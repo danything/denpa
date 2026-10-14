@@ -5,6 +5,11 @@
  *
  * 動かさないもの: AIT・Hybridcast の起動 (startAITControlledApp など)・外のアプリ・
  * 予約・電話回線 (PPP)。選局 (epgTune) は denpa の画面に任せる (エンジンは「この局へ」と知らせるだけ)。
+ *
+ * 通信の文書 (http・https から取った文書) からは、NVRAM の局の領域を読み書きさせない。使えるのは
+ * 通信の文書向けの `nvram://local_web/` と、受信機の設定 (`nvram://receiverinfo/`) を読むことだけ
+ * (denpa の決め。放送の文書が覚えたもの — 同意・地域など — を、外から来た文書に渡さない。
+ * `local_web` は名前のとおり通信の文書と分け合う領域)。
  */
 
 import type { ProgramInfoMessage } from '#lib/ts/bml-protocol.js';
@@ -12,7 +17,7 @@ import { type Cell, Table } from './binary';
 import { HostObject } from './dom';
 import { decodeEuc, encodeEuc } from './euc';
 import type { Nvram } from './nvram';
-import type { LockKind } from './resources';
+import { isRemote, type LockKind } from './resources';
 import type { Sound } from './sound';
 import {
     type Abort,
@@ -41,6 +46,11 @@ export interface BmlIp {
         icmp: boolean,
         timeout: number,
     ): Promise<{ success: boolean; ipAddress: string | null; responseTimeMillis: number | null } | null>;
+    /**
+     * 通信の文書と、その中の画像・CSS・script を取る (`launchDocument("https://…")`)。相手の返した
+     * 符号と中身をそのまま返す。中継が断った (相手まで行けなかった) なら null
+     */
+    get(uri: string): Promise<{ status: number; contentType: string; body: Uint8Array } | null>;
 }
 
 /** browser.* が呼ぶ、エンジンの側の API */
@@ -55,7 +65,8 @@ export interface BrowserHost {
     /** 放送の時刻 (UNIX ミリ秒) */
     now(): number;
     activeDocument(): string | null;
-    launch(name: string): Abort | number;
+    /** 移る。戻らない (Abort)・失敗 (NaN)・通信の文書を取るまで待つ (Suspend) */
+    launch(name: string): NativeResult;
     /** epgTune。`service` は `arib://<original_network_id>.<transport_stream_id>.<service_id>` */
     tune(service: string): Abort | number;
     quit(): Abort;
@@ -205,12 +216,32 @@ export function defineBrowser(host: BrowserHost): HostObject {
                   typeof item === 'boolean' || typeof item === 'number' ? item : toStr(item),
               )
             : [];
+    // 通信の文書から使えるか (冒頭の説明)。受信機の設定は読むだけ
+    const remote = (): boolean => isRemote(host.activeDocument() ?? '');
+    const usable = (uri: string, write: boolean): boolean => {
+        if (!remote()) return true;
+        const name = uri.trim().toLowerCase();
+        if (name.startsWith('nvram://local_web/') || (!write && name.startsWith('nvram://receiverinfo/')))
+            return true;
+        host.log(`通信の文書からは使えない NVRAM の領域です: ${uri}`);
+        return false;
+    };
     fn('readPersistentArray', (args) => {
+        if (!usable(str(args, 0), false)) return null;
         const values = host.nvram.read(str(args, 0), str(args, 1));
         return values === null ? null : array(values.map((v) => (typeof v === 'object' ? null : v)));
     });
-    fn('writePersistentArray', (args) => host.nvram.write(str(args, 0), str(args, 1), cells(args[2])));
-    fn('checkAccessInfoOfPersistentArray', (args) => host.nvram.check(str(args, 0)));
+    fn('writePersistentArray', (args) =>
+        usable(str(args, 0), true)
+            ? host.nvram.write(str(args, 0), str(args, 1), cells(args[2]))
+            : Number.NaN,
+    );
+    fn('checkAccessInfoOfPersistentArray', (args) => {
+        const uri = str(args, 0);
+        if (!usable(uri, false)) return Number.NaN;
+        // 通信の文書から local_web は読み書き、受信機の設定は読むだけ (nvram.check と同じ答え)
+        return host.nvram.check(uri);
+    });
     fail('readPersistentArrayWithAccessCheck', null);
     fail('writePersistentArrayWithAccessCheck');
 

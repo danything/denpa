@@ -63,7 +63,25 @@ export interface Ref {
     module: number | null;
     /** ファイル名 (小文字)。モジュールそのものなら null */
     file: string | null;
+    /**
+     * 通信の文書と、その中から指したもの (http・https)。あるときは部品・モジュールは使わない
+     * (component は `REMOTE`、module は 0 で、カルーセルのどれにも当たらない)
+     */
+    url?: string;
 }
+
+/** 通信のもの (`Ref.url`) の部品の番号。カルーセルの部品 (0〜0xff) と重ならない */
+export const REMOTE = -2;
+
+/** 通信の名前 (http・https) か */
+export const isRemote = (name: string): boolean => /^https?:\/\//i.test(name.trim());
+
+/** 通信のものを覚えておく上限 (数とバイト数)。超えたら古いものから捨てる */
+const REMOTE_FILES = 64;
+const REMOTE_BYTES = 8 * 1024 * 1024;
+
+/** 中継が返したもの (`BmlIp.get`)。取れなければ null */
+export type RemoteGet = (url: string) => Promise<{ contentType: string; body: Uint8Array } | null>;
 
 export type ResourceEvent =
     | { type: 'pmt'; components: Map<number, ComponentPMT>; previous: Map<number, ComponentPMT> }
@@ -93,6 +111,7 @@ export const hex = (n: number, size: number): string => n.toString(16).padStart(
 
 /** 解決した名前を文書の名前に (`/40/0000/startup.bml`) */
 export function refToPath(ref: Ref): string {
+    if (ref.url !== undefined) return ref.url;
     let out = `/${hex(ref.component, 2)}`;
     if (ref.module !== null) out += `/${hex(ref.module, 4)}`;
     if (ref.file !== null) out += `/${ref.file}`;
@@ -110,6 +129,16 @@ export class Resources {
     /** 待ちが増えた・減ったとき (「データ取得中」の表示) */
     onReceiving: (receiving: boolean) => void = () => {};
     private receiving = false;
+    /** 通信のものを取る (エンジンが中継に繋ぐ)。null なら取れない */
+    remoteGet: RemoteGet | null = null;
+    /** 取った通信のもの。古い順 (使うたびに後ろへ回す) */
+    private readonly remote = new Map<string, CarouselFile>();
+    private remoteBytes = 0;
+    /** 取りに行っている通信のもの (同じものを重ねて取らない) */
+    private readonly remoteWaiting = new Map<string, Promise<CarouselFile | null>>();
+    /** 文書を替えるたびに増える番号 (`newPage`)。今の文書が使った通信のものは、上限を超えても捨てない */
+    private page = 0;
+    private readonly usedOn = new WeakMap<CarouselFile, number>();
 
     /** 届いたものを受ける。起きたことを返す (文書に伝えるのはエンジン) */
     feed(message: ResponseMessage): ResourceEvent[] {
@@ -208,10 +237,25 @@ export class Resources {
     }
 
     /**
-     * 名前を解決する。`base` は今の文書 (`/40/0000/startup.bml`)。部品・モジュールの番号で
-     * 指せない名前 (http: など) は null
+     * 名前を解決する。`base` は今の文書 (`/40/0000/startup.bml`・通信の文書なら URL)。
+     * http・https は通信のもの (`Ref.url`)。通信の文書の中の相対の名前は文書の URL から解決し、
+     * `arib-dc://` だけを放送のものとして引く。どちらでも指せない名前 (ftp: など) は null
      */
     resolve(url: string, base: string | null): Ref | null {
+        const raw = url.trim();
+        if (isRemote(raw)) return remoteRef(raw);
+        if (base !== null && isRemote(base)) {
+            if (!/^[a-z][a-z0-9+.-]*:/i.test(raw)) {
+                // `~` は放送の部品を指す書き方で、通信の文書には今の部品が無い
+                if (raw === '' || raw.startsWith('~')) return null;
+                try {
+                    return remoteRef(new URL(raw, base.trim()).href);
+                } catch {
+                    return null;
+                }
+            }
+            base = null;
+        }
         // 問い合わせ (`?tsid=…`)・断片 (`#…`) はファイルを引くのに使わない。resourceName に `?`・`#` は
         // 入らない (STD-B24 第二編 9.2.1.2)。文書からは getActiveDocument で読める (engine.ts の launch)
         let path = url.trim().replace(/[?#][\s\S]*$/, '');
@@ -272,6 +316,15 @@ export class Resources {
 
     /** 押さえたもの・届いているものから、今すぐ出せるファイル */
     file(ref: Ref): CarouselFile | null {
+        if (ref.url !== undefined) {
+            const file = this.remote.get(ref.url);
+            if (file === undefined) return null;
+            // 使ったものは後ろへ (捨てるのは長く使っていないものから)
+            this.remote.delete(ref.url);
+            this.remote.set(ref.url, file);
+            this.usedOn.set(file, this.page);
+            return file;
+        }
         if (ref.module === null) return null;
         const k = key(ref.component, ref.module);
         const module = this.locks.get(k)?.module ?? this.cache.get(k);
@@ -287,7 +340,7 @@ export class Resources {
 
     /** もう来ないと分かっているモジュールか (PMT に部品が無い・DII にモジュールが無い) */
     missing(ref: Ref): boolean {
-        if (ref.module === null || this.has(ref.component, ref.module)) return false;
+        if (ref.url !== undefined || ref.module === null || this.has(ref.component, ref.module)) return false;
         return this.gone(ref.component, ref.module);
     }
 
@@ -301,9 +354,80 @@ export class Resources {
     /** 届くのを待ってファイルを出す。来ないと決まれば null */
     async fetch(ref: Ref): Promise<CarouselFile | null> {
         const now = this.file(ref);
-        if (now !== null || ref.module === null) return now;
+        if (now !== null) return now;
+        if (ref.url !== undefined) return this.fetchRemote(ref.url);
+        if (ref.module === null) return null;
         const module = await this.wait(ref.component, ref.module, null);
         return module?.files.get(ref.file ?? '') ?? null;
+    }
+
+    /**
+     * 覚えたものを使わずに取り直す (通信の文書へ移るとき。投票の結果のような「いまの中身」を、前に取った
+     * 版で出さない)。カルーセルのものは `fetch` と同じ
+     */
+    refetch(ref: Ref): Promise<CarouselFile | null> {
+        if (ref.url === undefined) return this.fetch(ref);
+        const old = this.remote.get(ref.url);
+        if (old !== undefined && !this.remoteWaiting.has(ref.url)) {
+            this.remote.delete(ref.url);
+            this.remoteBytes -= old.data.length;
+            revoke(old);
+        }
+        return this.fetchRemote(ref.url);
+    }
+
+    /** 文書を替えた。前の文書が使った通信のものは、上限を超えたら捨ててよくなる */
+    newPage(): void {
+        this.page++;
+    }
+
+    /** 通信のものを中継から取る。取れなければ null (取れなかったことは覚えない。画像は描く側が覚えて取り直さない) */
+    private fetchRemote(url: string): Promise<CarouselFile | null> {
+        const waiting = this.remoteWaiting.get(url);
+        if (waiting !== undefined) return waiting;
+        const get = this.remoteGet;
+        if (get === null) return Promise.resolve(null);
+        const promise = get(url)
+            .then(
+                (got): CarouselFile | null => {
+                    if (got === null || this.remoteGet === null) return null;
+                    const file: CarouselFile = {
+                        name: url,
+                        type: mediaType(got.contentType),
+                        data: got.body,
+                        urls: new Map(),
+                    };
+                    this.keepRemote(url, file);
+                    return file;
+                },
+                () => null,
+            )
+            .finally(() => this.remoteWaiting.delete(url));
+        this.remoteWaiting.set(url, promise);
+        return promise;
+    }
+
+    /**
+     * 取った通信のものを覚える。上限を超えたら、長く使っていないものから捨てる。今の文書が使ったものは
+     * 捨てない (描いている画像の blob: の URL を消さない。1 つの文書のぶんだけ上限を超えうる)
+     */
+    private keepRemote(url: string, file: CarouselFile): void {
+        const old = this.remote.get(url);
+        if (old !== undefined) {
+            this.remote.delete(url);
+            this.remoteBytes -= old.data.length;
+            revoke(old);
+        }
+        this.remote.set(url, file);
+        this.remoteBytes += file.data.length;
+        this.usedOn.set(file, this.page);
+        for (const [k, kept] of this.remote) {
+            if (this.remote.size <= REMOTE_FILES && this.remoteBytes <= REMOTE_BYTES) break;
+            if (this.usedOn.get(kept) === this.page) continue;
+            this.remote.delete(k);
+            this.remoteBytes -= kept.data.length;
+            revoke(kept);
+        }
     }
 
     /** モジュールが届くのを待つ。来ないと決まれば null */
@@ -434,13 +558,7 @@ export class Resources {
     private release(module: Module): void {
         const k = key(module.component, module.id);
         if (this.cache.get(k) === module || this.locks.get(k)?.module === module) return;
-        for (const file of module.files.values()) {
-            for (const made of file.urls.values()) {
-                URL.revokeObjectURL(made.url);
-                for (const frame of made.animation?.frames ?? []) URL.revokeObjectURL(frame.url);
-            }
-            file.urls.clear();
-        }
+        for (const file of module.files.values()) revoke(file);
     }
 
     destroy(): void {
@@ -453,7 +571,56 @@ export class Resources {
         this.cache.clear();
         this.locks.clear();
         for (const module of modules) this.release(module);
+        // 取りに行っている途中のものは、返ってきても覚えない (`fetchRemote`)
+        this.remoteGet = null;
+        for (const file of this.remote.values()) revoke(file);
+        this.remote.clear();
+        this.remoteBytes = 0;
     }
+}
+
+/** ファイルから作った blob: の URL を返す */
+function revoke(file: CarouselFile): void {
+    for (const made of file.urls.values()) {
+        URL.revokeObjectURL(made.url);
+        for (const frame of made.animation?.frames ?? []) URL.revokeObjectURL(frame.url);
+    }
+    file.urls.clear();
+}
+
+/** 通信のもの (断片 `#…` は外す。問い合わせは相手に渡すので残す) */
+function remoteRef(url: string): Ref | null {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return null;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    parsed.hash = '';
+    return { component: REMOTE, module: 0, file: null, url: parsed.href };
+}
+
+/** 中継が返した Content-Type を、カルーセルのファイルと同じ形に (`text/X-arib-bml; charset=…`) */
+function mediaType(contentType: string): MediaType {
+    const [head = '', ...rest] = contentType.split(';');
+    const [major = 'application', minor = 'octet-stream'] = head.trim().split('/');
+    return {
+        type: major.toLowerCase(),
+        originalType: major,
+        subtype: minor.toLowerCase(),
+        originalSubtype: minor,
+        parameters: rest.flatMap((part) => {
+            const at = part.indexOf('=');
+            if (at < 0) return [];
+            const attribute = part.slice(0, at).trim();
+            const value = part
+                .slice(at + 1)
+                .trim()
+                .replace(/^"(.*)"$/, '$1');
+            return [{ attribute: attribute.toLowerCase(), originalAttribute: attribute, value }];
+        }),
+    };
 }
 
 function fromBase64(text: string): Uint8Array {

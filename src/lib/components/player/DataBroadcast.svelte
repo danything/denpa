@@ -94,10 +94,10 @@
          */
         prefecture: number;
         /**
-         * 双方向 (通信系コンテンツ) を使うか。**既定は切**
-         * (`server/settings.ts` の `bmlNetwork`)。
+         * 双方向 (通信系コンテンツ) を使うか。**既定はオン**
+         * (`server/settings.ts` の `bmlNetwork`)。録画の再生では渡さない (昔の番組の送信を今やらない)。
          *
-         * 切っている間は `isIPConnected` に 0 を返すので、放送のアプリは
+         * オフの間は `isIPConnected` に 0 を返すので、放送のアプリは
          * 「インターネットに接続されていません」と正しく案内します。
          * **嘘をつかないのが大事** — 1 と答えて取りに行けないと、今度は
          * 無言で失敗します
@@ -242,7 +242,7 @@
      * 双方向 (通信系コンテンツ)。**中継はサーバがやる**
      * (`/api/bml/proxy`。放送局のサーバは CORS を返さないので直には取れない)。
      *
-     * 送る (`transmit`)・届くか確かめる (`confirm`) を渡す
+     * 送る (`transmit`)・届くか確かめる (`confirm`)・通信の文書を取る (`get`) を渡す
      * ([docs/stream.md](../../../../docs/stream.md#57-双方向通信系コンテンツプロキシ))。
      *
      * **送るほうは「応募・投票の API」だと思って外していたが、それでは足りない。**
@@ -278,6 +278,19 @@
                 success: boolean;
                 ipAddress: string | null;
                 responseTimeMillis: number | null;
+            };
+        },
+        /**
+         * **通信の文書と、その中の画像・CSS・script を取る** (`launchDocument("https://…")`)。
+         * 相手の符号と中身をそのまま返し、中継が断った (403/502) ときだけ null
+         */
+        get: async (uri) => {
+            const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(uri)}`));
+            if (response.headers.get('x-bml-relayed') !== '1') return null;
+            return {
+                status: response.status,
+                contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+                body: new Uint8Array(await response.arrayBuffer()),
             };
         },
     };

@@ -103,6 +103,7 @@ function open(options: Partial<BmlOptions> = {}): { bml: Bml; logs: string[] } {
             connected: () => false,
             transmit: async () => ({ resultCode: 0, status: '', body: new Uint8Array() }),
             confirm: async () => null,
+            get: async () => null,
         },
         store: { get: () => null, set: () => {} },
         clock: () => Date.UTC(2026, 9, 12, 3),
@@ -460,15 +461,12 @@ describe('移れない文書へ移ろうとしても閉じない', () => {
     }
 
     for (const [what, target, message] of [
-        ['通信の文書 (https://)', 'https://www.example.com/a.bml', '通信の文書にはまだ移れない'],
-        ['通信の文書 (http://)', 'http://www.example.com/a.bml', '通信の文書にはまだ移れない'],
-        [
-            '別の局の文書 (arib-dc://)',
-            'arib-dc://7fe1.7fe1.0401/40/0000/a.bml',
-            '放送の中の文書として読めない',
-        ],
+        ['双方向がオフで通信の文書 (https://)', 'https://www.example.com/a.bml', '双方向がオフ'],
+        ['双方向がオフで通信の文書 (http://)', 'http://www.example.com/a.bml', '双方向がオフ'],
+        ['別の局の文書 (arib-dc://)', 'arib-dc://7fe1.7fe1.0401/40/0000/a.bml', '移れる文書の名前ではない'],
         ['DII に無いモジュール', '/40/0005/a.bml', 'モジュールが放送に無い'],
         ['PMT に無い部品', '/50/0000/a.bml', 'モジュールが放送に無い'],
+        ['ftp の文書', 'ftp://www.example.com/a.bml', '移れる文書の名前ではない'],
     ] as const) {
         test(`${what}: 失敗 (NaN) を返し、今の文書のまま続きを動かす`, async () => {
             const visible: boolean[] = [];
@@ -485,6 +483,111 @@ describe('移れない文書へ移ろうとしても閉じない', () => {
             expect(logs.some((line) => line.includes(message) && line.includes(target))).toBe(true);
         });
     }
+
+    /** 双方向をオンにして、決めた URL に決めたものを返す中継 (取りに来た URL を控える) */
+    function relay(pages: Record<string, { status?: number; type: string; body: string }>) {
+        const asked: string[] = [];
+        const ip = {
+            connected: () => true,
+            transmit: async () => ({ resultCode: 0, status: '', body: new Uint8Array() }),
+            confirm: async () => null,
+            get: async (uri: string) => {
+                asked.push(uri);
+                const page = pages[uri];
+                if (page === undefined) return null;
+                return {
+                    status: page.status ?? 200,
+                    contentType: page.type,
+                    body: Uint8Array.from(Buffer.from(page.body, 'latin1')),
+                };
+            },
+        };
+        return { ip, asked };
+    }
+
+    for (const [what, page] of [
+        ['中継が断った', undefined],
+        ['相手が 404', { status: 404, type: 'text/X-arib-bml', body: '<bml></bml>' }],
+        ['BML でない (案内の HTML)', { type: 'text/html', body: '<html><body>x</body></html>' }],
+    ] as const) {
+        test(`双方向がオンで通信の文書が取れない (${what}): 失敗 (NaN) を返し、今の文書のまま`, async () => {
+            const target = 'https://www.example.com/a.bml';
+            const { ip, asked } = relay(page === undefined ? {} : { [target]: page });
+            const visible: boolean[] = [];
+            const { bml } = open({ ip, onVisible: (on) => visible.push(on) });
+            feedAll(bml, [PROGRAM, ...carousel(hiddenEntry(target))]);
+            const { done } = await watch(() => inside(bml).ureg[2] !== '');
+            expect(done).toBe(true);
+            expect(asked).toEqual([target]);
+            expect(inside(bml).ureg[1]).toBe('NaN');
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            expect(bml.path).toBe('/40/0000/menu.bml');
+            expect(visible.at(-1)).toBe(true);
+        });
+    }
+});
+
+describe('通信の文書', () => {
+    test('https の文書へ移り、中の相対の名前は文書の URL から取る。arib-dc:// で放送へ戻れる', async () => {
+        const remote = bmlFile(
+            'x',
+            '',
+            `function start() {
+                browser.Ureg[1] = browser.getActiveDocument() + "|" + fromScript;
+                browser.launchDocument("arib-dc://-1.-1.-1/40/0000/back.bml", "cut");
+            }`,
+        )[2].replace('<head>', '<head><script src="lib/app.js"></script>');
+        const asked: string[] = [];
+        const pages: Record<string, { type: string; body: string }> = {
+            'https://www.example.com/d/menu.bml?x=1': {
+                type: 'text/X-arib-bml; charset=EUC-JP',
+                body: remote,
+            },
+            'https://www.example.com/d/lib/app.js': { type: 'text/plain', body: 'var fromScript = "js";' },
+        };
+        const { bml } = open({
+            ip: {
+                connected: () => true,
+                transmit: async () => ({ resultCode: 0, status: '', body: new Uint8Array() }),
+                confirm: async () => null,
+                get: async (uri) => {
+                    asked.push(uri);
+                    const page = pages[uri];
+                    return page === undefined
+                        ? null
+                        : {
+                              status: 200,
+                              contentType: page.type,
+                              body: Uint8Array.from(Buffer.from(page.body, 'latin1')),
+                          };
+                },
+            },
+        });
+        feedAll(bml, [
+            PROGRAM,
+            ...carousel([
+                startup(
+                    '',
+                    'function start() { var r = browser.launchDocument("https://www.example.com/d/menu.bml?x=1#top", "cut"); browser.Ureg[3] = "" + r; }',
+                ),
+                bmlFile(
+                    'back.bml',
+                    '',
+                    'function start() { browser.Ureg[2] = browser.getActiveDocument(); }',
+                ),
+            ]),
+        ]);
+        const { done } = await watch(() => inside(bml).ureg[2] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('https://www.example.com/d/menu.bml?x=1|js');
+        expect(inside(bml).ureg[2]).toBe('/40/0000/back.bml');
+        // 移ったので、入口の launchDocument の後は動いていない
+        expect(inside(bml).ureg[3]).toBe('');
+        expect(asked).toEqual([
+            'https://www.example.com/d/menu.bml?x=1',
+            'https://www.example.com/d/lib/app.js',
+        ]);
+    });
 });
 
 describe('lockModuleOnMemoryEx', () => {

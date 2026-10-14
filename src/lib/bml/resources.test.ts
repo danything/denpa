@@ -5,7 +5,7 @@ import { crc32 } from '#lib/ts/png.js';
 import { parseDrcs } from './drcs';
 import { isDrcs } from './euc';
 import { alphaPng, applyClut } from './png';
-import { Resources, refToPath, unknownScheme } from './resources';
+import { REMOTE, Resources, refToPath, unknownScheme } from './resources';
 import { parseXml } from './xml';
 
 const media = (type: string, subtype: string) => ({
@@ -70,8 +70,70 @@ describe('カルーセルのファイル', () => {
             file: 'b.bml',
         });
         expect(r.resolve('../0003/c.bml', base)).toEqual({ component: 0x40, module: 3, file: 'c.bml' });
-        expect(r.resolve('http://example.jp/', base)).toBeNull();
+        expect(r.resolve('ftp://example.jp/', base)).toBeNull();
         expect(refToPath({ component: 0x40, module: 1, file: 'a.bml' })).toBe('/40/0001/a.bml');
+    });
+
+    test('通信の名前: http・https は URL のまま。通信の文書の中の相対は文書の URL から、arib-dc:// は放送', () => {
+        const r = new Resources();
+        const remote = (url: string) => ({ component: REMOTE, module: 0, file: null, url });
+        expect(r.resolve('http://example.jp/a.bml#top', '/40/0000/startup.bml')).toEqual(
+            remote('http://example.jp/a.bml'),
+        );
+        const base = 'https://example.jp/d/menu.bml?x=1';
+        expect(r.resolve('img/a.png', base)).toEqual(remote('https://example.jp/d/img/a.png'));
+        expect(r.resolve('/40/0000/b.bml', base)).toEqual(remote('https://example.jp/40/0000/b.bml'));
+        expect(r.resolve('next.bml?y=2', base)).toEqual(remote('https://example.jp/d/next.bml?y=2'));
+        expect(r.resolve('arib-dc://-1.-1.-1/40/0002/b.bml', base)).toEqual({
+            component: 0x40,
+            module: 2,
+            file: 'b.bml',
+        });
+        expect(r.resolve('~/0001/a.png', base)).toBeNull();
+        expect(r.resolve('', base)).toBeNull();
+        expect(refToPath(remote('https://example.jp/d/img/a.png'))).toBe('https://example.jp/d/img/a.png');
+    });
+
+    test('通信のものは中継から取って覚える。同じものを重ねて取らない。取れなければ null', async () => {
+        const r = new Resources();
+        const asked: string[] = [];
+        r.remoteGet = async (url) => {
+            asked.push(url);
+            return url.endsWith('a.png') ? { contentType: 'image/png', body: Uint8Array.of(1, 2) } : null;
+        };
+        const ref = r.resolve('https://example.jp/a.png', null)!;
+        const [first, second] = await Promise.all([r.fetch(ref), r.fetch(ref)]);
+        expect(first?.data).toEqual(Uint8Array.of(1, 2));
+        expect(first?.type.subtype).toBe('png');
+        expect(second).toBe(first);
+        expect(r.file(ref)).toBe(first);
+        expect(r.missing(ref)).toBe(false);
+        expect(await r.fetch(r.resolve('https://example.jp/b.png', null)!)).toBeNull();
+        expect(asked).toEqual(['https://example.jp/a.png', 'https://example.jp/b.png']);
+    });
+
+    test('refetch は覚えたものを使わずに取り直す (通信の文書へ移るとき)', async () => {
+        const r = new Resources();
+        let n = 0;
+        r.remoteGet = async () => ({ contentType: 'text/X-arib-bml', body: Uint8Array.of(++n) });
+        const ref = r.resolve('https://example.jp/vote.bml', null)!;
+        expect((await r.fetch(ref))?.data).toEqual(Uint8Array.of(1));
+        expect((await r.fetch(ref))?.data).toEqual(Uint8Array.of(1));
+        expect((await r.refetch(ref))?.data).toEqual(Uint8Array.of(2));
+        expect(r.file(ref)?.data).toEqual(Uint8Array.of(2));
+    });
+
+    test('上限 (64 個) を超えても、今の文書が使ったものは捨てない。文書を替えたら古いものから捨てる', async () => {
+        const r = new Resources();
+        r.remoteGet = async () => ({ contentType: 'image/png', body: Uint8Array.of(1) });
+        const refs = Array.from({ length: 70 }, (_, i) => r.resolve(`https://example.jp/${i}.png`, null)!);
+        for (const ref of refs) await r.fetch(ref);
+        expect(refs.every((ref) => r.file(ref) !== null)).toBe(true);
+        r.newPage();
+        // 次の文書が 1 つ取ると、前の文書のぶんを上限まで捨てる (長く使っていないものから)
+        await r.fetch(r.resolve('https://example.jp/next.png', null)!);
+        expect(refs.filter((ref) => r.file(ref) !== null)).toHaveLength(63);
+        expect(r.file(refs[0]!)).toBeNull();
     });
 
     test('届くのを待つ。DII に無いもの・PMT に無い部品は待たない', async () => {

@@ -40,7 +40,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/data-timeline.ts` / `src/lib/ts/data-capture.ts` / `src/lib/server/recorded-bml.ts` | 録画のデータ放送。エンコードするときに元のTSから変化ログを取り出して隣に置き (`.bml.jsonl`)、再生位置に合わせて流し直す |
 | `src/lib/components/player/Remote.svelte` | 指で押すリモコン (色・十字・決定・戻る・d・数字)。映像の上ではなく右の列 |
 | `src/lib/ts/ait.ts` | Hybridcast の在り処 (AIT)。読むだけで動かさない |
-| `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。既定はオフ・公開の相手だけ |
+| `src/lib/server/bml-network.ts` | データ放送の双方向の中継 (`/api/bml/proxy`・`/post`・`/confirm`)。既定はオン (設定で切れる)・公開の相手だけ |
 | `src/lib/ts/watch.ts` | 録画を観るときの押したことの読み方 (2回押し・チャプター送り・続きの位置。DOM を触らない) |
 | `src/lib/icons/` | Lucide に無いアイコンの図形 (`~icons/denpa/*`。いまはデータ放送の d だけ。[player.md](player.md#アイコンは-lucide-を組むときに埋め込みます)) |
 | `src/lib/components/player/` | 映像の上に置くもの。3画面 (ライブ・追っかけ・観る画面) で共通 (アイコン・重ねボタン・操作列・出し入れの決め方・字幕の重ね方) |

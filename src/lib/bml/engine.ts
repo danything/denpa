@@ -188,6 +188,16 @@ interface Timer {
     queued: boolean;
 }
 
+/**
+ * 通信で取ったものが BML の文書か。`text/X-arib-bml` か、型を付けずに返すサーバ向けに頭に `<bml` が
+ * あるか (BML でないもの — 案内の HTML など — を組んで「読めない」から入口へ出直さないため)
+ */
+function looksLikeBml(file: CarouselFile): boolean {
+    if (file.type.type === 'text' && file.type.subtype === 'x-arib-bml') return true;
+    const head = String.fromCharCode(...file.data.subarray(0, 1024));
+    return /<bml[\s>]/i.test(head);
+}
+
 /** JPEG の大きさ (SOF) */
 function jpegSize(data: Uint8Array): { width: number; height: number } | null {
     let at = 2;
@@ -279,6 +289,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             (message) => this.log(message),
         );
         this.resources.onReceiving = (receiving) => options.onReceiving?.(receiving);
+        this.resources.remoteGet = (url) => this.getRemote(url);
         this.ticker = setInterval(() => this.tick(), 1000);
     }
 
@@ -384,10 +395,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         }
     }
 
-    /** 今の文書の部品 */
+    /** 今の文書の部品。通信の文書なら null (カルーセルの部品に属さない) */
     private component(): number | null {
         const ref = this.current === null ? null : this.resources.resolve(this.current, null);
-        return ref?.component ?? null;
+        return ref === null || ref.url !== undefined ? null : ref.component;
     }
 
     private dataEvent(component: number, dii: Dii, previous: Dii | null): void {
@@ -592,7 +603,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         if (token !== this.token || this.destroyed) return;
         // 問い合わせ (`next.bml?tsid=…`) は、ファイルを引くのには使わず文書の名前に残す。移った先の文書は
         // getActiveDocument で読む (テレ朝。STD-B24 に放送の文書の問い合わせの決まりは無く、名前の一部として扱う)
-        const query = /\?[^#]*/.exec(name)?.[0] ?? '';
+        // 通信の文書は問い合わせごと URL (`refToPath`) に入っている
+        const query = ref?.url !== undefined ? '' : (/\?[^#]*/.exec(name)?.[0] ?? '');
         const shown =
             file !== null && ref !== null && (await this.show(file, `${refToPath(ref)}${query}`, token));
         if (token !== this.token || this.destroyed) return;
@@ -705,6 +717,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.playing.clear();
         this.unloadDrcs();
         this.current = path;
+        this.resources.newPage();
         this.table = table;
         const resolution = body?.style().resolution ?? '960x540';
         // 4:3 は 720x480 のときだけ (960x540 は 16:9 しか無い)。既定は 16v9 (第二編 5.4.13.1)
@@ -1047,20 +1060,18 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         return this.current;
     }
 
-    launch(name: string): Abort | number {
+    launch(name: string): NativeResult {
         if (name.startsWith('#')) return Number.NaN;
         // 規格に無いスキーム (`bml://` など) は、今の文書のまま失敗を返す (STD-B24 第二編 7.6.8: 失敗は NaN)
         if (this.unknownName(name)) return Number.NaN;
         // 移れると決まるまで今の文書を捨てない。捨ててから読めないと入口から出直すことになり、
         // 入口が invisible のまま d を待つ局 (NHK) ではデータ放送が閉じたように見える
         const ref = this.resources.resolve(name, this.current);
+        if (ref !== null && ref.url !== undefined) return this.launchRemote(name, ref);
         if (ref === null || ref.module === null) {
-            const remote = /^(https?|ftp):/i.test(name.trim());
             this.report(
                 `#launch ${name}`,
-                remote
-                    ? `通信の文書にはまだ移れないので、今の文書のまま失敗を返します: ${name}`
-                    : `放送の中の文書として読めない名前なので、今の文書のまま失敗を返します: ${name}`,
+                `移れる文書の名前ではないので、今の文書のまま失敗を返します: ${name}`,
             );
             return Number.NaN;
         }
@@ -1073,6 +1084,51 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         }
         void this.load(name);
         return ABORT;
+    }
+
+    /**
+     * 通信の文書へ移る (TR-B14 の通信コンテンツ)。取れるまでスクリプトを待たせ、取れたら今の文書を捨てて
+     * 移る (後に続くスクリプトは動かさない)。双方向がオフ・取れない・BML でないなら NaN を返して今の文書の
+     * まま続ける。放送のアプリはこれを見て「接続できません」などを自分で出す
+     */
+    private launchRemote(name: string, ref: Ref): NativeResult {
+        if (!this.ip.connected()) {
+            this.report(
+                `#launch ${name}`,
+                `データ放送の双方向がオフなので、通信の文書には移らずに失敗を返します: ${name}`,
+            );
+            return Number.NaN;
+        }
+        const token = this.token;
+        return new Suspend(
+            // 前に取った版を使わず取り直す (投票の結果などを開き直したときに古いものを出さない)
+            this.resources.refetch(ref).then((file) => {
+                if (token !== this.token || this.destroyed) return Number.NaN;
+                if (file === null || !looksLikeBml(file)) {
+                    this.log(`通信の文書を取得できないので、今の文書のまま失敗を返します: ${name}`);
+                    return Number.NaN;
+                }
+                // 今の文書を捨てて移る。待っていたスクリプトの続きは、文書が替わるので動かない
+                void this.load(refToPath(ref));
+                return Number.NaN;
+            }),
+        );
+    }
+
+    /** 中継で取る (双方向がオフなら取らない)。2xx のほかは取れなかったものとする */
+    private async getRemote(url: string): Promise<{ contentType: string; body: Uint8Array } | null> {
+        if (!this.ip.connected()) return null;
+        try {
+            const got = await this.ip.get(url);
+            if (got === null) return null;
+            if (got.status < 200 || got.status >= 300) {
+                this.log(`通信の文書・画像を取得できません (${got.status}): ${url}`);
+                return null;
+            }
+            return { contentType: got.contentType, body: got.body };
+        } catch {
+            return null;
+        }
     }
 
     /** 規格に無いスキームの名前なら知らせて true (STD-B24 第二編 9.2 に無い。扱えない) */
@@ -1247,7 +1303,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     private moduleRef(module: string): Ref | null {
         const ref = this.resources.resolve(module, this.current);
-        return ref === null || ref.module === null ? null : ref;
+        // 押さえられるのはカルーセルのモジュールだけ (通信のものは押さえない)
+        return ref === null || ref.module === null || ref.url !== undefined ? null : ref;
     }
 
     lock(module: string, kind: LockKind): number {
