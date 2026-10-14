@@ -1742,6 +1742,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                      */
                     fallback = notice.recording;
                     reconnect();
+                } else if (notice.type === 'restart') {
+                    /*
+                     * **番組が替わって音声・字幕の構成が変わった。** サーバは畳んだので、同じ局をすぐリクエストし直す
+                     * (音声を選び直したときと同じ。待たずに、前のフレームは貼ったまま)
+                     */
+                    if (tuned !== null && element !== null) void tune(element, tuned, true);
                 } else if (notice.type === 'notice') {
                     // 映像は出ている。断り書きに残す (GPU でエンコードできずにソフトウェアへ降りた、など)
                     warning = notice.message;

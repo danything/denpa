@@ -212,3 +212,61 @@ describe('コピー禁止', () => {
         expect(filter.copyNever).toBe(false);
     });
 });
+
+/**
+ * **映像・音声・字幕の並び** (`streams`)。ライブはこれが変わったら ffmpeg を作り直す (`server/live.ts` の `restart`)。
+ * 番組が替わって音声が増えた・字幕の PID が変わったときだけ変わり、データ放送の増減では変わらない
+ */
+describe('映像・音声・字幕の並び', () => {
+    const map = (streams: ([number, number] | [number, number, number[]])[]) =>
+        packetize(PMT1, programMap(MX1, 0x100, streams));
+
+    test('PMT を読むまでは null。読めば種別と PID の並び', () => {
+        const filter = new ServiceFilter(MX1);
+        filter.filter(pat());
+        expect(filter.streams).toBeNull();
+        filter.filter(pmt1());
+        expect(filter.streams).toBe('2:256,15:272');
+    });
+
+    test('音声が増えた・字幕の PID が変わったら変わる。データ放送の増減では変わらない', () => {
+        const filter = new ServiceFilter(MX1);
+        filter.filter(Uint8Array.from([...pat(), ...pmt1()]));
+        const before = filter.streams;
+
+        filter.filter(
+            map([
+                [0x02, 0x100],
+                [0x0f, 0x110],
+                [0x0d, 0x140],
+            ]),
+        );
+        expect(filter.streams).toBe(before);
+
+        filter.filter(
+            map([
+                [0x02, 0x100],
+                [0x0f, 0x110],
+                [0x0f, 0x111],
+            ]),
+        );
+        expect(filter.streams).toBe('2:256,15:272,15:273');
+
+        filter.filter(
+            map([
+                [0x02, 0x100],
+                [0x0f, 0x110],
+                [0x06, 0x130],
+            ]),
+        );
+        const captioned = filter.streams;
+        filter.filter(
+            map([
+                [0x02, 0x100],
+                [0x0f, 0x110],
+                [0x06, 0x131],
+            ]),
+        );
+        expect(filter.streams).not.toBe(captioned);
+    });
+});

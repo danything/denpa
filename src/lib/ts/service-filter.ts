@@ -91,6 +91,12 @@ function packet(pid: number, section: Uint8Array, counter: number): Uint8Array {
 }
 
 /**
+ * 映像・音声・字幕の stream_type (`ServiceFilter.streams`)。MPEG-2 映像・H.264・H.265、MPEG 音声・AAC (ADTS・LATM)、
+ * 字幕と文字スーパー (PES の private_data。0x06)
+ */
+const MEDIA_STREAMS = new Set([0x02, 0x1b, 0x24, 0x03, 0x04, 0x0f, 0x11, 0x06]);
+
+/**
  * 局1つぶんに絞る。
  *
  * PAT が来るまでは**何も出さない**。どの PID がその局のものか決まらないためで、
@@ -109,6 +115,7 @@ export class ServiceFilter {
     /** PAT に書いてある中継の番号。読むまでは null */
     private tsid: number | null = null;
     private copyNeverNow = false;
+    private streamsNow: string | null = null;
 
     constructor(private readonly serviceId: number) {}
 
@@ -127,6 +134,17 @@ export class ServiceFilter {
      */
     get copyNever(): boolean {
         return this.copyNeverNow;
+    }
+
+    /**
+     * **映像・音声・字幕の並び** (最後に読んだ PMT の `種別:PID`)。PMT を読むまでは null。
+     *
+     * ライブはこれが変わったら ffmpeg を作り直す (`server/live.ts` の `tap`)。ffmpeg は起きたときの並びのまま
+     * 音声・字幕を選んでいるので、番組が替わって音声の本数や字幕の PID が変わると追従しない。
+     * データ放送などのセクション (0x0D など) は入れない — 番組ごとに増減しても ffmpeg には関係ない
+     */
+    get streams(): string | null {
+        return this.streamsNow;
     }
 
     /**
@@ -221,7 +239,9 @@ export class ServiceFilter {
             const programInfo = pmtProgramInfo(section);
             collectCa(programInfo, pids);
             let copyNever = hasCopyNever(programInfo);
-            for (const [, elementaryPid, info] of pmtStreams(section)) {
+            const streams: string[] = [];
+            for (const [streamType, elementaryPid, info] of pmtStreams(section)) {
+                if (MEDIA_STREAMS.has(streamType)) streams.push(`${streamType}:${elementaryPid}`);
                 pids.add(elementaryPid);
                 collectCa(info, pids);
                 if (hasCopyNever(info)) copyNever = true;
@@ -230,6 +250,7 @@ export class ServiceFilter {
             this.own.clear();
             for (const pid of pids) this.own.add(pid);
             this.copyNeverNow = copyNever;
+            this.streamsNow = streams.join(',');
         }
     }
 }

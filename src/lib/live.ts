@@ -206,6 +206,14 @@ export type Notice =
           type: 'lost';
           recording: YieldedRecording | null;
       }
+    | {
+          /**
+           * **番組が替わって映像・音声・字幕の並び (PMT) が変わった。** セッションはここで畳む (`server/live.ts` の `restart`)。
+           * ffmpeg は起きたときの並びのまま音声・字幕を選んでいるので、作り直さないと追従しない。
+           * 画面はすぐ同じ局をリクエストし直す (音声を選び直したときと同じ)
+           */
+          type: 'restart';
+      }
     | { type: 'error'; message: string };
 
 /**

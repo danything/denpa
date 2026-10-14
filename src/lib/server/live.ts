@@ -1027,6 +1027,21 @@ class Session {
     }
 
     /**
+     * **番組が替わって映像・音声・字幕の並び (PMT) が変わった。** 畳んで、見ている人にリクエストし直させる (`restart`)。
+     *
+     * ffmpeg は起きたときの並びのまま音声・字幕を選んでいて (`encodeArgs` の `-map`)、音声の本数や字幕の PID が
+     * 変わっても追従しない。その場で ffmpeg を起こし直さないのは `lose` と同じ理由 — 時刻が 0 から数え直しになり、
+     * 受け側のバッファ (MSE・テレビの fMP4) が続きとして読めない。画面はすぐリクエストし直す (音声を選び直した
+     * ときと同じ。途切れるのはエンコードし始めのぶん)。新しい ffmpeg は新しい並びで起きる
+     */
+    private restart(): void {
+        if (this.stopped) return;
+        console.log(`[live] ${this.id}: 番組が替わって音声・字幕の構成が変わったので、作り直します`);
+        this.tell({ type: 'restart' });
+        this.stop();
+    }
+
+    /**
      * 届いた塊を1局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
      * Hybridcast の見張りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
      */
@@ -1116,6 +1131,8 @@ class Session {
     ): Promise<void> {
         const writer = proc.stdin as import('bun').FileSink;
         const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
+        /** この ffmpeg を起こしたときの映像・音声・字幕の並び (`ServiceFilter.streams`)。ライブだけ見る */
+        let streams: string | null = null;
         try {
             for (;;) {
                 // `for await` にしない — 抜けるとリーダーごと閉じてしまう (使い回せなくなる)
@@ -1138,6 +1155,13 @@ class Session {
                  */
                 if (this.stopped || this.proc !== proc) break;
                 const out = this.tap(filter, next.value);
+                if (!own && filter !== null && filter.streams !== null) {
+                    if (streams !== null && filter.streams !== streams) {
+                        this.restart();
+                        break;
+                    }
+                    streams = filter.streams;
+                }
                 if (out.length === 0) continue;
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手がいない
                 await writer.write(out);
@@ -1872,8 +1896,13 @@ export function sessionStream(
                         }
                         if (kind !== CHANNEL.control) return;
                         const notice = JSON.parse(new TextDecoder().decode(payload)) as Notice;
-                        // 外された (`lost`) ときも閉じる。リクエストし直すのは観ている側 (テレビのアプリは閉じたらリクエストし直す)
-                        if (notice.type === 'error' || notice.type === 'ended' || notice.type === 'lost')
+                        // 外された (`lost`)・作り直す (`restart`) ときも閉じる。リクエストし直すのは観ている側 (テレビのアプリは閉じたらリクエストし直す)
+                        if (
+                            notice.type === 'error' ||
+                            notice.type === 'ended' ||
+                            notice.type === 'lost' ||
+                            notice.type === 'restart'
+                        )
                             close();
                     },
                 };
