@@ -717,6 +717,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.playing.clear();
         this.unloadDrcs();
         this.current = path;
+        this.resources.newPage();
         this.table = table;
         const resolution = body?.style().resolution ?? '960x540';
         // 4:3 は 720x480 のときだけ (960x540 は 16:9 しか無い)。既定は 16v9 (第二編 5.4.13.1)
@@ -1100,7 +1101,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         }
         const token = this.token;
         return new Suspend(
-            this.resources.fetch(ref).then((file) => {
+            // 前に取った版を使わず取り直す (投票の結果などを開き直したときに古いものを出さない)
+            this.resources.refetch(ref).then((file) => {
                 if (token !== this.token || this.destroyed) return Number.NaN;
                 if (file === null || !looksLikeBml(file)) {
                     this.log(`通信の文書を取得できないので、今の文書のまま失敗を返します: ${name}`);

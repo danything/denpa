@@ -112,6 +112,30 @@ describe('カルーセルのファイル', () => {
         expect(asked).toEqual(['https://example.jp/a.png', 'https://example.jp/b.png']);
     });
 
+    test('refetch は覚えたものを使わずに取り直す (通信の文書へ移るとき)', async () => {
+        const r = new Resources();
+        let n = 0;
+        r.remoteGet = async () => ({ contentType: 'text/X-arib-bml', body: Uint8Array.of(++n) });
+        const ref = r.resolve('https://example.jp/vote.bml', null)!;
+        expect((await r.fetch(ref))?.data).toEqual(Uint8Array.of(1));
+        expect((await r.fetch(ref))?.data).toEqual(Uint8Array.of(1));
+        expect((await r.refetch(ref))?.data).toEqual(Uint8Array.of(2));
+        expect(r.file(ref)?.data).toEqual(Uint8Array.of(2));
+    });
+
+    test('上限 (64 個) を超えても、今の文書が使ったものは捨てない。文書を替えたら古いものから捨てる', async () => {
+        const r = new Resources();
+        r.remoteGet = async () => ({ contentType: 'image/png', body: Uint8Array.of(1) });
+        const refs = Array.from({ length: 70 }, (_, i) => r.resolve(`https://example.jp/${i}.png`, null)!);
+        for (const ref of refs) await r.fetch(ref);
+        expect(refs.every((ref) => r.file(ref) !== null)).toBe(true);
+        r.newPage();
+        // 次の文書が 1 つ取ると、前の文書のぶんを上限まで捨てる (長く使っていないものから)
+        await r.fetch(r.resolve('https://example.jp/next.png', null)!);
+        expect(refs.filter((ref) => r.file(ref) !== null)).toHaveLength(63);
+        expect(r.file(refs[0]!)).toBeNull();
+    });
+
     test('届くのを待つ。DII に無いもの・PMT に無い部品は待たない', async () => {
         const r = new Resources();
         const receiving: boolean[] = [];

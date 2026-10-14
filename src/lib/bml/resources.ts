@@ -136,6 +136,9 @@ export class Resources {
     private remoteBytes = 0;
     /** 取りに行っている通信のもの (同じものを重ねて取らない) */
     private readonly remoteWaiting = new Map<string, Promise<CarouselFile | null>>();
+    /** 文書を替えるたびに増える番号 (`newPage`)。今の文書が使った通信のものは、上限を超えても捨てない */
+    private page = 0;
+    private readonly usedOn = new WeakMap<CarouselFile, number>();
 
     /** 届いたものを受ける。起きたことを返す (文書に伝えるのはエンジン) */
     feed(message: ResponseMessage): ResourceEvent[] {
@@ -319,6 +322,7 @@ export class Resources {
             // 使ったものは後ろへ (捨てるのは長く使っていないものから)
             this.remote.delete(ref.url);
             this.remote.set(ref.url, file);
+            this.usedOn.set(file, this.page);
             return file;
         }
         if (ref.module === null) return null;
@@ -357,6 +361,26 @@ export class Resources {
         return module?.files.get(ref.file ?? '') ?? null;
     }
 
+    /**
+     * 覚えたものを使わずに取り直す (通信の文書へ移るとき。投票の結果のような「いまの中身」を、前に取った
+     * 版で出さない)。カルーセルのものは `fetch` と同じ
+     */
+    refetch(ref: Ref): Promise<CarouselFile | null> {
+        if (ref.url === undefined) return this.fetch(ref);
+        const old = this.remote.get(ref.url);
+        if (old !== undefined && !this.remoteWaiting.has(ref.url)) {
+            this.remote.delete(ref.url);
+            this.remoteBytes -= old.data.length;
+            revoke(old);
+        }
+        return this.fetchRemote(ref.url);
+    }
+
+    /** 文書を替えた。前の文書が使った通信のものは、上限を超えたら捨ててよくなる */
+    newPage(): void {
+        this.page++;
+    }
+
     /** 通信のものを中継から取る。取れなければ null (取れなかったことは覚えない。画像は描く側が覚えて取り直さない) */
     private fetchRemote(url: string): Promise<CarouselFile | null> {
         const waiting = this.remoteWaiting.get(url);
@@ -383,7 +407,10 @@ export class Resources {
         return promise;
     }
 
-    /** 取った通信のものを覚える。上限を超えたら、長く使っていないものから捨てる */
+    /**
+     * 取った通信のものを覚える。上限を超えたら、長く使っていないものから捨てる。今の文書が使ったものは
+     * 捨てない (描いている画像の blob: の URL を消さない。1 つの文書のぶんだけ上限を超えうる)
+     */
     private keepRemote(url: string, file: CarouselFile): void {
         const old = this.remote.get(url);
         if (old !== undefined) {
@@ -393,9 +420,10 @@ export class Resources {
         }
         this.remote.set(url, file);
         this.remoteBytes += file.data.length;
+        this.usedOn.set(file, this.page);
         for (const [k, kept] of this.remote) {
             if (this.remote.size <= REMOTE_FILES && this.remoteBytes <= REMOTE_BYTES) break;
-            if (kept === file) continue;
+            if (this.usedOn.get(kept) === this.page) continue;
             this.remote.delete(k);
             this.remoteBytes -= kept.data.length;
             revoke(kept);
