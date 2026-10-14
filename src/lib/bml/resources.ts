@@ -285,6 +285,14 @@ export class Resources {
         );
     }
 
+    /** もう来ないと分かっているモジュールか (PMT に部品が無い・DII にモジュールが無い) */
+    missing(ref: Ref): boolean {
+        if (ref.module === null || this.has(ref.component, ref.module)) return false;
+        if (this.pmtSeen && !this.pmt.has(ref.component)) return true;
+        const dii = this.dii.get(ref.component);
+        return dii !== undefined && !dii.modules.has(ref.module);
+    }
+
     /** 届くのを待ってファイルを出す。来ないと決まれば null */
     async fetch(ref: Ref): Promise<CarouselFile | null> {
         const now = this.file(ref);
