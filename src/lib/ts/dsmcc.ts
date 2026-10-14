@@ -200,6 +200,11 @@ export class ModuleBuilder {
         this.total = Math.ceil(moduleSize / blockSize);
     }
 
+    /** 受け取ったブロックの数 (同じブロックを2度受けても1つ) */
+    get blocks(): number {
+        return this.received.size;
+    }
+
     /** ブロックを1つ置く。**揃ったら true** */
     add(blockNumber: number, block: Uint8Array): boolean {
         const at = this.blockSize * blockNumber;

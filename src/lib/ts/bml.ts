@@ -27,7 +27,7 @@ import type {
     ModuleFile,
     ResponseMessage,
 } from './bml-protocol';
-import type { DiiModule } from './dsmcc';
+import type { Dii, DiiModule } from './dsmcc';
 import {
     dataEventIdOf,
     ModuleBuilder,
@@ -216,7 +216,20 @@ function parseEsEvents(section: Uint8Array): ESEvent[] {
 interface Building {
     module: DiiModule;
     builder: ModuleBuilder;
+    /** 最後にブロックが増えてから、DII が繰り返した回数 */
+    quietDiis: number;
+    /** 最後にブロックが増えてから、この部品のカルーセルで流れた DDB のバイト数 (どのモジュールのものでも) */
+    quietBytes: number;
 }
+
+/**
+ * **DII に載ったモジュールが来なければ諦める。** 最後にブロックが増えてから、DII が
+ * この回数繰り返し、しかもカルーセルが一覧の大きさのこの倍数ぶん流れたら、もう来ないとみなす。
+ * 両方を見るのは、DII の繰り返しはカルーセルの一周より短いことがあり (回数だけだと大きい
+ * カルーセルの途中で諦める)、よく使うモジュールは一周に何度も流れる (バイト数だけだと一周を
+ * 短く見積もる) ため
+ */
+const GIVE_UP_ROUNDS = 4;
 
 /** カルーセルが流れている ES 1本ぶんの覚え書き */
 interface Component {
@@ -229,6 +242,12 @@ interface Component {
     building: Map<number, Building>;
     /** 配り終えたモジュールの版。**同じものを配り直さない**ため */
     done: Map<number, string>;
+    /** 今の DII (諦めたモジュールを除いた一覧を配り直すのに使う) */
+    dii: Dii | null;
+    /** 今の DII のモジュールの大きさの合計 (カルーセルの一周の下限) */
+    size: number;
+    /** 今の DII で、来ないと諦めたモジュール */
+    abandoned: Set<number>;
 }
 
 /**
@@ -317,6 +336,9 @@ export class BmlDecoder {
                 dataEventId: -1,
                 building: new Map(),
                 done: new Map(),
+                dii: null,
+                size: 0,
+                abandoned: new Set(),
             });
         }
     }
@@ -346,7 +368,11 @@ export class BmlDecoder {
         const dii = parseDii(section);
         if (dii === null) return;
         // 同じカルーセルが回ってきただけ。組み立て中のものを捨てない
-        if (component.transactionId === dii.transactionId) return;
+        if (component.transactionId === dii.transactionId) {
+            for (const held of component.building.values()) held.quietDiis++;
+            this.giveUp(component);
+            return;
+        }
         component.transactionId = dii.transactionId;
 
         /*
@@ -360,33 +386,74 @@ export class BmlDecoder {
         }
 
         component.building.clear();
+        component.abandoned.clear();
+        component.dii = dii;
+        component.size = 0;
         for (const module of dii.modules) {
+            component.size += module.moduleSize;
             component.building.set(module.moduleId, {
                 module,
                 builder: new ModuleBuilder(module.moduleVersion, module.moduleSize, dii.blockSize),
+                quietDiis: 0,
+                quietBytes: 0,
             });
         }
+        this.sendList(component);
+    }
 
+    /** 今の DII の一覧を配る。**諦めたモジュールは載せない** */
+    private sendList(component: Component): void {
+        const dii = component.dii;
+        if (dii === null) return;
         this.send({
             type: 'moduleListUpdated',
             componentId: component.componentId,
-            modules: dii.modules.map((module) => ({
-                id: module.moduleId,
-                version: module.moduleVersion,
-                size: module.moduleSize,
-            })),
-            dataEventId,
+            modules: dii.modules
+                .filter((module) => !component.abandoned.has(module.moduleId))
+                .map((module) => ({
+                    id: module.moduleId,
+                    version: module.moduleVersion,
+                    size: module.moduleSize,
+                })),
+            dataEventId: component.dataEventId,
             ...(dii.returnToEntry === null ? {} : { returnToEntryFlag: dii.returnToEntry }),
         });
+    }
+
+    /**
+     * **来ないモジュールを諦める** (`GIVE_UP_ROUNDS`)。待っている受け側 (`Resources` の `wait`) は、
+     * DII に無いモジュールを「もう来ない」と決める (`gone`) ので、諦めたものを除いた一覧を配り直して
+     * 待ちを終わらせる。前の DII で配り終えた版のままのもの (受け側が持っている) は一覧から外さず、
+     * 組み立てるのをやめるだけ。次に DII の版が変われば、また待つ
+     */
+    private giveUp(component: Component): void {
+        const limit = component.size * GIVE_UP_ROUNDS;
+        let changed = false;
+        for (const [moduleId, held] of component.building) {
+            if (held.quietDiis < GIVE_UP_ROUNDS || held.quietBytes < limit) continue;
+            component.building.delete(moduleId);
+            if (component.done.get(moduleId) === `${held.module.moduleVersion}:${component.dataEventId}`)
+                continue;
+            component.abandoned.add(moduleId);
+            changed = true;
+        }
+        if (changed) this.sendList(component);
     }
 
     private onDdb(component: Component, section: Uint8Array): void {
         const ddb = parseDdb(section);
         if (ddb === null) return;
+        for (const waiting of component.building.values()) waiting.quietBytes += ddb.block.length;
         const held = component.building.get(ddb.moduleId);
         // 版が食い違うブロックを混ぜると壊れたファイルができる
         if (held === undefined || held.builder.moduleVersion !== ddb.moduleVersion) return;
-        if (!held.builder.add(ddb.blockNumber, ddb.block)) return;
+        const before = held.builder.blocks;
+        const complete = held.builder.add(ddb.blockNumber, ddb.block);
+        if (held.builder.blocks > before) {
+            held.quietDiis = 0;
+            held.quietBytes = 0;
+        }
+        if (!complete) return;
 
         // 揃った。次の DII が来るまで組み立て直さない
         component.building.delete(ddb.moduleId);
