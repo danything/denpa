@@ -1,16 +1,11 @@
-import { writeFileSync } from 'node:fs';
-import { extname } from 'node:path';
 import type { APIRequestContext, Page } from '@playwright/test';
 import {
     CAPTION_SCREENS,
     captionsClearOfBar,
-    captionsSeenInDataWindow,
     expect,
     expectSharpCaptions,
-    fakeDataBroadcast,
     goto,
     holdCaptions,
-    holdMedia,
     leaveFullscreen,
     oneRowTroubles,
     overlayTroubles,
@@ -31,19 +26,11 @@ import {
  */
 
 /**
- * **「このブラウザでは再生できませんでした」の幕を畳む** (画像で字幕を確かめるテストだけ)。
- * 偽の録画は中身が無く、ブラウザは再生に転んで幕 (`watch-broken`。映像の箱を暗く覆う) を出す。
- * データ放送の小窓に寄せた映像の箱もその下にあるので、塗った字幕が暗く写る。本物の録画では出ない
- */
-async function hideBroken(page: Page): Promise<void> {
-    await page.addStyleTag({ content: '[data-testid="watch-broken"] { display: none !important; }' });
-}
-
-/**
  * 読み取りだけのテストは**1本の録画を使い回す**。全テストが `recordOne`
  * (予約→録画→エンコードの完了待ちで各15秒前後) を自前でやっていた頃は、この
  * ファイルだけで3分近く掛かり、e2e の一番遅いシャードそのものだった。
- * 録画を消すテストだけが自分のぶんを録る (使い回しの1本を壊さない)
+ * 録画を消すテストだけが自分のぶんを録る (使い回しの1本を壊さない)。
+ * データ放送のサイドカーを置くテストは 23-watch-data に分けた (組の時間を割るため)
  */
 let shared: { id: string } | null = null;
 async function watchable(page: Page, request: APIRequestContext): Promise<string> {
@@ -227,79 +214,6 @@ test.describe('録画を観る', () => {
         await wakeControls(page, 'watch-stage');
         await button.click();
         await expect(button).toHaveAttribute('aria-pressed', 'false');
-    });
-
-    /**
-     * **データ放送を出しても字幕は見えている。テレビと同じで映像と一緒に小窓へ縮む。**
-     *
-     * 映像の箱ごと BML の小窓へ寄せる。字幕の canvas が箱の外にあった頃は、映像だけ
-     * 小窓へ行き、字幕は枠いっぱいのままデータ放送の面の下に隠れていた (実機で「データ放送を
-     * 出すと字幕が出なくなる」)。偽の録画にはデータ放送が無いので、小窓を持つ BML を
-     * サイドカー (`.bml.jsonl`) に置いてから出す。**操作列を出したまま d を押す**
-     * (持ち上げた字幕が小窓の中に残らないことも見る)
-     */
-    test('データ放送を出しても、字幕は映像と一緒に小窓へ縮んで見えている', async ({ page, request }) => {
-        test.setTimeout(180_000);
-        // サイドカーを足すので、使い回しの1本は汚さない
-        const { id, libraryPath } = await recordOne(page, request);
-        writeFileSync(
-            `${libraryPath.slice(0, libraryPath.length - extname(libraryPath).length)}.bml.jsonl`,
-            `${fakeDataBroadcast()
-                .map((message) => JSON.stringify({ at: 0, message }))
-                .join('\n')}\n`,
-        );
-        await goto(page, `/watch/${id}`);
-        await hideBroken(page);
-        await holdMedia(page, 'watch-video', 'watch-captions-canvas', 'watch-stage');
-        await page
-            .getByTestId('watch-captions-canvas')
-            .evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
-
-        await wakeControls(page, 'watch-stage');
-        await page.getByTestId('watch-data-button').click();
-        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
-            timeout: 15_000,
-        });
-
-        await captionsSeenInDataWindow(page);
-    });
-
-    /**
-     * **録画の再生中は選局できない。** データ放送の文書が epgTune を
-     * 呼んだら失敗を返し、観ている人には「録画の再生中は選局できません」と知らせる
-     */
-    test('録画のデータ放送が epgTune を呼ぶと、失敗にして知らせる', async ({ page, request }) => {
-        test.setTimeout(180_000);
-        const { id, libraryPath } = await recordOne(page, request);
-        const script =
-            '<script><![CDATA[function tune() { var r = browser.epgTune("arib://7fe7.-1.428"); document.getElementById("r").firstChild.data = "r:" + r; }]]></script>' +
-            '<bevent><beitem type="DataButtonPressed" onoccur="tune();" subscribe="subscribe"/></bevent>' +
-            '<p id="r" style="left:0px;top:0px;width:200px;height:30px;"></p>';
-        writeFileSync(
-            `${libraryPath.slice(0, libraryPath.length - extname(libraryPath).length)}.bml.jsonl`,
-            `${fakeDataBroadcast(script)
-                .map((message) => JSON.stringify({ at: 0, message }))
-                .join('\n')}\n`,
-        );
-        await goto(page, `/watch/${id}`);
-        await wakeControls(page, 'watch-stage');
-        await page.getByTestId('watch-data-button').click();
-        await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
-            timeout: 15_000,
-        });
-        await expect(page.getByText('録画の再生中は選局できません')).toBeVisible({ timeout: 15_000 });
-        // 文書には失敗 (NaN) が返り、後に続く処理も動く
-        await expect
-            .poll(() =>
-                page.evaluate(() => {
-                    for (const host of document.querySelectorAll('[data-testid="live-data"] div')) {
-                        const text = host.shadowRoot?.textContent ?? '';
-                        if (text.includes('r:')) return text.trim();
-                    }
-                    return '';
-                }),
-            )
-            .toBe('r:NaN');
     });
 
     /**
@@ -1000,37 +914,5 @@ test.describe('字幕をくっきり描く', () => {
             await expectSharpCaptions(tab, what);
             await context.close();
         }
-    });
-
-    test.describe('DPR 2', () => {
-        test.use({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 });
-
-        test('データ放送の小窓の中でも、字幕の画素が見えている大きさ × DPR と合う', async ({
-            page,
-            request,
-        }) => {
-            test.setTimeout(180_000);
-            const { id, libraryPath } = await recordOne(page, request);
-            writeFileSync(
-                `${libraryPath.slice(0, libraryPath.length - extname(libraryPath).length)}.bml.jsonl`,
-                `${fakeDataBroadcast()
-                    .map((message) => JSON.stringify({ at: 0, message }))
-                    .join('\n')}\n`,
-            );
-            await routeCaptions(page);
-            await goto(page, `/watch/${id}`);
-            await hideBroken(page);
-            await holdMedia(page, 'watch-video', 'watch-captions-canvas', 'watch-stage');
-            await holdCaptions(page, 'watch-captions-canvas');
-            await expectSharpCaptions(page, '小窓に入る前');
-
-            await wakeControls(page, 'watch-stage');
-            await page.getByTestId('watch-data-button').click();
-            await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
-                timeout: 15_000,
-            });
-            await captionsSeenInDataWindow(page);
-            await expectSharpCaptions(page, 'データ放送の小窓の中');
-        });
     });
 });
