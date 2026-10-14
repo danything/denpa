@@ -136,7 +136,8 @@ ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0.2
 # SVT-AV1 は**上流の最新をソースから組む** (Debian trixie のパッケージは 2 系で古い。
-# 3 系以降は速度も画質も別物)。静的に繋ぐので実行イメージに共有ライブラリは要らない
+# 3 系以降は速度も画質も別物)。libavcodec の .so に静的に繋ぐので、SVT-AV1 の共有ライブラリは要らない
+# (そのために `-DCMAKE_POSITION_INDEPENDENT_CODE=ON` で組む)
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
 ARG SVT_AV1_VERSION=v4.2.0
 
@@ -144,6 +145,12 @@ ARG SVT_AV1_VERSION=v4.2.0
 # ffmpeg を上げて当たらなくなったら黙ってずれて当たるより、ビルドを止めてほしいため
 COPY patches/ /patches/
 
+# **libav* は共有ライブラリで組む** (`--enable-shared --disable-static`)。静的に組むと ffmpeg と
+# ffprobe がそれぞれ libav* と SVT-AV1 を丸ごと抱え、同じ中身 (37MB ずつ) がイメージに2つ入る。
+# ライブラリは /usr/local/lib に置き、`--enable-rpath` で ffmpeg / ffprobe にその場所を書き込む
+# (ld.so の既定の検索先ではないので、ldconfig や LD_LIBRARY_PATH に頼らない)。
+# 実行イメージへ運ぶものは /out にまとめる。.so の版の symlink は運ばず、実行時に読まれる
+# SONAME の名前 (libavcodec.so.63 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため
 RUN case "${TARGETARCH}" in \
       amd64) qsv_dev=libvpl-dev qsv_flag=--enable-libvpl ;; \
       arm64) qsv_dev="" qsv_flag="" ;; \
@@ -153,13 +160,17 @@ RUN case "${TARGETARCH}" in \
     apt-get -y --no-install-recommends install $DEV $qsv_dev && \
     mkdir /tmp/svtav1 && cd /tmp/svtav1 && \
     $CURL https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz | tar -xz --strip-components=1 && \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
     cmake --build build -j$(nproc) && cmake --install build && \
     mkdir /tmp/ffmpeg_sources && cd /tmp/ffmpeg_sources && \
     $CURL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 && \
     for p in /patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done && \
     ./configure \
       --enable-gpl \
+      --enable-shared \
+      --disable-static \
+      --enable-rpath \
       --pkg-config-flags="--static" \
       --enable-libopus \
       --enable-libsvtav1 \
@@ -169,6 +180,11 @@ RUN case "${TARGETARCH}" in \
       $qsv_flag \
     && \
     make -j$(nproc) && make install && \
+    mkdir -p /out/bin /out/lib && \
+    cp /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /out/bin/ && \
+    for lib in /usr/local/lib/lib*.so.*; do \
+      case "${lib##*.so.}" in *.*) ;; *) cp -L "$lib" /out/lib/ ;; esac; \
+    done && \
     rm -rf /var/lib/apt/lists/* /tmp/*
 
 # ---------------------------------------------------------------------------
@@ -212,7 +228,11 @@ RUN case "${TARGETARCH}" in \
 # bun 本体。SvelteKit(adapter-node) の出力を bun で動かす
 COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
-COPY --from=ffmpeg /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
+# ffmpeg / ffprobe と、2つが共有する libav* (`ffmpeg` 段の説明)。
+# ライブラリが欠けていればここでビルドを止める (起動してからエンコードで落ちるより早く分かる)
+COPY --from=ffmpeg /out/bin/ /usr/local/bin/
+COPY --from=ffmpeg /out/lib/ /usr/local/lib/
+RUN ffmpeg -hide_banner -version > /dev/null && ffprobe -hide_banner -version > /dev/null
 
 # データ放送と字幕を描くブラウザに渡す字 (Denpa Font。上の `denpa-font` 段)
 COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
