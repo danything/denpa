@@ -261,6 +261,54 @@ export function watchedToEnd(at: number, length: number): boolean {
     return Number.isFinite(at) && Number.isFinite(length) && length > 0 && at > length - RESUME_EDGE;
 }
 
+/**
+ * 続きの位置の物差し。**続きの位置は元の TS の物差し (入れ物の頭からの秒) で覚える** —
+ * 録っている最中 (追っかけ) は元の TS で、エンコードしたあとはエンコードしたもので観るので、どちらかの
+ * 物差しのまま覚えると、もう一方で開いたときに捨てた頭 (`encode_skip`) や切った CM のぶんずれる。
+ *
+ * - `kept` … CM を切ってエンコードしたときに残した区間 (`cm_kept`。元の TS の物差し)。エンコードしたものは
+ *   これをつないだもの。null は切っていない
+ * - `skip` … 切っていないとき、エンコードしたときに頭から捨てた長さ (`encode_skip`)
+ *
+ * 物差しが元の TS そのもの (エンコードしたものが無い・TS で観ている) なら `Ruler` は null
+ */
+export interface Ruler {
+    kept: readonly { start: number; end: number }[] | null;
+    skip: number;
+}
+
+function keptOf(ruler: Ruler): { start: number; end: number }[] {
+    return (ruler.kept ?? []).filter((range) => range.end > range.start);
+}
+
+/** 元の TS の物差しの位置 (秒) を、`ruler` の物差しへ。**切った CM の中は、その後の本編の頭へ寄せる** */
+export function fromTsTime(at: number, ruler: Ruler | null): number {
+    if (ruler === null) return at;
+    const kept = keptOf(ruler);
+    if (kept.length === 0) return Math.max(0, at - ruler.skip);
+    let sum = 0;
+    for (const range of kept) {
+        if (at < range.start) return sum;
+        if (at < range.end) return sum + (at - range.start);
+        sum += range.end - range.start;
+    }
+    return sum;
+}
+
+/** `ruler` の物差しの位置 (秒) を、元の TS の物差しへ (`fromTsTime` の逆) */
+export function toTsTime(at: number, ruler: Ruler | null): number {
+    if (ruler === null) return at;
+    const kept = keptOf(ruler);
+    if (kept.length === 0) return at + ruler.skip;
+    let rest = Math.max(0, at);
+    for (const range of kept) {
+        const length = range.end - range.start;
+        if (rest < length) return range.start + rest;
+        rest -= length;
+    }
+    return kept.at(-1)!.end;
+}
+
 /** 末尾のここから先は「観終えた」とみなす (秒) */
 export const RESUME_EDGE = 30;
 /** 頭のここまでは「まだ観ていない」とみなす (秒) */

@@ -4,8 +4,10 @@ import { audioTracks, parseAudios } from '#lib/arib.js';
 import { logoUnusable } from '#lib/format.js';
 import { orm } from '#lib/server/db.js';
 import { encodedCodec } from '#lib/server/library.js';
+import { rulerOf } from '#lib/server/playback.js';
 import { recordings } from '#lib/server/schema.js';
 import { displayTitle } from '#lib/server/title.js';
+import { fromTsTime } from '#lib/ts/watch.js';
 
 /**
  * **観られる録画の一覧** (画面の外のもの向けの API。docs/api.md)。新しい順。
@@ -33,6 +35,8 @@ export function GET({ url }) {
             endAt: recordings.end_at,
             durationMs: recordings.duration_ms,
             resumeMs: recordings.resume_ms,
+            cmKept: recordings.cm_kept,
+            encodeSkip: recordings.encode_skip,
             watchedAt: recordings.watched_at,
             library: recordings.library_path,
             alt: recordings.alt_path,
@@ -81,8 +85,24 @@ export function GET({ url }) {
                 startAt: row.startAt,
                 endAt: row.endAt,
                 durationMs: row.durationMs,
-                // 続きから観る位置 (画面と同じ。`POST api/recordings/<id>/resume` で書く)。観終えた・未視聴なら null
-                resumeMs: row.resumeMs,
+                // 続きから観る位置 (画面と同じ。`POST api/recordings/<id>/resume` で書く)。観終えた・未視聴なら null。
+                // 覚えているのは元の TS の物差しなので、観る画面と同じ物差し (エンコードしたものがあればそれ) に直す
+                resumeMs:
+                    row.resumeMs === null
+                        ? null
+                        : Math.round(
+                              fromTsTime(
+                                  row.resumeMs / 1000,
+                                  rulerOf(
+                                      {
+                                          library_path: row.library,
+                                          cm_kept: row.cmKept,
+                                          encode_skip: row.encodeSkip,
+                                      },
+                                      null,
+                                  ),
+                              ) * 1000,
+                          ),
                 // 末尾まで観た時刻 (ms)。まだなら null。null かつ resumeMs も null なら未視聴 (画面の印と同じ)
                 watchedAt: row.watchedAt,
                 recording: row.state === 'recording',

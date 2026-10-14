@@ -36,6 +36,7 @@ import { existsSync, statSync } from 'node:fs';
 import { error } from '@sveltejs/kit';
 import { type AudioTrack, audioTracks, parseAudios, pickTrack } from '#lib/arib.js';
 import type { LiveCodec } from '#lib/live.js';
+import type { FileSource } from '#lib/source.js';
 import { CLOCK, WRAP } from '#lib/ts/pes.js';
 import {
     BUSY,
@@ -47,6 +48,7 @@ import {
     type PlayOffer,
 } from '#lib/ts/playback.js';
 import { lastVideoPts, type ReadAt, seekTs, sinceHead, tsHead } from '#lib/ts/seek.js';
+import type { Ruler } from '#lib/ts/watch.js';
 import type { Recording } from '#lib/types.js';
 import { programSpec } from './captions';
 import { chapterList } from './cm';
@@ -824,6 +826,19 @@ async function rawResponse(plan: PlaybackPlan, from: number): Promise<Response> 
 /** エンコード済みのファイル (Matroska)。無ければ null。在るものが物差しになる (`PlayAxis`) */
 export function encodedPath(recording: Pick<Recording, 'library_path'>): string | null {
     return recording.library_path?.endsWith('.mkv') === true ? recording.library_path : null;
+}
+
+/**
+ * 続きの位置の物差し (`ts/watch.ts` の `Ruler`)。`source` は観ているファイル (`?source=` と同じ語彙)。
+ * null なら観る画面と同じ決め方 (エンコードしたものがあればそれ、無ければ元の TS。`playbackPlan` の `axis`)。
+ * 元の TS の物差しなら null
+ */
+export function rulerOf(
+    recording: Pick<Recording, 'library_path' | 'cm_kept' | 'encode_skip'>,
+    source: FileSource | null,
+): Ruler | null {
+    const encoded = source === null ? encodedPath(recording) !== null : source !== 'ts';
+    return encoded ? { kept: recording.cm_kept, skip: recording.encode_skip ?? 0 } : null;
 }
 
 /**
