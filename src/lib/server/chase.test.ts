@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chasePlan, fileSize, followFile } from './chase';
+import { ServiceFilter, StreamsWatch } from '#lib/ts/service-filter.js';
+import { packetize, patSection, programMap, stream } from '#lib/ts/synth.js';
+import { chasePlan, fileSize, followFile, resumeFrom, resumePlan } from './chase';
 import { chunks } from './stream';
 
 /**
@@ -129,5 +131,79 @@ describe('伸びるファイルの追い読み (followFile)', () => {
 describe('fileSize', () => {
     test('無ければ null', () => {
         expect(fileSize('/no/such/file.ts')).toBeNull();
+    });
+});
+
+/**
+ * **番組が替わって作り直したところから読み直す** (`resumeFrom` / `resumePlan`)。秒からバイトへの当たりは比例なので、
+ * 少し手前に当たると前の番組の PMT を読んでからまた変わり、作り直しを繰り返す。変わったところの近くを
+ * リクエストされたら、変わったところのバイトから読む
+ */
+describe('作り直したところから読み直す (resumePlan)', () => {
+    const SERVICE = 1024;
+    const PMT = 0x1f0;
+    const pat = () => packetize(0x0000, patSection([[SERVICE, PMT]]));
+    const before = () =>
+        packetize(
+            PMT,
+            programMap(SERVICE, 0x100, [
+                [0x02, 0x100],
+                [0x0f, 0x110],
+            ]),
+        );
+    // 番組が替わって音声が増えた
+    const after = () =>
+        packetize(
+            PMT,
+            programMap(SERVICE, 0x100, [
+                [0x02, 0x100],
+                [0x0f, 0x110],
+                [0x0f, 0x111],
+            ]),
+        );
+    /** 前の番組 40 組・新しい番組 40 組の PAT/PMT が並んだ元のTS */
+    const ts = stream(
+        ...Array.from({ length: 40 }, () => [pat(), before()]).flat(),
+        ...Array.from({ length: 40 }, () => [pat(), after()]).flat(),
+    );
+
+    /** `from` から塊ごとに読んで、並びが変わったら頭から読んだ量を返す (`Session.pump` と同じ見方) */
+    function readUntilChange(from: number, size: number): { consumed: number | null; first: string | null } {
+        const filter = new ServiceFilter(SERVICE);
+        const watch = new StreamsWatch();
+        let first: string | null = null;
+        for (let at = from; at < ts.length; at += size) {
+            filter.filter(ts.subarray(at, Math.min(ts.length, at + size)));
+            first ??= filter.streams;
+            if (watch.changed(filter)) return { consumed: Math.min(ts.length, at + size) - from, first };
+        }
+        return { consumed: null, first };
+    }
+
+    test('変わったところから読み直すと、新しい並びから始まって作り直しを繰り返さない', () => {
+        const plan = chasePlan(ts.length, 80, 0);
+        // 塊は 188 に揃っていない (読む量は 256KB)
+        const { consumed } = readUntilChange(plan.offset, 1000);
+        expect(consumed).not.toBeNull();
+        const resume = resumeFrom(plan, consumed ?? 0, 0);
+        expect(resume.offset % 188).toBe(0);
+
+        // 少し手前の秒をリクエストされても、変わったところから
+        const again = resumePlan(chasePlan(ts.length, 80, resume.at - 3), resume, 1);
+        expect(again.offset).toBe(resume.offset);
+        expect(again.at).toBe(resume.at);
+        const reread = readUntilChange(again.offset, 1000);
+        expect(reread.first).toBe('2:256,15:272,15:273');
+        expect(reread.consumed).toBeNull();
+    });
+
+    test('遠くの位置・期限を過ぎたあと・覚えていない録画は、いつもの当たりのまま', () => {
+        const plan = chasePlan(ts.length, 80, 0);
+        const resume = resumeFrom(plan, 40 * 2 * 188, 0);
+        const far = chasePlan(ts.length, 80, resume.at + 30);
+        expect(resumePlan(far, resume, 1)).toEqual(far);
+        const near = chasePlan(ts.length, 80, resume.at);
+        expect(resumePlan(near, resume, resume.until + 1)).toEqual(near);
+        expect(resumePlan(near, undefined)).toEqual(near);
     });
 });

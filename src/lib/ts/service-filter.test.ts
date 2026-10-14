@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { PACKET } from './psi';
-import { ServiceFilter } from './service-filter';
+import { ServiceFilter, StreamsWatch } from './service-filter';
 import { copyControlDescriptor, packetize, patSection, programMap } from './synth';
 
 /** MX1 と MX2 が同じ TS に入っている、実機と同じ構成 */
@@ -268,5 +268,47 @@ describe('映像・音声・字幕の並び', () => {
             ]),
         );
         expect(filter.streams).not.toBe(captioned);
+    });
+});
+
+/**
+ * **並びが変わったか** (`StreamsWatch`)。ライブ・追っかけのエンコードと、放送のままの経路の字幕の ffmpeg は、
+ * これが true を返したら起こし直す。最初に読んだ並びは「変わった」にしない
+ */
+describe('並びが変わったか', () => {
+    const map = (streams: [number, number][]) => packetize(PMT1, programMap(MX1, 0x100, streams));
+
+    test('最初の PMT では変わったことにしない。変わったら1回だけ true、データ放送の増減では false', () => {
+        const filter = new ServiceFilter(MX1);
+        const watch = new StreamsWatch();
+        filter.filter(pat());
+        expect(watch.changed(filter)).toBe(false);
+        filter.filter(pmt1());
+        expect(watch.changed(filter)).toBe(false);
+        filter.filter(pmt1());
+        expect(watch.changed(filter)).toBe(false);
+
+        filter.filter(
+            map([
+                [0x02, 0x100],
+                [0x0f, 0x110],
+                [0x0d, 0x140],
+            ]),
+        );
+        expect(watch.changed(filter)).toBe(false);
+
+        filter.filter(
+            map([
+                [0x02, 0x100],
+                [0x0f, 0x110],
+                [0x0f, 0x111],
+            ]),
+        );
+        expect(watch.changed(filter)).toBe(true);
+        expect(watch.changed(filter)).toBe(false);
+
+        // 元の並びに戻ったのも変わったこと (切り替わりの前後で行き来する局)
+        filter.filter(pmt1());
+        expect(watch.changed(filter)).toBe(true);
     });
 });

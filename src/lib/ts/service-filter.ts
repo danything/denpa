@@ -139,7 +139,7 @@ export class ServiceFilter {
     /**
      * **映像・音声・字幕の並び** (最後に読んだ PMT の `種別:PID`)。PMT を読むまでは null。
      *
-     * ライブはこれが変わったら ffmpeg を作り直す (`server/live.ts` の `tap`)。ffmpeg は起きたときの並びのまま
+     * これが変わったら ffmpeg を作り直す (`StreamsWatch`)。ffmpeg は起きたときの並びのまま
      * 音声・字幕を選んでいるので、番組が替わって音声の本数や字幕の PID が変わると追従しない。
      * データ放送などのセクション (0x0D など) は入れない — 番組ごとに増減しても ffmpeg には関係ない
      */
@@ -252,6 +252,27 @@ export class ServiceFilter {
             this.copyNeverNow = copyNever;
             this.streamsNow = streams.join(',');
         }
+    }
+}
+
+/**
+ * **映像・音声・字幕の並びが変わったか** (`ServiceFilter.streams`) を見る。最初に読んだ並びを覚え、変わったら
+ * 1回だけ true を返して新しい並びを覚え直す。
+ *
+ * 並びを決め打ちで起こした ffmpeg (`-map`) は、番組が替わって音声の本数や字幕の PID が変わっても追従しない。
+ * 変わったら起こし直す — ライブと追っかけのエンコード (`server/live.ts` の `Session.pump`)、MPEG-2 をそのまま
+ * 流す経路の字幕 (`Session.runRaw`・`recordingCaptions`)
+ */
+export class StreamsWatch {
+    private seen: string | null = null;
+
+    /** `filter` に塊を通したあとに呼ぶ */
+    changed(filter: ServiceFilter): boolean {
+        const now = filter.streams;
+        if (now === null) return false;
+        const before = this.seen;
+        this.seen = now;
+        return before !== null && before !== now;
     }
 }
 
