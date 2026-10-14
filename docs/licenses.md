@@ -15,14 +15,14 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 ### 自前ビルドの ffmpeg と、そこに繋がるもの
 
-`--enable-gpl` で x264 を繋いでいるので、**出来上がる ffmpeg / ffprobe は GPL-2.0-or-later**
-になります。
+`--enable-gpl` で x264 を繋いでいるので、**出来上がる ffmpeg / ffprobe と、2つが共有する `libav*` の
+共有ライブラリ (`/usr/local/lib`) は GPL-2.0-or-later** になります。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | FFmpeg | エンコード・字幕・サムネイル・ライブ | <https://ffmpeg.org> | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+) |
 | x264 | H.264 のエンコード | <https://www.videolan.org/developers/x264.html> | GPL-2.0+ |
-| SVT-AV1 (ソースから静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
+| SVT-AV1 (ソースから組み、libavcodec に静的リンク) | AV1 のエンコード | <https://gitlab.com/AOMediaCodec/SVT-AV1> | BSD-3-Clause-Clear + AOM 特許ライセンス |
 | dav1d | AV1 のデコード | <https://code.videolan.org/videolan/dav1d> | BSD-2-Clause |
 | Opus (libopus) | 音声 | <https://opus-codec.org> | BSD-3-Clause |
 | libva / libva-drm | VA-API (GPU でエンコードする) | <https://github.com/intel/libva> | MIT |

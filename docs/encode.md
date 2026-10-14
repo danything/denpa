@@ -337,7 +337,7 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 ## SVT-AV1 は上流をソースから組みます
 
 **上流の 4.2.0 をソースから組んでイメージに入れています** (`Dockerfile` の `SVT_AV1_VERSION`)。
-Debian trixie のパッケージは 2.3.0 で止まっていて更新が来ません。静的に繋ぐので実行イメージは増えません。
+Debian trixie のパッケージは 2.3.0 で止まっていて更新が来ません。libavcodec に静的に繋ぐので実行イメージは増えません。
 上げるときの実測 (実機の録画から100秒、地上波の国内アニメ、denpa と同じフィルタ、当時は 10bit。画質は元との SSIM):
 
 | SVT-AV1 | preset | crf | 所要 | 大きさ | SSIM |
