@@ -405,8 +405,13 @@ export async function loadOffline(id: number): Promise<OfflineVideo | null> {
 }
 
 /** オフライン中に進んだ視聴位置を覚えておく。復帰時に flush がまとめて送る */
-export async function rememberResume(id: number, at: number, length: number, axis: PlayAxis): Promise<void> {
-    await resumeQueue.put({ id, at, length, axis, updatedAt: Date.now() });
+export async function rememberResume(
+    id: number,
+    at: number,
+    length: number,
+    axis: PlayAxis | undefined,
+): Promise<void> {
+    await resumeQueue.put({ id, at, length, ...(axis === undefined ? {} : { axis }), updatedAt: Date.now() });
 }
 
 /**

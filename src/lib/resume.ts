@@ -13,7 +13,14 @@ import type { PlayAxis } from './ts/playback';
  *   (`offline.svelte.ts` の resume の控え)
  * - 位置は観ているものの物差し (`axis`) で送る。サーバが元の TS の物差しに直して覚える
  */
-export function keepResume(id: number, at: number, length: number, axis: PlayAxis, leaving = false): void {
+export function keepResume(
+    id: number,
+    at: number,
+    length: number,
+    /** 観ているものの物差し。分からなければ undefined (サーバが観る画面と同じ決め方をする) */
+    axis: PlayAxis | undefined,
+    leaving = false,
+): void {
     const body = JSON.stringify({ at, length, source: axis });
     const url = resolve(`api/recordings/${id}/resume`);
     if (leaving && navigator.sendBeacon !== undefined) {

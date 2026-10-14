@@ -317,6 +317,18 @@ describe('続きの位置の物差し', () => {
         expect(fromTsTime(1, plain)).toBe(0);
     });
 
+    test('区間の終わりちょうどは次の区間の頭。往復すると元に戻る', () => {
+        expect(fromTsTime(100, cut)).toBe(90);
+        expect(toTsTime(90, cut)).toBe(160);
+        for (const at of [10, 50, 99, 160, 250]) expect(toTsTime(fromTsTime(at, cut), cut)).toBe(at);
+        for (const at of [0, 40, 90, 200]) expect(fromTsTime(toTsTime(at, cut), cut)).toBe(at);
+    });
+
+    test('残した区間が空なら、切っていないものと同じ', () => {
+        expect(fromTsTime(50, { kept: [], skip: 3 })).toBe(47);
+        expect(toTsTime(47, { kept: [], skip: 3 })).toBe(50);
+    });
+
     test('元の TS で観るときはそのまま', () => {
         expect(fromTsTime(120, null)).toBe(120);
         expect(toTsTime(120, null)).toBe(120);

@@ -51,6 +51,7 @@ const {
     mediaInfo,
     playbackPlan,
     presented,
+    rulerOf,
     streamResponse,
     transcodeBody,
     tsOffset,
@@ -409,5 +410,25 @@ describe('ffprobe の読み (mediaInfo)', () => {
             audios: [],
             duration: null,
         });
+    });
+});
+
+/** 続きの位置の物差し (`rulerOf`)。**どのファイルの時刻かの取り違えが、続きがずれる不具合そのもの** */
+describe('続きの位置の物差し', () => {
+    const kept = [{ start: 10, end: 100 }];
+    const encoded = { library_path: '/library/a.mkv', cm_kept: kept, encode_skip: 3 };
+    const tsOnly = { library_path: null, cm_kept: null, encode_skip: null };
+
+    test('source を省くと観る画面と同じ。エンコードしたものがあればそれ、無ければ元の TS', () => {
+        expect(rulerOf(encoded, null)).toEqual({ kept, skip: 3 });
+        expect(rulerOf(tsOnly, null)).toBeNull();
+        // エンコードせずに置いた録画は、置き場の TS が元の TS
+        expect(rulerOf({ ...tsOnly, library_path: '/library/a.ts' }, null)).toBeNull();
+    });
+
+    test('名指しされたらそれ。alt も同じ切り方 (2本目は1本目と同じ区間で切る)', () => {
+        expect(rulerOf(encoded, 'ts')).toBeNull();
+        expect(rulerOf(encoded, 'encoded')).toEqual({ kept, skip: 3 });
+        expect(rulerOf(encoded, 'alt')).toEqual({ kept, skip: 3 });
     });
 });
