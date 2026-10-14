@@ -285,6 +285,19 @@ export class Resources {
         );
     }
 
+    /** もう来ないと分かっているモジュールか (PMT に部品が無い・DII にモジュールが無い) */
+    missing(ref: Ref): boolean {
+        if (ref.module === null || this.has(ref.component, ref.module)) return false;
+        return this.gone(ref.component, ref.module);
+    }
+
+    /** PMT に部品が無い・DII にモジュールが無いので、待っても来ない (`missing`・`wait` で同じ決め方) */
+    private gone(component: number, module: number): boolean {
+        if (this.pmtSeen && !this.pmt.has(component)) return true;
+        const dii = this.dii.get(component);
+        return dii !== undefined && !dii.modules.has(module);
+    }
+
     /** 届くのを待ってファイルを出す。来ないと決まれば null */
     async fetch(ref: Ref): Promise<CarouselFile | null> {
         const now = this.file(ref);
@@ -297,9 +310,7 @@ export class Resources {
     private wait(component: number, module: number, kind: LockKind | null): Promise<Module | null> {
         const now = this.cache.get(key(component, module));
         if (now !== undefined) return Promise.resolve(now);
-        if (this.pmtSeen && !this.pmt.has(component)) return Promise.resolve(null);
-        const dii = this.dii.get(component);
-        if (dii !== undefined && !dii.modules.has(module)) return Promise.resolve(null);
+        if (this.gone(component, module)) return Promise.resolve(null);
         return new Promise((resolve) => {
             this.pending.push({ component, module, resolve, kind });
             this.updateReceiving();

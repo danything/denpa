@@ -157,6 +157,35 @@ test.describe('データ放送のエンジン', () => {
         );
     });
 
+    test('通信の文書・放送に無い文書へ移ろうとしても、データ放送は閉じずに失敗を返す', async ({ page }) => {
+        await prepare(page);
+        await openData(page);
+        // d が届いたら、移れない文書へ順に移ろうとして、返ってきた値を出す
+        await feed(
+            page,
+            [
+                '<script><![CDATA[',
+                'function go() {',
+                '  var a = browser.launchDocument("https://www.example.com/a.bml", "cut");',
+                '  var b = browser.launchDocument("/40/0005/a.bml", "cut");',
+                '  document.getElementById("msg").firstChild.data = a + "," + b;',
+                '}',
+                ']]></script>',
+                '<bevent><beitem type="DataButtonPressed" onoccur="go();" subscribe="subscribe"/></bevent>',
+                '<p id="msg" style="left:0px;top:0px;width:400px;height:40px;color-index:7;">init</p>',
+            ].join('\n'),
+        );
+        const text = async () => (await dataElement(page, 'span'))?.text;
+        await expect.poll(text, { timeout: 10_000 }).toBe('NaN,NaN');
+        // 入口から出直さず、出たまま
+        const overlay = page.getByTestId('live-data');
+        await expect(overlay).toHaveAttribute('data-state', 'ready');
+        await expect(overlay).toHaveAttribute('data-showing', 'true');
+        await page.waitForTimeout(500);
+        expect(await text()).toBe('NaN,NaN');
+        await expect(overlay).toHaveAttribute('data-showing', 'true');
+    });
+
     test('データ放送の epgTune で別の局へ切り替わる (選局は画面がやる)', async ({ page }) => {
         await prepare(page);
         await openData(page);

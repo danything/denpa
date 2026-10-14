@@ -405,6 +405,88 @@ describe('文書の名前', () => {
     });
 });
 
+describe('移れない文書へ移ろうとしても閉じない', () => {
+    test('DII に載っていてまだ届いていないモジュールへは、届くのを待って移る', async () => {
+        const { bml } = open();
+        const [pmt, , entry] = carousel([
+            startup('', 'function start() { browser.launchDocument("/40/0001/next.bml", "cut"); }'),
+        ]);
+        const list: ResponseMessage = {
+            type: 'moduleListUpdated',
+            componentId: 0x40,
+            modules: [
+                { id: 0, version: 1, size: 1 },
+                { id: 1, version: 1, size: 1 },
+            ],
+            dataEventId: 1,
+        };
+        feedAll(bml, [PROGRAM, pmt!, list, entry!]);
+        const [, , next] = carousel([
+            bmlFile('next.bml', '', 'function start() { browser.Ureg[1] = browser.getActiveDocument(); }'),
+        ]);
+        await watch(() => bml.path === '/40/0000/startup.bml');
+        // 入口の launchDocument が先に走り、モジュールを待っているところへ届ける
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(bml.path).toBe('/40/0000/startup.bml');
+        bml.feed({ ...(next as Extract<ResponseMessage, { type: 'moduleDownloaded' }>), moduleId: 1 });
+        const { done } = await watch(() => inside(bml).ureg[1] !== '');
+        expect(done).toBe(true);
+        expect(inside(bml).ureg[1]).toBe('/40/0001/next.bml');
+    });
+
+    /**
+     * 入口は invisible のまま次の文書へ渡し、次の文書が出てくる (NHK と同じ形)。入口から出直すと
+     * 入口の invisible で隠れ、データ放送が閉じたように見える
+     */
+    function hiddenEntry(target: string): [string, string, string][] {
+        return [
+            [
+                'startup.bml',
+                'text/X-arib-bml',
+                `<?xml version="1.0" encoding="EUC-JP"?>
+<bml><head><title>t</title><script><![CDATA[function start() { browser.launchDocument("menu.bml", "cut"); }]]></script></head>
+<body style="resolution:960x540" invisible="invisible" onload="start();"></body></bml>`,
+            ],
+            bmlFile(
+                'menu.bml',
+                '',
+                `function start() {
+                    var r = browser.launchDocument("${target}", "cut");
+                    browser.Ureg[1] = "" + r;
+                    browser.Ureg[2] = browser.getActiveDocument();
+                }`,
+            ),
+        ];
+    }
+
+    for (const [what, target, message] of [
+        ['通信の文書 (https://)', 'https://www.example.com/a.bml', '通信の文書にはまだ移れない'],
+        ['通信の文書 (http://)', 'http://www.example.com/a.bml', '通信の文書にはまだ移れない'],
+        [
+            '別の局の文書 (arib-dc://)',
+            'arib-dc://7fe1.7fe1.0401/40/0000/a.bml',
+            '放送の中の文書として読めない',
+        ],
+        ['DII に無いモジュール', '/40/0005/a.bml', 'モジュールが放送に無い'],
+        ['PMT に無い部品', '/50/0000/a.bml', 'モジュールが放送に無い'],
+    ] as const) {
+        test(`${what}: 失敗 (NaN) を返し、今の文書のまま続きを動かす`, async () => {
+            const visible: boolean[] = [];
+            const { bml, logs } = open({ onVisible: (on) => visible.push(on) });
+            feedAll(bml, [PROGRAM, ...carousel(hiddenEntry(target))]);
+            const { done } = await watch(() => inside(bml).ureg[2] !== '');
+            expect(done).toBe(true);
+            expect(inside(bml).ureg[1]).toBe('NaN');
+            expect(inside(bml).ureg[2]).toBe('/40/0000/menu.bml');
+            // 少し待っても入口へ出直さない (出ている文書のまま)
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            expect(bml.path).toBe('/40/0000/menu.bml');
+            expect(visible.at(-1)).toBe(true);
+            expect(logs.some((line) => line.includes(message) && line.includes(target))).toBe(true);
+        });
+    }
+});
+
 describe('lockModuleOnMemoryEx', () => {
     test('0x40・0x50・0x60 のほか (0x61 など) は NaN を返して知らせる', async () => {
         const { bml, logs } = open();
