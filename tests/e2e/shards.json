@@ -9,7 +9,9 @@
         "33-recordings-group",
         "35-csp",
         "36-bml",
-        "37-playback"
+        "37-playback",
+        "40-watch-compat",
+        "42-copy-never"
     ],
     "2": [
         "03-recording",
@@ -19,7 +21,9 @@
         "16-scan",
         "25-chase",
         "27-encode-cancel",
-        "32-chase-api"
+        "32-chase-api",
+        "41-watch-compat-local",
+        "43-raw-cadence"
     ],
     "3": [
         "09-behaviour",
