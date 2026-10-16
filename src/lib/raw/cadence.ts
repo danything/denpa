@@ -36,7 +36,8 @@ export class Vsync {
         this.anchor = at;
         if (last === null) return;
         const gap = at - last;
-        if (gap <= 0) return;
+        // 裏から戻った (rAF が止まっていた) なら位置だけ覚え直す。長く空くと何回ぶんかの割り戻しがずれる
+        if (gap <= 0 || gap > STALE_MS) return;
         // 落とした回 (2〜3回ぶん空いた) は、何回ぶんかで割って間隔に戻す
         const guess = this.interval ?? gap;
         const count = Math.max(1, Math.round(gap / guess));

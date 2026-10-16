@@ -176,3 +176,13 @@ describe('59.94i を 60Hz の画面に出す', () => {
         expect(repeats + skips).toBeGreaterThan(100);
     });
 });
+
+describe('Vsync (裏から戻ったとき)', () => {
+    test('長く空いたあとは間隔を崩さず、位置だけ覚え直す', () => {
+        const vsync = new Vsync();
+        for (let i = 0; i < 10; i++) vsync.feed(i * (1000 / 60));
+        vsync.feed(60_000.4);
+        expect(vsync.period).toBeCloseTo(1000 / 60, 6);
+        expect(vsync.next(60_001)).toBeCloseTo(60_000.4 + 1000 / 60, 6);
+    });
+});
