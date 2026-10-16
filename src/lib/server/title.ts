@@ -139,18 +139,20 @@ const SEASON_ANYWHERE = new RegExp(
     'gi',
 );
 
-// 期の表記を外した跡に残る頭の区切り記号 (`Season 2 - 作品名` の ` - `)
-const LEADING_SEPARATOR = /^[\s\-~〜:：|｜▼▽・]+/u;
+// 期の表記を外した跡に残る頭と後ろの区切り記号 (`Season 2 - 作品名` の ` - `、`作品名・Season 2` の `・`)
+const LEADING_SEPARATOR = /^[\s\-~〜:：|｜▼▽・･]+/u;
+const LEFTOVER_SEPARATOR = /[\s\-~〜:：|｜▼▽・･]+$/u;
 
 /**
  * シリーズ名から期・シーズンの表記を外す。**ルールのキーワードを次の期にも当てるため** —
  * `作品名 Season 2` をそのまま語にすると、次の `作品名 Season 3` に当たらない。
- * 外した跡の空白は1つに、前後の区切り記号は落とす。外すと何も残らないなら元のまま
+ * 外した跡の空白は1つに、前後の区切り記号は落とす。外すものが無い・外すと何も残らないなら元のまま
  */
 export function withoutSeason(series: string): string {
-    const out = new Twin(series)
-        .remove(SEASON_ANYWHERE)
-        .raw.replace(TRAILING_SEPARATOR, '')
+    const removed = new Twin(series).remove(SEASON_ANYWHERE).raw;
+    if (removed === series) return series;
+    const out = removed
+        .replace(LEFTOVER_SEPARATOR, '')
         .replace(LEADING_SEPARATOR, '')
         .replace(/\s+/g, (run) => ([...run].every((c) => c === WIDE_SPACE) ? WIDE_SPACE : ' '))
         .trim();
