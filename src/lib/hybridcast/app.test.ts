@@ -62,6 +62,16 @@ test('frameMessage は形の合わないものを捨てる', () => {
         items: { a: 'b' },
     });
     expect(frameMessage({ hc: 1, type: 'unknown' })).toBeNull();
+    expect(frameMessage({ hc: 1, type: 'video', place: 'other' })).toBeNull();
+    expect(frameMessage({ hc: 1, type: 'video', place: { left: 'x', top: 1, width: 2, height: 3 } })).toEqual(
+        {
+            type: 'video',
+            place: { left: 0, top: 1, width: 2, height: 3 },
+        },
+    );
+    expect(frameMessage({ hc: 1, type: 'fetch', id: 1, url: 'a', method: 'GET', body: 'x' })).toMatchObject({
+        body: null,
+    });
 });
 
 test('receiverKey: 色ボタンは 403〜406、戻ると d は閉じる', () => {

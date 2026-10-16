@@ -173,8 +173,8 @@
     function startApp(hint: number[]): boolean {
         const app = pickApp(hint);
         if (app === null) return false;
-        // 開いているなら開き直さない (文書が何度も呼んでくることがある)
-        if (running === null) {
+        // 同じアプリなら開き直さない (文書が何度も呼んでくることがある)。別のアプリなら替える
+        if (running?.url !== app.url) {
             running = app;
             appVideo = 'full';
             // 届け途中の d はここまで (押し直すと、開いたアプリを閉じてしまう)
@@ -746,6 +746,7 @@
         ので、テレビより待つ (実測で8秒)。何も言わずに待たせると壊れて見える
     -->
     {#if running !== null}
+        {#key running.url}
         <HybridcastFrame
             app={running}
             hc={hcState}
@@ -758,6 +759,7 @@
             }}
             bind:press={appPress}
         />
+        {/key}
     {/if}
     {#if on && running === null && (loading || receiving)}
         <div class="corner">

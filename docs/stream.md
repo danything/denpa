@@ -1432,6 +1432,7 @@ null (使えない) を返し、何を呼ばれたかをコンソールに `[hyb
 | オリジン | iframe は `sandbox="allow-scripts"` (`allow-same-origin` は付けない)。入れ物 (`/api/bml/hybridcast`) も CSP の `sandbox allow-scripts` を返すので、URL を直に開いても使い捨てのオリジンになる。denpa の cookie・localStorage・画面には触れない |
 | 繋ぐ | 入れ物の CSP で `connect-src 'none'`。アプリの通信は差し込みが画面へ渡し、画面が中継で取得する。中継の決まり (公開アドレスだけ・10 秒・4MB・cookie も UA も受信機を見分けるものも送らない) はデータ放送と同じ。denpa 自身 (内側) へは中継が断る |
 | 読み込む | script・画像・CSS・フォント・動画は元のサーバから直に (`*`)。フォームの送信・入れ子の iframe・worker・ポップアップ・上の画面を移すことはできない |
+| 残る危険 | 画像・script などの読み込みは中継を通らないので、アプリ (とアプリが読む外の script) は利用者のブラウザから LAN の中や localhost へ GET を送れる (返りは読めない)。読み込む先のサーバには利用者の IP が見える。テレビのブラウザと同じで、ここは受け入れる |
 | 受け取る | 画面は postMessage の送り元が自分の iframe であることと、形を確かめる (`frameMessage`)。選局は denpa が許した範囲だけ |
 | srcdoc・blob: にしない | それだと denpa の画面の CSP を受け継ぎ、放送局の script が動かない。緩めると denpa の画面の CSP の意味がなくなる。denpa の画面の CSP は `frame-src 'self'` を足しただけ |
 | 送られる情報 | アプリが自分で送るもの (視聴の記録・いまの番組など) は通る。テレビと同じ。「データ放送の双方向」をオフにすれば起動しない |
