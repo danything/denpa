@@ -346,6 +346,108 @@ describe('止まる・打ち切る・区切る', () => {
     });
 });
 
+describe('sort の比べる関数', () => {
+    test('数で比べる・逆順', async () => {
+        expect(
+            await evaluate(
+                'function up(x, y) { return x - y; } function down(x, y) { return y - x; }' +
+                    'var a = [10, 9, 1, 100]; a.sort(up);' +
+                    'var b = [10, 9, 1, 100]; b.sort(down);' +
+                    'var result = [a.join(","), b.join(",")];',
+            ).then(items),
+        ).toEqual(['1,9,10,100', '100,10,9,1']);
+    });
+
+    test('戻り値は数にする (文字列でも)', async () => {
+        expect(
+            await evaluate(
+                'function cmp(x, y) { return "" + (x - y); } var a = [3, 1, 2]; a.sort(cmp); var result = a.join(",");',
+            ),
+        ).toBe('1,2,3');
+    });
+
+    test('undefined は後ろに回し、比べる関数には渡さない', async () => {
+        expect(
+            await evaluate(
+                'var seen = 0; var a = [3, undefined, 1, undefined, 2];' +
+                    'function cmp(x, y) { if (x === undefined || y === undefined) seen++; return x - y; } a.sort(cmp);' +
+                    'var result = [a[0], a[1], a[2], a[3] === undefined, a[4] === undefined, a.length, seen];',
+            ).then(items),
+        ).toEqual([1, 2, 3, true, true, 5, 0]);
+    });
+
+    test('比べる関数の中で関数を呼べる・入れ子の sort もよい', async () => {
+        expect(
+            await evaluate(
+                'function up(x, y) { return x - y; } function byKey(x, y) { return key(x) - key(y); }' +
+                    'function key(o) { var k = [o.b, o.a]; k.sort(up); return k[0]; }' +
+                    'var a = [{a: 5, b: 9}, {a: 1, b: 7}, {a: 8, b: 3}];' +
+                    'a.sort(byKey);' +
+                    'var result = a[0].a + "," + a[1].a + "," + a[2].a;',
+            ),
+        ).toBe('1,8,5');
+    });
+
+    test('比べる関数の誤りはそのまま伝わり、実行を止める', async () => {
+        const vm = setup();
+        vm.startProgram(
+            compileScript(
+                'function cmp(x, y) { return nothing; } var a = [2, 1]; a.sort(cmp); var result = 1;',
+                'x',
+            ),
+        );
+        const result = vm.run(Number.POSITIVE_INFINITY);
+        expect(result.kind).toBe('error');
+        if (result.kind === 'error') expect(result.error.message).toContain('nothing');
+        expect(vm.busy).toBe(false);
+        expect(vm.realm.global.get('result')).toBeUndefined();
+    });
+
+    test('関数でないものは誤り', async () => {
+        await expect(evaluate('[2, 1].sort(5);')).rejects.toThrow('関数ではありません');
+    });
+
+    test('比べる関数の命令も上限に数える', () => {
+        const vm = new Vm(createRealm({ now: () => NOW }), { steps: 10000 });
+        vm.startProgram(
+            compileScript(
+                'var a = []; for (var i = 0; i < 200; i++) a.push(200 - i);' +
+                    'function cmp(x, y) { for (var j = 0; j < 10; j++) {} return x - y; } a.sort(cmp);',
+                'x',
+            ),
+        );
+        const result = vm.run(Number.POSITIVE_INFINITY);
+        expect(result.kind).toBe('error');
+        if (result.kind === 'error') expect(result.error.message).toContain('終わりません');
+        expect(vm.busy).toBe(false);
+    });
+
+    test('比べる関数の中で sleep は誤り', async () => {
+        const realm = createRealm({ now: () => NOW });
+        realm.global.put(
+            'sleep',
+            new JSFunction(
+                realm.functionProto,
+                'sleep',
+                {
+                    kind: 'native',
+                    impl: () => new Suspend(Promise.resolve(undefined)),
+                },
+                null,
+            ),
+        );
+        const vm = new Vm(realm);
+        vm.startProgram(
+            compileScript('function cmp(x, y) { sleep(); return x - y; } [2, 1].sort(cmp);', 'x'),
+        );
+        const result = vm.run(Number.POSITIVE_INFINITY);
+        expect(result.kind).toBe('error');
+        expect(vm.busy).toBe(false);
+        // 誤りの後も次の実行は動く
+        expect(await evaluate('var result = 1;', vm)).toBe(1);
+    });
+});
+
 describe('細かい意味', () => {
     test('配列の sort も EUC-JP の順 (全角英数 0xA3xx は漢字 0xB0xx より前)', async () => {
         expect(await evaluate('var a = ["亜", "Ａ", "あ"]; a.sort(); var result = a.join("");')).toBe(

@@ -1219,7 +1219,7 @@ bml.destroy();
 | 映像 | **動かさない。** object の場所を教えてもらい (`onVideoRect`)、映像の入れ物を style でそこへ寄せる (`placeVideo`)。字幕の canvas は入れ物の中なので一緒に縮む。映像より前に描くものの背景には穴を開ける |
 | 文書 | 自前の寛容な XML パーサ → 16 の要素の木 → open な Shadow DOM の中の絶対配置の div。**innerHTML も属性の写しも無い** (字は textContent、見た目は確かめた値を `element.style` に書くだけ。CSP の `style-src` にも頼らない) |
 | CSS | 自前で重ね合わせ (単純セレクタ・詳細度・継承・:focus/:active)、確かめた値だけ書く |
-| スクリプト | 自前の VM (`vm.ts`)。eval を使わず、CSP の下でそのまま動く。sleep で止まる・launchDocument で打ち切る |
+| スクリプト | 自前の VM (`vm.ts`)。eval を使わず、CSP の下でそのまま動く。sleep で止まる・launchDocument で打ち切る。`sort` に比べる関数を渡せる (日テレのメニューが使う)。比べる関数は戻るまで続けて動かし、命令の数は実行の上限に数える。中で sleep はできない |
 | 字 | TextDecoder (EUC-JP) と、追加記号は b24-tables。DRCS は 1 字を CSS の mask に |
 | 内蔵音 | WebAudio で合成 |
 | 束 | 押すまで落ちてこない (`import()` で分けてある。どのみちカルーセルの一周を待つので、そこに紛れる) |

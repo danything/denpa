@@ -121,16 +121,28 @@ export function createRealm(options: RealmOptions): Realm {
         items(self).reverse();
         return self;
     });
+    // ES3 15.4.4.11。undefined は後ろに回して比べない。既定の比べ方は文字列にしてから (EUC-JP の順)。
+    // 比べる関数の戻り値は数にし (NaN は 0)、投げた誤りはそのまま伝える。命令の数は実行の上限に数える
     method(realm.arrayProto, 'sort', (self, args) => {
-        if (args[0] !== undefined) throw new ScriptError('sort の比べる関数は使えません');
-        // 既定の比べ方は文字列にしてから (undefined は後ろ)
-        items(self).sort((a, b) => {
-            if (a === undefined) return b === undefined ? 0 : 1;
-            if (b === undefined) return -1;
-            const x = toStr(a);
-            const y = toStr(b);
-            return compareEuc(x, y);
-        });
+        const list = items(self);
+        const compare = args[0];
+        let order: (a: Value, b: Value) => number;
+        if (compare === undefined) {
+            order = (a, b) => compareEuc(toStr(a), toStr(b));
+        } else {
+            if (!(compare instanceof JSFunction))
+                throw new ScriptError('sort の比べる関数が関数ではありません');
+            const invoke = realm.invoke;
+            if (invoke === undefined) throw new ScriptError('sort の比べる関数を呼べません');
+            order = (a, b) => {
+                const n = toNumber(invoke(compare, undefined, [a, b]));
+                return Number.isNaN(n) ? 0 : n;
+            };
+        }
+        const defined = list.filter((item) => item !== undefined);
+        // 比べる関数が配列を書き換えても、並べ終えた結果で置き換える
+        defined.sort(order);
+        for (let i = 0; i < list.length; i++) list[i] = defined[i];
         return self;
     });
     method(realm.arrayProto, 'push', (self, args) => {

@@ -42,6 +42,11 @@ export interface Realm {
     stringProto: JSObject;
     numberProto: JSObject;
     booleanProto: JSObject;
+    /**
+     * 組み込みからスクリプトの関数を呼び、戻るまで動かして値を返す (`sort` の比べる関数)。
+     * Vm が入れる。途中で区切らない (締め切りを見ない) が、命令の数はその実行の上限に数える
+     */
+    invoke?: (fn: Value, thisValue: Value, args: Value[]) => Value;
 }
 
 interface Env {
@@ -91,6 +96,8 @@ export class Vm {
     private stack: Value[] = [];
     private frames: Frame[] = [];
     private steps = 0;
+    /** 組み込みから呼んだ関数の枠の深さ。枠がこれより減ったら `loop` を抜ける (0 は大域まで) */
+    private floor = 0;
     /** 組み込みの返事を待っているか (`resume` を受けるのはこのときだけ) */
     private waiting = false;
     private readonly limits: VmLimits;
@@ -100,6 +107,7 @@ export class Vm {
         limits: Partial<VmLimits> = {},
     ) {
         this.limits = { ...DEFAULT_LIMITS, ...limits };
+        realm.invoke = (fn, thisValue, args) => this.invoke(fn, thisValue, args);
     }
 
     /** 動いている途中か (止まっている・待っているも含む) */
@@ -112,7 +120,33 @@ export class Vm {
         this.stack = [];
         this.frames = [];
         this.steps = 0;
+        this.floor = 0;
         this.waiting = false;
+    }
+
+    /**
+     * 組み込みの中から関数を呼び、戻るまで動かして値を返す。誤りはそのまま投げる (外の `run` が
+     * 受けて実行を捨てる)。中で待つ (sleep)・打ち切る (launchDocument) ことはできない
+     */
+    private invoke(fn: Value, thisValue: Value, args: Value[]): Value {
+        if (!(fn instanceof JSFunction)) throw new ScriptError(`${toStr(fn)} は関数ではありません`);
+        const depth = this.frames.length;
+        this.stack.push(thisValue, fn, ...args);
+        if (this.call(args.length, false) !== null) {
+            throw new ScriptError(`${fn.name} は組み込みの中からは呼べません`);
+        }
+        // 組み込みだった (枠が増えていない) なら、結果はもう積んである
+        if (this.frames.length === depth) return this.stack.pop();
+        const outer = this.floor;
+        this.floor = depth + 1;
+        try {
+            const result = this.loop(Number.POSITIVE_INFINITY);
+            if (result.kind !== 'done') throw new ScriptError(`${fn.name} の中では待てません`);
+            if (this.steps > this.limits.steps) throw new ScriptError('スクリプトが終わりません');
+            return result.value;
+        } finally {
+            this.floor = outer;
+        }
     }
 
     /** 始めてよいか。**動いている途中に重ねて始めない** (待たせる順番は呼び手が持つ) */
@@ -413,6 +447,11 @@ export class Vm {
                     stack.length = frame.base;
                     this.frames.pop();
                     if (frame.construct !== null && !isObject(value)) value = frame.construct;
+                    // 組み込みから呼ばれた関数が戻った (数えた命令は持ち帰る)
+                    if (this.frames.length < this.floor) {
+                        this.steps += count;
+                        return { kind: 'done', value };
+                    }
                     const caller = this.frames.at(-1);
                     if (caller === undefined) {
                         this.reset();
