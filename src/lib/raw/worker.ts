@@ -37,6 +37,7 @@
 
 import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
 import { DecodeBudget } from './budget';
+import { fieldAt, type Shown, SmoothClock, Vsync, VsyncClock } from './cadence';
 import { Fmp4Video } from './fmp4';
 import type { FromWorker, RawInput, ToWorker } from './messages';
 import { MkvInput } from './mkv';
@@ -105,9 +106,14 @@ let pending: Pending[] = [];
 let started = false;
 /** PTS を伸ばす手元の物差し (`unwrap`)。選局し直すと捨てる */
 let near: number | null = null;
-let clock: { pts: number; at: number } | null = null;
+/** 鳴っている PTS の時計 (`cadence.ts`) */
+const clock = new SmoothClock();
+/** 画面の切り替わり (`cadence.ts`)。画面の requestAnimationFrame から届く */
+const vsync = new Vsync();
+/** 画面の切り替わりごとの PTS (`cadence.ts`) */
+const locked = new VsyncClock();
 /** いま出しているコマ */
-let current: { pts: number; interlaced: boolean; topFirst: boolean } | null = null;
+let current: Shown | null = null;
 /** 描く先。小窓へ書き込むときに、描いたものをここから写す (`toPip`) */
 let surface: OffscreenCanvas | null = null;
 /** 小窓 (PiP) の書き込み先と、書き込むか (`messages.ts` の `pip` / `pipFlow`) */
@@ -187,9 +193,15 @@ function isIntra(data: Uint8Array): boolean {
     return false;
 }
 
+/**
+ * **次に画面が切り替わるときの PTS。** いまの PTS ではなく、描いたものが画面に出る時点で見る
+ * (`cadence.ts`)。画面の切り替わりが分からなければ (裏に回った・届く前) いまの PTS
+ */
 function now(): number | null {
-    if (clock === null) return null;
-    return clock.pts + (performance.timeOrigin + performance.now() - clock.at) * (CLOCK / 1000);
+    const wall = performance.timeOrigin + performance.now();
+    const target = vsync.next(wall);
+    const pts = clock.at(target ?? wall);
+    return target === null || pts === null ? pts : locked.pick(target, pts);
 }
 
 function onVideo(pes: Pes): void {
@@ -453,27 +465,24 @@ function tick(): void {
     if (head !== undefined && head.dts < at - BEHIND_MOST) skipTo(at);
 
     /*
-     * **1回にデコードするのは1枚まで** (遅れているときだけ3枚まで)。1枚 10〜20ms かかるので、
-     * まとめてデコードするとその間コマを出せず、番を過ぎて捨てるコマが増える
+     * **先に出す。描いた回はデコードしない** — 描いたものはその回の終わりに画面へ渡るので、続けて
+     * デコードする (1枚 10〜20ms) と回が延び、次の画面の切り替わりに間に合わないことがある。
+     * 番のコマがまだデコードできていなければ、デコードしてから出す
      */
-    for (let i = 0; i < 3 && pending.length > 0 && decoder._dec_count() < DECODED_MOST; i++) {
-        const next = pending[0]!;
-        if (next.dts > at + AHEAD || (i > 0 && next.dts > at)) break;
-        decode(shift());
-    }
-    dropUnder();
-
-    // 次のフレームがもう番を迎えているなら、手前のフレームは上げずに捨てる
-    while (decoder._dec_count() >= 2 && decoder._dec_pts_at(1) <= at) {
-        decoder._dec_pop();
-        dropped++;
-    }
-    if (decoder._dec_count() >= 1 && decoder._dec_pts_at(0) <= at) take();
-
-    if (current !== null) {
-        const second = current.interlaced && at >= current.pts + frameTicks / 2;
-        const field = !current.interlaced ? -1 : current.topFirst !== second ? 0 : 1;
-        draw(field);
+    if (!present(decoder, at)) {
+        /*
+         * **1回にデコードするのは1枚まで** (遅れているときだけ3枚まで)。1枚 10〜20ms かかるので、
+         * まとめてデコードするとその間コマを出せず、番を過ぎて捨てるコマが増える。
+         * 先にデコードしたものがあるうちは、画面の切り替わりの直後にだけ始める (`Vsync.settled`)
+         */
+        const ready = decoder._dec_count() === 0 || vsync.settled(performance.timeOrigin + performance.now());
+        for (let i = 0; ready && i < 3 && pending.length > 0 && decoder._dec_count() < DECODED_MOST; i++) {
+            const next = pending[0]!;
+            if (next.dts > at + AHEAD || (i > 0 && next.dts > at)) break;
+            decode(shift());
+        }
+        dropUnder();
+        present(decoder, at);
     }
 
     // 映像が時計からどれだけ遅れているか。**デコードできたフレームが無いまま番を過ぎている**ぶん
@@ -482,6 +491,20 @@ function tick(): void {
             ? 0
             : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
     watch(late, frameTicks, 0, '再生が追いつかないため、変換した映像に切り替えました');
+}
+
+/** 番が来たコマを上げ、`at` に出すフィールドを描く。描いたら true */
+function present(decoder: Decoder, at: number): boolean {
+    // 次のフレームがもう番を迎えているなら、手前のフレームは上げずに捨てる
+    while (decoder._dec_count() >= 2 && decoder._dec_pts_at(1) <= at) {
+        decoder._dec_pop();
+        dropped++;
+    }
+    if (decoder._dec_count() >= 1 && decoder._dec_pts_at(0) <= at) take();
+    if (current === null) return false;
+    const before = shown;
+    draw(fieldAt(current, at, frameTicks));
+    return shown !== before;
 }
 
 /** エンコードしたもの (fMP4) の刻み。描くのは `fmp4.ts` で、ここは遅れを見張って数を出すだけ */
@@ -535,7 +558,8 @@ function reset(from: number | null): void {
     floor = null;
     started = false;
     near = null;
-    clock = null;
+    clock.clear();
+    locked.clear();
     current = null;
     drawn = { pts: Number.NaN, field: Number.NaN };
     lastFramePts = null;
@@ -707,7 +731,10 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             break;
         }
         case 'clock':
-            clock = message.pts === null ? null : { pts: message.pts, at: message.at };
+            clock.set(message.pts, message.at);
+            break;
+        case 'vsync':
+            vsync.feed(message.at);
             break;
         case 'reset':
             reset(message.from ?? null);
