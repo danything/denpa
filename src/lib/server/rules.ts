@@ -8,7 +8,7 @@ import { now, orm } from './db';
 import { type Airing, episodeOf, firstAirings, type Taken } from './episode';
 import { programs as programTable, recordings, reservations, rules as ruleTable, services } from './schema';
 import { settings } from './settings';
-import { parseTitle, searchable, withoutSlot } from './title';
+import { parseTitle, searchable, withoutSeason, withoutSlot } from './title';
 
 /** 空の並びは「指定なし」。NULL と同じに扱う */
 function nonEmpty<T>(list: T[] | null): T[] | null {
@@ -197,13 +197,13 @@ export interface RuleSource {
  * 切り出し方のままで、`「東京リベンジャーズ」三天戦争編` のように鍵括弧ごと残っているものがある
  */
 function seriesOf(source: Pick<RuleSource, 'name'>): string {
-    return source.name.trim() === '' ? '' : withoutSlot(parseTitle(source.name).series.trim());
+    return source.name.trim() === '' ? '' : withoutSeason(withoutSlot(parseTitle(source.name).series.trim()));
 }
 
 /**
  * **録画・番組から作るルールの下書き** (詳細の「ルールを作る」)。
  *
- * - キーワードは**シリーズ名**。話数・副題・`[新]` を落とした名前なので、次の回にも当たる。
+ * - キーワードは**シリーズ名**。話数・副題・`[新]`・期 (`Season 2`) を落とした名前なので、次の回にも次の期にも当たる。
  *   ルールのキーワードは空白で区切った語を**すべて含む**もので、引用の書き方は無い。
  *   シリーズ名は番組名の一部なので、空白で割れても同じ番組に当たる
  * - 局は絞らない。同じ回が別の局で流れても、ルールの「同じ回は最初の放送だけ」が

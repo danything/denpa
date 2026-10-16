@@ -44,10 +44,10 @@ const BRACKET_SUBTITLE = /[「『](.+?)[」』]\s*$/;
 // 頭の「作品名」。後ろは編の名前 (`「東京リベンジャーズ」三天戦争編`)
 const LEADING_TITLE = /^[「『]([^「『」』]+)[」』]\s*(.*)$/;
 
-// 第2期 / 第3シーズン。話数ではなく編として持つ。話数の前か題名の終わりにあるものだけ —
+// 第2期 / 第3シーズン (括弧ごと `【第2期】` も)。話数ではなく編として持つ。話数の前か題名の終わりにあるものだけ —
 // 「将棋)第34期 銀河戦」のように後ろに名前が続くものは、どこまでが編か分からない
 const SEASON =
-    /\s*第\s*(?:\d{1,4}|[一二三四五六七八九十]{1,3})\s*(?:期|シーズン|クール|章|部)(?=\s*(?:#|第\s*\d|$))/;
+    /\s*(?:[【[(]\s*)?第\s*(?:\d{1,4}|[一二三四五六七八九十]{1,3})\s*(?:期|シーズン|クール|章|部)(?:\s*[】\])])?(?=\s*(?:#|第\s*\d|$))/;
 
 // #12 / 第12話 / ＃12 のような話数表記
 const EPISODE = /\s*(?:#|＃|第)\s*(\d{1,4})\s*(?:話|回)?/;
@@ -121,6 +121,40 @@ class Twin {
     join(other: Twin): Twin {
         return new Twin(`${this.raw} ${other.raw}`, `${this.key} ${other.key}`);
     }
+}
+
+/*
+ * 期・シーズンの表記 (`第2期` `第3シーズン` `シーズン2` `Season 2` `season2` `2nd Season`)。
+ * 半角に寄せた写しに当てるので `Ｓｅａｓｏｎ２` も同じ。英語は語の途中 (`OffSeason2`) を読まない。
+ * 数の無い `シーズン` と、`第` の無い `2期` (`1期生` のように別の意味がある) は読まない
+ */
+const SEASON_LABEL =
+    String.raw`(?:第\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s*(?:期(?!生)|シーズン|クール|シリーズ)` +
+    String.raw`|シーズン\s*\d{1,2}(?!\d)` +
+    String.raw`|(?<![a-z0-9])(?:season\s*\.?\s*\d{1,2}|\d{1,2}\s*(?:st|nd|rd|th)\s*season)(?![a-z0-9]))`;
+
+// 括弧ごと (`【第2期】` `(Season 2)` `「シーズン2」`) か、表記だけ
+const SEASON_ANYWHERE = new RegExp(
+    String.raw`[【[(「『<]\s*${SEASON_LABEL}\s*[】\])」』>]|${SEASON_LABEL}`,
+    'gi',
+);
+
+// 期の表記を外した跡に残る頭の区切り記号 (`Season 2 - 作品名` の ` - `)
+const LEADING_SEPARATOR = /^[\s\-~〜:：|｜▼▽・]+/u;
+
+/**
+ * シリーズ名から期・シーズンの表記を外す。**ルールのキーワードを次の期にも当てるため** —
+ * `作品名 Season 2` をそのまま語にすると、次の `作品名 Season 3` に当たらない。
+ * 外した跡の空白は1つに、前後の区切り記号は落とす。外すと何も残らないなら元のまま
+ */
+export function withoutSeason(series: string): string {
+    const out = new Twin(series)
+        .remove(SEASON_ANYWHERE)
+        .raw.replace(TRAILING_SEPARATOR, '')
+        .replace(LEADING_SEPARATOR, '')
+        .replace(/\s+/g, (run) => ([...run].every((c) => c === WIDE_SPACE) ? WIDE_SPACE : ' '))
+        .trim();
+    return out === '' ? series : out;
 }
 
 /** 探すときの形式。全角を半角に、外字を昔の書き方に (`fold.ts`)、小文字に */

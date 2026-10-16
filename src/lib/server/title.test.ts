@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { toHalfWidth } from '../fold';
-import { displayTitle, parseTitle, sanitizeFileName } from './title';
+import { displayTitle, parseTitle, sanitizeFileName, withoutSeason } from './title';
 
 describe('parseTitle', () => {
     test('装飾記号を落としてシリーズ名にする', () => {
@@ -274,5 +274,65 @@ describe('sanitizeFileName', () => {
 
     test('長すぎる名前は切り詰める', () => {
         expect(sanitizeFileName('あ'.repeat(200)).length).toBeLessThanOrEqual(60);
+    });
+});
+
+describe('withoutSeason', () => {
+    test.each([
+        ['テストアニメ season2', 'テストアニメ'],
+        ['テストアニメ Season 2', 'テストアニメ'],
+        ['テストアニメ SEASON.3', 'テストアニメ'],
+        ['テストアニメ 2nd season', 'テストアニメ'],
+        ['テストアニメ 3rd Season', 'テストアニメ'],
+        ['テストアニメ 第2期', 'テストアニメ'],
+        ['テストアニメ 第二期', 'テストアニメ'],
+        ['テストアニメ シーズン2', 'テストアニメ'],
+        ['テストアニメ 第3シーズン', 'テストアニメ'],
+        ['テスト刑事 第2シリーズ', 'テスト刑事'],
+        ['テストアニメ第2期', 'テストアニメ'],
+        // 全角・括弧ごと・区切り記号
+        ['テストアニメ　Ｓｅａｓｏｎ２', 'テストアニメ'],
+        ['テストアニメ　２ｎｄ　ｓｅａｓｏｎ', 'テストアニメ'],
+        ['テストアニメ【第2期】', 'テストアニメ'],
+        ['テストアニメ（Season 2）', 'テストアニメ'],
+        ['テストアニメ (シーズン2)', 'テストアニメ'],
+        ['テストアニメ「第2期」', 'テストアニメ'],
+        ['テストアニメ -Season 2-', 'テストアニメ'],
+        ['Season 2 - テストアニメ', 'テストアニメ'],
+        ['テストアニメ Season 2 ふたたび', 'テストアニメ ふたたび'],
+        ['テスト　アニメ　第２期', 'テスト　アニメ'],
+    ])('%s → %s', (input, expected) => {
+        expect(withoutSeason(input)).toBe(expected);
+    });
+
+    test.each([
+        // 期の表記ではないもの
+        'テストアイドル 1期生',
+        'テストアイドル 2期',
+        'シーズン到来テスト',
+        'テストのシーズン',
+        'OffSeason2',
+        'テストシーズンズ',
+        'Season of Test',
+        'テストアニメ2',
+        'テスト 100th Seasons',
+        'テスト第2話',
+    ])('%s は外さない', (input) => {
+        expect(withoutSeason(input)).toBe(input);
+    });
+
+    test('期の表記しか無いなら元のまま', () => {
+        expect(withoutSeason('Season 2')).toBe('Season 2');
+        expect(withoutSeason('【第2期】')).toBe('【第2期】');
+    });
+});
+
+describe('parseTitle (括弧で囲んだ期)', () => {
+    test('【第3シーズン】の「第3」を話数に読まない', () => {
+        expect(parseTitle('テストアニメ【第3シーズン】 #7')).toMatchObject({
+            series: 'テストアニメ',
+            arc: '【第3シーズン】',
+            episode: 7,
+        });
     });
 });

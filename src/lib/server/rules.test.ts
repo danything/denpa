@@ -216,6 +216,23 @@ describe('録画からルールを作る', () => {
         );
     });
 
+    test('期・シーズンの表記はキーワードに入れない (次の期にも当てる)', () => {
+        for (const name of [
+            '[新]テストアニメ Season 2 #1「再会」',
+            'テストアニメ season2 第3話',
+            '[字]テストアニメ　２ｎｄ　ｓｅａｓｏｎ　＃４',
+            'テストアニメ 第2期 #5',
+            'アニメ　テストアニメ　シーズン2　第6話',
+            'テストアニメ【第3シーズン】 #7',
+            'テストアニメ（Season 2） #8',
+        ]) {
+            expect(prefillFrom({ ...recording, name })?.keyword, name).toBe('テストアニメ');
+        }
+        expect(prefillFrom({ ...recording, name: 'テストアイドル 1期生の旅 #3' })?.keyword).toBe(
+            'テストアイドル 1期生の旅',
+        );
+    });
+
     test('番組名が空なら下書きは作らない (ジャンルだけのルールになる)', () => {
         expect(prefillFrom({ ...recording, name: '' })).toBeNull();
     });
