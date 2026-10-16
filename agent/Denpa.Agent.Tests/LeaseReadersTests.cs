@@ -16,7 +16,7 @@ public class LeaseReadersTests
     private static Lease Make() => new(0, "GR", "T27");
 
     [Test]
-    public async Task 誰も来ていなければ読み手なし()
+    public async Task 誰も来ていなければ利用者なし()
     {
         await Assert.That(Make().Readers()).IsEqualTo("利用者なし");
     }
@@ -51,7 +51,7 @@ public class LeaseReadersTests
     }
 
     [Test]
-    public async Task 同じ読み手は一度だけ()
+    public async Task 同じ利用者は一度だけ()
     {
         var lease = Make();
         lease.Saw("live GR/T27");
