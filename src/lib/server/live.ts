@@ -29,8 +29,9 @@ import { Fmp4Splitter } from '#lib/ts/fmp4.js';
 import { MkvSplitter } from '#lib/ts/mkv.js';
 import { BUSY } from '#lib/ts/playback.js';
 import { PacketStream } from '#lib/ts/psi.js';
-import { ServiceFilter } from '#lib/ts/service-filter.js';
+import { ServiceFilter, StreamsWatch } from '#lib/ts/service-filter.js';
 import {
+    type CaptionOut,
     type CaptionShown,
     CaptionText,
     captionFeed,
@@ -42,7 +43,7 @@ import {
     textFrame,
     worthLogging,
 } from './captions';
-import { chasePlan, fileSize, followFile } from './chase';
+import { type ChaseResume, chasePlan, fileSize, followFile, resumeFrom, resumePlan } from './chase';
 import { config } from './config';
 import { DataBroadcast, type ResponseMessage } from './databroadcast';
 import { orm } from './db';
@@ -596,8 +597,8 @@ class Session {
      * GPU のせいだったと決めて覚え、断り書きを出す (`blameGpu`)
      */
     private blame: string | null = null;
-    /** 入口の見出しから拾った、選べる字幕 */
-    private readonly list: TrackList;
+    /** 選べる字幕 (ffmpeg の入口の見出しから)。放送そのままの経路で字幕の ffmpeg を起こし直したら作り直す (`captions`) */
+    private list: TrackList;
     private readonly aborter = new AbortController();
     private proc: ReturnType<typeof Bun.spawn> | null = null;
     /** 最後に流した init。途中から入ってきた人に真っ先に渡す */
@@ -684,6 +685,11 @@ class Session {
          * 呼ぶたびに読み直したストリームを返すこと — 字幕なしでの再エンコードに使う
          */
         private readonly source?: () => ReadableStream<Uint8Array>,
+        /**
+         * 追っかけで、番組が替わって作り直した (`restart`)。`consumed` は `source` の頭から読んだ量 (バイト)。
+         * 作り直したところを覚えるのに使う (`chase.ts` の `resumeFrom`)
+         */
+        private readonly restarted?: (consumed: number) => void,
     ) {
         this.list = new TrackList(program);
         this.id = key(channelType, channel, serviceId, audio, raw ? 'raw' : codec, track);
@@ -1032,11 +1038,18 @@ class Session {
      * ffmpeg は起きたときの並びのまま音声・字幕を選んでいて (`encodeArgs` の `-map`)、音声の本数や字幕の PID が
      * 変わっても追従しない。その場で ffmpeg を起こし直さないのは `lose` と同じ理由 — 時刻が 0 から数え直しになり、
      * 受け側のバッファ (MSE・テレビの fMP4) が続きとして読めない。画面はすぐリクエストし直す (音声を選び直した
-     * ときと同じ。途切れるのはエンコードし始めのぶん)。新しい ffmpeg は新しい並びで起きる
+     * ときと同じ。途切れるのはエンコードし始めのぶん)。新しい ffmpeg は新しい並びで起きる。
+     *
+     * **追っかけも同じ** (`source`)。ちがうのは、観ている側が届いたぶんを観終えてから、観ていた位置を
+     * リクエストし直すこと (観ていない先を飛ばさない)。その近くをリクエストされたら変わったところのバイトから
+     * 読むので (`restarted`・`chase.ts` の `resumePlan`)、前の番組の並びを読み直して作り直しを繰り返すことはない
+     *
+     * @param consumed 追っかけで、`source` の頭から読んだ量 (バイト)
      */
-    private restart(): void {
+    private restart(consumed: number): void {
         if (this.stopped) return;
         console.log(`[live] ${this.id}: 番組が替わって音声・字幕の構成が変わったので、作り直します`);
+        this.restarted?.(consumed);
         this.tell({ type: 'restart' });
         this.stop();
     }
@@ -1131,8 +1144,10 @@ class Session {
     ): Promise<void> {
         const writer = proc.stdin as import('bun').FileSink;
         const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
-        /** この ffmpeg を起こしたときの映像・音声・字幕の並び (`ServiceFilter.streams`)。ライブだけ見る */
-        let streams: string | null = null;
+        /** この ffmpeg を起こしてから、映像・音声・字幕の並びが変わったか */
+        const streams = new StreamsWatch();
+        /** 頭から読んだ量 (バイト)。追っかけで作り直したところを覚えるのに使う (`restart`) */
+        let consumed = 0;
         try {
             for (;;) {
                 // `for await` にしない — 抜けるとリーダーごと閉じてしまう (使い回せなくなる)
@@ -1154,13 +1169,11 @@ class Session {
                  * どのみち鍵フレームから拾うので欠けは見えない
                  */
                 if (this.stopped || this.proc !== proc) break;
+                consumed += next.value.length;
                 const out = this.tap(filter, next.value);
-                if (!own && filter !== null && filter.streams !== null) {
-                    if (streams !== null && filter.streams !== streams) {
-                        this.restart();
-                        break;
-                    }
-                    streams = filter.streams;
+                if (filter !== null && streams.changed(filter)) {
+                    this.restart(consumed);
+                    break;
                 }
                 if (out.length === 0) continue;
                 // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手がいない
@@ -1345,14 +1358,20 @@ class Session {
      * **本当の失敗が埋もれる**
      */
     private async watch(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+        /*
+         * **起きたときの一覧に数える。** 放送のままの経路で字幕の ffmpeg を起こし直したら (`captions`)、
+         * 古いほうの残りの行は新しい一覧にも「字幕が無い」にも入れない
+         */
+        const list = this.list;
         for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+            if (list !== this.list) return;
             /*
              * **選べる字幕は入口の見出しに出ている。** 1枚も来ていなくても
              * 分かるので、画面は待たずに切り替えを出せる (間隔の空く番組で
              * ボタンが出なかったのはこれを見ていなかったため)
              */
-            if (this.list.feed(line)) {
-                this.tell({ type: 'captions', tracks: this.list.tracks, track: this.track });
+            if (list.feed(line)) {
+                this.tell({ type: 'captions', tracks: list.tracks, track: this.track });
                 continue;
             }
             // 入口の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
@@ -1446,11 +1465,29 @@ class Session {
             const tuned = await this.tune();
             if (!captionlessNow(this.serviceId)) captioner = this.captions();
             const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
+            const streams = new StreamsWatch();
             try {
                 for await (const chunk of chunks(tuned)) {
                     if (this.stopped) break;
                     this.fed = true;
                     const out = this.tap(filter, chunk);
+                    /*
+                     * **番組が替わって並びが変わったら、字幕の ffmpeg だけ起こし直す** (`StreamsWatch`)。
+                     * 映像と音声は受け側が PMT を読んで自分で追う (`ts/pes.ts` の `PesDemuxer`)。字幕は放送の
+                     * PTS のまま写すので (`-copyts`)、起こし直しても時刻は続く。字幕が無かった局にも増えて
+                     * いるかもしれないので、覚えていた「字幕が無い」は忘れて起こす
+                     */
+                    if (filter !== null && streams.changed(filter)) {
+                        console.log(
+                            `[live] ${this.id}: 番組が替わって音声・字幕の構成が変わったので、字幕を写し直します`,
+                        );
+                        captioner?.stop();
+                        captionless.delete(this.serviceId);
+                        // 選べる字幕は新しい ffmpeg の見出しから数え直す。前の番組の字幕は残さない
+                        this.showing = null;
+                        this.tell({ type: 'captions', tracks: [], track: this.track });
+                        captioner = this.captions();
+                    }
                     if (out.length === 0) continue;
                     // **詰まったら捨てる** (`hand` の説明)。遅れて全部届くより、飛んで今が映るほうがいい
                     for (const viewer of this.viewers) this.hand(viewer, CHANNEL.rawTs, out);
@@ -1474,9 +1511,11 @@ class Session {
 
     /**
      * 放送そのままの経路の字幕の ffmpeg を起こす (`rawCaptionArgs`)。**字幕のパイプと見出しを汲み続ける。**
-     * 選べる字幕と「字幕が無い」もここの見出しから拾う
+     * 選べる字幕と「字幕が無い」もここの見出しから拾う。**起こし直したら数え直す** (`runRaw`。番組が替わった)
      */
     private captions(): RawCaptions {
+        this.list = new TrackList(this.program);
+        this.noSubtitle = false;
         const proc: ReturnType<typeof Bun.spawn> = Bun.spawn(
             [config.ffmpeg, ...rawCaptionArgs(this.program, this.track)],
             {
@@ -1490,9 +1529,11 @@ class Session {
                 // 読み捨てる
             }
         })().catch(() => undefined);
+        const list = this.list;
         void this.watch(proc)
             .then(() => {
-                if (this.noSubtitle) captionless.set(this.serviceId, Date.now());
+                // 起こし直されたあとの古いものは、「字幕が無い」を覚えさせない
+                if (list === this.list && this.noSubtitle) captionless.set(this.serviceId, Date.now());
             })
             .catch(() => undefined);
         void this.subtitles(proc).catch(() => undefined);
@@ -1768,9 +1809,6 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
     const label = `rec ${rec.id}`;
 
     return captionFeed((out) => {
-        const proc: ReturnType<typeof Bun.spawn> = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(program, 0)], {
-            stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
-        });
         const reader = followFile(
             path,
             plan.offset,
@@ -1781,6 +1819,8 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
             burst,
         ).getReader();
         let stopped = false;
+        /** いま写させている ffmpeg。番組が替わって並びが変わったら起こし直す (下の流し込み) */
+        let proc = spawnRecordingCaptioner(program, label, out, () => proc);
         const stop = () => {
             if (stopped) return;
             stopped = true;
@@ -1795,71 +1835,111 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
         for (const old of held.slice(0, Math.max(0, held.length - CAPTION_PER_RECORDING + 1))) old();
         recordingCaptioners.set(rec.id, [...(recordingCaptioners.get(rec.id) ?? []), stop]);
 
-        // 流し込み。**書けたことを待つ** (ffmpeg が詰まったら読むのも止まる)
+        /*
+         * 流し込み。**書けたことを待つ** (ffmpeg が詰まったら読むのも止まる)。
+         *
+         * **番組が替わって並びが変わったら、ffmpeg を起こし直す** (`StreamsWatch`)。字幕は放送の PTS のまま
+         * 写すので (`-copyts`)、起こし直しても時刻は続く。録画の TS は1局に絞ってあるが、並びを読むのに通す
+         */
+        const filter = program > 0 ? new ServiceFilter(program) : null;
+        const streams = new StreamsWatch();
         void (async () => {
-            const writer = proc.stdin as import('bun').FileSink;
             try {
                 for (;;) {
                     const { done, value } = await reader.read();
                     if (done || stopped) break;
+                    filter?.filter(value);
+                    if (filter !== null && streams.changed(filter)) {
+                        console.log(
+                            `[captions] ${label}: 番組が替わって音声・字幕の構成が変わったので、字幕を写し直します`,
+                        );
+                        const old = proc;
+                        proc = spawnRecordingCaptioner(program, label, out, () => proc);
+                        endInput(old);
+                        old.kill();
+                    }
+                    const writer = proc.stdin as import('bun').FileSink;
                     await writer.write(value);
                     await writer.flush();
                 }
             } finally {
-                try {
-                    writer.end();
-                } catch {
-                    // もう閉じている
-                }
+                endInput(proc);
             }
         })().catch(() => undefined);
-
-        // 標準出力には何も出さないはずだが、汲まずに放っておくと詰まったときに止まる
-        void (async () => {
-            for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
-                // 読み捨てる
-            }
-        })().catch(() => undefined);
-
-        // 選べる字幕は入口の見出しから (`TrackList`)。失敗は残す
-        const list = new TrackList(program);
-        void (async () => {
-            for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
-                if (list.feed(line)) {
-                    out.send(CHANNEL.control, 0n, json({ type: 'captions', tracks: list.tracks, track: 0 }));
-                } else if (worthLogging(line) && !NO_SUBTITLE.test(line)) {
-                    console.warn(`[captions] ${label} ffmpeg: ${line.trim()}`);
-                }
-            }
-        })().catch(() => undefined);
-
-        // 字幕。文字の配置は変わったときしか出てこないので、間引かない
-        const fd = (proc.stdio as unknown as number[])[3];
-        const frames = new MkvSplitter();
-        const text = new CaptionText();
-        const captions = (async () => {
-            if (typeof fd !== 'number') return;
-            for await (const chunk of chunks(Bun.file(fd).stream())) {
-                for (const frame of frames.feed(chunk)) {
-                    const shown = text.feed(frame);
-                    if (shown === null) continue;
-                    const { kind, pts, data } = textFrame(shown);
-                    out.send(kind, pts, data);
-                }
-            }
-        })().catch(() => undefined);
-
-        // 読み切った (字幕を持たない録画なら、ffmpeg が組み立てで降りる) ら閉じる
-        void Promise.all([captions, proc.exited]).then(() => out.close());
         return stop;
     });
+}
+
+/** ffmpeg の標準入力を閉じる。もう閉じていてもいい */
+function endInput(proc: ReturnType<typeof Bun.spawn>): void {
+    try {
+        (proc.stdin as import('bun').FileSink).end();
+    } catch {
+        // もう閉じている
+    }
+}
+
+/**
+ * 録画の字幕を写す ffmpeg を1本起こし (`rawCaptionArgs`)、選べる字幕と文字の配置を `out` へ送らせる。
+ * **読み切ったら閉じる** (字幕を持たない録画なら、ffmpeg が組み立てで降りる) — ただし起こし直された
+ * あとの古いもの (`current` が自分でない) は閉じない
+ */
+function spawnRecordingCaptioner(
+    program: number,
+    label: string,
+    out: CaptionOut,
+    current: () => ReturnType<typeof Bun.spawn>,
+): ReturnType<typeof Bun.spawn> {
+    const proc: ReturnType<typeof Bun.spawn> = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(program, 0)], {
+        stdio: ['pipe', 'pipe', 'pipe', 'pipe'] as never,
+    });
+
+    // 標準出力には何も出さないはずだが、汲まずに放っておくと詰まったときに止まる
+    void (async () => {
+        for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
+            // 読み捨てる
+        }
+    })().catch(() => undefined);
+
+    // 選べる字幕は入口の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
+    const list = new TrackList(program);
+    void (async () => {
+        for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+            if (list.feed(line)) {
+                out.send(CHANNEL.control, 0n, json({ type: 'captions', tracks: list.tracks, track: 0 }));
+            } else if (worthLogging(line) && !NO_SUBTITLE.test(line)) {
+                console.warn(`[captions] ${label} ffmpeg: ${line.trim()}`);
+            }
+        }
+    })().catch(() => undefined);
+
+    // 字幕。文字の配置は変わったときしか出てこないので、間引かない
+    const fd = (proc.stdio as unknown as number[])[3];
+    const frames = new MkvSplitter();
+    const text = new CaptionText();
+    const captions = (async () => {
+        if (typeof fd !== 'number') return;
+        for await (const chunk of chunks(Bun.file(fd).stream())) {
+            for (const frame of frames.feed(chunk)) {
+                const shown = text.feed(frame);
+                if (shown === null) continue;
+                const { kind, pts, data } = textFrame(shown);
+                out.send(kind, pts, data);
+            }
+        }
+    })().catch(() => undefined);
+
+    void Promise.all([captions, proc.exited]).then(() => {
+        if (current() === proc) out.close();
+    });
+    return proc;
 }
 
 /**
  * エンコードしたもの (`Session`) を HTTP の応答に流すところ。ライブと追っかけで共通。
  *
  * 流すのは映像のコンテナ (init + 中身) と元のTSだけで、字幕・データ放送・通知は捨てる。
- * エンコードできなくなったら・読み切ったら・チューナーから外されたら (`error` / `ended` / `lost`) 応答を閉じる。読むのが追いつかない
+ * エンコードできなくなったら・読み切ったら・チューナーから外されたら・番組が替わって作り直すなら (`error` / `ended` / `lost` / `restart`) 応答を閉じる。読むのが追いつかない
  * 相手も閉じる (溜め続けるとメモリが増え続け、fMP4 は途中を捨てると壊れる)。
  * `held` は溜まりすぎて送り込みを止めたいか (追っかけだけが使う。`CHASE_STREAM_HOLD`)
  */
@@ -2174,6 +2254,17 @@ export function attend(connection: Connection): void {
 }
 
 /**
+ * 追っかけで番組が替わって作り直したところ (`chase.ts` の `ChaseResume`)。録画ごとに最後の1つ。
+ * 期限を過ぎたものは、次に覚えるときに消す (`rememberResume`)
+ */
+const chaseResumes = new Map<number, ChaseResume>();
+
+function rememberResume(recordingId: number, resume: ChaseResume): void {
+    for (const [id, held] of chaseResumes) if (held.until < Date.now()) chaseResumes.delete(id);
+    chaseResumes.set(recordingId, resume);
+}
+
+/**
  * 追っかけ再生を1本起こす — **録画中の録画を、いま録れているところまで観る**
  * ([issue #16](https://github.com/danything/denpa/issues/16))。
  *
@@ -2217,7 +2308,8 @@ function openChase(
     if (release === null) return refuse(BUSY);
 
     const finished = rec.finished_at !== null;
-    const plan = chasePlan(size, recordedSec(rec), at);
+    // 番組が替わって作り直したところの近くなら、そのバイトから (`chase.ts` の `resumePlan`)
+    const plan = resumePlan(chasePlan(size, recordedSec(rec), at), chaseResumes.get(rec.id));
 
     const tracks = audioTracks(parseAudios(rec));
     const audio = pickTrack(tracks, wanted);
@@ -2257,6 +2349,7 @@ function openChase(
             caption,
             false,
             () => followFile(path, plan.offset, plan.paceBytesPerSec, () => recordingDone(rec.id), hold),
+            (consumed) => rememberResume(rec.id, resumeFrom(plan, consumed)),
         );
     } catch (failure) {
         // 起こせなかった。取った枠は返す

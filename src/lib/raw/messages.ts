@@ -43,6 +43,11 @@ export type ToWorker =
      */
     | { type: 'clock'; pts: number | null; at: number }
     /**
+     * 画面が切り替わった時刻 (画面の requestAnimationFrame。`performance.timeOrigin + performance.now()` の ms)。
+     * worker はこれで次の切り替わりを見越し、その時点で出すフィールドを選ぶ (`cadence.ts`)
+     */
+    | { type: 'vsync'; at: number }
+    /**
      * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる。** `from` (90kHz。届くものの PTS の物差しで、
      * 元の TS なら一周の中) があれば、それより前のコマはデコードするだけで描かない — サーバは飛び先の少し手前
      * (キーフレーム・1 秒前) から流すので、手前の映像 (CM を飛ばしたなら CM の映像) を出さないため

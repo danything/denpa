@@ -46,6 +46,49 @@ export interface ChasePlan {
     recordedSec: number;
     /** 送り込みの上限 (バイト/秒)。実測レート × PACE */
     paceBytesPerSec: number;
+    /** 実測レート (バイト/秒)。読んだ量を秒に直すのに使う (`resumeFrom`) */
+    bytesPerSec: number;
+}
+
+/**
+ * **番組が替わって作り直したところ** (`live.ts` の `Session.restart`)。録画ごとに覚える。
+ *
+ * 追っかけのエンコードも、ライブと同じく PMT の並びが変わったら畳んで `restart` を伝える。観ている側は
+ * 届いたぶんを観終えてから、観ていた位置をリクエストし直す (画面もテレビのアプリも)。ただ位置は秒で、
+ * バイトへはレートで比例して当てるので、少し手前に当たると前の番組の PMT を読んでからまた変わり、
+ * 作り直しを繰り返す。**近くをリクエストされたら、変わったところのバイトから読む** (`resumePlan`)
+ */
+export interface ChaseResume {
+    /** 変わったところ (秒。`ChasePlan.at` と同じ物差し) */
+    at: number;
+    /** 変わったところ (バイト。188 に揃えてある) */
+    offset: number;
+    /** これを過ぎたら使わない (ms) */
+    until: number;
+}
+
+/** 作り直したところから、これだけ (秒) の内をリクエストされたら、そこから読む (`resumePlan`) */
+export const RESUME_NEAR = 15;
+/** 作り直したところを覚えておく長さ (ms)。リクエストし直すのは観終えてから (届いたぶんは倍速で先へ伸びている) */
+const RESUME_KEEP = 10 * 60_000;
+
+/**
+ * 読んだ量 (`consumed` バイト。`plan` の頭から) のところで作り直した。どこからリクエストし直せばいいかを返す。
+ * 塊の途中で変わったので、**読んだ塊の尻**から — 頭からだと前の番組の PMT をまた読む
+ */
+export function resumeFrom(plan: ChasePlan, consumed: number, now = Date.now()): ChaseResume {
+    return {
+        at: plan.at + consumed / plan.bytesPerSec,
+        offset: plan.offset + Math.ceil(consumed / PACKET) * PACKET,
+        until: now + RESUME_KEEP,
+    };
+}
+
+/** 作り直したところの近く (`RESUME_NEAR`) をリクエストされたら、変わったところのバイトから読む */
+export function resumePlan(plan: ChasePlan, resume: ChaseResume | undefined, now = Date.now()): ChasePlan {
+    if (resume === undefined || now > resume.until || Math.abs(plan.at - resume.at) > RESUME_NEAR)
+        return plan;
+    return { ...plan, offset: resume.offset, at: resume.at };
 }
 
 /**
@@ -69,6 +112,7 @@ export function chasePlan(size: number, recordedSec: number, atSec: number): Cha
         at,
         recordedSec: usable,
         paceBytesPerSec: Math.max(1_000_000, bytesPerSec) * PACE,
+        bytesPerSec,
     };
 }
 

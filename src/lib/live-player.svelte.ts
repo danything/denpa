@@ -95,6 +95,12 @@ const RETRY_FIRST = 1_000;
 const RETRY_MOST = 10_000;
 /** 番組が替わって作り直す (`restart`) のが、これより短い間に続いたら待つ (ms) */
 const RESTART_CALM = 30_000;
+/** 追っかけで作り直したあと、手元がこれ (秒) を切ったらリクエストし直す (`resumeChase`) */
+const RESUME_LEFT = 0.3;
+/** 手元を見る間隔 (ms。`resumeChase`) */
+const RESUME_EVERY = 250;
+/** 手元が残ったまま位置がこれ (ms) だけ進まなければ、観終えるのを待たずにリクエストし直す (`resumeChase`) */
+const RESUME_STUCK = 3_000;
 /**
  * 映像だけがこれだけ遅れたら飛び直す (秒)。**口の動きが合わなくなる境目。**
  *
@@ -518,6 +524,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     let attempts = $state(0);
     /** 最後に作り直しを受けた時刻 (`restart`。`RESTART_CALM`) */
     let restartedAt = 0;
+    /** 追っかけで作り直したあと、届いたぶんを観終えるのを待っている (`resumeChase`) */
+    let resuming: ReturnType<typeof setInterval> | null = null;
     /** 画面を離れた。**もう繋ぎ直さない** */
     let left = false;
     /** 最後に詰まった時刻。無事が続いたかを見る */
@@ -1269,11 +1277,55 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         painter?.show(null);
     }
 
+    /**
+     * **追っかけで番組が替わって作り直した** (`restart`)。届いたぶんを観終えてから、観ていた位置をリクエストし直す。
+     *
+     * ライブと違って、届いたぶんは観ている位置より先にある (倍速で送り込まれている。`server/chase.ts`)。すぐ
+     * リクエストし直すとそこを飛ばしてしまう。サーバは変わったところの近くをリクエストされたら、変わったところから
+     * 読む (`server/chase.ts` の `resumePlan`)。続けて来たら (`RESTART_CALM`) いつもの繋ぎ直しに乗せる
+     *
+     * @param wait いつもの繋ぎ直しの待ちに乗せるか
+     */
+    function resumeChase(wait: boolean): void {
+        if (resuming !== null) clearInterval(resuming);
+        /** 位置が最後に進んだ時刻。**手元が残ったまま進まなくなっても待ち続けない** (`RESUME_STUCK`) */
+        let movedAt = Date.now();
+        let last = -1;
+        resuming = setInterval(() => {
+            if (left || chase === null || element === null) {
+                stopResuming();
+                return;
+            }
+            const onCanvas = canvas && engine !== null;
+            const now = onCanvas ? position : element.currentTime;
+            if (paused || now !== last) movedAt = Date.now();
+            last = now;
+            if (paused) return;
+            const ahead = onCanvas
+                ? (engine?.lead ?? 0)
+                : buffer === null || buffer.buffered.length === 0
+                  ? 0
+                  : buffer.buffered.end(buffer.buffered.length - 1) - element.currentTime;
+            if (ahead > RESUME_LEFT && Date.now() - movedAt < RESUME_STUCK) return;
+            stopResuming();
+            // <video> の位置は届いたときにしか写していない (`pace`)。もう届かないので、ここで写す
+            if (!onCanvas) position = Math.round(element.currentTime * 10) / 10;
+            if (wait) reconnect();
+            else void openChase(element, chase.recordingId, chase.base + position, true);
+        }, RESUME_EVERY);
+    }
+
+    function stopResuming(): void {
+        if (resuming !== null) clearInterval(resuming);
+        resuming = null;
+    }
+
     /** 画面を離れる。**貼ったフレームも剥がす** — 戻ってきたときに残っていては困る */
     function stop(): void {
         left = true;
         if (retry !== null) clearTimeout(retry);
         retry = null;
+        stopResuming();
         reset();
         stopRaw();
         thaw();
@@ -1610,6 +1662,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     async function begin(video: HTMLVideoElement, keepList: boolean): Promise<void> {
         element = video;
         left = false;
+        // リクエストし直すのはこれ。観終えるのを待っていたなら、もう待たない (`resumeChase`)
+        stopResuming();
         /*
          * **MPEG-2 を選んでいるなら、デコードできるかを先に確かめる** (1回だけ。`raw/support.ts`)。
          * デコードできない端末では最初からエンコードしたものをリクエストし、理由を断り書きに出す
@@ -1754,9 +1808,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                      * いつもの繋ぎ直し (待ちが倍々) に乗せる
                      */
                     const now = Date.now();
-                    if (now - restartedAt < RESTART_CALM) reconnect();
-                    else if (tuned !== null && element !== null) void tune(element, tuned, true);
+                    const calm = now - restartedAt >= RESTART_CALM;
                     restartedAt = now;
+                    if (chase !== null) resumeChase(!calm);
+                    else if (!calm) reconnect();
+                    else if (tuned !== null && element !== null) void tune(element, tuned, true);
                 } else if (notice.type === 'notice') {
                     // 映像は出ている。断り書きに残す (GPU でエンコードできずにソフトウェアへ降りた、など)
                     warning = notice.message;

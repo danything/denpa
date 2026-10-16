@@ -111,6 +111,8 @@ export class RawEngine {
     private readonly playout: Playout<AudioChunk>;
     private readonly nodes = new Set<AudioBufferSourceNode>();
     private readonly timer: ReturnType<typeof setInterval>;
+    /** 画面の切り替わりを worker へ知らせる requestAnimationFrame (`cadence.ts`) */
+    private frame = 0;
     /** 壁時計を時計にしているか。**音を鳴らせない間 (自動再生を断られた) はこちら** */
     private wall: boolean;
     /** 選局し直してから音が来たか。来ないまま映像だけ出ているなら諦める (`NO_AUDIO`) */
@@ -208,6 +210,16 @@ export class RawEngine {
         }
 
         this.timer = setInterval(() => this.tick(), TICK);
+        /*
+         * **画面の切り替わりの時刻を worker へ流す。** worker は次の切り替わりの時点で出すフィールドを
+         * 選ぶ (`cadence.ts`)。worker の rAF は描いたものが画面に出る速さに引っ張られるので、画面のものを使う
+         */
+        const onFrame = (at: number) => {
+            if (this.gone) return;
+            this.send({ type: 'vsync', at: performance.timeOrigin + at });
+            this.frame = requestAnimationFrame(onFrame);
+        };
+        this.frame = requestAnimationFrame(onFrame);
         this.route();
     }
 
@@ -376,6 +388,7 @@ export class RawEngine {
         this.gone = true;
         for (const settle of [...this.grabs.values()]) settle(null);
         clearInterval(this.timer);
+        cancelAnimationFrame(this.frame);
         this.stopAll();
         this.worker.terminate();
         if (this.out !== null) {
