@@ -57,6 +57,7 @@ const {
     tsOffset,
     tsChapters,
     tsTranscodeArgs,
+    watchProgress,
 } = await import('./playback');
 
 const media = join(dir, 'media');
@@ -430,5 +431,59 @@ describe('続きの位置の物差し', () => {
         expect(rulerOf(encoded, 'ts')).toBeNull();
         expect(rulerOf(encoded, 'encoded')).toEqual({ kept, skip: 3 });
         expect(rulerOf(encoded, 'alt')).toEqual({ kept, skip: 3 });
+    });
+});
+
+/**
+ * 一覧の「残り」(`watchProgress`)。**位置と尺を同じ物差しで比べる** — 位置は元の TS の物差しで覚えていて、
+ * 尺はエンコードし終えると出来上がりの長さになるので、そのまま引くと CM を切ったものでは食い違う
+ */
+describe('一覧の残り', () => {
+    // 元の TS の 10〜100 秒と 160〜300 秒を残し、100〜160 秒の CM を切った。出来上がりは 230 秒
+    const kept = [
+        { start: 10, end: 100 },
+        { start: 160, end: 300 },
+    ];
+    const times = { start_at: 0, end_at: 310_000 };
+    const cut = {
+        library_path: '/library/a.mkv',
+        cm_kept: kept,
+        encode_skip: 0,
+        duration_ms: 230_000,
+        ...times,
+    };
+
+    test('CM を切ったものは、位置を出来上がりの時刻に直して、出来上がりの尺から引く', () => {
+        // 元の TS の 200 秒は、出来上がりの 130 秒。残りは 100 秒 (元の TS の位置のままだと 30 秒になる)
+        expect(watchProgress({ ...cut, resume_ms: 200_000 })).toEqual({ at: 130_000, length: 230_000 });
+    });
+
+    test('切っていないものは、捨てた頭のぶんだけずらす', () => {
+        const plain = {
+            library_path: '/library/a.mkv',
+            cm_kept: null,
+            encode_skip: 3,
+            duration_ms: 297_000,
+            ...times,
+        };
+        expect(watchProgress({ ...plain, resume_ms: 100_000 })).toEqual({ at: 97_000, length: 297_000 });
+    });
+
+    test('エンコードしたものが無ければ、元の TS の位置と録れた長さのまま', () => {
+        const ts = { library_path: null, cm_kept: null, encode_skip: null, duration_ms: 310_000, ...times };
+        expect(watchProgress({ ...ts, resume_ms: 200_000 })).toEqual({ at: 200_000, length: 310_000 });
+    });
+
+    test('録れた長さが無い古い行は、番組表の尺を直して代わりにする', () => {
+        expect(watchProgress({ ...cut, duration_ms: null, resume_ms: 200_000 })).toEqual({
+            at: 130_000,
+            length: 230_000,
+        });
+    });
+
+    test('続きが無い・直すと頭になるものは出さない', () => {
+        expect(watchProgress({ ...cut, resume_ms: null })).toBeNull();
+        // 元の TS の頭 5 秒は、残した区間 (10 秒から) の前
+        expect(watchProgress({ ...cut, resume_ms: 5_000 })).toBeNull();
     });
 });

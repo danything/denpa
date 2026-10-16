@@ -48,7 +48,7 @@ import {
     type PlayOffer,
 } from '#lib/ts/playback.js';
 import { lastVideoPts, type ReadAt, seekTs, sinceHead, tsHead } from '#lib/ts/seek.js';
-import type { Ruler } from '#lib/ts/watch.js';
+import { fromTsTime, type Ruler } from '#lib/ts/watch.js';
 import type { Recording } from '#lib/types.js';
 import { programSpec } from './captions';
 import { chapterList } from './cm';
@@ -839,6 +839,33 @@ export function rulerOf(
 ): Ruler | null {
     const encoded = source === null ? encodedPath(recording) !== null : source !== 'ts';
     return encoded ? { kept: recording.cm_kept, skip: recording.encode_skip ?? 0 } : null;
+}
+
+/**
+ * 一覧の「残り」に使う、続きの位置と尺 (ms)。**どちらも観る物差し** (`rulerOf(recording, null)`。
+ * エンコードしたものがあればその時刻。`GET /api/recordings` の `resumeMs` と同じ)。
+ *
+ * - 位置 (`resume_ms`) は元の TS の物差しで覚えているので直す
+ * - 尺 (`duration_ms`) はエンコードし終えると出来上がりの長さに書き換わる (`encoder.ts`) ので、
+ *   エンコードしたものがあれば、もうその物差し。無い (古い行) ときは番組表の尺を直して代わりにする
+ *
+ * 元の TS の位置のまま出来上がりの尺から引くと、CM を切ったものでは切った CM のぶん食い違う。
+ * 続きが無い・直すと頭になる (捨てた頭の中で止めた) ものは null
+ */
+export function watchProgress(
+    recording: Pick<
+        Recording,
+        'library_path' | 'cm_kept' | 'encode_skip' | 'resume_ms' | 'duration_ms' | 'start_at' | 'end_at'
+    >,
+): { at: number; length: number } | null {
+    if (recording.resume_ms === null) return null;
+    const ruler = rulerOf(recording, null);
+    const at = Math.round(fromTsTime(recording.resume_ms / 1000, ruler) * 1000);
+    if (at <= 0) return null;
+    const length =
+        recording.duration_ms ??
+        Math.round(fromTsTime((recording.end_at - recording.start_at) / 1000, ruler) * 1000);
+    return { at, length };
 }
 
 /**

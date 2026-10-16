@@ -25,6 +25,7 @@ import { CM_CUT_ALREADY, cancel as cancelEncode, enqueue, isCanceling, pump } fr
 import { emit } from '#lib/server/events.js';
 import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
 import { seriesFolder } from '#lib/server/library.js';
+import { watchProgress } from '#lib/server/playback.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { cancel, restore } from '#lib/server/reservations.js';
 import {
@@ -85,6 +86,11 @@ interface RecordingRow extends Recording {
     from_manual: boolean | null;
     /** 局ロゴを拾えているか。局名の隣に出す */
     has_logo: boolean | null;
+    /**
+     * 一覧の「残り」の位置と尺 (ms)。観る物差しに直したもの (`playback.watchProgress`)。続きが無ければ null。
+     * `resume_ms` は元の TS の物差しなので、エンコードしたものの尺と比べると CM を切ったものでは食い違う
+     */
+    progress: { at: number; length: number } | null;
     /** 「まとめて表示」でまとめる鍵と見出し (`seriesGroup`) */
     group_key: string;
     group_name: string;
@@ -283,6 +289,7 @@ export function load({ url, cookies }) {
             raw_size: row.library_path === null || row.ts_path === null ? null : fileSize(row.ts_path),
             alt_size: row.alt_path === null ? null : fileSize(row.alt_path),
             job_canceling: row.job_id !== null && isCanceling(row.job_id),
+            progress: watchProgress(row),
             ...seriesGroup(row.series, row.name),
         }));
 

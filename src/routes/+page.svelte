@@ -786,20 +786,21 @@
                         (`resume_ms`) は続きから始めるために持っていて、末尾まで
                         観たものは消える (`api/.../resume`) ので、**残っている =
                         まだ途中**。押せば `/watch` が続きから始める。
-                        分母は実際に録れた長さ。無ければ番組表の尺で代用する。
+                        位置も分母も観る物差し (エンコードしたものがあればその時刻) に直したもの
+                        (`progress`。覚えている位置は元の TS の物差しなので、CM を切ったものでは
+                        そのまま出来上がりの尺と比べると食い違う)。分母は実際に録れた長さで、無ければ番組表の尺。
                         添える言葉は割合ではなく**あと何分か** — 「観終わるのに
                         どれだけ掛かるか」が知りたいことで、4% では換算がいる
                     -->
-                    {#if canPlay && rec.deleted_at === null && rec.resume_ms !== null && rec.resume_ms > 0}
-                        {@const total = rec.duration_ms ?? rec.end_at - rec.start_at}
-                        {@const frac =
-                            total > 0 ? Math.min(1, rec.resume_ms / total) : 0}
+                    {#if canPlay && rec.deleted_at === null && rec.progress !== null}
+                        {@const { at, length: span } = rec.progress}
+                        {@const frac = span > 0 ? Math.min(1, at / span) : 0}
                         <div class="resume">
                             <div class="resume-track">
                                 <div class="resume-fill" style="width: {frac * 100}%"></div>
                             </div>
                             <span class="resume-left muted tiny num">
-                                残り{durationMs(Math.max(0, total - rec.resume_ms))}
+                                残り{durationMs(Math.max(0, span - at))}
                             </span>
                         </div>
                     {/if}
