@@ -8,7 +8,7 @@
  *
  * - 映像 … 256x144 の**I フレームだけ**。マクロブロックごとに色 (DC) だけを置き、
  *   AC は持たない (EOB だけ)。コマごとに縞が流れるので、**映像が進んでいるか**を
- *   画素で見分けられる。インタレの印も立てる (受け側の field 分けの処理を通すため)
+ *   画素で見分けられる。インタレの印も立て、輝度は上下のフィールドで別の時刻の絵にする (フィールド DCT)
  * - 音声 … 48kHz ステレオの AAC-LC の**無音**を ADTS で。1コマ 7 バイト
  *
  * 規格は ISO/IEC 13818-2 (映像) と 13818-7 / 14496-3 (AAC)。表の出どころは
@@ -92,9 +92,14 @@ function block(bits: Bits, diff: number, table: [number, number][]): void {
     bits.put(0b10, 2);
 }
 
-/** n コマ目の色 (Y, Cb, Cr)。**列と時刻で縞を流す** — 進んでいれば画素が変わる */
-function colorAt(col: number, row: number, n: number): [number, number, number] {
-    const y = 32 + ((col * 12 + n * 8) % 192);
+/**
+ * n コマ目の色 (Y, Cb, Cr)。**列と時刻で縞を流す** — 進んでいれば画素が変わる。
+ * 輝度は**フィールドごとの時刻で**流す (下のフィールドは上の 1/59.94 秒後の位置)。フィールドごとに
+ * 出せているか (bob) と、出す間合いを画素で見分けられる。1フィールドで 16 進み、30 コマ (60 フィールド)
+ * でちょうど一周するので、偽の放送が 30 コマを繰り返しても段差が出ない
+ */
+function colorAt(col: number, row: number, n: number, field: 0 | 1): [number, number, number] {
+    const y = 32 + ((col * 12 + (2 * n + field) * 16) % 192);
     return [y, 96 + ((row * 16) % 64), 160 - ((col * 4) % 64)];
 }
 
@@ -107,7 +112,7 @@ function colorAt(col: number, row: number, n: number): [number, number, number] 
  */
 export function mpeg2Frame(
     n: number,
-    color: (col: number, row: number, n: number) => [number, number, number] = colorAt,
+    color: (col: number, row: number, n: number, field: 0 | 1) => [number, number, number] = colorAt,
 ): Uint8Array {
     const bits = new Bits();
     const mbWidth = WIDTH / 16;
@@ -163,7 +168,7 @@ export function mpeg2Frame(
     bits.put(0, 2); // intra_dc_precision = 8bit
     bits.put(3, 2); // picture_structure = frame
     bits.put(1, 1); // top_field_first
-    bits.put(1, 1); // frame_pred_frame_dct (dct_type を書かずに済む)
+    bits.put(0, 1); // frame_pred_frame_dct = 0 (マクロブロックごとに dct_type を書く。フィールドで分ける)
     bits.put(0, 1); // concealment_motion_vectors
     bits.put(0, 1); // q_scale_type
     bits.put(0, 1); // intra_vlc_format
@@ -182,8 +187,11 @@ export function mpeg2Frame(
         for (let col = 0; col < mbWidth; col++) {
             bits.put(1, 1); // macroblock_address_increment = 1
             bits.put(1, 1); // macroblock_type = intra
-            const [y, cb, cr] = color(col, row, n);
+            bits.put(1, 1); // dct_type = 1 (フィールド DCT: 輝度の上2ブロックが上のフィールド、下2つが下)
+            const [top, cb, cr] = color(col, row, n, 0);
+            const [bottom] = color(col, row, n, 1);
             for (let i = 0; i < 4; i++) {
+                const y = i < 2 ? top : bottom;
                 block(bits, y - predictor[0]!, DC_LUMA);
                 predictor[0] = y;
             }
