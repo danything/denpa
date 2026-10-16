@@ -191,7 +191,7 @@ public class AsicenTunerTests
         Px4Wire.Asicen, AsicenUserland.Device("1-2", receiver), $"asicen-1-2 #{receiver}");
 
     [Test]
-    public async Task 借りて選局できる(CancellationToken cancel)
+    public async Task 受信機を取って選局できる(CancellationToken cancel)
     {
         await Task.Yield();
         using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");

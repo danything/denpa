@@ -58,7 +58,7 @@ public partial class DeviceStreamTests
      * 固定で 300ms 寝ていたのを、読む側がいなければ待たないようにした
      */
     [Test]
-    public async Task 読み手が居なければ待たず_居れば戻るまで待つ()
+    public async Task 読んでいる処理がなければ待たず_あれば戻るまで待つ()
     {
         var (stream, write) = Silent();
         using (stream)
@@ -154,7 +154,7 @@ public class DeviceStreamPipeTests
     }
 
     [Test]
-    public async Task 降りると言えば_何も来なくても戻り_あとから来たものは次の読み手に渡る()
+    public async Task 降りると言えば_何も来なくても戻り_あとから来たものは次に読む処理に渡る()
     {
         var (stream, write) = Silent();
         using var _ = write;

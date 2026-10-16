@@ -1213,7 +1213,7 @@ public sealed class Px4Tuner : ITuneDevice
             }
             catch (IOException error) when (reused && Lost(error))
             {
-                Log.Write($"[{_name}] {_wire.Daemon} との接続が切れていたので、受信機を借り直します ({error.Message})");
+                Log.Write($"[{_name}] {_wire.Daemon} との接続が切れていたので、受信機を取り直します ({error.Message})");
                 Attempt(tuning, streamId, lnb);
             }
         }
@@ -1299,7 +1299,7 @@ public sealed class Px4Tuner : ITuneDevice
         catch (Px4Error error)
         {
             control.Dispose();
-            throw new Px4Error(error.Code, $"受信機 {_receiver} を借りられません ({error.Message})");
+            throw new Px4Error(error.Code, $"受信機 {_receiver} を取れません ({error.Message})");
         }
         catch
         {
@@ -1308,7 +1308,7 @@ public sealed class Px4Tuner : ITuneDevice
         }
         _control = control;
         _started = false;
-        Log.Write($"[{_name}] 受信機を借りました");
+        Log.Write($"[{_name}] 受信機を取りました");
     }
 
     /// <summary>STOP_STREAM / START_STREAM / RELEASE の中身 (lease だけ)</summary>
@@ -1704,7 +1704,7 @@ internal sealed class Px4Stream
                 if (stalled.Elapsed >= _stallLimit)
                 {
                     writer.CancelPendingFlush();
-                    End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は借りたまま)");
+                    End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は取ったまま)");
                     return false;
                 }
             }

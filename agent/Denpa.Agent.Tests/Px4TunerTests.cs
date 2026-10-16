@@ -396,7 +396,7 @@ public class Px4TunerTests
     private static readonly ChannelTable.Tuning T28 = ChannelTable.Parse("T28")!;
 
     [Test]
-    public async Task 借りたまま2回選局できて_2回目は借り直さない(CancellationToken cancel)
+    public async Task 取ったまま2回選局できて_2回目は取り直さない(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
@@ -422,7 +422,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 同期しなければ理由を言い_受信機は借りたまま(CancellationToken cancel)
+    public async Task 同期しなければ理由を言い_受信機は取ったまま(CancellationToken cancel)
     {
         await Task.Yield();
         var silent = T28.Frequency / 1000;
@@ -440,7 +440,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task px4dとの接続が切れたら次の選局で借り直す(CancellationToken cancel)
+    public async Task px4dとの接続が切れたら次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
@@ -459,7 +459,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task px4dが流れを止めたら理由を添えて尽き_次は借りたまま選局し直す(CancellationToken cancel)
+    public async Task px4dがストリームを止めたら理由を添えて終わり_次は取ったまま選局し直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { EndFirstStream = (5, 15) };
@@ -482,7 +482,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task ATTACHを断られたら黙って借り直さず_次の選局で借り直す(CancellationToken cancel)
+    public async Task ATTACHを断られたら黙って取り直さず_次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { RejectAttach = 2 };
@@ -504,7 +504,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 読み手が居なければ流れを畳み_受信機は借りたまま(CancellationToken cancel)
+    public async Task 利用者がいなければストリームを閉じ_受信機は取ったまま(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
@@ -521,14 +521,14 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 借りられなければ理由を言う(CancellationToken cancel)
+    public async Task 取れなければ理由を言う(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { AcquireError = 4 };
         using var tuner = Open(px4d);
 
         var error = Assert.Throws<IOException>(() => tuner.Tune(T27, ChannelTable.NoStreamId));
-        await Assert.That(error.Message).Contains("受信機 2 を借りられません");
+        await Assert.That(error.Message).Contains("受信機 2 を取れません");
         await Assert.That(error.Message).Contains("BUSY");
     }
 
