@@ -24,7 +24,7 @@ import { notify } from './webhook';
  * 録り始めてから PMT でコピー禁止と分かり、1バイトも保存しなかった録画の理由
  * (番組表が古い・無かったとき。ふだんは予約の時点で止まる: `format.COPY_NEVER_REASON`)
  */
-export const COPY_NEVER_RECORDING = 'コピー禁止の番組なので録画しませんでした';
+const COPY_NEVER_RECORDING = 'コピー禁止の番組なので録画しませんでした';
 
 /** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
 const active = new Map<number, AbortController>();

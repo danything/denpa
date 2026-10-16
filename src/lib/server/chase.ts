@@ -68,7 +68,7 @@ export interface ChaseResume {
 }
 
 /** 作り直したところから、これだけ (秒) の内をリクエストされたら、そこから読む (`resumePlan`) */
-export const RESUME_NEAR = 15;
+const RESUME_NEAR = 15;
 /** 作り直したところを覚えておく長さ (ms)。リクエストし直すのは観終えてから (届いたぶんは倍速で先へ伸びている) */
 const RESUME_KEEP = 10 * 60_000;
 

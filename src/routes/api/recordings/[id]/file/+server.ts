@@ -82,7 +82,7 @@ function respond(id: string, request: Request, source: FileSource | null, audio 
 
     /*
      * 再生のためのエンドポイントなので、添付 (`Content-Disposition: attachment`) にはしない。
-     * 録画のダウンロードはいったん無くした (Discussion #760)
+     * 録画をファイルとして持ち出すダウンロードは持たない (Discussion #760)
      */
     return serveFile(path, path.endsWith('.mkv') ? 'video/x-matroska' : 'video/mp2t', request);
 }

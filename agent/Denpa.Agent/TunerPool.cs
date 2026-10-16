@@ -245,7 +245,7 @@ public sealed class TunerPool(
                     /*
                      * **合っていても、生きていなければ選局し直す。** DVB は合ったまま
                      * だが、px4-userland は利用者がいなくなると TS のストリームを畳む
-                     * (受信機は借りたまま。Px4.cs)。合っている印だけ残っていて中身が無い、を信じない
+                     * (受信機は取ったまま。Px4.cs)。合っている印だけ残っていて中身が無い、を信じない
                      */
                     if (held.Channel != channel || !held.Device.Tuned)
                     {
@@ -726,7 +726,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     public List<Sink> Sinks { get; } = [];
 
     /// <summary>
-    /// **選局の内訳を測る時計** (借りた時点から)。最初に送り出したときに1行残す —
+    /// **選局の内訳を測る時計** (取った時点から)。最初に送り出したときに1行残す —
     /// 局替えの遅さがどこにあるか (前の読み出し待ち・同期・最初の TS・鍵) を実機で割るため
     /// </summary>
     public Stopwatch Clock { get; } = Stopwatch.StartNew();

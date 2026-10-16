@@ -216,7 +216,7 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
 
         /*
          * **字幕も小窓に出る** (`compose.ts`)。偽の放送に字幕は乗っていないので、画面の字幕の
-         * canvas に赤い帯を描いて「描いている」印を立てる (`paint.ts` の `drawOverlay` と同じ)。
+         * canvas に赤い帯を描いて「描いている」印を立てる (`caption-draw.ts` の `CaptionPainter` と同じ印)。
          * 小窓のコマの同じ所が赤くなり、印を下ろせば (字幕を消した) 元の映像に戻る
          */
         const captionShown = (on: boolean) =>

@@ -21,7 +21,7 @@ namespace Denpa.Agent;
 ///
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
-/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、受信機を借りたまま制御ソケットで選局し直す (Px4.cs)</item>
+/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
 /// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
 /// </list>
 ///
@@ -46,7 +46,7 @@ public interface ITuneDevice : IDisposable
     ///
     /// <para>
     /// DVB は一度合わせたら合ったまま。px4-userland は読む側がいなくなると
-    /// TS のストリームを畳む (受信機は借りたまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
+    /// TS のストリームを畳む (受信機は取ったまま) ので、**同じチャンネルでも選局し直しが要る**ことがある。
     /// TunerPool は「同じチャンネルならそのまま」の前にここを見る。
     /// </para>
     /// </summary>

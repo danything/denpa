@@ -133,7 +133,7 @@ const TABLE_TOT = 0x73;
  * 頭3バイトのあとに MJD + BCD が5バイト。**TOT も同じ並び**で、後ろに
  * 時差の記述子が付くだけなので同じに読める。
  *
- * データ放送 (`bml.ts` の `getCurrentDateTime`) が見ます
+ * データ放送 (`bml.ts` の `onTime`) が読み、BML の時計にします
  */
 export function parseTimeTable(section: Uint8Array): number | null {
     if (section[0] !== TABLE_TDT && section[0] !== TABLE_TOT) return null;

@@ -100,7 +100,7 @@ test.describe('録画とエンコード', () => {
             await detail.getByTestId('detail-more-menu').evaluate((el) => getComputedStyle(el).display),
         ).toBe('none');
 
-        // 録画のダウンロードはいったん無くした (Discussion #760)。「その他…」にも出さない
+        // 録画をファイルとして持ち出すダウンロードは持たない (Discussion #760)。「その他…」にも出さない
         await detail.getByTestId('detail-more').click();
         await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
         await expect(detail.getByTestId('detail-more-menu')).not.toContainText('ダウンロード');

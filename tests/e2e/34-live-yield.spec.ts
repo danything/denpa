@@ -11,7 +11,7 @@ import { expect, goto, syncEpg, test } from './helpers';
  * `server/live-yield.ts`)。
  *
  * 場面は偽エージェントで作る — 地上波のチューナーを1台だけにして、ライブを観ている間に別の
- * チャンネルを録る。偽エージェントは空きが無ければ弱い利用者からチューナーを取り上げる (`tests/fake/agent.ts` の `preempt`)。
+ * チャンネルを録る。偽エージェントは空きが無ければ弱い利用者からチューナーを取り上げる (`tests/fake/agent.ts` の `pick`)。
  * 映像は出ない (偽 ffmpeg) ので、見るのは通知と、エージェントの利用者の顔ぶれ
  */
 

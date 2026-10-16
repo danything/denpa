@@ -20,7 +20,7 @@
  */
 
 import { CLOCK, readStamp, WRAP } from './pes';
-import { PACKET, SYNC } from './psi';
+import { findSync, PACKET, SYNC } from './psi';
 
 /** PES の頭の印 (stream_id)。映像 0xE0〜0xEF、音声 0xC0〜0xDF、字幕などは private_stream_1 (0xBD) */
 const isVideo = (id: number) => id >= 0xe0 && id <= 0xef;
@@ -38,14 +38,6 @@ export interface PesMark {
     pts: number;
     /** その PES が始まる TS パケットの位置 (渡したバイト列の頭から) */
     at: number;
-}
-
-/** パケットの切れ目を探す。3 つ続けて 0x47 が並ぶところ。無ければ -1 */
-function findSync(bytes: Uint8Array, from = 0): number {
-    for (let i = from; i + PACKET * 2 < bytes.length; i++) {
-        if (bytes[i] === SYNC && bytes[i + PACKET] === SYNC && bytes[i + PACKET * 2] === SYNC) return i;
-    }
-    return -1;
 }
 
 /**

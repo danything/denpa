@@ -66,7 +66,7 @@ export function refusalMessage(failure: unknown, fallback: string): string {
     return failure instanceof Refused ? failure.message : fallback;
 }
 
-/** 双方向を切ってあるなら 403。3 つのエンドポイントの入口で同じ */
+/** 双方向を切ってあるなら 403。`/api/bml/*` のどのエンドポイントも入口で呼ぶ (Hybridcast の入れ物も) */
 export function requireBmlNetwork(): void {
     if (!settings().bmlNetwork) error(403, 'データ放送の双方向通信はオフになっています');
 }

@@ -195,8 +195,8 @@ export class SectionAssembler {
  */
 const CONFIRM = 3;
 
-/** `from` 以降 `until` の手前までで、188 間隔に 0x47 が続くところを探す。無ければ -1 */
-function findSync(data: Uint8Array, from = 0, until = data.length): number {
+/** `from` 以降 `until` の手前までで、188 間隔に 0x47 が続くところを探す。無ければ -1 (`seek.ts` も使う) */
+export function findSync(data: Uint8Array, from = 0, until = data.length): number {
     for (let at = from; at < until && at + PACKET * (CONFIRM - 1) < data.length; at++) {
         let ok = true;
         for (let i = 0; i < CONFIRM; i++) {

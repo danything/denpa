@@ -23,7 +23,7 @@ namespace Denpa.Agent;
 /// <para>
 /// **使うのは2つ。** <c>px4d</c> が筐体 (USB 機能・受信機・カード) を所有する
 /// デーモンで、筐体1台につき1つ起こす。<c>px4ctl</c> は状態を聞く。受信機は
-/// px4d の制御ソケットで直に借りて選局し、TS も px4d から直に受ける (<see cref="Px4Tuner"/>)。
+/// px4d の制御ソケットで直に取って選局し、TS も px4d から直に受ける (<see cref="Px4Tuner"/>)。
 /// 同梱の <c>px4-ts</c> (1回1チャンネルの CLI) は使わない。どれも同じランタイム
 /// ディレクトリと筐体の番号で Unix ドメインソケットを見つける。
 /// </para>
@@ -1032,7 +1032,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 }
 
 /// <summary>
-/// px4-userland の受信機1つ。**px4d の制御ソケットで受信機を借り、借りたまま選局し直す。**
+/// px4-userland の受信機1つ。**px4d の制御ソケットで受信機を取り、取ったまま選局し直す。**
 ///
 /// <para>
 /// 最初の選局で <c>ACQUIRE → TUNE → START_STREAM → ATTACH_STREAM</c>、2回目からは
@@ -1051,7 +1051,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 /// <para>
 /// **誰も読まなくなったら TS のストリームを畳む。** 溜めが埋まったまま空かなければ、こちらから
 /// stream.sock を閉じる (放っておくと px4d の溜めが溢れて <c>SLOW_CONSUMER</c> になる)。
-/// 受信機は借りたままなので、次の選局が来たら同じ lease で選局し直す (<see cref="Tuned"/> を
+/// 受信機は取ったままなので、次の選局が来たら同じ lease で選局し直す (<see cref="Tuned"/> を
 /// TunerPool が見る)。
 /// </para>
 /// </summary>
@@ -1091,7 +1091,7 @@ public sealed class Px4Tuner : ITuneDevice
     private readonly Action? _lost;
     private readonly Lock _gate = new();
 
-    /// <summary>受信機を借りている制御ソケット。null なら借りていない</summary>
+    /// <summary>受信機を取っている制御ソケット。null なら取っていない</summary>
     private Px4Control? _control;
 
     private ulong _lease;
@@ -1144,7 +1144,7 @@ public sealed class Px4Tuner : ITuneDevice
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
     /// <summary>
-    /// 受信機を借りていて、TS がまだ流れているか。**ロックの下で読む** — <c>Dispose</c> は別の
+    /// 受信機を取っていて、TS がまだ流れているか。**ロックの下で読む** — <c>Dispose</c> は別の
     /// ロック (<c>TunerPool._deviceGate</c>) から来るので、畳んでいる最中のものに触らないように
     /// </summary>
     public bool Tuned
@@ -1188,11 +1188,11 @@ public sealed class Px4Tuner : ITuneDevice
     }
 
     /// <summary>
-    /// 選局する。**借りていれば借りたまま、切れていれば借り直す。**
+    /// 選局する。**取っていれば取ったまま、切れていれば取り直す。**
     ///
     /// <para>
-    /// 借りていたはずの接続が切れていた (px4d が起こし直された・lease が無い) ときは、
-    /// その場で1度だけ借り直して続ける。同期しなかった (TIMEOUT) ときは受信機を借りたまま
+    /// 取っていたはずの接続が切れていた (px4d が起こし直された・lease が無い) ときは、
+    /// その場で1度だけ取り直して続ける。同期しなかった (TIMEOUT) ときは受信機を取ったまま
     /// 投げる — 総当たりのスキャンは同期しないチャンネルのほうが多く、そのたびに返すと
     /// 電源の入れ直しからやり直しになる。
     /// </para>
@@ -1252,7 +1252,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// <summary>
     /// 制御ソケットごと失くした (px4d のエラーの答えではない、または lease がもう無い)。
     /// **TS のストリームの失敗 (<see cref="Px4StreamError"/>) は入れない** — 制御ソケットは生きていて、
-    /// 黙って借り直すと「接続が切れていた」と嘘の記録が残る
+    /// 黙って取り直すと「接続が切れていた」と嘘の記録が残る
     /// </summary>
     private static bool Lost(IOException error) => error switch
     {
@@ -1262,7 +1262,7 @@ public sealed class Px4Tuner : ITuneDevice
     };
 
     /// <summary>
-    /// 受信機を借りたまま次に進める失敗か。同期しなかった・指定が合わなかった (TUNE)、
+    /// 受信機を取ったまま次に進める失敗か。同期しなかった・指定が合わなかった (TUNE)、
     /// ATTACH は通ったが TS が駄目だった (<see cref="Px4StreamError.KeepsLease"/>)。それ以外は受信機を返して閉じる
     /// </summary>
     private static bool Keeps(IOException error) =>
@@ -1283,7 +1283,7 @@ public sealed class Px4Tuner : ITuneDevice
         }
     }
 
-    /// <summary>繋いで受信機を借りる (HELLO → ACQUIRE)</summary>
+    /// <summary>繋いで受信機を取る (HELLO → ACQUIRE)</summary>
     private void Open()
     {
         var control = Px4Control.Connect(Px4Control.Endpoint(_runtimeDir, _id, "control.sock", _wire), 0, RequestTimeout, _wire);
@@ -1433,16 +1433,16 @@ public sealed class Px4Tuner : ITuneDevice
 }
 
 /// <summary>
-/// 受信機を借りたままの間に、TS のストリームが駄目だった (ATTACH を断られた・TS が来なかった)。
+/// 受信機を取ったままの間に、TS のストリームが駄目だった (ATTACH を断られた・TS が来なかった)。
 /// **受信機は返さない** — 次の選局で同じ lease のまま STOP_STREAM → TUNE からやり直せる
 /// </summary>
 internal sealed class Px4StreamError(string message, bool keepsLease) : IOException(message)
 {
     /// <summary>
-    /// 受信機を借りたまま次に進めるか。**ATTACH_STREAM が通っていれば (ストリームが active) 進める** —
+    /// 受信機を取ったまま次に進めるか。**ATTACH_STREAM が通っていれば (ストリームが active) 進める** —
     /// 次の STOP_STREAM で畳める。通らなかったときは px4d の lease が「armed」のまま残り、
     /// TUNE も START_STREAM も BUSY で返るようになる (px4d は armed の期限切れを ATTACH でしか
-    /// 見ない) ので、返して借り直すしかない
+    /// 見ない) ので、返して取り直すしかない
     /// </summary>
     public bool KeepsLease { get; } = keepsLease;
 }

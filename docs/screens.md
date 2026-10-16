@@ -91,7 +91,7 @@ docs・コードのコメント・テスト名も、初めて読む人に通じ�
 
 「詳細」で番組の中身と操作。「端末に保存」
 (オフライン視聴)、「ルールを作る」、「その他…」に視聴済みにする (未視聴に戻す)・再エンコード・CM検出のやり直し。
-録画のダウンロードはいったん無くしました ([Discussion #760](https://github.com/danything/denpa/discussions/760))。
+録画をファイルとして持ち出すダウンロードはありません ([Discussion #760](https://github.com/danything/denpa/discussions/760))。
 コマ数 (30/60) や字幕の有無もここに出ます。
 
 ![録画の詳細と操作](images/detail-anim.webp)

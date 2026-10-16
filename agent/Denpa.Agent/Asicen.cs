@@ -12,7 +12,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **IPC は px4-userland と同じ。** asicen-userland は px4-userland の portable IPC を取り込み、
-/// 枠の頭とソケットの置き場だけ変えている (<see cref="Px4Wire.Asicen"/>)。受信機の貸し借り・選局・
+/// 枠の頭とソケットの置き場だけ変えている (<see cref="Px4Wire.Asicen"/>)。受信機の取得と返却・選局・
 /// TS・内蔵カードは px4d と同じ経路 (<see cref="Px4Tuner"/> / <see cref="Px4Card"/>) を通す。
 /// 同梱の <c>asicen-ts</c> (1回1チャンネルの CLI) と IFD ハンドラ (<c>libifd-asicen.so</c>) は使わない
 /// (px4-ts と px4-userland の IFD を使わないのと同じ理由。docs/agent.md)。
@@ -262,7 +262,7 @@ public static class AsicenUserland
     /// <summary>設定に出てくる筐体。asicend を起こす相手</summary>
     public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);
 
-    /// <summary>受信機1つを開く。**受信機の貸し借りと選局は px4d と同じ経路** (<see cref="Px4Tuner"/>)</summary>
+    /// <summary>受信機1つを開く。**受信機の取得・返却と選局は px4d と同じ経路** (<see cref="Px4Tuner"/>)</summary>
     public static ITuneDevice Open(string id, int receiver, string? lnb) => new Px4Tuner(
         id, receiver, lnb, RuntimeDir,
         () =>
