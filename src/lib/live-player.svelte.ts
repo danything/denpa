@@ -99,6 +99,8 @@ const RESTART_CALM = 30_000;
 const RESUME_LEFT = 0.3;
 /** 手元を見る間隔 (ms。`resumeChase`) */
 const RESUME_EVERY = 250;
+/** 手元が残ったまま位置がこれ (ms) だけ進まなければ、観終えるのを待たずにリクエストし直す (`resumeChase`) */
+const RESUME_STUCK = 3_000;
 /**
  * 映像だけがこれだけ遅れたら飛び直す (秒)。**口の動きが合わなくなる境目。**
  *
@@ -1286,19 +1288,25 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     function resumeChase(wait: boolean): void {
         if (resuming !== null) clearInterval(resuming);
+        /** 位置が最後に進んだ時刻。**手元が残ったまま進まなくなっても待ち続けない** (`RESUME_STUCK`) */
+        let movedAt = Date.now();
+        let last = -1;
         resuming = setInterval(() => {
             if (left || chase === null || element === null) {
                 stopResuming();
                 return;
             }
-            if (paused) return;
             const onCanvas = canvas && engine !== null;
+            const now = onCanvas ? position : element.currentTime;
+            if (paused || now !== last) movedAt = Date.now();
+            last = now;
+            if (paused) return;
             const ahead = onCanvas
                 ? (engine?.lead ?? 0)
                 : buffer === null || buffer.buffered.length === 0
                   ? 0
                   : buffer.buffered.end(buffer.buffered.length - 1) - element.currentTime;
-            if (ahead > RESUME_LEFT) return;
+            if (ahead > RESUME_LEFT && Date.now() - movedAt < RESUME_STUCK) return;
             stopResuming();
             // <video> の位置は届いたときにしか写していない (`pace`)。もう届かないので、ここで写す
             if (!onCanvas) position = Math.round(element.currentTime * 10) / 10;

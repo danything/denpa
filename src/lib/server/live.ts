@@ -597,7 +597,6 @@ class Session {
      * GPU のせいだったと決めて覚え、断り書きを出す (`blameGpu`)
      */
     private blame: string | null = null;
-    /** 入口の見出しから拾った、選べる字幕 */
     /** 選べる字幕 (ffmpeg の入口の見出しから)。放送そのままの経路で字幕の ffmpeg を起こし直したら作り直す (`captions`) */
     private list: TrackList;
     private readonly aborter = new AbortController();
@@ -1359,14 +1358,20 @@ class Session {
      * **本当の失敗が埋もれる**
      */
     private async watch(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+        /*
+         * **起きたときの一覧に数える。** 放送のままの経路で字幕の ffmpeg を起こし直したら (`captions`)、
+         * 古いほうの残りの行は新しい一覧にも「字幕が無い」にも入れない
+         */
+        const list = this.list;
         for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
+            if (list !== this.list) return;
             /*
              * **選べる字幕は入口の見出しに出ている。** 1枚も来ていなくても
              * 分かるので、画面は待たずに切り替えを出せる (間隔の空く番組で
              * ボタンが出なかったのはこれを見ていなかったため)
              */
-            if (this.list.feed(line)) {
-                this.tell({ type: 'captions', tracks: this.list.tracks, track: this.track });
+            if (list.feed(line)) {
+                this.tell({ type: 'captions', tracks: list.tracks, track: this.track });
                 continue;
             }
             // 入口の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
@@ -1524,9 +1529,11 @@ class Session {
                 // 読み捨てる
             }
         })().catch(() => undefined);
+        const list = this.list;
         void this.watch(proc)
             .then(() => {
-                if (this.noSubtitle) captionless.set(this.serviceId, Date.now());
+                // 起こし直されたあとの古いものは、「字幕が無い」を覚えさせない
+                if (list === this.list && this.noSubtitle) captionless.set(this.serviceId, Date.now());
             })
             .catch(() => undefined);
         void this.subtitles(proc).catch(() => undefined);
