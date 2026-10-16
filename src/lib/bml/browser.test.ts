@@ -227,6 +227,22 @@ describe('browser.*', () => {
         expect(hints).toHaveLength(1);
     });
 
+    test('getBrowserStatus の IRDState は、出している文書が放送か通信かで Broadcast と Link が分かれる', async () => {
+        const query = `
+            var dir = (browser.getBrowserStatus("TerrP", "IRDState", "Link") == 1
+                && browser.getBrowserStatus("TerrP", "IRDState", "Broadcast") != 1)
+                ? "bridge" : browser.getActiveDocument().substring(0, 3) + "/DFF1";
+            var result = [
+                browser.getBrowserStatus("TerrP", "IRDState", "Broadcast"),
+                browser.getBrowserStatus("TerrP", "IRDState", "Link"),
+                browser.getBrowserStatus("TerrP", "IRDState", "UnLink"),
+                dir
+            ];
+        `;
+        expect(items(await setup().run(query))).toEqual([1, 0, 0, '/40/DFF1']);
+        expect(items(await setup('http://www.example.com/a/b.bml').run(query))).toEqual([0, 1, 0, 'bridge']);
+    });
+
     test('通信の文書からは NVRAM の局の領域を使えない (local_web と受信機の設定を読むことだけ)', async () => {
         const s = setup('https://www.example.com/a.bml');
         const result = await s.run(`

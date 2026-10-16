@@ -390,8 +390,12 @@ export function defineBrowser(host: BrowserHost): HostObject {
     fn('getBrowserVersion', () => array(['denpa', 'denpa', '001', '000']));
     fn('getBrowserStatus', (args) => {
         if (str(args, 0) !== 'TerrP' || str(args, 1) !== 'IRDState') return Number.NaN;
+        // Broadcast は放送の文書を、Link は通信の文書 (一次リンクの先) を出しているときに 1 (TR-B14)。
+        // 局の script はこれを見て BinaryTable の置き場 (放送のモジュールか、通信の相対の名前か) を選ぶ
         const state = str(args, 2);
-        return state === 'Link' || state === 'Broadcast' ? 1 : state === 'UnLink' ? 0 : Number.NaN;
+        if (state === 'Broadcast') return remote() ? 0 : 1;
+        if (state === 'Link') return remote() ? 1 : 0;
+        return state === 'UnLink' ? 0 : Number.NaN;
     });
     fn('isSupportedMedia', (args) => (['1', '2', '4'].includes(str(args, 0)) ? 1 : 0));
     fn('getIRDID', () => null);
