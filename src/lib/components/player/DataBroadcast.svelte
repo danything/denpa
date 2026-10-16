@@ -48,9 +48,14 @@
     import { onDestroy } from 'svelte';
     import type { Bml, BmlIp, Rect, Service } from '#lib/bml/engine.js';
     import { type Plane, planeArea } from '#lib/bml/plane.js';
+    import { type FrameMessage, type HcState, VIEWPORT } from '#lib/hybridcast/app.js';
     import { read, write } from '#lib/keep.js';
+    import type { HybridcastLink } from '#lib/live.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
+    import HybridcastFrame from './HybridcastFrame.svelte';
     import StageNote from './StageNote.svelte';
+
+    type Place = Extract<FrameMessage, { type: 'video' }>['place'];
 
     interface Props {
         /** 出すか。**押されたら読み込みが始まる** */
@@ -111,6 +116,16 @@
          * 「録画の再生中は選局できません」と知らせて false を返す。渡さなければいつも失敗
          */
         tune?: ((service: Service) => boolean) | null;
+        /**
+         * この番組に載っている Hybridcast (AIT)。文書が起動を求めたら (startAITControlledApp) 映像の上に開く
+         * (`HybridcastFrame`)。双方向がオフ (`network`) なら開かない — 文書の問い合わせにも「無い」と答える
+         */
+        apps?: HybridcastLink[];
+        /** 局の名前 (Hybridcast のアプリに渡す) */
+        serviceName?: string;
+        /** 字幕を出しているか、と切り替え (Hybridcast のアプリから) */
+        captions?: boolean;
+        setCaptions?: ((on: boolean) => void) | null;
     }
 
     let {
@@ -125,7 +140,59 @@
         network,
         clock = null,
         tune = null,
+        apps = [],
+        serviceName = '',
+        captions = false,
+        setCaptions = null,
     }: Props = $props();
+
+    /** いま開いている Hybridcast のアプリ。開いている間は BML を隠し、キーはアプリへ渡す */
+    let running = $state<HybridcastLink | null>(null);
+    /** アプリが言う映像の置き場 (`HybridcastFrame` の `onvideo`) */
+    let appVideo: Place = 'full';
+    /** アプリへキーを渡す関数 (`HybridcastFrame` の `press`) */
+    let appPress = $state<((code: number, down: boolean) => void) | null>(null);
+    /** いまの番組 (放送の programInfo)。アプリへ渡す */
+    let program = $state<HcState['program']>(null);
+    const hcState = $derived<HcState>({ program, serviceName, captions });
+
+    /**
+     * どのアプリを開くか。文書が渡した数に organisation_id と application_id が両方あればそれ、
+     * application_id だけ合うものがあればそれ、無ければ AIT の先頭 (autostart を先に)
+     */
+    function pickApp(hint: number[]): HybridcastLink | null {
+        return (
+            apps.find((a) => hint.includes(a.organisationId) && hint.includes(a.applicationId)) ??
+            apps.find((a) => hint.includes(a.applicationId)) ??
+            apps.find((a) => a.autostart) ??
+            apps[0] ??
+            null
+        );
+    }
+
+    function startApp(hint: number[]): boolean {
+        const app = pickApp(hint);
+        if (app === null) return false;
+        // 開いているなら開き直さない (文書が何度も呼んでくることがある)
+        if (running === null) {
+            running = app;
+            appVideo = 'full';
+            // 届け途中の d はここまで (押し直すと、開いたアプリを閉じてしまう)
+            dueD = false;
+            stopKnocking();
+            engine?.releaseKeys();
+            place();
+        }
+        return true;
+    }
+
+    /** アプリを閉じてデータ放送へ戻る */
+    function closeApp(): void {
+        if (running === null) return;
+        running = null;
+        appVideo = 'full';
+        place();
+    }
 
     /** リモコンの d。`AribKeyCode.DataButton` と同じ値 (番号で書く理由は `Remote.svelte`) */
     const DATA_BUTTON = 20;
@@ -327,7 +394,8 @@
         if (settled || !showing) stopWaiting();
         else startWaiting();
         visible = want;
-        if (mount !== null) mount.style.opacity = want ? '1' : '0';
+        // Hybridcast のアプリを開いている間は BML を隠す (閉じたら戻す)
+        if (mount !== null) mount.style.opacity = want && running === null ? '1' : '0';
         placeVideo(want);
     }
 
@@ -339,7 +407,24 @@
      */
     function placeVideo(want: boolean): void {
         if (media === null) return;
-        if (want && videoRect !== null && plane !== null) {
+        // Hybridcast のアプリを開いている間は、アプリの言う場所 (1920x1080 の座標。枠いっぱいに伸ばしてある)
+        if (running !== null && appVideo !== 'full') {
+            mediaStyle ??= media.style.cssText;
+            media.dataset['bmlWindow'] = '';
+            if (appVideo === 'hidden') {
+                media.style.opacity = '0';
+                return;
+            }
+            const share = (n: number): string => `${n * 100}%`;
+            media.style.opacity = '';
+            media.style.inset = 'auto';
+            media.style.left = share(appVideo.left / VIEWPORT.width);
+            media.style.top = share(appVideo.top / VIEWPORT.height);
+            media.style.width = share(appVideo.width / VIEWPORT.width);
+            media.style.height = share(appVideo.height / VIEWPORT.height);
+            return;
+        }
+        if (running === null && want && videoRect !== null && plane !== null) {
             mediaStyle ??= media.style.cssText;
             // 字幕を操作バーの上へ持ち上げない印 (`PlayerStage`。小窓の中は操作バーと重ならない)
             media.dataset['bmlWindow'] = '';
@@ -398,12 +483,22 @@
 
     /** 押して離したことにする。**BML は押しっぱなしを嫌う** (離すまで次が来ない) */
     function tap(code: number): void {
+        // Hybridcast のアプリを開いている間はアプリへ (戻ると d は閉じる)
+        if (running !== null) {
+            appPress?.(code, true);
+            appPress?.(code, false);
+            return;
+        }
         engine?.key(code, true);
         engine?.key(code, false);
     }
 
-    /** 画面の d (`pressD`)。出ている文書が d を聞いていれば押して true */
+    /** 画面の d (`pressD`)。出ている文書が d を聞いていれば押して true。Hybridcast を開いていれば閉じて true */
     function pressData(): boolean {
+        if (running !== null) {
+            closeApp();
+            return true;
+        }
         if (engine === null || !visible || !engine.listens('DataButtonPressed')) return false;
         tap(DATA_BUTTON);
         return true;
@@ -523,6 +618,8 @@
             },
             // 選局は画面に任せる (エンジンは「この局へ」と言うだけ)
             onTune: (service) => tune?.(service) ?? false,
+            // Hybridcast。双方向がオフなら開かない (エンジンも問い合わせに「無い」と答える)
+            hybridcast: { ready: () => network && apps.length > 0, start: startApp },
             log: (message) => console.warn(`[bml] ${message}`),
         });
         engine = made;
@@ -532,6 +629,21 @@
         listen((message) => {
             handed++;
             made.feed(message);
+            if (message.type === 'programInfo') {
+                const p = made.program();
+                program =
+                    p === null
+                        ? null
+                        : {
+                              originalNetworkId: p.originalNetworkId,
+                              transportStreamId: p.transportStreamId,
+                              serviceId: p.serviceId,
+                              eventId: p.eventId,
+                              eventName: p.eventName,
+                              startTimeUnixMillis: p.startTimeUnixMillis,
+                              durationSeconds: p.durationSeconds,
+                          };
+            }
         });
         // 指のリモコンにも同じ関数を渡す
         press = tap;
@@ -540,6 +652,9 @@
 
     function close(): void {
         generation++;
+        running = null;
+        appVideo = 'full';
+        program = null;
         listen(null);
         press = null;
         pressD = null;
@@ -592,7 +707,9 @@
         const code = toAribKey(event.key);
         if (code === -1) return;
         event.preventDefault();
-        engine.key(code, down);
+        // Hybridcast のアプリを開いている間はアプリへ (iframe に入力が向いていれば、こちらには来ない)
+        if (running !== null) appPress?.(code, down);
+        else engine.key(code, down);
     }
 
     onDestroy(close);
@@ -628,7 +745,21 @@
         **テレビと同じ「データ取得中」。** denpa は押されてから放送を読み取り始める
         ので、テレビより待つ (実測で8秒)。何も言わずに待たせると壊れて見える
     -->
-    {#if on && (loading || receiving)}
+    {#if running !== null}
+        <HybridcastFrame
+            app={running}
+            hc={hcState}
+            onclose={closeApp}
+            ontune={(service) => tune?.(service) ?? false}
+            oncaptions={(on) => setCaptions?.(on)}
+            onvideo={(where) => {
+                appVideo = where;
+                place();
+            }}
+            bind:press={appPress}
+        />
+    {/if}
+    {#if on && running === null && (loading || receiving)}
         <div class="corner">
             <StageNote testid="live-data-receiving">データ取得中…</StageNote>
         </div>

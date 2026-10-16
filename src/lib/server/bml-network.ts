@@ -46,6 +46,9 @@ const LIMIT = 4 * 1024 * 1024;
 /** 待つ上限 */
 const TIMEOUT = 10_000;
 
+/** 送るものの既定の形 (データ放送の `Denbun=…`) */
+const FORM = 'application/x-www-form-urlencoded';
+
 export interface Fetched {
     status: number;
     contentType: string;
@@ -224,6 +227,7 @@ function doRequest(
     address: string,
     method: 'GET' | 'POST',
     body: Uint8Array | undefined,
+    contentType = FORM,
 ): Promise<{ status: number; location: string | null; contentType: string; body: Uint8Array }> {
     return new Promise((resolve, reject) => {
         const https = url.protocol === 'https:';
@@ -239,7 +243,7 @@ function doRequest(
                     accept: '*/*',
                     ...(method === 'POST' && body !== undefined
                         ? {
-                              'content-type': 'application/x-www-form-urlencoded',
+                              'content-type': contentType,
                               'content-length': body.length,
                           }
                         : {}),
@@ -305,16 +309,21 @@ export function fetchForBml(raw: string): Promise<Fetched> {
  * 飛ばされたときの手の変わりかたは web と同じ規則にします —
  * 301/302/303 は GET へ、307/308 は POST のまま。**行き先は毎回確かめ直す**
  */
-export function postForBml(raw: string, body: Uint8Array): Promise<Fetched> {
-    return follow(raw, 'POST', body);
+export function postForBml(raw: string, body: Uint8Array, contentType = FORM): Promise<Fetched> {
+    return follow(raw, 'POST', body, contentType);
 }
 
 /** 飛ばされるのを1つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
-async function follow(raw: string, first: 'GET' | 'POST', body: Uint8Array | undefined): Promise<Fetched> {
+async function follow(
+    raw: string,
+    first: 'GET' | 'POST',
+    body: Uint8Array | undefined,
+    contentType = FORM,
+): Promise<Fetched> {
     let { url, address } = await allowed(raw);
     let method = first;
     for (let hop = 0; ; hop++) {
-        const got = await doRequest(url, address, method, method === 'POST' ? body : undefined);
+        const got = await doRequest(url, address, method, method === 'POST' ? body : undefined, contentType);
 
         if (got.status >= 300 && got.status < 400 && got.location !== null) {
             if (hop >= HOPS) throw new Refused('リダイレクトが多すぎます');

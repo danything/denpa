@@ -16,7 +16,7 @@
  * 時計は `clock` (録画は再生位置から放送の時刻を出す)。無ければ TOT + 経過時間。
  */
 
-import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
+import type { ProgramInfoMessage, ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type BmlIp, type BrowserHost, defineBinaryTable, defineBrowser } from './browser';
 import { Budget, type BudgetLimits } from './budget';
 import { createRealm } from './builtins';
@@ -93,6 +93,12 @@ export interface BmlOptions {
      * `transportStreamId` は分からなければ null (録画など)
      */
     onTune?: (service: Service) => boolean;
+    /**
+     * Hybridcast (startAITControlledApp)。**開くのは呼び手** — `ready` は開けるか (双方向がオンで、
+     * AIT にアプリがある)、`start` は開く (開けたら true)。`hint` は文書が渡した数 (どのアプリかの
+     * 手がかり)。無ければ AIT の問い合わせに 0 と答え、起動は失敗を返す
+     */
+    hybridcast?: { ready(): boolean; start(hint: number[]): boolean };
     log?: (message: string) => void;
     /** ページを握る長さの決まり (既定は [budget.ts](budget.ts) の DEFAULT_BUDGET。テストで縮める) */
     budget?: Partial<BudgetLimits>;
@@ -106,6 +112,8 @@ export interface Bml {
     setReceiverInfo(info: Partial<ReceiverInfo>): void;
     /** 押したままのキーを忘れる (窓のフォーカスが外れて keyup が来ないとき) */
     releaseKeys(): void;
+    /** いまの局と番組 (放送の programInfo)。Hybridcast のアプリに渡す */
+    program(): ProgramInfoMessage | null;
     readonly plane: Plane;
     /** 切り分け用 (今の文書の名前) */
     readonly path: string | null;
@@ -1054,6 +1062,14 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     program(): ReturnType<BrowserHost['program']> {
         return this.resources.program;
+    }
+
+    canStartApp(): boolean {
+        return !this.destroyed && this.ip.connected() && this.options.hybridcast?.ready() === true;
+    }
+
+    startApp(hint: number[]): boolean {
+        return this.canStartApp() && this.options.hybridcast?.start(hint) === true;
     }
 
     activeDocument(): string | null {

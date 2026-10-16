@@ -383,6 +383,12 @@
                 prefecture={data.prefecture}
                 network={data.bmlNetwork}
                 tune={tuneFromData}
+                apps={player.hybridcast}
+                serviceName={current?.name ?? ''}
+                captions={player.captions}
+                setCaptions={(on) => {
+                    if (on !== player.captions) player.toggleCaptions();
+                }}
             />
 
             <!--
@@ -523,11 +529,11 @@
                         電波に乗っているのは住所だけ (AIT) で、中身は放送局の
                         サーバから取ります (`ts/ait.ts`)。
 
-                        **denpa は動かしません。別のタブで開くだけ**です。
-                        動かすには受信機の API をアプリの文脈に用意する必要が
-                        あり、別オリジンのページには手を入れられません。放送局の
-                        サーバが認証された受信機を期待することも多いので、
-                        **多くはそのままでは動きません**
+                        **このボタンは別のタブで開くだけ**です (受信機の API が無いので、
+                        多くはそのままでは動きません)。denpa の中で動かすのは、データ放送が
+                        起動を求めたとき (`DataBroadcast` の `HybridcastFrame`)。
+                        受信機の API は用意できる範囲だけで、認証された受信機を期待する
+                        アプリは動きません
                         ([stream.md](../../../docs/stream.md#58-hybridcast))。
                         できないものをできる顔で出さないために、d ボタンと同じ
                         形にはせず「外へ出ていく」印にしてあります

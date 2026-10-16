@@ -321,10 +321,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** いま出している字幕 (`CaptionTrack.index`) */
     let captionTrack = $state(0);
     /**
-     * この番組に載っている Hybridcast。**在ることを言うだけ。**
-     *
-     * denpa は動かさない — 押すと別のタブで開くだけで、受信機の API は
-     * 用意していない ([docs/stream.md](../../docs/stream.md#58-hybridcast))
+     * この番組に載っている Hybridcast。ボタンは別のタブで開き、データ放送が起動を求めたら
+     * denpa の中で開く (`DataBroadcast`。受信機の API は用意できる範囲だけ) ([docs/stream.md](../../docs/stream.md#58-hybridcast))
      */
     let hybridcast = $state<HybridcastLink[]>([]);
     /**
@@ -2405,7 +2403,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         get hasCaptions() {
             return captionTracks.length > 0;
         },
-        /** この番組に載っている Hybridcast。**動かさない。行き先を出すだけ** */
+        /** この番組に載っている Hybridcast (行き先。データ放送が起動を求めたら開く) */
         get hybridcast() {
             return hybridcast;
         },

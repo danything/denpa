@@ -1404,6 +1404,8 @@ class Session {
                 .map((app) => ({
                     name: app.name,
                     url: app.url,
+                    organisationId: app.organisationId,
+                    applicationId: app.applicationId,
                     autostart: app.controlCode === CONTROL.autostart,
                 }));
             const mark = JSON.stringify(apps);

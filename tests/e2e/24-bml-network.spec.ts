@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { MX } from '../fake/services';
 import {
     captureSockets,
     dataElement,
@@ -147,4 +148,164 @@ test.describe('データ放送の双方向', () => {
             responseTimeMillis: null,
         });
     });
+
+    /*
+     * **Hybridcast はデータ放送が起動を求めたときに開く** ([stream.md](../../docs/stream.md#58-hybridcast))。
+     *
+     * アプリは合成のもの (本物の放送局のアプリは入れない)。中継の返りを差し替えて、
+     * 起動・アプリの通信が中継を通ること・denpa に触れないこと・受信機 API・戻るで閉じる、を見る
+     */
+    test('データ放送から Hybridcast を開き、戻るで閉じる', async ({ page, baseURL }) => {
+        const appUrl = 'https://hybridcast.example.jp/app.html';
+        const dataUrl = 'https://hybridcast.example.jp/api/data.json';
+        // denpa 自身の API。アプリが中継で取ろうとしても、内側なので中継が断る
+        const denpaUrl = new URL('/api/settings', baseURL).href;
+        const app = `<!DOCTYPE html><html><head><title>hc</title></head><body>
+<object id="v" type="video/broadcast" style="position:absolute;left:960px;top:0px;width:960px;height:540px"></object>
+<p id="out" style="position:absolute;left:0;top:600px">-</p>
+<script>
+(async function () {
+    var out = {};
+    var channel = document.getElementById('v').bindToCurrentChannel();
+    out.sid = channel && channel.sid;
+    out.device = navigator.receiverDevice.getCurrentChannel().sid;
+    out.receiverId = navigator.receiverDevice.getReceiverId();
+    out.origin = self.origin;
+    try { out.parent = parent.document.title; } catch (e) { out.parent = 'blocked'; }
+    out.cookie = document.cookie;
+    localStorage.setItem('n', '1');
+    try { out.fetch = (await (await fetch('api/data.json')).json()).v; } catch (e) { out.fetch = 'failed'; }
+    try { await fetch(${JSON.stringify(denpaUrl)}); out.denpa = 'reached'; } catch (e) { out.denpa = 'refused'; }
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'api/data.json');
+    xhr.responseType = 'json';
+    await new Promise(function (done) { xhr.onload = done; xhr.onerror = done; xhr.send(); });
+    out.xhr = xhr.response && xhr.response.v;
+    document.getElementById('out').textContent = JSON.stringify(out);
+})();
+</script></body></html>`;
+        const asked: string[] = [];
+        await page.route('**/api/bml/proxy**', (route) => {
+            const target = new URL(route.request().url()).searchParams.get('url') ?? '';
+            asked.push(target);
+            if (target === appUrl)
+                return route.fulfill({
+                    status: 200,
+                    headers: { 'x-bml-relayed': '1', 'content-type': 'text/html' },
+                    body: app,
+                });
+            if (target === dataUrl)
+                return route.fulfill({
+                    status: 200,
+                    headers: { 'x-bml-relayed': '1', 'content-type': 'application/json' },
+                    body: '{"v":"relayed"}',
+                });
+            // ほか (denpa 自身) は本物の中継へ。内側なので断る
+            return route.continue();
+        });
+        await captureSockets(page);
+        await goto(page, '/live');
+        await page.locator(`[data-testid=live-channel][data-service="${MX.id}"]`).click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        // AIT が届いてから (開けるアプリがあってから)
+        await expect(page.getByTestId('live-hybridcast')).toBeVisible({ timeout: 15_000 });
+        const overlay = page.getByTestId('live-data');
+        await wakeControls(page, 'live-frame');
+        await page.getByTestId('live-data-button').click();
+        await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+        await expect.poll(async () => Number(await overlay.getAttribute('data-handed'))).toBeGreaterThan(0);
+        await feedData(page, [
+            {
+                type: 'programInfo',
+                originalNetworkId: MX.networkId,
+                transportStreamId: null,
+                serviceId: MX.serviceId,
+                eventId: 0x1234,
+                eventName: 'テスト番組',
+                startTimeUnixMillis: Date.now(),
+                durationSeconds: 1800,
+                indefiniteDuration: false,
+                networkId: MX.networkId,
+            },
+            ...fakeDataBroadcast(START_APP),
+        ]);
+        await expect
+            .poll(async () => (await dataElement(page, 'span'))?.text, { timeout: 10_000 })
+            .toBe('s1r1');
+
+        const frame = page.getByTestId('live-hybridcast-app');
+        await expect(frame).toHaveAttribute('data-state', 'ready', { timeout: 10_000 });
+        const out = page.frameLocator('[data-testid=live-hybridcast-app] iframe').locator('#out');
+        await expect(out).not.toHaveText('-', { timeout: 10_000 });
+        expect(JSON.parse((await out.textContent()) ?? '{}')).toEqual({
+            sid: MX.serviceId,
+            device: MX.serviceId,
+            receiverId: null,
+            // 使い捨てのオリジン。denpa の画面にも cookie にも触れない
+            origin: 'null',
+            parent: 'blocked',
+            cookie: '',
+            fetch: 'relayed',
+            denpa: 'refused',
+            xhr: 'relayed',
+        });
+        // アプリの通信は中継を通った
+        expect(asked).toEqual(expect.arrayContaining([appUrl, dataUrl, denpaUrl]));
+        // 映像はアプリの object の場所 (右上の 4 分の 1)
+        await expect
+            .poll(() =>
+                page.evaluate(
+                    () => document.querySelector<HTMLElement>('[data-bml-window]')?.style.left ?? null,
+                ),
+            )
+            .toBe('50%');
+        // 受信機の記憶はアプリごとの置き場に
+        expect(await page.evaluate(() => localStorage.getItem('denpa_hybridcast_7e87_1'))).toBe('{"n":"1"}');
+
+        // 戻るで閉じて、データ放送へ戻る
+        await out.click();
+        await page.keyboard.press('Backspace');
+        await expect(frame).toHaveCount(0);
+        await expect(overlay).toHaveAttribute('data-showing', 'true');
+    });
+
+    test('双方向を切ってあれば、Hybridcast は起動しない', async ({ page }) => {
+        await setNetwork(page, false);
+        try {
+            await captureSockets(page);
+            await goto(page, '/live');
+            await page.locator(`[data-testid=live-channel][data-service="${MX.id}"]`).click();
+            await expect(page.getByTestId('live-title')).toBeVisible();
+            // 行き先のボタンは出る (別のタブで開くだけ)
+            await expect(page.getByTestId('live-hybridcast')).toBeVisible({ timeout: 15_000 });
+            const overlay = page.getByTestId('live-data');
+            await wakeControls(page, 'live-frame');
+            await page.getByTestId('live-data-button').click();
+            await expect(overlay).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+            await expect
+                .poll(async () => Number(await overlay.getAttribute('data-handed')))
+                .toBeGreaterThan(0);
+            await feedData(page, fakeDataBroadcast(START_APP));
+            // 問い合わせには「無い」、起動は失敗
+            await expect
+                .poll(async () => (await dataElement(page, 'span'))?.text, { timeout: 10_000 })
+                .toBe('s0rNaN');
+            await expect(page.getByTestId('live-hybridcast-app')).toHaveCount(0);
+        } finally {
+            await setNetwork(page, true);
+        }
+    });
 });
+
+/** d で Hybridcast に対応しているかを訊き、起動を求める BML (結果を画面に書く) */
+const START_APP = [
+    '<p id="hc" style="left:0px;top:0px;width:400px;height:40px;color-index:7;">-</p>',
+    '<script><![CDATA[',
+    'function go() {',
+    '    var s = browser.getBrowserSupport("ARIB", "AITControlledAppEngineFunction", "IPTV-F", "HTML5_ph0");',
+    '    var r = browser.startAITControlledApp(32391, 1);',
+    '    document.getElementById("hc").firstChild.data = "s" + s + "r" + r;',
+    '}',
+    ']]></script>',
+    '<bevent><beitem type="DataButtonPressed" onoccur="go();" subscribe="subscribe"/></bevent>',
+].join('\n');

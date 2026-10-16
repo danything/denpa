@@ -80,7 +80,8 @@ export default defineConfig({
                     // 変換せずに観る経路の worker と PWA の ServiceWorker
                     'worker-src': ['self'],
                     'object-src': ['none'],
-                    'frame-src': ['none'],
+                    // Hybridcast のアプリを入れる iframe (/api/bml/hybridcast。中は sandbox で使い捨てのオリジン)
+                    'frame-src': ['self'],
                     'base-uri': ['self'],
                     'form-action': ['self'],
                 },

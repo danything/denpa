@@ -29,7 +29,7 @@ interface Setup {
     run(source: string): Promise<Value>;
 }
 
-function setup(active = '/40/0000/startup.bml'): Setup {
+function setup(active = '/40/0000/startup.bml', app?: Pick<BrowserHost, 'canStartApp' | 'startApp'>): Setup {
     const xml = parseXml(BML);
     if (xml === null) throw new Error();
     const doc = new BmlDocument(xml);
@@ -113,6 +113,7 @@ function setup(active = '/40/0000/startup.bml'): Setup {
         loadDrcs: () => 1,
         binaryTable: async () => Uint8Array.of(1, 2, 3, 4),
         log: () => {},
+        ...app,
     };
     realm.global.put('document', dom.document);
     realm.global.put('browser', defineBrowser(browserHost));
@@ -197,6 +198,33 @@ describe('browser.*', () => {
         `);
         // Ctrl.Media は isSupportedMedia が答えるのと揃える。PPP・常駐アプリ・外のブラウザ・AIT は無い
         expect(items(result)).toEqual([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, null]);
+    });
+
+    test('Hybridcast を開けるときだけ AIT の問い合わせに 1 と答え、開くのは画面に任せる', async () => {
+        const hints: number[][] = [];
+        let ready = true;
+        const s = setup(undefined, {
+            canStartApp: () => ready,
+            startApp: (hint) => {
+                hints.push(hint);
+                return true;
+            },
+        });
+        const query = `
+            var result = [
+                browser.getBrowserSupport("ARIB", "AITControlledAppEngineFunction", "IPTV-F", "HTML5_ph0"),
+                browser.getBrowserSupport("ARIB", "APIGroup", "AITControlledApp.Start"),
+                browser.startReceivingAIT(),
+                browser.startAITControlledApp(16, 1, "https://evil.example/", 2)
+            ];
+        `;
+        expect(items(await s.run(query))).toEqual([1, 1, 1, 1]);
+        // 引数の URL は手がかりにしない (開くのは AIT にある行き先だけ)
+        expect(hints).toEqual([[16, 1, 2]]);
+        // 開けない (双方向がオフ・AIT にアプリが無い) なら、問い合わせも 0
+        ready = false;
+        expect(items(await s.run(query))).toEqual([0, 0, Number.NaN, Number.NaN]);
+        expect(hints).toHaveLength(1);
     });
 
     test('通信の文書からは NVRAM の局の領域を使えない (local_web と受信機の設定を読むことだけ)', async () => {

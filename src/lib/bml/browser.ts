@@ -3,8 +3,9 @@
  * 全部持ち、**動かせないものは規格どおり「失敗」を返す** (NaN・null・0)。呼んだら転ぶ、には
  * しない — 放送のアプリはその返事を見て「この機能はありません」と案内する。
  *
- * 動かさないもの: AIT・Hybridcast の起動 (startAITControlledApp など)・外のアプリ・
- * 予約・電話回線 (PPP)。選局 (epgTune) は denpa の画面に任せる (エンジンは「この局へ」と知らせるだけ)。
+ * 動かさないもの: 外のアプリ・予約・電話回線 (PPP)。選局 (epgTune) と Hybridcast の起動
+ * (startAITControlledApp) は denpa の画面に任せる (エンジンは「この局へ」「アプリを」と知らせるだけ)。
+ * Hybridcast を開けない (双方向がオフ・AIT にアプリが無い) ときは、AIT の問い合わせに 0 と答える。
  *
  * 通信の文書 (http・https から取った文書) からは、NVRAM の局の領域を読み書きさせない。使えるのは
  * 通信の文書向けの `nvram://local_web/` と、受信機の設定 (`nvram://receiverinfo/`) を読むことだけ
@@ -81,13 +82,20 @@ export interface BrowserHost {
     loadDrcs(ref: string): NativeResult;
     binaryTable(ref: string): Promise<Uint8Array | null>;
     log(message: string): void;
+    /** Hybridcast のアプリを開けるか (双方向がオンで、AIT にアプリがある)。無ければ開けない */
+    canStartApp?(): boolean;
+    /**
+     * Hybridcast のアプリを開く (startAITControlledApp)。`hint` は数の引数 (どのアプリかの手がかり。
+     * organization_id・application_id など)。開けたら true
+     */
+    startApp?(hint: number[]): boolean;
 }
 
 /**
  * getBrowserSupport の APIGroup で「ある」と答えるもの。組の中身は STD-B24 第二編 付属1 表11-2 で、
  * **ここで動く関数の組だけ**を挙げる。無いと答えるもの: Com.IP.Connect・Com.IP.Params (PPP)・
- * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・AITControlledApp.Start・
- * EPG.Basic2 (epgTuneToComponent)。EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の
+ * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・
+ * EPG.Basic2 (epgTuneToComponent)。AITControlledApp.Start は Hybridcast を開けるときだけ「ある」。EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の
  * 再生中は epgTune も失敗)
  */
 const API_GROUPS = new Set([
@@ -132,8 +140,14 @@ function clip(text: string, bytes: number): string {
 const hex4 = (n: number | null | undefined): string | null =>
     n == null ? null : `0x${n.toString(16).padStart(4, '0')}`;
 
-/** getBrowserSupport (TR-B14 第二分冊 5.12.6) */
-function browserSupport(provider: string, name: string, info: string[], ip: BmlIp): number {
+/** AIT (Hybridcast) についての問い合わせ。何を訊かれたかを残す (局がどれで出し分けているかを見るため) */
+const AIT_QUERIES = new Set(['AITControlledAppEngineFunction', 'AITTransferMethod', 'AITTransportMethod']);
+
+/**
+ * getBrowserSupport (TR-B14 第二分冊 5.12.6)。`app` は Hybridcast のアプリを開けるか。
+ * AIT の問い合わせは開けるときだけ 1 — 1 と答えて開かないと、放送のアプリは起動を待ったまま返らない
+ */
+function browserSupport(provider: string, name: string, info: string[], ip: BmlIp, app: boolean): number {
     if (provider !== 'ARIB') return 0;
     const [a, b] = info;
     switch (name) {
@@ -144,6 +158,7 @@ function browserSupport(provider: string, name: string, info: string[], ip: BmlI
         }
         case 'APIGroup':
             if (a === 'Com.IP.confirmIP' || a === 'Com.IP.Transmit') return 1;
+            if (a === 'AITControlledApp.Start') return app ? 1 : 0;
             return a !== undefined && API_GROUPS.has(a) ? 1 : 0;
         case 'Storage':
             return a === 'cachesize' && Number(b) * 1024 <= 10 * 1024 * 1024 ? 1 : 0;
@@ -155,12 +170,13 @@ function browserSupport(provider: string, name: string, info: string[], ip: BmlI
             return a === '960x540' || a === '720x480' ? 1 : 0;
         case 'TransmissionProtocol':
             return a === 'application' && (b === 'HTTP' || b === 'TLS') && ip.connected() ? 1 : 0;
-        case 'IRDID':
-        case 'ResidentApp':
-        case 'ExtraBrowserFunction':
         case 'AITControlledAppEngineFunction':
         case 'AITTransferMethod':
         case 'AITTransportMethod':
+            return app ? 1 : 0;
+        case 'IRDID':
+        case 'ResidentApp':
+        case 'ExtraBrowserFunction':
             return 0;
     }
     return 0;
@@ -357,14 +373,16 @@ export function defineBrowser(host: BrowserHost): HostObject {
         return duration == null || !isCurrentEvent(str(args, 0)) ? Number.NaN : duration;
     });
     fn('isBeingBroadcast', () => false);
-    fn('getBrowserSupport', (args) =>
-        browserSupport(
-            str(args, 0),
-            str(args, 1),
-            args.slice(2).map((a) => toStr(a)),
-            host.ip,
-        ),
-    );
+    const canStartApp = (): boolean => host.canStartApp?.() === true;
+    fn('getBrowserSupport', (args) => {
+        const name = str(args, 1);
+        const info = args.slice(2).map((a) => toStr(a));
+        const answer = browserSupport(str(args, 0), name, info, host.ip, canStartApp());
+        // Hybridcast について何を訊かれたかを残す (局が何を見て案内を出し分けているかが分かる)
+        if (AIT_QUERIES.has(name) || (name === 'APIGroup' && info[0] === 'AITControlledApp.Start'))
+            host.log(`getBrowserSupport(${[str(args, 0), name, ...info].join(', ')}) → ${answer}`);
+        return answer;
+    });
     fn('formatNumber', (args) => {
         const n = toNumber(args[0]);
         return (Number.isNaN(n) ? 0 : n).toLocaleString('en-US');
@@ -427,7 +445,16 @@ export function defineBrowser(host: BrowserHost): HostObject {
     fail('vote');
     fail('setCacheResourceOverIP', 1);
 
-    // 動かさないもの (選局・予約・AIT・外のアプリ・ブックマーク)
+    // Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ (引数に URL があっても使わない)
+    fn('startAITControlledApp', (args) => {
+        host.log(`startAITControlledApp(${args.map((a) => toStr(a)).join(', ')})`);
+        const hint = args.map((a) => toNumber(a)).filter((n) => Number.isFinite(n));
+        return canStartApp() && host.startApp?.(hint) === true ? 1 : Number.NaN;
+    });
+    // AIT は denpa のサーバが選局したときから読んでいる。開けないなら失敗
+    fn('startReceivingAIT', () => (canStartApp() ? 1 : Number.NaN));
+
+    // 動かさないもの (選局・予約・外のアプリ・ブックマーク)
     fn('epgTune', (args) => host.tune(str(args, 0)));
     for (const name of [
         'epgTuneToComponent',
@@ -438,9 +465,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
         'epgRecCancelReservation',
         'epgRecIsReserved',
         'launchExApp',
-        'startAITControlledApp',
         'startExtraBrowser',
-        'startReceivingAIT',
         'startResidentApp',
         'writeBookmarkArray',
         'deleteBookmark',

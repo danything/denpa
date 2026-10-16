@@ -1252,8 +1252,8 @@ TBS・テレ東が `String.fromCharCode(0xA1A1〜)` を、MX が `charCodeAt` �
 行き、すぐ「無い」と返って描き直す、がマイクロタスクで回り続けてタブごと固まった (区切りを
 マイクロタスクで入り直すたびに始め直していたので効かなかった)。
 
-`browser.*` は放送が呼ぶ 53 種を全部持ち、動かせないもの (AIT・Hybridcast の起動・予約・
-PPP・外のアプリ) は規格どおり失敗 (NaN / null / 0) を返す。選局 (`epgTune`) は画面に任せる
+`browser.*` は放送が呼ぶ 53 種を全部持ち、動かせないもの (予約・
+PPP・外のアプリ) は規格どおり失敗 (NaN / null / 0) を返す。Hybridcast の起動は画面に任せる (§5.8)。選局 (`epgTune`) は画面に任せる
 (ライブは局の一覧から探して切り替え、録画は失敗を返して「録画の再生中は選局できません」と知らせる)。郵便番号と都道府県は NVRAM に書かず、
 受信機の設定として渡す (`receiverinfo/zipcode`・`receiverinfo/prefecture`)。録画では再生位置から放送の時刻を出して渡す
 (`clock`)。
@@ -1346,10 +1346,10 @@ NaN を返す (放送のアプリはこれを見て「接続できません」�
 
 ### 5.8 Hybridcast
 
-**在ることは言う。動かさない。**
+**データ放送が起動を求めたら、denpa の中で開く。受信機の API は用意できる範囲だけ。**
 
 データ放送 (BML) と違い、**アプリが電波に乗っていません**。
-乗っているのは AIT という表だけで、中身は放送局のサーバから HTTPS で取ります。
+乗っているのは AIT という表だけで、中身は放送局のサーバから HTTPS で取得します。
 
 ```
 PMT ─ ES に application_signalling_descriptor (0x6F) ─→ その PID に AIT
@@ -1362,31 +1362,79 @@ AIT ─ transport_protocol_descriptor        (URL の頭)
 デコードする量が無いうえ、押すまで在ることが分からないのでは出したいものが出せないためです。
 載っていない局では PMT に印が無いので、AIT を待つこともしません。
 
-見つけたら、操作列の下の段に**別のタブで開くボタン**を出します。d ボタン (右の縦列) と
-同じ見せ方にはしません。あちらは denpa の中で開くもの、こちらは外へ出ていくもので、
-押した結果がまるで違います。
+見つけたら、操作バーの下の段に**別のタブで開くボタン**を出します (受信機の API が無いので、
+多くはそのままでは動きません)。denpa の中で開くのは、データ放送が `startAITControlledApp` で
+起動を求めたときです。
 
-#### 動かさないのは、越えられない壁が3つあるから
+#### 開くまで
 
-1. **受信機の API は、アプリのページの中に無いと意味がない。** Hybridcast の
-   アプリは `hcApp` などの API を呼びます (放送の映像面の制御・いまの局と番組・
-   受信機の記憶・スマホとの連携)。放送局のサーバから来るページは別オリジン
-   なので、iframe に入れても中に手を入れられません。同一オリジンに見せるには
-   URL を全書き換えして中継し、IPTVFJ STD-0010/0011 の API を実装する
-   必要があります。仕様1つぶんの仕事です
-2. **放送局のサーバが、認証された受信機を期待している。** 受信機の証明書や
-   識別子を見るものが多く、素性を偽って通す気はありません
-3. **映像は DRM 付き。** MPEG-DASH + Widevine/PlayReady で、ライセンスサーバが
-   また端末を見ます
+```
+データ放送 ─ getBrowserSupport("ARIB", "AITControlledAppEngineFunction", …) → 1 (開けるときだけ)
+          ─ startAITControlledApp(…) → 画面が AIT のアプリを開く
+画面 ─ アプリの HTML を中継で取得 (/api/bml/proxy)
+     ─ 頭に <base href="アプリの URL"> と差し込み (src/lib/hybridcast/shim.ts) を入れる
+     ─ sandbox="allow-scripts" の iframe (/api/bml/hybridcast) へ postMessage で渡し、document.write で開く
+アプリ ─ 画像・script・CSS は <base> から元のサーバへ直に取得 (CORS は要らない)
+       ─ fetch・XMLHttpRequest・受信機の記憶・受信機 API は postMessage で画面へ
+```
 
-**2番は denpa 側の努力では越えられません。** なので1番に仕様1つぶんを注ぎ込む理由もありません。
+- **開けるのは**「データ放送の双方向」がオンで、AIT にアプリがあるときだけ。オフなら AIT の問い合わせ
+  (`AITControlledAppEngineFunction`・`AITTransferMethod`・`AITTransportMethod`・APIGroup の
+  `AITControlledApp.Start`) に 0 と答え、`startAITControlledApp` は失敗を返す (行き先のボタンだけが残る)。
+  **開けないのに 1 と答えてはいけません** — BML が起動を求めてきて、そのまま返らなくなります
+- **開くのは AIT にある行き先だけ。** 文書が渡した引数に URL があっても使いません。数の引数は
+  どのアプリかの手がかり (organisation_id と application_id が合うもの → application_id が合うもの →
+  autostart のもの → 先頭)
+- 何を訊かれたか (`getBrowserSupport` の AIT の問い合わせと `startAITControlledApp` の引数) はブラウザの
+  コンソールに `[bml]` で出します。局が何を見て案内を出し分けているかを見るためです
 
-#### できないものを、できる顔で出さない
+#### 画面
 
-データ放送のエンジンは `getBrowserSupport` の `AITControlledApp` 系に 0 (できない) と
-答えます (`src/lib/bml/browser.ts`)。実機の NHK はこれを聞きに来て、その答えでデータ放送側の
-「Hybridcast」ボタンを死なせています。**ここを 1 にしてはいけません。**
-BML が起動を求めてきて、そのまま返らなくなります。
+- アプリは映像の上に重ねて、1920x1080 で組ませて枠に合わせて伸ばします。開いている間は BML を隠します
+- **戻る (Backspace・x・リモコンの戻る) と d で閉じて**データ放送へ戻ります
+- 色ボタン (r・g・b・y) は受信機のキー (keyCode 403〜406)、矢印・決定・数字はそのまま渡します
+  (`KeyEvent.VK_*` も用意)
+- アプリが `<object type="video/broadcast">` を置けば、放送の映像をその場所へ縮めて出します。
+  無ければ全面、`stop()` なら出しません
+
+#### できること・できないこと
+
+| 機能 | denpa | |
+| --- | --- | --- |
+| 放送の映像の表示と縮小 | ○ | `video/broadcast` の object (`bindToCurrentChannel`・`stop`・`setFullScreen`・`currentChannel`・`programmes`) |
+| いまの局と番組 | ○ | 放送の programInfo と局の一覧から。`navigator.receiverDevice.getCurrentChannel()`・`getCurrentProgram()` |
+| 選局 | △ | データ放送の `epgTune` と同じ範囲 (局の一覧にある局だけ)。局が変わるとアプリは閉じる |
+| 字幕の表示の切り替え | ○ | `getCCStatus`・`setCCStatus` |
+| 受信機の記憶 (`localStorage`) | ○ | アプリごとに分けて覚える (`denpa_hybridcast_<organisation_id>_<application_id>`。256KB まで)。denpa のほかの記憶とは混ぜない |
+| アプリの通信 (`fetch`・`XMLHttpRequest`) | ○ | 中継を通す。GET と POST だけ。POST の形はフォーム・JSON・文字だけ |
+| 受信機 ID・証明書・機種 | × | 持たない。`getReceiverId` などは null |
+| WebSocket・EventSource・sendBeacon | × | 差し込みで中継へ渡せないので使えない |
+| 同期の XMLHttpRequest | △ | 非同期で返す |
+| cookie | × | 持たない。`document.cookie` は空 |
+| DRM 付きの動画 | × | ライセンスサーバが受信機を見る |
+| スマホ連携 (Hybridcast Connect) | × | 家の LAN にエンドポイントを開けることになるので作らない |
+| 録画の再生中 | × | データ放送の通信と同じく放送中だけ |
+
+受信機 API の名前は IPTVFJ STD-0010 の本文で確かめていません。差し込みは知らない名前の呼び出しにも
+null (使えない) を返し、何を呼ばれたかをコンソールに `[hybridcast] … は使えません` で出します。
+本物の放送でここを見て、要るものを足していきます。
+
+#### 受信機を名乗らない
+
+- UA に `Hybridcast` や実在のメーカーを入れません (中継は UA も送らない。§5.7)。受信機 ID・証明書も持ちません
+- そのため、受信機を確かめるアプリ (UA を見る・証明書を求める・会員や視聴の記録を受信機に結ぶ) は
+  動きません。**denpa 側の努力では越えられないので、作り込みません**
+
+#### 安全のための作り
+
+| | |
+| --- | --- |
+| オリジン | iframe は `sandbox="allow-scripts"` (`allow-same-origin` は付けない)。入れ物 (`/api/bml/hybridcast`) も CSP の `sandbox allow-scripts` を返すので、URL を直に開いても使い捨てのオリジンになる。denpa の cookie・localStorage・画面には触れない |
+| 繋ぐ | 入れ物の CSP で `connect-src 'none'`。アプリの通信は差し込みが画面へ渡し、画面が中継で取得する。中継の決まり (公開アドレスだけ・10 秒・4MB・cookie も UA も受信機を見分けるものも送らない) はデータ放送と同じ。denpa 自身 (内側) へは中継が断る |
+| 読み込む | script・画像・CSS・フォント・動画は元のサーバから直に (`*`)。フォームの送信・入れ子の iframe・worker・ポップアップ・上の画面を移すことはできない |
+| 受け取る | 画面は postMessage の送り元が自分の iframe であることと、形を確かめる (`frameMessage`)。選局は denpa が許した範囲だけ |
+| srcdoc・blob: にしない | それだと denpa の画面の CSP を受け継ぎ、放送局の script が動かない。緩めると denpa の画面の CSP の意味がなくなる。denpa の画面の CSP は `frame-src 'self'` を足しただけ |
+| 送られる情報 | アプリが自分で送るもの (視聴の記録・いまの番組など) は通る。テレビと同じ。「データ放送の双方向」をオフにすれば起動しない |
 
 ---
 

@@ -24,9 +24,20 @@ export const POST: RequestHandler = async ({ url, request }) => {
     if (target === null || target === '') error(400, 'url がありません');
 
     const body = new Uint8Array(await request.arrayBuffer());
+    /*
+     * 形は決まったものだけ通す (データ放送はフォーム、Hybridcast のアプリは JSON や文字も送る)。
+     * ほかはフォームとして送る
+     */
+    const type = request.headers.get('content-type') ?? '';
+    const contentType =
+        /^(application\/x-www-form-urlencoded|application\/json|text\/plain)(;\s*charset=[\w-]+)?$/i.test(
+            type,
+        )
+            ? type
+            : undefined;
 
     try {
-        const got = await postForBml(target, body);
+        const got = await postForBml(target, body, contentType);
         return new Response(got.body as BodyInit, {
             status: got.status,
             headers: {

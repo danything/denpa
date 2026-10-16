@@ -147,9 +147,7 @@ export type Notice =
            * **Hybridcast が載っている番組。** AIT を読んで分かる
            * ([ts/ait.ts](ts/ait.ts))。
            *
-           * denpa は**動かしません** — 在ることと行き先を出すだけです。
-           * 動かすには受信機の API をアプリの文脈に用意する必要があり、
-           * 別オリジンのページには手を入れられません
+           * 画面は行き先を出し、データ放送が起動を求めたら denpa の中で開きます
            * ([docs/stream.md](../../docs/stream.md#58-hybridcast))。
            *
            * 載っていない局では**一度も来ません** (PMT に印が無いので、
@@ -240,11 +238,14 @@ export interface YieldedRecording {
  */
 export const CHASE_EDGE = 7 * 24 * 60 * 60;
 
-/** 画面に出す Hybridcast のアプリ。**押すと別のタブで開くだけ** */
+/** 画面に出す Hybridcast のアプリ。データ放送が起動を求めたら denpa の中で開く。ボタンは別のタブで開く */
 export interface HybridcastLink {
     /** 放送が付けた名前。入っていなければ空 */
     name: string;
     url: string;
+    /** 放送局 (organisation_id) とアプリ (application_id)。受信機の記憶をアプリごとに分けるのと、起動の手がかりに使う */
+    organisationId: number;
+    applicationId: number;
     /** `true` なら「選局したら勝手に始めよ」(テレビはそうする) */
     autostart: boolean;
 }

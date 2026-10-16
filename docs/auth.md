@@ -304,7 +304,8 @@ JS として動き**、ログインの控えで API を呼べることになる�
 | `media-src` | `'self' blob:` | 録画は自分。ライブの MSE と端末に保存した録画は blob: |
 | `connect-src` | `'self'` | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む |
 | `worker-src` | `'self'` | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker |
-| `object-src` / `frame-src` | `'none'` | どちらも使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない |
+| `object-src` | `'none'` | 使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない |
+| `frame-src` | `'self'` | Hybridcast のアプリを入れる iframe (`/api/bml/hybridcast`) だけ。中身は sandbox で使い捨てのオリジンになり、denpa には触れない ([stream.md](stream.md#58-hybridcast)) |
 | `base-uri` / `form-action` | `'self'` | `<base>` とフォームの送り先は自分だけ |
 | `default-src` | `'self'` | 上に無いもの (マニフェストなど) |
 
