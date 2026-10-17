@@ -10,7 +10,7 @@
 
   | チューナー | 使う仕組み | ホストに入れるもの |
   | --- | --- | --- |
-  | PT2 / PT3、PX-BCUD、PX-S1UD など ([下記](#pt2pt3px-bcud-linux-dvb)) | Linux DVB | ドライバ |
+  | PT2 / PT3、PX-BCUD、PX-S1UD など ([tuner-pt3.md](tuner-pt3.md)) | Linux DVB | ドライバ |
   | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も。[tuner-px4.md](tuner-px4.md)) | px4-userland (同梱) | なし (Windows はドライバを WinUSB に) |
   | PX-S1UD (smsusb を blacklist したとき。Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md)) | siano-userland (同梱) | なし (Windows はドライバを WinUSB に) |
   | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし |
@@ -23,14 +23,7 @@
 
 ## PT2・PT3・PX-BCUD (Linux DVB)
 
-| 機材 | 使うドライバ |
-| --- | --- |
-| PT2 / PT3 (Earthsoft) | DVB (mainline の `earth_pt1` / `earth_pt3`)。実機はこれ |
-| PX-S1UD (ISDB-T / USB) | DVB (mainline の Siano `smsusb` + `smsdvb`。firmware `isdbt_rio.inp` が要る)。smsusb を blacklist してあれば siano-userland ([tuner-px-s1ud.md](tuner-px-s1ud.md)) |
-| PX-BCUD (ISDB-S / USB) | DVB (Linux 4.7 以降 mainline) |
-
-Mac と Windows には DVB が無いので使えません。デバイスを開いたまま選局し直す作りは
-[agent.md](agent.md#デバイスを開いたままチャンネルを変える)。
+[tuner-pt3.md](tuner-pt3.md)。
 
 ## PX-Q3U4・PX-W3U4・PX-MLT
 
