@@ -141,3 +141,9 @@ export const videoImages = [
 export const videoImageNote = '画面の映像は試験用に作った偽の放送です';
 
 export const repoUrl = 'https://github.com/danything/denpa';
+
+/**
+ * トップの見出しの横に出す画面 (docs/images のファイル名)。映像が映っていない画面 (番組表など) を選ぶ。
+ * 映像が映る画面 (videoImages) にしたときは、偽の放送の添え書きも付く
+ */
+export const heroImage = { file: 'guide-bs.webp', alt: 'BS の番組表' };

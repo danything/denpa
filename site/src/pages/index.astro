@@ -3,9 +3,11 @@
  * トップ。文は README から取り (scripts/import-docs.ts が節ごとに src/generated/readme/*.md へ切り出す)、
  * ここで新しく書くのは見出しの一言だけ。どの節を出すか・入口のカードは src/data/pages.ts
  */
+
+import { getImage } from 'astro:assets';
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import type { AstroComponentFactory } from 'astro/runtime/server/index.js';
-import { base, repoUrl, tagline } from '../data/pages.ts';
+import { base, heroImage, repoUrl, tagline, videoImageNote, videoImages } from '../data/pages.ts';
 import { softwareApplication } from '../data/structured-data.ts';
 import top from '../generated/top.json';
 
@@ -13,10 +15,23 @@ const parts = import.meta.glob<{ Content: AstroComponentFactory }>('../generated
 const part = (key: string) => parts[`../generated/readme/${key}.md`]?.Content;
 const Intro = part('intro');
 const install = top.sections.find((s) => s.key === 'install');
+// 見出しの横の画面。Starlight の hero の画像は 400×400 の枠に収める作りで横長の画面が小さくなるので、
+// 最適化だけ Astro に任せ、<img> は自前で書く (image.html)
+const images = import.meta.glob<{ default: ImageMetadata }>('../assets/docs/*.{webp,png,jpg}', { eager: true });
+const heroSource = images[`../assets/docs/${heroImage.file}`]?.default;
+const heroImg = heroSource && (await getImage({ src: heroSource, width: Math.min(heroSource.width, 1280) }));
+const escapeAttr = (s: string) => s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+const heroHtml =
+    heroImg &&
+    `<figure class="hero-shot"><img src="${heroImg.src}" alt="${escapeAttr(heroImage.alt)}" width="${heroImg.attributes['width']}" height="${heroImg.attributes['height']}" decoding="async" />${
+        videoImages.includes(heroImage.file) ? `<figcaption>${videoImageNote}</figcaption>` : ''
+    }</figure>`;
 
 const hero = {
     title: 'denpa',
+
     tagline: `${tagline}。<br />チューナーを挿して、スキャンを押すだけ。`,
+    ...(heroHtml ? { image: { html: heroHtml } } : {}),
     actions: [
         {
             text: '入れる',
@@ -85,6 +100,50 @@ const head = [
     </div>
 </StarlightPage>
 
+<style is:global>
+    /*
+     * 見出しの段 (Starlight の hero) を詰める。既定は右に正方形の画像を置く前提で、上下の余白も大きい。
+     * ここでは横長の画面を右に大きめに置き、上下と本文までの間を狭くする
+     */
+    .hero {
+        max-width: 56rem;
+        margin-inline: auto;
+        padding-block: 1rem 0;
+        gap: 1.5rem;
+    }
+    .hero > .hero-html {
+        width: 100%;
+    }
+    .hero-shot {
+        margin: 0;
+    }
+    .hero-shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: var(--dp-radius);
+        box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 0.18);
+    }
+    .hero-shot figcaption {
+        margin-top: 0.25rem;
+        font-size: var(--sl-text-sm);
+        color: var(--sl-color-gray-3);
+    }
+    @media (min-width: 50rem) {
+        .hero {
+            grid-template-columns: 11fr 13fr;
+            gap: 2.5rem;
+            padding-block: 2rem 0.5rem;
+        }
+        .hero .tagline {
+            font-size: var(--sl-text-lg);
+        }
+        .hero > .hero-html {
+            width: 100%;
+        }
+    }
+</style>
+
 <style>
     .top {
         max-width: 56rem;
@@ -102,7 +161,7 @@ const head = [
         font-size: var(--sl-text-base);
     }
     .top-section {
-        margin-top: 3.5rem;
+        margin-top: 2.75rem;
     }
     .top-section > h2 {
         padding-bottom: 0.5rem;
