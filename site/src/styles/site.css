@@ -26,13 +26,20 @@
     --sl-color-gray-6: #2a3140; /* slate-800 */
     --sl-color-black: #181c25; /* slate-900 */
 
+    /*
+     * 地は上の帯・サイドバー・目次も本文と同じ 1 色にし、境は地より少し明るい 1px の線だけ。
+     * 灰色の面 (slate-800) はコード・表の見出しのような、中身を分けるところだけ
+     */
     --sl-color-bg: #202632; /* slate-850 (app.css の --dp-base-200) */
-    --sl-color-bg-nav: #181c25; /* slate-900 (app.css の --dp-surface) */
-    --sl-color-bg-sidebar: #181c25;
+    --sl-color-bg-nav: #202632;
+    --sl-color-bg-sidebar: #202632;
     --sl-color-bg-inline-code: #2a3140; /* slate-800 */
-    --sl-color-hairline-light: #3d475c;
-    --sl-color-hairline: #2a3140;
-    --sl-color-hairline-shade: #181c25;
+    --sl-color-hairline-light: #333b4d;
+    --sl-color-hairline: #2f3747;
+    --sl-color-hairline-shade: #2f3747;
+    /* 上の帯を透かすときの地 (bg を 80% に) */
+    --dp-nav-glass: rgb(32 38 50 / 0.8);
+    --dp-surface: #2a3140; /* 表の見出しの面 */
 }
 
 :root[data-theme="light"] {
@@ -51,17 +58,41 @@
     --sl-color-black: #fff;
 
     /*
-     * 文書は読むところなので、地は白。灰色 (slate-50) は面を分けたいところ (横のサイドバー・表の縞) だけに使う。
-     * 上の帯も白で、境は線 (hairline) で分ける
+     * 地は白 1 色 (上の帯・サイドバー・目次も)。境は地より少し濃い 1px の線だけ。
+     * 灰色の面はコード・表の見出しのような、中身を分けるところだけ
      */
     --sl-color-bg: #fff;
     --sl-color-bg-nav: #fff;
-    --sl-color-bg-sidebar: #eff1f4; /* slate-50 */
+    --sl-color-bg-sidebar: #fff;
     /* インラインの code は slate-50 よりわずかに淡い面に枠を付ける。slate-50 だとリンクの色 (#0172ad) が 4.5:1 ぎりぎり */
     --sl-color-bg-inline-code: #f4f5f8;
-    --sl-color-hairline-light: #dfe3eb;
-    --sl-color-hairline: #cfd5e2; /* slate-150 */
-    --sl-color-hairline-shade: #cfd5e2;
+    --sl-color-hairline-light: #e6e9ef;
+    --sl-color-hairline: #e6e9ef;
+    --sl-color-hairline-shade: #e6e9ef;
+    --dp-nav-glass: rgb(255 255 255 / 0.8);
+    --dp-surface: #f4f5f8;
+}
+
+/* 狭い画面で開くサイドバーも、本文と同じ地に (Starlight の既定は --sl-color-black) */
+.sidebar-pane {
+    background-color: var(--sl-color-bg-sidebar);
+}
+
+/* 上の帯は貼り付いたまま、下を流れる本文を少し透かしてぼかす。ぼかせないブラウザでは地の色のまま */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .page > .header {
+        background-color: var(--dp-nav-glass);
+        -webkit-backdrop-filter: saturate(1.5) blur(12px);
+        backdrop-filter: saturate(1.5) blur(12px);
+    }
+}
+
+/* 表の見出しは面で分ける (見出しの面があるので、端の字も詰めずに内側へ寄せる) */
+.sl-markdown-content th:not(:where(.not-content *)) {
+    background-color: var(--dp-surface);
+}
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+    padding-inline: 0.75rem;
 }
 
 /* 角丸をそろえる */
