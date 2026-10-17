@@ -82,9 +82,22 @@
     /* 字の太さは 2 段だけ。BIZ UDPゴシックは 400 と 700 しか持たない (500・600 は 400・700 に寄る) */
     --dp-weight: 400;
     --dp-weight-bold: 700;
-    /* 動き。短く、終わりをゆっくり。動かさない設定の端末では 0 (下の prefers-reduced-motion) */
+    /*
+     * 動き。**0.15〜0.3 秒の短いものだけ。** 出るときは終わりをゆっくり (`--dp-ease`)、
+     * 引っ込むときは頭をゆっくり (`--dp-ease-exit`)。動かさない設定の端末では全部止める
+     * (下の prefers-reduced-motion。画面の切り替えは JS でも見る — `#lib/motion.svelte.ts`)
+     *
+     * - `--dp-duration` … 色・影の移り変わり、メニューやダイアログの閉じ方
+     * - `--dp-duration-slow` … 画面の切り替え・滑る下線・開くメニューとダイアログ・伸びるバー
+     * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
+     * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
+     */
     --dp-duration: 150ms;
+    --dp-duration-slow: 250ms;
     --dp-ease: cubic-bezier(0.2, 0, 0, 1);
+    --dp-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+    --dp-pulse: 2s;
+    --dp-shine: 1.8s;
     --pico-transition: var(--dp-duration) var(--dp-ease);
     /*
 	 * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
@@ -127,6 +140,7 @@
  * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
  * - `--dp-shadow` … カードの影 (ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
+ * - `--dp-shadow-bar` … スクロールしたときのヘッダーの影 (`+layout.svelte`)
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
@@ -141,6 +155,7 @@
     --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
     --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
     --dp-shadow-pop: 0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
+    --dp-shadow-bar: 0 2px 8px rgb(24 28 37 / 0.08);
     --pico-form-element-background-color: #fff;
     --pico-form-element-border-color: var(--dp-line-strong);
     --pico-table-border-color: var(--dp-line);
@@ -174,6 +189,7 @@
     --dp-primary-text: var(--pico-primary);
     --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
+    --dp-shadow-bar: 0 2px 10px rgb(0 0 0 / 0.45);
     --pico-form-element-background-color: #13171f;
     --pico-form-element-border-color: var(--dp-line-strong);
     --pico-table-border-color: var(--dp-line);
@@ -192,10 +208,92 @@
     --dp-warn-text: #fecc63; /* amber-150 */
     --dp-info-text: #0ccece; /* cyan-250 */
 }
-/* 動かさない設定の端末では、色や影の移り変わりも止める (動きはどれも `--dp-duration` を使う) */
-@media (prefers-reduced-motion: reduce) {
-    :root {
-        --dp-duration: 0s;
+/* ---- 画面の切り替え (View Transitions。始めるのは `+layout.svelte` の `onNavigate`) ---- */
+/*
+ * **中身だけを入れ替える。** ふつうは画面全体 (root) がふわっと入れ替わる。
+ * ヘッダーと下のタブは名前を付けて抜き出し、**動かさない** (古いほうは描かず、新しいほうをそのまま置く)。
+ * 選んでいる印 (上のナビの下線・下のタブの印・番組表の種別) も名前で抜き出してあるので、
+ * 前の場所から新しい場所へ横に滑る。元の要素から広げるもの (番組表のマス → 詳細、
+ * 録画の行 → 観る画面の題名) も同じ仕組み (`#lib/motion.svelte.ts`)
+ */
+::view-transition-group(*) {
+    animation-duration: var(--dp-duration-slow);
+    animation-timing-function: var(--dp-ease);
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: var(--dp-duration-slow);
+}
+::view-transition-old(site-header),
+::view-transition-old(site-tabbar) {
+    display: none;
+}
+::view-transition-new(site-header),
+::view-transition-new(site-tabbar) {
+    animation: none;
+}
+/* 印は形が変わらないので、古いのと新しいのを重ねて混ぜない (そのまま滑らせる) */
+::view-transition-old(nav-underline),
+::view-transition-old(tab-indicator),
+::view-transition-old(guide-type) {
+    display: none;
+}
+::view-transition-new(nav-underline),
+::view-transition-new(tab-indicator),
+::view-transition-new(guide-type) {
+    animation: none;
+}
+
+/* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ ---- */
+.rec-dot {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: var(--dp-radius-full);
+    background: var(--dp-rec);
+    animation: rec-pulse var(--dp-pulse) ease-in-out infinite;
+}
+@keyframes rec-pulse {
+    50% {
+        opacity: 0.35;
+    }
+}
+/* 赤く塗ったバッジ (録画中) の中では、字と同じ白にする */
+.tag.solid .rec-dot {
+    background: currentColor;
+}
+
+/* ---- 読み込めたらふわっと出る画像 (`use:fadeIn`。`#lib/motion.svelte.ts`) ---- */
+img[data-fade] {
+    transition: opacity var(--dp-duration-slow) var(--dp-ease);
+}
+img[data-fade="pending"] {
+    opacity: 0;
+}
+
+/*
+ * ---- 一言だけ出して消える知らせ (`.flash`。「保存しました」) ----
+ * ふわっと出て (0.2 秒)、読めるだけ置き、ふわっと消える (0.3 秒)。
+ * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)
+ */
+.flash {
+    animation: flash var(--flash-for, 2.5s) linear both;
+}
+@keyframes flash {
+    0% {
+        opacity: 0;
+        translate: 0 2px;
+    }
+    8% {
+        opacity: 1;
+        translate: 0 0;
+    }
+    88% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
     }
 }
 /*
@@ -397,6 +495,29 @@ thead th {
     flex-direction: column;
     gap: 1.5rem;
 }
+/*
+ * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表集め)。値が変わったら
+ * なめらかに伸ばす (Pico の 0.15 秒より少し長く)。**動いているあいだ** (`.running`。付けるのは
+ * 呼ぶ側 — `JobProgress` など) は、伸びたところの上に光の筋を流す。
+ * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
+ */
+progress[value]::-webkit-progress-value {
+    transition: inline-size var(--dp-duration-slow) var(--dp-ease);
+}
+progress.running[value]::-webkit-progress-value {
+    background-image: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.35) 50%, transparent 100%);
+    background-repeat: no-repeat;
+    background-size: 40% 100%;
+    animation: progress-shine var(--dp-shine) ease-in-out infinite;
+}
+@keyframes progress-shine {
+    from {
+        background-position: -100% 0;
+    }
+    to {
+        background-position: 200% 0;
+    }
+}
 /* 走っている取り込み・スキャンの状態と記録 */
 .progress-block {
     display: flex;
@@ -471,6 +592,11 @@ thead th {
 .bold {
     font-weight: 700;
 }
+/*
+ * **変わる数字・縦に並ぶ数字は、桁の幅を揃える** (`.num`)。時刻 (一覧・番組表・詳細)・残り時間・
+ * 容量・進み具合・件数に付ける。揃えないと、1 秒ごとに変わる数字が左右に揺れ、縦に並んだ時刻の桁がずれる。
+ * 文章には当てない (ふつうの字詰めのほうが読みやすい)
+ */
 .num {
     font-variant-numeric: tabular-nums;
 }
@@ -805,6 +931,28 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     box-shadow: var(--dp-shadow);
     font-weight: var(--dp-weight-bold);
 }
+/*
+ * **持ち上げた面を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
+ * 面に画面の切り替えの名前を付けておけば、前の場所から新しい場所へ動く (View Transitions)。
+ * 字は動かさない (面の上に重ねたまま)。見た目は上の「選んでいるもの」と同じ
+ */
+[role="group"].segmented > :is(button, a.button):has(> .seg-pill) {
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    position: relative;
+    isolation: isolate;
+    box-shadow: none;
+}
+.seg-pill {
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border: 1px solid var(--dp-line);
+    border-radius: inherit;
+    background: var(--dp-raised);
+    box-shadow: var(--dp-shadow);
+    pointer-events: none;
+}
 
 /* ---- タグ ---- */
 /*
@@ -961,23 +1109,79 @@ button[aria-busy="true"]::after {
 }
 /*
  * 開いているときだけ並べる。閉じているときはブラウザの `display: none` のまま。
- * 開くときだけ、少し下から浮かび上がる (`--dp-duration`。動かさない設定では 0 で、すぐ出る)。
+ *
+ * **引き金の側から、少し縮んだ透明な姿で開き (`--dp-duration-slow`)、閉じるときは短く (`--dp-duration`) 引っ込む。**
+ * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
+ * 知らないブラウザはすぐ消える)。動かさない設定では時間が 0 で、すぐ出てすぐ消える。
  * 動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさ (`offsetHeight`) は変わらない
  */
+.menu {
+    opacity: 0;
+    transform: scale(0.96);
+    transform-origin: top left;
+    transition:
+        opacity var(--dp-duration) var(--dp-ease-exit),
+        transform var(--dp-duration) var(--dp-ease-exit),
+        overlay var(--dp-duration) allow-discrete,
+        display var(--dp-duration) allow-discrete;
+}
+.menu[data-align="end"] {
+    transform-origin: top right;
+}
+.menu[data-side="top"] {
+    transform-origin: bottom left;
+}
+.menu[data-side="top"][data-align="end"] {
+    transform-origin: bottom right;
+}
 .menu:popover-open {
     display: flex;
     flex-direction: column;
-    transition:
-        opacity var(--dp-duration) var(--dp-ease),
-        transform var(--dp-duration) var(--dp-ease);
+    opacity: 1;
+    transform: none;
+    transition-duration: var(--dp-duration-slow);
+    transition-timing-function: var(--dp-ease);
 }
 @starting-style {
     .menu:popover-open {
         opacity: 0;
-        transform: translateY(-4px);
+        transform: scale(0.96);
     }
-    .menu[data-side="top"]:popover-open {
-        transform: translateY(4px);
+}
+
+/*
+ * **ダイアログ (`<dialog>`) も同じ開き方。** 箱 (`article`) は少し縮んだ姿から、後ろの幕は透明から。
+ * 閉じるときは短く引っ込む。Pico の dialog は全面の幕そのもので、箱はその中の `article`
+ */
+dialog {
+    transition:
+        opacity var(--dp-duration) var(--dp-ease-exit),
+        overlay var(--dp-duration) allow-discrete,
+        display var(--dp-duration) allow-discrete;
+}
+dialog:not([open]) {
+    opacity: 0;
+}
+dialog > article {
+    transition: transform var(--dp-duration) var(--dp-ease-exit);
+}
+dialog:not([open]) > article {
+    transform: scale(0.96);
+}
+dialog[open] {
+    transition-duration: var(--dp-duration-slow);
+    transition-timing-function: var(--dp-ease);
+}
+dialog[open] > article {
+    transition-duration: var(--dp-duration-slow);
+    transition-timing-function: var(--dp-ease);
+}
+@starting-style {
+    dialog[open] {
+        opacity: 0;
+    }
+    dialog[open] > article {
+        transform: scale(0.96);
     }
 }
 .menu[data-side="bottom"] {
@@ -1129,4 +1333,29 @@ button[aria-busy="true"]::after {
     background: color-mix(in srgb, var(--pico-primary-background) 14%, var(--dp-surface));
     color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
+}
+
+/*
+ * **動かさない設定の端末では、全部止める。** 移り変わりは時間のトークンを 0 に、
+ * 繰り返すもの (録画中の点・光の筋・「保存しました」) と画面の切り替え (View Transitions) は動きそのものを外す。
+ * 上の決まりに勝つよう、ファイルの最後に置く
+ */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --dp-duration: 0s;
+        --dp-duration-slow: 0s;
+    }
+    .rec-dot,
+    .flash {
+        animation: none;
+    }
+    progress.running[value]::-webkit-progress-value {
+        animation: none;
+        background-image: none;
+    }
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+        animation: none;
+    }
 }

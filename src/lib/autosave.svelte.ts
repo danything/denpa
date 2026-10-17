@@ -43,7 +43,7 @@ function restore(values: Snapshot): void {
 }
 
 /** 「保存しました」を出しておく長さ。読めるだけ出したら引っ込める */
-const SAVED_FOR = 2500;
+export const SAVED_FOR = 2500;
 
 export function autosave(node: HTMLFormElement, status: SaveState) {
     let snapshot = take(node);

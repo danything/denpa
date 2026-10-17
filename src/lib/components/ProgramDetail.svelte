@@ -19,6 +19,7 @@
         cmNote = null,
         fps = null,
         actions,
+        transitionName,
     }: {
         program: ProgramDetail;
         onclose: () => void;
@@ -27,6 +28,11 @@
         /** エンコードしたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
         fps?: number | null;
         actions?: Snippet | undefined;
+        /**
+         * 箱に付ける画面の切り替えの名前 (View Transitions)。押した要素から広げて開くとき
+         * (番組表のマス。`#lib/motion.svelte.ts` の `morph`) だけ渡す
+         */
+        transitionName?: string | undefined;
     } = $props();
 </script>
 
@@ -45,7 +51,7 @@
         **巻き取るのは中身だけ。** 押すものは箱の下端に貼り付けたまま出しておく
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)
     -->
-    <div class="detail-box">
+    <div class="detail-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
         <div class="detail-body">
             <ProgramFacts {program} {notes} {cmNote} {fps} />
         </div>
@@ -89,6 +95,25 @@
         background: rgb(0 0 0 / 0.55);
         box-shadow: none;
         cursor: default;
+        transition: opacity var(--dp-duration-slow) var(--dp-ease);
+    }
+    /*
+     * **出るときは、幕は透明から、箱は少し縮んだ姿から** (メニュー・ダイアログと同じ。`app.css`)。
+     * 押したところから広げるとき (`transitionName`) は、箱の動きは画面の切り替えに任せる
+     */
+    .detail-box {
+        transition:
+            opacity var(--dp-duration-slow) var(--dp-ease),
+            transform var(--dp-duration-slow) var(--dp-ease);
+    }
+    @starting-style {
+        .detail-backdrop {
+            opacity: 0;
+        }
+        .detail-box:not(.morph) {
+            opacity: 0;
+            transform: scale(0.96);
+        }
     }
     .detail-box {
         position: relative;

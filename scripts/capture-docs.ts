@@ -13,6 +13,12 @@
  *
  *     docker compose run --rm docs bun scripts/capture-docs.ts ui
  *
+ * **`motion` を挙げると、動きを見比べる GIF を撮る** (docs には置かない)。画面の切り替え・メニュー・
+ * 保存の知らせ・スクロールしたヘッダーなどを、そのままの速さで `docs/images/.capture/motion/` に置く。
+ * 数字の多い画面 (予約と録画・チューナー) の静止画も一緒に撮る
+ *
+ *     docker compose run --rm docs bun scripts/capture-docs.ts motion
+ *
  * 中でやること:
  *
  * 1. アプリを組み、E2E と同じ一式 (denpa + 偽エージェント + 偽通知先。`tests/stack.ts`) を
@@ -596,6 +602,229 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
     writeFileSync(join(dir, 'contrast.json'), JSON.stringify(contrast, null, 2));
 }
 
+/**
+ * **動きをそのままの速さで録る** (`motion`)。0.25 秒の動きは 1 秒に数コマのスクリーンショットでは写らないので、
+ * ブラウザの画面配信 (CDP の screencast。描き替わるたびに 1 コマ届く) を貯め、届いた時刻のまま
+ * ffmpeg で GIF に組む。PR の前後の見比べに使う (docs には置かない)
+ */
+async function record(page: Page, name: string, fn: () => Promise<void>, width = 960): Promise<void> {
+    const cdp = await page.context().newCDPSession(page);
+    const frames: { data: string; t: number }[] = [];
+    cdp.on('Page.screencastFrame', (frame) => {
+        frames.push({ data: frame.data, t: frame.metadata.timestamp ?? Date.now() / 1000 });
+        void cdp.send('Page.screencastFrameAck', { sessionId: frame.sessionId }).catch(() => {});
+    });
+    await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 90, everyNthFrame: 1 });
+    await page.waitForTimeout(400);
+    await fn();
+    await page.waitForTimeout(600);
+    await cdp.send('Page.stopScreencast');
+    await cdp.detach();
+
+    const dir = join(OUT, 'motion', `${name}.frames`);
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    const list = ['ffconcat version 1.0'];
+    frames.forEach((frame, i) => {
+        const file = `${String(i).padStart(5, '0')}.jpg`;
+        writeFileSync(join(dir, file), Buffer.from(frame.data, 'base64'));
+        const next = frames[i + 1];
+        list.push(
+            `file ${file}`,
+            `duration ${next === undefined ? 1 : Math.max(0.001, next.t - frame.t).toFixed(4)}`,
+        );
+    });
+    // concat は最後のコマの長さを読まないので、もう 1 回並べる
+    if (frames.length > 0) list.push(`file ${String(frames.length - 1).padStart(5, '0')}.jpg`);
+    writeFileSync(join(dir, 'list.txt'), `${list.join('\n')}\n`);
+    const gif = join(OUT, 'motion', `${name}.gif`);
+    const made = spawnSync(
+        FFMPEG,
+        [
+            '-y',
+            '-loglevel',
+            'error',
+            '-f',
+            'concat',
+            '-safe',
+            '0',
+            '-i',
+            join(dir, 'list.txt'),
+            '-vf',
+            `fps=30,scale=${width}:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
+            gif,
+        ],
+        { stdio: 'inherit' },
+    );
+    rmSync(dir, { recursive: true, force: true });
+    console.log('motion', name, frames.length, 'frames', made.status === 0 ? 'ok' : `ffmpeg ${made.status}`);
+}
+
+/** 見比べる動き (`motion`) と、数字の多い画面の静止画 */
+async function motionShots(browser: Browser): Promise<void> {
+    mkdirSync(join(OUT, 'motion'), { recursive: true });
+    const context = async (width: number, height: number, mobile = false) => {
+        const ctx = await browser.newContext({
+            viewport: { width, height },
+            deviceScaleFactor: mobile ? 2 : 1,
+            isMobile: mobile,
+            hasTouch: mobile,
+            locale: 'ja-JP',
+            timezoneId: 'Asia/Tokyo',
+            colorScheme: 'dark',
+        });
+        await ctx.addInitScript(() => localStorage.setItem('theme', 'dark'));
+        return await ctx.newPage();
+    };
+    const desktop = await context(1280, 800);
+    const page = desktop;
+    const shot = async (name: string, fn: () => Promise<void>) => {
+        try {
+            await fn();
+        } catch (e) {
+            console.warn('motion', name, e);
+        }
+    };
+
+    // 数字の多い画面 (桁を揃えた数字)。見えている広さだけ
+    for (const [name, path] of [
+        ['numbers-home', '/'],
+        ['numbers-tuners', '/tuners'],
+    ] as const) {
+        await shot(name, async () => {
+            await page.goto(`${BASE}${path}`);
+            await settle(page, 800);
+            await page.screenshot({ path: join(OUT, 'motion', `${name}.png`) });
+        });
+    }
+
+    // 1. 画面の切り替え (中身が入れ替わる・上のナビの下線が滑る・ヘッダーは動かない)
+    await shot('nav', async () => {
+        await page.goto(`${BASE}/`);
+        await settle(page, 500);
+        await record(page, 'nav', async () => {
+            for (const to of ['guide', 'rules', 'tuners', 'home']) {
+                await page.getByTestId(`nav-${to}`).click();
+                await page.waitForTimeout(1300);
+            }
+        });
+    });
+    // 2. 番組表の種別 (選んでいる面が滑る)
+    await shot('guide-type', async () => {
+        await page.goto(`${BASE}/guide?type=GR`);
+        await settle(page, 1500);
+        await record(page, 'guide-type', async () => {
+            for (const type of ['BS', 'CS', 'GR']) {
+                await page.getByTestId(`type-${type}`).click();
+                await page.waitForTimeout(1300);
+            }
+        });
+    });
+    // 3. 番組表のマス → 詳細 (マスから広がり、閉じるとマスへ縮む)
+    await shot('guide-detail', async () => {
+        await page.goto(`${BASE}/guide?type=GR`);
+        await settle(page, 1500);
+        await record(page, 'guide-detail', async () => {
+            await page.getByTestId('program-button').nth(6).click();
+            await page.waitForTimeout(1500);
+            await page.getByTestId('detail-close').click();
+            await page.waitForTimeout(1000);
+        });
+    });
+    // 4. 録画の一覧 → 観る画面 (番組名が題名へ広がる)、戻る
+    await shot('home-watch', async () => {
+        await page.goto(`${BASE}/`);
+        await settle(page, 800);
+        await record(page, 'home-watch', async () => {
+            await (await visibleRow(page)).getByTestId('row-open').click();
+            await page.waitForTimeout(2000);
+            await page.goBack();
+            await page.waitForTimeout(1500);
+        });
+    });
+    // 5. メニューとダイアログの開け閉め
+    await shot('menu', async () => {
+        await page.goto(`${BASE}/`);
+        await settle(page, 800);
+        await record(page, 'menu', async () => {
+            await page.getByTestId('recordings-view').click();
+            await page.waitForTimeout(900);
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(700);
+        });
+    });
+    await shot('dialog', async () => {
+        await page.goto(`${BASE}/settings`);
+        await settle(page, 800);
+        await page.getByTestId('canvas-video-toggle').scrollIntoViewIfNeeded();
+        await record(page, 'dialog', async () => {
+            await page.getByTestId('canvas-video-toggle').click();
+            await page.waitForTimeout(1000);
+            await page.getByTestId('drive-notice-cancel').click();
+            await page.waitForTimeout(700);
+        });
+    });
+    // 6. その場で保存した「保存しました」(ふわっと出て消える)
+    await shot('saved', async () => {
+        await page.goto(`${BASE}/settings`);
+        await settle(page, 800);
+        const box = page.getByTestId('codec-h264');
+        await record(page, 'saved', async () => {
+            await box.click();
+            await page.waitForTimeout(3200);
+            await box.click();
+            await page.waitForTimeout(3200);
+        });
+    });
+    // 7. ヘッダーの線と影 (スクロールに合わせて濃くなる)
+    await shot('scroll', async () => {
+        await page.goto(`${BASE}/tuners`);
+        await settle(page, 800);
+        await record(page, 'scroll', async () => {
+            for (let y = 0; y <= 240; y += 12) {
+                await page.evaluate((top) => window.scrollTo({ top }), y);
+                await page.waitForTimeout(40);
+            }
+            await page.waitForTimeout(500);
+            for (let y = 240; y >= 0; y -= 12) {
+                await page.evaluate((top) => window.scrollTo({ top }), y);
+                await page.waitForTimeout(40);
+            }
+        });
+    });
+    // 8. 進み具合のバー (番組表をいますぐ集める)
+    await shot('progress', async () => {
+        await page.goto(`${BASE}/tuners`);
+        await settle(page, 800);
+        await page.getByTestId('epg-collect-now').click();
+        await page.getByTestId('epg-collect').waitFor({ timeout: 15_000 });
+        await page.getByTestId('epg-collect').scrollIntoViewIfNeeded();
+        await record(page, 'progress', async () => {
+            await page.waitForTimeout(5000);
+        });
+    });
+    await desktop.context().close();
+
+    // 9. スマホの下のタブ (印が滑る)
+    await shot('tabbar', async () => {
+        const phone = await context(390, 844, true);
+        await phone.goto(`${BASE}/`);
+        await settle(phone, 800);
+        await record(
+            phone,
+            'tabbar',
+            async () => {
+                for (const to of ['guide', 'settings', 'home']) {
+                    await phone.getByTestId(`tab-${to}`).click();
+                    await phone.waitForTimeout(1300);
+                }
+            },
+            390,
+        );
+        await phone.context().close();
+    });
+}
+
 let browser: Browser | null = null;
 try {
     await seed();
@@ -615,6 +844,7 @@ try {
         await uiShots(browser, await watched(first));
         await first.context().close();
     }
+    if (only.includes('motion')) await motionShots(browser);
 
     // 静止画 (1600×900。20インチの画面と同じ 16:9)
     {
@@ -735,7 +965,7 @@ try {
     await shutdown();
 }
 
-// 組み立てて docs/images へ (アニメーションは縮め、同じコマはまとめる)。見比べる一揃いだけのときは組まない
-if (only.length > 0 && only.every((n) => n === 'ui')) process.exit(0);
+// 組み立てて docs/images へ (アニメーションは縮め、同じコマはまとめる)。見比べる一揃いと動き (`motion`) だけのときは組まない
+if (only.length > 0 && only.every((n) => n === 'ui' || n === 'motion')) process.exit(0);
 const webp = spawnSync('python3', ['scripts/docs-webp.py', ...only], { stdio: 'inherit' });
 if (webp.status !== 0) throw new Error('webp の組み立てに失敗しました');

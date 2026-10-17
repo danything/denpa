@@ -343,10 +343,10 @@
                     titleTestid="chase-title"
                 >
                     {#snippet status()}
-                        <span class="clock">{clockLabel(pos)} / {clockLabel(recorded)}</span>
+                        <span class="clock num">{clockLabel(pos)} / {clockLabel(recorded)}</span>
                         {#if line !== null && !line.finished}
                             <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
-                            ・ <span class="rec"><span class="dot"></span>録画中</span>
+                            ・ <span class="rec"><span class="rec-dot"></span>録画中</span>
                         {:else if line !== null}
                             ・ 録画済み
                         {/if}
@@ -449,13 +449,9 @@
         align-items: baseline;
         gap: 0.25rem;
     }
-    .dot {
-        display: inline-block;
+    /* 録画中の点 (`app.css` の `.rec-dot`。ゆっくり脈打つ) を字の真ん中に */
+    .rec :global(.rec-dot) {
         align-self: center;
-        width: 0.375rem;
-        height: 0.375rem;
-        border-radius: 999px;
-        background: var(--dp-error);
     }
     /* 通知の列は押せない (`PlayerStage`)。この通知だけ押せるように戻す */
     .encoded {

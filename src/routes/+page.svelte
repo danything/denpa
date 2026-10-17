@@ -48,6 +48,7 @@
         type SeriesGroup,
     } from '#lib/grouping.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
+    import { fadeIn, heroName, rememberHero } from '#lib/motion.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { matches, normalize } from '#lib/paging.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
@@ -527,13 +528,29 @@
     open: string | (() => void),
     fresh = false,
     quiet = false,
+    recId: number | null = null,
 )}
     <div class="cluster title-line">
         <!-- ふつうの状態 (`quietState`) はラベルを出さず、読み上げにだけ渡す -->
-        <span class={quiet ? 'visually-hidden' : `tag ${badge}`} data-testid={testid}>{state}</span>
+        <!-- 塗ったバッジ (録画中など、いま動いているもの) には、ゆっくり脈打つ点を添える (`app.css` の `.rec-dot`) -->
+        <span class={quiet ? 'visually-hidden' : `tag ${badge}`} data-testid={testid}
+            >{#if !quiet && badge.includes('solid')}<span class="rec-dot" aria-hidden="true"></span>{/if}{state}</span
+        >
         {#if typeof open === 'string'}
             <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
-            <a class="row-name row-open broadcast" href={open} data-sveltekit-preload-data="tap" data-testid="row-open">
+            <!--
+                録画の行は、押すと番組名が観る画面の題名へ広がる (`rememberHero`。`#lib/motion.svelte.ts`)
+            -->
+            <a
+                class="row-name row-open broadcast"
+                href={open}
+                data-sveltekit-preload-data="tap"
+                data-testid="row-open"
+                style:view-transition-name={recId === null ? undefined : heroName(recId)}
+                onclick={() => {
+                    if (recId !== null) rememberHero(recId);
+                }}
+            >
                 {#if fresh}
                     <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
                 {/if}
@@ -558,7 +575,7 @@
             has={row.has_logo}
             style="height: 1rem; margin-right: 0.375rem; vertical-align: -0.1875rem"
         />
-        <span><span class="broadcast">{service}</span>{service && rest ? ' ・ ' : ''}{rest}</span>
+        <span><span class="broadcast">{service}</span>{service && rest ? ' ・ ' : ''}<span class="num">{rest}</span></span>
     </div>
 {/snippet}
 
@@ -616,6 +633,7 @@
         alt=""
         loading="lazy"
         class="poster-img"
+        use:fadeIn
         onerror={(event) => {
             (event.currentTarget as HTMLImageElement).style.display = 'none';
         }}
@@ -728,6 +746,7 @@
                         link ?? (() => openRecording(rec)),
                         unwatched(rec),
                         shown.quiet,
+                        rec.id,
                     )}
                     {#if held !== undefined}
                         <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
@@ -836,7 +855,7 @@
                         <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
                         {@const live = encodeLive.entries[rec.id]}
                         {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
-                        <div class="row-sub muted tiny" data-testid="encode-progress">
+                        <div class="row-sub muted tiny num" data-testid="encode-progress">
                             {percent(live?.percent ?? rec.job_percent ?? 0)}
                             {#if eta(liveEta)}・{eta(liveEta)}{/if}
                         </div>
@@ -938,6 +957,7 @@
                 {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
                 <progress
                     class="row-bar"
+                    class:running={rec.job_state === 'running' && barPercent > 0}
                     value={rec.job_state === 'running' && barPercent > 0
                         ? barPercent
                         : undefined}
@@ -947,6 +967,7 @@
                 <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
                 <progress
                     class="row-bar success"
+                    class:running={held.progress !== null}
                     value={held.progress ?? undefined}
                     max="1"
                 ></progress>
@@ -983,7 +1004,7 @@
         </span>
         <span class="row-body">
             <span class="cluster">
-                <span class="tag" data-testid="recording-group-count">{group.items.length}本</span>
+                <span class="tag num" data-testid="recording-group-count">{group.items.length}本</span>
                 {#if fresh > 0}
                     <span class="group-unwatched tiny" data-testid="recording-group-unwatched">
                         <span class="unwatched-dot" aria-hidden="true"></span>未視聴{fresh}
@@ -991,7 +1012,7 @@
                 {/if}
                 <span class="row-name broadcast" data-testid="recording-group-name">{group.name}</span>
             </span>
-            <span class="row-meta">最新 {dateTime(group.newest.at)}</span>
+            <span class="row-meta num">最新 {dateTime(group.newest.at)}</span>
         </span>
     </button>
     <!--
@@ -1146,7 +1167,7 @@
                     <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
                     {#if reservationPage.more}
                         <div
-                            class="row-empty muted small"
+                            class="row-empty muted small num"
                             use:sentinel={() => reservationPage.reveal()}
                             data-testid="reservation-more"
                         >
@@ -1158,7 +1179,7 @@
                         打つたびに右の押すものが動いてガクガクした
                     -->
                     {#if reservationQuery !== ''}
-                        <div class="row-empty muted small">
+                        <div class="row-empty muted small num">
                             {data.reservations.length} 件中 {reservationRows.length} 件
                         </div>
                     {/if}
@@ -1176,7 +1197,7 @@
                 <div class="head-title">
                     <h2>録画</h2>
                     {#if data.capacity !== null}
-                        <span class="capacity muted tiny" data-testid="recordings-capacity">
+                        <span class="capacity muted tiny num" data-testid="recordings-capacity">
                             {data.capacity.free}{#if data.capacity.hours !== null}<span class="capacity-hours">・{data.capacity.hours}</span>{/if}
                         </span>
                     {/if}
@@ -1265,7 +1286,7 @@
                             </button>
                         {/snippet}
                         {#if data.capacity !== null}
-                            <div class="menu-note muted small" data-testid="recordings-capacity-menu">
+                            <div class="menu-note muted small num" data-testid="recordings-capacity-menu">
                                 {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
                             </div>
                         {/if}
@@ -1285,7 +1306,7 @@
                         {#if line.kind === 'gap'}
                             <!-- 続きを足す印 (`sentinel`)。間に近づいたら足す。残りが無くなれば消える -->
                             <div
-                                class="row-empty muted small"
+                                class="row-empty muted small num"
                                 use:sentinel={() => recordingPage.reveal()}
                                 data-testid="recording-more"
                             >
@@ -1316,7 +1337,7 @@
                     {/each}
                     <!-- 手元で絞っているぶん (予約側と同じく末尾に)。送る前でも何件残るかが分かる -->
                     {#if recordingQuery !== data.q}
-                        <div class="row-empty muted small">
+                        <div class="row-empty muted small num">
                             {rightRows.length} 件中 {recordingRows.length} 件
                         </div>
                     {/if}

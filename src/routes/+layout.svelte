@@ -8,8 +8,10 @@
     import { denpaFontUrl } from '#lib/font.js';
     import { write } from '#lib/keep.js';
     import { measure } from '#lib/measure.svelte.js';
+    import { canTransition, forgetHero } from '#lib/motion.svelte.js';
     import { startOffline } from '#lib/offline.svelte.js';
     import { followNavigation, reload } from '#lib/reload.svelte.js';
+    import { onNavigate } from '$app/navigation';
     import { navigating, page } from '$app/state';
     import CalendarDays from '~icons/lucide/calendar-days';
     import Contrast from '~icons/lucide/contrast';
@@ -32,6 +34,40 @@
      * ので、ここで1度追い始めれば全部の遷移を見ていられる
      */
     followNavigation();
+
+    /**
+     * **ページを移るときは、中身をなめらかに入れ替える** (View Transitions。見た目は `app.css` の
+     * 「画面の切り替え」)。ヘッダーと下のタブは名前を付けて抜き出してあるので動かない。
+     *
+     * `onNavigate` は次の画面のデータが揃ってから呼ばれるので、写しを取って待たせるのは
+     * 中身を描き替える一瞬だけ (読み込みの間は今の画面のまま、上の細いバーも出る)。
+     *
+     * 動かさないもの:
+     * - **使えないブラウザと、動かさない設定の端末** (`canTransition`)。今までどおりすぐ替わる
+     * - **同じ URL** (読み直し・全画面の段を積む・戻す)。替わるものが無い
+     * - **映像の画面の中での移動** (ライブ・観る・追っかけ)。切り替えの間は画面が写しになるので、
+     *   映っているものを止めて見せることになる
+     */
+    const PLAYING = new Set(['/live', '/watch/[id]', '/chase/[id]']);
+    onNavigate((navigation) => {
+        if (!canTransition() || navigation.to === null || navigation.from === null) return;
+        const { from, to } = navigation;
+        if (from.url.pathname === to.url.pathname && from.url.search === to.url.search) return;
+        if (from.route.id === to.route.id && PLAYING.has(from.route.id ?? '')) return;
+        return new Promise<void>((resolve) => {
+            const transition = document.startViewTransition(async () => {
+                resolve();
+                await navigation.complete.catch(() => {});
+            });
+            transition.ready.catch(() => {});
+            // 一覧 → 観る画面で広げた行 (`hero`) は、観る画面の外へ移り終えたら忘れる
+            void transition.finished
+                .catch(() => {})
+                .then(() => {
+                    if (to.route.id !== '/watch/[id]') forgetHero();
+                });
+        });
+    });
 
     /**
      * **遷移が長引いているときだけ、上端に細いバーを出す。**
@@ -330,6 +366,7 @@
                             data-testid="nav-{link.href === '/' ? 'home' : link.href.slice(1)}"
                         >
                             {link.label}
+                            {#if page.route.id === link.href}<span class="nav-underline" aria-hidden="true"></span>{/if}
                         </a>
                     </li>
                 {/each}
@@ -375,6 +412,7 @@
                     aria-current={page.route.id === tab.href ? 'page' : undefined}
                     data-testid="tab-{tab.href === '/' ? 'home' : tab.href.slice(1)}"
                 >
+                    {#if page.route.id === tab.href}<span class="tab-indicator" aria-hidden="true"></span>{/if}
                     <Icon icon={tab.icon} size="size-5" />
                     <span>{tab.label}</span>
                 </a>
@@ -389,6 +427,7 @@
                             class="tab"
                             aria-current={moreCurrent ? 'page' : undefined}
                         >
+                            {#if moreCurrent}<span class="tab-indicator" aria-hidden="true"></span>{/if}
                             <Icon icon={Ellipsis} size="size-5" />
                             <span>その他</span>
                         </button>
@@ -470,6 +509,33 @@
         padding: 0.5rem var(--dp-space-3);
         border-bottom: 1px solid var(--dp-line);
         background: var(--dp-bg);
+        /* 画面の切り替えでは抜き出して動かさない (`app.css` の「画面の切り替え」) */
+        view-transition-name: site-header;
+    }
+    /*
+     * **スクロールに合わせて、下の線と影を濃くする** (`animation-timeline: scroll()`)。
+     * 一番上では今までどおり線 1 本、4rem 下ろすまでに線が一段濃くなり、影が付く。
+     * 時間ではなくスクロールの量で進む。知らないブラウザ、画面ぴったりの画面
+     * (ページごとは動かないので進まない)、動かさない設定の端末では線 1 本のまま
+     */
+    @supports (animation-timeline: scroll()) {
+        @media (prefers-reduced-motion: no-preference) {
+            .navbar {
+                animation: header-shade linear both;
+                animation-timeline: scroll(root block);
+                animation-range: 0 4rem;
+            }
+        }
+    }
+    @keyframes header-shade {
+        from {
+            border-bottom-color: var(--dp-line);
+            box-shadow: none;
+        }
+        to {
+            border-bottom-color: var(--dp-line-strong);
+            box-shadow: var(--dp-shadow-bar);
+        }
     }
     /*
      * **ヘッダーは本文と同じ地に、下の線 1 本で区切る。** スクロールすると下を流れる中身が
@@ -557,14 +623,16 @@
     ul.links a.button.ghost[aria-current='page']:hover {
         --pico-background-color: var(--dp-subtle);
     }
-    ul.links a.button.ghost[aria-current='page']::after {
-        content: '';
+    /* 下線は別の要素にして、画面を移ると前の画面の下線から横に滑らせる (`app.css` の「画面の切り替え」) */
+    .nav-underline {
         position: absolute;
         inset-inline: 0.65rem;
         bottom: 0.2rem;
         height: 2px;
         border-radius: 1px;
         background: var(--pico-primary);
+        view-transition-name: nav-underline;
+        pointer-events: none;
     }
     /*
      * 画面の下のタブ (狭い幅だけ)。ヘッダーと同じ地に上の線 1 本、スクロールすると透けてぼける。
@@ -581,6 +649,7 @@
         padding-bottom: env(safe-area-inset-bottom);
         border-top: 1px solid var(--dp-line);
         background: var(--dp-bg);
+        view-transition-name: site-tabbar;
     }
     @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
         .tabbar {
@@ -591,6 +660,7 @@
     }
     .tabbar .tab,
     .tab-more :global(.tab) {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -621,6 +691,22 @@
     }
     .tab-more {
         display: flex;
+    }
+    /*
+     * いまの画面の印。タブの上端 (区切りの線の上) に短い線を置く。画面を移ると
+     * 前のタブから横に滑る (`app.css` の「画面の切り替え」)
+     */
+    .tabbar :global(.tab-indicator) {
+        position: absolute;
+        top: -1px;
+        left: 50%;
+        width: 2rem;
+        height: 2px;
+        margin-left: -1rem;
+        border-radius: 1px;
+        background: var(--dp-primary-text);
+        view-transition-name: tab-indicator;
+        pointer-events: none;
     }
     /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */
     :global(.tab-more-menu) {

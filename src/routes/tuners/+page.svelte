@@ -177,7 +177,7 @@
                                         {#if tuner.disabled}
                                             <span class="tag">無効</span>
                                         {:else if tuner.channel !== null}
-                                            <span class="tag warning">
+                                            <span class="tag warning num">
                                                 {tuner.channel.channel}
                                             </span>
                                         {:else}
@@ -341,11 +341,12 @@
         {#if data.collect.running}
             <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
             <div class="progress-block" data-testid="epg-collect">
-                <div class="small soft">
+                <div class="small soft num">
                     {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
                     ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
                 </div>
                 <progress
+                    class="running"
                     value={data.collect.total - data.collect.pending - data.collect.active.length}
                     max={Math.max(1, data.collect.total)}
                 ></progress>
@@ -414,7 +415,7 @@
                                 <td class="nowrap small">
                                     {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
                                 </td>
-                                <td class="mono small nowrap">
+                                <td class="mono small nowrap num">
                                     {channel.channel}
                                 </td>
                                 <td class="small">
@@ -422,7 +423,7 @@
                                         {channel.services.map((service) => service.name).join(', ')}
                                     </div>
                                 </td>
-                                <td class="small nowrap">
+                                <td class="small nowrap num">
                                     {#if programs > 0}
                                         {programs} 件 <span class="tiny muted">{until(last)}</span>
                                     {:else}
@@ -491,7 +492,7 @@
                     {#if scan.phase}
                         <span class="tag outline">{scan.phase}</span>
                     {/if}
-                    <span data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
+                    <span class="num" data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
                 </div>
 
                 <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
@@ -663,7 +664,7 @@
                 <div class="cluster">
                     <!-- 取れないぶんを除いて揃っていれば「揃った」でよい -->
                     <span
-                        class="tag {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
+                        class="tag num {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
                         data-testid="status-logos"
                     >
                         {data.logos.have} / {data.logos.total} 局

@@ -16,6 +16,7 @@
         notes = [],
         cmNote = null,
         fps = null,
+        transitionName,
     }: {
         program: ProgramDetail;
         /**
@@ -33,6 +34,8 @@
          * `program` とは別に渡す — 番組詳細は EPG から引けると差し替わる (`detail.open`)
          */
         fps?: number | null;
+        /** 題名に付ける画面の切り替えの名前。録画の一覧から観る画面へ広げるとき (`#lib/motion.svelte.ts` の `heroName`) */
+        transitionName?: string | undefined;
     } = $props();
 
     /** 詳細情報。EIT から拾った「出演者」などの見出し付きテキスト */
@@ -72,8 +75,8 @@
                 rel="noopener noreferrer">{part.text}</a
             >{:else}{part.text}{/if}{/each}{/snippet}
 
-<h3 class="title broadcast">{program.name}</h3>
-<p class="meta small muted">
+<h3 class="title broadcast" style:view-transition-name={transitionName}>{program.name}</h3>
+<p class="meta small muted num">
     <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)} 〜 {time(program.end_at)}
     ({duration(program.start_at, program.end_at)})
 </p>

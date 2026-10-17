@@ -58,6 +58,7 @@
     import { CODEC_LABEL } from '#lib/hw.js';
     import { write as remind, read as stored } from '#lib/keep.js';
     import { type MkvSource, openMkv } from '#lib/mkv-source.js';
+    import { heroName } from '#lib/motion.svelte.js';
     import { loadOffline } from '#lib/offline.svelte.js';
     import type { OfflineVideo } from '#lib/offline-db.js';
     import { canvasSupport, rawUnsupported } from '#lib/raw/support.js';
@@ -2160,9 +2161,10 @@
             program={detail.current ?? facts}
             cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null}
             fps={rec.fps}
+            transitionName={heroName(rec.id)}
         />
 
-        <div class="small muted meta" data-testid="watch-meta">
+        <div class="small muted meta num" data-testid="watch-meta">
             {recordedDuration(rec)} ・ {size(rec.ts_size)}
         </div>
         <!--
