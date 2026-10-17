@@ -96,15 +96,18 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [docs/install-mac.md](docs/install-mac.md) — Mac に入れる
 - [docs/install-windows.md](docs/install-windows.md) — Windows に入れる
 - [docs/screens.md](docs/screens.md) — 画面 (実機のスクリーンショット)
+- [docs/faq.md](docs/faq.md) — よくある質問
 
 **チューナー**
 
 - [docs/tuners.md](docs/tuners.md) — **使えるチューナー** (一覧・カードリーダー・B-CAS・直らないとき)
+- [docs/tuner-pt3.md](docs/tuner-pt3.md) — PT2・PT3・PX-BCUD (Linux DVB)
 - [docs/tuner-px4.md](docs/tuner-px4.md) — PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
 - [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD (siano-userland)
 
 **乗り換え**
 
+- [docs/switch.md](docs/switch.md) — **ほかの録画ソフトから乗り換える** (Mirakurun・EPGStation・KonomiTV・EDCB)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 
 **使う**

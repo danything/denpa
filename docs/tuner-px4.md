@@ -1,5 +1,9 @@
 # PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
 
+PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーです。**同時に取れるチャンネルは受信機の数だけ**で、
+数と種別 (地上波・衛星・両方) は筐体ごとに px4-userland に聞いて決めます (Q3U4 は受信機ごとに地上波か衛星か決まっていて、MLT5 系はどれも両方)。
+**内蔵のカードリーダーがある機種は、それも使えます。** Linux・Mac (Apple Silicon)・Windows (x64) で使えます。
+
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
 
 複数チューナーの PX4 系を Linux で使うには、ホストに `px4_drv` (DKMS) を入れて
