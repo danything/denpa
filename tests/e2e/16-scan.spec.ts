@@ -197,10 +197,10 @@ test.describe('チューナーの設定', () => {
         await goto(page, '/tuners');
 
         const card = page.getByTestId('tuner-config-card');
-        for (const type of ['GR', 'BS', 'CS']) {
-            const box = card.locator(`input[name="type.0.${type}"]`);
-            if (await box.isChecked()) await box.uncheck();
-        }
+        // 最後の 1 つを外すと、その場で断られてすぐ元に戻る。そこだけは押すだけにする (外れたままを待たない)
+        const checked = card.locator('input[name^="type.0."]:checked');
+        while ((await checked.count()) > 1) await checked.first().uncheck();
+        await checked.first().click();
 
         // その場で保存して断られる。見出しの横に理由を出し、外したチェックは元に戻す
         await expect(card.getByTestId('settings-error')).toContainText('種別を1つ以上');
