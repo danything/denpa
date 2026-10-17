@@ -10,6 +10,9 @@
  *   - GitHub の注意書き (`> [!NOTE]` など) は Starlight の aside (`:::note` など) に
  *   - 放送の映像が映る画像には、偽の放送だという添え書き
  *
+ * README はページにせず、トップ (src/pages/index.astro) が読む節ごとの Markdown に切り出す
+ * (src/generated/readme/*.md と top.json。どの節を出すかは src/data/pages.ts の topSections)。
+ *
  * 書き出す先 (src/content/docs・src/assets/docs・src/generated) は毎回作り直し、git には入れない
  */
 import { execFileSync } from 'node:child_process';
@@ -25,12 +28,21 @@ import {
 } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { docNames, docsDir, repoDir, siteDir, slugOf } from '../src/data/docs.ts';
-import { overrides, repoUrl, videoImageNote, videoImages } from '../src/data/pages.ts';
+import {
+    base,
+    overrides,
+    repoUrl,
+    siteUrl,
+    topEntrances,
+    topSections,
+    videoImageNote,
+    videoImages,
+} from '../src/data/pages.ts';
 
-const base = '/denpa/';
 const outDocs = join(siteDir, 'src/content/docs');
 const outImages = join(siteDir, 'src/assets/docs');
 const outGenerated = join(siteDir, 'src/generated');
+const outReadme = join(outGenerated, 'readme');
 
 const published = new Set(docNames());
 
@@ -41,15 +53,15 @@ interface Source {
     path: string;
 }
 
-const sources: Source[] = [
-    { name: 'README', path: 'README.md' },
-    ...[...published].map((name) => ({ name, path: `docs/${name}.md` })),
-];
+const readme: Source = { name: 'README', path: 'README.md' };
+const sources: Source[] = [...published].map((name) => ({ name, path: `docs/${name}.md` }));
+const readmeText = readSource(readme.path);
+const readmeSections = sectionsOf(readmeText.split('\n'));
 
 // 先頭の H1 の見出しの id。H1 は本文から外して Starlight のページの見出し (id は `_top`) になるので、
 // そこへのリンクは付け替える
 const h1Anchors = new Map(
-    sources.map((s) => {
+    [readme, ...sources].map((s) => {
         const h1 = findH1(readSource(s.path).split('\n'));
         return [s.path, h1 ? slugify(h1.title) : undefined] as const;
     }),
@@ -62,16 +74,23 @@ mkdirSync(outDocs, { recursive: true });
 mkdirSync(outGenerated, { recursive: true });
 copyImages();
 
+// トップに出す README の節の id。README へのリンクのうち、これ以外の節へのものは GitHub の README へ
+const topAnchors = new Set(
+    topSections.filter((t) => findSection(t.heading) !== undefined).map((t) => slugify(t.heading)),
+);
+
 let gitWarned = false;
+/** 書き出したページの title と description (トップの入口のカードが使う) */
+const pageMeta = new Map<string, { title: string; description: string }>();
 for (const source of sources) {
     const text = readSource(source.path);
-    const slug = slugOf(source.name);
-    const outFile = join(outDocs, `${slug || 'index'}.md`);
+    const outFile = join(outDocs, `${slugOf(source.name)}.md`);
     mkdirSync(dirname(outFile), { recursive: true });
     writeFileSync(outFile, convert(text, source, outFile));
 }
 writeFileSync(join(outGenerated, 'usage.json'), `${JSON.stringify(usageNotice(), null, 4)}\n`);
-console.log(`import-docs: ${sources.length} ページを書き出しました`);
+writeFileSync(join(outGenerated, 'top.json'), `${JSON.stringify(top(), null, 4)}\n`);
+console.log(`import-docs: ${sources.length} ページと、トップに出す README の節を書き出しました`);
 
 function readSource(path: string): string {
     return readFileSync(join(repoDir, path), 'utf8').replaceAll('\r\n', '\n');
@@ -113,36 +132,105 @@ function convert(text: string, source: Source, outFile: string): string {
     body = addVideoNotes(body);
 
     const description = override.description ?? describe(body);
+    pageMeta.set(source.name, { title: override.title ?? title, description });
     const front: string[] = [`title: ${JSON.stringify(override.title ?? title)}`];
     if (description) front.push(`description: ${JSON.stringify(description)}`);
     front.push(`editUrl: ${JSON.stringify(`${repoUrl}/edit/main/${source.path}`)}`);
     const updated = lastCommit(source.path);
     // 引用符を付けない (YAML の日時として読ませ、Date で渡す)
     if (updated) front.push(`lastUpdated: ${updated}`);
-    if (source.name === 'README') front.push(...topPage(description));
     return `---\n${front.join('\n')}\n---\n\n${body.trimStart()}`;
 }
 
-/** トップ (仮)。README の本文の上に、立て方への入口を置く */
-function topPage(description: string): string[] {
-    const tagline = description.split('。')[0];
-    return [
-        'template: splash',
-        'hero:',
-        '    title: denpa',
-        `    tagline: ${JSON.stringify(tagline ? `${tagline}。` : '')}`,
-        '    actions:',
-        '        - text: 立てる',
-        `          link: ${base}${slugOf('install')}/`,
-        '          icon: right-arrow',
-        '        - text: 画面を見る',
-        `          link: ${base}${slugOf('screens')}/`,
-        '          variant: minimal',
-        '        - text: GitHub',
-        `          link: ${repoUrl}`,
-        '          icon: external',
-        '          variant: minimal',
-    ];
+/** README の一部を、サイトで読める形に直す (画像・リンク・注意書き・添え書き) */
+function convertReadmePart(text: string, outFile: string): string {
+    let body = convertReadmeHtml(text);
+    body = convertAlerts(body);
+    body = rewriteLinks(body, readme.path, outFile);
+    return addVideoNotes(body).trim();
+}
+
+/** 見出しごとの中身 (下の段の見出しも含む)。コードの囲みの中の `#` (シェルのコメント) は見出しにしない */
+function sectionsOf(lines: string[]): { heading: string; body: string }[] {
+    const heads: { level: number; heading: string; index: number }[] = [];
+    let fence: string | undefined;
+    for (const [index, line] of lines.entries()) {
+        const f = /^\s*(`{3,}|~{3,})/.exec(line);
+        if (f) {
+            if (!fence) fence = f[1]!;
+            else if (line.trim().startsWith(fence)) fence = undefined;
+            continue;
+        }
+        const m = fence ? null : /^(#{1,6}) (.+)$/.exec(line);
+        if (m) heads.push({ level: m[1]!.length, heading: m[2]!.trim(), index });
+    }
+    return heads.map((h, k) => {
+        const end = heads.slice(k + 1).find((n) => n.level <= h.level)?.index ?? lines.length;
+        return {
+            heading: h.heading,
+            body: lines
+                .slice(h.index + 1, end)
+                .join('\n')
+                .trim(),
+        };
+    });
+}
+
+/** README の節の中身 (見出しの行は除く)。無ければ undefined */
+function findSection(heading: string): string | undefined {
+    return readmeSections.find((s) => s.heading === heading)?.body;
+}
+
+/**
+ * トップ (src/pages/index.astro) が読むもの。README の冒頭 (H1 の下から最初の `##` まで) と
+ * topSections の節を src/generated/readme/*.md に書き、節の見出し・ページの説明・入口のカードを返す
+ * (top.json)。節や文書が無くなっていたら、そこは出さない (節は warn も出す)
+ */
+function top() {
+    mkdirSync(outReadme, { recursive: true });
+    const write = (key: string, text: string) => {
+        const outFile = join(outReadme, `${key}.md`);
+        const converted = convertReadmePart(text, outFile);
+        writeFileSync(outFile, `${converted}\n`);
+        return converted;
+    };
+    const lines = readmeText.split('\n');
+    const from = (findH1(lines)?.index ?? -1) + 1;
+    const next = lines.findIndex((l, i) => i >= from && /^## /.test(l));
+    // サイトそのものへの案内 (GitHub で読む人向けの 1 行) はトップには出さない
+    const intro = write(
+        'intro',
+        lines
+            .slice(from, next < 0 ? undefined : next)
+            .filter((l) => !l.includes(`](${siteUrl})`))
+            .join('\n'),
+    );
+
+    const sections = topSections.flatMap((t) => {
+        const body = findSection(t.heading);
+        if (body === undefined) {
+            console.warn(`import-docs: README に「${t.heading}」の節が無いので、トップには出しません`);
+            return [];
+        }
+        write(t.key, body);
+        return [{ key: t.key, id: slugify(t.heading), heading: t.label ?? t.heading }];
+    });
+
+    const page = (name: string) => {
+        const meta = pageMeta.get(name);
+        return meta && { ...meta, href: `${base}${slugOf(name)}/` };
+    };
+    const entrances = topEntrances.flatMap((e) => {
+        const main = page(e.doc);
+        if (!main) return [];
+        const more = (e.more ?? []).flatMap((n) => {
+            const p = page(n);
+            return p ? [{ title: p.title, href: p.href }] : [];
+        });
+        return [{ label: e.label, href: main.href, description: main.description, more }];
+    });
+
+    return { description: describe(intro), sections, entrances };
 }
 
 /** git の最後のコミットの日時。git が無い所 (手元のコンテナなど) では付けない */
@@ -217,7 +305,11 @@ function resolveTarget(target: string, fromPath: string, outFile: string): strin
     if (repoPath.startsWith('..')) return target;
     if (isH1Anchor(repoPath, hash)) hash = '';
 
-    if (repoPath === 'README.md') return `${base}${hash}`;
+    if (repoPath === 'README.md') {
+        // トップに出していない節は GitHub の README で読む
+        if (!hash || topAnchors.has(decodeURIComponent(hash.slice(1)))) return `${base}${hash}`;
+        return `${repoUrl}/blob/main/README.md${hash}`;
+    }
     const doc = /^docs\/([^/]+)\.md$/.exec(repoPath);
     if (doc && published.has(doc[1]!)) {
         const slug = slugOf(doc[1]!);
@@ -385,14 +477,12 @@ function usageNotice(): {
     anchor: string;
     discussion?: { label: string; url: string };
 } | null {
-    const readme = readFileSync(join(repoDir, 'README.md'), 'utf8').replaceAll('\r\n', '\n');
     const heading = '使ってよい範囲';
-    const m = new RegExp(`^## ${heading}\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, 'm').exec(readme);
-    if (!m) {
+    const section = findSection(heading);
+    if (section === undefined) {
         console.warn(`import-docs: README に「${heading}」の節が無いので、ページの下の要約は出しません`);
         return null;
     }
-    const section = m[1]!;
     const summary = section
         .trim()
         .split(/\n{2,}/)[0]!

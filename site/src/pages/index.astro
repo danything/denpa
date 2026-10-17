@@ -1,0 +1,175 @@
+---
+/*
+ * トップ。文は README から取り (scripts/import-docs.ts が節ごとに src/generated/readme/*.md へ切り出す)、
+ * ここで新しく書くのは見出しの一言だけ。どの節を出すか・入口のカードは src/data/pages.ts
+ */
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import type { AstroComponentFactory } from 'astro/runtime/server/index.js';
+import { base, repoUrl, tagline } from '../data/pages.ts';
+import { softwareApplication } from '../data/structured-data.ts';
+import top from '../generated/top.json';
+
+const parts = import.meta.glob<{ Content: AstroComponentFactory }>('../generated/readme/*.md', { eager: true });
+const part = (key: string) => parts[`../generated/readme/${key}.md`]?.Content;
+const Intro = part('intro');
+const install = top.sections.find((s) => s.key === 'install');
+
+const hero = {
+    title: 'denpa',
+    tagline: `${tagline}。<br />チューナーを挿して、スキャンを押すだけ。`,
+    actions: [
+        {
+            text: '入れる',
+            link: install ? `#${install.id}` : `${base}install/`,
+            icon: 'right-arrow',
+        },
+        { text: '画面を見る', link: `${base}screens/`, variant: 'minimal' as const },
+        {
+            text: 'GitHub',
+            link: repoUrl,
+            icon: 'external',
+            variant: 'minimal' as const,
+        },
+    ],
+};
+const head = [
+    { tag: 'meta' as const, attrs: { property: 'og:type', content: 'website' } },
+    await softwareApplication(top.description),
+];
+---
+
+<StarlightPage
+    frontmatter={{ title: tagline, description: top.description, template: 'splash', hero, head }}
+>
+    <div class="top">
+        {Intro && <section class="top-intro"><Intro /></section>}
+        {
+            top.sections.map((s) => {
+                const Content = part(s.key);
+                return (
+                    Content && (
+                        <section class={`top-section top-${s.key}`} aria-labelledby={s.id}>
+                            <h2 id={s.id}>{s.heading}</h2>
+                            <Content />
+                        </section>
+                    )
+                );
+            })
+        }
+        {
+            top.entrances.length > 0 && (
+                <section class="top-section top-entrances" aria-labelledby="もっと詳しく">
+                    <h2 id="もっと詳しく">もっと詳しく</h2>
+                    <ul class="entrances not-content">
+                        {top.entrances.map((e) => (
+                            <li>
+                                <h3>
+                                    <a href={e.href}>{e.label}</a>
+                                </h3>
+                                <p>{e.description}</p>
+                                {e.more.length > 0 && (
+                                    <ul>
+                                        {e.more.map((m) => (
+                                            <li>
+                                                <a href={m.href}>{m.title}</a>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )
+        }
+    </div>
+</StarlightPage>
+
+<style>
+    .top {
+        max-width: 56rem;
+        margin-inline: auto;
+    }
+    .top-intro {
+        font-size: var(--sl-text-lg);
+    }
+    .top-intro :global(img) {
+        display: block;
+        margin-inline: auto;
+        box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 0.15);
+    }
+    .top-intro :global(.shots) {
+        font-size: var(--sl-text-base);
+    }
+    .top-section {
+        margin-top: 3.5rem;
+    }
+    .top-section > h2 {
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--sl-color-accent);
+    }
+
+    /* できること: 1 項目ずつ面にして並べる */
+    .top-features :global(ul) {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        gap: 0.75rem;
+        padding: 0;
+        list-style: none;
+    }
+    .top-features :global(li) {
+        margin: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--sl-color-hairline);
+        border-radius: var(--dp-radius);
+        background: var(--sl-color-bg-nav);
+    }
+
+    /* 使ってよい範囲: 読み飛ばされないよう、主の色の枠で囲む */
+    .top-usage {
+        padding: 0.25rem 1.5rem 1.25rem;
+        border: 1px solid var(--sl-color-hairline);
+        border-left: 4px solid var(--sl-color-accent);
+        border-radius: var(--dp-radius);
+        background: var(--sl-color-bg-nav);
+    }
+    .top-usage > h2 {
+        border-bottom: 0;
+    }
+
+    /* もっと詳しく: 入口のカード */
+    .entrances {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        gap: 1rem;
+        margin-top: 1.25rem;
+        padding: 0;
+        list-style: none;
+    }
+    .entrances > li {
+        padding: 1rem 1.25rem;
+        border: 1px solid var(--sl-color-hairline);
+        border-radius: var(--dp-radius);
+        background: var(--sl-color-bg-nav);
+    }
+    .entrances h3 {
+        margin: 0;
+        font-size: var(--sl-text-h4);
+    }
+    .entrances h3 a {
+        color: var(--sl-color-text-accent);
+    }
+    .entrances p {
+        margin: 0.5rem 0 0;
+        font-size: var(--sl-text-sm);
+        color: var(--sl-color-gray-2);
+    }
+    .entrances ul {
+        margin: 0.75rem 0 0;
+        padding-left: 1.1rem;
+        font-size: var(--sl-text-sm);
+    }
+    .entrances ul a {
+        color: var(--sl-color-text-accent);
+    }
+</style>

@@ -51,9 +51,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # prebuild で docs と README を取り込んでから組む
+      # prebuild で docs と README を取り込んでから組む。
+      # GOOGLE_SITE_VERIFICATION は Search Console の確認用 (Actions の変数。無ければ出さない)。
+      # GITHUB_TOKEN はトップの構造化データに最新の版を入れるのに使う (取れなければ版を省く)
       - name: Build
         run: bun run build
+        env:
+          GOOGLE_SITE_VERIFICATION: ${{ vars.GOOGLE_SITE_VERIFICATION }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       # WCAG 2.1 A/AA の serious・critical で落とす (site/tests/a11y.spec.ts)
       - name: Install Chromium
