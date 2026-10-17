@@ -32,6 +32,7 @@
         eta,
         logoUnusable,
         percent,
+        quietState,
         recordedDuration,
         rowState,
         size,
@@ -52,10 +53,14 @@
     import { Paged, sentinel } from '#lib/paging.svelte.js';
     import { cmRedo, encodeSource } from '#lib/source.js';
     import { resolve } from '$app/paths';
+    import Check from '~icons/lucide/check';
+    import ChevronDown from '~icons/lucide/chevron-down';
     import ChevronRight from '~icons/lucide/chevron-right';
     import Ellipsis from '~icons/lucide/ellipsis';
+    import Info from '~icons/lucide/info';
     import ListTree from '~icons/lucide/list-tree';
     import Play from '~icons/lucide/play';
+    import X from '~icons/lucide/x';
 
     let { data, form } = $props();
 
@@ -360,9 +365,10 @@
         recordingQuery = data.q;
     });
 
-    /** 「削除済みも表示」の行き先とラベル。広い幅では並べ、狭い幅では「⋯」の中に出す (同じものを2か所) */
+    /** 「削除済みも表示」の行き先 (「表示」のメニューの項目)。入っていれば外した URL へ */
     const deletedHref = $derived(data.showDeleted ? resolve('') : `${resolve('')}?deleted=1`);
-    const deletedLabel = $derived(data.showDeleted ? '削除済みを隠す' : '削除済みも表示');
+    /** 「完了分も表示」の行き先 (予約の「表示」のメニュー) */
+    const finishedHref = $derived(data.showFinished ? resolve('') : `${resolve('')}?all=1`);
     /** 録画の見出しの「⋯」。照合を送り終えたら閉じる */
     let toolsOpen = $state(false);
     /** 録画の枠 (中だけスクロールする)。まとめる・まとめないを切り替えたときに置き直す */
@@ -520,9 +526,11 @@
     testid: string,
     open: string | (() => void),
     fresh = false,
+    quiet = false,
 )}
     <div class="cluster title-line">
-        <span class="tag {badge}" data-testid={testid}>{state}</span>
+        <!-- ふつうの状態 (`quietState`) はラベルを出さず、読み上げにだけ渡す -->
+        <span class={quiet ? 'visually-hidden' : `tag ${badge}`} data-testid={testid}>{state}</span>
         {#if typeof open === 'string'}
             <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
             <a class="row-name row-open broadcast" href={open} data-sveltekit-preload-data="tap" data-testid="row-open">
@@ -648,6 +656,7 @@
                         fields={{ id: res.id }}
                         testid="delete-button"
                         confirmTestid="delete-confirm"
+                        icon
                     />
                 </div>
             </div>
@@ -718,6 +727,7 @@
                         'recording-state',
                         link ?? (() => openRecording(rec)),
                         unwatched(rec),
+                        shown.quiet,
                     )}
                     {#if held !== undefined}
                         <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
@@ -838,9 +848,9 @@
                 </div>
 
                 <!--
-                    押すものはすべて枠付きにする。枠も地も無いボタン (ghost) は
-                    行の文字と見分けが付かず、どこからどこまでが押せるのか
-                    分からなかった
+                    押すものは枠の無いボタンに字とアイコン (`app.css` の `.row-actions`)。
+                    押せることは字の色と指を乗せたときの地で分かる。削除は控えた色で、
+                    指を乗せたときだけ赤い
                 -->
                 <div class="row-actions">
                     <!--
@@ -858,7 +868,7 @@
                             onclick={() => openRecording(rec)}
                             data-testid="detail-button"
                         >
-                            詳細
+                            <Icon icon={Info} size="size-4" />詳細
                         </button>
                     {/if}
                     {#if rec.deleted_at === null}
@@ -910,6 +920,7 @@
                                 }}
                                 testid="delete-button"
                                 confirmTestid="delete-confirm"
+                                icon
                             />
                         {/if}
                     {/if}
@@ -1017,9 +1028,31 @@
                         aria-label="予約を絞り込む"
                         bind:value={reservationQuery}
                     />
-                    <a class="button secondary outline small" href={data.showFinished ? resolve('') : `${resolve('')}?all=1`}>
-                        {data.showFinished ? '進行中のみ' : '完了分も表示'}
-                    </a>
+                    <!-- 録画の「表示」と同じ形。項目は 1 つでも、同じ場所に同じ形で置く -->
+                    <Menu align="end" class="view-menu" testid="reservations-view-menu">
+                        {#snippet trigger(props)}
+                            <button
+                                {...props}
+                                type="button"
+                                class="secondary outline small view-trigger"
+                                data-testid="reservations-view"
+                            >
+                                表示
+                                {#if data.showFinished}<span class="view-dot" aria-hidden="true"></span>{/if}
+                                <Icon icon={ChevronDown} size="size-4" />
+                            </button>
+                        {/snippet}
+                        <a
+                            role="menuitemcheckbox"
+                            class="menu-item"
+                            aria-checked={data.showFinished}
+                            href={finishedHref}
+                            data-testid="reservations-finished-toggle"
+                        >
+                            <span class="menu-check" aria-hidden="true">{#if data.showFinished}<Icon icon={Check} size="size-4" />{/if}</span>
+                            完了分も表示
+                        </a>
+                    </Menu>
                 </div>
             </div>
 
@@ -1040,6 +1073,8 @@
                                         res.name,
                                         'reservation-state',
                                         () => openReservation(res),
+                                        false,
+                                        quietState(res.state),
                                     )}
                                     {@render meta(res.service_name, [airing(res)], res)}
                                     {#if res.conflict_reason}
@@ -1077,7 +1112,7 @@
                                     {/if}
                                     {#if cancelable(res)}
                                         <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
-                                            取消
+                                            <Icon icon={X} size="size-4" />取消
                                         </ActionButton>
                                     {:else if res.state === 'canceled' && res.end_at > Date.now()}
                                         <!--
@@ -1166,36 +1201,52 @@
                         />
                     </form>
                     <!--
-                        **まとめて表示** (番組ごと。issue #480)。狭い列ではアイコンだけにする
-                        (名前は aria-label で読む)。入っているかは aria-pressed と地の色で。
-
-                        **入っているときは主の色で塗る** (ライブの種別の切り替えと同じ形)。
-                        灰色の塗り (`secondary`) と枠だけの灰色では、どちらが入っているのか
-                        見分けが付かなかった
+                        **表示の切り替えは「表示」のメニューに 1 つにまとめる** (まとめて表示・削除済みも表示)。
+                        並べていた頃は、見出しの行に枠のボタンが 3〜4 個並び、どれが入っているのかも
+                        読みにくかった。項目はオン・オフの印 (`menuitemcheckbox`) で、どれか入っていれば
+                        引き金に点を付ける (閉じていても、ふだんと違う見え方なのが分かる)。
+                        まとめて表示は端末に覚える (`setGrouped`)、削除済みは URL (`?deleted=1`)
                     -->
-                    <button
-                        type="button"
-                        class="small group-toggle {grouped ? '' : 'secondary outline'}"
-                        aria-pressed={grouped}
-                        title={grouped ? 'まとめて表示中 (押すと戻します)' : '番組ごとにまとめて表示'}
-                        aria-label="まとめて表示"
-                        onclick={() => setGrouped(!grouped)}
-                        data-testid="recordings-group-toggle"
-                    >
-                        <Icon icon={ListTree} size="size-4" />
-                        <span class="group-label">まとめて表示</span>
-                    </button>
-                    <a class="button secondary outline small wide-only" href={deletedHref}>
-                        {deletedLabel}
-                    </a>
-                    <form method="POST" action="?/reconcile" class="wide-only" use:submitting>
-                        <button type="submit" class="secondary outline small" data-testid="reconcile-button">ファイルと照合</button>
-                    </form>
+                    <Menu align="end" class="view-menu" testid="recordings-view-menu">
+                        {#snippet trigger(props)}
+                            <button
+                                {...props}
+                                type="button"
+                                class="secondary outline small view-trigger"
+                                data-testid="recordings-view"
+                            >
+                                表示
+                                {#if grouped || data.showDeleted}<span class="view-dot" aria-hidden="true"></span>{/if}
+                                <Icon icon={ChevronDown} size="size-4" />
+                            </button>
+                        {/snippet}
+                        <button
+                            type="button"
+                            role="menuitemcheckbox"
+                            class="menu-item"
+                            aria-checked={grouped}
+                            onclick={() => setGrouped(!grouped)}
+                            data-testid="recordings-group-toggle"
+                        >
+                            <span class="menu-check" aria-hidden="true">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>
+                            <Icon icon={ListTree} size="size-4" />
+                            まとめて表示
+                        </button>
+                        <a
+                            role="menuitemcheckbox"
+                            class="menu-item"
+                            aria-checked={data.showDeleted}
+                            href={deletedHref}
+                            data-testid="recordings-deleted-toggle"
+                        >
+                            <span class="menu-check" aria-hidden="true">{#if data.showDeleted}<Icon icon={Check} size="size-4" />{/if}</span>
+                            削除済みも表示
+                        </a>
+                    </Menu>
                     <!--
-                        **狭い幅では「⋯」に畳む。** 390px の端末では「ファイルと照合」が
-                        2行目に落ち、見出しの行が2段ぶんの厚さになっていた。どちらも
-                        たまにしか押さないので、絞り込みの欄を削るより奥へ下げる。
-                        広い列では今までどおり並べる (切り替えは列の幅。下の `@container`)
+                        **たまにしか押さない操作は「⋯」に。** ファイルとの照合は、外でファイルを
+                        消したときに押すくらいのもの。狭い列では見出しの脇の空きもここの頭に回す
+                        (下の `@container`)。
 
                         中身は閉じている間も DOM に置く (popover は閉じると見えないだけ)。照合を送っている
                         途中でメニューが消えると、回るものを出す先が無くなるため。
@@ -1206,7 +1257,7 @@
                             <button
                                 {...props}
                                 type="button"
-                                class="secondary outline small narrow-only tools-trigger"
+                                class="secondary outline small tools-trigger"
                                 aria-label="その他の操作"
                                 data-testid="recordings-more"
                             >
@@ -1218,8 +1269,7 @@
                                 {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
                             </div>
                         {/if}
-                        <a role="menuitem" href={deletedHref} class="menu-item">{deletedLabel}</a>
-                        {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-menu-button', {}, () => (toolsOpen = false))}
+                        {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-button', {}, () => (toolsOpen = false))}
                     </Menu>
                 </div>
             </div>
@@ -1524,7 +1574,7 @@
     }
     /* 絞り込みの欄。予約側と録画側で同じ形 (録画側だけ送れる form の中にある) */
     .filter {
-        width: 10rem;
+        width: 9rem;
         height: auto;
         padding-block: 0.3rem;
         font-size: 0.85rem;
@@ -1573,7 +1623,7 @@
         flex-shrink: 0;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.125rem;
     }
     .row-name {
         font-weight: 500;
@@ -1712,8 +1762,11 @@
         gap: 0.5rem;
         margin-top: 0.5rem;
     }
-    /* 録画の見出しの「⋯」。広い列では並べたほうを出し、狭い列ではこちらだけ */
-    .cluster :global(.tools-trigger) {
+    /*
+     * 見出しの「表示」と「⋯」。どちらも小さな枠のボタンで、字とアイコンを横に並べる。
+     * 「表示」に何か入っていれば主の色の点を付ける (ふつうと違う見え方をしている)
+     */
+    .cluster :global(:is(.tools-trigger, .view-trigger)) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1725,28 +1778,36 @@
     .recordings {
         container: recordings / inline-size;
     }
+    .cluster :global(.view-trigger) {
+        gap: 0.3rem;
+    }
+    .view-dot {
+        width: 0.4rem;
+        height: 0.4rem;
+        border-radius: var(--dp-radius-full);
+        background: var(--pico-primary-background);
+    }
+    /* オン・オフの印の場所。外れているときも幅を取って、字の頭を揃える */
+    .menu-check {
+        display: inline-flex;
+        width: 1rem;
+        flex-shrink: 0;
+        color: var(--pico-primary);
+    }
     @container recordings (min-width: 36rem) {
-        .cluster :global(.narrow-only) {
+        .menu-note {
             display: none;
         }
     }
     @container recordings (max-width: 35.99rem) {
-        .cluster .wide-only,
         .capacity {
             display: none;
         }
     }
     /*
-     * **空きを足しても見出しを1行に保つ。** 並べたものに空き (「空き 1.2TB・約900時間」)
-     * を足すと、列が 50rem ほど無いと2行目に落ちる (1200px の画面の列で 680px)。
-     * そこまでは「まとめて表示」をアイコンだけにして絞り込みの欄を狭め、さらに狭ければ時間を落とす。
+     * **空きを足しても見出しを1行に保つ。** 列が狭くなるにつれて絞り込みの欄を狭め、さらに狭ければ時間を落とす。
      * 36rem より狭い列では空きごと「⋯」の頭へ回す (上)
      */
-    @container recordings (max-width: 49.99rem) {
-        .group-label {
-            display: none;
-        }
-    }
     /* 狭い列 (36rem 未満) の欄は画面の幅で決まる (上の `.filter`)。ここで触るのは並べている間だけ */
     @container recordings (min-width: 36rem) and (max-width: 49.99rem) {
         .filter {
@@ -1791,14 +1852,6 @@
     }
     .truncated {
         border-top: 1px solid var(--dp-line);
-    }
-    /*
-     * まとめて表示の切り替え。アイコンと字を横に並べる (狭い列では字を隠してアイコンだけ)
-     */
-    .group-toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
     }
     /*
      * 番組の見出し。**行と同じ形** (左にポスター、右に名前と日付) にして、
@@ -1948,8 +2001,9 @@
         width: 16rem;
         max-width: calc(100vw - 2rem);
     }
-    /* 録画の見出しの「⋯」の中身。項目が短いので細くする */
-    :global(.tools-menu) {
+    /* 録画の見出しの「⋯」と「表示」の中身。項目が短いので細くする */
+    :global(.tools-menu),
+    :global(.view-menu) {
         width: 12rem;
     }
     .menu-form {

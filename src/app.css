@@ -493,6 +493,18 @@ thead th {
     font-family: var(--broadcast-font);
     font-feature-settings: "palt";
 }
+/* 画面には出さず、読み上げにだけ渡す字 (一覧のふつうの状態など) */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
 .truncate {
     min-width: 0;
     overflow: hidden;
@@ -646,15 +658,6 @@ button.xs {
     padding: 0.15rem 0.45rem;
     font-size: var(--dp-text-xs);
 }
-/*
- * **行に並べる操作は、字は小さくても押す的は 40px。** 観る画面の操作列と同じ物差し
- * (`player/ControlButton.svelte`)。通知先の「テスト送信」が 22px、ルールの「編集」が
- * 30px しかなく、指では隣を押していた。字の大きさは `.small` / `.xs` のまま、
- * 高さだけ足す。行の操作を `.row-actions` で囲めば当たる
- */
-.row-actions :is(button, a.button) {
-    min-height: 2.5rem;
-}
 button.ghost,
 a.button.ghost {
     --pico-background-color: transparent;
@@ -696,6 +699,48 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
     --pico-border-color: color-mix(in srgb, var(--dp-error) 85%, #000);
     --pico-color: #fff;
+}
+
+/* ---- 行の操作 (`.row-actions`。録画の「詳細」「削除」、予約の「取消」、ルールの「編集」など) ---- */
+/*
+ * **枠の無いボタンに、字とアイコン。指を乗せると淡い地。** 一覧では行ごとに同じボタンが
+ * 並ぶので、枠付きだと枠の列が縦に立って番組名より目立っていた。押せることは
+ * 字の色 (本文並み)・指を乗せたときの地・カーソルで分かる。
+ * 大きさは字を小さめ (`--dp-text-sm`) に揃え、**押す的は 40px のまま** (観る画面の操作列と同じ物差し。
+ * `player/ControlButton.svelte`)。行の右に寄せる (折り返して下に回ったときも右)。
+ * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする (押すと戻せないものなので、
+ * 押そうとしたときに分かればよい)。塗ったボタン (追っかけ・削除の「確定」) は塗ったまま、大きさだけ揃える
+ */
+.row-actions {
+    margin-inline-start: auto;
+}
+.row-actions :is(button, a.button) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2.5rem;
+    padding: 0.3rem 0.65rem;
+    font-size: var(--dp-text-sm);
+}
+.row-actions :is(button, a.button):is(.secondary, .outline, .ghost) {
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: var(--pico-secondary);
+    --pico-box-shadow: none;
+}
+.row-actions :is(button, a.button):is(.secondary, .outline, .ghost):is(:hover, :focus-visible) {
+    --pico-background-color: var(--dp-hover);
+    --pico-border-color: transparent;
+    --pico-color: var(--pico-h1-color, var(--pico-color));
+}
+.row-actions button.outline.danger {
+    --pico-color: var(--dp-muted);
+}
+.row-actions button.outline.danger:is(:hover, :focus-visible) {
+    --pico-background-color: color-mix(in srgb, var(--dp-rec) 12%, transparent);
+    --pico-border-color: transparent;
+    --pico-color: var(--dp-rec-text);
 }
 
 /*

@@ -213,6 +213,8 @@ test.describe('ダッシュボードと画面遷移', () => {
             await route.continue();
         });
 
+        // 照合はたまにしか押さないので「⋯」の中。送り終わるまでメニューは開いたまま
+        await page.getByTestId('recordings-more').click();
         const button = page.getByTestId('reconcile-button');
         const before = await button.boundingBox();
         await button.click();
@@ -271,7 +273,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         expect(layer.background).toMatch(/^rgb\(/);
         expect(layer.top).toBe(true);
         expect(layer.front).toBe(true);
-        await menu.getByTestId('reconcile-menu-button').click();
+        await menu.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる
         await expect(menu).toBeHidden();
@@ -281,18 +283,19 @@ test.describe('ダッシュボードと画面遷移', () => {
      * **メニューはキーボードでも使える** (`Menu.svelte`)。Enter で開くと先頭の項目に入り、
      * ↑↓・Home・End で動き、Esc で閉じて引き金に戻る
      */
-    test('「⋯」はキーボードで開け閉めできる', async ({ page }) => {
+    test('「表示」はキーボードで開け閉めできる', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/');
-        const more = page.getByTestId('recordings-more');
-        const menu = page.getByTestId('recordings-more-menu');
+        const more = page.getByTestId('recordings-view');
+        const menu = page.getByTestId('recordings-view-menu');
         await expect(more).toHaveAttribute('aria-expanded', 'false');
 
         await more.focus();
         await page.keyboard.press('Enter');
         await expect(menu).toBeVisible();
         await expect(more).toHaveAttribute('aria-expanded', 'true');
-        const items = menu.getByRole('menuitem');
+        // 項目はオン・オフの印付き (まとめて表示・削除済みも表示)
+        const items = menu.getByRole('menuitemcheckbox');
         await expect(items.first()).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(items.nth(1)).toBeFocused();
@@ -401,6 +404,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         });
 
         // 実体と照合すると recordings が飛ぶ
+        await page.getByTestId('recordings-more').click();
         await page.getByTestId('reconcile-button').click();
 
         await expect

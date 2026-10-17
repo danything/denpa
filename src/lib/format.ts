@@ -189,16 +189,16 @@ export function rowState(rec: {
     job_state: string | null;
     job_phase: string | null;
     encode_error: string | null;
-}): { label: string; badge: string } {
+}): { label: string; badge: string; quiet: boolean } {
     const running = encodeLabel(
         rec.job_state === null ? null : { state: rec.job_state, phase: rec.job_phase },
     );
-    if (running !== null) return { label: running, badge: badgeClass(rec.job_state ?? '') };
+    if (running !== null) return { label: running, badge: badgeClass(rec.job_state ?? ''), quiet: false };
     // 動いているものが無く、いちばん新しいエンコードが失敗している
     if (rec.encode_error !== null && rec.encode_error !== '') {
-        return { label: 'エンコード失敗', badge: badgeClass('failed') };
+        return { label: 'エンコード失敗', badge: badgeClass('failed'), quiet: false };
     }
-    return { label: stateLabel(rec.state), badge: badgeClass(rec.state) };
+    return { label: stateLabel(rec.state), badge: badgeClass(rec.state), quiet: quietState(rec.state) };
 }
 
 /**
@@ -227,6 +227,18 @@ export function badgeClass(state: string): string {
         default:
             return '';
     }
+}
+
+/**
+ * **ふつうの状態はラベルを出さない** (予約済み・視聴可能・録画済み・完了)。一覧のほとんどの行が
+ * この状態なので、全部の行にラベルが並ぶと、録画中・失敗・競合・録り逃しのような
+ * 見てほしい行が埋もれていた。予約の一覧にいる = 予約済み、ポスターと再生の印がある = 観られる、
+ * で分かるので情報は減らない。読み上げ用には残す (画面の外に置く。`.visually-hidden`)
+ */
+const QUIET_STATES = new Set(['scheduled', 'available', 'recorded', 'done']);
+
+export function quietState(state: string): boolean {
+    return QUIET_STATES.has(state);
 }
 
 export const STATE_LABEL: Record<string, string> = {

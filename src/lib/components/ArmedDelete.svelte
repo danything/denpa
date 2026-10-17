@@ -1,7 +1,9 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
     import type { Arming } from '#lib/arming.svelte.js';
+    import Icon from '#lib/components/player/Icon.svelte';
     import type { SubmitFunction } from '$app/forms';
+    import Trash from '~icons/lucide/trash-2';
 
     /**
      * 消すボタン。**1回目で聞き返し、2回目で送る** (`arming`。録画・予約・ルール・通知先で同じ)。
@@ -19,6 +21,7 @@
         class: size = '',
         testid,
         confirmTestid = `${testid}-confirm`,
+        icon = false,
     }: {
         deleting: Arming;
         armKey: number;
@@ -31,6 +34,8 @@
         class?: string;
         testid: string;
         confirmTestid?: string;
+        /** 字の前にごみ箱のアイコンを置く (一覧の行。どちらの段にも置くので幅は変わらない) */
+        icon?: boolean;
     } = $props();
 
     /** 送り終えたら構えを下ろす。断られて行が残ったとき、「確定」を出したままにしない */
@@ -49,10 +54,12 @@
         <input type="hidden" {name} {value} />
     {/each}
     {#if deleting.armed === armKey}
-        <button type="submit" class="{size} danger" data-testid={confirmTestid}>確定</button>
+        <button type="submit" class="{size} danger" data-testid={confirmTestid}>
+            {#if icon}<Icon icon={Trash} size="size-4" />{/if}確定
+        </button>
     {:else}
         <button type="button" class="{size} outline danger" onclick={() => deleting.arm(armKey)} data-testid={testid}>
-            削除
+            {#if icon}<Icon icon={Trash} size="size-4" />{/if}削除
         </button>
     {/if}
 </form>

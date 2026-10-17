@@ -247,33 +247,33 @@ test.describe('PWA', () => {
             }
         }
 
-        // 畳んだメニューからも行けること
+        /*
+         * **狭い幅では、主な画面へのタブが画面の下に並ぶ。** 指が届くのは画面の下のほうで、
+         * 上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
+         * ルールとチューナーは「その他」の中
+         */
         await page.setViewportSize({ width: 390, height: 780 });
         await goto(page, '/');
-        const menu = page.getByTestId('nav-menu');
+        const tabbar = page.getByTestId('tabbar');
+        await expect(tabbar).toBeVisible();
+        const bar = (await tabbar.boundingBox())!;
+        expect(bar.y + bar.height, 'タブが画面の下に付いていない').toBeCloseTo(780, 0);
+        await expect(page.getByTestId('tab-home')).toHaveAttribute('aria-current', 'page');
+        // 上のヘッダーにリンクは並べない (タブと二重になる)
+        await expect(page.getByTestId('nav-guide')).toBeHidden();
 
-        /*
-         * テーマの切り替えはハンバーガーの**横**に置く。ハンバーガーの包みは行を
-         * 占める箱なので、並べる指定が抜けていると切り替えが上の行へ押し出され、
-         * ヘッダーが2段ぶんの厚さになっていた
-         */
-        const theme = (await page.getByTestId('theme-toggle').boundingBox())!;
-        const burger = (await menu.getByRole('button', { name: 'メニュー' }).boundingBox())!;
-        expect(Math.abs(theme.y - burger.y)).toBeLessThan(theme.height);
-        expect(theme.x).toBeLessThan(burger.x);
-
-        /*
-         * **開いてもヘッダーの厚みは変わらない。** `<details>` で作っていた頃は、Pico が
-         * `details[open] > summary` に付ける下の余白で、開いた瞬間にヘッダーが 64px から 72px に伸びていた
-         */
-        const barBefore = (await page.locator('.navbar').boundingBox())!;
-        await menu.getByRole('button', { name: 'メニュー' }).click();
-        const barAfter = (await page.locator('.navbar').boundingBox())!;
-        expect(barAfter.height, 'メニューを開くとヘッダーの厚みが変わる').toBe(barBefore.height);
-        const themeAfter = (await page.getByTestId('theme-toggle').boundingBox())!;
-        expect(themeAfter.y, 'メニューを開くと隣のボタンがずれる').toBe(theme.y);
-
-        await menu.getByRole('link', { name: '番組表' }).click();
+        await page.getByTestId('tab-guide').click();
         await page.waitForURL(/guide/);
+        await expect(page.getByTestId('tab-guide')).toHaveAttribute('aria-current', 'page');
+
+        const menu = page.getByTestId('nav-menu');
+        await menu.getByRole('button', { name: 'その他' }).click();
+        await menu.getByRole('link', { name: 'ルール' }).click();
+        await page.waitForURL(/rules/);
+        await expect(menu.getByRole('button', { name: 'その他' })).toHaveAttribute('aria-current', 'page');
+
+        // 広い幅では上のヘッダーにリンクを並べるので、タブは出さない
+        await page.setViewportSize({ width: 1280, height: 780 });
+        await expect(tabbar).toBeHidden();
     });
 });

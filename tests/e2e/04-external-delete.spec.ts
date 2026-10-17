@@ -13,6 +13,7 @@ test.describe('外で消された録画の反映', () => {
         expect(libraryPath).toContain(stack.encodedDir);
 
         // ファイルが在るうちは照合しても何も起きない
+        await page.getByTestId('recordings-more').click();
         await page.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toContainText('削除済みにした 0 件');
         await expect(page.locator(`[data-recording-id="${recordingId}"]`)).toHaveCount(1);
@@ -20,6 +21,7 @@ test.describe('外で消された録画の反映', () => {
         // 外から消されたのと同じことをする
         rmSync(libraryPath);
 
+        await page.getByTestId('recordings-more').click();
         await page.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toContainText('削除済みにした 1 件');
 

@@ -104,6 +104,12 @@ async function open(page: Page): Promise<void> {
     await page.locator('[data-hydrated="true"]').waitFor();
 }
 
+/** まとめて表示は「表示」のメニューの中 (開いて押す。押せば閉じる) */
+async function toggleGrouped(page: Page): Promise<void> {
+    await page.getByTestId('recordings-view').click();
+    await page.getByTestId('recordings-group-toggle').click();
+}
+
 test.describe('録画一覧のまとめて表示', () => {
     test.beforeAll(({ stack }) => {
         seed(`${stack.root}/denpa.db`, SEEDS);
@@ -112,19 +118,16 @@ test.describe('録画一覧のまとめて表示', () => {
     test('番組ごとにまとまり、番組は新しい順・中は放送順、1本だけの番組はふつうの行', async ({ page }) => {
         await goto(page, '/');
         const toggle = page.getByTestId('recordings-group-toggle');
-        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        const view = page.getByTestId('recordings-view');
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
         await expect(toggle).toHaveAccessibleName('まとめて表示');
-        // 入っていないときは枠だけの灰色
-        await expect(toggle).toHaveClass(/\bsecondary\b/);
+        // 入っていないときは「表示」に点が付かない
+        await expect(view.locator('.view-dot')).toHaveCount(0);
 
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-        /*
-         * **入っているときは主の色で塗る** (ライブの種別の切り替えと同じ)。灰色の塗りと
-         * 灰色の枠で分けていた頃は、入っているのか見分けが付かなかった
-         */
-        await expect(toggle).not.toHaveClass(/\bsecondary\b/);
-        await expect(toggle).not.toHaveClass(/\boutline\b/);
+        await toggleGrouped(page);
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
+        // 入っていれば、閉じたメニューの引き金にも点が付く (ふつうと違う見え方なのが分かる)
+        await expect(view.locator('.view-dot')).toHaveCount(1);
 
         // 閉じた見出しと1本ものが、いちばん新しい回の日付で並ぶ
         expect((await listed(page)).slice(0, 4)).toEqual([
@@ -171,12 +174,12 @@ test.describe('録画一覧のまとめて表示', () => {
         await expect.poll(async () => (await scroll(page)).rest).toBeLessThanOrEqual(1);
 
         // まとめると一番上 (最近の番組) へ置き直す
-        await page.getByTestId('recordings-group-toggle').click();
+        await toggleGrouped(page);
         await expect.poll(async () => (await scroll(page)).top).toBe(0);
 
         // 開き直してもまとめたまま、一番上から
         await open(page);
-        await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-checked', 'true');
         await expect(page.getByTestId('recording-group').first()).toBeVisible();
         expect((await scroll(page)).scrollable).toBe(true);
         expect((await scroll(page)).top).toBe(0);
@@ -202,12 +205,12 @@ test.describe('録画一覧のまとめて表示', () => {
         await expect(news).toHaveAttribute('aria-expanded', 'false');
 
         // 戻すと一番下へ。次に開いたときもまとめない
-        await page.getByTestId('recordings-group-toggle').click();
-        await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-pressed', 'false');
+        await toggleGrouped(page);
+        await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-checked', 'false');
         await expect(page.getByTestId('recording-group')).toHaveCount(0);
         await expect.poll(async () => (await scroll(page)).rest).toBeLessThanOrEqual(1);
         await open(page);
-        await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-checked', 'false');
     });
 
     /**
@@ -224,7 +227,7 @@ test.describe('録画一覧のまとめて表示', () => {
 
             await context.addCookies([{ name: 'denpa_recordings_grouped', value: '1', url: stack.appUrl }]);
             await page.goto('/');
-            await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-pressed', 'true');
+            await expect(page.getByTestId('recordings-group-toggle')).toHaveAttribute('aria-checked', 'true');
             await expect(page.getByTestId('recording-group').first()).toBeVisible();
             expect((await scroll(page)).top).toBe(0);
         } finally {
@@ -238,7 +241,7 @@ test.describe('録画一覧のまとめて表示', () => {
      */
     test('番組の見出しと録画の詳細から、その番組のルールを作れる', async ({ page }) => {
         await goto(page, '/');
-        await page.getByTestId('recordings-group-toggle').click();
+        await toggleGrouped(page);
         const anime = page.locator('[data-testid="recording-group"][data-group="グループ試験アニメ"]');
         // 閉じている番組には出さない (見出しが並ぶだけの一覧を押すもので埋めない)
         await expect(page.getByTestId('group-rule')).toHaveCount(0);

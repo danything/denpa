@@ -12,9 +12,13 @@
     import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { navigating, page } from '$app/state';
     import Contrast from '~icons/lucide/contrast';
-    import MenuIcon from '~icons/lucide/menu';
+    import CalendarDays from '~icons/lucide/calendar-days';
+    import Ellipsis from '~icons/lucide/ellipsis';
+    import ListVideo from '~icons/lucide/list-video';
     import Moon from '~icons/lucide/moon';
+    import Settings from '~icons/lucide/settings';
     import Sun from '~icons/lucide/sun';
+    import Tv from '~icons/lucide/tv';
 
     let { children, data } = $props();
 
@@ -200,14 +204,23 @@
     const fill = $derived(FILLED.includes(page.route.id ?? '') || page.route.id === '/watch/[id]');
 
     /**
-     * 狭い画面ではナビを畳む。
+     * **狭い画面では、ナビを画面の下のタブにする** (下の `.tabbar`)。
      *
      * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
      * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
-     * 420px)。番組表を横に流すのと、ページごと横に動くのが混ざって扱いにくい。
-     *
-     * ほかのメニューと同じ `Menu` (popover)。リンクを並べるだけなので `menu` とは読ませない (`nav`)
+     * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
+     * よく開く 4 画面をタブに、残り (ルール・チューナー) は「その他」の `Menu` (popover) に
      */
+    const tabs = [
+        { href: '/', label: '予約と録画', icon: ListVideo },
+        { href: '/guide', label: '番組表', icon: CalendarDays },
+        { href: '/live', label: 'ライブ', icon: Tv },
+        { href: '/settings', label: '設定', icon: Settings },
+    ] as const;
+    const moreLinks = links.filter((link) => !tabs.some((tab) => tab.href === link.href));
+    const moreCurrent = $derived(moreLinks.some((link) => link.href === page.route.id));
+    /** タブを出すのは一覧の 6 画面だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
+    const showTabbar = $derived(links.some((link) => link.href === page.route.id));
     let menuOpen = $state(false);
     /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
     $effect(() => {
@@ -253,7 +266,23 @@
     {/if}
     <div class="navbar">
         <div class="brand">
-            <a class="button ghost logo" href={resolve('')}>denpa</a>
+            <!--
+                アンテナの印 (favicon と同じ形) と名前。印は飾りなので読み上げない (名前で足りる)
+            -->
+            <a class="button ghost logo" href={resolve('')}>
+                <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
+                    <rect width="32" height="32" rx="6" fill="#1d232a" />
+                    <g fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round">
+                        <path d="M11 9a8 8 0 0 0 0 10" />
+                        <path d="M21 9a8 8 0 0 1 0 10" />
+                        <path d="M7.5 5.5a13 13 0 0 0 0 17" />
+                        <path d="M24.5 5.5a13 13 0 0 1 0 17" />
+                    </g>
+                    <circle cx="16" cy="14" r="2.5" fill="#7dd3fc" />
+                    <path d="M16 16.5 13 27h6z" fill="#7dd3fc" />
+                </svg>
+                denpa
+            </a>
             <!--
                 **新しい版が出ている** (server/update.ts が GitHub のリリースを見比べる)。
                 押せばリリースのページ。閉じるボタンは無い — 上げるか、リリースが消えれば引っ込む
@@ -272,10 +301,8 @@
             {/if}
         </div>
         <!--
-            **横に並べる指定を忘れない。** ハンバーガーの包み (`.burger`) は行を占める箱なので、
-            flex にしていないとテーマの切り替えがその上の行に押し出され、
-            ヘッダーが2段ぶんの厚さになる。狭い画面ではテーマとハンバーガーが
-            横に並ぶ形にしたい
+            テーマの切り替え・画面へのリンク (広い幅だけ)・ログアウト。
+            狭い幅ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
         -->
         <nav class="actions">
             <button type="button"
@@ -289,9 +316,9 @@
                 <Icon icon={ICON[mode]} size="size-5" />
             </button>
             <!--
-                広い画面はそのまま並べる。狭い画面では下のハンバーガーに畳む。
-                同じリンクを2つ出すことになるが、data-testid は横並びのほうにだけ
-                付けて、テストがどちらを指すのか迷わないようにする
+                広い画面はそのまま並べる。狭い画面では画面の下のタブに替わる。
+                同じリンクを2か所に出すことになるが、data-testid は別にして (`nav-*` と `tab-*`)、
+                テストがどちらを指すのか迷わないようにする
             -->
             <ul class="links">
                 {#each links as link (link.href)}
@@ -307,33 +334,6 @@
                     </li>
                 {/each}
             </ul>
-
-            <!--
-                ほかのメニューと同じ `Menu` (popover)。引き金は `popovertarget` で結ぶので、
-                開くのに JS が要らず、読み込み途中でも押せる
-            -->
-            <div class="burger" data-testid="nav-menu">
-                <Menu bind:open={menuOpen} align="end" nav class="burger-menu">
-                    {#snippet trigger(props)}
-                        <button {...props} type="button" class="ghost burger-button" aria-label="メニュー">
-                            <Icon icon={MenuIcon} size="size-5" />
-                        </button>
-                    {/snippet}
-                    <ul class="burger-list">
-                        {#each links as link (link.href)}
-                            <li>
-                                <a
-                                    href={resolve(link.href)}
-                                    class="menu-item"
-                                    aria-current={page.route.id === link.href ? 'page' : undefined}
-                                >
-                                    {link.label}
-                                </a>
-                            </li>
-                        {/each}
-                    </ul>
-                </Menu>
-            </div>
 
             <!--
                 **名前は出さない。** 誰で入っているかを出しても、できることは
@@ -357,6 +357,59 @@
     <main>
         {@render children()}
     </main>
+
+    <!--
+        **狭い幅では、主な画面へのタブを画面の下に並べる** (予約と録画・番組表・ライブ・設定)。
+        指が届くのは画面の下のほうで、上のハンバーガーから開いていた頃は、画面を移るたびに
+        2回押していた。ルールとチューナーはたまにしか開かないので「その他」の中。
+        出すのは一覧の 6 画面だけ — 観る画面・追っかけ (映像が主役)、ログインやペアリングには出さない。
+        ライブの全画面 (`html[data-stage-fullscreen]`) のときも隠す (`app.css`)。
+        下の安全域 (ホームバー) のぶんは内側の余白で避ける
+    -->
+    {#if showTabbar}
+        <nav class="tabbar" aria-label="主な画面" data-testid="tabbar">
+            {#each tabs as tab (tab.href)}
+                <a
+                    href={resolve(tab.href)}
+                    class="tab"
+                    aria-current={page.route.id === tab.href ? 'page' : undefined}
+                    data-testid="tab-{tab.href === '/' ? 'home' : tab.href.slice(1)}"
+                >
+                    <Icon icon={tab.icon} size="size-5" />
+                    <span>{tab.label}</span>
+                </a>
+            {/each}
+            <!-- 「その他」。ほかのメニューと同じ `Menu` (popover)。リンクを並べるだけなので `nav` -->
+            <div class="tab-more" data-testid="nav-menu">
+                <Menu bind:open={menuOpen} side="top" align="end" nav class="tab-more-menu">
+                    {#snippet trigger(props)}
+                        <button
+                            {...props}
+                            type="button"
+                            class="tab"
+                            aria-current={moreCurrent ? 'page' : undefined}
+                        >
+                            <Icon icon={Ellipsis} size="size-5" />
+                            <span>その他</span>
+                        </button>
+                    {/snippet}
+                    <ul class="more-list">
+                        {#each moreLinks as link (link.href)}
+                            <li>
+                                <a
+                                    href={resolve(link.href)}
+                                    class="menu-item"
+                                    aria-current={page.route.id === link.href ? 'page' : undefined}
+                                >
+                                    {link.label}
+                                </a>
+                            </li>
+                        {/each}
+                    </ul>
+                </Menu>
+            </div>
+        </nav>
+    {/if}
 </div>
 
 {#if measure.on}
@@ -435,9 +488,24 @@
         align-items: center;
         gap: 0.5rem;
     }
+    /*
+     * 印と名前。**行の高さを字より詰めない** — ボタンの行の高さのままだと「denpa」の p の
+     * 下が切れて見えていた。印は字の高さに合わせる
+     */
     .logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding-block: 0.25rem;
         font-size: 1.25rem;
         font-weight: 700;
+        line-height: 1.4;
+        overflow: visible;
+    }
+    .logo-mark {
+        width: 1.5rem;
+        height: 1.5rem;
+        flex-shrink: 0;
     }
     .actions {
         display: flex;
@@ -447,7 +515,7 @@
     }
     /* 印と余白を消す。Pico のナビの部品は読まないので、文章の決まり (`ul li` の印・下の余白) がそのまま当たる */
     ul.links li,
-    ul.burger-list li {
+    ul.more-list li {
         margin: 0;
         list-style: none;
     }
@@ -498,38 +566,92 @@
         border-radius: 1px;
         background: var(--pico-primary);
     }
-    .burger {
+    /*
+     * 画面の下のタブ (狭い幅だけ)。ヘッダーと同じ地に上の線 1 本、スクロールすると透けてぼける。
+     * 1 つの的は幅を等分し、高さは 3.5rem (アイコンと小さな字)。下の安全域は内側の余白で避ける。
+     * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
+     * 位置に使う (タブに被らないように)
+     */
+    .tabbar {
+        position: fixed;
+        inset: auto 0 0 0;
+        z-index: 40;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        padding-bottom: env(safe-area-inset-bottom);
+        border-top: 1px solid var(--dp-line);
+        background: var(--dp-bg);
+    }
+    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .tabbar {
+            background: color-mix(in srgb, var(--dp-bg) 80%, transparent);
+            -webkit-backdrop-filter: saturate(1.8) blur(12px);
+            backdrop-filter: saturate(1.8) blur(12px);
+        }
+    }
+    .tabbar .tab,
+    .tab-more :global(.tab) {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.125rem;
+        width: 100%;
+        min-height: 3.5rem;
+        margin: 0;
+        padding: 0.25rem 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        color: var(--dp-muted);
+        font-size: 0.6875rem;
+        line-height: 1.2;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .tabbar .tab:hover,
+    .tab-more :global(.tab:hover) {
+        color: var(--pico-color);
+    }
+    .tabbar .tab[aria-current='page'],
+    .tab-more :global(.tab[aria-current='page']) {
+        color: var(--dp-primary-text);
+        font-weight: var(--dp-weight-bold);
+    }
+    .tab-more {
         display: flex;
     }
-    /* 押す的はヘッダーのほかのボタンと同じ 40px (`.actions :global(button)`)。開いている間は地を敷く */
-    .burger-button {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.3rem 0.65rem;
-    }
-    .burger-button[aria-expanded='true'] {
-        --pico-background-color: var(--dp-hover);
-    }
-    /* 枠 (`Menu` の中なので :global)。見た目は `app.css` の `.menu` */
-    :global(.burger-menu) {
+    /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */
+    :global(.tab-more-menu) {
         width: 12rem;
     }
     /*
      * **縦に積む。** Pico のナビの部品を読んでいた頃は `nav ul` が横並び (flex) になり、
-     * 畳んだメニューの中まで横に並んで、12rem の箱から「ライブ」より先がはみ出していた
+     * 畳んだメニューの中まで横に並んで、箱からはみ出していた
      */
-    .burger-list {
+    .more-list {
         display: flex;
         flex-direction: column;
         align-items: stretch;
         margin: 0;
         padding: 0;
     }
-    ul.burger-list a[aria-current='page'] {
-        background: color-mix(in srgb, var(--pico-primary) 12%, transparent);
-        box-shadow: inset 3px 0 0 var(--pico-primary);
-        color: var(--pico-primary);
-        font-weight: 600;
+    ul.more-list a[aria-current='page'] {
+        color: var(--dp-primary-text);
+        font-weight: var(--dp-weight-bold);
+    }
+    @media (max-width: 639.98px) {
+        :global(:root:has(.tabbar)) {
+            --dp-tabbar: calc(3.5rem + 1px + env(safe-area-inset-bottom));
+        }
+        .shell:has(.tabbar) main {
+            padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
+        }
+    }
+    /* ライブの全画面のあいだは隠す (映像だけにする) */
+    :global(html[data-stage-fullscreen]) .tabbar {
+        display: none;
     }
     /*
      * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる
@@ -544,7 +666,7 @@
         ul.links {
             display: flex;
         }
-        .burger {
+        .tabbar {
             display: none;
         }
     }

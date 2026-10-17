@@ -130,7 +130,7 @@
     .toasts {
         position: fixed;
         right: 1rem;
-        bottom: 1rem;
+        bottom: calc(1rem + var(--dp-tabbar, 0px));
         z-index: 50;
         display: flex;
         flex-direction: column;
