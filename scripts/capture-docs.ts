@@ -558,7 +558,10 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
                         if (size.mobile) {
                             await page.goto(`${BASE}/`);
                             await settle(page, 300);
-                            await page.getByTestId('nav-menu').getByRole('button', { name: 'その他' }).click();
+                            await page
+                                .getByTestId('nav-menu')
+                                .getByRole('button', { name: 'その他' })
+                                .click();
                         } else if (watchId !== null) {
                             await page.goto(`${BASE}/watch/${watchId}`);
                             await settle(page, 2000);
