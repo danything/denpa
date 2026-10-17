@@ -266,7 +266,8 @@ RUN --mount=type=bind,from=distroless,target=/distroless \
       cp -L "$dep" "/rootfs${lib}/${name}"; \
       owned+=("$(realpath "$dep")"); \
     done && \
-    for pkg in $(dpkg -S "${owned[@]}" | cut -d: -f1 | sort -u); do \
+    owners=$(dpkg -S "${owned[@]}") && \
+    for pkg in $(cut -d: -f1 <<< "$owners" | sort -u); do \
       dpkg -s "$pkg" > "/rootfs/var/lib/dpkg/status.d/${pkg}"; \
       if [ -f "/usr/share/doc/${pkg}/copyright" ]; then \
         install -D -m 644 "/usr/share/doc/${pkg}/copyright" "/rootfs/usr/share/doc/${pkg}/copyright"; \
