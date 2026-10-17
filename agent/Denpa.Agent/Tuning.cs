@@ -193,19 +193,30 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         /// 次の読みを待ちはじめることがあるので、**前の読みの合図が遅れて届く**。それを次の読みが済んだと
         /// 取ると、まだ済んでいない読みの結果を取りに行って投げる (CI でときどき落ちていた)
         /// </para>
+        /// <para>
+        /// <see cref="Wake"/> で起こされたときは <paramref name="giveUp"/> を見て、降りるならすぐ戻る
+        /// </para>
         /// </summary>
-        private bool WaitPending()
+        private bool WaitPending(Func<bool>? giveUp = null)
         {
             var since = Environment.TickCount64;
             while (!_pending.IsCompleted)
             {
                 var left = WakeMs - (int)(Environment.TickCount64 - since);
                 if (left <= 0 || !_ready.Wait(left)) return _pending.IsCompleted;
-                // 前の読みの合図だった。下ろして待ち直す (下ろす前にこの読みが済んでいても、上の印で気づく)
-                if (!_pending.IsCompleted) _ready.Reset();
+                if (_pending.IsCompleted) break;
+                // 前の読みの合図か、起こされただけ。下ろして待ち直す (下ろす前にこの読みが済んでいても、上の印で気づく)
+                _ready.Reset();
+                if (giveUp?.Invoke() == true) return false;
             }
             return true;
         }
+
+        /// <summary>
+        /// **待っている読む側を今すぐ起こす** (止めたとき)。起きた側は降りる合図を見て戻る。
+        /// 合図を立てる前に降りる合図を立てておくこと (起きた側が見落とさないように)
+        /// </summary>
+        public void Wake() => _ready.Set();
 
         /// <summary>読めたバイト数。0 は尽きた、null は降りた</summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
@@ -222,7 +233,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                     ReadResult result;
                     if (_waiting)
                     {
-                        if (!WaitPending()) continue;
+                        if (!WaitPending(giveUp)) continue;
                         _waiting = false;
                         result = _pending.GetAwaiter().GetResult();
                     }
@@ -429,7 +440,15 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         _handedAt = Stopwatch.GetTimestamp();
     }
 
-    public void Stop() => _closed = true;
+    /// <summary>
+    /// 畳む。px4d から受けた TS を待っている読む側は**すぐ起こす** (次に起きる 200ms を待たない。
+    /// 混んだ CI では 500ms を超えていた)。印を立ててから起こす (起きた側がその印を見て戻る)
+    /// </summary>
+    public void Stop()
+    {
+        _closed = true;
+        _piped?.Wake();
+    }
 
     /// <summary>いま <see cref="Read(byte[], int, int, Func{bool}?)"/> の中にいる読む側の数</summary>
     private int _reading;
