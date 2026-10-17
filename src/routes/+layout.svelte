@@ -611,8 +611,8 @@
         white-space: nowrap;
     }
     .tabbar .tab:hover,
-    .tab-more :global(.tab:hover) {
-        color: var(--pico-color);
+    .tab-more :global(.tab:is(:hover, [aria-expanded='true'])) {
+        color: var(--pico-h1-color); /* ボタンの中の --pico-color は白抜きの字なので使わない */
     }
     .tabbar .tab[aria-current='page'],
     .tab-more :global(.tab[aria-current='page']) {
