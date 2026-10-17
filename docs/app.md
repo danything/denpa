@@ -262,9 +262,9 @@ SQLite が拒むので、事実と状態が食い違いません。文字列で�
 | `OIDC_GROUP` | (空) | このグループにいる人だけ通す。空なら入れた人は全員 |
 | `TRUSTED_NETWORKS` | (空) | CIDR (IPv4・IPv6) のカンマ区切り。ここから来たら認証を掛けない (前段があるなら `TRUSTED_PROXIES` も要る) |
 | `TRUSTED_PROXIES` | (空) | 前段 (リバースプロキシ) のアドレス。CIDR (IPv4・IPv6) のカンマ区切り。直の相手がここに当たるときだけ `X-Forwarded-For` を右から辿り、前段でない最初のアドレスを接続元にする (`src/lib/server/address.ts`)。前段があるのに空だと `TRUSTED_NETWORKS` が誰にも当たらない ([auth.md](auth.md#前段の後ろに置くとき-trusted_proxies)) |
-| `PORT` / `HOST` | `3000` / `0.0.0.0` | server.js が外へ開くポート |
-| `DENPA_INNER_PORT` | `PORT+1` | server.js の中継の内側で adapter-node が待つポート (127.0.0.1 だけ) |
-| `ADDRESS_HEADER` | — | 読みません (廃止。`TRUSTED_PROXIES` を使う)。設定してあれば起動時に知らせる。`server.js` が内側の adapter-node 向けに `x-denpa-remote` へ固定する |
+| `PORT` / `HOST` | `3000` / `0.0.0.0` | 待ち受けるポートと住所 (adapter-bun が読む) |
+| `BODY_SIZE_LIMIT` | `512K` | 受け取るリクエストの本文の上限 (adapter-bun が読む。超えると 413) |
+| `ADDRESS_HEADER` | — | 読みません (廃止。`TRUSTED_PROXIES` を使う)。設定してあれば起動時に知らせる。`server.js` が adapter-bun 向けに `x-denpa-remote` へ固定する |
 | `PROTOCOL_HEADER` | — | 選べません。 `server.js` が常に `x-forwarded-proto` に固定します |
 | `OIDC_SESSION_TTL` | `2592000000` | ログインの有効期間(ms)。既定30日 |
 | `PWA_NAMES` | (空) | `ホスト名=表示名` のカンマ区切り。ホーム画面に置いたときの名前を、来た名前ごとに変える ([player.md](player.md#ホーム画面に置く)) |

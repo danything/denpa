@@ -9,9 +9,8 @@
  *
  * ## なぜ入口が別にあるのか
  *
- * bun の `node:http` (adapter-node が乗っている) は WebSocket の握手ができず、
- * `svelte-adapter-bun` も今の kit には挿し込めない (試したことは `server.js` の冒頭)。
- * そこで `server.js` の `Bun.serve` が WebSocket だけ受け、残りは adapter-node へ流す。
+ * 公式の adapter-bun は `Bun.serve` に `websocket` を渡す口を持たない (`server.js` の冒頭)。
+ * そこで `server.js` が adapter の `Bun.serve` に `websocket` を足し、握手だけ SvelteKit の手前で受ける。
  * 入口はアプリの束の外にあるので直に import できない。`globalThis` 越しに渡す。
  */
 

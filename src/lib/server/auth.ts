@@ -99,9 +99,9 @@ export function trusted(address: string): boolean {
 /**
  * 接続元の住所。**読めなければ空文字を返す。**
  *
- * 住所は入口の server.js が決めて `x-denpa-remote` に入れ、adapter-node はそれを読む
+ * 住所は入口の server.js が決めて `x-denpa-remote` に入れ、adapter-bun はそれを読む
  * (`ADDRESS_HEADER` は server.js が固定する。前段をどこまで信じるかは `TRUSTED_PROXIES`)。
- * adapter-node はそのヘッダが空だと**例外を投げる** — server.js が相手の住所を
+ * adapter-bun はそのヘッダが無いと**例外を投げる** — server.js が相手の住所を
  * 読めなかったときがそれで、そのまま呼ぶと 500 になる。
  *
  * **読めなかったときは素通しにしない** (空文字はどの CIDR にも当たらない)。

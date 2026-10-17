@@ -493,10 +493,10 @@ HTTP で観ているもの (テレビのアプリ) にはストリームを閉�
 
 ### 入口が1つ増えている
 
-**bun の `node:http` は WebSocket の握手ができない**（`upgrade` は上がるが、socket に書いても1バイトも届かない）。
-adapter-node はその上にあり、`svelte-adapter-bun` も今の SvelteKit では `websocket` フックを挿し込めない。
-そこで `Bun.serve` を前に置き、`/api/live/socket` の WebSocket だけそこで受けて、残りは 127.0.0.1 の
-adapter-node へ中継する（`server.js`。試したことと、`Host` をそのまま渡す理由は冒頭の説明に）。
+公式の adapter-bun は `Bun.serve` を自分で呼ぶが、`websocket` を渡す口が無い。そこで入口の `server.js` が
+`Bun.serve` を包んでから `build/index.js` を読み、adapter の設定に `websocket` を足して、`/api/live/socket` の
+握手だけ SvelteKit の手前で受ける（理由と、`Host` をそのまま扱う理由は冒頭の説明に）。
+以前は bun の `node:http` が WebSocket の握手をできないため、adapter-node を内側に置いて HTTP を中継していた。
 
 **開発サーバ（`bun run dev`）ではライブが繋がらない**（vite も `node:http`）。確かめるときは `bun run build && bun ./server.js`。
 

@@ -9,7 +9,7 @@ import { TEST_ROOT } from './stack';
  *
  * アプリはワーカーの数だけ同時に立てる。開発サーバをその数だけ動かすと
  * 起動も動きも重くなるので、組んだものを共有して**それぞれ別のポートで**回す。
- * ついでに、本番と同じ adapter-node の出力を試すことになる。
+ * ついでに、本番と同じ adapter-bun の出力を試すことになる。
  */
 export default function globalSetup() {
     rmSync(TEST_ROOT, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import adapter from '@sveltejs/adapter-node';
+import adapter from '@sveltejs/adapter-bun';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
@@ -35,13 +35,16 @@ export default defineConfig({
         sveltekit({
             preprocess: vitePreprocess(),
             /*
-             * adapter-node の出力を `bun ./build/index.js` で動かす。bun 前提なので
-             * サーバ側では bun:sqlite などの bun 組み込みモジュールをそのまま使える。
+             * adapter-bun の出力を bun で動かす。サーバ側では bun:sqlite などの
+             * bun 組み込みモジュールをそのまま使える。
              *
-             * **入口は `server.js`。** ライブ視聴の WebSocket だけ `Bun.serve` で
-             * 受けて、それ以外をここの出力へ流している (理由はあちらに書いてある)。
+             * **入口は `server.js`。** adapter が立てる `Bun.serve` にライブ視聴の
+             * WebSocket を足してから `build/index.js` を読む (理由はあちらに書いてある)。
+             *
+             * - `idleTimeout: 0` — 録画の配信や SSE を無反応で切らせない (WebSocket は server.js で別に決める)
+             * - `precompress` — 静的ファイルの br / gz を組むときに作っておく (adapter-node では既定で作っていた)
              */
-            adapter: adapter(),
+            adapter: adapter({ precompress: true, serverOptions: { idleTimeout: 0 } }),
             /*
              * **画面で動いてよいスクリプトを、自分の束と SvelteKit の起動だけに絞る**
              * (Content-Security-Policy。方針と、読み込み元を1つずつ洗った表は docs/auth.md の
@@ -105,7 +108,7 @@ export default defineConfig({
     ],
     server: {
         // compose 上の Jellyfin はサービス名(`http://app:5173`)で開発サーバにアクセスする。
-        // vite の Host チェックに引っかかるので開発時だけ外す(本番は adapter-node で
+        // vite の Host チェックに引っかかるので開発時だけ外す(本番は adapter-bun で
         // 動かすため、この設定は使われない)
         allowedHosts: true,
     },

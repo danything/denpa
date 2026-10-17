@@ -106,18 +106,18 @@ asicen-userland は入れません (Windows 版が無い)。カードリーダ�
 
 ## ブラウザへ配る束・サーバの束に入る主なもの
 
-`package.json` に runtime の `dependencies` は無く、adapter-node が全部を `build/` に
+`package.json` に runtime の `dependencies` は無く、adapter-bun が全部を `build/` に
 畳み込みます (イメージにもそれだけを載せる)。**MIT がほとんどで、例外は Apache-2.0 の
 `drizzle-orm` と、ISC の Lucide** (アイコンの図形)。
 
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
-| Svelte / SvelteKit / adapter-node | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
+| Svelte / SvelteKit / adapter-bun | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
 | Blades (Pico CSS を引き継いだもの) | 見た目の土台 | <https://blades.ninja> | MIT |
 | drizzle-orm | SQLite の読み書き (サーバの束) | <https://github.com/drizzle-team/drizzle-orm> | **Apache-2.0** |
 | Lucide (`@iconify-json/lucide` から、使ったアイコンの `<svg>` だけ) | 画面のアイコン ([player.md](player.md#アイコンは-lucide-を組むときに埋め込みます)) | <https://lucide.dev> | **ISC** |
 | unplugin-icons / @iconify/utils (組むときだけ。束には入らない) | `~icons/*` を Svelte の部品に変える | <https://github.com/unplugin/unplugin-icons> / <https://github.com/iconify/iconify> | MIT |
-| cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-node 6 は静的ファイルの配りも自前で、依存を持たない) | 各上流 | MIT |
+| cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-bun は静的ファイルを Bun の `routes` で配り、依存を束に持ち込まない) | 各上流 | MIT |
 
 **データ放送のエンジン** (`src/lib/bml/`。[stream.md](stream.md#56-データ放送の統合)) は自前で、依存を持たない。
 規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書き、NVRAM の領域の表・郵便番号の範囲の読み方・

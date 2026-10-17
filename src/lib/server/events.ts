@@ -3,8 +3,8 @@
  * 読み直すやり方では、こちらが知っている変化 (待機中のジョブが動き出した等) を伝えられない。
  *
  * WebSocket ではなく SSE を使う。伝えたいのはサーバ→ブラウザの一方向だけで、
- * SSE なら普通のHTTPなので逆プロキシも adapter-node もそのまま通る
- * (WebSocket は前段の `Bun.serve` でしか受けられない。`ws.ts`)。
+ * SSE なら普通のHTTPなので逆プロキシも SvelteKit もそのまま通る
+ * (WebSocket は入口の `server.js` でしか受けられない。`ws.ts`)。
  */
 
 import type { YieldedRecording } from '#lib/live.js';
