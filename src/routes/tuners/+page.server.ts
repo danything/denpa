@@ -308,7 +308,8 @@ export const actions = {
         } catch (error) {
             return fail(502, { message: String(error) });
         }
-        return { success: true, done: `チューナー ${tuners.length} 台を保存しました` };
+        // 画面はその場で保存して、見出しの横に「保存しました」を出す (`autosave`)。通知は出さない
+        return { success: true };
     },
 
     /** 定義を消して自動検出に戻す。刺さっている機材をエージェントが自分で見つける */
@@ -318,7 +319,7 @@ export const actions = {
         } catch (error) {
             return fail(502, { message: String(error) });
         }
-        return { success: true, done: '自動検出に戻しました' };
+        return { success: true };
     },
 
     /** 走っているスキャンを中断する。設定は書き換えないまま止まる */

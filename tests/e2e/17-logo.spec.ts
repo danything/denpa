@@ -212,6 +212,8 @@ test.describe('CM検出のロゴ', () => {
 
         await goto(page, '/tuners');
         // 局名は画面では半角に揃えてある (ＢＳ１１ → BS11)
+        // 局ごとの一覧は畳んである。開いてから探す
+        await page.getByTestId('cm-logo-list').locator('summary').first().click();
         const card = page.locator('details.cm-logo').filter({ hasText: 'ＢＳ１１' });
         await expect(card.locator('summary .tag')).toHaveText('覚えました');
         await card.locator('summary').first().click();

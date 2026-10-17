@@ -172,10 +172,12 @@ test.describe('チューナーの設定', () => {
         // 4台ぶん + 足すための空行
         await expect(rows).toHaveCount(5);
 
-        // 1台目を無効にして、名前を消して1台減らす
+        // 1台目を無効にして、名前を消して1台減らす。**変えたらその場で保存する** (名前は欄を離れたとき)
         await rows.nth(0).locator('input[name="disabled.0"]').check();
-        await rows.nth(3).locator('input[name="name.3"]').fill('');
-        await card.getByTestId('tuner-config-save').click();
+        await expect(card.getByTestId('saved-result')).toBeVisible();
+        const name = rows.nth(3).locator('input[name="name.3"]');
+        await name.fill('');
+        await name.blur();
 
         const list = page.getByTestId('tuner-list');
         await expect(list.getByTestId('tuner-row')).toHaveCount(3);
@@ -190,9 +192,10 @@ test.describe('チューナーの設定', () => {
             const box = card.locator(`input[name="type.0.${type}"]`);
             if (await box.isChecked()) await box.uncheck();
         }
-        await card.getByTestId('tuner-config-save').click();
 
-        await expect(page.getByTestId('tuner-error')).toContainText('種別を1つ以上');
+        // その場で保存して断られる。見出しの横に理由を出し、外したチェックは元に戻す
+        await expect(card.getByTestId('settings-error')).toContainText('種別を1つ以上');
+        await expect(card.locator('input[name^="type.0."]:checked').first()).toBeChecked();
     });
 
     /*

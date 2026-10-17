@@ -1,8 +1,11 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
+    import { autosave, SaveState } from '#lib/autosave.svelte.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import JobProgress from '#lib/components/JobProgress.svelte';
+    import Lead from '#lib/components/Lead.svelte';
     import LearnedLogo from '#lib/components/LearnedLogo.svelte';
+    import SaveNote from '#lib/components/SaveNote.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '#lib/format.js';
     import { held, liveUpdates } from '#lib/live-updates.svelte.js';
@@ -27,6 +30,10 @@
     const cmLogos = $derived(
         [...data.cmLogos].sort((a, b) => Number(a.learned_at !== null) - Number(b.learned_at !== null)),
     );
+    /** まだ覚えていない局の数。畳んだ一覧の見出しの横に出す */
+    const cmLogosPending = $derived(cmLogos.filter((service) => service.learned_at === null).length);
+    /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
+    const configSave = new SaveState();
 
     /** チューナーが受けられる種別。設定の表で並べる順 */
     const TYPES = ['GR', 'BS', 'CS'] as const;
@@ -93,145 +100,104 @@
 
 <Toasts {notices} source={form} />
 
-<div class="columns">
-    <div class="column">
-        <section class="panel card">
-            <!--
-                **説明を3つ重ねない。**
+<!--
+    **1 列に並べ、節は見出しと細い線で区切る** (設定の画面と同じ形。`app.css` の `.sections`)。
+    2 列にカードを積んでいた頃は、目が左右を行き来した。表は幅を使うので、設定の画面より広く取る。
 
-                見出しの下に長い前置き、ボタンの下に押し方の説明、数の下に
-                数え方の説明、と3つ並んでいた。どれも同じことを言い換えていて、
-                肝心の数が下に押し出されていた。**数を先に出して、注は1つだけ。**
-            -->
-            <div class="cluster spread">
-                <h2>受信できるチャンネル</h2>
+    並びは「いまの様子」から: 空きとカードリーダー → 受信できるチャンネル → たまに回すスキャン →
+    入れたときしか触らないチューナーの設定 → ロゴ
+-->
+<div class="sections tuners">
+    <!--
+        **いちばん上に置く。** 録るのも番組表を集めるのもここの取り合いで、
+        スキャン中に見たいのも「いま何台使っているか」。カードリーダーの
+        具合も同じ機材の話なので、同じ節に並べる
+    -->
+    <section class="section" data-testid="tuner-card">
+        <div class="section-head">
+            <h2>チューナーの空き</h2>
+        </div>
+        <!-- 譲り合う順は数字ではなく用途の並びで言う (順番は config.priority から) -->
+        <Lead>
+            足りないときにどれが譲るかは、使い方で決まります
+            {#snippet more()}
+                <p>チューナーが足りないときは、上にあるものが先に使い、下のものが譲ります。</p>
+                <ol data-testid="tuner-yield-order">
+                    {#each data.yieldOrder as use (use)}
+                        <li>{use}</li>
+                    {/each}
+                </ol>
+                <p>ルールの「優先度」は予約どうしを比べるもので、この順とは別です。</p>
+            {/snippet}
+        </Lead>
+        {#if shownTuners.value === undefined}
+            <p class="small muted">確認中…</p>
+        {:else}
+            {@const tuners = shownTuners.value.list}
+            {@const failure = shownTuners.value.error}
+            {#if failure !== null}
                 <!--
-                    入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
-                    譲るので、何か動いていると番組表がなかなか埋まらない。
-                    押されている間は録画以外には譲らせて、全チューナーで回る
+                    繋がらなかったときに空の一覧だけ出すと「1台も無い」と
+                    見分けが付かない。理由をそのまま出す
                 -->
-                <ActionButton
-                    action="?/collectNow"
-                    class="small secondary"
-                    disabled={data.collect.boosted}
-                    testid="epg-collect-now"
-                >
-                    {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
-                </ActionButton>
-            </div>
-            {#if data.collect.running}
-                <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
-                <div class="progress-block" data-testid="epg-collect">
-                    <div class="small soft">
-                        {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
-                        ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
-                    </div>
-                    <progress
-                        value={data.collect.total - data.collect.pending - data.collect.active.length}
-                        max={Math.max(1, data.collect.total)}
-                    ></progress>
-                    {#if data.collect.sweeping}
-                        <!-- 初回だけ。番組名が先に出て、詳細があとから埋まるのを不具合と思わせない -->
-                        <div class="tiny muted" data-testid="epg-sweeping">
-                            BS は、まず1つの中継から全局の番組名を入れています (数分)。
-                            番組内容・出演者などの詳細は、そのあと中継ごとに回って足します
-                        </div>
-                    {/if}
+                <div class="notice error small">
+                    チューナーエージェントに繋がりません: {failure}
                 </div>
-            {/if}
-            {#if coverage.length === 0}
+            {:else if tuners.length === 0}
                 <p class="small muted">
-                    まだ1つもありません。チャンネルスキャンを実行してください。
+                    チューナーがありません。「チューナーの設定」から追加してください。
                 </p>
             {:else}
-                <!-- 番組表がもう入っている局の数。下の表の右端を全部見なくても分かるように -->
-                {@const withEpg = services.filter((service) => service.programs > 0).length}
-                <!--
-                    **入れ子になった3つの数を、その順に並べる。**
-
-                    「50 / 59 ・ 124 局」とだけ出していた頃は、59 と 124 が
-                    同じものの数に見えて「残り65はどこへ行った」となっていた。
-                    この3つは入れ子で、数がそろわないのが当たり前:
-
-                      チャンネル (T19, BS15_0) ┬ 局 (TOKYO MX1) ─ 番組表
-                                          └ 局 (TOKYO MX2) ─ 番組表
-
-                    局と番組表を分けて出すのも、混ざりやすいから。
-                    局はスキャンで、番組表はそのあと denpa が集めるもので、
-                    埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
-                -->
-                <div class="small" data-testid="channel-coverage">
-                    <span class="soft">チャンネル</span>
-                    <strong>{coverage.length}</strong>
-                    <span class="faint">→</span>
-                    <span class="soft">局</span>
-                    <strong>{services.length}</strong>
-                    <span class="faint">→</span>
-                    <span class="soft">番組表のある局</span>
-                    <strong>{withEpg}</strong>
-                </div>
-                <!--
-                    **注はここ1つだけ。** 数のすぐ下に、数がそろわない理由を1行で。
-                    上のボタンが何をするものかは「詳しく」に畳む
-                -->
-                <div class="note-block">
-                    <div class="small soft">1つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません</div>
-                    <details class="more">
-                        <summary>詳しく</summary>
-                        <p>番組表はスキャンのあと、局ごとに埋まっていきます。</p>
-                        <p>
-                            BS の初回は、1つの中継から全局の番組名を先に入れ (数分)、番組内容などの詳細は
-                            そのあと中継ごとに回って足します。詳細は各局が自分の中継にしか流していないためです。
-                            CS は詳細を流していないので、いつも1つの中継で全局ぶんを集めます。
-                        </p>
-                        <p>
-                            待てないときは<strong>「番組表をいますぐ集める」</strong>で、録画とライブ視聴に使っていないチューナーを全部使って集められます
-                            (スキャンやロゴの取得は止めます)。
-                        </p>
-                    </details>
-                </div>
-                <!-- カードの中で巻かない。長くても全部並べる (巻くのはページごと) -->
-                <div class="table-wrap channels-wrap">
-                    <table>
+                <div class="table-wrap row-cards-wrap">
+                    <table class="row-cards">
                         <thead>
                             <tr>
+                                <th>名前</th>
                                 <th>種別</th>
-                                <th>ch</th>
-                                <th class="wide">局</th>
-                                <th class="nowrap">番組表</th>
+                                <th>状態</th>
+                                <th class="wide">使っているもの</th>
                             </tr>
                         </thead>
-                        <tbody data-testid="channel-list">
-                            {#each coverage as channel (`${channel.type}:${channel.channel}`)}
-                                {@const programs = channel.services.reduce(
-                                    (sum, service) => sum + service.programs,
-                                    0,
-                                )}
-                                {@const last = Math.max(
-                                    0,
-                                    ...channel.services.map((service) => service.until),
-                                )}
-                                <tr data-testid="channel-row" data-channel={channel.channel}>
-                                    <td class="nowrap small">
-                                        {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
+                        <tbody data-testid="tuner-list">
+                            {#each tuners as tuner (tuner.index)}
+                                <tr data-testid="tuner-row" data-tuner-index={tuner.index}>
+                                    <td class="nowrap" data-label="名前">{tuner.name}</td>
+                                    <td class="nowrap small" data-label="種別">
+                                        {tuner.types.map((t) => SERVICE_TYPE_LABEL[t] ?? t).join('/')}
                                     </td>
-                                    <td class="mono small nowrap">
-                                        {channel.channel}
+                                    <td class="nowrap" data-label="状態">
+                                        <!-- 何を使っているかも出す。空き/使用中だけでは追えない -->
+                                        {#if tuner.disabled}
+                                            <span class="tag">無効</span>
+                                        {:else if tuner.channel !== null}
+                                            <span class="tag warning">
+                                                {tuner.channel.channel}
+                                            </span>
+                                        {:else}
+                                            <span class="tag success">空き</span>
+                                        {/if}
+                                        {#if tuner.error !== null && tuner.channel === null}
+                                            <div class="text-error tiny" data-testid="tuner-error">
+                                                {tuner.error}
+                                            </div>
+                                        {/if}
                                     </td>
-                                    <td class="small">
-                                        <div class="broadcast">
-                                            {channel.services.map((service) => service.name).join(', ')}
-                                        </div>
-                                    </td>
-                                    <td class="small nowrap">
-                                        {#if programs > 0}
-                                            <div>{programs} 件</div>
-                                            <div class="tiny muted">
-                                                {until(last)}
+                                    <td class="small span" data-label="使っているもの">
+                                        <!--
+                                            **数字を出さない。** 何に使っているか (録画・ライブ視聴・番組表…)
+                                            が出ていれば、どちらが譲るかは用途で決まる (上の「詳しく」に順番)。
+                                            ルール画面の「優先度」(0〜9) と同じ名前の別の物差しが並ぶと、
+                                            ルールの 2 が番組表の 3 に負けるように読めていた。
+                                            数は調べるとき用に `data-priority` にだけ残す。
+                                            目印は番号で。同じ用途が2つ乗ることはあり、字を目印にすると落ちる
+                                        -->
+                                        {#each tuner.users as user, i (i)}
+                                            <div class="truncate" data-testid="tuner-user" data-priority={user.priority}>
+                                                {user.label}
                                             </div>
                                         {:else}
                                             <span class="muted">—</span>
-                                        {/if}
+                                        {/each}
                                     </td>
                                 </tr>
                             {/each}
@@ -239,44 +205,262 @@
                     </table>
                 </div>
             {/if}
-        </section>
+        {/if}
 
-        <section class="panel card" data-testid="scan-card">
-            <h2>チャンネルスキャン</h2>
-            <div class="note-block">
-                <!-- 何分もかかって空きチューナーを全部使う。そこは畳まずに見せておく -->
-                <p class="small soft">
-                    <strong>空いているチューナーを全部使います</strong>。録画中でも実行できます。
-                    始めたら、画面を移ったり閉じたりしてもかまいません (サーバで続きます)
-                </p>
-                <details class="more">
-                    <summary>詳しく</summary>
-                    <p>
-                        受信できるチャンネルを選局して探します (録画中のチューナーは使いません)。
-                    </p>
-                    <p>見つかったチャンネルは保存し、終わると番組表も集め直します。</p>
-                </details>
+        <!--
+            カードリーダー。**同じ機材の話**なのでここに置く。
+            掛かったまま録れてしまうのを避けるには、録る前に気づけること。
+
+            **使うカードは1枚** (エージェントの Card.cs)。どのチューナーもその1枚の鍵で
+            復号するので、「使っているチューナー」は使用中の行にだけ並ぶ。他のリーダーは予備で、
+            使用中のカードが答えなくなったら繋ぎ直すときに拾われる
+        -->
+        <div class="reader">
+            <div class="cluster">
+                <h3>カードリーダー</h3>
+                {#if shownCard.value === undefined}
+                    <span class="tag" data-testid="status-card-reader">確認中</span>
+                {:else}
+                    {@const card = shownCard.value}
+                    <span class="tag {card.ok ? 'success' : 'error'}" data-testid="status-card-reader">
+                        {card.ok ? '正常' : 'エラー'}
+                    </span>
+                    {#if card.source === 'remote'}
+                        <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
+                        <span class="small">
+                            別の拠点 <span class="mono break">{card.remote ?? '?'}</span> から鍵を受け取っています
+                            {#if card.ids.length > 0}
+                                <span class="mono">({card.ids.join(' / ')})</span>
+                            {/if}
+                            {#if card.tuners.length > 0}
+                                — {card.tuners.join('、')}
+                            {/if}
+                        </span>
+                    {/if}
+                {/if}
             </div>
-
-            <form method="POST" action="?/scan" use:submitting class="stack">
-                <div>
-                    <span class="field-label">種別</span>
-                    <div class="types" data-testid="scan-types">
-                        {#each TYPES as type (type)}
-                            <label class="check">
-                                <input type="checkbox" name="types" value={type} checked={type === 'GR'} />
-                                <span class="small">{SERVICE_TYPE_LABEL[type]}</span>
-                            </label>
-                        {/each}
+            {#if shownCard.value !== undefined}
+                {@const card = shownCard.value}
+                <!-- 困っているときだけ。名前と番号は表に出る -->
+                {#if card.message !== ''}
+                    <div class={card.ok ? 'tiny muted' : 'notice error small'} data-testid="card-message">
+                        {card.message}
                     </div>
+                {/if}
+                {#if card.readers.length > 0}
+                    <div class="table-wrap row-cards-wrap">
+                        <table class="row-cards">
+                            <thead>
+                                <tr>
+                                    <th>カードリーダー</th>
+                                    <th>カード (番号)</th>
+                                    <th>状態</th>
+                                    <th class="wide">使っているチューナー</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
+                                {#each card.readers as reader, i (i)}
+                                    {@const label = splitReaderName(reader.name)}
+                                    <tr data-testid="card-reader-row" data-state={reader.state}>
+                                        <!--
+                                            場所 (「usb 4-11」) は2行目に小さく。**文字の途中で折らない** —
+                                            break-all にしていた頃は、狭い列で「Gempl / us US / B Sma…」と
+                                            1文字ずつ折れて読めなかった。折るのは単語の区切りで
+                                        -->
+                                        <td class="reader-name span" data-label="カードリーダー">
+                                            <span data-testid="card-reader-name">{label.name}</span>
+                                            {#if label.where !== null}
+                                                <div class="tiny muted mono" data-testid="card-reader-where">
+                                                    {label.where}
+                                                </div>
+                                            {/if}
+                                        </td>
+                                        <td class="nowrap small mono" data-label="カード (番号)">
+                                            {#if reader.ids.length > 0}
+                                                {reader.ids.join(' / ')}
+                                            {:else}
+                                                <span class="muted">—</span>
+                                            {/if}
+                                        </td>
+                                        <td class="nowrap" data-label="状態">
+                                            <span class="tag {READER_STATE[reader.state].tone}">
+                                                {READER_STATE[reader.state].label}
+                                            </span>
+                                            {#if reader.error !== undefined}
+                                                <div class="text-error tiny">
+                                                    {reader.error}
+                                                </div>
+                                            {/if}
+                                        </td>
+                                        <td class="small span" data-label="使っているチューナー">
+                                            {#if reader.tuners.length > 0}
+                                                {reader.tuners.join('、')}
+                                            {:else}
+                                                <span class="muted">—</span>
+                                            {/if}
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                {/if}
+            {/if}
+        </div>
+    </section>
+
+    <section class="section" data-testid="channel-card">
+        <!--
+            **説明を3つ重ねない。** 数を先に出して、注は1つだけ (数がそろわない理由)。
+            上のボタンが何をするものかは「詳しく」に畳む
+        -->
+        <div class="section-head spread">
+            <h2>受信できるチャンネル</h2>
+            <!--
+                入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
+                譲るので、何か動いていると番組表がなかなか埋まらない。
+                押されている間は録画以外には譲らせて、全チューナーで回る
+            -->
+            <ActionButton
+                action="?/collectNow"
+                class="small secondary outline"
+                disabled={data.collect.boosted}
+                testid="epg-collect-now"
+            >
+                {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
+            </ActionButton>
+        </div>
+        {#if data.collect.running}
+            <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
+            <div class="progress-block" data-testid="epg-collect">
+                <div class="small soft">
+                    {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
+                    ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
                 </div>
-                <!--
-                    探す範囲は決め打ち。放送で使う物理チャンネルは決まっていて、
-                    狭めても総当たりの時間が少し減るだけ。
-                    狭めた結果 見つからない局が出るほうが困る
-                -->
+                <progress
+                    value={data.collect.total - data.collect.pending - data.collect.active.length}
+                    max={Math.max(1, data.collect.total)}
+                ></progress>
+                {#if data.collect.sweeping}
+                    <!-- 初回だけ。番組名が先に出て、詳細があとから埋まるのを不具合と思わせない -->
+                    <div class="tiny muted" data-testid="epg-sweeping">
+                        BS は、まず1つの中継から全局の番組名を入れています (数分)。
+                        番組内容・出演者などの詳細は、そのあと中継ごとに回って足します
+                    </div>
+                {/if}
+            </div>
+        {/if}
+        {#if coverage.length === 0}
+            <p class="small muted">
+                まだ1つもありません。チャンネルスキャンを実行してください。
+            </p>
+        {:else}
+            <!-- 番組表がもう入っている局の数。下の表の右端を全部見なくても分かるように -->
+            {@const withEpg = services.filter((service) => service.programs > 0).length}
+            <!--
+                **入れ子になった3つの数を、その順に並べる。** チャンネル (T19, BS15_0) の中に
+                局 (TOKYO MX1, MX2) があり、局ごとに番組表がある。「50 / 59 ・ 124 局」とだけ
+                出していた頃は、59 と 124 が同じものの数に見えた。局はスキャンで、番組表は
+                そのあと denpa が集めるもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
+            -->
+            <div class="small" data-testid="channel-coverage">
+                <span class="soft">チャンネル</span>
+                <strong>{coverage.length}</strong>
+                <span class="faint">→</span>
+                <span class="soft">局</span>
+                <strong>{services.length}</strong>
+                <span class="faint">→</span>
+                <span class="soft">番組表のある局</span>
+                <strong>{withEpg}</strong>
+            </div>
+            <Lead>
+                1つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません
+                {#snippet more()}
+                    <p>番組表はスキャンのあと、局ごとに埋まっていきます。</p>
+                    <p>
+                        BS の初回は、1つの中継から全局の番組名を先に入れ (数分)、番組内容などの詳細は
+                        そのあと中継ごとに回って足します。詳細は各局が自分の中継にしか流していないためです。
+                        CS は詳細を流していないので、いつも1つの中継で全局ぶんを集めます。
+                    </p>
+                    <p>
+                        待てないときは<strong>「番組表をいますぐ集める」</strong>で、録画とライブ視聴に使っていないチューナーを全部使って集められます
+                        (スキャンやロゴの取得は止めます)。
+                    </p>
+                {/snippet}
+            </Lead>
+            <div class="table-wrap channels-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>種別</th>
+                            <th>ch</th>
+                            <th class="wide">局</th>
+                            <th class="nowrap">番組表</th>
+                        </tr>
+                    </thead>
+                    <tbody data-testid="channel-list">
+                        {#each coverage as channel (`${channel.type}:${channel.channel}`)}
+                            {@const programs = channel.services.reduce((sum, service) => sum + service.programs, 0)}
+                            {@const last = Math.max(0, ...channel.services.map((service) => service.until))}
+                            <tr data-testid="channel-row" data-channel={channel.channel}>
+                                <td class="nowrap small">
+                                    {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
+                                </td>
+                                <td class="mono small nowrap">
+                                    {channel.channel}
+                                </td>
+                                <td class="small">
+                                    <div class="broadcast">
+                                        {channel.services.map((service) => service.name).join(', ')}
+                                    </div>
+                                </td>
+                                <td class="small nowrap">
+                                    {#if programs > 0}
+                                        {programs} 件 <span class="tiny muted">{until(last)}</span>
+                                    {:else}
+                                        <span class="muted">—</span>
+                                    {/if}
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        {/if}
+    </section>
+
+    <section class="section" data-testid="scan-card">
+        <div class="section-head">
+            <h2>チャンネルスキャン</h2>
+        </div>
+        <!-- 何分もかかって空きチューナーを全部使う。そこは畳まずに見せておく -->
+        <Lead>
+            <strong>空いているチューナーを全部使います</strong>。録画中でも実行できます。
+            始めたら、画面を移ったり閉じたりしてもかまいません (サーバで続きます)
+            {#snippet more()}
+                <p>受信できるチャンネルを選局して探します (録画中のチューナーは使いません)。</p>
+                <p>見つかったチャンネルは保存し、終わると番組表も集め直します。</p>
+            {/snippet}
+        </Lead>
+
+        <!--
+            探す範囲は決め打ち。放送で使う物理チャンネルは決まっていて、
+            狭めても総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
+        -->
+        <form method="POST" action="?/scan" use:submitting class="setting-rows scan-form">
+            <div class="field">
+                <span class="field-label">種別</span>
+                <div class="chips" data-testid="scan-types">
+                    {#each TYPES as type (type)}
+                        <label class="chip">
+                            <input type="checkbox" name="types" value={type} checked={type === 'GR'} />
+                            {SERVICE_TYPE_LABEL[type]}
+                        </label>
+                    {/each}
+                </div>
                 <div class="cluster">
-                    <button type="submit" disabled={scan.state === 'running'} data-testid="scan-start">
+                    <button type="submit" class="small" disabled={scan.state === 'running'} data-testid="scan-start">
                         {scan.state === 'running' ? '実行中…' : '開始'}
                     </button>
                     {#if scan.state === 'running'}
@@ -285,497 +469,274 @@
                             中断しても設定は書き換えない (途中までの結果で上書きすると、
                             まだ回っていない局の定義が消える)
                         -->
-                        <button
-                            type="submit"
-                            class="outline danger"
-                            formaction="?/scanStop"
-                        >
+                        <button type="submit" class="small outline danger" formaction="?/scanStop">
                             中断
                         </button>
                     {/if}
                 </div>
-            </form>
+            </div>
+        </form>
 
-            {#if scan.state !== 'idle'}
-                <div class="progress-block" data-state={scan.state}>
-                    <div class="cluster small">
-                        <span class="tag" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
-                        {#if scan.phase}
-                            <span class="tag outline">{scan.phase}</span>
-                        {/if}
-                        <span data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
-                    </div>
-
-                    <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
-                    <JobProgress done={scan.scanned} total={scan.total} unit="チャンネル" testid="scan-count" />
-
-                    {#if scan.error}
-                        <div class="notice error">{scan.error}</div>
+        {#if scan.state !== 'idle'}
+            <div class="progress-block" data-state={scan.state}>
+                <div class="cluster small">
+                    <span class="tag" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
+                    {#if scan.phase}
+                        <span class="tag outline">{scan.phase}</span>
                     {/if}
-                    {#if scan.log.length > 0}
-                        <pre class="log" data-testid="scan-log">{scan.log.join('\n')}</pre>
-                    {/if}
+                    <span data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
                 </div>
-            {/if}
-        </section>
 
-        <!--
-            **左の列は触る頻度の順。** 毎日見る「取れているチャンネル」が上、たまに回す
-            スキャン、入れたときしか触らないチューナーの設定は一番下。
-            右の列は「いまの様子」(空き・ロゴ)。
-        -->
-        <section class="panel card" data-testid="tuner-config-card">
-            <h2>チューナーの設定</h2>
-            {#await data.detected then detected}
-                {#if detected}
-                    <p class="small muted">
-                        いまは<strong>挿さっているチューナーを自動で見つけて</strong>使っています。
-                        保存すると、この内容に固定します。
-                    </p>
+                <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
+                <JobProgress done={scan.scanned} total={scan.total} unit="チャンネル" testid="scan-count" />
+
+                {#if scan.error}
+                    <div class="notice error">{scan.error}</div>
                 {/if}
-            {/await}
+                {#if scan.log.length > 0}
+                    <pre class="log" data-testid="scan-log">{scan.log.join('\n')}</pre>
+                {/if}
+            </div>
+        {/if}
+    </section>
 
-            {#if shownTuners.value !== undefined}
-                {@const rows = [...shownTuners.value.list, null]}
-                <form method="POST" action="?/tuners" use:submitting>
-                    <div class="table-wrap config-wrap row-cards-wrap">
-                        <table class="config row-cards">
-                            <thead>
-                                <tr>
-                                    <th>名前</th>
-                                    <th class="device-col">デバイス</th>
-                                    <th>受信できる種別</th>
-                                    <th>LNB</th>
-                                    <th>無効</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {#each rows as tuner, index (index)}
-                                    {@const lnb = tuner?.lnb ?? ''}
-                                    {@const lnbChoices = LNB_CHOICES.some((choice) => choice.value === lnb)
-                                        ? LNB_CHOICES
-                                        : [...LNB_CHOICES, { value: lnb, label: lnb }]}
-                                    <tr data-testid="tuner-config-row">
-                                        <td class="span" data-label="名前">
-                                            <input
-                                                class="w-name"
-                                                aria-label="名前"
-                                                name={`name.${index}`}
-                                                value={tuner?.name ?? ''}
-                                                placeholder={tuner === null ? '名前を入れて追加' : ''}
-                                            />
-                                        </td>
-                                        <td class="span" data-label="デバイス">
-                                            <input
-                                                class="w-device mono tiny"
-                                                aria-label="デバイス"
-                                                name={`device.${index}`}
-                                                value={tuner?.device ?? ''}
-                                                placeholder="/dev/dvb/adapter0/frontend0"
-                                            />
-                                        </td>
-                                        <td class="types-cell span" data-label="受信できる種別">
+    <section class="section" data-testid="tuner-config-card">
+        <div class="section-head">
+            <h2>チューナーの設定</h2>
+            <SaveNote status={configSave} />
+        </div>
+        {#await data.detected then detected}
+            {#if detected}
+                <Lead>
+                    いまは<strong>挿さっているチューナーを自動で見つけて</strong>使っています。
+                    どれかを変えると、この内容に固定します
+                </Lead>
+            {/if}
+        {/await}
+
+        {#if shownTuners.value !== undefined}
+            {@const rows = [...shownTuners.value.list, null]}
+            <!--
+                **変えたらその場で保存する** (`autosave`。設定の画面と同じ)。文字の欄は離れたとき、
+                チェックと選択は変えたとき。名前を空にして離れると、その行は消える。
+                **行の追加はボタンで** — 足すための空の行は、名前を打っている途中や
+                デバイスを入れる前に送らない (`data-no-autosave`)。自動検出に戻すのもボタン
+            -->
+            <form method="POST" action="?/tuners" use:autosave={configSave}>
+                <div class="table-wrap config-wrap row-cards-wrap">
+                    <table class="config row-cards">
+                        <thead>
+                            <tr>
+                                <th>名前</th>
+                                <th class="device-col">デバイス</th>
+                                <th>受信できる種別</th>
+                                <th>LNB</th>
+                                <th>無効</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {#each rows as tuner, index (index)}
+                                {@const lnb = tuner?.lnb ?? ''}
+                                {@const lnbChoices = LNB_CHOICES.some((choice) => choice.value === lnb)
+                                    ? LNB_CHOICES
+                                    : [...LNB_CHOICES, { value: lnb, label: lnb }]}
+                                <tr data-testid="tuner-config-row" data-no-autosave={tuner === null ? '' : undefined}>
+                                    <td class="span" data-label="名前">
+                                        <input
+                                            class="w-name"
+                                            aria-label="名前"
+                                            name={`name.${index}`}
+                                            value={tuner?.name ?? ''}
+                                            placeholder={tuner === null ? '名前を入れて追加' : ''}
+                                        />
+                                    </td>
+                                    <td class="span" data-label="デバイス">
+                                        <input
+                                            class="w-device mono tiny"
+                                            aria-label="デバイス"
+                                            name={`device.${index}`}
+                                            value={tuner?.device ?? ''}
+                                            placeholder="/dev/dvb/adapter0/frontend0"
+                                        />
+                                    </td>
+                                    <td class="span" data-label="受信できる種別">
+                                        <div class="chips types-cell">
                                             {#each TYPES as type (type)}
-                                                <label class="check type-check">
+                                                <label class="chip">
                                                     <input
                                                         type="checkbox"
                                                         name={`type.${index}.${type}`}
                                                         checked={tuner?.types.includes(type) ?? false}
                                                     />
-                                                    <span class="tiny">{SERVICE_TYPE_LABEL[type]}</span>
+                                                    {SERVICE_TYPE_LABEL[type]}
                                                 </label>
                                             {/each}
-                                        </td>
-                                        <td data-label="LNB">
-                                            <!--
-                                                **選ばせる。打たせない。** エージェントが読むのは小文字の
-                                                `15v` / `11v` だけで (`Tuning.cs`)、`15V` と打つと黙って
-                                                給電されない。見せる字は大文字 (電圧の書き方)
-                                            -->
-                                            <select class="w-lnb" name={`lnb.${index}`} aria-label="LNB">
-                                                {#each lnbChoices as choice (choice.value)}
-                                                    <option value={choice.value} selected={choice.value === lnb}>{choice.label}</option>
-                                                {/each}
-                                            </select>
-                                        </td>
-                                        <td data-label="無効">
-                                            <input
-                                                type="checkbox"
-                                                name={`disabled.${index}`}
-                                                checked={tuner?.disabled ?? false}
-                                                aria-label="無効"
-                                            />
-                                        </td>
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
-                    </div>
-                    <p class="tiny muted note">名前を空にすると、その行は消えます。</p>
-                    <div class="cluster actions">
-                        <button type="submit" class="small" data-testid="tuner-config-save">
-                            保存
-                        </button>
-                        <button
-                            type="submit"
-                            class="small ghost"
-                            formaction="?/tunersAuto"
-                        >
-                            自動検出に戻す
-                        </button>
-                    </div>
-                </form>
-            {/if}
-        </section>
-    </div>
-
-    <div class="column">
-        <!--
-            **いちばん上に置く。** 録るのも番組表を集めるのもここの取り合いで、
-            スキャン中に見たいのも「いま何台使っているか」。カードリーダーの
-            具合も同じ機材の話なので、下に並べてある
-        -->
-        <section class="panel card" data-testid="tuner-card">
-            <h2>チューナーの空き</h2>
-            {#if shownTuners.value === undefined}
-                <p class="small muted">確認中…</p>
-            {:else}
-                {@const tuners = shownTuners.value.list}
-                {@const failure = shownTuners.value.error}
-                {#if failure !== null}
-                    <!--
-                        繋がらなかったときに空の一覧だけ出すと「1台も無い」と
-                        見分けが付かない。理由をそのまま出す
-                    -->
-                    <div class="notice error small">
-                        チューナーエージェントに繋がりません: {failure}
-                    </div>
-                {:else if tuners.length === 0}
-                    <p class="small muted">
-                        チューナーがありません。「チューナーの設定」から追加してください。
-                    </p>
-                {:else}
-                    <div class="table-wrap row-cards-wrap">
-                        <table class="row-cards">
-                            <thead>
-                                <tr>
-                                    <th>名前</th>
-                                    <th>種別</th>
-                                    <th>状態</th>
-                                    <th class="wide">使っているもの</th>
-                                </tr>
-                            </thead>
-                            <tbody data-testid="tuner-list">
-                                {#each tuners as tuner (tuner.index)}
-                                    <tr data-testid="tuner-row" data-tuner-index={tuner.index}>
-                                        <td class="nowrap" data-label="名前">{tuner.name}</td>
-                                        <td class="nowrap small" data-label="種別">
-                                            {tuner.types.map((t) => SERVICE_TYPE_LABEL[t] ?? t).join('/')}
-                                        </td>
-                                        <td class="nowrap" data-label="状態">
-                                            <!-- 何を使っているかも出す。空き/使用中だけでは追えない -->
-                                            {#if tuner.disabled}
-                                                <span class="tag">無効</span>
-                                            {:else if tuner.channel !== null}
-                                                <span class="tag warning">
-                                                    {tuner.channel.channel}
-                                                </span>
-                                            {:else}
-                                                <span class="tag success">空き</span>
-                                            {/if}
-                                            {#if tuner.error !== null && tuner.channel === null}
-                                                <div class="text-error tiny" data-testid="tuner-error">
-                                                    {tuner.error}
-                                                </div>
-                                            {/if}
-                                        </td>
-                                        <td class="small span" data-label="使っているもの">
-                                            <!--
-                                                **数字を出さない。** 何に使っているか (録画・ライブ視聴・番組表…)
-                                                が出ていれば、どちらが譲るかは用途で決まる (下の「詳しく」に順番)。
-
-                                                以前のように「強さ 10」と数字を出すと言葉が不自然で、「優先度 10」と
-                                                書くとルール画面の「優先度」(0〜9。*どの予約を残すか*) と同じ名前の
-                                                別の物差しが並び、ルールの 2 が番組表の 3 に負けるように読めていた。
-                                                数は調べるとき用に `data-priority` にだけ残す
-                                            -->
-                                            <!-- 目印は番号で。同じ用途が2つ乗ることはあり、字を目印にすると落ちる -->
-                                            {#each tuner.users as user, i (i)}
-                                                <div
-                                                    class="truncate"
-                                                    data-testid="tuner-user"
-                                                    data-priority={user.priority}
-                                                >
-                                                    {user.label}
-                                                </div>
-                                            {:else}
-                                                <span class="muted">—</span>
+                                        </div>
+                                    </td>
+                                    <td data-label="LNB">
+                                        <!--
+                                            **選ばせる。打たせない。** エージェントが読むのは小文字の
+                                            `15v` / `11v` だけで (`Tuning.cs`)、`15V` と打つと黙って
+                                            給電されない。見せる字は大文字 (電圧の書き方)
+                                        -->
+                                        <select class="w-lnb" name={`lnb.${index}`} aria-label="LNB">
+                                            {#each lnbChoices as choice (choice.value)}
+                                                <option value={choice.value} selected={choice.value === lnb}>{choice.label}</option>
                                             {/each}
-                                        </td>
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
-                    </div>
-                {/if}
-            {/if}
-
-            <!-- 譲り合う順は数字ではなく用途の並びで言う (順番は config.priority から) -->
-            <details class="more" data-testid="tuner-yield">
-                <summary>詳しく</summary>
-                <p class="small">チューナーが足りないときは、上にあるものが先に使い、下のものが譲ります。</p>
-                <ol class="small" data-testid="tuner-yield-order">
-                    {#each data.yieldOrder as use (use)}
-                        <li>{use}</li>
-                    {/each}
-                </ol>
-                <p class="small">
-                    ルールの「優先度」は予約どうしを比べるもので、この順とは別です。
-                </p>
-            </details>
-
-            <!--
-                カードリーダー。**同じ機材の話**なのでここに置く。
-                掛かったまま録れてしまうのを避けるには、録る前に気づけること。
-
-                **使うカードは1枚** (エージェントの Card.cs)。どのチューナーもその1枚の鍵で
-                復号するので、「使っているチューナー」は使用中の行にだけ並ぶ。他のリーダーは予備で、
-                使用中のカードが答えなくなったら繋ぎ直すときに拾われる
-            -->
-            <div class="reader">
-                <div class="cluster">
-                    <span class="field-label">カードリーダー</span>
-                    {#if shownCard.value === undefined}
-                        <span class="tag" data-testid="status-card-reader">確認中</span>
-                    {:else}
-                        {@const card = shownCard.value}
-                        <span class="tag {card.ok ? 'success' : 'error'}" data-testid="status-card-reader">
-                            {card.ok ? '正常' : 'エラー'}
-                        </span>
-                        {#if card.source === 'remote'}
-                            <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
-                            <span class="small">
-                                別の拠点 <span class="mono break">{card.remote ?? '?'}</span> から鍵を受け取っています
-                                {#if card.ids.length > 0}
-                                    <span class="mono">({card.ids.join(' / ')})</span>
-                                {/if}
-                                {#if card.tuners.length > 0}
-                                    — {card.tuners.join('、')}
-                                {/if}
-                            </span>
-                        {/if}
-                    {/if}
+                                        </select>
+                                    </td>
+                                    <td data-label="無効">
+                                        <input
+                                            type="checkbox"
+                                            name={`disabled.${index}`}
+                                            checked={tuner?.disabled ?? false}
+                                            aria-label="無効"
+                                        />
+                                    </td>
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
                 </div>
-                {#if shownCard.value !== undefined}
-                    {@const card = shownCard.value}
-                    <!-- 困っているときだけ。名前と番号は表に出る -->
-                    {#if card.message !== ''}
-                        <div
-                            class={card.ok ? 'tiny muted' : 'notice error small'}
-                            data-testid="card-message"
-                        >
-                            {card.message}
-                        </div>
-                    {/if}
-                    {#if card.readers.length > 0}
-                        <div class="table-wrap row-cards-wrap">
-                            <table class="row-cards">
-                                <thead>
-                                    <tr>
-                                        <th>カードリーダー</th>
-                                        <th>カード (番号)</th>
-                                        <th>状態</th>
-                                        <th class="wide">使っているチューナー</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <!-- 同じ型のリーダーを2つ挿すと名前が並ぶ。目印は番号で -->
-                                    {#each card.readers as reader, i (i)}
-                                        {@const label = splitReaderName(reader.name)}
-                                        <tr data-testid="card-reader-row" data-state={reader.state}>
-                                            <!--
-                                                場所 (「usb 4-11」) は2行目に小さく。**文字の途中で折らない** —
-                                                break-all にしていた頃は、狭い列で「Gempl / us US / B Sma…」と
-                                                1文字ずつ折れて読めなかった。折るのは単語の区切りで
-                                            -->
-                                            <td class="reader-name span" data-label="カードリーダー">
-                                                <span data-testid="card-reader-name">{label.name}</span>
-                                                {#if label.where !== null}
-                                                    <div class="tiny muted mono" data-testid="card-reader-where">
-                                                        {label.where}
-                                                    </div>
-                                                {/if}
-                                            </td>
-                                            <td class="nowrap small mono" data-label="カード (番号)">
-                                                {#if reader.ids.length > 0}
-                                                    {reader.ids.join(' / ')}
-                                                {:else}
-                                                    <span class="muted">—</span>
-                                                {/if}
-                                            </td>
-                                            <td class="nowrap" data-label="状態">
-                                                <span class="tag {READER_STATE[reader.state].tone}">
-                                                    {READER_STATE[reader.state].label}
-                                                </span>
-                                                {#if reader.error !== undefined}
-                                                    <div class="text-error tiny">
-                                                        {reader.error}
-                                                    </div>
-                                                {/if}
-                                            </td>
-                                            <td class="small span" data-label="使っているチューナー">
-                                                {#if reader.tuners.length > 0}
-                                                    {reader.tuners.join('、')}
-                                                {:else}
-                                                    <span class="muted">—</span>
-                                                {/if}
-                                            </td>
-                                        </tr>
-                                    {/each}
-                                </tbody>
-                            </table>
-                        </div>
-                    {/if}
-                {/if}
-            </div>
-        </section>
+                <div class="cluster config-actions">
+                    <button type="submit" class="small secondary outline" data-testid="tuner-config-add">追加</button>
+                    <button type="submit" class="small ghost" formaction="?/tunersAuto">
+                        自動検出に戻す
+                    </button>
+                    <span class="tiny muted">名前を空にすると、その行は消えます</span>
+                </div>
+            </form>
+        {/if}
+    </section>
 
-        <section class="panel card" data-testid="logo-card">
+    <section class="section" data-testid="logo-card">
+        <div class="section-head">
             <h2>ロゴ</h2>
-            <dl class="logos">
-                <!--
-                    局ロゴ。放送波から拾うしかない。
-                    番組表に出ないとき、取れていないのか出し方が悪いのかを
-                    ここで見分けられるようにする
-                -->
+        </div>
+        <div class="setting-rows logos">
+            <!--
+                局ロゴ。放送波から拾うしかない。番組表に出ないとき、
+                取れていないのか出し方が悪いのかをここで見分けられるようにする
+            -->
+            <div class="field">
+                <span class="field-label">局ロゴ</span>
                 <div class="cluster">
-                    <dt class="term">局ロゴ</dt>
                     <!-- 取れないぶんを除いて揃っていれば「揃った」でよい -->
-                    <dd
+                    <span
                         class="tag {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
                         data-testid="status-logos"
                     >
                         {data.logos.have} / {data.logos.total} 局
-                    </dd>
+                    </span>
                     <!--
-                        取りに行くものが無ければボタンも出さない。押しても
-                        「もう全部持っています」と断るだけになる。
-                        **走っている最中でも押せる** — 押されたほうが譲る作りなので、
+                        取りに行くものが無ければボタンも出さない。押しても「もう全部持っています」と
+                        断るだけになる。**走っている最中でも押せる** — 押されたほうが譲る作りなので、
                         使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
                     -->
                     {#if data.logos.pending > 0}
-                        <dd>
-                            <ActionButton action="?/logoSweep" class="xs secondary" testid="logo-sweep">
-                                {data.logoSweep.running ? '取得中…' : 'いますぐ取得'}
-                            </ActionButton>
-                        </dd>
+                        <ActionButton action="?/logoSweep" class="small secondary outline" testid="logo-sweep">
+                            {data.logoSweep.running ? '取得中…' : 'いますぐ取得'}
+                        </ActionButton>
                     {/if}
-                    <dd class="full note-block">
-                        <div class="small soft">
-                            番組表を集めるときに、あわせて取得します
-                        </div>
-                        <details class="more">
-                            <summary>詳しく</summary>
-                            <p>
-                                ロゴが放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong>です。
-                                あわせて取得するので、ロゴのためだけにチューナーを使うことはありません。
-                                取れたロゴも1週間ごとに取り直します。
-                            </p>
-                            <p>
-                                「いますぐ取得」では衛星の分も取得します。<strong
-                                    >BS と CS のロゴは同じ1つの中継で流れる</strong
-                                >ため、そこだけ最大20分かかります (他の中継は数秒で終わります)。
-                            </p>
-                        </details>
-                        {#if data.logos.unavailable > 0}
-                            <!--
-                                取れないものを「まだ取れていない」と出し続けると、
-                                こちらの不具合と見分けが付かない。
-
-                                **中継にロゴが無いことでは数えない。** CS の中継には
-                                ロゴが流れていないが、CS のロゴは BS の中継から
-                                降ってくる。中継で数えていた頃は、取れる CS の54局を
-                                まとめて「取れません」と出していた
-                            -->
-                            <div class="small soft">
-                                <strong>{data.logos.unavailable} 局</strong
-                                >はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
+                </div>
+                {#if data.logos.unavailable > 0}
+                    <!--
+                        取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
+                        **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
+                        CS のロゴは BS の中継から降ってくる
+                    -->
+                    <div class="small soft">
+                        <strong>{data.logos.unavailable} 局</strong>はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
+                    </div>
+                {/if}
+                <!-- 1チャンネルに数分かかる。出さないと押しても何も起きていないように見える -->
+                {#if data.logoSweep.startedAt !== null}
+                    <div class="sweep" data-testid="logo-sweep-progress">
+                        <JobProgress done={data.logoSweep.done} total={data.logoSweep.total} unit="チャンネル">
+                            ・ 取得 <strong>{data.logoSweep.found} 局</strong>
+                            {#if data.logoSweep.channels.length > 0}
+                                ・ 受信中 {data.logoSweep.channels.join(', ')}
+                            {/if}
+                        </JobProgress>
+                        {#if data.logoSweep.message !== ''}
+                            <div class="tiny muted" data-testid="logo-sweep-done">
+                                {data.logoSweep.message}
                             </div>
                         {/if}
-                    </dd>
-                    <!--
-                        1チャンネルに数分かかる。出さないと押しても何も起きていないように
-                        見えるので、どこまで進んだかをそのまま流す
-                    -->
-                    {#if data.logoSweep.startedAt !== null}
-                        <dd class="full sweep" data-testid="logo-sweep-progress">
-                            <JobProgress done={data.logoSweep.done} total={data.logoSweep.total} unit="チャンネル">
-                                ・ 取得 <strong>{data.logoSweep.found} 局</strong>
-                                {#if data.logoSweep.channels.length > 0}
-                                    ・ 受信中 {data.logoSweep.channels.join(', ')}
-                                {/if}
-                            </JobProgress>
-                            {#if data.logoSweep.message !== ''}
-                                <div class="tiny muted" data-testid="logo-sweep-done">
-                                    {data.logoSweep.message}
-                                </div>
-                            {/if}
-                        </dd>
-                    {/if}
-                </div>
-                <!--
-                    CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
-                    こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
-
-                    置き場所を録画の詳細からここへ移した。**録画ごとの話ではなく
-                    局ごとの話**で、覚えたものは以降その局の全部に効く
-                -->
+                    </div>
+                {/if}
+                <Lead>
+                    番組表を集めるときに、あわせて取得します
+                    {#snippet more()}
+                        <p>
+                            ロゴが放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong>です。
+                            あわせて取得するので、ロゴのためだけにチューナーを使うことはありません。
+                            取れたロゴも1週間ごとに取り直します。
+                        </p>
+                        <p>
+                            「いますぐ取得」では衛星の分も取得します。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
+                            そこだけ最大20分かかります (他の中継は数秒で終わります)。
+                        </p>
+                    {/snippet}
+                </Lead>
+            </div>
+            <!--
+                CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
+                こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
+                **録画ごとの話ではなく局ごとの話**で、覚えたものは以降その局の全部に効く
+            -->
+            <div class="field">
+                <span class="field-label">CM検出のロゴ</span>
                 <div class="cluster">
-                    <dt class="term">CM検出のロゴ</dt>
-                    <dd class="tag">
-                        {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
-                    </dd>
-                    <dd class="full note-block">
-                        <div class="small soft">録画をエンコードするときに、その録画から自動で覚えます</div>
-                        <details class="more">
-                            <summary>詳しく</summary>
-                            <p>
-                                画面の隅で線の向きがどのコマでも揃うところをロゴとして覚え、エンコードのたびに精度を上げます。
-                                違うものを覚えていたら、下の一覧から消せば次の録画で覚え直します。
-                            </p>
-                        </details>
-                    </dd>
-                    {#if cmLogos.length > 0}
-                        <dd class="full cm-logos">
-                            {#each cmLogos as service (service.id)}
-                                <details class="cm-logo">
-                                    <summary class="small">
-                                        <span class="broadcast">{service.name}</span>
-                                        <!--
-                                            覚えたかどうかは畳んだまま分かるようにする。
-                                            開かないと分からない頃は、100局ぶん開いて回る
-                                            しかなかった
-                                        -->
-                                        <span class="tag {service.learned_at !== null ? 'success' : ''}">
-                                            {service.learned_at !== null ? '覚えました' : 'まだ'}
-                                        </span>
-                                    </summary>
-                                    <LearnedLogo
-                                        serviceId={service.id}
-                                        serviceName={service.name}
-                                        learnedAt={service.learned_at}
-                                    />
-                                </details>
-                            {/each}
-                        </dd>
-                    {/if}
+                    <span class="tag">{data.cmLogoStats.have} / {data.cmLogoStats.total} 局</span>
                 </div>
-            </dl>
-        </section>
-    </div>
+                <Lead>
+                    録画をエンコードするときに、その録画から自動で覚えます
+                    {#snippet more()}
+                        <p>
+                            画面の隅で線の向きがどのコマでも揃うところをロゴとして覚え、エンコードのたびに精度を上げます。
+                            違うものを覚えていたら、下の一覧から消せば次の録画で覚え直します。
+                        </p>
+                    {/snippet}
+                </Lead>
+            </div>
+        </div>
+        <!--
+            **局ごとの一覧は畳んでおく。** 100 局を超えると、開いたままでは画面がそれだけで埋まる。
+            覚えていない局があれば、その数だけ見出しの横に出す (開かなくても要るかどうか分かる)
+        -->
+        {#if cmLogos.length > 0}
+            <details class="cm-logo-list" data-testid="cm-logo-list">
+                <summary>
+                    局ごとの一覧
+                    {#if cmLogosPending > 0}
+                        <span class="tag" data-testid="cm-logo-pending">まだ {cmLogosPending} 局</span>
+                    {/if}
+                </summary>
+                <div class="cm-logos">
+                    {#each cmLogos as service (service.id)}
+                        <details class="cm-logo">
+                            <summary class="small">
+                                <span class="broadcast">{service.name}</span>
+                                <!-- 覚えたかどうかは畳んだまま分かるようにする (100局ぶん開いて回らずに済む) -->
+                                <span class="tag {service.learned_at !== null ? 'success' : ''}">
+                                    {service.learned_at !== null ? '覚えました' : 'まだ'}
+                                </span>
+                            </summary>
+                            <LearnedLogo serviceId={service.id} serviceName={service.name} learnedAt={service.learned_at} />
+                        </details>
+                    {/each}
+                </div>
+            </details>
+        {/if}
+    </section>
 </div>
 
 <style>
+    /* 表を幅いっぱいに使うので、設定の画面 (720px) より広く取る */
+    .tuners {
+        max-width: 64rem;
+    }
     .faint {
         opacity: 0.4;
     }
@@ -787,7 +748,6 @@
      * 頃は表が 784px より縮まず、1920px の画面でも Windows の拡大 125% (= 1536px)
      * では列が 675px しかなく、中に横スクロールが出ていた。
      * デバイスの欄だけを伸び縮みさせて、余った幅を全部そこにあげる。
-     * 列が狭い (44rem 未満) ときは種別を縦に積んで詰める。
      * それでも入らない幅 (スマートフォン) は、行を1枚ずつのカードにする (下の 32rem)
      */
     .config-wrap {
@@ -799,17 +759,9 @@
     .device-col {
         width: 100%;
     }
+    /* 受信できる種別は小さな切り替え (`.chip`) を横に並べる。行の高さを 1 段に保つ */
     .types-cell {
-        white-space: nowrap;
-    }
-    @container (max-width: 44rem) {
-        .types-cell {
-            white-space: normal;
-        }
-        .types-cell .type-check {
-            display: flex;
-            margin-right: 0;
-        }
+        flex-wrap: nowrap;
     }
     .table-wrap table {
         margin: 0;
@@ -834,18 +786,12 @@
     .wide {
         width: 100%;
     }
-    .types {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        margin-top: 0.25rem;
-    }
     .log {
         max-height: 16rem;
         overflow: auto;
         margin: 0;
         padding: 0.5rem;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius);
         background: var(--dp-subtle);
         font-family: var(--pico-font-family-monospace);
         font-size: 0.75rem;
@@ -911,9 +857,8 @@
             width: 100%;
             min-width: 0;
         }
-        .types-cell .type-check {
-            display: inline-flex;
-            margin-right: 1rem;
+        .types-cell {
+            flex-wrap: wrap;
         }
     }
     .w-name {
@@ -926,11 +871,7 @@
     .w-lnb {
         width: 5rem;
     }
-    .type-check {
-        margin-right: 0.5rem;
-    }
-    .note,
-    .actions {
+    .config-actions {
         margin-top: 0.5rem;
     }
     .reader {
@@ -938,8 +879,9 @@
         flex-direction: column;
         gap: 0.5rem;
         margin-top: 0.5rem;
-        padding-top: 0.75rem;
-        border-top: 1px solid var(--dp-line);
+    }
+    .reader h3 {
+        font-size: var(--dp-text-base);
     }
     .break {
         word-break: break-all;
@@ -952,16 +894,7 @@
     .logos {
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
-        margin: 0;
-    }
-    .logos dd {
-        margin: 0;
-    }
-    .term {
-        width: 7rem;
-        font-size: 0.875rem;
-        font-weight: 500;
+        gap: var(--dp-space-4);
     }
     .sweep,
     .cm-logos {
@@ -972,9 +905,19 @@
     .cm-logos {
         gap: 0.5rem;
     }
+    /* 局ごとの一覧 (畳んである)。開くと 1 局ずつの行が並ぶ */
+    .cm-logo-list > summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: var(--dp-text-sm);
+    }
+    .cm-logos {
+        margin-top: 0.5rem;
+    }
     .cm-logo {
-        padding: 0.5rem;
+        padding: 0.5rem 0.75rem;
         border: 1px solid var(--dp-line);
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius);
     }
 </style>

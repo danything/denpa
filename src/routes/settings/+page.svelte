@@ -154,7 +154,7 @@
             **変えたらその場で保存する** (`autosave`)。保存のボタンは置かない。
             値は bind せず `checked` / `selected` で渡す (保存して読み直しても、同じ値なら DOM に書かない)
         -->
-        <form method="POST" action="?/saveRecording" use:autosave={saves.recording} class="fields">
+        <form method="POST" action="?/saveRecording" use:autosave={saves.recording} class="fields setting-rows">
             <!--
                 **コーデックは複数選べる。** 両方入れると1本の録画を両方で
                 エンコードする — 古いテレビは AV1 をデコードできないので H.264 も置いておくと、
@@ -322,28 +322,30 @@
             その場で変換する本数の上限 (`server/transcode.ts`)。GPU の有無で既定が変わるのでここに置く。
             GPU の無い機械でも変えられるよう、GPU の印のフォームとは分ける
         -->
-        <form method="POST" action="?/saveTranscode" use:autosave={saves.transcode} class="field transcode">
-            <span class="field-label">
-                同時に変換する本数
-                <SaveNote status={saves.transcode} />
-            </span>
-            <select name="transcodeLimit" class="narrow" aria-label="同時に変換する本数" data-testid="transcode-limit">
-                <option value="" selected={recording.transcodeLimit === null}>
-                    自動 ({data.transcode.auto}本)
-                </option>
-                {#each data.transcode.choices as n (n)}
-                    <option value={String(n)} selected={recording.transcodeLimit === n}>{n}本</option>
-                {/each}
-            </select>
-            <Lead>
-                録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません
-                {#snippet more()}
-                    <p>
-                        自動では GPU が無ければ 2本、あれば 4本です。埋まっているときにリクエストされた再生は断り、
-                        エンコード済みの動画か元のTSでの再生を勧めます。
-                    </p>
-                {/snippet}
-            </Lead>
+        <form method="POST" action="?/saveTranscode" use:autosave={saves.transcode} class="setting-rows transcode">
+            <div class="field">
+                <span class="field-label">
+                    同時に変換する本数
+                    <SaveNote status={saves.transcode} />
+                </span>
+                <select name="transcodeLimit" class="narrow" aria-label="同時に変換する本数" data-testid="transcode-limit">
+                    <option value="" selected={recording.transcodeLimit === null}>
+                        自動 ({data.transcode.auto}本)
+                    </option>
+                    {#each data.transcode.choices as n (n)}
+                        <option value={String(n)} selected={recording.transcodeLimit === n}>{n}本</option>
+                    {/each}
+                </select>
+                <Lead>
+                    録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません
+                    {#snippet more()}
+                        <p>
+                            自動では GPU が無ければ 2本、あれば 4本です。埋まっているときにリクエストされた再生は断り、
+                            エンコード済みの動画か元のTSでの再生を勧めます。
+                        </p>
+                    {/snippet}
+                </Lead>
+            </div>
         </form>
     </section>
 
@@ -371,7 +373,7 @@
                 <p>都道府県で地域の情報を出し分ける局もあります。</p>
             {/snippet}
         </Lead>
-        <form method="POST" action="?/saveBroadcast" use:autosave={saves.broadcast} class="fields">
+        <form method="POST" action="?/saveBroadcast" use:autosave={saves.broadcast} class="fields setting-rows">
             <div class="wrap-row">
                 <label class="field">
                     <span class="field-label">郵便番号</span>
@@ -444,7 +446,7 @@
         </Lead>
 
         <!-- 新しく足す操作なので「追加」のボタンのまま (その場では保存しない) -->
-        <form method="POST" action="?/addWebhook" use:submitting class="fields">
+        <form method="POST" action="?/addWebhook" use:submitting class="fields setting-rows">
             <label class="field">
                 <span class="field-label">URL</span>
                 <input name="url" placeholder="https://..." data-testid="webhook-url" />

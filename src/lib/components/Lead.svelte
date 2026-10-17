@@ -30,8 +30,9 @@
         </button>
     {/if}
 </p>
-{#if more && open}
-    <div class="more-body" {id}>
+{#if more}
+    <!-- 閉じている間も置いておく (ページ内の検索で見つかる。読み上げとテストからも引ける) -->
+    <div class="more-body" {id} hidden={!open}>
         {@render more()}
     </div>
 {/if}
@@ -78,6 +79,9 @@
         margin-top: 0.35rem;
         color: var(--dp-muted);
         font-size: var(--dp-text-sm);
+    }
+    .more-body[hidden] {
+        display: none;
     }
     .more-body :global(p) {
         margin: 0;
