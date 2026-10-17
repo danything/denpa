@@ -607,7 +607,7 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
  * ブラウザの画面配信 (CDP の screencast。描き替わるたびに 1 コマ届く) を貯め、届いた時刻のまま
  * ffmpeg で GIF に組む。PR の前後の見比べに使う (docs には置かない)
  */
-async function record(page: Page, name: string, fn: () => Promise<void>, width = 960): Promise<void> {
+async function record(page: Page, name: string, fn: () => Promise<void>, width = 800): Promise<void> {
     const cdp = await page.context().newCDPSession(page);
     const frames: { data: string; t: number }[] = [];
     cdp.on('Page.screencastFrame', (frame) => {
@@ -651,7 +651,7 @@ async function record(page: Page, name: string, fn: () => Promise<void>, width =
             '-i',
             join(dir, 'list.txt'),
             '-vf',
-            `fps=30,scale=${width}:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
+            `fps=20,scale=${width}:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
             gif,
         ],
         { stdio: 'inherit' },
@@ -796,11 +796,11 @@ async function motionShots(browser: Browser): Promise<void> {
     await shot('progress', async () => {
         await page.goto(`${BASE}/tuners`);
         await settle(page, 800);
-        await page.getByTestId('epg-collect-now').click();
-        await page.getByTestId('epg-collect').waitFor({ timeout: 15_000 });
-        await page.getByTestId('epg-collect').scrollIntoViewIfNeeded();
+        // 偽の放送では集め終わるのが速いので、押す前から録る
+        await page.getByTestId('epg-collect-now').scrollIntoViewIfNeeded();
         await record(page, 'progress', async () => {
-            await page.waitForTimeout(5000);
+            await page.getByTestId('epg-collect-now').click();
+            await page.waitForTimeout(4000);
         });
     });
     await desktop.context().close();
