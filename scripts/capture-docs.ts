@@ -549,23 +549,43 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
                     console.log('axe', name, theme, size.name, found.length);
                 }
             }
-            // 開いたメニュー (`Menu.svelte`)。スマホはナビ、デスクトップは観る画面の速さ
-            try {
-                if (size.mobile) {
-                    await page.goto(`${BASE}/`);
-                    await settle(page, 300);
-                    await page.getByRole('button', { name: 'メニュー' }).click();
-                } else if (watchId !== null) {
-                    await page.goto(`${BASE}/watch/${watchId}`);
-                    await settle(page, 2000);
-                    await wake(page, 'watch-stage');
-                    await page.getByTestId('watch-speed').click();
+            // 開いたメニュー (`Menu.svelte`)。スマホは下のタブの「その他」、デスクトップは観る画面の速さ。
+            // 画面に見えている広さだけを撮る (ページ全体だと、下に貼り付くタブが途中に写る)
+            const menus: [string, () => Promise<void>][] = [
+                [
+                    'menu',
+                    async () => {
+                        if (size.mobile) {
+                            await page.goto(`${BASE}/`);
+                            await settle(page, 300);
+                            await page.getByRole('button', { name: 'その他' }).click();
+                        } else if (watchId !== null) {
+                            await page.goto(`${BASE}/watch/${watchId}`);
+                            await settle(page, 2000);
+                            await wake(page, 'watch-stage');
+                            await page.getByTestId('watch-speed').click();
+                        }
+                    },
+                ],
+                // 録画の「表示」(表示の切り替えをまとめたメニュー)
+                [
+                    'view',
+                    async () => {
+                        await page.goto(`${BASE}/`);
+                        await settle(page, 300);
+                        await page.getByTestId('recordings-view').click();
+                    },
+                ],
+            ];
+            for (const [name, open] of menus) {
+                try {
+                    await open();
+                    await page.waitForTimeout(400);
+                    await page.screenshot({ path: join(dir, `${name}-${theme}-${size.name}.png`) });
+                    console.log('ui', name, theme, size.name);
+                } catch (e) {
+                    console.warn('ui', name, theme, size.name, e);
                 }
-                await page.waitForTimeout(400);
-                await page.screenshot({ path: join(dir, `menu-${theme}-${size.name}.png`) });
-                console.log('ui', 'menu', theme, size.name);
-            } catch (e) {
-                console.warn('ui menu', theme, size.name, e);
             }
             await ctx.close();
         }
