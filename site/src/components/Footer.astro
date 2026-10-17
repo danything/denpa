@@ -4,17 +4,20 @@
  * 文は scripts/import-docs.ts が README から取ってくる (src/generated/usage.json)。ここには書かない
  */
 import Default from '@astrojs/starlight/components/Footer.astro';
+import { base } from '../data/pages.ts';
 import usage from '../generated/usage.json';
 
 const escapeHtml = (s: string) =>
     s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 // 要約は README の段落そのまま。太字 (**…**) だけ活かす
 const summary = usage ? escapeHtml(usage.summary).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') : '';
+// トップには節そのものがあるので、要約は出さない
+const isTop = Astro.url.pathname === base;
 ---
 
 <Default />
 {
-    usage && (
+    usage && !isTop && (
         <aside class="usage" aria-label="使ってよい範囲">
             <p>
                 <Fragment set:html={summary} />{' '}
