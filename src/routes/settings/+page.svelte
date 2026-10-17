@@ -712,7 +712,7 @@
             **互換モード** (`canvas-video.ts`)。`<video>` の再生が止まる端末 (テスラの車載ブラウザ) のため、
             ライブ・追っかけ・録画の動画を canvas に描く。端末ごとの設定なので「画面の高さを見る」と並べる。
             入れるときは運転中の注意を出し、「わかりました」で入る (`DriveNotice`)。
-            canvas・WebCodecs といった言葉は画面に出さない (docs/screens.md「画面の言葉」)
+            canvas・WebCodecs といった言葉は画面に出さない (docs/writing.md「画面の言葉」)
         -->
         <section class="panel card" data-testid="canvas-video">
             <h2>互換モードで再生</h2>

@@ -3,7 +3,7 @@
 **録画・ルール・手動予約を、EPGStation から denpa へ移します。** 設定画面から実行し、
 何度走らせても二重にはなりません (録画とルールは取り込み済みを飛ばす。手動予約は予約し直す。下記)。
 
-環境変数の一覧は [app.md](app.md#環境変数)、保存先の構成は [library.md](library.md)。
+環境変数の一覧は [config.md](config.md)、保存先の構成は [library.md](library.md)。
 
 ## 先に用意するもの
 
@@ -12,7 +12,7 @@
 | 何を | どうやって | 変数 |
 | --- | --- | --- |
 | EPGStation の録画置き場 | その PVC (かディレクトリ) を denpa の Pod にマウントする | `EPGSTATION_RECORDED_DIR` (既定 `/epgstation-recorded`) |
-| EPGStation v2 の MariaDB (`recorded`・`video_file`・`channel` / `rule` / `reserve`。v1 は見ない) | denpa から届くところに置く。読むだけ | `EPGSTATION_DB_*` (既定は [app.md](app.md#環境変数)) |
+| EPGStation v2 の MariaDB (`recorded`・`video_file`・`channel` / `rule` / `reserve`。v1 は見ない) | denpa から届くところに置く。読むだけ | `EPGSTATION_DB_*` (既定は [config.md](config.md)) |
 
 録画置き場が見えていないと、設定画面は実行の欄を出しません (`migrate.available`)。「引き継ぎ元 ○○ が
 見つかりません」と出ていれば、まだマウントできていません。**`charts/` にも `compose.prod.yml` にも

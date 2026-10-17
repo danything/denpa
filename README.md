@@ -77,45 +77,15 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 ```
 
-エージェントの置き場は OS で違います (どれも上の1行がやる)。
-
-- **Linux** — エージェントも本体も Docker Compose のコンテナ (`~/denpa/compose.yml`)
-- **Mac** — エージェントは Mac の上で直接 (LaunchAgent)、本体は Docker。USB をコンテナに渡せないため
-- **Windows** — エージェントは Windows の上で直接 (タスク スケジューラ)、本体は `wslc` のコンテナ。
-  チューナーは px4-userland と siano-userland の機材で、ドライバを WinUSB にしておく
-
-Linux で Compose を手で置くなら、これだけです (エージェントは `tuner-agent` として一緒に立つ)。
-
-```sh
-mkdir denpa && cd denpa
-curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/compose.prod.yml
-docker compose up -d
-```
-
-もう一度流すと最新のリリースに上がります。変えたい設定は `~/denpa/compose.override.yml`
-(Windows は `~/denpa/denpa.env`) に書きます。
+OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書き場所は [docs/install.md](docs/install.md#1行で入れる)。
 
 ### 3. 開く
 
 - <http://denpa.localhost> (Linux・Mac で [genkan](https://github.com/danything/genkan) を入れられたとき) か
   <http://localhost:3000>。LAN のほかの機器 (テレビ・スマホ) からは `http://<IP>:3000`
 - **誰を通すか** — 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
-  ここからはログインなしで通ります。画面をログインで守るなら OIDC の3つを渡します
-  (リダイレクト URI は `https://<denpa>/login/callback`)
-
-  ```yaml
-  # ~/denpa/compose.override.yml
-  services:
-      denpa:
-          environment:
-              TRUSTED_NETWORKS: 192.168.1.0/24
-              OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
-              OIDC_CLIENT_ID: <アプリケーションID>
-              OIDC_CLIENT_SECRET: <クライアントシークレット>
-  ```
-
-  Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に書きます。
-  **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います
+  ここからはログインなしで通ります。範囲の変え方と、画面をログイン (OIDC) で守るときは
+  [docs/install.md](docs/install.md#誰を通すか)
 - 「チューナー」の画面で、見つかったチューナーを確かめて**スキャン**を押します。衛星は最初から局が入っていて、
   地上波は十数分。終わると番組表を集めるので (数分)、あとは番組表から予約するだけです
 - **カードリーダーが NG のまま録ると、中身はスクランブルされたままです** (同じ画面に出ます)
@@ -131,22 +101,44 @@ docker compose up -d
 
 ## もっと詳しく
 
+**はじめる**
+
 - [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
 - [docs/screens.md](docs/screens.md) — 画面 (実機のスクリーンショット)
-- [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴)
-- [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
-- [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
+
+**チューナー**
+
 - [docs/agent.md](docs/agent.md) — チューナーを動かすところ (エージェント・取り合い・B-CAS・Mac / Windows)
-- [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
-- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
-- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
-- [docs/stream.md](docs/stream.md) — **ライブ視聴**
+
+**乗り換え**
+
+- [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
+
+**使う**
+
 - [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
 - [docs/offline.md](docs/offline.md) — 端末に保存して電波の無いところで観る
+- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
+
+**運用**
+
+- [docs/config.md](docs/config.md) — **環境変数** (一覧と、前の版から上げるとき)
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・画面で動いてよいもの (CSP))
+
+**外から使う**
+
 - [docs/api.md](docs/api.md) — **外から使う API**
-- [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
+
+**仕組み**
+
+- [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴)
+- [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・画面・状態遷移・テスト)
+- [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
+- [docs/stream.md](docs/stream.md) — **ライブ視聴**
+- [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
+- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
+- [docs/writing.md](docs/writing.md) — 書き方 (画面・docs・コメントの言葉)
 - [docs/licenses.md](docs/licenses.md) — 借りているもの
 
 動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。

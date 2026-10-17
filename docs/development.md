@@ -208,4 +208,4 @@ ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / siano-userland / asicen-u
 bunx --package renovate renovate-config-validator   # 設定そのもの
 ```
 
-文書の一覧は [README](../README.md#もっと詳しく) に。
+文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。

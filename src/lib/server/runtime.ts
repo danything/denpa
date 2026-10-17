@@ -56,7 +56,7 @@ export function start(): void {
     started = true;
 
     /*
-     * 前の版の置き場の変数は読まない (docs/app.md「置き場を変えた」)。黙って既定に変わると
+     * 前の版の置き場の変数は読まない (docs/config.md「置き場を変えた」)。黙って既定に変わると
      * 空の置き場を見て「録画が全部消えた」ように見えるので、残っていたら言う
      */
     for (const old of ['RECORDED_DIR', 'LIBRARY_DIR']) {

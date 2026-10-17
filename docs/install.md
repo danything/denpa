@@ -1,15 +1,15 @@
 # 立てる
 
-README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm)、前段 (リバースプロキシ) の後ろに置くとき。
+README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
 Mac と Windows の入れ方の中身は [agent.md](agent.md#mac-でチューナーを使う) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
 
 ## 用意するもの
 
-一覧は [README](../README.md#1-要るもの)。機材ごとの細かいことは agent.md に。
+チューナー・カードリーダー・OS の一覧は [README](../README.md#1-要るもの)。機材ごとの細かいこと
+([px4-userland の対応機種](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない) (e-Better / Digibest 系も)・
+[PX-S1UD の blacklist](agent.md#px-s1ud-はカーネルが使っていなければ-siano-userland-で)・
+[PX-W3U3 (試験的)](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) は agent.md に。
 
-- px4-userland の対応機種 (e-Better / Digibest 系も) — [agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)
-- PX-S1UD を siano-userland で使うときの blacklist — [agent.md](agent.md#px-s1ud-はカーネルが使っていなければ-siano-userland-で)
-- PX-W3U3 (試験的) — [agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
 - **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
   `compose.override.yml` で渡します (Helm は既定で渡す)。QSV は amd64 だけで、arm64 は VA-API かソフトウェア
@@ -28,8 +28,8 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 ```
 
 - **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
-- **Mac** (Apple Silicon) — エージェントは Mac の上で直接、denpa 本体は Docker ([agent.md](agent.md#mac-でチューナーを使う))
-- **Windows** (x64) — エージェントは Windows の上で直接、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
+- **Mac** (Apple Silicon) — エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([agent.md](agent.md#mac-でチューナーを使う))
+- **Windows** (x64) — エージェントは Windows の上で直接 (タスク スケジューラ)、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
   チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など)。ドライバは Zadig で WinUSB に ([agent.md](agent.md#windows-でチューナーを使う))
 - **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
@@ -45,6 +45,8 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
   (渡し方は install.ps1 の頭)
 
 ### Docker Compose を手で置く
+
+Linux ならこれだけです (エージェントは `tuner-agent` として一緒に立つ)。
 
 ```sh
 mkdir denpa && cd denpa
@@ -68,7 +70,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 ```
 
 - エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、録画は `/media` の下
-  (元のTS は `raw`、エンコードしたものは `encoded`)。前の版から上げるときは [app.md](app.md#置き場を変えた-前の版から上げるとき)
+  (元のTS は `raw`、エンコードしたものは `encoded`)。前の版から上げるときは [config.md](config.md#置き場を変えた-前の版から上げるとき)
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
   `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは録画の終わりを待つので、`--stop-timeout` を長くしておきます (compose の `stop_grace_period` と同じ)。
@@ -96,6 +98,26 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 
 `latest` はリリースのたびに新しくなります。版を固定するなら `1.20.0` のように書きます
 ([architecture.md](architecture.md#イメージのタグ))。
+
+## 誰を通すか
+
+設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、ここからはログインなしで通ります。
+画面をログインで守るなら OIDC の3つを渡します (リダイレクト URI は `https://<denpa>/login/callback`)。
+
+```yaml
+# ~/denpa/compose.override.yml
+services:
+    denpa:
+        environment:
+            TRUSTED_NETWORKS: 192.168.1.0/24
+            OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
+            OIDC_CLIENT_ID: <アプリケーションID>
+            OIDC_CLIENT_SECRET: <クライアントシークレット>
+```
+
+Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に書きます。
+**`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います。
+ログインの細かいことは [auth.md](auth.md)、変数の一覧は [config.md](config.md)。
 
 ## うまくいかないとき
 
