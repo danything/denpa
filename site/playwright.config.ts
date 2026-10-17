@@ -19,6 +19,7 @@ export default defineConfig({
     projects: [
         { name: 'desktop-light', use: { viewport: { width: 1280, height: 900 }, colorScheme: 'light' } },
         { name: 'desktop-dark', use: { viewport: { width: 1280, height: 900 }, colorScheme: 'dark' } },
-        { name: 'mobile', use: { ...devices['Pixel 7'] } },
+        { name: 'mobile', use: { ...devices['Pixel 7'], colorScheme: 'light' } },
+        { name: 'mobile-dark', use: { ...devices['Pixel 7'], colorScheme: 'dark' } },
     ],
 });

@@ -43,8 +43,6 @@ export default defineConfig({
             // 文書のページにパンくず (構造化データ) を足す
             routeMiddleware: './src/routeData.ts',
             components: {
-                // 既定のテーマを明るいほうに (切り替えは残す)
-                ThemeProvider: './src/components/ThemeProvider.astro',
                 // 全ページの下に「使ってよい範囲」の要約
                 Footer: './src/components/Footer.astro',
                 // 検索ボタンの「Ctrl K」を読み上げから外す

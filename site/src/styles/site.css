@@ -4,7 +4,7 @@
  *   - 主の色: Blades (Pico) の既定の azure (@anyblades/blades の pico/_variables.css の --pico-primary*)
  *   - 地と灰色: app.css と同じ slate の段 (pico.colors.css の 50〜950)
  *   - 角丸: app.css の --pico-border-radius (0.65rem)
- * 明るいほうが既定 (components/ThemeProvider.astro)。暗いほうも同じ段から選ぶ
+ * テーマの既定は Starlight のまま「自動」(OS の設定に合わせる)。暗いほうも同じ段から選ぶ
  */
 :root {
     --sl-font: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
