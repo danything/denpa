@@ -13,7 +13,7 @@ namespace Denpa.Agent;
 /// <c>siano-ts</c> は **smsusb が使っていても黙って奪っていた** (作者も unbind の境目で
 /// カーネルの異常を観測している)。0.1.8 からは siano-ts 自身がカーネルの使っている機材を
 /// 断り (終了コード 4)、こちらも自動検出ではどのドライバにも繋がっていない機材だけを並べる。
-/// 使いたい人は smsusb / smsdvb / smsmdtv を blacklist して再起動する (docs/agent.md)。
+/// 使いたい人は smsusb / smsdvb / smsmdtv を blacklist して再起動する (docs/tuner-px-s1ud.md)。
 /// </para>
 ///
 /// <para>
@@ -211,7 +211,7 @@ public static class SianoUserland
     {
         // Windows は libusb が WinUSB 越しにしか開けない。ドライバが違えば開くところで落ちる
         1 or 4 when OperatingSystem.IsWindows() =>
-            " — チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/agent.md)",
+            " — チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/install-windows.md)",
         3 => " — そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
         4 => " — カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
             + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",

@@ -3,6 +3,7 @@
 **電波を受けるところ。機材に触るのはここだけです。** なぜこの構成なのかと、
 `bun` から `.NET` に移るまでに測ったことを書きます。
 
+使えるチューナー・B-CASカード・困ったときは [tuners.md](tuners.md)、Mac と Windows は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md)。
 番組表・スキャン・持ち物は [data.md](data.md)、ファイルは [app.md](app.md)、環境変数は [config.md](config.md)。
 
 次の3つは denpa からは触れず、チューナーを持つコンテナでしか扱えません。
@@ -13,7 +14,7 @@
 - **選局そのもの** — DVB はデバイスを ioctl で直接操作します
   ([下記](#net-で書き直すまで-経緯と実測))。PX-Q3U4 などは同梱の px4-userland、
   PX-S1UD は (カーネルが使っていなければ) 同梱の siano-userland に USB を扱わせます
-  ([下記](#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))
+  ([下記](tuner-px4.md))
 
 持っている仕事は3つ。
 
@@ -278,9 +279,9 @@ PVC に置きます (`/config`)。どちらも無くて構いません (機材�
 | 機材 | 聞き方 |
 | --- | --- |
 | DVB | `/dev/dvb/*` を開いて `DTV_ENUM_DELSYS` で受けられる方式を聞く (実機の PT3 で adapter0/2 が ISDB-S、adapter1/3 が ISDB-T)。sysfs にはこれを答える項目が無い |
-| px4-userland | `px4d --list-json` (0.1.9 以上が要る。[下記](#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
-| siano-userland | `siano-ts --list` ([下記](#px-s1ud-はカーネルが使っていなければ-siano-userland-で)) |
-| asicen-userland | `/sys/bus/usb/devices` の USB ID を読む (試験的。配布物が無ければ挙げない。[下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
+| px4-userland | `px4d --list-json` (0.1.9 以上が要る。[下記](#px4-userland-の作り)) |
+| siano-userland | `siano-ts --list` ([下記](#siano-userland-の作り)) |
+| asicen-userland | `/sys/bus/usb/devices` の USB ID を読む (試験的。配布物が無ければ挙げない。[下記](#asicen-userland-の作り)) |
 
 書いてあれば書いたほうが勝ちます (LNB や1台だけ止めるのは人にしか決められない)。
 
@@ -312,7 +313,7 @@ denpa の `src/lib/ts` でも、局名・リモコン番号・17 秒ぶんの番
 ARIB の文字ごと読めました。
 
 **カードが開けなくても選局は続きます。** カードを読めなかった試しでも掛かったまま
-録れ、チューナー画面に理由が出ました ([下記](#b-casカードとデスクランブル))。
+録れ、チューナー画面に理由が出ました ([tuners.md](tuners.md#b-casカードとデスクランブル))。
 
 実際の放送で問題が1つ見つかりました。**EIT[p/f] の `running_status` が全部 0
 (未定義) の局がある**ので、延長追従が効いていませんでした (偽の TS は 4 を入れて
@@ -379,23 +380,9 @@ BS は再編があるので埋め込んだ表はいつか古くなります (実
 と見えて次の要求に取られます。選局し直す間の順番はチューナーごとの錠で守ります (別のチューナーは
 待たない)。
 
-### PX-Q3U4 などは px4-userland で。カーネルドライバは入れてもらわない
+### px4-userland の作り
 
-複数チューナーの PX4 系を Linux で使うには、ホストに `px4_drv` (DKMS) を入れて
-`/dev/px4video*` を出すしかなく、「まず何かを入れてください」が要ります (以前あった
-`px4_drv` の chardev 対応は、実機に当てないまま外しました)。
-
-代わりに [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントの
-イメージに同梱**します (`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間の
-ドライバで、`/dev/bus/usb` が見えれば動き、カーネルモジュールも DKMS も要りません。
-
-| 機材 | 使うドライバ |
-| --- | --- |
-| PT2 / PT3 (Earthsoft) | DVB (mainline の `earth_pt1` / `earth_pt3`)。実機はこれ |
-| PX-S1UD (ISDB-T / USB) | DVB (mainline の Siano `smsusb` + `smsdvb`。firmware `isdbt_rio.inp` が要る)。smsusb を blacklist してあれば siano-userland (同梱。`Siano.cs`。[下記](#px-s1ud-はカーネルが使っていなければ-siano-userland-で)) |
-| PX-BCUD (ISDB-S / USB) | DVB (Linux 4.7 以降 mainline) |
-| PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe) | px4-userland (同梱。`Px4.cs`)。px4-userland の対応機種ならそのまま使う ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境)) |
-| PX-W3U3 (ISDB-T/S / USB) | **試験的。** asicen-userland (`Asicen.cs`)。上流のリリース待ちで、いまはイメージに入らない ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
+使い方・設定・ファームウェアは [tuner-px4.md](tuner-px4.md)。
 
 **使うのは2つ。** `px4d` が筐体 (USB 機能・受信機・内蔵カードリーダー) を所有する
 デーモンで、筐体1台につき1つ起こします。`px4ctl` は状態を聞きます。受信機は
@@ -411,23 +398,6 @@ Q3U4 なら8つで受信機ごとに地上波か衛星か決まっており、ML
 受けられます。その違いは答えに入るだけなので、対応機種が増えても px4-userland を
 上げれば追従します。一覧は筐体を使わないので、px4d を起こす前に顔ぶれが決まります。
 
-- **設定の `device` は `px4:<筐体の番号>:<受信機>`。** 刺さっていれば
-  一覧から組み立てるので (`Px4Userland.Detect`)、普通は書きません。
-  `status=ready` 以外の筐体と、まとめられなかった USB デバイス (`ungrouped_usb_devices` /
-  `rejected` の行) は、理由と USB の場所を記録して使いません
-  (`open_failed` なら `/dev/bus/usb` を開く権限を疑う)。番号の桁数や受信機の上限は
-  見ず、合わなければ `px4d` が理由を付けて断ります。
-  古い `q3u4:<14桁>:<受信機>` は「知らないデバイス」として断るので、書いてあれば
-  `px4:` に書き直してください (番号と受信機はそのまま)
-- **番号が重なる筐体 (`serial_unique=false`) は、USB ポートで見分けます。** PX-M1UR と PX-S1UR は
-  どれも USB の serial が `000000000000001` で、0.1.9 からは同時に挿すと別々の ready な
-  筐体として並びます (0.1.8 までは1つの `duplicate`)。番号のままだと同じ
-  `px4:000000000000001:0` が2つでき、`px4d --device` も番号だけでは1台に決められず断ります。
-  そこで名前を番号と USB ポートにし (`px4:000000000000001_1-2.3:0`)、`px4d` を
-  `--device <番号> --usb-path <USBポート> --instance <名前>` で起こし、`px4ctl` やソケットも
-  その名前で呼びます (SPEC 4.1)。**差すポートを変えると別のチューナーになります**
-  (px4-userland も「抜き差し後の物理個体は保証しない」と言っています)。前は両方飛ばしていて、
-  Home Assistant のアドオンが `px4d` / `px4ctl` を差し替えるラッパーで補っていました
 - **`--list-json` の形式が違っても止まりません。** `schema_version` は無く、知らない鍵は
   無視する決まり (SPEC 4.6)。無い鍵・型の違う値は既定で埋めて読み進め、版のずれを疑う旨を
   1度だけ記録します。飛ばすのは筐体の番号・受信機の番号が読めないものだけ
@@ -448,12 +418,6 @@ Q3U4 なら8つで受信機ごとに地上波か衛星か決まっており、ML
   受け、枠ごとの確保はしません。選局のたびに新しい溜めなので、前の局の TS は混ざりません。
   どの OS でも同じ作りで、OS の pipe は使わないので深さも OS に左右されません
   (前は pipe(2) を 8MB に広げていて、`CAP_SYS_RESOURCE` が無いと浅いままでした)
-- **siano-ts の標準出力の pipe を広げるには `CAP_SYS_RESOURCE` を渡します** (compose の `cap_add`、HA のアドオンの
-  `privileged: [SYS_RESOURCE]`)。無いと上限 (`pipe-max-size`、既定 1MB) までしか広げられず、
-  さらに uid ごとの pipe の合計が上限 (`pipe-user-pages-soft`、既定 64MB) を超えていると
-  **1MB も断られて数 KB のまま**になります (読む側が少し止まると TS を落とす)。Home Assistant OS の
-  アドオンは、ホスト中の root と uid 0 を分け合うのでこれに当たります。広げられなかったときは
-  記録にいまの深さと理由が出ます (`ChildTs.WidenPipe`)。px4-userland の機材には要りません
 - **同期の判定は TUNE の答え。** `px4d` は同期するまで答えず、5 秒 (`timeout_ms`) で
   諦めて TIMEOUT を返します。そのあと最初の TS が 3 秒以内に来れば成功。**同期しなくても
   受信機は取ったまま**なので、総当たりのスキャンで同期しないチャンネルが続いても電源は
@@ -466,18 +430,6 @@ Q3U4 なら8つで受信機ごとに地上波か衛星か決まっており、ML
   (`ITuneDevice.Tuned` を `TunerPool` が見る。DVB は常に true)
 - **`px4d` との接続が切れていたら取り直します。** px4d が落ちて起こし直された・lease が
   無くなった、は次の選局で気づき、その場で1度だけ `HELLO → ACQUIRE` からやり直します
-- **15V は2段階で許可します。** `px4d` には `--allow-lnb-power` を渡し、実際に要求するのは
-  設定に `lnb: 15v` と書いたチューナーだけ (TUNE の `lnb_voltage` = 15)。`11v` は
-  px4-userland に無い (0V か 15V) ので要求しません
-- **15V を出せない受信機では 0V で選局します** (`Px4Tuner.Lnb`)。px4-userland 0.1.8 から、
-  1受信機の機種 (PX-M1UR / DTV02-1T1S-U / DTV02A-1T1S-U) は 15V の要求を
-  `--allow-lnb-power` があっても UNSUPPORTED で断ります (給電の経路が無い)。そのまま要求すると
-  衛星の選局が全部落ちるので、`lnb: 15v` と書いてあっても 0V で合わせ、記録に1度と、
-  チューナー画面のそのチューナーの欄 (空いているときの `error`) に理由を出します。0V での衛星受信は
-  これらの機種の対応範囲で、アンテナがほかの機器から給電されていれば受かります
-  (給電が無ければ「同期しませんでした」)。出せるかどうかは一覧の受信機の
-  `lnb_15v_supported` で、`px4ctl list` には載らないので、px4d を起こす前に一覧で聞いて
-  写します。一覧を聞けなかったときは言われたとおりに要求します
 - **内蔵カードリーダーも `px4d` が持っています。** control socket に APDU を
   投げて読みます (`Px4Card.cs`、px4-userland SPEC 6 節の portable IPC)。同梱の
   pcscd 用 IFD ハンドラは使いません。pcscd を挟んでいた頃は reader.conf を起動前に
@@ -487,54 +439,10 @@ Q3U4 なら8つで受信機ごとに地上波か衛星か決まっており、ML
   ファームウェアを流し込むので ready まで数秒かかります。起こせなくても
   他のチューナー (PT3 など) は動き、選局のときにもう一度試します
 
-**ファームウェアは同梱しています。** IT930x は挿すたびにホストから RAM へ
-ファームウェアを流し込み、px4-userland は受理する版を SHA-256 で1つに固定して
-います。イメージをビルドするとき (Mac と Windows は install.sh / install.ps1 が入れるとき) に、PLEX 公式の Windows ドライバ
-(`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から
-切り出します (0x287d0 から 2,169 バイト)。配布 zip・`.sys`・切り出したものの3つを
-ハッシュで確かめます。
+### siano-userland の作り
 
-**再配布の許諾は誰も持っていません。** 権利者が動いていないことに乗る判断です。
-px4-userland 本体は方針として同梱しない (SPEC 4.5) ので、そこはこちらが背負います。
+使い方・設定は [tuner-px-s1ud.md](tuner-px-s1ud.md)。
 
-**実機には当てていません** (手元の機材は PT3)。確かめたのは、機材に触らない部分
-(`px4d --list-json` / `px4ctl list` の読み方・device 文字列・TUNE の中身・受信機と内蔵カードの IPC)
-と、配布物の CLI が期待どおりの引数を受けることです。テストは `Px4Tests.cs` /
-`Px4TunerTests.cs` / `Px4CardTests.cs` で (受信機とカードは px4d のふりをしたソケット相手)、出力の形式は px4-userland の SPEC 4.6 と自身のテストの期待値に
-合わせてあります。実機で当てるのは
-`denpa-agent --tune px4:<筐体の番号>:2 T27` (`Probe.cs`)。
-
-### PX-S1UD はカーネルが使っていなければ siano-userland で
-
-PX-S1UD は mainline の `smsusb` + `smsdvb` で Linux DVB になるので、DVB でも使えます
-(ホストに `isdbt_rio.inp` が要る)。別に
-[siano-userland](https://github.com/Khronos31/siano-userland) の `siano-ts` を
-**エージェントのイメージに同梱**しています (`agent/Dockerfile`)。libusb だけで USB を
-扱い、ファームウェアも配布アーカイブに入っているので、ホストに何も入れずに動きます。
-
-**カーネルが使っている機材には触りません。** 作者自身が「動いている smsusb から
-切り替えるのは安全と判定していない」と書いており (unbind の境目でカーネルの異常を観測)、
-DVB で動いている S1UD を奪うのは論外です。siano-userland 0.1.8 からは
-siano-ts 自身が、カーネルのドライバが使っているデバイスを断ります (終了コード 4。
-以前は黙って奪っていた。Khronos31/siano-userland#9)。
-
-| 機材の様子 | 使うドライバ |
-| --- | --- |
-| smsusb が使っている (`/dev/dvb` に出ている) | DVB (`DvbTuner`)。siano-ts は起こさない |
-| どのドライバにも繋がっていない (smsusb を blacklist した・モジュールが無い) | siano-userland (`SianoTuner`) |
-
-siano-userland で使うなら、ホストで `smsusb` / `smsdvb` / `smsmdtv` を blacklist して
-再起動します (挿したまま unbind するのは上の理由で勧めません)。
-**siano-userland で使ったときの選局は、実機で試せていません** (動いた/動かなかったは Issue へ)。
-
-```sh
-printf 'blacklist smsusb\nblacklist smsdvb\nblacklist smsmdtv\n' | sudo tee /etc/modprobe.d/denpa-siano.conf
-sudo reboot
-```
-
-- **設定の `device` は `siano:<USB のポート>`** (`siano:1-2`)。S1UD にはシリアルが
-  無いので、挿したポートで見分けます。刺さっていれば組み立てるので
-  (`SianoUserland.Detect`)、普通は書きません。ポートを変えたら組み直します
 - **機材は `siano-ts --list` に聞きます** (`px4ctl list` と同じ `key=value` の形式)。
   USB ID の表は持たず、ポートと受けられる方式も siano-ts の答えを使います。
   ポートの分からない機材 (`port=-`) と対応外の機材 (`rejected`) は、理由を記録に残して
@@ -560,23 +468,10 @@ sudo reboot
   少し捨てることがありますが、録画の頭が数ミリ秒ずれるだけです
 - **誰も読まなくても siano-ts は死にません。** 書くところで待ち、中の溜めから
   溢れたぶんは捨てます。選局は生きています (DVB のリングバッファが溢れたときと同じ)
-- **地上波だけ。** 衛星は siano-ts を起こす前に断ります
-- **実機に当てていません。** siano-userland 側で実機確認済みなのは PX-S1UD (`3275:0080`) だけで、
-  `187f:0600` / `187f:0302` はあちらでも未検証です
 
-### PX-W3U3 は asicen-userland で (試験的。上流のリリース待ち)
+### asicen-userland の作り
 
-[asicen-userland](https://github.com/Khronos31/asicen-userland) は、px4-userland と同じ作者による
-ASICEN 系 (PLEX PX-W3U3) のユーザー空間ドライバです。**まだリリースが無い** (0.1.0 の予定) ので、
-いまは受け口だけ用意してあり、**イメージには何も入りません** (`agent/Dockerfile` の
-`ASICEN_USERLAND_VERSION=0.0.0` が「まだ無い」の印)。配布物が無ければエージェントは機材を挙げず、
-選局もしないので、main は今のまま出せます。0.1.0 が出ると Renovate が版を上げる PR を出し
-(自動では入れない。`renovate.json`)、そこで初めて取ってきます。PR の CI でイメージをビルドするので、
-配布物の名前や形式が見込み (下) と違えばそこで落ちて分かります。
-
-上流の現状 (2026-10): 受信機の並びは `0:S, 1:T, 2:S, 3:T` だが、実機で選局できるのは **受信機 0 の衛星と
-受信機 1 の T27 だけ**、使える受信機は**同時に1つ**、LNB の給電はできない、1台のホストで**1筐体まで**
-(筐体の錠が `/tmp` に1つ)。上流自身が「まだ4つの受信機として動くドライバではない」と言っています。
+いまの様子・設定・ファームウェアは [tuners.md](tuners.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)。
 
 - **IPC は px4d と同じ。** asicen-userland は px4-userland の portable IPC を取り込み、枠の頭 (`ASCN`) と
   ソケットの置き場 (`<ランタイム>/asicen-userland/<instance>/`) だけ変えています。受信機の取得と返却・
@@ -584,10 +479,6 @@ ASICEN 系 (PLEX PX-W3U3) のユーザー空間ドライバです。**まだリ�
   同梱の `asicen-ts` (1回1チャンネルの CLI。チャンネルの書き方は px4-ts と同じ) は使いません
   (px4-ts を使わないのと同じ理由)。上流の `asicend --mock` と話すテストがあります (`AsicenMockTests`。
   CI では上流の決めたコミットを組んで回す `agent-asicen-mock`。必須にはしない)
-- **USB の serial が無いので、USB ポートで見分けます。** PX-W3U3 は1つの筐体に USB 機能が2つ (内蔵ハブの
-  `.1` と `.2`) あり、それぞれに衛星と地上波の受信機が1つずつ。筐体の名前は内蔵ハブのポート (`1-2`) にして、
-  `asicend --instance` とソケットの置き場にもそのまま使います (PX-M1UR を USB ポートで見分けるのと同じ考え)。
-  **設定の `device` は `asicen:<ポート>:<受信機>`** (`asicen:1-2:1`)。**差すポートを変えると別のチューナーになります**
 - **機材は sysfs で見つけます** (`AsicenUserland.Scan`)。上流の配布物 (`bin/` の asicend・asicenctl・asicen-ts) には
   機材を並べる道具が無く (`asicen-probe` は入らない。`asicend --list` も実機ではまだ並べない)、asicend には
   USB のアドレスとポートを2組とも渡す決まり (`--primary` が `.1`、`--sibling` が `.2`) なので、
@@ -597,23 +488,9 @@ ASICEN 系 (PLEX PX-W3U3) のユーザー空間ドライバです。**まだリ�
 - **asicend は筐体1台につき1つ、起動時に起こします** (`AsicenDaemon`)。番地は挿し直すたびに変わるので
   起こす直前に読み直し、ready は `asicenctl list` が通ることで見ます (`status` はカードの様子も要る)。
   受信機も `asicenctl list` に聞きます (形式は `px4ctl list` と同じ)
-- **LNB は出せません。** 設定に `15v` と書いてあっても 0V で選局し、チューナー画面にその旨を出します
-  (px4-userland の 1受信機機種と同じ扱い)
 - **カードは asicend の内蔵リーダーを、px4d と同じ IPC で読みます** (`AsicenUserland.Cards`)。上流が用意する
   pcscd 用の `libifd-asicen.so` (recisdb で復号するための部品) は使いません。B25 は今までどおりエージェントが復号します
   ([下記](#b25-の解除もカードリーダーも自前))
-- **ファームウェアは上流の配布アーカイブに入っているものをそのまま使います** (`firmware/asicen-loader.bin`。
-  上流 NOTICES.md: Git には入れず、配布物には入れる)。**再配布の権利は確かめられていません**。上流が添える
-  `licenses/VENDOR-FIRMWARE-NOTICE.txt` (権利未確定・元の成果物・大きさ・SHA-256) も一緒に置き、ビルドするときに
-  上流の記録の SHA-256 (`b45d5102…`) と突き合わせます ([licenses.md](licenses.md))。挿した直後の PX-W3U3 は
-  ファームウェア待ちで現れ、asicend は自分では流し込まないので、配布物に `asicen-probe` があればエージェントが
-  1つずつ流し込みます (流すたびに並べ直す。上流は流し込むと同じ筐体のもう片方も出直すのを観測している)。
-  **配布物にファームウェアが無ければ「ファームウェアがありません」と記録して、その機材は使いません**
-- **見込みで書いたところ** (0.1.0 が出たら確かめる): 配布物の名前
-  (`asicen-userland-<版>-linux-glibc-x86_64.tar.gz`、タグは `v<版>`、`SHA256SUMS` を添える)、
-  アーカイブの構成 (頭に1段のディレクトリ、`bin/` にコマンド、`firmware/` と `licenses/`)。
-  上流の第一弾は Linux x86_64 だけなので、arm64 のイメージ・Mac・Windows には入りません
-- **実機には当てていません** (手元に PX-W3U3 が無い)。当てるなら `denpa-agent --tune asicen:1-2:1 T27`
 
 ### B25 の解除もカードリーダーも自前
 
@@ -670,17 +547,8 @@ PAT・PMT・ECM を読み、ECM の中身が変わったらその場でカード
 **速さ。** MULTI2 を `Vector<uint>` で並べて回し、Native AOT で1コアあたり
 約 400 MB/s (Ryzen 5 5600X)。地上波1チャンネルは 2.5 MB/s 弱なので桁で余ります。
 
-**USB のリーダーは usbfs を直接扱います。** `/dev/bus/usb` が見えていれば動きます。
-ホストや別のコンテナで pcscd が動いていると使えません (「別のプロセスがリーダーを
-使っています」と出る)。TPDU 単位のリーダー (Gemalto PC Twin など) には T=1 の枠組みを
-こちらで組み、APDU 単位のリーダーにはそのまま送ります。カードの無いリーダーや INT に
-答えないカードは飛ばし、USB のリーダーを内蔵リーダーより先に試します (`CardLinks.cs`)。
+リーダーの扱いと、カードと話せているかの確かめ方は [tuners.md](tuners.md#カードリーダー)。
 
-動いているエージェントがカードと話せているかは `/denpa/card` で分かります (INT を
-1回通す)。止めた状態なら `denpa-agent --card` でも確かめられます (リーダーを並べ、
-ATR とカードの番号を出す。動いているエージェントがリーダーを使っている間は断られます)。
-チューナーを使わずに B25 だけ確かめるなら `denpa-agent --decode-file <in.ts> <out.ts>` (`/denpa/decode`
-と同じことをする。掛かったまま録れてしまったものを救うのにも使える)。
 
 復号するのは選局ごとに1回です ([共有の決まり](#共有の決まり))。**番組表とロゴには
 カードは要りません。** PSI/SI (EIT・SDT・NIT・CDT・DSM-CC) はスクランブルされて
@@ -915,299 +783,7 @@ protocol の選び方ではありません。なので、いちばん退屈な�
 - **チューナーの刺さったマシンにエージェントだけ置き、denpa は別の所で動かせます**
   (`charts/denpa-agent`)。元のTSの置き場 (`denpa-raw`) は NFS などで両方に見せます (見せられなければ、
   録画中にカードが読めなかったものを後から復号できなくなるだけ)
-  ([下記](#b-casカードとデスクランブル))
+  ([tuners.md](tuners.md#b-casカードとデスクランブル))
 - **繋げるエージェントはいまは1つだけ**です (`TUNER_AGENT_URL`)。複数のエージェントを
   1つの denpa に束ねるのはまだ入っていません。入れるなら
   取り合いは denpa が全体を見て決め、どのエージェントの何台目かは denpa 側の帳簿になります
-
-## Mac でチューナーを使う
-
-**Apple Silicon の Mac なら、Linux と同じ1行で denpa ごと立ち上がってブラウザが開きます**
-(入口の `install.sh` は1つで、OS を見て振り分ける)。Mac 用は v1.23.0 からで、
-それより前の版は入れられません (install.sh がそう言って止まる)。
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
-```
-
-**エージェントは Mac の上でそのまま、denpa 本体は Docker で動かします。** Mac の Docker
-(Docker Desktop / OrbStack / colima) はコンテナに USB を渡せないので、エージェントは
-コンテナに入れられません。denpa のコンテナからは
-`host.docker.internal` でエージェントを呼びます (`compose.mac.yml`。
-compose.prod.yml から tuner-agent を外したもの)。
-
-1. **エージェント** — 最新のリリースから取り、LaunchAgent
-   (`~/Library/LaunchAgents/io.github.danything.denpa-agent.plist`) に載せます。
-   ログインで起き、落ちたら起き直し、止めるときは録画の終わりを待ちます
-   (launchd に殺されないよう、待ちの上限を 6 時間より長くしてある)
-2. **denpa 本体** — エージェントと同じ版の compose.mac.yml を `~/denpa/compose.yml` に置いて
-   `docker compose up -d`。答えたらブラウザで開きます (`--no-open` で開かない)。genkan が動いているか
-   80・443 が空いていれば、Linux と同じく `http://denpa.localhost` で開けるようにします ([install.md](install.md#1行で入れる))
-
-- **要るのは Docker だけ。** px4-userland / siano-userland の Mac 版は libusb を中に抱えている
-  (px4-userland 0.1.7・siano-userland 0.1.9 から) ので、Homebrew は要りません。
-  Docker は勝手に入れません。無い・起きていないときはエージェントだけ入れ、
-  Docker Desktop か OrbStack を入れる (起こす) よう言って終わります。入れたらもう一度流す
-- 入れるのは全部ユーザーの下で、sudo は要りません
-
-| 置き場 | 中身 |
-| --- | --- |
-| `~/denpa/` (`DENPA_HOME`) | Linux と同じ置き場。`compose.yml` (上げ直すたびに上書き)・`compose.override.yml` (手を入れるならここ。無いときだけ雛形を作る)・`config/` (エージェントの `tuners.json` / `channels.json`) |
-| `~/Library/Application Support/denpa-agent/` | エージェント・px4-userland・siano-userland (プログラムだけ) |
-| `~/Movies/denpa/recorded` | 元のTS。エージェントとコンテナの両方に見せる (掛かったまま録れたものを後から復号するとき、denpa は相対パスで要求し、エージェントが直に読み書きする) |
-| `~/Movies/denpa/library` | 出来上がった録画 (Finder から見える) |
-| Docker のボリューム `denpa_denpa-data` | DB。SQLite の錠は Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに |
-| `~/Library/Logs/denpa-agent.log` | エージェントのログ |
-
-- もう一度流せば上げ直し (エージェントも denpa のイメージも最新のリリースへ)。
-  消すときは `… | bash -s -- --uninstall`。エージェント・LaunchAgent・キャッシュを外し、
-  コンテナを畳みます。`~/denpa` (compose と設定)・録画・DB は残し、消し方を言います (Linux と同じ)
-- denpa 本体は別の Linux で動かし、Mac にはエージェントだけ置くなら `… | bash -s -- --no-docker`。
-  denpa の `TUNER_AGENT_URL` に `http://<Mac の名前>.local:25252` を書きます
-  ([別の所に置く](#エージェントは別イメージ別プロセス)のと同じ構成)
-- **誰を通すか** (`TRUSTED_NETWORKS`) は compose.prod.yml と同じ私設網です。Mac のブラウザから
-  localhost で入ると、送り元は Docker のネットワークの出口 (私設網の中) に見えるので通ります
-
-LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き場に向け直すものだけです
-(`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
-`SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RAW_DIR`)。`PX4_RUNTIME_DIR` を
-`~/Library/Caches/denpa-agent` と短くしているのは、px4d の制御ソケットのパスが macOS では
-104 バイトまでだからです。IT930x のファームウェアはコンテナと同じく PLEX のドライバから
-手元で切り出します (ハッシュ3つで確かめる)。
-
-**Linux と違うところ。**
-
-- **チューナーは px4-userland と siano-userland の機材だけ。** macOS には DVB が無いので、
-  PT2/PT3 のような PCI の機材は使えません
-- **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。USB のリーダーは
-  usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
-  (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます。動いている間はリーダーを
-  排他で使うので、他のアプリはカードを使えません
-- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、siano-ts から受ける溜めは Linux より浅い
-  (px4d から受ける溜めは pipe を使わないので、Linux と同じ 8MB)
-- **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)
-- **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI でビルドして起こし、
-  入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`。
-  Mac のランナーには Docker が無いので、compose.mac.yml は Linux のジョブ (`install-linux`) で書き方だけ見る)
-
-## Windows でチューナーを使う
-
-**x64 の Windows なら、PowerShell の1行で denpa ごと立ち上がってブラウザが開きます**
-(`install.ps1`)。Windows 用は 1.23.1 からで、
-それより前の版は入れられません (install.ps1 がそう言って止まる)。
-
-```powershell
-irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
-```
-
-引数を渡すときは `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall`
-のようにします (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ)。
-
-**エージェントは Windows の上でそのまま、denpa 本体は WSL のコンテナ (`wslc`) で動かします。** Docker Desktop は
-要りません (wslc は WSL に入っていて、`wsl --update` で使えるようになる)。コンテナには USB を渡せないので、
-チューナーとカードに触るエージェントはコンテナに入れられません。
-
-1. **エージェント** — 最新のリリースから取り、タスク スケジューラに「ログオンしたら起こす」
-   タスク (`denpa-agent`) を載せます。自分のアカウントのタスクなので管理者は要りません。窓は出さず
-   (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` の輪。
-   タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
-2. **denpa 本体** — エージェントと同じ版のイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
-   載せて、いま1度流します。起こすのは `denpa-start.ps1` (install.ps1 が書く)
-
-`denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
-
-- **コンテナから Windows のエージェントへは、Hyper-V の Default Switch の IP で届きます。**
-  `host.docker.internal` のような名前はありません。その IP は Windows を起こし直すと変わりうるので、
-  起こすたびに調べ、`TUNER_AGENT_URL` か版か `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
-  作り直します (環境変数は作るときに埋め込まれる。DB はボリューム、録画は Windows のフォルダなので消えない)。
-  変わっていなければ `wslc start` だけ。`denpa.env` を直したら、install.ps1 を流し直すかログオンし直せば効く
-- **自動で起こし直す指定 (`--restart`) がありません。** ログオン時のタスクが代わりに起こします
-- **ポートは既定で 127.0.0.1 にしか出ません。** `-p 0.0.0.0:3000:3000` で出して、LAN のほかの機器からも開けるようにします
-- **この PC のブラウザから入ると、送信元は `169.254.x.x` に見えます** (wslc がポートを中継するため)。
-  LAN のほかの機器は本当の IP のまま届きます。なので `TRUSTED_NETWORKS` の既定に `169.254.0.0/16` を足してあります
-- **DB は wslc のボリューム (`denpa-data`) に置きます。** Windows のフォルダ越し (virtiofs) だと SQLite のロックが当てにならないため
-- **compose はまだありません** (Microsoft は次の優先課題と言っている)。Windows で動かすコンテナは本体の1つだけなので、`wslc run` で足ります
-- 録画中に上げ直すと、`wslc stop` が録画の終わりを待ってから入れ替えます (`--stop-timeout 21900`)
-
-**前の版 (Docker Desktop の compose) から上げるとき**は、install.ps1 が `docker compose down` で止め
-(録画中なら待つ)、DB を Docker のボリューム `denpa_denpa-data` から wslc のボリュームへ移し、
-`compose.yml` を `compose.yml.docker` に退けます。`compose.override.yml` に足していた環境変数は引き継がないので、
-`denpa.env` に書き移します (退けたときにそう言う)。このときだけ Docker Desktop を起こしておく必要があります
-(移したあとは要りません。Docker のボリュームは消さずに残す)。
-
-- **WSL は勝手に入れません。** wslc が無いときは、エージェントだけ入れて `wsl --update` (WSL が無ければ
-  管理者で `wsl --install --no-distribution`) を流すよう言って終わります
-- ドライバは入れません (下)。刺さっているチューナーが WinUSB でなければ、そう言います
-  (px4-userland の機材は `px4d --list-json` に聞くので、機種の表は持ちません)
-- genkan (`http://denpa.localhost`) には繋ぎません (genkan は Docker のネットワークにいて、wslc のコンテナからは入れない)
-
-| 置き場 | 中身 |
-| --- | --- |
-| `~/denpa/` (`DENPA_HOME`) | `denpa.env` (コンテナの環境変数。手で足すならここ。無いときだけ雛形を作る)・`config/`・エージェントのログ `denpa-agent.log` |
-| `%LOCALAPPDATA%\denpa-agent\` | エージェント・px4-userland (`px4d.exe`・`px4ctl.exe`・切り出したファームウェア・ライセンスの文書)・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1` |
-| `C:\denpa-run` | px4d のソケットの置き場 (下) |
-| `~/Videos/denpa/recorded` | 元のTS。エージェントとコンテナ (`/media/raw`) の両方に見せる |
-| `~/Videos/denpa/library` | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える) |
-| wslc のボリューム `denpa-data` | DB |
-
-**使えるもの。**
-
-- **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 版 (0.2.0 から。
-  入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
-  受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
-  `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
-  置きません — エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらを引いてしまう。
-  ファームウェアは Mac と同じく PLEX 公式ドライバから切り出します (下の「ファームウェアは同梱しています」)
-- **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 版 (`siano-ts.exe` と libusb) も、
-  ドライバを WinUSB にすれば動きます
-- WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
-  **PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
-  機材は、WinUSB にするとそちらからは見えなくなります (戻すときはデバイス マネージャーでドライバを戻す)。
-  installer はドライバを入れ替えません (ほかのソフトで使っていた機材を黙って奪わない)。
-  WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
-  (Windows の libusb は WinUSB の機材しか開けず、開けるのも1つのプロセスだけ)
-- px4 と Siano の機材は同時に挿して使えます (別の USB の機材を別のプロセスが開く)
-- **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
-  Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
-  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーも
-  並びます (USB のリーダーが先)
-
-**px4-userland の機材で Windows だけ違うところ。**
-
-- **px4d は標準入力で止めます** (`--exit-on-stdin-eof`)。Windows には SIGTERM が無いので、エージェントは px4d の
-  標準入力を何も書かずに開けたまま持ち、止めるときに閉じます。px4d はそれを見て後片付け (LNB を 0V に戻す・
-  ソケットを消す) をしてから終わります。**エージェントが落ちても (止められても) 書く側が閉じるので、px4d が
-  USB を持ったまま残りません** (残ると、起こし直したエージェントの px4d が起きられない)。install.ps1 も
-  エージェントを先に止め、px4d が自分で終わるのを待ってから残りを落とします
-- **ソケットの置き場は `C:\denpa-run`** (`PX4_RUNTIME_DIR`)。px4d は、持ち主が本人で、本人・SYSTEM・Administrators の
-  ほかに書ける人がいないフォルダしか使いません。install.ps1 が作って、保護された ACL (本人・SYSTEM・Administrators に
-  フルコントロール) にします。ユーザーのフォルダ (`%LOCALAPPDATA%`) の下にしないのは、ソケットのパスが UTF-8 で
-  108 バイトまでで、日本語のユーザー名 (1 文字 3 バイト) だとすぐ溢れるのと、非 ASCII のパスだと px4d の
-  ready の行が途切れる ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52)) から。
-  エージェントは px4d を起こす前に、持ち主・ACL・パスの長さを確かめ、合わなければ理由を言います
-  (px4d に任せると INVALID_ARGUMENT としか言わない)。決まった1か所なので、**1台の PC でエージェントを動かせるのは
-  1人のユーザーだけ**です (USB を開けるのも1つのプロセスだけなので、もともと分けられない)
-- **px4d が使っている筐体は、一覧 (`px4d --list-json`) で開けない機材 (`open_failed`) に見えます。** エージェントは
-  起こしたときの筐体を覚えていて、動いている間はそれを顔ぶれに残し、その USB の `open_failed` は記録しません
-  (でないと、画面でチューナーの定義を消して自動に戻したときに筐体が消える)。同じ番号の PX-M1UR と PX-S1UR を
-  同時に挿したときも、片方の px4d が動いていればもう片方は番号が一意に見えるので、動いている px4d と番号が同じなら
-  USB ポートで見分けます。**同じ番号の筐体を `--usb-path` で分けて起こすのは、px4-userland も Windows では
-  確かめていません**
-- USB を抜くと px4d は終わり (USB_IO)、次の選局で起こし直します。px4d が DISCONNECTED / USB_IO を返したのに
-  動き続けていたら、エージェントが止めて起こし直します (同じ px4d のままの繋ぎ直しは px4-userland が確かめていない)
-
-px4-userland の README の対応表のうち Windows の行です (v0.2.1。そのまま写しています)。機種では絞らず、px4-userland が
-ready と言った筐体は使います。
-
-| OS / 環境 | 対象model/profile | build-tested | tuner-hardware-verified | card-core-hardware-verified | native-card-adapter-verified | 備考 |
-|---|---|:---:|:---:|:---:|:---:|---|
-| Windows 11 x64（Phase 1/2） | PX-Q3U4 | 完了 | 検証済み | 検証済み | 限定smoke確認 | native libusb（WinUSB）。0.2.0 candidateでE17の8 receiver受信、card hotplug/APDU、USB再接続後のdaemon再起動、2時間soak、全局受信を確認（[検証記録](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/validation-results.md#2026-10-10-v020-candidate-e17-windows-11-x64-実機試験q3u4必須matrix-pass--soak注記付き受入)）。既知の制限: 非ASCII endpoint pathでready行が途切れる（[Issue #52](https://github.com/Khronos31/px4-userland/issues/52)）。0.2.1ではx64 B25 application用の限定WinSCard.dllを同梱し、application-localでQ3U4実機のreader列挙・接続・状態取得・正常解放を限定smoke確認（[v0.2.1 evidence](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/validation-results.md#2026-10-12-v021-candidate-e17-windows-winscard-smoke限定実機確認)）。一般WinSCard/B25 application互換性は未認定（[API scope](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/windows-winscard.md#windows-application-local-winscard)）。PC/SC IFDシステム登録は未対応 |
-| Windows 11 x64（Phase 1） | PX-M1UR / PX-S1UR | 完了 | 検証済み | 検証済み | 該当なし（N/A） | native libusb（WinUSB）。0.2.0 candidateでprofile別30分連続受信（受信中の直接APDU 300/300）、機種固有T/S（M1UR ISDB-S 0V・15V拒否、S1UR ISDB-S拒否）、stop/reopen、card抜去/再挿入、USB切断・再接続後のdaemon再起動による復旧、同時接続時のlist/JSONと曖昧serial拒否を確認。同一lease retune、同一daemonの自動USB再接続、衝突中の`--usb-path`による個別起動は未認定。既知の制限: [Issue #52](https://github.com/Khronos31/px4-userland/issues/52)。PC/SCはPhase 2 |
-| Windows 11 x64（Phase 1） | その他のmodel/profile | 完了 | 未検証（hardware-unverified） | 未検証（hardware-unverified） | 該当なし（N/A） | 実機evidenceなし |
-
-denpa が使うのは px4d の制御ソケット (受信機と内蔵カード) だけで、表の WinSCard.dll と PC/SC の列は関係しません。
-
-**使えないもの。**
-
-- **PT2/PT3 などの DVB の機材** — Windows に DVB はありません
-- **PX-W3U3 (asicen-userland)** — Windows 版がありません
-- **止めるときに録画を待てません。** Windows には「止まれ」を伝える手 (SIGTERM) が無く、
-  止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが、
-  ログオフ・再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)。
-  siano-ts も同じく、止めるときに `quit` を読めなければ Kill になります (USB は OS が閉じる)
-
-**Linux・Mac と違うところ。**
-
-- 子の標準出力は poll できないので、裏のスレッドに読ませて 200ms ごとに起きます (`DeviceStream`)。
-  pipe は広げられず 4KB ほどで、読む側が少し止まったぶんは siano-ts の中の溜め
-  (16KB × 256) が吸う。px4d から受ける TS は pipe を使わないので、Linux・Mac と同じ 8MB の溜め
-- タスクの優先度は普通にしてあります (既定の「低い」だと、denpa のコンテナがエンコードで CPU を食う間
-  siano-ts や px4d が後回しにされる)
-- ログは cmd がファイルへ足すだけで、回しません (Mac と同じ)
-- LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、Windows ファイアウォールでポート 25252 を
-  許します (初めて起きたときに確認の窓が出ることがある)。wslc のコンテナからは要りません
-- **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows`) で
-  ビルドして起こし、API が応答することと入れ方 (`-AgentOnly`) を最後まで流すところまで。px4-userland は
-  偽の px4d (AF_UNIX のソケット) を相手に受信機と内蔵カードの IPC・TS の受け渡し・標準入力で止めるところを
-  流し、本物の `px4d.exe` / `px4ctl.exe` は引数を受けて「筐体が無い」と答えるところまで (ランナーにチューナーが無い)。
-  ランナーには wslc が無いので、denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました
-  (入れる・この PC と LAN から開ける・エージェントに繋がる・起こし直し・外す。Docker Desktop からの移行は未確認)。
-  実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`
-
-## B-CASカードとデスクランブル
-
-スクランブルは**エージェント自身が復号します** (`B25.cs`)。カードが読めないときは
-掛かったまま流し、理由を状態に出します。黙って素通しすると「録画は成功してサイズも
-それらしいのに中身が全部スクランブル」という分かりにくい壊れ方になるためです。
-選局を畳むときに、掛かったまま流したパケットの数と理由を記録にも残します。
-
-- **録画は止めません。** 電波は二度と来ないので、スクランブルされたままでも
-  録ります。denpa がエンコードの前に見て、掛かったままならエージェントに
-  復号させます (`src/lib/server/scramble.ts` → `/denpa/decode`)
-- やり取りするのはパスだけです。元のTSの置き場 (`denpa-raw`) を両方のコンテナに
-  見せてあるので、読み書きはエージェントが直接やり、数十GBを HTTP で往復させません
-  (`charts/denpa` が一緒に出すときは、置き場が RWO なので**両方の Pod が同じノードにあることが前提**です)
-- 元のTSを残す設定のときは、残るのは解除済みのTSだけです。掛かったままのものは、
-  あとから復号できる保証がありません
-- 状態はチューナー画面の「チューナーの空き」の「カードリーダー」の表に出ます。
-  リーダーごとに1行で、カードの番号・状態 (使用中・予備・カードなし・エラー)・
-  そのカードで復号しているチューナーを並べます。`CARD_URL` で鍵を貰っているときは、
-  表の代わりに配り役の URL を出します
-- **使うカードは1枚です。** INT に答えた最初のリーダーのカードを全部のチューナーで
-  使い回します (ECM は鍵が変わるときにしか来ないので、1枚で足ります)。残りの
-  リーダーは予備で、使っているカードが答えなくなると、繋ぎ直すときに探し直して
-  拾います。チューナーごとにカードは割り当てません
-
-### 直らないとき
-
-まず `/denpa/card` で、見えているリーダーと、カードに INT が通るかを見ます
-(チューナー画面の「カードリーダー」の表と同じもの)。使っているリーダーは鍵の出どころに
-INT を通させ、他のリーダーは開いて覗いて閉じます (USB のリーダーは使うと他から
-開けないので、使っているリーダーは開き直しません)。
-
-```json
-{
-  "ok": true,
-  "message": "",
-  "source": "local",
-  "readers": [
-    { "name": "Gemplus USB SmartCard Reader (usb 4-11)", "card": true, "ids": ["0000032231622637"],
-      "active": true, "tuners": ["PT3-T1", "PT3-S1"] },
-    { "name": "PX4 内蔵リーダー", "card": false, "ids": [], "active": false, "tuners": [] }
-  ]
-}
-```
-
-`message` は困ったときだけ入ります (カードがどこにも無い、など)。覗けなかった
-リーダーは `error` に理由が入ります。`CARD_URL` のときは `source: "remote"` で、
-`remote` (配り役の URL)・`ids`・`tuners` が付き、`readers` は空です。
-鍵を配っているときは `share` に決まり (ポート・相手の範囲・TTL・往復時間の上限) が付きます
-([鍵を配るのは LAN の中だけ](#鍵を配るのは-lan-の中だけ))。断られたときの文も同じ節にあります。
-
-```sh
-# ホストから呼ぶ (イメージには curl もシェルも無い)。compose は 25252 を出してある。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む
-curl -s localhost:25252/denpa/card
-```
-
-- **`readers` が空** — `/dev/bus/usb` がコンテナに見えていない
-- **`card: false` で `error` が無い** — そのリーダーにカードが挿さっていない
-- **「別のプロセスがリーダーを使っています」** — ホストで pcscd が動いている。
-  止めるか、リーダーをそちらから外す (`denpa-agent --card` を動いているエージェントの
-  横で起こしたときも、エージェントが使っているのでこう出る)
-- **応答が無い (タイムアウト)** — リーダーが固まっている。USB レベルで入れ直すと戻ります
-  (`4-11` は `lsusb` と `/sys/bus/usb/devices` から引く)
-
-```sh
-echo 4-11 | sudo tee /sys/bus/usb/drivers/usb/unbind
-sleep 2
-echo 4-11 | sudo tee /sys/bus/usb/drivers/usb/bind
-```
-
-エージェントは起こし直さなくて構いません。次の ECM で探し直します。
-
-実際に復号できているかは `--tune ... --decode` で見ます (復号したあとが 0% 近くなら正常)。
-衛星で LNB に電源を送るなら `--lnb 15v` を足します。
-
-```sh
-kubectl -n denpa exec deploy/tuner-agent -- denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode
-```

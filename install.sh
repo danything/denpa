@@ -7,7 +7,7 @@
 #   … | bash -s -- --uninstall    止めて外す (~/denpa の compose と設定、録画・DB は残す)
 #   … | bash -s -- --no-docker    Mac だけ: エージェントだけ (denpa 本体は別の Linux で動かす)
 #
-# Windows は install.ps1 (同じ作りを PowerShell で。docs/agent.md「Windows でチューナーを使う」)
+# Windows は install.ps1 (同じ作りを PowerShell で。docs/install-windows.md)
 #
 # **Linux** は全部 Docker Compose (compose.prod.yml をそのまま置く)。
 # **Mac (Apple Silicon)** は、エージェントを Mac の上でそのまま動かし (LaunchAgent)、
@@ -344,7 +344,7 @@ mac_main() {
   check_listed "$px4" px4.sums
   mkdir -p new/px4-userland/firmware && tar -xzf "$px4" -C new/px4-userland
 
-  # 再配布の許諾は誰も持っていないので、PLEX の配布物から手元で切り出す (docs/agent.md)
+  # 再配布の許諾は誰も持っていないので、PLEX の配布物から手元で切り出す (docs/tuner-px4.md)
   say "IT930x のファームウェアを PLEX のドライバから切り出します"
   fetch https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip driver.zip
   check driver.zip "$PLEX_DRIVER_SHA256"

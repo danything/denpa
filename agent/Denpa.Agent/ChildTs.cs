@@ -84,7 +84,7 @@ internal static class ChildTs
             var why = Marshal.GetLastPInvokeErrorMessage();
             Log.Write($"[{name}] pipe を広げられませんでした ({why}。いまの深さ {Sys.Fcntl(fd, Sys.GetPipeSize, 0)} バイト)。"
                 + "pipe の合計が uid ごとの上限 (pipe-user-pages-soft) を超えているかもしれません。"
-                + "コンテナに CAP_SYS_RESOURCE を渡すと広げられます (docs/agent.md)");
+                + "コンテナに CAP_SYS_RESOURCE を渡すと広げられます (docs/tuner-px-s1ud.md)");
         }
     }
 
