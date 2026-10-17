@@ -14,7 +14,7 @@
  * ここは読んで在ることを言うだけです。開くのはデータ放送が起動を求めたときで
  * (画面の `HybridcastFrame`)、受信機の API は用意できる範囲だけ。放送局のサーバが
  * 認証された受信機を期待するものは、denpa 側の努力では越えられません
- * ([docs/stream.md](../../../docs/stream.md#58-hybridcast))。
+ * ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  */
 
 import { decodeAribText } from './aribtext';

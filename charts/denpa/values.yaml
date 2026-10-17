@@ -44,7 +44,7 @@ denpa:
   # trustedNetworks が誰にも当たらない (安全側に倒れるだけで、開きはしない)。
   # (以前の addressHeader は廃止。設定していても読まない)
   trustedProxies: ""
-  # ホーム画面に置いたときの名前。`ホスト=名前` のカンマ区切り (docs/player.md)
+  # ホーム画面に置いたときの名前。`ホスト=名前` のカンマ区切り (docs/watch.md#ホーム画面に置く)
   pwaNames: ""
   # OIDC でのログイン (docs/auth.md)。**Secret の名前だけを渡し**、中身
   # (issuer / client-id / client-secret / group。group は無くてよい) は chart の外で作る

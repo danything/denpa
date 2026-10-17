@@ -62,10 +62,10 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 | --- | --- | --- | --- |
 | .NET 10 ランタイム (AOT でバイナリに埋まる) | エージェント本体 | <https://github.com/dotnet/runtime> | MIT |
 | px4-userland (`/opt/px4-userland`) | PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系のユーザー空間ドライバ。`px4d` / `px4ctl` (配布物に入っている `px4-ts` と pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/px4-userland> | **GPL-2.0-only** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `THIRD_PARTY_NOTICES.md` を同梱のまま置いてある) |
-| IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | PLEX 公式の Windows ドライバ (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) からイメージを組むときに切り出す (agent/Dockerfile) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない)) |
+| IT930x ファームウェア (`/opt/px4-userland/firmware/it930x-firmware.bin`、2,169 バイト) | 挿すたびに流し込む (px4-userland の対応機種で共通) | PLEX 公式の Windows ドライバ (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) からイメージを組むときに切り出す (agent/Dockerfile) | **ライセンス無し** (再配布の許諾は誰も持っていない。権利者が動いていない実態に乗る判断。[tuner-px4.md](tuner-px4.md#ファームウェア)) |
 | siano-userland (`/opt/siano-userland`) | PLEX PX-S1UD など Siano RIO 系のユーザー空間ドライバ。`siano-ts` | <https://github.com/Khronos31/siano-userland> | **GPL-2.0-or-later** (実行ファイルに静的リンクの libusb 1.0.30 は LGPL-2.1+。配布物の `COPYING`・`libusb/COPYING`・`DEPENDENCY-NOTICE.txt` を同梱のまま置いてある) |
 | asicen-userland (`/opt/asicen-userland`。**上流のリリース待ちで、いまは空**) | PLEX PX-W3U3 のユーザー空間ドライバ (試験的)。`asicend` / `asicenctl`、あればファームウェアを流す `asicen-probe` (配布物に入っている `asicen-ts` と pcscd 用 IFD ハンドラは使わない) | <https://github.com/Khronos31/asicen-userland> | **GPL-2.0** (px4-userland 由来の GPL-2.0-only と GPL-2.0-or-later の組み合わせ。静的リンクの libusb は LGPL-2.1+、musl と GCC ランタイムもそれぞれの条件。配布物の `licenses/` を同梱のまま置く) |
-| ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト。**入るのは上流のリリースから**) | 挿した直後の PX-W3U3 に流し込む | asicen-userland の配布アーカイブに入っているものをそのまま (元は PLEX 公式 Linux ドライバの `loader.ko` の `FirmBin`、SHA-256 `b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8`。イメージを組むときに突き合わせる) | **ライセンス無し・再配布の権利は未確定** (上流 NOTICES.md の判断で配布物に入る。上流が添える `licenses/VENDOR-FIRMWARE-NOTICE.txt` に権利未確定・元の成果物・大きさ・SHA-256 が書いてあり、同じ場所に置いてある。[agent.md](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
+| ASICEN ファームウェア (`/opt/asicen-userland/firmware/asicen-loader.bin`、16,384 バイト。**入るのは上流のリリースから**) | 挿した直後の PX-W3U3 に流し込む | asicen-userland の配布アーカイブに入っているものをそのまま (元は PLEX 公式 Linux ドライバの `loader.ko` の `FirmBin`、SHA-256 `b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8`。イメージを組むときに突き合わせる) | **ライセンス無し・再配布の権利は未確定** (上流 NOTICES.md の判断で配布物に入る。上流が添える `licenses/VENDOR-FIRMWARE-NOTICE.txt` に権利未確定・元の成果物・大きさ・SHA-256 が書いてあり、同じ場所に置いてある。[tuners.md](tuners.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) |
 | Siano ISDB-T ファームウェア (`/opt/siano-userland/firmware/isdbt_rio.inp`、85,840 バイト) | siano-ts が USB で流し込む | siano-userland の配布アーカイブに入っているもの (Siano Mobile Silicon) | **Siano の再配布許諾** (無改変なら再配布可。解析は禁止。許諾の文面 `LICENCE.siano` を同じ場所に置いてある) |
 | 土台 (glibc・libssl・ca-certificates・libstdc++・tzdata) | エージェントを動かす。libssl と ca-certificates は `CARD_URL` を https で指したときの検証 | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ) | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、OpenSSL は Apache-2.0、ca-certificates は MPL-2.0、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、tzdata はパブリックドメイン |
 
@@ -119,7 +119,7 @@ asicen-userland は入れません (Windows 版が無い)。カードリーダ�
 | unplugin-icons / @iconify/utils (組むときだけ。束には入らない) | `~icons/*` を Svelte の部品に変える | <https://github.com/unplugin/unplugin-icons> / <https://github.com/iconify/iconify> | MIT |
 | cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-bun は静的ファイルを Bun の `routes` で配り、依存を束に持ち込まない) | 各上流 | MIT |
 
-**データ放送のエンジン** (`src/lib/bml/`。[stream.md](stream.md#56-データ放送の統合)) は自前で、依存を持たない。
+**データ放送のエンジン** (`src/lib/bml/`。[stream.md](stream.md#データ放送の統合)) は自前で、依存を持たない。
 規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書き、NVRAM の領域の表・郵便番号の範囲の読み方・
 BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml (otya128、MIT) の振る舞いを読んで合わせた
 (2026-10 まではデータ放送を web-bml で描いていた。いまは依存に入っていない)。
@@ -127,7 +127,7 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
 ### ライブを変換せずに見るときにブラウザへ配るデコーダ
 
 [Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて
-`/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#55-放送そのままmpeg-2を送る))。
+`/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#放送そのままmpeg-2を送る))。
 **`--enable-gpl` を付けずに組んでいる**ので、中の FFmpeg は LGPL のまま (denpa 自身は AGPL で、
 どちらでも問題は無い)。ソースは Dockerfile が取ってくる FFmpeg の tarball と `wasm/mpeg2/decoder.c`。
 

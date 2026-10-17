@@ -142,7 +142,7 @@ if [ "$input" = "pipe:0" ]; then
     # **写し先が閉じても tee は降ろさない** (`--output-error=warn-nopipe`)。head は 200KB で
     # 抜けるので、既定の tee はそこで SIGPIPE を受けて死に、**偽 ffmpeg ごと終わって**
     # 「映像を出せませんでした」になる。偽の放送が本物の映像を流すようになって量が増え、
-    # 10秒ほどのテストでも 200KB に届くようになった (docs/stream.md §5.5)
+    # 10秒ほどのテストでも 200KB に届くようになった (docs/stream.md#放送そのままmpeg-2を送る)
     if [ -n "${FAKE_FFMPEG_TS_FILE:-}" ] &&
         printf '%s\n' "$@" | grep -qx -- 'libx264'; then
         exec tee --output-error=warn-nopipe >(head -c 200000 > "$FAKE_FFMPEG_TS_FILE" 2>/dev/null) 2>/dev/null

@@ -18,7 +18,7 @@
      *
      * denpa が作った `ResponseMessage` をそのまま食べさせるだけで、**映像は denpa のまま**。
      * エンジンは映像の object の場所を教えるだけで、映像の入れ物をそこへ寄せるのはこちら
-     * (`placeVideo`。[docs/stream.md](../../../../docs/stream.md#56-データ放送の統合))。
+     * (`placeVideo`。[docs/stream.md](../../../../docs/stream.md#データ放送の統合))。
      *
      * ## 押されるまで何も読み込まない
      *
@@ -310,7 +310,7 @@
      * (`/api/bml/proxy`。放送局のサーバは CORS を返さないので直には取れない)。
      *
      * 送る (`transmit`)・届くか確かめる (`confirm`)・通信の文書を取る (`get`) を渡す
-     * ([docs/stream.md](../../../../docs/stream.md#57-双方向通信系コンテンツプロキシ))。
+     * ([docs/stream.md](../../../../docs/stream.md#双方向通信系コンテンツプロキシ))。
      *
      * **送るほうは「応募・投票の API」だと思って外していたが、それでは足りない。**
      * 放送のアプリは `isIPConnected` に 1 と答えても信じず、送る API へ一度

@@ -117,7 +117,7 @@ const REWIND_HEAD = 3;
 /**
  * 次のチャプターの頭。**無ければ null** (最後のチャプターにいる)。
  *
- * CM はチャプターとして入っているので (`docs/encode.md`)、これが
+ * CM はチャプターとして入っているので (`docs/cm.md`)、これが
  * **そのままCM飛ばし**になる。
  */
 export function nextChapterAt(chapters: Chapter[], at: number): number | null {

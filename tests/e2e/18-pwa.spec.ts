@@ -47,7 +47,7 @@ test.describe('PWA', () => {
 
         /*
          * **304 にはならない。** 画面の HTML には CSP の nonce が入って毎回変わる
-         * (vite.config.ts の `csp`、docs/auth.md の「画面で動いてよいもの」)。中身の指紋
+         * (vite.config.ts の `csp`、docs/architecture.md の「画面で動いてよいもの」)。中身の指紋
          * (`etag`) も毎回変わるので、前の指紋で聞かれても中身を返し直す。HTML は小さく、
          * 重いもの (下の `_app/immutable/`) は永く持たせたままなので困らない
          */

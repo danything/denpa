@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { expect, goto, syncEpg, test, wakeControls } from './helpers';
 
 /**
- * ライブを MPEG-2 のまま見る ([docs/stream.md](../../docs/stream.md) §5.5)。
+ * ライブを MPEG-2 のまま見る ([docs/stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
  *
  * エンコードする経路の E2E (20-live) と違って、**ここは映像が出るところまで見る。** 偽エージェントは
  * 本当にデコードできる MPEG-2 と AAC を流していて (`src/lib/ts/synth-av.ts`)、ブラウザの中の

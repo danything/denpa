@@ -3,7 +3,7 @@ import type { Page, TestInfo, Worker } from '@playwright/test';
 import { expect, goto, recordOne, setRecording, test, wakeControls } from './helpers';
 
 /**
- * **元の TS (60i の MPEG-2) を出す間合い** (docs/stream.md §5.5「コマを出す間合い」、`raw/cadence.ts`)。
+ * **元の TS (60i の MPEG-2) を出す間合い** (docs/stream.md#コマを出す間合い--画面の切り替わりに合わせる。`raw/cadence.ts`)。
  *
  * 偽の放送の映像は上下のフィールドで別の時刻の絵にしてある (`ts/synth-av.ts`)。worker の WebGL の
  * 呼び出しを横から数え (どのコマを上げたか・どちらのフィールドを描いたか・いつ描いたか)、画面の

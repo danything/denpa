@@ -46,7 +46,7 @@ RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certifi
 # **PLEX 公式の Windows ドライバ (PX-W3U4 BDA Ver.1.0 64bit) の PXW3U4.sys から
 # 切り出す。** 配布 zip・.sys・切り出したものの3つをハッシュで確かめる。
 # px4-userland SPEC 4.5 が受理するのはこの 2,169 バイトの1つだけ。
-# 再配布の許諾は誰も持っていないので、そこはこちらが背負う判断 (docs/agent.md)。
+# 再配布の許諾は誰も持っていないので、そこはこちらが背負う判断 (docs/tuner-px4.md)。
 ARG PLEX_DRIVER_SHA256=bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200
 ARG PXW3U4_SYS_SHA256=8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722
 ARG IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484

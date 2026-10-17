@@ -7,7 +7,7 @@ import { aitSection, aitSignallingDescriptor, packetize, patSection, programMap 
  *
  * データ放送と違って、アプリの中身は電波に乗っていない。乗っているのは
  * 「どこにあるか」だけなので、ここで確かめるのは**住所を正しく組み立てられるか**。
- * denpa はアプリを動かさない ([docs/stream.md](../../../docs/stream.md#58-hybridcast))。
+ * denpa はアプリを動かさない ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  */
 
 describe('AIT の在り処', () => {

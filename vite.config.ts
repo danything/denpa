@@ -47,7 +47,7 @@ export default defineConfig({
             adapter: adapter({ precompress: true, serverOptions: { idleTimeout: 0 } }),
             /*
              * **画面で動いてよいスクリプトを、自分の束と SvelteKit の起動だけに絞る**
-             * (Content-Security-Policy。方針と、読み込み元を1つずつ洗った表は docs/auth.md の
+             * (Content-Security-Policy。方針と、読み込み元を1つずつ洗った表は docs/architecture.md の
              * 「画面で動いてよいもの」)。
              *
              * いちばんの狙いは**放送が書いたスクリプトを本物の JS として動かさない**こと。

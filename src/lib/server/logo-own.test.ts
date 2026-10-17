@@ -7,7 +7,7 @@ import { load, modelFile, save } from './logo-own';
 
 /**
  * 自前のロゴ判定の、覚えたものの置き場 (`logo-own.ts` の `save`/`load`)。
- * コマを抜く所は ffmpeg が要るので、ここでは試さない (実機での突き合わせは docs/encode.md)
+ * コマを抜く所は ffmpeg が要るので、ここでは試さない (実機での突き合わせは docs/cm.md)
  */
 
 function model(fill: number): LogoModel {

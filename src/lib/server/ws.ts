@@ -2,7 +2,7 @@
  * WebSocket の受け口。**入口 (`server.js`) の `Bun.serve` に間借りする。**
  *
  * ライブ視聴は映像・音声・字幕・データ放送を1本の接続に多重化する作りなので
- * ([stream.md](../../../docs/stream.md) §5.3)、`Request` → `Response` では足りない。
+ * ([stream.md](../../../docs/stream.md#websocket-プロトコル))、`Request` → `Response` では足りない。
  *
  * 枠の組み立て (RFC6455) も ping/pong も詰まり具合の面倒も **bun が見る**。
  * こちらが書くのは、多重化の頭を付けることと、誰に配るかだけ。
@@ -37,7 +37,7 @@ export class Connection {
     constructor(private readonly ws: ServerWebSocket<SocketData>) {}
 
     /**
-     * 1つ送る。**多重化の頭を自分で付ける** (stream.md §5.3)。
+     * 1つ送る。**多重化の頭を自分で付ける** (stream.md#websocket-プロトコル)。
      *
      *     [1 byte: 種別][8 bytes: PTS (90kHz, BE)][中身...]
      *

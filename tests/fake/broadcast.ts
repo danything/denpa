@@ -544,11 +544,11 @@ const TICK = 100;
  * 映像と音声。**本当にデコードできる MPEG-2 と AAC を流す** (`src/lib/ts/synth-av.ts`)。
  *
  * エンコードする経路の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを変換せずに送る経路は
- * **ブラウザが自分でデコードして映像を出す** (docs/stream.md §5.5)。そこを試すにはデコードできるものが要る。
+ * **ブラウザが自分でデコードして映像を出す** (docs/stream.md#放送そのままmpeg-2を送る)。そこを試すにはデコードできるものが要る。
  * コマは 30 枚を使い回す (1秒で一巡りする縞)。
  *
  * **PTS は PCR より 0.4 秒先にする。** 本物の放送もそう作ってある (受信機は PTS まで
- * 待って映す。stream.md §4「貯まりより小さく出ることはある」)
+ * 待って映す。stream.md#貯まりより小さく出ることはある)
  */
 const FRAMES = Array.from({ length: 30 }, (_, n) => (DOCS ? mpeg2Frame(n, docsColor) : mpeg2Frame(n)));
 const SILENCE = silentAac();

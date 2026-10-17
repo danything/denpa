@@ -2,7 +2,7 @@
  * 本番の入口。**adapter-bun の `Bun.serve` に WebSocket を足すためだけにある。**
  *
  * ライブ視聴は映像・音声・字幕・データ放送を1本の接続に多重化する作りなので
- * ([docs/stream.md](docs/stream.md) §5.3)、`Request` → `Response` しか扱えない
+ * ([docs/stream.md](docs/stream.md#websocket-プロトコル))、`Request` → `Response` しか扱えない
  * SvelteKit の仕組みでは足りない。
  *
  * ## なぜ入口が要るのか

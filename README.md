@@ -34,7 +34,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 
 - **予約** — 番組表から押すか、「ルール」のキーワードで自動で。同じ回は最初の放送だけ録る
 - **録画** — CM を見つけてチャプターにし、AV1 / H.264 の mkv にエンコードする。字幕は放送の ARIB 字幕のまま入れる。Intel の GPU があれば使う
-- **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/stream.md](docs/stream.md))
+- **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/watch.md](docs/watch.md#ライブ))
 - **データ放送** — テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも
 - **観る** — 行を押せばその場で再生。CM は1コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕ごと PNG)
 - **字幕と放送の字** — 字幕は放送どおりの位置に描き、番組名・局名も含めて Denpa Font で外字まで崩さない
@@ -48,20 +48,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 
 ### 1. 要るもの
 
-- **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
-
-  | チューナー | 使う仕組み | ホストに入れるもの |
-  | --- | --- | --- |
-  | PT2 / PT3、PX-BCUD、PX-S1UD など | Linux DVB | ドライバ |
-  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も) | px4-userland (同梱) | なし (Windows はドライバを WinUSB に) |
-  | PX-S1UD (smsusb を blacklist したとき。Windows も) | siano-userland (同梱) | なし (Windows はドライバを WinUSB に) |
-  | PX-W3U3 | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし |
-
-- **B-CASカード** と PC/SC のカードリーダー (px4-userland の機材は内蔵リーダーでもよい)
-- **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
-- **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
-  Kubernetes なら Helm
-- あれば Intel の GPU (`/dev/dri` を渡す。[docs/install.md](docs/install.md#用意するもの))。無ければソフトウェアでエンコードします
+チューナー・B-CASカードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Windows は WSL) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
 
 ### 2. 入れる
 
@@ -77,45 +64,15 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 ```
 
-エージェントの置き場は OS で違います (どれも上の1行がやる)。
-
-- **Linux** — エージェントも本体も Docker Compose のコンテナ (`~/denpa/compose.yml`)
-- **Mac** — エージェントは Mac の上で直接 (LaunchAgent)、本体は Docker。USB をコンテナに渡せないため
-- **Windows** — エージェントは Windows の上で直接 (タスク スケジューラ)、本体は `wslc` のコンテナ。
-  チューナーは px4-userland と siano-userland の機材で、ドライバを WinUSB にしておく
-
-Linux で Compose を手で置くなら、これだけです (エージェントは `tuner-agent` として一緒に立つ)。
-
-```sh
-mkdir denpa && cd denpa
-curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/compose.prod.yml
-docker compose up -d
-```
-
-もう一度流すと最新のリリースに上がります。変えたい設定は `~/denpa/compose.override.yml`
-(Windows は `~/denpa/denpa.env`) に書きます。
+OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書き場所は [docs/install.md](docs/install.md#1行で入れる)。
 
 ### 3. 開く
 
 - <http://denpa.localhost> (Linux・Mac で [genkan](https://github.com/danything/genkan) を入れられたとき) か
   <http://localhost:3000>。LAN のほかの機器 (テレビ・スマホ) からは `http://<IP>:3000`
 - **誰を通すか** — 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
-  ここからはログインなしで通ります。画面をログインで守るなら OIDC の3つを渡します
-  (リダイレクト URI は `https://<denpa>/login/callback`)
-
-  ```yaml
-  # ~/denpa/compose.override.yml
-  services:
-      denpa:
-          environment:
-              TRUSTED_NETWORKS: 192.168.1.0/24
-              OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
-              OIDC_CLIENT_ID: <アプリケーションID>
-              OIDC_CLIENT_SECRET: <クライアントシークレット>
-  ```
-
-  Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に書きます。
-  **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います
+  ここからはログインなしで通ります。範囲の変え方と、画面をログイン (OIDC) で守るときは
+  [docs/install.md](docs/install.md#誰を通すか)
 - 「チューナー」の画面で、見つかったチューナーを確かめて**スキャン**を押します。衛星は最初から局が入っていて、
   地上波は十数分。終わると番組表を集めるので (数分)、あとは番組表から予約するだけです
 - **カードリーダーが NG のまま録ると、中身はスクランブルされたままです** (同じ画面に出ます)
@@ -125,28 +82,57 @@ docker compose up -d
 
 ## 観る
 
-- **ブラウザ** — ホーム画面にも置ける ([docs/player.md](docs/player.md))
+- **ブラウザ** — ホーム画面にも置ける ([docs/watch.md](docs/watch.md#ホーム画面に置く))
 - **テレビ** (Android TV / Fire TV) — [denpa-tv](https://github.com/danything/denpa-tv)。テレビに出る QR をスマホで読めば繋がる
 - **外から使う API** — 局・録画の一覧、ライブ、音声だけ (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
 
 ## もっと詳しく
 
+**はじめる**
+
 - [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
+- [docs/install-mac.md](docs/install-mac.md) — Mac に入れる
+- [docs/install-windows.md](docs/install-windows.md) — Windows に入れる
 - [docs/screens.md](docs/screens.md) — 画面 (実機のスクリーンショット)
-- [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴)
-- [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・環境変数・画面・状態遷移)
-- [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
-- [docs/agent.md](docs/agent.md) — チューナーを動かすところ (エージェント・取り合い・B-CAS・Mac / Windows)
-- [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
-- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
-- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
-- [docs/stream.md](docs/stream.md) — **ライブ視聴**
-- [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
-- [docs/offline.md](docs/offline.md) — 端末に保存して電波の無いところで観る
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・画面で動いてよいもの (CSP))
-- [docs/api.md](docs/api.md) — **外から使う API**
+
+**チューナー**
+
+- [docs/tuners.md](docs/tuners.md) — **使えるチューナー** (一覧・カードリーダー・B-CAS・直らないとき)
+- [docs/tuner-px4.md](docs/tuner-px4.md) — PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
+- [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD (siano-userland)
+
+**乗り換え**
+
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
+
+**使う**
+
+- [docs/watch.md](docs/watch.md) — **観る** (ライブ・操作バー・ホーム画面に置く)
+- [docs/offline.md](docs/offline.md) — 端末に保存して電波の無いところで観る
+- [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
+
+**運用**
+
+- [docs/config.md](docs/config.md) — **環境変数** (一覧と、前の版から上げるとき)
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング)
+
+**外から使う**
+
+- [docs/api.md](docs/api.md) — **外から使う API**
+
+**仕組み**
+
+- [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴・画面で動いてよいもの (CSP))
+- [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・画面・状態遷移・テスト)
+- [docs/agent.md](docs/agent.md) — **チューナーエージェント** (取り合い・共有・選局・設定ファイル・B25・鍵の配布)
+- [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
+- [docs/stream.md](docs/stream.md) — ライブの仕組み ([経緯](docs/stream-history.md))
+- [docs/player.md](docs/player.md) — 観る画面の作り
+- [docs/encode.md](docs/encode.md) — エンコード (字幕・AV1・GPU)
+- [docs/cm.md](docs/cm.md) — CM 検出
+- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
+- [docs/writing.md](docs/writing.md) — 書き方 (画面・docs・コメントの言葉)
 - [docs/licenses.md](docs/licenses.md) — 借りているもの
 
 動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。

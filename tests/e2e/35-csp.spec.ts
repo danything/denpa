@@ -12,7 +12,7 @@ import {
 
 /**
  * **画面で動いてよいスクリプトは、自分の束と SvelteKit の起動だけ**
- * (Content-Security-Policy。docs/auth.md の「画面で動いてよいもの」、設定は vite.config.ts の `csp`)。
+ * (Content-Security-Policy。docs/architecture.md の「画面で動いてよいもの」、設定は vite.config.ts の `csp`)。
  *
  * 狙いは放送の BML。データ放送のエンジン (`src/lib/bml/`) は `onclick` などを DOM に写さず
  * 自前の VM で動かす。写していないこと、外枠の `pointer-events: none` を外して押しても

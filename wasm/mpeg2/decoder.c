@@ -1,5 +1,5 @@
 /*
- * 放送の MPEG-2 映像と AAC 音声を、ブラウザの中でデコードする (docs/stream.md §5.5)。
+ * 放送の MPEG-2 映像と AAC 音声を、ブラウザの中でデコードする (docs/stream.md#放送そのままmpeg-2を送る)。
  *
  * **ブラウザには MPEG-2 のデコーダが無い** (MSE も WebCodecs も mp2v を受け取らない)
  * ので、FFmpeg の mpeg2video を WebAssembly に組んで持ち込む。ここはその
@@ -19,7 +19,7 @@
  *   (B フレームの並べ替えはデコーダが済ませている)
  *
  * スレッドも SIMD も使わない。スレッド版は COOP/COEP (crossOriginIsolated) が要り、
- * 実測でも 1 本で 1080i を実時間の 3 倍でデコードできたので、払う理由が無い (§5.5)。
+ * 実測でも 1 本で 1080i を実時間の 3 倍でデコードできたので、払う理由が無い (docs/stream.md#放送そのままmpeg-2を送る)。
  */
 #include <emscripten/emscripten.h>
 #include <libavcodec/avcodec.h>

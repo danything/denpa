@@ -1,5 +1,5 @@
 /**
- * **この端末で元の TS をデコードできるか** (docs/stream.md §5.5)。デコードできなければ理由を返す。
+ * **この端末で元の TS をデコードできるか** (docs/stream.md#放送そのままmpeg-2を送る)。デコードできなければ理由を返す。
  *
  * 要るのは4つ: WebAssembly (MPEG-2 と AAC のデコーダ)、worker、worker の中の WebGL2 (描く)、
  * AudioContext (鳴らす)。AAC も WASM でデコードするので、WebCodecs (AudioDecoder) は要らない —

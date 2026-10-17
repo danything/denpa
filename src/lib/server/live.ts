@@ -3,9 +3,9 @@
  *
  *     エージェント (MPEG-TS) → ffmpeg (fMP4) → 割る → WebSocket → MSE
  *
- * [stream.md](../../../docs/stream.md) §4 の1番目にあたる。**字幕も同じ
+ * [stream-history.md](../../../docs/stream-history.md#実装の順序) の1番目にあたる。**字幕も同じ
  * ffmpeg から写して受け、同じ WebSocket で一緒に送る** (`captions.ts`) — 別々に
- * 起こすと時刻が揃わないため。データ放送 (§5.6) も同じ WebSocket で一緒に送る (`databroadcast.ts`)。
+ * 起こすと時刻が揃わないため。データ放送 (docs/stream.md#データ放送の統合) も同じ WebSocket で一緒に送る (`databroadcast.ts`)。
  *
  * ## 同じチャンネルは1本でエンコードする
  *
@@ -280,7 +280,7 @@ export function encodeArgs(
  *
  * ## AV1
  *
- * 設計 (stream.md §1) が最初から狙っていた方式。実機は HW エンコーダを持たない
+ * 設計 (stream.md#前提) が最初から狙っていた方式。実機は HW エンコーダを持たない
  * (`ffmpeg -hwaccels` が空) が、**44スレッドあるので間に合う**。同じ電波を
  * 40秒ずつ通した実測 (1080i をデコードして60コマ/秒):
  *
@@ -382,7 +382,7 @@ function softwareArgs(codec: LiveCodec): string[] {
      *
      * **一度入れて、外して、戻して、また外した。** 「一瞬止まって遅延が増えて
      * いく」を流量の話だと見立てて入れたが、原因は受け側の貯め方だった
-     * ([stream.md](../../../docs/stream.md) §4)。そのあと実機で「映像だけ遅れる」が
+     * ([stream.md](../../../docs/stream.md#一瞬止まって遅延が増えていく))。そのあと実機で「映像だけ遅れる」が
      * 出たので流量を疑って戻したが、そちらは**復号**の話で
      * (`live-player.svelte.ts` の `unslip`)、やはり山とは関係が無かった。
      * **2回とも、症状から流量を疑ったのが外れている**
@@ -393,7 +393,7 @@ function softwareArgs(codec: LiveCodec): string[] {
 /**
  * 音声のエンコード方式。**AV1 と組むときは Opus。**
  *
- * 設計 (stream.md §1) が狙っていた組み合わせで、**録画と同じ扱い**でもある
+ * 設計 (stream.md#前提) が狙っていた組み合わせで、**録画と同じ扱い**でもある
  * (`encoder.ts` は前から `libopus -b:a 256k`)。同じ音質なら AAC より小さく、
  * ブラウザは MSE で受け取れる (Chromium で `av01…,opus` を確かめ済み)。
  *
@@ -675,7 +675,7 @@ class Session {
         /** その局の中で何本目の字幕を出すか */
         readonly track: number,
         /**
-         * **エンコードせずに放送そのままの TS を配るか** (stream.md §5.5。`runRaw`)。音声もエンコード方式も画面が
+         * **エンコードせずに放送そのままの TS を配るか** (stream.md#放送そのままmpeg-2を送る。`runRaw`)。音声もエンコード方式も画面が
          * 決めるので、共有の目印からも外れる (`key`)
          */
         readonly raw: boolean,
@@ -1449,7 +1449,7 @@ class Session {
     }
 
     /**
-     * **エンコードせずに、1局に絞った TS をそのまま配る** (stream.md §5.5)。
+     * **エンコードせずに、1局に絞った TS をそのまま配る** (stream.md#放送そのままmpeg-2を送る)。
      *
      *     エージェント → 1局に絞る → WebSocket (`CHANNEL.rawTs`) → ブラウザが自分でデコードする
      *
@@ -1735,7 +1735,7 @@ export function chaseStream(
 /**
  * **アプリ向けのライブの字幕** (`GET /api/services/<id>/captions`。docs/api.md)。そのままの TS
  * (`liveStream` の `raw`) を観ているアプリに、字幕 (文字の配置 0x22) を放送の PTS のまま流す —
- * ブラウザで放送そのままを送る経路 (stream.md §5.5「字幕」) と同じもの。
+ * ブラウザで放送そのままを送る経路 (stream.md#放送のままのときの字幕) と同じもの。
  *
  * **いま流している放送そのままのセッションに脇から乗る**だけで、チューナーは増やさない
  * (ブラウザで同じ局を放送そのままで観ていればそれにも乗る)。乗る先が無ければ null —
@@ -2012,7 +2012,7 @@ const WARM_WAIT = 8_000;
 /**
  * **画面が繋いでくる前にエンコードし始める。**
  *
- * 開いてから映像が出るまでを実機で割ると ([stream.md](../../../docs/stream.md) §4):
+ * 開いてから映像が出るまでを実機で割ると ([stream.md](../../../docs/stream.md#開いてから映像が出るまでの内訳)):
  *
  *     画面が動き出してチケットを取り、WebSocket が繋がるまで   160ms
  *     ffmpeg の立ち上がり                              530ms
@@ -2153,7 +2153,7 @@ function depart(session: Session, viewer: Viewer): void {
 /**
  * 接続1本ぶんの受け持ち。**繋いでいる間だけチューナーを使う。**
  *
- * 接続そのものが在席の印になる (`stream.md` §4「入っているもの」の畳み方)。
+ * 接続そのものが在席の印になる (stream.md#入っているもの の畳み方)。
  * HTTP のストリームだと切断の検出が遅れるが、WebSocket なら閉じた時点で分かる。
  */
 export function attend(connection: Connection): void {

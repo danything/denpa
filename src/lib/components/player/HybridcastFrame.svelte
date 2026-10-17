@@ -1,6 +1,6 @@
 <script lang="ts">
     /**
-     * Hybridcast のアプリを映像の上に開く ([docs/stream.md](../../../../docs/stream.md#58-hybridcast))。
+     * Hybridcast のアプリを映像の上に開く ([docs/stream.md](../../../../docs/stream.md#hybridcast))。
      * 開くのはデータ放送が起動を求めたとき (`DataBroadcast` の `hybridcast`)。
      *
      * - アプリの HTML は中継で取り、差し込み (`#lib/hybridcast/shim.ts`) を入れて sandbox の iframe へ渡す

@@ -10,7 +10,7 @@
 # WSL のコンテナ (wslc) で動かす。** Docker Desktop は要らない (WSL に入っているので `wsl --update` だけで使える)。
 # コンテナには USB を渡せないので、チューナーとカードに触るエージェントはコンテナに入れられない。
 # **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など)**
-# (DVB は無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/agent.md)。
+# (DVB は無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/install-windows.md)。
 #
 # **WSL は勝手に入れない。** wslc が無いときはエージェントだけ入れて、入れ方を言って終わる。
 # もう一度流せば上げ直し。イメージは**エージェントと同じリリースの版**に揃える。
@@ -298,13 +298,13 @@ function Show-Tuner {
         return
     }
     if ($sticks.Count -eq 0) {
-        Say 'Siano のチューナー (PX-S1UD など) は見当たりません。挿したら、Zadig でドライバを WinUSB にしてください (docs/agent.md)'
+        Say 'Siano のチューナー (PX-S1UD など) は見当たりません。挿したら、Zadig でドライバを WinUSB にしてください (docs/install-windows.md)'
     }
     foreach ($stick in $sticks) {
         if ($stick.Service -eq 'WinUSB') {
             Say "$($stick.FriendlyName): WinUSB で使えます"
         } else {
-            Say "$($stick.FriendlyName): ドライバが $(if ($stick.Service) { $stick.Service } else { '入っていません' }) です。Zadig (https://zadig.akeo.ie) で WinUSB にしてください (docs/agent.md)"
+            Say "$($stick.FriendlyName): ドライバが $(if ($stick.Service) { $stick.Service } else { '入っていません' }) です。Zadig (https://zadig.akeo.ie) で WinUSB にしてください (docs/install-windows.md)"
         }
     }
 }
@@ -316,7 +316,7 @@ function Open-Zip([string]$Path) {
 }
 
 # px4-userland (PX-Q3U4 など) を $To に置く。**要るものだけ取り出す** ($Px4Keep)。
-# ファームウェアは Mac と同じく PLEX 公式ドライバから切り出す (再配布の許諾は誰も持っていない。docs/agent.md)
+# ファームウェアは Mac と同じく PLEX 公式ドライバから切り出す (再配布の許諾は誰も持っていない。docs/tuner-px4.md)
 function Get-Px4Userland([string]$Work, [string]$To) {
     Say "px4-userland $Px4UserlandVersion"
     $base = "https://github.com/Khronos31/px4-userland/releases/download/v$Px4UserlandVersion"
@@ -425,10 +425,10 @@ function Show-Px4 {
         }
         $why = if ($pnp -and $pnp.Service) { "ドライバが $($pnp.Service) なので" } else { 'ドライバが入っていないので' }
         Say ("$($device.model) (USB $($device.port)): ${why}開けません。Zadig (https://zadig.akeo.ie) で WinUSB にしてください " +
-            '(PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので両方。PLEX のドライバで TVTest などから使っていたなら、そちらからは見えなくなります。docs/agent.md)')
+            '(PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので両方。PLEX のドライバで TVTest などから使っていたなら、そちらからは見えなくなります。docs/install-windows.md)')
     }
     if ($enclosures.Count -eq 0 -and $devices.Count -eq 0) {
-        Say 'px4-userland のチューナー (PX-Q3U4 など) は見当たりません。挿したら、Zadig でドライバを WinUSB にしてください (docs/agent.md)'
+        Say 'px4-userland のチューナー (PX-Q3U4 など) は見当たりません。挿したら、Zadig でドライバを WinUSB にしてください (docs/install-windows.md)'
     }
 }
 
