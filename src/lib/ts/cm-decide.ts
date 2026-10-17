@@ -312,9 +312,10 @@ const CREDIT_TOLERANCE = 0.4;
  * - **ロゴが遅れて出る・先に消える**所は CM ではない。片側から CM の尺でたどった並びが
  *   反対側の手前で止まり、残りが CM の尺に足りなければ、そこは番組 (アイキャッチ・ロゴの無い頭)
  * - **番組の間では、無音の無いロゴの出入りを CM の端にしない。** CM は途切れの中の境目から境目まで
- * - **提供は番組に残す。** 番組に接する所、または番組の終わりから CM の並びをたどった先にある
- *   10 秒は提供 (CM は 15 秒の倍数)。番組の映像に字を重ねていることが多く、削ると番組が欠ける。
- *   番組が戻る手前の並びの中の 10 秒は局の番宣
+ * - **提供は番組に残す。** 番組の直後、または番組の終わりから CM の並びをたどった先にある
+ *   10 秒は提供 (CM は 15 秒の倍数)。番組の映像に字を重ねていることが多く、削ると番組が欠ける
+ * - **提供の後には CM が続く。** 番組が戻る直前の 10 秒でも、CM の並び (15 秒おき) に続くものは局の番宣で CM
+ *   (実機のフジテレビで、CM 120 秒の後、ロゴが戻る直前の 10 秒が番宣だった)。並びの外にあるものだけ提供とみる
  */
 function arrange(
     from: { at: number; snapped: boolean },
@@ -326,6 +327,7 @@ function arrange(
     let start = from.at;
     let end = to.at;
     const marks = all.filter((t) => t >= start - 0.5 && t <= end + 0.5);
+    const credit = (from: number, to: number) => Math.abs(to - from - CREDITS) <= CREDIT_TOLERANCE;
     /*
      * 番組の間で、近くに無音も切れ目も無いロゴの出入りは CM の端にしない。ロゴが場面の途中で消えただけ
      * (背景に紛れてロゴが判定できなくなった) のことがある (実機の TOKYO MX で、本編の 16 秒が CM になっていた)。
@@ -348,10 +350,10 @@ function arrange(
         const both = afterProgram && beforeProgram;
         if (beforeProgram && !to.snapped && forward > start) end = forward;
         else if (afterProgram && !from.snapped && backward < end) start = backward;
-        else if (both && forward > start && end - forward < GAP_MIN) end = forward;
+        // 並びの先に残った 10 秒は番組が戻る前の番宣 (提供の後には CM が続く)。番組には戻さない
+        else if (both && forward > start && end - forward < GAP_MIN && !credit(forward, end)) end = forward;
         else if (both && backward < end && backward - start < GAP_MIN) start = backward;
     }
-    const credit = (from: number, to: number) => Math.abs(to - from - CREDITS) <= CREDIT_TOLERANCE;
     const inner = marks.filter((t) => t > start + 0.5 && t < end - 0.5);
     const out: Range[] = [];
     if (afterProgram) {
@@ -364,9 +366,11 @@ function arrange(
         }
     }
     if (beforeProgram) {
-        // 番組が戻る直前だけ
+        // 番組が戻る直前だけ。手前に CM の尺 (15 秒の倍数) で届く境目があれば、並びに続く番宣
         const previous = inner.filter((t) => t > start + 0.5).at(-1);
-        if (previous !== undefined && credit(previous, end)) end = previous;
+        const chained = (at: number) =>
+            marks.some((t) => t >= start - 0.5 && t < at - 0.5 && isCmLength(at - t, CHAIN_TOLERANCE));
+        if (previous !== undefined && credit(previous, end) && !chained(previous)) end = previous;
     }
     if (end - start > 0.5) out.push({ start, end });
     return out;
