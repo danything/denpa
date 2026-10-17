@@ -369,7 +369,7 @@
         display: flex;
         flex-direction: column;
         min-height: 100%;
-        background: var(--dp-base-200);
+        background: var(--dp-bg);
     }
     /*
      * 遷移中のバー。**ヘッダーより上に重ねる** (z-index)。色は主の色で、
@@ -414,9 +414,20 @@
         align-items: center;
         gap: 0.5rem;
         min-height: 3.5rem;
-        padding: 0.5rem;
-        background: var(--dp-surface);
-        box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+        padding: 0.5rem var(--dp-space-3);
+        border-bottom: 1px solid var(--dp-line);
+        background: var(--dp-bg);
+    }
+    /*
+     * **ヘッダーは本文と同じ地に、下の線 1 本で区切る。** スクロールすると下を流れる中身が
+     * ぼけて透ける (地を 80% にしてぼかす)。ぼかせないブラウザは上の地の色のまま
+     */
+    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .navbar {
+            background: color-mix(in srgb, var(--dp-bg) 80%, transparent);
+            -webkit-backdrop-filter: saturate(1.8) blur(12px);
+            backdrop-filter: saturate(1.8) blur(12px);
+        }
     }
     .brand {
         display: flex;
@@ -452,7 +463,8 @@
         min-height: 2.5rem;
     }
     /*
-     * **いまの画面は主の色の字と下線で示す。** 薄い灰色の地を敷くだけだった頃は、
+     * **いまの画面は太い字と主の色の下線で示す。** ほかの画面へのリンクは薄い字 (`--pico-muted-color`) で、
+     * 指を乗せると本文の字になる。薄い灰色の地を敷くだけだった頃は、
      * ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
      * 地は塗らない (指を乗せたときの灰色と混ざらないように)。下線は押す場所の
      * 内側に引くので、ヘッダーの高さは変わらない。
@@ -461,15 +473,21 @@
      */
     ul.links a.button {
         position: relative;
-        font-size: 0.9rem;
+        font-size: var(--dp-text-sm);
+    }
+    ul.links a.button.ghost:not([aria-current='page']) {
+        --pico-color: var(--pico-muted-color);
+    }
+    ul.links a.button.ghost:not([aria-current='page']):hover {
+        --pico-color: inherit;
     }
     ul.links a.button.ghost[aria-current='page'] {
         --pico-background-color: transparent;
-        --pico-color: var(--pico-primary);
-        font-weight: 600;
+        --pico-color: var(--pico-h1-color, var(--pico-color));
+        font-weight: var(--dp-weight-bold);
     }
     ul.links a.button.ghost[aria-current='page']:hover {
-        --pico-background-color: var(--dp-base-200);
+        --pico-background-color: var(--dp-subtle);
     }
     ul.links a.button.ghost[aria-current='page']::after {
         content: '';
@@ -478,7 +496,7 @@
         bottom: 0.2rem;
         height: 2px;
         border-radius: 1px;
-        background: currentColor;
+        background: var(--pico-primary);
     }
     .burger {
         display: flex;

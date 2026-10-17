@@ -846,7 +846,7 @@
         margin: 0;
         padding: 0.5rem;
         border-radius: 0.25rem;
-        background: var(--dp-base-200);
+        background: var(--dp-subtle);
         font-family: var(--pico-font-family-monospace);
         font-size: 0.75rem;
         white-space: pre-wrap;
@@ -886,7 +886,7 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.5rem 0.75rem;
             padding-block: 0.75rem;
-            border-top: 1px solid var(--dp-base-300);
+            border-top: 1px solid var(--dp-line);
         }
         .row-cards tr:first-child {
             border-top: 0;
@@ -939,7 +939,7 @@
         gap: 0.5rem;
         margin-top: 0.5rem;
         padding-top: 0.75rem;
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .break {
         word-break: break-all;
@@ -974,7 +974,7 @@
     }
     .cm-logo {
         padding: 0.5rem;
-        border: 1px solid var(--dp-base-300);
+        border: 1px solid var(--dp-line);
         border-radius: 0.25rem;
     }
 </style>

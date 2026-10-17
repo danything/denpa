@@ -932,7 +932,7 @@
     .form-card,
     .preview,
     .rule-list {
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+        box-shadow: var(--dp-shadow);
     }
     @media (min-width: 768px) {
         .form-card {
@@ -968,12 +968,12 @@
         width: 60%;
         margin-bottom: 0.75rem;
         border-radius: 0.375rem;
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
     .skeleton-row {
         margin-bottom: 0.5rem;
         border-radius: 0.375rem;
-        background: var(--dp-base-200);
+        background: var(--dp-subtle);
     }
 
     .hint {
@@ -992,8 +992,8 @@
         margin-top: 0.25rem;
     }
     .box {
-        border: 1px solid var(--dp-base-300);
-        border-radius: 1rem;
+        border: 1px solid var(--dp-line);
+        border-radius: var(--dp-radius-lg);
     }
     .box summary {
         cursor: pointer;
@@ -1034,7 +1034,7 @@
     .form-actions {
         flex-shrink: 0;
         padding: 1rem;
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .result-col {
         display: flex;
@@ -1093,7 +1093,7 @@
         padding-block: 0.375rem;
     }
     .preview-row + .preview-row {
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .preview-open {
         min-width: 0;
@@ -1122,7 +1122,7 @@
         padding: 0.75rem;
     }
     .rule-row + .rule-row {
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .filter-bar {
         position: sticky;
@@ -1132,7 +1132,7 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
-        border-bottom: 1px solid var(--dp-base-300);
+        border-bottom: 1px solid var(--dp-line);
         /* 下を流れる行が透けないように。カード (.panel) と同じ地の色 */
         background: var(--dp-surface);
         border-radius: var(--pico-border-radius) var(--pico-border-radius) 0 0;

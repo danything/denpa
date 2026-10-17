@@ -860,7 +860,7 @@
             {/if}
 
             <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
-            <div role="group" class="type-tabs">
+            <div role="group" class="type-tabs segmented">
                 {#each types as type (type)}
                     <!-- いま出している種別は aria-pressed で言う (色だけにしない) -->
                     <button type="button"
@@ -1079,7 +1079,7 @@
         gap: 0.75rem;
         margin: 0;
         padding: 0.5rem;
-        border: 1px solid var(--dp-base-300);
+        border: 1px solid var(--dp-line);
         border-radius: 0.5rem;
         background: transparent;
         color: inherit;

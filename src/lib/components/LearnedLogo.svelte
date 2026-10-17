@@ -65,13 +65,13 @@
         --gap: 0.75rem;
         border-radius: 0.25rem;
         padding: 0.5rem;
-        background: var(--dp-base-200);
+        background: var(--dp-subtle);
     }
     .learned-image {
         max-height: 8rem;
         border-radius: 0.25rem;
         /* 縁を白で出すので、下地は暗いほうに寄せた枠色を使う */
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
     .sub {
         margin-top: 0.125rem;

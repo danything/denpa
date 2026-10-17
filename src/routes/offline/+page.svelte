@@ -254,7 +254,7 @@
     }
     .empty {
         padding: 1.5rem;
-        border-radius: 0.5rem;
+        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
         text-align: center;
     }
@@ -263,7 +263,7 @@
     }
     .list {
         padding: 0;
-        border-radius: 0.5rem;
+        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
     }
     .row {
@@ -276,7 +276,7 @@
         list-style: none;
     }
     .row + .row {
-        border-top: 1px solid var(--dp-base-200);
+        border-top: 1px solid var(--dp-subtle);
     }
     .thumb {
         width: 5rem;
@@ -285,7 +285,7 @@
         object-fit: cover;
     }
     .thumb.blank {
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
     .info {
         min-width: 0;

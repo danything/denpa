@@ -146,10 +146,10 @@
          * 枠は左以外の3辺だけ。左は種類の色の線 (app.css の .notice)。`border` 1行で書くと
          * 左の線ごと上書きして、どの通知も同じ灰色の枠になっていた
          */
-        border-top: 1px solid var(--dp-base-300);
-        border-right: 1px solid var(--dp-base-300);
-        border-bottom: 1px solid var(--dp-base-300);
-        box-shadow: 0 10px 25px rgb(0 0 0 / 0.35);
+        border-top: 1px solid var(--dp-line);
+        border-right: 1px solid var(--dp-line);
+        border-bottom: 1px solid var(--dp-line);
+        box-shadow: var(--dp-shadow-pop);
     }
     .text {
         white-space: pre-wrap;

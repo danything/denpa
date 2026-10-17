@@ -420,7 +420,7 @@
 <div class="page">
     <!-- **どこを見るかは1行にまとめる** (種別・日送り・探す)。縦は表に回す -->
     <div class="cluster toolbar">
-        <div role="group" class="types" data-testid="type-tabs">
+        <div role="group" class="types segmented" data-testid="type-tabs">
             {#each ['GR', 'BS', 'CS'] as type (type)}
                 <a
                     class="button small {data.type === type ? '' : 'secondary outline'}"
@@ -947,12 +947,12 @@
         /* 縮ませない。合計が枠より高いぶんは下で切る (本物の表も下へ続く) */
         flex-shrink: 0;
         border-radius: 0.375rem;
-        background: var(--dp-base-200);
+        background: var(--dp-subtle);
     }
     /* チャンネル名の行。本物と同じで、ここだけ濃い */
     .skeleton-head {
         height: 1.75rem;
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
     .skeleton::after {
         content: '';
@@ -983,9 +983,9 @@
         max-height: 75svh;
         overflow: auto;
         cursor: grab;
-        border-radius: 1rem;
+        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
-        border: 1px solid var(--dp-base-300);
+        border: 1px solid var(--dp-line);
     }
     .grid-box:active {
         cursor: grabbing;
@@ -1009,7 +1009,7 @@
     .service,
     .hour {
         background: var(--dp-surface);
-        border-color: var(--dp-base-300);
+        border-color: var(--dp-line);
         border-style: solid;
         border-width: 0;
     }
@@ -1110,7 +1110,7 @@
      * 線に加えて細い枠も引く。録画中はさらに録画の赤にする (一覧のバッジと同じ考え)
      */
     .program {
-        --tint: var(--dp-base-300);
+        --tint: var(--dp-line);
         --wash: 10%;
         display: flex;
         flex-direction: column;
@@ -1123,7 +1123,7 @@
         border: 0;
         border-inline-start: 4px solid var(--tint);
         border-radius: 0.25rem;
-        background: var(--dp-base-200);
+        background: var(--dp-subtle);
         color: inherit;
         text-align: left;
         font-weight: normal;

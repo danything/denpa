@@ -1543,12 +1543,12 @@
         display: flex;
         flex-direction: column;
         overflow: auto;
-        border-radius: 1rem;
+        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
-        border: 1px solid var(--dp-base-300);
+        border: 1px solid var(--dp-line);
     }
     .rows > :global(* + *) {
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .row {
         position: relative;
@@ -1771,7 +1771,7 @@
     /* 「⋯」の頭の空き。押せるものではないので、項目と同じ余白で字だけ置く */
     .menu-note {
         padding: 0.4rem 0.6rem;
-        border-bottom: 1px solid var(--dp-base-300);
+        border-bottom: 1px solid var(--dp-line);
         white-space: nowrap;
     }
     /* まだ観ていない録画の点 (`unwatched`)。続きのバーと同じ主の色 */
@@ -1790,7 +1790,7 @@
         white-space: nowrap;
     }
     .truncated {
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     /*
      * まとめて表示の切り替え。アイコンと字を横に並べる (狭い列では字を隠してアイコンだけ)
@@ -1824,7 +1824,7 @@
     }
     /* 行どうしの区切り線 (`.rows > * + *`) は、上で枠を外したぶん引き直す */
     .rows > .group-head:not(:first-child) {
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .group-head:hover {
         background: var(--dp-hover);
@@ -1854,7 +1854,7 @@
     /* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
     .row.nested {
         padding-left: 2.25rem;
-        background: color-mix(in srgb, var(--dp-base-200) 30%, transparent);
+        background: color-mix(in srgb, var(--dp-subtle) 30%, transparent);
     }
     .row.nested::before {
         content: '';
@@ -1862,7 +1862,7 @@
         inset-block: 0;
         left: 1.25rem;
         width: 2px;
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
     /* ポスターと再生の印。行に指を乗せると印が浮かぶ */
     .poster {
@@ -1873,7 +1873,7 @@
         flex-shrink: 0;
         overflow: hidden;
         border-radius: 0.25rem;
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
     @media (min-width: 640px) {
         .poster {
@@ -1923,7 +1923,7 @@
         flex: 1;
         overflow: hidden;
         border-radius: 999px;
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
     .resume-fill {
         height: 100%;

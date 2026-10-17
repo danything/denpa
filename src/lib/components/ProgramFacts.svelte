@@ -176,7 +176,7 @@
         overflow: auto;
         padding: 0.5rem;
         border-radius: 0.25rem;
-        background: var(--dp-base-200);
+        background: var(--dp-subtle);
         font-family: ui-monospace, monospace;
         font-size: 0.75rem;
         white-space: pre-wrap;

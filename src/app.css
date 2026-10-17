@@ -54,7 +54,38 @@
     --pico-typography-spacing-vertical: 0.75rem;
     --pico-form-element-spacing-vertical: 0.45rem;
     --pico-form-element-spacing-horizontal: 0.75rem;
-    --pico-border-radius: 0.65rem;
+    /*
+     * ---- 形のトークン ----
+     * **角丸・影・余白・字の大きさ・動きは、この段から選ぶ。** 画面ごとに 0.25〜1rem の角丸と
+     * 4 通りの影が散っていた頃は、同じ「カード」が画面を移ると違う顔で出ていた。
+     * 段を増やすときは、まず今ある段で足りないかを見る
+     */
+    /* 角丸。小 (タグの中・メニューの項目・番組表のマス)・中 (ボタン・入力欄・通知)・大 (カード・一覧の枠・メニュー・ダイアログ) */
+    --dp-radius-sm: 0.375rem;
+    --dp-radius: 0.5rem;
+    --dp-radius-lg: 0.75rem;
+    --dp-radius-full: 999px;
+    --pico-border-radius: var(--dp-radius);
+    /* 余白。4px 刻みの 6 段 */
+    --dp-space-1: 0.25rem;
+    --dp-space-2: 0.5rem;
+    --dp-space-3: 0.75rem;
+    --dp-space-4: 1rem;
+    --dp-space-5: 1.5rem;
+    --dp-space-6: 2rem;
+    /* 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない) */
+    --dp-text-xs: 0.75rem;
+    --dp-text-sm: 0.875rem;
+    --dp-text-base: 1rem;
+    --dp-text-lg: 1.125rem;
+    --dp-text-xl: 1.5rem;
+    /* 字の太さは 2 段だけ。BIZ UDPゴシックは 400 と 700 しか持たない (500・600 は 400・700 に寄る) */
+    --dp-weight: 400;
+    --dp-weight-bold: 700;
+    /* 動き。短く、終わりをゆっくり。動かさない設定の端末では 0 (下の prefers-reduced-motion) */
+    --dp-duration: 150ms;
+    --dp-ease: cubic-bezier(0.2, 0, 0, 1);
+    --pico-transition: var(--dp-duration) var(--dp-ease);
     /*
 	 * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
 	 * そのまま使う (上書きしない。アイコンの水色とも揃う)。
@@ -76,31 +107,51 @@
      * ルールのプレビュー・番組表のマス・ライブの局・メニュー)。画面ごとに3通りあった頃は、
      * 同じ「押せる」が画面を移ると違う濃さで返ってきた
      */
-    --dp-hover: var(--dp-base-200);
+    --dp-hover: var(--dp-subtle);
 }
 /*
  * テーマごとの色。**値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
  * 主の色 (azure) も Pico の段から来ているので、同じ物差しで並べると色の系統がそろう。
- * 本文・地 (ダーク)・入力欄は Blades (Pico) の既定のまま。Pico も [data-theme] と
- * :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ
+ * Pico も [data-theme] と :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ。
+ *
+ * **地は 1 色。** ヘッダー・ナビ・本文の地は同じ `--dp-bg` で、区切りは 1px の線 (`--dp-line`)。
+ * 色の付いた面は**中身を区切るところだけ** — カード・一覧の枠 (`--dp-surface`)、コードの枠・表の見出し・
+ * 指を乗せた行 (`--dp-subtle`)、通知。面の色を段々に重ねて分けていた頃は、暗いほうで
+ * ヘッダー・地・カードの 3 色が近すぎて、どこが押せる面なのかが読めなかった
+ *
+ * - `--dp-bg` … 地 (ページ・ヘッダー)
+ * - `--dp-surface` … カード・一覧の枠・メニュー・ダイアログ
+ * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
+ * - `--dp-line` … 区切りの線 (カードの縁・行の間・ヘッダーの下)
+ * - `--dp-line-strong` … 押せるものの縁 (入力欄・枠のボタン)。線より一段濃くして、押せない面と見分ける
+ * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
+ * - `--dp-shadow` … カードの影 (ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
-    /* 白い面 (.panel) を並べるので、地だけは白にせず slate の一番淡い段にする */
-    --pico-background-color: #eff1f4; /* slate-50 */
+    --pico-background-color: #fff;
+    --dp-bg: #fff;
     --dp-surface: #fff;
-    --dp-base-200: #eff1f4; /* slate-50 */
-    --dp-base-300: #cfd5e2; /* slate-150 */
+    --dp-subtle: #eff1f4; /* slate-50 */
+    --dp-line: #dfe3eb; /* slate-100 */
+    --dp-line-strong: #cfd5e2; /* slate-150 */
+    --dp-raised: #fff;
+    --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
+    --dp-shadow-pop: 0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
+    --pico-form-element-background-color: #fff;
+    --pico-form-element-border-color: var(--dp-line-strong);
+    --pico-table-border-color: var(--dp-line);
+    --pico-muted-border-color: var(--dp-line);
     /*
-	 * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
-	 * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにして枠で区別する
-	 */
+     * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
+     * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにして枠で区別する
+     */
     --pico-secondary: #3d475c; /* slate-700 */
-    --pico-secondary-background: #eff1f4; /* slate-50 */
-    --pico-secondary-border: #cfd5e2; /* slate-150 */
+    --pico-secondary-background: #fff;
+    --pico-secondary-border: var(--dp-line-strong);
     --pico-secondary-inverse: #2a3140; /* slate-800 */
     --pico-secondary-hover: #2a3140; /* slate-800 */
-    --pico-secondary-hover-background: #dfe3eb; /* slate-100 */
+    --pico-secondary-hover-background: #eff1f4; /* slate-50 */
     --pico-secondary-hover-border: #b0b9d0; /* slate-250 */
     /* 淡いバッジの文字。地が白寄りなので塗り色より一段濃くする */
     --dp-rec-text: #9b2318; /* red-650 */
@@ -109,22 +160,38 @@
     --dp-info-text: #025d5d; /* cyan-650 */
 }
 [data-theme="dark"] {
-    --dp-surface: #181c25; /* slate-900 (Pico のカードの地と同じ) */
-    --dp-base-200: #202632; /* slate-850 */
-    --dp-base-300: #2a3140; /* slate-800 */
+    --pico-background-color: #13171f; /* slate-950 (Pico の既定の地。theme-color と同じ) */
+    --dp-bg: #13171f;
+    --dp-surface: #181c25; /* slate-900 */
+    --dp-subtle: #202632; /* slate-850 */
+    --dp-line: #2a3140; /* slate-800 */
+    --dp-line-strong: #3d475c; /* slate-700 */
+    --dp-raised: #2a3140; /* slate-800 */
+    --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
+    --pico-form-element-background-color: #13171f;
+    --pico-form-element-border-color: var(--dp-line-strong);
+    --pico-table-border-color: var(--dp-line);
+    --pico-muted-border-color: var(--dp-line);
     /* 暗いほうも同じ考え。文字は本文並みの明るさ、区別は枠で付ける */
     --pico-secondary: #bfc7d9; /* slate-200 */
-    --pico-secondary-background: #202632; /* slate-850 */
-    --pico-secondary-border: #3d475c; /* slate-700 */
+    --pico-secondary-background: #181c25; /* slate-900 */
+    --pico-secondary-border: var(--dp-line-strong);
     --pico-secondary-inverse: #dfe3eb; /* slate-100 */
     --pico-secondary-hover: #dfe3eb; /* slate-100 */
-    --pico-secondary-hover-background: #2a3140; /* slate-800 */
+    --pico-secondary-hover-background: #202632; /* slate-850 */
     --pico-secondary-hover-border: #525f7a; /* slate-600 */
     /* 暗いほうは逆に、塗り色より明るくしないと読めない */
     --dp-rec-text: #f38f79; /* red-300 */
     --dp-ok-text: #00cc88; /* jade-250 */
     --dp-warn-text: #fecc63; /* amber-150 */
     --dp-info-text: #0ccece; /* cyan-250 */
+}
+/* 動かさない設定の端末では、色や影の移り変わりも止める (動きはどれも `--dp-duration` を使う) */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --dp-duration: 0s;
+    }
 }
 /*
  * **キーボードで触っているところは、主の色の線で囲む。**
@@ -250,13 +317,13 @@ section {
  * **番組表のマスは各画面の <style> で大きさを決めている** ので、ここを変えても動かない
  */
 h1 {
-    font-size: 1.5rem;
+    font-size: var(--dp-text-xl);
 }
 h2 {
     font-size: 1.25rem;
 }
 h3 {
-    font-size: 1.05rem;
+    font-size: var(--dp-text-lg);
 }
 table {
     font-size: 0.95rem;
@@ -264,6 +331,25 @@ table {
 th,
 td {
     padding: 0.45rem 0.6rem;
+}
+/*
+ * 表の見出しは淡い面に小さめの太字。行の区切りは線 1 本 (`--pico-table-border-color` = `--dp-line`)。
+ * Pico は見出しの下に太い線を引くが、面で分かるので本文の行と同じ線にする
+ */
+thead th {
+    background: var(--dp-subtle);
+    font-size: var(--dp-text-sm);
+    font-weight: var(--dp-weight-bold);
+    border-bottom-width: 1px;
+}
+/*
+ * **押せないものは押せないと分かるように。** Pico は薄くするだけなので、指 (カーソル) も変える。
+ * 押せるもの (ボタン・枠のボタン・入力欄の縁) は `--dp-line-strong` 以上の縁を持ち、押せない面 (カード・一覧の枠) は
+ * `--dp-line` の縁しか持たない
+ */
+:is(button, [role="button"], input, select, textarea):disabled,
+[aria-disabled="true"] {
+    cursor: not-allowed;
 }
 
 /* ---- 並べる ---- */
@@ -318,8 +404,8 @@ td {
 /* 枠で囲んだ白い面 */
 .panel {
     background: var(--dp-surface);
-    border: 1px solid var(--dp-base-300);
-    border-radius: 1rem;
+    border: 1px solid var(--dp-line);
+    border-radius: var(--dp-radius-lg);
     padding: 1rem;
 }
 
@@ -350,10 +436,10 @@ td {
     flex-direction: column;
     gap: 0.75rem;
     padding: 1.5rem;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+    box-shadow: var(--dp-shadow);
 }
 .card h2 {
-    font-size: 1.15rem;
+    font-size: var(--dp-text-lg);
 }
 /* 要点の1行と、その下に畳んだ「詳しく」 */
 .note-block {
@@ -367,10 +453,10 @@ td {
     opacity: 0.65;
 }
 .small {
-    font-size: 0.9rem;
+    font-size: var(--dp-text-sm);
 }
 .tiny {
-    font-size: 0.8rem;
+    font-size: var(--dp-text-xs);
 }
 .bold {
     font-weight: 700;
@@ -423,7 +509,7 @@ td {
 }
 .field > span:first-child,
 .field-label {
-    font-size: 0.8rem;
+    font-size: var(--dp-text-xs);
     font-weight: 500;
     opacity: 0.7;
 }
@@ -451,7 +537,7 @@ details.more > summary {
     align-items: center;
     width: fit-content;
     color: var(--pico-muted-color);
-    font-size: 0.8rem;
+    font-size: var(--dp-text-xs);
     line-height: 1.5;
 }
 details.more > summary::after {
@@ -465,7 +551,7 @@ details.more[open] > summary {
     margin-bottom: 0.25rem;
 }
 details.more > :not(summary) {
-    font-size: 0.85rem;
+    font-size: var(--dp-text-sm);
     opacity: 0.8;
 }
 details.more > :not(summary) + :not(summary) {
@@ -544,11 +630,11 @@ a.button[aria-current]:not([aria-current="false"]) {
 button.small,
 a.button.small {
     padding: 0.3rem 0.65rem;
-    font-size: 0.85rem;
+    font-size: var(--dp-text-sm);
 }
 button.xs {
     padding: 0.15rem 0.45rem;
-    font-size: 0.75rem;
+    font-size: var(--dp-text-xs);
 }
 /*
  * **行に並べる操作は、字は小さくても押す的は 40px。** 観る画面の操作列と同じ物差し
@@ -568,7 +654,7 @@ a.button.ghost {
 }
 :is(button, a.button).ghost:is(:hover, :active, :focus, [aria-current]:not([aria-current="false"])) {
     /* Pico は押せるものの :hover/:focus で文字を白、枠を主の色にする。薄い地の上だと読めないので戻す */
-    --pico-background-color: var(--dp-base-200);
+    --pico-background-color: var(--dp-subtle);
     --pico-border-color: transparent;
     --pico-color: inherit;
     --pico-box-shadow: none;
@@ -626,6 +712,45 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     flex: 0 0 auto;
 }
 
+/* ---- タブ (`<div role="group" class="segmented">`。番組表とライブの種別) ---- */
+/*
+ * 淡い面の溝に、選んでいるものだけ一段持ち上げた面 (`--dp-raised`) を置く。
+ * 主の色で塗りつぶしていた頃は、隣の「予約」などの主のボタンと同じ重さで並び、
+ * 「選んでいる」と「押すと何かが起きる」が見分けにくかった。
+ * 選んでいるものは面・影・太字の 3 つで示す (色だけにしない)。選んでいないものも本文並みの字で、押せると分かる
+ */
+[role="group"].segmented {
+    display: inline-flex;
+    gap: 2px;
+    width: auto;
+    padding: 2px;
+    border: 1px solid var(--dp-line);
+    border-radius: var(--dp-radius);
+    background: var(--dp-subtle);
+    box-shadow: none;
+}
+[role="group"].segmented > :is(button, a.button) {
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: var(--pico-secondary);
+    --pico-box-shadow: none;
+    margin: 0;
+    border-radius: calc(var(--dp-radius) - 2px);
+    box-shadow: none;
+}
+[role="group"].segmented > :is(button, a.button):hover {
+    --pico-background-color: color-mix(in srgb, var(--dp-raised) 60%, transparent);
+    --pico-border-color: transparent;
+    --pico-color: var(--pico-secondary-hover);
+}
+[role="group"].segmented > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]) {
+    --pico-background-color: var(--dp-raised);
+    --pico-border-color: var(--dp-line);
+    --pico-color: var(--pico-h1-color, var(--pico-color));
+    box-shadow: var(--dp-shadow);
+    font-weight: var(--dp-weight-bold);
+}
+
 /* ---- タグ ---- */
 /*
  * 状態のバッジ。**既定は淡い地に濃い文字。** 塗るのは `.solid` を付けたものだけで、
@@ -637,11 +762,11 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     align-items: center;
     gap: 0.25rem;
     padding: 0.05rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
+    border-radius: var(--dp-radius-full);
+    font-size: var(--dp-text-xs);
     line-height: 1.6;
     white-space: nowrap;
-    background: var(--dp-base-200);
+    background: var(--dp-subtle);
     color: inherit;
     border: 1px solid transparent;
 }
@@ -669,7 +794,7 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
 /* 色の付かない枠だけのバッジ(工程や但し書き)は地も塗らない。ふつうのバッジと見分けが付かなくなる */
 .tag.outline:not(.success, .error, .warning, .info, .solid) {
     background: transparent;
-    border-color: var(--dp-base-300);
+    border-color: var(--dp-line);
 }
 /* **いま動いているものだけ塗る。** 一覧の中でここにだけ目が行くようにする */
 .tag.solid {
@@ -688,9 +813,9 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
  * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった
  */
 .notice {
-    border-radius: 0.75rem;
+    border-radius: var(--dp-radius);
     padding: 0.75rem 1rem;
-    background: var(--dp-base-200);
+    background: var(--dp-subtle);
     border-left: 3px solid transparent;
 }
 .notice.warning {
@@ -771,18 +896,34 @@ button[aria-busy="true"]::after {
     max-height: 100%;
     overflow-y: auto;
     padding: 0.25rem;
-    border-radius: 0.5rem;
+    border-radius: var(--dp-radius-lg);
     background: var(--dp-surface);
     color: var(--pico-color);
-    border: 1px solid var(--dp-base-300);
-    box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+    border: 1px solid var(--dp-line);
+    box-shadow: var(--dp-shadow-pop);
     outline: none;
     position-try-fallbacks: flip-block;
 }
-/* 開いているときだけ並べる。閉じているときはブラウザの `display: none` のまま */
+/*
+ * 開いているときだけ並べる。閉じているときはブラウザの `display: none` のまま。
+ * 開くときだけ、少し下から浮かび上がる (`--dp-duration`。動かさない設定では 0 で、すぐ出る)。
+ * 動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさ (`offsetHeight`) は変わらない
+ */
 .menu:popover-open {
     display: flex;
     flex-direction: column;
+    transition:
+        opacity var(--dp-duration) var(--dp-ease),
+        transform var(--dp-duration) var(--dp-ease);
+}
+@starting-style {
+    .menu:popover-open {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    .menu[data-side="top"]:popover-open {
+        transform: translateY(4px);
+    }
 }
 .menu[data-side="bottom"] {
     margin-top: 4px;
@@ -811,7 +952,7 @@ button[aria-busy="true"]::after {
     margin: 0;
     padding: 0.4rem 0.6rem;
     border: 0;
-    border-radius: 0.375rem;
+    border-radius: var(--dp-radius-sm);
     box-shadow: none;
     background: transparent;
     color: inherit;

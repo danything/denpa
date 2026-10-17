@@ -44,6 +44,6 @@
         font-size: 0.75rem;
     }
     .empty:not(:empty) {
-        background: var(--dp-base-300);
+        background: var(--dp-line);
     }
 </style>

@@ -807,7 +807,7 @@
         flex-shrink: 0;
     }
     .rows > .row + .row {
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .rows {
         margin-top: 0.5rem;
@@ -838,7 +838,7 @@
     .transcode {
         margin-top: 1rem;
         padding-top: 1rem;
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
     .events {
         display: flex;
@@ -882,8 +882,8 @@
         width: 10rem;
     }
     .log {
-        border: 1px solid var(--dp-base-300);
-        border-radius: 1rem;
+        border: 1px solid var(--dp-line);
+        border-radius: var(--dp-radius-lg);
     }
     .log summary {
         padding: 0.5rem 1rem;

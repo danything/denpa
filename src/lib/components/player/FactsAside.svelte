@@ -67,9 +67,10 @@
         flex-direction: column;
         min-height: 0;
         flex: 1;
-        border-radius: 1rem;
+        border: 1px solid var(--dp-line);
+        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+        box-shadow: var(--dp-shadow);
     }
     .body {
         min-height: 0;
@@ -83,6 +84,6 @@
         flex-wrap: wrap;
         gap: 0.5rem;
         padding: 1rem;
-        border-top: 1px solid var(--dp-base-300);
+        border-top: 1px solid var(--dp-line);
     }
 </style>

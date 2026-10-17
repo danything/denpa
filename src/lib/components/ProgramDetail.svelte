@@ -99,10 +99,10 @@
         max-height: 100%;
         padding: 1.5rem;
         box-sizing: border-box;
-        border-radius: 1rem;
+        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
-        border: 1px solid var(--dp-base-300);
-        box-shadow: 0 20px 50px rgb(0 0 0 / 0.45);
+        border: 1px solid var(--dp-line);
+        box-shadow: var(--dp-shadow-pop);
     }
     .detail-body {
         min-height: 0;

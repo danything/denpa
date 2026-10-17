@@ -148,9 +148,10 @@
         flex-shrink: 0;
         margin-bottom: 0.5rem;
         padding: 0.75rem;
-        border-radius: 1rem;
+        border: 1px solid var(--dp-line);
+        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
-        box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+        box-shadow: var(--dp-shadow);
     }
     .colors {
         display: flex;
