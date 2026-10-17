@@ -11,8 +11,8 @@
     import { startOffline } from '#lib/offline.svelte.js';
     import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { navigating, page } from '$app/state';
-    import Contrast from '~icons/lucide/contrast';
     import CalendarDays from '~icons/lucide/calendar-days';
+    import Contrast from '~icons/lucide/contrast';
     import Ellipsis from '~icons/lucide/ellipsis';
     import ListVideo from '~icons/lucide/list-video';
     import Moon from '~icons/lucide/moon';
