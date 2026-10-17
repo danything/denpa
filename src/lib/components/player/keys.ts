@@ -34,7 +34,7 @@ export interface PlayerKeys {
 export function playerKeys(actions: PlayerKeys): (event: KeyboardEvent) => void {
     return (event: KeyboardEvent) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
-        if ((event.target as HTMLElement).closest('input, button, a') !== null) return;
+        if ((event.target as HTMLElement).closest('input, button, a, [role="menu"]') !== null) return;
 
         const { stepSpeed } = actions;
         const map: Record<string, (() => void) | undefined> = {

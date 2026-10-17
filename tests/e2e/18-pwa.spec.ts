@@ -253,21 +253,21 @@ test.describe('PWA', () => {
         const menu = page.getByTestId('nav-menu');
 
         /*
-         * テーマの切り替えはハンバーガーの**横**に置く。`<details>` は行を
+         * テーマの切り替えはハンバーガーの**横**に置く。ハンバーガーの包みは行を
          * 占める箱なので、並べる指定が抜けていると切り替えが上の行へ押し出され、
          * ヘッダーが2段ぶんの厚さになっていた
          */
         const theme = (await page.getByTestId('theme-toggle').boundingBox())!;
-        const burger = (await menu.locator('summary').boundingBox())!;
+        const burger = (await menu.getByRole('button', { name: 'メニュー' }).boundingBox())!;
         expect(Math.abs(theme.y - burger.y)).toBeLessThan(theme.height);
         expect(theme.x).toBeLessThan(burger.x);
 
         /*
-         * **開いてもヘッダーの厚みは変わらない。** Pico が `details[open] > summary` に
-         * 付ける下の余白で、開いた瞬間にヘッダーが 64px から 72px に伸びていた
+         * **開いてもヘッダーの厚みは変わらない。** `<details>` で作っていた頃は、Pico が
+         * `details[open] > summary` に付ける下の余白で、開いた瞬間にヘッダーが 64px から 72px に伸びていた
          */
         const barBefore = (await page.locator('.navbar').boundingBox())!;
-        await menu.locator('summary').click();
+        await menu.getByRole('button', { name: 'メニュー' }).click();
         const barAfter = (await page.locator('.navbar').boundingBox())!;
         expect(barAfter.height, 'メニューを開くとヘッダーの厚みが変わる').toBe(barBefore.height);
         const themeAfter = (await page.getByTestId('theme-toggle').boundingBox())!;

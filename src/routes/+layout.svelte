@@ -3,6 +3,7 @@
     import '../app.css';
     import { onMount } from 'svelte';
     import Measure from '#lib/components/Measure.svelte';
+    import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import { denpaFontUrl } from '#lib/font.js';
     import { write } from '#lib/keep.js';
@@ -205,14 +206,14 @@
      * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
      * 420px)。番組表を横に流すのと、ページごと横に動くのが混ざって扱いにくい。
      *
-     * `<details>` で作る。開閉に JS が要らないので、読み込み途中でも押せる
+     * ほかのメニューと同じ `Menu` (popover)。リンクを並べるだけなので `menu` とは読ませない (`nav`)
      */
-    let menu = $state<HTMLDetailsElement | null>(null);
+    let menuOpen = $state(false);
     /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
     $effect(() => {
         // 画面が変わったことをこの参照で拾う
         page.url.pathname;
-        if (menu !== null) menu.open = false;
+        menuOpen = false;
     });
 
     /**
@@ -271,7 +272,7 @@
             {/if}
         </div>
         <!--
-            **横に並べる指定を忘れない。** `<details>` は行を占める箱なので、
+            **横に並べる指定を忘れない。** ハンバーガーの包み (`.burger`) は行を占める箱なので、
             flex にしていないとテーマの切り替えがその上の行に押し出され、
             ヘッダーが2段ぶんの厚さになる。狭い画面ではテーマとハンバーガーが
             横に並ぶ形にしたい
@@ -308,26 +309,31 @@
             </ul>
 
             <!--
-                `<details>` のまま。開閉に JS が要らないので、読み込み途中でも押せる
-                (Bits UI のメニューはハイドレーションが済むまで開かない)
+                ほかのメニューと同じ `Menu` (popover)。引き金は `popovertarget` で結ぶので、
+                開くのに JS が要らず、読み込み途中でも押せる
             -->
-            <details class="burger" bind:this={menu} data-testid="nav-menu">
-                <summary aria-label="メニュー">
-                    <Icon icon={MenuIcon} size="size-5" />
-                </summary>
-                <ul class="burger-list">
-                    {#each links as link (link.href)}
-                        <li>
-                            <a
-                                href={resolve(link.href)}
-                                aria-current={page.route.id === link.href ? 'page' : undefined}
-                            >
-                                {link.label}
-                            </a>
-                        </li>
-                    {/each}
-                </ul>
-            </details>
+            <div class="burger" data-testid="nav-menu">
+                <Menu bind:open={menuOpen} align="end" nav class="burger-menu">
+                    {#snippet trigger(props)}
+                        <button {...props} type="button" class="ghost burger-button" aria-label="メニュー">
+                            <Icon icon={MenuIcon} size="size-5" />
+                        </button>
+                    {/snippet}
+                    <ul class="burger-list">
+                        {#each links as link (link.href)}
+                            <li>
+                                <a
+                                    href={resolve(link.href)}
+                                    class="menu-item"
+                                    aria-current={page.route.id === link.href ? 'page' : undefined}
+                                >
+                                    {link.label}
+                                </a>
+                            </li>
+                        {/each}
+                    </ul>
+                </Menu>
+            </div>
 
             <!--
                 **名前は出さない。** 誰で入っているかを出しても、できることは
@@ -473,30 +479,20 @@
         background: currentColor;
     }
     .burger {
-        position: relative;
+        display: flex;
     }
-    .burger summary {
+    /* 押す的はヘッダーのほかのボタンと同じ 40px (`.actions :global(button)`)。開いている間は地を敷く */
+    .burger-button {
         display: inline-flex;
         align-items: center;
-        min-height: 2.5rem;
-        /*
-         * **開いても余白を足さない。** Pico は `details[open] > summary` に下の余白
-         * (1rem) を付ける — 文章の中の折りたたみでは中身と離すために要るが、ヘッダーの
-         * ハンバーガーでは**開いた瞬間にヘッダーが 64px から 72px に伸び**、
-         * 隣のテーマ切り替えまで下にずれていた (実機の携帯)
-         */
-        margin-bottom: 0;
         padding: 0.3rem 0.65rem;
-        border-radius: var(--pico-border-radius);
-        cursor: pointer;
-        color: inherit;
     }
-    .burger summary:hover,
-    .burger[open] summary {
-        background: var(--dp-hover);
+    .burger-button[aria-expanded='true'] {
+        --pico-background-color: var(--dp-hover);
     }
-    .burger summary::after {
-        display: none;
+    /* 枠 (`Menu` の中なので :global)。見た目は `app.css` の `.menu` */
+    :global(.burger-menu) {
+        width: 12rem;
     }
     /*
      * **縦に積む。** Pico は `nav ul` を横並び (flex) にするので、何も言わないと
@@ -506,26 +502,9 @@
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        position: absolute;
-        right: 0;
-        z-index: 50;
-        width: 12rem;
-        border-radius: 0.75rem;
-        background: var(--dp-surface);
-        border: 1px solid var(--dp-base-300);
-        box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+        margin: 0;
+        padding: 0;
     }
-    .burger-list a {
-        display: block;
-        padding: 0.45rem 0.75rem;
-        border-radius: 0.5rem;
-        color: inherit;
-        text-decoration: none;
-    }
-    .burger-list a:hover {
-        background: var(--dp-hover);
-    }
-    /* 畳んだメニューでも同じ色。縦に並ぶので下線ではなく左端に印を立てる */
     ul.burger-list a[aria-current='page'] {
         background: color-mix(in srgb, var(--pico-primary) 12%, transparent);
         box-shadow: inset 3px 0 0 var(--pico-primary);

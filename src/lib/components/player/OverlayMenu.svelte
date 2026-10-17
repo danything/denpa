@@ -1,6 +1,6 @@
 <script lang="ts" generics="T extends string | number">
-    import { DropdownMenu } from 'bits-ui';
     import { getContext, type Snippet } from 'svelte';
+    import Menu, { type MenuTrigger } from '../Menu.svelte';
     import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
 
     /**
@@ -10,14 +10,13 @@
      * いくつも並ぶ。項目を `{#each}` で敷き、押したら選んで閉じる、選択中は
      * `aria-current`、までが全部同じだった。ここに1つにまとめる。
      *
-     * 開け閉めは Bits UI の DropdownMenu (キーボードで辿れる・外を押すと閉じる)。
-     * **メニューの枠は portal に出さない** — 全画面にしているのは舞台の枠なので、`body` へ
-     * 出すと全画面の間は見えなくなる。
+     * 開け閉めは `Menu` (popover。キーボードで辿れる・外を押すと閉じる)。最前面に出るので、
+     * 舞台を全画面にしている間も隠れない。
      *
      * **トリガー(押すボタン)は呼び出し側が snippet で渡す。** アイコンの有無・
      * ラベルの出し方・`data-testid` が箇所ごとに違ううえ、テストはその testid を
-     * 名指しで使うので、そこは各画面の持ち物のまま触らない。ボタンは包みの `<span>`
-     * の中に入り、押したのが包みまで届いて開く。
+     * 名指しで使うので、そこは各画面の持ち物のまま触らない。snippet は `Menu` の
+     * 引き金の属性を受け取り、ボタン (`ControlButton`) にそのまま広げる。
      *
      * 選択肢の `data-testid` は `{testid}-option`、枠は `{testid}-menu`。
      * `attrName` を渡すと各選択肢に `data-{attrName}={key}` を付ける (テストが
@@ -42,8 +41,8 @@
         size = 'normal',
         attrName,
     }: {
-        /** 押すボタン。包みの `<span>` の中に置くので、そのまま `<button>` を書く */
-        trigger: Snippet;
+        /** 押すボタン。受け取った属性を `<button>` (`ControlButton`) に広げる */
+        trigger: Snippet<[MenuTrigger]>;
         items: Item[];
         onselect: (key: T) => void;
         /** 枠と選択肢の testid の頭 (`{testid}-menu` / `{testid}-option`) */
@@ -75,105 +74,47 @@
     });
 
     /**
-     * **メニューは舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しの裏に潜り、
-     * 全画面では切れる。スマホの縦で全画面をやめると枠は 224px しか無く、速さ (7つ) の
-     * メニューが上へはみ出して**等速・×0.75 が見出しの裏に隠れて押せなかった**。
-     * 枠を当たり判定の境にして、入りきらなければメニューの中を巻き取る (`max-height`)
+     * **メニューは舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しにかぶる。
+     * スマホの縦で全画面をやめると枠は 224px しか無く、速さ (7つ) のメニューが上へはみ出していた。
+     * 枠を当たり判定の境にして、入りきらなければメニューの中を巻き取る (`Menu` の `boundary`)。
+     * 舞台の外 (と、枠がまだ無いうち) は画面に収める
      */
     const stage = getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
-    // 舞台の外 (と、枠がまだ無いうち) は空 — Bits の既定 (画面の端) に任せる
-    const boundary = $derived.by(() => {
-        const element = stage?.() ?? null;
-        return element === null ? [] : [element];
-    });
-
-    function toggle(): void {
-        open = !open;
-    }
-
-    /**
-     * 引き金の包みの span に付ける props。Bits UI がくれるものから 2 つ変える。
-     *
-     * - `type` を抜く。Bits は引き金に `type="button"` を付けるが、包みの span に付くと Pico が
-     *   ボタンの余白と枠を当て、操作バーが 1 段ぶん高くなる (実測 45px → 60.5px)
-     * - **開け閉めは click の 1 回だけで決める。** Bits の引き金は、マウスは pointerdown、指は
-     *   pointerup で開け、続く click は `detail` が 0 のときだけ (キーボード由来と見て) もう一度
-     *   開け閉めする。指の click の `detail` は端末で揃わず、実機のタブレットでは**押した瞬間に
-     *   閉じて**いた (pointerup で開いた直後の click で閉じる)。pointer とキーの手は外し、click
-     *   だけを受ける — 1 回押せば 1 回だけ届く。キーボードは中の `<button>` が Enter / Space を
-     *   click にしてくれるので、そのまま動く。矢印の上下で開くのだけは自分で持つ (Bits の
-     *   keydown は Enter / Space も開け閉めするので、そのまま残すと click と二重になる)
-     */
-    function triggerProps(props: Record<string, unknown>): Record<string, unknown> {
-        const { type: _type, ...rest } = props;
-        return {
-            ...rest,
-            onpointerdown: undefined,
-            onpointerup: undefined,
-            onkeydown: (event: KeyboardEvent) => {
-                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                event.preventDefault();
-                open = true;
-            },
-            onclick: toggle,
-        };
-    }
 </script>
 
-<DropdownMenu.Root bind:open>
-    <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-            <!-- 押す手は click だけ、`type` は抜く (`triggerProps`) -->
-            <span {...triggerProps(props)} class="trigger">{@render trigger()}</span>
-        {/snippet}
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content
-        side="top"
-        {align}
-        sideOffset={4}
-        collisionBoundary={boundary}
-        collisionPadding={4}
-        class="overlay-menu {size}"
-        data-testid="{testid}-menu"
-    >
-        {#each items as item (item.key)}
-            {@const extra = attrName === undefined ? {} : { [`data-${attrName}`]: item.key }}
-            <DropdownMenu.Item
-                class="option"
-                textValue={item.label}
-                disabled={item.disabled === true}
-                onSelect={() => onselect(item.key)}
-                data-testid="{testid}-option"
-                data-active={item.active ? '' : undefined}
-                aria-current={item.active ? 'true' : undefined}
-                {...extra}
-            >
-                {item.label}
-            </DropdownMenu.Item>
-        {/each}
-    </DropdownMenu.Content>
-</DropdownMenu.Root>
+<Menu bind:open side="top" {align} boundary={stage} {trigger} class="overlay-menu {size}" testid="{testid}-menu">
+    {#each items as item (item.key)}
+        {@const extra = attrName === undefined ? {} : { [`data-${attrName}`]: item.key }}
+        <button
+            type="button"
+            role="menuitem"
+            class="menu-item option"
+            aria-disabled={item.disabled === true ? 'true' : undefined}
+            data-disabled={item.disabled === true ? '' : undefined}
+            onclick={() => {
+                if (item.disabled !== true) onselect(item.key);
+            }}
+            data-testid="{testid}-option"
+            data-active={item.active ? '' : undefined}
+            aria-current={item.active ? 'true' : undefined}
+            {...extra}
+        >
+            {item.label}
+        </button>
+    {/each}
+</Menu>
 
 <style>
-    .trigger {
-        display: inline-flex;
-    }
     /*
-     * **幅は中身で決める。ボタンより狭くはしない。** メニューごとに決め打ち (音声 13rem・エンコード方式 9rem・
-     * 速さ 6rem) にしていた頃は、2 択のエンコード方式にも名前の短い音声にも余白ばかりの箱が出て、
-     * タブレットで目立った。`--bits-floating-anchor-width` は Bits UI が置くボタンの幅
+     * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。メニューごとに
+     * 決め打ち (音声 13rem・エンコード方式 9rem・速さ 6rem) にしていた頃は、2 択のエンコード方式にも
+     * 名前の短い音声にも余白ばかりの箱が出て、タブレットで目立った
      */
     :global(.overlay-menu) {
-        display: flex;
-        flex-direction: column;
         gap: 0.125rem;
         width: max-content;
-        min-width: var(--bits-floating-anchor-width);
         max-width: min(20rem, 90vw);
-        max-height: var(--bits-floating-available-height);
-        overflow-y: auto;
         padding: 0.5rem;
-        color: var(--pico-color);
     }
     :global(.overlay-menu .option) {
         padding: 0.4rem 0.75rem;
@@ -181,10 +122,6 @@
     :global(.overlay-menu .option[data-active]) {
         background: var(--pico-primary-background);
         color: #fff;
-    }
-    :global(.overlay-menu .option[data-disabled]) {
-        cursor: not-allowed;
-        opacity: 0.5;
     }
     :global(.overlay-menu.large) {
         gap: 0.25rem;
@@ -198,9 +135,10 @@
     /*
      * **狭い枠では速さを4列に並べる。** 縦に7つ積むと 300px あり、スマホの縦で
      * 全画面をやめた枠 (224px) には入らない — 巻き取らせると2つしか見えず、
-     * 押したい速さを探してメニューの中を動かすことになる
+     * 押したい速さを探してメニューの中を動かすことになる。
+     * 開いているときだけ (`:popover-open`)。閉じているときの `display: none` を消さない
      */
-    :global(.stage[data-compact] .overlay-menu.large) {
+    :global(.stage[data-compact] .overlay-menu.large:popover-open) {
         display: grid;
         grid-template-columns: repeat(4, auto);
     }

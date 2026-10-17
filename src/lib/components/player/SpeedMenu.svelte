@@ -58,9 +58,10 @@
     items={SPEEDS.map((value) => ({ key: value, label: `×${value}`, active: value === speed }))}
     {onselect}
 >
-    {#snippet trigger()}
+    {#snippet trigger(menu)}
         <span class="speed">
             <ControlButton
+                {menu}
                 label={speedLabel(label, speed)}
                 {testid}
                 on={speed !== 1}

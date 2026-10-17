@@ -51,7 +51,7 @@ export function stageFullscreen(target: () => HTMLElement | null): StageFullscre
 
     /*
      * 広げている間: 後ろを止めて黒く、Esc で出る。**枠の中のメニューが開いていれば
-     * そちらに譲る** — Bits UI は document で Esc を受けて `preventDefault` するので、
+     * そちらに譲る** — メニュー (`Menu.svelte`) は document で Esc を受けて `preventDefault` するので、
      * window まで上がってきたときには印が付いている
      */
     $effect(() => {

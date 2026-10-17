@@ -113,8 +113,7 @@ asicen-userland は入れません (Windows 版が無い)。カードリーダ�
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | Svelte / SvelteKit / adapter-node | 画面・ルーティング・サーバの束 | <https://github.com/sveltejs> | MIT |
-| Blades (Pico CSS を引き継いだもの) / Bits UI | 見た目の土台と、メニューなどの部品 | <https://blades.ninja> / <https://bits-ui.com> | MIT |
-| Floating UI / runed / svelte-toolbelt / tabbable / style-to-object | Bits UI の依存 (浮かせる枠・フォーカス) | 各上流 | MIT |
+| Blades (Pico CSS を引き継いだもの) | 見た目の土台 | <https://blades.ninja> | MIT |
 | drizzle-orm | SQLite の読み書き (サーバの束) | <https://github.com/drizzle-team/drizzle-orm> | **Apache-2.0** |
 | Lucide (`@iconify-json/lucide` から、使ったアイコンの `<svg>` だけ) | 画面のアイコン ([player.md](player.md#アイコンは-lucide-を組むときに埋め込みます)) | <https://lucide.dev> | **ISC** |
 | unplugin-icons / @iconify/utils (組むときだけ。束には入らない) | `~icons/*` を Svelte の部品に変える | <https://github.com/unplugin/unplugin-icons> / <https://github.com/iconify/iconify> | MIT |

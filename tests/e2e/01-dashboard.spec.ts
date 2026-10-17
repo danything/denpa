@@ -255,18 +255,22 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(menu).toBeVisible();
         /*
          * **下の行が透けて見えない** (#481)。iOS の Safari では包みの z-index が
-         * `auto` のまま残り、後に続く録画の行が上に重なっていた (`app.css`)。
-         * 塗りが不透明であることと、包みが前に出ていることを見る
+         * `auto` のまま残り、後に続く録画の行が上に重なっていた。いまは popover で
+         * 最前面 (top layer) に出す。塗りが不透明であることと、真ん中を指したとき
+         * メニュー自身が当たる (ほかのものが上に重なっていない) ことを見る
          */
         const layer = await menu.evaluate((el) => {
-            const wrapper = el.closest('[data-bits-floating-content-wrapper]');
+            const box = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
             return {
                 background: getComputedStyle(el).backgroundColor,
-                wrapperZ: wrapper === null ? '' : getComputedStyle(wrapper).zIndex,
+                top: el.matches(':popover-open'),
+                front: hit !== null && el.contains(hit),
             };
         });
         expect(layer.background).toMatch(/^rgb\(/);
-        expect(layer.wrapperZ).toBe('50');
+        expect(layer.top).toBe(true);
+        expect(layer.front).toBe(true);
         await menu.getByTestId('reconcile-menu-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる

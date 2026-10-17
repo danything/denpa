@@ -566,8 +566,8 @@
                                 }))}
                                 onselect={(key) => player.setCaptionTrack(key)}
                             >
-                                {#snippet trigger()}
-                                    <ControlButton label="字幕を選ぶ" testid="live-caption-track">
+                                {#snippet trigger(menu)}
+                                    <ControlButton {menu} label="字幕を選ぶ" testid="live-caption-track">
                                         <span class="track-label">
                                             {player.captionTracks.find((t) => t.index === player.captionTrack)
                                                 ?.label ?? '字幕'}

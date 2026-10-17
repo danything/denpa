@@ -36,7 +36,7 @@
     外枠は `position: fixed` なので、その `100%` は**そのページが縦に動かずに
     出せる高さ**そのものになる。上下に少し余白を置いて、中身はその中で巻き取らせる。
 
-    Bits UI の Dialog にはしていない。開閉は渡す側が持っている (出すときだけ描く) ので、
+    `<dialog>` にはしていない。開閉は渡す側が持っている (出すときだけ描く) ので、
     ここは箱と背景だけで足りる
 -->
 <div class="detail-modal" role="dialog" aria-modal="true" data-testid="program-detail">

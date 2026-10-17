@@ -743,7 +743,7 @@ test.describe('スマホの横で観る', () => {
 
 /**
  * **指で。** マウスと指では操作列の出し方が違い (`controls.svelte.ts`)、メニューの
- * 開け方も Bits UI が pointer の種類で分けていたので、指の経路を別に見る
+ * 開け方も pointer の種類で違いが出やすい (Bits UI を使っていた頃は分けていた) ので、指の経路を別に見る
  */
 test.describe('指で観る', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 1024, height: 768 } });

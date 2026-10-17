@@ -9,12 +9,12 @@
 </script>
 
 <script lang="ts">
-    import { DropdownMenu } from 'bits-ui';
-    import { onMount, tick, untrack } from 'svelte';
+    import { tick, untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import ArmedDelete from '#lib/components/ArmedDelete.svelte';
+    import Menu from '#lib/components/Menu.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
@@ -365,14 +365,6 @@
     const deletedLabel = $derived(data.showDeleted ? '削除済みを隠す' : '削除済みも表示');
     /** 録画の見出しの「⋯」。照合を送り終えたら閉じる */
     let toolsOpen = $state(false);
-    /**
-     * **「⋯」の中身はサーバでは描かない。** Bits UI は浮かせる枠の id を
-     * プロセス全体の数え上げで振る (`bits-1`, `bits-3`, …) ので、サーバで描くと
-     * 読むたびに HTML が変わり、指紋 (ETag) が合わず 304 が返らなくなる
-     * (いまは CSP の nonce が毎回変わるので、どのみち 304 にはならない。docs/auth.md)。
-     * 開けるのはハイドレーションの後なので、それまで無くて困ることは無い
-     */
-    let mounted = $state(false);
     /** 録画の枠 (中だけスクロールする)。まとめる・まとめないを切り替えたときに置き直す */
     let recordingBox: HTMLElement | undefined = $state();
     /**
@@ -382,9 +374,6 @@
      */
     // svelte-ignore state_referenced_locally
     let grouped = $state(data.grouped);
-    onMount(() => {
-        mounted = true;
-    });
     function rightText(row: RightRow): string {
         if (row.kind === 'missed') {
             const res = row.res;
@@ -588,11 +577,7 @@
         {#each Object.entries(fields) as [name, value] (name)}
             <input type="hidden" {name} {value} />
         {/each}
-        <DropdownMenu.Item closeOnSelect={false}>
-            {#snippet child({ props: itemProps })}
-                <button {...itemProps} type="submit" class="menu-button" data-testid={testid}>{label}</button>
-            {/snippet}
-        </DropdownMenu.Item>
+        <button type="submit" role="menuitem" class="menu-item" data-keep-open data-testid={testid}>{label}</button>
     </form>
 {/snippet}
 
@@ -1212,40 +1197,30 @@
                         たまにしか押さないので、絞り込みの欄を削るより奥へ下げる。
                         広い列では今までどおり並べる (切り替えは列の幅。下の `@container`)
 
-                        中身は閉じている間も DOM に置く (`forceMount`)。照合を送っている
+                        中身は閉じている間も DOM に置く (popover は閉じると見えないだけ)。照合を送っている
                         途中でメニューが消えると、回るものを出す先が無くなるため。
                         閉じるのは送り終わってから (詳細の「再エンコード」と同じ)
                     -->
-                    <DropdownMenu.Root bind:open={toolsOpen}>
-                        <DropdownMenu.Trigger
-                            class="secondary outline small narrow-only tools-trigger"
-                            aria-label="その他の操作"
-                            data-testid="recordings-more"
-                        >
-                            <Icon icon={Ellipsis} size="size-4.5" />
-                        </DropdownMenu.Trigger>
-                        {#if mounted}
-                            <DropdownMenu.Content forceMount align="end" sideOffset={4} collisionPadding={8}>
-                                {#snippet child({ wrapperProps, props, open })}
-                                    <div {...wrapperProps}>
-                                        <div {...props} class="more-menu tools-menu" hidden={!open} data-testid="recordings-more-menu">
-                                            {#if data.capacity !== null}
-                                                <div class="menu-note muted small" data-testid="recordings-capacity-menu">
-                                                    {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
-                                                </div>
-                                            {/if}
-                                            <DropdownMenu.Item>
-                                                {#snippet child({ props: itemProps })}
-                                                    <a {...itemProps} href={deletedHref} class="menu-link">{deletedLabel}</a>
-                                                {/snippet}
-                                            </DropdownMenu.Item>
-                                            {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-menu-button', {}, () => (toolsOpen = false))}
-                                        </div>
-                                    </div>
-                                {/snippet}
-                            </DropdownMenu.Content>
+                    <Menu bind:open={toolsOpen} align="end" class="more-menu tools-menu" testid="recordings-more-menu">
+                        {#snippet trigger(props)}
+                            <button
+                                {...props}
+                                type="button"
+                                class="secondary outline small narrow-only tools-trigger"
+                                aria-label="その他の操作"
+                                data-testid="recordings-more"
+                            >
+                                <Icon icon={Ellipsis} size="size-4.5" />
+                            </button>
+                        {/snippet}
+                        {#if data.capacity !== null}
+                            <div class="menu-note muted small" data-testid="recordings-capacity-menu">
+                                {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
+                            </div>
                         {/if}
-                    </DropdownMenu.Root>
+                        <a role="menuitem" href={deletedHref} class="menu-item">{deletedLabel}</a>
+                        {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-menu-button', {}, () => (toolsOpen = false))}
+                    </Menu>
                 </div>
             </div>
 
@@ -1422,60 +1397,54 @@
                 下端にあるので、下に開くと枠から出る)。中身は上から
                 視聴済みの付け外し、直すもの (再エンコード・CM検出) の順。
 
-                **開閉は Bits UI の DropdownMenu。** 位置は Bits UI が枠に収まるようにずらす。
+                **開け閉めは `Menu` (popover)。** 位置は画面に収まるようにずらす。
 
-                **閉じている間も中身は DOM に置く (`forceMount`)。** どの項目が出るかを
-                開かずに確かめられるように (e2e が数を見ている)。閉じている間は
-                `hidden` で消す — 見えないまま居座ってクリックを食うことが無いように
+                **閉じている間も中身は DOM に置く。** どの項目が出るかを
+                開かずに確かめられるように (e2e が数を見ている)。閉じた popover は
+                `display: none` — 見えないまま居座ってクリックを食うことが無い
             -->
-            <DropdownMenu.Root>
-                <DropdownMenu.Trigger class="secondary outline" data-testid="detail-more">その他…</DropdownMenu.Trigger>
-                <DropdownMenu.Content forceMount side="top" align="end" sideOffset={4} collisionPadding={8}>
-                    {#snippet child({ wrapperProps, props, open })}
-                        <div {...wrapperProps}>
-                            <div {...props} class="more-menu" hidden={!open} data-testid="detail-more-menu">
-                                <!--
-                                    **未視聴の印を付け外しする** (`?/watched`)。末尾まで観れば勝手に外れる
-                                    ので、押すのは観直したいときか、よそで観たときくらい。どちらも続きの位置は消す
-                                    (残すと進捗バーが残って、押した結果が一覧に出ない)。
-                                    詳細は開いたときの行を持っているので、送ったら閉じる (`menuSubmit`)
-                                -->
-                                {@render menuSubmit(
-                                    '?/watched',
-                                    rec.watched_at === null ? '視聴済みにする' : '未視聴に戻す',
-                                    'watched-button',
-                                    { id: rec.id, watched: rec.watched_at === null ? '1' : '0' },
-                                    detail.close,
-                                )}
-                                {#if rec.job_id === null && encodeSource(rec) !== null}
-                                    <!--
-                                        録り直しの元になるのは元のTS。エンコード済みを元にしても
-                                        画質は戻らないので、元のTSがあるときだけ出す
-                                    -->
-                                    {@render menuSubmit('?/reencode', '再エンコード', 'reencode-button', { id: rec.id }, detail.close)}
-                                {/if}
-                                {#if rec.job_id === null && cmRedo(rec).state !== 'hidden'}
-                                    {@const redo = cmRedo(rec)}
-                                    <!--
-                                        **CM 検出だけやり直す** (再エンコードしない。encoder.runCmJob)。元のTSがあれば元のTSから、
-                                        無ければエンコードしたものから読み、チャプターを書き直す。CM を切ってエンコードしたものは戻せないので、
-                                        元のTSがあれば押したときに再エンコードを促し (サーバが断る)、無ければ理由を出して押せない。
-                                        閉じるのは投げ終わってから (再エンコードと同じ)
-                                    -->
-                                    {#if redo.state === 'disabled'}
-                                        <DropdownMenu.Item disabled data-testid="cm-redo-button">
-                                            CM検出をやり直す
-                                        </DropdownMenu.Item>
-                                        <div class="menu-note muted small" data-testid="cm-redo-reason">{redo.reason}</div>
-                                    {:else}
-                                        {@render menuSubmit('?/redetectCm', 'CM検出をやり直す', 'cm-redo-button', { id: rec.id }, detail.close)}
-                                    {/if}
-                                {/if}
-                            </div>
+            <Menu side="top" align="end" class="more-menu" testid="detail-more-menu">
+                {#snippet trigger(props)}
+                    <button {...props} type="button" class="secondary outline" data-testid="detail-more">その他…</button>
+                {/snippet}
+                <!--
+                    **未視聴の印を付け外しする** (`?/watched`)。末尾まで観れば勝手に外れる
+                    ので、押すのは観直したいときか、よそで観たときくらい。どちらも続きの位置は消す
+                    (残すと進捗バーが残って、押した結果が一覧に出ない)。
+                    詳細は開いたときの行を持っているので、送ったら閉じる (`menuSubmit`)
+                -->
+                {@render menuSubmit(
+                    '?/watched',
+                    rec.watched_at === null ? '視聴済みにする' : '未視聴に戻す',
+                    'watched-button',
+                    { id: rec.id, watched: rec.watched_at === null ? '1' : '0' },
+                    detail.close,
+                )}
+                {#if rec.job_id === null && encodeSource(rec) !== null}
+                    <!--
+                        録り直しの元になるのは元のTS。エンコード済みを元にしても
+                        画質は戻らないので、元のTSがあるときだけ出す
+                    -->
+                    {@render menuSubmit('?/reencode', '再エンコード', 'reencode-button', { id: rec.id }, detail.close)}
+                {/if}
+                {#if rec.job_id === null && cmRedo(rec).state !== 'hidden'}
+                    {@const redo = cmRedo(rec)}
+                    <!--
+                        **CM 検出だけやり直す** (再エンコードしない。encoder.runCmJob)。元のTSがあれば元のTSから、
+                        無ければエンコードしたものから読み、チャプターを書き直す。CM を切ってエンコードしたものは戻せないので、
+                        元のTSがあれば押したときに再エンコードを促し (サーバが断る)、無ければ理由を出して押せない。
+                        閉じるのは投げ終わってから (再エンコードと同じ)
+                    -->
+                    {#if redo.state === 'disabled'}
+                        <div role="menuitem" class="menu-item" aria-disabled="true" data-disabled tabindex="-1" data-testid="cm-redo-button">
+                            CM検出をやり直す
                         </div>
-                    {/snippet}
-                </DropdownMenu.Content>
-            </DropdownMenu.Root>
+                        <div class="menu-note muted small" data-testid="cm-redo-reason">{redo.reason}</div>
+                    {:else}
+                        {@render menuSubmit('?/redetectCm', 'CM検出をやり直す', 'cm-redo-button', { id: rec.id }, detail.close)}
+                    {/if}
+                {/if}
+            </Menu>
         {/if}
     {/if}
     <button type="button" class="secondary" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
@@ -1749,10 +1718,6 @@
         align-items: center;
         justify-content: center;
     }
-    .menu-link {
-        color: inherit;
-        text-decoration: none;
-    }
     /*
      * 畳むかどうかは**画面の幅ではなく録画の列の幅**で決める。二段組に入ったばかりの
      * 幅 (縦の iPad など) でも列は 440px ほどしかなく、並べると同じように折り返す
@@ -1978,36 +1943,16 @@
     .row-bar.success {
         --pico-progress-color: var(--dp-ok);
     }
-    /* 「その他…」の中身。項目は左寄せで縦に積む */
-    .more-menu {
-        display: flex;
-        flex-direction: column;
+    /* 「その他…」の中身 (枠は `Menu` の中なので :global)。項目は左寄せで縦に積む (`app.css` の `.menu`) */
+    :global(.more-menu) {
         width: 16rem;
         max-width: calc(100vw - 2rem);
     }
     /* 録画の見出しの「⋯」の中身。項目が短いので細くする */
-    .tools-menu {
+    :global(.tools-menu) {
         width: 12rem;
     }
     .menu-form {
         display: contents;
-    }
-    /*
-     * 送信ボタンの項目 (再エンコード・ファイルと照合)。Pico のボタンの地・枠・フォーカスの輪を消し、
-     * ほかの項目と同じ見た目にする (選んでいるときの地は [data-highlighted])
-     */
-    .menu-button,
-    .menu-button:is(:hover, :active, :focus) {
-        width: 100%;
-        margin: 0;
-        border: 0;
-        box-shadow: none;
-        background: transparent;
-        color: inherit;
-        text-align: left;
-        font: inherit;
-    }
-    .menu-button[data-highlighted] {
-        background: var(--dp-hover);
     }
 </style>

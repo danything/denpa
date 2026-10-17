@@ -28,6 +28,7 @@
         testid,
         onclick,
         children,
+        menu,
     }: {
         /** アイコン (`icons.ts`)。文字だけのボタンでは省く (`undefined` を渡しても同じ) */
         icon?: IconShape | undefined;
@@ -46,6 +47,8 @@
         onclick?: () => void;
         /** 添える文字。渡すと丸くなくなる (`undefined` は渡さないのと同じ。速さは等速のときだけ省く) */
         children?: import('svelte').Snippet | undefined;
+        /** メニューの引き金にするときに `Menu` から受け取る属性 (`OverlayMenu`)。そのまま広げる */
+        menu?: import('../Menu.svelte').MenuTrigger | undefined;
     } = $props();
 </script>
 
@@ -61,6 +64,7 @@
     aria-pressed={on}
     title={label}
     data-testid={testid}
+    {...menu}
 >
     {#if icon !== undefined}
         <Icon {icon} />
