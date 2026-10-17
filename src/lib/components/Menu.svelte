@@ -30,11 +30,14 @@
         };
         const done = () => {
             for (const type of types) window.removeEventListener(type, stop, true);
+            window.removeEventListener('pointercancel', done, true);
             window.removeEventListener('pointerdown', done, true);
             window.removeEventListener('keydown', done, true);
         };
         for (const type of types) window.addEventListener(type, stop, true);
-        // 押したまま動かして (指なら巻き取って) click が来なかったときは、次の押下かキー入力で外す (そちらは止めない)
+        // 指で巻き取って押下が取り消されたら、そこで外す。押したまま動かして click が来なかったときは、
+        // 次の押下かキー入力で外す (そちらは止めない)
+        window.addEventListener('pointercancel', done, true);
         window.addEventListener('pointerdown', done, true);
         window.addEventListener('keydown', done, true);
     }
