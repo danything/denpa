@@ -133,7 +133,11 @@
             event.preventDefault();
             open = false;
         };
-        const update = () => place();
+        // メニューの中を巻き取ったときは置き直さない (測り直しで `max-height` を外すと、巻き取った位置が先頭に戻る)
+        const update = (event: Event) => {
+            if (event.target instanceof Node && content?.contains(event.target)) return;
+            place();
+        };
         document.addEventListener('keydown', onkey);
         window.addEventListener('resize', update);
         window.addEventListener('scroll', update, true);
@@ -165,6 +169,7 @@
         }
         const button = triggerElement();
         if (button === null) return;
+        const scrolled = element.scrollTop;
         const at = button.getBoundingClientRect();
         const root = document.documentElement;
         const box = area?.getBoundingClientRect() ?? new DOMRect(0, 0, root.clientWidth, root.clientHeight);
@@ -194,6 +199,7 @@
         style.setProperty('max-height', `${room}px`);
         style.setProperty('top', `${top}px`);
         style.setProperty('left', `${left}px`);
+        element.scrollTop = scrolled;
     }
 
     function onTriggerKey(event: KeyboardEvent): void {

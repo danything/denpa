@@ -277,6 +277,44 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(menu).toBeHidden();
     });
 
+    /*
+     * **メニューはキーボードでも使える** (`Menu.svelte`)。Enter で開くと先頭の項目に入り、
+     * ↑↓・Home・End で動き、Esc で閉じて引き金に戻る
+     */
+    test('「⋯」はキーボードで開け閉めできる', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/');
+        const more = page.getByTestId('recordings-more');
+        const menu = page.getByTestId('recordings-more-menu');
+        await expect(more).toHaveAttribute('aria-expanded', 'false');
+
+        await more.focus();
+        await page.keyboard.press('Enter');
+        await expect(menu).toBeVisible();
+        await expect(more).toHaveAttribute('aria-expanded', 'true');
+        const items = menu.getByRole('menuitem');
+        await expect(items.first()).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(items.nth(1)).toBeFocused();
+        await page.keyboard.press('Home');
+        await expect(items.first()).toBeFocused();
+        await page.keyboard.press('End');
+        await expect(items.last()).toBeFocused();
+
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+        await expect(more).toBeFocused();
+        await expect(more).toHaveAttribute('aria-expanded', 'false');
+
+        // ↑ で開くと末尾から
+        await page.keyboard.press('ArrowUp');
+        await expect(menu).toBeVisible();
+        await expect(items.last()).toBeFocused();
+        // 外を押せば閉じる
+        await page.locator('.recordings h2').click();
+        await expect(menu).toBeHidden();
+    });
+
     /**
      * **読み直しは、走っている遷移を畳んでしまう。**
      *
