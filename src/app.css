@@ -10,8 +10,31 @@
  *
  * テーマは暗いのが既定で、明るいのも選べる。app.html と +layout.svelte が <html data-theme> を付け、Pico はそれに従う。
  * 色はテーマごとに下の 2 つのブロックで決め、画面側は変数だけを使う
+ *
+ * **Pico は使う部品だけ読む。** 並びは Pico の `pico/_index.css` と同じ (後に読んだものが勝つので崩さない)。
+ * 読まないもの: 並べ方のクラス (container・grid・overflow-auto)・figure・色/日付/ファイルの入力欄・
+ * dropdown・tooltip (どれも当てる要素が無い)、コード・検索欄の虫眼鏡・ナビ (当てたくない。前は読んでから打ち消していた)
  */
-@import "@anyblades/blades/pico" layer(pico);
+@import "@anyblades/blades/pico/variables" layer(pico);
+@import "@anyblades/blades/pico/layout/document" layer(pico);
+@import "@anyblades/blades/pico/layout/landmarks" layer(pico);
+@import "@anyblades/blades/pico/layout/section" layer(pico);
+@import "@anyblades/blades/pico/content/typography" layer(pico);
+@import "@anyblades/blades/pico/content/link" layer(pico);
+@import "@anyblades/blades/pico/content/button" layer(pico);
+@import "@anyblades/blades/pico/content/table" layer(pico);
+@import "@anyblades/blades/pico/content/embedded-content" layer(pico);
+@import "@anyblades/blades/pico/content/misc" layer(pico);
+@import "@anyblades/blades/pico/forms/basics" layer(pico);
+@import "@anyblades/blades/pico/forms/checkbox-radio-switch" layer(pico);
+@import "@anyblades/blades/pico/forms/input-range" layer(pico);
+@import "@anyblades/blades/pico/components/accordion" layer(pico);
+@import "@anyblades/blades/pico/components/card" layer(pico);
+@import "@anyblades/blades/pico/components/group" layer(pico);
+@import "@anyblades/blades/pico/components/loading" layer(pico);
+@import "@anyblades/blades/pico/components/modal" layer(pico);
+@import "@anyblades/blades/pico/components/progress" layer(pico);
+@import "@anyblades/blades/pico/utilities" layer(pico);
 
 :root {
     --pico-font-family-sans-serif: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
@@ -186,42 +209,12 @@ html[data-stage-fullscreen] body {
     background: #000;
 }
 /*
- * **使わない Pico の部品を打ち消す。** Blades の Pico は部品を選べず丸ごと1枚で来る
- * (部品ごとに読めるようにする話は anyblades/discussions#168)。Pico の Sass で外していた
- * 部品のうち、こちらの要素に当たるものだけをここで戻す。部品ごとに読めるようになったら、
- * 読まないことにしてこの塊ごと消す
+ * コード (<pre>)。Pico のコードの部品は読まないので、字は素の等幅。文章の決まり (typography) が
+ * 付ける字の色と太さだけ外し、周り (注記・エラー) に合わせる
  */
-/* ナビ (<nav>)。間は各画面の gap で取る。Pico は li と a に負の余白と余白を足す */
-:root {
-    --pico-nav-element-spacing-vertical: 0;
-    --pico-nav-element-spacing-horizontal: 0;
-    --pico-nav-link-spacing-vertical: 0;
-    --pico-nav-link-spacing-horizontal: 0;
-}
-/* コード (<code> <pre>)。地を塗ったバッジにしない。字は等幅にするだけ */
-pre,
-code,
-var,
-kbd,
-samp {
-    display: revert;
-    padding: 0;
-    border-radius: 0;
-    background: none;
-    color: inherit;
-    font-family: revert;
-    font-size: revert;
-    font-weight: inherit;
-    line-height: inherit;
-}
 pre {
-    overflow: revert;
-    margin-bottom: var(--pico-typography-spacing-vertical);
-}
-/* 検索欄の虫眼鏡 */
-input[type="search"] {
-    padding-inline-start: var(--pico-form-element-spacing-horizontal);
-    background-image: none;
+    color: inherit;
+    font-weight: inherit;
 }
 
 /* Pico は入力欄・表・段落の下に大きな余白を付ける。並べ方は各画面の gap で決めるので外す */

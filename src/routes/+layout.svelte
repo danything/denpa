@@ -434,13 +434,15 @@
         align-items: center;
         gap: 0.25rem;
     }
-    /* 並べ方の余白は Pico の `nav ul` / `nav li` が消す (app.css で間を 0 にしてある)。印だけ `ul li` に残る */
+    /* 印と余白を消す。Pico のナビの部品は読まないので、文章の決まり (`ul li` の印・下の余白) がそのまま当たる */
     ul.links li,
     ul.burger-list li {
+        margin: 0;
         list-style: none;
     }
     ul.links {
         display: none;
+        align-items: center;
         gap: 0.125rem;
         padding: 0 0.25rem;
     }
@@ -495,8 +497,8 @@
         width: 12rem;
     }
     /*
-     * **縦に積む。** Pico は `nav ul` を横並び (flex) にするので、何も言わないと
-     * 畳んだメニューの中まで横に並び、12rem の箱から「ライブ」より先がはみ出していた
+     * **縦に積む。** Pico のナビの部品を読んでいた頃は `nav ul` が横並び (flex) になり、
+     * 畳んだメニューの中まで横に並んで、12rem の箱から「ライブ」より先がはみ出していた
      */
     .burger-list {
         display: flex;
