@@ -120,11 +120,13 @@ test.describe('録画一覧のまとめて表示', () => {
         const toggle = page.getByTestId('recordings-group-toggle');
         const view = page.getByTestId('recordings-view');
         await expect(toggle).toHaveAttribute('aria-checked', 'false');
-        await expect(toggle).toHaveAccessibleName('まとめて表示');
         // 入っていないときは「表示」に点が付かない
         await expect(view.locator('.view-dot')).toHaveCount(0);
 
-        await toggleGrouped(page);
+        // 名前は開いて見えているときに読む (閉じたメニューの中身は読み上げに出ない)
+        await view.click();
+        await expect(toggle).toHaveAccessibleName('まとめて表示');
+        await toggle.click();
         await expect(toggle).toHaveAttribute('aria-checked', 'true');
         // 入っていれば、閉じたメニューの引き金にも点が付く (ふつうと違う見え方なのが分かる)
         await expect(view.locator('.view-dot')).toHaveCount(1);
