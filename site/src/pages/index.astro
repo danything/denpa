@@ -19,11 +19,20 @@ const install = top.sections.find((s) => s.key === 'install');
 // 最適化だけ Astro に任せ、<img> は自前で書く (image.html)
 const images = import.meta.glob<{ default: ImageMetadata }>('../assets/docs/*.{webp,png,jpg}', { eager: true });
 const heroSource = images[`../assets/docs/${heroImage.file}`]?.default;
-const heroImg = heroSource && (await getImage({ src: heroSource, width: Math.min(heroSource.width, 1280) }));
+// 最初に見える大きな画像なので、先に取らせる (fetchpriority) うえ、画面の幅に合った大きさを選ばせる (srcset)。
+// 幅の広い画面では右の列 (本文の幅の半分ほど)、狭い画面では全幅
+const heroSizes = '(min-width: 50rem) 31rem, 100vw';
+const heroImg =
+    heroSource &&
+    (await getImage({
+        src: heroSource,
+        widths: [640, 960, 1280].filter((w) => w < heroSource.width).concat(Math.min(heroSource.width, 1280)),
+        sizes: heroSizes,
+    }));
 const escapeAttr = (s: string) => s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 const heroHtml =
     heroImg &&
-    `<figure class="hero-shot"><img src="${heroImg.src}" alt="${escapeAttr(heroImage.alt)}" width="${heroImg.attributes['width']}" height="${heroImg.attributes['height']}" decoding="async" />${
+    `<figure class="hero-shot"><img src="${heroImg.src}" srcset="${heroImg.srcSet.attribute}" sizes="${heroSizes}" alt="${escapeAttr(heroImage.alt)}" width="${heroSource.width}" height="${heroSource.height}" fetchpriority="high" decoding="async" />${
         videoImages.includes(heroImage.file) ? `<figcaption>${videoImageNote}</figcaption>` : ''
     }</figure>`;
 
@@ -184,16 +193,22 @@ const head = [
         background: var(--sl-color-bg-nav);
     }
 
-    /* 使ってよい範囲: 読み飛ばされないよう、主の色の枠で囲む */
+    /* 使ってよい範囲: 読み飛ばされないよう、細い枠と薄い地で囲む */
     .top-usage {
-        padding: 0.25rem 1.5rem 1.25rem;
-        border: 1px solid var(--sl-color-hairline);
-        border-left: 4px solid var(--sl-color-accent);
+        padding: 1.25rem 1.5rem;
+        border: 1px solid var(--sl-color-hairline-light);
         border-radius: var(--dp-radius);
-        background: var(--sl-color-bg-nav);
+        background: var(--dp-surface);
     }
+    /* 枠の中の見出しは、本文の見出しより一段小さく、枠の上の余白とそろえる */
     .top-usage > h2 {
+        margin-top: 0;
+        padding-bottom: 0;
         border-bottom: 0;
+        font-size: var(--sl-text-h3);
+    }
+    .top-usage > :global(:last-child) {
+        margin-bottom: 0;
     }
 
     /* もっと詳しく: 入口のカード */

@@ -9,6 +9,25 @@ import { base, ogImage, repoUrl } from './src/data/pages.ts';
 // Search Console の所有権の確認。値は Actions の変数 (GOOGLE_SITE_VERIFICATION) から渡し、ここには書かない
 const siteVerification = process.env['GOOGLE_SITE_VERIFICATION']?.trim();
 
+// サイトの中のページを、開かれる前にブラウザに読ませておく (Speculation Rules。JavaScript は要らない)。
+// eager は、パソコンではリンクにマウスを乗せてすぐ、スマホでは画面に見えているリンク。
+//   - prerender: 裏で描画まで済ませ、押したら待たずに切り替わる
+//   - prefetch: prerender が数の上限で捨てられたときも、HTML は取ってある
+// 対象は /denpa/ の下のページだけ (画像・検索の索引・サイトマップ・同じページの中への移動は外す)。
+// 対応していないブラウザ (Firefox・Safari) では普通に移る
+const speculationTargets = {
+    source: 'document',
+    where: {
+        and: [
+            { href_matches: `${base}*` },
+            { not: { href_matches: [`${base}_astro/*`, `${base}pagefind/*`, `${base}*.*`] } },
+            { not: { selector_matches: ['[href^="#"]', '[target]', '[download]'] } },
+        ],
+    },
+    eagerness: 'eager',
+};
+const speculationRules = { prefetch: [speculationTargets], prerender: [speculationTargets] };
+
 export default defineConfig({
     site: 'https://danything.github.io',
     base,
@@ -22,6 +41,11 @@ export default defineConfig({
             favicon: '/favicon.svg',
             head: [
                 { tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/denpa/apple-touch-icon.png' } },
+                {
+                    tag: 'script',
+                    attrs: { type: 'speculationrules' },
+                    content: JSON.stringify(speculationRules),
+                },
                 // 全ページ共通の画像 (ページごとには作らない)。twitter:card (summary_large_image) は Starlight が付ける
                 { tag: 'meta', attrs: { property: 'og:image', content: ogImage.url } },
                 { tag: 'meta', attrs: { property: 'og:image:width', content: String(ogImage.width) } },

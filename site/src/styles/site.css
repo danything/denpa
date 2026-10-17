@@ -133,3 +133,22 @@
 :root[data-theme="light"] .sl-markdown-content :not(pre) > code {
     border: 1px solid var(--sl-color-hairline-light);
 }
+
+/* 前後のページへのカード (Starlight の Pagination)。影はやめて細い線だけ、ページ名は本文くらいの大きさ */
+.pagination-links a {
+    border-color: var(--sl-color-hairline-light);
+    box-shadow: none;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+    transition:
+        border-color 0.15s,
+        background-color 0.15s;
+}
+.pagination-links a:hover {
+    border-color: var(--sl-color-accent);
+    background-color: var(--dp-surface);
+}
+.pagination-links .link-title {
+    font-size: var(--sl-text-base);
+    color: var(--sl-color-white);
+}

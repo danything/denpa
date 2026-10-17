@@ -20,25 +20,45 @@ const isTop = Astro.url.pathname === base;
     usage && !isTop && (
         <aside class="usage" aria-label="使ってよい範囲">
             <p>
-                <Fragment set:html={summary} />{' '}
-                <a href={usage.anchor}>使ってよい範囲</a>
-                {usage.discussion && (
-                    <>
-                        ・<a href={usage.discussion.url}>{usage.discussion.label}</a>
-                    </>
-                )}
+                <Fragment set:html={summary} />
             </p>
+            {/* リンクは 1 つずつ折り返さずに並べる (途中で切れて次の行に落ちないように) */}
+            <ul class="usage-links">
+                <li>
+                    <a href={usage.anchor}>使ってよい範囲</a>
+                </li>
+                {usage.discussion && (
+                    <li>
+                        <a href={usage.discussion.url}>{usage.discussion.label}</a>
+                    </li>
+                )}
+            </ul>
         </aside>
     )
 }
 
 <style>
     .usage {
-        margin-top: 1.5rem;
-        padding-top: 1rem;
+        margin-top: 2rem;
+        padding-top: 1.25rem;
         border-top: 1px solid var(--sl-color-hairline);
-        font-size: var(--sl-text-sm);
+        font-size: var(--sl-text-xs);
+        line-height: 1.7;
         color: var(--sl-color-gray-3);
+    }
+    .usage p {
+        margin: 0;
+    }
+    .usage-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem 1.25rem;
+        margin: 0.5rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .usage-links li {
+        white-space: nowrap;
     }
     .usage a {
         color: var(--sl-color-text-accent);
