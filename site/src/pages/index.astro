@@ -26,7 +26,9 @@ const heroImg =
     heroSource &&
     (await getImage({
         src: heroSource,
-        widths: [640, 960, 1280].filter((w) => w < heroSource.width).concat(Math.min(heroSource.width, 1280)),
+        // 最大は 1280 (元がもっと大きくても)。src (srcset が効かないとき) もその幅にする
+        width: Math.min(heroSource.width, 1280),
+        widths: [...new Set([640, 960, Math.min(heroSource.width, 1280)])].filter((w) => w <= heroSource.width),
         sizes: heroSizes,
     }));
 const escapeAttr = (s: string) => s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
