@@ -687,6 +687,7 @@ async function init(canvas: OffscreenCanvas, base: string, kind: RawInput, chase
         earlyEnd = false;
         mkv?.finish();
     }
+    post({ type: 'ready' });
     schedule();
 }
 

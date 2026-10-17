@@ -87,6 +87,11 @@ export type FromWorker =
       }
     /** 選局し直してから最初のフレームを描いた。**前の局の静止画を剥がす合図** */
     | { type: 'shown' }
+    /**
+     * デコーダ (WASM) を読み終え、それまで溜めていたものを渡しきった。**これより前は「尻まで読んだのに
+     * 音が来ない」を終わりと見なさない** (`RawEngine.finish`)
+     */
+    | { type: 'ready' }
     /** 数字 (1秒ごと)。画面に出すもの */
     | { type: 'stats'; dropped: number; p95: number; shown: number }
     /** `grab` の返事。まだ何も出していなければ null */

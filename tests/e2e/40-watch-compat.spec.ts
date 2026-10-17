@@ -207,4 +207,24 @@ test.describe('互換モードの観る画面', () => {
         expect(await where(page)).toBeLessThan(paused + 5);
         expect(asked.length).toBe(requests);
     });
+
+    /*
+     * **デコーダの読み込みが遅くても描ける** (遅い回線)。偽の録画は数秒しかなく、読み込みの間に尻まで
+     * 読み切る。「尻まで読んだのに音が来ない」を 2 秒で終わりと見なしていた頃は、デコーダが 2 秒より
+     * 遅れると1コマも出さずに「観終わった」になっていた (`RawEngine.finish`)
+     */
+    test('デコーダの読み込みが遅くても、短い録画を描く', async ({ page, request, stack }) => {
+        test.setTimeout(180_000);
+        await setRecording(request, { codecs: [] });
+        const { id } = await recordOne(page, request);
+        writeFileSync(stack.liveFmp4File, '');
+        await compatOn(page);
+        await page.route('**/api/live/mpeg2/decoder.wasm', async (route) => {
+            await new Promise((resolve) => setTimeout(resolve, 3_000));
+            await route.continue();
+        });
+
+        await goto(page, `/watch/${id}`);
+        await expectDrawn(page, 'fmp4');
+    });
 });

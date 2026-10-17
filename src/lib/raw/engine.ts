@@ -121,6 +121,10 @@ export class RawEngine {
     /** デコードできた音のコマ数 (選局からの通しではなく、このエンジンを作ってからの通し) */
     private heard = 0;
     private gone = false;
+    /** worker がデコーダを読み終えたか (`ready`)。それまでは尻まで読んでも終わりにしない (`finish`) */
+    private ready = false;
+    /** デコーダを読み終える前に尻まで読んだ。読み終えたら `Playout` に伝える */
+    private finishing = false;
     /** デュアルモノのどちらを両耳へ配るか (`AudioTrack.side`) */
     private side: AudioSide = 'both';
     /** 最後に知った PTS。字幕や時計の通知を伸ばすのに使う (`unwrap`) */
@@ -263,12 +267,20 @@ export class RawEngine {
         this.near = null;
         this.heardAt = 0;
         this.shownAt = 0;
+        this.finishing = false;
         this.send({ type: 'reset', from });
     }
 
-    /** もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `ended` */
+    /**
+     * もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `ended`。
+     *
+     * **デコーダを読み終えるまでは `Playout` に伝えない。** 伝えると「尻まで読んだのに鳴らすものが無い」が
+     * `LAST_WAIT` (2秒) 続いた時点で終わりになる。残りが短い (短い録画・尻の近くへ飛んだ) と、読み込みの間に
+     * 尻まで読み切ってしまい、遅い回線でデコーダが 2 秒より遅れると、1コマも出さずに「観終わった」になっていた
+     */
     finish(): void {
-        this.playout.finish();
+        if (this.ready) this.playout.finish();
+        else this.finishing = true;
         this.send({ type: 'end' });
     }
 
@@ -502,6 +514,13 @@ export class RawEngine {
                 if (scheduled !== null) this.play(scheduled);
                 break;
             }
+            case 'ready':
+                this.ready = true;
+                if (this.finishing) {
+                    this.finishing = false;
+                    this.playout.finish();
+                }
+                break;
             case 'shown':
                 this.shownAt = Date.now();
                 this.events.shown();
