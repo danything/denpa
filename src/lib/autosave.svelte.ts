@@ -59,6 +59,13 @@ export function autosave(node: HTMLFormElement, status: SaveState) {
             pending = true;
             return;
         }
+        // 検証 (required・pattern など) に落ちると requestSubmit は submit を起こさず、
+        // inFlight が戻らないまま以降の変更が送られなくなる。先に見て、落ちたら知らせて止める
+        if (!node.checkValidity()) {
+            node.reportValidity();
+            status.state = 'idle';
+            return;
+        }
         inFlight = true;
         node.requestSubmit();
     };
