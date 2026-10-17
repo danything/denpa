@@ -538,7 +538,7 @@ public static class Px4Userland
 
     /// <summary>Windows で筐体を開けないときの手当て</summary>
     private const string WinUsbHint =
-        "ドライバが WinUSB になっていないか、別のソフト (TVTest など) が使っています。Zadig で WinUSB に (docs/agent.md)";
+        "ドライバが WinUSB になっていないか、別のソフト (TVTest など) が使っています。Zadig で WinUSB に (docs/install-windows.md)";
 
     /// <summary>
     /// USB の場所を理由に添えるようにする (<c>, USB 1-2.3</c>)。同じ番号のものが並んだとき、どれの話か分かるように。

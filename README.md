@@ -48,20 +48,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 
 ### 1. 要るもの
 
-- **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
-
-  | チューナー | 使う仕組み | ホストに入れるもの |
-  | --- | --- | --- |
-  | PT2 / PT3、PX-BCUD、PX-S1UD など | Linux DVB | ドライバ |
-  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も) | px4-userland (同梱) | なし (Windows はドライバを WinUSB に) |
-  | PX-S1UD (smsusb を blacklist したとき。Windows も) | siano-userland (同梱) | なし (Windows はドライバを WinUSB に) |
-  | PX-W3U3 | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし |
-
-- **B-CASカード** と PC/SC のカードリーダー (px4-userland の機材は内蔵リーダーでもよい)
-- **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
-- **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
-  Kubernetes なら Helm
-- あれば Intel の GPU (`/dev/dri` を渡す。[docs/install.md](docs/install.md#用意するもの))。無ければソフトウェアでエンコードします
+チューナー・B-CASカードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Windows は WSL) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
 
 ### 2. 入れる
 
@@ -104,11 +91,15 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 **はじめる**
 
 - [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
+- [docs/install-mac.md](docs/install-mac.md) — Mac に入れる
+- [docs/install-windows.md](docs/install-windows.md) — Windows に入れる
 - [docs/screens.md](docs/screens.md) — 画面 (実機のスクリーンショット)
 
 **チューナー**
 
-- [docs/agent.md](docs/agent.md) — チューナーを動かすところ (エージェント・取り合い・B-CAS・Mac / Windows)
+- [docs/tuners.md](docs/tuners.md) — **使えるチューナー** (一覧・カードリーダー・B-CAS・直らないとき)
+- [docs/tuner-px4.md](docs/tuner-px4.md) — PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
+- [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD (siano-userland)
 
 **乗り換え**
 
@@ -133,6 +124,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 - [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴)
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・画面・状態遷移・テスト)
+- [docs/agent.md](docs/agent.md) — **チューナーエージェント** (取り合い・共有・選局・設定ファイル・B25・鍵の配布)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
 - [docs/stream.md](docs/stream.md) — **ライブ視聴**
 - [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)

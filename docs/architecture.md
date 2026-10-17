@@ -212,5 +212,5 @@ ApplicationSet が読めない)。
   hostPath でマウントするので、DVB の機材はノード側にドライバが読み込まれていること。
   PX-Q3U4 など px4-userland の対応機種と、smsusb を blacklist した PX-S1UD はノードに
   何も要らない (イメージ同梱のユーザー空間ドライバが `/dev/bus/usb` を使う。
-  [agent.md](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない))
+  [tuner-px4.md](tuner-px4.md))
 - **GHCR** — `ghcr.io/danything/denpa-agent` と `.../denpa` を pull できること

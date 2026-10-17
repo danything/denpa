@@ -1,14 +1,14 @@
 # 立てる
 
 README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
-Mac と Windows の入れ方の中身は [agent.md](agent.md#mac-でチューナーを使う) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
+Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
 
 ## 用意するもの
 
-チューナー・カードリーダー・OS の一覧は [README](../README.md#1-要るもの)。機材ごとの細かいこと
-([px4-userland の対応機種](agent.md#px-q3u4-などは-px4-userland-でカーネルドライバは入れてもらわない) (e-Better / Digibest 系も)・
-[PX-S1UD の blacklist](agent.md#px-s1ud-はカーネルが使っていなければ-siano-userland-で)・
-[PX-W3U3 (試験的)](agent.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) は agent.md に。
+チューナー・カードリーダー・OS の一覧は [tuners.md](tuners.md#要るもの)。機材ごとの細かいこと
+([px4-userland の対応機種](tuner-px4.md) (e-Better / Digibest 系も)・
+[PX-S1UD の blacklist](tuner-px-s1ud.md)・
+[PX-W3U3 (試験的)](tuners.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) は [tuners.md](tuners.md) から。
 
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
 - **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
@@ -28,9 +28,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 ```
 
 - **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
-- **Mac** (Apple Silicon) — エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([agent.md](agent.md#mac-でチューナーを使う))
+- **Mac** (Apple Silicon) — エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([install-mac.md](install-mac.md))
 - **Windows** (x64) — エージェントは Windows の上で直接 (タスク スケジューラ)、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
-  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など)。ドライバは Zadig で WinUSB に ([agent.md](agent.md#windows-でチューナーを使う))
+  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など)。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
 - **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。
