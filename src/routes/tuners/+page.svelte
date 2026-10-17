@@ -902,7 +902,7 @@
             margin-bottom: 0.25rem;
             font-size: 0.8rem;
             font-weight: 500;
-            opacity: 0.7;
+            color: var(--dp-muted);
         }
         .row-cards .span {
             grid-column: 1 / -1;

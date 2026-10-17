@@ -75,7 +75,7 @@
     }
     .sub {
         margin-top: 0.125rem;
-        opacity: 0.6;
+        color: var(--dp-muted);
     }
     .forget {
         margin-top: 0.25rem;

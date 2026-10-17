@@ -1197,7 +1197,7 @@
         display: block;
         font-size: 0.75rem;
         font-weight: 500;
-        color: var(--pico-primary);
+        color: var(--dp-primary-text);
     }
     .program:is([data-state="recording"], [data-state="conflict"]) .state {
         color: var(--dp-rec-text);

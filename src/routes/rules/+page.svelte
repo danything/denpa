@@ -978,7 +978,7 @@
 
     .hint {
         font-size: 0.8rem;
-        opacity: 0.7;
+        color: var(--dp-muted);
     }
     .fields {
         display: grid;
@@ -1005,7 +1005,7 @@
     .group-title {
         margin-bottom: 0.25rem;
         font-size: 0.75rem;
-        opacity: 0.6;
+        color: var(--dp-muted);
     }
     .scroll-list {
         display: flex;
@@ -1165,7 +1165,7 @@
         display: flex;
         flex-wrap: wrap;
         gap: 0.25rem 1rem;
-        opacity: 0.7;
+        color: var(--dp-muted);
     }
     .detail-error {
         flex-basis: 100%;

@@ -761,7 +761,7 @@
     .hint {
         display: block;
         font-size: 0.8rem;
-        opacity: 0.7;
+        color: var(--dp-muted);
     }
     /* 互換モードで使えるもの。点は付けずに詰めて並べる */
     .support {

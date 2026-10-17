@@ -1645,7 +1645,7 @@
     .row-meta {
         margin-top: 0.25rem;
         font-size: 0.875rem;
-        opacity: 0.65;
+        color: var(--dp-muted);
         overflow-wrap: anywhere;
     }
     .row-sub {
@@ -1703,7 +1703,7 @@
     }
     .empty-hint {
         font-size: 0.875rem;
-        opacity: 0.7;
+        color: var(--dp-muted);
     }
     .empty-actions {
         display: flex;

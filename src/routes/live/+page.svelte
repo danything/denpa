@@ -1122,11 +1122,11 @@
         font-weight: 500;
     }
     .tuned .channel-name {
-        color: var(--pico-primary);
+        color: var(--dp-primary-text);
     }
     .channel-now {
         font-size: 0.75rem;
-        opacity: 0.6;
+        color: var(--dp-muted);
     }
     /* 局名の前の印。塗った三角 (Lucide の play は線だけなので塗る) */
     .tuned-mark {

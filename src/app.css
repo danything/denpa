@@ -125,6 +125,7 @@
  * - `--dp-line` … 区切りの線 (カードの縁・行の間・ヘッダーの下)
  * - `--dp-line-strong` … 押せるものの縁 (入力欄・枠のボタン)。線より一段濃くして、押せない面と見分ける
  * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
+ * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
  * - `--dp-shadow` … カードの影 (ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  */
 :root:not([data-theme="dark"]),
@@ -136,6 +137,8 @@
     --dp-line: #dfe3eb; /* slate-100 */
     --dp-line-strong: #cfd5e2; /* slate-150 */
     --dp-raised: #fff;
+    --dp-muted: #555e70; /* 白・淡い面・選んでいる局の地のどれでも 4.5 以上 */
+    --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
     --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
     --dp-shadow-pop: 0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
     --pico-form-element-background-color: #fff;
@@ -167,6 +170,8 @@
     --dp-line: #2a3140; /* slate-800 */
     --dp-line-strong: #3d475c; /* slate-700 */
     --dp-raised: #2a3140; /* slate-800 */
+    --dp-muted: #9aa3b5; /* 地・面・持ち上げた面のどれでも 4.5 以上 */
+    --dp-primary-text: var(--pico-primary);
     --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
     --pico-form-element-background-color: #13171f;
@@ -449,8 +454,13 @@ thead th {
 }
 
 /* ---- 文字 ---- */
+/*
+ * 控えた字 (注記・補足・日時)。**透かさずに `--dp-muted` の色で。** 透かしていた頃は、淡い面や
+ * 指を乗せた行の上で字が地に溶け、明るいほうではコントラストが 4.5 を割っていた (axe)。
+ * 中のリンクも主の色のまま読める
+ */
 .muted {
-    opacity: 0.65;
+    color: var(--dp-muted);
 }
 .small {
     font-size: var(--dp-text-sm);
@@ -468,7 +478,7 @@ thead th {
     white-space: nowrap;
 }
 .soft {
-    opacity: 0.7;
+    color: var(--dp-muted);
 }
 .mono {
     font-family: var(--pico-font-family-monospace);
@@ -511,7 +521,7 @@ thead th {
 .field-label {
     font-size: var(--dp-text-xs);
     font-weight: 500;
-    opacity: 0.7;
+    color: var(--dp-muted);
 }
 /* チェックボックス + 文 */
 .check {
@@ -536,7 +546,7 @@ details.more > summary {
     display: inline-flex;
     align-items: center;
     width: fit-content;
-    color: var(--pico-muted-color);
+    color: var(--dp-muted);
     font-size: var(--dp-text-xs);
     line-height: 1.5;
 }
@@ -552,7 +562,7 @@ details.more[open] > summary {
 }
 details.more > :not(summary) {
     font-size: var(--dp-text-sm);
-    opacity: 0.8;
+    color: var(--dp-muted);
 }
 details.more > :not(summary) + :not(summary) {
     margin-top: 0.35rem;
