@@ -690,16 +690,56 @@ try {
             await page.goto(`${BASE}/guide?type=GR`);
             await settle(page, 2000);
             await anim(page, 'guide-anim', async () => {
+                const grid = page.getByTestId('guide-grid');
                 await page.waitForTimeout(1000);
-                await page
-                    .getByTestId('guide-grid')
-                    .evaluate((el) => el.scrollBy({ top: 240, behavior: 'smooth' }));
+                // 少し先を覗いて「いま」へ戻る。下ろしたままだと今の線が上へ隠れる
+                const home = await grid.evaluate((el) => el.scrollTop);
+                await grid.evaluate((el) => el.scrollBy({ top: 240, behavior: 'smooth' }));
                 await page.waitForTimeout(1500);
-                await page
-                    .getByTestId('guide-grid')
-                    .evaluate((el) => el.scrollBy({ left: 300, behavior: 'smooth' }));
+                await grid.evaluate((el, y) => el.scrollTo({ top: y, behavior: 'smooth' }), home);
                 await page.waitForTimeout(1500);
-                await page.getByTestId('program-button').nth(6).click();
+                await grid.evaluate((el) => el.scrollBy({ left: 300, behavior: 'smooth' }));
+                await page.waitForTimeout(1500);
+                /*
+                 * 開くのは**今の線のそばの、見えているマス**。並び順 (`nth`) で選ぶと
+                 * 日の頭 (4:00) の終わった番組に当たり、押す前に Playwright がそこまで
+                 * スクロールしてしまう (#866 までの画像)。これから始まる番組を選び、
+                 * 見えている中に無ければ放送中のものを開く
+                 */
+                const id = await grid.evaluate((el) => {
+                    const box = el.getBoundingClientRect();
+                    // 見出し (局名の行・時刻の列) の裏は見えていない (表の `scroll-padding`)
+                    const pad = getComputedStyle(el);
+                    const top = box.top + Number.parseFloat(pad.scrollPaddingTop);
+                    const left = box.left + Number.parseFloat(pad.scrollPaddingLeft);
+                    const now = Date.now();
+                    const cells = [...el.querySelectorAll<HTMLElement>('[data-testid="grid-program"]')]
+                        .map((c) => ({
+                            c,
+                            at: Number(c.getAttribute('data-start-at')),
+                            r: c.getBoundingClientRect(),
+                        }))
+                        .filter(
+                            ({ r }) =>
+                                r.top >= top &&
+                                r.bottom <= box.bottom &&
+                                r.left >= left &&
+                                r.right <= box.right,
+                        );
+                    const next = cells
+                        .filter((x) => x.at > now)
+                        .sort((a, b) => a.at - b.at || a.r.left - b.r.left);
+                    const airing = cells
+                        .filter((x) => x.at <= now)
+                        .sort((a, b) => b.at - a.at || a.r.left - b.r.left);
+                    // 左端の局ばかりにならないよう、同じ時刻なら左から 2 つ目
+                    const pick = (xs: typeof cells) => xs.filter((x) => x.at === xs[0]!.at)[1] ?? xs[0];
+                    return (
+                        next.length > 0 ? pick(next) : airing.length > 0 ? pick(airing) : undefined
+                    )?.c.getAttribute('data-program-id');
+                });
+                if (id == null) throw new Error('番組表の今の線のそばに、開ける番組が見えていません');
+                await page.locator(`[data-program-id="${id}"] [data-testid="program-button"]`).click();
                 await page.waitForTimeout(3000);
                 await page.getByTestId('detail-close').click();
                 await page.waitForTimeout(1200);
