@@ -230,6 +230,8 @@
     const HOUR = 60 * 60 * 1000;
     /** 5分を1マスにする。細かすぎると行数が増えるだけ、粗いと短い番組が潰れる */
     const SLOT = 5 * 60 * 1000;
+    /** 1 マスの高さ。表の行と今の線の送り (`nowSlots`) の両方がこれを使う */
+    const SLOT_HEIGHT = '0.75rem';
 
     const slots = $derived((data.hours * HOUR) / SLOT);
 
@@ -600,7 +602,7 @@
         -->
             <div
                 class="rows"
-                style="grid-template-columns: {TIME_COLUMN} repeat({columns.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, 0.75rem); width: calc({TIME_COLUMN} + {columns.length} * 11rem); min-width: 100%;"
+                style="grid-template-columns: {TIME_COLUMN} repeat({columns.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, {SLOT_HEIGHT}); width: calc({TIME_COLUMN} + {columns.length} * 11rem); min-width: 100%;"
                 data-testid="guide-rows"
             >
                 <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
@@ -662,7 +664,7 @@
                 {#if nowSlots !== null}
                     <div
                         class="now"
-                        style="grid-column: 1 / -1; grid-row: 2; translate: 0 calc({nowSlots} * 0.75rem);"
+                        style="grid-column: 1 / -1; grid-row: 2; translate: 0 calc({nowSlots} * {SLOT_HEIGHT});"
                         bind:this={nowMark}
                         data-testid="now-line"
                     >
