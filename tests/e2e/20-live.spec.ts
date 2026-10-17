@@ -674,9 +674,11 @@ test.describe('ライブ視聴', () => {
         });
         // ハイフン付きで入れても、数字7桁として読む
         await page.getByTestId('postal-code').fill('100-0001');
+        // 郵便番号は欄を離れたとき (Tab・Enter) にその場で保存する
+        await page.getByTestId('postal-code').press('Tab');
         // 番号は ARIB の県域。東京都は 14 (JIS の 13 ではない。`#lib/prefecture.ts`)
         await page.getByTestId('prefecture').selectOption({ label: '東京都' });
-        await page.getByTestId('save-broadcast').click();
+        await expect(page.getByTestId('saved-result')).toBeVisible();
         await expect(page.getByTestId('postal-code')).toHaveValue('1000001');
         await expect(page.getByTestId('prefecture')).toHaveValue('14');
         expect(await readZip()).toBe('z1000001p14');
@@ -687,8 +689,9 @@ test.describe('ライブ視聴', () => {
          */
         await goto(page, '/settings');
         await page.getByTestId('postal-code').fill('');
+        await page.getByTestId('postal-code').press('Tab');
         await page.getByTestId('prefecture').selectOption('255');
-        await page.getByTestId('save-broadcast').click();
+        await expect(page.getByTestId('saved-result')).toBeVisible();
         await expect(page.getByTestId('postal-code')).toHaveValue('');
         await expect(page.getByTestId('prefecture')).toHaveValue('255');
         // 未設定は 255 (受信機の設定で「設定されていない」)

@@ -23,11 +23,10 @@ import {
  * 双方向のオン/オフで答えが変わるテストを向こうに置かない)。
  */
 
-/** 設定画面の「データ放送の双方向」を切り替えて、保存し終えるまで */
+/** 設定画面の「データ放送の双方向」を切り替えて、保存し終えるまで (変えたらその場で保存する) */
 async function setNetwork(page: Page, on: boolean): Promise<void> {
     await goto(page, '/settings');
     await page.getByTestId('bml-network').setChecked(on);
-    await page.getByTestId('save-broadcast').click();
     /*
      * **待つのは保存の完了。** チェック状態で待っていた頃は、自分で入れた
      * チェックに即座に当たってしまい、設定がサーバに書かれる前に次の

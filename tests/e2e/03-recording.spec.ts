@@ -178,7 +178,6 @@ test.describe('CMの実カット', () => {
         // CM の扱いは全体設定。実際に切る側にしてから録る
         await goto(page, '/settings');
         await page.getByTestId('global-cmcut').selectOption('cut');
-        await page.getByTestId('save-recording').click();
         await expect(page.getByTestId('saved-result')).toBeVisible();
 
         await goto(page, '/guide?type=BS');
@@ -298,7 +297,6 @@ test.describe('エンコードしない', () => {
         await goto(page, '/settings');
         await page.getByTestId('codec-av1').uncheck();
         await page.getByTestId('codec-h264').uncheck();
-        await page.getByTestId('save-recording').click();
         await expect(page.getByTestId('saved-result')).toBeVisible();
         // 選び直しても残っていること (どちらも外れたまま)
         await goto(page, '/settings');
@@ -331,7 +329,6 @@ test.describe('エンコードしない', () => {
         // 後片付け。**エンコードする設定に戻す** (他のテストや本番の既定に揃える)
         await goto(page, '/settings');
         await page.getByTestId('codec-av1').check();
-        await page.getByTestId('save-recording').click();
         await expect(page.getByTestId('saved-result')).toBeVisible();
     });
 });

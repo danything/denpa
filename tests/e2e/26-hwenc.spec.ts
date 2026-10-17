@@ -78,11 +78,11 @@ test.describe('GPU でエンコードする', () => {
         }
 
         // デバイスごとに割り振る: 128 は AV1 だけ、129 は H.264 だけ (どちらも QSV/VA-API 両方)
+        // 印は変えたらその場で保存する (保存のボタンは無い)。最後の保存が終わるのを待ってから読み直す
         await page.getByTestId('hw-renderD128-qsv-h264').uncheck();
         await page.getByTestId('hw-renderD128-vaapi-h264').uncheck();
         await page.getByTestId('hw-renderD129-qsv-av1').uncheck();
         await page.getByTestId('hw-renderD129-vaapi-av1').uncheck();
-        await page.getByTestId('hw-save').click();
         await expect(page.getByTestId('saved-result')).toBeVisible();
         await goto(page, '/settings');
         await expect(page.getByTestId('hw-renderD128-qsv-h264')).not.toBeChecked();
