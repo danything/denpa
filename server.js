@@ -167,7 +167,37 @@ if (!served)
 
 /*
  * **止まれの合図をアプリにもう一度引き取らせる。** adapter は読み込みのいちばん最後で
- * 自分の後始末を登録する。アプリの引き取り (`setImmediate`) がそれより先に走ると、
- * adapter のものが残って SIGTERM で listen が閉じる (上の説明)
+ * 自分の後始末を登録する。それが残ると SIGTERM で listen が閉じ、録画が終わるまで居座る間に
+ * 画面が開けなくなる (上の説明)。
+ *
+ * **adapter の作りが変わっても気付けるようにする。** ここは adapter の中の形に頼っているので、
+ * 外れたら黙って居座りが壊れる。引き取り口が無い・引き取ったあとも合図に2人以上ついている、は
+ * 起動を止める (E2E も本番と同じくこの入口で起こすので、CI で落ちる)。数が想定 (アプリの2件 +
+ * adapter の2件) と違うだけなら知らせる。adapter があとから登録する作りに変わったときのために、
+ * 少し置いてもう一度見て、ついていたら引き取り直して知らせる
  */
-globalThis[TAKE_OVER]?.();
+const SIGNALS = ['SIGTERM', 'SIGINT'];
+const takeOver = globalThis[TAKE_OVER];
+if (typeof takeOver !== 'function') {
+    throw new Error('アプリが止まれの合図の引き取り口を置いていません (src/lib/server/runtime.ts)');
+}
+const taken = takeOver();
+const extra = () => SIGNALS.filter((signal) => process.listenerCount(signal) !== 1);
+if (extra().length > 0) {
+    throw new Error(
+        `止まれの合図を引き取れません (${extra().join('・')})。adapter-bun の作りが変わっていないか確かめてください`,
+    );
+}
+if (taken !== 4) {
+    console.warn(
+        `[boot] 止まれの合図の数が想定 (4 件) と違います (${taken} 件)。adapter-bun の作りが変わっていないか確かめてください`,
+    );
+}
+setTimeout(() => {
+    const late = extra();
+    if (late.length === 0) return;
+    takeOver();
+    console.warn(
+        `[boot] 起動のあとで止まれの合図に後始末が足されていました (${late.join('・')})。引き取り直しました。adapter-bun の作りが変わっていないか確かめてください`,
+    );
+}, 1000).unref();

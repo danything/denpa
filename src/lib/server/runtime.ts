@@ -307,9 +307,10 @@ function installShutdownHooks(): void {
      * `setImmediate` では足りない — adapter はアプリの初期化を `await` してから登録するので、
      * 先に走ることがありうる。
      */
-    (globalThis as Record<string, unknown>)[TAKE_OVER] = () => {
+    (globalThis as Record<string, unknown>)[TAKE_OVER] = (): number => {
         const taken = take();
         if (taken > 0) console.log(`[boot] 止まれの合図を引き取りました (${taken} 件)`);
+        return taken;
     };
 }
 
