@@ -2,7 +2,7 @@
  * ライブ視聴の受け側。**WebSocket で受けて MSE へ流す。**
  *
  * MSE は取ってこない。`appendBuffer()` に渡すバイト列をどこから持ってくるかは
- * こちら次第で、denpa は WebSocket から受ける ([stream.md](../../docs/stream.md) §5.3)。
+ * こちら次第で、denpa は WebSocket から受ける ([stream.md](../../docs/stream.md#websocket-プロトコル))。
  * 同じ1本で字幕もデータ放送も一緒に送る作りなので、種別で振り分ける。
  */
 
@@ -322,7 +322,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     let captionTrack = $state(0);
     /**
      * この番組に載っている Hybridcast。ボタンは別のタブで開き、データ放送が起動を求めたら
-     * denpa の中で開く (`DataBroadcast`。受信機の API は用意できる範囲だけ) ([docs/stream.md](../../docs/stream.md#58-hybridcast))
+     * denpa の中で開く (`DataBroadcast`。受信機の API は用意できる範囲だけ) ([docs/stream.md](../../docs/stream.md#hybridcast))
      */
     let hybridcast = $state<HybridcastLink[]>([]);
     /**
@@ -344,7 +344,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     let ending = false;
 
     /*
-     * ---- 録画に譲ったとき ([docs/stream.md](../../docs/stream.md) §4「録画に譲る」) ----
+     * ---- 録画に譲ったとき ([docs/stream.md](../../docs/stream.md#録画に譲る)) ----
      *
      * ライブは録画にだけ譲る。チューナーを取り上げられたらサーバが `lost` を言ってくるので、**まず同じ局をリクエストし直す**
      * (使ってよいチューナーが空いていればそこに入り、見ているものは変わらない)。リクエストし直しても入れなかった
@@ -362,7 +362,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     let returning = $state(false);
 
     /*
-     * ---- 変換せずに送る経路 ([stream.md](../../docs/stream.md) §5.5) ----
+     * ---- 変換せずに送る経路 ([stream.md](../../docs/stream.md#放送そのままmpeg-2を送る)) ----
      *
      * **MSE の代わりに `raw/engine.ts` を使う。** それ以外 (繋ぎ・通知・字幕・データ放送・
      * 貯め方の決め方) はエンコードする経路と同じものを通す。違うのは描く先と時計だけ:
@@ -536,7 +536,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 「LAN内なのに一瞬止まって遅延が増えていく」を追うために置いた。送り出す
      * 側は入口 (TLS) まで含めて測ってあり **0.5秒以上の間が1回も無い**ので、
      * 止まっているならこちら側だと分かる — その切り分けにこの数が要った
-     * ([stream.md](../../docs/stream.md) §4 に実測)。
+     * ([stream.md](../../docs/stream.md#一瞬止まって遅延が増えていく) に実測)。
      *
      * **見つかった原因は貯め方だった** (`ts/pacing.ts` の `nextTarget`)。
      * 直ったあとも出しておく — 経路が荒れているかどうかは、遅延の値より
@@ -569,7 +569,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 前のフレームを写して、次が出るまで貼っておく。**切り替えの間の黒を埋める。**
      *
      * 切り替えにかかる時間は、ほとんどが**こちらの都合では動かないもの**
-     * ([stream.md](../../docs/stream.md) §4 に実測の内訳)。復調器のロック 0.32秒、
+     * ([stream.md](../../docs/stream.md#開いてから映像が出るまでの内訳) に実測の内訳)。復調器のロック 0.32秒、
      * スクランブル解除が ECM を待つ 0.24秒、ffmpeg の立ち上がり 0.53秒、
      * 放送の I フレーム待ち 0〜0.50秒。
      * **待ち時間そのものは変わらないが、黒い画面を見せずに済む。**
@@ -1922,7 +1922,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             }
 
             /*
-             * **字幕。** 中身は文字の配置の JSON (`caption-text.ts`。[stream.md](../../docs/stream.md) §5.3)。
+             * **字幕。** 中身は文字の配置の JSON (`caption-text.ts`。[stream.md](../../docs/stream.md#websocket-プロトコル))。
              * 前の1枚を丸ごと置き換える。描くのは `paint`
              */
             if (kind === CHANNEL.captionText) {
@@ -1931,7 +1931,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                  * **添えられた時刻に置く** ([ts/captions.ts](./ts/captions.ts))。
                  *
                  * 映像と同じ ffmpeg が付けた mp4 の物差しなので、再生位置と
-                 * 直に比べられる ([stream.md](../../docs/stream.md) §5.4)。
+                 * 直に比べられる ([stream.md](../../docs/stream.md#時刻同期))。
                  *
                  * 前は「届いた時点の再生位置」に置いていた。**エンコードする手間のぶん
                  * 字幕のほうが先に届く**ので、そのぶんだけ早く出ていた —

@@ -34,7 +34,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 
 - **予約** — 番組表から押すか、「ルール」のキーワードで自動で。同じ回は最初の放送だけ録る
 - **録画** — CM を見つけてチャプターにし、AV1 / H.264 の mkv にエンコードする。字幕は放送の ARIB 字幕のまま入れる。Intel の GPU があれば使う
-- **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/stream.md](docs/stream.md))
+- **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/watch.md](docs/watch.md#ライブ))
 - **データ放送** — テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも
 - **観る** — 行を押せばその場で再生。CM は1コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕ごと PNG)
 - **字幕と放送の字** — 字幕は放送どおりの位置に描き、番組名・局名も含めて Denpa Font で外字まで崩さない
@@ -95,7 +95,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 ## 観る
 
-- **ブラウザ** — ホーム画面にも置ける ([docs/player.md](docs/player.md))
+- **ブラウザ** — ホーム画面にも置ける ([docs/watch.md](docs/watch.md#ホーム画面に置く))
 - **テレビ** (Android TV / Fire TV) — [denpa-tv](https://github.com/danything/denpa-tv)。テレビに出る QR をスマホで読めば繋がる
 - **外から使う API** — 局・録画の一覧、ライブ、音声だけ (Home Assistant やスクリプト向け。[docs/api.md](docs/api.md))
 
@@ -116,14 +116,14 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **使う**
 
-- [docs/player.md](docs/player.md) — ホーム画面に置く、LAN でも https で開く
+- [docs/watch.md](docs/watch.md) — **観る** (ライブ・操作バー・ホーム画面に置く)
 - [docs/offline.md](docs/offline.md) — 端末に保存して電波の無いところで観る
 - [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
 
 **運用**
 
 - [docs/config.md](docs/config.md) — **環境変数** (一覧と、前の版から上げるとき)
-- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング・画面で動いてよいもの (CSP))
+- [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング)
 
 **外から使う**
 
@@ -131,11 +131,13 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **仕組み**
 
-- [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴)
+- [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴・画面で動いてよいもの (CSP))
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・画面・状態遷移・テスト)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
-- [docs/stream.md](docs/stream.md) — **ライブ視聴**
-- [docs/encode.md](docs/encode.md) — CM とエンコード (字幕・AV1・CM検出)
+- [docs/stream.md](docs/stream.md) — ライブの仕組み ([経緯](docs/stream-history.md))
+- [docs/player.md](docs/player.md) — 観る画面の作り
+- [docs/encode.md](docs/encode.md) — エンコード (字幕・AV1・GPU)
+- [docs/cm.md](docs/cm.md) — CM 検出
 - [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
 - [docs/writing.md](docs/writing.md) — 書き方 (画面・docs・コメントの言葉)

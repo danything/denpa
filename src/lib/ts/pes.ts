@@ -1,5 +1,5 @@
 /**
- * **1局に絞った TS から、映像と音声の PES を取り出す** (ライブを変換せずに送る経路。docs/stream.md §5.5)。
+ * **1局に絞った TS から、映像と音声の PES を取り出す** (ライブを変換せずに送る経路。docs/stream.md#放送そのままmpeg-2を送る)。
  *
  * エンコードする経路ではここを ffmpeg がやっていた。変換せずに送ると TS がそのままブラウザへ来るので、
  * 映像も音声も WASM のデコーダ (`wasm/mpeg2`) に渡す前に、
@@ -12,7 +12,7 @@
 import { joinBytes } from './bytes';
 import { PACKET, PacketStream, PID_PAT, parsePat, pmtStreams, SectionAssembler } from './psi';
 
-/** PTS・PCR の刻み (90kHz)。取り決めの時刻もこの刻み (`docs/stream.md` §5.3) */
+/** PTS・PCR の刻み (90kHz)。取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
 export const CLOCK = 90_000;
 /** PTS の一周 (33ビット)。26.5 時間 */
 export const WRAP = 2 ** 33;

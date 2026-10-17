@@ -21,7 +21,7 @@
 | `RAW_DIR` | `$MEDIA_DIR/raw` | 元のTSの作業領域。別のディスクに分けたいときだけ |
 | `ENCODED_DIR` | `$MEDIA_DIR/encoded` | エンコード済みの置き場。ここから配る。別のディスクに分けたいときだけ |
 | `FFMPEG` / `FFPROBE` | `/usr/local/bin/...` | 開発時は偽物に差し替える |
-| `MPEG2_DIR` | `/opt/denpa/mpeg2` | ライブを変換せずに見るときにブラウザへ配る MPEG-2 と AAC のデコーダ (WASM) の置き場。イメージの `mpeg2wasm` 段が置く。無ければこの経路は使えず、エンコードしたものに戻る ([stream.md](stream.md#55-放送そのままmpeg-2を送る)) |
+| `MPEG2_DIR` | `/opt/denpa/mpeg2` | ライブを変換せずに見るときにブラウザへ配る MPEG-2 と AAC のデコーダ (WASM) の置き場。イメージの `mpeg2wasm` 段が置く。無ければこの経路は使えず、エンコードしたものに戻る ([stream.md](stream.md#放送そのままmpeg-2を送る)) |
 | `DENPA_VERSION` | `dev` | 動いている版。リリースのイメージにだけ入る (リリース時に main のイメージへ 1 層足す。`.github/release.Dockerfile`)。`dev` (develop・手元) なら新しい版の通知を出さない |
 | `DENPA_GITHUB_API` | `https://api.github.com/repos/danything/denpa` | 新しい版を見に行く先 (`releases/latest`)。試験では偽物を指す |
 | `UPDATE_CHECK_INTERVAL` | 1時間 | 新しい版を見に行く間隔 (ms) |
@@ -57,7 +57,7 @@
 | `ADDRESS_HEADER` | — | 読みません (廃止。`TRUSTED_PROXIES` を使う)。設定してあれば起動時に知らせる。`server.js` が adapter-bun 向けに `x-denpa-remote` へ固定する |
 | `PROTOCOL_HEADER` | — | 選べません。 `server.js` が常に `x-forwarded-proto` に固定します |
 | `OIDC_SESSION_TTL` | `2592000000` | ログインの有効期間(ms)。既定30日 |
-| `PWA_NAMES` | (空) | `ホスト名=表示名` のカンマ区切り。ホーム画面に置いたときの名前を、来た名前ごとに変える ([player.md](player.md#ホーム画面に置く)) |
+| `PWA_NAMES` | (空) | `ホスト名=表示名` のカンマ区切り。ホーム画面に置いたときの名前を、来た名前ごとに変える ([watch.md](watch.md#ホーム画面に置く)) |
 | `EPGSTATION_RECORDED_DIR` | `/epgstation-recorded` | 引き継ぎ元の録画置き場をマウントした場所 ([migrate.md](migrate.md)) |
 | `EPGSTATION_DB_HOST` / `_PORT` | `db` / `3306` | 引き継ぎ元の MariaDB |
 | `EPGSTATION_DB_USER` / `_PASSWORD` / `_NAME` | `root` / `epgstation` / `epgstation` | 〃 |

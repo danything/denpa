@@ -1,7 +1,7 @@
 /**
  * ライブ視聴で、サーバとブラウザが取り決めていること。**両側から読む。**
  *
- * 1本の WebSocket で全部を一緒に送る ([stream.md](../../docs/stream.md) §5.3)。
+ * 1本の WebSocket で全部を一緒に送る ([stream.md](../../docs/stream.md#websocket-プロトコル))。
  *
  *     [1 byte: 種別][8 bytes: 時刻 (90kHz, BE)][中身...]
  *
@@ -25,11 +25,11 @@ import type { AudioTrack } from './arib';
  *
  * **どちらがどれだけ小さいかは場面で動く。** どちらも品質を指定してエンコードして
  * いる (ビットレートを決めていない) ので、実測も揃わなかった
- * ([stream.md](../../docs/stream.md) §5.1)
+ * ([stream.md](../../docs/stream.md#エンコード))
  *
  * **MPEG-2 (放送のまま) はここに並べない。** エンコード方式ではなく「エンコードしない」なので、
  * 画質の切り替えの末尾に別に並べる (`CodecMenu` の `onraw`)
- * (`TuneCommand.raw`。[stream.md](../../docs/stream.md) §5.5)
+ * (`TuneCommand.raw`。[stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))
  */
 export type LiveCodec = 'h264' | 'av1';
 
@@ -52,14 +52,14 @@ export interface CaptionTrack {
     label: string;
 }
 
-/** 多重化の種別。番号は stream.md §5.3 の表そのまま */
+/** 多重化の種別。番号は stream.md#websocket-プロトコル の表そのまま */
 export const CHANNEL = {
     /** 映像の init セグメント (ftyp + moov) */
     videoInit: 0x00,
     /** 映像の中身 (moof + mdat) */
     videoMedia: 0x01,
     /**
-     * **元の TS** (1局に絞っただけ。エンコードしない経路。[stream.md](../../docs/stream.md) §5.5)。
+     * **元の TS** (1局に絞っただけ。エンコードしない経路。[stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
      * 映像・音声・PAT/PMT が入っていて、受け側が自分でデコードする (`raw/`)。init は無い
      */
     rawTs: 0x02,
@@ -148,7 +148,7 @@ export type Notice =
            * ([ts/ait.ts](ts/ait.ts))。
            *
            * 画面は行き先を出し、データ放送が起動を求めたら denpa の中で開きます
-           * ([docs/stream.md](../../docs/stream.md#58-hybridcast))。
+           * ([docs/stream.md](../../docs/stream.md#hybridcast))。
            *
            * 載っていない局では**一度も来ません** (PMT に印が無いので、
            * AIT を待つこともしない)
@@ -325,7 +325,7 @@ type TuneCommand = {
      */
     caption?: number;
     /**
-     * **エンコードせずに元の TS で欲しい** ([stream.md](../../docs/stream.md) §5.5)。
+     * **エンコードせずに元の TS で欲しい** ([stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
      *
      * 画質の切り替えで MPEG-2 を選び (`CodecMenu` の `onraw`)、ブラウザがデコードできる (`raw/support.ts`) ときに画面がリクエストする。
      * 変換せずに送ると音声は画面が選ぶので、`audio` は選び直しても再エンコードにならない

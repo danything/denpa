@@ -1,5 +1,5 @@
 #!/bin/bash
-# 放送の MPEG-2 と AAC (と、画面の canvas で描く経路の Opus) をデコードする WebAssembly を組む (docs/stream.md §5.5)。
+# 放送の MPEG-2 と AAC (と、画面の canvas で描く経路の Opus) をデコードする WebAssembly を組む (docs/stream.md#放送そのままmpeg-2を送る)。
 #
 #   build.sh <FFmpeg のソース> <出口>
 #

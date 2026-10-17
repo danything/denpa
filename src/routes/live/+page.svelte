@@ -534,7 +534,7 @@
                         起動を求めたとき (`DataBroadcast` の `HybridcastFrame`)。
                         受信機の API は用意できる範囲だけで、認証された受信機を期待する
                         アプリは動きません
-                        ([stream.md](../../../docs/stream.md#58-hybridcast))。
+                        ([stream.md](../../../docs/stream.md#hybridcast))。
                         できないものをできる顔で出さないために、d ボタンと同じ
                         形にはせず「外へ出ていく」印にしてあります
                     -->
@@ -675,7 +675,7 @@
                                     **詰まった回数。止まったときだけ出る。**
 
                                     出しておく理由は `live-player.svelte.ts` の
-                                    `stalls` に書いてある (実測は stream.md §4)
+                                    `stalls` に書いてある (実測は stream.md#一瞬止まって遅延が増えていく)
                                 -->
                                 {#if player.stalls > 0}
                                     ・ <span>途切れ {player.stalls}回</span>

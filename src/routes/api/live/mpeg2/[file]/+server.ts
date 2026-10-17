@@ -1,5 +1,5 @@
 /**
- * ブラウザで MPEG-2 と AAC をデコードする WebAssembly を配る (ライブを変換せずに送る経路。docs/stream.md §5.5)。
+ * ブラウザで MPEG-2 と AAC をデコードする WebAssembly を配る (ライブを変換せずに送る経路。docs/stream.md#放送そのままmpeg-2を送る)。
  *
  * **static/ に置かないのは、組むのがイメージの中だから** (Dockerfile の `mpeg2wasm` 段。
  * emscripten で FFmpeg のデコーダを組む)。git には入れない — 870KB ほど (wasm 855KB + mjs 14KB) の
@@ -28,7 +28,7 @@ const TYPES: Record<string, string> = {
 
 /**
  * **縮めて配る。** wasm は AAC のデコーダを足して 855KB になり、縮めれば 3 分の 1 になる
- * (brotli 292KB / gzip 364KB。docs/stream.md §5.5)。前段に縮める proxy が無い家が多いので
+ * (brotli 292KB / gzip 364KB。docs/stream.md#放送そのままmpeg-2を送る)。前段に縮める proxy が無い家が多いので
  * ここで縮める。縮めるのは中身が変わったとき (ETag が変わったとき) の1度だけで、あとは覚えたものを返す
  *
  * **縮め終えるまでは縮めずに返す。** brotli の 11 は wasm 1つで 2 秒ほど掛かる (実測 2079ms)。

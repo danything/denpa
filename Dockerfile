@@ -9,7 +9,7 @@ COPY package.json bun.lock* ./
 RUN bun install
 
 # ---------------------------------------------------------------------------
-# 放送の MPEG-2 と AAC をブラウザでデコードする WebAssembly (docs/stream.md §5.5「放送そのまま（MPEG-2）を送る」)
+# 放送の MPEG-2 と AAC をブラウザでデコードする WebAssembly (docs/stream.md#放送そのままmpeg-2を送る)
 #
 # **ブラウザには MPEG-2 のデコーダが無い**ので、FFmpeg の mpeg2video と aac だけを組んで
 # 持ち込む。出てくるのは decoder.mjs と decoder.wasm の2つ (wasm 855KB + mjs 14KB で 870KB ほど) で、

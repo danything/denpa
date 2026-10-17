@@ -119,7 +119,7 @@ asicen-userland は入れません (Windows 版が無い)。カードリーダ�
 | unplugin-icons / @iconify/utils (組むときだけ。束には入らない) | `~icons/*` を Svelte の部品に変える | <https://github.com/unplugin/unplugin-icons> / <https://github.com/iconify/iconify> | MIT |
 | cookie / devalue / esm-env / clsx | SvelteKit のランタイム (adapter-bun は静的ファイルを Bun の `routes` で配り、依存を束に持ち込まない) | 各上流 | MIT |
 
-**データ放送のエンジン** (`src/lib/bml/`。[stream.md](stream.md#56-データ放送の統合)) は自前で、依存を持たない。
+**データ放送のエンジン** (`src/lib/bml/`。[stream.md](stream.md#データ放送の統合)) は自前で、依存を持たない。
 規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書き、NVRAM の領域の表・郵便番号の範囲の読み方・
 BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml (otya128、MIT) の振る舞いを読んで合わせた
 (2026-10 まではデータ放送を web-bml で描いていた。いまは依存に入っていない)。
@@ -127,7 +127,7 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
 ### ライブを変換せずに見るときにブラウザへ配るデコーダ
 
 [Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて
-`/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#55-放送そのままmpeg-2を送る))。
+`/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#放送そのままmpeg-2を送る))。
 **`--enable-gpl` を付けずに組んでいる**ので、中の FFmpeg は LGPL のまま (denpa 自身は AGPL で、
 どちらでも問題は無い)。ソースは Dockerfile が取ってくる FFmpeg の tarball と `wasm/mpeg2/decoder.c`。
 

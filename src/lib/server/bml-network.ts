@@ -1,6 +1,6 @@
 /**
  * データ放送の双方向 (通信系コンテンツ) を中継する
- * ([docs/stream.md](../../../docs/stream.md#57-双方向通信系コンテンツプロキシ))。
+ * ([docs/stream.md](../../../docs/stream.md#双方向通信系コンテンツプロキシ))。
  *
  * BML のアプリは `browser.transmitTextDataOverIP` や `get` で放送局のサーバへ
  * 取りに行きます。放送局のサーバは受信機の専用ネットワークスタックを前提に

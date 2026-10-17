@@ -1,5 +1,5 @@
 /**
- * **変換せずに送られてきた TS を見せる**、画面の側の半分 (docs/stream.md §5.5)。
+ * **変換せずに送られてきた TS を見せる**、画面の側の半分 (docs/stream.md#放送そのままmpeg-2を送る)。
  *
  * デコードして描くのは worker (`worker.ts`)。ここが持つのは、Web Audio でしか触れない
  * **音を鳴らすことと、時計** (`playout.ts`)。時計はいま鳴っている音の PTS で、
@@ -38,7 +38,7 @@ const DECODER = '/api/live/mpeg2';
  * 鳴らすときの出口の遅れ (`baseLatency + outputLatency`。`latencyHint: 'playback'` で
  * 大きめ) を通らず、代わりに `<audio>` の側の出口を通る。その遅れはページから読めないので
  * 見込みで置く。**少なめに置く** — 外れても「音が映像より遅れる」側に倒れる (人は音が先に
- * 来るほうに気づきやすい)。実測は docs/stream.md §5.5「時計とリップシンク」
+ * 来るほうに気づきやすい)。実測は docs/stream.md#時計とリップシンク--時計は鳴っている音
  */
 const STREAM_OUT = 0.03;
 
@@ -294,7 +294,7 @@ export class RawEngine {
     }
 
     /**
-     * 止める。**再開は放送の今から** (MPEG-2 では遡れるだけ持っていない。stream.md §5.5)。
+     * 止める。**再開は放送の今から** (MPEG-2 では遡れるだけ持っていない。stream.md#放送そのままmpeg-2を送る)。
      * 追っかけ (`follow`) は止めた所から (`playout.ts`)
      */
     pause(): void {

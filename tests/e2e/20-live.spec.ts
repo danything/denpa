@@ -84,7 +84,7 @@ async function sameBox(a: Locator, b: Locator, expect_: typeof expect): Promise<
 }
 
 /**
- * ライブ視聴 ([docs/stream.md](../../docs/stream.md) §4)。映像・音声・字幕まで。
+ * ライブ視聴 ([docs/stream.md](../../docs/stream.md#ライブ))。映像・音声・字幕まで。
  *
  * **映像が出るところまでは見ない。** E2E の ffmpeg は偽物で、流れてくるのも
  * 本物の TS ではないため、MSE が受け取れる fMP4 にはならず、字幕も1枚も出ない。
@@ -435,7 +435,7 @@ test.describe('ライブ視聴', () => {
                     super(url, protocols);
                     this.addEventListener('message', (event) => {
                         const data = (event as MessageEvent).data;
-                        // 0x30 がデータ放送。中身は9バイト目から JSON (stream.md §5.3)
+                        // 0x30 がデータ放送。中身は9バイト目から JSON (stream.md#websocket-プロトコル)
                         if (!(data instanceof ArrayBuffer) || new Uint8Array(data)[0] !== 0x30) return;
                         seen.__got++;
                         const message = JSON.parse(new TextDecoder().decode(new Uint8Array(data, 9)));
@@ -578,7 +578,7 @@ test.describe('ライブ視聴', () => {
      * データ放送と決定的に違うのは、**アプリが電波に乗っていない**こと。
      * 乗っているのは住所だけ (AIT) で、中身は放送局のサーバにある。
      * denpa は**動かさない** — 在ることと行き先を出すだけで、押すと別の
-     * タブが開く ([stream.md](../../docs/stream.md#58-hybridcast))。
+     * タブが開く ([stream.md](../../docs/stream.md#hybridcast))。
      *
      * 偽の放送では TOKYO MX にだけ AIT を載せてある (`tests/fake/services.ts`)。
      * **載せていない局で出ないこと**まで見ないと、「常に出す」でも通ってしまう

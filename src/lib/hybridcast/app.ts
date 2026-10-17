@@ -1,6 +1,6 @@
 /**
  * Hybridcast のアプリを denpa の中で開く — 画面の側の決まり
- * ([docs/stream.md](../../../docs/stream.md#58-hybridcast))。
+ * ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  *
  * ```
  * 画面 ─ 中継でアプリの HTML を取る (/api/bml/proxy)

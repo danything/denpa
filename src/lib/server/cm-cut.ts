@@ -16,7 +16,7 @@ import { run } from './stream';
 /**
  * キーフレームを置く場面の切れ目の強さ (`scdet`。0〜100)。CM の境目に選ぶ切れ目と同じ 8 以上
  * (`cm-decide` の `CUT_MIN`)。CM 検出と同じコマ (インタレ解除の前) で測るので、点も同じになる。
- * 実測は docs/encode.md「CM を切るときは場面の切れ目にキーフレームを置く」
+ * 実測は docs/cm.md「CM を切るときは場面の切れ目にキーフレームを置く」
  */
 const KEY_SCENE = 8;
 

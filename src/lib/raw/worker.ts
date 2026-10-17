@@ -1,11 +1,11 @@
 /// <reference lib="webworker" />
 /**
- * **変換せずに送られてきた TS をデコードして描く** worker (docs/stream.md §5.5)。
+ * **変換せずに送られてきた TS をデコードして描く** worker (docs/stream.md#放送そのままmpeg-2を送る)。
  *
  *     TS ─→ PES (ts/pes.ts) ┬→ 映像: WASM の MPEG-2 デコーダ (wasm/mpeg2) → WebGL2 (render.ts)
  *                           └→ 音声: ADTS → 同じ WASM の AAC デコーダ → 画面へ (鳴らすのは画面)
  *
- * 音をデコードするのも同じ worker。AAC は1秒ぶんで数 ms (stream.md §5.5) と、映像をデコードする手間の
+ * 音をデコードするのも同じ worker。AAC は1秒ぶんで数 ms (stream.md#放送そのままmpeg-2を送る) と、映像をデコードする手間の
  * 1% にも届かないので、worker を分けて受け渡しを増やすほどではない。
  *
  * **時計は画面が持つ** (鳴っている音。`playout.ts`)。ここは届いた時計に合わせて、番が

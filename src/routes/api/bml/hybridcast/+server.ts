@@ -1,5 +1,5 @@
 /**
- * Hybridcast のアプリを入れる iframe の中身 ([docs/stream.md](../../../../../docs/stream.md#58-hybridcast))。
+ * Hybridcast のアプリを入れる iframe の中身 ([docs/stream.md](../../../../../docs/stream.md#hybridcast))。
  *
  * **中身は空の入れ物だけ。** 画面 (`HybridcastFrame.svelte`) が中継で取って差し込みを入れた HTML を
  * postMessage で渡してきて、ここが `document.write` で開く。

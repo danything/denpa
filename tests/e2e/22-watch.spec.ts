@@ -55,7 +55,7 @@ test.describe('録画を観る', () => {
 
         /*
          * **観るのはエンコードしたものだけ。** 元のTSは MPEG-2 で、ブラウザにデコーダが
-         * 無い (docs/stream.md §5.5)。名指ししていないと、エンコードしている最中は
+         * 無い (docs/stream.md#放送そのままmpeg-2を送る)。名指ししていないと、エンコードしている最中は
          * 元のTSが返ってきて何も映らない
          */
         const video = page.getByTestId('watch-video');

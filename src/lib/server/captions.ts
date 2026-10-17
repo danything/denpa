@@ -9,7 +9,7 @@
  * 放送に画像は流れてこない — 乗っているのは文字と「どこに・どの大きさで・何色で」という
  * 指定で、テレビはそれを見て毎回自分で描いている。**置き場所を決めるところまではサーバで、
  * 描くのは受け側で。** 画面の画素で描けるので全画面でも字が粗くならず、
- * 配る量は数百バイト/枚、サーバは画像を描かない (実測は docs/stream.md §5.2)。
+ * 配る量は数百バイト/枚、サーバは画像を描かない (実測は docs/stream.md#字幕)。
  *
  * ## 映像と同じ ffmpeg で受ける。**それが時刻を揃える唯一の方法**
  *
@@ -89,7 +89,7 @@ export function programSpec(program: number): string {
 }
 
 /**
- * **放送そのままで送る経路の字幕** (docs/stream.md §5.5)。映像はエンコードしないので、ffmpeg には字幕だけを
+ * **放送そのままで送る経路の字幕** (docs/stream.md#放送そのままmpeg-2を送る)。映像はエンコードしないので、ffmpeg には字幕だけを
  * 写させる。
  *
  * エンコードの経路で「同じ ffmpeg に両方エンコードさせる」のは、ffmpeg が入口で時刻を 0 に寄せ、その
@@ -214,7 +214,7 @@ export class CaptionText {
 }
 
 /**
- * 送る形式にする。**中身は JSON** (`CaptionPage`)、頭の時刻は映像と同じ物差し (90kHz。stream.md §5.3)。
+ * 送る形式にする。**中身は JSON** (`CaptionPage`)、頭の時刻は映像と同じ物差し (90kHz。stream.md#websocket-プロトコル)。
  * 前の1枚を丸ごと置き換えるので、消すのも同じ種別 (`runs` が空) で送る
  */
 export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; data: Uint8Array } {
@@ -227,7 +227,7 @@ export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; dat
 
 /**
  * **アプリ向けの字幕 API** (`GET /api/services/<id>/captions`・`GET /api/recordings/<id>/captions`。
- * docs/api.md) の1フレーム。WebSocket の1フレーム (stream.md §5.3) の頭に、後ろの長さを足しただけ:
+ * docs/api.md) の1フレーム。WebSocket の1フレーム (stream.md#websocket-プロトコル) の頭に、後ろの長さを足しただけ:
  *
  *     [4:後ろの長さ (BE)][1:種別][8:時刻 (90kHz, BE)][中身...]
  *

@@ -32,7 +32,7 @@
 
 **`/manifest.webmanifest` を守るとホーム画面の名前が付きません。** ブラウザは
 マニフェストを資格情報を付けずに取りに来るので、401 で落ちます。
-中身は表示名・色・アイコンの場所だけです ([player.md](player.md#ホーム画面に置く))。
+中身は表示名・色・アイコンの場所だけです ([watch.md](watch.md#ホーム画面に置く))。
 
 **録画のファイルも、ほかの API と同じ守り方です。** 観る画面の `<video>` も端末に保存も、
 画面と同じログインの控え (Cookie) を付けて `/api/recordings/<id>/file` をリクエストします。テレビのアプリは
@@ -70,6 +70,7 @@
 
 秘密を含むので環境変数だけから読み、設定画面には出しません。
 
+> [!NOTE]
 > **scheme は `x-forwarded-proto` から読みます** (`server.js` が常に設定する。前段が付けなければ、受けた接続の scheme を入れる)。
 > コールバックの URL も、控えの Cookie に `Secure` を付けるかどうかも、リクエストの
 > scheme で決めます。前段が接頭辞を剥がして渡す構成 (`/denpa` の下など) では、前段が付ける
@@ -184,7 +185,7 @@ TRUSTED_NETWORKS=0.0.0.0/0
 **見るのは住所だけで、どの名前で来たかは問いません。** LAN から外向きの
 `dp.doany.io` を開いても通ります。前段 (chart の `httpRoute`) は2つの名前を
 1つの HTTPRoute で denpa に届けるだけです。LAN 用の名前 `dp.l.doany.io` が家の中でだけ
-引けるのは DNS の側の話です ([player.md](player.md))。
+引けるのは DNS の側の話です ([install.md](install.md#lan-でも-https-で開く))。
 
 ### 前段の後ろに置くとき (`TRUSTED_PROXIES`)
 
@@ -249,6 +250,7 @@ POST が全部断られるようになるだけで、守れるものがありま
 4. **トークン構成**で `groupMembershipClaims` を有効にする (グループで絞るなら)。
    ロールで絞るなら、代わりに**アプリロール**を作って割り当てる
 
+> [!IMPORTANT]
 > **リダイレクト URI は authorize を呼んでも確かめられません。** 未登録の URI でも
 > Entra はまずログイン画面を返し、認証が済んでから `AADSTS50011` を出します
 > (出鱈目な URI を対照にして確認済み)。登録は Azure の画面で見るしかありません。
@@ -280,75 +282,3 @@ Deployment に付けた `secrets.infisical.com/auto-reload` で Pod も入れ替
 (`auth.ts`) がやります。前段から外すときは「denpa 側を設定 → 実機で入れることを確かめる →
 前段から外す」の順にします。逆にすると、OIDC の設定を間違えていたときに、誰も入れないのではなく
 誰でも入れる状態になります。
-
-## 画面で動いてよいもの (CSP)
-
-**画面の HTML には Content-Security-Policy を付けています** (設定は `vite.config.ts` の
-`csp`、SvelteKit が毎回付ける)。上までは「誰を通すか」ですが、ここは「通した人の画面で、
-**誰が書いたスクリプトを動かすか**」です。
-
-**狙いは放送が書いたスクリプト。** データ放送のエンジン (`src/lib/bml/`) は BML の
-`onclick` などを DOM に写さず、自前の VM で動かします (描く要素に付くのは `style` と画像の
-`src`・`alt` だけ)。それでも写し漏れがあったとき、放送の文字列が **denpa の origin で本物の
-JS として動き**、ログインの控えで API を呼べることになるので、「放送のものを本物の JS として
-動かさない」最後の砦として CSP でも止めます。
-
-| 指令 | 値 | 理由 |
-| --- | --- | --- |
-| `script-src` | `'self'` + nonce | 自分の束 (`_app/`。データ放送のエンジンの遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない** |
-| `script-src-attr` | `'none'` | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの) |
-| `style-src` | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」 |
-| `img-src` | `'self' data: blob:` | 局ロゴ・ポスターは自分。データ放送の画像は作り直して blob:、DRCS (外字) は canvas から data: |
-| `font-src` | `'self' data: blob:` | Denpa Font は自分 (`/api/font/denpa-font.woff2`)。DRCS は FontFace にバイト列で渡すので URL ではない |
-| `media-src` | `'self' blob:` | 録画は自分。ライブの MSE と端末に保存した録画は blob: |
-| `connect-src` | `'self'` | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む |
-| `worker-src` | `'self'` | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker |
-| `object-src` | `'none'` | 使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない |
-| `frame-src` | `'self'` | Hybridcast のアプリを入れる iframe (`/api/bml/hybridcast`) だけ。中身は sandbox で使い捨てのオリジンになり、denpa には触れない ([stream.md](stream.md#58-hybridcast)) |
-| `base-uri` / `form-action` | `'self'` | `<base>` とフォームの送り先は自分だけ |
-| `default-src` | `'self'` | 上に無いもの (マニフェストなど) |
-
-**画面の移動は関わりません。** OIDC のログイン (`/login` が Entra へ 302)・
-Hybridcast (別のタブで開く)・更新のお知らせのリンクは移動なので、上のどれにも掛かりません。
-フォームの送り先 (`form-action 'self'`) は自分だけで、送ったあとに外へ回すフォームはありません
-(ログアウトは `/login/out` へ戻すだけ。期限切れの POST はリダイレクトせず 401)。
-`frame-ancestors` は「denpa を枠に入れて使う」構成を止めるかどうかの別の話なので、
-ここでは決めていません。
-
-**WebSocket を `'self'` で通すのは CSP3 の決まり**で、今のブラウザ (Chrome・Edge・Firefox・Safari)
-は同じ host の `ws:` / `wss:` を `'self'` に含めます。CSP3 より前の作りの古いブラウザ (数年前の Safari など) では
-ライブが繋がりません。`ws:` / `wss:` を足せば通りますが、どこへでも繋げるようになるので足していません。
-
-### nonce にする (hash ではなく)
-
-**設定画面とチューナーの画面は、load から Promise を返して後から流しています**
-(SvelteKit のストリーミング)。流れてくる `<script>` は頭 (ヘッダ) を送ったあとに組まれるので、
-hash を頭に載せられず、hash の方式だと止まります。`app.html` の色当てのスクリプトも
-`nonce="%sveltekit.nonce%"` で通しています。
-
-nonce は毎回変わるので、**画面の HTML は 304 になりません** (中身の指紋が毎回変わる)。
-HTML は小さく、重いもの (`_app/immutable/`) は永く持たせたままなので困りません
-(`hooks.server.ts` の `finish`)。
-
-### スタイルは止めない
-
-`style-src` には `'unsafe-inline'` を残しています。その場で書くスタイルが多いためです。
-サーバで組んだ HTML の `style` 属性 (Svelte の `style:` と、観る画面の映像の箱などに直に書いたもの) と、
-`+layout.svelte` の @font-face の `<style>`。属性のスタイルは nonce では通せず、hash で通すには
-`'unsafe-hashes'` と1つずつの hash が要るので見合いません。データ放送のエンジンは
-`element.style` (CSSOM) で書くので、これには頼っていません (CSSOM からの書き込みは CSP に掛からない)。
-
-**CSS からできることは、スクリプトよりずっと少ない。** 見た目を変えることと、
-上の `img-src` / `font-src` の範囲での読み込みまでです (外へは出られない)。denpa の DOM に
-CSS で抜き出して困る秘密 (属性に入った鍵など) はありません。
-
-**この「外へは出られない」は `img-src` / `font-src` を自分・data:・blob: に絞っているから**
-成り立っています。外のサーバの画像や字を許すと、BML の CSS (属性セレクタ + `url()`) で
-画面の中身を外へ送れるようになるので、そのときはスタイルも絞り直します。
-
-### 増やすとき
-
-新しく読み込み元を足したら (外のサーバの画像・iframe など) ここの表と `vite.config.ts` を一緒に
-直します。止められたものは開発者ツールのコンソールに `Refused to …` と出ます。
-E2E (`tests/e2e/35-csp.spec.ts`) は主な画面を回って違反が1つも出ないこと、
-BML の `onclick` を押しても動かないことを見ています。

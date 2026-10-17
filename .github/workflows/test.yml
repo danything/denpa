@@ -482,7 +482,7 @@ jobs:
           test -n "$specs"
           echo "files=$(for s in $specs; do printf 'tests/e2e/%s.spec.ts ' "$s"; done)" >> "$GITHUB_OUTPUT"
 
-      # **ライブを変換せずに見る経路・互換モードのデコーダ** (docs/stream.md §5.5)。ブラウザで MPEG-2 と
+      # **ライブを変換せずに見る経路・互換モードのデコーダ** (docs/stream.md#放送そのままmpeg-2を送る)。ブラウザで MPEG-2 と
       # AAC・Opus をデコードする WASM は Dockerfile の `mpeg2wasm` 段で組む (emscripten)。E2E は
       # イメージを使わずランナーで回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
       #

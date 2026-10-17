@@ -9,7 +9,7 @@ import { addFrame, emptyOrientation, findArea } from './logo-detect';
  * 実物は使わず、**中身が毎コマ変わる画像に半透明の四角を重ねた**ものを作って試す。
  * ロゴは**まわりより暗い**場合も混ぜてある (濃さで探していると落ちる)。
  *
- * 実素材での当たりは `docs/encode.md`「在り処の割り出し」に。
+ * 実素材での当たりは `docs/cm.md`「在り処の割り出し」に。
  */
 
 const W = 960;
