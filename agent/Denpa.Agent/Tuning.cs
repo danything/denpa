@@ -184,6 +184,29 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
             _signal = _ready.Set;
         }
 
+        /// <summary>
+        /// 待っている読みが済むのを、長くても <see cref="WakeMs"/> 待つ。
+        ///
+        /// <para>
+        /// **済んだかは <see cref="_pending"/> で見る。<see cref="_ready"/> だけを信じない** —
+        /// PipeReader は済んだ印を立ててから、ロックの外で合図を呼ぶ。読む側はその間に印を見て先に読み進め、
+        /// 次の読みを待ちはじめることがあるので、**前の読みの合図が遅れて届く**。それを次の読みが済んだと
+        /// 取ると、まだ済んでいない読みの結果を取りに行って投げる (CI でときどき落ちていた)
+        /// </para>
+        /// </summary>
+        private bool WaitPending()
+        {
+            var since = Environment.TickCount64;
+            while (!_pending.IsCompleted)
+            {
+                var left = WakeMs - (int)(Environment.TickCount64 - since);
+                if (left <= 0 || !_ready.Wait(left)) return _pending.IsCompleted;
+                // 前の読みの合図だった。下ろして待ち直す (下ろす前にこの読みが済んでいても、上の印で気づく)
+                if (!_pending.IsCompleted) _ready.Reset();
+            }
+            return true;
+        }
+
         /// <summary>読めたバイト数。0 は尽きた、null は降りた</summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
         {
@@ -199,7 +222,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                     ReadResult result;
                     if (_waiting)
                     {
-                        if (!_pending.IsCompleted && !_ready.Wait(WakeMs)) continue;
+                        if (!WaitPending()) continue;
                         _waiting = false;
                         result = _pending.GetAwaiter().GetResult();
                     }
@@ -246,7 +269,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
             try
             {
                 _reader.CancelPendingRead();
-                if (_waiting && (_pending.IsCompleted || _ready.Wait(WakeMs)))
+                if (_waiting && WaitPending())
                 {
                     // 受けた読みは返してから閉じる (返さないまま閉じると、読んでいる最中だと言われる)
                     _reader.AdvanceTo(_pending.GetAwaiter().GetResult().Buffer.End);

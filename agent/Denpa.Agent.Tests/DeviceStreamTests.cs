@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Pipelines;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using Denpa.Agent;
@@ -181,5 +182,79 @@ public class DeviceStreamPipeTests
         write.Dispose();
         var error = Assert.Throws<IOException>(() => stream.Read(new byte[188], 0, 188, () => false));
         await Assert.That(error.Message).Contains("終了しました");
+    }
+}
+/*
+ * px4d から受けた TS (PipeReader) の読み出し側。待っている読みが済むと PipeReader が合図を呼ぶが、
+ * **合図は済んだ印より少し遅れて届く** (書く側は印を立ててから、ロックの外で合図を呼ぶ)。
+ * 読む側は印を見て先に読み進めるので、前の読みの合図が次の読みを待っている最中に届くことがある
+ */
+public class DeviceStreamPipedTests
+{
+    /// <summary>合図を言われるまで溜めておく。止めると、来た合図はその場で呼ぶ</summary>
+    private sealed class HeldScheduler : PipeScheduler
+    {
+        private readonly Lock _gate = new();
+        private readonly List<(Action<object?> Action, object? State)> _held = [];
+        private bool _holding = true;
+
+        public int Held
+        {
+            get { lock (_gate) return _held.Count; }
+        }
+
+        public override void Schedule(Action<object?> action, object? state)
+        {
+            lock (_gate)
+            {
+                if (_holding)
+                {
+                    _held.Add((action, state));
+                    return;
+                }
+            }
+            action(state);
+        }
+
+        public void Release()
+        {
+            List<(Action<object?> Action, object? State)> held;
+            lock (_gate)
+            {
+                _holding = false;
+                held = [.. _held];
+                _held.Clear();
+            }
+            foreach (var (action, state) in held) action(state);
+        }
+    }
+
+    [Test]
+    public async Task 前の読みの合図が遅れて届いても_次の読みを取り違えない(CancellationToken cancel)
+    {
+        var scheduler = new HeldScheduler();
+        var pipe = new Pipe(new System.IO.Pipelines.PipeOptions(readerScheduler: scheduler, writerScheduler: PipeScheduler.Inline, useSynchronizationContext: false));
+        using var stream = new DeviceStream(pipe.Reader);
+        var buffer = new byte[188];
+
+        // 1回目: 待っている間に届く。合図は溜めたままなので、読む側は 200ms ごとに起きて印を見て読む
+        var first = Task.Run(() => stream.Read(buffer, 0, buffer.Length), cancel);
+        while (stream.Readers == 0) await Task.Delay(5, cancel);
+        await Task.Delay(50, cancel);
+        await pipe.Writer.WriteAsync(new byte[] { 0x47, 0x01 }, cancel);
+        await Assert.That(await first.WaitAsync(TimeSpan.FromSeconds(5), cancel)).IsEqualTo(2);
+        await Assert.That(scheduler.Held).IsEqualTo(1);
+
+        // 2回目の読みが待ちに入ってから、1回目の合図を届ける
+        var second = Task.Run(() => stream.Read(buffer, 0, buffer.Length), cancel);
+        while (stream.Readers == 0) await Task.Delay(5, cancel);
+        await Task.Delay(100, cancel);
+        scheduler.Release();
+        await Task.Delay(100, cancel);
+        await Assert.That(second.IsCompleted).IsFalse().Because(second.Exception?.InnerException?.Message ?? "読めるものは無いはず");
+
+        await pipe.Writer.WriteAsync(new byte[] { 0x47, 0x02, 0x03 }, cancel);
+        await Assert.That(await second.WaitAsync(TimeSpan.FromSeconds(5), cancel)).IsEqualTo(3);
+        await Assert.That(buffer[..3]).IsEquivalentTo([(byte)0x47, (byte)0x02, (byte)0x03]);
     }
 }
