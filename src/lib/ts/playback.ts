@@ -183,6 +183,20 @@ export function pickOffer(
 }
 
 /**
+ * **音声を選ぶために、その場で流すほうへ移るときの行き先。** ファイルをそのまま読んでいて、ブラウザが
+ * 入れ物の音声を出さない (`video.audioTracks` が無い。Chrome・Firefox の既定) ときに使う —
+ * そのままでは2本目の音声 (副音声・解説) を選べない。流すほうはサーバが選んだ1本を流す (`/stream?audio=`)。
+ *
+ * 同じコーデックの詰め替え (サーバは軽い) を先に、無ければ `pickOffer` と同じ順の変換。MSE が
+ * 受け取れるものが無ければ null (= 移れないので、音声の切り替えは出さない)
+ */
+export function streamForAudio(info: PlaybackInfo, can: MediaAbility, codec: PlayCodec): Picked | null {
+    const streams = info.offers.filter((offer) => playsStream(offer, can));
+    const chosen = streams.find((offer) => offer.codec === codec) ?? streams[0];
+    return chosen === undefined ? null : asPicked(chosen);
+}
+
+/**
  * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → AV1)
  */
 export function codecChoices(info: PlaybackInfo, can: MediaAbility): ('h264' | 'av1')[] {

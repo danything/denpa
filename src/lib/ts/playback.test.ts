@@ -9,6 +9,7 @@ import {
     type PlaybackInfo,
     pickCanvas,
     pickOffer,
+    streamForAudio,
     transcodes,
 } from './playback';
 
@@ -103,6 +104,33 @@ describe('どれで観るか (pickOffer)', () => {
         };
         expect(pickOffer(unknown, chrome)).toEqual({ way: 'file', codec: 'av1', source: 'encoded' });
         expect(pickOffer(tsOnly, browser([], []))).toBeNull();
+    });
+});
+
+describe('音声を選ぶために流すほうへ移る (streamForAudio)', () => {
+    test('同じコーデックの詰め替えを先に', () => {
+        expect(streamForAudio(av1Only, chrome, 'av1')).toEqual({
+            way: 'stream',
+            codec: 'av1',
+            type: AV1_MP4,
+        });
+        expect(streamForAudio(h264Only, chrome, 'h264')).toEqual({
+            way: 'stream',
+            codec: 'h264',
+            type: H264_MP4,
+        });
+    });
+
+    test('同じコーデックを MSE が受け取れなければ、受け取れる変換', () => {
+        expect(streamForAudio(av1Only, browser([], [H264_LIVE]), 'av1')).toEqual({
+            way: 'stream',
+            codec: 'h264',
+            type: H264_LIVE,
+        });
+    });
+
+    test('MSE が何も受け取れなければ null', () => {
+        expect(streamForAudio(av1Only, browser([], []), 'av1')).toBeNull();
     });
 });
 

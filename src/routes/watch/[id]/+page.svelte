@@ -82,6 +82,7 @@
         pickOffer,
         retryWait,
         STREAM_RETRIES,
+        streamForAudio,
         transcodes,
     } from '#lib/ts/playback.js';
     import {
@@ -735,9 +736,9 @@
      * ここで選んだものだけを有効にして切り替える。ライブと違い**サーバはエンコード
      * 直さない** — コンテナの中に入っているものを選ぶだけ。
      *
-     * **出せない端末では空のまま = 切り替えは出さない。** `audioTracks` は
-     * ブラウザ任せで、Matroska の副音声を出さないものもある。押しても効かない
-     * 操作を並べないため、2本以上あるときだけ出す (`hasCaptions` と同じ考え)
+     * **出せない端末 (Chrome・Firefox の既定) では `playback` の名前で並べ、選んだらその場で流すほうへ
+     * 移る** (`moveForAudio`。サーバが選んだ1本を流す)。移れる先も無ければ空のまま = 切り替えは出さない。
+     * 押しても効かない操作を並べないため、2本以上あるときだけ出す (`hasCaptions` と同じ考え)
      */
     let audios = $state<{ label: string }[]>([]);
     let audioIndex = $state(0);
@@ -1136,7 +1137,14 @@
         }
         const tracks = audioTrackList();
         if (tracks === null) {
-            audios = [];
+            /*
+             * **ブラウザが入れ物の音声を出さない** (Chrome・Firefox の既定)。流すほうへ移れるなら
+             * `playback` の名前で並べ、選んだら移る (`selectAudio`)。移れなければ出さない
+             */
+            audios =
+                audioFallback() === null
+                    ? []
+                    : (info?.audios ?? []).map((audio, i) => ({ label: audio.label.trim() || `音声 ${i + 1}` }));
             return;
         }
         const list: { label: string }[] = [];
@@ -1160,12 +1168,43 @@
             return;
         }
         const tracks = audioTrackList();
-        if (tracks === null) return;
+        if (tracks === null) {
+            moveForAudio(index);
+            return;
+        }
         for (let i = 0; i < tracks.length; i++) {
             const track = tracks[i];
             if (track !== undefined) track.enabled = i === index;
         }
         audioIndex = index;
+    }
+
+    /** 音声を選ぶために移る先 (`streamForAudio`)。ファイルをそのまま読んでいないなら null */
+    function audioFallback(): Picked | null {
+        if (info === null || picked?.way !== 'file') return null;
+        return streamForAudio(info, ability(), picked.codec);
+    }
+
+    /**
+     * **ファイルのままでは選べない音声を、その場で流すほうへ移って選ぶ。** いまの位置から観直す
+     * (`chooseCodec` と同じ作り直し)。いまの音声 (ファイルでは1本目) を選んだだけなら何もしない
+     */
+    function moveForAudio(index: number): void {
+        if (index === audioIndex) return;
+        const fresh = audioFallback();
+        if (fresh === null) return;
+        const position = video?.currentTime ?? 0;
+        // 端末のコピーはそのまま読むときだけ (`chooseCodec` と同じ)
+        if (localSrc !== null) {
+            URL.revokeObjectURL(localSrc);
+            localSrc = null;
+        }
+        busy = false;
+        broken = false;
+        audioIndex = index;
+        retryAt = position;
+        switchAt = position;
+        picked = fresh;
     }
 
     /**
@@ -1970,8 +2009,8 @@
                             />
                         {/if}
                         <!--
-                            **音声トラックの切り替え。** ブラウザがコンテナから2本以上
-                            出せたときだけ (二カ国語・二重音声)。`/live` の音声選びと
+                            **音声トラックの切り替え。** 2本以上あって選べるときだけ (二カ国語・二重音声・解説。
+                            ブラウザが出せなければ流すほうへ移って選ぶ。`syncAudio`)。`/live` の音声選びと
                             同じ見た目。1本しか無ければ出さない
                         -->
                         {#if audios.length > 1}
