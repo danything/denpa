@@ -50,12 +50,15 @@
     --sl-color-gray-7: #eff1f4; /* slate-50 */
     --sl-color-black: #fff;
 
-    /* app.css と同じく、地は slate の一番淡い段、上に乗る面 (上の帯・横の目次) は白 */
-    --sl-color-bg: #eff1f4; /* slate-50 */
+    /*
+     * 文書は読むところなので、地は白。灰色 (slate-50) は面を分けたいところ (横のサイドバー・表の縞) だけに使う。
+     * 上の帯も白で、境は線 (hairline) で分ける
+     */
+    --sl-color-bg: #fff;
     --sl-color-bg-nav: #fff;
-    --sl-color-bg-sidebar: #fff;
-    /* 地が slate-50 なので、コードは白い面に。slate-100 だとリンクの色 (#0172ad) が 4.5:1 に届かない */
-    --sl-color-bg-inline-code: #fff;
+    --sl-color-bg-sidebar: #eff1f4; /* slate-50 */
+    /* インラインの code は slate-50 よりわずかに淡い面に枠を付ける。slate-50 だとリンクの色 (#0172ad) が 4.5:1 ぎりぎり */
+    --sl-color-bg-inline-code: #f4f5f8;
     --sl-color-hairline-light: #dfe3eb;
     --sl-color-hairline: #cfd5e2; /* slate-150 */
     --sl-color-hairline-shade: #cfd5e2;
@@ -93,4 +96,9 @@
 .sl-markdown-content .shots img {
     display: block;
     margin-bottom: 0.25rem;
+}
+
+/* インラインの code の枠 (白い地で面が見えるように)。暗いほうは地との差があるので枠は付けない */
+:root[data-theme="light"] .sl-markdown-content :not(pre) > code {
+    border: 1px solid var(--sl-color-hairline-light);
 }
