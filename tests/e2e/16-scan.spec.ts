@@ -172,12 +172,21 @@ test.describe('チューナーの設定', () => {
         // 4台ぶん + 足すための空行
         await expect(rows).toHaveCount(5);
 
-        // 1台目を無効にして、名前を消して1台減らす。**変えたらその場で保存する** (名前は欄を離れたとき)
+        // 1台目を無効にする。**変えたらその場で保存する**
         await rows.nth(0).locator('input[name="disabled.0"]').check();
         await expect(card.getByTestId('saved-result')).toBeVisible();
+
+        // **名前を空にしても消さない。** 断って元の名前に戻す (欄を空にして離れただけで消えていた)
         const name = rows.nth(3).locator('input[name="name.3"]');
+        const before = await name.inputValue();
         await name.fill('');
         await name.blur();
+        await expect(card.getByTestId('settings-error')).toContainText('名前は空にできません');
+        await expect(name).toHaveValue(before);
+
+        // 消すのは行の「×」。ほかの削除と同じく 2 回押しで確かめる
+        await rows.nth(3).getByTestId('tuner-delete').click();
+        await rows.nth(3).getByTestId('tuner-delete-confirm').click();
 
         const list = page.getByTestId('tuner-list');
         await expect(list.getByTestId('tuner-row')).toHaveCount(3);

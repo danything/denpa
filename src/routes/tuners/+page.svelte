@@ -1,15 +1,18 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
+    import { arming } from '#lib/arming.svelte.js';
     import { autosave, SaveState } from '#lib/autosave.svelte.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import JobProgress from '#lib/components/JobProgress.svelte';
     import Lead from '#lib/components/Lead.svelte';
     import LearnedLogo from '#lib/components/LearnedLogo.svelte';
+    import Icon from '#lib/components/player/Icon.svelte';
     import SaveNote from '#lib/components/SaveNote.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '#lib/format.js';
     import { held, liveUpdates } from '#lib/live-updates.svelte.js';
     import type { CardReaderState } from '#lib/server/scramble.js';
+    import X from '~icons/lucide/x';
 
     let { data, form } = $props();
 
@@ -34,6 +37,8 @@
     const cmLogosPending = $derived(cmLogos.filter((service) => service.learned_at === null).length);
     /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
     const configSave = new SaveState();
+    /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
+    const deleting = arming('[data-testid^="tuner-delete"]');
 
     /** チューナーが受けられる種別。設定の表で並べる順 */
     const TYPES = ['GR', 'BS', 'CS'] as const;
@@ -97,6 +102,8 @@
         return list;
     });
 </script>
+
+<svelte:window onclick={deleting.stand} />
 
 <Toasts {notices} source={form} />
 
@@ -518,7 +525,8 @@
             {@const rows = [...shownTuners.value.list, null]}
             <!--
                 **変えたらその場で保存する** (`autosave`。設定の画面と同じ)。文字の欄は離れたとき、
-                チェックと選択は変えたとき。名前を空にして離れると、その行は消える。
+                チェックと選択は変えたとき。
+                名前は空にできない (断って元に戻す)。行を消すのは右端の「×」の 2 回押し。
                 **行の追加はボタンで** — 足すための空の行は、名前を打っている途中や
                 デバイスを入れる前に送らない (`data-no-autosave`)。自動検出に戻すのもボタン
             -->
@@ -532,6 +540,7 @@
                                 <th>受信できる種別</th>
                                 <th>LNB</th>
                                 <th>無効</th>
+                                <th><span class="visually-hidden">削除</span></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -593,6 +602,35 @@
                                             aria-label="無効"
                                         />
                                     </td>
+                                    <td class="delete-cell" data-label="">
+                                        {#if tuner === null}
+                                            <!-- 足すための空の行。名前が空なら送っても足さない (サーバの `new`) -->
+                                            <input type="hidden" name="new" value={index} />
+                                        {:else if deleting.armed === index}
+                                            <!-- 2 回目。この行を除いて保存する -->
+                                            <button
+                                                type="submit"
+                                                name="delete"
+                                                value={index}
+                                                class="xs danger"
+                                                onclick={() => deleting.fire()}
+                                                data-testid="tuner-delete-confirm"
+                                            >
+                                                確定
+                                            </button>
+                                        {:else}
+                                            <button
+                                                type="button"
+                                                class="xs ghost delete-button"
+                                                aria-label={`${tuner.name} を削除`}
+                                                title="削除"
+                                                onclick={() => deleting.arm(index)}
+                                                data-testid="tuner-delete"
+                                            >
+                                                <Icon icon={X} size="size-4" />
+                                            </button>
+                                        {/if}
+                                    </td>
                                 </tr>
                             {/each}
                         </tbody>
@@ -603,7 +641,6 @@
                     <button type="submit" class="small ghost" formaction="?/tunersAuto">
                         自動検出に戻す
                     </button>
-                    <span class="tiny muted">名前を空にすると、その行は消えます</span>
                 </div>
             </form>
         {/if}
@@ -870,6 +907,17 @@
     }
     .w-lnb {
         width: 5rem;
+    }
+    /* 行の「×」。押す的は小さくても 2rem 角。2 回目の「確定」は同じ場所に出る */
+    .delete-cell {
+        width: 1%;
+        white-space: nowrap;
+    }
+    .delete-button {
+        min-width: 2rem;
+        min-height: 2rem;
+        padding: 0.25rem;
+        color: var(--dp-muted);
     }
     .config-actions {
         margin-top: 0.5rem;
