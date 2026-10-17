@@ -17,19 +17,33 @@ export interface PageOverride {
 export const overrides: Record<string, PageOverride> = {};
 
 /**
- * サイドバーの組と並び。ここに無いファイルは飛ばし、docs にあってここに無いものは
+ * サイドバーの組と並び (README の「もっと詳しく」と同じ組)。ここに無いファイルは飛ばし、docs にあってここに無いものは
  * 最後の組の末尾に足す (docs を足しただけで消えることは無い)
  */
 export const sidebarGroups: { label: string; items: string[] }[] = [
-    { label: 'はじめる', items: ['install', 'screens'] },
-    { label: 'チューナー', items: ['agent'] },
+    { label: 'はじめる', items: ['install', 'install-mac', 'install-windows', 'screens'] },
+    { label: 'チューナー', items: ['tuners', 'tuner-px4', 'tuner-px-s1ud'] },
     { label: '乗り換え', items: ['migrate'] },
-    { label: '使う', items: ['player', 'offline', 'library'] },
-    { label: '運用', items: ['config', 'auth', 'encode', 'logo'] },
+    { label: '使う', items: ['watch', 'offline', 'library'] },
+    { label: '運用', items: ['config', 'auth'] },
     { label: '外から使う', items: ['api'] },
     {
         label: '仕組み',
-        items: ['architecture', 'app', 'data', 'stream', 'development', 'writing', 'licenses'],
+        items: [
+            'architecture',
+            'app',
+            'agent',
+            'data',
+            'stream',
+            'stream-history',
+            'player',
+            'encode',
+            'cm',
+            'logo',
+            'development',
+            'writing',
+            'licenses',
+        ],
     },
 ];
 

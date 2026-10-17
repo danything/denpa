@@ -12,8 +12,7 @@ export default defineConfig({
         reducedMotion: 'reduce',
     },
     webServer: {
-        // --force: 前に落ちた preview の印 (.astro の下) が残っていても立ち上げる
-        command: 'bunx --bun astro preview --force --host 127.0.0.1 --port 4321',
+        command: 'bunx --bun astro preview --host 127.0.0.1 --port 4321',
         url: 'http://127.0.0.1:4321/denpa/',
         reuseExistingServer: !process.env['CI'],
     },

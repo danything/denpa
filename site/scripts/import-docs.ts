@@ -321,7 +321,8 @@ function addVideoNotes(text: string): string {
     const note = `<p class="video-note">${videoImageNote}</p>`;
     const hasVideo = (block: string) =>
         videoImages.some((f) => block.includes(`/assets/docs/${f})`) || block.includes(`/assets/docs/${f}"`));
-    const blocks = text.split(/\n{2,}/);
+    // 空行ちょうどで割り、同じ形でつなぎ直す (コードの囲みの中の、続いた空行を潰さない)
+    const blocks = text.split('\n\n');
     const out: string[] = [];
     let lastNote = -Infinity;
     const pushNote = () => {
@@ -334,7 +335,7 @@ function addVideoNotes(text: string): string {
     let shotsVideo = false;
     for (const block of blocks) {
         out.push(block);
-        if (block.startsWith('<div class="shots">')) {
+        if (block.trimStart().startsWith('<div class="shots">')) {
             inShots = true;
             shotsVideo = false;
             continue;
