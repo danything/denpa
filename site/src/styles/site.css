@@ -1,6 +1,6 @@
 /*
  * 見た目を denpa の画面 (src/app.css) に合わせる。
- *   - 字: app.css と同じ並び。BIZ UDPGothic は @fontsource で配る
+ *   - 字: app.css と同じ並び。フォントは配らず、名前を挙げるだけ (入っていれば使う)
  *   - 主の色: Blades (Pico) の既定の azure (@anyblades/blades の pico/_variables.css の --pico-primary*)
  *   - 地と灰色: app.css と同じ slate の段 (pico.colors.css の 50〜950)
  *   - 角丸: app.css の --pico-border-radius (0.65rem)

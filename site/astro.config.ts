@@ -20,11 +20,7 @@ export default defineConfig({
             locales: { root: { label: '日本語', lang: 'ja' } },
             social: [{ icon: 'github', label: 'GitHub', href: repoUrl }],
             sidebar: sidebar(),
-            customCss: [
-                '@fontsource/biz-udpgothic/400.css',
-                '@fontsource/biz-udpgothic/700.css',
-                './src/styles/site.css',
-            ],
+            customCss: ['./src/styles/site.css'],
             components: {
                 // 既定のテーマを明るいほうに (切り替えは残す)
                 ThemeProvider: './src/components/ThemeProvider.astro',

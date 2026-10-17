@@ -24,7 +24,6 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
-import { slug as slugify } from 'github-slugger';
 import { docNames, docsDir, repoDir, siteDir, slugOf } from '../src/data/docs.ts';
 import { overrides, repoUrl, videoImageNote, videoImages } from '../src/data/pages.ts';
 
@@ -405,4 +404,15 @@ function usageNotice(): {
         anchor: `${base}#${heading}`,
         ...(link ? { discussion: { label: link[1]!, url: link[2]! } } : {}),
     };
+}
+
+/**
+ * 見出しの id。GitHub (github-slugger) と同じ作り方: 小文字にし、字・数字・`-`・`_`・空白のほかを消して、
+ * 空白を `-` にする。Astro が付ける見出しの id も同じ
+ */
+function slugify(text: string): string {
+    return text
+        .toLowerCase()
+        .replace(/[^\p{L}\p{M}\p{N}\p{Pc}\- ]/gu, '')
+        .replaceAll(' ', '-');
 }

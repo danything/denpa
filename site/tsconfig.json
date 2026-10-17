@@ -7,7 +7,6 @@
     "include": [".astro/types.d.ts", "**/*", "index.html"],
     "exclude": ["dist"],
     "compilerOptions": {
-        "allowImportingTsExtensions": true,
-        "types": ["bun"]
+        "allowImportingTsExtensions": true
     }
 }
