@@ -3,9 +3,15 @@ name: Screenshots
 # README・docs の画像を撮る (scripts/capture-docs.ts。docs/development.md「README の画像」)。
 # PR の CI には入れない (手で走らせるか、shots/ の枝に積んだときだけ)。
 # 偽の放送 (作り物の局・番組・ロゴ・映像) の一式を立てて撮り、docs/images の webp を artifact (shots) に上げる。
-# 差し替えるときは artifact の中身を docs/images に置いてコミットする
+# 差し替えるときは artifact の中身を docs/images に置いてコミットする。
+# names に `ui` を入れて走らせると、見た目を見比べる一揃い (主な画面 × 明暗 × デスクトップ・スマホ) を artifact (ui) に上げる
 on:
   workflow_dispatch:
+    inputs:
+      names:
+        description: 撮るものの名前 (空なら docs の画像を全部。`ui` で見比べる一揃い)
+        required: false
+        default: ''
   push:
     branches: ['shots/**']
 
@@ -27,8 +33,16 @@ jobs:
         run: docker build --target docs -t denpa-docs .
       # node_modules はイメージの中のものを使う (名前の無いボリュームに写る)
       - name: Shoot
-        run: docker run --rm -e TZ=Asia/Tokyo -v "$PWD:/app" -v /app/node_modules -w /app denpa-docs bun scripts/capture-docs.ts
+        env:
+          NAMES: ${{ inputs.names }}
+        run: docker run --rm -e TZ=Asia/Tokyo -v "$PWD:/app" -v /app/node_modules -w /app denpa-docs bun scripts/capture-docs.ts $NAMES
       - uses: actions/upload-artifact@v7
+        if: ${{ !contains(inputs.names, 'ui') }}
         with:
           name: shots
           path: docs/images/*.webp
+      - uses: actions/upload-artifact@v7
+        if: ${{ contains(inputs.names, 'ui') }}
+        with:
+          name: ui
+          path: docs/images/.capture/ui/

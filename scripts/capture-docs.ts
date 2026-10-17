@@ -7,6 +7,12 @@
  *
  * CI でも撮れる (`.github/workflows/screenshots.yml`。手で走らせると画像を artifact に上げる)。
  *
+ * **`ui` だけを挙げると、見た目を見比べるための一揃いを撮る** (docs には置かない)。
+ * 主な画面を 明るい・暗い × デスクトップ (1440×900)・スマホ (390×844) で、ページ全体を
+ * `docs/images/.capture/ui/` に PNG で置く。見た目を変える PR の前後を並べるのに使う
+ *
+ *     docker compose run --rm docs bun scripts/capture-docs.ts ui
+ *
  * 中でやること:
  *
  * 1. アプリを組み、E2E と同じ一式 (denpa + 偽エージェント + 偽通知先。`tests/stack.ts`) を
@@ -476,6 +482,97 @@ async function wake(page: Page, stage: string): Promise<void> {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 4);
 }
 
+/** 撮るときだけ読む axe (CDN の axe-core) のうち、使うところ */
+interface Axe {
+    run: (
+        options: unknown,
+    ) => Promise<{ violations: { nodes: { target: string[]; failureSummary: string }[] }[] }>;
+}
+
+/** 見た目を見比べる一揃い (`ui`)。画面・テーマ・広さを掛け合わせて撮る */
+async function uiShots(browser: Browser, watchId: string | null): Promise<void> {
+    const dir = join(OUT, 'ui');
+    mkdirSync(dir, { recursive: true });
+    /*
+     * 文字のコントラスト (axe の color-contrast) も画面ごとに測り、contrast.json に残す。
+     * axe は依存に足さず、撮るときだけ CDN から読む (取れなければ測らずに撮るだけ)
+     */
+    const axe = await fetch('https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js')
+        .then((r) => (r.ok ? r.text() : null))
+        .catch(() => null);
+    const contrast: { screen: string; found: { target: string; summary: string }[] }[] = [];
+    const screens: [string, string][] = [
+        ['home', '/'],
+        ['guide', '/guide'],
+        ['watch', watchId === null ? '/' : `/watch/${watchId}`],
+        ['live', '/live'],
+        ['rules', '/rules'],
+        ['tuners', '/tuners'],
+        ['settings', '/settings'],
+    ];
+    const sizes = [
+        { name: 'desktop', width: 1440, height: 900, scale: 1, mobile: false },
+        { name: 'mobile', width: 390, height: 844, scale: 2, mobile: true },
+    ];
+    for (const theme of ['dark', 'light'] as const) {
+        for (const size of sizes) {
+            const ctx = await browser.newContext({
+                viewport: { width: size.width, height: size.height },
+                deviceScaleFactor: size.scale,
+                isMobile: size.mobile,
+                hasTouch: size.mobile,
+                locale: 'ja-JP',
+                timezoneId: 'Asia/Tokyo',
+                colorScheme: theme,
+            });
+            await ctx.addInitScript((t) => localStorage.setItem('theme', t), theme);
+            const page = await ctx.newPage();
+            for (const [name, path] of screens) {
+                await page.goto(`${BASE}${path}`);
+                await settle(page, name === 'live' || name === 'watch' ? 4000 : 800);
+                await page.screenshot({
+                    path: join(dir, `${name}-${theme}-${size.name}.png`),
+                    fullPage: true,
+                });
+                console.log('ui', name, theme, size.name);
+                if (axe !== null) {
+                    // CDP の evaluate は CSP に止められない (ページに <script> を差さない)
+                    await page.evaluate(axe);
+                    const found = await page.evaluate(async () => {
+                        const checker = (window as unknown as { axe: Axe }).axe;
+                        const result = await checker.run({ runOnly: ['color-contrast'] });
+                        return result.violations.flatMap((v) =>
+                            v.nodes.map((n) => ({ target: n.target.join(' '), summary: n.failureSummary })),
+                        );
+                    });
+                    contrast.push({ screen: `${name}-${theme}-${size.name}`, found });
+                    console.log('axe', name, theme, size.name, found.length);
+                }
+            }
+            // 開いたメニュー (`Menu.svelte`)。スマホはナビ、デスクトップは観る画面の速さ
+            try {
+                if (size.mobile) {
+                    await page.goto(`${BASE}/`);
+                    await settle(page, 300);
+                    await page.getByRole('button', { name: 'メニュー' }).click();
+                } else if (watchId !== null) {
+                    await page.goto(`${BASE}/watch/${watchId}`);
+                    await settle(page, 2000);
+                    await wake(page, 'watch-stage');
+                    await page.getByTestId('watch-speed').click();
+                }
+                await page.waitForTimeout(400);
+                await page.screenshot({ path: join(dir, `menu-${theme}-${size.name}.png`) });
+                console.log('ui', 'menu', theme, size.name);
+            } catch (e) {
+                console.warn('ui menu', theme, size.name, e);
+            }
+            await ctx.close();
+        }
+    }
+    writeFileSync(join(dir, 'contrast.json'), JSON.stringify(contrast, null, 2));
+}
+
 let browser: Browser | null = null;
 try {
     await seed();
@@ -489,6 +586,12 @@ try {
         await settle(page, 300);
         return await (await visibleRow(page)).getAttribute('data-recording-id');
     };
+
+    if (only.includes('ui')) {
+        const first = await open(browser, 1600, 900);
+        await uiShots(browser, await watched(first));
+        await first.context().close();
+    }
 
     // 静止画 (1600×900。20インチの画面と同じ 16:9)
     {
@@ -609,6 +712,7 @@ try {
     await shutdown();
 }
 
-// 組み立てて docs/images へ (アニメーションは縮め、同じコマはまとめる)
+// 組み立てて docs/images へ (アニメーションは縮め、同じコマはまとめる)。見比べる一揃いだけのときは組まない
+if (only.length > 0 && only.every((n) => n === 'ui')) process.exit(0);
 const webp = spawnSync('python3', ['scripts/docs-webp.py', ...only], { stdio: 'inherit' });
 if (webp.status !== 0) throw new Error('webp の組み立てに失敗しました');
