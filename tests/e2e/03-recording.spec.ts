@@ -107,6 +107,18 @@ test.describe('録画とエンコード', () => {
         // Esc で畳む (キーボードでも閉じられる)
         await page.keyboard.press('Escape');
         await expect(detail.getByTestId('detail-more-menu')).toBeHidden();
+        // 外 (詳細の背景) を押すとメニューだけ閉じる。その押下は下に届かず、詳細は開いたまま
+        await detail.getByTestId('detail-more').click();
+        await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
+        await detail.locator('.detail-backdrop').click({ position: { x: 5, y: 5 } });
+        await expect(detail.getByTestId('detail-more-menu')).toBeHidden();
+        await expect(detail).toBeVisible();
+        // 引き金をもう一度押しても閉じる
+        await detail.getByTestId('detail-more').click();
+        await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
+        await detail.getByTestId('detail-more').click();
+        await expect(detail.getByTestId('detail-more-menu')).toBeHidden();
+        await expect(detail).toBeVisible();
         await page.getByTestId('detail-close').click();
         await expect(detail).toHaveCount(0);
 

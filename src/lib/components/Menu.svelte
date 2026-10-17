@@ -13,6 +13,31 @@
 
     /** CSS anchor positioning が使えるか。使えないブラウザでは位置を JS で決める */
     const anchorSupported = typeof CSS !== 'undefined' && CSS.supports('position-area', 'top');
+
+    /**
+     * **外を押した押下を、閉じるだけにして下へ渡さない。** pointerdown を止め、同じ押下の
+     * mousedown (フォーカスの移動・文字の選択)・pointerup・mouseup・click も止める。
+     * メニューはもう閉じているので、ここだけは閉じた後も click (か次の押下・キー入力) まで残る
+     */
+    function swallowPress(first: PointerEvent): void {
+        first.preventDefault();
+        first.stopPropagation();
+        const types = ['mousedown', 'pointerup', 'mouseup', 'click'] as const;
+        const stop = (event: Event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.type === 'click') done();
+        };
+        const done = () => {
+            for (const type of types) window.removeEventListener(type, stop, true);
+            window.removeEventListener('pointerdown', done, true);
+            window.removeEventListener('keydown', done, true);
+        };
+        for (const type of types) window.addEventListener(type, stop, true);
+        // 押したまま動かして (指なら巻き取って) click が来なかったときは、次の押下かキー入力で外す (そちらは止めない)
+        window.addEventListener('pointerdown', done, true);
+        window.addEventListener('keydown', done, true);
+    }
 </script>
 
 <script lang="ts">
@@ -22,9 +47,13 @@
      * **開いたり閉じたりするメニュー。** 画面のメニューはどれもこれ1つで作る
      * (録画の「その他…」・見出しの「⋯」・映像の上の選択肢・狭い画面のナビ)。
      *
-     * 枠はブラウザの `popover` (`auto`)。最前面 (top layer) に出るので、後ろの行が透けたり
-     * (#481)、全画面の舞台に隠れたりしない。外を押すと閉じるのもブラウザがやる。
-     * 引き金は `popovertarget` で結ぶので、**ハイドレーション前でも開く**。
+     * 枠はブラウザの `popover` (`manual`)。最前面 (top layer) に出るので、後ろの行が透けたり
+     * (#481)、全画面の舞台に隠れたりしない。引き金は `popovertarget` で結ぶので、
+     * **ハイドレーション前でも開く**。
+     *
+     * **外を押したら閉じるだけで、その押下は下へ渡さない** (`swallowPress`)。`auto` の
+     * light dismiss に任せると、閉じると同時に下のボタンにも届く (録画の詳細で背景を押すと
+     * 詳細まで閉じる)。引き金は外に数えないので、押せば今までどおり開け閉めする。
      *
      * 位置は CSS anchor positioning (`app.css` の `.menu`)。**枠に収めたいとき (`boundary`) と、
      * anchor positioning の無いブラウザでは JS で置く** (`place`)。
@@ -94,7 +123,7 @@
         else if (!open && shown) content.hidePopover();
     });
 
-    /** 枠の開け閉めを `open` に写す。外を押して閉じたのもここに来る */
+    /** 枠の開け閉めを `open` に写す */
     $effect(() => {
         const element = content;
         if (element === null) return;
@@ -121,13 +150,19 @@
     });
 
     /**
-     * 開いている間: Esc で閉じる・画面が動いたら置き直す。
+     * 開いている間: 外を押したら閉じる・Esc で閉じる・画面が動いたら置き直す。
      *
      * **Esc はこちらで受けて `preventDefault` する。** ブラウザの popover に任せると keydown が
      * 素通りして、舞台の全画面 (`fullscreen.svelte.ts`) まで一緒に閉じてしまう
      */
     $effect(() => {
         if (!open) return;
+        const onpointerdown = (event: PointerEvent) => {
+            const target = event.target;
+            if (target instanceof Node && (content?.contains(target) || triggerElement()?.contains(target))) return;
+            swallowPress(event);
+            open = false;
+        };
         const onkey = (event: KeyboardEvent) => {
             if (event.key !== 'Escape' || event.defaultPrevented) return;
             event.preventDefault();
@@ -138,10 +173,12 @@
             if (event.target instanceof Node && content?.contains(event.target)) return;
             place();
         };
+        window.addEventListener('pointerdown', onpointerdown, true);
         document.addEventListener('keydown', onkey);
         window.addEventListener('resize', update);
         window.addEventListener('scroll', update, true);
         return () => {
+            window.removeEventListener('pointerdown', onpointerdown, true);
             document.removeEventListener('keydown', onkey);
             window.removeEventListener('resize', update);
             window.removeEventListener('scroll', update, true);
@@ -278,7 +315,7 @@
 <div
     bind:this={content}
     id={menuId}
-    popover="auto"
+    popover="manual"
     {...menuRole}
     tabindex="-1"
     class="menu {className}"
