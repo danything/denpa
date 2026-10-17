@@ -1082,6 +1082,9 @@ button[aria-busy="true"]::after {
         grid-row: 1;
         grid-column: 1;
         padding-top: 0.2rem;
+        /* 行の名前なので、欄の上の小さな見出しより一段強く */
+        color: var(--pico-color);
+        font-size: var(--dp-text-sm);
     }
     .setting-rows > .field > :is(.hint, .lead) {
         grid-row: 2;
