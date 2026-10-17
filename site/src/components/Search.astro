@@ -1,0 +1,21 @@
+---
+/*
+ * Starlight の検索ボタンの名前を、見えている字 (「検索」と「Ctrl K」) に合わせる。
+ * 名前が「検索」だけだと、見えている「Ctrl K」が名前に入っていないと axe に言われる
+ * (label-content-name-mismatch)。axe は字をつなげて単語に分けるので、キーの間に空白も入れる
+ * (並びは flex なので、空白は見た目に出ない)
+ */
+import Default from '@astrojs/starlight/components/Search.astro';
+---
+
+<Default {...Astro.props} />
+
+<script>
+    for (const button of document.querySelectorAll('site-search button[data-open-modal]')) {
+        const keys = [...button.querySelectorAll('kbd kbd')];
+        if (!keys.length) continue;
+        for (const key of keys.slice(1)) key.before(' ');
+        const label = button.getAttribute('aria-label') ?? '';
+        button.setAttribute('aria-label', `${label} ${keys.map((k) => k.textContent?.trim()).join(' ')}`);
+    }
+</script>

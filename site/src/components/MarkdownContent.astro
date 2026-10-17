@@ -1,0 +1,16 @@
+---
+/*
+ * 横に長い表は Starlight が表の中で横に動かせるようにしている (overflow)。キーボードでも
+ * 動かせるよう、表に tabindex を付ける (axe の scrollable-region-focusable)。
+ * Astro 7 の Markdown (Sätteri) では rehype のプラグインが使えないので、ここで付ける
+ */
+import Default from '@astrojs/starlight/components/MarkdownContent.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<script>
+    for (const table of document.querySelectorAll('.sl-markdown-content table')) {
+        table.setAttribute('tabindex', '0');
+    }
+</script>

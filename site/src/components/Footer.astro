@@ -1,0 +1,43 @@
+---
+/*
+ * Starlight の既定のフッタ (編集・最終更新・前後のページ) の下に、README の「使ってよい範囲」の要約を出す。
+ * 文は scripts/import-docs.ts が README から取ってくる (src/generated/usage.json)。ここには書かない
+ */
+import Default from '@astrojs/starlight/components/Footer.astro';
+import usage from '../generated/usage.json';
+
+const escapeHtml = (s: string) =>
+    s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+// 要約は README の段落そのまま。太字 (**…**) だけ活かす
+const summary = usage ? escapeHtml(usage.summary).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') : '';
+---
+
+<Default />
+{
+    usage && (
+        <aside class="usage" aria-label="使ってよい範囲">
+            <p>
+                <Fragment set:html={summary} />{' '}
+                <a href={usage.anchor}>使ってよい範囲</a>
+                {usage.discussion && (
+                    <>
+                        ・<a href={usage.discussion.url}>{usage.discussion.label}</a>
+                    </>
+                )}
+            </p>
+        </aside>
+    )
+}
+
+<style>
+    .usage {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--sl-color-hairline);
+        font-size: var(--sl-text-sm);
+        color: var(--sl-color-gray-3);
+    }
+    .usage a {
+        color: var(--sl-color-text-accent);
+    }
+</style>

@@ -1,0 +1,88 @@
+name: Pages
+
+# 文書サイト (https://danything.github.io/denpa/) を組んで出す。中身は docs/ と README.md で、
+# site/ (Astro + Starlight) が取り込んで組む (site/scripts/import-docs.ts)。
+# PR では組むのとアクセシビリティの検査 (axe) だけ。出すのは main に入ったときだけ。
+# 必須のチェックにはしない (docs の PR を止めない。壊れていたら main で気づいて直す)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      # 最終更新日は `git log` で docs ごとに読むので、履歴を全部取る
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # bun のバージョンは Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
+      - name: Read bun version from Dockerfile
+        id: bun
+        working-directory: .
+        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      # site/ は本体と別に package.json と bun.lock を持つ。本体の依存は入れない
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # prebuild で docs と README を取り込んでから組む
+      - name: Build
+        run: bun run build
+
+      # WCAG 2.1 A/AA の serious・critical で落とす (site/tests/a11y.spec.ts)
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Accessibility check (axe)
+        run: bun run test:a11y
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # 出すのは 1 本ずつ。途中で止めると半端な状態になるので、後から来たものは待たせる
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

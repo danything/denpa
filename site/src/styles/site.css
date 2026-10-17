@@ -1,0 +1,96 @@
+/*
+ * 見た目を denpa の画面 (src/app.css) に合わせる。
+ *   - 字: app.css と同じ並び。BIZ UDPGothic は @fontsource で配る
+ *   - 主の色: Blades (Pico) の既定の azure (@anyblades/blades の pico/_variables.css の --pico-primary*)
+ *   - 地と灰色: app.css と同じ slate の段 (pico.colors.css の 50〜950)
+ *   - 角丸: app.css の --pico-border-radius (0.65rem)
+ * 明るいほうが既定 (components/ThemeProvider.astro)。暗いほうも同じ段から選ぶ
+ */
+:root {
+    --sl-font: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    --dp-radius: 0.65rem;
+}
+
+/* 暗いほう。Starlight は :root を暗いほうとして書く */
+:root {
+    --sl-color-accent-low: #1a3f58; /* --pico-text-selection-color (#01aaff の 19%) を slate-850 に重ねた色 */
+    --sl-color-accent: #01aaff; /* --pico-primary */
+    --sl-color-accent-high: #79c0ff; /* --pico-primary-hover */
+
+    --sl-color-white: #fff;
+    --sl-color-gray-1: #dfe3eb; /* slate-100 */
+    --sl-color-gray-2: #c2c7d0; /* Pico の本文 */
+    --sl-color-gray-3: #969fb2; /* Pico の --pico-muted-color を、地の上で読める明るさまで上げたもの */
+    --sl-color-gray-4: #525f7a; /* slate-600 */
+    --sl-color-gray-5: #3d475c; /* slate-700 */
+    --sl-color-gray-6: #2a3140; /* slate-800 */
+    --sl-color-black: #181c25; /* slate-900 */
+
+    --sl-color-bg: #202632; /* slate-850 (app.css の --dp-base-200) */
+    --sl-color-bg-nav: #181c25; /* slate-900 (app.css の --dp-surface) */
+    --sl-color-bg-sidebar: #181c25;
+    --sl-color-bg-inline-code: #2a3140; /* slate-800 */
+    --sl-color-hairline-light: #3d475c;
+    --sl-color-hairline: #2a3140;
+    --sl-color-hairline-shade: #181c25;
+}
+
+:root[data-theme="light"] {
+    --sl-color-accent-low: #c0e6f9; /* --pico-text-selection-color (#029ae8 の 25%) を白に重ねた色 */
+    --sl-color-accent: #0172ad; /* --pico-primary */
+    --sl-color-accent-high: #015887; /* --pico-primary-hover */
+
+    --sl-color-white: #181c25; /* slate-900 */
+    --sl-color-gray-1: #2a3140; /* slate-800 */
+    --sl-color-gray-2: #373c44; /* Pico の本文 */
+    --sl-color-gray-3: #525f7a; /* slate-600 */
+    --sl-color-gray-4: #7b8495;
+    --sl-color-gray-5: #cfd5e2; /* slate-150 */
+    --sl-color-gray-6: #dfe3eb; /* slate-100 */
+    --sl-color-gray-7: #eff1f4; /* slate-50 */
+    --sl-color-black: #fff;
+
+    /* app.css と同じく、地は slate の一番淡い段、上に乗る面 (上の帯・横の目次) は白 */
+    --sl-color-bg: #eff1f4; /* slate-50 */
+    --sl-color-bg-nav: #fff;
+    --sl-color-bg-sidebar: #fff;
+    /* 地が slate-50 なので、コードは白い面に。slate-100 だとリンクの色 (#0172ad) が 4.5:1 に届かない */
+    --sl-color-bg-inline-code: #fff;
+    --sl-color-hairline-light: #dfe3eb;
+    --sl-color-hairline: #cfd5e2; /* slate-150 */
+    --sl-color-hairline-shade: #cfd5e2;
+}
+
+/* 角丸をそろえる */
+.sl-markdown-content img,
+.starlight-aside,
+.sl-markdown-content table,
+.card,
+.sl-link-card {
+    border-radius: var(--dp-radius);
+}
+.sl-markdown-content img {
+    height: auto;
+}
+
+/* 放送の映像が映る画像の下の添え書き (scripts/import-docs.ts が足す) */
+.sl-markdown-content .video-note {
+    margin-top: 0.25rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+}
+
+/* README の画像を並べたところ (scripts/import-docs.ts が表から直したもの) */
+.sl-markdown-content .shots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 1rem;
+}
+.sl-markdown-content .shots > p {
+    margin: 0;
+    font-size: var(--sl-text-sm);
+}
+.sl-markdown-content .shots img {
+    display: block;
+    margin-bottom: 0.25rem;
+}

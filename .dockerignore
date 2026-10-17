@@ -12,3 +12,5 @@ playwright-report
 !.github/aio-entrypoint.ts
 deploy
 docs
+# 文書サイト (GitHub Pages)。イメージには入れない
+site

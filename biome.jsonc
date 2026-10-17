@@ -17,7 +17,18 @@
             "!renovate.json",
             "!agent/Denpa.Agent",
             "!agent/Denpa.Agent.Tests",
-            "!agent/publish"
+            "!agent/publish",
+            // 文書サイト。ビルドの成果物と、scripts/import-docs.ts が docs から書き出すもの
+            // アイコンは static/ の写し (static/ と同じく外す)
+            "!site/public",
+            "!site/src/assets/logo.svg",
+            "!site/dist",
+            "!site/.astro",
+            "!site/src/content/docs",
+            "!site/src/assets/docs",
+            "!site/src/generated",
+            "!site/test-results",
+            "!site/playwright-report"
         ]
     },
     "formatter": {

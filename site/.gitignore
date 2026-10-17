@@ -1,0 +1,7 @@
+# ビルドの成果物と Astro の作業場所
+dist/
+.astro/
+# scripts/import-docs.ts が ../docs と ../README.md から毎回書き出すもの
+src/content/docs/
+src/assets/docs/
+src/generated/
