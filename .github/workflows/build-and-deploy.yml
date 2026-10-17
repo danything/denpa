@@ -19,7 +19,7 @@ on:
       - '.github/workflows/build-and-deploy.yml'
       - '.github/image-tags.sh'
       - '.github/aio.Dockerfile'
-      - '.github/aio-entrypoint.sh'
+      - '.github/aio-entrypoint.ts'
   workflow_dispatch: {}
 
 # この workflow が書き換えるのは deploy/application.yaml だけで、そのパスは上の

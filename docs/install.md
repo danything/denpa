@@ -102,6 +102,16 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 立てたあとの手順は [README](../README.md#3-開く)。うまくいかないときは「チューナー」の画面を見ます。エージェントと
 カードリーダーの状態、スキャンの結果、番組表の集まり具合が出ます。Helm の `TRUSTED_NETWORKS` は `denpa.trustedNetworks` です。
 
+イメージにはシェルがありません (土台は distroless。[development.md](development.md#イメージの土台は-distroless))。
+コンテナの中を見るときは、シェルのあるコンテナを横に付けます。
+
+```sh
+# Docker。名前は docker ps に出るもの (compose なら denpa-denpa-1)。中のファイルは /proc/1/root/ の下
+docker run --rm -it --pid=container:denpa-denpa-1 --network=container:denpa-denpa-1 busybox
+# Kubernetes
+kubectl debug -it deploy/denpa --image=busybox --target=denpa -n denpa
+```
+
 ## 前段 (リバースプロキシ) の後ろに置く
 
 - **前段のアドレスを `TRUSTED_PROXIES` に書きます** (CIDR のカンマ区切り)。無いと接続元がすべて前段になり、

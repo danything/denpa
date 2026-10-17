@@ -11,7 +11,9 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 ## コンテナイメージ `denpa` に入るもの
 
-[Dockerfile](../Dockerfile) の `runtime` 段。土台は Debian 13 (trixie) slim。
+[Dockerfile](../Dockerfile) の `runtime` 段。土台は distroless (`gcr.io/distroless/cc-debian13`。エージェントと同じ)。
+Debian のパッケージ (libva・ドライバなど) は要るファイルだけを写し、そのパッケージの copyright を
+`/usr/share/doc/<パッケージ>/copyright` に置いています。
 
 ### 自前ビルドの ffmpeg と、そこに繋がるもの
 
@@ -28,6 +30,7 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 | libva / libva-drm | VA-API (GPU でエンコードする) | <https://github.com/intel/libva> | MIT |
 | libvpl / libmfx-gen | Intel QSV (GPU でエンコードする) | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT |
 | intel-media-va-driver (iHD) | Intel の VA-API ドライバ | <https://github.com/intel/media-driver> | MIT (一部 BSD) |
+| i965-va-driver・libigdgmm・libdrm・libpciaccess | 古い世代の Intel の VA-API ドライバと、ドライバの依存 | Debian のパッケージ | MIT 系 (パッケージの copyright のとおり) |
 | zlib | ffmpeg の依存 | <https://zlib.net> | zlib |
 | [patches/](../patches) | ffmpeg に当てる直しの置き場 (いまは空。denpa が書いたもの。上流に投げる前提) | — | 当てる先と同じ (ffmpeg は LGPL/GPL) |
 
@@ -47,7 +50,7 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 | 名前 | 何に | 出どころ | ライセンス |
 | --- | --- | --- | --- |
 | Bun (実行バイナリだけ `oven/bun` から写す) | denpa 本体を動かす | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1) |
-| ca-certificates / tzdata | 証明書・時刻 | Debian | MPL-2.0 / パブリックドメイン |
+| 土台 (glibc・libstdc++・zlib・ca-certificates・tzdata) | bun と ffmpeg を動かす・証明書・時刻 | <https://github.com/GoogleContainerTools/distroless> (中身は Debian のパッケージ) | 組み方は Apache-2.0。中身はパッケージごと: glibc は LGPL-2.1+、libstdc++ は GPL-3.0+ (GCC Runtime Library Exception)、zlib は zlib、ca-certificates は MPL-2.0、tzdata はパブリックドメイン |
 
 ## コンテナイメージ `denpa-agent` に入るもの
 

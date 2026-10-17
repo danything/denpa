@@ -105,7 +105,7 @@ CMD ["bun", "scripts/capture-docs.ts"]
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
-# **debian は digest で固定する** (ffmpeg / runtime の2つとも同じもの)。
+# **debian は digest で固定する** (ffmpeg / runtime-libs の2つとも同じもの)。
 # タグ (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
 # その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
@@ -196,22 +196,25 @@ COPY . .
 RUN bun run build
 
 # ---------------------------------------------------------------------------
-# 本番イメージ
+# 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・libstdc++・zlib・ca-certificates・
+# tzdata など要るものだけを置いたもの)。下の `runtime-libs` 段が「土台にもうあるライブラリ」を
+# 見分けるのにも使うので、段に名前を付けておく
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS runtime
-WORKDIR /app
-ENV NODE_ENV=production \
-    TZ=Asia/Tokyo \
-    FFMPEG=/usr/local/bin/ffmpeg \
-    FFPROBE=/usr/local/bin/ffprobe
+FROM gcr.io/distroless/cc-debian13:latest AS distroless
 
-# B-CASカードは触らない。掛かったまま録れたTSの解除はチューナーエージェントに
-# 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
+# ---------------------------------------------------------------------------
+# 本番イメージへ写すライブラリを集める段。**本番イメージにはシェルも apt も無い**ので、
+# ここで Debian のパッケージを入れて ffmpeg を置き、要るファイルだけを /rootfs にまとめる。
+# 土台は ffmpeg 段と同じ digest (どちらも trixie なので、glibc の版は distroless と揃う)
+#
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
 # (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の4つは amd64 だけ**
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
 # i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
+# ---------------------------------------------------------------------------
+FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS runtime-libs
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
       amd64) intel="libvpl2 intel-media-va-driver i965-va-driver libmfx-gen1.2" ;; \
@@ -221,18 +224,83 @@ RUN case "${TARGETARCH}" in \
     apt-get update && \
     apt-get -y --no-install-recommends install \
       libopus0 libx264-164 libdav1d7 \
-      libva2 libva-drm2 $intel \
-      ca-certificates tzdata && \
+      libva2 libva-drm2 $intel && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ffmpeg / ffprobe と、2つが共有する libav* (`ffmpeg` 段の説明)
+COPY --from=ffmpeg /out/bin/ /usr/local/bin/
+COPY --from=ffmpeg /out/lib/ /usr/local/lib/
+
+# /rootfs に写すもの:
+# - ffmpeg / ffprobe / libav* と、それらが繋ぐライブラリ (ldd で辿る)
+# - **dlopen で読むもの** (ldd には出ない): libva のドライバ (dri/ の iHD・i965) と、libvpl が読む
+#   QSV のランタイム (libmfx-gen.so.1.2 と、それがさらに読む libmfx-gen/)。ドライバはディレクトリ
+#   ごと写し、それらが繋ぐライブラリも ldd で辿る
+# **土台 (distroless) にもうあるもの (glibc・libstdc++・zlib など) は写さない** (名前で見分ける)。
+# 写したライブラリのパッケージの記録 (status.d) と copyright も置く — distroless と同じ置き方で、
+# 脆弱性の検査やライセンスの確かめが中身を読めるように。
+# 依存が見つからなければここでビルドを止める (起動してからエンコードで落ちるより早く分かる)
+RUN --mount=type=bind,from=distroless,target=/distroless \
+    shopt -s nullglob && \
+    ffmpeg -hide_banner -version > /dev/null && ffprobe -hide_banner -version > /dev/null && \
+    lib="/usr/lib/$(uname -m)-linux-gnu" && \
+    mkdir -p /rootfs/usr/local/bin /rootfs/usr/local/lib "/rootfs${lib}" /rootfs/var/lib/dpkg/status.d && \
+    cp -a /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /rootfs/usr/local/bin/ && \
+    cp -a /usr/local/lib/lib*.so.* /rootfs/usr/local/lib/ && \
+    targets=(/usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/lib/lib*.so.*) && \
+    owned=() && \
+    for dir in "${lib}/dri" "${lib}/libmfx-gen"; do \
+      [ -d "$dir" ] || continue; \
+      cp -a "$dir" "/rootfs${lib}/"; \
+      targets+=("$dir"/*.so); owned+=("$dir"/*.so); \
+    done && \
+    if [ -e "${lib}/libmfx-gen.so.1.2" ]; then \
+      cp -L "${lib}/libmfx-gen.so.1.2" "/rootfs${lib}/"; \
+      targets+=("${lib}/libmfx-gen.so.1.2"); owned+=("${lib}/libmfx-gen.so.1.2"); \
+    fi && \
+    if ldd "${targets[@]}" | grep 'not found'; then echo "足りないライブラリがあります" >&2; exit 1; fi && \
+    for dep in $(ldd "${targets[@]}" | awk '$2 == "=>" && $3 ~ /^\// { print $3 }' | sort -u); do \
+      name=$(basename "$dep"); \
+      case "$dep" in /usr/local/lib/*) continue ;; esac; \
+      [ -e "/distroless${lib}/${name}" ] && continue; \
+      cp -L "$dep" "/rootfs${lib}/${name}"; \
+      owned+=("$(realpath "$dep")"); \
+    done && \
+    for pkg in $(dpkg -S "${owned[@]}" | cut -d: -f1 | sort -u); do \
+      dpkg -s "$pkg" > "/rootfs/var/lib/dpkg/status.d/${pkg}"; \
+      if [ -f "/usr/share/doc/${pkg}/copyright" ]; then \
+        install -D -m 644 "/usr/share/doc/${pkg}/copyright" "/rootfs/usr/share/doc/${pkg}/copyright"; \
+      fi; \
+    done && \
+    find /rootfs -type f | sort
+
+# ---------------------------------------------------------------------------
+# 本番イメージ
+#
+# **土台は distroless** (上の `distroless` 段)。シェルも apt も coreutils も無い。
+# denpa が子プロセスとして起こすのは ffmpeg / ffprobe だけで、どれもシェルを通さずに起こす
+# (Bun.spawn に引数の配列を渡す)。時刻 (TZ) と証明書は土台の tzdata と ca-certificates を使う。
+# **`latest` (root で動く) を使う。`nonroot` にはしない。** 今までどおり root で動かす
+# (/data や録画の置き場の持ち主と、/dev/dri を開く権限を変えないため)。
+# 中を見たいときはシェルのあるコンテナを横に付ける (docs/development.md)
+# ---------------------------------------------------------------------------
+FROM distroless AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    TZ=Asia/Tokyo \
+    FFMPEG=/usr/local/bin/ffmpeg \
+    FFPROBE=/usr/local/bin/ffprobe
+
+# B-CASカードは触らない。掛かったまま録れたTSの解除はチューナーエージェントに
+# 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
+COPY --from=runtime-libs /rootfs/ /
 
 # bun 本体。SvelteKit(adapter-node) の出力を bun で動かす
 COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
-# ffmpeg / ffprobe と、2つが共有する libav* (`ffmpeg` 段の説明)。
-# ライブラリが欠けていればここでビルドを止める (起動してからエンコードで落ちるより早く分かる)
-COPY --from=ffmpeg /out/bin/ /usr/local/bin/
-COPY --from=ffmpeg /out/lib/ /usr/local/lib/
-RUN ffmpeg -hide_banner -version > /dev/null && ffprobe -hide_banner -version > /dev/null
+# 写したライブラリだけで ffmpeg / ffprobe が起きるかを、本番の中身でも見る (シェルが無いので exec の形で)
+RUN ["/usr/local/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-version"]
+RUN ["/usr/local/bin/ffprobe", "-hide_banner", "-loglevel", "error", "-version"]
 
 # データ放送と字幕を描くブラウザに渡す字 (Denpa Font。上の `denpa-font` 段)
 COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font

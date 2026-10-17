@@ -176,12 +176,22 @@ Intel の QSV (libvpl・libmfx-gen・intel-media-va-driver) は amd64 だけに�
 `docker buildx build --platform linux/arm64 -f agent/Dockerfile .` (amd64 の機械では
 QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
-**エージェントのイメージの土台は distroless** (`gcr.io/distroless/cc-debian13`) で、シェルも apt も
-coreutils もありません。`kubectl exec deploy/tuner-agent -- denpa-agent --tune …` のように
-実行ファイルを直に呼ぶのは今までどおり動きます。コンテナの中を見たいときは、`kubectl debug -it <Pod> --image=busybox --target=tuner-agent`
-のようにシェルのあるコンテナを横に付けます。
-
 エージェントの API に当てる適合テストは `agent/conformance.test.ts` ([app.md](app.md) のテストの表)。
+
+### イメージの土台は distroless
+
+**本体もエージェントも土台は distroless** (`gcr.io/distroless/cc-debian13`) で、シェルも apt も
+coreutils もありません。どちらも今までどおり root で動きます。本体の ffmpeg が使うライブラリ
+(libva・Intel の VA-API ドライバ・QSV のランタイムなど) は、Dockerfile の `runtime-libs` 段で
+Debian のパッケージを入れてから要るファイルだけを写しています (dlopen で読むドライバはディレクトリごと)。
+足りないものが無いかは `.github/image-smoke.sh` が ld.so に依存を解かせて確かめます。
+
+denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しません。シェルで書いていたもの
+(denpa-aio の入口、Helm の prepull) は bun で動かします。実行ファイルを直に呼ぶのは今までどおり動きます
+(`kubectl exec deploy/denpa -- ffmpeg -hide_banner -hwaccels`、`kubectl exec deploy/tuner-agent -- denpa-agent --tune …`)。
+コンテナの中を見たいときは、`kubectl debug -it <Pod> --image=busybox --target=denpa`
+(エージェントは `--target=tuner-agent`。Docker なら `docker run --rm -it --pid=container:<名前> --network=container:<名前> busybox` で、
+中のファイルは `/proc/1/root/` の下) のようにシェルのあるコンテナを横に付けます。
 
 ### 外から持ってくるものは版で固定する
 

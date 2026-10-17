@@ -1,6 +1,7 @@
 {{- if .Values.prepull.enabled }}
 # 新しいイメージを入れ替える前にノードへ引いておくだけの Job (ArgoCD の PreSync)。
-# 理由は values.yaml の prepull。中身は動かさない (/bin/true)
+# 理由は values.yaml の prepull。denpa は起こさない (`bun --version` で終わる。土台は distroless で
+# シェルも /bin/true も無いので、イメージにある bun を使う)
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -21,5 +22,5 @@ spec:
           image: "{{ .Values.image.denpa.repository }}:{{ .Values.image.denpa.tag }}"
           # 必ず取りに行かせる。IfNotPresent だと古いものが残っているかぎり引かない
           imagePullPolicy: Always
-          command: ['/bin/true']
+          command: ['/usr/local/bin/bun', '--version']
 {{- end }}
