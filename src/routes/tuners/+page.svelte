@@ -607,13 +607,16 @@
                                             <!-- 足すための空の行。名前が空なら送っても足さない (サーバの `new`) -->
                                             <input type="hidden" name="new" value={index} />
                                         {:else if deleting.armed === index}
-                                            <!-- 2 回目。この行を除いて保存する -->
+                                            <!--
+                                                2 回目。この行を除いて保存する。構えを下ろすのは送り出したあと —
+                                                押した場で下ろすと、送る前にこのボタンが消えて何も送られない
+                                            -->
                                             <button
                                                 type="submit"
                                                 name="delete"
                                                 value={index}
                                                 class="xs danger"
-                                                onclick={() => deleting.fire()}
+                                                onclick={() => setTimeout(() => deleting.fire())}
                                                 data-testid="tuner-delete-confirm"
                                             >
                                                 確定
