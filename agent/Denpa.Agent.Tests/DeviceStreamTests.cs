@@ -257,4 +257,32 @@ public class DeviceStreamPipedTests
         await Assert.That(await second.WaitAsync(TimeSpan.FromSeconds(5), cancel)).IsEqualTo(3);
         await Assert.That(buffer[..3]).IsEquivalentTo([(byte)0x47, (byte)0x02, (byte)0x03]);
     }
+
+    /*
+     * **止めたら、待っている読む側はすぐ起きる** (次に起きる 200ms を待たない)。200ms ごとに起きて
+     * 印を見るだけだと、止めてから戻るまでに最大 200ms 掛かり、混んだ CI では 500ms を超えていた
+     * (Px4TunerTests の「待っている読む側は畳めと言われたらすぐ抜ける」が落ちた)
+     */
+    [Test]
+    public async Task 止めたら_待っている読む側はすぐ起きる(CancellationToken cancel)
+    {
+        var pipe = new Pipe(new System.IO.Pipelines.PipeOptions(readerScheduler: PipeScheduler.Inline, writerScheduler: PipeScheduler.Inline, useSynchronizationContext: false));
+        using var stream = new DeviceStream(pipe.Reader);
+        long stoppedAt = 0;
+        var reading = Task.Factory.StartNew(() =>
+        {
+            var read = stream.Read(new byte[188], 0, 188);
+            return (read, Stopwatch.GetElapsedTime(Volatile.Read(ref stoppedAt)));
+        }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        while (stream.Readers == 0) await Task.Delay(5, cancel);
+        // 待ちに入ってすぐ止める (200ms ごとに起きるだけなら、次に起きるまで 180ms ほど掛かる)
+        await Task.Delay(20, cancel);
+        Volatile.Write(ref stoppedAt, Stopwatch.GetTimestamp());
+        stream.Stop();
+        var (read, left) = await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
+
+        await Assert.That(read).IsEqualTo(0);
+        await Assert.That(left).IsLessThan(TimeSpan.FromMilliseconds(100));
+    }
 }
