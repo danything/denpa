@@ -4,7 +4,7 @@ import { takeOverSignals } from './runtime';
 /**
  * 止まれの合図を誰が受けるか。
  *
- * adapter-node は SIGTERM を受けたその場で listen を閉じる。録画が終わるまで
+ * adapter は SIGTERM を受けたその場で listen を閉じる。録画が終わるまで
  * 居座る denpa では、そのせいで「Pod は生きているのに画面だけ落ちる」状態が
  * 実機で34分続いた。合図はこちらで受け取り、閉じるのは止まる直前だけにする。
  */
@@ -57,7 +57,7 @@ describe('止まれの合図の受け取り', () => {
     });
 
     /*
-     * **adapter-node が登録するのはこちらより後。** `build/index.js` のいちばん
+     * **adapter が登録するのはこちらより後。** `build/index.js` のいちばん
      * 最後で `process.on('SIGTERM', graceful_shutdown)` を入れるのに対し、
      * こちらはアプリの読み込み中に走る。1度きりの引き取りだと**外すものがまだ
      * 無い**ので、両方が登録された状態になる。実機ではこれで、録画が続いている
@@ -70,7 +70,7 @@ describe('止まれの合図の受け取り', () => {
         // 1度目。まだ誰もいないので 0 件
         expect(takeOverSignals((signal) => received.push(signal))).toBe(0);
 
-        // ここで adapter-node が入ってくる
+        // ここで adapter が入ってくる
         let closed = 0;
         process.on('SIGTERM', () => {
             closed += 1;

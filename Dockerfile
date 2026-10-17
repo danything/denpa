@@ -296,7 +296,7 @@ ENV NODE_ENV=production \
 # 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
 COPY --from=runtime-libs /rootfs/ /
 
-# bun 本体。SvelteKit(adapter-node) の出力を bun で動かす
+# bun 本体。SvelteKit (adapter-bun) の出力を bun で動かす
 COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
 # 写したライブラリだけで ffmpeg / ffprobe が起きるかを、本番の中身でも見る (シェルが無いので exec の形で)
@@ -311,13 +311,13 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 
 # **node_modules は載せない。**
 #
-# adapter-node の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
+# adapter-bun の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
 # bun の組み込み (`bun:sqlite`) だけ。実際に build/ と server.js だけを置いた
 # ところで起動するのを確かめてある。載せていた頃は playwright も vite も
 # typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
 #
 # 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
-# `dependencies` に足すと adapter-node がそれを外に出すので、ここで転ぶ。
+# `dependencies` に足すと adapter-bun がそれを外に出すので、ここで転ぶ。
 # 借りものが使う4つを devDependencies に置いてあるのはそのため
 COPY --from=build /app/build ./build
 COPY --from=build /app/package.json ./package.json

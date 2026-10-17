@@ -265,6 +265,9 @@ function stop(): void {
     started = false;
 }
 
+/** 入口 (`server.js`) が見る名前。あちらと揃えること */
+const TAKE_OVER = '__denpaTakeOverSignals';
+
 /**
  * Pod の入れ替えなどで止められたときの後始末。
  *
@@ -297,21 +300,24 @@ function installShutdownHooks(): void {
     const take = () => takeOverSignals(onSignal);
     take();
     /*
-     * **もう一度、あとから引き取り直す。** adapter-node が後始末を登録するのは
+     * **もう一度、あとから引き取り直す。** adapter-bun が後始末を登録するのは
      * `build/index.js` の**いちばん最後**で、こちら (`hooks.server.ts`) はその手前なので、
      * 最初の引き取りでは外す相手がまだいない (外す理由は `takeOverSignals`)。
-     * `setImmediate` なら index.js の残りが走り終えたあとになる。
+     * 入口の `server.js` が `build/index.js` を読み終えたところで呼ぶ。
+     * `setImmediate` では足りない — adapter はアプリの初期化を `await` してから登録するので、
+     * 先に走ることがありうる。
      */
-    setImmediate(() => {
+    (globalThis as Record<string, unknown>)[TAKE_OVER] = (): number => {
         const taken = take();
         if (taken > 0) console.log(`[boot] 止まれの合図を引き取りました (${taken} 件)`);
-    });
+        return taken;
+    };
 }
 
 /**
  * 止まれの合図を**こちらで受け取る**。先に入っていた後始末は外す。
  *
- * 外す相手は adapter-node で、SIGTERM を受けた**その場で listen を閉じる**。
+ * 外す相手は adapter (adapter-bun。前は adapter-node) で、SIGTERM を受けた**その場で listen を閉じる**。
  * 両方残すと、録画が終わるまで居座っている間、プロセスは生きているのにポートだけ
  * 閉じて画面がどこからも開けなかった (実機で34分。`/proc/net/tcp` に listen が
  * 1つも無く、当時の前段 (Traefik) は「no available server」)。

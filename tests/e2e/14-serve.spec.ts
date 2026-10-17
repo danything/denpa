@@ -48,8 +48,8 @@ test.describe('入る方法を何も設定していないとき', () => {
 
 test.describe('接続元の住所', () => {
     /*
-     * server.js の中継は、本当の接続元を `x-denpa-remote` に**上書きで**入れて内側へ渡す
-     * (adapter-node は常にそれを読む)。外から同じ名前を付けて来ても消えるので、
+     * 入口の server.js は、本当の接続元を `x-denpa-remote` に**上書きで**入れて adapter へ渡す
+     * (adapter は常にそれを読む)。外から同じ名前を付けて来ても消えるので、
      * ヘッダを書くだけで信頼したネットワークを名乗ることはできない
      */
     test('外から x-denpa-remote を付けても、信頼したネットワークは名乗れない', async ({ stack }) => {

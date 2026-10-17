@@ -18,9 +18,8 @@
 理由を本文に書いて返す。[下記](#ログイン方法が無ければ全部断る))。全部開けたいなら
 `TRUSTED_NETWORKS=0.0.0.0/0` です ([公開時の注意](#ネットワークの中なら何も聞かない))。
 
-**`/api/live/socket` だけは前段の `Bun.serve` が受けます** (`server.js`)。bun の
-`node:http` では WebSocket の握手ができないためで、SvelteKit の `hooks.server.ts` に
-届かず、ここに書いた守り方は効きません。
+**`/api/live/socket` だけは入口の `server.js` が SvelteKit の手前で受けます。** SvelteKit の
+仕組みでは WebSocket の握手を扱えないためで、`hooks.server.ts` に届かず、ここに書いた守り方は効きません。
 
 **ブラウザは WebSocket の握手に `Authorization` を付けてくれない**ので、画面が先に
 `POST /api/live/ticket` で使い捨てのチケットを取り、URL に付けて繋ぎます。チケットの発行は
@@ -216,7 +215,7 @@ TRUSTED_PROXIES=172.16.0.0/12
   クラスタの中の Pod は `X-Forwarded-For` を付けて denpa に直に来れば好きな接続元を名乗れます。
   クラスタの中を信じられないなら、前段のアドレスだけに絞ってください
 
-決めたアドレスは内側の adapter-node へ `x-denpa-remote` で渡します (外から同じ名前で付けて
+決めたアドレスは adapter-bun へ `x-denpa-remote` で渡します (外から同じ名前で付けて
 来ても上書きで消えます)。アドレスを読めなかったときは通しません。
 
 **`X-Forwarded-Proto` は前段かどうかを問わず読みます。** 付けられて変わるのは、付けた本人に

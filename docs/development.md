@@ -63,7 +63,7 @@ ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、貼るときに 1120
 
 - ファイルの中は順番 (`fullyParallel: false`)。前のテストが作った予約や録画を次が当てにしてよい
 - ファイルをまたいでは当てにできない。実体のある録画が要るテストは `recordOne()` で自分のぶんを録る
-- アプリは開発サーバではなく組んだもの (`bun run build` → `adapter-node`) をワーカーの数だけ
+- アプリは開発サーバではなく組んだもの (`bun run build` → `adapter-bun`) をワーカーの数だけ
   動かす。開発サーバを4つ立てるより軽く、本番と同じ出力を試せる
 - API へ直接投げるときは `Origin` を付ける。SvelteKit は Origin の無いフォーム形式の POST を
   別サイトからの送信として断る (3 からは Content-Type の無い POST/PUT/PATCH/DELETE も)。

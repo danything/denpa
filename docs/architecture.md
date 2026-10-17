@@ -36,8 +36,9 @@ TSは追記で開き、次の起動で `recoverOrphanedRecordings` が続きか�
 
 **待っている間も画面は開けます。** ここは2箇所で落ちていました。
 
-1. **adapter-node が SIGTERM を受けたその場で listen を閉じる。** 居座っている間、
-   Pod の中からも `127.0.0.1:3000` が拒否されていました。止まれの合図は
+1. **adapter が SIGTERM を受けたその場で listen を閉じる。** 居座っている間、
+   Pod の中からも `127.0.0.1:3000` が拒否されていました (adapter-node の頃。adapter-bun も
+   `server.stop()` で同じことをする)。止まれの合図は
    `takeOverSignals` でこちらが受け取り、先に入っていた後始末は外します。
    閉じるのは本当に止まる直前 (`process.exit`) だけです。
 
@@ -47,7 +48,7 @@ TSは追記で開き、次の起動で `recoverOrphanedRecordings` が続きか�
    登録され、プロセスは生きたままポートだけ閉じます。実機で
    `/proc/net/tcp` に listen が1つも無く、前段が「no available server」を
    返しているのに、番組表は集まり続けていました。
-   `setImmediate` でもう一度引き取り直します。
+   入口の `server.js` が `build/index.js` を読み終えたところで、もう一度引き取らせます。
 
    2度目の合図でも落ちないようにします。`once` で受けていた頃は、1度目で
    自分の後始末が外れて誰も聞いていない状態になり、デプロイがもう一度走ると
