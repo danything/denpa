@@ -837,7 +837,7 @@ async function motionShots(browser: Browser): Promise<void> {
             phone,
             'tabbar',
             async () => {
-                for (const to of ['guide', 'settings', 'home']) {
+                for (const to of ['guide', 'search', 'home']) {
                     await phone.getByTestId(`tab-${to}`).click();
                     await phone.waitForTimeout(1300);
                 }
