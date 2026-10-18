@@ -4,6 +4,8 @@
  * 単体テストで見るために分けてある (`ambient.test.ts`)
  */
 
+import { boxAverage } from '../../raw/downscale';
+
 /** 端末ごとに覚える鍵 (`keep.ts`)。バックグラウンド再生・速さと同じ置き場 */
 export const AMBIENT_KEY = 'player-ambient';
 
@@ -44,6 +46,42 @@ export function frameDelta(a: ArrayLike<number>, b: ArrayLike<number>): number {
  * 1枚なので、ゆっくり変わる色もいずれは追いつく
  */
 export const STILL = 2;
+
+/**
+ * **色の元にする粗い格子** (横 4 x 縦 3)。写した 32x18 を、この大きさに面積で平均してから光にする
+ * (`coarse`)。32x18 の外周の1マスから色を取っていた頃は、外周の帯 (縦の 1/18 ほど) を何かが横切るたびに
+ * その辺の色が変わり、1 秒に 5 回の入れ替えでちらついた。格子の1マスは枠の 1/4 x 1/3 で、縁の色を
+ * 強めに映しつつ (縁に近いマスほど縁の光に効く)、中の動きは広い面積に薄まる。8x5・6x4 も試したが、
+ * 動く四角が横切る偽の放送で光の色の揺れが 4x3 の 1.5〜2 倍あった (`ambient.test.ts`)
+ */
+export const GRID = { width: 4, height: 3 } as const;
+
+/** 写した 32x18 (`GLANCE`) を格子 (`GRID`) に縮める */
+export function coarse(pixels: Uint8ClampedArray): Uint8ClampedArray<ArrayBuffer> {
+    return boxAverage(pixels, GLANCE.width, GLANCE.height, GRID.width, GRID.height);
+}
+
+/**
+ * 色を時間でならす時定数 (ms)。**250ms — 写す間隔 (200ms) と同じくらい。** 入れ替えの 200ms と合わせても、
+ * 新しい色の 9 割まで 0.6 秒ほどで追いつく
+ */
+export const SETTLE = 250;
+
+/** **場面が変わった** と見なす違い (`frameDelta`、0〜255)。これを超えたらならさずに、すぐ新しい色にする */
+export const CUT = 40;
+
+/**
+ * **色を時間でならす。** 前の色 (`prev`) を、写した色 (`next`) へ、経った時間 (`dt` ms) に応じて寄せる
+ * (時定数 `SETTLE` の指数移動平均)。場面が変わったら (`CUT`) ならさずに `next` にする — 切り替わりで遅れない
+ */
+export function follow(prev: Float32Array | null, next: Uint8ClampedArray, dt: number): Float32Array {
+    if (prev === null || prev.length !== next.length || frameDelta(prev, next) >= CUT)
+        return Float32Array.from(next);
+    const weight = 1 - Math.exp(-Math.max(0, dt) / SETTLE);
+    const out = new Float32Array(next.length);
+    for (let i = 0; i < next.length; i++) out[i] = prev[i]! + (next[i]! - prev[i]!) * weight;
+    return out;
+}
 
 /**
  * **ただし、どこか1画素でもこれ以上変わったら入れ替える** (0〜255)。字幕が出たなど一部だけが大きく変わると、

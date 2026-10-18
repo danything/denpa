@@ -2,14 +2,17 @@
     import { untrack } from 'svelte';
     import {
         changed,
+        coarse,
         EVERY,
         ease,
         FADE,
         FADE_STEPS,
         farthest,
+        follow,
         frameDelta,
         GLANCE,
         type GlowLayout,
+        GRID,
         glowLayout,
         glowPixels,
         plan,
@@ -43,9 +46,9 @@
      * - **写すのは `EVERY` (200ms) ごと、1秒に5回。** 縮めるのは写す側 (`<video>` は worker、canvas に
      *   描いているときはその worker) で、画面の側で元の大きさの画素を読むことは無い
      * - 色は、枠の幅を 96 画素とした小さな canvas の中で作り (`ambient.ts` の `glowLayout`・`glowPixels`)、
-     *   CSS で引き伸ばして見せる。色はいちばん近い枠の縁の色を強くぼかしたもの、濃さは枠からの距離で決める。
+     *   CSS で引き伸ばして見せる。色は**写した1枚を横 4 x 縦 3 の格子に面積で平均したもの** (`coarse`) の、いちばん近い縁の所の色。濃さは枠からの距離で決める。
      *   **CSS の `filter: blur` は使わない** — ぼかしが画面の大きさになり、GPU の無い端末では重かった
-     * - **前の色から次の色へ `FADE` (200ms) かけて 4 段で入れ替える** (`ease`)。写した1枚がそのまま次の色になる。
+     * - **前の色から次の色へ `FADE` (200ms) かけて 4 段で入れ替える** (`ease`)。色は時定数 250ms でならし (`follow`)、場面が変わったときだけすぐ切り替える。
      *   CSS で透明度を動かすと毎フレーム合成し直すので、段は canvas に描く
      * - **縦に積んで操作バーを映像の下に出しているとき (`data-under`)** は、操作バーの段にも色を敷く。
      *   枠の黒い地は映像の所だけにし、操作バーは薄い暗幕 (`ControlBar`) の上に載る
@@ -106,8 +109,10 @@
     /** ぼかし終えた前の1枚と次の1枚 (画面に出さない canvas)。入れ替えの間は2枚を重ねて描く */
     let shown: HTMLCanvasElement | null = null;
     let coming: HTMLCanvasElement | null = null;
-    /** 最後に写した色 (32x18 の RGBA)。置き場やテーマが変わったら、これから作り直す */
+    /** いまの色 (格子 `GRID` の RGBA。時間でならしたもの)。置き場やテーマが変わったら、これから作り直す */
     let colors: Float32Array | null = null;
+    /** 最後に写した時刻 (`performance.now`)。ならす重みを、経った時間で決める */
+    let lastAt: number | null = null;
     let fading: ReturnType<typeof setInterval> | undefined;
 
     function scratch(): HTMLCanvasElement {
@@ -123,7 +128,7 @@
         if (context === null) return;
         const frame = Uint8ClampedArray.from(colors);
         toneFrame(frame, dark ? 'dark' : 'light', WASH_LUMINANCE);
-        const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
+        const pixels = glowPixels(frame, GRID.width, GRID.height, at);
         context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
     }
 
@@ -167,10 +172,14 @@
         const pixels = framePixels(bitmap);
         bitmap.close();
         if (pixels === null) return;
-        // 最後に入れ替えた1枚との違い。小さければ入れ替えない (`ambient.ts` の `changed`)
-        delta = colors === null ? null : frameDelta(colors, pixels);
-        if (colors !== null && !changed(colors, pixels)) return;
-        colors = Float32Array.from(pixels);
+        // 粗い格子に平均し (`coarse`)、時間でならす (`follow`。場面が変わったらすぐ)
+        const now = performance.now();
+        const next = follow(colors, coarse(pixels), lastAt === null ? EVERY : now - lastAt);
+        lastAt = now;
+        // 最後に入れ替えた色との違い。小さければ入れ替えない (`ambient.ts` の `changed`)
+        delta = colors === null ? null : frameDelta(colors, next);
+        if (colors !== null && !changed(colors, next)) return;
+        colors = next;
         if (layout === null) return;
         clearInterval(fading);
         coming ??= scratch();
@@ -242,6 +251,7 @@
         lit = false;
         clearInterval(fading);
         colors = null;
+        lastAt = null;
         shown = null;
         coming = null;
         paint(0);
