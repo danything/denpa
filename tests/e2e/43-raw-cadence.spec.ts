@@ -74,35 +74,53 @@ async function instrument(worker: Worker): Promise<void> {
 
 interface Cadence {
     vsyncs: number;
+    /** 画面の requestAnimationFrame が来なかった回の数 (rAF の間隔から割り戻す) */
+    missed: number;
     draws: number;
     repeats: number;
     skips: number;
     /** 描いた間隔 (ms) */
     interval: { mean: number; sd: number; min: number; max: number };
-    /** 画面の切り替わりごとに進んだフィールドの数の度数 (0 = 重なり、2 以上 = 飛び) */
+    /** rAF ごとに進んだフィールドの数の度数 (rAF が来なかった回のぶんも含む) */
     steps: Record<string, number>;
 }
 
-/** 画面の切り替わりごとに出ていたフィールドを並べ、重なり・飛びを数える */
+/**
+ * 画面の切り替わりごとに出ていたフィールドを並べ、重なり・飛びを数える。
+ *
+ * **rAF が来なかった回のぶん進むのは正しい。** CI はほかのスペック (エンコードなど) と並んで混み、
+ * 画面の rAF が 2.5 秒 (150 回) のうち 20〜70 回来ないことがある。そのあいだもフィールドは時刻どおりに
+ * 進むので、前の rAF からの間隔を rAF の1回ぶんの間隔で割った回数ぶん進むのを正しいとし、
+ * それより少なければ重なり、多ければ飛びと数える
+ */
 function cadence(draws: Draw[], vsyncs: number[]): Cadence {
     const order = new Map<number, number>();
     for (const draw of draws) if (!order.has(draw.upload)) order.set(draw.upload, order.size);
     // 上が先のコマ (偽の放送はトップファースト)。上 = 0、下 = 1
     const id = (draw: Draw) => 2 * order.get(draw.upload)! + (draw.field === 1 ? 1 : 0);
-    const seen: number[] = [];
+    const seen: { at: number; field: number }[] = [];
     let at = 0;
     for (const vsync of vsyncs) {
         while (at < draws.length && draws[at]!.at < vsync) at++;
-        if (at > 0) seen.push(id(draws[at - 1]!));
+        if (at > 0) seen.push({ at: vsync, field: id(draws[at - 1]!) });
     }
+    const periods = vsyncs
+        .slice(1)
+        .map((vsync, i) => vsync - vsyncs[i]!)
+        .sort((a, b) => a - b);
+    // 半分より多く来ないこともあるので、中央値ではなく短い側 (下から 1 割) を1回ぶんとする
+    const period = periods[Math.floor(periods.length / 10)] ?? 1000 / 60;
     const steps: Record<string, number> = {};
+    let missed = 0;
     let repeats = 0;
     let skips = 0;
     for (let i = 1; i < seen.length; i++) {
-        const step = seen[i]! - seen[i - 1]!;
+        const expected = Math.max(1, Math.round((seen[i]!.at - seen[i - 1]!.at) / period));
+        missed += expected - 1;
+        const step = seen[i]!.field - seen[i - 1]!.field;
         steps[step] = (steps[step] ?? 0) + 1;
-        if (step === 0) repeats++;
-        else if (step > 1) skips++;
+        if (step < expected) repeats++;
+        else if (step > expected) skips++;
     }
     const gaps = draws.slice(1).map((draw, i) => draw.at - draws[i]!.at);
     const mean = gaps.reduce((sum, gap) => sum + gap, 0) / Math.max(1, gaps.length);
@@ -110,6 +128,7 @@ function cadence(draws: Draw[], vsyncs: number[]): Cadence {
     const round = (value: number) => Math.round(value * 100) / 100;
     return {
         vsyncs: vsyncs.length,
+        missed,
         draws: draws.length,
         repeats,
         skips,
@@ -210,7 +229,8 @@ test.describe('元の TS を出す間合い', () => {
         expect(result.draws).toBeGreaterThan(60);
         /*
          * 飛びと重なりは、ほぼ無い。手元 (Xvfb の上で headed) で 150 回の切り替わりのうち、直す前は
-         * 重なり 9・飛び 8、直した後は 0・0 (ヘッドレスで 2・1)。CI は混むので少し余裕を持たせる
+         * 重なり 9・飛び 8、直した後は 0・0 (ヘッドレスで 2・1)。CI は混むので少し余裕を持たせる。
+         * rAF が来なかった回 (`missed`) のぶん進んだのは飛びに数えない (`cadence`)
          */
         expect(result.repeats + result.skips).toBeLessThanOrEqual(8);
     });
