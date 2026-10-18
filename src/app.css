@@ -1084,7 +1084,7 @@ button[aria-busy="true"]::after {
     position-try-fallbacks: flip-block;
 }
 /*
- * 開いているときだけ並べる。閉じているときはブラウザの `display: none` のまま。
+ * 開いているときだけ flex にする。閉じているときはブラウザの `display: none` のまま。
  *
  * **引き金の側から、少し縮んだ透明な姿で開き (`--dp-duration-slow`)、閉じるときは短く (`--dp-duration`) 引っ込む。**
  * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
@@ -1092,6 +1092,9 @@ button[aria-busy="true"]::after {
  * 動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさ (`offsetHeight`) は変わらない
  */
 .menu {
+    /* 並べる向きは閉じている間も持たせる。開いているときだけにすると、閉じる動きの間 (`display` はまだ flex) に
+     * 横並びへ戻り、一瞬横向きのメニューが見えた */
+    flex-direction: column;
     opacity: 0;
     transform: scale(0.96);
     transform-origin: top left;
@@ -1112,7 +1115,6 @@ button[aria-busy="true"]::after {
 }
 .menu:popover-open {
     display: flex;
-    flex-direction: column;
     opacity: 1;
     transform: none;
     transition-duration: var(--dp-duration-slow);
