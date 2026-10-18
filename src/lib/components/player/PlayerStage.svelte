@@ -371,6 +371,16 @@
         aspect-ratio: 16 / 9;
     }
     /*
+     * **アンビエントモードで色を敷いている間 (`AmbientGlow`) は、操作バーの段の黒を外す。** 色は映像の下の端から
+     * 始まり、操作バーの下にも流れる。黒いのは映像の段 (`::before`) だけ。操作バーの暗幕は `ControlBar`
+     */
+    :global(html[data-ambient]) .stage[data-under] {
+        background: transparent;
+    }
+    :global(html[data-ambient]) .stage[data-under]::before {
+        background: #000;
+    }
+    /*
      * **終わりの線まで書く。** 絶対配置の子は、終わりを `auto` にすると格子の端
      * (枠の内側いっぱい) まで伸びる — `1 / 1` だけでは操作バーの段まで覆ってしまう
      */

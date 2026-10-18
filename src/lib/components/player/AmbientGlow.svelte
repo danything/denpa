@@ -2,6 +2,9 @@
     import { untrack } from 'svelte';
     import {
         EVERY,
+        ease,
+        FADE,
+        FADE_STEPS,
         GLANCE,
         type GlowLayout,
         glowLayout,
@@ -10,6 +13,8 @@
         type Rect,
         reach,
         region,
+        SMOOTH,
+        smoothFrame,
         strips,
         toneFrame,
         WASH_LUMINANCE,
@@ -34,13 +39,17 @@
      *
      * ## 作り
      *
-     * - 写すのは `EVERY` (200ms) ごと、1秒に5回まで。**縮めるのは写す側** (`<video>` は worker、canvas に
+     * - **写すのは `EVERY` (1秒) ごと。** 縮めるのは写す側 (`<video>` は worker、canvas に
      *   描いているときはその worker) で、画面の側で元の大きさの画素を読むことは無い
      * - 色は、枠の幅を 96 画素とした小さな canvas の中で作り (`ambient.ts` の `glowLayout`・`glowPixels`)、
      *   CSS で引き伸ばして見せる。色はいちばん近い枠の縁の色を強くぼかしたもの、濃さは枠からの距離で決める。
      *   **CSS の `filter: blur` は使わない** — ぼかしが画面の大きさになり、GPU の無い端末では重かった
-     * - **前の1枚から次の1枚へ、`EVERY` の長さで 4 段に分けて入れ替える** (`FADE_STEP` ごと)。
-     *   CSS で透明度を動かすと、その間は毎フレーム合成し直すことになる
+     * - **色は時間でならす** (`smoothFrame`)。写した1枚は 4 割だけ取り込み、前までの色を 6 割残す。
+     *   そのうえで **前の色から次の色へ `FADE` (1.2 秒) かけて 12 段で入れ替える** (`ease`。始めと終わりがゆっくり)。
+     *   場面が変わっても跳ばず、2〜3 秒かけて新しい色に寄る。CSS で透明度を動かすと毎フレーム合成し直すので、
+     *   段は canvas に描く
+     * - **縦に積んで操作バーを映像の下に出しているとき (`data-under`)** は、操作バーの段にも色を敷く。
+     *   枠の黒い地は映像の所だけにし、操作バーは薄い暗幕 (`ControlBar`) の上に載る
      * - **色は枠に重ならない4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ1枚を切り出す。
      *   枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろまで合成し直すことになる
      * - 範囲は `<main>` の縦の範囲と窓の横幅で切る (`region`)。ページの巻き取れる長さを増やさない
@@ -67,8 +76,8 @@
         testid: string;
     } = $props();
 
-    /** 入れ替えの1段の長さ (ms)。`EVERY` を4段に分ける */
-    const FADE_STEP = EVERY / 4;
+    /** 入れ替えの1段の長さ (ms) */
+    const FADE_STEP = FADE / FADE_STEPS;
 
     const BANDS = [0, 1, 2, 3];
     let box = $state<HTMLDivElement | null>(null);
@@ -95,8 +104,8 @@
     /** ぼかし終えた前の1枚と次の1枚 (画面に出さない canvas)。入れ替えの間は2枚を重ねて描く */
     let shown: HTMLCanvasElement | null = null;
     let coming: HTMLCanvasElement | null = null;
-    /** 最後に写した1枚。置き場が変わったら、これからぼかし直す */
-    let last: ImageBitmap | null = null;
+    /** 時間でならした色 (32x18 の RGBA。`smoothFrame`)。置き場やテーマが変わったら、これから作り直す */
+    let smooth: Float32Array | null = null;
     let fading: ReturnType<typeof setInterval> | undefined;
 
     function scratch(): HTMLCanvasElement {
@@ -106,11 +115,11 @@
         return canvas;
     }
 
-    /** 写した1枚から光を作って描く (`glowPixels`) */
-    function compose(target: HTMLCanvasElement, bitmap: ImageBitmap, at: GlowLayout): void {
+    /** ならした色から、敷く色を作って描く (`toneFrame`・`glowPixels`) */
+    function compose(target: HTMLCanvasElement, colors: Float32Array, at: GlowLayout): void {
         const context = target.getContext('2d');
-        const frame = framePixels(bitmap);
-        if (context === null || frame === null) return;
+        if (context === null) return;
+        const frame = Uint8ClampedArray.from(colors);
         toneFrame(frame, dark ? 'dark' : 'light', WASH_LUMINANCE[stacked ? 'stacked' : 'wide']);
         const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
         context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
@@ -149,10 +158,15 @@
         }
     }
 
-    /** 次の1枚を出す。`EVERY` の長さで前の1枚から入れ替える (動かさない設定ではすぐ) */
+    /**
+     * 写した1枚を取り込み (`smoothFrame`)、ならした色へ `FADE` の長さでゆっくり入れ替える
+     * (動かさない設定ではすぐ)。場面が変わっても跳ばない — 取り込むのは 4 割で、入れ替えも長い
+     */
     function show(bitmap: ImageBitmap): void {
-        last?.close();
-        last = bitmap;
+        const pixels = framePixels(bitmap);
+        bitmap.close();
+        if (pixels === null) return;
+        smooth = smoothFrame(smooth, pixels, SMOOTH);
         if (layout === null) return;
         clearInterval(fading);
         coming ??= scratch();
@@ -164,7 +178,7 @@
             context?.clearRect(0, 0, layout.width, layout.height);
             context?.drawImage(painted, 0, 0);
         }
-        compose(coming, bitmap, layout);
+        compose(coming, smooth, layout);
         const swap = () => {
             [shown, coming] = [coming, shown];
             paint(0);
@@ -174,13 +188,13 @@
             return;
         }
         let step = 1;
-        paint(step / 4);
+        paint(ease(step / FADE_STEPS));
         fading = setInterval(() => {
             step++;
-            if (step >= 4) {
+            if (step >= FADE_STEPS) {
                 clearInterval(fading);
                 swap();
-            } else paint(step / 4);
+            } else paint(ease(step / FADE_STEPS));
         }, FADE_STEP);
     }
 
@@ -223,8 +237,7 @@
         if (now !== 'off') return;
         lit = false;
         clearInterval(fading);
-        last?.close();
-        last = null;
+        smooth = null;
         shown = null;
         coming = null;
         paint(0);
@@ -234,20 +247,16 @@
     $effect(() => {
         void dark;
         untrack(() => {
-            if (last === null || layout === null) return;
+            if (smooth === null || layout === null) return;
             clearInterval(fading);
             coming = null;
             shown = scratch();
-            compose(shown, last, layout);
+            compose(shown, smooth, layout);
             paint(0);
         });
     });
 
-    $effect(() => () => {
-        clearInterval(fading);
-        last?.close();
-        last = null;
-    });
+    $effect(() => () => clearInterval(fading));
 
     /**
      * **範囲と帯の置き場を、枠に合わせて決める。** 枠・`<main>`・右の列の大きさが変わったとき、
@@ -260,7 +269,14 @@
         const main = target.closest('main') ?? document.documentElement;
         const frame = target.closest<HTMLElement>('[data-player-layout]');
         const measure = () => {
-            const s = target.getBoundingClientRect();
+            const rect = target.getBoundingClientRect();
+            /*
+             * **操作バーを映像の下に出している間 (`data-under`) は、映像の所だけを枠とみなす。** 色は映像の
+             * 下の端から敷き、操作バーの下にも流す (操作バーは色の上に透けて載る。下の style)
+             */
+            const s = target.hasAttribute('data-under')
+                ? new DOMRect(rect.left, rect.top, rect.width, (rect.width * 9) / 16)
+                : rect;
             const m = main.getBoundingClientRect();
             // 横は窓の幅いっぱい (二段組では右の列の下にも敷き、列が上のほうで透かす)。縦は `<main>` の中
             const bounds: Rect = { left: 0, top: m.top, right: document.documentElement.clientWidth, bottom: m.bottom };
@@ -318,9 +334,9 @@
                 clearInterval(fading);
                 coming = null;
                 shown = null;
-                if (last !== null) {
+                if (smooth !== null) {
                     shown = scratch();
-                    compose(shown, last, next);
+                    compose(shown, smooth, next);
                 }
                 paint(0);
             }

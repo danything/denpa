@@ -131,6 +131,16 @@
         padding: 0.375rem;
         background: none;
     }
+    /*
+     * アンビエントモードで色を敷いている間は、操作バーの段が色の上に透ける (`PlayerStage`)。字とアイコンは白いので、
+     * 薄い暗幕を敷いて読めるようにする。明るいテーマの淡い色 (輝度 0.75 から) の上でも、白い字が 4.5 以上になる濃さ
+     */
+    :global(html[data-ambient] .stage[data-under]) > .bottom {
+        background: rgb(0 0 0 / 0.3);
+    }
+    :global(html[data-ambient]:not([data-theme='dark']) .stage[data-under]) > .bottom {
+        background: rgb(0 0 0 / 0.6);
+    }
     :global(.stage[data-under]) > .bottom.away {
         pointer-events: auto;
         opacity: 1;
