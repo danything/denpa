@@ -11,7 +11,8 @@
         "36-bml",
         "37-playback",
         "40-watch-compat",
-        "42-copy-never"
+        "42-copy-never",
+        "45-buttons"
     ],
     "2": [
         "03-recording",
@@ -33,7 +34,8 @@
         "20-onair",
         "21-onair-fallback",
         "22-oidc",
-        "34-live-yield"
+        "34-live-yield",
+        "46-home-timeline"
     ],
     "4": ["01-dashboard", "02-reservation", "11-rule-edit", "15-scramble", "17-logo", "39-watch-stream"],
     "5": [
