@@ -26,11 +26,6 @@ export interface Situation {
     on: boolean;
     /** 光が見える置き方か (二段組。狭い画面と横にしたスマホでは映像の周りに地が残らない) */
     wide: boolean;
-    /**
-     * 暗いテーマか。**明るいテーマでは出さない** — 白い地に映像の暗い色が混ざると、灰色の汚れのように
-     * 見えた (YouTube も暗いテーマのときだけ)
-     */
-    dark: boolean;
     /** 全画面か。映像の周りは見えない */
     fullscreen: boolean;
     /** ページが裏に回っているか */
@@ -46,7 +41,7 @@ export interface Situation {
 /**
  * いま何をするか。
  *
- * - `off` … 光を消す (オフにした・明るいテーマ・光が見えない置き方)
+ * - `off` … 光を消す (オフにした・光が見えない置き方)
  * - `hold` … 写さない。出している光はそのまま (止めている・裏に回った・全画面・動かさない設定で1枚写したあと)
  * - `watch` … 間隔ごとに写す
  *
@@ -54,7 +49,7 @@ export interface Situation {
  * 止めた映像から開いた録画にも光は出る
  */
 export function plan(now: Situation): 'off' | 'hold' | 'watch' {
-    if (!now.on || !now.wide || !now.dark) return 'off';
+    if (!now.on || !now.wide) return 'off';
     if (now.fullscreen || now.hidden) return 'hold';
     if (now.reduced || !now.playing) return now.lit ? 'hold' : 'watch';
     return 'watch';
@@ -68,11 +63,11 @@ export interface Rect {
 }
 
 /** 光を枠より大きく引き伸ばす割合。ぼかすと縁が薄くなるので、そのぶん外へ出す */
-export const SCALE = 1.08;
+export const SCALE = 1.2;
 
-/** ぼかしの強さ (px)。枠の幅の 4% を 24〜56px に収める */
+/** ぼかしの強さ (px)。枠の幅の 6% を 32〜80px に収める */
 export function blur(width: number): number {
-    return Math.round(Math.min(56, Math.max(24, width * 0.04)));
+    return Math.round(Math.min(80, Math.max(32, width * 0.06)));
 }
 
 /** 映像の外へ光が届く幅 (px)。引き伸ばしたぶんと、ぼかしが広がるぶん (強さの2倍でほぼ消える) */
@@ -220,6 +215,38 @@ function boxLine(
             if (enter < length) sum += scratch[enter]!;
             if (leave >= 0) sum -= scratch[leave]!;
             values[base + i * step] = sum / span;
+        }
+    }
+}
+
+/** テーマごとの色の濃くし方 (`vivid`)。彩度は何倍にするか、明るさは何倍にするか */
+export const TONE = {
+    dark: { saturate: 1.8, gain: 1.25 },
+    light: { saturate: 2.2, gain: 0.95 },
+} as const;
+
+/**
+ * **色を濃くする。** 写した1枚に、ぼかす前に掛ける (`ImageData` の並び。乗算していない)。
+ *
+ * - 彩度を上げる — 明るさ (BT.709 の輝度) から各色を `saturate` 倍に離し、明るさを `gain` 倍にする。
+ *   ぼかすと色が混ざって鈍るので、先に濃くしておく
+ * - **明るいテーマでは、色の薄い所ほど透明にする。** 灰色・黒・白のまま白い地に乗せると、灰色の汚れに
+ *   見えた。色の付いた所だけが光になる (帯は `mix-blend-mode: multiply` で地に掛ける。`AmbientGlow.svelte`)
+ */
+export function vivid(data: Uint8ClampedArray, theme: 'dark' | 'light'): void {
+    const { saturate, gain } = TONE[theme];
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        const r = data[i]!;
+        const g = data[i + 1]!;
+        const b = data[i + 2]!;
+        const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        data[i] = (y + (r - y) * saturate) * gain;
+        data[i + 1] = (y + (g - y) * saturate) * gain;
+        data[i + 2] = (y + (b - y) * saturate) * gain;
+        if (theme === 'light') {
+            const chroma = (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
+            data[i + 3] = data[i + 3]! * Math.min(1, chroma * 2.5);
         }
     }
 }

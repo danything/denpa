@@ -88,11 +88,17 @@ test.describe('アンビエントモード', () => {
             expect(await page.evaluate(() => localStorage.getItem('player-ambient'))).toBe('0');
         });
 
-        test('明るいテーマでは出さない', async ({ page }) => {
+        test('明るいテーマでも出し、帯は地に掛ける (multiply)', async ({ page }) => {
             await page.addInitScript(() => localStorage.setItem('theme', 'light'));
             await watchRaw(page);
-            await expect(page.getByTestId('live-frame-ambient')).toHaveAttribute('data-plan', 'off');
-            await expect(page.getByTestId('live-frame-ambient')).toBeHidden();
+            const glow = page.getByTestId('live-frame-ambient');
+            await expect(glow).toHaveAttribute('data-plan', 'watch');
+            await expect.poll(updates(page), { timeout: 15_000 }).toBeGreaterThan(3);
+            const blend = await glow
+                .locator('.band:not([hidden])')
+                .first()
+                .evaluate((el) => getComputedStyle(el).mixBlendMode);
+            expect(blend).toBe('multiply');
         });
     });
 
