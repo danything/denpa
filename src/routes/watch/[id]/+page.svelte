@@ -47,6 +47,7 @@
         PREV,
         SOUND_OFF,
         SOUND_ON,
+        SPEED,
         TRASH,
     } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
@@ -59,7 +60,7 @@
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
-    import { audioTracks, recordingCodecs, subtitles } from '#lib/components/player/settings.js';
+    import { audioTracks, recordingCodecs, speeds, subtitles } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import { stageTap } from '#lib/components/player/stage-tap.js';
@@ -2035,7 +2036,7 @@
                         />
                         <!--
                             **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・チャプター送り・
-                            時刻・再生の設定 (⚙)・全画面だけ。** 音・字幕・速さ・小窓は「ほか」(⋯) に入れる (`Extras`)。
+                            時刻・再生の設定 (⚙)・全画面だけ。** 音・字幕・速さ・小窓は再生の設定 (⚙) の頭に入れる (`Extras`・`StageTail` の `fold`)。
                             広い枠では包みは何もしないので、並びは今までどおり
                         -->
                         <Extras>
@@ -2137,6 +2138,29 @@
                         -->
                         <StageTail
                             prefix="watch"
+                            fold={[
+                                {
+                                    kind: 'toggle' as const,
+                                    id: 'mute',
+                                    label: '消音',
+                                    icon: SOUND_OFF,
+                                    on: muted,
+                                    toggle: toggleMute,
+                                },
+                                ...(compat
+                                    ? []
+                                    : [
+                                          {
+                                              kind: 'choice' as const,
+                                              ...speeds({
+                                                  icon: SPEED,
+                                                  label: '再生の速さ',
+                                                  speed,
+                                                  onselect: (value) => setSpeed(value),
+                                              }),
+                                          },
+                                      ]),
+                            ]}
                             {background}
                             {ambient}
                             {pip}

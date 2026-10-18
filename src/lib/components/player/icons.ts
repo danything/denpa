@@ -45,11 +45,6 @@ export { default as FORWARD } from '~icons/lucide/chevron-right';
 /** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる。丸に点 (録画の印) */
 export { default as RECORD } from '~icons/lucide/circle-dot';
 /**
- * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音・字幕・速さ・小窓) を
- * 畳んでおくメニュー (`Extras.svelte`)
- */
-export { default as MORE } from '~icons/lucide/ellipsis';
-/**
  * Hybridcast。**別のタブへ出ていく**ので「四角から飛び出す矢印」。
  *
  * データ放送の `d` と並べるものなので、**同じ形にはしない** — あちらは

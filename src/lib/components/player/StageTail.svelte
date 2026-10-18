@@ -8,10 +8,9 @@
     import Extras from './Extras.svelte';
     import type { StageFullscreen } from './fullscreen.svelte.js';
     import { AMBIENT, BACKGROUND, COMPAT, CUT, EXPAND, PIP, SHRINK } from './icons';
-    import MoreButton from './MoreButton.svelte';
     import type { Pip } from './pip.svelte.js';
     import SettingsMenu from './SettingsMenu.svelte';
-    import type { SettingChoice, SettingToggle } from './settings';
+    import type { SettingChoice, SettingRow, SettingToggle } from './settings';
 
     /**
      * 操作バーの右端。**3画面 (ライブ・追っかけ・録画) で同じ。**
@@ -25,8 +24,9 @@
      *     入れるときは運転中の注意を出し、「わかりました」で入る (`DriveNotice`)。**切り替えたらページを読み直す** —
      *     `<video>` で観るか canvas に描くかはプレイヤーを組むときに決まる (観る画面は開いたとき、ライブは選局のたび)
      * - **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・API の無いブラウザ) では
-     *   出さない (`pip.svelte.ts`)。畳むときは「ほか」に入れる
-     * - **「ほか」(⋯)。** 畳むときだけ、全画面のすぐ左に出す (`MoreButton`)
+     *   出さない (`pip.svelte.ts`)。畳むときは ⚙ の頭に入れる (`pip-mode`)
+     * - **狭い枠 (`stage.fold`) では、毎回は使わないものを ⚙ の頭に入れる** (`fold`。音・速さ・Hybridcast と小窓)。
+     *   「ほか」(⋯) のボタンを別に置いていた頃は、狭い操作バーに ⋯ と ⚙ が並んでいた
      * - **全画面。** いつも出す
      */
     interface Props {
@@ -36,8 +36,13 @@
         ambient: Ambient;
         pip: Pip;
         fullscreen: StageFullscreen;
-        /** 舞台 (`PlayerStage`) が渡す畳み方と「ほか」の開け閉め */
-        stage: { fold: boolean; more: boolean; toggleMore: () => void };
+        /** 舞台 (`PlayerStage`) が渡す畳み方 */
+        stage: { fold: boolean };
+        /**
+         * 狭い枠で操作バーから畳むもの (`settings.ts` の `SettingRow`)。操作バーと同じ順に。畳まないときは使わない。
+         * 小窓はここで足す
+         */
+        fold?: SettingRow[];
         /** コーデック (`settings.ts` の `liveCodecs` / `recordingCodecs`)。選べないときは省く */
         codec?: SettingChoice | undefined;
         /** 音声 (`settings.ts` の `audioTracks`)。選べるものが2つ以上あるときだけ */
@@ -47,7 +52,28 @@
         /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
         subtitle?: SettingChoice | undefined;
     }
-    let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm, subtitle }: Props = $props();
+    let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm, subtitle, fold = [] }: Props = $props();
+
+    /** 狭い枠で ⚙ の頭に入れるもの。小窓は出せる端末だけ */
+    const head = $derived<SettingRow[]>(
+        stage.fold
+            ? [
+                  ...fold,
+                  ...(pip.available
+                      ? [
+                            {
+                                kind: 'toggle' as const,
+                                id: 'pip-mode',
+                                label: '小窓',
+                                icon: PIP,
+                                on: pip.active,
+                                toggle: () => pip.toggle(),
+                            },
+                        ]
+                      : []),
+              ]
+            : [],
+    );
 
     /** 互換モードか。端末で決まるので、開いてから読む */
     let compat = $state(false);
@@ -97,7 +123,7 @@
     const choices = $derived([subtitle, audio, codec].filter((item) => item !== undefined));
 </script>
 
-<SettingsMenu {prefix} {toggles} {choices} />
+<SettingsMenu {prefix} {head} {toggles} {choices} />
 <!-- 出すときだけ置く。ライブは再生の前に出す注意を自分でも持っているので、いつも置くと2つになる -->
 {#if confirming}
     <DriveNotice open onaccept={acceptCompat} oncancel={() => (confirming = false)} />
@@ -114,8 +140,6 @@
         />
     </Extras>
 {/if}
-
-<MoreButton {stage} testid="{prefix}-more" />
 
 <ControlButton
     icon={fullscreen.active ? SHRINK : EXPAND}

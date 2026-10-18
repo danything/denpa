@@ -176,11 +176,15 @@
             if (event.target instanceof Node && content?.contains(event.target)) return;
             place();
         };
+        // 中身が入れ替わったら置き直す (⚙ の選択肢の並びに入ると高さが変わる)。置き直した高さは同じなので繰り返さない
+        const resized = new ResizeObserver(() => place());
+        if (content !== null) resized.observe(content);
         window.addEventListener('pointerdown', onpointerdown, true);
         document.addEventListener('keydown', onkey);
         window.addEventListener('resize', update);
         window.addEventListener('scroll', update, true);
         return () => {
+            resized.disconnect();
             window.removeEventListener('pointerdown', onpointerdown, true);
             document.removeEventListener('keydown', onkey);
             window.removeEventListener('resize', update);
@@ -202,7 +206,7 @@
         const area = boundary?.() ?? null;
         const style = element.style;
         if (area === null && anchorSupported) {
-            for (const name of ['position-area', 'inset', 'margin', 'top', 'left', 'min-width', 'max-height']) {
+            for (const name of ['position-area', 'position-try-fallbacks', 'inset', 'margin', 'top', 'left', 'min-width', 'max-height']) {
                 style.removeProperty(name);
             }
             return;
@@ -215,6 +219,9 @@
         const box = area?.getBoundingClientRect() ?? new DOMRect(0, 0, root.clientWidth, root.clientHeight);
 
         style.setProperty('position-area', 'none');
+        // 入りきらないときに反対へ出すのはここで決める。CSS の `flip-block` を残すと、JS で置いた上下の位置を
+        // ブラウザがさらに裏返して、枠の外 (画面の下端) へ出していた (狭い枠で ⚙ の行が増えたとき)
+        style.setProperty('position-try-fallbacks', 'none');
         style.setProperty('inset', 'auto');
         style.setProperty('margin', '0');
         style.setProperty('top', '0');

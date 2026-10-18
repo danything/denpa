@@ -29,11 +29,9 @@ function updates(page: Page): () => Promise<number> {
         Number((await page.getByTestId('live-frame-ambient').getAttribute('data-updates')) ?? 0);
 }
 
-/** 操作バーのボタンを押す。畳んでいれば「ほか」(⋯) を開いてから */
+/** 操作バーのボタンを押す (畳まれないもの) */
 async function press(page: Page, testid: string): Promise<void> {
     await wakeControls(page, 'live-frame');
-    const more = page.getByTestId('live-more');
-    if (await more.isVisible()) await more.click();
     await page.getByTestId(testid).click();
 }
 
