@@ -42,7 +42,13 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
     const box = scroller(list);
     const height = box !== null ? box.clientHeight : window.innerHeight;
     const cover = coverOf();
-    scrollToTop(list, now, cover + (height - cover) * 0.25);
+    /*
+     * **線がもう見えている (上から 6 割まで) なら動かさない。** 頭の帯 (続きから観る・見てほしいこと) は一覧の上にあり、
+     * 送ると狭い画面ではページごと上へ流れて見えなくなる
+     */
+    const lineTop = now.getBoundingClientRect().top - (box !== null ? box.getBoundingClientRect().top : 0);
+    if (lineTop < cover || lineTop > cover + (height - cover) * 0.6)
+        scrollToTop(list, now, cover + (height - cover) * 0.25);
     const row =
         target === null
             ? null

@@ -9,8 +9,9 @@
     import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import { time } from '#lib/format.js';
-    import { FILTERS, type Filter } from '#lib/timeline.js';
+    import { ATTENTION_FILTERS, FILTERS, type Filter } from '#lib/timeline.js';
     import Ellipsis from '~icons/lucide/ellipsis';
+    import X from '~icons/lucide/x';
     import { home, type Res } from './context';
     import ViewList from './ViewList.svelte';
 
@@ -45,11 +46,26 @@
     const ctx = home();
 
     let viewOpen = $state(false);
+    /** チップに無い絞り込み (「見てほしいこと」から) が入っていれば、それ */
+    const extra = $derived(ATTENTION_FILTERS.find((f) => f.id === filter));
     const free = $derived(capacity === null ? null : capacity.free.replace(/^空き\s*/, ''));
 </script>
 
 <div class="t-toolbar" data-testid="timeline-toolbar">
     <div class="t-chips" role="group" aria-label="絞り込み">
+        {#if extra}
+            <!-- サイドバーの「見てほしいこと」から絞ったとき。押すと外して「すべて」に戻る -->
+            <button
+                type="button"
+                class="t-chip"
+                aria-pressed="true"
+                onclick={() => setFilter('all')}
+                data-testid="filter-chip-extra"
+                data-filter={extra.id}
+            >
+                {extra.label}<span class="num">{counts[extra.id]}</span><Icon icon={X} size="size-4" /><span class="visually-hidden">を外す</span>
+            </button>
+        {/if}
         {#each FILTERS as f (f.id)}
             <button
                 type="button"
@@ -66,12 +82,12 @@
         {/each}
     </div>
 
-    <!-- 今日のまとめ。狭い画面では外す (空きは「⋯」の中に出す) -->
-    <p class="t-summary small muted num" data-testid="summary">
+    <!-- 今日のまとめ。狭い画面では外し (空きは「⋯」の中)、サイドバーのある幅ではサイドバーの「状態」に出す -->
+    <p class="t-summary small muted num" data-testid="bar-summary">
         <span>次の録画 {nextRes === null ? 'なし' : `${time(nextRes.start_at)}・${ctx.untilLabel(nextRes.start_at)}`}</span>
         {#if free !== null}
             <span aria-hidden="true">·</span>
-            <span data-testid="recordings-capacity" title={capacity?.hours ?? undefined}>空き {free}</span>
+            <span data-testid="bar-capacity" title={capacity?.hours ?? undefined}>空き {free}</span>
         {/if}
     </p>
 

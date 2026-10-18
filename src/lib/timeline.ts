@@ -34,9 +34,13 @@ export interface Traits {
     unfinished: boolean;
     /** 失敗したもの (録画の失敗・エンコードの失敗・録り逃し) */
     failed: boolean;
+    /** チューナーが足りずに録れない予約 (競合) */
+    conflict?: boolean;
+    /** 局ロゴで CM を判定できなかった録画 (無音だけで判定) */
+    cmlogo?: boolean;
 }
 
-/** 絞り込み。ボタンの並びもこの順 */
+/** 絞り込み。ボタン (チップ) の並びもこの順 */
 export const FILTERS = [
     { id: 'all', label: 'すべて' },
     { id: 'reservations', label: '予約' },
@@ -45,7 +49,17 @@ export const FILTERS = [
     { id: 'failed', label: '失敗' },
 ] as const;
 
-export type Filter = (typeof FILTERS)[number]['id'];
+/**
+ * **チップには並べない絞り込み。** サイドバーの「見てほしいこと」から入る (`attention` はその全部、
+ * ほかは項目ごと)。入っている間は頭の1行に外すためのチップを出す
+ */
+export const ATTENTION_FILTERS = [
+    { id: 'attention', label: '見てほしいこと' },
+    { id: 'conflict', label: '競合' },
+    { id: 'cmlogo', label: 'CMの判定' },
+] as const;
+
+export type Filter = (typeof FILTERS)[number]['id'] | (typeof ATTENTION_FILTERS)[number]['id'];
 
 /** その絞り込みに入るか */
 export function passes(filter: Filter, item: TimelineItem, traits: Traits): boolean {
@@ -60,10 +74,20 @@ export function passes(filter: Filter, item: TimelineItem, traits: Traits): bool
             return item.zone === 'past' && traits.unfinished;
         case 'failed':
             return item.zone === 'past' && traits.failed;
+        case 'conflict':
+            return item.zone === 'future' && traits.conflict === true;
+        case 'cmlogo':
+            return item.zone === 'past' && traits.cmlogo === true;
+        case 'attention':
+            return (
+                passes('conflict', item, traits) ||
+                passes('failed', item, traits) ||
+                passes('cmlogo', item, traits)
+            );
     }
 }
 
-/** 絞り込みごとの件数 (ボタンに添える数) */
+/** 絞り込みごとの件数 (チップと「見てほしいこと」に添える数) */
 export function countFilters<T extends TimelineItem>(
     items: T[],
     traitsOf: (item: T) => Traits,
@@ -74,10 +98,14 @@ export function countFilters<T extends TimelineItem>(
         recording: 0,
         unfinished: 0,
         failed: 0,
+        attention: 0,
+        conflict: 0,
+        cmlogo: 0,
     };
     for (const item of items) {
         const traits = traitsOf(item);
-        for (const { id } of FILTERS) if (passes(id, item, traits)) counts[id] += 1;
+        for (const { id } of [...FILTERS, ...ATTENTION_FILTERS])
+            if (passes(id, item, traits)) counts[id] += 1;
     }
     return counts;
 }

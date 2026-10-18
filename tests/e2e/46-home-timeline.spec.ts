@@ -120,13 +120,15 @@ test.describe('ホームの1本の一覧', () => {
     });
 
     /*
-     * **右のサイドバーは無く、一覧が幅を全部使う。** 今日のまとめ (次の録画・空き) は頭の1行の右に。
+     * **行は一覧の幅いっぱいの2段。** 広い幅では右にサイドバー (今日のまとめもそこ)。
      * 行は 2 段で、2段目に局と尺と説明の頭が入る
      */
-    test('一覧は幅いっぱいの2段の行で、頭の1行にまとめが出る', async ({ page }) => {
+    test('一覧は幅いっぱいの2段の行で、まとめは右のサイドバーに出る', async ({ page }) => {
         await page.setViewportSize({ width: 1366, height: 768 });
         await goto(page, '/');
-        await expect(page.getByTestId('sidebar')).toHaveCount(0);
+        // 広い幅では右にサイドバー「今やること・観るもの」。次の録画と空きはその「状態」に (頭の1行には出さない)
+        await expect(page.getByTestId('sidebar')).toBeVisible();
+        await expect(page.getByTestId('bar-summary')).toBeHidden();
         await expect(page.getByTestId('summary')).toContainText('次の録画');
 
         const row = rows(page).filter({ hasText: '一覧試験の視聴済み' });
@@ -142,6 +144,53 @@ test.describe('ホームの1本の一覧', () => {
         // 行を押すと再生、詳細は ⓘ から
         await expect(row.getByTestId('row-open')).toHaveAttribute('href', /\/watch\/\d+$/);
         await expect(row.getByTestId('detail-button')).toBeVisible();
+    });
+
+    /*
+     * **サイドバーの「続きから観る」と「見てほしいこと」。** 観終えていない録画は続きから観るに並び、押せば観る画面。
+     * 見てほしいこと (失敗など) を押すと一覧がそれで絞られる
+     */
+    test('サイドバーの続きから観るは観る画面へ、見てほしいことは一覧を絞る', async ({ page }) => {
+        await page.setViewportSize({ width: 1366, height: 768 });
+        await goto(page, '/');
+        const side = page.getByTestId('sidebar');
+        const next = side.getByTestId('continue-item').filter({ hasText: '一覧試験の未視聴' });
+        await expect(next).toHaveAttribute('href', /\/watch\/\d+$/);
+        await expect(next).toContainText('未視聴');
+
+        await expect(side.getByTestId('attention-count')).toBeVisible();
+        await side.locator('[data-testid="attention-item"][data-filter="failed"]').click();
+        await expect(rows(page).filter({ hasText: '一覧試験の失敗' })).toHaveCount(1);
+        await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(0);
+        // 失敗はチップにもあるので、そのチップが押された印になる (チップに無いもの (競合など) は外すためのチップが出る)
+        await expect(page.locator('[data-testid="filter-chip"][data-filter="failed"]')).toHaveAttribute(
+            'aria-pressed',
+            'true',
+        );
+        await homeFilter(page, 'all');
+        await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(1);
+    });
+
+    /*
+     * **サイドバーの無い幅では、一覧の頭に帯。** 「見てほしいこと」の1行を押すと一覧がそれで絞られ、
+     * 頭の1行に外すためのチップが出る。「続きから観る」はサムネイルを横に流せる帯
+     */
+    test('狭い画面は一覧の頭の帯から見てほしいことに絞り、チップで外せる', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/');
+        await expect(page.getByTestId('sidebar')).toBeHidden();
+        const strip = page.getByTestId('home-strip');
+        await expect(
+            strip.getByTestId('strip-continue-item').filter({ hasText: '一覧試験の未視聴' }),
+        ).toHaveCount(1);
+        await strip.getByTestId('strip-attention').click();
+        const extra = page.getByTestId('filter-chip-extra');
+        await expect(extra).toHaveAttribute('data-filter', 'attention');
+        await expect(rows(page).filter({ hasText: '一覧試験の失敗' })).toHaveCount(1);
+        await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(0);
+        await extra.click();
+        await expect(extra).toHaveCount(0);
+        await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(1);
     });
 
     test('狭い画面は頭の細い1行のチップで1回で絞る', async ({ page }) => {
@@ -241,7 +290,7 @@ test.describe('ホームの1本の一覧', () => {
 
         test('行は幅いっぱいで、行と押すものは指の大きさ', async ({ page }) => {
             await goto(page, '/');
-            await expect(page.getByTestId('sidebar')).toHaveCount(0);
+            await expect(page.getByTestId('sidebar')).toBeHidden();
             const row = rows(page).filter({ hasText: '一覧試験の視聴済み' });
             await row.scrollIntoViewIfNeeded();
             expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(71.5);
