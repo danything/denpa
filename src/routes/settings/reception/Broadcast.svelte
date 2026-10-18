@@ -106,22 +106,4 @@
     .w-postal {
         width: 10rem;
     }
-    .check-item {
-        display: flex;
-        flex-direction: column;
-        gap: 0.125rem;
-    }
-    .check-item :global(.more-body) {
-        margin-inline-start: 1.75rem;
-    }
-    .check-row {
-        display: flex;
-        cursor: pointer;
-        align-items: flex-start;
-        gap: 0.5rem;
-    }
-    .check-row input {
-        margin: 0.15rem 0 0;
-        flex-shrink: 0;
-    }
 </style>

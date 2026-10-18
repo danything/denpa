@@ -266,7 +266,7 @@
         font-weight: var(--dp-weight-bold);
     }
     .group-link:hover {
-        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+        background: var(--dp-hover-soft);
     }
     .group-hint {
         display: none;
@@ -285,7 +285,7 @@
         color: var(--dp-muted);
     }
     .sections-nav a:hover {
-        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+        background: var(--dp-hover-soft);
         color: inherit;
     }
     .sections-nav a.selected {
