@@ -25,30 +25,24 @@
 
 <svelte:head><title>テレビのペアリング - denpa</title></svelte:head>
 
-<div class="solo">
-    <div class="panel" data-testid="device-card">
-        {#if data.viaToken || form?.viaToken}
-            <h1>アクセストークンではペアリングできません</h1>
-            <p class="small muted">
-                テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン) で開いてください。
-            </p>
-        {:else if view === null}
-            <h1>このペアリングコードは見つかりません</h1>
-            <p class="small muted">
-                QR を読み直すか、テレビでペアリングをやり直してください。コードの期限は10分です。
-            </p>
-        {:else if pending}
-            <h1>{view.name} とペアリングしています…</h1>
-            <form method="POST" bind:this={auto}>
-                <input type="hidden" name="code" value={view.userCode} />
-                <noscript><button type="submit">ペアリング</button></noscript>
-            </form>
-        {:else if view.state === 'approved' || view.state === 'consumed'}
-            <h1 data-testid="device-done">{view.name} とペアリングしました</h1>
-            <p class="small muted">テレビに戻ってください。</p>
-        {:else}
-            <h1>このペアリングコードは期限切れです</h1>
-            <p class="small muted">テレビでペアリングをやり直してください。コードの期限は10分です。</p>
-        {/if}
-    </div>
+<div class="solo" data-testid="device-card">
+    {#if data.viaToken || form?.viaToken}
+        <h1>アクセストークンではペアリングできません</h1>
+        <p>テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン) で開いてください。</p>
+    {:else if view === null}
+        <h1>このペアリングコードは見つかりません</h1>
+        <p>QR を読み直すか、テレビでペアリングをやり直してください。コードの期限は10分です。</p>
+    {:else if pending}
+        <h1>{view.name} とペアリングしています…</h1>
+        <form method="POST" bind:this={auto}>
+            <input type="hidden" name="code" value={view.userCode} />
+            <noscript><button type="submit">ペアリング</button></noscript>
+        </form>
+    {:else if view.state === 'approved' || view.state === 'consumed'}
+        <h1 data-testid="device-done">{view.name} とペアリングしました</h1>
+        <p>テレビに戻ってください。</p>
+    {:else}
+        <h1>このペアリングコードは期限切れです</h1>
+        <p>テレビでペアリングをやり直してください。コードの期限は10分です。</p>
+    {/if}
 </div>

@@ -5,6 +5,7 @@
     import { arming } from '#lib/arming.svelte.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import ArmedDelete from '#lib/components/ArmedDelete.svelte';
+    import Lead from '#lib/components/Lead.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
@@ -423,7 +424,7 @@
                 {#key formKey}
                     <form
                         method="POST"
-                        class="rule-form"
+                        class="rule-form dense"
                         id="rule-form"
                         data-testid="rule-form"
                         bind:this={ruleForm}
@@ -483,13 +484,12 @@
                                             data-testid="rule-keyword"
                                         />
                                     </label>
-                                    <span class="hint">
+                                    <Lead>
                                         空白で区切ると<strong>すべて含む</strong>ものに一致します
-                                    </span>
-                                    <details class="more">
-                                        <summary>詳しく</summary>
-                                        <p>これから放送される番組が対象です。ルール名はキーワードから付けます。</p>
-                                    </details>
+                                        {#snippet more()}
+                                            <p>これから放送される番組が対象です。ルール名はキーワードから付けます。</p>
+                                        {/snippet}
+                                    </Lead>
                                     <!--
                             当てる範囲。既定は番組名だけ。概要まで広げると番宣で名前が出ただけの
                             番組まで当たり、詳細まで広げると出演者でも当たる
@@ -533,13 +533,14 @@
                                         />
                                         <span class="field-label">同じ回は最初の放送だけ録る</span>
                                     </label>
-                                    <span class="hint">再放送や別の局の同じ回は録りません</span>
-                                    <details class="more">
-                                        <summary>詳しく</summary>
-                                        <p>
-                                            同じ回かどうかは番組名のシリーズ名と話数・副題で見ます。番組名に話数や副題が無ければ番組の説明から読みます。同じ時刻に流れているなら字幕のあるもの、次に BS/CS を選びます。選んだ放送がチューナー不足で録れないときは、次の放送で録ります。話数も副題も無い番組は、同じ時刻の同時放送だけをまとめます。
-                                        </p>
-                                    </details>
+                                    <Lead class="indent">
+                                        再放送や別の局の同じ回は録りません
+                                        {#snippet more()}
+                                            <p>
+                                                同じ回かどうかは番組名のシリーズ名と話数・副題で見ます。番組名に話数や副題が無ければ番組の説明から読みます。同じ時刻に流れているなら字幕のあるもの、次に BS/CS を選びます。選んだ放送がチューナー不足で録れないときは、次の放送で録ります。話数も副題も無い番組は、同じ時刻の同時放送だけをまとめます。
+                                            </p>
+                                        {/snippet}
+                                    </Lead>
                                 </div>
                                 <div class="field">
                                     <label class="field">
@@ -552,27 +553,29 @@
                                             max="9"
                                             data-testid="rule-priority"
                                         />
-                                        <span class="hint">
-                                            チューナーが足りないときは<strong>大きいほうを録ります</strong>
-                                        </span>
                                     </label>
-                                    <details class="more">
-                                        <summary>詳しく</summary>
-                                        <p>
-                                            <strong>予約どうし</strong>の優先度です (手動予約は 2)。番組表やロゴの取得とは比べません。録画はそれらより常に優先されます。
-                                        </p>
-                                    </details>
+                                    <Lead>
+                                        チューナーが足りないときは<strong>大きいほうを録ります</strong>
+                                        {#snippet more()}
+                                            <p>
+                                                <strong>予約どうし</strong>の優先度です (手動予約は 2)。番組表やロゴの取得とは比べません。録画はそれらより常に優先されます。
+                                            </p>
+                                        {/snippet}
+                                    </Lead>
                                 </div>
                             </div>
 
-                            <div class="fields">
-                                <details class="box">
-                                    <summary class="small bold" data-testid="channel-summary">
-                                        局
-                                        <span class="muted">
-                                            ({seedTypes.length + seedServices.length === 0
+                            <!--
+                                **局とジャンルは枠で囲まない行に** (名前は左、いまの値と › は右)。押すと行の下に開く
+                            -->
+                            <div class="pickers">
+                                <details class="picker">
+                                    <summary data-testid="channel-summary">
+                                        <span>局</span>
+                                        <span class="picker-value">
+                                            {seedTypes.length + seedServices.length === 0
                                                 ? '全局'
-                                                : `${seedTypes.length + seedServices.length} 件選択中`})
+                                                : `${seedTypes.length + seedServices.length} 件選択中`}
                                         </span>
                                     </summary>
                                     <div class="box-body stack">
@@ -631,13 +634,11 @@
                                     </div>
                                 </details>
 
-                                <details class="box">
-                                    <summary class="small bold" data-testid="genre-summary">
-                                        ジャンル
-                                        <span class="muted">
-                                            ({seedGenres.length === 0
-                                                ? '全ジャンル'
-                                                : `${seedGenres.length} 件選択中`})
+                                <details class="picker">
+                                    <summary data-testid="genre-summary">
+                                        <span>ジャンル</span>
+                                        <span class="picker-value">
+                                            {seedGenres.length === 0 ? '全ジャンル' : `${seedGenres.length} 件選択中`}
                                         </span>
                                     </summary>
                                     <div class="box-body">
@@ -1232,7 +1233,7 @@
     }
 
     .hint {
-        font-size: 0.8rem;
+        font-size: var(--dp-text-sm);
         color: var(--dp-muted);
     }
     .fields {
@@ -1246,16 +1247,52 @@
         gap: 0.25rem 1rem;
         margin-top: 0.25rem;
     }
-    .box {
-        border: 1px solid var(--dp-line);
-        border-radius: var(--dp-radius-lg);
+    /*
+     * 局とジャンルの行。枠の箱にはせず、行の間に線を1本 (設定の一覧と同じ顔)。
+     * 名前は左、いまの値と Pico の › は右。指を乗せると淡い地
+     */
+    .pickers {
+        display: flex;
+        flex-direction: column;
+        border-block: 1px solid var(--dp-line);
     }
-    .box summary {
+    .picker {
+        margin: 0;
+    }
+    .picker + .picker {
+        border-top: 1px solid var(--dp-line);
+    }
+    .picker > summary {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-height: 2.75rem;
+        margin: 0;
+        padding: 0 0.5rem;
+        border-radius: var(--dp-radius-sm);
+        color: inherit;
+        font-size: var(--dp-text-sm);
+        line-height: 1.4;
         cursor: pointer;
-        padding: 0.75rem 1rem;
+        transition: background-color var(--dp-duration);
+    }
+    .picker > summary:hover {
+        background: var(--dp-hover-soft);
+    }
+    .picker > summary::after {
+        flex-shrink: 0;
+        float: none;
+        margin-inline-start: 0;
+    }
+    .picker-value {
+        margin-inline-start: auto;
+        color: var(--dp-muted);
+    }
+    .picker[open] > summary {
+        margin-bottom: 0;
     }
     .box-body {
-        padding: 0 1rem 1rem;
+        padding: 0.25rem 0.5rem 1rem;
     }
     .group-title {
         margin-bottom: 0.25rem;
@@ -1302,6 +1339,19 @@
         padding-block: 0.75rem;
         border-top: 1px solid var(--dp-line);
         background: var(--dp-bg);
+    }
+    /*
+     * **下に潜る欄は、線の上で地の色に溶かす。** 貼り付いた行で欄が半分の高さで切れて見え、
+     * そこで終わっているのか下に続くのかが読めなかった
+     */
+    .form-actions::before {
+        content: '';
+        position: absolute;
+        inset-inline: 0;
+        bottom: 100%;
+        height: 1.5rem;
+        background: linear-gradient(to bottom, transparent, var(--dp-bg));
+        pointer-events: none;
     }
     /* 保存は右端。編集でないときも右に寄せる (左に何も無くても位置が変わらない) */
     .save {

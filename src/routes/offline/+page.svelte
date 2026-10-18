@@ -252,9 +252,9 @@
         white-space: nowrap;
         font-weight: var(--dp-weight);
     }
+    /* 空のときも枠で囲まず、見出しの下に左揃えで (断られた画面と同じ置き方) */
     .empty {
-        padding: 1.5rem;
-        text-align: center;
+        padding-block: var(--dp-space-4);
     }
     .empty p:first-child {
         margin-bottom: 0.25rem;
