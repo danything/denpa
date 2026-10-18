@@ -14,14 +14,14 @@
     import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { groupLabel } from '#lib/settings-sections.js';
     import { THEME_LABEL, theme } from '#lib/theme.svelte.js';
-    import { onNavigate } from '$app/navigation';
+    import { goto, onNavigate } from '$app/navigation';
     import { navigating, page } from '$app/state';
     import CalendarDays from '~icons/lucide/calendar-days';
     import Contrast from '~icons/lucide/contrast';
     import Ellipsis from '~icons/lucide/ellipsis';
     import ListVideo from '~icons/lucide/list-video';
     import Moon from '~icons/lucide/moon';
-    import Settings from '~icons/lucide/settings';
+    import Search from '~icons/lucide/search';
     import Sun from '~icons/lucide/sun';
     import Tv from '~icons/lucide/tv';
 
@@ -187,19 +187,28 @@
         { href: '/settings', label: '設定' },
     ] as const;
 
+    /** 検索 (`/search`)。ヘッダーでは欄にして、狭い画面では下のタブに置く (上の `links` には並べない) */
+    const SEARCH = { href: '/search', label: '検索' } as const;
+    const pages = [...links, SEARCH];
+
     /**
      * いま開いている画面のナビの行き先。**設定はグループごとに経路が分かれている** (`/settings/reception` など) ので、
      * その下も「設定」に数える。録画 (`/`) は頭が全部に合うので、ぴったりのときだけ
      */
     const here = $derived.by(() => {
         const route = page.route.id ?? '';
-        return links.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ?? null;
+        return pages.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ?? null;
     });
 
-    /** ページ名はナビと同じものを使う。タブに出す。設定はグループの名前を前に付ける */
+    /**
+     * ページ名はナビと同じものを使う。タブに出す。設定はグループの名前を前に付ける。
+     * 検索は言葉を前に付ける (履歴に並んだときに、どの検索だったか分かる)
+     */
     const title = $derived.by(() => {
-        const label = links.find((l) => l.href === here)?.label ?? 'denpa';
-        const section = here === '/settings' ? groupLabel(page.route.id?.split('/')[2] ?? '') : null;
+        const label = pages.find((l) => l.href === here)?.label ?? 'denpa';
+        const q = here === '/search' ? (page.url.searchParams.get('q') ?? '').trim() : '';
+        const section =
+            here === '/settings' ? groupLabel(page.route.id?.split('/')[2] ?? '') : q === '' ? null : q;
         return `${section === null ? '' : `${section} - `}${label} - denpa`;
     });
 
@@ -236,17 +245,18 @@
      * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
      * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
      * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
-     * よく開く 4 画面をタブに、残り (ルール) は「その他」の `Menu` (popover) に
+     * よく開く 3 画面と検索をタブに、残り (ルール・設定) は「その他」の `Menu` (popover) に。
+     * 狭い画面ではヘッダー (検索の欄) を隠すので、検索はタブから入る
      */
     const tabs = [
         { href: '/', label: '録画', icon: ListVideo },
         { href: '/guide', label: '番組表', icon: CalendarDays },
         { href: '/live', label: 'ライブ', icon: Tv },
-        { href: '/settings', label: '設定', icon: Settings },
+        { href: SEARCH.href, label: SEARCH.label, icon: Search },
     ] as const;
     const moreLinks = links.filter((link) => !tabs.some((tab) => tab.href === link.href));
     const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
-    /** タブを出すのはナビの 5 画面 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
+    /** タブを出すのはナビの 5 画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
     const showTabbar = $derived(here !== null);
     /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
     const notice = $derived((page.data['channelNotice'] ?? null) as NoticeKind | null);
@@ -259,12 +269,40 @@
     });
 
     /**
+     * **どこからでも `/` か Ctrl/⌘+K で検索の欄へ。** 字を打っている最中 (入力欄・テキストエリア・
+     * 選ぶ欄・編集できる所) では取らない — `/` を打てなくなる。見えている欄 (ヘッダーか検索の画面) に入り、
+     * どちらも無ければ (狭い画面でヘッダーを隠しているとき) 検索の画面を開く (開くと欄に入る)
+     */
+    function searchShortcut(event: KeyboardEvent): void {
+        if (event.defaultPrevented || event.isComposing) return;
+        const slash = event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey;
+        const k = event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+        if (!slash && !k) return;
+        const target = event.target;
+        if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select') !== null)) {
+            return;
+        }
+        event.preventDefault();
+        const field = [...document.querySelectorAll<HTMLInputElement>('[data-search-field]')].find(
+            (input) => input.getClientRects().length > 0,
+        );
+        if (field === undefined) {
+            void goto(resolve('search'));
+            return;
+        }
+        field.focus();
+        field.select();
+    }
+
+    /**
      * **放送の字 (Denpa Font) をここで名乗らせる** (使うのは `app.css` の `.broadcast`)。
      * 版付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
      * 使う字が画面に出たときだけ落ちてくる。届くまでは画面の字で出しておく (`swap`)
      */
     const fontFace = `<style>@font-face{font-family:"Denpa Font";src:url("${denpaFontUrl()}") format("woff2");font-display:swap}</style>`;
 </script>
+
+<svelte:window onkeydown={searchShortcut} />
 
 <svelte:head>
     <title>{title}</title>
@@ -330,6 +368,26 @@
             {/if}
         </div>
         <!--
+            **検索の欄** (広い幅だけ。狭い幅ではヘッダーごと隠し、下のタブの「検索」から入る)。
+            GET で `/search?q=` へ。検索の画面では画面の中に同じ欄があるので、ここには出さない
+        -->
+        {#if here !== '/search'}
+            <form method="GET" action={resolve('search')} role="search" aria-label="サイト内" class="header-search" data-testid="header-search">
+                <Icon icon={Search} size="size-4" />
+                <input
+                    type="search"
+                    name="q"
+                    placeholder="検索"
+                    aria-label="番組・録画・予約・ルールを検索"
+                    autocomplete="off"
+                    enterkeyhint="search"
+                    data-search-field
+                    data-testid="header-search-input"
+                />
+                <kbd class="header-search-key" aria-hidden="true">/</kbd>
+            </form>
+        {/if}
+        <!--
             テーマの切り替え・画面へのリンク (広い幅だけ)。ログアウトは設定の「一般」にある。
             狭い幅ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
         -->
@@ -383,9 +441,9 @@
     </main>
 
     <!--
-        **狭い幅では、主な画面へのタブを画面の下に並べる** (録画・番組表・ライブ・設定)。
+        **狭い幅では、主な画面へのタブを画面の下に並べる** (録画・番組表・ライブ・検索)。
         指が届くのは画面の下のほうで、上のハンバーガーから開いていた頃は、画面を移るたびに
-        2回押していた。ルールはたまにしか開かないので「その他」の中。
+        2回押していた。ルールと設定はたまにしか開かないので「その他」の中。
         出すのはナビの 5 画面だけ — 観る画面・追っかけ (映像が主役)、ログインやペアリングには出さない。
         ライブの全画面 (`html[data-stage-fullscreen]`) のときも隠す (`app.css`)。
         下の安全域 (ホームバー) のぶんは内側の余白で避ける
@@ -642,6 +700,57 @@
         pointer-events: none;
     }
     /*
+     * ヘッダーの検索の欄。**欄の形は虫眼鏡と字と `/` の印だけ** で、ナビのリンクより先に縮む。
+     * 欄そのものの枠は外し、包んだ `form` に枠を付ける (虫眼鏡も欄の中に見せる)
+     */
+    .header-search {
+        display: none;
+        flex: 0 1 16rem;
+        align-items: center;
+        gap: var(--dp-space-2);
+        min-width: 7rem;
+        height: 2.25rem;
+        margin: 0;
+        padding-inline: var(--dp-space-3) var(--dp-space-2);
+        border: 1px solid var(--dp-line);
+        border-radius: var(--dp-radius);
+        background: var(--dp-subtle);
+        color: var(--dp-muted);
+    }
+    .header-search:focus-within {
+        border-color: var(--pico-primary);
+    }
+    /* Pico の role=search は中の物を等分に伸ばす。欄だけを伸ばし、虫眼鏡と印は字の幅のまま */
+    .header-search > :global(*) {
+        flex: none;
+    }
+    .header-search input {
+        flex: 1 1 0%;
+        min-width: 0;
+        height: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        font-size: var(--dp-text-sm);
+        outline: none;
+        text-align: start;
+    }
+    .header-search-key {
+        flex: none;
+        padding: 0 0.375rem;
+        border: 1px solid var(--dp-line);
+        border-radius: var(--dp-radius-sm);
+        background: transparent;
+        color: var(--dp-muted);
+        font-size: var(--dp-text-xs);
+        line-height: 1.4;
+    }
+    .header-search:focus-within .header-search-key {
+        display: none;
+    }
+    /*
      * 画面の下のタブ (狭い幅だけ)。ヘッダーと同じ地に上の線 1 本、スクロールすると透けてぼける。
      * 1 つの的は幅を等分し、高さは 3.5rem (アイコンと小さな字)。下の安全域は内側の余白で避ける。
      * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
@@ -778,7 +887,8 @@
         padding: var(--dp-gutter);
     }
     @media (min-width: 640px) {
-        ul.links {
+        ul.links,
+        .header-search {
             display: flex;
         }
         .tabbar {

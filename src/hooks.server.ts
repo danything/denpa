@@ -75,6 +75,15 @@ export async function handle({ event, resolve }) {
         }
     }
 
+    /*
+     * **ホームの `?q=` は検索の画面へ。** 言葉で探すのはサイト全体の検索 (`/search`) に寄せた。
+     * 前に貼ったリンクや履歴から来ても、同じ言葉の結果が出る
+     */
+    const q = event.url.searchParams.get('q');
+    if (pathname === '/' && event.request.method === 'GET' && q !== null) {
+        redirect(302, relative(event.url, `/search?q=${encodeURIComponent(q)}`));
+    }
+
     return finish(await resolve(event));
 }
 

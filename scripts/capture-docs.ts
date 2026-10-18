@@ -522,6 +522,7 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
         ['watch', watchId === null ? '/' : `/watch/${watchId}`],
         ['live', '/live'],
         ['rules', '/rules'],
+        ['search', `/search?q=${encodeURIComponent('ひだまり荘')}`],
         ['tuners', '/settings/reception#tuners'],
         ['channels', '/settings/reception#channels'],
         ['settings', '/settings/recording'],
