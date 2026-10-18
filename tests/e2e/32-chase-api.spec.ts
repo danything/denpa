@@ -34,7 +34,7 @@ test.describe('追っかけ再生の API', () => {
 
         // 元のTS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
         // **一覧に出るのは録り始めた時点で、ファイルにはまだ何も書かれていないことがある** —
-        // そのあいだ chase は 404 (docs/api.md「まだ何も録れていなければ 404」)。アプリと同じく、
+        // そのあいだ chase は 404 (docs/api.md「録画が無い・まだ何も録れていなければ 404」)。アプリと同じく、
         // 届きはじめるまでリクエストし直す
         const controller = new AbortController();
         let opened: Response | undefined;
