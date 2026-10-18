@@ -71,6 +71,10 @@ test.describe('互換モード', () => {
         const notice = page.getByTestId('drive-notice');
         await expect(notice).toBeVisible();
         await expect(notice).toContainText('走行中は画面を見ないでください');
+        // フォーカスは箱に置き (取消に枠が付かない)、Tab でボタンへ進む
+        await expect(notice.locator('.modal-box')).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(page.getByTestId('drive-notice-cancel')).toBeFocused();
         await page.getByTestId('drive-notice-cancel').click();
         await expect(notice).toBeHidden();
         await expect(toggle).not.toBeChecked();
