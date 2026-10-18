@@ -15,11 +15,14 @@
         parts,
         row,
         rule,
+        excerpt = '',
     }: {
         service: string;
         parts: string[];
         row: { service_id: number; has_logo: boolean | null };
         rule: { rule_id: number | null; rule_name: string | null } | 'manual' | null;
+        /** 残りの幅を埋める番組の説明の頭 (1行で「…」まで。狭い画面では出さない) */
+        excerpt?: string;
     } = $props();
     const rest = $derived(parts.filter(Boolean).join(' ・ '));
 </script>
@@ -46,4 +49,5 @@
             </span>
         </span>
     {/if}
+    {#if excerpt}<span class="t-excerpt broadcast"> — {excerpt}</span>{/if}
 </div>

@@ -155,7 +155,7 @@
                 <li>
                     <a
                         {href}
-                        class="group-link"
+                        class="group-link s-group"
                         class:here
                         aria-current={here ? 'page' : undefined}
                         data-testid="settings-nav-{g.slug}"
@@ -164,13 +164,14 @@
                         <!-- 狭い画面の一覧だけ。中に何があるかを1行で (節の一覧は出さないので) -->
                         <span class="group-hint">{g.sections.map((s) => s.label).join('・')}</span>
                     </a>
-                    <ul class="sections-nav">
+                    <ul class="sections-nav s-list">
                         {#each g.sections as section (section.slug)}
                             {@const selected = here && active === section.slug}
                             <li>
                                 <a
                                     href="{href}#{section.slug}"
-                                    class:selected
+                                    class="s-item"
+                                    class:on={selected}
                                     aria-current={selected ? 'location' : undefined}
                                     onclick={() => jump(section.slug)}
                                     data-testid="settings-nav-{section.slug}"
@@ -250,9 +251,8 @@
         list-style: none;
     }
     /*
-     * **録画の画面のサイドバーと同じ顔** (`home.css` の `.s-group`・`.s-item`)。グループは小さく沈めた見出し、
-     * 節は線も字下げも無い行で、見えている節だけ角の丸い薄い塗り。木の線で親子を見せていた頃は、
-     * 2つの画面で左の列の作りが違って見えた
+     * **録画の画面のサイドバーと同じ部品** (`app.css` の `.s-group`・`.s-list`・`.s-item`)。グループは小さく沈めた見出し、
+     * 節は線も字下げも無い行で、見えている節だけ角の丸い薄い塗り。ここは置き方だけ
      */
     .groups {
         display: flex;
@@ -260,18 +260,16 @@
         gap: var(--dp-space-3);
     }
     .side a {
-        display: block;
-        border-radius: var(--dp-radius);
         text-decoration: none;
+    }
+    .group-link {
+        display: block;
+        margin: 0;
+        padding-block: 0.125rem;
+        border-radius: var(--dp-radius);
         transition:
             background-color var(--dp-duration),
             color var(--dp-duration);
-    }
-    .group-link {
-        padding: 0.125rem 0.75rem;
-        color: var(--dp-muted);
-        font-size: var(--dp-text-xs);
-        font-weight: var(--dp-weight);
     }
     .group-link:hover {
         color: inherit;
@@ -280,25 +278,7 @@
         display: none;
     }
     .side .sections-nav {
-        display: flex;
-        flex-direction: column;
-        gap: 1px;
         margin-top: 0.25rem;
-    }
-    .sections-nav a {
-        display: flex;
-        align-items: center;
-        min-height: 2.25rem;
-        padding: 0 0.75rem;
-        color: inherit;
-        font-size: var(--dp-text-sm);
-    }
-    .sections-nav a:hover {
-        background: var(--dp-hover-soft);
-    }
-    .sections-nav a.selected {
-        background: var(--dp-subtle);
-        font-weight: var(--dp-weight-bold);
     }
     /*
      * 狭い画面の一覧はグループだけ (押すとその画面。節へは画面の上の行で飛ぶ)。
