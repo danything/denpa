@@ -104,7 +104,17 @@
         display: flex;
         align-items: center;
         gap: 0.25rem;
-        padding: 0.75rem;
+        /* 角に寄せる (上と右の空きは 8px)。下の操作バー (12px) より詰める — 丸が角から離れて浮いて見えた */
+        padding: 0.5rem;
+    }
+    /*
+     * **右上の丸は 40px** (下の操作バーは 48px)。観る流れの外のものなので、映像の角で重く見せない。
+     * 指で押す的の 40px は割らない (狭い枠の大きさと同じ)
+     */
+    .side :global(.ov-btn.ov-round) {
+        width: 2.5rem;
+        height: 2.5rem;
+        min-height: 2.5rem;
     }
     .bottom {
         left: 0;
@@ -112,9 +122,6 @@
         bottom: 0;
         padding: 2rem 0.75rem 0.75rem;
         background: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent);
-    }
-    :global(.stage[data-compact]) .side {
-        padding: 0.375rem;
     }
     :global(.stage[data-compact]) .bottom {
         padding: 1rem 0.375rem 0.375rem;

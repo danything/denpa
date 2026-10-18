@@ -379,15 +379,11 @@
         flex-direction: column;
         align-items: center;
         gap: 0.25rem;
-        /* 右上の一行 (`ControlBar`。48px の丸と上の余白) の下から出す */
-        padding: 4rem 0.5rem 0.5rem;
+        /* 右上の一行 (`ControlBar`。40px の丸と上の余白 8px) の下から出す */
+        padding: 3.5rem 0.5rem 0.5rem;
     }
     .notes:empty {
         display: none;
-    }
-    /* 狭い枠では丸が 40px で余白も詰まる */
-    .stage[data-compact] .notes {
-        padding-top: 3.25rem;
     }
     /*
      * **スマホの縦では映像を画面の端から端まで。** 余白 (`--dp-gutter`、
