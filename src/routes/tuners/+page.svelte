@@ -53,7 +53,7 @@
      */
     const coverage = $derived(data.channels);
     /** 表の局名の前に出す局ロゴの大きさ。放送のロゴは 16:9 (64x36) */
-    const LOGO_SIZE = 'width: 1.6rem; height: 0.9rem';
+    const LOGO_SIZE = 'width: 2.4rem; height: 1.35rem';
     /** 入っている局をすべて並べたもの */
     const services = $derived(coverage.flatMap((channel) => channel.services));
 
@@ -949,8 +949,8 @@
     /* ロゴの無い局の場所。まだ取れていないものは点線の枠、取れないものは空けるだけ */
     .logo-slot {
         flex-shrink: 0;
-        width: 1.6rem;
-        height: 0.9rem;
+        width: 2.4rem;
+        height: 1.35rem;
         border-radius: 0.25rem;
     }
     .logo-slot.missing {
