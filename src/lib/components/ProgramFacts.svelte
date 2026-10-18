@@ -175,7 +175,7 @@
         max-height: 12rem;
         overflow: auto;
         padding: 0.5rem;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-subtle);
         font-family: ui-monospace, monospace;
         font-size: var(--dp-text-xs);

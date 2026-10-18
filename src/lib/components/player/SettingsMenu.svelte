@@ -199,7 +199,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: var(--pico-muted-color);
+        color: var(--dp-muted);
     }
     .back {
         border-bottom: 1px solid var(--dp-line);

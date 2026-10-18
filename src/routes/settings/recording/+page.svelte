@@ -187,7 +187,6 @@
                     <CheckRow
                         name="keepOriginal"
                         checked={recording.keepOriginal}
-                        testid="global-keep"
                         title="元のTSも残す"
                         hint="エンコードしたあとも元のTSを消しません。容量を多く使います"
                     />
@@ -202,7 +201,6 @@
                     <CheckRow
                         name="fpsDetect"
                         checked={recording.fpsDetect}
-                        testid="global-fps-detect"
                         title="コマ数を映像から決める"
                         hint="アニメなどは 30コマにして、時間とサイズを半分にします"
                         detail="同じコマが続く映像 (アニメなど) を見分けて 30コマでエンコードします。外すとすべて 60コマになります。"
@@ -252,7 +250,6 @@
                     <CheckRow
                         name="freeOnly"
                         checked={recording.freeOnly}
-                        testid="global-free-only"
                         title="自動予約は無料放送だけにする"
                         hint="契約していない有料放送は、録画してもスクランブルのままで観られません"
                     />

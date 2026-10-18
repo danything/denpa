@@ -7,6 +7,7 @@
     import { SERVICE_TYPE_LABEL, splitReaderName } from '#lib/format.js';
     import { held } from '#lib/live-updates.svelte.js';
     import type { CardReaderState } from '#lib/server/scramble.js';
+    import { CHANNEL_TYPES } from '#lib/types.js';
     import X from '~icons/lucide/x';
     import type { PageData } from './$types';
 
@@ -17,8 +18,6 @@
     /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
     const deleting = arming('[data-testid^="tuner-delete"]');
 
-    /** チューナーが受けられる種別。設定の表で並べる順 */
-    const TYPES = ['GR', 'BS', 'CS'] as const;
     /**
      * 衛星の給電の選び方。値はエージェントが読む字のまま (小文字。`agent/Denpa.Agent/Tuning.cs`)。
      * 設定ファイルに手で書いた別の値は、消さずに選べるものとして足す (表の `lnbChoices`)
@@ -341,7 +340,7 @@
                                     </td>
                                     <td class="span" data-label="受信できる種別">
                                         <div class="chips types-cell">
-                                            {#each TYPES as type (type)}
+                                            {#each CHANNEL_TYPES as type (type)}
                                                 <label class="chip">
                                                     <input
                                                         type="checkbox"

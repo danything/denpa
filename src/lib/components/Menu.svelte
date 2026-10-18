@@ -94,7 +94,7 @@
          */
         nav?: boolean;
         class?: string;
-        testid?: string;
+        testid?: string | undefined;
     } = $props();
 
     const uid = $props.id();

@@ -4,9 +4,7 @@ import { orm } from '#lib/server/db.js';
 import { collectNow, collectState } from '#lib/server/epg-collect.js';
 import { refresh, start, stop } from '#lib/server/scan.js';
 import { programs, services } from '#lib/server/schema.js';
-import type { ChannelType } from '#lib/types.js';
-
-const TYPES: ChannelType[] = ['GR', 'BS', 'CS'];
+import { CHANNEL_TYPES, type ChannelType } from '#lib/types.js';
 
 /** 物理チャンネル1本と、そこに入っている局 */
 interface Coverage {
@@ -92,7 +90,7 @@ export const actions = {
             .getAll('types')
             // 画面の選ぶ欄は1つ。「すべて」は `GR,BS,CS` で来る
             .flatMap((value) => String(value).split(','))
-            .filter((t): t is ChannelType => TYPES.includes(t as ChannelType));
+            .filter((t): t is ChannelType => CHANNEL_TYPES.includes(t as ChannelType));
         if (types.length === 0) return fail(400, { message: 'スキャンする種別を選んでください' });
 
         const result = await start({ types });

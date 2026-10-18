@@ -42,7 +42,7 @@
         items: Item[];
         onselect: (key: T) => void;
         /** 枠と選択肢の testid の頭 (`{testid}-menu` / `{testid}-option`) */
-        testid: string;
+        testid?: string | undefined;
         /** メニューをボタンのどちら端に揃えるか。右端に置くボタン (速さ) は `end` */
         align?: 'start' | 'end';
         /** 選択肢の文字の大きさ。速さは数字を大きく真ん中に (`large`) */
@@ -56,7 +56,7 @@
     const stage = stageMenu(() => open);
 </script>
 
-<Menu bind:open side="top" {align} boundary={stage} {trigger} class="overlay-menu {size}" testid="{testid}-menu">
+<Menu bind:open side="top" {align} boundary={stage} {trigger} class="overlay-menu {size}" testid={testid && `${testid}-menu`}>
     {#each items as item (item.key)}
         {@const extra = attrName === undefined ? {} : { [`data-${attrName}`]: item.key }}
         <button
@@ -64,7 +64,7 @@
             role="menuitem"
             class="menu-item option"
             onclick={() => onselect(item.key)}
-            data-testid="{testid}-option"
+            data-testid={testid && `${testid}-option`}
             data-active={item.active ? '' : undefined}
             aria-current={item.active ? 'true' : undefined}
             {...extra}
@@ -75,22 +75,7 @@
 </Menu>
 
 <style>
-    /*
-     * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)
-     */
-    :global(.overlay-menu) {
-        gap: 0.125rem;
-        width: max-content;
-        max-width: min(20rem, 90vw);
-        padding: 0.5rem;
-    }
-    :global(.overlay-menu .option) {
-        padding: 0.4rem 0.75rem;
-    }
-    :global(.overlay-menu .option[data-active]) {
-        background: var(--pico-primary-background);
-        color: #fff;
-    }
+    /* 箱と選択肢の地は `SettingsMenu` と同じなので app.css (`.overlay-menu`) に置く。ここは速さの並べ方だけ */
     :global(.overlay-menu.large) {
         gap: 0.25rem;
         font-size: var(--dp-text-lg);

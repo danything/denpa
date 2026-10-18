@@ -254,8 +254,6 @@
     }
     .empty {
         padding: 1.5rem;
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
         text-align: center;
     }
     .empty p:first-child {
@@ -263,8 +261,6 @@
     }
     .list {
         padding: 0;
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
     }
     .row {
         display: flex;
@@ -276,12 +272,12 @@
         list-style: none;
     }
     .row + .row {
-        border-top: 1px solid var(--dp-subtle);
+        border-top: 1px solid var(--dp-line);
     }
     .thumb {
         width: 5rem;
         height: 3rem;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         object-fit: cover;
     }
     .thumb.blank {

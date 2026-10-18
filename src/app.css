@@ -901,7 +901,7 @@ a.button {
 }
 /* 検索欄の入力欄は Pico が `[role="search"]` で 5rem の丸い端にする。ボタンの外側の角もそれに揃える */
 [role="search"]:not(.segmented) > :is(button, a.button) {
-    border-radius: 5rem;
+    border-radius: var(--dp-radius-full);
 }
 :is([role="group"], [role="search"]):not(.segmented) > :is(button, a.button):not(:first-child) {
     border-start-start-radius: 0;
@@ -1252,6 +1252,33 @@ button.text-button:hover {
 .menu-item[data-disabled] {
     cursor: not-allowed;
     opacity: 0.5;
+}
+/*
+ * 映像の上のメニュー (速さの `OverlayMenu`・再生の設定の `SettingsMenu`)。
+ * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。
+ * 選んでいる選択肢は主の色で塗る
+ */
+.overlay-menu {
+    gap: 0.125rem;
+    width: max-content;
+    max-width: min(20rem, 90vw);
+    padding: 0.5rem;
+}
+.overlay-menu .option {
+    padding: 0.4rem 0.75rem;
+}
+.overlay-menu .option[data-active] {
+    background: var(--pico-primary-background);
+    color: #fff;
+}
+/* 映像の上に出す短い通知 (`StageNote`・追っかけの「エンコード済みを観る」・ライブの「録画のため局を切り替えました」) */
+.stage-note {
+    max-width: 100%;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--dp-radius-lg);
+    background: rgb(0 0 0 / 0.6);
+    font-size: var(--dp-text-xs);
+    color: #fff;
 }
 
 /*
