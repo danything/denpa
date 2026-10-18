@@ -19,7 +19,7 @@
         <span class="t-day-zone">{entry.zone === 'future' ? '予約' : '録画'}</span>
     </h2>
 {:else if entry.kind === 'side'}
-    <h2 class="t-day" data-testid="timeline-side" data-zone={entry.zone}>
+    <h2 class="t-day">
         <span class="t-day-name">{entry.zone === 'future' ? 'これからの予約' : '録画'}</span>
     </h2>
 {:else}
