@@ -29,21 +29,15 @@ test.describe('検索からルールを作る', () => {
         expect(shape.top).toBeLessThan(80);
 
         /*
-         * 偽の放送は同じ回 (#12) を何度も流す。最初の放送だけ録り、あとは「同じ回」で録らない。
-         * 前のテストがもう録っていれば、どれも「録画済み」になる
+         * 行ごとに「録る / 録らない」が付く。同じ回のどれを録るかは、前のテストが残した録画や
+         * チューナー不足の予約で変わるので、ここでは決め打ちしない (rule-preview.test.ts が見る)
          */
         const verdict = (kind: string, station?: string) =>
             page
                 .locator(`[data-testid="search-program"][data-verdict="${kind}"]`)
                 .filter(station === undefined ? {} : { hasText: station })
                 .first();
-        await expect(
-            page
-                .getByTestId('search-verdict-reason')
-                .filter({ hasText: /^(同じ回|録画済み)$/ })
-                .first(),
-        ).toBeVisible();
-        await expect(verdict('skip').getByTestId('search-verdict')).toHaveText('録らない');
+        await expect(page.getByTestId('search-verdict').first()).toHaveText(/^録(る|らない)$/);
         await expect(page.getByTestId('rule-submit')).toHaveText(/^(\d+ 件を録る)?ルールを保存$/);
 
         // 除外する言葉に当たる行は「除外」
