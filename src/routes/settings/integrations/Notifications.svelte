@@ -47,8 +47,11 @@
                 </div>
                 <span class="hint">1つも選ばなければ全部送ります</span>
             </div>
-            <div>
-                <button type="submit" class="small" data-testid="webhook-add">追加</button>
+            <!-- 欄と同じ右の列に置く (`.field` の中身は右の列) -->
+            <div class="field">
+                <div>
+                    <button type="submit" class="small" data-testid="webhook-add">追加</button>
+                </div>
             </div>
         </form>
 

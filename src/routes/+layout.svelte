@@ -797,6 +797,13 @@
         width: 12rem;
     }
     /*
+     * 「その他」はいちばん右のタブなので、右端を揃えると画面の端に貼り付く。ページの余白ぶん内へ寄せる
+     * (anchor positioning の無いブラウザは `Menu` が JS で置き、端から 4px 空ける)
+     */
+    :global(.menu.tab-more-menu) {
+        margin-inline-end: var(--dp-gutter, 0.75rem);
+    }
+    /*
      * **縦に積む。** Pico のナビの部品を読んでいた頃は `nav ul` が横並び (flex) になり、
      * 畳んだメニューの中まで横に並んで、箱からはみ出していた
      */

@@ -3,7 +3,7 @@
 
     SvelteKit の素の画面は「404」と理由の1行が左上に置かれるだけで、**戻る手段が無かった**。
     消した録画のリンク (410) を開いた人は、ヘッダーから行き先を選び直すしかない。
-    ログアウト・ペアリングと同じ真ん中の1枚 (`.solo`) にして、一覧へ戻るボタンを置く。
+    ログアウト・ペアリングと同じ置き方 (`.solo`) にして、一覧へ戻るボタンを置く。
 
     理由はサーバが書いた言葉 (「この録画は削除されています」) をそのまま見出しにする。
     番号は小さく添えるだけ — 人が読むのは言葉のほう
@@ -37,10 +37,10 @@
 
 <svelte:head><title>{message} - denpa</title></svelte:head>
 
-<div class="solo">
-    <div class="panel" data-testid="error-card">
-        <h1>{message}</h1>
-        <p class="small muted">{hint} <span class="num">({page.status})</span></p>
+<div class="solo" data-testid="error-card">
+    <h1>{message}</h1>
+    <p>{hint} <span class="num">({page.status})</span></p>
+    <div class="actions">
         <a class="button" href={resolve('')} data-testid="error-home">録画へ戻る</a>
     </div>
 </div>
