@@ -312,13 +312,16 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 # **node_modules は載せない。**
 #
 # adapter-bun の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
-# bun の組み込み (`bun:sqlite`) だけ。実際に build/ と server.js だけを置いた
-# ところで起動するのを確かめてある。載せていた頃は playwright も vite も
+# bun の組み込み (`bun:sqlite`) だけ。載せていた頃は playwright も vite も
 # typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
+# 置くのは下の5つだけ: build/ (アプリ)、server.js (入口) とそれが読む
+# src/lib/server/address.ts、package.json (`"type": "module"` の宣言)、drizzle/
+# (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
+# (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy)
 #
 # 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
 # `dependencies` に足すと adapter-bun がそれを外に出すので、ここで転ぶ。
-# 借りものが使う4つを devDependencies に置いてあるのはそのため
+# 依存を全部 devDependencies に置いて `dependencies` を空にしてあるのはそのため
 COPY --from=build /app/build ./build
 COPY --from=build /app/package.json ./package.json
 # DB のマイグレーション (drizzle-kit が出した SQL)。起動時に `drizzle/` を cwd から
