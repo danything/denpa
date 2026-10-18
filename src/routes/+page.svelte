@@ -48,7 +48,7 @@
         type SeriesGroup,
     } from '#lib/grouping.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
-    import { fadeIn, heroName, rememberHero } from '#lib/motion.svelte.js';
+    import { fadeIn } from '#lib/motion.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { matches, normalize } from '#lib/paging.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
@@ -528,7 +528,6 @@
     open: string | (() => void),
     fresh = false,
     quiet = false,
-    recId: number | null = null,
 )}
     <div class="cluster title-line">
         <!-- ふつうの状態 (`quietState`) はラベルを出さず、読み上げにだけ渡す -->
@@ -538,18 +537,11 @@
         >
         {#if typeof open === 'string'}
             <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
-            <!--
-                録画の行は、押すと番組名が観る画面のタイトルへ広がる (`rememberHero`。`#lib/motion.svelte.ts`)
-            -->
             <a
                 class="row-name row-open broadcast"
                 href={open}
                 data-sveltekit-preload-data="tap"
                 data-testid="row-open"
-                style:view-transition-name={recId === null ? undefined : heroName(recId)}
-                onclick={() => {
-                    if (recId !== null) rememberHero(recId);
-                }}
             >
                 {#if fresh}
                     <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
@@ -746,7 +738,6 @@
                         link ?? (() => openRecording(rec)),
                         unwatched(rec),
                         shown.quiet,
-                        rec.id,
                     )}
                     {#if held !== undefined}
                         <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->

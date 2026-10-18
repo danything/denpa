@@ -8,7 +8,7 @@
     import { denpaFontUrl } from '#lib/font.js';
     import { write } from '#lib/keep.js';
     import { measure } from '#lib/measure.svelte.js';
-    import { canTransition, forgetHero } from '#lib/motion.svelte.js';
+    import { canTransition } from '#lib/motion.svelte.js';
     import { startOffline } from '#lib/offline.svelte.js';
     import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { onNavigate } from '$app/navigation';
@@ -60,12 +60,7 @@
                 await navigation.complete.catch(() => {});
             });
             transition.ready.catch(() => {});
-            // 一覧 → 観る画面で広げた行 (`hero`) は、観る画面の外へ移り終えたら忘れる
-            void transition.finished
-                .catch(() => {})
-                .then(() => {
-                    if (to.route.id !== '/watch/[id]') forgetHero();
-                });
+            transition.finished.catch(() => {});
         });
     });
 
