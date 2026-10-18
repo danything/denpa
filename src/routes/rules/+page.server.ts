@@ -781,7 +781,8 @@ export const actions = {
          * **条件に入ったものは立ち、外れたものは引っ込む** (`rules.applyRules`)
          */
         await reapply();
-        redirect(303, relative(url, '/rules'));
+        // 直したルールを選んだまま (左の一覧で光ったまま、右も同じルール)
+        redirect(303, relative(url, `/rules?edit=${id}`));
     },
 
     /**

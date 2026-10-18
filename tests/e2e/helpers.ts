@@ -298,6 +298,18 @@ export async function setRecording(
 }
 
 /**
+ * ルールを1件消す。**削除は書く欄の上にある** (編集中だけ出る) ので、一覧の行を押して開いてから。
+ * 消すと一覧の初め (`/rules`) に戻る
+ */
+export async function deleteRule(page: Page, row: Locator): Promise<void> {
+    await row.click();
+    await page.waitForURL(/\/rules\?edit=\d+$/);
+    await page.getByTestId('rule-delete').click();
+    await page.getByTestId('rule-delete-confirm').click();
+    await page.waitForURL(/\/rules$/);
+}
+
+/**
  * 前のテストが残したルールを全部消す。
  *
  * **件数で判定するテストの前に要る。** 同じワーカーの前のファイルが作った
@@ -315,8 +327,7 @@ export async function clearRules(page: Page): Promise<void> {
     for (let i = 0; i < 20; i++) {
         const count = await rows.count();
         if (count === 0) break;
-        await page.getByTestId('rule-delete').first().click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, rows.first());
         await expect(rows).toHaveCount(count - 1);
     }
     await expect(rows).toHaveCount(0);

@@ -1,5 +1,5 @@
 import { BS11 } from '../fake/services';
-import { cancelAllReservations, clearRules, expect, goto, syncEpg, test } from './helpers';
+import { cancelAllReservations, clearRules, deleteRule, expect, goto, syncEpg, test } from './helpers';
 
 test.describe('ルールの編集', () => {
     test.beforeEach(async ({ page, request }) => {
@@ -15,7 +15,7 @@ test.describe('ルールの編集', () => {
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toContainText('テストアニメ');
 
-        await page.getByTestId('rule-edit').first().click();
+        await page.getByTestId('rule-row').first().click();
         await page.waitForURL(/edit=/);
 
         // いまの内容が入っていること。空のフォームだと作り直しになってしまう
@@ -26,27 +26,26 @@ test.describe('ルールの編集', () => {
         await page.getByTestId('channel-summary').click();
         await page.getByTestId('rule-services').locator(`input[value="${BS11.id}"]`).check();
         await page.getByTestId('rule-update').click();
-        await page.waitForURL('**/rules');
 
-        // 増えずに書き換わること
-        await expect(page.getByTestId('rule-row')).toHaveCount(1);
+        // 増えずに書き換わること。保存しても同じルールを選んだまま
         const row = page.getByTestId('rule-row').first();
         await expect(row).toContainText('ニュース');
-        await expect(row).toContainText('再放送');
-        await expect(row).toContainText('ＢＳ１１イレブン');
+        await expect(page.getByTestId('rule-row')).toHaveCount(1);
+        await expect(page).toHaveURL(/\/rules\?edit=\d+$/);
+        await expect(row).toHaveAttribute('aria-current', 'true');
 
-        // 編集画面に入り直しても、変えた内容が入っている
-        await page.getByTestId('rule-edit').first().click();
+        // 一覧から入り直しても、変えた内容が入っている
+        await page.getByTestId('rule-cancel-edit').click();
+        await page.waitForURL(/\/rules$/);
+        await row.click();
         await expect(page.getByTestId('rule-ignore')).toHaveValue('再放送');
         await expect(page.getByTestId('rule-services').locator(`input[value="${BS11.id}"]`)).toBeChecked();
 
-        await page.getByTestId('rule-cancel-edit').click();
-        await page.getByTestId('rule-delete').first().click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, row);
         await cancelAllReservations(page);
     });
 
-    test('チェックを外したまま別のルールの「編集」を押しても、そのルールの値が入る', async ({ page }) => {
+    test('チェックを外したまま別のルールを開いても、そのルールの値が入る', async ({ page }) => {
         await goto(page, '/rules');
         const description = page.getByTestId('rule-search-fields').locator('input[value="description"]');
         // どの番組にも当たらない語。予約を立てずに済む
@@ -56,8 +55,7 @@ test.describe('ルールの編集', () => {
             await page.getByTestId('rule-submit').click();
             await expect(page.getByTestId('rule-row').filter({ hasText: keyword })).toBeVisible();
         }
-        const edit = (keyword: string) =>
-            page.getByTestId('rule-row').filter({ hasText: keyword }).getByTestId('rule-edit').click();
+        const edit = (keyword: string) => page.getByTestId('rule-row').filter({ hasText: keyword }).click();
 
         await edit('当たらない語A');
         await expect(page.getByTestId('rule-keyword')).toHaveValue('当たらない語A');
@@ -80,7 +78,7 @@ test.describe('ルールの編集', () => {
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toBeVisible();
 
-        await page.getByTestId('rule-edit').first().click();
+        await page.getByTestId('rule-row').first().click();
         await page.waitForURL(/edit=/);
 
         // 条件をいじってから確かめる。ここで追加の画面に戻ると、押し直した先で
@@ -107,14 +105,13 @@ test.describe('ルールの編集', () => {
 
         // 保存したものが一覧にもそのまま出る
         await page.getByTestId('rule-update').click();
-        await expect(page.getByTestId('rule-row').first()).toContainText('5');
-        await page.getByTestId('rule-edit').first().click();
+        await expect(page.getByTestId('rule-row').first()).toContainText('優先度 5');
+        await page.getByTestId('rule-cancel-edit').click();
+        await page.getByTestId('rule-row').first().click();
         await expect(page.getByTestId('rule-priority')).toHaveValue('5');
 
-        await page.getByTestId('rule-cancel-edit').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(1);
-        await page.getByTestId('rule-delete').first().click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await cancelAllReservations(page);
     });
@@ -132,7 +129,7 @@ test.describe('ルールの編集', () => {
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toBeVisible();
 
-        await page.getByTestId('rule-edit').first().click();
+        await page.getByTestId('rule-row').first().click();
         await page.waitForURL(/edit=/);
 
         /*
@@ -165,8 +162,7 @@ test.describe('ルールの編集', () => {
 
         // 残りはルールごと畳む。まだ始まっていない予約は行ごと消える
         await goto(page, '/rules');
-        await page.getByTestId('rule-delete').first().click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await goto(page, '/');
         await expect(page.getByTestId('reservation-row').filter({ hasText: 'テスト番組C' })).toHaveCount(0);
@@ -197,8 +193,7 @@ test.describe('ルールの作り直し', () => {
             ).toBeVisible();
 
             await goto(page, '/rules');
-            await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
-            await page.getByTestId('rule-delete-confirm').click();
+            await deleteRule(page, page.getByTestId('rule-row').first());
             await expect(page.getByTestId('rule-row')).toHaveCount(0);
         }
     });

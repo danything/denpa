@@ -1,37 +1,89 @@
 import { BS11 } from '../fake/services';
-import { cancelAllReservations, clearRules, expect, goto, syncEpg, test } from './helpers';
+import { cancelAllReservations, clearRules, deleteRule, expect, goto, syncEpg, test } from './helpers';
 
 test.describe('自動予約ルール', () => {
     /**
-     * **左に書く欄、右に一覧。** 縦に積んでいた頃は、条件をいじるたびに一覧まで
-     * 押し下げられて、**何が録れるようになったかを見るのに毎回スクロールで戻る**
-     * ことになっていた。
+     * **左に一覧、右に書く欄** (一覧と詳細の形)。左の列は画面の左端とヘッダーの下まで寄せ、
+     * 境目は線だけ。行を押せば右でそのまま直せる。
      *
      * 横に並べはじめる幅は**全画面で 768px** (`+layout.svelte` の `FILLED`)。
      * 並べたらページごとは動かさず、左右がそれぞれ自分で巻き取る
      */
-    test('広い画面では左に書く欄、右に一覧を並べる', async ({ page }) => {
+    test('広い画面では左に一覧、右に書く欄を並べる', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 720 });
         await goto(page, '/rules');
 
         const shape = await page.evaluate(() => {
             const form = document.querySelector('[data-testid="rule-form"]');
-            const table = document.querySelector('[data-testid="rule-list"]');
-            const add = document.querySelector('[data-testid="rule-submit"]');
+            const list = document.querySelector('[data-testid="rule-list"]');
+            const side = list?.closest('aside');
             const root = document.documentElement;
             return {
                 横に並ぶ:
-                    form !== null && table !== null
-                        ? form.getBoundingClientRect().right <= table.getBoundingClientRect().left + 1
+                    form !== null && list !== null
+                        ? list.getBoundingClientRect().right <= form.getBoundingClientRect().left + 1
                         : false,
-                // 押すものは巻き取られる中身の外。条件がどれだけ長くても見えている
-                押すものは外: form !== null && add !== null && !form.contains(add),
+                左端に付く: side !== null && side !== undefined ? side.getBoundingClientRect().left : -1,
                 縦に動く: root.scrollHeight > root.clientHeight + 1,
             };
         });
         expect(shape.横に並ぶ).toBe(true);
-        expect(shape.押すものは外).toBe(true);
+        expect(shape.左端に付く).toBe(0);
         expect(shape.縦に動く).toBe(false);
+        // 押すもの (追加) は条件が長くても画面の中にある
+        await expect(page.getByTestId('rule-submit')).toBeInViewport();
+    });
+
+    /**
+     * **狭い画面では一覧と書く欄を切り替える。** 縦に積むと書く欄が先に来て、
+     * 390×844 では登録済みのルールが1行も見えなかった。どちらを出すかは URL で決めるので、
+     * ブラウザの戻るで一覧に戻れる
+     */
+    test('狭い画面では一覧を先に出し、押すと書く欄に切り替わる', async ({ page }) => {
+        await clearRules(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/rules');
+        const keyword = page.getByTestId('rule-keyword');
+        await expect(page.getByTestId('rule-new')).toBeVisible();
+        await expect(keyword).toBeHidden();
+
+        // 新しいルール → 書く欄。戻るで一覧へ
+        await page.getByTestId('rule-new').click();
+        await page.waitForURL(/\/rules\?new/);
+        await expect(keyword).toBeVisible();
+        await expect(page.getByTestId('rule-list')).toBeHidden();
+        await page.goBack();
+        await expect(page.getByTestId('rule-new')).toBeVisible();
+        await expect(keyword).toBeHidden();
+
+        // 当たる番組の無い語にしておく (予約を立てない)
+        await page.getByTestId('rule-new').click();
+        await keyword.fill('どこにも無い番組');
+        // 下見のあとも書く欄のまま
+        await page.getByTestId('rule-preview').click();
+        await page.waitForURL(/\/rules\?.*keyword=/);
+        await expect(page.getByTestId('preview')).toBeVisible();
+        // 足したら一覧に戻り、足したルールが最初の画面に見える
+        await page.getByTestId('rule-submit').click();
+        const row = page.getByTestId('rule-row').filter({ hasText: 'どこにも無い番組' });
+        await expect(row).toBeInViewport();
+        await expect(keyword).toBeHidden();
+
+        // 行を押すとそのルールの書く欄。「← ルール一覧」で戻る
+        await row.click();
+        await page.waitForURL(/\/rules\?edit=\d+$/);
+        await expect(keyword).toHaveValue('どこにも無い番組');
+        await page.getByTestId('rule-back').click();
+        await page.waitForURL(/\/rules$/);
+        await expect(row).toBeVisible();
+
+        // 広い画面では戻るものを出さない (一覧と書く欄が並んでいる)
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await row.click();
+        await expect(page.getByTestId('rule-back')).toBeHidden();
+        await expect(page.getByTestId('rule-list')).toBeVisible();
+
+        await clearRules(page);
     });
 
     test('条件が空のルールは作れない', async ({ page }) => {
@@ -41,7 +93,7 @@ test.describe('自動予約ルール', () => {
             'キーワード・局・ジャンルのいずれかを指定してください',
         );
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
-        // 1件も無いときは、空のカードの隅ではなく真ん中に、次にすることまで出す
+        // 1件も無いときは、次にすることまで出す
         await expect(page.getByTestId('rule-empty')).toContainText('「追加」すると');
     });
 
@@ -74,12 +126,16 @@ test.describe('自動予約ルール', () => {
         await expect(fromRule.first()).toBeVisible();
 
         // 無効化しても既存の予約は残る(意図せず録り逃さないため)
+        // 有効/無効は、行を押して開いた書く欄の上で切り替える
         await goto(page, '/rules');
-        await rule.getByTestId('rule-toggle').click();
+        await rule.click();
+        await page.getByTestId('rule-toggle').click();
+        await expect(page.getByTestId('rule-toggle')).toHaveText('有効化');
+        // 選んだまま。一覧の行にも出る
+        await expect(page.getByTestId('rule-row').first()).toHaveAttribute('aria-current', 'true');
         await expect(page.getByTestId('rule-row').first()).toContainText('無効');
 
-        await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         // 後続に影響しないよう、このルールが作った予約は片付ける

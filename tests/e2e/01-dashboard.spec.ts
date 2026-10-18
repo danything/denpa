@@ -1,4 +1,4 @@
-import { cancelAllReservations, expect, goto, syncEpg, test } from './helpers';
+import { cancelAllReservations, deleteRule, expect, goto, syncEpg, test } from './helpers';
 
 test.describe('ダッシュボードと画面遷移', () => {
     test('データ放送のチャンネルは取り込まない', async ({ page, request }) => {
@@ -441,8 +441,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toContainText('テストアニメ');
 
-        await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await cancelAllReservations(page);
     });
