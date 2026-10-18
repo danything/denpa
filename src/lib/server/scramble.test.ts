@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isScrambled, readCardStatus, scrambledRatio } from './scramble';
 
+// カードの番号は必ず架空のものにする (本物のカードの番号を載せない)
 const PACKET = 188;
 
 /** 指定した割合だけスクランブルの印を立てたTSを作る */
@@ -75,11 +76,11 @@ describe('カードリーダーの状態', () => {
             const card = readCardStatus({
                 ok: true,
                 readers: ['Gemplus (usb 4-11)'],
-                message: 'カードが読めています (Gemplus (usb 4-11)、0000032231622637)',
+                message: 'カードが読めています (Gemplus (usb 4-11)、0000001234567890)',
             });
             expect(card.ok).toBe(true);
             expect(card.source).toBe('local');
-            expect(card.message).toContain('0000032231622637');
+            expect(card.message).toContain('0000001234567890');
             expect(card.readers).toEqual([
                 { name: 'Gemplus (usb 4-11)', state: 'unknown', ids: [], tuners: [] },
             ]);
@@ -94,12 +95,12 @@ describe('カードリーダーの状態', () => {
             message: '',
             source: 'remote',
             remote: 'http://card:25252',
-            ids: ['0000032231622637'],
+            ids: ['0000001234567890'],
             tuners: ['PT3-T1'],
             readers: [],
         });
         expect(card.remote).toBe('http://card:25252');
-        expect(card.ids).toEqual(['0000032231622637']);
+        expect(card.ids).toEqual(['0000001234567890']);
         expect(card.tuners).toEqual(['PT3-T1']);
     });
 });
