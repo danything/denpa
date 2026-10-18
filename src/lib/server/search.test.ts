@@ -11,8 +11,17 @@ const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-search-')), 'denpa.db');
 
 const { now, orm } = await import('./db');
-const { exact, hasAll, searchPrograms, searchRecordings, searchReservations, searchRules, searchWords } =
-    await import('./search');
+const {
+    exact,
+    hasAll,
+    MAX_QUERY,
+    searchQuery,
+    searchPrograms,
+    searchRecordings,
+    searchReservations,
+    searchRules,
+    searchWords,
+} = await import('./search');
 const { programs, recordings, reservations, rules, services } = await import('./schema');
 
 const SERVICE = 3239123608;
@@ -91,6 +100,25 @@ describe('語の読み方', () => {
     test('すべての語を含むときだけ当たる', () => {
         expect(hasAll(['abc', 'でんぱ'], 'ＡＢＣ', 'でんぱテレビ')).toBe(true);
         expect(hasAll(['abc', 'ラジオ'], 'ＡＢＣ', 'でんぱテレビ')).toBe(false);
+    });
+});
+
+describe('探す言葉の長さ', () => {
+    test('前後の空白を落とし、上限を超えた分は切る', () => {
+        expect(searchQuery('  でんぱ  ')).toBe('でんぱ');
+        expect(searchQuery(null)).toBe('');
+        expect(searchQuery('あ'.repeat(MAX_QUERY))).toHaveLength(MAX_QUERY);
+        expect(searchQuery('あ'.repeat(MAX_QUERY + 50))).toBe('あ'.repeat(MAX_QUERY));
+    });
+
+    test('文字で数えるので、外字の途中で切れない', () => {
+        const cut = searchQuery('𠮷'.repeat(MAX_QUERY + 1));
+        expect([...cut]).toHaveLength(MAX_QUERY);
+        expect(cut).toBe('𠮷'.repeat(MAX_QUERY));
+    });
+
+    test('切った端の空白は残さない', () => {
+        expect(searchQuery(`${'あ'.repeat(MAX_QUERY - 1)} い`)).toBe('あ'.repeat(MAX_QUERY - 1));
     });
 });
 
