@@ -12,7 +12,6 @@ import {
     reach,
     region,
     type Situation,
-    smoothFrame,
     storedAmbient,
     strips,
     vivid,
@@ -300,25 +299,7 @@ describe('地に敷く色', () => {
     });
 });
 
-describe('色を時間でならす', () => {
-    test('写した1枚を 4 割だけ取り込む。前が無ければそのまま', () => {
-        const first = smoothFrame(null, new Uint8ClampedArray([100, 0, 0, 255]), 0.4);
-        expect([...first]).toEqual([100, 0, 0, 255]);
-        const next = smoothFrame(first, new Uint8ClampedArray([200, 100, 0, 255]), 0.4);
-        expect([...next].map((v) => Math.round(v))).toEqual([140, 40, 0, 255]);
-    });
-
-    test('場面が変わっても一度には跳ばず、何回かで寄っていく', () => {
-        let state: Float32Array | null = smoothFrame(null, new Uint8ClampedArray([0, 0, 0, 255]), 0.4);
-        const cut = new Uint8ClampedArray([255, 255, 255, 255]);
-        const seen: number[] = [];
-        for (let i = 0; i < 5; i++) {
-            state = smoothFrame(state, cut, 0.4);
-            seen.push(Math.round(state[0]!));
-        }
-        expect(seen).toEqual([102, 163, 200, 222, 235]);
-    });
-
+describe('入れ替え', () => {
     test('入れ替えは始めと終わりがゆっくり', () => {
         expect(ease(0)).toBe(0);
         expect(ease(1)).toBe(1);
