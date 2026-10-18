@@ -364,6 +364,10 @@
             {#if form?.message}
                 <div class="notice error detail-error">{form.message}</div>
             {/if}
+            <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは右上の × (`ProgramDetail`) -->
+            {#if opened !== null}
+                <a class="button secondary" href={resolve(`rules?program=${opened.program_id}`)}>ルールを作る</a>
+            {/if}
             {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
                 <a class="button outline" href={resolve(`live?service=${opened.service_id}`)}>視聴</a>
             {/if}
@@ -394,10 +398,6 @@
                     <button type="submit" data-testid="search-detail-reserve">予約</button>
                 </form>
             {/if}
-            {#if opened !== null}
-                <a class="button secondary outline" href={resolve(`rules?program=${opened.program_id}`)}>ルールを作る</a>
-            {/if}
-            <button type="button" class="secondary" onclick={close} data-testid="detail-close">閉じる</button>
         {/snippet}
     </ProgramDetail>
 {/if}
