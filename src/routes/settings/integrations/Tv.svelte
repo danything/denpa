@@ -13,7 +13,7 @@
     なくしたテレビ・手放したテレビはここで止める
 -->
 <div class="sections readable">
-    <section class="section" data-testid="devices-card">
+    <section class="section">
         <div class="section-head">
             <h2>テレビのアプリ</h2>
         </div>
@@ -23,7 +23,7 @@
         {#if data.devices.length === 0}
             <p class="small muted">まだありません</p>
         {:else}
-            <div class="rows" data-testid="device-list">
+            <div class="rows">
                 {#each data.devices as device (device.id)}
                     <div class="row device" data-testid="device-row">
                         <div class="grow">
@@ -34,7 +34,7 @@
                             </div>
                         </div>
                         <div class="row-actions">
-                            <ActionButton action="?/revokeDevice" fields={{ id: device.id }} class="small outline danger" testid="device-revoke">
+                            <ActionButton action="?/revokeDevice" fields={{ id: device.id }} class="small outline danger">
                                 取消
                             </ActionButton>
                         </div>
