@@ -6,7 +6,13 @@ import { deleteRecordingFiles } from '#lib/server/files.js';
 import { recordingFromForm } from '#lib/server/recording.js';
 import { cancel, reserve } from '#lib/server/reservations.js';
 import { programs, reservations, services } from '#lib/server/schema.js';
-import { searchPrograms, searchRecordings, searchReservations, searchRules } from '#lib/server/search.js';
+import {
+    searchPrograms,
+    searchQuery,
+    searchRecordings,
+    searchReservations,
+    searchRules,
+} from '#lib/server/search.js';
 
 /**
  * `?program=<番組ID>` で開く番組。ヘッダーの候補 (`SearchField`) から番組や予約を選ぶと、
@@ -53,7 +59,7 @@ const LIMIT = 100;
  * 番組表・録画・予約・ルールを1度に引き、節ごとに件数と先頭を返す (`#lib/server/search.ts`)
  */
 export function load({ url }) {
-    const q = (url.searchParams.get('q') ?? '').trim();
+    const q = searchQuery(url.searchParams.get('q'));
     const options = { limit: LIMIT, count: true };
     return {
         q,
