@@ -87,8 +87,8 @@
      * 引っ込むときは頭をゆっくり (`--dp-ease-exit`)。動かさない設定の端末では全部止める
      * (下の prefers-reduced-motion。画面の切り替えは JS でも見る — `#lib/motion.svelte.ts`)
      *
-     * - `--dp-duration` … 色・影の移り変わり、メニューやダイアログの閉じ方
-     * - `--dp-duration-slow` … 画面の切り替え・滑る下線・開くメニューとダイアログ・伸びるバー
+     * - `--dp-duration` … 画面の切り替え・滑る下線・色・影の移り変わり、メニューやダイアログの閉じ方
+     * - `--dp-duration-slow` … 開くメニューとダイアログ・伸びるバー
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
      * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
      */
@@ -217,12 +217,18 @@
  * 録画の行 → 観る画面の題名) も同じ仕組み (`#lib/motion.svelte.ts`)
  */
 ::view-transition-group(*) {
-    animation-duration: var(--dp-duration-slow);
+    animation-duration: var(--dp-duration);
     animation-timing-function: var(--dp-ease);
 }
-::view-transition-old(root),
+/*
+ * 中身の入れ替えは**古いほうを消さずに置いたまま、新しいほうだけを短く重ねる**。
+ * 両方を同時に薄くすると、途中で両方とも半透明になって間延びして見えた
+ */
+::view-transition-old(root) {
+    animation: none;
+}
 ::view-transition-new(root) {
-    animation-duration: var(--dp-duration-slow);
+    animation-duration: var(--dp-duration);
 }
 ::view-transition-old(site-header),
 ::view-transition-old(site-tabbar) {
