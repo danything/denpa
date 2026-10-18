@@ -22,3 +22,6 @@ compose.override.yml
 # 手元の作業 (エミュレータ・トンネル) が置くもの
 /*.pid
 /ssh.log
+
+# 測った結果と、測るための作り物の映像 (tests/bench)
+tests/bench/out/

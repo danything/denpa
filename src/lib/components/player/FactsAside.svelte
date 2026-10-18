@@ -8,7 +8,7 @@
      * **ここだけが巻き取られ** (`overflow-y: auto`)、押すもの (`footer`) は
      * 巻き取られる中身の外に貼り付けて、いつでも見えるようにする。
      *
-     * 幅と高さの決めごとは3画面共通: 幅は固定で映像側だけ伸び、高さは画面の
+     * 幅と高さの決めごとは3画面共通 (枠は付けない): 幅は固定で映像側だけ伸び、高さは画面の
      * 残りぜんぶ (映像の高さに揃えない理由は [watch/[id]/+page.svelte](../../../routes/watch/%5Bid%5D/+page.svelte))。
      * **二段組にした直後は細く** (256px)。理由は [ControlBar.svelte](ControlBar.svelte)。
      *
@@ -62,28 +62,28 @@
             width: 20rem;
         }
     }
+    /*
+     * カードにしない。高さは画面の残りぜんぶで映像とは揃わないので、枠があると
+     * 映像の下端とずれた枠の下端が目立った。地の上に文字だけを置く
+     */
     .box {
         display: flex;
         flex-direction: column;
         min-height: 0;
         flex: 1;
-        border: 1px solid var(--dp-line);
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
-        box-shadow: var(--dp-shadow);
     }
     .body {
         min-height: 0;
         flex: 1;
         overflow-y: auto;
-        padding: 1rem;
+        padding: 0.25rem 0.5rem 1rem;
     }
     .foot {
         display: flex;
         flex-shrink: 0;
         flex-wrap: wrap;
         gap: 0.5rem;
-        padding: 1rem;
+        padding: 0.75rem 0.5rem;
         border-top: 1px solid var(--dp-line);
     }
 </style>

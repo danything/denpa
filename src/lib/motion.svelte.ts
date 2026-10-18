@@ -68,29 +68,6 @@ export function morph(
 }
 
 /**
- * **録画の一覧 → 観る画面で、押した行の番組名を観る画面のタイトルへ広げる。**
- * 一覧で押した録画を覚えておき (`rememberHero`)、一覧はその行の名前に、観る画面はタイトルに
- * 同じ名前を付ける (`heroName`)。観る画面から戻ったときも同じ行へ縮んで帰る。
- *
- * 名前が付くのはいつも 1 行だけで、**要るあいだだけ** — 観る画面の外へ移る切り替えが済んだら
- * 忘れる (`+layout.svelte`)。動かせないときは覚えない (名前を付けたままにしない)
- */
-const hero = $state<{ recording: number | null }>({ recording: null });
-
-export function rememberHero(id: number): void {
-    if (canTransition()) hero.recording = id;
-}
-
-export function forgetHero(): void {
-    hero.recording = null;
-}
-
-/** 一覧の行と観る画面のタイトルに付ける名前。覚えている録画でなければ付けない */
-export function heroName(id: number): string | undefined {
-    return hero.recording === id ? 'recording-hero' : undefined;
-}
-
-/**
  * **読み込めた画像をふわっと出す** (`use:fadeIn`。録画の一覧のポスター)。
  * もう読み込めている画像 (キャッシュにあった・描く前に届いた) は何もしない — 一瞬で出す。
  * 待つものだけ透明にしておき、届いたら `app.css` の `img[data-fade]` が出す。

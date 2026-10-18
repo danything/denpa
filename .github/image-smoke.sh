@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
-# 組んだイメージを起こして、中身が動くかを見る (docker-build-check.yml)。
+# 組んだイメージを起こして、中身が動くかを見る (PR の docker-build-check.yml と、
+# main で push する前の build-and-deploy.yml)。
 #
 # **CI のテストはイメージを使わない** (偽の ffmpeg・ホストで組んだエージェントで回す) ので、
 # イメージの中の ffmpeg やエージェントが実際に動くかはここでしか見ていない。
 # ライブラリの欠け (共有ライブラリの置き場・土台の入れ替え) は、組むのは通っても起こすと落ちる。
 #
-# 使い方: image-smoke.sh <denpa|denpa-agent> <イメージ>
+# 使い方: image-smoke.sh <denpa|denpa-agent|denpa-aio> <イメージ> [denpa-aio のときの版]
 set -euo pipefail
 name=$1
 image=$2
+
+# GET が 200 を返すまで待つ (中身を出す)。答えなければ 1
+wait_for() {
+    local url=$1 tries=$2
+    for _ in $(seq "$tries"); do
+        if curl -fsS "$url"; then echo; return 0; fi
+        sleep 1
+    done
+    return 1
+}
 
 case "$name" in
 denpa)
@@ -73,12 +84,11 @@ denpa)
         }
     '
 
-    # 本番と同じ入口 (CMD) で起こして、DB まで触る /api/health が答えるか
+    # 本番と同じ入口 (CMD) で起こして、DB まで触る /api/health が答えるか。
+    # /api/health が見るのは DB だけで、エージェントもチューナーも要らない
+    # (自動の処理はエージェントに繋がらなくても起動は止めない)
     docker run -d --name denpa-smoke -p 3000:3000 "$image" > /dev/null
-    for _ in $(seq 60); do
-        if curl -fsS localhost:3000/api/health; then echo; exit 0; fi
-        sleep 1
-    done
+    wait_for localhost:3000/api/health 60 && exit 0
     docker logs denpa-smoke
     echo "denpa が答えません" >&2
     exit 1
@@ -87,12 +97,25 @@ denpa-agent)
     # 起こして API が答えるか (機材は無いので、チューナーは自動検出で空)
     docker run -d --name agent-smoke -p 25252:25252 "$image" > /dev/null
     trap 'docker logs agent-smoke; docker rm -f agent-smoke > /dev/null' EXIT
-    for _ in $(seq 30); do
-        if curl -fsS localhost:25252/denpa/tuners; then echo; exit 0; fi
-        sleep 1
-    done
+    wait_for localhost:25252/denpa/tuners 30 && exit 0
     echo "エージェントが答えません" >&2
     exit 1
+    ;;
+denpa-aio)
+    # 入口 (aio-entrypoint.ts) が本体とエージェントの両方を起こすか。中身の ffmpeg などは
+    # 本体のイメージそのままなので、ここでは起動だけを見る。版を渡されたら、
+    # release.Dockerfile で足した版を本体が読めているかも見る
+    want_version=${3:-}
+    docker run -d --name aio-smoke -p 3000:3000 -p 25252:25252 "$image" > /dev/null
+    trap 'docker logs aio-smoke; docker rm -f aio-smoke > /dev/null' EXIT
+    wait_for localhost:25252/denpa/tuners 30 || { echo "エージェントが答えません" >&2; exit 1; }
+    health=$(wait_for localhost:3000/api/health 60) || { echo "denpa が答えません" >&2; exit 1; }
+    echo "$health"
+    if [ -n "$want_version" ] && ! grep -qF "\"version\":\"$want_version\"" <<< "$health"; then
+        echo "版が $want_version になっていません" >&2
+        exit 1
+    fi
+    exit 0
     ;;
 *)
     echo "知らないイメージ: $name" >&2
