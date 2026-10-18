@@ -1086,7 +1086,7 @@
         pointer-events: none;
         border-top: 2px solid var(--dp-error);
         /* 1 分ごとの移りを飛ばさずに (上の `nowSlots`) */
-        transition: translate var(--dp-duration-slow) var(--dp-ease);
+        transition: translate var(--dp-duration) var(--dp-ease);
     }
     .now-label {
         position: sticky;
