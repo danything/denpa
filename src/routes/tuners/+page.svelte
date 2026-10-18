@@ -8,6 +8,7 @@
     import LearnedLogo from '#lib/components/LearnedLogo.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import SaveNote from '#lib/components/SaveNote.svelte';
+    import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '#lib/format.js';
     import { held, liveUpdates } from '#lib/live-updates.svelte.js';
@@ -28,11 +29,14 @@
      * 覚えていない局だけ出していた頃は、**覚えているロゴを確かめる場所が
      * どこにも無かった**。自動探索はロゴでない縁を検出することもあるので、
      * 「当たらない」と思ったときに映像を見られることのほうが要る。
-     * 畳んであるので、並べても1行ずつ
+     * 局は畳んであり、まだの局と覚えた局に分けて (`CM_GROUPS`)、何列にも詰めて並べる
      */
-    const cmLogos = $derived(
-        [...data.cmLogos].sort((a, b) => Number(a.learned_at !== null) - Number(b.learned_at !== null)),
-    );
+    const cmLogos = $derived(data.cmLogos);
+    /** CM検出のロゴの一覧の分け方。まだの局が先 */
+    const CM_GROUPS = [
+        { learned: false, label: 'まだ' },
+        { learned: true, label: '覚えました' },
+    ];
     /** まだ覚えていない局の数。畳んだ一覧の見出しの横に出す */
     const cmLogosPending = $derived(cmLogos.filter((service) => service.learned_at === null).length);
     /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
@@ -59,6 +63,8 @@
      * エージェントにも控えはあるが、聞きに行かない (+page.server.ts)
      */
     const coverage = $derived(data.channels);
+    /** 表の局名の前に出す局ロゴの大きさ。放送のロゴは 16:9 (64x36) */
+    const LOGO_SIZE = 'width: 1.6rem; height: 0.9rem';
     /** 入っている局をすべて並べたもの */
     const services = $derived(coverage.flatMap((channel) => channel.services));
 
@@ -112,7 +118,7 @@
     2 列にカードを積んでいた頃は、目が左右を行き来した。表は幅を使うので、設定の画面より広く取る。
 
     並びは「いまの様子」から: 空きとカードリーダー → 受信できるチャンネル → たまに回すスキャン →
-    入れたときしか触らないチューナーの設定 → ロゴ
+    入れたときしか触らないチューナーの設定 → CM検出のロゴ。局ロゴは局ごとの話なので、受信できるチャンネルの表に出す
 -->
 <div class="sections tuners">
     <!--
@@ -324,19 +330,31 @@
         -->
         <div class="section-head spread">
             <h2>受信できるチャンネル</h2>
-            <!--
-                入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
-                譲るので、何か動いていると番組表がなかなか埋まらない。
-                押されている間は録画以外には譲らせて、全チューナーで回る
-            -->
-            <ActionButton
-                action="?/collectNow"
-                class="small secondary outline"
-                disabled={data.collect.boosted}
-                testid="epg-collect-now"
-            >
-                {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
-            </ActionButton>
+            <div class="cluster">
+                <!--
+                    入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
+                    譲るので、何か動いていると番組表がなかなか埋まらない。
+                    押されている間は録画以外には譲らせて、全チューナーで回る
+                -->
+                <ActionButton
+                    action="?/collectNow"
+                    class="small secondary outline"
+                    disabled={data.collect.boosted}
+                    testid="epg-collect-now"
+                >
+                    {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
+                </ActionButton>
+                <!--
+                    取得するものが無ければボタンも出さない。押しても「もう全部持っています」と
+                    断るだけになる。**走っている最中でも押せる** — 押されたほうが譲る作りなので、
+                    使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
+                -->
+                {#if data.logos.pending > 0}
+                    <ActionButton action="?/logoSweep" class="small secondary outline" testid="logo-sweep">
+                        {data.logoSweep.running ? 'ロゴを集めています…' : 'ロゴをいますぐ集める'}
+                    </ActionButton>
+                {/if}
+            </div>
         </div>
         {#if data.collect.running}
             <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
@@ -355,6 +373,22 @@
                     <div class="tiny muted" data-testid="epg-sweeping">
                         BS は、まず1つの中継から全局の番組名を入れています (数分)。
                         番組内容・出演者などの詳細は、そのあと中継ごとに回って足します
+                    </div>
+                {/if}
+            </div>
+        {/if}
+        <!-- ロゴも1チャンネルに数分かかる。出さないと押しても何も起きていないように見える -->
+        {#if data.logoSweep.startedAt !== null}
+            <div class="progress-block" data-testid="logo-sweep-progress">
+                <JobProgress done={data.logoSweep.done} total={data.logoSweep.total} unit="チャンネル">
+                    ・ ロゴ <strong>{data.logoSweep.found} 局</strong>
+                    {#if data.logoSweep.channels.length > 0}
+                        ・ 受信中 {data.logoSweep.channels.join(', ')}
+                    {/if}
+                </JobProgress>
+                {#if data.logoSweep.message !== ''}
+                    <div class="tiny muted" data-testid="logo-sweep-done">
+                        {data.logoSweep.message}
                     </div>
                 {/if}
             </div>
@@ -381,7 +415,29 @@
                 <span class="faint">→</span>
                 <span class="muted">番組表のある局</span>
                 <strong>{withEpg}</strong>
+                <!--
+                    局ロゴも局ごとの話なので、ここに並べる (別の節に分けていた頃は、説明が細い列に
+                    押し込まれて読みにくかった)。取れないぶんを除いて揃っていれば「揃った」の色
+                -->
+                <span class="faint">・</span>
+                <span class="muted">ロゴ</span>
+                <span
+                    class="tag num {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
+                    data-testid="status-logos"
+                >
+                    {data.logos.have} / {data.logos.total} 局
+                </span>
             </div>
+            {#if data.logos.unavailable > 0}
+                <!--
+                    取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
+                    **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
+                    CS のロゴは BS の中継から降ってくる
+                -->
+                <div class="tiny muted" data-testid="logo-unavailable">
+                    <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
+                </div>
+            {/if}
             <Lead>
                 1つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません
                 {#snippet more()}
@@ -394,6 +450,16 @@
                     <p>
                         待てないときは<strong>「番組表をいますぐ集める」</strong>で、録画とライブ視聴に使っていないチューナーを全部使って集められます
                         (スキャンやロゴの取得は止めます)。
+                    </p>
+                    <!-- 局ロゴ。放送波から取得するしかない。番組表に出ないとき、取れていないのか出し方が悪いのかをここで見分ける -->
+                    <p>
+                        局ロゴは番組表を集めるときに、あわせて取得します。放送波に流れるのは数十秒〜数分に一度、
+                        <strong>衛星は十数分に一度</strong>で、取れたロゴも1週間ごとに取り直します。
+                        表の局名の前に出ていないものは、まだ取れていない局です。
+                    </p>
+                    <p>
+                        「ロゴをいますぐ集める」では衛星の分も集めます。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
+                        そこだけ最大20分かかります (他の中継は数秒で終わります)。
                     </p>
                 {/snippet}
             </Lead>
@@ -419,8 +485,30 @@
                                     {channel.channel}
                                 </td>
                                 <td class="small">
-                                    <div class="broadcast">
-                                        {channel.services.map((service) => service.name).join(', ')}
+                                    <!--
+                                        局ごとに、取れている局ロゴを名前の前に出す。まだのものは点線の枠、
+                                        放送に載っていないものは何も置かない (場所だけ空けて頭を揃える)
+                                    -->
+                                    <div class="stations">
+                                        {#each channel.services as service (service.id)}
+                                            <span
+                                                class="station"
+                                                data-testid="channel-service"
+                                                data-service-id={service.id}
+                                                data-logo={service.logo}
+                                            >
+                                                {#if service.logo === 'have'}
+                                                    <ServiceLogo id={service.id} has style={LOGO_SIZE} />
+                                                {:else}
+                                                    <span
+                                                        class="logo-slot {service.logo}"
+                                                        aria-hidden="true"
+                                                        title={service.logo === 'missing' ? 'ロゴはまだ取れていません' : 'ロゴは放送に載っていません'}
+                                                    ></span>
+                                                {/if}
+                                                <span class="broadcast">{service.name}</span>
+                                            </span>
+                                        {/each}
                                     </div>
                                 </td>
                                 <td class="small nowrap num">
@@ -459,15 +547,19 @@
         <form method="POST" action="?/scan" use:submitting class="setting-rows scan-form">
             <div class="field">
                 <span class="field-label">種別</span>
-                <div class="chips" data-testid="scan-types">
-                    {#each TYPES as type (type)}
-                        <label class="chip">
-                            <input type="checkbox" name="types" value={type} checked={type === 'GR'} />
-                            {SERVICE_TYPE_LABEL[type]}
-                        </label>
-                    {/each}
-                </div>
-                <div class="cluster">
+                <!--
+                    **選ぶものと押すものを1行に。** ボタンを種別の下の段に置いていた頃は、
+                    どの欄にも付かない浮いたボタンに見えた。狭い幅では折り返す
+                -->
+                <div class="cluster scan-controls">
+                    <div class="chips" data-testid="scan-types">
+                        {#each TYPES as type (type)}
+                            <label class="chip">
+                                <input type="checkbox" name="types" value={type} checked={type === 'GR'} />
+                                {SERVICE_TYPE_LABEL[type]}
+                            </label>
+                        {/each}
+                    </div>
                     <button type="submit" class="small" disabled={scan.state === 'running'} data-testid="scan-start">
                         {scan.state === 'running' ? '実行中…' : '開始'}
                     </button>
@@ -650,98 +742,26 @@
         {/if}
     </section>
 
+    <!--
+        CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
+        こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
+        **録画ごとの話ではなく局ごとの話**で、覚えたものは以降その局の全部に効く。
+        番組表に出す局ロゴは「受信できるチャンネル」に局ごとに出す
+    -->
     <section class="section" data-testid="logo-card">
         <div class="section-head">
-            <h2>ロゴ</h2>
+            <h2>CM検出のロゴ</h2>
+            <span class="tag num" data-testid="status-cm-logos">{data.cmLogoStats.have} / {data.cmLogoStats.total} 局</span>
         </div>
-        <div class="setting-rows logos">
-            <!--
-                局ロゴ。放送波から取得するしかない。番組表に出ないとき、
-                取れていないのか出し方が悪いのかをここで見分けられるようにする
-            -->
-            <div class="field">
-                <span class="field-label">局ロゴ</span>
-                <div class="cluster">
-                    <!-- 取れないぶんを除いて揃っていれば「揃った」でよい -->
-                    <span
-                        class="tag num {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
-                        data-testid="status-logos"
-                    >
-                        {data.logos.have} / {data.logos.total} 局
-                    </span>
-                    <!--
-                        取得するものが無ければボタンも出さない。押しても「もう全部持っています」と
-                        断るだけになる。**走っている最中でも押せる** — 押されたほうが譲る作りなので、
-                        使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
-                    -->
-                    {#if data.logos.pending > 0}
-                        <ActionButton action="?/logoSweep" class="small secondary outline" testid="logo-sweep">
-                            {data.logoSweep.running ? '集めています…' : 'ロゴをいますぐ集める'}
-                        </ActionButton>
-                    {/if}
-                </div>
-                {#if data.logos.unavailable > 0}
-                    <!--
-                        取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
-                        **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
-                        CS のロゴは BS の中継から降ってくる
-                    -->
-                    <div class="small muted">
-                        <strong>{data.logos.unavailable} 局</strong>はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
-                    </div>
-                {/if}
-                <!-- 1チャンネルに数分かかる。出さないと押しても何も起きていないように見える -->
-                {#if data.logoSweep.startedAt !== null}
-                    <div class="sweep" data-testid="logo-sweep-progress">
-                        <JobProgress done={data.logoSweep.done} total={data.logoSweep.total} unit="チャンネル">
-                            ・ 取得 <strong>{data.logoSweep.found} 局</strong>
-                            {#if data.logoSweep.channels.length > 0}
-                                ・ 受信中 {data.logoSweep.channels.join(', ')}
-                            {/if}
-                        </JobProgress>
-                        {#if data.logoSweep.message !== ''}
-                            <div class="tiny muted" data-testid="logo-sweep-done">
-                                {data.logoSweep.message}
-                            </div>
-                        {/if}
-                    </div>
-                {/if}
-                <Lead>
-                    番組表を集めるときに、あわせて取得します
-                    {#snippet more()}
-                        <p>
-                            ロゴが放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong>です。
-                            あわせて取得するので、ロゴのためだけにチューナーを使うことはありません。
-                            取れたロゴも1週間ごとに取り直します。
-                        </p>
-                        <p>
-                            「ロゴをいますぐ集める」では衛星の分も集めます。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
-                            そこだけ最大20分かかります (他の中継は数秒で終わります)。
-                        </p>
-                    {/snippet}
-                </Lead>
-            </div>
-            <!--
-                CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
-                こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
-                **録画ごとの話ではなく局ごとの話**で、覚えたものは以降その局の全部に効く
-            -->
-            <div class="field">
-                <span class="field-label">CM検出のロゴ</span>
-                <div class="cluster">
-                    <span class="tag">{data.cmLogoStats.have} / {data.cmLogoStats.total} 局</span>
-                </div>
-                <Lead>
-                    録画をエンコードするときに、その録画から自動で覚えます
-                    {#snippet more()}
-                        <p>
-                            画面の隅で線の向きがどのコマでも揃うところをロゴとして覚え、エンコードのたびに精度を上げます。
-                            違うものを覚えていたら、下の一覧から消せば次の録画で覚え直します。
-                        </p>
-                    {/snippet}
-                </Lead>
-            </div>
-        </div>
+        <Lead>
+            録画をエンコードするときに、その録画から自動で覚えます
+            {#snippet more()}
+                <p>
+                    画面の隅で線の向きがどのコマでも揃うところをロゴとして覚え、エンコードのたびに精度を上げます。
+                    違うものを覚えていたら、下の一覧から消せば次の録画で覚え直します。
+                </p>
+            {/snippet}
+        </Lead>
         <!--
             **局ごとの一覧は畳んでおく。** 100 局を超えると、開いたままでは画面がそれだけで埋まる。
             覚えていない局があれば、その数だけ見出しの横に出す (開かなくても要るかどうか分かる)
@@ -751,23 +771,38 @@
                 <summary>
                     局ごとの一覧
                     {#if cmLogosPending > 0}
-                        <span class="tag" data-testid="cm-logo-pending">まだ {cmLogosPending} 局</span>
+                        <span class="tag num" data-testid="cm-logo-pending">まだ {cmLogosPending} 局</span>
                     {/if}
                 </summary>
-                <div class="cm-logos">
-                    {#each cmLogos as service (service.id)}
-                        <details class="cm-logo">
-                            <summary class="small">
-                                <span class="broadcast">{service.name}</span>
-                                <!-- 覚えたかどうかは畳んだまま分かるようにする (100局ぶん開いて回らずに済む) -->
-                                <span class="tag {service.learned_at !== null ? 'success' : ''}">
-                                    {service.learned_at !== null ? '覚えました' : 'まだ'}
-                                </span>
-                            </summary>
-                            <LearnedLogo serviceId={service.id} serviceName={service.name} learnedAt={service.learned_at} />
-                        </details>
-                    {/each}
-                </div>
+                <!--
+                    **まだの局と覚えた局を分けて、詰めて並べる。** 1局ずつ枠で囲んだ行を縦に積んでいた頃は、
+                    100局を超えると長く巻かないと見終わらなかった。開いた局だけ1段を使って中身を出す
+                -->
+                {#each CM_GROUPS as group (group.learned)}
+                    {@const list = cmLogos.filter((service) => (service.learned_at !== null) === group.learned)}
+                    {#if list.length > 0}
+                        <div class="cm-group" data-testid={group.learned ? 'cm-logo-learned' : 'cm-logo-waiting'}>
+                            <h3 class="tiny muted">{group.label} <span class="num">({list.length})</span></h3>
+                            <div class="cm-logos">
+                                {#each list as service (service.id)}
+                                    <details class="cm-logo" data-learned={service.learned_at !== null}>
+                                        <summary class="small">
+                                            <!-- 覚えたかどうかは畳んだまま分かるようにする (色だけにしない。字は読み上げ用) -->
+                                            <span class="state-dot" aria-hidden="true"></span>
+                                            <span class="visually-hidden">{group.label}:</span>
+                                            <span class="broadcast truncate">{service.name}</span>
+                                        </summary>
+                                        <LearnedLogo
+                                            serviceId={service.id}
+                                            serviceName={service.name}
+                                            learnedAt={service.learned_at}
+                                        />
+                                    </details>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+                {/each}
             </details>
         {/if}
     </section>
@@ -940,33 +975,90 @@
         min-width: 12rem;
         overflow-wrap: break-word;
     }
-    .logos {
+    /* 種別の切り替え (`.chip`) と同じ高さにして、1行に並べる */
+    .scan-controls button {
+        padding: 0.15rem 0.75rem;
+        font-size: var(--dp-text-xs);
+        line-height: 1.6;
+    }
+    /* 受信できるチャンネルの局。ロゴと名前を1組にして、折り返しても組は割らない */
+    .stations {
         display: flex;
-        flex-direction: column;
-        gap: var(--dp-space-4);
+        flex-wrap: wrap;
+        gap: 0.15rem 0.9rem;
     }
-    .sweep,
-    .cm-logos {
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
+    .station {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
     }
-    .cm-logos {
-        gap: 0.5rem;
+    /* ロゴの無い局の場所。まだ取れていないものは点線の枠、取れないものは空けるだけ */
+    .logo-slot {
+        flex-shrink: 0;
+        width: 1.6rem;
+        height: 0.9rem;
+        border-radius: 0.25rem;
     }
-    /* 局ごとの一覧 (畳んである)。開くと 1 局ずつの行が並ぶ */
+    .logo-slot.missing {
+        border: 1px dashed var(--dp-line-strong);
+    }
+    /* 局ごとの一覧 (畳んである) */
     .cm-logo-list > summary {
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
         font-size: var(--dp-text-sm);
     }
+    .cm-group {
+        margin-top: var(--dp-space-3);
+    }
+    .cm-group h3 {
+        margin-bottom: 0.25rem;
+        font-weight: var(--dp-weight);
+    }
+    /* 枠で囲まず、何列にも詰める。開いた局だけ1段を使う */
     .cm-logos {
-        margin-top: 0.5rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+        gap: 0 var(--dp-space-2);
     }
     .cm-logo {
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--dp-line);
+        min-width: 0;
+        margin: 0;
+    }
+    .cm-logo[open] {
+        grid-column: 1 / -1;
+        padding-bottom: 0.5rem;
+    }
+    .cm-logo > summary {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0;
+        padding: 0.2rem 0.35rem;
         border-radius: var(--dp-radius);
+        line-height: 1.5;
+        list-style: none;
+        transition: background-color var(--dp-duration) var(--dp-ease);
+    }
+    .cm-logo > summary::-webkit-details-marker,
+    .cm-logo > summary::after {
+        display: none;
+    }
+    .cm-logo > summary:hover,
+    .cm-logo[open] > summary {
+        background: var(--dp-subtle);
+    }
+    /* 覚えたかどうかの小さな点。まだは枠だけ、覚えたものは成功の色で塗る */
+    .state-dot {
+        flex-shrink: 0;
+        width: 0.5rem;
+        height: 0.5rem;
+        border: 1px solid var(--dp-line-strong);
+        border-radius: var(--dp-radius-full);
+    }
+    .cm-logo[data-learned='true'] .state-dot {
+        border-color: var(--dp-ok);
+        background: var(--dp-ok);
     }
 </style>
