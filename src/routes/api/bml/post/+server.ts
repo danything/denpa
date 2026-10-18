@@ -25,7 +25,7 @@ export const POST: RequestHandler = async ({ url, request }) => {
 
     const body = new Uint8Array(await request.arrayBuffer());
     /*
-     * 形は決まったものだけ通す (データ放送はフォーム、Hybridcast のアプリは JSON や文字も送る)。
+     * 形式は決まったものだけ通す (データ放送はフォーム、Hybridcast のアプリは JSON や文字も送る)。
      * ほかはフォームとして送る
      */
     const type = request.headers.get('content-type') ?? '';

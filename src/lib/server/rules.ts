@@ -49,7 +49,7 @@ function parseGenreDetail(program: Matchable): Genre[] {
 }
 
 /**
- * 判定に使う形にほどいたルール。
+ * 判定に使う形式にほどいたルール。
  *
  * ほどく作業 (JSON の読み出し、キーワードの分割、全角の直し) を**ルール1つにつき
  * 1回**にするために分けてある。以前は判定のたびにやっていて、実機では
@@ -81,7 +81,7 @@ export function compile(rule: Rule): CompiledRule {
 }
 
 /**
- * SQL の `GLOB` で候補を減らすための形。**減らすだけで、当てるのは `matchesCompiled`。**
+ * SQL の `GLOB` で候補を減らすための形式。**減らすだけで、当てるのは `matchesCompiled`。**
  *
  * 下見 (`rules/+page.server.ts`) はこれから放送される番組を全部引いて JS で絞っていた。
  * 実データ相当 (33,000 件) で全列を読むだけで 330〜400ms、条件が1語でも同じだけ
@@ -98,7 +98,7 @@ export function compile(rule: Rule): CompiledRule {
  * - 外字は規格の字 (𠮷 🈟) のまま入っていて、語のほうは昔の書き方 (吉 [新]) に
  *   寄せてある (`fold.ts`)。寄せた字が絡む所は抜き、残りの切れ端を当てる
  *
- * @returns `GLOB` に渡す形 (`*語*`)。使えなければ null
+ * @returns `GLOB` に渡す形式 (`*語*`)。使えなければ null
  */
 export function globPatterns(compiled: CompiledRule): string[] | null {
     if (compiled.fields.includes('extended')) return null;

@@ -46,7 +46,7 @@ test.describe('入る方法を何も設定していないとき', () => {
     });
 });
 
-test.describe('接続元の住所', () => {
+test.describe('接続元のアドレス', () => {
     /*
      * 入口の server.js は、本当の接続元を `x-denpa-remote` に**上書きで**入れて adapter へ渡す
      * (adapter は常にそれを読む)。外から同じ名前を付けて来ても消えるので、
@@ -94,7 +94,7 @@ test.describe('接続元の住所', () => {
             });
             // 通ったことだけ見る (断られれば 403。画面の中身はここでは問わない)
             expect(inside.status).not.toBe(403);
-            // 客が左に偽の住所を足して来ても、前段が足した右端 (本当の相手) を使う
+            // 客が左に偽のアドレスを足して来ても、前段が足した右端 (本当の相手) を使う
             const spoofed = await fetch(`${closed.appUrl}/`, {
                 headers: { 'x-forwarded-for': '10.10.5.9, 203.0.113.9' },
             });
