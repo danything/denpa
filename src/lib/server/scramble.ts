@@ -5,7 +5,7 @@ import { PACKET, SYNC } from '../ts/psi';
 import { config } from './config';
 
 /**
- * スクランブルの検出と解除。
+ * スクランブルの検出と復号。
  *
  * カードが読めないまま録れると、**録画は成功してサイズもそれらしいのに、中身が
  * 全部スクランブルされていて ffmpeg が1フレームも取り出せない**、という分かりにくい
@@ -50,7 +50,7 @@ export function scrambledRatio(path: string): number {
             offset += read;
 
             for (let i = 0; i + PACKET <= read; i += PACKET) {
-                // 同期が取れていないファイルは判定しない。誤って解除に回すより素通しがまし
+                // 同期が取れていないファイルは判定しない。誤って復号に回すより素通しがまし
                 if (buffer[i] !== SYNC) return 0;
                 total++;
                 if ((buffer[i + 3]! & 0xc0) !== 0) scrambled++;
@@ -223,7 +223,7 @@ export async function descramble(
     }
 
     try {
-        // 解除は数十分かかることがある。中止を押されたらここで切る
+        // 復号は数十分かかることがある。中止を押されたらここで切る
         const res = await fetch(`${config.agentUrl}/denpa/decode`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -82,7 +82,7 @@ export function denied(): Response {
 }
 
 /**
- * **何も聞かずに通す相手か。** 見るのは住所だけ (`TRUSTED_NETWORKS`、CIDR の
+ * **何も聞かずに通す相手か。** 見るのはアドレスだけ (`TRUSTED_NETWORKS`、CIDR の
  * カンマ区切り)。
  *
  * **ここに当たると OIDC も掛かりません。** LAN のテレビのアプリ (denpa-tv)
@@ -97,11 +97,11 @@ export function trusted(address: string): boolean {
 }
 
 /**
- * 接続元の住所。**読めなければ空文字を返す。**
+ * 接続元のアドレス。**読めなければ空文字を返す。**
  *
- * 住所は入口の server.js が決めて `x-denpa-remote` に入れ、adapter-bun はそれを読む
+ * アドレスは入口の server.js が決めて `x-denpa-remote` に入れ、adapter-bun はそれを読む
  * (`ADDRESS_HEADER` は server.js が固定する。前段をどこまで信じるかは `TRUSTED_PROXIES`)。
- * adapter-bun はそのヘッダが無いと**例外を投げる** — server.js が相手の住所を
+ * adapter-bun はそのヘッダが無いと**例外を投げる** — server.js が相手のアドレスを
  * 読めなかったときがそれで、そのまま呼ぶと 500 になる。
  *
  * **読めなかったときは素通しにしない** (空文字はどの CIDR にも当たらない)。

@@ -36,7 +36,7 @@ export interface FakeService {
      * Hybridcast が載っている局。**AIT を流す。**
      *
      * データ放送と違って、アプリの中身は電波に乗ってこない — 乗っているのは
-     * 住所だけなので、偽の放送でも本物と同じものが作れる ([ts/ait.ts](../../src/lib/ts/ait.ts))
+     * アドレス (URL) だけなので、偽の放送でも本物と同じものが作れる ([ts/ait.ts](../../src/lib/ts/ait.ts))
      */
     hybridcast?: { name: string; base: string; path: string };
     /** リモコンのボタン (地上波だけ)。省けば 9 */

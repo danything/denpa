@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { inNetwork, normalize, resolveClient, unreadable } from './address';
 
-describe('住所がネットワークの中か', () => {
+describe('アドレスがネットワークの中か', () => {
     test('CIDR の中と外', () => {
         expect(inNetwork('10.10.0.1', '10.10.0.0/16')).toBe(true);
         expect(inNetwork('10.10.255.254', '10.10.0.0/16')).toBe(true);
@@ -52,7 +52,7 @@ describe('住所がネットワークの中か', () => {
         expect(inNetwork('10.0.0.1', '10.0.0.0/-1')).toBe(false);
         expect(inNetwork('10.0.0.1', '10.0.0.0/abc')).toBe(false);
         expect(inNetwork('10.0.0.1', '')).toBe(false);
-        // 桁が溢れているもの。数として読めても住所ではない
+        // 桁が溢れているもの。数として読めてもアドレスではない
         expect(inNetwork('10.0.0.1', '10.0.0.256/24')).toBe(false);
         expect(inNetwork('fd00::1', 'fd00::/129')).toBe(false);
         expect(inNetwork('fd00::1', 'fd00:::/8')).toBe(false);
@@ -61,7 +61,7 @@ describe('住所がネットワークの中か', () => {
     });
 });
 
-describe('住所をそろえる', () => {
+describe('アドレスをそろえる', () => {
     test('IPv4 はそのまま、IPv4 を写した IPv6 は IPv4 に戻す', () => {
         expect(normalize('10.0.0.1')).toBe('10.0.0.1');
         expect(normalize('::ffff:10.0.0.1')).toBe('10.0.0.1');
@@ -103,7 +103,7 @@ describe('本当の接続元を決める', () => {
         expect(resolveClient('10.42.0.148', '10.10.5.9, 10.42.0.7', proxies)).toBe('10.10.5.9');
     });
 
-    test('客が前段の前で偽の住所を付けて来ても、右から最初の前段でない住所を使う', () => {
+    test('客が前段の前で偽のアドレスを付けて来ても、右から最初の前段でないアドレスを使う', () => {
         // Envoy は付いて来た X-Forwarded-For の右に本当の相手を足す
         expect(resolveClient('10.42.0.148', '10.10.5.9, 203.0.113.9', proxies)).toBe('203.0.113.9');
     });

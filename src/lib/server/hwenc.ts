@@ -346,7 +346,7 @@ function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
  *
  * 素材は放送と同じ **インタレの MPEG-2** を、その場で CPU で作る (`nullsrc` を
  * `mpeg2video` で。一時ファイルに置くのは、`run` が標準入力を渡さないため)。
- * それをライブと同じ引数 (`liveHwArgs` の `full`) でデコードして、解除して、エンコードする。
+ * それをライブと同じ引数 (`liveHwArgs` の `full`) でデコードして、インタレ解除して、エンコードする。
  *
  * **GPU でデコードできなかったら必ず落ちる。** ffmpeg は `-hwaccel` が使えないと黙って CPU で
  * デコードするが、そのフレームは GPU に無いので `deinterlace_vaapi` が受け取れずに降りる。
