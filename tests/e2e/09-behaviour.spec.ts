@@ -165,6 +165,31 @@ test.describe('操作したときの反応', () => {
         expect(title.y).toBeGreaterThanOrEqual(box.y);
     });
 
+    /*
+     * **番組の詳細を閉じるのは右上の × だけ** (下の並びに「閉じる」は置かない)。Esc でも閉じる。
+     * 狭い画面では下から出る一枚 (下端に付き、ボタンは全幅)
+     */
+    test('番組の詳細は × と Esc で閉じ、狭い画面では下から出る', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        await page.getByTestId('program-button').first().click();
+        const detail = page.getByTestId('program-detail');
+        await expect(detail).toBeVisible();
+        await expect(detail.getByRole('button', { name: '閉じる', exact: true })).toHaveCount(2); // × と幕
+        await expect(detail.locator('.modal-actions').getByText('閉じる')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(detail).toBeHidden();
+
+        const view = { width: 390, height: 844 };
+        await page.setViewportSize(view);
+        await page.getByTestId('program-button').first().click();
+        await expect(detail).toBeVisible();
+        const box = (await detail.locator('> div').first().boundingBox())!;
+        expect(Math.round(box.y + box.height)).toBe(view.height);
+        expect(Math.round(box.width)).toBe(view.width);
+        await detail.getByTestId('detail-close').click();
+        await expect(detail).toBeHidden();
+    });
+
     test('スマホの幅でも番組表の操作は1行で、表は下のタブまで届く', async ({ page }) => {
         // 操作を2段に積んだり表の下を空けたりすると、1画面に入る時間が減る
         await page.setViewportSize({ width: 390, height: 844 });

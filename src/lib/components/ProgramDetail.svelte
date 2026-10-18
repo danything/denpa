@@ -44,12 +44,14 @@
          */
         transitionName?: string | undefined;
     } = $props();
+
+    let box: HTMLDivElement | undefined = $state();
 </script>
 
 <svelte:window
     onkeydown={(e) => {
-        // 中で開いたメニュー (「その他…」) があれば、Esc はそれを閉じるだけにする
-        if (e.key === 'Escape' && !e.defaultPrevented && document.querySelector(':popover-open') === null) onclose();
+        // 箱の中で開いたメニュー (「その他…」) があれば、Esc はそれを閉じるだけにする (よそのポップオーバーは見ない)
+        if (e.key === 'Escape' && !e.defaultPrevented && box?.querySelector(':popover-open') == null) onclose();
     }}
 />
 
@@ -68,7 +70,7 @@
         **巻き取るのは中身だけ。** 押すものは箱の下端に貼り付けたまま出しておく
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)
     -->
-    <div class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
+    <div bind:this={box} class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
         <button type="button" class="ghost icon small modal-close" onclick={onclose} aria-label="閉じる" data-testid="detail-close">
             <X aria-hidden="true" />
         </button>
