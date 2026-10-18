@@ -1085,7 +1085,7 @@
         color: inherit;
         text-align: left;
         font-size: inherit;
-        font-weight: normal;
+        font-weight: var(--dp-weight);
         cursor: pointer;
         transition:
             background-color var(--dp-duration),
@@ -1119,7 +1119,7 @@
     }
     .channel-name {
         font-size: 0.875rem;
-        font-weight: 500;
+        font-weight: var(--dp-weight);
     }
     .tuned .channel-name {
         color: var(--dp-primary-text);
