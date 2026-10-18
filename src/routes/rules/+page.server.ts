@@ -70,8 +70,8 @@ const stillHeld = () =>
     );
 
 /**
- * 条件の読み取り。**画面から来る経路が2つある** — 「この条件で何が録れるか」は
- * URL のクエリで、保存はフォームの POST で来る。どちらも `get` / `getAll` を持つ。
+ * 条件の読み取り。**画面から来る経路が2つある** — 初期値 (番組表の検索・録画から) は
+ * URL のクエリで、下見 (`?/preview`) と保存はフォームの POST で来る。どちらも `get` / `getAll` を持つ。
  */
 interface Fields {
     get(key: string): unknown;
@@ -141,7 +141,7 @@ function dedupeOf(fields: Fields): boolean | null {
  * 条件を編集する場所はこの画面1つに寄せてある。番組表にも検索欄を置いていた頃は
  * 判定が二重にあってズレたので、フォームの値がそのまま「何が録れるか」になるようにした。
  */
-function conditionsFrom(params: URLSearchParams): Rule | null {
+function conditionsFrom(params: Fields): Rule | null {
     const conditions = conditionsOf(params);
     if (conditions.empty) return null;
 
@@ -159,10 +159,9 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
         /*
          * **打ち込んだ値をそのまま持ち回る。**
          *
-         * ここを 1 で埋めていた頃は、「この条件で何が録れるか見る」を押すたびに
+         * 下見を GET の往復で出していた頃、ここを 1 で埋めていたので、見るたびに
          * **優先度が 1 に戻って**いた (見るだけのつもりで押して、そのまま保存すると
-         * 静かに書き換わる)。あの往復は GET でこの画面に戻ってくるので、
-         * フォームの値は全部 URL に乗っている — 読まなければ落ちるだけ
+         * 静かに書き換わる)。読まなければ落ちるだけ
          */
         priority: rulePriority(params),
         dedupe: conditions.dedupe ?? true,
@@ -172,7 +171,7 @@ function conditionsFrom(params: URLSearchParams): Rule | null {
 }
 
 /**
- * 条件の下見ひとまとめ。**後から流れてくる** (`previewOf`)。
+ * 条件の下見ひとまとめ (`previewFor`)。
  *
  * `failed` は組めなかった理由。組めていれば null
  */
@@ -240,14 +239,6 @@ interface Pending {
 
 export async function load({ url }) {
     const defaults = settings();
-    /*
-     * チューナーの台数。**スケジューラと同じところから取る。**
-     * 取れなければ空 (= 何も競合として出さない)。エージェントが落ちているときに
-     * 予約表を赤くしても直しようが無いので、スケジューラもそう振る舞う
-     */
-    const { capacity, busy } = await tunerState();
-    // 使う区間は前後マージンぶん延びる。スケジューラと同じ物差しで数える
-    const margins = { start: config.startMargin, end: config.endMargin };
     // ?edit=<id> のときは、そのルールをフォームに読み込んで書き換えられるようにする
     const editing = orm()
         .select()
@@ -260,6 +251,115 @@ export async function load({ url }) {
      */
     if (url.searchParams.has('edit') && editing === undefined) redirect(303, relative(url, '/rules'));
 
+    const origin = originOf(url);
+    /*
+     * 録画・番組から来た (`originOf`) ときは、下書きの条件を URL に載せて出直す。
+     * 下書きが URL にあれば、フォームの初期値をそのまま組める。既にこのシリーズを録っているルールが
+     * あれば出直さず、そちらへの入口を出す
+     */
+    if (
+        origin !== null &&
+        origin.rule === null &&
+        origin.prefill !== null &&
+        !url.searchParams.has('keyword')
+    ) {
+        const query = new URLSearchParams({
+            keyword: origin.prefill.keyword,
+            dedupe: '1',
+            [origin.kind]: String(origin.id),
+        });
+        for (const genre of origin.prefill.genres ?? []) query.append('genres', genre);
+        redirect(303, relative(url, `/rules?${query}`));
+    }
+    /*
+     * フォームの初期値。URL に載っている条件を優先する (番組表の検索・録画から来たとき)。
+     * 無ければ編集中のルールの条件
+     */
+    const conditions = conditionsFrom(url.searchParams) ?? editing ?? null;
+
+    /*
+     * 予約数は**これから録るぶんだけ**。
+     *
+     * 全部の行を数えていた頃は、録り終えたものも取り消したものも混ざるので、
+     * ルールを止めても数が減らず、編集画面に出る件数とも合わなかった。
+     * この列を見るのは「このルールがいま何を押さえているか」を知りたいときなので、
+     * 履歴は数えない
+     */
+    const rules: Row[] = orm()
+        .select({
+            ...getTableColumns(ruleTable),
+            reservations: sql<number>`(SELECT COUNT(*) FROM ${reservations}
+                 WHERE ${reservations.rule_id} = ${ruleTable.id} AND ${PENDING})`.mapWith(Number),
+        })
+        .from(ruleTable)
+        .orderBy(desc(ruleTable.id))
+        .all();
+    // 取り残しの局は選ばせない (CURRENT_SERVICES)。もう録れない局が並ぶだけ
+    const services = orm()
+        .select()
+        .from(serviceTable)
+        .where(sql.raw(CURRENT_SERVICES))
+        .orderBy(serviceTable.type, serviceTable.channel)
+        .all();
+    // フォームの初期値は preview と同じものを使う。別々に組み立てると、
+    // 画面に出ている結果と保存されるものがズレる
+    return {
+        rules,
+        services,
+        editing: editing ?? null,
+        seed: conditions,
+        /** 録画・番組から作るとき、どれからか (`originOf`) */
+        origin:
+            origin === null
+                ? null
+                : {
+                      kind: origin.kind,
+                      id: origin.id,
+                      name: origin.name,
+                      found: origin.found,
+                      rule:
+                          origin.rule === null
+                              ? null
+                              : { id: origin.rule.id, name: origin.rule.name, enabled: origin.rule.enabled },
+                      prefilled: origin.prefill !== null,
+                  },
+        defaults,
+        // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)
+        watchable: watchableServices(now()),
+    };
+}
+
+/**
+ * 条件に当たる番組の下見。**いちばん重い。**
+ *
+ * これから先の番組を**全部**引いて JS で絞るので、実データでは番組表の
+ * 24時間ぶんより重い。画面は書く欄を打ち直すたびに、少し待ってから呼ぶ (`?/preview`)。
+ * 同じタブからは1つずつしか送らない (送っている間に変わったぶんは、返ってから最後の条件で1回)。
+ *
+ * **転んでも投げ返さない。** 理由を `failed` に入れて返す (画面は「数えられませんでした」と出す)
+ *
+ * @param editing 編集中のルール。条件から外れたのに残っている、そのルールの予約も混ぜる
+ */
+async function previewFor(conditions: Rule, editing: Rule | undefined): Promise<Preview> {
+    try {
+        return { ...(await countPreview(conditions, editing)), failed: null };
+    } catch (error) {
+        console.error('[rules] 下見を組めませんでした', error);
+        return { total: 0, skipped: 0, programs: [], conflicts: 0, failed: String(error) };
+    }
+}
+
+/** 下見を数える本体。転んだら投げる (受け止めるのは `previewFor`) */
+async function countPreview(conditions: Rule, editing: Rule | undefined): Promise<Omit<Preview, 'failed'>> {
+    const defaults = settings();
+    /*
+     * チューナーの台数。**スケジューラと同じところから取る。**
+     * 取れなければ空 (= 何も競合として出さない)。エージェントが落ちているときに
+     * 予約表を赤くしても直しようが無いので、スケジューラもそう振る舞う
+     */
+    const { capacity, busy } = await tunerState();
+    // 使う区間は前後マージンぶん延びる。スケジューラと同じ物差しで数える
+    const margins = { start: config.startMargin, end: config.endMargin };
     /** まだ録っていない予約。重なりの判定と、条件から外れた予約を出すのに使う */
     const pending: Pending[] = orm()
         .select({
@@ -284,58 +384,7 @@ export async function load({ url }) {
         .all();
     const reserved = new Map(pending.map((row) => [row.program_id, row]));
 
-    const origin = originOf(url);
-    /*
-     * 録画・番組から来た (`originOf`) ときは、下書きの条件を URL に載せて出直す。
-     * **条件はいつも URL にある**ので (「何が録れるか見る」と同じ形)、下見も
-     * フォームの初期値もそのまま組める。既にこのシリーズを録っているルールが
-     * あれば出直さず、そちらへの入口を出す
-     */
-    if (
-        origin !== null &&
-        origin.rule === null &&
-        origin.prefill !== null &&
-        !url.searchParams.has('keyword')
-    ) {
-        const query = new URLSearchParams({
-            keyword: origin.prefill.keyword,
-            dedupe: '1',
-            [origin.kind]: String(origin.id),
-        });
-        for (const genre of origin.prefill.genres ?? []) query.append('genres', genre);
-        redirect(303, relative(url, `/rules?${query}`));
-    }
-    /*
-     * 条件が入っていれば、その条件で録れる番組を出す。
-     *
-     * URL に載っている条件を優先する。編集中に「この条件で何が録れるか見る」を押すと
-     * ?edit=<id> と書き換えたフォームの値が一緒に飛んでくるので、保存済みのほうを
-     * 使うと**いま画面に入っている条件ではない結果**が出てしまう。
-     */
-    const conditions = conditionsFrom(url.searchParams) ?? editing ?? null;
-    const wanted = conditions !== null && url.searchParams.size > 0;
-
-    /**
-     * 条件に当たる番組の下見。**いちばん重い。**
-     *
-     * これから先の番組を**全部**引いて JS で絞るので、実データでは番組表の
-     * 24時間ぶんより重い。しかも**番組表の検索窓が飛ばす先はここ**なので、
-     * 待たされるのはたいていこの処理。
-     *
-     * ここだけ後から流して、条件の枠とルールの一覧は先に出す
-     * (番組表と同じ。`guide/+page.server.ts` の `gridOf`)。
-     * **転んでも投げ返さない** — 理由も同じ (誰も受け取らない拒否になる)
-     */
-    async function previewOf(): Promise<Preview> {
-        // 外枠を先に出してから引く。同期のクエリなので、ここで一度譲らないと意味が無い
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        try {
-            return { ...readPreview(conditions as Rule), failed: null };
-        } catch (error) {
-            console.error('[rules] 下見を組めませんでした', error);
-            return { total: 0, skipped: 0, programs: [], conflicts: 0, failed: String(error) };
-        }
-    }
+    return readPreview(conditions);
 
     function readPreview(conditions: Rule): Omit<Preview, 'failed'> {
         // 条件のほどきは1回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
@@ -533,58 +582,6 @@ export async function load({ url }) {
             programs: shown,
         };
     }
-    /*
-     * 予約数は**これから録るぶんだけ**。
-     *
-     * 全部の行を数えていた頃は、録り終えたものも取り消したものも混ざるので、
-     * ルールを止めても数が減らず、編集画面に出る件数とも合わなかった。
-     * この列を見るのは「このルールがいま何を押さえているか」を知りたいときなので、
-     * 履歴は数えない
-     */
-    const rules: Row[] = orm()
-        .select({
-            ...getTableColumns(ruleTable),
-            reservations: sql<number>`(SELECT COUNT(*) FROM ${reservations}
-                 WHERE ${reservations.rule_id} = ${ruleTable.id} AND ${PENDING})`.mapWith(Number),
-        })
-        .from(ruleTable)
-        .orderBy(desc(ruleTable.id))
-        .all();
-    // 取り残しの局は選ばせない (CURRENT_SERVICES)。もう録れない局が並ぶだけ
-    const services = orm()
-        .select()
-        .from(serviceTable)
-        .where(sql.raw(CURRENT_SERVICES))
-        .orderBy(serviceTable.type, serviceTable.channel)
-        .all();
-    // フォームの初期値は preview と同じものを使う。別々に組み立てると、
-    // 画面に出ている結果と保存されるものがズレる
-    return {
-        rules,
-        services,
-        editing: editing ?? null,
-        seed: conditions,
-        /** 録画・番組から作るとき、どれからか (`originOf`) */
-        origin:
-            origin === null
-                ? null
-                : {
-                      kind: origin.kind,
-                      id: origin.id,
-                      name: origin.name,
-                      found: origin.found,
-                      rule:
-                          origin.rule === null
-                              ? null
-                              : { id: origin.rule.id, name: origin.rule.name, enabled: origin.rule.enabled },
-                      prefilled: origin.prefill !== null,
-                  },
-        /** 下見。**条件が付いているときだけ、後から流れてくる** */
-        preview: wanted ? previewOf() : null,
-        defaults,
-        // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)
-        watchable: watchableServices(now()),
-    };
 }
 
 /**
@@ -744,6 +741,26 @@ function ruleValues(conditions: Conditions, form: FormData) {
 }
 
 export const actions = {
+    /**
+     * **書く欄のいまの値で、録れる番組を数える** (`previewFor`)。何も書き換えない。
+     *
+     * 画面が打ち直しのたびに少し待ってから送る。送るのは書く欄そのもの (`edit` も入っている)
+     * なので、読み方は保存と同じ (`conditionsOf`)。条件が空なら数えない (全番組に当たるだけ)
+     */
+    preview: async ({ request }) => {
+        const form = await request.formData();
+        const conditions = conditionsFrom(form);
+        if (conditions === null) return { preview: null };
+        const editing = form.has('edit')
+            ? orm()
+                  .select()
+                  .from(ruleTable)
+                  .where(eq(ruleTable.id, Number(form.get('edit'))))
+                  .get()
+            : undefined;
+        return { preview: await previewFor(conditions, editing) };
+    },
+
     create: async ({ request, url }) => {
         const form = await request.formData();
         const conditions = conditionsOf(form);
@@ -764,7 +781,7 @@ export const actions = {
         // 足したルールは他の予約を外せないので、そのルールだけ当てれば足りる
         await reapply(created.id);
         /*
-         * 書く欄を初めの状態に戻す (「何が録れるか見る」の条件も URL から外す)。更新と同じ。
+         * 書く欄を初めの状態に戻す (URL に載せて来た条件も外す)。更新と同じ。
          * 録画・番組から作ったときはその元だけ残す — 作ったルールで録っていると出る (`originOf`)
          */
         const from = String(form.get('origin') ?? '').match(/^(recording|program):(\d+)$/);

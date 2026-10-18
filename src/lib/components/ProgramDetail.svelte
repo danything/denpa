@@ -51,7 +51,7 @@
         **巻き取るのは中身だけ。** 押すものは箱の下端に貼り付けたまま出しておく
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)
     -->
-    <div class="detail-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
+    <div class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
         <div class="detail-body">
             <ProgramFacts {program} {notes} {cmNote} {fps} />
         </div>
@@ -60,7 +60,7 @@
             **枠はこちらで持つ。** 右下に横並びなので、どこから開いても同じ並びになる。
             **閉じるはいちばん右** (見ないでも押せる)。入り切らなければ折り返す (`flex-wrap`)
         -->
-        <div class="detail-actions">
+        <div class="detail-actions modal-actions">
             {#if actions}
                 {@render actions()}
             {:else}
@@ -80,8 +80,6 @@
         align-items: center;
         justify-content: center;
         height: 100%;
-        padding: 1rem 0;
-        box-sizing: border-box;
     }
     .detail-backdrop {
         position: absolute;
@@ -92,7 +90,7 @@
         padding: 0;
         border: 0;
         border-radius: 0;
-        background: rgb(0 0 0 / 0.55);
+        background: var(--dp-backdrop);
         box-shadow: none;
         cursor: default;
         transition: opacity var(--dp-duration) var(--dp-ease);
@@ -115,34 +113,21 @@
             transform: scale(0.96);
         }
     }
+    /* 箱の見た目 (面・縁・角丸・影・幅) は `app.css` の `.modal-box` (ダイアログと同じ)。ここは中身を巻き取る並べ方だけ */
     .detail-box {
-        position: relative;
         display: flex;
         flex-direction: column;
-        width: calc(100% - 2rem);
-        max-width: 42rem;
-        max-height: 100%;
-        padding: 1.5rem;
-        box-sizing: border-box;
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
-        border: 1px solid var(--dp-line);
-        box-shadow: var(--dp-shadow-pop);
+        overflow: hidden;
     }
     .detail-body {
         min-height: 0;
         flex: 1 1 0%;
         overflow-y: auto;
     }
+    /* 並べ方は `.modal-actions` */
     .detail-actions {
         position: relative;
-        display: flex;
         flex-shrink: 0;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 0.5rem;
-        margin-top: 1.5rem;
     }
     .detail-actions :global(form) {
         margin: 0;

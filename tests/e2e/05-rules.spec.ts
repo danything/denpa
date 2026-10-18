@@ -3,35 +3,49 @@ import { cancelAllReservations, clearRules, deleteRule, expect, goto, syncEpg, t
 
 test.describe('自動予約ルール', () => {
     /**
-     * **左に一覧、右に書く欄** (一覧と詳細の形)。左の列は画面の左端とヘッダーの下まで寄せ、
-     * 境目は線だけ。行を押せば右でそのまま直せる。
+     * **左に一覧、真ん中に書く欄、右に録れる番組** (一覧と詳細の形)。列は画面の端とヘッダーの下まで寄せ、
+     * 境目は線だけ。行を押せば真ん中でそのまま直せる。
      *
-     * 横に並べはじめる幅は**全画面で 768px** (`+layout.svelte` の `FILLED`)。
-     * 並べたらページごとは動かさず、左右がそれぞれ自分で巻き取る
+     * 横に並べはじめる幅は**全画面で 768px** (`+layout.svelte` の `FILLED`)。768px からは2列で、
+     * 下見は書く欄の下。**1280px からは下見を右の列に出す** (書く欄の下では、広い画面でも画面の外だった)。
+     * 並べたらページごとは動かさず、列がそれぞれ自分で巻き取る
      */
-    test('広い画面では左に一覧、右に書く欄を並べる', async ({ page }) => {
+    test('広い画面では一覧・書く欄・下見を横に並べる', async ({ page }) => {
+        const shape = () =>
+            page.evaluate(() => {
+                const box = (selector: string) => document.querySelector(selector)?.getBoundingClientRect();
+                const form = box('[data-testid="rule-form"]');
+                const list = box('[data-testid="rule-list"]');
+                const side = document.querySelector('[data-testid="rule-list"]')?.closest('aside');
+                const preview = box('.preview-pane');
+                const root = document.documentElement;
+                return {
+                    横に並ぶ: form !== undefined && list !== undefined && list.right <= form.left + 1,
+                    下見が右: form !== undefined && preview !== undefined && form.right <= preview.left + 1,
+                    下見が下: form !== undefined && preview !== undefined && form.bottom <= preview.top + 1,
+                    左端に付く: side?.getBoundingClientRect().left ?? -1,
+                    縦に動く: root.scrollHeight > root.clientHeight + 1,
+                };
+            });
+
         await page.setViewportSize({ width: 1280, height: 720 });
         await goto(page, '/rules');
-
-        const shape = await page.evaluate(() => {
-            const form = document.querySelector('[data-testid="rule-form"]');
-            const list = document.querySelector('[data-testid="rule-list"]');
-            const side = list?.closest('aside');
-            const root = document.documentElement;
-            return {
-                横に並ぶ:
-                    form !== null && list !== null
-                        ? list.getBoundingClientRect().right <= form.getBoundingClientRect().left + 1
-                        : false,
-                左端に付く: side !== null && side !== undefined ? side.getBoundingClientRect().left : -1,
-                縦に動く: root.scrollHeight > root.clientHeight + 1,
-            };
-        });
-        expect(shape.横に並ぶ).toBe(true);
-        expect(shape.左端に付く).toBe(0);
-        expect(shape.縦に動く).toBe(false);
+        const wide = await shape();
+        expect(wide.横に並ぶ).toBe(true);
+        expect(wide.下見が右).toBe(true);
+        expect(wide.左端に付く).toBe(0);
+        expect(wide.縦に動く).toBe(false);
         // 押すもの (追加) は条件が長くても画面の中にある
         await expect(page.getByTestId('rule-submit')).toBeInViewport();
+        // 条件が空なら数えず、何を入れればよいかを出す
+        await expect(page.getByTestId('preview-blank')).toBeVisible();
+
+        // 1280px より狭いと、下見は書く欄の下に続く
+        await page.setViewportSize({ width: 1024, height: 720 });
+        const middle = await shape();
+        expect(middle.横に並ぶ).toBe(true);
+        expect(middle.下見が下).toBe(true);
+        expect(middle.縦に動く).toBe(false);
 
         // 無いルールの `?edit=` は一覧へ (編集のつもりで新しいルールを作らせない)
         await goto(page, '/rules?edit=999999');
@@ -60,13 +74,13 @@ test.describe('自動予約ルール', () => {
         await expect(page.getByTestId('rule-new')).toBeVisible();
         await expect(keyword).toBeHidden();
 
-        // 当たる番組の無い語にしておく (予約を立てない)
-        await page.getByTestId('rule-new').click();
-        await keyword.fill('どこにも無い番組');
-        // 下見のあとも書く欄のまま
-        await page.getByTestId('rule-preview').click();
-        await page.waitForURL(/\/rules\?.*keyword=/);
-        await expect(page.getByTestId('preview')).toBeVisible();
+        // 当たる番組の無い語にしておく (予約を立てない)。一覧の上の欄に打って Enter で作る
+        await page.getByTestId('rule-search').fill('どこにも無い番組');
+        await page.getByTestId('rule-search').press('Enter');
+        await page.waitForURL(/\/rules\?new&keyword=/);
+        await expect(keyword).toHaveValue('どこにも無い番組');
+        // 下見は打った語でそのまま出る
+        await expect(page.getByTestId('preview')).toContainText('0 件');
         // 足したら一覧に戻り、足したルールが最初の画面に見える
         await page.getByTestId('rule-submit').click();
         const row = page.getByTestId('rule-row').filter({ hasText: 'どこにも無い番組' });
@@ -98,7 +112,50 @@ test.describe('自動予約ルール', () => {
         );
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         // 1件も無いときは、次にすることまで出す
-        await expect(page.getByTestId('rule-empty')).toContainText('「追加」すると');
+        await expect(page.getByTestId('rule-empty')).toContainText('Enter を押すと');
+    });
+
+    /**
+     * **探す欄が新しいルールの入口も兼ねる。** 打てば一覧を絞り、先頭に「「…」で新しいルールを作る」が出る。
+     * ↑/↓ で行を選び、Enter で開く。同じ名前のルールがあれば Enter はそちらを開く
+     */
+    test('一覧の上の欄で探して、無ければそのまま作れる', async ({ page }) => {
+        await clearRules(page);
+        await goto(page, '/rules');
+        const search = page.getByTestId('rule-search');
+        await expect(search).toHaveAccessibleName('ルールを探す・キーワードで新しく作る');
+        // 空なら「＋ 新しいルール」だけ
+        await expect(page.getByTestId('rule-new')).toBeVisible();
+        await expect(page.getByTestId('rule-create')).toHaveCount(0);
+
+        await search.fill('どこにも無い番組');
+        const create = page.getByTestId('rule-create');
+        await expect(create).toHaveText('「どこにも無い番組」で新しいルールを作る');
+        await expect(page.getByTestId('rule-new')).toHaveCount(0);
+        // 選んでいる行は読み上げにも伝える
+        await expect(search).toHaveAttribute('aria-activedescendant', 'rule-option-new');
+        await create.click();
+        await page.waitForURL(/\/rules\?new&keyword=/);
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('どこにも無い番組');
+        await expect(page.getByTestId('preview')).toContainText('0 件');
+        await page.getByTestId('rule-submit').click();
+        await expect(page.getByTestId('rule-row')).toHaveCount(1);
+
+        // 同じ名前のルールがあれば、Enter はそれを開く
+        await search.fill('どこにも無い番組');
+        await expect(search).toHaveAttribute('aria-activedescendant', /^rule-option-\d+$/);
+        await search.press('Enter');
+        await page.waitForURL(/\/rules\?edit=\d+$/);
+        await expect(page.getByTestId('rule-mode')).toContainText('どこにも無い番組');
+
+        // ↑ で作る行に戻して Enter なら、新しく作る書く欄
+        await search.press('ArrowUp');
+        await expect(search).toHaveAttribute('aria-activedescendant', 'rule-option-new');
+        await search.press('Enter');
+        await page.waitForURL(/\/rules\?new&keyword=/);
+        await expect(page.getByTestId('rule-mode')).toHaveText('新しいルール');
+
+        await clearRules(page);
     });
 
     test('キーワードルールを作ると予約が自動で立ち、削除できる', async ({ page, request }) => {
@@ -164,15 +221,12 @@ test.describe('キーワードを当てる範囲', () => {
         await goto(page, '/rules');
 
         await page.getByTestId('rule-keyword').fill('ゲスト太郎');
-        await page.getByTestId('rule-preview').click();
         await expect(page.getByTestId('preview')).toContainText('0 件');
 
-        // 詳細にチェックを入れると同じキーワードで当たる
-        await page.getByTestId('rule-keyword').fill('ゲスト太郎');
+        // 詳細にチェックを入れると同じキーワードで当たる。押すものは無く、そのまま数え直す
         await page.getByTestId('rule-search-fields').locator('input[value="extended"]').check();
-        await page.getByTestId('rule-preview').click();
         await expect(page.getByTestId('preview-row').first()).toBeVisible();
-        // 選んだ範囲は結果と一緒に残る。押し直すたびに戻ると使えない
+        // 数え直しても選んだ範囲はそのまま (打つたびに書く欄を描き直さない)
         await expect(page.getByTestId('rule-search-fields').locator('input[value="extended"]')).toBeChecked();
     });
 
@@ -185,7 +239,6 @@ test.describe('キーワードを当てる範囲', () => {
         await syncEpg(request);
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
-        await page.getByTestId('rule-preview').click();
 
         /*
          * **同じ回は最初の放送だけ** (新しいルールは入った状態)。偽の放送は同じ回 (#12) を
@@ -222,7 +275,6 @@ test.describe('キーワードを当てる範囲', () => {
         await clearRules(page);
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
-        await page.getByTestId('rule-preview').click();
 
         const row = page.getByTestId('preview-row').first();
         await expect(row).toBeVisible();
@@ -237,6 +289,8 @@ test.describe('キーワードを当てる範囲', () => {
         await expect(detail).toHaveCount(0);
         const same = page.locator(`[data-testid="preview-row"][data-program-id="${programId}"]`);
         await expect(same.getByTestId('preview-state')).toBeVisible();
+        // 読み直しても打ちかけの書く欄はそのまま (初期値に戻らない)
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ');
 
         // もう予約は立っているので、開き直しても予約ボタンは出ない (状態のバッジが出る)
         await same.getByTestId('preview-open').click();

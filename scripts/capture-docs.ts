@@ -887,7 +887,8 @@ try {
             await page.goto(`${BASE}/rules`);
             await settle(page, 300);
             await page.locator('input[name="keyword"]').first().fill('ニュース');
-            await page.getByRole('button', { name: '何が録れるか見る' }).click();
+            // 下見は打つそばから右の列に出る
+            await page.getByTestId('preview').waitFor();
             await still(page, 'rules');
         }
         await page.context().close();
