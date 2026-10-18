@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import type { Program, Rule } from '../types';
-import { compile, coveringRule, globPatterns, matches, prefillFrom } from './rules';
+import { compile, coveringRule, globPatterns, matches, missOf, prefillFrom } from './rules';
 
 /**
  * ルールの判定。DBには触らない (matches は純粋関数にしてある)。
@@ -266,5 +266,39 @@ describe('番組からルールを作る', () => {
     test('このシリーズを録っているルールを返す。[新] だけのルールは当たらない', () => {
         expect(coveringRule([rule({ id: 3, keyword: 'テストアニメ' })], program)?.id).toBe(3);
         expect(coveringRule([rule({ keyword: '[新]' })], program)).toBeUndefined();
+    });
+});
+
+/**
+ * **当たらない理由** (`missOf`)。検索の結果の行に「録らない (局)」のように出す。
+ * 判定は `matchesCompiled` と同じもの (理由が無ければ当たる)
+ */
+describe('当たらない理由', () => {
+    const miss = (fields: Partial<Rule>, p: Program, type = 'GR', freeOnly = true) =>
+        missOf(compile(rule(fields)), p, type, freeOnly, (f) => (f.includes('name') ? p.name : ''));
+    const anime = program({ name: 'テストアニメ #1', service_id: 7, genre_detail: [{ lv1: 7, lv2: 0 }] });
+
+    test('当たれば null', () => {
+        expect(miss({ keyword: 'テストアニメ' }, anime)).toBeNull();
+    });
+    test('有料放送 (無料放送だけのとき)', () => {
+        expect(miss({ keyword: 'テストアニメ' }, { ...anime, is_free: false })).toBe('paid');
+        expect(miss({ keyword: 'テストアニメ' }, { ...anime, is_free: false }, 'GR', false)).toBeNull();
+    });
+    test('局・種別', () => {
+        expect(miss({ keyword: 'テストアニメ', service_ids: [8] }, anime)).toBe('service');
+        expect(miss({ keyword: 'テストアニメ', service_types: ['BS'] }, anime)).toBe('service');
+        expect(miss({ keyword: 'テストアニメ', service_types: ['GR'] }, anime)).toBeNull();
+    });
+    test('ジャンル', () => {
+        expect(miss({ genres: ['1'] }, anime)).toBe('genre');
+        expect(miss({ genres: ['7'] }, anime)).toBeNull();
+    });
+    test('条件が何も無い', () => {
+        expect(miss({}, anime)).toBe('empty');
+    });
+    test('キーワードを含まない・除外する言葉を含む', () => {
+        expect(miss({ keyword: 'ニュース' }, anime)).toBe('keyword');
+        expect(miss({ keyword: 'テストアニメ', ignore_keyword: '再放送 #1' }, anime)).toBe('ignore');
     });
 });

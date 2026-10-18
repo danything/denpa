@@ -424,10 +424,10 @@ async function countPreview(
              * 条件に当たらないなら、その理由。当たるのに行が無いのは、もう始まっている番組だけ
              * (下見はこれから始まる番組から引く。ルールも始まった番組には予約を立てない)
              */
-            out[id] = {
-                kind: 'skip',
-                reason: missFor(program) ?? (program.start_at <= at ? 'airing' : 'keyword'),
-            };
+            const reason = missFor(program) ?? (program.start_at <= at ? 'airing' : null);
+            // 当たって始まってもいないのに行が無いことは無いはず。黙って「録る」とも「録らない」とも言わない
+            if (reason === null) console.warn('[rules] 下見の行に無い番組が当たりました', id);
+            else out[id] = { kind: 'skip', reason };
         }
         return out;
     }
