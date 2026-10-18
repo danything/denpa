@@ -87,8 +87,8 @@
      * 引っ込むときは頭をゆっくり (`--dp-ease-exit`)。動かさない設定の端末では全部止める
      * (下の prefers-reduced-motion。画面の切り替えは JS でも見る — `#lib/motion.svelte.ts`)
      *
-     * - `--dp-duration-fast` … メニューやダイアログの閉じ方
-     * - `--dp-duration` … 画面の切り替え・滑る下線・色・影の移り変わり、メニューやダイアログの開き方
+     * - `--dp-duration-fast` … 画面の中身の入れ替え、メニューやダイアログの閉じ方
+     * - `--dp-duration` … 滑る下線・元の要素から広げる動き・色・影の移り変わり、メニューやダイアログの開き方
      * - `--dp-duration-slow` … 伸びるバー・ふわっと出す画像
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
      * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
@@ -230,7 +230,7 @@
     animation: none;
 }
 ::view-transition-new(root) {
-    animation-duration: var(--dp-duration);
+    animation-duration: var(--dp-duration-fast);
 }
 ::view-transition-old(site-header),
 ::view-transition-old(site-tabbar) {
