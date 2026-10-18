@@ -616,7 +616,7 @@ function openAudio(codec: 'aac' | 'opus', config: Uint8Array | null): boolean {
 
 function startFmp4(canvas: OffscreenCanvas, follow: boolean): boolean {
     if (typeof VideoDecoder !== 'function') {
-        fail('この端末では表示できません');
+        fail('再生できない形式です');
         return false;
     }
     try {

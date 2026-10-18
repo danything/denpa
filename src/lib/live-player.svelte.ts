@@ -1652,7 +1652,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             rawChosen = true;
             return true;
         }
-        fail('この端末では再生できません');
+        fail('再生できる形式がありません');
         return false;
     }
 
@@ -1971,7 +1971,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 swapCodec('h264');
                 return;
             }
-            fail('この端末では再生できない形式です');
+            fail('再生できない形式です');
             return;
         }
         /*
