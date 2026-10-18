@@ -136,10 +136,13 @@
      * **狭い枠では速さを4列に並べる。** 縦に7つ積むと 300px あり、スマホの縦で
      * 全画面をやめた枠 (224px) には入らない — 巻き取らせると2つしか見えず、
      * 押したい速さを探してメニューの中を動かすことになる。
-     * 開いているときだけ (`:popover-open`)。閉じているときの `display: none` を消さない
+     * grid にするのは開いているときだけ (`:popover-open`)。閉じているときの `display: none` を消さない。
+     * 列の数は閉じる動きの間も持たせる (外すと、閉じる間だけ縦 1 列に戻って見える)
      */
+    :global(.stage[data-compact] .overlay-menu.large) {
+        grid-template-columns: repeat(4, auto);
+    }
     :global(.stage[data-compact] .overlay-menu.large:popover-open) {
         display: grid;
-        grid-template-columns: repeat(4, auto);
     }
 </style>
