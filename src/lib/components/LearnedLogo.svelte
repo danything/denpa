@@ -42,7 +42,7 @@
     <!-- 理由は `routes/tuners/+page.server.ts` の `logoForget` -->
     <form method="POST" action="?/logoForget" use:submitting class="forget">
         <input type="hidden" name="serviceId" value={serviceId} />
-        <button type="submit" class="xs ghost" aria-label={`${serviceName} のCM検出のロゴを覚え直す`}>覚え直す</button>
+        <button type="submit" class="small ghost" aria-label={`${serviceName} のCM検出のロゴを覚え直す`}>覚え直す</button>
     </form>
 </span>
 
@@ -53,12 +53,12 @@
         gap: 0.25rem;
     }
     .label {
-        font-size: var(--dp-text-xs);
+        font-size: var(--dp-text-sm);
         color: var(--dp-muted);
     }
     .learned-image {
-        height: 1rem;
-        max-width: 3rem;
+        height: 1.6rem;
+        max-width: 4.8rem;
         border-radius: 0.2rem;
         object-fit: contain;
         image-rendering: pixelated;
