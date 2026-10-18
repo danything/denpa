@@ -945,24 +945,28 @@
                             <span class="channel-number" data-testid="live-number">
                                 {#if channel.number !== null}<span class="tag">{channel.number}</span>{/if}
                             </span>
+                            <!--
+                                ロゴのまだ無い局は、局名の頭の 1 字 (「GR」のような種別の札だと、
+                                どの局も同じ灰色の箱になって見分けられない)
+                            -->
                             <ServiceLogo
                                 id={channel.id}
                                 has={channel.hasLogo}
-                                style="width: 2rem; height: 2rem"
-                                fallback={channel.type}
+                                style="width: 2rem; height: 2rem; font-size: var(--dp-text-sm)"
+                                fallback={Array.from(channel.name.trim())[0] ?? channel.type}
                             />
                             <!--
-                                **いま映しているものは、行の地と局名の前の小さな印 (▶) で。**
-                                色だけだと、色の見え方が違う人に伝わらない。行の右に
-                                「視聴中」のバッジを置いていた頃は、狭い列 (スマホの横・PC の
-                                256px) でバッジが幅を取り、局名も番組名も「で…」まで潰れていた。
-                                文字は読み上げにだけ渡す (行は `aria-current` も持つ)
+                                **いま映しているものは、行の地だけで示す。** 局名の前の印 (▶) や
+                                局名の色まで変えると、一覧の中でそこだけが騒がしかった。
+                                行の地は色ではなく明るさの差なので、色の見え方に頼らない。
+                                読み上げには `aria-current` と隠した「視聴中」で渡す。
+                                行の右に「視聴中」のバッジを置いていた頃は、狭い列 (スマホの横・PC の
+                                256px) でバッジが幅を取り、局名も番組名も「で…」まで潰れていた
                             -->
                             <span class="channel-text">
                                 <span class="channel-name broadcast">
-                                    {#if tuned}<span class="tuned-mark" data-testid="live-tuned-mark"
-                                            ><Icon icon={PLAY} size="size-3" /></span
-                                        ><span class="visually-hidden">視聴中</span>{/if}{channel.name}
+                                    {#if tuned}<span class="visually-hidden" data-testid="live-tuned-mark">視聴中</span
+                                        >{/if}{channel.name}
                                 </span>
                                 {#if channel.now}
                                     <span class="channel-now broadcast">
@@ -1151,26 +1155,28 @@
         font-size: var(--dp-text-sm);
         font-weight: var(--dp-weight);
     }
-    .tuned .channel-name {
-        color: var(--dp-primary-text);
-    }
     .channel-now {
         font-size: var(--dp-text-xs);
         color: var(--dp-muted);
-    }
-    /* 局名の前の印。塗った三角 (Lucide の play は線だけなので塗る) */
-    .tuned-mark {
-        display: inline-flex;
-        margin-inline-end: 0.25rem;
-        vertical-align: -0.0625rem;
-    }
-    .tuned-mark :global(path) {
-        fill: currentColor;
     }
     .channel-detail {
         height: auto;
         flex-shrink: 0;
         align-self: stretch;
         margin: 0;
+    }
+    /*
+     * **(i) はマウスでは行に乗せたとき (キーボードではフォーカスしたとき) だけ出す。**
+     * 全部の行に並べると、右端に同じ印の列ができて局名より目立った。
+     * 指で押す端末には「乗せる」が無いので、いつも出しておく
+     */
+    @media (hover: hover) and (pointer: fine) {
+        .channel-detail {
+            opacity: 0;
+            transition: opacity var(--dp-duration);
+        }
+        .channel-item:is(:hover, :focus-within) .channel-detail {
+            opacity: 1;
+        }
     }
 </style>

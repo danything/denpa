@@ -283,7 +283,7 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **いま映しているものが分かるようにする。** 色だけだと、色の見え方が違う人に
-     * 伝わらないので、局名の前に印 (▶) を出し、読み上げには文字で渡す。
+     * 伝わらないので、行の地 (明るさの差) で示し、読み上げには `aria-current` と文字で渡す。
      * **バッジにはしない** — 狭い列で局名と番組名を潰していた
      */
     test('選局中のチャンネルが分かる', async ({ page }) => {
@@ -294,7 +294,7 @@ test.describe('ライブ視聴', () => {
         await expect(page.getByTestId('live-title')).toBeVisible();
 
         await expect(second).toHaveAttribute('data-current', 'true');
-        await expect(second.getByTestId('live-tuned-mark')).toBeVisible();
+        await expect(second).toHaveAttribute('aria-current', 'true');
         await expect(second).toContainText('視聴中');
         await expect(page.getByTestId('live-tuned-mark')).toHaveCount(1);
         // 印は1つだけ。ほかの行に残っていたら、どれを見ているのか分からない

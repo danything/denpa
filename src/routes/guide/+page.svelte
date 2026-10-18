@@ -236,6 +236,15 @@
 
     const slots = $derived((data.hours * HOUR) / SLOT);
 
+    /**
+     * マスに入る字の行数。**行の途中で切らず、入りきらない行は「…」で止める** (`.clamp`)。
+     * 字は 0.75rem・行の高さ 1.25 (1 行 0.9375rem)、上下の余白はマスと button で 0.5rem。
+     * どれも rem なので、字の大きさを変えても行数は変わらない。1 マス (5 分) でも 1 行は出す
+     */
+    function lines(span: number): number {
+        return Math.max(1, Math.floor((span * 0.75 - 0.5) / 0.9375));
+    }
+
     /** いま何時か。番組表に現在位置の線を出すため、1分ごとに進める */
     let clock = $state(Date.now());
     $effect(() => {
@@ -775,7 +784,7 @@
                     {@const pos = place(cell)}
                     <div
                         class="cell"
-                        style="grid-column: {cell.column + 2} / span {cell.span}; grid-row: {pos.row} / span {pos.span};"
+                        style="grid-column: {cell.column + 2} / span {cell.span}; grid-row: {pos.row} / span {pos.span}; --lines: {lines(pos.span)};"
                         data-testid="grid-program"
                         data-program-id={program.id}
                         data-service-id={program.service_id}
@@ -794,27 +803,29 @@
                             onclick={(event) => void open(program, event.currentTarget)}
                             data-testid="program-button"
                         >
-                            <span class="title">
-                                <span class="num">{time(program.start_at)}</span>
-                                {#if program.name}
-                                    <span class="broadcast">{program.name}</span>
+                            <span class="clamp">
+                                <span class="title">
+                                    <span class="num">{time(program.start_at)}</span>
+                                    {#if program.name}
+                                        <span class="broadcast">{program.name}</span>
+                                    {:else}
+                                        <span class="faint">(番組情報なし)</span>
+                                    {/if}
+                                    {#if program.copy_never}
+                                        <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
+                                        <span class="copy-never" data-testid="grid-copy-never">コピー禁止</span>
+                                    {/if}
+                                </span>
+                                {#if program.reservation_state}
+                                    <span class="state">
+                                        {stateLabel(program.reservation_state)}
+                                    </span>
                                 {:else}
-                                    <span class="faint">(番組情報なし)</span>
-                                {/if}
-                                {#if program.copy_never}
-                                    <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
-                                    <span class="copy-never" data-testid="grid-copy-never">コピー禁止</span>
+                                    <span class="desc broadcast">
+                                        {program.description}
+                                    </span>
                                 {/if}
                             </span>
-                            {#if program.reservation_state}
-                                <span class="state">
-                                    {stateLabel(program.reservation_state)}
-                                </span>
-                            {:else}
-                                <span class="desc broadcast">
-                                    {program.description}
-                                </span>
-                            {/if}
                         </button>
                     </div>
                 {/each}
@@ -1294,6 +1305,17 @@
     .program[data-state="conflict"]:hover {
         background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
     }
+    /*
+     * **字は行の切れ目で止める。** マスの高さで切ると、最後の行が上半分だけ見えていた。
+     * 番組名と説明 (または予約の状態) をまとめて数え、入る行数 (`lines()`) の最後の行を「…」で終える
+     */
+    .clamp {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--lines);
+        line-clamp: var(--lines);
+        overflow: hidden;
+    }
     .title {
         display: block;
         font-size: 0.75rem;
@@ -1303,6 +1325,7 @@
     .state {
         display: block;
         font-size: 0.75rem;
+        line-height: 1.25;
         font-weight: var(--dp-weight);
         color: var(--dp-primary-text);
     }
