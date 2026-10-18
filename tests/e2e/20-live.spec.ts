@@ -1398,6 +1398,9 @@ test.describe('ライブ視聴', () => {
 
         const gear = page.getByTestId('live-settings');
         const menu = page.getByTestId('live-settings-menu');
+        // 広い枠では何も畳まないので、⚙ の頭に操作バーのもの (消音・小窓) は並ばない
+        await expect(page.getByTestId('live-mute')).toHaveCount(0);
+        await expect(page.getByTestId('live-pip-mode')).toHaveCount(0);
         await expect(gear).toHaveAttribute('aria-haspopup', 'menu');
         await gear.focus();
         await page.keyboard.press('Enter');

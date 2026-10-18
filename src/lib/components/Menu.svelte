@@ -176,8 +176,11 @@
             if (event.target instanceof Node && content?.contains(event.target)) return;
             place();
         };
-        // 中身が入れ替わったら置き直す (⚙ の選択肢の並びに入ると高さが変わる)。置き直した高さは同じなので繰り返さない
-        const resized = new ResizeObserver(() => place());
+        // 中身が入れ替わったら置き直す (⚙ の選択肢の並びに入ると高さが変わる)。**置いた直後の大きさと同じなら何もしない** —
+        // 置き直しが `max-height` を書き換えたぶんで、また置き直すことを繰り返さない
+        const resized = new ResizeObserver(() => {
+            if (content !== null && sizeOf(content) !== placed) place();
+        });
         if (content !== null) resized.observe(content);
         window.addEventListener('pointerdown', onpointerdown, true);
         document.addEventListener('keydown', onkey);
@@ -191,6 +194,12 @@
             window.removeEventListener('scroll', update, true);
         };
     });
+
+    /** 最後に置いたときの大きさ (`幅x高さ`)。中身の大きさが変わったかを見るのに使う */
+    let placed = '';
+    function sizeOf(element: HTMLElement): string {
+        return `${element.offsetWidth}x${element.offsetHeight}`;
+    }
 
     const GAP = 4;
     const PADDING = 4;
@@ -209,6 +218,7 @@
             for (const name of ['position-area', 'position-try-fallbacks', 'inset', 'margin', 'top', 'left', 'min-width', 'max-height']) {
                 style.removeProperty(name);
             }
+            placed = sizeOf(element);
             return;
         }
         const button = triggerElement();
@@ -247,6 +257,7 @@
         style.setProperty('top', `${top}px`);
         style.setProperty('left', `${left}px`);
         element.scrollTop = scrolled;
+        placed = sizeOf(element);
     }
 
     function onTriggerKey(event: KeyboardEvent): void {
