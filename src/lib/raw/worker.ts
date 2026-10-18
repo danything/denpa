@@ -38,7 +38,7 @@
 import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
 import { DecodeBudget } from './budget';
 import { fieldAt, type Shown, SmoothClock, Vsync, VsyncClock } from './cadence';
-import { Fmp4Video } from './fmp4';
+import { Fmp4Video, FOLLOW_BYTES_MOST } from './fmp4';
 import type { FromWorker, RawInput, ToWorker } from './messages';
 import { MkvInput } from './mkv';
 import { YuvRenderer } from './render';
@@ -47,7 +47,7 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 
 /** 番のこれだけ前からデコードする (90kHz)。デコードするのは1コマ 10ms 前後 */
 const AHEAD = 0.3 * CLOCK;
-/** デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1枚 3MB) */
+/** デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1枚 3MB。WebCodecs の `fmp4.ts` の 6 とは数えるものが違う) */
 const DECODED_MOST = 8;
 /** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
 const PENDING_MOST = 8 * CLOCK;
@@ -60,10 +60,9 @@ const AUDIO_ERRORS_MOST = 20;
 /**
  * 録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう。** 読む側
  * (`canvas-player.ts`) が先へ読みすぎないようにしているので、ふつうは届かない。超えたら受け取るのを
- * やめて `full` を返す (fMP4 の `FOLLOW_AHEAD_MOST` と同じ考え)
+ * やめて `full` を返す (fMP4 の `FOLLOW_AHEAD_MOST` と同じ考え)。バイト数は fMP4 と同じ `FOLLOW_BYTES_MOST`
  */
 const FOLLOW_PENDING_MOST = 30 * CLOCK;
-const FOLLOW_BYTES_MOST = 96 * 1024 * 1024;
 /** 飛び先より手前をデコードして捨てるとき、1回の刻みでデコードする上限 (1枚 10〜20ms) */
 const UNDER_PER_TICK = 4;
 
