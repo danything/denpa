@@ -311,16 +311,33 @@ async function saveRecordingPart(
     }
 }
 
+/** ルールを1件消す。一覧 (`/rules`) の行の削除を2回押す */
+export async function deleteRule(row: Locator): Promise<void> {
+    await row.getByTestId('rule-delete').click();
+    await row.getByTestId('rule-delete-confirm').click();
+}
+
 /**
- * ルールを1件消す。**削除は書く欄の上にある** (編集中だけ出る) ので、一覧の行を押して開いてから。
- * 消すと一覧の初め (`/rules`) に戻る
+ * **ルールを1件作る** (検索の画面の「ルールとして保存」)。書く欄の値は URL に載せて始める
+ * (`/search?keyword=…`。`dedupe: false` で「同じ回は最初の放送だけ」を外す)。狭い画面なら下から出してから押す。
+ * 作ったら保存したルールへのリンクが出るまで待つ。画面は検索のまま
  */
-export async function deleteRule(page: Page, row: Locator): Promise<void> {
-    await row.click();
-    await page.waitForURL(/\/rules\?edit=\d+$/);
-    await page.getByTestId('rule-delete').click();
-    await page.getByTestId('rule-delete-confirm').click();
-    await page.waitForURL(/\/rules$/);
+export async function makeRule(
+    page: Page,
+    keyword: string,
+    options: { dedupe?: boolean; fields?: Record<string, string | string[]> } = {},
+): Promise<void> {
+    const params = new URLSearchParams({ q: keyword, keyword });
+    if (options.dedupe === false) params.set('dedupe', '0');
+    for (const [key, value] of Object.entries(options.fields ?? {})) {
+        params.delete(key);
+        for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
+    }
+    await goto(page, `/search?${params}`);
+    const open = page.getByTestId('rule-draft-open');
+    if (await open.isVisible()) await open.click();
+    await page.getByTestId('rule-submit').click();
+    await expect(page.getByTestId('rule-saved-link')).toBeVisible();
 }
 
 /**
@@ -341,7 +358,7 @@ export async function clearRules(page: Page): Promise<void> {
     for (let i = 0; i < 20; i++) {
         const count = await rows.count();
         if (count === 0) break;
-        await deleteRule(page, rows.first());
+        await deleteRule(rows.first());
         await expect(rows).toHaveCount(count - 1);
     }
     await expect(rows).toHaveCount(0);

@@ -1,4 +1,4 @@
-import { clearRules, deleteRule, expect, goto, syncEpg, test } from './helpers';
+import { clearRules, deleteRule, expect, goto, makeRule, syncEpg, test } from './helpers';
 
 /**
  * ルールで立った予約まわり。
@@ -12,11 +12,9 @@ test.describe('ルールで立った予約', () => {
         await syncEpg(request);
         // 前のテストが残したルールを片付ける
         await clearRules(page);
-        await page.getByTestId('rule-keyword').fill('テストアニメ');
         // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
-        await page.getByTestId('rule-dedupe').uncheck();
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row').first()).toBeVisible();
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await makeRule(page, 'テストアニメ', { dedupe: false });
     });
 
     test.afterEach(async ({ page }) => {
@@ -85,7 +83,7 @@ test.describe('ルールで立った予約', () => {
         await expect(page.locator(`[data-reservation-id="${id}"]`)).toBeVisible();
 
         await goto(page, '/rules');
-        await deleteRule(page, page.getByTestId('rule-row').first());
+        await deleteRule(page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         await goto(page, '/?all=1');
@@ -145,7 +143,7 @@ test.describe('ルールで立った予約', () => {
         );
 
         await goto(page, '/rules');
-        await deleteRule(page, page.getByTestId('rule-row').first());
+        await deleteRule(page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         await goto(page, '/');

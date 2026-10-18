@@ -27,6 +27,8 @@ test.describe('検索からルールを作る', () => {
         // 画面の右端に付き、ヘッダーのすぐ下から
         expect(shape.right).toBe(0);
         expect(shape.top).toBeLessThan(80);
+        // 先の放送まで並べる (前のテストが取り消した近い放送は「取り消し済み」になる)
+        await page.getByTestId('search-more-programs').click();
 
         /*
          * 行ごとに「録る / 録らない」が付く。同じ回のどれを録るかは、前のテストが残した録画や
@@ -65,8 +67,15 @@ test.describe('検索からルールを作る', () => {
         await page.getByTestId('rule-submit').click();
         const link = page.getByTestId('rule-saved-link');
         await expect(link).toHaveText('テストアニメ');
-        // 予約が立ったので、録る行は「予約済み」になる
-        await expect(verdict('reserved', BS11.name)).toBeVisible();
+        /*
+         * 保存したら、「録る」と出ていた BS11 の行は予約が立って「予約済み」になる。下見と予約を立てるのは
+         * 同じ判定なので、「録る」のまま残る行は無い (前のテストが取り消した放送は、はじめから「取り消し済み」)
+         */
+        await expect(
+            page
+                .locator('[data-testid="search-program"][data-verdict="record"]')
+                .filter({ hasText: BS11.name }),
+        ).toHaveCount(0);
 
         // 開くと書く欄にそのルール。URL のまま開き直しても同じ
         await link.click();

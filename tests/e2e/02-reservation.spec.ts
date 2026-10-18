@@ -229,12 +229,12 @@ test.describe('予約の細かい指定', () => {
         await goto(page, '/guide?type=GR');
         const [target] = await upcoming(page);
         const day = await shownDay(page);
-        const ruleUrl = new RegExp(`/rules\\?(.*&)?program=${target.programId}(&|$)`);
+        // 行き先は検索の画面の「ルールとして保存」(シリーズ名を言葉にして出直す)。ホームの `/rules?program=` も送られてくる
+        const ruleUrl = new RegExp(`/search\\?(.*&)?from=program%3A${target.programId}(&|$)`);
         const detail = page.getByTestId('program-detail');
         await cellOf(page, target.programId).getByTestId('program-button').click();
         await detail.getByTestId('detail-rule').click();
-        // 番組表からは検索の画面の「ルールとして保存」へ (シリーズ名を言葉にして出直す)
-        await expect(page).toHaveURL(new RegExp(`/search\\?(.*&)?from=program%3A${target.programId}(&|$)`));
+        await expect(page).toHaveURL(ruleUrl);
         await expect(page.getByTestId('rule-origin')).toBeVisible();
         // 下書きにジャンルは入れない (すべて)
         expect(new URL(page.url()).searchParams.has('genres')).toBe(false);

@@ -1,4 +1,4 @@
-import { cancelAllReservations, deleteRule, expect, goto, homeTools, syncEpg, test } from './helpers';
+import { expect, goto, homeTools, syncEpg, test } from './helpers';
 
 test.describe('ホームと画面遷移', () => {
     test('データ放送のチャンネルは取り込まない', async ({ page, request }) => {

@@ -237,3 +237,34 @@ describe('録画・番組から作るときの元', () => {
         expect(originOf(null)).toBeNull();
     });
 });
+
+describe('人が取り消した放送', () => {
+    test('ルールは立て直さないので、下見でも「録らない」(取り消し済み)', async () => {
+        program(1, 'テスト魔法 #1', 5 * HOUR);
+        program(2, 'テスト魔法 #2', 8 * HOUR);
+        orm()
+            .insert(reservations)
+            .values({
+                program_id: 1,
+                rule_id: null,
+                service_id: MX,
+                name: 'テスト魔法 #1',
+                description: '',
+                start_at: base + 5 * HOUR,
+                end_at: base + 6 * HOUR,
+                priority: 2,
+                manual: true,
+                state: 'canceled',
+                created_at: now(),
+                updated_at: now(),
+            })
+            .run();
+        const preview = await previewFor(draftRule(form({ keyword: 'テスト魔法', dedupe: '0' }))!, {
+            ids: [1, 2],
+        });
+        expect(preview.verdicts).toEqual({
+            1: { kind: 'skip', reason: 'declined' },
+            2: { kind: 'record' },
+        });
+    });
+});

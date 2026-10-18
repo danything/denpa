@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { FUJI } from '../fake/services';
-import { cellOf, clearRules, expect, goto, reserveSoon, syncEpg, test, upcoming } from './helpers';
+import { cellOf, clearRules, expect, goto, makeRule, reserveSoon, syncEpg, test, upcoming } from './helpers';
 
 const REASON = 'コピー禁止の番組なので録画しません';
 
@@ -63,10 +63,8 @@ test.describe('コピー禁止の番組', () => {
 
         // ルールは予約を立てるが、録らないと決めて理由を残す
         await clearRules(page);
-        await page.getByTestId('rule-keyword').fill('テストアニメ');
-        await page.getByTestId('rule-dedupe').uncheck();
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row').first()).toBeVisible();
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await makeRule(page, 'テストアニメ', { dedupe: false });
 
         await goto(page, '/');
         const rows = page

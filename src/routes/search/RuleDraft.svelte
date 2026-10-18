@@ -6,6 +6,7 @@
         repeat: '同じ回',
         recorded: '録画済み',
         'copy-never': 'コピー禁止',
+        declined: '取り消し済み',
         airing: '放送中',
         ignore: '除外',
         service: '局',

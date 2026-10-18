@@ -3,7 +3,16 @@ import type { Program, Rule } from '../types';
 import { config } from './config';
 import { contentions, type Occupant, settled } from './conflict';
 import { now, orm } from './db';
-import { compile, globPatterns, haystack, keepsReservation, type Miss, missOf, previewSkips } from './rules';
+import {
+    canceledBroadcasts,
+    compile,
+    globPatterns,
+    haystack,
+    keepsReservation,
+    type Miss,
+    missOf,
+    previewSkips,
+} from './rules';
 import { tunerState } from './scheduler';
 import { programs, reservations, services as serviceTable } from './schema';
 import { settings } from './settings';
@@ -31,11 +40,12 @@ const stillHeld = () =>
 /**
  * **録らない理由** (同じ回は最初の放送だけ。`episode.firstAirings`)。
  * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある。
- * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)
+ * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)。`declined` は人が取り消した放送
+ * (ルールは立て直さない。`rules.canceledBroadcasts`)
  */
 export type Skip =
     | { kind: 'repeat' | 'recorded'; service_name: string; start_at: number }
-    | { kind: 'copy-never' }
+    | { kind: 'copy-never' | 'declined' }
     | null;
 
 /**
@@ -77,7 +87,7 @@ export interface PreviewRow {
 export type Verdict =
     | { kind: 'record' }
     | { kind: 'reserved'; state: string }
-    | { kind: 'skip'; reason: 'repeat' | 'recorded' | 'copy-never' | 'airing' | Miss };
+    | { kind: 'skip'; reason: 'repeat' | 'recorded' | 'copy-never' | 'declined' | 'airing' | Miss };
 
 /**
  * 条件の下見ひとまとめ (`previewFor`)。
@@ -238,9 +248,15 @@ async function countPreview(
     const skips: ReturnType<typeof previewSkips<(typeof hits)[number]>> = conditions.dedupe
         ? previewSkips(hits, at)
         : new Map();
+    /**
+     * **人が取り消した放送は録らない** (`applyRules` も立て直さない)。下見で「録る」と出して、
+     * 保存しても予約が立たない、ということが無いように
+     */
+    const declined = canceledBroadcasts(at);
     const skipOf = (p: (typeof hits)[number]): Skip => {
         // コピー禁止の番組は録らない (`format.COPY_NEVER_REASON`)。手動でも同じ
         if (p.copy_never) return { kind: 'copy-never' };
+        if (declined.has({ ...p, channel: p.service_channel })) return { kind: 'declined' };
         const skip = skips.get(p.id);
         if (skip === undefined) return null;
         return skip.kind === 'repeat'
@@ -258,7 +274,7 @@ async function countPreview(
     const occupants = new Map<number, Occupant>();
     for (const p of hits) {
         // 録らないものはチューナーを取り合わない
-        if (skips.has(p.id) || p.copy_never) continue;
+        if (skipOf(p) !== null) continue;
         occupants.set(p.id, {
             programId: p.id,
             name: p.name,

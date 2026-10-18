@@ -295,34 +295,35 @@ test.describe('ホームの一覧のまとめて表示', () => {
         await anime.click();
         await page.getByTestId('group-rule').click();
 
-        // 下書きは URL に載る。同じ回は最初の放送だけ、が入っている
-        await expect(page).toHaveURL(/\/rules\?.*keyword=/);
+        // 検索の画面の「ルールとして保存」へ。シリーズ名を言葉にして出直し、同じ回は最初の放送だけ、が入っている
+        await expect(page).toHaveURL(/\/search\?.*from=recording%3A\d+/);
         await page.locator('[data-hydrated="true"]').waitFor();
         await expect(page.getByTestId('rule-keyword')).toHaveValue('グループ試験アニメ');
         await expect(page.getByTestId('rule-dedupe')).toBeChecked();
-        await expect(page.getByTestId('rule-origin')).toContainText('条件を入れました');
+        await expect(page.getByTestId('rule-origin')).toContainText('シリーズ名から始めました');
 
         try {
+            const open = page.getByTestId('rule-draft-open');
+            if (await open.isVisible()) await open.click();
             await page.getByTestId('rule-submit').click();
             // 作ったら、この番組はそのルールで録っていると出る
             await expect(page.getByTestId('rule-origin')).toContainText('で録っています');
             await expect(page.getByTestId('rule-origin-link')).toHaveText('グループ試験アニメ');
 
-            // 録画の詳細からも同じ入口。もうルールがあるので、作らずにそちらを案内する
+            // 録画の詳細からも同じ入口。もうルールがあるので、そちらを案内する
             await goto(page, '/');
             await anime.click();
             await page.getByTestId('timeline').getByText('グループ試験アニメ #2').click();
             const detail = page.getByTestId('program-detail');
             await detail.getByTestId('detail-rule').click();
-            await expect(page).toHaveURL(/\/rules\?recording=\d+$/);
+            await expect(page).toHaveURL(/\/search\?.*from=recording%3A\d+/);
             await expect(page.getByTestId('rule-origin')).toContainText('で録っています');
-            await expect(page.getByTestId('rule-keyword')).toHaveValue('');
         } finally {
             // 後続に残さない
             await goto(page, '/rules');
             const made = page.getByTestId('rule-row').filter({ hasText: 'グループ試験アニメ' });
             if ((await made.count()) > 0) {
-                await deleteRule(page, made.first());
+                await deleteRule(made.first());
                 await expect(made).toHaveCount(0);
             }
             await goto(page, '/');

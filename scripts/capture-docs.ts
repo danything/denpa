@@ -267,11 +267,16 @@ async function seed(): Promise<void> {
     await post('/settings/recording?/probeHw', {});
     mkdirSync(stack.epgstationDir, { recursive: true });
 
-    // ルール (画面のフォームと同じものを投げる)。当てると予約が立つ
-    await post('/rules?/create', { keyword: '星屑ステーション', dedupe: ['0', '1'] });
-    await post('/rules?/create', { keyword: '鉄道でめぐる日本', dedupe: ['0', '1'] });
-    await post('/rules?/create', { keyword: 'ひだまり荘', dedupe: ['0', '1'] });
-    await post('/rules?/create', { keyword: '', genres: ['6'], serviceTypes: ['BS'], dedupe: ['0', '1'] });
+    // ルール (検索の画面の「ルールとして保存」と同じものを投げる)。当てると予約が立つ
+    await post('/search?/createRule', { keyword: '星屑ステーション', dedupe: ['0', '1'] });
+    await post('/search?/createRule', { keyword: '鉄道でめぐる日本', dedupe: ['0', '1'] });
+    await post('/search?/createRule', { keyword: 'ひだまり荘', dedupe: ['0', '1'] });
+    await post('/search?/createRule', {
+        keyword: '',
+        genres: ['6'],
+        serviceTypes: ['BS'],
+        dedupe: ['0', '1'],
+    });
 
     const db = new Database(join(stack.root, 'denpa.db'));
     const now = Date.now();
@@ -896,12 +901,9 @@ try {
             await still(page, 'live');
         }
         if (want('rules')) {
-            // 書きかけのルール。右に「いま何が引っかかるか」が出る
+            // ルールの一覧。条件・次の放送・予約の数を並べた表
             await page.goto(`${BASE}/rules`);
             await settle(page, 300);
-            await page.locator('input[name="keyword"]').first().fill('ニュース');
-            // 下見は打つそばから右の列に出る
-            await page.getByTestId('preview').waitFor();
             await still(page, 'rules');
         }
         await page.context().close();

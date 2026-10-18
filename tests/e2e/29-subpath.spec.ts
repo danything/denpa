@@ -97,21 +97,25 @@ test.describe('接頭辞の下で', () => {
         await expect(page.getByTestId('program-detail')).toBeVisible();
         await page.getByTestId('detail-close').click();
 
-        // ルール: 作って、開いて保存すると同じルールのまま転送される (転送は相対)
+        // ルール: 一覧から検索の画面へ行って作り、開いて保存しても同じルールのまま (行き先は相対)
         await page.getByTestId('nav-rules').click();
         await expect(page).toHaveURL(`${origin}${PREFIX}/rules`);
-        await page.getByTestId('rule-keyword').fill('接頭辞のテスト');
+        await page.getByTestId('rule-new').click();
+        await expect(page).toHaveURL(`${origin}${PREFIX}/search`);
+        await page.getByTestId('header-search-input').fill('接頭辞のテスト');
+        await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/search\\?q=`));
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('接頭辞のテスト');
         await page.getByTestId('rule-submit').click();
-        const row = page.getByTestId('rule-row').filter({ hasText: '接頭辞のテスト' });
-        await expect(row).toBeVisible();
-        await row.click();
-        await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/rules\\?edit=\\d+$`));
-        // 保存しても URL は同じ (選んだまま)。送り終えたのは返事で見る
-        const saved = page.waitForResponse((res) => res.url().includes('/update'));
+        await page.getByTestId('rule-saved-link').click();
+        await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/search\\?rule=\\d+$`));
+        // 保存しても URL は同じ。送り終えたのは返事で見る
+        const saved = page.waitForResponse((res) => res.url().includes('/updateRule'));
         await page.getByTestId('rule-update').click();
         expect((await saved).status()).toBeLessThan(400);
-        await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/rules\\?edit=\\d+$`));
-        await deleteRule(page, row);
+        await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/search\\?rule=\\d+$`));
+        await page.getByTestId('nav-rules').click();
+        const row = page.getByTestId('rule-row').filter({ hasText: '接頭辞のテスト' });
+        await deleteRule(row);
         await expect(row).toHaveCount(0);
 
         // ライブ: チケット (fetch) を取って、接頭辞の中の WebSocket に繋ぎ、TS が届く

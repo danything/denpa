@@ -5,6 +5,7 @@ import {
     deleteRule,
     expect,
     goto,
+    makeRule,
     reserveSoon,
     syncEpg,
     test,
@@ -282,12 +283,9 @@ test.describe('操作したときの反応', () => {
 
     test('ルールを消すと、そのルールが作った予約も消える', async ({ page }) => {
         // ルールを作ると、条件に合う番組の予約がその場で立つ
-        await goto(page, '/rules');
-        await page.getByTestId('rule-keyword').fill('テストアニメ');
         // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
-        await page.getByTestId('rule-dedupe').uncheck();
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row')).toHaveCount(1);
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await makeRule(page, 'テストアニメ', { dedupe: false });
 
         await goto(page, '/');
         await expect(page.getByTestId('reservation-row').first()).toBeVisible();
@@ -295,7 +293,7 @@ test.describe('操作したときの反応', () => {
         expect(before).toBeGreaterThan(0);
 
         await goto(page, '/rules');
-        await deleteRule(page, page.getByTestId('rule-row').first());
+        await deleteRule(page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         // ルールが無くなったのに予約だけ残ると、止めたつもりが録れ続ける

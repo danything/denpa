@@ -42,8 +42,8 @@ test.describe('ボタンの見た目', () => {
         expect(prev.background).not.toBe('rgba(0, 0, 0, 0)');
         expect(prev.radius).toBeGreaterThanOrEqual(prev.height / 2);
 
-        // 主のボタンの代表はルールの「追加」(番組表の検索欄はサイト全体の検索に寄せた)
-        await goto(page, '/rules');
+        // 主のボタンの代表は検索の画面の「ルールとして保存」
+        await goto(page, `/search?q=${encodeURIComponent('どこにも無い番組')}`);
         const submit = await look(page.getByTestId('rule-submit'));
         expect(submit.background).not.toBe(primary);
     });
