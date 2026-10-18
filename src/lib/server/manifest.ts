@@ -61,7 +61,7 @@ export function manifest(hostname: string): unknown {
         ],
         shortcuts: [
             { name: '番組表', url: './guide' },
-            { name: '予約と録画', url: './' },
+            { name: '録画', url: './' },
         ],
     };
 }
