@@ -195,6 +195,14 @@ test.describe('操作したときの反応', () => {
         await goto(page, '/guide?type=GR');
         const grid = page.getByTestId('guide-grid');
         const top = async () => Math.round((await grid.boundingBox())!.y);
+        /*
+         * 表の頭へ戻しておく (人が動かしたのではないので畳まない)。開いたときは「いま」に合わせて巻くので、
+         * 夜遅く (放送日の終わりの 4:00 に近い) に流すと下へ送る余りが足りず、畳む前に表の底に着いていた
+         */
+        await expect(page.getByTestId('grid-program').first()).toBeVisible();
+        await grid.evaluate((el) => {
+            el.scrollTop = 0;
+        });
         const shown = await top();
         const bar = Math.round((await page.getByTestId('guide-toolbar').boundingBox())!.height);
         const box = (await grid.boundingBox())!;

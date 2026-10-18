@@ -767,12 +767,16 @@
                     testid="live-status"
                 >
                     {#snippet actions()}
-                        <!-- 録画に譲っている間のやり直しは「ライブに戻る」と同じ (入れなければ追っかけに戻る) -->
-                        <button type="button"
-                            class="small secondary"
-                            onclick={() => (player.yielded !== null ? player.backToLive() : current && select(current))}
-                            data-testid="live-retry">やり直す</button
-                        >
+                        <!--
+                            録画に譲っている間は出さない。上の通知の「ライブに戻る」と同じ動きで、2つ並ぶと迷う
+                        -->
+                        {#if player.yielded === null}
+                            <button type="button"
+                                class="small secondary"
+                                onclick={() => current && select(current)}
+                                data-testid="live-retry">やり直す</button
+                            >
+                        {/if}
                     {/snippet}
                 </PlayerVeil>
             {/if}

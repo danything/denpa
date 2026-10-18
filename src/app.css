@@ -135,7 +135,7 @@
  * - `--dp-surface` … カード・一覧の枠・ダイアログ
  * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
  * - `--dp-line` … 区切りの線 (カードの縁・行の間・ヘッダーの下)
- * - `--dp-line-strong` … 押せるものの縁 (入力欄・枠のボタン)。線より一段濃くして、押せない面と見分ける
+ * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
  * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
@@ -165,15 +165,10 @@
     --pico-muted-border-color: var(--dp-line);
     /*
      * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
-     * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにして枠で区別する
+     * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにする。ボタンの色はここから採る (下の「ボタン」)
      */
     --pico-secondary: #3d475c; /* slate-700 */
-    --pico-secondary-background: #fff;
-    --pico-secondary-border: var(--dp-line-strong);
-    --pico-secondary-inverse: #2a3140; /* slate-800 */
     --pico-secondary-hover: #2a3140; /* slate-800 */
-    --pico-secondary-hover-background: #eff1f4; /* slate-50 */
-    --pico-secondary-hover-border: #b0b9d0; /* slate-250 */
     /* 淡いバッジの文字。地が白寄りなので塗り色より一段濃くする */
     --dp-rec-text: #9b2318; /* red-650 */
     --dp-ok-text: #005f3d; /* jade-650 */
@@ -218,14 +213,9 @@
     --pico-range-border-color: var(--dp-subtle);
     --pico-range-active-border-color: var(--dp-line);
     --pico-progress-background-color: var(--dp-subtle);
-    /* 暗いほうも同じ考え。文字は本文並みの明るさ、区別は枠で付ける */
+    /* 暗いほうも同じ考え。文字は本文並みの明るさ */
     --pico-secondary: #bfc7d9; /* slate-200 */
-    --pico-secondary-background: var(--dp-surface);
-    --pico-secondary-border: var(--dp-line-strong);
-    --pico-secondary-inverse: #dfe3eb; /* slate-100 */
     --pico-secondary-hover: #dfe3eb; /* slate-100 */
-    --pico-secondary-hover-background: var(--dp-subtle);
-    --pico-secondary-hover-border: #50545e;
     /* 暗いほうは逆に、塗り色より明るくしないと読めない */
     --dp-rec-text: #f38f79; /* red-300 */
     --dp-ok-text: #00cc88; /* jade-250 */
@@ -705,137 +695,167 @@ details.more > :not(summary) + :not(summary) {
 }
 
 /* ---- ボタン ---- */
-/* リンクのままボタンの見た目にする(role="button" にするとリンクでなくなる)。<a class="button"> */
-a.button {
+/*
+ * **ボタンは 3 段だけ。色と形はトークン (`--dp-btn-*`) で決め、画面ごとに塗り直さない。**
+ *
+ * - 主 (クラス無し) … 塗ったボタン。1 画面に 1 つか 2 つ (保存・追加・確定)。**主の色 (azure) では塗らず、
+ *   本文の字の色で塗る** (明るいほうはほぼ黒、暗いほうはほぼ白)。色を塗るのは「いま動いているもの」と
+ *   「押すと戻せないもの」だけ (上の「色」の決まり)。主の色はリンク・選んでいるもの・オンの印・フォーカスに残す
+ * - 控え (`.secondary` / `.outline`) … 淡い地だけで枠は引かない。`outline` も同じ見た目
+ *   (枠のボタンが並ぶと、枠の列が字より目立っていた)
+ * - 字だけ (`.ghost`) … 地も枠も無し。指を乗せると淡い地
+ *
+ * 危ない操作は `.danger` (赤で塗る。確定のボタン) と `.outline.danger` (待っている間は控えと同じ。
+ * 押そうとしたときだけ赤)。字だけのボタンは `.icon` を足すと正方形 (丸い形なら円) になる。
+ *
+ * **大きさは 3 段** (ふつう・`.small`・`.xs`)。ふつうは入力欄と同じ高さ (42px)。
+ * 指で押す端末では小さいほうも 40px 以上にする (iPad で押し外さない)。
+ *
+ * 規則は `:where()` で詳細度を 0 に落とし、クラス 1 つ分だけにしてある。各画面の <style> が
+ * 自前の見た目を持つボタン (メニューの項目・映像の上のボタン・リモコン) は、クラス 1 つでこれに勝つ。
+ * Pico は層の中なので、Pico の :hover / :focus の色はここで全部上書きされる (フォーカスは
+ * 上の `:focus-visible` の線だけで示す。押したあとに地の色が残らない)
+ */
+:root {
+    /* 角。ふつうのボタン・小さいボタン・アイコンのボタンで同じ値を使う (丸い形なら正方形は円になる) */
+    --dp-btn-radius: var(--dp-radius-full);
+    /* 主のボタン。字の色で塗り、字は地の色で抜く。指を乗せると地の色へ少し寄せる */
+    --dp-btn-solid: var(--pico-secondary-hover);
+    --dp-btn-solid-hover: color-mix(in srgb, var(--pico-secondary-hover) 82%, var(--dp-bg));
+    --dp-btn-solid-text: var(--dp-bg);
+    /* 控えのボタンの地。字の色を薄く混ぜるので、地・カード・メニューのどの上でも同じ濃さに見える */
+    --dp-btn-tonal: color-mix(in srgb, var(--pico-secondary) 10%, transparent);
+    --dp-btn-tonal-hover: color-mix(in srgb, var(--pico-secondary) 18%, transparent);
+    --dp-btn-text: var(--pico-secondary-hover);
+    /* 高さ。アイコンのボタンの幅にも使う */
+    --dp-btn-h: 2.625rem;
+    --dp-btn-h-sm: 2.125rem;
+    --dp-btn-h-xs: 1.625rem;
+}
+@media (pointer: coarse) {
+    :root {
+        --dp-btn-h-sm: 2.5rem;
+        --dp-btn-h-xs: 2.5rem;
+    }
+}
+:where(button, [type="button"], [type="submit"], [type="reset"], [role="button"], a.button):not(div) {
+    --pico-background-color: var(--dp-btn-solid);
+    --pico-border-color: transparent;
+    --pico-color: var(--dp-btn-solid-text);
+    --pico-box-shadow: none;
+    border-radius: var(--dp-btn-radius);
+}
+:where(button, [type="button"], [type="submit"], [type="reset"], [role="button"], a.button):not(div):where(
+    :hover,
+    :active
+) {
+    --pico-background-color: var(--dp-btn-solid-hover);
+}
+/*
+ * **入っている切り替え (`aria-pressed="true"`) は主の色で。** 「選んでいるもの」なので、主のボタン
+ * (押すと何かが起きる) とは塗り分ける (番組表の「サブch」)
+ */
+:where(button, a.button)[aria-pressed="true"]:where(:not(.secondary, .outline, .ghost)) {
     --pico-background-color: var(--pico-primary-background);
-    --pico-border-color: var(--pico-primary-border);
-    --pico-color: var(--pico-primary-inverse);
+    --pico-color: #fff;
+}
+/* リンクのままボタンの見た目にする (role="button" にするとリンクでなくなる)。<a class="button"> */
+a.button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.4rem;
     padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
     border: var(--pico-border-width) solid var(--pico-border-color);
-    border-radius: var(--pico-border-radius);
     background-color: var(--pico-background-color);
     color: var(--pico-color);
-    font-weight: var(--pico-font-weight);
-    line-height: var(--pico-line-height);
     text-align: center;
     text-decoration: none;
     cursor: pointer;
     transition:
         background-color var(--pico-transition),
-        border-color var(--pico-transition);
+        color var(--pico-transition);
 }
-a.button:hover {
-    --pico-background-color: var(--pico-primary-hover-background);
-    --pico-border-color: var(--pico-primary-hover-border);
+:where(button, [type="button"], [type="submit"], [type="reset"], [role="button"], a.button).secondary,
+:where(button, [type="button"], [type="submit"], [type="reset"], [role="button"], a.button).outline {
+    --pico-background-color: var(--dp-btn-tonal);
+    --pico-color: var(--dp-btn-text);
 }
-a.button.secondary {
-    --pico-background-color: var(--pico-secondary-background);
-    --pico-border-color: var(--pico-secondary-border);
-    --pico-color: var(--pico-secondary-inverse);
-}
-/* 枠も字と同じ色にする (Pico の button.outline と同じ)。素の枠の色では、隣の枠だけのボタンより沈んで見えた */
-a.button.outline {
+:where(button, [type="button"], [type="submit"], [type="reset"], [role="button"], a.button).ghost {
     --pico-background-color: transparent;
-    --pico-color: var(--pico-primary);
-    --pico-border-color: var(--pico-primary);
-}
-a.button.secondary.outline {
-    --pico-color: var(--pico-secondary);
-    --pico-border-color: var(--pico-secondary);
-}
-/* リンクのボタンの :hover。枠だけのものは地を塗らない(塗ると枠の色の文字が地に沈む) */
-a.button.secondary:hover {
-    --pico-background-color: var(--pico-secondary-hover-background);
-    --pico-border-color: var(--pico-secondary-hover-border);
-}
-a.button.outline:hover {
-    --pico-background-color: transparent;
-    --pico-color: var(--pico-primary-hover);
-    --pico-border-color: var(--pico-primary-hover);
-}
-a.button.secondary.outline:hover {
-    --pico-color: var(--pico-secondary-hover);
-    --pico-border-color: var(--pico-secondary-hover);
-}
-/*
- * **いまいるところを表すリンク** (`<a class="button" aria-current="page">`、番組表の種別)。
- *
- * Pico は「素のリンクの aria-current」を**文字を主の明るい色にする**ことで表す。
- * `role="button"` が付いていないので、ボタンの見た目にしたリンクにもその規則が当たり、
- * 塗ってある主の色の地に、同じ系統の明るい字が乗って読めなくなる。白抜きのままにする
- * (いま選んでいるものは塗ったほうだけ。枠だけのものに aria-current は付けない)
- */
-a.button[aria-current]:not([aria-current="false"]) {
-    --pico-color: var(--pico-primary-inverse);
-}
-/* Pico の .secondary / .contrast / .outline に足す */
-button.small,
-a.button.small {
-    padding: 0.3rem 0.65rem;
-    font-size: var(--dp-text-sm);
-}
-button.xs {
-    padding: 0.15rem 0.45rem;
-    font-size: var(--dp-text-xs);
-}
-button.ghost,
-a.button.ghost {
-    --pico-background-color: transparent;
-    --pico-border-color: transparent;
     --pico-color: inherit;
-    --pico-box-shadow: none;
 }
-:is(button, a.button).ghost:is(:hover, :active, :focus, [aria-current]:not([aria-current="false"])) {
-    /* Pico は押せるものの :hover/:focus で文字を白、枠を主の色にする。薄い地の上だと読めないので戻す */
-    --pico-background-color: var(--dp-subtle);
-    --pico-border-color: transparent;
-    --pico-color: inherit;
-    --pico-box-shadow: none;
+:where(button, [type="button"], [type="submit"], [type="reset"], [role="button"], a.button):is(
+    .secondary,
+    .outline,
+    .ghost
+):where(:hover, :active, [aria-current]:not([aria-current="false"])) {
+    --pico-background-color: var(--dp-btn-tonal-hover);
 }
-button.danger {
+/* 危ない操作。確定のボタンは赤で塗る */
+:where(button, a.button).danger {
     --pico-background-color: var(--dp-error);
-    --pico-border-color: var(--dp-error);
     --pico-color: #fff;
 }
-/*
- * 枠だけの危ない操作(取消・削除の 1 回目)。**待っている間は赤くしない。**
- *
- * 一覧では行ごとに取消や削除が並ぶので、赤い枠の列が立って画面全体が
- * 警告のように見えていた。**赤は押そうとしたときと、確定のボタンだけ**にする
- */
-button.outline.danger {
-    --pico-background-color: transparent;
-    --pico-border-color: var(--pico-secondary-border);
-    --pico-color: var(--pico-secondary);
+:where(button, a.button).danger:where(:hover, :active) {
+    --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
 }
-button.outline.danger:is(:hover, :active, :focus) {
-    --pico-background-color: color-mix(in srgb, var(--dp-rec) 14%, var(--dp-surface));
-    --pico-border-color: var(--dp-rec);
+/*
+ * 1 回目の削除・取消 (`.outline.danger`)。**待っている間は赤くしない。**
+ * 一覧では行ごとに並ぶので、赤の列が立って画面全体が警告のように見えていた。
+ * 赤は押そうとしたときと、確定のボタンだけにする
+ */
+:where(button, a.button).outline.danger {
+    --pico-background-color: var(--dp-btn-tonal);
+    --pico-color: var(--dp-btn-text);
+}
+:where(button, a.button).outline.danger:where(:hover, :active) {
+    --pico-background-color: color-mix(in srgb, var(--dp-rec) 14%, transparent);
     --pico-color: var(--dp-rec-text);
 }
-
-/* 赤いボタンは、押しているときも同じ色の少し濃いものにする(Pico の既定だと主の色に変わって文字が読みにくい) */
-button.danger:not(.outline):is(:hover, :active, :focus) {
-    --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
-    --pico-border-color: color-mix(in srgb, var(--dp-error) 85%, #000);
-    --pico-color: #fff;
+/*
+ * 大きさ。ふつうのボタンの高さは Pico の余白のまま (入力欄と同じ 42px)。小さいボタンとアイコンのボタンは
+ * 高さをトークンで決め、字は真ん中に置く
+ */
+:where(button, [type="button"], [type="submit"], a.button):is(.small, .xs, .icon) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding-block: 0;
+}
+:where(button, [type="button"], [type="submit"], a.button).small {
+    min-height: var(--dp-btn-h-sm);
+    padding-inline: 0.75rem;
+    font-size: var(--dp-text-sm);
+}
+:where(button, [type="button"], [type="submit"], a.button).xs {
+    min-height: var(--dp-btn-h-xs);
+    padding-inline: 0.5rem;
+    font-size: var(--dp-text-xs);
+}
+/* アイコンだけのボタン。幅を高さに揃える (丸い形なら円、角の丸い形なら角の丸い正方形) */
+:where(button, a.button).icon {
+    width: var(--dp-btn-h);
+    min-height: var(--dp-btn-h);
+    padding: 0;
+}
+:where(button, a.button).icon.small {
+    width: var(--dp-btn-h-sm);
+    min-height: var(--dp-btn-h-sm);
 }
 
 /* ---- 行の操作 (`.row-actions`。録画の「詳細」「削除」、予約の「取消」、ルールの「編集」など) ---- */
 /*
- * **枠の無いボタンに、字とアイコン。指を乗せると淡い地。** 一覧では行ごとに同じボタンが
- * 並ぶので、枠付きだと枠の列が縦に立って番組名より目立っていた。押せることは
- * 字の色 (本文並み)・指を乗せたときの地・カーソルで分かる。
- * 大きさは字を小さめ (`--dp-text-sm`) に揃え、**押す的は 40px のまま** (観る画面の操作列と同じ物差し。
- * `player/ControlButton.svelte`)。行の右に寄せる (折り返して下に回ったときも右)。
- * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする (押すと戻せないものなので、
- * 押そうとしたときに分かればよい)。塗ったボタン (追っかけ・削除の「確定」) は塗ったまま、大きさだけ揃える
+ * **控えのボタンも字だけにする。** 一覧では行ごとに同じボタンが並ぶので、地の付いたボタンの列が
+ * 縦に立つと番組名より目立つ。押せることは字の色・指を乗せたときの地・カーソルで分かる。
+ * 押す的は 40px (観る画面の操作列と同じ物差し。`player/ControlButton.svelte`)。行の右に寄せる。
+ * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする。塗ったボタン (追っかけ・削除の「確定」) は塗ったまま
  */
 .row-actions {
+    --dp-btn-tonal: transparent;
+    --dp-btn-h: 2.5rem;
+    --dp-btn-h-sm: 2.5rem;
     margin-inline-start: auto;
 }
 .row-actions :is(button, a.button) {
@@ -843,43 +863,34 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    min-height: 2.5rem;
-    padding: 0.3rem 0.65rem;
+    min-height: var(--dp-btn-h);
+    padding-block: 0;
+    padding-inline: 0.65rem;
     font-size: var(--dp-text-sm);
 }
-.row-actions :is(button, a.button):is(.secondary, .outline, .ghost) {
-    --pico-background-color: transparent;
-    --pico-border-color: transparent;
-    --pico-color: var(--pico-secondary);
-    --pico-box-shadow: none;
-}
-.row-actions :is(button, a.button):is(.secondary, .outline, .ghost):is(:hover, :focus-visible) {
-    --pico-background-color: var(--dp-hover);
-    --pico-border-color: transparent;
-    --pico-color: var(--pico-h1-color, var(--pico-color));
-}
-.row-actions button.outline.danger {
-    --pico-color: var(--dp-muted);
-}
-.row-actions button.outline.danger:is(:hover, :focus-visible) {
-    --pico-background-color: color-mix(in srgb, var(--dp-rec) 12%, transparent);
-    --pico-border-color: transparent;
-    --pico-color: var(--dp-rec-text);
+.row-actions .outline.danger {
+    --dp-btn-text: var(--dp-muted);
 }
 
 /*
- * **つなげたボタンの中のリンク (`<a class="button">`) も、つなぐ側の角を落とす。** Pico は
- * `[role=group]` の中身なら何でもつなぐが、層の外のこちらの `a.button` の角が必ず勝つので、
- * リンクだけ角の丸いバッジのまま離れて並んでいた (番組表の種別。ライブの `<button>` とずれていた)
+ * **入力欄とつなげたボタン (`role="search"` / `role="group"`) は、つなぐ側の角を落とす。** Pico も
+ * 落とすが、層の外のこちらのボタンの角 (`--dp-btn-radius`) が必ず勝つので、ここで落とし直す。
+ * 外側の角は入力欄と同じ丸み (ボタンだけ丸いと、つないだ形が崩れる。Pico の検索欄は丸い端)。
+ * タブ (`.segmented`) は下で別に決める
  */
-[role="group"] > a.button {
+:is([role="group"], [role="search"]):not(.segmented) > :is(button, a.button) {
     margin: 0;
+    border-radius: var(--pico-border-radius);
 }
-[role="group"] > a.button:not(:first-child) {
+/* 検索欄の入力欄は Pico が `[role="search"]` で 5rem の丸い端にする。ボタンの外側の角もそれに揃える */
+[role="search"]:not(.segmented) > :is(button, a.button) {
+    border-radius: 5rem;
+}
+:is([role="group"], [role="search"]):not(.segmented) > :is(button, a.button):not(:first-child) {
     border-start-start-radius: 0;
     border-end-start-radius: 0;
 }
-[role="group"] > a.button:not(:last-child) {
+:is([role="group"], [role="search"]):not(.segmented) > :is(button, a.button):not(:last-child) {
     border-start-end-radius: 0;
     border-end-end-radius: 0;
 }
@@ -904,7 +915,7 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     width: auto;
     padding: 2px;
     border: 1px solid var(--dp-line);
-    border-radius: var(--dp-radius);
+    border-radius: var(--dp-btn-radius);
     background: var(--dp-subtle);
     box-shadow: none;
 }
@@ -914,7 +925,7 @@ button.danger:not(.outline):is(:hover, :active, :focus) {
     --pico-color: var(--pico-secondary);
     --pico-box-shadow: none;
     margin: 0;
-    border-radius: calc(var(--dp-radius) - 2px);
+    border-radius: calc(var(--dp-btn-radius) - 2px);
     box-shadow: none;
 }
 [role="group"].segmented > :is(button, a.button):hover {

@@ -46,11 +46,6 @@ export function canvasVideo(): boolean {
     return decide(canvasChoice(), userAgent());
 }
 
-/** この端末がテスラの車載ブラウザか (設定画面の「この端末で使えるもの」に出す) */
-export function teslaBrowser(): boolean {
-    return isTesla(userAgent());
-}
-
 /** 入れる・切る。**明示した値として覚える** (UA の既定より勝つ) */
 export function chooseCanvas(on: boolean): void {
     write(CANVAS_VIDEO, on ? 'on' : 'off');

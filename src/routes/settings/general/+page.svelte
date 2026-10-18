@@ -1,13 +1,9 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
-    import { teslaBrowser } from '#lib/canvas-video.js';
     import Lead from '#lib/components/Lead.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { measure } from '#lib/measure.svelte.js';
-    import { type CanvasSupport, canvasSupport } from '#lib/raw/support.js';
-    import { THEME_LABEL, THEME_MODES, theme } from '#lib/theme.svelte.js';
     import type { SubmitFunction } from '$app/forms';
     import { resolve } from '$app/paths';
 
@@ -38,74 +34,24 @@
         await options.update();
         confirming.fire();
     };
-
-    /*
-     * **この端末だけの設定。** どれもサーバには送らず、端末に覚える (localStorage)。
-     * 読むのは画面に出てから (localStorage・UA・VideoDecoder はサーバでは読めない)
-     */
-    let tesla = $state(false);
-    let support = $state<CanvasSupport | null>(null);
-    onMount(() => {
-        tesla = teslaBrowser();
-        void canvasSupport().then((found) => (support = found));
-    });
 </script>
 
 <svelte:window onclick={confirming.stand} />
 
 <Toasts {notices} source={form} />
 
-<!-- 節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先 -->
+<!--
+    節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先。
+    **ほかの場所で切り替えられるものはここに並べない** (テーマはヘッダーとスマホの「その他」、
+    互換モードは再生画面の ⚙)。同じ設定が2か所にあると、どちらが効いているのか迷う
+-->
 <div class="part" id="browser" data-part>
     <div class="sections readable">
         <!--
-            **テーマ。** ヘッダーのボタン (押すたびに巡る) と同じもの (`theme.svelte.ts`)。
-            ここでは3つを並べて、いまどれなのかと次に何があるのかを見せる
-        -->
-        <section class="section" data-testid="theme-card">
-            <div class="section-head">
-                <h2>テーマ</h2>
-            </div>
-            <div class="theme-choices">
-                {#each THEME_MODES as mode (mode)}
-                    <label class="check">
-                        <input
-                            type="radio"
-                            name="theme"
-                            value={mode}
-                            checked={theme.mode === mode}
-                            onchange={() => theme.set(mode)}
-                            data-testid="theme-{mode}"
-                        />
-                        <span>{THEME_LABEL[mode]}</span>
-                    </label>
-                {/each}
-            </div>
-            <Lead><strong>この端末だけ</strong>の設定です。ヘッダーのボタンでも切り替えられます</Lead>
-        </section>
-
-        <!--
-            **互換モード** (`canvas-video.ts`)。`<video>` の再生が止まる端末 (テスラの車載ブラウザ) のため、
-            ライブ・追っかけ・録画の動画を canvas に描く。端末ごとの設定。
-            **オン/オフは再生画面の ⚙ (再生の設定。`StageTail`) で切り替える。** ここに残すのは、この端末で使えるものの一覧だけ。
-            canvas・WebCodecs といった言葉は画面に出さない (docs/writing.md「画面の言葉」)
-        -->
-        <section class="section" data-testid="canvas-video">
-            <div class="section-head">
-                <h2>互換モードで再生</h2>
-            </div>
-            <p class="small" data-testid="canvas-video-hint">オン/オフは、再生画面の ⚙ (再生の設定) で切り替えます。</p>
-            <ul class="support small" data-testid="canvas-video-support">
-                <li>H.264: {support === null ? '確認中' : support.h264 ? '使えます' : '使えません'}</li>
-                <li>AV1: {support === null ? '確認中' : support.av1 ? '使えます' : '使えません'}</li>
-                <li>テスラの車載ブラウザ: {tesla ? 'はい' : 'いいえ'}</li>
-            </ul>
-        </section>
-
-        <!--
             **端末でしか出ない食い違いを、その端末で読むための入口。** 縦のはみ出しは、引っ込む
             アドレスバーや画面の切り欠きが絡むと**その端末でしか起きない**。入り口をここに置くのは、
-            PWA にアドレスバーが無いため (`?measure` を打つところがない)
+            PWA にアドレスバーが無いため (`?measure` を打つところがない)。
+            サーバには送らず、端末に覚える (localStorage)
         -->
         <section class="section">
             <div class="section-head">
@@ -199,8 +145,8 @@
 <div class="part" id="version" data-part>
     <div class="sections readable">
         <!--
-            **動いている版と、新しい版が出ているか。** 新しい版はヘッダーにも出す (`server/update.ts`)。
-            main のイメージと手元は `dev` で、リリースと見比べない
+            **動いている版。** 新しい版のリンクはヘッダー (狭い画面は「その他」) にだけ出す (`server/update.ts`)。
+            ここにも並べると同じリンクが2か所になる。main のイメージと手元は `dev` で、リリースと見比べない
         -->
         <section class="section" data-testid="version-card">
             <div class="section-head">
@@ -209,16 +155,10 @@
             <p class="small" data-testid="version">
                 {data.version === 'dev' ? '開発版 (dev)' : data.version}
             </p>
-            {#if data.update !== null}
-                <Lead>
-                    <a href={data.update.url} target="_blank" rel="noopener noreferrer" data-testid="version-update">
-                        {data.update.version} が公開されています
-                    </a>
-                </Lead>
-            {:else if data.version === 'dev'}
+            {#if data.version === 'dev'}
                 <Lead>開発版なので、新しいリリースとは見比べません</Lead>
             {:else}
-                <Lead>新しい版が出たら、こことヘッダーに出ます</Lead>
+                <Lead>新しい版が出たら、ヘッダー (狭い画面は下の「その他」) に出ます</Lead>
             {/if}
         </section>
     </div>
@@ -233,20 +173,5 @@
         flex-direction: column;
         align-items: flex-start;
         gap: var(--dp-space-2);
-    }
-    .theme-choices {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--dp-space-2) var(--dp-space-4);
-    }
-    /* 互換モードで使えるもの。点は付けずに詰めて並べる */
-    .support {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-    .support li {
-        margin: 0;
-        list-style: none;
     }
 </style>

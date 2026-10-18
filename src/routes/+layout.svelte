@@ -393,7 +393,7 @@
         -->
         <nav class="actions">
             <button type="button"
-                class="ghost small"
+                class="ghost small icon"
                 onclick={theme.cycle}
                 aria-label="テーマを切り替える"
                 title={THEME_LABEL[theme.mode]}

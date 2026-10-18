@@ -57,13 +57,10 @@ test.describe('互換モード', () => {
     });
 
     test('⚙ で入れると運転中の注意が出て、読み直したライブを canvas に描く', async ({ page }) => {
-        // 設定の画面には、この端末で使えるもの (描ける形式・テスラか) と、⚙ で切り替えるという案内だけが残る
+        // 切り替えるのは再生画面の ⚙ だけ。設定の画面には置かない (同じものを2か所に置かない)
         await goto(page, '/settings/general');
-        const support = page.getByTestId('canvas-video-support');
-        await expect(support).toContainText('AV1: 使えます');
-        await expect(support).toContainText('テスラの車載ブラウザ: いいえ');
-        await expect(page.getByTestId('canvas-video-hint')).toContainText('⚙');
-        await expect(page.getByTestId('canvas-video-toggle')).toHaveCount(0);
+        await expect(page.getByTestId('measure-toggle')).toBeVisible();
+        await expect(page.getByTestId('canvas-video')).toHaveCount(0);
 
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
@@ -164,10 +161,6 @@ test.describe('互換モード', () => {
         });
 
         test('⚙ で明示して切れば、テスラでも <video> で観る', async ({ page }) => {
-            await goto(page, '/settings/general');
-            await expect(page.getByTestId('canvas-video-support')).toContainText(
-                'テスラの車載ブラウザ: はい',
-            );
             // 触らなくても入っているので、まず運転中の注意が出る
             await goto(page, '/live');
             await page.getByTestId('drive-notice-accept').click();

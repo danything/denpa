@@ -411,7 +411,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * (`RawEngine` の `fmp4`) へ流す。**ここでは `<video>` に戻らない** — 描けなくなったら
      * MPEG-2 へ、それも無理なら理由を出して止まる
      */
-    /** 互換モードか。**選局のたびに読み直す** (設定画面でオン/オフされる) */
+    /** 互換モードか。**選局のたびに読み直す** (再生の設定 ⚙ でオン/オフされる) */
     let compat = $state(false);
     /** この端末で描ける形式 (`raw/support.ts` の `canvasSupport`)。調べるまで null */
     let compatSupport = $state<CanvasSupport | null>(null);

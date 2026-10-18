@@ -996,18 +996,6 @@
     .types {
         width: auto;
     }
-    /*
-     * 指で押す端末では高さ 40px 以上にする (`docs/writing.md` の一覧の操作と同じ)。
-     * マウスの端末では小さいまま (細い1行に収める)
-     */
-    @media (pointer: coarse) {
-        .toolbar :is(a.button, button) {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 2.5rem;
-        }
-    }
     /* 種別を選び直すと、持ち上げた面が横へ滑る (`app.css` の「画面の切り替え」) */
     .seg-pill {
         view-transition-name: guide-type;
