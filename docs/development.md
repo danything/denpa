@@ -57,9 +57,7 @@ ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、貼るときに 1120
 ### 並べて流す
 
 **ワーカーごとに denpa と偽エージェントと偽通知先を1式ずつ立てます** (`tests/stack.ts`)。
-ポートも置き場もDBも別なので、同時に走るファイル同士は互いに見えません。1つのアプリとDBを
-共有していた頃は、予約もルールも同じ表に入って件数が合わなくなるので直列でした。
-2分半 → 50秒 (12コアで実測)。
+ポートも置き場もDBも別なので、同時に走るファイル同士は互いに見えません (12コアで 2分半 → 50秒)。
 
 - ファイルの中は順番 (`fullyParallel: false`)。前のテストが作った予約や録画を次が当てにしてよい
 - ファイルをまたいでは当てにできない。実体のある録画が要るテストは `recordOne()` で自分のぶんを録る
@@ -163,13 +161,12 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 ### イメージの土台は distroless
 
 **本体もエージェントも土台は distroless** (`gcr.io/distroless/cc-debian13`) で、シェルも apt も
-coreutils もありません。どちらも今までどおり root で動きます。本体の ffmpeg が使うライブラリ
+coreutils もありません。どちらも root で動きます。本体の ffmpeg が使うライブラリ
 (libva・Intel の VA-API ドライバ・QSV のランタイムなど) は、Dockerfile の `runtime-libs` 段で
 Debian のパッケージを入れてから要るファイルだけを写しています (dlopen で読むドライバはディレクトリごと)。
 足りないものが無いかは `.github/image-smoke.sh` が ld.so に依存を解かせて確かめます。
 
-denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しません。シェルで書いていたもの
-(denpa-aio の入口、Helm の prepull) は bun で動かします。実行ファイルを直に呼ぶのは今までどおり動きます
+denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しません (denpa-aio の入口・Helm の prepull も bun で動かす)。実行ファイルを直に呼ぶことはできます
 (`kubectl exec deploy/denpa -- ffmpeg -hide_banner -hwaccels`、`kubectl exec deploy/tuner-agent -- denpa-agent --tune …`)。
 コンテナの中を見たいときは、`kubectl debug -it <Pod> --image=busybox --target=denpa`
 (エージェントは `--target=tuner-agent`。Docker なら `docker run --rm -it --pid=container:<名前> --network=container:<名前> busybox` で、
@@ -178,16 +175,10 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 ### 外から持ってくるものは版で固定する
 
 ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / siano-userland / asicen-userland は、どれも
-`ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。**`master` を
-追っていた頃は、同じコミットからビルドしても中身が違いえました** (実機の中身は Pod へ入らないと
-分からなかった)。
+`ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 
 上げるのは Renovate 任せで、`# renovate:` の注釈と `renovate.json` の `customManagers` で
-場所を教えてあります。タグのあるものはタグで、無いものは枝の先頭のコミット (`git-refs`) で追います。
-`renovate.json` の書き方は、こう確かめます。
-
-```sh
-docker compose run --rm unit bunx --package renovate renovate-config-validator   # renovate.json の書き方
-```
+場所を教えてあります。タグのあるものはタグで、無いものはブランチの先頭のコミット (`git-refs`) で追います。
+`renovate.json` の書き方は `docker compose run --rm unit bunx --package renovate renovate-config-validator` で確かめます。
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
