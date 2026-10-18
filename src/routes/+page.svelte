@@ -59,6 +59,7 @@
     import ChevronRight from '~icons/lucide/chevron-right';
     import Ellipsis from '~icons/lucide/ellipsis';
     import Info from '~icons/lucide/info';
+    import ListFilter from '~icons/lucide/list-filter';
     import ListTree from '~icons/lucide/list-tree';
     import Play from '~icons/lucide/play';
     import X from '~icons/lucide/x';
@@ -490,6 +491,142 @@
         recordingQuery;
         untrack(() => recordingPage.reset());
     });
+
+    /* ===== 見本 1: 1本の時間軸 ===== */
+    type Res = (typeof data.reservations)[number];
+    type Rec = (typeof data.recordings)[number];
+    type TItem =
+        | { kind: 'res'; key: string; at: number; res: Res }
+        | { kind: 'now'; key: string; at: number; res: Res }
+        | { kind: 'past'; key: string; at: number; row: RightRow };
+    type TLine =
+        | { kind: 'day'; key: string; label: string; sub: string }
+        | { kind: 'now-line'; key: string }
+        | { kind: 'item'; key: string; item: TItem };
+
+    type Chip = 'all' | 'res' | 'now' | 'unwatched' | 'failed';
+    let chip = $state<Chip>('all');
+    let query = $state('');
+    let sheetOpen = $state(false);
+
+    const nowAt = Date.now();
+    const DAY = 86_400_000;
+    function dayStart(ms: number): number {
+        const d = new Date(ms);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime();
+    }
+    const today = dayStart(nowAt);
+    function dayLabel(ms: number): { label: string; sub: string } {
+        const diff = Math.round((dayStart(ms) - today) / DAY);
+        const named = ({ [-1]: '昨日', 0: '今日', 1: '明日' } as Record<number, string>)[diff];
+        return { label: named ?? date(ms), sub: named === undefined ? '' : date(ms) };
+    }
+
+    const resText = (res: Res) =>
+        [res.name, res.service_name, stateLabel(res.state), res.rule_name ?? '', dateTime(res.start_at)].join(' ');
+    const isFailedRow = (row: RightRow) =>
+        row.kind === 'missed' || row.rec.state === 'failed' || (row.rec.encode_error ?? '') !== '';
+
+    const futureAll = $derived(data.reservations.filter((r) => r.state !== 'recording'));
+    const nowAll = $derived(data.reservations.filter((r) => r.state === 'recording'));
+    const counts = $derived({
+        res: futureAll.length,
+        now: nowAll.length,
+        unwatched: rightRows.filter((r) => r.kind === 'rec' && unwatched(r.rec)).length,
+        failed: rightRows.filter(isFailedRow).length,
+        all: futureAll.length + nowAll.length + rightRows.length,
+    });
+    const CHIPS: { id: Chip; label: string }[] = [
+        { id: 'all', label: 'すべて' },
+        { id: 'res', label: '予約' },
+        { id: 'now', label: '録画中' },
+        { id: 'unwatched', label: '未視聴' },
+        { id: 'failed', label: '失敗' },
+    ];
+
+    const lines = $derived.by(() => {
+        const want = (c: Chip) => chip === 'all' || chip === c;
+        const future = want('res')
+            ? futureAll.filter((r) => matches(query, resText(r))).sort((a, b) => b.start_at - a.start_at)
+            : [];
+        const live = want('now') ? nowAll.filter((r) => matches(query, resText(r))) : [];
+        const past = rightRows.filter((row) => {
+            if (!matches(query, rightText(row))) return false;
+            if (chip === 'all') return true;
+            if (chip === 'unwatched') return row.kind === 'rec' && unwatched(row.rec);
+            if (chip === 'failed') return isFailedRow(row);
+            return false;
+        });
+        const out: TLine[] = [];
+        let lastDay = -1;
+        const head = (at: number, zone: string) => {
+            const d = dayStart(at);
+            if (d === lastDay) return;
+            lastDay = d;
+            const l = dayLabel(at);
+            out.push({ kind: 'day', key: `${zone}-${d}`, label: l.label, sub: `${l.sub}　${zone === 'f' ? '予約' : '録画'}` });
+        };
+        for (const res of future) {
+            head(res.start_at, 'f');
+            out.push({ kind: 'item', key: `res-${res.id}`, item: { kind: 'res', key: `res-${res.id}`, at: res.start_at, res } });
+        }
+        out.push({ kind: 'now-line', key: 'now' });
+        for (const res of live) {
+            out.push({ kind: 'item', key: `now-${res.id}`, item: { kind: 'now', key: `now-${res.id}`, at: res.start_at, res } });
+        }
+        lastDay = -1;
+        for (const row of past.slice(0, 120)) {
+            head(row.at, 'p');
+            out.push({ kind: 'item', key: row.key, item: { kind: 'past', key: row.key, at: row.at, row } });
+        }
+        return out;
+    });
+
+    /** 右の枠に出すもの。指を乗せた行、無ければ「いま」に近いもの */
+    let hovered = $state<TItem | null>(null);
+    const defaultItem = $derived.by((): TItem | null => {
+        const live = nowAll[0];
+        if (live) return { kind: 'now', key: `now-${live.id}`, at: live.start_at, res: live };
+        const next = [...futureAll].sort((a, b) => a.start_at - b.start_at)[0];
+        if (next) return { kind: 'res', key: `res-${next.id}`, at: next.start_at, res: next };
+        return null;
+    });
+    const focused = $derived(hovered ?? defaultItem);
+    const nextRes = $derived([...futureAll].sort((a, b) => a.start_at - b.start_at)[0] ?? null);
+    const upcoming = $derived([...futureAll].sort((a, b) => a.start_at - b.start_at).slice(0, 8));
+
+    let listBox: HTMLElement | undefined = $state();
+    let nowLine: HTMLElement | undefined = $state();
+    /** 開いたら「いま」の線まで送る (上が予約、下が録画) */
+    $effect(() => {
+        if (listBox === undefined || nowLine === undefined) return;
+        const box = listBox;
+        const line = nowLine;
+        untrack(() => {
+            const nav = document.querySelector<HTMLElement>(".navbar")?.offsetHeight ?? 0;
+            document.querySelector<HTMLElement>(".t-board")?.style.setProperty("--t-top", `${nav}px`);
+            const narrow = box.scrollHeight <= box.clientHeight + 1;
+            if (narrow) {
+                // 狭い画面はページごとスクロールする
+                const bar = document.querySelector<HTMLElement>(".t-toolbar")?.offsetHeight ?? 0;
+                const room = innerHeight - nav - bar;
+                window.scrollTo({ top: line.getBoundingClientRect().top + window.scrollY - nav - bar - room * 0.22 });
+            } else {
+                box.scrollTop = line.offsetTop - box.clientHeight * 0.28;
+            }
+        });
+    });
+
+    function pickFocus(item: TItem): void {
+        hovered = item;
+    }
+    function relative(at: number): string {
+        const min = Math.round((at - nowAt) / 60000);
+        if (min < 60) return `${min}分後`;
+        if (min < 24 * 60) return `${Math.floor(min / 60)}時間${min % 60 ? `${min % 60}分` : ''}後`;
+        return `${Math.floor(min / 1440)}日後`;
+    }
 </script>
 
 <!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
@@ -1025,327 +1162,294 @@
     畳まれる幅 (md 未満) では素直にページごとスクロールさせる。
     **横に並べはじめる幅は全画面で `md` (768px)** ([+layout.svelte](./+layout.svelte) の `FILLED`)
 -->
-<div class="board">
+<!-- 見本 1: 予約と録画を1本の時間軸に。上がこれから、「いま」の線、下が録れたもの -->
+{#snippet chips(sheet: boolean)}
+    {#each CHIPS as c (c.id)}
+        <button
+            type="button"
+            class="t-chip"
+            class:on={chip === c.id}
+            class:alert={c.id === 'failed' && counts.failed > 0}
+            aria-pressed={chip === c.id}
+            onclick={() => {
+                chip = c.id;
+                if (sheet) sheetOpen = false;
+            }}
+        >
+            {c.label}<span class="t-count num">{counts[c.id]}</span>
+        </button>
+    {/each}
+{/snippet}
+
+{#snippet tRes(item: TItem & { kind: 'res' | 'now' })}
+    {@const res = item.res}
+    <div
+        data-testid="reservation-row"
+        data-reservation-id={res.id}
+        data-program-id={res.program_id}
+        class="row t-row"
+        class:t-live={item.kind === 'now'}
+        class:t-focus={focused?.key === item.key}
+        onmouseenter={() => pickFocus(item)}
+        onfocusin={() => pickFocus(item)}
+        role="presentation"
+    >
+        <span class="t-time num">{time(res.start_at)}<span class="t-end">{time(res.end_at)}</span></span>
+        <div class="row-body" data-testid="row-body">
+            {@render title(
+                stateLabel(res.state),
+                badgeClass(res.state),
+                res.name,
+                'reservation-state',
+                () => openReservation(res),
+                false,
+                quietState(res.state),
+            )}
+            {@render meta(
+                res.service_name,
+                [duration(res.start_at, res.end_at), res.manual ? '手動予約' : (res.rule_name ?? '')],
+                res,
+            )}
+            {#if res.conflict_reason}
+                <div class="row-sub text-error small">{res.conflict_reason}</div>
+            {/if}
+        </div>
+        <div class="row-actions">
+            {#if res.recording_id !== null}
+                <a class="button" href={resolve(`chase/${res.recording_id}`)}>追っかけ</a>
+            {/if}
+            {#if cancelable(res)}
+                <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
+                    <Icon icon={X} size="size-4" />取消
+                </ActionButton>
+            {/if}
+        </div>
+    </div>
+{/snippet}
+
+{#snippet tRec(item: TItem & { kind: 'past' })}
+    {@const row = item.row}
+    {#if row.kind === 'missed'}
+        {@const res = row.res}
+        <div
+            class="row t-row"
+            data-program-id={res.program_id}
+            class:t-focus={focused?.key === item.key}
+            onmouseenter={() => pickFocus(item)}
+            role="presentation"
+        >
+            <span class="t-time num">{time(res.start_at)}</span>
+            <span class="t-thumb"></span>
+            <div class="row-body" data-testid="row-body">
+                {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state', () => openMissed(res))}
+                {@render meta(res.service_name, [duration(res.start_at, res.end_at)], res)}
+            </div>
+            <div class="row-actions">
+                <ArmedDelete {deleting} armKey={-res.id} action="?/deleteMissed" fields={{ id: res.id }} testid="delete-button" confirmTestid="delete-confirm" icon />
+            </div>
+        </div>
+    {:else}
+        {@const rec = row.rec}
+        {@const link = watchLink(rec)}
+        {@const shown = rowState(rec)}
+        <div
+            data-testid="recording-row"
+            data-recording-id={rec.id}
+            data-program-id={rec.program_id}
+            class="row t-row playable"
+            class:t-focus={focused?.key === item.key}
+            onmouseenter={() => pickFocus(item)}
+            onfocusin={() => pickFocus(item)}
+            role="presentation"
+        >
+            <span class="t-time num">{time(rec.start_at)}</span>
+            <span class="t-thumb">
+                {#if rec.library_path !== null}{@render posterImg(rec.id)}{/if}
+                {#if link !== null}<span class="t-play" aria-hidden="true"><Play class="poster-icon" /></span>{/if}
+            </span>
+            <div class="row-body" data-testid="row-body">
+                {@render title(
+                    shown.label,
+                    shown.badge,
+                    rec.name,
+                    'recording-state',
+                    link ?? (() => openRecording(rec)),
+                    unwatched(rec),
+                    shown.quiet,
+                    rec.id,
+                )}
+                {@render meta(rec.service_name, [recordedDuration(rec), size(rec.ts_size)], rec)}
+            </div>
+            {#if link !== null && rec.progress !== null}
+                {@const frac = rec.progress.length > 0 ? Math.min(1, rec.progress.at / rec.progress.length) : 0}
+                <span class="t-resume muted tiny num" title="続きから">
+                    <span class="t-resume-track"><span style="width: {frac * 100}%"></span></span>
+                    残り{durationMs(Math.max(0, rec.progress.length - rec.progress.at))}
+                </span>
+            {/if}
+            <div class="row-actions">
+                {#if link !== null}
+                    <button type="button" class="secondary outline" onclick={() => openRecording(rec)} data-testid="detail-button" aria-label="詳細">
+                        <Icon icon={Info} size="size-4" />
+                    </button>
+                {/if}
+                {#if rec.deleted_at === null && rec.job_id === null}
+                    <ArmedDelete {deleting} armKey={rec.id} fields={{ id: rec.id }} testid="delete-button" confirmTestid="delete-confirm" icon />
+                {/if}
+            </div>
+        </div>
+    {/if}
+{/snippet}
+
+{#snippet pane(item: TItem | null)}
+    <div class="t-stats">
+        <div class="t-stat t-next">
+            <span class="t-stat-label">次の録画</span>
+            {#if nextRes !== null}
+                <span class="t-stat-value num">{time(nextRes.start_at)}<small>{relative(nextRes.start_at)}</small></span>
+                <span class="t-stat-sub broadcast">{nextRes.name}</span>
+            {:else}
+                <span class="t-stat-value">なし</span>
+            {/if}
+        </div>
+        <div class="t-stat">
+            <span class="t-stat-label">録画中</span>
+            <span class="t-stat-value num">{counts.now}<small>本</small></span>
+        </div>
+        <div class="t-stat">
+            <span class="t-stat-label">未視聴</span>
+            <span class="t-stat-value num">{counts.unwatched}<small>本</small></span>
+        </div>
+        <div class="t-stat">
+            <span class="t-stat-label">空き</span>
+            <span class="t-stat-value num">{data.capacity?.free.replace('空き ', '') ?? '—'}</span>
+            {#if data.capacity?.hours}<span class="t-stat-sub">{data.capacity.hours}</span>{/if}
+        </div>
+    </div>
+    {#if item !== null}
+        {@const rec = item.kind === 'past' && item.row.kind === 'rec' ? item.row.rec : null}
+        {@const res = item.kind === 'past' ? (item.row.kind === 'missed' ? item.row.res : null) : item.res}
+        {@const base = rec ?? res!}
+        <div class="t-detail">
+            <p class="t-detail-kicker muted small">
+                {#if item.kind === 'now'}いま録画中{:else if item.kind === 'res'}{relative(base.start_at)}に録画{:else}{dateTime(base.start_at)} に録画{/if}
+            </p>
+            {#if rec !== null && rec.library_path !== null}
+                <a class="t-hero" href={watchLink(rec) ?? undefined}>
+                    {@render posterImg(rec.id)}
+                    <span class="t-hero-play"><Play /></span>
+                </a>
+            {/if}
+            <h2 class="t-detail-title broadcast">{base.name}</h2>
+            {@render meta(base.service_name, [airing(base)], base)}
+            {#if rec !== null && rec.progress !== null}
+                <p class="small muted">続きから (残り{durationMs(Math.max(0, rec.progress.length - rec.progress.at))})</p>
+            {/if}
+            <p class="t-desc small broadcast">{base.description}</p>
+            <div class="t-detail-actions">
+                {#if rec !== null}
+                    {@const link = watchLink(rec)}
+                    {#if link !== null}
+                        <a class="button" href={link}><Play class="size-4" /> 再生</a>
+                    {/if}
+                    <button type="button" class="secondary outline" onclick={() => openRecording(rec)}>詳細</button>
+                {:else if item.kind !== 'past'}
+                    {#if item.res.recording_id !== null}
+                        <a class="button" href={resolve(`chase/${item.res.recording_id}`)}>追っかけ</a>
+                    {/if}
+                    <button type="button" class="secondary outline" onclick={() => openReservation(item.res)}>詳細</button>
+                    {#if cancelable(item.res)}
+                        <ActionButton action="?/cancel" fields={{ id: item.res.id }} class="outline danger">予約取消</ActionButton>
+                    {/if}
+                {:else if res !== null}
+                    <button type="button" class="secondary outline" onclick={() => openMissed(res)}>詳細</button>
+                {/if}
+            </div>
+        </div>
+    {/if}
+    <div class="t-upcoming">
+        <h3>このあとの予約</h3>
+        {#each upcoming as res (res.id)}
+            <button type="button" class="t-up" onmouseenter={() => pickFocus({ kind: "res", key: `res-${res.id}`, at: res.start_at, res })} onclick={() => openReservation(res)}>
+                <span class="num">{dayLabel(res.start_at).label} {time(res.start_at)}</span>
+                <span class="broadcast">{res.name}</span>
+            </button>
+        {/each}
+    </div>
+{/snippet}
+
+<div class="board t-board">
     <Toasts {notices} source={form} ondismiss={dropNote} />
 
-    <div class="board-grid">
-        <section class="board-col reservations">
-            <div class="board-head">
-                <h2>予約</h2>
-                <div class="cluster">
-                    <input
-                        type="search"
-                        class="filter"
-                        placeholder="番組名・局・状態で絞り込み"
-                        aria-label="予約を絞り込む"
-                        bind:value={reservationQuery}
-                    />
-                    <!-- 録画の「表示」と同じ形。項目は 1 つでも、同じ場所に同じ形で置く -->
-                    <Menu align="end" class="view-menu" testid="reservations-view-menu">
-                        {#snippet trigger(props)}
-                            <button
-                                {...props}
-                                type="button"
-                                class="secondary outline small view-trigger"
-                                data-testid="reservations-view"
-                            >
-                                表示
-                                {#if data.showFinished}<span class="view-dot" aria-hidden="true"></span>{/if}
-                                <Icon icon={ChevronDown} size="size-4" />
-                            </button>
-                        {/snippet}
-                        <a
-                            role="menuitemcheckbox"
-                            class="menu-item"
-                            aria-checked={data.showFinished}
-                            href={finishedHref}
-                            data-testid="reservations-finished-toggle"
-                        >
-                            <span class="menu-check" aria-hidden="true">{#if data.showFinished}<Icon icon={Check} size="size-4" />{/if}</span>
-                            完了分も表示
-                        </a>
-                    </Menu>
-                </div>
-            </div>
-
-            <div class="board-box">
-                <div class="rows" data-testid="reservation-list">
-                    {#each reservationPage.rows as res (res.id)}
-                        <div
-                            data-testid="reservation-row"
-                            data-reservation-id={res.id}
-                            data-program-id={res.program_id}
-                            class="row"
-                        >
-                            <div class="row-inner">
-                                <div class="row-body" data-testid="row-body">
-                                    {@render title(
-                                        stateLabel(res.state),
-                                        badgeClass(res.state),
-                                        res.name,
-                                        'reservation-state',
-                                        () => openReservation(res),
-                                        false,
-                                        quietState(res.state),
-                                    )}
-                                    {@render meta(res.service_name, [airing(res)], res)}
-                                    {#if res.conflict_reason}
-                                        <div class="row-sub text-error small">{res.conflict_reason}</div>
-                                    {/if}
-                                    <!--
-                                        **譲ることになっているなら、録る前に言う。** 丸ごと
-                                        落とす代わりに入るところまで録るので (`server/conflict.ts`)、
-                                        黙っていると「録れたつもり」で頭が無い録画ができる
-                                    -->
-                                    {#if clipNote(res) !== null}
-                                        <div class="row-sub text-warning small">
-                                            {clipNote(res)}
-                                        </div>
-                                    {/if}
-                                    <!--
-                                        手動なら何も出さない。既定と違うときだけ言う。
-                                        **録画の側では手動とも書く** — 録れたものは後から
-                                        見返すので、「ルールではない」ことにも意味がある
-                                    -->
-                                    {#if !res.manual}
-                                        {@render source(res.rule_id, res.rule_name, false)}
-                                    {/if}
-                                </div>
-
-                                <div class="row-actions">
-                                    {#if res.recording_id !== null}
-                                        <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
-                                        <a
-                                            class="button"
-                                            href={resolve(`chase/${res.recording_id}`)}
-                                        >
-                                            追っかけ
-                                        </a>
-                                    {/if}
-                                    {#if cancelable(res)}
-                                        <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
-                                            <Icon icon={X} size="size-4" />取消
-                                        </ActionButton>
-                                    {:else if res.state === 'canceled' && res.end_at > Date.now()}
-                                        <!--
-                                            取り消した予約はルールが作り直さないので、
-                                            気が変わったときに戻せるのはここだけ
-                                        -->
-                                        <ActionButton action="?/restore" fields={{ id: res.id }} class="secondary" testid="restore-button">
-                                            戻す
-                                        </ActionButton>
-                                    {/if}
-                                </div>
-                            </div>
-                        </div>
-                    {:else}
-                        {#if reservationQuery === ''}
-                            <!-- 空のときは次に何をすればよいかまで言う (下の `.empty`) -->
-                            <div class="empty" data-testid="reservation-empty">
-                                <p class="empty-title">予約はありません</p>
-                                <p class="empty-hint">番組表から予約するか、ルールを作ると自動で入ります</p>
-                                <div class="empty-actions">
-                                    <a class="button small" href={resolve('guide')}>番組表を開く</a>
-                                    <a class="button secondary outline small" href={resolve('rules')}>ルールを作る</a>
-                                </div>
-                            </div>
-                        {:else}
-                            <div class="empty">
-                                <p class="empty-title">「{reservationQuery}」に一致する予約はありません</p>
-                            </div>
-                        {/if}
-                    {/each}
-                    <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
-                    {#if reservationPage.more}
-                        <div
-                            class="row-empty muted small num"
-                            use:sentinel={() => reservationPage.reveal()}
-                            data-testid="reservation-more"
-                        >
-                            残り {reservationPage.rest} 件
-                        </div>
-                    {/if}
-                    <!--
-                        絞った結果の件数は**一覧の末尾に**。見出しの行に出していた頃は、
-                        打つたびに右の押すものが動いてガクガクした
-                    -->
-                    {#if reservationQuery !== ''}
-                        <div class="row-empty muted small num">
-                            {data.reservations.length} 件中 {reservationRows.length} 件
-                        </div>
-                    {/if}
-                </div>
-            </div>
-        </section>
-
-        <section class="board-col recordings">
-            <!-- 見出しの高さと下の余白は予約側と揃える。並べたときにずれて見えるため -->
-            <div class="board-head">
-                <!--
-                    **空きと、あと何時間録れるか** (issue #505。`disk.capacity`)。見出しの脇に小さく置く。
-                    見出しの行を2段にしないよう、列が狭くなるにつれて削り、最後は「⋯」の頭に回す (下の `@container`)
-                -->
-                <div class="head-title">
-                    <h2>録画</h2>
-                    {#if data.capacity !== null}
-                        <span class="capacity muted tiny num" data-testid="recordings-capacity">
-                            {data.capacity.free}{#if data.capacity.hours !== null}<span class="capacity-hours">・{data.capacity.hours}</span>{/if}
-                        </span>
-                    {/if}
-                </div>
-                <div class="cluster">
-                    <!--
-                        打てば手元で絞り、**Enter で `?q=` をサーバに聞く** (上の `recordingQuery`)。
-                        GET なので URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ。
-                        押すものは置かない (予約側と同じ形) — 解除するのも欄を空にして Enter
-                    -->
-                    <form method="GET" action={resolve('')} class="search" data-sveltekit-reset={false}>
-                        {#if data.showDeleted}
-                            <input type="hidden" name="deleted" value="1" />
-                        {/if}
-                        <input
-                            type="search"
-                            name="q"
-                            class="filter"
-                            bind:value={recordingQuery}
-                            placeholder="番組名・局で絞り込み"
-                            aria-label="録画を絞り込む"
-                        />
-                    </form>
-                    <!--
-                        **表示の切り替えは「表示」のメニューに 1 つにまとめる** (まとめて表示・削除済みも表示)。
-                        並べていた頃は、見出しの行に枠のボタンが 3〜4 個並び、どれが入っているのかも
-                        読みにくかった。項目はオン・オフの印 (`menuitemcheckbox`) で、どれか入っていれば
-                        引き金に点を付ける (閉じていても、ふだんと違う見え方なのが分かる)。
-                        まとめて表示は端末に覚える (`setGrouped`)、削除済みは URL (`?deleted=1`)
-                    -->
-                    <Menu align="end" class="view-menu" testid="recordings-view-menu">
-                        {#snippet trigger(props)}
-                            <button
-                                {...props}
-                                type="button"
-                                class="secondary outline small view-trigger"
-                                data-testid="recordings-view"
-                            >
-                                表示
-                                {#if grouped || data.showDeleted}<span class="view-dot" aria-hidden="true"></span>{/if}
-                                <Icon icon={ChevronDown} size="size-4" />
-                            </button>
-                        {/snippet}
-                        <button
-                            type="button"
-                            role="menuitemcheckbox"
-                            class="menu-item"
-                            aria-checked={grouped}
-                            onclick={() => setGrouped(!grouped)}
-                            data-testid="recordings-group-toggle"
-                        >
-                            <span class="menu-check" aria-hidden="true">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>
-                            <Icon icon={ListTree} size="size-4" />
-                            まとめて表示
-                        </button>
-                        <a
-                            role="menuitemcheckbox"
-                            class="menu-item"
-                            aria-checked={data.showDeleted}
-                            href={deletedHref}
-                            data-testid="recordings-deleted-toggle"
-                        >
-                            <span class="menu-check" aria-hidden="true">{#if data.showDeleted}<Icon icon={Check} size="size-4" />{/if}</span>
-                            削除済みも表示
-                        </a>
-                    </Menu>
-                    <!--
-                        **たまにしか押さない操作は「⋯」に。** ファイルとの照合は、外でファイルを
-                        消したときに押すくらいのもの。狭い列では見出しの脇の空きもここの頭に回す
-                        (下の `@container`)。
-
-                        中身は閉じている間も DOM に置く (popover は閉じると見えないだけ)。照合を送っている
-                        途中でメニューが消えると、回るものを出す先が無くなるため。
-                        閉じるのは送り終わってから (詳細の「再エンコード」と同じ)
-                    -->
-                    <Menu bind:open={toolsOpen} align="end" class="more-menu tools-menu" testid="recordings-more-menu">
-                        {#snippet trigger(props)}
-                            <button
-                                {...props}
-                                type="button"
-                                class="secondary outline small tools-trigger"
-                                aria-label="その他の操作"
-                                data-testid="recordings-more"
-                            >
-                                <Icon icon={Ellipsis} size="size-4.5" />
-                            </button>
-                        {/snippet}
-                        {#if data.capacity !== null}
-                            <div class="menu-note muted small num" data-testid="recordings-capacity-menu">
-                                {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
-                            </div>
-                        {/if}
-                        {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-button', {}, () => (toolsOpen = false))}
-                    </Menu>
-                </div>
-            </div>
-
-            <!--
-                **まとめないときは一番下 (いちばん古い録画) から見せる** (`.from-end`)。
-                溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
-                並びは新しい順のまま。**まとめたときは一番上から** — 頭にいるのが最近録れた番組
-            -->
-            <div class="board-box" class:from-end={!grouped} bind:this={recordingBox}>
-                <div class="rows" data-testid="recording-list">
-                    {#each recordingShown as line (line.key)}
-                        {#if line.kind === 'gap'}
-                            <!-- 続きを足す印 (`sentinel`)。間に近づいたら足す。残りが無くなれば消える -->
-                            <div
-                                class="row-empty muted small num"
-                                use:sentinel={() => recordingPage.reveal()}
-                                data-testid="recording-more"
-                            >
-                                残り {recordingRest} 件
-                            </div>
-                        {:else if line.kind === 'head'}
-                            {@render groupHead(line.group, line.open)}
-                        {:else}
-                            {@render rightRow(line.item, line.nested)}
-                        {/if}
-                    {:else}
-                        {#if recordingQuery === ''}
-                            <div class="empty" data-testid="recording-empty">
-                                <p class="empty-title">録画はありません</p>
-                                <p class="empty-hint">予約した番組は、録り終わるとここに並びます</p>
-                                <div class="empty-actions">
-                                    <a class="button secondary outline small" href={resolve('guide')}>番組表を開く</a>
-                                </div>
-                            </div>
-                        {:else}
-                            <div class="empty">
-                                <p class="empty-title">「{recordingQuery}」に一致する録画はありません</p>
-                                {#if recordingQuery !== data.q}
-                                    <p class="empty-hint">Enter で古い録画まで探します</p>
-                                {/if}
-                            </div>
-                        {/if}
-                    {/each}
-                    <!-- 手元で絞っているぶん (予約側と同じく末尾に)。送る前でも何件残るかが分かる -->
-                    {#if recordingQuery !== data.q}
-                        <div class="row-empty muted small num">
-                            {rightRows.length} 件中 {recordingRows.length} 件
-                        </div>
-                    {/if}
-                    <!--
-                        **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って
-                        消え、「消えた」ように見える。上限に当たっていたら、絞り込みへ
-                        誘う一行を出す (`+page.server.ts` の LIMIT 300)
-                    -->
-                    {#if data.recordings.length >= 300}
-                        <div class="row-empty truncated muted small">
-                            新しい順に300件まで表示しています。古いものは絞り込みで探してください。
-                        </div>
-                    {/if}
-                </div>
-            </div>
-        </section>
+    <div class="t-toolbar">
+        <input type="search" class="t-search" placeholder="番組名・局で探す" aria-label="予約と録画を探す" bind:value={query} />
+        <div class="t-chips wide">{@render chips(false)}</div>
+        <button
+            type="button"
+            class="t-filter-btn narrow secondary outline"
+            aria-label="絞り込み"
+            onclick={() => (sheetOpen = true)}
+        >
+            <Icon icon={ListFilter} size="size-5" />
+            {#if chip !== 'all'}<span class="view-dot" aria-hidden="true"></span>{/if}
+        </button>
+        <Menu align="end" class="view-menu" testid="t-more-menu">
+            {#snippet trigger(props)}
+                <button {...props} type="button" class="secondary outline small t-more" aria-label="その他の操作">
+                    <Icon icon={Ellipsis} size="size-4.5" />
+                </button>
+            {/snippet}
+            <button type="button" role="menuitemcheckbox" class="menu-item" aria-checked={grouped} onclick={() => setGrouped(!grouped)}>
+                <span class="menu-check" aria-hidden="true">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>
+                まとめて表示
+            </button>
+            <a role="menuitemcheckbox" class="menu-item" aria-checked={data.showFinished} href={finishedHref}>
+                <span class="menu-check" aria-hidden="true">{#if data.showFinished}<Icon icon={Check} size="size-4" />{/if}</span>
+                完了した予約も表示
+            </a>
+            <a role="menuitemcheckbox" class="menu-item" aria-checked={data.showDeleted} href={deletedHref}>
+                <span class="menu-check" aria-hidden="true">{#if data.showDeleted}<Icon icon={Check} size="size-4" />{/if}</span>
+                削除済みも表示
+            </a>
+            {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-button', {}, () => {})}
+        </Menu>
     </div>
+
+    <div class="t-main">
+        <div class="t-list" bind:this={listBox} data-testid="timeline">
+            {#each lines as line (line.key)}
+                {#if line.kind === 'day'}
+                    <div class="t-day"><span>{line.label}</span>{#if line.sub}<span class="muted num">{line.sub}</span>{/if}</div>
+                {:else if line.kind === 'now-line'}
+                    <div class="t-now" bind:this={nowLine}>
+                        <span class="t-now-label num">いま {time(nowAt)}</span>
+                    </div>
+                {:else if line.item.kind === 'past'}
+                    {@render tRec(line.item)}
+                {:else}
+                    {@render tRes(line.item)}
+                {/if}
+            {/each}
+            {#if counts.now === 0 && (chip === 'all' || chip === 'now')}
+                <!-- 録画中が無くても線は残す -->
+            {/if}
+        </div>
+        <aside class="t-pane" aria-label="選んだ番組">
+            {@render pane(focused)}
+        </aside>
+    </div>
+
+    {#if sheetOpen}
+        <div class="t-scrim" role="presentation" onclick={() => (sheetOpen = false)}></div>
+        <div class="t-sheet" role="dialog" aria-label="絞り込み">
+            <div class="t-sheet-grip"></div>
+            <p class="t-sheet-title">絞り込み</p>
+            <div class="t-sheet-chips">{@render chips(true)}</div>
+            <hr />
+            <a class="t-sheet-link" href={finishedHref}>完了した予約も表示</a>
+            <a class="t-sheet-link" href={deletedHref}>削除済みも表示</a>
+        </div>
+    {/if}
 </div>
 
 {#if detail.current}
@@ -2020,5 +2124,515 @@
     }
     .menu-form {
         display: contents;
+    }
+
+    /* ===== 見本 1: 1本の時間軸 ===== */
+    .t-board {
+        display: flex;
+        flex-direction: column;
+    }
+    .t-toolbar {
+        position: sticky;
+        top: var(--t-top, 0px);
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+        background: var(--dp-bg);
+        border-bottom: 1px solid var(--dp-line, var(--dp-base-300));
+    }
+    .t-search {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 18rem;
+        height: 2.25rem;
+        margin: 0;
+        padding-block: 0.3rem;
+        font-size: 0.875rem;
+    }
+    .t-chips {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.375rem;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .t-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        width: auto;
+        margin: 0;
+        padding: 0.3rem 0.75rem;
+        border: 1px solid var(--dp-base-300);
+        border-radius: 999px;
+        background: transparent;
+        color: inherit;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: none;
+    }
+    .t-chip:hover {
+        background: var(--dp-hover);
+    }
+    .t-chip.on {
+        border-color: transparent;
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
+    }
+    .t-count {
+        font-size: 0.75rem;
+        opacity: 0.7;
+    }
+    .t-chip.alert:not(.on) .t-count {
+        color: var(--dp-rec-text);
+        opacity: 1;
+        font-weight: 700;
+    }
+    .t-more {
+        margin-left: auto;
+    }
+    .t-filter-btn {
+        position: relative;
+        display: none;
+        width: 2.5rem;
+        height: 2.5rem;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
+    }
+    .t-filter-btn .view-dot {
+        position: absolute;
+        top: 0.35rem;
+        right: 0.35rem;
+    }
+    .t-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        min-height: 0;
+        flex: 1;
+    }
+    .t-pane {
+        display: none;
+    }
+    .t-list {
+        position: relative;
+        min-width: 0;
+    }
+    .t-day {
+        position: sticky;
+        top: calc(var(--t-top, 0px) + 3.3rem);
+        z-index: 3;
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        padding: 0.6rem 0.25rem 0.3rem;
+        background: var(--dp-bg);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        border-bottom: 1px solid var(--dp-base-300);
+    }
+    .t-day .muted {
+        font-weight: 400;
+    }
+    .t-now {
+        position: relative;
+        display: flex;
+        align-items: center;
+        height: 1.75rem;
+        margin: 0.5rem 0 0.25rem;
+    }
+    .t-now::before {
+        content: '';
+        position: absolute;
+        inset-inline: 0;
+        top: 50%;
+        height: 2px;
+        background: var(--dp-rec);
+    }
+    .t-now-label {
+        position: relative;
+        padding: 0.1rem 0.6rem;
+        border-radius: 999px;
+        background: var(--dp-rec);
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+    .t-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.25rem 0.25rem;
+        border-bottom: 1px solid var(--dp-base-300);
+        border-radius: 0;
+    }
+    .t-row:hover,
+    .t-row.t-focus {
+        background: var(--dp-hover);
+    }
+    .t-row.t-live {
+        background: color-mix(in srgb, var(--dp-rec) 10%, transparent);
+    }
+    .t-row .row-body {
+        flex: 1 1 auto;
+    }
+    .t-row .row-meta {
+        margin-top: 0;
+        font-size: 0.78rem;
+    }
+    .t-row :global(.row-actions) {
+        flex-shrink: 0;
+    }
+    .t-time {
+        display: flex;
+        flex-direction: column;
+        width: 3.1rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.875rem;
+        font-weight: 600;
+        line-height: 1.15;
+    }
+    .t-end {
+        font-size: 0.7rem;
+        font-weight: 400;
+        color: var(--dp-muted);
+    }
+    .t-thumb {
+        position: relative;
+        width: 4rem;
+        aspect-ratio: 16 / 9;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-radius: 0.25rem;
+        background: var(--dp-base-300);
+    }
+    .t-play {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        opacity: 0;
+        background: rgb(0 0 0 / 0.45);
+        transition: opacity 0.15s;
+    }
+    .t-play :global(svg) {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+    .playable:hover .t-play {
+        opacity: 1;
+    }
+    .t-resume {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-shrink: 0;
+    }
+    .t-resume-track {
+        display: block;
+        width: 3rem;
+        height: 0.25rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--dp-base-300);
+    }
+    .t-resume-track > span {
+        display: block;
+        height: 100%;
+        background: var(--pico-primary-background);
+    }
+    /* 行の操作は指を乗せたときだけはっきり (広い画面) */
+    @media (hover: hover) and (min-width: 768px) {
+        .t-row :global(.row-actions) {
+            opacity: 0.35;
+            transition: opacity 0.15s;
+        }
+        .t-row:hover :global(.row-actions),
+        .t-row:focus-within :global(.row-actions) {
+            opacity: 1;
+        }
+    }
+    @media (min-width: 768px) {
+        .t-board {
+            height: 100%;
+        }
+        .t-toolbar {
+            position: static;
+        }
+        .t-main {
+            overflow: hidden;
+        }
+        .t-list {
+            overflow: auto;
+            overflow-anchor: none;
+        }
+        .t-day {
+            top: 0;
+        }
+    }
+    /* 広い画面: 右に選んだ行の中身と、今日のまとめ */
+    @media (min-width: 1100px) {
+        .t-main {
+            grid-template-columns: minmax(0, 1fr) 22rem;
+            gap: 0;
+        }
+        .t-pane {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            min-height: 0;
+            overflow: auto;
+            padding: 0.75rem 0 0.75rem 1.5rem;
+            margin-left: 1.5rem;
+            border-left: 1px solid var(--dp-base-300);
+        }
+    }
+    .t-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        padding-bottom: 0.875rem;
+        border-bottom: 1px solid var(--dp-base-300);
+    }
+    .t-stat.t-next {
+        grid-column: 1 / -1;
+    }
+    .t-stat {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .t-stat-label {
+        font-size: 0.7rem;
+        color: var(--dp-muted);
+    }
+    .t-stat-value {
+        font-size: 1.125rem;
+        font-weight: 700;
+        line-height: 1.3;
+        white-space: nowrap;
+    }
+    .t-stat-value small {
+        margin-left: 0.2rem;
+        font-size: 0.7rem;
+        font-weight: 400;
+        color: var(--dp-muted);
+    }
+    .t-stat-sub {
+        overflow: hidden;
+        font-size: 0.7rem;
+        color: var(--dp-muted);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .t-detail {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .t-detail-kicker {
+        margin: 0;
+    }
+    .t-hero {
+        position: relative;
+        display: block;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        border-radius: 0.5rem;
+        background: var(--dp-base-300);
+    }
+    .t-hero-play {
+        position: absolute;
+        right: 0.75rem;
+        bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: 999px;
+        background: rgb(0 0 0 / 0.55);
+        color: #fff;
+    }
+    .t-detail-title {
+        margin: 0.25rem 0 0;
+        font-size: 1.125rem;
+        line-height: 1.4;
+    }
+    .t-desc {
+        display: -webkit-box;
+        margin: 0;
+        overflow: hidden;
+        -webkit-line-clamp: 6;
+        -webkit-box-orient: vertical;
+        color: var(--dp-muted);
+        line-height: 1.6;
+    }
+    .t-detail-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+    }
+    .t-detail-actions :global(:is(button, a.button)) {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        width: auto;
+        margin: 0;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.875rem;
+    }
+    /* 狭い画面: 探す欄と絞り込みのボタンだけ。絞り込みは下から出る */
+    @media (max-width: 767px) {
+        .t-chips.wide,
+        .t-more {
+            display: none;
+        }
+        .t-filter-btn.narrow {
+            display: inline-flex;
+        }
+        .t-search {
+            max-width: none;
+        }
+        .t-row {
+            gap: 0.5rem;
+        }
+        .t-thumb {
+            width: 3.25rem;
+        }
+        .t-time {
+            width: 2.9rem;
+            font-size: 0.8125rem;
+        }
+        .t-resume {
+            display: none;
+        }
+        .t-row :global(.row-actions button:not(.danger):not([data-testid='delete-confirm'])) {
+            display: none;
+        }
+    }
+    .t-scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: rgb(0 0 0 / 0.45);
+    }
+    .t-sheet {
+        position: fixed;
+        inset-inline: 0;
+        bottom: 0;
+        z-index: 51;
+        padding: 0.5rem 1rem calc(1rem + env(safe-area-inset-bottom));
+        border-radius: 1rem 1rem 0 0;
+        background: var(--dp-surface);
+    }
+    .t-sheet-grip {
+        width: 2.5rem;
+        height: 0.25rem;
+        margin: 0 auto 0.75rem;
+        border-radius: 999px;
+        background: var(--dp-base-300);
+    }
+    .t-sheet-title {
+        margin: 0 0 0.75rem;
+        font-weight: 700;
+    }
+    .t-sheet-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .t-sheet-chips .t-chip {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+    .t-sheet hr {
+        margin: 1rem 0 0.5rem;
+    }
+    .t-sheet-link {
+        display: block;
+        padding: 0.625rem 0;
+        color: inherit;
+        text-decoration: none;
+    }
+    /* 広い画面は1行に詰める (時刻・サムネ・番組名・局と尺・操作) */
+    @media (min-width: 768px) {
+        .t-row {
+            padding-block: 0.0625rem;
+        }
+        .t-row .row-body {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .t-row .row-body > :global(.title-line) {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .t-row .row-body > :global(.row-meta) {
+            flex: 0 0 15rem;
+        }
+        .t-row .row-body > :global(.row-sub) {
+            display: none;
+        }
+        .t-time {
+            flex-direction: row;
+            gap: 0.25rem;
+            align-items: baseline;
+            width: 6.25rem;
+        }
+        .t-end::before {
+            content: '–';
+            margin-right: 0.25rem;
+        }
+        .t-thumb {
+            width: 3.5rem;
+        }
+    }
+    .t-upcoming {
+        display: flex;
+        flex-direction: column;
+        border-top: 1px solid var(--dp-base-300);
+        padding-top: 0.75rem;
+    }
+    .t-upcoming h3 {
+        margin: 0 0 0.375rem;
+        font-size: 0.75rem;
+        color: var(--dp-muted);
+    }
+    .t-up {
+        display: flex;
+        gap: 0.625rem;
+        width: 100%;
+        margin: 0;
+        padding: 0.3rem 0.25rem;
+        border: 0;
+        border-radius: 0.25rem;
+        background: transparent;
+        color: inherit;
+        font-size: 0.8125rem;
+        text-align: left;
+        box-shadow: none;
+    }
+    .t-up:hover {
+        background: var(--dp-hover);
+    }
+    .t-up .num {
+        flex-shrink: 0;
+        color: var(--dp-muted);
+    }
+    .t-up span:last-child {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
     }
 </style>
