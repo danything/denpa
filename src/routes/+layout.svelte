@@ -7,6 +7,7 @@
     import Measure from '#lib/components/Measure.svelte';
     import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
+    import SearchField from '#lib/components/SearchField.svelte';
     import { denpaFontUrl } from '#lib/font.js';
     import { measure } from '#lib/measure.svelte.js';
     import { canTransition } from '#lib/motion.svelte.js';
@@ -256,6 +257,8 @@
     ] as const;
     const moreLinks = links.filter((link) => !tabs.some((tab) => tab.href === link.href));
     const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
+    /** 検索の欄に入れておく言葉。結果の画面 (`/search?q=`) ではその言葉のまま直して送れる */
+    const query = $derived(here === '/search' ? (page.url.searchParams.get('q') ?? '').trim() : '');
     /** タブを出すのはナビの 5 画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
     const showTabbar = $derived(here !== null);
     /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
@@ -368,25 +371,12 @@
             {/if}
         </div>
         <!--
-            **検索の欄** (広い幅だけ。狭い幅ではヘッダーごと隠し、下のタブの「検索」から入る)。
-            GET で `/search?q=` へ。検索の画面では画面の中に同じ欄があるので、ここには出さない
+            **検索の欄はヘッダーの真ん中** (広い幅だけ。狭い幅ではヘッダーごと隠し、検索の画面の上の帯に同じ欄を置く)。
+            結果の画面でも同じ欄で、探した言葉が入ったまま直して送れる
         -->
-        {#if here !== '/search'}
-            <form method="GET" action={resolve('search')} role="search" aria-label="サイト内" class="header-search" data-testid="header-search">
-                <Icon icon={Search} size="size-4" />
-                <input
-                    type="search"
-                    name="q"
-                    placeholder="検索"
-                    aria-label="番組・録画・予約・ルールを検索"
-                    autocomplete="off"
-                    enterkeyhint="search"
-                    data-search-field
-                    data-testid="header-search-input"
-                />
-                <kbd class="header-search-key" aria-hidden="true">/</kbd>
-            </form>
-        {/if}
+        <div class="header-search">
+            <SearchField value={query} testid="header-search" />
+        </div>
         <!--
             テーマの切り替え・画面へのリンク (広い幅だけ)。ログアウトは設定の「一般」にある。
             狭い幅ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
@@ -430,6 +420,15 @@
         **局が無いときの案内** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
         スキャンして局が入れば消える。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
     -->
+    <!--
+        **狭い幅の検索の画面だけ、上に検索の欄の帯を出す** (ヘッダーを隠しているので)。ヘッダーと同じ欄
+    -->
+    {#if here === '/search'}
+        <div class="search-bar">
+            <SearchField value={query} testid="search" />
+        </div>
+    {/if}
+
     {#if notice}
         <div class="notice-slot">
             <ChannelNotice kind={notice} />
@@ -700,55 +699,25 @@
         pointer-events: none;
     }
     /*
-     * ヘッダーの検索の欄。**欄の形は虫眼鏡と字と `/` の印だけ** で、ナビのリンクより先に縮む。
-     * 欄そのものの枠は外し、包んだ `form` に枠を付ける (虫眼鏡も欄の中に見せる)
+     * ヘッダーの検索の欄 (中身は `SearchField`)。広い幅では「印と名前 ｜ 欄 ｜ ナビ」の3列にして、
+     * 欄を真ん中に置く (両脇の列を同じ幅に分けるので、欄は画面の中央に来る)。欄は 36rem まで広がり、
+     * 中くらいの幅ではナビより先に縮む
      */
     .header-search {
         display: none;
-        flex: 0 1 16rem;
-        align-items: center;
-        gap: var(--dp-space-2);
-        min-width: 7rem;
-        height: 2.25rem;
-        margin: 0;
-        padding-inline: var(--dp-space-3) var(--dp-space-2);
-        border: 1px solid var(--dp-line);
-        border-radius: var(--dp-radius-full);
-        background: var(--dp-subtle);
-        color: var(--dp-muted);
-    }
-    .header-search:focus-within {
-        border-color: var(--pico-primary);
-    }
-    /* Pico の role=search は中の物を等分に伸ばす。欄だけを伸ばし、虫眼鏡と印は字の幅のまま */
-    .header-search > :global(*) {
-        flex: none;
-    }
-    .header-search input {
-        flex: 1 1 0%;
         min-width: 0;
-        height: auto;
-        margin: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        box-shadow: none;
-        font-size: var(--dp-text-sm);
-        outline: none;
-        text-align: start;
     }
-    .header-search-key {
-        flex: none;
-        padding: 0 0.375rem;
-        border: 1px solid var(--dp-line);
-        border-radius: var(--dp-radius-sm);
-        background: transparent;
-        color: var(--dp-muted);
-        font-size: var(--dp-text-xs);
-        line-height: 1.4;
-    }
-    .header-search:focus-within .header-search-key {
+    /* 狭い幅の検索の画面の上の帯。ヘッダーと同じ地で、巻いても上に残る。指で使う幅なので `/` の印は出さない */
+    .search-bar :global(kbd) {
         display: none;
+    }
+    .search-bar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        padding: calc(var(--dp-space-2) + env(safe-area-inset-top)) var(--dp-gutter, 1rem) var(--dp-space-2);
+        border-bottom: 1px solid var(--dp-line);
+        background: var(--dp-bg);
     }
     /*
      * 画面の下のタブ (狭い幅だけ)。ヘッダーと同じ地に上の線 1 本、スクロールすると透けてぼける。
@@ -869,7 +838,8 @@
         .shell:has(.tabbar) .notice-slot {
             padding-top: env(safe-area-inset-top);
         }
-        .shell:has(.tabbar):has(.notice-slot) main {
+        .shell:has(.tabbar):has(.notice-slot) main,
+        .shell:has(.tabbar):has(.search-bar) main {
             padding-top: var(--dp-gutter);
         }
     }
@@ -887,9 +857,22 @@
         padding: var(--dp-gutter);
     }
     @media (min-width: 640px) {
-        ul.links,
-        .header-search {
+        ul.links {
             display: flex;
+        }
+        .navbar {
+            display: grid;
+            grid-template-columns: minmax(max-content, 1fr) minmax(8rem, 36rem) minmax(max-content, 1fr);
+            gap: var(--dp-space-4);
+        }
+        .header-search {
+            display: block;
+        }
+        .actions {
+            justify-self: end;
+        }
+        .search-bar {
+            display: none;
         }
         .tabbar {
             display: none;

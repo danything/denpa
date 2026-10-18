@@ -282,7 +282,7 @@ test.describe('PWA', () => {
         await page.waitForURL(/rules/);
         await expect(menu.getByRole('button', { name: 'その他' })).toHaveAttribute('aria-current', 'page');
 
-        // 検索のタブは欄に入った状態で開く (狭い画面ではヘッダーの欄ごと隠している)
+        // 検索のタブは上の帯の欄に入った状態で開く (狭い画面ではヘッダーごと隠している)
         await expect(page.getByTestId('header-search')).toBeHidden();
         await page.getByTestId('tab-search').click();
         await page.waitForURL(/\/search$/);

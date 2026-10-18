@@ -21,13 +21,19 @@ test.describe('検索', () => {
         await page.keyboard.press('Control+k');
         await expect(field).toBeFocused();
 
-        // 送ると結果の画面へ。結果の画面ではヘッダーに欄を出さず、画面の中の欄に言葉が入っている
+        // 送ると結果の画面へ。結果の画面でも同じヘッダーの欄で、探した言葉が入ったまま直して送れる
         await field.fill('テストアニメ');
         await field.press('Enter');
         await page.waitForURL(/\/search\?q=/);
-        await expect(page.getByTestId('header-search')).toHaveCount(0);
-        await expect(page.getByTestId('search-input')).toHaveValue('テストアニメ');
-        await expect(page).toHaveTitle('テストアニメ - 検索 - denpa');
+        await expect(field).toHaveValue('テストアニメ');
+        // 画面の中に別の欄は置かない (狭い幅の上の帯は広い幅では出さない)
+        await expect(page.getByRole('search')).toHaveCount(1);
+        await field.fill('ひとつめ');
+        await field.press('Enter');
+        await page.waitForURL((url) => url.searchParams.get('q') === 'ひとつめ');
+        await expect(page.getByTestId('search-summary')).toContainText('ひとつめ');
+        await expect(field).toHaveValue('ひとつめ');
+        await expect(page).toHaveTitle('ひとつめ - 検索 - denpa');
     });
 
     test('結果は節ごとに見出しと件数を出し、番組はそのまま予約できる', async ({ page, request }) => {
@@ -74,7 +80,7 @@ test.describe('検索', () => {
     test('言葉なしで開くと最近の検索を出し、消せる', async ({ page }) => {
         await goto(page, `/search?q=${encodeURIComponent('最近の言葉A')}`);
         await goto(page, '/search');
-        await expect(page.getByTestId('search-input')).toBeFocused();
+        await expect(page.getByTestId('header-search-input')).toBeFocused();
         const recent = page.getByTestId('recent-searches');
         await expect(recent.getByRole('link', { name: '最近の言葉A' })).toBeVisible();
         await page.getByTestId('recent-clear').click();

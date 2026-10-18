@@ -31,10 +31,6 @@
         return expanded[key] ? rows : rows.slice(0, FIRST);
     }
 
-    let field = $state<HTMLInputElement>();
-    /** 打っている言葉。URL の `q` から始め、URL が変われば追う */
-    let typed = $derived(q);
-
     /** 最近の検索。端末ごと (`#lib/recent-searches.ts`)。描いたあとに読む (サーバは知らない) */
     let recent = $state<string[]>([]);
     onMount(() => {
@@ -54,10 +50,16 @@
 
     /**
      * **言葉なしで開いたら欄に入る** (下のタブの「検索」から来たとき)。結果を見に来たときは入らない —
-     * 狭い画面でキーボードが出て結果を隠す
+     * 狭い画面でキーボードが出て結果を隠す。欄は画面の外 (`SearchField`。広い幅はヘッダー、狭い幅は上の帯)
+     * にあるので、見えているほうに入る
      */
     onMount(() => {
-        if (q === '') void tick().then(() => field?.focus());
+        if (q !== '') return;
+        void tick().then(() =>
+            [...document.querySelectorAll<HTMLInputElement>('[data-search-field]')]
+                .find((input) => input.getClientRects().length > 0)
+                ?.focus(),
+        );
     });
 
     const total = $derived(
@@ -133,26 +135,7 @@
 <Toasts {notices} source={form} />
 
 <div class="search-page">
-    <!--
-        **GET で送る。** 結果の URL (`/search?q=`) をそのまま人に渡せて、戻る/進むも効く。
-        狭い画面ではヘッダーを隠すので、検索の欄はこの画面にも置く (広い画面ではヘッダーの欄はここでは出さない)
-    -->
-    <form method="GET" action={resolve('search')} role="search" aria-label="サイト内" class="search-form" data-sveltekit-keepfocus>
-        <input
-            bind:this={field}
-            bind:value={typed}
-            type="search"
-            name="q"
-            placeholder="番組・録画・予約・ルールを検索"
-            aria-label="検索する言葉"
-            autocomplete="off"
-            enterkeyhint="search"
-            data-search-field
-            data-testid="search-input"
-        />
-        <button type="submit">検索</button>
-    </form>
-
+    <!-- 検索の欄はこの画面には置かない。ヘッダー (狭い幅では上の帯) の欄がそのまま言葉を持っている -->
     {#if q === ''}
         {#if recent.length > 0}
             <section class="hits-section" aria-labelledby="recent-head">
@@ -390,24 +373,6 @@
         width: 100%;
         max-width: 48rem;
         margin-inline: auto;
-    }
-    .search-form {
-        display: flex;
-        /* 入力欄とボタンはつなげる (`app.css` の role="search" の角の決まり) */
-        margin: 0;
-        /* Pico の role=search は中の物を等分に伸ばす。欄だけを伸ばす (下の input) */
-        align-items: stretch;
-    }
-    .search-form input {
-        flex: 1 1 0%;
-        min-width: 0;
-        margin: 0;
-    }
-    .search-form button {
-        flex: none;
-        width: auto;
-        padding-inline: var(--dp-space-5);
-        margin: 0;
     }
     .summary {
         margin: 0;
