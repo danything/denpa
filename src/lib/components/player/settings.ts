@@ -1,5 +1,6 @@
 import type { CaptionLanguage } from '#lib/caption-text.js';
 import { LIVE_CODECS, type LiveCodec } from '#lib/live.js';
+import { SPEEDS } from '#lib/ts/pacing.js';
 import type { IconShape } from './icons';
 
 /**
@@ -192,5 +193,42 @@ export function subtitles(opts: {
             if (track !== current) opts.ontrack?.(track);
             else if (language > 0) opts.onlanguage(language);
         },
+    };
+}
+
+/** 押すだけの行 (Hybridcast を別のタブで開く、など)。押したらメニューは閉じる */
+export interface SettingAction {
+    id: string;
+    label: string;
+    icon: IconShape;
+    run: () => void;
+}
+
+/**
+ * **狭い枠で操作バーから畳んだもの** (`StageTail` の `fold`)。⚙ の上の並びの頭に、押すもの・切り替え・選ぶものを
+ * 操作バーと同じ順に並べる (`kind` で見分ける)。広い枠では操作バーに出ているので並べない
+ */
+export type SettingRow =
+    | ({ kind: 'action' } & SettingAction)
+    | ({ kind: 'toggle' } & SettingToggle)
+    | ({ kind: 'choice' } & SettingChoice);
+
+/**
+ * 速さ (`pace`)。操作バーの速さ (`SpeedMenu`) を畳んだときの行。選択肢も同じ (×1〜×2)。
+ * `label` は画面の言葉 (ライブは「追っかけの速さ」、他は「再生の速さ」)
+ */
+export function speeds(opts: {
+    icon: IconShape;
+    label: string;
+    speed: number;
+    onselect: (speed: number) => void;
+}): SettingChoice {
+    return {
+        id: 'pace',
+        label: opts.label,
+        icon: opts.icon,
+        value: `×${opts.speed}`,
+        options: SPEEDS.map((value) => ({ key: value, label: `×${value}`, active: value === opts.speed })),
+        pick: (key) => opts.onselect(Number(key)),
     };
 }

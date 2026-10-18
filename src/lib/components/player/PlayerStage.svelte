@@ -42,11 +42,8 @@
     interface StageApi {
         /** 狭い枠か (スマホの縦)。押すものを 40px に縮める */
         compact: boolean;
-        /** 毎回は使わないものを「ほか」(⋯) に畳むか。狭い枠か、押すものが一段に収まらないとき */
+        /** 毎回は使わないものを再生の設定 (⚙) に畳むか。狭い枠か、押すものが一段に収まらないとき */
         fold: boolean;
-        /** 「ほか」を開いているか */
-        more: boolean;
-        toggleMore: () => void;
     }
     let {
         controls,
@@ -73,7 +70,7 @@
      * いた (実機の報告「全画面じゃないと操作ボタンがおかしくなる」)。
      *
      * - `compact` (幅 448px 未満か、16:9 より低く抑えられて高さ 300px 未満か、横にしたスマホ) … 押すものを 40px に縮め、毎回は使わないもの
-     *   (音・字幕・速さ・小窓など) を「ほか」(⋯) に畳む。読みもの (時刻) は
+     *   (音・字幕・音声・エンコード方式・速さなど) を再生の設定 (⚙) に畳む。読みもの (時刻) は
      *   押すものの間に残して短くし、押すものの行は一段のまま (`InfoBlock`)。スマホの縦は枠が画面の幅そのまま (端まで
      *   広げる。下の `@media`) で、いちばん広いもので 430px。
      *   縦の iPad (映像が 476px) はここに入れない — あちらは 48px の9個が一段に
@@ -83,7 +80,7 @@
      *   (枠は画面の高さいっぱいの 693x390 ほど。全部並べると読みものが数文字しか残らない)
      * - `under` (幅で `compact` のとき。全画面は除く) … **下の操作バーを映像の下 (枠の外) に出す。**
      *   スマホの縦の枠は 390x219 しか無く、操作バー (シークバー・読みもの・押すもの) を
-     *   重ねると映像の半分を覆い、字幕に時刻が重なっていた。「ほか」を開くとさらに隠れる。
+     *   重ねると映像の半分を覆い、字幕に時刻が重なっていた。
      *   映像の下は余っているので、操作バーはそこに置いて**いつも出しておく** (映像を覆わないので
      *   引っ込める理由が無い)。右上の一行 (閉じる・切り抜きなど) は今までどおり映像の上。
      *   全画面では映像の周りに黒帯があるので、今までどおり重ねる
@@ -112,7 +109,7 @@
         /*
          * **横にしたスマホも畳む** (`PlayerLayout` の `PHONE_LANDSCAPE`)。枠は 693x390 ほどで、
          * 48px を全部並べると読みもの (時刻・局・番組名) が数文字しか残らず、ライブでは
-         * 「20:3…」まで潰れていた。毎回使うものだけ残して ⋯ に畳み、読みものは一行を取る
+         * 「20:3…」まで潰れていた。毎回使うものだけ残して ⚙ に畳み、読みものは一行を取る
          */
         const phone = window.matchMedia(PHONE_LANDSCAPE);
         const measure = () => {
@@ -147,8 +144,7 @@
      *
      * 測るときだけ印 (`data-measuring`) を立てて畳んだものを並べ、いちばん右 (全画面) が
      * 行の右端を越えるかを読んで、すぐ外す。同じ処理の中で読むだけなので、画面には出ない。
-     * 「ほか」のボタンは測るときも残すので、広げるには畳んだときよりボタン1つぶん広さが要る
-     * (幅の境目で行ったり来たりしない)
+     * 測るときは畳んだものを全部並べるので、畳んでいてもいなくても同じ答えになる (幅の境目で行ったり来たりしない)
      */
     let crowded = $state(false);
     const fold = $derived(compact || crowded);
@@ -278,16 +274,6 @@
             for (const canvas of stage.querySelectorAll<HTMLElement>('canvas[data-ink]')) canvas.style.translate = '';
         };
     });
-
-    /**
-     * 「ほか」(⋯) を開いているか。**操作列が引っ込んだら閉じる** — 開いたまま
-     * 残すと、次に出したときに映像の半分を覆った状態から始まる。操作バーを映像の下に
-     * 出している間 (`under`) は操作バーが引っ込まないので、閉じるまで開いたまま
-     */
-    let more = $state(false);
-    $effect(() => {
-        if ((!controls.shown && !under) || !fold) more = false;
-    });
 </script>
 
 {#if ambient}
@@ -307,7 +293,6 @@
     data-compact={compact ? '' : undefined}
     data-low={low || compact ? '' : undefined}
     data-fold={fold ? '' : undefined}
-    data-more={more ? '' : undefined}
     data-under={under ? '' : undefined}
     data-pseudo={fullscreen.pseudo ? '' : undefined}
     onpointermove={controls.wake}
@@ -331,8 +316,6 @@
     {@render children({
         compact,
         fold,
-        more,
-        toggleMore: () => (more = !more),
     })}
     {#if notes}
         <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
