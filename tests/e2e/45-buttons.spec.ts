@@ -37,13 +37,15 @@ test.describe('ボタンの見た目', () => {
             probe.remove();
             return color;
         });
-        const submit = await look(page.getByTestId('guide-filter').getByRole('button', { name: '検索' }));
-        expect(submit.background).not.toBe(primary);
-
         const prev = await look(page.getByTestId('prev-day'));
         expect(prev.border).toBe('rgba(0, 0, 0, 0)');
         expect(prev.background).not.toBe('rgba(0, 0, 0, 0)');
         expect(prev.radius).toBeGreaterThanOrEqual(prev.height / 2);
+
+        // 主のボタンの代表はルールの「追加」(番組表の検索欄はサイト全体の検索に寄せた)
+        await goto(page, '/rules');
+        const submit = await look(page.getByTestId('rule-submit'));
+        expect(submit.background).not.toBe(primary);
     });
 
     test.describe('指で押す端末', () => {

@@ -763,7 +763,7 @@
     {/if}
     {#if on && running === null && (loading || receiving)}
         <div class="corner">
-            <StageNote testid="live-data-receiving">データ取得中…</StageNote>
+            <StageNote>データ取得中…</StageNote>
         </div>
     {/if}
 </div>

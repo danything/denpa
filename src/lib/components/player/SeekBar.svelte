@@ -98,7 +98,7 @@
         --seek-cm-played: rgb(255 179 0);
         position: relative;
         height: 1.5rem;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
     }
     .track {
         position: absolute;

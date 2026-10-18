@@ -142,7 +142,7 @@
         <div class="empty">
             <p>まだ何も保存していません。</p>
             <p class="small muted">
-                録画一覧の「端末に保存」を押すと、オフラインでも観られるようになります。
+                録画の詳細の「端末に保存」を押すと、オフラインでも観られるようになります。
             </p>
         </div>
     {:else}
@@ -254,8 +254,6 @@
     }
     .empty {
         padding: 1.5rem;
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
         text-align: center;
     }
     .empty p:first-child {
@@ -263,8 +261,6 @@
     }
     .list {
         padding: 0;
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
     }
     .row {
         display: flex;
@@ -276,12 +272,12 @@
         list-style: none;
     }
     .row + .row {
-        border-top: 1px solid var(--dp-subtle);
+        border-top: 1px solid var(--dp-line);
     }
     .thumb {
         width: 5rem;
         height: 3rem;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         object-fit: cover;
     }
     .thumb.blank {

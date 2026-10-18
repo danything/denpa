@@ -22,10 +22,3 @@ export function parseSearchFields(value: string | null | undefined): SearchField
     const fields = SEARCH_FIELDS.filter((field) => wanted.includes(field));
     return fields.length === 0 ? ['name'] : fields;
 }
-
-/** ルール一覧に出す表示。「番組名・概要」のような形式 */
-export function searchFieldLabel(value: string | null | undefined): string {
-    return parseSearchFields(value)
-        .map((field) => SEARCH_FIELD_LABEL[field])
-        .join('・');
-}

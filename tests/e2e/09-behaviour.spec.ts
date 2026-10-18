@@ -172,8 +172,8 @@ test.describe('操作したときの反応', () => {
         // 今日を見ているときは「今日」を出さない (押しても同じ表)。そのぶん1行に収まる
         await expect(page.getByTestId('guide-today')).toHaveCount(0);
         const types = (await page.getByTestId('type-tabs').boundingBox())!;
-        const search = (await page.getByTestId('guide-search-toggle').boundingBox())!;
-        expect(Math.abs(types.y + types.height / 2 - (search.y + search.height / 2))).toBeLessThan(4);
+        const next = (await page.getByTestId('next-day').boundingBox())!;
+        expect(Math.abs(types.y + types.height / 2 - (next.y + next.height / 2))).toBeLessThan(4);
 
         // ページごとは動かず、表だけが動く。表の下端は下のタブの上端
         const fit = await page.evaluate(() => {

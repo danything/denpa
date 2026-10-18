@@ -17,6 +17,8 @@
  * 出す・消すを決めるだけで、DOM も映像も触りません
  */
 
+import { getContext } from 'svelte';
+
 /**
  * 触らなくなってから消えるまで (ms)。**指もマウスも同じ長さ。**
  *
@@ -30,10 +32,10 @@ const LINGER = 2500;
 /** 消す時刻を跨ぐためだけの目覚まし。出ている間しか回さない */
 const TICK = 250;
 
-/** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`OverlayMenu`) が読む鍵 */
+/** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`stageMenu`) が読む鍵 */
 export const PLAYER_CONTROLS = Symbol('player-controls');
 
-/** 舞台の枠そのもの。**メニューを枠の中に収める**のに使う (`OverlayMenu`) */
+/** 舞台の枠そのもの。**メニューを枠の中に収める**のに使う (`stageMenu`) */
 export const PLAYER_STAGE = Symbol('player-stage');
 
 export interface PlayerControls {
@@ -158,4 +160,26 @@ export function playerControls(): PlayerControls {
             now = Date.now();
         },
     };
+}
+
+/**
+ * 舞台の中のメニュー (`OverlayMenu`・`SettingsMenu`) の決まり。**部品の初めに呼ぶ** (context と `$effect` を使う)。
+ *
+ * - **開いている間は操作列を残す。** 操作列は触らなくなって 2.5 秒で引っ込むが、メニューは
+ *   操作列の中にあるので、選んでいる最中に**メニューごと消えて**いた。舞台の外では何もしない
+ * - **メニューは舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しにかぶる。
+ *   スマホの縦で全画面をやめると枠は 224px しか無く、速さ (7つ) のメニューが上へはみ出していた。
+ *   返す枠を `Menu` の `boundary` に渡すと、入りきらなければメニューの中を巻き取る。
+ *   舞台の外 (と、枠がまだ無いうち) は画面に収める
+ */
+export function stageMenu(isOpen: () => boolean): (() => HTMLElement | null) | undefined {
+    const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
+    $effect(() => {
+        if (controls === undefined) return;
+        controls().hold = isOpen();
+        return () => {
+            controls().hold = false;
+        };
+    });
+    return getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
 }

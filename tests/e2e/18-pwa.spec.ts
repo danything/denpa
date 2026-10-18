@@ -277,12 +277,22 @@ test.describe('PWA', () => {
         const menu = page.getByTestId('nav-menu');
         await menu.getByRole('button', { name: 'その他' }).click();
         await expect(menu.getByRole('link', { name: 'チューナー' })).toHaveCount(0);
+        await expect(menu.getByRole('link', { name: '設定' })).toBeVisible();
         await menu.getByRole('link', { name: 'ルール' }).click();
         await page.waitForURL(/rules/);
         await expect(menu.getByRole('button', { name: 'その他' })).toHaveAttribute('aria-current', 'page');
 
-        // 広い幅では上のヘッダーにリンクを並べるので、タブは出さない
+        // 検索のタブは上の帯の欄に入った状態で開く (狭い画面ではヘッダーごと隠している)
+        await expect(page.getByTestId('header-search')).toBeHidden();
+        await page.getByTestId('tab-search').click();
+        await page.waitForURL(/\/search$/);
+        await expect(page.getByTestId('tab-search')).toHaveAttribute('aria-current', 'page');
+        await expect(page.getByTestId('search-input')).toBeFocused();
+
+        // 広い幅では上のヘッダーにリンクと検索の欄を並べるので、タブは出さない
         await page.setViewportSize({ width: 1280, height: 780 });
         await expect(tabbar).toBeHidden();
+        await goto(page, '/');
+        await expect(page.getByTestId('header-search')).toBeVisible();
     });
 });

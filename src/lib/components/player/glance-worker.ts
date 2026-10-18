@@ -27,7 +27,7 @@ scope.onmessage = async (event: MessageEvent<GlanceRequest>) => {
     try {
         bitmap = await createImageBitmap(frame, shrink(size));
     } catch {
-        // 縮められなかった。画面は次の回にまた頼む
+        // 縮められなかった。画面は次の回にまたリクエストする
     } finally {
         frame.close();
     }

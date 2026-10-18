@@ -81,7 +81,7 @@
     }
     .boxed {
         padding: 0.75rem;
-        border-radius: 1rem;
+        border-radius: var(--dp-radius-lg);
         background: rgb(0 0 0 / 0.45);
         opacity: 0;
         animation: appear 0s 1.5s forwards;

@@ -38,7 +38,7 @@ interface Options {
 }
 
 export interface Background {
-    /** 入れているか */
+    /** オンにしているか */
     readonly on: boolean;
     toggle: () => void;
 }

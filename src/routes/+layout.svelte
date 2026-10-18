@@ -7,6 +7,7 @@
     import Measure from '#lib/components/Measure.svelte';
     import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
+    import SearchField from '#lib/components/SearchField.svelte';
     import { denpaFontUrl } from '#lib/font.js';
     import { measure } from '#lib/measure.svelte.js';
     import { canTransition } from '#lib/motion.svelte.js';
@@ -14,14 +15,14 @@
     import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { groupLabel } from '#lib/settings-sections.js';
     import { THEME_LABEL, theme } from '#lib/theme.svelte.js';
-    import { onNavigate } from '$app/navigation';
+    import { goto, onNavigate } from '$app/navigation';
     import { navigating, page } from '$app/state';
     import CalendarDays from '~icons/lucide/calendar-days';
     import Contrast from '~icons/lucide/contrast';
     import Ellipsis from '~icons/lucide/ellipsis';
     import ListVideo from '~icons/lucide/list-video';
     import Moon from '~icons/lucide/moon';
-    import Settings from '~icons/lucide/settings';
+    import Search from '~icons/lucide/search';
     import Sun from '~icons/lucide/sun';
     import Tv from '~icons/lucide/tv';
 
@@ -187,19 +188,28 @@
         { href: '/settings', label: '設定' },
     ] as const;
 
+    /** 検索 (`/search`)。ヘッダーでは欄にして、狭い画面では下のタブに置く (上の `links` には並べない) */
+    const SEARCH = { href: '/search', label: '検索' } as const;
+    const pages = [...links, SEARCH];
+
     /**
      * いま開いている画面のナビの行き先。**設定はグループごとに経路が分かれている** (`/settings/reception` など) ので、
      * その下も「設定」に数える。録画 (`/`) は頭が全部に合うので、ぴったりのときだけ
      */
     const here = $derived.by(() => {
         const route = page.route.id ?? '';
-        return links.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ?? null;
+        return pages.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ?? null;
     });
 
-    /** ページ名はナビと同じものを使う。タブに出す。設定はグループの名前を前に付ける */
+    /**
+     * ページ名はナビと同じものを使う。タブに出す。設定はグループの名前を前に付ける。
+     * 検索は言葉を前に付ける (履歴に並んだときに、どの検索だったか分かる)
+     */
     const title = $derived.by(() => {
-        const label = links.find((l) => l.href === here)?.label ?? 'denpa';
-        const section = here === '/settings' ? groupLabel(page.route.id?.split('/')[2] ?? '') : null;
+        const label = pages.find((l) => l.href === here)?.label ?? 'denpa';
+        const q = here === '/search' ? (page.url.searchParams.get('q') ?? '').trim() : '';
+        const section =
+            here === '/settings' ? groupLabel(page.route.id?.split('/')[2] ?? '') : q === '' ? null : q;
         return `${section === null ? '' : `${section} - `}${label} - denpa`;
     });
 
@@ -236,17 +246,20 @@
      * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
      * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
      * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
-     * よく開く 4 画面をタブに、残り (ルール) は「その他」の `Menu` (popover) に
+     * よく開く 3 画面と検索をタブに、残り (ルール・設定) は「その他」の `Menu` (popover) に。
+     * 狭い画面ではヘッダー (検索の欄) を隠すので、検索はタブから入る
      */
     const tabs = [
         { href: '/', label: '録画', icon: ListVideo },
         { href: '/guide', label: '番組表', icon: CalendarDays },
         { href: '/live', label: 'ライブ', icon: Tv },
-        { href: '/settings', label: '設定', icon: Settings },
+        { href: SEARCH.href, label: SEARCH.label, icon: Search },
     ] as const;
     const moreLinks = links.filter((link) => !tabs.some((tab) => tab.href === link.href));
     const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
-    /** タブを出すのはナビの 5 画面 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
+    /** 検索の欄に入れておく言葉。結果の画面 (`/search?q=`) ではその言葉のまま直して送れる */
+    const query = $derived(here === '/search' ? (page.url.searchParams.get('q') ?? '').trim() : '');
+    /** タブを出すのはナビの 5 画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
     const showTabbar = $derived(here !== null);
     /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
     const notice = $derived((page.data['channelNotice'] ?? null) as NoticeKind | null);
@@ -259,12 +272,40 @@
     });
 
     /**
+     * **どこからでも `/` か Ctrl/⌘+K で検索の欄へ。** 字を打っている最中 (入力欄・テキストエリア・
+     * 選ぶ欄・編集できる所) では取らない — `/` を打てなくなる。見えている欄 (ヘッダーか検索の画面) に入り、
+     * どちらも無ければ (狭い画面でヘッダーを隠しているとき) 検索の画面を開く (開くと欄に入る)
+     */
+    function searchShortcut(event: KeyboardEvent): void {
+        if (event.defaultPrevented || event.isComposing) return;
+        const slash = event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey;
+        const k = event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+        if (!slash && !k) return;
+        const target = event.target;
+        if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select') !== null)) {
+            return;
+        }
+        event.preventDefault();
+        const field = [...document.querySelectorAll<HTMLInputElement>('[data-search-field]')].find(
+            (input) => input.getClientRects().length > 0,
+        );
+        if (field === undefined) {
+            void goto(resolve('search'));
+            return;
+        }
+        field.focus();
+        field.select();
+    }
+
+    /**
      * **放送の字 (Denpa Font) をここで名乗らせる** (使うのは `app.css` の `.broadcast`)。
      * 版付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
      * 使う字が画面に出たときだけ落ちてくる。届くまでは画面の字で出しておく (`swap`)
      */
     const fontFace = `<style>@font-face{font-family:"Denpa Font";src:url("${denpaFontUrl()}") format("woff2");font-display:swap}</style>`;
 </script>
+
+<svelte:window onkeydown={searchShortcut} />
 
 <svelte:head>
     <title>{title}</title>
@@ -330,6 +371,13 @@
             {/if}
         </div>
         <!--
+            **検索の欄はヘッダーの真ん中** (広い幅だけ。狭い幅ではヘッダーごと隠し、検索の画面の上の帯に同じ欄を置く)。
+            結果の画面でも同じ欄で、探した言葉が入ったまま直して送れる
+        -->
+        <div class="header-search">
+            <SearchField value={query} testid="header-search" />
+        </div>
+        <!--
             テーマの切り替え・画面へのリンク (広い幅だけ)。ログアウトは設定の「一般」にある。
             狭い幅ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
         -->
@@ -372,6 +420,15 @@
         **局が無いときの案内** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
         スキャンして局が入れば消える。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
     -->
+    <!--
+        **狭い幅の検索の画面だけ、上に検索の欄の帯を出す** (ヘッダーを隠しているので)。ヘッダーと同じ欄
+    -->
+    {#if here === '/search'}
+        <div class="search-bar">
+            <SearchField value={query} testid="search" />
+        </div>
+    {/if}
+
     {#if notice}
         <div class="notice-slot">
             <ChannelNotice kind={notice} />
@@ -383,9 +440,9 @@
     </main>
 
     <!--
-        **狭い幅では、主な画面へのタブを画面の下に並べる** (録画・番組表・ライブ・設定)。
+        **狭い幅では、主な画面へのタブを画面の下に並べる** (録画・番組表・ライブ・検索)。
         指が届くのは画面の下のほうで、上のハンバーガーから開いていた頃は、画面を移るたびに
-        2回押していた。ルールはたまにしか開かないので「その他」の中。
+        2回押していた。ルールと設定はたまにしか開かないので「その他」の中。
         出すのはナビの 5 画面だけ — 観る画面・追っかけ (映像が主役)、ログインやペアリングには出さない。
         ライブの全画面 (`html[data-stage-fullscreen]`) のときも隠す (`app.css`)。
         下の安全域 (ホームバー) のぶんは内側の余白で避ける
@@ -642,6 +699,27 @@
         pointer-events: none;
     }
     /*
+     * ヘッダーの検索の欄 (中身は `SearchField`)。広い幅では「印と名前 ｜ 欄 ｜ ナビ」の3列にして、
+     * 欄を真ん中に置く (両脇の列を同じ幅に分けるので、欄は画面の中央に来る)。欄は 36rem まで広がり、
+     * 中くらいの幅ではナビより先に縮む
+     */
+    .header-search {
+        display: none;
+        min-width: 0;
+    }
+    /* 狭い幅の検索の画面の上の帯。ヘッダーと同じ地で、巻いても上に残る。指で使う幅なので `/` の印は出さない */
+    .search-bar :global(kbd) {
+        display: none;
+    }
+    .search-bar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        padding: calc(var(--dp-space-2) + env(safe-area-inset-top)) var(--dp-gutter, 1rem) var(--dp-space-2);
+        border-bottom: 1px solid var(--dp-line);
+        background: var(--dp-bg);
+    }
+    /*
      * 画面の下のタブ (狭い幅だけ)。ヘッダーと同じ地に上の線 1 本、スクロールすると透けてぼける。
      * 1 つの的は幅を等分し、高さは 3.5rem (アイコンと小さな字)。下の安全域は内側の余白で避ける。
      * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
@@ -760,7 +838,8 @@
         .shell:has(.tabbar) .notice-slot {
             padding-top: env(safe-area-inset-top);
         }
-        .shell:has(.tabbar):has(.notice-slot) main {
+        .shell:has(.tabbar):has(.notice-slot) main,
+        .shell:has(.tabbar):has(.search-bar) main {
             padding-top: var(--dp-gutter);
         }
     }
@@ -780,6 +859,20 @@
     @media (min-width: 640px) {
         ul.links {
             display: flex;
+        }
+        .navbar {
+            display: grid;
+            grid-template-columns: minmax(max-content, 1fr) minmax(8rem, 36rem) minmax(max-content, 1fr);
+            gap: var(--dp-space-4);
+        }
+        .header-search {
+            display: block;
+        }
+        .actions {
+            justify-self: end;
+        }
+        .search-bar {
+            display: none;
         }
         .tabbar {
             display: none;

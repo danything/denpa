@@ -111,7 +111,11 @@ test.describe('ダッシュボードと画面遷移', () => {
         await page.getByTestId('settings-back').click();
         await page.waitForURL(/\/settings$/);
         await expect(page.getByTestId('settings-nav')).toBeVisible();
-        await expect(page.getByTestId('tab-settings')).toHaveAttribute('aria-current', 'page');
+        // 設定は「その他」の中。開いている画面がその中なら「その他」に印が付く
+        await expect(page.getByTestId('nav-menu').getByRole('button', { name: 'その他' })).toHaveAttribute(
+            'aria-current',
+            'page',
+        );
     });
 
     test('地上波の局があれば、局が無いときの案内は出さない', async ({ page, request }) => {
@@ -176,9 +180,9 @@ test.describe('ダッシュボードと画面遷移', () => {
         const res = await request.get('/guide');
         expect(res.ok()).toBe(true);
         const html = await res.text();
-        // 外枠 (種別タブ・日送り・検索窓) は最初の HTML に入っている
+        // 外枠 (種別タブ・日送り) は最初の HTML に入っている
         expect(html).toContain('data-testid="type-tabs"');
-        expect(html).toContain('data-testid="guide-filter"');
+        expect(html).toContain('data-testid="next-day"');
         // 表のところは骨組み。本物の枠はまだ無い
         expect(html.indexOf('data-testid="guide-skeleton"')).toBeGreaterThan(-1);
         expect(html.indexOf('data-testid="guide-skeleton"')).toBeLessThan(
@@ -467,14 +471,17 @@ test.describe('ダッシュボードと画面遷移', () => {
             .toContain('recordings');
     });
 
-    test('番組表の検索窓はルール画面で結果を出し、そのままルールにできる', async ({ page, request }) => {
+    test('検索の「ルールを作る」はルール画面に言葉を渡し、そのままルールにできる', async ({
+        page,
+        request,
+    }) => {
         await syncEpg(request);
-        await goto(page, '/guide');
+        await goto(page, `/search?q=${encodeURIComponent('テストアニメ')}`);
 
-        // 条件を書く場所は1箇所。番組表からはキーワードを渡すだけ
-        await page.getByTestId('filter-keyword').fill('テストアニメ');
-        await page.getByRole('button', { name: '検索' }).click();
-        await page.waitForURL(/\/rules\?/);
+        // 条件を書く場所は1箇所。検索からはキーワードを渡すだけ
+        await page.getByTestId('search-make-rule').click();
+        await page.waitForURL(/\/rules\?new&keyword=/);
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ');
 
         await expect(page.getByTestId('preview')).toContainText('録れる番組は');
         const rows = page.getByTestId('preview-row');

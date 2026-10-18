@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { tick, untrack } from 'svelte';
+    import { untrack } from 'svelte';
     import { dragScroll, submitting } from '#lib/actions.js';
     import ChannelNotice from '#lib/components/ChannelNotice.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
@@ -13,7 +13,6 @@
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
     import Layers from '~icons/lucide/layers';
-    import SearchIcon from '~icons/lucide/search';
 
     let { data, form } = $props();
 
@@ -21,7 +20,7 @@
 
     /**
      * 表の中身。**外枠より後から届く** (`+page.server.ts` の `gridOf`)。
-     * 届くまでは骨組みだけ出しておき、種別のタブ・日送り・検索窓は先に使えるようにする。
+     * 届くまでは骨組みだけ出しておき、種別のタブ・日送りは先に使えるようにする。
      *
      * **通知で読み直したときに骨組みへ戻さない。** 番組表は録画やエンコードの
      * 通知が来るたびに読み直すので、そのたび表が消えては現れるとちらつく。
@@ -420,23 +419,6 @@
     });
 
     /**
-     * **狭い画面では検索欄を畳み、虫眼鏡のボタンで開く。**
-     *
-     * 種別・日送り・検索を折り返して並べると、スマホの幅 (390px) では表の上に
-     * 4段・250px ほどの操作欄が積まれ、表が画面の下半分に押し込まれていた。
-     * 番組表で毎回触るのは種別と日送りで、検索はたまにしか使わない。
-     * 広い画面 (768px 以上) では今までどおり右端に出しておく (CSS で切り替える)
-     */
-    let searching = $state(false);
-    let keyword: HTMLInputElement | null = $state(null);
-    async function openSearch(): Promise<void> {
-        searching = !searching;
-        if (!searching) return;
-        await tick();
-        keyword?.focus();
-    }
-
-    /**
      * **表を下へ送っている間は、操作の1行を上へ畳む** (携帯のブラウザのアドレスバーと同じ)。
      * 上へ戻すと出てくる。畳んだぶん (1行 ≒ 50px) は時間に回る。
      *
@@ -610,45 +592,6 @@
             </button>
         {/if}
 
-        <!--
-        探すのは右端に寄せる。見るための操作とは別のことなので、間を空ける。
-
-        **見出しは置かない** — 枠の中の字が同じことを言っている。検索と条件の
-        編集はルール画面に寄せてあり (条件を2箇所で書けるようにすると判定が
-        ずれる)、探す範囲もあちらで切り替える。既定は番組名だけ
-    -->
-        <!-- 狭い画面だけ出る。押すと下の検索欄が1段だけ開く (上の `searching`) -->
-        <button
-            type="button"
-            class="small secondary outline icon search-toggle"
-            aria-label="番組を探す"
-            aria-expanded={searching}
-            aria-controls="guide-search"
-            onclick={() => void openSearch()}
-            data-testid="guide-search-toggle"
-        >
-            <Icon icon={SearchIcon} size="size-4" />
-        </button>
-        <!-- role="search" で入力欄とボタンを1つにつなぐ (Pico)。種別の切り替えと同じ見た目の決まり -->
-        <form
-            id="guide-search"
-            method="GET"
-            action={resolve('rules')}
-            role="search"
-            class="search"
-            class:open={searching}
-            data-testid="guide-filter"
-        >
-            <input
-                type="search"
-                name="keyword"
-                bind:this={keyword}
-                placeholder="全局の番組名で検索"
-                class="keyword"
-                data-testid="filter-keyword"
-            />
-            <button class="small" type="submit">検索</button>
-        </form>
     </div>
 
     {#if sheet !== null && sheet.failed !== null}
@@ -663,7 +606,7 @@
     {:else if sheet === null}
         <!--
             **表のところだけ読み込み中にする。** 画面ごと出てこないと、放送波を
-            選び直すのも検索を打ち始めるのも待たされる。骨組みは本物と同じ形
+            選び直すのも日を送るのも待たされる。骨組みは本物と同じ形
             (左に時刻の列、上に局名の行) にしておく — 何が出てくるのかが
             分かるし、届いたときに位置が飛ばない
         -->
@@ -1053,48 +996,24 @@
     .types {
         width: auto;
     }
-    /*
-     * 指で押す端末では検索欄も高さ 40px 以上にする (ボタンは `app.css` の `--dp-btn-h-sm` で 40px になる)。
-     * マウスの端末では小さいまま (細い1行に収める)
-     */
-    @media (pointer: coarse) {
-        .keyword {
-            min-height: 2.5rem;
-        }
-    }
     /* 種別を選び直すと、持ち上げた面が横へ滑る (`app.css` の「画面の切り替え」) */
     .seg-pill {
         view-transition-name: guide-type;
-    }
-    .search {
-        /* Pico の role=search は横いっぱい・下に余白。ここでは右に寄せて置くだけ */
-        width: auto;
-        margin-bottom: 0;
-        margin-left: auto;
-    }
-    .keyword {
-        width: 14rem;
-        height: auto;
-        padding-block: 0.3rem;
-        font-size: 0.85rem;
-    }
-    .search-toggle {
-        display: none;
     }
     .subch-icon {
         display: none;
     }
     /*
-     * **狭い画面も1段にまとめる** (上の `searching`)。種別・日送り (矢印・日付・今日)・虫眼鏡。
+     * **狭い画面も1段にまとめる。** 種別・日送り (矢印・日付・今日)・サブチャンネル。
      * 2段に積んでいた頃は、表の上に 80px ほど操作が並んでいた。
-     * 検索欄は虫眼鏡で開いたときだけ2段目に出る。
-     * DOM の順 (種別 → 日送り → 検索) は読み上げの順なので変えない
+     * 番組を言葉で探すのはサイト全体の検索 (`/search`) に寄せた。
+     * DOM の順 (種別 → 日送り) は読み上げの順なので変えない
      */
     @media (max-width: 767px) {
         .toolbar {
             --gap: var(--dp-space-1);
             padding-inline: var(--dp-space-2);
-            /* 1行に収める。折り返すのは検索欄を開いたときだけ */
+            /* 1行に収める */
             flex-wrap: nowrap;
         }
         .days {
@@ -1113,27 +1032,6 @@
         }
         .subch-icon {
             display: inline-flex;
-        }
-        .toolbar:has(.search.open) {
-            flex-wrap: wrap;
-        }
-        .search-toggle {
-            display: inline-flex;
-            align-items: center;
-            margin-left: auto;
-        }
-        .search {
-            display: none;
-        }
-        .search.open {
-            display: flex;
-            order: 2;
-            flex-basis: 100%;
-            margin-left: 0;
-        }
-        .search.open .keyword {
-            width: auto;
-            flex: 1 1 0%;
         }
     }
     .empty {

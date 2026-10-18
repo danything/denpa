@@ -1,4 +1,4 @@
-import { ends, matches, revealed, shownUpTo, sideStep } from './paging';
+import { matches, revealed, shownUpTo } from './paging';
 
 /**
  * 長い一覧を**少しずつ出す**。
@@ -10,8 +10,7 @@ import { ends, matches, revealed, shownUpTo, sideStep } from './paging';
  * **並べ替えや絞り込みで顔ぶれが変わったら先頭に戻す** (`reset`)。前の一覧で
  * 3ページ目まで開いていても、絞ったあとの一覧が同じ長さとは限らない。
  *
- * **全部は描かないので Ctrl+F では探せない。** 一覧を持つ画面には絞り込みの
- * 欄を置く (`filter`)。
+ * **全部は描かないので Ctrl+F では探せない。** ルールの一覧には絞り込みの欄を置く (`matches`)。
  *
  * 使い方:
  *
@@ -24,43 +23,22 @@ import { ends, matches, revealed, shownUpTo, sideStep } from './paging';
 export class Paged<T> {
     /** いま出している行数 (頭から) */
     shown = $state(0);
-    /** 尻から出している行数。`ends` のときだけ使う */
-    tailShown = $state(0);
 
     /**
      * @param items 元の一覧。絞り込み後のものを渡す
      * @param step 一度に足す行数。1画面ぶんより少し多め
-     * @param ends **頭と尻の両方から出す**か。一番下から見せる一覧 (録画の枠) のため。
-     *     間を空けて両端を半分ずつ描き、続きは間に足す。**描く数は片側だけのときと同じ** —
-     *     両端に `step` ずつ描くと、開いたときにハイドレーションする行が倍になり、
-     *     4倍遅い CPU で操作できるまでが 1 秒以上延びた
      */
     constructor(
         private readonly items: () => T[],
         readonly step = 60,
-        private readonly ends: () => boolean = () => false,
     ) {
         this.reset();
     }
 
-    /** 片側に一度に足す行数 */
-    private get side(): number {
-        return sideStep(this.step, this.ends());
-    }
-
-    /** 頭と尻と間。頭からだけ出すときは尻が 0 件 */
-    private get split() {
-        return ends(this.items(), this.shown, this.ends() ? this.tailShown : 0);
-    }
-
-    /** 出す行 (頭のほう)。間が無くなれば全部 */
+    /** 出す行。残りが無くなれば全部 */
     get rows(): T[] {
-        return this.split.head;
-    }
-
-    /** 尻のほう。間 (`more`) より後ろに描く。頭からだけ出すときは空 */
-    get tail(): T[] {
-        return this.split.tail;
+        const items = this.items();
+        return this.shown >= items.length ? items : items.slice(0, this.shown);
     }
 
     /** まだ出していない行があるか */
@@ -70,14 +48,12 @@ export class Paged<T> {
 
     /** 出していない残り */
     get rest(): number {
-        return this.split.rest;
+        return Math.max(0, this.items().length - this.shown);
     }
 
-    /** 続きを足す。両端から出すときは両方に足す (見えていないほうに足しても位置は動かない) */
+    /** 続きを足す */
     reveal(): void {
-        const length = this.items().length;
-        this.shown = revealed(this.shown, this.side, length);
-        this.tailShown = revealed(this.tailShown, this.side, length);
+        this.shown = revealed(this.shown, this.step, this.items().length);
     }
 
     /**
@@ -85,13 +61,12 @@ export class Paged<T> {
      * 足す単位 (`step`) に切り上げる (下端の印が、すぐまた鳴らないように)
      */
     showUpTo(count: number): void {
-        this.shown = shownUpTo(this.shown, count, this.side, this.items().length);
+        this.shown = shownUpTo(this.shown, count, this.step, this.items().length);
     }
 
     /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */
     reset(): void {
-        this.shown = this.side;
-        this.tailShown = this.side;
+        this.shown = this.step;
     }
 }
 

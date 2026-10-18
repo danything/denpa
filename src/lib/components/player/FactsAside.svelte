@@ -12,10 +12,6 @@
      * [PlayerLayout.svelte](PlayerLayout.svelte) が持つ。高さは画面の残りぜんぶ (映像の高さに
      * 揃えない理由は [watch/[id]/+page.svelte](../../../routes/watch/%5Bid%5D/+page.svelte))。
      * 中の余白はサイドバーのとき `--dp-side-pad` (巻き取る箱は列の幅いっぱい)。
-     *
-     * 中の段落を伸ばさない — daisyUI の `card-body` を使っていた頃は中の `<p>` に
-     * `flex-grow: 1` が当たり、中身が枠より短いと段落が余白を全部吸っていた
-     * (実機で局名の下だけ 60px 空いた)。
      */
     let {
         testid,

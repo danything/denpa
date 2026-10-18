@@ -262,7 +262,7 @@
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
         <ControlBar side shown={controls.shown}>
-            <CloseLink testid="chase-close" />
+            <CloseLink />
             <ControlButton
                 icon={CAMERA}
                 label="この場面を切り抜く"
@@ -449,7 +449,7 @@
                 -->
                 <span class="encoded" data-testid="chase-encoded">
                     <a
-                        class="to-watch"
+                        class="stage-note to-watch"
                         href={resolve(`watch/${data.rec.id}`)}
                         data-testid="chase-to-watch"
                     >
@@ -459,11 +459,11 @@
             {:else}
                 {#if player.chaseEnded}
                     <!-- 録れているところまで観た。録画が終わっていれば、この先はもう来ない -->
-                    <StageNote testid="chase-ended">録画済みのところまで観ました</StageNote>
+                    <StageNote>録画済みのところまで観ました</StageNote>
                 {/if}
                 {#if player.warning}
                     <!-- リクエストどおりにできなかった断り書き (GPU でエンコードできずにソフトウェアへ降りた、など) -->
-                    <StageNote testid="chase-warning">{player.warning}</StageNote>
+                    <StageNote>{player.warning}</StageNote>
                 {/if}
             {/if}
         {/snippet}
@@ -504,10 +504,6 @@
         pointer-events: auto;
     }
     .to-watch {
-        border-radius: 1rem;
-        background: rgb(0 0 0 / 0.6);
-        padding: 0.25rem 0.75rem;
-        font-size: var(--dp-text-xs);
         color: #fff;
         text-decoration: underline;
         text-decoration-color: rgb(255 255 255 / 0.5);

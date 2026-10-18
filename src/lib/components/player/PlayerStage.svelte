@@ -55,9 +55,9 @@
         ambient,
     }: Props = $props();
 
-    // 中のメニュー (`OverlayMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
+    // 中のメニュー (`OverlayMenu`・`SettingsMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
     setContext(PLAYER_CONTROLS, () => controls);
-    // メニューを枠の中に収める先 (`OverlayMenu`)。bind で入るので取り手で渡す
+    // メニューを枠の中に収める先 (`OverlayMenu`・`SettingsMenu`)。bind で入るので取り手で渡す
     setContext(PLAYER_STAGE, () => element);
 
     /**
@@ -138,7 +138,7 @@
      * **広い枠でも、押すものが一段に収まらなければ畳む** (`crowded`)。
      *
      * 押すものの行 (`ControlRow`) は折り返さない。狭い枠 (`compact`) はいつも畳むが、
-     * それより広くても一段に入るとは限らない — 並ぶものは番組しだい (字幕・音声の本数・
+     * それより広くても一段に入るとは限らない — 並ぶものは番組しだい (字幕・
      * チャプター・Hybridcast) で、縦の iPad の二段組 (映像 476px) に全部載ると 48px が
      * 11個で 570px を超える。幅の線では決められないので、**畳まずに並べたらはみ出すか**を測る。
      *

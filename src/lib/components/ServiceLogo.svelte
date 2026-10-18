@@ -34,7 +34,7 @@
 <style>
     .logo {
         flex-shrink: 0;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         object-fit: contain;
     }
     .empty {
