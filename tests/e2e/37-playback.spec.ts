@@ -1,5 +1,4 @@
 import { rmSync, writeFileSync } from 'node:fs';
-import type { APIRequestContext } from '@playwright/test';
 import { expect, recordOne, setRecording, test } from './helpers';
 
 /**
@@ -35,19 +34,10 @@ function firstTfdt(bytes: Uint8Array): number | null {
     return walk(0, bytes.length, ['moof', 'traf', 'tfdt']);
 }
 
-async function saveLimit(request: APIRequestContext, value: string): Promise<void> {
-    const res = await request.post('/settings?/saveTranscode', {
-        data: new URLSearchParams({ transcodeLimit: value }).toString(),
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    });
-    expect(res.ok()).toBe(true);
-}
-
 test.describe('録画をその場で流す', () => {
     test.afterAll(async ({ request, stack }) => {
         rmSync(stack.slowFile, { force: true });
-        await saveLimit(request, '');
-        await setRecording(request, {});
+        await setRecording(request, { transcodeLimit: '' });
     });
 
     test('元の TS だけの録画: 何で観られるかを返し、飛び先から物差しの時刻で流す', async ({
@@ -103,7 +93,7 @@ test.describe('録画をその場で流す', () => {
          * **枠が埋まっていれば断る。** 上限を 1 本にして、流しっぱなしの 1 本 (偽 ffmpeg を長引かせる) を
          * 開いたまま、もう 1 本リクエストする。閉じれば枠が返る
          */
-        await saveLimit(request, '1');
+        await setRecording(request, { codecs: [], transcodeLimit: '1' });
         writeFileSync(stack.slowFile, '1');
         const holding = new AbortController();
         const held = await fetch(`${baseURL}/api/recordings/${id}/stream?codec=av1`, {

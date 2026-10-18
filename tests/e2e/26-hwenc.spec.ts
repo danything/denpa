@@ -42,7 +42,6 @@ function wayOf(run: string[]): string {
 }
 
 const GPUS = ['renderD128', 'renderD129'];
-const IDS = ['qsv-av1', 'qsv-h264', 'vaapi-av1', 'vaapi-h264'];
 
 test.describe('GPU でエンコードする', () => {
     const clearGpus = (dir: string) => {
@@ -55,40 +54,34 @@ test.describe('GPU でエンコードする', () => {
         await request.post('/settings?/probeHw', { form: {} });
     });
 
-    test('見つかった GPU にはデバイスごとに自動で印が付き、外した印は残る', async ({ page, stack }) => {
+    test('見つかった GPU は自動で使い、コーデックごとにエンコーダを選べる', async ({ page, stack }) => {
         clearGpus(stack.hwDir);
         await goto(page, '/settings');
-        // GPU が無ければ、デバイスの行も無い
+        // GPU が無ければ、エンコーダを選ぶ欄も無い
         await page.getByTestId('hw-probe').click();
         await expect(page.getByTestId('hw-status')).toContainText('GPU が見つかりません');
         await expect(page.getByTestId('hw-device')).toHaveCount(0);
+        await expect(page.getByTestId('hw-av1')).toHaveCount(0);
 
-        // 2枚挿した → 確かめ直すと、デバイスが2つ・どちらも4つとも使えて、勝手に印が付く
+        // 2枚挿した → 確かめ直すと、デバイスが2つ。どちらも両方のコーデックを使えるので「順番に使う」
         for (const gpu of GPUS) writeFileSync(`${stack.hwDir}/${gpu}`, '1');
         await page.getByTestId('hw-probe').click();
         await expect(page.getByTestId('hw-status')).toContainText(
             'デバイスが 2 個見つかり、2 個で GPU エンコードできます',
         );
         await expect(page.getByTestId('hw-device')).toHaveCount(2);
-        for (const gpu of GPUS) {
-            for (const id of IDS) {
-                await expect(page.getByTestId(`hw-${gpu}-${id}`)).toBeEnabled();
-                await expect(page.getByTestId(`hw-${gpu}-${id}`)).toBeChecked();
-            }
-        }
+        await expect(page.getByTestId('hw-av1')).toHaveValue('every');
+        await expect(page.getByTestId('hw-h264')).toHaveValue('every');
 
-        // デバイスごとに割り振る: 128 は AV1 だけ、129 は H.264 だけ (どちらも QSV/VA-API 両方)
-        // 印は変えたらその場で保存する (保存のボタンは無い)。最後の保存が終わるのを待ってから読み直す
-        await page.getByTestId('hw-renderD128-qsv-h264').uncheck();
-        await page.getByTestId('hw-renderD128-vaapi-h264').uncheck();
-        await page.getByTestId('hw-renderD129-qsv-av1').uncheck();
-        await page.getByTestId('hw-renderD129-vaapi-av1').uncheck();
+        // デバイスごとに割り振る: AV1 は 128、H.264 は 129 (どちらも QSV/VA-API 両方)
+        // 変えたらその場で保存する (保存のボタンは無い)。最後の保存が終わるのを待ってから読み直す
+        const [d128, d129] = GPUS.map((gpu) => `${stack.hwDir}/${gpu}`);
+        await page.getByTestId('hw-av1').selectOption(d128 as string);
+        await page.getByTestId('hw-h264').selectOption(d129 as string);
         await expect(page.getByTestId('saved-result')).toBeVisible();
         await goto(page, '/settings');
-        await expect(page.getByTestId('hw-renderD128-qsv-h264')).not.toBeChecked();
-        await expect(page.getByTestId('hw-renderD128-qsv-av1')).toBeChecked();
-        await expect(page.getByTestId('hw-renderD129-qsv-av1')).not.toBeChecked();
-        await expect(page.getByTestId('hw-renderD129-vaapi-h264')).toBeChecked();
+        await expect(page.getByTestId('hw-av1')).toHaveValue(d128 as string);
+        await expect(page.getByTestId('hw-h264')).toHaveValue(d129 as string);
     });
 
     test('割り振ったデバイスでエンコードし、落ちたら次の方式へ倒れる', async ({ page, request, stack }) => {

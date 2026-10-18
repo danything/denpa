@@ -12,7 +12,7 @@
     import SaveNote from '#lib/components/SaveNote.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { dateTime, stateLabel } from '#lib/format.js';
-    import { CODEC_LABEL, HW_CODECS, HW_KIND_LABEL, HW_KINDS, hwAllowed } from '#lib/hw.js';
+    import { CODEC_LABEL, HW_EVERY, HW_SOFTWARE, hwChoice, hwUsable } from '#lib/hw.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { measure } from '#lib/measure.svelte.js';
     import { PREFECTURE_UNSET, PREFECTURES } from '#lib/prefecture.js';
@@ -55,12 +55,16 @@
      */
     const recording = $derived(data.recording);
 
+    /** 映像コーデックの行。並びは HW_CODECS と同じ (AV1 が先) */
+    const CODECS = [
+        { codec: 'av1', label: 'AV1 (小さい・遅い)' },
+        { codec: 'h264', label: 'H.264 (古いテレビ向け・大きい)' },
+    ] as const;
+
     /** 節ごとの保存の結果 (`autosave`)。見出しの横に出す */
     const saves = {
         recording: new SaveState(),
         broadcast: new SaveState(),
-        hw: new SaveState(),
-        transcode: new SaveState(),
     };
 
     /**
@@ -156,33 +160,83 @@
         -->
         <form method="POST" action="?/saveRecording" use:autosave={saves.recording} class="fields setting-rows">
             <!--
-                **コーデックは複数選べる。** 両方入れると1本の録画を両方で
-                エンコードする — 古いテレビは AV1 をデコードできないので H.264 も置いておくと、
-                同じ録画をどちらの端末でも観られる。どちらも入れなければ
-                「エンコードしない」(元のTSのまま)
+                **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。** 選べるのは、そのコーデックを
+                GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
+                (`chooseHw`)。チェックを外したコーデックも、ライブと追っかけはこのエンコーダを使うので、
+                選ぶ欄はチェックと関係なく出しておく
             -->
             <fieldset class="field">
                 <span class="field-label">映像コーデック</span>
-                <label class="check">
-                    <input
-                        type="checkbox"
-                        name="codecs"
-                        value="av1"
-                        checked={recording.codecs.includes('av1')}
-                        data-testid="codec-av1"
-                    />
-                    <span>AV1 (小さい・遅い)</span>
-                </label>
-                <label class="check">
-                    <input
-                        type="checkbox"
-                        name="codecs"
-                        value="h264"
-                        checked={recording.codecs.includes('h264')}
-                        data-testid="codec-h264"
-                    />
-                    <span>H.264 (古いテレビ向け・大きい)</span>
-                </label>
+                <div class="codecs">
+                    {#each CODECS as { codec, label } (codec)}
+                        <div class="codec-row">
+                            <label class="check">
+                                <input
+                                    type="checkbox"
+                                    name="codecs"
+                                    value={codec}
+                                    checked={recording.codecs.includes(codec)}
+                                    data-testid={`codec-${codec}`}
+                                />
+                                <span>{label}</span>
+                            </label>
+                            {#await data.hw then hw}
+                                {@const usable = hwUsable(hw.devices, codec)}
+                                {@const choice = hwChoice(recording.hwAllow, hw.devices, codec)}
+                                {#if usable.length > 0}
+                                    <select
+                                        name={`hw.${codec}`}
+                                        class="encoder"
+                                        aria-label={`${CODEC_LABEL[codec]} のエンコーダ`}
+                                        data-testid={`hw-${codec}`}
+                                    >
+                                        <option value={HW_SOFTWARE} selected={choice === HW_SOFTWARE}>ソフトウェア</option>
+                                        {#each usable as device (device.path)}
+                                            <option value={device.path} selected={choice === device.path}>{device.label}</option>
+                                        {/each}
+                                        {#if usable.length > 1}
+                                            <option value={HW_EVERY} selected={choice === HW_EVERY}>GPU を順番に使う</option>
+                                        {/if}
+                                    </select>
+                                {:else if hw.devices.length > 0}
+                                    <span class="hint">ソフトウェア</span>
+                                {/if}
+                            {/await}
+                        </div>
+                    {/each}
+                </div>
+                <!-- 列の右側 (欄の下) に置くため、要点の行は div で包む -->
+                <div class="hw-line">
+                    {#await data.hw}
+                        <span class="hint" data-testid="hw-status">GPU を確認中…</span>
+                    {:then hw}
+                        <Lead>
+                            <span data-testid="hw-status">{hw.message}</span>
+                            <!--
+                                一度だけの操作なので、その場で保存する欄とは別のフォーム (下の `probe-hw`) で送る。
+                                `form` で指すので、この節の保存には混ざらない
+                            -->
+                            <button type="submit" form="probe-hw" class="text-button" data-testid="hw-probe">確かめ直す</button>
+                            {#snippet more()}
+                                <p>使える GPU は Intel QSV / VA-API です。見つかれば自動で使います。</p>
+                                <p>QSV → VA-API → ソフトウェアの順に試し、失敗したら次の方法でやり直します。</p>
+                                <p>
+                                    ライブと追っかけも、ここで選んだエンコーダを使います (チェックを外したコーデックも)。MPEG-2
+                                    のデコードまで GPU でできるデバイスでは、デコードとインターレース解除も GPU で行います。
+                                </p>
+                                <p>
+                                    GPU が2枚あれば「AV1 はこちら、H.264 はあちら」のように分けられます。「GPU を順番に使う」では、
+                                    エンコードのたびに使う GPU を入れ替えます。
+                                </p>
+                                {#each hw.devices as device (device.path)}
+                                    <p data-testid="hw-device" data-device={device.path}>
+                                        <span class="mono">{device.label}</span>: {device.summary}
+                                    </p>
+                                {/each}
+                            {/snippet}
+                        </Lead>
+                    {/await}
+                </div>
                 {#if recording.codecs.length === 0}
                     <Lead>
                         選ばないと<strong>エンコードせず</strong>、元のTSのまま残します
@@ -199,6 +253,30 @@
                     </Lead>
                 {/if}
             </fieldset>
+            <!--
+                その場で変換する本数の上限 (`server/transcode.ts`)。既定が GPU の有無で変わるので、
+                エンコーダのすぐ下に置く
+            -->
+            <div class="field">
+                <span class="field-label">同時に変換する本数</span>
+                <select name="transcodeLimit" class="narrow" aria-label="同時に変換する本数" data-testid="transcode-limit">
+                    <option value="" selected={recording.transcodeLimit === null}>
+                        自動 ({data.transcode.auto}本)
+                    </option>
+                    {#each data.transcode.choices as n (n)}
+                        <option value={String(n)} selected={recording.transcodeLimit === n}>{n}本</option>
+                    {/each}
+                </select>
+                <Lead>
+                    録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません
+                    {#snippet more()}
+                        <p>
+                            自動では GPU が無ければ 2本、あれば 4本です。埋まっているときにリクエストされた再生は断り、
+                            エンコード済みの動画か元のTSでの再生を勧めます。
+                        </p>
+                    {/snippet}
+                </Lead>
+            </div>
             <div class="field">
                 <span class="field-label">元のTS</span>
                 {@render checkRow(
@@ -248,105 +326,8 @@
                 )}
             </div>
         </form>
-    </section>
-
-    <!--
-        **GPU。** GPU (グラボ) が増えると行が増え、方式 × コーデックの印も
-        GPU ごとに持つ。使えないものの印は触れない — 押してもエンコードできないものに
-        チェックを入れさせても嘘になるだけ
-    -->
-    <section class="setting">
-        <div class="setting-head">
-            <h2>GPU</h2>
-            <SaveNote status={saves.hw} />
-        </div>
-        <Lead>
-            GPU でエンコードするかを、デバイスとコーデックごとに選びます
-            {#snippet more()}
-                <p>使える GPU は Intel QSV / VA-API です。使えるものには自動で印が付きます。</p>
-                <p>両方に付いていれば QSV → VA-API → ソフトウェアの順に試し、失敗したら次の方法でやり直します。</p>
-                <p>
-                    ライブと追っかけも、印の付いたコーデックは GPU でエンコードします。MPEG-2
-                    のデコードまで GPU でできるデバイスでは、デコードとインターレース解除も GPU で行います。
-                </p>
-                <p>
-                    GPU が2枚あれば「こちらは AV1、あちらは H.264」のように分けられ、
-                    同じコーデックを扱えるデバイスが複数あれば順番に使います。
-                </p>
-            {/snippet}
-        </Lead>
-        {#await data.hw}
-            <span class="hint" data-testid="hw-status">GPU を確認中…</span>
-        {:then hw}
-            <div class="cluster hw-status">
-                <span class="hint" data-testid="hw-status">{hw.message}</span>
-                <!-- 一度だけの操作なのでボタンのまま。印のフォームとは分ける (中に置くと、印の保存と混ざる) -->
-                <form method="POST" action="?/probeHw" use:submitting={keepValues}>
-                    <button type="submit" class="small secondary outline" data-testid="hw-probe">確かめ直す</button>
-                </form>
-            </div>
-            {#if hw.devices.length > 0}
-                <form method="POST" action="?/saveHw" use:autosave={saves.hw}>
-                    <!-- GPU ごとに1つ。表にすると狭い幅で横に巻くので、縦に積む -->
-                    <div class="rows">
-                        {#each hw.devices as device (device.path)}
-                            <div class="row device" data-testid="hw-device" data-device={device.path}>
-                                <div class="mono small">{device.label}</div>
-                                <div class="hint">{device.summary}</div>
-                                {#each HW_KINDS as kind (kind)}
-                                    <div class="kind-row">
-                                        <span class="kind small">{HW_KIND_LABEL[kind]}</span>
-                                        {#each HW_CODECS as codec (codec)}
-                                            {@const usable = device[kind].includes(codec)}
-                                            <label class="check" class:unusable={!usable}>
-                                                <input
-                                                    type="checkbox"
-                                                    name={`hw.${device.path}.${kind}.${codec}`}
-                                                    checked={usable &&
-                                                        hwAllowed(data.recording.hwAllow, device.path, kind, codec)}
-                                                    disabled={!usable}
-                                                    data-testid={`hw-${device.port}-${kind}-${codec}`}
-                                                />
-                                                <span class="small">{CODEC_LABEL[codec]}</span>
-                                            </label>
-                                        {/each}
-                                    </div>
-                                {/each}
-                            </div>
-                        {/each}
-                    </div>
-                </form>
-            {/if}
-        {/await}
-        <!--
-            その場で変換する本数の上限 (`server/transcode.ts`)。GPU の有無で既定が変わるのでここに置く。
-            GPU の無い機械でも変えられるよう、GPU の印のフォームとは分ける
-        -->
-        <form method="POST" action="?/saveTranscode" use:autosave={saves.transcode} class="setting-rows transcode">
-            <div class="field">
-                <span class="field-label">
-                    同時に変換する本数
-                    <SaveNote status={saves.transcode} />
-                </span>
-                <select name="transcodeLimit" class="narrow" aria-label="同時に変換する本数" data-testid="transcode-limit">
-                    <option value="" selected={recording.transcodeLimit === null}>
-                        自動 ({data.transcode.auto}本)
-                    </option>
-                    {#each data.transcode.choices as n (n)}
-                        <option value={String(n)} selected={recording.transcodeLimit === n}>{n}本</option>
-                    {/each}
-                </select>
-                <Lead>
-                    録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません
-                    {#snippet more()}
-                        <p>
-                            自動では GPU が無ければ 2本、あれば 4本です。埋まっているときにリクエストされた再生は断り、
-                            エンコード済みの動画か元のTSでの再生を勧めます。
-                        </p>
-                    {/snippet}
-                </Lead>
-            </div>
-        </form>
+        <!-- 「確かめ直す」が送るフォーム。ボタンは映像コーデックの下にあり、`form="probe-hw"` で指す -->
+        <form id="probe-hw" method="POST" action="?/probeHw" use:submitting={keepValues} hidden></form>
     </section>
 
     <!--
@@ -839,30 +820,67 @@
         align-items: center;
         gap: var(--dp-space-3);
     }
-    .hw-status {
-        --gap: var(--dp-space-3);
-    }
-    .kind-row {
+    /*
+     * **チェックと、その横のエンコーダ。** 広い幅ではエンコーダを縦に揃える (行ごとに字の長さが違うので、
+     * 揃えないと欄が左右にずれる)。狭い幅ではチェックの文の下に、文の頭に揃えて置く
+     */
+    .codecs {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.25rem 0.75rem;
+        flex-direction: column;
+        gap: var(--dp-space-2);
     }
-    .kind {
-        width: 5rem;
-    }
-    .unusable {
-        cursor: not-allowed;
-        opacity: 0.5;
-    }
-    /* GPU の印と、その場の変換の本数を分ける */
-    .transcode {
-        margin-top: var(--dp-space-2);
-    }
-    .transcode .field-label {
+    .codec-row {
         display: flex;
-        gap: var(--dp-space-3);
-        align-items: baseline;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    .codec-row > :not(.check) {
+        margin-inline-start: 1.75rem;
+    }
+    @media (min-width: 30rem) {
+        .codecs {
+            display: grid;
+            grid-template-columns: max-content max-content;
+            align-items: center;
+            gap: var(--dp-space-2) var(--dp-space-3);
+        }
+        .codec-row {
+            display: contents;
+        }
+        .codec-row > :not(.check) {
+            margin-inline-start: 0;
+        }
+    }
+    .encoder {
+        width: auto;
+        max-width: 100%;
+        padding-block: 0.3rem;
+        font-size: var(--dp-text-sm);
+    }
+    .hw-line {
+        margin-top: 0.25rem;
+    }
+    /* 文の続きとして読める小さなボタン (Lead の「詳しく」と同じ見た目) */
+    .text-button {
+        display: inline;
+        width: auto;
+        margin: 0 0 0 0.25rem;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        box-shadow: none;
+        color: var(--dp-muted);
+        font: inherit;
+        text-decoration: underline;
+        text-decoration-color: var(--dp-line-strong);
+        text-underline-offset: 0.2em;
+        cursor: pointer;
+    }
+    .text-button:hover {
+        color: var(--pico-color);
+        text-decoration-color: currentColor;
     }
     .events {
         display: flex;
