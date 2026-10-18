@@ -8,6 +8,12 @@ name: Docker build check
 #
 # **パスで絞る。** denpa のイメージは ffmpeg を組むので重い。ソースだけの PR は
 # test.yml が見ていて、イメージの中身が変わるのは下のパスを触ったときだけ。
+# 配布用の2つ (.github/aio.Dockerfile と release.Dockerfile。どちらも main の
+# イメージに重ねるだけ) もここで組む。workflow の中でも、触ったものに要るジョブだけを
+# 動かす (下の `changes`) — aio だけの PR で ffmpeg まで組まない。
+#
+# **ここで組めても main で落ちないとは限らない。** src だけの PR はここを通らないので、
+# 起きるかどうかは build-and-deploy でも push の前に同じ .github/image-smoke.sh で見ている。
 #
 # **必須チェックにはしない** (ruleset に足さない)。パスで飛ばした workflow の check は
 # 「保留」のまま残る仕様なので、必須にすると docs だけの PR が塞がる。ジョブの名前
@@ -32,6 +38,10 @@ on:
       - 'vite.config.ts'
       - 'drizzle/**'
       - '.dockerignore'
+      # 配布用 (下の `dist`)
+      - '.github/aio.Dockerfile'
+      - '.github/aio-entrypoint.ts'
+      - '.github/release.Dockerfile'
       - '.github/workflows/docker-build-check.yml'
       - '.github/image-smoke.sh'
   workflow_dispatch: {}
@@ -44,7 +54,45 @@ permissions:
   contents: read
 
 jobs:
+  # 触ったファイルから、動かすジョブを決める。上の paths と同じものを2つに分けて並べる
+  # (paths に足したら、ここにも足す)。手で回したとき (workflow_dispatch) は全部
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      images: ${{ steps.files.outputs.images }}
+      dist: ${{ steps.files.outputs.dist }}
+    steps:
+      - name: Classify changed files
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          if [ -z "$PR" ]; then
+            echo "images=true" >> "$GITHUB_OUTPUT"
+            echo "dist=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          images=false
+          dist=false
+          while read -r f; do
+            case "$f" in
+              .github/aio.Dockerfile | .github/aio-entrypoint.ts | .github/release.Dockerfile) dist=true ;;
+              .github/workflows/docker-build-check.yml | .github/image-smoke.sh) images=true; dist=true ;;
+              Dockerfile | agent/* | patches/* | wasm/* | package.json | bun.lock | server.js) images=true ;;
+              src/lib/server/address.ts | vite.config.ts | drizzle/* | .dockerignore) images=true ;;
+            esac
+          done < <(gh api --paginate "repos/${{ github.repository }}/pulls/$PR/files" --jq '.[].filename')
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+          echo "dist=$dist" >> "$GITHUB_OUTPUT"
+          echo "images=$images dist=$dist"
+
   image:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
     strategy:
       # 片方の arch が落ちても、もう片方の結果は見たい
       fail-fast: false
@@ -101,3 +149,52 @@ jobs:
           image="smoke/${{ matrix.image.name }}"
           echo "展開後: $(docker image inspect -f '{{.Size}}' "$image" | numfmt --to=si)B"
           echo "gzip: $(docker save "$image" | gzip | wc -c | numfmt --to=si)B"
+
+  # 配布用の2つを、リリースのときと同じ順で重ねる (release.yml): denpa に版を足して
+  # (release.Dockerfile)、それにエージェントを写す (aio.Dockerfile)。土台は main で組んだ
+  # 公開の `develop` — どちらも RUN の無い写すだけのものなので、引いて重ねるのに数十秒。
+  # Dockerfile も一緒に変えた PR でも土台は develop のまま (組み合わせは main の aio ジョブで見る)。
+  #
+  # buildx の builder ではなく docker の既定の builder で組む。前の段で組んだ
+  # smoke/denpa-release を、レジストリを通さずに次の FROM で使えるのはこちらだけ。
+  # arch ごとに本物のランナーで組む — エージェントの置き場 (/opt/…-userland) が arch で
+  # 欠けていないかもここで分かる
+  dist:
+    needs: changes
+    if: needs.changes.outputs.dist == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: amd64
+            runner: ubuntu-latest
+          - name: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.arch.runner }}
+    name: dist (${{ matrix.arch.name }})
+    env:
+      BASE: ghcr.io/${{ github.repository_owner }}
+      # health が返す版で、release.Dockerfile の ENV が効いているかを見る
+      VERSION: v0.0.0-ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build release image
+        run: |
+          docker build --pull \
+            --file .github/release.Dockerfile \
+            --build-arg BASE="$BASE/denpa:develop" \
+            --build-arg DENPA_VERSION="$VERSION" \
+            --tag smoke/denpa-release .
+
+      - name: Build aio image
+        run: |
+          docker build \
+            --file .github/aio.Dockerfile \
+            --build-arg DENPA=smoke/denpa-release \
+            --build-arg AGENT="$BASE/denpa-agent:develop" \
+            --tag smoke/denpa-aio .
+
+      - name: Smoke test
+        run: bash .github/image-smoke.sh denpa-aio smoke/denpa-aio "$VERSION"

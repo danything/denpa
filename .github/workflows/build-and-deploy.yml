@@ -115,9 +115,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # **push する前に起こしてみる。** 組めても起きないイメージ (ライブラリの欠け・
+      # runtime に写し忘れたファイル) を develop に出すと、そのままデプロイされて止まる。
+      # PR の docker-build-check はイメージに入るパスを触ったときしか走らない (src だけの PR は
+      # 見ていない) ので、ここが最後の関所になる。
+      #
+      # まず手元 (docker) に読み込んで、PR と同じ .github/image-smoke.sh を通す。通ったら
+      # 下でもう一度組んで push する — 同じ builder の中なので層は全部使い回しで、組み直しはしない。
+      # キャッシュはこちらで書く (起こして落ちても、直した次の run が速いように)。
       # キャッシュは arch ごとに分ける。混ぜると互いの層を追い出し合う
-      - name: Build and push by digest
-        id: build
+      - name: Build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -127,6 +134,21 @@ jobs:
           pull: true
           cache-from: type=gha,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
           cache-to: type=gha,mode=${{ matrix.image.cache-mode }},scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          load: true
+          tags: smoke/${{ matrix.image.name }}
+
+      # 機材は要らない。denpa の /api/health は DB しか見ず、エージェントは自動検出で空のまま答える
+      - name: Smoke test
+        run: bash .github/image-smoke.sh "${{ matrix.image.name }}" "smoke/${{ matrix.image.name }}"
+
+      - name: Push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.image.file }}
+          target: ${{ matrix.image.target }}
+          platforms: linux/${{ matrix.arch.name }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
 
       # digest は空のファイルの名前にして merge へ渡す (中身は要らない)。
