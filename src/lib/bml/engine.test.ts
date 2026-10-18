@@ -1,16 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
-import {
-    type Bml,
-    type BmlOptions,
-    createBml,
-    MAX_QUEUE,
-    MAX_TIMERS,
-    type Plane,
-    planeArea,
-    type Service,
-} from './engine';
+import { type Bml, type BmlOptions, createBml, MAX_QUEUE, MAX_TIMERS, type Service } from './engine';
 import { sampleMng } from './mng.fixture';
+import { type Plane, planeArea } from './plane';
 import type { ImageSource } from './render';
 
 /*

@@ -1862,7 +1862,7 @@
         width: 0.5rem;
         height: 0.5rem;
         margin-right: 0.3rem;
-        border-radius: 999px;
+        border-radius: var(--dp-radius-full);
         background: var(--pico-primary-background);
         vertical-align: 0.1em;
     }
@@ -1914,7 +1914,7 @@
     .group-chevron {
         display: inline-flex;
         align-self: center;
-        transition: transform 0.15s;
+        transition: transform var(--dp-duration);
     }
     .group-chevron.open {
         transform: rotate(90deg);
@@ -1967,14 +1967,14 @@
         justify-content: center;
         color: #fff;
         background: rgb(0 0 0 / 0);
-        transition: background-color 0.15s;
+        transition: background-color var(--dp-duration);
     }
     .poster-play :global(.poster-icon) {
         width: 1.5rem;
         height: 1.5rem;
         opacity: 0;
         filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
-        transition: opacity 0.15s;
+        transition: opacity var(--dp-duration);
     }
     .playable:hover .poster-play {
         background: rgb(0 0 0 / 0.4);
@@ -1996,7 +1996,7 @@
         min-width: 0;
         flex: 1;
         overflow: hidden;
-        border-radius: 999px;
+        border-radius: var(--dp-radius-full);
         background: var(--dp-line);
     }
     .resume-fill {

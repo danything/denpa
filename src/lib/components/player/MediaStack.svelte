@@ -78,6 +78,6 @@
         pointer-events: none;
     }
     .still {
-        transition: opacity 150ms;
+        transition: opacity var(--dp-duration);
     }
 </style>

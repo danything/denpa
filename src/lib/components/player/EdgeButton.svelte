@@ -40,7 +40,7 @@
         display: inline-block;
         width: 0.5rem;
         height: 0.5rem;
-        border-radius: 999px;
+        border-radius: var(--dp-radius-full);
         background: var(--dp-error);
     }
     .dot.active {

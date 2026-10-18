@@ -247,7 +247,7 @@
                             <h2>
                                 {data.editing ? 'ルールを編集' : 'ルールを追加'}
                             </h2>
-                            <p class="small soft">条件に合う番組を自動で予約します</p>
+                            <p class="small muted">条件に合う番組を自動で予約します</p>
                             <details class="more">
                                 <summary>詳しく</summary>
                                 <p>
@@ -967,12 +967,12 @@
         height: 1.5rem;
         width: 60%;
         margin-bottom: 0.75rem;
-        border-radius: 0.375rem;
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-line);
     }
     .skeleton-row {
         margin-bottom: 0.5rem;
-        border-radius: 0.375rem;
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-subtle);
     }
 

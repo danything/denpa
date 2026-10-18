@@ -475,26 +475,6 @@ thead th {
     flex: 1 1 0;
     min-width: 0;
 }
-.full {
-    width: 100%;
-}
-/* カードを縦に積んだ列。広い画面 (1280px 以上) では2列にする (チューナー・設定) */
-.columns {
-    display: grid;
-    align-items: start;
-    gap: 1.5rem;
-}
-@media (min-width: 1280px) {
-    .columns {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-.column {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 1.5rem;
-}
 /*
  * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表集め)。値が変わったら
  * なめらかに伸ばす (Pico の 0.15 秒より少し長く)。**動いているあいだ** (`.running`。付けるのは
@@ -556,17 +536,6 @@ progress.running[value]::-webkit-progress-value {
 .solo h1 {
     font-size: 1.25rem;
 }
-/* 設定・チューナーの1枚ずつの面 (`panel card`) */
-.card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    padding: 1.5rem;
-    box-shadow: var(--dp-shadow);
-}
-.card h2 {
-    font-size: var(--dp-text-lg);
-}
 /* 要点の1行と、その下に畳んだ「詳しく」 */
 .note-block {
     display: flex;
@@ -590,7 +559,7 @@ progress.running[value]::-webkit-progress-value {
     font-size: var(--dp-text-xs);
 }
 .bold {
-    font-weight: 700;
+    font-weight: var(--dp-weight-bold);
 }
 /*
  * **変わる数字・縦に並ぶ数字は、桁の幅を揃える** (`.num`)。時刻 (一覧・番組表・詳細)・残り時間・
@@ -602,9 +571,6 @@ progress.running[value]::-webkit-progress-value {
 }
 .nowrap {
     white-space: nowrap;
-}
-.soft {
-    color: var(--dp-muted);
 }
 .mono {
     font-family: var(--pico-font-family-monospace);
@@ -636,6 +602,10 @@ progress.running[value]::-webkit-progress-value {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+/* 控えめな記号・空の印 (→・番組情報なし) */
+.faint {
+    opacity: 0.4;
 }
 /*
  * 本文の中の色つき文字。**塗り用の色ではなく「文字用」を使う。**

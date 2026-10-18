@@ -158,6 +158,6 @@
         flex: none;
         display: inline-flex;
         align-items: center;
-        border-radius: 999px;
+        border-radius: var(--dp-radius-full);
     }
 </style>

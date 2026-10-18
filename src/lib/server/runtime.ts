@@ -330,7 +330,7 @@ function installShutdownHooks(): void {
  *
  * **2度目の合図でも落ちないようにする。** `once` にしていた頃は、1度目で
  * 自分の後始末が外れ、2度目は**誰も聞いていない**状態になっていた。そこへ
- * デプロイがもう一度走ると、Node の既定どおりその場で終わる — 録画の途中でも。
+ * デプロイがもう一度走ると、既定どおりその場で終わる — 録画の途中でも。
  */
 export function takeOverSignals(onSignal: (signal: NodeJS.Signals) => void): number {
     let taken = 0;

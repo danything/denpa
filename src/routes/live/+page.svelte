@@ -923,7 +923,7 @@
                                 <span class="channel-name broadcast">
                                     {#if tuned}<span class="tuned-mark" data-testid="live-tuned-mark"
                                             ><Icon icon={PLAY} size="size-3" /></span
-                                        ><span class="hidden-label">視聴中</span>{/if}{channel.name}
+                                        ><span class="visually-hidden">視聴中</span>{/if}{channel.name}
                                 </span>
                                 {#if channel.now}
                                     <span class="channel-now broadcast">
@@ -1080,7 +1080,7 @@
         margin: 0;
         padding: 0.5rem;
         border: 1px solid var(--dp-line);
-        border-radius: 0.5rem;
+        border-radius: var(--dp-radius);
         background: transparent;
         color: inherit;
         text-align: left;
@@ -1088,8 +1088,8 @@
         font-weight: normal;
         cursor: pointer;
         transition:
-            background-color 0.15s,
-            border-color 0.15s;
+            background-color var(--dp-duration),
+            border-color var(--dp-duration);
     }
     .channel:hover {
         border-color: color-mix(in srgb, var(--pico-color) 30%, transparent);
@@ -1136,15 +1136,6 @@
     }
     .tuned-mark :global(path) {
         fill: currentColor;
-    }
-    /* 読み上げにだけ渡す字 */
-    .hidden-label {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
     }
     .channel-detail {
         height: auto;

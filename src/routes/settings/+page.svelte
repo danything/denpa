@@ -480,7 +480,7 @@
                             <span class="tag {webhook.enabled ? 'success' : ''}">
                                 {webhook.enabled ? '有効' : '無効'}
                             </span>
-                            <span class="url mono tiny">{webhook.url}</span>
+                            <span class="truncate mono tiny">{webhook.url}</span>
                         </div>
                         <div class="small">
                             <span class="muted">送る通知:</span>
@@ -883,12 +883,6 @@
     }
     .url-line .tag {
         flex-shrink: 0;
-    }
-    .url {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
     .log {
         border: 1px solid var(--dp-line);

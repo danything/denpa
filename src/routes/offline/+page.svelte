@@ -237,7 +237,7 @@
     .player video {
         display: block;
         width: 100%;
-        border-radius: 0.5rem;
+        border-radius: var(--dp-radius);
         background: #000;
     }
     .player-bar {

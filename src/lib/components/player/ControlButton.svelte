@@ -104,7 +104,7 @@
     :global(.ov-btn.ov-round) {
         width: 3rem;
         padding: 0;
-        border-radius: 999px;
+        border-radius: var(--dp-radius-full);
     }
     /*
      * **狭い枠 (スマホの縦) では 40px。** 48px のままだと、毎回使うものだけに

@@ -25,7 +25,7 @@
 <div class="learned-logo" data-testid="learned-logo">
     {#if learnedAt === null}
         <!-- 見出しは置かない。開いた局の名前 (チューナー画面の `<summary>`) の続きとして読む -->
-        <p class="small soft">
+        <p class="small muted">
             <span class="broadcast">{serviceName}</span> のロゴはまだ覚えていません。この局の録画をエンコードするときに、その録画から覚えます。
         </p>
     {:else}

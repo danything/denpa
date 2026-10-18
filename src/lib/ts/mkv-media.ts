@@ -19,22 +19,33 @@
  */
 
 import { aacCodec, av1Codec, avcCodec, type Fmp4Track } from './fmp4';
-import { DEFAULT_SCALE, ebmlHead, UNKNOWN, uint, vint } from './mkv';
+import {
+    BLOCK,
+    BLOCK_GROUP,
+    CLUSTER,
+    CODEC_ID,
+    DEFAULT_SCALE,
+    ebmlHead,
+    INFO,
+    SEGMENT,
+    SIMPLE_BLOCK,
+    TIMESTAMP,
+    TIMESTAMP_SCALE,
+    TRACK_ENTRY,
+    TRACKS,
+    UNKNOWN,
+    uint,
+    vint,
+} from './mkv';
 
 const EBML = 0x1a45dfa3;
-const SEGMENT = 0x18538067;
 const SEEK_HEAD = 0x114d9b74;
 const SEEK = 0x4dbb;
 const SEEK_ID = 0x53ab;
 const SEEK_POSITION = 0x53ac;
-const INFO = 0x1549a966;
-const TIMESTAMP_SCALE = 0x2ad7b1;
 const DURATION = 0x4489;
-const TRACKS = 0x1654ae6b;
-const TRACK_ENTRY = 0xae;
 const TRACK_NUMBER = 0xd7;
 const TRACK_TYPE = 0x83;
-const CODEC_ID = 0x86;
 const CODEC_PRIVATE = 0x63a2;
 const DEFAULT_DURATION = 0x23e383;
 const NAME = 0x536e;
@@ -45,11 +56,6 @@ const PIXEL_HEIGHT = 0xba;
 const AUDIO = 0xe1;
 const SAMPLING_FREQUENCY = 0xb5;
 const CHANNELS = 0x9f;
-const CLUSTER = 0x1f43b675;
-const TIMESTAMP = 0xe7;
-const SIMPLE_BLOCK = 0xa3;
-const BLOCK_GROUP = 0xa0;
-const BLOCK = 0xa1;
 const REFERENCE_BLOCK = 0xfb;
 const CUES = 0x1c53bb6b;
 const CUE_POINT = 0xbb;

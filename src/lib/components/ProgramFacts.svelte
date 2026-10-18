@@ -113,7 +113,7 @@
 {#each extended as [heading, text] (heading)}
     <div class="block">
         <div class="small head broadcast">{heading}</div>
-        <div class="small pre soft broadcast">{@render body(text)}</div>
+        <div class="small pre muted broadcast">{@render body(text)}</div>
     </div>
 {/each}
 

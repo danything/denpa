@@ -341,7 +341,7 @@
         {#if data.collect.running}
             <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
             <div class="progress-block" data-testid="epg-collect">
-                <div class="small soft num">
+                <div class="small muted num">
                     {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
                     ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
                 </div>
@@ -373,13 +373,13 @@
                 そのあと denpa が集めるもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
             -->
             <div class="small" data-testid="channel-coverage">
-                <span class="soft">チャンネル</span>
+                <span class="muted">チャンネル</span>
                 <strong>{coverage.length}</strong>
                 <span class="faint">→</span>
-                <span class="soft">局</span>
+                <span class="muted">局</span>
                 <strong>{services.length}</strong>
                 <span class="faint">→</span>
-                <span class="soft">番組表のある局</span>
+                <span class="muted">番組表のある局</span>
                 <strong>{withEpg}</strong>
             </div>
             <Lead>
@@ -686,7 +686,7 @@
                         **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
                         CS のロゴは BS の中継から降ってくる
                     -->
-                    <div class="small soft">
+                    <div class="small muted">
                         <strong>{data.logos.unavailable} 局</strong>はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
                     </div>
                 {/if}
@@ -777,9 +777,6 @@
     /* 表を幅いっぱいに使うので、設定の画面 (720px) より広く取る */
     .tuners {
         max-width: 64rem;
-    }
-    .faint {
-        opacity: 0.4;
     }
     .table-wrap {
         overflow-x: auto;

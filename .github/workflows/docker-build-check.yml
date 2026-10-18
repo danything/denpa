@@ -25,6 +25,12 @@ on:
       - 'wasm/**'
       - 'package.json'
       - 'bun.lock'
+      # 下は runtime に個別に入るもの (Dockerfile の COPY・組み立ての設定)。E2E は手元の木で
+      # 動くので、イメージに入れ忘れても PR の間は分からない
+      - 'server.js'
+      - 'src/lib/server/address.ts'
+      - 'vite.config.ts'
+      - 'drizzle/**'
       - '.dockerignore'
       - '.github/workflows/docker-build-check.yml'
       - '.github/image-smoke.sh'

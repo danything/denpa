@@ -633,7 +633,7 @@
                         {#if channelNumber(service) !== null}
                             <span class="tag ch-number" data-testid="guide-number">{channelNumber(service)}</span>
                         {/if}
-                        <span class="name broadcast">{service.name}</span>
+                        <span class="truncate broadcast">{service.name}</span>
                     </div>
                 {/each}
 
@@ -971,7 +971,7 @@
     .skeleton-cell {
         /* 縮ませない。合計が枠より高いぶんは下で切る (本物の表も下へ続く) */
         flex-shrink: 0;
-        border-radius: 0.375rem;
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-subtle);
     }
     /* チャンネル名の行。本物と同じで、ここだけ濃い */
@@ -1060,12 +1060,6 @@
         /* 行の高さ(= 時刻の数字が止まる位置 headHeight)を Tailwind の頃の 37px に揃える */
         line-height: 1.25rem;
         font-weight: 500;
-    }
-    .name {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
     .ch-number {
         flex-shrink: 0;
@@ -1216,9 +1210,6 @@
         font-size: 0.75rem;
         line-height: 1.25;
         font-weight: 500;
-    }
-    .faint {
-        opacity: 0.4;
     }
     .state {
         display: block;

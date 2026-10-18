@@ -58,9 +58,7 @@ import { type Realm, Vm } from './vm';
 import { parseXml } from './xml';
 
 export type { BmlIp } from './browser';
-export type { ReceiverInfo, Store } from './nvram';
-export { type Plane, planeArea } from './plane';
-export type { Fonts, Rect } from './render';
+export type { Rect } from './render';
 
 /** 局 (`arib://<original_network_id>.<transport_stream_id>.<service_id>` を読み取ったもの) */
 export interface Service {

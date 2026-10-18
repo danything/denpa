@@ -20,21 +20,21 @@
  */
 
 /** 中に入る (入れ子の親として扱う) もの */
-const SEGMENT = 0x18538067;
-const INFO = 0x1549a966;
-const CLUSTER = 0x1f43b675;
-const BLOCK_GROUP = 0xa0;
-const TRACKS = 0x1654ae6b;
-const TRACK_ENTRY = 0xae;
+export const SEGMENT = 0x18538067;
+export const INFO = 0x1549a966;
+export const CLUSTER = 0x1f43b675;
+export const BLOCK_GROUP = 0xa0;
+export const TRACKS = 0x1654ae6b;
+export const TRACK_ENTRY = 0xae;
 const DESCEND = new Set([SEGMENT, INFO, CLUSTER, BLOCK_GROUP, TRACKS, TRACK_ENTRY]);
 
 /** 中身を読むもの */
-const TIMESTAMP_SCALE = 0x2ad7b1;
-const TIMESTAMP = 0xe7;
-const SIMPLE_BLOCK = 0xa3;
-const BLOCK = 0xa1;
+export const TIMESTAMP_SCALE = 0x2ad7b1;
+export const TIMESTAMP = 0xe7;
+export const SIMPLE_BLOCK = 0xa3;
+export const BLOCK = 0xa1;
 /** トラックの中身の種類 (`S_ARIBSUB` など)。入っているものを確かめるのに使う */
-const CODEC_ID = 0x86;
+export const CODEC_ID = 0x86;
 
 /** 大きさが「不明」の印 (全部 1)。頭だけ書いて流し始めるときに出てくる */
 export const UNKNOWN = -1;

@@ -122,14 +122,14 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 
 # libvpl-dev / libva-dev は Intel の GPU (QSV) 向け (docs/encode.md「GPU でエンコードする」)。
 # ffmpeg に libvpl (QSV = h264_qsv / av1_qsv) を組み込み、実行イメージにドライバを
-# 入れてある。コンテナから /dev/dri が見えれば、起動時に server/hwenc.ts が試しのエンコードで
+# 入れてある。コンテナから /dev/dri が見えれば、起動時に src/lib/server/hwenc.ts が試しのエンコードで
 # 見つけて使い、無ければソフトウェア (libsvtav1 / libx264) でエンコードする。
 # **libva は QSV の下に必ずいる** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
 # vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
 #
 # **QSV (libvpl) は amd64 だけ。** Debian の libvpl / libmfx-gen / intel-media-va-driver は
 # amd64 にしか無い (Intel の GPU が載る arm の機械は無い)。arm64 では libvpl を外して組み、
-# VA-API だけ残す — 起動時の試しのエンコード (server/hwenc.ts) で QSV が落ちて、VA-API か
+# VA-API だけ残す — 起動時の試しのエンコード (src/lib/server/hwenc.ts) で QSV が落ちて、VA-API か
 # ソフトウェアでエンコードするだけなので、denpa の側は何も変えない
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
 

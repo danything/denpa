@@ -59,13 +59,13 @@
             >
         </span>
         {#if title !== null && title !== ''}
-            <span class="cut">
+            <span class="truncate">
                 <span class="sep lead">・</span><span class="broadcast" data-testid={titleTestid}>{title}</span>
             </span>
         {/if}
     </div>
 
-    <div class="status cut">
+    <div class="status truncate">
         {#if status}{@render status()}{/if}
     </div>
 </div>
@@ -95,12 +95,6 @@
     }
     .sep.lead {
         margin-inline-start: 0;
-    }
-    .cut {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
     :global(.stage[data-compact]) .info {
         padding: 0 0.25rem;
