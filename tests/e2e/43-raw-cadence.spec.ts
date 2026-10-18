@@ -108,8 +108,11 @@ function cadence(draws: Draw[], vsyncs: number[]): Cadence {
         .slice(1)
         .map((vsync, i) => vsync - vsyncs[i]!)
         .sort((a, b) => a - b);
-    // 半分より多く来ないこともあるので、中央値ではなく短い側 (下から 1 割) を1回ぶんとする
-    const period = periods[Math.floor(periods.length / 10)] ?? 1000 / 60;
+    /*
+     * 半分より多く来ないこともあるので、中央値ではなく短い側 (下から 1 割) を1回ぶんとする。
+     * それでも 2 回ぶんを拾うほど来ないときのために、テストの画面 (60Hz) の 1.1 倍で頭を押さえる
+     */
+    const period = Math.min(periods[Math.floor(periods.length / 10)] ?? 1000 / 60, (1000 / 60) * 1.1);
     const steps: Record<string, number> = {};
     let missed = 0;
     let repeats = 0;
