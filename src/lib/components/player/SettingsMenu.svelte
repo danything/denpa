@@ -46,6 +46,15 @@
     $effect(() => {
         if (!open) view = null;
     });
+    /**
+     * **開いている選択肢の並びが無くなったら、上の並びへ戻る** (音声が2本から1本に減ったときなど)。
+     * 消えた項目にいたフォーカスは上の並びの先頭へ移す (そのままだと行き場を失って、↑↓が効かなくなる)
+     */
+    $effect(() => {
+        if (view === null || opened !== undefined) return;
+        view = null;
+        void tick().then(() => pane?.querySelector<HTMLElement>('.menu-item')?.focus({ preventScroll: true }));
+    });
 
     /** 開いている間は操作列を残す (`OverlayMenu` と同じ) */
     const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
