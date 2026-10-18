@@ -199,6 +199,10 @@ test.describe('操作したときの反応', () => {
         const bar = Math.round((await page.getByTestId('guide-toolbar').boundingBox())!.height);
         const box = (await grid.boundingBox())!;
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        // 開いたときは「いま」へ送ってあるので、夜遅くに流すと下端が近く、下へ送っても動かないことがある。
+        // 先に頭まで戻しておく (時刻に左右されないように)
+        await page.mouse.wheel(0, -5000);
+        await expect.poll(top).toBe(shown);
 
         // 横に流しただけでは畳まない
         await page.mouse.wheel(300, 0);
@@ -213,7 +217,9 @@ test.describe('操作したときの反応', () => {
         await page.mouse.wheel(0, -60);
         await expect.poll(top).toBe(shown);
 
-        // キーボードで操作へ移ると出てくる
+        // キーボードで操作へ移ると出てくる。下端に着かないよう、いったん頭まで戻してから送る
+        await page.mouse.wheel(0, -2000);
+        await expect.poll(top).toBe(shown);
         await page.mouse.wheel(0, 300);
         await expect.poll(top).toBe(shown - bar);
         await page.getByTestId('next-day').focus();
