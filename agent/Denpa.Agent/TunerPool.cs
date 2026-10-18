@@ -497,7 +497,7 @@ public sealed class TunerPool(
     /// <para>
     /// **3番目を4番目より先にしてあるのは、1人の視聴でチューナーを2台塞がないため。**
     /// 畳むのを待っているだけのチューナーを放っておいて空いているチューナーを取ると、余韻の
-    /// 5秒間だけ2冊が埋まる。
+    /// 5秒間だけ2台が埋まる。
     /// </para>
     /// </summary>
     private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after)

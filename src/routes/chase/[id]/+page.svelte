@@ -261,12 +261,11 @@
         />
 
         <!-- 右上の列。**観る画面と同じ並び** (閉じる・切り抜き) -->
-        <ControlBar side shown={controls.shown} testid="chase-side">
+        <ControlBar side shown={controls.shown}>
             <CloseLink testid="chase-close" />
             <ControlButton
                 icon={CAMERA}
                 label="この場面を切り抜く"
-                testid="chase-shot"
                 onclick={() => void snapshot()}
             />
         </ControlBar>

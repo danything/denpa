@@ -87,6 +87,7 @@ jobs:
               .github/workflows/docker-build-check.yml | .github/image-smoke.sh) images=true; dist=true ;;
               Dockerfile | agent/* | patches/* | wasm/* | package.json | bun.lock | server.js) images=true ;;
               src/lib/server/address.ts | vite.config.ts | drizzle/* | .dockerignore) images=true ;;
+              src/lib/server/fps.ts | scripts/fps-smoke.ts) images=true ;;
             esac
           done < <(gh api --paginate "repos/${{ github.repository }}/pulls/$PR/files" --jq '.[].filename')
           echo "images=$images" >> "$GITHUB_OUTPUT"

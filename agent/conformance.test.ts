@@ -494,7 +494,7 @@ async function spawnAgent(port: number, env: Record<string, string>) {
     throw new Error(`:${port} のエージェントが応答しません`);
 }
 
-describe('カードとスクランブル解除', () => {
+describe('カードとスクランブルの復号', () => {
     test('カードリーダーの様子を返す', async () => {
         const card = (await (await get('/denpa/card')).json()) as CardStatus;
         // 手元にリーダーは無い。**それでも答えは返る**ことが大事
@@ -631,7 +631,7 @@ describe('カードとスクランブル解除', () => {
         30_000,
     );
 
-    test('置き場の外は解除に回さない', async () => {
+    test('置き場の外は復号に回さない', async () => {
         const res = await post('/denpa/decode', { input: '../../etc/passwd', output: 'x.ts' });
         expect(res.status).toBe(500);
         expect(((await res.json()) as { error: string }).error).toContain('保存先の外');

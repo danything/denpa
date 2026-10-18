@@ -90,7 +90,7 @@
             たまにしか押さないものが毎回目に入っていた。押すのは POST (`/logout`)。
             リンク (GET) にすると、先読みで勝手に切れる
         -->
-        <section class="section" data-testid="login-card">
+        <section class="section">
             <div class="section-head">
                 <h2>ログイン</h2>
             </div>
@@ -115,7 +115,7 @@
                         {/if}
                     </form>
                     <Lead>
-                        <span data-testid="other-sessions">
+                        <span>
                             {data.others === 0
                                 ? 'ほかにログインしている端末はありません'
                                 : `この端末のほかに ${data.others} 件のログインがあります`}
@@ -148,7 +148,7 @@
             **動いている版。** 新しい版のリンクはヘッダー (狭い画面は「その他」) にだけ出す (`server/update.ts`)。
             ここにも並べると同じリンクが2か所になる。main のイメージと手元は `dev` で、リリースと見比べない
         -->
-        <section class="section" data-testid="version-card">
+        <section class="section">
             <div class="section-head">
                 <h2>バージョン</h2>
             </div>

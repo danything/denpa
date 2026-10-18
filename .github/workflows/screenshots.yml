@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       names:
-        description: 撮るものの名前 (空なら docs の画像を全部。`ui` で見比べる一揃い)
+        description: 撮るものの名前 (空なら docs の画像を全部。`ui` で見比べる一揃い、`motion` で動きの GIF)
         required: false
         default: ''
   push:

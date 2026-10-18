@@ -134,7 +134,7 @@
                                         エンコードのたびに使う GPU を入れ替えます。
                                     </p>
                                     {#each hw.devices as device (device.path)}
-                                        <p data-testid="hw-device" data-device={device.path}>
+                                        <p data-testid="hw-device">
                                             <span class="mono">{device.label}</span>: {device.summary}
                                         </p>
                                     {/each}
@@ -164,7 +164,7 @@
                 -->
                 <div class="field">
                     <span class="field-label">同時に変換する本数</span>
-                    <select name="transcodeLimit" class="narrow" aria-label="同時に変換する本数" data-testid="transcode-limit">
+                    <select name="transcodeLimit" class="narrow" aria-label="同時に変換する本数">
                         <option value="" selected={recording.transcodeLimit === null}>
                             自動 ({data.transcode.auto}本)
                         </option>
