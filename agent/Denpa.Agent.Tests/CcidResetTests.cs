@@ -29,8 +29,8 @@ public class CcidResetTests
             if (Stuck) return;
             var command = CcidMessage.Parse(data);
             _replies.Enqueue(command.Type == CcidMessage.PowerOn
-                ? CcidMessage.Command(CcidMessage.DataBlock, command.Seq, Atr)
-                : CcidMessage.Command(CcidMessage.SlotStatus, command.Seq, [], 0x01));
+                ? CcidMessage.Command(CcidAnswer.DataBlock, command.Seq, Atr)
+                : CcidMessage.Command(CcidAnswer.SlotStatus, command.Seq, [], 0x01));
         }
 
         public int Read(Span<byte> buffer, int timeoutMs)

@@ -343,13 +343,11 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
 
 // --- カードとスクランブル解除 ---------------------------------------------
 /*
- * 鍵を配っているなら、その決まり (ポート・相手の範囲・TTL・往復の上限) も返す。
  * 鍵を配る API そのもの (/denpa/card/init・/denpa/card/ecm) は、このポートには無い (CardShareServer.cs)
  */
 app.MapGet("/denpa/card", async (HttpContext http) =>
 {
     var status = await Task.Run(() => Card.Status(pool.Descrambling));
-    if (sharing is not null) status["share"] = cardLan.ToJson();
     await Respond.Write(http, status);
 });
 
