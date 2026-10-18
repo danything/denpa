@@ -5,9 +5,7 @@ import { orm } from '#lib/server/db.js';
 import { recordings } from '#lib/server/schema.js';
 import { cardStatus } from '#lib/server/scramble.js';
 import { type AgentTuner, putTuners, type TunerConfig, tunerList } from '#lib/server/tuner.js';
-import type { ChannelType } from '#lib/types.js';
-
-const TYPES: ChannelType[] = ['GR', 'BS', 'CS'];
+import { CHANNEL_TYPES } from '#lib/types.js';
 
 interface TunerUser {
     use: string;
@@ -139,7 +137,7 @@ export const actions = {
                 return fail(400, { message: '名前は空にできません' });
             }
 
-            const types = TYPES.filter((type) => form.get(`type.${index}.${type}`) !== null);
+            const types = CHANNEL_TYPES.filter((type) => form.get(`type.${index}.${type}`) !== null);
             if (types.length === 0) {
                 return fail(400, { message: `${name}: 受信できる種別を1つ以上選んでください` });
             }

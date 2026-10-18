@@ -50,7 +50,6 @@
                 <CheckRow
                     name="move"
                     checked={false}
-                    testid="migrate-move"
                     title="コピーではなく移動する"
                     hint="空き容量が足りないときだけ移動にしてください"
                     detail="既定はコピーです。中身を確かめてから EPGStation 側を消せます。"

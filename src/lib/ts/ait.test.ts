@@ -6,7 +6,7 @@ import { aitSection, aitSignallingDescriptor, packetize, patSection, programMap 
  * **Hybridcast の在り処だけを読む。**
  *
  * データ放送と違って、アプリの中身は電波に乗っていない。乗っているのは
- * 「どこにあるか」だけなので、ここで確かめるのは**住所を正しく組み立てられるか**。
+ * 「どこにあるか」だけなので、ここで確かめるのは**アドレス (URL) を正しく組み立てられるか**。
  * denpa はアプリを動かさない ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  */
 

@@ -15,21 +15,16 @@
         testid,
         children,
     }: {
-        testid: string;
+        testid?: string;
         children: Snippet;
     } = $props();
 </script>
 
-<span class="note" data-testid={testid}>{@render children()}</span>
+<span class="stage-note note" data-testid={testid}>{@render children()}</span>
 
 <style>
+    /* 見た目は app.css の `.stage-note` (押せる通知も同じ形にする) */
     .note {
         pointer-events: none;
-        max-width: 100%;
-        padding: 0.25rem 0.75rem;
-        border-radius: 1rem;
-        background: rgb(0 0 0 / 0.6);
-        font-size: var(--dp-text-xs);
-        color: #fff;
     }
 </style>

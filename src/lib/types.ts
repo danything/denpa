@@ -11,8 +11,11 @@ import type {
 
 export type ChannelType = 'GR' | 'BS' | 'CS' | 'SKY';
 
+/** 受信の設定・番組表・ライブで並べる種別とその順 (地上波・BS・CS)。SKY を選べるのはルールの条件だけ */
+export const CHANNEL_TYPES: readonly ChannelType[] = ['GR', 'BS', 'CS'];
+
 /**
- * 番組詳細に出す分。番組表・予約一覧・録画一覧のどこから開いても同じ見た目で見せる。
+ * 番組詳細に出す分。番組表・ホーム (予約と録画)・ルールのどこから開いても同じ見た目で見せる。
  * 予約や録画からは局名しか手元に無いので、局IDではなく名前で持つ。
  */
 export interface ProgramDetail {

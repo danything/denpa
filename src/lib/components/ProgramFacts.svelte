@@ -8,7 +8,7 @@
      *
      * モーダル (`ProgramDetail.svelte`) と、観る画面・ライブ・追っかけの右側
      * (`FactsAside`) の両方から使う。**同じものを2つ書くと、片方だけ
-     * 直したときに見え方がずれる** — 実際、番組表・予約一覧・録画一覧で
+     * 直したときに見え方がずれる** — 実際、番組表・予約・録画で
      * 見え方を揃えるためにモーダルへ寄せたのが元の理由で、観る画面もその続き。
      */
     let {
@@ -175,7 +175,7 @@
         max-height: 12rem;
         overflow: auto;
         padding: 0.5rem;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-subtle);
         font-family: ui-monospace, monospace;
         font-size: var(--dp-text-xs);

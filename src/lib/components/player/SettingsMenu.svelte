@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { getContext, tick } from 'svelte';
+    import { tick } from 'svelte';
     import Menu from '../Menu.svelte';
     import ControlButton from './ControlButton.svelte';
-    import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
+    import { stageMenu } from './controls.svelte';
     import Icon from './Icon.svelte';
     import { BACK, CHECK, FORWARD, SETTINGS } from './icons';
     import type { SettingChoice, SettingToggle } from './settings';
@@ -10,8 +10,9 @@
     /**
      * 再生の設定 (⚙)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
      *
-     * 端末ごとに決めて、たいていは決めたまま観るもの (コーデック・音声・字幕の言語・CMスキップ・アンビエントモード・
-     * バックグラウンド再生) を1つにまとめる。1つずつボタンにしていた頃は操作バーに押すものが並びすぎ、
+     * 端末ごとに決めて、たいていは決めたまま観るもの (CMスキップ・アンビエントモード・バックグラウンド再生・
+     * 互換モード・字幕の言語・音声・コーデック) を1つにまとめる (並べるものは `StageTail` が決める)。
+     * 1つずつボタンにしていた頃は操作バーに押すものが並びすぎ、
      * 毎回使うもの (再生・シーク・音・速さ) が埋もれていた。
      *
      * **速さと字幕の出し入れは操作バーにも置く。** 速さは観ながら何度も変え、変えている間は数字がボタンに出る
@@ -61,17 +62,8 @@
         });
     });
 
-    /** 開いている間は操作列を残す (`OverlayMenu` と同じ) */
-    const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
-    $effect(() => {
-        if (controls === undefined) return;
-        controls().hold = open;
-        return () => {
-            controls().hold = false;
-        };
-    });
-    /** メニューは舞台の枠の中に収める (`OverlayMenu` と同じ) */
-    const stage = getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
+    /** 開いている間は操作列を残し、メニューは舞台の枠の中に収める (`stageMenu`) */
+    const stage = stageMenu(() => open);
 
     /** 並びを替え、フォーカスを移す (入ったら選ばれているもの、戻ったら入った行) */
     async function go(next: string | null): Promise<void> {
@@ -207,7 +199,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: var(--pico-muted-color);
+        color: var(--dp-muted);
     }
     .back {
         border-bottom: 1px solid var(--dp-line);

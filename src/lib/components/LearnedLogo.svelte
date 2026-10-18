@@ -59,7 +59,7 @@
     .learned-image {
         height: 1.6rem;
         max-width: 4.8rem;
-        border-radius: 0.2rem;
+        border-radius: var(--dp-radius-sm);
         object-fit: contain;
         image-rendering: pixelated;
         /* 縁を白で出すので、下地は暗いほうに寄せた枠色を使う */

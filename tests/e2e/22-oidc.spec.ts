@@ -28,7 +28,7 @@ const test = base.extend<Record<never, never>, { oidc: OidcStack }>({
     ],
 });
 
-/** LAN の外から来たことにする住所 */
+/** LAN の外から来たことにするアドレス */
 const OUTSIDE = '203.0.113.9';
 /** 素通しにしてあるネットワークの中 */
 const INSIDE = '10.10.5.9';
@@ -291,7 +291,7 @@ test.describe('ネットワークで素通し', () => {
     });
 
     test('どの名前で来たかは問わない', async ({ oidc }) => {
-        // 名前で分けるのは前段 (Traefik) の仕事。ここでは住所だけ見る
+        // 名前で分けるのは前段 (Traefik) の仕事。ここではアドレスだけ見る
         const get = client(oidc, { host: 'lan.denpa.test', xff: INSIDE });
         expect((await get('/')).res.status).toBe(200);
     });

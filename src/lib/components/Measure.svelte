@@ -290,7 +290,7 @@
         z-index: 100;
         max-width: 95vw;
         padding: 0.25rem 0.5rem;
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         background: rgb(0 0 0 / 0.85);
         color: #fff;
         font-family: ui-monospace, monospace;

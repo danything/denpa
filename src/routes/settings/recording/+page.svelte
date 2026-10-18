@@ -187,23 +187,20 @@
                     <CheckRow
                         name="keepOriginal"
                         checked={recording.keepOriginal}
-                        testid="global-keep"
                         title="元のTSも残す"
                         hint="エンコードしたあとも元のTSを消しません。容量を多く使います"
                     />
                 </div>
                 <!--
-                    コマ数 (30/60) は本編映像から実測して決める (encoder.measureSmoothMotion)。
+                    コマ数 (30/60) は本編映像のフィールドを比べて決める (`server/fps.ts`)。
                     放送は素材が何でも 1080i/60 で来るので、ジャンルにもTSのヘッダにも
-                    本当のコマ数は入っていない。60コマに起こして同じフレームが並ぶ割合を
-                    数えるのが唯一の見分け方だった (実測: アニメ 21〜55% / 生放送 71%)
+                    本当のコマ数は入っていない
                 -->
                 <div class="field">
                     <span class="field-label">コマ数</span>
                     <CheckRow
                         name="fpsDetect"
                         checked={recording.fpsDetect}
-                        testid="global-fps-detect"
                         title="コマ数を映像から決める"
                         hint="アニメなどは 30コマにして、時間とサイズを半分にします"
                         detail="同じコマが続く映像 (アニメなど) を見分けて 30コマでエンコードします。外すとすべて 60コマになります。"
@@ -253,7 +250,6 @@
                     <CheckRow
                         name="freeOnly"
                         checked={recording.freeOnly}
-                        testid="global-free-only"
                         title="自動予約は無料放送だけにする"
                         hint="契約していない有料放送は、録画してもスクランブルのままで観られません"
                     />

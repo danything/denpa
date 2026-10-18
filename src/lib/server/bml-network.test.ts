@@ -9,7 +9,7 @@ import { allowed, isPublicAddress, Refused } from './bml-network';
  * ここで固定する ([bml-network.ts](bml-network.ts))。
  */
 
-describe('繋いでよい住所か', () => {
+describe('繋いでよいアドレスか', () => {
     test('公開のものは通す', () => {
         for (const address of ['1.1.1.1', '203.0.113.9', '2400:2410::1', '8.8.8.8']) {
             expect(isPublicAddress(address)).toBe(true);

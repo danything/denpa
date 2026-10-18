@@ -84,7 +84,7 @@ export { default as PIP } from '~icons/lucide/picture-in-picture-2';
 export { default as PLAY } from '~icons/lucide/play';
 /** CM飛ばし。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
 export { default as CUT } from '~icons/lucide/scissors';
-/** 再生の設定 (⚙ `SettingsMenu`)。端末ごとに決めるもの (コーデック・音声・CMスキップ・アンビエントモード・バックグラウンド再生) をまとめたメニュー */
+/** 再生の設定 (⚙ `SettingsMenu`)。端末ごとに決めるもの (CMスキップ・アンビエントモード・バックグラウンド再生・互換モード・字幕・音声・コーデック) をまとめたメニュー */
 export { default as SETTINGS } from '~icons/lucide/settings';
 /** チャプター送り・戻し */
 export { default as PREV } from '~icons/lucide/skip-back';
@@ -116,7 +116,7 @@ export const OVERLAY = 'ov';
  * `btn-sm` (32px) にしていた頃は、**タブレットでもPCでも小さすぎた** —
  * 映像の上に薄く敷くものなので、輪郭で狙うのではなく面で狙うことになる。
  *
- * 引き出し (速さ・音声・エンコード方式) のボタンも同じ大きさで揃える (`OverlayMenu` の
+ * メニュー (速さ・再生の設定) のボタンも同じ大きさで揃える (どちらも
  * ボタンは ControlButton)。ボタンでない `<a>` (閉じる) にはここの字を直に当てる
  */
 export const OVERLAY_BTN = 'ov-btn';

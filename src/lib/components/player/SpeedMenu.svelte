@@ -35,7 +35,7 @@
         speed,
         onselect,
     }: {
-        testid: string;
+        testid?: string | undefined;
         label: string;
         speed: number;
         onselect: (speed: number) => void;

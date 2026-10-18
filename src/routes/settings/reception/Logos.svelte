@@ -155,6 +155,6 @@
         width: 2.4rem;
         height: 1.35rem;
         border: 1px dashed var(--dp-line-strong);
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
     }
 </style>
