@@ -393,13 +393,10 @@
     }
     .search-form {
         display: flex;
-        gap: var(--dp-space-2);
+        /* 入力欄とボタンはつなげる (`app.css` の role="search" の角の決まり) */
         margin: 0;
         /* Pico の role=search は中の物を等分に伸ばす。欄だけを伸ばす (下の input) */
         align-items: stretch;
-    }
-    .search-form :is(input, button) {
-        border-radius: var(--dp-radius);
     }
     .search-form input {
         flex: 1 1 0%;

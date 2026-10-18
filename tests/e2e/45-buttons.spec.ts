@@ -37,13 +37,17 @@ test.describe('ボタンの見た目', () => {
             probe.remove();
             return color;
         });
-        const submit = await look(page.getByTestId('guide-filter').getByRole('button', { name: '検索' }));
-        expect(submit.background).not.toBe(primary);
-
         const prev = await look(page.getByTestId('prev-day'));
         expect(prev.border).toBe('rgba(0, 0, 0, 0)');
         expect(prev.background).not.toBe('rgba(0, 0, 0, 0)');
         expect(prev.radius).toBeGreaterThanOrEqual(prev.height / 2);
+
+        // 主のボタンの代表は検索の画面の「検索」(番組表の検索欄はサイト全体の検索に寄せた)
+        await goto(page, '/search');
+        const submit = await look(
+            page.getByRole('search', { name: 'サイト内' }).getByRole('button', { name: '検索' }),
+        );
+        expect(submit.background).not.toBe(primary);
     });
 
     test.describe('指で押す端末', () => {

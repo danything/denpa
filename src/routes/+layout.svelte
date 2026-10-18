@@ -713,7 +713,7 @@
         margin: 0;
         padding-inline: var(--dp-space-3) var(--dp-space-2);
         border: 1px solid var(--dp-line);
-        border-radius: var(--dp-radius);
+        border-radius: var(--dp-radius-full);
         background: var(--dp-subtle);
         color: var(--dp-muted);
     }
