@@ -318,8 +318,8 @@ test.describe('ホームと画面遷移', () => {
         await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/');
 
-        // 右のサイドバーは無い。頭の1行 (チップと「⋯」) は 44px に収まり、「⋯」は指で押せる高さ
-        await expect(page.getByTestId('sidebar')).toHaveCount(0);
+        // 狭い幅では右のサイドバーは出さない。頭の1行 (チップと「⋯」) は 44px に収まり、「⋯」は指で押せる高さ
+        await expect(page.getByTestId('sidebar')).toBeHidden();
         const bar = page.getByTestId('timeline-toolbar');
         expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(44);
         const more = page.getByTestId('view-toggle');
@@ -338,7 +338,7 @@ test.describe('ホームと画面遷移', () => {
         expect(front).toBe(true);
         // 空きは狭い幅では「⋯」の中に出す (広い幅は頭の1行のまとめ)
         await expect(menu.getByTestId('recordings-capacity-menu')).toBeVisible();
-        await expect(page.getByTestId('summary')).toBeHidden();
+        await expect(page.getByTestId('bar-summary')).toBeHidden();
         await menu.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる

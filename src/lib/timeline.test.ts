@@ -133,7 +133,22 @@ describe('絞り込み', () => {
             recording: 1,
             unfinished: 2,
             failed: 2,
+            attention: 2,
+            conflict: 0,
+            cmlogo: 0,
         });
+    });
+
+    test('見てほしいことは、競合の予約・失敗・CM の判定ができなかった録画', () => {
+        const conflict = { unfinished: false, failed: false, conflict: true };
+        const cmlogo = { unfinished: false, failed: false, cmlogo: true };
+        expect(passes('attention', items[0]!, conflict)).toBe(true);
+        expect(passes('conflict', items[0]!, conflict)).toBe(true);
+        // 競合は予約だけ (録れたものに付いていても数えない)
+        expect(passes('conflict', items[2]!, conflict)).toBe(false);
+        expect(passes('attention', items[2]!, cmlogo)).toBe(true);
+        expect(passes('attention', items[4]!, traits(items[4]!))).toBe(true);
+        expect(passes('attention', items[2]!, plain)).toBe(false);
     });
 
     test('予約は線の上、録画中は線の下、未視聴と失敗は録れたものだけ', () => {
