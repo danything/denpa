@@ -176,17 +176,30 @@
             if (event.target instanceof Node && content?.contains(event.target)) return;
             place();
         };
+        // 中身が入れ替わったら置き直す (⚙ の選択肢の並びに入ると高さが変わる)。**置いた直後の大きさと同じなら何もしない** —
+        // 置き直しが `max-height` を書き換えたぶんで、また置き直すことを繰り返さない
+        const resized = new ResizeObserver(() => {
+            if (content !== null && sizeOf(content) !== placed) place();
+        });
+        if (content !== null) resized.observe(content);
         window.addEventListener('pointerdown', onpointerdown, true);
         document.addEventListener('keydown', onkey);
         window.addEventListener('resize', update);
         window.addEventListener('scroll', update, true);
         return () => {
+            resized.disconnect();
             window.removeEventListener('pointerdown', onpointerdown, true);
             document.removeEventListener('keydown', onkey);
             window.removeEventListener('resize', update);
             window.removeEventListener('scroll', update, true);
         };
     });
+
+    /** 最後に置いたときの大きさ (`幅x高さ`)。中身の大きさが変わったかを見るのに使う */
+    let placed = '';
+    function sizeOf(element: HTMLElement): string {
+        return `${element.offsetWidth}x${element.offsetHeight}`;
+    }
 
     const GAP = 4;
     const PADDING = 4;
@@ -202,9 +215,10 @@
         const area = boundary?.() ?? null;
         const style = element.style;
         if (area === null && anchorSupported) {
-            for (const name of ['position-area', 'inset', 'margin', 'top', 'left', 'min-width', 'max-height']) {
+            for (const name of ['position-area', 'position-try-fallbacks', 'inset', 'margin', 'top', 'left', 'min-width', 'max-height']) {
                 style.removeProperty(name);
             }
+            placed = sizeOf(element);
             return;
         }
         const button = triggerElement();
@@ -215,6 +229,9 @@
         const box = area?.getBoundingClientRect() ?? new DOMRect(0, 0, root.clientWidth, root.clientHeight);
 
         style.setProperty('position-area', 'none');
+        // 入りきらないときに反対へ出すのはここで決める。CSS の `flip-block` を残すと、JS で置いた上下の位置を
+        // ブラウザがさらに裏返して、枠の外 (画面の下端) へ出していた (狭い枠で ⚙ の行が増えたとき)
+        style.setProperty('position-try-fallbacks', 'none');
         style.setProperty('inset', 'auto');
         style.setProperty('margin', '0');
         style.setProperty('top', '0');
@@ -240,6 +257,7 @@
         style.setProperty('top', `${top}px`);
         style.setProperty('left', `${left}px`);
         element.scrollTop = scrolled;
+        placed = sizeOf(element);
     }
 
     function onTriggerKey(event: KeyboardEvent): void {

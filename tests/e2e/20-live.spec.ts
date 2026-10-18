@@ -1398,6 +1398,9 @@ test.describe('ライブ視聴', () => {
 
         const gear = page.getByTestId('live-settings');
         const menu = page.getByTestId('live-settings-menu');
+        // 広い枠では何も畳まないので、⚙ の頭に操作バーのもの (消音・小窓) は並ばない
+        await expect(page.getByTestId('live-mute')).toHaveCount(0);
+        await expect(page.getByTestId('live-pip-mode')).toHaveCount(0);
         await expect(gear).toHaveAttribute('aria-haspopup', 'menu');
         await gear.focus();
         await page.keyboard.press('Enter');
@@ -1765,12 +1768,12 @@ test.describe('スマホの横でライブ', () => {
 
 /**
  * **スマホの縦 (360px・320px) でも、操作バーのボタンは1行。** 残すのは再生・ライブ・読みもの・全画面と
- * 「ほか」だけ。音・字幕・エンコード方式などは「ほか」に畳み、そこから押せる
+ * ⚙ だけ。音・速さ・小窓などは ⚙ の頭に畳み、そこから押せる
  */
 test.describe('スマホの縦でライブ', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 360, height: 780 } });
 
-    test('幅 360px・320px でも操作バーのボタンは1行で、畳んだ音は「ほか」から押せる', async ({ page }) => {
+    test('幅 360px・320px でも操作バーのボタンは1行で、畳んだ音は ⚙ から押せる', async ({ page }) => {
         for (const width of [360, 320]) {
             await page.setViewportSize({ width, height: 780 });
             await goto(page, '/live');
@@ -1786,18 +1789,24 @@ test.describe('スマホの縦でライブ', () => {
             await expect(page.getByTestId('live-settings')).toBeVisible();
             await page.screenshot({ path: test.info().outputPath(`live-${width}.png`) });
 
+            // 畳んだ音は ⚙ の頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
             const sound = page.getByTestId('live-sound');
             await expect(sound).toBeHidden();
-            await page.getByTestId('live-more').tap();
-            await expect(sound).toBeVisible();
+            await expect(page.getByTestId('live-more')).toHaveCount(0);
             const label = (await sound.getAttribute('aria-label')) ?? '';
-            await sound.tap();
+            await page.getByTestId('live-settings').tap();
+            const mute = page.getByTestId('live-mute');
+            await expect(mute).toBeVisible();
+            await expect(mute).toHaveAttribute('role', 'menuitemcheckbox');
+            const muted = (await mute.getAttribute('aria-checked')) ?? '';
+            await mute.tap();
+            await expect(mute).not.toHaveAttribute('aria-checked', muted);
             await expect(sound).not.toHaveAttribute('aria-label', label);
             await page.screenshot({ path: test.info().outputPath(`live-${width}-more.png`) });
 
-            // 閉じれば1行に戻る
-            await page.getByTestId('live-more').tap();
-            await expect(sound).toBeHidden();
+            // 閉じても1行のまま
+            await page.keyboard.press('Escape');
+            await expect(page.getByTestId('live-settings-menu')).toBeHidden();
             expect(await oneRowTroubles(page, 'live-buttons'), `${width}px (閉じたあと)`).toEqual([]);
 
             // メニュー (再生の設定のコーデック) の外を押しても閉じるだけ。押した局には替わらない (もう一度押せば替わる)
