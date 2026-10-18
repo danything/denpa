@@ -41,7 +41,7 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
     }
     .empty:not(:empty) {
         background: var(--dp-line);
