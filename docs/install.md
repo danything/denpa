@@ -12,7 +12,7 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
 - **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
-  `compose.override.yml` で渡します (Helm は既定で渡す)。QSV は amd64 だけで、arm64 は VA-API かソフトウェア
+  `compose.override.yml` で渡します (Helm は既定で渡す)。GPU を使えるのは amd64 だけで、arm64 はソフトウェアでエンコードします
   ([encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api))
 
 ## 1行で入れる
@@ -115,23 +115,22 @@ services:
             OIDC_CLIENT_SECRET: <クライアントシークレット>
 ```
 
-Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に書きます。
+Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `denpa.trustedNetworks` と
+`denpa.oidcSecretName` に書きます。
 **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います。
 ログインの細かいことは [auth.md](auth.md)、変数の一覧は [config.md](config.md)。
 
 ## LAN でも https で開く
 
-**持っているドメインの名前を LAN 内のアドレスに向ければ、公開しないまま本物の証明書が
-使えます**（DNS-01 なので外から繋がる必要が無い。`.arpa` のような内側だけの名前は ACME で
-取れない）。この家では chart の `httpRoute.hostnames` に足した https://dp.l.doany.io で、
-名前は家の中でだけ引け、そこから来た人には何も聞きません
-（[auth.md](auth.md#ネットワークの中なら何も聞かない)）。テレビのアプリが録画を取りに来るのも
-同じ URL です。ホーム画面に置けるのも全画面にできるのも https のページだけなので、PWA にも要ります。
+**持っているドメインの名前を LAN の中のアドレスに向ければ、公開しないまま本物の証明書が
+使えます** (DNS-01 なら外から繋がる必要が無い。`.arpa` のような内側だけの名前は ACME で
+取れない)。ホーム画面に置けるのも全画面にできるのも https のページだけなので、PWA にも要ります。
+外向きと LAN 用の2つの名前で出すなら、ホーム画面の名前を分けられます ([watch.md](watch.md#ホーム画面に置く))。
 
 ## うまくいかないとき
 
 立てたあとの手順は [README](../README.md#3-開く)。うまくいかないときは「チューナー」の画面を見ます。エージェントと
-カードリーダーの状態、スキャンの結果、番組表の集まり具合が出ます。Helm の `TRUSTED_NETWORKS` は `denpa.trustedNetworks` です。
+カードリーダーの状態、スキャンの結果、番組表の集まり具合が出ます。
 
 イメージにはシェルがありません (土台は distroless。[development.md](development.md#イメージの土台は-distroless))。
 コンテナの中を見るときは、シェルのあるコンテナを横に付けます。

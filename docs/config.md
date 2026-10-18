@@ -1,17 +1,11 @@
 # 環境変数
 
-**外から差し替える理由があるものだけ。** 相手の場所と、テストで詰めたい間隔です。
-検出のしきい値やサムネイルの大きさまで環境変数にしていた頃は、誰も触らないのに
-既定値の出どころが追いにくくなるだけでした (`src/lib/server/config.ts` に直に書いてあります)。
+**環境変数にするのは、外から差し替える理由があるものだけです** (相手の場所と、テストで詰めたい間隔)。
+それ以外の値は `src/lib/server/config.ts` に直に書いてあります。画面から変えるものは設定画面
+(`src/lib/server/settings.ts`。何があるかは [app.md の画面](app.md#画面)の `/settings` の行)。
 
-画面から変えたいものは設定画面 (`src/lib/server/settings.ts`)。何があるかは
-[app.md の画面](app.md#画面)の `/settings` の行に。
-
-本番で差し替えているのは、既定値では決められないものだけです
-(前段の渡し方・OIDC・素通しにするネットワーク・PWA の名前)。置き場所は
-`deploy/application.yaml` の `helm.valuesObject` (chart の既定値 `charts/denpa/values.yaml`
-に重なる)。置き場所やエージェントの場所は既定値がそのままあの構成なので書いていません。
-同じ値を書き写すと、片方だけ直したときにどちらが効いているのか分からなくなります。
+ふつう書くのは、既定値では決められないもの (誰を通すか・前段・OIDC・PWA の名前) だけです。
+Helm では `charts/denpa/values.yaml` のキーで渡します。
 
 | 変数 | 既定値 | 説明 |
 | --- | --- | --- |
@@ -52,7 +46,7 @@
 | `OIDC_GROUP` | (空) | このグループにいる人だけ通す。空なら入れた人は全員 |
 | `TRUSTED_NETWORKS` | (空) | CIDR (IPv4・IPv6) のカンマ区切り。ここから来たら認証を掛けない (前段があるなら `TRUSTED_PROXIES` も要る) |
 | `TRUSTED_PROXIES` | (空) | 前段 (リバースプロキシ) のアドレス。CIDR (IPv4・IPv6) のカンマ区切り。直の相手がここに当たるときだけ `X-Forwarded-For` を右から辿り、前段でない最初のアドレスを接続元にする (`src/lib/server/address.ts`)。前段があるのに空だと `TRUSTED_NETWORKS` が誰にも当たらない ([auth.md](auth.md#前段の後ろに置くとき-trusted_proxies)) |
-| `PORT` / `HOST` | `3000` / `0.0.0.0` | 待ち受けるポートと住所 (adapter-bun が読む) |
+| `PORT` / `HOST` | `3000` / `0.0.0.0` | 待ち受けるポートとアドレス (adapter-bun が読む) |
 | `BODY_SIZE_LIMIT` | `512K` | 受け取るリクエストの本文の上限 (adapter-bun が読む。超えると 413) |
 | `ADDRESS_HEADER` | — | 読みません (廃止。`TRUSTED_PROXIES` を使う)。設定してあれば起動時に知らせる。`server.js` が adapter-bun 向けに `x-denpa-remote` へ固定する |
 | `PROTOCOL_HEADER` | — | 選べません。 `server.js` が常に `x-forwarded-proto` に固定します |
@@ -65,9 +59,7 @@
 
 ## 録画のダウンロードを無くした (前の版から上げるとき)
 
-**エンコードした録画 (mkv) にはコピー制御の符号が引き継がれないため、録画をファイルとして
-外へ持ち出す機能は持たないことにした** (元のTSは符号が入ったまま保存していて、取り除いたり書き換えたりはしていない。
-[Discussion #760](https://github.com/danything/denpa/discussions/760))。
+**録画をファイルとして外へ持ち出す機能はやめた** (理由は [library.md](library.md#観るのはブラウザで))。
 
 - 録画の詳細 (「その他…」) と番組表の詳細から、ダウンロードのボタンが無くなった
 - `/api/recordings/<id>/file` は `?download=1` を読まなくなり、添付 (`Content-Disposition`) を付けない。
@@ -104,8 +96,8 @@
 - 前段が無い構成 (compose の既定・Windows のインストーラ・`denpa-aio`) は何もしなくてよい。
   Linux・Mac のインストーラは前に genkan (Caddy) を立てるが、genkan の住所は既定の
   `TRUSTED_NETWORKS` に入り、私設網の外は genkan が断るので、こちらも何もしなくてよい
-- 前段のアドレスの例: Docker の compose で同じネットワークにいるなら `172.16.0.0/12`、k3s の
-  Pod や hostNetwork の Gateway (Cilium の Envoy など) なら Pod の網 (`10.42.0.0/16`)
+- 前段のアドレスの例: Docker の compose で同じネットワークにいるなら `172.16.0.0/12`、Kubernetes の
+  Pod や hostNetwork の Gateway (Cilium の Envoy など) なら Pod のネットワーク (k3s の既定なら `10.42.0.0/16`)
 - `TRUSTED_NETWORKS` も IPv6 を CIDR で書けるようになった (前は書いたとおりの一致だけ)
 
 ## 置き場を変えた (前の版から上げるとき)
@@ -153,5 +145,5 @@
   `persistence.raw.existingClaim`)
 - **名前ごと移す**: アプリを止め、PV の reclaim を `Retain` にして古い PVC を消し、PV の
   `claimRef` を外してから、新しい名前の PVC を `volumeName` で同じ PV に結ぶ。中身はコピーしない
-  (danything/gitops はこのやり方で移した)
-- compose の名前付きボリューム (`denpa-recorded` / `denpa-library`) は**変えていない**。
+
+compose の名前付きボリューム (`denpa-recorded` / `denpa-library`) は**変えていない**。

@@ -67,15 +67,6 @@ GStreamer には ARIB/ISDB の知識も前例も無い。
 **本当に縮めたいなら、エンコードするのをやめるほうが桁違いに効く**（[放送そのまま（MPEG-2）を送る](stream.md#放送そのままmpeg-2を送る)）。WHEP はその後でいい。
 ffmpeg の WHIP muxer も H.264/Opus 固定の experimental で AV1 が使えず、通すなら MediaMTX 経由になる。
 
-### MPEG-TS への AV1 多重 — 保留
-
-AOM 公式仕様（AOMediaCodec/av1-mpeg2-ts、stream_type 0x06 + format_identifier `AV01`）はあるが、
-FFmpeg は PR、GStreamer は WIP 段階で、ブラウザ側のデマクサも無い。継続監視する。
-
-### Media over QUIC — 低遅延化の候補
-
-字幕・データ放送を第一級のトラックとして扱える唯一の選択肢だが、IETF ドラフト段階。
-
 ## 既知のリスク・未解決事項
 
 | 項目 | 内容 | 対応 |
@@ -94,8 +85,5 @@ AV1 の負荷は [エンコード](stream.md#エンコード)、字幕にかか�
 | --- | --- |
 | otya128/web-bml | データ放送 (2026-10 まで描く側を借りていた。自前のエンジンの振る舞いの手本) |
 | xqq/libaribcaption | 字幕のデコード方法と表の写し元（`ts/b24caption.ts`・`ts/b24-tables.ts`。ffmpeg には組み込まない） |
-| Vanilagy/mediabunny | WebCodecs 移行時のデマクサ |
-| kixelated/moq | 低遅延化の候補 |
-| video-dev/hls.js / shaka-project/shaka-player / monyone/biim | HLS・DASH・LL-HLS の経路を採る場合 |
 | xtne6f/tsreadex / xtne6f/psisiarc | TS 整形・データ放送抽出（**どちらも要らなくなった** — [`tsreadex` は挟まない](#tsreadex-は挟まない)・[データ放送の統合](stream.md#データ放送の統合)） |
 | monyone/aribb24.js / xqq/mpegts.js | ブラウザ側で字幕を描く・MPEG-TS を直接再生する場合（不採用。[採用しなかったもの](#採用しなかったもの)） |

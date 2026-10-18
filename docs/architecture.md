@@ -111,7 +111,7 @@ ScalingReplicaSet (旧Podを削除) → Pulling → Pulled 13.6秒 → Started �
 ```
 
 そこで、マニフェストを当てる前にイメージだけ引いておく Job を ArgoCD の
-PreSync フックに置いています (`denpa-prepull`、中身は `/bin/true`)。
+PreSync フックに置いています (`denpa-prepull`。土台は distroless で `/bin/true` も無いので、`bun --version` で終わる)。
 入れ替えのときにはノードの手元にあり、隙間は起動そのものだけになります。
 
 ### 録画そのものは引き継がない
@@ -138,9 +138,9 @@ arch ごとにその arch のランナー (amd64 は `ubuntu-latest`、arm64 は
 組んで digest だけで push し、最後に両方を束ねた索引へ名前を付けます
 (`.github/workflows/build-and-deploy.yml`)。QEMU で arm64 を組むと ffmpeg と Native AOT が
 何倍も掛かるので使いません。片方の arch が落ちたら名前は付けません。片方だけの
-`develop` が出ていくより、前のものが残るほうがいい。中身の違いは Intel の QSV だけで、
-Debian では amd64 にしか無いので arm64 のイメージには入れていません
-([encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api))。
+`develop` が出ていくより、前のものが残るほうがいい。中身の違いは Intel の GPU の部品 (QSV と
+VA-API のドライバ) だけで、Debian では amd64 にしか無いので arm64 のイメージには入れていません
+(arm64 はソフトウェアでエンコードする。[encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api))。
 
 `denpa-aio` (本体とエージェントを1つにしたもの) も同じ名前で出ます。組み直さず、束ねた2つを
 写すだけです (`.github/aio.Dockerfile`)。main では `develop` と `<denpa の sha>-<agent の sha>`、
@@ -188,26 +188,16 @@ GHCR に繋がらないと Pod が起動しません。
 ## クラスタ側の前提条件
 
 **入れ方は Helm chart** ([charts/denpa](../charts/denpa)。エージェントだけ置くなら
-[charts/denpa-agent](../charts/denpa-agent))。この家の本番は ArgoCD が
-[deploy/application.yaml](../deploy/application.yaml) を見て、同じ chart にそこの
-`helm.valuesObject` (インライン) を重ねて当てており、chart の使い方の実例として
-読めます。bootstrap の ApplicationSet は `deploy/` を「素のマニフェストの置き場」として
-読む (置き場の設定は `deploy/argocd.yaml`) ので、そこには Application (chart を指す) と、
-chart に持たないこの家の事情だけを素のまま置いています。事情とは InfisicalSecret
-(Infisical から Secret を作る) と Namespace (PSA を privileged にするラベル。名前空間
-そのものは `CreateNamespace` が作る) の2つです。値を別ファイルにしないのも同じ理由 (kind が無いので
-ApplicationSet が読めない)。
+[charts/denpa-agent](../charts/denpa-agent))。このリポジトリ自身の本番は ArgoCD が
+[deploy/application.yaml](../deploy/application.yaml) の Application から同じ chart を当てていて、
+値はそこの `helm.valuesObject` にあります (chart の使い方の実例として読めます。なぜそう置くかは
+ファイルの頭のコメント)。クラスタの初期構築や共通アドオンは別のリポジトリです。chart を当てる前に以下が要ります。
 
-このリポジトリには `denpa` namespace のアプリ本体しか入っていません。クラスタの初期構築や
-共通アドオンは別の bootstrap リポジトリ側です。適用前に以下が要ります。
-
-- **StorageClass `local-path`** — 既定の local-path (`reclaimPolicy: Delete`)。PVC を守るのは
-  ArgoCD の Prune ではなく日次の restic (2026-10-05 に `local-path-retain` から寄せた)
-- **Gateway API の Gateway** — chart の `httpRoute.parentRefs` が指す先。証明書は
+- **StorageClass** — `persistence.storageClassName` (空ならクラスタの既定)。PVC を消させない設定は
+  `persistence.protectFromPruning` (values.yaml に理由つき)
+- **Gateway API の Gateway か Ingress** — chart の `httpRoute.parentRefs` / `ingress` が指す先。証明書は
   Gateway 側のリスナーが持ちます
-- **ArgoCD** — 上の ApplicationSet が `deploy/argocd.yaml` を見て Application を拾います
-- **DNS** — `dp.doany.io` が Gateway の外部IPを指すこと。
-  LAN 用の `dp.l.doany.io` は `*.l.doany.io` の書き換えで内側のIPへ
+- **DNS** — denpa の名前が Gateway のアドレスを指すこと
 - **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、DVB の機材はノード側にドライバが読み込まれていること。
   PX-Q3U4 など px4-userland の対応機種と、smsusb を blacklist した PX-S1UD はノードに

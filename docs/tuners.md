@@ -21,17 +21,7 @@
   Kubernetes なら Helm
 - あれば Intel の GPU (`/dev/dri` を渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします
 
-## PT2・PT3・PX-BCUD (Linux DVB)
-
-[tuner-pt3.md](tuner-pt3.md)。
-
-## PX-Q3U4・PX-W3U4・PX-MLT
-
-[tuner-px4.md](tuner-px4.md)。
-
-## PX-S1UD
-
-[tuner-px-s1ud.md](tuner-px-s1ud.md)。
+機材ごとの入れ方は表のリンク先に。
 
 ## PX-W3U3 は asicen-userland で (試験的。上流のリリース待ち)
 
@@ -92,7 +82,7 @@ ATR とカードの番号を出す。動いているエージェントがリー�
 - **録画は止めません。** 電波は二度と来ないので、スクランブルされたままでも
   録ります。denpa がエンコードの前に見て、掛かったままならエージェントに
   復号させます (`src/lib/server/scramble.ts` → `/denpa/decode`)
-- やり取りするのはパスだけです。元のTSの置き場 (`denpa-raw`) を両方のコンテナに
+- やり取りするのはパスだけです。元のTSの置き場 (`/media/raw`) を両方のコンテナに
   見せてあるので、読み書きはエージェントが直接やり、数十GBを HTTP で往復させません
   (`charts/denpa` が一緒に出すときは、置き場が RWO なので**両方の Pod が同じノードにあることが前提**です)
 - 元のTSを残す設定のときは、残るのは解除済みのTSだけです。掛かったままのものは、
@@ -119,7 +109,7 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
   "message": "",
   "source": "local",
   "readers": [
-    { "name": "Gemplus USB SmartCard Reader (usb 4-11)", "card": true, "ids": ["0000032231622637"],
+    { "name": "Gemplus USB SmartCard Reader (usb 4-11)", "card": true, "ids": ["0000012345678901"],
       "active": true, "tuners": ["PT3-T1", "PT3-S1"] },
     { "name": "PX4 内蔵リーダー", "card": false, "ids": [], "active": false, "tuners": [] }
   ]

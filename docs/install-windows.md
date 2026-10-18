@@ -104,16 +104,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - USB を抜くと px4d は終わり (USB_IO)、次の選局で起こし直します。px4d が DISCONNECTED / USB_IO を返したのに
   動き続けていたら、エージェントが止めて起こし直します (同じ px4d のままの繋ぎ直しは px4-userland が確かめていない)
 
-px4-userland の README の対応表のうち Windows の行です (v0.2.1。そのまま写しています)。機種では絞らず、px4-userland が
-ready と言った筐体は使います。
-
-| OS / 環境 | 対象model/profile | build-tested | tuner-hardware-verified | card-core-hardware-verified | native-card-adapter-verified | 備考 |
-|---|---|:---:|:---:|:---:|:---:|---|
-| Windows 11 x64（Phase 1/2） | PX-Q3U4 | 完了 | 検証済み | 検証済み | 限定smoke確認 | native libusb（WinUSB）。0.2.0 candidateでE17の8 receiver受信、card hotplug/APDU、USB再接続後のdaemon再起動、2時間soak、全局受信を確認（[検証記録](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/validation-results.md#2026-10-10-v020-candidate-e17-windows-11-x64-実機試験q3u4必須matrix-pass--soak注記付き受入)）。既知の制限: 非ASCII endpoint pathでready行が途切れる（[Issue #52](https://github.com/Khronos31/px4-userland/issues/52)）。0.2.1ではx64 B25 application用の限定WinSCard.dllを同梱し、application-localでQ3U4実機のreader列挙・接続・状態取得・正常解放を限定smoke確認（[v0.2.1 evidence](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/validation-results.md#2026-10-12-v021-candidate-e17-windows-winscard-smoke限定実機確認)）。一般WinSCard/B25 application互換性は未認定（[API scope](https://github.com/Khronos31/px4-userland/blob/v0.2.1/docs/platforms/windows-winscard.md#windows-application-local-winscard)）。PC/SC IFDシステム登録は未対応 |
-| Windows 11 x64（Phase 1） | PX-M1UR / PX-S1UR | 完了 | 検証済み | 検証済み | 該当なし（N/A） | native libusb（WinUSB）。0.2.0 candidateでprofile別30分連続受信（受信中の直接APDU 300/300）、機種固有T/S（M1UR ISDB-S 0V・15V拒否、S1UR ISDB-S拒否）、stop/reopen、card抜去/再挿入、USB切断・再接続後のdaemon再起動による復旧、同時接続時のlist/JSONと曖昧serial拒否を確認。同一lease retune、同一daemonの自動USB再接続、衝突中の`--usb-path`による個別起動は未認定。既知の制限: [Issue #52](https://github.com/Khronos31/px4-userland/issues/52)。PC/SCはPhase 2 |
-| Windows 11 x64（Phase 1） | その他のmodel/profile | 完了 | 未検証（hardware-unverified） | 未検証（hardware-unverified） | 該当なし（N/A） | 実機evidenceなし |
-
-denpa が使うのは px4d の制御ソケット (受信機と内蔵カード) だけで、表の WinSCard.dll と PC/SC の列は関係しません。
+機種では絞らず、px4-userland が ready と言った筐体は使います。px4-userland 側で Windows の実機で確かめてあるのは
+PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
+denpa が使うのは px4d の制御ソケット (受信機と内蔵カード) だけで、px4-userland の WinSCard.dll と PC/SC の対応は関係しません。
 
 **使えないもの。**
 
