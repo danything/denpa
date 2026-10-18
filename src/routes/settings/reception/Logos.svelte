@@ -145,19 +145,9 @@
 </div>
 
 <style>
-    .table-wrap {
-        overflow-x: auto;
-    }
-    .table-wrap table {
-        margin: 0;
-    }
     .table-wrap th,
     .table-wrap td {
-        padding: 0.35rem 0.5rem;
         vertical-align: middle;
-    }
-    .wide {
-        width: 100%;
     }
     /* まだ取れていない局ロゴの場所。取れたロゴと同じ大きさの点線の枠 */
     .logo-slot {

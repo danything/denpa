@@ -121,6 +121,6 @@
         overflow: auto;
         margin: 0;
         padding: 0 1rem 0.75rem;
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
     }
 </style>

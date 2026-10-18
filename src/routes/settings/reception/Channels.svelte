@@ -258,16 +258,6 @@
     .empty p {
         margin: 0;
     }
-    .table-wrap {
-        overflow-x: auto;
-    }
-    .table-wrap table {
-        margin: 0;
-    }
-    .table-wrap th,
-    .table-wrap td {
-        padding: 0.35rem 0.5rem;
-    }
     /*
      * 受信できるチャンネルの表は、スマートフォンの幅では欄の間を詰める。
      * 局の欄が幅を取り、右端の「10/13 まで」が枠の外へ押し出されていた
@@ -281,9 +271,6 @@
             padding-inline: 0.3rem;
         }
     }
-    .wide {
-        width: 100%;
-    }
     .log summary {
         color: var(--dp-muted);
         cursor: pointer;
@@ -296,7 +283,7 @@
         border-radius: var(--dp-radius);
         background: var(--dp-subtle);
         font-family: var(--pico-font-family-monospace);
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         white-space: pre-wrap;
     }
     /* 受信できるチャンネルの局。折り返しても局名は割らない */
