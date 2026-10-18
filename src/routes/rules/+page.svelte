@@ -92,6 +92,21 @@
      * 画面が新しいルールの欄に化けて見える。戻る先の履歴にも残さない (戻っても無いので)。
      * 「削除しました」の知らせは移ったあとに当てる
      */
+    /**
+     * 一覧の行のスイッチを送るとき。**送っている間は押せなくする** (連打で何度も切り替わらない)。
+     * 断られたら見た目を戻す — 一覧は読み直されないので、戻さないとスイッチだけ実際とずれる
+     */
+    const switched: SubmitFunction = ({ formElement }) => {
+        const box = formElement.querySelector<HTMLInputElement>('input[role="switch"]');
+        if (box !== null) box.disabled = true;
+        return async ({ result, update }) => {
+            await update();
+            if (box !== null) {
+                if (result.type !== 'success' && result.type !== 'redirect') box.checked = !box.checked;
+                box.disabled = false;
+            }
+        };
+    };
     const leaveDeleted: SubmitFunction = () => async ({ result, update }) => {
         if (result.type !== 'success') return update();
         await goto(resolve('rules'), { replaceState: true });
@@ -304,7 +319,7 @@
                             {/if}
                         </span>
                     </a>
-                    <form method="POST" action="?/toggle" class="row-switch" use:submitting>
+                    <form method="POST" action="?/toggle" class="row-switch" use:submitting={switched}>
                         <input type="hidden" name="id" value={rule.id} />
                         <input
                             type="checkbox"
