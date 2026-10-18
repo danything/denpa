@@ -23,6 +23,19 @@ import { searchable } from './title';
  * なら行を読まずに数え、そうでない言葉 (外字に寄せた字を含む) だけ全部読んで数える
  */
 
+/** 探す言葉の長さの上限 (文字数)。番組名を丸ごと貼っても収まり、打つたびに長い言葉で4つの節を引かせない */
+export const MAX_QUERY = 100;
+
+/**
+ * URL の `q` を探す言葉にする。前後の空白を落とし、**長すぎる分は切る** (断らない。貼った番組名の
+ * 後ろが少し欠けても、前のほうで当たる)。文字で数えるので、外字 (𠮷) の途中で切れない
+ */
+export function searchQuery(raw: string | null | undefined): string {
+    const q = (raw ?? '').trim();
+    const chars = [...q];
+    return chars.length <= MAX_QUERY ? q : chars.slice(0, MAX_QUERY).join('').trimEnd();
+}
+
 /** 語に分ける。空なら空の並び (何も探さない) */
 export function searchWords(q: string): string[] {
     return searchable(q).split(/\s+/).filter(Boolean);
