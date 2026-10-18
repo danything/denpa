@@ -56,12 +56,19 @@ test.describe('アンビエントモード', () => {
             await expect.poll(updates(page), { timeout: 15_000 }).toBeGreaterThan(5);
             const before = await updates(page)();
             await expect.poll(updates(page), { timeout: 10_000 }).toBeGreaterThan(before + 5);
-            // 見出しも映像の上の端の色で塗る
-            await expect(page.locator('html')).toHaveAttribute('data-ambient-header', '');
-            const header = await page
-                .locator('.navbar')
-                .evaluate((el) => getComputedStyle(el).backgroundImage);
-            expect(header).toContain('linear-gradient');
+            // 右の列は上のほうで面の色を透かし、色の上に描く。見出しは塗らない
+            await expect(page.locator('html')).toHaveAttribute('data-ambient', '');
+            const aside = await page.locator('[data-player-layout] > aside').evaluate((el) => ({
+                position: getComputedStyle(el).position,
+                image: getComputedStyle(el).backgroundImage,
+            }));
+            expect(aside).toEqual({
+                position: 'relative',
+                image: expect.stringContaining('linear-gradient'),
+            });
+            expect(await page.locator('.navbar').evaluate((el) => getComputedStyle(el).backgroundImage)).toBe(
+                'none',
+            );
             // 光は枠の外 (帯) にだけ描く。枠に重なる帯は無い
             const stage = (await page.getByTestId('live-frame').boundingBox())!;
             for (const band of await glow.locator('.band:not([hidden])').all()) {
@@ -89,10 +96,29 @@ test.describe('アンビエントモード', () => {
             await flipSetting(page, 'live', 'ambient');
             await expect(glow).toHaveAttribute('data-plan', 'off');
             await expect(glow).toBeHidden();
-            await expect(page.locator('html')).not.toHaveAttribute('data-ambient-header');
+            await expect(page.locator('html')).not.toHaveAttribute('data-ambient');
             await page.reload();
             await expect(page.getByTestId('live-frame-ambient')).toHaveAttribute('data-plan', 'off');
             expect(await page.evaluate(() => localStorage.getItem('player-ambient'))).toBe('0');
+        });
+
+        test('縦に積むと、映像の下の番組の中身に色を敷く', async ({ page }) => {
+            // 選局と MPEG-2 の切り替えは広い画面で済ませ、それから縦に積む幅へ
+            await watchRaw(page);
+            await page.setViewportSize({ width: 390, height: 844 });
+            const glow = page.getByTestId('live-frame-ambient');
+            await expect(glow).toHaveAttribute('data-plan', 'watch');
+            await expect.poll(updates(page), { timeout: 15_000 }).toBeGreaterThan(2);
+            const stage = (await page.getByTestId('live-frame').boundingBox())!;
+            const below = [];
+            for (const band of await glow.locator('.band:not([hidden])').all()) {
+                const box = (await band.boundingBox())!;
+                if (box.y >= stage.y + stage.height - 1) below.push(box);
+            }
+            // 映像の下に、画面の幅いっぱい・240px 以上
+            expect(below).toHaveLength(1);
+            expect(below[0]!.width).toBeGreaterThanOrEqual(389);
+            expect(below[0]!.height).toBeGreaterThanOrEqual(240);
         });
 
         test('明るいテーマでも出し、帯は地に掛ける (multiply)', async ({ page }) => {

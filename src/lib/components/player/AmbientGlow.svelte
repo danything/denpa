@@ -6,48 +6,51 @@
         type GlowLayout,
         glowLayout,
         glowPixels,
-        HEADER_STOPS,
-        headerTone,
-        mixRgb,
         plan,
         type Rect,
+        reach,
         region,
         strips,
-        vivid,
+        toneFrame,
+        WASH_LUMINANCE,
     } from './ambient';
     import type { Ambient } from './ambient.svelte.js';
     import { PHONE_LANDSCAPE } from './PlayerLayout.svelte';
 
     /**
-     * アンビエントモードの光。**いまのコマの色をぼかして、映像の枠の周りへ広げる。**
+     * アンビエントモード。**いまのコマの色を、映像の周りの地に薄く敷く** (YouTube と同じ見え方)。
      * 舞台 (`PlayerStage`) が枠のすぐ前 (兄弟) に置く。オン/オフと写し方は `ambient.svelte.ts`。
+     *
+     * ## 見え方
+     *
+     * - **縦に積むとき (768px より狭い)** … 映像の下の番組の中身に色を敷く。映像のすぐ下がいちばん濃く、
+     *   下へ向かって地に溶ける (`reach` の 90%)。中身の字は色の上に直に載る
+     * - **二段組** … 色を枠の後ろに敷き、枠の周りへ 20% だけにじませる。右の列は上のほうだけ面の色を
+     *   透かし (72%)、色が下へ向かって面の色に溶ける
+     * - 光の輪ではなく地の色に見えるよう、色は**明るさを抑えてから敷く** (`toneFrame`)。暗いテーマは深い色、
+     *   明るいテーマは淡い色になり、上に載る字はどちらも 4.5 以上で読める (`WASH_LUMINANCE`)。
+     *   明るいテーマでは色の薄い所を透明にし、`mix-blend-mode: multiply` で地に掛ける
+     * - 見出しは塗らない (YouTube も塗らない)
      *
      * ## 作り
      *
      * - 写すのは `EVERY` (200ms) ごと、1秒に5回まで。**縮めるのは写す側** (`<video>` は worker、canvas に
      *   描いているときはその worker) で、画面の側で元の大きさの画素を読むことは無い
-     * - 光は、枠の幅を 96 画素とした小さな canvas の中で作り (`ambient.ts` の `glowLayout`・`glowPixels`。
-     *   1回 130x80 画素ほど)、CSS で引き伸ばして見せる。色は**いちばん近い枠の縁の色**、濃さは**枠からの距離**で
-     *   決める — どの辺も同じ形で消え、上の光は上の縁、左の光は左の縁の色になる。**CSS の `filter: blur` は使わない** —
-     *   ぼかしが画面の大きさになり、GPU の無い端末では入れ替えのたびに重かった
-     * - **色は濃くしてから光にする** (`vivid`。彩度を上げる)。明るいテーマでは色の薄い所を透明にし、帯を
-     *   `mix-blend-mode: multiply` で地に掛ける — 白い地に灰色が乗ると汚れに見えるので、色だけを乗せる
+     * - 色は、枠の幅を 96 画素とした小さな canvas の中で作り (`ambient.ts` の `glowLayout`・`glowPixels`)、
+     *   CSS で引き伸ばして見せる。色はいちばん近い枠の縁の色を強くぼかしたもの、濃さは枠からの距離で決める。
+     *   **CSS の `filter: blur` は使わない** — ぼかしが画面の大きさになり、GPU の無い端末では重かった
      * - **前の1枚から次の1枚へ、`EVERY` の長さで 4 段に分けて入れ替える** (`FADE_STEP` ごと)。
-     *   CSS で透明度を動かすと、その間は毎フレーム光を合成し直すことになる
-     * - **光は枠の周りの4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ光を持ち、自分の所だけを
-     *   切り出して見せる。枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろの光まで合成し直すことになる
-     * - **見出し (`.navbar`) も、映像の上の端の色で塗る** (`tint`)。上の端を横に4つに分けて平均し、字が読める
-     *   明るさに収める (`headerTone`)。光と同じ間合いで入れ替え、光を消すと元の地に戻る
-     * - 光の届く範囲は `<main>` の内側と右の列の左端で切る (`region`)。列の上に光を出さない・ページの
-     *   巻き取れる長さを増やさない。切った端でも急に途切れないよう、範囲の縁で薄くする (`mask-image`)
+     *   CSS で透明度を動かすと、その間は毎フレーム合成し直すことになる
+     * - **色は枠に重ならない4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ1枚を切り出す。
+     *   枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろまで合成し直すことになる
+     * - 範囲は `<main>` の縦の範囲と窓の横幅で切る (`region`)。ページの巻き取れる長さを増やさない
      *
      * ## 写さないとき (`ambient.ts` の `plan`)
      *
-     * 止めている間・裏に回った間・全画面の間は写さない (光は最後の1枚のまま)。**動かさない設定の端末では
-     * 1枚だけ写して止める** (入れ替えの段も付けない)。
-     * 狭い画面・横にしたスマホでは映像の周りに地が残らないので出さない。
+     * 止めている間・裏に回った間・全画面の間は写さない (色は最後の1枚のまま)。**動かさない設定の端末では
+     * 1枚だけ写して止める** (入れ替えの段も付けない)。横にしたスマホでは映像の周りに地が残らないので出さない。
      *
-     * **映像の上には何も重ねない** — 光は枠の外だけで、字幕・データ放送・操作バー・CM 飛ばしの通知は
+     * **映像の上には何も重ねない** — 色は枠の外だけで、字幕・データ放送・操作バー・CM 飛ばしの通知は
      * 枠の中にある
      */
     let {
@@ -74,14 +77,16 @@
 
     let hidden = $state(false);
     let reduced = $state(false);
-    let wide = $state(false);
+    let room = $state(false);
+    /** 縦に積んでいるか (768px より狭い)。色は映像の下へだけ敷く */
+    let stacked = $state(false);
     let dark = $state(false);
     /** もう1枚写して光を出しているか */
     let lit = $state(false);
     /** 写した回数。E2E が「動いている・止まっている」を見る */
     let updates = $state(0);
 
-    const now = $derived(plan({ on: ambient.on, wide, fullscreen, hidden, reduced, playing: ambient.playing, lit }));
+    const now = $derived(plan({ on: ambient.on, room, fullscreen, hidden, reduced, playing: ambient.playing, lit }));
     /** 光を出しているか。置き場はこれが変わったときだけ測り直す (写す・止めるの切り替えでは測らない) */
     const visible = $derived(now !== 'off');
 
@@ -106,14 +111,14 @@
         const context = target.getContext('2d');
         const frame = framePixels(bitmap);
         if (context === null || frame === null) return;
-        vivid(frame, dark ? 'dark' : 'light');
+        toneFrame(frame, dark ? 'dark' : 'light', WASH_LUMINANCE[stacked ? 'stacked' : 'wide']);
         const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
         context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
     }
 
     let edge: HTMLCanvasElement | null = null;
 
-    /** 写した1枚の画素 (32x18 の RGBA)。光と見出しの色はここから作る */
+    /** 写した1枚の画素 (32x18 の RGBA) */
     function framePixels(bitmap: ImageBitmap): Uint8ClampedArray | null {
         if (edge === null) {
             edge = document.createElement('canvas');
@@ -144,54 +149,6 @@
         }
     }
 
-    /** 見出しに敷く色。入れ替えの前と後と、いま出しているもの (`headerTone` を通したもの) */
-    type Rgb = [number, number, number];
-    let headerFrom: Rgb[] | null = null;
-    let headerTo: Rgb[] | null = null;
-    let headerNow: Rgb[] | null = null;
-    /** 映像の上の端 (上から 1/3) を横に `HEADER_STOPS` に分けて平均し、見出しの色にする */
-    function edgeColors(bitmap: ImageBitmap): Rgb[] {
-        const data = framePixels(bitmap);
-        if (data === null) return [];
-        const rows = Math.ceil(GLANCE.height / 3);
-        const span = GLANCE.width / HEADER_STOPS;
-        return Array.from({ length: HEADER_STOPS }, (_, stop) => {
-            const sum = [0, 0, 0];
-            let count = 0;
-            for (let y = 0; y < rows; y++) {
-                for (let x = Math.floor(stop * span); x < Math.floor((stop + 1) * span); x++) {
-                    const at = (y * GLANCE.width + x) * 4;
-                    for (let c = 0; c < 3; c++) sum[c]! += data[at + c]!;
-                    count++;
-                }
-            }
-            const color = sum.map((v) => v / Math.max(1, count)) as Rgb;
-            return headerTone(color, dark ? 'dark' : 'light');
-        });
-    }
-
-    /** 見出しの地を、前の色から次の色へ `mix` まで進める */
-    function tint(mix: number): void {
-        // 色が揃わない (canvas が使えなかった) なら塗らない。変数が欠けると見出しの地が抜ける
-        if (headerTo === null || headerTo.length !== HEADER_STOPS) {
-            untint();
-            return;
-        }
-        const root = document.documentElement;
-        headerNow = headerTo.map((to, i) => mixRgb(headerFrom?.[i] ?? to, to, mix));
-        headerNow.forEach(([r, g, b], i) => {
-            root.style.setProperty(`--ambient-h${i}`, `rgb(${r} ${g} ${b})`);
-        });
-        root.dataset['ambientHeader'] = '';
-    }
-
-    function untint(): void {
-        const root = document.documentElement;
-        delete root.dataset['ambientHeader'];
-        for (let i = 0; i < HEADER_STOPS; i++) root.style.removeProperty(`--ambient-h${i}`);
-        headerFrom = headerTo = headerNow = null;
-    }
-
     /** 次の1枚を出す。`EVERY` の長さで前の1枚から入れ替える (動かさない設定ではすぐ) */
     function show(bitmap: ImageBitmap): void {
         last?.close();
@@ -208,12 +165,9 @@
             context?.drawImage(painted, 0, 0);
         }
         compose(coming, bitmap, layout);
-        headerFrom = headerNow;
-        headerTo = edgeColors(bitmap);
         const swap = () => {
             [shown, coming] = [coming, shown];
             paint(0);
-            tint(1);
         };
         if (reduced) {
             swap();
@@ -221,16 +175,12 @@
         }
         let step = 1;
         paint(step / 4);
-        tint(step / 4);
         fading = setInterval(() => {
             step++;
             if (step >= 4) {
                 clearInterval(fading);
                 swap();
-            } else {
-                paint(step / 4);
-                tint(step / 4);
-            }
+            } else paint(step / 4);
         }, FADE_STEP);
     }
 
@@ -241,7 +191,8 @@
         const check = () => {
             hidden = document.visibilityState === 'hidden';
             reduced = motion.matches;
-            wide = twoColumns.matches && !phone.matches;
+            room = !phone.matches;
+            stacked = !twoColumns.matches;
             dark = document.documentElement.dataset['theme'] === 'dark';
         };
         check();
@@ -257,6 +208,16 @@
         };
     });
 
+    /** 色を敷いている間、右の列を色の上に描かせる (`<html data-ambient>`。下の style) */
+    $effect(() => {
+        if (now === 'off' || !lit) return;
+        const root = document.documentElement;
+        root.dataset['ambient'] = '';
+        return () => {
+            delete root.dataset['ambient'];
+        };
+    });
+
     /** 消したら光も捨てる。次にオンにしたときに古い色が出ないように */
     $effect(() => {
         if (now !== 'off') return;
@@ -267,7 +228,6 @@
         shown = null;
         coming = null;
         paint(0);
-        untint();
     });
 
     /** テーマが変わったら、最後の1枚から塗り直す (色の濃くし方が違う) */
@@ -280,15 +240,11 @@
             shown = scratch();
             compose(shown, last, layout);
             paint(0);
-            headerFrom = null;
-            headerTo = edgeColors(last);
-            tint(1);
         });
     });
 
     $effect(() => () => {
         clearInterval(fading);
-        untint();
         last?.close();
         last = null;
     });
@@ -306,13 +262,10 @@
         const measure = () => {
             const s = target.getBoundingClientRect();
             const m = main.getBoundingClientRect();
-            const bounds: Rect = { left: m.left, top: m.top, right: m.right, bottom: m.bottom };
-            const aside = frame?.querySelector<HTMLElement>(':scope > aside');
-            if (aside) {
-                const a = aside.getBoundingClientRect();
-                if (a.left >= s.right - 1) bounds.right = Math.min(bounds.right, a.left);
-            }
-            const area = region(s, bounds);
+            // 横は窓の幅いっぱい (二段組では右の列の下にも敷き、列が上のほうで透かす)。縦は `<main>` の中
+            const bounds: Rect = { left: 0, top: m.top, right: document.documentElement.clientWidth, bottom: m.bottom };
+            const spread = reach(s.width, !stacked);
+            const area = region(s, bounds, spread);
             /*
              * 範囲の座標は入れ物 (いちばん近い位置を持つ祖先。無ければ文書) の内側から。
              * 文書のときは巻き取ったぶんを足す
@@ -332,7 +285,7 @@
             outer.style.width = `${areaWidth}px`;
             outer.style.height = `${areaHeight}px`;
 
-            const next = glowLayout(area, s);
+            const next = glowLayout(area, s, spread);
             const resized = layout === null || next.width !== layout.width || next.height !== layout.height;
             const moved =
                 resized || next.x !== layout?.x || next.y !== layout?.y || next.radius !== layout?.radius;
@@ -350,9 +303,6 @@
                 band.style.top = `${part.top - area.top}px`;
                 band.style.width = `${part.right - part.left}px`;
                 band.style.height = `${part.bottom - part.top}px`;
-                // 縁を薄くする覆いは範囲全体の大きさで敷き、帯の位置ぶんずらす (帯どうしで繋がって見える)
-                band.style.maskSize = `${areaWidth}px ${areaHeight}px`;
-                band.style.maskPosition = `${area.left - part.left}px ${area.top - part.top}px`;
                 // canvas は範囲全体を覆い、帯はその一部を切り出す
                 canvas.style.left = `${area.left - part.left}px`;
                 canvas.style.top = `${area.top - part.top}px`;
@@ -445,11 +395,10 @@
 
 <style>
     /*
-     * 光の届く範囲。位置と大きさは上の `measure` が書く。**自分では何も描かない** (帯が描く)。
+     * 色を敷く範囲。位置と大きさは上の `measure` が書く。**自分では何も描かない** (帯が描く)。
      * 文書の順で枠より前にあるので、重なっても枠の下になる
      */
     .ambient {
-        --ambient-fade: 2.5rem;
         position: absolute;
         pointer-events: none;
     }
@@ -459,45 +408,29 @@
     .band {
         position: absolute;
         overflow: hidden;
-        opacity: 0.9;
-        /* 範囲の縁で薄くする。範囲全体の大きさで敷き、帯の位置ぶんずらす (`measure` の `maskSize`・`maskPosition`) */
-        mask-image:
-            linear-gradient(
-                to right,
-                transparent,
-                #000 var(--ambient-fade),
-                #000 calc(100% - var(--ambient-fade)),
-                transparent
-            ),
-            linear-gradient(
-                to bottom,
-                transparent,
-                #000 var(--ambient-fade),
-                #000 calc(100% - var(--ambient-fade)),
-                transparent
-            );
-        mask-repeat: no-repeat;
-        mask-composite: intersect;
     }
-    /* 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`vivid` が色の薄い所を透明にしてある) */
+    /* 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`toneFrame` が色の薄い所を透明にしてある) */
     :global(html:not([data-theme='dark'])) .band {
         mix-blend-mode: multiply;
-        opacity: 0.85;
-    }
-    /*
-     * **見出しも映像の上の端の色で塗る** (`tint`)。色は字が 4.5 以上で読める明るさに収めてある
-     * (`ambient.ts` の `headerTone`)。透かさずに塗る — 下の中身が透けると、明るいコマで字が沈む
-     */
-    :global(html[data-ambient-header] .navbar) {
-        background: linear-gradient(
-            90deg,
-            var(--ambient-h0),
-            var(--ambient-h1),
-            var(--ambient-h2),
-            var(--ambient-h3)
-        );
     }
     canvas {
         position: absolute;
+    }
+    /*
+     * **右の列 (と、縦に積んだときの番組の中身) は色の上に描く。** 位置を持たせて、文書の順で色より後ろに
+     * 描かせる (位置を持たない箱は、位置を持つ色より先に描かれて隠れる)
+     */
+    :global(html[data-ambient] [data-player-layout] > aside) {
+        position: relative;
+    }
+    /* 二段組の右の列は、上のほうだけ面の色を透かして色を通し、下へ向かって面の色に戻す */
+    @media (min-width: 768px) {
+        :global(html[data-ambient] [data-player-layout] > aside) {
+            background: linear-gradient(
+                to bottom,
+                color-mix(in srgb, var(--dp-surface) 72%, transparent),
+                var(--dp-surface) 18rem
+            );
+        }
     }
 </style>

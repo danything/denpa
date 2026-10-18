@@ -24,8 +24,8 @@ export const EVERY = 200;
 export interface Situation {
     /** オンにしているか */
     on: boolean;
-    /** 光が見える置き方か (二段組。狭い画面と横にしたスマホでは映像の周りに地が残らない) */
-    wide: boolean;
+    /** 色を敷く場所があるか (横にしたスマホでは映像が画面いっぱいで、周りに地が残らない) */
+    room: boolean;
     /** 全画面か。映像の周りは見えない */
     fullscreen: boolean;
     /** ページが裏に回っているか */
@@ -49,7 +49,7 @@ export interface Situation {
  * 止めた映像から開いた録画にも光は出る
  */
 export function plan(now: Situation): 'off' | 'hold' | 'watch' {
-    if (!now.on || !now.wide) return 'off';
+    if (!now.on || !now.room) return 'off';
     if (now.fullscreen || now.hidden) return 'hold';
     if (now.reduced || !now.playing) return now.lit ? 'hold' : 'watch';
     return 'watch';
@@ -63,17 +63,18 @@ export interface Rect {
 }
 
 /**
- * 映像の外へ光が届く幅 (px)。**上下左右で同じ。** 枠の幅の 8% を 64〜128px に収める。
+ * 映像の外へ色が届く幅 (px)。
  *
- * 光はこの幅で 0 まで薄くなる (`falloff`)。下だけ長く尾を引いて見えていたのは、上と右が見出しと列で
- * すぐ切れるのに、下だけ広く空いていたため。濃いのは縁の近くだけにして、どの辺も同じ形で消えるようにした
+ * - **二段組 (`wide`)** … 枠の幅の 20%。枠の後ろに敷いた色が、周りへ少しだけにじむ
+ * - **縦に積むとき** … 枠の幅の 90% (240px から)。映像の下の番組の中身に色を敷き、下へ向かって地に溶かす
+ *   (YouTube のスマホのアプリと同じ見え方)
  */
-export function reach(width: number): number {
-    return Math.round(Math.min(128, Math.max(64, width * 0.08)));
+export function reach(width: number, wide: boolean): number {
+    return Math.round(wide ? width * 0.2 : Math.max(240, width * 0.9));
 }
 
 /**
- * 縁からの距離 `t` (0 = 枠の縁、1 = `reach`) での光の濃さ。**縁で 1、届く幅で 0。** 両端で傾きが 0 なので、
+ * 縁からの距離 `t` (0 = 枠の縁、1 = `reach`) での色の濃さ。**縁で 1、届く幅で 0。** 両端で傾きが 0 なので、
  * 枠の縁にも光の外側にも筋が出ない。濃いのは縁の近くで、半分で 0.35、4分の3で 0.06
  */
 export function falloff(t: number): number {
@@ -84,12 +85,11 @@ export function falloff(t: number): number {
 }
 
 /**
- * 光を描く範囲。**映像の枠を `reach` ぶん広げ、`bounds` (はみ出してよい範囲) で切る。**
- * どちらも画面の座標 (`getBoundingClientRect`)。`bounds` は `<main>` の内側で、右に列があれば
- * その左端まで — 列の上に光を出さない・ページを巻き取れる長さを増やさない
+ * 色を敷く範囲。**映像の枠を `spread` (`reach`) ぶん広げ、`bounds` (はみ出してよい範囲) で切る。**
+ * どちらも画面の座標 (`getBoundingClientRect`)。`bounds` は `<main>` の縦の範囲と窓の横幅 —
+ * ページの巻き取れる長さを増やさない
  */
-export function region(stage: Rect, bounds: Rect): Rect {
-    const spread = reach(stage.right - stage.left);
+export function region(stage: Rect, bounds: Rect, spread: number): Rect {
     const left = Math.max(bounds.left, stage.left - spread);
     const top = Math.max(bounds.top, stage.top - spread);
     const right = Math.min(bounds.right, stage.right + spread);
@@ -140,10 +140,10 @@ export interface GlowLayout {
 }
 
 /** 光の届く範囲 `area` と枠 `stage` (画面の座標) から、canvas の中の置き場を決める */
-export function glowLayout(area: Rect, stage: Rect): GlowLayout {
+export function glowLayout(area: Rect, stage: Rect, reachPx: number): GlowLayout {
     const stageWidth = Math.max(1, stage.right - stage.left);
     const k = GLOW_UNITS / stageWidth;
-    const spread = reach(stageWidth) * k;
+    const spread = reachPx * k;
     return {
         width: Math.max(1, Math.ceil((area.right - area.left) * k)),
         height: Math.max(1, Math.ceil((area.bottom - area.top) * k)),
@@ -152,7 +152,7 @@ export function glowLayout(area: Rect, stage: Rect): GlowLayout {
         w: stageWidth * k,
         h: (stage.bottom - stage.top) * k,
         reach: spread,
-        radius: boxRadius(spread * 0.2),
+        radius: boxRadius(Math.min(spread * 0.3, GLOW_UNITS * 0.08)),
     };
 }
 
@@ -285,7 +285,7 @@ function boxLine(
 /** テーマごとの色の濃くし方 (`vivid`)。彩度は何倍にするか、明るさは何倍にするか */
 export const TONE = {
     dark: { saturate: 1.8, gain: 1.25 },
-    light: { saturate: 2.2, gain: 0.95 },
+    light: { saturate: 3, gain: 0.95 },
 } as const;
 
 /**
@@ -314,17 +314,19 @@ export function vivid(data: Uint8ClampedArray, theme: 'dark' | 'light'): void {
     }
 }
 
-/** 見出しに敷く色の数 (左から右へ)。映像の上の端を横にこれだけに分けて平均する */
-export const HEADER_STOPS = 4;
-
 /**
- * 見出しの地の明るさ (相対輝度) の上限・下限。**見出しの字が 4.5 以上で読めるように決めてある。**
+ * 色を敷く地の明るさ (相対輝度) の上限・下限。**上に載る字が 4.5 以上で読めるように決めてある。**
  *
- * - 暗いテーマ … 字は `--dp-muted` (#9aa3b5、輝度 0.36)。(0.36 + 0.05) / 4.5 − 0.05 ≈ 0.041 なので 0.035 まで
- * - 明るいテーマ … 字は `--dp-primary-text` (#02659a、輝度 0.12。いまの画面のタブ) がいちばん暗くない。
- *   4.5 × (0.12 + 0.05) − 0.05 ≈ 0.72 なので 0.75 から
+ * - 縦に積むとき (`stacked`) … 番組の中身の字が色の上に直に載る
+ *   - 暗いテーマ: 字は `--dp-muted` (#9aa3b5、輝度 0.36)。(0.36 + 0.05) / 4.5 − 0.05 ≈ 0.041 なので 0.035 まで
+ *   - 明るいテーマ: 字は `--dp-primary-text` (#02659a、輝度 0.12)。4.5 × (0.12 + 0.05) − 0.05 ≈ 0.72 なので 0.75 から
+ * - 二段組 (`wide`) … 色の上に字は無く、右の列は上のほうで面の色を 72% 重ねる (`AmbientGlow.svelte`)。
+ *   暗いテーマで 0.72 × 0.006 + 0.28 × 0.12 ≈ 0.038 なので 0.12 まで。明るいテーマは面が白なので、0.45 からでも字は沈まない
  */
-export const HEADER_LUMINANCE = { dark: 0.035, light: 0.75 } as const;
+export const WASH_LUMINANCE = {
+    stacked: { dark: 0.035, light: 0.75 },
+    wide: { dark: 0.12, light: 0.45 },
+} as const;
 
 type Rgb = [number, number, number];
 
@@ -344,28 +346,44 @@ export function luminance([r, g, b]: Rgb): number {
 }
 
 /**
- * **見出しに敷く色。** 映像の上の端の色を濃くし (`vivid` と同じ彩度)、明るさだけを `HEADER_LUMINANCE` に収める。
+ * **地に敷く色。** 映像の色を濃くし (`vivid`)、明るさだけを `limit` に収める。
  * 暗いテーマは光の強さ (線形) を落とし、明るいテーマは白へ寄せる — どちらも色相は変えない
  */
-export function headerTone(color: Rgb, theme: 'dark' | 'light'): Rgb {
+export function washTone(color: Rgb, theme: 'dark' | 'light', limit: { dark: number; light: number }): Rgb {
     const pixel = new Uint8ClampedArray([...color, 255]);
-    vivid(pixel, 'dark');
+    // 明るいテーマは白へ寄せると色が抜けるので、先に強く濃くしておく (`TONE`)
+    vivid(pixel, theme);
     let lin = [linear(pixel[0]!), linear(pixel[1]!), linear(pixel[2]!)];
     const now = 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!;
     if (theme === 'dark') {
-        const cap = HEADER_LUMINANCE.dark;
-        if (now > cap) lin = lin.map((v) => (v * cap) / now);
-    } else {
-        const floor = HEADER_LUMINANCE.light;
-        if (now < floor) {
-            const t = (floor - now) / (1 - now);
-            lin = lin.map((v) => v + (1 - v) * t);
-        }
+        if (now > limit.dark) lin = lin.map((v) => (v * limit.dark) / now);
+    } else if (now < limit.light) {
+        const t = (limit.light - now) / (1 - now);
+        lin = lin.map((v) => v + (1 - v) * t);
     }
     return [gamma(lin[0]!), gamma(lin[1]!), gamma(lin[2]!)];
 }
 
-/** 2つの色を `t` で混ぜる (入れ替えの途中) */
-export function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
-    return [0, 1, 2].map((i) => Math.round(a[i]! + (b[i]! - a[i]!) * t)) as Rgb;
+/**
+ * 写した1枚 (RGBA) の色を、地に敷く色に直す (`washTone`)。**明るいテーマでは色の薄い所ほど透明にする** —
+ * 灰色・黒・白のまま白い地に敷くと、灰色の汚れに見える
+ */
+export function toneFrame(
+    data: Uint8ClampedArray,
+    theme: 'dark' | 'light',
+    limit: { dark: number; light: number },
+): void {
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]!;
+        const g = data[i + 1]!;
+        const b = data[i + 2]!;
+        const [tr, tg, tb] = washTone([r, g, b], theme, limit);
+        data[i] = tr;
+        data[i + 1] = tg;
+        data[i + 2] = tb;
+        if (theme === 'light') {
+            const chroma = (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
+            data[i + 3] = data[i + 3]! * Math.min(1, chroma * 2.5);
+        }
+    }
 }
