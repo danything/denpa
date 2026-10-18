@@ -481,11 +481,9 @@ test.describe('ダッシュボードと画面遷移', () => {
         // 種別で絞り込める(ルールの条件そのもの)
         await page.getByTestId('channel-summary').click();
         await page.getByTestId('rule-types').locator('input[value="BS"]').check();
-        await page.getByTestId('rule-preview').click();
-        await page.waitForURL(/serviceTypes=BS/);
-        for (const row of await page.getByTestId('preview-row').all()) {
-            await expect(row).toContainText('ＢＳ１１イレブン');
-        }
+        // 押すものは無く、そのまま数え直す。BS 以外の行が消えるのを待つ
+        await expect(rows.filter({ hasNotText: 'ＢＳ１１イレブン' })).toHaveCount(0);
+        await expect(rows.first()).toBeVisible();
 
         // そのまま保存できる
         await page.getByTestId('rule-submit').click();

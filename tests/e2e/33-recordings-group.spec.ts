@@ -250,7 +250,7 @@ test.describe('録画一覧のまとめて表示', () => {
         await anime.click();
         await page.getByTestId('group-rule').click();
 
-        // 下書きは URL に載る (「何が録れるか見る」と同じ形)。同じ回は最初の放送だけ、が入っている
+        // 下書きは URL に載る。同じ回は最初の放送だけ、が入っている
         await expect(page).toHaveURL(/\/rules\?.*keyword=/);
         await page.locator('[data-hydrated="true"]').waitFor();
         await expect(page.getByTestId('rule-keyword')).toHaveValue('グループ試験アニメ');

@@ -70,7 +70,7 @@ test.describe('ルールの編集', () => {
         await clearRules(page);
     });
 
-    test('編集中に「何が録れるか見る」を押しても編集のまま', async ({ page }) => {
+    test('編集中に条件を変えると、下見はその条件で数え直し、編集のまま', async ({ page }) => {
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
         // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
@@ -80,27 +80,29 @@ test.describe('ルールの編集', () => {
 
         await page.getByTestId('rule-row').first().click();
         await page.waitForURL(/edit=/);
-
-        // 条件をいじってから確かめる。ここで追加の画面に戻ると、押し直した先で
-        // ルールがもう1つ増えることになる
-        await page.getByTestId('rule-keyword').fill('テストアニメ 決戦');
-        await page.getByTestId('rule-preview').click();
-        await expect(page.getByTestId('preview')).toBeVisible();
-        await expect(page.getByTestId('rule-update')).toBeVisible();
-        await expect(page.getByTestId('rule-submit')).toHaveCount(0);
-        // 出ているのは保存済みの条件ではなく、いま入っている条件での結果
-        await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ 決戦');
+        await expect(page.getByTestId('preview-row').first()).toBeVisible();
 
         /*
-         * **打ち込んだ優先度も持ち回る。**
+         * 条件をいじると、押さずにその条件で数え直す。保存済みの条件ではなく、いま入っている条件での結果。
+         * どこにも当たらない語にすると、このルールが立てた予約は「条件外」として残って見える
+         * (編集中のルールを下見に伝えている)
+         */
+        await page.getByTestId('rule-keyword').fill('テストアニメ 当たらない語');
+        const preview = page.getByTestId('preview');
+        await expect(page.getByTestId('preview-row').getByText('条件外').first()).toBeVisible();
+        await expect(page.getByTestId('rule-update')).toBeVisible();
+        await expect(page.getByTestId('rule-submit')).toHaveCount(0);
+        await expect(page).toHaveURL(/\/rules\?edit=\d+$/);
+        await page.getByTestId('rule-keyword').fill('テストアニメ 決戦');
+
+        /*
+         * **打ち込んだ優先度も保存まで残る。**
          *
-         * ここを既定で埋めていた頃は、見るだけのつもりで押すたびに優先度が
-         * 1 に戻り、そのまま保存すると**静かに書き換わって**いた。往復は GET で
-         * この画面に戻ってくるので、フォームの値は全部 URL に乗っている
+         * 下見を GET の往復で出していた頃は、見るだけのつもりで押すたびに優先度が
+         * 1 に戻り、そのまま保存すると**静かに書き換わって**いた
          */
         await page.getByTestId('rule-priority').fill('5');
-        await page.getByTestId('rule-preview').click();
-        await expect(page.getByTestId('preview')).toBeVisible();
+        await expect(preview).toBeVisible();
         await expect(page.getByTestId('rule-priority')).toHaveValue('5');
 
         // 保存したものが一覧にもそのまま出る
