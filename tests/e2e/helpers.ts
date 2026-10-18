@@ -31,8 +31,7 @@ export async function goto(page: Page, url: string): Promise<void> {
      * 61 件目から先は、巻き取って初めて描かれる
      */
     if (pathname === '/') {
-        await revealAll(page, 'reservation-list');
-        await revealAll(page, 'recording-list');
+        await revealAll(page, 'timeline', 'recording-more');
     }
 }
 
@@ -360,11 +359,12 @@ export async function clearRules(page: Page): Promise<void> {
  * **行の数**で見る (印の文言で見ていた頃は、読む前に足されると比べる相手が同じになって
  * 5 秒ずつ空回りし、テストごと時間切れになった)。
  *
- * @param listTestId 一覧の `data-testid` (`reservation-list` など)。印はその `-list` を `-more` に替えたもの
+ * @param listTestId 一覧の `data-testid` (`timeline` など)
+ * @param moreTestId 続きを足す印の `data-testid`
  */
-async function revealAll(page: Page, listTestId: string): Promise<void> {
+async function revealAll(page: Page, listTestId: string, moreTestId: string): Promise<void> {
     const list = page.getByTestId(listTestId);
-    const more = page.getByTestId(listTestId.replace(/-list$/, '-more'));
+    const more = page.getByTestId(moreTestId);
     const rows = list.locator('[data-testid$="-row"]');
     for (let i = 0; i < 100; i++) {
         if ((await more.count()) === 0) return;
@@ -949,4 +949,34 @@ export async function routeCaptions(page: Page): Promise<void> {
     await page.route('**/api/recordings/*/captions.json', (route) =>
         route.fulfill({ json: { v: 1, pages: [{ at: 0, page: FAKE_CAPTION }] } }),
     );
+}
+
+/**
+ * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) を開き、
+ * その入れ物を返す。広い画面 (1000px 以上) はサイドバーの「表示の切り替え」、狭い画面は
+ * 絞り込みのボタンから出る下からの一枚。どちらにも同じ項目があるので、返した入れ物の中で探す
+ */
+export async function homeTools(page: Page): Promise<Locator> {
+    const side = page.getByTestId('sidebar');
+    if (await side.isVisible()) {
+        const toggle = side.getByTestId('view-toggle');
+        if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+        return side;
+    }
+    await page.getByTestId('filter-open').click();
+    const sheet = page.getByTestId('filter-sheet');
+    await expect(sheet).toBeVisible();
+    return sheet;
+}
+
+/** ホームの絞り込み (すべて・予約・録画中・未視聴・失敗) を押す。広い画面はサイドバー、狭い画面は下からの一枚 */
+export async function homeFilter(page: Page, id: string): Promise<void> {
+    const side = page.getByTestId('sidebar');
+    if (await side.isVisible()) {
+        await side.locator(`[data-testid="filter"][data-filter="${id}"]`).click();
+        return;
+    }
+    await page.getByTestId('filter-open').click();
+    await page.getByTestId('filter-sheet').locator(`[data-testid="filter"][data-filter="${id}"]`).click();
+    await expect(page.getByTestId('filter-sheet')).toBeHidden();
 }

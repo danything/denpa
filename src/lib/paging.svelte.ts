@@ -80,6 +80,15 @@ export class Paged<T> {
         this.tailShown = Math.min(length, this.tailShown + this.side);
     }
 
+    /**
+     * 頭から `count` 行目までは出す。開いたときに映したい行が、まだ描いていない所にあるとき。
+     * 足す単位 (`step`) に切り上げる (下端の印が、すぐまた鳴らないように)
+     */
+    showUpTo(count: number): void {
+        const length = this.items().length;
+        this.shown = Math.min(length, Math.max(this.shown, Math.ceil(count / this.side) * this.side));
+    }
+
     /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */
     reset(): void {
         this.shown = this.side;

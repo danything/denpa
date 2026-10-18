@@ -467,7 +467,8 @@ test.describe('録画を観る', () => {
                 const box = document.querySelector('main')?.firstElementChild;
                 return Math.round(box?.getBoundingClientRect().left ?? -1);
             });
-        await goto(page, '/');
+        // 比べる先は余白を持つふつうの画面 (ホームは一覧とサイドバーを端まで寄せるので使わない)
+        await goto(page, '/live');
         const other = await edge();
 
         await goto(page, `/watch/${id}`);

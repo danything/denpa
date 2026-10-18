@@ -67,18 +67,6 @@ test.describe('手動予約', () => {
             await expect(cell).toContainText('予約済み');
         }
 
-        // 絞り込みの言葉 (`?q=`) は予約にも効く
-        const rowOf = (programId: string) =>
-            page.locator(`[data-testid="reservation-row"][data-program-id="${programId}"]`);
-        await goto(page, '/');
-        const firstName = (await rowOf(first.programId).getByTestId('row-open').innerText()).trim();
-        await goto(page, `/?q=${encodeURIComponent(firstName)}`);
-        await expect(rowOf(first.programId)).toHaveCount(1);
-        // どれにも当たらない言葉なら、どちらの予約も出ない
-        await goto(page, `/?q=${encodeURIComponent('当たらない言葉ZZ')}`);
-        await expect(rowOf(first.programId)).toHaveCount(0);
-        await expect(rowOf(second.programId)).toHaveCount(0);
-
         await goto(page, '/');
         for (const target of [first, second]) {
             const reservation = page.locator(

@@ -1,22 +1,7 @@
 import { fail } from '@sveltejs/kit';
-import {
-    type AnyColumn,
-    and,
-    asc,
-    desc,
-    eq,
-    getTableColumns,
-    gt,
-    inArray,
-    isNull,
-    ne,
-    not,
-    or,
-    sql,
-} from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, not, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { channelNotice } from '#lib/channel-notice.js';
-import { globTerms } from '#lib/fold.js';
 import { capacityLabel } from '#lib/format.js';
 import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
 import { fileSize } from '#lib/server/chase.js';
@@ -41,7 +26,7 @@ import {
     services,
 } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
-import { parseTitle, searchable } from '#lib/server/title.js';
+import { parseTitle } from '#lib/server/title.js';
 import { cmRedo, encodeSource } from '#lib/source.js';
 import type { EncodeJob, Recording, Reservation, ReservationState } from '#lib/types.js';
 
@@ -143,34 +128,22 @@ interface ReservationRow extends Omit<Reservation, 'state'> {
     has_logo: boolean | null;
     /** 録画中の録画のID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
     recording_id: number | null;
+    /** 「まとめて表示」でまとめる鍵と見出し。録画の行と同じ決め方 (`seriesGroup`) */
+    group_key: string;
+    group_name: string;
 }
 
 /**
  * 予約と録画を1画面に並べる。
  *
  * 「これから何が録れるか」と「録れたものが今どうなっているか」は続きものなので、
- * 行き来せずに見えるほうがいい。左に予約、右に録画。
+ * 行き来せずに見えるほうがいい。1本の時間軸に並べる (上が予約、下が録れたもの。並べるのは画面の `#lib/timeline.ts`)。
+ *
+ * **番組名で探すのはここではない** (全体の検索 `/search?q=`)。ホームは絞り込みのボタンだけで絞る
  */
 export function load({ url, cookies }) {
     const showFinished = url.searchParams.get('all') === '1';
     const showDeleted = url.searchParams.get('deleted') === '1';
-    /*
-     * **絞り込みの言葉。** 溜まると300件フラットは指のリモコンで辿れない。
-     * 番組名・シリーズ・副題・局名にかかる (下の `search`。予約は番組名と局名)。空なら
-     * 今までどおり全部出す。**録画の一覧は元から完了分も含む**ので、完了分を
-     * 出すための細工は要らない (`showFinished` が効くのは左の予約側だけ)
-     */
-    const q = (url.searchParams.get('q') ?? '').trim();
-    /*
-     * 絞り込みの言葉は語ごとに AND (手元の絞り込みと同じ読み方)。予約・録画・録り逃しのどれにも効かせる
-     * (ホームは1本の一覧なので、片方だけ絞ると探した番組の予約が消えたように見える)。
-     * 外字は規格の字 (𠮷) のまま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる。
-     * 番組名は放送のとおり全角混じりなので、英数は全角と大文字も当たる組にする (`fold.globTerms`)。
-     * それで絞れない語 (「吉」だけ) は、手元の絞り込みに任せる
-     */
-    const terms = globTerms(searchable(q).split(/\s+/).filter(Boolean));
-    const search = (...columns: AnyColumn[]) =>
-        and(...terms.map((term) => or(...columns.map((column) => sql`${column} GLOB ${term}`))));
 
     /*
      * 並びは**放送日時の近い順**で固定する。録画中だけは真っ先に見たいので先頭に置く。
@@ -226,10 +199,12 @@ export function load({ url, cookies }) {
                 sql`(SELECT id FROM recordings WHERE reservation_id = ${r.id} ORDER BY id DESC LIMIT 1)`,
             ),
         )
-        .where(and(pending, search(r.name, services.name)))
+        .where(pending)
         .orderBy(desc(sql`${rec.state} = 'recording'`), asc(r.start_at))
         .limit(300)
-        .all();
+        .all()
+        // まとめて表示の鍵。予約はシリーズ名を持たないので、番組名から切り出す (録るときと同じ)
+        .map((row) => ({ ...row, ...seriesGroup('', row.name) }));
 
     /*
      * エンコードは録画一覧の行そのものに出す。
@@ -271,12 +246,6 @@ export function load({ url, cookies }) {
                  * 消したかどうかを確かめるのに一覧を行き来することになっていた
                  */
                 showDeleted ? undefined : isNull(recordingTable.deleted_at),
-                search(
-                    recordingTable.name,
-                    recordingTable.series,
-                    recordingTable.subtitle,
-                    recordingTable.service_name,
-                ),
             ),
         )
         /*
@@ -327,7 +296,7 @@ export function load({ url, cookies }) {
         .from(r)
         .innerJoin(services, eq(services.id, r.service_id))
         .leftJoin(ruleTable, eq(ruleTable.id, r.rule_id))
-        .where(and(eq(r.state, 'missed'), isNull(r.started_at), search(r.name, services.name)))
+        .where(and(eq(r.state, 'missed'), isNull(r.started_at)))
         .orderBy(desc(r.start_at))
         .limit(100)
         .all()
@@ -344,7 +313,6 @@ export function load({ url, cookies }) {
         missed,
         showFinished,
         showDeleted,
-        q,
         /** 録画の見出しに出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
         capacity: room === null ? null : capacityLabel(room.free, room.hours),
         /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */

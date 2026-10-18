@@ -1,11 +1,30 @@
 <script lang="ts" module>
     import { SvelteSet } from 'svelte/reactivity';
+    import { fadeIn } from '#lib/motion.svelte.js';
 
     /**
      * 「まとめて表示」で開いている番組 (まとめる鍵)。**その場かぎり覚える** —
      * モジュールに置くので、観る画面へ行って戻っても開いたまま。読み込み直すと閉じる
      */
     const openedGroups = new SvelteSet<string>();
+
+    /**
+     * ポスターに付ける (`{@attach}`)。読み込めたらふわっと出し (`fadeIn`)、読めなかったら隠して枠だけ残す
+     * (ポスターの無い録画もある)。ハイドレーションの前に失敗していたらイベントはもう来ないので、付けた時点の様子も見る。
+     *
+     * **`use:` や `onerror` にしない。** `<img>` にそれを書くと、Svelte はサーバの HTML に
+     * `onerror="this.__e=event"` を足す (ハイドレーション前のイベントを拾うため)。インラインのハンドラなので
+     * CSP に止められる (`script-src-attr`)。`{@attach}` には足さない
+     */
+    function poster(img: HTMLImageElement): () => void {
+        fadeIn(img);
+        const hide = () => {
+            img.style.display = 'none';
+        };
+        if (img.complete && img.naturalWidth === 0 && img.currentSrc !== '') hide();
+        img.addEventListener('error', hide);
+        return () => img.removeEventListener('error', hide);
+    }
 </script>
 
 <script lang="ts">
@@ -39,27 +58,31 @@
         stateLabel,
         time,
     } from '#lib/format.js';
-    import {
-        flatLines,
-        GROUPED_COOKIE,
-        type GroupLine,
-        groupBySeries,
-        groupLines,
-        type SeriesGroup,
-    } from '#lib/grouping.js';
+    import { GROUPED_COOKIE, type SeriesGroup } from '#lib/grouping.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
-    import { fadeIn } from '#lib/motion.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
-    import { matches, normalize } from '#lib/paging.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
     import { cmRedo, encodeSource } from '#lib/source.js';
+    import {
+        catchUp,
+        countFilters,
+        dayName,
+        FILTERS,
+        type Filter,
+        lineIndex,
+        passes,
+        sections,
+        type TimelineItem,
+        type TimelineLine,
+        type Traits,
+        timelineLines,
+        type Zone,
+    } from '#lib/timeline.js';
     import { resolve } from '$app/paths';
     import Check from '~icons/lucide/check';
-    import ChevronDown from '~icons/lucide/chevron-down';
     import ChevronRight from '~icons/lucide/chevron-right';
-    import Ellipsis from '~icons/lucide/ellipsis';
     import Info from '~icons/lucide/info';
-    import ListTree from '~icons/lucide/list-tree';
+    import ListFilter from '~icons/lucide/list-filter';
     import Play from '~icons/lucide/play';
     import X from '~icons/lucide/x';
 
@@ -243,15 +266,6 @@
         return resolve(`rules?${kind}=${id}`);
     }
 
-    /** 番組の中で、いちばん新しい回から遡って `test` に合う録画。無ければ null */
-    function newestRec(
-        group: SeriesGroup<RightRow>,
-        test: (rec: (typeof data.recordings)[number]) => boolean = () => true,
-    ): number | null {
-        const row = group.items.findLast((row) => row.kind === 'rec' && test(row.rec));
-        return row?.kind === 'rec' ? row.rec.id : null;
-    }
-
     /**
      * ファイルを持っているか。**端末に保存と「その他…」を出すかどうか。**
      * エンコードの失敗はここに出てこない — 落ちたのは再エンコードのほうで、元のTSは無事なので観られる
@@ -285,19 +299,6 @@
     }
 
     /**
-     * 右の一覧の並び。**録れたものと録り逃しを1本にして放送日順で出す。**
-     *
-     * 録り逃しは「これから録るもの」ではなく**録画の結果**なので、予約側では
-     * なくこちらに混ぜる。ただし録画の行を持たない (始まらないまま放送が
-     * 終わった — `+page.server.ts` の `missed`) ので、ここで差し込む。
-     * 鍵は種類ごとに接頭辞を付ける (録画と予約でIDの空間が別のため)
-     */
-    type RightRow = { key: string; at: number; group: string; groupName: string } & (
-        | { kind: 'rec'; rec: (typeof data.recordings)[number] }
-        | { kind: 'missed'; res: (typeof data.missed)[number] }
-    );
-
-    /**
      * 録り逃しの詳細。**失敗した録画と同じ形**で、開いたときに理由を出す。
      * チューナー不足で落とされたものは予約が理由を持っている (conflict_reason)
      */
@@ -306,190 +307,283 @@
             res.conflict_reason ?? 'アプリが止まっていたなどの理由で、録画を始められないまま放送が終わりました';
         openDetail(res.program_id, res, [{ title: '録り逃しました', text }]);
     }
-    const rightRows = $derived(
-        [
-            ...data.recordings.map(
-                (rec): RightRow => ({
-                    kind: 'rec',
-                    key: `rec-${rec.id}`,
-                    at: rec.start_at,
-                    group: rec.group_key,
-                    groupName: rec.group_name,
-                    rec,
-                }),
-            ),
-            ...data.missed.map(
-                (res): RightRow => ({
-                    kind: 'missed',
-                    key: `missed-${res.id}`,
-                    at: res.start_at,
-                    group: res.group_key,
-                    groupName: res.group_name,
-                    res,
-                }),
-            ),
-        ].sort((a, b) => b.at - a.at),
-    );
 
     /*
-     * **一覧は少しずつ出す** (`#lib/paging.svelte.js`)。
+     * ---- 1本の時間軸 (`#lib/timeline.ts`) ----
      *
-     * 予約も録画も 300 件まで来る。全部を一度に描くと、この画面を開いた直後に
-     * 一瞬止まって見えた (行ごとにボタンとポスターがあるので、描くのが重い)。
-     * 最初は1画面と少しだけ描き、下端に近づいたら足す。
-     *
-     * **絞り込みは手元で。** 出していない行は Ctrl+F で探せないので、代わりに
-     * 打った端から当たる欄を置く。当てる先は番組名・局・状態・ルール名。
-     * 録画のほうは既にサーバ側の絞り込み (`?q=`。300 件より古いものにも届く) が
-     * あるので、**同じ欄で両方やる** — 打った端から手元の 300 件を絞り、送れば
-     * サーバに聞きに行く
+     * 予約・録画・録り逃しを1つの一覧に並べる。上がこれからの予約、「いま」の線と録画中、
+     * 下が録れたもの。鍵は種類ごとに接頭辞を付ける (録画と予約でIDの空間が別のため)
      */
-    let reservationQuery = $state('');
-    const reservationRows = $derived(
-        data.reservations.filter((res) =>
-            matches(
-                reservationQuery,
-                [res.name, res.service_name, stateLabel(res.state), res.rule_name ?? '', dateTime(res.start_at)].join(' '),
-            ),
+    type Res = (typeof data.reservations)[number];
+    type Rec = (typeof data.recordings)[number];
+    type Missed = (typeof data.missed)[number];
+    type Item = TimelineItem &
+        ({ kind: 'res'; res: Res } | { kind: 'rec'; rec: Rec } | { kind: 'missed'; res: Missed });
+
+    /**
+     * 予約をどの側に置くか。録画中は線の下、放送が終わっていないものは線の上。
+     * 「完了分も表示」で出る終わった予約 (完了・失敗・取り消し) は録れたものの側
+     */
+    function zoneOf(res: Res, now: number): Zone {
+        if (res.state === 'recording') return 'now';
+        return res.end_at > now ? 'future' : 'past';
+    }
+
+    /** 描いた時刻。「いま」の線と予約の側分けの物差し。読み直すたびに取り直す */
+    const clock = $derived.by(() => {
+        void data;
+        return Date.now();
+    });
+
+    const items = $derived<Item[]>([
+        ...data.reservations.map(
+            (res): Item => ({
+                kind: 'res',
+                key: `res-${res.id}`,
+                at: res.start_at,
+                zone: zoneOf(res, clock),
+                group: res.group_key,
+                groupName: res.group_name,
+                res,
+            }),
         ),
-    );
-    const reservationPage = new Paged(() => reservationRows, 60);
-    $effect(() => {
-        reservationQuery;
-        reservationPage.reset();
-    });
+        ...data.recordings.map(
+            (rec): Item => ({
+                kind: 'rec',
+                key: `rec-${rec.id}`,
+                at: rec.start_at,
+                zone: 'past',
+                group: rec.group_key,
+                groupName: rec.group_name,
+                rec,
+            }),
+        ),
+        ...data.missed.map(
+            (res): Item => ({
+                kind: 'missed',
+                key: `missed-${res.id}`,
+                at: res.start_at,
+                zone: 'past',
+                group: res.group_key,
+                groupName: res.group_name,
+                res,
+            }),
+        ),
+    ]);
 
-    /** 録画の絞り込み。URL の `q` から始めて、打った端から効かせる (URL が変われば下の効果で追う) */
-    // svelte-ignore state_referenced_locally
-    let recordingQuery = $state(data.q);
-    $effect(() => {
-        recordingQuery = data.q;
-    });
+    /**
+     * **観終えていない録画** (未視聴の点か、続きのバーが出ているもの)。「未視聴」の絞り込みと、
+     * 開いたときに映す録画 (`catchUp`) に使う。観られないもの・消したものは入れない
+     */
+    function unfinished(item: Item): boolean {
+        if (item.kind !== 'rec') return false;
+        const rec = item.rec;
+        return rec.deleted_at === null && rec.watched_at === null && watchLink(rec) !== null;
+    }
 
-    /** 「削除済みも表示」の行き先 (「表示」のメニューの項目)。入っていれば外した URL へ */
-    const deletedHref = $derived(data.showDeleted ? resolve('') : `${resolve('')}?deleted=1`);
-    /** 「完了分も表示」の行き先 (予約の「表示」のメニュー) */
-    const finishedHref = $derived(data.showFinished ? resolve('') : `${resolve('')}?all=1`);
-    /** 録画の見出しの「⋯」。照合を送り終えたら閉じる */
-    let toolsOpen = $state(false);
-    /** 録画の枠 (中だけスクロールする)。まとめる・まとめないを切り替えたときに置き直す */
-    let recordingBox: HTMLElement | undefined = $state();
+    function traitsOf(item: Item): Traits {
+        return {
+            unfinished: unfinished(item),
+            failed:
+                item.kind === 'missed' ||
+                (item.kind === 'rec' && (item.rec.state === 'failed' || (item.rec.encode_error ?? '') !== '')),
+        };
+    }
+
+    /** 絞り込みのボタン (すべて・予約・録画中・未視聴・失敗)。その場かぎり */
+    let filter = $state<Filter>('all');
+    const filterLabel = $derived(FILTERS.find((f) => f.id === filter)?.label ?? '');
+    /** 件数はボタンごとに数える (押す前に、押すと何件になるかが分かる) */
+    const counts = $derived(countFilters(items, traitsOf));
+    const shownItems = $derived(items.filter((item) => passes(filter, item, traitsOf(item))));
+    const parts = $derived(sections(shownItems));
+
+    /** 「削除済みも表示」「完了分も表示」の行き先。入っていれば外した URL へ (ほかの指定は残す) */
+    function toggleHref(name: 'deleted' | 'all', on: boolean): string {
+        const params = new URLSearchParams();
+        if (name === 'all' ? !on : data.showFinished) params.set('all', '1');
+        if (name === 'deleted' ? !on : data.showDeleted) params.set('deleted', '1');
+        const search = params.toString();
+        return search === '' ? resolve('') : `${resolve('')}?${search}`;
+    }
+    const deletedHref = $derived(toggleHref('deleted', data.showDeleted));
+    const finishedHref = $derived(toggleHref('all', data.showFinished));
+
     /**
      * **「まとめて表示」(issue #480)。** 端末ごとに cookie で覚え、**サーバが読む**
-     * (`+page.server.ts`)。localStorage に置いていた頃はハイドレーションの後でしか
-     * 読めず、読むまで枠を隠していた (狭い画面で平らな一覧が一度出てから縮むため)
+     * (`+page.server.ts`)。予約にも録画にも効き、同じ番組でも線の上と下で別の見出しになる
      */
     // svelte-ignore state_referenced_locally
     let grouped = $state(data.grouped);
-    function rightText(row: RightRow): string {
-        if (row.kind === 'missed') {
-            const res = row.res;
-            return [res.name, res.service_name, stateLabel('missed'), res.rule_name ?? '', dateTime(res.start_at)].join(' ');
-        }
-        const rec = row.rec;
-        return [
-            rec.name,
-            rec.series ?? '',
-            rec.subtitle ?? '',
-            rec.service_name,
-            rowState(rec).label,
-            rec.rule_name ?? '',
-            dateTime(rec.start_at),
-        ].join(' ');
+    /** 開いた番組の鍵。側ごとに分けて覚える (`future:アニメ`) */
+    const openKey = (zone: 'future' | 'past', group: string) => `${zone}:${group}`;
+    function isOpen(zone: 'future' | 'past', group: string): boolean {
+        return openedGroups.has(openKey(zone, group));
     }
-    const recordingRows = $derived(rightRows.filter((row) => matches(recordingQuery, rightText(row))));
-    /** 絞り込みが効いているか。空白だけなら何も絞らない (`matches` と同じ読み方) */
-    const filtering = $derived(normalize(recordingQuery).trim() !== '');
-    /**
-     * 描く行。まとめるときは番組ごとに見出しを立てる (`#lib/grouping.ts`)。
-     * **絞っている間は番組を全部開く** — 当たった回が見出しの奥に隠れていると、
-     * 絞った意味が無い
-     */
-    const recordingLines = $derived<GroupLine<RightRow>[]>(
-        grouped
-            ? groupLines(groupBySeries(recordingRows), (group) =>
-                  filtering ? !closedWhileFiltering.has(group) : openedGroups.has(group),
-              )
-            : flatLines(recordingRows),
-    );
-    /*
-     * **まとめないときは頭と尻の両方を描く** (`Paged` の `ends`)。広い画面では
-     * 一番下 (いちばん古い録画) から見せるので、尻が描けていないと開いた所が空になる。
-     * 狭い画面はページごと上から見るので頭が要る。サーバはどちらの幅か知らないので両方。
-     * 続きは間 (「残り N 件」) に足す
-     */
-    const recordingPage = new Paged(() => recordingLines, 60, () => !grouped);
-    /** 間に置く印。頭からだけ出すとき (まとめて表示) は末尾に来る */
-    const GAP = { kind: 'gap', key: 'gap' } as const;
-    /**
-     * 描くもの。**1本の `each` で回す** — 頭と尻を別の `each` にすると、間が
-     * 詰まったときに尻の行が全部作り直しになる
-     */
-    const recordingShown = $derived(
-        recordingPage.more ? [...recordingPage.rows, GAP, ...recordingPage.tail] : recordingPage.rows,
-    );
-
-    /**
-     * 絞っている間に閉じた番組。**絞り込みが変わったら忘れる。**
-     * 絞っている間の開閉を `openedGroups` で覚えると、見た目は開いたまま
-     * 覚えだけが裏返り、絞り込みを消したときに思わぬ番組が開いて (閉じて) いた
-     */
-    const closedWhileFiltering = new SvelteSet<string>();
-    $effect(() => {
-        recordingQuery;
-        untrack(() => closedWhileFiltering.clear());
-    });
-
-    /**
-     * まだ描いていない**録画の本数** (「残り N 件」)。`recordingPage.rest` は描く行の
-     * 数で、まとめると閉じた見出し1つに何本も入っているので、そちらでは数えない
-     */
-    const recordingRest = $derived.by(() => {
-        let shown = 0;
-        for (const line of recordingShown) {
-            if (line.kind === 'row') shown += 1;
-            else if (line.kind === 'gap') continue;
-            else if (!line.open) shown += line.group.items.length;
-        }
-        return Math.max(0, recordingRows.length - shown);
-    });
-
-    function toggleGroup(group: string): void {
-        const set = filtering ? closedWhileFiltering : openedGroups;
-        if (set.has(group)) set.delete(group);
-        else set.add(group);
+    function toggleGroup(zone: 'future' | 'past', group: string): void {
+        const key = openKey(zone, group);
+        if (openedGroups.has(key)) openedGroups.delete(key);
+        else openedGroups.add(key);
     }
-
-    /**
-     * まとめる・まとめないを切り替える。**開いたときと同じ位置に置き直す** —
-     * まとめたら一番上 (最近の番組)、戻したら一番下 (いちばん古い録画)。
-     * 前の位置のままだと、並びが丸ごと変わったあとの中途半端な所が映る
-     */
-    async function setGrouped(on: boolean): Promise<void> {
+    function setGrouped(on: boolean): void {
         grouped = on;
-        // 描く数も置き直す。前の形の数 (片側 30 件など) のままにしない
-        recordingPage.reset();
+        pastPage.reset();
         // パスは接頭辞込み (`live-player.svelte.ts` の `remember` と同じ)
         document.cookie = `${GROUPED_COOKIE}=${on ? '1' : '0'}; path=${resolve('')}; max-age=31536000; samesite=lax`;
-        const box = recordingBox;
-        if (box === undefined) return;
-        await tick();
-        /*
-         * まとめないときの枠は下から積む (CSS の `.from-end`) ので、0 が一番下で上へは負。
-         * 端を越えた値は端に丸まるので、どちらの向きでも大きく振れば端に着く。
-         * 狭い画面では枠がスクロールしないので何も起きない
-         */
-        box.scrollTop = on ? -box.scrollHeight : box.scrollHeight;
+    }
+
+    const lines = $derived(timelineLines(parts, { grouped, isOpen }));
+    /** 線より上を、予約 (`ahead`) と「いま」の線から下 (`current`。線と録画中) に分ける */
+    const nowAt = $derived(lines.above.findIndex((line) => line.kind === 'now'));
+    const ahead = $derived(lines.above.slice(0, nowAt));
+    const current = $derived(lines.above.slice(nowAt));
+    /*
+     * **線より下 (録れたもの) だけ少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
+     * 開いた直後に一瞬止まって見えた。線より上 (予約) は全部描く — 上へ足すと、位置合わせの無い
+     * ブラウザ (iPad の Safari) では読んでいる所が跳ねる
+     */
+    const pastPage = new Paged(() => lines.below, 60);
+    $effect(() => {
+        filter;
+        untrack(() => pastPage.reset());
+    });
+
+    /**
+     * まだ描いていない**録れたものの本数** (「残り N 件」)。閉じた見出し1つに何本も入っているので、
+     * 描く行の数 (`pastPage.rest`) では数えない
+     */
+    const pastRest = $derived.by(() => {
+        let shown = 0;
+        for (const line of pastPage.rows) {
+            if (line.kind === 'row') shown += 1;
+            else if (line.kind === 'head' && !line.open) shown += line.group.items.length;
+        }
+        return Math.max(0, parts.past.length - shown);
+    });
+
+    /**
+     * **サイドバーに出す1本。** 指を乗せた行・焦点のある行・最後に開いた行。何も選んでいなければ
+     * 「いま」にいちばん近いもの (録画中、無ければ次の予約)。指で触る端末には乗せる操作が無いので、
+     * 押して開いた行を覚えておく
+     */
+    let selectedKey = $state<string | null>(null);
+    /**
+     * 行に付ける (`{@attach}`)。指を乗せたとき・焦点が入ったときに、その行をサイドバーに出す。
+     * 行そのものは押すものではない (押す的は中の入口とボタン) ので、属性のハンドラにはしない
+     */
+    function pickOn(key: string) {
+        return (row: HTMLElement) => {
+            const pick = () => {
+                selectedKey = key;
+            };
+            row.addEventListener('mouseenter', pick);
+            row.addEventListener('focusin', pick);
+            return () => {
+                row.removeEventListener('mouseenter', pick);
+                row.removeEventListener('focusin', pick);
+            };
+        };
+    }
+    const selected = $derived.by((): Item | null => {
+        const chosen = selectedKey === null ? undefined : items.find((item) => item.key === selectedKey);
+        if (chosen !== undefined) return chosen;
+        return parts.now[0] ?? parts.future.at(-1) ?? null;
+    });
+    /** 次の録画 (今日のまとめ)。絞り込みに関係なく、これからの予約のうちいちばん早いもの */
+    const nextRes = $derived.by(() => {
+        let next: Res | null = null;
+        for (const item of items) {
+            if (item.kind !== 'res' || item.zone !== 'future' || !cancelable(item.res)) continue;
+            if (item.res.state === 'skipped') continue;
+            if (next === null || item.res.start_at < next.start_at) next = item.res;
+        }
+        return next;
+    });
+    /** 「あと 25 分」。1日より先は日数で */
+    function untilLabel(at: number): string {
+        const min = Math.max(0, Math.round((at - clock) / 60_000));
+        if (min < 60) return `あと${min}分`;
+        if (min < 24 * 60) return `あと${Math.floor(min / 60)}時間${min % 60 === 0 ? '' : `${min % 60}分`}`;
+        return `あと${Math.floor(min / (24 * 60))}日`;
+    }
+    /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは日付 */
+    function dayLabel(at: number): string {
+        return dayName(at, clock) ?? date(at);
     }
 
     /*
-     * 絞り込みの言葉が変わったら先頭に戻す。`reset` は `grouped` を読むので外す
-     * (切り替えたときは `setGrouped` が戻す)
+     * ---- 開いたときの位置 ----
+     *
+     * **観終えていない録画があれば、いちばん古いものを映す** — 溜まったぶんを古い順に片付けられるように。
+     * 無ければ「いま」の線。描いていない所 (60 件より先) にあれば、そこまで描いてから送る。
+     * 並べ替えや絞り込みのたびには動かさない (開いたときの1回だけ)
      */
+    let listBox: HTMLElement | undefined = $state();
+    let placed = false;
+    /** 広い画面は一覧の枠が、狭い画面はページごとスクロールする */
+    function scroller(): HTMLElement | null {
+        if (listBox === undefined) return null;
+        return getComputedStyle(listBox).overflowY === 'auto' ? listBox : null;
+    }
+    /** 一覧の上に被さるもの (狭い画面の検索の段・日付の見出し) の高さ */
+    function coverOf(): number {
+        const bar = document.querySelector<HTMLElement>('[data-testid="timeline-toolbar"]');
+        return (bar !== null && getComputedStyle(bar).display !== 'none' ? bar.offsetHeight : 0) + 32;
+    }
+    /** 要素の上端が、見えている所の上から `offset` の位置に来るよう送る */
+    function scrollToTop(element: HTMLElement, offset: number): void {
+        const box = scroller();
+        if (box !== null) {
+            box.scrollTop += element.getBoundingClientRect().top - box.getBoundingClientRect().top - offset;
+        } else {
+            window.scrollTo({ top: window.scrollY + element.getBoundingClientRect().top - offset });
+        }
+    }
+    async function place(): Promise<void> {
+        const target = catchUp(parts.past, unfinished);
+        if (target !== null) {
+            const index = lineIndex(lines.below, target.key);
+            if (index >= pastPage.shown) pastPage.showUpTo(index + 1);
+        }
+        await tick();
+        const now = listBox?.querySelector<HTMLElement>('[data-testid="timeline-now"]');
+        if (now === null || now === undefined) return;
+        const box = scroller();
+        const height = box !== null ? box.clientHeight : window.innerHeight;
+        const cover = coverOf();
+        // 線は見えている所の 3 割ほどの高さに。上に次の予約、下に新しい録画が入る
+        scrollToTop(now, cover + (height - cover) * 0.25);
+        if (target === null) return;
+        const row =
+            listBox?.querySelector<HTMLElement>(`[data-key="${target.key}"]`) ??
+            listBox?.querySelector<HTMLElement>(`[data-group-rows~="${target.key}"]`);
+        if (row === null || row === undefined) return;
+        const bottom = box !== null ? box.getBoundingClientRect().bottom : window.innerHeight;
+        // 線のまま見えているならそのまま。見えなければ、その行が下の端に来るまで送る
+        if (row.getBoundingClientRect().bottom > bottom - 8) {
+            scrollToTop(row, height - row.offsetHeight - 16 - (box === null ? tabbarHeight() : 0));
+        }
+    }
+    function tabbarHeight(): number {
+        return document.querySelector<HTMLElement>('[data-testid="tabbar"]')?.offsetHeight ?? 0;
+    }
     $effect(() => {
-        recordingQuery;
-        untrack(() => recordingPage.reset());
+        if (listBox === undefined || placed) return;
+        placed = true;
+        untrack(() => void place());
     });
+
+    /** 絞り込みの下からの一枚 (狭い画面)。`<dialog>` なので焦点は中に閉じ込められ、Esc で閉じる */
+    let sheet: HTMLDialogElement | undefined = $state();
+    /** 一枚を開いているか。中身は開いている間だけ描く (サイドバーと同じ項目が二重に並ばないように) */
+    let sheetOpen = $state(false);
+    async function openSheet(): Promise<void> {
+        sheetOpen = true;
+        await tick();
+        sheet?.showModal();
+    }
+    /** 表示の切り替え (サイドバー)。開け閉めはその場かぎり */
+    let viewOpen = $state(false);
 </script>
 
 <!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
@@ -556,10 +650,19 @@
     </div>
 {/snippet}
 
-<!-- 局名・放送日時・尺・サイズ。1行にまとめて、空のものは出さない -->
+<!-- 局名・尺・サイズ。1行にまとめて、空のものは出さない -->
 <!-- 局ロゴは**まだ取得できていない局では何も出さない** (ServiceLogo) -->
 <!-- 局名は放送から来た字なので放送の字 (`.broadcast`)。残りはこちらで書いた字 -->
-{#snippet meta(service: string, parts: string[], row: { service_id: number; has_logo: boolean | null })}
+<!--
+    **何でこの1本が立ったのか** (`rule`)。要らないものが混ざっていたときに直す先 (どのルールか) が分かるよう、
+    ルール名をそのままルールの編集への入口にする。手動予約は、録れたもの (後から見返すもの) にだけ書く
+-->
+{#snippet meta(
+    service: string,
+    parts: string[],
+    row: { service_id: number; has_logo: boolean | null },
+    rule: { rule_id: number | null; rule_name: string | null } | 'manual' | null,
+)}
     {@const rest = parts.filter(Boolean).join(' ・ ')}
     <div class="row-meta">
         <ServiceLogo
@@ -568,6 +671,18 @@
             style="height: 1rem; margin-right: 0.375rem; vertical-align: -0.1875rem"
         />
         <span><span class="broadcast">{service}</span>{service && rest ? ' ・ ' : ''}<span class="num">{rest}</span></span>
+        {#if rule === 'manual'}
+            <span class="t-rule" data-testid="rule-name"> ・ 手動予約</span>
+        {:else if rule !== null}
+            <span class="t-rule" data-testid="rule-name">
+                ・ ルール:
+                {#if rule.rule_id !== null}
+                    <a href={resolve(`rules?edit=${rule.rule_id}`)} title={rule.rule_name ?? undefined}>{rule.rule_name}</a>
+                {:else}
+                    (削除済み)
+                {/if}
+            </span>
+        {/if}
     </div>
 {/snippet}
 
@@ -598,403 +713,327 @@
     </form>
 {/snippet}
 
-<!--
-    **何でこの1本が立ったのか。** 予約にも録画にも同じ形で出し、要らないものが
-    混ざっていたときに直す先 (どのルールか) が分かるようにする。
-    ルール名をそのまま入口にする。行にボタンを足すと窮屈になる
--->
-{#snippet source(ruleId: number | null, ruleName: string | null, manual: boolean)}
-    <div class="row-sub muted tiny" data-testid="rule-name">
-        {#if manual}
-            手動予約
-        {:else}
-            ルール:
-            {#if ruleId !== null}
-                <a href={resolve(`rules?edit=${ruleId}`)} title={ruleName ?? undefined}>{ruleName}</a>
-            {:else}
-                (削除済み)
-            {/if}
-        {/if}
-    </div>
-{/snippet}
-
 {#snippet posterImg(id: number)}
-    <!-- 読めなければ画像を隠して枠だけ残す -->
+    <!-- 読めなければ画像を隠して枠だけ残す (`poster`) -->
     <img
         src={resolve(`api/recordings/${id}/poster`)}
         alt=""
         loading="lazy"
         class="poster-img"
-        use:fadeIn
-        onerror={(event) => {
-            (event.currentTarget as HTMLImageElement).style.display = 'none';
-        }}
+        {@attach poster}
     />
 {/snippet}
 
 <!--
-    録画一覧の1行 (録画・録り逃し)。まとめて表示では番組の中にも同じ行を出す (`nested` で一段下げる)
+    **時刻の列。** 予約は始まりと終わり、録れたものは始まりだけ (日付は見出しにある)
 -->
-{#snippet rightRow(row: RightRow, nested: boolean)}
-    {#if row.kind === 'missed'}
-        {@const res = row.res}
-        <!--
-            録り逃し。観るものが無いので、押すと詳細だけ出す (予約の行と
-            同じ扱い)。置くのは畳むための削除だけ (再放送は番組表から予約し直す)
-        -->
-        <div data-program-id={res.program_id} class="row" class:nested={nested}>
-            <div class="row-inner">
-                <div class="row-body" data-testid="row-body">
-                    {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state', () =>
-                        openMissed(res),
-                    )}
-                    {@render meta(res.service_name, [airing(res)], res)}
-                    <!-- 録画側の流儀に合わせて手動とも書く (見返すものなので) -->
-                    {@render source(res.rule_id, res.rule_name, res.manual)}
+{#snippet clockCell(row: { start_at: number; end_at: number }, withEnd: boolean)}
+    <span class="t-time num" aria-hidden="true">
+        {time(row.start_at)}{#if withEnd}<span class="t-end">{time(row.end_at)}</span>{/if}
+    </span>
+{/snippet}
+
+<!--
+    **行の中の注意。** 行は 48px の 1 段 (広い画面) か 2 段 (狭い画面) にそろえ、言うことがあるときだけ
+    下に 1 段足す。黙っていると「録れたつもり」になるもの (競合・欠ける・ロゴでCMを判定できなかった) だけ
+-->
+
+<!-- 予約の行 (これから・録画中・「完了分も表示」で出る終わった予約) -->
+{#snippet resRow(item: Item & { kind: 'res' }, nested: boolean)}
+    {@const res = item.res}
+    <div
+        data-testid="reservation-row"
+        data-reservation-id={res.id}
+        data-program-id={res.program_id}
+        data-key={item.key}
+        class="row t-row"
+        class:nested
+        class:live={item.zone === 'now'}
+        class:picked={selected?.key === item.key}
+        {@attach pickOn(item.key)}
+    >
+        {@render clockCell(res, true)}
+        <div class="row-body" data-testid="row-body">
+            {@render title(
+                stateLabel(res.state),
+                badgeClass(res.state),
+                res.name,
+                'reservation-state',
+                () => {
+                    selectedKey = item.key;
+                    openReservation(res);
+                },
+                false,
+                quietState(res.state),
+            )}
+            {@render meta(res.service_name, [duration(res.start_at, res.end_at)], res, res.manual ? null : res)}
+            {#if res.conflict_reason}
+                <div class="row-sub text-error small">{res.conflict_reason}</div>
+            {/if}
+            {#if clipNote(res) !== null}
+                <div class="row-sub text-warning small">{clipNote(res)}</div>
+            {/if}
+        </div>
+        <div class="row-actions">
+            {#if res.recording_id !== null}
+                <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
+                <a class="button" href={resolve(`chase/${res.recording_id}`)} data-testid="chase-button">追っかけ</a>
+            {/if}
+            {#if cancelable(res)}
+                <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
+                    <Icon icon={X} size="size-4" /><span class="btn-label">取消</span>
+                </ActionButton>
+            {:else if res.state === 'canceled' && res.end_at > clock}
+                <!-- 取り消した予約はルールが作り直さないので、気が変わったときに戻せるのはここだけ -->
+                <ActionButton action="?/restore" fields={{ id: res.id }} class="secondary" testid="restore-button">
+                    戻す
+                </ActionButton>
+            {/if}
+        </div>
+    </div>
+{/snippet}
+
+<!-- 録り逃しの行。観るものが無いので、押すと詳細だけ出す。置くのは畳むための削除だけ -->
+{#snippet missedRow(item: Item & { kind: 'missed' }, nested: boolean)}
+    {@const res = item.res}
+    <div
+        data-testid="missed-row"
+        data-program-id={res.program_id}
+        data-key={item.key}
+        class="row t-row"
+        class:nested
+        class:picked={selected?.key === item.key}
+        {@attach pickOn(item.key)}
+    >
+        {@render clockCell(res, false)}
+        <span class="t-thumb" aria-hidden="true"></span>
+        <div class="row-body" data-testid="row-body">
+            {@render title(stateLabel('missed'), badgeClass('missed'), res.name, 'missed-state', () => {
+                selectedKey = item.key;
+                openMissed(res);
+            })}
+            {@render meta(res.service_name, [duration(res.start_at, res.end_at)], res, res.manual ? 'manual' : res)}
+        </div>
+        <div class="row-actions">
+            <!-- 構えの鍵は負の値にして、録画のIDと混ざらないようにする (deleting は録画と共用) -->
+            <ArmedDelete
+                {deleting}
+                armKey={-res.id}
+                action="?/deleteMissed"
+                fields={{ id: res.id }}
+                testid="delete-button"
+                confirmTestid="delete-confirm"
+                icon
+            />
+        </div>
+    </div>
+{/snippet}
+
+<!--
+    録画の行。押すと再生 (録っている最中は追っかけ)。中身を読みたいときは行の「詳細」から。
+    置き場と尺と切ったCMの位置は属性にだけ持たせる (確かめる手段は残しておきたい)
+-->
+{#snippet recRow(item: Item & { kind: 'rec' }, nested: boolean)}
+    {@const rec = item.rec}
+    {@const link = watchLink(rec)}
+    {@const shown = rowState(rec)}
+    {@const held = offline.entries[rec.id]}
+    <div
+        data-testid="recording-row"
+        data-recording-id={rec.id}
+        data-program-id={rec.program_id}
+        data-library-path={rec.library_path}
+        data-alt-path={rec.alt_path}
+        data-duration-ms={rec.duration_ms}
+        data-cm-ranges={rec.cm_ranges === null ? null : JSON.stringify(rec.cm_ranges)}
+        data-key={item.key}
+        class="row t-row playable"
+        class:nested
+        class:picked={selected?.key === item.key}
+        {@attach pickOn(item.key)}
+    >
+        {@render clockCell(rec, false)}
+        <!-- ポスター。無い録画もあるので、読めなければ画像を隠して枠だけ残す。再生の印は観られるものだけ -->
+        <span class="t-thumb" data-testid={link === null ? undefined : 'play-hint'} aria-hidden="true">
+            {#if rec.library_path !== null}
+                {@render posterImg(rec.id)}
+            {/if}
+            {#if link !== null}
+                <span class="t-play"><Play class="poster-icon" /></span>
+            {/if}
+        </span>
+        <div class="row-body" data-testid="row-body">
+            {@render title(
+                shown.label,
+                shown.badge,
+                rec.name,
+                'recording-state',
+                link ??
+                    (() => {
+                        selectedKey = item.key;
+                        openRecording(rec);
+                    }),
+                unwatched(rec),
+                shown.quiet,
+            )}
+            {@render meta(
+                rec.service_name,
+                [
+                    recordedDuration(rec),
+                    sizeLabel(rec),
+                    rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
+                ],
+                rec,
+                rec.from_manual === null ? null : rec.from_manual ? 'manual' : rec,
+            )}
+            {#if clipNote(rec, true) !== null}
+                <div class="row-sub text-warning small">{clipNote(rec, true)}</div>
+            {/if}
+            {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
+                <!-- ロゴでの判定が使えず、無音だけでCMを判定している。覚えたロゴはチューナー画面で確かめられる -->
+                <div class="row-sub text-warning small">
+                    ロゴでCMを判定できませんでした (無音だけで判定)
+                    <span class="muted">— 覚えたロゴはチューナー画面で確かめられます</span>
                 </div>
-                <!--
-                    確かめ終わったら畳める (録画の削除と同じ2回押し)。
-                    消すのは予約の行 (`?/deleteMissed`) — 録画の行が無いので。
-                    構えの鍵は負の値にして、録画のIDと混ざらないようにする
-                    (deleting は録画と共用で、IDの空間が別のため)
-                -->
-                <div class="row-actions">
+            {/if}
+            {#if held !== undefined}
+                <div class="row-sub small" data-testid="offline-state">
+                    <span class="tag offline-tag {held.state === 'ready' ? 'success' : held.state === 'failed' ? 'error' : ''}">
+                        {held.state === 'ready'
+                            ? '端末に保存済み'
+                            : held.state === 'failed'
+                              ? '端末に保存できませんでした — 詳細からやり直せます'
+                              : `端末に保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
+                    </span>
+                </div>
+            {/if}
+            {#if rec.job_state === 'running' && rec.job_phase === 'encode'}
+                <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
+                {@const live = encodeLive.entries[rec.id]}
+                {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
+                <div class="row-sub muted tiny num" data-testid="encode-progress">
+                    {percent(live?.percent ?? rec.job_percent ?? 0)}
+                    {#if eta(liveEta)}・{eta(liveEta)}{/if}
+                </div>
+            {:else if rec.job_state === 'running' && rec.job_log}
+                <div class="row-sub muted tiny">{rec.job_log}</div>
+            {/if}
+        </div>
+        <!--
+            **途中まで観たものは残りを出す。** 観た位置は続きから始めるために持っていて、末尾まで観たものは
+            消えるので、残っている = まだ途中。添える言葉は割合ではなく「あと何分か」
+        -->
+        {#if link !== null && rec.deleted_at === null && rec.progress !== null}
+            {@const { at, length: span } = rec.progress}
+            {@const frac = span > 0 ? Math.min(1, at / span) : 0}
+            <span class="resume" data-testid="resume">
+                <span class="resume-track"><span class="resume-fill" style="width: {frac * 100}%"></span></span>
+                <span class="resume-left muted tiny num">残り{durationMs(Math.max(0, span - at))}</span>
+            </span>
+        {/if}
+        <div class="row-actions">
+            {#if link !== null}
+                <!-- 行を押すと再生なので、中身を読む入口は別に置く。観られない行は行そのものが詳細の入口 -->
+                <button
+                    type="button"
+                    class="secondary outline icon"
+                    onclick={() => {
+                        selectedKey = item.key;
+                        openRecording(rec);
+                    }}
+                    aria-label="詳細"
+                    title="詳細"
+                    data-testid="detail-button"
+                >
+                    <Icon icon={Info} size="size-4" />
+                </button>
+            {/if}
+            {#if rec.deleted_at === null}
+                {#if rec.job_id !== null}
+                    <!-- 動いている間は中断だけ。裏で ffmpeg が元のTSを読んでいるので、消させると道連れになる -->
+                    {#if rec.job_canceling}
+                        <button type="button" class="outline danger" disabled aria-busy="true" data-testid="encode-cancel">
+                            エンコード中断
+                        </button>
+                    {:else}
+                        <ActionButton action="?/cancelEncode" fields={{ id: rec.job_id }} class="outline danger" testid="encode-cancel">
+                            エンコード中断
+                        </ActionButton>
+                    {/if}
+                {:else}
+                    <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
                     <ArmedDelete
                         {deleting}
-                        armKey={-res.id}
-                        action="?/deleteMissed"
-                        fields={{ id: res.id }}
+                        armKey={rec.id}
+                        fields={{ id: rec.id }}
+                        submit={() => async (options) => {
+                            await options.update();
+                            if (options.result.type === 'success' && offline.entries[rec.id] !== undefined) {
+                                void removeLocal(rec.id);
+                            }
+                        }}
                         testid="delete-button"
                         confirmTestid="delete-confirm"
                         icon
                     />
-                </div>
-            </div>
-        </div>
-    {:else}
-        {@const rec = row.rec}
-        {@const link = watchLink(rec)}
-        {@const canPlay = link !== null}
-        {@const shown = rowState(rec)}
-        <!-- 端末に入っているか (オフライン視聴)。行の印と、下のバーで見る -->
-        {@const held = offline.entries[rec.id]}
-        <!--
-            押すと再生。中身を読みたいときは行の中の「詳細」から。
-
-            **吹き出し (title) は出さない。** 行に指を乗せると色が反転し、
-            再生の印も出ているので、そこを押せば再生になることは見れば分かる。
-            出していた頃は、行を読もうとするたびに文字の上へバッジが被さっていた。
-
-            置き場と尺と**切ったCMの位置**は属性にだけ持たせる。普段は見ない
-            もので (CM の位置はチャプターとして動画に入っている)、
-            画面に並べると番組名を押し出すが、確かめる手段は残しておきたい
-        -->
-        <div
-            data-testid="recording-row"
-            data-recording-id={rec.id}
-            data-program-id={rec.program_id}
-            data-library-path={rec.library_path}
-            data-alt-path={rec.alt_path}
-            data-duration-ms={rec.duration_ms}
-            data-cm-ranges={rec.cm_ranges === null ? null : JSON.stringify(rec.cm_ranges)}
-            class="row playable"
-            class:nested={nested}
-        >
-            <div class="row-inner">
-                <!--
-                    再生の印。**押すもの (button) にはしない。**
-                    行そのものが再生なので、同じ働きの的を二重に置くと
-                    「印を外すと再生されない」ように見える。
-                    行に指を乗せると色が反転して、押す先がここだと分かる
-                -->
-                {#if canPlay}
-                    <!--
-                        **ポスターを出す。** エンコードしたときに動画の隣へ置いた
-                        `-poster.jpg` (`api/.../poster`)。文字だけの行より
-                        ずっと選びやすい。**無い録画もある**
-                        (ポスターより前にエンコードしたもの等) ので、読めなければ画像を
-                        隠して枠だけ残す (`onerror`)。枠と再生印はいつでも出す
-                    -->
-                    <div class="poster" data-testid="play-hint">
-                        {#if rec.library_path !== null}
-                            {@render posterImg(rec.id)}
-                        {/if}
-                        <span class="poster-play" aria-hidden="true">
-                            <Play class="poster-icon" aria-hidden="true" />
-                        </span>
-                    </div>
                 {/if}
-                <div class="row-body" data-testid="row-body">
-                    <!--
-                        録画の状態とエンコードの状態を1つにまとめて出す
-                        (rowState)。消したもの (deleted) も録画の状態から
-                        決まるので、ここで書き分けることは何も無い
-                    -->
-                    {@render title(
-                        shown.label,
-                        shown.badge,
-                        rec.name,
-                        'recording-state',
-                        link ?? (() => openRecording(rec)),
-                        unwatched(rec),
-                        shown.quiet,
-                    )}
-                    {#if held !== undefined}
-                        <!-- 端末に入っている印。保存中はエンコードと同じく割合を添える -->
-                        <span
-                            class="tag offline-tag {held.state === 'ready'
-                                ? 'success'
-                                : held.state === 'failed'
-                                  ? 'error'
-                                  : ''}"
-                        >
-                            {held.state === 'ready'
-                                ? '端末に保存済み'
-                                : held.state === 'failed'
-                                  ? '端末に保存できませんでした — 詳細からやり直せます'
-                                  : `端末に保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
-                        </span>
-                    {/if}
-                    <!--
-                        放送日時・尺・サイズは1行にまとめる。列に分けていた頃は、
-                        画面が狭いと表ごと横スクロールになって番組名まで隠れていた。
-                        ファイルの置き場所は普段は見ないので出さない (data-library-path)
-                    -->
-                    {@render meta(
-                        rec.service_name,
-                        [
-                            // 番組表の尺ではなく実際に録れた長さ。
-                            // 途中で止めたときやCMを切ったときは合わない
-                            `${dateTime(rec.start_at)} (${recordedDuration(rec)})`,
-                            // 在るものは全部出す (`sizeLabel`)。片方しか
-                            // 出していなかった頃は、消していいのか・
-                            // どれだけ空くのかが画面から分からなかった
-                            sizeLabel(rec),
-                            rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
-                        ],
-                        rec,
-                    )}
-                    <!--
-                        **欠けているなら、そう言う。** チューナーの取り合いで
-                        頭か尻を譲った録画は、番組の一部が入っていない
-                        (`server/conflict.ts` の「入るところまで録る」)。
-                        尺だけ見ても「短い番組」と見分けが付かないので、
-                        行に書く
-                    -->
-                    {#if clipNote(rec, true) !== null}
-                        <div class="row-sub text-warning small">
-                            {clipNote(rec, true)}
-                        </div>
-                    {/if}
-                    <!--
-                        **途中まで観たものは残りを出す。** 観た位置
-                        (`resume_ms`) は続きから始めるために持っていて、末尾まで
-                        観たものは消える (`api/.../resume`) ので、**残っている =
-                        まだ途中**。押せば `/watch` が続きから始める。
-                        位置も分母も観る物差し (エンコードしたものがあればその時刻) に直したもの
-                        (`progress`。覚えている位置は元の TS の物差しなので、CM を切ったものでは
-                        そのまま出来上がりの尺と比べると食い違う)。分母は実際に録れた長さで、無ければ番組表の尺。
-                        添える言葉は割合ではなく**あと何分か** — 「観終わるのに
-                        どれだけ掛かるか」が知りたいことで、4% では換算がいる
-                    -->
-                    {#if canPlay && rec.deleted_at === null && rec.progress !== null}
-                        {@const { at, length: span } = rec.progress}
-                        {@const frac = span > 0 ? Math.min(1, at / span) : 0}
-                        <div class="resume">
-                            <div class="resume-track">
-                                <div class="resume-fill" style="width: {frac * 100}%"></div>
-                            </div>
-                            <span class="resume-left muted tiny num">
-                                残り{durationMs(Math.max(0, span - at))}
-                            </span>
-                        </div>
-                    {/if}
-                    <!--
-                        何で録れた1本か。**予約から来たものだけ**。
-                        取り込んだ録画 (EPGStation から引き継いだもの) には
-                        予約が無いので、何も出さない
-                    -->
-                    {#if rec.from_manual !== null}
-                        {@render source(rec.rule_id, rec.rule_name, rec.from_manual)}
-                    {/if}
-                    <!--
-                        失敗・削除の理由や CM の検出元は長いので行に出さず、
-                        詳細 (openRecording) に回す。状態はバッジで分かる
-                    -->
-                    {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
-                        <!--
-                            ロゴでの判定が使えなかったので、無音だけでCMを判定している。
-                            精度が落ちているのを黙っていると「なぜか切れていない」に
-                            なるので出す。**覚えたロゴは設定の「ロゴ」で確かめられる** —
-                            録画ごとではなく局ごとの話で、覚え直せば以降の全部に効く。
-
-                            **見つけられなかったときだけではない。** ロゴには合致した
-                            のに結果が使い物にならなかったとき (番組の 100% がCM判定など)
-                            も、覚えているほうが怪しいので同じことを出す
-                        -->
-                        <div class="row-sub text-warning small">
-                            ロゴでCMを判定できませんでした (無音だけで判定)
-                            <span class="muted">— 覚えたロゴは<a href={`${resolve('settings/reception')}#logos`}>設定の「ロゴ」</a>で確かめられます</span>
-                        </div>
-                    {/if}
-                    <!--
-                        エンコード中だけ、割合と残りの見込みを添える。
-                        ffmpeg が回っていない段階 (解除中・CM検出中) は
-                        進み具合が取れないので、代わりに**いま何をしているか**を出す。
-                    -->
-                    {#if rec.job_state === 'running' && rec.job_phase === 'encode'}
-                        <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
-                        {@const live = encodeLive.entries[rec.id]}
-                        {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
-                        <div class="row-sub muted tiny num" data-testid="encode-progress">
-                            {percent(live?.percent ?? rec.job_percent ?? 0)}
-                            {#if eta(liveEta)}・{eta(liveEta)}{/if}
-                        </div>
-                    {:else if rec.job_state === 'running' && rec.job_log}
-                        <div class="row-sub muted tiny">
-                            {rec.job_log}
-                        </div>
-                    {/if}
-                </div>
-
-                <!--
-                    押すものは枠の無いボタンに字とアイコン (`app.css` の `.row-actions`)。
-                    押せることは字の色と指を乗せたときの地で分かる。削除は控えた色で、
-                    指を乗せたときだけ赤い
-                -->
-                <div class="row-actions">
-                    <!--
-                        中身を読む入口は、**行を押しても詳細にならない行だけ**に置く。
-                        観られる行は押すと再生に行くので、説明やCMの位置を見たい
-                        ときの別口が要る。観られない行 (録画そのものの失敗・
-                        削除済み・まだ何も録れていない) は行そのものが詳細の
-                        入口 (`title` の `.row-open`) なので、同じ働きのボタンを並べない
-                        (録り逃しの行とも揃う)。エンコードしている最中は観られる (追っかけ)
-                    -->
-                    {#if canPlay}
-                        <button
-                            type="button"
-                            class="secondary outline"
-                            onclick={() => openRecording(rec)}
-                            data-testid="detail-button"
-                        >
-                            <Icon icon={Info} size="size-4" />詳細
-                        </button>
-                    {/if}
-                    {#if rec.deleted_at === null}
-                        <!-- 録り直しは詳細の中 (recordingActions) -->
-                        {#if rec.job_id !== null}
-                            <!--
-                                動いている間は中止だけ。この裏で ffmpeg が
-                                元のTSを読んでいるので、消させると道連れになる
-                            -->
-                            {#if rec.job_canceling}
-                                <!--
-                                    **畳み終わるまで回したままにする。** 押した返事は
-                                    上限 (encoder.CANCEL_WAIT_MS) で切り上げることが
-                                    あり、返事でボタンを戻すと「回るのが止まったのに
-                                    まだエンコード中」になっていた。行が消える
-                                    (畳み終わりの通知) までは、まだ中止の途中
-                                -->
-                                <button type="button"
-                                    class="outline danger"
-                                    disabled
-                                    aria-busy="true"
-                                    data-testid="encode-cancel"
-                                >
-                                    エンコード中断
-                                </button>
-                            {:else}
-                                <ActionButton
-                                    action="?/cancelEncode"
-                                    fields={{ id: rec.job_id }}
-                                    class="outline danger"
-                                    testid="encode-cancel"
-                                >
-                                    エンコード中断
-                                </ActionButton>
-                            {/if}
-                        {:else}
-                            <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
-                            <ArmedDelete
-                                {deleting}
-                                armKey={rec.id}
-                                fields={{ id: rec.id }}
-                                submit={() => async (options) => {
-                                    await options.update();
-                                    // held は使わない。use: の引数は作ったときのまま閉じ込められるので、
-                                    // あとから端末に保存した録画でも古い「無い」を見てしまう
-                                    if (options.result.type === 'success' && offline.entries[rec.id] !== undefined) {
-                                        void removeLocal(rec.id);
-                                    }
-                                }}
-                                testid="delete-button"
-                                confirmTestid="delete-confirm"
-                                icon
-                            />
-                        {/if}
-                    {/if}
-                </div>
-            </div>
-
-            <!--
-                進み具合は行の下端いっぱいに敷く。別の行に分けていた頃は、
-                行と行の間に隙間ができて、どの録画のものか分かりにくかった。
-
-                ffmpeg が回っていない段階でも割合を出すようにしたが、
-                取れないものもあるので、そのときは動いているだけのバーにする
-            -->
-            {#if rec.job_id !== null}
-                {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
-                <progress
-                    class="row-bar"
-                    class:running={rec.job_state === 'running' && barPercent > 0}
-                    value={rec.job_state === 'running' && barPercent > 0
-                        ? barPercent
-                        : undefined}
-                    max="1"
-                ></progress>
-            {:else if held?.state === 'downloading'}
-                <!-- 端末への保存もエンコードと同じ見せ方。測れない間は動くだけのバー -->
-                <progress
-                    class="row-bar success"
-                    class:running={held.progress !== null}
-                    value={held.progress ?? undefined}
-                    max="1"
-                ></progress>
             {/if}
         </div>
+        <!-- 進み具合は行の下端いっぱいに敷く。取れないときは動いているだけのバー -->
+        {#if rec.job_id !== null}
+            {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
+            <progress
+                class="row-bar"
+                class:running={rec.job_state === 'running' && barPercent > 0}
+                value={rec.job_state === 'running' && barPercent > 0 ? barPercent : undefined}
+                max="1"
+            ></progress>
+        {:else if held?.state === 'downloading'}
+            <progress class="row-bar success" class:running={held.progress !== null} value={held.progress ?? undefined} max="1"></progress>
+        {/if}
+    </div>
+{/snippet}
+
+{#snippet itemRow(item: Item, nested: boolean)}
+    {#if item.kind === 'res'}
+        {@render resRow(item, nested)}
+    {:else if item.kind === 'missed'}
+        {@render missedRow(item, nested)}
+    {:else}
+        {@render recRow(item, nested)}
     {/if}
 {/snippet}
 
 <!--
-    **番組の見出し** (まとめて表示)。押すと開く・閉じる。本物の button なので、
-    Tab で辿れて Enter / Space で開く。開いているかは `aria-expanded` で読み上げる。
-    中身は見出しのすぐ下に放送順で続く (`#lib/grouping.ts`)
+    **番組の見出し** (まとめて表示)。押すと開く・閉じる。本物の button なので、Tab で辿れて Enter / Space で開く。
+    同じ番組でも線の上 (予約) と下 (録画) で別の見出し (`#lib/timeline.ts`)
 -->
-{#snippet groupHead(group: SeriesGroup<RightRow>, open: boolean)}
-    <!-- 見出しの画像は**いちばん新しい回のポスター**。エンコードしたものが無い回 (録り逃し・削除済み・エンコードする前) は飛ばして、その前の回を探す -->
-    {@const poster = newestRec(group, (rec) => rec.library_path !== null && rec.deleted_at === null)}
-    <!-- 閉じたままでも、まだ観ていない回があると分かるように数を添える (行の点と同じ決め方) -->
-    {@const fresh = group.items.filter((row) => row.kind === 'rec' && unwatched(row.rec)).length}
+{#snippet groupHead(group: SeriesGroup<Item>, zone: 'future' | 'past', open: boolean)}
+    {@const posterRec = group.items.findLast(
+        (item) => item.kind === 'rec' && item.rec.library_path !== null && item.rec.deleted_at === null,
+    )}
+    {@const fresh = group.items.filter((item) => item.kind === 'rec' && unwatched(item.rec)).length}
+    {@const next = zone === 'future' ? (group.items[0] ?? group.newest) : group.newest}
     <button
         type="button"
         class="group-head"
         aria-expanded={open}
-        onclick={() => toggleGroup(group.group)}
+        onclick={() => toggleGroup(zone, group.group)}
         data-testid="recording-group"
+        data-zone={zone}
         data-group={group.group}
+        data-group-rows={group.items.map((item) => item.key).join(' ')}
     >
         <span class="group-chevron" class:open aria-hidden="true">
             <Icon icon={ChevronRight} size="size-4" />
         </span>
-        <span class="poster">
-            {#if poster !== null}
-                {@render posterImg(poster)}
+        <span class="t-thumb" aria-hidden="true">
+            {#if posterRec?.kind === 'rec'}
+                {@render posterImg(posterRec.rec.id)}
             {/if}
         </span>
         <span class="row-body">
-            <span class="cluster">
+            <span class="cluster title-line">
                 <span class="tag num" data-testid="recording-group-count">{group.items.length}本</span>
                 {#if fresh > 0}
                     <span class="group-unwatched tiny" data-testid="recording-group-unwatched">
@@ -1003,350 +1042,340 @@
                 {/if}
                 <span class="row-name broadcast" data-testid="recording-group-name">{group.name}</span>
             </span>
-            <span class="row-meta num">最新 {dateTime(group.newest.at)}</span>
+            <span class="row-meta num">
+                {zone === 'future' ? `次 ${dateTime(next.at)}` : `最新 ${dateTime(group.newest.at)}`}
+            </span>
         </span>
     </button>
     <!--
-        開いた番組の頭に「ルールを作る」。見出しそのものは開閉のボタンなので、
-        中には入れられない (押す的が入れ子になる)。中身の行と同じだけ下げて、その番組の
-        ものだと分かるようにする
+        開いた番組の頭に「ルールを作る」。見出しは開閉のボタンなので中には入れられない (押す的が入れ子になる)。
+        元は録画ならいちばん新しい録画、予約なら次の回の番組
     -->
-    <!-- ルールの元は**いちばん新しい録画** (録り逃しだけの番組には出さない) -->
-    {@const source = open ? newestRec(group) : null}
-    {#if source !== null}
-        <div class="group-tools">
-            <a class="button small secondary outline" href={ruleFrom('recording', source)} data-testid="group-rule">ルールを作る</a>
-        </div>
+    {#if open}
+        {@const recSource = group.items.findLast((item) => item.kind === 'rec')}
+        {@const href =
+            recSource?.kind === 'rec'
+                ? ruleFrom('recording', recSource.rec.id)
+                : next.kind === 'res' && next.res.program_id !== null
+                  ? ruleFrom('program', next.res.program_id)
+                  : null}
+        {#if href !== null}
+            <div class="group-tools">
+                <a class="button small secondary outline" {href} data-testid="group-rule">ルールを作る</a>
+            </div>
+        {/if}
     {/if}
 {/snippet}
 
-<!--
-    広い画面では2つの一覧を横に並べ、画面の残りを丁度使い切る (全部 CSS で決める)。
-    畳まれる幅 (md 未満) では素直にページごとスクロールさせる。
-    **横に並べはじめる幅は全画面で `md` (768px)** ([+layout.svelte](./+layout.svelte) の `FILLED`)
--->
+{#snippet line(entry: TimelineLine<Item>)}
+    {#if entry.kind === 'day'}
+        <!-- 日付の見出し。見出しなので読み上げの見出し移動で辿れる。予約か録画かも言う -->
+        <h2 class="t-day" data-testid="timeline-day" data-zone={entry.zone}>
+            <span class="t-day-name">{dayLabel(entry.at)}</span>
+            {#if dayName(entry.at, clock) !== null}<span class="t-day-date num">{date(entry.at)}</span>{/if}
+            <span class="t-day-zone">{entry.zone === 'future' ? '予約' : '録画'}</span>
+        </h2>
+    {:else if entry.kind === 'side'}
+        <h2 class="t-day" data-testid="timeline-side" data-zone={entry.zone}>
+            <span class="t-day-name">{entry.zone === 'future' ? 'これからの予約' : '録画'}</span>
+        </h2>
+    {:else if entry.kind === 'now'}
+        <!-- 「いま」の線。見出しにして、見出し移動でここへ来られるようにする (読み上げは「いま 14:32」) -->
+        <h2 class="t-now" data-testid="timeline-now">
+            <span class="t-now-label num">いま {time(clock)}</span>
+        </h2>
+    {:else if entry.kind === 'head'}
+        {@render groupHead(entry.group, entry.zone, entry.open)}
+    {:else}
+        {@render itemRow(entry.item, entry.nested)}
+    {/if}
+{/snippet}
+
+<!-- 絞り込みの並び。サイドバーと、狭い画面の下からの一枚で同じもの -->
+{#snippet filterList(onpick: () => void)}
+    <div class="s-list" role="group" aria-label="絞り込み">
+        {#each FILTERS as f (f.id)}
+            <button
+                type="button"
+                class="s-item"
+                class:on={filter === f.id}
+                aria-pressed={filter === f.id}
+                onclick={() => {
+                    filter = f.id;
+                    onpick();
+                }}
+                data-testid="filter"
+                data-filter={f.id}
+            >
+                <span>{f.label}</span>
+                <span class="s-sub num" class:alert={f.id === 'failed' && counts.failed > 0} data-testid="filter-count">
+                    {counts[f.id]}
+                </span>
+            </button>
+        {/each}
+    </div>
+{/snippet}
+
+<!-- 表示の切り替え。オン・オフの印 (`aria-pressed`) 付き。サイドバーと下からの一枚で同じもの -->
+{#snippet viewList(done: () => void)}
+    <div class="s-list" role="group" aria-label="表示の切り替え">
+        <button
+            type="button"
+            class="s-item"
+            aria-pressed={grouped}
+            onclick={() => setGrouped(!grouped)}
+            data-testid="recordings-group-toggle"
+        >
+            <span>まとめて表示</span>
+            <span class="s-sub">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>
+        </button>
+        <!-- URL で切り替えるのでリンク。入っているかは印と、読み上げには「オン」で -->
+        <a class="s-item" href={finishedHref} data-testid="reservations-finished-toggle" data-on={data.showFinished}>
+            <span>完了した予約も表示</span>
+            <span class="s-sub">
+                {#if data.showFinished}<Icon icon={Check} size="size-4" /><span class="visually-hidden">オン</span>{/if}
+            </span>
+        </a>
+        <a class="s-item" href={deletedHref} data-testid="recordings-deleted-toggle" data-on={data.showDeleted}>
+            <span>削除済みも表示</span>
+            <span class="s-sub">
+                {#if data.showDeleted}<Icon icon={Check} size="size-4" /><span class="visually-hidden">オン</span>{/if}
+            </span>
+        </a>
+        <!-- 照合は送り終えてから閉じる (先に閉じると、結果の通知が出る前に一枚が消える) -->
+        <form
+            method="POST"
+            action="?/reconcile"
+            class="menu-form"
+            use:submitting={() => async (options) => {
+                await options.update();
+                done();
+            }}
+        >
+            <button type="submit" class="s-item" data-testid="reconcile-button"><span>ファイルと照合</span></button>
+        </form>
+    </div>
+{/snippet}
+
 <div class="board">
     <Toasts {notices} source={form} ondismiss={dropNote} />
 
-    <div class="board-grid">
-        <section class="board-col reservations">
-            <div class="board-head">
-                <h2>予約</h2>
-                <div class="cluster">
-                    <input
-                        type="search"
-                        class="filter"
-                        placeholder="番組名・局・状態で絞り込み"
-                        aria-label="予約を絞り込む"
-                        bind:value={reservationQuery}
-                    />
-                    <!-- 録画の「表示」と同じ形。項目は 1 つでも、同じ場所に同じ形で置く -->
-                    <Menu align="end" class="view-menu" testid="reservations-view-menu">
-                        {#snippet trigger(props)}
-                            <button
-                                {...props}
-                                type="button"
-                                class="secondary outline small view-trigger"
-                                data-testid="reservations-view"
-                            >
-                                表示
-                                {#if data.showFinished}<span class="view-dot" aria-hidden="true"></span>{/if}
-                                <Icon icon={ChevronDown} size="size-4" />
-                            </button>
-                        {/snippet}
-                        <a
-                            role="menuitemcheckbox"
-                            class="menu-item"
-                            aria-checked={data.showFinished}
-                            href={finishedHref}
-                            data-testid="reservations-finished-toggle"
-                        >
-                            <span class="menu-check" aria-hidden="true">{#if data.showFinished}<Icon icon={Check} size="size-4" />{/if}</span>
-                            完了分も表示
-                        </a>
-                    </Menu>
-                </div>
-            </div>
-
-            <div class="board-box">
-                <div class="rows" data-testid="reservation-list">
-                    {#each reservationPage.rows as res (res.id)}
-                        <div
-                            data-testid="reservation-row"
-                            data-reservation-id={res.id}
-                            data-program-id={res.program_id}
-                            class="row"
-                        >
-                            <div class="row-inner">
-                                <div class="row-body" data-testid="row-body">
-                                    {@render title(
-                                        stateLabel(res.state),
-                                        badgeClass(res.state),
-                                        res.name,
-                                        'reservation-state',
-                                        () => openReservation(res),
-                                        false,
-                                        quietState(res.state),
-                                    )}
-                                    {@render meta(res.service_name, [airing(res)], res)}
-                                    {#if res.conflict_reason}
-                                        <div class="row-sub text-error small">{res.conflict_reason}</div>
-                                    {/if}
-                                    <!--
-                                        **譲ることになっているなら、録る前に言う。** 丸ごと
-                                        落とす代わりに入るところまで録るので (`server/conflict.ts`)、
-                                        黙っていると「録れたつもり」で頭が無い録画ができる
-                                    -->
-                                    {#if clipNote(res) !== null}
-                                        <div class="row-sub text-warning small">
-                                            {clipNote(res)}
-                                        </div>
-                                    {/if}
-                                    <!--
-                                        手動なら何も出さない。既定と違うときだけ言う。
-                                        **録画の側では手動とも書く** — 録れたものは後から
-                                        見返すので、「ルールではない」ことにも意味がある
-                                    -->
-                                    {#if !res.manual}
-                                        {@render source(res.rule_id, res.rule_name, false)}
-                                    {/if}
-                                </div>
-
-                                <div class="row-actions">
-                                    {#if res.recording_id !== null}
-                                        <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
-                                        <a
-                                            class="button"
-                                            href={resolve(`chase/${res.recording_id}`)}
-                                        >
-                                            追っかけ
-                                        </a>
-                                    {/if}
-                                    {#if cancelable(res)}
-                                        <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
-                                            <Icon icon={X} size="size-4" />取消
-                                        </ActionButton>
-                                    {:else if res.state === 'canceled' && res.end_at > Date.now()}
-                                        <!--
-                                            取り消した予約はルールが作り直さないので、
-                                            気が変わったときに戻せるのはここだけ
-                                        -->
-                                        <ActionButton action="?/restore" fields={{ id: res.id }} class="secondary" testid="restore-button">
-                                            戻す
-                                        </ActionButton>
-                                    {/if}
-                                </div>
-                            </div>
-                        </div>
-                    {:else}
-                        {#if reservationQuery === ''}
-                            <!-- 空のときは次に何をすればよいかまで言う (下の `.empty`) -->
-                            <div class="empty" data-testid="reservation-empty">
-                                <p class="empty-title">予約はありません</p>
-                                <p class="empty-hint">番組表から予約するか、ルールを作ると自動で入ります</p>
-                                <div class="empty-actions">
-                                    <a class="button small" href={resolve('guide')}>番組表を開く</a>
-                                    <a class="button secondary outline small" href={resolve('rules')}>ルールを作る</a>
-                                </div>
-                            </div>
-                        {:else}
-                            <div class="empty">
-                                <p class="empty-title">「{reservationQuery}」に一致する予約はありません</p>
-                            </div>
-                        {/if}
-                    {/each}
-                    <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
-                    {#if reservationPage.more}
-                        <div
-                            class="row-empty muted small num"
-                            use:sentinel={() => reservationPage.reveal()}
-                            data-testid="reservation-more"
-                        >
-                            残り {reservationPage.rest} 件
-                        </div>
-                    {/if}
-                    <!--
-                        絞った結果の件数は**一覧の末尾に**。見出しの行に出していた頃は、
-                        打つたびに右の押すものが動いてガクガクした
-                    -->
-                    {#if reservationQuery !== ''}
-                        <div class="row-empty muted small num">
-                            {data.reservations.length} 件中 {reservationRows.length} 件
-                        </div>
-                    {/if}
-                </div>
-            </div>
-        </section>
-
-        <section class="board-col recordings">
-            <!-- 見出しの高さと下の余白は予約側と揃える。並べたときにずれて見えるため -->
-            <div class="board-head">
-                <!--
-                    **空きと、あと何時間録れるか** (issue #505。`disk.capacity`)。見出しの脇に小さく置く。
-                    見出しの行を2段にしないよう、列が狭くなるにつれて削り、最後は「⋯」の頭に回す (下の `@container`)
-                -->
-                <div class="head-title">
-                    <h2>録画</h2>
-                    {#if data.capacity !== null}
-                        <span class="capacity muted tiny num" data-testid="recordings-capacity">
-                            {data.capacity.free}{#if data.capacity.hours !== null}<span class="capacity-hours">・{data.capacity.hours}</span>{/if}
-                        </span>
-                    {/if}
-                </div>
-                <div class="cluster">
-                    <!--
-                        打てば手元で絞り、**Enter で `?q=` をサーバに聞く** (上の `recordingQuery`)。
-                        GET なので URL に残り、共有・戻るがそのまま効く。削除済み表示は引き継ぐ。
-                        押すものは置かない (予約側と同じ形) — 解除するのも欄を空にして Enter
-                    -->
-                    <form method="GET" action={resolve('')} class="search" data-sveltekit-reset={false}>
-                        {#if data.showDeleted}
-                            <input type="hidden" name="deleted" value="1" />
-                        {/if}
-                        <input
-                            type="search"
-                            name="q"
-                            class="filter"
-                            bind:value={recordingQuery}
-                            placeholder="番組名・局で絞り込み"
-                            aria-label="録画を絞り込む"
-                        />
-                    </form>
-                    <!--
-                        **表示の切り替えは「表示」のメニューに 1 つにまとめる** (まとめて表示・削除済みも表示)。
-                        並べていた頃は、見出しの行に枠のボタンが 3〜4 個並び、どれが入っているのかも
-                        読みにくかった。項目はオン・オフの印 (`menuitemcheckbox`) で、どれか入っていれば
-                        引き金に点を付ける (閉じていても、ふだんと違う見え方なのが分かる)。
-                        まとめて表示は端末に覚える (`setGrouped`)、削除済みは URL (`?deleted=1`)
-                    -->
-                    <Menu align="end" class="view-menu" testid="recordings-view-menu">
-                        {#snippet trigger(props)}
-                            <button
-                                {...props}
-                                type="button"
-                                class="secondary outline small view-trigger"
-                                data-testid="recordings-view"
-                            >
-                                表示
-                                {#if grouped || data.showDeleted}<span class="view-dot" aria-hidden="true"></span>{/if}
-                                <Icon icon={ChevronDown} size="size-4" />
-                            </button>
-                        {/snippet}
-                        <button
-                            type="button"
-                            role="menuitemcheckbox"
-                            class="menu-item"
-                            aria-checked={grouped}
-                            onclick={() => setGrouped(!grouped)}
-                            data-testid="recordings-group-toggle"
-                        >
-                            <span class="menu-check" aria-hidden="true">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>
-                            <Icon icon={ListTree} size="size-4" />
-                            まとめて表示
-                        </button>
-                        <a
-                            role="menuitemcheckbox"
-                            class="menu-item"
-                            aria-checked={data.showDeleted}
-                            href={deletedHref}
-                            data-testid="recordings-deleted-toggle"
-                        >
-                            <span class="menu-check" aria-hidden="true">{#if data.showDeleted}<Icon icon={Check} size="size-4" />{/if}</span>
-                            削除済みも表示
-                        </a>
-                    </Menu>
-                    <!--
-                        **たまにしか押さない操作は「⋯」に。** ファイルとの照合は、外でファイルを
-                        消したときに押すくらいのもの。狭い列では見出しの脇の空きもここの頭に回す
-                        (下の `@container`)。
-
-                        中身は閉じている間も DOM に置く (popover は閉じると見えないだけ)。照合を送っている
-                        途中でメニューが消えると、回るものを出す先が無くなるため。
-                        閉じるのは送り終わってから (詳細の「再エンコード」と同じ)
-                    -->
-                    <Menu bind:open={toolsOpen} align="end" class="more-menu tools-menu" testid="recordings-more-menu">
-                        {#snippet trigger(props)}
-                            <button
-                                {...props}
-                                type="button"
-                                class="secondary outline small icon tools-trigger"
-                                aria-label="その他の操作"
-                                data-testid="recordings-more"
-                            >
-                                <Icon icon={Ellipsis} size="size-4.5" />
-                            </button>
-                        {/snippet}
-                        {#if data.capacity !== null}
-                            <div class="menu-note muted small num" data-testid="recordings-capacity-menu">
-                                {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
-                            </div>
-                        {/if}
-                        {@render menuSubmit('?/reconcile', 'ファイルと照合', 'reconcile-button', {}, () => (toolsOpen = false))}
-                    </Menu>
-                </div>
-            </div>
-
-            <!--
-                **まとめないときは一番下 (いちばん古い録画) から見せる** (`.from-end`)。
-                溜まった録画は古いものから片付けたいので、開くたびに下まで送らずに済むように。
-                並びは新しい順のまま。**まとめたときは一番上から** — 頭にいるのが最近録れた番組
-            -->
-            <div class="board-box" class:from-end={!grouped} bind:this={recordingBox}>
-                <div class="rows" data-testid="recording-list">
-                    {#each recordingShown as line (line.key)}
-                        {#if line.kind === 'gap'}
-                            <!-- 続きを足す印 (`sentinel`)。間に近づいたら足す。残りが無くなれば消える -->
-                            <div
-                                class="row-empty muted small num"
-                                use:sentinel={() => recordingPage.reveal()}
-                                data-testid="recording-more"
-                            >
-                                残り {recordingRest} 件
-                            </div>
-                        {:else if line.kind === 'head'}
-                            {@render groupHead(line.group, line.open)}
-                        {:else}
-                            {@render rightRow(line.item, line.nested)}
-                        {/if}
-                    {:else}
-                        {#if recordingQuery === ''}
-                            <div class="empty" data-testid="recording-empty">
-                                <p class="empty-title">録画はありません</p>
-                                <p class="empty-hint">予約した番組は、録り終わるとここに並びます</p>
-                                <div class="empty-actions">
-                                    <a class="button secondary outline small" href={resolve('guide')}>番組表を開く</a>
-                                </div>
-                            </div>
-                        {:else}
-                            <div class="empty">
-                                <p class="empty-title">「{recordingQuery}」に一致する録画はありません</p>
-                                {#if recordingQuery !== data.q}
-                                    <p class="empty-hint">Enter で古い録画まで探します</p>
-                                {/if}
-                            </div>
-                        {/if}
-                    {/each}
-                    <!-- 手元で絞っているぶん (予約側と同じく末尾に)。送る前でも何件残るかが分かる -->
-                    {#if recordingQuery !== data.q}
-                        <div class="row-empty muted small num">
-                            {rightRows.length} 件中 {recordingRows.length} 件
-                        </div>
-                    {/if}
-                    <!--
-                        **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って
-                        消え、「消えた」ように見える。上限に当たっていたら、絞り込みへ
-                        誘う一行を出す (`+page.server.ts` の LIMIT 300)
-                    -->
-                    {#if data.recordings.length >= 300}
-                        <div class="row-empty truncated muted small">
-                            新しい順に300件まで表示しています。古いものは絞り込みで探してください。
-                        </div>
-                    {/if}
-                </div>
-            </div>
-        </section>
+    <!--
+        狭い画面 (1000px 未満) の頭。絞り込みの一枚を開くボタン。いま効いている絞り込みと件数を添える
+        (番組名で探すのは全体の検索。ホームには欄を置かない)
+    -->
+    <div class="t-toolbar" data-testid="timeline-toolbar">
+        <button
+            type="button"
+            class="secondary outline t-filter-open"
+            aria-haspopup="dialog"
+            onclick={openSheet}
+            data-testid="filter-open"
+        >
+            <Icon icon={ListFilter} size="size-5" />
+            <span class="visually-hidden">絞り込みと表示:</span>
+            <span>{filterLabel}</span>
+            <span class="muted num">{counts[filter]}</span>
+            {#if filter !== 'all' || grouped || data.showDeleted || data.showFinished}
+                <span class="view-dot" aria-hidden="true"></span>
+            {/if}
+        </button>
     </div>
+
+    <div class="t-main">
+        <section class="t-list" bind:this={listBox} aria-label="予約と録画" data-testid="timeline">
+            <!--
+                側ごとに包む。日付の見出しは包みの中だけで貼り付くので、録れたものを読んでいる間に
+                予約の見出しが頭に残らない
+            -->
+            <div class="t-rows">
+                <div class="t-zone" data-zone="future">
+                    {#each ahead as entry (entry.key)}
+                        {@render line(entry)}
+                    {/each}
+                </div>
+                {#each current as entry (entry.key)}
+                    {@render line(entry)}
+                {/each}
+                <div class="t-zone" data-zone="past">
+                    {#each pastPage.rows as entry (entry.key)}
+                        {@render line(entry)}
+                    {/each}
+                </div>
+            </div>
+            {#if pastPage.more}
+                <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
+                <div class="row-empty muted small num" use:sentinel={() => pastPage.reveal()} data-testid="recording-more">
+                    残り {pastRest} 件
+                </div>
+            {/if}
+            {#if shownItems.length === 0}
+                {#if items.length === 0}
+                    <!-- 空のときは次に何をすればよいかまで言う -->
+                    <div class="empty" data-testid="timeline-empty">
+                        <p class="empty-title">予約も録画もありません</p>
+                        <p class="empty-hint">番組表から予約するか、ルールを作ると自動で入ります</p>
+                        <div class="empty-actions">
+                            <a class="button small" href={resolve('guide')}>番組表を開く</a>
+                            <a class="button secondary outline small" href={resolve('rules')}>ルールを作る</a>
+                        </div>
+                    </div>
+                {:else}
+                    <div class="empty" data-testid="timeline-empty">
+                        <p class="empty-title">当てはまるものはありません</p>
+                    </div>
+                {/if}
+            {/if}
+            <!-- 絞った結果の件数は一覧の末尾に -->
+            {#if filter !== 'all'}
+                <div class="row-empty muted small num" data-testid="timeline-matched">
+                    {items.length} 件中 {shownItems.length} 件
+                </div>
+            {/if}
+            <!--
+                **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
+                上限に当たっていたら、検索へ誘う一行を出す (`+page.server.ts` の LIMIT 300)
+            -->
+            {#if data.recordings.length >= 300}
+                <div class="row-empty truncated muted small">
+                    新しい順に300件まで表示しています。古いものは検索で探してください。
+                </div>
+            {/if}
+        </section>
+
+        <!--
+            **右のサイドバー** (1000px 以上)。ウィンドウの端まで寄せ、1px の線で分けて、一覧とは別にスクロールする。
+            上から絞り込み・表示の切り替え、今日のまとめ、選んだ番組
+        -->
+        <aside class="t-side" aria-label="絞り込みと選んだ番組" data-testid="sidebar">
+            <h2 class="s-group s-first">絞り込み</h2>
+            {@render filterList(() => {})}
+            <h2 class="s-group">
+                <button
+                    type="button"
+                    class="s-group-toggle"
+                    aria-expanded={viewOpen}
+                    onclick={() => (viewOpen = !viewOpen)}
+                    data-testid="view-toggle"
+                >
+                    表示の切り替え
+                    {#if grouped || data.showDeleted || data.showFinished}<span class="view-dot" aria-hidden="true"></span>{/if}
+                    <span class="group-chevron" class:open={viewOpen} aria-hidden="true">
+                        <Icon icon={ChevronRight} size="size-4" />
+                    </span>
+                </button>
+            </h2>
+            {#if viewOpen}
+                {@render viewList(() => {})}
+            {/if}
+
+            <h2 class="s-group">今日</h2>
+            <dl class="s-list s-stats" data-testid="summary">
+                <div class="s-item s-static">
+                    <dt>次の録画</dt>
+                    <dd class="s-sub num">{nextRes === null ? 'なし' : `${time(nextRes.start_at)}・${untilLabel(nextRes.start_at)}`}</dd>
+                </div>
+                <div class="s-item s-static">
+                    <dt>録画中</dt>
+                    <dd class="s-sub num">{counts.recording} 本</dd>
+                </div>
+                <div class="s-item s-static">
+                    <dt>未視聴</dt>
+                    <dd class="s-sub num">{counts.unfinished} 本</dd>
+                </div>
+                {#if data.capacity !== null}
+                    <!-- 空きと、あと何時間録れるか (issue #505。`disk.capacity`) -->
+                    <div class="s-item s-static">
+                        <dt>空き</dt>
+                        <dd class="s-sub num" data-testid="recordings-capacity">
+                            {data.capacity.free.replace(/^空き\s*/, '')}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
+                        </dd>
+                    </div>
+                {/if}
+            </dl>
+
+            {#if selected !== null}
+                {@render selectedDetail(selected)}
+            {/if}
+        </aside>
+    </div>
+
+    <!-- 狭い画面の絞り込み。下から出る一枚 -->
+    <dialog
+        class="t-sheet"
+        bind:this={sheet}
+        aria-label="絞り込みと表示"
+        data-testid="filter-sheet"
+        onclose={() => (sheetOpen = false)}
+    >
+        <!-- 一枚の外 (背景) を押したら閉じる (番組の詳細と同じ作り) -->
+        <button type="button" class="t-sheet-backdrop" tabindex="-1" aria-label="閉じる" onclick={() => sheet?.close()}></button>
+        {#if sheetOpen}
+            <div class="t-sheet-body">
+            <div class="t-sheet-grip" aria-hidden="true"></div>
+            <h2 class="s-group">絞り込み</h2>
+            {@render filterList(() => sheet?.close())}
+            <h2 class="s-group">表示の切り替え</h2>
+            {@render viewList(() => sheet?.close())}
+            {#if data.capacity !== null}
+                <p class="s-note muted small num" data-testid="recordings-capacity-menu">
+                    {data.capacity.free}{data.capacity.hours === null ? '' : `・${data.capacity.hours}`}
+                </p>
+            {/if}
+            <button type="button" class="secondary t-sheet-close" onclick={() => sheet?.close()}>閉じる</button>
+            </div>
+        {/if}
+    </dialog>
 </div>
+
+<!-- サイドバーの「選んだ番組」。再生・追っかけ・予約取消をその場に置く -->
+{#snippet selectedDetail(item: Item)}
+    {@const rec = item.kind === 'rec' ? item.rec : null}
+    {@const base = item.kind === 'rec' ? item.rec : item.res}
+    <h2 class="s-group">
+        {#if item.zone === 'now'}いま録画中{:else if item.zone === 'future'}{untilLabel(base.start_at)}に録画{:else if item.kind === 'missed'}録り逃し{:else}録画済み{/if}
+    </h2>
+    <div class="t-detail" data-testid="selected-detail" data-key={item.key}>
+        {#if rec !== null && rec.library_path !== null}
+            {@const link = watchLink(rec)}
+            {#if link !== null}
+                <a class="t-hero" href={link} tabindex="-1" aria-label="再生">
+                    {@render posterImg(rec.id)}
+                    <span class="t-hero-play"><Play /></span>
+                </a>
+            {/if}
+        {/if}
+        <p class="t-detail-title broadcast">{base.name}</p>
+        {@render meta(base.service_name, [airing(base)], base, null)}
+        {#if rec !== null && rec.progress !== null && watchLink(rec) !== null}
+            <p class="small muted num">続きから (残り{durationMs(Math.max(0, rec.progress.length - rec.progress.at))})</p>
+        {/if}
+        {#if base.description}
+            <p class="t-desc small broadcast">{base.description}</p>
+        {/if}
+        <div class="t-detail-actions">
+            {#if item.kind === 'rec'}
+                {@const link = watchLink(item.rec)}
+                {#if link !== null}
+                    <a class="button" href={link} data-testid="selected-play"><Icon icon={Play} size="size-4" />再生</a>
+                {/if}
+                <button type="button" class="secondary outline" onclick={() => openRecording(item.rec)}>詳細</button>
+            {:else if item.kind === 'res'}
+                {#if item.res.recording_id !== null}
+                    <a class="button" href={resolve(`chase/${item.res.recording_id}`)}>追っかけ</a>
+                {/if}
+                <button type="button" class="secondary outline" onclick={() => openReservation(item.res)}>詳細</button>
+                {#if cancelable(item.res)}
+                    <ActionButton action="?/cancel" fields={{ id: item.res.id }} class="outline danger" testid="selected-cancel">
+                        予約取消
+                    </ActionButton>
+                {/if}
+            {:else}
+                <button type="button" class="secondary outline" onclick={() => openMissed(item.res)}>詳細</button>
+            {/if}
+        </div>
+    </div>
+{/snippet}
 
 {#if detail.current}
     <ProgramDetail
@@ -1513,105 +1542,6 @@
 {/snippet}
 
 <style>
-    /*
-     * 広い画面 (md = 768px 以上) では2つの一覧を横に並べ、画面の残りを丁度使い切る。
-     * 畳まれる幅では素直にページごとスクロールさせる
-     */
-    .board-grid {
-        display: grid;
-        gap: 1.5rem;
-    }
-    .board-col {
-        /* min-width: 0 が無いと、中の幅にグリッドの列が引きずられてページごとはみ出す */
-        min-width: 0;
-    }
-    /* 1列に畳まれたときは録画を先に出す(見るのはたいてい録れたほうなので) */
-    .reservations {
-        order: 2;
-    }
-    .recordings {
-        order: 1;
-    }
-    @media (min-width: 768px) {
-        .board {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-        .board-grid {
-            flex: 1;
-            min-height: 0;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-        }
-        .board-col {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            order: 0;
-        }
-        .reservations {
-            grid-column: span 2;
-        }
-        .recordings {
-            grid-column: span 3;
-        }
-        .board-box {
-            flex: 1;
-            min-height: 0;
-        }
-        /*
-         * **下から積む。** 枠は初めから一番下を映し、JS を待たない。中身は `.rows` の
-         * 1つだけなので、並びは逆にならない。行が足りなければ `.rows` が伸びて
-         * (`flex: 1 0 auto`) 上から並ぶ。間に行を足しても下からの位置は変わらない —
-         * Chromium・Firefox の scroll anchoring は切る (`overflow-anchor`)。間が画面の中に
-         * あるとき、上の行を留めて下 (見ていた古い録画) を押し下げてしまう。
-         * 狭い画面はページごと縦に積むので、ここ (広い画面) だけ
-         */
-        .board-box.from-end {
-            flex-direction: column-reverse;
-            overflow-anchor: none;
-        }
-    }
-    .board-head {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        min-height: 2rem;
-        margin-bottom: 0.5rem;
-    }
-    .board-head h2 {
-        font-size: 1.125rem;
-    }
-    /* 絞り込みの欄。予約側と録画側で同じ形 (録画側だけ送れる form の中にある) */
-    .filter {
-        width: 9rem;
-        height: auto;
-        padding-block: 0.3rem;
-        font-size: 0.85rem;
-    }
-    @media (min-width: 640px) {
-        .filter {
-            width: 14rem;
-        }
-    }
-    /*
-     * 残りいっぱいまで伸ばして、中だけスクロールさせる。2つ並べたときに、
-     * 片方が長いともう片方が下に置いていかれるため。
-     * 縦の flex なのは、空の案内 (`.empty`) を枠の真ん中に置くため
-     */
-    .board-box {
-        display: flex;
-        flex-direction: column;
-        overflow: auto;
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
-        border: 1px solid var(--dp-line);
-    }
-    .rows > :global(* + *) {
-        border-top: 1px solid var(--dp-line);
-    }
     .row {
         position: relative;
         cursor: pointer;
@@ -1744,7 +1674,7 @@
      * 枠の真ん中に置き、次にすること (番組表・ルール) へのリンクを添える。
      * 畳まれる幅では枠が中身の高さなので、上下の余白だけが効く
      */
-    .rows {
+    .t-rows {
         display: flex;
         flex: 1 0 auto;
         flex-direction: column;
@@ -1774,17 +1704,6 @@
         gap: 0.5rem;
         margin-top: 0.5rem;
     }
-    /*
-     * 畳むかどうかは**画面の幅ではなく録画の列の幅**で決める。二段組に入ったばかりの
-     * 幅 (縦の iPad など) でも列は 440px ほどしかなく、並べると同じように折り返す
-     */
-    .recordings {
-        container: recordings / inline-size;
-    }
-    .cluster :global(.view-trigger) {
-        gap: 0.3rem;
-    }
-    /* 「表示」に何か入っていれば主の色の点を付ける (ふつうと違う見え方をしている) */
     .view-dot {
         width: 0.4rem;
         height: 0.4rem;
@@ -1797,47 +1716,6 @@
         width: 1rem;
         flex-shrink: 0;
         color: var(--pico-primary);
-    }
-    @container recordings (min-width: 36rem) {
-        .menu-note {
-            display: none;
-        }
-    }
-    @container recordings (max-width: 35.99rem) {
-        .capacity {
-            display: none;
-        }
-    }
-    /*
-     * **空きを足しても見出しを1行に保つ。** 列が狭くなるにつれて絞り込みの欄を狭め、さらに狭ければ時間を落とす。
-     * 36rem より狭い列では空きごと「⋯」の頭へ回す (上)
-     */
-    /* 狭い列 (36rem 未満) の欄は画面の幅で決まる (上の `.filter`)。ここで触るのは並べている間だけ */
-    @container recordings (min-width: 36rem) and (max-width: 49.99rem) {
-        .filter {
-            width: 10rem;
-        }
-    }
-    @container recordings (max-width: 41.99rem) {
-        .capacity-hours {
-            display: none;
-        }
-    }
-    /* 見出しと空き。空きは見出しの字の並びに揃えて、小さく添える */
-    .head-title {
-        display: flex;
-        align-items: baseline;
-        gap: 0.5rem;
-        min-width: 0;
-    }
-    .capacity {
-        white-space: nowrap;
-    }
-    /* 「⋯」の頭の空き。押せるものではないので、項目と同じ余白で字だけ置く */
-    .menu-note {
-        padding: 0.4rem 0.6rem;
-        border-bottom: 1px solid var(--dp-line);
-        white-space: nowrap;
     }
     /* まだ観ていない録画の点 (`unwatched`)。続きのバーと同じ主の色 */
     .unwatched-dot {
@@ -1879,10 +1757,6 @@
         text-align: left;
         cursor: pointer;
     }
-    /* 行どうしの区切り線 (`.rows > * + *`) は、上で枠を外したぶん引き直す */
-    .rows > .group-head:not(:first-child) {
-        border-top: 1px solid var(--dp-line);
-    }
     .group-head:hover {
         background: var(--dp-hover);
     }
@@ -1903,10 +1777,8 @@
         transform: rotate(90deg);
     }
     /* 開いた番組の頭の押すもの。中身の行と同じだけ下げる */
-    .rows > .group-tools {
+    .t-zone > .group-tools {
         padding: 0 0.75rem 0.5rem 2.25rem;
-        /* 見出しとの間には線を引かない (見出しの続き) */
-        border-top: 0;
     }
     /* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
     .row.nested {
@@ -1921,49 +1793,10 @@
         width: 2px;
         background: var(--dp-line);
     }
-    /* ポスターと再生の印。行に指を乗せると印が浮かぶ */
-    .poster {
-        position: relative;
-        margin-top: 0.125rem;
-        aspect-ratio: 16 / 9;
-        width: 4rem;
-        flex-shrink: 0;
-        overflow: hidden;
-        border-radius: 0.25rem;
-        background: var(--dp-line);
-    }
-    @media (min-width: 640px) {
-        .poster {
-            width: 6rem;
-        }
-    }
     .poster-img {
         height: 100%;
         width: 100%;
         object-fit: cover;
-    }
-    .poster-play {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        background: rgb(0 0 0 / 0);
-        transition: background-color var(--dp-duration);
-    }
-    .poster-play :global(.poster-icon) {
-        width: 1.5rem;
-        height: 1.5rem;
-        opacity: 0;
-        filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
-        transition: opacity var(--dp-duration);
-    }
-    .playable:hover .poster-play {
-        background: rgb(0 0 0 / 0.4);
-    }
-    .playable:hover :global(.poster-icon) {
-        opacity: 1;
     }
     .offline-tag {
         margin-top: 0.25rem;
@@ -2012,5 +1845,571 @@
     }
     .menu-form {
         display: contents;
+    }
+    /*
+     * ---- 1本の時間軸 ----
+     *
+     * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧とサイドバーがそれぞれ自分で巻き取る**
+     * (ルール・観る画面と同じ。`+layout.svelte` の `FILLED`)。サイドバーは 1000px 以上で、右の端まで寄せて
+     * 1px の線で分ける。狭い画面はページごとスクロールし、頭の検索の段だけ上に貼り付く
+     */
+    .board {
+        display: flex;
+        flex-direction: column;
+    }
+    @media (min-width: 768px) {
+        .board {
+            height: calc(100% + 2 * var(--dp-gutter));
+            margin: calc(-1 * var(--dp-gutter));
+        }
+    }
+    .t-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        flex: 1;
+        min-height: 0;
+    }
+    .t-list {
+        position: relative;
+        min-width: 0;
+    }
+    @media (min-width: 768px) {
+        .t-list {
+            overflow-y: auto;
+            /* 足した行で読んでいる所が動かないように、位置合わせは自分でする (開いたときの `place`) */
+            overflow-anchor: none;
+            padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
+        }
+    }
+    .t-side {
+        display: none;
+    }
+    @media (min-width: 1000px) {
+        .t-main {
+            grid-template-columns: minmax(0, 1fr) 18rem;
+        }
+        .t-side {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 1rem 0.625rem 1.5rem;
+            border-left: 1px solid var(--dp-line);
+        }
+    }
+    @media (min-width: 1280px) {
+        .t-main {
+            grid-template-columns: minmax(0, 1fr) 20rem;
+        }
+    }
+
+    /* 狭い画面の頭。検索と絞り込みのボタン。ページごと動くので上に貼り付ける */
+    .t-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+        background: var(--dp-bg);
+    }
+    @media (min-width: 768px) {
+        .t-toolbar {
+            position: static;
+            padding: 0.75rem var(--dp-gutter) 0.25rem;
+        }
+    }
+    .t-filter-open {
+        position: relative;
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        gap: 0.5rem;
+        width: auto;
+        height: 2.75rem;
+        margin: 0;
+        padding: 0 1rem 0 0.75rem;
+        font-size: 0.875rem;
+    }
+    .t-filter-open .view-dot {
+        position: absolute;
+        top: 0.4rem;
+        right: 0.4rem;
+    }
+    /* サイドバーのある幅では、検索と絞り込みはサイドバーの頭に置く */
+    @media (min-width: 1000px) {
+        .t-toolbar {
+            display: none;
+        }
+    }
+
+    /* 日付の見出し。小さく沈めた字で、一覧の頭に貼り付く */
+    .t-day {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin: 0;
+        padding: 0.875rem 0.5rem 0.25rem;
+        background: var(--dp-bg);
+        color: var(--dp-muted);
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .t-day-name {
+        color: var(--pico-color);
+    }
+    .t-day-date,
+    .t-day-zone {
+        font-weight: 400;
+    }
+    /* 狭い画面は頭の検索の段の下に貼り付く */
+    @media (max-width: 767px) {
+        .t-day {
+            top: 3.75rem;
+        }
+    }
+
+    /* 「いま」の線 */
+    .t-now {
+        position: relative;
+        display: flex;
+        align-items: center;
+        height: 1.75rem;
+        margin: 0.5rem 0 0.25rem;
+        font-size: inherit;
+    }
+    .t-now::before {
+        content: '';
+        position: absolute;
+        inset-inline: 0;
+        top: 50%;
+        height: 2px;
+        background: var(--dp-rec);
+    }
+    .t-now-label {
+        position: relative;
+        padding: 0.1rem 0.6rem;
+        border-radius: var(--dp-radius-full);
+        background: var(--dp-rec);
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    /*
+     * **行。** 線も枠も無く地の上に直に並べ、触れると薄い塗り、選んでいる行 (サイドバーに出ている行) は
+     * もう少し濃い塗り (ルールの一覧と同じ作り)。高さは指で押せる 48px。広い画面は 1 段、
+     * サイドバーと並んで狭くなる幅 (1000〜1279px) と狭い画面は、番組名の下に局と尺を置く 2 段
+     */
+    .t-rows {
+        display: flex;
+        flex-direction: column;
+    }
+    .t-zone {
+        display: flex;
+        flex-direction: column;
+    }
+    /* 狭い画面では、途中まで観たものの残りは出さない (番組名に幅を回す) */
+    @media (max-width: 767px) {
+        .t-row .resume {
+            display: none;
+        }
+    }
+    .t-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0 0.75rem;
+        min-height: 3rem;
+        margin-bottom: 1px;
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--dp-radius);
+        transition: background-color var(--dp-duration);
+    }
+    .t-row:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .t-row.picked {
+        background: var(--dp-subtle);
+    }
+    .t-row.live {
+        background: color-mix(in srgb, var(--dp-rec) 12%, transparent);
+    }
+    .t-row .row-body {
+        flex: 1 1 0%;
+        min-width: 0;
+    }
+    .t-row .row-meta {
+        margin-top: 0;
+        font-size: 0.78rem;
+    }
+    .t-row .row-actions {
+        gap: 0.25rem;
+    }
+    /* 注意の段は時刻の列のぶん下げる (行の幅いっぱいに折り返す) */
+    .t-row .row-sub {
+        margin-top: 0.125rem;
+    }
+    .t-time {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        width: 2.9rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+    .t-end {
+        color: var(--dp-muted);
+        font-size: 0.7rem;
+        font-weight: 400;
+    }
+    .t-thumb {
+        position: relative;
+        flex-shrink: 0;
+        width: 3.25rem;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        border-radius: var(--dp-radius-sm);
+        background: var(--dp-subtle);
+    }
+    .t-play {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        opacity: 0;
+        background: rgb(0 0 0 / 0.45);
+        transition: opacity var(--dp-duration);
+    }
+    .t-play :global(.poster-icon) {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+    .playable:hover .t-play {
+        opacity: 1;
+    }
+    /* ルール名は局と尺の後ろに添える。狭い画面では外す (詳細とサイドバーで見られる) */
+    .t-rule a {
+        position: relative;
+        z-index: 2;
+    }
+    @media (max-width: 767px) {
+        .t-rule,
+        .resume {
+            display: none;
+        }
+        /* 狭い画面の行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
+        .t-row .row-actions :global(button:not([data-testid="delete-confirm"]) .btn-label) {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip-path: inset(50%);
+            white-space: nowrap;
+        }
+        .t-row .row-actions :global(:is(button, a.button)) {
+            padding-inline: 0.5rem;
+        }
+    }
+    @media (min-width: 768px) {
+        .t-time {
+            flex-direction: row;
+            align-items: baseline;
+            gap: 0.25rem;
+            width: 6.25rem;
+            font-size: 0.875rem;
+        }
+        .t-end::before {
+            content: '–';
+            margin-right: 0.25rem;
+        }
+        .t-thumb {
+            width: 3.5rem;
+        }
+    }
+    /* 1 段にする幅 (サイドバーの無いタブレットの縦と、1280px 以上) */
+    @media (min-width: 768px) and (max-width: 999px), (min-width: 1280px) {
+        .t-row .row-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 17rem);
+            align-items: center;
+            column-gap: 1rem;
+        }
+        .t-row .row-body > .row-sub,
+        .t-row .row-body > :global(.row-sub) {
+            grid-column: 1 / -1;
+        }
+    }
+    @media (min-width: 1000px) and (max-width: 1279px) {
+        .t-time {
+            width: 3.25rem;
+        }
+        .t-end,
+        .resume {
+            display: none;
+        }
+    }
+    .resume {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0;
+    }
+    .resume-track {
+        width: 3rem;
+        flex: none;
+    }
+
+    /* 番組の見出し (まとめて表示)。行と同じ作り */
+    .group-head {
+        min-height: 3rem;
+        margin-bottom: 1px;
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--dp-radius);
+        align-items: center;
+    }
+    .group-head:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .t-zone > .group-tools {
+        padding: 0 0.5rem 0.5rem 2.25rem;
+    }
+    .row.nested {
+        padding-left: 2.25rem;
+        background: transparent;
+    }
+    .row.nested::before {
+        left: 1.25rem;
+    }
+
+    /*
+     * ---- サイドバーの並び ----
+     * ドキュメントの目次と同じ作り: 小さく沈めた見出し、線も枠も無い行、選んでいる行だけ角の丸い薄い塗り、
+     * 件数などは小さく沈めた字
+     */
+    .s-group {
+        display: flex;
+        align-items: center;
+        margin: 1rem 0 0.25rem;
+        padding: 0 0.75rem;
+        color: var(--dp-muted);
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .s-group.s-first {
+        margin-top: 0.25rem;
+    }
+    .s-group-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        width: calc(100% + 1.5rem);
+        min-height: 2rem;
+        margin: 0 -0.75rem;
+        padding: 0 0.75rem;
+        border: 0;
+        border-radius: var(--dp-radius);
+        background: transparent;
+        box-shadow: none;
+        color: inherit;
+        font-size: inherit;
+        font-weight: inherit;
+        text-align: left;
+    }
+    .s-group-toggle .group-chevron {
+        margin-left: auto;
+    }
+    .s-group-toggle:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .s-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        margin: 0;
+    }
+    .s-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        width: 100%;
+        min-height: 2.5rem;
+        margin: 0;
+        padding: 0 0.75rem;
+        border: 0;
+        border-radius: var(--dp-radius);
+        background: transparent;
+        box-shadow: none;
+        color: inherit;
+        font-size: 0.875rem;
+        font-weight: 400;
+        text-align: left;
+        text-decoration: none;
+        transition: background-color var(--dp-duration);
+    }
+    .s-item:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .s-item.on {
+        background: var(--dp-subtle);
+        font-weight: 600;
+    }
+    .s-static {
+        min-height: 2rem;
+    }
+    .s-static:hover {
+        background: transparent;
+    }
+    .s-stats dt,
+    .s-stats dd {
+        margin: 0;
+        font-weight: 400;
+    }
+    .s-sub {
+        display: inline-flex;
+        align-items: center;
+        color: var(--dp-muted);
+        font-size: 0.8125rem;
+        white-space: nowrap;
+    }
+    .s-sub.alert {
+        color: var(--dp-rec-text);
+        font-weight: 700;
+    }
+    .s-note {
+        margin: 0.75rem 0.75rem 0;
+    }
+
+    /* 選んだ番組 */
+    .t-detail {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0 0.75rem;
+    }
+    .t-hero {
+        position: relative;
+        display: block;
+        aspect-ratio: 16 / 9;
+        max-height: 9rem;
+        overflow: hidden;
+        border-radius: var(--dp-radius);
+        background: var(--dp-subtle);
+    }
+    .t-hero-play {
+        position: absolute;
+        right: 0.75rem;
+        bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: var(--dp-radius-full);
+        background: rgb(0 0 0 / 0.55);
+        color: #fff;
+    }
+    .t-detail-title {
+        margin: 0;
+        font-size: 1.0625rem;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+    .t-detail .row-meta {
+        white-space: normal;
+    }
+    .t-desc {
+        display: -webkit-box;
+        margin: 0;
+        overflow: hidden;
+        -webkit-line-clamp: 6;
+        line-clamp: 6;
+        -webkit-box-orient: vertical;
+        color: var(--dp-muted);
+        line-height: 1.6;
+    }
+    .t-detail-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .t-detail-actions :global(:is(button, a.button)) {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        width: auto;
+        margin: 0;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.875rem;
+    }
+
+    /* 狭い画面の絞り込み。下から出る一枚 (`<dialog>`) */
+    .t-sheet {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        max-width: none;
+        height: 100%;
+        max-height: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+    }
+    .t-sheet[open] {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+    }
+    .t-sheet::backdrop {
+        background: transparent;
+    }
+    .t-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: var(--dp-backdrop);
+        box-shadow: none;
+        cursor: default;
+    }
+    .t-sheet-body {
+        position: relative;
+        width: 100%;
+        max-width: 32rem;
+        max-height: 85%;
+        overflow-y: auto;
+        padding: 0.5rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
+        border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
+        background: var(--dp-surface);
+    }
+    .t-sheet-grip {
+        width: 2.5rem;
+        height: 0.25rem;
+        margin: 0 auto 0.5rem;
+        border-radius: var(--dp-radius-full);
+        background: var(--dp-line);
+    }
+    .t-sheet .s-item {
+        min-height: 2.75rem;
+    }
+    .t-sheet-close {
+        width: 100%;
+        margin: 1rem 0 0;
     }
 </style>

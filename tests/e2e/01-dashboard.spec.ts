@@ -1,4 +1,4 @@
-import { cancelAllReservations, deleteRule, expect, goto, syncEpg, test } from './helpers';
+import { cancelAllReservations, deleteRule, expect, goto, homeTools, syncEpg, test } from './helpers';
 
 test.describe('ダッシュボードと画面遷移', () => {
     test('データ放送のチャンネルは取り込まない', async ({ page, request }) => {
@@ -288,9 +288,9 @@ test.describe('ダッシュボードと画面遷移', () => {
             await route.continue();
         });
 
-        // 照合はたまにしか押さないので「⋯」の中。送り終わるまでメニューは開いたまま
-        await page.getByTestId('recordings-more').click();
-        const button = page.getByTestId('reconcile-button');
+        // 照合はたまにしか押さないので「表示の切り替え」の中 (広い画面はサイドバー)
+        const tools = await homeTools(page);
+        const button = tools.getByTestId('reconcile-button');
         const before = await button.boundingBox();
         await button.click();
 
@@ -310,87 +310,68 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(page.getByTestId('reconcile-result')).toHaveCount(0);
     });
 
-    test('狭い幅では録画の見出しを1行に保ち、照合は「⋯」から押せる', async ({ page }) => {
+    test('狭い幅ではサイドバーの代わりに頭のボタンを置き、照合は下からの一枚から押せる', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/');
 
-        /*
-         * 並べていた頃は「ファイルと照合」が2行目に落ちていた。たまにしか押さない
-         * ものは「⋯」に畳み、見出し・絞り込み・「⋯」が同じ行に並ぶ
-         */
-        const more = page.getByTestId('recordings-more');
-        await expect(page.getByTestId('reconcile-button')).toBeHidden();
-        await expect(more).toBeVisible();
-        const heading = (await page.locator('.recordings h2').boundingBox())!;
-        const trigger = (await more.boundingBox())!;
-        expect(Math.abs(heading.y + heading.height / 2 - (trigger.y + trigger.height / 2))).toBeLessThan(
-            trigger.height / 2,
-        );
+        // サイドバーは出さない。頭には絞り込みの一枚を開くボタンだけ (指で押せる高さ)
+        await expect(page.getByTestId('sidebar')).toBeHidden();
+        const open = page.getByTestId('filter-open');
+        expect((await open.boundingBox())!.height).toBeGreaterThanOrEqual(40);
 
-        await more.click();
-        const menu = page.getByTestId('recordings-more-menu');
-        await expect(menu).toBeVisible();
+        await open.click();
+        const sheet = page.getByTestId('filter-sheet');
+        await expect(sheet).toBeVisible();
         /*
-         * **下の行が透けて見えない** (#481)。iOS の Safari では包みの z-index が
-         * `auto` のまま残り、後に続く録画の行が上に重なっていた。いまは popover で
-         * 最前面 (top layer) に出す。塗りが不透明であることと、真ん中を指したとき
-         * メニュー自身が当たる (ほかのものが上に重なっていない) ことを見る
+         * **下の行が透けて見えない** (#481)。一枚は `<dialog>` で最前面 (top layer) に出す。
+         * 真ん中を指したとき一枚の中身が当たる (ほかのものが上に重なっていない) ことを見る
          */
-        const layer = await menu.evaluate((el) => {
-            const box = el.getBoundingClientRect();
+        const front = await sheet.evaluate((el) => {
+            const body = el.querySelector('.t-sheet-body')!;
+            const box = body.getBoundingClientRect();
             const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-            return {
-                background: getComputedStyle(el).backgroundColor,
-                top: el.matches(':popover-open'),
-                front: hit !== null && el.contains(hit),
-            };
+            return hit !== null && body.contains(hit) && el.matches(':modal');
         });
-        expect(layer.background).toMatch(/^rgb\(/);
-        expect(layer.top).toBe(true);
-        expect(layer.front).toBe(true);
-        await menu.getByTestId('reconcile-button').click();
+        expect(front).toBe(true);
+        // 空きは一枚の中に出す (サイドバーの「今日」に出すものと同じ)
+        await expect(sheet.getByTestId('recordings-capacity-menu')).toBeVisible();
+        await sheet.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる
-        await expect(menu).toBeHidden();
+        await expect(sheet).toBeHidden();
     });
 
     /*
-     * **メニューはキーボードでも使える** (`Menu.svelte`)。Enter で開くと先頭の項目に入り、
-     * ↑↓・Home・End で動き、Esc で閉じて引き金に戻る
+     * **表示の切り替えと絞り込みはキーボードでも使える。** サイドバーの見出しは本物のボタンで、
+     * Enter で開け閉めする。狭い画面の一枚は `<dialog>` なので、焦点が中に閉じ込められ、Esc で閉じて
+     * 開いたボタンに戻る
      */
-    test('「表示」はキーボードで開け閉めできる', async ({ page }) => {
-        await page.setViewportSize({ width: 390, height: 844 });
+    test('表示の切り替えと絞り込みの一枚はキーボードで開け閉めできる', async ({ page }) => {
         await goto(page, '/');
-        const more = page.getByTestId('recordings-view');
-        const menu = page.getByTestId('recordings-view-menu');
-        await expect(more).toHaveAttribute('aria-expanded', 'false');
-
-        await more.focus();
+        const toggle = page.getByTestId('sidebar').getByTestId('view-toggle');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await toggle.focus();
         await page.keyboard.press('Enter');
-        await expect(menu).toBeVisible();
-        await expect(more).toHaveAttribute('aria-expanded', 'true');
-        // 項目はオン・オフの印付き (まとめて表示・削除済みも表示)
-        const items = menu.getByRole('menuitemcheckbox');
-        await expect(items.first()).toBeFocused();
-        await page.keyboard.press('ArrowDown');
-        await expect(items.nth(1)).toBeFocused();
-        await page.keyboard.press('Home');
-        await expect(items.first()).toBeFocused();
-        await page.keyboard.press('End');
-        await expect(items.last()).toBeFocused();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        const group = page.getByTestId('sidebar').getByTestId('recordings-group-toggle');
+        await expect(group).toBeVisible();
+        await page.keyboard.press('Tab');
+        await expect(group).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Enter');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(group).toHaveCount(0);
 
+        await page.setViewportSize({ width: 390, height: 844 });
+        const open = page.getByTestId('filter-open');
+        await open.focus();
+        await page.keyboard.press('Enter');
+        const sheet = page.getByTestId('filter-sheet');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator(':focus')).toHaveCount(1);
         await page.keyboard.press('Escape');
-        await expect(menu).toBeHidden();
-        await expect(more).toBeFocused();
-        await expect(more).toHaveAttribute('aria-expanded', 'false');
-
-        // ↑ で開くと末尾から
-        await page.keyboard.press('ArrowUp');
-        await expect(menu).toBeVisible();
-        await expect(items.last()).toBeFocused();
-        // 外を押せば閉じる
-        await page.locator('.recordings h2').click();
-        await expect(menu).toBeHidden();
+        await expect(sheet).toBeHidden();
+        await expect(open).toBeFocused();
     });
 
     /**
@@ -479,8 +460,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         });
 
         // 実体と照合すると recordings が飛ぶ
-        await page.getByTestId('recordings-more').click();
-        await page.getByTestId('reconcile-button').click();
+        await (await homeTools(page)).getByTestId('reconcile-button').click();
 
         await expect
             .poll(async () => await page.evaluate(() => (window as unknown as { seen: string[] }).seen))

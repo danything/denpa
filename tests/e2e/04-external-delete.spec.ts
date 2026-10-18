@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { expect, goto, recordOne, test } from './helpers';
+import { expect, goto, homeTools, recordOne, test } from './helpers';
 
 /**
  * 録画ファイルを denpa の外から消したときに、一覧からも消えることを確認する。
@@ -13,16 +13,14 @@ test.describe('外で消された録画の反映', () => {
         expect(libraryPath).toContain(stack.encodedDir);
 
         // ファイルが在るうちは照合しても何も起きない
-        await page.getByTestId('recordings-more').click();
-        await page.getByTestId('reconcile-button').click();
+        await (await homeTools(page)).getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toContainText('削除済みにした 0 件');
         await expect(page.locator(`[data-recording-id="${recordingId}"]`)).toHaveCount(1);
 
         // 外から消されたのと同じことをする
         rmSync(libraryPath);
 
-        await page.getByTestId('recordings-more').click();
-        await page.getByTestId('reconcile-button').click();
+        await (await homeTools(page)).getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toContainText('削除済みにした 1 件');
 
         // 現存一覧からは消え、「削除済みも表示」にすると履歴として残っている
@@ -45,6 +43,6 @@ test.describe('外で消された録画の反映', () => {
         await expect(card).toContainText('410');
         await card.getByTestId('error-home').click();
         await expect(page).toHaveURL(/\/$/);
-        await expect(page.getByTestId('reservation-list')).toBeVisible();
+        await expect(page.getByTestId('timeline')).toBeVisible();
     });
 });
