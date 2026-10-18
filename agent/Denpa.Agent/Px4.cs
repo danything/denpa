@@ -507,7 +507,7 @@ public static class Px4Userland
     ///
     /// <para>
     /// 番号が重なる筐体 (<c>serial_unique=false</c>) も使う。PX-M1UR と PX-S1UR はどれも USB の serial が
-    /// <c>000000000000001</c> で、番号のままだと同じ <c>px4:000000000000001:0</c> が2冊でき、
+    /// <c>000000000000001</c> で、番号のままだと同じ <c>px4:000000000000001:0</c> が2つでき、
     /// <c>px4d --device</c> も番号だけでは1台に決められず断る (exit 2)。そこでUSB ポートを足した名前にする
     /// (<see cref="ParseJson"/>)。前は使わずに理由だけ残していて、Home Assistant のアドオンが
     /// px4d / px4ctl を差し替えるラッパーで補っていた。

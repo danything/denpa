@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace Denpa.Agent;
 
 /// <summary>
-/// **鍵を配るのは LAN の中だけ。** 配る側と受け取る側の決まり (docs/agent.md「鍵を配る範囲」)。
+/// **鍵を配るのは LAN の中だけ。** 配る側と受け取る側の決まり (docs/agent.md「鍵を配るのは LAN の中だけ」)。
 ///
 /// <para>
 /// B-CAS カードは受信機ごとに貸し出されるもので、拠点の外から使い回せると危ない。

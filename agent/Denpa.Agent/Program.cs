@@ -341,7 +341,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
     await Respond.Write(http, merged);
 });
 
-// --- カードとスクランブル解除 ---------------------------------------------
+// --- カードとスクランブルの復号 -------------------------------------------
 /*
  * 鍵を配る API そのもの (/denpa/card/init・/denpa/card/ecm) は、このポートには無い (CardShareServer.cs)
  */

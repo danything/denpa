@@ -51,7 +51,7 @@ persistence:
     existingClaim: ""
 
 service:
-  # 選局・スクランブル解除の API。denpa の TUNER_AGENT_URL がここを指す
+  # 選局・スクランブルの復号の API。denpa の TUNER_AGENT_URL がここを指す
   port: 25252
   type: ClusterIP
   # 別のクラスタ/機械の denpa から届かせるなら NodePort か LoadBalancer にする
