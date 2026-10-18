@@ -35,7 +35,11 @@ import { CLOCK } from '#lib/ts/pes.js';
 
 /** 番のこれだけ前からデコードする (90kHz) */
 const AHEAD = 0.3 * CLOCK;
-/** デコードできたフレームと、渡したまま出てきていないフレームを合わせてこれだけまで (VideoFrame は GPU の置き場を使う) */
+/**
+ * デコードできたフレームと、渡したまま出てきていないフレームを合わせてこれだけまで (VideoFrame は GPU の置き場を使う)。
+ * MPEG-2 の worker (`worker.ts`) の 8 とは、数えるもの (こちらは渡したまま出てきていないものも含む) と
+ * 置き場 (あちらは WebAssembly のメモリ) が違うので揃えていない。どちらも測って決めた値ではない
+ */
 const DECODED_MOST = 6;
 /** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
 const PENDING_MOST = 8 * CLOCK;
@@ -49,7 +53,8 @@ const FRAME = 1501;
  * `full` を返し、画面が手元の尽きる前に再生している位置からリクエストし直す (エンコードする経路の MSE の `BUDGET` と同じ量)
  */
 const FOLLOW_AHEAD_MOST = 120 * CLOCK;
-const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
+/** MPEG-2 の worker の録画 (`worker.ts`) も同じ量で切る */
+export const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
 /** デコーダが転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
 
