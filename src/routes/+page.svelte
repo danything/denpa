@@ -1277,7 +1277,6 @@
                     link ?? (() => openRecording(rec)),
                     unwatched(rec),
                     shown.quiet,
-                    rec.id,
                 )}
                 {@render meta(rec.service_name, [recordedDuration(rec), size(rec.ts_size)], rec)}
             </div>
@@ -1303,78 +1302,66 @@
 {/snippet}
 
 {#snippet sideTools()}
-    <div class="t-side">
-        <input type="search" class="t-side-search" placeholder="番組名・局で探す" aria-label="予約と録画を探す" bind:value={query} />
-        <nav class="t-labels" aria-label="絞り込み">
-            {#each CHIPS as c (c.id)}
-                <button
-                    type="button"
-                    class="t-label"
-                    class:on={chip === c.id}
-                    class:alert={c.id === 'failed' && counts.failed > 0}
-                    aria-pressed={chip === c.id}
-                    onclick={() => (chip = c.id)}
-                >
-                    <span>{c.label}</span><span class="t-label-count num">{counts[c.id]}</span>
-                </button>
-            {/each}
-        </nav>
-        <button type="button" class="t-label t-view-toggle" aria-expanded={viewOpen} onclick={() => (viewOpen = !viewOpen)}>
-            <span>表示の切り替え</span>
-            <span class="t-view-chevron" class:open={viewOpen}><Icon icon={ChevronDown} size="size-4" /></span>
-        </button>
-        {#if viewOpen}
-            <div class="t-view-list">
-                <button type="button" class="t-opt" aria-pressed={grouped} onclick={() => setGrouped(!grouped)}>
-                    <span class="menu-check" aria-hidden="true">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>まとめて表示
-                </button>
-                <a class="t-opt" href={finishedHref} aria-pressed={data.showFinished}>
-                    <span class="menu-check" aria-hidden="true">{#if data.showFinished}<Icon icon={Check} size="size-4" />{/if}</span>完了した予約も表示
-                </a>
-                <a class="t-opt" href={deletedHref} aria-pressed={data.showDeleted}>
-                    <span class="menu-check" aria-hidden="true">{#if data.showDeleted}<Icon icon={Check} size="size-4" />{/if}</span>削除済みも表示
-                </a>
-                <form method="POST" action="?/reconcile" use:submitting class="menu-form">
-                    <button type="submit" class="t-opt"><span class="menu-check"></span>ファイルと照合</button>
-                </form>
-            </div>
-        {/if}
-    </div>
+    <input type="search" class="s-search" placeholder="番組名・局で探す" aria-label="予約と録画を探す" bind:value={query} />
+    <p class="s-group">絞り込み</p>
+    <nav class="s-list" aria-label="絞り込み">
+        {#each CHIPS as c (c.id)}
+            <button
+                type="button"
+                class="s-item"
+                class:on={chip === c.id}
+                aria-pressed={chip === c.id}
+                onclick={() => (chip = c.id)}
+            >
+                <span>{c.label}</span>
+                <span class="s-sub num" class:s-alert={c.id === 'failed' && counts.failed > 0}>{counts[c.id]}</span>
+            </button>
+        {/each}
+    </nav>
+    <button type="button" class="s-group s-group-toggle" aria-expanded={viewOpen} onclick={() => (viewOpen = !viewOpen)}>
+        表示の切り替え
+        <span class="t-view-chevron" class:open={viewOpen}><Icon icon={ChevronDown} size="size-4" /></span>
+    </button>
+    {#if viewOpen}
+        <div class="s-list">
+            <button type="button" class="s-item" aria-pressed={grouped} onclick={() => setGrouped(!grouped)}>
+                <span>まとめて表示</span><span class="s-sub">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>
+            </button>
+            <a class="s-item" href={finishedHref}>
+                <span>完了した予約も表示</span><span class="s-sub">{#if data.showFinished}<Icon icon={Check} size="size-4" />{/if}</span>
+            </a>
+            <a class="s-item" href={deletedHref}>
+                <span>削除済みも表示</span><span class="s-sub">{#if data.showDeleted}<Icon icon={Check} size="size-4" />{/if}</span>
+            </a>
+            <form method="POST" action="?/reconcile" use:submitting class="menu-form">
+                <button type="submit" class="s-item"><span>ファイルと照合</span></button>
+            </form>
+        </div>
+    {/if}
 {/snippet}
 
 {#snippet pane(item: TItem | null)}
-    <div class="t-stats">
-        <div class="t-stat t-next">
-            <span class="t-stat-label">次の録画</span>
-            {#if nextRes !== null}
-                <span class="t-stat-value num">{time(nextRes.start_at)}<small>{relative(nextRes.start_at)}</small></span>
-                <span class="t-stat-sub broadcast">{nextRes.name}</span>
-            {:else}
-                <span class="t-stat-value">なし</span>
-            {/if}
+    <p class="s-group">今日</p>
+    <div class="s-list s-stats">
+        <div class="s-item s-static">
+            <span>次の録画</span>
+            <span class="s-sub num">{#if nextRes !== null}{time(nextRes.start_at)}・{relative(nextRes.start_at)}{:else}なし{/if}</span>
         </div>
-        <div class="t-stat">
-            <span class="t-stat-label">録画中</span>
-            <span class="t-stat-value num">{counts.now}<small>本</small></span>
-        </div>
-        <div class="t-stat">
-            <span class="t-stat-label">未視聴</span>
-            <span class="t-stat-value num">{counts.unwatched}<small>本</small></span>
-        </div>
-        <div class="t-stat">
-            <span class="t-stat-label">空き</span>
-            <span class="t-stat-value num">{data.capacity?.free.replace('空き ', '') ?? '—'}</span>
-            {#if data.capacity?.hours}<span class="t-stat-sub">{data.capacity.hours}</span>{/if}
+        <div class="s-item s-static"><span>録画中</span><span class="s-sub num">{counts.now} 本</span></div>
+        <div class="s-item s-static"><span>未視聴</span><span class="s-sub num">{counts.unwatched} 本</span></div>
+        <div class="s-item s-static">
+            <span>空き</span>
+            <span class="s-sub num">{data.capacity?.free.replace('空き ', '') ?? '—'}{#if data.capacity?.hours}・{data.capacity.hours}{/if}</span>
         </div>
     </div>
     {#if item !== null}
         {@const rec = item.kind === 'past' && item.row.kind === 'rec' ? item.row.rec : null}
         {@const res = item.kind === 'past' ? (item.row.kind === 'missed' ? item.row.res : null) : item.res}
         {@const base = rec ?? res!}
+        <p class="s-group">
+            {#if item.kind === 'now'}いま録画中{:else if item.kind === 'res'}{relative(base.start_at)}に録画{:else}録画済み{/if}
+        </p>
         <div class="t-detail">
-            <p class="t-detail-kicker muted small">
-                {#if item.kind === 'now'}いま録画中{:else if item.kind === 'res'}{relative(base.start_at)}に録画{:else}{dateTime(base.start_at)} に録画{/if}
-            </p>
             {#if rec !== null && rec.library_path !== null}
                 <a class="t-hero" href={watchLink(rec) ?? undefined}>
                     {@render posterImg(rec.id)}
@@ -1386,7 +1373,7 @@
             {#if rec !== null && rec.progress !== null}
                 <p class="small muted">続きから (残り{durationMs(Math.max(0, rec.progress.length - rec.progress.at))})</p>
             {/if}
-            <p class="t-desc small broadcast">{base.description}</p>
+            {#if base.description}<p class="t-desc small broadcast">{base.description}</p>{/if}
             <div class="t-detail-actions">
                 {#if rec !== null}
                     {@const link = watchLink(rec)}
@@ -2789,5 +2776,139 @@
     }
     .t-pane .t-hero {
         max-height: 9rem;
+    }
+    /* ===== 見本 1 (方針の更新): 枠なし・線なしの行、右は端まで寄せたサイドバー ===== */
+    .t-row {
+        border-bottom: 0;
+        border-radius: var(--dp-radius);
+        padding-inline: 0.5rem;
+        margin-bottom: 1px;
+        transition: background-color var(--dp-duration);
+    }
+    .t-row:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .t-row.t-focus {
+        background: var(--dp-subtle);
+    }
+    .t-row.t-live {
+        background: color-mix(in srgb, var(--dp-rec) 12%, transparent);
+    }
+    .t-day {
+        padding: 0.875rem 0.5rem 0.25rem;
+        border-bottom: 0;
+        color: var(--dp-muted);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0;
+    }
+    .t-day > span:first-child {
+        color: var(--pico-color);
+    }
+    .t-toolbar {
+        border-bottom: 0;
+    }
+    @media (min-width: 1000px) {
+        .t-board {
+            height: calc(100% + 2 * var(--dp-gutter));
+            margin: calc(-1 * var(--dp-gutter));
+        }
+        .t-main {
+            grid-template-columns: minmax(0, 1fr) 18rem;
+        }
+        .t-list {
+            padding: 0.25rem calc(var(--dp-gutter) - 0.5rem) 1rem;
+        }
+        .t-pane {
+            gap: 0;
+            margin-left: 0;
+            padding: 1rem 0.625rem 1.5rem;
+            border-left: 1px solid var(--dp-line);
+        }
+    }
+    @media (min-width: 1280px) {
+        .t-main {
+            grid-template-columns: minmax(0, 1fr) 20rem;
+        }
+    }
+    .s-search {
+        height: 2.5rem;
+        margin: 0 0 0.25rem;
+        font-size: 0.875rem;
+    }
+    .s-group {
+        margin: 1rem 0 0.25rem;
+        padding: 0 0.75rem;
+        color: var(--dp-muted);
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .s-group-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: 2rem;
+        border: 0;
+        border-radius: var(--dp-radius);
+        background: transparent;
+        box-shadow: none;
+        text-align: left;
+    }
+    .s-group-toggle:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .s-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+    }
+    .s-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        width: 100%;
+        min-height: 2.5rem;
+        margin: 0;
+        padding: 0 0.75rem;
+        border: 0;
+        border-radius: var(--dp-radius);
+        background: transparent;
+        color: inherit;
+        font-size: 0.875rem;
+        font-weight: 400;
+        text-align: left;
+        text-decoration: none;
+        box-shadow: none;
+        transition: background-color var(--dp-duration);
+    }
+    .s-item:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .s-item.on {
+        background: var(--dp-subtle);
+        font-weight: 600;
+    }
+    .s-static {
+        min-height: 2rem;
+    }
+    .s-static:hover {
+        background: transparent;
+    }
+    .s-sub {
+        display: inline-flex;
+        align-items: center;
+        color: var(--dp-muted);
+        font-size: 0.8125rem;
+        font-weight: 400;
+        white-space: nowrap;
+    }
+    .s-sub.s-alert {
+        color: var(--dp-rec-text);
+        font-weight: 700;
+    }
+    .t-pane .t-detail {
+        padding: 0 0.75rem;
     }
 </style>
