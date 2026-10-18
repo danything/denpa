@@ -602,7 +602,7 @@
                                         </div>
                                         <div>
                                             <div class="group-title bold">個別に選ぶ</div>
-                                            <div class="scroll-list services" data-testid="rule-services">
+                                            <div class="pick-list" data-testid="rule-services">
                                                 {#each grouped as group (group.type)}
                                                     <div>
                                                         <div class="group-title">
@@ -644,7 +644,7 @@
                                     <div class="box-body">
                                         <!-- 大分類だけ選べば中分類は問わない。細かく絞りたいときだけ
                                  中分類にチェックを入れる -->
-                                        <div class="scroll-list genres" data-testid="rule-genres">
+                                        <div class="pick-list" data-testid="rule-genres">
                                             {#each GENRE_TREE as group (group.value)}
                                                 <div>
                                                     <label class="check">
@@ -1299,17 +1299,14 @@
         font-size: 0.75rem;
         color: var(--dp-muted);
     }
-    .scroll-list {
+    /*
+     * 局とジャンルの並び。**中で別にスクロールさせない** — 書く欄の列がもうスクロールするので、
+     * 入れ子にするとどちらが動くのか分かりにくい。CS の 50 局余りでも、そのぶん列が伸びるだけ
+     */
+    .pick-list {
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
-        overflow-y: auto;
-    }
-    .services {
-        max-height: 12rem;
-    }
-    .genres {
-        max-height: 16rem;
     }
     .grid-2 {
         display: grid;

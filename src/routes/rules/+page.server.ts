@@ -268,7 +268,6 @@ export async function load({ url }) {
             dedupe: '1',
             [origin.kind]: String(origin.id),
         });
-        for (const genre of origin.prefill.genres ?? []) query.append('genres', genre);
         redirect(303, relative(url, `/rules?${query}`));
     }
     /*

@@ -189,15 +189,9 @@ describe('録画からルールを作る', () => {
         genre_detail: [{ lv1: 7, lv2: 0 }],
     };
 
-    test('キーワードはシリーズ名、ジャンルは大分類だけ', () => {
-        expect(prefillFrom(recording)).toEqual({ keyword: 'テストアニメ', genres: ['7'] });
-    });
-
-    test('ジャンルの無い録画はキーワードだけ', () => {
-        expect(prefillFrom({ ...recording, genre_detail: null })).toEqual({
-            keyword: 'テストアニメ',
-            genres: null,
-        });
+    test('キーワードはシリーズ名だけ。ジャンルは入れない (全ジャンル)', () => {
+        expect(prefillFrom(recording)).toEqual({ keyword: 'テストアニメ' });
+        expect(prefillFrom({ ...recording, genre_detail: null })).toEqual({ keyword: 'テストアニメ' });
     });
 
     test('鍵括弧の作品名に編が続くタイトルは、作品名だけをキーワードにする', () => {
@@ -233,7 +227,7 @@ describe('録画からルールを作る', () => {
         );
     });
 
-    test('番組名が空なら下書きは作らない (ジャンルだけのルールになる)', () => {
+    test('番組名が空なら下書きは作らない', () => {
         expect(prefillFrom({ ...recording, name: '' })).toBeNull();
     });
 
@@ -264,15 +258,9 @@ describe('番組からルールを作る', () => {
         genre_detail: [{ lv1: 7, lv2: 0 }],
     };
 
-    test('キーワードはタイトルから切り出したシリーズ名、ジャンルは大分類だけ', () => {
-        expect(prefillFrom(program)).toEqual({ keyword: 'テストアニメ', genres: ['7'] });
-    });
-
-    test('ジャンルの無い番組 (予約の行から読んだとき) はキーワードだけ', () => {
-        expect(prefillFrom({ ...program, genre_detail: null })).toEqual({
-            keyword: 'テストアニメ',
-            genres: null,
-        });
+    test('キーワードはタイトルから切り出したシリーズ名だけ。ジャンルは入れない (全ジャンル)', () => {
+        expect(prefillFrom(program)).toEqual({ keyword: 'テストアニメ' });
+        expect(prefillFrom({ ...program, genre_detail: null })).toEqual({ keyword: 'テストアニメ' });
     });
 
     test('このシリーズを録っているルールを返す。[新] だけのルールは当たらない', () => {

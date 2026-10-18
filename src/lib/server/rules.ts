@@ -182,7 +182,6 @@ function textCache(program: Program): (fields: SearchField[]) => string {
 /** 録画・番組から作るルールの下書き (`prefillFrom`) */
 export interface RulePrefill {
     keyword: string;
-    genres: string[] | null;
 }
 
 /** 録画・番組から読む分 */
@@ -208,16 +207,14 @@ function seriesOf(source: Pick<RuleSource, 'name'>): string {
  *   シリーズ名は番組名の一部なので、空白で割れても同じ番組に当たる
  * - 局は絞らない。同じ回が別の局で流れても、ルールの「同じ回は最初の放送だけ」が
  *   いちばん早いものを選ぶ。局を絞ると、そちらで先に流れたときに遅いほうを待つことになる
- * - ジャンルは**大分類だけ**入れる。シリーズ名が短いと別の番組まで当たるので、その歯止め。
- *   中分類は局によって付け方が揺れるので使わない
+ * - ジャンルは入れない (全ジャンル)。局によって付け方が揺れ、同じシリーズでも回によって
+ *   違うことがあるので、絞ると録り逃す
  *
- * シリーズ名が読めなければ null (条件がジャンルだけになり、そのジャンルを全部録ってしまう)
+ * シリーズ名が読めなければ null (条件が何も無いので、ルールにならない)
  */
 export function prefillFrom(source: RuleSource): RulePrefill | null {
     const keyword = seriesOf(source);
-    if (keyword === '') return null;
-    const lv1 = source.genre_detail?.[0]?.lv1;
-    return { keyword, genres: lv1 === undefined ? null : [String(lv1)] };
+    return keyword === '' ? null : { keyword };
 }
 
 /**

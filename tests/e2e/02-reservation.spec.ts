@@ -235,6 +235,9 @@ test.describe('予約の細かい指定', () => {
         await detail.getByTestId('detail-rule').click();
         await expect(page).toHaveURL(ruleUrl);
         await expect(page.getByTestId('rule-origin')).toBeVisible();
+        // 下書きにジャンルは入れない (全ジャンル)
+        expect(new URL(page.url()).searchParams.has('genres')).toBe(false);
+        await expect(page.getByTestId('genre-summary')).toContainText('全ジャンル');
 
         await goto(page, day);
         await cellOf(page, target.programId).getByTestId('program-button').click();

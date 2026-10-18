@@ -309,6 +309,30 @@ test.describe('ジャンル指定', () => {
         await expect(page.getByTestId('reservation-row').first()).toBeVisible();
     });
 
+    /**
+     * **局とジャンルの並びは中でスクロールさせない。** 書く欄の列がもうスクロールするので、
+     * 開いた並びは丸ごとの高さで列に入る (入れ子にすると、どちらが動くのか分かりにくい)
+     */
+    test('局とジャンルを開くと、並びは中でスクロールせず丸ごと出る', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await goto(page, '/rules');
+        await page.getByTestId('channel-summary').click();
+        await page.getByTestId('genre-summary').click();
+        for (const id of ['rule-services', 'rule-genres']) {
+            const list = page.getByTestId(id);
+            await expect(list).toBeVisible();
+            const shape = await list.evaluate((el) => ({
+                overflow: getComputedStyle(el).overflowY,
+                cut: el.scrollHeight > el.clientHeight + 1,
+            }));
+            expect(shape, id).toEqual({ overflow: 'visible', cut: false });
+        }
+        // 最後のジャンルまで、列のスクロールだけで届く
+        const last = page.getByTestId('rule-genres').locator('input[name="genres"]').last();
+        await last.scrollIntoViewIfNeeded();
+        await expect(last).toBeInViewport();
+    });
+
     test('合わないジャンルなら何も録らない', async ({ page }) => {
         await goto(page, '/rules');
         await page.getByTestId('genre-summary').click();
