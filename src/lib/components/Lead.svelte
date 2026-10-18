@@ -55,7 +55,7 @@
         color: var(--dp-muted);
         font-size: var(--dp-text-sm);
     }
-    /* 字の並びに置く小さな丸い的。字の高さに収め、押せる幅だけ少し外へ広げる */
+    /* 字の並びに置く小さな丸い的 (24px)。行の高さを押し広げないよう、上下は負の余白で字の高さに収める */
     .info {
         display: inline-flex;
         align-items: center;
@@ -74,6 +74,17 @@
         transition:
             background-color var(--dp-duration),
             color var(--dp-duration);
+    }
+    /* 指で押す端末では、見た目は変えずに押せる範囲だけ 40px に広げる */
+    @media (pointer: coarse) {
+        .info {
+            position: relative;
+        }
+        .info::after {
+            content: '';
+            position: absolute;
+            inset: -0.5rem;
+        }
     }
     .info:hover {
         background: var(--dp-hover-soft);
