@@ -344,10 +344,16 @@
             scroll-behavior: smooth;
         }
     }
-    /* 中の 2 段組 (`app.css` の `.setting-rows`) は、この列の幅で切り替える */
+    /*
+     * 中の 2 段組 (`app.css` の `.setting-rows`) は、この列の幅で切り替える。
+     * 広い画面では列を真ん中に寄せる (左に寄せたままだと右が大きく空いて見えた)
+     */
     .main-inner {
         display: flex;
-        max-width: 64rem;
+        width: 100%;
+        max-width: 60rem;
+        margin-inline: auto;
+        box-sizing: border-box;
         flex-direction: column;
         gap: var(--dp-space-3);
         container-type: inline-size;
