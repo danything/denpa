@@ -30,6 +30,20 @@ test.describe('局ロゴ', () => {
         // 持っていなければ配れない
         expect((await request.get(`/api/services/${MX.id}/logo`)).status()).toBe(404);
 
+        /*
+         * **CS の局が入ってから押す。** CS はスキャンしなくても標準の表から入る (`channel-seed.ts`) が、
+         * 入るのは起動のあと。入る前に押すと衛星は BS の2中継だけで終わり、入ったあとだと
+         * BS の外れの中継を閉じた直後に CS の空きを訊く。閉じたことがエージェントに届く前なので
+         * 空きが0に見え、CS を諦めていた (CI で時々落ち、やり直すと通っていた)。
+         * どちらになるかを起動からの時間に任せず、いつも後者で確かめる
+         */
+        await expect
+            .poll(async () => {
+                const list = (await (await request.get('/api/services')).json()) as { type: string }[];
+                return list.some((service) => service.type === 'CS');
+            })
+            .toBe(true);
+
         // 普段は10分ごとに少しずつ取得している。押すと今すぐ取得する
         await goto(page, '/tuners');
         await page.getByTestId('logo-sweep').click();

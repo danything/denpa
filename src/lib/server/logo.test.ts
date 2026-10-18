@@ -15,7 +15,7 @@ config.dataDir = mkdtempSync(join(tmpdir(), 'denpa-logo-'));
 const dir = join(config.dataDir, 'logos');
 mkdirSync(dir, { recursive: true });
 
-const { logoStamps, writtenSince } = await import('./logo');
+const { countFree, logoStamps, writtenSince } = await import('./logo');
 
 /** 局のロゴを置き、書き込み時刻を `at` (秒) にする */
 function put(serviceId: number, at: number): void {
@@ -49,5 +49,36 @@ describe('取得できたロゴの数', () => {
         const stamps = logoStamps([20, 21]);
         put(21, 4000);
         expect(writtenSince(stamps, [20])).toBe(0);
+    });
+});
+
+/**
+ * 「ロゴをいますぐ集める」が数える空きチューナー (`countFree`)。
+ *
+ * 閉じたことがエージェントに届くのは非同期なので、閉じた直後の一覧には自分の選局が残っている。
+ * 衛星の外れの中継を閉じた直後に CS の空きを訊いて0と見え、残りの CS を諦めていた
+ */
+describe('空きチューナーの数', () => {
+    const tuner = (types: string[], users: string[] = []) => ({
+        disabled: false,
+        types: types as ('GR' | 'BS' | 'CS')[],
+        channel: users.length === 0 ? null : { type: types[0] as 'GR' | 'BS' | 'CS', channel: 'X' },
+        users: users.map((use) => ({ use, priority: 1 })),
+    });
+
+    test('閉じたばかりの自分の選局しかいないチューナーは空きとして数える', () => {
+        const tuners = [tuner(['BS', 'CS'], ['logo BS/BS11_0']), tuner(['BS', 'CS'], ['logo BS/BS03_0'])];
+        expect(countFree(tuners, 'CS')).toBe(0);
+        expect(countFree(tuners, 'CS', ['logo BS/BS03_0'])).toBe(1);
+    });
+
+    test('ほかの利用者が同じ選局にいれば空きではない。種別の合わないチューナーと無効なチューナーも数えない', () => {
+        const tuners = [
+            tuner(['BS', 'CS'], ['logo BS/BS03_0', 'epg BS03_0']),
+            tuner(['GR']),
+            { ...tuner(['BS', 'CS']), disabled: true },
+        ];
+        expect(countFree(tuners, 'CS', ['logo BS/BS03_0'])).toBe(0);
+        expect(countFree(tuners, 'GR')).toBe(1);
     });
 });

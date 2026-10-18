@@ -10,7 +10,7 @@ import { CURRENT_SERVICES } from './epg';
 import { emit } from './events';
 import { services } from './schema';
 import { chunks } from './stream';
-import { type AgentTuner, getTuners, openChannelStream } from './tuner';
+import { type AgentTuner, getTuners, openChannelStream, type StreamUse } from './tuner';
 
 /**
  * 局ロゴを集める。
@@ -495,7 +495,12 @@ const collecting = new Set<string>();
  * 流れていて、ロゴは局ごとに別々のタイミングで来る。せっかく開いたのだから、
  * 揃うか時間切れになるまで読む。
  */
-async function collect(target: Target, timeout: number, signal?: AbortSignal): Promise<number> {
+async function collect(
+    target: Target,
+    timeout: number,
+    signal?: AbortSignal,
+    after: readonly StreamUse[] = [],
+): Promise<number> {
     const before = target.type !== 'GR' ? missingSatellites() : missingOn(target.channel);
     /** 当たり外れを書き留めたか。毎回書きに行かないための印 */
     let marked = false;
@@ -516,8 +521,9 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
             target.channel,
             controller.signal,
             // 何を使っているのかがチューナー画面に出る
-            `logo ${target.type}/${target.channel}`,
+            logoUse(target),
             SWEEP_PRIORITY,
+            after,
         );
         const feed = watch(target.network_id);
         const satellite = target.type !== 'GR';
@@ -573,16 +579,41 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
     return before - (target.type !== 'GR' ? missingSatellites() : missingOn(target.channel));
 }
 
+/** チューナー画面に出る名乗り。引き継ぎ (`after`) でも同じものを渡す */
+function logoUse(target: Target): StreamUse {
+    return `logo ${target.type}/${target.channel}`;
+}
+
 /**
- * **その種別を受けられる**空きチューナーの数 (衛星用の空きは地上波の役に立たない)。無ければ自分では開かない。
+ * **その種別を受けられる**空きチューナーの数 (衛星用の空きは地上波の役に立たない)。
+ *
+ * `leaving` は**こちらが閉じたばかりの選局**。閉じたことがエージェントに届くのは
+ * 非同期なので、閉じた直後に訊くとまだ使用中に見える。それを数え損ねると、衛星の
+ * 外れの中継 (1秒ほどで閉じる) の次に「CS の空きチューナーが無くなった」と諦めて
+ * いた — もう1台は当たりの中継を読んでいる最中なので、空きが0に見える。
+ * そこにしかいないなら空きとして数え、開くときに `after` で引き継ぐ
+ */
+export function countFree(
+    tuners: readonly Pick<AgentTuner, 'disabled' | 'types' | 'channel' | 'users'>[],
+    type: string,
+    leaving: readonly string[] = [],
+): number {
+    return tuners.filter(
+        (tuner) =>
+            !tuner.disabled &&
+            tuner.types.includes(type as ChannelType) &&
+            (tuner.channel === null ||
+                (tuner.users.length > 0 && tuner.users.every((user) => leaving.includes(user.use)))),
+    ).length;
+}
+
+/**
+ * 空きチューナーの数 (`countFree`)。無ければ自分では開かない。
  * ロゴの優先度はいちばん下なので、番組表集めに譲る特別扱いは要らない (エージェントが断る・取り上げる)。
  */
-async function freeTuners(type: string): Promise<number> {
+async function freeTuners(type: string, leaving: readonly string[] = []): Promise<number> {
     try {
-        const tuners = await getTuners();
-        return tuners.filter(
-            (tuner) => !tuner.disabled && tuner.types.includes(type as ChannelType) && tuner.channel === null,
-        ).length;
+        return countFree(await getTuners(), type, leaving);
     } catch {
         // エージェントに聞けないなら開きに行かない
         return 0;
@@ -663,6 +694,8 @@ async function drain(
     /** 空きが無くなった種別。**その種別だけ**諦める (衛星の満杯で地上波を止めない) */
     const full = new Set<string>();
     const worker = async () => {
+        /** この手で閉じたばかりの選局。次を開くときに引き継ぐ (`freeTuners`) */
+        let left: StreamUse[] = [];
         for (;;) {
             const target = queue.shift();
             if (target === undefined || signal.aborted) return;
@@ -671,7 +704,7 @@ async function drain(
                 update({ done: state.done + 1 });
                 continue;
             }
-            if ((await freeTuners(target.type)) === 0) {
+            if ((await freeTuners(target.type, left)) === 0) {
                 full.add(target.type);
                 update({
                     done: state.done + 1,
@@ -682,7 +715,8 @@ async function drain(
             update({ channels: [...state.channels, target.channel] });
             // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
             const limit = target.type === 'GR' ? SWEEP_TIMEOUT : SATELLITE_TIMEOUT;
-            await collect(target, limit, signal);
+            await collect(target, limit, signal, left);
+            left = [logoUse(target)];
             update({
                 channels: state.channels.filter((channel) => channel !== target.channel),
                 done: state.done + 1,
