@@ -14,7 +14,7 @@
      * 操作バーの右端。**3画面 (ライブ・追っかけ・録画) で同じ。**
      *
      * - **再生の設定 (⚙ `SettingsMenu`)。** 端末ごとに決めるものをまとめる。上から CMスキップ (観る画面で
-     *   CM の入った録画だけ)・アンビエントモード・バックグラウンド再生・音声 (選べるときだけ)・コーデック。
+     *   CM の入った録画だけ)・アンビエントモード・バックグラウンド再生・字幕 (持っているときだけ)・音声 (選べるときだけ)・コーデック。
      *   **畳むときも出しておく** — 中身を1つにまとめたぶん、ボタンは1つで済む
      *   - バックグラウンド再生 … 既定はオフで、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`)
      *   - アンビエントモード … 既定はオンで、映像の色を枠の周りに広げる。端末ごとに覚える (`ambient.svelte.ts`)
@@ -38,8 +38,10 @@
         audio?: SettingChoice | undefined;
         /** CMスキップ (観る画面で、CM の入った録画だけ) */
         cm?: { on: boolean; toggle: () => void } | undefined;
+        /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
+        subtitle?: SettingChoice | undefined;
     }
-    let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm }: Props = $props();
+    let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm, subtitle }: Props = $props();
 
     const toggles = $derived<SettingToggle[]>([
         ...(cm === undefined ? [] : [{ id: 'skip-cm', label: 'CMスキップ', icon: CUT, on: cm.on, toggle: cm.toggle }]),
@@ -52,7 +54,7 @@
             toggle: () => background.toggle(),
         },
     ]);
-    const choices = $derived([audio, codec].filter((item) => item !== undefined));
+    const choices = $derived([subtitle, audio, codec].filter((item) => item !== undefined));
 </script>
 
 <SettingsMenu {prefix} {toggles} {choices} />

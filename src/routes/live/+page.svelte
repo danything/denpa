@@ -35,7 +35,6 @@
         SOUND_ON,
     } from '#lib/components/player/icons.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
-    import OverlayMenu from '#lib/components/player/OverlayMenu.svelte';
     import PlayerLayout, { PHONE_LANDSCAPE } from '#lib/components/player/PlayerLayout.svelte';
     import PlayerStage from '#lib/components/player/PlayerStage.svelte';
     import PlayerVeil from '#lib/components/player/PlayerVeil.svelte';
@@ -45,7 +44,7 @@
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
-    import { audioTracks, liveCodecs } from '#lib/components/player/settings.js';
+    import { audioTracks, liveCodecs, subtitles } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
@@ -557,35 +556,6 @@
                                 onclick={() => window.open(app.url, '_blank', 'noopener,noreferrer')}
                             />
                         {/if}
-
-                        <!--
-                        **字幕の選び直し。言語が2つ以上あるときだけ出す。**
-
-                        音声と同じで**再エンコードになる** — 字幕は映像と同じ ffmpeg が
-                        エンコードしているので (`server/live.ts` の `key`)。動くのは言語が
-                        複数ある放送だけなので、起こし直すのは年に数回のこと
-                    -->
-                        {#if player.captions && player.captionTracks.length > 1}
-                            <OverlayMenu
-                                testid="live-caption"
-                                attrName="track"
-                                items={player.captionTracks.map((t) => ({
-                                    key: t.index,
-                                    label: t.label,
-                                    active: t.index === player.captionTrack,
-                                }))}
-                                onselect={(key) => player.setCaptionTrack(key)}
-                            >
-                                {#snippet trigger(menu)}
-                                    <ControlButton {menu} label="字幕を選ぶ" testid="live-caption-track">
-                                        <span class="track-label">
-                                            {player.captionTracks.find((t) => t.index === player.captionTrack)
-                                                ?.label ?? '字幕'}
-                                        </span>
-                                    </ControlButton>
-                                {/snippet}
-                            </OverlayMenu>
-                        {/if}
                         </Extras>
 
                         <!--
@@ -746,6 +716,19 @@
                                           active: a.id === player.audio,
                                       })),
                                       onselect: (key) => player.setAudio(key),
+                                  })
+                                : undefined}
+                            subtitle={player.hasCaptions
+                                ? subtitles({
+                                      icon: CAPTION,
+                                      on: player.captions,
+                                      tracks: player.captionTracks,
+                                      track: player.captionTrack,
+                                      languages: player.captionLanguages,
+                                      language: player.captionLanguage,
+                                      onoff: (on) => player.setCaptions(on),
+                                      ontrack: (index) => player.setCaptionTrack(index),
+                                      onlanguage: (index) => player.setCaptionLanguage(index),
                                   })
                                 : undefined}
                         />
@@ -995,14 +978,6 @@
         display: flex;
         flex-direction: column;
         padding: var(--dp-side-pad, 0) var(--dp-side-pad, 0) 0;
-    }
-    .track-label {
-        display: inline-block;
-        max-width: 7rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        vertical-align: bottom;
     }
     /* 測り直す操作。読みものの行に置くので、ボタンの形にはしない */
     .relearn {

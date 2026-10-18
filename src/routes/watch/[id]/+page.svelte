@@ -4,7 +4,13 @@
     import { arming } from '#lib/arming.svelte.js';
     import { type CanvasPlayer, canvasPlayer } from '#lib/canvas-player.js';
     import { canvasVideo, driveNoticeSeen } from '#lib/canvas-video.js';
-    import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/caption-text.js';
+    import {
+        CAPTION_TEXT_VERSION,
+        type CaptionLanguage,
+        type CaptionPage,
+        type CaptionPages,
+        captionLanguage as languageOf,
+    } from '#lib/caption-text.js';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import { ambientMode } from '#lib/components/player/ambient.svelte.js';
@@ -15,6 +21,12 @@
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import ControlRow from '#lib/components/player/ControlRow.svelte';
     import { CaptionPainter } from '#lib/components/player/caption-draw.js';
+    import {
+        CAPTION_LANGUAGE_KEY,
+        CAPTION_ON_KEY,
+        pickLanguage,
+        storedCaptionsOn,
+    } from '#lib/components/player/caption-pref.js';
     import { playerControls } from '#lib/components/player/controls.svelte.js';
     import DataBroadcast, { pressD } from '#lib/components/player/DataBroadcast.svelte';
     import Extras from '#lib/components/player/Extras.svelte';
@@ -47,7 +59,7 @@
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
-    import { audioTracks, recordingCodecs } from '#lib/components/player/settings.js';
+    import { audioTracks, recordingCodecs, subtitles } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import { stageTap } from '#lib/components/player/stage-tap.js';
@@ -745,7 +757,7 @@
     let audioIndex = $state(0);
     /**
      * 字幕を出しているか。**持っている録画でだけ意味を持つ** (`data.subtitle`)。
-     * **既定は出す** — ライブと同じ (`live-player` の `captions`)
+     * **既定は出す** — ライブと同じ (`live-player` の `captions`)。端末ごとに覚える (`caption-pref.ts`)
      */
     let captions = $state(true);
     /**
@@ -756,9 +768,34 @@
      * 無ければ 404 が返る。ライブと同じで、持っているときだけボタンを出す
      * (`live-player` の `hasCaptions`)
      */
+    /** 受け取った字幕 (全部の言語)。持っていなければ null */
+    let captionText = $state.raw<CaptionPages | null>(null);
+    /**
+     * 載っている言語。第1言語は `pages`、第2言語から後ろは `others` (`captions.json`)。
+     * 名前が分からない第1言語 (古いサーバ・端末に保存した古いコピー) は「字幕1」
+     */
+    const captionLanguages = $derived<CaptionLanguage[]>(
+        captionText === null
+            ? []
+            : [
+                  captionText.language ?? languageOf(1, ''),
+                  ...(captionText.others ?? []).filter((o) => o.pages.length > 0),
+              ],
+    );
+    /** 出している言語 (`CaptionLanguage.index`) */
+    let captionLanguage = $state(1);
     /** 文字の配置。時刻の順 */
-    let cues = $state.raw<Cue[]>([]);
-    const hasCaptions = $derived(cues.length > 0);
+    const cues = $derived<Cue[]>(
+        captionText === null
+            ? []
+            : captionLanguage === 1
+              ? captionText.pages
+              : (captionText.others?.find((o) => o.index === captionLanguage)?.pages ?? captionText.pages),
+    );
+    const hasCaptions = $derived(
+        captionText !== null &&
+            (captionText.pages.length > 0 || (captionText.others ?? []).some((o) => o.pages.length > 0)),
+    );
     /** 文字の配置を描く係 (`overlay` ができたら作る) */
     let painter: CaptionPainter | null = null;
     /** いま描いている文字の配置。同じものを描き直さない */
@@ -978,8 +1015,9 @@
             settle();
         });
         void detail.open(rec.program_id, facts);
-        // 字幕は既定で出す (ライブと同じ)。持っていない録画では何も起きない
-        if (captions) void loadCaptions();
+        // 字幕は消していても取ってくる (持っているかどうかで ⚙ の字幕の行と字幕ボタンを出す)。持っていない録画では何も起きない
+        captions = storedCaptionsOn(stored(CAPTION_ON_KEY));
+        void loadCaptions();
         if (video !== null) follow(video);
         if (!ready) return;
         video?.play().catch(() => undefined);
@@ -1413,10 +1451,29 @@
      * 外字も落ちる。放送が言う置き場所のまま描く
      */
     function toggleCaptions(): void {
-        captions = !captions;
-        if (captions) void loadCaptions();
-        else clearCaptions();
+        setCaptions(!captions);
         controls.stir();
+    }
+
+    /** 字幕を出す・消す。端末ごとに覚える (`caption-pref.ts`) */
+    function setCaptions(on: boolean): void {
+        captions = on;
+        remind(CAPTION_ON_KEY, on ? '1' : '0');
+        if (on) {
+            void loadCaptions();
+            paint();
+        } else {
+            clearCaptions();
+        }
+    }
+
+    /** 字幕の言語を選ぶ。言語の名前 (ISO 639) で端末に覚える (`caption-pref.ts`) */
+    function setCaptionLanguage(index: number): void {
+        const code = captionLanguages.find((l) => l.index === index)?.code ?? '';
+        if (code !== '') remind(CAPTION_LANGUAGE_KEY, code);
+        captionLanguage = index;
+        clearCaptions();
+        paint();
     }
 
     /**
@@ -1426,7 +1483,7 @@
      * 端末に保存したものがあればそちらから読む (オフラインでも字幕が出る)
      */
     async function loadCaptions(): Promise<void> {
-        if (cues.length > 0) return;
+        if (captionText !== null) return;
         try {
             // 端末に保存したものがあればそちら。**字幕を持たない番組は 404** (ボタンを出さないだけで、異常ではない)
             const copy = await localLookup;
@@ -1436,8 +1493,10 @@
                     : await fetch(resolve(`api/recordings/${rec.id}/captions.json`)).then((res) =>
                           res.ok ? (res.json() as Promise<CaptionPages>) : undefined,
                       );
-            if (text?.v === CAPTION_TEXT_VERSION && text.pages.length > 0) {
-                cues = text.pages.map(({ at, page }) => ({ at, page }));
+            if (text?.v === CAPTION_TEXT_VERSION) {
+                captionText = text;
+                // 覚えている言語が載っていればそれ、無ければ第1言語
+                captionLanguage = pickLanguage(captionLanguages, stored(CAPTION_LANGUAGE_KEY));
                 paint();
             }
         } catch (error) {
@@ -2085,6 +2144,16 @@
                             {fullscreen}
                             stage={layout}
                             cm={hasCm ? { on: skipCm, toggle: toggleSkipCm } : undefined}
+                            subtitle={hasCaptions
+                                ? subtitles({
+                                      icon: CAPTION,
+                                      on: captions,
+                                      languages: captionLanguages,
+                                      language: captionLanguage,
+                                      onoff: (on) => setCaptions(on),
+                                      onlanguage: (index) => setCaptionLanguage(index),
+                                  })
+                                : undefined}
                             codec={codecMenu.length > 0
                                 ? recordingCodecs({
                                       icon: CODEC,

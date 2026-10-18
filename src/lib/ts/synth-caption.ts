@@ -26,7 +26,7 @@ export function unit(parameter: number, data: number[]): number[] {
     return [0x1f, parameter, ...u24(data.length), ...data];
 }
 
-/** データグループで包んで PES の中身にする。`id` は 0 (管理) / 1 (第1言語)、`group` は 0 (A) / 1 (B) */
+/** データグループで包んで PES の中身にする。`id` は 0 (管理) / 1〜8 (第何言語か)、`group` は 0 (A) / 1 (B) */
 function dataGroup(id: number, group: number, body: number[]): Uint8Array {
     const groupId = (group << 5) | id;
     const head = [groupId << 2, 0x00, 0x00, (body.length >> 8) & 0xff, body.length & 0xff, ...body];
@@ -36,30 +36,41 @@ function dataGroup(id: number, group: number, body: number[]): Uint8Array {
 }
 
 /**
- * 字幕管理データ。日本語1つ・書式は `format` (SWF+1。既定 8 = 960x540 横書き)
+ * 字幕管理データ。言語は `languages` (ISO 639 の3文字。既定は日本語1つ)・書式は `format` (SWF+1。既定 8 = 960x540 横書き)。
+ * 言語の順に第1言語・第2言語…になる (言語タグ 0, 1, …)
  */
-export function management(options: { format?: number; group?: number; units?: number[] } = {}): Uint8Array {
-    const { format = 8, group = 0, units = [] } = options;
+export function management(
+    options: {
+        format?: number;
+        formats?: number[];
+        group?: number;
+        units?: number[];
+        languages?: string[];
+    } = {},
+): Uint8Array {
+    const { format = 8, formats = [], group = 0, units = [], languages = ['jpn'] } = options;
     const body = [
         0x3f, // TMD 00 (自由)
-        1, // 言語の数
-        0x00 | 0x10, // 言語タグ 0 / DMF 0000 (予約ビット 1)
-        ...[0x6a, 0x70, 0x6e], // "jpn"
-        (format << 4) | 0x00, // 書式 / TCS 0 (8単位符号) / ロールアップ無し
+        languages.length, // 言語の数
+        ...languages.flatMap((code, tag) => [
+            (tag << 5) | 0x10, // 言語タグ / DMF 0000 (予約ビット 1)
+            ...[...code].map((c) => c.charCodeAt(0)),
+            ((formats[tag] ?? format) << 4) | 0x00, // 書式 (言語ごと。`formats` で替えられる) / TCS 0 (8単位符号) / ロールアップ無し
+        ]),
         ...u24(units.length),
         ...units,
     ];
     return dataGroup(0, group, body);
 }
 
-/** 字幕文 (第1言語)。`units` はデータユニットを並べたもの。本文だけなら `text(...)` を使う */
-export function statement(units: number[]): Uint8Array {
-    return dataGroup(1, 0, [0x3f, ...u24(units.length), ...units]);
+/** 字幕文。`units` はデータユニットを並べたもの。本文だけなら `text(...)` を使う。`language` は第何言語か (1〜8) */
+export function statement(units: number[], language = 1): Uint8Array {
+    return dataGroup(language, 0, [0x3f, ...u24(units.length), ...units]);
 }
 
-/** 本文1つだけの字幕文 */
-export function text(body: number[]): Uint8Array {
-    return statement(unit(0x20, body));
+/** 本文1つだけの字幕文 (`language` は第何言語か) */
+export function text(body: number[], language = 1): Uint8Array {
+    return statement(unit(0x20, body), language);
 }
 
 /**

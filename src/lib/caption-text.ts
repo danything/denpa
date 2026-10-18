@@ -1,3 +1,5 @@
+import { LANGUAGE } from './arib';
+
 /**
  * **字幕の文字の配置** (第1版)。サーバが放送の字幕 (ARIB STD-B24) をデコードして置き場所まで
  * 決め、受け側 (ブラウザ・テレビのアプリ) はこれを**描くだけ**にする。形式の取り決めは
@@ -102,5 +104,43 @@ export function isSpace(code: number): boolean {
 /** 録画1本ぶんの字幕 (`GET /api/recordings/<id>/captions.json`)。`at` は動画の頭からの秒 */
 export interface CaptionPages {
     v: typeof CAPTION_TEXT_VERSION;
+    /** 第1言語 */
     pages: { at: number; page: CaptionPage }[];
+    /** 第1言語の名前。字幕管理データが読めなければ省く */
+    language?: CaptionLanguage;
+    /** 第2言語から後ろ。**載っているときだけ** (たいていの番組は第1言語だけ) */
+    others?: CaptionLanguagePages[];
+}
+
+/**
+ * 字幕の言語1つ。**ARIB の字幕は1本の中に最大8言語を持てる** (データグループの番号 1〜8。
+ * 何番がどの言語かは字幕管理データに ISO 639 の3文字で書いてある)。日本の放送はほぼ日本語だけで、
+ * 英語の字幕が付く番組がたまにある
+ */
+export interface CaptionLanguage {
+    /** 第何言語か (1〜8。データグループの番号) */
+    index: number;
+    /** ISO 639-2 の3文字 (`jpn` / `eng`)。読めなければ空 */
+    code: string;
+    /** 読める名前 (日本語・英語)。知らない符号はそのまま */
+    label: string;
+}
+
+/**
+ * 録画の字幕のうち、第2言語から後ろ (`CaptionPages.others`)。**第1言語は今までどおり `pages`** —
+ * 版 (`v`) を上げずに足したので、知らない受け側は第1言語だけを描く
+ */
+export interface CaptionLanguagePages extends CaptionLanguage {
+    pages: { at: number; page: CaptionPage }[];
+}
+
+/** 第何言語かと ISO 639 の符号から、画面に出す名前を付ける */
+export function captionLanguage(index: number, code: string): CaptionLanguage {
+    return { index, code, label: LANGUAGE[code] ?? (code === '' ? `字幕${index}` : code) };
+}
+
+/** `?language=` を読む (1〜8)。省いた・読めないときは第1言語 */
+export function parseCaptionLanguage(value: string | null): number {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 1 && number <= 8 ? number : 1;
 }

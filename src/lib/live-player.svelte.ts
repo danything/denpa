@@ -8,8 +8,14 @@
 
 import type { AudioTrack } from '#lib/arib.js';
 import { canvasVideo, driveNoticeSeen } from '#lib/canvas-video.js';
-import { CAPTION_TEXT_VERSION, type CaptionPage } from '#lib/caption-text.js';
+import { CAPTION_TEXT_VERSION, type CaptionLanguage, type CaptionPage } from '#lib/caption-text.js';
 import { CaptionPainter } from '#lib/components/player/caption-draw.js';
+import {
+    CAPTION_LANGUAGE_KEY,
+    CAPTION_ON_KEY,
+    pickLanguage,
+    storedCaptionsOn,
+} from '#lib/components/player/caption-pref.js';
 import { eachFrame } from '#lib/components/player/frames.js';
 import { denpaFontUrl } from '#lib/font.js';
 import { forget, read, write } from '#lib/keep.js';
@@ -308,8 +314,19 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 2度目は落とし済みで待ちが無いので、間に合っていた
      */
     let heldData: ResponseMessage[] = [];
-    /** 字幕を出すか。**押して切り替えられる** (テレビの字幕ボタン) */
+    /** 字幕を出すか。**押して切り替えられる** (テレビの字幕ボタン)。端末ごとに覚える (`caption-pref.ts`) */
     let captions = $state(true);
+    // 開いた端末で決まる。サーバで組むときは無いので、開いてから読む
+    $effect(() => {
+        captions = storedCaptionsOn(read(CAPTION_ON_KEY));
+    });
+    /**
+     * いまの字幕のストリームに載っている言語 (`captions` の通知)。字幕管理データが届くまでは空。
+     * たいていは日本語1つで、英語の字幕が付く番組がたまにある
+     */
+    let captionLanguages = $state<CaptionLanguage[]>([]);
+    /** 出している言語 (`CaptionLanguage.index`)。サーバは視聴者ごとに出し分ける */
+    let captionLanguage = $state(1);
     /**
      * 選べる字幕。**1枚も届いていなくても分かる。**
      *
@@ -1133,6 +1150,32 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * (そうしないと時刻が揃わない。`server/captions.ts`)。MediaSource から作り直すので、
      * 待たせているぶんも映像も捨てる
      */
+    /**
+     * 字幕の言語を選ぶ。**再エンコードしない** — サーバは載っている言語を全部デコードしていて、
+     * 出す言語を視聴者ごとに替えるだけ (`server/live.ts` の `setLanguage`)。待たせている字幕は前の言語なので捨てる
+     *
+     * @param remember 端末に覚えるか。押して選んだときだけ (番組に合わせて選び直したときは覚えない)
+     */
+    function setCaptionLanguage(index: number, remember = true): void {
+        if (remember) {
+            const code = captionLanguages.find((l) => l.index === index)?.code ?? '';
+            if (code !== '') write(CAPTION_LANGUAGE_KEY, code);
+        }
+        if (index === captionLanguage) return;
+        captionLanguage = index;
+        clearCaptions();
+        if (socket !== null && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'language', language: index } satisfies Command));
+        }
+    }
+
+    /** 字幕を出す・消す。端末ごとに覚える (`caption-pref.ts`) */
+    function setCaptions(on: boolean): void {
+        captions = on;
+        write(CAPTION_ON_KEY, on ? '1' : '0');
+        if (element !== null) paint(element.currentTime);
+    }
+
     function setCaptionTrack(index: number): void {
         if (index === captionTrack) return;
         // 追っかけも同じ理屈で再エンコード。**再生していた位置から**開き直す
@@ -1145,7 +1188,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         // 一覧は同じ局のものなので残す (`forget`)
         forget(true);
         captionTrack = index;
-        const command: Command = { type: 'tune', ...tuned, caption: index, raw: wantsRaw() };
+        const command: Command = {
+            type: 'tune',
+            ...tuned,
+            caption: index,
+            language: captionLanguage,
+            raw: wantsRaw(),
+        };
         if (socket !== null && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(command));
     }
 
@@ -1262,6 +1311,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         if (!keepList) {
             captionTracks = [];
             captionTrack = 0;
+            captionLanguages = [];
             // **局ごとのもの。** 局を変えたら、前の局のアプリを出したままにしない
             hybridcast = [];
         }
@@ -1599,9 +1649,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 ...(audio === '' ? {} : { audio }),
                 codec,
                 caption: captionTrack,
+                language: captionLanguage,
             };
         }
-        if (tuned !== null) return { type: 'tune', ...tuned, raw: wantsRaw() };
+        if (tuned !== null) return { type: 'tune', ...tuned, language: captionLanguage, raw: wantsRaw() };
         return null;
     }
 
@@ -1821,6 +1872,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                      */
                     captionTracks = notice.tracks;
                     captionTrack = notice.track;
+                    /*
+                     * **載っている言語が分かったら、覚えている言語に合わせる** (`caption-pref.ts`)。
+                     * 第何言語かは番組ごとに違うので、言葉 (ISO 639) で覚えたものから選び直す
+                     */
+                    captionLanguages = notice.languages ?? [];
+                    if (notice.languages !== undefined) {
+                        const want = pickLanguage(notice.languages, read(CAPTION_LANGUAGE_KEY));
+                        const now = notice.language ?? 1;
+                        captionLanguage = now;
+                        if (want !== now) setCaptionLanguage(want, false);
+                    }
                 } else if (notice.type === 'clock') {
                     /*
                      * **サーバが受け取った時刻と、エンコードしたものの物差しの対応** (`behind`)。
@@ -2417,10 +2479,19 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             return captionTrack;
         },
         setCaptionTrack,
+        /** いまの字幕のストリームに載っている言語。分かるまでは空 */
+        get captionLanguages() {
+            return captionLanguages;
+        },
+        /** 出している言語 (`CaptionLanguage.index`) */
+        get captionLanguage() {
+            return captionLanguage;
+        },
+        setCaptionLanguage,
+        setCaptions,
         /** 字幕の出し入れ。テレビの字幕ボタンと同じ */
         toggleCaptions() {
-            captions = !captions;
-            if (element !== null) paint(element.currentTime);
+            setCaptions(!captions);
         },
         attach,
         seek,

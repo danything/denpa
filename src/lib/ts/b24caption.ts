@@ -4,7 +4,8 @@
  * libaribcaption の「デコードする (decoder)」側を写したもの — 置き場所・大きさ・色・外字の置き換えまでは
  * 同じ計算で、描く (renderer) 手前で止める。描くのは受け側 (ブラウザ・アプリ)。
  *
- * 写したのは日本の放送で要るところだけ: 8単位符号 (JIS)・Profile A (フルセグ)・第1言語。
+ * 写したのは日本の放送で要るところだけ: 8単位符号 (JIS)・Profile A (フルセグ)。言語は1つを選んで読む
+ * (既定は第1言語。`new B24CaptionDecoder(2)` で第2言語)。
  * ブラジルの Latin・UTF-8・ワンセグ (Profile C) は持たない。
  *
  * ## libaribcaption と違えたところ
@@ -19,7 +20,14 @@
  */
 
 import { createHash } from 'node:crypto';
-import { CAPTION_TEXT_VERSION, type CaptionDrcs, type CaptionPage, type CaptionRun } from '../caption-text';
+import {
+    CAPTION_TEXT_VERSION,
+    type CaptionDrcs,
+    type CaptionLanguage,
+    type CaptionPage,
+    type CaptionRun,
+    captionLanguage,
+} from '../caption-text';
 import {
     ADDITIONAL,
     ALNUM_FULL,
@@ -234,8 +242,13 @@ interface Caption {
 /**
  * 字幕のストリーム1本ぶんのデコーダ。**状態を持つ** (書式・位置・色・外字は字幕文を跨いで続く) ので、
  * ストリームごとに1つ作って、届いた順に食わせる。
+ *
+ * **読むのは1つの言語だけ** (`language`。1〜8)。言語ごとに書式も位置も別に続くので、2つの言語を出し分けるなら
+ * 言語ごとに1つ作って、同じコマを両方に食わせる (`server/captions.ts` の `CaptionText`)
  */
 export class B24CaptionDecoder {
+    /** 字幕管理データに書いてある言語。まだ届いていなければ空 */
+    languages: CaptionLanguage[] = [];
     private gx: Entry[] = [KANJI, ALNUM, HIRA, MACRO];
     private gl = 0;
     private gr = 2;
@@ -270,7 +283,8 @@ export class B24CaptionDecoder {
 
     private caption: Caption = { chars: [], clear: false, wait: null, drcs: new Map() };
 
-    constructor() {
+    /** @param language 読む言語 (1〜8。データグループの番号) */
+    constructor(readonly language = 1) {
         this.resetState();
     }
 
@@ -299,8 +313,8 @@ export class B24CaptionDecoder {
             this.prevGroup = group;
             this.management(body);
         } else {
-            // 第1言語の字幕文だけ (ffmpeg も第1言語でデコードする)
-            if (id !== 1) return null;
+            // 選んだ言語の字幕文だけ
+            if (id !== this.language) return null;
             this.statement(body);
         }
         return toPage(this.caption, [this.planeWidth, this.planeHeight]);
@@ -358,22 +372,27 @@ export class B24CaptionDecoder {
         let at = 1;
         if (data[0]! >> 6 === 0b10) at += 5; // OTM
         const languages = data[at++]!;
-        if (languages === 0 || languages > 2) return;
+        if (languages === 0 || languages > 8) return;
+        const found: CaptionLanguage[] = [];
         for (let i = 0; i < languages; i++) {
             if (at + 6 > data.length) return;
             const tag = data[at]! >> 5;
             const dmf = data[at]! & 0x0f;
             at += 1;
             if (dmf === 0b1100 || dmf === 0b1101 || dmf === 0b1110) at += 1;
+            const code = String.fromCharCode(data[at]!, data[at + 1]!, data[at + 2]!);
             at += 3; // ISO 639
             const format = data[at]! >> 4;
             at += 1;
-            if (tag === 0) {
+            found.push(captionLanguage(tag + 1, /^[a-z]{3}$/.test(code) ? code : ''));
+            // 書式は選んだ言語のものを使う
+            if (tag === this.language - 1) {
                 this.swf = format - 1;
                 this.resetGraphicSets();
                 this.resetWritingFormat();
             }
         }
+        this.languages = found;
         if (at + 3 > data.length) return;
         const length = (data[at]! << 16) | (data[at + 1]! << 8) | data[at + 2]!;
         at += 3;
@@ -973,4 +992,11 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
     };
     if (Object.keys(drcs).length > 0) page.drcs = drcs;
     return page;
+}
+
+/** 字幕の PES の中身が字幕管理データか (データグループの番号が 0)。読めないものは false */
+export function isManagement(data: Uint8Array): boolean {
+    if (data.length < 4 || data[0] !== 0x80 || data[1] !== 0xff) return false;
+    const begin = 3 + (data[2]! & 0x0f);
+    return begin < data.length && ((data[begin]! >> 2) & 0x0f) === 0;
 }
