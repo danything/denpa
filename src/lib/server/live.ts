@@ -309,7 +309,7 @@ export function encodeArgs(
  *
  * ## GPU
  *
- * 設定の「GPU」カードでそのコーデックに印が付いていれば、**録画と同じ GPU でエンコードする**
+ * 設定でそのコーデックのエンコーダに GPU を選んであれば、**録画と同じ GPU でエンコードする**
  * (`hwenc.liveHw`。低遅延の引数とインタレ解除まで GPU に寄せる話は `hwenc.liveHwArgs`)。
  * 非力な機材 (Celeron J4125) では x264 ultrafast で2本目から追いつかなくなるため (issue #417)。
  * GPU が映像を1つも出さずに降りたら、ソフトウェアで再エンコードする (`Session.run`)

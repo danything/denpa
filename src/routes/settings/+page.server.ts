@@ -1,7 +1,7 @@
 import { basename } from 'node:path';
 import { fail } from '@sveltejs/kit';
 import { eq, not } from 'drizzle-orm';
-import { HW_CODECS, HW_KINDS, type HwAllow, hwAllowed } from '#lib/hw.js';
+import { chooseHw, HW_CODECS, HW_EVERY, HW_SOFTWARE, hwUsable } from '#lib/hw.js';
 import { parsePrefectureField } from '#lib/prefecture.js';
 import { isCmMode } from '#lib/server/cm.js';
 import { now, orm } from '#lib/server/db.js';
@@ -67,7 +67,10 @@ export function load() {
 }
 
 export const actions = {
-    /** 録画のしかた。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ */
+    /**
+     * 録画のしかた。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ。
+     * コーデックごとのエンコーダ (GPU) と、その場で変換する本数も同じ節で受ける
+     */
     saveRecording: async ({ request }) => {
         const form = await request.formData();
         // **コーデックは複数選べる** (`av1` / `h264` を両方)。1つも選ばなければ「エンコードしない」。カンマ区切りで持つ
@@ -79,6 +82,28 @@ export const actions = {
         if (!isCmMode(cmCut)) {
             return fail(400, { message: 'CMの指定が不正です' });
         }
+        // その場で変換する本数の上限。空は自動 (GPU の有無で決める)。欄が無ければ前のまま
+        const rawLimit = form.get('transcodeLimit');
+        const transcodeLimit = rawLimit === null ? undefined : parseTranscodeLimit(String(rawLimit));
+        if (rawLimit !== null && String(rawLimit).trim() !== '' && transcodeLimit === null) {
+            return fail(400, { message: '本数が不正です' });
+        }
+        /*
+         * **コーデックごとのエンコーダ** (`hw.av1` / `hw.h264`。ソフトウェア・デバイスの path・順番に使う)。
+         * 持ち方はデバイス × 方式 × コーデックのまま (`chooseHw`)。欄が無いコーデック (GPU を
+         * 確かめ終わる前に保存した・そのコーデックを使えるデバイスが無い) と、いま見えていないデバイスを
+         * 選んできたもの (画面を開いたあとに確かめ直して GPU が変わった) は前のまま
+         */
+        const devices = hwEncode().devices;
+        let hwAllow = settings().hwAllow;
+        for (const codec of HW_CODECS) {
+            const choice = String(form.get(`hw.${codec}`) ?? '');
+            const known =
+                choice === HW_SOFTWARE ||
+                choice === HW_EVERY ||
+                hwUsable(devices, codec).some((device) => device.path === choice);
+            if (known) hwAllow = chooseHw(hwAllow, devices, codec, choice);
+        }
         saveSettings({
             // 順序は読むとき (parseCodecs) に AV1 を先頭へ寄せる。ここは来たまま
             codec: (codecs.length > 0 ? codecs.join(',') : 'none') as VideoCodec,
@@ -86,42 +111,9 @@ export const actions = {
             keepOriginal: form.get('keepOriginal') === 'on',
             freeOnly: form.get('freeOnly') === 'on',
             fpsDetect: form.get('fpsDetect') === 'on',
+            hwAllow,
+            ...(transcodeLimit === undefined ? {} : { transcodeLimit }),
         });
-        return { success: true, saved: true };
-    },
-
-    /**
-     * **GPU ごとの割り振り。** 画面で触れるのは使えるものの印だけなので、
-     * 使えないもの・いま見えていない GPU は前の値をそのまま持ち越す (GPU を挿し替えた
-     * ときにそのまま効く)。使えるものは印のとおりに
-     */
-    saveHw: async ({ request }) => {
-        const form = await request.formData();
-        const previous = settings().hwAllow;
-        const next: HwAllow = { ...previous };
-        for (const device of hwEncode().devices) {
-            next[device.path] = Object.fromEntries(
-                HW_KINDS.map((kind) => [
-                    kind,
-                    HW_CODECS.filter((codec) =>
-                        device[kind].includes(codec)
-                            ? form.get(`hw.${device.path}.${kind}.${codec}`) === 'on'
-                            : hwAllowed(previous, device.path, kind, codec),
-                    ),
-                ]),
-            ) as HwAllow[string];
-        }
-        saveSettings({ hwAllow: next });
-        return { success: true, saved: true };
-    },
-
-    /** その場で変換する本数の上限。空は自動 (GPU の有無で決める) */
-    saveTranscode: async ({ request }) => {
-        const form = await request.formData();
-        const raw = String(form.get('transcodeLimit') ?? '');
-        const limit = parseTranscodeLimit(raw);
-        if (raw !== '' && limit === null) return fail(400, { message: '本数が不正です' });
-        saveSettings({ transcodeLimit: limit });
         return { success: true, saved: true };
     },
 

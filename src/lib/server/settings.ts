@@ -32,7 +32,7 @@ export interface Settings {
     /**
      * **GPU の方式ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
      * 別 (`server/hwenc.ts`) で、エンコードするのは「使える かつ 許されている」もの。使えないものの
-     * 印は画面から触れないので保存しても残る (GPU を挿し替えればそのまま効く)。JSON で1つの鍵
+     * 印は画面で選べるエンコーダからは変わらず、保存しても残る (GPU を挿し替えればそのまま効く。`chooseHw`)。JSON で1つの鍵
      */
     hwAllow: HwAllow;
     /** CMの扱い。off / chapter / cut */

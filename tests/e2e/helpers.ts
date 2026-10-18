@@ -261,6 +261,8 @@ export async function setRecording(
         cmCut?: string;
         keepOriginal?: boolean;
         freeOnly?: boolean;
+        /** その場で変換する本数の上限 (空は自動)。省けば前のまま */
+        transcodeLimit?: string;
     } = {},
 ): Promise<void> {
     const chosen = patch.codecs ?? ['av1'];
@@ -274,6 +276,7 @@ export async function setRecording(
     for (const codec of chosen) body.append('codecs', codec);
     body.append('cmCut', patch.cmCut ?? 'chapter');
     if (patch.keepOriginal === true) body.append('keepOriginal', 'on');
+    if (patch.transcodeLimit !== undefined) body.append('transcodeLimit', patch.transcodeLimit);
     /*
      * **1回だけ投げ直す。**
      *
