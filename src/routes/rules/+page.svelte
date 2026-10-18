@@ -1148,6 +1148,20 @@
         gap: 0.5rem;
         padding: 0.75rem;
     }
+    /* 広い画面では操作を右に寄せ、名前と条件の 2 行に収める。下に 1 行足すと縦に間延びする */
+    @media (min-width: 768px) {
+        .rule-row[data-rule-id] {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            column-gap: 1rem;
+            row-gap: 0.25rem;
+            align-items: center;
+        }
+        .rule-row[data-rule-id] > .row-actions {
+            grid-column: 2;
+            grid-row: 1 / span 2;
+        }
+    }
     .rule-row + .rule-row {
         border-top: 1px solid var(--dp-line);
     }
