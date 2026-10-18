@@ -35,12 +35,12 @@ describe('スクランブルの検出', () => {
     });
 
     test('一部だけ掛かっていても復号には回さない', () => {
-        // 有料放送の一部だけが暗号のTSを解除に回すと、無駄に時間を食う
+        // 有料放送の一部だけが暗号のTSを復号に回すと、無駄に時間を食う
         expect(isScrambled(makeTs(2000, 0.2))).toBe(false);
     });
 
     test('同期が取れないファイルは判定しない', () => {
-        // mkv などを渡されても解除に回さない
+        // mkv などを渡されても復号に回さない
         const path = join(mkdtempSync(join(tmpdir(), 'denpa-scramble-')), 'not-ts.bin');
         writeFileSync(path, Buffer.alloc(PACKET * 500, 0xff));
         expect(scrambledRatio(path)).toBe(0);

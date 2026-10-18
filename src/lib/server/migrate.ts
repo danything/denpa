@@ -331,7 +331,7 @@ export async function importOne(
      * EPGStation の video_file.type は 'ts'(未エンコード) か 'encoded'。
      * 元のTSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
      * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
-     * 同じ形 (元のTSは raw、完成品は encoded) に揃える
+     * 同じ形式 (元のTSは raw、完成品は encoded) に揃える
      */
     const raw = row.fileType !== 'encoded';
     // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の1文字を拡張子と読んでしまう
