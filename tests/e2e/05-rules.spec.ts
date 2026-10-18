@@ -116,7 +116,7 @@ test.describe('自動予約ルール', () => {
         // ルール名はキーワードから付く
         const rule = page.getByTestId('rule-row').first();
         await expect(rule).toContainText('テストアニメ');
-        await expect(rule).toContainText('有効');
+        await expect(page.getByTestId('rule-switch').first()).toBeChecked();
         // 足したら書く欄は初めの状態に戻る (reset でチェックが全部外れていた)
         await expect(page.getByTestId('rule-keyword')).toHaveValue('');
         await expect(page.getByTestId('rule-search-fields').locator('input[value="name"]')).toBeChecked();
@@ -130,14 +130,21 @@ test.describe('自動予約ルール', () => {
         await expect(fromRule.first()).toBeVisible();
 
         // 無効化しても既存の予約は残る(意図せず録り逃さないため)
-        // 有効/無効は、行を押して開いた書く欄の上で切り替える
+        // 一覧の行のスイッチで、開かずに切り替えられる
         await goto(page, '/rules');
+        const toggle = page.getByTestId('rule-switch').first();
+        await expect(toggle).toHaveAccessibleName(/^「テストアニメ.*」を有効にする$/);
+        await toggle.click();
+        await expect(rule).toContainText('無効');
+        await expect(toggle).not.toBeChecked();
+        await expect(page).toHaveURL(/\/rules$/);
+        // 開いた書く欄の下でも切り替えられる。選んだまま
         await rule.click();
-        await page.getByTestId('rule-toggle').click();
         await expect(page.getByTestId('rule-toggle')).toHaveText('有効化');
-        // 選んだまま。一覧の行にも出る
-        await expect(page.getByTestId('rule-row').first()).toHaveAttribute('aria-current', 'true');
-        await expect(page.getByTestId('rule-row').first()).toContainText('無効');
+        await page.getByTestId('rule-toggle').click();
+        await expect(page.getByTestId('rule-toggle')).toHaveText('無効化');
+        await expect(rule).toHaveAttribute('aria-current', 'true');
+        await expect(toggle).toBeChecked();
 
         await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);

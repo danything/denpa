@@ -282,18 +282,21 @@
         <ul class="rule-list" data-testid="rule-list">
             {#each paged.rows as rule (rule.id)}
                 {@const selected = data.editing?.id === rule.id}
-                <li>
+                <!--
+                    **有効/無効は行のスイッチで、開かずに切り替える。** 一覧と詳細の形では、行を押して開いてから
+                    押すことになり1手増えていた。スイッチは行のリンクの外 (隣) に置くので、押してもルールは開かない
+                -->
+                <li class="rule-item" class:selected class:off={!rule.enabled}>
                     <a
                         class="rule-row"
-                        class:selected
                         href={resolve(`rules?edit=${rule.id}`)}
                         aria-current={selected ? 'true' : undefined}
                         data-testid="rule-row"
                         data-rule-id={rule.id}
                     >
-                        <span class="rule-name bold">{rule.name}</span>
+                        <span class="rule-name">{rule.name}</span>
                         <span class="rule-marks tiny">
-                            <span class="tag {rule.enabled ? 'success' : ''}">{rule.enabled ? '有効' : '無効'}</span>
+                            {#if !rule.enabled}<span class="tag">無効</span>{/if}
                             <span>優先度 {rule.priority}</span>
                             <span>予約 {rule.reservations} 件</span>
                             {#if rule.dedupe}
@@ -301,6 +304,18 @@
                             {/if}
                         </span>
                     </a>
+                    <form method="POST" action="?/toggle" class="row-switch" use:submitting>
+                        <input type="hidden" name="id" value={rule.id} />
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            aria-checked={rule.enabled}
+                            checked={rule.enabled}
+                            aria-label="「{rule.name}」を有効にする"
+                            onchange={(event) => event.currentTarget.form?.requestSubmit()}
+                            data-testid="rule-switch"
+                        />
+                    </form>
                 </li>
             {:else}
                 {#if data.rules.length === 0}
@@ -329,7 +344,7 @@
     <!--
         **右は書く欄と、その条件で録れる番組。** 下見は書く欄の下に続けて置く。
 
-        有効/無効と削除は**書く欄の外**、上の行に出す。中に入れると form が入れ子になって、
+        有効/無効と削除は**書く欄の外**、下の行に出す。中に入れると form が入れ子になって、
         押したつもりのないルールの更新まで送ってしまう (下見の行の「取消」も同じ理由で外にある)
     -->
     <section class="main" aria-label={data.editing ? 'ルールの編集' : '新しいルール'}>
@@ -338,41 +353,21 @@
             <a class="back small" href={resolve('rules')} data-testid="rule-back">← ルール一覧</a>
             <!--
                 **新規か編集かだけを小さく。** 上のタブがもう「ルール」と言っているので、見出しは置かない。
-                編集なら**どのルールか**と、そのルールそのものにすること (有効/無効・削除) を同じ行に
+                編集なら**どのルールか**
             -->
-            <div class="main-head">
-                {#if data.editing}
-                    <p class="mode" data-testid="rule-mode">
-                        <span class="muted">編集中:</span> <span class="bold">{data.editing.name}</span>
-                    </p>
-                    <div class="cluster head-actions">
-                        <ActionButton
-                            action="?/toggle"
-                            fields={{ id: data.editing.id }}
-                            class="small secondary"
-                            testid="rule-toggle"
-                        >
-                            {data.editing.enabled ? '無効化' : '有効化'}
-                        </ActionButton>
-                        <!-- 押し間違い防止に2回押させる (録画の削除と同じ)。消したら一覧の初めに戻る -->
-                        <ArmedDelete
-                            {deleting}
-                            armKey={data.editing.id}
-                            fields={{ id: data.editing.id }}
-                            submit={leaveDeleted}
-                            class="small"
-                            testid="rule-delete"
-                        />
-                    </div>
-                {:else}
-                    <p class="mode muted" data-testid="rule-mode">新しいルール</p>
-                {/if}
-            </div>
+            {#if data.editing}
+                <p class="mode" data-testid="rule-mode">
+                    <span class="muted">編集中:</span> <span class="bold">{data.editing.name}</span>
+                </p>
+            {:else}
+                <p class="mode muted" data-testid="rule-mode">新しいルール</p>
+            {/if}
             <!-- 足した・直したあと、書く欄を初期値で描き直す (`formKey`) -->
             {#key formKey}
                 <form
                     method="POST"
                     class="rule-form"
+                    id="rule-form"
                     data-testid="rule-form"
                     use:submitting={() =>
                         async ({ result, update }) => {
@@ -633,30 +628,61 @@
                         </p>
                     </div>
 
-                    <!-- 押すものは下に貼り付ける。条件がどれだけ長くても見えている -->
-                    <div class="form-actions cluster">
-                        <button
-                            type="submit"
-                            class="small secondary"
-                            formmethod="GET"
-                            formaction={resolve('rules')}
-                            data-testid="rule-preview"
-                        >
-                            何が録れるか見る
-                        </button>
-                        {#if data.editing}
-                            <button type="submit" class="small" formaction="?/update" data-testid="rule-update">
-                                更新
-                            </button>
-                            <a class="button small secondary" href={resolve('rules')} data-testid="rule-cancel-edit">編集をやめる</a>
-                        {:else}
-                            <button type="submit" class="small" formaction="?/create" data-testid="rule-submit">
-                                追加
-                            </button>
-                        {/if}
-                    </div>
                 </form>
             {/key}
+
+            <!--
+                **押すものは下の1行に、ふつうのフォームと同じ並びで。** 右端に保存 (追加・更新)、左に
+                そのルールそのものにすること (有効/無効・削除)。条件がどれだけ長くても下に貼り付いて見えている。
+
+                書く欄 (`<form>`) の**外**に置き、保存のボタンは `form` 属性で書く欄に繋ぐ。中に入れると
+                有効/無効と削除の form が入れ子になって、押したつもりのないルールの更新まで送ってしまう
+            -->
+            <div class="form-actions">
+                {#if data.editing}
+                    <div class="cluster">
+                        <ActionButton
+                            action="?/toggle"
+                            fields={{ id: data.editing.id }}
+                            class="small secondary"
+                            testid="rule-toggle"
+                        >
+                            {data.editing.enabled ? '無効化' : '有効化'}
+                        </ActionButton>
+                        <!-- 押し間違い防止に2回押させる (録画の削除と同じ)。消したら一覧の初めに戻る -->
+                        <ArmedDelete
+                            {deleting}
+                            armKey={data.editing.id}
+                            fields={{ id: data.editing.id }}
+                            submit={leaveDeleted}
+                            class="small"
+                            testid="rule-delete"
+                        />
+                    </div>
+                {/if}
+                <div class="cluster save">
+                    <button
+                        type="submit"
+                        form="rule-form"
+                        class="small secondary"
+                        formmethod="GET"
+                        formaction={resolve('rules')}
+                        data-testid="rule-preview"
+                    >
+                        何が録れるか見る
+                    </button>
+                    {#if data.editing}
+                        <a class="button small secondary" href={resolve('rules')} data-testid="rule-cancel-edit">編集をやめる</a>
+                        <button type="submit" form="rule-form" class="small" formaction="?/update" data-testid="rule-update">
+                            更新
+                        </button>
+                    {:else}
+                        <button type="submit" form="rule-form" class="small" formaction="?/create" data-testid="rule-submit">
+                            追加
+                        </button>
+                    {/if}
+                </div>
+            </div>
 
                 {#if data.preview !== null && preview === null}
                     <!--
@@ -966,8 +992,7 @@
     }
     @media (min-width: 768px) {
         .side-head {
-            padding: 1rem 1rem 0.75rem;
-            border-bottom: 1px solid var(--dp-line);
+            padding: 1rem 1rem 0.5rem;
         }
     }
     .new {
@@ -983,8 +1008,19 @@
     .rule-list {
         min-height: 0;
         margin: 0;
-        padding: 0;
+        padding: 0.25rem 0.375rem;
         list-style: none;
+    }
+    .rule-list > li {
+        margin: 0;
+        list-style: none;
+    }
+    /* 狭い画面では行の字を上の「＋ 新しいルール」と揃える (塗りだけ余白の外へ少し出す) */
+    @media (max-width: 767px) {
+        .rule-list {
+            margin-inline: -0.75rem;
+            padding: 0;
+        }
     }
     @media (min-width: 768px) {
         .rule-list {
@@ -992,44 +1028,57 @@
             overflow-y: auto;
         }
     }
-    .rule-list li {
-        margin: 0;
-        list-style: none;
-    }
-    .rule-list li + li {
-        border-top: 1px solid var(--dp-line);
-    }
-    .rule-row {
+    /*
+     * **行は線で区切らない** (ドキュメントの目次と同じ作り)。左右を少し空け、選んでいる行だけ
+     * 角の丸い薄い塗りで示す。触れている行はそれより薄く。印は小さく沈めた字で
+     */
+    .rule-item {
         display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-        padding: 0.625rem 0.75rem;
-        color: inherit;
-        text-decoration: none;
+        align-items: center;
+        margin-bottom: 1px;
+        border-radius: var(--dp-radius);
         transition: background-color var(--dp-duration);
     }
-    @media (min-width: 768px) {
-        .rule-row {
-            padding-inline: 1rem;
-        }
+    .rule-item:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
     }
-    .rule-row:hover {
-        background: var(--dp-hover);
+    .rule-item.selected {
+        background: var(--dp-subtle);
     }
-    /* 選んでいる行。色だけに頼らず、左に印の線も引く (色の見え方が違う人にも分かる) */
-    .rule-row.selected {
-        background: color-mix(in srgb, var(--pico-primary-background) 15%, transparent);
-        box-shadow: inset 3px 0 0 var(--pico-primary-background);
+    /* スイッチはリンクの外 (行の右端) なので、押してもルールは開かない */
+    .rule-row {
+        display: flex;
+        min-width: 0;
+        flex: 1 1 0%;
+        flex-direction: column;
+        gap: 0.125rem;
+        padding: 0.5rem 0.75rem;
+        color: inherit;
+        text-decoration: none;
     }
     .rule-name {
         overflow-wrap: anywhere;
+    }
+    /* 無効のルールは名前を沈める (印の「無効」と合わせて、色だけに頼らない) */
+    .rule-item.off .rule-name {
+        color: var(--dp-muted);
     }
     .rule-marks {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0.25rem 0.5rem;
+        gap: 0.125rem 0.5rem;
         color: var(--dp-muted);
+    }
+    .row-switch {
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        margin: 0;
+        padding: 0.5rem 0.75rem 0.5rem 0.25rem;
+    }
+    .row-switch input {
+        margin: 0;
     }
     .note {
         padding: 0.75rem;
@@ -1084,21 +1133,11 @@
             display: none;
         }
     }
-    .main-head {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem 1rem;
-    }
     /* 編集中のルール名。空白の無い長い名前でも欄からはみ出さない */
     .mode {
         min-width: 0;
         margin: 0;
         overflow-wrap: anywhere;
-    }
-    .head-actions {
-        --gap: 0.5rem;
     }
     .rule-form {
         display: flex;
@@ -1186,10 +1225,18 @@
         position: sticky;
         bottom: var(--dp-tabbar, 0px);
         z-index: 1;
-        margin-top: 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
         padding-block: 0.75rem;
         border-top: 1px solid var(--dp-line);
         background: var(--dp-bg);
+    }
+    /* 保存は右端。編集でないときも右に寄せる (左に何も無くても位置が変わらない) */
+    .save {
+        margin-left: auto;
     }
     /* 下見は書く欄の下に続ける。カードにはせず、線で区切る */
     .preview {
