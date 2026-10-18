@@ -1249,8 +1249,15 @@ class Session {
                 for (const shown of text.feed(found)) this.deliverText(shown);
                 // 載っている言語が分かった・変わった。選べるように知らせ直す
                 if (text.languagesChanged) {
+                    const before = new Map(
+                        [...this.viewers].map((viewer) => [viewer, this.languageOf(viewer)]),
+                    );
                     this.languages = text.languages;
-                    for (const viewer of this.viewers) this.tellCaptions(viewer, this.list.tracks);
+                    for (const viewer of this.viewers) {
+                        this.tellCaptions(viewer, this.list.tracks);
+                        // 出す言語が変わった人 (選んだ言語がこの番組に無い) には、その言語でいま出ている1枚を渡す
+                        if (before.get(viewer) !== this.languageOf(viewer)) this.handShowing(viewer);
+                    }
                 }
             }
         }
@@ -1296,6 +1303,11 @@ class Session {
         viewer.language = language;
         if (!this.viewers.has(viewer)) return;
         if (this.list.tracks.length > 0) this.tellCaptions(viewer, this.list.tracks);
+        this.handShowing(viewer);
+    }
+
+    /** その人の言語でいま出ている1枚を渡す。無ければ空の1枚で、前の言語の字幕を消す */
+    private handShowing(viewer: Viewer): void {
         const showing = this.showing.get(this.languageOf(viewer));
         if (showing !== undefined) {
             this.handText(viewer, showing);

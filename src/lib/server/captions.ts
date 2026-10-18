@@ -228,10 +228,12 @@ export class CaptionText {
             const page = this.decode(decoder, frame.data);
             if (page !== null) out.push({ at: frame.at, page, language });
         }
+        // 言語の顔ぶれは字幕管理データでしか変わらない
         const listed = this.decoders.get(1)?.languages ?? [];
         if (
+            isManagement(frame.data) &&
             listed.map((l) => `${l.index}:${l.code}`).join() !==
-            this.languages.map((l) => `${l.index}:${l.code}`).join()
+                this.languages.map((l) => `${l.index}:${l.code}`).join()
         ) {
             this.languages = listed;
             this.languagesChanged = true;
