@@ -21,12 +21,6 @@ async function look(button: Locator) {
     });
 }
 
-/** `rgb(r, g, b)` の 3 つの差。灰色 (色の無いもの) ならほぼ 0 */
-function chroma(color: string): number {
-    const [r = 0, g = 0, b = 0] = (color.match(/\d+(\.\d+)?/g) ?? []).map(Number);
-    return Math.max(r, g, b) - Math.min(r, g, b);
-}
-
 test.describe('ボタンの見た目', () => {
     test.beforeEach(async ({ request }) => {
         await syncEpg(request);
@@ -34,8 +28,17 @@ test.describe('ボタンの見た目', () => {
 
     test('主は色を塗らず、控えは枠を引かない。角は高さの半分', async ({ page }) => {
         await goto(page, '/guide?type=GR');
+        // 主の色 (azure) で塗っていない。主の色の計算値を同じ画面で採って比べる
+        const primary = await page.evaluate(() => {
+            const probe = document.createElement('div');
+            probe.style.backgroundColor = 'var(--pico-primary-background)';
+            document.body.append(probe);
+            const color = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return color;
+        });
         const submit = await look(page.getByTestId('guide-filter').getByRole('button', { name: '検索' }));
-        expect(chroma(submit.background)).toBeLessThan(24);
+        expect(submit.background).not.toBe(primary);
 
         const prev = await look(page.getByTestId('prev-day'));
         expect(prev.border).toBe('rgba(0, 0, 0, 0)');

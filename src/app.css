@@ -882,6 +882,7 @@ a.button {
     margin: 0;
     border-radius: var(--pico-border-radius);
 }
+/* 検索欄の入力欄は Pico が `[role="search"]` で 5rem の丸い端にする。ボタンの外側の角もそれに揃える */
 [role="search"]:not(.segmented) > :is(button, a.button) {
     border-radius: 5rem;
 }
