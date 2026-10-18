@@ -46,7 +46,7 @@ const LIMIT = 4 * 1024 * 1024;
 /** 待つ上限 */
 const TIMEOUT = 10_000;
 
-/** 送るものの既定の形 (データ放送の `Denbun=…`) */
+/** 送るものの既定の形式 (データ放送の `Denbun=…`) */
 const FORM = 'application/x-www-form-urlencoded';
 
 export interface Fetched {
@@ -76,12 +76,12 @@ export function requireBmlNetwork(): void {
  *
  * 家庭の DNS フィルタ (AdGuard 等) は局の双方向ドメインをブラックホール
  * (0.0.0.0 / ::) に落とすことがある — 実測で `view.fujitv.co.jp` と
- * `recv-entry.tbs.co.jp` がそうなり、下の SSRF 防御が「内側の住所」として
+ * `recv-entry.tbs.co.jp` がそうなり、下の SSRF 防御が「内側のアドレス」として
  * 正しく断った結果、TBS の TVer リンクが NAP エラーになっていた。
  * 上流が複数あると答えがフラつくので、放送アプリの通信はここで固定する。
  *
- * **繋ぐのも引いた住所へ直に繋ぐ** (`doRequest` の host に IP を渡す)。
- * 引き直しを OS に任せると、確かめた住所と繋ぐ住所がずれる (TOCTOU)
+ * **繋ぐのも引いたアドレスへ直に繋ぐ** (`doRequest` の host に IP を渡す)。
+ * 引き直しを OS に任せると、確かめたアドレスと繋ぐアドレスがずれる (TOCTOU)
  */
 const resolver = new Resolver();
 const BML_DNS = config.bmlDns
@@ -91,7 +91,7 @@ const BML_DNS = config.bmlDns
 if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
 
 /**
- * その住所へ繋いでよいか。**内側を向いていたら断る。**
+ * そのアドレスへ繋いでよいか。**内側を向いていたら断る。**
  *
  * IPv4 は数で、IPv6 は綴りで見ます。`::ffff:` で始まるものは IPv4 を
  * 被せただけなので、剥がしてから見ないと素通りします
@@ -139,8 +139,8 @@ export function isPublicAddress(address: string): boolean {
 }
 
 /**
- * 取得してよい住所か。**綴りではなく、引いた先で見る。**
- * 通った住所を1つ返す (繋ぐのもその住所へ直に繋ぐ)。
+ * 取得してよいアドレスか。**綴りではなく、引いた先で見る。**
+ * 通ったアドレスを1つ返す (繋ぐのもそのアドレスへ直に繋ぐ)。
  *
  * 名前で弾こうとすると `localhost` の別名や、内側を指す公開の名前
  * (いわゆる DNS リバインディング) が抜けます
@@ -148,7 +148,7 @@ export function isPublicAddress(address: string): boolean {
 async function resolvable(host: string): Promise<string> {
     /*
      * IPv6 リテラルの [] を自分で剥がす。**`new URL().hostname` は剥がさない** —
-     * `[::1]` のままだと綴りの判定に1つも掛からず、内側の住所なのに
+     * `[::1]` のままだと綴りの判定に1つも掛からず、内側のアドレスなのに
      * 公開扱いで素通りしていた
      */
     const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
@@ -177,8 +177,8 @@ async function resolvable(host: string): Promise<string> {
 }
 
 /**
- * その URL を取得してよいか。行けるなら整えた URL と、確かめた住所を返す。
- * 繋ぐのはその住所へ直に — 引き直すと、確かめたのと違う先に化かされうる
+ * その URL を取得してよいか。行けるなら整えた URL と、確かめたアドレスを返す。
+ * 繋ぐのはそのアドレスへ直に — 引き直すと、確かめたのと違う先に化かされうる
  */
 export async function allowed(raw: string): Promise<{ url: URL; address: string }> {
     let url: URL;
@@ -210,7 +210,7 @@ export async function allowed(raw: string): Promise<{ url: URL; address: string 
 }
 
 /**
- * 1回ぶんの HTTP。**確かめた住所へ直に繋ぐ。**
+ * 1回ぶんの HTTP。**確かめたアドレスへ直に繋ぐ。**
  *
  * fetch は名前引きを差し替えられないので node:http(s) で繋ぐ。Host と SNI には
  * 元の名前を入れる (IP へ繋いでも相手には正しい名前で名乗る)。
@@ -359,7 +359,7 @@ export async function confirmReachable(
     if (host === '') throw new Refused('宛先がありません');
 
     const started = Date.now();
-    // 確かめた住所へ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
+    // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
     const address = await resolvable(host);
     return await new Promise((resolve) => {
         const socket = connect({

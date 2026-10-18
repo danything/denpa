@@ -7,7 +7,7 @@ import { parseTranscodeLimit, saveSettings, settings, TRANSCODE_LIMIT_MAX } from
 import { transcodeAuto } from '#lib/server/transcode.js';
 import type { VideoCodec } from '#lib/types.js';
 
-/** 画面に渡す形。GPU ごとの一言 (`summary`) と、testid に使う GPU の名前 (`port`) を添える */
+/** 画面に渡す形式。GPU ごとの一言 (`summary`) と、testid に使う GPU の名前 (`port`) を添える */
 function forScreen(hw: HwEncode) {
     return {
         ...hw,
