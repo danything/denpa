@@ -1,11 +1,10 @@
 <script lang="ts">
     import { submitting } from '#lib/actions.js';
-    import { dateTime } from '#lib/format.js';
     import { resolve } from '$app/paths';
 
     /**
      * CM検出のために覚えた局ロゴを小さく見せて、違っていれば捨てる。設定の「ロゴ」の
-     * 局ごとの行に、**覚えた局だけ**出す。
+     * 局ごとの行に、**覚えた局だけ**出す (列の見出しが「CMロゴ」なので、ここでは名乗らない)。
      *
      * 自動の割り出しは「隅で線の向きが毎コマ揃う所」しか見ないので、ロゴでない縁
      * (番組がずっと出しているテロップの飾りなど) を覚えることもある。CM判定が当たらない
@@ -13,32 +12,37 @@
      *
      * **開け閉めしない。** 画像も「覚え直す」も行にいつも出しておく (畳んだ一覧や
      * ポップオーバーの奥に置いていた頃は、確かめるのに1局ずつ開いて回ることになった)。
-     * 行の高さは局ロゴと同じくらいに抑える
+     * 行の高さは局ロゴと同じくらいに抑える。細かい形は画像を押して大きく見る (`LogoZoom`)
      */
     let {
         serviceId,
         serviceName,
         learnedAt,
+        onzoom,
     }: {
         serviceId: number;
         serviceName: string;
         /** 覚えたものを最後に書いた時刻 */
         learnedAt: number;
+        /** 画像を押したとき。大きく見せる窓を開く */
+        onzoom: () => void;
     } = $props();
 </script>
 
 <span class="learned-logo" data-testid="learned-logo">
-    <span class="label" aria-hidden="true">CM</span>
     <!--
         線の向きがどのコマでも揃うところを白く出した画像。ロゴの形になっていれば合っている。
         書き直すたびに URL を変えて、古い画像を出し続けないようにする
     -->
-    <img
-        src={resolve(`api/services/${serviceId}/logo-data?at=${learnedAt}`)}
-        alt={`${serviceName} のCM検出のロゴ`}
-        title={`CM検出のロゴ (${dateTime(learnedAt)} に更新)`}
-        class="learned-image"
-    />
+    <button
+        type="button"
+        class="zoom"
+        onclick={onzoom}
+        aria-label={`${serviceName} のCMロゴを大きく見る`}
+        data-testid="logo-zoom-cm"
+    >
+        <img src={resolve(`api/services/${serviceId}/logo-data?at=${learnedAt}`)} alt="" class="learned-image" />
+    </button>
     <!-- 理由は `routes/settings/reception/logos.server.ts` の `logoForget` -->
     <form method="POST" action="?/logoForget" use:submitting class="forget">
         <input type="hidden" name="serviceId" value={serviceId} />
@@ -52,9 +56,16 @@
         align-items: center;
         gap: 0.25rem;
     }
-    .label {
-        font-size: var(--dp-text-sm);
-        color: var(--dp-muted);
+    /* 画像そのものを押す。ボタンの地や余白は付けない */
+    .zoom {
+        display: inline-flex;
+        width: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: var(--dp-radius-sm);
+        background: none;
+        cursor: zoom-in;
     }
     .learned-image {
         height: 1.6rem;

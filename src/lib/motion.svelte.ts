@@ -37,7 +37,12 @@ export function startTransition(update: () => void | Promise<void>): Promise<voi
  *
  * 同じ名前が同時に 2 つあると切り替えごと捨てられるので、名前は**どちらか一方にだけ**付ける:
  * 開く前は元の要素、開いた後は開いた箱 (箱の側は `name` を常に持たせておく)。閉じるときは逆。
- * 元の要素がもう画面に無ければ (表を描き直した)、ふつうに入れ替える
+ * 元の要素がもう画面に無ければ (表を描き直した)、ふつうに入れ替える。
+ *
+ * **写しにするのはこの要素だけ** (`<html data-morph>`。`app.css` の「画面の切り替え」)。ページ全体 (root) や
+ * ヘッダー・下のタブを写しにすると、切り替えの間それらは開いた詳細の幕より上に重なり、
+ * 幕で暗くならずに明るいまま残って、終わった瞬間に暗くなる (ヘッダーがちらつく)。
+ * 写しにしなければ、ほかは生のまま描かれ、幕もふつうにふわっと出る
  */
 export function morph(
     source: HTMLElement | null,
@@ -49,12 +54,16 @@ export function morph(
         update();
         return;
     }
+    const root = document.documentElement;
+    root.dataset['morph'] = '';
     if (direction === 'open') {
         source.style.viewTransitionName = name;
         void startTransition(async () => {
             source.style.viewTransitionName = '';
             update();
             await tick();
+        }).then(() => {
+            delete root.dataset['morph'];
         });
         return;
     }
@@ -64,6 +73,7 @@ export function morph(
         if (source.isConnected) source.style.viewTransitionName = name;
     }).then(() => {
         source.style.viewTransitionName = '';
+        delete root.dataset['morph'];
     });
 }
 

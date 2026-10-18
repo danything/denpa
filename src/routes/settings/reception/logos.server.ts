@@ -12,7 +12,7 @@ import type { ChannelType } from '#lib/types.js';
  *
  * - `logo` … 局ロゴの具合 (`logo.logoState`)
  * - `cm` … CM検出のロゴを覚えた時刻 (`logo-data.learnedAt`)。覚えていなければ null。
- *   CM検出の対象でない局 (テレビでない局・同じ映像を流しているサブチャンネル) は `cmShown` が偽で、何も出さない
+ *   CM検出の対象でない局 (テレビでない局・同じ映像を流しているサブチャンネル) もいつも null
  */
 function stationLogos() {
     const rows = orm()
@@ -40,7 +40,6 @@ function stationLogos() {
             name,
             type: type as ChannelType,
             logo: logoState(id),
-            cmShown: cmShown.has(id),
             cm: cmShown.has(id) ? learnedAt(id) : null,
         }))
         .sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9));

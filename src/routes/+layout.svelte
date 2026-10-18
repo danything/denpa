@@ -797,6 +797,16 @@
         view-transition-name: tab-indicator;
         pointer-events: none;
     }
+    /*
+     * **元の要素から広げるとき (番組表のマス → 詳細) は抜き出さない** (`motion.svelte.ts` の `morph`)。
+     * 抜き出すと切り替えの間だけ詳細の幕より上に重なり、暗くならずに明るく残ってちらつく
+     */
+    :global(:root[data-morph]) .navbar,
+    :global(:root[data-morph]) .nav-underline,
+    :global(:root[data-morph]) .tabbar,
+    :global(:root[data-morph]) .tabbar :global(.tab-indicator) {
+        view-transition-name: none;
+    }
     /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */
     :global(.tab-more-menu) {
         width: 12rem;

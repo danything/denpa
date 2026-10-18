@@ -1010,6 +1010,10 @@
     .seg-pill {
         view-transition-name: guide-type;
     }
+    /* 番組の詳細を広げるときは抜き出さない (`motion.svelte.ts` の `morph`。ヘッダーと同じ) */
+    :global(:root[data-morph]) .seg-pill {
+        view-transition-name: none;
+    }
     .subch-icon {
         display: none;
     }
