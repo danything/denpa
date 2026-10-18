@@ -249,7 +249,7 @@
                             編集なら**どのルールか**
                         -->
                         {#if data.editing}
-                            <p class="small" data-testid="rule-mode">
+                            <p class="small mode" data-testid="rule-mode">
                                 <span class="muted">編集中:</span> <span class="bold">{data.editing.name}</span>
                             </p>
                         {:else}
@@ -968,6 +968,10 @@
         gap: 1rem;
         overflow-y: auto;
         padding: 1rem;
+    }
+    /* 編集中のルール名。空白の無い長い名前でも欄からはみ出さない */
+    .mode {
+        overflow-wrap: anywhere;
     }
     /* 下見を待っている間の枠。本物と同じ場所・同じ大きさ */
     .skeleton-title {
