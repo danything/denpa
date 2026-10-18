@@ -1,6 +1,7 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import {
+        changed,
         EVERY,
         ease,
         FADE,
@@ -15,7 +16,6 @@
         type Rect,
         reach,
         region,
-        STILL,
         strips,
         toneFrame,
         WASH_LUMINANCE,
@@ -163,15 +163,15 @@
     /**
      * 写した1枚を次の色にして、`FADE` の長さで前の色から入れ替える (動かさない設定ではすぐ)
      */
-    function show(bitmap: ImageBitmap): boolean {
+    function show(bitmap: ImageBitmap): void {
         const pixels = framePixels(bitmap);
         bitmap.close();
-        if (pixels === null) return false;
-        // 最後に入れ替えた1枚との違い。小さければ入れ替えない (`STILL`)
+        if (pixels === null) return;
+        // 最後に入れ替えた1枚との違い。小さければ入れ替えない (`ambient.ts` の `changed`)
         delta = colors === null ? null : frameDelta(colors, pixels);
-        if (delta !== null && delta < STILL) return false;
+        if (colors !== null && !changed(colors, pixels)) return;
         colors = Float32Array.from(pixels);
-        if (layout === null) return true;
+        if (layout === null) return;
         clearInterval(fading);
         coming ??= scratch();
         shown ??= scratch();
@@ -189,7 +189,7 @@
         };
         if (reduced) {
             swap();
-            return true;
+            return;
         }
         let step = 1;
         paint(ease(step / FADE_STEPS));
@@ -200,7 +200,6 @@
                 swap();
             } else paint(ease(step / FADE_STEPS));
         }, FADE_STEP);
-        return true;
     }
 
     $effect(() => {

@@ -83,6 +83,7 @@ export async function downscale(
         if (context === null) return null;
         context.imageSmoothingEnabled = true;
         // ちょうど半分なら、線形で拾う1画素が元の 2x2 の真ん中に来て、4画素のちょうど平均になる
+        // (奇数の大きさを丸めた回だけは少しずれるが、最後に面積で平均するので残らない)
         context.imageSmoothingQuality = 'low';
         context.drawImage(current, 0, 0, sw, sh);
         current = canvas;

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     blurPixels,
     boxRadius,
+    changed,
     ease,
     falloff,
     farthest,
@@ -306,6 +307,17 @@ describe('入れ替え', () => {
         expect(frameDelta([10, 20, 30, 255], [10, 20, 30, 0])).toBe(0);
         expect(frameDelta([10, 20, 30, 255], [13, 17, 30, 255])).toBe(2);
         expect(STILL).toBeGreaterThan(0);
+    });
+
+    test('平均の違いが小さくても、一部だけ大きく変わったら入れ替える', () => {
+        const before = new Uint8ClampedArray(32 * 18 * 4).fill(80);
+        const noise = before.map((v, i) => (i % 4 === 3 ? v : v + (i % 3) - 1));
+        expect(changed(before, noise)).toBe(false);
+        // 字幕が出て 10 画素だけ 100 明るくなった (平均では 2 に届かない)
+        const caption = Uint8ClampedArray.from(before);
+        for (let p = 0; p < 10; p++) caption.set([180, 180, 180], p * 4);
+        expect(frameDelta(before, caption)).toBeLessThan(STILL);
+        expect(changed(before, caption)).toBe(true);
     });
 
     test('入れ替えは始めと終わりがゆっくり', () => {

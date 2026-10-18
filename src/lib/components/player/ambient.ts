@@ -45,6 +45,21 @@ export function frameDelta(a: ArrayLike<number>, b: ArrayLike<number>): number {
  */
 export const STILL = 2;
 
+/**
+ * **ただし、どこか1画素でもこれ以上変わったら入れ替える** (0〜255)。字幕が出たなど一部だけが大きく変わると、
+ * 平均では `STILL` に届かないことがある
+ */
+export const STILL_PEAK = 24;
+
+/** 入れ替えるほど変わったか (`STILL`・`STILL_PEAK`) */
+export function changed(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
+    if (frameDelta(a, b) >= STILL) return true;
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+        if (i % 4 !== 3 && Math.abs(a[i]! - b[i]!) >= STILL_PEAK) return true;
+    }
+    return false;
+}
+
 /** 前の色から次の色へ入れ替える長さ (ms)。写す間隔と同じ */
 export const FADE = 200;
 
