@@ -47,7 +47,13 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 
 /** 番のこれだけ前からデコードする (90kHz)。デコードするのは1コマ 10ms 前後 */
 const AHEAD = 0.3 * CLOCK;
-/** デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1枚 3MB。WebCodecs の `fmp4.ts` の 6 とは数えるものが違う) */
+/**
+ * デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1枚 3MB)。
+ * 実測 (`tests/bench`。docs/stream.md#デコードしたフレームを持つ数) では、1回に 1 枚ずつデコードするので
+ * 待たせるのは多くて 3〜5 枚で、8 にも届かない。2 だと追いつかずに毎秒 30 フィールド前後まで落ちた。
+ * WASM のメモリは最初の 64MB のまま増えないので、上げても下げても使う量は変わらない。
+ * fMP4 の `DECODED_MOST` (fmp4.ts) と同じ数だが、数えているもの (あちらは GPU の VideoFrame) も決め手も違う
+ */
 const DECODED_MOST = 8;
 /** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
 const PENDING_MOST = 8 * CLOCK;
