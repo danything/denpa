@@ -130,8 +130,12 @@
     :global(.ov:is(:hover, :focus-visible)) {
         --pico-background-color: rgb(0 0 0 / 0.7);
     }
+    /*
+     * 押されている間 (字幕を出している・速めているなど) は白を薄く敷く。主の色 (青) で塗っていた頃は、
+     * 映像の上で青い丸だけが目立った。青はリンクとフォーカスに残す
+     */
     :global(.ov-btn.ov-on) {
-        --pico-background-color: var(--pico-primary-background);
+        --pico-background-color: rgb(255 255 255 / 0.22);
         --pico-color: #fff;
     }
     :global(.ov-btn.ov-danger) {
