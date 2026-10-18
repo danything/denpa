@@ -14,7 +14,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 
 <table>
   <tr>
-    <td align="center"><a href="docs/screens.md#予約と録画"><img src="docs/images/dashboard.webp" alt="予約と録画" width="380"></a><br><sub><b>予約と録画</b> — サムネ付き。押せばその場で観る</sub></td>
+    <td align="center"><a href="docs/screens.md#録画"><img src="docs/images/dashboard.webp" alt="録画" width="380"></a><br><sub><b>録画</b> — 予約と録画を 1 画面に。サムネ付きで、押せばその場で観る</sub></td>
     <td align="center"><a href="docs/screens.md#ライブ"><img src="docs/images/live.webp" alt="ライブ" width="380"></a><br><sub><b>ライブ</b> — 字幕もデータ放送も。止めれば追っかけ</sub></td>
     <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b> — 放送どおりの字幕、CMは自動で飛ばす</sub></td>
   </tr>

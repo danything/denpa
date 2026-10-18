@@ -41,6 +41,6 @@
     <div class="panel" data-testid="error-card">
         <h1>{message}</h1>
         <p class="small muted">{hint} <span class="num">({page.status})</span></p>
-        <a class="button" href={resolve('')} data-testid="error-home">予約と録画へ戻る</a>
+        <a class="button" href={resolve('')} data-testid="error-home">録画へ戻る</a>
     </div>
 </div>

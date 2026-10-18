@@ -199,7 +199,7 @@
      * サービスワーカーが勝手にあそこへ落とす (service-worker/index.ts)
      */
     const links = [
-        { href: '/', label: '予約と録画' },
+        { href: '/', label: '録画' },
         { href: '/guide', label: '番組表' },
         { href: '/live', label: 'ライブ' },
         { href: '/rules', label: 'ルール' },
@@ -243,7 +243,7 @@
      * よく開く 4 画面をタブに、残り (ルール・チューナー) は「その他」の `Menu` (popover) に
      */
     const tabs = [
-        { href: '/', label: '予約と録画', icon: ListVideo },
+        { href: '/', label: '録画', icon: ListVideo },
         { href: '/guide', label: '番組表', icon: CalendarDays },
         { href: '/live', label: 'ライブ', icon: Tv },
         { href: '/settings', label: '設定', icon: Settings },
@@ -391,7 +391,7 @@
     </main>
 
     <!--
-        **狭い幅では、主な画面へのタブを画面の下に並べる** (予約と録画・番組表・ライブ・設定)。
+        **狭い幅では、主な画面へのタブを画面の下に並べる** (録画・番組表・ライブ・設定)。
         指が届くのは画面の下のほうで、上のハンバーガーから開いていた頃は、画面を移るたびに
         2回押していた。ルールとチューナーはたまにしか開かないので「その他」の中。
         出すのは一覧の 6 画面だけ — 観る画面・追っかけ (映像が主役)、ログインやペアリングには出さない。
