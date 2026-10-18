@@ -56,38 +56,50 @@ test.describe('互換モード', () => {
         rmSync(stack.liveFmp4File, { force: true });
     });
 
-    test('設定で入れると運転中の注意が出て、ライブを canvas に描く', async ({ page }) => {
+    test('⚙ で入れると運転中の注意が出て、読み直したライブを canvas に描く', async ({ page }) => {
+        // 設定の画面には、この端末で使えるもの (描ける形式・テスラか) と、⚙ で切り替えるという案内だけが残る
         await goto(page, '/settings/general');
-        const toggle = page.getByTestId('canvas-video-toggle');
-        await expect(toggle).not.toBeChecked();
-        // 使えるもの (この端末で描ける形式・テスラか) を出す
         const support = page.getByTestId('canvas-video-support');
         await expect(support).toContainText('AV1: 使えます');
         await expect(support).toContainText('テスラの車載ブラウザ: いいえ');
+        await expect(page.getByTestId('canvas-video-hint')).toContainText('⚙');
+        await expect(page.getByTestId('canvas-video-toggle')).toHaveCount(0);
 
-        // 取消なら入らない
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await wakeControls(page, 'live-frame');
+        await openSettings(page, 'live');
+        const toggle = page.getByTestId('live-compat');
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+        // 取消なら入らない。押すとメニューは閉じて、注意の窓だけになる
         await toggle.click();
-        const notice = page.getByTestId('drive-notice');
+        await expect(page.getByTestId('live-settings-menu')).toBeHidden();
+        // ライブは再生の前に出す注意も持っている (閉じたまま)。開いているほうを見る
+        const notice = page.locator('[data-testid="drive-notice"][open]');
         await expect(notice).toBeVisible();
         await expect(notice).toContainText('走行中は画面を見ないでください');
         // フォーカスは箱に置き (取消に枠が付かない)、Tab でボタンへ進む
         await expect(notice.locator('.modal-box')).toBeFocused();
         await page.keyboard.press('Tab');
-        await expect(page.getByTestId('drive-notice-cancel')).toBeFocused();
-        await page.getByTestId('drive-notice-cancel').click();
-        await expect(notice).toBeHidden();
-        await expect(toggle).not.toBeChecked();
+        await expect(notice.getByTestId('drive-notice-cancel')).toBeFocused();
+        await notice.getByTestId('drive-notice-cancel').click();
+        await expect(notice).toHaveCount(0);
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
+        expect(await page.evaluate(() => localStorage.getItem('canvas-video'))).toBeNull();
 
+        // 「わかりました」で入って、ページを読み直す
+        await wakeControls(page, 'live-frame');
+        await openSettings(page, 'live');
         await toggle.click();
-        await page.getByTestId('drive-notice-accept').click();
-        await expect(notice).toBeHidden();
-        await expect(toggle).toBeChecked();
+        await Promise.all([page.waitForEvent('load'), notice.getByTestId('drive-notice-accept').click()]);
         expect(await page.evaluate(() => localStorage.getItem('canvas-video'))).toBe('on');
 
-        await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
-        // 注意は設定で見せたので、ライブでは出さない
+        await expect(page.getByTestId('live-compat')).toHaveAttribute('aria-checked', 'true');
+        // 注意は入れたときに見せたので、ライブでは出さない
         await expect(page.getByTestId('drive-notice')).toBeHidden();
 
         const h264 = await page.evaluate(
@@ -151,15 +163,21 @@ test.describe('互換モード', () => {
             });
         });
 
-        test('設定で明示して切れば、テスラでも <video> で観る', async ({ page }) => {
+        test('⚙ で明示して切れば、テスラでも <video> で観る', async ({ page }) => {
             await goto(page, '/settings/general');
-            const toggle = page.getByTestId('canvas-video-toggle');
-            await expect(toggle).toBeChecked();
             await expect(page.getByTestId('canvas-video-support')).toContainText(
                 'テスラの車載ブラウザ: はい',
             );
-            await toggle.click();
-            await expect(toggle).not.toBeChecked();
+            // 触らなくても入っているので、まず運転中の注意が出る
+            await goto(page, '/live');
+            await page.getByTestId('drive-notice-accept').click();
+            await expect(page.getByTestId('live-title')).toBeVisible();
+            await wakeControls(page, 'live-frame');
+            await openSettings(page, 'live');
+            const toggle = page.getByTestId('live-compat');
+            await expect(toggle).toHaveAttribute('aria-checked', 'true');
+            // 切るのは注意を出さずにその場で。読み直す
+            await Promise.all([page.waitForEvent('load'), toggle.click()]);
             expect(await page.evaluate(() => localStorage.getItem('canvas-video'))).toBe('off');
 
             await goto(page, '/live');

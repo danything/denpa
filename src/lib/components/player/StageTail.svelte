@@ -1,10 +1,13 @@
 <script lang="ts">
+    import { onMount } from 'svelte';
+    import { canvasVideo, chooseCanvas, seeDriveNotice } from '#lib/canvas-video.js';
+    import DriveNotice from '../DriveNotice.svelte';
     import type { Ambient } from './ambient.svelte.js';
     import type { Background } from './background.svelte.js';
     import ControlButton from './ControlButton.svelte';
     import Extras from './Extras.svelte';
     import type { StageFullscreen } from './fullscreen.svelte.js';
-    import { AMBIENT, BACKGROUND, CUT, EXPAND, PIP, SHRINK } from './icons';
+    import { AMBIENT, BACKGROUND, COMPAT, CUT, EXPAND, PIP, SHRINK } from './icons';
     import MoreButton from './MoreButton.svelte';
     import type { Pip } from './pip.svelte.js';
     import SettingsMenu from './SettingsMenu.svelte';
@@ -18,6 +21,9 @@
      *   **畳むときも出しておく** — 中身を1つにまとめたぶん、ボタンは1つで済む
      *   - バックグラウンド再生 … 既定はオフで、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`)
      *   - アンビエントモード … 既定はオンで、映像の色を枠の周りに広げる。端末ごとに覚える (`ambient.svelte.ts`)
+     *   - 互換モード … 動画が止まる端末 (テスラの車載ブラウザ) 向けに canvas に描く。端末ごとに覚える (`canvas-video.ts`)。
+     *     入れるときは運転中の注意を出し、「わかりました」で入る (`DriveNotice`)。**切り替えたらページを読み直す** —
+     *     `<video>` で観るか canvas に描くかはプレイヤーを組むときに決まる (観る画面は開いたとき、ライブは選局のたび)
      * - **小窓 (PiP)。** ページから出せない端末 (iPhone・iPad のホーム画面から開いたもの・API の無いブラウザ) では
      *   出さない (`pip.svelte.ts`)。畳むときは「ほか」に入れる
      * - **「ほか」(⋯)。** 畳むときだけ、全画面のすぐ左に出す (`MoreButton`)
@@ -43,6 +49,31 @@
     }
     let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm, subtitle }: Props = $props();
 
+    /** 互換モードか。端末で決まるので、開いてから読む */
+    let compat = $state(false);
+    /** 入れようとしている (運転中の注意を出している) */
+    let confirming = $state(false);
+    onMount(() => {
+        compat = canvasVideo();
+    });
+
+    /** 入れるときは運転中の注意を先に出す。切るのはその場で。どちらも読み直して組み直す */
+    function setCompat(on: boolean): void {
+        if (on) {
+            confirming = true;
+            return;
+        }
+        chooseCanvas(false);
+        location.reload();
+    }
+
+    function acceptCompat(): void {
+        seeDriveNotice();
+        chooseCanvas(true);
+        confirming = false;
+        location.reload();
+    }
+
     const toggles = $derived<SettingToggle[]>([
         ...(cm === undefined ? [] : [{ id: 'skip-cm', label: 'CMスキップ', icon: CUT, on: cm.on, toggle: cm.toggle }]),
         { id: 'ambient', label: 'アンビエントモード', icon: AMBIENT, on: ambient.on, toggle: () => ambient.toggle() },
@@ -53,11 +84,24 @@
             on: background.on,
             toggle: () => background.toggle(),
         },
+        {
+            id: 'compat',
+            label: '互換モード',
+            icon: COMPAT,
+            on: compat || confirming,
+            toggle: () => setCompat(!compat),
+            // 運転中の注意を出すので、メニューは閉じる
+            closes: true,
+        },
     ]);
     const choices = $derived([subtitle, audio, codec].filter((item) => item !== undefined));
 </script>
 
 <SettingsMenu {prefix} {toggles} {choices} />
+<!-- 出すときだけ置く。ライブは再生の前に出す注意を自分でも持っているので、いつも置くと2つになる -->
+{#if confirming}
+    <DriveNotice open onaccept={acceptCompat} oncancel={() => (confirming = false)} />
+{/if}
 
 {#if pip.available}
     <Extras>

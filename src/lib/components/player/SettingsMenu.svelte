@@ -112,7 +112,7 @@
                     role="menuitemcheckbox"
                     class="menu-item setting"
                     aria-checked={item.on}
-                    data-keep-open
+                    data-keep-open={item.closes === true ? undefined : ''}
                     data-setting={item.id}
                     data-testid="{prefix}-{item.id}"
                     onclick={() => item.toggle()}

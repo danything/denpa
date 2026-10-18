@@ -73,6 +73,8 @@ export { default as INFO } from '~icons/lucide/info';
 /** 全画面にする / 戻す */
 export { default as EXPAND } from '~icons/lucide/maximize';
 export { default as SHRINK } from '~icons/lucide/minimize';
+/** 互換モード (再生の設定の行。動画が止まる端末向けに canvas に描く。`canvas-video.ts`) */
+export { default as COMPAT } from '~icons/lucide/monitor-play';
 export { default as PAUSE } from '~icons/lucide/pause';
 /**
  * ピクチャーインピクチャー (小窓)。大きな枠の右下に小さな枠。

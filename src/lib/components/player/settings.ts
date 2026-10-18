@@ -36,6 +36,11 @@ export interface SettingToggle {
     icon: IconShape;
     on: boolean;
     toggle: () => void;
+    /**
+     * 押したらメニューを閉じる (既定は閉じない)。押したあとに窓を出すもの (互換モードの運転中の注意) — 開いたままだと、
+     * 窓のボタンを押した1回目がメニューの外を押したことになって、閉じるだけで終わる
+     */
+    closes?: boolean;
 }
 
 /** 押せない形式に添える注記 (docs/writing.md「同じことは同じ文言で」) */
