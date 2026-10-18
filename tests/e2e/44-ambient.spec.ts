@@ -54,19 +54,32 @@ test.describe('アンビエントモード', () => {
             await expect.poll(updates(page), { timeout: 15_000 }).toBeGreaterThan(5);
             const before = await updates(page)();
             await expect.poll(updates(page), { timeout: 10_000 }).toBeGreaterThan(before + 5);
-            // 右の列は上のほうで面の色を透かし、色の上に描く。見出しは塗らない
+            // 見出しと右の列は地の色と区切りの線を外し、窓全体に敷いた色の上に載る
             await expect(page.locator('html')).toHaveAttribute('data-ambient', '');
             const aside = await page.locator('[data-player-layout] > aside').evaluate((el) => ({
                 position: getComputedStyle(el).position,
                 image: getComputedStyle(el).backgroundImage,
             }));
-            expect(aside).toEqual({
-                position: 'relative',
-                image: expect.stringContaining('linear-gradient'),
+            expect(aside).toEqual({ position: 'relative', image: 'none' });
+            const surfaces = await page.evaluate(() => {
+                const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
+                const aside = style('[data-player-layout] > aside');
+                const header = style('.navbar');
+                return [
+                    aside.backgroundColor,
+                    aside.borderLeftColor,
+                    header.backgroundColor,
+                    header.borderBottomColor,
+                ];
             });
-            expect(await page.locator('.navbar').evaluate((el) => getComputedStyle(el).backgroundImage)).toBe(
-                'none',
-            );
+            expect(surfaces).toEqual([
+                'rgba(0, 0, 0, 0)',
+                'rgba(0, 0, 0, 0)',
+                'rgba(0, 0, 0, 0)',
+                'rgba(0, 0, 0, 0)',
+            ]);
+            // 色は見出しの所 (窓の上の端) まで敷く
+            expect((await glow.boundingBox())!.y).toBeLessThanOrEqual(0);
             // 光は枠の外 (帯) にだけ描く。枠に重なる帯は無い
             const stage = (await page.getByTestId('live-frame').boundingBox())!;
             for (const band of await glow.locator('.band:not([hidden])').all()) {

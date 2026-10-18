@@ -4,6 +4,7 @@ import {
     boxRadius,
     ease,
     falloff,
+    farthest,
     glowLayout,
     glowPixels,
     luminance,
@@ -77,6 +78,12 @@ describe('アンビエントモード', () => {
             expect(falloff(t)).toBeLessThan(before);
             before = falloff(t);
         }
+    });
+
+    test('いちばん遠い端までの距離 (二段組の届く幅)', () => {
+        const view = { left: 0, top: 0, right: 1920, bottom: 1080 };
+        expect(farthest({ left: 24, top: 80, right: 1576, bottom: 953 }, view)).toBe(344);
+        expect(farthest({ left: 0, top: 0, right: 1920, bottom: 1080 }, view)).toBe(0);
     });
 
     test('帯は枠に重ならず、範囲を埋める', () => {
@@ -259,12 +266,12 @@ describe('地に敷く色', () => {
     ].map(hex);
     const text = { dark: [hex('#9aa3b5'), hex('#e6e8ec')], light: [hex('#555e70'), hex('#02659a')] };
 
-    test('縦に積むとき、番組の中身の字は、どんな映像の色の上でも 4.5 以上で読める (混ぜた途中も)', () => {
+    test('番組の中身・見出し・右の列の字は、どんな映像の色の上でも 4.5 以上で読める (混ぜた途中も)', () => {
         for (const theme of ['dark', 'light'] as const) {
             for (const a of frames) {
                 for (const b of frames) {
-                    const toneA = washTone(a, theme, WASH_LUMINANCE.stacked);
-                    const toneB = washTone(b, theme, WASH_LUMINANCE.stacked);
+                    const toneA = washTone(a, theme, WASH_LUMINANCE);
+                    const toneB = washTone(b, theme, WASH_LUMINANCE);
                     for (const color of [toneA, mix(toneA, toneB, 0.5)]) {
                         for (const t of text[theme]) expect(contrast(color, t)).toBeGreaterThanOrEqual(4.5);
                     }
@@ -273,32 +280,22 @@ describe('地に敷く色', () => {
         }
     });
 
-    test('二段組の右の列は、上で面の色を 72% 重ねれば 4.5 以上で読める', () => {
-        const surface = { dark: hex('#121318'), light: hex('#ffffff') };
-        for (const theme of ['dark', 'light'] as const) {
-            for (const frame of frames) {
-                const under = mix(washTone(frame, theme, WASH_LUMINANCE.wide), surface[theme], 0.72);
-                for (const t of text[theme]) expect(contrast(under, t)).toBeGreaterThanOrEqual(4.5);
-            }
-        }
-    });
-
     test('縦に積んだ操作バーは、暗幕 (明るいテーマ 60%・暗いテーマ 30%) の上で白い字が 4.5 以上', () => {
         const white = hex('#ffffff');
         const black = hex('#000000');
         for (const frame of [...frames, hex('#ffffff')]) {
-            const light = washTone(frame, 'light', WASH_LUMINANCE.stacked);
+            const light = washTone(frame, 'light', WASH_LUMINANCE);
             expect(contrast(mix(light, black, 0.6), white)).toBeGreaterThanOrEqual(4.5);
             expect(contrast(mix(hex('#ffffff'), black, 0.6), white)).toBeGreaterThanOrEqual(4.5);
-            const dark = washTone(frame, 'dark', WASH_LUMINANCE.stacked);
+            const dark = washTone(frame, 'dark', WASH_LUMINANCE);
             expect(contrast(mix(dark, black, 0.3), white)).toBeGreaterThanOrEqual(4.5);
         }
     });
 
     test('色相は残す (赤は赤みのまま、青は青みのまま)', () => {
-        const red = washTone(hex('#ff0000'), 'light', WASH_LUMINANCE.stacked);
+        const red = washTone(hex('#ff0000'), 'light', WASH_LUMINANCE);
         expect(red[0]).toBeGreaterThan(red[1]);
-        const blue = washTone(hex('#0000ff'), 'dark', WASH_LUMINANCE.wide);
+        const blue = washTone(hex('#0000ff'), 'dark', WASH_LUMINANCE);
         expect(blue[2]).toBeGreaterThan(blue[0]);
     });
 });
