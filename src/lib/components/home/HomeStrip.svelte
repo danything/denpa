@@ -5,10 +5,9 @@
      * 帯は畳める (`<details>`。開け閉めはブラウザに任せ、指でも押せる高さの見出し)
      */
     import Icon from '#lib/components/player/Icon.svelte';
-    import { durationMs } from '#lib/format.js';
     import type { Filter } from '#lib/timeline.js';
     import ChevronRight from '~icons/lucide/chevron-right';
-    import { home, type Rec } from './context';
+    import { home, type Rec, watchLeft } from './context';
     import Poster from './Poster.svelte';
 
     let {
@@ -21,11 +20,6 @@
         setFilter: (next: Filter) => void;
     } = $props();
     const ctx = home();
-
-    function left(rec: Rec): string {
-        if (rec.progress === null) return '未視聴';
-        return `残り${durationMs(Math.max(0, rec.progress.length - rec.progress.at))}`;
-    }
 </script>
 
 {#if watchNext.length > 0 || attention > 0}
@@ -56,7 +50,7 @@
                                     {/if}
                                 </span>
                                 <span class="a-title broadcast">{rec.name}</span>
-                                <span class="a-sub num">{left(rec)}</span>
+                                <span class="a-sub num">{watchLeft(rec)}</span>
                             </a>
                         </li>
                     {/each}

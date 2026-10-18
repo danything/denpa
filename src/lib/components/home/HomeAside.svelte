@@ -12,11 +12,11 @@
      */
     import Icon from '#lib/components/player/Icon.svelte';
     import { encodeLive } from '#lib/encode-live.svelte.js';
-    import { durationMs, eta, percent, time } from '#lib/format.js';
+    import { eta, percent, time } from '#lib/format.js';
     import type { Filter } from '#lib/timeline.js';
     import { resolve } from '$app/paths';
     import ChevronRight from '~icons/lucide/chevron-right';
-    import { home, type Rec, type Res } from './context';
+    import { home, type Rec, type Res, watchLeft } from './context';
     import Poster from './Poster.svelte';
 
     let {
@@ -41,11 +41,6 @@
         setFilter: (next: Filter) => void;
     } = $props();
     const ctx = home();
-
-    function left(rec: Rec): string {
-        if (rec.progress === null) return '未視聴';
-        return `残り${durationMs(Math.max(0, rec.progress.length - rec.progress.at))}`;
-    }
 </script>
 
 <aside class="t-side" aria-label="今やること・観るもの" data-testid="sidebar">
@@ -65,7 +60,7 @@
                         </span>
                         <span class="a-text">
                             <span class="a-title broadcast">{rec.name}</span>
-                            <span class="a-sub num">{left(rec)}</span>
+                            <span class="a-sub num">{watchLeft(rec)}</span>
                         </span>
                     </a>
                 </li>
