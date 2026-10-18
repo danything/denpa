@@ -14,8 +14,6 @@
         type Rect,
         reach,
         region,
-        SMOOTH,
-        smoothFrame,
         strips,
         toneFrame,
         WASH_LUMINANCE,
@@ -40,15 +38,13 @@
      *
      * ## 作り
      *
-     * - **写すのは `EVERY` (1秒) ごと。** 縮めるのは写す側 (`<video>` は worker、canvas に
+     * - **写すのは `EVERY` (200ms) ごと、1秒に5回。** 縮めるのは写す側 (`<video>` は worker、canvas に
      *   描いているときはその worker) で、画面の側で元の大きさの画素を読むことは無い
      * - 色は、枠の幅を 96 画素とした小さな canvas の中で作り (`ambient.ts` の `glowLayout`・`glowPixels`)、
      *   CSS で引き伸ばして見せる。色はいちばん近い枠の縁の色を強くぼかしたもの、濃さは枠からの距離で決める。
      *   **CSS の `filter: blur` は使わない** — ぼかしが画面の大きさになり、GPU の無い端末では重かった
-     * - **色は時間でならす** (`smoothFrame`)。写した1枚は 4 割だけ取り込み、前までの色を 6 割残す。
-     *   そのうえで **前の色から次の色へ `FADE` (1.2 秒) かけて 12 段で入れ替える** (`ease`。始めと終わりがゆっくり)。
-     *   場面が変わっても跳ばず、2〜3 秒かけて新しい色に寄る。CSS で透明度を動かすと毎フレーム合成し直すので、
-     *   段は canvas に描く
+     * - **前の色から次の色へ `FADE` (200ms) かけて 4 段で入れ替える** (`ease`)。写した1枚がそのまま次の色になる。
+     *   CSS で透明度を動かすと毎フレーム合成し直すので、段は canvas に描く
      * - **縦に積んで操作バーを映像の下に出しているとき (`data-under`)** は、操作バーの段にも色を敷く。
      *   枠の黒い地は映像の所だけにし、操作バーは薄い暗幕 (`ControlBar`) の上に載る
      * - **色は枠に重ならない4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ1枚を切り出す。
@@ -106,8 +102,8 @@
     /** ぼかし終えた前の1枚と次の1枚 (画面に出さない canvas)。入れ替えの間は2枚を重ねて描く */
     let shown: HTMLCanvasElement | null = null;
     let coming: HTMLCanvasElement | null = null;
-    /** 時間でならした色 (32x18 の RGBA。`smoothFrame`)。置き場やテーマが変わったら、これから作り直す */
-    let smooth: Float32Array | null = null;
+    /** 最後に写した色 (32x18 の RGBA)。置き場やテーマが変わったら、これから作り直す */
+    let colors: Float32Array | null = null;
     let fading: ReturnType<typeof setInterval> | undefined;
 
     function scratch(): HTMLCanvasElement {
@@ -161,14 +157,13 @@
     }
 
     /**
-     * 写した1枚を取り込み (`smoothFrame`)、ならした色へ `FADE` の長さでゆっくり入れ替える
-     * (動かさない設定ではすぐ)。場面が変わっても跳ばない — 取り込むのは 4 割で、入れ替えも長い
+     * 写した1枚を次の色にして、`FADE` の長さで前の色から入れ替える (動かさない設定ではすぐ)
      */
     function show(bitmap: ImageBitmap): void {
         const pixels = framePixels(bitmap);
         bitmap.close();
         if (pixels === null) return;
-        smooth = smoothFrame(smooth, pixels, SMOOTH);
+        colors = Float32Array.from(pixels);
         if (layout === null) return;
         clearInterval(fading);
         coming ??= scratch();
@@ -180,7 +175,7 @@
             context?.clearRect(0, 0, layout.width, layout.height);
             context?.drawImage(painted, 0, 0);
         }
-        compose(coming, smooth, layout);
+        compose(coming, colors, layout);
         const swap = () => {
             [shown, coming] = [coming, shown];
             paint(0);
@@ -239,7 +234,7 @@
         if (now !== 'off') return;
         lit = false;
         clearInterval(fading);
-        smooth = null;
+        colors = null;
         shown = null;
         coming = null;
         paint(0);
@@ -249,11 +244,11 @@
     $effect(() => {
         void dark;
         untrack(() => {
-            if (smooth === null || layout === null) return;
+            if (colors === null || layout === null) return;
             clearInterval(fading);
             coming = null;
             shown = scratch();
-            compose(shown, smooth, layout);
+            compose(shown, colors, layout);
             paint(0);
         });
     });
@@ -342,9 +337,9 @@
                 clearInterval(fading);
                 coming = null;
                 shown = null;
-                if (smooth !== null) {
+                if (colors !== null) {
                     shown = scratch();
-                    compose(shown, smooth, next);
+                    compose(shown, colors, next);
                 }
                 paint(0);
             }
