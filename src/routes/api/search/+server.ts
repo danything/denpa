@@ -1,5 +1,11 @@
 import { json } from '@sveltejs/kit';
-import { searchPrograms, searchRecordings, searchReservations, searchRules } from '#lib/server/search.js';
+import {
+    searchPrograms,
+    searchQuery,
+    searchRecordings,
+    searchReservations,
+    searchRules,
+} from '#lib/server/search.js';
 
 /** 節ごとに返す数の既定と上限。打つそばから出すぶんなので少しでよい */
 const DEFAULT_LIMIT = 4;
@@ -13,7 +19,7 @@ const MAX_LIMIT = 10;
  * denpa の根からの相対 (`watch/12`) で返す (ほかの API と同じ)
  */
 export function GET({ url }) {
-    const q = (url.searchParams.get('q') ?? '').trim();
+    const q = searchQuery(url.searchParams.get('q'));
     const asked = Number(url.searchParams.get('limit'));
     const limit = Number.isInteger(asked) && asked > 0 ? Math.min(asked, MAX_LIMIT) : DEFAULT_LIMIT;
     const options = { limit };
