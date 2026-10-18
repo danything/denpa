@@ -35,9 +35,11 @@
         グループの名前は小さく沈めた字で
     -->
     <nav class="side" aria-label="設定の項目" data-testid="settings-nav">
-        {#each SETTINGS_GROUPS as group (group.label)}
+        {#each SETTINGS_GROUPS as group, i (i)}
             <div class="group">
-                <p class="group-label">{group.label}</p>
+                {#if group.label !== null}
+                    <p class="group-label">{group.label}</p>
+                {/if}
                 <ul>
                     {#each group.sections as section (section.slug)}
                         {@const selected = current === section.slug}

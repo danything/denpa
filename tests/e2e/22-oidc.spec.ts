@@ -170,6 +170,52 @@ test.describe('OIDC でのログイン', () => {
         expect(jar.has('denpa_session')).toBe(false);
         expect((await get('/')).res.status).toBe(302);
     });
+
+    /*
+     * **設定の「一般」の「ほかの端末からもログアウト」。** いまの控えだけ残して、ほかは消す。
+     * 一式はワーカーで共有しているので、ほかのテストの控えも一緒に消える (数は決め打ちしない)
+     */
+    test('ほかの端末からもログアウトすると、ほかの端末だけ入り直しになる', async ({ oidc }) => {
+        const mine = client(oidc);
+        const other = client(oidc);
+        await login(mine);
+        await login(other);
+        expect((await other('/')).res.status).toBe(200);
+
+        const page = await mine('/settings/general');
+        expect(page.res.status).toBe(200);
+        const html = await page.res.text();
+        expect(html).toContain('data-testid="logout"');
+        expect(html).toContain('件のログインがあります');
+
+        const { res } = await mine('/settings/general?/logoutOthers', {
+            method: 'POST',
+            headers: {
+                origin: 'https://denpa.test',
+                accept: 'application/json',
+                'x-sveltekit-action': 'true',
+                'content-type': 'application/x-www-form-urlencoded',
+            },
+            body: '',
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { type: string; data: string };
+        expect(body.type).toBe('success');
+        expect(body.data).toContain('loggedOut');
+
+        // ほかの端末は入り直し、押した端末はそのまま
+        expect((await other('/')).res.status).toBe(302);
+        expect((await mine('/')).res.status).toBe(200);
+    });
+
+    test('素通しで入っていれば、一般にはログアウトを出さない', async ({ oidc }) => {
+        const get = client(oidc, { xff: INSIDE });
+        const { res } = await get('/settings/general');
+        expect(res.status).toBe(200);
+        const html = await res.text();
+        expect(html).toContain('data-testid="login-none"');
+        expect(html).not.toContain('data-testid="logout"');
+    });
 });
 
 /**

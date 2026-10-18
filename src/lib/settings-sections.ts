@@ -2,10 +2,12 @@
  * **設定の節の並び。** 左の一覧 (`routes/settings/+layout.svelte`) はこの順に出す。
  * 節ごとに `/settings/<slug>` の画面があり、フォームと保存 (actions) もその画面が持つ。
  *
- * 並びはよく触る順: 録画のしかた → 受信 (入れたときと困ったとき) → 視聴 → 連携 → その他。
+ * 並びは 一般 (ログアウトなど、どの設定にも属さないもの) → 録画のしかた → 受信 (入れたときと困ったとき) → 視聴 → 連携 → その他。
+ * 一般はグループ名を付けない (節の名前と同じになるので)。
  * 広い画面で `/settings` を開くと先頭の節へ移る (`FIRST_SECTION`)
  */
 export const SETTINGS_GROUPS = [
+    { label: null, sections: [{ slug: 'general', label: '一般' }] },
     { label: '録画', sections: [{ slug: 'recording', label: '録画のしかた' }] },
     {
         label: '受信',
@@ -30,11 +32,12 @@ export const SETTINGS_GROUPS = [
         ],
     },
     { label: 'その他', sections: [{ slug: 'migrate', label: 'EPGStation からの引き継ぎ' }] },
-] as const;
+] as const satisfies readonly {
+    label: string | null;
+    sections: readonly { slug: string; label: string }[];
+}[];
 
-export type SettingsSlug = (typeof SETTINGS_GROUPS)[number]['sections'][number]['slug'];
-
-export const FIRST_SECTION: SettingsSlug = 'recording';
+export const FIRST_SECTION = 'general';
 
 /** 節の名前。画面のタイトルに使う */
 export function sectionLabel(slug: string): string | null {

@@ -686,7 +686,7 @@
             {#if data.typeEmpty}
                 <!-- 局がまだ無い。上の案内と同じ文とボタンを、表の場所の真ん中に (上の案内はこのとき出さない) -->
                 <ChannelNotice
-                    kind={data.type === 'GR' ? 'gr' : 'all'}
+                    kind="all"
                     variant="center"
                     text={`${SERVICE_TYPE_LABEL[data.type]}のチャンネルがありません。チャンネルスキャンをしてください`}
                 />

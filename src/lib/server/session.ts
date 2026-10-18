@@ -6,7 +6,7 @@
  * 他のものと同じ SQLite なので、置き場が増えるわけでもありません。
  */
 
-import { eq, lte } from 'drizzle-orm';
+import { and, count, eq, gt, lte, ne } from 'drizzle-orm';
 import { config } from './config';
 import { affected, now, orm } from './db';
 import { randomToken } from './oidc';
@@ -55,4 +55,30 @@ export function destroy(id: string | undefined): void {
 /** 切れた控えを片付ける。消し忘れても害は無いが、溜め続ける理由も無い */
 export function prune(): number {
     return affected(orm().delete(sessions).where(lte(sessions.expires_at, now())));
+}
+
+/**
+ * **この控えのほかを全部消す** (設定の「一般」の「ほかの端末からもログアウト」)。
+ * 消したほうの端末は、次に画面を開いたときにログインし直しになる。
+ *
+ * 誰の控えかは見ない — 人ごとの権限も個人設定も無いので、なくした端末が家族のものでも止められるように。
+ * テレビのアプリのアクセストークン (`api_tokens`) は別の表で、ここでは消さない (テレビのアプリの節で1台ずつ取り消す)。
+ * 消した数を返す。数えるのは生きていた控えだけ (切れた行は `prune` が片付ける。どのみち使えない)
+ */
+export function destroyOthers(keep: string): number {
+    return affected(
+        orm()
+            .delete(sessions)
+            .where(and(ne(sessions.id, keep), gt(sessions.expires_at, now()))),
+    );
+}
+
+/** この控えのほかに、生きている控えがいくつあるか */
+export function countOthers(keep: string): number {
+    const row = orm()
+        .select({ n: count() })
+        .from(sessions)
+        .where(and(ne(sessions.id, keep), gt(sessions.expires_at, now())))
+        .get();
+    return row?.n ?? 0;
 }

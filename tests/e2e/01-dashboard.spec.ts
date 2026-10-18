@@ -37,8 +37,8 @@ test.describe('ダッシュボードと画面遷移', () => {
         for (const [name, title] of [
             ['nav-guide', '番組表 - denpa'],
             ['nav-rules', 'ルール - denpa'],
-            // 設定は広い画面では先頭の節 (録画のしかた) が開き、節の名前が前に付く
-            ['nav-settings', '録画のしかた - 設定 - denpa'],
+            // 設定は広い画面では先頭の節 (一般) が開き、節の名前が前に付く
+            ['nav-settings', '一般 - 設定 - denpa'],
             ['nav-home', '録画 - denpa'],
         ] as const) {
             await page.getByTestId(name).click();
@@ -54,9 +54,9 @@ test.describe('ダッシュボードと画面遷移', () => {
     test('設定は節ごとに開き、狭い画面では一覧から入る', async ({ page }) => {
         await goto(page, '/settings');
         // 広い画面では先頭の節へ移る
-        await page.waitForURL(/\/settings\/recording$/);
+        await page.waitForURL(/\/settings\/general$/);
         const nav = page.getByTestId('settings-nav');
-        await expect(nav.getByTestId('settings-nav-recording')).toHaveAttribute('aria-current', 'page');
+        await expect(nav.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
         await expect(page.getByTestId('settings-back')).toBeHidden();
 
         await nav.getByTestId('settings-nav-channels').click();
@@ -64,8 +64,9 @@ test.describe('ダッシュボードと画面遷移', () => {
         await expect(page.getByTestId('channel-card')).toBeVisible();
         await expect(page).toHaveTitle('チャンネル - 設定 - denpa');
         await page.goBack();
-        await page.waitForURL(/\/settings\/recording$/);
-        await expect(page.getByTestId('codec-av1')).toBeVisible();
+        await page.waitForURL(/\/settings\/general$/);
+        // 素通しの一式なので、ログアウトの代わりにその旨の1行
+        await expect(page.getByTestId('login-none')).toBeVisible();
 
         // 前のチューナーの画面は、設定のチューナーへずっと送る
         const old = await page.request.get('/tuners', { maxRedirects: 0 });

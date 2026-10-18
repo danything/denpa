@@ -352,7 +352,7 @@
             {/if}
         </div>
         <!--
-            テーマの切り替え・画面へのリンク (広い幅だけ)・ログアウト。
+            テーマの切り替え・画面へのリンク (広い幅だけ)。ログアウトは設定の「一般」にある。
             狭い幅ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
         -->
         <nav class="actions">
@@ -386,22 +386,6 @@
                     </li>
                 {/each}
             </ul>
-
-            <!--
-                **名前は出さない。** 誰で入っているかを出しても、できることは
-                変わらない (人ごとの権限も個人設定も無い)。出すのはログアウトの手段だけ。
-
-                ログインして入っているときだけ。素通し (LAN) では denpa は
-                誰か知らないし、切るものも持っていない
-            -->
-            {#if data.user}
-                <!-- ボタンはフォームの POST で押す。リンク (GET) だと先読みで勝手に切れる -->
-                <form method="POST" action={resolve('logout')}>
-                    <button type="submit" class="ghost small" data-testid="logout">
-                        ログアウト
-                    </button>
-                </form>
-            {/if}
         </nav>
 
     </div>
@@ -471,7 +455,7 @@
                         {/each}
                     </ul>
                     <!--
-                        狭い幅ではヘッダーを隠すので、ヘッダーにあったもの (新しい版・テーマ・ログアウト) をここに置く
+                        狭い幅ではヘッダーを隠すので、ヘッダーにあったもの (新しい版・テーマ) をここに置く
                     -->
                     <ul class="more-list more-extra">
                         {#if data.update !== null}
@@ -493,13 +477,6 @@
                                 テーマ: {LABEL[mode]}
                             </button>
                         </li>
-                        {#if data.user}
-                            <li>
-                                <form method="POST" action={resolve('logout')}>
-                                    <button type="submit" class="menu-item" data-testid="tab-logout">ログアウト</button>
-                                </form>
-                            </li>
-                        {/if}
                     </ul>
                 </Menu>
             </div>
@@ -779,9 +756,6 @@
         margin-top: 0.25rem;
         padding-top: 0.25rem;
         border-top: 1px solid var(--dp-line);
-    }
-    .more-extra form {
-        margin: 0;
     }
     ul.more-list a[aria-current='page'] {
         color: var(--dp-primary-text);
