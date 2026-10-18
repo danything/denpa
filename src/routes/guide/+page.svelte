@@ -340,8 +340,9 @@
     }
 
     /** 表の日付 (`10/18(日)`)。狭い画面では月を隠す (`.month`) */
-    const month = $derived(`${new Date(data.start).getMonth() + 1}/`);
-    const day = $derived(date(data.start).slice(month.length));
+    const shownDate = $derived(date(data.start));
+    const month = $derived(shownDate.slice(0, shownDate.indexOf('/') + 1));
+    const day = $derived(shownDate.slice(month.length));
 
     const prevHref = $derived(href({ start: String(data.start - data.hours * HOUR) }));
     const nextHref = $derived(href({ start: String(data.start + data.hours * HOUR) }));
@@ -433,6 +434,92 @@
         keyword?.focus();
     }
 
+    /**
+     * **表を下へ送っている間は、操作の1行を上へ畳む** (携帯のブラウザのアドレスバーと同じ)。
+     * 上へ戻すと出てくる。畳んだぶん (1行 ≒ 50px) は時間に回る。
+     *
+     * - 見るのは**表の縦のスクロールだけ**。横に流しただけでは動かさない。
+     * - **人が動かしたときだけ**数える (ホイール・指・ドラッグ・キー)。開いたときの「いま」への
+     *   位置合わせや、マスを押す前のブラウザのスクロールで畳むと、押す場所がずれる。
+     * - 同じ向きに 48px 進んだら畳み、24px 戻したら出す。行ったり来たりでちらつかない。
+     * - 動かすのは `translate` だけ。高さは「畳むときは先に伸ばし、出すときは出し終えてから縮める」
+     *   ので、途中で表の下に隙間が見えない。動かさない設定ではその場で畳んで出す。
+     * - 操作にフォーカスが入ったら出す (キーボードで届く)。
+     */
+    let barHeight = $state(0);
+    let barHidden = $state(false);
+    /** 畳んだぶん表を伸ばしているか。出すときは動き終えてから戻す */
+    let barTall = $state(false);
+    let toolbar: HTMLElement | null = $state(null);
+    const HIDE_AFTER = 48;
+    const SHOW_AFTER = 24;
+    /** 人が動かしている間 (`performance.now()` の期限)。指を離したあとの惰性もこの延長で拾う */
+    let userUntil = 0;
+    let lastTop = 0;
+    let travel = 0;
+    let tallTimer = 0;
+
+    function byUser(): void {
+        userUntil = performance.now() + 400;
+    }
+
+    function hideBar(): void {
+        if (toolbar?.contains(document.activeElement)) return;
+        clearTimeout(tallTimer);
+        barTall = true;
+        barHidden = true;
+    }
+
+    function showBar(): void {
+        if (!barHidden) return;
+        barHidden = false;
+        clearTimeout(tallTimer);
+        const page = toolbar?.parentElement;
+        const wait = page ? Number.parseFloat(getComputedStyle(page).transitionDuration) * 1000 : 0;
+        if (wait > 0) tallTimer = window.setTimeout(() => (barTall = false), wait);
+        else barTall = false;
+    }
+
+    function onGridScroll(event: Event): void {
+        const top = (event.currentTarget as HTMLElement).scrollTop;
+        const delta = top - lastTop;
+        lastTop = top;
+        if (delta === 0) return;
+        if (performance.now() > userUntil) {
+            travel = 0;
+            return;
+        }
+        byUser();
+        travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
+        if (top <= 0 || travel <= -SHOW_AFTER) showBar();
+        else if (travel >= HIDE_AFTER && top > barHeight) hideBar();
+    }
+
+    /* 表は放送波や日を選び直すたびに作り直すので、そのたびに付け直す */
+    $effect(() => {
+        const box = grid;
+        if (box === null) return;
+        lastTop = box.scrollTop;
+        const drag = (event: PointerEvent) => {
+            if (event.buttons !== 0) byUser();
+        };
+        const passive = { passive: true };
+        box.addEventListener('scroll', onGridScroll, passive);
+        box.addEventListener('wheel', byUser, passive);
+        box.addEventListener('touchmove', byUser, passive);
+        box.addEventListener('pointermove', drag, passive);
+        box.addEventListener('keydown', byUser);
+        return () => {
+            box.removeEventListener('scroll', onGridScroll);
+            box.removeEventListener('wheel', byUser);
+            box.removeEventListener('touchmove', byUser);
+            box.removeEventListener('pointermove', drag);
+            box.removeEventListener('keydown', byUser);
+        };
+    });
+
+    $effect(() => () => clearTimeout(tallTimer));
+
     /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
     const CANCELABLE = ['scheduled', 'conflict', 'skipped', 'recording'];
 </script>
@@ -446,16 +533,22 @@
     そこは `svh` で採る — `svh` だけが見えている範囲を超えない
     (`vh` と `dvh` は実機の PWA でアドレスバーの高さぶん超えた)。天井なので小さく出る側に倒す
 -->
-<div class="page">
+<div class="page" class:bar-hidden={barHidden} class:bar-tall={barTall} style:--bar="{barHeight}px">
     <!--
         **どこを見るかは表の上の細い1行にまとめる** (種別・日送り・探す)。縦は表に回す。
 
         表の中 (左上の角・局名の行) には入れない。角は時刻の列の幅 (2.5rem) しか無く、
         入れるならメニューに畳むことになり、種別や日を変えるたびに1回多く押す。
         局名の行に入れると、操作の幅のぶん局名が隠れる。表の外の1行なら、
-        隠れるものも押す回数も増えない
+        隠れるものも押す回数も増えない。表を下へ送っている間は畳む (`hideBar`)
     -->
-    <div class="cluster toolbar">
+    <div
+        class="cluster toolbar"
+        bind:this={toolbar}
+        bind:offsetHeight={barHeight}
+        onfocusin={showBar}
+        data-testid="guide-toolbar"
+    >
         <div role="group" class="types segmented" data-testid="type-tabs">
             {#each ['GR', 'BS', 'CS'] as type (type)}
                 <a
@@ -909,10 +1002,22 @@
      * 高さも同じぶん足す。広い幅は `FILLED` の `%`、狭い幅は下の `svh`
      */
     .page {
+        /* 高さの元 (`--page-h`) と、畳んだ1行のぶん伸ばす量 (`--extra`)。伸ばしたぶんは下のマージンで打ち消す */
+        --page-h: calc(100% + 2 * var(--dp-gutter));
+        --extra: 0px;
         display: flex;
         flex-direction: column;
         margin: calc(-1 * var(--dp-gutter));
-        height: calc(100% + 2 * var(--dp-gutter));
+        margin-bottom: calc(-1 * var(--dp-gutter) - var(--extra));
+        height: calc(var(--page-h) + var(--extra));
+        transition: translate var(--dp-duration) var(--dp-ease);
+    }
+    /* 操作の1行を畳む (上の `hideBar`)。広い幅ではナビの裏へ、狭い幅では画面の上へ抜ける */
+    .page.bar-hidden {
+        translate: 0 calc(-1 * var(--bar));
+    }
+    .page.bar-tall {
+        --extra: var(--bar);
     }
     /*
      * 狭い幅は画面の高さから上下の固定のもの (ナビ・下のタブ・ノッチ) を引く。
@@ -921,12 +1026,12 @@
     @media (max-width: 767px) {
         .page {
             /* ナビは 3.5rem と下の線 1px (`+layout.svelte` の `.navbar`)。下のタブは無いので、下の安全域だけ空ける */
-            height: calc(100svh - 3.5rem - 1px - env(safe-area-inset-bottom));
+            --page-h: calc(100svh - 3.5rem - 1px - env(safe-area-inset-bottom));
         }
     }
     @media (max-width: 639.98px) {
         .page {
-            height: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
+            --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
         }
     }
     .toolbar {

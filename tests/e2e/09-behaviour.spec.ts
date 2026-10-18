@@ -190,6 +190,35 @@ test.describe('操作したときの反応', () => {
         await expect(page.getByTestId('guide-today')).toBeVisible();
     });
 
+    test('表を下へ送ると操作の1行が畳まれ、上へ戻すかフォーカスで出てくる', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        const grid = page.getByTestId('guide-grid');
+        const top = async () => Math.round((await grid.boundingBox())!.y);
+        const shown = await top();
+        const bar = Math.round((await page.getByTestId('guide-toolbar').boundingBox())!.height);
+        const box = (await grid.boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+        // 横に流しただけでは畳まない
+        await page.mouse.wheel(300, 0);
+        await page.waitForTimeout(200);
+        expect(await top()).toBe(shown);
+
+        // 下へ送ると畳み、そのぶん表が上へ伸びる
+        await page.mouse.wheel(0, 300);
+        await expect.poll(top).toBe(shown - bar);
+
+        // 少し上へ戻すと出てくる
+        await page.mouse.wheel(0, -60);
+        await expect.poll(top).toBe(shown);
+
+        // キーボードで操作へ移ると出てくる
+        await page.mouse.wheel(0, 300);
+        await expect.poll(top).toBe(shown - bar);
+        await page.getByTestId('next-day').focus();
+        await expect.poll(top).toBe(shown);
+    });
+
     test('放送波を切り替えると横位置が先頭に戻る', async ({ page }) => {
         // 局の並びは放送波ごとに別物なので、前の位置から始まると左端の局が隠れる
         await page.setViewportSize({ width: 320, height: 700 });
