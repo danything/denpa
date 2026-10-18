@@ -28,7 +28,7 @@
         label: string;
         /** いま選ばれているか (`aria-current`) */
         active: boolean;
-        /** 並べるが押せない (互換モードでこの端末が描けない形式。`CodecMenu`) */
+        /** 並べるが押せない (互換モードでこの端末が描けない形式) */
         disabled?: boolean;
     }
 

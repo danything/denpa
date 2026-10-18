@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { expect, goto, syncEpg, test, wakeControls } from './helpers';
+import { expect, flipSetting, goto, pickCodec, syncEpg, test, wakeControls } from './helpers';
 
 /**
  * ライブを MPEG-2 のまま見る ([docs/stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
@@ -18,8 +18,7 @@ import { expect, goto, syncEpg, test, wakeControls } from './helpers';
 /** 画質の切り替えで MPEG-2 を選ぶ。操作列は触らないと引っ込む (`ControlBar`) ので動かして出す */
 async function chooseRaw(page: Page): Promise<void> {
     await wakeControls(page, 'live-frame');
-    await page.getByTestId('live-codec').click();
-    await page.locator('[data-testid="live-codec-option"][data-codec="mpeg2"]').click();
+    await pickCodec(page, 'live', 'mpeg2');
 }
 
 /** 偽 ffmpeg に渡された引数を、1回ぶんずつに切る (`tests/fake/ffmpeg.sh`) */
@@ -333,8 +332,8 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
 
         await wakeControls(page, 'live-frame');
         const toggle = page.getByTestId('live-background');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await flipSetting(page, 'live', 'background');
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
         const paused = () => audio.evaluate((a) => (a as HTMLAudioElement).paused);
         await expect.poll(paused, { timeout: 10_000 }).toBe(false);
         expect(
@@ -386,8 +385,8 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
 
         // 切れば直に鳴らすのに戻る。音はデコードでき続ける
         await wakeControls(page, 'live-frame');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        await flipSetting(page, 'live', 'background');
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
         await expect.poll(paused).toBe(true);
         const after = await count('audio');
         await expect.poll(() => count('audio'), { timeout: 10_000 }).toBeGreaterThan(after + 20);
@@ -423,8 +422,8 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
 
         await wakeControls(page, 'live-frame');
         const toggle = page.getByTestId('live-background');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await flipSetting(page, 'live', 'background');
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
         const audio = page.getByTestId('live-raw-audio');
         await expect(audio).toHaveCount(1);
         await page.waitForTimeout(500);
@@ -438,7 +437,7 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
-        await expect(page.getByTestId('live-codec').first()).toBeVisible();
+        await expect(page.getByTestId('live-codec')).toContainText('H.264');
         await expect(page.getByTestId('live-raw')).toHaveCount(0);
     });
 
@@ -471,8 +470,7 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
 
         // H.264 に戻すとエンコードしたものになり、それも覚える
         await wakeControls(page, 'live-frame');
-        await page.getByTestId('live-codec').click();
-        await page.locator('[data-testid="live-codec-option"][data-codec="h264"]').click();
+        await pickCodec(page, 'live', 'h264');
         await expect(page.getByTestId('live-raw')).toHaveCount(0, { timeout: 30_000 });
         await goto(page, '/live');
         await expect(page.getByTestId('live-title')).toBeVisible();

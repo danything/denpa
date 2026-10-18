@@ -2,12 +2,10 @@
     import { onMount } from 'svelte';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
-    import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { ambientMode } from '#lib/components/player/ambient.svelte.js';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CloseLink from '#lib/components/player/CloseLink.svelte';
-    import CodecMenu from '#lib/components/player/CodecMenu.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import ControlRow from '#lib/components/player/ControlRow.svelte';
@@ -17,7 +15,7 @@
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
-    import { CAMERA, CAPTION, PAUSE, PLAY, SOUND_OFF, SOUND_ON } from '#lib/components/player/icons.js';
+    import { AUDIO, CAMERA, CAPTION, CODEC, PAUSE, PLAY, SOUND_OFF, SOUND_ON } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
     import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
@@ -28,6 +26,7 @@
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
+    import { audioTracks, liveCodecs } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import { stageTap } from '#lib/components/player/stage-tap.js';
@@ -276,7 +275,7 @@
             <!-- シークバーは番組の全長。**録れていないところ (右側) へは飛べない** (`seekTo`) -->
             <SeekBar value={pos} max={total} step={1} onseek={seekTo} paused={player.paused} />
 
-            <!-- **並びはライブと同じ。** 再生・音・字幕、エンコード方式・音声・端 (最新)、読みもの、速さ、全画面 -->
+            <!-- **並びはライブと同じ。** 再生・音・字幕、端 (最新)、読みもの、速さ、再生の設定 (⚙)、全画面 -->
             <ControlRow testid="chase-buttons">
                 <ControlButton
                     icon={player.paused ? PLAY : PAUSE}
@@ -285,8 +284,8 @@
                     onclick={() => player.toggle()}
                 />
                 <!--
-                    **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・最新・読みもの・全画面だけ。**
-                    ここから音声までと速さ・バックグラウンド・小窓は「ほか」(⋯) に入れる (`Extras`。観る画面と同じ)
+                    **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・最新・読みもの・再生の設定 (⚙)・全画面だけ。**
+                    音・字幕と速さ・小窓は「ほか」(⋯) に入れる (`Extras`。観る画面と同じ)
                 -->
                 <Extras>
                 <ControlButton
@@ -302,25 +301,6 @@
                         on={player.captions}
                         testid="chase-caption"
                         onclick={() => player.toggleCaptions()}
-                    />
-                {/if}
-
-                <!-- エンコード方式。ライブと同じ場所・同じ見た目で、選び直すと再生していた位置から再エンコード -->
-                <CodecMenu
-                    testid="chase-codec"
-                    codec={player.codec}
-                    unavailable={player.unavailable}
-                    onselect={(key) => player.setCodec(key)}
-                />
-                {#if player.audios.length > 1}
-                    <AudioMenu
-                        testid="chase-audio"
-                        items={player.audios.map((a) => ({
-                            key: a.id,
-                            label: a.label,
-                            active: a.id === player.audio,
-                        }))}
-                        onselect={(key) => player.setAudio(key)}
                     />
                 {/if}
                 </Extras>
@@ -376,7 +356,34 @@
                     </Extras>
                 {/if}
 
-                <StageTail prefix="chase" {background} {ambient} {pip} {fullscreen} {stage} />
+                <!--
+                    コーデックと音声は再生の設定 (⚙)。コーデックは選び直すと再生していた位置から再エンコード (ライブと同じ)
+                -->
+                <StageTail
+                    prefix="chase"
+                    {background}
+                    {ambient}
+                    {pip}
+                    {fullscreen}
+                    {stage}
+                    codec={liveCodecs({
+                        icon: CODEC,
+                        codec: player.codec,
+                        unavailable: player.unavailable,
+                        onselect: (key) => player.setCodec(key),
+                    })}
+                    audio={player.audios.length > 1
+                        ? audioTracks({
+                              icon: AUDIO,
+                              items: player.audios.map((a) => ({
+                                  key: a.id,
+                                  label: a.label,
+                                  active: a.id === player.audio,
+                              })),
+                              onselect: (key) => player.setAudio(key),
+                          })
+                        : undefined}
+                />
             </ControlRow>
         </ControlBar>
 

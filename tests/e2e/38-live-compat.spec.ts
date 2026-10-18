@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { MX } from '../fake/services';
-import { expect, goto, syncEpg, test, wakeControls } from './helpers';
+import { expect, goto, openSettings, pickCodec, syncEpg, test, wakeControls } from './helpers';
 
 /**
  * **互換モード** — ライブの H.264 / AV1 も canvas に描く (`src/lib/canvas-video.ts`・`src/lib/raw/fmp4.ts`)。
@@ -23,8 +23,7 @@ const TESLA =
 async function watchAv1(page: Page): Promise<void> {
     await expect(page.getByTestId('live-title')).toBeVisible();
     await wakeControls(page, 'live-frame');
-    await page.getByTestId('live-codec').click();
-    await page.locator('[data-testid="live-codec-option"][data-codec="av1"]').click();
+    await pickCodec(page, 'live', 'av1');
     await expect(page.getByTestId('live-codec')).toContainText('AV1');
 }
 
@@ -97,6 +96,7 @@ test.describe('互換モード', () => {
         } else {
             // 描けない形式は切り替えで選ばせない
             await wakeControls(page, 'live-frame');
+            await openSettings(page, 'live');
             await page.getByTestId('live-codec').click();
             const option = page.locator('[data-testid="live-codec-option"][data-codec="h264"]');
             await expect(option).toHaveAttribute('data-disabled');
@@ -224,8 +224,7 @@ test.describe('互換モードの追っかけ', () => {
         await goto(page, `/chase/${id}`);
         await expect(page.getByTestId('chase-title')).toBeVisible();
         await wakeControls(page, 'chase');
-        await page.getByTestId('chase-codec').click();
-        await page.locator('[data-testid="chase-codec-option"][data-codec="av1"]').click();
+        await pickCodec(page, 'chase', 'av1');
         await expectDrawn(page, 'chase');
 
         // 速さは等速だけ (切り替えを出さない)

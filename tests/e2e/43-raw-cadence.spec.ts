@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import type { Page, TestInfo, Worker } from '@playwright/test';
-import { expect, goto, recordOne, setRecording, test, wakeControls } from './helpers';
+import { expect, goto, pickCodec, recordOne, setRecording, test, wakeControls } from './helpers';
 
 /**
  * **元の TS (60i の MPEG-2) を出す間合い** (docs/stream.md#コマを出す間合い--画面の切り替わりに合わせる。`raw/cadence.ts`)。
@@ -211,8 +211,7 @@ test.describe('元の TS を出す間合い', () => {
 
         await goto(page, `/watch/${id}`);
         await wakeControls(page, 'watch-stage');
-        await page.getByTestId('watch-codec').click();
-        await page.locator('[data-testid="watch-codec-option"][data-codec="mpeg2"]').click();
+        await pickCodec(page, 'watch', 'mpeg2');
         const canvas = page.locator('[data-testid="live-raw"][data-input="ts-mpeg2"]');
         await expect(canvas).toBeVisible({ timeout: 30_000 });
         await expect

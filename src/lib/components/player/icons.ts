@@ -39,10 +39,13 @@ export { default as CAMERA } from '~icons/lucide/camera';
 export { default as CAPTION } from '~icons/lucide/captions';
 /** 聞き返しの2回目 (レ点)。**文字を出さずに「これでいいか」を言う** */
 export { default as CHECK } from '~icons/lucide/check';
+/** 再生の設定 (`SettingsMenu`) の選択肢の並びから戻る / 選択肢の並びに入る */
+export { default as BACK } from '~icons/lucide/chevron-left';
+export { default as FORWARD } from '~icons/lucide/chevron-right';
 /** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる。丸に点 (録画の印) */
 export { default as RECORD } from '~icons/lucide/circle-dot';
 /**
- * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音声・送り・CM 飛ばし・エンコード方式・速さ・バックグラウンド再生・小窓) を
+ * 「ほか」(⋯)。**狭い枠でだけ出す** — 毎回は使わないもの (音・字幕・速さ・小窓) を
  * 畳んでおくメニュー (`Extras.svelte`)
  */
 export { default as MORE } from '~icons/lucide/ellipsis';
@@ -53,6 +56,8 @@ export { default as MORE } from '~icons/lucide/ellipsis';
  * denpa の中で開くもの、こちらは外へ出ていくもので、押した結果がまるで違う
  */
 export { default as OPEN_OUT } from '~icons/lucide/external-link';
+/** コーデック (再生の設定の行) */
+export { default as CODEC } from '~icons/lucide/film';
 /**
  * 再生の速さ (`SpeedMenu`)。針の付いたメーター。**等速のときだけ出す** —
  * 速めている間はアイコンをやめて数字 (「1.25」) だけにする
@@ -60,7 +65,7 @@ export { default as OPEN_OUT } from '~icons/lucide/external-link';
 export { default as SPEED } from '~icons/lucide/gauge';
 /**
  * バックグラウンド再生 (裏に回しても止めない)。ヘッドホン — 裏で続けるのはたいてい
- * 聴くため。入れている間は押されている見た目 (`OVERLAY_ON`)
+ * 聴くため。再生の設定 (⚙ `SettingsMenu`) の行のアイコン
  */
 export { default as BACKGROUND } from '~icons/lucide/headphones';
 /** 中身を読む。丸に i */
@@ -77,12 +82,14 @@ export { default as PIP } from '~icons/lucide/picture-in-picture-2';
 export { default as PLAY } from '~icons/lucide/play';
 /** CM飛ばし。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
 export { default as CUT } from '~icons/lucide/scissors';
+/** 再生の設定 (⚙ `SettingsMenu`)。端末ごとに決めるもの (コーデック・音声・CMスキップ・アンビエントモード・バックグラウンド再生) をまとめたメニュー */
+export { default as SETTINGS } from '~icons/lucide/settings';
 /** チャプター送り・戻し */
 export { default as PREV } from '~icons/lucide/skip-back';
 export { default as NEXT } from '~icons/lucide/skip-forward';
 /**
  * アンビエントモード (映像の色を周りにぼかして広げる。`AmbientGlow.svelte`)。弱い光を放つ太陽。
- * オンの間は押されている見た目 (`OVERLAY_ON`)
+ * 再生の設定 (⚙ `SettingsMenu`) の行のアイコン
  */
 export { default as AMBIENT } from '~icons/lucide/sun-dim';
 export { default as TRASH } from '~icons/lucide/trash';

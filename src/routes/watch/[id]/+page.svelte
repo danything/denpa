@@ -7,12 +7,10 @@
     import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/caption-text.js';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
-    import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { ambientMode } from '#lib/components/player/ambient.svelte.js';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CloseLink from '#lib/components/player/CloseLink.svelte';
-    import CodecMenu from '#lib/components/player/CodecMenu.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import ControlRow from '#lib/components/player/ControlRow.svelte';
@@ -25,10 +23,11 @@
     import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
+        AUDIO,
         CAMERA,
         CAPTION,
         CHECK,
-        CUT,
+        CODEC,
         DATA,
         NEXT,
         PAUSE,
@@ -48,6 +47,7 @@
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
+    import { audioTracks, recordingCodecs } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import { stageTap } from '#lib/components/player/stage-tap.js';
@@ -1976,8 +1976,8 @@
                         />
                         <!--
                             **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・チャプター送り・
-                            時刻・全画面だけ。** 音・字幕・コーデック・音声・CM 飛ばし・速さ・バックグラウンド・
-                            小窓は「ほか」(⋯) に入れる (`Extras`)。広い枠では包みは何もしないので、並びは今までどおり
+                            時刻・再生の設定 (⚙)・全画面だけ。** 音・字幕・速さ・小窓は「ほか」(⋯) に入れる (`Extras`)。
+                            広い枠では包みは何もしないので、並びは今までどおり
                         -->
                         <Extras>
                             <ControlButton
@@ -2003,37 +2003,6 @@
                             {/if}
                         </Extras>
 
-                        <Extras>
-                        <!--
-                            **コーデックの切り替え** (追っかけ・ライブと同じ部品)。この端末で観られる方式が
-                            2つ以上あるときだけ。「自動」は端末に合わせる (`ts/playback.ts` の `pickOffer`)。
-                            エンコード済みと違うものを選ぶと、サーバがその場で変換して流す
-                        -->
-                        {#if codecMenu.length > 0}
-                            <CodecMenu
-                                testid="watch-codec"
-                                choices={codecMenu}
-                                selected={codecMenu.some((item) => item.key === choice) ? choice : 'auto'}
-                                onpick={(key) => chooseCodec(key as CodecChoice | 'mpeg2')}
-                            />
-                        {/if}
-                        <!--
-                            **音声トラックの切り替え。** 2本以上あって選べるときだけ (二カ国語・二重音声・解説。
-                            ブラウザが出せなければ流すほうへ移って選ぶ。`syncAudio`)。`/live` の音声選びと
-                            同じ見た目。1本しか無ければ出さない
-                        -->
-                        {#if audios.length > 1}
-                            <AudioMenu
-                                testid="watch-audio"
-                                items={audios.map((track, i) => ({
-                                    key: i,
-                                    label: track.label,
-                                    active: i === audioIndex,
-                                }))}
-                                onselect={(key) => selectAudio(key)}
-                            />
-                        {/if}
-                        </Extras>
 
                         <!--
                             **チャプター送りは、入っているときだけ出す。**
@@ -2055,22 +2024,6 @@
                                 onclick={() => seekTo(nextChapterAt(chapters, at))}
                             />
                         {/if}
-
-                        <Extras>
-                        <!--
-                            **CM を自動で飛ばす。** チャプターに CM が入っている
-                            録画でだけ出す。押した時点で CM の中にいれば、そこで飛ぶ
-                        -->
-                        {#if hasCm}
-                            <ControlButton
-                                icon={CUT}
-                                label={skipCm ? 'CM飛ばしをやめる' : 'CMを自動で飛ばす'}
-                                on={skipCm}
-                                testid="watch-skip-cm"
-                                onclick={toggleSkipCm}
-                            />
-                        {/if}
-                        </Extras>
 
                         <!-- **読みものは3画面共通の二段** (InfoBlock)。決まりは [ControlBar.svelte](../../../lib/components/player/ControlBar.svelte) -->
                         <InfoBlock
@@ -2118,7 +2071,41 @@
                             </Extras>
                         {/if}
 
-                        <StageTail prefix="watch" {background} {ambient} {pip} {fullscreen} stage={layout} />
+                        <!--
+                            **再生の設定 (⚙) に入れるもの。** CMスキップはチャプターに CM が入っている録画でだけ
+                            (押した時点で CM の中にいれば、そこで飛ぶ)。コーデックはこの端末で観られる方式が
+                            2つ以上あるときだけ (「自動」は端末に合わせる。`ts/playback.ts` の `pickOffer`。
+                            エンコード済みと違うものを選ぶと、サーバがその場で変換して流す)。音声は2本以上あって
+                            選べるときだけ (ブラウザが出せなければ流すほうへ移って選ぶ。`syncAudio`)
+                        -->
+                        <StageTail
+                            prefix="watch"
+                            {background}
+                            {ambient}
+                            {pip}
+                            {fullscreen}
+                            stage={layout}
+                            cm={hasCm ? { on: skipCm, toggle: toggleSkipCm } : undefined}
+                            codec={codecMenu.length > 0
+                                ? recordingCodecs({
+                                      icon: CODEC,
+                                      choices: codecMenu,
+                                      selected: codecMenu.some((item) => item.key === choice) ? choice : 'auto',
+                                      onpick: (key) => chooseCodec(key as CodecChoice | 'mpeg2'),
+                                  })
+                                : undefined}
+                            audio={audios.length > 1
+                                ? audioTracks({
+                                      icon: AUDIO,
+                                      items: audios.map((track, i) => ({
+                                          key: i,
+                                          label: track.label,
+                                          active: i === audioIndex,
+                                      })),
+                                      onselect: (key) => selectAudio(key),
+                                  })
+                                : undefined}
+                        />
                     </ControlRow>
                 </ControlBar>
                 {/snippet}

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, goto, syncEpg, test, wakeControls } from './helpers';
+import { expect, flipSetting, goto, pickCodec, syncEpg, test, wakeControls } from './helpers';
 
 /**
  * アンビエントモード (`AmbientGlow.svelte`)。映像の色を枠の周りへぼかして広げる。
@@ -15,8 +15,7 @@ async function watchRaw(page: Page): Promise<void> {
     await page.getByTestId('live-channel').first().click();
     await expect(page.getByTestId('live-title')).toBeVisible();
     await wakeControls(page, 'live-frame');
-    await page.getByTestId('live-codec').click();
-    await page.locator('[data-testid="live-codec-option"][data-codec="mpeg2"]').click();
+    await pickCodec(page, 'live', 'mpeg2');
     await expect
         .poll(async () => Number((await page.getByTestId('live-raw').getAttribute('data-shown')) ?? 0), {
             timeout: 30_000,
@@ -86,7 +85,8 @@ test.describe('アンビエントモード', () => {
             await expect(glow).toHaveAttribute('data-plan', 'watch');
 
             // オフにすると消える。端末に覚えるので、開き直してもオフのまま
-            await press(page, 'live-ambient');
+            await wakeControls(page, 'live-frame');
+            await flipSetting(page, 'live', 'ambient');
             await expect(glow).toHaveAttribute('data-plan', 'off');
             await expect(glow).toBeHidden();
             await expect(page.locator('html')).not.toHaveAttribute('data-ambient-header');

@@ -422,6 +422,33 @@ export async function wakeControls(page: Page, stage: string): Promise<void> {
 }
 
 /**
+ * 再生の設定 (⚙ `SettingsMenu`) を開く。開いていればそのまま。`prefix` は `live` / `chase` / `watch`。
+ * 操作列が引っ込んでいると押せないので、待ちを挟んだ先では先に `wakeControls` を呼ぶ
+ */
+export async function openSettings(page: Page, prefix: string): Promise<void> {
+    const menu = page.getByTestId(`${prefix}-settings-menu`);
+    if (await menu.isVisible()) return;
+    await page.getByTestId(`${prefix}-settings`).click();
+    await expect(menu).toBeVisible();
+}
+
+/** 再生の設定からコーデックを選ぶ (選ぶとメニューは閉じる) */
+export async function pickCodec(page: Page, prefix: string, codec: string): Promise<void> {
+    await openSettings(page, prefix);
+    await page.getByTestId(`${prefix}-codec`).click();
+    await page.locator(`[data-testid="${prefix}-codec-option"][data-codec="${codec}"]`).click();
+    await expect(page.getByTestId(`${prefix}-settings-menu`)).toBeHidden();
+}
+
+/** 再生の設定の切り替え (`skip-cm` / `ambient` / `background`) を押して、メニューを閉じる */
+export async function flipSetting(page: Page, prefix: string, id: string): Promise<void> {
+    await openSettings(page, prefix);
+    await page.getByTestId(`${prefix}-${id}`).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId(`${prefix}-settings-menu`)).toBeHidden();
+}
+
+/**
  * 舞台の上の押すもの (`.ov-btn`) が**丸ごと見えているか**を見る。どれか2つが重なって
  * いないか (箱が交わらないか)、枠からはみ出していないか。見えていないもの (畳んだもの・
  * 幅 0) は数えない。返すのは困りごとの一覧 (空なら良し)

@@ -1,7 +1,16 @@
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { mkvFromClip } from '../fake/mkv-clip';
-import { expect, FAKE_CAPTION, goto, recordOne, setRecording, test, wakeControls } from './helpers';
+import {
+    expect,
+    FAKE_CAPTION,
+    flipSetting,
+    goto,
+    recordOne,
+    setRecording,
+    test,
+    wakeControls,
+} from './helpers';
 
 /**
  * **互換モードで、端末に保存した録画も canvas に描く** (`src/lib/mkv-source.ts`・`src/lib/raw/mkv.ts`)。
@@ -109,9 +118,9 @@ test('端末に保存した録画も canvas に描き、飛ぶ・CM 飛ばし・
      * CM の中で押せばその場で、手前で押せば CM に入るところで飛ぶ
      */
     const skip = page.getByTestId('watch-skip-cm');
-    await expect(skip).toHaveAttribute('aria-pressed', 'false');
-    await skip.click();
-    await expect(skip).toHaveAttribute('aria-pressed', 'true');
+    await expect(skip).toHaveAttribute('aria-checked', 'false');
+    await flipSetting(page, 'watch', 'skip-cm');
+    await expect(skip).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByTestId('watch-skipped')).toBeVisible({ timeout: 30_000 });
     await expect.poll(() => where(page), { timeout: 15_000 }).toBeGreaterThanOrEqual(16);
 

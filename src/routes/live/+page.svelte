@@ -4,11 +4,9 @@
     import type { Service } from '#lib/bml/engine.js';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
-    import AudioMenu from '#lib/components/player/AudioMenu.svelte';
     import { ambientMode } from '#lib/components/player/ambient.svelte.js';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
-    import CodecMenu from '#lib/components/player/CodecMenu.svelte';
     import ControlBar from '#lib/components/player/ControlBar.svelte';
     import ControlButton from '#lib/components/player/ControlButton.svelte';
     import ControlRow from '#lib/components/player/ControlRow.svelte';
@@ -22,8 +20,10 @@
     import Icon from '#lib/components/player/Icon.svelte';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
     import {
+        AUDIO,
         CAMERA,
         CAPTION,
+        CODEC,
         DATA,
         INFO,
         OPEN_OUT,
@@ -45,6 +45,7 @@
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
+    import { audioTracks, liveCodecs } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
@@ -493,8 +494,8 @@
                             onclick={() => player.toggle()}
                         />
                         <!--
-                            **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・ライブ・読みもの・全画面だけ。**
-                            ここから音声までと速さ・バックグラウンド・小窓は「ほか」(⋯) に入れる (`Extras`)。
+                            **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・ライブ・読みもの・再生の設定 (⚙)・全画面だけ。**
+                            ここから字幕の選び直しまでと速さ・小窓は「ほか」(⋯) に入れる (`Extras`)。
                             音を出していないときは映像の上に「音を出す」が別に出る。
                             広い枠では包みは何もしないので、並びは今までどおり (観る画面と同じ)
                         -->
@@ -584,33 +585,6 @@
                                     </ControlButton>
                                 {/snippet}
                             </OverlayMenu>
-                        {/if}
-
-                        <!--
-                            エンコード方式。AV1 は実時間に間に合う (`server/live.ts`) が、
-                            **出ないブラウザもある** — 受け取れなければ H.264 に
-                            戻して、戻した理由を出す (`live-player.svelte.ts` の `start`)
-                        -->
-                        <!-- 末尾の MPEG-2 はエンコードせずに放送そのままをデコードする経路 (エンコードしたものに戻るときは断り書きが理由を言う) -->
-                        <CodecMenu
-                            testid="live-codec"
-                            codec={player.codec}
-                            raw={player.raw}
-                            unavailable={player.unavailable}
-                            onselect={(key) => player.setCodec(key)}
-                            onraw={() => player.setRaw()}
-                        />
-
-                        {#if player.audios.length > 1}
-                            <AudioMenu
-                                testid="live-audio"
-                                items={player.audios.map((a) => ({
-                                    key: a.id,
-                                    label: a.label,
-                                    active: a.id === player.audio,
-                                }))}
-                                onselect={(key) => player.setAudio(key)}
-                            />
                         {/if}
                         </Extras>
 
@@ -742,7 +716,39 @@
                             </Extras>
                         {/if}
 
-                        <StageTail prefix="live" {background} {ambient} {pip} {fullscreen} {stage} />
+                        <!--
+                            コーデックと音声は再生の設定 (⚙)。AV1 は実時間に間に合う (`server/live.ts`) が、
+                            **出ないブラウザもある** — 受け取れなければ H.264 に戻して、戻した理由を出す
+                            (`live-player.svelte.ts` の `start`)。末尾の MPEG-2 はエンコードせずに放送そのままを
+                            デコードする経路 (エンコードしたものに戻るときは断り書きが理由を言う)
+                        -->
+                        <StageTail
+                            prefix="live"
+                            {background}
+                            {ambient}
+                            {pip}
+                            {fullscreen}
+                            {stage}
+                            codec={liveCodecs({
+                                icon: CODEC,
+                                codec: player.codec,
+                                raw: player.raw,
+                                unavailable: player.unavailable,
+                                onselect: (key) => player.setCodec(key),
+                                onraw: () => player.setRaw(),
+                            })}
+                            audio={player.audios.length > 1
+                                ? audioTracks({
+                                      icon: AUDIO,
+                                      items: player.audios.map((a) => ({
+                                          key: a.id,
+                                          label: a.label,
+                                          active: a.id === player.audio,
+                                      })),
+                                      onselect: (key) => player.setAudio(key),
+                                  })
+                                : undefined}
+                        />
                     </ControlRow>
                 </ControlBar>
             {/if}

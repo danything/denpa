@@ -13,11 +13,14 @@ import {
     fakeDataBroadcast,
     feedCaption,
     feedData,
+    flipSetting,
     goto,
     holdCaptions,
     leaveFullscreen,
     oneRowTroubles,
+    openSettings,
     overlayTroubles,
+    pickCodec,
     syncEpg,
     test,
     upcoming,
@@ -816,6 +819,7 @@ test.describe('ライブ視聴', () => {
         });
         await wakeControls(page, 'live-frame');
         await expect(page.getByTestId('live-controls')).toBeVisible();
+        await openSettings(page, 'live');
         await page.getByTestId('live-codec').click();
         await expect(page.locator('[data-testid="live-codec-option"][data-codec="av1"]')).toBeVisible();
     });
@@ -1184,9 +1188,9 @@ test.describe('ライブ視聴', () => {
 
         await wakeControls(page, 'live-frame');
         const toggle = page.getByTestId('live-background');
-        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
+        await flipSetting(page, 'live', 'background');
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
         await expect.poll(guarded).toBe(false);
         await turn('hidden');
         // 止まらない (止めるなら通知を受けたその場で止めている)
@@ -1199,7 +1203,7 @@ test.describe('ライブ視聴', () => {
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
         await wakeControls(page, 'live-frame');
-        await expect(page.getByTestId('live-background')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.getByTestId('live-background')).toHaveAttribute('aria-checked', 'true');
     });
 
     /*
@@ -1311,8 +1315,10 @@ test.describe('ライブ視聴', () => {
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();
 
+        // 音声は再生の設定 (⚙) の中。行にいまの音声を出し、押すと選択肢の並びに入る
+        await openSettings(page, 'live');
         const audio = page.getByTestId('live-audio');
-        await expect(audio).toBeVisible();
+        await expect(audio).toContainText('主音声ステレオ (日本語)');
         await audio.click();
         await expect(page.getByTestId('live-audio-option')).toHaveText([
             '主音声ステレオ (日本語)',
@@ -1339,8 +1345,7 @@ test.describe('ライブ視聴', () => {
         expect(await ffmpegArgs(stack.liveArgsFile, expect)).toContain('libx264');
 
         await wakeControls(page, 'live-frame');
-        await page.getByTestId('live-codec').click();
-        await page.locator('[data-testid="live-codec-option"][data-codec="av1"]').click();
+        await pickCodec(page, 'live', 'av1');
 
         await expect(async () => {
             const runs = readFileSync(stack.liveArgsFile, 'utf8')
@@ -1369,8 +1374,7 @@ test.describe('ライブ視聴', () => {
         await expect(page.getByTestId('live-title')).toBeVisible();
 
         await wakeControls(page, 'live-frame');
-        await page.getByTestId('live-codec').click();
-        await page.locator('[data-testid="live-codec-option"][data-codec="av1"]').click();
+        await pickCodec(page, 'live', 'av1');
         await expect(page.getByTestId('live-codec')).toContainText('AV1');
 
         await channels.nth(1).click();
@@ -1380,6 +1384,53 @@ test.describe('ライブ視聴', () => {
         // 開き直しても覚えている
         await goto(page, '/live');
         await expect(page.getByTestId('live-codec')).toContainText('AV1');
+    });
+
+    /*
+     * **再生の設定 (⚙) はキーボードでも辿れる。** 切り替えはその場で変わって閉じず、コーデックは
+     * 選択肢の並びに入り、Esc で上の並びへ、もう一度 Esc で閉じて ⚙ へ戻る
+     */
+    test('再生の設定をキーボードで辿れる', async ({ page }) => {
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        await wakeControls(page, 'live-frame');
+
+        const gear = page.getByTestId('live-settings');
+        const menu = page.getByTestId('live-settings-menu');
+        await expect(gear).toHaveAttribute('aria-haspopup', 'menu');
+        await gear.focus();
+        await page.keyboard.press('Enter');
+        await expect(menu).toBeVisible();
+        await expect(menu).toHaveAttribute('role', 'menu');
+
+        // 先頭はアンビエントモード (ライブに CMスキップは無い)。Enter で切り替わり、閉じない
+        const ambient = page.getByTestId('live-ambient');
+        await expect(ambient).toBeFocused();
+        await expect(ambient).toHaveAttribute('role', 'menuitemcheckbox');
+        const before = await ambient.getAttribute('aria-checked');
+        await page.keyboard.press('Enter');
+        await expect(ambient).not.toHaveAttribute('aria-checked', before ?? '');
+        await expect(menu).toBeVisible();
+
+        // コーデックは行にいまの値を出し、→ で選択肢の並びに入る (選んでいるものにフォーカス)
+        const codec = page.getByTestId('live-codec');
+        await expect(codec).toContainText('H.264');
+        await codec.focus();
+        await page.keyboard.press('ArrowRight');
+        const h264 = page.locator('[data-testid="live-codec-option"][data-codec="h264"]');
+        await expect(h264).toBeFocused();
+        await expect(h264).toHaveAttribute('aria-checked', 'true');
+        await expect(page.getByTestId('live-settings-back')).toBeVisible();
+
+        // Esc は上の並びへ (閉じない)。戻るとコーデックの行に居る
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeVisible();
+        await expect(codec).toBeFocused();
+        // もう一度 Esc で閉じて、⚙ に戻る
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+        await expect(gear).toBeFocused();
     });
 
     /*
@@ -1667,13 +1718,14 @@ test.describe('スマホの縦でライブ', () => {
             expect(await oneRowTroubles(page, 'live-buttons'), `${width}px`).toEqual([]);
             await expect(page.getByTestId('live-edge')).toBeVisible();
             await expect(page.getByTestId('live-full')).toBeVisible();
+            // 再生の設定 (⚙) は畳まない
+            await expect(page.getByTestId('live-settings')).toBeVisible();
             await page.screenshot({ path: test.info().outputPath(`live-${width}.png`) });
 
             const sound = page.getByTestId('live-sound');
             await expect(sound).toBeHidden();
             await page.getByTestId('live-more').tap();
             await expect(sound).toBeVisible();
-            await expect(page.getByTestId('live-codec')).toBeVisible();
             const label = (await sound.getAttribute('aria-label')) ?? '';
             await sound.tap();
             await expect(sound).not.toHaveAttribute('aria-label', label);
@@ -1684,10 +1736,11 @@ test.describe('スマホの縦でライブ', () => {
             await expect(sound).toBeHidden();
             expect(await oneRowTroubles(page, 'live-buttons'), `${width}px (閉じたあと)`).toEqual([]);
 
-            // メニュー (エンコード方式) の外を押しても閉じるだけ。押した局には替わらない (もう一度押せば替わる)
-            await page.getByTestId('live-more').tap();
+            // メニュー (再生の設定のコーデック) の外を押しても閉じるだけ。押した局には替わらない (もう一度押せば替わる)
+            await page.getByTestId('live-settings').tap();
             await page.getByTestId('live-codec').tap();
-            const codecMenu = page.getByTestId('live-codec-menu');
+            await expect(page.getByTestId('live-codec-option').first()).toBeVisible();
+            const codecMenu = page.getByTestId('live-settings-menu');
             await expect(codecMenu).toBeVisible();
             const other = page.getByTestId('live-channel').nth(1);
             await other.tap();

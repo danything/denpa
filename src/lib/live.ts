@@ -28,7 +28,7 @@ import type { AudioTrack } from './arib';
  * ([stream.md](../../docs/stream.md#エンコード))
  *
  * **MPEG-2 (放送のまま) はここに並べない。** エンコード方式ではなく「エンコードしない」なので、
- * 画質の切り替えの末尾に別に並べる (`CodecMenu` の `onraw`)
+ * 画質の切り替えの末尾に別に並べる (`player/settings.ts` の `liveCodecs` の `onraw`)
  * (`TuneCommand.raw`。[stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))
  */
 export type LiveCodec = 'h264' | 'av1';
@@ -327,7 +327,7 @@ type TuneCommand = {
     /**
      * **エンコードせずに元の TS で欲しい** ([stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
      *
-     * 画質の切り替えで MPEG-2 を選び (`CodecMenu` の `onraw`)、ブラウザがデコードできる (`raw/support.ts`) ときに画面がリクエストする。
+     * 画質の切り替えで MPEG-2 を選び (`player/settings.ts` の `liveCodecs` の `onraw`)、ブラウザがデコードできる (`raw/support.ts`) ときに画面がリクエストする。
      * 変換せずに送ると音声は画面が選ぶので、`audio` は選び直しても再エンコードにならない
      */
     raw?: boolean;

@@ -1,7 +1,16 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { clipFrom, readClip } from '../fake/fmp4-clip';
-import { expect, FAKE_CAPTION, goto, recordOne, setRecording, test, wakeControls } from './helpers';
+import {
+    expect,
+    FAKE_CAPTION,
+    goto,
+    openSettings,
+    recordOne,
+    setRecording,
+    test,
+    wakeControls,
+} from './helpers';
 
 /**
  * **互換モードで録画を観る** — 観る画面も `<video>` を使わず canvas に描く (`src/lib/canvas-player.ts`)。
@@ -82,6 +91,7 @@ test.describe('互換モードの観る画面', () => {
         await expect(page.getByTestId('watch-speed')).toHaveCount(0);
 
         // MPEG-2 を選ぶと、元の TS をそのまま描く
+        await openSettings(page, 'watch');
         await page.getByTestId('watch-codec').click();
         const h264 = page.locator('[data-testid="watch-codec-option"][data-codec="h264"]');
         const decodable = await page.evaluate(
@@ -170,7 +180,7 @@ test.describe('互換モードの観る画面', () => {
         expect(await where(page)).toBeGreaterThanOrEqual(600);
 
         // **CM 飛ばしで飛ぶ。** 観はじめから入っていて、CM の手前まで来たら、CM の終わりからリクエストし直す
-        await expect(page.getByTestId('watch-skip-cm')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.getByTestId('watch-skip-cm')).toHaveAttribute('aria-checked', 'true');
         await expect.poll(() => asked.length, { timeout: 30_000 }).toBeGreaterThan(1);
         expect(asked[1]?.searchParams.get('from')).toBe('640.000');
         await expect(page.getByTestId('watch-skipped')).toBeVisible();

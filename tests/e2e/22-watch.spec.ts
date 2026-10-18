@@ -4,6 +4,7 @@ import {
     captionsClearOfBar,
     expect,
     expectSharpCaptions,
+    flipSetting,
     goto,
     holdCaptions,
     leaveFullscreen,
@@ -468,12 +469,20 @@ test.describe('録画を観る', () => {
          * **押すだけのボタンは「切り替え」と名乗らない** (`aria-pressed` は切り替えにだけ)。
          * アイコンだけのボタンなので、マウスを重ねたときに名前が出る (`title`)
          */
-        for (const testid of ['watch-close', 'watch-shot', 'watch-delete', 'watch-play', 'watch-full']) {
+        for (const testid of [
+            'watch-close',
+            'watch-shot',
+            'watch-delete',
+            'watch-play',
+            'watch-full',
+            'watch-settings',
+        ]) {
             const button = page.getByTestId(testid);
             expect(await button.getAttribute('aria-pressed'), testid).toBeNull();
             expect(await button.getAttribute('title'), testid).toBe(await button.getAttribute('aria-label'));
         }
-        await expect(page.getByTestId('watch-background')).toHaveAttribute('aria-pressed', /^(true|false)$/);
+        await expect(page.getByTestId('watch-background')).toHaveAttribute('aria-checked', /^(true|false)$/);
+        await expect(page.getByTestId('watch-background')).toHaveAttribute('role', 'menuitemcheckbox');
         // 送り・戻しのボタンは置いていない (PCは矢印キー、指は端を素早く2回)
         await expect(page.getByTestId('watch-back')).toHaveCount(0);
         await expect(page.getByTestId('watch-forward')).toHaveCount(0);
@@ -545,9 +554,9 @@ test.describe('録画を観る', () => {
 
         await wakeControls(page, 'watch-stage');
         const toggle = page.getByTestId('watch-background');
-        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
+        await flipSetting(page, 'watch', 'background');
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
         await expect
             .poll(() => video.evaluate((v) => (v as HTMLVideoElement).disablePictureInPicture))
             .toBe(false);

@@ -1,6 +1,6 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { expect, goto, recordOne, reserveSoon, syncEpg, test, wakeControls } from './helpers';
+import { expect, goto, pickCodec, recordOne, reserveSoon, syncEpg, test, wakeControls } from './helpers';
 
 /**
  * **観る画面で、サーバがその場で流すものを観る** (`api/recordings/<id>/playback`・`stream`。
@@ -123,8 +123,7 @@ test.describe('観る画面でその場で流す', () => {
 
         const asked = streamRequests(page);
         await wakeControls(page, 'watch-stage');
-        await page.getByTestId('watch-codec').click();
-        await page.locator('[data-testid="watch-codec-option"][data-codec="av1"]').click();
+        await pickCodec(page, 'watch', 'av1');
         await expect.poll(() => asked.length).toBeGreaterThan(0);
         expect(asked[0]?.searchParams.get('codec')).toBe('av1');
         expect(asked[0]?.searchParams.get('audio')).toBe('0');
