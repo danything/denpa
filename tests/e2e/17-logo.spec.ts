@@ -85,10 +85,9 @@ test.describe('局ロゴ', () => {
         // まだ取得できていないのか出し方が悪いのかを見分けるため
         await expect(page.getByTestId('status-logos')).toContainText('局');
         // 受信できるチャンネルの表でも、局名の前にロゴが出る (局ごとに確かめられる)
-        const row = page
-            .getByTestId('channel-service')
-            .filter({ has: page.locator(`img[src$="api/services/${MX.id}/logo"]`) });
+        const row = page.locator(`[data-testid="channel-service"][data-service-id="${MX.id}"]`);
         await expect(row).toHaveAttribute('data-logo', 'have');
+        await expect(row.locator('img')).toBeVisible();
 
         /*
          * 取得するものが無くなったら**ボタンも消える**。押しても「もう全部持って

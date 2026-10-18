@@ -491,7 +491,12 @@
                                     -->
                                     <div class="stations">
                                         {#each channel.services as service (service.id)}
-                                            <span class="station" data-testid="channel-service" data-logo={service.logo}>
+                                            <span
+                                                class="station"
+                                                data-testid="channel-service"
+                                                data-service-id={service.id}
+                                                data-logo={service.logo}
+                                            >
                                                 {#if service.logo === 'have'}
                                                     <ServiceLogo id={service.id} has style={LOGO_SIZE} />
                                                 {:else}
