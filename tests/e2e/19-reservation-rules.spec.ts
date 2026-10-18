@@ -1,4 +1,4 @@
-import { clearRules, expect, goto, syncEpg, test } from './helpers';
+import { clearRules, deleteRule, expect, goto, syncEpg, test } from './helpers';
 
 /**
  * ルールで立った予約まわり。
@@ -85,8 +85,7 @@ test.describe('ルールで立った予約', () => {
         await expect(page.locator(`[data-reservation-id="${id}"]`)).toBeVisible();
 
         await goto(page, '/rules');
-        await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         await goto(page, '/?all=1');
@@ -146,8 +145,7 @@ test.describe('ルールで立った予約', () => {
         );
 
         await goto(page, '/rules');
-        await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         await goto(page, '/');

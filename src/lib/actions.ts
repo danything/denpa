@@ -22,7 +22,11 @@ import { enhance, type SubmitFunction } from '$app/forms';
 export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
     // 型引数は `SubmitFunction` の既定に揃える。省くと `| undefined` 側に推論され、after に渡せない
     return enhance<Record<string, unknown>, Record<string, unknown>>(node, (input) => {
-        const buttons = [...node.querySelectorAll('button')];
+        /*
+         * 中のボタンに加えて、外から `form` 属性で繋いだボタンも (ルール画面の保存。書く欄の外の下の行にある)。
+         * `elements` はどちらも含む
+         */
+        const buttons = [...node.elements].filter((el) => el instanceof HTMLButtonElement);
         /*
          * 出すのは**押したボタン**。Enter で送ったときは押されたものが無いので、
          * そのフォームの最初の送信ボタンに出す (見ている人が待つのはそこ)。

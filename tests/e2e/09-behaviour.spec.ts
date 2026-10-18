@@ -2,6 +2,7 @@ import {
     cancelAllReservations,
     cellOf,
     clearRules,
+    deleteRule,
     expect,
     goto,
     reserveSoon,
@@ -262,8 +263,7 @@ test.describe('操作したときの反応', () => {
         expect(before).toBeGreaterThan(0);
 
         await goto(page, '/rules');
-        await page.getByTestId('rule-row').first().getByTestId('rule-delete').click();
-        await page.getByTestId('rule-delete-confirm').click();
+        await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
 
         // ルールが無くなったのに予約だけ残ると、止めたつもりが録れ続ける
