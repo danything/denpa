@@ -32,6 +32,18 @@ export function startTransition(update: () => void | Promise<void>): Promise<voi
     return transition.finished.catch(() => {});
 }
 
+/** 走っている `morph` の数。開く途中で閉じると前のぶんが後から済むので、最後の1つが済んでから印を外す */
+let morphing = 0;
+
+function beginMorph(): () => void {
+    morphing++;
+    document.documentElement.dataset['morph'] = '';
+    return () => {
+        morphing--;
+        if (morphing === 0) delete document.documentElement.dataset['morph'];
+    };
+}
+
 /**
  * **元の要素から広げて開く / 元の要素へ縮めて閉じる** (番組表のマス → 詳細)。
  *
@@ -54,17 +66,14 @@ export function morph(
         update();
         return;
     }
-    const root = document.documentElement;
-    root.dataset['morph'] = '';
+    const done = beginMorph();
     if (direction === 'open') {
         source.style.viewTransitionName = name;
         void startTransition(async () => {
             source.style.viewTransitionName = '';
             update();
             await tick();
-        }).then(() => {
-            delete root.dataset['morph'];
-        });
+        }).then(done);
         return;
     }
     void startTransition(async () => {
@@ -73,7 +82,7 @@ export function morph(
         if (source.isConnected) source.style.viewTransitionName = name;
     }).then(() => {
         source.style.viewTransitionName = '';
-        delete root.dataset['morph'];
+        done();
     });
 }
 
