@@ -445,6 +445,37 @@
                             </li>
                         {/each}
                     </ul>
+                    <!--
+                        狭い幅ではヘッダーを隠すので、ヘッダーにあったもの (新しい版・テーマ・ログアウト) をここに置く
+                    -->
+                    <ul class="more-list more-extra">
+                        {#if data.update !== null}
+                            <li>
+                                <a
+                                    class="menu-item"
+                                    href={data.update.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    data-testid="tab-update-available"
+                                >
+                                    {data.update.version} が公開されています
+                                </a>
+                            </li>
+                        {/if}
+                        <li>
+                            <button type="button" class="menu-item" onclick={cycleTheme} data-testid="tab-theme-toggle">
+                                <Icon icon={ICON[mode]} size="size-5" />
+                                テーマ: {LABEL[mode]}
+                            </button>
+                        </li>
+                        {#if data.user}
+                            <li>
+                                <form method="POST" action={resolve('logout')}>
+                                    <button type="submit" class="menu-item" data-testid="tab-logout">ログアウト</button>
+                                </form>
+                            </li>
+                        {/if}
+                    </ul>
                 </Menu>
             </div>
         </nav>
@@ -723,6 +754,14 @@
         margin: 0;
         padding: 0;
     }
+    .more-extra {
+        margin-top: 0.25rem;
+        padding-top: 0.25rem;
+        border-top: 1px solid var(--dp-line);
+    }
+    .more-extra form {
+        margin: 0;
+    }
     ul.more-list a[aria-current='page'] {
         color: var(--dp-primary-text);
         font-weight: var(--dp-weight-bold);
@@ -730,6 +769,16 @@
     @media (max-width: 639.98px) {
         :global(:root:has(.tabbar)) {
             --dp-tabbar: calc(3.5rem + 1px + env(safe-area-inset-bottom));
+        }
+        /*
+         * 下のタブがある画面ではヘッダーを隠す。リンクはタブと重なり、残りは「その他」に移したので、
+         * 上の 3.5rem はまるごと中身に回す。上の安全域 (ノッチ) のぶんは本文の余白で避ける
+         */
+        .shell:has(.tabbar) .navbar {
+            display: none;
+        }
+        .shell:has(.tabbar) main {
+            padding-top: calc(var(--dp-gutter) + env(safe-area-inset-top));
         }
         .shell:has(.tabbar) main {
             padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
