@@ -13,15 +13,13 @@
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import { type Item, type Res, setHome } from '#lib/components/home/context.js';
-    import FilterSheet from '#lib/components/home/FilterSheet.svelte';
     import Menu from '#lib/components/Menu.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
-    import Icon from '#lib/components/player/Icon.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import '#lib/components/home/home.css';
-    import { placeTimeline } from '#lib/components/home/placement.js';
+    import { alignTop, placeTimeline, restoreRow, topRow } from '#lib/components/home/placement.js';
+    import TimelineBar from '#lib/components/home/TimelineBar.svelte';
     import TimelineEntry from '#lib/components/home/TimelineEntry.svelte';
-    import TimelineSidebar from '#lib/components/home/TimelineSidebar.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
     import { applyEncodeProgress } from '#lib/encode-live.svelte.js';
     import { cmNoteWorthShowing, date } from '#lib/format.js';
@@ -34,7 +32,6 @@
         catchUp,
         countFilters,
         dayName,
-        FILTERS,
         type Filter,
         lineIndex,
         passes,
@@ -44,7 +41,6 @@
         type Zone,
     } from '#lib/timeline.js';
     import { resolve } from '$app/paths';
-    import ListFilter from '~icons/lucide/list-filter';
 
     let { data, form } = $props();
 
@@ -170,7 +166,9 @@
     }
 
     /** 削除は2回押させる。挙動はほかの画面と共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
-    const deleting = arming('[data-testid="delete-button"], [data-testid="delete-confirm"]');
+    const deleting = arming(
+        '[data-testid="delete-button"], [data-testid="delete-confirm"], [data-testid="row-menu-delete"], [data-testid="row-menu-delete-confirm"]',
+    );
 
     /**
      * その録画を観る画面。**観られないものには無い。**
@@ -327,7 +325,6 @@
 
     /** 絞り込みのボタン (すべて・予約・録画中・未視聴・失敗)。その場かぎり */
     let filter = $state<Filter>('all');
-    const filterLabel = $derived(FILTERS.find((f) => f.id === filter)?.label ?? '');
     /** 件数はボタンごとに数える (押す前に、押すと何件になるかが分かる) */
     const counts = $derived(countFilters(items, traitsOf));
     const shownItems = $derived(items.filter((item) => passes(filter, item, traitsOf(item))));
@@ -378,10 +375,6 @@
      * ブラウザ (iPad の Safari) では読んでいる所が跳ねる
      */
     const pastPage = new Paged(() => lines.below, 60);
-    $effect(() => {
-        filter;
-        untrack(() => pastPage.reset());
-    });
 
     /**
      * まだ描いていない**録れたものの本数** (「残り N 件」)。閉じた見出し1つに何本も入っているので、
@@ -396,18 +389,9 @@
         return Math.max(0, parts.past.length - shown);
     });
 
-    /**
-     * **サイドバーに出す1本。** 指を乗せた行・焦点のある行・最後に開いた行。何も選んでいなければ
-     * 「いま」にいちばん近いもの (録画中、無ければ次の予約)。指で触る端末には乗せる操作が無いので、
-     * 押して開いた行を覚えておく
-     */
+    /** 最後に詳細を開いた行 (薄く塗って、どれを開いていたかを見せる) */
     let selectedKey = $state<string | null>(null);
-    const selected = $derived.by((): Item | null => {
-        const chosen = selectedKey === null ? undefined : items.find((item) => item.key === selectedKey);
-        if (chosen !== undefined) return chosen;
-        return parts.now[0] ?? parts.future.at(-1) ?? null;
-    });
-    /** 次の録画 (今日のまとめ)。絞り込みに関係なく、これからの予約のうちいちばん早いもの */
+    /** 次の録画 (頭の1行のまとめ)。絞り込みに関係なく、これからの予約のうちいちばん早いもの */
     const nextRes = $derived.by(() => {
         let next: Res | null = null;
         for (const item of items) {
@@ -445,7 +429,42 @@
             if (index >= pastPage.shown) pastPage.showUpTo(index + 1);
         }
         await tick();
-        if (listBox !== undefined) placeTimeline(listBox, target?.key ?? null);
+        if (listBox === undefined) return;
+        const list = listBox;
+        placeTimeline(list, target?.key ?? null);
+        // 字 (放送の字は後から届く) とポスターで行の高さが変わると、見出しの下で行が半分に切れる。届いてから合わせ直す。
+        // その間に自分で動かしていたら触らない (動かした所を奪わない)
+        const where = () => (getComputedStyle(list).overflowY === 'auto' ? list.scrollTop : window.scrollY);
+        const before = where();
+        await document.fonts.ready;
+        requestAnimationFrame(() => {
+            if (Math.abs(where() - before) < 1) alignTop(list);
+        });
+    }
+
+    /**
+     * **絞り込みを替えても、見ていた行をその場に残す。** 替える前に見えている所のいちばん上の行を覚え、
+     * 替えたあともその行があれば同じ高さに戻す (無くなっていれば「いま」の線)。
+     * 絞り込みは画面の中だけで替える (URL も読み込みも動かさない)。一覧の枠は位置合わせを自分でする
+     * (`overflow-anchor: none`) ので、何もしないと「すべて」に戻したとき頭まで跳んでいた
+     */
+    let filtering: Promise<void> = Promise.resolve();
+    /** 続けて押されたら順に替える (前の位置合わせが済んでから、次の「見ていた行」を覚える) */
+    function setFilter(next: Filter): Promise<void> {
+        filtering = filtering.then(() => applyFilter(next));
+        return filtering;
+    }
+    async function applyFilter(next: Filter): Promise<void> {
+        if (next === filter) return;
+        const anchor = listBox === undefined ? null : topRow(listBox);
+        filter = next;
+        pastPage.reset();
+        if (anchor !== null) {
+            const index = lineIndex(lines.below, anchor.key);
+            if (index >= pastPage.shown) pastPage.showUpTo(index + 1);
+        }
+        await tick();
+        if (listBox !== undefined) restoreRow(listBox, anchor);
     }
     $effect(() => {
         if (listBox === undefined || placed) return;
@@ -453,15 +472,13 @@
         untrack(() => void place());
     });
 
-    /** 狭い画面の絞り込みの一枚 (`FilterSheet`)。頭のボタンから開く */
-    let filterSheet: FilterSheet | undefined = $state();
 
     setHome({
         get clock() {
             return clock;
         },
         get pickedKey() {
-            return selected?.key ?? null;
+            return selectedKey;
         },
         select(key) {
             selectedKey = key;
@@ -513,27 +530,19 @@
 <div class="board">
     <Toasts {notices} source={form} ondismiss={dropNote} />
 
-    <!--
-        狭い画面 (1000px 未満) の頭。絞り込みの一枚を開くボタン。いま効いている絞り込みと件数を添える
-        (番組名で探すのは全体の検索。ホームには欄を置かない)
-    -->
-    <div class="t-toolbar" data-testid="timeline-toolbar">
-        <button
-            type="button"
-            class="secondary outline t-filter-open"
-            aria-haspopup="dialog"
-            onclick={() => filterSheet?.show()}
-            data-testid="filter-open"
-        >
-            <Icon icon={ListFilter} size="size-5" />
-            <span class="visually-hidden">絞り込みと表示:</span>
-            <span>{filterLabel}</span>
-            <span class="muted num">{counts[filter]}</span>
-            {#if filter !== 'all' || grouped || data.showDeleted || data.showFinished}
-                <span class="view-dot" aria-hidden="true"></span>
-            {/if}
-        </button>
-    </div>
+    <TimelineBar
+        {filter}
+        {setFilter}
+        {counts}
+        {grouped}
+        {setGrouped}
+        {finishedHref}
+        {deletedHref}
+        showFinished={data.showFinished}
+        showDeleted={data.showDeleted}
+        capacity={data.capacity}
+        {nextRes}
+    />
 
     <div class="t-main">
         <section class="t-list" bind:this={listBox} aria-label="予約と録画" data-testid="timeline">
@@ -595,34 +604,7 @@
                 </div>
             {/if}
         </section>
-
-        <TimelineSidebar
-            bind:filter
-            {counts}
-            {grouped}
-            {setGrouped}
-            {finishedHref}
-            {deletedHref}
-            showFinished={data.showFinished}
-            showDeleted={data.showDeleted}
-            capacity={data.capacity}
-            {nextRes}
-            {selected}
-        />
     </div>
-
-    <FilterSheet
-        bind:this={filterSheet}
-        bind:filter
-        {counts}
-        {grouped}
-        {setGrouped}
-        {finishedHref}
-        {deletedHref}
-        showFinished={data.showFinished}
-        showDeleted={data.showDeleted}
-        capacity={data.capacity}
-    />
 </div>
 
 {#if detail.current}
@@ -793,7 +775,7 @@
 
 <style>
     /*
-     * 一覧・行・サイドバーの見た目は部品と分け合うので `#lib/components/home/home.css` (`.board` の下だけに効く)。
+     * 一覧・行・頭の1行の見た目は部品と分け合うので `#lib/components/home/home.css` (`.board` の下だけに効く)。
      * ここに残すのは、一覧の外 (番組の詳細) に出るものだけ
      */
     /* 「その他…」の中身 (枠は `Menu` の中なので :global)。項目は左寄せで縦に積む (`app.css` の `.menu`) */

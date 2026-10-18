@@ -4,8 +4,10 @@
      * 状態と番組名と局・尺、右に押すもの。行は 48px で、言うことがあるときだけ下に1段足す
      * (黙っていると「録れたつもり」になるもの: 競合・欠ける・ロゴでCMを判定できなかった)
      */
+    import { submitting } from '#lib/actions.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import ArmedDelete from '#lib/components/ArmedDelete.svelte';
+    import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import { encodeLive } from '#lib/encode-live.svelte.js';
     import {
@@ -22,14 +24,16 @@
         rowState,
         size,
         stateLabel,
-        time,
     } from '#lib/format.js';
     import { offline, removeLocal } from '#lib/offline.svelte.js';
+    import type { SubmitFunction } from '$app/forms';
     import { resolve } from '$app/paths';
+    import Ellipsis from '~icons/lucide/ellipsis';
     import Info from '~icons/lucide/info';
     import Play from '~icons/lucide/play';
+    import Trash from '~icons/lucide/trash-2';
     import X from '~icons/lucide/x';
-    import { home, type Item, pickOn, type Rec } from './context';
+    import { home, type Item, type Rec } from './context';
     import Poster from './Poster.svelte';
     import RowMeta from './RowMeta.svelte';
     import RowTitle from './RowTitle.svelte';
@@ -52,16 +56,18 @@
         ].filter((s) => s !== '');
         return extra.length === 0 ? size(rec.ts_size) : `${size(rec.ts_size)} (${extra.join('、')})`;
     }
+
+    /** 消し終えたら、端末に落としてあったコピーも片付ける (行の削除と「⋯」の削除で同じ) */
+    function afterDelete(rec: Rec): SubmitFunction {
+        return () => async (options) => {
+            await options.update();
+            if (options.result.type === 'success' && offline.entries[rec.id] !== undefined) {
+                void removeLocal(rec.id);
+            }
+        };
+    }
 </script>
 
-<!--
-    **時刻の列。** 予約は始まりと終わり、録れたものは始まりだけ (日付は見出しにある)
--->
-{#snippet clockCell(row: { start_at: number; end_at: number }, withEnd: boolean)}
-    <span class="t-time num" aria-hidden="true">
-        {time(row.start_at)}{#if withEnd}<span class="t-end">{time(row.end_at)}</span>{/if}
-    </span>
-{/snippet}
 
 <!--
     **行の中の注意。** 行は 48px の 1 段 (広い画面) か 2 段 (狭い画面) にそろえ、言うことがあるときだけ
@@ -80,11 +86,11 @@
         class:nested
         class:live={item.zone === 'now'}
         class:picked={ctx.pickedKey === item.key}
-        {@attach pickOn(ctx, item.key)}
     >
-        {@render clockCell(res, true)}
         <div class="row-body" data-testid="row-body">
             <RowTitle
+                start={res.start_at}
+                end={res.end_at}
                 state={stateLabel(res.state)}
                 badge={badgeClass(res.state)}
                 name={res.name}
@@ -95,7 +101,7 @@
                 }}
                 quiet={quietState(res.state)}
             />
-            <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? null : res} />
+            <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? null : res} excerpt={res.description} />
             {#if res.conflict_reason}
                 <div class="row-sub text-error small">{res.conflict_reason}</div>
             {/if}
@@ -132,12 +138,12 @@
         class="row t-row"
         class:nested
         class:picked={ctx.pickedKey === item.key}
-        {@attach pickOn(ctx, item.key)}
     >
-        {@render clockCell(res, false)}
         <span class="t-thumb" aria-hidden="true"></span>
         <div class="row-body" data-testid="row-body">
             <RowTitle
+                start={res.start_at}
+                end={res.end_at}
                 state={stateLabel('missed')}
                 badge={badgeClass('missed')}
                 name={res.name}
@@ -147,7 +153,7 @@
                     ctx.openMissed(res);
                 }}
             />
-            <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? 'manual' : res} />
+            <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? 'manual' : res} excerpt={res.description} />
         </div>
         <div class="row-actions">
             <!-- 構えの鍵は負の値にして、録画のIDと混ざらないようにする (deleting は録画と共用) -->
@@ -173,6 +179,12 @@
     {@const link = ctx.watchLink(rec)}
     {@const shown = rowState(rec)}
     {@const held = offline.entries[rec.id]}
+    {@const canDelete = rec.deleted_at === null && rec.job_id === null}
+    <!--
+        **途中まで観たものは残りを出す。** 観た位置は続きから始めるために持っていて、末尾まで観たものは
+        消えるので、残っている = まだ途中。ポスターの下端に細いバー、2段目に「残り何分」
+    -->
+    {@const progress = link !== null && rec.deleted_at === null ? rec.progress : null}
     <div
         data-testid="recording-row"
         data-recording-id={rec.id}
@@ -185,9 +197,7 @@
         class="row t-row playable"
         class:nested
         class:picked={ctx.pickedKey === item.key}
-        {@attach pickOn(ctx, item.key)}
     >
-        {@render clockCell(rec, false)}
         <!-- ポスター。無い録画もあるので、読めなければ画像を隠して枠だけ残す。再生の印は観られるものだけ -->
         <span class="t-thumb" data-testid={link === null ? undefined : 'play-hint'} aria-hidden="true">
             {#if rec.library_path !== null}
@@ -196,9 +206,16 @@
             {#if link !== null}
                 <span class="t-play"><Play class="poster-icon" /></span>
             {/if}
+            {#if progress !== null}
+                <span class="t-resume" data-testid="resume"
+                    ><span class="resume-fill" style="width: {(progress.length > 0 ? Math.min(1, progress.at / progress.length) : 0) * 100}%"></span
+                ></span>
+            {/if}
         </span>
         <div class="row-body" data-testid="row-body">
             <RowTitle
+                start={rec.start_at}
+                end={rec.end_at}
                 state={shown.label}
                 badge={shown.badge}
                 name={rec.name}
@@ -217,9 +234,11 @@
                     recordedDuration(rec),
                     sizeLabel(rec),
                     rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
+                    progress === null ? '' : `残り${durationMs(Math.max(0, progress.length - progress.at))}`,
                 ]}
                 row={rec}
                 rule={rec.from_manual === null ? null : rec.from_manual ? 'manual' : rec}
+                excerpt={rec.description}
             />
             {#if clipNote(rec, true) !== null}
                 <div class="row-sub text-warning small">{clipNote(rec, true)}</div>
@@ -254,24 +273,71 @@
                 <div class="row-sub muted tiny">{rec.job_log}</div>
             {/if}
         </div>
-        <!--
-            **途中まで観たものは残りを出す。** 観た位置は続きから始めるために持っていて、末尾まで観たものは
-            消えるので、残っている = まだ途中。添える言葉は割合ではなく「あと何分か」
-        -->
-        {#if link !== null && rec.deleted_at === null && rec.progress !== null}
-            {@const { at, length: span } = rec.progress}
-            {@const frac = span > 0 ? Math.min(1, at / span) : 0}
-            <span class="resume" data-testid="resume">
-                <span class="resume-track"><span class="resume-fill" style="width: {frac * 100}%"></span></span>
-                <span class="resume-left muted tiny num">残り{durationMs(Math.max(0, span - at))}</span>
-            </span>
-        {/if}
         <div class="row-actions">
+            {#if link !== null || canDelete}
+                <!--
+                    **狭い画面では「⋯」1つにまとめる。** 詳細と削除のアイコンを2つ並べると、番組名が5文字ほどで
+                    切れていた。中身は詳細と削除 (削除は1回目で聞き返す。行の削除と同じ構え `deleting`)
+                -->
+                <div class="row-more">
+                    <Menu side="bottom" align="end" class="row-menu" testid="row-menu">
+                        {#snippet trigger(props)}
+                            <button {...props} type="button" class="ghost icon" title="操作" data-testid="row-more">
+                                <Icon icon={Ellipsis} size="size-4" /><span class="visually-hidden">操作</span>
+                            </button>
+                        {/snippet}
+                        <button
+                            type="button"
+                            role="menuitem"
+                            class="menu-item"
+                            onclick={() => {
+                                ctx.select(item.key);
+                                ctx.openRecording(rec);
+                            }}
+                            data-testid="row-menu-detail"
+                        >
+                            <Icon icon={Info} size="size-4" />詳細
+                        </button>
+                        {#if canDelete}
+                            <form
+                                method="POST"
+                                action="?/delete"
+                                class="menu-form"
+                                use:submitting={(input) => {
+                                    const after = afterDelete(rec)(input);
+                                    return async (options) => {
+                                        if (typeof after === 'function') await after(options);
+                                        ctx.deleting.fire();
+                                    };
+                                }}
+                            >
+                                <input type="hidden" name="id" value={rec.id} />
+                                {#if ctx.deleting.armed === rec.id}
+                                    <button type="submit" role="menuitem" class="menu-item menu-danger" data-testid="row-menu-delete-confirm">
+                                        <Icon icon={Trash} size="size-4" />削除を確定
+                                    </button>
+                                {:else}
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        class="menu-item"
+                                        data-keep-open
+                                        onclick={() => ctx.deleting.arm(rec.id)}
+                                        data-testid="row-menu-delete"
+                                    >
+                                        <Icon icon={Trash} size="size-4" />削除
+                                    </button>
+                                {/if}
+                            </form>
+                        {/if}
+                    </Menu>
+                </div>
+            {/if}
             {#if link !== null}
                 <!-- 行を押すと再生なので、中身を読む入口は別に置く。観られない行は行そのものが詳細の入口 -->
                 <button
                     type="button"
-                    class="secondary outline icon"
+                    class="secondary outline icon row-wide"
                     onclick={() => {
                         ctx.select(item.key);
                         ctx.openRecording(rec);
@@ -296,21 +362,18 @@
                         </ActionButton>
                     {/if}
                 {:else}
-                    <!-- サーバから消したら、端末に落としてあったコピーも片付ける -->
-                    <ArmedDelete
-                        deleting={ctx.deleting}
-                        armKey={rec.id}
-                        fields={{ id: rec.id }}
-                        submit={() => async (options) => {
-                            await options.update();
-                            if (options.result.type === 'success' && offline.entries[rec.id] !== undefined) {
-                                void removeLocal(rec.id);
-                            }
-                        }}
-                        testid="delete-button"
-                        confirmTestid="delete-confirm"
-                        icon
-                    />
+                    <!-- サーバから消したら、端末に落としてあったコピーも片付ける。狭い画面では「⋯」の中 -->
+                    <div class="row-wide">
+                        <ArmedDelete
+                            deleting={ctx.deleting}
+                            armKey={rec.id}
+                            fields={{ id: rec.id }}
+                            submit={afterDelete(rec)}
+                            testid="delete-button"
+                            confirmTestid="delete-confirm"
+                            icon
+                        />
+                    </div>
                 {/if}
             {/if}
         </div>

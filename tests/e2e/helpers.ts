@@ -953,30 +953,21 @@ export async function routeCaptions(page: Page): Promise<void> {
 
 /**
  * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) を開き、
- * その入れ物を返す。広い画面 (1000px 以上) はサイドバーの「表示の切り替え」、狭い画面は
- * 絞り込みのボタンから出る下からの一枚。どちらにも同じ項目があるので、返した入れ物の中で探す
+ * その入れ物を返す。どの幅でも一覧の頭の1行の「⋯」(`view-toggle`) から出るメニュー
  */
 export async function homeTools(page: Page): Promise<Locator> {
-    const side = page.getByTestId('sidebar');
-    if (await side.isVisible()) {
-        const toggle = side.getByTestId('view-toggle');
-        if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-        return side;
-    }
-    await page.getByTestId('filter-open').click();
-    const sheet = page.getByTestId('filter-sheet');
-    await expect(sheet).toBeVisible();
-    return sheet;
+    const toggle = page.getByTestId('view-toggle');
+    const menu = page.getByTestId('view-menu');
+    if (!(await menu.isVisible())) await toggle.click();
+    await expect(menu).toBeVisible();
+    return menu;
 }
 
-/** ホームの絞り込み (すべて・予約・録画中・未視聴・失敗) を押す。広い画面はサイドバー、狭い画面は下からの一枚 */
+/** ホームの絞り込み (すべて・予約・録画中・未視聴・失敗) を押す。どの幅でも一覧の頭のチップ */
 export async function homeFilter(page: Page, id: string): Promise<void> {
-    const side = page.getByTestId('sidebar');
-    if (await side.isVisible()) {
-        await side.locator(`[data-testid="filter"][data-filter="${id}"]`).click();
-        return;
-    }
-    await page.getByTestId('filter-open').click();
-    await page.getByTestId('filter-sheet').locator(`[data-testid="filter"][data-filter="${id}"]`).click();
-    await expect(page.getByTestId('filter-sheet')).toBeHidden();
+    const chip = page
+        .getByTestId('timeline-toolbar')
+        .locator(`[data-testid="filter-chip"][data-filter="${id}"]`);
+    await chip.click();
+    await expect(chip).toHaveAttribute('aria-pressed', 'true');
 }

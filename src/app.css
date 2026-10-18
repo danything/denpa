@@ -1628,3 +1628,60 @@ dialog[open] > article {
         animation: none;
     }
 }
+
+/*
+ * ---- 左右の並び (`.s-group`・`.s-list`・`.s-item`) ----
+ * **録画のサイドバーと設定の左の一覧は同じ部品。** ドキュメントの目次と同じ作り: 小さく沈めた見出し、
+ * 線も枠も無い行、指を乗せると淡い塗り、選んでいる行 (`.on`) だけ角の丸い薄い塗り。
+ * 2 か所に同じ値を書いていた頃は、片方だけ直して顔がずれることがあった。置き方 (余白・幅) は使う側で
+ */
+.s-group {
+    display: flex;
+    align-items: center;
+    margin: 1rem 0 0.25rem;
+    padding: 0 0.75rem;
+    color: var(--dp-muted);
+    font-size: 0.75rem;
+    font-weight: var(--dp-weight);
+}
+.s-group.s-first {
+    margin-top: 0.25rem;
+}
+.s-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin: 0;
+}
+.s-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 2.5rem;
+    margin: 0;
+    padding: 0 0.75rem;
+    border: 0;
+    border-radius: var(--dp-radius);
+    background: transparent;
+    box-shadow: none;
+    color: inherit;
+    font-size: 0.875rem;
+    font-weight: var(--dp-weight);
+    text-align: left;
+    text-decoration: none;
+    transition: background-color var(--dp-duration);
+}
+.s-item:hover {
+    background: var(--dp-hover-soft);
+}
+.s-item.on {
+    background: var(--dp-subtle);
+    font-weight: var(--dp-weight-bold);
+}
+@media (pointer: coarse) {
+    .s-item {
+        min-height: 3rem;
+    }
+}
