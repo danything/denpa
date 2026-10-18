@@ -896,12 +896,23 @@ async function run(targets: Target[], parallel: number): Promise<void> {
  * カルーセルを読み切った後になお足りない局だけが、本当に取れない局。
  */
 export function stats(): { have: number; total: number; pending: number; unavailable: number } {
-    const services = currentServices();
-    const has = (service: { id: number }) => existsSync(logoPath(service.id));
+    const states = currentServices().map((service) => logoState(service.id));
     return {
-        have: services.filter(has).length,
-        total: services.length,
+        have: states.filter((state) => state === 'have').length,
+        total: states.length,
         pending: missing().length,
-        unavailable: services.filter((service) => !has(service) && absentFromCarousel(service.id)).length,
+        unavailable: states.filter((state) => state === 'absent').length,
     };
+}
+
+/**
+ * 局1つぶんのロゴの具合。チューナー画面の「受信できるチャンネル」で局ごとに出す。
+ *
+ * - `have` … 持っている
+ * - `absent` … カルーセルに載っていないと分かった局 (取れない。`stats` の `unavailable`)
+ * - `missing` … まだ取れていない
+ */
+export function logoState(serviceId: number): 'have' | 'absent' | 'missing' {
+    if (existsSync(logoPath(serviceId))) return 'have';
+    return absentFromCarousel(serviceId) ? 'absent' : 'missing';
 }
