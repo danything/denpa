@@ -4,6 +4,7 @@
     import { resultsHref, type SuggestGroup, type SuggestResponse, suggestGroups } from '#lib/search-suggest.js';
     import { afterNavigate, goto } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import { page } from '$app/state';
     import SearchIcon from '~icons/lucide/search';
 
     /**
@@ -96,7 +97,13 @@
         if (live) {
             timer = setTimeout(() => {
                 sent = q;
-                void goto(q === '' ? resolve('search') : resolve(`search?${new URLSearchParams({ q })}`), {
+                /*
+                 * 直しているルール (`?rule=`) は付けたまま。言葉を探し直しても、右の書く欄はそのルールのまま
+                 */
+                const next = new URLSearchParams(q === '' ? {} : { q });
+                const rule = page.url.searchParams.get('rule');
+                if (rule !== null) next.set('rule', rule);
+                void goto(next.size === 0 ? resolve('search') : resolve(`search?${next}`), {
                     replace: true,
                     reset: false,
                 });

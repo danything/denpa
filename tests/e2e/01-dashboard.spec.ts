@@ -455,41 +455,6 @@ test.describe('ホームと画面遷移', () => {
             .toContain('recordings');
     });
 
-    test('検索の「ルールを作る」はルール画面に言葉を渡し、そのままルールにできる', async ({
-        page,
-        request,
-    }) => {
-        await syncEpg(request);
-        await goto(page, `/search?q=${encodeURIComponent('テストアニメ')}`);
-
-        // 条件を書く場所は1箇所。検索からはキーワードを渡すだけ
-        await page.getByTestId('search-make-rule').click();
-        await page.waitForURL(/\/rules\?new&keyword=/);
-        await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ');
-
-        await expect(page.getByTestId('preview')).toContainText('録れる番組は');
-        const rows = page.getByTestId('preview-row');
-        await expect(rows.first()).toBeVisible();
-        for (const row of await rows.all()) {
-            await expect(row).toContainText('テストアニメ');
-        }
-
-        // 種別で絞り込める(ルールの条件そのもの)
-        await page.getByTestId('channel-summary').click();
-        await page.getByTestId('rule-types').locator('input[value="BS"]').check();
-        // 押すものは無く、そのまま数え直す。BS 以外の行が消えるのを待つ
-        await expect(rows.filter({ hasNotText: 'ＢＳ１１イレブン' })).toHaveCount(0);
-        await expect(rows.first()).toBeVisible();
-
-        // そのまま保存できる
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row').first()).toContainText('テストアニメ');
-
-        await deleteRule(page, page.getByTestId('rule-row').first());
-        await expect(page.getByTestId('rule-row')).toHaveCount(0);
-        await cancelAllReservations(page);
-    });
-
     /*
      * **新しい版が出ていたら、ヘッダーで知らせる。** サーバが GitHub の最新の
      * リリースを見比べる (`server/update.ts`。ここでは偽通知先が GitHub の代わり)。

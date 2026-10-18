@@ -131,7 +131,7 @@ export function suggestGroups(res: SuggestResponse): SuggestGroup[] {
                 label: r.name,
                 meta: r.enabled ? '' : '無効',
                 hint: '編集',
-                href: `rules?edit=${r.id}`,
+                href: `search?rule=${r.id}`,
                 broadcast: false,
             })),
         },

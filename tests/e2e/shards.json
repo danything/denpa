@@ -46,6 +46,7 @@
         "28-live-raw",
         "30-api",
         "38-live-compat",
-        "44-ambient"
+        "44-ambient",
+        "47-search-rule"
     ]
 }
