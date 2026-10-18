@@ -47,11 +47,6 @@ export const FILTERS = [
 
 export type Filter = (typeof FILTERS)[number]['id'];
 
-/** URL や覚えから来た値を絞り込みに読む。知らない値は「すべて」 */
-export function readFilter(value: string | null | undefined): Filter {
-    return FILTERS.some((f) => f.id === value) ? (value as Filter) : 'all';
-}
-
 /** その絞り込みに入るか */
 export function passes(filter: Filter, item: TimelineItem, traits: Traits): boolean {
     switch (filter) {

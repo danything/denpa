@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { flatLines, type Groupable, groupBySeries, groupLines, storedGrouped } from './grouping';
+import { type Groupable, groupBySeries, groupLines, storedGrouped } from './grouping';
 
 function row(key: string, group: string, at: number): Groupable {
     return { key, at, group, groupName: `${group}の名前` };
@@ -73,11 +73,6 @@ describe('描く行に開く', () => {
         expect(lines[1]).toMatchObject({ kind: 'row', nested: true });
         // 1本だけの番組は中の行ではない
         expect(lines[4]).toMatchObject({ kind: 'row', nested: false });
-    });
-
-    test('まとめないときは渡した順のまま', () => {
-        expect(flatLines(rows).map((l) => l.key)).toEqual(rows.map((r) => r.key));
-        expect(flatLines(rows).every((l) => l.kind === 'row' && !l.nested)).toBe(true);
     });
 });
 

@@ -20,6 +20,7 @@
         quietState,
         recordedDuration,
         rowState,
+        size,
         stateLabel,
         time,
     } from '#lib/format.js';
@@ -28,7 +29,7 @@
     import Info from '~icons/lucide/info';
     import Play from '~icons/lucide/play';
     import X from '~icons/lucide/x';
-    import { home, type Item, pickOn } from './context';
+    import { home, type Item, pickOn, type Rec } from './context';
     import Poster from './Poster.svelte';
     import RowMeta from './RowMeta.svelte';
     import RowTitle from './RowTitle.svelte';
@@ -36,6 +37,21 @@
     /** `nested` はまとめて表示の番組の中の行 (一段下げる) */
     let { item, nested = false }: { item: Item; nested?: boolean } = $props();
     const ctx = home();
+
+    /**
+     * 置き場の使用量。**主 (AV1) を先に出し、在るものだけ括弧に添える。**
+     *
+     * `ts_size` が持っているのは主のぶんだけなので、両方エンコードした録画では画面の
+     * 数字と実際に使っている量が食い違っていた (H.264 のほうが大きいことも
+     * ある)。「消していいのか、どれだけ空くのか」を1行で読めるようにする
+     */
+    function sizeLabel(rec: Rec): string {
+        const extra = [
+            rec.alt_size === null ? '' : `H.264 ${size(rec.alt_size)}`,
+            rec.raw_size === null ? '' : `元のTS ${size(rec.raw_size)}`,
+        ].filter((s) => s !== '');
+        return extra.length === 0 ? size(rec.ts_size) : `${size(rec.ts_size)} (${extra.join('、')})`;
+    }
 </script>
 
 <!--
@@ -52,7 +68,7 @@
     下に 1 段足す。黙っていると「録れたつもり」になるもの (競合・欠ける・ロゴでCMを判定できなかった) だけ
 -->
 
-<!-- 予約の行 (これから・録画中・「完了分も表示」で出る終わった予約) -->
+<!-- 予約の行 (これから・録画中・「完了した予約も表示」で出る終わった予約) -->
 {#snippet resRow(item: Item & { kind: 'res' }, nested: boolean)}
     {@const res = item.res}
     <div
@@ -199,7 +215,7 @@
                 service={rec.service_name}
                 parts={[
                     recordedDuration(rec),
-                    ctx.sizeLabel(rec),
+                    sizeLabel(rec),
                     rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : '',
                 ]}
                 row={rec}
@@ -209,14 +225,14 @@
                 <div class="row-sub text-warning small">{clipNote(rec, true)}</div>
             {/if}
             {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
-                <!-- ロゴでの判定が使えず、無音だけでCMを判定している。覚えたロゴはチューナー画面で確かめられる -->
+                <!-- ロゴでの判定が使えず、無音だけでCMを判定している。覚えたロゴは設定の「受信」の「ロゴ」で確かめられる -->
                 <div class="row-sub text-warning small">
                     ロゴでCMを判定できませんでした (無音だけで判定)
-                    <span class="muted">— 覚えたロゴはチューナー画面で確かめられます</span>
+                    <span class="muted">— 覚えたロゴは設定の「受信」の「ロゴ」で確かめられます</span>
                 </div>
             {/if}
             {#if held !== undefined}
-                <div class="row-sub small" data-testid="offline-state">
+                <div class="row-sub small">
                     <span class="tag offline-tag {held.state === 'ready' ? 'success' : held.state === 'failed' ? 'error' : ''}">
                         {held.state === 'ready'
                             ? '端末に保存済み'

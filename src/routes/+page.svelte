@@ -6,7 +6,6 @@
      * モジュールに置くので、観る画面へ行って戻っても開いたまま。読み込み直すと閉じる
      */
     const openedGroups = new SvelteSet<string>();
-
 </script>
 
 <script lang="ts">
@@ -24,13 +23,9 @@
     import TimelineEntry from '#lib/components/home/TimelineEntry.svelte';
     import TimelineSidebar from '#lib/components/home/TimelineSidebar.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
-    import { applyEncodeProgress, } from '#lib/encode-live.svelte.js';
-    import {
-        cmNoteWorthShowing,
-        date,
-        size,
-    } from '#lib/format.js';
-    import { GROUPED_COOKIE, } from '#lib/grouping.js';
+    import { applyEncodeProgress } from '#lib/encode-live.svelte.js';
+    import { cmNoteWorthShowing, date } from '#lib/format.js';
+    import { GROUPED_COOKIE } from '#lib/grouping.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
     import { Paged, sentinel } from '#lib/paging.svelte.js';
@@ -61,21 +56,6 @@
     /** 取り消せるか。録画しない (`skipped`) は放送が終われば履歴なので出さない */
     const cancelable = (res: { state: string; end_at: number }) =>
         active.includes(res.state) && !(res.state === 'skipped' && res.end_at <= Date.now());
-
-    /**
-     * 置き場の使用量。**主 (AV1) を先に出し、在るものだけ括弧に添える。**
-     *
-     * `ts_size` が持っているのは主のぶんだけなので、両方エンコードした録画では画面の
-     * 数字と実際に使っている量が食い違っていた (H.264 のほうが大きいことも
-     * ある)。「消していいのか、どれだけ空くのか」を1行で読めるようにする
-     */
-    function sizeLabel(rec: (typeof data.recordings)[number]): string {
-        const extra = [
-            rec.alt_size === null ? '' : `H.264 ${size(rec.alt_size)}`,
-            rec.raw_size === null ? '' : `元のTS ${size(rec.raw_size)}`,
-        ].filter((s) => s !== '');
-        return extra.length === 0 ? size(rec.ts_size) : `${size(rec.ts_size)} (${extra.join('、')})`;
-    }
 
     /** 端末への保存の結果。フォームではないので自前で持つ */
     let offlineNote = $state<Notice | null>(null);
@@ -189,7 +169,7 @@
         detailResId = res.id;
     }
 
-    /** 削除は2回押させる。挙動は3画面共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
+    /** 削除は2回押させる。挙動はほかの画面と共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
     const deleting = arming('[data-testid="delete-button"], [data-testid="delete-confirm"]');
 
     /**
@@ -272,13 +252,12 @@
      * ---- 1本の時間軸 (`#lib/timeline.ts`) ----
      *
      * 予約・録画・録り逃しを1つの一覧に並べる。上がこれからの予約、「いま」の線と録画中、
-     * 下が録れたもの。鍵は種類ごとに接頭辞を付ける (録画と予約でIDの空間が別のため)
+     * 下が録れたもの。行の形 (`Item`) は部品と分け合う (`#lib/components/home/context.ts`)
      */
-    // 行の形 (`Item`) は部品と分け合う (`#lib/components/home/context.ts`)
 
     /**
      * 予約をどの側に置くか。録画中は線の下、放送が終わっていないものは線の上。
-     * 「完了分も表示」で出る終わった予約 (完了・失敗・取り消し) は録れたものの側
+     * 「完了した予約も表示」で出る終わった予約 (完了・失敗・取り消し) は録れたものの側
      */
     function zoneOf(res: Res, now: number): Zone {
         if (res.state === 'recording') return 'now';
@@ -354,7 +333,7 @@
     const shownItems = $derived(items.filter((item) => passes(filter, item, traitsOf(item))));
     const parts = $derived(sections(shownItems));
 
-    /** 「削除済みも表示」「完了分も表示」の行き先。入っていれば外した URL へ (ほかの指定は残す) */
+    /** 「削除済みも表示」「完了した予約も表示」の行き先。入っていれば外した URL へ (ほかの指定は残す) */
     function toggleHref(name: 'deleted' | 'all', on: boolean): string {
         const params = new URLSearchParams();
         if (name === 'all' ? !on : data.showFinished) params.set('all', '1');
@@ -491,7 +470,6 @@
         cancelable,
         watchLink,
         unwatched,
-        sizeLabel,
         ruleFrom,
         openReservation,
         openRecording,
@@ -587,7 +565,7 @@
             {#if shownItems.length === 0}
                 {#if items.length === 0}
                     <!-- 空のときは次に何をすればよいかまで言う -->
-                    <div class="empty" data-testid="timeline-empty">
+                    <div class="empty">
                         <p class="empty-title">予約も録画もありません</p>
                         <p class="empty-hint">番組表から予約するか、ルールを作ると自動で入ります</p>
                         <div class="empty-actions">
@@ -596,7 +574,7 @@
                         </div>
                     </div>
                 {:else}
-                    <div class="empty" data-testid="timeline-empty">
+                    <div class="empty">
                         <p class="empty-title">当てはまるものはありません</p>
                     </div>
                 {/if}
@@ -665,7 +643,7 @@
     行にしか無かった頃は、詳細を開いて中身を確かめてから要らないと分かっても、
     一度閉じて行のボタンを探し直すことになっていた (番組表の詳細には前から在る)。
     **取り消せたら閉じる** — 番組表の詳細で予約・取消したときと同じ。
-    取り消した行は一覧から消える (完了分を出しているときは「戻す」に変わる)
+    取り消した行は一覧から消える (完了した予約も出しているときは「戻す」に変わる)
 -->
 {#snippet reservationActions()}
     {#if detailRes !== null}
@@ -800,7 +778,7 @@
                         <div role="menuitem" class="menu-item" aria-disabled="true" data-disabled tabindex="-1" data-testid="cm-redo-button">
                             CM検出をやり直す
                         </div>
-                        <div class="menu-note muted small" data-testid="cm-redo-reason">{redo.reason}</div>
+                        <div class="menu-note muted small">{redo.reason}</div>
                     {:else}
                         {@render menuSubmit('?/redetectCm', 'CM検出をやり直す', 'cm-redo-button', { id: rec.id }, detail.close)}
                     {/if}
@@ -823,5 +801,11 @@
     }
     .menu-form {
         display: contents;
+    }
+    /* 押せない項目のすぐ下に出す理由 (CM検出をやり直せないわけ)。項目と同じ字下げで、次の項目と線で分ける */
+    .menu-note {
+        padding: 0.4rem 0.6rem;
+        border-bottom: 1px solid var(--dp-line);
+        white-space: nowrap;
     }
 </style>

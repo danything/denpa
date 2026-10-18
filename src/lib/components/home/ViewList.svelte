@@ -18,7 +18,7 @@
     }: {
         grouped: boolean;
         setGrouped: (on: boolean) => void;
-        /** 「完了分も表示」「削除済みも表示」の行き先 (入っていれば外した URL) */
+        /** 「完了した予約も表示」「削除済みも表示」の行き先 (入っていれば外した URL) */
         finishedHref: string;
         deletedHref: string;
         showFinished: boolean;
@@ -40,13 +40,13 @@
         <span class="s-sub">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>
     </button>
     <!-- URL で切り替えるのでリンク。入っているかは印と、読み上げには「オン」で -->
-    <a class="s-item" href={finishedHref} data-testid="reservations-finished-toggle" data-on={showFinished}>
+    <a class="s-item" href={finishedHref}>
         <span>完了した予約も表示</span>
         <span class="s-sub">
             {#if showFinished}<Icon icon={Check} size="size-4" /><span class="visually-hidden">オン</span>{/if}
         </span>
     </a>
-    <a class="s-item" href={deletedHref} data-testid="recordings-deleted-toggle" data-on={showDeleted}>
+    <a class="s-item" href={deletedHref}>
         <span>削除済みも表示</span>
         <span class="s-sub">
             {#if showDeleted}<Icon icon={Check} size="size-4" /><span class="visually-hidden">オン</span>{/if}

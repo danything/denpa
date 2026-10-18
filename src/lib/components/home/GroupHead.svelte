@@ -42,7 +42,7 @@
         <span class="cluster title-line">
             <span class="tag num" data-testid="recording-group-count">{group.items.length}本</span>
             {#if fresh > 0}
-                <span class="group-unwatched tiny" data-testid="recording-group-unwatched">
+                <span class="group-unwatched tiny">
                     <span class="unwatched-dot" aria-hidden="true"></span>未視聴{fresh}
                 </span>
             {/if}

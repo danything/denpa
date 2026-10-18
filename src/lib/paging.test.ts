@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { ends, matches, normalize, revealed, shownUpTo, sideStep } from './paging';
+import { matches, normalize, revealed, shownUpTo } from './paging';
 
 describe('一覧の絞り込み', () => {
     test('空なら全部残す', () => {
@@ -27,31 +27,7 @@ describe('一覧の絞り込み', () => {
     });
 });
 
-describe('頭と尻を切り出す (録画の枠)', () => {
-    const items = Array.from({ length: 10 }, (_, i) => i);
-
-    test('間を空けて両端を出す。残りは間の件数', () => {
-        expect(ends(items, 3, 2)).toEqual({ head: [0, 1, 2], tail: [8, 9], rest: 5 });
-    });
-
-    test('重なったら間は無く、全部を頭に (同じ行を2度描かない)', () => {
-        expect(ends(items, 6, 6)).toEqual({ head: items, tail: [], rest: 0 });
-        expect(ends(items, 5, 5)).toEqual({ head: items, tail: [], rest: 0 });
-    });
-
-    test('尻が 0 件なら頭からだけ (まとめて表示)', () => {
-        expect(ends(items, 4, 0)).toEqual({ head: [0, 1, 2, 3], tail: [], rest: 6 });
-        expect(ends([], 4, 0)).toEqual({ head: [], tail: [], rest: 0 });
-    });
-});
-
 describe('少しずつ出す一覧の行数', () => {
-    test('片側に足す数は、両端から出すときは半分 (切り上げ)', () => {
-        expect(sideStep(60, false)).toBe(60);
-        expect(sideStep(60, true)).toBe(30);
-        expect(sideStep(61, true)).toBe(31);
-    });
-
     test('続きを足しても全体を越えない', () => {
         expect(revealed(60, 60, 300)).toBe(120);
         expect(revealed(240, 60, 250)).toBe(250);
