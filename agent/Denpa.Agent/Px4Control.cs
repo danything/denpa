@@ -308,6 +308,7 @@ internal sealed class Px4Error(uint code, string message) : IOException(message)
     public const uint Timeout = 6;
     public const uint UsbIo = 7;
     public const uint Disconnected = 8;
+    public const uint SlowConsumer = 15;
     public const uint Unknown = uint.MaxValue;
 
     public uint Code { get; } = code;

@@ -34,8 +34,6 @@ public static class DeviceProbe
     private const uint DtvEnumDelsys = 44;
 
     private const int FrontendInfoSize = 168;
-    private const int PropertySize = 76;
-    private const int BufferDataAt = 16;
     private const int BufferLenAt = 48;
     private const int NameLength = 128;
 
@@ -93,7 +91,7 @@ public static class DeviceProbe
     {
         var length = (int)BitConverter.ToUInt32(property[BufferLenAt..]);
         if (length is <= 0 or > 32) return [];
-        return [.. property.Slice(BufferDataAt, length).ToArray().Select(value => (int)value)];
+        return [.. property.Slice(DvbTuner.PropertyDataAt, length).ToArray().Select(value => (int)value)];
     }
 
     private static unsafe string[] Ask(string device)
@@ -103,7 +101,7 @@ public static class DeviceProbe
         try
         {
             // struct dtv_properties { u32 num; struct dtv_property *props; } に、DTV_ENUM_DELSYS を1つ
-            var property = new byte[PropertySize];
+            var property = new byte[DvbTuner.PropertySize];
             BitConverter.TryWriteBytes(property, DtvEnumDelsys);
             var header = new byte[16];
             BitConverter.TryWriteBytes(header, 1u);

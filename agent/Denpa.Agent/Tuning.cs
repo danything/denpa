@@ -21,7 +21,7 @@ namespace Denpa.Agent;
 ///
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
-/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
+/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など) と asicen-userland の機材 (PX-W3U3。同じ IPC)。<c>px4d</c> (asicen なら <c>asicend</c>) が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
 /// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
 /// </list>
 ///
@@ -51,6 +51,9 @@ public interface ITuneDevice : IDisposable
     /// </para>
     /// </summary>
     bool Tuned { get; }
+
+    /// <summary>同期しなかったときの文言 (どの方式でも同じにする)</summary>
+    const string SyncFailed = "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
 }
 
 /// <summary>
@@ -634,8 +637,8 @@ public sealed class DvbTuner : ITuneDevice
     private const uint DtvIsdbtLayerEnabled = 41;
     private const uint DtvStreamId = 42;
 
-    private const int PropertySize = 76;             // packed。DeviceProbe の頭のコメントに実測値
-    private const int PropertyDataAt = 16;
+    internal const int PropertySize = 76;            // packed。DeviceProbe の頭のコメントに実測値
+    internal const int PropertyDataAt = 16;
 
     // linux/dvb/dmx.h
     private const uint DmxStart = 0x6f29;            // _IO('o', 41)
@@ -822,7 +825,7 @@ public sealed class DvbTuner : ITuneDevice
             handle.Free();
         }
 
-        throw new IOException("同期しませんでした (電波が来ていないか、その周波数に放送がありません)");
+        throw new IOException(ITuneDevice.SyncFailed);
     }
 
     private void StartFilter()

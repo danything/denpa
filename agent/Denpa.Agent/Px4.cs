@@ -1072,8 +1072,6 @@ public sealed class Px4Tuner : ITuneDevice
     /// </summary>
     private static readonly TimeSpan BusyRetry = TimeSpan.FromSeconds(1);
 
-    private const string SyncFailed = "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
-
     private readonly string _id;
     private readonly int _receiver;
     private readonly string? _lnb;
@@ -1355,11 +1353,11 @@ public sealed class Px4Tuner : ITuneDevice
             }
             catch (Px4Error error) when (error.Code == Px4Error.Timeout)
             {
-                throw new Px4Error(Px4Error.Timeout, SyncFailed);
+                throw new Px4Error(Px4Error.Timeout, ITuneDevice.SyncFailed);
             }
         }
         // u8 locked, i32 cnr_mdb。px4d は同期したときしか成功で答えないが、px4-ts と同じく locked も見る
-        if (answer.Length < 1 || answer[0] == 0) throw new Px4Error(Px4Error.Timeout, SyncFailed);
+        if (answer.Length < 1 || answer[0] == 0) throw new Px4Error(Px4Error.Timeout, ITuneDevice.SyncFailed);
 
         control.Request(Px4Control.StartStream, lease, RequestTimeout);
         _started = true;
@@ -1645,7 +1643,7 @@ internal sealed class Px4Stream
                 }
                 if (dropped != 0)
                 {
-                    End($"{_wire.Daemon} が TS を {dropped} 回捨てました ({Px4Control.Reason(15)})");
+                    End($"{_wire.Daemon} が TS を {dropped} 回捨てました ({Px4Control.Reason(Px4Error.SlowConsumer)})");
                     return;
                 }
                 if (sequence != _sequence)

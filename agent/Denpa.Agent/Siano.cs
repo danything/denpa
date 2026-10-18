@@ -493,7 +493,7 @@ public sealed class SianoTuner : ITuneDevice
         }
         catch (OperationCanceledException)
         {
-            return ("同期しませんでした (電波が来ていないか、その周波数に放送がありません)", true);
+            return (ITuneDevice.SyncFailed, true);
         }
         catch (System.Threading.Channels.ChannelClosedException)
         {

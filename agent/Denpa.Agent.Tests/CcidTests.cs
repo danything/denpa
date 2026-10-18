@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Denpa.Agent;
 using TUnit.Core.Enums;
 

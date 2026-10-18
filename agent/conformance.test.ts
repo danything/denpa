@@ -833,7 +833,7 @@ describe('機材の定義', () => {
 });
 
 /**
- * **止められても、開いている選局が終わるまで畳まない。**
+ * **止められても、録画 (`use=rec`) の選局が終わるまで畳まない。** ライブ視聴などほかの利用者は待たない
  *
  * ここが既定 (30秒) のままだった頃は、Pod を入れ替えるだけで TS が切れ、
  * 始まって10秒の30分番組が丸ごと失敗した (実機)。denpa 側は録画が終わるまで
@@ -846,7 +846,7 @@ describe('止まれと言われたとき', () => {
     const PORT2 = PORT + 1;
     const BASE2 = `http://127.0.0.1:${PORT2}`;
 
-    test('選局が開いている間は生きていて、離すと落ちる', async () => {
+    test('録画の選局が開いている間は生きていて、離すと落ちる', async () => {
         const room = mkdtempSync(join(tmpdir(), 'denpa-agent-stop-'));
         writeFileSync(join(room, 'tuners.json'), TUNERS);
         writeFileSync(join(room, 'channels.json'), JSON.stringify(channels(), null, 4));

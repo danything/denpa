@@ -339,7 +339,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         if (Running) return;
         var asicend = AsicenUserland.Bin(dir, "asicend");
         if (!File.Exists(asicend)) throw new IOException($"asicen-userland が入っていません: {asicend}");
-        // 機材を並べる (最悪 15 秒 + ファームウェアの流し込み) のはロックの外で
+        // 機材を並べる (ファームウェアの流し込みは1台30秒かかることがある) のはロックの外で
         var args = select();
         var listed = "";
         Launch(asicend, [.. args, "--runtime-dir", runtimeDir, "--instance", Id], runtimeDir,
