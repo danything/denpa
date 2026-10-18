@@ -157,8 +157,9 @@ test.describe('操作したときの反応', () => {
         await expect(detail).toBeVisible();
         const box = (await detail.locator('> div').first().boundingBox())!;
 
+        // 狭い画面では下から出る一枚 (下端に付ける。下のバーの分は箱の中の余白 `safe-area-inset-bottom` で空ける)
         expect(box.y, '上が画面に貼り付いている (バーが出ると切れる)').toBeGreaterThanOrEqual(8);
-        expect(box.y + box.height, '下が画面からはみ出している').toBeLessThanOrEqual(view.height - 8);
+        expect(box.y + box.height, '下が画面からはみ出している').toBeLessThanOrEqual(view.height);
         // タイトルは箱の中にある。中身が長くても、頭から読める
         const title = (await detail.locator('h3').boundingBox())!;
         expect(title.y).toBeGreaterThanOrEqual(box.y);

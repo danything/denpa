@@ -1040,24 +1040,14 @@ a.button {
     background: color-mix(in srgb, var(--dp-info) 14%, var(--dp-surface));
     color: var(--dp-info-text);
 }
-/* 枠を足すだけ。色は上の淡いバッジと同じ(手を止めてほしいもの = 競合・失敗に使う) */
-.tag.outline {
-    border-color: currentColor;
-}
-/* 色の付かない枠だけのバッジ(工程や但し書き)は地も塗らない。ふつうのバッジと見分けが付かなくなる */
-.tag.outline:not(.success, .error, .warning, .info, .solid) {
-    background: transparent;
-    border-color: var(--dp-line);
-}
-/* **いま動いているものだけ塗る。** 一覧の中でここにだけ目が行くようにする */
-.tag.solid {
-    background: var(--pico-primary-background);
-    color: #fff;
-    border-color: transparent;
-}
-.tag.solid.error {
-    background: var(--dp-rec);
-    color: #fff;
+/*
+ * **バッジの形は 1 つだけ** (淡い地に濃い字)。前は塗ったもの (`.solid`。録画中)・枠だけのもの (`.outline`。競合・失敗)・
+ * 淡いものが混ざり、同じ一覧に 3 通りの顔が並んでいた。違いは色だけで出す。
+ * `.solid` (いま動いているもの) は脈打つ点 (`.rec-dot`) を添えて見分ける。`.outline` は前の書き方の名残で、見た目は変えない
+ */
+.tag.solid:not(.success, .error, .warning, .info) {
+    background: color-mix(in srgb, var(--pico-primary) 14%, var(--dp-surface));
+    color: var(--pico-primary);
 }
 
 /* ---- 通知 ---- */
@@ -1350,6 +1340,53 @@ dialog {
 .modal-actions button,
 .modal-actions [role="button"] {
     margin: 0;
+}
+/* 右上の × (番組の詳細)。閉じるのはこれだけで、下の並びには置かない */
+.modal-close {
+    position: absolute;
+    top: var(--dp-space-3);
+    right: var(--dp-space-3);
+    z-index: 1;
+    color: var(--dp-muted);
+}
+.modal-close:hover {
+    color: inherit;
+}
+.modal-close svg {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+/*
+ * **狭い画面では下から出る一枚。** 中央に浮かせた箱だとボタンが2段に折れて、どれを押すのか探すことになった。
+ * 下端に付けて角は上だけ丸め、ボタンは全幅で縦に積む。主のボタン (並びの最後) がいちばん上
+ */
+@media (max-width: 639.98px) {
+    .modal-box {
+        width: 100%;
+        max-width: none;
+        max-height: calc(100% - 2.5rem);
+        border-width: 1px 0 0;
+        border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
+        padding-bottom: calc(var(--dp-space-5) + env(safe-area-inset-bottom));
+    }
+    dialog:has(> article.modal-box) {
+        padding: 0;
+    }
+    dialog > article.modal-box {
+        margin-top: auto;
+    }
+    .modal-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    .modal-actions > *,
+    .modal-actions > form > button,
+    .modal-actions > * > :is(button, a.button) {
+        width: 100%;
+    }
+    .modal-actions :is(button, a.button) {
+        justify-content: center;
+    }
 }
 
 /*

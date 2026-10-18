@@ -4,6 +4,7 @@
     import { afterNavigate } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
+    import ArrowLeft from '~icons/lucide/arrow-left';
 
     let { children } = $props();
 
@@ -189,7 +190,9 @@
             {#if group !== null}
                 <!-- 狭い画面だけ。一覧へ戻る (ブラウザの戻ると同じ行き先) と、節へ飛ぶ行 -->
                 <div class="jump small" bind:this={jumpRow} data-testid="settings-jump">
-                    <a class="back" href={resolve('settings')} data-testid="settings-back">← 設定</a>
+                    <a class="back" href={resolve('settings')} title="設定へ戻る" data-testid="settings-back"
+                        ><ArrowLeft aria-hidden="true" /><span class="visually-hidden">設定へ戻る</span></a
+                    >
                     {#each group.sections as section (section.slug)}
                         <a
                             href="{resolve(`settings/${group.slug}`)}#{section.slug}"
@@ -414,9 +417,23 @@
         color: inherit;
         font-weight: var(--dp-weight-bold);
     }
+    /* 戻るは字だけのアイコンのボタン (ルールの「戻る」と同じ形) */
     .jump .back {
-        padding-left: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: var(--dp-btn-h-sm);
+        height: var(--dp-btn-h-sm);
+        padding: 0;
         color: inherit;
+    }
+    .jump .back:hover {
+        background: var(--dp-btn-tonal-hover);
+    }
+    .jump .back :global(svg) {
+        width: 1.125rem;
+        height: 1.125rem;
     }
     /* 640px より狭いとヘッダーは隠れている (下のタブに替わる)。いちばん上に付ける */
     @media (max-width: 639.98px) {
