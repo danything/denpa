@@ -2,7 +2,7 @@
  * 見た目を denpa の画面 (src/app.css) に合わせる。
  *   - 字: app.css と同じ並び。フォントは配らず、名前を挙げるだけ (入っていれば使う)
  *   - 主の色: Blades (Pico) の既定の azure (@anyblades/blades の pico/_variables.css の --pico-primary*)
- *   - 地と灰色: app.css と同じ slate の段 (pico.colors.css の 50〜950)
+ *   - 地と灰色: app.css と同じ段 (明るいほうは pico.colors.css の slate、暗いほうは app.css のほぼ黒の段)
  *   - 角丸: app.css の --pico-border-radius (0.65rem)
  * テーマの既定は Starlight のまま「自動」(OS の設定に合わせる)。暗いほうも同じ段から選ぶ
  */
@@ -13,7 +13,7 @@
 
 /* 暗いほう。Starlight は :root を暗いほうとして書く */
 :root {
-    --sl-color-accent-low: #1a3f58; /* --pico-text-selection-color (#01aaff の 19%) を slate-850 に重ねた色 */
+    --sl-color-accent-low: #092a3d; /* --pico-text-selection-color (#01aaff の 19%) を地 (#0b0c0f) に重ねた色 */
     --sl-color-accent: #01aaff; /* --pico-primary */
     --sl-color-accent-high: #79c0ff; /* --pico-primary-hover */
 
@@ -21,25 +21,25 @@
     --sl-color-gray-1: #dfe3eb; /* slate-100 */
     --sl-color-gray-2: #c2c7d0; /* Pico の本文 */
     --sl-color-gray-3: #969fb2; /* Pico の --pico-muted-color を、地の上で読める明るさまで上げたもの */
-    --sl-color-gray-4: #525f7a; /* slate-600 */
-    --sl-color-gray-5: #3d475c; /* slate-700 */
-    --sl-color-gray-6: #2a3140; /* slate-800 */
-    --sl-color-black: #181c25; /* slate-900 */
+    --sl-color-gray-4: #50545e; /* app.css の --pico-secondary-hover-border */
+    --sl-color-gray-5: #3a3d46; /* app.css の --dp-line-strong */
+    --sl-color-gray-6: #26282e; /* app.css の --dp-line */
+    --sl-color-black: #121318; /* app.css の --dp-surface */
 
     /*
-     * 地は上の帯・サイドバー・目次も本文と同じ 1 色にし、境は地より少し明るい 1px の線だけ。
-     * 灰色の面 (slate-800) はコード・表の見出しのような、中身を分けるところだけ
+     * 地は上の帯・サイドバー・目次も本文と同じ 1 色 (app.css の --dp-bg) にし、境は地より少し明るい 1px の線だけ。
+     * 灰色の面 (app.css の --dp-subtle) はコード・表の見出しのような、中身を分けるところだけ
      */
-    --sl-color-bg: #202632; /* slate-850 (app.css の --dp-base-200) */
-    --sl-color-bg-nav: #202632;
-    --sl-color-bg-sidebar: #202632;
-    --sl-color-bg-inline-code: #2a3140; /* slate-800 */
-    --sl-color-hairline-light: #333b4d;
-    --sl-color-hairline: #2f3747;
-    --sl-color-hairline-shade: #2f3747;
+    --sl-color-bg: #0b0c0f;
+    --sl-color-bg-nav: #0b0c0f;
+    --sl-color-bg-sidebar: #0b0c0f;
+    --sl-color-bg-inline-code: #1a1b20;
+    --sl-color-hairline-light: #2e3037;
+    --sl-color-hairline: #26282e;
+    --sl-color-hairline-shade: #26282e;
     /* 上の帯を透かすときの地 (bg を 80% に) */
-    --dp-nav-glass: rgb(32 38 50 / 0.8);
-    --dp-surface: #2a3140; /* 表の見出しの面 */
+    --dp-nav-glass: rgb(11 12 15 / 0.8);
+    --dp-surface: #1a1b20; /* 表の見出しの面 */
 }
 
 :root[data-theme="light"] {
