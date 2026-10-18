@@ -68,7 +68,7 @@
         text-align: center;
     }
     .message {
-        font-weight: 500;
+        font-weight: var(--dp-weight);
     }
     .actions {
         margin-top: 0.75rem;

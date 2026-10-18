@@ -52,6 +52,6 @@
     }
     .label {
         font-size: 0.75rem;
-        font-weight: 600;
+        font-weight: var(--dp-weight-bold);
     }
 </style>

@@ -89,7 +89,7 @@
         position: absolute;
         z-index: 10;
         color: #fff;
-        transition: opacity 200ms;
+        transition: opacity var(--dp-duration);
     }
     .bar.away {
         pointer-events: none;

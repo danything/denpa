@@ -148,7 +148,7 @@
     .title {
         margin: 0;
         font-size: 1.125rem;
-        font-weight: 700;
+        font-weight: var(--dp-weight-bold);
         overflow-wrap: break-word;
     }
     .meta {
@@ -164,7 +164,7 @@
         margin-top: 0.75rem;
     }
     .head {
-        font-weight: 500;
+        font-weight: var(--dp-weight);
     }
     .pre {
         white-space: pre-wrap;

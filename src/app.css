@@ -79,7 +79,7 @@
     --dp-text-base: 1rem;
     --dp-text-lg: 1.125rem;
     --dp-text-xl: 1.5rem;
-    /* 字の太さは 2 段だけ。BIZ UDPゴシックは 400 と 700 しか持たない (500・600 は 400・700 に寄る) */
+    /* 字の太さは 2 段だけ。BIZ UDPゴシックは 400 と 700 しか持たないので、数字で書かずにこの2つを使う */
     --dp-weight: 400;
     --dp-weight-bold: 700;
     /*
@@ -628,7 +628,7 @@ progress.running[value]::-webkit-progress-value {
 .field > span:first-child,
 .field-label {
     font-size: var(--dp-text-xs);
-    font-weight: 500;
+    font-weight: var(--dp-weight);
     color: var(--dp-muted);
 }
 /* チェックボックス + 文 */

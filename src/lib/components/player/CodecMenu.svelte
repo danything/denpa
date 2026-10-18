@@ -87,7 +87,7 @@
 <OverlayMenu {testid} attrName="codec" {items} onselect={pick}>
     {#snippet trigger(menu)}
         <ControlButton {menu} label="画質 (コーデック) を選ぶ" {testid}>
-            <span style="font-size: 0.75rem; font-weight: 600">
+            <span style="font-size: 0.75rem; font-weight: var(--dp-weight-bold)">
                 {shownLabel}
             </span>
         </ControlButton>

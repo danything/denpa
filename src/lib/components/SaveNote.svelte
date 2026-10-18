@@ -25,7 +25,7 @@
 
 <style>
     .save-note {
-        font-weight: normal;
+        font-weight: var(--dp-weight);
     }
     .saved {
         display: inline-block;

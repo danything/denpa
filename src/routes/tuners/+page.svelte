@@ -885,7 +885,7 @@
             display: block;
             margin-bottom: 0.25rem;
             font-size: 0.8rem;
-            font-weight: 500;
+            font-weight: var(--dp-weight);
             color: var(--dp-muted);
         }
         .row-cards .span {
