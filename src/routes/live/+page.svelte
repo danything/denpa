@@ -33,6 +33,7 @@
         RECORD,
         SOUND_OFF,
         SOUND_ON,
+        SPEED,
     } from '#lib/components/player/icons.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
     import PlayerLayout, { PHONE_LANDSCAPE } from '#lib/components/player/PlayerLayout.svelte';
@@ -44,7 +45,7 @@
     import SpeedMenu from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
-    import { audioTracks, liveCodecs, subtitles } from '#lib/components/player/settings.js';
+    import { audioTracks, liveCodecs, speeds, subtitles } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
@@ -495,7 +496,7 @@
                         />
                         <!--
                             **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・ライブ・読みもの・再生の設定 (⚙)・全画面だけ。**
-                            音・字幕・Hybridcast と速さ・小窓は「ほか」(⋯) に入れる (`Extras`)。
+                            ここから Hybridcast までと速さ・小窓は再生の設定 (⚙) の頭に入れる (`Extras`・`StageTail` の `fold`)。
                             音を出していないときは映像の上に「音を出す」が別に出る。
                             広い枠では包みは何もしないので、並びは今までどおり (観る画面と同じ)
                         -->
@@ -693,6 +694,43 @@
                         -->
                         <StageTail
                             prefix="live"
+                            fold={[
+                                {
+                                    kind: 'toggle' as const,
+                                    id: 'mute',
+                                    label: '消音',
+                                    icon: SOUND_OFF,
+                                    on: player.silenced,
+                                    toggle: () => (player.silenced ? player.unmute() : player.mute()),
+                                },
+                                ...(player.hybridcast[0] === undefined
+                                    ? []
+                                    : [
+                                          {
+                                              kind: 'action' as const,
+                                              id: 'open-hybridcast',
+                                              label: `${player.hybridcast[0].name === '' ? 'Hybridcast' : player.hybridcast[0].name} を別のタブで開く`,
+                                              icon: OPEN_OUT,
+                                              run: () => {
+                                                  const app = player.hybridcast[0];
+                                                  if (app !== undefined) window.open(app.url, '_blank', 'noopener,noreferrer');
+                                              },
+                                          },
+                                      ]),
+                                ...(player.chasing
+                                    ? [
+                                          {
+                                              kind: 'choice' as const,
+                                              ...speeds({
+                                                  icon: SPEED,
+                                                  label: '追っかけの速さ',
+                                                  speed: player.speed,
+                                                  onselect: (speed) => player.setSpeed(speed),
+                                              }),
+                                          },
+                                      ]
+                                    : []),
+                            ]}
                             {background}
                             {ambient}
                             {pip}

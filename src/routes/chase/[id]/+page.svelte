@@ -15,7 +15,7 @@
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
-    import { AUDIO, CAMERA, CAPTION, CODEC, PAUSE, PLAY, SOUND_OFF, SOUND_ON } from '#lib/components/player/icons.js';
+    import { AUDIO, CAMERA, CAPTION, CODEC, PAUSE, PLAY, SOUND_OFF, SOUND_ON, SPEED } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
     import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
@@ -26,7 +26,7 @@
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
-    import { audioTracks, liveCodecs, subtitles } from '#lib/components/player/settings.js';
+    import { audioTracks, liveCodecs, speeds, subtitles } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import { stageTap } from '#lib/components/player/stage-tap.js';
@@ -284,7 +284,7 @@
                 />
                 <!--
                     **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・最新・読みもの・再生の設定 (⚙)・全画面だけ。**
-                    音・字幕と速さ・小窓は「ほか」(⋯) に入れる (`Extras`。観る画面と同じ)
+                    音・字幕と速さ・小窓は再生の設定 (⚙) の頭に入れる (`Extras`・`StageTail` の `fold`。観る画面と同じ)
                 -->
                 <Extras>
                 <ControlButton
@@ -360,6 +360,24 @@
                 -->
                 <StageTail
                     prefix="chase"
+                    fold={[
+                        {
+                            kind: 'toggle' as const,
+                            id: 'mute',
+                            label: '消音',
+                            icon: SOUND_OFF,
+                            on: player.silenced,
+                            toggle: () => (player.silenced ? player.unmute() : player.mute()),
+                        },
+                        ...(player.canvas
+                            ? []
+                            : [
+                                  {
+                                      kind: 'choice' as const,
+                                      ...speeds({ icon: SPEED, label: '再生の速さ', speed: want, onselect: setSpeed }),
+                                  },
+                              ]),
+                    ]}
                     {background}
                     {ambient}
                     {pip}
