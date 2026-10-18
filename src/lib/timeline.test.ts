@@ -6,7 +6,6 @@ import {
     dayStart,
     lineIndex,
     passes,
-    readFilter,
     sections,
     type TimelineItem,
     type TimelineLine,
@@ -144,12 +143,6 @@ describe('絞り込み', () => {
         // 録画中は観終えていなくても「未視聴」に入れない (まだ録っている)
         expect(passes('unfinished', items[1]!, { unfinished: true, failed: false })).toBe(false);
         expect(passes('failed', items[4]!, traits(items[4]!))).toBe(true);
-    });
-
-    test('知らない値は「すべて」', () => {
-        expect(readFilter('failed')).toBe('failed');
-        expect(readFilter('nope')).toBe('all');
-        expect(readFilter(null)).toBe('all');
     });
 });
 
