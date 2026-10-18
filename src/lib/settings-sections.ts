@@ -53,13 +53,11 @@ export const SETTINGS_GROUPS = [
     sections: readonly { slug: string; label: string }[];
 }[];
 
-export type SettingsGroup = (typeof SETTINGS_GROUPS)[number];
-
 export const FIRST_GROUP = 'general';
 
 /**
  * **前の節ごとの画面の URL** (`/settings/<節>`) → 移った先 (`<グループ>#<節>`)。
- * ブックマークや説明書のリンクを切らないため (`routes/settings/[moved]/+page.ts` が 308 で送る)。
+ * ブックマークや説明書のリンクを切らないため (`routes/settings/[moved]/+server.ts` が 308 で送る)。
  * `general` と `recording` はグループの画面の URL と同じなので要らない
  */
 export const MOVED_SECTIONS: Readonly<Record<string, string>> = {

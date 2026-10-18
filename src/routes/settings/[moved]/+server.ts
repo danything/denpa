@@ -7,7 +7,7 @@ import { MOVED_SECTIONS } from '#lib/settings-sections.js';
  * 設定は節ごとの画面からグループごとの画面に変わった。ブックマーク・docs・古い通知のリンクを切らない
  */
 export function GET({ params, url }) {
-    const to = MOVED_SECTIONS[params.moved];
-    if (to === undefined) error(404, 'Not Found');
-    redirect(308, relative(url, `/settings/${to}`));
+    // 自分のキーだけ (`constructor` などの継承したキーで飛ばない)
+    if (!Object.hasOwn(MOVED_SECTIONS, params.moved)) error(404, 'Not Found');
+    redirect(308, relative(url, `/settings/${MOVED_SECTIONS[params.moved]}`));
 }

@@ -90,7 +90,9 @@ test.describe('ダッシュボードと画面遷移', () => {
         await page.waitForURL(/\/settings\/reception#tuners$/);
         await expect(page.getByTestId('nav-tuners')).toHaveCount(0);
         await expect(page.getByTestId('nav-settings')).toHaveAttribute('aria-current', 'page');
-        expect((await page.request.get('/settings/nothing', { maxRedirects: 0 })).status()).toBe(404);
+        for (const path of ['/settings/nothing', '/settings/constructor']) {
+            expect((await page.request.get(path, { maxRedirects: 0 })).status(), path).toBe(404);
+        }
 
         await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/settings');
