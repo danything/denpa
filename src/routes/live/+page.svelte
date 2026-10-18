@@ -471,6 +471,7 @@
                             max={player.newest}
                             step={0.1}
                             onseek={(at) => player.seek(at)}
+                            paused={player.paused}
                             testid="live-seek"
                         />
                     {/if}

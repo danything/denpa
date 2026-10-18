@@ -135,13 +135,13 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **シークバーの CM は琥珀で塗る** (denpa-tv と同じ色と意味)。続いている CM は1本にまとめ、
-     * 位置はつまみの往復ぶんを引いて置く (`seek-track.ts`。式は単体試験が持つ)。
+     * **シークバーの CM は琥珀で分ける** (denpa-tv と同じ色)。続いている CM は1本にまとめ、
+     * CM の端で溝を区切る (`seek-track.ts`。区切りの計算は単体試験が持つ)。観たぶんは CM の中では濃い琥珀。
      *
-     * 偽の録画にはチャプターも尺も無いので、チャプターは API ごと差し替え、尺は映像の要素に
+     * 偽の録画にはチャプターも尺も無いので、チャプターは API ごと差し替え、尺と位置は映像の要素に
      * 持たせて「読み込めた」と知らせる (中身の無いファイルはブラウザが読めない)
      */
-    test('シークバーの CM の区間が琥珀で塗られ、読み上げでも CM と分かる', async ({ page, request }) => {
+    test('シークバーの CM の区間が琥珀で分かれ、読み上げでも CM と分かる', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
         await page.route('**/api/recordings/*/chapters', (route) =>
@@ -167,19 +167,37 @@ test.describe('録画を観る', () => {
 
         await page.getByTestId('watch-video').evaluate((video) => {
             Object.defineProperty(video, 'duration', { value: 1000 });
+            Object.defineProperty(video, 'currentTime', { value: 200, writable: true });
             video.dispatchEvent(new Event('loadedmetadata'));
+            video.dispatchEvent(new Event('timeupdate'));
         });
-        const layer = (name: string) =>
-            seek.evaluate((input, prop) => getComputedStyle(input).getPropertyValue(prop).trim(), name);
-        const amber = 'rgb(255 179 0 / 0.8)';
-        // 2本目は 400 秒 (0.4) から 430 秒 (0.43) まで。つまみの往復ぶんを引いた位置
-        await expect.poll(() => layer('--cm')).toContain(`${amber} calc(0.5rem + 0.4 * (100% - 1rem))`);
-        const cm = await layer('--cm');
-        expect(cm).toContain(`${amber} calc(0.5rem + 0.43 * (100% - 1rem))`);
-        // 頭の CM は溝の左端から
-        expect(cm).toContain(`${amber} 0%`);
-        // CM の端には目盛りを打たない (塗りの縁が言う)
-        expect(await layer('--ticks')).toBe('none');
+        const parts = seek.locator('xpath=..').locator('[data-part]');
+        // 溝は CM の端で区切った4つ (頭の CM・本編・続いた CM・本編)
+        await expect
+            .poll(() => parts.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset['part'])))
+            .toEqual(['cm', 'main', 'cm', 'main']);
+        // 2本目は 400 秒 (40%) から 430 秒 (43%) まで
+        const second = parts.nth(2);
+        expect(await second.evaluate((el) => [el.style.left, el.style.width])).toEqual(['40%', '3%']);
+
+        // CM と本編は色で分かれる。観たぶんは CM の中では濃い琥珀 (200 秒なので頭の CM は観終わり、本編は半ばまで)
+        const look = (part: number) =>
+            parts.nth(part).evaluate((el) => {
+                const bar = el.firstElementChild as HTMLElement;
+                const played = bar.firstElementChild as HTMLElement;
+                return {
+                    bar: getComputedStyle(bar).backgroundColor,
+                    played: getComputedStyle(played).backgroundColor,
+                    width: played.style.width,
+                };
+            });
+        await expect.poll(async () => (await look(1)).width).toBe('48.72%');
+        const cm = await look(0);
+        const main = await look(1);
+        expect(cm.bar).not.toBe(main.bar);
+        expect(cm.played).toBe('rgb(255, 179, 0)');
+        expect(cm.played).not.toBe(main.played);
+        expect(cm.width).toBe('100%');
     });
 
     /**

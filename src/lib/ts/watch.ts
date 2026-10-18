@@ -359,7 +359,7 @@ export function cmSpans(chapters: Chapter[]): Span[] {
 }
 
 /**
- * シークバーに目盛りを打つ切れ目。**CM の端は塗りの縁が言う**ので、どちらの側も CM でない
+ * シークバーの溝を区切る、CM 以外の切れ目。**CM の端は CM の区間 (`cmSpans`) で区切る**ので、どちらの側も CM でない
  * 切れ目だけ (引き継いだ録画の、名前の付いたチャプターなど)
  */
 export function plainMarks(chapters: Chapter[]): number[] {
