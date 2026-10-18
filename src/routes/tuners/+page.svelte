@@ -23,22 +23,6 @@
     // 番組表を集めている最中の様子も 'tuners' で流れてくる
     liveUpdates(['scan', 'services', 'logos', 'tuners', 'programs']);
     const scan = $derived(data.scan);
-    /**
-     * CM検出のロゴ。**覚えていない局を先に、でも全部並べる。**
-     *
-     * 覚えていない局だけ出していた頃は、**覚えているロゴを確かめる場所が
-     * どこにも無かった**。自動探索はロゴでない縁を検出することもあるので、
-     * 「当たらない」と思ったときに映像を見られることのほうが要る。
-     * 局は畳んであり、まだの局と覚えた局に分けて (`CM_GROUPS`)、何列にも詰めて並べる
-     */
-    const cmLogos = $derived(data.cmLogos);
-    /** CM検出のロゴの一覧の分け方。まだの局が先 */
-    const CM_GROUPS = [
-        { learned: false, label: 'まだ' },
-        { learned: true, label: '覚えました' },
-    ];
-    /** まだ覚えていない局の数。畳んだ一覧の見出しの横に出す */
-    const cmLogosPending = $derived(cmLogos.filter((service) => service.learned_at === null).length);
     /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
     const configSave = new SaveState();
     /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
@@ -55,6 +39,11 @@
         { value: '15v', label: '15V' },
         { value: '11v', label: '11V' },
     ];
+    /**
+     * チューナーの表の骨組みの行の高さ (rem)。本物の行 (1.8rem) から行の間 (0.4rem) を引いたもの。
+     * 台数は届くまで分からないので、よくある4台ぶん
+     */
+    const TUNER_SKELETON = [1.4, 1.4, 1.4, 1.4];
     /** スキャンの状態の呼び名。共通のものに、スキャンだけの2つを足す */
     const STATE_LABEL: Record<string, string> = { ...SHARED_STATE_LABEL, canceled: '中断', idle: '待機中' };
 
@@ -118,7 +107,7 @@
     2 列にカードを積んでいた頃は、目が左右を行き来した。表は幅を使うので、設定の画面より広く取る。
 
     並びは「いまの様子」から: 空きとカードリーダー → 受信できるチャンネル → たまに回すスキャン →
-    入れたときしか触らないチューナーの設定 → CM検出のロゴ。局ロゴは局ごとの話なので、受信できるチャンネルの表に出す
+    入れたときしか触らないチューナーの設定。局ロゴとCM検出のロゴは局ごとの話なので、受信できるチャンネルの表に出す
 -->
 <div class="sections tuners">
     <!--
@@ -144,7 +133,16 @@
             {/snippet}
         </Lead>
         {#if shownTuners.value === undefined}
-            <p class="small muted">確認中…</p>
+            <!--
+                エージェントの答え待ち。**本物の表と同じ形・同じ高さの枠を先に置く** (番組表・ルールの
+                下見と同じ骨組み)。字だけ出していた頃は、届いた拍子に表が出て下の節が押し下げられた
+            -->
+            <div class="skeleton" role="status" aria-label="チューナーを確認しています" data-testid="tuner-skeleton">
+                <div class="skeleton-head" aria-hidden="true"></div>
+                {#each TUNER_SKELETON as height, row (row)}
+                    <div class="skeleton-row" style="height: {height}rem" aria-hidden="true"></div>
+                {/each}
+            </div>
         {:else}
             {@const tuners = shownTuners.value.list}
             {@const failure = shownTuners.value.error}
@@ -232,7 +230,8 @@
             <div class="cluster">
                 <h3>カードリーダー</h3>
                 {#if shownCard.value === undefined}
-                    <span class="tag" data-testid="status-card-reader">確認中</span>
+                    <!-- 答え待ち。「正常」「エラー」のバッジと同じ大きさの枠 -->
+                    <span class="skeleton skeleton-tag" data-testid="status-card-reader" aria-hidden="true"></span>
                 {:else}
                     {@const card = shownCard.value}
                     <span class="tag {card.ok ? 'success' : 'error'}" data-testid="status-card-reader">
@@ -252,7 +251,13 @@
                     {/if}
                 {/if}
             </div>
-            {#if shownCard.value !== undefined}
+            {#if shownCard.value === undefined}
+                <!-- リーダーの表も同じ形の枠を先に置く (リーダーは1つのことが多い。名前と場所の2行) -->
+                <div class="skeleton" role="status" aria-label="カードリーダーを確認しています" data-testid="card-skeleton">
+                    <div class="skeleton-head" aria-hidden="true"></div>
+                    <div class="skeleton-row" style="height: 2.35rem" aria-hidden="true"></div>
+                </div>
+            {:else}
                 {@const card = shownCard.value}
                 <!-- 困っているときだけ。名前と番号は表に出る -->
                 {#if card.message !== ''}
@@ -427,6 +432,12 @@
                 >
                     {data.logos.have} / {data.logos.total} 局
                 </span>
+                <!-- CM検出のために覚えたロゴ。局ロゴとは別物 (logo-data.ts)。覚えた局は表の局名の横に出る -->
+                <span class="faint">・</span>
+                <span class="muted">CMロゴ</span>
+                <span class="tag num" data-testid="status-cm-logos">
+                    {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
+                </span>
             </div>
             {#if data.logos.unavailable > 0}
                 <!--
@@ -460,6 +471,10 @@
                     <p>
                         「ロゴをいますぐ集める」では衛星の分も集めます。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
                         そこだけ最大20分かかります (他の中継は数秒で終わります)。
+                    </p>
+                    <p>
+                        CMロゴは、CM検出のために録画から覚えたロゴの位置と形です。録画をエンコードするときに自動で覚え、
+                        覚えた局は局名の横に画像が出ます。ロゴの形になっていなければ「覚え直す」で消すと、次の録画で覚え直します。
                     </p>
                 {/snippet}
             </Lead>
@@ -507,6 +522,10 @@
                                                     ></span>
                                                 {/if}
                                                 <span class="broadcast">{service.name}</span>
+                                                <!-- CM検出のロゴは覚えた局だけ。画像と「覚え直す」をいつも出す -->
+                                                {#if service.cm !== null}
+                                                    <LearnedLogo serviceId={service.id} serviceName={service.name} learnedAt={service.cm} />
+                                                {/if}
                                             </span>
                                         {/each}
                                     </div>
@@ -741,71 +760,6 @@
             </form>
         {/if}
     </section>
-
-    <!--
-        CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
-        こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
-        **録画ごとの話ではなく局ごとの話**で、覚えたものは以降その局の全部に効く。
-        番組表に出す局ロゴは「受信できるチャンネル」に局ごとに出す
-    -->
-    <section class="section" data-testid="logo-card">
-        <div class="section-head">
-            <h2>CM検出のロゴ</h2>
-            <span class="tag num" data-testid="status-cm-logos">{data.cmLogoStats.have} / {data.cmLogoStats.total} 局</span>
-        </div>
-        <Lead>
-            録画をエンコードするときに、その録画から自動で覚えます
-            {#snippet more()}
-                <p>
-                    画面の隅で線の向きがどのコマでも揃うところをロゴとして覚え、エンコードのたびに精度を上げます。
-                    違うものを覚えていたら、下の一覧から消せば次の録画で覚え直します。
-                </p>
-            {/snippet}
-        </Lead>
-        <!--
-            **局ごとの一覧は畳んでおく。** 100 局を超えると、開いたままでは画面がそれだけで埋まる。
-            覚えていない局があれば、その数だけ見出しの横に出す (開かなくても要るかどうか分かる)
-        -->
-        {#if cmLogos.length > 0}
-            <details class="cm-logo-list" data-testid="cm-logo-list">
-                <summary>
-                    局ごとの一覧
-                    {#if cmLogosPending > 0}
-                        <span class="tag num" data-testid="cm-logo-pending">まだ {cmLogosPending} 局</span>
-                    {/if}
-                </summary>
-                <!--
-                    **まだの局と覚えた局を分けて、詰めて並べる。** 1局ずつ枠で囲んだ行を縦に積んでいた頃は、
-                    100局を超えると長く巻かないと見終わらなかった。開いた局だけ1段を使って中身を出す
-                -->
-                {#each CM_GROUPS as group (group.learned)}
-                    {@const list = cmLogos.filter((service) => (service.learned_at !== null) === group.learned)}
-                    {#if list.length > 0}
-                        <div class="cm-group" data-testid={group.learned ? 'cm-logo-learned' : 'cm-logo-waiting'}>
-                            <h3 class="tiny muted">{group.label} <span class="num">({list.length})</span></h3>
-                            <div class="cm-logos">
-                                {#each list as service (service.id)}
-                                    <details class="cm-logo" data-learned={service.learned_at !== null}>
-                                        <summary class="small">
-                                            <!-- 覚えたかどうかは畳んだまま分かるようにする (色だけにしない。字は読み上げ用) -->
-                                            <span class="state-dot" aria-hidden="true"></span>
-                                            <span class="visually-hidden">{group.label}:</span>
-                                            <span class="broadcast truncate">{service.name}</span>
-                                        </summary>
-                                        <LearnedLogo
-                                            serviceId={service.id}
-                                            serviceName={service.name}
-                                            learnedAt={service.learned_at}
-                                        />
-                                    </details>
-                                {/each}
-                            </div>
-                        </div>
-                    {/if}
-                {/each}
-            </details>
-        {/if}
-    </section>
 </div>
 
 <style>
@@ -1002,63 +956,49 @@
     .logo-slot.missing {
         border: 1px dashed var(--dp-line-strong);
     }
-    /* 局ごとの一覧 (畳んである) */
-    .cm-logo-list > summary {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: var(--dp-text-sm);
-    }
-    .cm-group {
-        margin-top: var(--dp-space-3);
-    }
-    .cm-group h3 {
-        margin-bottom: 0.25rem;
-        font-weight: var(--dp-weight);
-    }
-    /* 枠で囲まず、何列にも詰める。開いた局だけ1段を使う */
-    .cm-logos {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-        gap: 0 var(--dp-space-2);
-    }
-    .cm-logo {
-        min-width: 0;
-        margin: 0;
-    }
-    .cm-logo[open] {
-        grid-column: 1 / -1;
-        padding-bottom: 0.5rem;
-    }
-    .cm-logo > summary {
+    /*
+     * 答え待ちの骨組み (番組表・ルールの下見と同じ形と色)。見出しの行だけ濃く、光の筋が横に流れる。
+     * 高さは本物の表と同じにしてある (届いた拍子に下の節が動かない)
+     */
+    .skeleton {
+        position: relative;
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: 0.4rem;
-        margin: 0;
-        padding: 0.2rem 0.35rem;
-        border-radius: var(--dp-radius);
-        line-height: 1.5;
-        list-style: none;
-        transition: background-color var(--dp-duration) var(--dp-ease);
+        overflow: hidden;
     }
-    .cm-logo > summary::-webkit-details-marker,
-    .cm-logo > summary::after {
-        display: none;
-    }
-    .cm-logo > summary:hover,
-    .cm-logo[open] > summary {
+    .skeleton-head,
+    .skeleton-row {
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-subtle);
     }
-    /* 覚えたかどうかの小さな点。まだは枠だけ、覚えたものは成功の色で塗る */
-    .state-dot {
-        flex-shrink: 0;
-        width: 0.5rem;
-        height: 0.5rem;
-        border: 1px solid var(--dp-line-strong);
-        border-radius: var(--dp-radius-full);
+    .skeleton-head {
+        height: 1.8rem;
+        background: var(--dp-line);
     }
-    .cm-logo[data-learned='true'] .state-dot {
-        border-color: var(--dp-ok);
-        background: var(--dp-ok);
+    .skeleton-tag {
+        display: inline-block;
+        width: 2.5rem;
+        height: 1.1rem;
+        border-radius: var(--dp-radius-full);
+        background: var(--dp-subtle);
+    }
+    .skeleton::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.06) 50%, transparent 100%);
+        transform: translateX(-100%);
+        animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
+    }
+    @keyframes skeleton-sweep {
+        to {
+            transform: translateX(100%);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .skeleton::after {
+            animation: none;
+        }
     }
 </style>

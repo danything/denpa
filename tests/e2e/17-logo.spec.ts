@@ -182,16 +182,19 @@ test.describe('衛星の局ロゴ', () => {
         expect((await request.get(`/api/services/${BS_NO_LOGO.id}/logo`)).status()).toBe(404);
     });
 });
-
 /**
  * CM検出のために覚えたロゴ (`LearnedLogo.svelte`)。**番組表に出す局ロゴとは別物。**
  *
  * 覚えるのは録画をエンコードするときで、偽 ffmpeg では覚えられないので、覚えたものは
- * 本物と同じ形式で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局が
- * 「覚えました」と画像で出ること、「この画像は違う」で消せて済んだ色で知らせること
+ * 本物と同じ形式で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局の行に
+ * 画像と「覚え直す」が開かずに出ていること、押すと消えて済んだ色で知らせること
  */
 test.describe('CM検出のロゴ', () => {
-    test('覚えた画像を出し、「この画像は違う」で消すと済んだ通知で出る', async ({ page, request, stack }) => {
+    test('覚えた局の行に画像を出し、「覚え直す」で消すと済んだ通知で出る', async ({
+        page,
+        request,
+        stack,
+    }) => {
         await syncEpg(request);
 
         // 縁が一筋だけ揃っている 40×20 の枠
@@ -215,29 +218,28 @@ test.describe('CM検出のロゴ', () => {
         expect(image.headers()['content-type']).toContain('image/png');
 
         await goto(page, '/tuners');
-        // 局名は画面では半角に揃えてある (ＢＳ１１ → BS11)
-        // 局ごとの一覧は畳んである。開いてから探す
-        await page.getByTestId('cm-logo-list').locator('summary').first().click();
-        const card = page.locator('details.cm-logo').filter({ hasText: 'ＢＳ１１' });
-        // 覚えた局は「覚えました」の組に並ぶ
-        await expect(
-            page.getByTestId('cm-logo-learned').locator('details.cm-logo').filter({ hasText: 'ＢＳ１１' }),
-        ).toHaveCount(1);
-        await expect(card).toHaveAttribute('data-learned', 'true');
-        await card.locator('summary').first().click();
-        const shown = card.getByRole('img', { name: 'いま覚えているロゴ' });
+        // 数の行に「CMロゴ n / m 局」
+        await expect(page.getByTestId('status-cm-logos')).toContainText('局');
+        // 受信できるチャンネルの表の、その局の行に出る。開け閉めは無い
+        const station = page.locator(`[data-testid="channel-service"][data-service-id="${BS11.id}"]`);
+        const shown = station.getByRole('img', { name: 'CM検出のロゴ' });
         await expect(shown).toBeVisible();
         // 画像として読めていること (壊れた PNG だと幅が 0 になる)
         await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(40);
+        // 覚えていない局には何も出さない
+        await expect(
+            page
+                .locator(`[data-testid="channel-service"][data-service-id="${MX.id}"]`)
+                .getByTestId('learned-logo'),
+        ).toHaveCount(0);
 
-        await card.getByRole('button', { name: 'この画像は違う' }).click();
+        await station.getByRole('button', { name: '覚え直す' }).click();
 
         const done = page.getByTestId('tuner-done');
         await expect(done).toContainText('覚えたロゴを消しました');
         await expect(done).toHaveClass(/\bsuccess\b/);
         await expect(page.getByTestId('tuner-error')).toHaveCount(0);
-        await expect(card).toHaveAttribute('data-learned', 'false');
-        await expect(page.getByTestId('cm-logo-waiting')).toContainText('ＢＳ１１');
+        await expect(station.getByTestId('learned-logo')).toHaveCount(0);
         expect(existsSync(repo)).toBe(false);
         expect((await request.get(`/api/services/${BS11.id}/logo-data`)).status()).toBe(404);
     });
