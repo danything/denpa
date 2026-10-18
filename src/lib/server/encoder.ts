@@ -35,6 +35,16 @@ import { config } from './config';
 import { affected, now, orm } from './db';
 import { type EncodeProgress, emit } from './events';
 import { usedByOther } from './files';
+import {
+    FPS_POINTS,
+    FPS_WINDOW,
+    type FpsWindow,
+    fpsArgs,
+    judgeWindow,
+    pickSmooth,
+    UNMEASURED,
+    windowLabel,
+} from './fps';
 import { removeIfExists } from './fsx';
 import { type HwWay, hwArgs, hwChain } from './hwenc';
 import { encodedPath, libraryFamily, libraryPath } from './library';
@@ -65,83 +75,26 @@ export function deinterlace(smooth: boolean): string {
     return smooth ? 'bwdif' : 'bwdif=mode=send_frame';
 }
 
-/** 1窓の長さ(秒)。5窓測って中央値を採る */
-const FPS_WINDOW = 30;
-/**
- * 測る窓の位置 (録画のどのあたりか)。**5窓・中央値** — 3窓だと
- * アイキャッチや OP に1窓乗るだけで引きずられ、下位や最小を採ると実写の静止した窓
- * (42%) で 30コマに倒す側の誤判定が出る。実測と閾値 (config.fpsSurvive) の根拠は
- * docs/encode.md「コマ数は本編の映像から測って決める」
- */
-const FPS_POINTS = [0.1, 0.3, 0.5, 0.7, 0.9];
-
-/** ffmpeg (-f null) の stderr から、書き出したコマ数を読む。最後の frame= を採る */
-export function parseOutFrames(stderr: string): number {
-    let last = NaN;
-    for (const m of stderr.matchAll(/frame=\s*(\d+)/g)) last = Number(m[1]);
-    return last;
+/** 1窓ぶん測る。ffmpeg が失敗したら「測れない」 */
+async function measureWindow(input: string, at: number, signal: AbortSignal): Promise<FpsWindow> {
+    const diffs: string[] = [];
+    const result = await run([config.ffmpeg, ...fpsArgs(input, at)], {
+        signal,
+        // 1コマ2行ずつ出るので、差の行だけ溜める
+        onStderrLine: (line) => {
+            if (line.includes('YDIF=')) diffs.push(line);
+        },
+    });
+    return result.code === 0 ? judgeWindow(diffs) : UNMEASURED;
 }
 
 /**
- * 生存率の中央値から 60コマにするか決める。**迷ったら 60コマ。**
- * 本物の 60i を 30コマに落とすと動きが崩れるが、逆は無駄が出るだけで映像は変わらない。
- */
-export function pickSmooth(ratios: number[], threshold = config.fpsSurvive): boolean {
-    const valid = ratios.filter((r) => Number.isFinite(r) && r > 0);
-    if (valid.length === 0) return true;
-    const sorted = [...valid].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
-    return median > threshold;
-}
-
-/** 1窓ぶん測る。60p化 → 重複コマ落とし → 残った割合。測れなければ NaN */
-async function surviveRatio(input: string, at: number, signal: AbortSignal): Promise<number> {
-    const result = await run(
-        [
-            config.ffmpeg,
-            '-hide_banner',
-            '-nostats',
-            '-ss',
-            String(Math.max(0, at)),
-            '-t',
-            String(FPS_WINDOW),
-            '-i',
-            input,
-            // **主映像 (HD) に固定する。** GR には 1seg (H.264 320x180) が混じっていて、
-            // -map を付けないとフィルタがそちらに当たる (実測で判明)
-            '-map',
-            '0:v:0',
-            '-vf',
-            'bwdif=mode=send_field,mpdecimate',
-            '-an',
-            '-sn',
-            '-fps_mode',
-            'passthrough',
-            '-f',
-            'null',
-            '-',
-        ],
-        { signal, stderr: true },
-    );
-    const out = parseOutFrames(result.stderr);
-    // 60p に起こしたので、1窓の期待コマ数は 60000/1001 * 秒
-    return out / ((FPS_WINDOW * 60000) / 1001);
-}
-
-/**
- * 30コマか60コマかを、録画から5窓測って決める。
- *
- * 放送の TS に「本当のコマ数」は入っていない — EIT も符号化ヘッダも、素材が 24p の
- * アニメでも**全部 1080i/60 と名乗る** (本番の実測)。それでも、**60コマに
- * 起こして同じ画像が続く割合を数えれば**見分けはつく — アニメ (24p/30p 由来) は
- * 同じ画像が2〜3枚ずつ並ぶので重複を落とすとコマが大きく減り、本物の 60i
- * (実写・生放送) は全コマ動くので減らない。実測値の表と、idet (縞の検出) が
+ * 30コマか60コマかを、録画から5窓測って決める。見分け方は `fps.ts`、実測の表と idet (縞の検出) が
  * 使えなかった話は [docs/encode.md](../../../docs/encode.md) に。
  *
- * **窓は録画全体に散らす。** CM (実写 60i) に乗った窓は釣り上がるが、CM はエンコードしながら探すので
- * (`cm-scan.ts`)、測る時点ではまだ分からない。散らせば CM に乗るのは5窓のうち多くて2つで、
- * 中央値は動かない (本番の録画 117 本の CM 位置で数えて、3つ以上乗るものは無かった)。
- * 頭に固めると、アバン+OP の激しい動きに引きずられて 30コマの本編を 60コマと誤判定する。
+ * **窓は録画全体に散らす。** CM はエンコードしながら探すので測る時点では分からないが、
+ * 散らせば CM に乗るのは5窓のうち多くて2つで、多数決は動かない (CM はフィルム撮りも多い)。
+ * 頭に固めると、アバン+OP の激しい動きに引きずられる
  */
 async function measureSmoothMotion(
     source: string,
@@ -153,14 +106,15 @@ async function measureSmoothMotion(
 
     // 尺が窓より短いと5点が同じ位置に重なる。同じ30秒を測り直さない
     const offsets = [...new Set(FPS_POINTS.map((point) => span * point))];
-    const ratios: number[] = [];
+    const windows: FpsWindow[] = [];
     for (const at of offsets) {
         if (signal.aborted) break;
-        ratios.push(await surviveRatio(source, at, signal));
+        windows.push(await measureWindow(source, at, signal));
     }
-    const smooth = pickSmooth(ratios);
+    const smooth = pickSmooth(windows.map((w) => w.kind));
+    // 窓ごとの値も出す。閾値 (fps.ts) を詰め直すときの材料
     console.log(
-        `[fps] 重複コマの実測: 生存率 ${ratios.map((r) => (Number.isFinite(r) ? `${(r * 100).toFixed(0)}%` : '測れず')).join(' / ')} → ${smooth ? '60' : '30'}コマ`,
+        `[fps] フィールドの実測: ${windows.map(windowLabel).join(' / ')} → ${smooth ? '60' : '30'}コマ`,
     );
     return smooth;
 }
