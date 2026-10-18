@@ -103,7 +103,7 @@ test.describe('ルールで立った予約', () => {
         // 行にボタンを足すと窮屈になるので、出しているルール名をそのまま入口にする
         await row.getByTestId('rule-name').getByRole('link').click();
 
-        await expect(page.getByRole('heading', { level: 2 }).first()).toContainText('ルールを編集');
+        await expect(page.getByTestId('rule-mode')).toContainText('編集中');
         await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ');
     });
 
