@@ -110,25 +110,28 @@
         transition: transform var(--dp-duration) var(--dp-ease);
         pointer-events: none;
     }
-    /* 切れ目は 2px のすき間。両端の部分は溝の端まで */
+    /*
+     * 切れ目は 2px のすき間。両端の部分は溝の端まで。
+     * 2px に満たない部分 (長いバーの短い CM) も 1px は残す (すき間で消えないように)
+     */
     .part {
         position: absolute;
         top: 0;
         bottom: 0;
-        box-sizing: border-box;
-        padding-inline: 1px;
     }
     .bar {
         height: 100%;
+        min-width: 1px;
+        margin-inline: 1px;
         border-radius: 2px;
         overflow: hidden;
         background: var(--seek-track);
     }
-    .part:first-child {
-        padding-left: 0;
+    .part:first-child .bar {
+        margin-left: 0;
     }
-    .part:last-child {
-        padding-right: 0;
+    .part:last-child .bar {
+        margin-right: 0;
     }
     .part[data-part="cm"] .bar {
         background: var(--seek-cm);
