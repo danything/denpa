@@ -114,11 +114,12 @@
     --dp-info: #058686; /* cyan-500 */
     --dp-error: var(--dp-rec);
     /*
-     * 指を乗せた行・選んでいる項目の地。**押せる行はどこでもこの1色** (一覧の行・見出し・
-     * ルールのプレビュー・番組表のマス・ライブの局・メニュー)。画面ごとに3通りあった頃は、
-     * 同じ「押せる」が画面を移ると違う濃さで返ってきた
+     * 指を乗せた項目・選んでいる項目の地 (メニュー・番組表のマス・ルールのプレビュー)。
+     * 選んでいる行を `--dp-subtle` で塗る一覧 (ホーム・ルール・設定の目次) は、指を乗せた行を
+     * それより淡い `--dp-hover-soft` にして、選んでいる行と見分ける
      */
     --dp-hover: var(--dp-subtle);
+    --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
 }
 /*
  * テーマごとの色。**明るいほうの値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
@@ -139,7 +140,7 @@
  * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
- * - `--dp-shadow` … カードの影 (ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
+ * - `--dp-shadow` … 持ち上げた面の影 (選んでいるタブ・リモコン。ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)。
  *   箱は縁と影 (`--dp-shadow-pop`) で浮かせる
  */
@@ -291,7 +292,7 @@ img[data-fade="pending"] {
 }
 
 /*
- * ---- 一言だけ出して消える知らせ (`.flash`。「保存しました」) ----
+ * ---- 一言だけ出して消える通知 (`.flash`。「保存しました」) ----
  * ふわっと出て (0.2 秒)、読めるだけ置き、ふわっと消える (0.3 秒)。
  * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)
  */
@@ -554,12 +555,6 @@ progress.running[value]::-webkit-progress-value {
 .solo h1 {
     font-size: 1.25rem;
 }
-/* 要点の1行と、その下に畳んだ「詳しく」 */
-.note-block {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
 
 /* ---- 文字 ---- */
 /*
@@ -658,6 +653,28 @@ progress.running[value]::-webkit-progress-value {
 }
 .check input {
     margin: 0;
+}
+/*
+ * チェック + 見出しの行と、その下の要点 (`CheckRow`。要点に太字を混ぜたいときは同じ形を直に書く)。
+ * 要点 (`Lead`) と「詳しく」の続きは、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem)
+ */
+.check-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+.check-item .more-body {
+    margin-inline-start: 1.75rem;
+}
+.check-row {
+    display: flex;
+    cursor: pointer;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+.check-row input {
+    margin: 0.15rem 0 0;
+    flex-shrink: 0;
 }
 /*
  * 説明の続き。`<details class="more"><summary>詳しく</summary><p>…</p></details>`
@@ -1089,6 +1106,31 @@ button[aria-busy="true"]::after {
     background-position: center;
 }
 
+/*
+ * 文の続きとして読める、地も枠も無い小さなボタン (`Lead` の「詳しく」・エンコーダの「確かめ直す」)。
+ * 押せることは下線で示す。上の `aria-busy` より後に置き、送信中も字は控えた色のまま
+ */
+button.text-button {
+    display: inline;
+    width: auto;
+    margin: 0 0 0 0.25rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--dp-muted);
+    font: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--dp-line-strong);
+    text-underline-offset: 0.2em;
+    cursor: pointer;
+}
+button.text-button:hover {
+    color: var(--pico-color);
+    text-decoration-color: currentColor;
+}
+
 /* ---- メニュー (`Menu.svelte`) の見た目。開け閉めは popover、見た目はここ ---- */
 /*
  * popover の既定 (画面の真ん中・枠・余白) を消し、引き金の横に浮かせる箱にする。
@@ -1160,6 +1202,56 @@ button[aria-busy="true"]::after {
         opacity: 0;
         transform: scale(0.96);
     }
+}
+/* 引き金から 4px 離し、入りきる側へ広げる */
+.menu[data-side="bottom"] {
+    margin-top: 4px;
+}
+.menu[data-side="top"] {
+    margin-bottom: 4px;
+}
+.menu[data-side="bottom"][data-align="start"] {
+    position-area: bottom span-right;
+}
+.menu[data-side="bottom"][data-align="end"] {
+    position-area: bottom span-left;
+}
+.menu[data-side="top"][data-align="start"] {
+    position-area: top span-right;
+}
+.menu[data-side="top"][data-align="end"] {
+    position-area: top span-left;
+}
+/* 項目。`<button>` も `<a>` も同じ見た目にする (Pico のボタンの地・枠・フォーカスの輪を消す) */
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    border: 0;
+    border-radius: var(--dp-radius-sm);
+    box-shadow: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    outline: none;
+}
+/* いま選んでいるもの (↑↓・マウスを乗せたもの)。フォーカスで示す */
+.menu-item:is(:hover, :active, :focus, :focus-visible) {
+    box-shadow: none;
+    color: inherit;
+}
+.menu-item:focus {
+    background: var(--dp-hover);
+}
+.menu-item[data-disabled] {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 /*
@@ -1244,55 +1336,6 @@ dialog[open] > article {
         transform: scale(0.96);
     }
 }
-.menu[data-side="bottom"] {
-    margin-top: 4px;
-}
-.menu[data-side="top"] {
-    margin-bottom: 4px;
-}
-.menu[data-side="bottom"][data-align="start"] {
-    position-area: bottom span-right;
-}
-.menu[data-side="bottom"][data-align="end"] {
-    position-area: bottom span-left;
-}
-.menu[data-side="top"][data-align="start"] {
-    position-area: top span-right;
-}
-.menu[data-side="top"][data-align="end"] {
-    position-area: top span-left;
-}
-/* 項目。`<button>` も `<a>` も同じ見た目にする (Pico のボタンの地・枠・フォーカスの輪を消す) */
-.menu-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    margin: 0;
-    padding: 0.4rem 0.6rem;
-    border: 0;
-    border-radius: var(--dp-radius-sm);
-    box-shadow: none;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    text-decoration: none;
-    cursor: pointer;
-    outline: none;
-}
-/* いま選んでいるもの (↑↓・マウスを乗せたもの)。フォーカスで示す */
-.menu-item:is(:hover, :active, :focus, :focus-visible) {
-    box-shadow: none;
-    color: inherit;
-}
-.menu-item:focus {
-    background: var(--dp-hover);
-}
-.menu-item[data-disabled] {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
 
 /* ---- 設定の並べ方 (設定の画面。`routes/settings`) ---- */
 /*
@@ -1345,6 +1388,20 @@ dialog[open] > article {
 /* チェックの下の要点は、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem) */
 .sections .lead.indent {
     margin-inline-start: 1.75rem;
+}
+/* 設定の表 (チューナー・チャンネル・ロゴ)。入りきらなければ横に巻き、欄の間は詰める。`.wide` の列が余った幅を取る */
+.table-wrap {
+    overflow-x: auto;
+}
+.table-wrap table {
+    margin: 0;
+}
+.table-wrap th,
+.table-wrap td {
+    padding: 0.35rem 0.5rem;
+}
+.table-wrap .wide {
+    width: 100%;
 }
 /*
  * **広い画面では「名前 (左) ｜ 操作 (右)」の 2 段組の行にする** (`.setting-rows` の中の `.field`)。

@@ -305,25 +305,4 @@
     .hw-line {
         margin-top: 0.25rem;
     }
-    /* 文の続きとして読める小さなボタン (Lead の「詳しく」と同じ見た目) */
-    .text-button {
-        display: inline;
-        width: auto;
-        margin: 0 0 0 0.25rem;
-        padding: 0;
-        border: 0;
-        border-radius: 0;
-        background: none;
-        box-shadow: none;
-        color: var(--dp-muted);
-        font: inherit;
-        text-decoration: underline;
-        text-decoration-color: var(--dp-line-strong);
-        text-underline-offset: 0.2em;
-        cursor: pointer;
-    }
-    .text-button:hover {
-        color: var(--pico-color);
-        text-decoration-color: currentColor;
-    }
 </style>

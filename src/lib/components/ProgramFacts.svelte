@@ -144,7 +144,7 @@
 <style>
     .title {
         margin: 0;
-        font-size: 1.125rem;
+        font-size: var(--dp-text-lg);
         font-weight: var(--dp-weight-bold);
         overflow-wrap: break-word;
     }
@@ -178,7 +178,7 @@
         border-radius: 0.25rem;
         background: var(--dp-subtle);
         font-family: ui-monospace, monospace;
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         white-space: pre-wrap;
     }
 </style>

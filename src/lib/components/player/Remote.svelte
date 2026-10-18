@@ -165,7 +165,7 @@
         flex: 1;
         height: 2rem;
         padding: 0;
-        font-size: 0.875rem;
+        font-size: var(--dp-text-sm);
     }
     /* 押したときの色は Pico (層の中) に勝つ上の変数のまま。明るさだけ上げる */
     .color:is(:hover, :focus, :active) {
@@ -181,10 +181,10 @@
         width: 3rem;
         height: 3rem;
         padding: 0;
-        font-size: 1.125rem;
+        font-size: var(--dp-text-lg);
     }
     .enter {
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
     }
     .row {
         display: flex;

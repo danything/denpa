@@ -422,9 +422,6 @@
 </div>
 
 <style>
-    .table-wrap {
-        overflow-x: auto;
-    }
     /*
      * **チューナーの設定は、広い画面で横に巻かせない。** 欄の幅を決め打ちしていた
      * 頃は表が 784px より縮まず、1920px の画面でも Windows の拡大 125% (= 1536px)
@@ -444,16 +441,6 @@
     /* 受信できる種別は小さな切り替え (`.chip`) を横に並べる。行の高さを 1 段に保つ */
     .types-cell {
         flex-wrap: nowrap;
-    }
-    .table-wrap table {
-        margin: 0;
-    }
-    .table-wrap th,
-    .table-wrap td {
-        padding: 0.35rem 0.5rem;
-    }
-    .wide {
-        width: 100%;
     }
     .config :is(input:not([type='checkbox']), select) {
         height: auto;

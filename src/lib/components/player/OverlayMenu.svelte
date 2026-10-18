@@ -106,9 +106,7 @@
 
 <style>
     /*
-     * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。メニューごとに
-     * 決め打ち (音声 13rem・エンコード方式 9rem・速さ 6rem) にしていた頃は、2 択のエンコード方式にも
-     * 名前の短い音声にも余白ばかりの箱が出て、タブレットで目立った
+     * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)
      */
     :global(.overlay-menu) {
         gap: 0.125rem;
@@ -125,7 +123,7 @@
     }
     :global(.overlay-menu.large) {
         gap: 0.25rem;
-        font-size: 1.125rem;
+        font-size: var(--dp-text-lg);
     }
     :global(.overlay-menu.large .option) {
         justify-content: center;

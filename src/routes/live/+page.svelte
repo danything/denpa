@@ -1009,7 +1009,7 @@
         padding: 0.25rem 0.25rem 0.25rem 0.75rem;
         border-radius: 1rem;
         background: rgb(0 0 0 / 0.6);
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         color: #fff;
         pointer-events: auto;
     }
@@ -1018,10 +1018,9 @@
         margin: 0;
         padding: 0.125rem 0.75rem;
         border: 1px solid rgb(255 255 255 / 0.6);
-        border-radius: 1rem;
         background: transparent;
         color: #fff;
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
     }
     .back-live:hover:not(:disabled) {
         background: rgb(255 255 255 / 0.15);
@@ -1117,14 +1116,14 @@
         white-space: nowrap;
     }
     .channel-name {
-        font-size: 0.875rem;
+        font-size: var(--dp-text-sm);
         font-weight: var(--dp-weight);
     }
     .tuned .channel-name {
         color: var(--dp-primary-text);
     }
     .channel-now {
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         color: var(--dp-muted);
     }
     /* 局名の前の印。塗った三角 (Lucide の play は線だけなので塗る) */

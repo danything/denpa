@@ -2252,7 +2252,7 @@
 
 <style>
     .not-ready h2 {
-        font-size: 1rem;
+        font-size: var(--dp-text-base);
     }
     .wait {
         pointer-events: none;

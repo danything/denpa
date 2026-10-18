@@ -25,7 +25,7 @@
 <p class="lead {extra}">
     {@render children()}
     {#if more}
-        <button type="button" class="more-link" aria-expanded={open} aria-controls={id} onclick={() => (open = !open)}>
+        <button type="button" class="text-button" aria-expanded={open} aria-controls={id} onclick={() => (open = !open)}>
             詳しく<span class="chevron" class:open aria-hidden="true">›</span>
         </button>
     {/if}
@@ -42,27 +42,6 @@
         margin: 0;
         color: var(--dp-muted);
         font-size: var(--dp-text-sm);
-    }
-    /* 文の続きとして読める、地も枠も無い小さなリンク。押せることは下線で示す */
-    .more-link {
-        display: inline;
-        width: auto;
-        margin: 0 0 0 0.25rem;
-        padding: 0;
-        border: 0;
-        border-radius: 0;
-        background: none;
-        box-shadow: none;
-        color: var(--dp-muted);
-        font: inherit;
-        text-decoration: underline;
-        text-decoration-color: var(--dp-line-strong);
-        text-underline-offset: 0.2em;
-        cursor: pointer;
-    }
-    .more-link:hover {
-        color: var(--pico-color);
-        text-decoration-color: currentColor;
     }
     .chevron {
         display: inline-block;
