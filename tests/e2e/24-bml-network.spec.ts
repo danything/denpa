@@ -25,7 +25,7 @@ import {
 
 /** 設定画面の「データ放送の双方向」を切り替えて、保存し終えるまで (変えたらその場で保存する) */
 async function setNetwork(page: Page, on: boolean): Promise<void> {
-    await goto(page, '/settings/broadcast');
+    await goto(page, '/settings/reception');
     await page.getByTestId('bml-network').setChecked(on);
     /*
      * **待つのは保存の完了。** チェック状態で待っていた頃は、自分で入れた
@@ -37,7 +37,7 @@ async function setNetwork(page: Page, on: boolean): Promise<void> {
 
 test.describe('データ放送の双方向', () => {
     test('既定はオン。切ると中継しない', async ({ page, request }) => {
-        await goto(page, '/settings/broadcast');
+        await goto(page, '/settings/reception');
         await expect(page.getByTestId('bml-network')).toBeChecked();
         await setNetwork(page, false);
         try {

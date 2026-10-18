@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { type Actions, fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { config } from '#lib/server/config.js';
 import { orm } from '#lib/server/db.js';
@@ -173,4 +173,4 @@ export const actions = {
         }
         return { success: true };
     },
-};
+} satisfies Actions;

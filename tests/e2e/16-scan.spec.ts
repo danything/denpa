@@ -14,7 +14,7 @@ test.describe('設定のチューナーとチャンネル', () => {
 
     test('チャンネルスキャンを実行でき、進み具合と結果が出る', async ({ page, request }) => {
         await syncEpg(request);
-        await goto(page, '/settings/channels');
+        await goto(page, '/settings/reception');
 
         const card = page.getByTestId('channel-card');
         // 何分もかかって空きチューナーを全部使うので、そうと分かるようにしておく (「詳しく」の中)
@@ -39,7 +39,7 @@ test.describe('設定のチューナーとチャンネル', () => {
      */
     test('番組表をいますぐ集められる。譲る順も上がる', async ({ page, request, stack }) => {
         await syncEpg(request);
-        await goto(page, '/settings/channels');
+        await goto(page, '/settings/reception');
 
         await page.getByTestId('epg-collect-now').click();
 
@@ -74,7 +74,7 @@ test.describe('設定のチューナーとチャンネル', () => {
 
     test('種別を1つも選ばなければ断る', async ({ request }) => {
         // 画面の選ぶ欄は必ずどれかが入っている。画面の外から空で来たものは断る
-        const res = await request.post('/settings/channels?/scan', {
+        const res = await request.post('/settings/reception?/scan', {
             form: {},
             headers: { accept: 'application/json', 'x-sveltekit-action': 'true' },
         });
@@ -84,7 +84,7 @@ test.describe('設定のチューナーとチャンネル', () => {
     test('チューナーの空きと取れているチャンネルが出る', async ({ page, request, stack }) => {
         await syncEpg(request);
         await request.post(`${stack.agentUrl}/__control/tuners?busy=1`);
-        await goto(page, '/settings/tuners');
+        await goto(page, '/settings/reception');
 
         const tuners = page.getByTestId('tuner-list');
         await expect(tuners.getByTestId('tuner-row')).toHaveCount(4);
@@ -119,7 +119,7 @@ test.describe('設定のチューナーとチャンネル', () => {
         await expect(order.last()).toHaveText('局ロゴの取得');
 
         // スキャンで見つかった物理チャンネルと、denpa が取り込んだ局名 (設定のチャンネル)
-        await goto(page, '/settings/channels');
+        await goto(page, '/settings/reception');
         const channels = page.getByTestId('channel-list');
         await expect(channels.getByTestId('channel-row').first()).toBeVisible();
         // 局名は放送のとおりの幅で出す (全角の英数は全角のまま)
@@ -167,7 +167,7 @@ test.describe('チューナーの設定', () => {
     });
 
     test('画面から台数と種別を変えられる', async ({ page }) => {
-        await goto(page, '/settings/tuners');
+        await goto(page, '/settings/reception');
 
         const card = page.getByTestId('tuner-config-card');
         const rows = card.getByTestId('tuner-config-row');
@@ -196,7 +196,7 @@ test.describe('チューナーの設定', () => {
     });
 
     test('種別を1つも選ばない行は断る', async ({ page }) => {
-        await goto(page, '/settings/tuners');
+        await goto(page, '/settings/reception');
 
         const card = page.getByTestId('tuner-config-card');
         // 最後の 1 つを外すと、その場で断られてすぐ元に戻る。そこだけは押すだけにする (外れたままを待たない)
@@ -224,7 +224,7 @@ test.describe('チューナーの設定', () => {
         ];
 
         await page.setViewportSize({ width: 1600, height: 900 });
-        await goto(page, '/settings/tuners');
+        await goto(page, '/settings/reception');
         await expect(page.getByTestId('tuner-list').getByTestId('tuner-row').first()).toBeVisible();
         await expect(page.getByTestId('card-reader-row').first()).toBeVisible();
         for (const table of tables) {

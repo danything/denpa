@@ -244,10 +244,10 @@ function stamp(at: number): string {
  * 終わるまで待つ — 集めている間はチューナーが塞がり、ライブが映らない
  */
 async function sweepLogos(): Promise<void> {
-    await post('/settings/logos?/logoSweep', {});
+    await post('/settings/reception?/logoSweep', {});
     const until = Date.now() + 180_000;
     while (Date.now() < until) {
-        const html = await (await fetch(`${BASE}/settings/logos`)).text();
+        const html = await (await fetch(`${BASE}/settings/reception`)).text();
         if (html.includes('data-testid="logo-sweep-done"')) return;
         await new Promise((resolve) => setTimeout(resolve, 2000));
     }
@@ -522,8 +522,8 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
         ['watch', watchId === null ? '/' : `/watch/${watchId}`],
         ['live', '/live'],
         ['rules', '/rules'],
-        ['tuners', '/settings/tuners'],
-        ['channels', '/settings/channels'],
+        ['tuners', '/settings/reception#tuners'],
+        ['channels', '/settings/reception#channels'],
         ['settings', '/settings/recording'],
     ];
     const sizes = [
@@ -699,7 +699,7 @@ async function motionShots(browser: Browser): Promise<void> {
     // 数字の多い画面 (桁を揃えた数字)。見えている広さだけ
     for (const [name, path] of [
         ['numbers-home', '/'],
-        ['numbers-tuners', '/settings/channels'],
+        ['numbers-tuners', '/settings/reception#channels'],
     ] as const) {
         await shot(name, async () => {
             await page.goto(`${BASE}${path}`);
@@ -764,7 +764,7 @@ async function motionShots(browser: Browser): Promise<void> {
         });
     });
     await shot('dialog', async () => {
-        await page.goto(`${BASE}/settings/browser`);
+        await page.goto(`${BASE}/settings/general#browser`);
         await settle(page, 800);
         await page.getByTestId('canvas-video-toggle').scrollIntoViewIfNeeded();
         await record(page, 'dialog', async () => {
@@ -788,7 +788,7 @@ async function motionShots(browser: Browser): Promise<void> {
     });
     // 7. ヘッダーの線と影 (スクロールに合わせて濃くなる)
     await shot('scroll', async () => {
-        await page.goto(`${BASE}/settings/channels`);
+        await page.goto(`${BASE}/settings/reception#channels`);
         await settle(page, 800);
         await record(page, 'scroll', async () => {
             for (let y = 0; y <= 240; y += 12) {
@@ -804,7 +804,7 @@ async function motionShots(browser: Browser): Promise<void> {
     });
     // 8. 進み具合のバー (番組表をいますぐ集める)
     await shot('progress', async () => {
-        await page.goto(`${BASE}/settings/channels`);
+        await page.goto(`${BASE}/settings/reception#channels`);
         await settle(page, 800);
         // 偽の放送では集め終わるのが速いので、押す前から録る
         await page.getByTestId('epg-collect-now').scrollIntoViewIfNeeded();
@@ -994,7 +994,7 @@ try {
             });
         }
         if (want('tuners-anim')) {
-            await page.goto(`${BASE}/settings/tuners`);
+            await page.goto(`${BASE}/settings/reception#tuners`);
             await settle(page, 2000);
             await anim(page, 'tuners-anim', async () => {
                 await page.waitForTimeout(1000);

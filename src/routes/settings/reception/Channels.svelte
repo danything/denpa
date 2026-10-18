@@ -3,16 +3,11 @@
     import ActionButton from '#lib/components/ActionButton.svelte';
     import JobProgress from '#lib/components/JobProgress.svelte';
     import Lead from '#lib/components/Lead.svelte';
-    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL } from '#lib/format.js';
-    import { liveUpdates } from '#lib/live-updates.svelte.js';
+    import type { PageData } from './$types';
 
-    let { data, form } = $props();
+    let { data }: { data: PageData } = $props();
 
-    // スキャンは数十分かかることがある。進み具合はサーバから push される。
-    // 局の取り込みも1回では終わらないので、増えるたびに描き直す。
-    // 番組表を集めている最中の様子は 'tuners' で流れてくる
-    liveUpdates(['scan', 'services', 'tuners', 'programs']);
     const scan = $derived(data.scan);
 
     /**
@@ -41,14 +36,6 @@
         const d = new Date(at);
         return `${d.getMonth() + 1}/${d.getDate()} まで`;
     }
-
-    /** 押した結果。スキャンの経過そのものは見出しの下に出したままにする */
-    const notices = $derived.by(() => {
-        const list: Notice[] = [];
-        list.push(...errorNotice(form, 'tuner-error'));
-        if (form?.scan) list.push({ key: 'tuner-notice', kind: 'info', text: form.scan });
-        return list;
-    });
 </script>
 
 <!--
@@ -73,8 +60,6 @@
         {/if}
     </form>
 {/snippet}
-
-<Toasts {notices} source={form} />
 
 <!--
     **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・番組表)、

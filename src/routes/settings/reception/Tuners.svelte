@@ -4,16 +4,14 @@
     import Lead from '#lib/components/Lead.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import SaveNote from '#lib/components/SaveNote.svelte';
-    import Toasts, { errorNotice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL, splitReaderName } from '#lib/format.js';
-    import { held, liveUpdates } from '#lib/live-updates.svelte.js';
+    import { held } from '#lib/live-updates.svelte.js';
     import type { CardReaderState } from '#lib/server/scramble.js';
     import X from '~icons/lucide/x';
+    import type { PageData } from './$types';
 
-    let { data, form } = $props();
+    let { data }: { data: PageData } = $props();
 
-    // 使い始めた・離したはエージェントの通知 ('tuners') で流れてくる。スキャン・番組表・ロゴの取得もここに出る
-    liveUpdates(['tuners']);
     /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
     const configSave = new SaveState();
     /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
@@ -55,13 +53,9 @@
         error: { label: 'エラー', tone: 'error' },
         unknown: { label: '—', tone: '' },
     };
-
-    const notices = $derived(errorNotice(form, 'tuner-error'));
 </script>
 
 <svelte:window onclick={deleting.stand} />
-
-<Toasts {notices} source={form} />
 
 <!--
     **チューナーの空き → チューナーの設定** の順。いまの様子を先に、入れたときしか触らない設定を後に。

@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { type Actions, fail } from '@sveltejs/kit';
 import { liveTokens, revokeToken } from '#lib/server/device-auth.js';
 
 export function load() {
@@ -15,4 +15,4 @@ export const actions = {
         revokeToken(id);
         return { success: true };
     },
-};
+} satisfies Actions;

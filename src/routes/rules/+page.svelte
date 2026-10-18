@@ -758,7 +758,7 @@
                                                     </div>
                                                 {:else}
                                                     <p class="small muted">
-                                                        局がまだありません。<a href={resolve('settings/channels')}>チャンネルスキャン</a>をしてください。
+                                                        局がまだありません。<a href={`${resolve('settings/reception')}#channels`}>チャンネルスキャン</a>をしてください。
                                                     </p>
                                                 {/each}
                                             </div>

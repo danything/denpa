@@ -272,15 +272,27 @@ export async function setRecording(
      * サーバは `formData().getAll('codecs')` で読む。Playwright の `form`
      * オブジェクトは同じキーを繰り返せないので、body を手で組む
      */
-    const body = new URLSearchParams();
-    for (const codec of chosen) body.append('codecs', codec);
-    body.append('cmCut', patch.cmCut ?? 'chapter');
-    if (patch.keepOriginal === true) body.append('keepOriginal', 'on');
-    if (patch.transcodeLimit !== undefined) body.append('transcodeLimit', patch.transcodeLimit);
+    const encoding = new URLSearchParams();
+    for (const codec of chosen) encoding.append('codecs', codec);
+    if (patch.keepOriginal === true) encoding.append('keepOriginal', 'on');
+    if (patch.transcodeLimit !== undefined) encoding.append('transcodeLimit', patch.transcodeLimit);
+    const reserve = new URLSearchParams();
+    if (patch.freeOnly === true) reserve.append('freeOnly', 'on');
+    // 画面では節ごとにフォームが分かれている (エンコード・CM・自動予約)。同じ3つを投げる
+    await saveRecordingPart(request, 'saveEncoding', encoding);
+    await saveRecordingPart(request, 'saveCm', new URLSearchParams({ cmCut: patch.cmCut ?? 'chapter' }));
+    await saveRecordingPart(request, 'saveReserve', reserve);
+}
+
+async function saveRecordingPart(
+    request: APIRequestContext,
+    action: string,
+    body: URLSearchParams,
+): Promise<void> {
     /*
      * **1回だけ投げ直す。**
      *
-     * CI で 1回、**中身の空の 400** が返って落ちました (`saveRecording` は
+     * CI で 1回、**中身の空の 400** が返って落ちました (保存の action は
      * 不正な値でしか 400 を出さず、そのときは理由の入ったページを返すので、
      * 出どころはこちらのフォームではない)。手元では同じ条件で走らせても出ず、
      * 4つ並べて走らせている CI でだけ出ています。
@@ -289,12 +301,12 @@ export async function setRecording(
      * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
      */
     for (let 回 = 0; ; 回++) {
-        const res = await request.post('/settings/recording?/saveRecording', {
+        const res = await request.post(`/settings/recording?/${action}`, {
             data: body.toString(),
             headers: { 'content-type': 'application/x-www-form-urlencoded' },
         });
         if (res.ok() || 回 >= 1) {
-            await ok(res, '録画のしかたの保存');
+            await ok(res, `録画のしかたの保存 (${action})`);
             return;
         }
     }
@@ -370,7 +382,7 @@ async function revealAll(page: Page, listTestId: string): Promise<void> {
 
 /** 通知先を全部消す (10-webhook の後片付け)。消えるのを待ってから次を押す */
 export async function clearWebhooks(page: Page): Promise<void> {
-    await goto(page, '/settings/notifications');
+    await goto(page, '/settings/integrations');
     const rows = page.getByTestId('webhook-delete');
     for (let i = 0; i < 10; i++) {
         const count = await rows.count();

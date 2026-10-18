@@ -4,33 +4,14 @@
     import Lead from '#lib/components/Lead.svelte';
     import LearnedLogo from '#lib/components/LearnedLogo.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
-    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { SERVICE_TYPE_LABEL } from '#lib/format.js';
-    import { liveUpdates } from '#lib/live-updates.svelte.js';
+    import type { PageData } from './$types';
 
-    let { data, form } = $props();
-
-    // ロゴの取得は1チャンネルに数分かかるので、進み具合を流してもらう。局が入れ替わったら表も
-    liveUpdates(['logos', 'services']);
+    let { data }: { data: PageData } = $props();
 
     /** 局ロゴの大きさ。放送のロゴは 16:9 (64x36) */
     const LOGO_SIZE = 'width: 2.4rem; height: 1.35rem';
-
-    /** 押した結果。取得の経過そのものは節の中に出したままにする */
-    const notices = $derived.by(() => {
-        const list: Notice[] = [];
-        list.push(...errorNotice(form, 'tuner-error'));
-        if (form?.scan) list.push({ key: 'tuner-notice', kind: 'info', text: form.scan });
-        /*
-         * 済んだこと (覚えたロゴを消した)。**`message` に載せない** — あれは fail の言葉として
-         * 赤で出す欄 (`errorNotice`) なので、載せていた頃は済んだことまで失敗の赤で出ていた
-         */
-        if (form?.done) list.push({ key: 'tuner-done', kind: 'success', text: form.done });
-        return list;
-    });
 </script>
-
-<Toasts {notices} source={form} />
 
 <!--
     **局ロゴとCMロゴを局ごとに1行で並べる。** 中身は別物 (番組表に出す局ロゴは放送波から取得し、

@@ -38,20 +38,17 @@ export function load() {
 
 export const actions = {
     /**
-     * 録画のしかた。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ。
-     * コーデックごとのエンコーダ (GPU) と、その場で変換する本数も同じ節で受ける
+     * エンコード。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ。
+     * コーデックごとのエンコーダ (GPU)・その場で変換する本数・元のTS・コマ数も同じ節で受ける。
+     * **節ごとにフォームが分かれている** (CM・自動予約は別の action)。ここで受けない値には触らない
      */
-    saveRecording: async ({ request }) => {
+    saveEncoding: async ({ request }) => {
         const form = await request.formData();
         // **コーデックは複数選べる** (`av1` / `h264` を両方)。1つも選ばなければ「エンコードしない」。カンマ区切りで持つ
         const codecs = form
             .getAll('codecs')
             .map(String)
             .filter((c): c is 'av1' | 'h264' => c === 'av1' || c === 'h264');
-        const cmCut = String(form.get('cmCut') ?? '');
-        if (!isCmMode(cmCut)) {
-            return fail(400, { message: 'CMの指定が不正です' });
-        }
         // その場で変換する本数の上限。空は自動 (GPU の有無で決める)。欄が無ければ前のまま
         const rawLimit = form.get('transcodeLimit');
         const transcodeLimit = rawLimit === null ? undefined : parseTranscodeLimit(String(rawLimit));
@@ -77,13 +74,27 @@ export const actions = {
         saveSettings({
             // 順序は読むとき (parseCodecs) に AV1 を先頭へ寄せる。ここは来たまま
             codec: (codecs.length > 0 ? codecs.join(',') : 'none') as VideoCodec,
-            cmCut,
             keepOriginal: form.get('keepOriginal') === 'on',
-            freeOnly: form.get('freeOnly') === 'on',
             fpsDetect: form.get('fpsDetect') === 'on',
             hwAllow,
             ...(transcodeLimit === undefined ? {} : { transcodeLimit }),
         });
+        return { success: true, saved: true };
+    },
+
+    /** CMの扱い (チャプターを打つ・切り取る・何もしない) */
+    saveCm: async ({ request }) => {
+        const cmCut = String((await request.formData()).get('cmCut') ?? '');
+        if (!isCmMode(cmCut)) {
+            return fail(400, { message: 'CMの指定が不正です' });
+        }
+        saveSettings({ cmCut });
+        return { success: true, saved: true };
+    },
+
+    /** 自動予約を無料放送だけにするか */
+    saveReserve: async ({ request }) => {
+        saveSettings({ freeOnly: (await request.formData()).get('freeOnly') === 'on' });
         return { success: true, saved: true };
     },
 

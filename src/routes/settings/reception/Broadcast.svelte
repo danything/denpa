@@ -2,17 +2,13 @@
     import { autosave, SaveState } from '#lib/autosave.svelte.js';
     import Lead from '#lib/components/Lead.svelte';
     import SaveNote from '#lib/components/SaveNote.svelte';
-    import Toasts, { errorNotice } from '#lib/components/Toasts.svelte';
     import { PREFECTURE_UNSET, PREFECTURES } from '#lib/prefecture.js';
+    import type { PageData } from './$types';
 
-    let { data, form } = $props();
-
-    const notices = $derived(errorNotice(form, 'settings-error'));
+    let { data }: { data: PageData } = $props();
     /** 保存の結果 (`autosave`)。見出しの横に出す */
     const save = new SaveState();
 </script>
-
-<Toasts {notices} source={form} />
 
 <!--
     **データ放送に渡すもの。** 郵便番号と都道府県。

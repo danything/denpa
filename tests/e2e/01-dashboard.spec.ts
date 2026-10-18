@@ -37,7 +37,7 @@ test.describe('ダッシュボードと画面遷移', () => {
         for (const [name, title] of [
             ['nav-guide', '番組表 - denpa'],
             ['nav-rules', 'ルール - denpa'],
-            // 設定は広い画面では先頭の節 (一般) が開き、節の名前が前に付く
+            // 設定は広い画面では先頭のグループ (一般) が開き、グループの名前が前に付く
             ['nav-settings', '一般 - 設定 - denpa'],
             ['nav-home', '録画 - denpa'],
         ] as const) {
@@ -48,41 +48,66 @@ test.describe('ダッシュボードと画面遷移', () => {
     });
 
     /*
-     * **設定は左に節の一覧、右に中身** (ルールと同じ一覧と詳細の形)。節ごとに URL があり、
-     * 戻る/進むもそのまま効く。狭い画面では一覧を先に出し、節を押すと中身と「← 設定」
+     * **設定は左にグループと節の一覧、右にグループの画面** (ルールと同じ一覧と詳細の形)。
+     * グループごとに URL があり、節はその画面に積んで `#<節>` で飛ぶ。見えている節が一覧で塗られる。
+     * 狭い画面では一覧 (グループだけ) を先に出し、押すと画面と「← 設定」・節へ飛ぶ行
      */
-    test('設定は節ごとに開き、狭い画面では一覧から入る', async ({ page }) => {
+    test('設定はグループごとに開き、節へ飛べる。狭い画面では一覧から入る', async ({ page }) => {
         await goto(page, '/settings');
-        // 広い画面では先頭の節へ移る
+        // 広い画面では先頭のグループへ移る
         await page.waitForURL(/\/settings\/general$/);
         const nav = page.getByTestId('settings-nav');
         await expect(nav.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
         await expect(page.getByTestId('settings-back')).toBeHidden();
-
-        await nav.getByTestId('settings-nav-channels').click();
-        await page.waitForURL(/\/settings\/channels$/);
-        await expect(page.getByTestId('channel-card')).toBeVisible();
-        await expect(page).toHaveTitle('チャンネル - 設定 - denpa');
-        await page.goBack();
-        await page.waitForURL(/\/settings\/general$/);
         // 素通しの一式なので、ログアウトの代わりにその旨の1行
         await expect(page.getByTestId('login-none')).toBeVisible();
 
-        // 前のチューナーの画面は、設定のチューナーへずっと送る
+        // 別のグループの節を押すと、その画面のその節へ
+        await nav.getByTestId('settings-nav-channels').click();
+        await page.waitForURL(/\/settings\/reception#channels$/);
+        await expect(page.getByTestId('channel-card')).toBeInViewport();
+        await expect(page).toHaveTitle('受信 - 設定 - denpa');
+        await expect(nav.getByTestId('settings-nav-reception')).toHaveAttribute('aria-current', 'page');
+        await expect(nav.getByTestId('settings-nav-channels')).toHaveAttribute('aria-current', 'location');
+
+        // 同じ画面の中の節へ。見えている節の塗りも移る
+        await nav.getByTestId('settings-nav-broadcast').click();
+        await page.waitForURL(/\/settings\/reception#broadcast$/);
+        await expect(page.getByTestId('postal-code')).toBeInViewport();
+        await expect(nav.getByTestId('settings-nav-broadcast')).toHaveAttribute('aria-current', 'location');
+        await expect(nav.getByTestId('settings-nav-channels')).not.toHaveAttribute(
+            'aria-current',
+            'location',
+        );
+
+        // 前の節ごとの画面と、前のチューナーの画面は、グループの画面のその節へずっと送る
+        const moved = await page.request.get('/settings/logos', { maxRedirects: 0 });
+        expect(moved.status()).toBe(308);
+        expect(moved.headers()['location']).toBe('../settings/reception#logos');
         const old = await page.request.get('/tuners', { maxRedirects: 0 });
         expect(old.status()).toBe(308);
         await goto(page, '/tuners');
-        await page.waitForURL(/\/settings\/tuners$/);
+        await page.waitForURL(/\/settings\/reception#tuners$/);
         await expect(page.getByTestId('nav-tuners')).toHaveCount(0);
         await expect(page.getByTestId('nav-settings')).toHaveAttribute('aria-current', 'page');
+        for (const path of ['/settings/nothing', '/settings/constructor']) {
+            expect((await page.request.get(path, { maxRedirects: 0 })).status(), path).toBe(404);
+        }
 
         await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/settings');
         await expect(page.getByTestId('settings-nav')).toBeVisible();
-        await page.getByTestId('settings-nav-tuners').click();
-        await page.waitForURL(/\/settings\/tuners$/);
+        // 狭い画面の一覧はグループだけ
+        await expect(page.getByTestId('settings-nav-tuners')).toBeHidden();
+        await page.getByTestId('settings-nav-reception').click();
+        await page.waitForURL(/\/settings\/reception$/);
         await expect(page.getByTestId('settings-nav')).toBeHidden();
         await expect(page.getByTestId('tuner-card')).toBeVisible();
+        // 上の行から節へ飛ぶ。行は巻いてもヘッダーの下に残る
+        await page.getByTestId('settings-jump-logos').click();
+        await page.waitForURL(/\/settings\/reception#logos$/);
+        await expect(page.getByTestId('logo-card')).toBeInViewport();
+        await expect(page.getByTestId('settings-jump')).toBeInViewport();
         await page.getByTestId('settings-back').click();
         await page.waitForURL(/\/settings$/);
         await expect(page.getByTestId('settings-nav')).toBeVisible();
@@ -98,7 +123,7 @@ test.describe('ダッシュボードと画面遷移', () => {
     });
 
     test('設定のチューナーにカードリーダーの状態が出る', async ({ page }) => {
-        await goto(page, '/settings/tuners');
+        await goto(page, '/settings/reception');
         /*
          * **「チューナーの空き」に並べてある。** 同じ機材の話なので、
          * わざわざ別の枠を作って見るところを増やさない
