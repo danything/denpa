@@ -1,15 +1,11 @@
 <script lang="ts">
     import ActionButton from '#lib/components/ActionButton.svelte';
     import Lead from '#lib/components/Lead.svelte';
-    import Toasts, { errorNotice } from '#lib/components/Toasts.svelte';
     import { dateTime } from '#lib/format.js';
+    import type { PageData } from './$types';
 
-    let { data, form } = $props();
-
-    const notices = $derived(errorNotice(form, 'settings-error'));
+    let { data }: { data: PageData } = $props();
 </script>
-
-<Toasts {notices} source={form} />
 
 <!--
     テレビのアプリ (danything/denpa-tv) に渡したアクセストークン。家の外から OIDC 越しに使うテレビは

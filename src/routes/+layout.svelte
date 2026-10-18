@@ -8,12 +8,12 @@
     import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import { denpaFontUrl } from '#lib/font.js';
-    import { write } from '#lib/keep.js';
     import { measure } from '#lib/measure.svelte.js';
     import { canTransition } from '#lib/motion.svelte.js';
     import { startOffline } from '#lib/offline.svelte.js';
     import { followNavigation, reload } from '#lib/reload.svelte.js';
-    import { sectionLabel } from '#lib/settings-sections.js';
+    import { groupLabel } from '#lib/settings-sections.js';
+    import { THEME_LABEL, theme } from '#lib/theme.svelte.js';
     import { onNavigate } from '$app/navigation';
     import { navigating, page } from '$app/state';
     import CalendarDays from '~icons/lucide/calendar-days';
@@ -121,38 +121,16 @@
     // 値が書き戻されて消える。E2Eはこの印が付くのを待ってから操作する
     let hydrated = $state(false);
 
-    /** 既定はダーク (映像を観るものはダークが基本)。system は端末の設定に従う */
-    let mode = $state<'system' | 'light' | 'dark'>('dark');
-    const LABEL = { system: '端末に合わせる', light: 'ライト', dark: 'ダーク' };
-    /** 月・太陽・半分塗った丸 (Lucide)。絵文字は端末ごとに見た目が違い、太さも揃わなかった */
+    /**
+     * テーマは `theme.svelte.ts` が持つ (設定の「一般」からも選べるので、ここだけの値にしない)。
+     * 月・太陽・半分塗った丸 (Lucide)。絵文字は端末ごとに見た目が違い、太さも揃わなかった
+     */
     const ICON = { dark: Moon, light: Sun, system: Contrast };
-
-    function apply() {
-        const dark =
-            mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.dataset['theme'] = dark ? 'dark' : 'light';
-        document.documentElement.dataset['themeMode'] = mode;
-    }
 
     onMount(() => {
         hydrated = true;
-        mode = (document.documentElement.dataset['themeMode'] as 'system' | 'light' | 'dark') ?? 'dark';
-
-        // 端末側の設定が変わったら、system のときだけ追従する
-        const media = matchMedia('(prefers-color-scheme: dark)');
-        const onChange = () => {
-            if (mode === 'system') apply();
-        };
-        media.addEventListener('change', onChange);
-        return () => media.removeEventListener('change', onChange);
+        return theme.start();
     });
-
-    function cycleTheme() {
-        mode = mode === 'dark' ? 'light' : mode === 'light' ? 'system' : 'dark';
-        // 既定がダークなので「端末に合わせる」も選んだ印として残す (残さないと次に開いたときダークに戻る)
-        write('theme', mode);
-        apply();
-    }
 
     /**
      * **戻ってきたら読み直す。**
@@ -210,7 +188,7 @@
     ] as const;
 
     /**
-     * いま開いている画面のナビの行き先。**設定は節ごとに経路が分かれている** (`/settings/tuners` など) ので、
+     * いま開いている画面のナビの行き先。**設定はグループごとに経路が分かれている** (`/settings/reception` など) ので、
      * その下も「設定」に数える。録画 (`/`) は頭が全部に合うので、ぴったりのときだけ
      */
     const here = $derived.by(() => {
@@ -218,10 +196,10 @@
         return links.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ?? null;
     });
 
-    /** ページ名はナビと同じものを使う。タブに出す。設定は節の名前を前に付ける */
+    /** ページ名はナビと同じものを使う。タブに出す。設定はグループの名前を前に付ける */
     const title = $derived.by(() => {
         const label = links.find((l) => l.href === here)?.label ?? 'denpa';
-        const section = here === '/settings' ? sectionLabel(page.route.id?.split('/')[2] ?? '') : null;
+        const section = here === '/settings' ? groupLabel(page.route.id?.split('/')[2] ?? '') : null;
         return `${section === null ? '' : `${section} - `}${label} - denpa`;
     });
 
@@ -358,13 +336,13 @@
         <nav class="actions">
             <button type="button"
                 class="ghost small"
-                onclick={cycleTheme}
+                onclick={theme.cycle}
                 aria-label="テーマを切り替える"
-                title={LABEL[mode]}
+                title={THEME_LABEL[theme.mode]}
                 data-testid="theme-toggle"
-                data-mode={mode}
+                data-mode={theme.mode}
             >
-                <Icon icon={ICON[mode]} size="size-5" />
+                <Icon icon={ICON[theme.mode]} size="size-5" />
             </button>
             <!--
                 広い画面はそのまま並べる。狭い画面では画面の下のタブに替わる。
@@ -472,9 +450,9 @@
                             </li>
                         {/if}
                         <li>
-                            <button type="button" class="menu-item" onclick={cycleTheme} data-testid="tab-theme-toggle">
-                                <Icon icon={ICON[mode]} size="size-5" />
-                                テーマ: {LABEL[mode]}
+                            <button type="button" class="menu-item" onclick={theme.cycle} data-testid="tab-theme-toggle">
+                                <Icon icon={ICON[theme.mode]} size="size-5" />
+                                テーマ: {THEME_LABEL[theme.mode]}
                             </button>
                         </li>
                     </ul>

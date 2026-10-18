@@ -23,7 +23,7 @@
 <div class="channel-notice {variant}" role="status" data-testid="channel-notice" data-kind={kind}>
     <p>{text}</p>
     <a
-        href={resolve('settings/channels')}
+        href={`${resolve('settings/reception')}#channels`}
         class="button small {variant === 'bar' ? 'secondary outline' : ''}"
         data-testid="channel-notice-scan">スキャンへ</a
     >

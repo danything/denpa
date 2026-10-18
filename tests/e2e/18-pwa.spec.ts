@@ -173,7 +173,7 @@ test.describe('PWA', () => {
      * 覚えるので、**リロードしても消えない** — 見たいのはまさにその後
      */
     test('高さの表示は設定からオンにできて、リロードしても消えない', async ({ page }) => {
-        await goto(page, '/settings/browser');
+        await goto(page, '/settings/general');
         await page.getByTestId('measure-toggle').check();
         await expect(page.getByTestId('measure')).toBeVisible();
 
@@ -184,7 +184,7 @@ test.describe('PWA', () => {
         await expect(page.getByTestId('measure')).toBeVisible();
 
         // 後片付け。**入れっぱなしにしない**
-        await goto(page, '/settings/browser');
+        await goto(page, '/settings/general');
         await page.getByTestId('measure-toggle').uncheck();
         await expect(page.getByTestId('measure')).toHaveCount(0);
     });
@@ -241,9 +241,10 @@ test.describe('PWA', () => {
                 '/',
                 '/rules',
                 '/settings',
-                '/settings/tuners',
-                '/settings/channels',
-                '/settings/logos',
+                '/settings/general',
+                '/settings/recording',
+                '/settings/reception',
+                '/settings/integrations',
             ]) {
                 await goto(page, path);
                 const doc = await page.evaluate(() => ({

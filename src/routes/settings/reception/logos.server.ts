@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { type Actions, fail } from '@sveltejs/kit';
 import { sql } from 'drizzle-orm';
 import { orm } from '#lib/server/db.js';
 import { logoState, stats as logoStats, sweepNow, sweepState } from '#lib/server/logo.js';
@@ -101,4 +101,4 @@ export const actions = {
         if (!result.started) return fail(409, { message: result.message });
         return { success: true, scan: result.message };
     },
-};
+} satisfies Actions;

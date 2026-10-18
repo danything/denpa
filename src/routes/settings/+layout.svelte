@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onDestroy } from 'svelte';
     import { SETTINGS_GROUPS } from '#lib/settings-sections.js';
     import { afterNavigate } from '$app/navigation';
     import { resolve } from '$app/paths';
@@ -6,63 +7,201 @@
 
     let { children } = $props();
 
-    /** いま開いている節 (`/settings/tuners` なら `tuners`)。`/settings` そのものなら null */
+    /** いま開いているグループ (`/settings/reception` なら `reception`)。`/settings` そのものなら null */
     const current = $derived(page.route.id?.split('/')[2] ?? null);
+    const group = $derived(SETTINGS_GROUPS.find((g) => g.slug === current) ?? null);
+
+    /** 見えている節 (左の一覧と、狭い画面の上の行で塗る) */
+    let active = $state<string | null>(null);
+
+    let main = $state<HTMLElement>();
+    let jumpRow = $state<HTMLElement>();
+
+    const WIDE = '(min-width: 768px)';
 
     /**
-     * **節を移ったら右の列を頭に戻す。** 広い画面では window ではなく右の列が巻き取るので、
-     * ブラウザのスクロールの戻し方が効かず、前の節で下まで巻いた位置のまま次の節が出ていた
+     * **巻き取るのは広い画面では右の列、狭い画面では window。** 広い画面ではページごとは動かさない
+     * (`+layout.svelte` の `.shell.fill`)
      */
-    let main = $state<HTMLElement>();
+    function scroller(): HTMLElement | null {
+        return matchMedia(WIDE).matches ? (main ?? null) : null;
+    }
+
+    /**
+     * **グループを移ったら右の列を頭に戻す。** 広い画面では window ではなく右の列が巻き取るので、
+     * ブラウザのスクロールの戻し方が効かず、前のグループで下まで巻いた位置のまま次の画面が出ていた。
+     * `#<節>` 付きで来たらその節へ (飛ぶ途中を見せても意味が無いので、ここは滑らかにしない)
+     */
     afterNavigate(({ from, to }) => {
-        if (main !== undefined && from?.url.pathname !== to?.url.pathname) main.scrollTop = 0;
+        if (main === undefined || from?.url.pathname === to?.url.pathname) return;
+        const hash = decodeURIComponent(to?.url.hash.slice(1) ?? '');
+        const target = hash === '' ? null : document.getElementById(hash);
+        if (target === null) {
+            main.scrollTop = 0;
+            active = group?.sections[0]?.slug ?? null;
+        } else {
+            pin(target);
+        }
+    });
+
+    /**
+     * **飛んだ先に、上の節が育つ間は付いていく。** 相手待ちの節 (チューナー) は骨組みのあとで本物が流れてきて
+     * 背が変わるので、開いた瞬間に合わせただけでは、流れ終わったころには前の節を見ている。
+     * 自分で巻こうとしたら (ホイール・指・キー・クリック)、そこで手を離す
+     */
+    let unpin = () => {};
+    const LET_GO = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+    function pin(target: HTMLElement): void {
+        unpin();
+        const align = () => {
+            target.scrollIntoView({ block: 'start', behavior: 'instant' });
+            active = target.id;
+        };
+        align();
+        const resize = new ResizeObserver(align);
+        resize.observe(main?.firstElementChild ?? target);
+        const timer = setTimeout(() => unpin(), 4000);
+        const letGo = () => unpin();
+        for (const type of LET_GO) window.addEventListener(type, letGo, { passive: true });
+        unpin = () => {
+            resize.disconnect();
+            clearTimeout(timer);
+            for (const type of LET_GO) window.removeEventListener(type, letGo);
+            unpin = () => {};
+        };
+    }
+    onDestroy(() => unpin());
+
+    /** 押した節へ飛んでいる間は、見えている節を数え直さない (途中の節が点々と塗られる) */
+    let jumping: ReturnType<typeof setTimeout> | undefined;
+    function jump(slug: string): void {
+        active = slug;
+        clearTimeout(jumping);
+        jumping = setTimeout(() => (jumping = undefined), 800);
+    }
+
+    /**
+     * **見えている節を追う** (Vercel のドキュメントの目次と同じ)。上の帯 (ヘッダーの下から画面の 45%) に
+     * かかっている節のうち、いちばん上のもの。長い節 (チューナー) が帯にかかっている間は次の節に移らない。
+     * 下まで巻いたら最後の節 (短い節は帯まで上がってこない)
+     */
+    $effect(() => {
+        void page.url.pathname;
+        if (main === undefined) return;
+        const parts = [...main.querySelectorAll<HTMLElement>('[data-part]')];
+        if (parts.length === 0) return;
+        const root = scroller();
+        const seen = new Set<string>();
+
+        const pick = () => {
+            if (jumping !== undefined) return;
+            const box = root ?? document.documentElement;
+            const bottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
+            if (bottom && box.scrollTop > 0) {
+                active = parts.at(-1)!.id;
+                return;
+            }
+            const first = parts.find((part) => seen.has(part.id));
+            if (first !== undefined) active = first.id;
+        };
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                for (const entry of entries) {
+                    if (entry.isIntersecting) seen.add(entry.target.id);
+                    else seen.delete(entry.target.id);
+                }
+                pick();
+            },
+            /*
+             * 狭い画面は上に節の行 (とヘッダー) が重なるので、その下から数える。
+             * rootMargin は px か % だけ (rem は投げる)
+             */
+            { root, rootMargin: `-${root === null ? Math.round(jumpRow?.getBoundingClientRect().bottom ?? 0) + 8 : 16}px 0px -55% 0px` },
+        );
+        for (const part of parts) observer.observe(part);
+        const target = root ?? window;
+        target.addEventListener('scroll', pick, { passive: true });
+        return () => {
+            observer.disconnect();
+            target.removeEventListener('scroll', pick);
+        };
     });
 </script>
 
 <!--
-    **一覧と詳細の形** (ルールの画面と同じ)。左に節の一覧、右にその節の中身。
-    節ごとに URL (`/settings/<節>`) があるので、戻る/進む・リンクもそのまま使える。
+    **一覧と詳細の形** (ルールの画面と同じ)。左にグループとその節の一覧、右にグループの画面。
+    **グループごとに1つの画面** (`/settings/<グループ>`) で、節は上から積む。節を押すとそこへ滑らかに巻き、
+    巻いていくと見えている節が左の一覧で塗られる。並びは `#lib/settings-sections.ts`。
 
     **横に並べはじめる幅は全画面で 768px** ([+layout.svelte](../+layout.svelte) の `FILLED`)。
     並べたらページごとは動かさず、左右がそれぞれ自分で巻き取る。左の列は画面の左端とヘッダーの下に付け、
     境目は 1px の線だけ。
 
-    **狭い画面では一覧と中身を切り替える。** `/settings` は一覧だけ、節を押すと中身と「← 設定」
+    **狭い画面では一覧と中身を切り替える。** `/settings` はグループの一覧だけ、押すとその画面と「← 設定」、
+    上に節へ飛ぶ行 (巻いても上に残る)
 -->
-<div class="page" class:list-view={current === null}>
+<div class="page settings-page" class:list-view={current === null}>
     <!--
-        **行は線で区切らない** (ドキュメントの目次と同じ作り)。選んでいる行だけ角の丸い薄い塗り。
-        グループの名前は小さく沈めた字で
+        **行は線で区切らない** (ドキュメントの目次と同じ作り)。グループは本文の色、節は一段沈めて字下げし、
+        左に細い線。見えている節だけ角の丸い薄い塗り
     -->
     <nav class="side" aria-label="設定の項目" data-testid="settings-nav">
-        {#each SETTINGS_GROUPS as group, i (i)}
-            <div class="group">
-                {#if group.label !== null}
-                    <p class="group-label">{group.label}</p>
-                {/if}
-                <ul>
-                    {#each group.sections as section (section.slug)}
-                        {@const selected = current === section.slug}
-                        <li>
-                            <a
-                                href={resolve(`settings/${section.slug}`)}
-                                class:selected
-                                aria-current={selected ? 'page' : undefined}
-                                data-testid="settings-nav-{section.slug}"
-                            >
-                                {section.label}
-                            </a>
-                        </li>
-                    {/each}
-                </ul>
-            </div>
-        {/each}
+        <ul class="groups">
+            {#each SETTINGS_GROUPS as g (g.slug)}
+                {@const here = current === g.slug}
+                {@const href = resolve(`settings/${g.slug}`)}
+                <li>
+                    <a
+                        {href}
+                        class="group-link"
+                        class:here
+                        aria-current={here ? 'page' : undefined}
+                        data-testid="settings-nav-{g.slug}"
+                    >
+                        {g.label}
+                        <!-- 狭い画面の一覧だけ。中に何があるかを1行で (節の一覧は出さないので) -->
+                        <span class="group-hint">{g.sections.map((s) => s.label).join('・')}</span>
+                    </a>
+                    <ul class="sections-nav">
+                        {#each g.sections as section (section.slug)}
+                            {@const selected = here && active === section.slug}
+                            <li>
+                                <a
+                                    href="{href}#{section.slug}"
+                                    class:selected
+                                    aria-current={selected ? 'location' : undefined}
+                                    onclick={() => jump(section.slug)}
+                                    data-testid="settings-nav-{section.slug}"
+                                >
+                                    {section.label}
+                                </a>
+                            </li>
+                        {/each}
+                    </ul>
+                </li>
+            {/each}
+        </ul>
     </nav>
 
     <div class="main" bind:this={main}>
         <div class="main-inner">
-            <!-- 狭い画面だけ。一覧へ戻る (ブラウザの戻ると同じ行き先) -->
-            <a class="back small" href={resolve('settings')} data-testid="settings-back">← 設定</a>
+            {#if group !== null}
+                <!-- 狭い画面だけ。一覧へ戻る (ブラウザの戻ると同じ行き先) と、節へ飛ぶ行 -->
+                <div class="jump small" bind:this={jumpRow} data-testid="settings-jump">
+                    <a class="back" href={resolve('settings')} data-testid="settings-back">← 設定</a>
+                    {#each group.sections as section (section.slug)}
+                        <a
+                            href="{resolve(`settings/${group.slug}`)}#{section.slug}"
+                            class:selected={active === section.slug}
+                            onclick={() => jump(section.slug)}
+                            data-testid="settings-jump-{section.slug}"
+                        >
+                            {section.label}
+                        </a>
+                    {/each}
+                </div>
+            {/if}
             {@render children()}
         </div>
     </div>
@@ -89,10 +228,7 @@
 
     /* ---- 左の一覧 ---- */
     .side {
-        display: flex;
         min-height: 0;
-        flex-direction: column;
-        gap: var(--dp-space-4);
     }
     @media (min-width: 768px) {
         .side {
@@ -101,57 +237,83 @@
             border-right: 1px solid var(--dp-line);
         }
     }
-    .group-label {
-        margin: 0 0 0.25rem;
-        padding-inline: 0.75rem;
-        color: var(--dp-muted);
-        font-size: var(--dp-text-xs);
-        font-weight: var(--dp-weight-bold);
-    }
     .side ul {
         margin: 0;
         padding: 0;
         list-style: none;
     }
     .side li {
-        margin: 0 0 1px;
+        margin: 0;
         list-style: none;
+    }
+    .groups {
+        display: flex;
+        flex-direction: column;
+        gap: var(--dp-space-3);
     }
     .side a {
         display: block;
-        padding: 0.375rem 0.75rem;
         border-radius: var(--dp-radius);
-        color: var(--dp-muted);
         font-size: var(--dp-text-sm);
         text-decoration: none;
         transition:
             background-color var(--dp-duration),
             color var(--dp-duration);
     }
-    .side a:hover {
+    .group-link {
+        padding: 0.25rem 0.75rem;
+        color: inherit;
+        font-weight: var(--dp-weight-bold);
+    }
+    .group-link:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .group-hint {
+        display: none;
+    }
+    /* 節は字下げして、左に細い線 (どのグループの下なのかを線で見せる) */
+    .side .sections-nav {
+        margin: 0.125rem 0 0 0.75rem;
+        padding-left: 0.375rem;
+        border-left: 1px solid var(--dp-line);
+    }
+    .sections-nav li {
+        margin-bottom: 1px;
+    }
+    .sections-nav a {
+        padding: 0.3rem 0.625rem;
+        color: var(--dp-muted);
+    }
+    .sections-nav a:hover {
         background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
         color: inherit;
     }
-    .side a.selected {
+    .sections-nav a.selected {
         background: var(--dp-subtle);
         color: inherit;
         font-weight: var(--dp-weight-bold);
     }
     /*
-     * 狭い画面の一覧は指で押すので行を高くする (40px 以上)。字は本文の大きさ、
-     * 塗りだけ余白の外へ少し出して、字は上のグループの名前と揃える
+     * 狭い画面の一覧はグループだけ (押すとその画面。節へは画面の上の行で飛ぶ)。
+     * 指で押すので行を高くする (40px 以上)。字は本文の大きさ、塗りだけ余白の外へ少し出す
      */
     @media (max-width: 767px) {
-        .side ul {
+        .sections-nav {
+            display: none;
+        }
+        .groups {
+            gap: 0;
             margin-inline: -0.75rem;
         }
-        .group-label {
-            padding-inline: 0;
-        }
-        .side a {
+        .group-link {
             padding-block: 0.625rem;
-            color: inherit;
             font-size: var(--dp-text-base);
+            font-weight: var(--dp-weight);
+        }
+        .group-hint {
+            display: block;
+            color: var(--dp-muted);
+            font-size: var(--dp-text-xs);
         }
     }
 
@@ -163,6 +325,13 @@
         .main {
             min-height: 0;
             overflow-y: auto;
+        }
+    }
+    /* 節を押したら滑らかに巻く。動かさない設定の端末ではそのまま飛ぶ */
+    @media (prefers-reduced-motion: no-preference) {
+        .main,
+        :global(html:has(.settings-page)) {
+            scroll-behavior: smooth;
         }
     }
     /* 中の 2 段組 (`app.css` の `.setting-rows`) は、この列の幅で切り替える */
@@ -178,6 +347,27 @@
             padding: var(--dp-gutter);
         }
     }
+    /*
+     * **節どうしは線1本で区切る** (中の節と同じ。カードにはしない)。飛んだ先が見出しの上にぴったり付くよう、
+     * 巻き取りの余白を取る (狭い画面はヘッダーと節の行の下)
+     */
+    .main-inner :global([data-part] + [data-part]) {
+        padding-top: var(--dp-space-5);
+        border-top: 1px solid var(--dp-line);
+    }
+    .main-inner :global([data-part]) {
+        scroll-margin-top: var(--dp-gutter);
+    }
+    @media (max-width: 767px) {
+        .main-inner :global([data-part]) {
+            scroll-margin-top: 7rem;
+        }
+    }
+    @media (max-width: 639.98px) {
+        .main-inner :global([data-part]) {
+            scroll-margin-top: calc(3.5rem + env(safe-area-inset-top));
+        }
+    }
     /* 狭い画面は一覧か中身のどちらか。どちらを出すかは URL */
     @media (max-width: 767px) {
         .page.list-view .main,
@@ -185,11 +375,50 @@
             display: none;
         }
     }
-    .back {
-        align-self: flex-start;
+
+    /*
+     * **狭い画面の上の行。** 「← 設定」と節の名前を横に並べ、巻いてもヘッダーの下に残す。
+     * はみ出す分は横に巻く (行を折り返すと高さが変わり、飛んだ先の余白が合わなくなる)
+     */
+    .jump {
+        position: sticky;
+        top: 3.5rem;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: var(--dp-space-1);
+        margin-inline: calc(-1 * var(--dp-gutter));
+        padding: 0.5rem var(--dp-gutter);
+        overflow-x: auto;
+        border-bottom: 1px solid var(--dp-line);
+        background: var(--dp-bg);
+        scrollbar-width: none;
+        white-space: nowrap;
+    }
+    .jump a {
+        flex-shrink: 0;
+        padding: 0.3rem 0.65rem;
+        border-radius: var(--dp-radius-full);
+        color: var(--dp-muted);
+        text-decoration: none;
+    }
+    .jump a.selected {
+        background: var(--dp-subtle);
+        color: inherit;
+        font-weight: var(--dp-weight-bold);
+    }
+    .jump .back {
+        padding-left: 0;
+        color: inherit;
+    }
+    /* 640px より狭いとヘッダーは隠れている (下のタブに替わる)。いちばん上に付ける */
+    @media (max-width: 639.98px) {
+        .jump {
+            top: env(safe-area-inset-top);
+        }
     }
     @media (min-width: 768px) {
-        .back {
+        .jump {
             display: none;
         }
     }

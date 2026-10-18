@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { type Actions, fail } from '@sveltejs/kit';
 import { count, eq, sql } from 'drizzle-orm';
 import { orm } from '#lib/server/db.js';
 import { collectNow, collectState } from '#lib/server/epg-collect.js';
@@ -106,4 +106,4 @@ export const actions = {
         if (!result.stopped) return fail(409, { message: result.message });
         return { success: true, scan: result.message };
     },
-};
+} satisfies Actions;

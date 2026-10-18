@@ -834,7 +834,7 @@
                         -->
                         <div class="row-sub text-warning small">
                             ロゴでCMを判定できませんでした (無音だけで判定)
-                            <span class="muted">— 覚えたロゴは<a href={resolve('settings/logos')}>設定の「ロゴ」</a>で確かめられます</span>
+                            <span class="muted">— 覚えたロゴは<a href={`${resolve('settings/reception')}#logos`}>設定の「ロゴ」</a>で確かめられます</span>
                         </div>
                     {/if}
                     <!--

@@ -45,7 +45,7 @@ test.describe('CSP', () => {
          * 流れてくる `<script>` にも nonce が要る (hash にしていたら、ここで止まる)。
          * `goto` は読み込みの終わり (= 流し終わり) まで待つ
          */
-        for (const path of ['/', '/guide', '/live', '/rules', '/settings/recording', '/settings/tuners']) {
+        for (const path of ['/', '/guide', '/live', '/rules', '/settings/recording', '/settings/reception']) {
             const response = await page.goto(path);
             const policy = response?.headers()['content-security-policy'] ?? '';
             expect(policy, path).toContain("script-src-attr 'none'");

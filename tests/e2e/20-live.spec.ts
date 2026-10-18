@@ -671,7 +671,7 @@ test.describe('ライブ視聴', () => {
         };
         await captureSockets(page);
 
-        await goto(page, '/settings/broadcast');
+        await goto(page, '/settings/reception');
         // web-bml の頃の鍵を残しておく (別の番号。読まれたら食い違う)
         await page.evaluate(() => {
             localStorage.setItem('denpa_bml_denpa_nvram_prefix=receiverinfo%2Fzipcode', btoa('9999999'));
@@ -692,7 +692,7 @@ test.describe('ライブ視聴', () => {
          * **消したら残さない。** 引っ越したのに前の番号のままだと、
          * 直したつもりで直っていないことになる
          */
-        await goto(page, '/settings/broadcast');
+        await goto(page, '/settings/reception');
         await page.getByTestId('postal-code').fill('');
         await page.getByTestId('postal-code').press('Tab');
         await page.getByTestId('prefecture').selectOption('255');
@@ -1250,7 +1250,7 @@ test.describe('ライブ視聴', () => {
         // 選んだ局が「いま映しているもの」になる
         await expect(page.getByTestId('live-title')).toBeVisible();
 
-        await goto(page, '/settings/tuners');
+        await goto(page, '/settings/reception');
         await expect(page.getByText(/ライブ/).first()).toBeVisible();
         expect(channel).not.toBeNull();
     });

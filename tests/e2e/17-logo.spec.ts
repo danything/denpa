@@ -45,7 +45,7 @@ test.describe('局ロゴ', () => {
             .toBe(true);
 
         // 普段は10分ごとに少しずつ取得している。押すと今すぐ取得する
-        await goto(page, '/settings/logos');
+        await goto(page, '/settings/reception');
         await page.getByTestId('logo-sweep').click();
 
         /*
@@ -91,7 +91,7 @@ test.describe('局ロゴ', () => {
          * まとまって来るので、来なくなったことが分かるまで開けておく)
          */
         await expect(async () => {
-            await goto(page, '/settings/logos');
+            await goto(page, '/settings/reception');
             await expect(page.getByTestId('logo-sweep-done')).toContainText('ロゴを取得しました');
         }).toPass({ timeout: 60_000 });
 
@@ -135,7 +135,7 @@ test.describe('衛星の局ロゴ', () => {
 
         rmSync(`${stack.root}/logos/${BS11.id}.png`, { force: true });
 
-        await goto(page, '/settings/logos');
+        await goto(page, '/settings/reception');
         /*
          * **番組表を集めるだけでも取得できることがある。** 衛星のチャンネルも
          * 開くので、そこにカルーセルが流れていれば只で埋まる。押すボタンが
@@ -174,7 +174,7 @@ test.describe('衛星の局ロゴ', () => {
 
         rmSync(`${stack.root}/logos/${BS_NO_LOGO.id}.png`, { force: true });
 
-        await goto(page, '/settings/logos');
+        await goto(page, '/settings/reception');
         // 既に見切ったあとならボタンは出ていない。出ていれば押して確かめる
         const sweep = page.getByTestId('logo-sweep');
         if ((await sweep.count()) > 0) await sweep.click();
@@ -184,7 +184,7 @@ test.describe('衛星の局ロゴ', () => {
          * 覚えられていないと `missing()` に残り続けてボタンが消えない
          */
         await expect(async () => {
-            await goto(page, '/settings/logos');
+            await goto(page, '/settings/reception');
             await expect(page.getByTestId('logo-sweep')).toHaveCount(0);
         }).toPass({ timeout: 90_000 });
 
@@ -231,7 +231,7 @@ test.describe('CM検出のロゴ', () => {
         expect(image.status()).toBe(200);
         expect(image.headers()['content-type']).toContain('image/png');
 
-        await goto(page, '/settings/logos');
+        await goto(page, '/settings/reception');
         // 数の行に「CMロゴ n / m 局」
         await expect(page.getByTestId('status-cm-logos')).toContainText('局');
         // 局ごとの表の、その局の行に出る。開け閉めは無い

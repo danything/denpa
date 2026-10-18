@@ -3,7 +3,7 @@
  *
  * 数百GBのコピーになるので、リクエストの中では終わらない。開始だけ受けて
  * 裏で進め、進捗は {@link status} から読む。入口は設定画面だけ
- * (`/settings/migrate` の「EPGStation からの引き継ぎ」)。使い方は docs/migrate.md。
+ * (`/settings/integrations#migrate` の「EPGStation からの引き継ぎ」)。使い方は docs/migrate.md。
  *
  * ファイルは既定でコピーする。元のPVCを消すまで EPGStation 側もそのまま動くので、
  * 取り込みが済んで中身を確認してから消せる。容量が無いときは move を使う。

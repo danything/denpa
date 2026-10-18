@@ -4,34 +4,17 @@
     import ActionButton from '#lib/components/ActionButton.svelte';
     import ArmedDelete from '#lib/components/ArmedDelete.svelte';
     import Lead from '#lib/components/Lead.svelte';
-    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { dateTime } from '#lib/format.js';
     import { EVENT_LABEL } from '#lib/webhook-events.js';
+    import type { PageData } from './$types';
 
-    let { data, form } = $props();
-
-    const notices = $derived.by(() => {
-        const list: Notice[] = [];
-        list.push(...errorNotice(form, 'settings-error'));
-        if (form?.webhookAdded) list.push({ key: 'webhook-added', kind: 'success', text: '通知先を追加しました' });
-        if (form?.tested) {
-            list.push({
-                key: 'webhook-tested',
-                kind: form.tested === 'ok' ? 'success' : 'error',
-                // 届いたら `ok` が返る (`server/webhook.ts`)。英語のまま出さない
-                text: form.tested === 'ok' ? 'テスト送信が届きました' : `テスト送信に失敗しました: ${form.tested}`,
-            });
-        }
-        return list;
-    });
+    let { data }: { data: PageData } = $props();
 
     /** 通知先の削除は2回押させる (録画・ルールと同じ。[arming.svelte.ts](../../../lib/arming.svelte.ts)) */
     const deleting = arming('[data-testid^="webhook-delete"]');
 </script>
 
 <svelte:window onclick={deleting.stand} />
-
-<Toasts {notices} source={form} />
 
 <div class="sections readable">
     <section class="section">

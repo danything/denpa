@@ -3,27 +3,14 @@
     import CheckRow from '#lib/components/CheckRow.svelte';
     import JobProgress from '#lib/components/JobProgress.svelte';
     import Lead from '#lib/components/Lead.svelte';
-    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { stateLabel } from '#lib/format.js';
-    import { liveUpdates } from '#lib/live-updates.svelte.js';
+    import type { PageData } from './$types';
 
-    let { data, form } = $props();
-
-    liveUpdates(['migrate']);
+    let { data }: { data: PageData } = $props();
 
     const migrate = $derived(data.migrate.status);
     const done = $derived(migrate.imported + migrate.skipped + migrate.missing);
-
-    /** 押した結果。引き継ぎの進み具合そのものは、節の中に出したままにする */
-    const notices = $derived.by(() => {
-        const list: Notice[] = [];
-        if (form?.migrate) list.push({ key: 'migrate-started', kind: 'info', text: form.migrate });
-        list.push(...errorNotice(form, 'settings-error'));
-        return list;
-    });
 </script>
-
-<Toasts {notices} source={form} />
 
 <!-- **たまにしか触らないもの。** 引っ越しのときだけ使う -->
 <div class="sections readable">

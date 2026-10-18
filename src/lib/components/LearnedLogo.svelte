@@ -39,7 +39,7 @@
         title={`CM検出のロゴ (${dateTime(learnedAt)} に更新)`}
         class="learned-image"
     />
-    <!-- 理由は `routes/settings/logos/+page.server.ts` の `logoForget` -->
+    <!-- 理由は `routes/settings/reception/logos.server.ts` の `logoForget` -->
     <form method="POST" action="?/logoForget" use:submitting class="forget">
         <input type="hidden" name="serviceId" value={serviceId} />
         <button type="submit" class="small ghost" aria-label={`${serviceName} のCM検出のロゴを覚え直す`}>覚え直す</button>

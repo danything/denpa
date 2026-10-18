@@ -20,7 +20,7 @@ import { run } from './stream';
  * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
  * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** 方式 (QSV / VA-API) ×
  * コーデックの4通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は設定画面の
- * 「録画のしかた」に出て、使えるものは自動で使う (コーデックごとのエンコーダ。`settings().hwAllow` と
+ * 設定の「エンコード」に出て、使えるものは自動で使う (コーデックごとのエンコーダ。`settings().hwAllow` と
  * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は予備** — 同じ GPU なら速さは
  * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
  *

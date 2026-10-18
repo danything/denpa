@@ -165,7 +165,7 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
  * 何のために開いたかを伝える印。設定の「チューナー」にそのまま出る。
  *
  * **ASCII だけ**にしてある。番組名は入れず録画IDだけ渡して、読める言葉に直すのは
- * 画面側でやる (routes/settings/tuners/+page.server.ts)。
+ * 画面側でやる (routes/settings/reception/tuners.server.ts)。
  */
 export type StreamUse =
     | `rec ${number}`

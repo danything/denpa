@@ -13,7 +13,7 @@ test.describe('通知', () => {
     });
 
     test('通知先を追加してテスト送信すると、相手に届く', async ({ page, request, stack }) => {
-        await goto(page, '/settings/notifications');
+        await goto(page, '/settings/integrations');
         await page.getByTestId('webhook-url').fill(`${stack.webhookUrl}/__control/webhook`);
         await page.getByTestId('webhook-add').click();
 
@@ -36,7 +36,7 @@ test.describe('通知', () => {
     });
 
     test('送る通知を選べる', async ({ page, stack }) => {
-        await goto(page, '/settings/notifications');
+        await goto(page, '/settings/integrations');
         await page.getByTestId('webhook-url').fill(`${stack.webhookUrl}/__control/webhook`);
         await page.getByTestId('webhook-events').locator('input[value="recording.failed"]').check();
         await page.getByTestId('webhook-add').click();
@@ -47,7 +47,7 @@ test.describe('通知', () => {
     });
 
     test('URLが不正なら断る', async ({ page }) => {
-        await goto(page, '/settings/notifications');
+        await goto(page, '/settings/integrations');
         await page.getByTestId('webhook-url').fill('not-a-url');
         await page.getByTestId('webhook-add').click();
         await expect(page.getByTestId('settings-error')).toContainText('http(s) で始まるURL');
@@ -55,7 +55,7 @@ test.describe('通知', () => {
     });
 
     test('無効にした通知先には送らない', async ({ page, request, stack }) => {
-        await goto(page, '/settings/notifications');
+        await goto(page, '/settings/integrations');
         await page.getByTestId('webhook-url').fill(`${stack.webhookUrl}/__control/webhook`);
         await page.getByTestId('webhook-add').click();
         await page.getByTestId('webhook-toggle').first().click();

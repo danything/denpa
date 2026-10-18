@@ -25,7 +25,7 @@ test.describe('録画とエンコード', () => {
 
         // 節目の通知が実際にどう飛ぶかも、この一連の流れで見ておく
         await request.post(`${stack.webhookUrl}/__control/reset`);
-        await goto(page, '/settings/notifications');
+        await goto(page, '/settings/integrations');
         await page.getByTestId('webhook-url').fill(`${stack.webhookUrl}/__control/webhook`);
         await page.getByTestId('webhook-add').click();
 
@@ -163,7 +163,7 @@ test.describe('録画とエンコード', () => {
         await expect(cellOf(page, programId)).toContainText('完了');
 
         // 後続のテストに通知先を持ち越さない
-        await goto(page, '/settings/notifications');
+        await goto(page, '/settings/integrations');
         await page.getByTestId('webhook-delete').first().click();
         await page.getByTestId('webhook-delete-confirm').click();
         await expect(page.getByTestId('webhook-delete-confirm')).toHaveCount(0);

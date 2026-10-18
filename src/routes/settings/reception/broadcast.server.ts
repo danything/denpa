@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { type Actions, fail } from '@sveltejs/kit';
 import { parsePrefectureField } from '#lib/prefecture.js';
 import { normalizePostalCode, saveSettings, settings } from '#lib/server/settings.js';
 
@@ -37,4 +37,4 @@ export const actions = {
         saveSettings({ postalCode, prefecture, bmlNetwork: form.get('bmlNetwork') === 'on' });
         return { success: true, saved: true };
     },
-};
+} satisfies Actions;

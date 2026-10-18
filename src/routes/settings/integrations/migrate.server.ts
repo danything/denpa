@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { type Actions, fail } from '@sveltejs/kit';
 import { available as migrateAvailable, source, start, status } from '#lib/server/migrate.js';
 
 export function load() {
@@ -23,4 +23,4 @@ export const actions = {
         if (!result.started) return fail(409, { message: result.message });
         return { success: true, migrate: result.message };
     },
-};
+} satisfies Actions;
