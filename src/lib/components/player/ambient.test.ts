@@ -158,6 +158,20 @@ describe('光の canvas', () => {
         expect(px(0, 0)[3]).toBe(0);
     });
 
+    test('枠の奥を飛ばしても、縁の外の光は変わらない', () => {
+        const frame = new Uint8ClampedArray(2 * 2 * 4).fill(200);
+        // 半径 1 なら奥は縁から 5 画素より内側。幅 8 の枠には奥が無く、幅 40 の枠にはある
+        const narrow = { width: 30, height: 60, x: 10, y: 10, w: 8, h: 40, reach: 6, radius: 1 };
+        const wide = { ...narrow, width: 62, w: 40 };
+        const a = glowPixels(frame, 2, 2, narrow);
+        const b = glowPixels(frame, 2, 2, wide);
+        for (const x of [5, 7, 9]) {
+            const at = (30 * 30 + x) * 4;
+            const bt = (62 * 30 + x) * 4;
+            expect([...b.slice(bt, bt + 4)]).toEqual([...a.slice(at, at + 4)]);
+        }
+    });
+
     test('箱の半径は、3回でその強さに近づくもの', () => {
         expect(boxRadius(0.1)).toBe(1);
         expect(boxRadius(2.6)).toBe(2);

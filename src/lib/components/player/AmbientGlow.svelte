@@ -101,7 +101,7 @@
         return canvas;
     }
 
-    /** 写した1枚を置き場に描いてぼかす */
+    /** 写した1枚から光を作って描く (`glowPixels`) */
     function compose(target: HTMLCanvasElement, bitmap: ImageBitmap, at: GlowLayout): void {
         const context = target.getContext('2d');
         const frame = framePixels(bitmap);
