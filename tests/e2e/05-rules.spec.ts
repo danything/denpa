@@ -49,6 +49,11 @@ test.describe('自動予約ルール', () => {
 
         await toggle.click();
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        // 足せなかったときは開いたまま (直してもう一度押せる)
+        await page.getByTestId('rule-submit').click();
+        await expect(page.getByTestId('rule-error')).toBeVisible();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(keyword).toBeVisible();
         // 当たる番組の無い語にしておく (予約を立てない)
         await keyword.fill('どこにも無い番組');
         // 下見のあとは開いたまま
