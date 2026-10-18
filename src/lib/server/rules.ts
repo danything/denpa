@@ -35,7 +35,7 @@ export function haystack(
 }
 
 /**
- * 判定が番組から読む列。**全列は要らない** — 下見 (`rules/+page.server.ts`) は
+ * 判定が番組から読む列。**全列は要らない** — 下見 (`rule-preview.ts`) は
  * 読む列を絞って引くので、ここを `Program` にしていると渡せない
  */
 export type Matchable = Pick<Program, 'service_id' | 'is_free' | 'genres' | 'genre_detail'>;
@@ -83,7 +83,7 @@ export function compile(rule: Rule): CompiledRule {
 /**
  * SQL の `GLOB` で候補を減らすための形式。**減らすだけで、当てるのは `matchesCompiled`。**
  *
- * 下見 (`rules/+page.server.ts`) はこれから放送される番組を全部引いて JS で絞っていた。
+ * 下見 (`rule-preview.ts`) はこれから放送される番組を全部引いて JS で絞っていた。
  * 実データ相当 (33,000 件) で全列を読むだけで 330〜400ms、条件が1語でも同じだけ
  * かかる。番組名に `GLOB '*語*'` を掛ければ当たった行だけ読める。
  *
@@ -107,20 +107,35 @@ export function globPatterns(compiled: CompiledRule): string[] | null {
 }
 
 /**
- * ほどいたルールに番組が当てはまるか。
+ * **ルールに当たらない理由** ({@link missOf})。下見の行に「なぜ録らないか」を書くのに使う。
+ *
+ * - `paid` 有料放送 (全体設定で無料放送だけにしているとき)
+ * - `service` 局の条件から外れる
+ * - `genre` ジャンルの条件から外れる
+ * - `empty` 条件が何も無い (全番組に当たってしまうので当てない)
+ * - `keyword` キーワードを含まない
+ * - `ignore` 除外する言葉を含む
+ */
+export type Miss = 'paid' | 'service' | 'genre' | 'empty' | 'keyword' | 'ignore';
+
+/**
+ * ほどいたルールに番組が当てはまらない理由。当てはまれば null。
  *
  * 検索用テキストは**関数で受け取る**。文字を作るのが一番高くつくので、
  * チャンネルやジャンルで落ちる番組にはそもそも作らせない。
  * 同じ番組に何本ものルールを当てるときは、呼ぶ側が作ったものを使い回せる。
+ *
+ * **当てるのはここ1つ。** 予約を立てる (`applyRules`)・下見 (`rule-preview.ts`)・検索の
+ * 「これからの放送」(`search.ts`) はどれもここを通る (`matchesCompiled` はその真偽)
  */
-export function matchesCompiled(
+export function missOf(
     compiled: CompiledRule,
     program: Matchable,
     serviceType: string | undefined,
     freeOnly: boolean,
     textOf: (fields: SearchField[]) => string,
-): boolean {
-    if (freeOnly && !program.is_free) return false;
+): Miss | null {
+    if (freeOnly && !program.is_free) return 'paid';
 
     const { services, types, genres, keywords, ignores } = compiled;
 
@@ -129,25 +144,36 @@ export function matchesCompiled(
     if (services !== null || types !== null) {
         const byService = services?.includes(program.service_id) ?? false;
         const byType = serviceType !== undefined && (types?.includes(serviceType) ?? false);
-        if (!byService && !byType) return false;
+        if (!byService && !byType) return 'service';
     }
 
     // ジャンルは "7"(大分類だけ)と "7-0"(中分類まで)の2通りで持つ。
     // 昔のルールは数値の配列だが、読み出し時に文字列へ揃えてある (schema.ts の strings)
     if (genres !== null) {
         const detail = parseGenreDetail(program);
-        if (detail.length === 0) return false;
-        if (!genreMatches(genres, detail)) return false;
+        if (detail.length === 0) return 'genre';
+        if (!genreMatches(genres, detail)) return 'genre';
     }
 
     // 全条件が空のルールは全番組にマッチしてしまうので無効扱いにする
-    if (keywords.length === 0 && services === null && types === null && genres === null) return false;
+    if (keywords.length === 0 && services === null && types === null && genres === null) return 'empty';
 
-    if (keywords.length === 0 && ignores.length === 0) return true;
+    if (keywords.length === 0 && ignores.length === 0) return null;
 
     const text = textOf(compiled.fields);
-    if (!keywords.every((k) => text.includes(k))) return false;
-    return !ignores.some((k) => text.includes(k));
+    if (!keywords.every((k) => text.includes(k))) return 'keyword';
+    return ignores.some((k) => text.includes(k)) ? 'ignore' : null;
+}
+
+/** ほどいたルールに番組が当てはまるか ({@link missOf} が理由を返さないか) */
+export function matchesCompiled(
+    compiled: CompiledRule,
+    program: Matchable,
+    serviceType: string | undefined,
+    freeOnly: boolean,
+    textOf: (fields: SearchField[]) => string,
+): boolean {
+    return missOf(compiled, program, serviceType, freeOnly, textOf) === null;
 }
 
 /**
@@ -361,7 +387,7 @@ function blockedPrograms(): Set<number> {
 
 /**
  * **同じ回は最初の放送だけ** (ルールの `dedupe`)。録らない番組 → 理由 (`episode.firstAirings`)。
- * 予約を立てるとき (`applyRules`) とルール画面の下見で同じものを使う
+ * 予約を立てるとき (`applyRules`) と下見 (`rule-preview.ts`) で同じものを使う
  */
 function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string; copy_never: boolean }>(
     list: T[],
@@ -381,7 +407,7 @@ function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string; co
 }
 
 /**
- * ルール画面の下見の「録らない」({@link dedupeSkips})。人が取り消した放送は `applyRules` も
+ * 下見 (`rule-preview.ts`) の「録らない」({@link dedupeSkips})。人が取り消した放送は `applyRules` も
  * 立てないので、「最初の放送」の候補に入れない
  */
 export function previewSkips<

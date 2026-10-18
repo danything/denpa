@@ -103,7 +103,7 @@
         } catch (error) {
             // 黙って空にしない。もう1度打ち直せば送り直す
             if (sent === generation) {
-                preview = { total: 0, skipped: 0, programs: [], conflicts: 0, failed: String(error) };
+                preview = { total: 0, skipped: 0, programs: [], conflicts: 0, verdicts: {}, failed: String(error) };
                 shownKey = null;
             }
         } finally {
