@@ -99,7 +99,7 @@ export const tagline = '自宅用のテレビ録画サーバ';
  * 最後の組の末尾に足す (docs を足しただけで消えることは無い)
  */
 export const sidebarGroups: { label: string; items: string[] }[] = [
-    { label: 'はじめる', items: ['install', 'install-mac', 'install-windows', 'screens', 'faq'] },
+    { label: 'はじめる', items: ['install', 'install-mac', 'install-windows', 'screens', 'faq', 'v2'] },
     { label: 'チューナー', items: ['tuners', 'tuner-pt3', 'tuner-px4', 'tuner-px-s1ud'] },
     { label: '乗り換え', items: ['switch', 'migrate'] },
     { label: '使う', items: ['watch', 'offline', 'library'] },

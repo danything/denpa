@@ -5,14 +5,11 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 
 ## 用意するもの
 
-チューナー・カードリーダー・OS の一覧は [tuners.md](tuners.md#要るもの)。機材ごとの細かいこと
-([px4-userland の対応機種](tuner-px4.md) (e-Better / Digibest 系も)・
-[PX-S1UD の blacklist](tuner-px-s1ud.md)・
-[PX-W3U3 (試験的)](tuners.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)) は [tuners.md](tuners.md) から。
+チューナー・カードリーダー・OS の一覧と機材ごとのページは [tuners.md](tuners.md#要るもの) に。
 
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
 - **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
-  `compose.override.yml` で渡します (Helm は既定で渡す)。GPU を使えるのは amd64 だけで、arm64 はソフトウェアでエンコードします
+  `compose.override.yml` で渡します (Helm は既定で渡す)。GPU を使えるのは amd64 だけです
   ([encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api))
 
 ## 1行で入れる
@@ -129,7 +126,7 @@ Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `den
 
 ## うまくいかないとき
 
-立てたあとの手順は [README](../README.md#3-開く)。うまくいかないときは設定の「チューナー」を見ます。エージェントと
+立てたあとの手順は [README](../README.md#3-開く)。うまくいかないときは設定の「受信」 (`/settings/reception`) を見ます。エージェントと
 カードリーダーの状態、スキャンの結果、番組表の集まり具合が出ます。
 
 イメージにはシェルがありません (土台は distroless。[development.md](development.md#イメージの土台は-distroless))。
