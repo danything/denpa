@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { untrack } from 'svelte';
     import {
         blurPixels,
         EVERY,
@@ -9,6 +10,7 @@
         type Rect,
         region,
         strips,
+        vivid,
     } from './ambient';
     import type { Ambient } from './ambient.svelte.js';
     import { PHONE_LANDSCAPE } from './PlayerLayout.svelte';
@@ -22,8 +24,10 @@
      * - 写すのは `EVERY` (200ms) ごと、1秒に5回まで。**縮めるのは写す側** (`<video>` は worker、canvas に
      *   描いているときはその worker) で、画面の側で元の大きさの画素を読むことは無い
      * - 写した 32x18 を、枠の幅を 64 画素とした小さな canvas に置いてぼかし (`ambient.ts` の `glowLayout`・
-     *   `blurPixels`。1回 80x50 画素ほど)、CSS で引き伸ばして見せる。**CSS の `filter: blur` は使わない** —
+     *   `blurPixels`。1回 90x60 画素ほど)、CSS で引き伸ばして見せる。**CSS の `filter: blur` は使わない** —
      *   ぼかしが画面の大きさになり、GPU の無い端末では入れ替えのたびに重かった
+     * - **色は濃くしてからぼかす** (`vivid`。彩度を上げる)。明るいテーマでは色の薄い所を透明にし、帯を
+     *   `mix-blend-mode: multiply` で地に掛ける — 白い地に灰色が乗ると汚れに見えるので、色だけを乗せる
      * - **前の1枚から次の1枚へ、`EVERY` の長さで 4 段に分けて入れ替える** (`FADE_STEP` ごと)。
      *   CSS で透明度を動かすと、その間は毎フレーム光を合成し直すことになる
      * - **光は枠の周りの4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ光を持ち、自分の所だけを
@@ -34,7 +38,7 @@
      * ## 写さないとき (`ambient.ts` の `plan`)
      *
      * 止めている間・裏に回った間・全画面の間は写さない (光は最後の1枚のまま)。**動かさない設定の端末では
-     * 1枚だけ写して止める** (入れ替えの段も付けない)。**明るいテーマでは出さない** (`plan` の `dark`)。
+     * 1枚だけ写して止める** (入れ替えの段も付けない)。
      * 狭い画面・横にしたスマホでは映像の周りに地が残らないので出さない。
      *
      * **映像の上には何も重ねない** — 光は枠の外だけで、字幕・データ放送・操作バー・CM 飛ばしの通知は
@@ -71,7 +75,7 @@
     /** 写した回数。E2E が「動いている・止まっている」を見る */
     let updates = $state(0);
 
-    const now = $derived(plan({ on: ambient.on, wide, dark, fullscreen, hidden, reduced, playing: ambient.playing, lit }));
+    const now = $derived(plan({ on: ambient.on, wide, fullscreen, hidden, reduced, playing: ambient.playing, lit }));
     /** 光を出しているか。置き場はこれが変わったときだけ測り直す (写す・止めるの切り替えでは測らない) */
     const visible = $derived(now !== 'off');
 
@@ -99,6 +103,7 @@
         context.imageSmoothingQuality = 'high';
         context.drawImage(bitmap, at.x, at.y, at.w, at.h);
         const image = context.getImageData(0, 0, at.width, at.height);
+        vivid(image.data, dark ? 'dark' : 'light');
         blurPixels(image.data, at.width, at.height, at.radius);
         context.putImageData(image, 0, 0);
     }
@@ -188,6 +193,19 @@
         shown = null;
         coming = null;
         paint(0);
+    });
+
+    /** テーマが変わったら、最後の1枚から塗り直す (色の濃くし方が違う) */
+    $effect(() => {
+        void dark;
+        untrack(() => {
+            if (last === null || layout === null) return;
+            clearInterval(fading);
+            coming = null;
+            shown = scratch();
+            compose(shown, last, layout);
+            paint(0);
+        });
     });
 
     $effect(() => () => {
@@ -362,7 +380,7 @@
     .band {
         position: absolute;
         overflow: hidden;
-        opacity: 0.55;
+        opacity: 0.9;
         /* 範囲の縁で薄くする。範囲全体の大きさで敷き、帯の位置ぶんずらす (`measure` の `maskSize`・`maskPosition`) */
         mask-image:
             linear-gradient(
@@ -381,6 +399,11 @@
             );
         mask-repeat: no-repeat;
         mask-composite: intersect;
+    }
+    /* 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`vivid` が色の薄い所を透明にしてある) */
+    :global(html:not([data-theme='dark'])) .band {
+        mix-blend-mode: multiply;
+        opacity: 0.85;
     }
     canvas {
         position: absolute;

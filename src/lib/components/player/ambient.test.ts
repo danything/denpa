@@ -10,12 +10,12 @@ import {
     type Situation,
     storedAmbient,
     strips,
+    vivid,
 } from './ambient';
 
 const base: Situation = {
     on: true,
     wide: true,
-    dark: true,
     fullscreen: false,
     hidden: false,
     reduced: false,
@@ -35,9 +35,8 @@ describe('アンビエントモード', () => {
         expect(plan({ ...base, lit: false })).toBe('watch');
     });
 
-    test('オフにした・明るいテーマ・光が見えない置き方なら消す', () => {
+    test('オフにした・光が見えない置き方なら消す', () => {
         expect(plan({ ...base, on: false })).toBe('off');
-        expect(plan({ ...base, dark: false })).toBe('off');
         expect(plan({ ...base, wide: false })).toBe('off');
     });
 
@@ -58,12 +57,12 @@ describe('アンビエントモード', () => {
     });
 
     test('ぼかしは枠の幅に合わせ、上下限で止める。届く幅は引き伸ばしとぼかしのぶん', () => {
-        expect(blur(200)).toBe(24);
-        expect(blur(1000)).toBe(40);
-        expect(blur(2000)).toBe(56);
-        // 800px: 引き伸ばしで 32px、ぼかし (32px) の2倍で 64px
-        expect(reach(800)).toBe(96);
-        expect(reach(1600)).toBe(64 + 112);
+        expect(blur(200)).toBe(32);
+        expect(blur(1000)).toBe(60);
+        expect(blur(2000)).toBe(80);
+        // 800px: 引き伸ばしで 80px、ぼかし (48px) の2倍で 96px
+        expect(reach(800)).toBe(80 + 96);
+        expect(reach(1600)).toBe(160 + 160);
     });
 
     test('帯は枠に重ならず、範囲を埋める', () => {
@@ -81,19 +80,19 @@ describe('アンビエントモード', () => {
 
     test('箱は枠を広げたもので、はみ出してよい範囲で切る', () => {
         const stage = { left: 100, top: 80, right: 900, bottom: 530 };
-        // 広げる幅は 96px
+        // 広げる幅は 176px
         expect(region(stage, { left: 0, top: 0, right: 2000, bottom: 2000 })).toEqual({
-            left: 4,
+            left: 0,
             top: 0,
-            right: 996,
-            bottom: 626,
+            right: 1076,
+            bottom: 706,
         });
         // 右に列がある (920px から)。列の上には出さない
         expect(region(stage, { left: 24, top: 56, right: 920, bottom: 700 })).toEqual({
             left: 24,
             top: 56,
             right: 920,
-            bottom: 626,
+            bottom: 700,
         });
     });
 
@@ -115,13 +114,13 @@ describe('光の canvas', () => {
         // 640px の枠が 64 画素 (1画素 10px)
         expect(layout.width).toBe(90);
         expect(layout.height).toBe(54);
-        expect(layout.w).toBeCloseTo(64 * 1.08);
-        expect(layout.h).toBeCloseTo(36 * 1.08);
+        expect(layout.w).toBeCloseTo(64 * 1.2);
+        expect(layout.h).toBeCloseTo(36 * 1.2);
         // 真ん中は枠の真ん中 (42, 22)
         expect(layout.x + layout.w / 2).toBeCloseTo(42);
         expect(layout.y + layout.h / 2).toBeCloseTo(22);
-        // ぼかし 26px は 2.6 画素
-        expect(layout.radius).toBe(boxRadius(2.6));
+        // ぼかし 38px は 3.8 画素
+        expect(layout.radius).toBe(boxRadius(3.8));
     });
 
     test('箱の半径は、3回でその強さに近づくもの', () => {
@@ -155,5 +154,32 @@ describe('光の canvas', () => {
         expect(data[near + 1]).toBe(0);
         // 遠い角は透明のまま
         expect(data[3]).toBe(0);
+    });
+});
+
+describe('色を濃くする', () => {
+    const pixel = (r: number, g: number, b: number) => new Uint8ClampedArray([r, g, b, 255]);
+
+    test('暗いテーマでは彩度と明るさを上げる。灰色は灰色のまま明るくなるだけ', () => {
+        const color = pixel(120, 60, 60);
+        vivid(color, 'dark');
+        expect(color[0]! - color[1]!).toBeGreaterThan(60);
+        expect(color[3]).toBe(255);
+        const gray = pixel(100, 100, 100);
+        vivid(gray, 'dark');
+        expect([...gray]).toEqual([125, 125, 125, 255]);
+    });
+
+    test('明るいテーマでは、色の薄い所ほど透明にする', () => {
+        const gray = pixel(90, 90, 90);
+        vivid(gray, 'light');
+        expect(gray[3]).toBe(0);
+        const red = pixel(200, 40, 40);
+        vivid(red, 'light');
+        expect(red[3]).toBe(255);
+        const pale = pixel(140, 120, 120);
+        vivid(pale, 'light');
+        expect(pale[3]).toBeGreaterThan(0);
+        expect(pale[3]).toBeLessThan(255);
     });
 });
