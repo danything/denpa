@@ -846,7 +846,7 @@
             {/snippet}
         </FactsAside>
     {:else}
-        <!-- 幅と高さの決めごとは FactsAside と同じ (一覧は枠が違うので列だけ揃える) -->
+        <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
         <aside class="live-side">
             <!--
                 **データ放送を出している間だけ、リモコンを一覧の上に出す。**
@@ -971,22 +971,15 @@
 <DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>
-    /* 右の一覧の列。幅と高さの決めごとは FactsAside と同じ (min-height: 0 が無いと中身の高さで突っ張って巻き取られない) */
+    /*
+     * 右の一覧の列。幅と高さ・サイドバーの形は FactsAside と同じく `PlayerLayout` が持つ。
+     * 中の余白はサイドバーのとき `--dp-side-pad`。一覧 (`.channels`) だけは列の端まで広げて
+     * 中で余白を取る — スクロールバーを窓の右端に出すため
+     */
     .live-side {
         display: flex;
         flex-direction: column;
-    }
-    @media (min-width: 768px) {
-        .live-side {
-            width: 16rem;
-            min-height: 0;
-            flex-shrink: 0;
-        }
-    }
-    @media (min-width: 1024px) {
-        .live-side {
-            width: 20rem;
-        }
+        padding: var(--dp-side-pad, 0) var(--dp-side-pad, 0) 0;
     }
     .track-label {
         display: inline-block;
@@ -1055,8 +1048,8 @@
     }
     .channels {
         flex: 1;
-        margin: 0;
-        padding: 0;
+        margin: 0 calc(-1 * var(--dp-side-pad, 0px));
+        padding: 0 var(--dp-side-pad, 0) var(--dp-side-pad, 0);
         overflow-y: auto;
     }
     @media (min-width: 768px) {
