@@ -574,36 +574,36 @@
                         「取消」が言っているので、残すのは「詳しく」の中身だけ
                     -->
                     <div class="preview-head">
-                    <h2 class="preview-title">
-                        この条件で録れる番組は <span class="num">{preview.total}</span> 件
-                        {#if preview.total > preview.programs.length}
-                            <span class="small muted normal">
-                                (先頭 {preview.programs.length} 件)
-                            </span>
+                        <h2 class="preview-title">
+                            この条件で録れる番組は <span class="num">{preview.total}</span> 件
+                            {#if preview.total > preview.programs.length}
+                                <span class="small muted normal">
+                                    (先頭 {preview.programs.length} 件)
+                                </span>
+                            {/if}
+                            <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
+                            {#if preview.skipped > 0}
+                                <!-- 録らないものも行に出す。数は全体の数 (下見の 100 件の中ではない) -->
+                                <span class="small muted normal" data-testid="preview-skipped">
+                                    (うち同じ回の {preview.skipped} 件は録りません)
+                                </span>
+                            {/if}
+                            {#if preview.conflicts > 0}
+                                <span class="tag error outline">
+                                    {preview.total > preview.programs.length ? '表示分のうち' : ''}競合 {preview.conflicts} 件
+                                </span>
+                            {/if}
+                        </h2>
+                        {#if preview.total > 0}
+                            <details class="more preview-more">
+                                <summary>詳しく</summary>
+                                <p>取り消した番組をルールが予約し直すことはありません。</p>
+                                <p>
+                                    条件から外れた予約は取り消されます。手動の予約と、まもなく始まる予約は残り、
+                                    <span class="tag">条件外</span> として表示します。
+                                </p>
+                            </details>
                         {/if}
-                        <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
-                        {#if preview.skipped > 0}
-                            <!-- 録らないものも行に出す。数は全体の数 (下見の 100 件の中ではない) -->
-                            <span class="small muted normal" data-testid="preview-skipped">
-                                (うち同じ回の {preview.skipped} 件は録りません)
-                            </span>
-                        {/if}
-                        {#if preview.conflicts > 0}
-                            <span class="tag error outline">
-                                {preview.total > preview.programs.length ? '表示分のうち' : ''}競合 {preview.conflicts} 件
-                            </span>
-                        {/if}
-                    </h2>
-                    {#if preview.total > 0}
-                        <details class="more preview-more">
-                            <summary>詳しく</summary>
-                            <p>取り消した番組をルールが予約し直すことはありません。</p>
-                            <p>
-                                条件から外れた予約は取り消されます。手動の予約と、まもなく始まる予約は残り、
-                                <span class="tag">条件外</span> として表示します。
-                            </p>
-                        </details>
-                    {/if}
                     </div>
                     {#if preview.total === 0}
                         <p class="small muted">
@@ -728,93 +728,93 @@
                 1件を 名前とバッジ → 条件 → 押すもの の順に縦に積めば、幅がいくらでも横には出ない
             -->
             <div class="list-col">
-            <!--
-                **絞り込みの欄はカードの外、見出しの行に** (予約と録画の一覧と同じ形。`../+page.svelte` の
-                `board-head`)。カードの中に貼り付けていた頃と、1画面に入る行の数は変わらない
-                (どちらも1行ぶん使う)。広い画面では巻き取るのはカードの中なので、下まで来てからでも
-                上へ戻らずに絞り直せる。ルールが1件も無いときは欄を出さない (絞るものが無い)
-            -->
-            <div class="list-head">
-                <h2>登録済み</h2>
-                {#if data.rules.length > 0}
-                    <input
-                        type="search"
-                        class="filter"
-                        placeholder="名前・条件で絞り込み"
-                        aria-label="ルールの一覧を絞り込む"
-                        bind:value={filter}
-                    />
-                {/if}
-            </div>
-            <div class="panel rule-list" data-testid="rule-list">
-                {#each paged.rows as rule (rule.id)}
-                    <div class="rule-row" data-testid="rule-row" data-rule-id={rule.id}>
-                        <div class="cluster">
-                            <span class="bold">{rule.name}</span>
-                            <span class="tag {rule.enabled ? 'success' : ''}">
-                                {rule.enabled ? '有効' : '無効'}
-                            </span>
-                            <!-- 優先度と予約数はバッジで。列にしていた頃は見出しが無いと何の数か分からなかった -->
-                            <span class="tag">優先度 {rule.priority}</span>
-                            <span class="tag">予約 {rule.reservations} 件</span>
-                            {#if rule.dedupe}
-                                <span class="tag" title="同じ回は最初の放送だけ録る">同じ回は1度</span>
-                            {/if}
-                        </div>
-                        <div class="conditions small">
-                            <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
-                            {#if rule.keyword}
-                                <span>{searchFieldLabel(rule.search_fields)}から</span>
-                            {/if}
-                            {#if rule.ignore_keyword}
-                                <span class="text-error">除外: {rule.ignore_keyword}</span>
-                            {/if}
-                            <span
-                                >局: {#each channelParts(rule) as part, i (i)}{i > 0 ? ', ' : ''}<span
-                                        class:broadcast={part.station}>{part.text}</span
-                                    >{:else}全局{/each}</span
-                            >
-                            <span>ジャンル: {genres(rule)}</span>
-                        </div>
-                        <div class="cluster row-actions">
-                            <a class="button small secondary" href={resolve(`rules?edit=${rule.id}`)} data-testid="rule-edit">編集</a>
-                            <ActionButton action="?/toggle" fields={{ id: rule.id }} class="small secondary" testid="rule-toggle">
-                                {rule.enabled ? '無効化' : '有効化'}
-                            </ActionButton>
-                            <!-- 押し間違い防止に2回押させる (録画の削除と同じ) -->
-                            <ArmedDelete {deleting} armKey={rule.id} fields={{ id: rule.id }} class="small" testid="rule-delete" />
-                        </div>
-                    </div>
-                {:else}
-                    {#if data.rules.length === 0}
-                        <!--
-                            **1件も無いときは、カードの真ん中に。** 左上に小さく出していた頃は、
-                            大きな空のカードの隅に埋もれて、まだ何も無いのか読み込み途中なのかが
-                            分からなかった。次に何をすればよいかも添える
-                        -->
-                        <div class="empty" data-testid="rule-empty">
-                            <p class="bold">ルールはまだありません</p>
-                            <p class="small muted">
-                                キーワードを入れて「追加」すると、合う番組を自動で予約します
-                            </p>
+                <!--
+                    **絞り込みの欄はカードの外、見出しの行に** (予約と録画の一覧と同じ形。`../+page.svelte` の
+                    `board-head`)。カードの中に貼り付けていた頃と、1画面に入る行の数は変わらない
+                    (どちらも1行ぶん使う)。広い画面では巻き取るのはカードの中なので、下まで来てからでも
+                    上へ戻らずに絞り直せる。ルールが1件も無いときは欄を出さない (絞るものが無い)
+                -->
+                <div class="list-head">
+                    <h2>登録済み</h2>
+                    {#if data.rules.length > 0}
+                        <input
+                            type="search"
+                            class="filter"
+                            placeholder="名前・条件で絞り込み"
+                            aria-label="ルールの一覧を絞り込む"
+                            bind:value={filter}
+                        />
+                    {/if}
+                </div>
+                <div class="panel rule-list" data-testid="rule-list">
+                    {#each paged.rows as rule (rule.id)}
+                        <div class="rule-row" data-testid="rule-row" data-rule-id={rule.id}>
+                            <div class="cluster">
+                                <span class="bold">{rule.name}</span>
+                                <span class="tag {rule.enabled ? 'success' : ''}">
+                                    {rule.enabled ? '有効' : '無効'}
+                                </span>
+                                <!-- 優先度と予約数はバッジで。列にしていた頃は見出しが無いと何の数か分からなかった -->
+                                <span class="tag">優先度 {rule.priority}</span>
+                                <span class="tag">予約 {rule.reservations} 件</span>
+                                {#if rule.dedupe}
+                                    <span class="tag" title="同じ回は最初の放送だけ録る">同じ回は1度</span>
+                                {/if}
+                            </div>
+                            <div class="conditions small">
+                                <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
+                                {#if rule.keyword}
+                                    <span>{searchFieldLabel(rule.search_fields)}から</span>
+                                {/if}
+                                {#if rule.ignore_keyword}
+                                    <span class="text-error">除外: {rule.ignore_keyword}</span>
+                                {/if}
+                                <span
+                                    >局: {#each channelParts(rule) as part, i (i)}{i > 0 ? ', ' : ''}<span
+                                            class:broadcast={part.station}>{part.text}</span
+                                        >{:else}全局{/each}</span
+                                >
+                                <span>ジャンル: {genres(rule)}</span>
+                            </div>
+                            <div class="cluster row-actions">
+                                <a class="button small secondary" href={resolve(`rules?edit=${rule.id}`)} data-testid="rule-edit">編集</a>
+                                <ActionButton action="?/toggle" fields={{ id: rule.id }} class="small secondary" testid="rule-toggle">
+                                    {rule.enabled ? '無効化' : '有効化'}
+                                </ActionButton>
+                                <!-- 押し間違い防止に2回押させる (録画の削除と同じ) -->
+                                <ArmedDelete {deleting} armKey={rule.id} fields={{ id: rule.id }} class="small" testid="rule-delete" />
+                            </div>
                         </div>
                     {:else}
-                        <div class="rule-row small muted">一致するルールはありません</div>
+                        {#if data.rules.length === 0}
+                            <!--
+                                **1件も無いときは、カードの真ん中に。** 左上に小さく出していた頃は、
+                                大きな空のカードの隅に埋もれて、まだ何も無いのか読み込み途中なのかが
+                                分からなかった。次に何をすればよいかも添える
+                            -->
+                            <div class="empty" data-testid="rule-empty">
+                                <p class="bold">ルールはまだありません</p>
+                                <p class="small muted">
+                                    キーワードを入れて「追加」すると、合う番組を自動で予約します
+                                </p>
+                            </div>
+                        {:else}
+                            <div class="rule-row small muted">一致するルールはありません</div>
+                        {/if}
+                    {/each}
+                    <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
+                    {#if paged.more}
+                        <div class="rule-row small muted tail" use:sentinel={() => paged.reveal()}>
+                            残り {paged.rest} 件
+                        </div>
                     {/if}
-                {/each}
-                <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
-                {#if paged.more}
-                    <div class="rule-row small muted tail" use:sentinel={() => paged.reveal()}>
-                        残り {paged.rest} 件
-                    </div>
-                {/if}
-                <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
-                {#if filter !== ''}
-                    <div class="rule-row small muted tail">
-                        {data.rules.length} 件中 {filtered.length} 件
-                    </div>
-                {/if}
-            </div>
+                    <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
+                    {#if filter !== ''}
+                        <div class="rule-row small muted tail">
+                            {data.rules.length} 件中 {filtered.length} 件
+                        </div>
+                    {/if}
+                </div>
             </div>
         </section>
     </div>
