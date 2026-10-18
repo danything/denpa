@@ -18,8 +18,44 @@ export function storedAmbient(saved: string | null): boolean {
  */
 export const GLANCE = { width: 32, height: 18 } as const;
 
-/** 写す間隔 (ms)。**1秒に5回まで。** 前の1枚から次の1枚へは、この長さで入れ替える */
-export const EVERY = 200;
+/**
+ * 写す間隔 (ms)。**1秒に1回。** 1秒に5回写して 200ms で入れ替えていた頃は、色が細かく揺れてちらついた。
+ * 地の色は映像の動きを追う必要が無い — 場面が変わったことが分かれば足りる
+ */
+export const EVERY = 1000;
+
+/** 前の色から次の色へ入れ替える長さ (ms)。写す間隔より長く、ゆっくり溶かす (`ease`) */
+export const FADE = 1200;
+
+/** 入れ替えを何段で描くか。1段 100ms */
+export const FADE_STEPS = 12;
+
+/**
+ * 写した1枚をどれだけ取り込むか (`smoothFrame`)。**0.4 — 前までの色を 6 割残す。** 場面が変わっても
+ * 一度には跳ばず、2〜3 秒かけて新しい色に寄っていく
+ */
+export const SMOOTH = 0.4;
+
+/** 入れ替えの進み方。始めと終わりをゆっくりにする (0〜1 → 0〜1) */
+export function ease(t: number): number {
+    const x = Math.min(1, Math.max(0, t));
+    return x * x * (3 - 2 * x);
+}
+
+/**
+ * **色を時間でならす。** 写した1枚 (`next`、RGBA) を、前までの色 (`prev`) へ `weight` だけ混ぜる
+ * (画素ごとの指数移動平均)。`prev` が無ければ `next` をそのまま使う。返すのは次の `prev`
+ */
+export function smoothFrame(
+    prev: Float32Array | null,
+    next: Uint8ClampedArray,
+    weight: number,
+): Float32Array {
+    if (prev === null || prev.length !== next.length) return Float32Array.from(next);
+    const out = new Float32Array(next.length);
+    for (let i = 0; i < next.length; i++) out[i] = prev[i]! + (next[i]! - prev[i]!) * weight;
+    return out;
+}
 
 export interface Situation {
     /** オンにしているか */
