@@ -75,17 +75,23 @@ export function reach(width: number): number {
     return Math.round((width * (SCALE - 1)) / 2 + blur(width) * 2);
 }
 
+/** 下へ広げる割合 (`region`)。横と上の 0.4 倍 */
+export const BELOW = 0.4;
+
 /**
  * 光を描く範囲。**映像の枠を `reach` ぶん広げ、`bounds` (はみ出してよい範囲) で切る。**
  * どちらも画面の座標 (`getBoundingClientRect`)。`bounds` は `<main>` の内側で、右に列があれば
- * その左端まで — 列の上に光を出さない・ページを巻き取れる長さを増やさない
+ * その左端まで — 列の上に光を出さない・ページを巻き取れる長さを増やさない。
+ *
+ * **下へは `BELOW` の割合しか広げない。** 映像の下は地が広く残っていて、同じだけ広げると光が下へ長く
+ * 尾を引いた (上と横は見出しと列ですぐ切れる)
  */
 export function region(stage: Rect, bounds: Rect): Rect {
     const spread = reach(stage.right - stage.left);
     const left = Math.max(bounds.left, stage.left - spread);
     const top = Math.max(bounds.top, stage.top - spread);
     const right = Math.min(bounds.right, stage.right + spread);
-    const bottom = Math.min(bounds.bottom, stage.bottom + spread);
+    const bottom = Math.min(bounds.bottom, stage.bottom + Math.round(spread * BELOW));
     return { left, top, right: Math.max(left, right), bottom: Math.max(top, bottom) };
 }
 
@@ -249,4 +255,60 @@ export function vivid(data: Uint8ClampedArray, theme: 'dark' | 'light'): void {
             data[i + 3] = data[i + 3]! * Math.min(1, chroma * 2.5);
         }
     }
+}
+
+/** 見出しに敷く色の数 (左から右へ)。映像の上の端を横にこれだけに分けて平均する */
+export const HEADER_STOPS = 4;
+
+/**
+ * 見出しの地の明るさ (相対輝度) の上限・下限。**見出しの字が 4.5 以上で読めるように決めてある。**
+ *
+ * - 暗いテーマ … 字は `--dp-muted` (#9aa3b5、輝度 0.36)。(0.36 + 0.05) / 4.5 − 0.05 ≈ 0.041 なので 0.035 まで
+ * - 明るいテーマ … 字は `--dp-primary-text` (#02659a、輝度 0.12。いまの画面のタブ) がいちばん暗くない。
+ *   4.5 × (0.12 + 0.05) − 0.05 ≈ 0.72 なので 0.75 から
+ */
+export const HEADER_LUMINANCE = { dark: 0.035, light: 0.75 } as const;
+
+type Rgb = [number, number, number];
+
+function linear(channel: number): number {
+    const c = channel / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function gamma(value: number): number {
+    const c = value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055;
+    return Math.round(Math.min(1, Math.max(0, c)) * 255);
+}
+
+/** 相対輝度 (WCAG) */
+export function luminance([r, g, b]: Rgb): number {
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+}
+
+/**
+ * **見出しに敷く色。** 映像の上の端の色を濃くし (`vivid` と同じ彩度)、明るさだけを `HEADER_LUMINANCE` に収める。
+ * 暗いテーマは光の強さ (線形) を落とし、明るいテーマは白へ寄せる — どちらも色相は変えない
+ */
+export function headerTone(color: Rgb, theme: 'dark' | 'light'): Rgb {
+    const pixel = new Uint8ClampedArray([...color, 255]);
+    vivid(pixel, 'dark');
+    let lin = [linear(pixel[0]!), linear(pixel[1]!), linear(pixel[2]!)];
+    const now = 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!;
+    if (theme === 'dark') {
+        const cap = HEADER_LUMINANCE.dark;
+        if (now > cap) lin = lin.map((v) => (v * cap) / now);
+    } else {
+        const floor = HEADER_LUMINANCE.light;
+        if (now < floor) {
+            const t = (floor - now) / (1 - now);
+            lin = lin.map((v) => v + (1 - v) * t);
+        }
+    }
+    return [gamma(lin[0]!), gamma(lin[1]!), gamma(lin[2]!)];
+}
+
+/** 2つの色を `t` で混ぜる (入れ替えの途中) */
+export function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
+    return [0, 1, 2].map((i) => Math.round(a[i]! + (b[i]! - a[i]!) * t)) as Rgb;
 }

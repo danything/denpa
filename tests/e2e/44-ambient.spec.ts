@@ -57,6 +57,12 @@ test.describe('アンビエントモード', () => {
             await expect.poll(updates(page), { timeout: 15_000 }).toBeGreaterThan(5);
             const before = await updates(page)();
             await expect.poll(updates(page), { timeout: 10_000 }).toBeGreaterThan(before + 5);
+            // 見出しも映像の上の端の色で塗る
+            await expect(page.locator('html')).toHaveAttribute('data-ambient-header', '');
+            const header = await page
+                .locator('.navbar')
+                .evaluate((el) => getComputedStyle(el).backgroundImage);
+            expect(header).toContain('linear-gradient');
             // 光は枠の外 (帯) にだけ描く。枠に重なる帯は無い
             const stage = (await page.getByTestId('live-frame').boundingBox())!;
             for (const band of await glow.locator('.band:not([hidden])').all()) {
@@ -83,6 +89,7 @@ test.describe('アンビエントモード', () => {
             await press(page, 'live-ambient');
             await expect(glow).toHaveAttribute('data-plan', 'off');
             await expect(glow).toBeHidden();
+            await expect(page.locator('html')).not.toHaveAttribute('data-ambient-header');
             await page.reload();
             await expect(page.getByTestId('live-frame-ambient')).toHaveAttribute('data-plan', 'off');
             expect(await page.evaluate(() => localStorage.getItem('player-ambient'))).toBe('0');

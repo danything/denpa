@@ -4,6 +4,8 @@ import {
     blurPixels,
     boxRadius,
     glowLayout,
+    headerTone,
+    luminance,
     plan,
     reach,
     region,
@@ -80,19 +82,19 @@ describe('アンビエントモード', () => {
 
     test('箱は枠を広げたもので、はみ出してよい範囲で切る', () => {
         const stage = { left: 100, top: 80, right: 900, bottom: 530 };
-        // 広げる幅は 176px
+        // 広げる幅は 176px (下は 0.4 倍の 70px)
         expect(region(stage, { left: 0, top: 0, right: 2000, bottom: 2000 })).toEqual({
             left: 0,
             top: 0,
             right: 1076,
-            bottom: 706,
+            bottom: 600,
         });
         // 右に列がある (920px から)。列の上には出さない
         expect(region(stage, { left: 24, top: 56, right: 920, bottom: 700 })).toEqual({
             left: 24,
             top: 56,
             right: 920,
-            bottom: 700,
+            bottom: 600,
         });
     });
 
@@ -181,5 +183,48 @@ describe('色を濃くする', () => {
         vivid(pale, 'light');
         expect(pale[3]).toBeGreaterThan(0);
         expect(pale[3]).toBeLessThan(255);
+    });
+});
+
+describe('見出しに敷く色', () => {
+    const hex = (h: string): [number, number, number] =>
+        [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+    const contrast = (a: [number, number, number], b: [number, number, number]) => {
+        const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p) as [number, number];
+        return (x + 0.05) / (y + 0.05);
+    };
+    const frames = [
+        '#ffffff',
+        '#000000',
+        '#ff0000',
+        '#ffff00',
+        '#00ffff',
+        '#0000ff',
+        '#808080',
+        '#36c8c0',
+        '#0b3550',
+    ].map(hex);
+
+    test('暗いテーマでは、どんな映像でも見出しの字 (控えた字・主の色) が 4.5 以上で読める', () => {
+        for (const frame of frames) {
+            const tone = headerTone(frame, 'dark');
+            expect(contrast(tone, hex('#9aa3b5'))).toBeGreaterThanOrEqual(4.5);
+            expect(contrast(tone, hex('#e6e8ec'))).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    test('明るいテーマでも、見出しの字が 4.5 以上で読める', () => {
+        for (const frame of frames) {
+            const tone = headerTone(frame, 'light');
+            expect(contrast(tone, hex('#555e70'))).toBeGreaterThanOrEqual(4.5);
+            expect(contrast(tone, hex('#02659a'))).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    test('色相は残す (赤は赤みのまま、青は青みのまま)', () => {
+        const red = headerTone(hex('#ff0000'), 'light');
+        expect(red[0]).toBeGreaterThan(red[1]);
+        const blue = headerTone(hex('#0000ff'), 'dark');
+        expect(blue[2]).toBeGreaterThan(blue[0]);
     });
 });

@@ -6,6 +6,9 @@
         GLANCE,
         type GlowLayout,
         glowLayout,
+        HEADER_STOPS,
+        headerTone,
+        mixRgb,
         plan,
         type Rect,
         region,
@@ -32,6 +35,8 @@
      *   CSS で透明度を動かすと、その間は毎フレーム光を合成し直すことになる
      * - **光は枠の周りの4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ光を持ち、自分の所だけを
      *   切り出して見せる。枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろの光まで合成し直すことになる
+     * - **見出し (`.navbar`) も、映像の上の端の色で塗る** (`tint`)。上の端を横に4つに分けて平均し、字が読める
+     *   明るさに収める (`headerTone`)。光と同じ間合いで入れ替え、光を消すと元の地に戻る
      * - 光の届く範囲は `<main>` の内側と右の列の左端で切る (`region`)。列の上に光を出さない・ページの
      *   巻き取れる長さを増やさない。切った端でも急に途切れないよう、範囲の縁で薄くする (`mask-image`)
      *
@@ -126,6 +131,57 @@
     }
 
     /** 次の1枚を出す。`EVERY` の長さで前の1枚から入れ替える (動かさない設定ではすぐ) */
+    /** 見出しに敷く色。入れ替えの前と後と、いま出しているもの (`headerTone` を通したもの) */
+    type Rgb = [number, number, number];
+    let headerFrom: Rgb[] | null = null;
+    let headerTo: Rgb[] | null = null;
+    let headerNow: Rgb[] | null = null;
+    let edge: HTMLCanvasElement | null = null;
+
+    /** 映像の上の端 (上から 1/3) を横に `HEADER_STOPS` に分けて平均し、見出しの色にする */
+    function edgeColors(bitmap: ImageBitmap): Rgb[] {
+        edge ??= document.createElement('canvas');
+        edge.width = GLANCE.width;
+        edge.height = GLANCE.height;
+        const context = edge.getContext('2d', { willReadFrequently: true });
+        if (context === null) return [];
+        context.drawImage(bitmap, 0, 0, GLANCE.width, GLANCE.height);
+        const rows = Math.ceil(GLANCE.height / 3);
+        const { data } = context.getImageData(0, 0, GLANCE.width, rows);
+        const span = GLANCE.width / HEADER_STOPS;
+        return Array.from({ length: HEADER_STOPS }, (_, stop) => {
+            const sum = [0, 0, 0];
+            let count = 0;
+            for (let y = 0; y < rows; y++) {
+                for (let x = Math.floor(stop * span); x < Math.floor((stop + 1) * span); x++) {
+                    const at = (y * GLANCE.width + x) * 4;
+                    for (let c = 0; c < 3; c++) sum[c]! += data[at + c]!;
+                    count++;
+                }
+            }
+            const color = sum.map((v) => v / Math.max(1, count)) as Rgb;
+            return headerTone(color, dark ? 'dark' : 'light');
+        });
+    }
+
+    /** 見出しの地を、前の色から次の色へ `mix` まで進める */
+    function tint(mix: number): void {
+        if (headerTo === null) return;
+        const root = document.documentElement;
+        headerNow = headerTo.map((to, i) => mixRgb(headerFrom?.[i] ?? to, to, mix));
+        headerNow.forEach(([r, g, b], i) => {
+            root.style.setProperty(`--ambient-h${i}`, `rgb(${r} ${g} ${b})`);
+        });
+        root.dataset['ambientHeader'] = '';
+    }
+
+    function untint(): void {
+        const root = document.documentElement;
+        delete root.dataset['ambientHeader'];
+        for (let i = 0; i < HEADER_STOPS; i++) root.style.removeProperty(`--ambient-h${i}`);
+        headerFrom = headerTo = headerNow = null;
+    }
+
     function show(bitmap: ImageBitmap): void {
         last?.close();
         last = bitmap;
@@ -141,9 +197,12 @@
             context?.drawImage(painted, 0, 0);
         }
         compose(coming, bitmap, layout);
+        headerFrom = headerNow;
+        headerTo = edgeColors(bitmap);
         const swap = () => {
             [shown, coming] = [coming, shown];
             paint(0);
+            tint(1);
         };
         if (reduced) {
             swap();
@@ -151,12 +210,16 @@
         }
         let step = 1;
         paint(step / 4);
+        tint(step / 4);
         fading = setInterval(() => {
             step++;
             if (step >= 4) {
                 clearInterval(fading);
                 swap();
-            } else paint(step / 4);
+            } else {
+                paint(step / 4);
+                tint(step / 4);
+            }
         }, FADE_STEP);
     }
 
@@ -193,6 +256,7 @@
         shown = null;
         coming = null;
         paint(0);
+        untint();
     });
 
     /** テーマが変わったら、最後の1枚から塗り直す (色の濃くし方が違う) */
@@ -205,11 +269,15 @@
             shown = scratch();
             compose(shown, last, layout);
             paint(0);
+            headerFrom = null;
+            headerTo = edgeColors(last);
+            tint(1);
         });
     });
 
     $effect(() => () => {
         clearInterval(fading);
+        untint();
         last?.close();
         last = null;
     });
@@ -404,6 +472,19 @@
     :global(html:not([data-theme='dark'])) .band {
         mix-blend-mode: multiply;
         opacity: 0.85;
+    }
+    /*
+     * **見出しも映像の上の端の色で塗る** (`tint`)。色は字が 4.5 以上で読める明るさに収めてある
+     * (`ambient.ts` の `headerTone`)。透かさずに塗る — 下の中身が透けると、明るいコマで字が沈む
+     */
+    :global(html[data-ambient-header] .navbar) {
+        background: linear-gradient(
+            90deg,
+            var(--ambient-h0),
+            var(--ambient-h1),
+            var(--ambient-h2),
+            var(--ambient-h3)
+        );
     }
     canvas {
         position: absolute;
