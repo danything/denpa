@@ -1945,6 +1945,7 @@
                         cm={cmOnBar}
                         marks={marksOnBar}
                         valuetext={current === null ? undefined : `${clock(at)}、${current.title}`}
+                        paused={!playing}
                         testid="watch-seek"
                     />
 

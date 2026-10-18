@@ -233,7 +233,7 @@
 }
 /* ---- 画面の切り替え (View Transitions。始めるのは `+layout.svelte` の `onNavigate`) ---- */
 /*
- * **中身だけを入れ替える。** ふつうは画面全体 (root) がふわっと入れ替わる。
+ * **中身はすぐ入れ替え、選んでいる印だけを滑らせる。** (ふつうは画面全体 (root) がふわっと入れ替わるが、それは止めてある)
  * ヘッダーと下のタブは名前を付けて抜き出し、**動かさない** (古いほうは描かず、新しいほうをそのまま置く)。
  * 選んでいる印 (上のナビの下線・下のタブの印・番組表の種別) も名前で抜き出してあるので、
  * 前の場所から新しい場所へ横に滑る。元の要素から広げるもの (番組表のマス → 詳細)
@@ -244,14 +244,12 @@
     animation-timing-function: var(--dp-ease);
 }
 /*
- * 中身の入れ替えは**古いほうを消さずに置いたまま、新しいほうだけを短く重ねる**。
- * 両方を同時に薄くすると、途中で両方とも半透明になって間延びして見えた
+ * 中身は**動かさずにすぐ入れ替える**。動くのは選んでいる印 (下線・タブの印・種別) と、元の要素から
+ * 広げるものだけ。印が横に滑る横で中身がフェードすると、動きの向きがちぐはぐで、待たされて見えた
  */
-::view-transition-old(root) {
-    animation: none;
-}
+::view-transition-old(root),
 ::view-transition-new(root) {
-    animation-duration: var(--dp-duration);
+    animation: none;
 }
 ::view-transition-old(site-header),
 ::view-transition-old(site-tabbar) {

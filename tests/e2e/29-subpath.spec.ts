@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { connect } from 'node:net';
-import { cellOf, expect, syncEpg, test, upcoming } from './helpers';
+import { cellOf, deleteRule, expect, syncEpg, test, upcoming } from './helpers';
 
 /**
  * **前段の接頭辞の下でも動く** (server/paths.ts)。
@@ -97,19 +97,21 @@ test.describe('接頭辞の下で', () => {
         await expect(page.getByTestId('program-detail')).toBeVisible();
         await page.getByTestId('detail-close').click();
 
-        // ルール: 作って、編集して保存すると一覧へ転送される (転送は相対)
+        // ルール: 作って、開いて保存すると同じルールのまま転送される (転送は相対)
         await page.getByTestId('nav-rules').click();
         await expect(page).toHaveURL(`${origin}${PREFIX}/rules`);
         await page.getByTestId('rule-keyword').fill('接頭辞のテスト');
         await page.getByTestId('rule-submit').click();
         const row = page.getByTestId('rule-row').filter({ hasText: '接頭辞のテスト' });
         await expect(row).toBeVisible();
-        await row.getByTestId('rule-edit').click();
+        await row.click();
         await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/rules\\?edit=\\d+$`));
+        // 保存しても URL は同じ (選んだまま)。送り終えたのは返事で見る
+        const saved = page.waitForResponse((res) => res.url().includes('/update'));
         await page.getByTestId('rule-update').click();
-        await expect(page).toHaveURL(`${origin}${PREFIX}/rules`);
-        await row.getByTestId('rule-delete').click();
-        await page.getByTestId('rule-delete-confirm').click();
+        expect((await saved).status()).toBeLessThan(400);
+        await expect(page).toHaveURL(new RegExp(`^${origin}${PREFIX}/rules\\?edit=\\d+$`));
+        await deleteRule(page, row);
         await expect(row).toHaveCount(0);
 
         // ライブ: チケット (fetch) を取って、接頭辞の中の WebSocket に繋ぎ、TS が届く
