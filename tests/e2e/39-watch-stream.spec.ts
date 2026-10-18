@@ -61,7 +61,7 @@ test.describe('観る画面でその場で流す', () => {
 
         // 字幕は元の TS から (偽 ffmpeg は作り置きの字幕を返す)。データ放送は出さない
         await expect(page.getByTestId('watch-captions')).toHaveCount(1);
-        await expect(page.getByTestId('watch-data-button')).toHaveCount(0);
+        await expect(page.getByTestId('watch-data')).toHaveCount(0);
     });
 
     /**
