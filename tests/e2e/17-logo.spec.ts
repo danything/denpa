@@ -84,6 +84,10 @@ test.describe('局ロゴ', () => {
         // 何局ぶん持っているかもここに出す。番組表にロゴが出ないとき、
         // まだ取得できていないのか出し方が悪いのかを見分けるため
         await expect(page.getByTestId('status-logos')).toContainText('局');
+        // 受信できるチャンネルの表でも、局名の前にロゴが出る (局ごとに確かめられる)
+        const row = page.locator(`[data-testid="channel-service"][data-service-id="${MX.id}"]`);
+        await expect(row).toHaveAttribute('data-logo', 'have');
+        await expect(row.locator('img')).toBeVisible();
 
         /*
          * 取得するものが無くなったら**ボタンも消える**。押しても「もう全部持って
@@ -172,7 +176,7 @@ test.describe('衛星の局ロゴ', () => {
 
         // 取れない局は取れないと書く。黙って足りないままだと不具合と区別が付かない
         await expect(page.getByTestId('status-logos')).toContainText('局');
-        await expect(page.locator('[data-testid="logo-card"]')).toContainText(
+        await expect(page.getByTestId('logo-unavailable')).toContainText(
             'ロゴが放送に載っていないため取れません',
         );
         expect((await request.get(`/api/services/${BS_NO_LOGO.id}/logo`)).status()).toBe(404);
@@ -215,7 +219,11 @@ test.describe('CM検出のロゴ', () => {
         // 局ごとの一覧は畳んである。開いてから探す
         await page.getByTestId('cm-logo-list').locator('summary').first().click();
         const card = page.locator('details.cm-logo').filter({ hasText: 'ＢＳ１１' });
-        await expect(card.locator('summary .tag')).toHaveText('覚えました');
+        // 覚えた局は「覚えました」の組に並ぶ
+        await expect(
+            page.getByTestId('cm-logo-learned').locator('details.cm-logo').filter({ hasText: 'ＢＳ１１' }),
+        ).toHaveCount(1);
+        await expect(card).toHaveAttribute('data-learned', 'true');
         await card.locator('summary').first().click();
         const shown = card.getByRole('img', { name: 'いま覚えているロゴ' });
         await expect(shown).toBeVisible();
@@ -228,7 +236,8 @@ test.describe('CM検出のロゴ', () => {
         await expect(done).toContainText('覚えたロゴを消しました');
         await expect(done).toHaveClass(/\bsuccess\b/);
         await expect(page.getByTestId('tuner-error')).toHaveCount(0);
-        await expect(card.locator('summary .tag')).toHaveText('まだ');
+        await expect(card).toHaveAttribute('data-learned', 'false');
+        await expect(page.getByTestId('cm-logo-waiting')).toContainText('ＢＳ１１');
         expect(existsSync(repo)).toBe(false);
         expect((await request.get(`/api/services/${BS11.id}/logo-data`)).status()).toBe(404);
     });
