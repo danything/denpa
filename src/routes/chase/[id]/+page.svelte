@@ -260,14 +260,14 @@
             bind:overlay
         />
 
-        <!-- 右上の一行。**観る画面と同じ並び** (切り抜き・閉じる。閉じるは角) -->
+        <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き) -->
         <ControlBar side shown={controls.shown}>
+            <CloseLink />
             <ControlButton
                 icon={CAMERA}
                 label="この場面を切り抜く"
                 onclick={() => void snapshot()}
             />
-            <CloseLink />
         </ControlBar>
 
         <ControlBar shown={controls.shown} testid="chase-controls">

@@ -3,7 +3,7 @@
     import Icon from './Icon.svelte';
     import { CLOSE, OVERLAY, OVERLAY_BTN, OVERLAY_ROUND } from './icons.js';
 
-    /** 右上の列のいちばん上。**観る画面と追っかけで同じ場所・同じ行き先** (一覧へ戻る) */
+    /** 右端の縦の列のいちばん上。**観る画面と追っかけで同じ場所・同じ行き先** (一覧へ戻る) */
     let { testid }: { testid?: string } = $props();
 </script>
 
