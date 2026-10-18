@@ -1,17 +1,11 @@
 # 観る
 
-ライブ・追っかけ・録画をブラウザで観るときの使い方です。画面の作りは [player.md](player.md)、
-ライブの仕組みは [stream.md](stream.md)、端末に保存する作りは [offline.md](offline.md) にあります。
-
-**録画はブラウザでそのまま観ます** (`/watch/<id>`。[library.md](library.md#観るのはブラウザで))。
-テレビのアプリは [library.md](library.md#テレビのアプリ) に。
+ライブ・追っかけ・録画をブラウザで観るときの使い方です。録画の観る画面 (`/watch/<id>`) とテレビのアプリは
+[library.md](library.md#観るのはブラウザで)、画面の作りは [player.md](player.md) にあります。
 
 ## ライブ
 
-**放送中のものもブラウザで観られます**（`/live`。作りは [stream.md](stream.md)）。
-録画の観る画面とは作りが別物です。ライブは WebSocket + MSE で放送に追いつき続け、
-録画はファイルをそのまま渡すか、サーバが詰め替え・変換して流すものを読みます ([library.md](library.md#何で観るかはサーバが出せるものから画面が選ぶ))。
-
+**放送中のものもブラウザで観られます** (`/live`)。WebSocket + MSE で放送に追いつき続けます (作りは [stream.md](stream.md))。
 局は右の一覧から切り替えます。止めれば追っかけ再生になり (速さを選べ、追いついたら自分でライブに戻る)、
 二カ国語・解説放送の音声も選べます。
 
@@ -83,7 +77,7 @@ denpa は PWA なので、ブラウザの「ホーム画面に追加」でアプ
 そこで、どの名前で来たかで表示名を変えられます (`PWA_NAMES`)。
 
 ```sh
-PWA_NAMES='dp.doany.io=denpa,dp.l.doany.io=denpa 宅内'
+PWA_NAMES='tv.example.com=denpa,tv.lan.example.com=denpa 宅内'
 ```
 
 書き方は `ホスト名=表示名` のカンマ区切りで、載っていない名前で来たら `denpa`。
@@ -112,9 +106,8 @@ PWA_NAMES='dp.doany.io=denpa,dp.l.doany.io=denpa 宅内'
 ## 端末に保存して観る (オフライン)
 
 **端末に保存したものは denpa の中だけで観ます。** ブラウザの保存領域 (IndexedDB) に置き、
-ファイルとして外へは出しません。録画のファイルそのものを持ち出すダウンロードは、エンコードした録画 (mkv) に
-コピー制御の符号が引き継がれないため、持たないことにしています
-([Discussion #760](https://github.com/danything/denpa/discussions/760))。
+ファイルとして外へは出しません (持ち出すダウンロードが無い理由は [library.md](library.md#観るのはブラウザで))。
+作りは [offline.md](offline.md)。
 
 **電波の無いときは `/offline` で観ます。** `/watch/<id>` はサーバが組む画面なので開けず、
 ナビゲーションが繋がらないとサービスワーカーが `/offline` へ落とします。

@@ -6,17 +6,13 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
 
-複数チューナーの PX4 系を Linux で使うには、ホストに `px4_drv` (DKMS) を入れて
-`/dev/px4video*` を出すしかなく、「まず何かを入れてください」が要ります (以前あった
-`px4_drv` の chardev 対応は、実機に当てないまま外しました)。
-
-代わりに [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントの
-イメージに同梱**します (`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間の
-ドライバで、`/dev/bus/usb` が見えれば動き、カーネルモジュールも DKMS も要りません。
+[px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントのイメージに同梱**しています
+(`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間のドライバで、`/dev/bus/usb` が見えれば動き、
+ホストに `px4_drv` (DKMS) もカーネルモジュールも要りません (`px4_drv` の `/dev/px4video*` には対応していません)。
 
 ## 対応機種
 
-PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe) は px4-userland (同梱。`Px4.cs`) で使います。px4-userland の対応機種ならそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
+PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種ならそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
 
 ## 設定
 
@@ -35,8 +31,7 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe) は 
   そこで名前を番号と USB ポートにし (`px4:000000000000001_1-2.3:0`)、`px4d` を
   `--device <番号> --usb-path <USBポート> --instance <名前>` で起こし、`px4ctl` やソケットも
   その名前で呼びます (SPEC 4.1)。**差すポートを変えると別のチューナーになります**
-  (px4-userland も「抜き差し後の物理個体は保証しない」と言っています)。前は両方飛ばしていて、
-  Home Assistant のアドオンが `px4d` / `px4ctl` を差し替えるラッパーで補っていました
+  (px4-userland も「抜き差し後の物理個体は保証しない」と言っています)
 
 ## 衛星の LNB 給電
 

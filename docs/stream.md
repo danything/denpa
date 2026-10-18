@@ -11,9 +11,8 @@
 | デプロイ形態 | **セルフホスト（1ユーザー = 1サーバ）** |
 | アプリ | SvelteKit 単一アプリ（配信・視聴の両方を担当） |
 | 入力ソース | 放送波 MPEG-TS（ISDB-T / ISDB-S） |
-| 目標コーデック | AV1 + Opus |
+| コーデック | H.264 + AAC (既定) / AV1 + Opus |
 | 必須機能 | ARIB字幕、データ放送（双方向含む）、複数音声・映像ストリーム |
-| 非機能要件 | 低遅延 |
 
 セルフホストなので、以下は**設計で考えない**:
 
@@ -107,7 +106,7 @@ libaribcaption にやらせ、画像 (PNG) を配っていた。libaribcaption �
 | エンコード | FFmpeg (設定の「GPU」カードで印があれば、ライブも録画も GPU でエンコードする — [encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api)) | CLI パイプラインで差し替え可能 |
 | 字幕 | 自前 (`ts/b24caption.ts`。libaribcaption のデコーダを写したもの) | ffmpeg は `-c:s copy` で写すだけ。デコードして置き場所まで決めるのはサーバ、描くのは受け側 ([字幕はサーバでデコードして、描くのは受け側](#字幕はサーバでデコードして描くのは受け側)) |
 | データ放送 | 自前 (`src/lib/bml/`。デコードする側は `ts/bml.ts`) | 2026-10 まで描く側は otya128/web-bml を借りていた ([データ放送の統合](#データ放送の統合)) |
-| 再生 | MSE 直接 (借り物なし) | H.264+AAC (既定) / AV1+Opus の fMP4。mediabunny は候補のまま ([参考リポジトリ](stream-history.md#参考リポジトリ)) |
+| 再生 | MSE 直接 (借り物なし) | H.264+AAC (既定) / AV1+Opus の fMP4。互換モードは WebCodecs で、箱は自前で読む (`ts/fmp4.ts`・`ts/mkv-media.ts`) |
 
 **TS 整形の `tsreadex` は入れかけて外した。** 挟む理由はどれも ffmpeg 単体で足りた
 （[`tsreadex` は挟まない](stream-history.md#tsreadex-は挟まない)）。mpegts.js と aribb24.js も、fMP4 + サイドチャネルでは
@@ -133,7 +132,7 @@ AV1 + Opus はプレイヤーの画質メニューで選ぶ。エンコーダと
 
 **共有の単位は局・音声・エンコード方式・字幕。** 1つの物理チャンネルに複数の局が入っていて、
 ffmpeg には局を名指しさせている（下記）ので、映像は局ごとに違う。二カ国語を主音声で
-見る人と副音声で見る人も別のものをエンコードする。字幕も映像と同じ ffmpeg がエンコードするので
+見る人と副音声で見る人も別のものをエンコードする。字幕も映像と同じ ffmpeg が書き出すので
 （[字幕](#字幕)）、何本目を選ぶかで別になる。チューナーはエージェント側で
 共有され、増えるのは ffmpeg だけ。
 
@@ -470,8 +469,7 @@ HTTP で観ているもの (テレビのアプリ) にはストリームを閉�
 
 公式の adapter-bun は `Bun.serve` を自分で呼ぶが、`websocket` を渡す口が無い。そこで入口の `server.js` が
 `Bun.serve` を包んでから `build/index.js` を読み、adapter の設定に `websocket` を足して、`/api/live/socket` の
-握手だけ SvelteKit の手前で受ける（理由と、`Host` をそのまま扱う理由は冒頭の説明に）。
-以前は bun の `node:http` が WebSocket の握手をできないため、adapter-node を内側に置いて HTTP を中継していた。
+握手だけ SvelteKit の手前で受ける（理由と、`Host` をそのまま扱う理由は `server.js` の頭のコメントに）。
 
 **開発サーバ（`bun run dev`）ではライブが繋がらない**（vite も `node:http`）。確かめるときは `bun run build && bun ./server.js`。
 
@@ -491,7 +489,7 @@ ffmpeg が映像と音声を1つの pipe へ多重化し、`Fmp4Splitter` が `m
 割って WebSocket へ流します。
 
 ```bash
-ffmpeg -nostats -fflags nobuffer -probesize <小さく> <字幕の入口> -i pipe:0 \
+ffmpeg -nostats -fflags nobuffer -probesize <小さく> [<GPU の入口>] -i pipe:0 \
     -vf <インタレ解除> \
     -map 0:p:<局>:v:0 -fpsmax <上限> <映像のエンコード方式> \
     -map 0:p:<局>:a:<何本目> [-af pan=...] <音声のエンコード方式> \
@@ -609,7 +607,7 @@ ffmpeg <上の映像の引数と同じ> -i pipe:0 \
 1本にすれば入口の寄せが1回で済み、両方の出口に効く。実機で突き合わせると 1ms 以内で
 一致した（実測は `captions.ts`）。
 
-引き換えに、音声やエンコード方式を選び直すと字幕も再エンコードになる（前は局ごとに1本だったので
+引き換えに、音声やエンコード方式を選び直すと字幕の出口も別になる（前は局ごとに1本だったので
 途切れなかった）。字幕は次が来るまで出しっぱなしなので、再エンコードの間はサーバが
 最後の1枚を配り直して繋ぐ。
 
@@ -673,7 +671,7 @@ channel:
 - init セグメントは接続直後に必ず送る（再送用にサーバ側で保持）
 - MSE はバイト列をそのまま `appendBuffer()` に投げられるので、映像音声のパースは不要
 - 字幕の座標は字幕の面 (`plane`。ふつう 960x540) の単位。受け側は映像の枠に合わせて伸ばし、画面の画素で描く
-- **頭の時刻は「エンコードした mp4 の物差し」。** 映像も音声も字幕も同じ ffmpeg がエンコードするので、
+- **頭の時刻は「エンコードした mp4 の物差し」。** 映像も音声も字幕も同じ ffmpeg が書き出すので、
   受け側の `video.currentTime` と直に比べられる（[時刻同期](#時刻同期)）
 - **放送のままの経路（0x02）では、字幕の時刻は放送の PTS そのまま**（受け側の時計が放送の PTS なので。[放送のままのときの字幕](#放送のままのときの字幕)）
 - 途中から入ってきた視聴者のために、いま出ている字幕はサーバが1枚だけ保持して再送する
@@ -688,7 +686,7 @@ channel:
 
 **いまは測っていません。** 字幕のコマに付いてくる時刻を再生位置と比べ、
 「追い越していない中の最後の1つ」を出すだけです（`ts/captions.ts`）。
-映像と字幕を同じ ffmpeg でエンコードしているので揃います（[字幕](#字幕)）。
+映像と字幕を同じ ffmpeg が書き出しているので揃います（[字幕](#字幕)）。
 
 > 「放送から N秒」は遅れを見せるためだけのもので（[「遅延」は2つある](#遅延は2つある)）、
 > 映像・音声・字幕を揃えるのには使っていない。
@@ -704,7 +702,7 @@ channel:
 | 字幕側の `showinfo` が言う放送時刻 | **1秒ほど遅れる**。行とフレームの数が合わず、組がずれる |
 
 「待たせる量を渡す」に替えても3回外した。別々に起こした ffmpeg は鍵フレームが 0〜0.5 秒ずれるので、
-測れないものを測っていた。**直したのは測り方ではなく作り**で、1本の ffmpeg に両方をエンコードさせ、測るもの
+測れないものを測っていた。**直したのは測り方ではなく作り**で、1本の ffmpeg に両方を書き出させ、測るもの
 自体を無くした（[1本にしたのは、時刻を揃えるため](#1本にしたのは時刻を揃えるため)）。`-copyts` は効かないうえ、実機で
 `Assertion next_dts <= 0x7fffffff failed at libavformat/movenc.c` で映像ごと落ちた（放送時刻は 32bit に収まらない）。
 
@@ -737,7 +735,7 @@ WebSocket に流し、ブラウザが WebAssembly の MPEG-2 デコーダでデ�
 
 得るもの: **ffmpeg の立ち上がり 0.5〜0.7 秒と、エンコードするのに掛かっているぶん**（電波が届いてから
 塊が出るまで。実測は `server/live.ts` の `videoArgs`）**が丸ごと消え**、サーバの CPU も
-350〜470% からほぼ 0 になります（字幕を描く ffmpeg だけ残る。映像をデコードしないので軽い）。
+350〜470% からほぼ 0 になります（字幕を写す ffmpeg だけ残る。`-c:s copy` なので軽い）。
 残る遅れは受け側の貯め（`ts/pacing.ts` の `FLOOR` から始まる貯め）だけです。
 
 ### いつ放送のまま送るか
@@ -920,7 +918,7 @@ CSP には掛かりません（`srcObject` は URL を読まない。E2E で `se
 **字幕は ffmpeg に写させて、denpa がデコードします**（エンコードする経路と同じ。[全体構成](#全体構成)）。映像をデコードしない ffmpeg を
 1本起こし（`captions.rawCaptionArgs`）、**`-copyts` で放送の時刻のまま**字幕だけを写させます。CPU は 0.2% ほど。
 
-エンコードする経路で「同じ ffmpeg に両方エンコードさせる」のは、入口で時刻を 0 に寄せる幅がプロセスごとに違う
+エンコードする経路で「同じ ffmpeg に両方書き出させる」のは、入口で時刻を 0 に寄せる幅がプロセスごとに違う
 からでした（[1本にしたのは、時刻を揃えるため](#1本にしたのは時刻を揃えるため)）。放送のままの経路の受け側は放送の PTS そのものを
 時計にしているので、字幕も放送の PTS のまま出せば突き合わせられます。mp4 のマルチプレクサが 0 に
 詰め直す問題は、字幕の出口（Matroska）には無い。実機の録画で、出てきた字幕の時刻が元の TS の
@@ -1124,8 +1122,8 @@ web-bml のデコードする側 (`server/decode_ts.ts`) も一度は借りた�
 TS を直に読むので、psisiarc も要らない。
 
 ```
-エージェント → denpa ┬→ ffmpeg     → fMP4 → MSE          (映像・音声)
-                     ├→ ffmpeg     → mkv  → デコードする → canvas (字幕)
+エージェント → denpa ┬→ ffmpeg ┬→ fMP4 → MSE          (映像・音声)
+                     │         └→ mkv  → デコードする → canvas (字幕)
                      └→ BmlDecoder → 組み立て済みモジュール → 画面のエンジン (src/lib/bml/)
 ```
 
@@ -1183,7 +1181,7 @@ ffmpeg は1本のまま、チューナーも1つのまま、遅延も 0.6秒 の
 [DataBroadcast.svelte](../src/lib/components/player/DataBroadcast.svelte) が持つ:
 
 ```ts
-const bml = createBml({ root, fonts, ip, store, receiver, clock, onVideoRect, onVisible, onReceiving, onLoad });
+const bml = createBml({ root, fonts, ip, store, receiver, clock, onVideoRect, /* ほかは bml/engine.ts の型 */ });
 bml.feed(message);        // ← ts/bml.ts が吐くものをそのまま
 bml.key(code, down);      // AribKeyCode (20 が d)
 bml.listens('DataButtonPressed');

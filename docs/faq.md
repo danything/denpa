@@ -25,7 +25,7 @@ arm64 には Intel の QSV が無く、VA-API のドライバも入れていな�
 ### GPU が無くても使えますか
 
 使えます。GPU が無ければソフトウェアでエンコードします。
-AV1 は時間がかかるので、設定画面で H.264 も選べます。同時に変換する本数の既定は、GPU が無ければ 2 です。
+AV1 は時間がかかるので、設定画面で H.264 も選べます。観るときにその場で変換する本数は、GPU が無ければ 2 本までです (設定の「GPU」で変えられます)。
 [encode.md](encode.md)。
 
 ### Mirakurun や EPGStation から乗り換えられますか
@@ -65,7 +65,7 @@ Android TV と Fire TV は、専用のアプリ [denpa-tv](https://github.com/da
 
 外部のプレイヤーには対応しません。録画をファイルとして持ち出す機能もありません。
 端末に保存して、denpa の中で観ることはできます。
-[library.md](library.md#テレビのアプリ)・[offline.md](offline.md)。
+[library.md](library.md#観るのはブラウザで)・[watch.md](watch.md#端末に保存して観る-オフライン)。
 
 ### 録画はどこに置かれますか
 

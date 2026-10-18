@@ -4,7 +4,7 @@
 ものです。OIDC のグループ (`OIDC_GROUP`) に入れる人、ペアリングするテレビ、`TRUSTED_NETWORKS` に入れる
 ネットワークも、同じ世帯の人と機器に限ります。考え方は [Discussion #760](https://github.com/danything/denpa/discussions/760) にあります。
 
-**エンドポイントによって守り方が違います。** 録画のファイル (`/api/recordings/<id>/file`) も画面と同じ守り方です。
+**エンドポイントによって守り方が違います。**
 
 | エンドポイント | 守り方 |
 | --- | --- |
@@ -34,10 +34,9 @@
 マニフェストを資格情報を付けずに取りに来るので、401 で落ちます。
 中身は表示名・色・アイコンの場所だけです ([watch.md](watch.md#ホーム画面に置く))。
 
-**録画のファイルも、ほかの API と同じ守り方です。** 観る画面の `<video>` も端末に保存も、
-画面と同じログインの控え (Cookie) を付けて `/api/recordings/<id>/file` をリクエストします。テレビのアプリは
-アクセストークンを付けます。ログインせずに開ける URL を渡す仕組み (前の「再生リンク」) はやめました
-(外部のプレイヤーには対応しないため。[config.md](config.md#再生リンクをやめた-前の版から上げるとき))。
+**録画のファイル (`/api/recordings/<id>/file`) も、ほかの API と同じ守り方です。** 観る画面の `<video>` も
+端末に保存もログインの控え (Cookie) を、テレビのアプリはアクセストークンを付けます。ログインせずに開ける URL を
+渡す仕組み (前の「再生リンク」) はやめました ([config.md](config.md#再生リンクをやめた-前の版から上げるとき))。
 
 ## ログイン方法が無ければ、全部断る
 
@@ -98,9 +97,8 @@ OIDC の標準しか使っていないので、Keycloak でも Google でも同�
 **誰がログインしたかでは決めません。** 人が増えても denpa 側を触らずに済みます。
 
 **見るのは `groups` と `roles` の両方で、どちらかに `OIDC_GROUP` があれば通します。**
-この家はグループクレーム (グループのオブジェクトID) からアプリロールへ移しました。
-グループを載せると ID トークンが大きくなり、oauth2-proxy の Cookie セッションが
-壊れるためです。両方受ければ、どちらの形式の登録でも、切り替えの途中でも入れます。
+グループを載せると ID トークンが大きくなる (前段の oauth2-proxy などの Cookie が壊れることがある) ので、
+アプリロールに移す人もいます。両方受ければ、どちらの形式でも、切り替えの途中でも入れます。
 
 Entra ID でグループを載せるには、アプリ登録の「トークン構成」で
 `groupMembershipClaims` を有効にしてください。既定で載るのは
@@ -182,10 +180,8 @@ TRUSTED_NETWORKS=0.0.0.0/0
 **`0.0.0.0/0` はインターネットに向けて開くのと同じです。** 録画も設定も誰でも触れます。
 家の外に出す構成では使わず、OIDC にします。
 
-**見るのは住所だけで、どの名前で来たかは問いません。** LAN から外向きの
-`dp.doany.io` を開いても通ります。前段 (chart の `httpRoute`) は2つの名前を
-1つの HTTPRoute で denpa に届けるだけです。LAN 用の名前 `dp.l.doany.io` が家の中でだけ
-引けるのは DNS の側の話です ([install.md](install.md#lan-でも-https-で開く))。
+**見るのはアドレスだけで、どの名前で来たかは問いません。** 外向きと LAN 用の2つの名前で出していても、
+LAN から外向きの名前を開けば通ります ([install.md](install.md#lan-でも-https-で開く))。
 
 ### 前段の後ろに置くとき (`TRUSTED_PROXIES`)
 
@@ -195,7 +191,7 @@ TRUSTED_NETWORKS=0.0.0.0/0
 何も要りません。
 
 ```sh
-# この構成 (k3s + Cilium Gateway。Envoy は hostNetwork で、Pod の網のアドレスから繋いでくる)
+# Kubernetes の Gateway (Cilium の Envoy など hostNetwork で動くもの) は Pod のネットワークから繋いでくる
 TRUSTED_PROXIES=10.42.0.0/16,fd42::/64
 # 同じ compose のネットワークにいるリバースプロキシ
 TRUSTED_PROXIES=172.16.0.0/12
@@ -227,7 +223,7 @@ POST が全部断られるようになるだけで、守れるものがありま
 > 前の版の `ADDRESS_HEADER=x-forwarded-for` は廃止しました (読みません)。上げるときは
 > [docs/config.md](config.md#接続元の読み方を変えた-前の版から上げるとき)。
 
-ネットワークの書き方は CIDR (`10.10.0.0/16`・`fd00::/8`) か住所そのまま。IPv4 と IPv6 の
+ネットワークの書き方は CIDR (`10.10.0.0/16`・`fd00::/8`) かアドレスそのまま。IPv4 と IPv6 の
 どちらも書けます。
 
 ### ログインの控え
@@ -245,7 +241,7 @@ POST が全部断られるようになるだけで、守れるものがありま
 
 1. **アプリの登録**を作る (シングルテナントでよい)
 2. **リダイレクト URI** を「Web」で登録する。denpa の名前ごとに1つずつ要ります
-   (`https://dp.doany.io/login/callback` と `https://dp.l.doany.io/login/callback`)
+   (`https://<denpa の名前>/login/callback`)
 3. **クライアントシークレット**を作る
 4. **トークン構成**で `groupMembershipClaims` を有効にする (グループで絞るなら)。
    ロールで絞るなら、代わりに**アプリロール**を作って割り当てる
@@ -255,30 +251,9 @@ POST が全部断られるようになるだけで、守れるものがありま
 > Entra はまずログイン画面を返し、認証が済んでから `AADSTS50011` を出します
 > (出鱈目な URI を対照にして確認済み)。登録は Azure の画面で見るしかありません。
 
-#### この構成で実際に使っている値
+Helm では、chart の外で作った Secret (鍵は `issuer` / `client-id` / `client-secret` / `group`) の名前を
+`denpa.oidcSecretName` に渡します。denpa は Secret を環境変数で読むので、値を変えたら Pod を入れ替えます。
 
-**oauth2-proxy (`auth` 名前空間) と同じアプリ登録を使い回しています。** テナントも
-同じなので、入れる人の集合は前段で forward-auth していたときと変わりません。
-
-値は `denpa` 名前空間の Secret `denpa-oidc` (鍵は `issuer` / `client-id` /
-`client-secret` / `group`) に入っていて、chart はその名前 (`denpa.oidcSecretName`、
-この家の値は `deploy/application.yaml` の `helm.valuesObject`) を `secretKeyRef` で引くだけです。
-
-**Secret は Infisical の operator が作ります** (`deploy/oidc-secret.yaml` の InfisicalSecret)。
-値は Infisical (https://il.doany.io、このクラスタでセルフホスト) のフォルダ
-`/denpa/denpa-oidc` にあり、シークレット名がそのまま Secret の鍵になります。
-手で作った Secret だと、クラスタを立て直したとき他は全部 ArgoCD がリポジトリから戻すのに、
-これだけ手順を思い出して打ち直すことになります。リポジトリには「どこから取るか」だけが
-あって値は入っていません。
-
-値を変えるときは Infisical の UI で書き換えるだけです。Secret はすぐ追いつき、
-Deployment に付けた `secrets.infisical.com/auto-reload` で Pod も入れ替わります
-(denpa は Secret を環境変数で読むので、入れ替えないと古い値を使ったまま。
-録画中なら終わるまで居座ってから)。
-
-### 前段の forward-auth は使わない
-
-前段に `forward-auth` (oauth2-proxy) は挟みません。「配信だけ通す」仕分けは denpa 側
-(`auth.ts`) がやります。前段から外すときは「denpa 側を設定 → 実機で入れることを確かめる →
-前段から外す」の順にします。逆にすると、OIDC の設定を間違えていたときに、誰も入れないのではなく
-誰でも入れる状態になります。
+**前段の認証 (oauth2-proxy の forward-auth など) は要りません。** 前段で掛けていたものを外すときは
+「denpa 側を設定 → 実機で入れることを確かめる → 前段から外す」の順にします。逆にすると、
+OIDC の設定を間違えていたときに、誰も入れないのではなく誰でも入れる状態になります。
