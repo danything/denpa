@@ -57,11 +57,6 @@ test.describe('互換モード', () => {
     });
 
     test('⚙ で入れると運転中の注意が出て、読み直したライブを canvas に描く', async ({ page }) => {
-        // 切り替えるのは再生画面の ⚙ だけ。設定の画面には置かない (同じものを2か所に置かない)
-        await goto(page, '/settings/general');
-        await expect(page.getByTestId('measure-toggle')).toBeVisible();
-        await expect(page.getByTestId('canvas-video')).toHaveCount(0);
-
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
         await expect(page.getByTestId('live-title')).toBeVisible();

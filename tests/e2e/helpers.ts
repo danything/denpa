@@ -572,7 +572,7 @@ export async function captionsClearOfBar(page: Page, canvas: string, bar: string
  *
  * `extra` は `<body>` の終わりに足す BML (放送が書くものを試すとき。tests/e2e/35-csp.spec.ts)
  */
-export const DATA_WINDOW = { left: 480, top: 270, width: 480, height: 270 } as const;
+const DATA_WINDOW = { left: 480, top: 270, width: 480, height: 270 } as const;
 export function fakeDataBroadcast(extra = ''): Record<string, unknown>[] {
     const { left, top, width, height } = DATA_WINDOW;
     const bml = [

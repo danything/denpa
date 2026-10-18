@@ -11,6 +11,7 @@
  *
  * 時刻の刻みは 90kHz (映像)
  */
+import { CLOCK, WRAP } from '../../src/lib/ts/pes';
 import { pesMarks } from '../../src/lib/ts/seek';
 import { clipFrom, readClip } from './fmp4-clip';
 
@@ -19,9 +20,6 @@ const after = (flag: string): string | undefined => {
     const at = args.indexOf(flag);
     return at < 0 ? undefined : args[at + 1];
 };
-
-const CLOCK = 90_000;
-const WRAP = 2 ** 33;
 
 async function firstVideoPts(): Promise<number | null> {
     const parts: Uint8Array[] = [];
