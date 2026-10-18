@@ -147,7 +147,7 @@ mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch({ args: ['--disable-gpu'] });
 const counts: Record<string, number> = {};
 try {
-    for (const [w, h] of [[1366, 768], [390, 844]] as const) {
+    for (const [w, h] of (process.env["VIEWPORTS"] ?? "1366x768,390x844").split(",").map((v) => v.split("x").map(Number) as [number, number])) {
         for (const theme of ['dark', 'light'] as const) {
             const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1,
                 locale: 'ja-JP', timezoneId: 'Asia/Tokyo', colorScheme: theme });

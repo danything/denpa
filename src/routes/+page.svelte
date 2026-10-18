@@ -508,6 +508,7 @@
     let chip = $state<Chip>('all');
     let query = $state('');
     let sheetOpen = $state(false);
+    let viewOpen = $state(false);
 
     const nowAt = Date.now();
     const DAY = 86_400_000;
@@ -1301,6 +1302,46 @@
     {/if}
 {/snippet}
 
+{#snippet sideTools()}
+    <div class="t-side">
+        <input type="search" class="t-side-search" placeholder="番組名・局で探す" aria-label="予約と録画を探す" bind:value={query} />
+        <nav class="t-labels" aria-label="絞り込み">
+            {#each CHIPS as c (c.id)}
+                <button
+                    type="button"
+                    class="t-label"
+                    class:on={chip === c.id}
+                    class:alert={c.id === 'failed' && counts.failed > 0}
+                    aria-pressed={chip === c.id}
+                    onclick={() => (chip = c.id)}
+                >
+                    <span>{c.label}</span><span class="t-label-count num">{counts[c.id]}</span>
+                </button>
+            {/each}
+        </nav>
+        <button type="button" class="t-label t-view-toggle" aria-expanded={viewOpen} onclick={() => (viewOpen = !viewOpen)}>
+            <span>表示の切り替え</span>
+            <span class="t-view-chevron" class:open={viewOpen}><Icon icon={ChevronDown} size="size-4" /></span>
+        </button>
+        {#if viewOpen}
+            <div class="t-view-list">
+                <button type="button" class="t-opt" aria-pressed={grouped} onclick={() => setGrouped(!grouped)}>
+                    <span class="menu-check" aria-hidden="true">{#if grouped}<Icon icon={Check} size="size-4" />{/if}</span>まとめて表示
+                </button>
+                <a class="t-opt" href={finishedHref} aria-pressed={data.showFinished}>
+                    <span class="menu-check" aria-hidden="true">{#if data.showFinished}<Icon icon={Check} size="size-4" />{/if}</span>完了した予約も表示
+                </a>
+                <a class="t-opt" href={deletedHref} aria-pressed={data.showDeleted}>
+                    <span class="menu-check" aria-hidden="true">{#if data.showDeleted}<Icon icon={Check} size="size-4" />{/if}</span>削除済みも表示
+                </a>
+                <form method="POST" action="?/reconcile" use:submitting class="menu-form">
+                    <button type="submit" class="t-opt"><span class="menu-check"></span>ファイルと照合</button>
+                </form>
+            </div>
+        {/if}
+    </div>
+{/snippet}
+
 {#snippet pane(item: TItem | null)}
     <div class="t-stats">
         <div class="t-stat t-next">
@@ -1367,15 +1408,6 @@
             </div>
         </div>
     {/if}
-    <div class="t-upcoming">
-        <h3>このあとの予約</h3>
-        {#each upcoming as res (res.id)}
-            <button type="button" class="t-up" onmouseenter={() => pickFocus({ kind: "res", key: `res-${res.id}`, at: res.start_at, res })} onclick={() => openReservation(res)}>
-                <span class="num">{dayLabel(res.start_at).label} {time(res.start_at)}</span>
-                <span class="broadcast">{res.name}</span>
-            </button>
-        {/each}
-    </div>
 {/snippet}
 
 <div class="board t-board">
@@ -1435,6 +1467,7 @@
             {/if}
         </div>
         <aside class="t-pane" aria-label="選んだ番組">
+            {@render sideTools()}
             {@render pane(focused)}
         </aside>
     </div>
@@ -2379,19 +2412,22 @@
         }
     }
     /* 広い画面: 右に選んだ行の中身と、今日のまとめ */
-    @media (min-width: 1100px) {
+    @media (min-width: 1000px) {
+        .t-toolbar {
+            display: none;
+        }
         .t-main {
-            grid-template-columns: minmax(0, 1fr) 22rem;
+            grid-template-columns: minmax(0, 1fr) 18rem;
             gap: 0;
         }
         .t-pane {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 0.875rem;
             min-height: 0;
             overflow: auto;
-            padding: 0.75rem 0 0.75rem 1.5rem;
-            margin-left: 1.5rem;
+            padding: 0 0 0.75rem 1.25rem;
+            margin-left: 1.25rem;
             border-left: 1px solid var(--dp-base-300);
         }
     }
@@ -2634,5 +2670,124 @@
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
+    }
+    /* タブレット向け: 右の列の頭に検索・絞り込み・表示の切り替え。行は指で押せる高さ */
+    @media (min-width: 768px) {
+        .t-row {
+            min-height: 3rem;
+        }
+    }
+    @media (min-width: 1280px) {
+        .t-main {
+            grid-template-columns: minmax(0, 1fr) 21rem;
+        }
+    }
+    /* タブレットの横 (右の列あり) は、番組名の下に局と尺を置く 2 段 (高さは 48px のまま) */
+    @media (min-width: 1000px) and (max-width: 1279px) {
+        .t-row .row-body {
+            display: block;
+        }
+        .t-row .row-meta {
+            line-height: 1.3;
+        }
+        .t-resume {
+            display: none;
+        }
+        .t-time {
+            width: 3.25rem;
+        }
+        .t-end {
+            display: none;
+        }
+    }
+    .t-side {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--dp-base-300);
+    }
+    .t-side-search {
+        height: 2.75rem;
+        margin: 0 0 0.375rem;
+        font-size: 0.9rem;
+    }
+    .t-labels {
+        display: flex;
+        flex-direction: column;
+    }
+    .t-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: 2.75rem;
+        margin: 0;
+        padding: 0 0.75rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: transparent;
+        color: inherit;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-align: left;
+        box-shadow: none;
+    }
+    .t-label:hover {
+        background: var(--dp-hover);
+    }
+    .t-label.on {
+        background: color-mix(in srgb, var(--pico-primary-background) 18%, transparent);
+        color: var(--pico-h1-color, inherit);
+        font-weight: 700;
+    }
+    .t-label-count {
+        font-size: 0.8125rem;
+        color: var(--dp-muted);
+    }
+    .t-label.alert .t-label-count {
+        color: var(--dp-rec-text);
+        font-weight: 700;
+    }
+    .t-view-toggle {
+        color: var(--dp-muted);
+        font-size: 0.8125rem;
+    }
+    .t-view-chevron {
+        display: inline-flex;
+        transition: transform 0.15s;
+    }
+    .t-view-chevron.open {
+        transform: rotate(180deg);
+    }
+    .t-view-list {
+        display: flex;
+        flex-direction: column;
+    }
+    .t-opt {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        min-height: 2.75rem;
+        margin: 0;
+        padding: 0 0.75rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: transparent;
+        color: inherit;
+        font-size: 0.875rem;
+        text-align: left;
+        text-decoration: none;
+        box-shadow: none;
+    }
+    .t-opt:hover {
+        background: var(--dp-hover);
+    }
+    .t-pane .t-stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .t-pane .t-hero {
+        max-height: 9rem;
     }
 </style>
