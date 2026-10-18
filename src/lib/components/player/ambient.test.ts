@@ -6,6 +6,7 @@ import {
     glowLayout,
     headerTone,
     luminance,
+    mixRgb,
     plan,
     reach,
     region,
@@ -218,6 +219,19 @@ describe('見出しに敷く色', () => {
             const tone = headerTone(frame, 'light');
             expect(contrast(tone, hex('#555e70'))).toBeGreaterThanOrEqual(4.5);
             expect(contrast(tone, hex('#02659a'))).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    test('混ぜた途中の色 (グラデーション・入れ替えの途中) でも 4.5 以上で読める', () => {
+        expect(mixRgb([0, 0, 0], [200, 100, 50], 0.5)).toEqual([100, 50, 25]);
+        for (const theme of ['dark', 'light'] as const) {
+            for (const a of frames) {
+                for (const b of frames) {
+                    const mid = mixRgb(headerTone(a, theme), headerTone(b, theme), 0.5);
+                    const text = theme === 'dark' ? hex('#9aa3b5') : hex('#02659a');
+                    expect(contrast(mid, text)).toBeGreaterThanOrEqual(4.5);
+                }
+            }
         }
     });
 

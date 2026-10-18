@@ -130,7 +130,6 @@
         }
     }
 
-    /** 次の1枚を出す。`EVERY` の長さで前の1枚から入れ替える (動かさない設定ではすぐ) */
     /** 見出しに敷く色。入れ替えの前と後と、いま出しているもの (`headerTone` を通したもの) */
     type Rgb = [number, number, number];
     let headerFrom: Rgb[] | null = null;
@@ -140,9 +139,11 @@
 
     /** 映像の上の端 (上から 1/3) を横に `HEADER_STOPS` に分けて平均し、見出しの色にする */
     function edgeColors(bitmap: ImageBitmap): Rgb[] {
-        edge ??= document.createElement('canvas');
-        edge.width = GLANCE.width;
-        edge.height = GLANCE.height;
+        if (edge === null) {
+            edge = document.createElement('canvas');
+            edge.width = GLANCE.width;
+            edge.height = GLANCE.height;
+        }
         const context = edge.getContext('2d', { willReadFrequently: true });
         if (context === null) return [];
         context.drawImage(bitmap, 0, 0, GLANCE.width, GLANCE.height);
@@ -166,7 +167,11 @@
 
     /** 見出しの地を、前の色から次の色へ `mix` まで進める */
     function tint(mix: number): void {
-        if (headerTo === null) return;
+        // 色が揃わない (canvas が使えなかった) なら塗らない。変数が欠けると見出しの地が抜ける
+        if (headerTo === null || headerTo.length !== HEADER_STOPS) {
+            untint();
+            return;
+        }
         const root = document.documentElement;
         headerNow = headerTo.map((to, i) => mixRgb(headerFrom?.[i] ?? to, to, mix));
         headerNow.forEach(([r, g, b], i) => {
@@ -182,6 +187,7 @@
         headerFrom = headerTo = headerNow = null;
     }
 
+    /** 次の1枚を出す。`EVERY` の長さで前の1枚から入れ替える (動かさない設定ではすぐ) */
     function show(bitmap: ImageBitmap): void {
         last?.close();
         last = bitmap;
