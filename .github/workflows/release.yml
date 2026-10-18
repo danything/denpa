@@ -40,7 +40,7 @@ permissions:
   packages: write
   # 書き戻しは main へ直接 push せず、PR を出して自分でマージする (charts の最後の段)
   pull-requests: write
-  # その PR に必須チェック (`check`) の status を自分で付けるため
+  # その PR に必須チェックの status を自分で付けるため (context は ruleset から引く)
   statuses: write
 
 env:
@@ -277,7 +277,7 @@ jobs:
       # 手で回した (workflow_dispatch) ときも同じ — 貼り直しなら版も同じ。
       #
       # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
-      # 素通しにならない)。PR を出し、`check` の status を自分で付けて、自分でマージする。
+      # 素通しにならない)。PR を出し、必須チェックの status を自分で付けて、自分でマージする。
       # 中身は Chart.yaml の版だけで、確かめるものは無い。手順と理由は
       # .github/bump-pr.sh (build-and-deploy と共通)
       - name: Open and self-merge a PR that writes the version back to Chart.yaml
@@ -295,6 +295,6 @@ jobs:
           done
           bump_finish bump-chart-version \
             "chore: chart の版を ${v} に合わせる [skip ci]" \
-            "リリース ${v} の版を Chart.yaml に書き戻すだけ。下の check が付いたら自分でマージする" \
+            "リリース ${v} の版を Chart.yaml に書き戻すだけ。必須チェックが付いたら自分でマージする" \
             "Chart.yaml の版だけ。chart はこの run が出した" \
             charts/*/Chart.yaml
