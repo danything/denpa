@@ -4,7 +4,7 @@
  * エンコードする経路ではここを ffmpeg がやっていた。変換せずに送ると TS がそのままブラウザへ来るので、
  * 映像も音声も WASM のデコーダ (`wasm/mpeg2`) に渡す前に、
  * こちらで PES に戻す。サーバが1局に絞ってある (`ServiceFilter`) ので、PAT に
- * 載っている局は1つだけ — その PMT を読んで、映像1本と音声 (並んだ順) を拾う。
+ * 載っている局は1つだけ — その PMT を読んで、映像1本と音声 (並んだ順) を取り出す。
  *
  * DOM も WASM も触らないので、ここだけ単体で確かめられる (`pes.test.ts`)。
  */
@@ -89,7 +89,7 @@ export class PesDemuxer {
     streams: Streams = { video: null, audio: [] };
     /** デコードする音声の PID。**選ばれた1本だけ**組み立てる (他は捨てる) */
     audioPid: number | null = null;
-    /** 何本目の音声を拾うか (`AudioTrack.stream`)。無ければ先頭に落とす */
+    /** 何本目の音声を取り出すか (`AudioTrack.stream`)。無ければ先頭に落とす */
     audioIndex = 0;
 
     feed(chunk: Uint8Array): { pes: Pes[]; changed: boolean } {

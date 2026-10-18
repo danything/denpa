@@ -48,7 +48,7 @@ describe('郵便番号', () => {
 
     test('ハイフン付きでも同じに読む', () => {
         expect(normalizePostalCode('100-0001')).toBe('1000001');
-        // 全角や空白を混ぜても、数字だけ拾えば同じ
+        // 全角や空白を混ぜても、数字だけ取り出せば同じ
         expect(normalizePostalCode(' 100 - 0001 ')).toBe('1000001');
     });
 

@@ -201,8 +201,8 @@ describe('assign (前後マージン)', () => {
         expect(accepted).toHaveLength(2);
         expect(rejected).toHaveLength(0);
         /*
-         * 同じチャンネルで続くなら、マージンを削らずに重ねる。後ろは前の選局に乗るので、
-         * 前が離れても同じチューナーに居続け、止めてから使う間は生まれない (引き継ぎは要らない)
+         * 同じチャンネルで続くなら、マージンを削らずに重ねる。後ろは前の選局を共有するので、
+         * 前が離れても同じチューナーを使い続け、止めてから使う間は生まれない (引き継ぎは要らない)
          */
         const [first, second] = [1, 2].map((id) => accepted.find((a) => a.reservation.id === id));
         expect(first?.to).toBe(115);
@@ -528,7 +528,7 @@ describe('兼用のチューナーがあるとき (#668)', () => {
         expect(accepted.find((a) => a.reservation.id === 3)?.from).toBe(at(22));
     });
 
-    test('選局を共有する相手が先に抜けても、残ったほうは同じチューナーに居続ける', () => {
+    test('選局を共有する相手が先に抜けても、残ったほうは同じチューナーを使い続ける', () => {
         const { accepted } = assign(
             [
                 res({ id: 1, channel: 'T21', start_at: at(20), end_at: at(21) }),

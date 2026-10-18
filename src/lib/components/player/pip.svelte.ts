@@ -179,7 +179,7 @@ export function pictureInPicture(options: Options): Pip {
         able = supported();
     });
 
-    /** 出た・引っ込んだを拾う。**閉じるのは小窓の × からも来る** ので、こちらで押したかに頼らない */
+    /** 出た・引っ込んだを受け取る。**閉じるのは小窓の × からも来る** ので、こちらで押したかに頼らない */
     function listen(video: WebkitVideo): () => void {
         const update = () => {
             if (shown(video)) on = video;
@@ -203,8 +203,8 @@ export function pictureInPicture(options: Options): Pip {
     /**
      * **小窓で押された止める・再開を player に伝える。**
      *
-     * 小窓に出している間だけ。それ以外の `pause` まで拾うと、押していないのに止まった
-     * ことになる。**MPEG-2 へ移るときも拾わない** — player は変換したほうの `<video>` を止めるが
+     * 小窓に出している間だけ。それ以外の `pause` にまで反応すると、押していないのに止まった
+     * ことになる。**MPEG-2 へ移るときも反応しない** — player は変換したほうの `<video>` を止めるが
      * (`startRaw`)、`pause` が届くのは小窓が閉じきる前で、まだ `on` のまま。
      * player が自分で止めた・再開したときは、その時点で `paused` が既に合っているので何もしない
      */

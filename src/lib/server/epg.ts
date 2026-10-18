@@ -157,7 +157,7 @@ export function syncServices(channels: AgentChannel[]): number {
                         service_type: service.serviceType,
                         channel: channel.channel,
                         remote_control_key: channel.remoteControlKeyId,
-                        // ロゴは放送波から拾ったときに立てる (logo.ts)
+                        // ロゴは放送波から取得したときに立てる (logo.ts)
                         has_logo: false,
                         updated_at: at,
                     })
@@ -363,7 +363,7 @@ export function savePrograms(events: EitEvent[]): number {
      * service_id も上書きする。ここを更新しないと、一度おかしな値で入った行が
      * 取り込み直しても直らない (番組表が空のままになる)。
      *
-     * **題名と概要は空で塗り潰さない。** 番組表は「基本」(題名) と「詳細」(番組内容) の
+     * **タイトルと概要は空で塗り潰さない。** 番組表は「基本」(タイトル) と「詳細」(番組内容) の
      * 2つの表に分かれて流れてきて、片方しか読めなかった回がある
      * (ts/eit.ts の EpgReader.merge)。読めたところだけ書く
      */
@@ -521,7 +521,7 @@ export function followOnAir(events: readonly EitEvent[]): boolean {
             row === undefined ||
             row.start_at !== event.startAt ||
             row.end_at !== event.startAt + event.duration ||
-            // 題名の無い回は、入っている題名を消さない (`savePrograms`)。違うとも言わない
+            // タイトルの無い回は、入っているタイトルを消さない (`savePrograms`)。違うとも言わない
             (event.name !== '' && row.name !== event.name)
         );
     });

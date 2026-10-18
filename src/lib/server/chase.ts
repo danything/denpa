@@ -10,7 +10,7 @@
  *
  * 元のTSには時間→バイトの索引が無い。放送TSはレートがほぼ一定なので、
  * 「これまで録れた秒数とファイルの大きさ」からバイト/秒を出して比例で飛ぶ。
- * 188バイト (TS パケット) に揃えれば、ffmpeg は次の鍵フレームから拾い直す。
+ * 188バイト (TS パケット) に揃えれば、ffmpeg は次のキーフレームから読み直す。
  * シークのたびに ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。
  */
 
@@ -102,7 +102,7 @@ export function chasePlan(size: number, recordedSec: number, atSec: number): Cha
     const usable = Math.max(1, recordedSec);
     const bytesPerSec = size / usable;
     /*
-     * 書き込み中の端 (いま書いているところ) ぎりぎりから始めると、鍵フレーム待ちで
+     * 書き込み中の端 (いま書いているところ) ぎりぎりから始めると、キーフレーム待ちで
      * 何も出ないまま追い付いてしまう。少し手前に置く
      */
     const at = Math.min(Math.max(0, atSec), Math.max(0, usable - 5));

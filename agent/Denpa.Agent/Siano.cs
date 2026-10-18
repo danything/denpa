@@ -428,7 +428,7 @@ public sealed class SianoTuner : ITuneDevice
             }
             catch (IOException)
             {
-                // 子が終わった。理由は下で stderr から拾う
+                // 子が終わった。理由は下で stderr から読み取る
             }
         });
 

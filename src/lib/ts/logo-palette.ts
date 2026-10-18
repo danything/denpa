@@ -6,7 +6,7 @@
  * 決まっているので、受け取った側がその表を入れて初めて画像になる。
  *
  * 入れないままだと「パレット PNG なのにパレットが無い」壊れたファイルになり、
- * ブラウザは何も描かない。実機では15局ぶん拾えているのに番組表が空のままだった。
+ * ブラウザは何も描かない。実機では15局ぶん取得できているのに番組表が空のままだった。
  * Mirakurun も同じことをしている (aribts の TsLogo.decode)。
  */
 
@@ -80,7 +80,7 @@ function hasPalette(png: Uint8Array): boolean {
 
 /**
  * 放送で決まっている色の表を入れた PNG を返す。
- * すでに入っているもの・形式が違うものはそのまま返す (拾い直しの手間を増やさない)。
+ * すでに入っているもの・形式が違うものはそのまま返す (取得し直す手間を増やさない)。
  */
 export function withPalette(png: Uint8Array): Uint8Array {
     if (!isPaletteImage(png) || hasPalette(png)) return png;

@@ -121,7 +121,7 @@ export function chapterMetadata(cm: Range[], duration: number): string {
 /**
  * ffprobe の `key=value` 出力を読む。**位置では読まない。**
  *
- * - 1本のTSに局が何本も乗っていると (TOKYO MX)、`-select_streams v:0` でも
+ * - 1本のTSに局がいくつも入っていると (TOKYO MX)、`-select_streams v:0` でも
  *   **同じ行が番組の数だけ並ぶ**
  * - `-show_entries` に**書いた順では返らない** (`avg_frame_rate,width,height` が幅,高さ,fps の順で来る)
  *
@@ -228,7 +228,7 @@ export async function probeVideo(input: string): Promise<{
 }
 
 /**
- * ffprobe の JSON から、**中身のある音声**が音声の何本目かを拾う (`0:a:<n>` の n)。
+ * ffprobe の JSON から、**中身のある音声**が音声の何本目かを読み取る (`0:a:<n>` の n)。
  *
  * 中身があるかは `channels` で見る。探り (`TS_PROBE`) の間に1パケットも来なかった
  * 音声は復号できておらず、0 のまま出てくる
@@ -243,16 +243,16 @@ export function liveAudioIndexes(json: string): number[] {
 }
 
 /**
- * エンコードするときに拾う音声 (音声の何本目か)。**頭に中身の無い音声は拾わない。**
+ * エンコードするときに使う音声 (音声の何本目か)。**頭に中身の無い音声は使わない。**
  *
  * 録画の尻には次の番組の頭が少し入る。次の番組が副音声つきだと、その音声の PID が
- * 最後の十数秒だけ現れ、`-map 0:a` はそれも1本の音声として拾ってしまう
+ * 最後の十数秒だけ現れ、`-map 0:a` はそれも1本の音声として取り込んでしまう
  * (出来上がりに**末尾にしか中身の無い音声トラック**が入る)。
  *
  * **探りの長さはエンコードするほうと揃える** (`TS_PROBE`)。何本目かで名指しするので、
  * 見えている音声の並びが食い違うと別の音声を指してしまう。
  *
- * 分からなければ空を返す — 呼ぶ側は今までどおり全部拾う
+ * 分からなければ空を返す — 呼ぶ側は今までどおり全部使う
  */
 export async function probeLiveAudio(input: string): Promise<number[]> {
     try {

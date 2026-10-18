@@ -64,7 +64,7 @@ export interface Stack {
     liveFmp4File: string;
     /**
      * **偽の GPU の置き場。** ここに `renderD128` のような名前でファイルを置くと、
-     * denpa は `HW_DEVICES` (`<ここ>/renderD*`) のデバイスとして拾い、偽 ffmpeg は渡された
+     * denpa は `HW_DEVICES` (`<ここ>/renderD*`) のデバイスとして見つけ、偽 ffmpeg は渡された
      * デバイスが在るのを見て「GPU がある」と答える (QSV / VA-API の試しのエンコードが通る)。
      * 消せば、エンコードしようとした GPU の経路が本物と同じく初期化で落ちる
      */

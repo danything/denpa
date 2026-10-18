@@ -99,7 +99,7 @@ test('走り出したジョブの中止は、畳み終わってから返る', as
     pump(); // 取り出して走り出す (この録画には元のTSが無いので、すぐ畳まれる)
     const at = Date.now();
     await cancel(jobId);
-    // 返ってきた時点で走り終わっている = 押した直後の読み直しが真実を拾える
+    // 返ってきた時点で走り終わっている = 押した直後の読み直しが真実を読める
     expect(job(jobId).state).not.toBe('running');
     // 上限 (CANCEL_WAIT_MS) で諦めたのではなく、畳み終わりを受け取って返っている
     expect(Date.now() - at).toBeLessThan(1_000);

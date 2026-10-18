@@ -297,7 +297,7 @@ describe('audioTitles', () => {
         expect(audioTitles([], true)).toEqual(['主音声', '副音声']);
     });
 
-    /** それ以外は入っている音声をそのまま拾うので、放送が名乗っている順 */
+    /** それ以外は入っている音声をそのまま使うので、放送が名乗っている順 */
     test('複数の音声はそのまま並べる', () => {
         expect(
             audioTitles(

@@ -194,7 +194,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         /// **済んだかは <see cref="_pending"/> で見る。<see cref="_ready"/> だけを信じない** —
         /// PipeReader は済んだ印を立ててから、ロックの外で合図を呼ぶ。読む側はその間に印を見て先に読み進め、
         /// 次の読みを待ちはじめることがあるので、**前の読みの合図が遅れて届く**。それを次の読みが済んだと
-        /// 取ると、まだ済んでいない読みの結果を取りに行って投げる (CI でときどき落ちていた)
+        /// 取ると、まだ済んでいない読みの結果を取得しようとして投げる (CI でときどき落ちていた)
         /// </para>
         /// <para>
         /// <see cref="Wake"/> で起こされたときは <paramref name="giveUp"/> を見て、降りるならすぐ戻る
@@ -811,7 +811,7 @@ public sealed class DvbTuner : ITuneDevice
             {
                 // 細かく見る。同期は 200ms ほどで来るので、100ms 刻みだと
                 // その半分が待つだけの時間になる (カーネルは選局のたびに
-                // status を 0 に戻すので、前のチャンネルの同期を拾うことはない)
+                // status を 0 に戻すので、前のチャンネルの同期を読み取ることはない)
                 Thread.Sleep(10);
                 if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeReadStatus, handle.AddrOfPinnedObject()) < 0)
                 {

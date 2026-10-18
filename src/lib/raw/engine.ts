@@ -477,7 +477,7 @@ export class RawEngine {
         audio.srcObject = destination.stream;
         /*
          * **外から止められた・再開されたら画面に伝える。** こちらが止めた・再開したもの
-         * (`held` と合っている) と、直に鳴らしている間のものは拾わない
+         * (`held` と合っている) と、直に鳴らしている間のものには反応しない
          */
         const sync = () => {
             if (this.gone || !this.through || audio.paused === this.held) return;

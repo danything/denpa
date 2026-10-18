@@ -4,7 +4,7 @@ using System.Buffers.Binary;
 namespace Denpa.Agent;
 
 /// <summary>
-/// ARIB STD-B25 を復号する。**TS を読んで ECM を拾い、鍵を貰って MULTI2 で復号する** (Cas.cs)。
+/// ARIB STD-B25 を復号する。**TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する** (Cas.cs)。
 ///
 /// <para>
 /// 道筋は PAT → PMT → CA 記述子。CA 記述子 (番組全体、または ES ごと) が「この ES の鍵は
@@ -62,7 +62,7 @@ public sealed class Descrambler(IKeySource source)
     private byte[]? _patLast;
     /// <summary>program_number → PMT の PID</summary>
     private readonly Dictionary<int, int> _programs = [];
-    /// <summary>PMT の PID → 組み立て中のセクション (1つの PID に複数の番組が乗ることもある)</summary>
+    /// <summary>PMT の PID → 組み立て中のセクション (1つの PID に複数の番組が入ることもある)</summary>
     private readonly Dictionary<int, Section> _pmtSections = [];
     /// <summary>program_number → 最後に受けた PMT。CA の方式が変わったら読み直せるように丸ごと持つ</summary>
     private readonly Dictionary<int, byte[]> _pmts = [];
@@ -88,7 +88,7 @@ public sealed class Descrambler(IKeySource source)
     /// <summary>掛かっていたのに鍵が無くて**そのまま流した**パケットの数 (契約の無いものは数えない)</summary>
     public long Undecodable => Volatile.Read(ref _undecodable);
 
-    /// <summary>**契約が無くて**そのまま流した数。復号できなかったのではなく資格が無い (同じ TS に乗る有料局)</summary>
+    /// <summary>**契約が無くて**そのまま流した数。復号できなかったのではなく資格が無い (同じ TS に入っている有料局)</summary>
     public long Unentitled => Volatile.Read(ref _unentitled);
 
     /// <summary>188 バイトの並びに乗らず捨てたバイト数 (途中から読み始めた頭や、壊れたところ)</summary>
@@ -406,7 +406,7 @@ public sealed class Descrambler(IKeySource source)
         _only = _allPmts && _ecms.Count == 1 ? _ecms.Values.First() : null;
     }
 
-    /// <summary>PMT から、掛かっている ES とその ECM の PID を拾う。**ES ごとの CA 記述子が番組全体のものより優先する**</summary>
+    /// <summary>PMT から、掛かっている ES とその ECM の PID を読み取る。**ES ごとの CA 記述子が番組全体のものより優先する**</summary>
     private static void Streams(ReadOnlySpan<byte> pmt, int caSystemId, List<(int Es, int Ecm)> streams, HashSet<int> ecms)
     {
         var end = pmt.Length - 4;

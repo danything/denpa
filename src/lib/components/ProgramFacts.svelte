@@ -34,11 +34,11 @@
          * `program` とは別に渡す — 番組詳細は EPG から引けると差し替わる (`detail.open`)
          */
         fps?: number | null;
-        /** 題名に付ける画面の切り替えの名前。録画の一覧から観る画面へ広げるとき (`#lib/motion.svelte.ts` の `heroName`) */
+        /** タイトルに付ける画面の切り替えの名前。録画の一覧から観る画面へ広げるとき (`#lib/motion.svelte.ts` の `heroName`) */
         transitionName?: string | undefined;
     } = $props();
 
-    /** 詳細情報。EIT から拾った「出演者」などの見出し付きテキスト */
+    /** 詳細情報。EIT から読み取った「出演者」などの見出し付きテキスト */
     const extended = $derived(Object.entries(program.extended ?? {}));
 
     /**

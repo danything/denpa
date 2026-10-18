@@ -4,7 +4,7 @@
      * 開くのはデータ放送が起動を求めたとき (`DataBroadcast` の `hybridcast`)。
      *
      * - アプリの HTML は中継で取り、差し込み (`#lib/hybridcast/shim.ts`) を入れて sandbox の iframe へ渡す
-     * - iframe からの頼み (通信・記憶・映像の置き場・選局・字幕・閉じる) は postMessage で受ける。
+     * - iframe からのリクエスト (通信・記憶・映像の置き場・選局・字幕・閉じる) は postMessage で受ける。
      *   **送り元が自分の iframe かを必ず見る**
      * - 通信は中継 (`/api/bml/proxy`・`/api/bml/post`) を通す。決まり (公開アドレスだけ・10 秒・4MB・
      *   cookie も UA も受信機を見分けるものも送らない) はデータ放送と同じ
@@ -68,7 +68,7 @@
     }
 
     function post(message: Record<string, unknown>, transfer: Transferable[] = []): void {
-        // 中は使い捨てのオリジン ("null") なので相手を名指しできない。送るのはアプリが頼んだものとその状態だけ
+        // 中は使い捨てのオリジン ("null") なので相手を名指しできない。送るのはアプリがリクエストしたものとその状態だけ
         frame?.contentWindow?.postMessage({ hc: 1, ...message }, '*', transfer);
     }
 

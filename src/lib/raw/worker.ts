@@ -601,7 +601,7 @@ async function grab(id: number): Promise<void> {
 }
 
 /**
- * エンコードしたもの (fMP4) の音の受け口 (`fmp4.ts` の `AudioSink`)。デコードするのは MPEG-2 の経路と同じ WASM —
+ * エンコードしたもの (fMP4) の音を受け取る側 (`fmp4.ts` の `AudioSink`)。デコードするのは MPEG-2 の経路と同じ WASM —
  * AAC は ADTS の頭を付けて (`fmp4.ts` が付ける)、Opus は OpusHead を渡して開く
  */
 function openAudio(codec: 'aac' | 'opus', config: Uint8Array | null): boolean {

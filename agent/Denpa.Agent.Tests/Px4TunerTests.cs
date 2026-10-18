@@ -574,7 +574,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task _15V_を出せない受信機には_0V_で頼み_画面に理由を出す(CancellationToken cancel)
+    public async Task _15V_を出せない受信機には_0V_でリクエストし_画面に理由を出す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
@@ -609,7 +609,7 @@ public class Px4TunerTests
 
         await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
         var took = since.Elapsed;
-        // 溜めは 8MB。流せるだけ流すので埋まるのはすぐ。そこから 1 秒 (と見回りの 50ms) で畳む
+        // 溜めは 8MB。流せるだけ流すので埋まるのはすぐ。そこから 1 秒 (と定期チェックの 50ms) で畳む
         await Assert.That(took).IsGreaterThanOrEqualTo(limit);
         await Assert.That(took).IsLessThan(limit + TimeSpan.FromSeconds(4));
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);

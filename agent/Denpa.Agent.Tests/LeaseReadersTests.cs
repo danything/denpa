@@ -41,7 +41,7 @@ public class LeaseReadersTests
     }
 
     [Test]
-    public async Task 相乗りは並べる()
+    public async Task 共有している利用者は並べる()
     {
         var lease = Make();
         lease.Saw("logo GR/T27");

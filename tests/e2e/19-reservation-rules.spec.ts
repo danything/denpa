@@ -13,7 +13,7 @@ test.describe('ルールで立った予約', () => {
         // 前のテストが残したルールを片付ける
         await clearRules(page);
         await page.getByTestId('rule-keyword').fill('テストアニメ');
-        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
         await page.getByTestId('rule-dedupe').uncheck();
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toBeVisible();
@@ -108,7 +108,7 @@ test.describe('ルールで立った予約', () => {
     });
 
     /*
-     * **録れたあとも、どのルールが拾ったのかが分かる。**
+     * **録れたあとも、どのルールが当たったのかが分かる。**
      *
      * 予約の側にしか出していなかった頃は、録画一覧に要らないものが混ざっていても
      * 直す先 (どのルールの条件か) が画面から辿れなかった。予約は録り終えると

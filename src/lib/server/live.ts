@@ -120,7 +120,7 @@ type StreamCodec = LiveCodec | 'audio';
  * [captions.ts](captions.ts) の `captionOutput`)。**時刻を揃えるにはこうするしか
  * なかった** — 理由と実測、引き換え (選び直すと字幕も再エンコード) は captions.ts の冒頭。
  *
- * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから拾っていて
+ * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから読み取っていて
  * (`TrackList`)、あれは info で出る。騒がしいぶんは読む側で落とす (`watch`)。
  * 数字の進み具合だけは要らないので `-nostats` で止める。
  *
@@ -336,7 +336,7 @@ export function videoArgs(
                 ? gpu.filter
                 : [...(interlaced ? [deinterlace(true)] : []), ...gpu.filter]
             ).join(','),
-            // -g はソフトウェアと揃える。合流の待ちは鍵フレームの間隔で決まる
+            // -g はソフトウェアと揃える。合流の待ちはキーフレームの間隔で決まる
             encoder: ['-c:v', ...gpu.encoder, '-g', '60'],
         };
     }
@@ -346,7 +346,7 @@ export function videoArgs(
 /** ソフトウェアでエンコードするときの `-c:v` から (上の説明) */
 function softwareArgs(codec: LiveCodec): string[] {
     if (codec === 'av1') {
-        // -g は H.264 と揃える。合流の待ちは鍵フレームの間隔で決まる
+        // -g は H.264 と揃える。合流の待ちはキーフレームの間隔で決まる
         return ['-c:v', 'libsvtav1', '-preset', '12', '-g', '60', '-svtav1-params', 'lookahead=0'];
     }
     /*
@@ -579,7 +579,7 @@ class Session {
     private readonly clock = new BroadcastClock();
     /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast で分け合う (`tap`) */
     private readonly packets = new PacketStream();
-    /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から拾う */
+    /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から読み取る */
     private startPts = Number.NaN;
     /** 最後に時計を配った時刻 (`tellClock`) */
     private toldClockAt = 0;
@@ -827,7 +827,7 @@ class Session {
      * 放送は待ってくれないので、積むと際限なく太る。init は捨てない
      * (捨てるとその人には以降ずっと映像が出ない)。
      *
-     * **そのままの TS も捨ててよい。** 欠けた PES は受け側のデコーダが次の I フレームで拾い直す。
+     * **そのままの TS も捨ててよい。** 欠けた PES は受け側のデコーダが次の I フレームで立ち直る。
      * 1局 15Mbit/s を積み続けると、詰まった客1人でサーバの手元が数秒で数十 MB 太る
      */
     private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
@@ -895,7 +895,7 @@ class Session {
                     watching,
                     wanted === null ? Promise.resolve() : this.subtitles(proc),
                 ]).catch((error: unknown) => {
-                    // 相手が降りたあとの EPIPE。**ここで拾わないと再エンコードに来られない**
+                    // 相手が降りたあとの EPIPE。**ここで受け止めないと再エンコードに来られない**
                     trouble = error;
                 });
                 await Promise.race([running, proc.exited]);
@@ -1166,7 +1166,7 @@ class Session {
                 if (!own) this.fed = true;
                 /*
                  * 起こし直したあとの古い流し込みは抜ける。その1塊は捨てるが、次の ffmpeg は
-                 * どのみち鍵フレームから拾うので欠けは見えない
+                 * どのみちキーフレームから始めるので欠けは見えない
                  */
                 if (this.stopped || this.proc !== proc) break;
                 consumed += next.value.length;
@@ -1176,7 +1176,7 @@ class Session {
                     break;
                 }
                 if (out.length === 0) continue;
-                // **書けたことを待つ** (上の説明)。待たないと、転んだときに拾い手がいない
+                // **書けたことを待つ** (上の説明)。待たないと、転んだときに受け止める先がない
                 await writer.write(out);
                 await writer.flush();
             }
@@ -1347,7 +1347,7 @@ class Session {
     }
 
     /**
-     * ffmpeg の言い分から、**選べる字幕と失敗**を拾う。
+     * ffmpeg の言い分から、**選べる字幕と失敗**を読み取る。
      *
      * エンコードできない理由 (音声が無い・解像度が変わった) はここにしか出ない。
      * 捨てていると「映像が出ない」としか分からなくなる。
@@ -1513,7 +1513,7 @@ class Session {
 
     /**
      * 放送そのままの経路の字幕の ffmpeg を起こす (`rawCaptionArgs`)。**字幕のパイプと見出しを汲み続ける。**
-     * 選べる字幕と「字幕が無い」もここの見出しから拾う。**起こし直したら数え直す** (`runRaw`。番組が替わった)
+     * 選べる字幕と「字幕が無い」もここの見出しから読み取る。**起こし直したら数え直す** (`runRaw`。番組が替わった)
      */
     private captions(): RawCaptions {
         this.list = new TrackList(this.program);
@@ -1669,7 +1669,7 @@ export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
  * `audio` はエンコードする音声 (`AudioTrack.id`。画面の `TuneCommand.audio` と同じもの)。無いもの・省けば主音声。
  * 放送そのままでは効かない (全部の音声を送り、アプリが選ぶ)。
  *
- * 画面の視聴者と同じ取り合いに乗る — 同じ局・同じエンコード方式・**同じ音声**を誰かが見ていれば
+ * 画面の視聴者と同じ取り合いに加わる — 同じ局・同じエンコード方式・**同じ音声**を誰かが見ていれば
  * 共有し (`key`)、最後の1人が抜けたら畳む。局が無ければ null
  */
 export function liveStream(
@@ -1737,8 +1737,8 @@ export function chaseStream(
  * (`liveStream` の `raw`) を観ているアプリに、字幕 (文字の配置 0x22) を放送の PTS のまま流す —
  * ブラウザで放送そのままを送る経路 (stream.md#放送のままのときの字幕) と同じもの。
  *
- * **いま流している放送そのままのセッションに脇から乗る**だけで、チューナーは増やさない
- * (ブラウザで同じ局を放送そのままで観ていればそれにも乗る)。乗る先が無ければ null —
+ * **いま流している放送そのままのセッションを脇から共有する**だけで、チューナーは増やさない
+ * (ブラウザで同じ局を放送そのままで観ていればそれも共有する)。共有する相手が無ければ null —
  * 映像 (`live?codec=raw`) を先に開いてからリクエストすること。映像が終われば閉じる (`Viewer.side`)
  */
 export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | null {
@@ -1765,7 +1765,7 @@ export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | nu
     });
 }
 
-/** 録画の字幕を、求められた位置のどれだけ手前から読むか (秒)。**いま出ている字幕を拾うため** (字幕は次が来るまで出しっぱなし) */
+/** 録画の字幕を、求められた位置のどれだけ手前から読むか (秒)。**いま出ている字幕も出すため** (字幕は次が来るまで出しっぱなし) */
 const CAPTION_LEAD = 10;
 
 /** 観ている位置より先に読んでおく量 (秒)。頭のここまでは倍速の縛りを掛けずに読む (`followFile` の `burst`) */
@@ -2023,8 +2023,8 @@ const WARM_WAIT = 8_000;
  * 覚えている前回の局か (`LAST_COOKIE`)、一覧の先頭。
  *
  * **1枚も出ないうちに繋がるので、合流の待ちは付かない。** エンコードしたものは
- * 鍵フレームから始まるが、それが出るのは 530ms 後なので、160ms で来る画面は
- * まだ何も渡されていない状態で乗る。
+ * キーフレームから始まるが、それが出るのは 530ms 後なので、160ms で来る画面は
+ * まだ何も渡されていない状態で繋がる。
  *
  * 待たない・投げない。使えなくても画面はいつもどおり繋いでくるので、
  * そのとき改めて開くだけ。
@@ -2207,7 +2207,7 @@ export function attend(connection: Connection): void {
             current.track === caption;
 
         /*
-         * **知らせるのも印を戻すのも、乗る前に済ませる。**
+         * **知らせるのも印を戻すのも、共有する前に済ませる。**
          *
          * `watch` は既に誰かが見ているチャンネルなら、その場で持っている init を
          * 渡す (`Session.add`)。そのあとで `ready` を戻していた頃は、**渡した直後の

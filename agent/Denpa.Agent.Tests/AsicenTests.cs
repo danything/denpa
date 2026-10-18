@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
 /*
  * asicen-userland の機材 (Asicen.cs)。
  *
- * 機材は無い。sysfs を真似た木から USB 機能を拾うところ、筐体へのまとめ方、device の文字列、
+ * 機材は無い。sysfs を真似た木から USB 機能を探すところ、筐体へのまとめ方、device の文字列、
  * IPC の違い (枠の頭とソケットの置き場) を、偽の px4d (Px4TunerTests.FakePx4d を asicend のふりにしたもの) で確かめる。
  * 本物の asicend の模擬 (`--mock`) が手元にあれば (ASICEN_USERLAND_DIR)、それとも話す。
  */
@@ -23,7 +23,7 @@ public class AsicenTests
     }
 
     [Test]
-    public async Task sysfs_から_ASICEN_の_USB_機能だけを拾う()
+    public async Task sysfs_から_ASICEN_の_USB_機能だけを探す()
     {
         var root = Directory.CreateTempSubdirectory("sysfs");
         try
@@ -136,7 +136,7 @@ public class AsicenTests
         AsicenUserland.Receivers(4));
 
     [Test]
-    public async Task asicend_には_1_と_2_の番地と挿し口を渡す()
+    public async Task asicend_には_1_と_2_のアドレスとポートを渡す()
     {
         var firmware = Path.GetTempFileName();
         try
@@ -203,7 +203,7 @@ public class AsicenTunerTests
     }
 
     [Test]
-    public async Task 地上波の受信機に衛星は頼まない(CancellationToken cancel)
+    public async Task 地上波の受信機に衛星はリクエストしない(CancellationToken cancel)
     {
         await Task.Yield();
         using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");

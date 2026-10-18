@@ -29,7 +29,7 @@ describe('どこまで埋まっているか', () => {
     const NOW = Date.UTC(2026, 7, 4, 3, 0, 0);
     const WEEK = NOW + 7 * 24 * 3600_000;
 
-    test('乗っている局のうち、いちばん薄いものに合わせる', () => {
+    test('入っている局のうち、いちばん薄いものに合わせる', () => {
         const reach = new Map([
             [serviceKey(NETWORK, 23608), WEEK],
             [serviceKey(NETWORK, 23610), NOW],
@@ -122,7 +122,7 @@ describe('pickChannels', () => {
 describe('最後に集めた時刻', () => {
     const AT = Date.UTC(2026, 7, 4, 3, 0, 0);
 
-    test('乗っている局のうち、いちばん新しいものを採る', () => {
+    test('入っている局のうち、いちばん新しいものを採る', () => {
         const perService = new Map([
             [serviceKey(NETWORK, 101), AT - 60_000],
             [serviceKey(NETWORK, 102), AT],

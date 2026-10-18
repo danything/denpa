@@ -323,8 +323,8 @@ interface EncodeOptions {
     /** 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`) */
     audioTitles?: string[];
     /**
-     * 拾う音声 (音声の何本目か。`cm.probeLiveAudio`)。**頭に中身の無い音声を外すため。**
-     * 無い・空なら全部拾う。デュアルモノでは使わない (1本を左右に割るだけ)
+     * 使う音声 (音声の何本目か。`cm.probeLiveAudio`)。**頭に中身の無い音声を外すため。**
+     * 無い・空なら全部使う。デュアルモノでは使わない (1本を左右に割るだけ)
      */
     audioStreams?: number[];
     /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
@@ -477,7 +477,7 @@ export function buildArgs(
             'language=und',
         );
     } else {
-        // 音声ストリームを全て拾う(多言語放送等で複数トラックある場合に備える)。
+        // 音声ストリームを全て使う(多言語放送等で複数トラックある場合に備える)。
         // ただし頭に中身の無いもの (次の番組の副音声) は外す — `audioStreams`
         const streams = options.audioStreams ?? [];
         if (streams.length === 0) args.push('-map', '0:a');
@@ -617,7 +617,7 @@ export async function cancel(jobId: number): Promise<void> {
 
     /*
      * 走っている分。**段階の名前を先に書き換えてから待つ** — 上限に間に合わな
-     * かったときでも、押した直後の読み直しが「中止しています」を拾える
+     * かったときでも、押した直後の読み直しが「中止しています」を読める
      * (割合を出している段階では出ないが、CM検出のように数分かかる段階で効く)
      */
     if (runningJobs.has(jobId)) writeStep(jobId, '中止しています');
@@ -793,7 +793,7 @@ export function readInputPos(pid: number, fd: number): number {
 }
 
 /**
- * 失敗の理由を stderr から拾う。
+ * 失敗の理由を stderr から読み取る。
  *
  * 末尾をそのまま切り出すと警告ばかりが残って肝心の理由が見えない。エラーらしい行を優先して残す。
  */
@@ -1280,7 +1280,7 @@ async function runJob(jobId: number): Promise<void> {
 
     /**
      * 1本エンコードする。**試す順。** まず頭からそのまま。落ちたら頭を少し捨てて (`-ss`) もう一度 —
-     * 録画開始直後の数百msだけ壊れているケースをここで拾う (buildArgs のコメント)。
+     * 録画開始直後の数百msだけ壊れているケースをここで救う (buildArgs のコメント)。
      * 別の理由での失敗もここに来るが、もう一度同じ理由で落ちるだけなので無害。
      *
      * **GPU でエンコードするときは、その2回が駄目なら次の方式 (QSV → VA-API → ソフトウェア) で
@@ -1914,7 +1914,7 @@ export function pump(): void {
             continue;
         }
 
-        // 実際に走り出す前に状態を進めておく。次のループが同じジョブを拾わないため
+        // 実際に走り出す前に状態を進めておく。次のループが同じジョブを取らないため
         const claimed = orm()
             .update(encodeJobs)
             .set({ state: 'running', started_at: now(), attempts: sql`${encodeJobs.attempts} + 1` })

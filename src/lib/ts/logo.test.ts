@@ -90,7 +90,7 @@ describe('SDT のロゴ対応', () => {
     });
 });
 
-describe('拾い集める', () => {
+describe('ロゴを集める', () => {
     test('CDTとSDTが揃って初めて局に配れる', () => {
         const collector = new LogoCollector(NETWORK);
         collector.feed(packetize(0x0029, cdtSection(3, 0x05, PNG)));

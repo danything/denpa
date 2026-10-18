@@ -181,8 +181,8 @@ describe('録画の字幕 (recordingCaptions)', () => {
 });
 
 describe('ライブの字幕 (liveCaptions)', () => {
-    // 乗る先 (放送そのままのセッション) が無ければ自分では起こさない。チューナーを字幕のためだけに使わない
-    test('放送そのままで流していない局には乗らない', () => {
+    // 共有する相手 (放送そのままのセッション) が無ければ自分では起こさない。チューナーを字幕のためだけに使わない
+    test('放送そのままで流していない局には繋がない', () => {
         expect(liveCaptions(SERVICE)).toBeNull();
         expect(liveCaptions(SERVICE + 1)).toBeNull();
     });
@@ -193,7 +193,7 @@ describe('ライブの字幕 (liveCaptions)', () => {
         const first = liveCaptions(SERVICE);
         expect(first).not.toBeNull();
         await first!.cancel();
-        // 映像はまだ流れている (同じセッションにもう一度乗れる)
+        // 映像はまだ流れている (同じセッションをもう一度共有できる)
         const second = liveCaptions(SERVICE);
         expect(second).not.toBeNull();
         // 映像が抜けたら畳まれて、字幕 API も閉じる (読み切れる)

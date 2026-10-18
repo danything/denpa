@@ -57,7 +57,7 @@ function pack(path: string, tag: string): Packed | null {
         ]);
         entry.ready = { br: br as Buffer<ArrayBuffer>, gzip: gz as Buffer<ArrayBuffer> };
     })().catch((failure) => {
-        // 縮められなくても配れる。次に頼まれたときにもう一度試す
+        // 縮められなくても配れる。次にリクエストされたときにもう一度試す
         console.warn(`[mpeg2] ${path} を縮められません: ${failure}`);
         if (packed.get(path) === entry) packed.delete(path);
     });
@@ -65,7 +65,7 @@ function pack(path: string, tag: string): Packed | null {
 }
 
 export const GET: RequestHandler = ({ params, request }) => {
-    // `constructor` などの継いだ名前を拾わない
+    // `constructor` などの継いだ名前に当たらない
     const type = Object.hasOwn(TYPES, params.file) ? TYPES[params.file] : undefined;
     if (type === undefined) error(404, 'ファイルが見つかりません');
     const path = join(config.mpeg2Dir, params.file);

@@ -18,7 +18,7 @@ import { run } from './stream';
  * **GPU でエンコードできるか、起動時に ffmpeg に確かめさせる。**
  *
  * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
- * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部拾い、**デバイスごとに** 方式 (QSV / VA-API) ×
+ * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** 方式 (QSV / VA-API) ×
  * コーデックの4通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は設定画面の
  * 「GPU」カードにデバイスごとに出て、使えるものには自動で印が付く (`settings().hwAllow` と
  * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は予備** — 同じ GPU なら速さは
@@ -276,7 +276,7 @@ function labelOf(path: string): string {
 
 /**
  * `HW_DEVICES` に当たるデバイス。名前順 (renderD128, renderD129, …)。
- * 印は最後の段の `*` だけ (デバイスの名前は決まっている)。**readdir で拾う** —
+ * 印は最後の段の `*` だけ (デバイスの名前は決まっている)。**readdir で探す** —
  * デバイスは普通のファイルでもフォルダでもないので、glob の道具に頼らない
  */
 export function findDevices(pattern = config.hwDevices): string[] {

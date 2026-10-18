@@ -7,17 +7,17 @@ import { expect, FAKE_CAPTION, goto, recordOne, setRecording, test, wakeControls
  * **互換モードで録画を観る** — 観る画面も `<video>` を使わず canvas に描く (`src/lib/canvas-player.ts`)。
  *
  * テスラの車載ブラウザは停車中でも `<video>` を止める。互換モードの観る画面は `/stream` を fetch で
- * 読んで、ライブ・追っかけと同じ器 (`raw/engine.ts`) へ流す。ここは**描くところまで**見る:
+ * 読んで、ライブ・追っかけと同じエンジン (`raw/engine.ts`) へ流す。ここは**描くところまで**見る:
  *
  * - 本物のストリーム (偽 ffmpeg が作り置きの fMP4 を出す `fmp4-out.ts` と、偽の放送の MPEG-2 をそのまま) を描く。
  *   元の TS は `X-Denpa-Origin` で物差しに直す
  * - 飛ぶ・CM 飛ばし・字幕・止めて再開は、長い録画のふりをして見る (`playback` を差し替え、`stream` は
- *   作り置きの fMP4 を頼まれた位置から並べて返す。`fmp4-clip.ts`)
+ *   作り置きの fMP4 をリクエストされた位置から並べて返す。`fmp4-clip.ts`)
  *
  * 映像は AV1 で見る (Playwright の Chromium の VideoDecoder は H.264 をデコードできないことがある。38-live-compat と同じ)
  */
 
-/** 頼んだ `stream` の URL を順に控える */
+/** リクエストした `stream` の URL を順に控える */
 function streamRequests(page: Page): URL[] {
     const seen: URL[] = [];
     page.on('request', (request) => {
@@ -130,7 +130,7 @@ test.describe('互換モードの観る画面', () => {
                 },
             }),
         );
-        // 頼まれた位置から 60 秒ぶん (時刻はページの物差しのまま)
+        // リクエストされた位置から 60 秒ぶん (時刻はページの物差しのまま)
         await page.route(`**/api/recordings/${id}/stream?**`, (route) => {
             const from = Number(new URL(route.request().url()).searchParams.get('from') ?? 0);
             return route.fulfill({
@@ -169,14 +169,14 @@ test.describe('互換モードの観る画面', () => {
         await expect(page.getByTestId('watch-resumed')).toBeVisible();
         expect(await where(page)).toBeGreaterThanOrEqual(600);
 
-        // **CM 飛ばしで飛ぶ。** 観はじめから入っていて、CM の手前まで来たら、CM の終わりから頼み直す
+        // **CM 飛ばしで飛ぶ。** 観はじめから入っていて、CM の手前まで来たら、CM の終わりからリクエストし直す
         await expect(page.getByTestId('watch-skip-cm')).toHaveAttribute('aria-pressed', 'true');
         await expect.poll(() => asked.length, { timeout: 30_000 }).toBeGreaterThan(1);
         expect(asked[1]?.searchParams.get('from')).toBe('640.000');
         await expect(page.getByTestId('watch-skipped')).toBeVisible();
         await expect.poll(() => where(page), { timeout: 15_000 }).toBeGreaterThanOrEqual(640);
 
-        // **飛ぶ** (→ で 10 秒先)。飛んだ先から頼み直し、位置と字幕がそこに合う
+        // **飛ぶ** (→ で 10 秒先)。飛んだ先からリクエストし直し、位置と字幕がそこに合う
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         const before = await where(page);
         await page.keyboard.press('ArrowRight');
@@ -191,7 +191,7 @@ test.describe('互換モードの観る画面', () => {
         });
         await expectDrawn(page, 'fmp4');
 
-        // **止めて再開しても位置が保たれる** (止めている間も進まず、再開は止めた所から。頼み直さない)
+        // **止めて再開しても位置が保たれる** (止めている間も進まず、再開は止めた所から。リクエストし直さない)
         const play = page.getByTestId('watch-play');
         await wakeControls(page, 'watch-stage');
         await play.click();

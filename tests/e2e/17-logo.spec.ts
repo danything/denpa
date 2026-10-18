@@ -6,7 +6,7 @@ import { expect, goto, syncEpg, test } from './helpers';
 /**
  * 局ロゴ。
  *
- * 局ロゴは denpa が放送波から拾う
+ * 局ロゴは denpa が放送波から取得する
  * (CDT の実体と、SDT の「どの局のものか」を突き合わせる)。
  *
  * **開くのは物理チャンネル。** その局に要るPIDだけを通す開き方をすると、
@@ -16,21 +16,21 @@ import { expect, goto, syncEpg, test } from './helpers';
  */
 test.describe('局ロゴ', () => {
     /**
-     * 画面から取りに行くと、地上波も衛星もまとめて回る。地上波は中継ごとに
-     * 乗っている局が違うので、チューナー2つで並べて回る。
+     * 画面から取得すると、地上波も衛星もまとめて回る。地上波は中継ごとに
+     * 入っている局が違うので、チューナー2つで並べて回る。
      */
-    test('地上波を2チャンネル並べて拾い、番組表に出る', async ({ page, request, stack }) => {
+    test('地上波を2チャンネル並べて取得し、番組表に出る', async ({ page, request, stack }) => {
         test.setTimeout(120_000);
         await syncEpg(request);
 
-        // 先に走ったテストで拾えていることがあるので、一度捨てる
+        // 先に走ったテストで取得できていることがあるので、一度捨てる
         for (const service of [MX, FUJI]) {
             rmSync(`${stack.root}/logos/${service.id}.png`, { force: true });
         }
         // 持っていなければ配れない
         expect((await request.get(`/api/services/${MX.id}/logo`)).status()).toBe(404);
 
-        // 普段は10分ごとに少しずつ拾っている。押すと今すぐ取りに行く
+        // 普段は10分ごとに少しずつ取得している。押すと今すぐ取得する
         await goto(page, '/tuners');
         await page.getByTestId('logo-sweep').click();
 
@@ -54,7 +54,7 @@ test.describe('局ロゴ', () => {
                 expect(logo.headers()['content-type']).toContain('image/png');
                 /*
                  * 色の表を入れ直してあること。放送に乗るのはパレットの抜けた PNG で、
-                 * そのまま置くとブラウザは何も描かない。実機では15局ぶん拾えているのに
+                 * そのまま置くとブラウザは何も描かない。実機では15局ぶん取得できているのに
                  * 番組表が空のままだった
                  */
                 const bytes = await logo.body();
@@ -73,7 +73,7 @@ test.describe('局ロゴ', () => {
          * 見終えて、結果が残っていること。
          *
          * 地上波が揃ってもまだ終わりではない。同じ一回で衛星の中継も回っていて、
-         * そちらは**最後に拾ってからしばらく待って**から切り上げる (カルーセルは
+         * そちらは**最後に取得してからしばらく待って**から切り上げる (カルーセルは
          * まとまって来るので、来なくなったことが分かるまで開けておく)
          */
         await expect(async () => {
@@ -82,14 +82,14 @@ test.describe('局ロゴ', () => {
         }).toPass({ timeout: 60_000 });
 
         // 何局ぶん持っているかもここに出す。番組表にロゴが出ないとき、
-        // まだ拾えていないのか出し方が悪いのかを見分けるため
+        // まだ取得できていないのか出し方が悪いのかを見分けるため
         await expect(page.getByTestId('status-logos')).toContainText('局');
 
         /*
-         * 取りに行くものが無くなったら**ボタンも消える**。押しても「もう全部持って
+         * 取得するものが無くなったら**ボタンも消える**。押しても「もう全部持って
          * います」と断るだけのボタンを出しておく意味がない。
          *
-         * ここで消えるのは、衛星ぶんも同じ一回で拾えているから。地上波と衛星は
+         * ここで消えるのは、衛星ぶんも同じ一回で取得できているから。地上波と衛星は
          * 伝送方式が違うだけで、開けば両方流れてくる
          */
         await expect(page.getByTestId('logo-sweep')).toHaveCount(0);
@@ -105,13 +105,13 @@ test.describe('局ロゴ', () => {
  *
  * **地上波とは伝送方式が違う。** CDT には載らず、データカルーセル (DSM-CC) で
  * 流れてくる (ARIB TR-B15)。PAT → エンジニアリングサービス (929) の PMT →
- * component_tag 0x79/0x7A の ES → DII → DDB と辿って初めて拾える。
+ * component_tag 0x79/0x7A の ES → DII → DDB と辿って初めて取得できる。
  *
  * 読めていなかった頃は、実機で BS を26中継・CS を12中継ぶん開いても
  * 0/38・0/54 のままだった (地上波は12中継で 29/29 揃う)。
  */
 test.describe('衛星の局ロゴ', () => {
-    test('データカルーセルから拾って番組表に出る', async ({ page, request, stack }) => {
+    test('データカルーセルから取得して番組表に出る', async ({ page, request, stack }) => {
         test.setTimeout(120_000);
         await syncEpg(request);
 
@@ -119,9 +119,9 @@ test.describe('衛星の局ロゴ', () => {
 
         await goto(page, '/tuners');
         /*
-         * **番組表を集めるだけでも拾えることがある。** 衛星のチャンネルも
+         * **番組表を集めるだけでも取得できることがある。** 衛星のチャンネルも
          * 開くので、そこにカルーセルが流れていれば只で埋まる。押すボタンが
-         * 出ていなければ、もう拾えているということ
+         * 出ていなければ、もう取得できているということ
          */
         const sweep = page.getByTestId('logo-sweep');
         if ((await sweep.count()) > 0) await sweep.click();
@@ -162,7 +162,7 @@ test.describe('衛星の局ロゴ', () => {
         if ((await sweep.count()) > 0) await sweep.click();
 
         /*
-         * 取りに行くところが無くなる = 外れの中継を覚えた、ということ。
+         * 取得するところが無くなる = 外れの中継を覚えた、ということ。
          * 覚えられていないと `missing()` に残り続けてボタンが消えない
          */
         await expect(async () => {

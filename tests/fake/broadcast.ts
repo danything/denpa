@@ -44,7 +44,7 @@ import { type FakeService, SERVICES } from './services';
 const DOCS = process.env['FAKE_PROFILE'] === 'docs';
 
 /**
- * 放送に乗るのと同じ形式のロゴ (実機の地上波から拾った 48x24)。
+ * 放送に乗るのと同じ形式のロゴ (実機の地上波から取得した 48x24)。
  *
  * 8bit のパレット PNG だが、**色の表 (PLTE/tRNS) が入っていない。** ARIB では
  * 色が決め打ちなので送らない決まりで、受け取った側が入れて初めて画像になる。
@@ -198,7 +198,7 @@ function programsFor(service: FakeService): SynthEvent[] {
     return programs;
 }
 
-/** その物理チャンネルに乗っている局 */
+/** その物理チャンネルに入っている局 */
 export function on(type: string, channel: string): FakeService[] {
     return SERVICES.filter((s) => s.type === type && s.channel === channel);
 }
@@ -301,7 +301,7 @@ const pidsOf = (index: number) => ({
  *
  * CDT には載らず、データカルーセル (DSM-CC) で流れてくる。PAT →
  * エンジニアリングサービス (929) の PMT → component_tag 0x79 の ES →
- * DII → DDB と辿らないと拾えないので、そこまで作る。本物と同じ道筋にして
+ * DII → DDB と辿らないと取得できないので、そこまで作る。本物と同じ道筋にして
  * おかないと、テストだけ通って現物では永久に集まらない。
  *
  * **PAT と PMT は `tables()` のほうに載せる。** 中継にあるかどうかは PAT を

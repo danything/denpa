@@ -8,7 +8,7 @@ import { ddbSection, diiSection, logoModule, packetize, patSection, pmtSection, 
  *
  * 地上波と違って CDT には載らず、データカルーセル (DSM-CC) で流れてくる。
  * PAT → エンジニアリングサービス (929) の PMT → component_tag 0x79/0x7A の ES
- * → DII でモジュールの大きさ → DDB でブロック、と辿らないと拾えない。
+ * → DII でモジュールの大きさ → DDB でブロック、と辿らないと取得できない。
  */
 
 /** 1x1 の PNG のつもり。中身は問わない */
@@ -92,7 +92,7 @@ describe('DsmccLogoCollector', () => {
         expect(logos[0]!.services).toEqual([{ networkId: 4, serviceId: 211 }]);
     });
 
-    test('名前の違うモジュールは拾わない', () => {
+    test('名前の違うモジュールは取得しない', () => {
         const collector = new DsmccLogoCollector();
         const module = logoModule(0x05, [{ logoId: 1, services: [[4, 211]], data: PNG }]);
         // カルーセルにはロゴ以外のモジュールも流れている
@@ -100,7 +100,7 @@ describe('DsmccLogoCollector', () => {
         expect(collector.collected()).toEqual([]);
     });
 
-    test('CS の component_tag でも拾う', () => {
+    test('CS の component_tag でも取得する', () => {
         const collector = new DsmccLogoCollector();
         const module = logoModule(0x05, [{ logoId: 2, services: [[7, 330]], data: PNG }]);
         const data = stream(

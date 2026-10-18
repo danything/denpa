@@ -116,7 +116,7 @@ export const scenes: Scene[] = [
         ],
     },
     {
-        name: '同じチャンネルを読んでいる選局があれば、どのチューナーでもそこに乗る',
+        name: '同じチャンネルを読んでいる選局があれば、どのチューナーでもそれを共有する',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -125,7 +125,7 @@ export const scenes: Scene[] = [
             { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
             { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
             { close: 'a' },
-            // gr9 が空いていても、T21 を読んでいる mlt9 に乗る
+            // gr9 が空いていても、T21 を読んでいる mlt9 を共有する
             { open: 'c', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
         ],
     },
@@ -191,10 +191,10 @@ export const scenes: Scene[] = [
     },
     {
         /*
-         * 録画が同じチャンネルで続くとき。後ろは前の選局に乗るだけで、引き継ぐことも選局し直す
+         * 録画が同じチャンネルで続くとき。後ろは前の選局を共有するだけで、引き継ぐことも選局し直す
          * ことも無い。前が離れても後ろはそのチューナーにい続ける
          */
-        name: '同じチャンネルで続くなら乗るだけ。前が離れても後ろは同じチューナーに残る',
+        name: '同じチャンネルで続くなら共有するだけ。前が離れても後ろは同じチューナーに残る',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },
@@ -202,7 +202,7 @@ export const scenes: Scene[] = [
         steps: [
             { open: 'a', type: 'GR', channel: 'T16', priority: RECORDING, rank: 0 },
             { open: 'b', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
-            // b がまだ読んでいるうちに来るので、b の選局に乗る (マージンで前後が重なる)
+            // b がまだ読んでいるうちに来るので、b の選局を共有する (マージンで前後が重なる)
             { open: 'c', type: 'GR', channel: 'T21', priority: RECORDING, rank: 1 },
             { close: 'b' },
             { close: 'a' },
@@ -212,10 +212,10 @@ export const scenes: Scene[] = [
     },
     {
         /*
-         * 弱い利用者 (番組表集め) が広いチューナーで同じチャンネルを読んでいても、録画はそこへ乗らずに
-         * 順位のいちばん前のチューナーへ入る。乗ると、録画の入るチューナーが録画以外に左右される
+         * 弱い利用者 (番組表集め) が広いチューナーで同じチャンネルを読んでいても、録画はそれを共有せずに
+         * 順位のいちばん前のチューナーへ入る。共有すると、録画の入るチューナーが録画以外に左右される
          */
-        name: '弱い利用者しかいない同じチャンネルには、そのチューナーが順位で先頭の組のときだけ乗る',
+        name: '弱い利用者しかいない同じチャンネルは、そのチューナーが順位で先頭の組のときだけ共有する',
         tuners: [
             { name: 'mlt9', types: ['GR', 'BS', 'CS'], rank: 1 },
             { name: 'gr9', types: ['GR'], rank: 0 },

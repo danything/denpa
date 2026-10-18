@@ -52,7 +52,7 @@ const SATELLITE_TIMEOUT = 20 * 60_000;
  * 「衛星でまだ持っていない局が0になるまで」で待つと、放送側が流していない局
  * (実機の CS の一部) が1つでもあると**毎回20分丸ごと待つ**ことになる。
  *
- * まとまって来て、あとは無音、という流れ方をするので、**最後に1局拾ってから
+ * まとまって来て、あとは無音、という流れ方をするので、**最後に1局取得してから
  * これだけ何も来なければ切り上げる**。実測ではカルーセル1回ぶんが同じ1分の中に
  * 収まっていたので、これだけ空けば取りこぼしはない。
  */
@@ -214,7 +214,7 @@ export function readLogo(serviceId: number): Uint8Array | null {
 }
 
 /**
- * 拾えたロゴを保存して、番組表に出せるようにする。
+ * 取得できたロゴを保存して、番組表に出せるようにする。
  *
  * 放送波の service_id は ARIB のもので、denpa が持っている services.id とは
  * 別物。network_id と合わせて引き直す。
@@ -301,7 +301,7 @@ interface Feed {
  * 置き場ごと消えることは実際に起きる (PVCの作り直しなど)。
  * DBとファイルのどちらが正しいかを迷わないよう、**ファイルを正とする**。
  *
- * ついでに、色の表の入っていない古いファイルを直す。放送から拾ったままの
+ * ついでに、色の表の入っていない古いファイルを直す。放送から取得したままの
  * PNG はパレットが抜けていて、ブラウザは何も描かない (logo-palette.ts)。
  * 取得し直すと局によっては何時間もかかるので、置いてあるものを直す。
  */
@@ -479,7 +479,7 @@ function missingSatellites(): number {
 /**
  * いま開いて読んでいる物理チャンネル。
  *
- * **共有 (`ride`) が自分の開けたものに乗らないように持つ。** こちらが開くと
+ * **共有 (`ride`) が自分の開けたものを使わないように持つ。** こちらが開くと
  * エージェントが `tuners` を飛ばし、それを合図に共有が走って同じものを二重に読んでしまう。
  */
 const collecting = new Set<string>();
@@ -538,7 +538,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
             }
             /*
              * 衛星は揃いきらないことがある (カルーセルに載っていない局がある)。
-             * 拾えたあと何も来なくなったら、そこで切り上げる。これが無いと
+             * 取得できたあと何も来なくなったら、そこで切り上げる。これが無いと
              * 載っていない局が1つでもあるだけで毎回20分丸ごと待つことになる。
              *
              * ここまで来たなら**カルーセルは1回ぶん読み切った**。残っている局は
@@ -569,7 +569,7 @@ async function collect(target: Target, timeout: number, signal?: AbortSignal): P
     }
     // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
     if (target.type === 'GR' && ranOut && timeout >= SWEEP_TIMEOUT) markGaveUp(target.channel);
-    // 衛星は開いた中継以外の局も一緒に拾える。数えるほうも合わせる
+    // 衛星は開いた中継以外の局も一緒に取得できる。数えるほうも合わせる
     return before - (target.type !== 'GR' ? missingSatellites() : missingOn(target.channel));
 }
 
@@ -716,7 +716,7 @@ export async function ride(): Promise<number> {
         let found = 0;
         for (const target of need) {
             if (!open.has(target.channel)) continue;
-            // 自分で開けたものには乗らない。同じチャンネルを二重に読むことになる
+            // 自分で開けたものは共有しない。同じチャンネルを二重に読むことになる
             if (collecting.has(target.channel)) continue;
             found += await collect(target, RIDE_TIMEOUT);
         }
@@ -798,7 +798,7 @@ async function settled(): Promise<boolean> {
 /**
  * 各局のロゴの書き込み時刻 (無ければ 0)。取得を始める前に控えておく。
  *
- * **拾えた数は「開いた中継で減った数」では数えない。** 1つのTSに他の中継の局の
+ * **取得できた数は「開いた中継で減った数」では数えない。** 1つのTSに他の中継の局の
  * ロゴが乗ってくることがあり (衛星は1つの中継に全局ぶん。偽の放送 (`tests/fake`) は
  * 地上波も各中継に全局ぶん流す)、開いた中継の局だけを数えていた頃は、画面の「14 / 14 局」の下に
  * 「12 局のロゴを取得しました」と出ていた。共有 (`ride`) が同じ間に取得したものも

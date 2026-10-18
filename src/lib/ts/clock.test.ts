@@ -76,7 +76,7 @@ describe('PCR と受け取った時刻を組にする', () => {
 
     /**
      * **一周したら組み直す。** 足し込む作りにすると、選局直後の飛びまで
-     * 拾って時刻が何時間もずれる
+     * 取り込んで時刻が何時間もずれる
      */
     test('PCR が巻き戻ったら組み直す', () => {
         const clock = new BroadcastClock();
@@ -85,7 +85,7 @@ describe('PCR と受け取った時刻を組にする', () => {
         expect(clock.anchor).toEqual({ pcr: 10, unixMs: at + 100 });
     });
 
-    /** PMT が言う PCR の ES だけを見る。ほかの ES の PCR は拾わない */
+    /** PMT が言う PCR の ES だけを見る。ほかの ES の PCR は使わない */
     test('PCR を運ぶ ES だけを見る', () => {
         const clock = new BroadcastClock();
         tune(clock, 1000, at);
@@ -95,7 +95,7 @@ describe('PCR と受け取った時刻を組にする', () => {
 });
 
 describe('ffmpeg の start: を読む', () => {
-    test('入口の見出しから拾う', () => {
+    test('入口の見出しから読み取る', () => {
         expect(parseStart('  Duration: N/A, start: 72575.147089, bitrate: N/A')).toBeCloseTo(72575.147089, 6);
         expect(parseStart('  Duration: N/A, start: -0.100000, bitrate: N/A')).toBeCloseTo(-0.1, 6);
     });

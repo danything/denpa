@@ -146,7 +146,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 選局は標準入力に_Hz_で頼む()
+    public async Task 選局は標準入力に_Hz_でリクエストする()
     {
         // 地上波の表は Hz のまま渡す (27ch は 557.142857 MHz)
         await Assert.That(SianoTuner.TuneCommand(ChannelTable.Parse("T27")!)).IsEqualTo("tune 557142857");

@@ -45,7 +45,7 @@ export const GET: RequestHandler = async ({ url }) => {
         const why = refusalMessage(failure, '取得できませんでした');
         // **何に繋ごうとして断ったかを残す。** 切り分けのときにここがいちばん効く
         console.warn(`[bml] 中継を断りました: ${target} (${why})`);
-        // 断りは 502 (相手ではなく、こちらが取りに行けなかった)
+        // 断りは 502 (相手ではなく、こちらが取得できなかった)
         error(502, why);
     }
 };

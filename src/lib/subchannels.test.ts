@@ -147,7 +147,7 @@ describe('本チャンネルとサブチャンネル', () => {
         ]);
     });
 
-    test('CS と SKY は同じ TS でも束ねない (1つの TS に別々の会社の局が乗る)', () => {
+    test('CS と SKY は同じ TS でも束ねない (1つの TS に別々の会社の局が入る)', () => {
         const a = station(20, 296, 'CS2', 'CS');
         const b = station(21, 298, 'CS2', 'CS');
         const c = station(22, 800, 'SKY1', 'SKY');

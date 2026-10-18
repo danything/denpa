@@ -279,7 +279,7 @@ public class CcidTests
     [Test]
     // Linux の置き場の形式 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
     [ExcludeOn(OS.Windows)]
-    public async Task sysfs_から_CCID_のインターフェースだけ拾う()
+    public async Task sysfs_から_CCID_のインターフェースだけ探す()
     {
         var root = Path.Combine(Path.GetTempPath(), $"denpa-ccid-{Guid.NewGuid():N}");
         void Write(string dir, string name, string value)
@@ -297,7 +297,7 @@ public class CcidTests
             Write("4-11", "product", "USB SmartCard Reader");
             Write("4-11:1.0", "bInterfaceClass", "0b");
             Write("4-11:1.0", "bInterfaceNumber", "00");
-            // HID の機材は拾わない
+            // HID の機材は対象にしない
             Write("1-2", "busnum", "1");
             Write("1-2", "devnum", "2");
             Write("1-2", "idVendor", "046d");

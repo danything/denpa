@@ -75,7 +75,7 @@ test.describe('録画をその場で流す', () => {
 
         /*
          * 頭の塊は、リクエストした位置の 1 秒手前 (キーフレームを含めるため) の映像から。偽の放送の映像は
-         * 毎コマが鍵フレーム (I フレームだけ) なので、そこから 1 コマ以内
+         * 毎コマがキーフレーム (I フレームだけ) なので、そこから 1 コマ以内
          */
         for (const from of [0, 3]) {
             const res = await request.get(`/api/recordings/${id}/stream?codec=h264&from=${from}`);

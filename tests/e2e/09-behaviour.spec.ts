@@ -78,9 +78,9 @@ test.describe('操作したときの反応', () => {
 
         const grid = page.getByTestId('guide-grid');
         /*
-         * **`style` の字面では拾わない。** 表は後から流れてきて画面側で組むので
+         * **`style` の字面では探さない。** 表は後から流れてきて画面側で組むので
          * (`guide/+page.server.ts`)、`grid-column` と `grid-row` はブラウザが
-         * `grid-area` にまとめ直す。SSR の頃の字面を当てにすると1つも拾えない
+         * `grid-area` にまとめ直す。SSR の頃の字面を当てにすると1つも見つからない
          */
         const hours = grid.locator('div.hour > span.hour-label');
         const frame = (await grid.boundingBox())!;
@@ -128,7 +128,7 @@ test.describe('操作したときの反応', () => {
      * daisyUI の既定は外枠が `inset: 0`、中身が `max-height: 100vh` で、どちらも
      * **アドレスバーが引っ込んだときの高さ**を指す。スマホでバーが出ていると
      * 中身が画面より高くなり、外枠の `overflow: clip` に上下とも切り落とされて
-     * **題名も閉じるボタンも見えなくなる** (実機の Android Chrome)。
+     * **タイトルも閉じるボタンも見えなくなる** (実機の Android Chrome)。
      *
      * 直したのは `dvh` (いま見えている高さ) と、上下の余白。ここで確かめられるのは
      * **余白のほう** — Playwright には引っ込むバーが無いので `dvh` と `vh` は同じ値
@@ -158,7 +158,7 @@ test.describe('操作したときの反応', () => {
 
         expect(box.y, '上が画面に貼り付いている (バーが出ると切れる)').toBeGreaterThanOrEqual(8);
         expect(box.y + box.height, '下が画面からはみ出している').toBeLessThanOrEqual(view.height - 8);
-        // 題名は箱の中にある。中身が長くても、頭から読める
+        // タイトルは箱の中にある。中身が長くても、頭から読める
         const title = (await detail.locator('h3').boundingBox())!;
         expect(title.y).toBeGreaterThanOrEqual(box.y);
     });
@@ -195,7 +195,7 @@ test.describe('操作したときの反応', () => {
         // ルールを作ると、条件に合う番組の予約がその場で立つ
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
-        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
         await page.getByTestId('rule-dedupe').uncheck();
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(1);

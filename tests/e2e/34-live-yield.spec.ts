@@ -96,7 +96,7 @@ test.describe('ライブが録画にチューナーを取り上げられたと�
 
         await recordNow(request, watched);
         try {
-            // 録画が同じチューナーに乗る。ライブの利用者も残っている
+            // 録画が同じチューナーを共有する。ライブの利用者も残っている
             await expect
                 .poll(async () => (await grUsers(stack)).some((use) => use.startsWith('rec ')), {
                     timeout: 30_000,

@@ -39,14 +39,14 @@ describe('Vsync', () => {
 });
 
 describe('SmoothClock', () => {
-    test('小さなずれは少しずつ寄せ、大きく跳べば合わせ直す', () => {
+    test('小さなずれは少しずつ寄せ、大きく飛べば合わせ直す', () => {
         const clock = new SmoothClock();
         clock.set(90_000, 1000);
         expect(clock.at(1010)).toBe(90_900);
         // 2ms ぶん (180) 先を言ってきた。1割だけ寄せる
         clock.set(90_000 + 1800 + 180, 1020);
         expect(clock.at(1020)).toBeCloseTo(90_000 + 1800 + 18, 6);
-        // 1秒跳んだ (飛んだ・貯め直した)
+        // 1秒飛んだ (シークした・貯め直した)
         clock.set(500_000, 1040);
         expect(clock.at(1040)).toBe(500_000);
         clock.set(null, 1060);

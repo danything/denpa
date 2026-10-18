@@ -7,7 +7,7 @@ import { compile, coveringRule, globPatterns, matches, prefillFrom } from './rul
  * ルールの判定。DBには触らない (matches は純粋関数にしてある)。
  *
  * 見るのは主に「キーワードをどこに当てるか」。ここを広げすぎると
- * 番宣で名前が出ただけの番組まで録れてしまい、狭すぎると出演者で拾えない。
+ * 番宣で名前が出ただけの番組まで録れてしまい、狭すぎると出演者で当たらない。
  */
 
 function rule(fields: Partial<Rule>): Rule {
@@ -72,7 +72,7 @@ describe('キーワードを当てる範囲', () => {
         expect(matches(rule({ ...r, keyword: '山田太郎' }), target)).toBe(false);
     });
 
-    test('詳細まで広げると出演者で拾える', () => {
+    test('詳細まで広げると出演者で当たる', () => {
         const r = rule({ keyword: '山田太郎', search_fields: 'name,description,extended' });
         expect(matches(r, target)).toBe(true);
     });
@@ -200,7 +200,7 @@ describe('録画からルールを作る', () => {
         });
     });
 
-    test('鍵括弧の作品名に編が続く題名は、作品名だけをキーワードにする', () => {
+    test('鍵括弧の作品名に編が続くタイトルは、作品名だけをキーワードにする', () => {
         expect(
             prefillFrom({ ...recording, name: '[新]「東京リベンジャーズ」三天戦争編 第51話【アニメイズム】' })
                 ?.keyword,
@@ -244,7 +244,7 @@ describe('録画からルールを作る', () => {
         expect(coveringRule([off], recording)?.id).toBe(1);
     });
 
-    test('録れた回の題名にしか当たらないルール ([新]) は、シリーズを録っているとは言わない', () => {
+    test('録れた回のタイトルにしか当たらないルール ([新]) は、シリーズを録っているとは言わない', () => {
         expect(coveringRule([rule({ keyword: '[新]' })], recording)).toBeUndefined();
     });
 
@@ -256,7 +256,7 @@ describe('録画からルールを作る', () => {
     });
 });
 
-/** 番組表・予約の詳細から。番組はシリーズ名を持たないので、題名から切り出す */
+/** 番組表・予約の詳細から。番組はシリーズ名を持たないので、タイトルから切り出す */
 describe('番組からルールを作る', () => {
     const program = {
         name: '[新]テストアニメ #1「はじまり」[字]',
@@ -264,7 +264,7 @@ describe('番組からルールを作る', () => {
         genre_detail: [{ lv1: 7, lv2: 0 }],
     };
 
-    test('キーワードは題名から切り出したシリーズ名、ジャンルは大分類だけ', () => {
+    test('キーワードはタイトルから切り出したシリーズ名、ジャンルは大分類だけ', () => {
         expect(prefillFrom(program)).toEqual({ keyword: 'テストアニメ', genres: ['7'] });
     });
 

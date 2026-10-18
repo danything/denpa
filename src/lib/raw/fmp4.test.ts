@@ -61,7 +61,7 @@ function watcher(follow: boolean) {
     return { video: new Fmp4Video(canvas, host, follow), seen };
 }
 
-/** 2秒ぶんを繰り返し流す (作り置きの時刻のまま。鍵のコマから入り直すので、圧縮の待ちは積み増していく) */
+/** 2秒ぶんを繰り返し流す (作り置きの時刻のまま。キーフレームから入り直すので、圧縮の待ちは積み増していく) */
 function feedRounds(video: Fmp4Video, rounds: number): void {
     for (let i = 0; i < rounds; i++) for (const data of media) video.feed(data);
 }
@@ -89,7 +89,7 @@ describe('Fmp4Video (追っかけで抱えきれないとき)', () => {
         video.close();
     });
 
-    test('追っかけでなければ溢れを言わない (いちばん新しい鍵から持ち直す)', () => {
+    test('追っかけでなければ溢れを言わない (いちばん新しいキーフレームから持ち直す)', () => {
         const { video, seen } = watcher(false);
         video.feed(init);
         feedRounds(video, 50);

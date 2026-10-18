@@ -589,7 +589,7 @@ test.describe('スマホの縦で観る', () => {
             const buttons = [...side, ...bottom].filter((el) => el.classList.contains('ov-btn'));
             const stage = rect(document.querySelector('[data-testid="watch-stage"]') as Element);
             return {
-                右の列は帯より上: sideBottom <= barTop,
+                右の列は操作バーより上: sideBottom <= barTop,
                 いちばん小さい: Math.min(...buttons.map((el) => Math.min(rect(el).width, rect(el).height))),
                 枠からはみ出す: buttons.some(
                     (el) => rect(el).left < stage.left || rect(el).right > stage.right,
@@ -598,7 +598,7 @@ test.describe('スマホの縦で観る', () => {
                 枠: { left: Math.round(stage.left), width: Math.round(stage.width) },
             };
         });
-        expect(shape.右の列は帯より上).toBe(true);
+        expect(shape.右の列は操作バーより上).toBe(true);
         expect(shape.いちばん小さい).toBeGreaterThanOrEqual(40);
         expect(shape.枠からはみ出す).toBe(false);
         expect(shape.横に動く).toBe(false);

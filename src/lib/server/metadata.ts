@@ -31,7 +31,7 @@ function sidecarBase(videoPath: string): string {
     return videoPath.slice(0, videoPath.length - extname(videoPath).length);
 }
 
-/** 付き添いの接尾辞。片付けと拾い上げ (files.ts の孤児探し) はこの一覧で見る。増やすときはここだけ */
+/** 付き添いの接尾辞。片付けと孤児探し (files.ts) はこの一覧で見る。増やすときはここだけ */
 export const SIDECAR_SUFFIXES = ['-poster.jpg', '.bml.jsonl'] as const;
 
 /**

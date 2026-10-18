@@ -79,7 +79,7 @@ export interface Ait {
 }
 
 /**
- * PMT から「AIT が流れている PID」を拾う。
+ * PMT から「AIT が流れている PID」を読み取る。
  *
  * **記述子が付いている ES を見るだけ。** `stream_type` では決められません —
  * AIT は DSM-CC セクション (0x0D) で運ばれ、データ放送のカルーセルと同じ型を
@@ -128,7 +128,7 @@ function applicationName(body: Uint8Array): string {
 }
 
 /**
- * AIT のセクションを1つ読む。**壊れていたら `null`** (放送は途中から拾うので、
+ * AIT のセクションを1つ読む。**壊れていたら `null`** (放送は途中から読むので、
  * 読めないものが来るのは普通のこと)
  */
 export function parseAit(section: Uint8Array): Ait | null {
@@ -206,7 +206,7 @@ export class AitReader {
             for (const section of this.pat.feed(packet)) {
                 const next = parsePat(section).get(this.serviceId);
                 if (next === undefined || next === this.pmtPid) continue;
-                // 局が変わった。PMT も AIT も拾い直す
+                // 局が変わった。PMT も AIT も読み直す
                 this.pmtPid = next;
                 this.pmt = new SectionAssembler(next);
                 this.aits = new Map();

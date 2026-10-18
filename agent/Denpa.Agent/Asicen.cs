@@ -110,7 +110,7 @@ public static class AsicenUserland
     public sealed record Enclosure(string Id, string Model, Function Primary, Function Sibling, IReadOnlyList<Px4Receiver> Receivers);
 
     /// <summary>
-    /// sysfs から ASICEN の USB 機能を拾う。**上流の asicend が受け付ける USB ID だけ。**
+    /// sysfs から ASICEN の USB 機能を探す。**上流の asicend が受け付ける USB ID だけ。**
     /// PX-W3U3 (<c>0b06:0005</c>) と、ファームウェア待ち (<c>1738:5211</c> / <c>1738:5216</c>)。
     /// 読めないデバイスは黙って飛ばす (抜けかけ・権限)
     /// </summary>

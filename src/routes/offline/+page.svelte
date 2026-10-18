@@ -42,7 +42,7 @@
         };
     });
 
-    // 控えが変わったら映し直す。SW の「保存できた」も startOffline が拾って revision に出る
+    // 控えが変わったら映し直す。SW の「保存できた」も startOffline が受け取って revision に出る
     $effect(() => {
         offline.revision;
         void load();

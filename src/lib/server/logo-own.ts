@@ -24,7 +24,7 @@ import { config } from './config';
 import { run } from './stream';
 
 /**
- * **局ロゴの判定。** どのコマにロゴが出ているかを拾う。
+ * **局ロゴの判定。** どのコマにロゴが出ているかを調べる。
  *
  * 覚え方と当て方は [logo-detect.ts](../ts/logo-detect.ts)。ここはコマを抜いて渡すところと、
  * 覚えたものの置き場です。

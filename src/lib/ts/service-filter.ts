@@ -42,7 +42,7 @@ const PID_NULL = 0x1fff;
  * 局に関係なく残す PID。**どれも数十バイト/秒**で、落として得るものが無い。
  *
  * CDT (ロゴ) はここに入れない。録画に要らないうえ、衛星では数百KBのカルーセルが
- * 流れてくる。ロゴを拾うのは録画の外でやる (logo.ts)
+ * 流れてくる。ロゴを取得するのは録画の外でやる (logo.ts)
  */
 const KEEP = new Set([
     0x0001, // CAT
@@ -284,7 +284,7 @@ function hasCopyNever(body: Uint8Array): boolean {
     return false;
 }
 
-/** CA_descriptor から ECM の PID を拾う。掛かったまま録れたものを後から復号するのに要る */
+/** CA_descriptor から ECM の PID を読み取る。掛かったまま録れたものを後から復号するのに要る */
 function collectCa(body: Uint8Array, into: Set<number>): void {
     let at = 0;
     while (at + 2 <= body.length) {

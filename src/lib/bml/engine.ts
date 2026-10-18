@@ -272,7 +272,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     private drawDeferred = false;
     /** 計っている仕事の入れ子 (外側だけ数える) */
     private depth = 0;
-    /** 取りに行って「無い」と決まった画像。モジュールが届き直すまで取りに行かない */
+    /** 取得して「無い」と決まった画像。モジュールが届き直すまで取得しない */
     private readonly missingImages = new Set<string>();
     private receiver: ReceiverInfo = { zipcode: '', prefecture: 255 };
     /** 扱えない名前だと知らせたもの (同じものを何度も知らせない) */

@@ -4,7 +4,7 @@ import { allowed, isPublicAddress, Refused } from './bml-network';
 /*
  * **危ないのは繋ぎ先ではなく、繋ぐ範囲。**
  *
- * データ放送の双方向は、放送局のサーバへ取りに行く API。局ごとのドメイン表は
+ * データ放送の双方向は、放送局のサーバから取得する API。局ごとのドメイン表は
  * 持たない (必ず古くなる) 代わりに、**denpa のサーバが内側へ繋がないこと**を
  * ここで固定する ([bml-network.ts](bml-network.ts))。
  */
@@ -55,7 +55,7 @@ describe('繋いでよい住所か', () => {
     });
 });
 
-describe('取りに行ってよい URL か', () => {
+describe('取得してよい URL か', () => {
     /*
      * **http も通す。** 放送がそう作られている (NHK は
      * `http://beacon.nhk.jp/` へ投げてくる)。https だけにすると、
