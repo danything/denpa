@@ -432,9 +432,14 @@
         if (listBox === undefined) return;
         const list = listBox;
         placeTimeline(list, target?.key ?? null);
-        // 字 (放送の字は後から届く) とポスターで行の高さが変わると、見出しの下で行が半分に切れる。届いてから合わせ直す
+        // 字 (放送の字は後から届く) とポスターで行の高さが変わると、見出しの下で行が半分に切れる。届いてから合わせ直す。
+        // その間に自分で動かしていたら触らない (動かした所を奪わない)
+        const where = () => (getComputedStyle(list).overflowY === 'auto' ? list.scrollTop : window.scrollY);
+        const before = where();
         await document.fonts.ready;
-        requestAnimationFrame(() => alignTop(list));
+        requestAnimationFrame(() => {
+            if (Math.abs(where() - before) < 1) alignTop(list);
+        });
     }
 
     /**
@@ -443,7 +448,13 @@
      * 絞り込みは画面の中だけで替える (URL も読み込みも動かさない)。一覧の枠は位置合わせを自分でする
      * (`overflow-anchor: none`) ので、何もしないと「すべて」に戻したとき頭まで跳んでいた
      */
-    async function setFilter(next: Filter): Promise<void> {
+    let filtering: Promise<void> = Promise.resolve();
+    /** 続けて押されたら順に替える (前の位置合わせが済んでから、次の「見ていた行」を覚える) */
+    function setFilter(next: Filter): Promise<void> {
+        filtering = filtering.then(() => applyFilter(next));
+        return filtering;
+    }
+    async function applyFilter(next: Filter): Promise<void> {
         if (next === filter) return;
         const anchor = listBox === undefined ? null : topRow(listBox);
         filter = next;
