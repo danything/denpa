@@ -140,6 +140,8 @@
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
  * - `--dp-shadow` … カードの影 (ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
+ * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)。
+ *   箱は縁と影 (`--dp-shadow-pop`) で浮かせる
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
@@ -156,6 +158,7 @@
     --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
     --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
     --dp-shadow-pop: 0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
+    --dp-backdrop: rgb(24 28 37 / 0.16);
     --pico-form-element-background-color: #fff;
     --pico-form-element-border-color: var(--dp-line-strong);
     --pico-table-border-color: var(--dp-line);
@@ -201,6 +204,7 @@
     --dp-primary-text: var(--pico-primary);
     --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
+    --dp-backdrop: rgb(0 0 0 / 0.45);
     --pico-form-element-background-color: var(--dp-bg);
     --pico-form-element-active-background-color: var(--dp-surface);
     --pico-form-element-selected-background-color: var(--dp-line);
@@ -1145,6 +1149,53 @@ button[aria-busy="true"]::after {
         opacity: 0;
         transform: scale(0.96);
     }
+}
+
+/*
+ * ---- 浮かぶ箱 (ダイアログ・番組の詳細) ----
+ * **見た目は 1 つ。** `<dialog>` の中の `<article class="modal-box">` と、番組の詳細 (`ProgramDetail.svelte`) が
+ * 同じクラスを使う。Pico の card (`article`) の区切り (本文の下の線・灰色の footer) は使わず、
+ * 押すものは右下に並べるだけ (`.modal-actions`。閉じる・取消は `secondary`、主は塗り)。
+ * 後ろの幕はぼかさない (`--dp-backdrop`)。Pico の dialog は全面の幕そのものなので、その地を替える
+ */
+dialog {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: var(--dp-backdrop);
+}
+.modal-box {
+    position: relative;
+    box-sizing: border-box;
+    width: calc(100% - 2rem);
+    max-width: 42rem;
+    max-height: calc(100% - 2rem);
+    margin: 0;
+    padding: var(--dp-space-5);
+    overflow: auto;
+    border: 1px solid var(--dp-line);
+    border-radius: var(--dp-radius-lg);
+    background: var(--dp-surface);
+    box-shadow: var(--dp-shadow-pop);
+}
+/* 開いたときは箱にフォーカスを置く (`DriveNotice`)。箱そのものに枠は出さない */
+.modal-box:focus {
+    outline: none;
+}
+.modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--dp-space-2);
+    margin: var(--dp-space-5) 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+}
+.modal-actions button,
+.modal-actions [role="button"] {
+    margin: 0;
 }
 
 /*
