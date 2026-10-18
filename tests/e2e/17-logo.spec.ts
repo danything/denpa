@@ -103,6 +103,18 @@ test.describe('局ロゴ', () => {
         await expect(row).toHaveAttribute('data-logo', 'have');
         await expect(row.locator('img')).toBeVisible();
 
+        // 押すと大きく見られる。画素をぼかさずに整数倍で、× で閉じる
+        await row.getByRole('button', { name: `${MX.name} のロゴを大きく見る` }).click();
+        const zoom = page.getByTestId('logo-zoom');
+        await expect(zoom).toBeVisible();
+        await expect(zoom).toContainText(MX.name);
+        await expect(zoom).toContainText('局ロゴ');
+        const large = zoom.getByTestId('logo-zoom-image');
+        await expect.poll(() => large.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(64);
+        await expect.poll(async () => (await large.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(64 * 4);
+        await zoom.getByTestId('logo-zoom-close').click();
+        await expect(zoom).toBeHidden();
+
         /*
          * 取得するものが無くなったら**ボタンも消える**。押しても「もう全部持って
          * います」と断るだけのボタンを出しておく意味がない。
@@ -236,16 +248,44 @@ test.describe('CM検出のロゴ', () => {
         await expect(page.getByTestId('status-cm-logos')).toContainText('局');
         // 局ごとの表の、その局の行に出る。開け閉めは無い
         const station = page.locator(`[data-testid="logo-row"][data-service-id="${BS11.id}"]`);
-        const shown = station.getByRole('img', { name: 'CM検出のロゴ' });
-        await expect(shown).toBeVisible();
+        const thumb = station.getByTestId('logo-zoom-cm');
+        await expect(thumb).toBeVisible();
         // 画像として読めていること (壊れた PNG だと幅が 0 になる)
-        await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(40);
-        // 覚えていない局には何も出さない
-        await expect(
-            page.locator(`[data-testid="logo-row"][data-service-id="${MX.id}"]`).getByTestId('learned-logo'),
-        ).toHaveCount(0);
+        await expect
+            .poll(() => thumb.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth))
+            .toBe(40);
+        // 列の見出しが「CMロゴ」なので、セルの中では名乗らない
+        await expect(station.getByTestId('learned-logo')).not.toContainText('CM');
+        // 覚えていない局には何も出さない (「まだ」とも書かない)
+        const other = page.locator(`[data-testid="logo-row"][data-service-id="${MX.id}"]`);
+        await expect(other.getByTestId('learned-logo')).toHaveCount(0);
+        await expect(other.locator('td').last()).toHaveText('');
 
-        await station.getByRole('button', { name: '覚え直す' }).click();
+        /*
+         * 押すと大きく見られる。白い縁だけの画像なので、暗い地に画素をぼかさず整数倍で。
+         * Esc でも、幕を押しても閉じる
+         */
+        const zoom = page.getByTestId('logo-zoom');
+        await station.getByRole('button', { name: `${BS11.name} のCMロゴを大きく見る` }).click();
+        await expect(zoom).toBeVisible();
+        await expect(zoom).toContainText(BS11.name);
+        await expect(zoom).toContainText('CMロゴ');
+        await expect(zoom.getByTestId('logo-zoom-learned')).toContainText('に覚えました');
+        const large = zoom.getByRole('img', { name: `${BS11.name} のCM検出のロゴ` });
+        await expect(large).toHaveCSS('image-rendering', 'pixelated');
+        await expect.poll(async () => (await large.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(40 * 8);
+        await page.keyboard.press('Escape');
+        await expect(zoom).toBeHidden();
+
+        await thumb.click();
+        await expect(zoom).toBeVisible();
+        await page.mouse.click(5, 5);
+        await expect(zoom).toBeHidden();
+
+        // 窓の中からも「覚え直す」。消えたら窓も閉じる
+        await thumb.click();
+        await zoom.getByRole('button', { name: '覚え直す' }).click();
+        await expect(zoom).toBeHidden();
 
         const done = page.getByTestId('tuner-done');
         await expect(done).toContainText('覚えたロゴを消しました');
