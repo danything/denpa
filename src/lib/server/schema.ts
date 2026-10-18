@@ -379,7 +379,7 @@ export const recordings = sqliteTable(
         fps: integer('fps'),
         /** 消した時刻 (denpa から、または外から)。行は履歴として残す */
         deleted_at: integer('deleted_at'),
-        /** 失敗をユーザーが確認した時刻。以降ダッシュボードの通知に出さない */
+        /** 失敗をユーザーが確認した時刻。以降ホームの通知に出さない */
         acknowledged_at: integer('acknowledged_at'),
         created_at: integer('created_at').notNull(),
         updated_at: integer('updated_at').notNull(),

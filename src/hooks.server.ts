@@ -35,7 +35,7 @@ export async function handle({ event, resolve }) {
     }
 
     /*
-     * **何も聞かずに通す相手。** 住所が `TRUSTED_NETWORKS` に当たったときだけ。
+     * **何も聞かずに通す相手。** アドレスが `TRUSTED_NETWORKS` に当たったときだけ。
      * LAN のプレイヤーに資格情報を入れずに使わせるためで、ここに当たると
      * OIDC も掛からない
      */

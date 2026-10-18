@@ -9,7 +9,7 @@
     import { morph } from '#lib/motion.svelte.js';
     import { reload } from '#lib/reload.svelte.js';
     import { cellsOf, columnsOf, mainOf, SUBCHANNELS_COOKIE, splitOf } from '#lib/subchannels.js';
-    import type { ProgramDetail as Facts } from '#lib/types.js';
+    import { CHANNEL_TYPES, type ProgramDetail as Facts } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
     import Layers from '~icons/lucide/layers';
@@ -534,7 +534,7 @@
         data-testid="guide-toolbar"
     >
         <div role="group" class="types segmented" data-testid="type-tabs">
-            {#each ['GR', 'BS', 'CS'] as type (type)}
+            {#each CHANNEL_TYPES as type (type)}
                 <a
                     class="button small {data.type === type ? '' : 'secondary outline'}"
                     aria-current={data.type === type ? 'page' : undefined}
@@ -584,7 +584,6 @@
                 title={subchannels ? 'サブチャンネルを表示中 (押すと隠します)' : 'サブチャンネルも表示'}
                 aria-label="サブチャンネル表示"
                 onclick={() => setSubchannels(!subchannels)}
-                data-testid="subchannel-toggle"
             >
                 <!-- 狭い画面では印だけ (字のままだと1行に収まらない)。名前は aria-label で -->
                 <span class="subch-icon" aria-hidden="true"><Icon icon={Layers} size="size-4" /></span>
@@ -701,7 +700,7 @@
                         />
                         <!-- テレビに出ている番号。ラベルの形はライブの一覧と同じ (format.ts の channelNumber) -->
                         {#if channelNumber(service) !== null}
-                            <span class="tag ch-number" data-testid="guide-number">{channelNumber(service)}</span>
+                            <span class="tag ch-number">{channelNumber(service)}</span>
                         {/if}
                         <span class="truncate broadcast">{service.name}</span>
                     </div>
@@ -1092,7 +1091,7 @@
             transparent 100%
         );
         transform: translateX(-100%);
-        animation: skeleton-sweep 1.4s ease-in-out infinite;
+        animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
     }
     @keyframes skeleton-sweep {
         to {
@@ -1183,7 +1182,7 @@
         z-index: 20;
         display: block;
         transform: translateY(-50%);
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-error);
         color: #fff;
         text-align: center;
@@ -1232,7 +1231,7 @@
         padding: 0.125rem 0.25rem;
         border: 0;
         border-inline-start: 4px solid var(--tint);
-        border-radius: 0.25rem;
+        border-radius: var(--dp-radius-sm);
         background: var(--dp-subtle);
         color: inherit;
         text-align: left;

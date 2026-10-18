@@ -20,6 +20,7 @@ import {
 } from '#lib/server/schema.js';
 import { mainOf, SUBCHANNELS_COOKIE, storedSubchannels } from '#lib/subchannels.js';
 import type { ChannelType, Program, Recording, ReservationState, Service } from '#lib/types.js';
+import { CHANNEL_TYPES } from '#lib/types.js';
 
 const HOUR = 60 * 60 * 1000;
 /**
@@ -28,7 +29,6 @@ const HOUR = 60 * 60 * 1000;
  */
 const DAY_START_HOUR = 4;
 const WINDOW_HOURS = 24;
-const TYPES: ChannelType[] = ['GR', 'BS', 'CS'];
 
 /** その時刻が属する放送日の 4:00 (ローカル時刻) */
 function broadcastDayStart(at: number): number {
@@ -164,7 +164,7 @@ function readGrid(type: ChannelType, start: number, end: number) {
  * (言葉で探すのはサイト全体の検索 `/search` に寄せてある)
  */
 export function load({ url, cookies }) {
-    const type = (TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
+    const type = (CHANNEL_TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
 
     // 既定は今日の放送日。めくるときだけ start が付く
     const requested = Number(url.searchParams.get('start'));
