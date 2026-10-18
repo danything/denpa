@@ -339,6 +339,11 @@
         return resolve(`guide?${query}`);
     }
 
+    /** 表の日付 (`10/18(日)`)。狭い画面では月を隠す (`.month`) */
+    const shownDate = $derived(date(data.start));
+    const month = $derived(shownDate.slice(0, shownDate.indexOf('/') + 1));
+    const day = $derived(shownDate.slice(month.length));
+
     const prevHref = $derived(href({ start: String(data.start - data.hours * HOUR) }));
     const nextHref = $derived(href({ start: String(data.start + data.hours * HOUR) }));
 
@@ -429,21 +434,121 @@
         keyword?.focus();
     }
 
+    /**
+     * **表を下へ送っている間は、操作の1行を上へ畳む** (携帯のブラウザのアドレスバーと同じ)。
+     * 上へ戻すと出てくる。畳んだぶん (1行 ≒ 50px) は時間に回る。
+     *
+     * - 見るのは**表の縦のスクロールだけ**。横に流しただけでは動かさない。
+     * - **人が動かしたときだけ**数える (ホイール・指・ドラッグ・キー)。開いたときの「いま」への
+     *   位置合わせや、マスを押す前のブラウザのスクロールで畳むと、押す場所がずれる。
+     * - 同じ向きに 48px 進んだら畳み、24px 戻したら出す。行ったり来たりでちらつかない。
+     * - 動かすのは `translate` だけ。高さは「畳むときは先に伸ばし、出すときは出し終えてから縮める」
+     *   ので、途中で表の下に隙間が見えない。動かさない設定ではその場で畳んで出す。
+     * - 操作にフォーカスが入ったら出す (キーボードで届く)。
+     */
+    let barHeight = $state(0);
+    let barHidden = $state(false);
+    /** 畳んだぶん表を伸ばしているか。出すときは動き終えてから戻す */
+    let barTall = $state(false);
+    let toolbar: HTMLElement | null = $state(null);
+    const HIDE_AFTER = 48;
+    const SHOW_AFTER = 24;
+    /** 人が動かしている間 (`performance.now()` の期限)。指を離したあとの惰性もこの延長で拾う */
+    let userUntil = 0;
+    let lastTop = 0;
+    let travel = 0;
+    let tallTimer = 0;
+
+    function byUser(): void {
+        userUntil = performance.now() + 400;
+    }
+
+    function hideBar(): void {
+        if (toolbar?.contains(document.activeElement)) return;
+        clearTimeout(tallTimer);
+        barTall = true;
+        barHidden = true;
+    }
+
+    function showBar(): void {
+        if (!barHidden) return;
+        barHidden = false;
+        clearTimeout(tallTimer);
+        const page = toolbar?.parentElement;
+        const wait = page ? Number.parseFloat(getComputedStyle(page).transitionDuration) * 1000 : 0;
+        if (wait > 0) tallTimer = window.setTimeout(() => (barTall = false), wait);
+        else barTall = false;
+    }
+
+    function onGridScroll(event: Event): void {
+        const top = (event.currentTarget as HTMLElement).scrollTop;
+        const delta = top - lastTop;
+        lastTop = top;
+        if (delta === 0) return;
+        if (performance.now() > userUntil) {
+            travel = 0;
+            return;
+        }
+        byUser();
+        travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
+        if (top <= 0 || travel <= -SHOW_AFTER) showBar();
+        else if (travel >= HIDE_AFTER && top > barHeight) hideBar();
+    }
+
+    /* 表は放送波や日を選び直すたびに作り直すので、そのたびに付け直す */
+    $effect(() => {
+        const box = grid;
+        if (box === null) return;
+        lastTop = box.scrollTop;
+        const drag = (event: PointerEvent) => {
+            if (event.buttons !== 0) byUser();
+        };
+        const passive = { passive: true };
+        box.addEventListener('scroll', onGridScroll, passive);
+        box.addEventListener('wheel', byUser, passive);
+        box.addEventListener('touchmove', byUser, passive);
+        box.addEventListener('pointermove', drag, passive);
+        box.addEventListener('keydown', byUser);
+        return () => {
+            box.removeEventListener('scroll', onGridScroll);
+            box.removeEventListener('wheel', byUser);
+            box.removeEventListener('touchmove', byUser);
+            box.removeEventListener('pointermove', drag);
+            box.removeEventListener('keydown', byUser);
+        };
+    });
+
+    $effect(() => () => clearTimeout(tallTimer));
+
     /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
     const CANCELABLE = ['scheduled', 'conflict', 'skipped', 'recording'];
 </script>
 
 <!--
-    **表は画面の残りをぜんぶ使う** (`+layout.svelte` の `FILLED`)。
-    畳まれる幅ではページごとスクロールさせるので、そちらは 75% のまま。
+    **表は画面の残りをぜんぶ使う。** 枠 (カード) で囲まず、本文の余白も打ち消して
+    端から端まで表にする (`.page` の負のマージン)。1画面に入る局と時間を増やすため。
+    広い幅の高さは `+layout.svelte` の `FILLED` から `%` で降ろす。
 
-    **ここだけ `%` で降ろせない** (畳まれる幅では途中の入れ物に高さが決まっておらず、
-    `%` が解決しない)。そこは `svh` で採る — `svh` だけが見えている範囲を超えない
+    **狭い幅だけ `%` で降ろせない** (途中の入れ物に高さが決まっておらず、`%` が解決しない)。
+    そこは `svh` で採る — `svh` だけが見えている範囲を超えない
     (`vh` と `dvh` は実機の PWA でアドレスバーの高さぶん超えた)。天井なので小さく出る側に倒す
 -->
-<div class="page">
-    <!-- **どこを見るかは1行にまとめる** (種別・日送り・探す)。縦は表に回す -->
-    <div class="cluster toolbar">
+<div class="page" class:bar-hidden={barHidden} class:bar-tall={barTall} style:--bar="{barHeight}px">
+    <!--
+        **どこを見るかは表の上の細い1行にまとめる** (種別・日送り・探す)。縦は表に回す。
+
+        表の中 (左上の角・局名の行) には入れない。角は時刻の列の幅 (2.5rem) しか無く、
+        入れるならメニューに畳むことになり、種別や日を変えるたびに1回多く押す。
+        局名の行に入れると、操作の幅のぶん局名が隠れる。表の外の1行なら、
+        隠れるものも押す回数も増えない。表を下へ送っている間は畳む (`hideBar`)
+    -->
+    <div
+        class="cluster toolbar"
+        bind:this={toolbar}
+        bind:offsetHeight={barHeight}
+        onfocusin={showBar}
+        data-testid="guide-toolbar"
+    >
         <div role="group" class="types segmented" data-testid="type-tabs">
             {#each ['GR', 'BS', 'CS'] as type (type)}
                 <a
@@ -460,13 +565,25 @@
 
         <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
         <div class="cluster days">
-            <a class="button small secondary outline" href={prevHref} data-testid="prev-day">← 前日</a>
+            <!-- 狭い画面では矢印だけにする。読み上げは名前 (aria-label) で -->
+            <a class="button small secondary outline" href={prevHref} aria-label="前日" data-testid="prev-day">
+                ←<span class="day-word"> 前日</span>
+            </a>
             <span class="small nowrap">
-                <!-- 日本の番組表の慣習で、1日は4時から翌4時まで。狭い画面では日付だけ -->
-                {date(data.start)} <span class="muted hours">(4:00〜翌4:00)</span>
+                <!--
+                    日本の番組表の慣習で、1日は4時から翌4時まで。狭い画面では日と曜日だけ
+                    (前後の日へ送るだけなので、月が無くても迷わない)
+                -->
+                <span class="month">{month}</span>{day}
+                <span class="muted hours">(4:00〜翌4:00)</span>
             </span>
-            <a class="button small secondary outline" href={nextHref} data-testid="next-day">翌日 →</a>
-            <a class="button small secondary outline" href={href({})}>今日</a>
+            <a class="button small secondary outline" href={nextHref} aria-label="翌日" data-testid="next-day">
+                <span class="day-word">翌日 </span>→
+            </a>
+            <!-- 今日を見ているときは出さない (押しても同じ表のまま)。そのぶん狭い画面でも1行に収まる -->
+            {#if nowSlots === null}
+                <a class="button small secondary outline" href={href({})} data-testid="guide-today">今日</a>
+            {/if}
         </div>
 
         <!--
@@ -547,7 +664,7 @@
             分かるし、届いたときに位置が飛ばない
         -->
         <div
-            class="panel skeleton"
+            class="skeleton"
             data-testid="guide-skeleton"
             role="status"
             aria-label="番組表を読み込んでいます"
@@ -880,11 +997,71 @@
 {/if}
 
 <style>
+    /*
+     * **本文の余白 (`--dp-gutter`) を打ち消して、端から端まで使う** (上のコメント)。
+     * 高さも同じぶん足す。広い幅は `FILLED` の `%`、狭い幅は下の `svh`
+     */
+    .page {
+        /* 高さの元 (`--page-h`) と、畳んだ1行のぶん伸ばす量 (`--extra`)。伸ばしたぶんは下のマージンで打ち消す */
+        --page-h: calc(100% + 2 * var(--dp-gutter));
+        --extra: 0px;
+        display: flex;
+        flex-direction: column;
+        margin: calc(-1 * var(--dp-gutter));
+        margin-bottom: calc(-1 * var(--dp-gutter) - var(--extra));
+        height: calc(var(--page-h) + var(--extra));
+        transition: translate var(--dp-duration) var(--dp-ease);
+    }
+    /* 操作の1行を畳む (上の `hideBar`)。広い幅ではナビの裏へ、狭い幅では画面の上へ抜ける */
+    .page.bar-hidden {
+        translate: 0 calc(-1 * var(--bar));
+    }
+    .page.bar-tall {
+        --extra: var(--bar);
+    }
+    /*
+     * 狭い幅は画面の高さから上下の固定のもの (ナビ・下のタブ・ノッチ) を引く。
+     * ページごとスクロールさせず、表だけを動かす (表の中と外の二重のスクロールにしない)
+     */
+    @media (max-width: 767px) {
+        .page {
+            /* ナビは 3.5rem と下の線 1px (`+layout.svelte` の `.navbar`)。下のタブは無いので、下の安全域だけ空ける */
+            --page-h: calc(100svh - 3.5rem - 1px - env(safe-area-inset-bottom));
+        }
+    }
+    @media (max-width: 639.98px) {
+        .page {
+            --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
+        }
+    }
     .toolbar {
-        margin-bottom: 0.75rem;
+        --gap: var(--dp-space-2);
+        flex: none;
+        padding: var(--dp-space-1) var(--dp-space-3);
+        border-bottom: 1px solid var(--dp-line);
     }
     .types {
         width: auto;
+    }
+    /*
+     * 指で押す端末では高さ 40px 以上にする (`docs/writing.md` の一覧の操作と同じ)。
+     * マウスの端末では小さいまま (細い1行に収める)
+     */
+    @media (pointer: coarse) {
+        /* 虫眼鏡は出すかどうかを下の幅の切り替えに任せる (ここで display を書くと広い幅にも出る) */
+        .toolbar :is(a.button, button):not(.search-toggle) {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .toolbar :is(a.button, button),
+        .keyword {
+            min-height: 2.5rem;
+        }
+    }
+    /* 種別を選び直すと、持ち上げた面が横へ滑る (`app.css` の「画面の切り替え」) */
+    .seg-pill {
+        view-transition-name: guide-type;
     }
     .search {
         /* Pico の role=search は横いっぱい・下に余白。ここでは右に寄せて置くだけ */
@@ -902,17 +1079,27 @@
         display: none;
     }
     /*
-     * **狭い画面は2段にまとめる** (上の `searching`)。1段目に種別と虫眼鏡、2段目に
-     * 日送り (前日・日付・翌日・今日を1行)。検索欄は虫眼鏡で開いたときだけ3段目に出る。
-     * 並べ替えは `order` で — DOM の順 (種別 → 日送り → 検索) は読み上げの順なので変えない
+     * **狭い画面も1段にまとめる** (上の `searching`)。種別・日送り (矢印・日付・今日)・虫眼鏡。
+     * 2段に積んでいた頃は、表の上に 80px ほど操作が並んでいた。
+     * 検索欄は虫眼鏡で開いたときだけ2段目に出る。
+     * DOM の順 (種別 → 日送り → 検索) は読み上げの順なので変えない
      */
     @media (max-width: 767px) {
+        .toolbar {
+            --gap: var(--dp-space-1);
+            padding-inline: var(--dp-space-2);
+        }
         .days {
-            order: 1;
-            flex-basis: 100%;
+            --gap: var(--dp-space-1);
             flex-wrap: nowrap;
         }
-        .hours {
+        .types > a.button,
+        .days > a.button {
+            padding-inline: 0.4rem;
+        }
+        .hours,
+        .month,
+        .day-word {
             display: none;
         }
         .search-toggle {
@@ -935,6 +1122,7 @@
         }
     }
     .empty {
+        margin: var(--dp-gutter);
         padding: 1.5rem;
         text-align: center;
     }
@@ -951,8 +1139,9 @@
         position: relative;
         overflow: hidden;
         padding: 0.75rem;
-        /* 表と同じ高さを取っておく。届いた拍子に枠が伸びると画面が跳ねる */
-        height: 75svh;
+        /* 表と同じ場所を取っておく。届いた拍子に高さが変わると画面が跳ねる */
+        flex: 1 1 0%;
+        min-height: 0;
     }
     .skeleton-rows {
         display: flex;
@@ -1003,29 +1192,16 @@
             animation: none;
         }
     }
-    /* 畳まれる幅ではページごとスクロールさせ、表の高さは見えている範囲まで(上のコメント) */
+    /* 表は枠で囲まない。操作の1行の下から画面の端まで (上のコメント) */
     .grid-box {
-        max-height: 75svh;
+        flex: 1 1 0%;
+        min-height: 0;
         overflow: auto;
         cursor: grab;
-        border-radius: var(--dp-radius-lg);
         background: var(--dp-surface);
-        border: 1px solid var(--dp-line);
     }
     .grid-box:active {
         cursor: grabbing;
-    }
-    @media (min-width: 768px) {
-        .page {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-        .grid-box {
-            max-height: none;
-            min-height: 0;
-            flex: 1 1 0%;
-        }
     }
     .rows {
         display: grid;
