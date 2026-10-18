@@ -1078,7 +1078,7 @@
         gap: 0.5rem;
     }
     .normal {
-        font-weight: normal;
+        font-weight: var(--dp-weight);
     }
     .preview-list {
         margin: 0.25rem 0 0;
