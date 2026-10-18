@@ -87,11 +87,13 @@
      * 引っ込むときは頭をゆっくり (`--dp-ease-exit`)。動かさない設定の端末では全部止める
      * (下の prefers-reduced-motion。画面の切り替えは JS でも見る — `#lib/motion.svelte.ts`)
      *
-     * - `--dp-duration` … 画面の切り替え・滑る下線・色・影の移り変わり、メニューやダイアログの閉じ方
-     * - `--dp-duration-slow` … 開くメニューとダイアログ・伸びるバー
+     * - `--dp-duration-fast` … メニューやダイアログの閉じ方
+     * - `--dp-duration` … 画面の切り替え・滑る下線・色・影の移り変わり、メニューやダイアログの開き方
+     * - `--dp-duration-slow` … 伸びるバー・ふわっと出す画像
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
      * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
      */
+    --dp-duration-fast: 100ms;
     --dp-duration: 150ms;
     --dp-duration-slow: 250ms;
     --dp-ease: cubic-bezier(0.2, 0, 0, 1);
@@ -1086,7 +1088,7 @@ button[aria-busy="true"]::after {
 /*
  * 開いているときだけ flex にする。閉じているときはブラウザの `display: none` のまま。
  *
- * **引き金の側から、少し縮んだ透明な姿で開き (`--dp-duration-slow`)、閉じるときは短く (`--dp-duration`) 引っ込む。**
+ * **引き金の側から、少し縮んだ透明な姿で開き (`--dp-duration`)、閉じるときはもっと短く (`--dp-duration-fast`) 引っ込む。**
  * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
  * 知らないブラウザはすぐ消える)。動かさない設定では時間が 0 で、すぐ出てすぐ消える。
  * 動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさ (`offsetHeight`) は変わらない
@@ -1099,10 +1101,10 @@ button[aria-busy="true"]::after {
     transform: scale(0.96);
     transform-origin: top left;
     transition:
-        opacity var(--dp-duration) var(--dp-ease-exit),
-        transform var(--dp-duration) var(--dp-ease-exit),
-        overlay var(--dp-duration) allow-discrete,
-        display var(--dp-duration) allow-discrete;
+        opacity var(--dp-duration-fast) var(--dp-ease-exit),
+        transform var(--dp-duration-fast) var(--dp-ease-exit),
+        overlay var(--dp-duration-fast) allow-discrete,
+        display var(--dp-duration-fast) allow-discrete;
 }
 .menu[data-align="end"] {
     transform-origin: top right;
@@ -1117,7 +1119,7 @@ button[aria-busy="true"]::after {
     display: flex;
     opacity: 1;
     transform: none;
-    transition-duration: var(--dp-duration-slow);
+    transition-duration: var(--dp-duration);
     transition-timing-function: var(--dp-ease);
 }
 @starting-style {
@@ -1133,25 +1135,25 @@ button[aria-busy="true"]::after {
  */
 dialog {
     transition:
-        opacity var(--dp-duration) var(--dp-ease-exit),
-        overlay var(--dp-duration) allow-discrete,
-        display var(--dp-duration) allow-discrete;
+        opacity var(--dp-duration-fast) var(--dp-ease-exit),
+        overlay var(--dp-duration-fast) allow-discrete,
+        display var(--dp-duration-fast) allow-discrete;
 }
 dialog:not([open]) {
     opacity: 0;
 }
 dialog > article {
-    transition: transform var(--dp-duration) var(--dp-ease-exit);
+    transition: transform var(--dp-duration-fast) var(--dp-ease-exit);
 }
 dialog:not([open]) > article {
     transform: scale(0.96);
 }
 dialog[open] {
-    transition-duration: var(--dp-duration-slow);
+    transition-duration: var(--dp-duration);
     transition-timing-function: var(--dp-ease);
 }
 dialog[open] > article {
-    transition-duration: var(--dp-duration-slow);
+    transition-duration: var(--dp-duration);
     transition-timing-function: var(--dp-ease);
 }
 @starting-style {
@@ -1320,6 +1322,7 @@ dialog[open] > article {
  */
 @media (prefers-reduced-motion: reduce) {
     :root {
+        --dp-duration-fast: 0s;
         --dp-duration: 0s;
         --dp-duration-slow: 0s;
     }

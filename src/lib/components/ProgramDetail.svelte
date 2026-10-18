@@ -95,7 +95,7 @@
         background: rgb(0 0 0 / 0.55);
         box-shadow: none;
         cursor: default;
-        transition: opacity var(--dp-duration-slow) var(--dp-ease);
+        transition: opacity var(--dp-duration) var(--dp-ease);
     }
     /*
      * **出るときは、幕は透明から、箱は少し縮んだ姿から** (メニュー・ダイアログと同じ。`app.css`)。
@@ -103,8 +103,8 @@
      */
     .detail-box {
         transition:
-            opacity var(--dp-duration-slow) var(--dp-ease),
-            transform var(--dp-duration-slow) var(--dp-ease);
+            opacity var(--dp-duration) var(--dp-ease),
+            transform var(--dp-duration) var(--dp-ease);
     }
     @starting-style {
         .detail-backdrop {
