@@ -78,6 +78,31 @@
     background-color: var(--sl-color-bg-sidebar);
 }
 
+/*
+ * サイドバーの開いているページは淡い面で (アプリのサイドバーの一覧と同じ)。
+ * Starlight の既定は主の色で塗って白い字で、一覧の中でそこだけが強すぎた
+ */
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:is(:hover, :focus) {
+    background-color: var(--sl-color-gray-6);
+    color: var(--sl-color-white);
+}
+
+/*
+ * 主のボタン (トップの「入れる」) は、アプリの主のボタンと同じく本文の字の色で塗った丸いボタンにする。
+ * 主の色 (azure) はリンクと選んでいるものに残す (src/app.css の「ボタン」)
+ */
+.sl-link-button.primary {
+    border-color: var(--sl-color-gray-1);
+    background-color: var(--sl-color-gray-1);
+    color: var(--sl-color-bg);
+}
+.sl-link-button.primary:hover {
+    border-color: color-mix(in srgb, var(--sl-color-gray-1) 82%, var(--sl-color-bg));
+    background-color: color-mix(in srgb, var(--sl-color-gray-1) 82%, var(--sl-color-bg));
+    color: var(--sl-color-bg);
+}
+
 /* 上の帯は貼り付いたまま、下を流れる本文を少し透かしてぼかす。ぼかせないブラウザでは地の色のまま */
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
     .page > .header {
