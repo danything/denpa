@@ -5,6 +5,7 @@ import {
     ease,
     falloff,
     farthest,
+    frameDelta,
     glowLayout,
     glowPixels,
     luminance,
@@ -12,6 +13,7 @@ import {
     reach,
     region,
     type Situation,
+    STILL,
     storedAmbient,
     strips,
     vivid,
@@ -300,6 +302,12 @@ describe('地に敷く色', () => {
 });
 
 describe('入れ替え', () => {
+    test('写した2枚の違いは色の差の平均で、透明度は見ない', () => {
+        expect(frameDelta([10, 20, 30, 255], [10, 20, 30, 0])).toBe(0);
+        expect(frameDelta([10, 20, 30, 255], [13, 17, 30, 255])).toBe(2);
+        expect(STILL).toBeGreaterThan(0);
+    });
+
     test('入れ替えは始めと終わりがゆっくり', () => {
         expect(ease(0)).toBe(0);
         expect(ease(1)).toBe(1);

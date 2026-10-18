@@ -24,6 +24,27 @@ export const GLANCE = { width: 32, height: 18 } as const;
  */
 export const EVERY = 200;
 
+/**
+ * **写した2枚の違い。** 色 (RGB) の差の平均 (0〜255)。透明度は見ない
+ */
+export function frameDelta(a: ArrayLike<number>, b: ArrayLike<number>): number {
+    let sum = 0;
+    let count = 0;
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+        if (i % 4 === 3) continue;
+        sum += Math.abs(a[i]! - b[i]!);
+        count++;
+    }
+    return count === 0 ? 0 : sum / count;
+}
+
+/**
+ * **これより小さい違いは入れ替えない** (`frameDelta`、0〜255)。止まった場面でも、放送の雑音や字幕の縁で
+ * 写すたびに少しずつ違い、それを 1 秒に 5 回入れ替えるとちらついて見えた。比べる相手は最後に入れ替えた
+ * 1枚なので、ゆっくり変わる色もいずれは追いつく
+ */
+export const STILL = 2;
+
 /** 前の色から次の色へ入れ替える長さ (ms)。写す間隔と同じ */
 export const FADE = 200;
 

@@ -6,6 +6,7 @@
         FADE,
         FADE_STEPS,
         farthest,
+        frameDelta,
         GLANCE,
         type GlowLayout,
         glowLayout,
@@ -14,6 +15,7 @@
         type Rect,
         reach,
         region,
+        STILL,
         strips,
         toneFrame,
         WASH_LUMINANCE,
@@ -92,6 +94,8 @@
     let lit = $state(false);
     /** 写した回数。E2E が「動いている・止まっている」を見る */
     let updates = $state(0);
+    /** 最後に写した1枚と、最後に入れ替えた1枚の違い (`frameDelta`)。E2E が「止まった映像では 0 に近い」を見る */
+    let delta = $state<number | null>(null);
 
     const now = $derived(plan({ on: ambient.on, room, fullscreen, hidden, reduced, playing: ambient.playing, lit }));
     /** 光を出しているか。置き場はこれが変わったときだけ測り直す (写す・止めるの切り替えでは測らない) */
@@ -159,12 +163,15 @@
     /**
      * 写した1枚を次の色にして、`FADE` の長さで前の色から入れ替える (動かさない設定ではすぐ)
      */
-    function show(bitmap: ImageBitmap): void {
+    function show(bitmap: ImageBitmap): boolean {
         const pixels = framePixels(bitmap);
         bitmap.close();
-        if (pixels === null) return;
+        if (pixels === null) return false;
+        // 最後に入れ替えた1枚との違い。小さければ入れ替えない (`STILL`)
+        delta = colors === null ? null : frameDelta(colors, pixels);
+        if (delta !== null && delta < STILL) return false;
         colors = Float32Array.from(pixels);
-        if (layout === null) return;
+        if (layout === null) return true;
         clearInterval(fading);
         coming ??= scratch();
         shown ??= scratch();
@@ -182,7 +189,7 @@
         };
         if (reduced) {
             swap();
-            return;
+            return true;
         }
         let step = 1;
         paint(ease(step / FADE_STEPS));
@@ -193,6 +200,7 @@
                 swap();
             } else paint(ease(step / FADE_STEPS));
         }, FADE_STEP);
+        return true;
     }
 
     $effect(() => {
@@ -402,6 +410,7 @@
     data-off={now === 'off' ? '' : undefined}
     data-plan={now}
     data-updates={updates}
+    data-delta={delta === null ? undefined : delta.toFixed(2)}
     data-testid={testid}
     aria-hidden="true"
 >

@@ -24,11 +24,11 @@ export interface GrabSize {
 }
 
 /**
- * `createImageBitmap` に渡す縮め方。**`medium` で縮める** — `low` は 1920 から 32 へ点で拾う
- * ブラウザがあり、細かい模様のある映像で 1 回ごとに色が揺れる
+ * `createImageBitmap` に渡す縮め方。**`VideoFrame` の無いブラウザで、画面の側で `<video>` を縮めるときだけ使う**
+ * (worker の中は `downscale.ts`)。`high` で縮める — 低いほど 1920 から 32 へ点で拾い、写すたびに色が揺れる
  */
 export function shrink(size: GrabSize): ImageBitmapOptions {
-    return { resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'medium' };
+    return { resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'high' };
 }
 
 /** 画面 → worker */
