@@ -12,6 +12,7 @@
     import type { ProgramDetail as Facts } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import Layers from '~icons/lucide/layers';
     import SearchIcon from '~icons/lucide/search';
 
     let { data, form } = $props();
@@ -603,7 +604,9 @@
                 onclick={() => setSubchannels(!subchannels)}
                 data-testid="subchannel-toggle"
             >
-                サブch
+                <!-- 狭い画面では印だけ (字のままだと1行に収まらない)。名前は aria-label で -->
+                <span class="subch-icon" aria-hidden="true"><Icon icon={Layers} size="size-4" /></span>
+                <span class="subch-word">サブch</span>
             </button>
         {/if}
 
@@ -1085,6 +1088,9 @@
     .search-toggle {
         display: none;
     }
+    .subch-icon {
+        display: none;
+    }
     /*
      * **狭い画面も1段にまとめる** (上の `searching`)。種別・日送り (矢印・日付・今日)・虫眼鏡。
      * 2段に積んでいた頃は、表の上に 80px ほど操作が並んでいた。
@@ -1095,6 +1101,8 @@
         .toolbar {
             --gap: var(--dp-space-1);
             padding-inline: var(--dp-space-2);
+            /* 1行に収める。折り返すのは検索欄を開いたときだけ */
+            flex-wrap: nowrap;
         }
         .days {
             --gap: var(--dp-space-1);
@@ -1106,8 +1114,15 @@
         }
         .hours,
         .month,
-        .day-word {
+        .day-word,
+        .subch-word {
             display: none;
+        }
+        .subch-icon {
+            display: inline-flex;
+        }
+        .toolbar:has(.search.open) {
+            flex-wrap: wrap;
         }
         .search-toggle {
             display: inline-flex;
