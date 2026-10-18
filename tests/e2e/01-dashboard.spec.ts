@@ -336,9 +336,9 @@ test.describe('ホームと画面遷移', () => {
             return hit !== null && el.contains(hit) && el.matches(':popover-open');
         });
         expect(front).toBe(true);
-        // 空きは狭い幅では「⋯」の中に出す (広い幅は頭の1行のまとめ)
+        // 状態 (次の録画・空き) は狭い幅では「⋯」の頭に出す (広い幅はサイドバーのいちばん下)
         await expect(menu.getByTestId('recordings-capacity-menu')).toBeVisible();
-        await expect(page.getByTestId('bar-summary')).toBeHidden();
+        await expect(menu.getByTestId('menu-summary')).toContainText('次の録画');
         await menu.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる
@@ -350,13 +350,15 @@ test.describe('ホームと画面遷移', () => {
      * Esc で閉じて「⋯」に戻る
      */
     test('表示の切り替えの「⋯」はキーボードで開け閉めできる', async ({ page }) => {
+        // 「⋯」はサイドバーの無い幅だけ
+        await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/');
         const toggle = page.getByTestId('view-toggle');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await toggle.focus();
         await page.keyboard.press('Enter');
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await expect(page.getByTestId('recordings-group-toggle')).toBeFocused();
+        await expect(page.getByTestId('view-menu').getByTestId('recordings-group-toggle')).toBeFocused();
         await page.keyboard.press('Escape');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await expect(toggle).toBeFocused();

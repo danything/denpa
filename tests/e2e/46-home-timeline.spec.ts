@@ -34,11 +34,14 @@ function rows(page: Page) {
         );
 }
 
-/** 頭の1行の絞り込みのチップに添えた件数 */
+/** 広い画面はサイドバー、狭い画面は頭の1行の、その絞り込みに添えた件数 */
+async function filterBox(page: Page) {
+    const side = page.getByTestId('sidebar');
+    return (await side.isVisible()) ? side : page.getByTestId('timeline-toolbar');
+}
 async function countOf(page: Page, id: string): Promise<number> {
-    const text = await page
-        .getByTestId('timeline-toolbar')
-        .locator(`[data-testid="filter-chip"][data-filter="${id}"] [data-testid="filter-count"]`)
+    const text = await (await filterBox(page))
+        .locator(`[data-filter="${id}"] [data-testid="filter-count"]`)
         .innerText();
     return Number(text.trim());
 }
@@ -101,9 +104,10 @@ test.describe('ホームの1本の一覧', () => {
         for (const id of ['reservations', 'unfinished', 'failed']) {
             const count = await countOf(page, id);
             await homeFilter(page, id);
-            await expect(
-                page.getByTestId('timeline-toolbar').locator(`[data-filter="${id}"]`),
-            ).toHaveAttribute('aria-pressed', 'true');
+            await expect((await filterBox(page)).locator(`[data-filter="${id}"]`)).toHaveAttribute(
+                'aria-pressed',
+                'true',
+            );
             await expect(rows(page)).toHaveCount(count);
         }
         // 入れた行がそれぞれの絞り込みに入る
@@ -126,9 +130,9 @@ test.describe('ホームの1本の一覧', () => {
     test('一覧は幅いっぱいの2段の行で、まとめは右のサイドバーに出る', async ({ page }) => {
         await page.setViewportSize({ width: 1366, height: 768 });
         await goto(page, '/');
-        // 広い幅では右にサイドバー「今やること・観るもの」。次の録画と空きはその「状態」に (頭の1行には出さない)
+        // 広い幅では右にサイドバー (絞り込み・見てほしいこと・表示・状態)。頭の1行は出さず、一覧はいちばん上から
         await expect(page.getByTestId('sidebar')).toBeVisible();
-        await expect(page.getByTestId('bar-summary')).toBeHidden();
+        await expect(page.getByTestId('timeline-toolbar')).toBeHidden();
         await expect(page.getByTestId('summary')).toContainText('次の録画');
 
         const row = rows(page).filter({ hasText: '一覧試験の視聴済み' });
@@ -147,50 +151,28 @@ test.describe('ホームの1本の一覧', () => {
     });
 
     /*
-     * **サイドバーの「続きから観る」と「見てほしいこと」。** 観終えていない録画は続きから観るに並び、押せば観る画面。
-     * 見てほしいこと (失敗など) を押すと一覧がそれで絞られる
+     * **サイドバーの「見てほしいこと」は絞り込みと同じ仕組み。** 件数のあるものだけ出て、押すと一覧がそれで絞られ、
+     * もう一度押すと「すべて」に戻る。「続きから観る」「録画中」はサイドバーに置かない
      */
-    test('サイドバーの続きから観るは観る画面へ、見てほしいことは一覧を絞る', async ({ page }) => {
+    test('サイドバーの見てほしいことは一覧を絞り、もう一度押すと戻る', async ({ page }) => {
         await page.setViewportSize({ width: 1366, height: 768 });
         await goto(page, '/');
         const side = page.getByTestId('sidebar');
-        const next = side.getByTestId('continue-item').filter({ hasText: '一覧試験の未視聴' });
-        await expect(next).toHaveAttribute('href', /\/watch\/\d+$/);
-        await expect(next).toContainText('未視聴');
-
-        await expect(side.getByTestId('attention-count')).toBeVisible();
-        await side.locator('[data-testid="attention-item"][data-filter="failed"]').click();
+        await expect(side.getByTestId('continue-item')).toHaveCount(0);
+        const failed = side.locator('[data-testid="attention-item"][data-filter="failed"]');
+        await expect(failed).toContainText(/失敗\s*\d+/);
+        await failed.click();
+        await expect(failed).toHaveAttribute('aria-pressed', 'true');
         await expect(rows(page).filter({ hasText: '一覧試験の失敗' })).toHaveCount(1);
         await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(0);
-        // 失敗はチップにもあるので、そのチップが押された印になる (チップに無いもの (競合など) は外すためのチップが出る)
-        await expect(page.locator('[data-testid="filter-chip"][data-filter="failed"]')).toHaveAttribute(
+        await failed.click();
+        await expect(side.locator('[data-testid="filter"][data-filter="all"]')).toHaveAttribute(
             'aria-pressed',
             'true',
         );
-        await homeFilter(page, 'all');
         await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(1);
-    });
-
-    /*
-     * **サイドバーの無い幅では、一覧の頭に帯。** 「見てほしいこと」の1行を押すと一覧がそれで絞られ、
-     * 頭の1行に外すためのチップが出る。「続きから観る」はサムネイルを横に流せる帯
-     */
-    test('狭い画面は一覧の頭の帯から見てほしいことに絞り、チップで外せる', async ({ page }) => {
-        await page.setViewportSize({ width: 390, height: 844 });
-        await goto(page, '/');
-        await expect(page.getByTestId('sidebar')).toBeHidden();
-        const strip = page.getByTestId('home-strip');
-        await expect(
-            strip.getByTestId('strip-continue-item').filter({ hasText: '一覧試験の未視聴' }),
-        ).toHaveCount(1);
-        await strip.getByTestId('strip-attention').click();
-        const extra = page.getByTestId('filter-chip-extra');
-        await expect(extra).toHaveAttribute('data-filter', 'attention');
-        await expect(rows(page).filter({ hasText: '一覧試験の失敗' })).toHaveCount(1);
-        await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(0);
-        await extra.click();
-        await expect(extra).toHaveCount(0);
-        await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(1);
+        // 状態 (次の録画・空き) はサイドバーのいちばん下
+        await expect(side.getByTestId('summary')).toContainText('次の録画');
     });
 
     test('狭い画面は頭の細い1行のチップで1回で絞る', async ({ page }) => {

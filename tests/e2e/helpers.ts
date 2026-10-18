@@ -969,22 +969,26 @@ export async function routeCaptions(page: Page): Promise<void> {
 }
 
 /**
- * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) を開き、
- * その入れ物を返す。どの幅でも一覧の頭の1行の「⋯」(`view-toggle`) から出るメニュー
+ * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) の入れ物を返す。
+ * 広い画面 (1000px 以上) はサイドバーの「表示」、狭い画面は一覧の頭の1行の「⋯」から出るメニュー
  */
 export async function homeTools(page: Page): Promise<Locator> {
-    const toggle = page.getByTestId('view-toggle');
+    const side = page.getByTestId('sidebar');
+    if (await side.isVisible()) return side;
     const menu = page.getByTestId('view-menu');
-    if (!(await menu.isVisible())) await toggle.click();
+    if (!(await menu.isVisible())) await page.getByTestId('view-toggle').click();
     await expect(menu).toBeVisible();
     return menu;
 }
 
-/** ホームの絞り込み (すべて・予約・録画中・未視聴・失敗) を押す。どの幅でも一覧の頭のチップ */
+/**
+ * ホームの絞り込み (すべて・予約・録画中・未視聴、見てほしいことの競合・失敗・録り逃し・CMの判定) を押す。
+ * 広い画面はサイドバーの行、狭い画面は一覧の頭のチップ
+ */
 export async function homeFilter(page: Page, id: string): Promise<void> {
-    const chip = page
-        .getByTestId('timeline-toolbar')
-        .locator(`[data-testid="filter-chip"][data-filter="${id}"]`);
-    await chip.click();
-    await expect(chip).toHaveAttribute('aria-pressed', 'true');
+    const side = page.getByTestId('sidebar');
+    const box = (await side.isVisible()) ? side : page.getByTestId('timeline-toolbar');
+    const button = box.locator(`[data-filter="${id}"]`);
+    await button.click();
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
 }

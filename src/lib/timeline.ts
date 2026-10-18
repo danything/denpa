@@ -32,30 +32,32 @@ export interface TimelineItem extends Groupable {
 export interface Traits {
     /** 観終えていない録画 (未視聴の点か、続きのバーが出ているもの) */
     unfinished: boolean;
-    /** 失敗したもの (録画の失敗・エンコードの失敗・録り逃し) */
+    /** 失敗した録画 (録画の失敗・エンコードの失敗) */
     failed: boolean;
+    /** 録り逃し (始まらないまま放送が終わった予約) */
+    missed?: boolean;
     /** チューナーが足りずに録れない予約 (競合) */
     conflict?: boolean;
     /** 局ロゴで CM を判定できなかった録画 (無音だけで判定) */
     cmlogo?: boolean;
 }
 
-/** 絞り込み。ボタン (チップ) の並びもこの順 */
+/** 絞り込み。サイドバーの並び・狭い画面のチップの並びもこの順 */
 export const FILTERS = [
     { id: 'all', label: 'すべて' },
     { id: 'reservations', label: '予約' },
     { id: 'recording', label: '録画中' },
     { id: 'unfinished', label: '未視聴' },
-    { id: 'failed', label: '失敗' },
 ] as const;
 
 /**
- * **チップには並べない絞り込み。** サイドバーの「見てほしいこと」から入る (`attention` はその全部、
- * ほかは項目ごと)。入っている間は頭の1行に外すためのチップを出す
+ * **見てほしいこと** (手を止めてほしいもの)。絞り込みと同じ仕組みで、件数があるときだけ出す
+ * (広い画面はサイドバーの「見てほしいこと」、狭い画面は注意の色のチップ)
  */
 export const ATTENTION_FILTERS = [
-    { id: 'attention', label: '見てほしいこと' },
     { id: 'conflict', label: '競合' },
+    { id: 'failed', label: '失敗' },
+    { id: 'missed', label: '録り逃し' },
     { id: 'cmlogo', label: 'CMの判定' },
 ] as const;
 
@@ -74,20 +76,16 @@ export function passes(filter: Filter, item: TimelineItem, traits: Traits): bool
             return item.zone === 'past' && traits.unfinished;
         case 'failed':
             return item.zone === 'past' && traits.failed;
+        case 'missed':
+            return item.zone === 'past' && traits.missed === true;
         case 'conflict':
             return item.zone === 'future' && traits.conflict === true;
         case 'cmlogo':
             return item.zone === 'past' && traits.cmlogo === true;
-        case 'attention':
-            return (
-                passes('conflict', item, traits) ||
-                passes('failed', item, traits) ||
-                passes('cmlogo', item, traits)
-            );
     }
 }
 
-/** 絞り込みごとの件数 (チップと「見てほしいこと」に添える数) */
+/** 絞り込みごとの件数 (並びとチップに添える数) */
 export function countFilters<T extends TimelineItem>(
     items: T[],
     traitsOf: (item: T) => Traits,
@@ -97,9 +95,9 @@ export function countFilters<T extends TimelineItem>(
         reservations: 0,
         recording: 0,
         unfinished: 0,
-        failed: 0,
-        attention: 0,
         conflict: 0,
+        failed: 0,
+        missed: 0,
         cmlogo: 0,
     };
     for (const item of items) {
