@@ -1,48 +1,19 @@
 import { fail, redirect } from '@sveltejs/kit';
-import {
-    and,
-    desc,
-    eq,
-    getTableColumns,
-    gt,
-    inArray,
-    isNotNull,
-    isNull,
-    ne,
-    not,
-    or,
-    sql,
-} from 'drizzle-orm';
-import { genreName } from '#lib/arib.js';
-import { SERVICE_TYPE_LABEL } from '#lib/format.js';
-import { parseSearchFields } from '#lib/search.js';
-import { config } from '#lib/server/config.js';
-import { contentions, type Occupant, settled } from '#lib/server/conflict.js';
+import { and, desc, eq, getTableColumns, inArray, isNotNull, isNull, not, sql } from 'drizzle-orm';
 import { now, orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES, watchableServices } from '#lib/server/epg.js';
 import { relative } from '#lib/server/paths.js';
 import { cancel, reserve } from '#lib/server/reservations.js';
-import {
-    applyRules,
-    compile,
-    coveringRule,
-    globPatterns,
-    haystack,
-    keepsReservation,
-    matchesCompiled,
-    prefillFrom,
-    previewSkips,
-} from '#lib/server/rules.js';
-import { resolveConflicts, tunerState } from '#lib/server/scheduler.js';
-import {
-    programs,
-    recordings,
-    reservations,
-    rules as ruleTable,
-    services as serviceTable,
-} from '#lib/server/schema.js';
+import { conditionsOf, draftRule, EMPTY_RULE, originOf, ruleValues } from '#lib/server/rule-form.js';
+import { previewFor } from '#lib/server/rule-preview.js';
+import { applyRules } from '#lib/server/rules.js';
+import { resolveConflicts } from '#lib/server/scheduler.js';
+import { reservations, rules as ruleTable, services as serviceTable } from '#lib/server/schema.js';
 import { settings } from '#lib/server/settings.js';
-import type { Program, Rule } from '#lib/types.js';
+import type { Rule } from '#lib/types.js';
+
+/** 画面が受け取る下見の形 (`rule-preview.ts`) */
+export type { Preview, PreviewRow } from '#lib/server/rule-preview.js';
 
 interface Row extends Rule {
     reservations: number;
@@ -56,186 +27,6 @@ interface Row extends Rule {
  * 録り終えた予約まで「押さえている」に入っていた
  */
 const PENDING = and(inArray(reservations.state, ['scheduled', 'conflict']), isNull(reservations.started_at));
-
-/**
- * 下見に出す、立っている予約。**録らないと決めたもの (コピー禁止の `skipped`) も出す** — 行に
- * 状態と取消を出すため。録らないので、予約数 (`PENDING`) とチューナーの取り合いには数えない。
- * 放送が終わった `skipped` は履歴なので出さない (録り逃しには移さず残っている。`scheduler.tick`)
- */
-const stillHeld = () =>
-    and(
-        inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
-        isNull(reservations.started_at),
-        or(ne(reservations.state, 'skipped'), gt(reservations.end_at, now())),
-    );
-
-/**
- * 条件の読み取り。**画面から来る経路が2つある** — 初期値 (検索の「ルールを作る」・録画から) は
- * URL のクエリで、下見 (`?/preview`) と保存はフォームの POST で来る。どちらも `get` / `getAll` を持つ。
- */
-interface Fields {
-    get(key: string): unknown;
-    getAll(key: string): unknown[];
-}
-
-/** 保存する形に直した条件。並びは**空なら NULL** (指定なし) にするところまでがここの仕事 */
-interface Conditions {
-    keyword: string;
-    ignoreKeyword: string;
-    searchFields: string;
-    serviceIds: number[] | null;
-    serviceTypes: string[] | null;
-    genres: string[] | null;
-    /** 同じ回は最初の放送だけ録る (`rules.dedupe`)。送られてこなければ null (`dedupeOf`) */
-    dedupe: boolean | null;
-    /** 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない */
-    empty: boolean;
-}
-
-/**
- * 入力を条件として読む。**プレビューも保存もここを通る。**
- *
- * 別々に読んでいた頃は、同じ読み取りが2つあった (プレビューは URL から、
- * 保存はフォームから)。**画面に出ている結果と保存されるものがズレる**のは、
- * 片方だけ直したときに必ず起きる。
- */
-function conditionsOf(fields: Fields): Conditions {
-    const text = (key: string) => String(fields.get(key) ?? '').trim();
-    const list = (key: string) => fields.getAll(key).map(String).filter(Boolean);
-    const some = <T>(values: T[]) => (values.length === 0 ? null : values);
-
-    const keyword = text('keyword');
-    const ids = list('serviceIds').map(Number).filter(Number.isFinite);
-    const types = list('serviceTypes');
-    const genres = list('genres');
-    return {
-        keyword,
-        ignoreKeyword: text('ignoreKeyword'),
-        // 番組表から来たときは指定が無い。既定 (番組名だけ) に戻る
-        searchFields: parseSearchFields(list('searchFields').join(',')).join(','),
-        serviceIds: some(ids),
-        serviceTypes: some(types),
-        genres: some(genres),
-        dedupe: dedupeOf(fields),
-        empty: keyword === '' && ids.length === 0 && types.length === 0 && genres.length === 0,
-    };
-}
-
-/**
- * 「同じ回は最初の放送だけ」。フォームは**隠しの `0` とチェックの `1`** を両方送る
- * (外したチェックは何も送らないので、隠しが無いと「外した」と「指定なし」が
- * 区別できない)。
- *
- * **送られてこなければ null。** 新しく作るとき (下見・追加) は入れる — 検索の「ルールを作る」から
- * 来たときと、録画から作るとき。**更新では今の値のまま** — 編集画面は必ず送るが、
- * それ以外の経路から来た更新で、入れていないルールが黙って変わらないように
- */
-function dedupeOf(fields: Fields): boolean | null {
-    const sent = fields.getAll('dedupe').map(String);
-    return sent.length === 0 ? null : sent.includes('1');
-}
-
-/**
- * 入力中の条件を、保存していないルールとして組み立てる。
- *
- * 条件を編集する場所はこの画面1つに寄せてある。番組表にも検索欄を置いていた頃は
- * 判定が二重にあってズレたので、フォームの値がそのまま「何が録れるか」になるようにした。
- */
-function conditionsFrom(params: Fields): Rule | null {
-    const conditions = conditionsOf(params);
-    if (conditions.empty) return null;
-
-    return {
-        id: 0,
-        name: '',
-        keyword: conditions.keyword,
-        ignore_keyword: conditions.ignoreKeyword,
-        search_fields: conditions.searchFields,
-        service_ids: conditions.serviceIds,
-        service_types: conditions.serviceTypes,
-        genres: conditions.genres,
-        // 無料放送の扱いは**全体設定** (ルールには持たない)
-        enabled: true,
-        /*
-         * **打ち込んだ値をそのまま持ち回る。**
-         *
-         * 下見を GET の往復で出していた頃、ここを 1 で埋めていたので、見るたびに
-         * **優先度が 1 に戻って**いた (見るだけのつもりで押して、そのまま保存すると
-         * 静かに書き換わる)。読まなければ落ちるだけ
-         */
-        priority: rulePriority(params),
-        dedupe: conditions.dedupe ?? true,
-        source: null,
-        created_at: 0,
-    };
-}
-
-/**
- * 条件の下見ひとまとめ (`previewFor`)。
- *
- * `failed` は組めなかった理由。組めていれば null
- */
-export interface Preview {
-    total: number;
-    /** 同じ回の2回目以降で、録らないもの (`PreviewRow.skip`) */
-    skipped: number;
-    programs: PreviewRow[];
-    conflicts: number;
-    failed: string | null;
-}
-
-/**
- * 「この条件で録れる番組」の1行。
- *
- * **予約とプレビューは同じ表に出す。** 別々に並べていた頃は、同じ番組が2箇所に
- * 出るうえ、「押さえている予約」と「これから当たる番組」を頭の中で突き合わせる
- * ことになっていた。1本の時系列にして、その番組がいまどうなっているかを行に書く。
- */
-export interface PreviewRow {
-    id: number;
-    name: string;
-    /** 詳細から「視聴」でライブへ飛ぶときの局。番組表の詳細と同じ */
-    service_id: number;
-    service_name: string;
-    start_at: number;
-    end_at: number;
-    /** 立っている予約。取り消せるように id も持つ */
-    reservation_id: number | null;
-    reservation_state: string | null;
-    /** いまの条件に当たるか。false なら「条件から外れたが予約は残っている」 */
-    matched: boolean;
-    /** チューナーを取り合う他の番組。**全部**入れる。取り合わなければ空 */
-    conflicts: string[];
-    /** スケジューラが既にチューナー不足と判断していれば、その理由 */
-    conflict_reason: string | null;
-    /**
-     * **録らない理由** (同じ回は最初の放送だけ。`episode.firstAirings`)。録るなら null。
-     * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある。
-     * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)
-     */
-    skip:
-        | { kind: 'repeat' | 'recorded'; service_name: string; start_at: number }
-        | { kind: 'copy-never' }
-        | null;
-}
-
-interface Pending {
-    id: number;
-    rule_id: number | null;
-    manual: boolean;
-    program_id: number;
-    name: string;
-    service_id: number;
-    service_name: string;
-    /** チャンネル種別 (GR/BS/CS)。チューナーはこの単位で台数が決まる */
-    type: string;
-    /** 物理チャンネル。同じチャンネルなら1台のチューナーで足りる */
-    channel: string;
-    start_at: number;
-    end_at: number;
-    state: string;
-    conflict_reason: string | null;
-}
 
 export async function load({ url }) {
     const defaults = settings();
@@ -251,7 +42,7 @@ export async function load({ url }) {
      */
     if (url.searchParams.has('edit') && editing === undefined) redirect(303, relative(url, '/rules'));
 
-    const origin = originOf(url);
+    const origin = originOf(url.searchParams);
     /*
      * 録画・番組から来た (`originOf`) ときは、下書きの条件を URL に載せて出直す。
      * 下書きが URL にあれば、フォームの初期値をそのまま組める。既にこのシリーズを録っているルールが
@@ -274,7 +65,7 @@ export async function load({ url }) {
      * フォームの初期値。URL に載っている条件を優先する (検索の「ルールを作る」・録画から来たとき)。
      * 無ければ編集中のルールの条件
      */
-    const conditions = conditionsFrom(url.searchParams) ?? editing ?? null;
+    const conditions = draftRule(url.searchParams) ?? editing ?? null;
 
     /*
      * 予約数は**これから録るぶんだけ**。
@@ -329,376 +120,6 @@ export async function load({ url }) {
 }
 
 /**
- * 条件に当たる番組の下見。**いちばん重い。**
- *
- * これから先の番組を**全部**引いて JS で絞るので、実データでは番組表の
- * 24時間ぶんより重い。画面は書く欄を打ち直すたびに、少し待ってから呼ぶ (`?/preview`)。
- * 同じタブからは1つずつしか送らない (送っている間に変わったぶんは、返ってから最後の条件で1回)。
- *
- * **転んでも投げ返さない。** 理由を `failed` に入れて返す (画面は「数えられませんでした」と出す)
- *
- * @param editing 編集中のルール。条件から外れたのに残っている、そのルールの予約も混ぜる
- */
-async function previewFor(conditions: Rule, editing: Rule | undefined): Promise<Preview> {
-    try {
-        return { ...(await countPreview(conditions, editing)), failed: null };
-    } catch (error) {
-        console.error('[rules] 下見を組めませんでした', error);
-        return { total: 0, skipped: 0, programs: [], conflicts: 0, failed: String(error) };
-    }
-}
-
-/** 下見を数える本体。転んだら投げる (受け止めるのは `previewFor`) */
-async function countPreview(conditions: Rule, editing: Rule | undefined): Promise<Omit<Preview, 'failed'>> {
-    const defaults = settings();
-    /*
-     * チューナーの台数。**スケジューラと同じところから取る。**
-     * 取れなければ空 (= 何も競合として出さない)。エージェントが落ちているときに
-     * 予約表を赤くしても直しようが無いので、スケジューラもそう振る舞う
-     */
-    const { capacity, busy } = await tunerState();
-    // 使う区間は前後マージンぶん延びる。スケジューラと同じ物差しで数える
-    const margins = { start: config.startMargin, end: config.endMargin };
-    /** まだ録っていない予約。重なりの判定と、条件から外れた予約を出すのに使う */
-    const pending: Pending[] = orm()
-        .select({
-            id: reservations.id,
-            rule_id: reservations.rule_id,
-            manual: reservations.manual,
-            program_id: reservations.program_id,
-            name: reservations.name,
-            service_id: reservations.service_id,
-            start_at: reservations.start_at,
-            end_at: reservations.end_at,
-            state: reservations.state,
-            conflict_reason: reservations.conflict_reason,
-            service_name: serviceTable.name,
-            type: serviceTable.type,
-            channel: serviceTable.channel,
-        })
-        .from(reservations)
-        .innerJoin(serviceTable, eq(serviceTable.id, reservations.service_id))
-        .where(stillHeld())
-        .orderBy(reservations.start_at)
-        .all();
-    const reserved = new Map(pending.map((row) => [row.program_id, row]));
-
-    return readPreview(conditions);
-
-    function readPreview(conditions: Rule): Omit<Preview, 'failed'> {
-        // 条件のほどきは1回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
-        const compiled = compile(conditions);
-        /*
-         * **SQL で候補を減らしてから JS で当てる。** これから放送される全番組
-         * (実データ相当で 33,000 件) を全列で読むだけで 330〜400ms かかり、条件が
-         * 1語でもそれは同じだった。番組名 (と概要) に `GLOB` を掛ければ当たった
-         * 行だけ読めて 33ms。当てるのは今までどおり `matchesCompiled` で、
-         * SQL は「必ず含むはずの語」を落とすだけ (`globPatterns`)
-         */
-        const patterns = globPatterns(compiled);
-        const columns = compiled.fields.includes('description')
-            ? [programs.name, programs.description]
-            : [programs.name];
-        const narrowed = (patterns ?? []).map((pattern) =>
-            or(...columns.map((column) => sql`${column} GLOB ${pattern}`)),
-        );
-        /*
-         * **読む列も絞る。** 判定に要らない JSON 列 (音声 106KB、映像) は読まない。
-         * 詳細説明は検索範囲に入っているときと、同じ回を見分けるとき (タイトルに話数・副題が無い局は
-         * 概要・詳細から読む。`episode.episodeOf`) だけ。JSON 列の読み出しが 33,000 行ぶんで
-         * 43ms あった
-         */
-        const {
-            audios: _audios,
-            video_type: _video,
-            video_resolution: _resolution,
-            extended,
-            ...light
-        } = getTableColumns(programs);
-        const all = orm()
-            .select({
-                ...light,
-                extended:
-                    compiled.fields.includes('extended') || conditions.dedupe
-                        ? extended
-                        : sql<Program['extended']>`NULL`,
-                service_type: serviceTable.type,
-                service_name: serviceTable.name,
-                service_channel: serviceTable.channel,
-            })
-            .from(programs)
-            .innerJoin(serviceTable, eq(serviceTable.id, programs.service_id))
-            .where(and(gt(programs.start_at, now()), ...narrowed))
-            .orderBy(programs.start_at)
-            .all();
-        const hits = all.filter((program) =>
-            // 判定が読むのは局・ジャンル・無料かどうか・検索範囲の文字だけ (`Matchable`。読まない列は上で外した)
-            matchesCompiled(compiled, program, program.service_type, defaults.freeOnly, (fields) =>
-                haystack(program, fields),
-            ),
-        );
-
-        /*
-         * **同じ回は最初の放送だけ。** 録らないものも行には出す (黙って消すと、
-         * 条件が当たっていないのか、当たったうえで外したのか読めない)。
-         * 選び方は予約を立てるときと同じもの (`rules.previewSkips`)
-         */
-        const skips: ReturnType<typeof previewSkips<(typeof hits)[number]>> = conditions.dedupe
-            ? previewSkips(hits, now())
-            : new Map();
-        const skipOf = (p: (typeof hits)[number]): PreviewRow['skip'] => {
-            // コピー禁止の番組は録らない (`format.COPY_NEVER_REASON`)。手動でも同じ
-            if (p.copy_never) return { kind: 'copy-never' };
-            const skip = skips.get(p.id);
-            if (skip === undefined) return null;
-            return skip.kind === 'repeat'
-                ? { kind: 'repeat', service_name: skip.first.service_name, start_at: skip.first.start_at }
-                : { kind: 'recorded', service_name: skip.service_name, start_at: skip.start_at };
-        };
-
-        /*
-         * 重なりを数える相手。**立っている予約と、この条件で録れる番組の両方。**
-         *
-         * 予約としか比べていなかった頃は、保存前のルールでは重なりが1件も
-         * 出なかった (比べる相手がまだいない)。同じ番組が両方に出てくるので、
-         * 番組IDで1つにまとめる
-         */
-        const occupants = new Map<number, Occupant>();
-        for (const p of hits) {
-            // 録らないものはチューナーを取り合わない
-            if (skips.has(p.id) || p.copy_never) continue;
-            occupants.set(p.id, {
-                programId: p.id,
-                name: p.name,
-                serviceName: p.service_name,
-                type: p.service_type,
-                channel: p.service_channel,
-                start_at: p.start_at,
-                end_at: p.end_at,
-            });
-        }
-        for (const row of pending) {
-            if (row.state === 'skipped') continue;
-            occupants.set(row.program_id, {
-                programId: row.program_id,
-                name: row.name,
-                serviceName: row.service_name,
-                type: row.type,
-                channel: row.channel,
-                start_at: row.start_at,
-                end_at: row.end_at,
-            });
-        }
-        const rows: PreviewRow[] = hits.map((p) => {
-            const held = reserved.get(p.id) ?? null;
-            return {
-                id: p.id,
-                name: p.name,
-                service_id: p.service_id,
-                service_name: p.service_name,
-                start_at: p.start_at,
-                end_at: p.end_at,
-                reservation_id: held?.id ?? null,
-                reservation_state: held?.state ?? null,
-                matched: true,
-                // 重なりは出す 100 件にだけ当てる (下)。スケジューラが既にチューナー
-                // 不足と判断していれば、その理由も添える (何台足りないのかはあちらしか知らない)
-                conflicts: [],
-                conflict_reason:
-                    held?.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
-                // 引っ込めない予約 (手動・猶予の内) が立っているなら録る。「録らない」とは言わない
-                skip: held !== null && keepsReservation(held, now()) && !p.copy_never ? null : skipOf(p),
-            };
-        });
-
-        /*
-         * 条件から外れたのに残っている予約 (手動・猶予の内。`keepsReservation`) も同じ表に混ぜる
-         */
-        if (editing !== undefined) {
-            const shown = new Set(rows.map((row) => row.id));
-            for (const held of pending) {
-                if (shown.has(held.program_id)) continue;
-                if (held.rule_id !== editing.id) continue;
-                rows.push({
-                    id: held.program_id,
-                    name: held.name,
-                    service_id: held.service_id,
-                    service_name: held.service_name,
-                    start_at: held.start_at,
-                    end_at: held.end_at,
-                    reservation_id: held.id,
-                    reservation_state: held.state,
-                    matched: false,
-                    conflicts: [],
-                    conflict_reason:
-                        held.state === 'conflict' ? (held.conflict_reason ?? 'チューナーが足りません') : null,
-                    skip: null,
-                });
-            }
-        }
-        rows.sort((a, b) => a.start_at - b.start_at);
-
-        /*
-         * **重なりは、出す 100 件にだけ当てる。**
-         *
-         * 重なりは**録ろうとした時点で初めて分かる**ので先に見せるのだが、当たった
-         * 全部に当てていた頃は、ゆるい条件 (詳細まで・27,000 件) で 7.5 秒かかり、
-         * その間サーバごと止まっていた (SQLite も判定も同期)。画面に出るのは先頭 100 件
-         * だけなので、そこにだけ当てる。
-         *
-         * **比べる相手は、その 100 件が掛かる時間帯の全部と、そこから誰も使っていない瞬間まで
-         * さかのぼったぶん** (`settled`)。出さない番組とも取り合うので相手は減らせない。どのチューナーに
-         * 入るかはその前に誰がどのチューナーに入ったかで変わる (#668) ので、時間帯の頭からなぞると答えが
-         * 変わる。誰も使っていない瞬間を挟めば振り出しに戻るので、そこより前と、時間帯より後は渡さない。
-         *
-         * 「競合 N 件」もその 100 件の中の数になる。画面ではそう書く
-         */
-        const shown = rows.slice(0, 100);
-        const mine = shown.flatMap((row) => (row.skip === null ? (occupants.get(row.id) ?? []) : []));
-        const from = settled(
-            occupants.values(),
-            margins,
-            Math.min(...mine.map((o) => o.start_at)) - margins.start,
-        );
-        const to = Math.max(...mine.map((o) => o.end_at)) + margins.end;
-        const contended = contentions(
-            [...occupants.values()].filter(
-                (o) => o.start_at - margins.start < to && from < o.end_at + margins.end,
-            ),
-            capacity,
-            margins,
-            busy,
-        );
-        for (const row of shown) {
-            if (row.skip === null) row.conflicts = contended.get(row.id) ?? [];
-        }
-
-        return {
-            total: rows.length,
-            skipped: rows.filter((row) => row.skip !== null).length,
-            // 数えるのは**行の数**。1行に3本重なっていても、困っている番組は1つ
-            conflicts: shown.filter((row) => row.conflicts.length > 0 || row.conflict_reason !== null).length,
-            programs: shown,
-        };
-    }
-}
-
-/**
- * **録画・番組からルールを作るときの元** (詳細の「ルールを作る」)。
- * `?recording=<録画ID>` か `?program=<番組ID>` (番組表・予約の詳細から)。
- *
- * 下書き (`rules.prefillFrom`) と、このシリーズを既に録っているルール
- * (`rules.coveringRule`) を一緒に引く。ルールがあれば作らせずにそちらを案内する —
- * 同じ番組のルールが2つあっても予約は1本だが、どちらを直せばいいか分からなくなる
- */
-function originOf(url: URL) {
-    const kind = url.searchParams.has('recording')
-        ? 'recording'
-        : url.searchParams.has('program')
-          ? 'program'
-          : null;
-    if (kind === null) return null;
-    const id = Number(url.searchParams.get(kind));
-    const source = Number.isInteger(id)
-        ? kind === 'recording'
-            ? recordingSource(id)
-            : programSource(id)
-        : undefined;
-    if (source === undefined) return { kind, id, name: '', found: false, prefill: null, rule: null };
-    const rules = orm().select().from(ruleTable).all();
-    return {
-        kind,
-        id,
-        name: source.name,
-        found: true,
-        prefill: prefillFrom(source),
-        rule: coveringRule(rules, source, source.type ?? undefined) ?? null,
-    };
-}
-
-/** 録画から読む分 */
-function recordingSource(id: number) {
-    return orm()
-        .select({
-            name: recordings.name,
-            service_id: recordings.service_id,
-            genre_detail: recordings.genre_detail,
-            type: serviceTable.type,
-        })
-        .from(recordings)
-        .leftJoin(serviceTable, eq(serviceTable.id, recordings.service_id))
-        .where(eq(recordings.id, id))
-        .get();
-}
-
-/**
- * 番組から読む分。**番組表の行が無ければ予約の行から** — 番組表は終わった番組を
- * 消していくが、予約の一覧には済んだものも残る。予約の行はジャンルを持たないので、
- * そのときの下書きはキーワードだけになる
- */
-function programSource(id: number) {
-    const program = orm()
-        .select({
-            name: programs.name,
-            service_id: programs.service_id,
-            genre_detail: programs.genre_detail,
-            type: serviceTable.type,
-        })
-        .from(programs)
-        .leftJoin(serviceTable, eq(serviceTable.id, programs.service_id))
-        .where(eq(programs.id, id))
-        .get();
-    if (program !== undefined) return program;
-    const reservation = orm()
-        .select({ name: reservations.name, service_id: reservations.service_id, type: serviceTable.type })
-        .from(reservations)
-        .leftJoin(serviceTable, eq(serviceTable.id, reservations.service_id))
-        .where(eq(reservations.program_id, id))
-        .get();
-    return reservation === undefined ? undefined : { ...reservation, genre_detail: null };
-}
-
-/**
- * 予約どうしを比べる数。**0 も受ける。**
- *
- * `Number(...) || 2` と書いていた頃は、0 を入れると既定に戻っていた
- * (`0 || 2` は 2)。「いちばん譲る」を選べないことになる。
- * 既定はルールの 1 で、手動予約はその上の 2。
- *
- * **空欄と 0 は別物。** `Number('')` は 0 なので、まとめて読むと**箱を空にした
- * だけで「いちばん譲る」に落ちる**。無ければ既定に戻す
- */
-function rulePriority(fields: Fields): number {
-    const raw = fields.get('priority');
-    if (raw === null || raw === undefined || raw === '') return 1;
-    const value = Number(raw);
-    return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 1;
-}
-
-/**
- * ルール名はキーワードから決める。別で名前を付けさせても、結局キーワードと
- * 同じものを打ち込むだけになるため。キーワードが無いときは対象の局で表す。
- */
-function ruleName(conditions: Conditions): string {
-    if (conditions.keyword !== '') return conditions.keyword;
-
-    const services = orm().select().from(serviceTable).all();
-    const parts: string[] = [];
-    if (conditions.genres !== null) parts.push(...conditions.genres.map(genreName));
-    if (conditions.serviceTypes !== null) {
-        parts.push(...conditions.serviceTypes.map((type) => SERVICE_TYPE_LABEL[type] ?? type));
-    }
-    if (conditions.serviceIds !== null) {
-        parts.push(
-            ...conditions.serviceIds.map((id) => services.find((s) => s.id === id)?.name ?? String(id)),
-        );
-    }
-    return parts.length === 0
-        ? '名前の無いルール'
-        : `${parts.slice(0, 3).join('・')}${parts.length > 3 ? ' ほか' : ''}`;
-}
-
-/**
  * ルールを当て直して、チューナーの取り合いを計算し直す。
  *
  * 以前はここで番組表を丸ごと取り直していた (`sync()`)。押す動機はたいてい
@@ -718,27 +139,6 @@ async function reapply(rule?: number): Promise<number> {
 }
 
 /** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
-const EMPTY_RULE = 'キーワード・局・ジャンルのいずれかを指定してください';
-
-/**
- * create と update で同じもの。**エンコード方式は書かない** — エンコードもCMも全体設定で、
- * エンコードするときに読む
- */
-function ruleValues(conditions: Conditions, form: FormData) {
-    return {
-        name: ruleName(conditions),
-        keyword: conditions.keyword,
-        ignore_keyword: conditions.ignoreKeyword,
-        search_fields: conditions.searchFields,
-        service_ids: conditions.serviceIds,
-        service_types: conditions.serviceTypes,
-        genres: conditions.genres,
-        priority: rulePriority(form),
-        // 送られてこなければ触らない (更新では今の値のまま。追加は下で入れる)
-        ...(conditions.dedupe === null ? {} : { dedupe: conditions.dedupe }),
-    };
-}
-
 export const actions = {
     /**
      * **書く欄のいまの値で、録れる番組を数える** (`previewFor`)。何も書き換えない。
@@ -748,7 +148,7 @@ export const actions = {
      */
     preview: async ({ request }) => {
         const form = await request.formData();
-        const conditions = conditionsFrom(form);
+        const conditions = draftRule(form);
         if (conditions === null) return { preview: null };
         const editing = form.has('edit')
             ? orm()
@@ -757,7 +157,7 @@ export const actions = {
                   .where(eq(ruleTable.id, Number(form.get('edit'))))
                   .get()
             : undefined;
-        return { preview: await previewFor(conditions, editing) };
+        return { preview: await previewFor(conditions, { editing }) };
     },
 
     create: async ({ request, url }) => {
