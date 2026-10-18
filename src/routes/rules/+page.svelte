@@ -204,7 +204,7 @@
     /**
      * 編集中のルールを消したら、一覧の初めに戻る。`?edit=` のまま残ると、無くなったルールの
      * 画面が新しいルールの欄に化けて見える。戻る先の履歴にも残さない (戻っても無いので)。
-     * 「削除しました」の知らせは移ったあとに当てる
+     * 「削除しました」の通知は移ったあとに当てる
      */
     const leaveDeleted: SubmitFunction = () => async ({ result, update }) => {
         if (result.type !== 'success') return update();
@@ -353,7 +353,6 @@
                         href={resolve(`rules?edit=${rule.id}`)}
                         aria-current={selected ? 'true' : undefined}
                         data-testid="rule-row"
-                        data-rule-id={rule.id}
                     >
                         <span class="rule-name">{rule.name}</span>
                         <span class="rule-marks tiny">
@@ -680,7 +679,7 @@
                             </div>
 
                             <p class="small muted">
-                                録画のしかたと無料放送の扱いは<a href={resolve('settings')}>設定</a
+                                録画のしかたと無料放送の扱いは<a href={resolve('settings/recording')}>設定</a
                                 >で決めます ({data.defaults.codecs.map((codec) => CODEC_LABEL[codec]).join(' + ') || 'エンコードしない'}
                                 / CM: {CM_LABEL[data.defaults.cmCut]}{data.defaults.freeOnly
                                     ? ' / 無料放送のみ'
@@ -1107,7 +1106,7 @@
         transition: background-color var(--dp-duration);
     }
     .rule-item:hover {
-        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+        background: var(--dp-hover-soft);
     }
     .rule-item.selected {
         background: var(--dp-subtle);

@@ -500,14 +500,13 @@
                                     href={data.update.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    data-testid="tab-update-available"
                                 >
                                     {data.update.version} が公開されています
                                 </a>
                             </li>
                         {/if}
                         <li>
-                            <button type="button" class="menu-item" onclick={theme.cycle} data-testid="tab-theme-toggle">
+                            <button type="button" class="menu-item" onclick={theme.cycle}>
                                 <Icon icon={ICON[theme.mode]} size="size-5" />
                                 テーマ: {THEME_LABEL[theme.mode]}
                             </button>
@@ -550,7 +549,7 @@
                 )
                 0 0 / 40% 100% no-repeat,
             color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
-        animation: nav-progress 1.1s ease-in-out infinite;
+        animation: nav-progress var(--dp-shine) ease-in-out infinite;
     }
     @keyframes nav-progress {
         from {

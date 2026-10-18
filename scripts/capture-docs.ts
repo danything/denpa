@@ -476,6 +476,8 @@ async function liveRaw(page: Page): Promise<void> {
     await page.goto(`${BASE}/live`);
     await settle(page, 500);
     await wake(page, 'live-frame');
+    // 形式は再生の設定 (⚙) の「コーデック」から選ぶ
+    await page.getByTestId('live-settings').click();
     await page.getByTestId('live-codec').click();
     await page.locator('[data-testid="live-codec-option"][data-codec="mpeg2"]').click();
 }
@@ -587,13 +589,14 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
                         }
                     },
                 ],
-                // 録画の「表示」(表示の切り替えをまとめたメニュー)
+                // 録画の詳細の「その他…」
                 [
-                    'view',
+                    'more',
                     async () => {
                         await page.goto(`${BASE}/`);
                         await settle(page, 300);
-                        await page.getByTestId('recordings-view').click();
+                        await (await visibleRow(page)).getByRole('button', { name: '詳細' }).click();
+                        await page.getByTestId('detail-more').click();
                     },
                 ],
             ];
@@ -757,21 +760,30 @@ async function motionShots(browser: Browser): Promise<void> {
     await shot('menu', async () => {
         await page.goto(`${BASE}/`);
         await settle(page, 800);
+        await (await visibleRow(page)).getByRole('button', { name: '詳細' }).click();
+        await page.waitForTimeout(800);
         await record(page, 'menu', async () => {
-            await page.getByTestId('recordings-view').click();
+            await page.getByTestId('detail-more').click();
             await page.waitForTimeout(900);
             await page.keyboard.press('Escape');
             await page.waitForTimeout(700);
         });
     });
     await shot('dialog', async () => {
-        await page.goto(`${BASE}/settings/general#browser`);
+        // 互換モードを入れるときの注意 (再生の設定 ⚙ の「互換モード」)
+        await page.goto(`${BASE}/live`);
         await settle(page, 800);
-        await page.getByTestId('canvas-video-toggle').scrollIntoViewIfNeeded();
+        await page.getByTestId('live-channel').first().click();
+        await page.getByTestId('live-title').waitFor();
+        await wake(page, 'live-frame');
+        await page.getByTestId('live-settings').click();
         await record(page, 'dialog', async () => {
-            await page.getByTestId('canvas-video-toggle').click();
+            await page.getByTestId('live-compat').click();
             await page.waitForTimeout(1000);
-            await page.getByTestId('drive-notice-cancel').click();
+            await page
+                .locator('[data-testid="drive-notice"][open]')
+                .getByTestId('drive-notice-cancel')
+                .click();
             await page.waitForTimeout(700);
         });
     });
@@ -825,7 +837,7 @@ async function motionShots(browser: Browser): Promise<void> {
             phone,
             'tabbar',
             async () => {
-                for (const to of ['guide', 'settings', 'home']) {
+                for (const to of ['guide', 'search', 'home']) {
                     await phone.getByTestId(`tab-${to}`).click();
                     await phone.waitForTimeout(1300);
                 }
