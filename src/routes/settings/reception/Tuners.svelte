@@ -87,7 +87,7 @@
                 エージェントの答え待ち。**本物の表と同じ形・同じ高さの枠を先に置く** (番組表・ルールの
                 下見と同じ骨組み)。字だけ出していた頃は、届いた拍子に表が出て下の節が押し下げられた
             -->
-            <div class="skeleton" role="status" aria-label="チューナーを確認しています" data-testid="tuner-skeleton">
+            <div class="skeleton" role="status" aria-label="チューナーを確認しています">
                 <div class="skeleton-head" aria-hidden="true"></div>
                 {#each TUNER_SKELETON as height, row (row)}
                     <div class="skeleton-row" style="height: {height}rem" aria-hidden="true"></div>
@@ -121,7 +121,7 @@
                         </thead>
                         <tbody data-testid="tuner-list">
                             {#each tuners as tuner (tuner.index)}
-                                <tr data-testid="tuner-row" data-tuner-index={tuner.index}>
+                                <tr data-testid="tuner-row">
                                     <td class="nowrap" data-label="名前">{tuner.name}</td>
                                     <td class="nowrap small" data-label="種別">
                                         {tuner.types.map((t) => SERVICE_TYPE_LABEL[t] ?? t).join('/')}
@@ -203,7 +203,7 @@
             </div>
             {#if shownCard.value === undefined}
                 <!-- リーダーの表も同じ形の枠を先に置く (リーダーは1つのことが多い。名前と場所の2行) -->
-                <div class="skeleton" role="status" aria-label="カードリーダーを確認しています" data-testid="card-skeleton">
+                <div class="skeleton" role="status" aria-label="カードリーダーを確認しています">
                     <div class="skeleton-head" aria-hidden="true"></div>
                     <div class="skeleton-row" style="height: 2.35rem" aria-hidden="true"></div>
                 </div>
@@ -411,7 +411,7 @@
                     </table>
                 </div>
                 <div class="cluster config-actions">
-                    <button type="submit" class="small secondary outline" data-testid="tuner-config-add">追加</button>
+                    <button type="submit" class="small secondary outline">追加</button>
                     <button type="submit" class="small ghost" formaction="?/tunersAuto">
                         自動検出に戻す
                     </button>

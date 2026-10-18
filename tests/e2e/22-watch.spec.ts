@@ -436,8 +436,7 @@ test.describe('録画を観る', () => {
 
         await goto(page, `/watch/${id}`);
         await expect(page.getByTestId('watch-facts')).toBeVisible();
-        // 開くための「詳細」は無い。押さなくても出ている
-        await expect(page.getByTestId('watch-detail')).toHaveCount(0);
+        // 押さなくても出ている。詳細のモーダルは開かない
         await expect(page.getByTestId('program-detail')).toHaveCount(0);
     });
 
@@ -532,9 +531,6 @@ test.describe('録画を観る', () => {
         }
         await expect(page.getByTestId('watch-background')).toHaveAttribute('aria-checked', /^(true|false)$/);
         await expect(page.getByTestId('watch-background')).toHaveAttribute('role', 'menuitemcheckbox');
-        // 送り・戻しのボタンは置いていない (PCは矢印キー、指は端を素早く2回)
-        await expect(page.getByTestId('watch-back')).toHaveCount(0);
-        await expect(page.getByTestId('watch-forward')).toHaveCount(0);
         // 再生停止は下の操作バーのいちばん左。ライブと同じ並び
         await expect(page.getByTestId('watch-controls').getByTestId('watch-play')).toBeVisible();
         // 小窓 (PiP) も下の操作バー。並べても一段に収まる (下で見る)

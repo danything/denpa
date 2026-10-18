@@ -50,7 +50,7 @@
             </div>
         {/if}
         <!-- 取れないぶんを除いて揃っていれば「揃った」の色 -->
-        <div class="small cluster" data-testid="logo-coverage">
+        <div class="small cluster">
             <span>
                 <span class="muted">局ロゴ</span>
                 <span
@@ -110,7 +110,7 @@
                             <th class="nowrap">CMロゴ</th>
                         </tr>
                     </thead>
-                    <tbody data-testid="logo-list">
+                    <tbody>
                         {#each data.stations as station (station.id)}
                             <tr data-testid="logo-row" data-service-id={station.id} data-logo={station.logo}>
                                 <td class="nowrap small">{SERVICE_TYPE_LABEL[station.type] ?? station.type}</td>

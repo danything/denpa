@@ -57,9 +57,9 @@
                 1件を URL・送る通知・直近の結果・ボタン の順に縦に積む。幅がいくらでも横には出ない
                 (URL だけは `text-overflow: ellipsis` で止める)
             -->
-            <div class="rows" data-testid="webhook-list">
+            <div class="rows">
                 {#each data.webhooks as webhook (webhook.id)}
-                    <div class="row webhook" data-testid="webhook-row" data-webhook-id={webhook.id}>
+                    <div class="row webhook" data-testid="webhook-row">
                         <div class="url-line">
                             <span class="tag {webhook.enabled ? 'success' : ''}">
                                 {webhook.enabled ? '有効' : '無効'}

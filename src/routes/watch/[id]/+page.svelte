@@ -2072,7 +2072,6 @@
                             <ControlButton
                                 icon={PREV}
                                 label="前のチャプター"
-                                testid="watch-prev-chapter"
                                 onclick={() => seekTo(prevChapterAt(chapters, at))}
                             />
                             <ControlButton

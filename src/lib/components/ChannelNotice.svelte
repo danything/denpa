@@ -20,12 +20,11 @@
     } = $props();
 </script>
 
-<div class="channel-notice {variant}" role="status" data-testid="channel-notice" data-kind={kind}>
+<div class="channel-notice {variant}" role="status" data-testid="channel-notice">
     <p>{text}</p>
     <a
         href={`${resolve('settings/reception')}#channels`}
-        class="button small {variant === 'bar' ? 'secondary outline' : ''}"
-        data-testid="channel-notice-scan">スキャンへ</a
+        class="button small {variant === 'bar' ? 'secondary outline' : ''}">スキャンへ</a
     >
 </div>
 

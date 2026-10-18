@@ -43,15 +43,15 @@
     探す範囲は決め打ち (放送で使う物理チャンネルは決まっていて、狭めても総当たりの時間が少し減るだけ)
 -->
 {#snippet scanControl()}
-    <form method="POST" action="?/scan" use:submitting class="scan-control" data-testid="scan-control">
+    <form method="POST" action="?/scan" use:submitting class="scan-control">
         {#if scan.state === 'running'}
             <!--
                 十数分かかるので、途中で降りられるようにしてある。中断しても設定は書き換えない
                 (途中までの結果で上書きすると、まだ回っていない局の定義が消える)
             -->
-            <button type="submit" class="small outline danger" formaction="?/scanStop" data-testid="scan-stop">中断</button>
+            <button type="submit" class="small outline danger" formaction="?/scanStop">中断</button>
         {:else}
-            <select name="types" aria-label="スキャンする種別" data-testid="scan-types">
+            <select name="types" aria-label="スキャンする種別">
                 {#each SCAN_CHOICES as choice (choice.value)}
                     <option value={choice.value}>{choice.label}</option>
                 {/each}
@@ -113,7 +113,7 @@
 
         {#if scan.state !== 'idle'}
             <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
-            <div class="progress-block" data-testid="scan-progress" data-state={scan.state}>
+            <div class="progress-block" data-state={scan.state}>
                 <div class="cluster small">
                     <span class="tag" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
                     {#if scan.phase}
@@ -147,7 +147,7 @@
                 ></progress>
                 {#if data.collect.sweeping}
                     <!-- 初回だけ。番組名が先に出て、詳細があとから埋まるのを不具合と思わせない -->
-                    <div class="tiny muted" data-testid="epg-sweeping">
+                    <div class="tiny muted">
                         BS は、まず1つの中継から全局の番組名を入れています (数分)。
                         番組内容・出演者などの詳細は、そのあと中継ごとに回って足します
                     </div>
@@ -178,7 +178,7 @@
 
         {#if coverage.length === 0}
             <!-- まだ1つも無い。表の場所の真ん中に、スキャンの欄と1行の案内 -->
-            <div class="empty" data-testid="channel-empty">
+            <div class="empty">
                 <p class="small muted">チャンネルがまだありません。種別を選んでスキャンしてください</p>
                 {@render scanControl()}
             </div>
@@ -207,7 +207,7 @@
                                 <td class="small">
                                     <div class="stations">
                                         {#each channel.services as service (service.id)}
-                                            <span class="broadcast" data-testid="channel-service" data-service-id={service.id}>
+                                            <span class="broadcast" data-service-id={service.id}>
                                                 {service.name}
                                             </span>
                                         {/each}
