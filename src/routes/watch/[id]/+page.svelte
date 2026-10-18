@@ -165,7 +165,7 @@
      * **ここでは `<video>` に戻らない** — 描けなくなったら MPEG-2 へ、それも無理なら理由を出して止まる
      * (ライブと同じ)。**端末に保存したものは、その Matroska を読んで描く** (`mkv-source.ts`。オフラインでも)
      */
-    /** 互換モードか。**開いたときに決める** (設定画面でオン/オフする) */
+    /** 互換モードか。**開いたときに決める** (再生の設定 ⚙ でオン/オフし、切り替えたら読み直す。`StageTail`) */
     let compat = $state(false);
     /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
     let canvasAbility = $state.raw<CanvasAbility | null>(null);
@@ -2192,7 +2192,7 @@
                     {/if}
                     {#if warning !== null}
                         <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
-                        <StageNote testid="watch-warning">{warning}</StageNote>
+                        <StageNote>{warning}</StageNote>
                     {/if}
                 {/snippet}
             </PlayerStage>
@@ -2267,7 +2267,7 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.5rem 0.75rem;
-        border-radius: 1rem;
+        border-radius: var(--dp-radius-lg);
         background: rgb(0 0 0 / 0.6);
         color: #fff;
         --pico-color: #fff;

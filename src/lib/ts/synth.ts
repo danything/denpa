@@ -622,7 +622,7 @@ export interface SynthHybridcastApp {
 }
 
 /**
- * AIT (table_id 0x74)。**Hybridcast のアプリの住所が載っている表。**
+ * AIT (table_id 0x74)。**Hybridcast のアプリのアドレス (URL) が載っている表。**
  *
  * 中身そのものは電波に乗っていないので、ここに入るのは URL と名前だけ
  */

@@ -4,17 +4,17 @@ import { type Situation, step, storedBackground } from './background';
 const base: Situation = { allowed: false, hidden: true, pip: false, paused: false, held: false };
 
 describe('バックグラウンド再生', () => {
-    test('既定は切。入れたことのある端末だけ入', () => {
+    test('既定はオフ。オンにしたことのある端末だけオン', () => {
         expect(storedBackground(null)).toBe(false);
         expect(storedBackground('0')).toBe(false);
         expect(storedBackground('1')).toBe(true);
     });
 
-    test('切なら、裏に回った時点で止める', () => {
+    test('オフなら、裏に回った時点で止める', () => {
         expect(step(base)).toBe('pause');
     });
 
-    test('入なら、裏でも止めない', () => {
+    test('オンなら、裏でも止めない', () => {
         expect(step({ ...base, allowed: true })).toBeNull();
     });
 

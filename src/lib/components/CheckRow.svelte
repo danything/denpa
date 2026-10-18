@@ -17,7 +17,7 @@
     }: {
         name: string;
         checked: boolean;
-        testid: string;
+        testid?: string;
         title: string;
         hint: string;
         /** 「詳しく」で開く続き。空なら「詳しく」は出さない */

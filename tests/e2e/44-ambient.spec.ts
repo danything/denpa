@@ -113,12 +113,17 @@ test.describe('アンビエントモード', () => {
             const below = [];
             for (const band of await glow.locator('.band:not([hidden])').all()) {
                 const box = (await band.boundingBox())!;
-                if (box.y >= stage.y + stage.height - 1) below.push(box);
+                if (box.y >= stage.y + (stage.width * 9) / 16 - 1) below.push(box);
             }
-            // 映像の下に、画面の幅いっぱい・240px 以上
+            // 映像の下の端から (操作バーの段の下にも)、画面の幅いっぱい・240px 以上
+            expect(below[0]?.y).toBeLessThan(stage.y + stage.height - 1);
             expect(below).toHaveLength(1);
             expect(below[0]!.width).toBeGreaterThanOrEqual(389);
             expect(below[0]!.height).toBeGreaterThanOrEqual(240);
+            // 操作バーの段は黒く塗らず、色が透ける
+            expect(
+                await page.getByTestId('live-frame').evaluate((el) => getComputedStyle(el).backgroundColor),
+            ).toBe('rgba(0, 0, 0, 0)');
         });
 
         test('明るいテーマでも出し、帯は地に掛ける (multiply)', async ({ page }) => {

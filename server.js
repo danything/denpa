@@ -7,7 +7,7 @@
  *
  * ## なぜ入口が要るのか
  *
- * 公式の `@sveltejs/adapter-bun` は `Bun.serve` を自分で呼ぶが、`websocket` を渡す口が無い
+ * 公式の `@sveltejs/adapter-bun` は `Bun.serve` を自分で呼ぶが、`websocket` を渡す手段が無い
  * (`serverOptions` は JSON にして埋め込まれるので関数を持てない)。`platform.server` で
  * Bun の Server には触れても、`websocket` 無しに立てた Server は upgrade できない。
  * SvelteKit の手続き (handler) も静的ファイルの表 (routes) も `build/server/adapter-index.js`
@@ -48,12 +48,12 @@ const TAKE_OVER = '__denpaTakeOverSignals';
  * 変えられるのは自分に返る origin の見た目だけ。`TRUSTED_PROXIES` の前段からだけ読む
  * ようにはしない — 守れるものが無いのに、前段を設定し忘れた構成の POST を全部止める。
  *
- * **接続元の住所はこの入口が決める** (TRUSTED_NETWORKS の判定材料。`src/lib/server/address.ts`)。
- * ここで決めた住所を `x-denpa-remote` に**上書きで**入れ (外から同名で付けて来ても消える)、
+ * **接続元のアドレスはこの入口が決める** (TRUSTED_NETWORKS の判定材料。`src/lib/server/address.ts`)。
+ * ここで決めたアドレスを `x-denpa-remote` に**上書きで**入れ (外から同名で付けて来ても消える)、
  * adapter には必ずそれを読ませる。
  *
  * - 直の相手が `TRUSTED_PROXIES` (前段の CIDR のカンマ区切り) の中なら、`X-Forwarded-For` を
- *   右から辿って前段でない最初の住所を接続元にする (nginx の `real_ip_recursive` と同じ)
+ *   右から辿って前段でない最初のアドレスを接続元にする (nginx の `real_ip_recursive` と同じ)
  * - そうでなければ相手そのもの。`X-Forwarded-For` は誰でも付けられるので読まない
  *
  * 以前は `ADDRESS_HEADER=x-forwarded-for` を渡すと adapter-node が誰から来たヘッダでも
@@ -66,7 +66,7 @@ const REMOTE_HEADER = 'x-denpa-remote';
 if (process.env.ADDRESS_HEADER && process.env.ADDRESS_HEADER !== REMOTE_HEADER) {
     console.warn(
         `ADDRESS_HEADER=${process.env.ADDRESS_HEADER} はもう読みません。前段 (リバースプロキシ) の後ろにいるなら ` +
-            'TRUSTED_PROXIES に前段の住所 (CIDR) を設定してください。設定するまで、前段越しの接続元は前段の住所になります',
+            'TRUSTED_PROXIES に前段のアドレス (CIDR) を設定してください。設定するまで、前段越しの接続元は前段のアドレスになります',
     );
 }
 process.env.ADDRESS_HEADER = REMOTE_HEADER;
@@ -170,8 +170,8 @@ if (!served)
  * 自分の後始末を登録する。それが残ると SIGTERM で listen が閉じ、録画が終わるまで居座る間に
  * 画面が開けなくなる (上の説明)。
  *
- * **adapter の作りが変わっても気付けるようにする。** ここは adapter の中の形に頼っているので、
- * 外れたら黙って居座りが壊れる。引き取り口が無い・引き取ったあとも合図に2人以上ついている、は
+ * **adapter の作りが変わっても気付けるようにする。** ここは adapter の中の作りに頼っているので、
+ * 外れたら黙って居座りが壊れる。引き取る関数が無い・引き取ったあとも合図に2人以上ついている、は
  * 起動を止める (E2E も本番と同じくこの入口で起こすので、CI で落ちる)。数が想定 (アプリの2件 +
  * adapter の2件) と違うだけなら知らせる。adapter があとから登録する作りに変わったときのために、
  * 少し置いてもう一度見て、ついていたら引き取り直して知らせる
@@ -179,7 +179,7 @@ if (!served)
 const SIGNALS = ['SIGTERM', 'SIGINT'];
 const takeOver = globalThis[TAKE_OVER];
 if (typeof takeOver !== 'function') {
-    throw new Error('アプリが止まれの合図の引き取り口を置いていません (src/lib/server/runtime.ts)');
+    throw new Error('アプリが止まれの合図を引き取る関数を置いていません (src/lib/server/runtime.ts)');
 }
 const taken = takeOver();
 const extra = () => SIGNALS.filter((signal) => process.listenerCount(signal) !== 1);

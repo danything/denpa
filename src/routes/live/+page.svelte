@@ -56,6 +56,7 @@
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { reload } from '#lib/reload.svelte.js';
     import { FLOOR } from '#lib/ts/pacing.js';
+    import { CHANNEL_TYPES } from '#lib/types.js';
     import type { LiveChannel } from './+page.server';
 
     /** 番組の終わりから読み直すまで置く間 (下の「番組が替わったら読み直す」) */
@@ -140,7 +141,7 @@
      * 同じ並び・同じ見た目にしてあるので、探す場所がずれない
      */
     /** 局を持っている種別だけ出す。BS を繋いでいない環境で空の見出しを出さない */
-    const types = $derived(['GR', 'BS', 'CS'].filter((t) => channels.some((c) => c.type === t)));
+    const types = $derived(CHANNEL_TYPES.filter((t) => channels.some((c) => c.type === t)));
     /** **開いたときは、いま映している局の種別。** 選び直す手間を増やさない */
     let picked = $state<string | null>(null);
     const shown = $derived(picked ?? current?.type ?? types[0] ?? 'GR');
@@ -401,7 +402,7 @@
 
             <!--
                 **出せなかった間も出しておく。** 「再生できない形式です」の
-                逃げ道はエンコード方式を選び直すこと (別の形式か、MPEG-2) で、その操作はこの操作バーにしか無い。
+                逃げ道はコーデックを選び直すこと (別の形式か、MPEG-2) で、その操作はこの操作バーの再生の設定 (⚙) にしか無い。
                 隠していた頃は、出せない端末では選び直す手立てが無かった
             -->
             <!-- 録画に譲って追っかけを観ている間 (`yielded`) も出す。局をリクエストするものだけ外す (下) -->
@@ -494,7 +495,7 @@
                         />
                         <!--
                             **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・ライブ・読みもの・再生の設定 (⚙)・全画面だけ。**
-                            ここから字幕の選び直しまでと速さ・小窓は「ほか」(⋯) に入れる (`Extras`)。
+                            音・字幕・Hybridcast と速さ・小窓は「ほか」(⋯) に入れる (`Extras`)。
                             音を出していないときは映像の上に「音を出す」が別に出る。
                             広い枠では包みは何もしないので、並びは今までどおり (観る画面と同じ)
                         -->
@@ -535,7 +536,7 @@
                         **Hybridcast。載っている番組でだけ出す。**
 
                         データ放送と違って、**アプリは電波に乗っていません** —
-                        電波に乗っているのは住所だけ (AIT) で、中身は放送局の
+                        電波に乗っているのはアドレス (URL) だけ (AIT) で、中身は放送局の
                         サーバから取ります (`ts/ait.ts`)。
 
                         **このボタンは別のタブで開くだけ**です (受信機の API が無いので、
@@ -560,8 +561,7 @@
 
                         <!--
                             放送の今にいるかどうか。離れていれば押して戻れる。
-                            **文字はエンコード方式のボタンと同じ大きさ・幅は詰める** —
-                            大きいボタンのままだと操作バーの中でこれだけ太って見えていた
+                            見た目の決まりは `EdgeButton`
                         -->
                         {#if player.yielded === null}
                             <EdgeButton
@@ -678,7 +678,6 @@
                         {#if player.chasing}
                             <Extras>
                                 <SpeedMenu
-                                    testid="live-speed"
                                     label="追っかけの速さ"
                                     speed={player.speed}
                                     onselect={(speed) => player.setSpeed(speed)}
@@ -792,7 +791,7 @@
                 -->
                 {#if player.yielded}
                     {@const yielded = player.yielded}
-                    <span class="yielded" data-testid="live-yielded">
+                    <span class="stage-note yielded" data-testid="live-yielded">
                         <span class="yielded-text">
                             録画のため局を切り替えました: <span class="broadcast">{yielded.recording.title}</span>
                             (録画中を再生しています)
@@ -998,19 +997,14 @@
     .relearn:hover {
         color: #fff;
     }
-    /* 録画に譲った通知。通知の列は押せない (`PlayerStage`) ので、この通知だけ押せるように戻す。見た目は StageNote と同じ */
+    /* 録画に譲った通知。通知の列は押せない (`PlayerStage`) ので、この通知だけ押せるように戻す。見た目は StageNote と同じ (`.stage-note`) */
     .yielded {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
-        max-width: 100%;
         padding: 0.25rem 0.25rem 0.25rem 0.75rem;
-        border-radius: 1rem;
-        background: rgb(0 0 0 / 0.6);
-        font-size: var(--dp-text-xs);
-        color: #fff;
         pointer-events: auto;
     }
     .back-live {
@@ -1072,7 +1066,7 @@
     }
     /* 指を乗せた行は、いま映している行より淡く */
     .channel-item:hover {
-        background: color-mix(in srgb, var(--dp-hover) 60%, transparent);
+        background: var(--dp-hover-soft);
     }
     .channel-item.tuned {
         background: var(--dp-subtle);

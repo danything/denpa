@@ -67,9 +67,9 @@ import { notify } from './webhook';
  * 撮られたとおりの動きになる。コマ数が倍なのでエンコードの時間もサイズも
  * およそ倍になる (実測・地上波1分・AV1: 31.8秒 26MB ↔ 16.9秒 15MB)。
  *
- * **国内アニメだけは倍にしない。** 元が毎秒24コマ前後で描かれていて、それを
- * プルダウンして60フィールドに乗せているだけなので、フィールドごとにコマを
- * 起こしても同じ画像が並ぶだけになる。滑らかさは1つも増えず、時間とサイズだけ倍になる。
+ * **24p 系 (アニメ・フィルム) と 30p は倍にしない** (`smooth` が false。見分け方は `fps.ts`)。
+ * 24p 系はプルダウンして60フィールドに乗せているだけ、30p は上下が同じ時刻のコマなので、
+ * フィールドごとにコマを起こしても同じ画像が並ぶだけになる。滑らかさは1つも増えず、時間とサイズだけ倍になる。
  */
 export function deinterlace(smooth: boolean): string {
     return smooth ? 'bwdif' : 'bwdif=mode=send_frame';
@@ -239,7 +239,7 @@ const procs = new Map<number, Bun.Subprocess>();
 /**
  * 中止の合図。ジョブが走っている間ずっとある。
  *
- * ffmpeg を kill するだけでは足りない。スクランブル解除は向こうの
+ * ffmpeg を kill するだけでは足りない。スクランブルの復号は向こうの
  * コンテナへの HTTP、CM検出は別の ffmpeg で、どちらも数十分かかることがある。
  * 「中止を押したのに何も起きない」を無くすため、段階ごとにこれを渡す
  */
@@ -1556,7 +1556,7 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     /*
-     * **サムネイルは元のTSから取る** (解除したTSを消す前に)。エンコードした AV1 をデコードし直すと
+     * **サムネイルは元のTSから取る** (復号したTSを消す前に)。エンコードした AV1 をデコードし直すと
      * ソフトウェアデコードで数百コマぶん重い。元のTSの MPEG-2/H.264 なら軽い。
      * 位置は元のTSの時刻で決める (`thumbnailPlace`): CM を切ったなら残した区間をつないで数え、
      * CM を残したなら本編の最初の区間から取る (CMの映像を避ける)
@@ -1588,7 +1588,7 @@ async function runJob(jobId: number): Promise<void> {
     }
 
     removeIfExists(encodeOptions.chaptersFile);
-    // 解除したTSは作業用。元のTSは残したままなので、やり直せる
+    // 復号したTSは作業用。元のTSは残したままなので、やり直せる
     removeIfExists(decoded);
 
     let size = 0;

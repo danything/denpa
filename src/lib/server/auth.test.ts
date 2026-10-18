@@ -65,7 +65,7 @@ describe('ログイン方法が設定してあるか', () => {
  * **何も聞かずに通す相手。** 家の中のプレイヤーやテレビに資格情報を
  * 入れずに使わせるためのもの。ここに当たると OIDC も掛からない。
  *
- * 見るのは住所だけ。どの名前で来たかは問わない (名前で分けるのは前段の仕事)。
+ * 見るのはアドレスだけ。どの名前で来たかは問わない (名前で分けるのは前段の仕事)。
  */
 describe('ネットワークの中なら素通しにする', () => {
     const original = config.trustedNetworks;
@@ -84,7 +84,7 @@ describe('ネットワークの中なら素通しにする', () => {
         expect(trusted('203.0.113.9')).toBe(false);
     });
 
-    test('住所が読めなければ通さない', () => {
+    test('アドレスが読めなければ通さない', () => {
         // `clientAddress` は読めないとき空文字を返す。閉じる側に倒す
         expect(trusted('')).toBe(false);
     });
@@ -98,7 +98,7 @@ describe('ネットワークの中なら素通しにする', () => {
         config.trustedNetworks = '10.10.0.0/16, 10.20.0.0/16, 192.168.1.5';
         expect(trusted('10.10.1.1')).toBe(true);
         expect(trusted('10.20.1.1')).toBe(true);
-        // CIDR でなく住所そのままでも書ける
+        // CIDR でなくアドレスそのままでも書ける
         expect(trusted('192.168.1.5')).toBe(true);
         expect(trusted('192.168.1.6')).toBe(false);
     });
