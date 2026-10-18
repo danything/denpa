@@ -17,6 +17,7 @@
     import { afterNavigate, goto } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
+    import ArrowLeft from '~icons/lucide/arrow-left';
     import type { Preview, PreviewRow } from './+page.server';
 
     let { data, form } = $props();
@@ -405,7 +406,9 @@
         <section class="main" aria-label={data.editing ? 'ルールの編集' : '新しいルール'}>
             <div class="main-inner">
                 <!-- 狭い画面だけ。一覧へ戻る (ブラウザの戻ると同じ行き先) -->
-                <a class="back small" href={resolve('rules')} data-testid="rule-back">← ルール一覧</a>
+                <a class="button ghost icon small back" href={resolve('rules')} title="ルール一覧へ戻る" data-testid="rule-back"
+                    ><ArrowLeft aria-hidden="true" /><span class="visually-hidden">ルール一覧へ戻る</span></a
+                >
                 <!--
                     **新規か編集かだけを小さく。** 上のタブがもう「ルール」と言っているので、見出しは置かない。
                     編集なら**どのルールか**
@@ -952,6 +955,13 @@
 -->
 {#if detail.current}
     <ProgramDetail program={detail.current} onclose={close}>
+        {#snippet status()}
+            {#if opened?.reservation_state}
+                <span class="tag info" data-testid="rule-detail-state">
+                    {stateLabel(opened.reservation_state)}
+                </span>
+            {/if}
+        {/snippet}
         {#snippet actions()}
             <!--
                 失敗の理由は詳細の中に出す。押したのはこのモーダルの中のボタンで、
@@ -960,11 +970,6 @@
             -->
             {#if form?.message}
                 <div class="notice error detail-error">{form.message}</div>
-            {/if}
-            {#if opened?.reservation_state}
-                <span class="tag info detail-state" data-testid="rule-detail-state">
-                    {stateLabel(opened.reservation_state)}
-                </span>
             {/if}
 
             {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
@@ -999,9 +1004,6 @@
                     <button type="submit" data-testid="rule-detail-reserve">予約</button>
                 </form>
             {/if}
-
-            <!-- 位置を動かさないため、いつでもここが最後 -->
-            <button type="button" class="secondary" onclick={close} data-testid="detail-close">閉じる</button>
         {/snippet}
     </ProgramDetail>
 {/if}
@@ -1189,8 +1191,14 @@
             display: none;
         }
     }
+    /* 字だけのアイコンのボタン。字の頭に揃うよう、ボタンの余白ぶん左へ出す */
     .back {
         align-self: flex-start;
+        margin-inline-start: calc(-0.25 * var(--dp-btn-h-sm));
+    }
+    .back :global(svg) {
+        width: 1.125rem;
+        height: 1.125rem;
     }
     @media (min-width: 768px) {
         .back,
@@ -1430,8 +1438,5 @@
     }
     .detail-error {
         flex-basis: 100%;
-    }
-    .detail-state {
-        margin-right: auto;
     }
 </style>

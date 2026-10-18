@@ -836,7 +836,33 @@
 <!-- 番組の中身。**二段組の外に置く** (中に入れると巻き取る箱の中で開くことになる) -->
 {#if selected && facts}
     {@const program = selected}
+    <!-- 録れているなら、録画一覧へ戻らずここからそのまま観られるようにする (一覧の `hasFile` と同じ判定) -->
+    {@const canPlay =
+        program.recording_id !== null &&
+        program.recording_state !== 'failed' &&
+        (program.library_path ?? program.ts_path) !== null}
+    {@const canWatch = program.start_at <= clock && program.end_at > clock && watchable.has(program.service_id)}
+    {@const canCancel =
+        CANCELABLE.includes(program.reservation_state ?? '') &&
+        !(program.reservation_state === 'skipped' && program.end_at <= clock)}
+    {@const canReserve =
+        !canCancel && program.reservation_state === null && program.end_at > clock && !program.copy_never}
+    <!-- **塗るのは 1 つだけ。** 予約できるなら予約、録れていれば再生、いま流れていれば視聴 -->
+    {@const primary = canReserve ? 'reserve' : canPlay ? 'play' : canWatch ? 'watch' : null}
     <ProgramDetail program={facts} onclose={close} transitionName={DETAIL_NAME}>
+        {#snippet status()}
+            {#if program.reservation_state}
+                <span class="tag info" data-testid="detail-state">
+                    {stateLabel(program.reservation_state)}
+                </span>
+            {:else if program.end_at <= clock}
+                <!--
+                    もう終わった番組。予約ボタンを出しても、押した先で
+                    「放送が終わっています」と断られるだけ (reservations.reserve)
+                -->
+                <span class="tag" data-testid="detail-ended">放送終了</span>
+            {/if}
+        {/snippet}
         {#snippet actions()}
             <!--
                 失敗の理由は詳細の中に出す。番組表にインラインで足すと、その分だけ
@@ -849,112 +875,90 @@
             {#if form?.message}
                 <div class="notice error guide-error">{form.message}</div>
             {/if}
+
             <!--
-                閉じるは**いちばん右で動かさない**。押すものが番組によって増えたり
-                減ったりする (予約する / 取り消す / 再生 / 視聴) ので、
-                そのたびに位置が変わると、閉じたつもりで別のものを押すことになる
+                **並びは控えから主へ。** 主 (塗ったボタン) はいちばん右 (狭い画面ではいちばん上)。
+                閉じるは右上の × (`ProgramDetail`)
             -->
-            <div class="cluster guide-actions">
-                {#if program.reservation_state}
-                    <span class="tag info lead" data-testid="detail-state">
-                        {stateLabel(program.reservation_state)}
-                    </span>
-                {:else if program.end_at <= clock}
-                    <!--
-                        もう終わった番組。予約ボタンを出しても、押した先で
-                        「放送が終わっています」と断られるだけ (reservations.reserve)
-                    -->
-                    <span class="tag lead" data-testid="detail-ended">放送終了</span>
-                {/if}
 
-                {#if program.recording_id !== null && program.recording_state !== 'failed' && (program.library_path ?? program.ts_path) !== null}
-                    <!--
-                        録れているなら、録画一覧へ戻らずここからそのまま観られるようにする
-                        (一覧の `hasFile` と同じ判定)。エンコードする前の元のTSは観る画面が追っかけ (`/chase`) へ送る
-                    -->
-                    <a class="button" href={resolve(`watch/${program.recording_id}`)}>再生</a>
-                {/if}
+            <!--
+                **ルールを作る。** 予約・録画の詳細と同じ入口
+                (`rules/+page.server.ts` の `originOf`)。毎回録りたい番組を番組表で
+                見つけたとき、ルールの画面で探し直さずに済む
+            -->
+            <a class="button secondary" href={resolve(`rules?program=${program.id}`)} data-testid="detail-rule">
+                ルールを作る
+            </a>
 
-                {#if program.start_at <= clock && program.end_at > clock && watchable.has(program.service_id)}
-                    <!--
-                        **いま流れている番組は、その場で観られるようにする。**
-                        番組表で見つけた番組を観るのに、ライブ画面へ行って
-                        同じ局を一覧から探し直させるのは遠回り (局が100を超える
-                        環境では、探すほうが手間になる)。
+            {#if canCancel}
+                <!-- 予約したあと番組表から止められないと、わざわざ予約一覧まで行くことになる -->
+                <form
+                    method="POST"
+                    action="?/cancel"
+                    use:submitting={() =>
+                        async ({ result, update }) => {
+                            await update();
+                            if (result.type === 'success') close();
+                        }}
+                >
+                    <input type="hidden" name="programId" value={program.id} />
+                    <button type="submit" class="danger outline" data-testid="detail-cancel">予約取消</button>
+                </form>
+            {/if}
 
-                        **ライブ画面が持っている局にだけ出す** (`watchable`)。
-                        番組表のマスは**名前の無い枠でも出る**ので、そのまま出すと
-                        押した先で別の局が映る (実機の NHKEテレ2/3。分割放送を
-                        していない間のサブチャンネルがこれにあたる)。
-
-                        **リンクにする。** 押した先は別の画面で、そこで選局から
-                        やり直すことになるので、モーダルの中で始めるものではない
-                    -->
-                    <a
-                        class="button outline"
-                        href={resolve(`live?service=${program.service_id}`)}
-                        data-testid="detail-watch"
-                    >
-                        視聴
-                    </a>
-                {/if}
-
+            {#if canWatch}
                 <!--
-                    **ルールを作る。** 予約・録画の詳細と同じ入口
-                    (`rules/+page.server.ts` の `originOf`)。毎回録りたい番組を番組表で
-                    見つけたとき、ルールの画面で探し直さずに済む
+                    **いま流れている番組は、その場で観られるようにする。**
+                    番組表で見つけた番組を観るのに、ライブ画面へ行って
+                    同じ局を一覧から探し直させるのは遠回り (局が100を超える
+                    環境では、探すほうが手間になる)。
+
+                    **ライブ画面が持っている局にだけ出す** (`watchable`)。
+                    番組表のマスは**名前の無い枠でも出る**ので、そのまま出すと
+                    押した先で別の局が映る (実機の NHKEテレ2/3。分割放送を
+                    していない間のサブチャンネルがこれにあたる)。
+
+                    **リンクにする。** 押した先は別の画面で、そこで選局から
+                    やり直すことになるので、モーダルの中で始めるものではない
                 -->
                 <a
-                    class="button secondary outline"
-                    href={resolve(`rules?program=${program.id}`)}
-                    data-testid="detail-rule"
+                    class="button"
+                    class:secondary={primary !== 'watch'}
+                    href={resolve(`live?service=${program.service_id}`)}
+                    data-testid="detail-watch"
                 >
-                    ルールを作る
+                    視聴
                 </a>
+            {/if}
 
-                {#if CANCELABLE.includes(program.reservation_state ?? '') && !(program.reservation_state === 'skipped' && program.end_at <= clock)}
-                    <!-- 予約したあと番組表から止められないと、わざわざ予約一覧まで行くことになる -->
-                    <form
-                        method="POST"
-                        action="?/cancel"
-                        use:submitting={() =>
-                            async ({ result, update }) => {
-                                await update();
-                                if (result.type === 'success') close();
-                            }}
-                    >
-                        <input type="hidden" name="programId" value={program.id} />
-                        <button type="submit" class="danger outline" data-testid="detail-cancel">
-                            予約取消
-                        </button>
-                    </form>
-                {:else if program.reservation_state === null && program.end_at > clock && !program.copy_never}
-                    <!--
-                        録画のしかたはここでは選ばせない。設定画面の1箇所で決める
-                        (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
-                        分からなくなる)。コピー禁止の番組には出さない — 押しても断るだけ
-                        (`reservations.reserve`)。理由は詳細の「コピー禁止」に添えてある
-                    -->
-                    <form
-                        method="POST"
-                        action="?/reserve"
-                        use:submitting={() =>
-                            async ({ result, update }) => {
-                                await update();
-                                // 失敗したときは開いたままにして、中に理由を出す
-                                if (result.type === 'success') close();
-                            }}
-                    >
-                        <input type="hidden" name="programId" value={program.id} />
-                        <button type="submit" data-testid="detail-reserve">予約</button>
-                    </form>
-                {/if}
+            {#if canPlay}
+                <!-- エンコードする前の元のTSは観る画面が追っかけ (`/chase`) へ送る -->
+                <a class="button" class:secondary={primary !== 'play'} href={resolve(`watch/${program.recording_id}`)}>
+                    再生
+                </a>
+            {/if}
 
-                <!-- 位置を動かさないため、いつでもここが最後 -->
-                <button type="button" class="secondary" onclick={close} data-testid="detail-close">
-                    閉じる
-                </button>
-            </div>
+            {#if canReserve}
+                <!--
+                    録画のしかたはここでは選ばせない。設定画面の1箇所で決める
+                    (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
+                    分からなくなる)。コピー禁止の番組には出さない — 押しても断るだけ
+                    (`reservations.reserve`)。理由は詳細の「コピー禁止」に添えてある
+                -->
+                <form
+                    method="POST"
+                    action="?/reserve"
+                    use:submitting={() =>
+                        async ({ result, update }) => {
+                            await update();
+                            // 失敗したときは開いたままにして、中に理由を出す
+                            if (result.type === 'success') close();
+                        }}
+                >
+                    <input type="hidden" name="programId" value={program.id} />
+                    <button type="submit" data-testid="detail-reserve">予約</button>
+                </form>
+            {/if}
         {/snippet}
     </ProgramDetail>
 {/if}
@@ -1356,13 +1360,9 @@
         line-height: 1.25;
         opacity: 0.8;
     }
+    /* 押すものの並び (`.modal-actions`) の中で、1行まるごと使う */
     .guide-error {
-        margin-top: 1rem;
-    }
-    .guide-actions {
-        justify-content: flex-end;
-    }
-    .lead {
-        margin-right: auto;
+        flex-basis: 100%;
+        margin: 0;
     }
 </style>
