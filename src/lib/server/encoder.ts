@@ -1072,14 +1072,14 @@ async function runJob(jobId: number): Promise<void> {
     let decoded: string | null = null;
     let sourceTs = input;
     if (isScrambled(input)) {
-        setPhase(jobId, 'descramble', 'スクランブルを解除しています');
+        setPhase(jobId, 'descramble', 'スクランブルを復号しています');
         const target = `${input}.decoded.m2ts`;
         const result = await descramble(input, target, signal);
         if (!result.ok) {
             removeIfExists(target);
             // 中止で切ったときは失敗にしない。下の後始末で canceled として畳む
             if (canceled.has(jobId)) return finishCanceled(jobId, target);
-            fail(jobId, recording, `スクランブルを解除できませんでした: ${result.error}`);
+            fail(jobId, recording, `スクランブルを復号できませんでした: ${result.error}`);
             return;
         }
         // 元のTSを残すかは録画ごとではなく全体設定 (settings.keepOriginal)

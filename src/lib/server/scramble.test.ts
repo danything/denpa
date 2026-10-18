@@ -24,7 +24,7 @@ function makeTs(packets: number, scrambledRatio: number): string {
 }
 
 describe('スクランブルの検出', () => {
-    test('解除できていれば0', () => {
+    test('復号できていれば0', () => {
         expect(scrambledRatio(makeTs(2000, 0))).toBe(0);
     });
 
@@ -34,7 +34,7 @@ describe('スクランブルの検出', () => {
         expect(isScrambled(makeTs(2000, 0.99))).toBe(true);
     });
 
-    test('一部だけ掛かっていても解除には回さない', () => {
+    test('一部だけ掛かっていても復号には回さない', () => {
         // 有料放送の一部だけが暗号のTSを解除に回すと、無駄に時間を食う
         expect(isScrambled(makeTs(2000, 0.2))).toBe(false);
     });
