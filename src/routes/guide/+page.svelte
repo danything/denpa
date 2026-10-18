@@ -363,12 +363,15 @@
 
     /**
      * 日付の並び (広い画面)。**今日から、番組表の届いている日まで** (`+page.server.ts` の `daysOf`)。
-     * 番組の無い日も並べて押せなくする。前の日を見ているときだけ、その日を頭に足す
+     * 番組の無い日も並べて押せなくする。並びの外の日を見ているときは、その日を端に足す
      * (選んでいる日が並びに無いと、どこを見ているのか分からない)
      */
     const days = $derived.by(() => {
         const list = data.days.map((day) => ({ ...day, label: dayLabel(day.start) }));
-        if (data.start < data.today) list.unshift({ start: data.start, has: true, label: dayLabel(data.start) });
+        const chosen = { start: data.start, has: true, label: dayLabel(data.start) };
+        if (data.start < data.today) list.unshift(chosen);
+        // 並びより先の日 (手で書いた URL・古いリンク) も末尾に足す
+        else if (data.start > (list.at(-1)?.start ?? data.start)) list.push(chosen);
         return list;
     });
 
