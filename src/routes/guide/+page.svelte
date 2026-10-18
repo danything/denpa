@@ -1,6 +1,7 @@
 <script lang="ts">
     import { tick, untrack } from 'svelte';
     import { dragScroll, submitting } from '#lib/actions.js';
+    import ChannelNotice from '#lib/components/ChannelNotice.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
@@ -682,11 +683,17 @@
         </div>
     {:else if services.length === 0}
         <div class="panel empty" data-testid="empty-grid">
-            <p class="muted">
-                {SERVICE_TYPE_LABEL[
-                    data.type
-                ]}の局がありません。チューナー画面でチャンネルスキャンを実行してください。
-            </p>
+            {#if data.typeEmpty}
+                <!-- 局がまだ無い。上の案内と同じ文とボタンを、表の場所の真ん中に (上の案内はこのとき出さない) -->
+                <ChannelNotice
+                    kind={data.type === 'GR' ? 'gr' : 'all'}
+                    variant="center"
+                    text={`${SERVICE_TYPE_LABEL[data.type]}のチャンネルがありません。チャンネルスキャンをしてください`}
+                />
+            {:else}
+                <!-- 局はあるが、いま流している番組が無い (番組表を集めている途中など) -->
+                <p class="muted">{SERVICE_TYPE_LABEL[data.type]}の番組表はまだありません。集まるまでお待ちください</p>
+            {/if}
         </div>
     {:else}
         <!--

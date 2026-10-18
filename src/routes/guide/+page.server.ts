@@ -1,8 +1,15 @@
 import { fail } from '@sveltejs/kit';
 import { and, eq, gt, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { channelNotice } from '#lib/channel-notice.js';
 import { orm } from '#lib/server/db.js';
-import { airing, CURRENT_SERVICES, SERVICE_ORDER, watchableServices } from '#lib/server/epg.js';
+import {
+    airing,
+    CURRENT_SERVICES,
+    SERVICE_ORDER,
+    serviceCounts,
+    watchableServices,
+} from '#lib/server/epg.js';
 import { cancel, reserve } from '#lib/server/reservations.js';
 import {
     programs as programTable,
@@ -164,6 +171,13 @@ export function load({ url, cookies }) {
     const start = broadcastDayStart(Number.isFinite(requested) && requested > 0 ? requested : Date.now());
     const end = start + WINDOW_HOURS * HOUR;
 
+    /*
+     * 局の数 (種別ごと)。選んでいる種別に局が無ければ、表の真ん中にスキャンの案内を出す。
+     * そのときは上の案内 (`+layout.svelte`) を出さない — 同じことを2度言わない
+     */
+    const counts = serviceCounts();
+    const typeEmpty = (counts[type] ?? 0) === 0;
+
     return {
         // ここまでが外枠。URL と設定だけで決まるので、表を待たずに描ける
         type,
@@ -175,6 +189,8 @@ export function load({ url, cookies }) {
         subchannels: storedSubchannels(cookies.get(SUBCHANNELS_COOKIE)),
         /** 表の中身。**promise のまま渡して、後から流す** */
         grid: gridOf(type, start, end),
+        typeEmpty,
+        channelNotice: typeEmpty ? null : channelNotice(counts),
     };
 }
 

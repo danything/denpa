@@ -15,6 +15,7 @@ import {
     sql,
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
+import { channelNotice } from '#lib/channel-notice.js';
 import { globTerms } from '#lib/fold.js';
 import { capacityLabel } from '#lib/format.js';
 import { GROUPED_COOKIE, storedGrouped } from '#lib/grouping.js';
@@ -22,6 +23,7 @@ import { fileSize } from '#lib/server/chase.js';
 import { now, orm } from '#lib/server/db.js';
 import { capacity } from '#lib/server/disk.js';
 import { CM_CUT_ALREADY, cancel as cancelEncode, enqueue, isCanceling, pump } from '#lib/server/encoder.js';
+import { serviceCounts } from '#lib/server/epg.js';
 import { emit } from '#lib/server/events.js';
 import { deleteRecordingFiles, reconcile } from '#lib/server/files.js';
 import { seriesFolder } from '#lib/server/library.js';
@@ -334,6 +336,8 @@ export function load({ url, cookies }) {
     const room = capacity();
 
     return {
+        /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
+        channelNotice: channelNotice(serviceCounts()),
         reservations,
         recordings,
         missed,

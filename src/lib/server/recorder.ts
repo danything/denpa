@@ -285,7 +285,7 @@ async function pump(
         Date.now() > recording.start_at && (statSync(path, { throwIfNoEntry: false })?.size ?? 0) > 0;
     /** 始めから禁止だったので録画をやめたか。前の番組のぶんを書いていても失敗にする */
     let stoppedForCopyNever = false;
-    // 何を使っているのかがチューナー画面に出る。番組名は載せず、IDだけ渡して向こうで引く
+    // 何を使っているのかが設定の「チューナー」に出る。番組名は載せず、IDだけ渡して向こうで引く
     const use = recordingUse(recording.id);
 
     try {

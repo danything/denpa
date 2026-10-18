@@ -8,11 +8,11 @@ const REASON = 'コピー禁止の番組なので録画しません';
  * **番組表を読み直す。** 偽の放送のつまみを変えたあとに使う。
  *
  * `syncEpg` だけでは、さっき集め終えたチャンネルには行き直さない (`epg-collect.pickChannels`)。
- * 画面の「いますぐ集める」(`/tuners?/collectNow`) は全部を回り直すので、それを起こしてから
+ * 画面の「いますぐ集める」(`/settings/channels?/collectNow`) は全部を回り直すので、それを起こしてから
  * `syncEpg` で待つ (走っている回に合流する)
  */
 async function recollect(request: APIRequestContext): Promise<void> {
-    const res = await request.post('/tuners?/collectNow', { form: {} });
+    const res = await request.post('/settings/channels?/collectNow', { form: {} });
     expect(res.ok()).toBe(true);
     await syncEpg(request);
 }

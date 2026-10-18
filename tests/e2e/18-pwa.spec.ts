@@ -173,7 +173,7 @@ test.describe('PWA', () => {
      * 覚えるので、**リロードしても消えない** — 見たいのはまさにその後
      */
     test('高さの表示は設定からオンにできて、リロードしても消えない', async ({ page }) => {
-        await goto(page, '/settings');
+        await goto(page, '/settings/browser');
         await page.getByTestId('measure-toggle').check();
         await expect(page.getByTestId('measure')).toBeVisible();
 
@@ -184,7 +184,7 @@ test.describe('PWA', () => {
         await expect(page.getByTestId('measure')).toBeVisible();
 
         // 後片付け。**入れっぱなしにしない**
-        await goto(page, '/settings');
+        await goto(page, '/settings/browser');
         await page.getByTestId('measure-toggle').uncheck();
         await expect(page.getByTestId('measure')).toHaveCount(0);
     });
@@ -227,7 +227,7 @@ test.describe('PWA', () => {
         /*
          * **番組表以外の画面も同じ。**
          *
-         * ルール・チューナー・設定は表を並べていて、それが画面より広い。
+         * ルール・設定 (チューナー・チャンネル) は表を並べていて、それが画面より広い。
          * 表が枠の中で横に流れるのは構わないが、**ページごと流れると**
          * ヘッダーも本文も一緒に動いて読めなくなる。
          *
@@ -237,7 +237,14 @@ test.describe('PWA', () => {
          */
         for (const width of [390, 430, 768]) {
             await page.setViewportSize({ width, height: 780 });
-            for (const path of ['/', '/rules', '/tuners', '/settings']) {
+            for (const path of [
+                '/',
+                '/rules',
+                '/settings',
+                '/settings/tuners',
+                '/settings/channels',
+                '/settings/logos',
+            ]) {
                 await goto(page, path);
                 const doc = await page.evaluate(() => ({
                     scrollW: document.documentElement.scrollWidth,
@@ -250,7 +257,7 @@ test.describe('PWA', () => {
         /*
          * **狭い幅では、主な画面へのタブが画面の下に並ぶ。** 指が届くのは画面の下のほうで、
          * 上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
-         * ルールとチューナーは「その他」の中
+         * ルールは「その他」の中 (チューナーは設定の節に移した)
          */
         await page.setViewportSize({ width: 390, height: 780 });
         await goto(page, '/');
@@ -268,6 +275,7 @@ test.describe('PWA', () => {
 
         const menu = page.getByTestId('nav-menu');
         await menu.getByRole('button', { name: 'その他' }).click();
+        await expect(menu.getByRole('link', { name: 'チューナー' })).toHaveCount(0);
         await menu.getByRole('link', { name: 'ルール' }).click();
         await page.waitForURL(/rules/);
         await expect(menu.getByRole('button', { name: 'その他' })).toHaveAttribute('aria-current', 'page');

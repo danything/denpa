@@ -240,14 +240,14 @@ function stamp(at: number): string {
 }
 
 /**
- * 局ロゴを集める (チューナー画面の「今すぐ取得」と同じ API)。番組表とライブの局の列に出る。
+ * 局ロゴを集める (設定の「ロゴ」の「ロゴをいますぐ集める」と同じ API)。番組表とライブの局の列に出る。
  * 終わるまで待つ — 集めている間はチューナーが塞がり、ライブが映らない
  */
 async function sweepLogos(): Promise<void> {
-    await post('/tuners?/logoSweep', {});
+    await post('/settings/logos?/logoSweep', {});
     const until = Date.now() + 180_000;
     while (Date.now() < until) {
-        const html = await (await fetch(`${BASE}/tuners`)).text();
+        const html = await (await fetch(`${BASE}/settings/logos`)).text();
         if (html.includes('data-testid="logo-sweep-done"')) return;
         await new Promise((resolve) => setTimeout(resolve, 2000));
     }
@@ -264,7 +264,7 @@ async function seed(): Promise<void> {
     // GPU (偽物。置いたファイルを偽 ffmpeg が「ある」と答える) と、EPGStation の引き継ぎ元。
     // 無いと設定画面に作業場の住所入りの「見つかりません」が出る
     writeFileSync(join(stack.hwDir, 'renderD128'), '');
-    await post('/settings?/probeHw', {});
+    await post('/settings/recording?/probeHw', {});
     mkdirSync(stack.epgstationDir, { recursive: true });
 
     // ルール (画面のフォームと同じものを投げる)。当てると予約が立つ
@@ -430,13 +430,22 @@ async function anim(page: Page, name: string, fn: () => Promise<void>): Promise<
     console.log('anim', name, frames.length, 'frames');
 }
 
-async function slowScroll(page: Page, steps = 40): Promise<void> {
-    const total = await page.evaluate(() => {
-        const el = document.scrollingElement;
+async function slowScroll(page: Page, steps = 40, selector: string | null = null): Promise<void> {
+    // 設定は右の列だけが巻き取る (広い画面)。その列を指せば、そこを動かす
+    const total = await page.evaluate((sel) => {
+        const el = (sel === null ? null : document.querySelector(sel)) ?? document.scrollingElement;
         return el ? el.scrollHeight - el.clientHeight : 0;
-    });
+    }, selector);
     for (let i = 1; i <= steps; i++) {
-        await page.evaluate((y) => document.scrollingElement?.scrollTo({ top: y }), (total * i) / steps);
+        await page.evaluate(
+            ([y, sel]) =>
+                (
+                    (sel === null ? null : document.querySelector(sel as string)) ?? document.scrollingElement
+                )?.scrollTo({
+                    top: y as number,
+                }),
+            [(total * i) / steps, selector] as const,
+        );
         await page.waitForTimeout(120);
     }
     await page.waitForTimeout(800);
@@ -513,8 +522,9 @@ async function uiShots(browser: Browser, watchId: string | null): Promise<void> 
         ['watch', watchId === null ? '/' : `/watch/${watchId}`],
         ['live', '/live'],
         ['rules', '/rules'],
-        ['tuners', '/tuners'],
-        ['settings', '/settings'],
+        ['tuners', '/settings/tuners'],
+        ['channels', '/settings/channels'],
+        ['settings', '/settings/recording'],
     ];
     const sizes = [
         { name: 'desktop', width: 1440, height: 900, scale: 1, mobile: false },
@@ -689,7 +699,7 @@ async function motionShots(browser: Browser): Promise<void> {
     // 数字の多い画面 (桁を揃えた数字)。見えている広さだけ
     for (const [name, path] of [
         ['numbers-home', '/'],
-        ['numbers-tuners', '/tuners'],
+        ['numbers-tuners', '/settings/channels'],
     ] as const) {
         await shot(name, async () => {
             await page.goto(`${BASE}${path}`);
@@ -703,7 +713,7 @@ async function motionShots(browser: Browser): Promise<void> {
         await page.goto(`${BASE}/`);
         await settle(page, 500);
         await record(page, 'nav', async () => {
-            for (const to of ['guide', 'rules', 'tuners', 'home']) {
+            for (const to of ['guide', 'rules', 'settings', 'home']) {
                 await page.getByTestId(`nav-${to}`).click();
                 await page.waitForTimeout(1300);
             }
@@ -754,7 +764,7 @@ async function motionShots(browser: Browser): Promise<void> {
         });
     });
     await shot('dialog', async () => {
-        await page.goto(`${BASE}/settings`);
+        await page.goto(`${BASE}/settings/browser`);
         await settle(page, 800);
         await page.getByTestId('canvas-video-toggle').scrollIntoViewIfNeeded();
         await record(page, 'dialog', async () => {
@@ -766,7 +776,7 @@ async function motionShots(browser: Browser): Promise<void> {
     });
     // 6. その場で保存した「保存しました」(ふわっと出て消える)
     await shot('saved', async () => {
-        await page.goto(`${BASE}/settings`);
+        await page.goto(`${BASE}/settings/recording`);
         await settle(page, 800);
         const box = page.getByTestId('codec-h264');
         await record(page, 'saved', async () => {
@@ -778,7 +788,7 @@ async function motionShots(browser: Browser): Promise<void> {
     });
     // 7. ヘッダーの線と影 (スクロールに合わせて濃くなる)
     await shot('scroll', async () => {
-        await page.goto(`${BASE}/tuners`);
+        await page.goto(`${BASE}/settings/channels`);
         await settle(page, 800);
         await record(page, 'scroll', async () => {
             for (let y = 0; y <= 240; y += 12) {
@@ -794,7 +804,7 @@ async function motionShots(browser: Browser): Promise<void> {
     });
     // 8. 進み具合のバー (番組表をいますぐ集める)
     await shot('progress', async () => {
-        await page.goto(`${BASE}/tuners`);
+        await page.goto(`${BASE}/settings/channels`);
         await settle(page, 800);
         // 偽の放送では集め終わるのが速いので、押す前から録る
         await page.getByTestId('epg-collect-now').scrollIntoViewIfNeeded();
@@ -983,19 +993,19 @@ try {
             });
         }
         if (want('tuners-anim')) {
-            await page.goto(`${BASE}/tuners`);
+            await page.goto(`${BASE}/settings/tuners`);
             await settle(page, 2000);
             await anim(page, 'tuners-anim', async () => {
                 await page.waitForTimeout(1000);
-                await slowScroll(page, 60);
+                await slowScroll(page, 60, '.page > .main');
             });
         }
         if (want('settings-anim')) {
-            await page.goto(`${BASE}/settings`);
+            await page.goto(`${BASE}/settings/recording`);
             await settle(page, 2000);
             await anim(page, 'settings-anim', async () => {
                 await page.waitForTimeout(1000);
-                await slowScroll(page, 50);
+                await slowScroll(page, 50, '.page > .main');
             });
         }
         await page.context().close();

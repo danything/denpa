@@ -289,7 +289,7 @@ export async function setRecording(
      * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
      */
     for (let 回 = 0; ; 回++) {
-        const res = await request.post('/settings?/saveRecording', {
+        const res = await request.post('/settings/recording?/saveRecording', {
             data: body.toString(),
             headers: { 'content-type': 'application/x-www-form-urlencoded' },
         });
@@ -370,7 +370,7 @@ async function revealAll(page: Page, listTestId: string): Promise<void> {
 
 /** 通知先を全部消す (10-webhook の後片付け)。消えるのを待ってから次を押す */
 export async function clearWebhooks(page: Page): Promise<void> {
-    await goto(page, '/settings');
+    await goto(page, '/settings/notifications');
     const rows = page.getByTestId('webhook-delete');
     for (let i = 0; i < 10; i++) {
         const count = await rows.count();

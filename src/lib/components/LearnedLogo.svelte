@@ -4,8 +4,8 @@
     import { resolve } from '$app/paths';
 
     /**
-     * CM検出のために覚えた局ロゴを小さく見せて、違っていれば捨てる。チューナー画面の
-     * 「受信できるチャンネル」の局名の横に、**覚えた局だけ**出す。
+     * CM検出のために覚えた局ロゴを小さく見せて、違っていれば捨てる。設定の「ロゴ」の
+     * 局ごとの行に、**覚えた局だけ**出す。
      *
      * 自動の割り出しは「隅で線の向きが毎コマ揃う所」しか見ないので、ロゴでない縁
      * (番組がずっと出しているテロップの飾りなど) を覚えることもある。CM判定が当たらない
@@ -39,7 +39,7 @@
         title={`CM検出のロゴ (${dateTime(learnedAt)} に更新)`}
         class="learned-image"
     />
-    <!-- 理由は `routes/tuners/+page.server.ts` の `logoForget` -->
+    <!-- 理由は `routes/settings/logos/+page.server.ts` の `logoForget` -->
     <form method="POST" action="?/logoForget" use:submitting class="forget">
         <input type="hidden" name="serviceId" value={serviceId} />
         <button type="submit" class="small ghost" aria-label={`${serviceName} のCM検出のロゴを覚え直す`}>覚え直す</button>

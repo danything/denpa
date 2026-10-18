@@ -520,7 +520,7 @@ async function collect(
             target.type,
             target.channel,
             controller.signal,
-            // 何を使っているのかがチューナー画面に出る
+            // 何を使っているのかが設定の「チューナー」に出る
             logoUse(target),
             SWEEP_PRIORITY,
             after,
@@ -579,7 +579,7 @@ async function collect(
     return before - (target.type !== 'GR' ? missingSatellites() : missingOn(target.channel));
 }
 
-/** チューナー画面に出る名乗り。引き継ぎ (`after`) でも同じものを渡す */
+/** 設定の「チューナー」に出る名乗り。引き継ぎ (`after`) でも同じものを渡す */
 function logoUse(target: Target): StreamUse {
     return `logo ${target.type}/${target.channel}`;
 }
@@ -940,7 +940,7 @@ export function stats(): { have: number; total: number; pending: number; unavail
 }
 
 /**
- * 局1つぶんのロゴの具合。チューナー画面の「受信できるチャンネル」で局ごとに出す。
+ * 局1つぶんのロゴの具合。設定の「ロゴ」で局ごとに出す。
  *
  * - `have` … 持っている
  * - `absent` … カルーセルに載っていないと分かった局 (取れない。`stats` の `unavailable`)

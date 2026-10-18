@@ -1,28 +1,19 @@
 <script lang="ts">
-    import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import { autosave, SaveState } from '#lib/autosave.svelte.js';
-    import ActionButton from '#lib/components/ActionButton.svelte';
-    import JobProgress from '#lib/components/JobProgress.svelte';
     import Lead from '#lib/components/Lead.svelte';
-    import LearnedLogo from '#lib/components/LearnedLogo.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import SaveNote from '#lib/components/SaveNote.svelte';
-    import ServiceLogo from '#lib/components/ServiceLogo.svelte';
-    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
-    import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL, splitReaderName } from '#lib/format.js';
+    import Toasts, { errorNotice } from '#lib/components/Toasts.svelte';
+    import { SERVICE_TYPE_LABEL, splitReaderName } from '#lib/format.js';
     import { held, liveUpdates } from '#lib/live-updates.svelte.js';
     import type { CardReaderState } from '#lib/server/scramble.js';
     import X from '~icons/lucide/x';
 
     let { data, form } = $props();
 
-    // スキャンは数十分かかることがある。進み具合はサーバから push される。
-    // 局の取り込みも1回では終わらないので、増えるたびに描き直す。
-    // ロゴ取得も1チャンネルに数分かかるので、同じように流してもらう
-    // 番組表を集めている最中の様子も 'tuners' で流れてくる
-    liveUpdates(['scan', 'services', 'logos', 'tuners', 'programs']);
-    const scan = $derived(data.scan);
+    // 使い始めた・離したはエージェントの通知 ('tuners') で流れてくる。スキャン・番組表・ロゴの取得もここに出る
+    liveUpdates(['tuners']);
     /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
     const configSave = new SaveState();
     /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
@@ -44,18 +35,6 @@
      * 台数は届くまで分からないので、よくある4台ぶん
      */
     const TUNER_SKELETON = [1.4, 1.4, 1.4, 1.4];
-    /** スキャンの状態の呼び名。共通のものに、スキャンだけの2つを足す */
-    const STATE_LABEL: Record<string, string> = { ...SHARED_STATE_LABEL, canceled: '中断', idle: '待機中' };
-
-    /*
-     * 物理チャンネルと、そこに入っている局。**denpa 自身のDBから来る。**
-     * エージェントにも控えはあるが、聞きに行かない (+page.server.ts)
-     */
-    const coverage = $derived(data.channels);
-    /** 表の局名の前に出す局ロゴの大きさ。放送のロゴは 16:9 (64x36) */
-    const LOGO_SIZE = 'width: 2.4rem; height: 1.35rem';
-    /** 入っている局をすべて並べたもの */
-    const services = $derived(coverage.flatMap((channel) => channel.services));
 
     /*
      * **読み直しの間も前の中身を出したままにする。**
@@ -77,25 +56,7 @@
         unknown: { label: '—', tone: '' },
     };
 
-    /** 番組表がどこまで埋まっているか。「8/9 まで」の形で出す */
-    function until(at: number): string {
-        const d = new Date(at);
-        return `${d.getMonth() + 1}/${d.getDate()} まで`;
-    }
-
-    /** 押した結果。スキャンの経過そのものは下のカードに出したままにする */
-    const notices = $derived.by(() => {
-        const list: Notice[] = [];
-        list.push(...errorNotice(form, 'tuner-error'));
-        if (form?.scan) list.push({ key: 'tuner-notice', kind: 'info', text: form.scan });
-        /*
-         * 済んだこと (ロゴの位置・チューナーの保存)。**`message` に載せない** —
-         * あれは fail の言葉として赤で出す欄 (`errorNotice`) なので、載せていた頃は
-         * ロゴの位置を受け取れても失敗の赤で出ていた (チューナーの保存は何も出なかった)
-         */
-        if (form?.done) list.push({ key: 'tuner-done', kind: 'success', text: form.done });
-        return list;
-    });
+    const notices = $derived(errorNotice(form, 'tuner-error'));
 </script>
 
 <svelte:window onclick={deleting.stand} />
@@ -103,17 +64,12 @@
 <Toasts {notices} source={form} />
 
 <!--
-    **1 列に並べ、節は見出しと細い線で区切る** (設定の画面と同じ形。`app.css` の `.sections`)。
-    2 列にカードを積んでいた頃は、目が左右を行き来した。表は幅を使うので、設定の画面より広く取る。
-
-    並びは「いまの様子」から: 空きとカードリーダー → 受信できるチャンネル → たまに回すスキャン →
-    入れたときしか触らないチューナーの設定。局ロゴとCM検出のロゴは局ごとの話なので、受信できるチャンネルの表に出す
+    **チューナーの空き → チューナーの設定** の順。いまの様子を先に、入れたときしか触らない設定を後に。
+    カードリーダーも同じ機材の話なので、空きの節に並べる
 -->
-<div class="sections tuners">
+<div class="sections">
     <!--
-        **いちばん上に置く。** 録るのも番組表を集めるのもここの取り合いで、
-        スキャン中に見たいのも「いま何台使っているか」。カードリーダーの
-        具合も同じ機材の話なので、同じ節に並べる
+        録るのも番組表を集めるのもここの取り合いで、スキャン中に見たいのも「いま何台使っているか」
     -->
     <section class="section" data-testid="tuner-card">
         <div class="section-head">
@@ -156,7 +112,7 @@
                 </div>
             {:else if tuners.length === 0}
                 <p class="small muted">
-                    チューナーがありません。「チューナーの設定」から追加してください。
+                    チューナーがありません。下の「チューナーの設定」から追加してください。
                 </p>
             {:else}
                 <div class="table-wrap row-cards-wrap">
@@ -328,297 +284,6 @@
         </div>
     </section>
 
-    <section class="section" data-testid="channel-card">
-        <!--
-            **説明を3つ重ねない。** 数を先に出して、注は1つだけ (数がそろわない理由)。
-            上のボタンが何をするものかは「詳しく」に畳む
-        -->
-        <div class="section-head spread">
-            <h2>受信できるチャンネル</h2>
-            <div class="cluster">
-                <!--
-                    入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
-                    譲るので、何か動いていると番組表がなかなか埋まらない。
-                    押されている間は録画以外には譲らせて、全チューナーで回る
-                -->
-                <ActionButton
-                    action="?/collectNow"
-                    class="small secondary outline"
-                    disabled={data.collect.boosted}
-                    testid="epg-collect-now"
-                >
-                    {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
-                </ActionButton>
-                <!--
-                    取得するものが無ければボタンも出さない。押しても「もう全部持っています」と
-                    断るだけになる。**走っている最中でも押せる** — 押されたほうが譲る作りなので、
-                    使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
-                -->
-                {#if data.logos.pending > 0}
-                    <ActionButton action="?/logoSweep" class="small secondary outline" testid="logo-sweep">
-                        {data.logoSweep.running ? 'ロゴを集めています…' : 'ロゴをいますぐ集める'}
-                    </ActionButton>
-                {/if}
-            </div>
-        </div>
-        {#if data.collect.running}
-            <!-- 1チャンネルに数分かかる。黙っていると止まって見える -->
-            <div class="progress-block" data-testid="epg-collect">
-                <div class="small muted num">
-                    {data.collect.boosted ? '最優先で集めています' : '番組表を集めています'}
-                    ({data.collect.active.join(', ') || '準備中'}) ・ 残り {data.collect.pending} チャンネル
-                </div>
-                <progress
-                    class="running"
-                    value={data.collect.total - data.collect.pending - data.collect.active.length}
-                    max={Math.max(1, data.collect.total)}
-                ></progress>
-                {#if data.collect.sweeping}
-                    <!-- 初回だけ。番組名が先に出て、詳細があとから埋まるのを不具合と思わせない -->
-                    <div class="tiny muted" data-testid="epg-sweeping">
-                        BS は、まず1つの中継から全局の番組名を入れています (数分)。
-                        番組内容・出演者などの詳細は、そのあと中継ごとに回って足します
-                    </div>
-                {/if}
-            </div>
-        {/if}
-        <!-- ロゴも1チャンネルに数分かかる。出さないと押しても何も起きていないように見える -->
-        {#if data.logoSweep.startedAt !== null}
-            <div class="progress-block" data-testid="logo-sweep-progress">
-                <JobProgress done={data.logoSweep.done} total={data.logoSweep.total} unit="チャンネル">
-                    ・ ロゴ <strong>{data.logoSweep.found} 局</strong>
-                    {#if data.logoSweep.channels.length > 0}
-                        ・ 受信中 {data.logoSweep.channels.join(', ')}
-                    {/if}
-                </JobProgress>
-                {#if data.logoSweep.message !== ''}
-                    <div class="tiny muted" data-testid="logo-sweep-done">
-                        {data.logoSweep.message}
-                    </div>
-                {/if}
-            </div>
-        {/if}
-        {#if coverage.length === 0}
-            <p class="small muted">
-                まだ1つもありません。チャンネルスキャンを実行してください。
-            </p>
-        {:else}
-            <!-- 番組表がもう入っている局の数。下の表の右端を全部見なくても分かるように -->
-            {@const withEpg = services.filter((service) => service.programs > 0).length}
-            <!--
-                **入れ子になった3つの数を、その順に並べる。** チャンネル (T19, BS15_0) の中に
-                局 (TOKYO MX1, MX2) があり、局ごとに番組表がある。「50 / 59 ・ 124 局」とだけ
-                出していた頃は、59 と 124 が同じものの数に見えた。局はスキャンで、番組表は
-                そのあと denpa が集めるもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
-            -->
-            <div class="small" data-testid="channel-coverage">
-                <span class="muted">チャンネル</span>
-                <strong>{coverage.length}</strong>
-                <span class="faint">→</span>
-                <span class="muted">局</span>
-                <strong>{services.length}</strong>
-                <span class="faint">→</span>
-                <span class="muted">番組表のある局</span>
-                <strong>{withEpg}</strong>
-                <!--
-                    局ロゴも局ごとの話なので、ここに並べる (別の節に分けていた頃は、説明が細い列に
-                    押し込まれて読みにくかった)。取れないぶんを除いて揃っていれば「揃った」の色
-                -->
-                <span class="faint">・</span>
-                <span class="muted">ロゴ</span>
-                <span
-                    class="tag num {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
-                    data-testid="status-logos"
-                >
-                    {data.logos.have} / {data.logos.total} 局
-                </span>
-                <!-- CM検出のために覚えたロゴ。局ロゴとは別物 (logo-data.ts)。覚えた局は表の局名の横に出る -->
-                <span class="faint">・</span>
-                <span class="muted">CMロゴ</span>
-                <span class="tag num" data-testid="status-cm-logos">
-                    {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
-                </span>
-            </div>
-            {#if data.logos.unavailable > 0}
-                <!--
-                    取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
-                    **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
-                    CS のロゴは BS の中継から降ってくる
-                -->
-                <div class="tiny muted" data-testid="logo-unavailable">
-                    <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
-                </div>
-            {/if}
-            <Lead>
-                1つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません
-                {#snippet more()}
-                    <p>番組表はスキャンのあと、局ごとに埋まっていきます。</p>
-                    <p>
-                        BS の初回は、1つの中継から全局の番組名を先に入れ (数分)、番組内容などの詳細は
-                        そのあと中継ごとに回って足します。詳細は各局が自分の中継にしか流していないためです。
-                        CS は詳細を流していないので、いつも1つの中継で全局ぶんを集めます。
-                    </p>
-                    <p>
-                        待てないときは<strong>「番組表をいますぐ集める」</strong>で、録画とライブ視聴に使っていないチューナーを全部使って集められます
-                        (スキャンやロゴの取得は止めます)。
-                    </p>
-                    <!-- 局ロゴ。放送波から取得するしかない。番組表に出ないとき、取れていないのか出し方が悪いのかをここで見分ける -->
-                    <p>
-                        局ロゴは番組表を集めるときに、あわせて取得します。放送波に流れるのは数十秒〜数分に一度、
-                        <strong>衛星は十数分に一度</strong>で、取れたロゴも1週間ごとに取り直します。
-                        表の局名の前に出ていないものは、まだ取れていない局です。
-                    </p>
-                    <p>
-                        「ロゴをいますぐ集める」では衛星の分も集めます。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
-                        そこだけ最大20分かかります (他の中継は数秒で終わります)。
-                    </p>
-                    <p>
-                        CMロゴは、CM検出のために録画から覚えたロゴの位置と形です。録画をエンコードするときに自動で覚え、
-                        覚えた局は局名の横に画像が出ます。ロゴの形になっていなければ「覚え直す」で消すと、次の録画で覚え直します。
-                    </p>
-                {/snippet}
-            </Lead>
-            <div class="table-wrap channels-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>種別</th>
-                            <th>ch</th>
-                            <th class="wide">局</th>
-                            <th class="nowrap">番組表</th>
-                        </tr>
-                    </thead>
-                    <tbody data-testid="channel-list">
-                        {#each coverage as channel (`${channel.type}:${channel.channel}`)}
-                            {@const programs = channel.services.reduce((sum, service) => sum + service.programs, 0)}
-                            {@const last = Math.max(0, ...channel.services.map((service) => service.until))}
-                            <tr data-testid="channel-row" data-channel={channel.channel}>
-                                <td class="nowrap small">
-                                    {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
-                                </td>
-                                <td class="mono small nowrap num">
-                                    {channel.channel}
-                                </td>
-                                <td class="small">
-                                    <!--
-                                        局ごとに、取れている局ロゴを名前の前に出す。まだのものは点線の枠、
-                                        放送に載っていないものは何も置かない (場所だけ空けて頭を揃える)
-                                    -->
-                                    <div class="stations">
-                                        {#each channel.services as service (service.id)}
-                                            <span
-                                                class="station"
-                                                data-testid="channel-service"
-                                                data-service-id={service.id}
-                                                data-logo={service.logo}
-                                            >
-                                                {#if service.logo === 'have'}
-                                                    <ServiceLogo id={service.id} has style={LOGO_SIZE} />
-                                                {:else}
-                                                    <span
-                                                        class="logo-slot {service.logo}"
-                                                        aria-hidden="true"
-                                                        title={service.logo === 'missing' ? 'ロゴはまだ取れていません' : 'ロゴは放送に載っていません'}
-                                                    ></span>
-                                                {/if}
-                                                <span class="broadcast">{service.name}</span>
-                                                <!-- CM検出のロゴは覚えた局だけ。画像と「覚え直す」をいつも出す -->
-                                                {#if service.cm !== null}
-                                                    <LearnedLogo serviceId={service.id} serviceName={service.name} learnedAt={service.cm} />
-                                                {/if}
-                                            </span>
-                                        {/each}
-                                    </div>
-                                </td>
-                                <td class="small nowrap num">
-                                    {#if programs > 0}
-                                        {programs} 件 <span class="tiny muted">{until(last)}</span>
-                                    {:else}
-                                        <span class="muted">—</span>
-                                    {/if}
-                                </td>
-                            </tr>
-                        {/each}
-                    </tbody>
-                </table>
-            </div>
-        {/if}
-    </section>
-
-    <section class="section" data-testid="scan-card">
-        <div class="section-head">
-            <h2>チャンネルスキャン</h2>
-        </div>
-        <!-- 何分もかかって空きチューナーを全部使う。そこは畳まずに見せておく -->
-        <Lead>
-            <strong>空いているチューナーを全部使います</strong>。録画中でも実行できます。
-            始めたら、画面を移ったり閉じたりしてもかまいません (サーバで続きます)
-            {#snippet more()}
-                <p>受信できるチャンネルを選局して探します (録画中のチューナーは使いません)。</p>
-                <p>見つかったチャンネルは保存し、終わると番組表も集め直します。</p>
-            {/snippet}
-        </Lead>
-
-        <!--
-            探す範囲は決め打ち。放送で使う物理チャンネルは決まっていて、
-            狭めても総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
-        -->
-        <form method="POST" action="?/scan" use:submitting class="setting-rows scan-form">
-            <div class="field">
-                <span class="field-label">種別</span>
-                <!--
-                    **選ぶものと押すものを1行に。** ボタンを種別の下の段に置いていた頃は、
-                    どの欄にも付かない浮いたボタンに見えた。狭い幅では折り返す
-                -->
-                <div class="cluster scan-controls">
-                    <div class="chips" data-testid="scan-types">
-                        {#each TYPES as type (type)}
-                            <label class="chip">
-                                <input type="checkbox" name="types" value={type} checked={type === 'GR'} />
-                                {SERVICE_TYPE_LABEL[type]}
-                            </label>
-                        {/each}
-                    </div>
-                    <button type="submit" class="small" disabled={scan.state === 'running'} data-testid="scan-start">
-                        {scan.state === 'running' ? '実行中…' : '開始'}
-                    </button>
-                    {#if scan.state === 'running'}
-                        <!--
-                            十数分かかるので、途中で降りられるようにしてある。
-                            中断しても設定は書き換えない (途中までの結果で上書きすると、
-                            まだ回っていない局の定義が消える)
-                        -->
-                        <button type="submit" class="small outline danger" formaction="?/scanStop">
-                            中断
-                        </button>
-                    {/if}
-                </div>
-            </div>
-        </form>
-
-        {#if scan.state !== 'idle'}
-            <div class="progress-block" data-state={scan.state}>
-                <div class="cluster small">
-                    <span class="tag" data-testid="scan-state">{STATE_LABEL[scan.state]}</span>
-                    {#if scan.phase}
-                        <span class="tag outline">{scan.phase}</span>
-                    {/if}
-                    <span class="num" data-testid="scan-found">見つかったチャンネル {scan.channels}</span>
-                </div>
-
-                <!-- 総当たりなので何分かかるか分かりにくい。どこまで進んだかを出す -->
-                <JobProgress done={scan.scanned} total={scan.total} unit="チャンネル" testid="scan-count" />
-
-                {#if scan.error}
-                    <div class="notice error">{scan.error}</div>
-                {/if}
-                {#if scan.log.length > 0}
-                    <pre class="log" data-testid="scan-log">{scan.log.join('\n')}</pre>
-                {/if}
-            </div>
-        {/if}
-    </section>
-
     <section class="section" data-testid="tuner-config-card">
         <div class="section-head">
             <h2>チューナーの設定</h2>
@@ -636,7 +301,7 @@
         {#if shownTuners.value !== undefined}
             {@const rows = [...shownTuners.value.list, null]}
             <!--
-                **変えたらその場で保存する** (`autosave`。設定の画面と同じ)。文字の欄は離れたとき、
+                **変えたらその場で保存する** (`autosave`。設定のほかの節と同じ)。文字の欄は離れたとき、
                 チェックと選択は変えたとき。
                 名前は空にできない (断って元に戻す)。行を消すのは右端の「×」の 2 回押し。
                 **行の追加はボタンで** — 足すための空の行は、名前を打っている途中や
@@ -763,10 +428,6 @@
 </div>
 
 <style>
-    /* 表を幅いっぱいに使うので、設定の画面 (720px) より広く取る */
-    .tuners {
-        max-width: 64rem;
-    }
     .table-wrap {
         overflow-x: auto;
     }
@@ -797,32 +458,8 @@
     .table-wrap td {
         padding: 0.35rem 0.5rem;
     }
-    /*
-     * 受信できるチャンネルの表は、スマートフォンの幅では欄の間を詰める。
-     * 局の欄が幅を取り、右端の「10/13 まで」が枠の外へ押し出されていた
-     */
-    .channels-wrap {
-        container-type: inline-size;
-    }
-    @container (max-width: 32rem) {
-        .channels-wrap th,
-        .channels-wrap td {
-            padding-inline: 0.3rem;
-        }
-    }
     .wide {
         width: 100%;
-    }
-    .log {
-        max-height: 16rem;
-        overflow: auto;
-        margin: 0;
-        padding: 0.5rem;
-        border-radius: var(--dp-radius);
-        background: var(--dp-subtle);
-        font-family: var(--pico-font-family-monospace);
-        font-size: 0.75rem;
-        white-space: pre-wrap;
     }
     .config :is(input:not([type='checkbox']), select) {
         height: auto;
@@ -928,33 +565,6 @@
     .reader-name {
         min-width: 12rem;
         overflow-wrap: break-word;
-    }
-    /* 種別の切り替え (`.chip`) と同じ高さにして、1行に並べる */
-    .scan-controls button {
-        padding: 0.15rem 0.75rem;
-        font-size: var(--dp-text-xs);
-        line-height: 1.6;
-    }
-    /* 受信できるチャンネルの局。ロゴと名前を1組にして、折り返しても組は割らない */
-    .stations {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.15rem 0.9rem;
-    }
-    .station {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-    }
-    /* ロゴの無い局の場所。まだ取れていないものは点線の枠、取れないものは空けるだけ */
-    .logo-slot {
-        flex-shrink: 0;
-        width: 2.4rem;
-        height: 1.35rem;
-        border-radius: 0.25rem;
-    }
-    .logo-slot.missing {
-        border: 1px dashed var(--dp-line-strong);
     }
     /*
      * 答え待ちの骨組み (番組表・ルールの下見と同じ形と色)。見出しの行だけ濃く、光の筋が横に流れる。

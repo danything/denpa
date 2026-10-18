@@ -36,6 +36,20 @@ const DIGITAL_TV = 1;
 export const CURRENT_SERVICES = 'updated_at >= (SELECT MAX(updated_at) FROM services)';
 
 /**
+ * いま選局できる局の数を種別ごとに。局が無いときの案内に使う (`#lib/channel-notice.ts`)。
+ * 局が1つも無い種別は入らない
+ */
+export function serviceCounts(): Record<string, number> {
+    const rows = orm()
+        .select({ type: services.type, n: count() })
+        .from(services)
+        .where(sql.raw(CURRENT_SERVICES))
+        .groupBy(services.type)
+        .all();
+    return Object.fromEntries(rows.map((row) => [row.type, row.n]));
+}
+
+/**
  * 局の並び。**テレビと同じ順にする。**
  *
  * リモコン番号を持つのは地上波だけ。**BS と CS はサービスID がそのまま

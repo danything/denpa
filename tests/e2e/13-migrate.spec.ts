@@ -17,7 +17,7 @@ test.describe('EPGStation からの引き継ぎ', () => {
     });
 
     test('引き継ぎ元が見えなければ実行させない', async ({ page }) => {
-        await goto(page, '/settings');
+        await goto(page, '/settings/migrate');
 
         await expect(page.getByTestId('migrate-unavailable')).toBeVisible();
         // ボタンを出しておいて押したら失敗、では何をすればいいか分からない
@@ -26,7 +26,7 @@ test.describe('EPGStation からの引き継ぎ', () => {
 
     test('引き継ぎ元が見えれば実行でき、失敗すれば理由が出る', async ({ page, stack }) => {
         mkdirSync(stack.epgstationDir, { recursive: true });
-        await goto(page, '/settings');
+        await goto(page, '/settings/migrate');
         await expect(page.getByTestId('migrate-unavailable')).toHaveCount(0);
 
         // 既定は下見。チェックを入れない限りファイルもDBも触らない

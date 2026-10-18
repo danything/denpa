@@ -1,23 +1,23 @@
 import { expect, goto, syncEpg, test } from './helpers';
 
 /**
- * チューナー画面。
+ * 設定のチューナーとチャンネル。
  *
  * **総当たりを回すのは denpa。** 選局はエージェントにリクエストするが、NIT と SDT を
  * 読み取って局名を取るのはこちらで、見つけた顔ぶれをエージェントに預ける。
  * ここは 13〜62ch を本当に1つずつ開いていて、偽の放送にあるのは T16 と T21 だけ。
  */
-test.describe('チューナー画面', () => {
+test.describe('設定のチューナーとチャンネル', () => {
     test.afterEach(async ({ request, stack }) => {
         await request.post(`${stack.agentUrl}/__control/tuners?busy=0`);
     });
 
     test('チャンネルスキャンを実行でき、進み具合と結果が出る', async ({ page, request }) => {
         await syncEpg(request);
-        await goto(page, '/tuners');
+        await goto(page, '/settings/channels');
 
-        const card = page.getByTestId('scan-card');
-        // 何分もかかって空きチューナーを全部使うので、そうと分かるようにしておく
+        const card = page.getByTestId('channel-card');
+        // 何分もかかって空きチューナーを全部使うので、そうと分かるようにしておく (「詳しく」の中)
         await expect(card).toContainText('空いているチューナーを全部使います');
 
         await card.getByTestId('scan-start').click();
@@ -39,7 +39,7 @@ test.describe('チューナー画面', () => {
      */
     test('番組表をいますぐ集められる。譲る順も上がる', async ({ page, request, stack }) => {
         await syncEpg(request);
-        await goto(page, '/tuners');
+        await goto(page, '/settings/channels');
 
         await page.getByTestId('epg-collect-now').click();
 
@@ -72,18 +72,19 @@ test.describe('チューナー画面', () => {
         await expect(page.getByTestId('channel-coverage')).toContainText('番組表のある局');
     });
 
-    test('種別を1つも選ばなければ断る', async ({ page }) => {
-        await goto(page, '/tuners');
-        const card = page.getByTestId('scan-card');
-        await card.getByTestId('scan-types').getByRole('checkbox').first().uncheck();
-        await card.getByTestId('scan-start').click();
-        await expect(page.getByTestId('tuner-error')).toContainText('種別を選んでください');
+    test('種別を1つも選ばなければ断る', async ({ request }) => {
+        // 画面の選ぶ欄は必ずどれかが入っている。画面の外から空で来たものは断る
+        const res = await request.post('/settings/channels?/scan', {
+            form: {},
+            headers: { accept: 'application/json', 'x-sveltekit-action': 'true' },
+        });
+        expect(await res.text()).toContain('種別を選んでください');
     });
 
     test('チューナーの空きと取れているチャンネルが出る', async ({ page, request, stack }) => {
         await syncEpg(request);
         await request.post(`${stack.agentUrl}/__control/tuners?busy=1`);
-        await goto(page, '/tuners');
+        await goto(page, '/settings/tuners');
 
         const tuners = page.getByTestId('tuner-list');
         await expect(tuners.getByTestId('tuner-row')).toHaveCount(4);
@@ -117,7 +118,8 @@ test.describe('チューナー画面', () => {
         await expect(order.nth(1)).toHaveText('ライブ視聴');
         await expect(order.last()).toHaveText('局ロゴの取得');
 
-        // スキャンで見つかった物理チャンネルと、denpa が取り込んだ局名
+        // スキャンで見つかった物理チャンネルと、denpa が取り込んだ局名 (設定のチャンネル)
+        await goto(page, '/settings/channels');
         const channels = page.getByTestId('channel-list');
         await expect(channels.getByTestId('channel-row').first()).toBeVisible();
         // 局名は放送のとおりの幅で出す (全角の英数は全角のまま)
@@ -165,7 +167,7 @@ test.describe('チューナーの設定', () => {
     });
 
     test('画面から台数と種別を変えられる', async ({ page }) => {
-        await goto(page, '/tuners');
+        await goto(page, '/settings/tuners');
 
         const card = page.getByTestId('tuner-config-card');
         const rows = card.getByTestId('tuner-config-row');
@@ -194,7 +196,7 @@ test.describe('チューナーの設定', () => {
     });
 
     test('種別を1つも選ばない行は断る', async ({ page }) => {
-        await goto(page, '/tuners');
+        await goto(page, '/settings/tuners');
 
         const card = page.getByTestId('tuner-config-card');
         // 最後の 1 つを外すと、その場で断られてすぐ元に戻る。そこだけは押すだけにする (外れたままを待たない)
@@ -222,7 +224,7 @@ test.describe('チューナーの設定', () => {
         ];
 
         await page.setViewportSize({ width: 1600, height: 900 });
-        await goto(page, '/tuners');
+        await goto(page, '/settings/tuners');
         await expect(page.getByTestId('tuner-list').getByTestId('tuner-row').first()).toBeVisible();
         await expect(page.getByTestId('card-reader-row').first()).toBeVisible();
         for (const table of tables) {

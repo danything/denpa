@@ -1235,15 +1235,18 @@ dialog[open] > article {
     opacity: 0.5;
 }
 
-/* ---- 設定の並べ方 (設定・チューナーの画面) ---- */
+/* ---- 設定の並べ方 (設定の画面。`routes/settings`) ---- */
 /*
  * **節は枠で囲まず、見出しと細い線で区切る** (`<div class="sections">` に `<section class="section">` を並べる)。
- * カードを 2 列に積んでいた頃は、目が左右を行き来して、どこまで読んだのか分からなくなった
+ * カードを 2 列に積んでいた頃は、目が左右を行き来して、どこまで読んだのか分からなくなった。
+ * 左の一覧の隣に左寄せで置く。文と欄だけの節は読みやすい幅で止める (`.readable`)。表のある節は広く使う
  */
 .sections {
     display: flex;
     flex-direction: column;
-    margin-inline: auto;
+}
+.sections.readable {
+    max-width: 45rem;
 }
 .section {
     display: flex;
@@ -1266,13 +1269,32 @@ dialog[open] > article {
 .section-head h2 {
     font-size: var(--dp-text-lg);
 }
+.sections .fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-space-4);
+}
+.sections .hint {
+    display: block;
+    font-size: var(--dp-text-sm);
+    color: var(--dp-muted);
+}
+/* 選ぶ欄は中身の幅で足りる。横いっぱいに伸ばすと、どこまでが欄なのか読みにくい */
+.sections .narrow {
+    max-width: 20rem;
+}
+/* チェックの下の要点は、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem) */
+.sections .lead.indent {
+    margin-inline-start: 1.75rem;
+}
 /*
  * **広い画面では「名前 (左) ｜ 操作 (右)」の 2 段組の行にする** (`.setting-rows` の中の `.field`)。
  * 名前・操作・説明を縦に積んでいた頃は、項目ごとに 3〜4 段の高さを取り、画面が縦に長くなっていた。
  * 名前 (`.field-label`) と説明 (`.hint`・`Lead`) は左、それ以外 (欄・チェック・ボタン) は右。
- * 狭い画面は縦に積んだまま
+ * 狭い画面は縦に積んだまま。**切り替えは画面の幅ではなく右の列の幅で** (設定の `.main-inner` が container)。
+ * 左に一覧が付くので、768px の画面でも右の列は 480px ほどしかない
  */
-@media (min-width: 768px) {
+@container (min-width: 40rem) {
     .setting-rows > .field {
         display: grid;
         grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);

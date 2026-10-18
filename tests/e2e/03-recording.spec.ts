@@ -25,7 +25,7 @@ test.describe('録画とエンコード', () => {
 
         // 節目の通知が実際にどう飛ぶかも、この一連の流れで見ておく
         await request.post(`${stack.webhookUrl}/__control/reset`);
-        await goto(page, '/settings');
+        await goto(page, '/settings/notifications');
         await page.getByTestId('webhook-url').fill(`${stack.webhookUrl}/__control/webhook`);
         await page.getByTestId('webhook-add').click();
 
@@ -163,7 +163,7 @@ test.describe('録画とエンコード', () => {
         await expect(cellOf(page, programId)).toContainText('完了');
 
         // 後続のテストに通知先を持ち越さない
-        await goto(page, '/settings');
+        await goto(page, '/settings/notifications');
         await page.getByTestId('webhook-delete').first().click();
         await page.getByTestId('webhook-delete-confirm').click();
         await expect(page.getByTestId('webhook-delete-confirm')).toHaveCount(0);
@@ -176,7 +176,7 @@ test.describe('CMの実カット', () => {
         await syncEpg(request);
 
         // CM の扱いは全体設定。実際に切る側にしてから録る
-        await goto(page, '/settings');
+        await goto(page, '/settings/recording');
         await page.getByTestId('global-cmcut').selectOption('cut');
         await expect(page.getByTestId('saved-result')).toBeVisible();
 
@@ -294,12 +294,12 @@ test.describe('エンコードしない', () => {
         test.setTimeout(180_000);
         await syncEpg(request);
 
-        await goto(page, '/settings');
+        await goto(page, '/settings/recording');
         await page.getByTestId('codec-av1').uncheck();
         await page.getByTestId('codec-h264').uncheck();
         await expect(page.getByTestId('saved-result')).toBeVisible();
         // 選び直しても残っていること (どちらも外れたまま)
-        await goto(page, '/settings');
+        await goto(page, '/settings/recording');
         await expect(page.getByTestId('codec-av1')).not.toBeChecked();
         await expect(page.getByTestId('codec-h264')).not.toBeChecked();
 
@@ -327,7 +327,7 @@ test.describe('エンコードしない', () => {
         await expect(detail.getByTestId('reencode-button')).toHaveCount(0);
 
         // 後片付け。**エンコードする設定に戻す** (他のテストや本番の既定に揃える)
-        await goto(page, '/settings');
+        await goto(page, '/settings/recording');
         await page.getByTestId('codec-av1').check();
         await expect(page.getByTestId('saved-result')).toBeVisible();
     });

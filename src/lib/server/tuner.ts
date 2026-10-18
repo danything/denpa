@@ -130,7 +130,7 @@ export async function putChannels(found: AgentChannel[], scanned: ChannelType[])
     return tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels');
 }
 
-/** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。チューナー画面に出す) を1度に */
+/** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を1度に */
 export function tunerList(): Promise<Infer<typeof TUNERS>> {
     return get('/denpa/tuners', TUNERS);
 }
@@ -162,10 +162,10 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
 }
 
 /**
- * 何のために開いたかを伝える印。チューナー画面にそのまま出る。
+ * 何のために開いたかを伝える印。設定の「チューナー」にそのまま出る。
  *
  * **ASCII だけ**にしてある。番組名は入れず録画IDだけ渡して、読める言葉に直すのは
- * 画面側でやる (routes/tuners/+page.server.ts)。
+ * 画面側でやる (routes/settings/tuners/+page.server.ts)。
  */
 export type StreamUse =
     | `rec ${number}`

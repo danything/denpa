@@ -51,12 +51,12 @@ test.describe('GPU でエンコードする', () => {
         clearGpus(stack.hwDir);
         await setRecording(request);
         // 次に GPU を見る人が「無い」から始められるように
-        await request.post('/settings?/probeHw', { form: {} });
+        await request.post('/settings/recording?/probeHw', { form: {} });
     });
 
     test('見つかった GPU は自動で使い、コーデックごとにエンコーダを選べる', async ({ page, stack }) => {
         clearGpus(stack.hwDir);
-        await goto(page, '/settings');
+        await goto(page, '/settings/recording');
         // GPU が無ければ、エンコーダを選ぶ欄も無い
         await page.getByTestId('hw-probe').click();
         await expect(page.getByTestId('hw-status')).toContainText('GPU が見つかりません');
@@ -79,7 +79,7 @@ test.describe('GPU でエンコードする', () => {
         await page.getByTestId('hw-av1').selectOption(d128 as string);
         await page.getByTestId('hw-h264').selectOption(d129 as string);
         await expect(page.getByTestId('saved-result')).toBeVisible();
-        await goto(page, '/settings');
+        await goto(page, '/settings/recording');
         await expect(page.getByTestId('hw-av1')).toHaveValue(d128 as string);
         await expect(page.getByTestId('hw-h264')).toHaveValue(d129 as string);
     });
@@ -89,7 +89,7 @@ test.describe('GPU でエンコードする', () => {
         await syncEpg(request);
         // 上の割り振りのまま (128 = AV1、129 = H.264)
         for (const gpu of GPUS) writeFileSync(`${stack.hwDir}/${gpu}`, '1');
-        await request.post('/settings?/probeHw', { form: {} });
+        await request.post('/settings/recording?/probeHw', { form: {} });
         rmSync(stack.encodeArgsFile, { force: true });
         await setRecording(request, { codecs: ['av1', 'h264'] });
 

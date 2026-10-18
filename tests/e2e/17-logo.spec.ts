@@ -45,7 +45,7 @@ test.describe('局ロゴ', () => {
             .toBe(true);
 
         // 普段は10分ごとに少しずつ取得している。押すと今すぐ取得する
-        await goto(page, '/tuners');
+        await goto(page, '/settings/logos');
         await page.getByTestId('logo-sweep').click();
 
         /*
@@ -91,15 +91,15 @@ test.describe('局ロゴ', () => {
          * まとまって来るので、来なくなったことが分かるまで開けておく)
          */
         await expect(async () => {
-            await goto(page, '/tuners');
+            await goto(page, '/settings/logos');
             await expect(page.getByTestId('logo-sweep-done')).toContainText('ロゴを取得しました');
         }).toPass({ timeout: 60_000 });
 
         // 何局ぶん持っているかもここに出す。番組表にロゴが出ないとき、
         // まだ取得できていないのか出し方が悪いのかを見分けるため
         await expect(page.getByTestId('status-logos')).toContainText('局');
-        // 受信できるチャンネルの表でも、局名の前にロゴが出る (局ごとに確かめられる)
-        const row = page.locator(`[data-testid="channel-service"][data-service-id="${MX.id}"]`);
+        // 局ごとの表にも出る (局ごとに確かめられる)
+        const row = page.locator(`[data-testid="logo-row"][data-service-id="${MX.id}"]`);
         await expect(row).toHaveAttribute('data-logo', 'have');
         await expect(row.locator('img')).toBeVisible();
 
@@ -135,7 +135,7 @@ test.describe('衛星の局ロゴ', () => {
 
         rmSync(`${stack.root}/logos/${BS11.id}.png`, { force: true });
 
-        await goto(page, '/tuners');
+        await goto(page, '/settings/logos');
         /*
          * **番組表を集めるだけでも取得できることがある。** 衛星のチャンネルも
          * 開くので、そこにカルーセルが流れていれば只で埋まる。押すボタンが
@@ -174,7 +174,7 @@ test.describe('衛星の局ロゴ', () => {
 
         rmSync(`${stack.root}/logos/${BS_NO_LOGO.id}.png`, { force: true });
 
-        await goto(page, '/tuners');
+        await goto(page, '/settings/logos');
         // 既に見切ったあとならボタンは出ていない。出ていれば押して確かめる
         const sweep = page.getByTestId('logo-sweep');
         if ((await sweep.count()) > 0) await sweep.click();
@@ -184,7 +184,7 @@ test.describe('衛星の局ロゴ', () => {
          * 覚えられていないと `missing()` に残り続けてボタンが消えない
          */
         await expect(async () => {
-            await goto(page, '/tuners');
+            await goto(page, '/settings/logos');
             await expect(page.getByTestId('logo-sweep')).toHaveCount(0);
         }).toPass({ timeout: 90_000 });
 
@@ -231,20 +231,18 @@ test.describe('CM検出のロゴ', () => {
         expect(image.status()).toBe(200);
         expect(image.headers()['content-type']).toContain('image/png');
 
-        await goto(page, '/tuners');
+        await goto(page, '/settings/logos');
         // 数の行に「CMロゴ n / m 局」
         await expect(page.getByTestId('status-cm-logos')).toContainText('局');
-        // 受信できるチャンネルの表の、その局の行に出る。開け閉めは無い
-        const station = page.locator(`[data-testid="channel-service"][data-service-id="${BS11.id}"]`);
+        // 局ごとの表の、その局の行に出る。開け閉めは無い
+        const station = page.locator(`[data-testid="logo-row"][data-service-id="${BS11.id}"]`);
         const shown = station.getByRole('img', { name: 'CM検出のロゴ' });
         await expect(shown).toBeVisible();
         // 画像として読めていること (壊れた PNG だと幅が 0 になる)
         await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(40);
         // 覚えていない局には何も出さない
         await expect(
-            page
-                .locator(`[data-testid="channel-service"][data-service-id="${MX.id}"]`)
-                .getByTestId('learned-logo'),
+            page.locator(`[data-testid="logo-row"][data-service-id="${MX.id}"]`).getByTestId('learned-logo'),
         ).toHaveCount(0);
 
         await station.getByRole('button', { name: '覚え直す' }).click();

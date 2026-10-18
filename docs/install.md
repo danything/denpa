@@ -129,7 +129,7 @@ Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `den
 
 ## うまくいかないとき
 
-立てたあとの手順は [README](../README.md#3-開く)。うまくいかないときは「チューナー」の画面を見ます。エージェントと
+立てたあとの手順は [README](../README.md#3-開く)。うまくいかないときは設定の「チューナー」を見ます。エージェントと
 カードリーダーの状態、スキャンの結果、番組表の集まり具合が出ます。
 
 イメージにはシェルがありません (土台は distroless。[development.md](development.md#イメージの土台は-distroless))。

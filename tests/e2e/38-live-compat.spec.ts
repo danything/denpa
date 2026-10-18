@@ -58,7 +58,7 @@ test.describe('互換モード', () => {
     });
 
     test('設定で入れると運転中の注意が出て、ライブを canvas に描く', async ({ page }) => {
-        await goto(page, '/settings');
+        await goto(page, '/settings/browser');
         const toggle = page.getByTestId('canvas-video-toggle');
         await expect(toggle).not.toBeChecked();
         // 使えるもの (この端末で描ける形式・テスラか) を出す
@@ -148,7 +148,7 @@ test.describe('互換モード', () => {
         });
 
         test('設定で明示して切れば、テスラでも <video> で観る', async ({ page }) => {
-            await goto(page, '/settings');
+            await goto(page, '/settings/browser');
             const toggle = page.getByTestId('canvas-video-toggle');
             await expect(toggle).toBeChecked();
             await expect(page.getByTestId('canvas-video-support')).toContainText(

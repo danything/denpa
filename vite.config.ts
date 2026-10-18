@@ -55,7 +55,7 @@ export default defineConfig({
              * 動かすが、写し漏れがあっても本物の JS として動かないよう二重に止める。
              * `script-src` に `'unsafe-inline'` を入れず、`script-src-attr 'none'` で属性のハンドラを止める。`eval` 系も許さない (`'unsafe-eval'` を入れない)。
              *
-             * **nonce にする (hash ではなく)。** 設定画面・チューナーの画面は load から
+             * **nonce にする (hash ではなく)。** 設定の画面 (録画のしかた・チューナー) は load から
              * Promise を返して後から流している (SvelteKit のストリーミング) — 流れてくる
              * `<script>` は頭を送ったあとに組まれるので hash を頭に載せられず、hash では止まる
              */

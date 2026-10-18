@@ -60,7 +60,7 @@ test.describe('テレビのペアリング', () => {
         expect(await stillPending.json()).toEqual({ error: 'authorization_pending' });
 
         // 設定画面に並ぶ
-        await goto(page, '/settings');
+        await goto(page, '/settings/tv');
         await expect(page.getByTestId('device-row').filter({ hasText: 'E2E のテレビ' })).toBeVisible();
 
         // アプリが自分で外す。無効にしたアクセストークンは信頼するネットワークからでも 401 (ペアリングし直しと分かるように)

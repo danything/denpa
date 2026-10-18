@@ -41,11 +41,11 @@ test.describe('CSP', () => {
     test('画面に CSP が付き、ふだんの画面では何も止められない', async ({ page }) => {
         await watchViolations(page);
         /*
-         * **設定とチューナーは load から Promise を返して後から流す** (ストリーミング)。
+         * **設定 (録画のしかた・チューナー) は load から Promise を返して後から流す** (ストリーミング)。
          * 流れてくる `<script>` にも nonce が要る (hash にしていたら、ここで止まる)。
          * `goto` は読み込みの終わり (= 流し終わり) まで待つ
          */
-        for (const path of ['/', '/guide', '/live', '/rules', '/settings', '/tuners']) {
+        for (const path of ['/', '/guide', '/live', '/rules', '/settings/recording', '/settings/tuners']) {
             const response = await page.goto(path);
             const policy = response?.headers()['content-security-policy'] ?? '';
             expect(policy, path).toContain("script-src-attr 'none'");

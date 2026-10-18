@@ -34,21 +34,70 @@ test.describe('ダッシュボードと画面遷移', () => {
          * 分かるので、同じ言葉をもう一度大きく出す意味が無かった。
          * ここで確かめるのもその2つ (`+layout.svelte` の `title`)
          */
-        for (const [name, label] of [
-            ['nav-guide', '番組表'],
-            ['nav-rules', 'ルール'],
-            ['nav-tuners', 'チューナー'],
-            ['nav-settings', '設定'],
-            ['nav-home', '録画'],
+        for (const [name, title] of [
+            ['nav-guide', '番組表 - denpa'],
+            ['nav-rules', 'ルール - denpa'],
+            // 設定は広い画面では先頭の節 (録画のしかた) が開き、節の名前が前に付く
+            ['nav-settings', '録画のしかた - 設定 - denpa'],
+            ['nav-home', '録画 - denpa'],
         ] as const) {
             await page.getByTestId(name).click();
-            await expect(page).toHaveTitle(`${label} - denpa`);
+            await expect(page).toHaveTitle(title);
             await expect(page.getByTestId(name)).toHaveAttribute('aria-current', 'page');
         }
     });
 
-    test('チューナー画面にカードリーダーの状態が出る', async ({ page }) => {
+    /*
+     * **設定は左に節の一覧、右に中身** (ルールと同じ一覧と詳細の形)。節ごとに URL があり、
+     * 戻る/進むもそのまま効く。狭い画面では一覧を先に出し、節を押すと中身と「← 設定」
+     */
+    test('設定は節ごとに開き、狭い画面では一覧から入る', async ({ page }) => {
+        await goto(page, '/settings');
+        // 広い画面では先頭の節へ移る
+        await page.waitForURL(/\/settings\/recording$/);
+        const nav = page.getByTestId('settings-nav');
+        await expect(nav.getByTestId('settings-nav-recording')).toHaveAttribute('aria-current', 'page');
+        await expect(page.getByTestId('settings-back')).toBeHidden();
+
+        await nav.getByTestId('settings-nav-channels').click();
+        await page.waitForURL(/\/settings\/channels$/);
+        await expect(page.getByTestId('channel-card')).toBeVisible();
+        await expect(page).toHaveTitle('チャンネル - 設定 - denpa');
+        await page.goBack();
+        await page.waitForURL(/\/settings\/recording$/);
+        await expect(page.getByTestId('codec-av1')).toBeVisible();
+
+        // 前のチューナーの画面は、設定のチューナーへずっと送る
+        const old = await page.request.get('/tuners', { maxRedirects: 0 });
+        expect(old.status()).toBe(308);
         await goto(page, '/tuners');
+        await page.waitForURL(/\/settings\/tuners$/);
+        await expect(page.getByTestId('nav-tuners')).toHaveCount(0);
+        await expect(page.getByTestId('nav-settings')).toHaveAttribute('aria-current', 'page');
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/settings');
+        await expect(page.getByTestId('settings-nav')).toBeVisible();
+        await page.getByTestId('settings-nav-tuners').click();
+        await page.waitForURL(/\/settings\/tuners$/);
+        await expect(page.getByTestId('settings-nav')).toBeHidden();
+        await expect(page.getByTestId('tuner-card')).toBeVisible();
+        await page.getByTestId('settings-back').click();
+        await page.waitForURL(/\/settings$/);
+        await expect(page.getByTestId('settings-nav')).toBeVisible();
+        await expect(page.getByTestId('tab-settings')).toHaveAttribute('aria-current', 'page');
+    });
+
+    test('地上波の局があれば、局が無いときの案内は出さない', async ({ page, request }) => {
+        await syncEpg(request);
+        for (const path of ['/', '/guide', '/live']) {
+            await goto(page, path);
+            await expect(page.getByTestId('channel-notice'), path).toHaveCount(0);
+        }
+    });
+
+    test('設定のチューナーにカードリーダーの状態が出る', async ({ page }) => {
+        await goto(page, '/settings/tuners');
         /*
          * **「チューナーの空き」に並べてある。** 同じ機材の話なので、
          * わざわざ別の枠を作って見るところを増やさない

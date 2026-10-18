@@ -1,9 +1,16 @@
 import { fail } from '@sveltejs/kit';
 import { and, gt, lte, sql } from 'drizzle-orm';
+import { channelNotice } from '#lib/channel-notice.js';
 import { channelNumber } from '#lib/format.js';
 import { LAST_COOKIE, type LiveCodec } from '#lib/live.js';
 import { orm } from '#lib/server/db.js';
-import { airing, CURRENT_SERVICES, SERVICE_ORDER, SERVICE_TYPE_ORDER } from '#lib/server/epg.js';
+import {
+    airing,
+    CURRENT_SERVICES,
+    SERVICE_ORDER,
+    SERVICE_TYPE_ORDER,
+    serviceCounts,
+} from '#lib/server/epg.js';
 import { warm } from '#lib/server/live.js';
 import { recordAiring } from '#lib/server/reservations.js';
 import { programs, services as stations } from '#lib/server/schema.js';
@@ -186,6 +193,8 @@ export function load(event) {
     const current = settings();
     return {
         channels,
+        /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
+        channelNotice: channelNotice(serviceCounts()),
         start,
         postalCode: current.postalCode,
         prefecture: current.prefecture,

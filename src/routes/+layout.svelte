@@ -2,6 +2,8 @@
     import { resolve } from '$app/paths';
     import '../app.css';
     import { onMount } from 'svelte';
+    import type { ChannelNotice as NoticeKind } from '#lib/channel-notice.js';
+    import ChannelNotice from '#lib/components/ChannelNotice.svelte';
     import Measure from '#lib/components/Measure.svelte';
     import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
@@ -11,6 +13,7 @@
     import { canTransition } from '#lib/motion.svelte.js';
     import { startOffline } from '#lib/offline.svelte.js';
     import { followNavigation, reload } from '#lib/reload.svelte.js';
+    import { sectionLabel } from '#lib/settings-sections.js';
     import { onNavigate } from '$app/navigation';
     import { navigating, page } from '$app/state';
     import CalendarDays from '~icons/lucide/calendar-days';
@@ -203,12 +206,24 @@
         { href: '/guide', label: '番組表' },
         { href: '/live', label: 'ライブ' },
         { href: '/rules', label: 'ルール' },
-        { href: '/tuners', label: 'チューナー' },
         { href: '/settings', label: '設定' },
     ] as const;
 
-    /** ページ名はナビと同じものを使う。タブに出す */
-    const title = $derived(`${links.find((l) => l.href === page.route.id)?.label ?? 'denpa'} - denpa`);
+    /**
+     * いま開いている画面のナビの行き先。**設定は節ごとに経路が分かれている** (`/settings/tuners` など) ので、
+     * その下も「設定」に数える。録画 (`/`) は頭が全部に合うので、ぴったりのときだけ
+     */
+    const here = $derived.by(() => {
+        const route = page.route.id ?? '';
+        return links.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ?? null;
+    });
+
+    /** ページ名はナビと同じものを使う。タブに出す。設定は節の名前を前に付ける */
+    const title = $derived.by(() => {
+        const label = links.find((l) => l.href === here)?.label ?? 'denpa';
+        const section = here === '/settings' ? sectionLabel(page.route.id?.split('/')[2] ?? '') : null;
+        return `${section === null ? '' : `${section} - `}${label} - denpa`;
+    });
 
     /**
      * 画面ぴったりの高さにして、中の一覧だけをスクロールさせる画面。
@@ -220,6 +235,7 @@
      *   ページごと動くと書いている欄が画面から出ていく
      * - **番組表** … 表が画面の残りをぜんぶ使う。`max-height: 75vh` で切っていた頃は、
      *   **画面の下に余白があるのに表のほうが先に終わって**いた
+     * - **設定** … 左に節の一覧、右に中身 (ルールと同じ形)。一覧は動かさず、中身だけを巻き取る
      *
      * 他の画面まで同じにすると、スクロールするのが window ではなくなり、
      * 戻ったときに見ていた位置へ帰らなくなる。畳まれる幅ではどの画面も
@@ -232,7 +248,9 @@
      */
     const FILLED = ['/', '/live', '/rules', '/guide'];
     // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと頭が付く (server/paths.ts)
-    const fill = $derived(FILLED.includes(page.route.id ?? '') || page.route.id === '/watch/[id]');
+    const fill = $derived(
+        FILLED.includes(page.route.id ?? '') || page.route.id === '/watch/[id]' || here === '/settings',
+    );
 
     /**
      * **狭い画面では、ナビを画面の下のタブにする** (下の `.tabbar`)。
@@ -240,7 +258,7 @@
      * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
      * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
      * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
-     * よく開く 4 画面をタブに、残り (ルール・チューナー) は「その他」の `Menu` (popover) に
+     * よく開く 4 画面をタブに、残り (ルール) は「その他」の `Menu` (popover) に
      */
     const tabs = [
         { href: '/', label: '録画', icon: ListVideo },
@@ -249,9 +267,11 @@
         { href: '/settings', label: '設定', icon: Settings },
     ] as const;
     const moreLinks = links.filter((link) => !tabs.some((tab) => tab.href === link.href));
-    const moreCurrent = $derived(moreLinks.some((link) => link.href === page.route.id));
-    /** タブを出すのは一覧の 6 画面だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
-    const showTabbar = $derived(links.some((link) => link.href === page.route.id));
+    const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
+    /** タブを出すのはナビの 5 画面 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
+    const showTabbar = $derived(here !== null);
+    /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
+    const notice = $derived((page.data['channelNotice'] ?? null) as NoticeKind | null);
     let menuOpen = $state(false);
     /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
     $effect(() => {
@@ -357,11 +377,11 @@
                         <a
                             href={resolve(link.href)}
                             class="button ghost small"
-                            aria-current={page.route.id === link.href ? 'page' : undefined}
+                            aria-current={here === link.href ? 'page' : undefined}
                             data-testid="nav-{link.href === '/' ? 'home' : link.href.slice(1)}"
                         >
                             {link.label}
-                            {#if page.route.id === link.href}<span class="nav-underline" aria-hidden="true"></span>{/if}
+                            {#if here === link.href}<span class="nav-underline" aria-hidden="true"></span>{/if}
                         </a>
                     </li>
                 {/each}
@@ -386,6 +406,16 @@
 
     </div>
 
+    <!--
+        **局が無いときの案内** (録画・番組表・ライブ。`#lib/channel-notice.ts`)。閉じるボタンは無く、
+        スキャンして局が入れば消える。中身の外 (ヘッダーの下) に置くので、各画面の高さの取り方は変わらない
+    -->
+    {#if notice}
+        <div class="notice-slot">
+            <ChannelNotice kind={notice} />
+        </div>
+    {/if}
+
     <main>
         {@render children()}
     </main>
@@ -393,8 +423,8 @@
     <!--
         **狭い幅では、主な画面へのタブを画面の下に並べる** (録画・番組表・ライブ・設定)。
         指が届くのは画面の下のほうで、上のハンバーガーから開いていた頃は、画面を移るたびに
-        2回押していた。ルールとチューナーはたまにしか開かないので「その他」の中。
-        出すのは一覧の 6 画面だけ — 観る画面・追っかけ (映像が主役)、ログインやペアリングには出さない。
+        2回押していた。ルールはたまにしか開かないので「その他」の中。
+        出すのはナビの 5 画面だけ — 観る画面・追っかけ (映像が主役)、ログインやペアリングには出さない。
         ライブの全画面 (`html[data-stage-fullscreen]`) のときも隠す (`app.css`)。
         下の安全域 (ホームバー) のぶんは内側の余白で避ける
     -->
@@ -404,10 +434,10 @@
                 <a
                     href={resolve(tab.href)}
                     class="tab"
-                    aria-current={page.route.id === tab.href ? 'page' : undefined}
+                    aria-current={here === tab.href ? 'page' : undefined}
                     data-testid="tab-{tab.href === '/' ? 'home' : tab.href.slice(1)}"
                 >
-                    {#if page.route.id === tab.href}<span class="tab-indicator" aria-hidden="true"></span>{/if}
+                    {#if here === tab.href}<span class="tab-indicator" aria-hidden="true"></span>{/if}
                     <Icon icon={tab.icon} size="size-5" />
                     <span>{tab.label}</span>
                 </a>
@@ -433,7 +463,7 @@
                                 <a
                                     href={resolve(link.href)}
                                     class="menu-item"
-                                    aria-current={page.route.id === link.href ? 'page' : undefined}
+                                    aria-current={here === link.href ? 'page' : undefined}
                                 >
                                     {link.label}
                                 </a>
@@ -778,9 +808,16 @@
         .shell:has(.tabbar) main {
             padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
         }
+        /* 局が無いときの案内がいちばん上に来る。安全域はそちらで避け、本文は普通の余白に戻す */
+        .shell:has(.tabbar) .notice-slot {
+            padding-top: env(safe-area-inset-top);
+        }
+        .shell:has(.tabbar):has(.notice-slot) main {
+            padding-top: var(--dp-gutter);
+        }
     }
     /* ライブの全画面のあいだは隠す (映像だけにする) */
-    :global(html[data-stage-fullscreen]) .tabbar {
+    :global(html[data-stage-fullscreen]) :is(.tabbar, .notice-slot) {
         display: none;
     }
     /*
