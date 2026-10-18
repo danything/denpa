@@ -4,7 +4,7 @@ import { config } from '#lib/server/config.js';
 import { orm } from '#lib/server/db.js';
 import { CURRENT_SERVICES } from '#lib/server/epg.js';
 import { collectNow, collectState } from '#lib/server/epg-collect.js';
-import { stats as logoStats, sweepNow, sweepState } from '#lib/server/logo.js';
+import { logoState, stats as logoStats, sweepNow, sweepState } from '#lib/server/logo.js';
 import { forgetLogoData, learnedAt, stats as learnStats, siblings, stations } from '#lib/server/logo-data.js';
 import { refresh, start, stop } from '#lib/server/scan.js';
 import { programs, recordings, services } from '#lib/server/schema.js';
@@ -95,7 +95,14 @@ function withLabels(tuners: AgentTuner[]): (Omit<AgentTuner, 'users'> & { users:
 interface Coverage {
     type: ChannelType;
     channel: string;
-    services: { id: number; name: string; programs: number; until: number }[];
+    /** `logo` は局ロゴの具合 (`logo.logoState`)。局ごとに出す */
+    services: {
+        id: number;
+        name: string;
+        programs: number;
+        until: number;
+        logo: ReturnType<typeof logoState>;
+    }[];
 }
 
 /**
@@ -133,7 +140,7 @@ function coverage(): Coverage[] {
     for (const { id, name, type, channel, programs, until } of rows) {
         const key = `${type}:${channel}`;
         const entry = channels.get(key) ?? { type, channel, services: [] };
-        entry.services.push({ id, name, programs, until });
+        entry.services.push({ id, name, programs, until, logo: logoState(id) });
         channels.set(key, entry);
     }
     return [...channels.values()].sort(
