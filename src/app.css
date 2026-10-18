@@ -121,7 +121,8 @@
     --dp-hover: var(--dp-subtle);
 }
 /*
- * テーマごとの色。**値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
+ * テーマごとの色。**明るいほうの値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
+ * 暗いほうの地と面だけは自前の段 (下の `[data-theme="dark"]`)。
  * 主の色 (azure) も Pico の段から来ているので、同じ物差しで並べると色の系統がそろう。
  * Pico も [data-theme] と :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ。
  *
@@ -131,11 +132,12 @@
  * ヘッダー・地・カードの 3 色が近すぎて、どこが押せる面なのかが読めなかった
  *
  * - `--dp-bg` … 地 (ページ・ヘッダー)
- * - `--dp-surface` … カード・一覧の枠・メニュー・ダイアログ
+ * - `--dp-surface` … カード・一覧の枠・ダイアログ
  * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
  * - `--dp-line` … 区切りの線 (カードの縁・行の間・ヘッダーの下)
  * - `--dp-line-strong` … 押せるものの縁 (入力欄・枠のボタン)。線より一段濃くして、押せない面と見分ける
  * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
+ * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
  * - `--dp-shadow` … カードの影 (ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  * - `--dp-shadow-bar` … スクロールしたときのヘッダーの影 (`+layout.svelte`)
@@ -149,6 +151,8 @@
     --dp-line: #dfe3eb; /* slate-100 */
     --dp-line-strong: #cfd5e2; /* slate-150 */
     --dp-raised: #fff;
+    --dp-pop: #fff;
+    --dp-pop-hover: var(--dp-subtle);
     --dp-muted: #555e70; /* 白・淡い面・選んでいる局の地のどれでも 4.5 以上 */
     --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
     --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
@@ -176,30 +180,51 @@
     --dp-info-text: #025d5d; /* cyan-650 */
 }
 [data-theme="dark"] {
-    --pico-background-color: #13171f; /* slate-950 (Pico の既定の地。theme-color と同じ) */
-    --dp-bg: #13171f;
-    --dp-surface: #181c25; /* slate-900 */
-    --dp-subtle: #202632; /* slate-850 */
-    --dp-line: #2a3140; /* slate-800 */
-    --dp-line-strong: #3d475c; /* slate-700 */
-    --dp-raised: #2a3140; /* slate-800 */
-    --dp-muted: #9aa3b5; /* 地・面・持ち上げた面のどれでも 4.5 以上 */
+    /*
+     * 暗いほうは Pico の段 (slate) を使わず、**ほぼ黒で色みを抑えた段**を自前で刻む。slate-950 の地は
+     * 青みがかった紺に見え、最近のアプリ (ほぼ黒の地) と並ぶと暗さが足りなかった。
+     * 青みはわずかに残す (真っ黒の灰色より、主の色の azure と馴染む)。
+     * 段は地 → 面 → 淡い面 → 線・持ち上げた面 → 押せるものの縁の順に、ほぼ等しく明るくする
+     */
+    --pico-background-color: #0b0c0f; /* 地 (theme-color と同じ) */
+    --dp-bg: #0b0c0f;
+    --dp-surface: #121318;
+    --dp-subtle: #1a1b20;
+    --dp-line: #26282e;
+    --dp-line-strong: #3a3d46;
+    --dp-raised: #26282e;
+    /*
+     * 影は黒い地では見えないので、メニューは面より明るい色で浮かせる (ダイアログの中で開いても分かる)。
+     * 選んでいる項目の地もそのぶん明るく
+     */
+    --dp-pop: #1f2026;
+    --dp-pop-hover: #2c2e35;
+    --dp-muted: #9aa3b5; /* 地・面・持ち上げた面・メニューのどれでも 4.5 以上 */
     --dp-primary-text: var(--pico-primary);
     --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
     --dp-shadow-bar: 0 2px 10px rgb(0 0 0 / 0.45);
-    --pico-form-element-background-color: #13171f;
+    --pico-form-element-background-color: var(--dp-bg);
+    --pico-form-element-active-background-color: var(--dp-surface);
+    --pico-form-element-selected-background-color: var(--dp-line);
     --pico-form-element-border-color: var(--dp-line-strong);
     --pico-table-border-color: var(--dp-line);
     --pico-muted-border-color: var(--dp-line);
+    /* Pico の既定は slate の段のままなので、カード・スイッチ・つまみ・進み具合も同じ段に寄せる */
+    --pico-card-background-color: var(--dp-surface);
+    --pico-card-sectioning-background-color: var(--dp-subtle);
+    --pico-switch-background-color: var(--dp-line-strong);
+    --pico-range-border-color: var(--dp-subtle);
+    --pico-range-active-border-color: var(--dp-line);
+    --pico-progress-background-color: var(--dp-subtle);
     /* 暗いほうも同じ考え。文字は本文並みの明るさ、区別は枠で付ける */
     --pico-secondary: #bfc7d9; /* slate-200 */
-    --pico-secondary-background: #181c25; /* slate-900 */
+    --pico-secondary-background: var(--dp-surface);
     --pico-secondary-border: var(--dp-line-strong);
     --pico-secondary-inverse: #dfe3eb; /* slate-100 */
     --pico-secondary-hover: #dfe3eb; /* slate-100 */
-    --pico-secondary-hover-background: #202632; /* slate-850 */
-    --pico-secondary-hover-border: #525f7a; /* slate-600 */
+    --pico-secondary-hover-background: var(--dp-subtle);
+    --pico-secondary-hover-border: #50545e;
     /* 暗いほうは逆に、塗り色より明るくしないと読めない */
     --dp-rec-text: #f38f79; /* red-300 */
     --dp-ok-text: #00cc88; /* jade-250 */
@@ -1074,7 +1099,9 @@ button[aria-busy="true"]::after {
     overflow-y: auto;
     padding: 0.25rem;
     border-radius: var(--dp-radius-lg);
-    background: var(--dp-surface);
+    /* 選んでいる項目の地もメニューの面に合わせる (暗いほうは面より明るいので、ふつうの --dp-hover だと沈む) */
+    --dp-hover: var(--dp-pop-hover);
+    background: var(--dp-pop);
     color: var(--pico-color);
     border: 1px solid var(--dp-line);
     box-shadow: var(--dp-shadow-pop);
