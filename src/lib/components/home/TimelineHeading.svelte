@@ -1,0 +1,30 @@
+<script lang="ts">
+    /**
+     * 時間軸の見出し: 日付 (`day`)、まとめて表示のときの側 (`side`)、「いま」の線 (`now`)。
+     * どれも `h2` なので、読み上げの見出し移動で辿れる
+     */
+    import { date, time } from '#lib/format.js';
+    import { dayName, type TimelineLine } from '#lib/timeline.js';
+    import { home, type Item } from './context';
+
+    let { entry }: { entry: TimelineLine<Item> & { kind: 'day' | 'side' | 'now' } } = $props();
+    const ctx = home();
+</script>
+
+{#if entry.kind === 'day'}
+    <!-- 日付の見出し。見出しなので読み上げの見出し移動で辿れる。予約か録画かも言う -->
+    <h2 class="t-day" data-testid="timeline-day" data-zone={entry.zone}>
+        <span class="t-day-name">{ctx.dayLabel(entry.at)}</span>
+        {#if dayName(entry.at, ctx.clock) !== null}<span class="t-day-date num">{date(entry.at)}</span>{/if}
+        <span class="t-day-zone">{entry.zone === 'future' ? '予約' : '録画'}</span>
+    </h2>
+{:else if entry.kind === 'side'}
+    <h2 class="t-day" data-testid="timeline-side" data-zone={entry.zone}>
+        <span class="t-day-name">{entry.zone === 'future' ? 'これからの予約' : '録画'}</span>
+    </h2>
+{:else}
+    <!-- 「いま」の線。見出しにして、見出し移動でここへ来られるようにする (読み上げは「いま 14:32」) -->
+    <h2 class="t-now" data-testid="timeline-now">
+        <span class="t-now-label num">いま {time(ctx.clock)}</span>
+    </h2>
+{/if}
