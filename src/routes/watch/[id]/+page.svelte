@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount, untrack } from 'svelte';
-    import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import { type CanvasPlayer, canvasPlayer } from '#lib/canvas-player.js';
     import { canvasVideo, driveNoticeSeen } from '#lib/canvas-video.js';
@@ -11,6 +10,7 @@
         type CaptionPages,
         captionLanguage as languageOf,
     } from '#lib/caption-text.js';
+    import ArmedDelete from '#lib/components/ArmedDelete.svelte';
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import { ambientMode } from '#lib/components/player/ambient.svelte.js';
@@ -38,7 +38,6 @@
         AUDIO,
         CAMERA,
         CAPTION,
-        CHECK,
         CODEC,
         DATA,
         NEXT,
@@ -48,7 +47,6 @@
         SOUND_OFF,
         SOUND_ON,
         SPEED,
-        TRASH,
     } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
@@ -1933,18 +1931,19 @@
                 {/if}
 
                 <!--
-                    **右端は「観るのをやめる」ための列。**
+                    **右上は「観る流れの外」の一行。** d・切り抜き・閉じる (閉じるは角)。
 
-                    閉じる・切り抜く・消すは、観ながら使う操作 (音・字幕・送り) とは
-                    押す頻度も並べる理由も違う。下の操作バーに混ぜると番組の名前が入る幅が残らない。
+                    観ながら使う操作 (音・字幕・送り) とは押す頻度も並べる理由も違う。
+                    下の操作バーに混ぜると番組の名前が入る幅が残らない。
+                    **並びはライブ・追っかけと同じ** — 切り抜きは角の 1 つ内側、角はその画面をやめるもの
+                    (観る・追っかけは閉じる、ライブは録画)。
 
-                    **削除をいちばん下に置く。** 隣を押すつもりで当たっても、
-                    聞き返しがあるので消えはしない
+                    **削除は映像の上に置かない。** 右の列の下 (`FactsAside` の押すもの) にある。
+                    映像の上の丸いボタンに混ぜると、閉じるのつもりで消すほうに指が行く
                 -->
                 <ControlBar side shown={controls.shown} testid="watch-side">
-                    <CloseLink testid="watch-close" />
                     <!--
-                        **データ放送 (d) は右上に置く。** 取り出してある録画でだけ出す
+                        **データ放送 (d)。** 取り出してある録画でだけ出す
                         (`data.hasData`)。データ操作 (リモコン) を右カラムに出すので、
                         入口の d も右にまとめた。押すと右カラムに `Remote` が出る。
                         ライブと違い、取得するのはサーバではなく取り出しておいた変化ログ
@@ -1968,34 +1967,7 @@
                         testid="watch-shot"
                         onclick={() => void snapshot()}
                     />
-                    <!--
-                        **観終わったその場で消せるようにする。** 末尾はたいてい
-                        CM なので、流したまま消せる。押し間違い防止に2回押させる
-                        のは一覧と同じ。
-
-                        **2回目も同じ大きさの丸** (`danger`)。見た目とその理由は
-                        [icons.ts](../../../lib/components/player/icons.ts) の
-                        `OVERLAY_DANGER`
-                    -->
-                    <form method="POST" action="?/delete" use:submitting>
-                        <input type="hidden" name="id" value={rec.id} />
-                        {#if deleting.armed !== null}
-                            <ControlButton
-                                icon={CHECK}
-                                label="削除を確定"
-                                danger
-                                submit
-                                testid="watch-delete-confirm"
-                            />
-                        {:else}
-                            <ControlButton
-                                icon={TRASH}
-                                label="削除"
-                                testid="watch-delete"
-                                onclick={() => deleting.arm(rec.id)}
-                            />
-                        {/if}
-                    </form>
+                    <CloseLink testid="watch-close" />
                 </ControlBar>
 
                 <!-- 下端。操作バーと押すもの。**ライブと同じ操作バー** (`ControlBar`) -->
@@ -2253,9 +2225,16 @@
             {recordedDuration(rec)} ・ {size(rec.ts_size)}
         </div>
         <!--
-            **押すものは置かない。** 「一覧へ」は映像の右上の「×」と同じ行き先なので、
-            観ている横に要らない
+            **押すものは削除だけ。** 「一覧へ」は映像の右上の「×」と同じ行き先なので、
+            観ている横に要らない。
+
+            **観終わったその場で消せるようにする。** 末尾はたいてい CM なので、流したまま消せる。
+            押し間違い防止に2回押させるのは一覧と同じ (`ArmedDelete`)。映像の上には置かない
+            (閉じる・切り抜きの丸と並ぶと、そのつもりのない指が当たる)
         -->
+        {#snippet footer()}
+            <ArmedDelete {deleting} armKey={rec.id} fields={{ id: rec.id }} class="small" icon testid="watch-delete" />
+        {/snippet}
     </FactsAside>
     {/snippet}
 </PlayerLayout>

@@ -409,22 +409,12 @@
             <!-- 録画に譲って追っかけを観ている間 (`yielded`) も出す。局をリクエストするものだけ外す (下) -->
             {#if player.tuned !== null || player.yielded !== null}
                 <!--
-                    **右上の縦列。観る画面と同じ場所・同じ並び** (`watch-side`) —
+                    **右上の一行。観る画面と同じ場所・同じ並び** (`watch-side`) —
                     d ボタンと切り抜きが画面ごとに違う場所にあると、押すたびに
-                    探し直すことになる。いちばん上は録画 (観る画面では「閉じる」の位置)
+                    探し直すことになる。角は録画 (観る画面では「閉じる」の位置)
                 -->
                 <ControlBar side shown={controls.shown}>
-                    <!--
-                        **いま観ている番組を録る。** 手動予約と同じ経路 (`?/record`) に
-                        乗せるだけで、数秒後にはこの番組の録画が始まる。既に録って
-                        いれば二重にはならない (予約は番組ごとに1本)。
-                        録画に譲っている間は出さない (観ているのはもう録っている番組)。データ放送も局のもの
-                    -->
                     {#if player.tuned !== null}
-                        <form method="POST" action="?/record" use:submitting>
-                            <input type="hidden" name="service" value={player.tuned.serviceId} />
-                            <ControlButton icon={RECORD} label="いまの番組を録画する" submit testid="live-record" />
-                        </form>
                         <ControlButton
                             icon={DATA}
                             label={player.showData ? 'データ放送を消す' : 'データ放送を出す'}
@@ -443,6 +433,18 @@
                         testid="live-shot"
                         onclick={() => void snapshot()}
                     />
+                    <!--
+                        **いま観ている番組を録る。** 手動予約と同じ経路 (`?/record`) に
+                        乗せるだけで、数秒後にはこの番組の録画が始まる。既に録って
+                        いれば二重にはならない (予約は番組ごとに1本)。
+                        録画に譲っている間は出さない (観ているのはもう録っている番組)。データ放送も局のもの
+                    -->
+                    {#if player.tuned !== null}
+                        <form method="POST" action="?/record" use:submitting>
+                            <input type="hidden" name="service" value={player.tuned.serviceId} />
+                            <ControlButton icon={RECORD} label="いまの番組を録画する" submit testid="live-record" />
+                        </form>
+                    {/if}
                 </ControlBar>
 
                 <!--

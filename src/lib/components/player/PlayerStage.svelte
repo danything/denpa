@@ -15,7 +15,7 @@
      * - 全画面 — **枠ごと**入れる (映像だけでなく操作列も一緒に大きくする)。
      *   出入りは画面側が持つ `fullscreen` (`fullscreen.svelte.ts`。`f` キーからも使うため)。
      *   iPhone では枠を画面いっぱいに広げて代わりにする (`data-pseudo`。下の style)
-     * - 枠の大きさから、操作列の詰め方を決める (`compact` / `low`。下の説明)
+     * - 枠の大きさから、操作列の詰め方を決める (`compact`。下の説明)
      *
      * 中身 (video・重ねる canvas・操作列) は画面ごとに違うので snippet で受ける。
      */
@@ -30,7 +30,7 @@
         /**
          * 映像の上の通知 (`StageNote`) を積む列。**通知はみなここへ** — 通知ごとに
          * 絶対配置していた頃は、置き場ごとに上からの距離を書いていて、同時に出ると重なった。
-         * 上端の真ん中から下へ積む。低い枠では右上の一行 (`ControlBar`) の下から
+         * 上端の真ん中から下へ積む。右上の一行 (`ControlBar`) の下から
          */
         notes?: Snippet;
         /**
@@ -63,10 +63,10 @@
     /**
      * **枠の大きさで操作列の詰め方を変える。**
      *
-     * 操作列は 48px の丸を横に9個、右の縦列に4個並べる作り (`ControlBar`) で、
+     * 操作列は 48px の丸を横に9個、右上の一行に3個並べる作り (`ControlBar`) で、
      * 映像が 476px 幅・340px 高あることを前提にしている。スマホの縦 (390px 幅) で
      * 全画面をやめると枠は 358x224 しか無く、**下の操作バーが二段に折れて映像を覆い、
-     * 右の縦列 (閉じる・切り抜き・削除) が操作バーのシークバーや再生ボタンに重なって**
+     * 右の縦列 (当時は閉じる・切り抜き・削除) が操作バーのシークバーや再生ボタンに重なって**
      * いた (実機の報告「全画面じゃないと操作ボタンがおかしくなる」)。
      *
      * - `compact` (幅 448px 未満か、16:9 より低く抑えられて高さ 300px 未満か、横にしたスマホ) … 押すものを 40px に縮め、毎回は使わないもの
@@ -84,10 +84,6 @@
      *   映像の下は余っているので、操作バーはそこに置いて**いつも出しておく** (映像を覆わないので
      *   引っ込める理由が無い)。右上の一行 (閉じる・切り抜きなど) は今までどおり映像の上。
      *   全画面では映像の周りに黒帯があるので、今までどおり重ねる
-     * - `low` (高さ 360px 未満) … 右の縦列を横に寝かせて右上の一行にする。縦に
-     *   4個積むと 228px、下の操作バーが 112px で、それより低い枠では重なる (スマホの横や
-     *   縦の iPad の二段組)。**大きさは変えない**。狭い枠も低い (224px) ので、
-     *   `compact` のときは必ずこちらも立てる
      *
      * 全画面にすると枠が画面いっぱいになるので、横持ちの全画面はどちらにも
      * 当たらない (今までどおり)。**決めるのは媒体の幅ではなく枠の大きさ** —
@@ -95,7 +91,6 @@
      */
     let narrow = $state(false);
     let short = $state(false);
-    let low = $state(false);
     const compact = $derived(narrow || short);
     /*
      * **操作バーを下に出すのは幅で決めたときだけ。** 高さで決めると、操作バーを出したぶん枠が
@@ -122,7 +117,6 @@
              */
             const height = target.clientHeight;
             short = !narrow && ((height < 300 && height < (target.clientWidth * 9) / 16 - 1) || phone.matches);
-            low = target.clientHeight < 360;
         };
         measure();
         const watcher = new ResizeObserver(measure);
@@ -291,7 +285,6 @@
     class="stage"
     class:quiet={!controls.shown}
     data-compact={compact ? '' : undefined}
-    data-low={low || compact ? '' : undefined}
     data-fold={fold ? '' : undefined}
     data-under={under ? '' : undefined}
     data-pseudo={fullscreen.pseudo ? '' : undefined}
@@ -386,14 +379,11 @@
         flex-direction: column;
         align-items: center;
         gap: 0.25rem;
-        padding: 0.5rem;
+        /* 右上の一行 (`ControlBar`。40px の丸と上の余白 8px) の下から出す */
+        padding: 3.5rem 0.5rem 0.5rem;
     }
     .notes:empty {
         display: none;
-    }
-    /* 低い枠では右の列が右上の一行に寝る (`ControlBar`)。その下から出す */
-    .stage[data-low] .notes {
-        padding-top: 3.25rem;
     }
     /*
      * **スマホの縦では映像を画面の端から端まで。** 余白 (`--dp-gutter`、
