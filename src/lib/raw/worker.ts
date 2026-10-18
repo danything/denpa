@@ -39,7 +39,7 @@ import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.j
 import { DecodeBudget } from './budget';
 import { fieldAt, type Shown, SmoothClock, Vsync, VsyncClock } from './cadence';
 import { Fmp4Video, FOLLOW_BYTES_MOST } from './fmp4';
-import type { FromWorker, RawInput, ToWorker } from './messages';
+import { type FromWorker, type GrabSize, type RawInput, shrink, type ToWorker } from './messages';
 import { MkvInput } from './mkv';
 import { YuvRenderer } from './render';
 
@@ -586,18 +586,24 @@ function reset(from: number | null): void {
 /**
  * いま出しているコマを1枚返す (切り抜き。`messages.ts` の `grab`)。
  * **最後に描いたフィールドのまま** 描き直す — 1080i で別のフィールドを描くと、
- * 画面に見えていたものと半コマずれる
+ * 画面に見えていたものと半コマずれる。
+ *
+ * `size` があれば縮めたものを返す (アンビエントモード)。MPEG-2 は描き直した直後の面を
+ * `createImageBitmap` の縮小で写す — 呼んだ時点の面を写すので、描いたのと同じ回のうちなら読める
+ * (`toPip` と同じ)。全部を `readPixels` で読み出す切り抜きの経路は通らない
  */
-async function grab(id: number): Promise<void> {
+async function grab(id: number, size: GrabSize | undefined): Promise<void> {
     let bitmap: ImageBitmap | null = null;
     try {
-        if (fmp4 !== null) bitmap = await fmp4.grab();
-        else {
-            const image =
-                renderer !== null && current !== null && !Number.isNaN(drawn.field)
-                    ? renderer.capture(drawn.field)
-                    : null;
-            if (image !== null) bitmap = await createImageBitmap(image);
+        if (fmp4 !== null) bitmap = await fmp4.grab(size);
+        else if (renderer !== null && current !== null && !Number.isNaN(drawn.field)) {
+            if (size !== undefined && surface !== null) {
+                renderer.draw(drawn.field);
+                bitmap = await createImageBitmap(surface, shrink(size));
+            } else {
+                const image = renderer.capture(drawn.field);
+                if (image !== null) bitmap = await createImageBitmap(image);
+            }
         }
     } catch {
         // 読めなかった。写せないと返す (画面は何もしない)
@@ -765,7 +771,7 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             audioConfig = '';
             break;
         case 'grab':
-            void grab(message.id);
+            void grab(message.id, message.size);
             break;
         case 'pip':
             void pip?.abort().catch(() => undefined);

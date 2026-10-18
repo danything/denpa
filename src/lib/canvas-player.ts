@@ -26,7 +26,7 @@
  */
 
 import { RawEngine } from '#lib/raw/engine.js';
-import type { RawInput } from '#lib/raw/messages.js';
+import type { GrabSize, RawInput } from '#lib/raw/messages.js';
 import { Fmp4Splitter } from '#lib/ts/fmp4.js';
 import { CLOCK, WRAP } from '#lib/ts/pes.js';
 import {
@@ -103,7 +103,8 @@ export interface CanvasPlayer {
     setAudio(id: string): void;
     /** 「再生する音」として鳴らすか */
     background(on: boolean): void;
-    grab(): Promise<ImageBitmap | null>;
+    /** いまのコマ。`size` を付けると縮めたもの (`RawEngine.grab`) */
+    grab(size?: GrabSize): Promise<ImageBitmap | null>;
     pipStream(): MediaStream | null;
     pipFlow(on: boolean): void;
     destroy(): void;
@@ -384,7 +385,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         background(on: boolean): void {
             engine.background = on;
         },
-        grab: () => engine.grab(),
+        grab: (size) => engine.grab(size),
         pipStream: () => engine.pipStream(),
         pipFlow: (on) => engine.pipFlow(on),
         destroy(): void {

@@ -3,6 +3,7 @@
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
+    import { ambientMode } from '#lib/components/player/ambient.svelte.js';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CloseLink from '#lib/components/player/CloseLink.svelte';
@@ -190,6 +191,13 @@
         resume: () => player.toggle(),
     });
 
+    /** アンビエントモード (`ambient.svelte.ts`)。ライブと同じ */
+    const ambient = ambientMode({
+        playing: () => !player.paused,
+        canvas: () => (player.canvas ? player : null),
+        video: () => video,
+    });
+
     /** 小窓 (PiP)。小窓で押された止める・再開は player に合わせる (ライブと同じ。`pip.svelte.ts`) */
     const pip = pictureInPicture({
         video: () => video,
@@ -241,7 +249,7 @@
 <!-- **ライブ・観る画面と同じレイアウト** (PlayerLayout)。映像が左、番組の中身が右 -->
 <PlayerLayout>
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
-    <PlayerStage {controls} {fullscreen} testid="chase" bind:element={stageEl}>
+    <PlayerStage {controls} {fullscreen} {ambient} testid="chase" bind:element={stageEl}>
         {#snippet children(stage)}
         <MediaStack
             holding={player.holding}
@@ -368,7 +376,7 @@
                     </Extras>
                 {/if}
 
-                <StageTail prefix="chase" {background} {pip} {fullscreen} {stage} />
+                <StageTail prefix="chase" {background} {ambient} {pip} {fullscreen} {stage} />
             </ControlRow>
         </ControlBar>
 

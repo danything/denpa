@@ -20,7 +20,7 @@
 import type { AudioSide } from '#lib/arib.js';
 import { CLOCK, unwrap } from '#lib/ts/pes.js';
 import { resolve } from '$app/paths';
-import type { FromWorker, RawInput, ToWorker } from './messages';
+import type { FromWorker, GrabSize, RawInput, ToWorker } from './messages';
 import { type Chunk, Playout, type Scheduled } from './playout';
 
 /** 刻み (ms)。音の予約と時計の配り直しをここで回す */
@@ -345,9 +345,10 @@ export class RawEngine {
 
     /**
      * いま出しているコマを1枚 (切り抜き)。**映像は worker の canvas にある**ので、
-     * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null
+     * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null。
+     * `size` を付けると worker の中で縮めたものが返る (アンビエントモード)
      */
-    grab(): Promise<ImageBitmap | null> {
+    grab(size?: GrabSize): Promise<ImageBitmap | null> {
         if (this.gone) return Promise.resolve(null);
         const id = ++this.grabbed;
         return new Promise((resolve) => {
@@ -358,7 +359,7 @@ export class RawEngine {
                 resolve(bitmap);
             };
             this.grabs.set(id, settle);
-            this.send({ type: 'grab', id });
+            this.send(size === undefined ? { type: 'grab', id } : { type: 'grab', id, size });
         });
     }
 

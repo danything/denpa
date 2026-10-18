@@ -32,6 +32,7 @@ import {
     readInit,
 } from '#lib/ts/fmp4.js';
 import { CLOCK } from '#lib/ts/pes.js';
+import { type GrabSize, shrink } from './messages';
 
 /** 番のこれだけ前からデコードする (90kHz) */
 const AHEAD = 0.3 * CLOCK;
@@ -425,10 +426,12 @@ export class Fmp4Video {
         this.host.drew(first);
     }
 
-    /** いま出しているコマ (切り抜き)。2D は描いたものが残るので、そのまま写す */
-    async grab(): Promise<ImageBitmap | null> {
+    /** いま出しているコマ (切り抜き)。2D は描いたものが残るので、そのまま写す。`size` があれば縮めて (`messages.ts` の `grab`) */
+    async grab(size?: GrabSize): Promise<ImageBitmap | null> {
         if (this.current === null) return null;
-        return createImageBitmap(this.canvas);
+        return size === undefined
+            ? createImageBitmap(this.canvas)
+            : createImageBitmap(this.canvas, shrink(size));
     }
 
     /**

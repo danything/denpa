@@ -5,6 +5,7 @@
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
+    import { ambientMode } from '#lib/components/player/ambient.svelte.js';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CodecMenu from '#lib/components/player/CodecMenu.svelte';
@@ -285,6 +286,13 @@
         },
     });
 
+    /** アンビエントモード ([ambient.svelte.ts](../../lib/components/player/ambient.svelte.ts))。canvas に描いているときは worker から縮めた1枚をもらう */
+    const ambient = ambientMode({
+        playing: () => !player.paused,
+        canvas: () => (player.canvas ? player : null),
+        video: () => video,
+    });
+
     /**
      * 小窓 (PiP。[pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。放送のまま見ている間は
      * worker の canvas からストリームを取って出す。**小窓で押された止める・再開は player に合わせる**
@@ -352,7 +360,7 @@
             映像と重ねものの束も追っかけと共通 ([MediaStack.svelte](../../lib/components/player/MediaStack.svelte)) —
             なぜ style で書くか・なぜ入れ物を分けるかはあちらに
         -->
-        <PlayerStage {controls} {fullscreen} testid="live-frame" bind:element={stageEl}>
+        <PlayerStage {controls} {fullscreen} {ambient} testid="live-frame" bind:element={stageEl}>
             {#snippet children(stage)}
             <MediaStack
                 holding={player.holding}
@@ -734,7 +742,7 @@
                             </Extras>
                         {/if}
 
-                        <StageTail prefix="live" {background} {pip} {fullscreen} {stage} />
+                        <StageTail prefix="live" {background} {ambient} {pip} {fullscreen} {stage} />
                     </ControlRow>
                 </ControlBar>
             {/if}

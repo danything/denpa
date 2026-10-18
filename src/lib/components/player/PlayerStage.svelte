@@ -1,5 +1,7 @@
 <script lang="ts">
     import { type Snippet, setContext } from 'svelte';
+    import AmbientGlow from './AmbientGlow.svelte';
+    import type { Ambient } from './ambient.svelte.js';
     import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
     import type { StageFullscreen } from './fullscreen.svelte.js';
     import { PHONE_LANDSCAPE } from './PlayerLayout.svelte';
@@ -31,6 +33,11 @@
          * 上端の真ん中から下へ積む。低い枠では右上の一行 (`ControlBar`) の下から
          */
         notes?: Snippet;
+        /**
+         * アンビエントモード (`ambient.svelte.ts`)。渡すと、枠の後ろに映像の色の光を置く (`AmbientGlow`)。
+         * 光は枠の外に出るだけで、枠の中 (映像・字幕・データ放送・操作列・通知) には重ならない
+         */
+        ambient?: Ambient;
     }
     interface StageApi {
         /** 狭い枠か (スマホの縦)。押すものを 40px に縮める */
@@ -48,6 +55,7 @@
         fullscreen,
         children,
         notes,
+        ambient,
     }: Props = $props();
 
     // 中のメニュー (`OverlayMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
@@ -282,6 +290,10 @@
     });
 </script>
 
+{#if ambient}
+    <!-- 光は枠より前 (兄弟) に置く。位置を持つ枠のほうが後ろなので、光の上に描かれる -->
+    <AmbientGlow {ambient} stage={element} fullscreen={fullscreen.active} testid="{testid}-ambient" />
+{/if}
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!--
     **映像の周りは黒** (letterbox の帯にテーマ色を出さない)。縦横比は 16:9 で、高さは

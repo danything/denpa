@@ -17,6 +17,20 @@
  */
 export type RawInput = 'ts-mpeg2' | 'fmp4' | 'mkv';
 
+/** 縮めて返す大きさ (`grab`) */
+export interface GrabSize {
+    width: number;
+    height: number;
+}
+
+/**
+ * `createImageBitmap` に渡す縮め方。**`medium` で縮める** — `low` は 1920 から 32 へ点で拾う
+ * ブラウザがあり、細かい模様のある映像で 1 回ごとに色が揺れる
+ */
+export function shrink(size: GrabSize): ImageBitmapOptions {
+    return { resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'medium' };
+}
+
 /** 画面 → worker */
 export type ToWorker =
     | {
@@ -60,9 +74,12 @@ export type ToWorker =
     /**
      * いま出しているコマを1枚ください (切り抜き)。**映像は worker の canvas にあって、
      * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
-     * `id` は返事 (`frame`) と組にするため
+     * `id` は返事 (`frame`) と組にするため。
+     *
+     * `size` を付けると、その大きさに縮めたものを返す (アンビエントモードの 32x18。`ambient.ts`)。
+     * 縮めるのは worker の中で、元の大きさの画素は読み出さない
      */
-    | { type: 'grab'; id: number }
+    | { type: 'grab'; id: number; size?: GrabSize }
     /**
      * 小窓 (PiP) へ出す映像の書き込み先 (`MediaStreamTrackGenerator` の `writable`)。
      * **描いた1コマをその場で書き込む** — canvas の画面への更新を待たない (`engine.ts` の `pipStream`)
