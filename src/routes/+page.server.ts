@@ -84,7 +84,7 @@ interface RecordingRow extends Recording {
     rule_name: string | null;
     /** 手動予約か。取り込んだ録画のように予約が無いものは null */
     from_manual: boolean | null;
-    /** 局ロゴを拾えているか。局名の隣に出す */
+    /** 局ロゴを取得できているか。局名の隣に出す */
     has_logo: boolean | null;
     /**
      * 一覧の「残り」の位置と尺 (ms)。観る物差しに直したもの (`playback.watchProgress`)。続きが無ければ null。
@@ -137,7 +137,7 @@ interface ReservationRow extends Omit<Reservation, 'state'> {
     state: ReservationState;
     service_name: string;
     rule_name: string | null;
-    /** 局ロゴを拾えているか。局名の隣に出す */
+    /** 局ロゴを取得できているか。局名の隣に出す */
     has_logo: boolean | null;
     /** 録画中の録画のID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
     recording_id: number | null;
@@ -399,7 +399,7 @@ export const actions = {
         const id = Number(form.get('id'));
         if (!Number.isFinite(id)) return fail(400, { message: 'ジョブIDが不正です' });
         // 畳み終わってから返る。ここで待たないと、この直後の読み直しが
-        // まだ「エンコード中」を拾って、押しても何も変わらないように見える
+        // まだ「エンコード中」を読んで、押しても何も変わらないように見える
         await cancelEncode(id);
         return { success: true };
     },

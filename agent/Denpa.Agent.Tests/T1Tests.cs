@@ -115,7 +115,7 @@ public class T1Tests
     }
 
     [Test]
-    public async Task 黙った_化けたときは_R_ブロックで頼み直す()
+    public async Task 黙った_化けたときは_R_ブロックでリクエストし直す()
     {
         var garbled = I(0, false, "9000");
         garbled[^1] ^= 0xFF;

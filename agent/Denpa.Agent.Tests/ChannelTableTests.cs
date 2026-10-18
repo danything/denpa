@@ -44,7 +44,7 @@ public class ChannelTableTests
     }
 
     [Test]
-    public async Task 同じ周波数に相乗りしている本数を覚えておく()
+    public async Task 同じ周波数を共有している本数を覚えておく()
     {
         // BS01_0 と BS01_1 は**同じ周波数**。開いたままなら選局し直さずに済む
         await Assert.That(ChannelTable.Parse("BS01_3")!.Frequency).IsEqualTo(ChannelTable.Parse("BS01_0")!.Frequency);
@@ -55,7 +55,7 @@ public class ChannelTableTests
     [Test]
     public async Task 衛星のスロットは相対番号そのもの()
     {
-        // TSID が分からないときに px4-userland へ --slot で渡す (Px4.cs)。CS は1本しか乗っていない
+        // TSID が分からないときに px4-userland へ --slot で渡す (Px4.cs)。CS は1本しか入っていない
         await Assert.That(ChannelTable.Parse("BS01_2")!.Slot).IsEqualTo(2);
         await Assert.That(ChannelTable.Parse("BS23_0")!.Slot).IsEqualTo(0);
         await Assert.That(ChannelTable.Parse("BS15")!.Slot).IsEqualTo(0);
@@ -108,7 +108,7 @@ public class StreamIdTests
     [Test]
     public async Task CS_も選り分けない()
     {
-        // 1つの中継に1本しか乗っていない
+        // 1つの中継に1本しか入っていない
         var cs = ChannelTable.Parse("CS02")!;
         await Assert.That(ChannelTable.StreamId("CS02", cs, null)).IsEqualTo(ChannelTable.NoStreamId);
     }

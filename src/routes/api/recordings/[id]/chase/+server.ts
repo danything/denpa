@@ -4,7 +4,7 @@ import { chaseStream } from '#lib/server/live.js';
 import { BUSY } from '#lib/ts/playback.js';
 
 /**
- * **追っかけ再生を HTTP で流す** (画面の外のもの向けの口。docs/api.md)。テレビのアプリが、
+ * **追っかけ再生を HTTP で流す** (画面の外のもの向けのエンドポイント。docs/api.md)。テレビのアプリが、
  * 録画中 (とエンコードが終わる前) の録画を観るのに使う。
  *
  * `?codec=` は `h264` (既定) / `av1` / `raw`。`h264` と `av1` は画面の追っかけと同じ再エンコードの

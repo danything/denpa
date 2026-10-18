@@ -82,7 +82,7 @@ export const config = {
     },
 
     dbPath,
-    /** DBと並べて置くもの。放送波から拾った局ロゴと、CM検出のために覚えた局ロゴ */
+    /** DBと並べて置くもの。放送波から取得した局ロゴと、CM検出のために覚えた局ロゴ */
     dataDir,
     /** 元のTSの置き場。エンコード後は (元のTSを残す設定でなければ) 消える作業領域 */
     rawDir: str('RAW_DIR', join(mediaDir, 'raw')),
@@ -122,7 +122,7 @@ export const config = {
     /** CMの扱いの初期値。実カットは事故ると本編が消えるのでチャプターのみ */
     cmCutDefault: 'chapter' as CmMode,
 
-    /** CM検出のために覚えた局ロゴ (`own-logo-*.bin`) の置き場。放送波から拾った局ロゴ (PNG) の隣 */
+    /** CM検出のために覚えた局ロゴ (`own-logo-*.bin`) の置き場。放送波から取得した局ロゴ (PNG) の隣 */
     cmLogoDir: `${dataDir}/logos/cm`,
     /** CM検出でロゴの区間をならすときの fps。ffprobe で取れなければこれを使う (地上波・BS は 30000/1001) */
     cmFallbackFps: 30000 / 1001,
@@ -235,7 +235,7 @@ export const config = {
      */
     shutdownWait: num('SHUTDOWN_WAIT', 6 * 60 * MIN),
     schedulerTick: num('SCHEDULER_TICK', 5 * SEC),
-    /** 保存先の実体とDBを突き合わせる間隔。外から消されたものをここで拾う */
+    /** 保存先の実体とDBを突き合わせる間隔。外から消されたものをここで見つける */
     reconcileInterval: num('RECONCILE_INTERVAL', 5 * MIN),
     /**
      * ディスク残量がこれを下回ったら知らせる (バイト)。**録画が全部失敗して初めて

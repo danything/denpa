@@ -26,7 +26,7 @@ describe('parseTitle', () => {
         expect(parsed.subtitle).toBe('決戦');
     });
 
-    test('第N話 表記も拾う', () => {
+    test('第N話 表記も読み取る', () => {
         expect(parseTitle('ドラマ 第3話').episode).toBe(3);
         expect(parseTitle('ドラマ 第3話').series).toBe('ドラマ');
     });
@@ -118,7 +118,7 @@ describe('parseTitle', () => {
         expect(parseTitle('将棋)第34期 銀河戦').arc).toBe('');
     });
 
-    test('英語の話数 (Chapter / Episode / EP) も拾う', () => {
+    test('英語の話数 (Chapter / Episode / EP) も読み取る', () => {
         expect(parseTitle('[字]アニメ 追放された転生重騎士はゲーム知識で無双する Chapter 15')).toEqual({
             series: 'アニメ 追放された転生重騎士はゲーム知識で無双する',
             arc: '',
@@ -147,7 +147,7 @@ describe('parseTitle', () => {
         expect(parseTitle('テストアニメ Ep.3.5').episode).toBeNull();
     });
 
-    test('作品ごとの呼び方 (request / FILE / Case …) の話数も拾う', () => {
+    test('作品ごとの呼び方 (request / FILE / Case …) の話数も読み取る', () => {
         expect(parseTitle('テストホテル request 15.[字]')).toEqual({
             series: 'テストホテル',
             arc: '',

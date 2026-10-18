@@ -431,7 +431,7 @@ public static class Px4Userland
     }
 
     /// <summary>
-    /// JSON の値を拾う。**形式が違えば null を返し、違ったことを <see cref="Notes"/> に溜める。**
+    /// JSON の値を読み取る。**形式が違えば null を返し、違ったことを <see cref="Notes"/> に溜める。**
     /// リフレクションで型に流し込む方式 (JsonSerializer) は Native AOT で使えないので、木 (<c>JsonNode</c>) を直に読む
     /// </summary>
     private sealed class JsonShape
@@ -1164,7 +1164,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// 周波数は kHz で言う。選局表は DVB の決まりで地上波が Hz・衛星が kHz
     /// なので、地上波だけ 1000 で割る (473142857 Hz → 473142 kHz。端数は切る)。
     /// 衛星は TSID が分かっていれば <c>stream_id</c>、分からなければ相対番号を
-    /// <c>slot</c> で (CS は1本しか乗っていないので 0)。使わないほうは 0xffff。
+    /// <c>slot</c> で (CS は1本しか入っていないので 0)。使わないほうは 0xffff。
     /// 帯域は地上波が 6MHz、衛星は 0 (px4d がこれ以外を断る)。
     /// 15V は設定に <c>15v</c> と書いてあるチューナーだけ指定する (<c>11v</c> は px4-userland に無い)。
     /// </para>

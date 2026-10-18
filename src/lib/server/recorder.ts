@@ -26,7 +26,7 @@ import { notify } from './webhook';
  */
 const COPY_NEVER_RECORDING = 'コピー禁止の番組なので録画しませんでした';
 
-/** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に拾い直す: recoverOrphanedRecordings) */
+/** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に回収する: recoverOrphanedRecordings) */
 const active = new Map<number, AbortController>();
 
 export function activeRecordingIds(): number[] {
@@ -235,7 +235,7 @@ function addDuration(recordingId: number, ms: number): void {
 }
 
 /**
- * 録画中に拾った番組表を書き出す間隔。
+ * 録画中に取得した番組表を書き出す間隔。
  *
  * **ただで手に入るぶん。** 録画で開いているチャンネルには EIT[schedule] も
  * 流れてきているので、読んで捨てる理由が無い。番組表集めがそのチャンネルへ
@@ -500,7 +500,7 @@ function finish(recordingId: number, size: number): void {
 /**
  * その録画が終わっているべき時刻。**尻を譲っていればそこまで** (`record_to`)。
  *
- * 止めるとき (`scheduler.tick`)・起動時に拾い直すとき・持ち主のいない行を畳むとき
+ * 止めるとき (`scheduler.tick`)・起動時に回収するとき・持ち主のいない行を畳むとき
  * (`failStrayRecordings`) で同じ物差しを使う。書き写していると、片方だけ直したときに
  * 「止めた時刻」と「終わっているはずの時刻」がずれる
  */
@@ -509,7 +509,7 @@ export function recordingUntil(rec: { end_at: number; record_to: number | null }
 }
 
 /**
- * プロセスが落ちた時点で録画中だった行を拾い直す。
+ * プロセスが落ちた時点で録画中だった行を回収する。
  *
  * AbortController はメモリ上にしか無いので、再起動すると録画は止まったままになる。
  * まだ放送中のものは録り直しに行く。元のTSは追記で開くので、落ちるまでに録れていた分は

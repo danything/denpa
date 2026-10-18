@@ -294,7 +294,7 @@ async function seed(): Promise<void> {
     }
 
     /*
-     * 録画。終わった番組から、番組名が重ならないように新しい順に拾う。同じ時刻の番組は
+     * 録画。終わった番組から、番組名が重ならないように新しい順に選ぶ。同じ時刻の番組は
      * 2本まで (並んだ録画の時刻がばらけるように)。中身は1本の作り物を全部で使い回す
      */
     const seen = new Set<string>();
@@ -731,7 +731,7 @@ async function motionShots(browser: Browser): Promise<void> {
             await page.waitForTimeout(1000);
         });
     });
-    // 4. 録画の一覧 → 観る画面 (番組名が題名へ広がる)、戻る
+    // 4. 録画の一覧 → 観る画面 (番組名がタイトルへ広がる)、戻る
     await shot('home-watch', async () => {
         await page.goto(`${BASE}/`);
         await settle(page, 800);

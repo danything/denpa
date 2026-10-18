@@ -158,7 +158,7 @@ public class Px4Tests
         BinaryPrimitives.ReadUInt32LittleEndian(p.AsSpan(26)));
 
     [Test]
-    public async Task 地上波は_Hz_を_kHz_に直して頼む()
+    public async Task 地上波は_Hz_を_kHz_に直してリクエストする()
     {
         var payload = Px4Tuner.TuneRequest(0x0102030405060708, ChannelTable.Parse("T27")!, ChannelTable.NoStreamId, "15v");
         await Assert.That(payload.Length).IsEqualTo(30);
@@ -189,7 +189,7 @@ public class Px4Tests
         await Assert.That(tune.StreamId).IsEqualTo((ushort)0xffff);
         await Assert.That(tune.Lnb).IsEqualTo((byte)0);
 
-        // CS は1本しか乗っていないので slot 0。11v は px4-userland には無い (0V か 15V)。指定しない
+        // CS は1本しか入っていないので slot 0。11v は px4-userland には無い (0V か 15V)。指定しない
         var cs = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("CS04")!, ChannelTable.NoStreamId, "11v"));
         await Assert.That(cs.Slot).IsEqualTo((ushort)0);
         await Assert.That(cs.Lnb).IsEqualTo((byte)0);
@@ -232,7 +232,7 @@ public class Px4Tests
         """;
 
     [Test]
-    public async Task px4d_list_json_の_ready_な筐体を使い_番号が重なるものは挿し口で見分ける()
+    public async Task px4d_list_json_の_ready_な筐体を使い_番号が重なるものはポートで見分ける()
     {
         var warned = new List<string>();
         var found = Px4Userland.ParseJson(JsonList, warned.Add);

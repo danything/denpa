@@ -327,7 +327,7 @@ export function cmNoteWorthShowing(cmNote: string | null): boolean {
 }
 
 /*
- * 番組の説明に入っているURLを拾う。
+ * 番組の説明に入っているURLを取り出す。
  *
  * 番組表の説明欄には公式サイトや配信の告知が素のまま書いてある。読めるだけで
  * 押せないと、結局手で選んで貼り直すことになる。

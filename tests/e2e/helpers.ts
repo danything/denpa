@@ -86,7 +86,7 @@ async function cellsOn(page: Page): Promise<Cell[]> {
  * 番組表を翌日 / 前日に送り、**表が新しい日のものに入れ替わって描き終わるまで待つ。**
  *
  * ハイドレーションは済んでいるので、それを待っても即座に抜ける。表は後から流れてきて
- * 少しずつ描くので (`goto` と同じ)、押した直後に数えると**前の日のマス**を拾い、
+ * 少しずつ描くので (`goto` と同じ)、押した直後に数えると**前の日のマス**を数え、
  * 入れ替わった後には無いマスを押していた (放送日の終わり際の 3 時台に CI で落ちた)
  */
 async function turnDay(page: Page, which: 'next-day' | 'prev-day'): Promise<void> {
@@ -267,7 +267,7 @@ export async function setRecording(
 
     /*
      * **`codecs` は同じ名前で複数送る** (`codecs=av1&codecs=h264`)。
-     * サーバは `formData().getAll('codecs')` で拾う。Playwright の `form`
+     * サーバは `formData().getAll('codecs')` で読む。Playwright の `form`
      * オブジェクトは同じキーを繰り返せないので、body を手で組む
      */
     const body = new URLSearchParams();
@@ -697,7 +697,7 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
             const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             let hit = 0;
             for (let i = 0; i < data.length; i += 4) {
-                // 塗った色 (マゼンタ)。読み込み中の幕 (半透明の黒) が被っていても色味で拾う
+                // 塗った色 (マゼンタ)。読み込み中の幕 (半透明の黒) が被っていても色味で見分ける
                 const [r = 0, g = 255, b = 0] = [data[i], data[i + 1], data[i + 2]];
                 if (r > 90 && b > 90 && g * 3 < r && g * 3 < b) hit++;
             }

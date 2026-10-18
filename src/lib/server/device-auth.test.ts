@@ -64,7 +64,7 @@ describe('コード', () => {
 });
 
 describe('ペアリングの流れ', () => {
-    test('許されるまでは待てと言い、許されたら鍵を1度だけ渡す', () => {
+    test('許されるまでは待てと言い、許されたらアクセストークンを1度だけ渡す', () => {
         const at = 3_000_000;
         const { deviceCode, userCode } = pair('居間', at);
         expect(poll(deviceCode, at)).toEqual({ error: 'authorization_pending' });
@@ -79,14 +79,14 @@ describe('ペアリングの流れ', () => {
         expect(poll(deviceCode, at + 2 * POLL_INTERVAL_MS)).toEqual({ error: 'invalid_grant' });
         expect(viewCode(userCode, at + 3 * POLL_INTERVAL_MS)?.state).toBe('consumed');
 
-        // 鍵も DB には SHA-256 だけ
+        // アクセストークンも DB には SHA-256 だけ
         const row = orm().select().from(apiTokens).all().at(-1);
         expect(row?.token_hash).toBe(sha256(token));
         expect(row?.name).toBe('居間');
         expect(row?.created_by).toBe('trusted-network');
     });
 
-    test('許すのは何度呼んでも同じ (読み直しで鍵が2本にならない)', () => {
+    test('許すのは何度呼んでも同じ (読み直しでアクセストークンが2つにならない)', () => {
         const at = 4_000_000;
         const { deviceCode, userCode } = pair('二度押し', at);
         approve(userCode, 'trusted-network', false, at);
@@ -105,12 +105,12 @@ describe('ペアリングの流れ', () => {
     });
 
     /*
-     * 盗まれた鍵で別の鍵を作れると、元の鍵を取り消しても作った鍵が生き残る。
+     * 盗まれたアクセストークンで別のトークンを作れると、元を取り消しても作ったほうが生き残る。
      * 許すのはブラウザ (信頼するネットワークか OIDC) だけ
      */
     test('アクセストークンで入った相手は許せない', () => {
         const at = 4_500_000;
-        const { deviceCode, userCode } = pair('鍵から', at);
+        const { deviceCode, userCode } = pair('アクセストークンから', at);
         expect(() => approve(userCode, 'token:1', true, at)).toThrow(TokenCannotApprove);
         expect(viewCode(userCode, at)?.state).toBe('pending');
         expect(poll(deviceCode, at)).toEqual({ error: 'authorization_pending' });
@@ -150,16 +150,16 @@ describe('ペアリングの流れ', () => {
     });
 });
 
-describe('鍵', () => {
+describe('アクセストークン', () => {
     function mint(name: string, at: number): string {
         const { deviceCode, userCode } = pair(name, at);
         approve(userCode, 'trusted-network', false, at);
         const got = poll(deviceCode, at);
-        if (!('token' in got)) throw new Error('鍵が出ない');
+        if (!('token' in got)) throw new Error('アクセストークンが出ない');
         return got.token;
     }
 
-    test('Authorization から denpa の鍵だけを取り出す (ほかの Bearer は見ない)', () => {
+    test('Authorization から denpa のアクセストークンだけを取り出す (ほかの Bearer は見ない)', () => {
         expect(bearerToken(`Bearer ${TOKEN_PREFIX}abc`)).toBe(`${TOKEN_PREFIX}abc`);
         expect(bearerToken(`bearer   ${TOKEN_PREFIX}abc`)).toBe(`${TOKEN_PREFIX}abc`);
         expect(bearerToken('Bearer eyJhbGciOi.someone-elses')).toBeNull();
@@ -167,7 +167,7 @@ describe('鍵', () => {
         expect(bearerToken(null)).toBeNull();
     });
 
-    test('生きている鍵は持ち主を返し、止めた鍵は通さない', () => {
+    test('生きているトークンは持ち主を返し、止めたトークンは通さない', () => {
         const at = 9_000_000_000;
         const token = mint('寝室', at);
         const owner = verifyToken(token, at);

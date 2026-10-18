@@ -134,7 +134,7 @@ export class Resources {
     /** 取った通信のもの。古い順 (使うたびに後ろへ回す) */
     private readonly remote = new Map<string, CarouselFile>();
     private remoteBytes = 0;
-    /** 取りに行っている通信のもの (同じものを重ねて取らない) */
+    /** 取得している途中の通信のもの (同じものを重ねて取らない) */
     private readonly remoteWaiting = new Map<string, Promise<CarouselFile | null>>();
     /** 文書を替えるたびに増える番号 (`newPage`)。今の文書が使った通信のものは、上限を超えても捨てない */
     private page = 0;
@@ -571,7 +571,7 @@ export class Resources {
         this.cache.clear();
         this.locks.clear();
         for (const module of modules) this.release(module);
-        // 取りに行っている途中のものは、返ってきても覚えない (`fetchRemote`)
+        // 取得している途中のものは、返ってきても覚えない (`fetchRemote`)
         this.remoteGet = null;
         for (const file of this.remote.values()) revoke(file);
         this.remote.clear();

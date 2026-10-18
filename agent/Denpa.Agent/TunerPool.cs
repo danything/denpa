@@ -159,10 +159,10 @@ public sealed class TunerPool(
         lock (_gate)
         {
             /*
-             * **自分と同じか強い利用者がいれば、どのチューナーでもそこに乗る** (約束3)。弱い利用者しか
-             * いない選局と、余韻で残っているだけの選局には、ここでは乗らない — そのチューナーが選ぶ順で
-             * 先頭の組のときだけ、`Pick` が選んで下で乗る。弱い相手 (番組表集めなど) が広いチューナーに
-             * いるからといって録画がそこへ乗ると、録画の入るチューナーが録画以外に左右される (denpa は録画しか知らない)。
+             * **自分と同じか強い利用者がいれば、どのチューナーでもその選局を共有する** (約束3)。弱い利用者しか
+             * いない選局と、余韻で残っているだけの選局には、ここでは共有しない — そのチューナーが選ぶ順で
+             * 先頭の組のときだけ、`Pick` が選んで下で共有する。弱い相手 (番組表集めなど) が広いチューナーに
+             * いるからといって録画がそこを共有すると、録画の入るチューナーが録画以外に左右される (denpa は録画しか知らない)。
              * 引き継ぐ利用者 (`after`) は、もう離れたものとして数えない
              */
             after ??= new HashSet<string>();
@@ -188,7 +188,7 @@ public sealed class TunerPool(
                         victim.Sinks.Remove(leaving);
                     }
                 }
-                // 同じチャンネルなら、選局し直さずにそのまま乗る (余韻ならそのまま使い回し、弱い利用者も残す)
+                // 同じチャンネルなら、選局し直さずにそのまま共有する (余韻ならそのまま使い回し、弱い利用者も残す)
                 if (victim.Type == type && victim.Channel == channel)
                 {
                     return Join(victim, priority, use);
@@ -481,7 +481,7 @@ public sealed class TunerPool(
     /// <para>組の中 (受けられる種別がまったく同じチューナー) では、次の順に選ぶ。</para>
     ///
     /// <list type="number">
-    /// <item>**同じチャンネルの選局** (余韻か、弱い利用者しかいないもの)。選局し直さずにそのまま乗る</item>
+    /// <item>**同じチャンネルの選局** (余韻か、弱い利用者しかいないもの)。選局し直さずにそのまま共有する</item>
     /// <item>**もうそのチャンネルに合っているもの**。選局し直さずに済む</item>
     /// <item>**ほかの余韻**。1人の視聴でチューナーを2台塞がない</item>
     /// <item>空いているもの</item>
@@ -525,7 +525,7 @@ public sealed class TunerPool(
 
         foreach (var index in group)
         {
-            // 組の中に同じチャンネルの選局があれば乗る (余韻か、弱い利用者しかいないもの)
+            // 組の中に同じチャンネルの選局があれば共有する (余韻か、弱い利用者しかいないもの)
             if (_leases.TryGetValue(index, out var same) && same.Type == type && same.Channel == channel) return index;
         }
         foreach (var index in group)
@@ -1043,7 +1043,7 @@ internal sealed class Lease(int tuner, string type, string channel)
 
         var stderr = Task.Run(async () =>
         {
-            // 選局が失敗した理由を拾うため、末尾だけ持つ
+            // 選局が失敗した理由を読み取るため、末尾だけ持つ
             _stderr += await child.StandardError.ReadToEndAsync();
             if (_stderr.Length > 2000) _stderr = _stderr[^2000..];
         });

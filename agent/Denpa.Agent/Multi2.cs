@@ -77,7 +77,7 @@ public sealed class Multi2
 
     /// <summary>
     /// システム鍵とデータ鍵から作業鍵を作る。暗号化の 1 段と同じ π1〜π4 を、
-    /// 鍵のほうを材料にして回し、途中の半分を1語ずつ拾っていく
+    /// 鍵のほうを材料にして回し、途中の半分を1語ずつ取り出していく
     /// </summary>
     private void Schedule(ref Words work, ReadOnlySpan<byte> dataKey)
     {

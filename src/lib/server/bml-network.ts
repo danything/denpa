@@ -3,7 +3,7 @@
  * ([docs/stream.md](../../../docs/stream.md#双方向通信系コンテンツプロキシ))。
  *
  * BML のアプリは `browser.transmitTextDataOverIP` や `get` で放送局のサーバへ
- * 取りに行きます。放送局のサーバは受信機の専用ネットワークスタックを前提に
+ * 取得します。放送局のサーバは受信機の専用ネットワークスタックを前提に
  * していて **CORS を返さない**ので、ブラウザからは直に取れません。
  * denpa が中継します。
  *
@@ -139,7 +139,7 @@ export function isPublicAddress(address: string): boolean {
 }
 
 /**
- * 取りに行ってよい住所か。**綴りではなく、引いた先で見る。**
+ * 取得してよい住所か。**綴りではなく、引いた先で見る。**
  * 通った住所を1つ返す (繋ぐのもその住所へ直に繋ぐ)。
  *
  * 名前で弾こうとすると `localhost` の別名や、内側を指す公開の名前
@@ -177,7 +177,7 @@ async function resolvable(host: string): Promise<string> {
 }
 
 /**
- * その URL を取りに行ってよいか。行けるなら整えた URL と、確かめた住所を返す。
+ * その URL を取得してよいか。行けるなら整えた URL と、確かめた住所を返す。
  * 繋ぐのはその住所へ直に — 引き直すと、確かめたのと違う先に化かされうる
  */
 export async function allowed(raw: string): Promise<{ url: URL; address: string }> {

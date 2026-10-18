@@ -87,7 +87,7 @@ export function start(): void {
     void probe();
 
     /*
-     * **ライブ視聴の受け口を開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —
+     * **ライブ視聴のエンドポイントを開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —
      * 押されたときだけ動くもので、勝手にチューナーを使いはしない。
      *
      * 認証は使い捨てのチケットで見る。ブラウザは WebSocket の握手に `Authorization` を
@@ -144,7 +144,7 @@ export function start(): void {
     /*
      * 実体とDBを突き合わせ、外から消されたものを一覧から落とす。
      *
-     * inotify (fs.watch) で消した瞬間に拾えないか試したが、この構成では
+     * inotify (fs.watch) で消した瞬間に気づけないか試したが、この構成では
      * 最初の1件しかイベントが来ず当てにできなかったので定期実行にしてある。
      * すぐ反映したいときは画面の「実体と照合」を押す。
      */
@@ -185,7 +185,7 @@ export function start(): void {
     nowAndEvery(config.reconcileInterval, 'device-codes', pruneCodes);
 
     /*
-     * 局ロゴ。放送波から拾うしかないので、持っていない局のぶんを少しずつ取得する。
+     * 局ロゴ。放送波から取得するしかないので、持っていない局のぶんを少しずつ取得する。
      * 開いている選局を共有するだけなので、チューナーは増えない
      *
      * 起動のたびに、印 (`has_logo`) とファイルを突き合わせ直す。置き場ごと
@@ -288,8 +288,8 @@ const TAKE_OVER = '__denpaTakeOverSignals';
 function installShutdownHooks(): void {
     /*
      * **落ちても降りる。** `drain` の中で投げると、`void` で捨てているぶん
-     * 誰も拾わず、**プロセスが生きたまま残る** = 入れ替えが止まる。
-     * 拾って、使っているものだけ放して降りる
+     * 誰も受け止めず、**プロセスが生きたまま残る** = 入れ替えが止まる。
+     * 受け止めて、使っているものだけ放して降りる
      */
     const onSignal = (signal: NodeJS.Signals) => {
         drain(signal).catch((error) => {

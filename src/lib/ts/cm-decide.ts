@@ -39,10 +39,10 @@ export interface Boundary {
     weak: number[];
 }
 
-/** 境目として見る無音の最短 (秒)。ロゴがあれば短い無音も拾う (CM の継ぎ目でも 0.35 秒のことがある) */
+/** 境目として見る無音の最短 (秒)。ロゴがあれば短い無音も使う (CM の継ぎ目でも 0.35 秒のことがある) */
 const SILENCE_MIN = 0.2;
 /**
- * ロゴを使わないときの無音の最短 (秒)。本編の「間」を拾わないよう長めに取る。
+ * ロゴを使わないときの無音の最短 (秒)。本編の「間」を境目にしないよう長めに取る。
  * 実機 16 本で 0.4 秒にすると余分 67・抜け 42、0.8 秒で余分 37・抜け 32 (境目 123 のうち)
  */
 const SILENCE_MIN_ALONE = 0.8;
@@ -66,7 +66,7 @@ function lowerBound(values: ArrayLike<number>, at: number): number {
 }
 
 /**
- * 無音ごとに、その中 (と少し外) の切れ目を拾う。CM の継ぎ目は必ず無音と切れ目が重なる。
+ * 無音ごとに、その中 (と少し外) の切れ目を探す。CM の継ぎ目は必ず無音と切れ目が重なる。
  * 切れ目が無ければ (黒から黒など) 無音の真ん中
  */
 export function boundaries(input: CmInput, shortest = SILENCE_MIN): Boundary[] {
@@ -152,7 +152,7 @@ function snap(
 const CHANGE_WINDOW = 1;
 /**
  * ロゴが替わったとみなす点の差。これに届く切れ目が無ければ、ロゴの出入りにいちばん近いもの。
- * 消えた側の点は残った側の半分以下 (`CHANGE_RATIO`)。明るい場面に替わって点が下がっただけの所を拾わない
+ * 消えた側の点は残った側の半分以下 (`CHANGE_RATIO`)。明るい場面に替わって点が下がっただけの所は数えない
  */
 const CHANGE_MIN = 0.2;
 const CHANGE_RATIO = 0.5;
@@ -390,7 +390,7 @@ export function isCmLength(seconds: number, tolerance = CM_TOLERANCE): boolean {
 
 /**
  * ロゴを使わずに決める。境目と境目の間が CM の尺 (15秒の倍数) になっているところが続けば CM。
- * 本編の「間」を拾うことがあるので、30秒以上続いたものだけ
+ * 本編の「間」に当たることがあるので、30秒以上続いたものだけ
  */
 function byLength(input: CmInput, candidates: Boundary[]): Range[] {
     const edges = [0, ...points(candidates), input.duration];

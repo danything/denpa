@@ -10,7 +10,7 @@ test.describe('ルールの編集', () => {
     test('作ったルールの条件を後から変えられる', async ({ page }) => {
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
-        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
         await page.getByTestId('rule-dedupe').uncheck();
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toContainText('テストアニメ');
@@ -75,7 +75,7 @@ test.describe('ルールの編集', () => {
     test('編集中に「何が録れるか見る」を押しても編集のまま', async ({ page }) => {
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
-        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
         await page.getByTestId('rule-dedupe').uncheck();
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toBeVisible();
@@ -127,7 +127,7 @@ test.describe('ルールの編集', () => {
          */
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テスト番組C');
-        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
         await page.getByTestId('rule-dedupe').uncheck();
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row').first()).toBeVisible();
@@ -185,7 +185,7 @@ test.describe('ルールの作り直し', () => {
         for (const round of [1, 2]) {
             await goto(page, '/rules');
             await page.getByTestId('rule-keyword').fill('テストアニメ');
-            // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+            // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
             await page.getByTestId('rule-dedupe').uncheck();
             await page.getByTestId('rule-submit').click();
             await expect(page.getByTestId('rule-row')).toHaveCount(1);

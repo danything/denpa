@@ -240,7 +240,7 @@ function orphan(path: string, videos: Set<string>): boolean {
     return !['m2ts', 'ts', 'mkv', 'mp4'].some((extension) => videos.has(`${base[1]}.${extension}`));
 }
 
-/** 置き場の下を全部拾う (ファイルとフォルダを分けて)。置き場がまだ無ければ空 */
+/** 置き場の下を全部集める (ファイルとフォルダを分けて)。置き場がまだ無ければ空 */
 function walk(
     dir: string,
     out = { files: [] as string[], dirs: [] as string[] },

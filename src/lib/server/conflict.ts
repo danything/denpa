@@ -169,7 +169,7 @@ interface Hold {
  */
 class Tuners {
     private readonly free: number[];
-    /** `keyOf` → 入っている組と、乗っている数 */
+    /** `keyOf` → 入っている組と、使っている数 */
     private readonly held = new Map<string, { group: number; refs: number }>();
 
     constructor(private readonly capacity: Capacity) {
@@ -192,7 +192,7 @@ class Tuners {
     }
 
     /**
-     * 使う。同じチャンネルが入っていればそこに乗り、無ければ**空いていて受けられる組の
+     * 使う。同じチャンネルが入っていればそれを共有し、無ければ**空いていて受けられる組の
      * うち `rank` のいちばん小さい組**から1台取る (約束1)。取れた組の番号 (取れなければ -1)
      */
     take(type: string, channel: string): number {
@@ -771,7 +771,7 @@ export function settled(occupants: Iterable<Occupant>, margins: Margins, at: num
  *   増えない。待つものがいなければ誰も困っていない
  * - **名指しするのは、その瞬間のうち相手がいちばん多いもの** (同数なら早いほう)
  * - **名前は最後に1回だけ集める。** いちばん多い瞬間が更新されるたびに集めていた頃は、
- *   同時に使う数を K として全体が K の3乗で伸びた。瞬間だけ覚えておき、もう1度なぞって拾う
+ *   同時に使う数を K として全体が K の3乗で伸びた。瞬間だけ覚えておき、もう1度なぞって集める
  */
 export function contentions(
     occupants: Iterable<Occupant>,

@@ -301,7 +301,7 @@ test.describe('ライブ視聴', () => {
      *
      * ライブ画面へ移ってから同じ局を一覧で探し直させるのは遠回りで、局が100を
      * 超える環境では探すほうが手間になる。**局まで名指しで渡す** — 1つの物理
-     * チャンネルには複数の局が乗っているので、チャンネルだけでは足りない
+     * チャンネルには複数の局が入っているので、チャンネルだけでは足りない
      */
     test('番組表の「視聴」から、その局で開く', async ({ page }) => {
         await goto(page, '/guide?type=GR');
@@ -417,7 +417,7 @@ test.describe('ライブ視聴', () => {
     /*
      * **データ放送 (テレビの d ボタン)。**
      *
-     * 描くのはエンジン (`src/lib/bml/`) で、**押されるまで取りに行かない**。作りものの放送にはデータ放送が載って
+     * 描くのはエンジン (`src/lib/bml/`) で、**押されるまで読み込まない**。作りものの放送にはデータ放送が載って
      * いないので中身は出ないが、**押してエンジンが立ち上がるところ**までは見られる。
      *
      * サーバに「出す」と伝わっているかも見る — 求められてから読み取る作りなので、
@@ -1252,7 +1252,7 @@ test.describe('ライブ視聴', () => {
     /*
      * **ffmpeg に渡すのは、放送が名乗っている番号。**
      *
-     * 1つの物理チャンネルに複数の局が乗っているので局を名指しするのだが、
+     * 1つの物理チャンネルに複数の局が入っているので局を名指しするのだが、
      * 渡す番号を間違えると ffmpeg はその局を探して見つけられず、**映像も音も
      * 出ない**。denpa の `services.id` は `network_id * 100000 + service_id` の
      * 内部IDで、TS の中には出てこない — 実際にこれを渡して再生できなくなった。
@@ -1435,7 +1435,7 @@ test.describe('ライブ視聴', () => {
             await captureSockets(page);
             await goto(page, '/live');
             await page.getByTestId('live-channel').first().click();
-            // 狭い枠では題名を畳むので、出ているかではなく在るかで待つ
+            // 狭い枠ではタイトルを畳むので、出ているかではなく在るかで待つ
             await expect(page.getByTestId('live-title')).toBeAttached();
             await holdCaptions(page, 'live-captions');
             await feedCaption(page, 'live');
@@ -1477,7 +1477,7 @@ test.describe('ライブ視聴', () => {
         expect(args[args.indexOf('-c:s') + 1]).toBe('copy');
         expect(args[args.indexOf('-f', args.indexOf('pipe:1')) + 1]).toBe('matroska');
 
-        // 字幕も局を名指しする。1つの物理チャンネルに複数の局が乗っている
+        // 字幕も局を名指しする。1つの物理チャンネルに複数の局が入っている
         expect(args[args.lastIndexOf('-map') + 1]).toMatch(/^0:p:\d+:s:0$/);
 
         /*
@@ -1541,7 +1541,7 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
-     * **チケットは使い捨て。** URL は履歴にもログにも残るので、拾われても二度目は
+     * **チケットは使い捨て。** URL は履歴にもログにも残るので、見られても二度目は
      * 通らない。ここが緩むと、チューナーを使うエンドポイントが素通しになる
      */
     test('チケットなしでは WebSocket に繋げない', async ({ page }) => {

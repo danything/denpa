@@ -15,7 +15,7 @@ import { decodeAribText } from './aribtext';
 export const PACKET = 188;
 export const SYNC = 0x47;
 
-/** PAT。どの PID に PMT が居るかを持つ。**入口はいつもここ** */
+/** PAT。どの PID に PMT があるかを持つ。**入口はいつもここ** */
 export const PID_PAT = 0x0000;
 const PID_NIT = 0x0010;
 export const PID_SDT = 0x0011;
@@ -109,7 +109,7 @@ export class SectionAssembler {
     private buffer = new Uint8Array(0);
 
     /**
-     * @param pid 拾うPID
+     * @param pid 読むPID
      * @param crc CRC の見方。
      *   `always` … 末尾4バイトを CRC32 とみなして必ず確かめる (PSI はこちら)
      *   `syntax` … `section_syntax_indicator` が立っているときだけ確かめる。

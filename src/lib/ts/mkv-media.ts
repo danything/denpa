@@ -217,7 +217,7 @@ export class MkvDemuxer {
     /** 時刻の刻み (ナノ秒) */
     scale = DEFAULT_SCALE;
     private base = 0;
-    /** 読んでいる BlockGroup。終わりの位置 (`buffer` の中) と、ReferenceBlock があったか (= 鍵のコマではない) */
+    /** 読んでいる BlockGroup。終わりの位置 (`buffer` の中) と、ReferenceBlock があったか (= キーフレームではない) */
     private group: { block: MkvBlock | null; end: number; referenced: boolean } | null = null;
 
     feed(chunk: Uint8Array): { tracks: MkvTrack[] | null; blocks: MkvBlock[] } {

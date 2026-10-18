@@ -25,7 +25,7 @@ import { run } from './stream';
 
 /** 無音とみなす音の大きさ。16ビットで ±50 */
 const SILENCE_NOISE = 50 / 32768;
-/** 拾う無音の最短 (秒)。短いものは判定 (`cm-decide`) で捨てる */
+/** 検出する無音の最短 (秒)。短いものは判定 (`cm-decide`) で捨てる */
 const SILENCE_MIN = 0.15;
 
 export interface ScanLogo {
@@ -82,7 +82,7 @@ export function scanLine(line: string): { duration: number } | null {
 const FRAME_TIME = /pts_time:\s*(-?[\d.]+)/;
 
 /**
- * `metadata=mode=print` の書き出しから、コマごとの時刻と `scdet` の点を拾う。1コマ2行:
+ * `metadata=mode=print` の書き出しから、コマごとの時刻と `scdet` の点を読み取る。1コマ2行:
  *
  *     frame:0    pts:58316   pts_time:0.647956
  *     lavfi.scd.score=0.000
@@ -107,7 +107,7 @@ export function parseCuts(text: string): { times: number[]; cuts: number[] } {
 }
 
 /**
- * `ametadata=mode=print` の書き出しから無音を拾う (`silencedetect` が付けた印。始まりと終わりは別のコマ)。
+ * `ametadata=mode=print` の書き出しから無音を読み取る (`silencedetect` が付けた印。始まりと終わりは別のコマ)。
  * 終わりまで続いた無音は `end` で閉じる (分からなければ捨てる)
  */
 export function parseSilences(text: string, end: number): Range[] {
@@ -137,8 +137,8 @@ export function scanOutputs(want: ScanWant, files: { cuts: string; silences: str
     const args: string[] = [];
     if (want.video) {
         /*
-         * 映像は ffmpeg に選ばせる (いちばん大きいもの)。1本の TS に局が何本も乗っていても (TOKYO MX)、
-         * 中身のある映像を拾う。**コマは間引かない・増やさない** — `times` とロゴの枠を順番で突き合わせる。
+         * 映像は ffmpeg に選ばせる (いちばん大きいもの)。1本の TS に局がいくつも入っていても (TOKYO MX)、
+         * 中身のある映像を選ぶ。**コマは間引かない・増やさない** — `times` とロゴの枠を順番で突き合わせる。
          * `scdet` は点を全部のコマに付ける。閾値を上げておくのはログを出させないため (キーフレームを置く
          * `scdet@key` と名前で分ける)
          */
@@ -151,7 +151,7 @@ export function scanOutputs(want: ScanWant, files: { cuts: string; silences: str
         args.push(...(want.logo ? ['-f', 'rawvideo', 'pipe:1'] : ['-f', 'null', '-']));
     }
     if (want.audio) {
-        // 主音声だけ。録画の尻にだけ現れる副音声を拾わないように (cm.probeLiveAudio)
+        // 主音声だけ。録画の尻にだけ現れる副音声を選ばないように (cm.probeLiveAudio)
         args.push(
             '-map',
             '0:a:0',

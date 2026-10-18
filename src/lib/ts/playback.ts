@@ -157,7 +157,7 @@ function asPicked(offer: PlayOffer): Picked | null {
  * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする)
  * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ観る画面が観られる先を案内する
  *
- * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する道は画面の設定で別に決める)。何も無ければ null
+ * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する方式は画面の設定で別に決める)。何も無ければ null
  */
 export function pickOffer(
     info: PlaybackInfo,

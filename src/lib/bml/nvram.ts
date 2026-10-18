@@ -67,7 +67,7 @@ export class Nvram {
             if (affiliation === undefined || block > 63) return null;
             return `group:${affiliation.toLowerCase()}:${block}`;
         }
-        // 放送の文字列で引くので、Object.prototype の名前 (constructor など) を拾わない
+        // 放送の文字列で引くので、Object.prototype の名前 (constructor など) に当たらない
         const area = Object.hasOwn(AREAS, prefix!) ? AREAS[prefix!] : undefined;
         if (area === undefined || affiliation !== undefined) return null;
         if (block < area.first || block > area.last) {

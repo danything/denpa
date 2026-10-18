@@ -66,7 +66,7 @@ function tsFile(name: string): string {
 }
 
 describe('幅だけ戻す (restoredText)', () => {
-    test('寄せて同じ欄を放送の字にする。作品名と副題は戻した題名から切り出す', () => {
+    test('寄せて同じ欄を放送の字にする。作品名と副題は戻したタイトルから切り出す', () => {
         expect(restoredText(STORED, AIRED)).toEqual({
             name: AIRED.name,
             series: 'Ｖｅｎｕｅ１０１',
@@ -111,7 +111,7 @@ describe('幅だけ戻す (restoredText)', () => {
 });
 
 describe('元のTSの EIT を読む (readBroadcastText)', () => {
-    test('「次」として流れていた番組も event_id で拾う', async () => {
+    test('「次」として流れていた番組も event_id で見つける', async () => {
         expect(await readBroadcastText(tsFile('pf.ts'), 1024, 77, true)).toEqual({
             name: AIRED.name,
             description: AIRED.description,

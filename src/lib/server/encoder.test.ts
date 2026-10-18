@@ -96,8 +96,8 @@ describe('トラックの名前', () => {
         expect(title(args, '-metadata:s:a:1')).toBe('title=副音声');
     });
 
-    /** 頭に中身の無い音声 (次の番組の副音声) は拾わない。分からなければ全部拾う */
-    test('拾う音声を名指しされたらそれだけを map する', () => {
+    /** 頭に中身の無い音声 (次の番組の副音声) は使わない。分からなければ全部使う */
+    test('使う音声を名指しされたらそれだけを map する', () => {
         const all = buildArgs('/in.m2ts', '/out.mkv', 1, null);
         expect(all).toContain('0:a');
 
@@ -465,7 +465,7 @@ describe('入力の読み位置を /proc から覗く', () => {
 });
 
 describe('failureReason', () => {
-    test('警告に埋もれずエラー行を拾う', () => {
+    test('警告に埋もれずエラー行を読み取る', () => {
         const stderr = [
             '[in#0/mpegts] Codec AVOption font has not been used for any stream.',
             'Stream mapping: Stream #0:3 -> #0:0 (mpeg2video -> av1)',

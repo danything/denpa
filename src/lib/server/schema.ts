@@ -42,7 +42,7 @@ const flag = (name: string) => integer(name, { mode: 'boolean' });
  * JSON を文字列で持つ列。読むときにデコードし、書くときに畳む。**読み取り関数は列ごとに書く。**
  *
  * drizzle の `{ mode: 'json' }` は使わない。あれは読めない行で例外を投げるが、
- * ここに入っているのは放送から拾ったものや、取り込みの時期によって形式が違うもの
+ * ここに入っているのは放送から取得したものや、取り込みの時期によって形式が違うもの
  * (古い行は `''`、EPGStation から来たジャンルは数の並び) で、1行が読めないせいで
  * 一覧ごと出なくなるのは困る。読めない行はその列を「持っていない」ことにして、
  * 残りは見えるようにする。NULL の行は drizzle が読み取り関数を呼ばない (NULL のまま)
@@ -498,11 +498,11 @@ export const sessions = sqliteTable(
 );
 
 /**
- * **アプリに渡した鍵** (device-auth.ts)。テレビのアプリ (danything/denpa-tv) などが
- * `Authorization: Bearer <鍵>` で入るためのもの。
+ * **アプリに渡したアクセストークン** (device-auth.ts)。テレビのアプリ (danything/denpa-tv) などが
+ * `Authorization: Bearer <アクセストークン>` で入るためのもの。
  *
- * **鍵そのものは持たない。** 持つのは SHA-256 だけで、鍵は渡すときに1度だけ返す。
- * DB が漏れても、ここから入れる鍵は作れない。消さずに `revoked_at` で止める
+ * **アクセストークンそのものは持たない。** 持つのは SHA-256 だけで、トークンは渡すときに1度だけ返す。
+ * DB が漏れても、ここから入れるトークンは作れない。消さずに `revoked_at` で止める
  * (いつ・誰が許したかを設定画面に残すため)
  */
 export const apiTokens = sqliteTable('api_tokens', {
@@ -523,7 +523,7 @@ export const apiTokens = sqliteTable('api_tokens', {
  *
  * 端末が持つ `device_code` は推測できない秘密で、持つのは SHA-256 だけ。QR に載る
  * `user_code` (ABCD-EFGH) は短いので、10分で切れる。開いた人が入れる人なら許したことにし、
- * 端末が次に聞きに来たときに鍵を作って1度だけ渡し、`consumed_at` を付ける。
+ * 端末が次に聞きに来たときにアクセストークンを作って1度だけ渡し、`consumed_at` を付ける。
  * 断る手順は持たない (家で使う前提。コードは10分で切れ、1度しか使えない)
  */
 export const deviceCodes = sqliteTable(
@@ -536,10 +536,10 @@ export const deviceCodes = sqliteTable(
         created_at: integer('created_at').notNull(),
         expires_at: integer('expires_at').notNull(),
         last_polled_at: integer('last_polled_at'),
-        /** 許された時刻と、許した人。**鍵はまだ作らない** (渡すときに作る。生の鍵を DB に置かないため) */
+        /** 許された時刻と、許した人。**アクセストークンはまだ作らない** (渡すときに作る。生のトークンを DB に置かないため) */
         approved_at: integer('approved_at'),
         approved_by: text('approved_by'),
-        /** 渡した鍵 */
+        /** 渡したアクセストークン */
         approved_token_id: integer('approved_token_id').references((): AnySQLiteColumn => apiTokens.id),
         consumed_at: integer('consumed_at'),
     },

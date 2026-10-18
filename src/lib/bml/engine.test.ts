@@ -133,15 +133,15 @@ async function watch(until: () => boolean, limit = 10_000): Promise<{ longest: n
 }
 
 describe('エンジンはページを固めない', () => {
-    test('モジュールに無い画像を指す object で、描き直しと取りに行くのを繰り返さない', async () => {
+    test('モジュールに無い画像を指す object で、描き直しと取得を繰り返さない', async () => {
         const { bml } = open();
         const resources = inside(bml).resources;
-        // 直す前は、描く → 無いので取りに行く → すぐ「無い」と返る → 描き直す… がマイクロタスクで
+        // 直す前は、描く → 無いので取得する → すぐ「無い」と返る → 描き直す… がマイクロタスクで
         // 回り続けてページが固まった。数えて、多すぎたら止める (テストが固まらないように)
         let fetches = 0;
         const fetch = resources.fetch.bind(resources);
         resources.fetch = (...args) => {
-            if (++fetches > 1000) throw new Error('取りに行きすぎ');
+            if (++fetches > 1000) throw new Error('取得しすぎ');
             return fetch(...args);
         };
         for (const message of carousel([

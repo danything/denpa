@@ -12,7 +12,7 @@ import { join } from 'node:path';
 const ROOT = join(import.meta.dir);
 const SERVER =
     /(^|\/)(lib\/server\/|hooks\.server\.ts$|.*\+server\.ts$|.*\+page\.server\.ts$|.*\+layout\.server\.ts$)/;
-// `href={x ? '/' : '/?deleted=1'}` のように、式の中に根から書いた文字列があるものも拾う。
+// `href={x ? '/' : '/?deleted=1'}` のように、式の中に根から書いた文字列があるものも見つける。
 // cookie の `path=/…` も同じ (接頭辞の下では、その画面に cookie が届かない)
 const ABSOLUTE =
     /(?:href|src|action|formaction)="\/|(?:href|src|action)=\{[^}]*['"`]\/(?!\/)|['"`]\/api\/|goto\(['`]\/|path=\//;

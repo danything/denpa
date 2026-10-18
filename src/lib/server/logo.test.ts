@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * 「いますぐ取りに行く」で拾えた局の数 (`logoStamps` / `writtenSince`)。
+ * 「いますぐ取得」で取得できた局の数 (`logoStamps` / `writtenSince`)。
  *
  * 開いた中継で減った数で数えていた頃は、他の中継から来たロゴや選局の共有で取得したものが
  * 入らず、画面の「14 / 14 局」の下に「12 局のロゴを取得しました」と出ていた。
@@ -24,7 +24,7 @@ function put(serviceId: number, at: number): void {
     utimesSync(path, at, at);
 }
 
-describe('拾えたロゴの数', () => {
+describe('取得できたロゴの数', () => {
     test('控えたあとに書き込まれた局だけ数える。前から持っていて変わらない局は数えない', () => {
         put(1, 1000);
         put(2, 1000);

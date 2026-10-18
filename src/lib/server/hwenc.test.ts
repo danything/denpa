@@ -50,7 +50,7 @@ describe('GPU の方式の選び方', () => {
         expect(hwChain('av1', { [B.path]: { qsv: ['av1'], vaapi: ['av1'] } }, 0, [B])).toEqual([]);
     });
 
-    test('デバイスは最後の段の * で拾い、名前順', () => {
+    test('デバイスは最後の段の * で探し、名前順', () => {
         const dir = mkdtempSync(join(tmpdir(), 'dri-'));
         for (const name of ['renderD129', 'renderD128', 'card0']) writeFileSync(join(dir, name), '');
         expect(findDevices(`${dir}/renderD*`)).toEqual([`${dir}/renderD128`, `${dir}/renderD129`]);

@@ -539,7 +539,7 @@
         {#if typeof open === 'string'}
             <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
             <!--
-                録画の行は、押すと番組名が観る画面の題名へ広がる (`rememberHero`。`#lib/motion.svelte.ts`)
+                録画の行は、押すと番組名が観る画面のタイトルへ広がる (`rememberHero`。`#lib/motion.svelte.ts`)
             -->
             <a
                 class="row-name row-open broadcast"
@@ -565,7 +565,7 @@
 {/snippet}
 
 <!-- 局名・放送日時・尺・サイズ。1行にまとめて、空のものは出さない -->
-<!-- 局ロゴは**まだ拾えていない局では何も出さない** (ServiceLogo) -->
+<!-- 局ロゴは**まだ取得できていない局では何も出さない** (ServiceLogo) -->
 <!-- 局名は放送から来た字なので放送の字 (`.broadcast`)。残りはこちらで書いた字 -->
 {#snippet meta(service: string, parts: string[], row: { service_id: number; has_logo: boolean | null })}
     {@const rest = parts.filter(Boolean).join(' ・ ')}
@@ -1723,7 +1723,7 @@
         margin-top: 0.125rem;
     }
     /*
-     * **番組名・局と日時・ルール名は1行ずつで切る。** 折り返すと題名の長さで行の高さが
+     * **番組名・局と日時・ルール名は1行ずつで切る。** 折り返すとタイトルの長さで行の高さが
      * 変わり、並んだ「詳細」「削除」の位置が行ごとにずれて押しにくかった。はみ出す分は
      * 「…」で省く。全部は詳細 (番組名・局) と、押した先のルールの編集・title (ルール名) で読める。
      * 押せる範囲 (`.row-open::after`) は `.row` を基準に置いているので、ここで切っても欠けない

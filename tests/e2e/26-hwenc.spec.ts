@@ -16,7 +16,7 @@ import { expect, goto, reserveSoon, setRecording, syncEpg, test, waitWatchable }
  *
  * **この録画のぶんだけ。** 入力は元のTS (`…-<録画の番号>.m2ts`)。
  * 同じワーカーの前のテストが残した予約が録れてエンコードされると、そのぶんまで混ざっていた (CI)。
- * 名前の尻で合わせる — エンコードしたものにチャプターを書き足すとき (`-c copy`) の `<元のTS>.chapters.txt` を拾わないように
+ * 名前の尻で合わせる — エンコードしたものにチャプターを書き足すとき (`-c copy`) の `<元のTS>.chapters.txt` に当たらないように
  */
 function encodeRuns(file: string, recordingId: string | null): string[][] {
     if (!existsSync(file)) return [];

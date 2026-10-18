@@ -260,7 +260,7 @@
     let menuOpen = $state(false);
     /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
     $effect(() => {
-        // 画面が変わったことをこの参照で拾う
+        // 画面が変わったことをこの参照で知る
         page.url.pathname;
         menuOpen = false;
     });

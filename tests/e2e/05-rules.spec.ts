@@ -50,7 +50,7 @@ test.describe('自動予約ルール', () => {
 
         await goto(page, '/rules');
         await page.getByTestId('rule-keyword').fill('テストアニメ');
-        // 偽の放送は同じ題名を何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
         await page.getByTestId('rule-dedupe').uncheck();
         // チャンネルは既定で畳んである
         await page.getByTestId('channel-summary').click();
@@ -110,7 +110,7 @@ test.describe('キーワードを当てる範囲', () => {
     });
 
     /*
-     * **この条件で本当にこれを録りたいのか**は、題名と局と時刻だけでは決められない。
+     * **この条件で本当にこれを録りたいのか**は、タイトルと局と時刻だけでは決められない。
      * 同じタイトルの再放送、傍題の違い、番組の中身は詳細にしか無く、確かめるには
      * 番組表を別に開いて探し直すことになっていた。予約一覧と同じ詳細をここでも出す
      */
@@ -134,7 +134,7 @@ test.describe('キーワードを当てる範囲', () => {
         await expect(row).toBeVisible();
         await row.getByTestId('preview-open').click();
 
-        // 行が持っているのは題名・局・時刻だけ。EPG から引いた中身まで出ること
+        // 行が持っているのはタイトル・局・時刻だけ。EPG から引いた中身まで出ること
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
         await expect(detail).toContainText('ゲスト太郎');

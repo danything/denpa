@@ -73,7 +73,7 @@ export function compile(rule: Rule): CompiledRule {
         types: nonEmpty(rule.service_types),
         genres: nonEmpty(rule.genres),
         fields: parseSearchFields(rule.search_fields),
-        // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ拾える
+        // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ当たる
         keywords: searchable(rule.keyword).split(/\s+/).filter(Boolean),
         // 除外キーワードは OR。1つでも当たれば落とす
         ignores: searchable(rule.ignore_keyword).split(/\s+/).filter(Boolean),
@@ -208,7 +208,7 @@ function seriesOf(source: Pick<RuleSource, 'name'>): string {
  *   シリーズ名は番組名の一部なので、空白で割れても同じ番組に当たる
  * - 局は絞らない。同じ回が別の局で流れても、ルールの「同じ回は最初の放送だけ」が
  *   いちばん早いものを選ぶ。局を絞ると、そちらで先に流れたときに遅いほうを待つことになる
- * - ジャンルは**大分類だけ**入れる。シリーズ名が短いと別の番組まで拾うので、その歯止め。
+ * - ジャンルは**大分類だけ**入れる。シリーズ名が短いと別の番組まで当たるので、その歯止め。
  *   中分類は局によって付け方が揺れるので使わない
  *
  * シリーズ名が読めなければ null (条件がジャンルだけになり、そのジャンルを全部録ってしまう)
@@ -223,9 +223,9 @@ export function prefillFrom(source: RuleSource): RulePrefill | null {
 /**
  * **このシリーズを既に録っているルール。** 有効なものを先に返す。
  *
- * 当てるのは録れた回の題名ではなく**シリーズ名だけ**。`[新]` で拾った第1話は
+ * 当てるのは録れた回のタイトルではなく**シリーズ名だけ**。`[新]` で当たった第1話は
  * 「[新]」のルールにも当たるが、そのルールは第2話を録らない。
- * 次の回の題名に何が付くかは分からないので、いちばん素の名前で確かめる
+ * 次の回のタイトルに何が付くかは分からないので、いちばん素の名前で確かめる
  */
 export function coveringRule(rules: Rule[], source: RuleSource, serviceType?: string): Rule | undefined {
     const name = seriesOf(source);
@@ -256,7 +256,7 @@ interface Declined {
 const DECLINE_WINDOW = 10 * 60 * 1000;
 
 /**
- * **人が取り消した放送。** 番組の id ではなく、**物理チャンネル + 題名 + 開始時刻**で持つ。
+ * **人が取り消した放送。** 番組の id ではなく、**物理チャンネル + タイトル + 開始時刻**で持つ。
  *
  * 取り消しの記録は `reservations.program_id` (局 + event_id) に付いていて、ルールは
  * `INSERT OR IGNORE` がそれに当たることで「二度と立てない」を成り立たせていた。
@@ -264,14 +264,14 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * 録れた**として出た。
  *
  * - **枝番違い。** 同じ放送が 23608 と 23609 の両方に載るとき、束ねが一時的に
- *   外れる (片方だけ延長が先に届く、題名がまだ違う) と、取り消していないほうの
+ *   外れる (片方だけ延長が先に届く、タイトルがまだ違う) と、取り消していないほうの
  *   枝番に予約が無いので立つ。放送直前なら猶予 (`ruleRetractGrace`) の中で
  *   引っ込まず、そのまま録れる
  * - **event_id の変更。** 局が同じ番組を別の event_id で送り直すと、番組表の
  *   取り込みは重なる行を消して新しい id で入れる。取り消し行は古い id を指したまま
  *   残り、新しい id には予約が無いので立つ
  *
- * どちらも「同じ物理チャンネルで、同じ題名が、同じ頃に始まる」ことは変わらないので、
+ * どちらも「同じ物理チャンネルで、同じタイトルが、同じ頃に始まる」ことは変わらないので、
  * そこで当てる。
  *
  * **システムの取り消しは含めない。** 選局できなくなった局の予約はシステムが
@@ -297,7 +297,7 @@ function canceledBroadcasts(at: number): Declined {
             ),
         )
         .all();
-    /** 物理チャンネル + 題名 → 取り消した回の開始時刻 */
+    /** 物理チャンネル + タイトル → 取り消した回の開始時刻 */
     const starts = new Map<string, number[]>();
     for (const row of rows) {
         if (row.name === '') continue;
@@ -345,14 +345,14 @@ function recordedEpisodes(at: number): Taken {
         .all();
     const taken: Taken = [];
     for (const { start_at, service_name, ...described } of rows) {
-        // 番組表の番組と同じ読み方をする。録画は録ったときの題名・概要・詳細を持っている
+        // 番組表の番組と同じ読み方をする。録画は録ったときのタイトル・概要・詳細を持っている
         const episode = episodeOf(described);
         if (episode !== null) taken.push({ episode, start_at, service_name });
     }
     return taken;
 }
 
-/** チューナー不足で弾かれている番組。同じ回の次の放送で拾う (`episode.firstAirings` の `blocked`) */
+/** チューナー不足で弾かれている番組。同じ回の次の放送で録る (`episode.firstAirings` の `blocked`) */
 function blockedPrograms(): Set<number> {
     const rows = orm()
         .select({ id: reservations.program_id })
@@ -439,7 +439,7 @@ export interface RuleSync {
  * - **人が取り消したもの。** 取り消しの記録はそのまま残す
  * - **番組表からその番組ごと消えているとき。** 「条件から外れた」のか
  *   「まだ読めていない」のか区別が付かない
- * - **題名が空の番組。** 放送が名前を出していないのではなく、こちらがまだ
+ * - **タイトルが空の番組。** 放送が名前を出していないのではなく、こちらがまだ
  *   読めていないだけのことがある (実機で 23,000 件のうち 11,000 件がそうだった)
  * - **もうすぐ始まるもの** (`config.ruleRetractGrace`)。番組表は放送直前まで
  *   書き換わるので、そこで条件を外れても手遅れになるより録っておく。
@@ -491,11 +491,11 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
      * 素通しにしていた実機では、同じ回が2本録れたうえに、2つのエンコードが
      * 同じ名前のファイルへ同時に書いて中身が壊れた。
      *
-     * 中身が違うとき (MX1 と MX2 で別番組) は題名が違うので、両方残る。
+     * 中身が違うとき (MX1 と MX2 で別番組) はタイトルが違うので、両方残る。
      *
      * **終了時刻は鍵に入れない。** 延長は枝番ごとに別々のタイミングで届く
      * (EIT p/f は局ごと) ので、片方だけ `end_at` が動いた回は「別の放送」に
-     * 見えて両方が立っていた。開始と題名が同じなら同じ放送。
+     * 見えて両方が立っていた。開始とタイトルが同じなら同じ放送。
      */
     const simulcast = new Map<string, { serviceId: number; programId: number }>();
     for (const program of programs) {
@@ -632,7 +632,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
                 continue;
             }
             const program = listed.get(reservation.program_id);
-            // 番組表から消えているだけかもしれない。題名が空のものも判断材料にならない
+            // 番組表から消えているだけかもしれない。タイトルが空のものも判断材料にならない
             if (program === undefined || program.name === '') continue;
             // ルールが生きているのに外れた = 番組表が動いた。直前なら録っておく
             const byChurn = reservation.rule_id !== null && enabled.has(reservation.rule_id);

@@ -11,7 +11,7 @@ import { aitSection, aitSignallingDescriptor, packetize, patSection, programMap 
  */
 
 describe('AIT の在り処', () => {
-    test('PMT の印が付いた ES の PID を拾う', () => {
+    test('PMT の印が付いた ES の PID を読み取る', () => {
         const pmt = programMap(1024, 0x0100, [
             [0x02, 0x0100], // 映像
             [0x0f, 0x0110], // 音声
@@ -20,7 +20,7 @@ describe('AIT の在り処', () => {
         expect(aitPidsFromPmt(pmt)).toEqual([0x0200]);
     });
 
-    test('印の無い局では拾わない', () => {
+    test('印の無い局では読み取らない', () => {
         // **データ放送のカルーセルと同じ stream_type (0x0D) でも、印が無ければ AIT ではない**
         const pmt = programMap(1024, 0x0100, [
             [0x02, 0x0100],
@@ -112,8 +112,8 @@ describe('TS から見つける', () => {
         expect(found[0]!.applications[0]!.name).toBe('テスト');
     });
 
-    test('AIT が先に来ても、PMT を読むまでは拾わない', () => {
-        // **印を知らない PID は読まない。** 拾ってしまうと他局の表まで混ざる
+    test('AIT が先に来ても、PMT を読むまでは読み取らない', () => {
+        // **印を知らない PID は読まない。** 読み取ってしまうと他局の表まで混ざる
         const reader = new AitReader(1024);
         const ait = packetize(
             0x0200,

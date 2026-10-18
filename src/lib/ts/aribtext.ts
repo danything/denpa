@@ -67,7 +67,7 @@ const CHARSETS = new Map<number, Charset>([
     [0x35, MOSAIC],
 ]);
 
-/** 外字にも JIS にも無い文字を出すときの印。消すと題名から1文字黙って落ちる */
+/** 外字にも JIS にも無い文字を出すときの印。消すとタイトルから1文字黙って落ちる */
 const UNKNOWN = '□';
 
 /**
@@ -106,7 +106,7 @@ function twoByte(code: number, plane2: boolean): string {
         : Uint8Array.of(high | 0x80, low | 0x80);
     // 85区から先は外字の表だけで引く。EUC-JP に渡すと 89〜92区が IBM 拡張の漢字になる
     const decoded = gaiji ?? (!plane2 && high >= 0x75 ? '' : eucjp.decode(bytes));
-    // 変換できないと置換文字が返る。そのまま出すと題名に「�」が並ぶ
+    // 変換できないと置換文字が返る。そのまま出すとタイトルに「�」が並ぶ
     const text = decoded === '' || decoded.includes('�') ? UNKNOWN : decoded;
     cache.set(key, text);
     return text;

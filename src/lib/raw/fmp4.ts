@@ -20,7 +20,7 @@
  *
  * サーバは詰まった客には媒体を捨てる (`server/live.ts` の `hand`) ので、**コマの時刻が
  * 飛んだら次のキーフレームまで捨てる** — 参照するコマが欠けたまま渡すと、デコーダは崩れたフレームを
- * 出すか転ぶ。転んだら (`error`) 開き直して鍵のコマから入り直し、続けて転ぶなら諦める。
+ * 出すか転ぶ。転んだら (`error`) 開き直してキーフレームから入り直し、続けて転ぶなら諦める。
  */
 
 import {
@@ -39,7 +39,7 @@ const AHEAD = 0.3 * CLOCK;
 const DECODED_MOST = 6;
 /** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
 const PENDING_MOST = 8 * CLOCK;
-/** これだけ遅れたら、デコードしながら追いつくのをやめて鍵のコマまで飛ぶ (90kHz) */
+/** これだけ遅れたら、デコードしながら追いつくのをやめてキーフレームまで飛ぶ (90kHz) */
 const BEHIND_MOST = 0.5 * CLOCK;
 /** 1コマの長さの目安 (90kHz)。59.94 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 1501;
@@ -95,9 +95,9 @@ export class Fmp4Video {
     private pending: Pending[] = [];
     /** デコードできたフレーム (見せる順)。**描いたら閉じる** */
     private frames: VideoFrame[] = [];
-    /** 鍵のコマを待っているか。開き直した・時刻が飛んだ・選局し直した */
+    /** キーフレームを待っているか。開き直した・時刻が飛んだ・選局し直した */
     private needKey = true;
-    /** 次に来るはずのコマの時刻 (90kHz)。**飛んだら鍵のコマまで捨てる** */
+    /** 次に来るはずのコマの時刻 (90kHz)。**飛んだらキーフレームまで捨てる** */
     private expected: number | null = null;
     /** 渡した時刻 (µs → performance.now())。デコードするのに掛かった時間を測る */
     private readonly started = new Map<number, number>();
@@ -109,7 +109,7 @@ export class Fmp4Video {
     private shownSinceReset = false;
     /**
      * 飛び先 (µs。`reset` の `from`)。**これより前に出てきたフレームは描かずに閉じる** — 録画のサーバは
-     * 飛び先の手前の鍵のコマから流してくる。最初の1枚を描いたら外す
+     * 飛び先の手前のキーフレームから流してくる。最初の1枚を描いたら外す
      */
     private floor: number | null = null;
     private lastPts: number | null = null;
@@ -214,7 +214,7 @@ export class Fmp4Video {
         this.open();
     }
 
-    /** VideoDecoder を開く (開き直す)。**鍵のコマから入り直す** */
+    /** VideoDecoder を開く (開き直す)。**キーフレームから入り直す** */
     private open(): void {
         this.dropFrames();
         this.started.clear();
@@ -234,7 +234,7 @@ export class Fmp4Video {
         }
     }
 
-    /** 転んだ (壊れたコマ・端末の都合)。**開き直して鍵のコマから入り直す**。続けて転ぶなら諦める */
+    /** 転んだ (壊れたコマ・端末の都合)。**開き直してキーフレームから入り直す**。続けて転ぶなら諦める */
     private broke(): void {
         if (++this.errors > ERRORS_MOST) {
             this.host.fail('映像を再生できません');
@@ -244,8 +244,8 @@ export class Fmp4Video {
         this.decoder = null;
         this.open();
         /*
-         * **待たせている圧縮の頭も、次の鍵のコマまで捨てる。** 開き直したデコーダに差分のコマから
-         * 渡すと、また転ぶ (`ERRORS_MOST` を使い切って諦めてしまう)。鍵が無ければこれから来るぶんを待つ
+         * **待たせている圧縮の頭も、次のキーフレームまで捨てる。** 開き直したデコーダに差分のコマから
+         * 渡すと、また転ぶ (`ERRORS_MOST` を使い切って諦めてしまう)。キーフレームが無ければこれから来るぶんを待つ
          */
         const key = this.pending.findIndex((item) => item.key);
         this.pending = key < 0 ? [] : this.pending.slice(key);
@@ -254,7 +254,7 @@ export class Fmp4Video {
     }
 
     private queue(item: Pending): void {
-        // 時刻が飛んだ (サーバが詰まって捨てた)。**次の鍵のコマまで捨てる** (上の説明)
+        // 時刻が飛んだ (サーバが詰まって捨てた)。**次のキーフレームまで捨てる** (上の説明)
         if (this.expected !== null && Math.abs(item.dts - this.expected) > item.duration + 2)
             this.needKey = true;
         this.expected = item.dts + item.duration;
@@ -264,7 +264,7 @@ export class Fmp4Video {
         }
         this.pending.push(item);
         this.pendingBytes += item.data.length;
-        // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しい鍵から持ち直す。追っかけは捨てない (`overfull`)
+        // 溜め込みすぎ (止めている・裏に回っている)。いちばん新しいキーフレームから持ち直す。追っかけは捨てない (`overfull`)
         if (
             !this.follow &&
             this.pending.length > 1 &&
@@ -275,7 +275,7 @@ export class Fmp4Video {
     }
 
     /**
-     * `target` より手前でいちばん新しい鍵のコマまで飛ぶ。**デコーダも開き直す** —
+     * `target` より手前でいちばん新しいキーフレームまで飛ぶ。**デコーダも開き直す** —
      * 飛ばしたコマを参照するフレームを出させないため
      */
     private skipTo(target: number): void {
@@ -289,7 +289,7 @@ export class Fmp4Video {
         this.pendingBytes = this.pending.reduce((sum, item) => sum + item.data.length, 0);
         this.decoder?.reset();
         this.open();
-        // 開き直しで鍵を待つ印が立つが、頭は鍵のコマなのでそのまま渡せる
+        // 開き直しでキーフレームを待つ印が立つが、頭はキーフレームなのでそのまま渡せる
         this.needKey = false;
     }
 
@@ -371,7 +371,7 @@ export class Fmp4Video {
         }
         if (at === null) return;
 
-        // 大きく遅れている (裏から戻った・止めていた)。デコードしながら追うより鍵まで飛ぶ
+        // 大きく遅れている (裏から戻った・止めていた)。デコードしながら追うよりキーフレームまで飛ぶ
         const head = this.pending[0];
         if (head !== undefined && head.dts < at - BEHIND_MOST && this.frames.length === 0) this.skipTo(at);
 

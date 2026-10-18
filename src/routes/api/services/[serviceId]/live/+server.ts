@@ -10,7 +10,7 @@ import { liveStream } from '#lib/server/live.js';
  * 1局に絞っただけの、変換しない TS (MPEG-2。テレビのアプリ向け。Content-Type で分かる)。
  * `?audio=only` で音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け。録画の API と同じ書き方)。
  * `?audio=<音声ID>` (`now.audios` の `id`。`0:sub` など) でエンコードする音声を選ぶ。知らないものは主音声、変換しないときは効かない。
- * 画面の視聴者と同じチューナーの取り合いに乗り、閉じれば降りる (live.ts の liveStream)
+ * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)
  */
 export function GET({ params, url }) {
     const serviceId = Number(params.serviceId);

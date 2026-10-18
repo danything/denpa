@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { readLogo } from '#lib/server/logo.js';
 
 /**
- * 局ロゴ。denpa が放送波から拾ったものを配る (src/lib/server/logo.ts)。
+ * 局ロゴ。denpa が放送波から取得したものを配る (src/lib/server/logo.ts)。
  * 滅多に変わらないので長めにキャッシュさせる。
  */
 export function GET({ params, setHeaders }) {

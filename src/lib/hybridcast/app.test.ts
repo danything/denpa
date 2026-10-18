@@ -47,7 +47,7 @@ test('decodeHtml は content-type、無ければ meta の charset で読む', ()
     expect(decodeHtml(new TextEncoder().encode('あ'), 'text/html')).toBe('あ');
 });
 
-test('frameMessage は形の合わないものを捨てる', () => {
+test('frameMessage は形式の合わないものを捨てる', () => {
     expect(frameMessage({ type: 'close' })).toBeNull();
     expect(frameMessage({ hc: 1, type: 'close' })).toEqual({ type: 'close' });
     expect(frameMessage({ hc: 1, type: 'fetch', id: 'x', url: 'a', method: 'GET' })).toBeNull();

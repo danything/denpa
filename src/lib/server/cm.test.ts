@@ -85,7 +85,7 @@ describe('最初に復号できたコマ', () => {
         expect(firstFrameTime('best_effort_timestamp_time=N/A')).toBeNaN();
     });
 
-    test('他の行が混ざっていても拾える', () => {
+    test('他の行が混ざっていても読み取れる', () => {
         // ffprobe は復号できないコマについて警告を吐くことがある
         expect(firstFrameTime(`[mpeg2video] Invalid frame dimensions 0x0.\n${output}`)).toBeCloseTo(
             6116.439489,
@@ -145,7 +145,7 @@ describe('chapterMetadata', () => {
 
 describe('ffprobe の読み取り', () => {
     /**
-     * 実機の TOKYO MX の元のTS。MX1 と MX2 が同じTSに乗っているので
+     * 実機の TOKYO MX の元のTS。MX1 と MX2 が同じTSに入っているので
      * `-select_streams v:0` を付けても番組の数だけ並ぶ。
      * 並び順も**指定した順ではない** (avg_frame_rate,width,height と指定して幅から来る)
      */
@@ -218,7 +218,7 @@ describe('ロゴで判定できなかったと扱うか', () => {
         expect(
             logoUnusable('無音 30 箇所 (ロゴは使えず: 番組の 100% がCMという結果だったので捨てました)'),
         ).toBe(true);
-        // ロゴで判定できている。ここで出すと、直しようのないものまで拾う
+        // ロゴで判定できている。ここで出すと、直しようのないものまで対象になる
         expect(logoUnusable('ロゴ')).toBe(false);
         expect(logoUnusable('無音 8 箇所')).toBe(false);
         expect(logoUnusable(null)).toBe(false);
@@ -229,14 +229,14 @@ describe('ロゴで判定できなかったと扱うか', () => {
  * 録画の尻に次の番組の副音声が入ると、探りの間に中身の来ない音声が1本増える。
  * 実機の ffprobe の出力 (programs と streams の両方に同じものが並ぶ) をそのまま使う
  */
-describe('中身のある音声だけを拾う', () => {
+describe('中身のある音声だけを選ぶ', () => {
     test('channels が 0 の音声は外す', () => {
         const json =
             '{"programs":[{"streams":[{"channels":2},{"channels":0}]},{"streams":[]}],"streams":[{"channels":2},{"channels":0}]}';
         expect(liveAudioIndexes(json)).toEqual([0]);
     });
 
-    test('多重音声はどちらも拾う', () => {
+    test('多重音声はどちらも選ぶ', () => {
         expect(liveAudioIndexes('{"streams":[{"channels":2},{"channels":2}]}')).toEqual([0, 1]);
     });
 

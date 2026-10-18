@@ -343,7 +343,7 @@ describe('ffmpeg が書いた fMP4 を読む', () => {
             if (audio === 'opus') expect(opusHead(tracks[1]!.config)?.length).toBe(19);
             else expect(adtsHeader(tracks[1]!.config, 100)).not.toBeNull();
 
-            // 媒体を全部読む: 2秒ぶんのコマが時刻の順に並び、頭は鍵のコマ
+            // 媒体を全部読む: 2秒ぶんのコマが時刻の順に並び、頭はキーフレーム
             const samples = new Fmp4Splitter()
                 .feed(file)
                 .filter((s) => s.kind === 'media')

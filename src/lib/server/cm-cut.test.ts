@@ -2,14 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { chapterArgs, cutArgs, cutList, cutPoints, parseKeyframes, planCut } from './cm-cut';
 
 /**
- * エンコードしたものから CM を切る段取り (`cm-cut.ts`)。ffmpeg は動かさず、キーフレームの拾い方・
+ * エンコードしたものから CM を切る段取り (`cm-cut.ts`)。ffmpeg は動かさず、キーフレームの読み取り方・
  * 切る所の決め方・concat に渡す一覧だけを見る
  */
 const frame = 1001 / 30000;
 const limits = { offset: 0, tolerance: 1.5 * frame, margin: 0.8, duration: 1800 };
 const key = (pts: number, lag = 0) => ({ pts, dts: pts - lag });
 
-describe('キーフレームを拾う', () => {
+describe('キーフレームを読み取る', () => {
     test('K の付いたパケットと、いちばん早いコマの時刻', () => {
         const csv = ['0.701,0.634,___', '0.634,N/A,K__', '0.668,0.668,___', '12.079,12.012,K__', ''].join(
             '\n',

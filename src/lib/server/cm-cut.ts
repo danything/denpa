@@ -34,7 +34,7 @@ export interface Keyframe {
 }
 
 /**
- * ffprobe のパケット一覧 (`pts,dts,flags`) から、キーフレームと最初のコマの時刻を拾う。
+ * ffprobe のパケット一覧 (`pts,dts,flags`) から、キーフレームと最初のコマの時刻を読み取る。
  * **パケットを読むだけでデコードしない**ので、30分の録画でも数秒で済む
  */
 export function parseKeyframes(csv: string): { keys: Keyframe[]; first: number } {

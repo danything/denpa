@@ -25,7 +25,7 @@ function airing(name: string, at: number, fields: Partial<Airing> = {}): Airing 
     };
 }
 
-/** 題名 (と概要) だけで同じ回か */
+/** タイトル (と概要) だけで同じ回か */
 function same(a: string, b: string, descriptions: [string, string] = ['', '']): boolean {
     const one = episodeOf({ name: a, description: descriptions[0], extended: null });
     const two = episodeOf({ name: b, description: descriptions[1], extended: null });
@@ -76,7 +76,7 @@ describe('同じ回の見分け', () => {
         ).toBeNull();
     });
 
-    test('題名に話数が無ければ概要から読む。局ごとの飾りは違っていてよい', () => {
+    test('タイトルに話数が無ければ概要から読む。局ごとの飾りは違っていてよい', () => {
         expect(
             same('薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]', 'アニメ 薬屋のひとりごと', [
                 '第18話「月下の花」 猫猫は壬氏に連れられて…',
@@ -152,7 +152,7 @@ describe('同じ回の見分け', () => {
         expect(same('銀魂 #1「最終回」', '銀魂 #1「最終回」[再]')).toBe(true);
     });
 
-    test('題名が「第2期」だけなら、全話を1つの回にしない', () => {
+    test('タイトルが「第2期」だけなら、全話を1つの回にしない', () => {
         // 「第2期」は編で話数ではない。毎回同じなので回にはならない
         expect(episodeOf({ name: 'テストアニメ 第2期', description: '', extended: null })).toBeNull();
         expect(same('テストアニメ 第2期', 'テストアニメ 第2期', ['#1「はじまり」', '#2「つづき」'])).toBe(
@@ -193,7 +193,7 @@ describe('同じ回の見分け', () => {
     const TBS = '追放された転生重騎士はゲーム知識で無双する#15◆スーパーアニメイズムTURBO[字][デ]';
     const NTV = '[字]アニメ 追放された転生重騎士はゲーム知識で無双する Chapter 15';
 
-    test('題名に話数だけなら、副題は概要から足す (Chapter 15「…」 / Chapter 15 …)', () => {
+    test('タイトルに話数だけなら、副題は概要から足す (Chapter 15「…」 / Chapter 15 …)', () => {
         expect(
             same(TBS, NTV, ['Chapter 15「百足坑道の主」▼レベルアップし…', 'Chapter 15 百足坑道の主']),
         ).toBe(true);
@@ -207,7 +207,7 @@ describe('同じ回の見分け', () => {
         expect(same(TBS, NTV)).toBe(true);
     });
 
-    test('概要の話数が題名と違えば副題は足さない', () => {
+    test('概要の話数がタイトルと違えば副題は足さない', () => {
         const episode = episodeOf({ name: 'テストアニメ #3', description: '#2「前の話」', extended: null });
         expect(episode).toMatchObject({ number: 3, subtitle: '' });
     });
@@ -227,16 +227,16 @@ describe('同じ回の見分け', () => {
         expect(read('#18: 春の訪れ')).toMatchObject({ number: 18, subtitle: '春の訪れ' });
     });
 
-    test('概要から足した副題が題名の副題と食い違っても、別の回にはしない', () => {
+    test('概要から足した副題がタイトルの副題と食い違っても、別の回にはしない', () => {
         // 局によって書き方が違う (`奈良県` と `奈良`)。足していない頃と同じく、シリーズ名で見る
         expect(same('私の幸福時間 #1138 奈良県/鹿の写真', '私の幸福時間', ['', '#1138 奈良/鹿の写真'])).toBe(
             true,
         );
-        // 題名どうしの副題が食い違えば今までどおり別の回
+        // タイトルどうしの副題が食い違えば今までどおり別の回
         expect(same('テストアニメ #1「はじまり」', 'テストアニメ #1「別の話」')).toBe(false);
     });
 
-    test('題名の話数の後ろの印 (◆★▼) は副題とは限らない', () => {
+    test('タイトルの話数の後ろの印 (◆★▼) は副題とは限らない', () => {
         // 印の後ろは枠の名前や出演者。概要に副題があればそちらで比べる
         expect(
             same('テストアニメ#5◆アニメ枠', 'アニメ テストアニメ #5', ['#5「はじまり」', '#5「はじまり」']),
@@ -260,7 +260,7 @@ describe('同じ回の見分け', () => {
         expect(same('続・テストドラマ #3', 'テストドラマ #3')).toBe(false);
     });
 
-    test('話数と概要がぴったり同じなら、題名の飾りが違っても同じ回', () => {
+    test('話数と概要がぴったり同じなら、タイトルの飾りが違っても同じ回', () => {
         const summary =
             '「釣りの裾野を広げる!」をモットーに、様々な釣りをご紹介!第42話 マダイ釣りならまかせろ!';
         const [one, sp] = ['テスト釣り番組 #42', '【釣りの日SP】テスト釣り番組 #42'];
@@ -376,7 +376,7 @@ describe('firstAirings', () => {
         });
     });
 
-    test('回の分からない番組は、別の時刻なら同じ題名でも全部録る (毎日のニュース)', () => {
+    test('回の分からない番組は、別の時刻なら同じタイトルでも全部録る (毎日のニュース)', () => {
         const days = [0, 1, 2].map((d) => airing('ニュース', base + d * DAY));
         expect(kept(days)).toEqual(days.map((a) => a.id));
     });
@@ -388,7 +388,7 @@ describe('firstAirings', () => {
         expect(kept([gr, bs, tomorrow])).toEqual([gr.id, tomorrow.id]);
     });
 
-    test('題名に話数の無い再放送も、概要の話数で同じ回とみる', () => {
+    test('タイトルに話数の無い再放送も、概要の話数で同じ回とみる', () => {
         const ntv = airing('薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]', base, {
             description: '第18話「月下の花」 猫猫は壬氏に連れられて…',
         });
@@ -484,7 +484,7 @@ describe('firstAirings', () => {
     });
 
     test('「request 15.」の地上波と BS は同じ回。早いほうだけ録る', () => {
-        // 毎週同じ番組紹介なので、回は題名の話数でしか分からない
+        // 毎週同じ番組紹介なので、回はタイトルの話数でしか分からない
         const intro = {
             description: 'そのホテルのお客様は殺し屋様。決してNOと告げないコンシェルジュの物語、開幕!',
         };

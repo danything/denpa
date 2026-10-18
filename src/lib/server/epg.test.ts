@@ -16,7 +16,7 @@ import { count, eq, sql } from 'drizzle-orm';
 const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-epg-')), 'denpa.db');
 
-/** 何を取りに来たか。番組表を取りに行っていないことまで見る */
+/** 何を取りに来たか。番組表を取得していないことまで見る */
 const asked: string[] = [];
 
 function channel(serviceId: number, name: string, serviceType = 1) {
@@ -274,7 +274,7 @@ describe('消えた局の片付け', () => {
 /**
  * 番組の取り込み。
  *
- * 番組表は「基本」(題名) と「詳細」(番組内容) の2つの表に分かれて放送されていて、
+ * 番組表は「基本」(タイトル) と「詳細」(番組内容) の2つの表に分かれて放送されていて、
  * 読むほうも分けて届く ([ts/eit.ts](../ts/eit.ts) の EpgReader.merge)。
  * 片方しか読めなかった回に、もう片方を消させない。
  */
@@ -321,13 +321,13 @@ describe('savePrograms', () => {
         expect(copyNever()).toBe(false);
     });
 
-    test('題名の無い回で、入っている題名を消さない', async () => {
+    test('タイトルの無い回で、入っているタイトルを消さない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         syncServicesOnly(await getChannels());
         orm().delete(programs).run();
 
         savePrograms([event()]);
-        // 詳細だけ読めた回。題名も説明も空で来る
+        // 詳細だけ読めた回。タイトルも説明も空で来る
         savePrograms([event({ name: '', description: '', extended: { 番組内容: 'あらすじ' } })]);
 
         expect(
@@ -455,7 +455,7 @@ describe('savePrograms', () => {
         expect(settle().retimed).toBe(0);
     });
 
-    test('題名だけ読めた回で、入っている番組内容を消さない', async () => {
+    test('タイトルだけ読めた回で、入っている番組内容を消さない', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         syncServicesOnly(await getChannels());
         orm().delete(programs).run();
@@ -468,7 +468,7 @@ describe('savePrograms', () => {
         ).toEqual([{ name: 'テスト番組', extended: { 番組内容: 'あらすじ' } }]);
     });
 
-    test('題名の書き換えはこれまでどおり通る', async () => {
+    test('タイトルの書き換えはこれまでどおり通る', async () => {
         offered = [channel(23608, 'ＴＯＫＹＯ　ＭＸ')];
         syncServicesOnly(await getChannels());
         orm().delete(programs).run();
@@ -725,7 +725,7 @@ describe('SERVICE_ORDER', () => {
 
     test('BS は物理チャンネルではなく3桁番号の順に並ぶ', () => {
         orm().delete(services).run();
-        // 実機の並び。BS-TBS (161) は BS朝日 (151) より前の中継に乗っている
+        // 実機の並び。BS-TBS (161) は BS朝日 (151) より前の中継に入っている
         put(400161, 161, 'BS', 'BS01_1', null, 'BS-TBS');
         put(400151, 151, 'BS', 'BS01_3', null, 'BS朝日1');
         put(400191, 191, 'BS', 'BS03_3', null, 'WOWOWプライム');

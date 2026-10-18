@@ -1,5 +1,5 @@
 /**
- * 衛星 (BS/CS) の局ロゴを拾う。
+ * 衛星 (BS/CS) の局ロゴを取得する。
  *
  * **地上波とは伝送方式が違う。** 地上波は CDT (PID 0x0029) にロゴをそのまま
  * 載せてくるが、衛星は載せない。実機で確かめると、BS を26中継・CS を12中継
@@ -41,7 +41,7 @@ const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 const LOGO_MODULE_NAMES = new Set(['LOGO-05', 'CS_LOGO-05']);
 
 /**
- * PMT から、ロゴのカルーセルが流れている ES の PID を拾う。
+ * PMT から、ロゴのカルーセルが流れている ES の PID を読み取る。
  * 見るのは `stream_identifier_descriptor` の component_tag だけ。
  */
 function parseLogoEsPids(section: Uint8Array): { serviceId: number; pids: number[] } | null {
@@ -127,9 +127,9 @@ function logoKey(logo: ModuleLogo): string {
 }
 
 /**
- * 衛星のロゴを拾い集める。
+ * 衛星のロゴを集める。
  *
- * PAT → PMT → カルーセル、と辿る必要があるので、拾う PID が動く。
+ * PAT → PMT → カルーセル、と辿る必要があるので、読む PID が動く。
  * `SectionAssembler` を必要になった時点で足していく。
  */
 export class DsmccLogoCollector {
@@ -175,7 +175,7 @@ export class DsmccLogoCollector {
             const dii = parseDii(section);
             if (dii === null) return;
             /*
-             * **合致するモジュールは全部拾う。** 1つのカルーセルに `LOGO-05` と
+             * **合致するモジュールは全部取得する。** 1つのカルーセルに `LOGO-05` と
              * `CS_LOGO-05` が並んで流れてくる (実機の BS15_0)。最初の1つで
              * 打ち切っていた頃は、CS のロゴが永久に揃わなかった
              */

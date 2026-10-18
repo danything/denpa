@@ -17,7 +17,7 @@
  * - 局名は局のほうを直すときに一緒に直る (`epg.widenServices`)
  * - **見た録画は覚えておく** (`settings` の `widthRestoredThrough` = 録画ID)。戻せなかったものも
  *   二度は読まない。番組表が取り込み直されるまでの間 (チャンネルごとに最大6時間) に録り始めたものも
- *   寄せた字を写すので、起動時だけでなく定期的に回して拾う。もう全角が入っている録画は読まずに済ませる
+ *   寄せた字を写すので、起動時だけでなく定期的に回して取りこぼさない。もう全角が入っている録画は読まずに済ませる
  */
 import { open } from 'node:fs/promises';
 import { asc, eq, gt } from 'drizzle-orm';
@@ -119,17 +119,17 @@ export function restoredText(stored: StoredText, original: BroadcastText): Parti
 }
 
 /**
- * もう放送のとおりの幅で入っているか (題名か概要に全角の英数・記号・空白が1字でもある)。
- * 寄せていたのは題名と概要だけなので、詳細は見ない (漢字の集合の全角はもとから残っている)
+ * もう放送のとおりの幅で入っているか (タイトルか概要に全角の英数・記号・空白が1字でもある)。
+ * 寄せていたのはタイトルと概要だけなので、詳細は見ない (漢字の集合の全角はもとから残っている)
  */
 function alreadyWide(stored: StoredText): boolean {
     return [stored.name, stored.description].some((text) => toHalfWidth(text) !== text);
 }
 
 /**
- * 元のTSに流れていた EIT から、その番組の題名・概要・詳細を読む。読めなければ null。
+ * 元のTSに流れていた EIT から、その番組のタイトル・概要・詳細を読む。読めなければ null。
  *
- * 録画は番組の少し前から回すので、頭では「次」として来ていることが多い。どちらでも event_id で拾う
+ * 録画は番組の少し前から回すので、頭では「次」として来ていることが多い。どちらでも event_id で見つける
  */
 export async function readBroadcastText(
     path: string,

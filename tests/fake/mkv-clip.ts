@@ -125,7 +125,7 @@ export function mkvFromClip(file: Uint8Array, length: number, audioName = '主�
     );
     const info = el(0x1549a966, u(0x2ad7b1, 1_000_000), f64(0x4489, length * 1000));
 
-    // Cluster は 1 秒たって次の映像の鍵のコマが来たら区切る
+    // Cluster は 1 秒たって次の映像のキーフレームが来たら区切る
     const clusters: { at: number; bytes: Uint8Array }[] = [];
     let current: Frame[] = [];
     const flush = () => {

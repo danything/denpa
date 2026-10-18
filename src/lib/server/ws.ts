@@ -1,5 +1,5 @@
 /**
- * WebSocket の受け口。**入口 (`server.js`) の `Bun.serve` に間借りする。**
+ * WebSocket のエンドポイント。**入口 (`server.js`) の `Bun.serve` に間借りする。**
  *
  * ライブ視聴は映像・音声・字幕・データ放送を1本の接続に多重化する作りなので
  * ([stream.md](../../../docs/stream.md#websocket-プロトコル))、`Request` → `Response` では足りない。
@@ -9,7 +9,7 @@
  *
  * ## なぜ入口が別にあるのか
  *
- * 公式の adapter-bun は `Bun.serve` に `websocket` を渡す口を持たない (`server.js` の冒頭)。
+ * 公式の adapter-bun は `Bun.serve` に `websocket` を渡す手段を持たない (`server.js` の冒頭)。
  * そこで `server.js` が adapter の `Bun.serve` に `websocket` を足し、握手だけ SvelteKit の手前で受ける。
  * 入口はアプリの束の外にあるので直に import できない。`globalThis` 越しに渡す。
  */
