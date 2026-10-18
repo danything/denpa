@@ -53,7 +53,11 @@
     $effect(() => {
         if (view === null || opened !== undefined) return;
         view = null;
-        void tick().then(() => pane?.querySelector<HTMLElement>('.menu-item')?.focus({ preventScroll: true }));
+        void tick().then(() => {
+            // 消えた項目にいたときだけ (フォーカスは body に落ちている)。ほかを触っているなら奪わない
+            if (document.activeElement !== null && document.activeElement !== document.body) return;
+            pane?.querySelector<HTMLElement>('.menu-item')?.focus({ preventScroll: true });
+        });
     });
 
     /** 開いている間は操作列を残す (`OverlayMenu` と同じ) */
