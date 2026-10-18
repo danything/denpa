@@ -1045,9 +1045,13 @@
         left: 0.75rem;
         gap: 0.5rem;
     }
+    /* 列の幅いっぱいに伸びるので、3 つを均等に広げる。左に寄せると右に溝だけが余った */
     .type-tabs {
-        width: auto;
+        display: flex;
         margin-bottom: 0.5rem;
+    }
+    .type-tabs > button {
+        flex: 1;
     }
     .channels {
         flex: 1;
