@@ -51,8 +51,14 @@ export type GroupLine<T extends Groupable> =
 /**
  * 番組ごとにまとめて並べる。渡す順は問わない。
  * 同じ時刻どうしは渡した順を保つ (並べ替えは安定)
+ *
+ * @param anchor 番組の位置をどの回で決めるか。`latest` はいちばん新しい回 (録画の一覧)、
+ *     `earliest` はいちばん早い回 (これからの予約。次に録る回の位置に置く)。どちらも並びは時刻の遅い順
  */
-export function groupBySeries<T extends Groupable>(items: T[]): GroupEntry<T>[] {
+export function groupBySeries<T extends Groupable>(
+    items: T[],
+    anchor: 'latest' | 'earliest' = 'latest',
+): GroupEntry<T>[] {
     const buckets = new Map<string, T[]>();
     for (const item of items) {
         const bucket = buckets.get(item.group);
@@ -69,7 +75,7 @@ export function groupBySeries<T extends Groupable>(items: T[]): GroupEntry<T>[] 
             continue;
         }
         entries.push({
-            at: newest.at,
+            at: anchor === 'latest' ? newest.at : ordered[0]!.at,
             entry: {
                 kind: 'group',
                 group: { key: `group-${group}`, group, name: newest.groupName, items: ordered, newest },

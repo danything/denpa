@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
-    blur,
     blurPixels,
     boxRadius,
+    falloff,
     glowLayout,
-    headerTone,
+    glowPixels,
     luminance,
-    mixRgb,
     plan,
     reach,
     region,
@@ -14,11 +13,13 @@ import {
     storedAmbient,
     strips,
     vivid,
+    WASH_LUMINANCE,
+    washTone,
 } from './ambient';
 
 const base: Situation = {
     on: true,
-    wide: true,
+    room: true,
     fullscreen: false,
     hidden: false,
     reduced: false,
@@ -38,9 +39,9 @@ describe('アンビエントモード', () => {
         expect(plan({ ...base, lit: false })).toBe('watch');
     });
 
-    test('オフにした・光が見えない置き方なら消す', () => {
+    test('オフにした・色を敷く場所が無いなら消す', () => {
         expect(plan({ ...base, on: false })).toBe('off');
-        expect(plan({ ...base, wide: false })).toBe('off');
+        expect(plan({ ...base, room: false })).toBe('off');
     });
 
     test('止めている間は写さず、光は残す。まだ光が無ければ1枚だけ写す', () => {
@@ -59,13 +60,21 @@ describe('アンビエントモード', () => {
         expect(plan({ ...base, reduced: true })).toBe('hold');
     });
 
-    test('ぼかしは枠の幅に合わせ、上下限で止める。届く幅は引き伸ばしとぼかしのぶん', () => {
-        expect(blur(200)).toBe(32);
-        expect(blur(1000)).toBe(60);
-        expect(blur(2000)).toBe(80);
-        // 800px: 引き伸ばしで 80px、ぼかし (48px) の2倍で 96px
-        expect(reach(800)).toBe(80 + 96);
-        expect(reach(1600)).toBe(160 + 160);
+    test('届く幅は、二段組で枠の幅の 20%、縦に積むと 90% (240px から)', () => {
+        expect(reach(1000, true)).toBe(200);
+        expect(reach(390, false)).toBe(351);
+        expect(reach(200, false)).toBe(240);
+    });
+
+    test('濃さは縁で 1、届く幅で 0。その間は薄くなる一方', () => {
+        expect(falloff(0)).toBe(1);
+        expect(falloff(1)).toBe(0);
+        expect(falloff(0.5)).toBeCloseTo(0.354, 2);
+        let before = 1;
+        for (let t = 0.05; t < 1; t += 0.05) {
+            expect(falloff(t)).toBeLessThan(before);
+            before = falloff(t);
+        }
     });
 
     test('帯は枠に重ならず、範囲を埋める', () => {
@@ -83,19 +92,19 @@ describe('アンビエントモード', () => {
 
     test('箱は枠を広げたもので、はみ出してよい範囲で切る', () => {
         const stage = { left: 100, top: 80, right: 900, bottom: 530 };
-        // 広げる幅は 176px (下は 0.4 倍の 70px)
-        expect(region(stage, { left: 0, top: 0, right: 2000, bottom: 2000 })).toEqual({
-            left: 0,
-            top: 0,
-            right: 1076,
-            bottom: 600,
+        // 広げる幅は上下左右とも 64px
+        expect(region(stage, { left: 0, top: 0, right: 2000, bottom: 2000 }, 64)).toEqual({
+            left: 36,
+            top: 16,
+            right: 964,
+            bottom: 594,
         });
-        // 右に列がある (920px から)。列の上には出さない
-        expect(region(stage, { left: 24, top: 56, right: 920, bottom: 700 })).toEqual({
-            left: 24,
+        // はみ出してよい範囲で切る
+        expect(region(stage, { left: 24, top: 56, right: 920, bottom: 700 }, 64)).toEqual({
+            left: 36,
             top: 56,
             right: 920,
-            bottom: 600,
+            bottom: 594,
         });
     });
 
@@ -103,6 +112,7 @@ describe('アンビエントモード', () => {
         const box = region(
             { left: 100, top: 100, right: 500, bottom: 325 },
             { left: 600, top: 0, right: 550, bottom: 50 },
+            64,
         );
         expect(box.right).toBeGreaterThanOrEqual(box.left);
         expect(box.bottom).toBeGreaterThanOrEqual(box.top);
@@ -110,20 +120,57 @@ describe('アンビエントモード', () => {
 });
 
 describe('光の canvas', () => {
-    test('枠の幅を 64 画素にして、範囲ぶんの大きさを取る。コマは枠を少し大きくした所に描く', () => {
+    test('枠の幅を 96 画素にして、範囲ぶんの大きさを取る', () => {
         const stage = { left: 100, top: 100, right: 740, bottom: 460 };
         const area = { left: 0, top: 60, right: 900, bottom: 600 };
-        const layout = glowLayout(area, stage);
-        // 640px の枠が 64 画素 (1画素 10px)
-        expect(layout.width).toBe(90);
-        expect(layout.height).toBe(54);
-        expect(layout.w).toBeCloseTo(64 * 1.2);
-        expect(layout.h).toBeCloseTo(36 * 1.2);
-        // 真ん中は枠の真ん中 (42, 22)
-        expect(layout.x + layout.w / 2).toBeCloseTo(42);
-        expect(layout.y + layout.h / 2).toBeCloseTo(22);
-        // ぼかし 38px は 3.8 画素
-        expect(layout.radius).toBe(boxRadius(3.8));
+        const layout = glowLayout(area, stage, 64);
+        // 640px の枠が 96 画素 (1画素 6.67px)
+        expect(layout.width).toBe(135);
+        expect(layout.height).toBe(81);
+        expect(layout.x).toBeCloseTo(15);
+        expect(layout.y).toBeCloseTo(6);
+        expect(layout.w).toBeCloseTo(96);
+        expect(layout.h).toBeCloseTo(54);
+        // 届く幅 64px は 9.6 画素
+        expect(layout.reach).toBeCloseTo(9.6);
+        expect(layout.radius).toBe(boxRadius(9.6 * 0.3));
+    });
+
+    test('光の色はいちばん近い縁の色で、枠から離れるほど薄く、届く幅の外は透明', () => {
+        // 2x2 のコマ: 左上 赤・右上 緑・左下 青・右下 黄
+        const frame = new Uint8ClampedArray([
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+        ]);
+        const at = { width: 40, height: 30, x: 10, y: 10, w: 20, h: 10, reach: 8, radius: 1 };
+        const out = glowPixels(frame, 2, 2, at);
+        const px = (x: number, y: number) => [...out.slice((y * 40 + x) * 4, (y * 40 + x) * 4 + 4)];
+        // 左上の上: 赤
+        const [r, g, b, near] = px(11, 8) as [number, number, number, number];
+        expect(r).toBeGreaterThan(g + 100);
+        expect(r).toBeGreaterThan(b + 100);
+        // 右下の右: 黄
+        const yellow = px(31, 19);
+        expect(yellow[0]).toBeGreaterThan(200);
+        expect(yellow[1]).toBeGreaterThan(200);
+        expect(yellow[2]).toBeLessThan(60);
+        // 離れるほど薄い
+        expect(px(11, 5)[3]).toBeLessThan(near);
+        // 届く幅の外 (角から 13 画素) は透明
+        expect(px(0, 0)[3]).toBe(0);
+    });
+
+    test('枠の奥を飛ばしても、縁の外の光は変わらない', () => {
+        const frame = new Uint8ClampedArray(2 * 2 * 4).fill(200);
+        // 半径 1 なら奥は縁から 5 画素より内側。幅 8 の枠には奥が無く、幅 40 の枠にはある
+        const narrow = { width: 30, height: 60, x: 10, y: 10, w: 8, h: 40, reach: 6, radius: 1 };
+        const wide = { ...narrow, width: 62, w: 40 };
+        const a = glowPixels(frame, 2, 2, narrow);
+        const b = glowPixels(frame, 2, 2, wide);
+        for (const x of [5, 7, 9]) {
+            const at = (30 * 30 + x) * 4;
+            const bt = (62 * 30 + x) * 4;
+            expect([...b.slice(bt, bt + 4)]).toEqual([...a.slice(at, at + 4)]);
+        }
     });
 
     test('箱の半径は、3回でその強さに近づくもの', () => {
@@ -187,13 +234,16 @@ describe('色を濃くする', () => {
     });
 });
 
-describe('見出しに敷く色', () => {
-    const hex = (h: string): [number, number, number] =>
-        [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
-    const contrast = (a: [number, number, number], b: [number, number, number]) => {
+describe('地に敷く色', () => {
+    type Rgb = [number, number, number];
+    const hex = (h: string): Rgb => [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16)) as Rgb;
+    const contrast = (a: Rgb, b: Rgb) => {
         const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p) as [number, number];
         return (x + 0.05) / (y + 0.05);
     };
+    /** sRGB のまま混ぜる (CSS の重ね・入れ替えの途中と同じ) */
+    const mix = (a: Rgb, b: Rgb, t: number): Rgb =>
+        [0, 1, 2].map((i) => Math.round(a[i]! + (b[i]! - a[i]!) * t)) as Rgb;
     const frames = [
         '#ffffff',
         '#000000',
@@ -205,40 +255,36 @@ describe('見出しに敷く色', () => {
         '#36c8c0',
         '#0b3550',
     ].map(hex);
+    const text = { dark: [hex('#9aa3b5'), hex('#e6e8ec')], light: [hex('#555e70'), hex('#02659a')] };
 
-    test('暗いテーマでは、どんな映像でも見出しの字 (控えた字・主の色) が 4.5 以上で読める', () => {
-        for (const frame of frames) {
-            const tone = headerTone(frame, 'dark');
-            expect(contrast(tone, hex('#9aa3b5'))).toBeGreaterThanOrEqual(4.5);
-            expect(contrast(tone, hex('#e6e8ec'))).toBeGreaterThanOrEqual(4.5);
-        }
-    });
-
-    test('明るいテーマでも、見出しの字が 4.5 以上で読める', () => {
-        for (const frame of frames) {
-            const tone = headerTone(frame, 'light');
-            expect(contrast(tone, hex('#555e70'))).toBeGreaterThanOrEqual(4.5);
-            expect(contrast(tone, hex('#02659a'))).toBeGreaterThanOrEqual(4.5);
-        }
-    });
-
-    test('混ぜた途中の色 (グラデーション・入れ替えの途中) でも 4.5 以上で読める', () => {
-        expect(mixRgb([0, 0, 0], [200, 100, 50], 0.5)).toEqual([100, 50, 25]);
+    test('縦に積むとき、番組の中身の字は、どんな映像の色の上でも 4.5 以上で読める (混ぜた途中も)', () => {
         for (const theme of ['dark', 'light'] as const) {
             for (const a of frames) {
                 for (const b of frames) {
-                    const mid = mixRgb(headerTone(a, theme), headerTone(b, theme), 0.5);
-                    const text = theme === 'dark' ? hex('#9aa3b5') : hex('#02659a');
-                    expect(contrast(mid, text)).toBeGreaterThanOrEqual(4.5);
+                    const toneA = washTone(a, theme, WASH_LUMINANCE.stacked);
+                    const toneB = washTone(b, theme, WASH_LUMINANCE.stacked);
+                    for (const color of [toneA, mix(toneA, toneB, 0.5)]) {
+                        for (const t of text[theme]) expect(contrast(color, t)).toBeGreaterThanOrEqual(4.5);
+                    }
                 }
             }
         }
     });
 
+    test('二段組の右の列は、上で面の色を 72% 重ねれば 4.5 以上で読める', () => {
+        const surface = { dark: hex('#121318'), light: hex('#ffffff') };
+        for (const theme of ['dark', 'light'] as const) {
+            for (const frame of frames) {
+                const under = mix(washTone(frame, theme, WASH_LUMINANCE.wide), surface[theme], 0.72);
+                for (const t of text[theme]) expect(contrast(under, t)).toBeGreaterThanOrEqual(4.5);
+            }
+        }
+    });
+
     test('色相は残す (赤は赤みのまま、青は青みのまま)', () => {
-        const red = headerTone(hex('#ff0000'), 'light');
+        const red = washTone(hex('#ff0000'), 'light', WASH_LUMINANCE.stacked);
         expect(red[0]).toBeGreaterThan(red[1]);
-        const blue = headerTone(hex('#0000ff'), 'dark');
+        const blue = washTone(hex('#0000ff'), 'dark', WASH_LUMINANCE.wide);
         expect(blue[2]).toBeGreaterThan(blue[0]);
     });
 });

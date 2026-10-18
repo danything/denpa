@@ -156,11 +156,21 @@ export function load({ url, cookies }) {
     const showDeleted = url.searchParams.get('deleted') === '1';
     /*
      * **絞り込みの言葉。** 溜まると300件フラットは指のリモコンで辿れない。
-     * 番組名・シリーズ・副題・局名にかかる (下の録画クエリの `search`)。空なら
+     * 番組名・シリーズ・副題・局名にかかる (下の `search`。予約は番組名と局名)。空なら
      * 今までどおり全部出す。**録画の一覧は元から完了分も含む**ので、完了分を
      * 出すための細工は要らない (`showFinished` が効くのは左の予約側だけ)
      */
     const q = (url.searchParams.get('q') ?? '').trim();
+    /*
+     * 絞り込みの言葉は語ごとに AND (手元の絞り込みと同じ読み方)。予約・録画・録り逃しのどれにも効かせる
+     * (ホームは1本の一覧なので、片方だけ絞ると探した番組の予約が消えたように見える)。
+     * 外字は規格の字 (𠮷) のまま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる。
+     * 番組名は放送のとおり全角混じりなので、英数は全角と大文字も当たる組にする (`fold.globTerms`)。
+     * それで絞れない語 (「吉」だけ) は、手元の絞り込みに任せる
+     */
+    const terms = globTerms(searchable(q).split(/\s+/).filter(Boolean));
+    const search = (...columns: AnyColumn[]) =>
+        and(...terms.map((term) => or(...columns.map((column) => sql`${column} GLOB ${term}`))));
 
     /*
      * 並びは**放送日時の近い順**で固定する。録画中だけは真っ先に見たいので先頭に置く。
@@ -216,7 +226,7 @@ export function load({ url, cookies }) {
                 sql`(SELECT id FROM recordings WHERE reservation_id = ${r.id} ORDER BY id DESC LIMIT 1)`,
             ),
         )
-        .where(pending)
+        .where(and(pending, search(r.name, services.name)))
         .orderBy(desc(sql`${rec.state} = 'recording'`), asc(r.start_at))
         .limit(300)
         .all();
@@ -228,15 +238,6 @@ export function load({ url, cookies }) {
      * ずれてページごとスクロールバーが生えていた。同じ番組が2箇所に並んでもいた。
      * 「録れたものが今どうなっているか」の一形態なので、行の状態として出すのが素直。
      */
-    /*
-     * 絞り込みの言葉は語ごとに AND (手元の絞り込みと同じ読み方)。外字は規格の字 (𠮷) の
-     * まま入っているので、昔の書き方 (吉) に寄せた字が絡む所は抜いて当てる。番組名は放送のとおり
-     * 全角混じりなので、英数は全角と大文字も当たる組にする (`fold.globTerms`)。
-     * それで絞れない語 (「吉」だけ) は、手元の絞り込みに任せる
-     */
-    const terms = globTerms(searchable(q).split(/\s+/).filter(Boolean));
-    const search = (...columns: AnyColumn[]) =>
-        and(...terms.map((term) => or(...columns.map((column) => sql`${column} GLOB ${term}`))));
     const res = alias(reservationTable, 'res');
     const j = alias(encodeJobs, 'j');
     const recordings: RecordingRow[] = orm()
