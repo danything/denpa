@@ -2078,10 +2078,10 @@
                                     狭い枠では位置と長さだけにする (`.long` を省く。`InfoBlock`)
                                 -->
                                 <span class="clock" data-testid="watch-clock">
-                                    {clock(at)} / {clock(length)}<span class="long"> 残り {clock(remaining)}</span>
+                                    {clock(at)} / {clock(length)}<span class="long">{' · 残り '}{clock(remaining)}</span>
                                 </span>
                                 {#if current !== null}
-                                    <span class="long">・ <span>{current.title}</span></span>
+                                    <span class="long">{' · '}<span>{current.title}</span></span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>

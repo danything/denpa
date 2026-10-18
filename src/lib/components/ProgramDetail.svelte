@@ -2,12 +2,19 @@
     import type { Snippet } from 'svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import type { ProgramDetail } from '#lib/types.js';
+    import X from '~icons/lucide/x';
 
     /**
      * 番組の詳細を出すモーダル。
      *
      * 番組表・ホーム (予約と録画)・ルールのどこから開いても同じ見え方にするため、ここに寄せてある。
-     * 下に並べるボタンだけは開いた場所で違うので snippet で受ける (渡さなければ「閉じる」だけ)。
+     * 下に並べるボタンと、番組名の上に出す状態 (予約済み・放送終了など) だけは開いた場所で違うので
+     * snippet で受ける (`actions`・`status`)。
+     *
+     * **閉じるのは右上の × だけ** (幕を押しても Esc でも閉じる)。下の並びに「閉じる」を置いていた頃は、
+     * 押すものがどれも同じ控えのボタンで、どれが主なのか読めなかった。下には主のボタン (再生・予約) を
+     * 1つだけ塗りで置き、ほかは控えにする。並びは主がいちばん右 (狭い画面では下から出る一枚になり、
+     * 主がいちばん上の全幅のボタン)。
      *
      * **中身は `ProgramFacts` が持っている** — 観る画面・ライブ・追っかけは
      * 枠なしで同じものを右 (FactsAside) に置くため。
@@ -19,6 +26,7 @@
         cmNote = null,
         fps = null,
         actions,
+        status,
         transitionName,
     }: {
         program: ProgramDetail;
@@ -28,13 +36,24 @@
         /** エンコードしたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
         fps?: number | null;
         actions?: Snippet | undefined;
+        /** 番組名の上に出す状態のバッジ (予約済み・放送終了)。押すものの並びには混ぜない */
+        status?: Snippet | undefined;
         /**
          * 箱に付ける画面の切り替えの名前 (View Transitions)。押した要素から広げて開くとき
          * (番組表のマス。`#lib/motion.svelte.ts` の `morph`) だけ渡す
          */
         transitionName?: string | undefined;
     } = $props();
+
+    let box: HTMLDivElement | undefined = $state();
 </script>
+
+<svelte:window
+    onkeydown={(e) => {
+        // 箱の中で開いたメニュー (「その他…」) があれば、Esc はそれを閉じるだけにする (よそのポップオーバーは見ない)
+        if (e.key === 'Escape' && !e.defaultPrevented && box?.querySelector(':popover-open') == null) onclose();
+    }}
+/>
 
 <!--
     **高さは `%` で採る** (`app.css` で `html` に高さを与えてある)。
@@ -46,27 +65,27 @@
     ここは箱と背景だけで足りる
 -->
 <div class="detail-modal" role="dialog" aria-modal="true" data-testid="program-detail">
-    <button type="button" class="detail-backdrop" onclick={onclose} aria-label="閉じる"></button>
+    <button type="button" class="detail-backdrop" onclick={onclose} aria-label="閉じる" tabindex="-1"></button>
     <!--
         **巻き取るのは中身だけ。** 押すものは箱の下端に貼り付けたまま出しておく
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)
     -->
-    <div class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
+    <div bind:this={box} class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
+        <button type="button" class="ghost icon small modal-close" onclick={onclose} aria-label="閉じる" data-testid="detail-close">
+            <X aria-hidden="true" />
+        </button>
         <div class="detail-body">
+            {#if status}
+                <div class="cluster detail-status">{@render status()}</div>
+            {/if}
             <ProgramFacts {program} {notes} {cmNote} {fps} />
         </div>
 
-        <!--
-            **枠はこちらで持つ。** 右下に横並びなので、どこから開いても同じ並びになる。
-            **閉じるはいちばん右** (見ないでも押せる)。入り切らなければ折り返す (`flex-wrap`)
-        -->
-        <div class="detail-actions modal-actions">
-            {#if actions}
+        {#if actions}
+            <div class="detail-actions modal-actions">
                 {@render actions()}
-            {:else}
-                <button type="button" class="secondary" onclick={onclose} data-testid="detail-close">閉じる</button>
-            {/if}
-        </div>
+            </div>
+        {/if}
     </div>
 </div>
 
@@ -131,5 +150,24 @@
     }
     .detail-actions :global(form) {
         margin: 0;
+    }
+    /* 番組名と状態は × に掛からないところで折り返す (× は箱の右上に浮かせる。`app.css` の `.modal-close`) */
+    .detail-body > :global(.title),
+    .detail-status {
+        padding-inline-end: 2.25rem;
+    }
+    .detail-status {
+        margin-bottom: var(--dp-space-2);
+    }
+    /* 狭い画面では下から出る一枚 (箱の形は `app.css` の `.modal-box`) */
+    @media (max-width: 639.98px) {
+        .detail-modal {
+            align-items: flex-end;
+        }
+        @starting-style {
+            .detail-box:not(.morph) {
+                transform: translateY(1rem);
+            }
+        }
     }
 </style>

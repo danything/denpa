@@ -670,8 +670,6 @@
             <button type="submit" class="outline danger" data-testid="detail-cancel">予約取消</button>
         </form>
     {/if}
-    <!-- 位置を動かさないため、いつでもここが最後 -->
-    <button type="button" class="secondary" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
 {/snippet}
 
 <!--
@@ -785,8 +783,12 @@
                 {/if}
             </Menu>
         {/if}
+        {@const watch = watchLink(rec)}
+        {#if watch !== null}
+            <!-- **主のボタンは再生だけ** (塗る。並びのいちばん右・狭い画面ではいちばん上) -->
+            <a class="button" href={watch} data-testid="detail-play">再生</a>
+        {/if}
     {/if}
-    <button type="button" class="secondary" onclick={() => detail.close()} data-testid="detail-close">閉じる</button>
 {/snippet}
 
 <style>
