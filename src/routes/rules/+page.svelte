@@ -74,7 +74,23 @@
      */
     afterNavigate(({ type }) => {
         if (type === 'link' || type === 'popstate') formKey += 1;
+        formOpen = opensForm();
     });
+
+    /**
+     * **狭い画面では書く欄を畳んでおく** (768px 未満。広い画面では使わない)。
+     *
+     * 縦に積むと書く欄が先に来て、390×844 では登録済みのルールが1行も見えなかった。
+     * ふだん開くのは一覧を見るためなので、欄は「＋ 新しいルール」の1行にして、押したら広げる。
+     *
+     * 開いて始まるのは、書く途中で来たとき — 編集 (`?edit=`)・録画や番組から (`origin`)・
+     * 「何が録れるか見る」のあと (`preview`)。足した・直したあとは /rules へ戻るので畳まれる。
+     * 決め直すのは画面を移ったときだけで、一覧の「有効/無効」などで読み直しても開け閉めは変えない
+     */
+    function opensForm(): boolean {
+        return data.editing !== null || data.origin !== null || data.preview !== null;
+    }
+    let formOpen = $state(opensForm());
 
     /**
      * プレビューの行から開く番組詳細 (detail.svelte.ts)。予約一覧と同じ見せ方。
@@ -224,8 +240,20 @@
             **書く欄。** 中身を浮かせて枠に高さを持たせないことで、右の一覧と
             同じ高さに収まる (観る画面と同じ作り。`watch/[id]/+page.svelte`)
         -->
-        <section class="form-col">
-            <div class="panel form-card">
+        <section class="form-col" class:closed={!formOpen}>
+            <!-- 狭い画面だけに出す開け閉め。広い画面では欄はいつも出ている -->
+            <button
+                type="button"
+                class="secondary outline form-toggle"
+                aria-expanded={formOpen}
+                aria-controls="rule-form-card"
+                onclick={() => (formOpen = !formOpen)}
+                data-testid="rule-form-toggle"
+            >
+                <span aria-hidden="true">{formOpen ? '−' : '＋'}</span>
+                {data.editing ? 'ルールを編集' : '新しいルール'}
+            </button>
+            <div class="panel form-card" id="rule-form-card">
                 <!--
                     **押すものは巻き取られる中身の外に貼り付ける。** 条件が長い
                     ときに「追加」まで探して降りることになるので、`<form>` 自身を
@@ -253,7 +281,7 @@
                                 <span class="muted">編集中:</span> <span class="bold">{data.editing.name}</span>
                             </p>
                         {:else}
-                            <p class="small muted" data-testid="rule-mode">新しいルール</p>
+                            <p class="small muted new-mode" data-testid="rule-mode">新しいルール</p>
                         {/if}
                         {#if data.origin !== null}
                             {@const what = data.origin.kind === 'recording' ? '録画' : '番組'}
@@ -543,7 +571,7 @@
             入れると form が入れ子になって、1件取り消すつもりでルールの更新まで
             送ってしまう。要らないものだけここで外す
         -->
-        <section class="result-col">
+        <section class="result-col" class:closed={!formOpen}>
             {#if data.preview !== null && preview === null}
                 <!--
                     下見が届くまで。**枠だけ先に置く** — 条件を打ち直すたびに
@@ -930,6 +958,27 @@
     .form-col {
         display: flex;
         flex-direction: column;
+        gap: 0.5rem;
+    }
+    .form-toggle {
+        width: 100%;
+        text-align: left;
+    }
+    @media (min-width: 768px) {
+        .form-toggle {
+            display: none;
+        }
+    }
+    /*
+     * 畳んだら下見も隠す (書く欄と一緒に開く)。
+     * 「新しいルール」の行は開け閉めのボタンが同じことを言っているので出さない
+     */
+    @media (max-width: 767px) {
+        .form-col.closed .form-card,
+        .result-col.closed .preview,
+        .new-mode {
+            display: none;
+        }
     }
     @media (min-width: 768px) {
         .form-col {

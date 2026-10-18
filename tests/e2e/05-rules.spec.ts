@@ -34,6 +34,52 @@ test.describe('自動予約ルール', () => {
         expect(shape.縦に動く).toBe(false);
     });
 
+    /**
+     * **狭い画面では書く欄を畳む。** 縦に積むと書く欄が先に来て、390×844 では
+     * 登録済みのルールが1行も見えなかった。欄は「＋ 新しいルール」の1行にして、
+     * 書く途中 (編集・下見) で来たときだけ開いて始める
+     */
+    test('狭い画面では書く欄を畳んで、一覧を先に見せる', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/rules');
+        const toggle = page.getByTestId('rule-form-toggle');
+        const keyword = page.getByTestId('rule-keyword');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(keyword).toBeHidden();
+
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        // 当たる番組の無い語にしておく (予約を立てない)
+        await keyword.fill('どこにも無い番組');
+        // 下見のあとは開いたまま
+        await page.getByTestId('rule-preview').click();
+        await page.waitForURL(/\/rules\?.*keyword=/);
+        await expect(page.getByTestId('preview')).toBeVisible();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+        // 足したら畳まれて、足したルールが最初の画面に見える
+        await page.getByTestId('rule-submit').click();
+        const row = page.getByTestId('rule-row').first();
+        await expect(row).toContainText('どこにも無い番組');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(keyword).toBeHidden();
+        await expect(row).toBeInViewport();
+
+        // 編集で来たら開いて始まる
+        await row.getByTestId('rule-edit').click();
+        await page.waitForURL(/\/rules\?edit=\d+$/);
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(keyword).toHaveValue('どこにも無い番組');
+
+        // 広い画面では開け閉めを出さず、欄はいつも出ている
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await goto(page, '/rules');
+        await expect(toggle).toBeHidden();
+        await expect(keyword).toBeVisible();
+
+        await clearRules(page);
+    });
+
     test('条件が空のルールは作れない', async ({ page }) => {
         await goto(page, '/rules');
         await page.getByTestId('rule-submit').click();
