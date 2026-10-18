@@ -33,7 +33,7 @@ RUN case "${TARGETARCH}" in \
 
 # ---------------------------------------------------------------------------
 # 外から取ってくるもの (ファームウェアと3つの userland)。**取ってくる道具は実行イメージに残さない**
-# (curl などはこの段だけ。実行イメージが apt で入れるのは ca-certificates だけ)。
+# (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る
 # ---------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim AS fetch
