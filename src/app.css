@@ -1270,19 +1270,37 @@ button.text-button:hover {
 /*
  * 映像の上のメニュー (速さの `OverlayMenu`・再生の設定の `SettingsMenu`)。
  * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。
- * 選んでいる選択肢は主の色で塗る
+ *
+ * **面はテーマにかかわらず暗い磨りガラス** (YouTube やテレビのプレイヤーと同じ)。後ろの映像が透けて、
+ * どこに被さっているかが分かる。明るい映像の上でも字は 4.5:1 以上 (面を白い地に 72% で重ねると
+ * 白い字で 7:1 ほど、控えた字 (72%) で 4.7:1 ほど)。ぼかせないブラウザでは面を濃くする。
+ * 選んでいる選択肢は白を薄く敷く (主の色 (青) はリンクとフォーカスだけ)。ページのメニューは今までどおり
  */
 .overlay-menu {
+    --dp-hover: rgb(255 255 255 / 0.12);
+    --dp-line: rgb(255 255 255 / 0.14);
+    --dp-muted: rgb(255 255 255 / 0.72);
+    --pico-color: #fff;
     gap: 0.125rem;
     width: max-content;
     max-width: min(20rem, 90vw);
     padding: 0.5rem;
+    border-color: rgb(255 255 255 / 0.12);
+    background: rgb(20 21 25 / 0.9);
+    color: #fff;
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .overlay-menu {
+        background: rgb(20 21 25 / 0.72);
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
+        backdrop-filter: blur(16px) saturate(1.4);
+    }
 }
 .overlay-menu .option {
     padding: 0.4rem 0.75rem;
 }
 .overlay-menu .option[data-active] {
-    background: var(--pico-primary-background);
+    background: rgb(255 255 255 / 0.2);
     color: #fff;
 }
 /* 映像の上に出す短い通知 (`StageNote`・追っかけの「エンコード済みを観る」・ライブの「録画のため局を切り替えました」) */

@@ -297,8 +297,12 @@
         box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
         transition: transform var(--dp-duration) var(--dp-ease);
     }
+    /*
+     * 入っているときも主の色 (青) は使わない (青はリンクとフォーカスだけ)。白を濃く敷いた溝にし、
+     * 入り切りは丸の位置でも分かる。メニューの面はいつも暗い磨りガラス (app.css の `.overlay-menu`)
+     */
     .switch[data-on] {
-        background: var(--pico-primary-background);
+        background: rgb(255 255 255 / 0.6);
     }
     .switch[data-on]::after {
         transform: translateX(1rem);
