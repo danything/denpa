@@ -163,6 +163,62 @@ test.describe('操作したときの反応', () => {
         expect(title.y).toBeGreaterThanOrEqual(box.y);
     });
 
+    test('スマホの幅でも番組表の操作は1行で、表は下のタブまで届く', async ({ page }) => {
+        // 操作を2段に積んだり表の下を空けたりすると、1画面に入る時間が減る
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/guide?type=GR');
+
+        // 今日を見ているときは「今日」を出さない (押しても同じ表)。そのぶん1行に収まる
+        await expect(page.getByTestId('guide-today')).toHaveCount(0);
+        const types = (await page.getByTestId('type-tabs').boundingBox())!;
+        const search = (await page.getByTestId('guide-search-toggle').boundingBox())!;
+        expect(Math.abs(types.y + types.height / 2 - (search.y + search.height / 2))).toBeLessThan(4);
+
+        // ページごとは動かず、表だけが動く。表の下端は下のタブの上端
+        const fit = await page.evaluate(() => {
+            const grid = document.querySelector('[data-testid="guide-grid"]')!.getBoundingClientRect();
+            const tabbar = document.querySelector('[data-testid="tabbar"]')!.getBoundingClientRect();
+            return {
+                scroll: document.documentElement.scrollHeight - innerHeight,
+                gap: tabbar.top - grid.bottom,
+            };
+        });
+        expect(fit.scroll).toBe(0);
+        expect(Math.abs(fit.gap)).toBeLessThanOrEqual(1);
+
+        await page.getByTestId('next-day').click();
+        await expect(page.getByTestId('guide-today')).toBeVisible();
+    });
+
+    test('表を下へ送ると操作の1行が畳まれ、上へ戻すかフォーカスで出てくる', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        const grid = page.getByTestId('guide-grid');
+        const top = async () => Math.round((await grid.boundingBox())!.y);
+        const shown = await top();
+        const bar = Math.round((await page.getByTestId('guide-toolbar').boundingBox())!.height);
+        const box = (await grid.boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+        // 横に流しただけでは畳まない
+        await page.mouse.wheel(300, 0);
+        await page.waitForTimeout(200);
+        expect(await top()).toBe(shown);
+
+        // 下へ送ると畳み、そのぶん表が上へ伸びる
+        await page.mouse.wheel(0, 300);
+        await expect.poll(top).toBe(shown - bar);
+
+        // 少し上へ戻すと出てくる
+        await page.mouse.wheel(0, -60);
+        await expect.poll(top).toBe(shown);
+
+        // キーボードで操作へ移ると出てくる
+        await page.mouse.wheel(0, 300);
+        await expect.poll(top).toBe(shown - bar);
+        await page.getByTestId('next-day').focus();
+        await expect.poll(top).toBe(shown);
+    });
+
     test('放送波を切り替えると横位置が先頭に戻る', async ({ page }) => {
         // 局の並びは放送波ごとに別物なので、前の位置から始まると左端の局が隠れる
         await page.setViewportSize({ width: 320, height: 700 });

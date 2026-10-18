@@ -1,8 +1,7 @@
 import { fail } from '@sveltejs/kit';
-import { and, count, eq, sql } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import { config } from '#lib/server/config.js';
 import { orm } from '#lib/server/db.js';
-import { CURRENT_SERVICES } from '#lib/server/epg.js';
 import { collectNow, collectState } from '#lib/server/epg-collect.js';
 import { logoState, stats as logoStats, sweepNow, sweepState } from '#lib/server/logo.js';
 import { forgetLogoData, learnedAt, stats as learnStats, siblings, stations } from '#lib/server/logo-data.js';
@@ -11,14 +10,6 @@ import { programs, recordings, services } from '#lib/server/schema.js';
 import { cardStatus } from '#lib/server/scramble.js';
 import { type AgentTuner, putTuners, type TunerConfig, tunerList } from '#lib/server/tuner.js';
 import type { ChannelType } from '#lib/types.js';
-
-/** 局1つぶんの、CM検出ロゴの覚え具合 */
-interface CmLogo {
-    id: number;
-    name: string;
-    /** 覚えたものを最後に書いた時刻。覚えていなければ null */
-    learned_at: number | null;
-}
 
 const TYPES: ChannelType[] = ['GR', 'BS', 'CS'];
 
@@ -95,13 +86,17 @@ function withLabels(tuners: AgentTuner[]): (Omit<AgentTuner, 'users'> & { users:
 interface Coverage {
     type: ChannelType;
     channel: string;
-    /** `logo` は局ロゴの具合 (`logo.logoState`)。局ごとに出す */
+    /**
+     * `logo` は局ロゴの具合 (`logo.logoState`)。`cm` はCM検出のロゴを覚えた時刻 (`logo-data.learnedAt`)。
+     * 覚えていなければ null で、その局には何も出さない
+     */
     services: {
         id: number;
         name: string;
         programs: number;
         until: number;
         logo: ReturnType<typeof logoState>;
+        cm: number | null;
     }[];
 }
 
@@ -124,6 +119,8 @@ function coverage(): Coverage[] {
             name: services.name,
             type: services.type,
             channel: services.channel,
+            network_id: services.network_id,
+            service_type: services.service_type,
             programs: count(programs.id),
             until: sql`COALESCE(MAX(${programs.end_at}), 0)`.mapWith(Number),
         })
@@ -135,12 +132,24 @@ function coverage(): Coverage[] {
         .orderBy(services.service_id)
         .all();
 
+    /*
+     * CM検出のロゴを出す局。数え上げ (`logo-data.stats`) と同じく、テレビの局で、同じ映像を流している
+     * サブチャンネルの枠は束ねて1局にする (覚えたものは写し合うので、束ねないと同じ画像が2つ並ぶ)
+     */
+    const cmShown = new Set(stations(rows.filter((row) => row.service_type === 1)).map((row) => row.id));
     const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
     const channels = new Map<string, Coverage>();
     for (const { id, name, type, channel, programs, until } of rows) {
         const key = `${type}:${channel}`;
         const entry = channels.get(key) ?? { type, channel, services: [] };
-        entry.services.push({ id, name, programs, until, logo: logoState(id) });
+        entry.services.push({
+            id,
+            name,
+            programs,
+            until,
+            logo: logoState(id),
+            cm: cmShown.has(id) ? learnedAt(id) : null,
+        });
         channels.set(key, entry);
     }
     return [...channels.values()].sort(
@@ -192,35 +201,11 @@ export async function load() {
          */
         logoSweep: sweepState(),
         /*
-         * CM検出のロゴ。**番組表に出す局ロゴとは別物** (logo-data.ts)。
-         *
-         * 覚えたものを確かめて、違っていれば捨てる。**録画の詳細ではなく局の話**
-         * なので、局を並べているこの画面に置く
+         * CM検出のロゴを何局ぶん覚えたか。**番組表に出す局ロゴとは別物** (logo-data.ts)。
+         * 局ごとの覚えた画像は「受信できるチャンネル」の行に出す (`coverage` の `cm`)
          */
-        cmLogos: cmLogoState(),
         cmLogoStats: learnStats(),
     };
-}
-
-/**
- * 局ごとの、CM検出ロゴの覚え具合。
- *
- * **いま選局できる局だけ**にする。数え上げ (`logo-data.stats`) と揃えないと、
- * 「6 / 46 局」と出ている下に 125 局が並ぶ。
- */
-function cmLogoState(): CmLogo[] {
-    const rows = orm()
-        .select({ id: services.id, network_id: services.network_id, name: services.name })
-        .from(services)
-        .where(and(eq(services.service_type, 1), sql.raw(CURRENT_SERVICES)))
-        .orderBy(sql`${services.remote_control_key} IS NULL`, services.remote_control_key, services.id)
-        .all();
-    // 同じ映像を映しているサブチャンネルの枠は束ねる (実機で「TOKYO MX1」が2つ並んでいた)
-    return stations(rows).map((service) => ({
-        id: service.id,
-        name: service.name,
-        learned_at: learnedAt(service.id),
-    }));
 }
 
 export const actions = {

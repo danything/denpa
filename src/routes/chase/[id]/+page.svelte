@@ -266,7 +266,7 @@
 
         <ControlBar shown={controls.shown} testid="chase-controls">
             <!-- シークバーは番組の全長。**録れていないところ (右側) へは飛べない** (`seekTo`) -->
-            <SeekBar value={pos} max={total} step={1} onseek={seekTo} />
+            <SeekBar value={pos} max={total} step={1} onseek={seekTo} paused={player.paused} />
 
             <!-- **並びはライブと同じ。** 再生・音・字幕、エンコード方式・音声・端 (最新)、読みもの、速さ、全画面 -->
             <ControlRow testid="chase-buttons">

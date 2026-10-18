@@ -1,77 +1,64 @@
 /**
- * シークバー (`SeekBar.svelte`) の溝に敷く塗り。DOM を触らない。
+ * シークバー (`SeekBar.svelte`) の溝の区切り。DOM を触らない。
  *
- * **溝そのものの background に描く。** 溝の上に要素を重ねると、溝が入力欄の中の
- * どの高さに来るかはブラウザの作り次第で、塗りが溝からずれうる。溝の background なら
- * 必ず溝に載る。
+ * 溝は**チャプターの切れ目で区切った部分の並び**にする (CM の端と、それ以外の切れ目)。
+ * 部分ごとに要素を置き、すき間 (2px) で区切る。CM の部分は色で分ける (`SeekBar` の色)。
  *
- * 色の意味は denpa-tv の `ProgressLine` (ControlBar.kt) と同じ: **CM は琥珀**
- * (`#FFB300` を 80%)、本編は溝のまま、観たぶんは主の色で上から塗る。バーの地は
- * いつも黒い舞台 (`PlayerStage`) なので、ダーク・ライトのどちらでも琥珀は溝・主の色と分かれる
+ * 位置はただの比 (0〜1)。入力欄のつまみは幅 1px にして見えなくしてあるので、
+ * 押した位置と値は溝の端から端までまっすぐ対応する (つまみの往復ぶんを引かなくてよい)
  */
 
-/** CM の塗り。denpa-tv と同じ値 */
-export const CM_COLOR = 'rgb(255 179 0 / 0.8)';
-/** 切れ目の目盛り */
-const TICK_COLOR = 'rgb(255 255 255 / 0.7)';
+/** 溝の1部分。`from`・`to` は比 (0〜1)、`cm` は CM の部分か */
+export type TrackPart = { from: number; to: number; cm: boolean };
 
-/**
- * 溝の中での位置 (CSS の長さ)。`ratio` は 0〜1。
- *
- * **つまみの往復ぶんを引く。** つまみ (1rem) は端で枠から出ないよう内側を動くので、
- * 素の百分率で置くと**つまみとずれる** — 実機では、まだ来ていない CM の印が再生位置の
- * 左に出ていた。両端だけは溝の端まで伸ばす (頭の CM の左に塗り残しが出ないように)
- */
-export function trackAt(ratio: number): string {
-    if (!(ratio > 0)) return '0%';
-    if (ratio >= 1) return '100%';
-    return `calc(0.5rem + ${Math.round(ratio * 10000) / 10000} * (100% - 1rem))`;
+/** 比を 4 桁で丸める (1時間で 0.4 秒。溝の 1px より細かい) */
+function round(ratio: number): number {
+    return Math.round(ratio * 10000) / 10000;
 }
 
 /**
- * CM の区間と目盛りを、溝に敷く background の層にする。無いほうは `none`。
+ * CM の区間と切れ目から、溝の部分の並びを作る。
  *
- * - `cm` は観たぶんの塗りの**下** (観たところは主の色で隠れる。denpa-tv と同じ)
- * - `ticks` は観たぶんの塗りの**上** (観たところでも切れ目が見える。前の目盛りと同じ)
- *
- * 区間は重ならず、並んでいること (`cmSpans` の出すもの)。比は 4 桁で丸める
- * (1時間で 0.4 秒。溝の 1px より細かい)
+ * 区間は重ならず、並んでいること (`cmSpans` の出すもの)。幅の無いバー (尺がまだ分からない・
+ * 戻れる範囲が無い) は区切らず1本にする。バーの外の区間・切れ目は捨てる
  */
-export function trackLayers(
+export function trackParts(
     spans: { start: number; end: number }[],
     marks: number[],
     min: number,
     max: number,
-): { cm: string; ticks: string } {
+): TrackPart[] {
     const span = max - min;
-    if (!(span > 0)) return { cm: 'none', ticks: 'none' };
-    const ratio = (at: number) => Math.min(1, Math.max(0, (at - min) / span));
+    if (!(span > 0)) return [{ from: 0, to: 1, cm: false }];
+    const ratio = (at: number) => round(Math.min(1, Math.max(0, (at - min) / span)));
 
-    let ticks = 'none';
-    const marked = [...marks].sort((a, b) => a - b).filter((at) => at > min && at < max);
-    if (marked.length > 0) {
-        const stops = marked.flatMap((at) => {
-            const x = trackAt(ratio(at));
-            const after = `calc(${x} + 1px)`;
-            return [
-                `transparent ${x}`,
-                `${TICK_COLOR} ${x}`,
-                `${TICK_COLOR} ${after}`,
-                `transparent ${after}`,
-            ];
-        });
-        ticks = `linear-gradient(to right, ${stops.join(', ')})`;
+    const cms = spans
+        .filter((s) => s.end > s.start && s.end > min && s.start < max)
+        .map((s) => ({ from: ratio(s.start), to: ratio(s.end) }))
+        .filter((s) => s.to > s.from);
+    const cuts = new Set<number>([0, 1]);
+    for (const s of cms) {
+        cuts.add(s.from);
+        cuts.add(s.to);
     }
+    for (const at of marks) {
+        if (at > min && at < max) cuts.add(ratio(at));
+    }
+    const sorted = [...cuts].sort((a, b) => a - b);
 
-    let cm = 'none';
-    const painted = spans.filter((s) => s.end > s.start && s.end > min && s.start < max);
-    if (painted.length > 0) {
-        const stops = painted.flatMap((s) => {
-            const from = trackAt(ratio(s.start));
-            const to = trackAt(ratio(s.end));
-            return [`transparent ${from}`, `${CM_COLOR} ${from}`, `${CM_COLOR} ${to}`, `transparent ${to}`];
-        });
-        cm = `linear-gradient(to right, ${stops.join(', ')})`;
+    const parts: TrackPart[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+        const from = sorted[i - 1] as number;
+        const to = sorted[i] as number;
+        const middle = (from + to) / 2;
+        parts.push({ from, to, cm: cms.some((s) => s.from <= middle && middle < s.to) });
     }
-    return { cm, ticks };
+    return parts;
+}
+
+/** 部分の中で観たぶんの比 (0〜1)。`at` はバー全体での比 */
+export function playedIn(part: TrackPart, at: number): number {
+    if (!(at > part.from)) return 0;
+    if (at >= part.to) return 1;
+    return round((at - part.from) / (part.to - part.from));
 }
