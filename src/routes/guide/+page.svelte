@@ -920,8 +920,8 @@
      */
     @media (max-width: 767px) {
         .page {
-            /* ナビは 3.5rem と下の線 1px (`+layout.svelte` の `.navbar`) */
-            height: calc(100svh - 3.5rem - 1px);
+            /* ナビは 3.5rem と下の線 1px (`+layout.svelte` の `.navbar`)。下のタブは無いので、下の安全域だけ空ける */
+            height: calc(100svh - 3.5rem - 1px - env(safe-area-inset-bottom));
         }
     }
     @media (max-width: 639.98px) {
