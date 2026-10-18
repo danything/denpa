@@ -9,12 +9,12 @@
     import { resolve } from '$app/paths';
 </script>
 <div class="solo">
-    <div class="panel">
-        <h1>ログアウトしました</h1>
-        <p class="small muted">
-            この端末のログイン情報を消しました。ログイン先 (IdP) からはログアウトしていないので、
-            次はパスワードを聞かれずにログインできることがあります。
-        </p>
+    <h1>ログアウトしました</h1>
+    <p>
+        この端末のログイン情報を消しました。ログイン先 (IdP) からはログアウトしていないので、
+        次はパスワードを聞かれずにログインできることがあります。
+    </p>
+    <div class="actions">
         <a class="button" href={resolve('login')}>もう一度ログイン</a>
     </div>
 </div>

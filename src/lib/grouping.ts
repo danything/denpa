@@ -1,5 +1,6 @@
 /**
- * 録画一覧の「まとめて表示」(issue #480)。**画面に触らない所だけ**を置く (単体テストで見る)。
+ * ホームの「まとめて表示」(issue #480)。**画面に触らない所だけ**を置く (単体テストで見る)。
+ * 時間軸の両側 (予約と録れたもの) に効かせるのは `#lib/timeline.ts`。
  *
  * まとめる単位は**番組 (シリーズ)**。鍵はサーバが付ける (`+page.server.ts` の
  * `seriesGroup`) — エンコードしたものを置くシリーズのフォルダと同じ名前なので、
@@ -7,16 +8,16 @@
  *
  * 並びは2段:
  *
- * - **番組どうしは、いちばん新しい回が新しい順** (まとめないときの一覧と同じ向き)
+ * - **番組どうしは時刻の遅い順** (まとめないときの一覧と同じ向き)。番組の位置は `anchor` の回で決める
  * - **番組の中は放送順** (第1話が上)。開いた番組を上から読めば話が進む
  *
  * **1本しか無い番組はまとめない。** 見出しを押してやっと1行出るのでは手間が増える
  * だけなので、ふつうの行としてその日付の位置に混ぜる。
  */
 
-/** まとめられる行。録画の行も録り逃しの行も、この形式にして渡す */
+/** まとめられる行。予約・録画・録り逃しの行を、この形式にして渡す */
 export interface Groupable {
-    /** 行の鍵 (`rec-12` / `missed-3`) */
+    /** 行の鍵 (`res-5` / `rec-12` / `missed-3`) */
     key: string;
     /** 放送の開始時刻。並びはこれで決める */
     at: number;
@@ -106,11 +107,6 @@ export function groupLines<T extends Groupable>(
         for (const item of entry.group.items) lines.push({ kind: 'row', key: item.key, item, nested: true });
     }
     return lines;
-}
-
-/** まとめないときの行。描き方を1つにするため、同じ形式にそろえる */
-export function flatLines<T extends Groupable>(items: T[]): GroupLine<T>[] {
-    return items.map((item) => ({ kind: 'row', key: item.key, item, nested: false }));
 }
 
 /**

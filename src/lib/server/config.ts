@@ -96,7 +96,7 @@ export const config = {
      * /app に被せるため** (中に置くと隠れる)。無ければ放送そのままの経路は使えず、画面はエンコードしたものに戻る
      */
     mpeg2Dir: str('MPEG2_DIR', '/opt/denpa/mpeg2'),
-    encodeConcurrency: num('ENCODE_CONCURRENCY', 1),
+    encodeConcurrency: num('ENCODE_CONCURRENCY', 2),
     /** 先頭が壊れていて初期化に失敗したときに頭を捨てて再試行する秒数 (enc.js 由来) */
     encodeRetrySeek: 0.2,
     /**

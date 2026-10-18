@@ -7,13 +7,13 @@
 /** 端末ごとに覚える鍵 (`keep.ts`)。速さ・CM 飛ばしと同じ置き場 */
 export const BACKGROUND_KEY = 'player-background';
 
-/** 覚えていた値。**既定は切** — 入れたことのある端末だけ入で始まる */
+/** 覚えていた値。**既定はオフ** — オンにしたことのある端末だけオンで始まる */
 export function storedBackground(saved: string | null): boolean {
     return saved === '1';
 }
 
 export interface Situation {
-    /** バックグラウンド再生を入れているか */
+    /** バックグラウンド再生をオンにしているか */
     allowed: boolean;
     /** ページが裏に回っているか (`visibilityState` が `hidden`、または `pagehide` のあと) */
     hidden: boolean;
@@ -28,7 +28,7 @@ export interface Situation {
 /**
  * いま何をするか。
  *
- * - **裏に回ったら止める** — 入れていない・小窓を出していない・まだ止まっていない、が揃ったとき。
+ * - **裏に回ったら止める** — オンにしていない・小窓を出していない・まだ止まっていない、が揃ったとき。
  *   小窓は押して開いたもので、裏でも観たいと言われている。閉じた時点でまだ裏なら、そこで止める
  * - **戻ってきたら再開する** — こちらが止めたときだけ。自分で止めて裏に回った人のは再開しない。
  *   裏にいる間に (ロック画面などから) 再開されていれば、そのまま

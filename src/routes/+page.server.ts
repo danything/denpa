@@ -96,7 +96,7 @@ function seriesGroup(series: string, name: string): { group_key: string; group_n
 
 /**
  * 録り逃し。**録画の行を持たない** (始まらないまま放送が終わったので、録れた
- * ファイルどころか recordings の行も無い)。予約の行から、録画一覧に差し込むのに
+ * ファイルどころか recordings の行も無い)。予約の行から、時間軸に差し込むのに
  * 要る分だけ持ってくる。
  */
 interface MissedRow {
@@ -148,7 +148,7 @@ export function load({ url, cookies }) {
     /*
      * 並びは**放送日時の近い順**で固定する。録画中だけは真っ先に見たいので先頭に置く。
      *
-     * 「完了分も表示」で向きを変えていた頃は、押した瞬間に一覧がひっくり返って、
+     * 「完了した予約も表示」で向きを変えていた頃は、押した瞬間に一覧がひっくり返って、
      * さっきまで見ていた行がどこへ行ったのか分からなくなっていた。
      * 出るものが増えるだけで、並びは変わらないほうがいい
      *
@@ -157,7 +157,7 @@ export function load({ url, cookies }) {
      * 残ることがあった。持っているのは「録り始めた時刻」だけにしてある
      */
     /*
-     * まだ始まっていないものと、いま録っているものだけ。「完了分も表示」なら全部。
+     * まだ始まっていないものと、いま録っているものだけ。「完了した予約も表示」なら全部。
      *
      * **録り逃したもの (`missed`) はここには出さない** — あれは「これから録るもの」
      * ではなく**録画の結果**なので、録画の一覧のほうに出す (下の `missed`)。
@@ -165,10 +165,10 @@ export function load({ url, cookies }) {
      * 「これから何が録れるか」の中に過去が混ざっていた。
      *
      * **取り消したものは既定では出さない** — 人が押した結果で、驚くことが無い
-     * (「完了分も表示」では出す。戻すボタンのため)
+     * (「完了した予約も表示」では出す。戻すボタンのため)
      *
      * **録画しない (コピー禁止の `skipped`) は放送が終わるまで出す。** 終わったあとも録り逃しには
-     * 移さず (意図して録らなかったものを失敗に見せない)、「完了分も表示」で理由ごと見られる
+     * 移さず (意図して録らなかったものを失敗に見せない)、「完了した予約も表示」で理由ごと見られる
      */
     const r = alias(reservationTable, 'r');
     const rec = alias(recordingTable, 'rec');
@@ -207,7 +207,7 @@ export function load({ url, cookies }) {
         .map((row) => ({ ...row, ...seriesGroup('', row.name) }));
 
     /*
-     * エンコードは録画一覧の行そのものに出す。
+     * エンコードは録画の行そのものに出す。
      *
      * 別のカードにして一覧の上に積んでいた頃は、エンコードが増えるたびに表が下へ
      * ずれてページごとスクロールバーが生えていた。同じ番組が2箇所に並んでもいた。
@@ -239,7 +239,7 @@ export function load({ url, cookies }) {
         .leftJoin(j, eq(j.id, activeEncodeJobId(recordingTable.id)))
         .where(
             and(
-                // 録画中のものは予約一覧に出ている。ここにも出すと同じ番組が2箇所に並ぶ
+                // 録画中のものは予約の行として出ている。ここにも出すと同じ番組が2箇所に並ぶ
                 ne(recordingTable.state, 'recording'),
                 /*
                  * 「削除済みも表示」は消したものを**足す**。消したものだけに切り替えていた頃は、
@@ -266,7 +266,7 @@ export function load({ url, cookies }) {
         }));
 
     /*
-     * 録り逃し。**録画の一覧に混ぜて出す** (画面側で放送日順に差し込む)。
+     * 録り逃し。**録れたものに混ぜて出す** (画面側で放送日順に差し込む)。
      * チューナーが足りずに落とされたものが黙って消えると、録れたつもりのまま
      * 気付かれずに終わる — いちばん知りたいのは「録れなかった」ほうなのに。
      *
@@ -274,8 +274,7 @@ export function load({ url, cookies }) {
      * (放送が終わっても `skipped` のまま。`scheduler.tick`)
      *
      * 溜まり続けはしない。終わった予約は履歴の片付けで消える
-     * (`server/files.ts`。既定で14日)。絞り込みは録画側と同じ言葉を効かせる
-     * (予約はシリーズ・副題を持たないので、番組名と局名だけ)
+     * (`server/files.ts`。既定で14日)
      */
     const missed: MissedRow[] = orm()
         .select({
@@ -313,7 +312,7 @@ export function load({ url, cookies }) {
         missed,
         showFinished,
         showDeleted,
-        /** 録画の見出しに出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
+        /** サイドバーの「今日」に出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
         capacity: room === null ? null : capacityLabel(room.free, room.hours),
         /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
         grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),
@@ -399,7 +398,7 @@ export const actions = {
     },
 
     reconcile: () => {
-        // 「実体と照合」ボタン。外から消した分をすぐ一覧に反映したいとき用
+        // 「ファイルと照合」ボタン。外から消した分をすぐ一覧に反映したいとき用
         const result = reconcile();
         // 押した本人以外の画面も更新する。同じものを見ている端末が食い違うのを防ぐ
         emit('recordings');

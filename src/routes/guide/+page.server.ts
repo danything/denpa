@@ -20,6 +20,7 @@ import {
 } from '#lib/server/schema.js';
 import { mainOf, SUBCHANNELS_COOKIE, storedSubchannels } from '#lib/subchannels.js';
 import type { ChannelType, Program, Recording, ReservationState, Service } from '#lib/types.js';
+import { CHANNEL_TYPES } from '#lib/types.js';
 
 const HOUR = 60 * 60 * 1000;
 /**
@@ -28,7 +29,6 @@ const HOUR = 60 * 60 * 1000;
  */
 const DAY_START_HOUR = 4;
 const WINDOW_HOURS = 24;
-const TYPES: ChannelType[] = ['GR', 'BS', 'CS'];
 
 /** その時刻が属する放送日の 4:00 (ローカル時刻) */
 function broadcastDayStart(at: number): number {
@@ -68,9 +68,9 @@ interface GridProgram
 /**
  * 表の中身。**外枠より後から流す** (SvelteKit の streaming)。
  *
- * 種別のタブ・日送り・検索窓は URL だけで描けるのに、いちばん重い表を待って
+ * 種別のタブ・日送りは URL だけで描けるのに、いちばん重い表を待って
  * いたせいで**画面ごと出てこなかった**。外枠を先に出して、表のところだけ
- * 読み込み中にしておけば、放送波を選び直すのも検索を打ち始めるのも待たずにできる。
+ * 読み込み中にしておけば、放送波を選び直すのも日を送るのも待たずにできる。
  *
  * **一度譲ってから引く。** SQLite の読みは同期なので、譲らずに引くと `load` が
  * 返る前に引き終わり、外枠だけ先に出す意味が無くなる (後から流れるのは、`load` が
@@ -161,10 +161,10 @@ function readGrid(type: ChannelType, start: number, end: number) {
 
 /**
  * 時間×チャンネルのグリッドを返す。並びを眺めて選ぶとき用
- * (キーワードで探すのはルール画面 `/rules` に寄せてある)
+ * (言葉で探すのはサイト全体の検索 `/search` に寄せてある)
  */
 export function load({ url, cookies }) {
-    const type = (TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
+    const type = (CHANNEL_TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR') as ChannelType;
 
     // 既定は今日の放送日。めくるときだけ start が付く
     const requested = Number(url.searchParams.get('start'));

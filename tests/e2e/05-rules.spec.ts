@@ -74,10 +74,8 @@ test.describe('自動予約ルール', () => {
         await expect(page.getByTestId('rule-new')).toBeVisible();
         await expect(keyword).toBeHidden();
 
-        // 当たる番組の無い語にしておく (予約を立てない)。一覧の上の欄に打って Enter で作る
-        await page.getByTestId('rule-search').fill('どこにも無い番組');
-        await page.getByTestId('rule-search').press('Enter');
-        await page.waitForURL(/\/rules\?new&keyword=/);
+        // 当たる番組の無い語にしておく (予約を立てない)。検索の「ルールを作る」と同じ URL で来る
+        await goto(page, `/rules?new&keyword=${encodeURIComponent('どこにも無い番組')}`);
         await expect(keyword).toHaveValue('どこにも無い番組');
         // 下見は打った語でそのまま出る
         await expect(page.getByTestId('preview')).toContainText('0 件');
@@ -112,48 +110,28 @@ test.describe('自動予約ルール', () => {
         );
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         // 1件も無いときは、次にすることまで出す
-        await expect(page.getByTestId('rule-empty')).toContainText('Enter を押すと');
+        await expect(page.getByTestId('rule-empty')).toContainText('「＋ 新しいルール」から');
     });
 
     /**
-     * **探す欄が新しいルールの入口も兼ねる。** 打てば一覧を絞り、先頭に「「…」で新しいルールを作る」が出る。
-     * ↑/↓ で行を選び、Enter で開く。同じ名前のルールがあれば Enter はそちらを開く
+     * **ルールの一覧には探す欄を置かない。** 探すのはサイト全体の検索の「ルール」で、
+     * そこから押せばそのルールの書く欄が開く。言葉から作るのは検索の「ルールを作る」(`?new&keyword=`)
      */
-    test('一覧の上の欄で探して、無ければそのまま作れる', async ({ page }) => {
+    test('ルールは検索で探して開ける', async ({ page }) => {
         await clearRules(page);
-        await goto(page, '/rules');
-        const search = page.getByTestId('rule-search');
-        await expect(search).toHaveAccessibleName('ルールを探す・キーワードで新しく作る');
-        // 空なら「＋ 新しいルール」だけ
-        await expect(page.getByTestId('rule-new')).toBeVisible();
-        await expect(page.getByTestId('rule-create')).toHaveCount(0);
-
-        await search.fill('どこにも無い番組');
-        const create = page.getByTestId('rule-create');
-        await expect(create).toHaveText('「どこにも無い番組」で新しいルールを作る');
-        await expect(page.getByTestId('rule-new')).toHaveCount(0);
-        // 選んでいる行は読み上げにも伝える
-        await expect(search).toHaveAttribute('aria-activedescendant', 'rule-option-new');
-        await create.click();
-        await page.waitForURL(/\/rules\?new&keyword=/);
+        await goto(page, `/rules?new&keyword=${encodeURIComponent('どこにも無い番組')}`);
         await expect(page.getByTestId('rule-keyword')).toHaveValue('どこにも無い番組');
         await expect(page.getByTestId('preview')).toContainText('0 件');
         await page.getByTestId('rule-submit').click();
         await expect(page.getByTestId('rule-row')).toHaveCount(1);
+        await expect(page.getByTestId('rule-search')).toHaveCount(0);
 
-        // 同じ名前のルールがあれば、Enter はそれを開く
-        await search.fill('どこにも無い番組');
-        await expect(search).toHaveAttribute('aria-activedescendant', /^rule-option-\d+$/);
-        await search.press('Enter');
+        await goto(page, `/search?q=${encodeURIComponent('どこにも無い')}`);
+        const hit = page.getByTestId('search-rule');
+        await expect(hit).toHaveCount(1);
+        await hit.getByRole('link').click();
         await page.waitForURL(/\/rules\?edit=\d+$/);
         await expect(page.getByTestId('rule-mode')).toContainText('どこにも無い番組');
-
-        // ↑ で作る行に戻して Enter なら、新しく作る書く欄
-        await search.press('ArrowUp');
-        await expect(search).toHaveAttribute('aria-activedescendant', 'rule-option-new');
-        await search.press('Enter');
-        await page.waitForURL(/\/rules\?new&keyword=/);
-        await expect(page.getByTestId('rule-mode')).toHaveText('新しいルール');
 
         await clearRules(page);
     });
@@ -195,13 +173,22 @@ test.describe('自動予約ルール', () => {
         await expect(rule).toContainText('無効');
         await expect(toggle).not.toBeChecked();
         await expect(page).toHaveURL(/\/rules$/);
-        // 開いた書く欄の下でも切り替えられる。選んだまま
+        // 広い画面では書く欄の下に有効/無効を出さない (行のスイッチが同時に見えている)。
+        // 狭い画面の書く欄では一覧を隠すので、そちらでは書く欄の下で切り替える。選んだまま
         await rule.click();
+        await expect(rule).toHaveAttribute('aria-current', 'true');
+        await expect(page.getByTestId('rule-toggle')).toBeHidden();
+        await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.getByTestId('rule-toggle')).toHaveText('有効化');
         await page.getByTestId('rule-toggle').click();
         await expect(page.getByTestId('rule-toggle')).toHaveText('無効化');
+        // 狭い画面では「編集をやめる」は出さない (「← ルール一覧」と同じ行き先)
+        await expect(page.getByTestId('rule-cancel-edit')).toBeHidden();
+        await expect(page.getByTestId('rule-back')).toBeVisible();
+        await page.setViewportSize({ width: 1280, height: 720 });
         await expect(rule).toHaveAttribute('aria-current', 'true');
         await expect(toggle).toBeChecked();
+        await expect(page.getByTestId('rule-cancel-edit')).toBeVisible();
 
         await deleteRule(page, page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);

@@ -1,17 +1,18 @@
 <script lang="ts">
-    import { getContext, tick } from 'svelte';
+    import { tick } from 'svelte';
     import Menu from '../Menu.svelte';
     import ControlButton from './ControlButton.svelte';
-    import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
+    import { stageMenu } from './controls.svelte';
     import Icon from './Icon.svelte';
     import { BACK, CHECK, FORWARD, SETTINGS } from './icons';
-    import type { SettingChoice, SettingToggle } from './settings';
+    import type { SettingAction, SettingChoice, SettingRow, SettingToggle } from './settings';
 
     /**
      * 再生の設定 (⚙)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
      *
-     * 端末ごとに決めて、たいていは決めたまま観るもの (コーデック・音声・字幕の言語・CMスキップ・アンビエントモード・
-     * バックグラウンド再生) を1つにまとめる。1つずつボタンにしていた頃は操作バーに押すものが並びすぎ、
+     * 端末ごとに決めて、たいていは決めたまま観るもの (CMスキップ・アンビエントモード・バックグラウンド再生・
+     * 互換モード・字幕の言語・音声・コーデック) を1つにまとめる (並べるものは `StageTail` が決める)。
+     * 1つずつボタンにしていた頃は操作バーに押すものが並びすぎ、
      * 毎回使うもの (再生・シーク・音・速さ) が埋もれていた。
      *
      * **速さと字幕の出し入れは操作バーにも置く。** 速さは観ながら何度も変え、変えている間は数字がボタンに出る
@@ -23,16 +24,23 @@
      * - 選択肢の並び: 先頭が「戻る」行。選ぶと閉じる (`menuitemradio` + `aria-checked`)。
      *   Esc か ← で上の並びへ戻る (上の並びの Esc は閉じる。`Menu`)
      *
+     * **狭い枠では、操作バーから畳んだもの (`head`) を上の並びの頭に置く** — 音・速さ・小窓など。「ほか」(⋯) のボタンを
+     * 別に置いていた頃は、狭い操作バーに ⋯ と ⚙ が並んでいた。押すものは押したら閉じ、切り替えはその場で変わる。
+     * いつもの行との間は線で分ける
+     *
      * testid: ボタンは `{prefix}-settings`、枠は `{prefix}-settings-menu`、行は `{prefix}-{id}`、
      * 選択肢は `{prefix}-{id}-option` に `data-{id}={key}` (例: `data-codec="av1"`)
      */
     let {
         prefix,
+        head = [],
         toggles,
         choices,
     }: {
         /** testid の頭 (`watch` / `chase` / `live`) */
         prefix: string;
+        /** 狭い枠で操作バーから畳んだもの。上の並びの頭に置く */
+        head?: SettingRow[];
         toggles: SettingToggle[];
         choices: SettingChoice[];
     } = $props();
@@ -40,7 +48,9 @@
     let open = $state(false);
     /** 開いている選択肢の並び (`SettingChoice` の `id`)。上の並びなら null */
     let view = $state<string | null>(null);
-    const opened = $derived(choices.find((c) => c.id === view));
+    const opened = $derived(
+        [...head.filter((row) => row.kind === 'choice'), ...choices].find((c) => c.id === view),
+    );
     let pane = $state<HTMLElement | null>(null);
 
     // 閉じたら上の並びに戻しておく。次に開いたとき途中から始まらないように
@@ -61,17 +71,8 @@
         });
     });
 
-    /** 開いている間は操作列を残す (`OverlayMenu` と同じ) */
-    const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
-    $effect(() => {
-        if (controls === undefined) return;
-        controls().hold = open;
-        return () => {
-            controls().hold = false;
-        };
-    });
-    /** メニューは舞台の枠の中に収める (`OverlayMenu` と同じ) */
-    const stage = getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
+    /** 開いている間は操作列を残し、メニューは舞台の枠の中に収める (`stageMenu`) */
+    const stage = stageMenu(() => open);
 
     /** 並びを替え、フォーカスを移す (入ったら選ばれているもの、戻ったら入った行) */
     async function go(next: string | null): Promise<void> {
@@ -99,6 +100,56 @@
     }
 </script>
 
+{#snippet action(item: SettingAction)}
+    <button
+        type="button"
+        role="menuitem"
+        class="menu-item setting"
+        data-setting={item.id}
+        data-testid="{prefix}-{item.id}"
+        onclick={() => item.run()}
+    >
+        <Icon icon={item.icon} />
+        <span class="label">{item.label}</span>
+    </button>
+{/snippet}
+
+{#snippet toggle(item: SettingToggle)}
+    <button
+        type="button"
+        role="menuitemcheckbox"
+        class="menu-item setting"
+        aria-checked={item.on}
+        data-keep-open={item.closes === true ? undefined : ''}
+        data-setting={item.id}
+        data-testid="{prefix}-{item.id}"
+        onclick={() => item.toggle()}
+    >
+        <Icon icon={item.icon} />
+        <span class="label">{item.label}</span>
+        <span class="switch" data-on={item.on ? '' : undefined} aria-hidden="true"></span>
+    </button>
+{/snippet}
+
+{#snippet choice(item: SettingChoice)}
+    <button
+        type="button"
+        role="menuitem"
+        class="menu-item setting"
+        aria-haspopup="menu"
+        data-keep-open
+        data-choice
+        data-setting={item.id}
+        data-testid="{prefix}-{item.id}"
+        onclick={() => go(item.id)}
+    >
+        <Icon icon={item.icon} />
+        <span class="label">{item.label}</span>
+        <span class="value">{item.value}</span>
+        <Icon icon={FORWARD} />
+    </button>
+{/snippet}
+
 <Menu bind:open side="top" align="end" boundary={stage} class="overlay-menu settings-menu" testid="{prefix}-settings-menu">
     {#snippet trigger(menu)}
         <ControlButton {menu} icon={SETTINGS} label="再生の設定" testid="{prefix}-settings" />
@@ -106,39 +157,21 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -- キーは中の項目から上がってくるものを受けるだけ -->
     <div class="pane" bind:this={pane} {onkeydown}>
         {#if opened === undefined}
+            {#each head as row (row.id)}
+                {#if row.kind === 'action'}
+                    {@render action(row)}
+                {:else if row.kind === 'toggle'}
+                    {@render toggle(row)}
+                {:else}
+                    {@render choice(row)}
+                {/if}
+            {/each}
+            {#if head.length > 0}<hr class="split" />{/if}
             {#each toggles as item (item.id)}
-                <button
-                    type="button"
-                    role="menuitemcheckbox"
-                    class="menu-item setting"
-                    aria-checked={item.on}
-                    data-keep-open={item.closes === true ? undefined : ''}
-                    data-setting={item.id}
-                    data-testid="{prefix}-{item.id}"
-                    onclick={() => item.toggle()}
-                >
-                    <Icon icon={item.icon} />
-                    <span class="label">{item.label}</span>
-                    <span class="switch" data-on={item.on ? '' : undefined} aria-hidden="true"></span>
-                </button>
+                {@render toggle(item)}
             {/each}
             {#each choices as item (item.id)}
-                <button
-                    type="button"
-                    role="menuitem"
-                    class="menu-item setting"
-                    aria-haspopup="menu"
-                    data-keep-open
-                    data-choice
-                    data-setting={item.id}
-                    data-testid="{prefix}-{item.id}"
-                    onclick={() => go(item.id)}
-                >
-                    <Icon icon={item.icon} />
-                    <span class="label">{item.label}</span>
-                    <span class="value">{item.value}</span>
-                    <Icon icon={FORWARD} />
-                </button>
+                {@render choice(item)}
             {/each}
         {:else}
             <button
@@ -188,6 +221,12 @@
     .pane {
         display: contents;
     }
+    /* 畳んだものといつもの行の境目。線は面の線の色で、上下を少し空ける */
+    .split {
+        margin: 0.25rem 0;
+        border: 0;
+        border-top: 1px solid var(--dp-line);
+    }
     .setting {
         padding: 0.5rem 0.75rem;
     }
@@ -207,7 +246,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: var(--pico-muted-color);
+        color: var(--dp-muted);
     }
     .back {
         border-bottom: 1px solid var(--dp-line);

@@ -32,8 +32,6 @@ export interface HomeContext {
     watchLink(rec: Rec): string | null;
     /** まだ観ていない録画 (行の点) */
     unwatched(rec: Rec): boolean;
-    /** 置き場の使用量 (主と、在るものだけ括弧に) */
-    sizeLabel(rec: Rec): string;
     /** 録画・番組からルールを作る入口 */
     ruleFrom(kind: 'recording' | 'program', id: number): string;
     openReservation(res: Res): void;

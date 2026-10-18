@@ -1,16 +1,17 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
-    import { GENRE_TREE, genreName } from '#lib/arib.js';
+    import { GENRE_TREE } from '#lib/arib.js';
     import { arming } from '#lib/arming.svelte.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import ArmedDelete from '#lib/components/ArmedDelete.svelte';
+    import Lead from '#lib/components/Lead.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { programDetail } from '#lib/detail.svelte.js';
     import { badgeClass, CM_LABEL, COPY_NEVER_REASON, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '#lib/format.js';
     import { CODEC_LABEL } from '#lib/hw.js';
-    import { matches, Paged, sentinel } from '#lib/paging.svelte.js';
+    import { Paged, sentinel } from '#lib/paging.svelte.js';
     import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS } from '#lib/search.js';
     import { applyAction, deserialize, type SubmitFunction } from '$app/forms';
     import { afterNavigate, goto } from '$app/navigation';
@@ -204,7 +205,7 @@
     /**
      * 編集中のルールを消したら、一覧の初めに戻る。`?edit=` のまま残ると、無くなったルールの
      * 画面が新しいルールの欄に化けて見える。戻る先の履歴にも残さない (戻っても無いので)。
-     * 「削除しました」の知らせは移ったあとに当てる
+     * 「削除しました」の通知は移ったあとに当てる
      */
     const leaveDeleted: SubmitFunction = () => async ({ result, update }) => {
         if (result.type !== 'success') return update();
@@ -213,7 +214,7 @@
     };
     /**
      * 付いていれば書く途中、という URL の鍵。編集 (`edit`)・新しいルール (`new`)・録画や番組から
-     * (`recording` / `program`)・条件を URL に載せて来たとき (番組表の検索は `keyword`。書く欄の名前ならどれでも)。
+     * (`recording` / `program`)・条件を URL に載せて来たとき (検索の「ルールを作る」は `keyword`。書く欄の名前ならどれでも)。
      * 計測用などの関係ない鍵では書く欄にしない
      */
     const FORM_KEYS = [
@@ -269,31 +270,6 @@
     /** ライブ画面が持っている局。**決めているのはサーバ** (`epg.watchableServices`) */
     const watchable = $derived(new Set(data.watchable));
 
-    /** 絞り込んでいる種別と局。局名 (`station`) は放送から来た字なので放送の字で出す */
-    function channelParts(rule: {
-        service_types: string[] | null;
-        service_ids: number[] | null;
-    }): { text: string; station: boolean }[] {
-        return [
-            ...(rule.service_types ?? []).map((t) => ({ text: SERVICE_TYPE_LABEL[t] ?? t, station: false })),
-            ...(rule.service_ids ?? []).map((id) => {
-                const name = data.services.find((s) => s.id === id)?.name;
-                return name === undefined ? { text: String(id), station: false } : { text: name, station: true };
-            }),
-        ];
-    }
-
-    function channels(rule: { service_types: string[] | null; service_ids: number[] | null }): string {
-        const parts = channelParts(rule);
-        return parts.length === 0 ? '全局' : parts.map((p) => p.text).join(', ');
-    }
-
-    /** 絞り込んでいるジャンル。条件のうち一番見落としやすいので、名前と並べず条件の行に出す */
-    function genres(rule: { genres: string[] | null }): string {
-        const parts = (rule.genres ?? []).map(genreName);
-        return parts.length === 0 ? '全ジャンル' : parts.join(', ');
-    }
-
     /** 局は50以上あるので種別ごとにまとめる */
     const grouped = $derived(
         ['GR', 'BS', 'CS', 'SKY']
@@ -302,86 +278,22 @@
     );
 
     /**
-     * 一覧の絞り込み。**Ctrl+F の代わり。**
-     *
-     * 一覧は少しずつしか描かない (下の `paged`) ので、画面に無い行はブラウザの
-     * 検索では見つからない。名前だけでなく、条件に出しているもの (キーワード・
-     * 除外・チャンネル・ジャンル・有効かどうか) も当てる — 「NHK のルールは
-     * どれだったか」で探せるように。読み方はルールのキーワードと同じ
-     * (空白で区切った語をすべて含む)。
-     *
-     * **同じ欄が新しいルールの入口も兼ねる。** 探して無ければ、打った語をそのままキーワードにして
-     * 作る (一覧の先頭の行)。探す欄と「＋ 新しいルール」が別だった頃は、無いと分かってから
-     * 同じ語を書く欄に打ち直していた
-     */
-    let query = $state('');
-    const typed = $derived(query.trim());
-    const filtered = $derived(
-        data.rules.filter((rule) =>
-            matches(
-                query,
-                [
-                    rule.name,
-                    rule.keyword,
-                    rule.ignore_keyword,
-                    channels(rule),
-                    genres(rule),
-                    rule.enabled ? '有効' : '無効',
-                ].join(' '),
-            ),
-        ),
-    );
-
-    /**
      * 少しずつ出す (`paging.svelte.ts`)。
      *
      * ルールが数百に溜まると、この画面を開いた直後に一瞬止まって見える —
      * 全部の行を描き終わるまで何も動かない。最初は 1 画面ぶん少し多めだけ描き、
-     * 下端に近づいたら続きを足す。**絞り込みが変わったら先頭に戻す**
-     * (絞ったあとの一覧が前と同じ長さとは限らない)
-     */
-    const paged = new Paged(() => filtered, 40);
-
-    /**
-     * **↑/↓ で選んでいる行** (入力欄に字を打ったまま動かす)。0 は先頭の「新しいルール」の行、
-     * 1 から先がルールの行 (`paged.rows`)。-1 は何も選んでいない。
+     * 下端に近づいたら続きを足す。
      *
-     * 打つたびに選び直す: 名前かキーワードがそのまま同じルールがあればそれ、無ければ作る行。
-     * **Enter は選んでいる行を開く**ので、無ければそのまま新しいルールになる
+     * 一覧を言葉で絞る欄は置かない。ルールを探すのはサイト全体の検索 (`/search`) の「ルール」で、
+     * 行の名前は書く欄の「編集中」にも出る
      */
-    let active = $state(-1);
-    $effect(() => {
-        void query;
-        void data.rules;
-        // 続きを足したとき (`paged.reveal`) には選び直さない。見るのは打った字とルールの顔ぶれだけ
-        untrack(() => {
-            paged.reset();
-            const same = paged.rows.findIndex((rule) => rule.name === typed || rule.keyword === typed);
-            active = typed === "" ? -1 : same + 1;
-        });
-    });
+    const paged = new Paged(() => data.rules, 40);
+
     /**
      * 先頭の「新しいルール」の行を開いているか。右がいまその書く欄なら光らせる
-     * (打った語と同じキーワードで開いているか。何も打っていなければ、キーワード無しで開いているか)
+     * (編集ではなく書く欄を出しているとき。検索の「ルールを作る」から来たときも)
      */
-    const creating = $derived(
-        data.editing === null && page.url.searchParams.get('keyword') === (typed === '' ? null : typed),
-    );
-    /** 行の id。入力欄の `aria-activedescendant` が指す */
-    const optionId = (index: number) => (index === 0 ? 'rule-option-new' : `rule-option-${paged.rows[index - 1]?.id}`);
-
-    function move(event: KeyboardEvent): void {
-        const last = paged.rows.length;
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            active = event.key === 'ArrowDown' ? Math.min(last, active + 1) : Math.max(0, active - 1);
-            document.getElementById(optionId(active))?.scrollIntoView({ block: 'nearest' });
-        } else if (event.key === 'Enter' && !event.isComposing) {
-            // 変換を確定する Enter では開かない
-            event.preventDefault();
-            document.getElementById(optionId(Math.max(0, active)))?.click();
-        }
-    }
+    const creating = $derived(data.editing === null && formView);
 
     /** 押した結果 */
     const notices = $derived.by<Notice[]>(() => {
@@ -418,66 +330,30 @@
     <Toasts {notices} source={form} />
 
     <aside class="side" aria-label="ルールの一覧">
-        <div class="side-head">
-            <!--
-                **探す欄と新しいルールの入口を1つに。** 打つと一覧を絞り、先頭に「「…」で新しいルールを作る」が出る。
-                ↑/↓ で行を選び、Enter で開く (`move`)。字は入力欄に打ったまま、選んでいる行は
-                `aria-activedescendant` で読み上げに伝える。
-
-                絞り込みは Ctrl+F の代わりでもある。一覧は少しずつしか描かないので、画面に無い行は
-                ブラウザの検索では見つからない
-            -->
-            <input
-                type="search"
-                class="search"
-                placeholder="ルールを探す・キーワードで新しく作る"
-                aria-label="ルールを探す・キーワードで新しく作る"
-                aria-controls="rule-list"
-                aria-activedescendant={active >= 0 ? optionId(active) : undefined}
-                autocomplete="off"
-                enterkeyhint="go"
-                bind:value={query}
-                onkeydown={move}
-                data-testid="rule-search"
-            />
-        </div>
         <!--
             **行は名前と小さな印だけ。** 条件 (局・ジャンル・除外) は押せば右に全部出るので、ここでは
             どれがどれか見分けられれば足りる。並べて比べたいもの (有効か・優先度・予約の数・同じ回は1度) だけ残す
         -->
         <ul class="rule-list" id="rule-list" data-testid="rule-list">
             <!--
-                **先頭はいつも新しいルールの行。** 何も打っていなければ「＋ 新しいルール」、打てば
-                その語をキーワードにして作る行。押すと書く欄にその語が入り、右に録れる番組が出る
+                **先頭はいつも新しいルールの行。** 言葉から作るときは、サイト全体の検索の
+                「ルールを作る」から来る (`/rules?new&keyword=`。書く欄に語が入る)
             -->
-            <li class="rule-item create" class:selected={creating} class:active={active === 0}>
-                {#if typed === ''}
-                    <a class="rule-row" id="rule-option-new" href={resolve('rules?new')} data-testid="rule-new">＋ 新しいルール</a>
-                {:else}
-                    <a
-                        class="rule-row"
-                        id="rule-option-new"
-                        href={resolve(`rules?new&keyword=${encodeURIComponent(typed)}`)}
-                        data-testid="rule-create"
-                    >
-                        <span class="rule-name">「{typed}」で新しいルールを作る</span>
-                    </a>
-                {/if}
+            <li class="rule-item create" class:selected={creating}>
+                <a class="rule-row" href={resolve('rules?new')} data-testid="rule-new">＋ 新しいルール</a>
             </li>
-            {#each paged.rows as rule, index (rule.id)}
+            {#each paged.rows as rule (rule.id)}
                 {@const selected = data.editing?.id === rule.id}
                 <!--
                     **有効/無効は行のスイッチで、開かずに切り替える。** 一覧と詳細の形では、行を押して開いてから
                     押すことになり1手増えていた。スイッチは行のリンクの外 (隣) に置くので、押してもルールは開かない
                 -->
-                <li class="rule-item" class:selected class:active={active === index + 1} class:off={!rule.enabled}>
+                <li class="rule-item" class:selected class:off={!rule.enabled}>
                     <a
                         class="rule-row"
-                        id="rule-option-{rule.id}"
                         href={resolve(`rules?edit=${rule.id}`)}
                         aria-current={selected ? 'true' : undefined}
                         data-testid="rule-row"
-                        data-rule-id={rule.id}
                     >
                         <span class="rule-name">{rule.name}</span>
                         <span class="rule-marks tiny">
@@ -503,27 +379,17 @@
                     </form>
                 </li>
             {:else}
-                {#if data.rules.length === 0}
-                    <!-- 1件も無いとき。まだ何も無いのか読み込み途中なのかが分かるように、次にすることも添える -->
-                    {#if typed === ''}
-                        <li class="empty" data-testid="rule-empty">
-                            <p class="bold">ルールはまだありません</p>
-                            <p class="small muted">
-                                上の欄にキーワードを入れて Enter を押すと、合う番組を自動で予約するルールを作れます
-                            </p>
-                        </li>
-                    {/if}
-                {:else}
-                    <li class="note small muted">一致するルールはありません</li>
-                {/if}
+                <!-- 1件も無いとき。まだ何も無いのか読み込み途中なのかが分かるように、次にすることも添える -->
+                <li class="empty" data-testid="rule-empty">
+                    <p class="bold">ルールはまだありません</p>
+                    <p class="small muted">
+                        「＋ 新しいルール」から、合う番組を自動で予約するルールを作れます
+                    </p>
+                </li>
             {/each}
             <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
             {#if paged.more}
                 <li class="note small muted" use:sentinel={() => paged.reveal()}>残り {paged.rest} 件</li>
-            {/if}
-            <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
-            {#if typed !== '' && data.rules.length > 0}
-                <li class="note small muted" role="status">{data.rules.length} 件中 {filtered.length} 件</li>
             {/if}
         </ul>
     </aside>
@@ -558,7 +424,7 @@
                 {#key formKey}
                     <form
                         method="POST"
-                        class="rule-form"
+                        class="rule-form dense"
                         id="rule-form"
                         data-testid="rule-form"
                         bind:this={ruleForm}
@@ -618,13 +484,12 @@
                                             data-testid="rule-keyword"
                                         />
                                     </label>
-                                    <span class="hint">
+                                    <Lead>
                                         空白で区切ると<strong>すべて含む</strong>ものに一致します
-                                    </span>
-                                    <details class="more">
-                                        <summary>詳しく</summary>
-                                        <p>これから放送される番組が対象です。ルール名はキーワードから付けます。</p>
-                                    </details>
+                                        {#snippet more()}
+                                            <p>これから放送される番組が対象です。ルール名はキーワードから付けます。</p>
+                                        {/snippet}
+                                    </Lead>
                                     <!--
                             当てる範囲。既定は番組名だけ。概要まで広げると番宣で名前が出ただけの
                             番組まで当たり、詳細まで広げると出演者でも当たる
@@ -668,13 +533,14 @@
                                         />
                                         <span class="field-label">同じ回は最初の放送だけ録る</span>
                                     </label>
-                                    <span class="hint">再放送や別の局の同じ回は録りません</span>
-                                    <details class="more">
-                                        <summary>詳しく</summary>
-                                        <p>
-                                            同じ回かどうかは番組名のシリーズ名と話数・副題で見ます。番組名に話数や副題が無ければ番組の説明から読みます。同じ時刻に流れているなら字幕のあるもの、次に BS/CS を選びます。選んだ放送がチューナー不足で録れないときは、次の放送で録ります。話数も副題も無い番組は、同じ時刻の同時放送だけをまとめます。
-                                        </p>
-                                    </details>
+                                    <Lead class="indent">
+                                        再放送や別の局の同じ回は録りません
+                                        {#snippet more()}
+                                            <p>
+                                                同じ回かどうかは番組名のシリーズ名と話数・副題で見ます。番組名に話数や副題が無ければ番組の説明から読みます。同じ時刻に流れているなら字幕のあるもの、次に BS/CS を選びます。選んだ放送がチューナー不足で録れないときは、次の放送で録ります。話数も副題も無い番組は、同じ時刻の同時放送だけをまとめます。
+                                            </p>
+                                        {/snippet}
+                                    </Lead>
                                 </div>
                                 <div class="field">
                                     <label class="field">
@@ -687,27 +553,29 @@
                                             max="9"
                                             data-testid="rule-priority"
                                         />
-                                        <span class="hint">
-                                            チューナーが足りないときは<strong>大きいほうを録ります</strong>
-                                        </span>
                                     </label>
-                                    <details class="more">
-                                        <summary>詳しく</summary>
-                                        <p>
-                                            <strong>予約どうし</strong>の優先度です (手動予約は 2)。番組表やロゴの取得とは比べません。録画はそれらより常に優先されます。
-                                        </p>
-                                    </details>
+                                    <Lead>
+                                        チューナーが足りないときは<strong>大きいほうを録ります</strong>
+                                        {#snippet more()}
+                                            <p>
+                                                <strong>予約どうし</strong>の優先度です (手動予約は 2)。番組表やロゴの取得とは比べません。録画はそれらより常に優先されます。
+                                            </p>
+                                        {/snippet}
+                                    </Lead>
                                 </div>
                             </div>
 
-                            <div class="fields">
-                                <details class="box">
-                                    <summary class="small bold" data-testid="channel-summary">
-                                        局
-                                        <span class="muted">
-                                            ({seedTypes.length + seedServices.length === 0
+                            <!--
+                                **局とジャンルは枠で囲まない行に** (名前は左、いまの値と › は右)。押すと行の下に開く
+                            -->
+                            <div class="pickers">
+                                <details class="picker">
+                                    <summary data-testid="channel-summary">
+                                        <span>局</span>
+                                        <span class="picker-value">
+                                            {seedTypes.length + seedServices.length === 0
                                                 ? '全局'
-                                                : `${seedTypes.length + seedServices.length} 件選択中`})
+                                                : `${seedTypes.length + seedServices.length} 件選択中`}
                                         </span>
                                     </summary>
                                     <div class="box-body stack">
@@ -766,13 +634,11 @@
                                     </div>
                                 </details>
 
-                                <details class="box">
-                                    <summary class="small bold" data-testid="genre-summary">
-                                        ジャンル
-                                        <span class="muted">
-                                            ({seedGenres.length === 0
-                                                ? '全ジャンル'
-                                                : `${seedGenres.length} 件選択中`})
+                                <details class="picker">
+                                    <summary data-testid="genre-summary">
+                                        <span>ジャンル</span>
+                                        <span class="picker-value">
+                                            {seedGenres.length === 0 ? '全ジャンル' : `${seedGenres.length} 件選択中`}
                                         </span>
                                     </summary>
                                     <div class="box-body">
@@ -814,7 +680,7 @@
                             </div>
 
                             <p class="small muted">
-                                録画のしかたと無料放送の扱いは<a href={resolve('settings')}>設定</a
+                                録画のしかたと無料放送の扱いは<a href={resolve('settings/recording')}>設定</a
                                 >で決めます ({data.defaults.codecs.map((codec) => CODEC_LABEL[codec]).join(' + ') || 'エンコードしない'}
                                 / CM: {CM_LABEL[data.defaults.cmCut]}{data.defaults.freeOnly
                                     ? ' / 無料放送のみ'
@@ -835,14 +701,20 @@
                 <div class="form-actions">
                     {#if data.editing}
                         <div class="cluster">
-                            <ActionButton
-                                action="?/toggle"
-                                fields={{ id: data.editing.id }}
-                                class="small secondary"
-                                testid="rule-toggle"
-                            >
-                                {data.editing.enabled ? '無効化' : '有効化'}
-                            </ActionButton>
+                            <!--
+                                有効/無効は狭い画面だけ。広い画面では左の一覧の行のスイッチが同時に見えている
+                                (狭い画面の書く欄では一覧を隠すので、ここに無いと切り替えられない)
+                            -->
+                            <div class="narrow-only">
+                                <ActionButton
+                                    action="?/toggle"
+                                    fields={{ id: data.editing.id }}
+                                    class="small secondary"
+                                    testid="rule-toggle"
+                                >
+                                    {data.editing.enabled ? '無効化' : '有効化'}
+                                </ActionButton>
+                            </div>
                             <!-- 押し間違い防止に2回押させる (録画の削除と同じ)。消したら一覧の初めに戻る -->
                             <ArmedDelete
                                 {deleting}
@@ -857,7 +729,8 @@
                     <!-- 下見は打つそばから右 (狭い画面では下) に出るので、「見る」ためのボタンは置かない -->
                     <div class="cluster save">
                         {#if data.editing}
-                            <a class="button small secondary" href={resolve('rules')} data-testid="rule-cancel-edit">編集をやめる</a>
+                            <!-- 広い画面だけ。狭い画面では上の「← ルール一覧」が同じ行き先 -->
+                            <a class="button small secondary wide-only" href={resolve('rules')} data-testid="rule-cancel-edit">編集をやめる</a>
                             <button type="submit" form="rule-form" class="small" formaction="?/update" data-testid="rule-update">
                                 更新
                             </button>
@@ -1105,24 +978,8 @@
                 </a>
             {/if}
 
-            {#if opened !== null && opened.reservation_id !== null}
-                <!--
-                    行の「取消」と同じアクション。ルールが立てた予約でも作り直されず、
-                    戻すのは予約一覧の「戻す」から (cancelReservation)
-                -->
-                <form
-                    method="POST"
-                    action="?/cancelReservation"
-                    use:submitting={() =>
-                        async ({ result, update }) => {
-                            await update();
-                            if (result.type === 'success') close();
-                        }}
-                >
-                    <input type="hidden" name="reservationId" value={opened.reservation_id} />
-                    <button type="submit" class="outline danger" data-testid="rule-detail-cancel">予約取消</button>
-                </form>
-            {:else if opened !== null && opened.reservation_state === null && opened.end_at > clock && opened.skip?.kind !== 'copy-never'}
+            <!-- 取り消しは行の「取消」だけ (詳細に同じものを2つ並べない) -->
+            {#if opened !== null && opened.reservation_id === null && opened.reservation_state === null && opened.end_at > clock && opened.skip?.kind !== 'copy-never'}
                 <!--
                     録画のしかたはここでは選ばせない。設定画面の1箇所で決める
                     (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
@@ -1214,23 +1071,6 @@
             border-right: 1px solid var(--dp-line);
         }
     }
-    .side-head {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        padding-bottom: 0.75rem;
-    }
-    @media (min-width: 768px) {
-        .side-head {
-            padding: 1rem 1rem 0.5rem;
-        }
-    }
-    .search {
-        height: auto;
-        margin: 0;
-        padding-block: 0.4rem;
-        font-size: 0.875rem;
-    }
     .rule-list {
         min-height: 0;
         margin: 0;
@@ -1241,7 +1081,7 @@
         margin: 0;
         list-style: none;
     }
-    /* 狭い画面では行の字を上の入力欄と揃える (塗りだけ余白の外へ少し出す) */
+    /* 狭い画面では行の字を本文と揃える (塗りだけ余白の外へ少し出す) */
     @media (max-width: 767px) {
         .rule-list {
             margin-inline: -0.75rem;
@@ -1251,6 +1091,7 @@
     @media (min-width: 768px) {
         .rule-list {
             flex: 1 1 0%;
+            padding-top: 0.75rem;
             overflow-y: auto;
         }
     }
@@ -1266,17 +1107,10 @@
         transition: background-color var(--dp-duration);
     }
     .rule-item:hover {
-        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+        background: var(--dp-hover-soft);
     }
     .rule-item.selected {
         background: var(--dp-subtle);
-    }
-    /*
-     * ↑/↓ で選んでいる行 (`active`)。開いている行 (`selected`) と重なっても分かるよう、
-     * 塗りではなく内側の線で示す
-     */
-    .rule-item.active {
-        box-shadow: inset 0 0 0 1px var(--dp-line-strong);
     }
     /* スイッチはリンクの外 (行の右端) なので、押してもルールは開かない */
     .rule-row {
@@ -1359,7 +1193,13 @@
         align-self: flex-start;
     }
     @media (min-width: 768px) {
-        .back {
+        .back,
+        .narrow-only {
+            display: none;
+        }
+    }
+    @media (max-width: 767px) {
+        .wide-only {
             display: none;
         }
     }
@@ -1393,7 +1233,7 @@
     }
 
     .hint {
-        font-size: 0.8rem;
+        font-size: var(--dp-text-sm);
         color: var(--dp-muted);
     }
     .fields {
@@ -1407,16 +1247,52 @@
         gap: 0.25rem 1rem;
         margin-top: 0.25rem;
     }
-    .box {
-        border: 1px solid var(--dp-line);
-        border-radius: var(--dp-radius-lg);
+    /*
+     * 局とジャンルの行。枠の箱にはせず、行の間に線を1本 (設定の一覧と同じ顔)。
+     * 名前は左、いまの値と Pico の › は右。指を乗せると淡い地
+     */
+    .pickers {
+        display: flex;
+        flex-direction: column;
+        border-block: 1px solid var(--dp-line);
     }
-    .box summary {
+    .picker {
+        margin: 0;
+    }
+    .picker + .picker {
+        border-top: 1px solid var(--dp-line);
+    }
+    .picker > summary {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-height: 2.75rem;
+        margin: 0;
+        padding: 0 0.5rem;
+        border-radius: var(--dp-radius-sm);
+        color: inherit;
+        font-size: var(--dp-text-sm);
+        line-height: 1.4;
         cursor: pointer;
-        padding: 0.75rem 1rem;
+        transition: background-color var(--dp-duration);
+    }
+    .picker > summary:hover {
+        background: var(--dp-hover-soft);
+    }
+    .picker > summary::after {
+        flex-shrink: 0;
+        float: none;
+        margin-inline-start: 0;
+    }
+    .picker-value {
+        margin-inline-start: auto;
+        color: var(--dp-muted);
+    }
+    .picker[open] > summary {
+        margin-bottom: 0;
     }
     .box-body {
-        padding: 0 1rem 1rem;
+        padding: 0.25rem 0.5rem 1rem;
     }
     .group-title {
         margin-bottom: 0.25rem;
@@ -1463,6 +1339,19 @@
         padding-block: 0.75rem;
         border-top: 1px solid var(--dp-line);
         background: var(--dp-bg);
+    }
+    /*
+     * **下に潜る欄は、線の上で地の色に溶かす。** 貼り付いた行で欄が半分の高さで切れて見え、
+     * そこで終わっているのか下に続くのかが読めなかった
+     */
+    .form-actions::before {
+        content: '';
+        position: absolute;
+        inset-inline: 0;
+        bottom: 100%;
+        height: 1.5rem;
+        background: linear-gradient(to bottom, transparent, var(--dp-bg));
+        pointer-events: none;
     }
     /* 保存は右端。編集でないときも右に寄せる (左に何も無くても位置が変わらない) */
     .save {

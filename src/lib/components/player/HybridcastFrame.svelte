@@ -232,7 +232,7 @@
     ></iframe>
     {#if phase !== 'ready'}
         <div class="corner">
-            <StageNote testid="live-hybridcast-note">
+            <StageNote>
                 {phase === 'loading' ? 'Hybridcast を読み込み中…' : 'Hybridcast のアプリを読み込めませんでした (戻るで閉じる)'}
             </StageNote>
         </div>

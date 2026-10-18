@@ -623,13 +623,13 @@ test.describe('録画を観る', () => {
  *
  * 48px の押すものを全部並べていた頃は、操作バーが折れて映像を覆い、右の縦列 (閉じる・
  * 切り抜き・削除) がシークバーや再生ボタンに重なっていた (実機の報告)。狭い枠では
- * 40px に縮め、毎回は使わないもの (速さなど) を「ほか」(⋯) に畳み、右の列を右上の
+ * 40px に縮め、毎回は使わないもの (速さなど) を再生の設定 (⚙) に畳み、右の列を右上の
  * 一行に寝かせる (`PlayerStage`)
  */
 test.describe('スマホの縦で観る', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
-    test('押すものは 40px 以上で重ならず、速さは「ほか」に畳まれる', async ({ page, request }) => {
+    test('押すものは 40px 以上で重ならず、速さは ⚙ に畳まれる', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
         await goto(page, `/watch/${id}`);
@@ -692,16 +692,19 @@ test.describe('スマホの縦で観る', () => {
         const full = await page.getByTestId('watch-full').boundingBox();
         expect(Math.abs((row?.y ?? 0) - (full?.y ?? -100))).toBeLessThan(2);
 
-        // 速さは畳まれていて、「ほか」で出る
+        // 速さは畳まれていて、⚙ の頭の「再生の速さ」の行から選ぶ
         await expect(page.getByTestId('watch-speed')).toBeHidden();
-        await page.getByTestId('watch-more').tap();
-        await expect(page.getByTestId('watch-speed')).toBeVisible();
-        await page.getByTestId('watch-speed').tap();
+        await page.getByTestId('watch-settings').tap();
+        const pace = page.getByTestId('watch-pace');
+        await expect(pace).toContainText('×1');
+        await pace.tap();
         // メニューは枠の中に収まる (見出しの裏に潜らない)
-        const menu = page.getByTestId('watch-speed-menu');
+        const menu = page.getByTestId('watch-settings-menu');
         await expect(menu).toBeVisible();
         const inside = await page.evaluate(() => {
-            const menu = document.querySelector('[data-testid="watch-speed-menu"]')?.getBoundingClientRect();
+            const menu = document
+                .querySelector('[data-testid="watch-settings-menu"]')
+                ?.getBoundingClientRect();
             const stage = document.querySelector('[data-testid="watch-stage"]')?.getBoundingClientRect();
             return (
                 menu !== undefined &&
@@ -711,21 +714,24 @@ test.describe('スマホの縦で観る', () => {
             );
         });
         expect(inside).toBe(true);
-        await page.getByTestId('watch-speed-option').filter({ hasText: '×1.5' }).tap();
+        await page.locator('[data-testid="watch-pace-option"][data-pace="1.5"]').tap();
+        await expect(menu).toBeHidden();
+        await expect(page.getByTestId('watch-pace')).toContainText('×1.5');
+        // 操作バーの速さのボタン (畳まれている) にも同じ値が出る
         await expect(page.getByTestId('watch-speed')).toHaveText('1.5');
 
-        // 映像を覆わないので、操作バーは放っておいても引っ込まない (「ほか」も開いたまま)
+        // 映像を覆わないので、操作バーは放っておいても引っ込まない
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
         expect(await bar.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
-        await expect(page.getByTestId('watch-speed')).toBeVisible();
+        await expect(page.getByTestId('watch-settings')).toBeVisible();
     });
 
     /*
      * **いちばん狭いスマホ (360px・320px) でも、操作バーのボタンは1行。** 折り返していた頃は、
      * 時刻が押すものの上に一行を取って操作バーが二段になっていた。残すのは再生・チャプター送り・
-     * 時刻・全画面と「ほか」だけで、時刻は短い形 (残りを省く)。畳んだもの (音など) は「ほか」から押せる
+     * 時刻・⚙・全画面だけで、時刻は短い形 (残りを省く)。畳んだもの (音など) は ⚙ の頭の行から押せる
      */
-    test('幅 360px・320px でも操作バーのボタンは1行で、畳んだ音は「ほか」から押せる', async ({
+    test('幅 360px・320px でも操作バーのボタンは1行で、畳んだ音は ⚙ から押せる', async ({
         page,
         request,
     }) => {
@@ -744,18 +750,24 @@ test.describe('スマホの縦で観る', () => {
             await expect(page.getByTestId('watch-clock').locator('.long')).toBeHidden();
             await page.screenshot({ path: test.info().outputPath(`watch-${width}.png`) });
 
+            // 畳んだ音は ⚙ の頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
             const sound = page.getByTestId('watch-sound');
             await expect(sound).toBeHidden();
-            await page.getByTestId('watch-more').tap();
-            await expect(sound).toBeVisible();
+            await expect(page.getByTestId('watch-more')).toHaveCount(0);
             const label = (await sound.getAttribute('aria-label')) ?? '';
-            await sound.tap();
+            await page.getByTestId('watch-settings').tap();
+            const mute = page.getByTestId('watch-mute');
+            await expect(mute).toBeVisible();
+            await expect(mute).toHaveAttribute('role', 'menuitemcheckbox');
+            const muted = (await mute.getAttribute('aria-checked')) ?? '';
+            await mute.tap();
+            await expect(mute).not.toHaveAttribute('aria-checked', muted);
             await expect(sound).not.toHaveAttribute('aria-label', label);
             await page.screenshot({ path: test.info().outputPath(`watch-${width}-more.png`) });
 
-            // 閉じれば1行に戻る
-            await page.getByTestId('watch-more').tap();
-            await expect(sound).toBeHidden();
+            // 閉じても1行のまま
+            await page.keyboard.press('Escape');
+            await expect(page.getByTestId('watch-settings-menu')).toBeHidden();
             expect(await oneRowTroubles(page, 'watch-buttons'), `${width}px (閉じたあと)`).toEqual([]);
         }
     });

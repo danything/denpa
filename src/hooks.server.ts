@@ -35,7 +35,7 @@ export async function handle({ event, resolve }) {
     }
 
     /*
-     * **何も聞かずに通す相手。** 住所が `TRUSTED_NETWORKS` に当たったときだけ。
+     * **何も聞かずに通す相手。** アドレスが `TRUSTED_NETWORKS` に当たったときだけ。
      * LAN のプレイヤーに資格情報を入れずに使わせるためで、ここに当たると
      * OIDC も掛からない
      */
@@ -73,6 +73,15 @@ export async function handle({ event, resolve }) {
             // 入る手段が無い (設定していないか、信頼するネットワークの外の画面)。言葉で返す (auth.denied)
             return denied();
         }
+    }
+
+    /*
+     * **ホームの `?q=` は検索の画面へ。** 言葉で探すのはサイト全体の検索 (`/search`) に寄せた。
+     * 前に貼ったリンクや履歴から来ても、同じ言葉の結果が出る
+     */
+    const q = event.url.searchParams.get('q');
+    if (pathname === '/' && event.request.method === 'GET' && q !== null) {
+        redirect(302, relative(event.url, `/search?q=${encodeURIComponent(q)}`));
     }
 
     return finish(await resolve(event));

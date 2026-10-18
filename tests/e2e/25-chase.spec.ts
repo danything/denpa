@@ -109,7 +109,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
 
     /*
      * **スマホの縦 (360px・320px) でも、操作バーのボタンは1行** (観る画面・ライブと同じ)。
-     * 残すのは再生・最新・読みもの・全画面と「ほか」だけで、畳んだ音は「ほか」から押せる
+     * 残すのは再生・最新・読みもの・⚙・全画面だけで、畳んだ音は ⚙ の頭の行から押せる
      */
     for (const width of [360, 320]) {
         const context = await browser.newContext({
@@ -128,18 +128,24 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
         await expect(tab.getByTestId('chase-full')).toBeVisible();
         await tab.screenshot({ path: test.info().outputPath(`chase-${width}.png`) });
 
+        // 畳んだ音は ⚙ の頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
         const sound = tab.getByTestId('chase-sound');
         await expect(sound).toBeHidden();
-        await tab.getByTestId('chase-more').tap();
-        await expect(sound).toBeVisible();
+        await expect(tab.getByTestId('chase-more')).toHaveCount(0);
         const label = (await sound.getAttribute('aria-label')) ?? '';
-        await sound.tap();
+        await tab.getByTestId('chase-settings').tap();
+        const mute = tab.getByTestId('chase-mute');
+        await expect(mute).toBeVisible();
+        await expect(mute).toHaveAttribute('role', 'menuitemcheckbox');
+        const muted = (await mute.getAttribute('aria-checked')) ?? '';
+        await mute.tap();
+        await expect(mute).not.toHaveAttribute('aria-checked', muted);
         await expect(sound).not.toHaveAttribute('aria-label', label);
         await tab.screenshot({ path: test.info().outputPath(`chase-${width}-more.png`) });
 
-        // 閉じれば1行に戻る
-        await tab.getByTestId('chase-more').tap();
-        await expect(sound).toBeHidden();
+        // 閉じても1行のまま
+        await tab.keyboard.press('Escape');
+        await expect(tab.getByTestId('chase-settings-menu')).toBeHidden();
         expect(await oneRowTroubles(tab, 'chase-buttons'), `${width}px (閉じたあと)`).toEqual([]);
         await context.close();
     }

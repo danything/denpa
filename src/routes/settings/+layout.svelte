@@ -143,8 +143,8 @@
 -->
 <div class="page settings-page" class:list-view={current === null}>
     <!--
-        **行は線で区切らない** (ドキュメントの目次と同じ作り)。グループは本文の色、節は一段沈めて字下げし、
-        左に細い線。見えている節だけ角の丸い薄い塗り
+        **行は線で区切らない** (録画の画面のサイドバーと同じ作り)。グループは小さく沈めた見出し、
+        節は字下げしない行。見えている節だけ角の丸い薄い塗り
     -->
     <nav class="side" aria-label="設定の項目" data-testid="settings-nav">
         <ul class="groups">
@@ -246,6 +246,11 @@
         margin: 0;
         list-style: none;
     }
+    /*
+     * **録画の画面のサイドバーと同じ顔** (`home.css` の `.s-group`・`.s-item`)。グループは小さく沈めた見出し、
+     * 節は線も字下げも無い行で、見えている節だけ角の丸い薄い塗り。木の線で親子を見せていた頃は、
+     * 2つの画面で左の列の作りが違って見えた
+     */
     .groups {
         display: flex;
         flex-direction: column;
@@ -254,43 +259,42 @@
     .side a {
         display: block;
         border-radius: var(--dp-radius);
-        font-size: var(--dp-text-sm);
         text-decoration: none;
         transition:
             background-color var(--dp-duration),
             color var(--dp-duration);
     }
     .group-link {
-        padding: 0.25rem 0.75rem;
-        color: inherit;
-        font-weight: var(--dp-weight-bold);
+        padding: 0.125rem 0.75rem;
+        color: var(--dp-muted);
+        font-size: var(--dp-text-xs);
+        font-weight: var(--dp-weight);
     }
     .group-link:hover {
-        background: var(--dp-hover-soft);
+        color: inherit;
     }
     .group-hint {
         display: none;
     }
-    /* 節は字下げして、左に細い線 (どのグループの下なのかを線で見せる) */
     .side .sections-nav {
-        margin: 0.125rem 0 0 0.75rem;
-        padding-left: 0.375rem;
-        border-left: 1px solid var(--dp-line);
-    }
-    .sections-nav li {
-        margin-bottom: 1px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        margin-top: 0.25rem;
     }
     .sections-nav a {
-        padding: 0.3rem 0.625rem;
-        color: var(--dp-muted);
+        display: flex;
+        align-items: center;
+        min-height: 2.25rem;
+        padding: 0 0.75rem;
+        color: inherit;
+        font-size: var(--dp-text-sm);
     }
     .sections-nav a:hover {
         background: var(--dp-hover-soft);
-        color: inherit;
     }
     .sections-nav a.selected {
         background: var(--dp-subtle);
-        color: inherit;
         font-weight: var(--dp-weight-bold);
     }
     /*
@@ -298,7 +302,7 @@
      * 指で押すので行を高くする (40px 以上)。字は本文の大きさ、塗りだけ余白の外へ少し出す
      */
     @media (max-width: 767px) {
-        .sections-nav {
+        .side .sections-nav {
             display: none;
         }
         .groups {
@@ -307,8 +311,11 @@
         }
         .group-link {
             padding-block: 0.625rem;
+            color: inherit;
             font-size: var(--dp-text-base);
-            font-weight: var(--dp-weight);
+        }
+        .group-link:hover {
+            background: var(--dp-hover-soft);
         }
         .group-hint {
             display: block;
