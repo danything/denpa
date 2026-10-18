@@ -392,7 +392,7 @@
             />
 
             <!--
-                **出せなかった間も出しておく。** 「この端末では再生できない形式です」の
+                **出せなかった間も出しておく。** 「再生できない形式です」の
                 逃げ道はエンコード方式を選び直すこと (別の形式か、MPEG-2) で、その操作はこの操作バーにしか無い。
                 隠していた頃は、出せない端末では選び直す手立てが無かった
             -->
@@ -792,7 +792,7 @@
                     {@const yielded = player.yielded}
                     <span class="yielded" data-testid="live-yielded">
                         <span class="yielded-text">
-                            録画のためチャンネルを切り替えました: <span class="broadcast">{yielded.recording.title}</span>
+                            録画のため局を切り替えました: <span class="broadcast">{yielded.recording.title}</span>
                             (録画中を再生しています)
                         </span>
                         <button type="button"

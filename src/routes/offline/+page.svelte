@@ -204,7 +204,7 @@
                             onclick={() => remove(item)}
                             data-testid="offline-delete"
                         >
-                            {deleting.armed === item.id ? '端末とサーバから消す' : '削除'}
+                            {deleting.armed === item.id ? '端末とサーバから削除' : '削除'}
                         </button>
                     {/if}
                 </li>

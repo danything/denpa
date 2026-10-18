@@ -36,7 +36,7 @@
         /** いま放送のままで見ているか */
         raw?: boolean;
         onraw?: () => void;
-        /** この端末では表示できない形式 */
+        /** 再生できない形式 */
         unavailable?: LiveCodec[];
         /** 並べるもの (観る画面)。渡せば LIVE_CODECS の代わりにこれ */
         choices?: { key: string; label: string; disabled?: boolean }[];
@@ -51,7 +51,7 @@
         choices !== undefined
             ? choices.map((c) => ({
                   key: c.key,
-                  label: c.disabled === true ? `${c.label} (この端末では表示できません)` : c.label,
+                  label: c.disabled === true ? `${c.label} (再生できません)` : c.label,
                   active: c.key === selected,
                   disabled: c.disabled === true,
               }))
@@ -60,7 +60,7 @@
                       const off = unavailable.includes(c.id);
                       return {
                           key: c.id as string,
-                          label: off ? `${c.label} (この端末では表示できません)` : c.label,
+                          label: off ? `${c.label} (再生できません)` : c.label,
                           active: c.id === current,
                           disabled: off,
                       };

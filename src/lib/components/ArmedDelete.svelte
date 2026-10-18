@@ -38,7 +38,7 @@
         icon?: boolean;
     } = $props();
 
-    /** 送り終えたら構えを下ろす。断られて行が残ったとき、「確定」を出したままにしない */
+    /** 送り終えたら構えを下ろす。断られて行が残ったとき、「削除を確定」を出したままにしない */
     const sent: SubmitFunction = (input) => {
         const after = submit?.(input);
         return async (options) => {
@@ -55,7 +55,7 @@
     {/each}
     {#if deleting.armed === armKey}
         <button type="submit" class="{size} danger" data-testid={confirmTestid}>
-            {#if icon}<Icon icon={Trash} size="size-4" />{/if}確定
+            {#if icon}<Icon icon={Trash} size="size-4" />{/if}削除を確定
         </button>
     {:else}
         <button type="button" class="{size} outline danger" onclick={() => deleting.arm(armKey)} data-testid={testid}>

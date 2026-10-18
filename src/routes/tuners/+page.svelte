@@ -620,7 +620,7 @@
                                                 onclick={() => setTimeout(() => deleting.fire())}
                                                 data-testid="tuner-delete-confirm"
                                             >
-                                                確定
+                                                削除を確定
                                             </button>
                                         {:else}
                                             <button
@@ -676,7 +676,7 @@
                     -->
                     {#if data.logos.pending > 0}
                         <ActionButton action="?/logoSweep" class="small secondary outline" testid="logo-sweep">
-                            {data.logoSweep.running ? '取得中…' : 'いますぐ取得'}
+                            {data.logoSweep.running ? '集めています…' : 'ロゴをいますぐ集める'}
                         </ActionButton>
                     {/if}
                 </div>
@@ -715,7 +715,7 @@
                             取れたロゴも1週間ごとに取り直します。
                         </p>
                         <p>
-                            「いますぐ取得」では衛星の分も取得します。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
+                            「ロゴをいますぐ集める」では衛星の分も集めます。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
                             そこだけ最大20分かかります (他の中継は数秒で終わります)。
                         </p>
                     {/snippet}
@@ -909,7 +909,7 @@
     .w-lnb {
         width: 5rem;
     }
-    /* 行の「×」。押す的は小さくても 2rem 角。2 回目の「確定」は同じ場所に出る */
+    /* 行の「×」。押す的は小さくても 2rem 角。2 回目の「削除を確定」は同じ場所に出る */
     .delete-cell {
         width: 1%;
         white-space: nowrap;
