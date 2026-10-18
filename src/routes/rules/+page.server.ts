@@ -341,6 +341,16 @@ export async function load({ url }) {
  * @param editing 編集中のルール。条件から外れたのに残っている、そのルールの予約も混ぜる
  */
 async function previewFor(conditions: Rule, editing: Rule | undefined): Promise<Preview> {
+    try {
+        return { ...(await countPreview(conditions, editing)), failed: null };
+    } catch (error) {
+        console.error('[rules] 下見を組めませんでした', error);
+        return { total: 0, skipped: 0, programs: [], conflicts: 0, failed: String(error) };
+    }
+}
+
+/** 下見を数える本体。転んだら投げる (受け止めるのは `previewFor`) */
+async function countPreview(conditions: Rule, editing: Rule | undefined): Promise<Omit<Preview, 'failed'>> {
     const defaults = settings();
     /*
      * チューナーの台数。**スケジューラと同じところから取る。**
@@ -374,12 +384,7 @@ async function previewFor(conditions: Rule, editing: Rule | undefined): Promise<
         .all();
     const reserved = new Map(pending.map((row) => [row.program_id, row]));
 
-    try {
-        return { ...readPreview(conditions), failed: null };
-    } catch (error) {
-        console.error('[rules] 下見を組めませんでした', error);
-        return { total: 0, skipped: 0, programs: [], conflicts: 0, failed: String(error) };
-    }
+    return readPreview(conditions);
 
     function readPreview(conditions: Rule): Omit<Preview, 'failed'> {
         // 条件のほどきは1回だけ。番組ごとにやり直すと、番組の数だけ JSON を読むことになる
