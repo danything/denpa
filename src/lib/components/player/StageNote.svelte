@@ -29,7 +29,7 @@
         padding: 0.25rem 0.75rem;
         border-radius: 1rem;
         background: rgb(0 0 0 / 0.6);
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         color: #fff;
     }
 </style>

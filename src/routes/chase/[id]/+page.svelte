@@ -489,7 +489,7 @@
         border-radius: 1rem;
         background: rgb(0 0 0 / 0.6);
         padding: 0.25rem 0.75rem;
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         color: #fff;
         text-decoration: underline;
         text-decoration-color: rgb(255 255 255 / 0.5);

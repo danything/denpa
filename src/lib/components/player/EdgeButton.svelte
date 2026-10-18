@@ -51,7 +51,7 @@
         padding: 0 0.5rem;
     }
     .label {
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         font-weight: var(--dp-weight-bold);
     }
 </style>

@@ -83,30 +83,20 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 **px4-userland の機材で Windows だけ違うところ。**
 
 - **px4d は標準入力で止めます** (`--exit-on-stdin-eof`)。Windows には SIGTERM が無いので、エージェントは px4d の
-  標準入力を何も書かずに開けたまま持ち、止めるときに閉じます。px4d はそれを見て後片付け (LNB を 0V に戻す・
-  ソケットを消す) をしてから終わります。**エージェントが落ちても (止められても) 書く側が閉じるので、px4d が
-  USB を持ったまま残りません** (残ると、起こし直したエージェントの px4d が起きられない)。install.ps1 も
-  エージェントを先に止め、px4d が自分で終わるのを待ってから残りを落とします
-- **ソケットの置き場は `C:\denpa-run`** (`PX4_RUNTIME_DIR`)。px4d は、持ち主が本人で、本人・SYSTEM・Administrators の
-  ほかに書ける人がいないフォルダしか使いません。install.ps1 が作って、保護された ACL (本人・SYSTEM・Administrators に
-  フルコントロール) にします。ユーザーのフォルダ (`%LOCALAPPDATA%`) の下にしないのは、ソケットのパスが UTF-8 で
-  108 バイトまでで、日本語のユーザー名 (1 文字 3 バイト) だとすぐ溢れるのと、非 ASCII のパスだと px4d の
-  ready の行が途切れる ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52)) から。
-  エージェントは px4d を起こす前に、持ち主・ACL・パスの長さを確かめ、合わなければ理由を言います
-  (px4d に任せると INVALID_ARGUMENT としか言わない)。決まった1か所なので、**1台の PC でエージェントを動かせるのは
-  1人のユーザーだけ**です (USB を開けるのも1つのプロセスだけなので、もともと分けられない)
-- **px4d が使っている筐体は、一覧 (`px4d --list-json`) で開けない機材 (`open_failed`) に見えます。** エージェントは
-  起こしたときの筐体を覚えていて、動いている間はそれを顔ぶれに残し、その USB の `open_failed` は記録しません
-  (でないと、画面でチューナーの定義を消して自動に戻したときに筐体が消える)。同じ番号の PX-M1UR と PX-S1UR を
-  同時に挿したときも、片方の px4d が動いていればもう片方は番号が一意に見えるので、動いている px4d と番号が同じなら
-  USB ポートで見分けます。**同じ番号の筐体を `--usb-path` で分けて起こすのは、px4-userland も Windows では
-  確かめていません**
-- USB を抜くと px4d は終わり (USB_IO)、次の選局で起こし直します。px4d が DISCONNECTED / USB_IO を返したのに
-  動き続けていたら、エージェントが止めて起こし直します (同じ px4d のままの繋ぎ直しは px4-userland が確かめていない)
+  標準入力を開けたまま持ち、止めるときに閉じます。px4d は後片付け (LNB を 0V に戻す・ソケットを消す) をしてから
+  終わります。エージェントが落ちても書く側が閉じるので、**px4d が USB を持ったまま残りません**
+- **ソケットの置き場は `C:\denpa-run`** (`PX4_RUNTIME_DIR`)。px4d は、本人・SYSTEM・Administrators のほかに
+  書ける人がいないフォルダしか使わないので、install.ps1 がその ACL で作ります。ユーザーのフォルダの下にしないのは、
+  ソケットのパスが UTF-8 で 108 バイトまでで日本語のユーザー名だとすぐ溢れ、非 ASCII のパスだと px4d の ready の行が
+  途切れるため ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52))。エージェントは px4d を起こす前に
+  持ち主・ACL・長さを確かめ、合わなければ理由を言います。**1台の PC でエージェントを動かせるのは1人のユーザーだけ**です
+- **px4d が使っている筐体は、一覧で開けない機材 (`open_failed`) に見えます。** エージェントは起こしたときの筐体を
+  覚えていて、動いている間は顔ぶれに残します。同じ番号の筐体を `--usb-path` で分けて起こすのは、
+  px4-userland も Windows では確かめていません
+- USB を抜くと px4d は終わり、次の選局で起こし直します (DISCONNECTED / USB_IO を返したまま動いていたら、エージェントが止める)
 
 機種では絞らず、px4-userland が ready と言った筐体は使います。px4-userland 側で Windows の実機で確かめてあるのは
 PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
-denpa が使うのは px4d の制御ソケット (受信機と内蔵カード) だけで、px4-userland の WinSCard.dll と PC/SC の対応は関係しません。
 
 **使えないもの。**
 
@@ -119,18 +109,12 @@ denpa が使うのは px4d の制御ソケット (受信機と内蔵カード) �
 
 **Linux・Mac と違うところ。**
 
-- 子の標準出力は poll できないので、裏のスレッドに読ませて 200ms ごとに起きます (`DeviceStream`)。
-  pipe は広げられず 4KB ほどで、読む側が少し止まったぶんは siano-ts の中の溜め
-  (16KB × 256) が吸う。px4d から受ける TS は pipe を使わないので、Linux・Mac と同じ 8MB の溜め
-- タスクの優先度は普通にしてあります (既定の「低い」だと、denpa のコンテナがエンコードで CPU を食う間
-  siano-ts や px4d が後回しにされる)
+- 子の標準出力は poll できないので、裏のスレッドが読みます (`DeviceStream`)。pipe は 4KB ほどで広げられず、
+  読む側が少し止まったぶんは siano-ts の中の溜め (16KB × 256) が吸います。px4d から受ける TS は pipe を使わないので 8MB の溜め
+- タスクの優先度は普通にしてあります (既定の「低い」だと、エンコードで CPU が埋まる間 siano-ts や px4d が後回しになる)
 - ログは cmd がファイルへ足すだけで、回しません (Mac と同じ)
-- LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、Windows ファイアウォールでポート 25252 を
-  許します (初めて起きたときに確認の窓が出ることがある)。wslc のコンテナからは要りません
-- **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows` と `agent-windows-install`) で
-  ビルドして起こし、API が応答することと入れ方 (`-AgentOnly`) を最後まで流すところまで。px4-userland は
-  偽の px4d (AF_UNIX のソケット) を相手に受信機と内蔵カードの IPC・TS の受け渡し・標準入力で止めるところを
-  流し、本物の `px4d.exe` / `px4ctl.exe` は引数を受けて「筐体が無い」と答えるところまで (ランナーにチューナーが無い)。
-  ランナーには wslc が無いので、denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました
-  (入れる・この PC と LAN から開ける・エージェントに繋がる・起こし直し・外す。Docker Desktop からの移行は未確認)。
+- LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、Windows ファイアウォールでポート 25252 を許します
+- **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows`・`agent-windows-install`) で
+  ビルドして起こし、偽の px4d を相手に IPC と TS の受け渡しを流し、入れ方 (`-AgentOnly`) を最後まで流すところまでです。
+  denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました (Docker Desktop からの移行は未確認)。
   実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`

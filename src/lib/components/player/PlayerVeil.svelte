@@ -98,7 +98,7 @@
         --pico-color: #fff;
     }
     .note {
-        font-size: 0.875rem;
+        font-size: var(--dp-text-sm);
     }
     .idle {
         color: rgb(255 255 255 / 0.6);

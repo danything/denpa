@@ -83,7 +83,7 @@
         align-items: baseline;
         gap: 0.375rem;
         overflow: hidden;
-        font-size: 0.875rem;
+        font-size: var(--dp-text-sm);
         white-space: nowrap;
     }
     .keep {
@@ -127,7 +127,7 @@
         display: none;
     }
     .status {
-        font-size: 0.75rem;
+        font-size: var(--dp-text-xs);
         font-variant-numeric: tabular-nums;
         color: rgb(255 255 255 / 0.6);
     }
