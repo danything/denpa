@@ -1986,6 +1986,9 @@ function spawnRecordingCaptioner(
     // 選べる字幕は入口の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
     const list = new TrackList(program);
     const text = new CaptionText();
+    // 流す言語。**求められた言語が載っていなければ第1言語** (ライブの `languageOf` と同じ)
+    const effective = () =>
+        text.languages.length === 0 || text.languages.some((l) => l.index === language) ? language : 1;
     // 選べる字幕。言語は字幕管理データが届いてから足す
     const tell = () =>
         out.send(
@@ -1995,7 +1998,7 @@ function spawnRecordingCaptioner(
                 type: 'captions',
                 tracks: list.tracks,
                 track: 0,
-                ...(text.languages.length === 0 ? {} : { languages: text.languages, language }),
+                ...(text.languages.length === 0 ? {} : { languages: text.languages, language: effective() }),
             }),
         );
     void (async () => {
@@ -2017,7 +2020,7 @@ function spawnRecordingCaptioner(
             for (const frame of frames.feed(chunk)) {
                 for (const shown of text.feed(frame)) {
                     // 求められた言語だけ (`?language=`)
-                    if (shown.language !== language) continue;
+                    if (shown.language !== effective()) continue;
                     const { kind, pts, data } = textFrame(shown);
                     out.send(kind, pts, data);
                 }
