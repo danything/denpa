@@ -420,12 +420,14 @@ async function countPreview(
             }
             const program = missById.get(id);
             if (program === undefined) continue;
-            if (program.start_at <= at) {
-                out[id] = { kind: 'skip', reason: 'airing' };
-                continue;
-            }
-            // 当たったのに行が無いことは無い (上の `byId`)。ここは当たらないものだけ
-            out[id] = { kind: 'skip', reason: missFor(program) ?? 'keyword' };
+            /*
+             * 条件に当たらないなら、その理由。当たるのに行が無いのは、もう始まっている番組だけ
+             * (下見はこれから始まる番組から引く。ルールも始まった番組には予約を立てない)
+             */
+            out[id] = {
+                kind: 'skip',
+                reason: missFor(program) ?? (program.start_at <= at ? 'airing' : 'keyword'),
+            };
         }
         return out;
     }
