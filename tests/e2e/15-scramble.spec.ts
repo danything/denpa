@@ -28,7 +28,7 @@ test.describe('スクランブルされたまま録れたとき', () => {
         await request.post(`${stack.agentUrl}/__control/scrambled?on=0`);
     });
 
-    test('録画は止めず、エンコードの前に自動で解除する', async ({ page, request, stack }) => {
+    test('録画は止めず、エンコードの前に自動で復号する', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
 
@@ -48,7 +48,7 @@ test.describe('スクランブルされたまま録れたとき', () => {
         await page.getByTestId('detail-close').click();
     });
 
-    test('元のTSを残す設定なら、残るのは解除済みのTSだけ', async ({ page, request, stack }) => {
+    test('元のTSを残す設定なら、残るのは復号済みのTSだけ', async ({ page, request, stack }) => {
         test.setTimeout(180_000);
         await syncEpg(request);
         await request.post(`${stack.agentUrl}/__control/scrambled?on=1`);

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * 「いますぐ取得」で取得できた局の数 (`logoStamps` / `writtenSince`)。
+ * 「ロゴをいますぐ集める」で取得できた局の数 (`logoStamps` / `writtenSince`)。
  *
  * 開いた中継で減った数で数えていた頃は、他の中継から来たロゴや選局の共有で取得したものが
  * 入らず、画面の「14 / 14 局」の下に「12 局のロゴを取得しました」と出ていた。

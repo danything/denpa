@@ -162,7 +162,7 @@ export function eta(ms: number | null): string {
  * 何をしているところなのかを状態として出す。
  */
 const PHASE_LABEL: Record<string, string> = {
-    descramble: 'スクランブル解除中',
+    descramble: 'スクランブル復号中',
     cm: 'CM検出中',
     cut: 'CMカット中',
     encode: 'エンコード中',

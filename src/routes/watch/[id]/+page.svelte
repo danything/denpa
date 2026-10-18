@@ -206,11 +206,11 @@
             }
         }
         if (got === null) {
-            canvasProblem = 'この端末では再生できません';
+            canvasProblem = '再生できる形式がありません';
             return;
         }
         const codec = pickCanvas(got, canvasAbility, choice);
-        if (codec === null) canvasProblem = 'この端末では再生できません';
+        if (codec === null) canvasProblem = '再生できる形式がありません';
         else canvasCodec = codec;
     }
 
@@ -588,7 +588,7 @@
         canvasProblem = null;
         warning = null;
         if (fresh === null) {
-            canvasProblem = 'この端末では再生できません';
+            canvasProblem = '再生できる形式がありません';
             return;
         }
         canvasGaveUp = canvasGaveUp.filter((codec) => codec !== fresh);
@@ -1915,7 +1915,7 @@
                         {#if deleting.armed !== null}
                             <ControlButton
                                 icon={CHECK}
-                                label="削除"
+                                label="削除を確定"
                                 danger
                                 submit
                                 testid="watch-delete-confirm"
