@@ -140,7 +140,7 @@ public sealed class T1Protocol
     /// <summary>
     /// 1つの APDU のあいだに受ける S(WTX) / S(IFS) の上限。**これが無いと、求め続ける
     /// カードで永久に返らない** — カードは1枚を全チューナーで共有しているので、1本が
-    /// ここで止まると全部の解除が道連れになる。B-CAS の ECM は普通 1〜2 回で済む
+    /// ここで止まると全部の復号が道連れになる。B-CAS の ECM は普通 1〜2 回で済む
     /// </summary>
     private const int MaxSupervisory = 16;
 
