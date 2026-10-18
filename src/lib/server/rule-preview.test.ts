@@ -16,7 +16,7 @@ config.agentUrl = 'http://127.0.0.1:9';
 
 const { now, orm } = await import('./db');
 const { previewFor } = await import('./rule-preview');
-const { conditionsOf, draftRule, rulePriority } = await import('./rule-form');
+const { conditionsOf, draftRule, originOf, rulePriority } = await import('./rule-form');
 const { programs, recordings, reservations, rules: ruleTable, services } = await import('./schema');
 
 const MX = 3239123608;
@@ -209,5 +209,31 @@ describe('検索の行ごとの「録るか」', () => {
         expect(narrowed.verdicts[1]).toEqual({ kind: 'skip', reason: 'ignore' });
         // 行には「条件外」で残る (保存すると引っ込む予約)
         expect(narrowed.programs.map((row) => [row.id, row.matched])).toEqual([[1, false]]);
+    });
+});
+
+describe('録画・番組から作るときの元', () => {
+    test('from=program:<ID> はシリーズ名の下書きと、録っているルール', () => {
+        program(1, 'テスト魔法 #1「始まり」', 2 * HOUR);
+        expect(originOf('program:1')).toMatchObject({
+            kind: 'program',
+            id: 1,
+            found: true,
+            prefill: { keyword: 'テスト魔法' },
+            rule: null,
+        });
+        orm()
+            .insert(ruleTable)
+            .values({ id: 3, name: 'テスト魔法', keyword: 'テスト魔法', enabled: true, created_at: now() })
+            .run();
+        expect(originOf('program:1')?.rule?.id).toBe(3);
+    });
+
+    test('無い番組は見つからない、形の違うものは元にしない', () => {
+        expect(originOf('program:999')).toMatchObject({ found: false, prefill: null });
+        expect(originOf('recording:999')).toMatchObject({ kind: 'recording', found: false });
+        expect(originOf('program:abc')).toBeNull();
+        expect(originOf('channel:1')).toBeNull();
+        expect(originOf(null)).toBeNull();
     });
 });

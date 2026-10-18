@@ -14,7 +14,7 @@ describe('ヘッダーの欄の候補', () => {
             response({ rules: { more: false, rows: [{ id: 3, name: 'でんぱ枠', enabled: false }] } }),
         );
         expect(groups.map((group) => group.title)).toEqual(['ルール']);
-        expect(groups[0]?.items[0]).toMatchObject({ href: 'rules?edit=3', hint: '編集', meta: '無効' });
+        expect(groups[0]?.items[0]).toMatchObject({ href: 'search?rule=3', hint: '編集', meta: '無効' });
     });
 
     test('番組は結果の画面で詳細を開き、録画は観る画面へ', () => {

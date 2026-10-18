@@ -130,7 +130,8 @@ test.describe('自動予約ルール', () => {
         const hit = page.getByTestId('search-rule');
         await expect(hit).toHaveCount(1);
         await hit.getByRole('link').click();
-        await page.waitForURL(/\/rules\?edit=\d+$/);
+        // 開く先は検索の画面の書く欄 (`?rule=`)
+        await page.waitForURL(/\/search\?rule=\d+$/);
         await expect(page.getByTestId('rule-mode')).toContainText('どこにも無い番組');
 
         await clearRules(page);

@@ -42,7 +42,12 @@ export async function load({ url }) {
      */
     if (url.searchParams.has('edit') && editing === undefined) redirect(303, relative(url, '/rules'));
 
-    const origin = originOf(url.searchParams);
+    const kind = url.searchParams.has('recording')
+        ? 'recording'
+        : url.searchParams.has('program')
+          ? 'program'
+          : null;
+    const origin = kind === null ? null : originOf(`${kind}:${url.searchParams.get(kind)}`);
     /*
      * 録画・番組から来た (`originOf`) ときは、下書きの条件を URL に載せて出直す。
      * 下書きが URL にあれば、フォームの初期値をそのまま組める。既にこのシリーズを録っているルールが
