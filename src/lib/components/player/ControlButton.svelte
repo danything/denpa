@@ -91,7 +91,7 @@
         margin: 0;
         padding: 0 1.25rem;
         border: 0;
-        border-radius: var(--pico-border-radius);
+        border-radius: var(--dp-btn-radius);
         box-shadow: none;
         font-size: 1.125rem;
         line-height: 1;

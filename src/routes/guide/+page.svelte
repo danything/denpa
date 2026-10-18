@@ -620,7 +620,7 @@
         <!-- 狭い画面だけ出る。押すと下の検索欄が1段だけ開く (上の `searching`) -->
         <button
             type="button"
-            class="small secondary outline search-toggle"
+            class="small secondary outline icon search-toggle"
             aria-label="番組を探す"
             aria-expanded={searching}
             aria-controls="guide-search"
@@ -1054,17 +1054,10 @@
         width: auto;
     }
     /*
-     * 指で押す端末では高さ 40px 以上にする (`docs/writing.md` の一覧の操作と同じ)。
+     * 指で押す端末では検索欄も高さ 40px 以上にする (ボタンは `app.css` の `--dp-btn-h-sm` で 40px になる)。
      * マウスの端末では小さいまま (細い1行に収める)
      */
     @media (pointer: coarse) {
-        /* 虫眼鏡は出すかどうかを下の幅の切り替えに任せる (ここで display を書くと広い幅にも出る) */
-        .toolbar :is(a.button, button):not(.search-toggle) {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .toolbar :is(a.button, button),
         .keyword {
             min-height: 2.5rem;
         }

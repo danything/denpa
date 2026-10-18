@@ -1269,7 +1269,7 @@
                             <button
                                 {...props}
                                 type="button"
-                                class="secondary outline small tools-trigger"
+                                class="secondary outline small icon tools-trigger"
                                 aria-label="その他の操作"
                                 data-testid="recordings-more"
                             >
@@ -1775,15 +1775,6 @@
         margin-top: 0.5rem;
     }
     /*
-     * 見出しの「表示」と「⋯」。どちらも小さな枠のボタンで、字とアイコンを横に並べる。
-     * 「表示」に何か入っていれば主の色の点を付ける (ふつうと違う見え方をしている)
-     */
-    .cluster :global(:is(.tools-trigger, .view-trigger)) {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-    /*
      * 畳むかどうかは**画面の幅ではなく録画の列の幅**で決める。二段組に入ったばかりの
      * 幅 (縦の iPad など) でも列は 440px ほどしかなく、並べると同じように折り返す
      */
@@ -1793,6 +1784,7 @@
     .cluster :global(.view-trigger) {
         gap: 0.3rem;
     }
+    /* 「表示」に何か入っていれば主の色の点を付ける (ふつうと違う見え方をしている) */
     .view-dot {
         width: 0.4rem;
         height: 0.4rem;
