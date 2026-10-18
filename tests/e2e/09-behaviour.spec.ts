@@ -242,7 +242,7 @@ test.describe('操作したときの反応', () => {
         await expect.poll(() => grid.evaluate((el) => el.scrollLeft)).toBe(0);
     });
 
-    test('ダッシュボードで取り消すと、その場で一覧から消える', async ({ page, request }) => {
+    test('ホームで取り消すと、その場で一覧から消える', async ({ page, request }) => {
         await reserveSoon(page, request, 'GR', 6);
 
         await goto(page, '/');

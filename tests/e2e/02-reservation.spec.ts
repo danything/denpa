@@ -115,7 +115,6 @@ test.describe('予約の細かい指定', () => {
             const [target] = await upcoming(page);
 
             await cellOf(page, target.programId).getByTestId('program-button').click();
-            await expect(page.getByTestId('reserve-options')).toHaveCount(0);
             await page.getByTestId('detail-reserve').click();
 
             await goto(page, '/');

@@ -1,6 +1,6 @@
 import { cancelAllReservations, deleteRule, expect, goto, homeTools, syncEpg, test } from './helpers';
 
-test.describe('ダッシュボードと画面遷移', () => {
+test.describe('ホームと画面遷移', () => {
     test('データ放送のチャンネルは取り込まない', async ({ page, request }) => {
         await syncEpg(request);
         await goto(page, '/guide?type=GR');
@@ -383,7 +383,7 @@ test.describe('ダッシュボードと画面遷移', () => {
      *
      * SvelteKit は遷移にも `invalidateAll` にも同じトークンを使っていて、後から来た
      * 読み直しがトークンを書き換えると、行き先を読み終えた遷移はそこで黙って降りる。
-     * **押した先へ行かない** — 番組表を押したのにダッシュボードのまま、になる
+     * **押した先へ行かない** — 番組表を押したのにホームのまま、になる
      * (実機で「削除したあと画面が変わらないことがある」として出た。観る画面の
      * 削除は一覧へ戻る遷移を伴う)。
      *

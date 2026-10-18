@@ -49,6 +49,9 @@
      * (全角英数字を詰める palt も一緒に付く)
      */
     --broadcast-font: "Denpa Font", var(--pico-font-family-sans-serif);
+    /* 等幅 (デバイスのパス・カードの番号・URL)。端末にある等幅の字を使い、Pico の等幅もこれに揃える */
+    --dp-font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, monospace;
+    --pico-font-family-monospace: var(--dp-font-mono);
     --pico-line-height: 1.6;
     --pico-spacing: 1rem;
     --pico-typography-spacing-vertical: 0.75rem;
@@ -455,13 +458,14 @@ td {
     padding: 0.45rem 0.6rem;
 }
 /*
- * 表の見出しは淡い面に小さめの太字。行の区切りは線 1 本 (`--pico-table-border-color` = `--dp-line`)。
- * Pico は見出しの下に太い線を引くが、面で分かるので本文の行と同じ線にする
+ * 表の見出しは地を塗らず、小さく沈めた字だけ。行の区切りは線 1 本 (`--pico-table-border-color` = `--dp-line`)。
+ * 淡い面に太字だった頃は、見出しの帯が中身より目立っていた
  */
 thead th {
-    background: var(--dp-subtle);
-    font-size: var(--dp-text-sm);
-    font-weight: var(--dp-weight-bold);
+    background: transparent;
+    color: var(--dp-muted);
+    font-size: var(--dp-text-xs);
+    font-weight: var(--dp-weight);
     border-bottom-width: 1px;
 }
 /*
@@ -534,26 +538,31 @@ progress.running[value]::-webkit-progress-value {
     padding: 1rem;
 }
 
-/* 真ん中に1枚だけ置く画面 (ログアウト・テレビのペアリング) */
+/*
+ * 1つのことだけを言う画面 (断られた・無かった・ログアウトした・テレビのペアリング)。
+ * **枠で囲まず、見出し・文・ボタンを左に揃えて置く。** 真ん中の小さなカードに入れていた頃は、
+ * 文が数文字ずつで折り返して読みにくかった。読みやすい幅 (32rem) で止め、画面の上のほうに置く
+ */
 .solo {
     display: flex;
-    min-height: 60vh;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-}
-.solo > .panel {
-    display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    max-width: 24rem;
-    padding: 2rem;
-    text-align: center;
+    align-items: flex-start;
+    gap: var(--dp-space-3);
+    max-width: 32rem;
+    margin: clamp(2rem, 16vh, 9rem) auto 2rem;
 }
 .solo h1 {
-    font-size: 1.25rem;
+    font-size: var(--dp-text-xl);
+    line-height: 1.35;
+}
+.solo p {
+    color: var(--dp-muted);
+}
+.solo .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dp-space-2);
+    margin-top: var(--dp-space-2);
 }
 
 /* ---- 文字 ---- */
@@ -643,6 +652,13 @@ progress.running[value]::-webkit-progress-value {
     font-size: var(--dp-text-xs);
     font-weight: var(--dp-weight);
     color: var(--dp-muted);
+}
+/*
+ * **チェックボックスは角の丸い四角、ラジオだけ丸。** Pico はチェックボックスにも入力欄と同じ角丸 (0.5rem) を
+ * 付けるので、小さな箱ではほとんど丸に見え、ラジオと見分けが付かなかった。スイッチ (`role="switch"`) は丸いまま
+ */
+input[type="checkbox"]:not([role="switch"]) {
+    border-radius: 0.25rem;
 }
 /* チェックボックス + 文 */
 .check {
@@ -1408,13 +1424,34 @@ dialog[open] > article {
     font-size: var(--dp-text-sm);
     color: var(--dp-muted);
 }
+/*
+ * **設定とルールの欄は低く (36px)。** 欄が 42px のままだと、項目の多い画面で欄ばかりが目に付いた。
+ * 縁は 1px の線のまま、字の大きさも変えない (16px より小さいと iPhone は押したときに拡大する)。
+ * 指で押す端末では 40px 以上を保つ。中のボタン (`.small` でないもの) も同じ高さに揃う
+ */
+:is(.sections, .dense) {
+    --pico-form-element-spacing-vertical: 0.25rem;
+    --pico-form-element-spacing-horizontal: 0.625rem;
+}
+@media (pointer: coarse) {
+    :is(.sections, .dense) {
+        --pico-form-element-spacing-vertical: 0.45rem;
+    }
+}
 /* 選ぶ欄は中身の幅で足りる。横いっぱいに伸ばすと、どこまでが欄なのか読みにくい */
 .sections .narrow {
     max-width: 20rem;
 }
-/* チェックの下の要点は、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem) */
-.sections .lead.indent {
+/*
+ * チェックの下の要点は、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem)。
+ * スイッチは箱より幅がある (2.25rem) ので、そのぶん深く
+ */
+.lead.indent,
+.lead.indent + .more-body {
     margin-inline-start: 1.75rem;
+}
+.check:has(> [role="switch"]) ~ :is(.lead.indent, .lead.indent + .more-body) {
+    margin-inline-start: 2.75rem;
 }
 /* 設定の表 (チューナー・チャンネル・ロゴ)。入りきらなければ横に巻き、欄の間は詰める。`.wide` の列が余った幅を取る */
 .table-wrap {
@@ -1433,7 +1470,8 @@ dialog[open] > article {
 /*
  * **広い画面では「名前 (左) ｜ 操作 (右)」の 2 段組の行にする** (`.setting-rows` の中の `.field`)。
  * 名前・操作・説明を縦に積んでいた頃は、項目ごとに 3〜4 段の高さを取り、画面が縦に長くなっていた。
- * 名前 (`.field-label`) と説明 (`.hint`・`Lead`) は左、それ以外 (欄・チェック・ボタン) は右。
+ * 名前 (`.field-label`) だけが左、それ以外 (欄・チェック・ボタンと、その下の説明) は右。
+ * 説明を狭い左の列に入れていた頃は、数文字ずつで折り返し、右の欄と頭の高さもずれていた (GitHub の設定と同じ置き方)。
  * 狭い画面は縦に積んだまま。**切り替えは画面の幅ではなく右の列の幅で** (設定の `.main-inner` が container)。
  * 左に一覧が付くので、768px の画面でも右の列は 480px ほどしかない
  */
@@ -1456,13 +1494,16 @@ dialog[open] > article {
         color: var(--pico-color);
         font-size: var(--dp-text-sm);
     }
-    .setting-rows > .field > :is(.hint, .lead) {
-        grid-row: 2;
-        grid-column: 1;
+    /* 右が字を打つ欄・選ぶ欄の行は、名前を欄の字の高さに下ろす (欄 36px、指で押す端末は 42px) */
+    .setting-rows > .field:has(> :is(input:not([type="checkbox"], [type="radio"]), select)) > .field-label {
+        padding-top: 0.45rem;
     }
-    .setting-rows > .field > .more-body {
-        grid-row: 3;
-        grid-column: 1;
+    @media (pointer: coarse) {
+        .setting-rows
+            > .field:has(> :is(input:not([type="checkbox"], [type="radio"]), select))
+            > .field-label {
+            padding-top: 0.6rem;
+        }
     }
 }
 

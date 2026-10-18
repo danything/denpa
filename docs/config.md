@@ -18,7 +18,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 | `DENPA_VERSION` | `dev` | 動いている版。リリースのイメージにだけ入る (`.github/release.Dockerfile`)。`dev` なら新しい版の通知を出さない |
 | `DENPA_GITHUB_API` | `https://api.github.com/repos/danything/denpa` | 新しい版を確かめる先 (`releases/latest`)。試験では偽物を指す |
 | `UPDATE_CHECK_INTERVAL` | `3600000` | 新しい版を確かめる間隔(ms) |
-| `ENCODE_CONCURRENCY` | `1` | 録画エンコードの同時実行数。同梱の compose と chart は `2` にしてある |
+| `ENCODE_CONCURRENCY` | `2` | 録画エンコードの同時実行数 |
 | `ENCODE_MAX_ATTEMPTS` | `5` | 1つのエンコードを試す上限。超えたら failed にして後ろを進める (プロセスごと落とすジョブでキューを塞がないため) |
 | `HW_DEVICES` | `/dev/dri/renderD*` | GPU のデバイスを探すパターン。当たったデバイスを全部試し、QSV / VA-API が初期化できたものでエンコードする ([encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api)) |
 | `HW_PROBE_TIMEOUT` | `20000` | GPU の試しのエンコード1本に待つ上限(ms) |

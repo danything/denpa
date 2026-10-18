@@ -506,14 +506,13 @@
                                     href={data.update.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    data-testid="tab-update-available"
                                 >
                                     {data.update.version} が公開されています
                                 </a>
                             </li>
                         {/if}
                         <li>
-                            <button type="button" class="menu-item" onclick={theme.cycle} data-testid="tab-theme-toggle">
+                            <button type="button" class="menu-item" onclick={theme.cycle}>
                                 <Icon icon={ICON[theme.mode]} size="size-5" />
                                 テーマ: {THEME_LABEL[theme.mode]}
                             </button>
@@ -556,7 +555,7 @@
                 )
                 0 0 / 40% 100% no-repeat,
             color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
-        animation: nav-progress 1.1s ease-in-out infinite;
+        animation: nav-progress var(--dp-shine) ease-in-out infinite;
     }
     @keyframes nav-progress {
         from {
@@ -800,6 +799,13 @@
     /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */
     :global(.tab-more-menu) {
         width: 12rem;
+    }
+    /*
+     * 「その他」はいちばん右のタブなので、右端を揃えると画面の端に貼り付く。ページの余白ぶん内へ寄せる
+     * (anchor positioning の無いブラウザは `Menu` が JS で置き、端から 4px 空ける)
+     */
+    :global(.menu.tab-more-menu) {
+        margin-inline-end: var(--dp-gutter, 0.75rem);
     }
     /*
      * **縦に積む。** Pico のナビの部品を読んでいた頃は `nav ul` が横並び (flex) になり、
