@@ -539,32 +539,28 @@
         view-transition-name: site-header;
     }
     /*
-     * **スクロールに合わせて、下の線と影を濃くする** (`animation-timeline: scroll()`)。
-     * 一番上では今までどおり線 1 本、4rem 下ろすまでに線が一段濃くなり、影が付く。
-     * 時間ではなくスクロールの量で進む。知らないブラウザ、画面ぴったりの画面
-     * (ページごとは動かないので進まない)、動かさない設定の端末では線 1 本のまま
+     * **一番上では境目を出さず、下ろし始めたら線を 1 本出す** (`animation-timeline: scroll()`)。影は付けない。
+     * 時間ではなくスクロールの量で進むので、動かさない設定の端末でもそのまま使う (動きではなく線の有り無し)。
+     * 知らないブラウザは線 1 本のまま。ページごとは動かない画面 (番組表・観る画面・ルールなど) は
+     * 線が出ないが、中身は自分の枠の中で巻き取るのでヘッダーの下に潜らず、区切りが無くても困らない
      */
     @supports (animation-timeline: scroll()) {
-        @media (prefers-reduced-motion: no-preference) {
-            .navbar {
-                animation: header-shade linear both;
-                animation-timeline: scroll(root block);
-                animation-range: 0 4rem;
-            }
+        .navbar {
+            animation: header-line linear both;
+            animation-timeline: scroll(root block);
+            animation-range: 0 1rem;
         }
     }
-    @keyframes header-shade {
+    @keyframes header-line {
         from {
-            border-bottom-color: var(--dp-line);
-            box-shadow: none;
+            border-bottom-color: transparent;
         }
         to {
-            border-bottom-color: var(--dp-line-strong);
-            box-shadow: var(--dp-shadow-bar);
+            border-bottom-color: var(--dp-line);
         }
     }
     /*
-     * **ヘッダーは本文と同じ地に、下の線 1 本で区切る。** スクロールすると下を流れる中身が
+     * **ヘッダーは本文と同じ地に置く。** スクロールすると下を流れる中身が
      * ぼけて透ける (地を 80% にしてぼかす)。ぼかせないブラウザは上の地の色のまま
      */
     @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
