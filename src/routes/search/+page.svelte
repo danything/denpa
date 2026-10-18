@@ -13,6 +13,8 @@
     import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
+    import type { Preview } from './+page.server';
+    import RuleDraft, { SKIP_LABEL } from './RuleDraft.svelte';
 
     let { data, form } = $props();
     /**
@@ -164,17 +166,66 @@
         return resolve(rec.finished_at === null ? `chase/${rec.id}` : `watch/${rec.id}`);
     }
 
-    const notices = $derived(errorNotice(form, 'search-error'));
+    /**
+     * **右の「ルールとして保存」を出すか。** 言葉で探したとき、ルールを直しているとき (`?rule=`)、
+     * 書く欄の値を URL に載せて来たとき。何も探していない画面 (最近の検索) には出さない
+     */
+    const drafting = $derived(q !== '' || data.draft.editing !== null || data.draft.seed !== null);
+    /** 書く欄のいまの条件での下見 (`RuleDraft`)。行ごとの「録るか」もここ */
+    let preview = $state<Preview | null>(null);
+    /** 狭い画面で書く欄を下から出しているか */
+    let sheetOpen = $state(false);
+    /** 「録るか」を聞く番組。結果の一覧に出しうる行 (「もっと見る」で広げるぶんまで) */
+    const programIds = $derived(data.programs.rows.map((row) => row.id));
+    /** 一覧の行のうち、いまの条件で録るもの */
+    const recordingCount = $derived(
+        preview === null ? null : programIds.filter((id) => verdictOf(id)?.kind === 'record').length,
+    );
+    function verdictOf(id: number) {
+        return preview?.verdicts[id] ?? null;
+    }
+    /** ルールの削除の2回押し (書く欄の「削除」) */
+    const ruleDeleting = arming('[data-testid^="rule-delete"]');
+
+    const notices = $derived.by(() => {
+        const list = errorNotice(form, 'search-error');
+        if (form?.deletedRule !== undefined) {
+            const { canceled } = form.deletedRule;
+            list.push({
+                key: 'rule-deleted',
+                kind: 'success',
+                text: canceled > 0 ? `ルールを削除しました (予約 ${canceled} 件を取り消し)` : 'ルールを削除しました',
+            });
+        }
+        if (form?.toggled) list.push({ key: 'rule-toggled', kind: 'success', text: 'ルールを切り替えました' });
+        return list;
+    });
 </script>
 
-<svelte:window onclick={deleting.stand} />
+<svelte:window
+    onclick={(event) => {
+        deleting.stand(event);
+        ruleDeleting.stand(event);
+    }}
+/>
 
 <Toasts {notices} source={form} />
 
+<!--
+    **結果と、右の「ルールとして保存」** (`RuleDraft`)。広い画面 (1024px から) では右の列、狭い画面では
+    下のボタンで下から出す。書く欄の条件を変えると、結果の「これからの放送」の行ごとに録るかが出る
+-->
+<div class="search-layout" class:drafting>
 <div class="search-page">
     <!-- 検索の欄はこの画面には置かない。ヘッダー (狭い幅では上の帯) の欄がそのまま言葉を持っている -->
     {#if q === ''}
-        {#if recent.length > 0}
+        {#if drafting}
+            <!--
+                **言葉なしでルールを開いたとき** (`?rule=`)。結果の代わりに、そのルールで録る番組を出す
+                (下見の行。予約を立てるときと同じ判定)
+            -->
+            {@render rulePreview()}
+        {:else if recent.length > 0}
             <section class="hits-section" aria-labelledby="recent-head">
                 <div class="hits-head">
                     <h2 id="recent-head">最近の検索</h2>
@@ -194,26 +245,34 @@
             「<span class="bold">{q}</span>」の検索結果 {total} 件
         </p>
 
-        <!-- これからの放送 (番組表)。予約とルール作りの入口 -->
+        <!-- これからの放送 (番組表)。予約の入口で、右の書く欄の条件で録るかどうかも行に出す -->
         <section class="hits-section" aria-labelledby="programs-head" data-testid="search-programs">
             <div class="hits-head">
                 <h2 id="programs-head">これからの放送 <span class="count">{data.programs.total}</span></h2>
-                <a class="small" href={resolve(`rules?new&keyword=${encodeURIComponent(q)}`)} data-testid="search-make-rule">
-                    「{q}」でルールを作る
-                </a>
+                {#if recordingCount !== null && data.programs.total > 0}
+                    <span class="small muted" data-testid="search-recording-count">
+                        いまの条件で録るのは <span class="bold">{recordingCount}</span> 件{data.programs.total > data.programs.rows.length ? ` (先頭 ${data.programs.rows.length} 件のうち)` : ''}
+                    </span>
+                {/if}
             </div>
             {#if data.programs.total === 0}
                 <p class="none small muted">番組表に一致する番組はありません</p>
             {:else}
                 <ul class="hits">
                     {#each shown('programs', data.programs.rows) as program (program.id)}
-                        <li class="hit" data-testid="search-program" data-program-id={program.id}>
+                        {@const verdict = verdictOf(program.id)}
+                        <li class="hit" class:dim={verdict?.kind === 'skip' && program.reservation_state === null} data-testid="search-program" data-program-id={program.id} data-verdict={verdict?.kind}>
                             <button type="button" class="hit-main" onclick={() => showProgram(program)} data-testid="search-open">
                                 <span class="hit-title">
+                                    <!-- 立っている予約は本当のこととして先に出す。無ければ書く欄の条件で録るか -->
                                     {#if program.reservation_state !== null}
                                         <span class="tag {badgeClass(program.reservation_state)}" data-testid="search-program-state">
                                             {stateLabel(program.reservation_state)}
                                         </span>
+                                    {:else if verdict?.kind === 'record'}
+                                        <span class="tag success" data-testid="search-verdict">録る</span>
+                                    {:else if verdict?.kind === 'skip'}
+                                        <span class="tag" data-testid="search-verdict">録らない</span>
                                     {/if}
                                     <span class="truncate broadcast">{program.name}</span>
                                 </span>
@@ -221,6 +280,9 @@
                                     <ServiceLogo id={program.service_id} has={program.has_logo} style="height: 0.875rem; vertical-align: -0.125rem" />
                                     <span class="broadcast">{program.service_name}</span> ・
                                     <span class="num">{dateTime(program.start_at)}〜{time(program.end_at)}</span>
+                                    {#if verdict?.kind === 'skip' && program.reservation_state === null}
+                                        ・ <span data-testid="search-verdict-reason">{SKIP_LABEL[verdict.reason]}</span>
+                                    {/if}
                                 </span>
                             </button>
                             <div class="row-actions">
@@ -233,7 +295,6 @@
                                         予約
                                     </ActionButton>
                                 {/if}
-                                <a class="button small ghost" href={resolve(`rules?program=${program.id}`)} data-testid="search-program-rule">ルールを作る</a>
                             </div>
                         </li>
                     {/each}
@@ -328,7 +389,7 @@
                 <ul class="hits">
                     {#each shown('rules', data.rules.rows) as rule (rule.id)}
                         <li class="hit" data-testid="search-rule">
-                            <a class="hit-main" href={resolve(`rules?edit=${rule.id}`)}>
+                            <a class="hit-main" href={resolve(`search?rule=${rule.id}`)}>
                                 <span class="hit-title">
                                     {#if !rule.enabled}<span class="tag">無効</span>{/if}
                                     <span class="truncate">{rule.name}</span>
@@ -346,6 +407,67 @@
         </section>
     {/if}
 </div>
+{#if drafting}
+    <RuleDraft draft={data.draft} {q} ids={programIds} refresh={data} deleting={ruleDeleting} bind:preview bind:open={sheetOpen} />
+    <!-- 狭い画面だけ。書く欄を下から出す (下のタブの上に貼り付ける) -->
+    <div class="sheet-bar">
+        <button type="button" onclick={() => (sheetOpen = true)} data-testid="rule-draft-open">
+            {data.draft.editing === null ? 'ルールとして保存' : `ルール「${data.draft.editing.name}」を直す`}
+        </button>
+    </div>
+{/if}
+</div>
+
+<!-- 言葉なしでルールを開いたときの、そのルールで録る番組 (`rule-preview.ts` の行) -->
+{#snippet rulePreview()}
+    <section class="hits-section" aria-labelledby="rule-preview-head" data-testid="rule-preview">
+        <div class="hits-head">
+            <h2 id="rule-preview-head">この条件で録る番組 <span class="count">{preview?.total ?? '…'}</span></h2>
+            {#if preview !== null && preview.skipped > 0}
+                <span class="small muted">うち {preview.skipped} 件は録りません</span>
+            {/if}
+        </div>
+        {#if preview === null}
+            <p class="none small muted">数えています…</p>
+        {:else if preview.programs.length === 0}
+            <p class="none small muted">いまの番組表では1件も一致しません</p>
+        {:else}
+            <ul class="hits">
+                {#each preview.programs as row (row.id)}
+                    <li class="hit" class:dim={row.skip !== null || !row.matched} data-testid="preview-row" data-program-id={row.id}>
+                        <div class="hit-main">
+                            <span class="hit-title">
+                                {#if row.skip !== null || !row.matched}
+                                    <span class="tag">録らない</span>
+                                {:else if row.reservation_state !== null}
+                                    <span class="tag {badgeClass(row.reservation_state)}">{stateLabel(row.reservation_state)}</span>
+                                {:else}
+                                    <span class="tag success">録る</span>
+                                {/if}
+                                <span class="truncate broadcast">{row.name}</span>
+                            </span>
+                            <span class="hit-meta tiny muted">
+                                <span class="broadcast">{row.service_name}</span> ・
+                                <span class="num">{dateTime(row.start_at)}〜{time(row.end_at)}</span>
+                                {#if !row.matched}
+                                    ・ 条件から外れました
+                                {:else if row.skip !== null}
+                                    ・ {SKIP_LABEL[row.skip.kind]}
+                                {/if}
+                                {#if row.conflicts.length > 0 || row.conflict_reason !== null}
+                                    ・ <span class="text-error">{row.conflict_reason ?? `チューナーの競合 ${row.conflicts.length} 件`}</span>
+                                {/if}
+                            </span>
+                        </div>
+                    </li>
+                {/each}
+            </ul>
+            {#if preview.total > preview.programs.length}
+                <p class="none tiny muted">先頭の {preview.programs.length} 件を表示しています</p>
+            {/if}
+        {/if}
+    </section>
+{/snippet}
 
 <!-- 「もっと見る」。受け取ったぶんを出し切っても残りがあれば、言葉を足してもらう -->
 {#snippet more(key: Key, received: number, all: number)}
@@ -366,7 +488,7 @@
             {/if}
             <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは右上の × (`ProgramDetail`) -->
             {#if opened !== null}
-                <a class="button secondary" href={resolve(`rules?program=${opened.program_id}`)}>ルールを作る</a>
+                <a class="button secondary" href={resolve(`search?from=program:${opened.program_id}`)}>ルールを作る</a>
             {/if}
             {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
                 <a class="button outline" href={resolve(`live?service=${opened.service_id}`)}>視聴</a>
@@ -410,6 +532,53 @@
         width: 100%;
         max-width: 48rem;
         margin-inline: auto;
+    }
+    /*
+     * **広い画面では右に書く欄の列** (`RuleDraft`)。列は main の余白の外まで出して、画面の右端と
+     * ヘッダーの下に付ける。結果は残りの幅の真ん中 (48rem まで)
+     */
+    @media (min-width: 1024px) {
+        .search-layout.drafting {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 25rem;
+            align-items: start;
+            gap: var(--dp-gutter);
+            margin-block: calc(-1 * var(--dp-gutter));
+            margin-inline-end: calc(-1 * var(--dp-gutter));
+        }
+        .drafting > .search-page {
+            padding-block: var(--dp-gutter);
+        }
+        .sheet-bar {
+            display: none;
+        }
+    }
+    /*
+     * 狭い画面では書く欄を下から出すボタンを、下のタブの上に貼り付ける。
+     * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
+     */
+    @media (max-width: 1023.98px) {
+        .drafting > .search-page {
+            padding-bottom: 4rem;
+        }
+        .sheet-bar {
+            position: fixed;
+            inset-inline: 0;
+            bottom: var(--dp-tabbar, 0px);
+            z-index: 30;
+            padding: var(--dp-space-2) var(--dp-gutter);
+            border-top: 1px solid var(--dp-line);
+            background: var(--dp-bg);
+        }
+        .sheet-bar button {
+            width: 100%;
+            margin: 0;
+            border-radius: var(--dp-radius-full);
+        }
+    }
+    /* 書く欄の条件では録らない行。消さずに出すが、録るものより沈める */
+    .hit.dim {
+        opacity: 0.5;
     }
     .summary {
         margin: 0;

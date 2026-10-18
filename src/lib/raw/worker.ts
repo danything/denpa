@@ -38,8 +38,9 @@
 import { AdtsSplitter, CLOCK, type Pes, PesDemuxer, unwrap } from '#lib/ts/pes.js';
 import { DecodeBudget } from './budget';
 import { fieldAt, type Shown, SmoothClock, Vsync, VsyncClock } from './cadence';
+import { downscale } from './downscale';
 import { Fmp4Video, FOLLOW_BYTES_MOST } from './fmp4';
-import { type FromWorker, type GrabSize, type RawInput, shrink, type ToWorker } from './messages';
+import type { FromWorker, GrabSize, RawInput, ToWorker } from './messages';
 import { MkvInput } from './mkv';
 import { YuvRenderer } from './render';
 
@@ -589,7 +590,7 @@ function reset(from: number | null): void {
  * 画面に見えていたものと半コマずれる。
  *
  * `size` があれば縮めたものを返す (アンビエントモード)。MPEG-2 は描き直した直後の面を
- * `createImageBitmap` の縮小で写す — 呼んだ時点の面を写すので、描いたのと同じ回のうちなら読める
+ * 半分ずつ縮めて写す (`downscale.ts`) — 呼んだ時点の面を写すので、描いたのと同じ回のうちなら読める
  * (`toPip` と同じ)。全部を `readPixels` で読み出す切り抜きの経路は通らない
  */
 async function grab(id: number, size: GrabSize | undefined): Promise<void> {
@@ -599,7 +600,7 @@ async function grab(id: number, size: GrabSize | undefined): Promise<void> {
         else if (renderer !== null && current !== null && !Number.isNaN(drawn.field)) {
             if (size !== undefined && surface !== null) {
                 renderer.draw(drawn.field);
-                bitmap = await createImageBitmap(surface, shrink(size));
+                bitmap = await downscale(surface, surface.width, surface.height, size);
             } else {
                 const image = renderer.capture(drawn.field);
                 if (image !== null) bitmap = await createImageBitmap(image);

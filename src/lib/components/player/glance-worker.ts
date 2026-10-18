@@ -4,9 +4,10 @@
  *
  * 画面の側で `<video>` から直に縮めると、ブラウザが元の大きさのまま RGB に直してから縮めるので、
  * GPU の無い端末では 1 回 5〜10ms 画面が止まる。画面は `new VideoFrame(video)` (コマを指すだけで写さない)
- * を渡すだけにして、直して縮めるのはここでやる
+ * を渡すだけにして、直して縮めるのはここでやる。縮め方は `raw/downscale.ts` (半分ずつ縮めて、雑音を平均で消す)
  */
-import { type GrabSize, shrink } from '#lib/raw/messages.js';
+import { downscale } from '#lib/raw/downscale.js';
+import type { GrabSize } from '#lib/raw/messages.js';
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -25,7 +26,7 @@ scope.onmessage = async (event: MessageEvent<GlanceRequest>) => {
     const { id, frame, size } = event.data;
     let bitmap: ImageBitmap | null = null;
     try {
-        bitmap = await createImageBitmap(frame, shrink(size));
+        bitmap = await downscale(frame, frame.displayWidth, frame.displayHeight, size);
     } catch {
         // 縮められなかった。画面は次の回にまたリクエストする
     } finally {

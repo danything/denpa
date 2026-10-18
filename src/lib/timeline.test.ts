@@ -123,7 +123,8 @@ describe('絞り込み', () => {
     ];
     const traits = (i: TimelineItem): Traits => ({
         unfinished: i.key === 'rec-new' || i.key === 'rec-old',
-        failed: i.key === 'rec-failed' || i.key === 'missed-1',
+        failed: i.key === 'rec-failed',
+        missed: i.key === 'missed-1',
     });
 
     test('件数はボタンごとに数える', () => {
@@ -132,23 +133,23 @@ describe('絞り込み', () => {
             reservations: 1,
             recording: 1,
             unfinished: 2,
-            failed: 2,
-            attention: 2,
             conflict: 0,
+            failed: 1,
+            missed: 1,
             cmlogo: 0,
         });
     });
 
-    test('見てほしいことは、競合の予約・失敗・CM の判定ができなかった録画', () => {
+    test('見てほしいこと: 競合は予約だけ、失敗・録り逃し・CM の判定は録れたものだけ', () => {
         const conflict = { unfinished: false, failed: false, conflict: true };
         const cmlogo = { unfinished: false, failed: false, cmlogo: true };
-        expect(passes('attention', items[0]!, conflict)).toBe(true);
         expect(passes('conflict', items[0]!, conflict)).toBe(true);
         // 競合は予約だけ (録れたものに付いていても数えない)
         expect(passes('conflict', items[2]!, conflict)).toBe(false);
-        expect(passes('attention', items[2]!, cmlogo)).toBe(true);
-        expect(passes('attention', items[4]!, traits(items[4]!))).toBe(true);
-        expect(passes('attention', items[2]!, plain)).toBe(false);
+        expect(passes('cmlogo', items[2]!, cmlogo)).toBe(true);
+        expect(passes('cmlogo', items[0]!, cmlogo)).toBe(false);
+        expect(passes('missed', items[5]!, traits(items[5]!))).toBe(true);
+        expect(passes('failed', items[5]!, traits(items[5]!))).toBe(false);
     });
 
     test('予約は線の上、録画中は線の下、未視聴と失敗は録れたものだけ', () => {

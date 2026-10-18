@@ -1,5 +1,5 @@
 <script lang="ts" module>
-    import { MediaQuery, SvelteSet } from 'svelte/reactivity';
+    import { SvelteSet } from 'svelte/reactivity';
 
     /**
      * 「まとめて表示」で開いている番組 (まとめる鍵)。**その場かぎり覚える** —
@@ -18,7 +18,6 @@
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import '#lib/components/home/home.css';
     import HomeAside from '#lib/components/home/HomeAside.svelte';
-    import HomeStrip from '#lib/components/home/HomeStrip.svelte';
     import { alignTop, placeTimeline, restoreRow, topRow } from '#lib/components/home/placement.js';
     import TimelineBar from '#lib/components/home/TimelineBar.svelte';
     import TimelineEntry from '#lib/components/home/TimelineEntry.svelte';
@@ -320,8 +319,8 @@
         return {
             unfinished: unfinished(item),
             failed:
-                item.kind === 'missed' ||
                 (item.kind === 'rec' && (item.rec.state === 'failed' || (item.rec.encode_error ?? '') !== '')),
+            missed: item.kind === 'missed',
             conflict: item.kind === 'res' && item.res.state === 'conflict',
             cmlogo: item.kind === 'rec' && item.rec.deleted_at === null && logoUnusable(item.rec.cm_note),
         };
@@ -395,23 +394,6 @@
 
     /** 最後に詳細を開いた行 (薄く塗って、どれを開いていたかを見せる) */
     let selectedKey = $state<string | null>(null);
-    /** スマホの幅 (768px 未満)。頭の帯 (`HomeStrip`) を置く場所が変わる */
-    const phone = new MediaQuery('max-width: 767.98px');
-    /**
-     * **サイドバー (狭い幅は一覧の頭の帯) の中身。** どれもホームが読んだものから作る。
-     * 続きから観る: 観られて、まだ観終えていない録画を新しい順に 6 本まで (途中まで観たものも、まだのものも)
-     */
-    const watchNext = $derived(
-        items
-            .filter((item): item is Item & { kind: 'rec' } => item.kind === 'rec' && unfinished(item))
-            .sort((a, b) => b.at - a.at)
-            .slice(0, 6)
-            .map((item) => item.rec),
-    );
-    /** 録画中の予約 */
-    const recordingNow = $derived(
-        items.filter((item): item is Item & { kind: 'res' } => item.kind === 'res' && item.zone === 'now').map((item) => item.res),
-    );
     /** エンコードを待っている・している録画 (動いているものが先) */
     const encoding = $derived(
         data.recordings
@@ -569,11 +551,8 @@
         showDeleted={data.showDeleted}
         capacity={data.capacity}
         {nextRes}
+        {encoding}
     />
-
-    {#if !phone.current}
-        <HomeStrip {watchNext} attention={counts.attention} {setFilter} />
-    {/if}
 
     <div class="t-main">
         <section class="t-list" bind:this={listBox} aria-label="予約と録画" data-testid="timeline">
@@ -590,10 +569,6 @@
                 {#each current as entry (entry.key)}
                     <TimelineEntry {entry} />
                 {/each}
-                {#if phone.current}
-                    <!-- スマホではページごと流れるので、帯は「いま」と録画中のすぐ下に置く (一覧の頭だと予約のずっと上になる) -->
-                    <HomeStrip {watchNext} attention={counts.attention} {setFilter} />
-                {/if}
                 <div class="t-zone" data-zone="past">
                     {#each pastPage.rows as entry (entry.key)}
                         <TimelineEntry {entry} />
@@ -641,13 +616,18 @@
         </section>
 
         <HomeAside
-            {watchNext}
-            recording={recordingNow}
-            attention={{ all: counts.attention, conflict: counts.conflict, failed: counts.failed, cmlogo: counts.cmlogo }}
+            {filter}
+            {setFilter}
+            {counts}
+            {grouped}
+            {setGrouped}
+            {finishedHref}
+            {deletedHref}
+            showFinished={data.showFinished}
+            showDeleted={data.showDeleted}
             {encoding}
             {nextRes}
             capacity={data.capacity}
-            {setFilter}
         />
     </div>
 </div>

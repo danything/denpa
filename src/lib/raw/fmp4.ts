@@ -32,7 +32,8 @@ import {
     readInit,
 } from '#lib/ts/fmp4.js';
 import { CLOCK } from '#lib/ts/pes.js';
-import { type GrabSize, shrink } from './messages';
+import { downscale } from './downscale';
+import type { GrabSize } from './messages';
 
 /** 番のこれだけ前からデコードする (90kHz) */
 const AHEAD = 0.3 * CLOCK;
@@ -431,7 +432,7 @@ export class Fmp4Video {
         if (this.current === null) return null;
         return size === undefined
             ? createImageBitmap(this.canvas)
-            : createImageBitmap(this.canvas, shrink(size));
+            : downscale(this.canvas, this.canvas.width, this.canvas.height, size);
     }
 
     /**

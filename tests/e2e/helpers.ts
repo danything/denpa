@@ -324,16 +324,33 @@ async function saveRecordingPart(
     }
 }
 
+/** ルールを1件消す。一覧 (`/rules`) の行の削除を2回押す */
+export async function deleteRule(row: Locator): Promise<void> {
+    await row.getByTestId('rule-delete').click();
+    await row.getByTestId('rule-delete-confirm').click();
+}
+
 /**
- * ルールを1件消す。**削除は書く欄の上にある** (編集中だけ出る) ので、一覧の行を押して開いてから。
- * 消すと一覧の初め (`/rules`) に戻る
+ * **ルールを1件作る** (検索の画面の「ルールとして保存」)。書く欄の値は URL に載せて始める
+ * (`/search?keyword=…`。`dedupe: false` で「同じ回は最初の放送だけ」を外す)。狭い画面なら下から出してから押す。
+ * 作ったら保存したルールへのリンクが出るまで待つ。画面は検索のまま
  */
-export async function deleteRule(page: Page, row: Locator): Promise<void> {
-    await row.click();
-    await page.waitForURL(/\/rules\?edit=\d+$/);
-    await page.getByTestId('rule-delete').click();
-    await page.getByTestId('rule-delete-confirm').click();
-    await page.waitForURL(/\/rules$/);
+export async function makeRule(
+    page: Page,
+    keyword: string,
+    options: { dedupe?: boolean; fields?: Record<string, string | string[]> } = {},
+): Promise<void> {
+    const params = new URLSearchParams({ q: keyword, keyword });
+    if (options.dedupe === false) params.set('dedupe', '0');
+    for (const [key, value] of Object.entries(options.fields ?? {})) {
+        params.delete(key);
+        for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
+    }
+    await goto(page, `/search?${params}`);
+    const open = page.getByTestId('rule-draft-open');
+    if (await open.isVisible()) await open.click();
+    await page.getByTestId('rule-submit').click();
+    await expect(page.getByTestId('rule-saved-link')).toBeVisible();
 }
 
 /**
@@ -354,7 +371,7 @@ export async function clearRules(page: Page): Promise<void> {
     for (let i = 0; i < 20; i++) {
         const count = await rows.count();
         if (count === 0) break;
-        await deleteRule(page, rows.first());
+        await deleteRule(rows.first());
         await expect(rows).toHaveCount(count - 1);
     }
     await expect(rows).toHaveCount(0);
@@ -965,22 +982,26 @@ export async function routeCaptions(page: Page): Promise<void> {
 }
 
 /**
- * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) を開き、
- * その入れ物を返す。どの幅でも一覧の頭の1行の「⋯」(`view-toggle`) から出るメニュー
+ * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) の入れ物を返す。
+ * 広い画面 (1000px 以上) はサイドバーの「表示」、狭い画面は一覧の頭の1行の「⋯」から出るメニュー
  */
 export async function homeTools(page: Page): Promise<Locator> {
-    const toggle = page.getByTestId('view-toggle');
+    const side = page.getByTestId('sidebar');
+    if (await side.isVisible()) return side;
     const menu = page.getByTestId('view-menu');
-    if (!(await menu.isVisible())) await toggle.click();
+    if (!(await menu.isVisible())) await page.getByTestId('view-toggle').click();
     await expect(menu).toBeVisible();
     return menu;
 }
 
-/** ホームの絞り込み (すべて・予約・録画中・未視聴・失敗) を押す。どの幅でも一覧の頭のチップ */
+/**
+ * ホームの絞り込み (すべて・予約・録画中・未視聴、見てほしいことの競合・失敗・録り逃し・CMの判定) を押す。
+ * 広い画面はサイドバーの行、狭い画面は一覧の頭のチップ
+ */
 export async function homeFilter(page: Page, id: string): Promise<void> {
-    const chip = page
-        .getByTestId('timeline-toolbar')
-        .locator(`[data-testid="filter-chip"][data-filter="${id}"]`);
-    await chip.click();
-    await expect(chip).toHaveAttribute('aria-pressed', 'true');
+    const side = page.getByTestId('sidebar');
+    const box = (await side.isVisible()) ? side : page.getByTestId('timeline-toolbar');
+    const button = box.locator(`[data-filter="${id}"]`);
+    await button.click();
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
 }

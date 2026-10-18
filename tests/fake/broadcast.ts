@@ -550,7 +550,22 @@ const TICK = 100;
  * **PTS は PCR より 0.4 秒先にする。** 本物の放送もそう作ってある (受信機は PTS まで
  * 待って映す。stream.md#貯まりより小さく出ることはある)
  */
-const FRAMES = Array.from({ length: 30 }, (_, n) => (DOCS ? mpeg2Frame(n, docsColor) : mpeg2Frame(n)));
+/**
+ * **動くものを映す偽の放送** (`FAKE_MOTION=1`)。止まった地の上を、真ん中と上の端で四角が横切る
+ * (マクロブロック 2x2。真ん中は右へ、上の端は左へ、1 秒で端から端まで)。アンビエントモードが、映像の中の
+ * 動きでちらつかないかを見るためのもの
+ */
+const MOTION = process.env['FAKE_MOTION'] === '1';
+function motionColor(col: number, row: number, n: number): [number, number, number] {
+    const x = Math.floor(n / 2);
+    if (row >= 4 && row < 6 && col >= x && col < x + 2) return [200, 90, 210];
+    if (row === 0 && col >= 14 - x && col < 16 - x) return [170, 40, 120];
+    return [70, 150, 110];
+}
+
+const FRAMES = Array.from({ length: 30 }, (_, n) =>
+    MOTION ? mpeg2Frame(n, motionColor) : DOCS ? mpeg2Frame(n, docsColor) : mpeg2Frame(n),
+);
 const SILENCE = silentAac();
 const PTS_AHEAD = 0.4 * CLOCK;
 

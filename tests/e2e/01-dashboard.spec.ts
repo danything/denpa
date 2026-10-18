@@ -1,4 +1,4 @@
-import { cancelAllReservations, deleteRule, expect, goto, homeTools, syncEpg, test } from './helpers';
+import { expect, goto, homeTools, syncEpg, test } from './helpers';
 
 test.describe('ホームと画面遷移', () => {
     test('データ放送のチャンネルは取り込まない', async ({ page, request }) => {
@@ -336,9 +336,9 @@ test.describe('ホームと画面遷移', () => {
             return hit !== null && el.contains(hit) && el.matches(':popover-open');
         });
         expect(front).toBe(true);
-        // 空きは狭い幅では「⋯」の中に出す (広い幅は頭の1行のまとめ)
+        // 状態 (次の録画・空き) は狭い幅では「⋯」の頭に出す (広い幅はサイドバーのいちばん下)
         await expect(menu.getByTestId('recordings-capacity-menu')).toBeVisible();
-        await expect(page.getByTestId('bar-summary')).toBeHidden();
+        await expect(menu.getByTestId('menu-summary')).toContainText('次の録画');
         await menu.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる
@@ -350,13 +350,15 @@ test.describe('ホームと画面遷移', () => {
      * Esc で閉じて「⋯」に戻る
      */
     test('表示の切り替えの「⋯」はキーボードで開け閉めできる', async ({ page }) => {
+        // 「⋯」はサイドバーの無い幅だけ
+        await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/');
         const toggle = page.getByTestId('view-toggle');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await toggle.focus();
         await page.keyboard.press('Enter');
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await expect(page.getByTestId('recordings-group-toggle')).toBeFocused();
+        await expect(page.getByTestId('view-menu').getByTestId('recordings-group-toggle')).toBeFocused();
         await page.keyboard.press('Escape');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await expect(toggle).toBeFocused();
@@ -453,41 +455,6 @@ test.describe('ホームと画面遷移', () => {
         await expect
             .poll(async () => await page.evaluate(() => (window as unknown as { seen: string[] }).seen))
             .toContain('recordings');
-    });
-
-    test('検索の「ルールを作る」はルール画面に言葉を渡し、そのままルールにできる', async ({
-        page,
-        request,
-    }) => {
-        await syncEpg(request);
-        await goto(page, `/search?q=${encodeURIComponent('テストアニメ')}`);
-
-        // 条件を書く場所は1箇所。検索からはキーワードを渡すだけ
-        await page.getByTestId('search-make-rule').click();
-        await page.waitForURL(/\/rules\?new&keyword=/);
-        await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ');
-
-        await expect(page.getByTestId('preview')).toContainText('録れる番組は');
-        const rows = page.getByTestId('preview-row');
-        await expect(rows.first()).toBeVisible();
-        for (const row of await rows.all()) {
-            await expect(row).toContainText('テストアニメ');
-        }
-
-        // 種別で絞り込める(ルールの条件そのもの)
-        await page.getByTestId('channel-summary').click();
-        await page.getByTestId('rule-types').locator('input[value="BS"]').check();
-        // 押すものは無く、そのまま数え直す。BS 以外の行が消えるのを待つ
-        await expect(rows.filter({ hasNotText: 'ＢＳ１１イレブン' })).toHaveCount(0);
-        await expect(rows.first()).toBeVisible();
-
-        // そのまま保存できる
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row').first()).toContainText('テストアニメ');
-
-        await deleteRule(page, page.getByTestId('rule-row').first());
-        await expect(page.getByTestId('rule-row')).toHaveCount(0);
-        await cancelAllReservations(page);
     });
 
     /*

@@ -96,7 +96,8 @@ export function alignTop(list: HTMLElement): void {
     let line = top;
     for (const heading of list.querySelectorAll<HTMLElement>('.t-day')) {
         const box = heading.getBoundingClientRect();
-        if (Math.abs(box.top - top) < 1) line = Math.max(line, box.bottom);
+        // 貼り付いている見出し (枠の余白ぶん下に付くこともあるので少し幅を持たせる)
+        if (box.top >= top - 1 && box.top - top < 8) line = Math.max(line, box.bottom);
     }
     for (const row of list.querySelectorAll<HTMLElement>(
         '.t-row, .group-head, [data-testid="timeline-now"]',

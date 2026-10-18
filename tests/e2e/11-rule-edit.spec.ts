@@ -1,120 +1,112 @@
 import { BS11 } from '../fake/services';
-import { cancelAllReservations, clearRules, deleteRule, expect, goto, syncEpg, test } from './helpers';
+import {
+    cancelAllReservations,
+    clearRules,
+    deleteRule,
+    expect,
+    goto,
+    makeRule,
+    syncEpg,
+    test,
+} from './helpers';
 
+/**
+ * **ルールを直す** (検索の画面の `?rule=<ID>`)。一覧の行を押すとそのルールが書く欄に入る
+ */
 test.describe('ルールの編集', () => {
     test.beforeEach(async ({ page, request }) => {
         await syncEpg(request);
         await clearRules(page);
+        await page.setViewportSize({ width: 1440, height: 900 });
     });
 
-    test('作ったルールの条件を後から変えられる', async ({ page }) => {
+    /** 一覧の行を押して、そのルールを開く */
+    async function open(page: import('@playwright/test').Page, name: string): Promise<void> {
         await goto(page, '/rules');
-        await page.getByTestId('rule-keyword').fill('テストアニメ');
-        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
-        await page.getByTestId('rule-dedupe').uncheck();
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row').first()).toContainText('テストアニメ');
+        await page.getByTestId('rule-row').filter({ hasText: name }).getByTestId('rule-open').click();
+        await page.waitForURL(/\/search\?rule=\d+$/);
+    }
 
-        await page.getByTestId('rule-row').first().click();
-        await page.waitForURL(/edit=/);
+    test('作ったルールの条件を後から変えられる', async ({ page }) => {
+        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+        await makeRule(page, 'テストアニメ', { dedupe: false });
+        await open(page, 'テストアニメ');
 
         // いまの内容が入っていること。空のフォームだと作り直しになってしまう
         await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ');
+        await expect(page.getByTestId('rule-dedupe')).not.toBeChecked();
 
         await page.getByTestId('rule-keyword').fill('ニュース');
         await page.getByTestId('rule-ignore').fill('再放送');
         await page.getByTestId('channel-summary').click();
         await page.getByTestId('rule-services').locator(`input[value="${BS11.id}"]`).check();
         await page.getByTestId('rule-update').click();
+        await expect(page.getByTestId('rule-saved')).toContainText('更新しました');
+        await expect(page).toHaveURL(/\/search\?rule=\d+$/);
 
-        // 増えずに書き換わること。保存しても同じルールを選んだまま
-        const row = page.getByTestId('rule-row').first();
-        await expect(row).toContainText('ニュース');
-        await expect(page.getByTestId('rule-row')).toHaveCount(1);
-        await expect(page).toHaveURL(/\/rules\?edit=\d+$/);
-        await expect(row).toHaveAttribute('aria-current', 'true');
+        // 増えずに書き換わること
+        await goto(page, '/rules');
+        const row = page.getByTestId('rule-row');
+        await expect(row).toHaveCount(1);
+        await expect(row.first()).toContainText('ニュース');
 
-        // 一覧から入り直しても、変えた内容が入っている
-        await page.getByTestId('rule-cancel-edit').click();
-        await page.waitForURL(/\/rules$/);
-        await row.click();
+        // 開き直しても、変えた内容が入っている
+        await open(page, 'ニュース');
         await expect(page.getByTestId('rule-ignore')).toHaveValue('再放送');
         await expect(page.getByTestId('rule-services').locator(`input[value="${BS11.id}"]`)).toBeChecked();
 
-        await deleteRule(page, row);
+        await clearRules(page);
         await cancelAllReservations(page);
     });
 
     test('チェックを外したまま別のルールを開いても、そのルールの値が入る', async ({ page }) => {
-        await goto(page, '/rules');
-        const description = page.getByTestId('rule-search-fields').locator('input[value="description"]');
         // どの番組にも当たらない語。予約を立てずに済む
         for (const keyword of ['当たらない語A', '当たらない語B']) {
-            await page.getByTestId('rule-keyword').fill(keyword);
-            await description.check();
-            await page.getByTestId('rule-submit').click();
-            await expect(page.getByTestId('rule-row').filter({ hasText: keyword })).toBeVisible();
+            await makeRule(page, keyword, { fields: { searchFields: ['name', 'description'] } });
         }
-        const edit = (keyword: string) => page.getByTestId('rule-row').filter({ hasText: keyword }).click();
+        const description = page.getByTestId('rule-search-fields').locator('input[value="description"]');
 
-        await edit('当たらない語A');
+        await open(page, '当たらない語A');
         await expect(page.getByTestId('rule-keyword')).toHaveValue('当たらない語A');
         await expect(description).toBeChecked();
-        // 保存せずに外す。`checked` は値が変わったときしか当て直さないので、外れたまま残っていた
+        // 保存せずに外す
         await description.uncheck();
 
-        await edit('当たらない語B');
+        await open(page, '当たらない語B');
         await expect(page.getByTestId('rule-keyword')).toHaveValue('当たらない語B');
         await expect(description).toBeChecked();
 
         await clearRules(page);
     });
 
-    test('編集中に条件を変えると、下見はその条件で数え直し、編集のまま', async ({ page }) => {
-        await goto(page, '/rules');
-        await page.getByTestId('rule-keyword').fill('テストアニメ');
-        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
-        await page.getByTestId('rule-dedupe').uncheck();
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row').first()).toBeVisible();
-
-        await page.getByTestId('rule-row').first().click();
-        await page.waitForURL(/edit=/);
-        await expect(page.getByTestId('preview-row').first()).toBeVisible();
+    test('編集中に条件を変えると、その条件で数え直し、優先度も保存まで残る', async ({ page }) => {
+        await makeRule(page, 'テストアニメ', { dedupe: false });
+        await open(page, 'テストアニメ');
+        // 言葉なしで開いたら、そのルールで録る番組を出す
+        const rows = page.getByTestId('rule-preview').getByTestId('preview-row');
+        await expect(rows.first()).toBeVisible();
 
         /*
          * 条件をいじると、押さずにその条件で数え直す。保存済みの条件ではなく、いま入っている条件での結果。
-         * どこにも当たらない語にすると、このルールが立てた予約は「条件外」として残って見える
-         * (編集中のルールを下見に伝えている)
+         * どこにも当たらない語にすると、このルールが立てた予約は「条件から外れました」として残って見える
          */
         await page.getByTestId('rule-keyword').fill('テストアニメ 当たらない語');
-        const preview = page.getByTestId('preview');
-        await expect(page.getByTestId('preview-row').getByText('条件外').first()).toBeVisible();
+        await expect(rows.filter({ hasText: '条件から外れました' }).first()).toBeVisible();
         await expect(page.getByTestId('rule-update')).toBeVisible();
         await expect(page.getByTestId('rule-submit')).toHaveCount(0);
-        await expect(page).toHaveURL(/\/rules\?edit=\d+$/);
         await page.getByTestId('rule-keyword').fill('テストアニメ 決戦');
 
-        /*
-         * **打ち込んだ優先度も保存まで残る。**
-         *
-         * 下見を GET の往復で出していた頃は、見るだけのつもりで押すたびに優先度が
-         * 1 に戻り、そのまま保存すると**静かに書き換わって**いた
-         */
-        await page.getByTestId('rule-priority').fill('5');
-        await expect(preview).toBeVisible();
+        await page.getByTestId('rule-priority').selectOption('5');
+        await expect(rows.first()).toBeVisible();
         await expect(page.getByTestId('rule-priority')).toHaveValue('5');
 
-        // 保存したものが一覧にもそのまま出る
         await page.getByTestId('rule-update').click();
-        await expect(page.getByTestId('rule-row').first()).toContainText('優先度 5');
-        await page.getByTestId('rule-cancel-edit').click();
-        await page.getByTestId('rule-row').first().click();
+        await expect(page.getByTestId('rule-saved')).toContainText('更新しました');
+        await page.reload();
         await expect(page.getByTestId('rule-priority')).toHaveValue('5');
+        await expect(page.getByTestId('rule-keyword')).toHaveValue('テストアニメ 決戦');
 
-        await expect(page.getByTestId('rule-row')).toHaveCount(1);
-        await deleteRule(page, page.getByTestId('rule-row').first());
-        await expect(page.getByTestId('rule-row')).toHaveCount(0);
+        await clearRules(page);
         await cancelAllReservations(page);
     });
 
@@ -124,47 +116,26 @@ test.describe('ルールの編集', () => {
          * 他のテストが使う「テストアニメ」を消費すると、そちらで予約が
          * 立たなくなるので、このテストだけの番組名を使う
          */
-        await goto(page, '/rules');
-        await page.getByTestId('rule-keyword').fill('テスト番組C');
-        // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
-        await page.getByTestId('rule-dedupe').uncheck();
-        await page.getByTestId('rule-submit').click();
-        await expect(page.getByTestId('rule-row').first()).toBeVisible();
-
-        await page.getByTestId('rule-row').first().click();
-        await page.waitForURL(/edit=/);
+        await makeRule(page, 'テスト番組C', { dedupe: false });
 
         /*
-         * 条件を狭めても既存の予約は残るので、要らないものをここで外す。
-         *
-         * **まとめてではなく1件ずつ**。1つだけ要らないときに全部消してから
-         * 条件を作り直す、ということにならないように。押すたびにちょうど
-         * 1件だけ減ることを見る (まとめて畳んでいたら一気に0になる)
+         * 結果の行から1件ずつ取り消す。**まとめてではなく1件ずつ**。押すたびにちょうど
+         * 1件だけ減ることを見る
          */
-        /*
-         * 予約とプレビューは同じ表に出る。取り消しても**行は残る** (条件には
-         * まだ当たっているので)。減るのは取消ボタンのほうなので、そちらを数える
-         */
-        const cancels = page.getByTestId('rule-pending-cancel');
-        await expect(page.getByTestId('preview-row').first()).toBeVisible();
+        await page.getByTestId('search-more-programs').click();
+        const cancels = page.getByTestId('search-cancel');
+        await expect(cancels.first()).toBeVisible();
         const before = await cancels.count();
         expect(before).toBeGreaterThan(2);
-
         for (let left = before; left > before - 2; left--) {
             await cancels.first().click();
             // 送信中はボタンが無効になる。減るのを待たずに次を押すと空振りする
             await expect(cancels).toHaveCount(left - 1);
         }
 
-        // 取り消したぶんだけ予約一覧からも消える (残りはそのまま)
-        await goto(page, '/');
-        await expect(page.getByTestId('reservation-row').filter({ hasText: 'テスト番組C' })).toHaveCount(
-            before - 2,
-        );
-
         // 残りはルールごと畳む。まだ始まっていない予約は行ごと消える
         await goto(page, '/rules');
-        await deleteRule(page, page.getByTestId('rule-row').first());
+        await deleteRule(page.getByTestId('rule-row').first());
         await expect(page.getByTestId('rule-row')).toHaveCount(0);
         await goto(page, '/');
         await expect(page.getByTestId('reservation-row').filter({ hasText: 'テスト番組C' })).toHaveCount(0);
@@ -175,18 +146,14 @@ test.describe('ルールの作り直し', () => {
     test.beforeEach(async ({ page, request }) => {
         await syncEpg(request);
         await clearRules(page);
+        await page.setViewportSize({ width: 1440, height: 900 });
     });
 
     test('同じルールを消して作り直すと、また予約が立つ', async ({ page }) => {
         // 消した予約を「取り消し」で残していた頃は、applyRules が
         // 「予約行が既にある」と見て飛ばすため、二度と予約が立たなかった
         for (const round of [1, 2]) {
-            await goto(page, '/rules');
-            await page.getByTestId('rule-keyword').fill('テストアニメ');
-            // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
-            await page.getByTestId('rule-dedupe').uncheck();
-            await page.getByTestId('rule-submit').click();
-            await expect(page.getByTestId('rule-row')).toHaveCount(1);
+            await makeRule(page, 'テストアニメ', { dedupe: false });
 
             await goto(page, '/');
             await expect(
@@ -195,7 +162,7 @@ test.describe('ルールの作り直し', () => {
             ).toBeVisible();
 
             await goto(page, '/rules');
-            await deleteRule(page, page.getByTestId('rule-row').first());
+            await deleteRule(page.getByTestId('rule-row').first());
             await expect(page.getByTestId('rule-row')).toHaveCount(0);
         }
     });

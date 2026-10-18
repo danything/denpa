@@ -268,7 +268,7 @@ export function coveringRule(rules: Rule[], source: RuleSource, serviceType?: st
 }
 
 /** 取り消し済みの放送に、番組が当たるかどうか */
-interface Declined {
+export interface Declined {
     has(program: Pick<Program, 'name' | 'start_at'> & { channel: string }): boolean;
 }
 
@@ -303,7 +303,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * 手動予約を人が取り消したぶんは含める — 今までも id が同じ限りルールを止めていたので、
  * その振る舞いを id が変わっても続けるだけ。
  */
-function canceledBroadcasts(at: number): Declined {
+export function canceledBroadcasts(at: number): Declined {
     const rows = orm()
         .select({
             channel: services.channel,

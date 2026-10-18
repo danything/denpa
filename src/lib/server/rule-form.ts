@@ -174,16 +174,18 @@ export interface Origin {
 
 /**
  * **録画・番組からルールを作るときの元** (詳細の「ルールを作る」)。
- * `?recording=<録画ID>` か `?program=<番組ID>` (番組表・予約の詳細から)。
+ * 検索の画面の `?from=recording:<録画ID>` か `?from=program:<番組ID>` (番組表・予約・録画の詳細から)。
+ * `?program=` は検索の画面では番組の詳細を開く鍵なので、別の名前にしてある。
  *
  * 下書き (`rules.prefillFrom`) と、このシリーズを既に録っているルール
  * (`rules.coveringRule`) を一緒に引く。ルールがあれば作らせずにそちらを案内する —
  * 同じ番組のルールが2つあっても予約は1本だが、どちらを直せばいいか分からなくなる
  */
-export function originOf(params: URLSearchParams): Origin | null {
-    const kind = params.has('recording') ? 'recording' : params.has('program') ? 'program' : null;
-    if (kind === null) return null;
-    const id = Number(params.get(kind));
+export function originOf(from: string | null): Origin | null {
+    const match = (from ?? '').match(/^(recording|program):(-?\d+)$/);
+    if (match === null) return null;
+    const kind = match[1] as Origin['kind'];
+    const id = Number(match[2]);
     const source = Number.isInteger(id)
         ? kind === 'recording'
             ? recordingSource(id)

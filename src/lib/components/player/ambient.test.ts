@@ -2,9 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import {
     blurPixels,
     boxRadius,
+    changed,
+    coarse,
     ease,
     falloff,
     farthest,
+    follow,
+    frameDelta,
+    GLANCE,
+    GRID,
     glowLayout,
     glowPixels,
     luminance,
@@ -12,6 +18,7 @@ import {
     reach,
     region,
     type Situation,
+    STILL,
     storedAmbient,
     strips,
     vivid,
@@ -300,11 +307,95 @@ describe('地に敷く色', () => {
 });
 
 describe('入れ替え', () => {
+    test('写した2枚の違いは色の差の平均で、透明度は見ない', () => {
+        expect(frameDelta([10, 20, 30, 255], [10, 20, 30, 0])).toBe(0);
+        expect(frameDelta([10, 20, 30, 255], [13, 17, 30, 255])).toBe(2);
+        expect(STILL).toBeGreaterThan(0);
+    });
+
+    test('平均の違いが小さくても、一部だけ大きく変わったら入れ替える', () => {
+        const before = new Uint8ClampedArray(32 * 18 * 4).fill(80);
+        const noise = before.map((v, i) => (i % 4 === 3 ? v : v + (i % 3) - 1));
+        expect(changed(before, noise)).toBe(false);
+        // 字幕が出て 10 画素だけ 100 明るくなった (平均では 2 に届かない)
+        const caption = Uint8ClampedArray.from(before);
+        for (let p = 0; p < 10; p++) caption.set([180, 180, 180], p * 4);
+        expect(frameDelta(before, caption)).toBeLessThan(STILL);
+        expect(changed(before, caption)).toBe(true);
+    });
+
     test('入れ替えは始めと終わりがゆっくり', () => {
         expect(ease(0)).toBe(0);
         expect(ease(1)).toBe(1);
         expect(ease(0.5)).toBe(0.5);
         expect(ease(0.1)).toBeLessThan(0.1);
         expect(ease(0.9)).toBeGreaterThan(0.9);
+    });
+});
+
+describe('映像の中の動き', () => {
+    /** 偽の放送 (`FAKE_MOTION`) と同じ: 止まった地の上を、真ん中と上の端で四角 (4x4 マス) が横切る 32x18 */
+    const frame = (n: number): Uint8ClampedArray => {
+        const data = new Uint8ClampedArray(GLANCE.width * GLANCE.height * 4);
+        for (let y = 0; y < GLANCE.height; y++) {
+            for (let x = 0; x < GLANCE.width; x++) {
+                const middle = y >= 8 && y < 12 && x >= 2 * n && x < 2 * n + 4;
+                const top = y < 2 && x >= 28 - 2 * n && x < 32 - 2 * n;
+                data.set(
+                    middle ? [240, 60, 200, 255] : top ? [250, 220, 40, 255] : [60, 140, 110, 255],
+                    (y * GLANCE.width + x) * 4,
+                );
+            }
+        }
+        return data;
+    };
+    const at = { width: 140, height: 90, x: 22, y: 18, w: 96, h: 54, reach: 20, radius: 3 };
+    /** 入れ替えるたびに、光の色がどれだけ動いたか (色の差の平均) */
+    const variance = (outputs: Uint8ClampedArray[]) => {
+        let sum = 0;
+        for (let i = 1; i < outputs.length; i++) sum += frameDelta(outputs[i - 1]!, outputs[i]!);
+        return sum / (outputs.length - 1);
+    };
+
+    test('格子に平均して時間でならすと、外周の1マスから取るより光の色の揺れが 3 分の 1 より小さい', () => {
+        const before: Uint8ClampedArray[] = [];
+        const after: Uint8ClampedArray[] = [];
+        let state: Float32Array | null = null;
+        for (let n = 0; n < 14; n++) {
+            before.push(glowPixels(frame(n), GLANCE.width, GLANCE.height, at));
+            state = follow(state, coarse(frame(n)), 200);
+            after.push(glowPixels(Uint8ClampedArray.from(state), GRID.width, GRID.height, at));
+        }
+        expect(variance(after)).toBeLessThan(variance(before) / 3);
+    });
+
+    test('入れ替えを見送っても、ならした色は進むので、小さな違いもいずれ入れ替わる', () => {
+        const shown = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(100);
+        const target = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(103);
+        let smoothed: Float32Array | null = Float32Array.from(shown);
+        let current = Float32Array.from(shown);
+        let swaps = 0;
+        for (let i = 0; i < 10; i++) {
+            smoothed = follow(smoothed, target, 200);
+            if (changed(current, smoothed)) {
+                current = Float32Array.from(smoothed);
+                swaps++;
+            }
+        }
+        expect(swaps).toBe(1);
+        expect(current[0]).toBeGreaterThan(102);
+    });
+
+    test('ならすのは小さな違いだけ。場面が変わったら、すぐ新しい色にする', () => {
+        const dark = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(20);
+        const bright = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(220);
+        const state = follow(Float32Array.from(dark), bright, 200);
+        expect([...state].every((v) => v === 220)).toBe(true);
+        // 小さな違い (10) は、200ms で 55% ほど寄る
+        const near = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(30);
+        expect(follow(Float32Array.from(dark), near, 200)[0]).toBeCloseTo(
+            20 + 10 * (1 - Math.exp(-200 / 250)),
+            3,
+        );
     });
 });
