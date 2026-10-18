@@ -5,6 +5,7 @@
         ease,
         FADE,
         FADE_STEPS,
+        farthest,
         GLANCE,
         type GlowLayout,
         glowLayout,
@@ -30,12 +31,12 @@
      *
      * - **縦に積むとき (768px より狭い)** … 映像の下の番組の中身に色を敷く。映像のすぐ下がいちばん濃く、
      *   下へ向かって地に溶ける (`reach` の 90%)。中身の字は色の上に直に載る
-     * - **二段組** … 色を枠の後ろに敷き、枠の周りへ 20% だけにじませる。右の列は上のほうだけ面の色を
-     *   透かし (72%)、色が下へ向かって面の色に溶ける
+     * - **二段組** … 色を窓全体に敷く。映像の周りがいちばん濃く、窓の端へ向かって薄くなる (届く幅は枠から
+     *   いちばん遠い窓の端まで。`farthest`)。見出しと右の列は地の色と区切りの線を外し、同じ色の上に載る
      * - 光の輪ではなく地の色に見えるよう、色は**明るさを抑えてから敷く** (`toneFrame`)。暗いテーマは深い色、
      *   明るいテーマは淡い色になり、上に載る字はどちらも 4.5 以上で読める (`WASH_LUMINANCE`)。
      *   明るいテーマでは色の薄い所を透明にし、`mix-blend-mode: multiply` で地に掛ける
-     * - 見出しは塗らない (YouTube も塗らない)
+     * - 見出しだけを別の色で塗ることはしない。二段組で見出しが色づくのは、窓全体に敷いた色の上に透けて載るから
      *
      * ## 作り
      *
@@ -52,7 +53,8 @@
      *   枠の黒い地は映像の所だけにし、操作バーは薄い暗幕 (`ControlBar`) の上に載る
      * - **色は枠に重ならない4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ1枚を切り出す。
      *   枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろまで合成し直すことになる
-     * - 範囲は `<main>` の縦の範囲と窓の横幅で切る (`region`)。ページの巻き取れる長さを増やさない
+     * - 範囲は、二段組では窓全体、縦に積むときは `<main>` の縦の範囲と窓の横幅で切る (`region`)。
+     *   ページの巻き取れる長さを増やさない
      *
      * ## 写さないとき (`ambient.ts` の `plan`)
      *
@@ -120,7 +122,7 @@
         const context = target.getContext('2d');
         if (context === null) return;
         const frame = Uint8ClampedArray.from(colors);
-        toneFrame(frame, dark ? 'dark' : 'light', WASH_LUMINANCE[stacked ? 'stacked' : 'wide']);
+        toneFrame(frame, dark ? 'dark' : 'light', WASH_LUMINANCE);
         const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
         context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
     }
@@ -278,9 +280,15 @@
                 ? new DOMRect(rect.left, rect.top, rect.width, (rect.width * 9) / 16)
                 : rect;
             const m = main.getBoundingClientRect();
-            // 横は窓の幅いっぱい (二段組では右の列の下にも敷き、列が上のほうで透かす)。縦は `<main>` の中
-            const bounds: Rect = { left: 0, top: m.top, right: document.documentElement.clientWidth, bottom: m.bottom };
-            const spread = reach(s.width, !stacked);
+            /*
+             * 二段組は**窓全体** (見出しと右の列の下にも敷き、窓の端へ向かって薄くする)。
+             * 縦に積むときは、横は窓の幅、縦は `<main>` の中
+             */
+            const width = document.documentElement.clientWidth;
+            const bounds: Rect = stacked
+                ? { left: 0, top: m.top, right: width, bottom: m.bottom }
+                : { left: 0, top: 0, right: width, bottom: window.innerHeight };
+            const spread = stacked ? reach(s.width, false) : Math.max(reach(s.width, true), farthest(s, bounds));
             const area = region(s, bounds, spread);
             /*
              * 範囲の座標は入れ物 (いちばん近い位置を持つ祖先。無ければ文書) の内側から。
@@ -426,8 +434,10 @@
         overflow: hidden;
     }
     /* 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`toneFrame` が色の薄い所を透明にしてある) */
+    /* 窓全体に敷くので、明るいテーマは控えめに (白へ寄るだけなので、字の読みやすさは変わらない) */
     :global(html:not([data-theme='dark'])) .band {
         mix-blend-mode: multiply;
+        opacity: 0.6;
     }
     canvas {
         position: absolute;
@@ -439,14 +449,24 @@
     :global(html[data-ambient] [data-player-layout] > aside) {
         position: relative;
     }
-    /* 二段組の右の列は、上のほうだけ面の色を透かして色を通し、下へ向かって面の色に戻す */
+    /*
+     * **二段組では、見出しと右の列も同じ色の上に載せる** (YouTube と同じ)。右の列の面の色と左の線、見出しの
+     * 地と下の線を外す。字はどれも色の上に直に載るが、色の明るさを抑えてあるので 4.5 以上で読める
+     * (`WASH_LUMINANCE`)。色を敷いていない間 (オフ・まだ1枚も写していない) は今までどおり
+     */
     @media (min-width: 768px) {
         :global(html[data-ambient] [data-player-layout] > aside) {
-            background: linear-gradient(
-                to bottom,
-                color-mix(in srgb, var(--dp-surface) 72%, transparent),
-                var(--dp-surface) 18rem
-            );
+            border-left-color: transparent;
+            background: transparent;
+        }
+        :global(html[data-ambient] .navbar) {
+            border-bottom-color: transparent;
+            background: transparent;
+            box-shadow: none;
+            -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+            /* スクロールで線と影を濃くする動き (`+layout.svelte`) も止める。動きの値は上の指定より勝つ */
+            animation: none;
         }
     }
 </style>

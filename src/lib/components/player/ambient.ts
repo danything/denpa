@@ -121,6 +121,19 @@ export function falloff(t: number): number {
 }
 
 /**
+ * 枠から範囲のいちばん遠い端までの距離 (px)。二段組ではこれを届く幅にして、窓の端へ向かって薄くする
+ */
+export function farthest(stage: Rect, bounds: Rect): number {
+    return Math.max(
+        stage.left - bounds.left,
+        bounds.right - stage.right,
+        stage.top - bounds.top,
+        bounds.bottom - stage.bottom,
+        0,
+    );
+}
+
+/**
  * 色を敷く範囲。**映像の枠を `spread` (`reach`) ぶん広げ、`bounds` (はみ出してよい範囲) で切る。**
  * どちらも画面の座標 (`getBoundingClientRect`)。`bounds` は `<main>` の縦の範囲と窓の横幅 —
  * ページの巻き取れる長さを増やさない
@@ -353,16 +366,12 @@ export function vivid(data: Uint8ClampedArray, theme: 'dark' | 'light'): void {
 /**
  * 色を敷く地の明るさ (相対輝度) の上限・下限。**上に載る字が 4.5 以上で読めるように決めてある。**
  *
- * - 縦に積むとき (`stacked`) … 番組の中身の字が色の上に直に載る
- *   - 暗いテーマ: 字は `--dp-muted` (#9aa3b5、輝度 0.36)。(0.36 + 0.05) / 4.5 − 0.05 ≈ 0.041 なので 0.035 まで
- *   - 明るいテーマ: 字は `--dp-primary-text` (#02659a、輝度 0.12)。4.5 × (0.12 + 0.05) − 0.05 ≈ 0.72 なので 0.75 から
- * - 二段組 (`wide`) … 色の上に字は無く、右の列は上のほうで面の色を 72% 重ねる (`AmbientGlow.svelte`)。
- *   暗いテーマで 0.72 × 0.006 + 0.28 × 0.12 ≈ 0.038 なので 0.12 まで。明るいテーマは面が白なので、0.45 からでも字は沈まない
+ * 字は色の上に直に載る (縦に積んだときの番組の中身、二段組の見出しと右の列)。
+ *
+ * - 暗いテーマ: 字は `--dp-muted` (#9aa3b5、輝度 0.36)。(0.36 + 0.05) / 4.5 − 0.05 ≈ 0.041 なので 0.035 まで
+ * - 明るいテーマ: 字は `--dp-primary-text` (#02659a、輝度 0.12)。4.5 × (0.12 + 0.05) − 0.05 ≈ 0.72 なので 0.75 から
  */
-export const WASH_LUMINANCE = {
-    stacked: { dark: 0.035, light: 0.75 },
-    wide: { dark: 0.12, light: 0.45 },
-} as const;
+export const WASH_LUMINANCE = { dark: 0.035, light: 0.75 } as const;
 
 type Rgb = [number, number, number];
 
