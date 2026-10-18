@@ -1,4 +1,4 @@
-import { ends, matches } from './paging';
+import { ends, matches, revealed, shownUpTo, sideStep } from './paging';
 
 /**
  * 長い一覧を**少しずつ出す**。
@@ -45,7 +45,7 @@ export class Paged<T> {
 
     /** 片側に一度に足す行数 */
     private get side(): number {
-        return this.ends() ? Math.ceil(this.step / 2) : this.step;
+        return sideStep(this.step, this.ends());
     }
 
     /** 頭と尻と間。頭からだけ出すときは尻が 0 件 */
@@ -76,8 +76,8 @@ export class Paged<T> {
     /** 続きを足す。両端から出すときは両方に足す (見えていないほうに足しても位置は動かない) */
     reveal(): void {
         const length = this.items().length;
-        this.shown = Math.min(length, this.shown + this.side);
-        this.tailShown = Math.min(length, this.tailShown + this.side);
+        this.shown = revealed(this.shown, this.side, length);
+        this.tailShown = revealed(this.tailShown, this.side, length);
     }
 
     /**
@@ -85,8 +85,7 @@ export class Paged<T> {
      * 足す単位 (`step`) に切り上げる (下端の印が、すぐまた鳴らないように)
      */
     showUpTo(count: number): void {
-        const length = this.items().length;
-        this.shown = Math.min(length, Math.max(this.shown, Math.ceil(count / this.side) * this.side));
+        this.shown = shownUpTo(this.shown, count, this.side, this.items().length);
     }
 
     /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */

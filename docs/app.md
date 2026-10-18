@@ -80,6 +80,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
 | `src/lib/ts/logo-detect.ts` | CM検出のロゴ判定。線の向きで覚え、コマごとに当てて区間にする (純粋関数) |
 | `src/lib/server/logo-own.ts` | 覚えるコマを ffmpeg で抜き (当てるコマは cm-scan から受け取る)、覚えたもの (`own-logo-<幅>x<高さ>.bin`) を局ごとの入れ物に置く |
 | `src/lib/components/ProgramFacts.svelte` | 番組の中身そのもの (枠は持たない)。モーダルと観る画面の両方から使う |
+| `src/lib/components/home/` | ホーム (`/`) の部品。行 (`TimelineRow`。予約・録画・録り逃し)・番組の見出し (`GroupHead`)・日付と「いま」の見出し (`TimelineHeading`)・サイドバー (`TimelineSidebar`)・狭い画面の一枚 (`FilterSheet`)。開いた行の覚えや詳細の開き方はホームがコンテキストで配る (`context.ts`)。開いたときの位置へ送るのは `placement.ts`。見た目は `home.css` (`.board` の下だけに効く。部品をまたぐ行の作りを1か所に置く) |
 | `src/lib/components/LearnedLogo.svelte` | CM検出用に覚えたロゴを小さな画像で出し、「覚え直す」で捨てる (設定の「ロゴ」の局ごとの行) |
 | `src/lib/components/ServiceLogo.svelte` | 局ロゴ (一覧・番組表・ライブ)。まだ取得できていない局の出し方は画面ごと |
 | `src/lib/components/ChannelNotice.svelte` | 局が無いときの案内と「スキャンへ」(録画・番組表・ライブの上の1行と、空の番組表の真ん中)。出すかどうかは `#lib/channel-notice.ts` (地上波が無い / どれも無い) |
