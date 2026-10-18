@@ -62,6 +62,10 @@ Bun.serve({
         const policy = response.headers.get('content-security-policy');
         if (policy === null) return response;
         const answer = new Headers(response.headers);
+        if (!/script-src /.test(policy) || !/worker-src /.test(policy)) {
+            // 書き換える所が無い。Blob の worker が起こせず、測れないまま黙って終わらないように言っておく
+            console.warn(`CSP に script-src か worker-src がありません (${request.url})`);
+        }
         answer.set(
             'content-security-policy',
             policy

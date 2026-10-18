@@ -967,6 +967,7 @@ MPEG-2 15Mbps・1920x1080p 59.94 の H.264 / AV1。放送は使わない）を�
 docker compose --profile docs run --rm docs bunx playwright test -c tests/bench            # GPU 無し
 docker compose --profile docs run --rm -p 4180:4180 -e BENCH_SERVE=1 docs bunx playwright test -c tests/bench
 # ↑ 立てたまま。ふだんの Chrome で http://localhost:4180/ を開き、probe.js の頭の手順で測って report.ts で表にする
+# （入口 tests/bench/proxy.ts は認証なしで結果を書き込めるので、測る間だけ立てる）
 ```
 
 **GPU のある Chrome**（Edge 155・Radeon RX 5700 XT・D3D11。H.264 は GPU でデコード、AV1 はこの GPU が
@@ -1006,7 +1007,7 @@ CPU の数だけ空回りのプロセスを並べる（`BENCH_LOADS=busy`）と�
   2〜12 のどれでも変わらない
 - 遅い回（毎秒 33 コマ前後）は値によらず混じる（AV1 の 6・12、H.264 の 11）。窓が隠れた Edge が刻みを間引いたものと見ていて、
   値の差として読まない。GPU の置き場の大きさは GPU とドライバで違うので、ほかの GPU（Intel・テスラ）で 12 より下に
-  崖が来ることはありうる
+  崖が来ることはありうる（崖を測ったのはこの 1 台だけ）。ほかの端末で「再生が追いつきません」が出るなら、まずここを下げて測る
 - **放送のままは 1 回に 1 枚ずつデコードする**ので、待たせるのは多くて 3〜5 枚。2 だと追いつかない。3〜4 は 15 秒で
   二十数コマ落とし、6 以上でほぼ落とさない。**8 のまま。** WASM のメモリはどの値でも最初の 64MB から増えない（1 枚 3MB でも、
   持つのは 5 枚まで）ので、上げても下げても使う量は変わらない

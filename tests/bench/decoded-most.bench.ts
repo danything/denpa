@@ -187,8 +187,9 @@ test('DECODED_MOST を振って、コマの出方と持つ量を比べる', asyn
         const table = summarize(results);
         writeFileSync(`${OUT}/decoded-most.md`, `${table}\n`);
         console.log(table);
-        await setRecording(request, {});
     } finally {
+        // 立てたまま測ったとき・途中で落ちたときも、録画の設定を戻す
+        await setRecording(request, {}).catch(() => undefined);
         proxy.kill('SIGTERM');
     }
 });
