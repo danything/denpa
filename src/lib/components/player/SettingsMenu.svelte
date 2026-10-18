@@ -213,10 +213,12 @@
 <style>
     /*
      * **幅は上の並びと選択肢の並びで変えない。** 入るたびに枠の幅が変わると、押した位置から行が逃げる。
-     * 名前と値が1行に収まる幅から (値が長ければ後ろを省く)
+     * 名前と値が1行に収まる幅から。**値は省かずに出したい** (音声の「主音声ステレオ (日本語)」など) ので、
+     * 映像の上のほかのメニュー (20rem まで) より広く取り、それでも入らなければ値だけ2行に折る
      */
-    :global(.settings-menu) {
+    :global(.overlay-menu.settings-menu) {
         min-width: 17rem;
+        max-width: min(24rem, 90vw);
     }
     .pane {
         display: contents;
@@ -240,12 +242,21 @@
         white-space: nowrap;
         padding-inline-end: 0.75rem;
     }
+    /*
+     * 値は名前と同じ大きさの字で、色だけ控える。長い値は2行まで右にそろえて折り、
+     * それでも入らないぶんだけ「…」で止める
+     */
     .value {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
         min-width: 0;
-        max-width: 8rem;
+        max-width: 13rem;
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        font-size: inherit;
+        line-height: 1.3;
+        text-align: right;
         color: var(--dp-muted);
     }
     .back {
