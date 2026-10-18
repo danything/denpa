@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using System.Text.Json.Nodes;
 
 namespace Denpa.Agent;
 
@@ -87,7 +86,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
             {
                 throw new ArgumentException(
                     $"CARD_SHARE_NETWORKS の「{outside}」は LAN の外を含みます。鍵は同じ世帯の機器にだけ配るので、"
-                    + "ループバック・10.0.0.0/8・172.16.0.0/12・192.168.0.0/16・fc00::/7・fe80::/10 の中の範囲だけを書けます");
+                    + $"{string.Join("・", DefaultNetworks)} の中の範囲だけを書けます");
             }
         }
 
@@ -198,15 +197,6 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     }
 
     private static string Ms(TimeSpan span) => $"{span.TotalMilliseconds.ToString("0.###", CultureInfo.InvariantCulture)}ms";
-
-    /// <summary>決まりをそのまま出す (<c>/denpa/card</c> の <c>share</c>)</summary>
-    public JsonObject ToJson() => new()
-    {
-        ["port"] = Port,
-        ["networks"] = Json.Strings(Networks.Select(network => network.ToString())),
-        ["ttl"] = Hops,
-        ["maxRtt"] = MaxRoundTrip?.TotalMilliseconds,
-    };
 }
 
 /// <summary>断った理由。<paramref name="Rule"/> はどの決まりか (設定の名前)</summary>

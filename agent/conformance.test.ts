@@ -446,8 +446,6 @@ type CardStatus = {
     ids?: string[];
     tuners?: string[];
     readers: CardReader[];
-    /** 鍵を配っているときの決まり (CARD_SHARE_PORT など。agent/Denpa.Agent/CardLan.cs) */
-    share?: { port: number; networks: string[]; ttl: number; maxRtt: number | null };
 };
 
 function expectReader(reader: CardReader) {
@@ -509,21 +507,6 @@ describe('カードとスクランブル解除', () => {
         for (const reader of card.readers) expectReader(reader);
         // 使うカードは1枚だけ
         expect(card.readers.filter((reader) => reader.active).length).toBeLessThanOrEqual(1);
-        // 鍵を配っているので、その決まりも出る。既定は LAN の中だけ・TTL 1・往復時間は見ない
-        expect(card.share).toEqual({
-            port: SHARE_PORT,
-            networks: [
-                '127.0.0.0/8',
-                '10.0.0.0/8',
-                '172.16.0.0/12',
-                '192.168.0.0/16',
-                '::1/128',
-                'fc00::/7',
-                'fe80::/10',
-            ],
-            ttl: 1,
-            maxRtt: null,
-        });
     });
 
     test('鍵を配る API は専用のポートにだけある', async () => {
@@ -560,8 +543,6 @@ describe('カードとスクランブル解除', () => {
             expect(card.readers).toEqual([]);
             // 配る側にカードが無い。何が起きたかを画面に出す
             if (!card.ok) expect(card.message).toContain('鍵を配る拠点');
-            // 鍵を配っていなければ決まりは出ない
-            expect(card.share).toBeUndefined();
         } finally {
             await stop();
         }
@@ -601,12 +582,11 @@ describe('カードとスクランブル解除', () => {
     test('往復時間の上限を付けても、近い相手には配る', async () => {
         // 往復時間は受けた接続のソケットから OS に聞く。読めなければ 403 になるので、ここで届いていることを見る
         const sharePort = PORT + 4;
-        const { card, stop } = await spawnAgent(PORT + 2, {
+        const { stop } = await spawnAgent(PORT + 2, {
             CARD_SHARE_PORT: String(sharePort),
             CARD_SHARE_MAX_RTT: '50',
         });
         try {
-            expect(card.share?.maxRtt).toBe(50);
             expect((await fetch(`http://127.0.0.1:${sharePort}/denpa/card/init`)).status).toBe(503);
         } finally {
             await stop();

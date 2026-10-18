@@ -80,19 +80,13 @@ public sealed class Descrambler(IKeySource source)
     private CardInit? _init;
     private int _caSystemId = BcasSystemId;
     private string? _logged;
-    private long _decoded, _undecodable, _unentitled, _dropped;
+    private long _decoded, _undecodable;
 
     /// <summary>復号したパケットの数</summary>
     public long Decoded => Volatile.Read(ref _decoded);
 
     /// <summary>掛かっていたのに鍵が無くて**そのまま流した**パケットの数 (契約の無いものは数えない)</summary>
     public long Undecodable => Volatile.Read(ref _undecodable);
-
-    /// <summary>**契約が無くて**そのまま流した数。復号できなかったのではなく資格が無い (同じ TS に入っている有料局)</summary>
-    public long Unentitled => Volatile.Read(ref _unentitled);
-
-    /// <summary>188 バイトの並びに乗らず捨てたバイト数 (途中から読み始めた頭や、壊れたところ)</summary>
-    public long Dropped => Volatile.Read(ref _dropped);
 
     /// <summary>最後に鍵を貰えなかった理由。**録画が掛かったままだったときに見せる**</summary>
     public string? LastError { get; private set; }
@@ -145,7 +139,6 @@ public sealed class Descrambler(IKeySource source)
     {
         var whole = _carryLength >= PacketSize && _carry[0] == SyncByte;
         if (whole) Take(_carry.AsSpan(0, PacketSize), output);
-        _dropped += _carryLength - (whole ? PacketSize : 0);
         _carryLength = 0;
         if (_holding) Settle();
         Release(output);
@@ -167,7 +160,6 @@ public sealed class Descrambler(IKeySource source)
             _synced = false;
             var found = at;
             while (found + PacketSize < data.Length && (data[found] != SyncByte || data[found + PacketSize] != SyncByte)) found++;
-            _dropped += found - at;
             at = found;
             // 最後の 188 バイトの中の 0x47 は、次が来るまで本物か分からない
             if (found + PacketSize >= data.Length) return at;
@@ -218,7 +210,8 @@ public sealed class Descrambler(IKeySource source)
             packet[3] &= 0x3F;
             _decoded++;
         }
-        else if (ecm is { Unentitled: true }) _unentitled++;
+        // 契約が無い (同じ TS に入っている有料局)。復号の失敗には数えずにそのまま流す
+        else if (ecm is { Unentitled: true }) return;
         else if (start < 0 || !usable || ecm?.Cipher is not { HasKeys: true } cipher) _undecodable++;
         else
         {

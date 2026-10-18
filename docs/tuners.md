@@ -119,8 +119,7 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
 `message` は困ったときだけ入ります (カードがどこにも無い、など)。覗けなかった
 リーダーは `error` に理由が入ります。`CARD_URL` のときは `source: "remote"` で、
 `remote` (配り役の URL)・`ids`・`tuners` が付き、`readers` は空です。
-鍵を配っているときは `share` に決まり (ポート・相手の範囲・TTL・往復時間の上限) が付きます
-([鍵を配るのは LAN の中だけ](agent.md#鍵を配るのは-lan-の中だけ))。断られたときの文も同じ節にあります。
+鍵を配る範囲と、断られたときの文は [鍵を配るのは LAN の中だけ](agent.md#鍵を配るのは-lan-の中だけ) にあります。
 
 ```sh
 # ホストから呼ぶ (イメージには curl もシェルも無い)。compose は 25252 を出してある。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む

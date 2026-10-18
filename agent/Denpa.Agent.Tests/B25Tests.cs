@@ -325,7 +325,6 @@ public class B25Tests
 
         byte[] expected = [.. Expected(head), .. Expected(tail)];
         await Assert.That(Diff(output, expected)).IsEqualTo(-1);
-        await Assert.That(descrambler.Dropped).IsEqualTo(50 + garbage.Length);
     }
 
     [Test]
@@ -602,7 +601,6 @@ public class B25Tests
 
         await Assert.That(Diff(output, ts.Wire.ToArray())).IsEqualTo(-1);
         // 復号できなかったのではなく、復号する資格が無い。**復号の失敗には数えない**
-        await Assert.That(descrambler.Unentitled).IsEqualTo(5);
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
         await Assert.That(descrambler.LastError!).Contains("0x8901");
     }
