@@ -911,7 +911,7 @@
                                     aria-busy="true"
                                     data-testid="encode-cancel"
                                 >
-                                    エンコード中止
+                                    エンコード中断
                                 </button>
                             {:else}
                                 <ActionButton
@@ -920,7 +920,7 @@
                                     class="outline danger"
                                     testid="encode-cancel"
                                 >
-                                    エンコード中止
+                                    エンコード中断
                                 </ActionButton>
                             {/if}
                         {:else}
