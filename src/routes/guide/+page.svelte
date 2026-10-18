@@ -1,7 +1,9 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import { dragScroll, submitting } from '#lib/actions.js';
+    import { GENRE_TREE } from '#lib/arib.js';
     import ChannelNotice from '#lib/components/ChannelNotice.svelte';
+    import Menu from '#lib/components/Menu.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
@@ -12,7 +14,9 @@
     import { CHANNEL_TYPES, type ProgramDetail as Facts } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import Ellipsis from '~icons/lucide/ellipsis';
     import Layers from '~icons/lucide/layers';
+    import Palette from '~icons/lucide/palette';
 
     let { data, form } = $props();
 
@@ -358,6 +362,135 @@
     const nextHref = $derived(href({ start: String(data.start + data.hours * HOUR) }));
 
     /**
+     * 日付の並び (広い画面)。**今日から、番組表の届いている日まで** (`+page.server.ts` の `daysOf`)。
+     * 番組の無い日も並べて押せなくする。前の日を見ているときだけ、その日を頭に足す
+     * (選んでいる日が並びに無いと、どこを見ているのか分からない)
+     */
+    const days = $derived.by(() => {
+        const list = data.days.map((day) => ({ ...day, label: dayLabel(day.start) }));
+        if (data.start < data.today) list.unshift({ start: data.start, has: true, label: dayLabel(data.start) });
+        return list;
+    });
+
+    /** 「今日」か「18(日)」。土日は字の色で分かるようにする (`.sat`・`.sun`) */
+    function dayLabel(start: number): string {
+        if (start === data.today) return '今日';
+        const text = date(start);
+        return text.slice(text.indexOf('/') + 1);
+    }
+
+    function weekday(start: number): 'sat' | 'sun' | null {
+        const day = new Date(start).getDay();
+        return day === 6 ? 'sat' : day === 0 ? 'sun' : null;
+    }
+
+    /**
+     * **並びが入りきらないときだけ、両端に ← → を出す。** 入るなら日を直接押せば済む。
+     * ← は前日に番組があるときも出す (並びは今日からなので、前の日へはこれでしか行けない)。
+     *
+     * 測るのは並び (`strip`) の中身の幅と、出せる幅。矢印を出すと並びが狭くなるので、
+     * 出しているときは矢印のぶんも出せる幅に足して比べる (出したり消したりを繰り返さない)
+     */
+    let strip = $state<HTMLElement | null>(null);
+    let prevArrow = $state<HTMLElement | null>(null);
+    let nextArrow = $state<HTMLElement | null>(null);
+    let crowded = $state(false);
+    $effect(() => {
+        const box = strip;
+        if (box === null) return;
+        const measure = () => {
+            if (box.clientWidth === 0) return;
+            const arrows = crowded ? (prevArrow?.offsetWidth ?? 0) + (nextArrow?.offsetWidth ?? 0) : 0;
+            crowded = box.scrollWidth > box.clientWidth + arrows + 1;
+        };
+        const observer = new ResizeObserver(measure);
+        observer.observe(box);
+        measure();
+        return () => observer.disconnect();
+    });
+
+    /* 選んでいる日が並びの外に隠れていたら見えるところへ (並びは横に流れる) */
+    $effect(() => {
+        data.start;
+        strip?.querySelector('[aria-current="date"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+
+    /**
+     * 時刻へ送るボタン。**その日のその時刻を表の上端 (局名の行のすぐ下) に持ってくる。**
+     * 「今」はいまの線を開いたときと同じ高さ (画面の4分の1) に置く。今日を見ているときだけ押せる
+     */
+    const JUMPS = [
+        { key: '6', label: '朝', hour: 6, title: '6:00 へ' },
+        { key: '12', label: '昼', hour: 12, title: '12:00 へ' },
+        { key: '19', label: '夜', hour: 19, title: '19:00 へ' },
+        { key: '23', label: '深夜', hour: 23, title: '23:00 へ' },
+    ] as const;
+
+    let scrollFrame = 0;
+
+    /**
+     * 表を縦に送る。**動きは `--dp-duration` (80ms)**。動かさない設定ではその値が 0 になり、すぐ移る。
+     * ブラウザの `behavior: 'smooth'` は長さを決められず、数百ms かかる
+     */
+    function scrollGrid(top: number): void {
+        const box = grid;
+        if (box === null) return;
+        cancelAnimationFrame(scrollFrame);
+        const target = Math.max(0, Math.min(top, box.scrollHeight - box.clientHeight));
+        const raw = getComputedStyle(document.documentElement).getPropertyValue('--dp-duration').trim();
+        const duration = raw.endsWith('ms') ? Number.parseFloat(raw) : Number.parseFloat(raw) * 1000;
+        const from = box.scrollTop;
+        if (!(duration > 0) || from === target) {
+            box.scrollTop = target;
+            return;
+        }
+        const begin = performance.now();
+        const step = (now: number) => {
+            const t = Math.min(1, (now - begin) / duration);
+            box.scrollTop = from + (target - from) * (1 - (1 - t) ** 3);
+            if (t < 1) scrollFrame = requestAnimationFrame(step);
+        };
+        scrollFrame = requestAnimationFrame(step);
+    }
+
+    $effect(() => () => cancelAnimationFrame(scrollFrame));
+
+    function jumpTo(hour: number): void {
+        const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+        // 表の頭は 4:00。5分で1マス
+        const slot = (((hour - 4 + 24) % 24) * HOUR) / SLOT;
+        scrollGrid(slot * Number.parseFloat(SLOT_HEIGHT) * rem);
+    }
+
+    function jumpNow(): void {
+        if (grid === null || nowMark === null) return;
+        const top = nowMark.getBoundingClientRect().top - grid.getBoundingClientRect().top;
+        scrollGrid(grid.scrollTop + top - grid.clientHeight / 4);
+    }
+
+    /**
+     * ジャンルの色の見本と、1つだけ目立たせる切り替え。色の決め方は下の `.program[data-genre]` と同じ規則
+     * (見本も同じセレクタで `--tint` を受ける)。色の付くのは 0〜11 だけ
+     */
+    const GENRES = GENRE_TREE.filter((genre) => Number(genre.value) <= 11).map((genre) => ({
+        id: Number(genre.value),
+        label: genre.label,
+    }));
+    /** 目立たせているジャンル。ほかのマスを淡くする。端末をまたいで覚えるほどのものではない */
+    let highlight = $state<number | null>(null);
+
+    /** 狭い画面では操作の1行が下にあるので、メニューは上へ開く */
+    let narrow = $state(false);
+    $effect(() => {
+        const query = matchMedia('(max-width: 767px)');
+        const sync = () => (narrow = query.matches);
+        sync();
+        query.addEventListener('change', sync);
+        return () => query.removeEventListener('change', sync);
+    });
+    const menuSide = $derived(narrow ? 'top' : 'bottom');
+
+    /**
      * 読み込み中に出す骨組みの形。**中身の数とは関係なく決め打ち。**
      *
      * 何局あるかは表と一緒に届くので、この時点では分からない。8列ぶん出して
@@ -427,92 +560,6 @@
         return () => cancelIdleCallback(handle);
     });
 
-    /**
-     * **表を下へ送っている間は、操作の1行を上へ畳む** (携帯のブラウザのアドレスバーと同じ)。
-     * 上へ戻すと出てくる。畳んだぶん (1行 ≒ 50px) は時間に回る。
-     *
-     * - 見るのは**表の縦のスクロールだけ**。横に流しただけでは動かさない。
-     * - **人が動かしたときだけ**数える (ホイール・指・ドラッグ・キー)。開いたときの「いま」への
-     *   位置合わせや、マスを押す前のブラウザのスクロールで畳むと、押す場所がずれる。
-     * - 同じ向きに 48px 進んだら畳み、24px 戻したら出す。行ったり来たりでちらつかない。
-     * - 動かすのは `translate` だけ。高さは「畳むときは先に伸ばし、出すときは出し終えてから縮める」
-     *   ので、途中で表の下に隙間が見えない。動かさない設定ではその場で畳んで出す。
-     * - 操作にフォーカスが入ったら出す (キーボードで届く)。
-     */
-    let barHeight = $state(0);
-    let barHidden = $state(false);
-    /** 畳んだぶん表を伸ばしているか。出すときは動き終えてから戻す */
-    let barTall = $state(false);
-    let toolbar: HTMLElement | null = $state(null);
-    const HIDE_AFTER = 48;
-    const SHOW_AFTER = 24;
-    /** 人が動かしている間 (`performance.now()` の期限)。指を離したあとの惰性もこの延長で拾う */
-    let userUntil = 0;
-    let lastTop = 0;
-    let travel = 0;
-    let tallTimer = 0;
-
-    function byUser(): void {
-        userUntil = performance.now() + 400;
-    }
-
-    function hideBar(): void {
-        if (toolbar?.contains(document.activeElement)) return;
-        clearTimeout(tallTimer);
-        barTall = true;
-        barHidden = true;
-    }
-
-    function showBar(): void {
-        if (!barHidden) return;
-        barHidden = false;
-        clearTimeout(tallTimer);
-        const page = toolbar?.parentElement;
-        const wait = page ? Number.parseFloat(getComputedStyle(page).transitionDuration) * 1000 : 0;
-        if (wait > 0) tallTimer = window.setTimeout(() => (barTall = false), wait);
-        else barTall = false;
-    }
-
-    function onGridScroll(event: Event): void {
-        const top = (event.currentTarget as HTMLElement).scrollTop;
-        const delta = top - lastTop;
-        lastTop = top;
-        if (delta === 0) return;
-        if (performance.now() > userUntil) {
-            travel = 0;
-            return;
-        }
-        byUser();
-        travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
-        if (top <= 0 || travel <= -SHOW_AFTER) showBar();
-        else if (travel >= HIDE_AFTER && top > barHeight) hideBar();
-    }
-
-    /* 表は放送波や日を選び直すたびに作り直すので、そのたびに付け直す */
-    $effect(() => {
-        const box = grid;
-        if (box === null) return;
-        lastTop = box.scrollTop;
-        const drag = (event: PointerEvent) => {
-            if (event.buttons !== 0) byUser();
-        };
-        const passive = { passive: true };
-        box.addEventListener('scroll', onGridScroll, passive);
-        box.addEventListener('wheel', byUser, passive);
-        box.addEventListener('touchmove', byUser, passive);
-        box.addEventListener('pointermove', drag, passive);
-        box.addEventListener('keydown', byUser);
-        return () => {
-            box.removeEventListener('scroll', onGridScroll);
-            box.removeEventListener('wheel', byUser);
-            box.removeEventListener('touchmove', byUser);
-            box.removeEventListener('pointermove', drag);
-            box.removeEventListener('keydown', byUser);
-        };
-    });
-
-    $effect(() => () => clearTimeout(tallTimer));
-
     /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
     const CANCELABLE = ['scheduled', 'conflict', 'skipped', 'recording'];
 </script>
@@ -526,22 +573,20 @@
     そこは `svh` で採る — `svh` だけが見えている範囲を超えない
     (`vh` と `dvh` は実機の PWA でアドレスバーの高さぶん超えた)。天井なので小さく出る側に倒す
 -->
-<div class="page" class:bar-hidden={barHidden} class:bar-tall={barTall} style:--bar="{barHeight}px">
+<div class="page">
     <!--
-        **どこを見るかは表の上の細い1行にまとめる** (種別・日送り・探す)。縦は表に回す。
+        **どこを見るかは表の外の細い1行にまとめる** (種別・日付・時刻・サブch・ジャンル)。縦は表に回す。
 
         表の中 (左上の角・局名の行) には入れない。角は時刻の列の幅 (2.5rem) しか無く、
         入れるならメニューに畳むことになり、種別や日を変えるたびに1回多く押す。
         局名の行に入れると、操作の幅のぶん局名が隠れる。表の外の1行なら、
-        隠れるものも押す回数も増えない。表を下へ送っている間は畳む (`hideBar`)
+        隠れるものも押す回数も増えない。
+
+        **狭い画面では表の下、下のタブのすぐ上に置く** (親指が届く。`.toolbar` の `order`)。
+        DOM の順 (種別 → 日付 → 時刻 → …) は読み上げの順なので変えない。
+        入りきらない幅では、時刻のボタンを「⋯」に、さらに狭いと日付のメニューに移す
     -->
-    <div
-        class="cluster toolbar"
-        bind:this={toolbar}
-        bind:offsetHeight={barHeight}
-        onfocusin={showBar}
-        data-testid="guide-toolbar"
-    >
+    <div class="toolbar" data-testid="guide-toolbar">
         <div role="group" class="types segmented" data-testid="type-tabs">
             {#each CHANNEL_TYPES as type (type)}
                 <a
@@ -556,50 +601,206 @@
             {/each}
         </div>
 
-        <!-- 日送りは種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない -->
-        <div class="cluster days">
-            <!-- 狭い画面では矢印だけにする。読み上げは名前 (aria-label) で -->
-            <a class="button small secondary outline" href={prevHref} aria-label="前日" data-testid="prev-day">
-                ←<span class="day-word"> 前日</span>
-            </a>
-            <span class="small nowrap">
-                <!--
-                    日本の番組表の慣習で、1日は4時から翌4時まで。狭い画面では日と曜日だけ
-                    (前後の日へ送るだけなので、月が無くても迷わない)
-                -->
-                <span class="month">{month}</span>{day}
-                <span class="muted hours">(4:00〜翌4:00)</span>
-            </span>
-            <a class="button small secondary outline" href={nextHref} aria-label="翌日" data-testid="next-day">
-                <span class="day-word">翌日 </span>→
-            </a>
-            <!-- 今日を見ているときは出さない (押しても同じ表のまま)。そのぶん狭い画面でも1行に収まる -->
+        <!--
+            日付は種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない。
+            広い画面は日付を並べて直接押す (`.strip`)。← → は入りきらないときと、前日に番組があるときだけ。
+            狭い画面は ← 日付 → で、日付を押すと1週間ぶんと時刻のメニューが開く
+        -->
+        <div class="days" class:crowded class:earlier={data.earlier || data.start < data.today}>
+            <a
+                class="button small secondary outline arrow prev"
+                href={prevHref}
+                aria-label="前日"
+                data-testid="prev-day"
+                bind:this={prevArrow}
+            >←</a>
+            <nav class="strip" aria-label="日付" bind:this={strip}>
+                {#each days as day (day.start)}
+                    {@const selected = day.start === data.start}
+                    {#if day.has || selected}
+                        <a
+                            class="day-chip {weekday(day.start) ?? ''}"
+                            class:selected
+                            href={href({ start: String(day.start) })}
+                            aria-current={selected ? 'date' : undefined}
+                            aria-label={day.start === data.today ? `今日 ${date(day.start)}` : date(day.start)}
+                            data-testid="guide-day"
+                            data-start={day.start}
+                        >{day.label}</a>
+                    {:else}
+                        <!-- 番組がまだ届いていない日。並びの幅を保つために置いて、押せなくする -->
+                        <span
+                            class="day-chip disabled {weekday(day.start) ?? ''}"
+                            title="番組表がまだありません"
+                            data-testid="guide-day"
+                            data-start={day.start}
+                            aria-disabled="true"
+                        >{day.label}<span class="visually-hidden"> (番組表なし)</span></span>
+                    {/if}
+                {/each}
+            </nav>
+            <Menu side={menuSide} class="guide-menu" testid="guide-date-menu">
+                {#snippet trigger(props)}
+                    <!-- 日本の番組表の慣習で、1日は4時から翌4時まで (読み上げと title で) -->
+                    <button
+                        {...props}
+                        type="button"
+                        class="small secondary outline date-label"
+                        title="{shownDate} (4:00〜翌4:00)"
+                        data-testid="guide-date"
+                    >{day}</button>
+                {/snippet}
+                {#each days as day (day.start)}
+                    {@const selected = day.start === data.start}
+                    {#if day.has || selected}
+                        <a
+                            class="menu-item {weekday(day.start) ?? ''}"
+                            class:selected
+                            role="menuitem"
+                            href={href({ start: String(day.start) })}
+                            aria-current={selected ? 'date' : undefined}
+                        >{day.start === data.today ? `今日 ${date(day.start)}` : date(day.start)}</a>
+                    {:else}
+                        <button
+                            type="button"
+                            class="menu-item {weekday(day.start) ?? ''}"
+                            role="menuitem"
+                            aria-disabled="true"
+                            data-disabled
+                        >{date(day.start)} <span class="muted">番組表なし</span></button>
+                    {/if}
+                {/each}
+                <hr />
+                {@render jumpItems()}
+            </Menu>
+            <a
+                class="button small secondary outline arrow next"
+                href={nextHref}
+                aria-label="翌日"
+                data-testid="next-day"
+                bind:this={nextArrow}
+            >→</a>
+            <!-- 狭い画面だけ。今日を見ているときは出さない (押しても同じ表のまま) -->
             {#if nowSlots === null}
-                <a class="button small secondary outline" href={href({})} data-testid="guide-today">今日</a>
+                <a class="button small secondary outline today" href={href({})} data-testid="guide-today">今日</a>
             {/if}
         </div>
 
-        <!--
-            **サブチャンネルを出すか** (issue #509)。テレビの番組表の「サブチャンネル表示」と同じ。
-            見え方の好みなので設定画面ではなくここに置き、端末ごとに覚える。
-            入っているかは aria-pressed と地の色で (録画一覧の「まとめて表示」と同じ形)。
-            その日に分割放送が無ければ出さない (押しても列が増えない)
-        -->
-        {#if canSplit}
+        <!-- 時刻へ送る (広い画面)。入りきらない幅では右の「⋯」に移す -->
+        <div role="group" class="jumps" aria-label="時刻へ移動">
             <button
                 type="button"
-                class="small {subchannels ? '' : 'secondary outline'}"
-                aria-pressed={subchannels}
-                title={subchannels ? 'サブチャンネルを表示中 (押すと隠します)' : 'サブチャンネルも表示'}
-                aria-label="サブチャンネル表示"
-                onclick={() => setSubchannels(!subchannels)}
-            >
-                <!-- 狭い画面では印だけ (字のままだと1行に収まらない)。名前は aria-label で -->
-                <span class="subch-icon" aria-hidden="true"><Icon icon={Layers} size="size-4" /></span>
-                <span class="subch-word">サブch</span>
-            </button>
-        {/if}
+                class="small secondary outline"
+                disabled={nowSlots === null || sheet === null}
+                title={nowSlots === null ? '今日を見ているときだけ' : 'いまの時刻へ'}
+                onclick={jumpNow}
+                data-testid="guide-jump-now"
+            >今</button>
+            {#each JUMPS as jump (jump.key)}
+                <button
+                    type="button"
+                    class="small secondary outline"
+                    disabled={sheet === null}
+                    title={jump.title}
+                    onclick={() => jumpTo(jump.hour)}
+                    data-testid="guide-jump-{jump.key}"
+                >{jump.label}</button>
+            {/each}
+        </div>
+        <div class="more">
+            <Menu side={menuSide} align="end" class="guide-menu" testid="guide-more-menu">
+                {#snippet trigger(props)}
+                    <button {...props} type="button" class="small secondary outline icon" aria-label="時刻へ移動" data-testid="guide-more">
+                        <Icon icon={Ellipsis} size="size-4" />
+                    </button>
+                {/snippet}
+                {@render jumpItems()}
+            </Menu>
+        </div>
 
+        <div class="end">
+            <!--
+                **サブチャンネルを出すか** (issue #509)。テレビの番組表の「サブチャンネル表示」と同じ。
+                見え方の好みなので設定画面ではなくここに置き、端末ごとに覚える。
+                入っているかは aria-pressed と地の色で (録画一覧の「まとめて表示」と同じ形)。
+                その日に分割放送が無ければ出さない (押しても列が増えない)
+            -->
+            {#if canSplit}
+                <button
+                    type="button"
+                    class="small subch {subchannels ? '' : 'secondary outline'}"
+                    aria-pressed={subchannels}
+                    title={subchannels ? 'サブチャンネルを表示中 (押すと隠します)' : 'サブチャンネルも表示'}
+                    aria-label="サブチャンネル表示"
+                    onclick={() => setSubchannels(!subchannels)}
+                >
+                    <!-- 狭い画面では印だけ (字のままだと1行に収まらない)。名前は aria-label で -->
+                    <span class="icon-only" aria-hidden="true"><Icon icon={Layers} size="size-4" /></span>
+                    <span class="word">サブch</span>
+                </button>
+            {/if}
+
+            <!--
+                **ジャンルの色の見本。** 押すとそのジャンルだけ目立たせる (ほかのマスを淡く)。もう一度押すか
+                「すべて」で戻す。見本の色はマスと同じ規則 (`:is(.program, .swatch)[data-genre]`) から
+            -->
+            <Menu side={menuSide} align="end" class="guide-menu genre-menu" testid="guide-genre-menu">
+                {#snippet trigger(props)}
+                    <button
+                        {...props}
+                        type="button"
+                        class="small secondary outline genre-button"
+                        aria-label={narrow && canSplit ? 'サブチャンネルとジャンルの色' : 'ジャンルの色'}
+                        data-testid="guide-genres"
+                    >
+                        {#if highlight !== null}
+                            <span class="swatch" data-genre={highlight} aria-hidden="true"></span>
+                        {:else}
+                            <span class="icon-only" aria-hidden="true">
+                                <Icon icon={narrow && canSplit ? Ellipsis : Palette} size="size-4" />
+                            </span>
+                        {/if}
+                        <span class="word">ジャンル</span>
+                    </button>
+                {/snippet}
+                {#if narrow && canSplit}
+                    <!-- 狭い画面ではサブch もここに入れる (ボタン2つぶんの幅が1行に入らない) -->
+                    <button
+                        type="button"
+                        class="menu-item"
+                        role="menuitemcheckbox"
+                        aria-checked={subchannels}
+                        onclick={() => setSubchannels(!subchannels)}
+                        data-testid="subch-item"
+                    >
+                        <Icon icon={Layers} size="size-4" />サブチャンネルも表示
+                    </button>
+                    <hr />
+                {/if}
+                <button
+                    type="button"
+                    class="menu-item"
+                    role="menuitemradio"
+                    aria-checked={highlight === null}
+                    onclick={() => (highlight = null)}
+                    data-testid="genre-all"
+                >
+                    <span class="swatch all" aria-hidden="true"></span>すべて
+                </button>
+                {#each GENRES as genre (genre.id)}
+                    <button
+                        type="button"
+                        class="menu-item"
+                        role="menuitemradio"
+                        aria-checked={highlight === genre.id}
+                        onclick={() => (highlight = highlight === genre.id ? null : genre.id)}
+                        data-testid="genre-{genre.id}"
+                    >
+                        <span class="swatch" data-genre={genre.id} aria-hidden="true"></span>{genre.label}
+                    </button>
+                {/each}
+            </Menu>
+        </div>
     </div>
 
     {#if sheet !== null && sheet.failed !== null}
@@ -799,6 +1000,7 @@
                             class:reserved={program.reservation_state && program.reservation_state !== 'skipped'}
                             data-state={program.reservation_state}
                             data-genre={program.genres?.[0]}
+                            class:dim={highlight !== null && program.genres?.[0] !== highlight}
                             onclick={(event) => void open(program, event.currentTarget)}
                             data-testid="program-button"
                         >
@@ -832,6 +1034,29 @@
         </div>
     {/if}
 </div>
+
+<!-- 時刻へ送るメニューの項目 (「⋯」と、狭い画面の日付のメニュー) -->
+{#snippet jumpItems()}
+    {@const off = nowSlots === null || sheet === null}
+    <button
+        type="button"
+        class="menu-item"
+        role="menuitem"
+        aria-disabled={off ? 'true' : undefined}
+        data-disabled={off ? '' : undefined}
+        onclick={() => !off && jumpNow()}
+    >今 <span class="muted">{off ? '(今日だけ)' : time(clock)}</span></button>
+    {#each JUMPS as jump (jump.key)}
+        <button
+            type="button"
+            class="menu-item"
+            role="menuitem"
+            aria-disabled={sheet === null ? 'true' : undefined}
+            data-disabled={sheet === null ? '' : undefined}
+            onclick={() => sheet !== null && jumpTo(jump.hour)}
+        >{jump.label} <span class="muted">{jump.hour}:00</span></button>
+    {/each}
+{/snippet}
 
 <!-- 番組の中身。**二段組の外に置く** (中に入れると巻き取る箱の中で開くことになる) -->
 {#if selected && facts}
@@ -969,22 +1194,11 @@
      * 高さも同じぶん足す。広い幅は `FILLED` の `%`、狭い幅は下の `svh`
      */
     .page {
-        /* 高さの元 (`--page-h`) と、畳んだ1行のぶん伸ばす量 (`--extra`)。伸ばしたぶんは下のマージンで打ち消す */
         --page-h: calc(100% + 2 * var(--dp-gutter));
-        --extra: 0px;
         display: flex;
         flex-direction: column;
         margin: calc(-1 * var(--dp-gutter));
-        margin-bottom: calc(-1 * var(--dp-gutter) - var(--extra));
-        height: calc(var(--page-h) + var(--extra));
-        transition: translate var(--dp-duration) var(--dp-ease);
-    }
-    /* 操作の1行を畳む (上の `hideBar`)。広い幅ではナビの裏へ、狭い幅では画面の上へ抜ける */
-    .page.bar-hidden {
-        translate: 0 calc(-1 * var(--bar));
-    }
-    .page.bar-tall {
-        --extra: var(--bar);
+        height: var(--page-h);
     }
     /*
      * 狭い幅は画面の高さから上下の固定のもの (ナビ・下のタブ・ノッチ) を引く。
@@ -1001,13 +1215,17 @@
             --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
         }
     }
+    /* **1行に収める** (折り返さない)。入りきらないぶんは日付の並びが縮んで横に流れ、時刻は「⋯」へ (下の幅ごとの決まり) */
     .toolbar {
-        --gap: var(--dp-space-2);
+        display: flex;
         flex: none;
+        align-items: center;
+        gap: var(--dp-space-2);
         padding: var(--dp-space-1) var(--dp-space-3);
         border-bottom: 1px solid var(--dp-line);
     }
     .types {
+        flex: none;
         width: auto;
     }
     /* 種別を選び直すと、持ち上げた面が横へ滑る (`app.css` の「画面の切り替え」) */
@@ -1018,39 +1236,207 @@
     :global(:root[data-morph]) .seg-pill {
         view-transition-name: none;
     }
-    .subch-icon {
+    .days {
+        display: flex;
+        flex: 0 1 auto;
+        align-items: center;
+        gap: var(--dp-space-1);
+        min-width: 0;
+    }
+    .arrow {
+        flex: none;
+    }
+    /*
+     * 日付の並び。**中身の幅だけ取り、入りきらなければ縮んで横に流れる** (流す印は出さない。両端の ← → で送れる)
+     */
+    .strip {
+        display: flex;
+        flex: 0 1 auto;
+        gap: 2px;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .strip::-webkit-scrollbar {
         display: none;
     }
     /*
-     * **狭い画面も1段にまとめる。** 種別・日送り (矢印・日付・今日)・サブチャンネル。
-     * 2段に積んでいた頃は、表の上に 80px ほど操作が並んでいた。
-     * 番組を言葉で探すのはサイト全体の検索 (`/search`) に寄せた。
-     * DOM の順 (種別 → 日送り) は読み上げの順なので変えない
+     * 日付の1つ。ふだんは字だけ (押せることは字の濃さと、指を乗せたときの地で)。
+     * **選んでいる日は内側を塗る** (控えのボタンの地より一段濃い地と、内側の細い縁)。太字も添えて、色だけにしない
+     */
+    .day-chip {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        min-height: var(--dp-btn-h-sm);
+        padding-inline: 0.55rem;
+        border-radius: var(--dp-btn-radius);
+        color: var(--pico-secondary);
+        font-size: var(--dp-text-sm);
+        font-variant-numeric: tabular-nums;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    a.day-chip:hover {
+        background: var(--dp-btn-tonal);
+        color: var(--pico-secondary-hover);
+    }
+    .day-chip.selected {
+        background: var(--dp-btn-tonal-hover);
+        box-shadow: inset 0 0 0 1px var(--dp-line-strong);
+        color: var(--pico-h1-color, var(--pico-color));
+        font-weight: var(--dp-weight-bold);
+    }
+    /*
+     * **土日は字の色で。** 土曜は主の色の字、日曜は録画の赤の字 (どちらも淡い地の上で 4.5:1 以上になる段。`app.css`)。
+     * 日付のメニューの中も同じ
+     */
+    .sat {
+        color: var(--dp-primary-text);
+    }
+    .sun {
+        color: var(--dp-rec-text);
+    }
+    a.day-chip.sat:hover,
+    .day-chip.selected.sat {
+        color: var(--dp-primary-text);
+    }
+    a.day-chip.sun:hover,
+    .day-chip.selected.sun {
+        color: var(--dp-rec-text);
+    }
+    /* 番組表がまだ届いていない日。並びに置くだけで押せない */
+    .day-chip.disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    /*
+     * 矢印は広い画面では「入りきらないとき」(`crowded`) だけ。← は前日に番組があるときも (`earlier`)。
+     * 日付のメニューと「今日」は狭い画面だけ
+     */
+    .days:not(.crowded) .next,
+    .days:not(.crowded, .earlier) .prev,
+    .days .date-label,
+    .days .today {
+        display: none;
+    }
+    .jumps {
+        display: none;
+        flex: none;
+        width: auto;
+    }
+    .jumps > button {
+        padding-inline: 0.6rem;
+    }
+    .more {
+        flex: none;
+    }
+    /* 右端に寄せる (サブch・ジャンル) */
+    .end {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: var(--dp-space-2);
+        margin-inline-start: auto;
+    }
+    .icon-only {
+        display: none;
+    }
+    .genre-button {
+        gap: 0.4rem;
+    }
+    /* 時刻のボタンが入る幅。サブch が出ていても 1180px で1行に収まる (実測は PR に) */
+    @media (min-width: 1180px) {
+        .jumps {
+            display: flex;
+        }
+        .more {
+            display: none;
+        }
+    }
+    /*
+     * **狭い画面は表の下に置く** (下のタブのすぐ上。親指が届く)。中身は ← 日付 → (日付を押すと1週間ぶんと時刻) と、
+     * 印だけのボタン1つ (ジャンル。サブch があればそれも中に)。日付の並びと時刻のボタンは出さない (日付のメニューに入っている)。
+     * それでも入りきらない幅 (360px で今日以外を見ているとき) は横に流す
      */
     @media (max-width: 767px) {
         .toolbar {
-            --gap: var(--dp-space-1);
+            order: 1;
+            gap: var(--dp-space-1);
             padding-inline: var(--dp-space-2);
-            /* 1行に収める */
-            flex-wrap: nowrap;
-        }
-        .days {
-            --gap: var(--dp-space-1);
-            flex-wrap: nowrap;
+            border-bottom: 0;
+            border-top: 1px solid var(--dp-line);
+            overflow-x: auto;
+            scrollbar-width: none;
         }
         .types > a.button,
-        .days > a.button {
+        .days > a.button,
+        .date-label {
             padding-inline: 0.4rem;
         }
-        .hours,
-        .month,
-        .day-word,
-        .subch-word {
+        /* サブch はジャンルのメニューに入れる (2つ並べると、今日以外を見ているときに 390px で入りきらない) */
+        .strip,
+        .more,
+        .word,
+        .subch {
             display: none;
         }
-        .subch-icon {
+        .toolbar .days .prev,
+        .toolbar .days .next,
+        .toolbar .days .date-label,
+        .toolbar .days .today {
             display: inline-flex;
         }
+        .icon-only {
+            display: inline-flex;
+        }
+        .end {
+            gap: var(--dp-space-1);
+        }
+        .end > button {
+            width: var(--dp-btn-h-sm);
+            padding-inline: 0;
+        }
+    }
+    /* メニュー (枠は `Menu` の中なので :global)。日付・時刻・ジャンルで共通 */
+    :global(.guide-menu) {
+        width: max-content;
+        min-width: 11rem;
+        max-width: calc(100vw - 1rem);
+    }
+    /* 「ドキュメンタリー／教養」も1行で (狭い画面で幅を詰められて、名前が3行に割れていた) */
+    :global(.guide-menu) .menu-item {
+        white-space: nowrap;
+    }
+    :global(.guide-menu) hr {
+        margin: 0.25rem 0;
+        border-color: var(--dp-line);
+    }
+    :global(.guide-menu) .menu-item.selected {
+        font-weight: var(--dp-weight-bold);
+    }
+    :global(.guide-menu) .menu-item[aria-checked="true"] {
+        background: var(--dp-hover);
+        font-weight: var(--dp-weight-bold);
+    }
+    .menu-item .muted {
+        margin-inline-start: auto;
+    }
+    /*
+     * ジャンルの見本。**マスと同じ形** (左の太い線がジャンルの色、地はその色をごく淡く)。
+     * 色は下の `:is(.program, .swatch)[data-genre]` からマスと同じ値を受ける
+     */
+    .swatch {
+        --tint: var(--dp-line);
+        --wash: 10%;
+        flex: none;
+        width: 1.25rem;
+        height: 0.875rem;
+        border-inline-start: 4px solid var(--tint);
+        border-radius: var(--dp-radius-sm);
+        background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
+        box-shadow: inset 0 0 0 1px var(--dp-line);
     }
     .empty {
         margin: var(--dp-gutter);
@@ -1257,7 +1643,7 @@
         font-weight: var(--dp-weight);
         line-height: normal;
     }
-    :global([data-theme="dark"]) .program {
+    :global([data-theme="dark"]) :is(.program, .swatch) {
         --wash: 14%;
     }
     .program:hover {
@@ -1273,20 +1659,25 @@
      * ジャンルの色は **色みだけを変えて、濃さと鮮やかさは全部同じ** にする
      * (hsl の S と L を固定)。集めてきた色を12個並べていた頃は、黄色のマスだけが
      * 前に出て紺色のマスが沈み、番組表を眺めると明るいマスに目が吸われていた。
-     * 濃さが揃っていれば、色は「種類が違う」ことだけを伝える
+     * 濃さが揃っていれば、色は「種類が違う」ことだけを伝える。
+     * ジャンルの見本 (`.swatch`) も同じ規則で受ける (値を2か所に書かない)
      */
-    .program[data-genre="0"] { --tint: hsl(210 62% 55%); }  /* ニュース/報道 */
-    .program[data-genre="1"] { --tint: hsl(145 62% 55%); }  /* スポーツ */
-    .program[data-genre="2"] { --tint: hsl(190 62% 55%); }  /* 情報/ワイドショー */
-    .program[data-genre="3"] { --tint: hsl(350 62% 55%); }  /* ドラマ */
-    .program[data-genre="4"] { --tint: hsl(280 62% 55%); }  /* 音楽 */
-    .program[data-genre="5"] { --tint: hsl(25 62% 55%); }   /* バラエティ */
-    .program[data-genre="6"] { --tint: hsl(250 62% 55%); }  /* 映画 */
-    .program[data-genre="7"] { --tint: hsl(310 62% 55%); }  /* アニメ/特撮 */
-    .program[data-genre="8"] { --tint: hsl(45 62% 55%); }   /* ドキュメンタリー/教養 */
-    .program[data-genre="9"] { --tint: hsl(325 62% 55%); }  /* 劇場/公演 */
-    .program[data-genre="10"] { --tint: hsl(95 62% 55%); }  /* 趣味/教育 */
-    .program[data-genre="11"] { --tint: hsl(170 62% 55%); } /* 福祉 */
+    :is(.program, .swatch)[data-genre="0"] { --tint: hsl(210 62% 55%); }  /* ニュース/報道 */
+    :is(.program, .swatch)[data-genre="1"] { --tint: hsl(145 62% 55%); }  /* スポーツ */
+    :is(.program, .swatch)[data-genre="2"] { --tint: hsl(190 62% 55%); }  /* 情報/ワイドショー */
+    :is(.program, .swatch)[data-genre="3"] { --tint: hsl(350 62% 55%); }  /* ドラマ */
+    :is(.program, .swatch)[data-genre="4"] { --tint: hsl(280 62% 55%); }  /* 音楽 */
+    :is(.program, .swatch)[data-genre="5"] { --tint: hsl(25 62% 55%); }   /* バラエティ */
+    :is(.program, .swatch)[data-genre="6"] { --tint: hsl(250 62% 55%); }  /* 映画 */
+    :is(.program, .swatch)[data-genre="7"] { --tint: hsl(310 62% 55%); }  /* アニメ/特撮 */
+    :is(.program, .swatch)[data-genre="8"] { --tint: hsl(45 62% 55%); }   /* ドキュメンタリー/教養 */
+    :is(.program, .swatch)[data-genre="9"] { --tint: hsl(325 62% 55%); }  /* 劇場/公演 */
+    :is(.program, .swatch)[data-genre="10"] { --tint: hsl(95 62% 55%); }  /* 趣味/教育 */
+    :is(.program, .swatch)[data-genre="11"] { --tint: hsl(170 62% 55%); } /* 福祉 */
+    /* ジャンルを1つ目立たせているときの、ほかのマス (`highlight`)。押せるまま淡くするだけ */
+    .program.dim {
+        opacity: 0.3;
+    }
     .program.reserved {
         --tint: var(--pico-primary);
         background: color-mix(in srgb, var(--tint) calc(var(--wash) + 6%), var(--dp-surface));

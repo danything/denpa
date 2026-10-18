@@ -1,5 +1,5 @@
 import { fail } from '@sveltejs/kit';
-import { and, eq, gt, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { channelNotice } from '#lib/channel-notice.js';
 import { orm } from '#lib/server/db.js';
@@ -159,6 +159,55 @@ function readGrid(type: ChannelType, start: number, end: number) {
     };
 }
 
+/** 日付の並びに出す日数 (今日を含む)。番組表はおよそ1週間先まで届く */
+const STRIP_DAYS = 8;
+/** 番組表が1週間より先まで届いていても、並べるのはここまで */
+const STRIP_MAX_DAYS = 15;
+
+/** その放送日から `n` 日ずらした放送日の 4:00。夏時間のある地域でも日で数える */
+function shiftDay(start: number, n: number): number {
+    const d = new Date(start);
+    d.setDate(d.getDate() + n);
+    return d.getTime();
+}
+
+/** その放送日 (4:00〜翌4:00) に始まる番組があるか。始まりの時刻の索引 (`programs_time`) で範囲を引くだけ */
+function hasPrograms(type: ChannelType, start: number): boolean {
+    const row = orm()
+        .select({ id: programTable.id })
+        .from(programTable)
+        .innerJoin(serviceTable, eq(serviceTable.id, programTable.service_id))
+        .where(
+            and(
+                eq(serviceTable.type, type),
+                gte(programTable.start_at, start),
+                lt(programTable.start_at, shiftDay(start, 1)),
+            ),
+        )
+        .limit(1)
+        .get();
+    return row !== undefined;
+}
+
+/**
+ * 日付の並び (今日から)。**番組の無い日も並べて、押せなくする** (並びの幅が日によって変わらない)。
+ * 届いている最後の日が1週間より先なら、そこまで伸ばす。
+ * `earlier` は前日に番組があるか (広い画面で「←」を出すかどうか)
+ */
+function daysOf(type: ChannelType, today: number) {
+    const days = Array.from({ length: STRIP_DAYS }, (_, i) => {
+        const start = shiftDay(today, i);
+        return { start, has: hasPrograms(type, start) };
+    });
+    // 1週間より先にも届いていれば、届いている日まで伸ばす
+    while (days.length < STRIP_MAX_DAYS) {
+        const start = shiftDay(today, days.length);
+        if (!hasPrograms(type, start)) break;
+        days.push({ start, has: true });
+    }
+    return { days, earlier: hasPrograms(type, shiftDay(today, -1)) };
+}
+
 /**
  * 時間×チャンネルのグリッドを返す。並びを眺めて選ぶとき用
  * (言葉で探すのはサイト全体の検索 `/search` に寄せてある)
@@ -177,12 +226,17 @@ export function load({ url, cookies }) {
      */
     const counts = serviceCounts();
     const typeEmpty = (counts[type] ?? 0) === 0;
+    const today = broadcastDayStart(Date.now());
 
     return {
         // ここまでが外枠。URL と設定だけで決まるので、表を待たずに描ける
         type,
         start,
         hours: WINDOW_HOURS,
+        /** 今日の放送日の 4:00。日付の並びの先頭 */
+        today,
+        /** 日付の並び (`daysOf`)。索引を引くだけなので、表を待たずに描ける */
+        ...daysOf(type, today),
         // 詳細の「視聴」を出すかどうか。決め方はライブ画面と揃えてある (watchableServices)
         watchable: watchableServices(Date.now()),
         /** サブチャンネルも出すか (`#lib/subchannels.ts`)。端末ごとに覚える */

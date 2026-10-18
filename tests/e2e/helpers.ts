@@ -90,7 +90,20 @@ async function cellsOn(page: Page): Promise<Cell[]> {
  */
 async function turnDay(page: Page, which: 'next-day' | 'prev-day'): Promise<void> {
     const before = page.url();
-    await page.getByTestId(which).click();
+    /*
+     * **広い画面は日付を並べて直接押す** (← → は入りきらないときと、前日に番組があるときだけ)。
+     * 矢印が隠れていれば、選んでいる日の隣を押す
+     */
+    const arrow = page.getByTestId(which);
+    if (await arrow.isVisible()) await arrow.click();
+    else
+        await page
+            .locator(
+                which === 'next-day'
+                    ? '[data-testid="guide-day"][aria-current="date"] + [data-testid="guide-day"]'
+                    : '[data-testid="guide-day"]:has(+ [data-testid="guide-day"][aria-current="date"])',
+            )
+            .click();
     await page.waitForURL((url) => url.href !== before);
     await page.locator('[data-hydrated="true"]').waitFor();
     /*

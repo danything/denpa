@@ -190,66 +190,148 @@ test.describe('操作したときの反応', () => {
         await expect(detail).toBeHidden();
     });
 
-    test('スマホの幅でも番組表の操作は1行で、表は下のタブまで届く', async ({ page }) => {
-        // 操作を2段に積んだり表の下を空けたりすると、1画面に入る時間が減る
+    test('スマホの幅でも番組表の操作は1行で、表の下・下のタブのすぐ上にある', async ({ page }) => {
+        // 操作を2段に積んだり表の下を空けたりすると、1画面に入る時間が減る。親指が届くよう下に置く
         await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/guide?type=GR');
 
         // 今日を見ているときは「今日」を出さない (押しても同じ表)。そのぶん1行に収まる
         await expect(page.getByTestId('guide-today')).toHaveCount(0);
         const types = (await page.getByTestId('type-tabs').boundingBox())!;
-        const next = (await page.getByTestId('next-day').boundingBox())!;
-        expect(Math.abs(types.y + types.height / 2 - (next.y + next.height / 2))).toBeLessThan(4);
+        for (const id of ['next-day', 'guide-date', 'guide-genres']) {
+            const box = (await page.getByTestId(id).boundingBox())!;
+            expect(Math.abs(types.y + types.height / 2 - (box.y + box.height / 2)), id).toBeLessThan(4);
+        }
 
-        // ページごとは動かず、表だけが動く。表の下端は下のタブの上端
+        // ページごとは動かず、表だけが動く。表の下に操作の1行、その下端が下のタブの上端
         const fit = await page.evaluate(() => {
-            const grid = document.querySelector('[data-testid="guide-grid"]')!.getBoundingClientRect();
-            const tabbar = document.querySelector('[data-testid="tabbar"]')!.getBoundingClientRect();
+            const rect = (id: string) =>
+                document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
+            const grid = rect('guide-grid');
+            const bar = rect('guide-toolbar');
+            const tabbar = rect('tabbar');
             return {
                 scroll: document.documentElement.scrollHeight - innerHeight,
-                gap: tabbar.top - grid.bottom,
+                above: bar.top - grid.bottom,
+                gap: tabbar.top - bar.bottom,
+                right: Math.max(
+                    ...[...document.querySelectorAll('[data-testid="guide-toolbar"] *')].map(
+                        (el) => el.getBoundingClientRect().right,
+                    ),
+                ),
             };
         });
         expect(fit.scroll).toBe(0);
+        expect(Math.abs(fit.above)).toBeLessThanOrEqual(1);
         expect(Math.abs(fit.gap)).toBeLessThanOrEqual(1);
+        expect(fit.right, '操作が画面の右からはみ出している').toBeLessThanOrEqual(390);
+
+        // 日付を押すと、1週間ぶんと時刻のメニューが上へ開く
+        await page.getByTestId('guide-date').click();
+        const menu = page.getByTestId('guide-date-menu');
+        await expect(menu).toBeVisible();
+        const opened = (await menu.boundingBox())!;
+        const trigger = (await page.getByTestId('guide-date').boundingBox())!;
+        expect(opened.y + opened.height).toBeLessThanOrEqual(trigger.y);
+        await expect(menu.locator('[aria-current="date"]')).toContainText('今日');
+        await page.keyboard.press('Escape');
 
         await page.getByTestId('next-day').click();
         await expect(page.getByTestId('guide-today')).toBeVisible();
     });
 
-    test('表を下へ送ると操作の1行が畳まれ、上へ戻すかフォーカスで出てくる', async ({ page }) => {
+    test('広い画面では日付を並べて押せ、今日から始まる', async ({ page }) => {
+        await page.setViewportSize({ width: 1366, height: 768 });
+        await goto(page, '/guide?type=GR');
+        const days = page.getByTestId('guide-day');
+        // 1週間ぶん (番組の無い日も押せないまま並ぶ)
+        expect(await days.count()).toBeGreaterThanOrEqual(8);
+        await expect(days.first()).toHaveText('今日');
+        await expect(days.first()).toHaveAttribute('aria-current', 'date');
+        // 入りきるので → は出さない。狭い画面の日付のメニューも出さない
+        await expect(page.getByTestId('next-day')).toBeHidden();
+        await expect(page.getByTestId('guide-date')).toBeHidden();
+
+        // 1366px で全部が1行に収まる (時刻のボタンも「⋯」に畳まない)
+        await expect(page.getByTestId('guide-jump-19')).toBeVisible();
+        await expect(page.getByTestId('guide-more')).toBeHidden();
+        const bar = (await page.getByTestId('guide-toolbar').boundingBox())!;
+        expect(bar.height).toBeLessThan(60);
+
+        // 番組の無い日は押せない (偽の放送は 30 時間ぶんなので、朝に流すと翌日はまだ無い)
+        const later = page.locator('a[data-testid="guide-day"]:not([aria-current])');
+        await expect(page.locator('span[data-testid="guide-day"]').first()).toHaveAttribute(
+            'aria-disabled',
+            'true',
+        );
+        if ((await later.count()) === 0) return;
+        // 別の日を押すとその日が選ばれ、「今」は押せなくなる
+        const start = await later.first().getAttribute('data-start');
+        await later.first().click();
+        await expect(page.locator(`[data-testid="guide-day"][data-start="${start}"]`)).toHaveAttribute(
+            'aria-current',
+            'date',
+        );
+        await expect(page.getByTestId('guide-jump-now')).toBeDisabled();
+    });
+
+    test('時刻のボタンで表がその時刻へ送られる', async ({ page }) => {
+        await page.setViewportSize({ width: 1366, height: 768 });
         await goto(page, '/guide?type=GR');
         const grid = page.getByTestId('guide-grid');
-        const top = async () => Math.round((await grid.boundingBox())!.y);
-        const shown = await top();
-        const bar = Math.round((await page.getByTestId('guide-toolbar').boundingBox())!.height);
-        const box = (await grid.boundingBox())!;
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-        // 開いたときは「いま」へ送ってあるので、夜遅くに流すと下端が近く、下へ送っても動かないことがある。
-        // 先に頭まで戻しておく (時刻に左右されないように)
-        await page.mouse.wheel(0, -5000);
-        await expect.poll(top).toBe(shown);
+        const rem = await page.evaluate(() =>
+            Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+        );
+        const room = await grid.evaluate((el) => el.scrollHeight - el.clientHeight);
+        // 表の頭は 4:00、5分で 0.75rem
+        const at = (hour: number) => Math.min(room, (hour - 4) * 12 * 0.75 * rem);
+        await page.getByTestId('guide-jump-6').click();
+        await expect.poll(() => grid.evaluate((el) => el.scrollTop)).toBeCloseTo(at(6), 0);
+        await page.getByTestId('guide-jump-19').click();
+        await expect.poll(() => grid.evaluate((el) => el.scrollTop)).toBeCloseTo(at(19), 0);
+        // 操作の1行は動かない (畳まない)
+        const top = (await page.getByTestId('guide-toolbar').boundingBox())!.y;
+        await page.getByTestId('guide-jump-now').click();
+        const line = page.getByTestId('now-line');
+        await expect(line).toBeInViewport();
+        expect((await page.getByTestId('guide-toolbar').boundingBox())!.y).toBe(top);
+    });
 
-        // 横に流しただけでは畳まない
-        await page.mouse.wheel(300, 0);
-        await page.waitForTimeout(200);
-        expect(await top()).toBe(shown);
+    test('ジャンルの見本はマスと同じ色で、押すとそのジャンルだけ目立つ', async ({ page }) => {
+        await goto(page, '/guide?type=GR');
+        await page.getByTestId('guide-genres').click();
+        const menu = page.getByTestId('guide-genre-menu');
+        await expect(menu).toBeVisible();
+        await expect(menu.getByRole('menuitemradio')).toHaveCount(13);
 
-        // 下へ送ると畳み、そのぶん表が上へ伸びる
-        await page.mouse.wheel(0, 300);
-        await expect.poll(top).toBe(shown - bar);
+        // 表にあるジャンルを1つ選ぶ。見本の線の色はマスの線の色と同じ
+        const genre = await page
+            .locator('[data-testid="program-button"][data-genre]')
+            .first()
+            .getAttribute('data-genre');
+        const line = (selector: string) =>
+            page
+                .locator(selector)
+                .first()
+                .evaluate((el) => getComputedStyle(el).borderInlineStartColor);
+        expect(await line(`[data-testid="guide-genre-menu"] .swatch[data-genre="${genre}"]`)).toBe(
+            await line(`[data-testid="program-button"][data-genre="${genre}"]:not(.reserved)`),
+        );
 
-        // 少し上へ戻すと出てくる
-        await page.mouse.wheel(0, -60);
-        await expect.poll(top).toBe(shown);
+        await menu.getByTestId(`genre-${genre}`).click();
+        const opacity = (selector: string) =>
+            page
+                .locator(selector)
+                .first()
+                .evaluate((el) => getComputedStyle(el).opacity);
+        expect(await opacity(`[data-testid="program-button"][data-genre="${genre}"]`)).toBe('1');
+        const other = `[data-testid="program-button"]:not([data-genre="${genre}"])`;
+        if ((await page.locator(other).count()) > 0) expect(Number(await opacity(other))).toBeLessThan(1);
 
-        // キーボードで操作へ移ると出てくる。下端に着かないよう、いったん頭まで戻してから送る
-        await page.mouse.wheel(0, -2000);
-        await expect.poll(top).toBe(shown);
-        await page.mouse.wheel(0, 300);
-        await expect.poll(top).toBe(shown - bar);
-        await page.getByTestId('next-day').focus();
-        await expect.poll(top).toBe(shown);
+        // 「すべて」で戻す
+        await page.getByTestId('guide-genres').click();
+        await menu.getByTestId('genre-all').click();
+        await expect(page.locator('[data-testid="program-button"].dim')).toHaveCount(0);
     });
 
     test('放送波を切り替えると横位置が先頭に戻る', async ({ page }) => {
