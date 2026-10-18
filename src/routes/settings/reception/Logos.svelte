@@ -3,6 +3,7 @@
     import JobProgress from '#lib/components/JobProgress.svelte';
     import Lead from '#lib/components/Lead.svelte';
     import LearnedLogo from '#lib/components/LearnedLogo.svelte';
+    import LogoZoom from '#lib/components/LogoZoom.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import { SERVICE_TYPE_LABEL } from '#lib/format.js';
     import type { PageData } from './$types';
@@ -11,6 +12,21 @@
 
     /** 局ロゴの大きさ。放送のロゴは 16:9 (64x36) */
     const LOGO_SIZE = 'width: 2.4rem; height: 1.35rem';
+
+    /**
+     * 大きく見ているロゴ (`LogoZoom`)。持つのは局と種類だけで、中身は表の行から引く —
+     * 「覚え直す」でCMロゴが消えたら、そのまま閉じる
+     */
+    let zoom = $state<{ id: number; kind: 'station' | 'cm' } | null>(null);
+    const zoomTarget = $derived.by(() => {
+        if (zoom === null) return null;
+        const { id, kind } = zoom;
+        const station = data.stations.find((s) => s.id === id);
+        if (station === undefined) return null;
+        if (kind === 'cm' && station.cm === null) return null;
+        if (kind === 'station' && station.logo !== 'have') return null;
+        return { id, name: station.name, kind, learnedAt: kind === 'cm' ? station.cm : null };
+    });
 </script>
 
 <!--
@@ -118,7 +134,15 @@
                                 <td>
                                     <!-- まだのものは点線の枠、放送に載っていないものは「—」 -->
                                     {#if station.logo === 'have'}
-                                        <ServiceLogo id={station.id} has style={LOGO_SIZE} />
+                                        <button
+                                            type="button"
+                                            class="zoom"
+                                            onclick={() => (zoom = { id: station.id, kind: 'station' })}
+                                            aria-label={`${station.name} のロゴを大きく見る`}
+                                            data-testid="logo-zoom-station"
+                                        >
+                                            <ServiceLogo id={station.id} has style={LOGO_SIZE} />
+                                        </button>
                                     {:else if station.logo === 'missing'}
                                         <span class="logo-slot" title="ロゴはまだ取れていません">
                                             <span class="visually-hidden">まだ</span>
@@ -128,11 +152,14 @@
                                     {/if}
                                 </td>
                                 <td class="nowrap">
-                                    <!-- CM検出の対象でない局 (サブチャンネルなど) は空けておく -->
+                                    <!-- まだ覚えていない局と、CM検出の対象でない局 (サブチャンネルなど) は空けておく -->
                                     {#if station.cm !== null}
-                                        <LearnedLogo serviceId={station.id} serviceName={station.name} learnedAt={station.cm} />
-                                    {:else if station.cmShown}
-                                        <span class="muted small">まだ</span>
+                                        <LearnedLogo
+                                            serviceId={station.id}
+                                            serviceName={station.name}
+                                            learnedAt={station.cm}
+                                            onzoom={() => (zoom = { id: station.id, kind: 'cm' })}
+                                        />
                                     {/if}
                                 </td>
                             </tr>
@@ -144,10 +171,23 @@
     </section>
 </div>
 
+<LogoZoom target={zoomTarget} onclose={() => (zoom = null)} />
+
 <style>
     .table-wrap th,
     .table-wrap td {
         vertical-align: middle;
+    }
+    /* 局ロゴそのものを押して大きく見る (`LogoZoom`)。ボタンの地や余白は付けない */
+    .zoom {
+        display: inline-flex;
+        width: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: var(--dp-radius-sm);
+        background: none;
+        cursor: zoom-in;
     }
     /* まだ取れていない局ロゴの場所。取れたロゴと同じ大きさの点線の枠 */
     .logo-slot {
