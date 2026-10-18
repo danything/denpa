@@ -1,7 +1,7 @@
 <script lang="ts" generics="T extends string | number">
-    import { getContext, type Snippet } from 'svelte';
+    import type { Snippet } from 'svelte';
     import Menu, { type MenuTrigger } from '../Menu.svelte';
-    import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
+    import { stageMenu } from './controls.svelte';
 
     /**
      * 映像の上に出すドロップダウン (速さ。`SpeedMenu`)。**メニュー(選択肢の並び)だけ**を持つ。
@@ -52,30 +52,8 @@
     } = $props();
 
     let open = $state(false);
-
-    /**
-     * **開いている間は操作列を残す。**
-     *
-     * 操作列は触らなくなって 2.5 秒で引っ込む (`controls.svelte.ts`) が、このメニューは
-     * 操作列の中にあるので、選んでいる最中に**メニューごと消えて**いた。舞台
-     * (`PlayerStage`) が context に置いた `controls` に伝える。舞台の外では何もしない
-     */
-    const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
-    $effect(() => {
-        if (controls === undefined) return;
-        controls().hold = open;
-        return () => {
-            controls().hold = false;
-        };
-    });
-
-    /**
-     * **メニューは舞台の枠の中に収める。** 枠の外へ出ると、上はページの見出しにかぶる。
-     * スマホの縦で全画面をやめると枠は 224px しか無く、速さ (7つ) のメニューが上へはみ出していた。
-     * 枠を当たり判定の境にして、入りきらなければメニューの中を巻き取る (`Menu` の `boundary`)。
-     * 舞台の外 (と、枠がまだ無いうち) は画面に収める
-     */
-    const stage = getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
+    /** 開いている間は操作列を残し、メニューは舞台の枠の中に収める (`stageMenu`) */
+    const stage = stageMenu(() => open);
 </script>
 
 <Menu bind:open side="top" {align} boundary={stage} {trigger} class="overlay-menu {size}" testid="{testid}-menu">
