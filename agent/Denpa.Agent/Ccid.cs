@@ -44,10 +44,6 @@ public static class CcidMessage
     public const byte PowerOff = 0x63;
     public const byte XfrBlock = 0x6F;
 
-    public const byte DataBlock = 0x80;
-    public const byte SlotStatus = 0x81;
-    public const byte Parameters = 0x82;
-
     // bError のうち、T=1 でブロックを送り直せば済むもの
     public const byte IccMute = 0xFE;
     public const byte ParityError = 0xFD;

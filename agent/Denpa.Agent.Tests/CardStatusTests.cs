@@ -11,7 +11,8 @@ namespace Denpa.Agent.Tests;
  */
 public class CardStatusTests
 {
-    private static readonly CardInit Using = new(new byte[32], new byte[8], 5, [32231622637]);
+    // カードの番号は必ず架空のものにする (本物のカードの番号を載せない)
+    private static readonly CardInit Using = new(new byte[32], new byte[8], 5, [1234567890]);
 
     /// <summary>INT (返り値 0x2100) と IDI (番号 <paramref name="id"/>) に答える線</summary>
     private sealed class FakeLink(string name, long id) : ICardLink
@@ -74,7 +75,7 @@ public class CardStatusTests
 
         var active = rows[1]!;
         await Assert.That(active["active"]!.GetValue<bool>()).IsTrue();
-        await Assert.That(active["ids"]![0]!.GetValue<string>()).IsEqualTo("0000032231622637");
+        await Assert.That(active["ids"]![0]!.GetValue<string>()).IsEqualTo("0000001234567890");
         await Assert.That(active["tuners"]!.AsArray().Select(name => name!.GetValue<string>()).ToArray())
             .IsEquivalentTo(new[] { "PT3-T1", "PT3-S1" });
         await Assert.That(active.AsObject().ContainsKey("error")).IsFalse();
@@ -175,7 +176,7 @@ public class CardStatusTests
         await Assert.That(report["source"]!.GetValue<string>()).IsEqualTo("remote");
         await Assert.That(report["remote"]!.GetValue<string>()).IsEqualTo("http://card:25252");
         await Assert.That(report["ok"]!.GetValue<bool>()).IsTrue();
-        await Assert.That(report["ids"]![0]!.GetValue<string>()).IsEqualTo("0000032231622637");
+        await Assert.That(report["ids"]![0]!.GetValue<string>()).IsEqualTo("0000001234567890");
         await Assert.That(report["tuners"]![0]!.GetValue<string>()).IsEqualTo("PT3-T1");
         await Assert.That(report["readers"]!.AsArray().Count).IsEqualTo(0);
 
