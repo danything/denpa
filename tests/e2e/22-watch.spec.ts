@@ -522,13 +522,7 @@ test.describe('録画を観る', () => {
          * **押すだけのボタンは「切り替え」と名乗らない** (`aria-pressed` は切り替えにだけ)。
          * アイコンだけのボタンなので、マウスを重ねたときに名前が出る (`title`)
          */
-        for (const testid of [
-            'watch-close',
-            'watch-shot',
-            'watch-play',
-            'watch-full',
-            'watch-settings',
-        ]) {
+        for (const testid of ['watch-close', 'watch-shot', 'watch-play', 'watch-full', 'watch-settings']) {
             const button = page.getByTestId(testid);
             expect(await button.getAttribute('aria-pressed'), testid).toBeNull();
             expect(await button.getAttribute('title'), testid).toBe(await button.getAttribute('aria-label'));
