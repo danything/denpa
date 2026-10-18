@@ -11,7 +11,7 @@ const { config } = await import('./config');
 config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-search-')), 'denpa.db');
 
 const { now, orm } = await import('./db');
-const { hasAll, searchPrograms, searchRecordings, searchReservations, searchRules, searchWords } =
+const { exact, hasAll, searchPrograms, searchRecordings, searchReservations, searchRules, searchWords } =
     await import('./search');
 const { programs, recordings, reservations, rules, services } = await import('./schema');
 
@@ -94,22 +94,57 @@ describe('語の読み方', () => {
     });
 });
 
+describe('件数を SQL で数えてよい言葉', () => {
+    test('外字に寄せた字が絡まず、まるごと GLOB に掛けられる言葉だけ', () => {
+        expect(exact(searchWords('テストアニメ ニュース'))).toBe(true);
+        expect(exact(searchWords('吉野家'))).toBe(false);
+        expect(exact([])).toBe(false);
+    });
+});
+
 describe('これからの放送', () => {
     test('番組名か概要に当たる、終わっていない番組だけ。近い順', () => {
         program(1, 'テストアニメ 第2話', 3 * HOUR);
         program(2, 'ニュース', 2 * HOUR, 'テストアニメの特集');
         program(3, 'テストアニメ 第1話', -3 * HOUR);
         program(4, '天気予報', HOUR);
-        const found = searchPrograms('テストアニメ', 10);
+        const found = searchPrograms('テストアニメ', { limit: 10, count: true });
         expect(found.total).toBe(2);
         expect(found.rows.map((row) => row.id)).toEqual([2, 1]);
     });
 
     test('件数は全部、行は上限まで', () => {
         for (let i = 1; i <= 5; i++) program(i, `テストアニメ 第${i}話`, i * HOUR);
-        const found = searchPrograms('テストアニメ', 2);
+        const found = searchPrograms('テストアニメ', { limit: 2, count: true });
         expect(found.total).toBe(5);
         expect(found.rows).toHaveLength(2);
+    });
+
+    test('件数を頼まなければ、上限に1つ足したぶんで読むのをやめる', () => {
+        for (let i = 1; i <= 5; i++) program(i, `テストアニメ 第${i}話`, i * HOUR);
+        const found = searchPrograms('テストアニメ', { limit: 2 });
+        expect(found.rows.map((row) => row.id)).toEqual([1, 2]);
+        expect(found.more).toBe(true);
+        expect(found.total).toBe(3);
+        expect(searchPrograms('テストアニメ', { limit: 5 }).more).toBe(false);
+    });
+
+    test('一度に読む数を超えても、当たったものを順に集める', () => {
+        // 前絞り (GLOB) に掛かって JS で落ちる行は無いので、ここでは並びと件数だけを見る
+        for (let i = 1; i <= 150; i++) program(i, `テストアニメ 第${i}話`, i * 60_000);
+        const found = searchPrograms('テストアニメ', { limit: 100, count: true });
+        expect(found.total).toBe(150);
+        expect(found.rows).toHaveLength(100);
+        expect(found.rows[99]?.id).toBe(100);
+    });
+
+    test('外字に寄せた字を含む言葉も、件数まで当たる', () => {
+        program(1, '𠮷野家のうた', HOUR);
+        program(2, '吉野家のうた', 2 * HOUR);
+        program(3, '野家のうた', 3 * HOUR);
+        const found = searchPrograms('吉野家', { limit: 10, count: true });
+        expect(found.rows.map((row) => row.id)).toEqual([1, 2]);
+        expect(found.total).toBe(2);
     });
 
     test('予約が立っていれば行に出す', () => {
@@ -128,14 +163,14 @@ describe('これからの放送', () => {
                 updated_at: now(),
             })
             .run();
-        const [row] = searchPrograms('テストアニメ', 10).rows;
+        const [row] = searchPrograms('テストアニメ', { limit: 10, count: true }).rows;
         expect(row?.reservation_state).toBe('scheduled');
         expect(row?.reservation_id).not.toBeNull();
     });
 
     test('空の言葉では何も探さない', () => {
         program(1, 'テストアニメ', HOUR);
-        expect(searchPrograms('  ', 10)).toEqual({ total: 0, rows: [] });
+        expect(searchPrograms('  ', { limit: 10, count: true })).toEqual({ total: 0, rows: [], more: false });
     });
 });
 
@@ -144,10 +179,12 @@ describe('録画', () => {
         recording(1, { name: '第3話「旅立ち」', series: 'テストアニメ' });
         recording(2, { name: 'テストアニメ 第2話', deleted: true });
         recording(3, { name: 'ニュース' });
-        expect(searchRecordings('テストアニメ', 10).rows.map((row) => row.id)).toEqual([1]);
+        expect(
+            searchRecordings('テストアニメ', { limit: 10, count: true }).rows.map((row) => row.id),
+        ).toEqual([1]);
         // 局名は全角で入っていても半角で当たる
-        expect(searchRecordings('tokyo mx', 10).total).toBe(2);
-        expect(searchRecordings('テストアニメ', 10).rows[0]?.has_file).toBe(true);
+        expect(searchRecordings('tokyo mx', { limit: 10, count: true }).total).toBe(2);
+        expect(searchRecordings('テストアニメ', { limit: 10, count: true }).rows[0]?.has_file).toBe(true);
     });
 });
 
@@ -178,7 +215,7 @@ describe('予約とルール', () => {
                 },
             ])
             .run();
-        const found = searchReservations('テストアニメ', 10);
+        const found = searchReservations('テストアニメ', { limit: 10, count: true });
         expect(found.rows.map((row) => row.program_id)).toEqual([1]);
         expect(found.rows[0]?.state).toBe('scheduled');
     });
@@ -191,7 +228,9 @@ describe('予約とルール', () => {
                 { name: 'ニュース', keyword: 'ニュース', created_at: now() },
             ])
             .run();
-        expect(searchRules('テストアニメ', 10).rows.map((row) => row.name)).toEqual(['アニメ枠']);
-        expect(searchRules('アニメ枠', 10).total).toBe(1);
+        expect(searchRules('テストアニメ', { limit: 10, count: true }).rows.map((row) => row.name)).toEqual([
+            'アニメ枠',
+        ]);
+        expect(searchRules('アニメ枠', { limit: 10, count: true }).total).toBe(1);
     });
 });

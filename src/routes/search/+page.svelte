@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount, tick } from 'svelte';
+    import { onMount, tick, untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
@@ -10,7 +10,9 @@
     import { programDetail } from '#lib/detail.svelte.js';
     import { badgeClass, dateTime, quietState, recordedDuration, stateLabel, time } from '#lib/format.js';
     import { loadRecent, pushRecent, saveRecent } from '#lib/recent-searches.js';
+    import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import { page } from '$app/state';
 
     let { data, form } = $props();
     /**
@@ -36,12 +38,21 @@
     onMount(() => {
         recent = loadRecent();
     });
+    /**
+     * **打ち終えてから覚える。** 打つそばから結果を出し直すので、すぐ覚えると「ひ」「ひだ」「ひだま」…と
+     * 打ちかけが全部並ぶ。言葉が少しの間変わらなかったら覚える
+     */
+    const REMEMBER_AFTER = 1500;
     $effect(() => {
         if (q === '') return;
-        // 覚えた並びは読まずに作る (読むとこの効果が自分の書いたものを追って回り続ける)
-        const next = pushRecent(loadRecent(), q);
-        saveRecent(next);
-        recent = next;
+        const word = q;
+        const timer = setTimeout(() => {
+            // 覚えた並びは読まずに作る (読むとこの効果が自分の書いたものを追って回り続ける)
+            const next = pushRecent(loadRecent(), word);
+            saveRecent(next);
+            recent = next;
+        }, REMEMBER_AFTER);
+        return () => clearTimeout(timer);
     });
     function clearRecent(): void {
         recent = [];
@@ -113,7 +124,33 @@
     function close(): void {
         opened = null;
         detail.close();
+        // 候補から来た番組 (`?program=`) を閉じたら URL からも外す。読み直しても開き直さない
+        if (page.url.searchParams.has('program')) {
+            const url = new URL(page.url.href);
+            url.searchParams.delete('program');
+            void goto(url, { replace: true, shallow: true, state: page.state });
+        }
     }
+
+    /**
+     * **候補から選んだ番組は、開いたら詳細を出す** (`?program=`。ヘッダーの候補の番組・予約)。
+     * 番組が変わったときだけ開く (予約・取消のあとの読み直しでは開き直さない)
+     */
+    const focusId = $derived(data.focus?.id ?? null);
+    $effect(() => {
+        if (focusId === null) return;
+        const focus = untrack(() => data.focus);
+        if (focus === null) return;
+        opened = {
+            program_id: focus.id,
+            service_id: focus.service_id,
+            start_at: focus.start_at,
+            end_at: focus.end_at,
+            reservation_id: focus.reservation_id,
+            copy_never: focus.copy_never,
+        };
+        void detail.open(focus.id, focus);
+    });
 
     /** 削除は2回押させる (ホームと同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
     const deleting = arming('[data-testid="search-delete"], [data-testid="search-delete-confirm"]');

@@ -381,7 +381,7 @@
             結果の画面でも同じ欄で、探した言葉が入ったまま直して送れる
         -->
         <div class="header-search">
-            <SearchField value={query} testid="header-search" />
+            <SearchField value={query} testid="header-search" live={here === '/search'} />
         </div>
         <!--
             テーマの切り替え・画面へのリンク (広い幅だけ)。ログアウトは設定の「一般」にある。
@@ -431,7 +431,7 @@
     -->
     {#if here === '/search'}
         <div class="search-bar">
-            <SearchField value={query} testid="search" />
+            <SearchField value={query} testid="search" live />
         </div>
     {/if}
 

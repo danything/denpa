@@ -330,6 +330,29 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 - 番組表は終わった番組を消していくので、**引けないことがあります** (`404`)。そのときは呼ぶ側が持っている分
   (`now` の番組名・時刻など) だけを出してください
 
+## 検索の候補 `GET /api/search?q=<言葉>&limit=<数>`
+
+画面のヘッダーの欄が、打つそばから出す候補に使います。読み方は結果の画面 (`/search?q=`) と同じで
+(空白で区切った語をすべて含む。全角/半角・大文字/小文字は区別しない)、節ごとに先頭の `limit` 件 (既定 4、多くても 10) と、
+その先にもあるか (`more`) だけを返します。件数は数えません。**キーは snake_case** です。
+
+```json
+{ "q": "でんぱ",
+  "programs": { "more": true, "rows": [{ "id": 3227310008123, "name": "でんぱ劇場", "service_name": "でんぱテレビ",
+                                         "start_at": 1790000000000, "end_at": 1790001800000, "reservation_state": null }] },
+  "recordings": { "more": false, "rows": [{ "id": 12, "name": "でんぱ劇場 #1", "service_name": "でんぱテレビ",
+                                            "start_at": 1789000000000, "state": "available", "watch": "watch/12" }] },
+  "reservations": { "more": false, "rows": [{ "id": 5, "program_id": 3227310008123, "name": "でんぱ劇場",
+                                              "service_name": "でんぱテレビ", "start_at": 1790000000000,
+                                              "end_at": 1790001800000, "state": "scheduled", "chase": null }] },
+  "rules": { "more": false, "rows": [{ "id": 2, "name": "でんぱ", "enabled": true }] } }
+```
+
+- `programs` はまだ終わっていない番組 (始まる順)。`reservation_state` は予約が立っていればその状態
+- `recordings` は消していない録画 (新しい順)。`watch` は観る画面 (録っている最中は追っかけ再生 `chase/<id>`)。観られなければ `null`
+- `reservations` はこれから録るものと録っている最中のもの。`chase` は録っている最中なら追っかけ再生
+- `q` が空なら、どの節も空で返します
+
 ## 番組の中身 `GET /api/recordings/<id>/detail`
 
 ```json
