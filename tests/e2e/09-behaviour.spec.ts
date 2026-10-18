@@ -163,6 +163,33 @@ test.describe('操作したときの反応', () => {
         expect(title.y).toBeGreaterThanOrEqual(box.y);
     });
 
+    test('スマホの幅でも番組表の操作は1行で、表は下のタブまで届く', async ({ page }) => {
+        // 操作を2段に積んだり表の下を空けたりすると、1画面に入る時間が減る
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/guide?type=GR');
+
+        // 今日を見ているときは「今日」を出さない (押しても同じ表)。そのぶん1行に収まる
+        await expect(page.getByTestId('guide-today')).toHaveCount(0);
+        const types = (await page.getByTestId('type-tabs').boundingBox())!;
+        const search = (await page.getByTestId('guide-search-toggle').boundingBox())!;
+        expect(Math.abs(types.y + types.height / 2 - (search.y + search.height / 2))).toBeLessThan(4);
+
+        // ページごとは動かず、表だけが動く。表の下端は下のタブの上端
+        const fit = await page.evaluate(() => {
+            const grid = document.querySelector('[data-testid="guide-grid"]')!.getBoundingClientRect();
+            const tabbar = document.querySelector('[data-testid="tabbar"]')!.getBoundingClientRect();
+            return {
+                scroll: document.documentElement.scrollHeight - innerHeight,
+                gap: tabbar.top - grid.bottom,
+            };
+        });
+        expect(fit.scroll).toBe(0);
+        expect(Math.abs(fit.gap)).toBeLessThanOrEqual(1);
+
+        await page.getByTestId('next-day').click();
+        await expect(page.getByTestId('guide-today')).toBeVisible();
+    });
+
     test('放送波を切り替えると横位置が先頭に戻る', async ({ page }) => {
         // 局の並びは放送波ごとに別物なので、前の位置から始まると左端の局が隠れる
         await page.setViewportSize({ width: 320, height: 700 });

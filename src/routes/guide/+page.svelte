@@ -489,7 +489,7 @@
             </a>
             <!-- 今日を見ているときは出さない (押しても同じ表のまま)。そのぶん狭い画面でも1行に収まる -->
             {#if nowSlots === null}
-                <a class="button small secondary outline" href={href({})}>今日</a>
+                <a class="button small secondary outline" href={href({})} data-testid="guide-today">今日</a>
             {/if}
         </div>
 
