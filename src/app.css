@@ -83,19 +83,15 @@
     --dp-weight: 400;
     --dp-weight-bold: 700;
     /*
-     * 動き。**0.15〜0.3 秒の短いものだけ。** 出るときは終わりをゆっくり (`--dp-ease`)、
+     * 動き。**長さは全部 80ms (`--dp-duration`) にそろえる。** 待たされている感じを出さない。 出るときは終わりをゆっくり (`--dp-ease`)、
      * 引っ込むときは頭をゆっくり (`--dp-ease-exit`)。動かさない設定の端末では全部止める
      * (下の prefers-reduced-motion。画面の切り替えは JS でも見る — `#lib/motion.svelte.ts`)
      *
-     * - `--dp-duration-fast` … 画面の中身の入れ替え、メニューやダイアログの閉じ方
-     * - `--dp-duration` … 滑る下線・元の要素から広げる動き・色・影の移り変わり、メニューやダイアログの開き方
-     * - `--dp-duration-slow` … 伸びるバー・ふわっと出す画像
+     * - `--dp-duration` … 画面の切り替え・滑る下線・メニューやダイアログ・伸びるバー・色や影の移り変わり。ぜんぶこれ
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
      * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
      */
-    --dp-duration-fast: 100ms;
-    --dp-duration: 150ms;
-    --dp-duration-slow: 250ms;
+    --dp-duration: 80ms;
     --dp-ease: cubic-bezier(0.2, 0, 0, 1);
     --dp-ease-exit: cubic-bezier(0.3, 0, 1, 1);
     --dp-pulse: 2s;
@@ -230,7 +226,7 @@
     animation: none;
 }
 ::view-transition-new(root) {
-    animation-duration: var(--dp-duration-fast);
+    animation-duration: var(--dp-duration);
 }
 ::view-transition-old(site-header),
 ::view-transition-old(site-tabbar) {
@@ -274,7 +270,7 @@
 
 /* ---- 読み込めたらふわっと出る画像 (`use:fadeIn`。`#lib/motion.svelte.ts`) ---- */
 img[data-fade] {
-    transition: opacity var(--dp-duration-slow) var(--dp-ease);
+    transition: opacity var(--dp-duration) var(--dp-ease);
 }
 img[data-fade="pending"] {
     opacity: 0;
@@ -490,7 +486,7 @@ thead th {
  * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
  */
 progress[value]::-webkit-progress-value {
-    transition: inline-size var(--dp-duration-slow) var(--dp-ease);
+    transition: inline-size var(--dp-duration) var(--dp-ease);
 }
 progress.running[value]::-webkit-progress-value {
     background-image: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.35) 50%, transparent 100%);
@@ -1088,7 +1084,7 @@ button[aria-busy="true"]::after {
 /*
  * 開いているときだけ flex にする。閉じているときはブラウザの `display: none` のまま。
  *
- * **引き金の側から、少し縮んだ透明な姿で開き (`--dp-duration`)、閉じるときはもっと短く (`--dp-duration-fast`) 引っ込む。**
+ * **引き金の側から、少し縮んだ透明な姿で開き、閉じるときは引っ込む (どちらも `--dp-duration`)。**
  * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
  * 知らないブラウザはすぐ消える)。動かさない設定では時間が 0 で、すぐ出てすぐ消える。
  * 動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさ (`offsetHeight`) は変わらない
@@ -1101,10 +1097,10 @@ button[aria-busy="true"]::after {
     transform: scale(0.96);
     transform-origin: top left;
     transition:
-        opacity var(--dp-duration-fast) var(--dp-ease-exit),
-        transform var(--dp-duration-fast) var(--dp-ease-exit),
-        overlay var(--dp-duration-fast) allow-discrete,
-        display var(--dp-duration-fast) allow-discrete;
+        opacity var(--dp-duration) var(--dp-ease-exit),
+        transform var(--dp-duration) var(--dp-ease-exit),
+        overlay var(--dp-duration) allow-discrete,
+        display var(--dp-duration) allow-discrete;
 }
 .menu[data-align="end"] {
     transform-origin: top right;
@@ -1135,15 +1131,15 @@ button[aria-busy="true"]::after {
  */
 dialog {
     transition:
-        opacity var(--dp-duration-fast) var(--dp-ease-exit),
-        overlay var(--dp-duration-fast) allow-discrete,
-        display var(--dp-duration-fast) allow-discrete;
+        opacity var(--dp-duration) var(--dp-ease-exit),
+        overlay var(--dp-duration) allow-discrete,
+        display var(--dp-duration) allow-discrete;
 }
 dialog:not([open]) {
     opacity: 0;
 }
 dialog > article {
-    transition: transform var(--dp-duration-fast) var(--dp-ease-exit);
+    transition: transform var(--dp-duration) var(--dp-ease-exit);
 }
 dialog:not([open]) > article {
     transform: scale(0.96);
@@ -1322,9 +1318,7 @@ dialog[open] > article {
  */
 @media (prefers-reduced-motion: reduce) {
     :root {
-        --dp-duration-fast: 0s;
         --dp-duration: 0s;
-        --dp-duration-slow: 0s;
     }
     .rec-dot,
     .flash {
