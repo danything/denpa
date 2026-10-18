@@ -75,7 +75,9 @@ test.describe('録画のデータ放送', () => {
             .evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
 
         await wakeControls(page, 'watch-stage');
-        await page.getByTestId('watch-data-button').click();
+        // データ放送は ⚙ (再生の設定) の中
+        await page.getByTestId('watch-settings').click();
+        await page.getByTestId('watch-data').click();
         await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
             timeout: 15_000,
         });
@@ -99,7 +101,9 @@ test.describe('録画のデータ放送', () => {
         );
         await goto(page, `/watch/${id}`);
         await wakeControls(page, 'watch-stage');
-        await page.getByTestId('watch-data-button').click();
+        // データ放送は ⚙ (再生の設定) の中
+        await page.getByTestId('watch-settings').click();
+        await page.getByTestId('watch-data').click();
         await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
             timeout: 15_000,
         });
@@ -140,7 +144,9 @@ test.describe('字幕をくっきり描く (データ放送の小窓)', () => {
         await expectSharpCaptions(page, '小窓に入る前');
 
         await wakeControls(page, 'watch-stage');
-        await page.getByTestId('watch-data-button').click();
+        // データ放送は ⚙ (再生の設定) の中
+        await page.getByTestId('watch-settings').click();
+        await page.getByTestId('watch-data').click();
         await expect(page.getByTestId('live-data')).toHaveAttribute('data-state', 'ready', {
             timeout: 15_000,
         });

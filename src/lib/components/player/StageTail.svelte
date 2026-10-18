@@ -7,7 +7,7 @@
     import ControlButton from './ControlButton.svelte';
     import Extras from './Extras.svelte';
     import type { StageFullscreen } from './fullscreen.svelte.js';
-    import { AMBIENT, BACKGROUND, COMPAT, CUT, EXPAND, PIP, SHRINK } from './icons';
+    import { AMBIENT, BACKGROUND, COMPAT, CUT, DATA, EXPAND, PIP, SHRINK } from './icons';
     import type { Pip } from './pip.svelte.js';
     import SettingsMenu from './SettingsMenu.svelte';
     import type { SettingChoice, SettingRow, SettingToggle } from './settings';
@@ -16,7 +16,7 @@
      * 操作バーの右端。**3画面 (ライブ・追っかけ・録画) で同じ。**
      *
      * - **再生の設定 (⚙ `SettingsMenu`)。** 端末ごとに決めるものをまとめる。上から CMスキップ (観る画面で
-     *   CM の入った録画だけ)・アンビエントモード・バックグラウンド再生・互換モード・字幕 (持っているときだけ)・音声 (選べるときだけ)・コーデック。
+     *   CM の入った録画だけ)・データ放送 (観る画面で取り出してある録画だけ)・アンビエントモード・バックグラウンド再生・互換モード・字幕 (持っているときだけ)・音声 (選べるときだけ)・コーデック。
      *   **畳むときも出しておく** — 中身を1つにまとめたぶん、ボタンは1つで済む
      *   - バックグラウンド再生 … 既定はオフで、裏に回したら止める。端末ごとに覚える (`background.svelte.ts`)
      *   - アンビエントモード … 既定はオンで、映像の色を枠の周りに広げる。端末ごとに覚える (`ambient.svelte.ts`)
@@ -49,10 +49,16 @@
         audio?: SettingChoice | undefined;
         /** CMスキップ (観る画面で、CM の入った録画だけ) */
         cm?: { on: boolean; toggle: () => void } | undefined;
+        /**
+         * データ放送 (観る画面で、取り出してある録画だけ)。**映像の上の列には置かない** — 右端の列は
+         * 全画面のタブレットで使う閉じる・切り抜き・削除のために空けておく (`ControlBar`)
+         */
+        data?: { on: boolean; toggle: () => void } | undefined;
         /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
         subtitle?: SettingChoice | undefined;
     }
-    let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm, subtitle, fold = [] }: Props = $props();
+    let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm, data, subtitle, fold = [] }: Props =
+        $props();
 
     /** 狭い枠で ⚙ の頭に入れるもの。小窓は出せる端末だけ */
     const head = $derived<SettingRow[]>(
@@ -102,6 +108,10 @@
 
     const toggles = $derived<SettingToggle[]>([
         ...(cm === undefined ? [] : [{ id: 'skip-cm', label: 'CMスキップ', icon: CUT, on: cm.on, toggle: cm.toggle }]),
+        // 出すとリモコンが右の列に出るので、メニューは閉じる
+        ...(data === undefined
+            ? []
+            : [{ id: 'data', label: 'データ放送', icon: DATA, on: data.on, toggle: data.toggle, closes: true }]),
         { id: 'ambient', label: 'アンビエントモード', icon: AMBIENT, on: ambient.on, toggle: () => ambient.toggle() },
         {
             id: 'background',

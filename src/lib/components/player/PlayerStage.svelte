@@ -379,8 +379,8 @@
         flex-direction: column;
         align-items: center;
         gap: 0.25rem;
-        /* 右端の縦の列 (`ControlBar`。40px の丸と右の余白 8px) に掛けない。真ん中に置くので左も同じだけ空ける */
-        padding: 0.5rem 3.5rem;
+        /* 右端の縦の列 (`ControlBar`。48px の丸と右の余白 8px) に掛けない。真ん中に置くので左も同じだけ空ける */
+        padding: 0.5rem 4rem;
     }
     .notes:empty {
         display: none;

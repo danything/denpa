@@ -99,7 +99,8 @@ test.describe('録画を観る', () => {
         const { id } = await recordOne(page, request);
 
         await goto(page, `/watch/${id}`);
-        // 削除は右の列の下 (映像の上には置かない)。映像の操作列が引っ込んでいても押せる
+        // 削除は映像の上の右端の列 (全画面のタブレットでも押せる)
+        await wakeControls(page, 'watch-stage');
         await page.getByTestId('watch-delete').click();
         await expect(page.getByTestId('watch-delete-confirm')).toBeVisible();
 
@@ -107,6 +108,8 @@ test.describe('録画を観る', () => {
         await page.getByTestId('detail-badges').click();
         await expect(page.getByTestId('watch-delete-confirm')).toHaveCount(0);
 
+        // 右の列は映像から離れた間に引っ込んでいる。起こしてから押す
+        await wakeControls(page, 'watch-stage');
         await page.getByTestId('watch-delete').click();
         await page.getByTestId('watch-delete-confirm').click();
 
@@ -492,18 +495,15 @@ test.describe('録画を観る', () => {
     });
 
     /**
-     * **右端は「観る流れの外」の縦の列。** 閉じる・切り抜くは、
+     * **右端は「観る流れの外」の縦の列。** 閉じる・切り抜く・消すは、
      * 観ながら使う操作 (再生・音・字幕) とは押す頻度も並べる理由も違う。
-     * **削除は映像の上に置かず、右の列の下に** (閉じるの丸と並ぶと、そのつもりのない指が当たる)。
+     * **削除も映像の上** — タブレットは全画面で観るので、全画面から出ずに消せるように。データ放送 (d) は ⚙ の中。
      *
      * 1つの操作バーに混ぜていた頃は押すものが12個並び、**番組の名前が入る幅が
      * 残らなかった** — 実機のタブレットで名前が折り返し、操作バーが二段になっていた。
-     * **列は縦に積む** — 車に付けたタブレットでは右の縁がいちばん指が届く (横一行にして戻した)
+     * **列は縦に積む** — 車に付けたタブレットでは右の縁がいちばん指が届く (横一行・40px にして戻した)
      */
-    test('閉じる・切り抜きは右端の縦の列、削除は右の列。下の操作バーは一段のまま', async ({
-        page,
-        request,
-    }) => {
+    test('閉じる・切り抜き・削除は右端の縦の列。下の操作バーは一段のまま', async ({ page, request }) => {
         test.setTimeout(180_000);
         const id = await watchable(page, request);
 
@@ -511,7 +511,7 @@ test.describe('録画を観る', () => {
         await goto(page, `/watch/${id}`);
 
         const side = page.getByTestId('watch-side');
-        for (const testid of ['watch-close', 'watch-shot']) {
+        for (const testid of ['watch-close', 'watch-shot', 'watch-delete']) {
             expect(await side.getByTestId(testid).count()).toBe(1);
             // 下の操作バーには無い。同じことをするボタンを2つ置かない
             expect(await page.getByTestId('watch-controls').getByTestId(testid).count()).toBe(0);
@@ -519,19 +519,27 @@ test.describe('録画を観る', () => {
         // 閉じるはいちばん上。ライブ・追っかけと同じ並び
         const top = await side.evaluate((el) => (el.firstElementChild as HTMLElement).dataset['testid']);
         expect(top).toBe('watch-close');
-        // 縦に積む (横一行にしない)
+        // 縦に積む (横一行にしない)。丸は 48px で、間は 8px
         const close = (await page.getByTestId('watch-close').boundingBox())!;
         const shot = (await page.getByTestId('watch-shot').boundingBox())!;
         expect(shot.y).toBeGreaterThan(close.y + close.height - 1);
         expect(Math.abs(shot.x - close.x)).toBeLessThan(2);
-        // 削除は映像の上には無い
-        expect(await page.getByTestId('watch-stage').getByTestId('watch-delete').count()).toBe(0);
-        await expect(page.getByTestId('watch-delete')).toBeVisible();
+        expect(Math.round(close.width)).toBe(48);
+        expect(Math.round(shot.y - (close.y + close.height))).toBe(8);
+        // データ放送 (d) は映像の上の列に置かない (⚙ の中)
+        expect(await side.getByTestId('watch-data').count()).toBe(0);
         /*
          * **押すだけのボタンは「切り替え」と名乗らない** (`aria-pressed` は切り替えにだけ)。
          * アイコンだけのボタンなので、マウスを重ねたときに名前が出る (`title`)
          */
-        for (const testid of ['watch-close', 'watch-shot', 'watch-play', 'watch-full', 'watch-settings']) {
+        for (const testid of [
+            'watch-close',
+            'watch-shot',
+            'watch-delete',
+            'watch-play',
+            'watch-full',
+            'watch-settings',
+        ]) {
             const button = page.getByTestId(testid);
             expect(await button.getAttribute('aria-pressed'), testid).toBeNull();
             expect(await button.getAttribute('title'), testid).toBe(await button.getAttribute('aria-label'));
