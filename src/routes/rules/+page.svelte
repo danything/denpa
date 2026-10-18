@@ -98,11 +98,29 @@
         await applyAction(result);
     };
     /**
-     * **狭い画面で書く欄のほうを出すか。** URL に何か付いていれば書く途中 —
-     * 編集 (`?edit=`)・新しいルール (`?new`)・録画や番組から (`origin`)・「何が録れるか見る」のあと。
-     * 何も無ければ一覧。URL で決めるので、ブラウザの戻るで一覧に戻れる
+     * 付いていれば書く途中、という URL の鍵。編集 (`edit`)・新しいルール (`new`)・録画や番組から
+     * (`recording` / `program`)・「何が録れるか見る」のあと (書く欄の名前。`dedupe` と `priority` はいつも送られる)。
+     * 計測用などの関係ない鍵では書く欄にしない
      */
-    const formView = $derived(page.url.searchParams.size > 0);
+    const FORM_KEYS = [
+        'edit',
+        'new',
+        'recording',
+        'program',
+        'keyword',
+        'ignoreKeyword',
+        'searchFields',
+        'serviceIds',
+        'serviceTypes',
+        'genres',
+        'priority',
+        'dedupe',
+    ];
+    /**
+     * **狭い画面で書く欄のほうを出すか。** 上の鍵が1つでも付いていれば書く欄、無ければ一覧。
+     * URL で決めるので、ブラウザの戻るで一覧に戻れる
+     */
+    const formView = $derived(FORM_KEYS.some((key) => page.url.searchParams.has(key)));
     /**
      * 詳細を開いている行そのもの。**`detail.current` とは別に持つ。**
      *

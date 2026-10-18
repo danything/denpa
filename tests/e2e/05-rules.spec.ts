@@ -32,6 +32,10 @@ test.describe('自動予約ルール', () => {
         expect(shape.縦に動く).toBe(false);
         // 押すもの (追加) は条件が長くても画面の中にある
         await expect(page.getByTestId('rule-submit')).toBeInViewport();
+
+        // 無いルールの `?edit=` は一覧へ (編集のつもりで新しいルールを作らせない)
+        await goto(page, '/rules?edit=999999');
+        await expect(page).toHaveURL(/\/rules$/);
     });
 
     /**
