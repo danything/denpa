@@ -28,7 +28,7 @@ import {
     type YieldedRecording,
 } from '#lib/live.js';
 import { RawEngine } from '#lib/raw/engine.js';
-import type { RawInput } from '#lib/raw/messages.js';
+import type { GrabSize, RawInput } from '#lib/raw/messages.js';
 import { type CanvasSupport, canvasSupport, rawUnsupported } from '#lib/raw/support.js';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
@@ -2268,10 +2268,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         },
         /**
          * MPEG-2 で見ているときの、いま出しているコマ (切り抜き)。**映像は worker の canvas に
-         * あって、`<video>` からは写せない** (`RawEngine.grab`)。MPEG-2 でなければ null
+         * あって、`<video>` からは写せない** (`RawEngine.grab`)。MPEG-2 でなければ null。
+         * `size` を付けると縮めたもの (アンビエントモード)
          */
-        grab(): Promise<ImageBitmap | null> {
-            return canvas && engine !== null ? engine.grab() : Promise.resolve(null);
+        grab(size?: GrabSize): Promise<ImageBitmap | null> {
+            return canvas && engine !== null ? engine.grab(size) : Promise.resolve(null);
         },
         /**
          * MPEG-2 で見ているときの映像ストリーム (PiP)。**映像は worker の canvas にあって、`<video>` は

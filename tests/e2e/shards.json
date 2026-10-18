@@ -43,6 +43,7 @@
         "26-hwenc",
         "28-live-raw",
         "30-api",
-        "38-live-compat"
+        "38-live-compat",
+        "44-ambient"
     ]
 }

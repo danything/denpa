@@ -62,9 +62,35 @@
             height: 100%;
             min-height: 0;
             flex-direction: row;
+            /* 映像の右も左と同じ余白にする (右の列は窓の端まで出るので) */
+            gap: var(--dp-gutter, 1.5rem);
         }
         .main {
             min-height: 0;
+        }
+        /*
+         * **右の列は窓の右端に付けたサイドバー。** `<main>` の余白 (`--dp-gutter`) の外へ
+         * 上・右・下にはみ出し、ヘッダーの下 (ヘッダーを隠す画面では窓の上) から窓の下まで届く。
+         * 区切りは左の線 1 本。中身の余白は列の中身が `--dp-side-pad` で取る — 巻き取る箱を
+         * 列の幅いっぱいにして、スクロールバーを窓の右端に出すため。
+         *
+         * 幅は固定で映像側だけ伸びる。**二段組にした直後は細く** (256px)。理由は
+         * [ControlBar.svelte](ControlBar.svelte)。列が右の余白を使うぶん、映像は前より広く残る
+         */
+        .layout > :global(aside) {
+            --dp-side-pad: 1.25rem;
+            width: 16rem;
+            min-height: 0;
+            flex-shrink: 0;
+            margin: calc(-1 * var(--dp-gutter, 1.5rem)) calc(-1 * var(--dp-gutter, 1.5rem))
+                calc(-1 * var(--dp-gutter, 1.5rem)) 0;
+            border-left: 1px solid var(--dp-line);
+            background: var(--dp-surface);
+        }
+    }
+    @media (min-width: 1024px) {
+        .layout > :global(aside) {
+            width: 20rem;
         }
     }
     /*
@@ -77,6 +103,7 @@
         }
         .layout {
             flex-direction: column;
+            gap: 1rem;
             height: calc(100% + 2 * var(--dp-gutter, 1rem));
             margin: calc(-1 * var(--dp-gutter, 1rem));
             overflow-y: auto;
@@ -88,8 +115,11 @@
             background: #000;
         }
         .layout > :global(aside) {
+            --dp-side-pad: initial;
             width: auto;
             margin: 0 var(--dp-gutter, 1rem) var(--dp-gutter, 1rem);
+            border-left: 0;
+            background: none;
         }
     }
 </style>

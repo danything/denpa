@@ -160,6 +160,22 @@ jobs:
           bash -n install.sh
           shellcheck install.sh
 
+      # install.ps1 (Windows の入れ方) のリントもここで。PSScriptAnalyzer は Linux の pwsh でも同じに見られる
+      # 書き方は PowerShell 5.1 (Windows の既定) に合わせて見る (PSUseCompatibleSyntax)。
+      # 読むのは pwsh で — install.ps1 は BOM の無い UTF-8 で、5.1 はそれを ANSI で読む
+      # (irm | iex は UTF-8 で受け取るので困らない。-File で 5.1 に渡す入れ方は案内しない)。
+      # 外す規則: Write-Host (画面に出す案内)、ShouldProcess (-WhatIf を持つモジュールではない)、BOM (上の理由)。
+      - name: Lint install.ps1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $found = Invoke-ScriptAnalyzer -Path install.ps1 -Severity Warning, Error `
+            -ExcludeRule PSAvoidUsingWriteHost, PSUseShouldProcessForStateChangingFunctions, PSUseBOMForUnicodeEncodedFile `
+            -Settings @{ Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1', '7.0') } } }
+          $found | Format-Table -AutoSize | Out-String -Width 200
+          if ($found) { throw "PSScriptAnalyzer: $($found.Count) findings" }
+
       # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
       - name: Mac compose file is valid
         run: docker compose -f compose.mac.yml config -q
@@ -274,42 +290,85 @@ jobs:
   # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起動して API が答える・入れ方が最後まで通る」まで。
   # ランナーには wslc (WSL のコンテナ) が無いので、denpa 本体は -AgentOnly で外す。
   # **必須チェックにはしない** (agent-macos と同じ理由)
+  #
+  # **2つのジョブに分けて同時に流す。** 1本に並べていた頃は平均3分 (遅い回で4分半) で、
+  # 中身はテスト (agent-windows) と、ビルドして起こす・入れ方を通す (agent-windows-install) の
+  # 関係ない2つだった。install.ps1 のリントは Windows でなくてよいので install-linux へ移した。
+  #
+  # **SDK と NuGet は D: に置き、actions/cache で戻す。** SDK の版 (10.0.402) はランナーの
+  # イメージに入っていないので毎回 300MB を落として展開していて、C: への展開だけで20秒かかっていた
+  # (D: なら8秒。ビルドと restore も C: より速い)。キャッシュに当たれば SDK の用意は10秒ほどで済む。
+  # 鍵は SDK の版と csproj。版は下の setup-dotnet の行から読む (Renovate が書き換えるのはそこ)
   agent-windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Put the SDK and NuGet on D
+        id: dirs
+        shell: pwsh
+        run: |
+          "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" >> $env:GITHUB_ENV
+          "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" >> $env:GITHUB_ENV
+          $sdk = (Select-String -Path .github/workflows/test.yml -Pattern "dotnet-version: '([^']+)'").Matches[0].Groups[1].Value
+          "sdk=$sdk" >> $env:GITHUB_OUTPUT
+
+      - name: Restore the SDK and NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ runner.temp }}\dotnet
+            ${{ runner.temp }}\nuget
+          key: agent-windows-test-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj') }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.402'
 
-      # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある
+      # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある。
+      # 測るだけのテスト (Px4StreamBenchTests。並べずに1本で流れる) も Windows では飛ばす (Linux と Mac で流れる)
       - name: Unit tests (.NET agent)
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
+  agent-windows-install:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Put the SDK and NuGet on D
+        id: dirs
+        shell: pwsh
+        run: |
+          "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" >> $env:GITHUB_ENV
+          "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" >> $env:GITHUB_ENV
+          $sdk = (Select-String -Path .github/workflows/test.yml -Pattern "dotnet-version: '([^']+)'").Matches[0].Groups[1].Value
+          "sdk=$sdk" >> $env:GITHUB_OUTPUT
+
+      # 鍵はテストのジョブと分ける。中の NuGet が違う (こちらは ILCompiler、あちらは TUnit) ので、
+      # 同じ鍵だと先に置いたほうだけが残る
+      - name: Restore the SDK and NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ runner.temp }}\dotnet
+            ${{ runner.temp }}\nuget
+          key: agent-windows-publish-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj') }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.402'
+
       - name: Publish (Native AOT, win-x64)
         run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out
 
-      # 書き方は PowerShell 5.1 (Windows の既定) に合わせて見る (PSUseCompatibleSyntax)。
-      # 読むのは pwsh で — install.ps1 は BOM の無い UTF-8 で、5.1 はそれを ANSI で読む
-      # (irm | iex は UTF-8 で受け取るので困らない。-File で 5.1 に渡す入れ方は案内しない)。
-      # 外す規則: Write-Host (画面に出す案内)、ShouldProcess (-WhatIf を持つモジュールではない)、BOM (上の理由)。
       # **このジョブの PowerShell の段には日本語を書かない** (5.1 が ANSI で読んで、引用符が崩れうる)
-      - name: Lint install.ps1
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
-          $found = Invoke-ScriptAnalyzer -Path install.ps1 -Severity Warning, Error `
-            -ExcludeRule PSAvoidUsingWriteHost, PSUseShouldProcessForStateChangingFunctions, PSUseBOMForUnicodeEncodedFile `
-            -Settings @{ Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1', '7.0') } } }
-          $found | Format-Table -AutoSize | Out-String -Width 200
-          if ($found) { throw "PSScriptAnalyzer: $($found.Count) findings" }
-
       # 何も設定せずに起こす。チューナーは自動検出で空、カードはリーダーが無いので ok:false が返るはず。
       # **落ちずに答える**ことを見る。WinSCard (winscard.dll) をここで実際に引く
       - name: Smoke test (published binary)

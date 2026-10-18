@@ -8,9 +8,10 @@
      * **ここだけが巻き取られ** (`overflow-y: auto`)、押すもの (`footer`) は
      * 巻き取られる中身の外に貼り付けて、いつでも見えるようにする。
      *
-     * 幅と高さの決めごとは3画面共通 (枠は付けない): 幅は固定で映像側だけ伸び、高さは画面の
-     * 残りぜんぶ (映像の高さに揃えない理由は [watch/[id]/+page.svelte](../../../routes/watch/%5Bid%5D/+page.svelte))。
-     * **二段組にした直後は細く** (256px)。理由は [ControlBar.svelte](ControlBar.svelte)。
+     * 幅と高さ・広い画面でのサイドバーの形 (窓の右端に付け、左の線で区切る) は3画面共通で、
+     * [PlayerLayout.svelte](PlayerLayout.svelte) が持つ。高さは画面の残りぜんぶ (映像の高さに
+     * 揃えない理由は [watch/[id]/+page.svelte](../../../routes/watch/%5Bid%5D/+page.svelte))。
+     * 中の余白はサイドバーのとき `--dp-side-pad` (巻き取る箱は列の幅いっぱい)。
      *
      * 中の段落を伸ばさない — daisyUI の `card-body` を使っていた頃は中の `<p>` に
      * `flex-grow: 1` が当たり、中身が枠より短いと段落が余白を全部吸っていた
@@ -32,7 +33,7 @@
 </script>
 
 <aside class="facts">
-    {#if top}{@render top()}{/if}
+    {#if top}<div class="top">{@render top()}</div>{/if}
     <div class="box">
         <div class="body" data-testid={testid}>
             {@render children()}
@@ -50,17 +51,12 @@
         display: flex;
         flex-direction: column;
     }
-    @media (min-width: 768px) {
-        .facts {
-            width: 16rem;
-            min-height: 0;
-            flex-shrink: 0;
-        }
+    .top {
+        padding: var(--dp-side-pad, 0) var(--dp-side-pad, 0) 0;
     }
-    @media (min-width: 1024px) {
-        .facts {
-            width: 20rem;
-        }
+    /* 中身が無ければ場所も取らない (データ放送を出していない間のリモコン) */
+    .top:empty {
+        display: none;
     }
     /*
      * カードにしない。高さは画面の残りぜんぶで映像とは揃わないので、枠があると
@@ -76,14 +72,14 @@
         min-height: 0;
         flex: 1;
         overflow-y: auto;
-        padding: 0.25rem 0.5rem 1rem;
+        padding: var(--dp-side-pad, 0.25rem) var(--dp-side-pad, 0.5rem) 1rem;
     }
     .foot {
         display: flex;
         flex-shrink: 0;
         flex-wrap: wrap;
         gap: 0.5rem;
-        padding: 0.75rem 0.5rem;
+        padding: 0.75rem var(--dp-side-pad, 0.5rem);
         border-top: 1px solid var(--dp-line);
     }
 </style>

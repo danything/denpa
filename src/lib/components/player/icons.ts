@@ -80,6 +80,11 @@ export { default as CUT } from '~icons/lucide/scissors';
 /** チャプター送り・戻し */
 export { default as PREV } from '~icons/lucide/skip-back';
 export { default as NEXT } from '~icons/lucide/skip-forward';
+/**
+ * アンビエントモード (映像の色を周りにぼかして広げる。`AmbientGlow.svelte`)。弱い光を放つ太陽。
+ * オンの間は押されている見た目 (`OVERLAY_ON`)
+ */
+export { default as AMBIENT } from '~icons/lucide/sun-dim';
 export { default as TRASH } from '~icons/lucide/trash';
 export { default as SOUND_ON } from '~icons/lucide/volume-2';
 export { default as SOUND_OFF } from '~icons/lucide/volume-off';

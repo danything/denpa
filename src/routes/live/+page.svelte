@@ -5,6 +5,7 @@
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
+    import { ambientMode } from '#lib/components/player/ambient.svelte.js';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CodecMenu from '#lib/components/player/CodecMenu.svelte';
@@ -285,6 +286,13 @@
         },
     });
 
+    /** アンビエントモード ([ambient.svelte.ts](../../lib/components/player/ambient.svelte.ts))。canvas に描いているときは worker から縮めた1枚をもらう */
+    const ambient = ambientMode({
+        playing: () => !player.paused,
+        canvas: () => (player.canvas ? player : null),
+        video: () => video,
+    });
+
     /**
      * 小窓 (PiP。[pip.svelte.ts](../../lib/components/player/pip.svelte.ts))。放送のまま見ている間は
      * worker の canvas からストリームを取って出す。**小窓で押された止める・再開は player に合わせる**
@@ -352,7 +360,7 @@
             映像と重ねものの束も追っかけと共通 ([MediaStack.svelte](../../lib/components/player/MediaStack.svelte)) —
             なぜ style で書くか・なぜ入れ物を分けるかはあちらに
         -->
-        <PlayerStage {controls} {fullscreen} testid="live-frame" bind:element={stageEl}>
+        <PlayerStage {controls} {fullscreen} {ambient} testid="live-frame" bind:element={stageEl}>
             {#snippet children(stage)}
             <MediaStack
                 holding={player.holding}
@@ -734,7 +742,7 @@
                             </Extras>
                         {/if}
 
-                        <StageTail prefix="live" {background} {pip} {fullscreen} {stage} />
+                        <StageTail prefix="live" {background} {ambient} {pip} {fullscreen} {stage} />
                     </ControlRow>
                 </ControlBar>
             {/if}
@@ -847,7 +855,7 @@
             {/snippet}
         </FactsAside>
     {:else}
-        <!-- 幅と高さの決めごとは FactsAside と同じ (一覧は枠が違うので列だけ揃える) -->
+        <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
         <aside class="live-side">
             <!--
                 **データ放送を出している間だけ、リモコンを一覧の上に出す。**
@@ -875,15 +883,15 @@
                 {/each}
             </div>
             <!--
-            **押せると分かる形にする。** 平らに並べていた頃は、文字が並んでいる
-            だけに見えて押せると気付けなかった。枠を持たせ、指を乗せると浮かせ、
-            いま映しているものは色で塗る
-        -->
+                **枠の無い行を並べる** (アプリのサイドバーの一覧と同じ形)。一行ずつ枠を付けた
+                カードにしていた頃は、枠と行の間の余白が幅を取り、局名と番組名が先に潰れた。
+                押せることは、指を乗せたときの淡い地と、いま映している行の地で分かる
+            -->
             <ul bind:this={list} class="channels" data-testid="live-channels">
                 {#each listed as channel (channel.id)}
                     <!-- いま映しているものかどうかは、この行の中で何度も使う -->
                     {@const tuned = current?.id === channel.id}
-                    <li class="channel-item">
+                    <li class="channel-item" class:tuned>
                         <button type="button"
                             bind:this={rows[channel.id]}
                             class="channel"
@@ -914,7 +922,7 @@
                                 fallback={channel.type}
                             />
                             <!--
-                                **いま映しているものは、枠の色と局名の前の小さな印 (▶) で。**
+                                **いま映しているものは、行の地と局名の前の小さな印 (▶) で。**
                                 色だけだと、色の見え方が違う人に伝わらない。行の右に
                                 「視聴中」のバッジを置いていた頃は、狭い列 (スマホの横・PC の
                                 256px) でバッジが幅を取り、局名も番組名も「で…」まで潰れていた。
@@ -972,22 +980,15 @@
 <DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>
-    /* 右の一覧の列。幅と高さの決めごとは FactsAside と同じ (min-height: 0 が無いと中身の高さで突っ張って巻き取られない) */
+    /*
+     * 右の一覧の列。幅と高さ・サイドバーの形は FactsAside と同じく `PlayerLayout` が持つ。
+     * 中の余白はサイドバーのとき `--dp-side-pad`。一覧 (`.channels`) だけは列の端まで広げて
+     * 中で余白を取る — スクロールバーを窓の右端に出すため
+     */
     .live-side {
         display: flex;
         flex-direction: column;
-    }
-    @media (min-width: 768px) {
-        .live-side {
-            width: 16rem;
-            min-height: 0;
-            flex-shrink: 0;
-        }
-    }
-    @media (min-width: 1024px) {
-        .live-side {
-            width: 20rem;
-        }
+        padding: var(--dp-side-pad, 0) var(--dp-side-pad, 0) 0;
     }
     .track-label {
         display: inline-block;
@@ -1056,8 +1057,12 @@
     }
     .channels {
         flex: 1;
-        margin: 0;
-        padding: 0;
+        margin: 0 calc(-1 * var(--dp-side-pad, 0px));
+        /*
+         * 行は列の端から少し内側 (0.5rem) に置き、行の中の余白 (0.75rem) と足して、
+         * 局名の頭を上のタブや番組の中身の字と同じ位置 (`--dp-side-pad`) にそろえる
+         */
+        padding: 0 max(0px, calc(var(--dp-side-pad, 0px) - 0.75rem)) var(--dp-side-pad, 0);
         overflow-y: auto;
     }
     @media (min-width: 768px) {
@@ -1065,17 +1070,33 @@
             min-height: 0;
         }
     }
+    /*
+     * 一行 = 局を選ぶボタンと中身を読むボタン。地は行 (`li`) ごと塗る — 選ぶボタンだけを
+     * 塗ると、右の (i) の所だけ地が欠ける。枠も区切りの線も付けない
+     */
     .channel-item {
         display: flex;
         align-items: stretch;
-        gap: 0.25rem;
+        min-height: 2.75rem;
         margin: 0;
+        border-radius: var(--dp-radius);
         list-style: none;
+        transition: background-color var(--dp-duration);
     }
     .channel-item + .channel-item {
-        margin-top: 0.25rem;
+        margin-top: 0.125rem;
     }
-    /* 押せると分かる形にする。枠を持たせ、指を乗せると浮かせ、いま映しているものは色で塗る */
+    /* 指を乗せた行は、いま映している行より淡く */
+    .channel-item:hover {
+        background: color-mix(in srgb, var(--dp-hover) 60%, transparent);
+    }
+    .channel-item.tuned {
+        background: var(--dp-subtle);
+    }
+    /* 番号のラベルは淡い面の色。同じ色で塗った行の上では消えるので、地の色にする */
+    .channel-item.tuned :global(.tag) {
+        background: var(--dp-bg);
+    }
     .channel {
         display: flex;
         min-width: 0;
@@ -1083,8 +1104,8 @@
         align-items: center;
         gap: 0.75rem;
         margin: 0;
-        padding: 0.5rem;
-        border: 1px solid var(--dp-line);
+        padding: 0.5rem 0.75rem;
+        border: 0;
         border-radius: var(--dp-radius);
         background: transparent;
         color: inherit;
@@ -1092,18 +1113,6 @@
         font-size: inherit;
         font-weight: var(--dp-weight);
         cursor: pointer;
-        transition:
-            background-color var(--dp-duration),
-            border-color var(--dp-duration);
-    }
-    .channel:hover {
-        border-color: color-mix(in srgb, var(--pico-color) 30%, transparent);
-        background: var(--dp-hover);
-    }
-    .channel.tuned {
-        border-color: var(--pico-primary-background);
-        background: color-mix(in srgb, var(--pico-primary-background) 15%, transparent);
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--pico-primary-background) 40%, transparent);
     }
     .channel-number {
         width: 2.5rem;

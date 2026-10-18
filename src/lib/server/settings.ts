@@ -46,8 +46,8 @@ export interface Settings {
     /**
      * コマ数 (30/60) を本編映像から実測して決めるか。
      *
-     * オン: 60p に起こして重複コマの割合を測り、同じコマが並ぶ素材 (アニメ・
-     *       フィルム) は 30コマで出す (`encoder.measureSmoothMotion`)。
+     * オン: フィールドを比べて素材を見分け、24p 系 (アニメ・フィルム) と 30p の
+     *       素材は 30コマで出す (`encoder.measureSmoothMotion`)。
      * オフ: 測らず**全部 60コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
      */
     fpsDetect: boolean;

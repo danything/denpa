@@ -8,6 +8,7 @@
     import DriveNotice from '#lib/components/DriveNotice.svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import AudioMenu from '#lib/components/player/AudioMenu.svelte';
+    import { ambientMode } from '#lib/components/player/ambient.svelte.js';
     import { screenAwake } from '#lib/components/player/awake.svelte.js';
     import { backgroundPlayback } from '#lib/components/player/background.svelte.js';
     import CloseLink from '#lib/components/player/CloseLink.svelte';
@@ -855,6 +856,13 @@
         resume: playMedia,
     });
 
+    /** アンビエントモード ([ambient.svelte.ts](../../../lib/components/player/ambient.svelte.ts))。canvas に描いているときはプレイヤーから縮めた1枚をもらう */
+    const ambient = ambientMode({
+        playing: () => playing,
+        canvas: () => canvas,
+        video: () => video,
+    });
+
     /**
      * 早送りの速さ。**ライブの追っかけと同じ並び** (`ts/pacing` の `SPEEDS`)。
      * 録画は放送より先が無いという縛りが無いので、いつでも選べる。
@@ -1686,7 +1694,7 @@
                 舞台 (映像と操作をまとめた箱。全画面にするのはここ) は3画面で共通 (PlayerStage)。
                 全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま
             -->
-            <PlayerStage {controls} {fullscreen} testid="watch-stage" bind:element={stage}>
+            <PlayerStage {controls} {fullscreen} {ambient} testid="watch-stage" bind:element={stage}>
                 {#snippet children(layout)}
                 <!--
                     **押すのは映像そのもの。** ボタンを避けて敷くのではなく、
@@ -2110,7 +2118,7 @@
                             </Extras>
                         {/if}
 
-                        <StageTail prefix="watch" {background} {pip} {fullscreen} stage={layout} />
+                        <StageTail prefix="watch" {background} {ambient} {pip} {fullscreen} stage={layout} />
                     </ControlRow>
                 </ControlBar>
                 {/snippet}

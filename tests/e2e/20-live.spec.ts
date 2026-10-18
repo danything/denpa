@@ -262,18 +262,20 @@ test.describe('ライブ視聴', () => {
 
     /*
      * **押せると分かる見た目にする。** 平らに並べていた頃は、文字が並んでいるだけに
-     * 見えて押せると気付けなかった。枠を持たせ、指の形を変える
+     * 見えて押せると気付けなかった。行に枠は付けない (サイドバーの一覧) が、指の形を変え、
+     * 指を乗せた行には淡い地を敷く。指でも押しやすい高さ (44px) は取る
      */
     test('チャンネルは押せると分かる見た目にする', async ({ page }) => {
         await goto(page, '/live');
-        const row = page.getByTestId('live-channel').first();
+        // いま映していない行で見る (映している行は初めから塗ってある)
+        const row = page.locator('[data-testid="live-channel"][data-current="false"]').first();
         await expect(row).toBeVisible();
-        const look = await row.evaluate((el) => {
-            const style = getComputedStyle(el);
-            return { cursor: style.cursor, border: Number.parseFloat(style.borderTopWidth) };
-        });
-        expect(look.cursor).toBe('pointer');
-        expect(look.border).toBeGreaterThan(0);
+        expect(await row.evaluate((el) => getComputedStyle(el).cursor)).toBe('pointer');
+        expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        const fill = () => row.evaluate((el) => getComputedStyle(el.closest('li')!).backgroundColor);
+        const before = await fill();
+        await row.hover();
+        await expect.poll(fill).not.toBe(before);
     });
 
     /*

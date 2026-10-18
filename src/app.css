@@ -140,7 +140,6 @@
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
  * - `--dp-shadow` … カードの影 (ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
- * - `--dp-shadow-bar` … スクロールしたときのヘッダーの影 (`+layout.svelte`)
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
@@ -157,7 +156,6 @@
     --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
     --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
     --dp-shadow-pop: 0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
-    --dp-shadow-bar: 0 2px 8px rgb(24 28 37 / 0.08);
     --pico-form-element-background-color: #fff;
     --pico-form-element-border-color: var(--dp-line-strong);
     --pico-table-border-color: var(--dp-line);
@@ -203,7 +201,6 @@
     --dp-primary-text: var(--pico-primary);
     --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
-    --dp-shadow-bar: 0 2px 10px rgb(0 0 0 / 0.45);
     --pico-form-element-background-color: var(--dp-bg);
     --pico-form-element-active-background-color: var(--dp-surface);
     --pico-form-element-selected-background-color: var(--dp-line);

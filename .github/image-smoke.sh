@@ -76,6 +76,10 @@ denpa)
     ff -i av1.mp4 -f null -
     ff -i in.ts -vf "scdet@cm=threshold=0" -af silencedetect -f null -
     ff -ss 1 -i in.ts -vf thumbnail,scale=320:-2 -frames:v 1 thumb.png
+    # コマ数の見分け方 (src/lib/server/fps.ts)。テレシネ・60i・30p の合成の映像で、判定が分かれるか。
+    # イメージには src が無いので、チェックアウトを読み取り専用で渡す (fps.ts はほかのモジュールを読まない)
+    docker run --rm -v "$PWD:/src:ro" -v "$work:/work" -w /work --entrypoint /usr/local/bin/bun "$image" \
+        /src/scripts/fps-smoke.ts /work
     run /usr/local/bin/bun -e '
         for (const name of ["in.ts", "h264.mkv", "av1.mp4", "thumb.png"]) {
             const size = Bun.file(name).size;

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Denpa.Agent;
+using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -11,6 +12,8 @@ namespace Denpa.Agent.Tests;
  * 偽の px4d も同じプロセスにいるので、数字はその分も含む (比べるときは同じテストを書き換えの前後で流す)。
  * 合否は「流したぶんが読む側に届いたか」だけで、数字は記録に出す (CI の Unit tests の出力で見る)
  */
+// 測るだけなので Windows の CI では流さない (並べずに1本で流れて、そのぶん全体が延びる)。数字は Linux と Mac で出る
+[ExcludeOn(OS.Windows)]
 [NotInParallel]
 [Timeout(120_000)]
 public class Px4StreamBenchTests
