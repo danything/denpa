@@ -74,7 +74,8 @@ export default defineConfig({
                 // 横に長い表をキーボードでも動かせるように
                 MarkdownContent: './src/components/MarkdownContent.astro',
             },
-            expressiveCode: { styleOverrides: { borderRadius: '0.65rem' } },
+            // コードの枠は飾らない。シェルのコードにも端末の窓の飾り (左上の ●●●) を付けず、ほかのコードと同じ箱にする
+            expressiveCode: { styleOverrides: { borderRadius: '0.65rem' }, defaultProps: { frame: 'code' } },
         }),
     ],
 });
