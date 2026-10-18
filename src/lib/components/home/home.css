@@ -175,15 +175,10 @@
 .board .group-head {
     display: flex;
     align-items: center;
-    gap: 0.5rem 0.75rem;
     width: 100%;
-    min-height: 3rem;
-    margin: 0 0 1px;
-    padding: 0.25rem 0.5rem;
     border: 0;
     border-radius: var(--dp-radius);
     box-shadow: none;
-    background: transparent;
     color: inherit;
     font-size: inherit;
     font-weight: inherit;
@@ -221,22 +216,6 @@
 .board .offline-tag {
     margin-top: 0.25rem;
 }
-.board .resume-track {
-    width: 3rem;
-    height: 0.25rem;
-    min-width: 0;
-    flex: none;
-    overflow: hidden;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-line);
-}
-.board .resume-fill {
-    height: 100%;
-    background: var(--pico-primary-background);
-}
-.board .resume-left {
-    flex-shrink: 0;
-}
 /* 進み具合は行の下端いっぱいに敷く */
 .board .row-bar {
     position: absolute;
@@ -254,9 +233,9 @@
 /*
  * ---- 1本の時間軸 ----
  *
- * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧とサイドバーがそれぞれ自分で巻き取る**
- * (ルール・観る画面と同じ。`+layout.svelte` の `FILLED`)。サイドバーは 1000px 以上で、右の端まで寄せて
- * 1px の線で分ける。狭い画面はページごとスクロールし、頭の段 (絞り込みのボタン) だけ上に貼り付く
+ * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧が自分で巻き取る**
+ * (ルール・観る画面と同じ。`+layout.svelte` の `FILLED`)。頭の1行 (絞り込みのチップ・まとめ・「⋯」) は一覧の上に置く。
+ * 狭い画面はページごとスクロールし、頭の1行だけ上に貼り付く
  */
 .board {
     display: flex;
@@ -286,69 +265,67 @@
         padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
     }
 }
-.board .t-side {
-    display: none;
-}
-@media (min-width: 1000px) {
-    .board .t-main {
-        grid-template-columns: minmax(0, 1fr) 18rem;
-    }
-    .board .t-side {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        overflow-y: auto;
-        padding: 1rem 0.625rem 1.5rem;
-        border-left: 1px solid var(--dp-line);
-    }
-}
-@media (min-width: 1280px) {
-    .board .t-main {
-        grid-template-columns: minmax(0, 1fr) 20rem;
-    }
-}
-
-/* 狭い画面の頭。絞り込みと表示の切り替えを開くボタン。ページごと動くので上に貼り付ける */
+/*
+ * 狭い画面の頭。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、表示の切り替えの一枚を開くアイコン。
+ * ページごと動くので上に貼り付ける
+ */
 .board .t-toolbar {
     position: sticky;
     top: 0;
     z-index: 5;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0;
+    gap: 0.25rem;
+    height: 2.75rem;
     background: var(--dp-bg);
 }
-@media (min-width: 768px) {
-    .board .t-toolbar {
-        position: static;
-        padding: 0.75rem var(--dp-gutter) 0.25rem;
-    }
+.board .t-chips {
+    display: flex;
+    flex: 1;
+    gap: 0.375rem;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* 右端は切れているのが分かるように淡く消す (横に流せる印) */
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
 }
-.board .t-filter-open {
-    position: relative;
+.board .t-chips::-webkit-scrollbar {
+    display: none;
+}
+/* つないだボタンの角を落とす規則 (`app.css` の `[role="group"] > button`) に負けないよう、頭の段から書く */
+.board .t-toolbar .t-chips > .t-chip {
+    border-radius: var(--dp-radius-full);
+    --pico-background-color: var(--dp-btn-tonal);
+    --pico-color: var(--dp-btn-text);
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
     width: auto;
-    height: 2.75rem;
+    height: 2.125rem;
     margin: 0;
-    padding: 0 1rem 0 0.75rem;
-    font-size: 0.875rem;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
 }
-.board .t-filter-open .view-dot {
-    position: absolute;
-    top: 0.4rem;
-    right: 0.4rem;
+.board .t-chip .num {
+    color: var(--dp-muted);
 }
-/* サイドバーのある幅では、絞り込みと表示の切り替えはサイドバーに置く */
-@media (min-width: 1000px) {
-    .board .t-toolbar {
-        display: none;
-    }
+.board .t-chip .num.alert {
+    color: var(--dp-rec-text);
 }
-
+/* 選んでいるチップは主のボタンと同じ (字の色で塗る) */
+.board .t-toolbar .t-chips > .t-chip:hover {
+    --pico-background-color: var(--dp-btn-tonal-hover);
+}
+.board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
+    --pico-background-color: var(--dp-btn-solid);
+    --pico-color: var(--dp-btn-solid-text);
+}
+.board .t-chip[aria-pressed="true"] .num {
+    color: inherit;
+    opacity: 0.7;
+}
 /* 日付の見出し。小さく沈めた字で、一覧の頭に貼り付く */
 .board .t-day {
     position: sticky;
@@ -374,7 +351,7 @@
 /* 狭い画面は頭の段 (`.t-toolbar`) の下に貼り付く */
 @media (max-width: 767px) {
     .board .t-day {
-        top: 3.75rem;
+        top: 2.75rem;
     }
 }
 
@@ -406,36 +383,36 @@
 }
 
 /*
- * **行。** 線も枠も無く地の上に直に並べ、触れると薄い塗り、選んでいる行 (サイドバーに出ている行) は
- * もう少し濃い塗り (ルールの一覧と同じ作り)。高さは指で押せる 48px。広い画面は 1 段、
- * サイドバーと並んで狭くなる幅 (1000〜1279px) と狭い画面は、番組名の下に局と尺を置く 2 段
+ * **行。** 幅いっぱいの 2 段の塊。線も枠も影も無く、ごく淡い地と角の丸みと 4px の間で 1 本ずつに見せる
+ * (カードの顔だが箱ではない)。触れると一段濃く、最後に詳細を開いた行 (`.picked`) はもう一段。
+ *
+ * - 1段目: 時刻 · 番組名 · 状態のバッジ、右に押すもの
+ * - 2段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の頭 (残りの幅を埋め、「…」で切る)
+ * - 言うことがあるときだけ 3 段目 (競合・欠ける・CM の判定・エンコードの進み)
+ *
+ * 録れたものは左に大きめのポスター (96×54) を 2 段ぶん置き、途中まで観たものはその下端に細いバー。
+ * 高さはマウスの画面で 64px、指で押す端末で 72px
  */
-.board .t-rows {
-    display: flex;
-    flex-direction: column;
-}
+.board .t-rows,
 .board .t-zone {
     display: flex;
     flex-direction: column;
+    gap: 0.25rem;
 }
-/* 狭い画面では、途中まで観たものの残りは出さない (番組名に幅を回す) */
-@media (max-width: 767px) {
-    .board .t-row .resume {
-        display: none;
-    }
-}
-.board .t-row {
+.board .t-row,
+.board .group-head {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 0 0.75rem;
-    min-height: 3rem;
-    margin-bottom: 1px;
-    padding: 0.25rem 0.5rem;
+    gap: 0.25rem 0.875rem;
+    min-height: 4rem;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
     border-radius: var(--dp-radius);
+    background: color-mix(in srgb, var(--dp-subtle) 35%, transparent);
     transition: background-color var(--dp-duration);
 }
-.board .t-row:hover {
+.board .t-row:hover,
+.board .group-head:hover {
     background: var(--dp-hover-soft);
 }
 .board .t-row.picked {
@@ -445,32 +422,40 @@
     background: color-mix(in srgb, var(--dp-rec) 12%, transparent);
 }
 .board .t-row .row-body {
+    display: flex;
     flex: 1 1 0%;
+    flex-direction: column;
+    gap: 0.125rem;
     min-width: 0;
 }
 .board .t-row .row-meta {
-    margin-top: 0;
-    font-size: 0.78rem;
+    margin: 0;
+    font-size: 0.8125rem;
+}
+.board .title-line .row-name {
+    flex: 0 1 auto;
+    min-width: 4rem;
+}
+.board .title-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
 }
 .board .t-time {
-    display: flex;
-    flex-direction: column;
     flex-shrink: 0;
-    width: 2.9rem;
-    font-size: 0.8125rem;
-    font-weight: var(--dp-weight-bold);
-    line-height: 1.15;
+    color: var(--dp-muted);
+    font-size: 0.875rem;
     white-space: nowrap;
 }
-.board .t-end {
+.board .t-excerpt {
     color: var(--dp-muted);
-    font-size: 0.7rem;
-    font-weight: var(--dp-weight);
+    opacity: 0.85;
 }
 .board .t-thumb {
     position: relative;
     flex-shrink: 0;
-    width: 3.25rem;
+    width: 6rem;
     aspect-ratio: 16 / 9;
     overflow: hidden;
     border-radius: var(--dp-radius-sm);
@@ -488,22 +473,50 @@
     transition: opacity var(--dp-duration);
 }
 .board .t-play .poster-icon {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.5rem;
+    height: 1.5rem;
 }
 .board .playable:hover .t-play {
     opacity: 1;
 }
-/* ルール名は局と尺の後ろに添える。狭い画面では外す (詳細とサイドバーで見られる) */
+/* 途中まで観たもの。ポスターの下端に敷く細いバー (YouTube と同じ置き方) */
+.board .t-resume {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 0.1875rem;
+    background: rgb(255 255 255 / 0.35);
+}
+.board .t-resume .resume-fill {
+    height: 100%;
+    background: var(--pico-primary-background);
+}
 .board .t-rule a {
     position: relative;
     z-index: 2;
 }
+/*
+ * **狭い画面 (768px 未満)。** 同じ 2 段の形のまま、ポスターを 80px に、説明の頭とルールは外す
+ * (番組名に幅を回す)。押すものは「⋯」1つ (下の `.row-more`)
+ */
 @media (max-width: 767px) {
+    .board .t-row,
+    .board .group-head {
+        gap: 0.25rem 0.625rem;
+        padding: 0.5rem;
+    }
+    .board .t-thumb {
+        width: 5rem;
+    }
+    .board .t-end,
+    .board .t-excerpt,
     .board .t-rule {
         display: none;
     }
-    /* 狭い画面の行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
+    .board .t-time {
+        font-size: 0.8125rem;
+    }
+    /* 行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
     .board .t-row .row-actions button:not([data-testid="delete-confirm"]) .btn-label {
         position: absolute;
         width: 1px;
@@ -514,54 +527,6 @@
     }
     .board .t-row .row-actions :is(button, a.button) {
         padding-inline: 0.5rem;
-    }
-}
-@media (min-width: 768px) {
-    .board .t-time {
-        flex-direction: row;
-        align-items: baseline;
-        gap: 0.25rem;
-        width: 6.25rem;
-        font-size: 0.875rem;
-    }
-    .board .t-end::before {
-        content: "–";
-        margin-right: 0.25rem;
-    }
-    .board .t-thumb {
-        width: 3.5rem;
-    }
-}
-/* 1 段にする幅 (サイドバーの無いタブレットの縦と、1280px 以上) */
-@media (min-width: 768px) and (max-width: 999px), (min-width: 1280px) {
-    .board .t-row .row-body {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 17rem);
-        align-items: center;
-        column-gap: 1rem;
-    }
-    .board .t-row .row-body > .row-sub {
-        grid-column: 1 / -1;
-    }
-}
-/*
- * 途中まで観たものの残り。狭い画面 (上の `.t-row .resume`) と、時刻の列を詰める中くらいの幅 (下) では出さない。
- * **出さない規則より前に置く** (後ろに置くと、同じ強さのこちらが勝って出てしまう)
- */
-.board .resume {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: 0.4rem;
-    margin: 0;
-}
-@media (min-width: 1000px) and (max-width: 1279px) {
-    .board .t-time {
-        width: 3.25rem;
-    }
-    .board .t-end,
-    .board .resume {
-        display: none;
     }
 }
 /* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
@@ -578,223 +543,131 @@
 }
 
 /*
- * ---- サイドバーの並び ----
- * ドキュメントの目次と同じ作り: 小さく沈めた見出し、線も枠も無い行、選んでいる行だけ角の丸い薄い塗り、
- * 件数などは小さく沈めた字
+ * **狭い画面では行の操作を「⋯」1つに** (`TimelineRow`)。詳細と削除のアイコンを2つ並べると番組名が数文字で切れた。
+ * 広い画面は今までどおり並べ、「⋯」は出さない
  */
-.board .s-group {
+.board .row-more {
+    display: none;
+}
+.board div.row-wide {
+    display: contents;
+}
+@media (max-width: 767px) {
+    .board .row-more {
+        display: block;
+    }
+    .board .t-row .row-actions .row-wide {
+        display: none;
+    }
+    .board div.row-wide {
+        display: none;
+    }
+}
+/* 「⋯」の中の項目。行の操作のボタンの決まり (`app.css` の `.row-actions`) を、メニューの項目の形に戻す */
+.board .t-row .row-actions .row-menu .menu-item {
+    justify-content: flex-start;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.4rem 0.75rem;
+    font-size: var(--dp-text-base);
+}
+.board .t-row .row-actions .row-menu .menu-danger {
+    color: var(--dp-rec-text);
+}
+
+/* 表示の切り替えのスイッチ (`ViewList`)。押せるのは行ぜんぶで、これは入っているかの印だけ */
+.board .s-switch {
+    position: relative;
+    flex-shrink: 0;
+    width: 2rem;
+    height: 1.125rem;
+    border-radius: var(--dp-radius-full);
+    background: var(--dp-line-strong);
+    transition: background-color var(--dp-duration) var(--dp-ease);
+}
+.board .s-switch::after {
+    content: "";
+    position: absolute;
+    top: 0.1875rem;
+    left: 0.1875rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: var(--dp-radius-full);
+    background: #fff;
+    transition: transform var(--dp-duration) var(--dp-ease);
+}
+.board .s-switch.on {
+    background: var(--pico-primary-background);
+}
+.board .s-switch.on::after {
+    transform: translateX(0.875rem);
+}
+
+/* 頭の1行の右: 今日のまとめと「⋯」。狭い画面ではまとめを外す (空きは「⋯」の中) */
+.board .t-summary {
     display: flex;
-    align-items: center;
-    margin: 1rem 0 0.25rem;
-    padding: 0 0.75rem;
-    color: var(--dp-muted);
-    font-size: 0.75rem;
-    font-weight: var(--dp-weight);
-}
-.board .s-group.s-first {
-    margin-top: 0.25rem;
-}
-.board .s-group-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    width: calc(100% + 1.5rem);
-    min-height: 2rem;
-    margin: 0 -0.75rem;
-    padding: 0 0.75rem;
-    border: 0;
-    border-radius: var(--dp-radius);
-    background: transparent;
-    box-shadow: none;
-    color: inherit;
-    font-size: inherit;
-    font-weight: inherit;
-    text-align: left;
-}
-.board .s-group-toggle .group-chevron {
-    margin-left: auto;
-}
-.board .s-group-toggle:hover {
-    background: var(--dp-hover-soft);
-}
-.board .s-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    margin: 0;
-}
-.board .s-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    width: 100%;
-    min-height: 2.5rem;
-    margin: 0;
-    padding: 0 0.75rem;
-    border: 0;
-    border-radius: var(--dp-radius);
-    background: transparent;
-    box-shadow: none;
-    color: inherit;
-    font-size: 0.875rem;
-    font-weight: var(--dp-weight);
-    text-align: left;
-    text-decoration: none;
-    transition: background-color var(--dp-duration);
-}
-.board .s-item:hover {
-    background: var(--dp-hover-soft);
-}
-.board .s-item.on {
-    background: var(--dp-subtle);
-    font-weight: var(--dp-weight-bold);
-}
-.board .s-static {
-    min-height: 2rem;
-}
-.board .s-static:hover {
-    background: transparent;
-}
-.board .s-stats dt,
-.board .s-stats dd {
-    margin: 0;
-    font-weight: var(--dp-weight);
-}
-.board .s-sub {
-    display: inline-flex;
-    align-items: center;
-    color: var(--dp-muted);
-    font-size: 0.8125rem;
+    flex-shrink: 0;
+    gap: 0.375rem;
+    margin: 0 0 0 auto;
     white-space: nowrap;
 }
-.board .s-sub.alert {
-    color: var(--dp-rec-text);
-    font-weight: var(--dp-weight-bold);
+.board .t-more {
+    position: relative;
+    flex-shrink: 0;
+    margin: 0;
 }
-.board .s-note {
-    margin: 0.75rem 0.75rem 0;
+.board .t-more .view-dot {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+}
+@media (max-width: 767px) {
+    .board .t-summary {
+        display: none;
+    }
+}
+@media (min-width: 768px) {
+    .board .t-toolbar {
+        position: static;
+        gap: 0.75rem;
+        padding: 0.5rem var(--dp-gutter) 0.25rem;
+    }
+}
+/* 「⋯」の中。切り替えは右にスイッチ、空きは押せない1行 */
+.board .view-menu {
+    min-width: 15rem;
+}
+.board .view-item {
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 2.5rem;
+}
+.board .view-menu .menu-note {
+    margin: 0.25rem 0 0;
+    padding: 0.5rem 0.6rem 0.25rem;
+    border-top: 1px solid var(--dp-line);
 }
 
-/* 選んだ番組 */
-.board .t-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 0 0.75rem;
-}
-.board .t-hero {
-    position: relative;
-    display: block;
-    aspect-ratio: 16 / 9;
-    max-height: 9rem;
-    overflow: hidden;
-    border-radius: var(--dp-radius);
-    background: var(--dp-subtle);
-}
-.board .t-hero-play {
-    position: absolute;
-    right: 0.75rem;
-    bottom: 0.75rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: var(--dp-radius-full);
-    background: rgb(0 0 0 / 0.55);
-    color: #fff;
-}
-.board .t-detail-title {
-    margin: 0;
-    font-size: 1.0625rem;
-    font-weight: var(--dp-weight-bold);
-    line-height: 1.4;
-}
-.board .t-detail .row-meta {
-    white-space: normal;
-}
-.board .t-desc {
-    display: -webkit-box;
-    margin: 0;
-    overflow: hidden;
-    -webkit-line-clamp: 6;
-    line-clamp: 6;
-    -webkit-box-orient: vertical;
-    color: var(--dp-muted);
-    line-height: 1.6;
-}
-.board .t-detail-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-.board .t-detail-actions :is(button, a.button) {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    width: auto;
-    margin: 0;
-    padding: 0.45rem 0.9rem;
-    font-size: 0.875rem;
-}
-
-/* 狭い画面の絞り込み。下から出る一枚 (`<dialog>`) */
-.board .t-sheet {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    max-width: none;
-    height: 100%;
-    max-height: none;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-}
-.board .t-sheet[open] {
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-}
-.board .t-sheet::backdrop {
-    background: transparent;
-}
-.board .t-sheet-backdrop {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: var(--dp-backdrop);
-    box-shadow: none;
-    cursor: default;
-}
-.board .t-sheet-body {
-    position: relative;
-    width: 100%;
-    max-width: 32rem;
-    max-height: 85%;
-    overflow-y: auto;
-    padding: 0.5rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
-    border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
-    background: var(--dp-surface);
-}
-.board .t-sheet-grip {
-    width: 2.5rem;
-    height: 0.25rem;
-    margin: 0 auto 0.5rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-line);
-}
-.board .t-sheet .s-item {
-    min-height: 2.75rem;
-}
-.board .t-sheet-close {
-    width: 100%;
-    margin: 1rem 0 0;
+/*
+ * ---- 指で押す端末 (`pointer: coarse`) ----
+ * タブレットでは低い行は押したつもりの隣が開いた。行は 72px、行の操作 (詳細・削除・取消・「⋯」) は 44px 四方以上で
+ * 間を空ける。チップと「⋯」の中の項目も指の大きさに。マウスの画面 (`pointer: fine`) の詰め具合は変えない
+ */
+@media (pointer: coarse) {
+    .board .t-row,
+    .board .group-head {
+        min-height: 4.5rem;
+    }
+    .board .t-row .row-actions {
+        --dp-btn-h: 2.75rem;
+        --dp-btn-h-sm: 2.75rem;
+        gap: 0.5rem;
+    }
+    .board .t-row .row-actions :is(button, a.button) {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+    }
+    .board .view-item {
+        min-height: 3rem;
+    }
 }
