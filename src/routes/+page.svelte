@@ -1638,7 +1638,7 @@
         gap: 0.125rem;
     }
     .row-name {
-        font-weight: 500;
+        font-weight: var(--dp-weight);
         overflow-wrap: anywhere;
     }
     /*
@@ -1658,7 +1658,7 @@
         color: inherit;
         /* 字の形は `.broadcast` に任せる (`font` でまとめて戻すと放送の字が外れる) */
         font-size: inherit;
-        font-weight: 500;
+        font-weight: var(--dp-weight);
         line-height: inherit;
         text-align: inherit;
         text-decoration: none;
@@ -1760,7 +1760,7 @@
         text-align: center;
     }
     .empty-title {
-        font-weight: 600;
+        font-weight: var(--dp-weight-bold);
         overflow-wrap: anywhere;
     }
     .empty-hint {

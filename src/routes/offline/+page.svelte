@@ -250,7 +250,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-weight: 500;
+        font-weight: var(--dp-weight);
     }
     .empty {
         padding: 1.5rem;

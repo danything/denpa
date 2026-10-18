@@ -1059,7 +1059,7 @@
         font-size: 0.875rem;
         /* 行の高さ(= 時刻の数字が止まる位置 headHeight)を Tailwind の頃の 37px に揃える */
         line-height: 1.25rem;
-        font-weight: 500;
+        font-weight: var(--dp-weight);
     }
     .ch-number {
         flex-shrink: 0;
@@ -1147,7 +1147,7 @@
         background: var(--dp-subtle);
         color: inherit;
         text-align: left;
-        font-weight: normal;
+        font-weight: var(--dp-weight);
         line-height: normal;
     }
     :global([data-theme="dark"]) .program {
@@ -1209,12 +1209,12 @@
         display: block;
         font-size: 0.75rem;
         line-height: 1.25;
-        font-weight: 500;
+        font-weight: var(--dp-weight);
     }
     .state {
         display: block;
         font-size: 0.75rem;
-        font-weight: 500;
+        font-weight: var(--dp-weight);
         color: var(--dp-primary-text);
     }
     .program:is([data-state="recording"], [data-state="conflict"]) .state {
@@ -1230,7 +1230,7 @@
     }
     .copy-never {
         font-size: 0.625rem;
-        font-weight: normal;
+        font-weight: var(--dp-weight);
         opacity: 0.7;
         white-space: nowrap;
     }
