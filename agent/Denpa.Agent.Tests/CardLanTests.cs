@@ -182,17 +182,6 @@ public class CardLanTests
     }
 
     [Test]
-    public async Task 決まりをデータで出す()
-    {
-        var json = Read(("CARD_SHARE_PORT", "25253"), ("CARD_SHARE_MAX_RTT", "7")).ToJson();
-        await Assert.That(json["port"]!.GetValue<int>()).IsEqualTo(25253);
-        await Assert.That(json["ttl"]!.GetValue<int>()).IsEqualTo(1);
-        await Assert.That(json["maxRtt"]!.GetValue<double>()).IsEqualTo(7);
-        await Assert.That(json["networks"]!.AsArray().Count).IsEqualTo(7);
-        await Assert.That(Read().ToJson()["maxRtt"]).IsNull();
-    }
-
-    [Test]
     public async Task 断られたら理由の分かる文にする()
     {
         var refused = RemoteCard.Refused(

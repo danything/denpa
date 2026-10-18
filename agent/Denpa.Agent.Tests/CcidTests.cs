@@ -3,6 +3,14 @@ using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
+/// <summary>リーダーが返すメッセージの種類 (CCID 1.1 の 6.2)。本体は Seq で答えを見分けるので、偽のリーダーだけが使う</summary>
+internal static class CcidAnswer
+{
+    public const byte DataBlock = 0x80;
+    public const byte SlotStatus = 0x81;
+    public const byte Parameters = 0x82;
+}
+
 /*
  * USB の CCID リーダーを直接扱うところ。
  *
@@ -99,7 +107,7 @@ public class CcidTests
         await Assert.That(Convert.ToHexString(xfr)).IsEqualTo("6F0200000000FF001000AABB");
 
         var reply = CcidMessage.Parse(Convert.FromHexString("80030000000007" + "000001" + "9000FF"));
-        await Assert.That(reply.Type).IsEqualTo(CcidMessage.DataBlock);
+        await Assert.That(reply.Type).IsEqualTo(CcidAnswer.DataBlock);
         await Assert.That(reply.Seq).IsEqualTo((byte)7);
         await Assert.That(reply.Chain).IsEqualTo((byte)1);
         await Assert.That(Convert.ToHexString(reply.Data)).IsEqualTo("9000FF");
@@ -154,7 +162,7 @@ public class CcidTests
     private static byte[] Reply(byte type, byte seq, byte status, byte error, ReadOnlySpan<byte> data, byte chain = 0) =>
         CcidMessage.Command(type, seq, data, status, error, chain);
 
-    private static byte[] Slot(CcidReply command, byte status = 0x01) => Reply(CcidMessage.SlotStatus, command.Seq, status, 0, []);
+    private static byte[] Slot(CcidReply command, byte status = 0x01) => Reply(CcidAnswer.SlotStatus, command.Seq, status, 0, []);
 
     /// <summary>
     /// PC Twin に B-CAS が挿さっているつもりの偽物。カードは I ブロックに <paramref name="answer"/> を返す。
@@ -166,15 +174,15 @@ public class CcidTests
         return new FakeReader(command => command.Type switch
         {
             CcidMessage.PowerOff => [Slot(command)],
-            CcidMessage.PowerOn => [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, BcasAtr)],
-            CcidMessage.SetParameters => [Reply(CcidMessage.Parameters, command.Seq, 0, 0, command.Data, 1)],
+            CcidMessage.PowerOn => [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, BcasAtr)],
+            CcidMessage.SetParameters => [Reply(CcidAnswer.Parameters, command.Seq, 0, 0, command.Data, 1)],
             CcidMessage.XfrBlock when command.Data[1] == 0xC1 =>
-                [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, T1Protocol.Block(0xE1, command.Data.AsSpan(3, 1)))],
+                [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, T1Protocol.Block(0xE1, command.Data.AsSpan(3, 1)))],
             CcidMessage.XfrBlock => (byte[][])
                 [
-                    Reply(CcidMessage.DataBlock, (byte)(command.Seq - 1), 0, 0, [0x00]),
-                    Reply(CcidMessage.DataBlock, command.Seq, 0x80, 1, []),
-                    Reply(CcidMessage.DataBlock, command.Seq, 0, 0, T1Protocol.Block((byte)(cardNs++ << 6), answer)),
+                    Reply(CcidAnswer.DataBlock, (byte)(command.Seq - 1), 0, 0, [0x00]),
+                    Reply(CcidAnswer.DataBlock, command.Seq, 0x80, 1, []),
+                    Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, T1Protocol.Block((byte)(cardNs++ << 6), answer)),
                 ],
             _ => throw new InvalidOperationException($"思わぬ命令 0x{command.Type:X2}"),
         });
@@ -211,7 +219,7 @@ public class CcidTests
     public async Task カードが無ければ投げる()
     {
         var reader = new FakeReader(command => command.Type == CcidMessage.PowerOn
-            ? [Reply(CcidMessage.SlotStatus, command.Seq, 0x42, CcidMessage.IccMute, [])]
+            ? [Reply(CcidAnswer.SlotStatus, command.Seq, 0x42, CcidMessage.IccMute, [])]
             : [Slot(command, 0x02)]);
         var link = new CcidLink("PC Twin", reader, Twin);
         await Assert.That(Assert.Throws<IOException>(() => link.Reset()).Message).Contains("挿さっていません");
@@ -222,7 +230,7 @@ public class CcidTests
     public async Task ATR_が壊れていても閉じるときに電源を切る()
     {
         var reader = new FakeReader(command => command.Type == CcidMessage.PowerOn
-            ? [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, [0x3B, 0xFF])]
+            ? [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, [0x3B, 0xFF])]
             : [Slot(command)]);
         var link = new CcidLink("PC Twin", reader, Twin);
         Assert.Throws<IOException>(() => link.Reset());
@@ -238,10 +246,10 @@ public class CcidTests
     {
         var reader = new FakeReader(command => command.Type switch
         {
-            CcidMessage.PowerOn when command.Status == 1 => [Reply(CcidMessage.SlotStatus, command.Seq, 0x41, CcidMessage.IccMute, [])],
-            CcidMessage.PowerOn => [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, BcasAtr)],
-            CcidMessage.SetParameters => [Reply(CcidMessage.Parameters, command.Seq, 0, 0, command.Data, 1)],
-            CcidMessage.XfrBlock => [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, T1Protocol.Block(0xE1, [0xFE]))],
+            CcidMessage.PowerOn when command.Status == 1 => [Reply(CcidAnswer.SlotStatus, command.Seq, 0x41, CcidMessage.IccMute, [])],
+            CcidMessage.PowerOn => [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, BcasAtr)],
+            CcidMessage.SetParameters => [Reply(CcidAnswer.Parameters, command.Seq, 0, 0, command.Data, 1)],
+            CcidMessage.XfrBlock => [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, T1Protocol.Block(0xE1, [0xFE]))],
             _ => [Slot(command)],
         });
         var link = new CcidLink("PC Twin", reader, Twin);
@@ -256,10 +264,10 @@ public class CcidTests
         var info = Twin with { Features = CcidInterface.ExtendedApduLevel | CcidInterface.AutoParameters | CcidInterface.AutoVoltage, MaxMessage = 20 };
         var reader = new FakeReader(command => command.Type switch
         {
-            CcidMessage.PowerOn => [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, BcasAtr)],
-            CcidMessage.XfrBlock when command.Error == 1 => [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, [], 0x10)],
-            CcidMessage.XfrBlock when command.Error == 2 => [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, [0xAA, 0xBB], 1)],
-            CcidMessage.XfrBlock => [Reply(CcidMessage.DataBlock, command.Seq, 0, 0, [0x90, 0x00], 2)],
+            CcidMessage.PowerOn => [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, BcasAtr)],
+            CcidMessage.XfrBlock when command.Error == 1 => [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, [], 0x10)],
+            CcidMessage.XfrBlock when command.Error == 2 => [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, [0xAA, 0xBB], 1)],
+            CcidMessage.XfrBlock => [Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, [0x90, 0x00], 2)],
             _ => [Slot(command)],
         });
         var link = new CcidLink("APDU", reader, info);
