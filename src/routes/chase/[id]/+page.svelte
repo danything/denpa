@@ -26,7 +26,7 @@
     import SpeedMenu, { SPEED_KEY, storedSpeed } from '#lib/components/player/SpeedMenu.svelte';
     import StageNote from '#lib/components/player/StageNote.svelte';
     import StageTail from '#lib/components/player/StageTail.svelte';
-    import { audioTracks, liveCodecs } from '#lib/components/player/settings.js';
+    import { audioTracks, liveCodecs, subtitles } from '#lib/components/player/settings.js';
     import { snapshotter } from '#lib/components/player/shot.svelte.js';
     import { grabbedFrame, videoFrame } from '#lib/components/player/snapshot.js';
     import { stageTap } from '#lib/components/player/stage-tap.js';
@@ -381,6 +381,19 @@
                                   active: a.id === player.audio,
                               })),
                               onselect: (key) => player.setAudio(key),
+                          })
+                        : undefined}
+                    subtitle={player.hasCaptions
+                        ? subtitles({
+                              icon: CAPTION,
+                              on: player.captions,
+                              tracks: player.captionTracks,
+                              track: player.captionTrack,
+                              languages: player.captionLanguages,
+                              language: player.captionLanguage,
+                              onoff: (on) => player.setCaptions(on),
+                              ontrack: (index) => player.setCaptionTrack(index),
+                              onlanguage: (index) => player.setCaptionLanguage(index),
                           })
                         : undefined}
                 />

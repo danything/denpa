@@ -28,9 +28,15 @@
  */
 
 import { LANGUAGE } from '#lib/arib.js';
-import { CAPTION_TEXT_VERSION, type CaptionPage, type CaptionPages } from '#lib/caption-text.js';
+import {
+    CAPTION_TEXT_VERSION,
+    type CaptionLanguage,
+    type CaptionLanguagePages,
+    type CaptionPage,
+    type CaptionPages,
+} from '#lib/caption-text.js';
 import { type CaptionTrack, CHANNEL, type Notice } from '#lib/live.js';
-import { B24CaptionDecoder } from '#lib/ts/b24caption.js';
+import { B24CaptionDecoder, isManagement } from '#lib/ts/b24caption.js';
 import { type MkvFrame, MkvSplitter } from '#lib/ts/mkv.js';
 import { CLOCK } from '#lib/ts/pes.js';
 
@@ -182,29 +188,68 @@ function label(index: number, lang: string | null): string {
     return `${head} (${LANGUAGE[lang] ?? lang})`;
 }
 
-/** 文字の配置の1枚と、出す時刻 (ミリ秒。コンテナのコマの時刻そのまま) */
+/** 文字の配置の1枚と、出す時刻 (ミリ秒。コンテナのコマの時刻そのまま) と、第何言語か */
 export interface CaptionShown {
     at: number;
     page: CaptionPage;
+    /** 第何言語か (1〜8)。たいていは 1 */
+    language: number;
 }
 
 /**
  * 写してきた字幕 (`S_ARIBSUB` のコマ) をデコードして、文字の配置にする。**字幕のストリーム1本に1つ** —
- * 書式や位置は字幕文を跨いで続くので、ffmpeg を起こし直したら作り直す
+ * 書式や位置は字幕文を跨いで続くので、ffmpeg を起こし直したら作り直す。
+ *
+ * **載っている言語は全部読む。** 字幕のストリーム1本に最大8言語が入っていて (データグループの番号)、
+ * 言語ごとに書式も位置も別に続くので、言語ごとにデコーダを1つずつ持つ。第2言語から後ろは
+ * 字幕管理データに出てきてから作り、最後の字幕管理データを先に食わせる (書式と外字を揃える)。
+ * どの言語を誰に出すかは使う側 (ライブは視聴者ごとに `Viewer.language`) が決める
  */
 export class CaptionText {
-    private readonly decoder = new B24CaptionDecoder();
+    private readonly decoders = new Map<number, B24CaptionDecoder>([[1, new B24CaptionDecoder(1)]]);
+    /** 最後に来た字幕管理データ。あとから作るデコーダに先に食わせる */
+    private management: Uint8Array | null = null;
     /** 読めなかったと言ったか。**1回だけ言う** (壊れた放送は続けて壊れていることが多い) */
     private told = false;
+    /** 載っている言語。変わったら `languagesChanged` が立つ */
+    languages: CaptionLanguage[] = [];
+    /** 前の `feed` で言語の顔ぶれが変わったか */
+    languagesChanged = false;
 
     /**
-     * 出すものが無いコマ (字幕管理データ・送り直し・待ちだけ) なら null。
+     * 出すもの (言語ごとに0か1枚)。字幕管理データ・送り直し・待ちだけのコマは何も出さない。
      * **読めないコマは捨てて続ける** — 投げると、受けている側 (ライブの字幕 API) ごと止まる
      */
-    feed(frame: MkvFrame): CaptionShown | null {
+    feed(frame: MkvFrame): CaptionShown[] {
+        const out: CaptionShown[] = [];
+        this.languagesChanged = false;
+        if (isManagement(frame.data)) this.management = frame.data;
+        for (const [language, decoder] of this.decoders) {
+            const page = this.decode(decoder, frame.data);
+            if (page !== null) out.push({ at: frame.at, page, language });
+        }
+        // 言語の顔ぶれは字幕管理データでしか変わらない
+        const listed = this.decoders.get(1)?.languages ?? [];
+        if (
+            isManagement(frame.data) &&
+            listed.map((l) => `${l.index}:${l.code}`).join() !==
+                this.languages.map((l) => `${l.index}:${l.code}`).join()
+        ) {
+            this.languages = listed;
+            this.languagesChanged = true;
+            for (const { index } of listed) {
+                if (this.decoders.has(index)) continue;
+                const decoder = new B24CaptionDecoder(index);
+                if (this.management !== null) this.decode(decoder, this.management);
+                this.decoders.set(index, decoder);
+            }
+        }
+        return out;
+    }
+
+    private decode(decoder: B24CaptionDecoder, data: Uint8Array): CaptionPage | null {
         try {
-            const page = this.decoder.decode(frame.data);
-            return page === null ? null : { at: frame.at, page };
+            return decoder.decode(data);
         } catch (error) {
             if (!this.told) console.warn(`[captions] 字幕を1コマ読めませんでした: ${String(error)}`);
             this.told = true;
@@ -217,7 +262,11 @@ export class CaptionText {
  * 送る形式にする。**中身は JSON** (`CaptionPage`)、頭の時刻は映像と同じ物差し (90kHz。stream.md#websocket-プロトコル)。
  * 前の1枚を丸ごと置き換えるので、消すのも同じ種別 (`runs` が空) で送る
  */
-export function textFrame(shown: CaptionShown): { kind: number; pts: bigint; data: Uint8Array } {
+export function textFrame(shown: Pick<CaptionShown, 'at' | 'page'>): {
+    kind: number;
+    pts: bigint;
+    data: Uint8Array;
+} {
     return {
         kind: CHANNEL.captionText,
         pts: BigInt(Math.max(0, Math.round((shown.at * CLOCK) / 1000))),
@@ -350,10 +399,28 @@ export function pagesFromMkv(data: Uint8Array): CaptionPages | null {
     const frames = splitter.feed(data);
     if (splitter.codecs[0] !== 'S_ARIBSUB') return null;
     const text = new CaptionText();
-    const pages: CaptionPages['pages'] = [];
+    const byLanguage = new Map<number, CaptionPages['pages']>([[1, []]]);
+    // 録画の途中で言語の顔ぶれが変わることがある (番組の境目)。出てきた言語は全部残す
+    const seen = new Map<number, CaptionLanguage>();
     for (const frame of frames) {
-        const shown = text.feed(frame);
-        if (shown !== null) pages.push({ at: shown.at / 1000, page: shown.page });
+        const shownAll = text.feed(frame);
+        for (const l of text.languages) if (!seen.has(l.index)) seen.set(l.index, l);
+        for (const shown of shownAll) {
+            const list = byLanguage.get(shown.language) ?? [];
+            byLanguage.set(shown.language, list);
+            list.push({ at: shown.at / 1000, page: shown.page });
+        }
     }
-    return { v: CAPTION_TEXT_VERSION, pages };
+    // 第1言語は今までどおり `pages`。第2言語から後ろは載っているときだけ `others` に (版は上げない)
+    const first = seen.get(1);
+    const others: CaptionLanguagePages[] = [...seen.values()]
+        .sort((a, b) => a.index - b.index)
+        .filter((l) => l.index !== 1)
+        .map((l) => ({ ...l, pages: byLanguage.get(l.index) ?? [] }));
+    return {
+        v: CAPTION_TEXT_VERSION,
+        pages: byLanguage.get(1) ?? [],
+        ...(first === undefined ? {} : { language: first }),
+        ...(others.length === 0 ? {} : { others }),
+    };
 }

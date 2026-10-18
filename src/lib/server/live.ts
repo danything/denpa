@@ -21,7 +21,8 @@
 
 import { and, eq, gt, lte } from 'drizzle-orm';
 import { type Audio, type AudioTrack, audioTracks, parseAudios, pickTrack } from '#lib/arib.js';
-import { CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '#lib/live.js';
+import { CAPTION_TEXT_VERSION, type CaptionLanguage } from '#lib/caption-text.js';
+import { type CaptionTrack, CHANNEL, type HybridcastLink, type LiveCodec, type Notice } from '#lib/live.js';
 import { type Ait, AitReader, APPLICATION_TYPE_HTML5, CONTROL } from '#lib/ts/ait.js';
 import { BroadcastClock, parseStart } from '#lib/ts/clock.js';
 import { PresentFollowing } from '#lib/ts/eit.js';
@@ -491,6 +492,8 @@ interface Viewer {
      * チューナーを使い続けない。畳んだら `ended` を伝えて閉じさせる
      */
     side?: boolean;
+    /** 字幕の第何言語を出すか (1〜8)。省けば第1言語。**その人の選んだもの**で、局を変えても続く */
+    language?: number;
 }
 
 /**
@@ -609,7 +612,9 @@ class Session {
      * 字幕は次が来るまで出しっぱなしなので、渡さないとその人には
      * 次の字幕まで何も出ない (数十秒あく)
      */
-    private showing: CaptionShown | null = null;
+    private readonly showing = new Map<number, CaptionShown>();
+    /** いまの字幕のストリームに載っている言語 (`CaptionText.languages`)。届くまでは空 */
+    private languages: CaptionLanguage[] = [];
     /** 字幕が無いと言われたか。言われたら字幕なしで再エンコードする */
     private noSubtitle = false;
     /**
@@ -721,10 +726,9 @@ class Session {
         if (this.raw) viewer.ready = true;
         if (this.init !== null) this.hand(viewer, CHANNEL.videoInit, this.init);
         // 選べる字幕と、いま出ている1枚。**どちらも待たせない**
-        if (this.list.tracks.length > 0) {
-            this.tellOne(viewer, { type: 'captions', tracks: this.list.tracks, track: this.track });
-        }
-        if (this.showing !== null) this.handText(viewer, this.showing);
+        if (this.list.tracks.length > 0) this.tellCaptions(viewer, this.list.tracks);
+        const showing = this.showing.get(this.languageOf(viewer));
+        if (showing !== undefined) this.handText(viewer, showing);
         // **待たせない。** 途中から来た人にも、分かっているぶんはその場で渡す
         if (this.toldApps !== '') {
             this.tellOne(viewer, { type: 'hybridcast', apps: JSON.parse(this.toldApps) });
@@ -1242,16 +1246,79 @@ class Session {
         const text = new CaptionText();
         for await (const chunk of chunks(Bun.file(fd).stream())) {
             for (const found of frames.feed(chunk)) {
-                const shown = text.feed(found);
-                if (shown !== null) this.deliverText(shown);
+                for (const shown of text.feed(found)) this.deliverText(shown);
+                // 載っている言語が分かった・変わった。選べるように知らせ直す
+                if (text.languagesChanged) {
+                    const before = new Map(
+                        [...this.viewers].map((viewer) => [viewer, this.languageOf(viewer)]),
+                    );
+                    this.languages = text.languages;
+                    for (const viewer of this.viewers) {
+                        this.tellCaptions(viewer, this.list.tracks);
+                        // 出す言語が変わった人 (選んだ言語がこの番組に無い) には、その言語でいま出ている1枚を渡す
+                        if (before.get(viewer) !== this.languageOf(viewer)) this.handShowing(viewer);
+                    }
+                }
             }
         }
     }
 
     /** 文字の配置を1枚配る。**デコードして出てくるのは変わったときだけ**なので、間引かない */
     private deliverText(shown: CaptionShown): void {
-        this.showing = shown;
-        for (const viewer of this.viewers) this.handText(viewer, shown);
+        this.showing.set(shown.language, shown);
+        for (const viewer of this.viewers) {
+            if (this.languageOf(viewer) === shown.language) this.handText(viewer, shown);
+        }
+    }
+
+    /**
+     * 選べる字幕を1人に知らせる。**言語はその人に出しているもの** (`Viewer.language`) なので、全員に同じものは送れない。
+     * 言語がまだ分からない (字幕管理データが届いていない) ときは `languages` を省く
+     */
+    private tellCaptions(viewer: Viewer, tracks: CaptionTrack[]): void {
+        this.tellOne(viewer, {
+            type: 'captions',
+            tracks,
+            track: this.track,
+            ...(this.languages.length === 0
+                ? {}
+                : { languages: this.languages, language: this.languageOf(viewer) }),
+        });
+    }
+
+    /**
+     * その人に出す言語。**選んだ言語が載っていなければ第1言語** — 前の番組で英語を選んだまま、英語の無い局へ
+     * 移ったときに何も出なくならないように (画面は通知を見て選び直す)
+     */
+    private languageOf(viewer: Viewer): number {
+        const wanted = viewer.language ?? 1;
+        return this.languages.length === 0 || this.languages.some((l) => l.index === wanted) ? wanted : 1;
+    }
+
+    /**
+     * 字幕の言語を選び直す (`{ type: 'language' }`)。**再エンコードしない** — 全部の言語をデコードしているので、
+     * 出すものを替えて、その言語でいま出ている1枚を渡すだけ (無ければ空の1枚で前の言語の字幕を消す)
+     */
+    setLanguage(viewer: Viewer, language: number): void {
+        viewer.language = language;
+        if (!this.viewers.has(viewer)) return;
+        if (this.list.tracks.length > 0) this.tellCaptions(viewer, this.list.tracks);
+        this.handShowing(viewer);
+    }
+
+    /** その人の言語でいま出ている1枚を渡す。無ければ空の1枚で、前の言語の字幕を消す */
+    private handShowing(viewer: Viewer): void {
+        const showing = this.showing.get(this.languageOf(viewer));
+        if (showing !== undefined) {
+            this.handText(viewer, showing);
+            return;
+        }
+        // 時刻はいま出ている中でいちばん新しいものに揃える (受け側はその位置で前の1枚を置き換える)
+        const at = Math.max(0, ...[...this.showing.values()].map((s) => s.at));
+        this.handText(viewer, {
+            at,
+            page: { v: CAPTION_TEXT_VERSION, plane: [960, 540], duration: null, runs: [] },
+        });
     }
 
     /**
@@ -1341,7 +1408,7 @@ class Session {
         };
     }
 
-    private handText(viewer: Viewer, shown: CaptionShown): void {
+    private handText(viewer: Viewer, shown: Pick<CaptionShown, 'at' | 'page'>): void {
         const { kind, pts, data } = textFrame(shown);
         viewer.connection.send(kind, pts, data);
     }
@@ -1371,7 +1438,7 @@ class Session {
              * ボタンが出なかったのはこれを見ていなかったため)
              */
             if (list.feed(line)) {
-                this.tell({ type: 'captions', tracks: list.tracks, track: this.track });
+                for (const viewer of this.viewers) this.tellCaptions(viewer, list.tracks);
                 continue;
             }
             // 入口の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
@@ -1486,8 +1553,9 @@ class Session {
                         captioner?.stop();
                         captionless.delete(this.serviceId);
                         // 選べる字幕は新しい ffmpeg の見出しから数え直す。前の番組の字幕は残さない
-                        this.showing = null;
-                        this.tell({ type: 'captions', tracks: [], track: this.track });
+                        this.showing.clear();
+                        this.languages = [];
+                        for (const viewer of this.viewers) this.tellCaptions(viewer, []);
                         captioner = this.captions();
                     }
                     if (out.length === 0) continue;
@@ -1728,7 +1796,12 @@ export function chaseStream(
     const release = holdTranscode();
     if (release === null) return 'busy';
     return sessionStream((viewer, held) =>
-        openChase({ type: 'chase', recordingId, at, audio, codec, caption: 0 }, viewer, held, release),
+        openChase(
+            { type: 'chase', recordingId, at, audio, codec, caption: 0, language: undefined },
+            viewer,
+            held,
+            release,
+        ),
     );
 }
 
@@ -1741,7 +1814,7 @@ export function chaseStream(
  * (ブラウザで同じ局を放送そのままで観ていればそれも共有する)。共有する相手が無ければ null —
  * 映像 (`live?codec=raw`) を先に開いてからリクエストすること。映像が終われば閉じる (`Viewer.side`)
  */
-export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | null {
+export function liveCaptions(serviceId: number, language = 1): ReadableStream<Uint8Array> | null {
     const row = orm()
         .select({ type: services.type, channel: services.channel })
         .from(services)
@@ -1759,6 +1832,8 @@ export function liveCaptions(serviceId: number): ReadableStream<Uint8Array> | nu
             ready: false,
             wantsData: false,
             side: true,
+            // 第何言語を流すか (`?language=`)。省けば第1言語 (今までどおり)
+            language,
         };
         session.add(viewer);
         return () => depart(session, viewer);
@@ -1798,7 +1873,11 @@ const recordingCaptioners = new Map<number, (() => void)[]>();
  * 読まなくなったら (アプリは先読みする枚数に上限がある) 録画を読むのも止める。
  * シークしたら `from` を変えてリクエストし直す
  */
-export function recordingCaptions(recordingId: number, at: number): ReadableStream<Uint8Array> | null {
+export function recordingCaptions(
+    recordingId: number,
+    at: number,
+    language = 1,
+): ReadableStream<Uint8Array> | null {
     const rec = orm().select().from(recordings).where(eq(recordings.id, recordingId)).get();
     if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) return null;
     const size = fileSize(rec.ts_path);
@@ -1822,7 +1901,7 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
         ).getReader();
         let stopped = false;
         /** いま写させている ffmpeg。番組が替わって並びが変わったら起こし直す (下の流し込み) */
-        let proc = spawnRecordingCaptioner(program, label, out, () => proc);
+        let proc = spawnRecordingCaptioner(program, label, language, out, () => proc);
         const stop = () => {
             if (stopped) return;
             stopped = true;
@@ -1856,7 +1935,7 @@ export function recordingCaptions(recordingId: number, at: number): ReadableStre
                             `[captions] ${label}: 番組が替わって音声・字幕の構成が変わったので、字幕を写し直します`,
                         );
                         const old = proc;
-                        proc = spawnRecordingCaptioner(program, label, out, () => proc);
+                        proc = spawnRecordingCaptioner(program, label, language, out, () => proc);
                         endInput(old);
                         old.kill();
                     }
@@ -1889,6 +1968,7 @@ function endInput(proc: ReturnType<typeof Bun.spawn>): void {
 function spawnRecordingCaptioner(
     program: number,
     label: string,
+    language: number,
     out: CaptionOut,
     current: () => ReturnType<typeof Bun.spawn>,
 ): ReturnType<typeof Bun.spawn> {
@@ -1905,10 +1985,26 @@ function spawnRecordingCaptioner(
 
     // 選べる字幕は入口の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
     const list = new TrackList(program);
+    const text = new CaptionText();
+    // 流す言語。**求められた言語が載っていなければ第1言語** (ライブの `languageOf` と同じ)
+    const effective = () =>
+        text.languages.length === 0 || text.languages.some((l) => l.index === language) ? language : 1;
+    // 選べる字幕。言語は字幕管理データが届いてから足す
+    const tell = () =>
+        out.send(
+            CHANNEL.control,
+            0n,
+            json({
+                type: 'captions',
+                tracks: list.tracks,
+                track: 0,
+                ...(text.languages.length === 0 ? {} : { languages: text.languages, language: effective() }),
+            }),
+        );
     void (async () => {
         for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
             if (list.feed(line)) {
-                out.send(CHANNEL.control, 0n, json({ type: 'captions', tracks: list.tracks, track: 0 }));
+                tell();
             } else if (worthLogging(line) && !NO_SUBTITLE.test(line)) {
                 console.warn(`[captions] ${label} ffmpeg: ${line.trim()}`);
             }
@@ -1918,15 +2014,17 @@ function spawnRecordingCaptioner(
     // 字幕。文字の配置は変わったときしか出てこないので、間引かない
     const fd = (proc.stdio as unknown as number[])[3];
     const frames = new MkvSplitter();
-    const text = new CaptionText();
     const captions = (async () => {
         if (typeof fd !== 'number') return;
         for await (const chunk of chunks(Bun.file(fd).stream())) {
             for (const frame of frames.feed(chunk)) {
-                const shown = text.feed(frame);
-                if (shown === null) continue;
-                const { kind, pts, data } = textFrame(shown);
-                out.send(kind, pts, data);
+                for (const shown of text.feed(frame)) {
+                    // 求められた言語だけ (`?language=`)
+                    if (shown.language !== effective()) continue;
+                    const { kind, pts, data } = textFrame(shown);
+                    out.send(kind, pts, data);
+                }
+                if (text.languagesChanged && list.tracks.length > 0) tell();
             }
         }
     })().catch(() => undefined);
@@ -2073,6 +2171,7 @@ export function warm(
 /** 画面からの指示 (`#lib/live` の `Command`) を、省かれたところを既定で埋めて読んだもの */
 type Asked =
     | { type: 'data'; on: boolean }
+    | { type: 'language'; language: number }
     | {
           type: 'tune';
           channelType: string;
@@ -2082,6 +2181,8 @@ type Asked =
           audio: string | undefined;
           codec: LiveCodec;
           caption: number;
+          /** 字幕の第何言語か。省かれていれば前のまま (`Viewer.language`) */
+          language: number | undefined;
           /** 放送そのままで欲しいと言われたか */
           raw: boolean;
       }
@@ -2095,6 +2196,7 @@ type ChaseAsked = {
     audio: string | undefined;
     codec: LiveCodec;
     caption: number;
+    language: number | undefined;
 };
 
 /**
@@ -2109,9 +2211,14 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
     const codec: LiveCodec = message['codec'] === 'av1' ? 'av1' : 'h264';
     // **字幕も映像と同じ ffmpeg**。選び直すと再エンコードになる (`encodeArgs`)
     const caption = Number.isInteger(message['caption']) ? Math.max(0, Number(message['caption'])) : 0;
+    // 字幕の言語 (データグループの番号 1〜8)。それ以外は聞かなかったことにする
+    const number = Number(message['language']);
+    const language = Number.isInteger(number) && number >= 1 && number <= 8 ? number : undefined;
     switch (message['type']) {
         case 'data':
             return { type: 'data', on: message['on'] === true };
+        case 'language':
+            return language === undefined ? null : { type: 'language', language };
         case 'chase': {
             const at = Number(message['at']);
             return {
@@ -2121,6 +2228,7 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
                 audio,
                 codec,
                 caption,
+                language,
             };
         }
         case 'tune': {
@@ -2136,6 +2244,7 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
                 audio,
                 codec,
                 caption,
+                language,
                 raw: message['raw'] === true,
             };
         }
@@ -2176,6 +2285,13 @@ export function attend(connection: Connection): void {
             current?.wantData(viewer, asked.on);
             return;
         }
+        // 字幕の言語は再エンコードせずに替える (`Session.setLanguage`)
+        if (asked.type === 'language') {
+            if (current === null) viewer.language = asked.language;
+            else current.setLanguage(viewer, asked.language);
+            return;
+        }
+        if (asked.language !== undefined) viewer.language = asked.language;
         /*
          * **追っかけ再生** (issue #16)。シークも同じ指示の送り直しで、
          * そのたびに再エンコードする (ライブの選局し直しと同じ流儀)

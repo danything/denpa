@@ -6,6 +6,7 @@ import {
     CAPTION_FEED_BACKLOG,
     CAPTION_FEED_HOLD,
     type CaptionOut,
+    CaptionText,
     captionFeed,
     captionOutput,
     NO_SUBTITLE,
@@ -343,3 +344,63 @@ describe('textFrame', () => {
         expect(textFrame({ at: 1500.4, page }).pts).toBe(135_036n);
     });
 });
+
+/**
+ * **字幕1本に言語が複数ある放送。** 全部の言語をデコードして、言語の番号を付けて出す。どれを誰に出すかは
+ * 使う側が決める (ライブは視聴者ごと、録画は `others`)
+ */
+describe('字幕の言語', () => {
+    const words = (page: { runs: { text: string }[] }) => page.runs.map((r) => r.text).join('');
+    const frame = (at: number, data: Uint8Array) => ({ at, data });
+
+    test('載っている言語を全部デコードし、言語の番号を付けて出す', () => {
+        const text = new CaptionText();
+        text.feed(frame(0, management({ languages: ['jpn', 'eng'] })));
+        expect(text.languagesChanged).toBe(true);
+        expect(text.languages.map((l) => l.label)).toEqual(['日本語', '英語']);
+        expect(text.feed(frame(1000, text_(1, 'にほんご'))).map((s) => [s.language, words(s.page)])).toEqual([
+            [1, 'にほんご'],
+        ]);
+        expect(text.feed(frame(1000, text_(2, 'えいご'))).map((s) => [s.language, words(s.page)])).toEqual([
+            [2, 'えいご'],
+        ]);
+        expect(text.languagesChanged).toBe(false);
+    });
+
+    test('言語が1つなら今までどおり第1言語だけ', () => {
+        const text = new CaptionText();
+        text.feed(frame(0, management()));
+        expect(text.languages.map((l) => l.index)).toEqual([1]);
+        expect(text.feed(frame(1000, text_(1, 'じまく'))).map((s) => s.language)).toEqual([1]);
+    });
+
+    test('録画は第1言語を pages に、第2言語から後ろを others に', () => {
+        const pages = pagesFromMkv(
+            mkv([
+                [0, management({ languages: ['jpn', 'eng'] })],
+                [1500, text_(1, 'にほんご')],
+                [1500, text_(2, 'えいご')],
+            ]),
+        );
+        expect(pages?.language).toEqual({ index: 1, code: 'jpn', label: '日本語' });
+        expect(pages?.pages.map((p) => words(p.page))).toEqual(['にほんご']);
+        expect(
+            pages?.others?.map((o) => [o.index, o.label, o.pages.map((p) => words(p.page)).at(-1)]),
+        ).toEqual([[2, '英語', 'えいご']]);
+    });
+
+    test('言語が1つの録画には others を付けない (今までと同じ形)', () => {
+        const pages = pagesFromMkv(
+            mkv([
+                [0, management()],
+                [1500, text_(1, 'じまく')],
+            ]),
+        );
+        expect(pages?.others).toBeUndefined();
+    });
+});
+
+/** 第 `language` 言語の本文1つ */
+function text_(language: number, body: string): Uint8Array {
+    return text(encodeAribText(body), language);
+}

@@ -4,11 +4,13 @@ import {
     captionsClearOfBar,
     expect,
     expectSharpCaptions,
+    FAKE_CAPTION,
     flipSetting,
     goto,
     holdCaptions,
     leaveFullscreen,
     oneRowTroubles,
+    openSettings,
     overlayTroubles,
     recordOne,
     routeCaptions,
@@ -233,6 +235,52 @@ test.describe('録画を観る', () => {
         await wakeControls(page, 'watch-stage');
         await button.click();
         await expect(button).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    /*
+     * **字幕の言語を再生の設定 (⚙) で選ぶ。** 字幕1本に英語も載っている録画 (`captions.json` の `others`)。
+     * 選んだ言語と出し入れは端末に覚え、開き直しても続く (`caption-pref.ts`)
+     */
+    test('字幕の言語を ⚙ で選び、出し入れと一緒に覚える', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        const english = { ...FAKE_CAPTION, runs: [{ ...FAKE_CAPTION.runs[0]!, text: 'English captions' }] };
+        await page.route('**/api/recordings/*/captions.json', (route) =>
+            route.fulfill({
+                json: {
+                    v: 1,
+                    pages: [{ at: 0, page: FAKE_CAPTION }],
+                    language: { index: 1, code: 'jpn', label: '日本語' },
+                    others: [{ index: 2, code: 'eng', label: '英語', pages: [{ at: 0, page: english }] }],
+                },
+            }),
+        );
+        await goto(page, `/watch/${id}`);
+        await wakeControls(page, 'watch-stage');
+
+        const row = page.getByTestId('watch-subtitle');
+        await expect(row).toContainText('日本語');
+        await openSettings(page, 'watch');
+        await row.click();
+        const options = page.getByTestId('watch-subtitle-option');
+        await expect(options).toHaveText(['オフ', '日本語', '英語']);
+        await page.locator('[data-testid="watch-subtitle-option"][data-subtitle="0:2"]').click();
+        await expect(row).toContainText('英語');
+        expect(await page.evaluate(() => localStorage.getItem('caption-language'))).toBe('eng');
+
+        // 開き直しても英語のまま
+        await page.reload();
+        await expect(page.getByTestId('watch-subtitle')).toContainText('英語');
+
+        // オフも覚える。字幕ボタンも消えた形になる
+        await wakeControls(page, 'watch-stage');
+        await openSettings(page, 'watch');
+        await page.getByTestId('watch-subtitle').click();
+        await page.locator('[data-testid="watch-subtitle-option"][data-subtitle="off"]').click();
+        await expect(page.getByTestId('watch-captions')).toHaveAttribute('aria-pressed', 'false');
+        await page.reload();
+        await expect(page.getByTestId('watch-subtitle')).toContainText('オフ');
+        await expect(page.getByTestId('watch-captions')).toHaveAttribute('aria-pressed', 'false');
     });
 
     /**

@@ -2,8 +2,7 @@
     import { onMount } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
-    import { canvasVideo, chooseCanvas, seeDriveNotice, teslaBrowser } from '#lib/canvas-video.js';
-    import DriveNotice from '#lib/components/DriveNotice.svelte';
+    import { teslaBrowser } from '#lib/canvas-video.js';
     import Lead from '#lib/components/Lead.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import { measure } from '#lib/measure.svelte.js';
@@ -44,33 +43,12 @@
      * **この端末だけの設定。** どれもサーバには送らず、端末に覚える (localStorage)。
      * 読むのは画面に出てから (localStorage・UA・VideoDecoder はサーバでは読めない)
      */
-    let compat = $state(false);
     let tesla = $state(false);
     let support = $state<CanvasSupport | null>(null);
-    /** 互換モードを入れようとしている (運転中の注意を出している) */
-    let compatAsking = $state(false);
     onMount(() => {
-        compat = canvasVideo();
         tesla = teslaBrowser();
         void canvasSupport().then((found) => (support = found));
     });
-
-    /** 入れるときは運転中の注意を先に出し、「わかりました」で入れる。切るのはその場で */
-    function setCompat(on: boolean): void {
-        if (on) {
-            compatAsking = true;
-            return;
-        }
-        chooseCanvas(false);
-        compat = false;
-    }
-
-    function acceptCompat(): void {
-        seeDriveNotice();
-        chooseCanvas(true);
-        compat = true;
-        compatAsking = false;
-    }
 </script>
 
 <svelte:window onclick={confirming.stand} />
@@ -109,37 +87,14 @@
         <!--
             **互換モード** (`canvas-video.ts`)。`<video>` の再生が止まる端末 (テスラの車載ブラウザ) のため、
             ライブ・追っかけ・録画の動画を canvas に描く。端末ごとの設定。
-            入れるときは運転中の注意を出し、「わかりました」で入る (`DriveNotice`)。
+            **オン/オフは再生画面の ⚙ (再生の設定。`StageTail`) で切り替える。** ここに残すのは、この端末で使えるものの一覧だけ。
             canvas・WebCodecs といった言葉は画面に出さない (docs/writing.md「画面の言葉」)
         -->
         <section class="section" data-testid="canvas-video">
             <div class="section-head">
                 <h2>互換モードで再生</h2>
             </div>
-            <label class="check">
-                <input
-                    type="checkbox"
-                    role="switch"
-                    aria-checked={compat || compatAsking}
-                    checked={compat || compatAsking}
-                    onchange={(event) => setCompat(event.currentTarget.checked)}
-                    data-testid="canvas-video-toggle"
-                />
-                <span>互換モードで再生する</span>
-            </label>
-            <Lead class="indent">
-                動画が止まってしまう端末 (テスラの車載ブラウザなど) 向け
-                {#snippet more()}
-                    <p>
-                        <strong>この端末だけ</strong>の設定で、サーバにも他の端末にも伝わりません。
-                        テスラの車載ブラウザでは、触らなくても入っています。
-                    </p>
-                    <p>
-                        ライブ・追っかけ再生・録画を、動画が止まりにくい方法で再生します。使えない画質は選べなくなります。
-                        速さは変えられません。ライブはさかのぼって見ることができません。
-                    </p>
-                {/snippet}
-            </Lead>
+            <p class="small" data-testid="canvas-video-hint">オン/オフは、再生画面の ⚙ (再生の設定) で切り替えます。</p>
             <ul class="support small" data-testid="canvas-video-support">
                 <li>H.264: {support === null ? '確認中' : support.h264 ? '使えます' : '使えません'}</li>
                 <li>AV1: {support === null ? '確認中' : support.av1 ? '使えます' : '使えません'}</li>
@@ -268,8 +223,6 @@
         </section>
     </div>
 </div>
-
-<DriveNotice open={compatAsking} onaccept={acceptCompat} oncancel={() => (compatAsking = false)} />
 
 <style>
     .section form {

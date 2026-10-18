@@ -1498,6 +1498,70 @@ test.describe('ライブ視聴', () => {
     });
 
     /*
+     * **字幕の言語は再エンコードせずに選び直す** (`{ type: 'language' }`)。サーバは載っている言語を全部
+     * デコードしていて、出す言語を視聴者ごとに替えるだけ。偽の放送に字幕は乗っていないので、
+     * 言語が2つ載っている通知を流す
+     */
+    test('字幕の言語を ⚙ で選ぶと、言語だけをリクエストし直して覚える', async ({ page }) => {
+        await captureSockets(page);
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-title')).toBeVisible();
+        // 送ったものを控える
+        await page.evaluate(() => {
+            const seen = window as unknown as { __sockets: WebSocket[]; __sent: string[] };
+            seen.__sent = [];
+            const socket = seen.__sockets.at(-1);
+            const send = socket?.send.bind(socket);
+            if (socket !== undefined && send !== undefined) {
+                socket.send = (data) => {
+                    seen.__sent.push(String(data));
+                    send(data);
+                };
+            }
+        });
+        const notice = {
+            type: 'captions',
+            tracks: [{ index: 0, lang: 'jpn', label: '字幕' }],
+            track: 0,
+            languages: [
+                { index: 1, code: 'jpn', label: '日本語' },
+                { index: 2, code: 'eng', label: '英語' },
+            ],
+            language: 1,
+        };
+        await page.evaluate((json) => {
+            const socket = (window as unknown as { __sockets: WebSocket[] }).__sockets.at(-1);
+            const body = new TextEncoder().encode(json);
+            const data = new Uint8Array(9 + body.length);
+            data[0] = 0x40;
+            data.set(body, 9);
+            socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
+        }, JSON.stringify(notice));
+
+        await wakeControls(page, 'live-frame');
+        const row = page.getByTestId('live-subtitle');
+        await expect(row).toContainText('日本語');
+        await openSettings(page, 'live');
+        await row.click();
+        await expect(page.getByTestId('live-subtitle-option')).toHaveText(['オフ', '日本語', '英語']);
+        await page.locator('[data-testid="live-subtitle-option"][data-subtitle="0:2"]').click();
+        await expect(row).toContainText('英語');
+        const sent = await page.evaluate(() => (window as unknown as { __sent: string[] }).__sent);
+        expect(sent.map((s) => JSON.parse(s))).toContainEqual({ type: 'language', language: 2 });
+        // 映像はリクエストし直さない (選局の指示は送らない)
+        expect(sent.some((s) => JSON.parse(s).type === 'tune')).toBe(false);
+        expect(await page.evaluate(() => localStorage.getItem('caption-language'))).toBe('eng');
+
+        // オフは字幕ボタンと同じ。端末に覚える
+        await openSettings(page, 'live');
+        await row.click();
+        await page.locator('[data-testid="live-subtitle-option"][data-subtitle="off"]').click();
+        await expect(page.getByTestId('live-caption')).toHaveAttribute('aria-pressed', 'false');
+        expect(await page.evaluate(() => localStorage.getItem('caption-on'))).toBe('0');
+    });
+
+    /*
      * **字幕は映像と同じ ffmpeg がエンコードする。** 出口を2つ持つ1本しか起きない。
      *
      * **それが時刻を揃える唯一の方法だった。** 別々に起こした2本は入口で時刻を

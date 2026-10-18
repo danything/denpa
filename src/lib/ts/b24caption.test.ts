@@ -195,3 +195,49 @@ describe('B24CaptionDecoder', () => {
         expect(decoder().decode(data)).toBeNull();
     });
 });
+
+/**
+ * **字幕1本に言語が複数ある放送** (データグループの番号 1〜8。何番がどの言語かは字幕管理データの ISO 639)。
+ * デコーダは1つの言語だけを読み、載っている言語を `languages` に出す
+ */
+describe('字幕の言語', () => {
+    const both = management({ languages: ['jpn', 'eng'] });
+    const words = (page: ReturnType<B24CaptionDecoder['decode']>) => page?.runs.map((r) => r.text).join('');
+
+    test('字幕管理データから載っている言語を読む (名前つき)', () => {
+        const decoder = new B24CaptionDecoder();
+        decoder.decode(both);
+        expect(decoder.languages).toEqual([
+            { index: 1, code: 'jpn', label: '日本語' },
+            { index: 2, code: 'eng', label: '英語' },
+        ]);
+    });
+
+    test('既定は第1言語だけを読み、第2言語の字幕文は捨てる', () => {
+        const decoder = new B24CaptionDecoder();
+        decoder.decode(both);
+        expect(words(decoder.decode(text(encodeAribText('字幕'), 1)))).toBe('字幕');
+        expect(decoder.decode(text(encodeAribText('えいご'), 2))).toBeNull();
+    });
+
+    test('第2言語を選べば第2言語だけを読む', () => {
+        const decoder = new B24CaptionDecoder(2);
+        decoder.decode(both);
+        expect(decoder.decode(text(encodeAribText('字幕'), 1))).toBeNull();
+        expect(words(decoder.decode(text(encodeAribText('えいご'), 2)))).toBe('えいご');
+    });
+
+    test('8言語まで読む', () => {
+        const decoder = new B24CaptionDecoder(8);
+        decoder.decode(management({ languages: ['jpn', 'eng', 'kor', 'zho', 'fra', 'deu', 'ita', 'spa'] }));
+        expect(decoder.languages.map((l) => l.index)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+        expect(words(decoder.decode(text(encodeAribText('字幕'), 8)))).toBe('字幕');
+    });
+
+    test('書式は選んだ言語のものを使う', () => {
+        const decoder = new B24CaptionDecoder(2);
+        // 第1言語は 960x540 (SWF 7)、第2言語は 720x480 (SWF 9)。書式は言語ごとに書いてある
+        decoder.decode(management({ languages: ['jpn', 'eng'], formats: [8, 10] }));
+        expect(decoder.decode(text(encodeAribText('A'), 2))?.plane).toEqual([720, 480]);
+    });
+});

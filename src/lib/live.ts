@@ -13,6 +13,7 @@
  */
 
 import type { AudioTrack } from './arib';
+import type { CaptionLanguage } from './caption-text';
 
 /**
  * エンコード方式。**見ながら切り替えられる** (`live/+page.svelte`)。
@@ -115,6 +116,13 @@ export type Notice =
           tracks: CaptionTrack[];
           /** いま出しているもの (`CaptionTrack.index`) */
           track: number;
+          /**
+           * いまの字幕のストリームに載っている言語 (字幕管理データから)。**届くまでは省く** — 知らない受け側は
+           * 読み飛ばせばよく、そのときは第1言語だけが届く
+           */
+          languages?: CaptionLanguage[];
+          /** この視聴者に出している言語 (`CaptionLanguage.index`) */
+          language?: number;
       }
     | {
           /**
@@ -270,7 +278,12 @@ export type Command =
      * 全員のぶんをデコードし続ける理由が無い (`server/databroadcast.ts`)。
      * 引き換えに、**押してから出るまでカルーセルが一周するのを待つ**
      */
-    | { type: 'data'; on: boolean };
+    | { type: 'data'; on: boolean }
+    /**
+     * 字幕の言語を選ぶ (第何言語か。1〜8)。**再エンコードしない** — 字幕のストリーム1本に全部の言語が入っていて、
+     * サーバは全部デコードしている (`server/captions.ts` の `CaptionText`)。出す言語を視聴者ごとに替えるだけ
+     */
+    | { type: 'language'; language: number };
 
 /**
  * 追っかけ再生 — **録画中の録画を頭から観る** (issue #16)。
@@ -293,6 +306,8 @@ type ChaseCommand = {
     codec?: LiveCodec;
     /** 何本目の字幕か。省くと1本目 */
     caption?: number;
+    /** 字幕の第何言語を出すか (1〜8)。省くと第1言語 */
+    language?: number;
 };
 
 type TuneCommand = {
@@ -324,6 +339,10 @@ type TuneCommand = {
      * `encodeArgs`)。そうしないと時刻が揃わない
      */
     caption?: number;
+    /**
+     * 字幕の第何言語を出すか (1〜8)。省くと第1言語。**選び直しは `{ type: 'language' }` で** (再エンコードしない)
+     */
+    language?: number;
     /**
      * **エンコードせずに元の TS で欲しい** ([stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
      *
