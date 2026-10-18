@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, goto, test } from './helpers';
+import { deleteRule, expect, goto, test } from './helpers';
 
 /**
  * 録画一覧の「まとめて表示」(issue #480)。
@@ -277,8 +277,7 @@ test.describe('録画一覧のまとめて表示', () => {
             await goto(page, '/rules');
             const made = page.getByTestId('rule-row').filter({ hasText: 'グループ試験アニメ' });
             if ((await made.count()) > 0) {
-                await made.first().getByTestId('rule-delete').click();
-                await page.getByTestId('rule-delete-confirm').click();
+                await deleteRule(page, made.first());
                 await expect(made).toHaveCount(0);
             }
         }

@@ -254,6 +254,11 @@ export async function load({ url }) {
         .from(ruleTable)
         .where(eq(ruleTable.id, Number(url.searchParams.get('edit'))))
         .get();
+    /*
+     * **無いルールの `?edit=` は一覧へ。** 消したルールのリンクや古い履歴から来ると、編集のつもりの欄が
+     * 「新しいルール」に化けて、気づかずに別のルールを作ることになる
+     */
+    if (url.searchParams.has('edit') && editing === undefined) redirect(303, relative(url, '/rules'));
 
     /** まだ録っていない予約。重なりの判定と、条件から外れた予約を出すのに使う */
     const pending: Pending[] = orm()
@@ -781,7 +786,8 @@ export const actions = {
          * **条件に入ったものは立ち、外れたものは引っ込む** (`rules.applyRules`)
          */
         await reapply();
-        redirect(303, relative(url, '/rules'));
+        // 直したルールを選んだまま (左の一覧で光ったまま、右も同じルール)
+        redirect(303, relative(url, `/rules?edit=${id}`));
     },
 
     /**

@@ -10,8 +10,9 @@
     import { badgeClass, CM_LABEL, COPY_NEVER_REASON, dateTime, SERVICE_TYPE_LABEL, stateLabel } from '#lib/format.js';
     import { CODEC_LABEL } from '#lib/hw.js';
     import { matches, Paged, sentinel } from '#lib/paging.svelte.js';
-    import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS, searchFieldLabel } from '#lib/search.js';
-    import { afterNavigate } from '$app/navigation';
+    import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS } from '#lib/search.js';
+    import { applyAction, type SubmitFunction } from '$app/forms';
+    import { afterNavigate, goto } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
     import type { Preview, PreviewRow } from './+page.server';
@@ -68,7 +69,7 @@
     let formKey = $state(0);
     /*
      * **編集を押したら描き直す。** チェックは `checked` の値が変わったときしか当て直さないので、
-     * 手で外したまま別のルールの「編集」を押すと、同じ値 (概要にチェック) のルールでは外れたまま
+     * 手で外したまま別のルールを開くと、同じ値 (概要にチェック) のルールでは外れたまま
      * 残っていた。リンクと戻る/進むで来たら、そのルールの値から組み直す。
      * 「何が録れるか見る」(GET の送信) は打ち込んだ値がそのまま返るので描き直さない
      */
@@ -86,6 +87,55 @@
     const detail = programDetail();
     /** ルールの削除は2回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
     const deleting = arming('[data-testid^="rule-delete"]');
+    /**
+     * 一覧の行のスイッチを送るとき。**送っている間は押せなくする** (連打で何度も切り替わらない)。
+     * 断られたら見た目を戻す — 一覧は読み直されないので、戻さないとスイッチだけ実際とずれる
+     */
+    const switched: SubmitFunction = ({ formElement }) => {
+        const box = formElement.querySelector<HTMLInputElement>('input[role="switch"]');
+        if (box !== null) box.disabled = true;
+        return async ({ result, update }) => {
+            await update();
+            if (box !== null) {
+                if (result.type !== 'success' && result.type !== 'redirect') box.checked = !box.checked;
+                box.disabled = false;
+            }
+        };
+    };
+    /**
+     * 編集中のルールを消したら、一覧の初めに戻る。`?edit=` のまま残ると、無くなったルールの
+     * 画面が新しいルールの欄に化けて見える。戻る先の履歴にも残さない (戻っても無いので)。
+     * 「削除しました」の知らせは移ったあとに当てる
+     */
+    const leaveDeleted: SubmitFunction = () => async ({ result, update }) => {
+        if (result.type !== 'success') return update();
+        await goto(resolve('rules'), { replaceState: true });
+        await applyAction(result);
+    };
+    /**
+     * 付いていれば書く途中、という URL の鍵。編集 (`edit`)・新しいルール (`new`)・録画や番組から
+     * (`recording` / `program`)・「何が録れるか見る」のあと (書く欄の名前。`dedupe` と `priority` はいつも送られる)。
+     * 計測用などの関係ない鍵では書く欄にしない
+     */
+    const FORM_KEYS = [
+        'edit',
+        'new',
+        'recording',
+        'program',
+        'keyword',
+        'ignoreKeyword',
+        'searchFields',
+        'serviceIds',
+        'serviceTypes',
+        'genres',
+        'priority',
+        'dedupe',
+    ];
+    /**
+     * **狭い画面で書く欄のほうを出すか。** 上の鍵が1つでも付いていれば書く欄、無ければ一覧。
+     * URL で決めるので、ブラウザの戻るで一覧に戻れる
+     */
+    const formView = $derived(FORM_KEYS.some((key) => page.url.searchParams.has(key)));
     /**
      * 詳細を開いている行そのもの。**`detail.current` とは別に持つ。**
      *
@@ -203,58 +253,144 @@
     });
 </script>
 
+
 <svelte:window onclick={deleting.stand} />
 
 <!--
-    **左に書く欄、右に一覧。** 縦に積んでいた頃は、条件をいじるたびに
-    一覧まで押し下げられて、**何が録れるようになったかを見るのに毎回
-    スクロールで戻る**ことになっていた。広い画面では横がまるまる余っていて、
-    キーワード1つの入力欄が 600px あるのに一覧は画面の外、という形だった。
+    **左に一覧、右に書く欄** (一覧と詳細の形)。左でルールを押せば、右でそのまま直せる。
+
+    一覧を表とカードで右に積んでいた頃は、直すたびに「編集」を探して押し、書く欄まで
+    目を戻すことになっていた。いまは行そのものが `?edit=<id>` へのリンクなので、
+    押すのは1回で、戻る/進むもリンクの共有もそのまま効く。
 
     **横に並べはじめる幅は全画面で 768px**
-    ([+layout.svelte](../+layout.svelte) の `FILLED`)。並べたらページごとは
-    動かさず、**左右がそれぞれ自分で巻き取る** — 書いている欄と一覧の
-    どちらも画面から出ていかない
+    ([+layout.svelte](../+layout.svelte) の `FILLED`)。並べたらページごとは動かさず、
+    **左右がそれぞれ自分で巻き取る**。左の列は画面の左端とヘッダーの下まで寄せ、境目は 1px の線だけ。
+
+    **狭い画面では一覧と書く欄を切り替える** (`formView`)。どちらを出すかは URL で決めるので、
+    ブラウザの戻るで一覧に戻れる
 -->
-<div class="page">
+<div class="page" class:form-view={formView}>
     <Toasts {notices} source={form} />
 
-    <div class="layout">
+    <aside class="side" aria-label="ルールの一覧">
+        <div class="side-head">
+            <a class="button small new" href={resolve('rules?new')} data-testid="rule-new">＋ 新しいルール</a>
+            <!--
+                **絞り込みは Ctrl+F の代わり。** 一覧は少しずつしか描かないので、画面に無い行はブラウザの
+                検索では見つからない。ルールが1件も無いときは出さない (絞るものが無い)
+            -->
+            {#if data.rules.length > 0}
+                <input
+                    type="search"
+                    class="filter"
+                    placeholder="名前・条件で絞り込み"
+                    aria-label="ルールの一覧を絞り込む"
+                    bind:value={filter}
+                />
+            {/if}
+        </div>
         <!--
-            **書く欄。** 中身を浮かせて枠に高さを持たせないことで、右の一覧と
-            同じ高さに収まる (観る画面と同じ作り。`watch/[id]/+page.svelte`)
+            **行は名前と小さな印だけ。** 条件 (局・ジャンル・除外) は押せば右に全部出るので、ここでは
+            どれがどれか見分けられれば足りる。並べて比べたいもの (有効か・優先度・予約の数・同じ回は1度) だけ残す
         -->
-        <section class="form-col">
-            <div class="panel form-card">
+        <ul class="rule-list" data-testid="rule-list">
+            {#each paged.rows as rule (rule.id)}
+                {@const selected = data.editing?.id === rule.id}
                 <!--
-                    **押すものは巻き取られる中身の外に貼り付ける。** 条件が長い
-                    ときに「追加」まで探して降りることになるので、`<form>` 自身を
-                    縦の入れ物にして、上だけを巻き取る
+                    **有効/無効は行のスイッチで、開かずに切り替える。** 一覧と詳細の形では、行を押して開いてから
+                    押すことになり1手増えていた。スイッチは行のリンクの外 (隣) に置くので、押してもルールは開かない
                 -->
-                {#key formKey}
+                <li class="rule-item" class:selected class:off={!rule.enabled}>
+                    <a
+                        class="rule-row"
+                        href={resolve(`rules?edit=${rule.id}`)}
+                        aria-current={selected ? 'true' : undefined}
+                        data-testid="rule-row"
+                        data-rule-id={rule.id}
+                    >
+                        <span class="rule-name">{rule.name}</span>
+                        <span class="rule-marks tiny">
+                            {#if !rule.enabled}<span class="tag">無効</span>{/if}
+                            <span>優先度 {rule.priority}</span>
+                            <span>予約 {rule.reservations} 件</span>
+                            {#if rule.dedupe}
+                                <span title="同じ回は最初の放送だけ録る">同じ回は1度</span>
+                            {/if}
+                        </span>
+                    </a>
+                    <form method="POST" action="?/toggle" class="row-switch" use:submitting={switched}>
+                        <input type="hidden" name="id" value={rule.id} />
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            aria-checked={rule.enabled}
+                            checked={rule.enabled}
+                            aria-label="「{rule.name}」を有効にする"
+                            onchange={(event) => event.currentTarget.form?.requestSubmit()}
+                            data-testid="rule-switch"
+                        />
+                    </form>
+                </li>
+            {:else}
+                {#if data.rules.length === 0}
+                    <!-- 1件も無いとき。まだ何も無いのか読み込み途中なのかが分かるように、次にすることも添える -->
+                    <li class="empty" data-testid="rule-empty">
+                        <p class="bold">ルールはまだありません</p>
+                        <p class="small muted">
+                            「＋ 新しいルール」でキーワードを入れて「追加」すると、合う番組を自動で予約します
+                        </p>
+                    </li>
+                {:else}
+                    <li class="note small muted">一致するルールはありません</li>
+                {/if}
+            {/each}
+            <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
+            {#if paged.more}
+                <li class="note small muted" use:sentinel={() => paged.reveal()}>残り {paged.rest} 件</li>
+            {/if}
+            <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
+            {#if filter !== ''}
+                <li class="note small muted">{data.rules.length} 件中 {filtered.length} 件</li>
+            {/if}
+        </ul>
+    </aside>
+
+    <!--
+        **右は書く欄と、その条件で録れる番組。** 下見は書く欄の下に続けて置く。
+
+        有効/無効と削除は**書く欄の外**、下の行に出す。中に入れると form が入れ子になって、
+        押したつもりのないルールの更新まで送ってしまう (下見の行の「取消」も同じ理由で外にある)
+    -->
+    <section class="main" aria-label={data.editing ? 'ルールの編集' : '新しいルール'}>
+        <div class="main-inner">
+            <!-- 狭い画面だけ。一覧へ戻る (ブラウザの戻ると同じ行き先) -->
+            <a class="back small" href={resolve('rules')} data-testid="rule-back">← ルール一覧</a>
+            <!--
+                **新規か編集かだけを小さく。** 上のタブがもう「ルール」と言っているので、見出しは置かない。
+                編集なら**どのルールか**
+            -->
+            {#if data.editing}
+                <p class="mode" data-testid="rule-mode">
+                    <span class="muted">編集中:</span> <span class="bold">{data.editing.name}</span>
+                </p>
+            {:else}
+                <p class="mode muted" data-testid="rule-mode">新しいルール</p>
+            {/if}
+            <!-- 足した・直したあと、書く欄を初期値で描き直す (`formKey`) -->
+            {#key formKey}
                 <form
                     method="POST"
                     class="rule-form"
+                    id="rule-form"
+                    data-testid="rule-form"
                     use:submitting={() =>
                         async ({ result, update }) => {
                             await update({ reset: false });
-                            // 足した・直した (どちらも /rules へ戻る) ら、書く欄を初期値で描き直す
                             if (result.type === 'redirect') formKey += 1;
                         }}
                 >
-                    <div class="form-scroll" data-testid="rule-form">
-                        <!--
-                            **新規か編集かだけを小さく。** 「ルールを追加」「ルールを編集」の見出しは、上のタブが
-                            もう「ルール」と言っているので繰り返しになっていた。分かればよいのはどちらを書いているかと、
-                            編集なら**どのルールか**
-                        -->
-                        {#if data.editing}
-                            <p class="small mode" data-testid="rule-mode">
-                                <span class="muted">編集中:</span> <span class="bold">{data.editing.name}</span>
-                            </p>
-                        {:else}
-                            <p class="small muted" data-testid="rule-mode">新しいルール</p>
-                        {/if}
+                    <div class="form-body">
                         {#if data.origin !== null}
                             {@const what = data.origin.kind === 'recording' ? '録画' : '番組'}
                             <!--
@@ -507,317 +643,242 @@
                         </p>
                     </div>
 
-                    <!-- 巻き取られる中身の外。条件がどれだけ長くても見えている -->
-                    <div class="form-actions cluster">
-                        <button
-                            type="submit"
-                            class="small secondary"
-                            formmethod="GET"
-                            formaction={resolve('rules')}
-                            data-testid="rule-preview"
-                        >
-                            何が録れるか見る
-                        </button>
-                        {#if data.editing}
-                            <button type="submit" class="small" formaction="?/update" data-testid="rule-update">
-                                更新
-                            </button>
-                            <a class="button small secondary" href={resolve('rules')} data-testid="rule-cancel-edit">編集をやめる</a>
-                        {:else}
-                            <button type="submit" class="small" formaction="?/create" data-testid="rule-submit">
-                                追加
-                            </button>
-                        {/if}
-                    </div>
                 </form>
-                {/key}
-            </div>
-        </section>
+            {/key}
 
-        <!--
-            **右は結果。** この条件で何が録れるか (プレビュー) と、いまあるルール。
-            ここだけが巻き取られるので、左で条件をいじっても書いている欄は
-            動かない。
+            <!--
+                **押すものは下の1行に、ふつうのフォームと同じ並びで。** 右端に保存 (追加・更新)、左に
+                そのルールそのものにすること (有効/無効・削除)。条件がどれだけ長くても下に貼り付いて見えている。
 
-            このルールが押さえている予約は**フォームの外**に出してある。中に
-            入れると form が入れ子になって、1件取り消すつもりでルールの更新まで
-            送ってしまう。要らないものだけここで外す
-        -->
-        <section class="result-col">
-            {#if data.preview !== null && preview === null}
-                <!--
-                    下見が届くまで。**枠だけ先に置く** — 条件を打ち直すたびに
-                    右の列ごと消えると、どこを見ていたか分からなくなる
-                -->
-                <div class="panel preview" role="status" aria-label="下見を数えています">
-                    <div class="skeleton-title" aria-hidden="true"></div>
-                    <ul class="preview-list" aria-hidden="true">
-                        {#each PREVIEW_SKELETON as height, row (row)}
-                            <li class="skeleton-row" style="height: {height}rem"></li>
-                        {/each}
-                    </ul>
-                </div>
-            {:else if preview !== null && preview.failed !== null}
-                <!-- 数えられなかった。黙って空にしない (本当の理由はサーバのログ) -->
-                <div class="panel preview">
-                    <p class="muted">下見を数えられませんでした ({preview.failed})</p>
-                </div>
-            {:else if data.preview !== null && preview !== null}
-                <!--
-        **予約とプレビューは同じ一覧**。別々に並べていた頃は、同じ番組が2箇所に出るうえ、
-        「押さえている予約」と「これから当たる番組」を頭の中で突き合わせることになっていた
-    -->
-                <div class="panel preview" data-testid="preview">
-                    <!--
-                        **見出しの行に全部寄せる。** 「予約済みの番組はここで取り消せます」の1行と「詳しく」の1行を
-                        別に積んでいた頃は、番組が1件も見えないうちに4行ぶん下がっていた。取り消せることは行の
-                        「取消」が言っているので、残すのは「詳しく」の中身だけ
-                    -->
-                    <div class="preview-head">
-                        <h2 class="preview-title">
-                            この条件で録れる番組は <span class="num">{preview.total}</span> 件
-                            {#if preview.total > preview.programs.length}
-                                <span class="small muted normal">
-                                    (先頭 {preview.programs.length} 件)
-                                </span>
-                            {/if}
-                            <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
-                            {#if preview.skipped > 0}
-                                <!-- 録らないものも行に出す。数は全体の数 (下見の 100 件の中ではない) -->
-                                <span class="small muted normal" data-testid="preview-skipped">
-                                    (うち同じ回の {preview.skipped} 件は録りません)
-                                </span>
-                            {/if}
-                            {#if preview.conflicts > 0}
-                                <span class="tag error outline">
-                                    {preview.total > preview.programs.length ? '表示分のうち' : ''}競合 {preview.conflicts} 件
-                                </span>
-                            {/if}
-                        </h2>
-                        {#if preview.total > 0}
-                            <details class="more preview-more">
-                                <summary>詳しく</summary>
-                                <p>取り消した番組をルールが予約し直すことはありません。</p>
-                                <p>
-                                    条件から外れた予約は取り消されます。手動の予約と、まもなく始まる予約は残り、
-                                    <span class="tag">条件外</span> として表示します。
-                                </p>
-                            </details>
-                        {/if}
+                書く欄 (`<form>`) の**外**に置き、保存のボタンは `form` 属性で書く欄に繋ぐ。中に入れると
+                有効/無効と削除の form が入れ子になって、押したつもりのないルールの更新まで送ってしまう
+            -->
+            <div class="form-actions">
+                {#if data.editing}
+                    <div class="cluster">
+                        <ActionButton
+                            action="?/toggle"
+                            fields={{ id: data.editing.id }}
+                            class="small secondary"
+                            testid="rule-toggle"
+                        >
+                            {data.editing.enabled ? '無効化' : '有効化'}
+                        </ActionButton>
+                        <!-- 押し間違い防止に2回押させる (録画の削除と同じ)。消したら一覧の初めに戻る -->
+                        <ArmedDelete
+                            {deleting}
+                            armKey={data.editing.id}
+                            fields={{ id: data.editing.id }}
+                            submit={leaveDeleted}
+                            class="small"
+                            testid="rule-delete"
+                        />
                     </div>
-                    {#if preview.total === 0}
-                        <p class="small muted">
-                            いまの番組表では1件も一致しません。条件を緩めてください。
-                        </p>
+                {/if}
+                <div class="cluster save">
+                    <button
+                        type="submit"
+                        form="rule-form"
+                        class="small secondary"
+                        formmethod="GET"
+                        formaction={resolve('rules')}
+                        data-testid="rule-preview"
+                    >
+                        何が録れるか見る
+                    </button>
+                    {#if data.editing}
+                        <a class="button small secondary" href={resolve('rules')} data-testid="rule-cancel-edit">編集をやめる</a>
+                        <button type="submit" form="rule-form" class="small" formaction="?/update" data-testid="rule-update">
+                            更新
+                        </button>
                     {:else}
-                        <ul class="preview-list">
-                            {#each preview.programs as program (program.id)}
-                                <li class="preview-row small" class:skipped={program.skip !== null} data-testid="preview-row" data-program-id={program.id}>
-                                    <!--
-                                押すと番組詳細が出る。予約一覧・番組表と同じもの。
+                        <button type="submit" form="rule-form" class="small" formaction="?/create" data-testid="rule-submit">
+                            追加
+                        </button>
+                    {/if}
+                </div>
+            </div>
 
-                                **押せるのは中身のところだけ。** 行ごと押せるようにすると
-                                取消ボタンまで詳細を開く的の中に入り、押し間違えたときに
-                                何が起きたのか分からなくなる
-                            -->
-                                    <div
-                                        class="preview-open"
-                                        data-testid="preview-open"
-                                        role="button"
-                                        tabindex="0"
-                                        onclick={() => show(program)}
-                                        onkeydown={(event) => event.key === 'Enter' && show(program)}
-                                    >
-                                        <div class="cluster tight">
-                                            {#if program.reservation_state}
-                                                <span
-                                                    class="tag {badgeClass(program.reservation_state)}"
-                                                    data-testid="preview-state"
-                                                >
-                                                    {stateLabel(program.reservation_state)}
-                                                </span>
-                                            {/if}
-                                            {#if !program.matched}
-                                                <span class="tag">条件外</span>
-                                            {/if}
-                                            {#if program.skip !== null}
-                                                <span class="tag" data-testid="preview-skip">録らない</span>
-                                            {/if}
-                                            <span class="truncate broadcast">{program.name}</span>
-                                        </div>
-                                        <div class="tiny muted">
-                                            <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)}
-                                        </div>
-                                        <!--
-                                    チューナーの取り合いは**録ろうとした時点で初めて分かる**
-                                    ので、ここで先に見せる。出すのはチューナーの台数が足りなくなるものだけ
-                                    (`contentions`)。ただ時間が重なっているだけのものを
-                                    出していた頃は、地上波チューナーが2台あって録れる組にも、
-                                    そもそも別のチューナーを使う衛星の番組にも印が付いていた。
-
-                                    **足りなくなるものは全部出す。** 1件だけ出していた頃は、
-                                    3本ぶつかっていても1本しか見えず、どれを諦めれば
-                                    いいのかが読めなかった
-                                -->
-                                        {#if program.skip !== null}
-                                            <!-- なぜ録らないのか。どの放送で録るのかまで書けば、確かめに行ける -->
-                                            <div class="tiny muted" data-testid="preview-skip-reason">
-                                                {#if program.skip.kind === 'copy-never'}
-                                                    {COPY_NEVER_REASON}
-                                                {:else if program.skip.kind === 'repeat'}
-                                                    同じ回を <span class="broadcast">{program.skip.service_name}</span>
-                                                    ({dateTime(program.skip.start_at)}) で録ります
-                                                {:else}
-                                                    同じ回は録画済みです (<span class="broadcast"
-                                                        >{program.skip.service_name}</span
-                                                    > ・ {dateTime(program.skip.start_at)})
-                                                {/if}
-                                            </div>
-                                        {/if}
-                                        {#if program.conflict_reason}
-                                            <div class="text-error tiny">
-                                                {program.conflict_reason}
-                                            </div>
-                                        {/if}
-                                        {#if program.conflicts.length > 0}
-                                            <!--
-                                        件数は本当の数、名前は先頭だけ。ゆるい条件だと
-                                        1つの番組に何十本もぶつかることがあり、全部並べると
-                                        1行が画面何個ぶんにもなる (件数さえ合っていれば
-                                        「多すぎる」ことは伝わる)
-                                    -->
-                                            <div class="text-error tiny">
-                                                チューナーの競合 {program.conflicts.length} 件: {program.conflicts
-                                                    .slice(0, 3)
-                                                    .join('、')}{program.conflicts.length > 3
-                                                    ? ` ほか ${program.conflicts.length - 3} 件`
-                                                    : ''}
-                                            </div>
-                                        {/if}
-                                    </div>
-                                    {#if program.reservation_id !== null}
-                                        <div class="row-actions">
-                                            <ActionButton
-                                                action="?/cancelReservation"
-                                                fields={{ reservationId: program.reservation_id }}
-                                                class="small outline danger"
-                                                testid="rule-pending-cancel"
-                                            >
-                                                取消
-                                            </ActionButton>
-                                        </div>
-                                    {/if}
-                                </li>
+                {#if data.preview !== null && preview === null}
+                    <!--
+                        下見が届くまで。**枠だけ先に置く** — 条件を打ち直すたびに
+                        右の列ごと消えると、どこを見ていたか分からなくなる
+                    -->
+                    <div class="preview" role="status" aria-label="下見を数えています">
+                        <div class="skeleton-title" aria-hidden="true"></div>
+                        <ul class="preview-list" aria-hidden="true">
+                            {#each PREVIEW_SKELETON as height, row (row)}
+                                <li class="skeleton-row" style="height: {height}rem"></li>
                             {/each}
                         </ul>
-                    {/if}
-                </div>
-            {/if}
-
-            <!--
-    **「今すぐ全ルールを適用」は置かない。**
-
-    ルールを当て直すのは番組表が動いたとき (`epg.settle`) と、ルールを
-    足した/変えた/消したとき。押す理由のある場面が残っていない。
-    番組表そのものを取得したいなら、チューナー画面の
-    「番組表をいますぐ集める」がその入口で、集め終わりに当て直しまで通る
--->
-            <!--
-                **表ではなく行のカード** (録画一覧と同じ形)。7列の表にしていた頃は、
-                タブレットの幅で「チャンネル」「ジャンル」が1文字ずつ折れて読めなかった。
-                1件を 名前とバッジ → 条件 → 押すもの の順に縦に積めば、幅がいくらでも横には出ない
-            -->
-            <div class="list-col">
-                <!--
-                    **絞り込みの欄はカードの外、見出しの行に** (予約と録画の一覧と同じ形。`../+page.svelte` の
-                    `board-head`)。カードの中に貼り付けていた頃と、1画面に入る行の数は変わらない
-                    (どちらも1行ぶん使う)。広い画面では巻き取るのはカードの中なので、下まで来てからでも
-                    上へ戻らずに絞り直せる。ルールが1件も無いときは欄を出さない (絞るものが無い)
-                -->
-                <div class="list-head">
-                    <h2>登録済み</h2>
-                    {#if data.rules.length > 0}
-                        <input
-                            type="search"
-                            class="filter"
-                            placeholder="名前・条件で絞り込み"
-                            aria-label="ルールの一覧を絞り込む"
-                            bind:value={filter}
-                        />
-                    {/if}
-                </div>
-                <div class="panel rule-list" data-testid="rule-list">
-                    {#each paged.rows as rule (rule.id)}
-                        <div class="rule-row" data-testid="rule-row" data-rule-id={rule.id}>
-                            <div class="cluster">
-                                <span class="bold">{rule.name}</span>
-                                <span class="tag {rule.enabled ? 'success' : ''}">
-                                    {rule.enabled ? '有効' : '無効'}
-                                </span>
-                                <!-- 優先度と予約数はバッジで。列にしていた頃は見出しが無いと何の数か分からなかった -->
-                                <span class="tag">優先度 {rule.priority}</span>
-                                <span class="tag">予約 {rule.reservations} 件</span>
-                                {#if rule.dedupe}
-                                    <span class="tag" title="同じ回は最初の放送だけ録る">同じ回は1度</span>
+                    </div>
+                {:else if preview !== null && preview.failed !== null}
+                    <!-- 数えられなかった。黙って空にしない (本当の理由はサーバのログ) -->
+                    <div class="preview">
+                        <p class="muted">下見を数えられませんでした ({preview.failed})</p>
+                    </div>
+                {:else if data.preview !== null && preview !== null}
+                    <!--
+            **予約とプレビューは同じ一覧**。別々に並べていた頃は、同じ番組が2箇所に出るうえ、
+            「押さえている予約」と「これから当たる番組」を頭の中で突き合わせることになっていた
+        -->
+                    <div class="preview" data-testid="preview">
+                        <!--
+                            **見出しの行に全部寄せる。** 「予約済みの番組はここで取り消せます」の1行と「詳しく」の1行を
+                            別に積んでいた頃は、番組が1件も見えないうちに4行ぶん下がっていた。取り消せることは行の
+                            「取消」が言っているので、残すのは「詳しく」の中身だけ
+                        -->
+                        <div class="preview-head">
+                            <h2 class="preview-title">
+                                この条件で録れる番組は <span class="num">{preview.total}</span> 件
+                                {#if preview.total > preview.programs.length}
+                                    <span class="small muted normal">
+                                        (先頭 {preview.programs.length} 件)
+                                    </span>
                                 {/if}
-                            </div>
-                            <div class="conditions small">
-                                <!-- どこを見て当たったのか分からないと、絞り込みの直しようがない -->
-                                {#if rule.keyword}
-                                    <span>{searchFieldLabel(rule.search_fields)}から</span>
+                                <!-- 重なりを見るのは出している分だけ (`readPreview`)。全部は見ていないと分かる書き方にする -->
+                                {#if preview.skipped > 0}
+                                    <!-- 録らないものも行に出す。数は全体の数 (下見の 100 件の中ではない) -->
+                                    <span class="small muted normal" data-testid="preview-skipped">
+                                        (うち同じ回の {preview.skipped} 件は録りません)
+                                    </span>
                                 {/if}
-                                {#if rule.ignore_keyword}
-                                    <span class="text-error">除外: {rule.ignore_keyword}</span>
+                                {#if preview.conflicts > 0}
+                                    <span class="tag error outline">
+                                        {preview.total > preview.programs.length ? '表示分のうち' : ''}競合 {preview.conflicts} 件
+                                    </span>
                                 {/if}
-                                <span
-                                    >局: {#each channelParts(rule) as part, i (i)}{i > 0 ? ', ' : ''}<span
-                                            class:broadcast={part.station}>{part.text}</span
-                                        >{:else}全局{/each}</span
-                                >
-                                <span>ジャンル: {genres(rule)}</span>
-                            </div>
-                            <div class="cluster row-actions">
-                                <a class="button small secondary" href={resolve(`rules?edit=${rule.id}`)} data-testid="rule-edit">編集</a>
-                                <ActionButton action="?/toggle" fields={{ id: rule.id }} class="small secondary" testid="rule-toggle">
-                                    {rule.enabled ? '無効化' : '有効化'}
-                                </ActionButton>
-                                <!-- 押し間違い防止に2回押させる (録画の削除と同じ) -->
-                                <ArmedDelete {deleting} armKey={rule.id} fields={{ id: rule.id }} class="small" testid="rule-delete" />
-                            </div>
+                            </h2>
+                            {#if preview.total > 0}
+                                <details class="more preview-more">
+                                    <summary>詳しく</summary>
+                                    <p>取り消した番組をルールが予約し直すことはありません。</p>
+                                    <p>
+                                        条件から外れた予約は取り消されます。手動の予約と、まもなく始まる予約は残り、
+                                        <span class="tag">条件外</span> として表示します。
+                                    </p>
+                                </details>
+                            {/if}
                         </div>
-                    {:else}
-                        {#if data.rules.length === 0}
-                            <!--
-                                **1件も無いときは、カードの真ん中に。** 左上に小さく出していた頃は、
-                                大きな空のカードの隅に埋もれて、まだ何も無いのか読み込み途中なのかが
-                                分からなかった。次に何をすればよいかも添える
-                            -->
-                            <div class="empty" data-testid="rule-empty">
-                                <p class="bold">ルールはまだありません</p>
-                                <p class="small muted">
-                                    キーワードを入れて「追加」すると、合う番組を自動で予約します
-                                </p>
-                            </div>
+                        {#if preview.total === 0}
+                            <p class="small muted">
+                                いまの番組表では1件も一致しません。条件を緩めてください。
+                            </p>
                         {:else}
-                            <div class="rule-row small muted">一致するルールはありません</div>
+                            <ul class="preview-list">
+                                {#each preview.programs as program (program.id)}
+                                    <li class="preview-row small" class:skipped={program.skip !== null} data-testid="preview-row" data-program-id={program.id}>
+                                        <!--
+                                    押すと番組詳細が出る。予約一覧・番組表と同じもの。
+
+                                    **押せるのは中身のところだけ。** 行ごと押せるようにすると
+                                    取消ボタンまで詳細を開く的の中に入り、押し間違えたときに
+                                    何が起きたのか分からなくなる
+                                -->
+                                        <div
+                                            class="preview-open"
+                                            data-testid="preview-open"
+                                            role="button"
+                                            tabindex="0"
+                                            onclick={() => show(program)}
+                                            onkeydown={(event) => event.key === 'Enter' && show(program)}
+                                        >
+                                            <div class="cluster tight">
+                                                {#if program.reservation_state}
+                                                    <span
+                                                        class="tag {badgeClass(program.reservation_state)}"
+                                                        data-testid="preview-state"
+                                                    >
+                                                        {stateLabel(program.reservation_state)}
+                                                    </span>
+                                                {/if}
+                                                {#if !program.matched}
+                                                    <span class="tag">条件外</span>
+                                                {/if}
+                                                {#if program.skip !== null}
+                                                    <span class="tag" data-testid="preview-skip">録らない</span>
+                                                {/if}
+                                                <span class="truncate broadcast">{program.name}</span>
+                                            </div>
+                                            <div class="tiny muted">
+                                                <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)}
+                                            </div>
+                                            <!--
+                                        チューナーの取り合いは**録ろうとした時点で初めて分かる**
+                                        ので、ここで先に見せる。出すのはチューナーの台数が足りなくなるものだけ
+                                        (`contentions`)。ただ時間が重なっているだけのものを
+                                        出していた頃は、地上波チューナーが2台あって録れる組にも、
+                                        そもそも別のチューナーを使う衛星の番組にも印が付いていた。
+
+                                        **足りなくなるものは全部出す。** 1件だけ出していた頃は、
+                                        3本ぶつかっていても1本しか見えず、どれを諦めれば
+                                        いいのかが読めなかった
+                                    -->
+                                            {#if program.skip !== null}
+                                                <!-- なぜ録らないのか。どの放送で録るのかまで書けば、確かめに行ける -->
+                                                <div class="tiny muted" data-testid="preview-skip-reason">
+                                                    {#if program.skip.kind === 'copy-never'}
+                                                        {COPY_NEVER_REASON}
+                                                    {:else if program.skip.kind === 'repeat'}
+                                                        同じ回を <span class="broadcast">{program.skip.service_name}</span>
+                                                        ({dateTime(program.skip.start_at)}) で録ります
+                                                    {:else}
+                                                        同じ回は録画済みです (<span class="broadcast"
+                                                            >{program.skip.service_name}</span
+                                                        > ・ {dateTime(program.skip.start_at)})
+                                                    {/if}
+                                                </div>
+                                            {/if}
+                                            {#if program.conflict_reason}
+                                                <div class="text-error tiny">
+                                                    {program.conflict_reason}
+                                                </div>
+                                            {/if}
+                                            {#if program.conflicts.length > 0}
+                                                <!--
+                                            件数は本当の数、名前は先頭だけ。ゆるい条件だと
+                                            1つの番組に何十本もぶつかることがあり、全部並べると
+                                            1行が画面何個ぶんにもなる (件数さえ合っていれば
+                                            「多すぎる」ことは伝わる)
+                                        -->
+                                                <div class="text-error tiny">
+                                                    チューナーの競合 {program.conflicts.length} 件: {program.conflicts
+                                                        .slice(0, 3)
+                                                        .join('、')}{program.conflicts.length > 3
+                                                        ? ` ほか ${program.conflicts.length - 3} 件`
+                                                        : ''}
+                                                </div>
+                                            {/if}
+                                        </div>
+                                        {#if program.reservation_id !== null}
+                                            <div class="row-actions">
+                                                <ActionButton
+                                                    action="?/cancelReservation"
+                                                    fields={{ reservationId: program.reservation_id }}
+                                                    class="small outline danger"
+                                                    testid="rule-pending-cancel"
+                                                >
+                                                    取消
+                                                </ActionButton>
+                                            </div>
+                                        {/if}
+                                    </li>
+                                {/each}
+                            </ul>
                         {/if}
-                    {/each}
-                    <!-- 下端に近づいたら続きを足す。まだ出していない件数を添えて、終わりではないと分かるように -->
-                    {#if paged.more}
-                        <div class="rule-row small muted tail" use:sentinel={() => paged.reveal()}>
-                            残り {paged.rest} 件
-                        </div>
-                    {/if}
-                    <!-- 絞った結果の件数は末尾に。入力欄の隣に出すと、打つたびに欄の幅が変わる -->
-                    {#if filter !== ''}
-                        <div class="rule-row small muted tail">
-                            {data.rules.length} 件中 {filtered.length} 件
-                        </div>
-                    {/if}
-                </div>
-            </div>
-        </section>
-    </div>
+                    </div>
+                {/if}
+
+            <!--
+                **「今すぐ全ルールを適用」は置かない。**
+
+                ルールを当て直すのは番組表が動いたとき (`epg.settle`) と、ルールを
+                足した/変えた/消したとき。押す理由のある場面が残っていない。
+                番組表そのものを取得したいなら、チューナー画面の
+                「番組表をいますぐ集める」がその入口で、集め終わりに当て直しまで通る
+            -->
+        </div>
+    </section>
 </div>
 
 <!--
@@ -909,69 +970,198 @@
 {/if}
 
 <style>
+    /*
+     * **広い画面では main の余白の外まで広げる。** 左の列は画面の左端とヘッダーの下に付け、
+     * 高さは画面の残りいっぱい (`+layout.svelte` の `.shell.fill`)
+     */
     @media (min-width: 768px) {
         .page {
-            display: flex;
-            height: 100%;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: 18rem minmax(0, 1fr);
+            height: calc(100% + 2 * var(--dp-gutter));
+            margin: calc(-1 * var(--dp-gutter));
         }
     }
-    .layout {
-        display: grid;
-        gap: 1rem;
-    }
-    @media (min-width: 768px) {
-        .layout {
-            min-height: 0;
-            flex: 1 1 0%;
-            grid-template-columns: minmax(20rem, 26rem) 1fr;
+    @media (min-width: 1280px) {
+        .page {
+            grid-template-columns: 20rem minmax(0, 1fr);
         }
     }
-    .form-col {
+
+    /* ---- 左の一覧 ---- */
+    .side {
         display: flex;
+        min-height: 0;
         flex-direction: column;
     }
     @media (min-width: 768px) {
-        .form-col {
-            position: relative;
-            min-height: 0;
+        .side {
+            border-right: 1px solid var(--dp-line);
         }
     }
-    .form-card {
+    .side-head {
         display: flex;
-        min-height: 0;
-        flex: 1 1 0%;
-        padding: 0;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding-bottom: 0.75rem;
     }
-    .form-card,
-    .preview,
+    @media (min-width: 768px) {
+        .side-head {
+            padding: 1rem 1rem 0.5rem;
+        }
+    }
+    .new {
+        width: 100%;
+        margin: 0;
+    }
+    .filter {
+        height: auto;
+        margin: 0;
+        padding-block: 0.3rem;
+        font-size: 0.85rem;
+    }
     .rule-list {
-        box-shadow: var(--dp-shadow);
+        min-height: 0;
+        margin: 0;
+        padding: 0.25rem 0.375rem;
+        list-style: none;
     }
-    @media (min-width: 768px) {
-        .form-card {
-            position: absolute;
-            inset: 0;
+    .rule-list > li {
+        margin: 0;
+        list-style: none;
+    }
+    /* 狭い画面では行の字を上の「＋ 新しいルール」と揃える (塗りだけ余白の外へ少し出す) */
+    @media (max-width: 767px) {
+        .rule-list {
+            margin-inline: -0.75rem;
+            padding: 0;
         }
     }
-    .rule-form {
+    @media (min-width: 768px) {
+        .rule-list {
+            flex: 1 1 0%;
+            overflow-y: auto;
+        }
+    }
+    /*
+     * **行は線で区切らない** (ドキュメントの目次と同じ作り)。左右を少し空け、選んでいる行だけ
+     * 角の丸い薄い塗りで示す。触れている行はそれより薄く。印は小さく沈めた字で
+     */
+    .rule-item {
         display: flex;
-        min-height: 0;
+        align-items: center;
+        margin-bottom: 1px;
+        border-radius: var(--dp-radius);
+        transition: background-color var(--dp-duration);
+    }
+    .rule-item:hover {
+        background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    }
+    .rule-item.selected {
+        background: var(--dp-subtle);
+    }
+    /* スイッチはリンクの外 (行の右端) なので、押してもルールは開かない */
+    .rule-row {
+        display: flex;
+        min-width: 0;
         flex: 1 1 0%;
         flex-direction: column;
+        gap: 0.125rem;
+        padding: 0.5rem 0.75rem;
+        color: inherit;
+        text-decoration: none;
     }
-    .form-scroll {
+    .rule-name {
+        overflow-wrap: anywhere;
+    }
+    /* 無効のルールは名前を沈める (印の「無効」と合わせて、色だけに頼らない) */
+    .rule-item.off .rule-name {
+        color: var(--dp-muted);
+    }
+    .rule-marks {
         display: flex;
-        min-height: 0;
-        flex: 1 1 0%;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.125rem 0.5rem;
+        color: var(--dp-muted);
+    }
+    .row-switch {
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        margin: 0;
+        padding: 0.5rem 0.75rem 0.5rem 0.25rem;
+    }
+    .row-switch input {
+        margin: 0;
+    }
+    .note {
+        padding: 0.75rem;
+        text-align: center;
+    }
+    .empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 2rem 1rem;
+        text-align: center;
+    }
+    .empty p {
+        margin: 0;
+    }
+
+    /* ---- 右の書く欄と下見 ---- */
+    .main {
+        min-width: 0;
+    }
+    @media (min-width: 768px) {
+        .main {
+            min-height: 0;
+            overflow-y: auto;
+        }
+    }
+    .main-inner {
+        display: flex;
+        max-width: 56rem;
         flex-direction: column;
         gap: 1rem;
-        overflow-y: auto;
-        padding: 1rem;
+    }
+    @media (min-width: 768px) {
+        .main-inner {
+            padding: var(--dp-gutter);
+            padding-bottom: 0;
+        }
+    }
+    /* 狭い画面は一覧か書く欄のどちらか。どちらを出すかは URL (`formView`) */
+    @media (max-width: 767px) {
+        .page:not(.form-view) .main,
+        .page.form-view .side {
+            display: none;
+        }
+    }
+    .back {
+        align-self: flex-start;
+    }
+    @media (min-width: 768px) {
+        .back {
+            display: none;
+        }
     }
     /* 編集中のルール名。空白の無い長い名前でも欄からはみ出さない */
     .mode {
+        min-width: 0;
+        margin: 0;
         overflow-wrap: anywhere;
+    }
+    .rule-form {
+        display: flex;
+        flex-direction: column;
+    }
+    .form-body {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
     }
     /* 下見を待っている間の枠。本物と同じ場所・同じ大きさ */
     .skeleton-title {
@@ -1042,47 +1232,33 @@
     .children {
         margin: 0.25rem 0 0 1.5rem;
     }
+    /*
+     * 押すものは下に貼り付ける。条件が長いときに「追加」まで探して降りずに済む。
+     * 狭い画面では下のタブの上に (`--dp-tabbar`。タブが無い幅では 0)
+     */
     .form-actions {
-        flex-shrink: 0;
-        padding: 1rem;
-        border-top: 1px solid var(--dp-line);
-    }
-    .result-col {
+        position: sticky;
+        bottom: var(--dp-tabbar, 0px);
+        z-index: 1;
         display: flex;
-        min-width: 0;
-        flex-direction: column;
-        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding-block: 0.75rem;
+        border-top: 1px solid var(--dp-line);
+        background: var(--dp-bg);
     }
-    @media (min-width: 768px) {
-        .result-col {
-            min-height: 0;
-        }
-        /*
-         * **巻き取るのはカードの中。** 列ごと巻き取っていた頃は、上へ抜けていくカードが列の縁で
-         * 真っ直ぐに切られ、**動かすと角丸が消えて**見えた (タブレット)。カードはその場にいて
-         * 中身だけ動けば、角はいつも丸い。プレビューが長いときは、そちらも自分で巻き取り、
-         * 一覧の場所は半分は残す
-         */
-        .preview {
-            min-height: 0;
-            max-height: 50%;
-            overflow-y: auto;
-        }
-        .list-col,
-        .rule-list {
-            min-height: 0;
-            flex: 1 1 0%;
-        }
-        .rule-list {
-            overflow-y: auto;
-        }
+    /* 保存は右端。編集でないときも右に寄せる (左に何も無くても位置が変わらない) */
+    .save {
+        margin-left: auto;
     }
+    /* 下見は書く欄の下に続ける。カードにはせず、線で区切る */
     .preview {
         display: flex;
-        flex-shrink: 0;
         flex-direction: column;
         gap: 0.25rem;
-        padding: 0.75rem;
+        padding-bottom: var(--dp-gutter);
     }
     /* 見出しと「詳しく」を1行に。開いたら中身は見出しの下に全幅で */
     .preview-head {
@@ -1137,90 +1313,6 @@
     }
     .tight {
         --gap: 0.25rem 0.5rem;
-    }
-    .rule-list {
-        flex-shrink: 0;
-        padding: 0;
-    }
-    .rule-row {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        padding: 0.75rem;
-    }
-    /* 広い画面では操作を右に寄せ、名前と条件の 2 行に収める。下に 1 行足すと縦に間延びする */
-    @media (min-width: 768px) {
-        .rule-row[data-rule-id] {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            column-gap: 1rem;
-            row-gap: 0.25rem;
-            align-items: center;
-        }
-        .rule-row[data-rule-id] > .row-actions {
-            grid-column: 2;
-            grid-row: 1 / span 2;
-        }
-    }
-    .rule-row + .rule-row {
-        border-top: 1px solid var(--dp-line);
-    }
-    /* 見出しの行。予約と録画の一覧と同じ寸法 (`../+page.svelte` の `.board-head` と `.filter`) */
-    .list-head {
-        display: flex;
-        flex-wrap: wrap;
-        flex-shrink: 0;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        min-height: 2rem;
-        margin-bottom: 0.5rem;
-    }
-    .list-head h2 {
-        margin: 0;
-        font-size: var(--dp-text-lg);
-    }
-    .filter {
-        width: 9rem;
-        height: auto;
-        margin: 0;
-        padding-block: 0.3rem;
-        font-size: 0.85rem;
-    }
-    @media (min-width: 640px) {
-        .filter {
-            width: 14rem;
-        }
-    }
-    .list-col {
-        display: flex;
-        flex-shrink: 0;
-        flex-direction: column;
-    }
-    .tail {
-        text-align: center;
-    }
-    .empty {
-        display: flex;
-        min-height: 12rem;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        padding: 2rem 1rem;
-        text-align: center;
-    }
-    @media (min-width: 768px) {
-        /* 一覧のカードは列の残りを埋めている。その高さいっぱいの真ん中に置く */
-        .empty {
-            height: 100%;
-        }
-    }
-    .conditions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem 1rem;
-        color: var(--dp-muted);
     }
     .detail-error {
         flex-basis: 100%;
