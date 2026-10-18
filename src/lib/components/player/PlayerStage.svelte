@@ -365,9 +365,9 @@
     .stage[data-under] > :global(*) {
         grid-area: 1 / 1 / 2 / 2;
     }
-    /* 字幕の持ち上げ (上の `lift`)。操作バーの出入り (200ms) と同じ速さで動かす */
+    /* 字幕の持ち上げ (上の `lift`)。操作バーの出入りと同じ `--dp-duration` で動かす (動かさない設定では一緒に止まる) */
     .stage :global(canvas[data-ink]) {
-        transition: translate 200ms;
+        transition: translate var(--dp-duration);
     }
     /* 通知の列。押せない (下の映像を押せるように)。押せる通知は自分で戻す */
     .notes {

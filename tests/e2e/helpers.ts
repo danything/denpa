@@ -658,7 +658,7 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
             { message: '映像がデータ放送の小窓へ移らない (偽の BML が効いていない)' },
         )
         .toBe(true);
-    // 持ち上げを戻すのは 200ms かけて動く (PlayerStage の transition)。戻り終わるまで待つ
+    // 持ち上げを戻すのは `--dp-duration` かけて動く (PlayerStage の transition)。戻り終わるまで待つ
     await expect
         .poll(async () => (await boxes()).translate, { message: '小窓の中で字幕が持ち上げられたまま' })
         .toBe('none');
