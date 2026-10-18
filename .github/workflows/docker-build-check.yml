@@ -44,6 +44,9 @@ on:
       - '.github/release.Dockerfile'
       - '.github/workflows/docker-build-check.yml'
       - '.github/image-smoke.sh'
+      # image-smoke がイメージの ffmpeg で確かめるもの
+      - 'src/lib/server/fps.ts'
+      - 'scripts/fps-smoke.ts'
   workflow_dispatch: {}
 
 concurrency:

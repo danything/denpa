@@ -163,14 +163,6 @@ export const config = {
     /** 新しい版を見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
     updateCheckInterval: num('UPDATE_CHECK_INTERVAL', 60 * MIN),
 
-    /**
-     * 30コマとみなす生存率の上限 (encoder.measureSmoothMotion。5窓の中央値)。
-     * アニメ 17〜28% (30枚違う画像の作品で 48%) と実写 60〜79% の間の 50%。
-     * **これ以上は上げないこと** — 実写側の余裕が 3〜10 ポイントしか無い
-     * (実測は docs/encode.md「コマ数は本編の映像から測って決める」)
-     */
-    fpsSurvive: num('FPS_SURVIVE', 0.5),
-
     /** 録画の前後マージン(ms)。放送時刻のズレを吸収する */
     startMargin: num('START_MARGIN', 10 * SEC),
     endMargin: num('END_MARGIN', 15 * SEC),
