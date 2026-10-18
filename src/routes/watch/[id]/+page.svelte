@@ -1970,7 +1970,6 @@
                     <CloseLink testid="watch-close" />
                 </ControlBar>
 
-
                 <!-- 下端。操作バーと押すもの。**ライブと同じ操作バー** (`ControlBar`) -->
                 <ControlBar shown={controls.shown} testid="watch-controls">
                     <!--

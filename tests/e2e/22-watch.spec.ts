@@ -526,7 +526,6 @@ test.describe('録画を観る', () => {
             'watch-close',
             'watch-shot',
             'watch-play',
-
             'watch-full',
             'watch-settings',
         ]) {
