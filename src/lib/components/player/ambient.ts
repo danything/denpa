@@ -62,36 +62,38 @@ export interface Rect {
     bottom: number;
 }
 
-/** 光を枠より大きく引き伸ばす割合。ぼかすと縁が薄くなるので、そのぶん外へ出す */
-export const SCALE = 1.2;
-
-/** ぼかしの強さ (px)。枠の幅の 6% を 32〜80px に収める */
-export function blur(width: number): number {
-    return Math.round(Math.min(80, Math.max(32, width * 0.06)));
-}
-
-/** 映像の外へ光が届く幅 (px)。引き伸ばしたぶんと、ぼかしが広がるぶん (強さの2倍でほぼ消える) */
+/**
+ * 映像の外へ光が届く幅 (px)。**上下左右で同じ。** 枠の幅の 8% を 64〜128px に収める。
+ *
+ * 光はこの幅で 0 まで薄くなる (`falloff`)。下だけ長く尾を引いて見えていたのは、上と右が見出しと列で
+ * すぐ切れるのに、下だけ広く空いていたため。濃いのは縁の近くだけにして、どの辺も同じ形で消えるようにした
+ */
 export function reach(width: number): number {
-    return Math.round((width * (SCALE - 1)) / 2 + blur(width) * 2);
+    return Math.round(Math.min(128, Math.max(64, width * 0.08)));
 }
 
-/** 下へ広げる割合 (`region`)。横と上の 0.4 倍 */
-export const BELOW = 0.4;
+/**
+ * 縁からの距離 `t` (0 = 枠の縁、1 = `reach`) での光の濃さ。**縁で 1、届く幅で 0。** 両端で傾きが 0 なので、
+ * 枠の縁にも光の外側にも筋が出ない。濃いのは縁の近くで、半分で 0.35、4分の3で 0.06
+ */
+export function falloff(t: number): number {
+    if (t <= 0) return 1;
+    if (t >= 1) return 0;
+    const s = t * t * (3 - 2 * t);
+    return (1 - s) ** 1.5;
+}
 
 /**
  * 光を描く範囲。**映像の枠を `reach` ぶん広げ、`bounds` (はみ出してよい範囲) で切る。**
  * どちらも画面の座標 (`getBoundingClientRect`)。`bounds` は `<main>` の内側で、右に列があれば
- * その左端まで — 列の上に光を出さない・ページを巻き取れる長さを増やさない。
- *
- * **下へは `BELOW` の割合しか広げない。** 映像の下は地が広く残っていて、同じだけ広げると光が下へ長く
- * 尾を引いた (上と横は見出しと列ですぐ切れる)
+ * その左端まで — 列の上に光を出さない・ページを巻き取れる長さを増やさない
  */
 export function region(stage: Rect, bounds: Rect): Rect {
     const spread = reach(stage.right - stage.left);
     const left = Math.max(bounds.left, stage.left - spread);
     const top = Math.max(bounds.top, stage.top - spread);
     const right = Math.min(bounds.right, stage.right + spread);
-    const bottom = Math.min(bounds.bottom, stage.bottom + Math.round(spread * BELOW));
+    const bottom = Math.min(bounds.bottom, stage.bottom + spread);
     return { left, top, right: Math.max(left, right), bottom: Math.max(top, bottom) };
 }
 
@@ -100,7 +102,7 @@ export function region(stage: Rect, bounds: Rect): Rect {
  *
  * 光を枠の後ろに1枚で敷くと、映像が1コマ進むたびに枠の下の光まで合成し直すことになる
  * (GPU の無いヘッドレスの Chromium では、1枚で敷くと光が止まっていても CPU が 1 秒あたり 0.6 秒ほど増えた)。
- * 帯なら映像のコマで描き直される所に光が無い
+ * 帯なら映像のコマで描き直される所に光が無い。帯はどれも同じ1枚の光を切り出すので、継ぎ目は出ない
  */
 export function strips(area: Rect, stage: Rect): Rect[] {
     const top = Math.min(Math.max(stage.top, area.top), area.bottom);
@@ -116,22 +118,24 @@ export function strips(area: Rect, stage: Rect): Rect[] {
 }
 
 /**
- * 光を描く canvas の細かさ。**枠の幅を 64 画素として描き、CSS で引き伸ばす。**
- * ぼかしも canvas の中でかけるので、引き伸ばすだけで済む (CSS の `filter: blur` は使わない —
+ * 光を描く canvas の細かさ。**枠の幅を 96 画素として描き、CSS で引き伸ばす。**
+ * 光は canvas の中で作るので、引き伸ばすだけで済む (CSS の `filter: blur` は使わない —
  * GPU の無い端末では、入れ替えのたびに画面の大きさでぼかし直すことになる)
  */
-export const GLOW_UNITS = 64;
+export const GLOW_UNITS = 96;
 
 /** 光の canvas の中での置き場 (画素)。`width`・`height` は canvas の大きさ */
 export interface GlowLayout {
     width: number;
     height: number;
-    /** コマを描く位置と大きさ (枠を `SCALE` 倍にしたもの) */
+    /** 枠の位置と大きさ */
     x: number;
     y: number;
     w: number;
     h: number;
-    /** 箱ぼかしの半径 (`boxRadius`) */
+    /** 光の届く幅 (`reach`) */
+    reach: number;
+    /** 色をならす箱ぼかしの半径 (`boxRadius`) */
     radius: number;
 }
 
@@ -139,19 +143,72 @@ export interface GlowLayout {
 export function glowLayout(area: Rect, stage: Rect): GlowLayout {
     const stageWidth = Math.max(1, stage.right - stage.left);
     const k = GLOW_UNITS / stageWidth;
-    const w = stageWidth * k * SCALE;
-    const h = (stage.bottom - stage.top) * k * SCALE;
-    const cx = ((stage.left + stage.right) / 2 - area.left) * k;
-    const cy = ((stage.top + stage.bottom) / 2 - area.top) * k;
+    const spread = reach(stageWidth) * k;
     return {
         width: Math.max(1, Math.ceil((area.right - area.left) * k)),
         height: Math.max(1, Math.ceil((area.bottom - area.top) * k)),
-        x: cx - w / 2,
-        y: cy - h / 2,
-        w,
-        h,
-        radius: boxRadius(blur(stageWidth) * k),
+        x: (stage.left - area.left) * k,
+        y: (stage.top - area.top) * k,
+        w: stageWidth * k,
+        h: (stage.bottom - stage.top) * k,
+        reach: spread,
+        radius: boxRadius(spread * 0.2),
     };
+}
+
+/**
+ * **光を作る。** 写した1枚 (`frame`、`width`x`height` の RGBA) から、`at` の大きさの RGBA を返す。
+ *
+ * - 色は**いちばん近い枠の縁の色** — 枠の外の点を枠の中へ寄せた位置の色を取る。上の光は上の縁、
+ *   左の光は左の縁の色になり、角は角の色になる
+ * - 濃さは**枠からの距離** (角では丸く測る) で `falloff` に沿って薄くする。枠を中心に、どの辺も同じ形で消える
+ * - 最後に軽くぼかして、縁に沿った色の移り変わりをならす (`blurPixels`)
+ */
+export function glowPixels(
+    frame: Uint8ClampedArray,
+    width: number,
+    height: number,
+    at: GlowLayout,
+): Uint8ClampedArray<ArrayBuffer> {
+    const out = new Uint8ClampedArray(at.width * at.height * 4);
+    /*
+     * 枠の奥は描かない (枠に隠れる)。ぼかしが届く深さ (3回ぶん) より奥だけを飛ばすので、縁の色は変わらない。
+     * 描くのは枠の周りの輪だけになり、手間は枠の面積に比例しない
+     */
+    const deep = 3 * at.radius + 2;
+    for (let py = 0; py < at.height; py++) {
+        const cy = py + 0.5;
+        const ny = Math.min(at.y + at.h, Math.max(at.y, cy));
+        const v = Math.min(height - 1, Math.max(0, ((ny - at.y) / at.h) * height - 0.5));
+        const y0 = Math.floor(v);
+        const y1 = Math.min(height - 1, y0 + 1);
+        const fy = v - y0;
+        const insideY = Math.min(cy - at.y, at.y + at.h - cy);
+        for (let px = 0; px < at.width; px++) {
+            const cx = px + 0.5;
+            if (Math.min(insideY, Math.min(cx - at.x, at.x + at.w - cx)) > deep) continue;
+            const nx = Math.min(at.x + at.w, Math.max(at.x, cx));
+            const strength = falloff(Math.hypot(cx - nx, cy - ny) / at.reach);
+            if (strength <= 0) continue;
+            const u = Math.min(width - 1, Math.max(0, ((nx - at.x) / at.w) * width - 0.5));
+            const x0 = Math.floor(u);
+            const x1 = Math.min(width - 1, x0 + 1);
+            const fx = u - x0;
+            const a = (y0 * width + x0) * 4;
+            const b = (y0 * width + x1) * 4;
+            const c = (y1 * width + x0) * 4;
+            const d = (y1 * width + x1) * 4;
+            const i = (py * at.width + px) * 4;
+            for (let ch = 0; ch < 4; ch++) {
+                const top = frame[a + ch]! + (frame[b + ch]! - frame[a + ch]!) * fx;
+                const bottom = frame[c + ch]! + (frame[d + ch]! - frame[c + ch]!) * fx;
+                out[i + ch] = top + (bottom - top) * fy;
+            }
+            out[i + 3] = out[i + 3]! * strength;
+        }
+    }
+    blurPixels(out, at.width, at.height, at.radius);
+    return out;
 }
 
 /**

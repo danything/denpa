@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
-    blur,
     blurPixels,
     boxRadius,
+    falloff,
     glowLayout,
+    glowPixels,
     headerTone,
     luminance,
     mixRgb,
@@ -59,13 +60,21 @@ describe('アンビエントモード', () => {
         expect(plan({ ...base, reduced: true })).toBe('hold');
     });
 
-    test('ぼかしは枠の幅に合わせ、上下限で止める。届く幅は引き伸ばしとぼかしのぶん', () => {
-        expect(blur(200)).toBe(32);
-        expect(blur(1000)).toBe(60);
-        expect(blur(2000)).toBe(80);
-        // 800px: 引き伸ばしで 80px、ぼかし (48px) の2倍で 96px
-        expect(reach(800)).toBe(80 + 96);
-        expect(reach(1600)).toBe(160 + 160);
+    test('光の届く幅は上下左右で同じで、枠の幅の 8% を 64〜128px に収める', () => {
+        expect(reach(500)).toBe(64);
+        expect(reach(1000)).toBe(80);
+        expect(reach(2000)).toBe(128);
+    });
+
+    test('濃さは縁で 1、届く幅で 0。その間は薄くなる一方', () => {
+        expect(falloff(0)).toBe(1);
+        expect(falloff(1)).toBe(0);
+        expect(falloff(0.5)).toBeCloseTo(0.354, 2);
+        let before = 1;
+        for (let t = 0.05; t < 1; t += 0.05) {
+            expect(falloff(t)).toBeLessThan(before);
+            before = falloff(t);
+        }
     });
 
     test('帯は枠に重ならず、範囲を埋める', () => {
@@ -83,19 +92,19 @@ describe('アンビエントモード', () => {
 
     test('箱は枠を広げたもので、はみ出してよい範囲で切る', () => {
         const stage = { left: 100, top: 80, right: 900, bottom: 530 };
-        // 広げる幅は 176px (下は 0.4 倍の 70px)
+        // 広げる幅は上下左右とも 64px
         expect(region(stage, { left: 0, top: 0, right: 2000, bottom: 2000 })).toEqual({
-            left: 0,
-            top: 0,
-            right: 1076,
-            bottom: 600,
+            left: 36,
+            top: 16,
+            right: 964,
+            bottom: 594,
         });
         // 右に列がある (920px から)。列の上には出さない
         expect(region(stage, { left: 24, top: 56, right: 920, bottom: 700 })).toEqual({
-            left: 24,
+            left: 36,
             top: 56,
             right: 920,
-            bottom: 600,
+            bottom: 594,
         });
     });
 
@@ -110,20 +119,43 @@ describe('アンビエントモード', () => {
 });
 
 describe('光の canvas', () => {
-    test('枠の幅を 64 画素にして、範囲ぶんの大きさを取る。コマは枠を少し大きくした所に描く', () => {
+    test('枠の幅を 96 画素にして、範囲ぶんの大きさを取る', () => {
         const stage = { left: 100, top: 100, right: 740, bottom: 460 };
         const area = { left: 0, top: 60, right: 900, bottom: 600 };
         const layout = glowLayout(area, stage);
-        // 640px の枠が 64 画素 (1画素 10px)
-        expect(layout.width).toBe(90);
-        expect(layout.height).toBe(54);
-        expect(layout.w).toBeCloseTo(64 * 1.2);
-        expect(layout.h).toBeCloseTo(36 * 1.2);
-        // 真ん中は枠の真ん中 (42, 22)
-        expect(layout.x + layout.w / 2).toBeCloseTo(42);
-        expect(layout.y + layout.h / 2).toBeCloseTo(22);
-        // ぼかし 38px は 3.8 画素
-        expect(layout.radius).toBe(boxRadius(3.8));
+        // 640px の枠が 96 画素 (1画素 6.67px)
+        expect(layout.width).toBe(135);
+        expect(layout.height).toBe(81);
+        expect(layout.x).toBeCloseTo(15);
+        expect(layout.y).toBeCloseTo(6);
+        expect(layout.w).toBeCloseTo(96);
+        expect(layout.h).toBeCloseTo(54);
+        // 届く幅 64px は 9.6 画素
+        expect(layout.reach).toBeCloseTo(9.6);
+        expect(layout.radius).toBe(boxRadius(9.6 * 0.2));
+    });
+
+    test('光の色はいちばん近い縁の色で、枠から離れるほど薄く、届く幅の外は透明', () => {
+        // 2x2 のコマ: 左上 赤・右上 緑・左下 青・右下 黄
+        const frame = new Uint8ClampedArray([
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+        ]);
+        const at = { width: 40, height: 30, x: 10, y: 10, w: 20, h: 10, reach: 8, radius: 1 };
+        const out = glowPixels(frame, 2, 2, at);
+        const px = (x: number, y: number) => [...out.slice((y * 40 + x) * 4, (y * 40 + x) * 4 + 4)];
+        // 左上の上: 赤
+        const [r, g, b, near] = px(11, 8) as [number, number, number, number];
+        expect(r).toBeGreaterThan(g + 100);
+        expect(r).toBeGreaterThan(b + 100);
+        // 右下の右: 黄
+        const yellow = px(31, 19);
+        expect(yellow[0]).toBeGreaterThan(200);
+        expect(yellow[1]).toBeGreaterThan(200);
+        expect(yellow[2]).toBeLessThan(60);
+        // 離れるほど薄い
+        expect(px(11, 5)[3]).toBeLessThan(near);
+        // 届く幅の外 (角から 13 画素) は透明
+        expect(px(0, 0)[3]).toBe(0);
     });
 
     test('箱の半径は、3回でその強さに近づくもの', () => {

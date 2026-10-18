@@ -1,11 +1,11 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import {
-        blurPixels,
         EVERY,
         GLANCE,
         type GlowLayout,
         glowLayout,
+        glowPixels,
         HEADER_STOPS,
         headerTone,
         mixRgb,
@@ -26,10 +26,11 @@
      *
      * - 写すのは `EVERY` (200ms) ごと、1秒に5回まで。**縮めるのは写す側** (`<video>` は worker、canvas に
      *   描いているときはその worker) で、画面の側で元の大きさの画素を読むことは無い
-     * - 写した 32x18 を、枠の幅を 64 画素とした小さな canvas に置いてぼかし (`ambient.ts` の `glowLayout`・
-     *   `blurPixels`。1回 90x60 画素ほど)、CSS で引き伸ばして見せる。**CSS の `filter: blur` は使わない** —
+     * - 光は、枠の幅を 96 画素とした小さな canvas の中で作り (`ambient.ts` の `glowLayout`・`glowPixels`。
+     *   1回 130x80 画素ほど)、CSS で引き伸ばして見せる。色は**いちばん近い枠の縁の色**、濃さは**枠からの距離**で
+     *   決める — どの辺も同じ形で消え、上の光は上の縁、左の光は左の縁の色になる。**CSS の `filter: blur` は使わない** —
      *   ぼかしが画面の大きさになり、GPU の無い端末では入れ替えのたびに重かった
-     * - **色は濃くしてからぼかす** (`vivid`。彩度を上げる)。明るいテーマでは色の薄い所を透明にし、帯を
+     * - **色は濃くしてから光にする** (`vivid`。彩度を上げる)。明るいテーマでは色の薄い所を透明にし、帯を
      *   `mix-blend-mode: multiply` で地に掛ける — 白い地に灰色が乗ると汚れに見えるので、色だけを乗せる
      * - **前の1枚から次の1枚へ、`EVERY` の長さで 4 段に分けて入れ替える** (`FADE_STEP` ごと)。
      *   CSS で透明度を動かすと、その間は毎フレーム光を合成し直すことになる
@@ -102,15 +103,28 @@
 
     /** 写した1枚を置き場に描いてぼかす */
     function compose(target: HTMLCanvasElement, bitmap: ImageBitmap, at: GlowLayout): void {
-        const context = target.getContext('2d', { willReadFrequently: true });
-        if (context === null) return;
-        context.clearRect(0, 0, at.width, at.height);
-        context.imageSmoothingQuality = 'high';
-        context.drawImage(bitmap, at.x, at.y, at.w, at.h);
-        const image = context.getImageData(0, 0, at.width, at.height);
-        vivid(image.data, dark ? 'dark' : 'light');
-        blurPixels(image.data, at.width, at.height, at.radius);
-        context.putImageData(image, 0, 0);
+        const context = target.getContext('2d');
+        const frame = framePixels(bitmap);
+        if (context === null || frame === null) return;
+        vivid(frame, dark ? 'dark' : 'light');
+        const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
+        context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
+    }
+
+    let edge: HTMLCanvasElement | null = null;
+
+    /** 写した1枚の画素 (32x18 の RGBA)。光と見出しの色はここから作る */
+    function framePixels(bitmap: ImageBitmap): Uint8ClampedArray | null {
+        if (edge === null) {
+            edge = document.createElement('canvas');
+            edge.width = GLANCE.width;
+            edge.height = GLANCE.height;
+        }
+        const context = edge.getContext('2d', { willReadFrequently: true });
+        if (context === null) return null;
+        context.clearRect(0, 0, GLANCE.width, GLANCE.height);
+        context.drawImage(bitmap, 0, 0, GLANCE.width, GLANCE.height);
+        return context.getImageData(0, 0, GLANCE.width, GLANCE.height).data;
     }
 
     /** 帯の canvas に、前の1枚の上へ次の1枚を `mix` の濃さで重ねて描く */
@@ -135,20 +149,11 @@
     let headerFrom: Rgb[] | null = null;
     let headerTo: Rgb[] | null = null;
     let headerNow: Rgb[] | null = null;
-    let edge: HTMLCanvasElement | null = null;
-
     /** 映像の上の端 (上から 1/3) を横に `HEADER_STOPS` に分けて平均し、見出しの色にする */
     function edgeColors(bitmap: ImageBitmap): Rgb[] {
-        if (edge === null) {
-            edge = document.createElement('canvas');
-            edge.width = GLANCE.width;
-            edge.height = GLANCE.height;
-        }
-        const context = edge.getContext('2d', { willReadFrequently: true });
-        if (context === null) return [];
-        context.drawImage(bitmap, 0, 0, GLANCE.width, GLANCE.height);
+        const data = framePixels(bitmap);
+        if (data === null) return [];
         const rows = Math.ceil(GLANCE.height / 3);
-        const { data } = context.getImageData(0, 0, GLANCE.width, rows);
         const span = GLANCE.width / HEADER_STOPS;
         return Array.from({ length: HEADER_STOPS }, (_, stop) => {
             const sum = [0, 0, 0];
