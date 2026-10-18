@@ -39,7 +39,7 @@ test.describe('ダッシュボードと画面遷移', () => {
             ['nav-rules', 'ルール'],
             ['nav-tuners', 'チューナー'],
             ['nav-settings', '設定'],
-            ['nav-home', '予約と録画'],
+            ['nav-home', '録画'],
         ] as const) {
             await page.getByTestId(name).click();
             await expect(page).toHaveTitle(`${label} - denpa`);
