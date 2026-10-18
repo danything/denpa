@@ -67,6 +67,16 @@ test.describe('手動予約', () => {
             await expect(cell).toContainText('予約済み');
         }
 
+        // 絞り込みの言葉 (`?q=`) は予約にも効く。番組名で絞ると、名前の違う予約は出ない
+        const rowOf = (programId: string) =>
+            page.locator(`[data-testid="reservation-row"][data-program-id="${programId}"]`);
+        await goto(page, '/');
+        const firstName = (await rowOf(first.programId).getByTestId('row-open').innerText()).trim();
+        const secondName = (await rowOf(second.programId).getByTestId('row-open').innerText()).trim();
+        await goto(page, `/?q=${encodeURIComponent(firstName)}`);
+        await expect(rowOf(first.programId)).toHaveCount(1);
+        if (!secondName.includes(firstName)) await expect(rowOf(second.programId)).toHaveCount(0);
+
         await goto(page, '/');
         for (const target of [first, second]) {
             const reservation = page.locator(
