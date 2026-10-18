@@ -191,7 +191,7 @@
     cursor: pointer;
 }
 .board .group-head:hover {
-    background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    background: var(--dp-hover-soft);
 }
 .board .group-head:focus-visible {
     outline: 2px solid var(--pico-primary-background);
@@ -362,7 +362,7 @@
     background: var(--dp-bg);
     color: var(--dp-muted);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: var(--dp-weight-bold);
 }
 .board .t-day-name {
     color: var(--pico-color);
@@ -436,7 +436,7 @@
     transition: background-color var(--dp-duration);
 }
 .board .t-row:hover {
-    background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    background: var(--dp-hover-soft);
 }
 .board .t-row.picked {
     background: var(--dp-subtle);
@@ -458,7 +458,7 @@
     flex-shrink: 0;
     width: 2.9rem;
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: var(--dp-weight-bold);
     line-height: 1.15;
     white-space: nowrap;
 }
@@ -544,6 +544,17 @@
         grid-column: 1 / -1;
     }
 }
+/*
+ * 途中まで観たものの残り。狭い画面 (上の `.t-row .resume`) と、時刻の列を詰める中くらいの幅 (下) では出さない。
+ * **出さない規則より前に置く** (後ろに置くと、同じ強さのこちらが勝って出てしまう)
+ */
+.board .resume {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+}
 @media (min-width: 1000px) and (max-width: 1279px) {
     .board .t-time {
         width: 3.25rem;
@@ -553,19 +564,9 @@
         display: none;
     }
 }
-/* 途中まで観たものの残り。狭い画面では出さない (上の `.t-row .resume`) */
-.board .resume {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: 0.4rem;
-    margin: 0;
-}
-
 /* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
 .board .row.nested {
     padding-left: 2.25rem;
-    background: transparent;
 }
 .board .row.nested::before {
     content: "";
@@ -588,7 +589,7 @@
     padding: 0 0.75rem;
     color: var(--dp-muted);
     font-size: 0.75rem;
-    font-weight: 500;
+    font-weight: var(--dp-weight);
 }
 .board .s-group.s-first {
     margin-top: 0.25rem;
@@ -614,7 +615,7 @@
     margin-left: auto;
 }
 .board .s-group-toggle:hover {
-    background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    background: var(--dp-hover-soft);
 }
 .board .s-list {
     display: flex;
@@ -643,11 +644,11 @@
     transition: background-color var(--dp-duration);
 }
 .board .s-item:hover {
-    background: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+    background: var(--dp-hover-soft);
 }
 .board .s-item.on {
     background: var(--dp-subtle);
-    font-weight: 600;
+    font-weight: var(--dp-weight-bold);
 }
 .board .s-static {
     min-height: 2rem;
