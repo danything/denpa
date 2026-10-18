@@ -64,6 +64,13 @@
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["danything/denpa-font"],
       "allowedVersions": "/^v\\d+\\.\\d+$/"
+    },
+    {
+      "description": "@anyblades/blades はプレリリースに固定中で、規則がどの部品にあるかがまだ変わり得る。部品の間で規則が移ると build は通ったまま見た目だけ変わるので、自動では入れない。ほかの更新の自動マージを止めないよう、まとめの PR から外して別の PR にする。安定版に戻したらこの規則を消す (xool・lgtm と同じ)",
+      "matchPackageNames": ["@anyblades/blades"],
+      "groupName": "@anyblades/blades",
+      "groupSlug": "blades",
+      "automerge": false
     }
   ]
 }
