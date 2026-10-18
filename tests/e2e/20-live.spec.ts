@@ -799,7 +799,7 @@ test.describe('ライブ視聴', () => {
     /*
      * **出せない形式でも、エンコード方式を選び直すボタンは残す。**
      *
-     * 失敗している間は操作列を隠していた頃は、「この端末では再生できない形式です」
+     * 失敗している間は操作列を隠していた頃は、「再生できない形式です」
      * と出たきり、別の形式 (や放送のままの MPEG-2) へ逃げる手立てが無かった
      */
     test('出せない形式でも、操作列からエンコード方式を選び直せる', async ({ page }) => {
@@ -809,7 +809,7 @@ test.describe('ライブ視聴', () => {
         await goto(page, '/live');
         await page.getByTestId('live-channel').first().click();
 
-        await expect(page.getByTestId('live-status')).toContainText('この端末では再生できない形式です', {
+        await expect(page.getByTestId('live-status')).toContainText('再生できない形式です', {
             timeout: 15_000,
         });
         await wakeControls(page, 'live-frame');

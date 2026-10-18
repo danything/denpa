@@ -219,7 +219,7 @@ export async function descramble(
     const from = relative(base, input);
     const to = relative(base, output);
     if (from.startsWith('..') || to.startsWith('..')) {
-        return { ok: false, error: `元のTSの保存先 (${base}) の外にあるファイルは解除できません` };
+        return { ok: false, error: `元のTSの保存先 (${base}) の外にあるファイルは復号できません` };
     }
 
     try {
@@ -234,18 +234,18 @@ export async function descramble(
         if (!res.ok || body.ok !== true) {
             return {
                 ok: false,
-                error: body.error ?? `エージェントへの解除の依頼が失敗しました (${res.status})`,
+                error: body.error ?? `エージェントへの復号のリクエストが失敗しました (${res.status})`,
             };
         }
     } catch (error) {
-        return { ok: false, error: `解除を依頼するエージェントに繋がりません: ${error}` };
+        return { ok: false, error: `復号するエージェントに繋がりません: ${error}` };
     }
 
     if (isScrambled(output)) {
         // 素通しされた。ほぼカードが読めていない
         const card = await cardStatus();
         const why = card.ok ? 'カードは読めているので、鍵が合わないか ECM が流れていません' : card.message;
-        return { ok: false, error: `解除してもスクランブルが残っています。${why}` };
+        return { ok: false, error: `復号してもスクランブルが残っています。${why}` };
     }
     return { ok: true, error: '' };
 }

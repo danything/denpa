@@ -100,7 +100,7 @@ test.describe('互換モード', () => {
             await page.getByTestId('live-codec').click();
             const option = page.locator('[data-testid="live-codec-option"][data-codec="h264"]');
             await expect(option).toHaveAttribute('data-disabled');
-            await expect(option).toContainText('この端末では表示できません');
+            await expect(option).toContainText('再生できません');
             await page.keyboard.press('Escape');
         }
         // AV1 (Opus は WASM)

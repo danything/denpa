@@ -693,7 +693,7 @@ function ruleName(conditions: Conditions): string {
         );
     }
     return parts.length === 0
-        ? '無題のルール'
+        ? '名前の無いルール'
         : `${parts.slice(0, 3).join('・')}${parts.length > 3 ? ' ほか' : ''}`;
 }
 
