@@ -314,68 +314,52 @@ test.describe('ホームと画面遷移', () => {
         await expect(page.getByTestId('reconcile-result')).toHaveCount(0);
     });
 
-    test('狭い幅ではサイドバーの代わりに頭のボタンを置き、照合は下からの一枚から押せる', async ({ page }) => {
+    test('一覧の頭は細い1行。照合と空きは「⋯」の中、狭い幅でも同じ', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await goto(page, '/');
 
-        // サイドバーは出さない。頭には絞り込みの一枚を開くボタンだけ (指で押せる高さ)
-        await expect(page.getByTestId('sidebar')).toBeHidden();
-        const open = page.getByTestId('filter-open');
-        expect((await open.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+        // 右のサイドバーは無い。頭の1行 (チップと「⋯」) は 44px に収まり、「⋯」は指で押せる高さ
+        await expect(page.getByTestId('sidebar')).toHaveCount(0);
+        const bar = page.getByTestId('timeline-toolbar');
+        expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(44);
+        const more = page.getByTestId('view-toggle');
+        expect((await more.boundingBox())!.height).toBeGreaterThanOrEqual(40);
 
-        await open.click();
-        const sheet = page.getByTestId('filter-sheet');
-        await expect(sheet).toBeVisible();
+        const menu = await homeTools(page);
         /*
-         * **下の行が透けて見えない** (#481)。一枚は `<dialog>` で最前面 (top layer) に出す。
-         * 真ん中を指したとき一枚の中身が当たる (ほかのものが上に重なっていない) ことを見る
+         * **下の行が透けて見えない** (#481)。メニューは popover で最前面 (top layer) に出す。
+         * 真ん中を指したときメニューの中身が当たる (ほかのものが上に重なっていない) ことを見る
          */
-        const front = await sheet.evaluate((el) => {
-            const body = el.querySelector('.t-sheet-body')!;
-            const box = body.getBoundingClientRect();
+        const front = await menu.evaluate((el) => {
+            const box = el.getBoundingClientRect();
             const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-            return hit !== null && body.contains(hit) && el.matches(':modal');
+            return hit !== null && el.contains(hit) && el.matches(':popover-open');
         });
         expect(front).toBe(true);
-        // 空きは一枚の中に出す (サイドバーの「今日」に出すものと同じ)
-        await expect(sheet.getByTestId('recordings-capacity-menu')).toBeVisible();
-        await sheet.getByTestId('reconcile-button').click();
+        // 空きは狭い幅では「⋯」の中に出す (広い幅は頭の1行のまとめ)
+        await expect(menu.getByTestId('recordings-capacity-menu')).toBeVisible();
+        await expect(page.getByTestId('summary')).toBeHidden();
+        await menu.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる
-        await expect(sheet).toBeHidden();
+        await expect(menu).toBeHidden();
     });
 
     /*
-     * **表示の切り替えと絞り込みはキーボードでも使える。** サイドバーの見出しは本物のボタンで、
-     * Enter で開け閉めする。狭い画面の一枚は `<dialog>` なので、焦点が中に閉じ込められ、Esc で閉じて
-     * 開いたボタンに戻る
+     * **表示の切り替えはキーボードでも使える。** 「⋯」は本物のボタンで Enter で開き、↓ で項目へ、
+     * Esc で閉じて「⋯」に戻る
      */
-    test('表示の切り替えと絞り込みの一枚はキーボードで開け閉めできる', async ({ page }) => {
+    test('表示の切り替えの「⋯」はキーボードで開け閉めできる', async ({ page }) => {
         await goto(page, '/');
-        const toggle = page.getByTestId('sidebar').getByTestId('view-toggle');
+        const toggle = page.getByTestId('view-toggle');
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await toggle.focus();
         await page.keyboard.press('Enter');
         await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        const group = page.getByTestId('sidebar').getByTestId('recordings-group-toggle');
-        await expect(group).toBeVisible();
-        await page.keyboard.press('Tab');
-        await expect(group).toBeFocused();
-        await page.keyboard.press('Shift+Tab');
-        await page.keyboard.press('Enter');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await expect(group).toHaveCount(0);
-
-        await page.setViewportSize({ width: 390, height: 844 });
-        const open = page.getByTestId('filter-open');
-        await open.focus();
-        await page.keyboard.press('Enter');
-        const sheet = page.getByTestId('filter-sheet');
-        await expect(sheet).toBeVisible();
-        await expect(sheet.locator(':focus')).toHaveCount(1);
+        await expect(page.getByTestId('recordings-group-toggle')).toBeFocused();
         await page.keyboard.press('Escape');
-        await expect(sheet).toBeHidden();
-        await expect(open).toBeFocused();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(toggle).toBeFocused();
     });
 
     /**

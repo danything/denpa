@@ -162,12 +162,12 @@ test.describe('ホームの一覧のまとめて表示', () => {
         await goto(page, '/');
         const tools = await homeTools(page);
         const toggle = tools.getByTestId('recordings-group-toggle');
-        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
         await expect(toggle).toHaveAccessibleName('まとめて表示');
         // 入っていないときは「表示の切り替え」に点が付かない
         await expect(page.getByTestId('view-toggle').locator('.view-dot')).toHaveCount(0);
         await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
         await expect(page.getByTestId('view-toggle').locator('.view-dot')).toHaveCount(1);
 
         // 閉じた見出しと1本ものが、いちばん新しい回の日付で並ぶ

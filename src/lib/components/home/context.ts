@@ -1,5 +1,5 @@
 /**
- * ホーム (`routes/+page.svelte`) の部品が分け合うもの。行・番組の見出し・サイドバーは、
+ * ホーム (`routes/+page.svelte`) の部品が分け合うもの。行・番組の見出し・頭の1行は、
  * 開いた行の覚え・詳細の開き方・削除の2回押しをホームと共有するので、props で何段も渡さずに
  * コンテキストで配る (`setHome` はホームだけが呼ぶ)
  */
@@ -20,9 +20,9 @@ export type Item = TimelineItem &
 export interface HomeContext {
     /** 描いた時刻。「いま」の線と予約の側分けの物差し */
     readonly clock: number;
-    /** サイドバーに出ている行の鍵 */
+    /** 最後に詳細を開いた行の鍵 (薄く塗る) */
     readonly pickedKey: string | null;
-    /** その行をサイドバーに出す */
+    /** その行を覚える (詳細を開くとき) */
     select(key: string): void;
     /** 削除の2回押し (録画と録り逃しで共用。録り逃しの鍵は負の値) */
     readonly deleting: Arming;
@@ -53,20 +53,4 @@ export function setHome(context: HomeContext): void {
 
 export function home(): HomeContext {
     return getContext<HomeContext>(KEY);
-}
-
-/**
- * 行に付ける (`{@attach}`)。指を乗せたとき・焦点が入ったときに、その行をサイドバーに出す。
- * 行そのものは押すものではない (押す的は中の入口とボタン) ので、属性のハンドラにはしない
- */
-export function pickOn(context: HomeContext, key: string) {
-    return (row: HTMLElement) => {
-        const pick = () => context.select(key);
-        row.addEventListener('mouseenter', pick);
-        row.addEventListener('focusin', pick);
-        return () => {
-            row.removeEventListener('mouseenter', pick);
-            row.removeEventListener('focusin', pick);
-        };
-    };
 }

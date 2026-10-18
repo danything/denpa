@@ -1,6 +1,6 @@
 <script lang="ts">
     /**
-     * 行の頭の1段: 状態のバッジと番組名 (行の入口)。予約・録画・録り逃しで同じ形。
+     * 行の1段目: 時刻・番組名 (行の入口)・状態のバッジ。予約・録画・録り逃しで同じ形。
      *
      * `fresh` はまだ観ていない録画 (`unwatched`)。番組名の頭に小さな点を置く。
      * バッジ (「NEW」など) にしないのは、番組名に入っている [新] と紛れるのと、
@@ -20,7 +20,11 @@
      * リンクでもないので中クリックで別のタブにも開けなかった。行の中のボタンとルール名の
      * リンクは広げた範囲より上に置く (`.row-actions` など)
      */
+    import { time } from '#lib/format.js';
+
     let {
+        start,
+        end,
         state,
         badge,
         name,
@@ -29,6 +33,9 @@
         fresh = false,
         quiet = false,
     }: {
+        /** 頭に置く放送の時刻 (`21:30–22:00`。狭い画面は始まりだけ) */
+        start: number;
+        end: number;
         state: string;
         badge: string;
         name: string;
@@ -39,20 +46,16 @@
     } = $props();
 </script>
 
-<div class="cluster title-line">
-    <!-- ふつうの状態 (`quietState`) はラベルを出さず、読み上げにだけ渡す -->
-    <!-- 塗ったバッジ (録画中など、いま動いているもの) には、ゆっくり脈打つ点を添える (`app.css` の `.rec-dot`) -->
-    <span class={quiet ? 'visually-hidden' : `tag ${badge}`} data-testid={testid}
-        >{#if !quiet && badge.includes('solid')}<span class="rec-dot" aria-hidden="true"></span>{/if}{state}</span
-    >
+<!--
+    **1段目は 時刻 · 番組名 · 状態のバッジ。** 番組名が長ければ番組名だけを「…」で切り、時刻とバッジは残す。
+    ふつうの状態 (`quietState`) はラベルを出さず、読み上げにだけ渡す。
+    塗ったバッジ (録画中など、いま動いているもの) には、ゆっくり脈打つ点を添える (`app.css` の `.rec-dot`)
+-->
+<div class="title-line">
+    <span class="t-time num">{time(start)}<span class="t-end">–{time(end)}</span></span>
     {#if typeof open === 'string'}
         <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
-        <a
-            class="row-name row-open broadcast"
-            href={open}
-            data-sveltekit-preload-data="tap"
-            data-testid="row-open"
-        >
+        <a class="row-name row-open broadcast" href={open} data-sveltekit-preload-data="tap" data-testid="row-open">
             {#if fresh}
                 <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
             {/if}
@@ -63,4 +66,7 @@
             {name}
         </button>
     {/if}
+    <span class={quiet ? 'visually-hidden' : `tag ${badge}`} data-testid={testid}
+        >{#if !quiet && badge.includes('solid')}<span class="rec-dot" aria-hidden="true"></span>{/if}{state}</span
+    >
 </div>
