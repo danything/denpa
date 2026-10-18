@@ -369,6 +369,23 @@ describe('映像の中の動き', () => {
         expect(variance(after)).toBeLessThan(variance(before) / 3);
     });
 
+    test('入れ替えを見送っても、ならした色は進むので、小さな違いもいずれ入れ替わる', () => {
+        const shown = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(100);
+        const target = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(103);
+        let smoothed: Float32Array | null = Float32Array.from(shown);
+        let current = Float32Array.from(shown);
+        let swaps = 0;
+        for (let i = 0; i < 10; i++) {
+            smoothed = follow(smoothed, target, 200);
+            if (changed(current, smoothed)) {
+                current = Float32Array.from(smoothed);
+                swaps++;
+            }
+        }
+        expect(swaps).toBe(1);
+        expect(current[0]).toBeGreaterThan(102);
+    });
+
     test('ならすのは小さな違いだけ。場面が変わったら、すぐ新しい色にする', () => {
         const dark = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(20);
         const bright = new Uint8ClampedArray(GRID.width * GRID.height * 4).fill(220);

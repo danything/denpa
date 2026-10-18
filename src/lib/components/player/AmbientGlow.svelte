@@ -111,6 +111,8 @@
     let coming: HTMLCanvasElement | null = null;
     /** いまの色 (格子 `GRID` の RGBA。時間でならしたもの)。置き場やテーマが変わったら、これから作り直す */
     let colors: Float32Array | null = null;
+    /** 時間でならした色 (`follow`)。写すたびに進め、違いが大きくなったら `colors` に移す */
+    let smoothed: Float32Array | null = null;
     /** 最後に写した時刻 (`performance.now`)。ならす重みを、経った時間で決める */
     let lastAt: number | null = null;
     let fading: ReturnType<typeof setInterval> | undefined;
@@ -174,12 +176,13 @@
         if (pixels === null) return;
         // 粗い格子に平均し (`coarse`)、時間でならす (`follow`。場面が変わったらすぐ)
         const now = performance.now();
-        const next = follow(colors, coarse(pixels), lastAt === null ? EVERY : now - lastAt);
+        // ならした色は、入れ替えるかどうかに関わらず毎回進める (入れ替えを見送っても、ゆっくりした変化を捨てない)
+        smoothed = follow(smoothed, coarse(pixels), lastAt === null ? EVERY : now - lastAt);
         lastAt = now;
         // 最後に入れ替えた色との違い。小さければ入れ替えない (`ambient.ts` の `changed`)
-        delta = colors === null ? null : frameDelta(colors, next);
-        if (colors !== null && !changed(colors, next)) return;
-        colors = next;
+        delta = colors === null ? null : frameDelta(colors, smoothed);
+        if (colors !== null && !changed(colors, smoothed)) return;
+        colors = Float32Array.from(smoothed);
         if (layout === null) return;
         clearInterval(fading);
         coming ??= scratch();
@@ -251,6 +254,7 @@
         lit = false;
         clearInterval(fading);
         colors = null;
+        smoothed = null;
         lastAt = null;
         shown = null;
         coming = null;
