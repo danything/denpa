@@ -165,7 +165,7 @@
      * **ここでは `<video>` に戻らない** — 描けなくなったら MPEG-2 へ、それも無理なら理由を出して止まる
      * (ライブと同じ)。**端末に保存したものは、その Matroska を読んで描く** (`mkv-source.ts`。オフラインでも)
      */
-    /** 互換モードか。**開いたときに決める** (設定画面でオン/オフする) */
+    /** 互換モードか。**開いたときに決める** (再生の設定 ⚙ でオン/オフし、切り替えたら読み直す。`StageTail`) */
     let compat = $state(false);
     /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
     let canvasAbility = $state.raw<CanvasAbility | null>(null);

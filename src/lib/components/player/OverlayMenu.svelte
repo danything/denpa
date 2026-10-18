@@ -4,11 +4,9 @@
     import { PLAYER_CONTROLS, PLAYER_STAGE, type PlayerControls } from './controls.svelte';
 
     /**
-     * 映像の上に出すドロップダウンの共通部分。**メニュー(選択肢の並び)だけ**を持つ。
-     *
-     * 3画面には、音声・字幕・エンコード方式・速さと、同じ形のドロップダウンが
-     * いくつも並ぶ。項目を `{#each}` で敷き、押したら選んで閉じる、選択中は
-     * `aria-current`、までが全部同じだった。ここに1つにまとめる。
+     * 映像の上に出すドロップダウン (速さ。`SpeedMenu`)。**メニュー(選択肢の並び)だけ**を持つ。
+     * 項目を `{#each}` で敷き、押したら選んで閉じる、選択中は `aria-current`。
+     * 音声・字幕・コーデックは再生の設定 (⚙ `SettingsMenu`) の選択肢の並びにある。
      *
      * 開け閉めは `Menu` (popover。キーボードで辿れる・外を押すと閉じる)。最前面に出るので、
      * 舞台を全画面にしている間も隠れない。
@@ -28,8 +26,6 @@
         label: string;
         /** いま選ばれているか (`aria-current`) */
         active: boolean;
-        /** 並べるが押せない (互換モードでこの端末が描けない形式) */
-        disabled?: boolean;
     }
 
     let {
@@ -89,11 +85,7 @@
             type="button"
             role="menuitem"
             class="menu-item option"
-            aria-disabled={item.disabled === true ? 'true' : undefined}
-            data-disabled={item.disabled === true ? '' : undefined}
-            onclick={() => {
-                if (item.disabled !== true) onselect(item.key);
-            }}
+            onclick={() => onselect(item.key)}
             data-testid="{testid}-option"
             data-active={item.active ? '' : undefined}
             aria-current={item.active ? 'true' : undefined}
