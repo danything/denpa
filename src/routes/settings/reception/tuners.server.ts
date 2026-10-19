@@ -98,7 +98,7 @@ export async function load() {
         tuners: answer
             .then((got) => ({ list: withLabels(got.tuners), error: null as string | null }))
             .catch((error: unknown) => ({ list: [], error: String(error) })),
-        // チューナーを譲り合う順。「チューナーの空き」の「詳しく」に出す
+        // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
         yieldOrder: yieldOrder(),
         card: cardStatus(),
     };
@@ -122,7 +122,7 @@ export const actions = {
         }
 
         /*
-         * 消す行は「×」の 2 回目 (`delete` にその行の番号)。足すための空の行は `new` に番号が来る。
+         * 消す行は「⋯」の中の「削除」の 2 回目 (`delete` にその行の番号)。足すための欄 (「追加」) は `new` に番号が来る。
          * **名前を空にしても消さない** — その場で保存するので、欄を空にして離れただけで
          * チューナーが消えていた。空の名前は断り、画面は元の名前に戻す (`autosave`)
          */
@@ -149,7 +149,8 @@ export const actions = {
                 types,
                 device,
                 lnb: String(form.get(`lnb.${index}`) ?? '').trim() || null,
-                disabled: form.get(`disabled.${index}`) !== null,
+                // スイッチは「使う」。外れていれば送られてこない
+                disabled: form.get(`use.${index}`) === null,
             });
         }
 

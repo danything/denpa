@@ -181,36 +181,60 @@ test.describe('チューナーの設定', () => {
     test('画面から台数と種別を変えられる', async ({ page }) => {
         await goto(page, '/settings/reception');
 
-        const card = page.getByTestId('tuner-config-card');
-        const rows = card.getByTestId('tuner-config-row');
-        // 4台ぶん + 足すための空行
-        await expect(rows).toHaveCount(5);
+        /*
+         * **空きと設定は1つの表。** 1台に1行で、名前・種別・使うかが2つの表に2度ずつ出ていた頃の
+         * 「チューナーの設定」の表は無い
+         */
+        const card = page.getByTestId('tuner-card');
+        const rows = card.getByTestId('tuner-list').getByTestId('tuner-row');
+        await expect(rows).toHaveCount(4);
+        await expect(page.getByTestId('tuner-config-card')).toHaveCount(0);
+        await expect(card.locator('table')).toHaveCount(2); // チューナーとカードリーダー
 
-        // 1台目を無効にする。**変えたらその場で保存する**
-        await rows.nth(0).locator('input[name="disabled.0"]').check();
+        // 1台目のスイッチを外す (使わない)。**変えたらその場で保存する**
+        await rows.nth(0).getByTestId('tuner-use').uncheck();
         await expect(card.getByTestId('saved-result')).toBeVisible();
+        await expect(rows.nth(0)).toContainText('無効');
+
+        // 名前・デバイス・LNB と削除は「⋯」の中。閉じている行の欄は隠れている
+        const detail = card.getByTestId('tuner-detail').nth(3);
+        await expect(detail).toBeHidden();
+        await rows.nth(3).getByTestId('tuner-more').click();
+        await expect(rows.nth(3).getByTestId('tuner-more')).toHaveAttribute('aria-expanded', 'true');
+        await expect(detail).toBeVisible();
 
         // **名前を空にしても消さない。** 断って元の名前に戻す (欄を空にして離れただけで消えていた)
-        const name = rows.nth(3).locator('input[name="name.3"]');
+        const name = detail.locator('input[name="name.3"]');
         const before = await name.inputValue();
         await name.fill('');
         await name.blur();
         await expect(card.getByTestId('settings-error')).toContainText('名前は空にできません');
         await expect(name).toHaveValue(before);
 
-        // 消すのは行の「×」。ほかの削除と同じく 2 回押しで確かめる
-        await rows.nth(3).getByTestId('tuner-delete').click();
-        await rows.nth(3).getByTestId('tuner-delete-confirm').click();
+        // 消すのは「⋯」の中の「削除」。ほかの削除と同じく 2 回押しで確かめる
+        await detail.getByTestId('tuner-delete').click();
+        await detail.getByTestId('tuner-delete-confirm').click();
+        await expect(rows).toHaveCount(3);
+        await expect(rows.nth(0)).toContainText('無効');
 
-        const list = page.getByTestId('tuner-list');
-        await expect(list.getByTestId('tuner-row')).toHaveCount(3);
-        await expect(list.getByTestId('tuner-row').nth(0)).toContainText('無効');
+        // 足すのは「追加」で出す欄から。名前を打っている途中では送らない
+        await card.getByTestId('tuner-add-open').click();
+        const add = card.getByTestId('tuner-add');
+        await add.locator('input[name="name.3"]').fill('adapter3');
+        await add.locator('input[name="device.3"]').fill('/dev/dvb/adapter3/frontend0');
+        await add.locator('input[name="type.3.GR"]').check();
+        await expect(rows).toHaveCount(3);
+        await card.getByTestId('tuner-add-submit').click();
+        await expect(rows).toHaveCount(4);
+        await expect(add).toHaveCount(0);
+        await expect(rows.nth(3)).toContainText('adapter3');
+        await expect(rows.nth(3).getByTestId('tuner-use')).toBeChecked();
     });
 
     test('種別を1つも選ばない行は断る', async ({ page }) => {
         await goto(page, '/settings/reception');
 
-        const card = page.getByTestId('tuner-config-card');
+        const card = page.getByTestId('tuner-card');
         // 最後の 1 つを外すと、その場で断られてすぐ元に戻る。そこだけは押すだけにする (外れたままを待たない)
         const checked = card.locator('input[name^="type.0."]:checked');
         while ((await checked.count()) > 1) await checked.first().uncheck();
@@ -222,15 +246,14 @@ test.describe('チューナーの設定', () => {
     });
 
     /*
-     * **広い画面では表のまま、見出しと欄が縦に揃う。狭い画面では1行ずつのカード。**
+     * **広い画面では表のまま、見出しと欄が縦に揃う。狭い画面では1台ずつの段の行。**
      *
      * カードにする表に `.stack` と名付けていた頃は、app.css の `.stack` (縦に積む flex) が
      * 広い画面でも当たり、表が flex になっていた。見出しと行が別々に詰められて、
-     * LNB と無効の欄が見出しより左にずれ、行の右端も見出しより手前で終わっていた
+     * 欄が見出しより左にずれ、行の右端も見出しより手前で終わっていた
      */
-    test('見出しと欄が揃い、狭い画面ではカードになる', async ({ page }) => {
+    test('見出しと欄が揃い、狭い画面では段の行になる', async ({ page }) => {
         const tables = [
-            page.getByTestId('tuner-config-card').locator('table'),
             page.getByTestId('tuner-list').locator('xpath=ancestor::table'),
             page.getByTestId('card-reader-row').first().locator('xpath=ancestor::table'),
         ];
@@ -264,13 +287,13 @@ test.describe('チューナーの設定', () => {
             expect(await table.locator('thead').evaluate(display)).toBe('none');
             expect(await table.locator('tbody tr').first().evaluate(display)).toBe('grid');
         }
-        // 欄の見出しはカードの中に書く
+        // 種別の欄だけ、見出しを行の中に書く
         const label = await page
-            .getByTestId('tuner-config-row')
+            .getByTestId('tuner-row')
             .first()
-            .locator('td')
+            .locator('td[data-label]')
             .first()
             .evaluate((el) => getComputedStyle(el, '::before').content);
-        expect(label).toBe('"名前"');
+        expect(label).toBe('"受信できる種別"');
     });
 });
