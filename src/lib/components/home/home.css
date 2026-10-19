@@ -377,13 +377,13 @@
     }
 }
 
-/* 「いま」の線 */
+/* 「いま」の線。上の見出しや行との間は詰める (時刻の札の高さだけ取る) */
 .board .t-now {
     position: relative;
     display: flex;
     align-items: center;
-    height: 1.75rem;
-    margin: 0.5rem 0 0.25rem;
+    height: 1.25rem;
+    margin: 0.125rem 0;
     font-size: inherit;
 }
 .board .t-now::before {
@@ -396,7 +396,8 @@
 }
 .board .t-now-label {
     position: relative;
-    padding: 0.1rem 0.6rem;
+    padding: 0 0.6rem;
+    line-height: 1.25rem;
     border-radius: var(--dp-radius-full);
     background: var(--dp-rec);
     color: #fff;
