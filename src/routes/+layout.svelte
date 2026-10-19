@@ -707,7 +707,7 @@
         background: var(--dp-bg);
     }
     /*
-     * 画面の下のタブ (狭い幅だけ)。浮かぶもののガラス (`.glass`。`app.css`) に上の縁 1 本。スクロールすると下の中身が透けてぼける。
+     * 画面の下のタブ (狭い幅だけ)。磨りガラス (`.glass`。`app.css`) に上の線 1 本。スクロールすると下の中身が透けてぼける。
      * 1 つの的は幅を等分し、高さは 3.5rem (アイコンと小さな字)。下の安全域は内側の余白で避ける。
      * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
      * 位置に使う (タブに被らないように)
@@ -721,8 +721,6 @@
         padding-bottom: env(safe-area-inset-bottom);
         border-width: 1px 0 0;
         border-radius: 0;
-        /* 下端に付くので、影は上へ薄く */
-        box-shadow: var(--dp-glass-edge), 0 -8px 24px -12px rgb(0 0 0 / 0.25);
         view-transition-name: site-tabbar;
     }
     .tabbar .tab,
