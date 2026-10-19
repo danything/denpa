@@ -827,6 +827,13 @@
         .shell:has(.tabbar) .navbar {
             display: none;
         }
+        /*
+         * **スマホでは頭の余白を詰める** (1rem → 0.5rem)。ヘッダーが無いので、上の安全域のすぐ下から中身を始める。
+         * 安全域 + 1rem に、録画の画面では日付の見出しの余白まで重なって、上に大きな空きが出ていた
+         */
+        .shell:has(.tabbar) main {
+            --dp-page-top: 0.5rem;
+        }
         .shell:has(.tabbar) main {
             padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
         }

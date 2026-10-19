@@ -1,10 +1,11 @@
 <script lang="ts">
     /**
-     * **一覧の頭の細い1行** (サイドバーの無い幅 = 1000px 未満だけ)。絞り込みのチップ (件数付き。1回押せば絞れる。
+     * **一覧の頭の細い1行** (サイドバーの無い幅 = 1000px 未満だけ。スマホでは下のタブのすぐ上に貼り付く)。絞り込みのチップ (件数付き。1回押せば絞れる。
      * 横に流せる) と、見てほしいこと (競合・失敗・録り逃し・CM の判定) のうち件数のあるものを注意の色のチップで。
      * 右の「⋯」に状態 (次の録画・エンコード・空き。押せない頭) と表示の切り替え。
      * 広い画面では同じものをサイドバー (`HomeAside`) に置き、この行は出さない
      */
+    import { MediaQuery } from 'svelte/reactivity';
     import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import { ATTENTION_FILTERS, FILTERS, type Filter } from '#lib/timeline.js';
@@ -47,6 +48,8 @@
     } = $props();
 
     let viewOpen = $state(false);
+    /** スマホ (下のタブがある幅) ではこの行は下に貼り付くので、メニューは上に開く */
+    const phone = new MediaQuery('max-width: 639.98px');
     /** 見てほしいことのチップ。件数のあるものだけ (選んでいるものは 0 件でも残す。外せるように) */
     const attention = $derived(ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id));
 </script>
@@ -82,7 +85,7 @@
         {/each}
     </div>
 
-    <Menu bind:open={viewOpen} side="bottom" align="end" class="view-menu" testid="view-menu">
+    <Menu bind:open={viewOpen} side={phone.current ? 'top' : 'bottom'} align="end" class="view-menu" testid="view-menu">
         {#snippet trigger(props)}
             <button {...props} type="button" class="ghost icon t-more" title="状態と表示の切り替え" data-testid="view-toggle">
                 <Icon icon={Ellipsis} size="size-5" /><span class="visually-hidden">状態と表示の切り替え</span>

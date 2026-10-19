@@ -187,6 +187,11 @@ test.describe('ホームの1本の一覧', () => {
             'true',
         );
         expect((await page.getByTestId('timeline-toolbar').boundingBox())!.height).toBeLessThanOrEqual(44);
+        // スマホでは下のタブのすぐ上に貼り付く (押すものは下に)。上には何も被さらない
+        const bar = (await page.getByTestId('timeline-toolbar').boundingBox())!;
+        const tabs = (await page.getByTestId('tabbar').boundingBox())!;
+        expect(Math.abs(bar.y + bar.height - tabs.y)).toBeLessThanOrEqual(8);
+        expect(bar.y).toBeGreaterThan(tabs.y - 100);
         await homeFilter(page, 'all');
 
         // 番組名で探す欄はホームには無い (全体の検索)
