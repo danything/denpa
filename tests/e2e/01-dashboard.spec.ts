@@ -37,8 +37,8 @@ test.describe('ホームと画面遷移', () => {
         for (const [name, title] of [
             ['nav-guide', '番組表 - denpa'],
             ['nav-rules', 'ルール - denpa'],
-            // 設定は広い画面では先頭のグループ (一般) が開き、グループの名前が前に付く
-            ['nav-settings', '一般 - 設定 - denpa'],
+            // 設定は広い画面では先頭のグループ (録画) が開き、グループの名前が前に付く
+            ['nav-settings', '録画 - 設定 - denpa'],
             ['nav-home', '録画 - denpa'],
         ] as const) {
             await page.getByTestId(name).click();
@@ -55,11 +55,13 @@ test.describe('ホームと画面遷移', () => {
     test('設定はグループごとに開き、節へ飛べる。狭い画面では一覧から入る', async ({ page }) => {
         await goto(page, '/settings');
         // 広い画面では先頭のグループへ移る
-        await page.waitForURL(/\/settings\/general$/);
+        await page.waitForURL(/\/settings\/recording$/);
         const nav = page.getByTestId('settings-nav');
-        await expect(nav.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+        await expect(nav.getByTestId('settings-nav-recording')).toHaveAttribute('aria-current', 'page');
         await expect(page.getByTestId('settings-back')).toBeHidden();
-        // 素通しの一式なので、ログアウトの代わりにその旨の1行
+        // 「その他」は一番下。素通しの一式なので、ログアウトの代わりにその旨の1行
+        await nav.getByTestId('settings-nav-general').click();
+        await page.waitForURL(/\/settings\/general$/);
         await expect(page.getByTestId('login-none')).toBeVisible();
 
         // 別のグループの節を押すと、その画面のその節へ

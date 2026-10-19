@@ -123,7 +123,7 @@
     let hydrated = $state(false);
 
     /**
-     * テーマは `theme.svelte.ts` が持つ (設定の「一般」からも選べるので、ここだけの値にしない)。
+     * テーマは `theme.svelte.ts` が持つ (設定の「その他」からも選べるので、ここだけの値にしない)。
      * 月・太陽・半分塗った丸 (Lucide)。絵文字は端末ごとに見た目が違い、太さも揃わなかった
      */
     const ICON = { dark: Moon, light: Sun, system: Contrast };
@@ -383,7 +383,7 @@
             <SearchField value={query} testid="header-search" live={here === '/search'} />
         </div>
         <!--
-            テーマの切り替え・画面へのリンク (広い幅だけ)。ログアウトは設定の「一般」にある。
+            テーマの切り替え・画面へのリンク (広い幅だけ)。ログアウトは設定の「その他」にある。
             狭い幅ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
         -->
         <nav class="actions">
