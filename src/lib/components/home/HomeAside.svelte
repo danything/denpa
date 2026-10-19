@@ -1,7 +1,7 @@
 <script lang="ts">
     /**
      * **右のサイドバー** (1000px 以上)。ウィンドウの端まで寄せ、一覧とは別に巻き取る (線では分けない。地も一覧と同じ)。
-     * 並びはドキュメントの目次と同じ作り (小さく沈めた見出し・線の無い行・選んでいる行だけ内側の塗り)。
+     * 並びは `app.css` のサイドバーの部品 (太字の見出し・線の無い行・選んでいる行だけ内側の塗り)。
      * この幅では頭の1行 (`TimelineBar`) は出さず、一覧はいちばん上から始まる。上から
      *
      * 1. 絞り込み … すべて・予約・録画中・未視聴 (件数付き)
@@ -49,52 +49,50 @@
     const attention = $derived(ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id));
 </script>
 
-<aside class="t-side" aria-label="絞り込みと表示" data-testid="sidebar">
-    <h2 class="s-group s-first">絞り込み</h2>
-    <div class="s-list" role="group" aria-label="絞り込み">
+<aside class="t-side side-panel" aria-label="絞り込みと表示" data-testid="sidebar">
+    <h2 class="side-label">絞り込み</h2>
+    <div class="side-list" role="group" aria-label="絞り込み">
         {#each FILTERS as f (f.id)}
             <button
                 type="button"
-                class="s-item"
-                class:on={filter === f.id}
+                class="side-item"
                 aria-pressed={filter === f.id}
                 onclick={() => setFilter(f.id)}
                 data-testid="filter"
                 data-filter={f.id}
             >
                 <span>{f.label}</span>
-                <span class="a-sub num" data-testid="filter-count">{counts[f.id]}</span>
+                <span class="side-sub num" data-testid="filter-count">{counts[f.id]}</span>
             </button>
         {/each}
     </div>
 
     {#if attention.length > 0}
-        <h2 class="s-group">見てほしいこと</h2>
-        <div class="s-list" role="group" aria-label="見てほしいこと">
+        <h2 class="side-label">見てほしいこと</h2>
+        <div class="side-list" role="group" aria-label="見てほしいこと">
             {#each attention as f (f.id)}
                 <button
                     type="button"
-                    class="s-item a-warn"
-                    class:on={filter === f.id}
+                    class="side-item a-warn"
                     aria-pressed={filter === f.id}
                     onclick={() => setFilter(filter === f.id ? 'all' : f.id)}
                     data-testid="attention-item"
                     data-filter={f.id}
                 >
                     <span class="a-warn-label"><Icon icon={TriangleAlert} size="size-4" />{f.label}</span>
-                    <span class="a-sub num" data-testid="filter-count">{counts[f.id]}</span>
+                    <span class="side-sub num" data-testid="filter-count">{counts[f.id]}</span>
                 </button>
             {/each}
         </div>
     {/if}
 
-    <h2 class="s-group">表示</h2>
-    <div class="s-list" role="group" aria-label="表示の切り替え">
+    <h2 class="side-label">表示</h2>
+    <div class="side-list" role="group" aria-label="表示の切り替え">
         <ViewList {grouped} {setGrouped} {finishedHref} {deletedHref} {showFinished} {showDeleted} variant="list" />
     </div>
 
-    <div class="a-bottom">
-        <h2 class="s-group">状態</h2>
+    <div class="side-foot">
+        <h2 class="side-label">状態</h2>
         <HomeState {encoding} {nextRes} {capacity} where="side" />
     </div>
 </aside>

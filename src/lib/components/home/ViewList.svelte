@@ -29,7 +29,7 @@
         /** 「⋯」の中 (`menu`) か、サイドバーの並び (`list`) か。形と読み上げの役割だけが変わる */
         variant?: 'menu' | 'list';
     } = $props();
-    const item = $derived(variant === 'menu' ? 'menu-item view-item' : 's-item view-item');
+    const item = $derived(variant === 'menu' ? 'menu-item view-item' : 'side-item view-item');
 </script>
 
 <!--

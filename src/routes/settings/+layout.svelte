@@ -152,19 +152,18 @@
 -->
 <div class="page settings-page" class:list-view={current === null}>
     <!--
-        **行は線で区切らない** (録画の画面のサイドバーと同じ作り)。グループは小さく沈めた見出し、
-        節は字下げしない行。見えている節だけ角の丸い薄い塗り
+        **行は線で区切らない** (録画の画面のサイドバーと同じ部品)。グループは太字の見出し、
+        節はそれより一段深い行。見えている節だけ角の丸い薄い塗り
     -->
-    <nav class="side" aria-label="設定の項目" data-testid="settings-nav">
+    <nav class="side side-panel" aria-label="設定の項目" data-testid="settings-nav">
         <ul class="groups">
-            {#each SETTINGS_GROUPS as g, i (g.slug)}
+            {#each SETTINGS_GROUPS as g (g.slug)}
                 {@const here = current === g.slug}
                 {@const href = resolve(`settings/${g.slug}`)}
                 <li>
                     <a
                         {href}
-                        class="group-link s-group"
-                        class:s-first={i === 0}
+                        class="group-link side-label"
                         class:here
                         aria-current={here ? 'page' : undefined}
                         data-testid="settings-nav-{g.slug}"
@@ -173,14 +172,13 @@
                         <!-- 狭い画面の一覧だけ。中に何があるかを1行で (節の一覧は出さないので) -->
                         <span class="group-hint">{g.sections.map((s) => s.label).join('・')}</span>
                     </a>
-                    <ul class="sections-nav s-list">
+                    <ul class="sections-nav side-list">
                         {#each g.sections as section (section.slug)}
                             {@const selected = here && active === section.slug}
                             <li>
                                 <a
                                     href="{href}#{section.slug}"
-                                    class="s-item"
-                                    class:on={selected}
+                                    class="side-item"
                                     aria-current={selected ? 'location' : undefined}
                                     onclick={() => jump(section.slug)}
                                     data-testid="settings-nav-{section.slug}"
@@ -239,48 +237,30 @@
         }
     }
 
-    /* ---- 左の一覧 ---- */
-    .side {
-        min-height: 0;
-    }
-    @media (min-width: 768px) {
-        .side {
-            overflow-y: auto;
-            padding: var(--dp-space-4) var(--dp-space-2);
-        }
-    }
-    .side ul {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-    .side li {
-        margin: 0;
-        list-style: none;
-    }
     /*
-     * **録画の画面のサイドバーと同じ部品** (`app.css` の `.s-group`・`.s-list`・`.s-item`)。グループは小さく沈めた見出し、
-     * 節は線も字下げも無い行で、見えている節だけ角の丸い薄い塗り。グループの間は見出しの上の細い線と余白
-     * (`.s-group` の `::before`。最初のグループには引かない)。ここは置き方だけ
+     * ---- 左の一覧 ----
+     * **録画の画面のサイドバーと同じ部品** (`app.css` の `.side-panel`・`.side-label`・`.side-list`・`.side-item`)。
+     * グループの見出しはその画面へのリンク。ここは幅と、狭い画面の形だけ
      */
     .groups {
         display: flex;
         flex-direction: column;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .groups > li {
+        margin: 0;
+        list-style: none;
     }
     .side a {
         text-decoration: none;
     }
     .group-link {
-        display: block;
-        margin: var(--s-gap) 0 0;
-        padding-block: 0.125rem;
         border-radius: var(--dp-radius);
         transition:
             background-color var(--dp-duration),
             color var(--dp-duration);
-    }
-    .group-link.s-first {
-        margin-top: 0;
     }
     .group-link:hover {
         color: inherit;
@@ -288,29 +268,29 @@
     .group-hint {
         display: none;
     }
-    .side .sections-nav {
-        margin-top: 0.25rem;
-    }
     /*
      * 狭い画面の一覧はグループだけ (押すとその画面。節へは画面の上の行で飛ぶ)。
      * 指で押すので行を高くする (40px 以上)。字は本文の大きさ、塗りだけ余白の外へ少し出す
      */
     @media (max-width: 767px) {
+        .side {
+            padding: 0;
+            overflow: visible;
+        }
         .side .sections-nav {
             display: none;
         }
         .groups {
             margin-inline: -0.75rem;
         }
-        /* 行どうしは線で区切らない (グループの線も引かない) */
+        /* 行どうしは線で区切らない。見出しの太字も外し、ふつうの行にする (下に中身の1行) */
         .group-link {
+            display: block;
             margin: 0;
             padding-block: 0.625rem;
             color: inherit;
             font-size: var(--dp-text-base);
-        }
-        .group-link::before {
-            display: none;
+            font-weight: var(--dp-weight);
         }
         .group-link:hover {
             background: var(--dp-hover-soft);

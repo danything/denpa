@@ -117,7 +117,7 @@
         <div class="skeleton" role="status" aria-label="チューナーを確認しています">
             <div class="skeleton-head" aria-hidden="true"></div>
             {#each TUNER_SKELETON as height, row (row)}
-                <div class="skeleton-row" style="height: {height}rem" aria-hidden="true"></div>
+                <div class="skeleton-block" style="height: {height}rem" aria-hidden="true"></div>
             {/each}
         </div>
     {:else if shownTuners.value.error !== null}
@@ -386,7 +386,7 @@
             <!-- リーダーの表も同じ形の枠を先に置く (リーダーは1つのことが多い。名前と場所の2行) -->
             <div class="skeleton" role="status" aria-label="カードリーダーを確認しています">
                 <div class="skeleton-head" aria-hidden="true"></div>
-                <div class="skeleton-row" style="height: 2.35rem" aria-hidden="true"></div>
+                <div class="skeleton-block" style="height: 2.35rem" aria-hidden="true"></div>
             </div>
         {:else}
             {@const card = shownCard.value}
@@ -776,24 +776,16 @@
         overflow-wrap: break-word;
     }
     /*
-     * 答え待ちの骨組み (番組表と同じ形と色)。見出しの行だけ濃く、光の筋が横に流れる。
+     * 答え待ちの骨組み (色と光の筋は `app.css` の `.skeleton`。番組表と同じ)。見出しの行だけ濃い。
      * 高さは本物の表と同じにしてある (届いた拍子に下の節が動かない)
      */
     .skeleton {
-        position: relative;
         display: flex;
         flex-direction: column;
         gap: 0.4rem;
-        overflow: hidden;
-    }
-    .skeleton-head,
-    .skeleton-row {
-        border-radius: var(--dp-radius-sm);
-        background: var(--dp-subtle);
     }
     .skeleton-head {
         height: 1.8rem;
-        background: var(--dp-line);
     }
     .skeleton-tag {
         display: inline-block;
@@ -801,23 +793,5 @@
         height: 1.1rem;
         border-radius: var(--dp-radius-full);
         background: var(--dp-subtle);
-    }
-    .skeleton::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.06) 50%, transparent 100%);
-        transform: translateX(-100%);
-        animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
-    }
-    @keyframes skeleton-sweep {
-        to {
-            transform: translateX(100%);
-        }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .skeleton::after {
-            animation: none;
-        }
     }
 </style>

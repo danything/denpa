@@ -311,10 +311,10 @@
             <input name="ignoreKeyword" bind:value={ignoreKeyword} placeholder="例: 再放送 総集編" data-testid="rule-ignore" />
         </label>
 
-        <!-- 局・同じ回・優先度・ジャンルは枠の無い行に。名前は左、いまの値は右 -->
-        <div class="rows">
+        <!-- 局・同じ回・優先度・ジャンルは枠の無い行に (サイドバーの行と同じ形)。名前は左、いまの値は右 -->
+        <div class="rows side-list">
             <details class="row picker">
-                <summary data-testid="channel-summary">
+                <summary class="side-item" data-testid="channel-summary">
                     <span>局</span>
                     <span class="value">{serviceSummary}</span>
                 </summary>
@@ -348,13 +348,13 @@
                     </div>
                 </div>
             </details>
-            <label class="row">
+            <label class="row side-item">
                 <span>同じ回は最初の放送だけ</span>
                 <!-- 外したスイッチは何も送らない。「外した」と「指定なし」を分けるための隠し (`rule-form.dedupeOf`) -->
                 <input type="hidden" name="dedupe" value="0" />
                 <input type="checkbox" role="switch" aria-checked={dedupe} name="dedupe" value="1" bind:checked={dedupe} data-testid="rule-dedupe" />
             </label>
-            <label class="row">
+            <label class="row side-item">
                 <span>優先度 <span class="tiny muted">(大きいほうを先に録る)</span></span>
                 <select name="priority" bind:value={priority} data-testid="rule-priority">
                     {#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as value (value)}
@@ -364,7 +364,7 @@
             </label>
             <!-- ジャンルは畳んでおく (シリーズ名で足りる)。データとしては残している -->
             <details class="row picker">
-                <summary data-testid="genre-summary">
+                <summary class="side-item" data-testid="genre-summary">
                     <span>ジャンル</span>
                     <span class="value">{genres.length === 0 ? 'すべて' : `${genres.length} 件`}</span>
                 </summary>
@@ -536,27 +536,19 @@
     .field input {
         margin: 0;
     }
-    /* 局・同じ回・優先度・ジャンル。枠の箱にせず、行の間に線を1本 */
+    /*
+     * 局・同じ回・優先度・ジャンル。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
+     * 行の塗りは左右に字の余白ぶんはみ出し、字の頭は上の欄の頭にそろえる
+     */
     .rows {
-        display: flex;
-        flex-direction: column;
+        margin-inline: -0.75rem;
+        padding: 0;
     }
     .row {
         margin: 0;
-        border-bottom: 1px solid var(--dp-line);
-        font-size: var(--dp-text-sm);
     }
     label.row,
     .row > summary {
-        display: flex;
-        width: 100%;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--dp-space-3);
-        min-height: 2.75rem;
-        margin: 0;
-        padding: 0;
-        color: inherit;
         cursor: pointer;
     }
     .row > summary::after {
@@ -566,9 +558,6 @@
     }
     .chips .chip {
         width: auto;
-    }
-    .row:last-child {
-        border-bottom: 0;
     }
     .value {
         margin-inline-start: auto;
@@ -591,7 +580,7 @@
         display: flex;
         flex-direction: column;
         gap: var(--dp-space-2);
-        padding-bottom: var(--dp-space-3);
+        padding: var(--dp-space-1) 0.75rem var(--dp-space-3);
     }
     .group-title {
         font-size: var(--dp-text-xs);

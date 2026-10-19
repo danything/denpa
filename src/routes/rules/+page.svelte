@@ -184,30 +184,28 @@
     </div>
 
     <!-- 1000px から。絞り込み・並び・集計 (ホームのサイドバーと同じ行) -->
-    <aside class="rules-side" aria-label="絞り込みと並び" data-testid="rule-sidebar">
-        <h2 class="s-group s-first">絞り込み</h2>
-        <div class="s-list" role="group" aria-label="絞り込み" data-testid="rule-filters">
+    <aside class="rules-side side-panel" aria-label="絞り込みと並び" data-testid="rule-sidebar">
+        <h2 class="side-label">絞り込み</h2>
+        <div class="side-list" role="group" aria-label="絞り込み" data-testid="rule-filters">
             {#each FILTERS as f (f.key)}
                 <button
                     type="button"
-                    class="s-item"
-                    class:on={filter === f.key}
+                    class="side-item"
                     aria-pressed={filter === f.key}
                     onclick={() => (filter = f.key)}
                     data-testid="rule-filter-{f.key}"
                 >
                     <span>{f.label}</span>
-                    <span class="sub num">{counts[f.key]}</span>
+                    <span class="side-sub num">{counts[f.key]}</span>
                 </button>
             {/each}
         </div>
-        <h2 class="s-group">並び</h2>
-        <div class="s-list" role="group" aria-label="並び">
+        <h2 class="side-label">並び</h2>
+        <div class="side-list" role="group" aria-label="並び">
             {#each SORTS as s (s.key)}
                 <button
                     type="button"
-                    class="s-item"
-                    class:on={sort === s.key}
+                    class="side-item"
                     aria-pressed={sort === s.key}
                     onclick={() => (sort = s.key)}
                     data-testid="rule-sort-{s.key}"
@@ -216,12 +214,12 @@
                 </button>
             {/each}
         </div>
-        <h2 class="s-group">集計</h2>
-        <dl class="s-list stats" data-testid="rule-summary">
-            <div class="s-item static"><dt>これから7日の予約</dt><dd class="num">{data.summary.weekReservations} 件</dd></div>
-            <div class="s-item static"><dt>この7日で録れた</dt><dd class="num">{data.summary.lastWeekRecordings} 本</dd></div>
+        <h2 class="side-label">集計</h2>
+        <dl class="side-list stats" data-testid="rule-summary">
+            <div class="side-item static"><dt>これから7日の予約</dt><dd class="num">{data.summary.weekReservations} 件</dd></div>
+            <div class="side-item static"><dt>この7日で録れた</dt><dd class="num">{data.summary.lastWeekRecordings} 本</dd></div>
         </dl>
-        <div class="side-bottom">
+        <div class="side-foot">
             <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->
             <a class="button small" href={resolve('search')} data-testid="rule-new">ルールを作る</a>
         </div>
@@ -287,10 +285,7 @@
             position: sticky;
             top: 3.5rem;
             display: flex;
-            flex-direction: column;
             height: calc(100dvh - 3.5rem);
-            overflow-y: auto;
-            padding: 0.75rem 0.625rem 1.5rem;
         }
         .rules-bar,
         .narrow-summary {
@@ -301,10 +296,6 @@
         .rules-board {
             grid-template-columns: minmax(0, 1fr) 22rem;
         }
-    }
-    .sub {
-        color: var(--dp-muted);
-        font-size: 0.75rem;
     }
     .stats {
         margin: 0;
@@ -317,14 +308,10 @@
     .stats dd {
         color: var(--dp-muted);
     }
-    .s-item.static:hover {
-        background: transparent;
+    .side-foot {
+        padding-inline: 0.75rem;
     }
-    .side-bottom {
-        margin-top: auto;
-        padding: 1rem 0.75rem 0;
-    }
-    .side-bottom .button {
+    .side-foot .button {
         width: 100%;
         margin: 0;
     }

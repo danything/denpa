@@ -849,7 +849,7 @@
                     <div class="skeleton-column">
                         <div class="skeleton-head"></div>
                         {#each SKELETON_CELLS[column] as height, cell (cell)}
-                            <div class="skeleton-cell" style="height: {height}rem"></div>
+                            <div class="skeleton-block" style="height: {height}rem"></div>
                         {/each}
                     </div>
                 {/each}
@@ -1486,15 +1486,9 @@
 
     /*
      * 読み込み中の骨組み。**表と同じ場所・同じ高さに置く** ので、
-     * 中身が届いたときに下のものが飛び跳ねない。
-     *
-     * 光が流れるのは骨組みそのものではなく**上に重ねた一枚**。桝ごとに動かすと
-     * 数十個ぶんのアニメーションが同時に走り、届いた瞬間の描き直しと重なって
-     * もたついた。重ねた一枚なら動くのは1つで済む
+     * 中身が届いたときに下のものが飛び跳ねない。色と光の筋は `app.css` の `.skeleton`
      */
     .skeleton {
-        position: relative;
-        overflow: hidden;
         padding: 0.75rem;
         /* 表と同じ場所を取っておく。届いた拍子に高さが変わると画面が跳ねる */
         flex: 1 1 0%;
@@ -1513,41 +1507,9 @@
         /* 狭い画面では右の列がはみ出すが、外側で切る (本物の表も横に流れる) */
         min-width: 6rem;
     }
-    .skeleton-head,
-    .skeleton-cell {
-        /* 縮ませない。合計が枠より高いぶんは下で切る (本物の表も下へ続く) */
-        flex-shrink: 0;
-        border-radius: var(--dp-radius-sm);
-        background: var(--dp-subtle);
-    }
-    /* 局名の行。本物と同じで、ここだけ濃い */
+    /* 局名の行の高さ (色は `app.css`。本物と同じで、ここだけ濃い) */
     .skeleton-head {
         height: 1.75rem;
-        background: var(--dp-line);
-    }
-    .skeleton::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-            90deg,
-            transparent 0%,
-            rgb(255 255 255 / 0.06) 50%,
-            transparent 100%
-        );
-        transform: translateX(-100%);
-        animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
-    }
-    @keyframes skeleton-sweep {
-        to {
-            transform: translateX(100%);
-        }
-    }
-    /* 動くものが苦手な人には動かさない (Pico と同じ約束) */
-    @media (prefers-reduced-motion: reduce) {
-        .skeleton::after {
-            animation: none;
-        }
     }
     /* 表は枠で囲まない。操作の1行の下から画面の端まで (上のコメント) */
     .grid-box {

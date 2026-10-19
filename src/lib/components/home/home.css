@@ -660,7 +660,7 @@
 .board .view-menu {
     min-width: 15rem;
 }
-.board .view-item {
+.board .menu-item.view-item {
     justify-content: space-between;
     gap: 1rem;
     min-height: 2.5rem;
@@ -685,15 +685,15 @@
         min-width: 2.75rem;
         min-height: 2.75rem;
     }
-    .board .view-item {
+    .board .menu-item.view-item {
         min-height: 3rem;
     }
 }
 
 /*
  * ---- 右のサイドバー (`HomeAside`) ----
- * 1000px 以上。右の端まで寄せ、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (一覧の行の塗りと余白で分かれる)。行はドキュメントの目次と同じ
- * (`app.css` の `.s-group`・`.s-list`・`.s-item`)。この幅では頭の1行は出さず、一覧はいちばん上から始まる
+ * 1000px 以上。右の端まで寄せ、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (一覧の行の塗りと余白で分かれる)。
+ * 形は `app.css` のサイドバーの部品 (`.side-panel` など)。ここは幅と、出すかどうかだけ。この幅では頭の1行は出さず、一覧はいちばん上から始まる
  */
 .board .t-side {
     display: none;
@@ -704,10 +704,6 @@
     }
     .board .t-side {
         display: flex;
-        flex-direction: column;
-        min-height: 0;
-        overflow-y: auto;
-        padding: 0.75rem 0.625rem 1.5rem;
     }
     .board .t-toolbar {
         display: none;
@@ -717,26 +713,6 @@
     .board .t-main {
         grid-template-columns: minmax(0, 1fr) 22rem;
     }
-}
-.board .t-side .s-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-.board .t-side li {
-    margin: 0;
-    list-style: none;
-}
-.board .a-sub {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: 0.25rem;
-    color: var(--dp-muted);
-    font-size: 0.75rem;
-}
-.board .a-static:hover {
-    background: transparent;
 }
 .board .a-state dt,
 .board .a-state dd {
@@ -750,22 +726,17 @@
 .board .a-warn {
     color: var(--dp-warn-text);
 }
-.board .a-warn .a-sub {
+.board .a-warn .side-sub {
     color: inherit;
     font-weight: var(--dp-weight-bold);
 }
-.board .a-warn.on {
+.board .a-warn[aria-pressed="true"] {
     background: color-mix(in srgb, var(--dp-warn) 16%, transparent);
 }
 .board .a-warn-label {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-}
-/* 状態はいちばん下に寄せる (並びが短ければ下端に、長ければ表示の下に続く) */
-.board .a-bottom {
-    margin-top: auto;
-    padding-top: 0.5rem;
 }
 /* 狭い画面の見てほしいことのチップ。注意の色 */
 .board .t-toolbar .t-chips > .t-chip.warn {
@@ -785,7 +756,10 @@
     padding: 0 0 0.25rem;
     border-bottom: 1px solid var(--dp-line);
 }
-.board .view-menu .menu-head .s-item {
+.board .view-menu .menu-head .side-list {
+    padding: 0;
+}
+.board .view-menu .menu-head .side-item {
     min-height: 2rem;
     padding: 0 0.6rem;
     font-size: var(--dp-text-sm);

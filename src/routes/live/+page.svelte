@@ -876,13 +876,11 @@
             読んでいる間はチャンネルを選ばないので、一覧は退けてよい。
             枠は3画面共通 (FactsAside)
         -->
-        <FactsAside testid="live-detail">
+        <FactsAside
+            testid="live-detail"
+            back={{ label: '局の一覧', onclick: () => detail.close(), testid: 'live-detail-close' }}
+        >
             <ProgramFacts program={detail.current} />
-            {#snippet footer()}
-                <button type="button" class="small secondary" onclick={() => detail.close()} data-testid="live-detail-close">
-                    局の一覧へ戻る
-                </button>
-            {/snippet}
         </FactsAside>
     {:else}
         <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
@@ -917,11 +915,11 @@
                 カードにしていた頃は、枠と行の間の余白が幅を取り、局名と番組名が先に潰れた。
                 押せることは、指を乗せたときの淡い地と、いま映している行の地で分かる
             -->
-            <ul bind:this={list} class="channels" data-testid="live-channels">
+            <ul bind:this={list} class="channels side-list" data-testid="live-channels">
                 {#each listed as channel (channel.id)}
                     <!-- いま映しているものかどうかは、この行の中で何度も使う -->
                     {@const tuned = current?.id === channel.id}
-                    <li class="channel-item" class:tuned>
+                    <li class="channel-item side-item" class:tuned>
                         <button type="button"
                             bind:this={rows[channel.id]}
                             class="channel"
@@ -1095,26 +1093,16 @@
     }
     /*
      * 一行 = 局を選ぶボタンと中身を読むボタン。地は行 (`li`) ごと塗る — 選ぶボタンだけを
-     * 塗ると、右の (i) の所だけ地が欠ける。枠も区切りの線も付けない
+     * 塗ると、右の (i) の所だけ地が欠ける。塗り (指を乗せた・映している) はサイドバーの行と同じ
+     * (`app.css` の `.side-item`。選ぶボタンの `aria-current` で行ごと塗る)。高さは中身 (2 行とロゴ) で決まる
      */
     .channel-item {
-        display: flex;
+        flex-shrink: 0;
         align-items: stretch;
+        gap: 0;
         min-height: 2.75rem;
-        margin: 0;
-        border-radius: var(--dp-radius);
-        list-style: none;
-        transition: background-color var(--dp-duration);
-    }
-    .channel-item + .channel-item {
-        margin-top: 0.125rem;
-    }
-    /* 指を乗せた行は、いま映している行より淡く */
-    .channel-item:hover {
-        background: var(--dp-hover-soft);
-    }
-    .channel-item.tuned {
-        background: var(--dp-subtle);
+        padding: 0;
+        font-size: inherit;
     }
     /* 番号のラベルは淡い面の色。同じ色で塗った行の上では消えるので、地の色にする */
     .channel-item.tuned :global(.tag) {

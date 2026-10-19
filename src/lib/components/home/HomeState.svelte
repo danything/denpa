@@ -26,15 +26,15 @@
     const left = $derived(running === null ? null : (live?.etaMs ?? running.job_eta_ms));
 </script>
 
-<dl class="s-list a-state" data-testid={where === 'side' ? 'summary' : 'menu-summary'}>
-    <div class="s-item a-static">
+<dl class="side-list a-state" data-testid={where === 'side' ? 'summary' : 'menu-summary'}>
+    <div class="side-item static">
         <dt>次の録画</dt>
-        <dd class="a-sub num">{nextRes === null ? 'なし' : `${time(nextRes.start_at)}・${ctx.untilLabel(nextRes.start_at)}`}</dd>
+        <dd class="side-sub num">{nextRes === null ? 'なし' : `${time(nextRes.start_at)}・${ctx.untilLabel(nextRes.start_at)}`}</dd>
     </div>
     {#if encoding.length > 0}
-        <div class="s-item a-static">
+        <div class="side-item static">
             <dt>エンコード</dt>
-            <dd class="a-sub num" data-testid={where === 'side' ? 'aside-encode' : undefined}>
+            <dd class="side-sub num" data-testid={where === 'side' ? 'aside-encode' : undefined}>
                 {#if running !== null}
                     {percent(live?.percent ?? running.job_percent ?? 0)}{#if eta(left)}・{eta(left)}{/if}
                 {:else}
@@ -45,9 +45,9 @@
         </div>
     {/if}
     {#if capacity !== null}
-        <div class="s-item a-static">
+        <div class="side-item static">
             <dt>空き</dt>
-            <dd class="a-sub num" data-testid={where === 'side' ? 'recordings-capacity' : 'recordings-capacity-menu'}>
+            <dd class="side-sub num" data-testid={where === 'side' ? 'recordings-capacity' : 'recordings-capacity-menu'}>
                 {capacity.free.replace(/^空き\s*/, '')}{capacity.hours === null ? '' : `・${capacity.hours}`}
             </dd>
         </div>
