@@ -22,9 +22,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # main を取り込んだだけの push (Update branch) ではレビューし直さない。中身はもう見ているので、
+      # 毎回読み直すとトークンだけがかさむ。ジョブは成功で終わるので必須チェックは通る
+      - name: Skip main merges
+        id: merge
+        if: github.event.action == 'synchronize'
+        run: |
+          parents=$(git log -1 --pretty=%P | wc -w)
+          subject=$(git log -1 --pretty=%s)
+          if [ "$parents" -gt 1 ] && echo "$subject" | grep -qE "^Merge (branch 'main'|remote-tracking branch 'origin/main'|branch 'main' of)"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Claude Code Review
+        if: steps.merge.outputs.skip != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
