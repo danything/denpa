@@ -241,14 +241,17 @@ test.describe('操作したときの反応', () => {
         await expect(page.getByTestId('guide-today')).toBeVisible();
     });
 
-    test('広い画面では日付を並べて押せ、今日から始まる', async ({ page }) => {
+    test('広い画面では日付を並べて押せ、今日には日付も添える', async ({ page }) => {
         await page.setViewportSize({ width: 1366, height: 768 });
         await goto(page, '/guide?type=GR');
         const days = page.getByTestId('guide-day');
-        // 1週間ぶん (番組の無い日も押せないまま並ぶ)
+        // 今日から1週間ぶん (番組の無い日も押せないまま並ぶ)。前の日は番組が残っていれば今日の左に
         expect(await days.count()).toBeGreaterThanOrEqual(8);
-        await expect(days.first()).toHaveText('今日');
-        await expect(days.first()).toHaveAttribute('aria-current', 'date');
+        const today = page.locator('[data-testid="guide-day"].present');
+        await expect(today).toHaveText(/^今日\d+\(.\)$/);
+        await expect(today).toHaveAttribute('aria-current', 'date');
+        const index = await today.evaluate((el) => [...el.parentElement!.children].indexOf(el));
+        for (let i = 0; i < index; i++) await expect(days.nth(i)).toHaveClass(/past/);
         // 入りきるので → は出さない。狭い画面の日付のメニューも出さない
         await expect(page.getByTestId('next-day')).toBeHidden();
         await expect(page.getByTestId('guide-date')).toBeHidden();
@@ -274,6 +277,9 @@ test.describe('操作したときの反応', () => {
             'date',
         );
         await expect(page.getByTestId('guide-jump-now')).toBeDisabled();
+        // 今日は選んでいなくても「今日」の印で分かる (選んでいる日は塗りで)
+        await expect(today).not.toHaveAttribute('aria-current', 'date');
+        await expect(today).toHaveText(/^今日/);
     });
 
     test('時刻のボタンで表がその時刻へ送られる', async ({ page }) => {

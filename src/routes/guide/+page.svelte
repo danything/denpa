@@ -362,22 +362,27 @@
     const nextHref = $derived(href({ start: String(data.start + data.hours * HOUR) }));
 
     /**
-     * 日付の並び (広い画面)。**今日から、番組表の届いている日まで** (`+page.server.ts` の `daysOf`)。
-     * 番組の無い日も並べて押せなくする。並びの外の日を見ているときは、その日を端に足す
+     * 日付の並び (広い画面)。**番組の残っている前の日 → 今日 → 番組表の届いている日** (`+page.server.ts` の `daysOf`)。
+     * 前の日は字を控える (`past`)。番組の無い日も並べて押せなくする。並びの外の日を見ているときは、その日を端に足す
      * (選んでいる日が並びに無いと、どこを見ているのか分からない)
      */
     const days = $derived.by(() => {
-        const list = data.days.map((day) => ({ ...day, label: dayLabel(day.start) }));
-        const chosen = { start: data.start, has: true, label: dayLabel(data.start) };
-        if (data.start < data.today) list.unshift(chosen);
+        const entry = (day: { start: number; has: boolean }) => ({
+            ...day,
+            label: dayLabel(day.start),
+            today: day.start === data.today,
+            past: day.start < data.today,
+        });
+        const list = data.days.map(entry);
+        const chosen = entry({ start: data.start, has: true });
+        if (data.start < (list[0]?.start ?? data.start)) list.unshift(chosen);
         // 並びより先の日 (手で書いた URL・古いリンク) も末尾に足す
         else if (data.start > (list.at(-1)?.start ?? data.start)) list.push(chosen);
         return list;
     });
 
-    /** 「今日」か「18(日)」。土日は字の色で分かるようにする (`.sat`・`.sun`) */
+    /** 「18(日)」。今日はこの前に小さく「今日」を添える (マークアップの `.today-mark`)。土日は字の色 (`.sat`・`.sun`) */
     function dayLabel(start: number): string {
-        if (start === data.today) return '今日';
         const text = date(start);
         return text.slice(text.indexOf('/') + 1);
     }
@@ -388,8 +393,7 @@
     }
 
     /**
-     * **並びが入りきらないときだけ、両端に ← → を出す。** 入るなら日を直接押せば済む。
-     * ← は前日に番組があるときも出す (並びは今日からなので、前の日へはこれでしか行けない)。
+     * **並びが入りきらないときだけ、両端に ← → を出す** (どちらも1日ずつ送る)。入るなら日を直接押せば済む。
      *
      * 測るのは並び (`strip`) の中身の幅と、出せる幅。矢印を出すと並びが狭くなるので、
      * 出しているときは矢印のぶんも出せる幅に足して比べる (出したり消したりを繰り返さない)
@@ -412,10 +416,19 @@
         return () => observer.disconnect();
     });
 
-    /* 選んでいる日が並びの外に隠れていたら見えるところへ (並びは横に流れる) */
+    /*
+     * **選んでいる日を並びの左のほうに見せる** (並びは横に流れる)。前の日を並べたぶん、今日が右へ押し出されて
+     * 隠れないように。1つ前の日だけは左に覗かせて、まだ戻れることが分かるようにする
+     */
     $effect(() => {
         data.start;
-        strip?.querySelector('[aria-current="date"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        crowded;
+        const box = strip;
+        const chosen = box?.querySelector<HTMLElement>('[aria-current="date"]');
+        if (box == null || chosen == null || box.clientWidth === 0) return;
+        const left = chosen.getBoundingClientRect().left - box.getBoundingClientRect().left + box.scrollLeft;
+        const peek = (chosen.previousElementSibling as HTMLElement | null)?.offsetWidth ?? 0;
+        box.scrollLeft = Math.max(0, left - peek);
     });
 
     /**
@@ -606,10 +619,10 @@
 
         <!--
             日付は種別のすぐ隣。どちらも「表のどこを見るか」の操作なので離さない。
-            広い画面は日付を並べて直接押す (`.strip`)。← → は入りきらないときと、前日に番組があるときだけ。
+            広い画面は日付を並べて直接押す (`.strip`。前の日は今日の左に控えた字で)。← → は入りきらないときだけ。
             狭い画面は ← 日付 → で、日付を押すと1週間ぶんと時刻のメニューが開く
         -->
-        <div class="days" class:crowded class:earlier={data.earlier || data.start < data.today}>
+        <div class="days" class:crowded>
             <a
                 class="button small secondary outline arrow prev"
                 href={prevHref}
@@ -624,12 +637,14 @@
                         <a
                             class="day-chip {weekday(day.start) ?? ''}"
                             class:selected
+                            class:present={day.today}
+                            class:past={day.past}
                             href={href({ start: String(day.start) })}
                             aria-current={selected ? 'date' : undefined}
                             aria-label={day.start === data.today ? `今日 ${date(day.start)}` : date(day.start)}
                             data-testid="guide-day"
                             data-start={day.start}
-                        >{day.label}</a>
+                        >{#if day.today}<span class="today-mark">今日</span>{/if}{day.label}</a>
                     {:else}
                         <!-- 番組がまだ届いていない日。並びの幅を保つために置いて、押せなくする -->
                         <span
@@ -659,6 +674,7 @@
                         <a
                             class="menu-item {weekday(day.start) ?? ''}"
                             class:selected
+                            class:past={day.past}
                             role="menuitem"
                             href={href({ start: String(day.start) })}
                             aria-current={selected ? 'date' : undefined}
@@ -1292,6 +1308,20 @@
         font-weight: var(--dp-weight-bold);
     }
     /*
+     * **今日は日付の前に小さく「今日」** (主の色の字・太字)。選んでいる日の塗りとは別の印なので、
+     * 前の日を見ているときも今日がどれか分かる
+     */
+    .today-mark {
+        margin-inline-end: 0.3rem;
+        color: var(--dp-primary-text);
+        font-size: var(--dp-text-xs);
+        font-weight: var(--dp-weight-bold);
+    }
+    /* 前の日は字を控える (土日は土日の色のまま) */
+    .past {
+        color: var(--dp-muted);
+    }
+    /*
      * **土日は字の色で。** 土曜は主の色の字、日曜は録画の赤の字 (どちらも淡い地の上で 4.5:1 以上になる段。`app.css`)。
      * 日付のメニューの中も同じ
      */
@@ -1315,11 +1345,10 @@
         cursor: not-allowed;
     }
     /*
-     * 矢印は広い画面では「入りきらないとき」(`crowded`) だけ。← は前日に番組があるときも (`earlier`)。
+     * 矢印は広い画面では「入りきらないとき」(`crowded`) だけ。
      * 日付のメニューと「今日」は狭い画面だけ
      */
-    .days:not(.crowded) .next,
-    .days:not(.crowded, .earlier) .prev,
+    .days:not(.crowded) :is(.prev, .next),
     .days .date-label,
     .days .today {
         display: none;

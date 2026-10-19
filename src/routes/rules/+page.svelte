@@ -103,45 +103,42 @@
 <Toasts {notices} source={form} />
 
 <div class="rules-page">
-    <div class="toolbar">
-        <div class="chips filters" role="group" aria-label="絞り込み" data-testid="rule-filters">
-            {#each FILTERS as f (f.key)}
-                <button
-                    type="button"
-                    class="filter"
-                    class:active={filter === f.key}
-                    aria-pressed={filter === f.key}
-                    onclick={() => (filter = f.key)}
-                    data-testid="rule-filter-{f.key}"
-                >
-                    {f.label} <span class="num">{data.rules.filter(f.test).length}</span>
-                </button>
-            {/each}
-        </div>
-        <label class="sort small muted">
-            <span class="visually-hidden">並び</span>
-            <select bind:value={sort} data-testid="rule-sort">
-                {#each SORTS as s (s.key)}
-                    <option value={s.key}>{s.label}</option>
+    <!--
+        **上の操作と表の見出しは、巻いても上に残す** (`position: sticky`)。ルールが増えると、
+        下のほうで絞り込みや並びを変えるのに上まで戻ることになる。地はページと同じで枠は付けない。
+        下の線は巻き始めたら出す (ヘッダーと同じ `animation-timeline: scroll()`)
+    -->
+    <div class="top" data-testid="rule-top">
+        <div class="toolbar">
+            <div class="chips filters" role="group" aria-label="絞り込み" data-testid="rule-filters">
+                {#each FILTERS as f (f.key)}
+                    <button
+                        type="button"
+                        class="filter"
+                        class:active={filter === f.key}
+                        aria-pressed={filter === f.key}
+                        onclick={() => (filter = f.key)}
+                        data-testid="rule-filter-{f.key}"
+                    >
+                        {f.label} <span class="num">{data.rules.filter(f.test).length}</span>
+                    </button>
                 {/each}
-            </select>
-        </label>
-        <p class="summary small muted" data-testid="rule-summary">
-            これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた <span class="num">{data.summary.lastWeekRecordings}</span> 本
-        </p>
-        <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->
-        <a class="button small" href={resolve('search')} data-testid="rule-new">ルールを作る</a>
-    </div>
-
-    {#if data.rules.length === 0}
-        <div class="empty" data-testid="rule-empty">
-            <p class="bold">ルールはまだありません</p>
-            <p class="small muted">
-                <a href={resolve('search')}>検索</a>で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
+            </div>
+            <label class="sort small muted">
+                <span class="visually-hidden">並び</span>
+                <select bind:value={sort} data-testid="rule-sort">
+                    {#each SORTS as s (s.key)}
+                        <option value={s.key}>{s.label}</option>
+                    {/each}
+                </select>
+            </label>
+            <p class="summary small muted" data-testid="rule-summary">
+                これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた <span class="num">{data.summary.lastWeekRecordings}</span> 本
             </p>
+            <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->
+            <a class="button small" href={resolve('search')} data-testid="rule-new">ルールを作る</a>
         </div>
-    {:else}
-        <div class="table" data-testid="rule-table">
+        {#if data.rules.length > 0}
             <div class="head row" aria-hidden="true">
                 <div class="cells">
                     <span>ルール</span>
@@ -154,6 +151,18 @@
                 <span></span>
                 <span></span>
             </div>
+        {/if}
+    </div>
+
+    {#if data.rules.length === 0}
+        <div class="empty" data-testid="rule-empty">
+            <p class="bold">ルールはまだありません</p>
+            <p class="small muted">
+                <a href={resolve('search')}>検索</a>で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
+            </p>
+        </div>
+    {:else}
+        <div class="table" data-testid="rule-table">
             {#each paged.rows as rule (rule.id)}
                 <!--
                     **行を押すと検索の画面でそのルールを直す。** スイッチと削除はリンクの外 (隣) に置くので、
@@ -212,8 +221,47 @@
     .rules-page {
         display: flex;
         flex-direction: column;
-        gap: var(--dp-space-3);
         width: 100%;
+    }
+    /*
+     * 巻いても残る上の操作と見出し。ヘッダー (3.5rem) のすぐ下に止める。地はページと同じで、
+     * 本文の余白 (`--dp-gutter`) まで広げて、下を流れる行が横から覗かないようにする
+     */
+    .top {
+        position: sticky;
+        top: 3.5rem;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        gap: var(--dp-space-3);
+        /* 止まったときにヘッダーの線と字がくっつかないよう上に余白。止まる前の位置は負のマージンで変えない */
+        margin: calc(-1 * var(--dp-space-2)) calc(-1 * var(--dp-gutter)) 0;
+        padding: var(--dp-space-2) var(--dp-gutter) var(--dp-space-1);
+        border-bottom: 1px solid transparent;
+        background: var(--dp-bg);
+    }
+    @supports (animation-timeline: scroll()) {
+        .top {
+            animation: top-line linear both;
+            animation-timeline: scroll(root block);
+            animation-range: 0 1rem;
+        }
+    }
+    @keyframes top-line {
+        to {
+            border-bottom-color: var(--dp-line);
+        }
+    }
+    /* ヘッダーを隠す幅 (下のタブ) では画面の上端に止める。ノッチのぶんは内側の余白で避ける */
+    @media (max-width: 639.98px) {
+        .top {
+            top: 0;
+            margin-top: calc(-1 * var(--dp-space-2) - env(safe-area-inset-top));
+            padding-top: calc(var(--dp-space-2) + env(safe-area-inset-top));
+        }
+    }
+    .table {
+        padding-top: var(--dp-space-1);
     }
     .toolbar {
         display: flex;
@@ -367,8 +415,9 @@
      * 条件と最後に録れた日は押した先 (検索の画面の書く欄) で見る
      */
     @media (max-width: 767.98px) {
-        .rules-page {
+        .top {
             gap: var(--dp-space-2);
+            padding-bottom: var(--dp-space-2);
         }
         /* 絞り込みは1行に並べ、はみ出したぶんは横に送る */
         .filters {
