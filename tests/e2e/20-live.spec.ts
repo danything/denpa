@@ -11,6 +11,7 @@ import {
     expect,
     expectSharpCaptions,
     expectSideAligned,
+    expectSideFrame,
     fakeDataBroadcast,
     feedCaption,
     feedData,
@@ -153,6 +154,8 @@ test.describe('ライブ視聴', () => {
             await page.getByTestId('live-channel').first().click();
             await expect(page.getByTestId('live-frame')).toBeVisible();
             await expectSideAligned(page, '[data-testid="live-video"]', '.live-side > :first-child');
+            // 映像の左・映像から種別のタブまで・タブの右の余白が同じ
+            await expectSideFrame(page, '[data-testid="live-video"]', '.live-side > :first-child');
         }
         // MPEG-2 のまま (canvas に描く) でも同じ
         await wakeControls(page, 'live-frame');
@@ -163,6 +166,26 @@ test.describe('ライブ視聴', () => {
             })
             .toBeGreaterThan(10);
         await expectSideAligned(page, '[data-testid="live-raw"]', '.live-side > :first-child');
+    });
+
+    /*
+     * **種別のタブの外枠と、下の一覧の行の面の端がそろう** (広い画面・縦のタブレット・スマホ)。選んでいる行は
+     * 面で塗るので、面の端がタブより外へ出ていると、タブと一覧がずれて見えた
+     */
+    test('種別のタブと下の一覧の端がそろう', async ({ page }) => {
+        for (const size of [
+            { width: 1366, height: 768 },
+            { width: 820, height: 1180 },
+            { width: 390, height: 844 },
+        ]) {
+            await page.setViewportSize(size);
+            await goto(page, '/live');
+            const tabs = (await page.locator('.live-side > .type-tabs').boundingBox())!;
+            const row = (await page.locator('.live-side .channel-item').first().boundingBox())!;
+            const at = `${size.width}px`;
+            expect(Math.abs(tabs.x - row.x), `${at} の左`).toBeLessThanOrEqual(1);
+            expect(Math.abs(tabs.x + tabs.width - (row.x + row.width)), `${at} の右`).toBeLessThanOrEqual(1);
+        }
     });
 
     /*

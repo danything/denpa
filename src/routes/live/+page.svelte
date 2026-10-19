@@ -1080,10 +1080,12 @@
         flex: 1;
         margin: 0 calc(-1 * var(--dp-side-pad, 0px));
         /*
-         * 行は列の端から少し内側 (0.5rem) に置き、行の中の余白 (0.75rem) と足して、
-         * 局名の頭を上のタブや番組の中身の字と同じ位置 (`--dp-side-pad`) にそろえる
+         * **行の面の端は、上の種別のタブの外枠と同じ所** (列の中身の余白 `--dp-side-pad`)。選んでいる行は面で
+         * 塗るので、目に入るのは面の端 — 字の頭をタブにそろえて面だけ外へはみ出させていた頃は、タブより
+         * 行の面が左右に 12px ずつ広く、タブと下の一覧がずれて見えた。巻き取る箱は列の幅いっぱい
+         * (スクロールバーは窓の右端)。E2E (20 の「種別のタブと下の一覧の端がそろう」) で見る
          */
-        padding: 0 max(0px, calc(var(--dp-side-pad, 0px) - 0.75rem)) var(--dp-side-pad, 0);
+        padding: 0 var(--dp-side-pad, 0px) var(--dp-side-pad, 0);
         overflow-y: auto;
     }
     @media (min-width: 768px) {

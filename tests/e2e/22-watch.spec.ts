@@ -5,6 +5,7 @@ import {
     expect,
     expectSharpCaptions,
     expectSideAligned,
+    expectSideFrame,
     FAKE_CAPTION,
     flipSetting,
     goto,
@@ -516,6 +517,8 @@ test.describe('録画を観る', () => {
             '[data-testid="watch-video"]',
             '[data-testid="watch-facts"] > :first-child',
         );
+        // 映像の左・映像から番組名まで・番組名の右の余白が同じ
+        await expectSideFrame(page, '[data-testid="watch-video"]', '[data-testid="watch-facts"] h3');
 
         const side = page.getByTestId('watch-side');
         for (const testid of ['watch-close', 'watch-shot', 'watch-delete']) {

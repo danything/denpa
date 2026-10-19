@@ -6,6 +6,7 @@ import {
     expect,
     expectSharpCaptions,
     expectSideAligned,
+    expectSideFrame,
     feedCaption,
     goto,
     holdCaptions,
@@ -192,6 +193,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
         '[data-testid="chase-video"]',
         '[data-testid="chase-facts"] > :first-child',
     );
+    await expectSideFrame(page, '[data-testid="chase-video"]', '[data-testid="chase-facts"] h3');
     await expect(badges.getByTestId('detail-genre').first()).toHaveText('アニメ／特撮 > 国内アニメ');
     await expect(badges.getByTestId('detail-audio').first()).toBeVisible();
     await page.unroute('/api/programs/*');
