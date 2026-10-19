@@ -83,7 +83,9 @@
         /*
          * **右の列は窓の右端に付けたサイドバー。** `<main>` の余白 (`--dp-gutter`) の外へ
          * 上・右・下にはみ出し、ヘッダーの下 (ヘッダーを隠す画面では窓の上) から窓の下まで届く。
-         * 区切りは左の線 1 本。中身の余白は列の中身が `--dp-side-pad` で取る — 巻き取る箱を
+         * **区切りの線も面の色も付けない** — 地はページと同じで、映像との間は余白 (`--dp-gutter`) だけで分ける
+     * (アンビエントモードでは窓全体の色の上に載る。線と面があると、映像を開いてから色が出るまでの間だけ
+     * 線が見えて、ちらついた)。中身の余白は列の中身が `--dp-side-pad` で取る — 巻き取る箱を
          * 列の幅いっぱいにして、スクロールバーを窓の右端に出すため。
          *
          * 幅は固定で映像側だけ伸びる。**二段組にした直後は細く** (256px)。理由は
@@ -100,9 +102,16 @@
             flex-shrink: 0;
             margin: calc(-1 * var(--dp-gutter, 1.5rem)) calc(-1 * var(--dp-gutter, 1.5rem))
                 calc(-1 * var(--dp-gutter, 1.5rem)) 0;
-            border-left: 1px solid var(--dp-line);
-            background: var(--dp-surface);
         }
+    }
+    /*
+     * **見出しの下の線も付けない** (3画面とも。右の列の線と同じ理由)。スクロールで線と影を濃くする動き
+     * (`+layout.svelte`) も止める — 二段組ではページごとは動かない
+     */
+    :global(body:has([data-player-layout]) .navbar) {
+        border-bottom-color: transparent;
+        box-shadow: none;
+        animation: none;
     }
     @media (min-width: 1024px) {
         .layout > :global(aside) {
@@ -134,8 +143,6 @@
             --dp-side-pad: initial;
             width: auto;
             margin: 0 var(--dp-gutter, 1rem) var(--dp-gutter, 1rem);
-            border-left: 0;
-            background: none;
         }
     }
 </style>

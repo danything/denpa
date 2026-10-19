@@ -150,20 +150,33 @@
         return context.getImageData(0, 0, GLANCE.width, GLANCE.height).data;
     }
 
-    /** 帯の canvas に、前の1枚の上へ次の1枚を `mix` の濃さで重ねて描く */
+    /**
+     * 帯の canvas に、前の1枚から次の1枚へ `mix` だけ進んだ色を描く。**2枚を足し合わせて混ぜる** —
+     * 前の1枚を `1 - mix`、次の1枚を `mix` の濃さで描き、2枚目は重ねずに足す (`lighter`)。canvas は透明度を
+     * 掛けた色で持つので、足すとちょうど 2 枚の間の色になる。
+     *
+     * 前の1枚を濃さ 1 のまま描き、その上に次の1枚を重ねていた頃は、光の薄い所 (縁へ向かって透ける所) で
+     * 2 枚の透明度が重なって入れ替えの間だけ濃くなり、入れ替え終わると元の薄さへ落ちていた。1 秒に 5 回
+     * 入れ替えるので、光が 5 回明滅して見えた (画面に出たコマで、明るさが 31.6 → 37.3 と上がっては落ちていた)
+     */
     function paint(mix: number): void {
         for (const canvas of canvases) {
             const context = canvas?.getContext('2d');
             if (!canvas || !context) continue;
             context.clearRect(0, 0, canvas.width, canvas.height);
+            const blending = coming !== null && mix > 0;
+            context.globalCompositeOperation = 'source-over';
             if (shown !== null) {
-                context.globalAlpha = 1;
+                context.globalAlpha = blending ? 1 - mix : 1;
                 context.drawImage(shown, 0, 0);
             }
-            if (coming !== null && mix > 0) {
+            if (blending && coming !== null) {
+                context.globalCompositeOperation = 'lighter';
                 context.globalAlpha = mix;
                 context.drawImage(coming, 0, 0);
             }
+            context.globalCompositeOperation = 'source-over';
+            context.globalAlpha = 1;
         }
     }
 
@@ -467,23 +480,15 @@
         position: relative;
     }
     /*
-     * **二段組では、見出しと右の列も同じ色の上に載せる** (YouTube と同じ)。右の列の面の色と左の線、見出しの
-     * 地と下の線を外す。字はどれも色の上に直に載るが、色の明るさを抑えてあるので 4.5 以上で読める
-     * (`WASH_LUMINANCE`)。色を敷いていない間 (オフ・まだ1枚も写していない) は今までどおり
+     * **二段組では、見出しも同じ色の上に載せる** (YouTube と同じ)。見出しの地とぼかしを外す。右の列と見出しの
+     * 区切りの線は、色の有る無しに関わらず付けない (`PlayerLayout`)。字はどれも色の上に直に載るが、色の明るさを
+     * 抑えてあるので 4.5 以上で読める (`WASH_LUMINANCE`)
      */
     @media (min-width: 768px) {
-        :global(html[data-ambient] [data-player-layout] > aside) {
-            border-left-color: transparent;
-            background: transparent;
-        }
         :global(html[data-ambient] .navbar) {
-            border-bottom-color: transparent;
             background: transparent;
-            box-shadow: none;
             -webkit-backdrop-filter: none;
             backdrop-filter: none;
-            /* スクロールで線と影を濃くする動き (`+layout.svelte`) も止める。動きの値は上の指定より勝つ */
-            animation: none;
         }
     }
 </style>
