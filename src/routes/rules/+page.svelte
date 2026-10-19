@@ -112,7 +112,7 @@
     スマホ (下のタブがある幅) では画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
 <div class="rules-board">
-    <div class="rules-list">
+    <div class="rules-list" data-testid="rule-list">
         <!-- 狭い画面の集計。広い画面ではサイドバーの「集計」 -->
         <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
             これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた <span class="num">{data.summary.lastWeekRecordings}</span> 本
@@ -255,8 +255,10 @@
 
 <style>
     /*
-     * **広い画面 (1000px から) は一覧と右のサイドバー。** サイドバーは main の余白の外まで出して画面の右端と
-     * ヘッダーの下に付け、一覧を下ろしても見えたまま (検索の「ルールとして保存」と同じ貼り付け方)
+     * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧が自分で巻き取る** (ホームと同じ。
+     * `+layout.svelte` の `FILLED`)。窓はスクロールしない。1000px からは右にサイドバーを置き、画面の右端と
+     * ヘッダーの下に付けて高さいっぱいに伸ばす (中身があふれたときだけサイドバーの中で巻き取る)。
+     * 狭い画面はページごとスクロールする
      */
     .rules-board {
         display: flex;
@@ -269,23 +271,36 @@
     .rules-side {
         display: none;
     }
+    @media (min-width: 768px) {
+        .rules-board {
+            height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
+            margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
+            gap: 0;
+        }
+        .rules-list {
+            flex: 1 1 0%;
+            min-height: 0;
+            overflow-y: auto;
+            padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
+        }
+    }
+    /* 768〜999px は細い帯が一覧の上。帯は動かず、その下の一覧だけが巻き取る */
+    @media (min-width: 768px) and (max-width: 999.98px) {
+        .rules-bar {
+            padding: var(--dp-page-top) var(--dp-gutter) 0;
+        }
+        .rules-list {
+            padding-top: var(--dp-space-3);
+        }
+    }
     @media (min-width: 1000px) {
         .rules-board {
             display: grid;
             grid-template-columns: minmax(0, 1fr) 20rem;
-            align-items: start;
-            gap: var(--dp-gutter);
-            margin-block: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter));
-            margin-inline-end: calc(-1 * var(--dp-gutter));
-        }
-        .rules-list {
-            padding-block: var(--dp-page-top) var(--dp-gutter);
+            grid-template-rows: minmax(0, 1fr);
         }
         .rules-side {
-            position: sticky;
-            top: 3.5rem;
             display: flex;
-            height: calc(100dvh - 3.5rem);
         }
         .rules-bar,
         .narrow-summary {
@@ -308,8 +323,16 @@
     .stats dd {
         color: var(--dp-muted);
     }
+    /*
+     * 「ルールを作る」はサイドバーの下端。低い画面でサイドバーの中身があふれても、下に貼り付けて見えたままにする
+     * (下の余白はサイドバーの余白 (1.5rem) を打ち消して自分で持つ。貼り付く位置もその余白の内側から測られるので同じだけ下げる)
+     */
     .side-foot {
-        padding-inline: 0.75rem;
+        position: sticky;
+        bottom: -1.5rem;
+        margin-bottom: -1.5rem;
+        padding: 1rem 0.75rem 1.5rem;
+        background: var(--dp-bg);
     }
     .side-foot .button {
         width: 100%;
