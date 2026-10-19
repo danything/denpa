@@ -99,9 +99,9 @@ test.describe('局ロゴ', () => {
         // まだ取得できていないのか出し方が悪いのかを見分けるため
         await expect(page.getByTestId('status-logos')).toContainText('局');
         // 局ごとの表にも出る (局ごとに確かめられる)
-        const row = page.locator(`[data-testid="logo-row"][data-service-id="${MX.id}"]`);
+        const row = page.locator(`[data-testid="channel-row"][data-service-id="${MX.id}"]`);
         await expect(row).toHaveAttribute('data-logo', 'have');
-        await expect(row.locator('img')).toBeVisible();
+        await expect(row.getByTestId('logo-zoom-station').locator('img')).toBeVisible();
 
         // 押すと大きく見られる。画素をぼかさずに整数倍で、× で閉じる
         await row.getByRole('button', { name: `${MX.name} のロゴを大きく見る` }).click();
@@ -209,11 +209,11 @@ test.describe('衛星の局ロゴ', () => {
     });
 });
 /**
- * CM検出のために覚えたロゴ (`LearnedLogo.svelte`)。**番組表に出す局ロゴとは別物。**
+ * CM検出のために覚えたロゴ (受信できるチャンネルの表の「CMロゴ」の列)。**番組表に出す局ロゴとは別物。**
  *
  * 覚えるのは録画をエンコードするときで、偽 ffmpeg では覚えられないので、覚えたものは
  * 本物と同じ形式で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局の行に
- * 画像と「覚え直す」が開かずに出ていること、押すと消えて済んだ色で知らせること
+ * 画像が開かずに出ていること、押すと大きく見られ、窓の中の「覚え直す」で消すと済んだ色で知らせること
  */
 test.describe('CM検出のロゴ', () => {
     test('覚えた局の行に画像を出し、「覚え直す」で消すと済んだ通知で出る', async ({
@@ -247,19 +247,42 @@ test.describe('CM検出のロゴ', () => {
         // 数の行に「CMロゴ n / m 局」
         await expect(page.getByTestId('status-cm-logos')).toContainText('局');
         // 局ごとの表の、その局の行に出る。開け閉めは無い
-        const station = page.locator(`[data-testid="logo-row"][data-service-id="${BS11.id}"]`);
+        const station = page.locator(`[data-testid="channel-row"][data-service-id="${BS11.id}"]`);
         const thumb = station.getByTestId('logo-zoom-cm');
         await expect(thumb).toBeVisible();
         // 画像として読めていること (壊れた PNG だと幅が 0 になる)
         await expect
             .poll(() => thumb.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth))
             .toBe(40);
-        // 列の見出しが「CMロゴ」なので、セルの中では名乗らない
-        await expect(station.getByTestId('learned-logo')).not.toContainText('CM');
+        // 列の見出しが「CMロゴ」なので、セルの中では名乗らない。「覚え直す」は窓の中だけ (行を低く保つ)
+        const cmCell = station.locator('td.logo-col').nth(1);
+        await expect(cmCell).toHaveText('');
+        await expect(station.getByRole('button', { name: '覚え直す' })).toHaveCount(0);
         // 覚えていない局には何も出さない (「まだ」とも書かない)
-        const other = page.locator(`[data-testid="logo-row"][data-service-id="${MX.id}"]`);
-        await expect(other.getByTestId('learned-logo')).toHaveCount(0);
-        await expect(other.locator('td').last()).toHaveText('');
+        const other = page.locator(`[data-testid="channel-row"][data-service-id="${MX.id}"]`);
+        await expect(other.getByTestId('logo-zoom-cm')).toHaveCount(0);
+        await expect(other.locator('td.logo-col').nth(1)).toHaveText('');
+
+        /*
+         * **狭い幅ではロゴの列をたたみ、局名の前に出す。** 列のまま 6 つ並べると、表が横にはみ出す。
+         * 押せば同じ窓が開く
+         */
+        const viewport = page.viewportSize();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(station.locator('td.logo-col').first()).toBeHidden();
+        const inline = station.getByRole('button', { name: `${BS11.name} のCMロゴを大きく見る` });
+        await expect(inline).toBeVisible();
+        const wrap = page
+            .getByTestId('channel-list')
+            .locator('xpath=ancestor::div[contains(@class, "table-wrap")]');
+        await expect
+            .poll(() => wrap.evaluate((element) => element.scrollWidth - element.clientWidth))
+            .toBeLessThanOrEqual(1);
+        await inline.click();
+        await expect(page.getByTestId('logo-zoom')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.getByTestId('logo-zoom')).toBeHidden();
+        if (viewport !== null) await page.setViewportSize(viewport);
 
         /*
          * 押すと大きく見られる。白い縁だけの画像なので、暗い地に画素をぼかさず整数倍で。
@@ -282,7 +305,7 @@ test.describe('CM検出のロゴ', () => {
         await page.mouse.click(5, 5);
         await expect(zoom).toBeHidden();
 
-        // 窓の中からも「覚え直す」。消えたら窓も閉じる
+        // 窓の中の「覚え直す」。消えたら窓も閉じる
         await thumb.click();
         await zoom.getByRole('button', { name: '覚え直す' }).click();
         await expect(zoom).toBeHidden();
@@ -291,7 +314,7 @@ test.describe('CM検出のロゴ', () => {
         await expect(done).toContainText('覚えたロゴを消しました');
         await expect(done).toHaveClass(/\bsuccess\b/);
         await expect(page.getByTestId('tuner-error')).toHaveCount(0);
-        await expect(station.getByTestId('learned-logo')).toHaveCount(0);
+        await expect(station.getByTestId('logo-zoom-cm')).toHaveCount(0);
         expect(existsSync(repo)).toBe(false);
         expect((await request.get(`/api/services/${BS11.id}/logo-data`)).status()).toBe(404);
     });

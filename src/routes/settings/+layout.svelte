@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onDestroy } from 'svelte';
-    import { SETTINGS_GROUPS } from '#lib/settings-sections.js';
-    import { afterNavigate } from '$app/navigation';
+    import { SECTION_ALIASES, SETTINGS_GROUPS } from '#lib/settings-sections.js';
+    import { afterNavigate, replaceState } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
     import ArrowLeft from '~icons/lucide/arrow-left';
@@ -34,8 +34,16 @@
      * `#<節>` 付きで来たらその節へ (飛ぶ途中を見せても意味が無いので、ここは滑らかにしない)
      */
     afterNavigate(({ from, to }) => {
-        if (main === undefined || from?.url.pathname === to?.url.pathname) return;
-        const hash = decodeURIComponent(to?.url.hash.slice(1) ?? '');
+        if (main === undefined) return;
+        let hash = decodeURIComponent(to?.url.hash.slice(1) ?? '');
+        // なくなった節 (`#logos`) で来たら、入った先の節へ。URL も書き換えて、そのまま共有されても迷わせない
+        const alias = Object.hasOwn(SECTION_ALIASES, hash) ? SECTION_ALIASES[hash] : undefined;
+        if (alias !== undefined) {
+            hash = alias;
+            replaceState(`#${alias}`, page.state);
+        } else if (from?.url.pathname === to?.url.pathname) {
+            return;
+        }
         const target = hash === '' ? null : document.getElementById(hash);
         if (target === null) {
             main.scrollTop = 0;

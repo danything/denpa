@@ -98,7 +98,7 @@ export async function load() {
         tuners: answer
             .then((got) => ({ list: withLabels(got.tuners), error: null as string | null }))
             .catch((error: unknown) => ({ list: [], error: String(error) })),
-        // チューナーを譲り合う順。「チューナーの空き」の「詳しく」に出す
+        // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
         yieldOrder: yieldOrder(),
         card: cardStatus(),
     };
@@ -122,34 +122,45 @@ export const actions = {
         }
 
         /*
-         * 消す行は「×」の 2 回目 (`delete` にその行の番号)。足すための空の行は `new` に番号が来る。
+         * 消す行は「⋯」の中の「削除」の 2 回目 (`delete` にその行の番号)。
          * **名前を空にしても消さない** — その場で保存するので、欄を空にして離れただけで
          * チューナーが消えていた。空の名前は断り、画面は元の名前に戻す (`autosave`)
+         *
+         * **足す欄は番号の代わりに `add` を入れた名前 (`name.add` `type.add.GR` …) にし、「追加」のボタン (`add`) で送ったときだけ読む。**
+         * 同じフォームなので、ほかの行を変えたときの保存にも一緒に乗ってくる。番号付きの名前にしていた頃は、
+         * 名前だけ打った途中でほかの行を切り替えると、その行まで断られて保存されなかった
          */
         const drop = form.get('delete') === null ? null : Number(form.get('delete'));
-        const added = form.get('new') === null ? null : Number(form.get('new'));
-        const tuners: TunerConfig[] = [];
-        for (const index of [...rows].sort((a, b) => a - b)) {
-            const name = String(form.get(`name.${index}`) ?? '').trim();
-            if (index === drop) continue;
-            if (name === '') {
-                if (index === added) continue;
-                return fail(400, { message: '名前は空にできません' });
-            }
+        // 行の欄を読む。`type.GR` なら `type.<番号>.GR`
+        const slot = (at: number | 'add') => (field: string) => {
+            const [head, ...rest] = field.split('.');
+            return form.get([head, at, ...rest].join('.'));
+        };
+        const sources = [...rows]
+            .sort((a, b) => a - b)
+            .filter((index) => index !== drop)
+            .map((index) => slot(index));
+        if (form.get('add') !== null) sources.push(slot('add'));
 
-            const types = CHANNEL_TYPES.filter((type) => form.get(`type.${index}.${type}`) !== null);
+        const tuners: TunerConfig[] = [];
+        for (const get of sources) {
+            const name = String(get('name') ?? '').trim();
+            if (name === '') return fail(400, { message: '名前は空にできません' });
+
+            const types = CHANNEL_TYPES.filter((type) => get(`type.${type}`) !== null);
             if (types.length === 0) {
                 return fail(400, { message: `${name}: 受信できる種別を1つ以上選んでください` });
             }
-            const device = String(form.get(`device.${index}`) ?? '').trim();
+            const device = String(get('device') ?? '').trim();
             if (device === '') return fail(400, { message: `${name}: デバイスのパスを入れてください` });
 
             tuners.push({
                 name,
                 types,
                 device,
-                lnb: String(form.get(`lnb.${index}`) ?? '').trim() || null,
-                disabled: form.get(`disabled.${index}`) !== null,
+                lnb: String(get('lnb') ?? '').trim() || null,
+                // スイッチは「使う」。外れていれば送られてこない (足す欄は隠し欄でいつも使う)
+                disabled: get('use') === null,
             });
         }
 

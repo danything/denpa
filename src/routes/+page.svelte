@@ -35,6 +35,7 @@
         dayName,
         type Filter,
         lineIndex,
+        mergeRecorded,
         passes,
         sections,
         type Traits,
@@ -269,8 +270,11 @@
         return Date.now();
     });
 
+    /** 終わった予約と、それで録れた録画を 1 本に (`mergeRecorded`)。録画の行が代わりに立つ */
+    const merged = $derived(mergeRecorded(data.reservations, data.recordings, clock));
+
     const items = $derived<Item[]>([
-        ...data.reservations.map(
+        ...merged.reservations.map(
             (res): Item => ({
                 kind: 'res',
                 key: `res-${res.id}`,
@@ -289,7 +293,8 @@
                 zone: 'past',
                 group: rec.group_key,
                 groupName: rec.group_name,
-                rec,
+                // 予約にしか無かった副題は予約の名前で (`mergeRecorded` の `names`)
+                rec: merged.names.has(rec.id) ? { ...rec, name: merged.names.get(rec.id) ?? rec.name } : rec,
             }),
         ),
         ...data.missed.map(

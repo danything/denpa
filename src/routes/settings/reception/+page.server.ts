@@ -4,7 +4,7 @@ import * as logos from './logos.server';
 import * as tuners from './tuners.server';
 
 /**
- * 受信。チューナー・チャンネル・ロゴ・データ放送の節を1つの画面に積む。
+ * 受信。チューナー・チャンネル (局ロゴ・CMロゴも)・データ放送の節を1つの画面に積む。
  * 読み込みと保存 (actions) は節ごとのファイルが持ち、ここでまとめる。
  * 返す値の名前と action の名前は節どうしで重ならない
  */

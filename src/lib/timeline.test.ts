@@ -5,6 +5,7 @@ import {
     dayName,
     dayStart,
     lineIndex,
+    mergeRecorded,
     passes,
     sections,
     type TimelineItem,
@@ -191,5 +192,60 @@ describe('日付の呼び名', () => {
         expect(dayName(NOW + 13 * H, NOW)).toBe('明日');
         expect(dayName(NOW - 13 * H, NOW)).toBe('昨日');
         expect(dayName(NOW - 40 * H, NOW)).toBeNull();
+    });
+});
+
+describe('終わった予約と録画をまとめる', () => {
+    const res = (id: number, program: number | null, end: number, state = 'done', name = `番組${id}`) => ({
+        id,
+        program_id: program,
+        end_at: end,
+        state,
+        name,
+    });
+    const rec = (id: number, reservation: number | null, program: number | null, name = `番組${id}`) => ({
+        id,
+        reservation_id: reservation,
+        program_id: program,
+        name,
+    });
+
+    test('録画が見つかる終わった予約は出さない (予約の ID でも、予約を持たない録画の番組でも)', () => {
+        const { reservations } = mergeRecorded(
+            [res(1, 10, NOW - H), res(2, 20, NOW - H), res(3, 30, NOW - H, 'canceled')],
+            [rec(100, 1, 10), rec(101, null, 20)],
+            NOW,
+        );
+        // 録画の無い予約 (取消) だけが残る
+        expect(reservations.map((r) => r.id)).toEqual([3]);
+    });
+
+    test('録画が一覧に無くても (消した録画)、録画のあった予約は出さない', () => {
+        const { reservations } = mergeRecorded(
+            [{ ...res(1, 10, NOW - H), recorded: true }, res(2, 20, NOW - H, 'canceled')],
+            [],
+            NOW,
+        );
+        expect(reservations.map((r) => r.id)).toEqual([2]);
+    });
+
+    test('これからの予約と録画中の予約は、録画があっても残す', () => {
+        const { reservations } = mergeRecorded(
+            [res(1, 10, NOW + H, 'scheduled'), res(2, 20, NOW - H, 'recording')],
+            [rec(100, 1, 10), rec(101, 2, 20)],
+            NOW,
+        );
+        expect(reservations.map((r) => r.id)).toEqual([1, 2]);
+    });
+
+    test('録画の名前に無い副題は予約の名前から持ってくる', () => {
+        const { names } = mergeRecorded(
+            [res(1, 10, NOW - H, 'done', '魔法少女 #3「エルマ」'), res(2, 20, NOW - H, 'done', '別の名前')],
+            [rec(100, 1, 10, '魔法少女'), rec(101, 2, 20, 'まったく違う')],
+            NOW,
+        );
+        expect(names.get(100)).toBe('魔法少女 #3「エルマ」');
+        // 片方がもう片方を含まないときは録画の名前のまま
+        expect(names.has(101)).toBe(false);
     });
 });

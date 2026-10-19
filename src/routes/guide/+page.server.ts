@@ -163,6 +163,8 @@ function readGrid(type: ChannelType, start: number, end: number) {
 const STRIP_DAYS = 8;
 /** 番組表が1週間より先まで届いていても、並べるのはここまで */
 const STRIP_MAX_DAYS = 15;
+/** 前の日を並べるのはここまで (番組表は録り終えた番組もしばらく残る) */
+const STRIP_PAST_DAYS = 7;
 
 /** その放送日から `n` 日ずらした放送日の 4:00。夏時間のある地域でも日で数える */
 function shiftDay(start: number, n: number): number {
@@ -190,9 +192,10 @@ function hasPrograms(type: ChannelType, start: number): boolean {
 }
 
 /**
- * 日付の並び (今日から)。**番組の無い日も並べて、押せなくする** (並びの幅が日によって変わらない)。
+ * 日付の並び。**番組の無い日も並べて、押せなくする** (並びの幅が日によって変わらない)。
  * 届いている最後の日が1週間より先なら、そこまで伸ばす。
- * `earlier` は前日に番組があるか (広い画面で「←」を出すかどうか)
+ * **前の日も、番組が残っている日だけ今日の左に並べる** (遡るのは番組の無い日に当たるまで。`STRIP_PAST_DAYS` 日まで)。
+ * 「←」1つで前の日へ送るより、どこまで戻れるかが見える
  */
 function daysOf(type: ChannelType, today: number) {
     const days = Array.from({ length: STRIP_DAYS }, (_, i) => {
@@ -205,7 +208,12 @@ function daysOf(type: ChannelType, today: number) {
         if (!hasPrograms(type, start)) break;
         days.push({ start, has: true });
     }
-    return { days, earlier: hasPrograms(type, shiftDay(today, -1)) };
+    for (let back = 1; back <= STRIP_PAST_DAYS; back++) {
+        const start = shiftDay(today, -back);
+        if (!hasPrograms(type, start)) break;
+        days.unshift({ start, has: true });
+    }
+    return days;
 }
 
 /**
@@ -236,7 +244,7 @@ export function load({ url, cookies }) {
         /** 今日の放送日の 4:00。日付の並びの先頭 */
         today,
         /** 日付の並び (`daysOf`)。索引を引くだけなので、表を待たずに描ける */
-        ...daysOf(type, today),
+        days: daysOf(type, today),
         // 詳細の「視聴」を出すかどうか。決め方はライブ画面と揃えてある (watchableServices)
         watchable: watchableServices(Date.now()),
         /** サブチャンネルも出すか (`#lib/subchannels.ts`)。端末ごとに覚える */

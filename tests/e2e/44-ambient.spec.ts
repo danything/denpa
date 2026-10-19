@@ -67,17 +67,12 @@ test.describe('アンビエントモード', () => {
                 const header = style('.navbar');
                 return [
                     aside.backgroundColor,
-                    aside.borderLeftColor,
+                    aside.borderLeftWidth,
                     header.backgroundColor,
                     header.borderBottomColor,
                 ];
             });
-            expect(surfaces).toEqual([
-                'rgba(0, 0, 0, 0)',
-                'rgba(0, 0, 0, 0)',
-                'rgba(0, 0, 0, 0)',
-                'rgba(0, 0, 0, 0)',
-            ]);
+            expect(surfaces).toEqual(['rgba(0, 0, 0, 0)', '0px', 'rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)']);
             // 色は見出しの所 (窓の上の端) まで敷く
             expect((await glow.boundingBox())!.y).toBeLessThanOrEqual(0);
             // 光は枠の外 (帯) にだけ描く。枠に重なる帯は無い
@@ -108,6 +103,12 @@ test.describe('アンビエントモード', () => {
             await expect(glow).toHaveAttribute('data-plan', 'off');
             await expect(glow).toBeHidden();
             await expect(page.locator('html')).not.toHaveAttribute('data-ambient');
+            // オフでも区切りの線は出さない (色が出るまでの間に線がちらつかないように)
+            const lines = await page.evaluate(() => [
+                getComputedStyle(document.querySelector('[data-player-layout] > aside')!).borderLeftWidth,
+                getComputedStyle(document.querySelector('.navbar')!).borderBottomColor,
+            ]);
+            expect(lines).toEqual(['0px', 'rgba(0, 0, 0, 0)']);
             await page.reload();
             await expect(page.getByTestId('live-frame-ambient')).toHaveAttribute('data-plan', 'off');
             expect(await page.evaluate(() => localStorage.getItem('player-ambient'))).toBe('0');
