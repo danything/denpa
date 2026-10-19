@@ -633,13 +633,12 @@ test.describe('録画を観る', () => {
 });
 
 /**
- * **スマホの縦で、全画面をやめて観る。** 枠は 390x224 しか無い (画面の端から端まで。
+ * **スマホの縦で、全画面をやめて観る。** 枠は 390x219 (画面の端から端まで、ちょうど 16:9。
  * 余白の内側に置いていた頃は 358x224)。
  *
  * 48px の押すものを全部並べていた頃は、操作バーが折れて映像を覆い、右の縦列 (閉じる・
  * 切り抜き・削除) がシークバーや再生ボタンに重なっていた (実機の報告)。狭い枠では
- * 40px に縮め、毎回は使わないもの (速さなど) を再生の設定 (⚙) に畳み、右の列を右上の
- * 一行に寝かせる (`PlayerStage`)
+ * 40px に縮め、毎回は使わないもの (速さなど) を再生の設定 (⚙) に畳む (`PlayerStage`)
  */
 test.describe('スマホの縦で観る', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
@@ -692,14 +691,18 @@ test.describe('スマホの縦で観る', () => {
         // **映像は画面の端から端まで** (余白の内側に置くと 358px に縮み、周りに縁が出る)
         expect(shape.枠).toEqual({ left: 0, width: 390 });
         /*
-         * **下の操作バーは映像の下 (枠の外) に出す** (`PlayerStage` の `under`)。390x219 の映像に
-         * 重ねていた頃は映像の半分を覆い、字幕に時刻が重なっていた。字幕の面も映像の中に収まる
+         * **枠はちょうど映像の形 (16:9) で、操作バーは映像に重ねる** (`PlayerStage` の `narrow`)。
+         * 以前は映像の下に段を足して操作バーを出しっぱなしにしていたが、枠が映像より高くなり、
+         * 映像の下に操作バーの段がいつも残って見えた。いまは触らなければ引っ込む。字幕の面も映像の中に収まる
          */
-        await expect(stage).toHaveAttribute('data-under', '');
+        await expect(stage).toHaveAttribute('data-narrow', '');
+        const frame = (await stage.boundingBox())!;
         const picture = (await page.getByTestId('watch-video').boundingBox())!;
         const strip = (await bar.boundingBox())!;
-        expect(strip.y).toBeGreaterThanOrEqual(picture.y + picture.height - 1);
+        expect(Math.round(frame.height)).toBe(Math.round((390 * 9) / 16));
         expect(Math.round(picture.height)).toBe(Math.round((390 * 9) / 16));
+        expect(strip.y + strip.height).toBeLessThanOrEqual(frame.y + frame.height + 1);
+
         const captions = (await page.getByTestId('watch-captions-canvas').boundingBox())!;
         expect(captions.y + captions.height).toBeLessThanOrEqual(picture.y + picture.height + 1);
         // 押すものは一段 (40px)。折れると倍になる
@@ -709,6 +712,8 @@ test.describe('スマホの縦で観る', () => {
 
         // 速さは畳まれていて、⚙ の頭の「再生の速さ」の行から選ぶ
         await expect(page.getByTestId('watch-speed')).toBeHidden();
+        // 操作バーは引っ込んでいることがある (映像に重ねるので)。起こしてから押す
+        await wakeControls(page, 'watch-stage');
         await page.getByTestId('watch-settings').tap();
         const pace = page.getByTestId('watch-pace');
         await expect(pace).toContainText('×1');
@@ -735,10 +740,12 @@ test.describe('スマホの縦で観る', () => {
         // 操作バーの速さのボタン (畳まれている) にも同じ値が出る
         await expect(page.getByTestId('watch-speed')).toHaveText('1.5');
 
-        // 映像を覆わないので、操作バーは放っておいても引っ込まない
+        // 映像に重ねるので、放っておけば引っ込む (ほかの枠と同じ)。押せばまた出る
         await expect(bar).toHaveAttribute('data-shown', 'false', { timeout: 6000 });
-        expect(await bar.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
-        await expect(page.getByTestId('watch-settings')).toBeVisible();
+        await expect.poll(() => bar.evaluate((el) => getComputedStyle(el).opacity)).toBe('0');
+        const again = (await stage.boundingBox())!;
+        await page.touchscreen.tap(again.x + again.width / 2, again.y + again.height / 2);
+        await expect(bar).toHaveAttribute('data-shown', 'true');
     });
 
     /*
@@ -756,7 +763,7 @@ test.describe('スマホの縦で観る', () => {
             await page.setViewportSize({ width, height: 780 });
             await goto(page, `/watch/${id}`);
             await leaveFullscreen(page);
-            await expect(page.getByTestId('watch-stage')).toHaveAttribute('data-under', '');
+            await expect(page.getByTestId('watch-stage')).toHaveAttribute('data-narrow', '');
             await expect(page.getByTestId('watch-play')).toBeVisible();
 
             expect(await oneRowTroubles(page, 'watch-buttons'), `${width}px`).toEqual([]);
@@ -770,6 +777,8 @@ test.describe('スマホの縦で観る', () => {
             await expect(sound).toBeHidden();
             await expect(page.getByTestId('watch-more')).toHaveCount(0);
             const label = (await sound.getAttribute('aria-label')) ?? '';
+            // 操作バーは引っ込んでいることがある (映像に重ねるので)。起こしてから押す
+            await wakeControls(page, 'watch-stage');
             await page.getByTestId('watch-settings').tap();
             const mute = page.getByTestId('watch-mute');
             await expect(mute).toBeVisible();

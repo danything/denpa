@@ -12,6 +12,7 @@ import {
     oneRowTroubles,
     syncEpg,
     test,
+    wakeControls,
 } from './helpers';
 
 /**
@@ -121,7 +122,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
         await goto(tab, `/chase/${id}`);
         await expect(tab.getByTestId('chase-play')).toBeVisible();
         await leaveFullscreen(tab);
-        await expect(tab.getByTestId('chase')).toHaveAttribute('data-under', '');
+        await expect(tab.getByTestId('chase')).toHaveAttribute('data-narrow', '');
 
         expect(await oneRowTroubles(tab, 'chase-buttons'), `${width}px`).toEqual([]);
         await expect(tab.getByTestId('chase-edge')).toBeVisible();
@@ -133,6 +134,7 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
         await expect(sound).toBeHidden();
         await expect(tab.getByTestId('chase-more')).toHaveCount(0);
         const label = (await sound.getAttribute('aria-label')) ?? '';
+        await wakeControls(tab, 'chase');
         await tab.getByTestId('chase-settings').tap();
         const mute = tab.getByTestId('chase-mute');
         await expect(mute).toBeVisible();

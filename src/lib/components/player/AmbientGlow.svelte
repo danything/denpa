@@ -49,8 +49,6 @@
      *   **CSS の `filter: blur` は使わない** — ぼかしが画面の大きさになり、GPU の無い端末では重かった
      * - **前の色から次の色へ `FADE` (200ms) かけて 4 段で入れ替える** (`ease`)。色は時定数 250ms でならし (`follow`)、場面が変わったときだけすぐ切り替える。
      *   CSS で透明度を動かすと毎フレーム合成し直すので、段は canvas に描く
-     * - **縦に積んで操作バーを映像の下に出しているとき (`data-under`)** は、操作バーの段にも色を敷く。
-     *   枠の黒い地は映像の所だけにし、操作バーは薄い暗幕 (`ControlBar`) の上に載る
      * - **色は枠に重ならない4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ1枚を切り出す。
      *   枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろまで合成し直すことになる
      * - 範囲は、二段組では窓全体、縦に積むときは `<main>` の縦の範囲と窓の横幅で切る (`region`)。
@@ -300,13 +298,7 @@
         const frame = target.closest<HTMLElement>('[data-player-layout]');
         const measure = () => {
             const rect = target.getBoundingClientRect();
-            /*
-             * **操作バーを映像の下に出している間 (`data-under`) は、映像の所だけを枠とみなす。** 色は映像の
-             * 下の端から敷き、操作バーの下にも流す (操作バーは色の上に透けて載る。下の style)
-             */
-            const s = target.hasAttribute('data-under')
-                ? new DOMRect(rect.left, rect.top, rect.width, (rect.width * 9) / 16)
-                : rect;
+            const s = rect;
             const m = main.getBoundingClientRect();
             /*
              * 二段組は**窓全体** (見出しと右の列の下にも敷き、窓の端へ向かって薄くする)。
