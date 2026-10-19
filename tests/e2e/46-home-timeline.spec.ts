@@ -302,6 +302,37 @@ test.describe('ホームの1本の一覧', () => {
     });
 
     /*
+     * **途中まで観た録画には、ポスターの下端に観たぶんのバーが見える** (4px。地は暗く透かし、観たぶんを主の色で)。
+     * 3px の白く透かしたバーは明るいポスターや行の地に溶けて、無いように見えていた
+     */
+    test('途中まで観た録画は、ポスターの下端に観たぶんのバーが見える', async ({ page, stack }) => {
+        const now = Date.now();
+        const at = new Date(2098, 5, 1, 21, 0).getTime();
+        sqlite(
+            `${stack.root}/denpa.db`,
+            `db.run("INSERT INTO recordings (service_id, service_name, name, series, start_at, end_at, finished_at, library_path, duration_ms, resume_ms, created_at, updated_at) VALUES (211, 'BS11', '続き試験', '続き試験', ${at}, ${at + 1800000}, ${at + 1800000}, '/media/encoded/seed/r.mkv', 1800000, 660000, ${now}, ${now})");`,
+        );
+        try {
+            await page.setViewportSize({ width: 1366, height: 768 });
+            await goto(page, '/');
+            const row = rows(page).filter({ hasText: '続き試験' });
+            await row.scrollIntoViewIfNeeded();
+            const bar = row.getByTestId('resume');
+            await expect(bar).toBeVisible();
+            const track = (await bar.boundingBox())!;
+            const fill = (await bar.locator('.resume-fill').boundingBox())!;
+            expect(track.height).toBeGreaterThanOrEqual(3);
+            // 30 分のうち 11 分観た = 4 割ほど埋まっている
+            expect(fill.width).toBeGreaterThan(0);
+            expect(fill.width / track.width).toBeGreaterThan(0.3);
+            expect(fill.width / track.width).toBeLessThan(0.5);
+            await expect(row.locator('.row-meta')).toContainText('残り');
+        } finally {
+            sqlite(`${stack.root}/denpa.db`, `db.run("DELETE FROM recordings WHERE name = '続き試験'");`);
+        }
+    });
+
+    /*
      * **指で押す端末は行を高くする。** 低い行は押したつもりの隣が開いた。行は 72px 以上、
      * 行の操作は 44px 四方以上。タブレットの縦でも右に欄は出さず、同じ形の行
      */

@@ -515,16 +515,25 @@
 .board .playable:hover .t-play {
     opacity: 1;
 }
-/* 途中まで観たもの。ポスターの下端に敷く細いバー (YouTube と同じ置き方) */
+/*
+ * **途中まで観たもの。** ポスターの下端に重ねる 4px のバー (YouTube と同じ置き方)。地は暗く透かし、観たぶんを主の色で。
+ * 観たぶん (`.resume-fill`) が中身の無い `<span>` のままで幅が付かず、地だけの 3px の白い線になっていた。
+ * ポスターの無い録画は枠の下端に同じものが出る。エンコードの進みは行の下端いっぱい (`.row-bar`) なので重ならない
+ */
 .board .t-resume {
+    display: block;
     position: absolute;
     inset-inline: 0;
     bottom: 0;
-    height: 0.1875rem;
-    background: rgb(255 255 255 / 0.35);
+    z-index: 1;
+    height: 0.25rem;
+    background: rgb(0 0 0 / 0.55);
 }
+/* 中身の無い `<span>` なので、ブロックにしないと幅も高さも付かない (観たぶんが描かれていなかった本当の理由) */
 .board .t-resume .resume-fill {
+    display: block;
     height: 100%;
+    min-width: 0.25rem;
     background: var(--pico-primary-background);
 }
 .board .t-rule a {
