@@ -172,7 +172,7 @@ test.describe('OIDC でのログイン', () => {
     });
 
     /*
-     * **設定の「一般」の「ほかの端末からもログアウト」。** いまの控えだけ残して、ほかは消す。
+     * **設定の「その他」の「ほかの端末からもログアウト」。** いまの控えだけ残して、ほかは消す。
      * 一式はワーカーで共有しているので、ほかのテストの控えも一緒に消える (数は決め打ちしない)
      */
     test('ほかの端末からもログアウトすると、ほかの端末だけ入り直しになる', async ({ oidc }) => {
@@ -208,7 +208,7 @@ test.describe('OIDC でのログイン', () => {
         expect((await mine('/')).res.status).toBe(200);
     });
 
-    test('素通しで入っていれば、一般にはログアウトを出さない', async ({ oidc }) => {
+    test('素通しで入っていれば、その他にはログアウトを出さない', async ({ oidc }) => {
         const get = client(oidc, { xff: INSIDE });
         const { res } = await get('/settings/general');
         expect(res.status).toBe(200);

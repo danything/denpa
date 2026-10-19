@@ -3,7 +3,7 @@ import { config } from '#lib/server/config.js';
 import { COOKIE, countOthers, destroyOthers, find } from '#lib/server/session.js';
 
 /**
- * 一般。この端末だけの設定 (画面で読み書きするのでサーバは何もしない)・ログイン・バージョン。
+ * その他。この端末だけの設定 (画面で読み書きするのでサーバは何もしない)・ログイン・バージョン。
  *
  * **ログアウトはログインの控え (Cookie) で入っているときだけ出す。** 素通し (LAN) には控えが無く、
  * 切るものも無い。アクセストークン (テレビのアプリ) で画面を開くことは無いが、
