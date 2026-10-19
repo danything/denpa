@@ -832,6 +832,13 @@
         .shell:has(.tabbar) main {
             --dp-page-top: 0.5rem;
         }
+        /*
+         * **映像の画面 (`PlayerLayout`) は空けない。** 映像を上の安全域のすぐ下から始める。0.5rem 空けると、
+         * 縦のスマホで映像の上に暗い帯が見えた (映像は左右も端まで出している。`PlayerStage`)
+         */
+        .shell:has(.tabbar) main:has(:global([data-player-layout])) {
+            --dp-page-top: 0rem;
+        }
         .shell:has(.tabbar) main {
             padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
         }

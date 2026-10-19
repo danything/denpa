@@ -476,7 +476,7 @@ export function vivid(data: Uint8ClampedArray, theme: 'dark' | 'light'): void {
  */
 export const WASH_LUMINANCE = { dark: 0.035, light: 0.75 } as const;
 
-type Rgb = [number, number, number];
+export type Rgb = [number, number, number];
 
 function linear(channel: number): number {
     const c = channel / 255;
@@ -534,4 +534,64 @@ export function toneFrame(
             data[i + 3] = data[i + 3]! * Math.min(1, chroma * 2.5);
         }
     }
+}
+
+/** 明るいテーマで帯を地に掛ける濃さ (`AmbientGlow.svelte` の `.band` の `opacity`。変えるときは両方) */
+export const LIGHT_OPACITY = 0.6;
+
+/**
+ * **ページの上の端に見える色。** ブラウザの枠の色 (`theme-color`) にして、枠とすぐ下の画素をつなげる。
+ *
+ * 光の canvas (`glowPixels` が出したもの、幅 `width`) のいちばん上の行を透明度で重みを付けて平均し、地
+ * (`background`) にページと同じ描き方で重ねる — 暗いテーマはそのまま重ね、明るいテーマは `multiply` を
+ * `LIGHT_OPACITY` の濃さで掛ける。枠の色は1色なので、横は平均する。
+ * 縦に積むときは上の端が映像の上の縁になるので、その縁の色を延ばした色になる
+ */
+export function washTop(
+    pixels: ArrayLike<number>,
+    width: number,
+    background: Rgb,
+    theme: 'dark' | 'light',
+): Rgb {
+    const sum = [0, 0, 0];
+    let cover = 0;
+    for (let x = 0; x < width; x++) {
+        const alpha = pixels[x * 4 + 3]! / 255;
+        for (let c = 0; c < 3; c++) sum[c]! += pixels[x * 4 + c]! * alpha;
+        cover += alpha;
+    }
+    const n = Math.max(1, width);
+    const a = cover / n;
+    return background.map((bg, c) => {
+        const p = sum[c]! / n;
+        const out =
+            theme === 'dark'
+                ? p + bg * (1 - a)
+                : bg * (1 - LIGHT_OPACITY * a) + (LIGHT_OPACITY * bg * p) / 255;
+        return Math.round(Math.min(255, Math.max(0, out)));
+    }) as Rgb;
+}
+
+/**
+ * **枠の色を変えるほどの違い** (各色 0〜255 の差のいちばん大きいもの)。これより小さければ変えない —
+ * 枠の色を書き換えるとブラウザが枠を描き直すので、見て分からない違いでは触らない
+ */
+export const TOOLBAR_STEP = 3;
+
+/** 2色の違い (各色の差のいちばん大きいもの) */
+export function colorStep(a: Rgb, b: Rgb): number {
+    return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+}
+
+/** `#rrggbb` を色に。読めなければ null */
+export function fromHex(text: string): Rgb | null {
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(text.trim());
+    return m === null
+        ? null
+        : [Number.parseInt(m[1]!, 16), Number.parseInt(m[2]!, 16), Number.parseInt(m[3]!, 16)];
+}
+
+/** 色を `#rrggbb` に */
+export function toHex(color: Rgb): string {
+    return `#${color.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }

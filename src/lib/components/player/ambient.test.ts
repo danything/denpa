@@ -4,15 +4,18 @@ import {
     blurPixels,
     boxRadius,
     changed,
+    colorStep,
     ease,
     edgeExtend,
     falloff,
     farthest,
     follow,
     frameDelta,
+    fromHex,
     GLANCE,
     glowLayout,
     glowPixels,
+    LIGHT_OPACITY,
     luminance,
     plan,
     reach,
@@ -21,9 +24,11 @@ import {
     STILL,
     storedAmbient,
     strips,
+    toHex,
     vivid,
     WASH_LUMINANCE,
     washTone,
+    washTop,
 } from './ambient';
 
 const base: Situation = {
@@ -445,5 +450,47 @@ describe('映像の中の動き', () => {
             20 + 10 * (1 - Math.exp(-200 / 250)),
             3,
         );
+    });
+});
+
+describe('washTop (ページの上の端の色 = ブラウザの枠の色)', () => {
+    /** 幅 `width` の1行。色と透明度は全部同じ */
+    const row = (width: number, [r, g, b]: [number, number, number], a: number) =>
+        Uint8ClampedArray.from({ length: width * 4 }, (_, i) => [r, g, b, a][i % 4]!);
+    const dark: [number, number, number] = [11, 12, 15];
+    const white: [number, number, number] = [255, 255, 255];
+
+    test('色が無ければ地のまま', () => {
+        expect(washTop(row(8, [200, 0, 0], 0), 8, dark, 'dark')).toEqual(dark);
+        expect(washTop(row(8, [200, 0, 0], 0), 8, white, 'light')).toEqual(white);
+    });
+
+    test('暗いテーマはそのまま重ねる (濃さ 1 なら色そのもの、半分なら地との間)', () => {
+        expect(washTop(row(8, [40, 20, 10], 255), 8, dark, 'dark')).toEqual([40, 20, 10]);
+        const half = washTop(row(8, [41, 21, 11], 128), 8, dark, 'dark');
+        expect(half).toEqual([26, 17, 13]);
+    });
+
+    test('明るいテーマは multiply を LIGHT_OPACITY の濃さで掛ける', () => {
+        const [r, g, b] = washTop(row(4, [255, 0, 128], 255), 4, white, 'light');
+        expect(r).toBe(255);
+        expect(g).toBe(Math.round(255 * (1 - LIGHT_OPACITY)));
+        expect(b).toBe(Math.round(255 * (1 - LIGHT_OPACITY) + LIGHT_OPACITY * 128));
+    });
+
+    test('横は透明度で重みを付けて平均する', () => {
+        // 左半分は赤で濃さ 1、右半分は透明 (緑でも混ざらない)
+        const pixels = new Uint8ClampedArray([
+            ...[255, 0, 0, 255, 255, 0, 0, 255],
+            ...[0, 255, 0, 0, 0, 255, 0, 0],
+        ]);
+        expect(washTop(pixels, 4, [0, 0, 0], 'dark')).toEqual([128, 0, 0]);
+    });
+
+    test('16進とのやりとりと、違いの大きさ', () => {
+        expect(toHex([11, 12, 255])).toBe('#0b0cff');
+        expect(fromHex('#0B0CFF')).toEqual([11, 12, 255]);
+        expect(fromHex('#fff')).toBeNull();
+        expect(colorStep([10, 10, 10], [12, 7, 10])).toBe(3);
     });
 });

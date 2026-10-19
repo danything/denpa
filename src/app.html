@@ -7,6 +7,7 @@
         <!-- ホーム画面に置いてアプリのように開けるようにする -->
         <link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+        <!-- ブラウザの枠の色。下のスクリプトがテーマの地に合わせ、その後は theme-color.ts が持つ -->
         <meta name="theme-color" content="#0b0c0f" />
         <meta name="mobile-web-app-capable" content="yes" />
         <title>denpa</title>
@@ -22,6 +23,10 @@
                     (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
                 document.documentElement.dataset.theme = dark ? 'dark' : 'light';
                 document.documentElement.dataset.themeMode = mode;
+                // CSS はまだ読んでいないので、地の色 (app.css の --dp-bg) を直に書く
+                document
+                    .querySelector('meta[name="theme-color"]')
+                    ?.setAttribute('content', dark ? '#0b0c0f' : '#ffffff');
             })();
         </script>
         %sveltekit.head%

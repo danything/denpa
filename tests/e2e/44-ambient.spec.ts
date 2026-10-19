@@ -152,4 +152,30 @@ test.describe('アンビエントモード', () => {
         await page.waitForTimeout(1500);
         await expect(glow).toHaveAttribute('data-updates', '1');
     });
+
+    /*
+     * **ブラウザの枠の色 (theme-color) は、色を敷いている間だけその色** (ページの上の端の色。`washTop`)。
+     * オフにした・画面を離れたらテーマの地 (#0b0c0f) に戻す
+     */
+    test('色を敷いている間はブラウザの枠の色も合わせ、消したら・離れたら地の色に戻す', async ({ page }) => {
+        const toolbar = page.locator('meta[name="theme-color"]');
+        await watchRaw(page);
+        const glow = page.getByTestId('live-frame-ambient');
+        await expect(glow).toHaveAttribute('data-updates', '1');
+        await expect(toolbar).toHaveAttribute('content', /^#[0-9a-f]{6}$/);
+        await expect(toolbar).not.toHaveAttribute('content', '#0b0c0f');
+
+        await wakeControls(page, 'live-frame');
+        await flipSetting(page, 'live', 'ambient');
+        await expect(glow).toHaveAttribute('data-plan', 'off');
+        await expect(toolbar).toHaveAttribute('content', '#0b0c0f');
+
+        await wakeControls(page, 'live-frame');
+        await flipSetting(page, 'live', 'ambient');
+        await expect(toolbar).not.toHaveAttribute('content', '#0b0c0f');
+        // 画面を離れる (ページは読み直さない)
+        await page.getByTestId('nav-guide').click();
+        await page.waitForURL(/guide/);
+        await expect(toolbar).toHaveAttribute('content', '#0b0c0f');
+    });
 });

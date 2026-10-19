@@ -1,7 +1,9 @@
 <script lang="ts">
     import { untrack } from 'svelte';
+    import { setAmbientThemeColor, themeBackground } from '#lib/theme-color.js';
     import {
         changed,
+        colorStep,
         EVERY,
         ease,
         edgeExtend,
@@ -10,17 +12,22 @@
         farthest,
         follow,
         frameDelta,
+        fromHex,
         GLANCE,
         type GlowLayout,
         glowLayout,
         glowPixels,
         plan,
         type Rect,
+        type Rgb,
         reach,
         region,
         strips,
+        TOOLBAR_STEP,
+        toHex,
         toneFrame,
         WASH_LUMINANCE,
+        washTop,
     } from './ambient';
     import type { Ambient } from './ambient.svelte.js';
     import { PHONE_LANDSCAPE } from './PlayerLayout.svelte';
@@ -53,6 +60,8 @@
      *   枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろまで合成し直すことになる
      * - 範囲は、二段組では窓全体、縦に積むときは `<main>` の縦の範囲と窓の横幅で切る (`region`)。
      *   ページの巻き取れる長さを増やさない
+     * - **ブラウザの枠の色 (`theme-color`) も、ページの上の端に見える色にする** (`washTop`)。色を入れ替えたときだけ
+     *   変える (動かさない設定の端末では1枚目のまま)
      *
      * ## 写さないとき (`ambient.ts` の `plan`)
      *
@@ -129,7 +138,24 @@
         toneFrame(frame, dark ? 'dark' : 'light', WASH_LUMINANCE);
         const pixels = glowPixels(frame, GLANCE.width, GLANCE.height, at);
         context.putImageData(new ImageData(pixels, at.width, at.height), 0, 0);
+        // ページの上の端の色をブラウザの枠の色にする (`washTop`)。描いたときだけ測るので、毎フレームの手間は無い
+        const background = fromHex(themeBackground());
+        if (background === null) return;
+        const next = washTop(pixels, at.width, background, dark ? 'dark' : 'light');
+        if (top === null || colorStep(top, next) >= TOOLBAR_STEP) top = next;
     }
+
+    /** ページの上の端に見える色 (`washTop`)。ブラウザの枠の色にする (下の `toolbar`) */
+    let top = $state<Rgb | null>(null);
+    /**
+     * **ブラウザの枠の色** (`theme-color.ts`)。色を敷いている間だけ。消した・全画面 (枠が見えない)・
+     * 画面を離れたときはテーマの地に戻す。変わるのは色を入れ替えたときだけ (多くて 1 秒に 5 回)
+     */
+    const toolbar = $derived(now !== 'off' && lit && !fullscreen && top !== null ? toHex(top) : null);
+    $effect(() => {
+        setAmbientThemeColor(toolbar);
+    });
+    $effect(() => () => setAmbientThemeColor(null));
 
     let edge: HTMLCanvasElement | null = null;
 
@@ -266,6 +292,7 @@
         colors = null;
         smoothed = null;
         lastAt = null;
+        top = null;
         shown = null;
         coming = null;
         paint(0);
@@ -458,6 +485,7 @@
     /* 窓全体に敷くので、明るいテーマは控えめに (白へ寄るだけなので、字の読みやすさは変わらない) */
     :global(html:not([data-theme='dark'])) .band {
         mix-blend-mode: multiply;
+        /* `ambient.ts` の `LIGHT_OPACITY` と同じ (枠の色を同じ描き方で作る) */
         opacity: 0.6;
     }
     canvas {

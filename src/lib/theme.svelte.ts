@@ -7,6 +7,7 @@
  */
 
 import { write } from '#lib/keep.js';
+import { syncThemeColor } from '#lib/theme-color.js';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -26,6 +27,8 @@ function apply(): void {
     const dark = mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset['theme'] = dark ? 'dark' : 'light';
     document.documentElement.dataset['themeMode'] = mode;
+    // ブラウザの枠の色も地に合わせる (`theme-color.ts`)
+    syncThemeColor();
 }
 
 export const theme = {

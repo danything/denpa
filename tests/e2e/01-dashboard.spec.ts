@@ -261,20 +261,27 @@ test.describe('ホームと画面遷移', () => {
         // 既定はダーク (映像を観るものはダークが基本)。端末の設定には従わない
         await expect(toggle).toHaveAttribute('data-mode', 'dark');
         await expect(html).toHaveAttribute('data-theme', 'dark');
+        // ブラウザの枠の色 (theme-color) もテーマの地に合わせる
+        const toolbar = page.locator('meta[name="theme-color"]');
+        await expect(toolbar).toHaveAttribute('content', '#0b0c0f');
 
         await toggle.click();
         await expect(html).toHaveAttribute('data-theme', 'light');
         await expect(toggle).toHaveAttribute('data-mode', 'light');
+        await expect(toolbar).toHaveAttribute('content', '#ffffff');
 
         // 明示した設定は再読み込みしても残る(ちらつかないようハイドレーション前に当てている)
         await goto(page, '/guide');
         await expect(html).toHaveAttribute('data-theme', 'light');
+        // 開き直しても (ハイドレーションの前から) 明るい地の色
+        await expect(toolbar).toHaveAttribute('content', '#ffffff');
         await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'light');
 
         // 端末に合わせる。テストはダークの端末として動かしている。これも選んだ印として残る
         await page.getByTestId('theme-toggle').click();
         await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'system');
         await expect(html).toHaveAttribute('data-theme', 'dark');
+        await expect(toolbar).toHaveAttribute('content', '#0b0c0f');
         await goto(page, '/');
         await expect(page.getByTestId('theme-toggle')).toHaveAttribute('data-mode', 'system');
 

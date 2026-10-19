@@ -700,6 +700,16 @@ test.describe('スマホの縦で観る', () => {
         expect(shape.横に動く).toBe(false);
         // **映像は画面の端から端まで** (余白の内側に置くと 358px に縮み、周りに縁が出る)
         expect(shape.枠).toEqual({ left: 0, width: 390 });
+        // **上も空けない。** 本文の上の端 (この画面は見出しを出すので、その下の端) から映像が始まる
+        const gap = await page.evaluate(() => {
+            const main = document.querySelector('main')!;
+            const content =
+                main.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(main).paddingTop);
+            return (
+                document.querySelector('[data-testid="watch-stage"]')!.getBoundingClientRect().top - content
+            );
+        });
+        expect(Math.round(gap)).toBe(0);
         /*
          * **枠はちょうど映像の形 (16:9) で、操作バーは映像に重ねる** (`PlayerStage` の `narrow`)。
          * 以前は映像の下に段を足して操作バーを出しっぱなしにしていたが、枠が映像より高くなり、

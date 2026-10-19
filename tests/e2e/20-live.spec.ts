@@ -1824,6 +1824,26 @@ test.describe('スマホの横でライブ', () => {
 test.describe('スマホの縦でライブ', () => {
     test.use({ hasTouch: true, isMobile: true, viewport: { width: 360, height: 780 } });
 
+    /*
+     * **映像は本文の上の端から始まる** (390x844)。ほかの画面のように 0.5rem 空けると、映像の上に暗い帯が見えた。
+     * テストでは上の安全域は 0 なので、映像の上の端は 0
+     */
+    test('映像の上に隙間を空けない', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-play')).toBeVisible();
+        await leaveFullscreen(page);
+        const top = await page.evaluate(() => {
+            const main = document.querySelector('main')!;
+            const content =
+                main.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(main).paddingTop);
+            const stage = document.querySelector('[data-testid="live-frame"]')!.getBoundingClientRect();
+            return { content, stage: stage.top };
+        });
+        expect(top).toEqual({ content: 0, stage: 0 });
+    });
+
     test('幅 360px・320px でも操作バーのボタンは1行で、畳んだ音は ⚙ から押せる', async ({ page }) => {
         for (const width of [360, 320]) {
             await page.setViewportSize({ width, height: 780 });
