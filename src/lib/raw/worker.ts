@@ -176,6 +176,18 @@ function post(message: FromWorker, transfer: Transferable[] = []): void {
     scope.postMessage(message, transfer);
 }
 
+/** 最後に画面へ伝えた絵の大きさ (`postSize`) */
+let told = { width: 0, height: 0 };
+
+/** 描いた絵の大きさが変わっていたら画面へ伝える (`messages.ts` の `size`)。描くたびに呼ぶ */
+function postSize(): void {
+    if (surface === null) return;
+    const { width, height } = surface;
+    if (width === told.width && height === told.height) return;
+    told = { width, height };
+    post({ type: 'size', width, height });
+}
+
 function fail(reason: string): void {
     if (failed) return;
     failed = true;
@@ -394,6 +406,7 @@ function draw(field: number): void {
     if (drawn.pts === current.pts && drawn.field === field) return;
     renderer.draw(field);
     drawn = { pts: current.pts, field };
+    postSize();
     toPip();
     shown++;
     if (!shownSinceReset) {
@@ -643,6 +656,7 @@ function startFmp4(canvas: OffscreenCanvas, follow: boolean): boolean {
                 },
                 drew: (first) => {
                     shown++;
+                    postSize();
                     toPip();
                     if (first) post({ type: 'shown' });
                 },

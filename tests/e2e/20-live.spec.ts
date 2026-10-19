@@ -139,6 +139,65 @@ test.describe('ライブ視聴', () => {
         expect(doc.scrollH).toBeLessThanOrEqual(doc.clientH + 1);
     });
 
+    test.describe('動かしてよい端末', () => {
+        test.use({ reducedMotion: 'no-preference' });
+
+        /*
+         * **開いた直後にも、窓にスクロールバーを出さない。** ページの中で開いたとき (画面の切り替えの動きの間も含めて)、
+         * 毎コマ見る。読み上げ用の `.visually-hidden` (`position: absolute`) が文書を基準に置かれて
+         * `.shell.fill` の `overflow: hidden` で切られず、局の一覧の中で隠れている行のぶんだけページが
+         * 伸びていた (映像の色が付いて右の列が `position: relative` になるまでの1秒ほど)。
+         * 偽の局は少なく一覧が溢れないので、**文書を基準に置かれたものが無いこと**も一緒に見る
+         */
+        test('ページの中で開いた直後も、窓はスクロールしない', async ({ page }) => {
+            for (const size of [
+                { width: 1541, height: 954 },
+                { width: 1400, height: 600 },
+            ]) {
+                await page.setViewportSize(size);
+                await goto(page, '/');
+                await page.evaluate(() => {
+                    const w = window as unknown as { samples: { over: number; loose: string[] }[] };
+                    w.samples = [];
+                    const start = performance.now();
+                    const tick = () => {
+                        const root = document.documentElement;
+                        const shell = document.querySelector('.shell.fill');
+                        const loose: string[] = [];
+                        if (shell !== null) {
+                            // `position: absolute` で、位置を持つ祖先が `.shell` の外にあるもの (SVG の中身は `offsetParent` を持たないので見ない)
+                            for (const el of shell.querySelectorAll('*')) {
+                                if (
+                                    !(el instanceof HTMLElement) ||
+                                    getComputedStyle(el).position !== 'absolute'
+                                )
+                                    continue;
+                                const parent = el.offsetParent;
+                                if (parent !== null && !shell.contains(parent))
+                                    loose.push(`${el.tagName}.${el.className}`);
+                            }
+                        }
+                        w.samples.push({ over: root.scrollHeight - root.clientHeight, loose });
+                        if (performance.now() - start < 2500) requestAnimationFrame(tick);
+                    };
+                    requestAnimationFrame(tick);
+                });
+                await page.getByTestId('nav-live').click();
+                await expect(page.getByTestId('live')).toBeVisible();
+                await page.waitForTimeout(2600);
+                const samples = await page.evaluate(
+                    () => (window as unknown as { samples: { over: number; loose: string[] }[] }).samples,
+                );
+                expect(samples.length).toBeGreaterThan(10);
+                expect(
+                    Math.max(...samples.map((s) => s.over)),
+                    `${size.width}x${size.height}`,
+                ).toBeLessThanOrEqual(0);
+                expect([...new Set(samples.flatMap((s) => s.loose))]).toEqual([]);
+            }
+        });
+    });
+
     /*
      * **目に見える映像の上端と、種別のタブの上端がそろう** (広い画面・低い画面の両方)。
      * 測るのは絵の出ている所 (エンコードしたものは video、MPEG-2 のままは canvas)
@@ -166,6 +225,36 @@ test.describe('ライブ視聴', () => {
             })
             .toBeGreaterThan(10);
         await expectSideAligned(page, '[data-testid="live-raw"]', '.live-side > :first-child');
+
+        /*
+         * **横に長い低い窓では、枠が映像の形に縮む** (左右に黒い帯を出さない。`PlayerStage`)。
+         * 枠は絵と同じ縦横比で、高さいっぱい・上寄せ・列の真ん中。右端の縦の列も枠の中に残る
+         */
+        await page.setViewportSize({ width: 1680, height: 700 });
+        const told = await page.getByTestId('live-raw').getAttribute('data-aspect');
+        expect(told).toMatch(/^\d+ \/ \d+$/);
+        const [w = 0, h = 0] = (told ?? '').split(' / ').map(Number);
+        await expect
+            .poll(async () => {
+                const box = (await page.getByTestId('live-frame').boundingBox())!;
+                return Math.abs(box.width / box.height - w / h);
+            })
+            .toBeLessThan(0.01);
+        const frame = (await page.getByTestId('live-frame').boundingBox())!;
+        const column = (await page.locator('[data-player-layout] > .main').boundingBox())!;
+        expect(frame.width).toBeLessThan(column.width - 100);
+        expect(Math.abs(frame.y - column.y)).toBeLessThanOrEqual(1);
+        expect(
+            Math.abs(frame.x - column.x - (column.x + column.width - frame.x - frame.width)),
+        ).toBeLessThanOrEqual(1);
+        // 枠の下は窓の中 (高さで収まっている)
+        expect(frame.y + frame.height).toBeLessThanOrEqual(700);
+        await expectSideAligned(page, '[data-testid="live-raw"]', '.live-side > :first-child');
+        await expectSideFrame(page, '[data-testid="live-raw"]', '.live-side > :first-child');
+        await wakeControls(page, 'live-frame');
+        const shot = (await page.getByTestId('live-shot').boundingBox())!;
+        expect(shot.x + shot.width).toBeLessThanOrEqual(frame.x + frame.width);
+        expect(shot.width).toBe(48);
     });
 
     /*

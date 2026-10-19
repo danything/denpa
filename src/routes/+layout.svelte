@@ -901,7 +901,15 @@
         main {
             --dp-gutter: 1.5rem;
         }
+        /*
+         * **位置の基準もここにする** (`position: relative`)。`overflow: hidden` だけでは、中の
+         * `position: absolute` のうち位置を持つ祖先の無いもの (読み上げ用の `.visually-hidden` など) が
+         * 文書を基準に置かれ、この箱で切られずにページの高さを伸ばす。ライブでは局の一覧の下のほう
+         * (一覧の中で隠れている行) の「リモコン」が窓の下に出て、映像の色が付くまで (右の列が
+         * `position: relative` になるまで) の1秒ほど、窓にスクロールバーが出ていた。E2E 20 で毎コマ見る
+         */
         .shell.fill {
+            position: relative;
             height: 100%;
             min-height: 0;
             overflow: hidden;

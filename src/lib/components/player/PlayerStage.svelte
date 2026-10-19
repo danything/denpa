@@ -125,6 +125,46 @@
     });
 
     /**
+     * **映像の縦横比** (`"1920 / 1080"` の形)。二段組では枠をこの形にする (下の style の `--dp-aspect`)。
+     *
+     * 枠を列の幅いっぱいの 16:9 にしていた頃は、横に長い低い窓で高さの上限に当たると、映像の左右に
+     * 黒い帯が出ていた。枠を映像の形にして、幅は列の幅と「高さ × 縦横比」の小さいほうにする
+     * (余った横は地かアンビエントモードの色)。
+     *
+     * 読むのは、エンジンが描く canvas (`raw/engine.ts`。MPEG-2 と互換モード。worker に渡してあるので
+     * 大きさは `data-aspect` で受け取る) があればそちら、無ければ `<video>` の絵の大きさ。
+     * **まだ分からない間は前の形のまま** — 局を変えるたびに 16:9 へ戻ってから跳ねないように
+     */
+    let aspect = $state('16 / 9');
+    $effect(() => {
+        const target = element;
+        if (target === null) return;
+        const read = () => {
+            const raw = target.querySelector<HTMLCanvasElement>('canvas[data-input]');
+            if (raw !== null) {
+                const told = raw.dataset['aspect'];
+                if (told !== undefined) aspect = told;
+                return;
+            }
+            const video = target.querySelector('video');
+            if (video !== null && video.videoWidth > 0 && video.videoHeight > 0)
+                aspect = `${video.videoWidth} / ${video.videoHeight}`;
+        };
+        read();
+        // `<video>` の絵の大きさが変わった (`resize` は泡立たないので、捕まえる側で受ける)
+        target.addEventListener('resize', read, true);
+        target.addEventListener('loadedmetadata', read, true);
+        // エンジンの canvas が出入りした・形を書き換えた
+        const changes = new MutationObserver(read);
+        changes.observe(target, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-aspect'] });
+        return () => {
+            target.removeEventListener('resize', read, true);
+            target.removeEventListener('loadedmetadata', read, true);
+            changes.disconnect();
+        };
+    });
+
+    /**
      * **広い枠でも、押すものが一段に収まらなければ畳む** (`crowded`)。
      *
      * 押すものの行 (`ControlRow`) は折り返さない。狭い枠 (`compact`) はいつも畳むが、
@@ -270,15 +310,20 @@
     <!-- 光は枠より前 (兄弟) に置く。位置を持つ枠のほうが後ろなので、光の上に描かれる -->
     <AmbientGlow {ambient} stage={element} fullscreen={fullscreen.active} testid="{testid}-ambient" />
 {/if}
+<!--
+    枠の置き場。二段組では、枠が使える広さ (列の幅と高さ) をここで測る (下の style の `container-type`)
+-->
+<div class="room">
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!--
-    **映像の周りは黒** (letterbox の帯にテーマ色を出さない)。縦横比は 16:9 で、高さは
+    **映像の周りは黒** (letterbox の帯にテーマ色を出さない)。縦横比は 16:9 (二段組では映像の形。下の style) で、高さは
     画面に収まるまで。**低くしすぎない** (224px) — 上下と右に操作バーを重ねるので、
     それより低いと操作バーどうしが重なって押せなくなる
 -->
 <div
     bind:this={element}
     class="stage"
+    style:--dp-aspect={aspect}
     class:quiet={!controls.shown}
     data-compact={compact ? '' : undefined}
     data-fold={fold ? '' : undefined}
@@ -310,6 +355,7 @@
         <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
     {/if}
 </div>
+</div>
 
 <style>
     .stage {
@@ -319,6 +365,35 @@
         aspect-ratio: 16 / 9;
         max-height: 100%;
         min-height: 14rem;
+    }
+    /* 置き場は箱を持たない (狭い画面・横にしたスマホ・広げた全画面。下で二段組だけ箱にする) */
+    .room {
+        display: contents;
+    }
+    /*
+     * **二段組では、枠を映像の形にして、使える広さに収まる大きさにする** (上の `aspect`)。
+     *
+     * 幅は列の幅 (`100cqw`) と「高さ × 縦横比」(`100cqh`) の小さいほう。横に長い低い窓でも映像の左右に
+     * 黒い帯が出ず、余った横は地 (アンビエントモードでは映像の色) になる。**上に寄せて、横は真ん中** —
+     * 映像の左と右の列の中身までの間が同じになる (E2E の `expectSideFrame`)。
+     * 高さの下限 (14rem) は今までどおり。それより低い窓では、枠は 14rem の高さで切れる。
+     *
+     * 測る箱 (`container-type: size`) は `.room` で、`<main>` の列そのものにはしない — 測る箱は
+     * 中の `position: absolute` の基準になり、列に付けるとアンビエントモードの色 (`AmbientGlow`) の位置がずれる
+     */
+    @media (min-width: 768px) {
+        .room {
+            display: flex;
+            flex: 1 1 0%;
+            min-height: 0;
+            flex-direction: column;
+            align-items: center;
+            container-type: size;
+        }
+        .stage {
+            aspect-ratio: var(--dp-aspect, 16 / 9);
+            width: min(100cqw, max(100cqh, 14rem) * var(--dp-aspect, 16 / 9));
+        }
     }
     .quiet {
         cursor: none;
@@ -374,8 +449,13 @@
      * 条件は `PlayerLayout` の `PHONE_LANDSCAPE` と同じ
      */
     @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+        /* 二段組の置き場 (上) は使わない。枠は `PlayerLayout` の `.main` (画面の高さ) に直に置く */
+        .room {
+            display: contents;
+        }
         .stage:not([data-pseudo]) {
             align-self: center;
+            aspect-ratio: 16 / 9;
             width: auto;
             max-width: 100%;
             height: 100%;
@@ -398,9 +478,14 @@
         bottom: env(safe-area-inset-bottom, 0px);
         left: env(safe-area-inset-left, 0px);
         z-index: 90;
+        width: auto;
         margin: 0;
         aspect-ratio: auto;
         max-height: none;
         min-height: 0;
+    }
+    /* 置き場の箱 (測る箱) は外す。中の `position: fixed` の基準が窓でなくなる */
+    .room:has(> [data-pseudo]) {
+        display: contents;
     }
 </style>

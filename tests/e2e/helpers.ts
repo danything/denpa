@@ -1041,16 +1041,23 @@ export async function expectSideAligned(page: Page, media: string, first: string
 }
 
 /**
- * **映像の左の余白・映像から右の列の中身まで・列の中身の右の余白が同じ** (1px まで)。どれも `--dp-gutter`
- * (`PlayerLayout`)。映像と列の間にも余白を足していた頃は、映像から列の字まで倍 (2rem) あった
+ * **映像の左の余白と、映像から右の列の中身までが同じ** (1px まで)。列の中身の右の余白は、映像の列の左の余白と同じ。
+ * どれも `--dp-gutter` (`PlayerLayout`)。映像と列の間にも余白を足していた頃は、映像から列の字まで倍 (2rem) あった。
+ *
+ * 低い窓では枠が映像の形に縮んで、映像の列の真ん中に来る (`PlayerStage`)。映像の左右に同じだけ空きが足されるので、
+ * 映像の左と映像から列の中身までは同じまま。列の右の余白は、映像の列 (`.main`) の左端と比べる
  */
 export async function expectSideFrame(page: Page, media: string, first: string): Promise<void> {
     const picture = (await page.locator(media).first().boundingBox())!;
     const head = (await page.locator(first).first().boundingBox())!;
+    const column = (await page.locator('[data-player-layout] > .main').first().boundingBox())!;
     const width = await page.evaluate(() => document.documentElement.clientWidth);
     const left = picture.x;
     const gap = head.x - (picture.x + picture.width);
     const right = width - (head.x + head.width);
     expect(Math.abs(gap - left), `映像の左 ${left} と、映像から ${first} まで ${gap}`).toBeLessThanOrEqual(1);
-    expect(Math.abs(right - left), `映像の左 ${left} と、${first} の右 ${right}`).toBeLessThanOrEqual(1);
+    expect(
+        Math.abs(right - column.x),
+        `映像の列の左 ${column.x} と、${first} の右 ${right}`,
+    ).toBeLessThanOrEqual(1);
 }

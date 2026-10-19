@@ -526,6 +526,10 @@ export class RawEngine {
                 this.shownAt = Date.now();
                 this.events.shown();
                 break;
+            case 'size':
+                // 絵の形。枠 (`PlayerStage`) がこれを読んで、同じ形になる
+                this.canvas.dataset['aspect'] = `${message.width} / ${message.height}`;
+                break;
             case 'stats':
                 this.dropped = message.dropped;
                 this.decodeMs = message.p95;
