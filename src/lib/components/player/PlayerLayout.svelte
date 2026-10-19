@@ -90,7 +90,11 @@
          * [ControlBar.svelte](ControlBar.svelte)。列が右の余白を使うぶん、映像は前より広く残る
          */
         .layout > :global(aside) {
-            --dp-side-pad: 1.25rem;
+            /*
+             * 中身の余白は映像の周りの余白と同じ (`--dp-gutter`)。列の最初のもの (タブ・番組名) の上端が
+             * 映像の上端とそろう。1.25rem にしていた頃は、列の中身だけ 4px 下から始まっていた
+             */
+            --dp-side-pad: var(--dp-gutter, 1rem);
             width: 16rem;
             min-height: 0;
             flex-shrink: 0;
