@@ -121,15 +121,12 @@ test.describe('アンビエントモード', () => {
                 const box = (await band.boundingBox())!;
                 if (box.y >= stage.y + (stage.width * 9) / 16 - 1) below.push(box);
             }
-            // 映像の下の端から (操作バーの段の下にも)、画面の幅いっぱい・240px 以上
-            expect(below[0]?.y).toBeLessThan(stage.y + stage.height - 1);
+            // 枠はちょうど映像の形 (16:9)。色は映像の下の端から、画面の幅いっぱい・240px 以上
+            expect(Math.round(stage.height)).toBe(Math.round((stage.width * 9) / 16));
+            expect(Math.abs((below[0]?.y ?? 0) - (stage.y + stage.height))).toBeLessThan(2);
             expect(below).toHaveLength(1);
             expect(below[0]!.width).toBeGreaterThanOrEqual(389);
             expect(below[0]!.height).toBeGreaterThanOrEqual(240);
-            // 操作バーの段は黒く塗らず、色が透ける
-            expect(
-                await page.getByTestId('live-frame').evaluate((el) => getComputedStyle(el).backgroundColor),
-            ).toBe('rgba(0, 0, 0, 0)');
         });
 
         test('明るいテーマでも出し、帯は地に掛ける (multiply)', async ({ page }) => {

@@ -1780,7 +1780,7 @@ test.describe('スマホの縦でライブ', () => {
             await page.getByTestId('live-channel').first().click();
             await expect(page.getByTestId('live-play')).toBeVisible();
             await leaveFullscreen(page);
-            await expect(page.getByTestId('live-frame')).toHaveAttribute('data-under', '');
+            await expect(page.getByTestId('live-frame')).toHaveAttribute('data-narrow', '');
 
             expect(await oneRowTroubles(page, 'live-buttons'), `${width}px`).toEqual([]);
             await expect(page.getByTestId('live-edge')).toBeVisible();
@@ -1794,6 +1794,7 @@ test.describe('スマホの縦でライブ', () => {
             await expect(sound).toBeHidden();
             await expect(page.getByTestId('live-more')).toHaveCount(0);
             const label = (await sound.getAttribute('aria-label')) ?? '';
+            await wakeControls(page, 'live-frame');
             await page.getByTestId('live-settings').tap();
             const mute = page.getByTestId('live-mute');
             await expect(mute).toBeVisible();
@@ -1810,6 +1811,7 @@ test.describe('スマホの縦でライブ', () => {
             expect(await oneRowTroubles(page, 'live-buttons'), `${width}px (閉じたあと)`).toEqual([]);
 
             // メニュー (再生の設定のコーデック) の外を押しても閉じるだけ。押した局には替わらない (もう一度押せば替わる)
+            await wakeControls(page, 'live-frame');
             await page.getByTestId('live-settings').tap();
             await page.getByTestId('live-codec').tap();
             await expect(page.getByTestId('live-codec-option').first()).toBeVisible();

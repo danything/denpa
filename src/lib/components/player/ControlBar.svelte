@@ -54,8 +54,8 @@
      * 枠の大きさは舞台 (`PlayerStage`) が測って `data-compact` に出す。
      * **狭い枠 (スマホの縦) では操作バーの余白も削る** — 映像が 224px しか無いところで
      * 上に 32px のぼかしを取ると、操作バーだけで映像の半分になっていた。
-     * **さらに幅で狭い枠 (スマホの縦) では、下の操作バーを映像の下に出す** (`data-under`)。
-     * 詰めても操作バーは映像の半分を覆い、字幕に時刻が重なっていた
+     * スマホの縦でも操作バーは映像に重ね、触らなければ引っ込める (以前は映像の下に段を足して出しっぱなしに
+     * していた。理由と今の形は `PlayerStage` の `narrow`)
      */
     let {
         shown = true,
@@ -123,30 +123,5 @@
     }
     :global(.stage[data-compact]) .bottom {
         padding: 1rem 0.375rem 0.375rem;
-    }
-    /*
-     * **操作バーを映像の下に出す (スマホの縦。舞台の `data-under`)。** 格子の下の段に置き、
-     * 敷きもの (ぼかし) は外す — 映像に重ならないので要らない。**いつも出しておく** —
-     * 映像を覆わないので、引っ込めても見えるものが増えない。触るたびに出し直す手間が残るだけ
-     */
-    :global(.stage[data-under]) > .bottom {
-        grid-area: 2 / 1 / 3 / 2;
-        position: relative;
-        padding: 0.375rem;
-        background: none;
-    }
-    /*
-     * アンビエントモードで色を敷いている間は、操作バーの段が色の上に透ける (`PlayerStage`)。字とアイコンは白いので、
-     * 薄い暗幕を敷いて読めるようにする。明るいテーマの淡い色 (輝度 0.75 から) の上でも、白い字が 4.5 以上になる濃さ
-     */
-    :global(html[data-ambient] .stage[data-under]) > .bottom {
-        background: rgb(0 0 0 / 0.3);
-    }
-    :global(html[data-ambient]:not([data-theme='dark']) .stage[data-under]) > .bottom {
-        background: rgb(0 0 0 / 0.6);
-    }
-    :global(.stage[data-under]) > .bottom.away {
-        pointer-events: auto;
-        opacity: 1;
     }
 </style>

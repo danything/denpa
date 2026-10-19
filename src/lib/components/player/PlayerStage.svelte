@@ -78,12 +78,12 @@
      *   **高さでも畳む** — 幅が足りていても、300px に満たない枠に 48px の操作バーと右上の
      *   一行を載せると映像がほとんど隠れる (二段組の低い窓など)。**横にしたスマホも畳む**
      *   (枠は画面の高さいっぱいの 693x390 ほど。全部並べると読みものが数文字しか残らない)
-     * - `under` (幅で `compact` のとき。全画面は除く) … **下の操作バーを映像の下 (枠の外) に出す。**
-     *   スマホの縦の枠は 390x219 しか無く、操作バー (シークバー・読みもの・押すもの) を
-     *   重ねると映像の半分を覆い、字幕に時刻が重なっていた。
-     *   映像の下は余っているので、操作バーはそこに置いて**いつも出しておく** (映像を覆わないので
-     *   引っ込める理由が無い)。右端の縦の列 (閉じる・切り抜きなど) は今までどおり映像の上。
-     *   全画面では映像の周りに黒帯があるので、今までどおり重ねる
+     * - `narrow` だけのとき (幅で `compact`。全画面は除く。スマホの縦) … 読みものの上の段 (番組名・局・時間帯) を省く
+     *   (`InfoBlock`。`data-narrow`)。**操作バーは映像の上に重ね、触らなければ引っ込める** (ほかの枠と同じ)。
+     *   以前は映像の下 (枠の外) に段を足して出しっぱなしにしていた — 390x219 の映像に重ねると半分を覆い、
+     *   字幕に時刻が重なったため。ただ、枠が映像より高くなり、映像の下に操作バーの段がいつも残って見えた。
+     *   いまは引っ込むので覆うのは触った直後だけで、字幕は出ている間だけ操作バーの上へ持ち上げる (下の `lift`)
+
      *
      * 全画面にすると枠が画面いっぱいになるので、横持ちの全画面はどちらにも
      * 当たらない (今までどおり)。**決めるのは媒体の幅ではなく枠の大きさ** —
@@ -92,12 +92,8 @@
     let narrow = $state(false);
     let short = $state(false);
     const compact = $derived(narrow || short);
-    /*
-     * **操作バーを下に出すのは幅で決めたときだけ。** 高さで決めると、操作バーを出したぶん枠が
-     * 高くなって外れ、外れると低くなってまた入る (行ったり来たりする)。幅は操作バーを
-     * 出しても変わらない
-     */
-    const under = $derived(narrow && !fullscreen.active);
+    /** スマホの縦 (幅で狭く、全画面でない)。読みものの上の段を省く (`InfoBlock`) */
+    const slim = $derived(narrow && !fullscreen.active);
     $effect(() => {
         const target = element;
         if (target === null) return;
@@ -209,14 +205,14 @@
      *
      * - 持ち上げるのは重なるときだけ。上の方の字幕は動かない
      * - 枠の上端より上へは出さない (操作バーと字幕がどちらも長いときは、上を優先して見せる)
-     * - 操作バーを映像の下に出している間 (`under`) と操作バーを引っ込めている間は戻す
+     * - 操作バーを引っ込めている間は戻す
      * - データ放送の小窓に映像ごと寄せている間も戻す (下の `offsetIn`)
      * - 小窓・切り抜きは canvas の中身を使うので、ずらしても影響しない
      */
     $effect(() => {
         const stage = element;
         if (stage === null) return;
-        const lifting = controls.shown && !under;
+        const lifting = controls.shown;
         /*
          * 位置は `offsetTop` で測る (枠の中の、ずらす前の位置。`translate` が効かない)。
          *
@@ -286,7 +282,7 @@
     class:quiet={!controls.shown}
     data-compact={compact ? '' : undefined}
     data-fold={fold ? '' : undefined}
-    data-under={under ? '' : undefined}
+    data-narrow={slim ? '' : undefined}
     data-pseudo={fullscreen.pseudo ? '' : undefined}
     onpointermove={controls.wake}
     onpointerdown={controls.wake}
@@ -327,42 +323,6 @@
     .quiet {
         cursor: none;
     }
-    /*
-     * **操作バーを映像の下に出す (`under`)。** 枠を2段の格子にし、上の段を 16:9 (`::before` が
-     * 縦横比を持つ)、下の段を操作バー (`ControlBar` の `.bottom`) にする。中身 (video・字幕・
-     * データ放送・幕・通知) は絶対配置のまま上の段に置く — 格子の子の絶対配置は、
-     * その段を入れ物にして `inset: 0` で収まる。中身の書き方は画面ごとに変えずに済む
-     */
-    .stage[data-under] {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: auto auto;
-        aspect-ratio: auto;
-        max-height: none;
-        min-height: 0;
-    }
-    .stage[data-under]::before {
-        content: '';
-        grid-area: 1 / 1;
-        aspect-ratio: 16 / 9;
-    }
-    /*
-     * **アンビエントモードで色を敷いている間 (`AmbientGlow`) は、操作バーの段の黒を外す。** 色は映像の下の端から
-     * 始まり、操作バーの下にも流れる。黒いのは映像の段 (`::before`) だけ。操作バーの暗幕は `ControlBar`
-     */
-    :global(html[data-ambient]) .stage[data-under] {
-        background: transparent;
-    }
-    :global(html[data-ambient]) .stage[data-under]::before {
-        background: #000;
-    }
-    /*
-     * **終わりの線まで書く。** 絶対配置の子は、終わりを `auto` にすると格子の端
-     * (枠の内側いっぱい) まで伸びる — `1 / 1` だけでは操作バーの段まで覆ってしまう
-     */
-    .stage[data-under] > :global(*) {
-        grid-area: 1 / 1 / 2 / 2;
-    }
     /* 字幕の持ち上げ (上の `lift`)。操作バーの出入りと同じ `--dp-duration` で動かす (動かさない設定では一緒に止まる) */
     .stage :global(canvas[data-ink]) {
         transition: translate var(--dp-duration);
@@ -392,7 +352,9 @@
      *
      * 余白の内側に置いていた頃は 390px の画面で枠が 358px しか無く、映像は
      * 358x201 (枠の高さの下限 224px との差が上下の黒帯) — **小さいうえに
-     * 周りが黒く縁取られて**見えた。端まで出すと 390x219 で、下限との差は 2px ほど。
+     * 周りが黒く縁取られて**見えた。端まで出すと 390x219。
+     * **高さの下限 (14rem) も外し、枠をちょうど映像の形 (16:9) にする** — 下限が残ると、
+     * 映像より数 px 高い枠の上下に黒帯が出る。操作バーは引っ込むので、低い枠でも重なりは触った直後だけ
      *
      * 線は `sm` (640px) — ナビを畳むのと同じ幅。携帯の縦はみなこれより狭く、
      * 縦の iPad mini (744px) や横にした携帯は入らない (縦横比は今までどおり)。
@@ -401,6 +363,7 @@
     @media (max-width: 639px) and (orientation: portrait) {
         .stage {
             margin-inline: calc(-1 * var(--dp-gutter, 1rem));
+            min-height: 0;
         }
     }
     /*
