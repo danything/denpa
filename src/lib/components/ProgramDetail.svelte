@@ -46,6 +46,8 @@
     } = $props();
 
     let box: HTMLDivElement | undefined = $state();
+    /** 下に重ねたボタンの並びの高さ。中身の最後の行がその上まで巻き上がるよう、下に同じだけ空ける */
+    let actionsHeight = $state(0);
 </script>
 
 <svelte:window
@@ -67,11 +69,12 @@
 <div class="detail-modal" role="dialog" aria-modal="true" data-testid="program-detail">
     <button type="button" class="detail-backdrop" onclick={onclose} aria-label="閉じる" tabindex="-1"></button>
     <!--
-        **巻き取るのは中身だけ。** 押すものは箱の下端に貼り付けたまま出しておく
-        (説明が長くても開いた時点で見える。FactsAside と同じ考え方)
+        **巻き取るのは中身だけ。** 押すものは箱の下端に重ねたまま出しておく
+        (説明が長くても開いた時点で見える。FactsAside と同じ考え方)。並びの地は塗らず、
+        中身はボタンの間と後ろに透けて見える (下に地の帯を敷くと、そこだけ何も書いていない帯になった)
     -->
     <div bind:this={box} class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
-        <div class="detail-body">
+        <div class="detail-body" style:--detail-bottom={actions ? `calc(${actionsHeight}px + 2 * var(--dp-space-5))` : undefined}>
             <!-- × は巻き取る中身の中に置く (下の CSS)。箱に浮かせると、スクロールバーが常に出る Windows でバーに重なった -->
             <button type="button" class="ghost icon small modal-close" onclick={onclose} aria-label="閉じる" data-testid="detail-close">
                 <X aria-hidden="true" />
@@ -83,7 +86,7 @@
         </div>
 
         {#if actions}
-            <div class="detail-actions modal-actions">
+            <div class="detail-actions modal-actions" bind:offsetHeight={actionsHeight}>
                 {@render actions()}
             </div>
         {/if}
@@ -138,11 +141,15 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        /* 中身は箱の下端まで巻き取る (ボタンの並びは上に重ねる) */
+        padding-bottom: 0;
     }
     .detail-body {
         min-height: 0;
         flex: 1 1 0%;
         overflow-y: auto;
+        /* 最後の行がボタンの並びの上まで上がりきるよう、並びの高さと上下の余白ぶん空ける (並びが無ければ箱の余白だけ) */
+        padding-bottom: var(--detail-bottom, var(--dp-space-5));
     }
     /*
      * **× は中身の右上に貼り付ける** (`sticky`)。巻き取る箱の中に置くので、スクロールバーは × の外 (右) に出る。
@@ -156,10 +163,19 @@
         float: right;
         margin: 0 0 0 var(--dp-space-2);
     }
-    /* 並べ方は `.modal-actions` */
+    /*
+     * 並べ方は `.modal-actions`。箱の下端に重ね、地は塗らない。ボタンの無い所は押しても中身に届く
+     * (字を選ぶ・巻き取る)
+     */
     .detail-actions {
-        position: relative;
-        flex-shrink: 0;
+        position: absolute;
+        inset-inline: var(--dp-space-5);
+        bottom: var(--dp-space-5);
+        margin: 0;
+        pointer-events: none;
+    }
+    .detail-actions > :global(*) {
+        pointer-events: auto;
     }
     .detail-actions :global(form) {
         margin: 0;
