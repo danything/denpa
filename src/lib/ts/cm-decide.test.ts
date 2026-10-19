@@ -366,6 +366,36 @@ describe('番組表の尺で前後の番組を外す', () => {
     });
 });
 
+describe('CM に挟まれた短い所の頭の告知', () => {
+    // 番組 10〜600、CM 600〜675、ロゴの出ている 30 秒 (告知 5 秒・次回予告・提供)、705 から CM が録画の尻まで
+    const joints = [10, ...every15(600, 675), ...every15(705, 795)];
+    const logo = [
+        { start: 10.2, end: 599.8 },
+        { start: 675.3, end: 704.7 },
+    ];
+    /** `cut` の秒に、無音の無い強い切れ目を足す */
+    const withCut = (cut: number, lit = logo) => recording(800, joints, lit, frames(800, [...joints, cut]));
+
+    test('CM の終わりからちょうど 5 秒の切れ目までは CM (ロゴの出ている局の告知)', () => {
+        expect(round(decideCm(withCut(680)))).toEqual([
+            { start: 0, end: 10 },
+            { start: 600, end: 680 },
+            { start: 705, end: 800 },
+        ]);
+    });
+
+    test('5 秒・10 秒から外れた切れ目では伸ばさない', () => {
+        expect(round(decideCm(withCut(683)))[1]).toEqual({ start: 600, end: 675 });
+    });
+
+    test('長い番組の頭は、5 秒の所に切れ目があっても伸ばさない', () => {
+        const long = [logo[0]!, { start: 675.3, end: 789.7 }];
+        const tail = [10, ...every15(600, 675), 790, 805];
+        const input = recording(800, tail, long, frames(800, [...tail, 680]));
+        expect(round(decideCm(input))[1]).toEqual({ start: 600, end: 675 });
+    });
+});
+
 describe('ロゴを使わずに決める (CM の尺だけ)', () => {
     /** ロゴを使わないときは 0.8 秒以上の無音だけを見る */
     const long = (points: number[]): Range[] => points.map((t) => ({ start: t - 0.5, end: t + 0.5 }));

@@ -274,7 +274,40 @@ function byLogo(input: CmInput, logo: Range[], candidates: Boundary[]): Range[] 
         if (afterProgram && beforeProgram && end.at - start.at < GAP_MIN) continue;
         out.push(...arrange(start, end, marks, afterProgram, beforeProgram));
     }
-    return out;
+    return trimSpots(input, out);
+}
+
+/** CM に挟まれた、ロゴの出ている短い所の最長 (秒)。番組の終わりの次回予告と提供など */
+const ISLAND_MAX = 60;
+/** 局の短い告知の尺 (秒)。CM の尺 (15 秒) より短い */
+const SPOTS = [5, 10];
+/** 告知の尺とみなす誤差 (秒) */
+const SPOT_TOLERANCE = 0.25;
+/** 告知を除いたあとに残す、ロゴの出ている所の最短 (秒) */
+const ISLAND_REST = 15;
+
+/**
+ * **CM に挟まれた短い所の頭の、ロゴの出ている告知は CM にする。** 局の 5 秒の告知はロゴを出したまま流れ、
+ * 次回予告との間に無音が無いことがあるので、CM がその手前で終わってしまう (実機で 5 秒の告知 → 次回予告 → 提供)。
+ * CM の終わりからちょうど 5 秒・10 秒の所に強い切れ目があれば、そこまで CM を伸ばす。
+ * 番組の本編 (長い所) には手を出さない — 本編の頭の数秒にもよく切れ目がある
+ */
+function trimSpots(input: CmInput, cm: Range[]): Range[] {
+    const { times, cuts } = input;
+    if (times === undefined || cuts === undefined) return cm;
+    return cm.map((range, i) => {
+        const next = cm[i + 1];
+        if (next === undefined || next.start - range.end > ISLAND_MAX) return range;
+        for (const spot of SPOTS) {
+            const at = range.end + spot;
+            if (next.start - at < ISLAND_REST) break;
+            for (let f = lowerBound(times, at - SPOT_TOLERANCE); f < times.length; f++) {
+                if (times[f]! > at + SPOT_TOLERANCE) break;
+                if (cuts[f]! >= CUT_MIN) return { start: range.start, end: times[f]! };
+            }
+        }
+        return range;
+    });
 }
 
 /**
