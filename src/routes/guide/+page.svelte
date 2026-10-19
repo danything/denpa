@@ -1256,7 +1256,7 @@
         flex: none;
         width: auto;
     }
-    /* 種別を選び直すと、持ち上げた面が横へ滑る (`app.css` の「画面の切り替え」) */
+    /* 種別を選び直すと、選んだ面が横へ滑る (`app.css` の「画面の切り替え」) */
     .seg-pill {
         view-transition-name: guide-type;
     }

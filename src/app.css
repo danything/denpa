@@ -976,19 +976,19 @@ a.button {
 
 /* ---- タブ (`<div role="group" class="segmented">`。番組表とライブの種別) ---- */
 /*
- * 淡い面の溝に、選んでいるものだけ一段持ち上げた面 (`--dp-raised`) を置く。
- * 主の色で塗りつぶしていた頃は、隣の「予約」などの主のボタンと同じ重さで並び、
- * 「選んでいる」と「押すと何かが起きる」が見分けにくかった。
- * 選んでいるものは面・影・太字の 3 つで示す (色だけにしない)。選んでいないものも本文並みの字で、押せると分かる
+ * **溝 (枠と地) は付けず、選んでいるものだけをリストの選んだ行と同じ面 (`--dp-row-selected`) で塗る。**
+ * 溝を淡い面で塗っていた頃は、アンビエントモードの色がタブの所だけ届かず浮いて見えた。外の端は中のボタンの端なので、
+ * 映像の上端やすぐ下の一覧の行とそのままそろう。主の色では塗らない (隣の「予約」などの主のボタンと見分けるため)。
+ * 選んでいるものは面と太字で示す (色だけにしない)。選んでいないものも本文並みの字で、押せると分かる
  */
 [role="group"].segmented {
     display: inline-flex;
     gap: 2px;
     width: auto;
-    padding: 2px;
-    border: 1px solid var(--dp-line);
+    padding: 0;
+    border: 0;
     border-radius: var(--dp-btn-radius);
-    background: var(--dp-subtle);
+    background: none;
     box-shadow: none;
 }
 [role="group"].segmented > :is(button, a.button) {
@@ -997,23 +997,22 @@ a.button {
     --pico-color: var(--pico-secondary);
     --pico-box-shadow: none;
     margin: 0;
-    border-radius: calc(var(--dp-btn-radius) - 2px);
+    border-radius: var(--dp-btn-radius);
     box-shadow: none;
 }
 [role="group"].segmented > :is(button, a.button):hover {
-    --pico-background-color: color-mix(in srgb, var(--dp-raised) 60%, transparent);
+    --pico-background-color: var(--dp-row-hover, var(--dp-subtle));
     --pico-border-color: transparent;
     --pico-color: var(--pico-secondary-hover);
 }
 [role="group"].segmented > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]) {
-    --pico-background-color: var(--dp-raised);
-    --pico-border-color: var(--dp-line);
+    --pico-background-color: var(--dp-row-selected, var(--dp-subtle));
+    --pico-border-color: transparent;
     --pico-color: var(--pico-h1-color, var(--pico-color));
-    box-shadow: var(--dp-shadow);
     font-weight: var(--dp-weight-bold);
 }
 /*
- * **持ち上げた面を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
+ * **選んだ面を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
  * 面に画面の切り替えの名前を付けておけば、前の場所から新しい場所へ動く (View Transitions)。
  * 字は動かさない (面の上に重ねたまま)。見た目は上の「選んでいるもの」と同じ
  */
@@ -1022,16 +1021,13 @@ a.button {
     --pico-border-color: transparent;
     position: relative;
     isolation: isolate;
-    box-shadow: none;
 }
 .seg-pill {
     position: absolute;
     inset: -1px;
     z-index: -1;
-    border: 1px solid var(--dp-line);
     border-radius: inherit;
-    background: var(--dp-raised);
-    box-shadow: var(--dp-shadow);
+    background: var(--dp-row-selected, var(--dp-subtle));
     pointer-events: none;
 }
 
