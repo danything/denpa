@@ -425,3 +425,25 @@ test('CM の尺は 15 秒の倍数 (15〜180 秒)', () => {
     // 本編は 15 の倍数に乗っても長すぎるので弾く
     expect(isCmLength(600)).toBe(false);
 });
+
+describe('ロゴが遅れて戻る', () => {
+    // 実機の TOKYO MX の並びを写したもの。番組 10〜600、CM 600〜659.7 (15 秒おき)、659.7 の無音で番組が戻るが、
+    // 明るい場面でロゴが見えるのは 665.6 から (5.9 秒遅れ)。630・645 の継ぎ目は無音の中の切れ目が 0.5 秒ほどずれ、
+    // 番組が戻る無音には強い切れ目が無い (真ん中を置く)。どの継ぎ目からも 15 秒の倍数でたどれない
+    const silences = silencesAt([10, 600, 615, 630, 645, 1790, 1805]).concat({ start: 659.2, end: 660.2 });
+    const cuts = [10, 600, 615, 629.53, 644.55, 1790, 1805];
+    const logo = [
+        { start: 13.4, end: 596.6 },
+        { start: 665.6, end: 1789.7 },
+    ];
+    const input = (lit: Range[]): CmInput => ({ duration: 1800, silences, ...frames(1800, cuts), logo: lit });
+
+    test('ロゴの戻りが番組の戻った無音から 8 秒以内なら、そこまでを CM にする (15 秒で切らない)', () => {
+        expect(round(decideCm(input(logo)))[1]).toEqual({ start: 600, end: 659.7 });
+    });
+
+    test('8 秒より遅れたロゴの戻りは寄せない (CM の並びが止まった所まで)', () => {
+        const late = [logo[0]!, { start: 668.6, end: 1789.7 }];
+        expect(round(decideCm(input(late)))[1]).toEqual({ start: 600, end: 615 });
+    });
+});

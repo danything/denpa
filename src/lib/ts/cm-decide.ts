@@ -107,6 +107,12 @@ function points(candidates: Boundary[]): number[] {
  * (局がロゴを後から重ねる・判定がならしのぶん遅れる)、実機では 4.7 秒遅れていた (BSテレ東)
  */
 const SNAP = 5;
+/**
+ * **ロゴが戻る側だけ、もう少し遠くまで寄せる** (秒)。番組が戻った直後が明るい場面だと、ロゴが地に紛れて
+ * 判定が遅れる。実機の TOKYO MX で、番組が戻った無音から 5.6 秒遅れてロゴが出て、寄せられずに
+ * CM が 60 秒から 15 秒に縮んでいた。消える側は広げない (番組の終わりを削るおそれがある)
+ */
+const SNAP_RISE = 8;
 /** 切れ目の無い無音を、どれだけ遠いとみなすか (秒) */
 const STILL_PENALTY = 1.5;
 
@@ -121,16 +127,17 @@ function snap(
     at: number,
     candidates: Boundary[],
     change?: (t: number) => number,
+    reach = SNAP,
 ): { at: number; snapped: boolean } {
     let best = at;
-    let distance = SNAP;
+    let distance = reach;
     let biggest = CHANGE_MIN;
     let changed: number | null = null;
     for (const b of candidates) {
-        if (b.silence.end + REACH < at - SNAP || b.silence.start - REACH > at + SNAP) continue;
+        if (b.silence.end + REACH < at - reach || b.silence.start - REACH > at + reach) continue;
         if (change !== undefined) {
             for (const cut of [...(b.still ? [] : b.cuts), ...b.weak]) {
-                const c = Math.abs(cut - at) < SNAP ? change(cut) : 0;
+                const c = Math.abs(cut - at) < reach ? change(cut) : 0;
                 if (c > biggest) {
                     biggest = c;
                     changed = cut;
@@ -145,7 +152,7 @@ function snap(
         }
     }
     if (changed !== null) return { at: changed, snapped: true };
-    return { at: best, snapped: distance < SNAP };
+    return { at: best, snapped: distance < reach };
 }
 
 /** ロゴの点の変わり方をみる幅 (秒) */
@@ -268,7 +275,9 @@ function byLogo(input: CmInput, logo: Range[], candidates: Boundary[]): Range[] 
         const afterProgram = gap.start > 0;
         const beforeProgram = gap.end < duration;
         const start = afterProgram ? snap(gap.start, candidates, fall) : { at: 0, snapped: true };
-        const end = beforeProgram ? snap(gap.end, candidates, rise) : { at: duration, snapped: true };
+        const end = beforeProgram
+            ? snap(gap.end, candidates, rise, SNAP_RISE)
+            : { at: duration, snapped: true };
         if (end.at - start.at <= 0.5) continue;
         // 頭と尻は短くても CM。番組の間は CM の尺に足りなければ番組
         if (afterProgram && beforeProgram && end.at - start.at < GAP_MIN) continue;
