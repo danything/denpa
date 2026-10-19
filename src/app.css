@@ -414,6 +414,20 @@ html,
 body {
     height: 100%;
 }
+/*
+ * **スクロールバーは細く、地に馴染む色にする。** Windows ではスクロールバーが常に出て、太い灰色の溝が
+ * 一覧やサイドバー・番組の詳細の右に並んでいた。溝は透明にしてつまみだけを線の色で描き、
+ * 指を乗せている所だけ一段濃くする。標準の `scrollbar-width` / `scrollbar-color` だけで書く
+ * (Chrome・Edge・Firefox。Safari は重ねて出すスクロールバーなのでもとから邪魔にならない)。
+ * 隠している所 (`scrollbar-width: none`) はそれぞれの指定が勝つ
+ */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--dp-line-strong) transparent;
+}
+*:hover {
+    scrollbar-color: var(--dp-muted) transparent;
+}
 body {
     margin: 0;
     word-break: auto-phrase;
