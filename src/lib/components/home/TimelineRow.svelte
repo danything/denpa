@@ -125,6 +125,16 @@
                 </ActionButton>
             {/if}
         </div>
+        <!-- 録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは「いま」の線にも出る) -->
+        {#if item.zone === 'now' && res.end_at > res.start_at}
+            <progress
+                class="row-bar rec"
+                value={Math.min(1, Math.max(0, (ctx.clock - res.start_at) / (res.end_at - res.start_at)))}
+                max="1"
+                aria-label="録画の進み"
+                data-testid="recording-progress"
+            ></progress>
+        {/if}
     </div>
 {/snippet}
 

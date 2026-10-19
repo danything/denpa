@@ -224,6 +224,9 @@
 .board .row-bar.success {
     --pico-progress-color: var(--dp-ok);
 }
+.board .row-bar.rec {
+    --pico-progress-color: var(--dp-rec);
+}
 .board .menu-form {
     display: contents;
 }
