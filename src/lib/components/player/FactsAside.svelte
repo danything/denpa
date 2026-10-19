@@ -47,8 +47,12 @@
         display: flex;
         flex-direction: column;
     }
+    /*
+     * **列の最初のものの上は `--dp-side-top`** (サイドバーのとき `PlayerLayout` が映像の上と同じ値を入れる)。
+     * 映像の上端と列の最初のものの上端を、同じ1つの値でそろえる
+     */
     .top {
-        padding: var(--dp-side-pad, 0) var(--dp-side-pad, 0) 0;
+        padding: var(--dp-side-top, var(--dp-side-pad, 0)) var(--dp-side-pad, 0) 0;
     }
     /* 中身が無ければ場所も取らない (データ放送を出していない間のリモコン) */
     .top:empty {
@@ -68,7 +72,11 @@
         min-height: 0;
         flex: 1;
         overflow-y: auto;
-        padding: var(--dp-side-pad, 0.25rem) var(--dp-side-pad, 0.5rem) 1rem;
+        padding: var(--dp-side-top, var(--dp-side-pad, 0.25rem)) var(--dp-side-pad, 0.5rem) 1rem;
+    }
+    /* 上にリモコンがあるときは、その下は列の中の余白 */
+    .top:not(:empty) + .box .body {
+        padding-top: var(--dp-side-pad, 0.25rem);
     }
     .foot {
         display: flex;

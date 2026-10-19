@@ -1005,3 +1005,13 @@ export async function homeFilter(page: Page, id: string): Promise<void> {
     await button.click();
     await expect(button).toHaveAttribute('aria-pressed', 'true');
 }
+
+/**
+ * **映像の上端と、右の列の最初のものの上端がそろっている** (1px まで)。観る・ライブ・追っかけで同じ
+ * 1つの値 (`PlayerLayout` の `--dp-side-top`) から決まるので、片方だけ動くとここで分かる
+ */
+export async function expectSideAligned(page: Page, stage: string, first: string): Promise<void> {
+    const frame = (await page.getByTestId(stage).boundingBox())!;
+    const head = (await page.locator(first).first().boundingBox())!;
+    expect(Math.abs(frame.y - head.y), `${stage} と ${first} の上端`).toBeLessThanOrEqual(1);
+}

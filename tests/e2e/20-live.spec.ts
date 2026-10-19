@@ -10,6 +10,7 @@ import {
     dataElement,
     expect,
     expectSharpCaptions,
+    expectSideAligned,
     fakeDataBroadcast,
     feedCaption,
     feedData,
@@ -135,6 +136,14 @@ test.describe('ライブ視聴', () => {
             clientH: document.documentElement.clientHeight,
         }));
         expect(doc.scrollH).toBeLessThanOrEqual(doc.clientH + 1);
+    });
+
+    test('映像の上端と右の列の最初のもの (種別のタブ) の上端がそろう', async ({ page }) => {
+        await page.setViewportSize({ width: 1366, height: 768 });
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect(page.getByTestId('live-frame')).toBeVisible();
+        await expectSideAligned(page, 'live-frame', '.live-side > :first-child');
     });
 
     /*

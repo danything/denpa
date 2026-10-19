@@ -1022,7 +1022,8 @@
     .live-side {
         display: flex;
         flex-direction: column;
-        padding: var(--dp-side-pad, 0) var(--dp-side-pad, 0) 0;
+        /* 上は映像の上と同じ値 (`--dp-side-top`。FactsAside と同じ) */
+        padding: var(--dp-side-top, var(--dp-side-pad, 0)) var(--dp-side-pad, 0) 0;
     }
     /* 測り直す操作。読みものの行に置くので、ボタンの形にはしない */
     .relearn {

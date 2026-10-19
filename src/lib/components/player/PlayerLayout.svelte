@@ -93,10 +93,13 @@
          */
         .layout > :global(aside) {
             /*
-             * 中身の余白は映像の周りの余白と同じ (`--dp-gutter`)。上は `--dp-page-top` (0。ヘッダーのすぐ下)。列の最初のもの (タブ・番組名) の上端が
-             * 映像の上端とそろう。1.25rem にしていた頃は、列の中身だけ 4px 下から始まっていた
+             * 中身の左右の余白は映像の周りの余白と同じ (`--dp-gutter`)。**上は映像の上と同じ1つの値
+             * (`--dp-side-top` = `--dp-page-top`)** — 列の最初のもの (タブ・番組名) の上端が映像の上端とそろう。
+             * 上も `--dp-side-pad` で取っていた頃は、映像の上の余白を変えるたびに列の中身だけずれた
+             * (1.25rem で 4px、`--dp-page-top` を 0 にしたときは 16px)。E2E (20・22・25 の `expectSideAligned`) で見る
              */
             --dp-side-pad: var(--dp-gutter, 1rem);
+            --dp-side-top: var(--dp-page-top, 0px);
             width: 16rem;
             min-height: 0;
             flex-shrink: 0;
