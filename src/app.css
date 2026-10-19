@@ -414,6 +414,13 @@ html,
 body {
     height: 100%;
 }
+/* 番組の詳細のフェードの濃さ (`ProgramDetail`)。数として登録しておくと、スクロールに合わせて滑らかに変わる */
+@property --detail-fade {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 0;
+}
+
 /*
  * **スクロールバーは細く、地に馴染む色にする。** Windows ではスクロールバーが常に出て、太い灰色の溝が
  * 一覧やサイドバー・番組の詳細の右に並んでいた。溝は透明にしてつまみだけを線の色で描き、
@@ -1441,21 +1448,6 @@ dialog {
 .modal-actions button,
 .modal-actions [role="button"] {
     margin: 0;
-}
-/* 右上の × (番組の詳細)。閉じるのはこれだけで、下の並びには置かない */
-.modal-close {
-    position: absolute;
-    top: var(--dp-space-3);
-    right: var(--dp-space-3);
-    z-index: 1;
-    color: var(--dp-muted);
-}
-.modal-close:hover {
-    color: inherit;
-}
-.modal-close svg {
-    width: 1.125rem;
-    height: 1.125rem;
 }
 /*
  * **狭い画面では下から出る一枚。** 中央に浮かせた箱だとボタンが2段に折れて、どれを押すのか探すことになった。

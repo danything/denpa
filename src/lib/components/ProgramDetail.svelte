@@ -2,7 +2,6 @@
     import type { Snippet } from 'svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import type { ProgramDetail } from '#lib/types.js';
-    import X from '~icons/lucide/x';
 
     /**
      * 番組の詳細を出すモーダル。
@@ -11,10 +10,10 @@
      * 下に並べるボタンと、番組名の上に出す状態 (予約済み・放送終了など) だけは開いた場所で違うので
      * snippet で受ける (`actions`・`status`)。
      *
-     * **閉じるのは右上の × だけ** (幕を押しても Esc でも閉じる)。下の並びに「閉じる」を置いていた頃は、
-     * 押すものがどれも同じ控えのボタンで、どれが主なのか読めなかった。下には主のボタン (再生・予約) を
-     * 1つだけ塗りで置き、ほかは控えにする。並びは主がいちばん右 (狭い画面では下から出る一枚になり、
-     * 主がいちばん上の全幅のボタン)。
+     * **閉じるは左下の「閉じる」** (幕を押しても Esc でも閉じる)。主のボタン (再生・予約) は右下に
+     * 1つだけ塗りで置き、ほかは控えにする。閉じるを右の並びに混ぜていた頃は、どれも同じ控えのボタンで
+     * どれが主なのか読めず、右上の × にしたら × がスクロールバーに重なった。左右に分ければ主が埋もれない
+     * (狭い画面では下から出る一枚になり、主がいちばん上・閉じるがいちばん下の全幅のボタン)。
      *
      * **中身は `ProgramFacts` が持っている** — 観る画面・ライブ・追っかけは
      * 枠なしで同じものを右 (FactsAside) に置くため。
@@ -71,25 +70,28 @@
     <!--
         **巻き取るのは中身だけ。** 押すものは箱の下端に重ねたまま出しておく
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)。並びの地は塗らず、
-        中身はボタンの間と後ろに透けて見える (下に地の帯を敷くと、そこだけ何も書いていない帯になった)
+        中身はボタンの間と後ろに透けて見える (下に地の帯を敷くと、そこだけ何も書いていない帯になった)。
+        続きがあるときは、ボタンの手前で中身を薄く消していく (下の CSS)
     -->
     <div bind:this={box} class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
-        <div class="detail-body" style:--detail-bottom={actions ? `calc(${actionsHeight}px + 2 * var(--dp-space-5))` : undefined}>
-            <!-- × は巻き取る中身の中に置く (下の CSS)。箱に浮かせると、スクロールバーが常に出る Windows でバーに重なった -->
-            <button type="button" class="ghost icon small modal-close" onclick={onclose} aria-label="閉じる" data-testid="detail-close">
-                <X aria-hidden="true" />
-            </button>
+        <!--
+            フェードの長さ (`animation-duration`) は要素に直に書く。時間で動くものではない (巻き取った量で濃さが
+            決まるだけ) が、動きを減らす設定で Pico の層が `!important` で 1ms に縮める。層の中の `!important` には
+            層の外の規則では勝てず、要素に直に書いたものだけが勝つ
+        -->
+        <div class="detail-body" style:--detail-bottom={`calc(${actionsHeight}px + 2 * var(--dp-space-5))`} style:animation-duration|important="auto">
             {#if status}
                 <div class="cluster detail-status">{@render status()}</div>
             {/if}
             <ProgramFacts {program} {notes} {cmNote} {fps} />
         </div>
 
-        {#if actions}
-            <div class="detail-actions modal-actions" bind:offsetHeight={actionsHeight}>
+        <div class="detail-actions modal-actions" bind:offsetHeight={actionsHeight}>
+            <button type="button" class="secondary detail-close" onclick={onclose} data-testid="detail-close">閉じる</button>
+            {#if actions}
                 {@render actions()}
-            </div>
-        {/if}
+            {/if}
+        </div>
     </div>
 </div>
 
@@ -141,31 +143,49 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        /* 中身は箱の下端まで巻き取る (ボタンの並びは上に重ねる) */
-        padding-bottom: 0;
+        /*
+         * **巻き取るのは箱いっぱいの中身** (余白は中身の側で取る)。スクロールバーは箱の右端に出る
+         * (余白の内側に出すと、字のすぐ横に浮いて見えた)。中身は箱の下端まで巻き取り、ボタンの並びは上に重ねる
+         */
+        padding: 0;
     }
     .detail-body {
         min-height: 0;
         flex: 1 1 0%;
         overflow-y: auto;
-        /* 最後の行がボタンの並びの上まで上がりきるよう、並びの高さと上下の余白ぶん空ける (並びが無ければ箱の余白だけ) */
-        padding-bottom: var(--detail-bottom, var(--dp-space-5));
+        padding: var(--dp-space-5);
+        /* 最後の行がボタンの並びの上まで上がりきるよう、並びの高さと上下の余白ぶん空ける */
+        padding-bottom: var(--detail-bottom);
     }
     /*
-     * **× は中身の右上に貼り付ける** (`sticky`)。巻き取る箱の中に置くので、スクロールバーは × の外 (右) に出る。
-     * 箱に `absolute` で浮かせていた頃は、スクロールバーが常に出る Windows で × とバーが重なった。
-     * 箱の余白 (`--dp-space-5`) の内側に来るので、浮かせていた頃より少し内に寄る
+     * **続きがあるときだけ、ボタンの手前で中身を薄く消していく** (フェード)。字がボタンの後ろを
+     * そのまま通ると、ボタンも字も読みにくい。マスクは箱 (巻き取る枠) に掛かるので、中身を巻き取っても
+     * 消える位置はボタンの手前のまま。濃さ (`--detail-fade`) は巻き取った量で決め、いちばん下まで
+     * 読んだら消える (最後の行がはっきり見える)。巻き取れないほど短い中身では掛からない
+     * (スクロールの物差しが無いので `--detail-fade` は初めの 0 のまま)。スクロール連動のアニメーションが
+     * 無いブラウザでは、アニメーションがすぐ終わって 0 になり、フェードの無い形になる
      */
-    .detail-body > .modal-close {
-        position: sticky;
-        top: 0;
-        right: auto;
-        float: right;
-        margin: 0 0 0 var(--dp-space-2);
+    .detail-body {
+        mask-image: linear-gradient(
+            to bottom,
+            #000 calc(100% - var(--detail-bottom) - 1.5rem),
+            rgb(0 0 0 / calc(1 - 0.85 * var(--detail-fade))) calc(100% - var(--detail-bottom) + 1rem)
+        );
+        animation: detail-fade auto linear both;
+        animation-timeline: scroll(self);
+    }
+    @keyframes detail-fade {
+        0%,
+        92% {
+            --detail-fade: 1;
+        }
+        100% {
+            --detail-fade: 0;
+        }
     }
     /*
      * 並べ方は `.modal-actions`。箱の下端に重ね、地は塗らない。ボタンの無い所は押しても中身に届く
-     * (字を選ぶ・巻き取る)
+     * (字を選ぶ・巻き取る)。閉じるは左端、ほかは右に寄せる
      */
     .detail-actions {
         position: absolute;
@@ -179,6 +199,9 @@
     }
     .detail-actions :global(form) {
         margin: 0;
+    }
+    .detail-close {
+        margin-inline-end: auto;
     }
     .detail-status {
         margin-bottom: var(--dp-space-2);

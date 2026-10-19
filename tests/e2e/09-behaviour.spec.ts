@@ -167,16 +167,20 @@ test.describe('操作したときの反応', () => {
     });
 
     /*
-     * **番組の詳細を閉じるのは右上の × だけ** (下の並びに「閉じる」は置かない)。Esc でも閉じる。
-     * 狭い画面では下から出る一枚 (下端に付き、ボタンは全幅)
+     * **番組の詳細を閉じるのは左下の「閉じる」** (主のボタンは右)。Esc でも閉じる。
+     * 狭い画面では下から出る一枚 (下端に付き、ボタンは全幅で、閉じるがいちばん下)
      */
-    test('番組の詳細は × と Esc で閉じ、狭い画面では下から出る', async ({ page }) => {
+    test('番組の詳細は左下の「閉じる」と Esc で閉じ、狭い画面では下から出る', async ({ page }) => {
         await goto(page, '/guide?type=GR');
         await page.getByTestId('program-button').first().click();
         const detail = page.getByTestId('program-detail');
         await expect(detail).toBeVisible();
-        await expect(detail.getByRole('button', { name: '閉じる', exact: true })).toHaveCount(2); // × と幕
-        await expect(detail.locator('.modal-actions').getByText('閉じる')).toHaveCount(0);
+        // 閉じるは並びの左端 (主のボタンより左)
+        const close = (await detail.getByTestId('detail-close').boundingBox())!;
+        const others = detail.locator(
+            '.modal-actions :is(button, a.button):not([data-testid="detail-close"])',
+        );
+        for (const other of await others.all()) expect(close.x).toBeLessThan((await other.boundingBox())!.x);
         await page.keyboard.press('Escape');
         await expect(detail).toBeHidden();
 
@@ -187,6 +191,12 @@ test.describe('操作したときの反応', () => {
         const box = (await detail.locator('> div').first().boundingBox())!;
         expect(Math.round(box.y + box.height)).toBe(view.height);
         expect(Math.round(box.width)).toBe(view.width);
+        // 狭い画面では閉じるがいちばん下
+        const closeY = (await detail.getByTestId('detail-close').boundingBox())!.y;
+        for (const other of await detail
+            .locator('.modal-actions :is(button, a.button):not([data-testid="detail-close"])')
+            .all())
+            expect(closeY).toBeGreaterThan((await other.boundingBox())!.y);
         await detail.getByTestId('detail-close').click();
         await expect(detail).toBeHidden();
     });
