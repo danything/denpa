@@ -628,6 +628,18 @@
             background: var(--dp-bg);
         }
     }
+    /*
+     * **数えている間 (`aria-busy`) も形を変えない。** Pico の `aria-busy` は1行の字に回るものを付ける前提で、
+     * `white-space: nowrap` と `::before` の回るものを足す。ここは字の段落とボタンを縦に並べた箱なので、
+     * 案内の字が1行に伸びて列の幅からはみ出し (列が横にスクロールできてしまう)、回るものも1行ぶん場所を取る。
+     * 開いた直後の1回目の下見でも、数え終わるまでの一瞬だけ崩れて見えていた
+     */
+    .draft-foot[aria-busy='true'] {
+        white-space: normal;
+    }
+    .draft-foot[aria-busy='true']::before {
+        display: none;
+    }
     .draft-foot p {
         margin: 0;
     }

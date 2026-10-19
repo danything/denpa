@@ -59,6 +59,49 @@ test.describe('ルールの編集', () => {
         await cancelAllReservations(page);
     });
 
+    /*
+     * **開いた直後も右の列は崩れない。** 開くとすぐ1回目の下見を数え、その間は列の下に `aria-busy` が付く。
+     * Pico の `aria-busy` は字を1行にするので、案内の字が列の幅からはみ出して列が横にスクロールでき、
+     * 数え終わると戻る (一瞬だけ崩れて見えた)。押した瞬間から毎フレーム測って、数え終わるまで見る
+     */
+    test('開いてから下見を数え終わるまで、右の列がはみ出さない', async ({ page }) => {
+        await makeRule(page, 'テストアニメ');
+        await goto(page, '/rules');
+        await page.evaluate(() => {
+            const w = window as unknown as { overflow: string[]; busy: boolean; done: boolean };
+            w.overflow = [];
+            w.busy = false;
+            w.done = false;
+            const started = performance.now();
+            const frame = () => {
+                const draft = document.querySelector<HTMLElement>('[data-testid="rule-draft"]');
+                const foot = draft?.querySelector('[aria-busy]');
+                if (draft !== null && draft !== undefined) {
+                    if (draft.scrollWidth > draft.clientWidth || draft.scrollHeight > draft.clientHeight) {
+                        w.overflow.push(
+                            `${draft.scrollWidth}x${draft.scrollHeight} > ${draft.clientWidth}x${draft.clientHeight}`,
+                        );
+                    }
+                    if (foot?.getAttribute('aria-busy') === 'true') w.busy = true;
+                    else if (w.busy) w.done = true;
+                }
+                if (!w.done && performance.now() - started < 5000) requestAnimationFrame(frame);
+                else w.done = true;
+            };
+            requestAnimationFrame(frame);
+        });
+        await page
+            .getByTestId('rule-row')
+            .filter({ hasText: 'テストアニメ' })
+            .getByTestId('rule-open')
+            .click();
+        await page.waitForURL(/\/search\?rule=\d+$/);
+        await page.waitForFunction(() => (window as unknown as { done: boolean }).done);
+        expect(await page.evaluate(() => (window as unknown as { overflow: string[] }).overflow)).toEqual([]);
+        await clearRules(page);
+        await cancelAllReservations(page);
+    });
+
     test('チェックを外したまま別のルールを開いても、そのルールの値が入る', async ({ page }) => {
         // どの番組にも当たらない語。予約を立てずに済む
         for (const keyword of ['当たらない語A', '当たらない語B']) {
