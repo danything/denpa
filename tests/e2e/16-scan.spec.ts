@@ -220,9 +220,17 @@ test.describe('チューナーの設定', () => {
         // 足すのは「追加」で出す欄から。名前を打っている途中では送らない
         await card.getByTestId('tuner-add-open').click();
         const add = card.getByTestId('tuner-add');
-        await add.locator('input[name="name.3"]').fill('adapter3');
-        await add.locator('input[name="device.3"]').fill('/dev/dvb/adapter3/frontend0');
-        await add.locator('input[name="type.3.GR"]').check();
+        await add.locator('input[name="name.add"]').fill('adapter3');
+        /*
+         * **足す欄が途中でも、ほかの行の保存は通る。** 足す欄は「追加」で送ったときだけ読む。
+         * 番号付きの名前で同じフォームに乗せていた頃は、デバイスが空だとほかの行まで断られていた
+         */
+        await rows.nth(0).getByTestId('tuner-use').check();
+        await expect(card.getByTestId('saved-result')).toBeVisible();
+        await expect(rows).toHaveCount(3);
+        await expect(rows.nth(0)).not.toContainText('無効');
+        await add.locator('input[name="device.add"]').fill('/dev/dvb/adapter3/frontend0');
+        await add.locator('input[name="type.add.GR"]').check();
         await expect(rows).toHaveCount(3);
         await card.getByTestId('tuner-add-submit').click();
         await expect(rows).toHaveCount(4);

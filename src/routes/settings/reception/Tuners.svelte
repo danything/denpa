@@ -130,7 +130,6 @@
         </div>
     {:else}
         {@const tuners = shownTuners.value.list}
-        {@const newIndex = tuners.length}
         <!--
             **変えたらその場で保存する** (`autosave`。設定のほかの節と同じ)。文字の欄は離れたとき、
             チェック・スイッチ・選択は変えたとき。
@@ -301,24 +300,26 @@
             {/if}
 
             {#if adding}
-                <!-- 足すための欄。名前が空なら送っても足さない (サーバの `new`) -->
+                <!--
+                    足すための欄。名前は番号の代わりに `add` (`name.add` …) で、「追加」のボタン (`add`) で送ったときだけサーバが読む。
+                    ほかの行を変えたときの保存にも乗るが、そこでは読まれない (`tuners.server.ts`)
+                -->
                 <div class="add" data-no-autosave data-testid="tuner-add">
-                    <input type="hidden" name="new" value={newIndex} />
-                    <input type="hidden" name={`use.${newIndex}`} value="on" />
+                    <input type="hidden" name="use.add" value="on" />
                     <label class="field">
                         <span>名前</span>
-                        <input class="w-name" name={`name.${newIndex}`} />
+                        <input class="w-name" name="name.add" />
                     </label>
                     <label class="field grow">
                         <span>デバイス</span>
-                        <input class="mono" name={`device.${newIndex}`} placeholder="/dev/dvb/adapter0/frontend0" />
+                        <input class="mono" name="device.add" placeholder="/dev/dvb/adapter0/frontend0" />
                     </label>
                     <div class="field">
                         <span>受信できる種別</span>
                         <div class="chips types">
                             {#each CHANNEL_TYPES as type (type)}
                                 <label class="chip">
-                                    <input type="checkbox" name={`type.${newIndex}.${type}`} />
+                                    <input type="checkbox" name={`type.add.${type}`} />
                                     {SERVICE_TYPE_LABEL[type]}
                                 </label>
                             {/each}
@@ -326,7 +327,7 @@
                     </div>
                     <label class="field">
                         <span>LNB</span>
-                        <select class="w-lnb" name={`lnb.${newIndex}`}>
+                        <select class="w-lnb" name="lnb.add">
                             {#each LNB_CHOICES as choice (choice.value)}
                                 <option value={choice.value}>{choice.label}</option>
                             {/each}
@@ -336,7 +337,7 @@
             {/if}
             <div class="cluster actions">
                 {#if adding}
-                    <button type="submit" class="small" data-testid="tuner-add-submit">追加</button>
+                    <button type="submit" name="add" value="1" class="small" data-testid="tuner-add-submit">追加</button>
                     <button type="button" class="small ghost" onclick={() => (adding = false)}>やめる</button>
                 {:else}
                     <button type="button" class="small secondary outline" onclick={() => (adding = true)} data-testid="tuner-add-open">
