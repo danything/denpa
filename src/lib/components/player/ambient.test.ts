@@ -403,6 +403,18 @@ describe('映像の中の動き', () => {
         const topRight = extended.slice(27 * 4, 27 * 4 + 4);
         expect(topLeft[0]).toBeGreaterThan(200);
         expect(topRight[1]).toBeGreaterThan(180);
+        // 上が赤・下が緑なら、左の辺は上寄りが赤・下寄りが緑、下の辺は緑
+        for (let y = 0; y < GLANCE.height; y++) {
+            for (let x = 0; x < GLANCE.width; x++)
+                data.set(y < 9 ? [220, 30, 30, 255] : [30, 200, 60, 255], (y * GLANCE.width + x) * 4);
+        }
+        const split = edgeExtend(data);
+        const at = (x: number, y: number) =>
+            split.slice((y * GLANCE.width + x) * 4, (y * GLANCE.width + x) * 4 + 4);
+        expect(at(0, 3)[0]).toBeGreaterThan(200);
+        expect(at(0, 15)[1]).toBeGreaterThan(180);
+        expect(at(31, 15)[1]).toBeGreaterThan(180);
+        expect(at(16, 17)[1]).toBeGreaterThan(180);
     });
 
     test('入れ替えを見送っても、ならした色は進むので、小さな違いもいずれ入れ替わる', () => {

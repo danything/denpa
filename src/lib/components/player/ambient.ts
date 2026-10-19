@@ -110,6 +110,7 @@ export function edgeExtend(pixels: Uint8ClampedArray): Uint8ClampedArray<ArrayBu
     }
     return out;
 }
+
 /**
  * 色を時間でならす時定数 (ms)。**250ms — 写す間隔 (200ms) と同じくらい。** 入れ替えの 200ms と合わせても、
  * 新しい色の 9 割まで 0.6 秒ほどで追いつく
