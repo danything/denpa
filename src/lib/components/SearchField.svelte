@@ -345,9 +345,14 @@
     /*
      * 候補。欄の真下に浮かせ、欄より少し広く取る (ヘッダーの欄が縮んでも読める幅)。
      * 節は小さな見出しと行だけ (カードにしない)。選んでいる行は淡い地。
-     * 箱は浮かぶもののガラス (`.glass`。`app.css`)
+     * 箱は浮かぶもののガラス (`.glass`。`app.css`) の縁・照り・影で、**面は透かさない。** ヘッダーは自分がぼかしを
+     * 持ち、画面の切り替えで抜き出す名前 (`view-transition-name`) も付いているので、その中の箱は裏 (本文) をぼかせない
+     * (ぼかしがヘッダーの中で止まる)。透かすと本文の字がぼけずに透けて読みにくいので、ぼかしは掛けない
      */
     .suggest {
+        background: var(--dp-glass-sheen), var(--dp-glass-solid);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
         position: absolute;
         top: calc(100% + var(--dp-space-1));
         left: 50%;
