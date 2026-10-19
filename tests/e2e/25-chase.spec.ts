@@ -187,7 +187,11 @@ async function checkChase(page: Page, browser: Browser, id: string): Promise<voi
     await goto(page, `/chase/${id}`);
     const badges = page.getByTestId('chase-facts').getByTestId('detail-badges');
     // 映像の上端と右の列の最初のもの (番組名) の上端がそろう
-    await expectSideAligned(page, 'chase', '[data-testid="chase-facts"] > :first-child');
+    await expectSideAligned(
+        page,
+        '[data-testid="chase-video"]',
+        '[data-testid="chase-facts"] > :first-child',
+    );
     await expect(badges.getByTestId('detail-genre').first()).toHaveText('アニメ／特撮 > 国内アニメ');
     await expect(badges.getByTestId('detail-audio').first()).toBeVisible();
     await page.unroute('/api/programs/*');

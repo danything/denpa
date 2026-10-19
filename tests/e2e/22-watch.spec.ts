@@ -511,7 +511,11 @@ test.describe('録画を観る', () => {
         await page.setViewportSize({ width: 820, height: 1180 });
         await goto(page, `/watch/${id}`);
         // 映像の上端と右の列の最初のもの (番組名) の上端がそろう
-        await expectSideAligned(page, 'watch-stage', '[data-testid="watch-facts"] > :first-child');
+        await expectSideAligned(
+            page,
+            '[data-testid="watch-video"]',
+            '[data-testid="watch-facts"] > :first-child',
+        );
 
         const side = page.getByTestId('watch-side');
         for (const testid of ['watch-close', 'watch-shot', 'watch-delete']) {

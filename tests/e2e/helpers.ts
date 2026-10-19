@@ -1007,11 +1007,35 @@ export async function homeFilter(page: Page, id: string): Promise<void> {
 }
 
 /**
- * **映像の上端と、右の列の最初のものの上端がそろっている** (1px まで)。観る・ライブ・追っかけで同じ
- * 1つの値 (`PlayerLayout` の `--dp-side-top`) から決まるので、片方だけ動くとここで分かる
+ * **目に見える映像の上端と、右の列の最初のもの (の外枠) の上端がそろっている** (1px まで)。
+ * 観る・ライブ・追っかけで同じ1つの値 (`PlayerLayout` の `--dp-side-top`) から決まるので、片方だけ動くとここで分かる。
+ *
+ * 映像は枠 (舞台) ではなく、**絵の出ている所** を測る — `media` の要素 (video か、ライブの MPEG-2 の canvas) の
+ * 中で、絵の縦横比 (`videoWidth`/`width`) を `object-fit: contain` で収めた矩形。絵の大きさがまだ分からなければ
+ * 要素そのもの。列の最初のものは外枠 (枠線を含む `getBoundingClientRect`)
  */
-export async function expectSideAligned(page: Page, stage: string, first: string): Promise<void> {
-    const frame = (await page.getByTestId(stage).boundingBox())!;
+export async function expectSideAligned(page: Page, media: string, first: string): Promise<void> {
+    const picture = await page
+        .locator(media)
+        .first()
+        .evaluate((el) => {
+            const box = el.getBoundingClientRect();
+            const w =
+                el instanceof HTMLVideoElement
+                    ? el.videoWidth
+                    : el instanceof HTMLCanvasElement
+                      ? el.width
+                      : 0;
+            const h =
+                el instanceof HTMLVideoElement
+                    ? el.videoHeight
+                    : el instanceof HTMLCanvasElement
+                      ? el.height
+                      : 0;
+            if (w === 0 || h === 0) return box.top;
+            const scale = Math.min(box.width / w, box.height / h);
+            return box.top + (box.height - h * scale) / 2;
+        });
     const head = (await page.locator(first).first().boundingBox())!;
-    expect(Math.abs(frame.y - head.y), `${stage} と ${first} の上端`).toBeLessThanOrEqual(1);
+    expect(Math.abs(picture - head.y), `${media} の絵と ${first} の上端`).toBeLessThanOrEqual(1);
 }

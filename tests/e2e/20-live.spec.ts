@@ -138,12 +138,31 @@ test.describe('ライブ視聴', () => {
         expect(doc.scrollH).toBeLessThanOrEqual(doc.clientH + 1);
     });
 
+    /*
+     * **目に見える映像の上端と、種別のタブの外枠の上端がそろう** (広い画面・低い画面の両方)。
+     * 測るのは絵の出ている所 (エンコードしたものは video、MPEG-2 のままは canvas)
+     */
     test('映像の上端と右の列の最初のもの (種別のタブ) の上端がそろう', async ({ page }) => {
-        await page.setViewportSize({ width: 1366, height: 768 });
-        await goto(page, '/live');
-        await page.getByTestId('live-channel').first().click();
-        await expect(page.getByTestId('live-frame')).toBeVisible();
-        await expectSideAligned(page, 'live-frame', '.live-side > :first-child');
+        for (const size of [
+            { width: 1366, height: 768 },
+            { width: 1920, height: 1080 },
+            { width: 1920, height: 900 },
+        ]) {
+            await page.setViewportSize(size);
+            await goto(page, '/live');
+            await page.getByTestId('live-channel').first().click();
+            await expect(page.getByTestId('live-frame')).toBeVisible();
+            await expectSideAligned(page, '[data-testid="live-video"]', '.live-side > :first-child');
+        }
+        // MPEG-2 のまま (canvas に描く) でも同じ
+        await wakeControls(page, 'live-frame');
+        await pickCodec(page, 'live', 'mpeg2');
+        await expect
+            .poll(async () => Number((await page.getByTestId('live-raw').getAttribute('data-shown')) ?? 0), {
+                timeout: 30_000,
+            })
+            .toBeGreaterThan(10);
+        await expectSideAligned(page, '[data-testid="live-raw"]', '.live-side > :first-child');
     });
 
     /*
