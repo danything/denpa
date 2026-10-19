@@ -45,15 +45,18 @@ test.describe('ルールの一覧', () => {
         await expect(anime.getByTestId('rule-next')).toContainText(BS11.name);
         await expect(anime.getByTestId('rule-reservations')).not.toHaveText('0');
         await expect(none.getByTestId('rule-next')).toHaveText('予定なし');
-        await expect(page.getByTestId('rule-summary')).toContainText(/これから7日の予約 \d+ 件/);
+        await expect(page.getByTestId('rule-summary')).toContainText(/これから7日の予約\s*\d+ 件/);
+        // 広い画面では絞り込み・並び・集計は右のサイドバー。細い帯は出さない
+        await expect(page.getByTestId('rule-sidebar')).toBeVisible();
+        await expect(page.getByTestId('rule-bar')).toBeHidden();
 
         // 既定は次の放送が近い順 (予定なしは下)
         await expect(rows.first()).toContainText('テストアニメ');
-        await page.getByTestId('rule-sort').selectOption('new');
+        await page.getByTestId('rule-sort-new').click();
         await expect(rows.first()).toContainText('どこにも無い番組');
 
         // 絞り込みは件数つき
-        await expect(page.getByTestId('rule-filter-idle')).toContainText('次の放送なし 1');
+        await expect(page.getByTestId('rule-filter-idle')).toContainText(/次の放送なし\s*1/);
         await page.getByTestId('rule-filter-idle').click();
         await expect(rows).toHaveCount(1);
         await expect(rows.first()).toContainText('どこにも無い番組');
@@ -66,7 +69,7 @@ test.describe('ルールの一覧', () => {
         await expect(anime).toContainText('無効');
         await expect(toggle).not.toBeChecked();
         await expect(page).toHaveURL(/\/rules$/);
-        await expect(page.getByTestId('rule-filter-off')).toContainText('無効 1');
+        await expect(page.getByTestId('rule-filter-off')).toContainText(/無効\s*1/);
         // 止めたルールの予約は引っ込む
         await expect(anime.getByTestId('rule-reservations')).toHaveText('0');
         await toggle.click();
@@ -95,7 +98,11 @@ test.describe('ルールの一覧', () => {
         await makeRule(page, 'どこにも無い番組');
         await goto(page, '/rules');
         const row = page.getByTestId('rule-row').first();
-        await expect(row).toContainText('予約 0 ・ 録画 0');
+        await expect(row).toContainText(/予約\s*0\s*・\s*録画\s*0/);
+        // 絞り込みと並びは細い帯にまとめ、画面の下 (タブのすぐ上) に置く
+        const bar = await page.getByTestId('rule-bar').boundingBox();
+        expect(bar?.y ?? 0).toBeGreaterThan(844 / 2);
+        await expect(page.getByTestId('rule-bar-filter-all')).toBeInViewport();
         await expect(row.getByTestId('rule-switch')).toBeInViewport();
         await expect(row.getByTestId('rule-delete')).toBeInViewport();
         const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

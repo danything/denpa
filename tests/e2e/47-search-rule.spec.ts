@@ -87,6 +87,22 @@ test.describe('検索からルールを作る', () => {
         // 言葉なしで開いたら、結果の代わりにそのルールで録る番組を出す
         await expect(page.getByTestId('rule-preview').getByTestId('preview-row').first()).toBeVisible();
 
+        // 行は1本ずつ扱える: 押すと番組の詳細、予約の立っている行はその場で取消。取り消すと「取り消し済み」に変わる
+        const reserved = page
+            .getByTestId('rule-preview')
+            .getByTestId('preview-row')
+            .filter({ has: page.getByTestId('preview-cancel') })
+            .last(); // 先の放送 (近い放送は数秒で始まって一覧から抜ける)
+        const programId = await reserved.getAttribute('data-program-id');
+        await reserved.getByTestId('preview-open').click();
+        await expect(page.getByTestId('program-detail')).toBeVisible();
+        await page.getByTestId('detail-close').click();
+        await expect(page.getByTestId('program-detail')).toHaveCount(0);
+        await reserved.getByTestId('preview-cancel').click();
+        const same = page.locator(`[data-testid="preview-row"][data-program-id="${programId}"]`);
+        await expect(same.getByTestId('preview-cancel')).toHaveCount(0);
+        await expect(same).toContainText('取り消し済み');
+
         // 直して更新
         await page.getByTestId('rule-priority').selectOption('3');
         await page.getByTestId('rule-update').click();

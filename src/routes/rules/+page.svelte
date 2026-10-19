@@ -62,6 +62,10 @@
         paged.reset();
     });
 
+    /** 絞り込みごとの件数 */
+    const counts = $derived(
+        Object.fromEntries(FILTERS.map((f) => [f.key, data.rules.filter(f.test).length])) as Record<Filter, number>,
+    );
     const serviceNames = $derived(new Map(data.services.map((s) => [s.id, s.name])));
     /** 「今日」「明日」の切れ目に使う時計。分で刻む */
     let clock = $state(Date.now());
@@ -102,203 +106,297 @@
 
 <Toasts {notices} source={form} />
 
-<div class="rules-page">
-    <!--
-        **上の操作と表の見出しは、巻いても上に残す** (`position: sticky`)。ルールが増えると、
-        下のほうで絞り込みや並びを変えるのに上まで戻ることになる。地はページと同じで枠は付けない。
-        下の線も引かない (ヘッダーと同じ。下を流れる行とは地で分かれる)
-    -->
-    <div class="top" data-testid="rule-top">
-        <div class="toolbar">
-            <div class="chips filters" role="group" aria-label="絞り込み" data-testid="rule-filters">
-                {#each FILTERS as f (f.key)}
-                    <button
-                        type="button"
-                        class="filter"
-                        class:active={filter === f.key}
-                        aria-pressed={filter === f.key}
-                        onclick={() => (filter = f.key)}
-                        data-testid="rule-filter-{f.key}"
-                    >
-                        {f.label} <span class="num">{data.rules.filter(f.test).length}</span>
-                    </button>
+<!--
+    **ホームと同じ作り。** 左に1本の一覧 (2段の淡い塊を 6px 空けて並べる)、1000px からは右にサイドバー
+    (絞り込み・並び・集計。ドキュメントの目次と同じ行)。それより狭いと、絞り込みと並びは細い1本の帯にまとめ、
+    スマホ (下のタブがある幅) では画面の下、タブのすぐ上に置く (押すものは指の届く下に)
+-->
+<div class="rules-board">
+    <div class="rules-list">
+        <!-- 狭い画面の集計。広い画面ではサイドバーの「集計」 -->
+        <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
+            これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた <span class="num">{data.summary.lastWeekRecordings}</span> 本
+        </p>
+
+        {#if data.rules.length === 0}
+            <div class="empty" data-testid="rule-empty">
+                <p class="bold">ルールはまだありません</p>
+                <p class="small muted">
+                    <a href={resolve('search')}>検索</a>で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
+                </p>
+            </div>
+        {:else}
+            <ul class="rows" data-testid="rule-table">
+                {#each paged.rows as rule (rule.id)}
+                    <!--
+                        **2段の塊。** 1段目に名前、右にスイッチと削除。2段目に条件・次の放送・予約と録画の数・最後に録れた日。
+                        塊を押すと検索の画面でそのルールを直す。スイッチと削除はリンクの外 (隣) なので、押してもルールは開かない
+                    -->
+                    <li class="row" class:off={!rule.enabled} data-testid="rule-row" data-rule-id={rule.id}>
+                        <a class="row-body" href={resolve(`search?rule=${rule.id}`)} data-testid="rule-open">
+                            <span class="name">
+                                <span class="truncate">{rule.name}</span>
+                                {#if !rule.enabled}<span class="tag">無効</span>{/if}
+                                {#if rule.conflicts > 0}<span class="tag error outline">競合 {rule.conflicts}</span>{/if}
+                            </span>
+                            <span class="meta small muted">
+                                <span class="wide-part"><span class="cond">{conditionSummary(rule, (id) => serviceNames.get(id))}</span>
+                                <span class="sep" aria-hidden="true">・</span></span>
+                                <span class="next" data-testid="rule-next">
+                                    {#if rule.next === null}
+                                        予定なし
+                                    {:else}
+                                        次 {upcomingLabel(rule.next.start_at, clock)} <span class="broadcast">{rule.next.service_name}</span>
+                                    {/if}
+                                </span>
+                                <span class="sep" aria-hidden="true">・</span>
+                                <span class="num">予約 <span data-testid="rule-reservations">{rule.reservations}</span></span>
+                                <span class="sep" aria-hidden="true">・</span>
+                                <span class="num">録画 {rule.recordings}</span>
+                                {#if rule.last_recorded_at !== null}
+                                    <span class="wide-part"><span class="sep" aria-hidden="true">・</span>
+                                    <span>最後に録れた {date(rule.last_recorded_at)}</span></span>
+                                {/if}
+                            </span>
+                        </a>
+                        <form method="POST" action="?/toggle" class="switch" use:submitting={switched}>
+                            <input type="hidden" name="id" value={rule.id} />
+                            <input
+                                type="checkbox"
+                                role="switch"
+                                aria-checked={rule.enabled}
+                                checked={rule.enabled}
+                                aria-label="「{rule.name}」を有効にする"
+                                onchange={(event) => event.currentTarget.form?.requestSubmit()}
+                                data-testid="rule-switch"
+                            />
+                        </form>
+                        <ArmedDelete {deleting} armKey={rule.id} fields={{ id: rule.id }} class="xs" testid="rule-delete" />
+                    </li>
+                {:else}
+                    <li class="none small muted" data-testid="rule-none">この絞り込みに当たるルールはありません</li>
                 {/each}
-            </div>
-            <label class="sort small muted">
-                <span class="visually-hidden">並び</span>
-                <select bind:value={sort} data-testid="rule-sort">
-                    {#each SORTS as s (s.key)}
-                        <option value={s.key}>{s.label}</option>
-                    {/each}
-                </select>
-            </label>
-            <p class="summary small muted" data-testid="rule-summary">
-                これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた <span class="num">{data.summary.lastWeekRecordings}</span> 本
-            </p>
-            <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->
-            <a class="button small" href={resolve('search')} data-testid="rule-new">ルールを作る</a>
-        </div>
-        {#if data.rules.length > 0}
-            <div class="head row" aria-hidden="true">
-                <div class="cells">
-                    <span>ルール</span>
-                    <span class="wide">条件</span>
-                    <span class="wide">次の放送</span>
-                    <span class="wide end">予約</span>
-                    <span class="wide end">録画</span>
-                    <span class="wide">最後に録れた</span>
-                </div>
-                <span></span>
-                <span></span>
-            </div>
+                {#if paged.more}
+                    <li class="none small muted" use:sentinel={() => paged.reveal()}>残り {paged.rest} 件</li>
+                {/if}
+            </ul>
         {/if}
     </div>
 
-    {#if data.rules.length === 0}
-        <div class="empty" data-testid="rule-empty">
-            <p class="bold">ルールはまだありません</p>
-            <p class="small muted">
-                <a href={resolve('search')}>検索</a>で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
-            </p>
-        </div>
-    {:else}
-        <div class="table" data-testid="rule-table">
-            {#each paged.rows as rule (rule.id)}
-                <!--
-                    **行を押すと検索の画面でそのルールを直す。** スイッチと削除はリンクの外 (隣) に置くので、
-                    押してもルールは開かない
-                -->
-                <div class="row" class:off={!rule.enabled} data-testid="rule-row" data-rule-id={rule.id}>
-                    <a class="cells" href={resolve(`search?rule=${rule.id}`)} data-testid="rule-open">
-                        <span class="name">
-                            {rule.name}
-                            {#if !rule.enabled}<span class="tag">無効</span>{/if}
-                        </span>
-                        <span class="cond wide muted">{conditionSummary(rule, (id) => serviceNames.get(id))}</span>
-                        <span class="next" class:muted={rule.next === null} data-testid="rule-next">
-                            {#if rule.next === null}
-                                予定なし
-                            {:else}
-                                {upcomingLabel(rule.next.start_at, clock)} <span class="broadcast">{rule.next.service_name}</span>
-                            {/if}
-                            {#if rule.conflicts > 0}<span class="tag error outline">競合 {rule.conflicts}</span>{/if}
-                        </span>
-                        <span class="count wide end num" data-testid="rule-reservations">{rule.reservations}</span>
-                        <span class="count wide end num muted">{rule.recordings}</span>
-                        <span class="wide muted small">
-                            {rule.last_recorded_at === null ? '—' : date(rule.last_recorded_at)}
-                        </span>
-                        <!-- 狭い画面の2段目。予約と録画の数 -->
-                        <span class="narrow counts muted">予約 {rule.reservations} ・ 録画 {rule.recordings}</span>
-                    </a>
-                    <form method="POST" action="?/toggle" class="switch" use:submitting={switched}>
-                        <input type="hidden" name="id" value={rule.id} />
-                        <input
-                            type="checkbox"
-                            role="switch"
-                            aria-checked={rule.enabled}
-                            checked={rule.enabled}
-                            aria-label="「{rule.name}」を有効にする"
-                            onchange={(event) => event.currentTarget.form?.requestSubmit()}
-                            data-testid="rule-switch"
-                        />
-                    </form>
-                    <div class="delete">
-                        <ArmedDelete {deleting} armKey={rule.id} fields={{ id: rule.id }} class="xs" testid="rule-delete" />
-                    </div>
-                </div>
-            {:else}
-                <p class="none small muted" data-testid="rule-none">この絞り込みに当たるルールはありません</p>
+    <!-- 1000px から。絞り込み・並び・集計 (ホームのサイドバーと同じ行) -->
+    <aside class="rules-side" aria-label="絞り込みと並び" data-testid="rule-sidebar">
+        <h2 class="s-group s-first">絞り込み</h2>
+        <div class="s-list" role="group" aria-label="絞り込み" data-testid="rule-filters">
+            {#each FILTERS as f (f.key)}
+                <button
+                    type="button"
+                    class="s-item"
+                    class:on={filter === f.key}
+                    aria-pressed={filter === f.key}
+                    onclick={() => (filter = f.key)}
+                    data-testid="rule-filter-{f.key}"
+                >
+                    <span>{f.label}</span>
+                    <span class="sub num">{counts[f.key]}</span>
+                </button>
             {/each}
-            {#if paged.more}
-                <p class="none small muted" use:sentinel={() => paged.reveal()}>残り {paged.rest} 件</p>
-            {/if}
         </div>
-    {/if}
+        <h2 class="s-group">並び</h2>
+        <div class="s-list" role="group" aria-label="並び">
+            {#each SORTS as s (s.key)}
+                <button
+                    type="button"
+                    class="s-item"
+                    class:on={sort === s.key}
+                    aria-pressed={sort === s.key}
+                    onclick={() => (sort = s.key)}
+                    data-testid="rule-sort-{s.key}"
+                >
+                    {s.label}
+                </button>
+            {/each}
+        </div>
+        <h2 class="s-group">集計</h2>
+        <dl class="s-list stats" data-testid="rule-summary">
+            <div class="s-item static"><dt>これから7日の予約</dt><dd class="num">{data.summary.weekReservations} 件</dd></div>
+            <div class="s-item static"><dt>この7日で録れた</dt><dd class="num">{data.summary.lastWeekRecordings} 本</dd></div>
+        </dl>
+        <div class="side-bottom">
+            <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->
+            <a class="button small" href={resolve('search')} data-testid="rule-new">ルールを作る</a>
+        </div>
+    </aside>
+
+    <!--
+        1000px より狭いときの細い帯。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
+        スマホでは画面の下 (タブの上) に貼り付ける
+    -->
+    <div class="rules-bar" data-testid="rule-bar">
+        <div class="bar-chips" role="group" aria-label="絞り込み">
+            {#each FILTERS as f (f.key)}
+                <button
+                    type="button"
+                    class="chip-button"
+                    class:on={filter === f.key}
+                    aria-pressed={filter === f.key}
+                    onclick={() => (filter = f.key)}
+                    data-testid="rule-bar-filter-{f.key}"
+                >
+                    {f.label} <span class="num">{counts[f.key]}</span>
+                </button>
+            {/each}
+        </div>
+        <select bind:value={sort} aria-label="並び" data-testid="rule-sort">
+            {#each SORTS as s (s.key)}
+                <option value={s.key}>{s.label}</option>
+            {/each}
+        </select>
+        <a class="button small" href={resolve('search')} data-testid="rule-new-narrow">作る</a>
+    </div>
 </div>
 
 <style>
-    .rules-page {
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-    }
     /*
-     * 巻いても残る上の操作と見出し。ヘッダー (3.5rem) のすぐ下に止める。地はページと同じで、
-     * 本文の余白 (`--dp-gutter`) まで広げて、下を流れる行が横から覗かないようにする。
-     * 止まっても下に線は引かない (ヘッダーと同じ。下を流れる行とは地で分かれる)
+     * **広い画面 (1000px から) は一覧と右のサイドバー。** サイドバーは main の余白の外まで出して画面の右端と
+     * ヘッダーの下に付け、一覧を下ろしても見えたまま (検索の「ルールとして保存」と同じ貼り付け方)
      */
-    .top {
-        position: sticky;
-        top: 3.5rem;
-        z-index: 20;
+    .rules-board {
         display: flex;
         flex-direction: column;
         gap: var(--dp-space-3);
-        /* 止まったときにヘッダーと字がくっつかないよう上に余白。止まる前の位置は負のマージンで変えない */
-        margin: calc(-1 * var(--dp-space-2)) calc(-1 * var(--dp-gutter)) 0;
-        padding: var(--dp-space-2) var(--dp-gutter) var(--dp-space-1);
-        background: var(--dp-bg);
     }
-    /* ヘッダーを隠す幅 (下のタブ) では画面の上端に止める。ノッチのぶんは内側の余白で避ける */
-    @media (max-width: 639.98px) {
-        .top {
-            top: 0;
-            margin-top: calc(-1 * var(--dp-space-2) - env(safe-area-inset-top));
-            padding-top: calc(var(--dp-space-2) + env(safe-area-inset-top));
+    .rules-list {
+        min-width: 0;
+    }
+    .rules-side {
+        display: none;
+    }
+    @media (min-width: 1000px) {
+        .rules-board {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 20rem;
+            align-items: start;
+            gap: var(--dp-gutter);
+            margin-block: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter));
+            margin-inline-end: calc(-1 * var(--dp-gutter));
+        }
+        .rules-list {
+            padding-block: var(--dp-page-top) var(--dp-gutter);
+        }
+        .rules-side {
+            position: sticky;
+            top: 3.5rem;
+            display: flex;
+            flex-direction: column;
+            height: calc(100dvh - 3.5rem);
+            overflow-y: auto;
+            padding: 0.75rem 0.625rem 1.5rem;
+        }
+        .rules-bar,
+        .narrow-summary {
+            display: none;
         }
     }
-    .table {
-        padding-top: var(--dp-space-1);
+    @media (min-width: 1600px) {
+        .rules-board {
+            grid-template-columns: minmax(0, 1fr) 22rem;
+        }
     }
-    .toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--dp-space-2) var(--dp-space-4);
+    .sub {
+        color: var(--dp-muted);
+        font-size: 0.75rem;
     }
-    /* Pico は role="group" を横いっぱいの帯にするので、中身の幅に戻す */
-    .filters {
-        width: auto;
+    .stats {
         margin: 0;
-        gap: var(--dp-space-1);
     }
-    /* 絞り込み。選んでいるものだけ淡い地 (枠は付けない) */
-    .filter {
-        width: auto;
+    .stats dt,
+    .stats dd {
         margin: 0;
-        padding: 0.3rem 0.75rem;
-        border: 0;
-        border-radius: var(--dp-radius-full);
+        font-weight: var(--dp-weight);
+    }
+    .stats dd {
+        color: var(--dp-muted);
+    }
+    .s-item.static:hover {
         background: transparent;
-        color: var(--dp-muted);
-        font-size: var(--dp-text-sm);
     }
-    .filter:hover {
-        background: var(--dp-hover-soft);
+    .side-bottom {
+        margin-top: auto;
+        padding: 1rem 0.75rem 0;
     }
-    .filter.active {
-        background: var(--dp-subtle);
+    .side-bottom .button {
+        width: 100%;
+        margin: 0;
+    }
+    .num {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /*
+     * **行は2段の淡い塊** (ホームの行と同じ。`--dp-row`、線も枠も無く、6px 空けて並べる)。触れると一段濃く
+     */
+    .rows {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .row {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem 0.75rem;
+        min-height: 4rem;
+        margin: 0;
+        padding: 0.5rem 0.75rem;
+        border-radius: var(--dp-radius);
+        background: var(--dp-row);
+        list-style: none;
+        transition: background-color var(--dp-duration);
+    }
+    .row:hover {
+        background: var(--dp-row-hover);
+    }
+    .row-body {
+        display: flex;
+        flex: 1 1 0%;
+        flex-direction: column;
+        gap: 0.125rem;
+        min-width: 0;
         color: inherit;
+        text-decoration: none;
     }
-    .sort {
-        width: auto;
-        margin: 0 0 0 auto;
+    .name {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
     }
-    .sort select {
-        width: auto;
+    .meta {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .sep {
+        margin-inline: 0.25rem;
+    }
+    /* 無効のルールは中身を沈める (印の「無効」と合わせて、色だけに頼らない) */
+    .row.off .row-body {
+        opacity: 0.55;
+    }
+    .switch {
+        display: flex;
         margin: 0;
-        padding-block: 0.25rem;
-        border: 0;
-        background-color: transparent;
-        color: var(--dp-muted);
-        font-size: var(--dp-text-sm);
     }
-    .summary {
+    .switch input {
         margin: 0;
     }
-    .toolbar .button {
+    .none {
         margin: 0;
+        padding: var(--dp-space-3);
+        text-align: center;
+        list-style: none;
     }
     .empty {
         display: flex;
@@ -308,148 +406,83 @@
         padding: 3rem 1rem;
         text-align: center;
     }
-    .empty p {
+    .empty p,
+    .narrow-summary {
         margin: 0;
+    }
+    .narrow-summary {
+        margin-bottom: var(--dp-space-2);
     }
 
-    /*
-     * **詰めた表。** 行は線で区切らず、触れると淡い地。列は 名前・条件・次の放送・予約・録画・最後に録れた
-     * と、リンクの外にスイッチと削除。行の中身 (リンク) とヘッダーは同じ列の割り振り
-     */
-    .table {
-        display: flex;
-        flex-direction: column;
-    }
-    .row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 3rem 6.5rem;
-        align-items: center;
-        gap: var(--dp-space-2);
-        min-height: 2.875rem;
-        padding-inline-end: var(--dp-space-2);
-        border-radius: var(--dp-radius);
-        transition: background-color var(--dp-duration);
-    }
-    .row:not(.head):hover {
-        background: var(--dp-hover-soft);
-    }
-    .cells {
-        display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.4fr) 11rem 4rem 4rem 7rem;
-        align-items: center;
-        gap: var(--dp-space-3);
-        min-width: 0;
-        padding: 0.5rem var(--dp-space-3);
-        color: inherit;
-        text-decoration: none;
-    }
-    .head {
-        min-height: 2rem;
-        font-size: var(--dp-text-xs);
-        color: var(--dp-muted);
-    }
-    .head .cells {
-        padding-block: 0.25rem;
-    }
-    .name,
-    .cond,
-    .next {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    .name {
-        font-size: var(--dp-text-sm);
-    }
-    .cond {
-        font-size: var(--dp-text-xs);
-    }
-    .next {
-        font-size: var(--dp-text-sm);
-    }
-    .end {
-        text-align: end;
-    }
-    .num {
-        font-variant-numeric: tabular-nums;
-    }
-    /* 無効のルールは行ごと沈める (印の「無効」と合わせて、色だけに頼らない) */
-    .row.off .cells {
-        opacity: 0.55;
-    }
-    .switch {
-        display: flex;
-        justify-content: flex-end;
-        margin: 0;
-    }
-    .switch input {
-        margin: 0;
-    }
-    /* 削除は幅を決めておく (「削除を確定」になっても列がずれない)。スイッチのすぐ右に寄せる */
-    .delete {
-        display: flex;
-        justify-content: flex-start;
-    }
-    .narrow {
-        display: none;
-    }
-    .none {
-        margin: 0;
-        padding: var(--dp-space-3);
-        text-align: center;
-    }
-    /*
-     * **狭い画面では2段の行。** 1段目に名前 (とスイッチ・削除)、2段目に次の放送と予約・録画の数。
-     * 条件と最後に録れた日は押した先 (検索の画面の書く欄) で見る
-     */
-    @media (max-width: 767.98px) {
-        .top {
+    /* ---- 1000px より狭いときの細い帯 ---- */
+    @media (max-width: 999.98px) {
+        .rules-bar {
+            display: flex;
+            align-items: center;
             gap: var(--dp-space-2);
-            padding-bottom: var(--dp-space-2);
+            order: -1;
         }
-        /* 絞り込みは1行に並べ、はみ出したぶんは横に送る */
-        .filters {
-            flex-wrap: nowrap;
-            max-width: 100%;
-            overflow-x: auto;
-            scrollbar-width: none;
+    }
+    .bar-chips {
+        display: flex;
+        flex: 1 1 0%;
+        gap: var(--dp-space-1);
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .chip-button {
+        flex: none;
+        width: auto;
+        margin: 0;
+        padding: 0.3rem 0.75rem;
+        border: 0;
+        border-radius: var(--dp-radius-full);
+        background: transparent;
+        color: var(--dp-muted);
+        font-size: var(--dp-text-sm);
+    }
+    .chip-button.on {
+        background: var(--dp-subtle);
+        color: inherit;
+    }
+    .rules-bar select {
+        flex: none;
+        width: auto;
+        margin: 0;
+        padding-block: 0.25rem;
+        border: 0;
+        background-color: transparent;
+        color: var(--dp-muted);
+        font-size: var(--dp-text-sm);
+    }
+    .rules-bar .button {
+        flex: none;
+        margin: 0;
+    }
+    /*
+     * **スマホでは帯を画面の下、タブのすぐ上に貼り付ける** (押すものは指の届く下に)。
+     * 一覧の最後の行が帯に隠れないよう、帯の高さぶん下を空ける
+     */
+    @media (max-width: 639.98px) {
+        .rules-bar {
+            position: fixed;
+            inset-inline: 0;
+            bottom: var(--dp-tabbar, 0px);
+            z-index: 30;
+            padding: var(--dp-space-2) var(--dp-gutter);
+            border-top: 1px solid var(--dp-line);
+            background: var(--dp-bg);
         }
-        .filter {
-            flex: none;
-        }
-        .summary {
-            order: 3;
-            flex-basis: 100%;
-        }
-        .sort {
-            margin-inline-start: 0;
-        }
-        .head {
-            display: none;
+        .rules-list {
+            padding-bottom: 3.5rem;
         }
         .row {
-            grid-template-columns: minmax(0, 1fr) auto auto;
-            padding-inline-end: 0;
+            min-height: 3.75rem;
         }
-        .cells {
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 0.125rem var(--dp-space-2);
-            padding: 0.5rem 0;
-        }
-        .wide {
+        /* 狭い幅の2段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る) */
+        .wide-part {
             display: none;
-        }
-        .name {
-            grid-column: 1 / -1;
-            font-size: var(--dp-text-base);
-        }
-        .next,
-        .narrow {
-            font-size: var(--dp-text-xs);
-        }
-        .narrow {
-            display: inline;
-            text-align: end;
         }
     }
 </style>

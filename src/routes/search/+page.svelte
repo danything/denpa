@@ -13,7 +13,7 @@
     import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
-    import type { Preview } from './+page.server';
+    import type { Preview, PreviewRow } from './+page.server';
     import RuleDraft, { SKIP_LABEL } from './RuleDraft.svelte';
 
     let { data, form } = $props();
@@ -109,6 +109,18 @@
             end_at: row.end_at,
             reservation_id: row.reservation_id,
             copy_never: row.copy_never,
+        };
+        void detail.open(row.id, row);
+    }
+    /** 下見の行 (言葉なしでルールを開いたとき) から詳細を開く */
+    function showPreview(row: PreviewRow): void {
+        opened = {
+            program_id: row.id,
+            service_id: row.service_id,
+            start_at: row.start_at,
+            end_at: row.end_at,
+            reservation_id: row.reservation_state === 'skipped' ? null : row.reservation_id,
+            copy_never: row.skip?.kind === 'copy-never',
         };
         void detail.open(row.id, row);
     }
@@ -435,7 +447,7 @@
             <ul class="hits">
                 {#each preview.programs as row (row.id)}
                     <li class="hit" class:dim={row.skip !== null || !row.matched} data-testid="preview-row" data-program-id={row.id}>
-                        <div class="hit-main">
+                        <button type="button" class="hit-main" onclick={() => showPreview(row)} data-testid="preview-open">
                             <span class="hit-title">
                                 {#if row.skip !== null || !row.matched}
                                     <span class="tag">録らない</span>
@@ -458,6 +470,18 @@
                                     ・ <span class="text-error">{row.conflict_reason ?? `チューナーの競合 ${row.conflicts.length} 件`}</span>
                                 {/if}
                             </span>
+                        </button>
+                        <!-- 1件ずつ: 立っている予約は取り消し、録る行はその1本だけ予約できる (ホーム・結果の行と同じ action) -->
+                        <div class="row-actions">
+                            {#if row.reservation_id !== null && row.reservation_state !== 'skipped'}
+                                <ActionButton action="?/cancel" fields={{ reservationId: row.reservation_id }} class="small outline danger" testid="preview-cancel">
+                                    取消
+                                </ActionButton>
+                            {:else if row.reservation_id === null && row.matched && row.skip === null}
+                                <ActionButton action="?/reserve" fields={{ programId: row.id }} class="small outline" testid="preview-reserve">
+                                    予約
+                                </ActionButton>
+                            {/if}
                         </div>
                     </li>
                 {/each}
