@@ -23,8 +23,8 @@
         <span class="t-day-name">{entry.zone === 'future' ? 'これからの予約' : '録画'}</span>
     </h2>
 {:else}
-    <!-- 「いま」の線。見出しにして、見出し移動でここへ来られるようにする (読み上げは「いま 14:32」) -->
+    <!-- 「いま」の線。見出しにして、見出し移動でここへ来られるようにする (読み上げは「いま 14:32」)。赤い線で「いま」と分かるので、目に見える字は時刻だけ -->
     <h2 class="t-now" data-testid="timeline-now">
-        <span class="t-now-label num">いま {time(ctx.clock)}</span>
+        <span class="t-now-label num"><span class="visually-hidden">いま </span>{time(ctx.clock)}</span>
     </h2>
 {/if}
