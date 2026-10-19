@@ -25,7 +25,6 @@ export const SETTINGS_GROUPS = [
         sections: [
             { slug: 'tuners', label: 'チューナー' },
             { slug: 'channels', label: 'チャンネル' },
-            { slug: 'logos', label: 'ロゴ' },
             { slug: 'broadcast', label: 'データ放送' },
         ],
     },
@@ -64,7 +63,8 @@ export const MOVED_SECTIONS: Readonly<Record<string, string>> = {
     browser: 'general#browser',
     tuners: 'reception#tuners',
     channels: 'reception#channels',
-    logos: 'reception#logos',
+    // ロゴの節は受信できるチャンネルの表に入った (局ロゴ・CMロゴの列)
+    logos: 'reception#channels',
     broadcast: 'reception#broadcast',
     notifications: 'integrations#notifications',
     tv: 'integrations#tv',
@@ -75,3 +75,11 @@ export const MOVED_SECTIONS: Readonly<Record<string, string>> = {
 export function groupLabel(slug: string): string | null {
     return SETTINGS_GROUPS.find((group) => group.slug === slug)?.label ?? null;
 }
+
+/**
+ * **なくなった節の名前** → 入った先の節。前のリンク (`/settings/reception#logos`) で来たら、
+ * その節へ飛んで URL も書き換える (`routes/settings/+layout.svelte`)。`#` は手元にしか来ないので、サーバでは送れない
+ */
+export const SECTION_ALIASES: Readonly<Record<string, string>> = {
+    logos: 'channels',
+};

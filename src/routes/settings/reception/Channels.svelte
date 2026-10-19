@@ -3,10 +3,37 @@
     import ActionButton from '#lib/components/ActionButton.svelte';
     import JobProgress from '#lib/components/JobProgress.svelte';
     import Lead from '#lib/components/Lead.svelte';
+    import LogoZoom from '#lib/components/LogoZoom.svelte';
+    import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import { SERVICE_TYPE_LABEL, STATE_LABEL as SHARED_STATE_LABEL } from '#lib/format.js';
+    import { resolve } from '$app/paths';
     import type { PageData } from './$types';
 
     let { data }: { data: PageData } = $props();
+
+    /**
+     * 局ごとのロゴ (`logos.server.ts`)。局ロゴの具合 (`logo`) と、CM検出のロゴを覚えた時刻 (`cm`)。
+     * 表は物理チャンネルごとに並ぶので、局の id で引く
+     */
+    const logoOf = $derived(new Map(data.stations.map((station) => [station.id, station])));
+
+    /**
+     * 大きく見ているロゴ (`LogoZoom`)。持つのは局と種類だけで、中身は表の行から引く —
+     * 「覚え直す」でCMロゴが消えたら、そのまま閉じる。**「覚え直す」は窓の中だけ** (行を低く保つ)
+     */
+    let zoom = $state<{ id: number; kind: 'station' | 'cm' } | null>(null);
+    const zoomTarget = $derived.by(() => {
+        if (zoom === null) return null;
+        const { id, kind } = zoom;
+        const station = logoOf.get(id);
+        if (station === undefined) return null;
+        if (kind === 'cm' && station.cm === null) return null;
+        if (kind === 'station' && station.logo !== 'have') return null;
+        return { id, name: station.name, kind, learnedAt: kind === 'cm' ? station.cm : null };
+    });
+
+    /** 局ロゴの大きさ。放送のロゴは 16:9 (64x36) */
+    const LOGO_SIZE = 'width: 2.4rem; height: 1.35rem';
 
     const scan = $derived(data.scan);
 
@@ -86,6 +113,16 @@
                     >
                         {data.collect.boosted ? '集めています…' : '番組表をいますぐ集める'}
                     </ActionButton>
+                    <!--
+                        取得するものが無ければボタンも出さない。押しても「もう全部持っています」と
+                        断るだけになる。**走っている最中でも押せる** — 押されたほうが譲る作りなので、
+                        使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
+                    -->
+                    {#if data.logos.pending > 0}
+                        <ActionButton action="?/logoSweep" class="small secondary outline" testid="logo-sweep">
+                            {data.logoSweep.running ? 'ロゴを集めています…' : 'ロゴをいますぐ集める'}
+                        </ActionButton>
+                    {/if}
                 </div>
             {/if}
         </div>
@@ -108,6 +145,50 @@
                 <span class="faint">→</span>
                 <span class="muted">番組表のある局</span>
                 <strong>{withEpg}</strong>
+                <!--
+                    ロゴの数も同じ行に。取れないぶんを除いて揃っていれば「揃った」の色。
+                    CMロゴはCM検出のために覚えたもので、局ロゴとは別物 (logo-data.ts)
+                -->
+                <span class="logo-counts">
+                    <span class="muted">局ロゴ</span>
+                    <span
+                        class="tag num {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
+                        data-testid="status-logos"
+                    >
+                        {data.logos.have} / {data.logos.total} 局
+                    </span>
+                    <span class="muted">CMロゴ</span>
+                    <span class="tag num" data-testid="status-cm-logos">
+                        {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
+                    </span>
+                </span>
+            </div>
+            {#if data.logos.unavailable > 0}
+                <!--
+                    取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
+                    **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
+                    CS のロゴは BS の中継から降ってくる
+                -->
+                <div class="tiny muted" data-testid="logo-unavailable">
+                    <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
+                </div>
+            {/if}
+        {/if}
+
+        <!-- ロゴの取得は1チャンネルに数分かかる。出さないと押しても何も起きていないように見える -->
+        {#if data.logoSweep.startedAt !== null}
+            <div class="progress-block" data-testid="logo-sweep-progress">
+                <JobProgress done={data.logoSweep.done} total={data.logoSweep.total} unit="チャンネル">
+                    ・ ロゴ <strong>{data.logoSweep.found} 局</strong>
+                    {#if data.logoSweep.channels.length > 0}
+                        ・ 受信中 {data.logoSweep.channels.join(', ')}
+                    {/if}
+                </JobProgress>
+                {#if data.logoSweep.message !== ''}
+                    <div class="tiny muted" data-testid="logo-sweep-done">
+                        {data.logoSweep.message}
+                    </div>
+                {/if}
             </div>
         {/if}
 
@@ -172,6 +253,20 @@
                         待てないときは<strong>「番組表をいますぐ集める」</strong>で、録画とライブ視聴に使っていないチューナーを全部使って集められます
                         (スキャンやロゴの取得は止めます)。
                     </p>
+                    <!-- 局ロゴ。放送波から取得するしかない。番組表に出ないとき、取れていないのか出し方が悪いのかをここで見分ける -->
+                    <p>
+                        <strong>局ロゴ</strong>は番組表と一覧に出すもので、番組表を集めるときにあわせて取得します。
+                        放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong>で、取れたロゴも1週間ごとに取り直します。
+                        点線の枠は、まだ取れていない局です。
+                    </p>
+                    <p>
+                        「ロゴをいますぐ集める」では衛星の分も集めます。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
+                        そこだけ最大20分かかります (他の中継は数秒で終わります)。
+                    </p>
+                    <p>
+                        <strong>CMロゴ</strong>は、CM検出のために録画から覚えたロゴの位置と形です。録画をエンコードするときに自動で覚えます。
+                        ロゴを押すと大きく見られます。ロゴの形になっていなければ、そこで「覚え直す」で消すと、次の録画で覚え直します。
+                    </p>
                 {/snippet}
             </Lead>
         {/if}
@@ -190,37 +285,55 @@
                             <th>種別</th>
                             <th>ch</th>
                             <th class="wide">局</th>
+                            <th class="nowrap logo-col">局ロゴ</th>
+                            <th class="nowrap logo-col">CMロゴ</th>
                             <th class="nowrap">番組表</th>
                         </tr>
                     </thead>
+                    <!--
+                        **1行に1局。** 種別と ch はチャンネルの局の数だけ縦につなぐ (`rowspan`)。
+                        ロゴは局ごとのものなので、局の行に1つずつ置く (チャンネルの行に並べると、どれがどの局か読めない)
+                    -->
                     <tbody data-testid="channel-list">
                         {#each coverage as channel (`${channel.type}:${channel.channel}`)}
-                            {@const programs = channel.services.reduce((sum, service) => sum + service.programs, 0)}
-                            {@const last = Math.max(0, ...channel.services.map((service) => service.until))}
-                            <tr data-testid="channel-row" data-channel={channel.channel}>
-                                <td class="nowrap small">
-                                    {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
-                                </td>
-                                <td class="mono small nowrap num">
-                                    {channel.channel}
-                                </td>
-                                <td class="small">
-                                    <div class="stations">
-                                        {#each channel.services as service (service.id)}
-                                            <span class="broadcast" data-service-id={service.id}>
-                                                {service.name}
-                                            </span>
-                                        {/each}
-                                    </div>
-                                </td>
-                                <td class="small nowrap num">
-                                    {#if programs > 0}
-                                        {programs} 件 <span class="tiny muted">{until(last)}</span>
-                                    {:else}
-                                        <span class="muted">—</span>
+                            {#each channel.services as service, index (service.id)}
+                                {@const logo = logoOf.get(service.id)}
+                                <tr
+                                    data-testid="channel-row"
+                                    data-channel={channel.channel}
+                                    data-service-id={service.id}
+                                    data-logo={logo?.logo}
+                                >
+                                    {#if index === 0}
+                                        <td class="nowrap small" rowspan={channel.services.length}>
+                                            {SERVICE_TYPE_LABEL[channel.type] ?? channel.type}
+                                        </td>
+                                        <td class="mono small nowrap num" rowspan={channel.services.length}>
+                                            {channel.channel}
+                                        </td>
                                     {/if}
-                                </td>
-                            </tr>
+                                    <td class="small">
+                                        <span class="station">
+                                            <!-- 狭い幅では、ロゴの列をたたんで局名の前に出す -->
+                                            <span class="inline-logos">
+                                                {@render stationLogo(service.id, service.name, false)}
+                                                {@render cmLogo(service.id, service.name, false)}
+                                            </span>
+                                            <span class="broadcast">{service.name}</span>
+                                        </span>
+                                    </td>
+                                    <td class="logo-col">{@render stationLogo(service.id, service.name, true)}</td>
+                                    <!-- まだ覚えていない局と、CM検出の対象でない局 (サブチャンネルなど) は空けておく -->
+                                    <td class="logo-col">{@render cmLogo(service.id, service.name, true)}</td>
+                                    <td class="small nowrap num">
+                                        {#if service.programs > 0}
+                                            {service.programs} 件 <span class="tiny muted until">{until(service.until)}</span>
+                                        {:else}
+                                            <span class="muted">—</span>
+                                        {/if}
+                                    </td>
+                                </tr>
+                            {/each}
                         {/each}
                     </tbody>
                 </table>
@@ -228,6 +341,55 @@
         {/if}
     </section>
 </div>
+
+<LogoZoom target={zoomTarget} onclose={() => (zoom = null)} />
+
+<!--
+    局ロゴ。押すと大きく見る (`LogoZoom`)。まだのものは点線の枠、放送に載っていないものは列では「—」。
+    `column` が偽のものは狭い幅で局名の前に出す写し (テスト ID は列のほうにだけ付ける)
+-->
+{#snippet stationLogo(id: number, name: string, column: boolean)}
+    {@const state = logoOf.get(id)?.logo}
+    {#if state === 'have'}
+        <button
+            type="button"
+            class="zoom"
+            onclick={() => (zoom = { id, kind: 'station' })}
+            aria-label={`${name} のロゴを大きく見る`}
+            data-testid={column ? 'logo-zoom-station' : undefined}
+        >
+            <ServiceLogo {id} has style={LOGO_SIZE} />
+        </button>
+    {:else if state === 'missing'}
+        <span class="logo-slot" title="ロゴはまだ取れていません">
+            <span class="visually-hidden">ロゴはまだ取れていません</span>
+        </span>
+    {:else if column}
+        <span class="muted small" title="ロゴは放送に載っていません">—</span>
+    {:else}
+        <!-- 局名の頭がずれないよう、場所だけ空けておく -->
+        <span class="logo-space"></span>
+    {/if}
+{/snippet}
+
+<!--
+    CM検出のために覚えたロゴ。線の向きがどのコマでも揃うところを白く出した画像で、ロゴの形になっていれば合っている。
+    書き直すたびに URL を変えて、古い画像を出し続けないようにする。覚えていなければ何も出さない
+-->
+{#snippet cmLogo(id: number, name: string, column: boolean)}
+    {@const at = logoOf.get(id)?.cm ?? null}
+    {#if at !== null}
+        <button
+            type="button"
+            class="zoom"
+            onclick={() => (zoom = { id, kind: 'cm' })}
+            aria-label={`${name} のCMロゴを大きく見る`}
+            data-testid={column ? 'logo-zoom-cm' : undefined}
+        >
+            <img src={resolve(`api/services/${id}/logo-data?at=${at}`)} alt="" class="learned-image" />
+        </button>
+    {/if}
+{/snippet}
 
 <style>
     /* 種別を選ぶ欄とボタンを1組に。高さは隣の小さなボタンにそろえる */
@@ -286,10 +448,88 @@
         font-size: var(--dp-text-xs);
         white-space: pre-wrap;
     }
-    /* 受信できるチャンネルの局。折り返しても局名は割らない */
-    .stations {
-        display: flex;
+    /* ロゴの数は、チャンネル → 局 → 番組表の数のあとに少し離して並べる */
+    .logo-counts {
+        display: inline-flex;
         flex-wrap: wrap;
-        gap: 0.15rem 0.9rem;
+        align-items: center;
+        gap: 0.25rem;
+        margin-left: var(--dp-space-3);
+    }
+    /*
+     * **行は低く保つ。** 1行に1局で、ロゴは局名の字の高さほど (局ロゴ 1.35rem)。
+     * 同じチャンネルの局は、種別と ch を縦につないでまとめて見せる
+     */
+    .channels-wrap td {
+        padding-block: 0.3rem;
+        vertical-align: middle;
+    }
+    .channels-wrap td[rowspan] {
+        vertical-align: top;
+    }
+    .station {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    /* 局名は欄の幅で折り返す (全角の英数が続く局名でも) */
+    .station .broadcast {
+        overflow-wrap: anywhere;
+    }
+    /* 狭い幅で局名の前に出すロゴ。広い幅では列に出すので隠す */
+    .inline-logos {
+        display: none;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    /* ロゴそのものを押して大きく見る (`LogoZoom`)。ボタンの地や余白は付けない */
+    .zoom {
+        display: inline-flex;
+        width: auto;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: var(--dp-radius-sm);
+        background: none;
+        vertical-align: middle;
+        cursor: zoom-in;
+    }
+    /* まだ取れていない局ロゴの場所。取れたロゴと同じ大きさの点線の枠 */
+    .logo-slot,
+    .logo-space {
+        display: block;
+        flex-shrink: 0;
+        width: 2.4rem;
+        height: 1.35rem;
+    }
+    .logo-slot {
+        border: 1px dashed var(--dp-line-strong);
+        border-radius: var(--dp-radius-sm);
+    }
+    /* CM検出のロゴ。縁を白で出すので、下地は暗いほうに寄せた枠色 */
+    .learned-image {
+        height: 1.35rem;
+        max-width: 4.8rem;
+        border-radius: var(--dp-radius-sm);
+        object-fit: contain;
+        image-rendering: pixelated;
+        background: var(--dp-line);
+    }
+    /* **狭い幅ではロゴの列をたたみ、局名の前に出す** (表が横にはみ出さないように) */
+    @container (max-width: 36rem) {
+        .channels-wrap .logo-col {
+            display: none;
+        }
+        .inline-logos {
+            display: inline-flex;
+        }
+        /* 局の欄に余りを全部渡す指定 (`.wide`) を外す。100% の列があると、ほかの列の幅のぶん表が枠からはみ出す */
+        .channels-wrap .wide {
+            width: auto;
+        }
+        /* 「10/26 まで」は件数の下へ。横に並べると局名の欄が押されて、表が枠の外へはみ出す */
+        .until {
+            display: block;
+        }
     }
 </style>

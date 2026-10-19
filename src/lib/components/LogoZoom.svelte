@@ -6,7 +6,7 @@
     import X from '~icons/lucide/x';
 
     /**
-     * **ロゴを大きく見る窓** (設定の「ロゴ」の表で、局ロゴ・CMロゴを押したとき)。
+     * **ロゴを大きく見る窓** (設定の「受信できるチャンネル」の表で、局ロゴ・CMロゴを押したとき)。
      *
      * 表の中のロゴは行の高さに合わせて小さく、CMロゴは白い縁だけの画像なので、
      * ロゴの形になっているかは並べたままでは見分けにくい。**整数倍で拡大し、画素をぼかさない**
@@ -128,7 +128,7 @@
                         {dateTime(shown.learnedAt)} に覚えました
                         {#if scale > 0}<span class="num">・ {scale} 倍</span>{/if}
                     </span>
-                    <!-- 表の行と同じ (`LearnedLogo`)。消えたら窓も閉じる -->
+                    <!-- 「覚え直す」はこの窓の中だけ (表の行を低く保つ)。消えたら窓も閉じる -->
                     <form method="POST" action="?/logoForget" use:submitting>
                         <input type="hidden" name="serviceId" value={shown.id} />
                         <button

@@ -124,6 +124,18 @@ test.describe('設定のチューナーとチャンネル', () => {
         await expect(channels.getByTestId('channel-row').first()).toBeVisible();
         // 局名は放送のとおりの幅で出す (全角の英数は全角のまま)
         await expect(channels).toContainText('ＴＯＫＹＯ　ＭＸ');
+        /*
+         * **1行に1局。** ロゴ (局ロゴ・CMロゴ) は局ごとのものなので、同じ表の局の行に列で並べる
+         * (別の表で種別と局名を繰り返さない)。種別と ch はチャンネルの局の数だけ縦につなぐ
+         */
+        const card = page.getByTestId('channel-card');
+        await expect(card.getByRole('columnheader', { name: '局ロゴ' })).toBeVisible();
+        await expect(card.getByRole('columnheader', { name: 'CMロゴ' })).toBeVisible();
+        const first = channels.getByTestId('channel-row').first();
+        const channel = await first.getAttribute('data-channel');
+        const rows = channels.locator(`[data-testid="channel-row"][data-channel="${channel}"]`);
+        await expect(first.locator('td').first()).toHaveAttribute('rowspan', String(await rows.count()));
+        await expect(page.getByTestId('logo-card')).toHaveCount(0);
 
         /*
          * どこまで進んだかを1行で出す。時間がかかるのは1チャンネルずつ選局して

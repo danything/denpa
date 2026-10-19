@@ -85,7 +85,13 @@ test.describe('ホームと画面遷移', () => {
         // 前の節ごとの画面と、前のチューナーの画面は、グループの画面のその節へずっと送る
         const moved = await page.request.get('/settings/logos', { maxRedirects: 0 });
         expect(moved.status()).toBe(308);
-        expect(moved.headers()['location']).toBe('../settings/reception#logos');
+        // ロゴの節は受信できるチャンネルの表に入った。前の `#logos` もそこへ送る (URL も書き換える)
+        expect(moved.headers()['location']).toBe('../settings/reception#channels');
+        await goto(page, '/');
+        await goto(page, '/settings/reception#logos');
+        await page.waitForURL(/\/settings\/reception#channels$/);
+        await expect(page.getByTestId('channel-card')).toBeInViewport();
+        await expect(nav.getByTestId('settings-nav-logos')).toHaveCount(0);
         const old = await page.request.get('/tuners', { maxRedirects: 0 });
         expect(old.status()).toBe(308);
         await goto(page, '/tuners');
@@ -106,9 +112,9 @@ test.describe('ホームと画面遷移', () => {
         await expect(page.getByTestId('settings-nav')).toBeHidden();
         await expect(page.getByTestId('tuner-card')).toBeVisible();
         // 上の行から節へ飛ぶ。行は巻いてもヘッダーの下に残る
-        await page.getByTestId('settings-jump-logos').click();
-        await page.waitForURL(/\/settings\/reception#logos$/);
-        await expect(page.getByTestId('logo-card')).toBeInViewport();
+        await page.getByTestId('settings-jump-broadcast').click();
+        await page.waitForURL(/\/settings\/reception#broadcast$/);
+        await expect(page.getByTestId('postal-code')).toBeInViewport();
         await expect(page.getByTestId('settings-jump')).toBeInViewport();
         await page.getByTestId('settings-back').click();
         await page.waitForURL(/\/settings$/);
