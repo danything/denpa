@@ -264,6 +264,39 @@ test.describe('ホームの1本の一覧', () => {
     });
 
     /*
+     * **「完了した予約も表示」で、終わった予約とその録画を 1 本にまとめる。** 同じ放送が予約の行と録画の行の
+     * 2 本で並んでいた。録画の行が代わりに立ち、録画の名前に無い副題は予約の名前から持ってくる。
+     * 録画の無い終わった予約 (取消など) は状態のバッジ付きで残る
+     */
+    test('完了した予約と、その録画は1本にまとめる', async ({ page, stack }) => {
+        const now = Date.now();
+        // 終わった予約にするため過去 (ほかの行と紛れないよう 2001 年)
+        const at = new Date(2001, 5, 1, 21, 0).getTime();
+        sqlite(
+            `${stack.root}/denpa.db`,
+            `db.run("INSERT INTO reservations (program_id, service_id, name, start_at, end_at, manual, state, started_at, created_at, updated_at) VALUES (970001, (SELECT id FROM services ORDER BY id LIMIT 1), 'まとめ試験 #3「エルマ」', ${at}, ${at + 1800000}, 1, 'done', ${at}, ${now}, ${now})");
+            const id = db.query('SELECT last_insert_rowid() AS id').get().id;
+            db.run("INSERT INTO recordings (reservation_id, program_id, service_id, service_name, name, series, start_at, end_at, finished_at, library_path, created_at, updated_at) VALUES (?, 970001, 211, 'BS11', 'まとめ試験', 'まとめ試験', ${at}, ${at + 1800000}, ${at + 1800000}, '/media/encoded/seed/m.mkv', ${now}, ${now})", [id]);
+            db.run("INSERT INTO reservations (program_id, service_id, name, start_at, end_at, manual, state, created_at, updated_at) VALUES (970002, (SELECT id FROM services ORDER BY id LIMIT 1), 'まとめ試験の取消', ${at - DAY}, ${at - DAY + 1800000}, 1, 'canceled', ${now}, ${now})");`,
+        );
+        try {
+            await goto(page, '/?all=1');
+            const same = rows(page).filter({ hasText: 'まとめ試験 #3' });
+            await expect(same).toHaveCount(1);
+            await expect(same).toHaveAttribute('data-testid', 'recording-row');
+            await expect(same.getByTestId('row-open')).toContainText('まとめ試験 #3「エルマ」');
+            const canceled = rows(page).filter({ hasText: 'まとめ試験の取消' });
+            await expect(canceled).toHaveCount(1);
+            await expect(canceled.getByTestId('reservation-state')).toHaveText('取り消し済み');
+        } finally {
+            sqlite(
+                `${stack.root}/denpa.db`,
+                `db.run("DELETE FROM recordings WHERE name LIKE 'まとめ試験%'"); db.run("DELETE FROM reservations WHERE name LIKE 'まとめ試験%'");`,
+            );
+        }
+    });
+
+    /*
      * **指で押す端末は行を高くする。** 低い行は押したつもりの隣が開いた。行は 72px 以上、
      * 行の操作は 44px 四方以上。タブレットの縦でも右に欄は出さず、同じ形の行
      */

@@ -32,11 +32,15 @@ test.describe('録画とエンコード', () => {
         // BSは他のテストが触らないので、チューナー競合の心配なく録れる
         const programId = await reserveSoon(page, request, 'BS');
 
-        const reservationRow = `[data-testid="reservation-row"][data-program-id="${programId}"]`;
-        await waitRowState(page, '/?all=1', page.locator(reservationRow), '完了');
-
         const recordingRow = `[data-testid="recording-row"][data-program-id="${programId}"]`;
-        await waitRowState(page, '/', page.locator(recordingRow), '視聴可能');
+        await waitWatchable(page, page.locator(recordingRow));
+
+        // 録り終えた予約は録画の行にまとまる。「完了した予約も表示」でも予約の行は別に出ない (`mergeRecorded`)
+        await goto(page, '/?all=1');
+        await expect(page.locator(recordingRow)).toHaveCount(1);
+        await expect(
+            page.locator(`[data-testid="reservation-row"][data-program-id="${programId}"]`),
+        ).toHaveCount(0);
 
         // 保存先のパスが決まっていること。実体との突き合わせにこのパスを使う。
         // 画面には出さない(普段は見ないので)ので、行の属性から取る

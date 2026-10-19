@@ -128,6 +128,8 @@ interface ReservationRow extends Omit<Reservation, 'state'> {
     has_logo: boolean | null;
     /** 録画中の録画のID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
     recording_id: number | null;
+    /** 録画の行が1本でもあるか (消したものも含む)。終わった予約を録画の行にまとめる (`mergeRecorded`) */
+    recorded: boolean;
     /** 「まとめて表示」でまとめる鍵と見出し。録画の行と同じ決め方 (`seriesGroup`) */
     group_key: string;
     group_name: string;
@@ -187,6 +189,10 @@ export function load({ url, cookies }) {
             rule_name: ruleTable.name,
             state: reservationState(r, rec),
             recording_id: sql<number | null>`CASE WHEN ${rec.state} = 'recording' THEN ${rec.id} END`,
+            // 録画の行が1本でもあるか (消したものも)。終わった予約を録画の行にまとめるのに使う (`timeline.ts` の `mergeRecorded`)
+            recorded: sql<number>`EXISTS (SELECT 1 FROM recordings WHERE reservation_id = ${r.id})`.mapWith(
+                Boolean,
+            ),
         })
         .from(r)
         .innerJoin(services, eq(services.id, r.service_id))
