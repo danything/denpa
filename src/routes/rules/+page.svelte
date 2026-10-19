@@ -106,7 +106,7 @@
     <!--
         **上の操作と表の見出しは、巻いても上に残す** (`position: sticky`)。ルールが増えると、
         下のほうで絞り込みや並びを変えるのに上まで戻ることになる。地はページと同じで枠は付けない。
-        下の線は巻き始めたら出す (ヘッダーと同じ `animation-timeline: scroll()`)
+        下の線も引かない (ヘッダーと同じ。下を流れる行とは地で分かれる)
     -->
     <div class="top" data-testid="rule-top">
         <div class="toolbar">
@@ -225,7 +225,8 @@
     }
     /*
      * 巻いても残る上の操作と見出し。ヘッダー (3.5rem) のすぐ下に止める。地はページと同じで、
-     * 本文の余白 (`--dp-gutter`) まで広げて、下を流れる行が横から覗かないようにする
+     * 本文の余白 (`--dp-gutter`) まで広げて、下を流れる行が横から覗かないようにする。
+     * 止まっても下に線は引かない (ヘッダーと同じ。下を流れる行とは地で分かれる)
      */
     .top {
         position: sticky;
@@ -234,23 +235,10 @@
         display: flex;
         flex-direction: column;
         gap: var(--dp-space-3);
-        /* 止まったときにヘッダーの線と字がくっつかないよう上に余白。止まる前の位置は負のマージンで変えない */
+        /* 止まったときにヘッダーと字がくっつかないよう上に余白。止まる前の位置は負のマージンで変えない */
         margin: calc(-1 * var(--dp-space-2)) calc(-1 * var(--dp-gutter)) 0;
         padding: var(--dp-space-2) var(--dp-gutter) var(--dp-space-1);
-        border-bottom: 1px solid transparent;
         background: var(--dp-bg);
-    }
-    @supports (animation-timeline: scroll()) {
-        .top {
-            animation: top-line linear both;
-            animation-timeline: scroll(root block);
-            animation-range: 0 1rem;
-        }
-    }
-    @keyframes top-line {
-        to {
-            border-bottom-color: var(--dp-line);
-        }
     }
     /* ヘッダーを隠す幅 (下のタブ) では画面の上端に止める。ノッチのぶんは内側の余白で避ける */
     @media (max-width: 639.98px) {

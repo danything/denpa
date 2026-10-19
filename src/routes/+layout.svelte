@@ -579,32 +579,15 @@
         gap: 0.5rem;
         min-height: 3.5rem;
         padding: 0.5rem var(--dp-space-3);
-        border-bottom: 1px solid var(--dp-line);
         background: var(--dp-bg);
         /* 画面の切り替えでは抜き出して動かさない (`app.css` の「画面の切り替え」) */
         view-transition-name: site-header;
     }
     /*
-     * **一番上では境目を出さず、下ろし始めたら線を 1 本出す** (`animation-timeline: scroll()`)。影は付けない。
-     * 時間ではなくスクロールの量で進むので、動かさない設定の端末でもそのまま使う (動きではなく線の有り無し)。
-     * 知らないブラウザは線 1 本のまま。ページごとは動かない画面 (番組表・観る画面・ルールなど) は
-     * 線が出ないが、中身は自分の枠の中で巻き取るのでヘッダーの下に潜らず、区切りが無くても困らない
+     * **本文との間に線を引かない** (巻いても出さない)。高さはちょうど 3.5rem。
+     * 下を流れる中身とは、次のぼかし (透けてぼける地) で分かれる。サイドバーとの間も線は引かず、
+     * 地の色か余白で分ける (`app.css` の「地は 1 色」)
      */
-    @supports (animation-timeline: scroll()) {
-        .navbar {
-            animation: header-line linear both;
-            animation-timeline: scroll(root block);
-            animation-range: 0 1rem;
-        }
-    }
-    @keyframes header-line {
-        from {
-            border-bottom-color: transparent;
-        }
-        to {
-            border-bottom-color: var(--dp-line);
-        }
-    }
     /*
      * **ヘッダーは本文と同じ地に置く。** スクロールすると下を流れる中身が
      * ぼけて透ける (地を 80% にしてぼかす)。ぼかせないブラウザは上の地の色のまま
@@ -709,7 +692,10 @@
         display: none;
         min-width: 0;
     }
-    /* 狭い幅の検索の画面の上の帯。ヘッダーと同じ地で、巻いても上に残る。指で使う幅なので `/` の印は出さない */
+    /*
+     * 狭い幅の検索の画面の上の帯。ヘッダーと同じ地で、巻いても上に残る (下の線も引かない)。
+     * 指で使う幅なので `/` の印は出さない
+     */
     .search-bar :global(kbd) {
         display: none;
     }
@@ -718,7 +704,6 @@
         top: 0;
         z-index: 40;
         padding: calc(var(--dp-space-2) + env(safe-area-inset-top)) var(--dp-gutter, 1rem) var(--dp-space-2);
-        border-bottom: 1px solid var(--dp-line);
         background: var(--dp-bg);
     }
     /*

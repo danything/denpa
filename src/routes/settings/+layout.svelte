@@ -145,7 +145,7 @@
 
     **横に並べはじめる幅は全画面で 768px** ([+layout.svelte](../+layout.svelte) の `FILLED`)。
     並べたらページごとは動かさず、左右がそれぞれ自分で巻き取る。左の列は画面の左端とヘッダーの下に付け、
-    境目は 1px の線だけ。
+    右とは線で分けない (地は同じで、右の列を真ん中に寄せた余白で分かれる)。
 
     **狭い画面では一覧と中身を切り替える。** `/settings` はグループの一覧だけ、押すとその画面と「← 設定」、
     上に節へ飛ぶ行 (巻いても上に残る)
@@ -157,13 +157,14 @@
     -->
     <nav class="side" aria-label="設定の項目" data-testid="settings-nav">
         <ul class="groups">
-            {#each SETTINGS_GROUPS as g (g.slug)}
+            {#each SETTINGS_GROUPS as g, i (g.slug)}
                 {@const here = current === g.slug}
                 {@const href = resolve(`settings/${g.slug}`)}
                 <li>
                     <a
                         {href}
                         class="group-link s-group"
+                        class:s-first={i === 0}
                         class:here
                         aria-current={here ? 'page' : undefined}
                         data-testid="settings-nav-{g.slug}"
@@ -246,7 +247,6 @@
         .side {
             overflow-y: auto;
             padding: var(--dp-space-4) var(--dp-space-2);
-            border-right: 1px solid var(--dp-line);
         }
     }
     .side ul {
@@ -260,24 +260,27 @@
     }
     /*
      * **録画の画面のサイドバーと同じ部品** (`app.css` の `.s-group`・`.s-list`・`.s-item`)。グループは小さく沈めた見出し、
-     * 節は線も字下げも無い行で、見えている節だけ角の丸い薄い塗り。ここは置き方だけ
+     * 節は線も字下げも無い行で、見えている節だけ角の丸い薄い塗り。グループの間は見出しの上の細い線と余白
+     * (`.s-group` の `::before`。最初のグループには引かない)。ここは置き方だけ
      */
     .groups {
         display: flex;
         flex-direction: column;
-        gap: var(--dp-space-3);
     }
     .side a {
         text-decoration: none;
     }
     .group-link {
         display: block;
-        margin: 0;
+        margin: var(--s-gap) 0 0;
         padding-block: 0.125rem;
         border-radius: var(--dp-radius);
         transition:
             background-color var(--dp-duration),
             color var(--dp-duration);
+    }
+    .group-link.s-first {
+        margin-top: 0;
     }
     .group-link:hover {
         color: inherit;
@@ -297,13 +300,17 @@
             display: none;
         }
         .groups {
-            gap: 0;
             margin-inline: -0.75rem;
         }
+        /* 行どうしは線で区切らない (グループの線も引かない) */
         .group-link {
+            margin: 0;
             padding-block: 0.625rem;
             color: inherit;
             font-size: var(--dp-text-base);
+        }
+        .group-link::before {
+            display: none;
         }
         .group-link:hover {
             background: var(--dp-hover-soft);
@@ -352,11 +359,13 @@
         }
     }
     /*
-     * **節どうしは線1本で区切る** (中の節と同じ。カードにはしない)。飛んだ先が見出しの上にぴったり付くよう、
+     * **節どうしは細い線1本と、上下にたっぷりの余白で区切る** (左の一覧のグループの境目と同じ考え。カードにはしない)。
+     * 線の上下を広めに取り、節の中の行の間より目に見えて空ける。飛んだ先が見出しの上にぴったり付くよう、
      * 巻き取りの余白を取る (狭い画面はヘッダーと節の行の下)
      */
     .main-inner :global([data-part] + [data-part]) {
-        padding-top: var(--dp-space-5);
+        margin-top: var(--dp-space-4);
+        padding-top: var(--dp-space-6);
         border-top: 1px solid var(--dp-line);
     }
     .main-inner :global([data-part]) {
@@ -381,7 +390,7 @@
     }
 
     /*
-     * **狭い画面の上の行。** 「← 設定」と節の名前を横に並べ、巻いてもヘッダーの下に残す。
+     * **狭い画面の上の行。** 「← 設定」と節の名前を横に並べ、巻いてもヘッダーの下に残す (ヘッダーと同じく下の線は引かない)。
      * はみ出す分は横に巻く (行を折り返すと高さが変わり、飛んだ先の余白が合わなくなる)
      */
     .jump {
@@ -394,7 +403,6 @@
         margin-inline: calc(-1 * var(--dp-gutter));
         padding: 0.5rem var(--dp-gutter);
         overflow-x: auto;
-        border-bottom: 1px solid var(--dp-line);
         background: var(--dp-bg);
         scrollbar-width: none;
         white-space: nowrap;

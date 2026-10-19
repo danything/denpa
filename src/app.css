@@ -130,7 +130,9 @@
  * 主の色 (azure) も Pico の段から来ているので、同じ物差しで並べると色の系統がそろう。
  * Pico も [data-theme] と :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ。
  *
- * **地は 1 色。** ヘッダー・ナビ・本文の地は同じ `--dp-bg` で、区切りは 1px の線 (`--dp-line`)。
+ * **地は 1 色。** ヘッダー・ナビ・本文の地は同じ `--dp-bg`。**ヘッダーと本文、サイドバーと本文の間に線は引かない**
+ * — 分けるのは余白か地の色 (観る画面・ルールを書く欄の列は `--dp-surface`) だけ。線 (`--dp-line`) は中身の中の区切り
+ * (表の行・節・「いま」など) に使う。
  * 色の付いた面は**中身を区切るところだけ** — カード・一覧の枠 (`--dp-surface`)、コードの枠・表の見出し・
  * 指を乗せた行 (`--dp-subtle`)、通知。面の色を段々に重ねて分けていた頃は、暗いほうで
  * ヘッダー・地・カードの 3 色が近すぎて、どこが押せる面なのかが読めなかった
@@ -1641,16 +1643,29 @@ dialog[open] > article {
  * ---- 左右の並び (`.s-group`・`.s-list`・`.s-item`) ----
  * **録画のサイドバーと設定の左の一覧は同じ部品。** ドキュメントの目次と同じ作り: 小さく沈めた見出し、
  * 線も枠も無い行、指を乗せると淡い塗り、選んでいる行 (`.on`) だけ角の丸い薄い塗り。
- * 2 か所に同じ値を書いていた頃は、片方だけ直して顔がずれることがあった。置き方 (余白・幅) は使う側で
+ * 2 か所に同じ値を書いていた頃は、片方だけ直して顔がずれることがあった。置き方 (余白・幅) は使う側で。
+ *
+ * **グループの境目は、見出しの上の細い線と余白。** 見出しの字だけでは、行の並びのどこから次のグループかが
+ * 読みにくかった。線は列の幅いっぱいで、見出しの上の余白 (`--s-gap`) の真ん中に引く。最初のグループ (`.s-first`) には引かない
  */
 .s-group {
+    --s-gap: 1.5rem;
+    position: relative;
     display: flex;
     align-items: center;
-    margin: 1rem 0 0.25rem;
+    margin: var(--s-gap) 0 0.25rem;
     padding: 0 0.75rem;
     color: var(--dp-muted);
     font-size: 0.75rem;
     font-weight: var(--dp-weight);
+}
+.s-group:not(.s-first)::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: calc(var(--s-gap) / -2);
+    border-top: 1px solid var(--dp-line);
+    pointer-events: none;
 }
 .s-group.s-first {
     margin-top: 0.25rem;

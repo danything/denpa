@@ -104,15 +104,6 @@
                 calc(-1 * var(--dp-gutter, 1.5rem)) 0;
         }
     }
-    /*
-     * **見出しの下の線も付けない** (3画面とも。右の列の線と同じ理由)。スクロールで線と影を濃くする動き
-     * (`+layout.svelte`) も止める — 二段組ではページごとは動かない
-     */
-    :global(body:has([data-player-layout]) .navbar) {
-        border-bottom-color: transparent;
-        box-shadow: none;
-        animation: none;
-    }
     @media (min-width: 1024px) {
         .layout > :global(aside) {
             width: 20rem;

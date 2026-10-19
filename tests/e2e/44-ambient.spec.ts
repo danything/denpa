@@ -54,7 +54,7 @@ test.describe('アンビエントモード', () => {
             await expect.poll(updates(page), { timeout: 15_000 }).toBeGreaterThan(5);
             const before = await updates(page)();
             await expect.poll(updates(page), { timeout: 10_000 }).toBeGreaterThan(before + 5);
-            // 見出しと右の列は地の色と区切りの線を外し、窓全体に敷いた色の上に載る
+            // 見出しと右の列は地の色を外し (区切りの線はもともと無い)、窓全体に敷いた色の上に載る
             await expect(page.locator('html')).toHaveAttribute('data-ambient', '');
             const aside = await page.locator('[data-player-layout] > aside').evaluate((el) => ({
                 position: getComputedStyle(el).position,
@@ -69,10 +69,10 @@ test.describe('アンビエントモード', () => {
                     aside.backgroundColor,
                     aside.borderLeftWidth,
                     header.backgroundColor,
-                    header.borderBottomColor,
+                    header.borderBottomWidth,
                 ];
             });
-            expect(surfaces).toEqual(['rgba(0, 0, 0, 0)', '0px', 'rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)']);
+            expect(surfaces).toEqual(['rgba(0, 0, 0, 0)', '0px', 'rgba(0, 0, 0, 0)', '0px']);
             // 色は見出しの所 (窓の上の端) まで敷く
             expect((await glow.boundingBox())!.y).toBeLessThanOrEqual(0);
             // 光は枠の外 (帯) にだけ描く。枠に重なる帯は無い
@@ -103,12 +103,6 @@ test.describe('アンビエントモード', () => {
             await expect(glow).toHaveAttribute('data-plan', 'off');
             await expect(glow).toBeHidden();
             await expect(page.locator('html')).not.toHaveAttribute('data-ambient');
-            // オフでも区切りの線は出さない (色が出るまでの間に線がちらつかないように)
-            const lines = await page.evaluate(() => [
-                getComputedStyle(document.querySelector('[data-player-layout] > aside')!).borderLeftWidth,
-                getComputedStyle(document.querySelector('.navbar')!).borderBottomColor,
-            ]);
-            expect(lines).toEqual(['0px', 'rgba(0, 0, 0, 0)']);
             await page.reload();
             await expect(page.getByTestId('live-frame-ambient')).toHaveAttribute('data-plan', 'off');
             expect(await page.evaluate(() => localStorage.getItem('player-ambient'))).toBe('0');
