@@ -65,14 +65,25 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
     const lineTop = now.getBoundingClientRect().top - (box !== null ? box.getBoundingClientRect().top : 0);
     if (lineTop < cover + view * 0.4 || lineTop > cover + view - now.offsetHeight)
         scrollToTop(list, now, cover + view * 0.7);
+    // 貼り付いた日付の見出しの下端。行はその少し下に置く (`alignTop` が見出しの裏へ送らないように)
+    const line = topEdge(list) + (list.querySelector<HTMLElement>('.t-day')?.offsetHeight ?? 32);
+    /*
+     * **録画中の行は線のすぐ上にいるので、線と一緒に映す。** 何本も録っていて頭が見出しの裏に入るなら、
+     * 線が下の端に掛からない範囲で戻す
+     */
+    const live = list.querySelector<HTMLElement>('.t-row.live');
+    if (live !== null) {
+        const short = line + 8 - live.getBoundingClientRect().top;
+        const bottom = box !== null ? box.getBoundingClientRect().bottom : window.innerHeight - bottomCover();
+        const room = bottom - now.getBoundingClientRect().bottom;
+        if (short > 0 && room > 0) scrollBy(list, -Math.min(short, room));
+    }
     const row =
         target === null
             ? null
             : (list.querySelector<HTMLElement>(`[data-key="${target}"]`) ??
               list.querySelector<HTMLElement>(`[data-group-rows~="${target}"]`));
     if (row !== null) {
-        // 貼り付いた日付の見出しの下端。行はその少し下に置く (`alignTop` が見出しの裏へ送らないように)
-        const line = topEdge(list) + (list.querySelector<HTMLElement>('.t-day')?.offsetHeight ?? 32);
         if (row.getBoundingClientRect().top < line) {
             scrollToTop(list, row, line + 8 - (box !== null ? box.getBoundingClientRect().top : 0));
         }

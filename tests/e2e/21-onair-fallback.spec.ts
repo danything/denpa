@@ -50,7 +50,8 @@ test.describe('放送の延長 (追従できない局と、延長)', () => {
             await page.waitForTimeout(500);
         }
         await expect(recording).toBeVisible();
-        const before = ((await recording.textContent()) ?? '').trim();
+        // 比べるのは時刻だけ (バッジの「あと何分」は時間が経てば変わる)
+        const before = ((await recording.locator('.t-time').textContent()) ?? '').trim();
 
         // 放送が10分押した状態にする
         await request.post(`${stack.agentUrl}/__control/extend?ms=${10 * 60 * 1000}`);
@@ -61,7 +62,7 @@ test.describe('放送の延長 (追従できない局と、延長)', () => {
             await goto(page, '/');
             const row = page.getByTestId('reservation-row').filter({ hasText: '録画中' }).first();
             if ((await row.count()) > 0) {
-                after = ((await row.textContent()) ?? '').trim();
+                after = ((await row.locator('.t-time').textContent()) ?? '').trim();
                 if (after !== before) break;
             }
             await page.waitForTimeout(500);

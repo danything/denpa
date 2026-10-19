@@ -21,7 +21,7 @@ export type Item = TimelineItem &
 export interface HomeContext {
     /** 描いた時刻。「いま」の線と予約の側分けの物差し */
     readonly clock: number;
-    /** 「いま」の線に添える一言 (録画中ならあと何分か、無ければ次の録画まで)。どちらも無ければ null */
+    /** 「いま」の線に添える一言 (次の録画まで)。次の予約が無ければ null */
     readonly nowStatus: NowStatus | null;
     /** 最後に詳細を開いた行の鍵 (薄く塗る) */
     readonly pickedKey: string | null;

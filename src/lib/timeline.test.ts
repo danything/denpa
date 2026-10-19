@@ -44,10 +44,10 @@ describe('側ごとの並び', () => {
         expect(parts.future.map((i) => i.key)).toEqual(['res-1', 'res-2']);
     });
 
-    test('日付の見出しはその日の頭に立ち、「いま」の線の下に録画中、その下に予約を置く', () => {
+    test('日付の見出しはその日の頭に立ち、録画中は「いま」の線の上、予約は線の下に置く', () => {
         const { past, now, future } = byDayLines(items);
         expect(keys(past)).toEqual([`day-${yesterday}`, 'missed-1', `day-${today}`, 'rec-1', 'rec-2']);
-        expect(keys(now)).toEqual(['now', 'res-now']);
+        expect(keys(now)).toEqual(['res-now', 'now']);
         // 今日の予約には見出しを立てない (今日の見出しは線の上の1つだけ)
         expect(keys(future)).toEqual(['res-1', 'res-2']);
     });
@@ -70,7 +70,7 @@ const yesterday = dayStart(NOW - 26 * H);
 const tomorrow = dayStart(NOW + 24 * H);
 
 describe('今日の見出しは線をまたいで1つ', () => {
-    test('今日の録画・線と録画中・今日の予約が1つの見出しの下に並び、ほかの日は上と下', () => {
+    test('今日の録画・録画中と線・今日の予約が1つの見出しの下に並び、ほかの日は上と下', () => {
         const lines = byDayLines([
             item('rec-old', 'past', NOW - 26 * H),
             item('rec-1', 'past', NOW - 3 * H),
@@ -80,7 +80,7 @@ describe('今日の見出しは線をまたいで1つ', () => {
         ]);
         expect(blocks(all(lines)).map((block) => [block.key, keys(block.lines)])).toEqual([
             [`day-${yesterday}`, [`day-${yesterday}`, 'rec-old']],
-            [`day-${today}`, [`day-${today}`, 'rec-1', 'now', 'res-now', 'res-1']],
+            [`day-${today}`, [`day-${today}`, 'rec-1', 'res-now', 'now', 'res-1']],
             [`day-${tomorrow}`, [`day-${tomorrow}`, 'res-next']],
         ]);
     });
@@ -90,6 +90,19 @@ describe('今日の見出しは線をまたいで1つ', () => {
         expect(keys(lines.past)).toEqual([`day-${yesterday}`, 'rec-old']);
         expect(keys(lines.now)).toEqual([`day-${today}`, 'now']);
         expect(keys(lines.future)).toEqual(['res-1']);
+    });
+
+    test('今日の録画が無く録画中があれば、見出しは録画中の上に立つ (前の日から録っている行も今日)', () => {
+        const lines = byDayLines([
+            item('rec-old', 'past', NOW - 26 * H),
+            item('res-night', 'now', NOW - 13 * H),
+            item('res-now', 'now', NOW - H),
+            item('res-1', 'future', NOW + H),
+        ]);
+        expect(blocks(all(lines)).map((block) => [block.key, keys(block.lines)])).toEqual([
+            [`day-${yesterday}`, [`day-${yesterday}`, 'rec-old']],
+            [`day-${today}`, [`day-${today}`, 'res-night', 'res-now', 'now', 'res-1']],
+        ]);
     });
 
     test('今日に録画も予約も無ければ、見出しは線だけを抱える', () => {
@@ -165,18 +178,34 @@ describe('今日の見出しは線をまたいで1つ', () => {
         expect(blocks(all(after)).map((block) => block.key)).toEqual([`day-${today}`, `day-${tomorrow}`]);
     });
 
-    test('まとめて表示は側ごとに包み、線と録画中は見出しの無い包みにする', () => {
+    test('まとめて表示は側ごとに包み、録画中は「録画」の末尾に番組でまとめずに置き、線は見出しの無い包みにする', () => {
         const lines = timelineLines(
             sections([
-                item('rec-1', 'past', NOW - 3 * H),
-                item('res-now', 'now', NOW - H),
+                item('rec-1', 'past', NOW - 3 * H, 'a'),
+                item('res-now', 'now', NOW - H, 'a'),
                 item('res-1', 'future', NOW + H),
             ]),
             { now: NOW, grouped: true, isOpen: () => false },
         );
         expect(blocks(all(lines)).map((block) => [block.key, keys(block.lines)])).toEqual([
-            ['side-past', ['side-past', 'rec-1']],
-            ['now', ['now', 'res-now']],
+            ['side-past', ['side-past', 'rec-1', 'res-now']],
+            ['now', ['now']],
+            ['side-future', ['side-future', 'res-1']],
+        ]);
+    });
+
+    test('まとめて表示で録れたものが無くても、録画中の上に「録画」の見出しを立てる', () => {
+        const lines = timelineLines(
+            sections([item('res-now', 'now', NOW - H), item('res-1', 'future', NOW + H)]),
+            {
+                now: NOW,
+                grouped: true,
+                isOpen: () => false,
+            },
+        );
+        expect(blocks(all(lines)).map((block) => [block.key, keys(block.lines)])).toEqual([
+            ['side-past', ['side-past', 'res-now']],
+            ['now', ['now']],
             ['side-future', ['side-future', 'res-1']],
         ]);
     });
@@ -315,7 +344,7 @@ describe('絞り込み', () => {
         expect(passes('failed', items[5]!, traits(items[5]!))).toBe(false);
     });
 
-    test('予約と録画中は線の下、未視聴と失敗は録れたものだけ', () => {
+    test('予約は線の下、録画中は線のすぐ上、未視聴と失敗は録れたものだけ', () => {
         expect(passes('reservations', items[0]!, plain)).toBe(true);
         expect(passes('reservations', items[1]!, plain)).toBe(false);
         expect(passes('recording', items[1]!, plain)).toBe(true);

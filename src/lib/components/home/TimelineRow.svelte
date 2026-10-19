@@ -21,6 +21,7 @@
         percent,
         quietState,
         recordedDuration,
+        recordingState,
         rowState,
         size,
         stateLabel,
@@ -77,6 +78,8 @@
 <!-- 予約の行 (これから・録画中・「完了した予約も表示」で出る終わった予約) -->
 {#snippet resRow(item: Item & { kind: 'res' }, nested: boolean)}
     {@const res = item.res}
+    <!-- 録画中はバッジにあと何分かを添える (狭い幅は「あと21分」だけ) -->
+    {@const live = item.zone === 'now' ? recordingState(ctx.clock, res.end_at) : null}
     <div
         data-testid="reservation-row"
         data-reservation-id={res.id}
@@ -91,7 +94,8 @@
             <RowTitle
                 start={res.start_at}
                 end={res.end_at}
-                state={stateLabel(res.state)}
+                state={live?.text ?? stateLabel(res.state)}
+                stateShort={live?.short}
                 badge={badgeClass(res.state)}
                 name={res.name}
                 testid="reservation-state"
@@ -125,7 +129,7 @@
                 </ActionButton>
             {/if}
         </div>
-        <!-- 録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは「いま」の線にも出る) -->
+        <!-- 録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かはバッジが言う) -->
         {#if item.zone === 'now' && res.end_at > res.start_at}
             <progress
                 class="row-bar rec"

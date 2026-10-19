@@ -103,6 +103,10 @@
 .board .title-line > .tag {
     flex-shrink: 0;
 }
+/* 録画中のバッジの狭い形 (「あと21分」)。広い画面は「録画中・あと21分」 */
+.board .t-state-short {
+    display: none;
+}
 .board .title-line .row-name,
 .board div.row-meta {
     display: block;
@@ -532,6 +536,18 @@
     .board .t-excerpt,
     .board .t-rule {
         display: none;
+    }
+    /* 読み上げには長い形を残す */
+    .board .t-state-full {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+    .board .t-state-short {
+        display: inline;
     }
     .board .t-time {
         font-size: 0.8125rem;

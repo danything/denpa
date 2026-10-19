@@ -26,6 +26,7 @@
         start,
         end,
         state,
+        stateShort,
         badge,
         name,
         testid,
@@ -37,6 +38,8 @@
         start: number;
         end: number;
         state: string;
+        /** 狭い幅で代わりに出す状態の字 (録画中の「あと21分」)。読み上げはいつも `state` */
+        stateShort?: string | undefined;
         badge: string;
         name: string;
         testid: string;
@@ -67,6 +70,6 @@
         </button>
     {/if}
     <span class={quiet ? 'visually-hidden' : `tag ${badge}`} data-testid={testid}
-        >{#if !quiet && badge.includes('solid')}<span class="rec-dot" aria-hidden="true"></span>{/if}{state}</span
+        >{#if !quiet && badge.includes('solid')}<span class="rec-dot" aria-hidden="true"></span>{/if}{#if stateShort === undefined}{state}{:else}<span class="t-state-full">{state}</span><span class="t-state-short" aria-hidden="true">{stateShort}</span>{/if}</span
     >
 </div>

@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { expect, goto, homeFilter, syncEpg, test } from './helpers';
 
 /**
- * ホームの1本の一覧 (録れたもの → 「いま」→ 予約) と、右のサイドバー・狭い画面の絞り込みの一枚。
+ * ホームの1本の一覧 (録れたもの → 録画中 → 「いま」→ 予約) と、右のサイドバー・狭い画面の絞り込みの一枚。
  * 並べ方そのものは単体テスト (`#lib/timeline.test.ts`)。ここでは画面の上で効いているかを見る。
  *
  * 行は DB に直に入れる (33 と同じ)。予約は 2100 年、録画は 2099 年にして、
@@ -91,9 +91,9 @@ test.describe('ホームの1本の一覧', () => {
         expect(recording!.y).toBeLessThan(now!.y);
 
         // 「いま」の線と日付の見出しは見出しなので、読み上げの見出し移動で辿れる。
-        // 線には次の録画まで (録画中ならあと何分か) を添える (隠した読み点の前後に空白が入ることがある)
+        // 線には次の録画までを添える (隠した読み点の前後に空白が入ることがある)
         await expect(
-            page.getByRole('heading', { name: /^いま \d{1,2}:\d{2}\s*、\s*(次の録画まで \d|録画中)/ }),
+            page.getByRole('heading', { name: /^いま \d{1,2}:\d{2}\s*、\s*次の録画まで \d/ }),
         ).toHaveCount(1);
         await expect(page.getByTestId('timeline-day').first()).toHaveRole('heading');
 
@@ -111,13 +111,105 @@ test.describe('ホームの1本の一覧', () => {
             await page.setViewportSize({ width, height: 800 });
             await goto(page, '/');
             const line = page.getByTestId('timeline-now');
-            await expect(line).toContainText(/次の録画まで|次まで|録画中/);
+            await expect(line).toContainText(/次の録画まで|次まで/);
             const time = (await line.locator('.now-time').boundingBox())!;
             const row = rows(page).filter({ hasText: '一覧試験の予約' });
             await row.scrollIntoViewIfNeeded();
             const rowTime = (await row.locator('.t-time').boundingBox())!;
             expect(Math.abs(time.x - rowTime.x)).toBeLessThan(1);
             expect((await line.boundingBox())!.height).toBeLessThan(24);
+        }
+    });
+
+    /*
+     * **録画中の行は「いま」の線のすぐ上。** 並びは始まった時刻の順で、いまより前に始まったものは線の上に来る。
+     * あと何分かは行のバッジが言い、線は次の録画までを言う (録画中とは言わない)。開いたときも線と一緒に見える
+     */
+    test('録画中の行は線のすぐ上にあり、あと何分かは行のバッジが言う', async ({ page, stack }) => {
+        const now = Date.now();
+        const MIN = 60_000;
+        // 録画中の録画は DB に直に置く (終わった時刻が無ければ録画中)。終わりの時刻まで片付け (`failStrayRecordings`) は触らない
+        sqlite(
+            `${stack.root}/denpa.db`,
+            `const res = db.prepare("INSERT INTO reservations (program_id, service_id, name, start_at, end_at, manual, state, started_at, created_at, updated_at) VALUES (980200, (SELECT id FROM services ORDER BY id LIMIT 1), '録画中試験', ${now - 10 * MIN}, ${now + 21 * MIN}, 1, 'scheduled', ${now - 10 * MIN}, ${now}, ${now})").run().lastInsertRowid;
+            db.prepare("INSERT INTO recordings (reservation_id, service_id, service_name, name, series, start_at, end_at, created_at, updated_at) VALUES (?, 211, 'BS11', '録画中試験', '録画中試験', ${now - 10 * MIN}, ${now + 21 * MIN}, ${now}, ${now})").run(res);`,
+        );
+        try {
+            for (const viewport of [
+                { width: 1366, height: 800 },
+                { width: 390, height: 844 },
+            ]) {
+                await page.setViewportSize(viewport);
+                // 開いたときの位置を見るので、一覧を全部描かせる `goto` は使わない
+                await page.goto('/');
+                await page.locator('[data-hydrated="true"]').waitFor();
+                const row = page.getByTestId('reservation-row').filter({ hasText: '録画中試験' });
+                // 広い画面は「録画中・あと21分」、狭い画面は「あと21分」だけ (読み上げはいつも長い形)
+                const badge = row.getByTestId('reservation-state');
+                await expect(badge.locator('.t-state-full')).toHaveText(/^録画中・あと\d+分$/);
+                const narrow = viewport.width < 768;
+                if (narrow) {
+                    await expect(badge.locator('.t-state-short')).toBeVisible();
+                    await expect(badge.locator('.t-state-short')).toHaveText(/^あと\d+分$/);
+                } else {
+                    await expect(badge.locator('.t-state-short')).toBeHidden();
+                }
+                await expect(row.locator('.rec-dot')).toHaveCount(1);
+                await expect(row.getByTestId('recording-progress')).toBeVisible();
+
+                // 線のすぐ上 (線の手前の行がこの行)
+                const before = await page.getByTestId('timeline').evaluate((list) => {
+                    const all = [
+                        ...list.querySelectorAll<HTMLElement>('[data-key], [data-testid="timeline-now"]'),
+                    ];
+                    const at = all.findIndex((node) => node.dataset['testid'] === 'timeline-now');
+                    return all[at - 1]?.textContent ?? '';
+                });
+                expect(before).toContain('録画中試験');
+
+                // 線は次の録画までを言い、録画中とは言わない
+                const line = page.getByTestId('timeline-now');
+                await expect(line).toContainText(/次の録画まで|次まで/);
+                await expect(line).not.toContainText('録画中');
+
+                // 開いたときに、録画中の行も線も見えている
+                const seen = await page.getByTestId('timeline').evaluate((list) => {
+                    const box =
+                        getComputedStyle(list).overflowY === 'auto'
+                            ? list.getBoundingClientRect()
+                            : {
+                                  top: 0,
+                                  bottom:
+                                      window.innerHeight -
+                                      (document.querySelector<HTMLElement>('[data-testid="tabbar"]')
+                                          ?.offsetHeight ?? 0),
+                              };
+                    const inside = (node: Element | null) => {
+                        const rect = node?.getBoundingClientRect();
+                        return rect !== undefined && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1;
+                    };
+                    const live = [...list.querySelectorAll('[data-testid="reservation-row"]')].find((node) =>
+                        (node.textContent ?? '').includes('録画中試験'),
+                    );
+                    return {
+                        row: inside(live ?? null),
+                        line: inside(list.querySelector('[data-testid="timeline-now"]')),
+                    };
+                });
+                expect(seen).toEqual({ row: true, line: true });
+            }
+
+            // 「録画中」に絞っても、行は線の上に残る
+            await homeFilter(page, 'recording');
+            const row = page.getByTestId('reservation-row').filter({ hasText: '録画中試験' });
+            const rowBox = (await row.boundingBox())!;
+            const lineBox = (await page.getByTestId('timeline-now').boundingBox())!;
+            expect(rowBox.y).toBeLessThan(lineBox.y);
+        } finally {
+            sqlite(
+                `${stack.root}/denpa.db`,
+                `db.run("DELETE FROM recordings WHERE name = '録画中試験'"); db.run("DELETE FROM reservations WHERE program_id = 980200");`,
+            );
         }
     });
 

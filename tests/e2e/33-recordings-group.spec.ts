@@ -95,7 +95,7 @@ function seedReservations(db: string, rows: Seed[]): void {
 
 /**
  * 一覧に並んでいるもの (見出しは `group:名前`、行は番組名) を上から。
- * `zone` で「いま」の線の上 (録れたもの) か下 (予約) かを選ぶ
+ * `zone` で「いま」の線の上 (録れたものと録画中) か下 (予約) かを選ぶ
  */
 async function listed(page: Page, zone: 'future' | 'past' = 'past'): Promise<string[]> {
     const all = await page

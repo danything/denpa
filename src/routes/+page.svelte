@@ -263,12 +263,12 @@
     /*
      * ---- 1本の時間軸 (`#lib/timeline.ts`) ----
      *
-     * 予約・録画・録り逃しを1つの一覧に並べる。上が録れたもの、「いま」の線と録画中、
+     * 予約・録画・録り逃しを1つの一覧に並べる。上が録れたものと録画中、「いま」の線、
      * 下がこれからの予約 (下へ行くほど時間が進む)。行の形 (`Item`) は部品と分け合う (`#lib/components/home/context.ts`)
      */
 
     /**
-     * 予約をどの側に置くか。録画中は線のすぐ下、放送が終わっていないものはその下 (これからの予約)。
+     * 予約をどの側に置くか。録画中は線のすぐ上、放送が終わっていないものは線の下 (これからの予約)。
      * 「完了した予約も表示」で出る終わった予約 (完了・失敗・取り消し) は録れたものの側
      */
     function zoneOf(res: Res, now: number): Zone {
@@ -389,7 +389,7 @@
      * **線より上 (録れたもの) だけ少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
      * 開いた直後に一瞬止まって見えた。描くのは線の側 (新しいほう) から `pastPage.shown` 行で、
      * 古いほうは一覧の頭に近づいたら上へ足す。足しても読んでいる所は動かさない (`holdPlace`)。
-     * 線より下 (録画中と予約) は全部描く
+     * 録画中と線より下 (予約) は全部描く
      */
     const pastPage = new Paged(() => lines.past, 60);
     /** 描く頭の行。見出しの途中から描かないよう、見出しまで戻す (`pageStart`) */
@@ -424,24 +424,18 @@
             .filter((rec) => rec.job_id !== null && rec.deleted_at === null)
             .sort((a, b) => Number(b.job_state === 'running') - Number(a.job_state === 'running')),
     );
-    /** 次の録画 (「いま」の線の一言)。絞り込みに関係なく、これからの予約のうちいちばん早いもの */
+    /** 次の録画 (「いま」の線の一言)。絞り込みに関係なく、いまより後に始まる予約のうちいちばん早いもの */
     const nextRes = $derived.by(() => {
         let next: Res | null = null;
         for (const item of items) {
             if (item.kind !== 'res' || item.zone !== 'future' || !cancelable(item.res)) continue;
-            if (item.res.state === 'skipped') continue;
+            if (item.res.state === 'skipped' || item.res.start_at <= clock) continue;
             if (next === null || item.res.start_at < next.start_at) next = item.res;
         }
         return next;
     });
-    /** 「いま」の線に添える一言。録画中ならあと何分か、無ければ次の録画まで (絞り込みに関係なく) */
-    const lineStatus = $derived(
-        nowStatus(
-            clock,
-            merged.reservations.filter((res) => res.state === 'recording'),
-            nextRes,
-        ),
-    );
+    /** 「いま」の線に添える一言。次の録画まで (絞り込みに関係なく。録画中のあと何分かは行のバッジ) */
+    const lineStatus = $derived(nowStatus(clock, nextRes));
     /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは日付 */
     function dayLabel(at: number): string {
         return dayName(at, clock) ?? date(at);
