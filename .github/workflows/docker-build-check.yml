@@ -124,10 +124,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # キャッシュは build-and-deploy と同じ scope を**読むだけ** (main で積んだ層がそのまま効く)。
-      # **書かない。** PR から書いたものはその PR の中にしか見えず、マージした後は誰も読まない。
-      # それでも Actions のキャッシュの上限 (10GB) には数えられるので、PR ごとに mode=max で
-      # 積むと main の層が追い出されていた (PR の分だけで 3GB を超えていた)
+      # キャッシュは build-and-deploy が GHCR に積んだもの (`<イメージ>:buildcache-<arch>`) を**読むだけ**
+      # (main の層がそのまま効く)。イメージは公開なのでログインは要らない。
+      # **書かない。** PR の層はマージした後は誰も読まず、main のキャッシュを上書きしてしまう
       - name: Build
         uses: docker/build-push-action@v7
         with:
@@ -137,7 +136,7 @@ jobs:
           platforms: linux/${{ matrix.arch.name }}
           push: false
           pull: true
-          cache-from: type=gha,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}:buildcache-${{ matrix.arch.name }}
           # 下の起動の確かめに使う。push はしないので、名前はこのジョブの中だけのもの
           load: true
           tags: smoke/${{ matrix.image.name }}

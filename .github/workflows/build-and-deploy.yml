@@ -123,7 +123,12 @@ jobs:
       # まず手元 (docker) に読み込んで、PR と同じ .github/image-smoke.sh を通す。通ったら
       # 下でもう一度組んで push する — 同じ builder の中なので層は全部使い回しで、組み直しはしない。
       # キャッシュはこちらで書く (起こして落ちても、直した次の run が速いように)。
-      # キャッシュは arch ごとに分ける。混ぜると互いの層を追い出し合う
+      # キャッシュは arch ごとに分ける。混ぜると互いの層を追い出し合う。
+      #
+      # **置き場所は GHCR のタグ (`<イメージ>:buildcache-<arch>`)。** Actions のキャッシュ (上限 10GB) に置いていた頃は、
+      # Windows のエージェントや Playwright のキャッシュと取り合って ffmpeg の層が追い出され、
+      # arm64 で ffmpeg を一から組み直して 10 分を超えていた。レジストリには上限が無く、取り合わない。
+      # イメージは公開なので、PR の docker-build-check もログインせずに読める
       - name: Build
         uses: docker/build-push-action@v7
         with:
@@ -132,8 +137,8 @@ jobs:
           target: ${{ matrix.image.target }}
           platforms: linux/${{ matrix.arch.name }}
           pull: true
-          cache-from: type=gha,scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
-          cache-to: type=gha,mode=${{ matrix.image.cache-mode }},scope=${{ matrix.image.scope }}-${{ matrix.arch.name }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }}:buildcache-${{ matrix.arch.name }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }}:buildcache-${{ matrix.arch.name }},mode=${{ matrix.image.cache-mode }},image-manifest=true,oci-mediatypes=true
           load: true
           tags: smoke/${{ matrix.image.name }}
 
