@@ -935,15 +935,6 @@
                             data-service={channel.id}
                         >
                             <!--
-                            **テレビに出ている番号を添える。** 地上波はリモコン番号、
-                            BS/CS は3桁番号 (BS朝日1=151)。局名だけだと、テレビで
-                            覚えている番号から探せない
-                        -->
-                            <!-- ラベルの形は番組表の見出しと同じ。番号の無い局も幅は取る (局名の頭をそろえる) -->
-                            <span class="channel-number" data-testid="live-number">
-                                {#if channel.number !== null}<span class="tag">{channel.number}</span>{/if}
-                            </span>
-                            <!--
                                 ロゴのまだ無い局は、局名の頭の 1 字 (「GR」のような種別の札だと、
                                 どの局も同じ灰色の箱になって見分けられない)
                             -->
@@ -962,9 +953,20 @@
                                 256px) でバッジが幅を取り、局名も番組名も「で…」まで潰れていた
                             -->
                             <span class="channel-text">
+                                <!--
+                                    **テレビに出ている番号を局名の頭に添える** (「3 チバテレ1」)。地上波は
+                                    リモコン番号、BS/CS は3桁番号 (BS朝日1=151)。局名だけだと、テレビで
+                                    覚えている番号から探せない。ロゴの前に番号の列を取っていた頃は、狭い列
+                                    (256px) でその列が幅を取り、局名が「J:COMチャン…」まで潰れていた。
+                                    番号の無い局 (リモコン番号の無い地上波) も幅は取る — 同じ一覧の中で局名の頭がそろう
+                                -->
                                 <span class="channel-name broadcast">
                                     {#if tuned}<span class="visually-hidden" data-testid="live-tuned-mark">視聴中</span
-                                        >{/if}{channel.name}
+                                        >{/if}{#if channel.number !== null}<span class="visually-hidden"
+                                            >{channel.type === 'GR' ? 'リモコン' : 'チャンネル'}</span
+                                        >{/if}<span class="channel-number" data-testid="live-number"
+                                        >{channel.number ?? ''}</span
+                                    >{channel.name}
                                 </span>
                                 {#if channel.now}
                                     <span class="channel-now broadcast">
@@ -1104,10 +1106,6 @@
         padding: 0;
         font-size: inherit;
     }
-    /* 番号のラベルは淡い面の色。同じ色で塗った行の上では消えるので、地の色にする */
-    .channel-item.tuned :global(.tag) {
-        background: var(--dp-bg);
-    }
     .channel {
         display: flex;
         min-width: 0;
@@ -1126,15 +1124,18 @@
         cursor: pointer;
     }
     /*
-     * **番号は箱の左に寄せる。** 行の左の余白を右 ((i) の外) と同じ 12px にするため。箱の幅は番号の無い局や
-     * 3 桁 (BS・CS) でも局名の頭がそろうように取ったままで、右に寄せていた頃は短い番号ほど左が空き、
-     * 塗った面の端から番号まで 25〜29px あった (E2E 20 の「種別のタブと下の一覧の端がそろう」で見る)
+     * **番号は局名の頭に、小さく淡く添える。** 幅は 2 桁ぶん取って右に寄せる — 1 桁と 2 桁 (地上波) が
+     * 混ざっても局名の頭がそろう。BS・CS の 3 桁はどの局も同じだけ広がるので、やはりそろう。
+     * 行の左の余白 (ロゴまで 12px) は右 ((i) の外) と同じ (E2E 20 の「種別のタブと下の一覧の端がそろう」で見る)
      */
     .channel-number {
-        width: 2.5rem;
-        flex-shrink: 0;
-        text-align: left;
+        display: inline-block;
+        min-width: 2ch;
+        margin-right: 0.375rem;
+        text-align: right;
+        font-size: var(--dp-text-xs);
         font-variant-numeric: tabular-nums;
+        color: var(--dp-muted);
     }
     .channel-text {
         min-width: 0;

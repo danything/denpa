@@ -185,16 +185,16 @@ test.describe('ライブ視聴', () => {
             const at = `${size.width}px`;
             expect(Math.abs(tabs.x - row.x), `${at} の左`).toBeLessThanOrEqual(1);
             expect(Math.abs(tabs.x + tabs.width - (row.x + row.width)), `${at} の右`).toBeLessThanOrEqual(1);
-            // 面の中の余白も左右で同じ (番号の頭と (i) の印の外)
+            // 面の中の余白も左右で同じ (ロゴの頭と (i) の印の外)
             if (size.width === 820) continue;
             const item = page
                 .locator('.live-side .channel-item')
                 .filter({ has: page.getByTestId('live-channel-detail') })
                 .first();
-            const number = (await item.locator('.channel-number .tag').boundingBox())!;
+            const logo = (await item.locator('.channel .logo').boundingBox())!;
             const icon = (await item.locator('.channel-detail svg').boundingBox())!;
             const box = (await item.boundingBox())!;
-            const left = number.x - box.x;
+            const left = logo.x - box.x;
             const right = box.x + box.width - (icon.x + icon.width);
             expect(Math.abs(left - right), `${at} の内側 (左 ${left}・右 ${right})`).toBeLessThanOrEqual(2);
         }
@@ -317,6 +317,11 @@ test.describe('ライブ視聴', () => {
         await expect(first).toBeVisible();
         // 地上波はリモコン番号
         await expect(first.getByTestId('live-number')).toHaveText(/^\d+$/);
+        // 番号は局名の頭 (ロゴの右)。ロゴの前に番号の列を取ると、狭い列で局名が潰れた
+        const logo = (await first.locator('.logo').boundingBox())!;
+        const number = (await first.getByTestId('live-number').boundingBox())!;
+        expect(number.x).toBeGreaterThan(logo.x + logo.width);
+        await expect(first.locator('.channel-name')).toContainText(/リモコン\s*\d+/);
 
         await page.getByTestId('live-type-BS').click();
         await expect(page.getByTestId('live-channel').first()).toBeVisible();
