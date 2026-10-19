@@ -138,6 +138,7 @@
  * - `--dp-bg` … 地 (ページ・ヘッダー)
  * - `--dp-surface` … カード・一覧の枠・ダイアログ
  * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
+ * - `--dp-row` … ホームの一覧の行の塊。`--dp-row-hover` (指を乗せた)・`--dp-row-selected` (詳細を開いた) で一段ずつ濃く
  * - `--dp-line` … 区切りの線 (カードの縁・行の間・ヘッダーの下)
  * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
  * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
@@ -153,6 +154,10 @@
     --dp-bg: #fff;
     --dp-surface: #fff;
     --dp-subtle: #eff1f4; /* slate-50 */
+    /* 一覧の行の塊 (ホームの時間軸)。地との差は L で 5 ほど。指を乗せた・選んだ行はさらに一段ずつ (`home.css`) */
+    --dp-row: #f0f2f5;
+    --dp-row-hover: #e6e9ee;
+    --dp-row-selected: #dde1e8;
     --dp-line: #dfe3eb; /* slate-100 */
     --dp-line-strong: #cfd5e2; /* slate-150 */
     --dp-raised: #fff;
@@ -190,6 +195,9 @@
     --dp-bg: #0b0c0f;
     --dp-surface: #121318;
     --dp-subtle: #1a1b20;
+    --dp-row: #16171c;
+    --dp-row-hover: #1f2127;
+    --dp-row-selected: #272a31;
     --dp-line: #26282e;
     --dp-line-strong: #3a3d46;
     --dp-raised: #26282e;
