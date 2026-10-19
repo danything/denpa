@@ -3,6 +3,7 @@
      * 時間軸の見出し: 日付 (`day`)、まとめて表示のときの側 (`side`)、「いま」の線 (`now`)。
      * どれも `h2` なので、読み上げの見出し移動で辿れる
      */
+    import NowLine from '#lib/components/NowLine.svelte';
     import { date, time } from '#lib/format.js';
     import { dayName, type TimelineLine } from '#lib/timeline.js';
     import { home, type Item } from './context';
@@ -23,8 +24,9 @@
         <span class="t-day-name">{entry.zone === 'future' ? 'これからの予約' : '録画'}</span>
     </h2>
 {:else}
-    <!-- 「いま」の線。見出しにして、見出し移動でここへ来られるようにする (読み上げは「いま 14:32」)。赤い線で「いま」と分かるので、目に見える字は時刻だけ -->
-    <h2 class="t-now" data-testid="timeline-now">
-        <span class="t-now-label num"><span class="visually-hidden">いま </span>{time(ctx.clock)}</span>
-    </h2>
+    <!--
+        「いま」の線。見出しにして、見出し移動でここへ来られるようにする (読み上げは「いま 14:32、次の録画まで 3時間59分」)。
+        赤い線で「いま」と分かるので、目に見える字は時刻と、録画中ならあと何分か・無ければ次の録画までの一言だけ
+    -->
+    <NowLine heading class="t-now" time={time(ctx.clock)} status={ctx.nowStatus} data-testid="timeline-now" />
 {/if}

@@ -23,7 +23,7 @@
     import TimelineEntry from '#lib/components/home/TimelineEntry.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
     import { applyEncodeProgress } from '#lib/encode-live.svelte.js';
-    import { cmNoteWorthShowing, date, logoUnusable } from '#lib/format.js';
+    import { cmNoteWorthShowing, date, logoUnusable, nowStatus } from '#lib/format.js';
     import { GROUPED_COOKIE } from '#lib/grouping.js';
     import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { clearFailed, offline, removeLocal, saveOffline } from '#lib/offline.svelte.js';
@@ -414,7 +414,7 @@
             .filter((rec) => rec.job_id !== null && rec.deleted_at === null)
             .sort((a, b) => Number(b.job_state === 'running') - Number(a.job_state === 'running')),
     );
-    /** 次の録画 (頭の1行・サイドバーのまとめ)。絞り込みに関係なく、これからの予約のうちいちばん早いもの */
+    /** 次の録画 (「いま」の線の一言)。絞り込みに関係なく、これからの予約のうちいちばん早いもの */
     const nextRes = $derived.by(() => {
         let next: Res | null = null;
         for (const item of items) {
@@ -424,13 +424,14 @@
         }
         return next;
     });
-    /** 「あと 25 分」。1日より先は日数で */
-    function untilLabel(at: number): string {
-        const min = Math.max(0, Math.round((at - clock) / 60_000));
-        if (min < 60) return `あと${min}分`;
-        if (min < 24 * 60) return `あと${Math.floor(min / 60)}時間${min % 60 === 0 ? '' : `${min % 60}分`}`;
-        return `あと${Math.floor(min / (24 * 60))}日`;
-    }
+    /** 「いま」の線に添える一言。録画中ならあと何分か、無ければ次の録画まで (絞り込みに関係なく) */
+    const lineStatus = $derived(
+        nowStatus(
+            clock,
+            merged.reservations.filter((res) => res.state === 'recording'),
+            nextRes,
+        ),
+    );
     /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは日付 */
     function dayLabel(at: number): string {
         return dayName(at, clock) ?? date(at);
@@ -515,6 +516,9 @@
         get clock() {
             return clock;
         },
+        get nowStatus() {
+            return lineStatus;
+        },
         get pickedKey() {
             return selectedKey;
         },
@@ -531,7 +535,6 @@
         openMissed,
         toggleGroup,
         dayLabel,
-        untilLabel,
     });
 </script>
 
@@ -579,7 +582,6 @@
         showFinished={data.showFinished}
         showDeleted={data.showDeleted}
         capacity={data.capacity}
-        {nextRes}
         {encoding}
     />
 
@@ -649,7 +651,6 @@
             showFinished={data.showFinished}
             showDeleted={data.showDeleted}
             {encoding}
-            {nextRes}
             capacity={data.capacity}
         />
     </div>

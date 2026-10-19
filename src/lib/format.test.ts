@@ -6,6 +6,7 @@ import {
     duration,
     durationMs,
     eta,
+    nowStatus,
     percent,
     recordedDuration,
     splitReaderName,
@@ -175,5 +176,63 @@ describe('空きと残り時間', () => {
     test('目安が無ければ空きだけ、残りわずかはそう言う', () => {
         expect(capacityLabel(300 * GB, null)).toEqual({ free: '空き 300GB', hours: null });
         expect(capacityLabel(0.5 * GB, 0.2)).toEqual({ free: '空き 1GB未満', hours: '1時間未満' });
+    });
+});
+
+describe('「いま」の線の一言', () => {
+    // 18:01:20。線の時刻は 18:01
+    const now = new Date(2026, 9, 19, 18, 1, 20).getTime();
+    const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();
+
+    test('録っていなければ次の録画まで。分は線の時刻と食い違わないよう切り上げる', () => {
+        expect(nowStatus(now, [], { start_at: at(22, 0) })).toEqual({
+            text: '次の録画まで 3時間59分',
+            short: '次まで 3:59',
+        });
+    });
+
+    test('1時間を切ると分だけ', () => {
+        expect(nowStatus(now, [], { start_at: at(18, 13) })).toEqual({
+            text: '次の録画まで 12分',
+            short: '次まで 12分',
+        });
+    });
+
+    test('ちょうどの時間は時間だけ、狭い形は 0 を埋める', () => {
+        expect(nowStatus(at(18, 0), [], { start_at: at(20, 5) })).toEqual({
+            text: '次の録画まで 2時間5分',
+            short: '次まで 2:05',
+        });
+        expect(nowStatus(at(18, 0), [], { start_at: at(20, 0) })?.text).toBe('次の録画まで 2時間');
+    });
+
+    test('1日より先は日数で', () => {
+        expect(nowStatus(now, [], { start_at: now + 3 * 24 * 60 * MIN })).toEqual({
+            text: '次の録画まで 3日',
+            short: '次まで 3日',
+        });
+    });
+
+    test('始まる時刻を過ぎていても「0分」とは言わない', () => {
+        expect(nowStatus(now, [], { start_at: now - MIN })?.text).toBe('次の録画まで 1分');
+    });
+
+    test('予約が無ければ何も添えない', () => {
+        expect(nowStatus(now, [], null)).toBeNull();
+    });
+
+    test('録画中はあと何分か。2本以上なら本数と、いちばん早く終わるもの', () => {
+        expect(nowStatus(now, [{ end_at: at(18, 13) }], { start_at: at(22, 0) })).toEqual({
+            text: '録画中・あと12分',
+            short: '録画中・あと12分',
+        });
+        expect(nowStatus(now, [{ end_at: at(19, 0) }, { end_at: at(18, 13) }], null)).toEqual({
+            text: '録画中 2本・あと12分',
+            short: '録画中・あと12分',
+        });
+    });
+
+    test('終わりの時刻を過ぎても止まりきるまでは録画中とだけ', () => {
+        expect(nowStatus(now, [{ end_at: at(18, 0) }], null)).toEqual({ text: '録画中', short: '録画中' });
     });
 });

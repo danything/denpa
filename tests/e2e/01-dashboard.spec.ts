@@ -351,9 +351,9 @@ test.describe('ホームと画面遷移', () => {
             return hit !== null && el.contains(hit) && el.matches(':popover-open');
         });
         expect(front).toBe(true);
-        // 状態 (次の録画・空き) は狭い幅では「⋯」の頭に出す (広い幅はサイドバーのいちばん下)
+        // 状態 (空き) は狭い幅では「⋯」の頭に出す (広い幅はサイドバーのいちばん下)。次の録画は「いま」の線に出す
         await expect(menu.getByTestId('recordings-capacity-menu')).toBeVisible();
-        await expect(menu.getByTestId('menu-summary')).toContainText('次の録画');
+        await expect(menu.getByTestId('menu-summary')).not.toContainText('次の録画');
         await menu.getByTestId('reconcile-button').click();
         await expect(page.getByTestId('reconcile-result')).toBeVisible();
         // 送り終えたら閉じる

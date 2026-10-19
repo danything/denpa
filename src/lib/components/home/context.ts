@@ -6,6 +6,7 @@
 
 import { getContext, setContext } from 'svelte';
 import type { Arming } from '#lib/arming.svelte.js';
+import type { NowStatus } from '#lib/format.js';
 import type { TimelineItem } from '#lib/timeline.js';
 import type { PageData } from '../../../routes/$types';
 
@@ -20,6 +21,8 @@ export type Item = TimelineItem &
 export interface HomeContext {
     /** 描いた時刻。「いま」の線と予約の側分けの物差し */
     readonly clock: number;
+    /** 「いま」の線に添える一言 (録画中ならあと何分か、無ければ次の録画まで)。どちらも無ければ null */
+    readonly nowStatus: NowStatus | null;
     /** 最後に詳細を開いた行の鍵 (薄く塗る) */
     readonly pickedKey: string | null;
     /** その行を覚える (詳細を開くとき) */
@@ -41,8 +44,6 @@ export interface HomeContext {
     toggleGroup(zone: 'future' | 'past', group: string): void;
     /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは日付 */
     dayLabel(at: number): string;
-    /** 「あと 25 分」 */
-    untilLabel(at: number): string;
 }
 
 const KEY = Symbol('home');

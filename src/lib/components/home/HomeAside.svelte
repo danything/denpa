@@ -7,14 +7,14 @@
      * 1. 絞り込み … すべて・予約・録画中・未視聴 (件数付き)
      * 2. 見てほしいこと … 競合・失敗・録り逃し・CM の判定。件数があるものだけ、注意の色とアイコンで。押すと絞り込みと同じく一覧を絞る
      * 3. 表示 … まとめて表示・完了した予約も表示・削除済みも表示 (スイッチ)、ファイルと照合 (→)
-     * 4. 状態 … 次の録画・エンコード・空き (いちばん下)
+     * 4. 状態 … エンコード・空き (いちばん下。どちらも無ければ出さない)。次の録画は「いま」の線に出す
      *
      * 中身はホームが読んだものから作る (問い合わせは足さない)。指を乗せたときだけ出るものは置かない
      */
     import Icon from '#lib/components/player/Icon.svelte';
     import { ATTENTION_FILTERS, FILTERS, type Filter } from '#lib/timeline.js';
     import TriangleAlert from '~icons/lucide/triangle-alert';
-    import type { Rec, Res } from './context';
+    import type { Rec } from './context';
     import HomeState from './HomeState.svelte';
     import ViewList from './ViewList.svelte';
 
@@ -29,7 +29,6 @@
         showFinished,
         showDeleted,
         encoding,
-        nextRes,
         capacity,
     }: {
         filter: Filter;
@@ -42,7 +41,6 @@
         showFinished: boolean;
         showDeleted: boolean;
         encoding: Rec[];
-        nextRes: Res | null;
         capacity: { free: string; hours: string | null } | null;
     } = $props();
 
@@ -91,8 +89,10 @@
         <ViewList {grouped} {setGrouped} {finishedHref} {deletedHref} {showFinished} {showDeleted} variant="list" />
     </div>
 
-    <div class="side-foot">
-        <h2 class="side-label">状態</h2>
-        <HomeState {encoding} {nextRes} {capacity} where="side" />
-    </div>
+    {#if encoding.length > 0 || capacity !== null}
+        <div class="side-foot">
+            <h2 class="side-label">状態</h2>
+            <HomeState {encoding} {capacity} where="side" />
+        </div>
+    {/if}
 </aside>

@@ -4,6 +4,7 @@
     import { GENRE_TREE } from '#lib/arib.js';
     import ChannelNotice from '#lib/components/ChannelNotice.svelte';
     import Menu from '#lib/components/Menu.svelte';
+    import NowLine from '#lib/components/NowLine.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
@@ -960,19 +961,18 @@
                 {/each}
 
                 {#if nowSlots !== null}
-                    <div
-                        class="now"
-                        style="grid-column: 1 / -1; grid-row: 2; translate: 0 calc({nowSlots} * {SLOT_HEIGHT});"
-                        bind:this={nowMark}
-                        data-testid="now-line"
-                    >
-                        <!--
+                    <!--
+                        「いま」の線。見た目はホームの一覧と同じ部品 (`NowLine`): 赤い太字の時刻と細い赤い線。
+                        ホームのような一言 (次の録画まで…) は添えない。時刻の列は数字1つぶんの幅しか無く、
+                        はみ出せば番組名に被る (下のとおり、それを避けて列の中に収めた)
+
                         時刻のラベルは**時刻の列の中に置く。**
 
                         右へずらして番組の上に浮かせていた頃は、列の外へはみ出して
                         番組名に被っていた。時刻を読むところは左の列と決まっているので、
                         そこに収める。ちょうど同じ時のところにある数字とは重なるが、
-                        その1時間は「いま」のラベルを読めばいいので困らない。
+                        その1時間は「いま」のラベルを読めばいいので困らない
+                        (ラベルには地の色を敷いて、下の数字を隠す)。
 
                         `sticky` (`left: 0`) で横スクロールに付いてこさせる (`absolute` だと
                         線を引いている枠 `grid-column: 1 / -1` の左端に貼り付いて、
@@ -983,14 +983,17 @@
                         線の下に落ち、番組名に被っていた (下がるぶんは字の大きさで
                         変わるので、マージンの値では合わせられない)。
                         `block` にして高さの半分だけ上げれば、字が変わっても線の上に乗る
+                        (どちらも `NowLine` の `overlay`)
                     -->
-                        <span
-                            class="now-label num"
-                            style="width: {TIME_COLUMN};"
-                        >
-                            {time(clock)}
-                        </span>
-                    </div>
+                    <NowLine
+                        layout="overlay"
+                        class="now"
+                        time={time(clock)}
+                        labelWidth={TIME_COLUMN}
+                        style="grid-column: 1 / -1; grid-row: 2; translate: 0 calc({nowSlots} * {SLOT_HEIGHT});"
+                        bind:element={nowMark}
+                        data-testid="now-line"
+                    />
                 {/if}
 
                 <!--
@@ -1575,26 +1578,10 @@
         position: sticky;
         display: block;
     }
-    .now {
-        position: relative;
+    /* 「いま」の線 (`NowLine`)。時の列 (`.hour`) より上に。1 分ごとの移りを飛ばさずに (上の `nowSlots`) */
+    .rows :global(.now) {
         z-index: 10;
-        pointer-events: none;
-        border-top: 2px solid var(--dp-error);
-        /* 1 分ごとの移りを飛ばさずに (上の `nowSlots`) */
         transition: translate var(--dp-duration) var(--dp-ease);
-    }
-    .now-label {
-        position: sticky;
-        left: 0;
-        z-index: 20;
-        display: block;
-        transform: translateY(-50%);
-        border-radius: var(--dp-radius-sm);
-        background: var(--dp-error);
-        color: #fff;
-        text-align: center;
-        font-size: 10px;
-        line-height: 1rem;
     }
     /*
      * **画面の外のマスは中身を組まない** (`content-visibility: auto`)。

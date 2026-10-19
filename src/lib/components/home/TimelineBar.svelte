@@ -2,7 +2,7 @@
     /**
      * **一覧の頭の細い1行** (サイドバーの無い幅 = 1000px 未満だけ。スマホでは下のタブのすぐ上に貼り付く)。絞り込みのチップ (件数付き。1回押せば絞れる。
      * 横に流せる) と、見てほしいこと (競合・失敗・録り逃し・CM の判定) のうち件数のあるものを注意の色のチップで。
-     * 右の「⋯」に状態 (次の録画・エンコード・空き。押せない頭) と表示の切り替え。
+     * 右の「⋯」に状態 (エンコード・空き。押せない頭) と表示の切り替え。
      * 広い画面では同じものをサイドバー (`HomeAside`) に置き、この行は出さない
      */
     import { MediaQuery } from 'svelte/reactivity';
@@ -11,7 +11,7 @@
     import { ATTENTION_FILTERS, FILTERS, type Filter } from '#lib/timeline.js';
     import Ellipsis from '~icons/lucide/ellipsis';
     import TriangleAlert from '~icons/lucide/triangle-alert';
-    import type { Rec, Res } from './context';
+    import type { Rec } from './context';
     import HomeState from './HomeState.svelte';
     import ViewList from './ViewList.svelte';
 
@@ -26,7 +26,6 @@
         showFinished,
         showDeleted,
         capacity,
-        nextRes,
         encoding,
     }: {
         filter: Filter;
@@ -41,8 +40,6 @@
         showDeleted: boolean;
         /** 空きと、あと何時間録れるか (`disk.capacity`)。読めなければ null */
         capacity: { free: string; hours: string | null } | null;
-        /** 次の録画。絞り込みに関係なく、これからの予約のうちいちばん早いもの */
-        nextRes: Res | null;
         /** エンコードを待っている・している録画 */
         encoding: Rec[];
     } = $props();
@@ -93,9 +90,11 @@
             </button>
         {/snippet}
         <!-- 状態は押せない頭 (サイドバーの無い幅でも読めるように) -->
-        <div class="menu-head">
-            <HomeState {encoding} {nextRes} {capacity} where="menu" />
-        </div>
+        {#if encoding.length > 0 || capacity !== null}
+            <div class="menu-head">
+                <HomeState {encoding} {capacity} where="menu" />
+            </div>
+        {/if}
         <ViewList
             {grouped}
             {setGrouped}

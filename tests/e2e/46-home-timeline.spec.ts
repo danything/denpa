@@ -90,13 +90,35 @@ test.describe('ホームの1本の一覧', () => {
         expect(reservation!.y).toBeGreaterThan(now!.y);
         expect(recording!.y).toBeLessThan(now!.y);
 
-        // 「いま」の線と日付の見出しは見出しなので、読み上げの見出し移動で辿れる
-        await expect(page.getByRole('heading', { name: /^いま \d{1,2}:\d{2}$/ })).toHaveCount(1);
+        // 「いま」の線と日付の見出しは見出しなので、読み上げの見出し移動で辿れる。
+        // 線には次の録画まで (録画中ならあと何分か) を添える (隠した読み点の前後に空白が入ることがある)
+        await expect(
+            page.getByRole('heading', { name: /^いま \d{1,2}:\d{2}\s*、\s*(次の録画まで \d|録画中)/ }),
+        ).toHaveCount(1);
         await expect(page.getByTestId('timeline-day').first()).toHaveRole('heading');
 
         // 行は指で押せる高さ (48px) がある
         const box = await rows(page).filter({ hasText: '一覧試験の視聴済み' }).boundingBox();
         expect(box!.height).toBeGreaterThanOrEqual(47.5);
+    });
+
+    /*
+     * **「いま」の線の時刻は行の時刻 (「22:00–22:30」) と同じ左端。** 塗った札は無く、赤い字と細い線だけ。
+     * 狭い画面でも1行のまま (一言は短い形に替わるか「…」で切れ、折り返さない)
+     */
+    test('「いま」の線の時刻は行の時刻にそろい、狭い画面でも1行のまま', async ({ page }) => {
+        for (const width of [1366, 390, 320]) {
+            await page.setViewportSize({ width, height: 800 });
+            await goto(page, '/');
+            const line = page.getByTestId('timeline-now');
+            await expect(line).toContainText(/次の録画まで|次まで|録画中/);
+            const time = (await line.locator('.now-time').boundingBox())!;
+            const row = rows(page).filter({ hasText: '一覧試験の予約' });
+            await row.scrollIntoViewIfNeeded();
+            const rowTime = (await row.locator('.t-time').boundingBox())!;
+            expect(Math.abs(time.x - rowTime.x)).toBeLessThan(1);
+            expect((await line.boundingBox())!.height).toBeLessThan(24);
+        }
     });
 
     test('絞り込みのボタンは件数どおりの行に絞る', async ({ page }) => {
@@ -133,7 +155,9 @@ test.describe('ホームの1本の一覧', () => {
         // 広い幅では右にサイドバー (絞り込み・見てほしいこと・表示・状態)。頭の1行は出さず、一覧はいちばん上から
         await expect(page.getByTestId('sidebar')).toBeVisible();
         await expect(page.getByTestId('timeline-toolbar')).toBeHidden();
-        await expect(page.getByTestId('summary')).toContainText('次の録画');
+        // 次の録画は「いま」の線に出し、状態には残さない
+        await expect(page.getByTestId('summary')).toContainText('空き');
+        await expect(page.getByTestId('summary')).not.toContainText('次の録画');
 
         const row = rows(page).filter({ hasText: '一覧試験の視聴済み' });
         await row.scrollIntoViewIfNeeded();
@@ -171,8 +195,8 @@ test.describe('ホームの1本の一覧', () => {
             'true',
         );
         await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(1);
-        // 状態 (次の録画・空き) はサイドバーのいちばん下
-        await expect(side.getByTestId('summary')).toContainText('次の録画');
+        // 状態 (空き) はサイドバーのいちばん下
+        await expect(side.getByTestId('summary')).toContainText('空き');
     });
 
     test('狭い画面は頭の細い1行のチップで1回で絞る', async ({ page }) => {

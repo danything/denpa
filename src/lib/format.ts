@@ -43,6 +43,58 @@ export function duration(startAt: number, endAt: number): string {
     return durationMs(endAt - startAt);
 }
 
+/** 「いま」の線に添える一言 (`NowLine`)。`short` は狭い幅で代わりに出す形 */
+export interface NowStatus {
+    text: string;
+    short: string;
+}
+
+/**
+ * **「いま」の線に添える一言。** 録っている間は「録画中 2本・あと12分」(あと何分かはいちばん早く終わるもの)、
+ * 録っていなければ「次の録画まで 3時間59分」。どちらも無ければ null (何も添えない)。
+ *
+ * 分は切り上げる。線の時刻は分を切り捨てて出すので、22:00 の録画は 18:01 の間ずっと「3時間59分」になり、
+ * 時刻と食い違わない。1日より先は日数で
+ */
+export function nowStatus(
+    now: number,
+    recording: readonly { end_at: number }[],
+    next: { start_at: number } | null,
+): NowStatus | null {
+    if (recording.length > 0) {
+        const end = Math.min(...recording.map((res) => res.end_at));
+        const head = recording.length > 1 ? `録画中 ${recording.length}本` : '録画中';
+        // 終わりの時刻を過ぎても止まりきるまでは録画中のまま。あと何分かは言えない
+        if (end <= now) return { text: head, short: head };
+        const left = untilWords(end - now);
+        return { text: `${head}・あと${left}`, short: `録画中・あと${left}` };
+    }
+    if (next === null) return null;
+    return {
+        text: `次の録画まで ${untilWords(next.start_at - now)}`,
+        short: `次まで ${untilShort(next.start_at - now)}`,
+    };
+}
+
+/** 切り上げた分。過ぎていても 1 分 (「0分」とは言わない) */
+function minutesUntil(ms: number): number {
+    return Math.max(1, Math.ceil(ms / 60_000));
+}
+
+/** 「3時間59分」「12分」「3日」 */
+function untilWords(ms: number): string {
+    const min = minutesUntil(ms);
+    return min < 24 * 60 ? durationMs(min * 60_000) : `${Math.floor(min / (24 * 60))}日`;
+}
+
+/** 狭い幅の形。「3:59」「12分」「3日」 */
+function untilShort(ms: number): string {
+    const min = minutesUntil(ms);
+    if (min < 60) return `${min}分`;
+    if (min < 24 * 60) return `${Math.floor(min / 60)}:${pad(min % 60)}`;
+    return `${Math.floor(min / (24 * 60))}日`;
+}
+
 /**
  * **チューナーの取り合いで、番組のどこが欠けるか。** 欠けないなら null。
  *

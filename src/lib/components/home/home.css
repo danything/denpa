@@ -377,32 +377,13 @@
     }
 }
 
-/* 「いま」の線。上の見出しや行との間は詰める (時刻の札の高さだけ取る) */
-.board .t-now {
-    position: relative;
-    display: flex;
-    align-items: center;
-    height: 1.25rem;
+/*
+ * 「いま」の線 (`NowLine`)。上の見出しや行との間は詰める。時刻の左端は行の時刻 (「22:00–22:30」) にそろえる
+ * (行の内側の余白と同じ。狭い画面は下の 768px 未満で詰める)。`.t-rows` まで書くのは、部品の `margin: 0` より強くするため
+ */
+.board .t-rows .t-now {
+    --now-inset: 0.75rem;
     margin: 0.125rem 0;
-    font-size: inherit;
-}
-.board .t-now::before {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    top: 50%;
-    height: 2px;
-    background: var(--dp-rec);
-}
-.board .t-now-label {
-    position: relative;
-    padding: 0 0.6rem;
-    line-height: 1.25rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-rec);
-    color: #fff;
-    font-size: 0.75rem;
-    font-weight: var(--dp-weight-bold);
 }
 
 /*
@@ -551,6 +532,10 @@
     }
     .board .t-time {
         font-size: 0.8125rem;
+    }
+    .board .t-rows .t-now {
+        --now-inset: 0.5rem;
+        --now-time-size: 0.8125rem;
     }
     /* 行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
     .board .t-row .row-actions button:not([data-testid="delete-confirm"]) .btn-label {
