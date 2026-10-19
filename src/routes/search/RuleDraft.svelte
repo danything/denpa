@@ -26,7 +26,7 @@
     import ArmedDelete from '#lib/components/ArmedDelete.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import { SERVICE_TYPE_LABEL } from '#lib/format.js';
-    import { parseSearchFields, SEARCH_FIELDS, type SearchField } from '#lib/search.js';
+    import { parseSearchFields, SEARCH_FIELD_LABEL, SEARCH_FIELDS } from '#lib/search.js';
     import { applyAction, deserialize, type SubmitFunction } from '$app/forms';
     import { goto } from '$app/navigation';
     import { resolve } from '$app/paths';
@@ -67,9 +67,6 @@
         /** 狭い画面で下から出しているか */
         open?: boolean;
     } = $props();
-
-    /** 当てる範囲のチップの字。設定の言葉より短く */
-    const FIELD_LABEL: Record<SearchField, string> = { name: '番組名', description: '概要', extended: '詳細' };
 
     // ---- 書く欄の値 ----
     let keyword = $state('');
@@ -305,7 +302,7 @@
             {#each SEARCH_FIELDS as field (field)}
                 <label class="chip">
                     <input type="checkbox" name="searchFields" value={field} bind:group={searchFields} />
-                    {FIELD_LABEL[field]}
+                    {SEARCH_FIELD_LABEL[field]}
                 </label>
             {/each}
         </div>

@@ -244,10 +244,10 @@
                 <div class="row-sub text-warning small">{clipNote(rec, true)}</div>
             {/if}
             {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
-                <!-- ロゴでの判定が使えず、無音だけでCMを判定している。覚えたロゴは設定の「受信」の「ロゴ」で確かめられる -->
+                <!-- ロゴでの判定が使えず、無音だけでCMを判定している。覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられる -->
                 <div class="row-sub text-warning small">
                     ロゴでCMを判定できませんでした (無音だけで判定)
-                    <span class="muted">— 覚えたロゴは設定の「受信」の「ロゴ」で確かめられます</span>
+                    <span class="muted">— 覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられます</span>
                 </div>
             {/if}
             {#if held !== undefined}

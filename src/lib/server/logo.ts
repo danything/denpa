@@ -940,7 +940,7 @@ export function stats(): { have: number; total: number; pending: number; unavail
 }
 
 /**
- * 局1つぶんのロゴの具合。設定の「ロゴ」で局ごとに出す。
+ * 局1つぶんのロゴの具合。設定の「チャンネル」の表で局ごとに出す。
  *
  * - `have` … 持っている
  * - `absent` … カルーセルに載っていないと分かった局 (取れない。`stats` の `unavailable`)

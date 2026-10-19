@@ -410,7 +410,7 @@
             {#if player.tuned !== null || player.yielded !== null}
                 <!--
                     **右端の縦の列。観る画面と同じ場所・同じ並び** (`watch-side`) —
-                    d ボタンと切り抜きが画面ごとに違う場所にあると、押すたびに
+                    切り抜きが画面ごとに違う場所にあると、押すたびに
                     探し直すことになる。いちばん上は録画 (観る画面では「閉じる」の位置)
                 -->
                 <ControlBar side shown={controls.shown}>

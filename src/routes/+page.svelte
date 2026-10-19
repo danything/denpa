@@ -201,7 +201,7 @@
         return rec.watched_at === null && rec.resume_ms === null && watchLink(rec) !== null;
     }
 
-    /** 録画・番組からルールを作る入口 (`rules/+page.server.ts` の `originOf`) */
+    /** 録画・番組からルールを作る入口。`/rules` が検索の画面の「ルールとして保存」へ送る (`rules/+page.server.ts` の `movedTo`) */
     function ruleFrom(kind: 'recording' | 'program', id: number): string {
         return resolve(`rules?${kind}=${id}`);
     }
@@ -733,7 +733,7 @@
             {/if}
         {/if}
         <!--
-            **ルールを作る。** ルールの画面へ、シリーズ名を入れた下書きを
+            **ルールを作る。** 検索の画面の「ルールとして保存」へ、シリーズ名を入れた下書きを
             持って行く (保存はあちらで確かめてから)。既にこの番組を録っているルールが
             あれば、あちらがそのルールを案内する
         -->

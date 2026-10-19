@@ -51,7 +51,7 @@ export interface HwDevice {
 }
 
 export interface HwEncode {
-    /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/+page.server.ts) */
+    /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/recording/+page.server.ts) */
     probed: boolean;
     /** 見つかったデバイス、`HW_DEVICES` に当たった順。空なら GPU が見えていない */
     devices: HwDevice[];

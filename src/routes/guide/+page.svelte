@@ -1127,8 +1127,8 @@
 
             <!--
                 **ルールを作る。** 予約・録画の詳細と同じ入口
-                (`rules/+page.server.ts` の `originOf`)。毎回録りたい番組を番組表で
-                見つけたとき、ルールの画面で探し直さずに済む
+                (`search/+page.server.ts`。`rule-form.originOf`)。毎回録りたい番組を番組表で
+                見つけたとき、検索で探し直さずに済む
             -->
             <a class="button secondary" href={resolve(`search?from=program:${program.id}`)} data-testid="detail-rule">
                 ルールを作る

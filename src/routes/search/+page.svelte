@@ -89,7 +89,7 @@
 
     /**
      * 番組の詳細。押すもの (視聴・予約・取消・ルールを作る) を出すのに、開いた行を覚えておく。
-     * 中身は番組表から引く (`detail.svelte.ts`。予約・ルールの画面と同じ)
+     * 中身は番組表から引く (`detail.svelte.ts`。ホームと同じ)
      */
     interface Opened {
         program_id: number;

@@ -1,4 +1,4 @@
-import { matches, revealed, shownUpTo } from './paging';
+import { revealed, shownUpTo } from './paging';
 
 /**
  * 長い一覧を**少しずつ出す**。
@@ -10,7 +10,7 @@ import { matches, revealed, shownUpTo } from './paging';
  * **並べ替えや絞り込みで顔ぶれが変わったら先頭に戻す** (`reset`)。前の一覧で
  * 3ページ目まで開いていても、絞ったあとの一覧が同じ長さとは限らない。
  *
- * **全部は描かないので Ctrl+F では探せない。** ルールの一覧には絞り込みの欄を置く (`matches`)。
+ * **全部は描かないので Ctrl+F では探せない。** 言葉で探すのはサイト全体の検索 (`/search`)。
  *
  * 使い方:
  *
@@ -116,5 +116,3 @@ export function sentinel(node: HTMLElement, onSeen: () => void) {
         },
     };
 }
-
-export { matches };

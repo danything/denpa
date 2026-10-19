@@ -185,9 +185,6 @@
     text-align: left;
     cursor: pointer;
 }
-.board .group-head:hover {
-    background: var(--dp-hover-soft);
-}
 .board .group-head:focus-visible {
     outline: 2px solid var(--pico-primary-background);
     outline-offset: -2px;
@@ -234,7 +231,7 @@
  * ---- 1本の時間軸 ----
  *
  * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧が自分で巻き取る**
- * (ルール・観る画面と同じ。`+layout.svelte` の `FILLED`)。頭の1行 (絞り込みのチップ・まとめ・「⋯」) は一覧の上に置く。
+ * (番組表・設定・観る画面と同じ。`+layout.svelte` の `FILLED`)。頭の1行 (絞り込みのチップ・まとめ・「⋯」) は一覧の上に置く。
  * 狭い画面はページごとスクロールし、頭の1行だけ上に貼り付く
  */
 .board {
@@ -311,13 +308,10 @@
 .board .t-chip .num {
     color: var(--dp-muted);
 }
-.board .t-chip .num.alert {
-    color: var(--dp-rec-text);
-}
-/* 選んでいるチップは主のボタンと同じ (字の色で塗る) */
 .board .t-toolbar .t-chips > .t-chip:hover {
     --pico-background-color: var(--dp-btn-tonal-hover);
 }
+/* 選んでいるチップは主のボタンと同じ (字の色で塗る) */
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
     --pico-background-color: var(--dp-btn-solid);
     --pico-color: var(--dp-btn-solid-text);
@@ -416,7 +410,7 @@
 
 /*
  * **行。** 幅いっぱいの 2 段の塊。線も枠も影も無く、淡い地 (`--dp-row`。地との差は L で 5 ほど) と角の丸みと 6px の間で 1 本ずつに見せる
- * (カードの顔だが箱ではない)。触れると一段濃く、最後に詳細を開いた行 (`.picked`) はもう一段。
+ * 触れると一段濃く、最後に詳細を開いた行 (`.picked`) はもう一段。
  *
  * - 1段目: 時刻 · 番組名 · 状態のバッジ、右に押すもの
  * - 2段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の頭 (残りの幅を埋め、「…」で切る)

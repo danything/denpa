@@ -328,9 +328,6 @@
         width: 100%;
         margin: 0;
     }
-    .num {
-        font-variant-numeric: tabular-nums;
-    }
 
     /*
      * **行は2段の淡い塊** (ホームの行と同じ。`--dp-row`、線も枠も無く、6px 空けて並べる)。触れると一段濃く

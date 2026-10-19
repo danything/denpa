@@ -271,12 +271,6 @@ export function stateLabel(state: string): string {
  */
 export const COPY_NEVER_REASON = 'コピー禁止の番組なので録画しません';
 
-export const CM_LABEL: Record<string, string> = {
-    off: '何もしない',
-    chapter: 'チャプター',
-    cut: '切り取る',
-};
-
 /**
  * ロゴでの判定が使えなかったときに、CM検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。

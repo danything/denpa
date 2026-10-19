@@ -6,7 +6,6 @@
 
 import { getContext, setContext } from 'svelte';
 import type { Arming } from '#lib/arming.svelte.js';
-import { durationMs } from '#lib/format.js';
 import type { TimelineItem } from '#lib/timeline.js';
 import type { PageData } from '../../../routes/$types';
 
@@ -54,10 +53,4 @@ export function setHome(context: HomeContext): void {
 
 export function home(): HomeContext {
     return getContext<HomeContext>(KEY);
-}
-
-/** 続きから観るに添える字。途中まで観たものは「残り◯分」、まだのものは「未視聴」 */
-export function watchLeft(rec: Rec): string {
-    if (rec.progress === null) return '未視聴';
-    return `残り${durationMs(Math.max(0, rec.progress.length - rec.progress.at))}`;
 }
