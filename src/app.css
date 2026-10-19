@@ -49,6 +49,11 @@
      * (全角英数字を詰める palt も一緒に付く)
      */
     --broadcast-font: "Denpa Font", var(--pico-font-family-sans-serif);
+    /*
+     * **本文の字の色。** ここ (`<html>`) で決まった値をそのまま受け継ぐ。`--pico-color` は要素ごとに
+     * 書き換わる (ボタンの中では主のボタンの字 = 地の色) ので、ボタンの中から本文の色を指すときはこちら
+     */
+    --dp-fg: var(--pico-color);
     /* 等幅 (デバイスのパス・カードの番号・URL)。端末にある等幅の字を使い、Pico の等幅もこれに揃える */
     --dp-font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, monospace;
     --pico-font-family-monospace: var(--dp-font-mono);
@@ -145,6 +150,7 @@
  * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
  * - `--dp-raised` … 溝から一段持ち上げた面 (選んでいるタブ)
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
+ * - `--dp-fg` … 本文の字。ボタンの中でも本文の色のまま (`--pico-color` はボタンの中では地の色になる)
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
  * - `--dp-shadow` … 持ち上げた面の影 (選んでいるタブ・リモコン。ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)。
@@ -1147,9 +1153,15 @@ button[aria-busy="true"]::after {
 
 /*
  * 文の続きとして読める、地も枠も無い小さなボタン (`Lead` の「詳しく」・エンコーダの「確かめ直す」)。
- * 押せることは下線で示す。上の `aria-busy` より後に置き、送信中も字は控えた色のまま
+ * 押せることは下線で示す。上の `aria-busy` より後に置き、送信中も字は控えた色のまま。
+ *
+ * **ボタンのトークンをここで字のものに戻す。** ボタンの規則 (上の「ボタン」) は `--pico-color` を
+ * 主のボタンの字 (= 地の色) にするので、乗せたときに `var(--pico-color)` を指すと字が地に溶けて消えていた。
+ * 字の色は `--dp-fg`、地は透明
  */
 button.text-button {
+    --pico-background-color: transparent;
+    --pico-color: var(--dp-muted);
     display: inline;
     width: auto;
     margin: 0 0 0 0.25rem;
@@ -1166,7 +1178,9 @@ button.text-button {
     cursor: pointer;
 }
 button.text-button:hover {
-    color: var(--pico-color);
+    --pico-background-color: transparent;
+    --pico-color: var(--dp-fg);
+    color: var(--dp-fg);
     text-decoration-color: currentColor;
 }
 
