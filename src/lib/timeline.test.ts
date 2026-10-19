@@ -220,6 +220,15 @@ describe('終わった予約と録画をまとめる', () => {
         expect(reservations.map((r) => r.id)).toEqual([3]);
     });
 
+    test('録画が一覧に無くても (消した録画)、録画のあった予約は出さない', () => {
+        const { reservations } = mergeRecorded(
+            [{ ...res(1, 10, NOW - H), recorded: true }, res(2, 20, NOW - H, 'canceled')],
+            [],
+            NOW,
+        );
+        expect(reservations.map((r) => r.id)).toEqual([2]);
+    });
+
     test('これからの予約と録画中の予約は、録画があっても残す', () => {
         const { reservations } = mergeRecorded(
             [res(1, 10, NOW + H, 'scheduled'), res(2, 20, NOW - H, 'recording')],

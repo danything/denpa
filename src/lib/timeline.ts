@@ -256,10 +256,18 @@ export function lineIndex<T extends TimelineItem>(lines: TimelineLine<T>[], key:
  *
  * 録画の行に足りないものは予約から持ってくる。いまは番組名だけ — 録った後に番組表の名前が縮んだ録画
  * (副題「#3「…」」が落ちたもの) は、予約の長いほうの名前を使う (`names`。片方がもう片方を含むときだけ)。
- * 録画の見つからない予約 (取消・始まる前の失敗など) はそのまま残す。件数も 1 本として数える
+ * 録画の見つからない予約 (取消・始まる前の失敗など) はそのまま残す。一覧に録画が無くても、録画の行が
+ * あった予約 (`recorded`。消した録画・300 件の外) は出さない。件数も 1 本として数える
  */
 export function mergeRecorded<
-    R extends { id: number; program_id: number | null; end_at: number; state: string; name: string },
+    R extends {
+        id: number;
+        program_id: number | null;
+        end_at: number;
+        state: string;
+        name: string;
+        recorded?: boolean;
+    },
     C extends { id: number; reservation_id: number | null; program_id: number | null; name: string },
 >(reservations: R[], recordings: C[], now: number): { reservations: R[]; names: Map<number, string> } {
     const byReservation = new Map<number, C>();
@@ -275,7 +283,8 @@ export function mergeRecorded<
         const rec =
             byReservation.get(res.id) ??
             (res.program_id === null ? undefined : byProgram.get(res.program_id));
-        if (rec === undefined) return true;
+        // 録画が一覧に無くても (消した・300 件の外)、録画の行がある予約は出さない。消した録画の予約が化けて戻らないように
+        if (rec === undefined) return res.recorded !== true;
         if (res.name !== rec.name && res.name.includes(rec.name)) names.set(rec.id, res.name);
         return false;
     });
