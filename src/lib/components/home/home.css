@@ -349,10 +349,41 @@
 .board .t-day-zone {
     font-weight: var(--dp-weight);
 }
-/* 狭い画面は頭の段 (`.t-toolbar`) の下に貼り付く */
-@media (max-width: 767px) {
+/* タブレットの縦 (640〜767px) は頭の1行が上にあるので、その下に貼り付く */
+@media (min-width: 640px) and (max-width: 767px) {
     .board .t-day {
         top: 2.75rem;
+    }
+}
+/*
+ * **スマホ (下のタブがある幅) では、頭の1行を下のタブのすぐ上に貼り付ける。** 押すものは下に置く (指の届く所)。
+ * 並びの上では一覧の後ろに回し (`order`)、下端に貼り付ける (`sticky` + `bottom`)。メニューは上に開く (`TimelineBar`)。
+ * 日付の見出しは上の安全域 (ノッチ) のすぐ下に貼り付く
+ */
+@media (max-width: 639.98px) {
+    .board .t-toolbar {
+        order: 2;
+        top: auto;
+        bottom: var(--dp-tabbar, 0px);
+        margin-inline: calc(-1 * var(--dp-gutter, 1rem));
+        padding-inline: var(--dp-gutter, 1rem);
+        border-top: 1px solid var(--dp-line);
+    }
+    .board .t-main {
+        order: 1;
+    }
+    /* 一覧が短くても頭の1行が下のタブのすぐ上に来るよう、ページの高さいっぱいまで伸ばす (下の余白は打ち消す) */
+    .board {
+        min-height: calc(
+            100svh -
+            env(safe-area-inset-top, 0px) -
+            var(--dp-page-top, 0.5rem) -
+            var(--dp-tabbar, 0px)
+        );
+        margin-bottom: calc(-1 * var(--dp-gutter, 1rem));
+    }
+    .board .t-day {
+        top: env(safe-area-inset-top, 0px);
     }
 }
 

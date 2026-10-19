@@ -11,14 +11,28 @@ function scroller(list: HTMLElement): HTMLElement | null {
     return getComputedStyle(list).overflowY === 'auto' ? list : null;
 }
 
-/** 一覧の上に被さるもの (狭い画面の頭の段・日付の見出し) の高さ */
-function coverOf(): number {
+/**
+ * 一覧の頭の1行。**上に貼り付いているときだけ**返す (スマホでは下のタブの上に貼り付くので、上には被さらない)
+ */
+function topBar(): HTMLElement | null {
     const bar = document.querySelector<HTMLElement>('[data-testid="timeline-toolbar"]');
-    return (bar !== null && getComputedStyle(bar).display !== 'none' ? bar.offsetHeight : 0) + 32;
+    if (bar === null) return null;
+    const style = getComputedStyle(bar);
+    return style.display !== 'none' && style.top !== 'auto' ? bar : null;
 }
 
-function tabbarHeight(): number {
-    return document.querySelector<HTMLElement>('[data-testid="tabbar"]')?.offsetHeight ?? 0;
+/** 一覧の下に被さるもの (下のタブと、スマホではその上に貼り付いた頭の1行) の高さ */
+function bottomCover(): number {
+    const tab = document.querySelector<HTMLElement>('[data-testid="tabbar"]')?.offsetHeight ?? 0;
+    const bar = document.querySelector<HTMLElement>('[data-testid="timeline-toolbar"]');
+    const below =
+        bar !== null && getComputedStyle(bar).display !== 'none' && topBar() === null ? bar.offsetHeight : 0;
+    return tab + below;
+}
+
+/** 一覧の上に被さるもの (上に貼り付いた頭の1行・日付の見出し) の高さ */
+function coverOf(): number {
+    return (topBar()?.offsetHeight ?? 0) + 32;
 }
 
 /** 要素の上端が、見えている所の上から `offset` の位置に来るよう送る */
@@ -57,7 +71,7 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
     if (row !== null) {
         const bottom = box !== null ? box.getBoundingClientRect().bottom : window.innerHeight;
         if (row.getBoundingClientRect().bottom > bottom - 8) {
-            scrollToTop(list, row, height - row.offsetHeight - 16 - (box === null ? tabbarHeight() : 0));
+            scrollToTop(list, row, height - row.offsetHeight - 16 - (box === null ? bottomCover() : 0));
         }
     }
     alignTop(list);
@@ -67,8 +81,11 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
 function topEdge(list: HTMLElement): number {
     const box = scroller(list);
     if (box !== null) return box.getBoundingClientRect().top;
-    const bar = document.querySelector<HTMLElement>('[data-testid="timeline-toolbar"]');
-    return bar !== null && getComputedStyle(bar).display !== 'none' ? bar.getBoundingClientRect().bottom : 0;
+    const bar = topBar();
+    if (bar !== null) return bar.getBoundingClientRect().bottom;
+    // 上に被さるものが無いときは、日付の見出しが貼り付く線 (上の安全域の下)
+    const day = list.querySelector<HTMLElement>('.t-day');
+    return day === null ? 0 : Number.parseFloat(getComputedStyle(day).top) || 0;
 }
 
 function scrollBy(list: HTMLElement, delta: number): void {
