@@ -149,6 +149,8 @@
  * - `--dp-shadow` … 持ち上げた面の影 (選んでいるタブ・リモコン。ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)。
  *   箱は縁と影 (`--dp-shadow-pop`) で浮かせる
+ * - `--dp-glass-*` … 浮かぶもののガラス (`.glass`)。面 (`tint`)・透かさないときの面 (`solid`)・裏のぼかし (`filter`)・
+ *   縁 (`rim`)・内側の光の縁 (`edge`)・上からの照り (`sheen`)。中身は下の「浮かぶもののガラス」
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
@@ -170,6 +172,13 @@
     --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
     --dp-shadow-pop: 0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
     --dp-backdrop: rgb(24 28 37 / 0.16);
+    /* ガラス (下の「浮かぶもののガラス」)。地を 90% 残すと、裏が黒くても控えた字・主の色の字が 4.5 以上 */
+    --dp-glass-tint: rgb(255 255 255 / 0.9);
+    --dp-glass-solid: #fff;
+    --dp-glass-filter: blur(20px) saturate(1.8);
+    --dp-glass-rim: rgb(24 28 37 / 0.1);
+    --dp-glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 -1px 0 rgb(24 28 37 / 0.04);
+    --dp-glass-sheen: linear-gradient(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0) 3rem);
     --pico-form-element-background-color: #fff;
     --pico-form-element-border-color: var(--dp-line-strong);
     --pico-table-border-color: var(--dp-line);
@@ -214,6 +223,16 @@
     --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
     --dp-backdrop: rgb(0 0 0 / 0.45);
+    /*
+     * ガラス。暗いほうは裏を 70% の明るさに落としてから面を重ねる。白い裏でも控えた字が 4.5 以上
+     * (面の色は `--dp-surface` と同じ)
+     */
+    --dp-glass-tint: rgb(18 19 24 / 0.84);
+    --dp-glass-solid: var(--dp-surface);
+    --dp-glass-filter: blur(20px) saturate(1.6) brightness(0.7);
+    --dp-glass-rim: rgb(255 255 255 / 0.1);
+    --dp-glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.12), inset 0 -1px 0 rgb(0 0 0 / 0.3);
+    --dp-glass-sheen: linear-gradient(rgb(255 255 255 / 0.05), rgb(255 255 255 / 0) 3rem);
     --pico-form-element-background-color: var(--dp-bg);
     --pico-form-element-active-background-color: var(--dp-surface);
     --pico-form-element-selected-background-color: var(--dp-line);
@@ -1278,12 +1297,93 @@ button.text-button:hover {
     opacity: 0.5;
 }
 /*
+ * ---- 浮かぶもののガラス ----
+ * **中身の上に浮かぶものだけ** (映像の上のボタンとメニュー・下のタブ・検索の候補・ダイアログ)。
+ * 一覧・表・行・設定の欄は塗らない — 中身までガラスにすると、どこが浮いているのか読めなくなる。
+ *
+ * 磨りガラス (裏をぼかして色を濃くする) に3つ足す。光の縁 (上に明るい線・下に暗い線を内側に)・
+ * 上からの淡い照り (`--dp-glass-sheen`)・外の柔らかい影。歪ませる (屈折の) フィルタは使わない。
+ *
+ * **ぼかすのは浮かぶ箱ごとに 1 回。** ぼかし (`backdrop-filter`) は描くたびに裏を写し取ってぼかすので、
+ * 重ねた数だけ重い (車のタブレットで観ながら使う)。映像の上のボタンは 1 つずつぼかさず、
+ * 面の濃さと光の縁だけでガラスに見せる (下の `--dp-glass-btn-*`。並べ方は `ControlButton`)。
+ *
+ * 透かしを減らす設定 (`prefers-reduced-transparency`) と、ぼかせないブラウザでは透かさない面 (`--dp-glass-solid`)。
+ *
+ * - `.glass` … テーマに合わせた面 (下のタブ・検索の候補。ダイアログ `.modal-box` も同じ)
+ * - `.glass-stage` … 映像の上の、テーマにかかわらず暗い面 (速さ・再生の設定のメニュー `.overlay-menu` も同じ)。
+ *   映像の上に新しく浮かぶ箱を置くときはこれを付ける
+ */
+:root {
+    /*
+     * 映像の上のボタン (`ControlButton` の `.ov`)。ぼかさないので、真っ白な映像の上でも白いアイコンが
+     * 4.5 以上になる濃さ (黒 60%。照りを足しても 5:1)。照りは上の縁だけに寄せ、アイコンの高さでは消える
+     */
+    --dp-glass-btn-tint: rgb(0 0 0 / 0.6);
+    --dp-glass-btn-hover: rgb(0 0 0 / 0.75);
+    --dp-glass-btn-sheen: radial-gradient(
+        120% 70% at 50% 0%,
+        rgb(255 255 255 / 0.18),
+        rgb(255 255 255 / 0) 70%
+    );
+    --dp-glass-btn-edge:
+        inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 0 0 1px rgb(255 255 255 / 0.1),
+        inset 0 -1px 0 rgb(0 0 0 / 0.25);
+    --dp-glass-btn-depth: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+.glass-stage,
+.overlay-menu {
+    /*
+     * 裏を 75% の明るさに落としてから黒 70% を重ねる。真っ白な映像の上でも白い字で 7:1 ほど、
+     * 控えた字 (白 72%) で 4.7:1 ほど
+     */
+    --dp-glass-tint: rgb(20 21 25 / 0.7);
+    --dp-glass-solid: #141519;
+    --dp-glass-filter: blur(16px) saturate(1.5) brightness(0.75);
+    --dp-glass-rim: rgb(255 255 255 / 0.14);
+    --dp-glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.2), inset 0 -1px 0 rgb(0 0 0 / 0.3);
+    --dp-glass-sheen: linear-gradient(rgb(255 255 255 / 0.07), rgb(255 255 255 / 0) 2.5rem);
+    --dp-glass-shadow: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
+}
+.glass,
+.glass-stage,
+.overlay-menu,
+.modal-box {
+    border: 1px solid var(--dp-glass-rim);
+    background: var(--dp-glass-sheen), var(--dp-glass-solid);
+    box-shadow: var(--dp-glass-edge), var(--dp-glass-shadow, var(--dp-shadow-pop));
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .glass,
+    .glass-stage,
+    .overlay-menu,
+    .modal-box {
+        background: var(--dp-glass-sheen), var(--dp-glass-tint);
+        -webkit-backdrop-filter: var(--dp-glass-filter);
+        backdrop-filter: var(--dp-glass-filter);
+    }
+}
+@media (prefers-reduced-transparency: reduce) {
+    :root {
+        --dp-glass-btn-tint: #141519;
+        --dp-glass-btn-hover: #26282e;
+    }
+    .glass,
+    .glass-stage,
+    .overlay-menu,
+    .modal-box {
+        background: var(--dp-glass-solid);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+}
+
+/*
  * 映像の上のメニュー (速さの `OverlayMenu`・再生の設定の `SettingsMenu`)。
  * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。
  *
- * **面はテーマにかかわらず暗い磨りガラス** (YouTube やテレビのプレイヤーと同じ)。後ろの映像が透けて、
- * どこに被さっているかが分かる。明るい映像の上でも字は 4.5:1 以上 (面を白い地に 72% で重ねると
- * 白い字で 7:1 ほど、控えた字 (72%) で 4.7:1 ほど)。ぼかせないブラウザでは面を濃くする。
+ * **面はテーマにかかわらず暗いガラス** (YouTube やテレビのプレイヤーと同じ。上の `.glass-stage`)。
+ * 後ろの映像が透けて、どこに被さっているかが分かる。
  * 選んでいる選択肢は白を薄く敷く (主の色 (青) はリンクとフォーカスだけ)。ページのメニューは今までどおり
  */
 .overlay-menu {
@@ -1295,16 +1395,7 @@ button.text-button:hover {
     width: max-content;
     max-width: min(20rem, 90vw);
     padding: 0.5rem;
-    border-color: rgb(255 255 255 / 0.12);
-    background: rgb(20 21 25 / 0.9);
     color: #fff;
-}
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .overlay-menu {
-        background: rgb(20 21 25 / 0.72);
-        -webkit-backdrop-filter: blur(16px) saturate(1.4);
-        backdrop-filter: blur(16px) saturate(1.4);
-    }
 }
 .overlay-menu .option {
     padding: 0.4rem 0.75rem;
@@ -1328,7 +1419,9 @@ button.text-button:hover {
  * **見た目は 1 つ。** `<dialog>` の中の `<article class="modal-box">` と、番組の詳細 (`ProgramDetail.svelte`) が
  * 同じクラスを使う。Pico の card (`article`) の区切り (本文の下の線・灰色の footer) は使わず、
  * 押すものは右下に並べるだけ (`.modal-actions`。閉じる・取消は `secondary`、主は塗り)。
- * 後ろの幕はぼかさない (`--dp-backdrop`)。Pico の dialog は全面の幕そのものなので、その地を替える
+ * 後ろの幕はぼかさない (`--dp-backdrop`)。Pico の dialog は全面の幕そのものなので、その地を替える。
+ * 箱そのものは浮かぶもののガラス (上の `.glass` と同じ面。幕の向こうがぼけて透ける)。開く・閉じる動きの間は
+ * `dialog` の透明度がぼかしを止めるので (ぼかしは透明度の掛かった祖先の中で止まる)、面の色だけになる
  */
 dialog {
     -webkit-backdrop-filter: none;
@@ -1344,10 +1437,8 @@ dialog {
     margin: 0;
     padding: var(--dp-space-5);
     overflow: auto;
-    border: 1px solid var(--dp-line);
+    /* 面・縁・影は上の「浮かぶもののガラス」 */
     border-radius: var(--dp-radius-lg);
-    background: var(--dp-surface);
-    box-shadow: var(--dp-shadow-pop);
 }
 /* 開いたときは箱にフォーカスを置く (`DriveNotice`)。箱そのものに枠は出さない */
 .modal-box:focus {

@@ -78,7 +78,10 @@
      * `<a>` (閉じる) や EdgeButton にも届く。
      *
      * Pico はボタンの色を変数 (`--pico-background-color` など) で持つので、変数を差し替える。
-     * Pico は層 (`@layer pico`) の中なので、`:hover` などで主の色に戻されることはない
+     * Pico は層 (`@layer pico`) の中なので、`:hover` などで主の色に戻されることはない。
+     *
+     * **ガラスに見せるが、1 つずつはぼかさない** (`app.css` の「浮かぶもののガラス」)。下の操作バーだけで
+     * 10 個ほど並ぶので、ぼかしを重ねると観ている間ずっと重い。面の濃さ・上からの照り・光の縁・柔らかい影で見せる
      */
     :global(.ov-btn) {
         display: inline-flex;
@@ -91,13 +94,14 @@
         padding: 0 1.25rem;
         border: 0;
         border-radius: var(--dp-btn-radius);
-        box-shadow: none;
+        box-shadow: var(--dp-glass-btn-edge), var(--dp-glass-btn-depth);
         font-size: var(--dp-text-lg);
         line-height: 1;
         text-decoration: none;
         white-space: nowrap;
         flex-shrink: 0;
         background-color: var(--pico-background-color);
+        background-image: var(--dp-glass-btn-sheen);
         color: var(--pico-color);
     }
     :global(.ov-btn.ov-round) {
@@ -122,21 +126,23 @@
     }
     /* `.ov` だけで使うものもある (ライブの「音を出す」) */
     :global(.ov) {
-        --pico-background-color: rgb(0 0 0 / 0.45);
+        --pico-background-color: var(--dp-glass-btn-tint);
         --pico-border-color: transparent;
         --pico-color: #fff;
         --pico-box-shadow: none;
     }
     :global(.ov:is(:hover, :focus-visible)) {
-        --pico-background-color: rgb(0 0 0 / 0.7);
+        --pico-background-color: var(--dp-glass-btn-hover);
     }
     /*
-     * 押されている間 (字幕を出している・速めているなど) は白を薄く敷く。主の色 (青) で塗っていた頃は、
-     * 映像の上で青い丸だけが目立った。青はリンクとフォーカスに残す
+     * 押されている間 (字幕を出している・速めているなど) は白いガラスに暗いアイコン。主の色 (青) で塗っていた頃は、
+     * 映像の上で青い丸だけが目立った。青はリンクとフォーカスに残す。
+     * 白を薄く (22%) 敷いていた頃は、明るい映像の上で白いアイコンが地に溶けた (2:1 を割る)。
+     * 指を乗せても白いまま — 上の `.ov:is(:hover, :focus-visible)` と詳細度が同じなので、**この順で後に置く**
      */
     :global(.ov-btn.ov-on) {
-        --pico-background-color: rgb(255 255 255 / 0.22);
-        --pico-color: #fff;
+        --pico-background-color: rgb(255 255 255 / 0.88);
+        --pico-color: #16171b;
     }
     :global(.ov-btn.ov-danger) {
         --pico-background-color: var(--dp-error);
