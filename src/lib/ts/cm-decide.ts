@@ -283,7 +283,44 @@ function byLogo(input: CmInput, logo: Range[], candidates: Boundary[]): Range[] 
         if (afterProgram && beforeProgram && end.at - start.at < GAP_MIN) continue;
         out.push(...arrange(start, end, marks, afterProgram, beforeProgram));
     }
-    return trimSpots(input, out);
+    return trimSpots(input, alignLengths(out, candidates, input.duration));
+}
+
+/** CM の尺から外れているとみなして寄せ直す、ずれの上限 (秒)。これより大きくずれたものは CM の並びの外 (提供など) */
+const ALIGN_MAX = 1;
+
+/**
+ * **CM の端は、尺が 15 秒の倍数になる切れ目を選ぶ。** 継ぎ目の無音の中に切れ目が 2 つあると、強いほう
+ * (`Boundary.cuts` の先頭) が継ぎ目とは限らない。明るい本編の終わりから明るい CM の頭へ替わる所は切れ目が弱く、
+ * その 0.5 秒後の CM の中の場面の替わりのほうが強かった (実機の TOKYO MX で、CM の頭の白い 0.5 秒が本編の側に残り、
+ * 映ってから飛んでいた)。
+ *
+ * 番組の間の CM で、尺が 15 秒の倍数から少し (`ALIGN_MAX` まで) 外れているとき、端の無音の中のほかの切れ目
+ * (弱いものも) で尺が合うものがあれば、そちらへ寄せる。頭を先に試し、合わなければ尻。録画の頭と尻に接するものは
+ * 前後の番組なので触らない
+ */
+function alignLengths(cm: Range[], candidates: Boundary[], duration: number): Range[] {
+    const within = (t: number) =>
+        candidates.find((b) => t >= b.silence.start - REACH && t <= b.silence.end + REACH);
+    const fit = (length: number) => isCmLength(length, CHAIN_TOLERANCE);
+    return cm.map((range) => {
+        const length = range.end - range.start;
+        if (range.start <= 0 || range.end >= duration || fit(length)) return range;
+        const units = Math.round(length / 15);
+        if (units < 1 || Math.abs(length - units * 15) > ALIGN_MAX) return range;
+        const pick = (at: number, other: number, way: 1 | -1) => {
+            const b = within(at);
+            if (b === undefined) return null;
+            const found = [...b.cuts, ...b.weak]
+                .filter((t) => t !== at && fit((other - t) * way))
+                .sort((x, y) => Math.abs(x - at) - Math.abs(y - at));
+            return found[0] ?? null;
+        };
+        const start = pick(range.start, range.end, 1);
+        if (start !== null) return { start, end: range.end };
+        const end = pick(range.end, range.start, -1);
+        return end !== null ? { start: range.start, end } : range;
+    });
 }
 
 /** CM に挟まれた、ロゴの出ている短い所の最長 (秒)。番組の終わりの次回予告と提供など */

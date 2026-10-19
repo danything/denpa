@@ -447,3 +447,36 @@ describe('ロゴが遅れて戻る', () => {
         expect(round(decideCm(input(late)))[1]).toEqual({ start: 600, end: 615 });
     });
 });
+
+describe('CM の端は尺が 15 秒の倍数になる切れ目', () => {
+    // 実機の TOKYO MX の並びを写したもの。CM は 599.5〜659.5 の 60 秒。頭の継ぎ目 (599.5) は明るい本編から明るい CM への
+    // 替わりで弱く、同じ無音の中の 600 (CM の中の場面の替わり) のほうが強い
+    const joints = [10, 614.5, 629.5, 644.5, 659.5, 1790, 1805];
+    const silences = [...silencesAt(joints), { start: 599, end: 600.5 }];
+    const logo = [
+        { start: 10.2, end: 597 },
+        { start: 662, end: 1789.7 },
+    ];
+    const input = (): CmInput => ({
+        duration: 1800,
+        silences,
+        ...frames(1800, [...joints, 600], [599.5]),
+        logo,
+    });
+
+    test('強い切れ目で尺が 0.5 秒外れるなら、同じ無音の中の弱い継ぎ目を CM の頭にする', () => {
+        expect(round(decideCm(input()))[1]).toEqual({ start: 599.5, end: 659.5 });
+    });
+
+    test('尺が合っていれば強い切れ目のまま', () => {
+        // 継ぎ目が 600 からの 15 秒おき (600 の強い切れ目が本当の継ぎ目)。弱い 599.5 には寄せない
+        const shifted = joints.map((t) => (t > 600 && t < 1700 ? t + 0.5 : t));
+        const ok: CmInput = {
+            duration: 1800,
+            silences: [...silencesAt(shifted), { start: 599, end: 600.5 }],
+            ...frames(1800, [...shifted, 600], [599.5]),
+            logo,
+        };
+        expect(round(decideCm(ok))[1]).toEqual({ start: 600, end: 660 });
+    });
+});
