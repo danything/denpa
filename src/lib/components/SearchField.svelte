@@ -221,7 +221,7 @@
         (`aria-activedescendant`)、押した瞬間に欄から焦点が外れて閉じないよう、mousedown では焦点を動かさない。
         結果の画面 (`live`) では出さない (欄の `aria-controls` が指す先として空のまま置く)
     -->
-    <div class="suggest" hidden={live || !open} data-testid="{testid}-suggest">
+    <div class="suggest glass" hidden={live || !open} data-testid="{testid}-suggest">
         <div id={listId} role="listbox" aria-label="検索の候補" class="suggest-list">
             {#each groups as group (group.key)}
                 <div role="group" aria-labelledby="{testid}-group-{group.key}" class="suggest-group">
@@ -344,7 +344,8 @@
 
     /*
      * 候補。欄の真下に浮かせ、欄より少し広く取る (ヘッダーの欄が縮んでも読める幅)。
-     * 節は小さな見出しと行だけ (カードにしない)。選んでいる行は淡い地
+     * 節は小さな見出しと行だけ (カードにしない)。選んでいる行は淡い地。
+     * 箱は浮かぶもののガラス (`.glass`。`app.css`)
      */
     .suggest {
         position: absolute;
@@ -355,10 +356,7 @@
         max-height: min(70vh, 36rem);
         overflow-y: auto;
         padding: var(--dp-space-1);
-        border: 1px solid var(--dp-line);
         border-radius: var(--dp-radius-lg);
-        background: var(--dp-bg);
-        box-shadow: var(--dp-shadow-lg, 0 12px 32px rgb(0 0 0 / 0.25));
         transform: translateX(-50%);
     }
     .suggest[hidden] {

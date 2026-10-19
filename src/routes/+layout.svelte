@@ -453,7 +453,7 @@
         下の安全域 (ホームバー) のぶんは内側の余白で避ける
     -->
     {#if showTabbar}
-        <nav class="tabbar" aria-label="主な画面" data-testid="tabbar">
+        <nav class="tabbar glass" aria-label="主な画面" data-testid="tabbar">
             {#each tabs as tab (tab.href)}
                 <a
                     href={resolve(tab.href)}
@@ -707,7 +707,7 @@
         background: var(--dp-bg);
     }
     /*
-     * 画面の下のタブ (狭い幅だけ)。ヘッダーと同じ地に上の線 1 本、スクロールすると透けてぼける。
+     * 画面の下のタブ (狭い幅だけ)。浮かぶもののガラス (`.glass`。`app.css`) に上の縁 1 本。スクロールすると下の中身が透けてぼける。
      * 1 つの的は幅を等分し、高さは 3.5rem (アイコンと小さな字)。下の安全域は内側の余白で避ける。
      * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
      * 位置に使う (タブに被らないように)
@@ -719,16 +719,11 @@
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
         padding-bottom: env(safe-area-inset-bottom);
-        border-top: 1px solid var(--dp-line);
-        background: var(--dp-bg);
+        border-width: 1px 0 0;
+        border-radius: 0;
+        /* 下端に付くので、影は上へ薄く */
+        box-shadow: var(--dp-glass-edge), 0 -8px 24px -12px rgb(0 0 0 / 0.25);
         view-transition-name: site-tabbar;
-    }
-    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-        .tabbar {
-            background: color-mix(in srgb, var(--dp-bg) 80%, transparent);
-            -webkit-backdrop-filter: saturate(1.8) blur(12px);
-            backdrop-filter: saturate(1.8) blur(12px);
-        }
     }
     .tabbar .tab,
     .tab-more :global(.tab) {
