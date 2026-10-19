@@ -4,8 +4,6 @@
  * 単体テストで見るために分けてある (`ambient.test.ts`)
  */
 
-import { boxAverage } from '../../raw/downscale';
-
 /** 端末ごとに覚える鍵 (`keep.ts`)。バックグラウンド再生・速さと同じ置き場 */
 export const AMBIENT_KEY = 'player-ambient';
 
@@ -48,17 +46,69 @@ export function frameDelta(a: ArrayLike<number>, b: ArrayLike<number>): number {
 export const STILL = 2;
 
 /**
- * **色の元にする粗い格子** (横 4 x 縦 3)。写した 32x18 を、この大きさに面積で平均してから光にする
- * (`coarse`)。32x18 の外周の1マスから色を取っていた頃は、外周の帯 (縦の 1/18 ほど) を何かが横切るたびに
- * その辺の色が変わり、1 秒に 5 回の入れ替えでちらついた。格子の1マスは枠の 1/4 x 1/3 で、縁の色を
- * 強めに映しつつ (縁に近いマスほど縁の光に効く)、中の動きは広い面積に薄まる。8x5・6x4 も試したが、
- * 動く四角が横切る偽の放送で光の色の揺れが 4x3 の 1.5〜2 倍あった (`ambient.test.ts`)
+ * **縁の色を外へ延ばす元** (`edgeExtend`)。映像が枠の外へ続いているように見せる (Ambilight と同じ考え)。
+ *
+ * - **辺に沿っては細かく** — 上下の辺は 32 点、左右の辺は 18 点 (写した 32x18 の1マスごと)。映像の色が辺に
+ *   沿って変われば、光の色もそのとおりに変わる。少しだけならす (`taps`。左右 2 マスまで)
+ * - **辺から内へは厚く平均する** — 枠の外側 15% (`depth`) の帯の平均。外周の1マスだけから取っていた頃は、
+ *   そこを小さなものが横切るたびに色が変わってちらついた
+ *
+ * 4x3 の格子に平均していた頃 (#1064) より、辺の色の細かさが残る。真ん中の動きは光に入らない
  */
-export const GRID = { width: 4, height: 3 } as const;
+export const EDGE = { depth: 0.15, taps: [1, 2, 3, 2, 1] } as const;
 
-/** 写した 32x18 (`GLANCE`) を格子 (`GRID`) に縮める */
-export function coarse(pixels: Uint8ClampedArray): Uint8ClampedArray<ArrayBuffer> {
-    return boxAverage(pixels, GLANCE.width, GLANCE.height, GRID.width, GRID.height);
+/**
+ * 写した 32x18 (`GLANCE`) から、**縁を延ばした 32x18** を作る。各マスは、近い辺の帯の平均 (`EDGE`) を、
+ * 辺までの近さで混ぜたもの (近いほど重い。角では2辺が半分ずつ)。光 (`glowPixels`) はこれの、いちばん近い
+ * 縁の所の色を外へ延ばす
+ */
+export function edgeExtend(pixels: Uint8ClampedArray): Uint8ClampedArray<ArrayBuffer> {
+    const width = GLANCE.width;
+    const height = GLANCE.height;
+    /** 範囲 [x0, x1) x [y0, y1) の平均 (端は重なった割合だけ数える) */
+    const band = (x0: number, x1: number, y0: number, y1: number): number[] => {
+        const sum = [0, 0, 0, 0];
+        let area = 0;
+        for (let y = Math.floor(y0); y < Math.ceil(y1); y++) {
+            const wy = Math.min(y + 1, y1) - Math.max(y, y0);
+            for (let x = Math.floor(x0); x < Math.ceil(x1); x++) {
+                const weight = wy * (Math.min(x + 1, x1) - Math.max(x, x0));
+                for (let c = 0; c < 4; c++) sum[c]! += pixels[(y * width + x) * 4 + c]! * weight;
+                area += weight;
+            }
+        }
+        return sum.map((v) => v / area);
+    };
+    const smooth = (line: number[][]): number[][] =>
+        line.map((_, i) => {
+            const sum = [0, 0, 0, 0];
+            let total = 0;
+            EDGE.taps.forEach((tap, k) => {
+                const j = Math.min(line.length - 1, Math.max(0, i + k - (EDGE.taps.length - 1) / 2));
+                for (let c = 0; c < 4; c++) sum[c]! += line[j]![c]! * tap;
+                total += tap;
+            });
+            return sum.map((v) => v / total);
+        });
+    const rows = height * EDGE.depth;
+    const cols = width * EDGE.depth;
+    const top = smooth(Array.from({ length: width }, (_, x) => band(x, x + 1, 0, rows)));
+    const bottom = smooth(Array.from({ length: width }, (_, x) => band(x, x + 1, height - rows, height)));
+    const left = smooth(Array.from({ length: height }, (_, y) => band(0, cols, y, y + 1)));
+    const right = smooth(Array.from({ length: height }, (_, y) => band(width - cols, width, y, y + 1)));
+    const out = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            // 辺までの距離 (マス)。近さの4乗で重みを付ける
+            const near = [y + 0.5, height - y - 0.5, x + 0.5, width - x - 0.5].map((d) => 1 / d ** 4);
+            const sources = [top[x]!, bottom[x]!, left[y]!, right[y]!];
+            const total = near.reduce((a, b) => a + b, 0);
+            for (let c = 0; c < 4; c++) {
+                out[(y * width + x) * 4 + c] = sources.reduce((a, s, i) => a + s[c]! * near[i]!, 0) / total;
+            }
+        }
+    }
+    return out;
 }
 
 /**
