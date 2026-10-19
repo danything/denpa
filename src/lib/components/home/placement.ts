@@ -181,3 +181,30 @@ export function holdPlace(list: HTMLElement, key: string | null = null): () => v
         scrollBy(list, mark.getBoundingClientRect().top - before);
     };
 }
+
+/**
+ * **いま頭に貼り付いている日** (カレンダーで薄く塗る日)。見えている所の上端に掛かっている包みの、日付の見出しの日。
+ * まとめて表示 (日付の見出しが無い) や、日付の無い包みなら null
+ */
+export function topDay(list: HTMLElement): number | null {
+    const top = topEdge(list);
+    for (const block of list.querySelectorAll<HTMLElement>('.t-block')) {
+        if (block.getBoundingClientRect().bottom <= top + 1) continue;
+        const day = block.querySelector<HTMLElement>(':scope > [data-testid="timeline-day"]')?.dataset['day'];
+        return day === undefined ? null : Number(day);
+    }
+    return null;
+}
+
+/**
+ * その日の見出しを頭に送る (カレンダーで日を押したとき)。包みの頭を見えている所の上端に合わせる —
+ * 見出しは貼り付くので、見出しの位置では送り先が決まらない。見出しが無ければ (まだ描いていない) 送らずに false
+ */
+export function showDay(list: HTMLElement, day: number): boolean {
+    const block = list
+        .querySelector<HTMLElement>(`[data-testid="timeline-day"][data-day="${day}"]`)
+        ?.closest<HTMLElement>('.t-block');
+    if (block === null || block === undefined) return false;
+    scrollBy(list, block.getBoundingClientRect().top - topEdge(list));
+    return true;
+}

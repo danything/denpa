@@ -17,8 +17,17 @@
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import '#lib/components/home/home.css';
+    import { markDays } from '#lib/calendar.js';
     import HomeAside from '#lib/components/home/HomeAside.svelte';
-    import { alignTop, holdPlace, placeTimeline, restoreRow, topRow } from '#lib/components/home/placement.js';
+    import {
+        alignTop,
+        holdPlace,
+        placeTimeline,
+        restoreRow,
+        showDay,
+        topDay,
+        topRow,
+    } from '#lib/components/home/placement.js';
     import TimelineBar from '#lib/components/home/TimelineBar.svelte';
     import TimelineEntry from '#lib/components/home/TimelineEntry.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
@@ -34,6 +43,7 @@
         catchUp,
         countFilters,
         dayName,
+        dayStart,
         type Filter,
         lineIndex,
         mergeRecorded,
@@ -511,6 +521,48 @@
         untrack(() => void place());
     });
 
+    /*
+     * ---- サイドバーのカレンダー (`HomeCalendar`・`#lib/calendar.ts`) ----
+     *
+     * 点は**一覧に出ている行** (絞り込みの後) で打つ。頭に貼り付いている日 (`pinned`) は送るたびに読み直し、
+     * カレンダーで薄く塗る。日を押したらその日の見出しへ送る
+     */
+    const today = $derived(dayStart(clock));
+    const dayMarks = $derived(markDays(shownItems, today));
+    let pinned = $state<number | null>(null);
+    let pinFrame = 0;
+    /** 頭の日を読み直す。送っている間は1コマに1回だけ */
+    function trackPinned(): void {
+        if (pinFrame !== 0) return;
+        pinFrame = requestAnimationFrame(() => {
+            pinFrame = 0;
+            if (listBox !== undefined) pinned = topDay(listBox);
+        });
+    }
+    // 描く行が替わったとき (足した・絞った・読み直した) も読み直す
+    $effect(() => {
+        void shownBlocks;
+        if (listBox !== undefined) untrack(trackPinned);
+    });
+
+    /**
+     * その日の見出しを頭に送る。**まだ描いていない古い日なら、そこまで描いてから** (`showPastUpTo` と同じ数え方)。
+     * 足すのは上なので、足す間は読んでいる所を動かさず (`holdPlace`)、描き終えてから送る — 足したぶん跳んでから送り直す、
+     * という2段の動きを見せない
+     */
+    async function pickDay(day: number): Promise<void> {
+        if (listBox === undefined) return;
+        const index = lines.past.findIndex((line) => line.kind === 'day' && line.at === day);
+        if (index >= 0 && index < pastStart) {
+            const restore = holdPlace(listBox);
+            pastPage.showUpTo(lines.past.length - index);
+            await tick();
+            restore();
+        }
+        showDay(listBox, day);
+    }
+    const calendar = $derived({ marks: dayMarks, today, pinned, onpick: (day: number) => void pickDay(day) });
+
 
     setHome({
         get clock() {
@@ -586,7 +638,7 @@
     />
 
     <div class="t-main">
-        <section class="t-list" bind:this={listBox} aria-label="予約と録画" data-testid="timeline">
+        <section class="t-list" bind:this={listBox} onscroll={trackPinned} aria-label="予約と録画" data-testid="timeline">
             <!--
                 **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
                 上限に当たっていたら、いちばん古い録画の上 (一覧の頭) に検索へ誘う一行を出す (`+page.server.ts` の LIMIT 300)
@@ -652,6 +704,7 @@
             showDeleted={data.showDeleted}
             {encoding}
             capacity={data.capacity}
+            {calendar}
         />
     </div>
 </div>

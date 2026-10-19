@@ -1,4 +1,5 @@
 <script lang="ts">
+    import type { DayMark } from '#lib/calendar.js';
     /**
      * **右のサイドバー** (1000px 以上)。ウィンドウの端まで寄せ、一覧とは別に巻き取る (線では分けない。地も一覧と同じ)。
      * 並びは `app.css` のサイドバーの部品 (太字の見出し・線の無い行・選んでいる行だけ内側の塗り)。
@@ -7,7 +8,8 @@
      * 1. 絞り込み … すべて・予約・録画中・未視聴 (件数付き)
      * 2. 見てほしいこと … 競合・失敗・録り逃し・CM の判定。件数があるものだけ、注意の色とアイコンで。押すと絞り込みと同じく一覧を絞る
      * 3. 表示 … まとめて表示・完了した予約も表示・削除済みも表示 (スイッチ)、ファイルと照合 (→)
-     * 4. 状態 … エンコード・空き (いちばん下。どちらも無ければ出さない)。次の録画は「いま」の線に出す
+     * 4. カレンダー … 月の升目。行のある日に点、押すとその日の見出しへ。日ごとに並べているときだけ (`HomeCalendar`)
+     * 5. 状態 … エンコード・空き (いちばん下。どちらも無ければ出さない)。次の録画は「いま」の線に出す
      *
      * 中身はホームが読んだものから作る (問い合わせは足さない)。指を乗せたときだけ出るものは置かない
      */
@@ -15,6 +17,7 @@
     import { ATTENTION_FILTERS, FILTERS, type Filter } from '#lib/timeline.js';
     import TriangleAlert from '~icons/lucide/triangle-alert';
     import type { Rec } from './context';
+    import HomeCalendar from './HomeCalendar.svelte';
     import HomeState from './HomeState.svelte';
     import ViewList from './ViewList.svelte';
 
@@ -30,6 +33,7 @@
         showDeleted,
         encoding,
         capacity,
+        calendar,
     }: {
         filter: Filter;
         setFilter: (next: Filter) => void;
@@ -42,6 +46,8 @@
         showDeleted: boolean;
         encoding: Rec[];
         capacity: { free: string; hours: string | null } | null;
+        /** カレンダーに渡すもの (`HomeCalendar`) */
+        calendar: { marks: Map<number, DayMark>; today: number; pinned: number | null; onpick: (day: number) => void };
     } = $props();
 
     const attention = $derived(ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id));
@@ -88,6 +94,10 @@
     <div class="side-list" role="group" aria-label="表示の切り替え">
         <ViewList {grouped} {setGrouped} {finishedHref} {deletedHref} {showFinished} {showDeleted} variant="list" />
     </div>
+
+    {#if !grouped}
+        <HomeCalendar {...calendar} />
+    {/if}
 
     {#if encoding.length > 0 || capacity !== null}
         <div class="side-foot">

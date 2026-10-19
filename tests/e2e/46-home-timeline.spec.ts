@@ -498,6 +498,98 @@ test.describe('ホームの1本の一覧', () => {
         }
     });
 
+    /*
+     * **サイドバーのカレンダーで日を押すと、その日の見出しへ送る。** まだ描いていない古い日 (一覧の頭の「残り N 件」より先) は、
+     * そこまで描いてから送る。カレンダーは頭に貼り付いた日を薄く塗り、送った先に付いてくる
+     */
+    test.describe('サイドバーのカレンダー', () => {
+        /** カレンダーをその日の月まで ‹ › で送る (行のある月だけを行き来する) */
+        async function showMonth(page: Page, day: number): Promise<void> {
+            const calendar = page.getByTestId('home-calendar');
+            const want = await page.evaluate((at) => {
+                const d = new Date(at);
+                return d.getFullYear() * 12 + d.getMonth();
+            }, day);
+            for (let i = 0; i < 60; i++) {
+                const label = await calendar.getByTestId('calendar-month').innerText();
+                const [, y, m] = label.match(/(\d+)年(\d+)月/) ?? [];
+                const at = Number(y) * 12 + Number(m) - 1;
+                if (at === want) return;
+                await calendar.getByTestId(at > want ? 'calendar-prev' : 'calendar-next').click();
+            }
+            throw new Error('その日の月まで行けませんでした');
+        }
+        /** その日の 0 時 (画面と同じ時刻帯で数える) */
+        const startOf = (page: Page, at: number) =>
+            page.evaluate((t) => new Date(t).setHours(0, 0, 0, 0), at);
+
+        test('まだ描いていない古い日を押すと、そこまで描いて見出しを頭に出す', async ({ page, stack }) => {
+            const now = Date.now();
+            // 開いたときに古い未視聴の録画まで描かれないよう、いったん観終えたことにする (足し試験と同じ。終わったら戻す)
+            const unwatched = spawnSync(
+                'bun',
+                [
+                    '-e',
+                    `import { Database } from 'bun:sqlite'; const db = new Database(process.env.SEED_DB); const ids = db.query('SELECT id FROM recordings WHERE watched_at IS NULL').all().map((r) => r.id); db.run('UPDATE recordings SET watched_at = ? WHERE watched_at IS NULL', [Date.now()]); console.log(JSON.stringify(ids));`,
+                ],
+                { env: { ...process.env, SEED_DB: `${stack.root}/denpa.db` }, encoding: 'utf8' },
+            ).stdout.trim();
+            sqlite(
+                `${stack.root}/denpa.db`,
+                `const rec = db.prepare('INSERT INTO recordings (service_id, service_name, name, series, start_at, end_at, finished_at, library_path, watched_at, created_at, updated_at) VALUES (211, ?, ?, ?, ?, ?, ?, ?, ${now}, ${now}, ${now})');
+                for (let i = 0; i < 90; i++) rec.run('BS11', '暦試験' + i, '暦試験' + i, ${BASE} - (40 + i) * ${DAY}, ${BASE} - (40 + i) * ${DAY} + 1800000, ${BASE} - (40 + i) * ${DAY} + 1800000, '/media/encoded/seed/c' + i + '.mkv');`,
+            );
+            try {
+                await page.setViewportSize({ width: 1366, height: 768 });
+                // 全部描かせる `goto` は使わない (描いていない日を押す)
+                await page.goto('/');
+                await page.locator('[data-hydrated="true"]').waitFor();
+                await expect(page.getByTestId('recording-more')).toBeVisible();
+                const oldest = rows(page).filter({ hasText: /暦試験89(?!\d)/ });
+                await expect(oldest).toHaveCount(0);
+
+                const day = await startOf(page, BASE - 129 * DAY);
+                await showMonth(page, day);
+                const cell = page.getByTestId('calendar-day').and(page.locator(`[data-day="${day}"]`));
+                await expect(cell).toHaveAttribute('aria-disabled', 'false');
+                await expect(cell).toHaveAttribute('aria-label', /録画 1件/);
+                await cell.click();
+
+                const head = page.getByTestId('timeline-day').and(page.locator(`[data-day="${day}"]`));
+                await expect(head).toBeInViewport();
+                await expect(oldest).toBeInViewport();
+                // 見出しは一覧の頭にあり、カレンダーはその日を頭の日として塗る
+                const top = await page
+                    .getByTestId('timeline')
+                    .evaluate((list) => list.getBoundingClientRect().top);
+                expect(Math.abs((await head.boundingBox())!.y - top)).toBeLessThan(2);
+                await expect(cell).toHaveClass(/pinned/);
+                // 行の無い日 (いちばん古い日の前の日) は押せない
+                const before = await startOf(page, BASE - 129 * DAY - DAY);
+                const muted = page.locator(`[data-testid="calendar-day"][data-day="${before}"]`);
+                if ((await muted.count()) > 0) await expect(muted).toHaveAttribute('aria-disabled', 'true');
+            } finally {
+                sqlite(
+                    `${stack.root}/denpa.db`,
+                    `db.run("DELETE FROM recordings WHERE name LIKE '暦試験%'"); const s = db.prepare('UPDATE recordings SET watched_at = NULL WHERE id = ?'); for (const id of ${unwatched || '[]'}) s.run(id);`,
+                );
+            }
+        });
+
+        test('先の日を押すと、その日の予約の見出しを頭に出す', async ({ page }) => {
+            await page.setViewportSize({ width: 1366, height: 768 });
+            await goto(page, '/');
+            const day = await startOf(page, FUTURE);
+            await showMonth(page, day);
+            const cell = page.getByTestId('calendar-day').and(page.locator(`[data-day="${day}"]`));
+            await expect(cell).toHaveAttribute('aria-label', /予約 \d+件/);
+            await cell.click();
+            const head = page.getByTestId('timeline-day').and(page.locator(`[data-day="${day}"]`));
+            await expect(head).toBeInViewport();
+            await expect(rows(page).filter({ hasText: '一覧試験の予約' })).toBeInViewport();
+        });
+    });
+
     test.describe('タブレットの縦', () => {
         test.use({ hasTouch: true, isMobile: true, viewport: { width: 820, height: 1180 } });
 

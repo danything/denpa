@@ -749,3 +749,118 @@
     padding: 0 0.6rem;
     font-size: var(--dp-text-sm);
 }
+/*
+ * サイドバーの月のカレンダー (`HomeCalendar`)。行は 48px にしない (升は 32px。幅は 7 等分で 40px ほどあるので、押す所は升いっぱい)。
+ * 見出しはほかのグループと同じ太字で、右に ‹ ›。点は数字の下 (録画・予約のある日)。今日は丸、頭に貼り付いている日は薄い塗り
+ */
+.board .cal-head {
+    display: flex;
+    align-items: center;
+    margin-top: 1.75rem;
+}
+.board .cal-head .side-label {
+    flex: 1;
+    margin: 0;
+}
+.board .cal-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--dp-radius);
+    background: transparent;
+    box-shadow: none;
+    color: var(--dp-fg);
+    transition: background-color var(--dp-duration);
+}
+.board .cal-step:hover:not(:disabled) {
+    background: var(--dp-hover-soft);
+}
+.board .cal-step:disabled {
+    background: transparent;
+    color: var(--dp-muted);
+    opacity: 0.4;
+}
+.board .cal-grid {
+    width: calc(100% - 0.75rem);
+    margin: 0.25rem 0 0 0.75rem;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.board .cal-grid :is(th, td) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: center;
+}
+.board .cal-grid th {
+    height: 1.5rem;
+    color: var(--dp-muted);
+    font-size: 0.6875rem;
+    font-weight: var(--dp-weight);
+}
+.board .cal-day {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 2rem;
+    margin: 0;
+    padding: 0 0 0.25rem;
+    border: 0;
+    border-radius: var(--dp-radius);
+    background: transparent;
+    box-shadow: none;
+    color: var(--dp-muted);
+    font-size: 0.8125rem;
+    font-weight: var(--dp-weight);
+    transition: background-color var(--dp-duration);
+}
+/* 行の無い日は沈めて押せない (読み上げには aria-disabled) */
+.board .cal-day[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: default;
+}
+.board .cal-day.has {
+    color: var(--dp-fg);
+}
+.board .cal-day.has::after {
+    content: "";
+    position: absolute;
+    bottom: 0.3125rem;
+    left: 50%;
+    width: 0.25rem;
+    height: 0.25rem;
+    border-radius: 50%;
+    background: currentColor;
+    transform: translateX(-50%);
+}
+.board .cal-day:not([aria-disabled="true"]):hover {
+    background: var(--dp-hover-soft);
+}
+.board .cal-day.pinned {
+    background: var(--dp-subtle);
+}
+/* 今日は丸で囲む (行が無くても押せる) */
+.board .cal-day.today {
+    color: var(--dp-fg);
+    font-weight: var(--dp-weight-bold);
+    opacity: 1;
+}
+.board .cal-day.today::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
