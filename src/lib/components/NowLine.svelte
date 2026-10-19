@@ -3,7 +3,7 @@
      * **「いま」の線。** ホームの一覧 (`home/TimelineHeading`) と番組表で同じ見た目にする:
      * 赤い太字の時刻と、細い赤い線。塗った丸い札は使わない。
      *
-     * - `inline` (ホーム) … 時刻・沈めた字の一言 (`status`)・残りの幅を埋める線を1行に並べる。
+     * - `inline` (ホーム) … 時刻・赤みを少し抑えた一言 (`status`)・残りの幅を埋める線を1行に並べる。
      *   字の下には線を引かない。幅が足りなければ一言を短い形 (`status.short`) に替え、それでも入らなければ「…」で切る (折り返さない)
      * - `overlay` (番組表) … 線は枠の上端。時刻は左端に貼り付き (`sticky`)、線をまたいで乗る。
      *   下のマスや時の数字の上に乗るので、時刻だけ地の色を敷く
@@ -78,11 +78,16 @@
         flex-shrink: 0;
         font-size: var(--now-time-size, 0.875rem);
     }
+    /*
+     * 一言も赤の仲間 (時刻より細い字で、少し地に寄せる)。灰色にしていた頃は、赤い時刻・灰色の字・赤い線と
+     * 色が行き来して落ち着かなかった。字に読める赤 (`--dp-rec-text`) を地と 8:2 で混ぜる —
+     * 明るいテーマで 5.2:1、暗いテーマで 5.7:1 (小さい字の AA 4.5 を超える)
+     */
     .now-status {
         flex: 0 1 auto;
         min-width: 0;
         overflow: hidden;
-        color: var(--dp-muted);
+        color: color-mix(in srgb, var(--dp-rec-text) 80%, var(--dp-bg));
         font-size: 0.8125rem;
         text-overflow: ellipsis;
         white-space: nowrap;

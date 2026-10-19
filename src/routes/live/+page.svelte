@@ -1125,10 +1125,15 @@
         font-weight: var(--dp-weight);
         cursor: pointer;
     }
+    /*
+     * **番号は箱の左に寄せる。** 行の左の余白を右 ((i) の外) と同じ 12px にするため。箱の幅は番号の無い局や
+     * 3 桁 (BS・CS) でも局名の頭がそろうように取ったままで、右に寄せていた頃は短い番号ほど左が空き、
+     * 塗った面の端から番号まで 25〜29px あった (E2E 20 の「種別のタブと下の一覧の端がそろう」で見る)
+     */
     .channel-number {
         width: 2.5rem;
         flex-shrink: 0;
-        text-align: right;
+        text-align: left;
         font-variant-numeric: tabular-nums;
     }
     .channel-text {
