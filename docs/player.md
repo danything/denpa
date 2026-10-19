@@ -39,7 +39,7 @@
 | `pip.svelte.ts` / `compose.ts` | 小窓 (ピクチャーインピクチャー)。操作バーの全画面の左に置き、狭い枠では ⚙ の頭の「小窓」の行にする。ページから小窓を開かせられない端末 (iPhone・iPad のホーム画面から開いたもの・API の無いブラウザ) ではボタンごと出さない。canvas に描いているとき (放送のままの MPEG-2・互換モード) は worker が描いたフレームを別の `<video>` に流して出す (Chrome は worker が直に書き込む。canvas の画面への更新から取ると、窓が隠れたとき映像が止まる。Safari は canvas から取る。Firefox は放送のままの MPEG-2 ではボタンを出さない)。**字幕も小窓に出す** (Chrome・Edge だけ。`compose.ts` がコマごとに字幕の canvas を重ねたストリームを作る。小窓に出している間だけ重ねる)。小窓で押した止める・再開は操作バーにも反映する。操作列は小窓に付いていかない。denpa の別の画面へ移ると、再生ごと止まって小窓も閉じる |
 | `fullscreen.svelte.ts` / `fullscreen.ts` | 全画面の出入り（操作バーのボタンと `f`）。端末で全画面にする方法を決める（[watch.md](watch.md#全画面にする方法は端末で変えます)） |
 | `background.svelte.ts` / `background.ts` | バックグラウンド再生のオン/オフ（再生の設定の行）。既定はオフで、裏に回したら止める（[watch.md](watch.md#裏に回したら止めます)） |
-| `ambient.svelte.ts` / `ambient.ts` / `AmbientGlow.svelte` / `glance-worker.ts` | アンビエントモード（再生の設定の行。既定はオン、端末ごとに覚える）。いまのコマを 32x18 に縮めて (1秒に5回まで)、明るさを抑えた色を映像の周りの地に敷く。`<video>` のコマは worker (`glance-worker.ts`) で縮め、canvas に描いているときは描いている worker に1枚もらう。周りに地が残らない横にしたスマホでは敷かず、全画面の間は写さない |
+| `ambient.svelte.ts` / `ambient.ts` / `AmbientGlow.svelte` / `glance-worker.ts` | アンビエントモード（再生の設定の行。既定はオン、端末ごとに覚える）。いまのコマを 32x18 に縮め (1秒に5回まで)、縁の色を外へ延ばして明るさを抑え、地に敷く (二段組は窓全体、縦に積むときは映像の下の中身)。`<video>` のコマは worker (`glance-worker.ts`) で縮め、canvas に描いているときは描いている worker に1枚もらう。周りに地が残らない横にしたスマホでは敷かず、全画面の間は写さない |
 | `shot.svelte.ts` / `snapshot.ts` | いまの1コマを字幕ごと切り抜いて PNG に（`番組名_YYYYMMDD-HHMMSS.png`）。指の端末は共有シート（写真へ保存・そのまま送る）、PC はファイルに保存してクリップボードにも置く。放送のままの MPEG-2 と互換モードで見ているときは worker に1枚貰う（`raw/engine.ts` の `grab`） |
 | `DataBroadcast.svelte` / `Remote.svelte` / `HybridcastFrame.svelte` | データ放送の表示枠、指で押せるリモコン、Hybridcast のアプリの枠 ([stream.md](stream.md#hybridcast)) |
 
