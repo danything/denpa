@@ -1225,8 +1225,8 @@
      */
     @media (max-width: 767px) {
         .page {
-            /* ナビは 3.5rem と下の線 1px (`+layout.svelte` の `.navbar`)。下のタブは無いので、下の安全域だけ空ける */
-            --page-h: calc(100svh - 3.5rem - 1px - env(safe-area-inset-bottom));
+            /* ナビは 3.5rem (`+layout.svelte` の `.navbar`。下の線は無い)。下のタブは無いので、下の安全域だけ空ける */
+            --page-h: calc(100svh - 3.5rem - env(safe-area-inset-bottom));
         }
     }
     @media (max-width: 639.98px) {
@@ -1234,14 +1234,16 @@
             --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
         }
     }
-    /* **1行に収める** (折り返さない)。入りきらないぶんは日付の並びが縮んで横に流れ、時刻は「⋯」へ (下の幅ごとの決まり) */
+    /*
+     * **1行に収める** (折り返さない)。入りきらないぶんは日付の並びが縮んで横に流れ、時刻は「⋯」へ (下の幅ごとの決まり)。
+     * 表との間に線は引かない (ヘッダーと同じ。表の頭の局の行が区切りになる)
+     */
     .toolbar {
         display: flex;
         flex: none;
         align-items: center;
         gap: var(--dp-space-2);
         padding: var(--dp-space-1) var(--dp-space-3);
-        border-bottom: 1px solid var(--dp-line);
     }
     /* 広い画面では上の余白を画面の頭の余白 (`--dp-page-top`) にし、最初の行 (種別のタブ) をほかの画面とそろえる */
     @media (min-width: 768px) {
@@ -1404,7 +1406,6 @@
             order: 1;
             gap: var(--dp-space-1);
             padding-inline: var(--dp-space-2);
-            border-bottom: 0;
             border-top: 1px solid var(--dp-line);
             overflow-x: auto;
             scrollbar-width: none;

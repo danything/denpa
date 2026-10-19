@@ -440,7 +440,7 @@
 <style>
     /*
      * **広い画面 (1024px から) では右の列。** 画面の右端に付け、ヘッダーの下に貼り付けて、
-     * 結果の一覧を下ろしても書く欄と保存のボタンは見えたまま。境目は 1px の線だけ
+     * 結果の一覧を下ろしても書く欄と保存のボタンは見えたまま。一覧とは線で分けず、列の地 (`--dp-surface`) で分ける
      */
     .draft {
         display: flex;
@@ -453,10 +453,9 @@
     @media (min-width: 1024px) {
         .draft {
             position: sticky;
-            top: calc(3.5rem + 1px);
-            height: calc(100dvh - 3.5rem - 1px);
+            top: 3.5rem;
+            height: calc(100dvh - 3.5rem);
             overflow-y: auto;
-            border-left: 1px solid var(--dp-line);
             /* 上は画面の頭の余白 (`--dp-page-top`)。最初の行を左の結果やほかの画面とそろえる */
             padding-top: var(--dp-page-top);
         }
