@@ -72,7 +72,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    `backgroundfetchfail` / `backgroundfetchabort` は `state='failed'` として残す。
    開き直したときは、「保存中」なのにブラウザ側にダウンロードが無ければ失敗に倒す (`watchRunning`)。
 5. 対応していないブラウザ (Safari / Firefox) はページ主導の fetch にフォールバック
-   (タブを開いたまま。進捗は一覧のバッジに出す)。機能検出は
+   (タブを開いたまま。進捗は一覧の行の3段目に出す)。機能検出は
    `'backgroundFetch' in swReg`。仕分けは SW の受け取りと共有 (`storeResponse`)。
 
 ### どちらを保存するか — 端末がデコードできるコーデック

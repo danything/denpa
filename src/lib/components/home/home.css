@@ -100,13 +100,6 @@
     flex-wrap: nowrap;
     min-width: 0;
 }
-.board .title-line > .tag {
-    flex-shrink: 0;
-}
-/* 録画中のバッジの狭い形 (「あと21分」)。広い画面は「録画中・あと21分」 */
-.board .t-state-short {
-    display: none;
-}
 .board .title-line .row-name,
 .board div.row-meta {
     display: block;
@@ -214,8 +207,74 @@
     width: 100%;
     object-fit: cover;
 }
-.board .offline-tag {
-    margin-top: 0.25rem;
+/*
+ * **行の3段目: 動いていること・止まっている問題** (`RowActivity`)。頭に点か印、ラベル (状態の色)、
+ * 中身 (地の字)。1段で切り、狭いときは中身から「…」で縮める (ラベルは最後まで残す)
+ */
+.board .row-activity {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
+    font-size: var(--dp-text-sm);
+    white-space: nowrap;
+}
+.board .act-mark {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 0.875rem;
+}
+.board .act-dot {
+    display: block;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: var(--dp-radius-full);
+    background: currentColor;
+}
+.board .act-text {
+    display: flex;
+    min-width: 0;
+}
+.board .act-label,
+.board .act-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.board .act-label {
+    flex: 0 1 auto;
+    font-weight: 600;
+}
+.board .act-detail {
+    flex: 0 1000 auto;
+    color: var(--dp-muted);
+}
+.board .row-activity.rec {
+    color: var(--dp-rec-text);
+}
+.board .row-activity.rec .act-dot {
+    background: var(--dp-rec);
+}
+.board .row-activity.busy {
+    color: var(--dp-primary-text);
+}
+.board .row-activity.ok {
+    color: var(--dp-ok-text);
+}
+.board .row-activity.error {
+    color: var(--dp-rec-text);
+}
+.board .row-activity.warning {
+    color: var(--dp-warn-text);
+}
+.board .row-activity.wait,
+.board .row-activity.neutral {
+    color: var(--dp-muted);
+}
+.board .row-activity.wait .act-label,
+.board .row-activity.neutral .act-label {
+    font-weight: 400;
 }
 /* 進み具合は行の下端いっぱいに敷く */
 .board .row-bar {
@@ -537,24 +596,34 @@
     .board .t-rule {
         display: none;
     }
-    /* 読み上げには長い形を残す */
-    .board .t-state-full {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-    }
-    .board .t-state-short {
-        display: inline;
-    }
     .board .t-time {
         font-size: 0.8125rem;
     }
     .board .t-rows .t-now {
         --now-inset: 0.5rem;
         --now-time-size: 0.8125rem;
+    }
+    /*
+     * 状態の段は2行まで折り返す。押すものに幅を取られて、1行で切ると「エンコー…」のように
+     * 状態そのものまで欠けていた (進みとあと何分かは消える)
+     */
+    .board .row-activity {
+        align-items: flex-start;
+        white-space: normal;
+    }
+    .board .act-mark {
+        height: 1lh;
+    }
+    .board .act-text {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+    }
+    .board .act-label,
+    .board .act-detail {
+        overflow: visible;
     }
     /* 行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
     .board .t-row .row-actions button:not([data-testid="delete-confirm"]) .btn-label {

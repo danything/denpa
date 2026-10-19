@@ -123,9 +123,9 @@ test.describe('ホームの1本の一覧', () => {
 
     /*
      * **録画中の行は「いま」の線のすぐ上。** 並びは始まった時刻の順で、いまより前に始まったものは線の上に来る。
-     * あと何分かは行のバッジが言い、線は次の録画までを言う (録画中とは言わない)。開いたときも線と一緒に見える
+     * あと何分かは行の3段目が言い、線は次の録画までを言う (録画中とは言わない)。開いたときも線と一緒に見える
      */
-    test('録画中の行は線のすぐ上にあり、あと何分かは行のバッジが言う', async ({ page, stack }) => {
+    test('録画中の行は線のすぐ上にあり、あと何分かは行の3段目が言う', async ({ page, stack }) => {
         const now = Date.now();
         const MIN = 60_000;
         // 録画中の録画は DB に直に置く (終わった時刻が無ければ録画中)。終わりの時刻まで片付け (`failStrayRecordings`) は触らない
@@ -144,17 +144,24 @@ test.describe('ホームの1本の一覧', () => {
                 await page.goto('/');
                 await page.locator('[data-hydrated="true"]').waitFor();
                 const row = page.getByTestId('reservation-row').filter({ hasText: '録画中試験' });
-                // 広い画面は「録画中・あと21分」、狭い画面は「あと21分」だけ (読み上げはいつも長い形)
-                const badge = row.getByTestId('reservation-state');
-                await expect(badge.locator('.t-state-full')).toHaveText(/^録画中・あと\d+分$/);
-                const narrow = viewport.width < 768;
-                if (narrow) {
-                    await expect(badge.locator('.t-state-short')).toBeVisible();
-                    await expect(badge.locator('.t-state-short')).toHaveText(/^あと\d+分$/);
-                } else {
-                    await expect(badge.locator('.t-state-short')).toBeHidden();
-                }
-                await expect(row.locator('.rec-dot')).toHaveCount(1);
+                // 番組名の下に「● 録画中・あと21分」。番組名の行には何も足さない。狭い画面でも縮めずに入りきる
+                const status = row.getByTestId('row-activity');
+                await expect(status).toHaveCount(1);
+                await expect(status).toHaveAttribute('data-kind', 'recording');
+                await expect(status).toHaveText(/録画中・あと\d+分/);
+                await expect(row.getByTestId('reservation-state')).toHaveText('録画中');
+                await expect(status.locator('.rec-dot')).toBeVisible();
+                await expect(row.locator('.title-line .rec-dot, .title-line .tag')).toHaveCount(0);
+                expect(
+                    await status.evaluate((node) =>
+                        [...node.querySelectorAll('.act-text, .act-label, .act-detail')].every(
+                            (span) =>
+                                span.scrollWidth <= span.clientWidth &&
+                                span.scrollHeight <= span.clientHeight,
+                        ),
+                    ),
+                    '「録画中・あと21分」が縮んでいる',
+                ).toBe(true);
                 await expect(row.getByTestId('recording-progress')).toBeVisible();
 
                 // 線のすぐ上 (線の手前の行がこの行)
@@ -210,6 +217,31 @@ test.describe('ホームの1本の一覧', () => {
                 `${stack.root}/denpa.db`,
                 `db.run("DELETE FROM recordings WHERE name = '録画中試験'"); db.run("DELETE FROM reservations WHERE program_id = 980200");`,
             );
+        }
+    });
+
+    /*
+     * **止まっている問題も3段目に、理由と1段で。** 番組名の行は時刻と番組名だけ。
+     * 競合は「競合・チューナーが足りません」(前は番組名の横のバッジと、理由の段が別だった)
+     */
+    test('競合の行は、状態と理由を番組名の下の1段に出す', async ({ page, stack }) => {
+        const now = Date.now();
+        const HOUR = 3_600_000;
+        sqlite(
+            `${stack.root}/denpa.db`,
+            `db.run("INSERT INTO reservations (program_id, service_id, name, start_at, end_at, manual, state, conflict_reason, created_at, updated_at) VALUES (980201, (SELECT id FROM services ORDER BY id LIMIT 1), '競合試験', ${now + 5 * HOUR}, ${now + 6 * HOUR}, 1, 'conflict', 'チューナーが足りません', ${now}, ${now})");`,
+        );
+        try {
+            await goto(page, '/');
+            const row = page.getByTestId('reservation-row').filter({ hasText: '競合試験' });
+            const status = row.getByTestId('row-activity');
+            await expect(status).toHaveCount(1);
+            await expect(status).toHaveText('競合・チューナーが足りません');
+            await expect(row.getByTestId('reservation-state')).toHaveText('競合');
+            await expect(row.locator('.title-line .tag')).toHaveCount(0);
+            await expect(row.getByTestId('recording-progress')).toHaveCount(0);
+        } finally {
+            sqlite(`${stack.root}/denpa.db`, `db.run("DELETE FROM reservations WHERE program_id = 980201");`);
         }
     });
 

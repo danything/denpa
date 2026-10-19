@@ -1,10 +1,10 @@
 <script lang="ts">
     /**
-     * 行の1段目: 時刻・番組名 (行の入口)・状態のバッジ。予約・録画・録り逃しで同じ形。
+     * 行の1段目: 時刻と番組名 (行の入口)。予約・録画・録り逃しで同じ形。状態は3段目 (`RowActivity`)。
      *
      * `fresh` はまだ観ていない録画 (`unwatched`)。番組名の頭に小さな点を置く。
      * バッジ (「NEW」など) にしないのは、番組名に入っている [新] と紛れるのと、
-     * 状態のバッジと2つ並ぶと番組名が押し出されるため。
+     * 番組名の行には何も足さないため。
      *
      * **行のどこを押しても、その行でいちばんやりたいことをする。** 入口は番組名で、押せる範囲を
      * `::after` で行いっぱいに広げる (`.row-open`)。
@@ -26,33 +26,26 @@
         start,
         end,
         state,
-        stateShort,
-        badge,
         name,
         testid,
         open,
         fresh = false,
-        quiet = false,
     }: {
         /** 頭に置く放送の時刻 (`21:30–22:00`。狭い画面は始まりだけ) */
         start: number;
         end: number;
-        state: string;
-        /** 狭い幅で代わりに出す状態の字 (録画中の「あと21分」)。読み上げはいつも `state` */
-        stateShort?: string | undefined;
-        badge: string;
+        /** ふつうの状態 (予約済み・視聴可能)。画面には出さず、読み上げにだけ渡す。ほかの状態は3段目 */
+        state?: string | undefined;
         name: string;
         testid: string;
         open: string | (() => void);
         fresh?: boolean;
-        quiet?: boolean;
     } = $props();
 </script>
 
 <!--
-    **1段目は 時刻 · 番組名 · 状態のバッジ。** 番組名が長ければ番組名だけを「…」で切り、時刻とバッジは残す。
-    ふつうの状態 (`quietState`) はラベルを出さず、読み上げにだけ渡す。
-    塗ったバッジ (録画中など、いま動いているもの) には、ゆっくり脈打つ点を添える (`app.css` の `.rec-dot`)
+    **1段目は 時刻 · 番組名 だけ。** 番組名が長ければ番組名だけを「…」で切る。
+    ふつうの状態 (`quietState`) は読み上げにだけ渡す。見てほしい状態は3段目 (`RowActivity`)
 -->
 <div class="title-line">
     <span class="t-time num">{time(start)}<span class="t-end">–{time(end)}</span></span>
@@ -69,7 +62,7 @@
             {name}
         </button>
     {/if}
-    <span class={quiet ? 'visually-hidden' : `tag ${badge}`} data-testid={testid}
-        >{#if !quiet && badge.includes('solid')}<span class="rec-dot" aria-hidden="true"></span>{/if}{#if stateShort === undefined}{state}{:else}<span class="t-state-full">{state}</span><span class="t-state-short" aria-hidden="true">{stateShort}</span>{/if}</span
-    >
+    {#if state !== undefined}
+        <span class="visually-hidden" data-testid={testid}>{state}</span>
+    {/if}
 </div>

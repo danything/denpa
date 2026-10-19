@@ -52,7 +52,7 @@ export interface NowStatus {
 /**
  * **「いま」の線に添える一言。** 次の録画 (いまより後に始まる予約のうちいちばん早いもの) までを
  * 「次の録画まで 3時間59分」と言う。無ければ null (何も添えない)。録画中かどうかは言わない —
- * 録画中の行は線の上にあり、あと何分かは行のバッジが言う (`recordingState`)。
+ * 録画中の行は線の上にあり、あと何分かは行の3段目が言う (`recordingLeft`)。
  *
  * 分は切り上げる。線の時刻は分を切り捨てて出すので、22:00 の録画は 18:01 の間ずっと「3時間59分」になり、
  * 時刻と食い違わない。1日より先は日数で
@@ -66,14 +66,11 @@ export function nowStatus(now: number, next: { start_at: number } | null): NowSt
 }
 
 /**
- * **録画中の行のバッジ。** 「録画中・あと21分」(分は `nowStatus` と同じく切り上げ)。`short` は狭い幅で代わりに出す形
- * 「あと21分」(赤い行と脈打つ点で録画中と分かるので、番組名に幅を回す)。
- * 終わりの時刻を過ぎても止まりきるまでは録画中のまま。そのときはあと何分かは言えないので「録画中」だけ
+ * **録画中の行の、あと何分か。** 「あと21分」(分は `nowStatus` と同じく切り上げ)。行の3段目に「録画中・あと21分」と出す (`RowActivity`)。
+ * 終わりの時刻を過ぎても止まりきるまでは録画中のまま。そのときはあと何分かは言えないので null (「録画中」だけ)
  */
-export function recordingState(now: number, endAt: number): NowStatus {
-    if (endAt <= now) return { text: '録画中', short: '録画中' };
-    const left = untilWords(endAt - now);
-    return { text: `録画中・あと${left}`, short: `あと${left}` };
+export function recordingLeft(now: number, endAt: number): string | null {
+    return endAt <= now ? null : `あと${untilWords(endAt - now)}`;
 }
 
 /** 切り上げた分。過ぎていても 1 分 (「0分」とは言わない) */

@@ -50,7 +50,7 @@ test.describe('放送の延長 (追従できない局と、延長)', () => {
             await page.waitForTimeout(500);
         }
         await expect(recording).toBeVisible();
-        // 比べるのは時刻だけ (バッジの「あと何分」は時間が経てば変わる)
+        // 比べるのは時刻だけ (3段目の「あと何分」は時間が経てば変わる)
         const before = ((await recording.locator('.t-time').textContent()) ?? '').trim();
 
         // 放送が10分押した状態にする

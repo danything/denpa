@@ -9,7 +9,7 @@ import {
     nowStatus,
     percent,
     recordedDuration,
-    recordingState,
+    recordingLeft,
     splitReaderName,
 } from './format';
 
@@ -223,16 +223,16 @@ describe('「いま」の線の一言', () => {
     });
 });
 
-describe('録画中の行のバッジ', () => {
+describe('録画中の行のあと何分か', () => {
     const now = new Date(2026, 9, 19, 18, 1, 20).getTime();
     const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();
 
-    test('あと何分か。分は切り上げ、1時間を越えれば時間も。狭い幅はあと何分かだけ', () => {
-        expect(recordingState(now, at(18, 22))).toEqual({ text: '録画中・あと21分', short: 'あと21分' });
-        expect(recordingState(now, at(19, 30)).text).toBe('録画中・あと1時間29分');
+    test('分は切り上げ、1時間を越えれば時間も', () => {
+        expect(recordingLeft(now, at(18, 22))).toBe('あと21分');
+        expect(recordingLeft(now, at(19, 30))).toBe('あと1時間29分');
     });
 
-    test('終わりの時刻を過ぎても止まりきるまでは録画中とだけ', () => {
-        expect(recordingState(now, at(18, 0))).toEqual({ text: '録画中', short: '録画中' });
+    test('終わりの時刻を過ぎても止まりきるまでは録画中なので、あと何分かは言わない', () => {
+        expect(recordingLeft(now, at(18, 0))).toBeNull();
     });
 });

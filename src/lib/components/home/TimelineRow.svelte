@@ -1,8 +1,9 @@
 <script lang="ts">
     /**
      * 時間軸の1行 (予約・録画・録り逃し)。どれも同じ形にする: 左に時刻、(録れたものは) ポスター、
-     * 状態と番組名と局・尺、右に押すもの。行は 48px で、言うことがあるときだけ下に1段足す
-     * (黙っていると「録れたつもり」になるもの: 競合・欠ける・ロゴでCMを判定できなかった)
+     * 時刻と番組名、局と尺、右に押すもの。行は 48px で、状態を言うときだけ下に段を足す (`RowActivity`。2段まで):
+     * いま動いているもの (録画中・エンコード中・端末に保存中) と、黙っていると「録れたつもり」になるもの
+     * (競合・失敗・欠ける・ロゴでCMを判定できなかった)
      */
     import { submitting } from '#lib/actions.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
@@ -21,12 +22,13 @@
         percent,
         quietState,
         recordedDuration,
-        recordingState,
+        recordingLeft,
         rowState,
         size,
         stateLabel,
     } from '#lib/format.js';
     import { offline, removeLocal } from '#lib/offline.svelte.js';
+    import { type RowStatus, statusLines, toneOf } from '#lib/row-status.js';
     import type { SubmitFunction } from '$app/forms';
     import { resolve } from '$app/paths';
     import Ellipsis from '~icons/lucide/ellipsis';
@@ -34,8 +36,9 @@
     import Play from '~icons/lucide/play';
     import Trash from '~icons/lucide/trash-2';
     import X from '~icons/lucide/x';
-    import { home, type Item, type Rec } from './context';
+    import { home, type Item, type Rec, type Res } from './context';
     import Poster from './Poster.svelte';
+    import RowActivity from './RowActivity.svelte';
     import RowMeta from './RowMeta.svelte';
     import RowTitle from './RowTitle.svelte';
 
@@ -67,19 +70,123 @@
             }
         };
     }
+
+    /** 欠けたぶん (チューナー不足)。録れたものは「欠けています」、これからのものは「欠けます」 */
+    function clipLine(row: Parameters<typeof clipNote>[0], done = false): RowStatus[] {
+        const note = clipNote(row, done);
+        return note === null ? [] : [{ kind: 'clip', tone: 'warning', label: note }];
+    }
+
+    /**
+     * 予約の行の段。録画中は「● 録画中・あと21分」(あと何分かは `ctx.clock` で進む)。
+     * 見てほしい状態 (競合・失敗・録画しない・取り消し済み) は理由と1段に
+     */
+    function resLines(res: Res, live: boolean): RowStatus[] {
+        const activities: RowStatus[] = live
+            ? [
+                  {
+                      kind: 'recording',
+                      tone: 'rec',
+                      running: true,
+                      label: stateLabel('recording'),
+                      detail: recordingLeft(ctx.clock, res.end_at),
+                      testid: 'reservation-state',
+                  },
+              ]
+            : [];
+        const problems: RowStatus[] =
+            live || quietState(res.state)
+                ? []
+                : [
+                      {
+                          kind: res.state,
+                          tone: toneOf(badgeClass(res.state)),
+                          label: stateLabel(res.state),
+                          detail: res.conflict_reason,
+                          testid: 'reservation-state',
+                      },
+                  ];
+        return statusLines(activities, [...problems, ...clipLine(res)]);
+    }
+
+    /**
+     * 録画の行の段。動いているもの (エンコード・待ち・録画中・端末に保存中) が先、
+     * 問題 (失敗・欠けた・ロゴでCMを判定できなかった・端末に保存できなかった) が後
+     */
+    function recLines(rec: Rec): RowStatus[] {
+        const shown = rowState(rec);
+        const held = offline.entries[rec.id];
+        const activities: RowStatus[] = [];
+        const problems: RowStatus[] = [];
+        if (rec.job_state === 'queued' || rec.job_state === 'running') {
+            const queued = rec.job_state === 'queued';
+            const encoding = !queued && rec.job_phase === 'encode';
+            activities.push({
+                kind: queued ? 'queued' : 'encode',
+                tone: queued ? 'wait' : 'busy',
+                running: !queued,
+                label: shown.label,
+                detail: encoding ? encodeDetail(rec) : queued ? null : rec.job_log,
+                testid: 'recording-state',
+                detailTestid: encoding ? 'encode-progress' : undefined,
+            });
+        } else if (rec.state === 'recording') {
+            activities.push({
+                kind: 'recording',
+                tone: 'rec',
+                running: true,
+                label: shown.label,
+                detail: recordingLeft(ctx.clock, rec.end_at),
+                testid: 'recording-state',
+            });
+        } else if (!shown.quiet) {
+            problems.push({
+                kind: rec.state,
+                tone: toneOf(shown.badge),
+                label: shown.label,
+                // 録画の失敗は短い理由を添える。エンコードの失敗は ffmpeg の長い字なので詳細だけ
+                detail: rec.state === 'failed' ? rec.error : null,
+                testid: 'recording-state',
+            });
+        }
+        if (held?.state === 'downloading') {
+            activities.push({
+                kind: 'download',
+                tone: 'ok',
+                running: true,
+                label: '端末に保存中',
+                detail: held.progress === null ? null : percent(held.progress),
+            });
+        } else if (held?.state === 'ready') {
+            problems.push({ kind: 'saved', tone: 'ok', label: '端末に保存済み' });
+        } else if (held?.state === 'failed') {
+            problems.push({ kind: 'save-failed', tone: 'error', label: '端末に保存できませんでした', detail: '詳細からやり直せます' });
+        }
+        problems.push(...clipLine(rec, true));
+        if (logoUnusable(rec.cm_note) && rec.deleted_at === null) {
+            // 覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられる
+            problems.push({
+                kind: 'logo',
+                tone: 'warning',
+                label: 'ロゴでCMを判定できませんでした',
+                detail: '無音だけで判定。覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられます',
+            });
+        }
+        return statusLines(activities, problems);
+    }
+
+    /** 「45.0%・あと3分04秒」。SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く */
+    function encodeDetail(rec: Rec): string {
+        const live = encodeLive.entries[rec.id];
+        const left = eta(live !== undefined ? live.etaMs : rec.job_eta_ms);
+        const done = percent(live?.percent ?? rec.job_percent ?? 0);
+        return left === '' ? done : `${done}・${left}`;
+    }
 </script>
-
-
-<!--
-    **行の中の注意。** 行は 48px の 1 段 (広い画面) か 2 段 (狭い画面) にそろえ、言うことがあるときだけ
-    下に 1 段足す。黙っていると「録れたつもり」になるもの (競合・欠ける・ロゴでCMを判定できなかった) だけ
--->
 
 <!-- 予約の行 (これから・録画中・「完了した予約も表示」で出る終わった予約) -->
 {#snippet resRow(item: Item & { kind: 'res' }, nested: boolean)}
     {@const res = item.res}
-    <!-- 録画中はバッジにあと何分かを添える (狭い幅は「あと21分」だけ) -->
-    {@const live = item.zone === 'now' ? recordingState(ctx.clock, res.end_at) : null}
     <div
         data-testid="reservation-row"
         data-reservation-id={res.id}
@@ -94,24 +201,18 @@
             <RowTitle
                 start={res.start_at}
                 end={res.end_at}
-                state={live?.text ?? stateLabel(res.state)}
-                stateShort={live?.short}
-                badge={badgeClass(res.state)}
+                state={quietState(res.state) ? stateLabel(res.state) : undefined}
                 name={res.name}
                 testid="reservation-state"
                 open={() => {
                     ctx.select(item.key);
                     ctx.openReservation(res);
                 }}
-                quiet={quietState(res.state)}
             />
             <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? null : res} excerpt={res.description} />
-            {#if res.conflict_reason}
-                <div class="row-sub text-error small">{res.conflict_reason}</div>
-            {/if}
-            {#if clipNote(res) !== null}
-                <div class="row-sub text-warning small">{clipNote(res)}</div>
-            {/if}
+            {#each resLines(res, item.zone === 'now') as status (status.kind)}
+                <RowActivity {status} />
+            {/each}
         </div>
         <div class="row-actions">
             {#if res.recording_id !== null}
@@ -129,7 +230,7 @@
                 </ActionButton>
             {/if}
         </div>
-        <!-- 録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かはバッジが言う) -->
+        <!-- 録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは3段目が言う) -->
         {#if item.zone === 'now' && res.end_at > res.start_at}
             <progress
                 class="row-bar rec"
@@ -158,8 +259,6 @@
             <RowTitle
                 start={res.start_at}
                 end={res.end_at}
-                state={stateLabel('missed')}
-                badge={badgeClass('missed')}
                 name={res.name}
                 testid="missed-state"
                 open={() => {
@@ -168,6 +267,7 @@
                 }}
             />
             <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? 'manual' : res} excerpt={res.description} />
+            <RowActivity status={{ kind: 'missed', tone: 'warning', label: stateLabel('missed'), testid: 'missed-state' }} />
         </div>
         <div class="row-actions">
             <!-- 構えの鍵は負の値にして、録画のIDと混ざらないようにする (deleting は録画と共用) -->
@@ -192,6 +292,7 @@
     {@const rec = item.rec}
     {@const link = ctx.watchLink(rec)}
     {@const shown = rowState(rec)}
+    {@const lines = recLines(rec)}
     {@const held = offline.entries[rec.id]}
     {@const canDelete = rec.deleted_at === null && rec.job_id === null}
     <!--
@@ -230,8 +331,7 @@
             <RowTitle
                 start={rec.start_at}
                 end={rec.end_at}
-                state={shown.label}
-                badge={shown.badge}
+                state={shown.quiet ? shown.label : undefined}
                 name={rec.name}
                 testid="recording-state"
                 open={link ??
@@ -240,7 +340,6 @@
                         ctx.openRecording(rec);
                     })}
                 fresh={ctx.unwatched(rec)}
-                quiet={shown.quiet}
             />
             <RowMeta
                 service={rec.service_name}
@@ -254,38 +353,9 @@
                 rule={rec.from_manual === null ? null : rec.from_manual ? 'manual' : rec}
                 excerpt={rec.description}
             />
-            {#if clipNote(rec, true) !== null}
-                <div class="row-sub text-warning small">{clipNote(rec, true)}</div>
-            {/if}
-            {#if logoUnusable(rec.cm_note) && rec.deleted_at === null}
-                <!-- ロゴでの判定が使えず、無音だけでCMを判定している。覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられる -->
-                <div class="row-sub text-warning small">
-                    ロゴでCMを判定できませんでした (無音だけで判定)
-                    <span class="muted">— 覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられます</span>
-                </div>
-            {/if}
-            {#if held !== undefined}
-                <div class="row-sub small">
-                    <span class="tag offline-tag {held.state === 'ready' ? 'success' : held.state === 'failed' ? 'error' : ''}">
-                        {held.state === 'ready'
-                            ? '端末に保存済み'
-                            : held.state === 'failed'
-                              ? '端末に保存できませんでした — 詳細からやり直せます'
-                              : `端末に保存中${held.progress === null ? '…' : ` ${percent(held.progress)}`}`}
-                    </span>
-                </div>
-            {/if}
-            {#if rec.job_state === 'running' && rec.job_phase === 'encode'}
-                <!-- SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く -->
-                {@const live = encodeLive.entries[rec.id]}
-                {@const liveEta = live !== undefined ? live.etaMs : rec.job_eta_ms}
-                <div class="row-sub muted tiny num" data-testid="encode-progress">
-                    {percent(live?.percent ?? rec.job_percent ?? 0)}
-                    {#if eta(liveEta)}・{eta(liveEta)}{/if}
-                </div>
-            {:else if rec.job_state === 'running' && rec.job_log}
-                <div class="row-sub muted tiny">{rec.job_log}</div>
-            {/if}
+            {#each lines as status (status.kind)}
+                <RowActivity {status} />
+            {/each}
         </div>
         <div class="row-actions">
             {#if link !== null || canDelete}
@@ -365,14 +435,15 @@
             {/if}
             {#if rec.deleted_at === null}
                 {#if rec.job_id !== null}
-                    <!-- 動いている間は中断だけ。裏で ffmpeg が元のTSを読んでいるので、消させると道連れになる -->
+                    <!-- 動いている間は中断だけ。裏で ffmpeg が元のTSを読んでいるので、消させると道連れになる。
+                        狭い画面はアイコンだけ (3段目のエンコードの進みに幅を回す。字は読み上げに残す) -->
                     {#if rec.job_canceling}
                         <button type="button" class="outline danger" disabled aria-busy="true" data-testid="encode-cancel">
-                            エンコード中断
+                            <Icon icon={X} size="size-4" /><span class="btn-label">エンコード中断</span>
                         </button>
                     {:else}
                         <ActionButton action="?/cancelEncode" fields={{ id: rec.job_id }} class="outline danger" testid="encode-cancel">
-                            エンコード中断
+                            <Icon icon={X} size="size-4" /><span class="btn-label">エンコード中断</span>
                         </ActionButton>
                     {/if}
                 {:else}
