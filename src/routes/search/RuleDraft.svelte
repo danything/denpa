@@ -440,7 +440,7 @@
 <style>
     /*
      * **広い画面 (1024px から) では右の列。** 画面の右端に付け、ヘッダーの下に貼り付けて、
-     * 結果の一覧を下ろしても書く欄と保存のボタンは見えたまま。一覧とは線で分けず、列の地 (`--dp-surface`) で分ける
+     * 結果の一覧を下ろしても書く欄と保存のボタンは見えたまま。一覧とは線でも地の色でも分けず、余白だけで分ける (ほかの画面のサイドバーと同じ)。狭い画面で下から出すときだけ `--dp-surface` で塗る
      */
     .draft {
         display: flex;
@@ -453,6 +453,7 @@
     @media (min-width: 1024px) {
         .draft {
             position: sticky;
+            background: var(--dp-bg);
             top: 3.5rem;
             height: calc(100dvh - 3.5rem);
             overflow-y: auto;
@@ -621,6 +622,11 @@
         margin-top: auto;
         padding-block: var(--dp-space-3) var(--dp-space-5);
         background: var(--dp-surface);
+    }
+    @media (min-width: 1024px) {
+        .draft-foot {
+            background: var(--dp-bg);
+        }
     }
     .draft-foot p {
         margin: 0;
