@@ -243,8 +243,8 @@
 }
 @media (min-width: 768px) {
     .board {
-        height: calc(100% + 2 * var(--dp-gutter));
-        margin: calc(-1 * var(--dp-gutter));
+        height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
+        margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
     }
 }
 .board .t-main {
@@ -335,7 +335,8 @@
     align-items: baseline;
     gap: 0.5rem;
     margin: 0;
-    padding: 0.875rem 0.5rem 0.25rem;
+    /* 上の余白は画面の頭の余白 (`--dp-page-top`) と同じ。いちばん上の見出しがほかの画面の最初の行とそろう */
+    padding: var(--dp-page-top, 0.875rem) 0.5rem 0.25rem;
     background: var(--dp-bg);
     color: var(--dp-muted);
     font-size: 0.75rem;

@@ -457,6 +457,8 @@
             height: calc(100dvh - 3.5rem - 1px);
             overflow-y: auto;
             border-left: 1px solid var(--dp-line);
+            /* 上は画面の頭の余白 (`--dp-page-top`)。最初の行を左の結果やほかの画面とそろえる */
+            padding-top: var(--dp-page-top);
         }
         .close {
             display: none;

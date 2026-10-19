@@ -91,14 +91,14 @@
          */
         .layout > :global(aside) {
             /*
-             * 中身の余白は映像の周りの余白と同じ (`--dp-gutter`)。列の最初のもの (タブ・番組名) の上端が
+             * 中身の余白は映像の周りの余白と同じ (`--dp-gutter`)。上は `--dp-page-top` で、二段組ではどちらも 1rem。列の最初のもの (タブ・番組名) の上端が
              * 映像の上端とそろう。1.25rem にしていた頃は、列の中身だけ 4px 下から始まっていた
              */
             --dp-side-pad: var(--dp-gutter, 1rem);
             width: 16rem;
             min-height: 0;
             flex-shrink: 0;
-            margin: calc(-1 * var(--dp-gutter, 1.5rem)) calc(-1 * var(--dp-gutter, 1.5rem))
+            margin: calc(-1 * var(--dp-page-top, 1rem)) calc(-1 * var(--dp-gutter, 1.5rem))
                 calc(-1 * var(--dp-gutter, 1.5rem)) 0;
             border-left: 1px solid var(--dp-line);
             background: var(--dp-surface);
@@ -120,8 +120,8 @@
         .layout {
             flex-direction: column;
             gap: 1rem;
-            height: calc(100% + 2 * var(--dp-gutter, 1rem));
-            margin: calc(-1 * var(--dp-gutter, 1rem));
+            height: calc(100% + var(--dp-page-top, 1rem) + var(--dp-gutter, 1rem));
+            margin: calc(-1 * var(--dp-page-top, 1rem)) calc(-1 * var(--dp-gutter, 1rem)) calc(-1 * var(--dp-gutter, 1rem));
             overflow-y: auto;
         }
         .main {

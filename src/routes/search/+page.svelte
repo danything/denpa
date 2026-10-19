@@ -543,11 +543,11 @@
             grid-template-columns: minmax(0, 1fr) 25rem;
             align-items: start;
             gap: var(--dp-gutter);
-            margin-block: calc(-1 * var(--dp-gutter));
+            margin-block: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter));
             margin-inline-end: calc(-1 * var(--dp-gutter));
         }
         .drafting > .search-page {
-            padding-block: var(--dp-gutter);
+            padding-block: var(--dp-page-top) var(--dp-gutter);
         }
         .sheet-bar {
             display: none;

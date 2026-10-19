@@ -848,7 +848,7 @@
             display: none;
         }
         .shell:has(.tabbar) main {
-            padding-top: calc(var(--dp-gutter) + env(safe-area-inset-top));
+            padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
         }
         .shell:has(.tabbar) main {
             padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
@@ -859,7 +859,7 @@
         }
         .shell:has(.tabbar):has(.notice-slot) main,
         .shell:has(.tabbar):has(.search-bar) main {
-            padding-top: var(--dp-gutter);
+            padding-top: var(--dp-page-top);
         }
     }
     /* ライブの全画面のあいだは隠す (映像だけにする) */
@@ -873,7 +873,14 @@
      */
     main {
         --dp-gutter: 1rem;
-        padding: var(--dp-gutter);
+        /*
+         * **ヘッダーから最初の中身までは、どの画面も `--dp-page-top` (1rem)。** 左右と下の余白 (`--dp-gutter`) は
+         * 広い画面で 1.5rem に広がるが、上は広げない — 画面を移るたびに最初の行の高さが変わって見えた。
+         * 余白の外まで広げる画面 (番組表・録画・設定・観る画面の右の列など) も、上はこの値だけ打ち消し、
+         * 最初の行をこの線にそろえる
+         */
+        --dp-page-top: 1rem;
+        padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
     }
     @media (min-width: 640px) {
         ul.links {

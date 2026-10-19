@@ -1197,10 +1197,10 @@
      * 高さも同じぶん足す。広い幅は `FILLED` の `%`、狭い幅は下の `svh`
      */
     .page {
-        --page-h: calc(100% + 2 * var(--dp-gutter));
+        --page-h: calc(100% + var(--dp-page-top) + var(--dp-gutter));
         display: flex;
         flex-direction: column;
-        margin: calc(-1 * var(--dp-gutter));
+        margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
         height: var(--page-h);
     }
     /*
@@ -1226,6 +1226,13 @@
         gap: var(--dp-space-2);
         padding: var(--dp-space-1) var(--dp-space-3);
         border-bottom: 1px solid var(--dp-line);
+    }
+    /* 広い画面では上の余白を画面の頭の余白 (`--dp-page-top`) にし、最初の行 (種別のタブ) をほかの画面とそろえる */
+    @media (min-width: 768px) {
+        .toolbar {
+            padding-top: var(--dp-page-top);
+            padding-bottom: var(--dp-space-2);
+        }
     }
     .types {
         flex: none;
