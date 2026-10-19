@@ -1311,7 +1311,8 @@ button.text-button:hover {
  * 透かしを減らす設定 (`prefers-reduced-transparency`) と、ぼかせないブラウザでは透かさない面 (`--dp-glass-solid`)。
  *
  * - `.glass` … テーマに合わせた面 (下のタブ・検索の候補。ダイアログ `.modal-box` も同じ)
- * - `.glass-stage` … 映像の上の、テーマにかかわらず暗い面 (速さ・再生の設定のメニュー `.overlay-menu` も同じ)
+ * - `.glass-stage` … 映像の上の、テーマにかかわらず暗い面 (速さ・再生の設定のメニュー `.overlay-menu` も同じ)。
+ *   映像の上に新しく浮かぶ箱を置くときはこれを付ける
  */
 :root {
     /*
@@ -1419,7 +1420,8 @@ button.text-button:hover {
  * 同じクラスを使う。Pico の card (`article`) の区切り (本文の下の線・灰色の footer) は使わず、
  * 押すものは右下に並べるだけ (`.modal-actions`。閉じる・取消は `secondary`、主は塗り)。
  * 後ろの幕はぼかさない (`--dp-backdrop`)。Pico の dialog は全面の幕そのものなので、その地を替える。
- * 箱そのものは浮かぶもののガラス (上の `.glass` と同じ面。幕の向こうがぼけて透ける)
+ * 箱そのものは浮かぶもののガラス (上の `.glass` と同じ面。幕の向こうがぼけて透ける)。開く・閉じる動きの間は
+ * `dialog` の透明度がぼかしを止めるので (ぼかしは透明度の掛かった祖先の中で止まる)、面の色だけになる
  */
 dialog {
     -webkit-backdrop-filter: none;
