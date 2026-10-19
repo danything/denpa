@@ -33,7 +33,7 @@ import { chapterArgs, cutArgs, cutList, cutPoints, KEY_SCDET, listKeyframes, pla
 import { type Scan, type ScanReader, scan, scanReader } from './cm-scan';
 import { config } from './config';
 import { affected, now, orm } from './db';
-import { type EncodeProgress, emit } from './events';
+import { type ChaptersChanged, type EncodeProgress, emit } from './events';
 import { usedByOther } from './files';
 import {
     FPS_POINTS,
@@ -1804,6 +1804,7 @@ async function runCmJob(jobId: number): Promise<void> {
         .where(eq(encodeJobs.id, jobId))
         .run();
     emit('recordings');
+    emit('chapters', { recordingId: recording.id } satisfies ChaptersChanged);
 }
 
 /** エンコードしたものが元のTSよりこれ以上短ければ、CM を切ってエンコードしたものとみなす (秒。CM は 15 秒から) */

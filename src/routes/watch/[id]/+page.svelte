@@ -70,6 +70,7 @@
     import { clock, cmNoteWorthShowing, recordedDuration, size } from '#lib/format.js';
     import { CODEC_LABEL } from '#lib/hw.js';
     import { write as remind, read as stored } from '#lib/keep.js';
+    import { liveUpdates } from '#lib/live-updates.svelte.js';
     import { type MkvSource, openMkv } from '#lib/mkv-source.js';
     import { loadOffline } from '#lib/offline.svelte.js';
     import type { OfflineVideo } from '#lib/offline-db.js';
@@ -1269,13 +1270,41 @@
                 chapters = held.chapters;
                 return;
             }
-            const res = await fetch(resolve(`api/recordings/${rec.id}/chapters`));
-            if (!res.ok) return;
-            chapters = (await res.json()).chapters ?? [];
+            await fetchChapters();
         } catch {
             // 出せないだけ。観るのに支障は無い
         }
     }
+
+    async function fetchChapters(): Promise<void> {
+        // 前にこの画面で読んだものを持っていても、変わっていないか確かめさせる (CM検出のやり直しは同じファイルを書き直す)
+        const res = await fetch(resolve(`api/recordings/${rec.id}/chapters`), { cache: 'no-cache' });
+        if (!res.ok) return;
+        chapters = (await res.json()).chapters ?? [];
+    }
+
+    /**
+     * **CM検出をやり直したら、チャプターを取り直す** (`chapters` の通知)。
+     *
+     * 開いたときに1回読んだきりなので、やり直しても CM飛ばしとシークバーの CM が古いままだった。
+     * 差し替えるのはチャプターだけで、位置も再生も触らない。いまいる所が新しく CM になっていて
+     * CM飛ばしが入っていれば、次のコマで `hopCm` がいつもどおり飛ぶ。
+     *
+     * **端末に保存したものは取り直さない。** あちらは落としたときのチャプターを動画と一緒に持っていて、
+     * オフラインでも同じに観られることのほうが大事。新しいものが欲しければ落とし直す
+     */
+    liveUpdates([], {
+        chapters: (payload) => {
+            if ((payload as { recordingId?: unknown }).recordingId !== rec.id) return;
+            void (async () => {
+                const copy = await localLookup;
+                if ((copy?.chapters as { chapters?: unknown } | undefined)?.chapters !== undefined) return;
+                await fetchChapters();
+            })().catch(() => {
+                // 取り直せなければ前のまま。観るのに支障は無い
+            });
+        },
+    });
 
     /**
      * 配信が切れたら繋ぎ直す。**サーバの入れ替え (デプロイ) で切れるため。**

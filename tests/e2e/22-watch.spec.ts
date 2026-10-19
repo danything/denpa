@@ -207,6 +207,59 @@ test.describe('録画を観る', () => {
     });
 
     /**
+     * **CM検出をやり直したら、開いている観る画面もチャプターを取り直す** (`chapters` の通知)。
+     * 位置は動かさない。本物のやり直しは 03 が見ているので、ここではチャプターと通知を差し替える。
+     * 通知の繋ぎは、やり直すまで返さずに待たせておき、やり直したら通知を1つだけ流す
+     */
+    test('CM検出をやり直すと、開いている画面のシークバーにも CM が出る', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        let redone = false;
+        let redo = () => {};
+        const redoing = new Promise<void>((done) => {
+            redo = done;
+        });
+        await page.route('**/api/recordings/*/chapters', (route) =>
+            route.fulfill({
+                json: {
+                    chapters: redone
+                        ? [
+                              { start: 0, end: 10, title: 'CM' },
+                              { start: 10, end: 1000, title: '本編' },
+                          ]
+                        : [],
+                },
+            }),
+        );
+        await page.route('**/api/events', async (route) => {
+            await redoing;
+            await route.fulfill({
+                contentType: 'text/event-stream',
+                // 流し終えたら繋ぎ直させない (繋ぎ直すたびに画面を読み直す)
+                body: `retry: 600000\nevent: chapters\ndata: {"recordingId":${id}}\n\n`,
+            });
+        });
+        await goto(page, `/watch/${id}`);
+
+        const seek = page.getByTestId('watch-seek');
+        const video = page.getByTestId('watch-video');
+        await expect(video).toBeVisible();
+        await video.evaluate((el) => {
+            Object.defineProperty(el, 'duration', { value: 1000 });
+            Object.defineProperty(el, 'currentTime', { value: 200, writable: true });
+            el.dispatchEvent(new Event('loadedmetadata'));
+            el.dispatchEvent(new Event('timeupdate'));
+        });
+        expect(await seek.getAttribute('data-cm')).toBeNull();
+
+        redone = true;
+        redo();
+        await expect(seek).toHaveAttribute('data-cm', '0-10');
+        // チャプターを差し替えただけで、位置はそのまま
+        expect(await video.evaluate((el) => (el as HTMLVideoElement).currentTime)).toBe(200);
+    });
+
+    /**
      * **字幕は canvas に描いて重ねる。** ライブ (`/live`) と同じやり方。
      *
      * 文字を `<track>` に渡す方法は放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。

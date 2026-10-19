@@ -31,7 +31,17 @@ export type DenpaEvent =
      * HTTP でライブを観ているもの (テレビのアプリ) 向け — ストリームの中では伝えられないので、ここで知る。
      * 画面 (WebSocket) は同じものを `lost` の通知で受け取るので、これは読まない
      */
-    | 'yielded';
+    | 'yielded'
+    /**
+     * **録画のチャプターが書き換わった** (CM検出のやり直し。`encoder.runCmJob`)。中身は `ChaptersChanged`。
+     * 開いている観る画面がチャプターを取り直す — 開いたときに読んだきりなので、CM飛ばしとシークバーが古いままになる
+     */
+    | 'chapters';
+
+/** `chapters` イベントの中身 */
+export interface ChaptersChanged {
+    recordingId: number;
+}
 
 /** `yielded` イベントの中身 */
 export interface Yielded {

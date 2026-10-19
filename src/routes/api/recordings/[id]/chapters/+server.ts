@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import { config } from '#lib/server/config.js';
 import { encodedPath, tsChapters } from '#lib/server/playback.js';
 import { recordingOr404 } from '#lib/server/recording.js';
@@ -32,12 +33,18 @@ import { parseChapters } from '#lib/ts/watch.js';
  * `-show_chapters` は見出しだけを読むので、中身を舐めない。実機の30分ものでも
  * 一瞬で返る。**開くたびに呼ぶ**ので、録画ごとに控えを持つほどではない
  * (ファイルが再エンコードされたら中身も変わる)。
+ *
+ * ## 持たせてよいが、毎回確かめさせる
+ *
+ * **CM検出のやり直しは、同じパスのファイルのチャプターを書き直す** (`encoder.runCmJob`)。
+ * パスで1時間持たせていた頃は、やり直したあとも古いチャプターが返っていた。
+ * `no-cache` + ETag (ファイルの大きさと更新時刻) にして、変わっていなければ ffprobe も走らせずに 304 で返す
  */
 
 /** 待ち時間の上限。壊れたファイルで居座らせない */
 const TIMEOUT = 15_000;
 
-export async function GET({ params }) {
+export async function GET({ params, request }) {
     const recording = recordingOr404(params.id);
     const path = encodedPath(recording);
     // エンコードが終われば中身が変わるので控えさせない
@@ -46,6 +53,19 @@ export async function GET({ params }) {
             { chapters: await tsChapters(recording) },
             { headers: { 'Cache-Control': 'no-store' } },
         );
+    }
+
+    const stat = statSync(path, { throwIfNoEntry: false });
+    const tag =
+        stat === undefined ? null : `"${stat.size.toString(36)}-${Math.trunc(stat.mtimeMs).toString(36)}"`;
+    const headers: Record<string, string> = { 'Cache-Control': 'private, no-cache' };
+    if (tag !== null) {
+        headers['ETag'] = tag;
+        // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
+        const asked = (request.headers.get('if-none-match') ?? '')
+            .split(',')
+            .map((t) => t.trim().replace(/^W\//, ''));
+        if (asked.includes(tag)) return new Response(null, { status: 304, headers });
     }
 
     /*
@@ -59,9 +79,5 @@ export async function GET({ params }) {
     );
     const out = new TextDecoder().decode(probed.stdout);
 
-    return Response.json(
-        { chapters: parseChapters(out) },
-        // 同じファイルなら中身は変わらない。再エンコードすればパスごと変わる
-        { headers: { 'Cache-Control': 'private, max-age=3600' } },
-    );
+    return Response.json({ chapters: parseChapters(out) }, { headers });
 }

@@ -213,6 +213,8 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
   別の名前のことがあり、名前の無いものは `—` です。並びは `start` の順
 - チャプターが無ければ空の配列です (CM を切ってエンコードした、CM を見つけられなかった、CM の扱いが「何もしない」、録っている最中)。
   ファイルを読めなかったときも空で返します
+- CM検出をやり直すと、同じ録画でも中身が変わります (通知の `chapters`)。エンコード済みのものは `ETag` 付きの `no-cache` で返すので、
+  `If-None-Match` で確かめれば変わっていないときは 304 です
 - 録画が無い・消したものは 404
 
 ## その場で変換する本数
@@ -393,7 +395,9 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 - 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
 - `programs` は番組表を集めたときのほか、**ライブで開いている局の番組が放送で替わった・延びた**ときにも来ます
   (EIT[p/f] が番組表と違ったとき)。局の一覧 (`GET /api/services`) の `now` を読み直せば、いまの番組に追いつきます
-- `data` は `encode` と `yielded` だけが中身を運び、ほかは `1`。`encode` は `recordingId` `percent` `etaMs` `log`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`
+- `chapters` は**録画のチャプターが書き換わった** (CM検出をやり直した) ことの通知。`data` は `{"recordingId":12}`。
+  その録画を観ていれば [チャプター](#録画のチャプター-get-apirecordingsidchapters) を読み直してください。位置 (秒) の物差しは変わりません
+- `data` は `encode` と `yielded` と `chapters` だけが中身を運び、ほかは `1`。`encode` は `recordingId` `percent` `etaMs` `log`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`
 - `yielded` は**ライブがチューナーを録画に譲った** (チューナーを取り上げられた) ことの通知。`serviceId` の局を観ていた人だけが読みます。
   譲った録画が分かったときだけ来ます
 
