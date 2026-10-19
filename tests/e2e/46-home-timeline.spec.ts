@@ -300,7 +300,7 @@ test.describe('ホームの1本の一覧', () => {
             // 開いたときは線のあたり (頭の印は画面の外)
             await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
             // 描いているうちでいちばん古い行を覚え、頭まで戻して印を画面に入れる。戻した直後の行の高さを覚えておく
-            const first = list.locator('[data-zone="past"] [data-key]').first();
+            const first = list.locator('[data-key]').first();
             const key = await first.getAttribute('data-key');
             const count = await rows(page).count();
             const y = await first.evaluate((row) => {
@@ -311,10 +311,7 @@ test.describe('ホームの1本の一覧', () => {
             });
             await expect.poll(() => rows(page).count()).toBeGreaterThan(count);
             // 足したぶんは上に入り、見ていた行は同じ高さのまま
-            await expect(list.locator('[data-zone="past"] [data-key]').first()).not.toHaveAttribute(
-                'data-key',
-                key!,
-            );
+            await expect(list.locator('[data-key]').first()).not.toHaveAttribute('data-key', key!);
             const row = list.locator(`[data-key="${key}"]`);
             await expect.poll(async () => Math.abs((await row.boundingBox())!.y - y)).toBeLessThan(2);
         } finally {
@@ -393,6 +390,90 @@ test.describe('ホームの1本の一覧', () => {
      * **指で押す端末は行を高くする。** 低い行は押したつもりの隣が開いた。行は 72px 以上、
      * 行の操作は 44px 四方以上。タブレットの縦でも右に欄は出さず、同じ形の行
      */
+    /*
+     * **今日の見出しは線をまたいで1つ。** 今日の録画、「いま」の線、今日の予約が1つの「今日」の下に並び、
+     * 見出しに予約か録画かは書かない。見出しは日ごとの包みの中で貼り付くので、線を越えて今日の予約を
+     * 読んでいる間も「今日」が頭に残る (広い画面は一覧の枠、スマホはページごと動く)
+     */
+    test('今日の見出しは線をまたいで1つで、今日を読む間は頭に貼り付いたまま', async ({ page, stack }) => {
+        const now = Date.now();
+        const midnight = new Date(now).setHours(0, 0, 0, 0);
+        // 今日の中に録画と予約を前後 6 分ずつ置く。0 時の前後で今日に収まらないときは見送る
+        test.skip(now - midnight < 10 * 60_000 || midnight + DAY - now < 10 * 60_000, '0 時の前後');
+        const MIN = 60_000;
+        // 日付が先の録画 (ほかのテストが見分けに使う 2099 年) は、時計のずれと同じく線の上に別の見出しを立てる。
+        // この間だけ消したことにして隠す (`deleted_at = 1` を印に、終わったら戻す)
+        sqlite(
+            `${stack.root}/denpa.db`,
+            `const rec = db.prepare('INSERT INTO recordings (service_id, service_name, name, series, start_at, end_at, finished_at, library_path, watched_at, created_at, updated_at) VALUES (211, ?, ?, ?, ?, ?, ?, ?, ${now}, ${now}, ${now})');
+            const res = db.prepare("INSERT INTO reservations (program_id, service_id, name, start_at, end_at, manual, state, created_at, updated_at) VALUES (?, (SELECT id FROM services ORDER BY id LIMIT 1), ?, ?, ?, 1, 'scheduled', ${now}, ${now})");
+            for (let i = 0; i < 6; i++) {
+                rec.run('BS11', '今日試験の録画' + i, '今日試験の録画' + i, ${now} - (7 - i) * ${MIN}, ${now} - (6 - i) * ${MIN}, ${now} - (6 - i) * ${MIN}, '/media/encoded/seed/t' + i + '.mkv');
+                res.run(980100 + i, '今日試験の予約' + i, ${now} + (i + 1) * ${MIN}, ${now} + (i + 2) * ${MIN});
+            }
+            db.run("UPDATE recordings SET deleted_at = 1 WHERE deleted_at IS NULL AND start_at > ?", [${now}]);`,
+        );
+        try {
+            for (const viewport of [
+                { width: 1366, height: 560 },
+                { width: 390, height: 700 },
+            ]) {
+                await page.setViewportSize(viewport);
+                await goto(page, '/');
+                const today = page.getByTestId('timeline-day').filter({ hasText: /^今日/ });
+                await expect(today).toHaveCount(1);
+                // 予約か録画かは書かない (線の上下で分かる)
+                await expect(today).toHaveText(/^今日\s*\d{1,2}\/\d{1,2}\(.\)$/);
+                // 今日の録画・線・今日の予約が、同じ見出しの包みに入る
+                const block = page.locator('.t-block').filter({ has: today });
+                await expect(block.getByTestId('timeline-now')).toHaveCount(1);
+                await expect(block.locator('[data-key]').filter({ hasText: '今日試験の録画0' })).toHaveCount(
+                    1,
+                );
+                await expect(block.locator('[data-key]').filter({ hasText: '今日試験の予約5' })).toHaveCount(
+                    1,
+                );
+
+                // 今日の頭の録画から、線を越えて今日の最後の予約まで送る。包みの頭が上へ流れたあとも「今日」は頭に貼り付いている
+                const pinned = async (name: string) => {
+                    const row = rows(page).filter({ hasText: name });
+                    await row.evaluate((node) => node.scrollIntoView({ block: 'center' }));
+                    return today.evaluate((node, key) => {
+                        const list = node.closest<HTMLElement>('[data-testid="timeline"]')!;
+                        const box = getComputedStyle(list).overflowY === 'auto' ? list : null;
+                        const top =
+                            box === null
+                                ? Number.parseFloat(getComputedStyle(node).top) || 0
+                                : box.getBoundingClientRect().top;
+                        const head = node.getBoundingClientRect();
+                        const line = [...list.querySelectorAll<HTMLElement>('[data-key]')].find((r) =>
+                            (r.textContent ?? '').includes(key),
+                        )!;
+                        return {
+                            head: head.top - top,
+                            block: node.parentElement!.getBoundingClientRect().top - top,
+                            row: line.getBoundingClientRect().top - head.bottom,
+                        };
+                    }, name);
+                };
+                for (const name of ['今日試験の録画2', '今日試験の予約1', '今日試験の予約5']) {
+                    const at = await pinned(name);
+                    expect(at.row, `${name} は見出しより下`).toBeGreaterThan(0);
+                    expect(at.head, `${name} のとき見出しは見えている`).toBeGreaterThan(-1);
+                    if (at.block < -1)
+                        expect(Math.abs(at.head), `${name} のとき見出しは頭に`).toBeLessThan(2);
+                }
+                // 今日の最後の予約まで送ると、包みの頭 (今日の録画) は上へ流れ、見出しだけが頭に残る
+                expect((await pinned('今日試験の予約5')).block).toBeLessThan(-1);
+            }
+        } finally {
+            sqlite(
+                `${stack.root}/denpa.db`,
+                `db.run("DELETE FROM recordings WHERE name LIKE '今日試験%'"); db.run("DELETE FROM reservations WHERE name LIKE '今日試験%'"); db.run("UPDATE recordings SET deleted_at = NULL WHERE deleted_at = 1");`,
+            );
+        }
+    });
+
     test.describe('タブレットの縦', () => {
         test.use({ hasTouch: true, isMobile: true, viewport: { width: 820, height: 1180 } });
 

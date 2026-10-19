@@ -30,6 +30,7 @@
     import { Paged, sentinel } from '#lib/paging.svelte.js';
     import { cmRedo, encodeSource } from '#lib/source.js';
     import {
+        blocks,
         catchUp,
         countFilters,
         dayName,
@@ -373,7 +374,7 @@
         document.cookie = `${GROUPED_COOKIE}=${on ? '1' : '0'}; path=${resolve('')}; max-age=31536000; samesite=lax`;
     }
 
-    const lines = $derived(timelineLines(parts, { grouped, isOpen }));
+    const lines = $derived(timelineLines(parts, { now: clock, grouped, isOpen }));
     /*
      * **線より上 (録れたもの) だけ少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
      * 開いた直後に一瞬止まって見えた。描くのは線の側 (新しいほう) から `pastPage.shown` 行で、
@@ -384,6 +385,8 @@
     /** 描く頭の行。見出しの途中から描かないよう、見出しまで戻す (`pageStart`) */
     const pastStart = $derived(pageStart(lines.past, pastPage.shown));
     const pastRows = $derived(lines.past.slice(pastStart));
+    /** 描く行を見出しごとに包む (`blocks`)。今日の包みは線と今日の予約まで抱える */
+    const shownBlocks = $derived(blocks([...pastRows, ...lines.now, ...lines.future]));
     /** 線の側から数えて、その行まで描く (開いたとき・絞り込みを替えたときに映したい行) */
     function showPastUpTo(key: string): void {
         const index = lineIndex(lines.past, key);
@@ -598,23 +601,17 @@
                 </div>
             {/if}
             <!--
-                側ごとに包む。日付の見出しは包みの中だけで貼り付くので、片方の側を読んでいる間に
-                もう片方の見出しが頭に残らない
+                見出しごとに包む。見出しは包みの中だけで貼り付くので、前の日の見出しが次の日に残らない。
+                今日の包みは線と今日の予約まで抱えるので、線をまたいでも「今日」が頭に残る
             -->
             <div class="t-rows">
-                <div class="t-zone" data-zone="past">
-                    {#each pastRows as entry (entry.key)}
-                        <TimelineEntry {entry} />
-                    {/each}
-                </div>
-                {#each lines.now as entry (entry.key)}
-                    <TimelineEntry {entry} />
+                {#each shownBlocks as block (block.key)}
+                    <div class="t-block" data-block={block.key}>
+                        {#each block.lines as entry (entry.key)}
+                            <TimelineEntry {entry} />
+                        {/each}
+                    </div>
                 {/each}
-                <div class="t-zone" data-zone="future">
-                    {#each lines.future as entry (entry.key)}
-                        <TimelineEntry {entry} />
-                    {/each}
-                </div>
             </div>
             {#if shownItems.length === 0}
                 {#if items.length === 0}

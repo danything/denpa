@@ -202,7 +202,7 @@
     transform: rotate(90deg);
 }
 /* 開いた番組の頭の押すもの。中身の行と同じだけ下げる */
-.board .t-zone > .group-tools {
+.board .t-block > .group-tools {
     padding: 0 0.5rem 0.5rem 2.25rem;
 }
 .board .poster-img {
@@ -336,8 +336,7 @@
 .board .t-day-name {
     color: var(--pico-color);
 }
-.board .t-day-date,
-.board .t-day-zone {
+.board .t-day-date {
     font-weight: var(--dp-weight);
 }
 /* タブレットの縦 (640〜767px) は頭の1行が上にあるので、その下に貼り付く */
@@ -417,7 +416,7 @@
  * 高さはマウスの画面で 64px、指で押す端末で 72px
  */
 .board .t-rows,
-.board .t-zone {
+.board .t-block {
     display: flex;
     flex-direction: column;
     gap: 0.375rem;

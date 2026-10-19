@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    blocks,
     catchUp,
     countFilters,
     dayName,
@@ -44,25 +45,140 @@ describe('側ごとの並び', () => {
     });
 
     test('日付の見出しはその日の頭に立ち、「いま」の線の下に録画中、その下に予約を置く', () => {
-        const { past, now, future } = timelineLines(sections(items), { grouped: false, isOpen: () => false });
-        const today = dayStart(NOW);
-        const yesterday = dayStart(NOW - 26 * H);
-        expect(keys(past)).toEqual([
-            `day-past-${yesterday}`,
-            'missed-1',
-            `day-past-${today}`,
-            'rec-1',
-            'rec-2',
-        ]);
+        const { past, now, future } = byDayLines(items);
+        expect(keys(past)).toEqual([`day-${yesterday}`, 'missed-1', `day-${today}`, 'rec-1', 'rec-2']);
         expect(keys(now)).toEqual(['now', 'res-now']);
-        expect(keys(future)).toEqual([`day-future-${today}`, 'res-1', 'res-2']);
+        // 今日の予約には見出しを立てない (今日の見出しは線の上の1つだけ)
+        expect(keys(future)).toEqual(['res-1', 'res-2']);
     });
 
-    test('何も無くても「いま」の線は残す', () => {
-        const { past, now, future } = timelineLines(sections([]), { grouped: false, isOpen: () => false });
-        expect(keys(now)).toEqual(['now']);
+    test('何も無くても「いま」の線は残し、今日の見出しは線の上に立てる', () => {
+        const { past, now, future } = byDayLines([]);
+        expect(keys(now)).toEqual([`day-${today}`, 'now']);
         expect(past).toEqual([]);
         expect(future).toEqual([]);
+    });
+});
+
+/** 日ごとに並べ、つないで包む */
+function byDayLines(list: TimelineItem[], now = NOW) {
+    return timelineLines(sections(list), { now, grouped: false, isOpen: () => false });
+}
+const all = (lines: ReturnType<typeof byDayLines>) => [...lines.past, ...lines.now, ...lines.future];
+const today = dayStart(NOW);
+const yesterday = dayStart(NOW - 26 * H);
+const tomorrow = dayStart(NOW + 24 * H);
+
+describe('今日の見出しは線をまたいで1つ', () => {
+    test('今日の録画・線と録画中・今日の予約が1つの見出しの下に並び、ほかの日は上と下', () => {
+        const lines = byDayLines([
+            item('rec-old', 'past', NOW - 26 * H),
+            item('rec-1', 'past', NOW - 3 * H),
+            item('res-now', 'now', NOW - H),
+            item('res-1', 'future', NOW + H),
+            item('res-next', 'future', NOW + 24 * H),
+        ]);
+        expect(blocks(all(lines)).map((block) => [block.key, keys(block.lines)])).toEqual([
+            [`day-${yesterday}`, [`day-${yesterday}`, 'rec-old']],
+            [`day-${today}`, [`day-${today}`, 'rec-1', 'now', 'res-now', 'res-1']],
+            [`day-${tomorrow}`, [`day-${tomorrow}`, 'res-next']],
+        ]);
+    });
+
+    test('今日の録画が無ければ、見出しは線のすぐ上に立つ', () => {
+        const lines = byDayLines([item('rec-old', 'past', NOW - 26 * H), item('res-1', 'future', NOW + H)]);
+        expect(keys(lines.past)).toEqual([`day-${yesterday}`, 'rec-old']);
+        expect(keys(lines.now)).toEqual([`day-${today}`, 'now']);
+        expect(keys(lines.future)).toEqual(['res-1']);
+    });
+
+    test('今日に録画も予約も無ければ、見出しは線だけを抱える', () => {
+        const lines = byDayLines([
+            item('rec-old', 'past', NOW - 26 * H),
+            item('res-next', 'future', NOW + 24 * H),
+        ]);
+        expect(blocks(all(lines)).map((block) => keys(block.lines))).toEqual([
+            [`day-${yesterday}`, 'rec-old'],
+            [`day-${today}`, 'now'],
+            [`day-${tomorrow}`, 'res-next'],
+        ]);
+    });
+
+    test('予約だけ・未視聴だけに絞っても、今日の見出しは1つ', () => {
+        const reservations = byDayLines([
+            item('res-1', 'future', NOW + H),
+            item('res-2', 'future', NOW + 2 * H),
+        ]);
+        expect(keys(all(reservations))).toEqual([`day-${today}`, 'now', 'res-1', 'res-2']);
+        const unfinished = byDayLines([item('rec-1', 'past', NOW - 3 * H)]);
+        expect(keys(all(unfinished))).toEqual([`day-${today}`, 'rec-1', 'now']);
+    });
+
+    test('見出しは1日に1つ (鍵が重ならない)', () => {
+        const lines = all(
+            byDayLines([
+                item('rec-1', 'past', NOW - 3 * H),
+                item('res-now', 'now', NOW - H),
+                item('res-1', 'future', NOW + H),
+                item('res-next', 'future', NOW + 24 * H),
+            ]),
+        );
+        const days = lines.filter((line) => line.kind === 'day').map((line) => line.key);
+        expect(new Set(days).size).toBe(days.length);
+        expect(days).toEqual([`day-${today}`, `day-${tomorrow}`]);
+    });
+
+    test('始まったのに録画に入っていない昨日の予約は、線の下の今日に入れる', () => {
+        const lines = byDayLines([
+            item('res-late', 'future', NOW - 13 * H),
+            item('res-1', 'future', NOW + H),
+        ]);
+        expect(keys(all(lines))).toEqual([`day-${today}`, 'now', 'res-late', 'res-1']);
+    });
+
+    test('日付が先の録れたもの (時計のずれ) は線の上に見出しを立て、鍵は予約の側と重ならない', () => {
+        const lines = byDayLines([
+            item('rec-1', 'past', NOW - 3 * H),
+            item('rec-ahead', 'past', NOW + 24 * H),
+            item('res-next', 'future', NOW + 24 * H),
+        ]);
+        expect(keys(all(lines))).toEqual([
+            `day-${today}`,
+            'rec-1',
+            `day-past-${tomorrow}`,
+            'rec-ahead',
+            `day-now-${today}`,
+            'now',
+            `day-${tomorrow}`,
+            'res-next',
+        ]);
+        const days = all(lines)
+            .filter((line) => line.kind === 'day')
+            .map((line) => line.key);
+        expect(new Set(days).size).toBe(days.length);
+    });
+
+    test('0 時を越えて読み直すと、前の日の行は「昨日」の見出しに移り、今日の見出しは線の上に立つ', () => {
+        const list = [item('rec-1', 'past', NOW - 3 * H), item('res-1', 'future', NOW + 13 * H)];
+        const after = byDayLines(list, dayStart(NOW + 24 * H) + 5 * 60_000);
+        expect(keys(all(after))).toEqual([`day-${today}`, 'rec-1', `day-${tomorrow}`, 'now', 'res-1']);
+        expect(blocks(all(after)).map((block) => block.key)).toEqual([`day-${today}`, `day-${tomorrow}`]);
+    });
+
+    test('まとめて表示は側ごとに包み、線と録画中は見出しの無い包みにする', () => {
+        const lines = timelineLines(
+            sections([
+                item('rec-1', 'past', NOW - 3 * H),
+                item('res-now', 'now', NOW - H),
+                item('res-1', 'future', NOW + H),
+            ]),
+            { now: NOW, grouped: true, isOpen: () => false },
+        );
+        expect(blocks(all(lines)).map((block) => [block.key, keys(block.lines)])).toEqual([
+            ['side-past', ['side-past', 'rec-1']],
+            ['now', ['now', 'res-now']],
+            ['side-future', ['side-future', 'res-1']],
+        ]);
     });
 });
 
@@ -74,7 +190,7 @@ describe('録れたものを線の側から描く頭', () => {
         item('rec-4', 'past', NOW - 3 * H),
         item('rec-5', 'past', NOW - 2 * H),
     ];
-    const { past } = timelineLines(sections(items), { grouped: false, isOpen: () => false });
+    const { past } = timelineLines(sections(items), { now: NOW, grouped: false, isOpen: () => false });
 
     test('日付の途中に落ちたら、その日の見出しまで戻す', () => {
         // [day, rec-1, rec-2, day, rec-3, day, rec-4, rec-5]。末尾 1 行なら今日の見出しから
@@ -92,7 +208,7 @@ describe('録れたものを線の側から描く頭', () => {
                 item('rec-a1', 'past', NOW - 40 * H, 'A'),
                 item('rec-a2', 'past', NOW - 30 * H, 'A'),
             ]),
-            { grouped: true, isOpen: () => true },
+            { now: NOW, grouped: true, isOpen: () => true },
         ).past;
         expect(keys(grouped)).toEqual([
             'side-past',
@@ -124,13 +240,17 @@ describe('まとめて表示', () => {
     ];
 
     test('同じ番組でも、予約と録画で側ごとに別の見出しを立てる', () => {
-        const { past, future } = timelineLines(sections(items), { grouped: true, isOpen: () => false });
+        const { past, future } = timelineLines(sections(items), {
+            now: NOW,
+            grouped: true,
+            isOpen: () => false,
+        });
         expect(keys(past)).toEqual(['side-past', 'rec-n', 'past-group-アニメ']);
         expect(keys(future)).toEqual(['side-future', 'future-group-アニメ', 'res-x', 'future-group-ドラマ']);
     });
 
     test('予約の番組は次の回の位置に置く (いちばん早い予約が線のすぐ下)', () => {
-        const { future } = timelineLines(sections(items), { grouped: true, isOpen: () => false });
+        const { future } = timelineLines(sections(items), { now: NOW, grouped: true, isOpen: () => false });
         const heads = future.filter((line) => line.kind === 'head');
         // アニメの次の回 (2時間後) はドラマの次の回 (10時間後) より早いので、線の側 (上) に来る
         expect(heads.map((line) => line.key)).toEqual(['future-group-アニメ', 'future-group-ドラマ']);
@@ -138,6 +258,7 @@ describe('まとめて表示', () => {
 
     test('開くのは側ごと。中身は放送順', () => {
         const { past, future } = timelineLines(sections(items), {
+            now: NOW,
             grouped: true,
             isOpen: (zone, group) => zone === 'future' && group === 'アニメ',
         });
@@ -221,7 +342,11 @@ describe('開いたときに映すもの', () => {
 
     test('閉じた番組の中にあれば、その見出しの位置', () => {
         const grouped = [item('rec-a2', 'past', NOW - H, 'A'), item('rec-a1', 'past', NOW - 9 * H, 'A')];
-        const { past: lines } = timelineLines(sections(grouped), { grouped: true, isOpen: () => false });
+        const { past: lines } = timelineLines(sections(grouped), {
+            now: NOW,
+            grouped: true,
+            isOpen: () => false,
+        });
         expect(lineIndex(lines, 'rec-a1')).toBe(1);
         expect(lineIndex(lines, 'rec-zz')).toBe(-1);
     });

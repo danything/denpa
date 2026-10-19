@@ -7,13 +7,22 @@
  * - **「いま」の線** と、その下に録画中の行
  * - **これからの予約** — 近い順。いちばん早い予約が録画中のすぐ下、遠い先がいちばん下
  *
- * 日付の見出しはその日の頭に立ち、見出しの下も時刻の早い順。どちらの側も「いま」に近いものが
- * 線の近くに来るので、開いて線を映せば、最後に録れたものと次に録るものが同じ画面に入る。
+ * 日付の見出しはその日の頭に立ち、見出しの下も時刻の早い順。**見出しは1日に1つ** — 今日の録画、
+ * 「いま」の線と録画中、今日の予約を、1つの「今日」の下に並べる (線は見出しの下)。今日の録画が無ければ
+ * 見出しは線のすぐ上に立つ (予約も録画中も無ければ、線だけを抱えて立つ)。画面は見出しごとに包み (`blocks`)、
+ * 見出しは包みの中で貼り付くので、今日を読む間は線をまたいでも「今日」が頭に残る。
+ * どちらの側も「いま」に近いものが線の近くに来るので、開いて線を映せば、最後に録れたものと次に録るものが
+ * 同じ画面に入る。
+ *
+ * どの日を今日とするかは描いた時刻 (`LineOptions.now`) で決める。「いま」の時刻や「今日」「昨日」の呼び名と
+ * 同じ物差しなので、開いたまま 0 時を越えても食い違わない。読み直すと、前の日の行は「昨日」の下に移る。
  *
  * **まとめて表示** (`#lib/grouping.ts`) は両側に効く。同じ番組でも、録画は線の上、予約は線の下と
  * **側ごとに別の見出し**を立てる。1つにまとめると、見出しの位置が時間の並びから外れる
  * (線の下にあるのに中身は過去の回) うえ、開いたときに線をまたいで中身が並ぶため。
- * 見出しの位置は**その側でいちばん線に近い回**で決める (予約は次の回、録画は最新の回)
+ * 見出しの位置は**その側でいちばん線に近い回**で決める (予約は次の回、録画は最新の回)。
+ * 番組の見出しには日付が無いので、側の見出し (「録画」「これからの予約」) を貼り付けて、
+ * 線から離れても、いまどちらの側を読んでいるかを見せる
  */
 
 import { type Groupable, type GroupEntry, groupBySeries, groupLines, type SeriesGroup } from './grouping';
@@ -129,8 +138,8 @@ export function sections<T extends TimelineItem>(items: T[]): Sections<T> {
 
 /** 画面に描く1行 */
 export type TimelineLine<T extends TimelineItem> =
-    /** 日付の見出し。`at` はその日の 0 時 */
-    | { kind: 'day'; key: string; zone: 'future' | 'past'; at: number }
+    /** 日付の見出し。`at` はその日の 0 時。1日に1つ (今日は線をまたいで1つ) */
+    | { kind: 'day'; key: string; at: number }
     /** まとめて表示のときの側の見出し (「予約」「録画」) */
     | { kind: 'side'; key: string; zone: 'future' | 'past' }
     /** 「いま」の線 */
@@ -164,14 +173,26 @@ export function dayName(at: number, now: number): '今日' | '明日' | '昨日'
     return null;
 }
 
-/** 日付の見出しを挟んで並べる */
-function byDay<T extends TimelineItem>(items: T[], zone: 'future' | 'past'): TimelineLine<T>[] {
+/**
+ * 日付の見出しを挟んで並べる。見出しの鍵は `day-<その日の 0 時>` で、1日に1つ。
+ *
+ * - 予約の側には今日の見出しを立てない (今日の見出しは線の上に立つ)。放送が始まったのに録画に入っていない
+ *   予約 (日付が今日より前) も今日に入れる — 線の下に前の日の見出しが立たないように
+ * - 録れたものの日付が今日より先 (時計のずれ) なら、その日の見出しは側を付けた鍵にする。予約の側の
+ *   同じ日の見出しと鍵が重ならないように (線の上と下に1つずつ立つ)
+ */
+function byDay<T extends TimelineItem>(
+    items: T[],
+    zone: 'future' | 'past',
+    today: number,
+): TimelineLine<T>[] {
     const lines: TimelineLine<T>[] = [];
-    let last: number | null = null;
+    let last: number | null = zone === 'future' ? today : null;
     for (const item of items) {
-        const day = dayStart(item.at);
+        const day = zone === 'future' ? Math.max(dayStart(item.at), today) : dayStart(item.at);
         if (day !== last) {
-            lines.push({ kind: 'day', key: `day-${zone}-${day}`, zone, at: day });
+            const key = zone === 'past' && day > today ? `day-past-${day}` : `day-${day}`;
+            lines.push({ kind: 'day', key, at: day });
             last = day;
         }
         lines.push({ kind: 'row', key: item.key, item, nested: false });
@@ -205,6 +226,8 @@ function bySeries<T extends TimelineItem>(
 
 /** 時間軸の描き方 */
 export interface LineOptions {
+    /** 描いた時刻。どの日を今日とするか (今日の見出しを線の上に立てる) */
+    now: number;
     /** まとめて表示 */
     grouped: boolean;
     /** その側のその番組を開いているか (まとめて表示のとき) */
@@ -213,17 +236,66 @@ export interface LineOptions {
 
 /**
  * 描く行に開く。上の側 (録れたもの)、「いま」の線と録画中、下の側 (予約) の3つに分けて返す —
- * 上の側だけ、線の側から古いほうへ少しずつ描くため (`pageStart`)。録画中と予約は全部描く
+ * 上の側だけ、線の側から古いほうへ少しずつ描くため (`pageStart`)。録画中と予約は全部描く。
+ *
+ * 日ごとのとき、今日の見出しは1つだけ。今日の録画があればその頭 (`past` の中)、無ければ線の上 (`now` の頭)。
+ * 予約の側には今日の見出しを立てない (今日の予約は線と録画中の下にそのまま続く)
  */
 export function timelineLines<T extends TimelineItem>(
     parts: Sections<T>,
     options: LineOptions,
 ): { past: TimelineLine<T>[]; now: TimelineLine<T>[]; future: TimelineLine<T>[] } {
-    const side = (items: T[], zone: 'future' | 'past') =>
-        options.grouped ? bySeries(items, zone, options.isOpen) : byDay(items, zone);
     const now: TimelineLine<T>[] = [{ kind: 'now', key: 'now' }];
     for (const item of parts.now) now.push({ kind: 'row', key: item.key, item, nested: false });
-    return { past: side(parts.past, 'past'), now, future: side(parts.future, 'future') };
+    if (options.grouped) {
+        return {
+            past: bySeries(parts.past, 'past', options.isOpen),
+            now,
+            future: bySeries(parts.future, 'future', options.isOpen),
+        };
+    }
+    const today = dayStart(options.now);
+    const past = byDay(parts.past, 'past', today);
+    const heads = past.filter((line) => line.kind === 'day');
+    if (heads.at(-1)?.key !== `day-${today}`) {
+        // 今日の録画のあとに日付が先の録れたもの (時計のずれ) が挟まったときだけ、線の上にもう1つ立てる
+        const again = heads.some((line) => line.key === `day-${today}`);
+        now.unshift({ kind: 'day', key: again ? `day-now-${today}` : `day-${today}`, at: today });
+    }
+    return { past, now, future: byDay(parts.future, 'future', today) };
+}
+
+/** 画面で1つに包む行 (見出しは包みの中だけで貼り付く) */
+export interface TimelineBlock<T extends TimelineItem> {
+    key: string;
+    lines: TimelineLine<T>[];
+}
+
+/**
+ * 描く行 (上の側・線と録画中・下の側をつないだもの) を、見出しごとの包みに分ける。日付と側の見出しで包みを替える。
+ * 日ごとのときは、今日の包みが線と今日の予約まで抱える (今日の見出しが線をまたいで貼り付く)。
+ * まとめて表示のときは「録画」の包みを線の手前で閉じ、線と録画中は見出しの無い包みにする
+ * (線より下で「録画」が頭に残らないように)
+ */
+export function blocks<T extends TimelineItem>(lines: TimelineLine<T>[]): TimelineBlock<T>[] {
+    const out: TimelineBlock<T>[] = [];
+    let head: TimelineLine<T>['kind'] | null = null;
+    for (const line of lines) {
+        const opens =
+            line.kind === 'day' ||
+            line.kind === 'side' ||
+            (line.kind === 'now' && head !== 'day') ||
+            out.length === 0;
+        if (opens) {
+            out.push({
+                key: line.kind === 'row' || line.kind === 'head' ? `block-${line.key}` : line.key,
+                lines: [],
+            });
+            head = line.kind;
+        }
+        out.at(-1)?.lines.push(line);
+    }
+    return out;
 }
 
 /**
