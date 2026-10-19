@@ -201,9 +201,9 @@
         return rec.watched_at === null && rec.resume_ms === null && watchLink(rec) !== null;
     }
 
-    /** 録画・番組からルールを作る入口。`/rules` が検索の画面の「ルールとして保存」へ送る (`rules/+page.server.ts` の `movedTo`) */
+    /** 録画・番組からルールを作る入口。検索の画面の「ルールとして保存」へ直接行く (`search/+page.server.ts` の `?from=`) */
     function ruleFrom(kind: 'recording' | 'program', id: number): string {
-        return resolve(`rules?${kind}=${id}`);
+        return resolve(`search?${new URLSearchParams({ from: `${kind}:${id}` })}`);
     }
 
     /**
@@ -594,7 +594,7 @@
                         <p class="empty-hint">番組表から予約するか、ルールを作ると自動で入ります</p>
                         <div class="empty-actions">
                             <a class="button small" href={resolve('guide')}>番組表を開く</a>
-                            <a class="button secondary outline small" href={resolve('rules')}>ルールを作る</a>
+                            <a class="button secondary outline small" href={resolve('search')}>ルールを作る</a>
                         </div>
                     </div>
                 {:else}

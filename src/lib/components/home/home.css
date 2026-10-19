@@ -311,14 +311,11 @@
 .board .t-toolbar .t-chips > .t-chip:hover {
     --pico-background-color: var(--dp-btn-tonal-hover);
 }
-/* 選んでいるチップは主のボタンと同じ (字の色で塗る) */
+/* 選んでいるチップは色を付けず、一覧の選んだ行と同じ地に太字 (`app.css` の `.chip` と同じ。青は焦点とリンクだけ) */
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
-    --pico-background-color: var(--dp-btn-solid);
-    --pico-color: var(--dp-btn-solid-text);
-}
-.board .t-chip[aria-pressed="true"] .num {
-    color: inherit;
-    opacity: 0.7;
+    --pico-background-color: var(--dp-row-selected);
+    --pico-color: var(--dp-fg);
+    font-weight: var(--dp-weight-bold);
 }
 /* 日付の見出し。小さく沈めた字で、一覧の頭に貼り付く */
 .board .t-day {

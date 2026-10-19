@@ -42,7 +42,7 @@
             <span data-testid="rule-name">
                 ルール:
                 {#if rule.rule_id !== null}
-                    <a href={resolve(`rules?edit=${rule.rule_id}`)} title={rule.rule_name ?? undefined}>{rule.rule_name}</a>
+                    <a href={resolve(`search?rule=${rule.rule_id}`)} title={rule.rule_name ?? undefined}>{rule.rule_name}</a>
                 {:else}
                     (削除済み)
                 {/if}

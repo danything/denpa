@@ -72,7 +72,7 @@ test.describe('テレビのペアリング', () => {
 
     test('知らないペアリングコードの画面は、そうと言う', async ({ page }) => {
         await goto(page, '/device?code=ZZZZ-ZZZZ');
-        await expect(page.getByTestId('device-card')).toContainText('見つかりません');
+        await expect(page.getByTestId('device-page')).toContainText('見つかりません');
     });
 });
 

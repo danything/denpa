@@ -67,7 +67,7 @@ test.describe('ホームと画面遷移', () => {
         // 別のグループの節を押すと、その画面のその節へ
         await nav.getByTestId('settings-nav-channels').click();
         await page.waitForURL(/\/settings\/reception#channels$/);
-        await expect(page.getByTestId('channel-card')).toBeInViewport();
+        await expect(page.getByTestId('channel-section')).toBeInViewport();
         await expect(page).toHaveTitle('受信 - 設定 - denpa');
         await expect(nav.getByTestId('settings-nav-reception')).toHaveAttribute('aria-current', 'page');
         await expect(nav.getByTestId('settings-nav-channels')).toHaveAttribute('aria-current', 'location');
@@ -90,7 +90,7 @@ test.describe('ホームと画面遷移', () => {
         await goto(page, '/');
         await goto(page, '/settings/reception#logos');
         await page.waitForURL(/\/settings\/reception#channels$/);
-        await expect(page.getByTestId('channel-card')).toBeInViewport();
+        await expect(page.getByTestId('channel-section')).toBeInViewport();
         await expect(nav.getByTestId('settings-nav-logos')).toHaveCount(0);
         const old = await page.request.get('/tuners', { maxRedirects: 0 });
         expect(old.status()).toBe(308);
@@ -110,7 +110,7 @@ test.describe('ホームと画面遷移', () => {
         await page.getByTestId('settings-nav-reception').click();
         await page.waitForURL(/\/settings\/reception$/);
         await expect(page.getByTestId('settings-nav')).toBeHidden();
-        await expect(page.getByTestId('tuner-card')).toBeVisible();
+        await expect(page.getByTestId('tuner-section')).toBeVisible();
         // 上の行から節へ飛ぶ。行は巻いてもヘッダーの下に残る
         await page.getByTestId('settings-jump-broadcast').click();
         await page.waitForURL(/\/settings\/reception#broadcast$/);
@@ -141,7 +141,7 @@ test.describe('ホームと画面遷移', () => {
          * わざわざ別の枠を作って見るところを増やさない
          * (エージェントの死活も、繋がらなければその枠に理由が出る)
          */
-        const card = page.getByTestId('tuner-card');
+        const card = page.getByTestId('tuner-section');
         // 相手待ちなので後から流れてくる
         await expect(card.getByTestId('status-card-reader')).toHaveText('正常');
         /*

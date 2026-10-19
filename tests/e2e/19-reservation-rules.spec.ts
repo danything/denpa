@@ -136,10 +136,10 @@ test.describe('ルールで立った予約', () => {
             await expect(recording).toHaveCount(1);
         }).toPass({ timeout: 120_000 });
         await expect(recording.getByTestId('rule-name')).toContainText('テストアニメ');
-        // ルール名はそのまま編集への入口。予約の行と同じ形
+        // ルール名はそのまま編集 (検索の画面) への入口。予約の行と同じ形
         await expect(recording.getByTestId('rule-name').getByRole('link')).toHaveAttribute(
             'href',
-            /\/rules\?edit=\d+$/,
+            /\/search\?rule=\d+$/,
         );
 
         await goto(page, '/rules');

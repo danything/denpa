@@ -94,7 +94,7 @@
     スキャンの欄を出す (局が無いときの案内 `ChannelNotice` の行き先がここ)
 -->
 <div class="sections">
-    <section class="section" data-testid="channel-card">
+    <section class="section" data-testid="channel-section">
         <div class="section-head spread">
             <h2>受信できるチャンネル</h2>
             {#if coverage.length > 0}

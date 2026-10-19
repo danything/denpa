@@ -439,9 +439,11 @@
         color: var(--dp-muted);
         font-size: var(--dp-text-sm);
     }
+    /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (一覧の選んだ行の地に太字) */
     .chip-button.on {
-        background: var(--dp-subtle);
-        color: inherit;
+        background: var(--dp-row-selected);
+        color: var(--dp-fg);
+        font-weight: var(--dp-weight-bold);
     }
     .rules-bar select {
         flex: none;

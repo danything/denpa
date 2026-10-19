@@ -82,7 +82,7 @@
     カードリーダーも同じ機材の話なので、同じ節の下に置く
 -->
 <div class="sections">
-<section class="section" data-testid="tuner-card">
+<section class="section" data-testid="tuner-section">
     <div class="section-head">
         <h2>チューナー</h2>
         <SaveNote status={configSave} />

@@ -16,7 +16,7 @@ test.describe('設定のチューナーとチャンネル', () => {
         await syncEpg(request);
         await goto(page, '/settings/reception');
 
-        const card = page.getByTestId('channel-card');
+        const card = page.getByTestId('channel-section');
         // 何分もかかって空きチューナーを全部使うので、そうと分かるようにしておく (「詳しく」の中)
         await expect(card).toContainText('空いているチューナーを全部使います');
 
@@ -128,14 +128,13 @@ test.describe('設定のチューナーとチャンネル', () => {
          * **1行に1局。** ロゴ (局ロゴ・CMロゴ) は局ごとのものなので、同じ表の局の行に列で並べる
          * (別の表で種別と局名を繰り返さない)。種別と ch はチャンネルの局の数だけ縦につなぐ
          */
-        const card = page.getByTestId('channel-card');
+        const card = page.getByTestId('channel-section');
         await expect(card.getByRole('columnheader', { name: '局ロゴ' })).toBeVisible();
         await expect(card.getByRole('columnheader', { name: 'CMロゴ' })).toBeVisible();
         const first = channels.getByTestId('channel-row').first();
         const channel = await first.getAttribute('data-channel');
         const rows = channels.locator(`[data-testid="channel-row"][data-channel="${channel}"]`);
         await expect(first.locator('td').first()).toHaveAttribute('rowspan', String(await rows.count()));
-        await expect(page.getByTestId('logo-card')).toHaveCount(0);
 
         /*
          * どこまで進んだかを1行で出す。時間がかかるのは1チャンネルずつ選局して
@@ -185,10 +184,9 @@ test.describe('チューナーの設定', () => {
          * **空きと設定は1つの表。** 1台に1行で、名前・種別・使うかが2つの表に2度ずつ出ていた頃の
          * 「チューナーの設定」の表は無い
          */
-        const card = page.getByTestId('tuner-card');
+        const card = page.getByTestId('tuner-section');
         const rows = card.getByTestId('tuner-list').getByTestId('tuner-row');
         await expect(rows).toHaveCount(4);
-        await expect(page.getByTestId('tuner-config-card')).toHaveCount(0);
         await expect(card.locator('table')).toHaveCount(2); // チューナーとカードリーダー
 
         // 1台目のスイッチを外す (使わない)。**変えたらその場で保存する**
@@ -242,7 +240,7 @@ test.describe('チューナーの設定', () => {
     test('種別を1つも選ばない行は断る', async ({ page }) => {
         await goto(page, '/settings/reception');
 
-        const card = page.getByTestId('tuner-card');
+        const card = page.getByTestId('tuner-section');
         // 最後の 1 つを外すと、その場で断られてすぐ元に戻る。そこだけは押すだけにする (外れたままを待たない)
         const checked = card.locator('input[name^="type.0."]:checked');
         while ((await checked.count()) > 1) await checked.first().uncheck();

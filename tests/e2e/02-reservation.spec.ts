@@ -229,7 +229,7 @@ test.describe('予約の細かい指定', () => {
         await goto(page, '/guide?type=GR');
         const [target] = await upcoming(page);
         const day = await shownDay(page);
-        // 行き先は検索の画面の「ルールとして保存」(シリーズ名を言葉にして出直す)。ホームの `/rules?program=` も送られてくる
+        // 行き先は検索の画面の「ルールとして保存」(シリーズ名を言葉にして出直す)。ホームの「ルールを作る」も同じ形で直接来る
         const ruleUrl = new RegExp(`/search\\?(.*&)?from=program%3A${target.programId}(&|$)`);
         const detail = page.getByTestId('program-detail');
         await cellOf(page, target.programId).getByTestId('program-button').click();

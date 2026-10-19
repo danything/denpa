@@ -21,11 +21,11 @@ const FORM_KEYS = [
 ];
 
 /**
- * **前の URL は検索の画面へ送る。** ブックマークや、ホームの詳細の「ルールを作る」(`?recording=` / `?program=`)、
- * ルール名のリンク (`?edit=`) がそのまま効くように
+ * **前の URL は検索の画面へ送る。** ブックマークや、前の版のホームの「ルールを作る」(`?recording=` / `?program=`)・
+ * ルール名のリンク (`?edit=`) がそのまま効くように。今のリンクは送り先を直接指す
  *
  * - `?edit=<ID>` → `/search?rule=<ID>`
- * - `?program=<ID>` / `?recording=<ID>` → `/search?from=program:<ID>` (シリーズ名を言葉にして出直す)
+ * - `?program=<ID>` / `?recording=<ID>` → `/search?from=program:<ID>` / `from=recording:<ID>` (シリーズ名を言葉にして出直す)
  * - `?keyword=` など書く欄の値 → `/search?q=<キーワード>&…` (書く欄はその値で始まる)
  * - `?new` → `/search`
  */

@@ -25,7 +25,7 @@
 
 <svelte:head><title>テレビのペアリング - denpa</title></svelte:head>
 
-<div class="solo" data-testid="device-card">
+<div class="solo" data-testid="device-page">
     {#if data.viaToken || form?.viaToken}
         <h1>アクセストークンではペアリングできません</h1>
         <p>テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン) で開いてください。</p>
