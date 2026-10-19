@@ -7,7 +7,7 @@
      * 番組の詳細を出すモーダル。
      *
      * 番組表・ホーム (録画)・検索のどこから開いても同じ見え方にするため、ここに寄せてある。
-     * 下に並べるボタンと、番組名の上に出す状態 (予約済み・放送終了など) だけは開いた場所で違うので
+     * 下に並べるボタンと、時刻の行に添える状態 (予約済み・放送終了など) だけは開いた場所で違うので
      * snippet で受ける (`actions`・`status`)。
      *
      * **閉じるは左下の「閉じる」** (幕を押しても Esc でも閉じる)。主のボタン (再生・予約) は右下に
@@ -35,7 +35,7 @@
         /** エンコードしたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
         fps?: number | null;
         actions?: Snippet | undefined;
-        /** 番組名の上に出す状態のバッジ (予約済み・放送終了)。押すものの並びには混ぜない */
+        /** 時刻の行の末尾に添える状態のバッジ (予約済み・放送終了。`ProgramFacts`)。押すものの並びには混ぜない */
         status?: Snippet | undefined;
         /**
          * 箱に付ける画面の切り替えの名前 (View Transitions)。押した要素から広げて開くとき
@@ -80,10 +80,7 @@
             層の外の規則では勝てず、要素に直に書いたものだけが勝つ
         -->
         <div class="detail-body" style:--detail-bottom={`calc(${actionsHeight}px + 2 * var(--dp-space-5))`} style:animation-duration|important="auto">
-            {#if status}
-                <div class="cluster detail-status">{@render status()}</div>
-            {/if}
-            <ProgramFacts {program} {notes} {cmNote} {fps} />
+            <ProgramFacts {program} {notes} {cmNote} {fps} {status} />
         </div>
 
         <div class="detail-actions modal-actions" bind:offsetHeight={actionsHeight}>
@@ -202,9 +199,6 @@
     }
     .detail-close {
         margin-inline-end: auto;
-    }
-    .detail-status {
-        margin-bottom: var(--dp-space-2);
     }
     /* 狭い画面では下から出る一枚 (箱の形は `app.css` の `.modal-box`) */
     @media (max-width: 639.98px) {

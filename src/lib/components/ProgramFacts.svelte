@@ -1,4 +1,5 @@
 <script lang="ts">
+    import type { Snippet } from 'svelte';
     import { audioLabel, genreLabel, videoLabel } from '#lib/arib.js';
     import { COPY_NEVER_REASON, dateTime, duration, linkify, time } from '#lib/format.js';
     import type { ProgramDetail } from '#lib/types.js';
@@ -16,6 +17,7 @@
         notes = [],
         cmNote = null,
         fps = null,
+        status,
     }: {
         program: ProgramDetail;
         /**
@@ -33,6 +35,11 @@
          * `program` とは別に渡す — 番組詳細は EPG から引けると差し替わる (`detail.open`)
          */
         fps?: number | null;
+        /**
+         * 時刻の行の末尾に添える状態のバッジ (予約済み・放送終了)。番組名の上に 1 行取っていた頃は、
+         * バッジ 1 つのために中身が下がった。時刻と状態を 1 か所で読める (モーダルから渡すときだけ)
+         */
+        status?: Snippet | undefined;
     } = $props();
 
     /** 詳細情報。EIT から読み取った「出演者」などの見出し付きテキスト */
@@ -76,6 +83,9 @@
 <p class="meta small muted num">
     <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)} 〜 {time(program.end_at)}
     ({duration(program.start_at, program.end_at)})
+    {#if status}
+        <span class="meta-status">{@render status()}</span>
+    {/if}
 </p>
 
 <!-- EPG が持っている符号は、そのままでは読めないので言葉に直して出す -->
@@ -150,6 +160,14 @@
     }
     .meta {
         margin-top: 0.25rem;
+    }
+    /* バッジは時刻の続きに置き、入りきらなければ次の行へ回る (字の途中では折らない) */
+    .meta-status {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-inline-start: 0.5rem;
+        vertical-align: middle;
     }
     .badges {
         display: flex;
