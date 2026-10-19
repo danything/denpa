@@ -234,6 +234,8 @@ describe('ffmpeg の引数', () => {
         expect(joined).toContain('-copyts -f mpegts -i pipe:0 -map 0:p:1024:v:0 -map 0:p:1024:a:0?');
         expect(joined).toContain('-vf bwdif');
         expect(joined).toContain('-fps_mode passthrough');
+        // 上限と passthrough を一緒に渡すと ffmpeg が断る (録画 467 で変換が始まらなかった)
+        expect(args).not.toContain('-fpsmax');
         expect(joined).toContain('-af pan=stereo|c0=c1|c1=c1');
         expect(args[args.indexOf('-output_ts_offset') + 1]).toBe('-12345.500000');
     });

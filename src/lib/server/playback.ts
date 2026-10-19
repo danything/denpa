@@ -521,11 +521,10 @@ export function tsTranscodeArgs(
         `${from}:a:${audio.stream}?`,
         '-vf',
         video.filter,
-        // 探りの間にコマ数を読み違えたときの抑え (`live.encodeArgs` の説明)
-        '-fpsmax',
-        '60000/1001',
         ...video.encoder,
-        // 時刻を詰め直させない (`tsOffset` の説明)。既定 (mp4 は cfr) だと負の時刻のコマを捨てる
+        // 時刻を詰め直させない (`tsOffset` の説明)。既定 (mp4 は cfr) だと負の時刻のコマを捨てる。
+        // ライブのようにコマ数の上限 (`-fpsmax`) は付けられない — passthrough と一緒だと ffmpeg が
+        // 「矛盾している」と断って変換が始まらない。探りは既定の大きさなのでコマ数を読み違えない
         '-fps_mode',
         'passthrough',
         ...(pan === null ? [] : ['-af', pan]),
