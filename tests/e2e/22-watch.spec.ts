@@ -260,6 +260,105 @@ test.describe('録画を観る', () => {
     });
 
     /**
+     * **つまんで動かす間、つまみは指にそのまま付いてくる** (`SeekBar`)。タブレットで、動かすたびに
+     * 飛んでいた頃はつまみが指から遅れていた。飛ぶのは下見を1度に1つまで (飛び終わってから次) と、
+     * 離したときの1回。動かしている間に届く位置ではつまみを戻さず、CM も飛ばさない。
+     * 離した先が CM なら、いつもどおり飛ばす。
+     *
+     * 偽の録画は読めないので、位置は映像の要素に持たせ、代入された回数を数える。
+     * `seeked` は来ない (下見は飛び終わりを待ったまま)
+     */
+    test('シークバーをつまむと、つまみが付いてきて、飛ぶのは数回だけ', async ({ page, request }) => {
+        test.setTimeout(180_000);
+        const id = await watchable(page, request);
+        await page.route('**/api/recordings/*/chapters', (route) =>
+            route.fulfill({
+                json: {
+                    chapters: [
+                        { start: 0, end: 400, title: '本編' },
+                        { start: 400, end: 430, title: 'CM' },
+                        { start: 430, end: 1000, title: '本編' },
+                    ],
+                },
+            }),
+        );
+        await goto(page, `/watch/${id}`);
+        const seek = page.getByTestId('watch-seek');
+        await expect(seek).toHaveAttribute('data-cm', '400-430');
+
+        const video = page.getByTestId('watch-video');
+        await video.evaluate((el) => {
+            const w = window as unknown as { seekTo: number; seeks: number[]; seeked: number };
+            w.seekTo = 200;
+            w.seeks = [];
+            w.seeked = 0;
+            Object.defineProperty(el, 'duration', { value: 1000 });
+            Object.defineProperty(el, 'currentTime', {
+                get: () => w.seekTo,
+                set: (to: number) => {
+                    w.seekTo = to;
+                    w.seeks.push(to);
+                },
+            });
+            el.addEventListener('seeked', () => w.seeked++);
+            el.dispatchEvent(new Event('loadedmetadata'));
+            el.dispatchEvent(new Event('timeupdate'));
+        });
+        const seeks = () => page.evaluate(() => (window as unknown as { seeks: number[] }).seeks);
+        const clockText = page.getByTestId('watch-clock');
+        await expect(clockText).toContainText('3:20 / 16:40');
+        // 偽の録画はロゴでの判定に失敗していて、CM 飛ばしは外れて始まる (`skipCmAtStart`)。入れておく
+        await flipSetting(page, 'watch', 'skip-cm');
+        await expect(page.getByTestId('watch-skip-cm')).toHaveAttribute('aria-checked', 'true');
+
+        const bar = seek.locator('xpath=..');
+        const thumb = bar.locator('.thumb');
+        const left = async () =>
+            Number.parseFloat(await thumb.evaluate((el) => (el as HTMLElement).style.left));
+        await wakeControls(page, 'watch-stage');
+        const box = (await bar.boundingBox())!;
+        const y = box.y + box.height / 2;
+        const x = (ratio: number) => box.x + box.width * ratio;
+
+        await page.mouse.move(x(0.2), y);
+        await page.mouse.down();
+        await expect.poll(left).toBeCloseTo(20, 0);
+        // 動かしている間、つまみも時刻も指の位置。飛び終わり (`seeked`) を待たない
+        for (let i = 1; i <= 20; i++) {
+            await page.mouse.move(x(0.2 + (0.21 * i) / 20), y);
+            expect(Math.abs((await left()) - (20 + 21 * (i / 20)))).toBeLessThan(0.6);
+        }
+        await expect(clockText).toContainText('6:50 / 16:40');
+        expect(await page.evaluate(() => (window as unknown as { seeked: number }).seeked)).toBe(0);
+        // 21回動かしても、下見は飛び終わりを待つ (着かなければ 1 秒) ので、押したときの1つと多くて1つ
+        expect((await seeks()).length).toBeLessThanOrEqual(2);
+
+        // 下見が着いたことにしても (`timeupdate` で元の位置が届いても)、つまみは戻らず、CM も飛ばさない
+        await page.waitForTimeout(1300);
+        const during = (await seeks()).length;
+        expect(during).toBeLessThanOrEqual(3);
+        await page.evaluate(() => {
+            (window as unknown as { seekTo: number }).seekTo = 200;
+        });
+        await video.evaluate((el) => el.dispatchEvent(new Event('timeupdate')));
+        await page.evaluate(() => {
+            (window as unknown as { seekTo: number }).seekTo = 410;
+        });
+        await video.evaluate((el) => el.dispatchEvent(new Event('timeupdate')));
+        expect(await left()).toBeCloseTo(41, 0);
+        expect((await seeks()).length).toBe(during);
+
+        // 離すと、その位置へちゃんと1回飛ぶ。つまみはそこに居る
+        await page.mouse.up();
+        await expect.poll(async () => (await seeks()).slice(during)[0]).toBeCloseTo(410, 0);
+        expect(await left()).toBeCloseTo(41, 0);
+        // 着いた先は CM。いつもどおり先へ飛ぶ
+        await video.evaluate((el) => el.dispatchEvent(new Event('timeupdate')));
+        await expect.poll(async () => (await seeks()).at(-1)).toBeGreaterThanOrEqual(429);
+        expect((await seeks()).length).toBe(during + 2);
+    });
+
+    /**
      * **字幕は canvas に描いて重ねる。** ライブ (`/live`) と同じやり方。
      *
      * 文字を `<track>` に渡す方法は放送どおりには出ない (左右の位置・背景の箱・外字が落ちる)。

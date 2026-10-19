@@ -394,7 +394,11 @@
             feedData();
             return;
         }
-        if (video !== null) video.currentTime = to;
+        if (video !== null) {
+            video.currentTime = to;
+            // 時刻の表示も飛んだ先へ。`timeupdate` を待つと、つまみを離したあと一瞬元の時刻に戻って見える
+            at = to;
+        }
     }
 
     function mediaPaused(): boolean {
@@ -740,6 +744,8 @@
 
     let playing = $state(false);
     let at = $state(0);
+    /** シークバーをつまんで動かしている間の位置 (`SeekBar` の `scrub`)。触っていなければ `null` */
+    let scrub = $state<number | null>(null);
     let length = $state(0);
     let muted = $state(false);
     /**
@@ -1383,6 +1389,8 @@
     function hopCm(): void {
         // 飛んだ先を待っている最中。着くまでは何もしない
         if (waiting || !skipCm || (video === null && canvas === null)) return;
+        // シークバーをつまんでいる最中は飛ばない。離したら、着いた先で決める
+        if (scrub !== null) return;
         const to = skipTarget(chapters, mediaTime(), CM_LEAD);
         if (to === null) return;
         /*
@@ -1679,6 +1687,29 @@
         if ((video === null && canvas === null) || seconds === null) return;
         seekMedia(seconds);
         controls.stir();
+    }
+
+    /**
+     * シークバーをつまんで動かしている間の下見 (`SeekBar` の `preview`)。`<video>` だけ。
+     * 粗くてよいので、持っていれば `fastSeek` (近くのキーフレーム) を使う。飛び終わり (`seeked`) で
+     * 約束を終え、シークバーはそれから次を頼む。離したときは `seekTo` でちゃんと飛ぶ。
+     * **canvas のプレイヤーには渡さない** — 飛ぶたびに持っているものを捨てて取り直すので、離したときだけにする
+     */
+    function previewSeek(to: number): Promise<void> {
+        const target = video;
+        if (target === null || canvas !== null) return Promise.resolve();
+        return new Promise((resolve) => {
+            const done = () => {
+                clearTimeout(timer);
+                target.removeEventListener('seeked', done);
+                resolve();
+            };
+            // 着かないまま (読めない・遅い) でも次へ進めるように
+            const timer = setTimeout(done, 1000);
+            target.addEventListener('seeked', done);
+            if (typeof target.fastSeek === 'function') target.fastSeek(to);
+            else target.currentTime = to;
+        });
     }
 
     /** 映像を押されたときの読み方は追っかけと同じ (`stage-tap.ts`) */
@@ -2015,6 +2046,8 @@
                         max={length || 0}
                         step={0.1}
                         onseek={seekTo}
+                        preview={drawing ? undefined : previewSeek}
+                        bind:scrub
                         cm={cmOnBar}
                         marks={marksOnBar}
                         valuetext={current === null ? undefined : `${clock(at)}、${current.title}`}
@@ -2111,7 +2144,7 @@
                                     狭い枠では位置と長さだけにする (`.long` を省く。`InfoBlock`)
                                 -->
                                 <span class="clock" data-testid="watch-clock">
-                                    {clock(at)} / {clock(length)}<span class="long">{' · 残り '}{clock(remaining)}</span>
+                                    {clock(scrub ?? at)} / {clock(length)}<span class="long">{' · 残り '}{clock(remaining)}</span>
                                 </span>
                                 {#if current !== null}
                                     <span class="long">{' · '}<span>{current.title}</span></span>
