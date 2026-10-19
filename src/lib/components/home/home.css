@@ -421,6 +421,10 @@
 .board .t-row.live {
     background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row));
 }
+.board .t-row.live:hover,
+.board .t-row.live.picked {
+    background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row-hover));
+}
 .board .t-row .row-body {
     display: flex;
     flex: 1 1 0%;
@@ -459,7 +463,7 @@
     aspect-ratio: 16 / 9;
     overflow: hidden;
     border-radius: var(--dp-radius-sm);
-    background: var(--dp-row-selected);
+    background: var(--dp-line-strong);
 }
 .board .t-play {
     position: absolute;
