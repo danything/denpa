@@ -71,10 +71,11 @@
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)
     -->
     <div bind:this={box} class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
-        <button type="button" class="ghost icon small modal-close" onclick={onclose} aria-label="閉じる" data-testid="detail-close">
-            <X aria-hidden="true" />
-        </button>
         <div class="detail-body">
+            <!-- × は巻き取る中身の中に置く (下の CSS)。箱に浮かせると、スクロールバーが常に出る Windows でバーに重なった -->
+            <button type="button" class="ghost icon small modal-close" onclick={onclose} aria-label="閉じる" data-testid="detail-close">
+                <X aria-hidden="true" />
+            </button>
             {#if status}
                 <div class="cluster detail-status">{@render status()}</div>
             {/if}
@@ -143,6 +144,18 @@
         flex: 1 1 0%;
         overflow-y: auto;
     }
+    /*
+     * **× は中身の右上に貼り付ける** (`sticky`)。巻き取る箱の中に置くので、スクロールバーは × の外 (右) に出る。
+     * 箱に `absolute` で浮かせていた頃は、スクロールバーが常に出る Windows で × とバーが重なった。
+     * 箱の余白 (`--dp-space-5`) の内側に来るので、浮かせていた頃より少し内に寄る
+     */
+    .detail-body > .modal-close {
+        position: sticky;
+        top: 0;
+        right: auto;
+        float: right;
+        margin: 0 0 0 var(--dp-space-2);
+    }
     /* 並べ方は `.modal-actions` */
     .detail-actions {
         position: relative;
@@ -150,11 +163,6 @@
     }
     .detail-actions :global(form) {
         margin: 0;
-    }
-    /* 番組名と状態は × に掛からないところで折り返す (× は箱の右上に浮かせる。`app.css` の `.modal-close`) */
-    .detail-body > :global(.title),
-    .detail-status {
-        padding-inline-end: 2.25rem;
     }
     .detail-status {
         margin-bottom: var(--dp-space-2);
