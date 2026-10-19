@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { expect, goto, homeFilter, syncEpg, test } from './helpers';
 
 /**
- * ホームの1本の一覧 (予約 → 「いま」→ 録れたもの) と、右のサイドバー・狭い画面の絞り込みの一枚。
+ * ホームの1本の一覧 (録れたもの → 「いま」→ 予約) と、右のサイドバー・狭い画面の絞り込みの一枚。
  * 並べ方そのものは単体テスト (`#lib/timeline.test.ts`)。ここでは画面の上で効いているかを見る。
  *
  * 行は DB に直に入れる (33 と同じ)。予約は 2100 年、録画は 2099 年にして、
@@ -74,10 +74,10 @@ test.describe('ホームの1本の一覧', () => {
         );
     });
 
-    test('予約は「いま」の線の上、録れたものは下に、日付の見出しを挟んで並ぶ', async ({ page }) => {
+    test('録れたものは「いま」の線の上、予約は下に、日付の見出しを挟んで時刻の順に並ぶ', async ({ page }) => {
         await goto(page, '/');
         const names = await rows(page).locator('.row-name').allInnerTexts();
-        const order = ['一覧試験の予約', '一覧試験の未視聴', '一覧試験の視聴済み', '一覧試験の失敗'].map(
+        const order = ['一覧試験の失敗', '一覧試験の視聴済み', '一覧試験の未視聴', '一覧試験の予約'].map(
             (n) => names.findIndex((name) => name.trim() === n),
         );
         expect(order.every((i) => i >= 0)).toBe(true);
@@ -87,8 +87,8 @@ test.describe('ホームの1本の一覧', () => {
         const now = await page.getByTestId('timeline-now').boundingBox();
         const reservation = await rows(page).filter({ hasText: '一覧試験の予約' }).boundingBox();
         const recording = await rows(page).filter({ hasText: '一覧試験の未視聴' }).boundingBox();
-        expect(reservation!.y).toBeLessThan(now!.y);
-        expect(recording!.y).toBeGreaterThan(now!.y);
+        expect(reservation!.y).toBeGreaterThan(now!.y);
+        expect(recording!.y).toBeLessThan(now!.y);
 
         // 「いま」の線と日付の見出しは見出しなので、読み上げの見出し移動で辿れる
         await expect(page.getByRole('heading', { name: /^いま \d{1,2}:\d{2}$/ })).toHaveCount(1);
@@ -265,6 +265,63 @@ test.describe('ホームの1本の一覧', () => {
             expect(Math.abs((await target.boundingBox())!.y - before)).toBeLessThan(80);
         } finally {
             sqlite(`${stack.root}/denpa.db`, `db.run("DELETE FROM recordings WHERE name LIKE 'ずれ試験%'");`);
+        }
+    });
+
+    /*
+     * **古い録画は一覧の頭に足し、足しても読んでいる所は動かない。** 録れたものは線の側 (新しいほう) から
+     * 描き、頭の「残り N 件」が見えたら古いほうを上へ足す。一覧の枠は位置合わせを自分でするので
+     * (`overflow-anchor: none`)、何もしないと足したぶん中身が下へずれる
+     */
+    test('古い録画は上へ足し、足しても見ていた行は動かない', async ({ page, stack }) => {
+        const now = Date.now();
+        // ほかのスペックが残した未視聴の録画は、いったん観終えたことにする (開いたときにそこまで描かれてしまう。終わったら戻す)
+        const unwatched = spawnSync(
+            'bun',
+            [
+                '-e',
+                `import { Database } from 'bun:sqlite'; const db = new Database(process.env.SEED_DB); const ids = db.query('SELECT id FROM recordings WHERE watched_at IS NULL').all().map((r) => r.id); db.run('UPDATE recordings SET watched_at = ? WHERE watched_at IS NULL', [Date.now()]); console.log(JSON.stringify(ids));`,
+            ],
+            { env: { ...process.env, SEED_DB: `${stack.root}/denpa.db` }, encoding: 'utf8' },
+        ).stdout.trim();
+        sqlite(
+            `${stack.root}/denpa.db`,
+            `const rec = db.prepare('INSERT INTO recordings (service_id, service_name, name, series, start_at, end_at, finished_at, library_path, watched_at, created_at, updated_at) VALUES (211, ?, ?, ?, ?, ?, ?, ?, ${now}, ${now}, ${now})');
+            for (let i = 0; i < 90; i++) rec.run('BS11', '足し試験' + i, '足し試験' + i, ${BASE} - (40 + i) * ${DAY}, ${BASE} - (40 + i) * ${DAY} + 1800000, ${BASE} - (40 + i) * ${DAY} + 1800000, '/media/encoded/seed/q' + i + '.mkv');`,
+        );
+        try {
+            await page.setViewportSize({ width: 1366, height: 768 });
+            // 全部描かせる `goto` は使わない (足すところを見る)
+            await page.goto('/');
+            await page.locator('[data-hydrated="true"]').waitFor();
+            const more = page.getByTestId('recording-more');
+            await expect(more).toBeVisible();
+            const list = page.getByTestId('timeline');
+            // 開いたときは線のあたり (頭の印は画面の外)
+            await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+            // 描いているうちでいちばん古い行を覚え、頭まで戻して印を画面に入れる。戻した直後の行の高さを覚えておく
+            const first = list.locator('[data-zone="past"] [data-key]').first();
+            const key = await first.getAttribute('data-key');
+            const count = await rows(page).count();
+            const y = await first.evaluate((row) => {
+                const box = row.closest<HTMLElement>('[data-testid="timeline"]')!;
+                const at = row.getBoundingClientRect().top + box.scrollTop;
+                box.scrollTop = 0;
+                return at;
+            });
+            await expect.poll(() => rows(page).count()).toBeGreaterThan(count);
+            // 足したぶんは上に入り、見ていた行は同じ高さのまま
+            await expect(list.locator('[data-zone="past"] [data-key]').first()).not.toHaveAttribute(
+                'data-key',
+                key!,
+            );
+            const row = list.locator(`[data-key="${key}"]`);
+            await expect.poll(async () => Math.abs((await row.boundingBox())!.y - y)).toBeLessThan(2);
+        } finally {
+            sqlite(
+                `${stack.root}/denpa.db`,
+                `db.run("DELETE FROM recordings WHERE name LIKE '足し試験%'"); const s = db.prepare('UPDATE recordings SET watched_at = NULL WHERE id = ?'); for (const id of ${unwatched || '[]'}) s.run(id);`,
+            );
         }
     });
 

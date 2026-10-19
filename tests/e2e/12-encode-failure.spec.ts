@@ -25,12 +25,7 @@ test.describe('エンコードの失敗', () => {
          * 出るのは「エンコード失敗」であって「失敗」ではない。落ちたのは再エンコードの
          * ほうなので、録画そのものの状態 (録画済み) には手を付けない
          */
-        await waitRowState(
-            page,
-            '/',
-            page.locator('[data-testid="recording-row"]').first(),
-            'エンコード失敗',
-        );
+        await waitRowState(page, '/', page.locator('[data-testid="recording-row"]').last(), 'エンコード失敗');
         await goto(page, '/');
         await expect(page.getByTestId('encode-progress')).toHaveCount(0);
         const failed = page

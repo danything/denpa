@@ -165,7 +165,7 @@
     white-space: nowrap;
 }
 .board .truncated {
-    border-top: 1px solid var(--dp-line);
+    border-bottom: 1px solid var(--dp-line);
 }
 /*
  * 番組の見出し。**行と同じ形** (左にポスター、右に名前と日付) にして、

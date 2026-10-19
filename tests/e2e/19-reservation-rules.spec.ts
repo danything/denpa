@@ -26,7 +26,7 @@ test.describe('ルールで立った予約', () => {
         /*
          * 先に走ったテストが残した予約と混ざらないよう、いま立っているものから選ぶ。
          *
-         * **いちばん先の予約** (一覧の頭) を取る。予約は「いま」の線の上に遠い先から並ぶ。偽エージェントの番組は
+         * **いちばん先の予約** (一覧の末尾) を取る。予約は「いま」の線の下に近い順に並ぶ。偽エージェントの番組は
          * 10秒しかないため、線に近いものは取り消して開き直す間に放送が終わってしまう。終わった予約は
          * 戻しても意味が無いので、戻すボタン自体が出ない
          */
@@ -34,7 +34,7 @@ test.describe('ルールで立った予約', () => {
             .getByTestId('reservation-row')
             .filter({ hasText: 'テストアニメ' })
             .filter({ has: page.getByTestId('cancel-button') })
-            .first();
+            .last();
         await expect(row).toBeVisible();
         const id = await row.getAttribute('data-reservation-id');
 
@@ -73,7 +73,7 @@ test.describe('ルールで立った予約', () => {
             .getByTestId('reservation-row')
             .filter({ hasText: 'テストアニメ' })
             .filter({ has: page.getByTestId('cancel-button') })
-            .first();
+            .last();
         await expect(row).toBeVisible();
         const id = await row.getAttribute('data-reservation-id');
         await row.getByTestId('cancel-button').click();
@@ -118,14 +118,14 @@ test.describe('ルールで立った予約', () => {
         test.setTimeout(180_000);
         await goto(page, '/');
         /*
-         * **いちばん早い予約**を取る。予約は「いま」の線の上に遠い先から並ぶので、線に近い最後のもの。
+         * **いちばん早い予約**を取る。予約は「いま」の線の下に近い順に並ぶので、線に近い最初のもの。
          * 先のものを選ぶと放送そのものが数分先になる (偽の番組表は10分ぶんある)
          */
         const reservation = page
             .getByTestId('reservation-row')
             .filter({ hasText: 'テストアニメ' })
             .filter({ has: page.getByTestId('rule-name') })
-            .last();
+            .first();
         await expect(reservation).toBeVisible();
         // 番組で辿る。同じ名前の録画は他のテストも残すので、名前では絞れない
         const programId = await reservation.getAttribute('data-program-id');

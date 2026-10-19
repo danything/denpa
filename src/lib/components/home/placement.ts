@@ -46,9 +46,9 @@ function scrollToTop(list: HTMLElement, element: HTMLElement, offset: number): v
 }
 
 /**
- * 開いたときの位置に送る。線を見えている所の 3 割ほどの高さに置き (上に次の予約、下に新しい録画が入る)、
- * `target` (映したい録画の行の鍵) があって線のままでは見えなければ、その行が下の端に来るまで送る。
- * 閉じた番組の中にあれば、その見出し (`data-group-rows`)
+ * 開いたときの位置に送る。線を見えている所の 7 割ほどの高さに置き (上に新しい録画、下に次の予約が入る)、
+ * `target` (映したい録画の行の鍵) があって線のままでは見えなければ、その行が上の端 (貼り付いた日付の見出しの下)
+ * に来るまで戻す。閉じた番組の中にあれば、その見出し (`data-group-rows`)
  */
 export function placeTimeline(list: HTMLElement, target: string | null): void {
     const now = list.querySelector<HTMLElement>('[data-testid="timeline-now"]');
@@ -56,22 +56,25 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
     const box = scroller(list);
     const height = box !== null ? box.clientHeight : window.innerHeight;
     const cover = coverOf();
+    // 見えている所の高さ (狭い画面は下のタブと頭の1行が下に被さる)
+    const view = height - cover - (box === null ? bottomCover() : 0);
     /*
-     * **線がもう見えている (上から 6 割まで) なら動かさない。** 頭の帯 (続きから観る・見てほしいこと) は一覧の上にあり、
-     * 送ると狭い画面ではページごと上へ流れて見えなくなる
+     * **線がもう見えている (上から 4 割より下で、下に被さるものより上) なら動かさない。**
+     * 録れたものが少ないと線は頭の近くにあり、7 割まで下げる余地が無い
      */
     const lineTop = now.getBoundingClientRect().top - (box !== null ? box.getBoundingClientRect().top : 0);
-    if (lineTop < cover || lineTop > cover + (height - cover) * 0.6)
-        scrollToTop(list, now, cover + (height - cover) * 0.25);
+    if (lineTop < cover + view * 0.4 || lineTop > cover + view - now.offsetHeight)
+        scrollToTop(list, now, cover + view * 0.7);
     const row =
         target === null
             ? null
             : (list.querySelector<HTMLElement>(`[data-key="${target}"]`) ??
               list.querySelector<HTMLElement>(`[data-group-rows~="${target}"]`));
     if (row !== null) {
-        const bottom = box !== null ? box.getBoundingClientRect().bottom : window.innerHeight;
-        if (row.getBoundingClientRect().bottom > bottom - 8) {
-            scrollToTop(list, row, height - row.offsetHeight - 16 - (box === null ? bottomCover() : 0));
+        // 貼り付いた日付の見出しの下端。行はその少し下に置く (`alignTop` が見出しの裏へ送らないように)
+        const line = topEdge(list) + (list.querySelector<HTMLElement>('.t-day')?.offsetHeight ?? 32);
+        if (row.getBoundingClientRect().top < line) {
+            scrollToTop(list, row, line + 8 - (box !== null ? box.getBoundingClientRect().top : 0));
         }
     }
     alignTop(list);
@@ -99,7 +102,7 @@ function scrollBy(list: HTMLElement, delta: number): void {
  * 押し上げられる。送った先がちょうどそこだと、前の日の見出しが半分だけ頭に残っていた。
  * 半分押し上げられた見出しがあれば、それが隠れきるところまで送る。そのうえで、貼り付いた見出しの
  * 下端に掛かっている行があれば、その行が見出しの裏に隠れきるところまで送る (半分だけ見える行を残さない)。
- * **送るのは先へだけ** — 戻すと、下の端に合わせて映した行 (観終えていない録画) が画面の外へ出る
+ * **送るのは先へだけ** (行き来させない)。開いたときに映す行 (観終えていない録画) は見出しの少し下に置くので、隠れない
  */
 export function alignTop(list: HTMLElement): void {
     const top = topEdge(list);
@@ -158,4 +161,23 @@ export function restoreRow(list: HTMLElement, anchor: Anchor | null): boolean {
     }
     scrollBy(list, row.getBoundingClientRect().top - topEdge(list) - anchor.offset);
     return true;
+}
+
+/**
+ * **上へ行を足しても、読んでいる所を動かさない。** 足す前に呼び、足して描き終えたら返り値を呼ぶ。
+ * 一覧の枠は位置合わせを自分でする (`overflow-anchor: none`) ので、何もしないと足したぶん中身が下へずれる。
+ * 物差しは `key` の行 (無ければ「いま」の線)。足すのはいつもそれより上なので、ずれたぶんだけ送り直せばよい
+ */
+export function holdPlace(list: HTMLElement, key: string | null = null): () => void {
+    const mark =
+        (key === null
+            ? null
+            : (list.querySelector<HTMLElement>(`[data-key="${key}"]`) ??
+              list.querySelector<HTMLElement>(`[data-group-rows~="${key}"]`))) ??
+        list.querySelector<HTMLElement>('[data-testid="timeline-now"]');
+    const before = mark?.getBoundingClientRect().top ?? 0;
+    return () => {
+        if (mark === null || !mark.isConnected) return;
+        scrollBy(list, mark.getBoundingClientRect().top - before);
+    };
 }

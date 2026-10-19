@@ -18,7 +18,7 @@
     import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
     import '#lib/components/home/home.css';
     import HomeAside from '#lib/components/home/HomeAside.svelte';
-    import { alignTop, placeTimeline, restoreRow, topRow } from '#lib/components/home/placement.js';
+    import { alignTop, holdPlace, placeTimeline, restoreRow, topRow } from '#lib/components/home/placement.js';
     import TimelineBar from '#lib/components/home/TimelineBar.svelte';
     import TimelineEntry from '#lib/components/home/TimelineEntry.svelte';
     import { type DetailSeed, programDetail } from '#lib/detail.svelte.js';
@@ -36,6 +36,7 @@
         type Filter,
         lineIndex,
         mergeRecorded,
+        pageStart,
         passes,
         sections,
         type Traits,
@@ -251,12 +252,12 @@
     /*
      * ---- 1本の時間軸 (`#lib/timeline.ts`) ----
      *
-     * 予約・録画・録り逃しを1つの一覧に並べる。上がこれからの予約、「いま」の線と録画中、
-     * 下が録れたもの。行の形 (`Item`) は部品と分け合う (`#lib/components/home/context.ts`)
+     * 予約・録画・録り逃しを1つの一覧に並べる。上が録れたもの、「いま」の線と録画中、
+     * 下がこれからの予約 (下へ行くほど時間が進む)。行の形 (`Item`) は部品と分け合う (`#lib/components/home/context.ts`)
      */
 
     /**
-     * 予約をどの側に置くか。録画中は線の下、放送が終わっていないものは線の上。
+     * 予約をどの側に置くか。録画中は線のすぐ下、放送が終わっていないものはその下 (これからの予約)。
      * 「完了した予約も表示」で出る終わった予約 (完了・失敗・取り消し) は録れたものの側
      */
     function zoneOf(res: Res, now: number): Zone {
@@ -373,24 +374,29 @@
     }
 
     const lines = $derived(timelineLines(parts, { grouped, isOpen }));
-    /** 線より上を、予約 (`ahead`) と「いま」の線から下 (`current`。線と録画中) に分ける */
-    const nowAt = $derived(lines.above.findIndex((line) => line.kind === 'now'));
-    const ahead = $derived(lines.above.slice(0, nowAt));
-    const current = $derived(lines.above.slice(nowAt));
     /*
-     * **線より下 (録れたもの) だけ少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
-     * 開いた直後に一瞬止まって見えた。線より上 (予約) は全部描く — 上へ足すと、位置合わせの無い
-     * ブラウザ (iPad の Safari) では読んでいる所が跳ねる
+     * **線より上 (録れたもの) だけ少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
+     * 開いた直後に一瞬止まって見えた。描くのは線の側 (新しいほう) から `pastPage.shown` 行で、
+     * 古いほうは一覧の頭に近づいたら上へ足す。足しても読んでいる所は動かさない (`holdPlace`)。
+     * 線より下 (録画中と予約) は全部描く
      */
-    const pastPage = new Paged(() => lines.below, 60);
+    const pastPage = new Paged(() => lines.past, 60);
+    /** 描く頭の行。見出しの途中から描かないよう、見出しまで戻す (`pageStart`) */
+    const pastStart = $derived(pageStart(lines.past, pastPage.shown));
+    const pastRows = $derived(lines.past.slice(pastStart));
+    /** 線の側から数えて、その行まで描く (開いたとき・絞り込みを替えたときに映したい行) */
+    function showPastUpTo(key: string): void {
+        const index = lineIndex(lines.past, key);
+        if (index >= 0 && index < pastStart) pastPage.showUpTo(lines.past.length - index);
+    }
 
     /**
      * まだ描いていない**録れたものの本数** (「残り N 件」)。閉じた見出し1つに何本も入っているので、
-     * 描く行の数 (`pastPage.rest`) では数えない
+     * 描く行の数では数えない
      */
     const pastRest = $derived.by(() => {
         let shown = 0;
-        for (const line of pastPage.rows) {
+        for (const line of pastRows) {
             if (line.kind === 'row') shown += 1;
             else if (line.kind === 'head' && !line.open) shown += line.group.items.length;
         }
@@ -438,21 +444,23 @@
     let placed = false;
     async function place(): Promise<void> {
         const target = catchUp(parts.past, unfinished);
-        if (target !== null) {
-            const index = lineIndex(lines.below, target.key);
-            if (index >= pastPage.shown) pastPage.showUpTo(index + 1);
-        }
+        if (target !== null) showPastUpTo(target.key);
         await tick();
         if (listBox === undefined) return;
         const list = listBox;
         placeTimeline(list, target?.key ?? null);
-        // 字 (放送の字は後から届く) とポスターで行の高さが変わると、見出しの下で行が半分に切れる。届いてから合わせ直す。
-        // その間に自分で動かしていたら触らない (動かした所を奪わない)
+        // 字 (放送の字は後から届く) とポスターで行の高さが変わると、映した行がずれ、見出しの下で行が半分に切れる。
+        // 届いてから、映した行 (無ければ線) を元の高さに戻して合わせ直す。その間に自分で動かしていたら触らない (動かした所を奪わない)
         const where = () => (getComputedStyle(list).overflowY === 'auto' ? list.scrollTop : window.scrollY);
         const before = where();
+        const restore = holdPlace(list, target?.key ?? null);
         await document.fonts.ready;
         requestAnimationFrame(() => {
-            if (Math.abs(where() - before) < 1) alignTop(list);
+            if (Math.abs(where() - before) < 1) {
+                restore();
+                alignTop(list);
+            }
+            ready = true;
         });
     }
 
@@ -473,12 +481,25 @@
         const anchor = listBox === undefined ? null : topRow(listBox);
         filter = next;
         pastPage.reset();
-        if (anchor !== null) {
-            const index = lineIndex(lines.below, anchor.key);
-            if (index >= pastPage.shown) pastPage.showUpTo(index + 1);
-        }
+        if (anchor !== null) showPastUpTo(anchor.key);
         await tick();
         if (listBox !== undefined) restoreRow(listBox, anchor);
+    }
+
+    /**
+     * 古い録画を上へ足す (一覧の頭の「残り N 件」が見えたとき)。**開いたときの位置に送り終えるまでは足さない** —
+     * 送っている途中に足すと、送った先がずれる。待っている間も印は見張り直すので、送り終えたら足す (`sentinel`)
+     */
+    let ready = false;
+    let revealing = false;
+    async function revealOlder(): Promise<void> {
+        if (!ready || revealing || listBox === undefined) return;
+        revealing = true;
+        const restore = holdPlace(listBox);
+        pastPage.reveal();
+        await tick();
+        restore();
+        revealing = false;
     }
     $effect(() => {
         if (listBox === undefined || placed) return;
@@ -562,30 +583,39 @@
     <div class="t-main">
         <section class="t-list" bind:this={listBox} aria-label="予約と録画" data-testid="timeline">
             <!--
-                側ごとに包む。日付の見出しは包みの中だけで貼り付くので、録れたものを読んでいる間に
-                予約の見出しが頭に残らない
+                **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
+                上限に当たっていたら、いちばん古い録画の上 (一覧の頭) に検索へ誘う一行を出す (`+page.server.ts` の LIMIT 300)
+            -->
+            {#if data.recordings.length >= 300 && pastStart === 0}
+                <div class="row-empty truncated muted small">
+                    新しい順に300件まで表示しています。古いものは検索で探してください。
+                </div>
+            {/if}
+            {#if pastStart > 0}
+                <!-- 頭に近づいたら古いほうを上へ足す (`sentinel`・`revealOlder`)。残りが無くなれば消える -->
+                <div class="row-empty muted small num" use:sentinel={() => void revealOlder()} data-testid="recording-more">
+                    残り {pastRest} 件
+                </div>
+            {/if}
+            <!--
+                側ごとに包む。日付の見出しは包みの中だけで貼り付くので、片方の側を読んでいる間に
+                もう片方の見出しが頭に残らない
             -->
             <div class="t-rows">
-                <div class="t-zone" data-zone="future">
-                    {#each ahead as entry (entry.key)}
+                <div class="t-zone" data-zone="past">
+                    {#each pastRows as entry (entry.key)}
                         <TimelineEntry {entry} />
                     {/each}
                 </div>
-                {#each current as entry (entry.key)}
+                {#each lines.now as entry (entry.key)}
                     <TimelineEntry {entry} />
                 {/each}
-                <div class="t-zone" data-zone="past">
-                    {#each pastPage.rows as entry (entry.key)}
+                <div class="t-zone" data-zone="future">
+                    {#each lines.future as entry (entry.key)}
                         <TimelineEntry {entry} />
                     {/each}
                 </div>
             </div>
-            {#if pastPage.more}
-                <!-- 下端に近づいたら続きを足す (`sentinel`)。残りが無くなれば消える -->
-                <div class="row-empty muted small num" use:sentinel={() => pastPage.reveal()} data-testid="recording-more">
-                    残り {pastRest} 件
-                </div>
-            {/if}
             {#if shownItems.length === 0}
                 {#if items.length === 0}
                     <!-- 空のときは次に何をすればよいかまで言う -->
@@ -607,15 +637,6 @@
             {#if filter !== 'all'}
                 <div class="row-empty muted small num" data-testid="timeline-matched">
                     {items.length} 件中 {shownItems.length} 件
-                </div>
-            {/if}
-            <!--
-                **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
-                上限に当たっていたら、検索へ誘う一行を出す (`+page.server.ts` の LIMIT 300)
-            -->
-            {#if data.recordings.length >= 300}
-                <div class="row-empty truncated muted small">
-                    新しい順に300件まで表示しています。古いものは検索で探してください。
                 </div>
             {/if}
         </section>

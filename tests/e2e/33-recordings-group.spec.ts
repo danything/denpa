@@ -95,7 +95,7 @@ function seedReservations(db: string, rows: Seed[]): void {
 
 /**
  * 一覧に並んでいるもの (見出しは `group:名前`、行は番組名) を上から。
- * `zone` で「いま」の線の上 (予約) か下 (録れたもの) かを選ぶ
+ * `zone` で「いま」の線の上 (録れたもの) か下 (予約) かを選ぶ
  */
 async function listed(page: Page, zone: 'future' | 'past' = 'past'): Promise<string[]> {
     const all = await page
@@ -113,7 +113,7 @@ async function listed(page: Page, zone: 'future' | 'past' = 'past'): Promise<str
             }),
         );
     const now = all.indexOf('@now');
-    return (zone === 'future' ? all.slice(0, now) : all.slice(now + 1)).filter((name) => name !== '');
+    return (zone === 'past' ? all.slice(0, now) : all.slice(now + 1)).filter((name) => name !== '');
 }
 
 /**
@@ -158,7 +158,7 @@ test.describe('ホームの一覧のまとめて表示', () => {
         sqlite(`${stack.root}/denpa.db`, 'db.run("DELETE FROM reservations WHERE program_id >= 990000")');
     });
 
-    test('番組ごとにまとまり、番組は新しい順・中は放送順、1本だけの番組はふつうの行', async ({ page }) => {
+    test('番組ごとにまとまり、番組は古い順・中は放送順、1本だけの番組はふつうの行', async ({ page }) => {
         await goto(page, '/');
         const tools = await homeTools(page);
         const toggle = tools.getByTestId('recordings-group-toggle');
@@ -170,12 +170,12 @@ test.describe('ホームの一覧のまとめて表示', () => {
         await expect(toggle).toHaveAttribute('aria-checked', 'true');
         await expect(page.getByTestId('view-toggle').locator('.view-dot')).toHaveCount(1);
 
-        // 閉じた見出しと1本ものが、いちばん新しい回の日付で並ぶ
-        expect((await listed(page)).slice(0, 4)).toEqual([
-            'group:グループ試験アニメ',
-            'グループ試験ドラマ',
-            'group:グループ試験ニュース',
+        // 閉じた見出しと1本ものが、いちばん新しい回の日付で並ぶ (線のすぐ上がいちばん新しい)
+        expect((await listed(page)).slice(-4)).toEqual([
             'グループ試験単発1',
+            'group:グループ試験ニュース',
+            'グループ試験ドラマ',
+            'group:グループ試験アニメ',
         ]);
 
         const anime = page.locator(
@@ -187,12 +187,12 @@ test.describe('ホームの一覧のまとめて表示', () => {
         // 押すと見出しのすぐ下に、第1話から順に開く
         await anime.click();
         await expect(anime).toHaveAttribute('aria-expanded', 'true');
-        expect((await listed(page)).slice(0, 5)).toEqual([
+        expect((await listed(page)).slice(-5)).toEqual([
+            'グループ試験ドラマ',
             'group:グループ試験アニメ',
             'グループ試験アニメ #1',
             'グループ試験アニメ #2',
             'グループ試験アニメ #3',
-            'グループ試験ドラマ',
         ]);
 
         // キーボードでも開ける (本物の button なので Enter で押せる)
@@ -211,16 +211,16 @@ test.describe('ホームの一覧のまとめて表示', () => {
     });
 
     /**
-     * **予約もまとめる。** 同じ番組でも、予約は「いま」の線の上、録画は線の下と側ごとに別の見出しを立てる
+     * **予約もまとめる。** 同じ番組でも、録画は「いま」の線の上、予約は線の下と側ごとに別の見出しを立てる
      * (1つにすると、見出しの位置が時間の並びから外れ、開くと中身が線をまたぐ)。予約の番組は次の回の位置
      */
     test('予約もまとめ、同じ番組でも線の上と下で別の見出しになる', async ({ page }) => {
         await goto(page, '/');
         await toggleGrouped(page);
         const future = await listed(page, 'future');
-        // 2100 年の予約はいちばん先なので、一覧の頭に来る。番組は次の回が遅い順
-        // (アニメの次の回 #4 は特番より早いので、線の側 = 下に来る)
-        expect(future.slice(0, 2)).toEqual(['グループ試験特番', 'group:グループ試験アニメ']);
+        // 2100 年の予約はいちばん先なので、一覧の末尾に来る。番組は次の回が早い順
+        // (アニメの次の回 #4 は特番より早いので、線の側 = 上に来る)
+        expect(future.slice(-2)).toEqual(['group:グループ試験アニメ', 'グループ試験特番']);
         const ahead = page.locator(
             '[data-testid="recording-group"][data-zone="future"][data-group="グループ試験アニメ"]',
         );
@@ -370,7 +370,7 @@ test.describe('ホームの一覧のまとめて表示', () => {
             await expect
                 .poll(() => inView(page, `[data-testid="recording-row"][data-recording-id="${id}"]`))
                 .toBe(true);
-            // 線は見えていない (ずっと上)
+            // 線は見えていない (ずっと下)
             expect(await inView(page, '[data-testid="timeline-now"]')).toBe(false);
         } finally {
             sqlite(db, 'db.run("DELETE FROM recordings WHERE name LIKE \'位置試験%\'")');

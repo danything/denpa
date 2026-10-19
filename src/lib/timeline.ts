@@ -1,18 +1,18 @@
 /**
  * ホームの**1本の時間軸**。予約と録画を1つの一覧に並べる。**画面に触らない所だけ**を置く (単体テストで見る)。
  *
- * 上から順に:
+ * **下へ行くほど時間が進む** (番組表と同じ向き)。上から順に:
  *
- * - **これからの予約** — 遠い先が上、「いま」に近いほど下 (いちばん早い予約が「いま」のすぐ上)
+ * - **録れたもの** (録画と録り逃し) — 古い順。いちばん新しいものが「いま」の線のすぐ上
  * - **「いま」の線** と、その下に録画中の行
- * - **録れたもの** (録画と録り逃し) — 新しい順。「いま」に近いほど上
+ * - **これからの予約** — 近い順。いちばん早い予約が録画中のすぐ下、遠い先がいちばん下
  *
- * どちらの側も「いま」に近いものが線の近くに来るので、開いて線を映せば、次に録るものと
- * 最後に録れたものが同じ画面に入る。
+ * 日付の見出しはその日の頭に立ち、見出しの下も時刻の早い順。どちらの側も「いま」に近いものが
+ * 線の近くに来るので、開いて線を映せば、最後に録れたものと次に録るものが同じ画面に入る。
  *
- * **まとめて表示** (`#lib/grouping.ts`) は両側に効く。同じ番組でも、予約は線の上、録画は線の下と
+ * **まとめて表示** (`#lib/grouping.ts`) は両側に効く。同じ番組でも、録画は線の上、予約は線の下と
  * **側ごとに別の見出し**を立てる。1つにまとめると、見出しの位置が時間の並びから外れる
- * (線の上にあるのに中身は過去の回) うえ、開いたときに線をまたいで中身が並ぶため。
+ * (線の下にあるのに中身は過去の回) うえ、開いたときに線をまたいで中身が並ぶため。
  * 見出しの位置は**その側でいちばん線に近い回**で決める (予約は次の回、録画は最新の回)
  */
 
@@ -110,22 +110,21 @@ export function countFilters<T extends TimelineItem>(
 
 /** 側ごとに分けて並べたもの */
 export interface Sections<T extends TimelineItem> {
-    /** これからの予約。遠い先が先頭 (描く順) */
-    future: T[];
+    /** 録れたもの。古い順 (描く順) */
+    past: T[];
     /** 録画中。始まった順 */
     now: T[];
-    /** 録れたもの。新しい順 */
-    past: T[];
+    /** これからの予約。近い順 */
+    future: T[];
 }
 
 /**
- * 側ごとに分けて、描く順に並べる。渡す順は問わない。同じ時刻どうしは渡した順を保つ (並べ替えは安定)
+ * 側ごとに分けて、描く順 (どの側も時刻の早い順) に並べる。渡す順は問わない。
+ * 同じ時刻どうしは渡した順を保つ (並べ替えは安定)
  */
 export function sections<T extends TimelineItem>(items: T[]): Sections<T> {
-    const future = items.filter((item) => item.zone === 'future').sort((a, b) => b.at - a.at);
-    const now = items.filter((item) => item.zone === 'now').sort((a, b) => a.at - b.at);
-    const past = items.filter((item) => item.zone === 'past').sort((a, b) => b.at - a.at);
-    return { future, now, past };
+    const byTime = (zone: Zone) => items.filter((item) => item.zone === zone).sort((a, b) => a.at - b.at);
+    return { past: byTime('past'), now: byTime('now'), future: byTime('future') };
 }
 
 /** 画面に描く1行 */
@@ -180,19 +179,23 @@ function byDay<T extends TimelineItem>(items: T[], zone: 'future' | 'past'): Tim
     return lines;
 }
 
-/** 番組ごとに並べる。見出しの鍵に側を付ける (同じ番組が両側に立つため) */
+/**
+ * 番組ごとに並べる。見出しの鍵に側を付ける (同じ番組が両側に立つため)。
+ * `groupBySeries` は遅い順に返すので、逆にして早い順にする
+ */
 function bySeries<T extends TimelineItem>(
     items: T[],
     zone: 'future' | 'past',
     isOpen: (zone: 'future' | 'past', group: string) => boolean,
 ): TimelineLine<T>[] {
     if (items.length === 0) return [];
-    const entries: GroupEntry<T>[] = groupBySeries(items, zone === 'future' ? 'earliest' : 'latest').map(
-        (entry) =>
+    const entries: GroupEntry<T>[] = groupBySeries(items, zone === 'future' ? 'earliest' : 'latest')
+        .reverse()
+        .map((entry) =>
             entry.kind === 'group'
                 ? { kind: 'group', group: { ...entry.group, key: `${zone}-${entry.group.key}` } }
                 : entry,
-    );
+        );
     const lines: TimelineLine<T>[] = [{ kind: 'side', key: `side-${zone}`, zone }];
     for (const line of groupLines(entries, (group) => isOpen(zone, group))) {
         lines.push(line.kind === 'head' ? { ...line, zone } : line);
@@ -209,19 +212,35 @@ export interface LineOptions {
 }
 
 /**
- * 描く行に開く。上の側 (予約)、「いま」の線と録画中、下の側 (録れたもの) を1本にする。
- * 返すのは2つに分けたもの — 下の側だけ少しずつ描くため (`Paged`)。
- * 上の側は全部描く (上へ足すと、位置合わせの無いブラウザでは読んでいる所が跳ねる)
+ * 描く行に開く。上の側 (録れたもの)、「いま」の線と録画中、下の側 (予約) の3つに分けて返す —
+ * 上の側だけ、線の側から古いほうへ少しずつ描くため (`pageStart`)。録画中と予約は全部描く
  */
 export function timelineLines<T extends TimelineItem>(
     parts: Sections<T>,
     options: LineOptions,
-): { above: TimelineLine<T>[]; below: TimelineLine<T>[] } {
+): { past: TimelineLine<T>[]; now: TimelineLine<T>[]; future: TimelineLine<T>[] } {
     const side = (items: T[], zone: 'future' | 'past') =>
         options.grouped ? bySeries(items, zone, options.isOpen) : byDay(items, zone);
-    const above: TimelineLine<T>[] = [...side(parts.future, 'future'), { kind: 'now', key: 'now' }];
-    for (const item of parts.now) above.push({ kind: 'row', key: item.key, item, nested: false });
-    return { above, below: side(parts.past, 'past') };
+    const now: TimelineLine<T>[] = [{ kind: 'now', key: 'now' }];
+    for (const item of parts.now) now.push({ kind: 'row', key: item.key, item, nested: false });
+    return { past: side(parts.past, 'past'), now, future: side(parts.future, 'future') };
+}
+
+/**
+ * 録れたものを末尾 (線の側) から `count` 行だけ描くとき、何行目から描くか。
+ * 頭が日付の見出しの途中 (見出しより下の行) や開いた番組の中に落ちたら、その見出しまで戻す —
+ * 頭の行が見出し無しで描かれないように
+ */
+export function pageStart<T extends TimelineItem>(lines: TimelineLine<T>[], count: number): number {
+    const grouped = lines[0]?.kind === 'side';
+    let at = Math.max(0, lines.length - count);
+    while (at > 0) {
+        const line = lines[at]!;
+        if (line.kind !== 'row' || (grouped && !line.nested)) break;
+        at -= 1;
+    }
+    // 残りが側の見出し (「録画」) だけなら、それも描く
+    return at === 1 && grouped ? 0 : at;
 }
 
 /**
