@@ -707,7 +707,7 @@
 .board .a-state dt {
     min-width: 0;
 }
-/* 見てほしいこと。注意の色とアイコン (選んでいるときは内側の塗りに注意の色を混ぜる) */
+/* 絞り込みのうち手を止めてほしいもの (競合・失敗など)。注意の色とアイコン (選んでいるときは内側の塗りに注意の色を混ぜる) */
 .board .a-warn {
     color: var(--dp-warn-text);
 }
@@ -723,7 +723,7 @@
     align-items: center;
     gap: 0.5rem;
 }
-/* 狭い画面の見てほしいことのチップ。注意の色 */
+/* 狭い画面の、手を止めてほしいもののチップ。注意の色 */
 .board .t-toolbar .t-chips > .t-chip.warn {
     --pico-background-color: color-mix(in srgb, var(--dp-warn) 16%, transparent);
     --pico-color: var(--dp-warn-text);
@@ -757,6 +757,10 @@
     display: flex;
     align-items: center;
     margin-top: 1.75rem;
+}
+/* いちばん上に来たとき (日ごとに並べているときはいつも) は上を空けない */
+.board .t-side > .cal:first-child > .cal-head {
+    margin-top: 0;
 }
 .board .cal-head .side-label {
     flex: 1;

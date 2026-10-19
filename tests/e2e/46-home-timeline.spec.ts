@@ -152,7 +152,7 @@ test.describe('ホームの1本の一覧', () => {
     test('一覧は幅いっぱいの2段の行で、まとめは右のサイドバーに出る', async ({ page }) => {
         await page.setViewportSize({ width: 1366, height: 768 });
         await goto(page, '/');
-        // 広い幅では右にサイドバー (絞り込み・見てほしいこと・表示・状態)。頭の1行は出さず、一覧はいちばん上から
+        // 広い幅では右にサイドバー (上からカレンダー・状態・絞り込み・表示)。頭の1行は出さず、一覧はいちばん上から
         await expect(page.getByTestId('sidebar')).toBeVisible();
         await expect(page.getByTestId('timeline-toolbar')).toBeHidden();
         // 次の録画は「いま」の線に出し、状態には残さない
@@ -175,15 +175,20 @@ test.describe('ホームの1本の一覧', () => {
     });
 
     /*
-     * **サイドバーの「見てほしいこと」は絞り込みと同じ仕組み。** 件数のあるものだけ出て、押すと一覧がそれで絞られ、
+     * **競合・失敗などは絞り込みの並びの続き。** 見出しは分けず、件数のあるものだけ出て、押すと一覧がそれで絞られ、
      * もう一度押すと「すべて」に戻る。「続きから観る」「録画中」はサイドバーに置かない
      */
-    test('サイドバーの見てほしいことは一覧を絞り、もう一度押すと戻る', async ({ page }) => {
+    test('絞り込みの続きの失敗は一覧を絞り、もう一度押すと戻る', async ({ page }) => {
         await page.setViewportSize({ width: 1366, height: 768 });
         await goto(page, '/');
         const side = page.getByTestId('sidebar');
         await expect(side.getByTestId('continue-item')).toHaveCount(0);
         const failed = side.locator('[data-testid="attention-item"][data-filter="failed"]');
+        // よく使うものほど上: カレンダー・状態・絞り込み・表示。失敗は絞り込みと同じ並びの、未視聴より後ろ
+        await expect(side.locator('h2.side-label')).toHaveText([/\d+年\d+月/, '状態', '絞り込み', '表示']);
+        const filters = side.getByRole('group', { name: '絞り込み' });
+        await expect(filters.locator('button').nth(3)).toHaveAttribute('data-filter', 'unfinished');
+        await expect(filters.locator('[data-testid="attention-item"][data-filter="failed"]')).toHaveCount(1);
         await expect(failed).toContainText(/失敗\s*\d+/);
         await failed.click();
         await expect(failed).toHaveAttribute('aria-pressed', 'true');
@@ -195,8 +200,12 @@ test.describe('ホームの1本の一覧', () => {
             'true',
         );
         await expect(rows(page).filter({ hasText: '一覧試験の未視聴' })).toHaveCount(1);
-        // 状態 (空き) はサイドバーのいちばん下
+        // 状態 (空き) もサイドバーに出る
         await expect(side.getByTestId('summary')).toContainText('空き');
+        // まとめて表示ではカレンダーが消え、残りは同じ順
+        await side.getByTestId('recordings-group-toggle').click();
+        await expect(side.getByTestId('home-calendar')).toHaveCount(0);
+        await expect(side.locator('h2.side-label')).toHaveText(['状態', '絞り込み', '表示']);
     });
 
     test('狭い画面は頭の細い1行のチップで1回で絞る', async ({ page }) => {
