@@ -2,6 +2,7 @@ import { isAbsolute, join, relative, sep } from 'node:path';
 import { sql } from 'drizzle-orm';
 import {
     type AnySQLiteColumn,
+    blob,
     customType,
     index,
     integer,
@@ -438,6 +439,22 @@ export const recordings = sqliteTable(
         index('recordings_program').on(t.program_id),
     ],
 );
+
+/**
+ * **CM 検出の材料の控え** (録画1本に1行)。無音・場面の切れ目・ロゴの点を数だけ縮めて持つ (映像は持たない)。
+ * CM 検出だけやり直すときは、版 (`version`) が合えば読み直さずにここから決める (`cm-material.ts`)。
+ * 決め方を変えたときに、本番の録画で前と比べるのにも使う。中身の形式は docs/cm.md
+ */
+export const cmMaterials = sqliteTable('cm_materials', {
+    recording_id: integer('recording_id')
+        .primaryKey()
+        .references(() => recordings.id, { onDelete: 'cascade' }),
+    /** 中身の形式の版 (`cm-material.MATERIAL_VERSION`) */
+    version: integer('version').notNull(),
+    /** zstd で縮めたもの */
+    data: blob('data', { mode: 'buffer' }).notNull(),
+    created_at: integer('created_at').notNull(),
+});
 
 const ENCODE_STATES = ['queued', 'running', 'done', 'failed', 'canceled'] as const;
 /**

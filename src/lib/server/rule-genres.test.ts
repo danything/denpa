@@ -1,8 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import type { Rule } from '../types';
-import { bootstrap } from './db';
+import { bootstrap, MIGRATIONS } from './db';
 import { compile, haystack, matchesCompiled } from './rules';
 import * as schema from './schema';
 
@@ -13,13 +17,20 @@ import * as schema from './schema';
  * 予約をそろえ直すのはマイグレーションではなく、起動直後の当て直し (`epg.sync` → `rules.applyRules`)
  */
 describe('ルールのジャンルの条件を外す (0013_clear-rule-genres)', () => {
-    /** 0013 を当てる前の DB。当てた記録を消せば、次の `bootstrap` がそこから先を当てる */
+    /**
+     * 0013 を当てる前の DB。0012 までのマイグレーションだけを写した置き場から当てる。次の `bootstrap` がそこから先を当てる
+     * (当てた記録を消すだけだと、0013 より後に作ったテーブルを作り直そうとして落ちる)
+     */
     function before0013() {
+        const dir = mkdtempSync(join(tmpdir(), 'denpa-0012-'));
+        cpSync(MIGRATIONS, dir, { recursive: true });
+        const path = join(dir, 'meta/_journal.json');
+        const journal = JSON.parse(readFileSync(path, 'utf8')) as { entries: { tag: string }[] };
+        journal.entries = journal.entries.filter((e) => e.tag < '0013');
+        writeFileSync(path, JSON.stringify(journal));
         const db = new Database(':memory:');
-        bootstrap(db);
-        db.run(
-            'DELETE FROM __drizzle_migrations WHERE created_at = (SELECT MAX(created_at) FROM __drizzle_migrations)',
-        );
+        migrate(drizzle({ client: db }), { migrationsFolder: dir });
+        rmSync(dir, { recursive: true, force: true });
         return db;
     }
 

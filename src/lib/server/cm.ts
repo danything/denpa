@@ -1,6 +1,7 @@
 import { LOGO_OK, LOGO_UNUSABLE } from '../format';
 import { decideCm, type Range } from '../ts/cm-decide';
 import type { CmMode } from '../types';
+import type { CmMaterial } from './cm-material';
 import { type Scan, type ScanWant, scan } from './cm-scan';
 import { config } from './config';
 import { logoRepo, share } from './logo-data';
@@ -361,6 +362,8 @@ export interface CmDetection {
     cm: Range[];
     duration: number;
     note: string;
+    /** 決めた材料。控えに残す (`cm-material-store.saveMaterial`)。読み方が欠けていたときは無い */
+    material?: CmMaterial;
 }
 
 export interface CmOptions {
@@ -441,15 +444,6 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
                 : (found.times.at(-1) ?? Number.NaN);
             if (!Number.isFinite(duration) || duration <= 0)
                 return { cm: [], duration: Number.NaN, note: '長さを読み取れませんでした' };
-            const at = (frame: number) => (frame < found.times.length ? found.times[frame]! : duration);
-            const material = {
-                duration,
-                silences: found.silences,
-                times: found.times,
-                cuts: found.cuts,
-                ...(options.programLength !== undefined ? { programLength: options.programLength } : {}),
-                ...(options.programStart !== undefined ? { programStart: options.programStart - skip } : {}),
-            };
 
             // ロゴの枠とコマの時刻は順番で突き合わせる。数が合わなければ読み落としがあるので使わない
             let current = logo;
@@ -464,6 +458,7 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
             }
 
             // ロゴの区間を出す (覚えていたものが当たらなければ、覚え直して枠だけ読み直す)
+            let lit: CmMaterial['logo'] = null;
             if (current) {
                 step('本編とCMに分けています');
                 const result = await current.finish(
@@ -487,30 +482,70 @@ export async function openCm(input: string, options: CmOptions): Promise<CmReadi
                      * サブチャンネルの枠で録れた番組が一から覚え直さないように
                      */
                     if (result.learned !== null) share(serviceId, result.learned.file, result.learned.again);
-                    const cm = decideCm({
-                        ...material,
-                        logo: result.spans.map((s) => ({ start: at(s.start), end: at(s.end + 1) })),
-                        logoScores: result.scores,
-                    });
-                    if (cm.length === 0) why = 'ロゴの消えている所がありませんでした';
-                    // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
-                    else if (tooMuchCm(cm, duration))
-                        why = `番組の ${cmRatio(cm, duration)}% がCMと判定されたため、この結果は使いません`;
-                    else return { cm, duration, note: LOGO_OK };
+                    lit = { spans: result.spans, scores: result.scores };
                 } else {
                     why = `ロゴ判定に失敗: ${result.note}`;
                 }
             }
 
-            // ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
-            const cm = decideCm(material);
-            // 落ちた理由まで書く。**この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)
-            const note = `無音 ${material.silences.length} 箇所`;
-            return {
-                cm: tooMuchCm(cm, duration) ? [] : cm,
+            const material: CmMaterial = {
+                offset: 0,
                 duration,
-                note: `${note} (${LOGO_UNUSABLE}: ${why})`,
+                fps,
+                programLength: options.programLength,
+                programStart: options.programStart !== undefined ? options.programStart - skip : undefined,
+                silences: found.silences,
+                times: Float64Array.from(found.times),
+                cuts: Float32Array.from(found.cuts),
+                logo: lit,
+                why,
             };
+            /*
+             * 控えに残すのは映像まで読めたときだけ。音だけ読み直したもの・ロゴの枠が欠けたものは、
+             * やり直すときに読み直したほうがよい
+             */
+            const keep = read && found.times.length > 0 && (logo === null || current !== null);
+            return { ...decideFromMaterial(material), ...(keep ? { material } : {}) };
         },
+    };
+}
+
+/**
+ * 材料から CM を決める (読み直さない)。**ロゴで決め、使えなければ同じ材料から CM の尺だけで決め直す。**
+ * 返す区間と尺は材料の物差し (`offset` は足さない)
+ */
+export function decideFromMaterial(material: CmMaterial): CmDetection {
+    const { duration, times } = material;
+    const at = (frame: number) => (frame < times.length ? times[frame]! : duration);
+    const input = {
+        duration,
+        silences: material.silences,
+        times,
+        cuts: material.cuts,
+        ...(material.programLength !== undefined ? { programLength: material.programLength } : {}),
+        ...(material.programStart !== undefined ? { programStart: material.programStart } : {}),
+    };
+    let why = material.why;
+    if (material.logo !== null) {
+        const cm = decideCm({
+            ...input,
+            logo: material.logo.spans.map((s) => ({ start: at(s.start), end: at(s.end + 1) })),
+            logoScores: material.logo.scores,
+        });
+        if (cm.length === 0) why = 'ロゴの消えている所がありませんでした';
+        // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
+        else if (tooMuchCm(cm, duration))
+            why = `番組の ${cmRatio(cm, duration)}% がCMと判定されたため、この結果は使いません`;
+        else return { cm, duration, note: LOGO_OK };
+    }
+
+    // ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
+    const cm = decideCm(input);
+    // 落ちた理由まで書く。**この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)
+    const note = `無音 ${material.silences.length} 箇所`;
+    return {
+        cm: tooMuchCm(cm, duration) ? [] : cm,
+        duration,
+        note: `${note} (${LOGO_UNUSABLE}: ${why})`,
     };
 }

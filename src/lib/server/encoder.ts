@@ -21,6 +21,7 @@ import {
     type CmDetection,
     type CmReading,
     chapterMetadata,
+    decideFromMaterial,
     invertRanges,
     openCm,
     probeLeadIn,
@@ -30,6 +31,7 @@ import {
     shiftRanges,
 } from './cm';
 import { chapterArgs, cutArgs, cutList, cutPoints, KEY_SCDET, listKeyframes, planCut } from './cm-cut';
+import { loadMaterial, saveMaterial } from './cm-material-store';
 import { type Scan, type ScanReader, scan, scanReader } from './cm-scan';
 import { config } from './config';
 import { affected, now, orm } from './db';
@@ -919,6 +921,7 @@ async function decide(
         const decided = await reading.decide(found, { skip, before: inputArgs(skip), video });
         return {
             ...decided,
+            ...(decided.material !== undefined ? { material: { ...decided.material, offset: skip } } : {}),
             cm: decided.cm.map((range) => ({ start: range.start + skip, end: range.end + skip })),
             duration: decided.duration + skip,
         };
@@ -1448,6 +1451,7 @@ async function runJob(jobId: number): Promise<void> {
         if (first && reading !== null) {
             setPhase(jobId, 'cm', 'CMの境目を決めています');
             detection = await decide(reading, done.found, done.skip, done.video);
+            if (detection.material !== undefined) saveMaterial(recording.id, detection.material);
             /*
              * 音だけで決めた (映像の読み込みが落ちて探さずに再エンコードした) なら切らない。キーフレームも置いて
              * いないので、切るにはもう1回エンコードすることになる。尺だけの判定で本編を削るより CM を残す
@@ -1720,41 +1724,62 @@ async function runCmJob(jobId: number): Promise<void> {
     /** 読んだものの時刻を入れ物の頭からの秒に直すぶん。元のTSなら 0 */
     const shift = ts === null ? skip : 0;
 
+    /*
+     * **控えておいた材料があれば読み直さない** (`cm-material-store.ts`)。版が合い、ロゴまで当たっていたものだけ。
+     * ロゴが使えなかった回は、そのあと覚えたロゴで当たるかもしれないので読み直す
+     */
+    const stored = loadMaterial(recording.id);
     let detection: CmDetection;
     try {
-        setPhase(jobId, 'cm', '局ロゴを確かめています');
-        const programStart =
-            (recording.start_at - (recording.record_from ?? recording.start_at - config.startMargin)) / 1000;
-        const reading = await openCm(input, {
-            signal,
-            serviceId: recording.service_id,
-            programLength: (recording.end_at - recording.start_at) / 1000,
-            programStart: programStart - shift,
-            onStep: (label) => setStep(jobId, label),
-        });
-        if (canceled.has(jobId)) return finishCanceled(jobId, null);
-        setStep(
-            jobId,
-            `${ts === null ? 'エンコード済みの動画' : '元のTS'}から無音・場面の切れ目・ロゴを読み取っています`,
-        );
-        const report = progressReporter(jobId, reading.duration);
-        const found = await scan(input, {
-            ...reading.want(),
-            signal,
-            timeoutMs: config.cmDetectTimeout,
-            onTime: report,
-        });
-        if (canceled.has(jobId)) return finishCanceled(jobId, null);
-        if (found.code !== 0) {
-            fail(jobId, recording, `読み込みに失敗しました (code ${found.code}): ${found.stderr}`, what);
-            return;
+        if (stored !== null && stored.logo !== null) {
+            setPhase(jobId, 'cm', '控えておいた材料から決め直しています');
+            const decided = decideFromMaterial(stored);
+            detection = {
+                ...decided,
+                cm: decided.cm.map((range) => ({
+                    start: range.start + stored.offset,
+                    end: range.end + stored.offset,
+                })),
+                duration: decided.duration + stored.offset,
+            };
+        } else {
+            setPhase(jobId, 'cm', '局ロゴを確かめています');
+            const programStart =
+                (recording.start_at - (recording.record_from ?? recording.start_at - config.startMargin)) /
+                1000;
+            const reading = await openCm(input, {
+                signal,
+                serviceId: recording.service_id,
+                programLength: (recording.end_at - recording.start_at) / 1000,
+                programStart: programStart - shift,
+                onStep: (label) => setStep(jobId, label),
+            });
+            if (canceled.has(jobId)) return finishCanceled(jobId, null);
+            setStep(
+                jobId,
+                `${ts === null ? 'エンコード済みの動画' : '元のTS'}から無音・場面の切れ目・ロゴを読み取っています`,
+            );
+            const report = progressReporter(jobId, reading.duration);
+            const found = await scan(input, {
+                ...reading.want(),
+                signal,
+                timeoutMs: config.cmDetectTimeout,
+                onTime: report,
+            });
+            if (canceled.has(jobId)) return finishCanceled(jobId, null);
+            if (found.code !== 0) {
+                fail(jobId, recording, `読み込みに失敗しました (code ${found.code}): ${found.stderr}`, what);
+                return;
+            }
+            const decided = await reading.decide(found, { skip: 0, before: [] });
+            detection = {
+                ...decided,
+                cm: decided.cm.map((range) => ({ start: range.start + shift, end: range.end + shift })),
+                duration: decided.duration + shift,
+            };
+            if (decided.material !== undefined)
+                saveMaterial(recording.id, { ...decided.material, offset: shift });
         }
-        const decided = await reading.decide(found, { skip: 0, before: [] });
-        detection = {
-            ...decided,
-            cm: decided.cm.map((range) => ({ start: range.start + shift, end: range.end + shift })),
-            duration: decided.duration + shift,
-        };
     } catch (error) {
         if (canceled.has(jobId)) return finishCanceled(jobId, null);
         fail(jobId, recording, String(error), what);

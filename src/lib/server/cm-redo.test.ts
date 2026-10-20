@@ -80,3 +80,49 @@ test('同じ録画に2つは積まない (エンコードするジョブがあ�
     const encode = enqueue(1);
     expect(enqueue(1, 'cm')).toBe(encode);
 });
+
+test('材料の控えがあれば読み直さずに決める (控えの物差しに頭を足す)', async () => {
+    seed(null);
+    const { cmMaterials } = await import('./schema');
+    const { saveMaterial } = await import('./cm-material-store');
+    // 控え: 尺 600 秒、100〜160 秒にロゴが無い (CM 60 秒)。継ぎ目は無音と切れ目。エンコードしたときに頭を 0.5 秒捨てた
+    const fps = 10;
+    const times = Float64Array.from({ length: 6000 }, (_, i) => i / fps);
+    const cuts = new Float32Array(6000);
+    const joints = [100, 115, 130, 145, 160];
+    for (const t of joints) cuts[t * fps] = 30;
+    saveMaterial(1, {
+        offset: 0.5,
+        duration: 600,
+        fps,
+        silences: joints.map((t) => ({ start: t - 0.5, end: t + 0.5 })),
+        times,
+        cuts,
+        logo: {
+            spans: [
+                { start: 0, end: 999 },
+                { start: 1600, end: 5999 },
+            ],
+            scores: new Float32Array(6000),
+        },
+        why: '',
+    });
+    const jobId = enqueue(1, 'cm');
+    pump();
+    const job = await finished(jobId);
+    expect(job.state).toBe('done');
+    const rec = orm().select().from(recordings).where(eq(recordings.id, 1)).get()!;
+    // 偽 ffmpeg の無音 (300・360) ではなく、控えから決めたもの
+    expect(rec.cm_ranges).toEqual([{ start: 100.5, end: 160.5 }]);
+    orm().delete(cmMaterials).run();
+});
+
+test('コマを1つも読めなかったものは控えない (次も読み直す)', async () => {
+    seed(null);
+    const { loadMaterial } = await import('./cm-material-store');
+    const jobId = enqueue(1, 'cm');
+    pump();
+    expect((await finished(jobId)).state).toBe('done');
+    // 偽 ffmpeg は無音しか返さない
+    expect(loadMaterial(1)).toBeNull();
+});

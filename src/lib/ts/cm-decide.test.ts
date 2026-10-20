@@ -442,9 +442,14 @@ describe('ロゴが遅れて戻る', () => {
         expect(round(decideCm(input(logo)))[1]).toEqual({ start: 600, end: 659.7 });
     });
 
-    test('8 秒より遅れたロゴの戻りは寄せない (CM の並びが止まった所まで)', () => {
+    test('8 秒より遅れたロゴの戻りでも、間に無音の無いロゴの無い所は CM の続き', () => {
+        /*
+         * 前は「8 秒より遅れたロゴの戻りには寄せず、CM の並びが止まった 615 まで」としていた。そうすると 615〜668.6 の
+         * ロゴの無い 53 秒が番組に残る。659.7 の無音のあとロゴが戻るまで無音も切れ目も無いので、番組が戻ったのは 659.7。
+         * 点数で比べる今のやり方では、ロゴの無い 53 秒を番組にする減点のほうが、境目がロゴの戻りから 8.9 秒離れている減点より大きい
+         */
         const late = [logo[0]!, { start: 668.6, end: 1789.7 }];
-        expect(round(decideCm(input(late)))[1]).toEqual({ start: 600, end: 615 });
+        expect(round(decideCm(input(late)))[1]).toEqual({ start: 600, end: 659.7 });
     });
 });
 
@@ -492,5 +497,88 @@ describe('番組が戻る直前の 10 秒の番宣 (並びの境目が少しず�
 
     test('手前の境目から 15 秒の倍数に 0.6 秒以内で届くなら、最後の 10 秒も CM', () => {
         expect(round(decideCm(recording(1800, joints, logo)))[1]).toEqual({ start: 600, end: 690.03 });
+    });
+});
+
+describe('実機の並び (点数で比べる)', () => {
+    test('録画 474: ロゴが 5.9 秒遅れて戻り、2 つの継ぎ目の切れ目が 0.5 秒ずつずれていても 60 秒の CM', () => {
+        // 継ぎ目は 600・615・630・645・660 (無音はその前後 0.5 秒)。615 と 645 の無音の中の切れ目は 0.5 秒ずれている。
+        // ロゴは 665.9 まで戻らない
+        const joints = [10, 600, 615, 630, 645, 660, 1790, 1805];
+        const cuts = [10, 600, 614.5, 630, 645.5, 660, 1790, 1805];
+        const input: CmInput = {
+            duration: 1800,
+            silences: silencesAt(joints),
+            ...frames(1800, cuts),
+            logo: [
+                { start: 10.2, end: 599.8 },
+                { start: 665.9, end: 1789.7 },
+            ],
+        };
+        expect(round(decideCm(input))).toEqual([
+            { start: 0, end: 10 },
+            { start: 600, end: 660 },
+            { start: 1790, end: 1800 },
+        ]);
+    });
+
+    test('録画 474: 同じ無音の中で、強い切れ目の 0.5 秒前の弱い切れ目が本当の継ぎ目 (CM の頭)', () => {
+        // CM は 599.5〜659.5。頭の無音には弱い 599.5 (継ぎ目) と、もっと強い 600 (CM の中の場面の替わり)
+        const joints = [10, 614.5, 629.5, 644.5, 659.5, 1790, 1805];
+        const silences = [...silencesAt(joints), { start: 599, end: 600.5 }];
+        const material = frames(1800, [...joints, 600], [599.5]);
+        material.cuts[Math.round(600 * FPS)] = 60;
+        const logo = [
+            { start: 10.2, end: 598 },
+            { start: 662, end: 1789.7 },
+        ];
+        expect(round(decideCm({ duration: 1800, silences, ...material, logo }))[1]).toEqual({
+            start: 599.5,
+            end: 659.5,
+        });
+    });
+
+    test('録画 474: 同じ無音の中で、強い切れ目の 0.5 秒前の弱い切れ目が本当の継ぎ目 (CM の終わり)', () => {
+        // CM は 600〜660。終わりの無音には弱い 660 (番組が戻った所) と、もっと強い 660.5 (番組の中の場面の替わり)
+        const joints = [10, 600, 615, 630, 645, 1790, 1805];
+        const silences = [...silencesAt(joints), { start: 659.6, end: 661 }];
+        const material = frames(1800, [...joints, 660.5], [660]);
+        material.cuts[Math.round(660.5 * FPS)] = 60;
+        const logo = [
+            { start: 10.2, end: 599.8 },
+            { start: 663, end: 1789.7 },
+        ];
+        expect(round(decideCm({ duration: 1800, silences, ...material, logo }))[1]).toEqual({
+            start: 600,
+            end: 660,
+        });
+    });
+
+    test('録画 467: CM 60 秒 + 告知 5.5 秒 + 14.65 秒 + 番宣 9.9 秒で、ひと続きの 90 秒の CM', () => {
+        const joints = [10, ...every15(600, 660), 665.5, 680.15, 690.05, 1790, 1805];
+        const logo = [
+            { start: 10.2, end: 599.8 },
+            { start: 690.4, end: 1789.7 },
+        ];
+        expect(round(decideCm(recording(1800, joints, logo)))).toEqual([
+            { start: 0, end: 10 },
+            { start: 600, end: 690.07 },
+            { start: 1790, end: 1800 },
+        ]);
+    });
+
+    test('録画 469: ロゴの出ている 30 秒 (局の告知 5 秒 + 次回予告 15 秒 + 提供 10 秒) の告知だけ CM', () => {
+        // CM 600〜675、告知 675〜680 (ロゴあり、次回予告との間に無音が無い)、次回予告 680〜695、提供 695〜705、705 から CM
+        const joints = [10, ...every15(600, 675), 695, ...every15(705, 795)];
+        const logo = [
+            { start: 10.2, end: 599.8 },
+            { start: 675.3, end: 704.7 },
+        ];
+        const input = recording(800, joints, logo, frames(800, [...joints, 680]));
+        expect(round(decideCm(input))).toEqual([
+            { start: 0, end: 10 },
+            { start: 600, end: 680 },
+            { start: 705, end: 800 },
+        ]);
     });
 });

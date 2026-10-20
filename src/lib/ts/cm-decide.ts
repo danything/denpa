@@ -35,7 +35,7 @@ export interface Boundary {
     cuts: number[];
     /** 切れ目が無かった (無音の真ん中を置いた) */
     still: boolean;
-    /** 弱い切れ目 (明るい映像どうしの切り替わり)。ロゴが替わった所を探すときだけ見る */
+    /** 弱い切れ目 (明るい映像どうしの切り替わり) */
     weak: number[];
 }
 
@@ -50,7 +50,7 @@ const SILENCE_MIN_ALONE = 0.8;
 const REACH = 0.2;
 /** これより弱い切れ目は切れ目と見ない */
 const CUT_MIN = 8;
-/** ロゴが替わった所を探すときに見る、弱い切れ目の下限 */
+/** 弱い切れ目の下限。明るい映像どうしの切り替わりはこのくらい */
 const CUT_WEAK = 3;
 
 /** 最初に `at` 以上になる位置 */
@@ -102,66 +102,28 @@ function points(candidates: Boundary[]): number[] {
     return out;
 }
 
-/**
- * ロゴの境目からどれだけ離れた無音まで寄せるか (秒)。ロゴは番組が戻ってから数秒遅れて出ることがあり
- * (局がロゴを後から重ねる・判定がならしのぶん遅れる)、実機では 4.7 秒遅れていた (BSテレ東)
- */
+/** 番組の尺の窓の端を、どれだけ離れた無音まで寄せるか (秒) */
 const SNAP = 5;
-/**
- * **ロゴが戻る側だけ、もう少し遠くまで寄せる** (秒)。番組が戻った直後が明るい場面だと、ロゴが地に紛れて
- * 判定が遅れる。実機の TOKYO MX で、番組が戻った無音から 5.6 秒遅れてロゴが出て、寄せられずに
- * CM が 60 秒から 15 秒に縮んでいた。消える側は広げない (番組の終わりを削るおそれがある)
- */
-const SNAP_RISE = 8;
 /** 切れ目の無い無音を、どれだけ遠いとみなすか (秒) */
 const STILL_PENALTY = 1.5;
 
-/**
- * ロゴの出入り `at` に寄せる境目。**近くの切れ目のうち、ロゴの点が大きく替わったもの** (`change`)、
- * 無ければロゴの出入りにいちばん近い無音の、いちばん強い切れ目。継ぎ目の無音に切れ目が2つあるとき
- * (番組の映像 → 番宣のフェード)、強いほうではなくロゴが替わったほうが境目。
- * 切れ目の無い無音 (真ん中を置いたもの) は、切れ目のあるものより遠いとみなす (CM の継ぎ目にはふつう切れ目がある)。
- * 近くに無音が無ければロゴの出入りそのもの (`snapped` が偽)。番組の間では、そこを CM の端にはしない (`arrange`)
- */
-function snap(
-    at: number,
-    candidates: Boundary[],
-    change?: (t: number) => number,
-    reach = SNAP,
-): { at: number; snapped: boolean } {
+/** `at` にいちばん近い無音の、いちばん強い切れ目。`SNAP` 秒より遠ければ `at` のまま (番組の尺の窓の端) */
+function snap(at: number, candidates: Boundary[]): number {
     let best = at;
-    let distance = reach;
-    let biggest = CHANGE_MIN;
-    let changed: number | null = null;
+    let distance = SNAP;
     for (const b of candidates) {
-        if (b.silence.end + REACH < at - reach || b.silence.start - REACH > at + reach) continue;
-        if (change !== undefined) {
-            for (const cut of [...(b.still ? [] : b.cuts), ...b.weak]) {
-                const c = Math.abs(cut - at) < reach ? change(cut) : 0;
-                if (c > biggest) {
-                    biggest = c;
-                    changed = cut;
-                }
-            }
-        }
-        // 無音ごとにいちばん強い切れ目で比べる
         const d = Math.abs(b.cuts[0]! - at) + (b.still ? STILL_PENALTY : 0);
         if (d < distance) {
             distance = d;
             best = b.cuts[0]!;
         }
     }
-    if (changed !== null) return { at: changed, snapped: true };
-    return { at: best, snapped: distance < reach };
+    return best;
 }
 
 /** ロゴの点の変わり方をみる幅 (秒) */
 const CHANGE_WINDOW = 1;
-/**
- * ロゴが替わったとみなす点の差。これに届く切れ目が無ければ、ロゴの出入りにいちばん近いもの。
- * 消えた側の点は残った側の半分以下 (`CHANGE_RATIO`)。明るい場面に替わって点が下がっただけの所は数えない
- */
-const CHANGE_MIN = 0.2;
+/** 消えた側の点が残った側のこの割合より大きければ、ロゴが替わったとは見ない (明るい場面で点が下がっただけ) */
 const CHANGE_RATIO = 0.5;
 
 /**
@@ -171,12 +133,12 @@ const CHANGE_RATIO = 0.5;
  */
 function logoChange(input: CmInput, way: 1 | -1): ((t: number) => number) | undefined {
     const { times, logoScores } = input;
-    if (times === undefined || logoScores === undefined) return undefined;
+    if (times === undefined || logoScores === undefined || logoScores.length === 0) return undefined;
     const mean = (from: number, to: number) => {
         let sum = 0;
         let count = 0;
         for (let i = lowerBound(times, from); i < times.length && times[i]! < to; i++) {
-            sum += logoScores[i]!;
+            sum += logoScores[i] ?? 0;
             count++;
         }
         return count > 0 ? sum / count : 0;
@@ -242,222 +204,446 @@ function withinProgram(spans: Range[], input: CmInput, candidates: Boundary[]): 
      * 置き場所の手がかりが番組表だけのときは、頭は切らない。録画が遅れて始まると番組表どおりの頭は
      * 実際より後ろになり、番組の頭を削ってしまう (尻の次の番組は削っても番組は減らない)
      */
-    const start = places.length > 0 ? snap(head, candidates).at : 0;
-    const end = snap(head + length, candidates).at;
+    const start = places.length > 0 ? snap(head, candidates) : 0;
+    const end = snap(head + length, candidates);
     return spans
         .map((span) => ({ start: Math.max(span.start, start), end: Math.min(span.end, end) }))
         .filter((span) => span.end > span.start);
 }
 
-/** ロゴの出ていない所を CM にする。境目は近くの無音の切れ目に寄せ、CM の並び (15秒の倍数) で詰める */
-function byLogo(input: CmInput, logo: Range[], candidates: Boundary[]): Range[] {
+/*
+ * ここから、ロゴで決めるときの点数。**全部の分け方の中から点数の合計がいちばん高いものを選ぶ** (`byLogo`)。
+ * 境目の候補を時刻の順に並べ、候補から候補までの区間を「番組」か「CM」にする。点数は区間ごとの点
+ * (CM の尺・ロゴの出ている秒) と、番組と CM が替わる境目の点 (切れ目・無音・ロゴの出入りからの距離) の和。
+ * 規則を順に当てて決めていくと、1つの継ぎ目が 0.3〜0.5 秒ずれただけで CM の並びが途切れ、その先が崩れた
+ */
+
+/** 番組: ロゴの出ている 1 秒ごとの点 */
+const PROGRAM_LOGO = 1;
+/**
+ * 番組: ロゴの無い 1 秒ごとの減点。CM の尺に合わない所の減点 (`CM_MISFIT`) とつり合わせて、
+ * 番組の間の 14.5 秒より短いロゴの途切れ (アイキャッチ) は番組に残す
+ */
+const PROGRAM_BARE = 0.5;
+/** CM: 尺が 15 秒の倍数にぴったりのときの 1 秒ごとの点。ずれると減り、`CM_TOLERANCE` で 0 */
+const CM_FIT = 1;
+/** CM: 尺がどの倍数にも合わない (外れが `CM_TOLERANCE` 以上の) 区間の減点。ロゴの無い 14.5 秒の番組と同じ */
+const CM_MISFIT = GAP_MIN * PROGRAM_BARE;
+/** CM: ロゴの出ている 1 秒ごとの減点。番組の点 (`PROGRAM_LOGO`) と CM の点 (`CM_FIT`) の和より大きく */
+const CM_LOGO = 3;
+/** 局の短い告知の尺 (秒)。CM の尺 (15 秒) より短い。CM の続きでだけ CM とみる */
+const SPOTS = [5, 10];
+/** 告知: ぴったりのときの 1 秒ごとの点。15 秒の倍数より低い */
+const SPOT_FIT = 0.5;
+/** 告知の尺とみなす誤差 (秒)。実機の BS-TBS で 5.47 秒の告知があった */
+const SPOT_TOLERANCE = 0.6;
+/**
+ * CM に挟まれた短い所 (`ISLAND_MAX` 秒以内のロゴの出ている所) の頭の告知の点。局の 5 秒の告知はロゴを出したまま流れ、
+ * 次回予告との間に無音が無いことがある (実機で 5 秒の告知 → 次回予告 → 提供)。ロゴの減点はせず、番組にしたときと同じ点にこれを足す
+ */
+const SPOT_ISLAND = 4;
+/** CM に挟まれた短い所の最長 (秒)。番組の終わりの次回予告と提供など */
+const ISLAND_MAX = 60;
+/** 告知を除いたあとに残す、ロゴの出ている所の最短 (秒) */
+const ISLAND_REST = 15;
+/** 提供の尺 (秒) と誤差 */
+const CREDITS = 10;
+const CREDIT_TOLERANCE = 0.4;
+/**
+ * 提供を番組に残す点。番組の直後、または番組の終わりから CM の並びをたどった先の 10 秒と、
+ * 並びの外にある番組が戻る直前の 10 秒。告知 (10 秒) を CM にしたときの点とロゴの無い 10 秒の減点の和より大きく
+ */
+const CREDIT = 14;
+/**
+ * 境目の減点 (ぴったりの境目は 0)。番組と CM が替わる所だけに付く。強い切れ目 (`CUT_FULL` 以上) と
+ * 長い無音 (`SILENCE_FULL` 秒以上) は減点なし。ロゴの点が大きく替わった切れ目 (`CHANGE_FULL` 以上) も同じ
+ */
+const CUT_COST = 2;
+const CUT_FULL = 20;
+const SILENCE_COST = 1;
+const SILENCE_FULL = 1;
+const CHANGE_COST = 1.5;
+const CHANGE_FULL = 0.5;
+/**
+ * ロゴの出入りから離れた境目の減点 (1 秒ごと)。**近いうちはほとんど減らさず** (`EDGE_NEAR`)、ロゴが消える側は 5 秒、
+ * 戻る側は 8 秒を超えると大きく減らす (`EDGE_FAR`)。ロゴは番組が戻ってから遅れて出ることがあり、
+ * 明るい場面で始まると判定も遅れる (実機で 4.7〜5.9 秒)
+ */
+const EDGE_NEAR = 0.1;
+const EDGE_FAR = 2;
+const EDGE_FLAT_FALL = 5;
+const EDGE_FLAT_RISE = 8;
+/** ロゴの出入りが1つも無いときの減点の上限 */
+const EDGE_CAP = 30;
+
+/**
+ * 無音1つから採る切れ目の数 (強いほうから)。動いている場面の無音には弱い切れ目がいくつも並ぶので、比べる数を抑える
+ */
+const PER_SILENCE = 4;
+
+/** 候補の種類。`mark` は無音の中、`end` は録画の頭と尻、`bare` は無音の外の強い切れ目、`logo` はロゴの出入りそのもの */
+type Kind = 'mark' | 'end' | 'bare' | 'logo';
+
+interface Candidate {
+    at: number;
+    /** 切れ目の強さ (無ければ 0) */
+    cut: number;
+    /** 無音の長さ (秒。無ければ 0) */
+    silence: number;
+    kind: Kind;
+}
+
+/**
+ * 境目の候補。**無音の中の切れ目を強いものも弱いものも全部** (継ぎ目の無音に切れ目が2つあると、強いほうが継ぎ目とは限らない)。
+ * 切れ目が無ければ無音の真ん中。ほかに、
+ *
+ * - 録画の頭と尻
+ * - 無音の候補からちょうど 5・10 秒の、無音の外の強い切れ目 (`bare`)。CM に挟まれた短い所の頭の告知の終わりにだけ使う
+ * - 最初のロゴの出始めと最後の消え際 (`logo`)。録画の頭と尻の CM の端にだけ使う (前後の番組との境目は無音を挟まないことがある)
+ */
+function candidates(input: CmInput, logo: Range[]): Candidate[] {
+    const { duration, times, cuts } = input;
+    const strength = (t: number) => {
+        if (times === undefined || cuts === undefined) return 0;
+        const i = lowerBound(times, t - 1e-6);
+        return i < times.length && Math.abs(times[i]! - t) < 1e-6 ? cuts[i]! : 0;
+    };
+    const out: Candidate[] = [];
+    for (const b of boundaries(input)) {
+        const silence = b.silence.end - b.silence.start;
+        const middle = (b.silence.start + b.silence.end) / 2;
+        const found = [...b.cuts, ...b.weak]
+            .filter((t) => !b.still || t !== middle)
+            .map((t) => ({ at: t, cut: strength(t) }))
+            .sort((x, y) => y.cut - x.cut)
+            .slice(0, PER_SILENCE);
+        if (b.still) found.push({ at: middle, cut: 0 });
+        for (const { at, cut } of found)
+            if (at > 0 && at < duration) out.push({ at, cut, silence, kind: 'mark' });
+    }
+    if (times !== undefined && cuts !== undefined) {
+        const marks = out.map((c) => c.at).sort((a, b) => a - b);
+        const near = (t: number) => {
+            const k = lowerBound(marks, t - 0.5);
+            return k < marks.length && marks[k]! < t + 0.5;
+        };
+        for (const from of marks) {
+            for (const spot of SPOTS) {
+                for (let i = lowerBound(times, from + spot - 0.25); i < times.length; i++) {
+                    if (times[i]! > from + spot + 0.25) break;
+                    const t = times[i]!;
+                    if (cuts[i]! >= CUT_MIN && t < duration && !near(t))
+                        out.push({ at: t, cut: cuts[i]!, silence: 0, kind: 'bare' });
+                }
+            }
+        }
+    }
+    const first = logo[0];
+    const last = logo.at(-1);
+    if (first !== undefined && first.start > EDGE)
+        out.push({ at: first.start, cut: 0, silence: 0, kind: 'logo' });
+    if (last !== undefined && last.end < duration - EDGE)
+        out.push({ at: last.end, cut: 0, silence: 0, kind: 'logo' });
+    out.sort((a, b) => a.at - b.at);
+    // 同じ時刻は1つに (無音が重なっていた・ロゴの出入りが切れ目と同じ)。強いほうを残す
+    const merged: Candidate[] = [{ at: 0, cut: 0, silence: 0, kind: 'end' }];
+    const rank = { end: 3, mark: 2, bare: 1, logo: 0 };
+    for (const c of out) {
+        const prev = merged.at(-1)!;
+        if (c.at - prev.at < 1e-3) {
+            if (prev.kind === 'end') continue;
+            if (rank[c.kind] > rank[prev.kind]) prev.kind = c.kind;
+            prev.cut = Math.max(prev.cut, c.cut);
+            prev.silence = Math.max(prev.silence, c.silence);
+        } else {
+            merged.push({ ...c });
+        }
+    }
+    if (duration - merged.at(-1)!.at < 1e-3) merged.pop();
+    merged.push({ at: duration, cut: 0, silence: 0, kind: 'end' });
+    return merged;
+}
+
+/** 15 秒の倍数への合い方 (ぴったりで 1、`tolerance` 外れて 0)。15〜180 秒の外は 0 */
+function fit15(seconds: number, tolerance = CM_TOLERANCE): number {
+    if (seconds < 15 - tolerance || seconds > 180 + tolerance) return 0;
+    const units = Math.min(12, Math.max(1, Math.round(seconds / 15)));
+    return Math.max(0, 1 - Math.abs(seconds - units * 15) / tolerance);
+}
+
+/** 告知の尺 (5・10 秒) への合い方 */
+function fitSpot(seconds: number): number {
+    let best = 0;
+    for (const spot of SPOTS) best = Math.max(best, 1 - Math.abs(seconds - spot) / SPOT_TOLERANCE);
+    return best;
+}
+
+/**
+ * 分け方の途中の状態 (いま終わった区間が何だったか)。CM が 15 秒の倍数で並んでいるか、提供の手前が何だったかで
+ * 次の区間の点が変わる
+ */
+const State = {
+    /** 番組 */
+    Program: 0,
+    /** CM。番組の終わりから 15 秒の倍数ばかりで並んでいる */
+    Chain: 1,
+    /** CM。直前の区間が 15 秒の倍数 */
+    Fit: 2,
+    /** CM。それ以外 (尺の合わないもの・告知・録画の端) */
+    Other: 3,
+    /** CM。番組のあとに告知だけ (このまま番組に戻るなら尺の合わない CM とみる) */
+    Spot: 4,
+    /** CM。無音の外の切れ目で終わった告知 (次は番組) */
+    Bare: 5,
+    /** 提供 (番組)。その手前が番組 / 並び / 15 秒の倍数 / それ以外の CM */
+    CreditAfterProgram: 6,
+    CreditAfterChain: 7,
+    CreditAfterFit: 8,
+    CreditAfterOther: 9,
+} as const;
+type State = (typeof State)[keyof typeof State];
+const STATES = 10;
+
+const isCm = (s: State) => s >= State.Chain && s <= State.Bare;
+const isCredit = (s: State) => s >= State.CreditAfterProgram;
+
+/**
+ * 提供として番組に残す点。次の区間 (`next` が CM か) で決まる。
+ * 番組の直後・番組の終わりからの CM の並びの先の 10 秒は、次が CM なら提供。並びの外にある 10 秒は、次が番組なら提供。
+ * 15 秒の倍数の CM に続いて番組に戻る 10 秒は局の番宣 (CM) なので点を付けない
+ */
+function creditBonus(state: State, nextIsCm: boolean): number {
+    if (nextIsCm) return state === State.CreditAfterProgram || state === State.CreditAfterChain ? CREDIT : 0;
+    return state === State.CreditAfterOther ? CREDIT : 0;
+}
+
+/** ロゴの出ている区間から作る、出ている秒の数え方とロゴの出入り */
+function logoIndex(spans: Range[], duration: number) {
+    const sorted = [...spans].sort((a, b) => a.start - b.start);
+    const merged: Range[] = [];
+    for (const s of sorted) {
+        const last = merged.at(-1);
+        if (last !== undefined && s.start <= last.end) last.end = Math.max(last.end, s.end);
+        else merged.push({ ...s });
+    }
+    const starts = merged.map((s) => s.start);
+    const before = [0];
+    for (const s of merged) before.push(before.at(-1)! + s.end - s.start);
+    /** 0 から `t` までにロゴが出ていた秒 */
+    const litTo = (t: number) => {
+        const k = lowerBound(starts, t + 1e-9) - 1;
+        if (k < 0) return 0;
+        const s = merged[k]!;
+        return before[k]! + Math.max(0, Math.min(t, s.end) - s.start);
+    };
+    // 録画の端で切れているロゴは、そこで出入りしたのではない
+    const rises = merged.map((s) => s.start).filter((t) => t > EDGE);
+    const falls = merged.map((s) => s.end).filter((t) => t < duration - EDGE);
+    return { merged, lit: (a: number, b: number) => litTo(b) - litTo(a), rises, falls };
+}
+
+/** `edges` (並んだ時刻) のうち `t` にいちばん近いものまでの距離 */
+function nearest(edges: number[], t: number): number {
+    let best = Number.POSITIVE_INFINITY;
+    for (const e of edges) best = Math.min(best, Math.abs(e - t));
+    return best;
+}
+
+/** ロゴの出入りから `distance` 秒離れた境目の減点 */
+function edgeCost(distance: number, flat: number): number {
+    if (!Number.isFinite(distance)) return EDGE_CAP;
+    const cost = distance <= flat ? distance * EDGE_NEAR : flat * EDGE_NEAR + (distance - flat) * EDGE_FAR;
+    return Math.min(EDGE_CAP, cost);
+}
+
+/**
+ * ロゴの出ていない所を CM にする。**分け方を全部比べて、点数の合計がいちばん高いものを選ぶ** (動的計画法)。
+ *
+ * - **CM の区間** は 180 秒まで。尺が 15 秒の倍数に近いほど高く、ロゴの出ている秒は大きく減らす。録画の頭と尻に接する区間は
+ *   前後の番組なので尺を問わない。5・10 秒は CM の続きでだけ告知として低めの点
+ * - **番組の区間** はロゴの出ている秒に点、ロゴの無い秒は少し減らす (短いアイキャッチは番組のまま)
+ * - **番組と CM が替わる境目** は強い切れ目・長い無音・ロゴの点が替わった所ほど減らさず、ロゴの出入りから離れるほど減らす
+ * - **提供**は状態で見る。CM の並びに続く番組が戻る直前の 10 秒は局の番宣 (CM)、それ以外の 10 秒は提供 (番組)
+ *
+ * 隣り合う CM の区間は1つにまとめて返す
+ */
+function byLogo(input: CmInput, logo: Range[]): Range[] {
     const { duration } = input;
     const spans = withinProgram(
         [...logo].sort((a, b) => a.start - b.start),
         input,
-        candidates,
+        boundaries(input),
     );
-    const gaps: Range[] = [];
-    let cursor = 0;
-    for (const span of spans) {
-        gaps.push({ start: cursor, end: span.start });
-        cursor = Math.max(cursor, span.end);
-    }
-    gaps.push({ start: cursor, end: duration });
-
-    // CM の並びをたどるときは、無音の中の切れ目を全部候補にする (いちばん強い切れ目が継ぎ目とは限らない)
-    const marks = candidates.flatMap((b) => b.cuts).sort((a, b) => a - b);
+    const index = logoIndex(spans, duration);
+    const nodes = candidates(input, index.merged);
+    const n = nodes.length;
     const fall = logoChange(input, -1);
     const rise = logoChange(input, 1);
-    const out: Range[] = [];
-    for (const gap of gaps) {
-        // 録画の頭と尻は前後の番組。それ以外は番組の終わりから始まり、番組の頭で終わる
-        const afterProgram = gap.start > 0;
-        const beforeProgram = gap.end < duration;
-        const start = afterProgram ? snap(gap.start, candidates, fall) : { at: 0, snapped: true };
-        const end = beforeProgram
-            ? snap(gap.end, candidates, rise, SNAP_RISE)
-            : { at: duration, snapped: true };
-        if (end.at - start.at <= 0.5) continue;
-        // 頭と尻は短くても CM。番組の間は CM の尺に足りなければ番組
-        if (afterProgram && beforeProgram && end.at - start.at < GAP_MIN) continue;
-        out.push(...arrange(start, end, marks, afterProgram, beforeProgram));
-    }
-    return trimSpots(input, alignLengths(out, candidates, input.duration));
-}
+    const fallChange = nodes.map((c) => (fall === undefined || c.kind === 'end' ? 0 : fall(c.at)));
+    const riseChange = nodes.map((c) => (rise === undefined || c.kind === 'end' ? 0 : rise(c.at)));
+    const scored = fall !== undefined;
 
-/** CM の尺から外れているとみなして寄せ直す、ずれの上限 (秒)。これより大きくずれたものは CM の並びの外 (提供など) */
-const ALIGN_MAX = 1;
+    /**
+     * 境目の減点。`starts` は CM の頭か (偽なら CM の終わり)。`also` は提供の反対の端 (近いほうのロゴの出入りで測る)。
+     * 番組の終わりから CM の並びをたどった先の提供は、ロゴの消えている所の中にあるので、ロゴの出入りからの距離は見ない (`also` が null)
+     */
+    const boundaryCost = (i: number, starts: boolean, also?: number | null): number => {
+        const c = nodes[i]!;
+        if (c.kind === 'end') return 0;
+        const at = c.at;
+        const edges = starts ? index.falls : index.rises;
+        let distance = also === null ? 0 : nearest(edges, at);
+        if (also !== undefined && also !== null) distance = Math.min(distance, nearest(edges, also));
+        const change = starts ? fallChange[i]! : riseChange[i]!;
+        return (
+            CUT_COST * (1 - Math.min(1, c.cut / CUT_FULL)) +
+            SILENCE_COST * (1 - Math.min(1, c.silence / SILENCE_FULL)) +
+            (scored ? CHANGE_COST * (1 - Math.min(1, change / CHANGE_FULL)) : 0) +
+            edgeCost(distance, starts ? EDGE_FLAT_FALL : EDGE_FLAT_RISE)
+        );
+    };
+    const program = (a: number, b: number) => {
+        const lit = index.lit(a, b);
+        return PROGRAM_LOGO * lit - PROGRAM_BARE * (b - a - lit);
+    };
+    /** CM に挟まれた短い所の頭か (告知のあとに `ISLAND_REST` 秒以上ロゴが残る) */
+    const island = (a: number, b: number) =>
+        index.merged.some(
+            (s) =>
+                s.start >= a - EDGE &&
+                s.start <= a + EDGE &&
+                s.end - s.start <= ISLAND_MAX &&
+                s.end - b >= ISLAND_REST - CREDIT_TOLERANCE,
+        );
 
-/**
- * **CM の端は、尺が 15 秒の倍数になる切れ目を選ぶ。** 継ぎ目の無音の中に切れ目が 2 つあると、強いほう
- * (`Boundary.cuts` の先頭) が継ぎ目とは限らない。明るい本編の終わりから明るい CM の頭へ替わる所は切れ目が弱く、
- * その 0.5 秒後の CM の中の場面の替わりのほうが強かった (実機の TOKYO MX で、CM の頭の白い 0.5 秒が本編の側に残り、
- * 映ってから飛んでいた)。
- *
- * 番組の間の CM で、尺が 15 秒の倍数から少し (`ALIGN_MAX` まで) 外れているとき、端の無音の中のほかの切れ目
- * (弱いものも) で尺が合うものがあれば、そちらへ寄せる。頭を先に試し、合わなければ尻。録画の頭と尻に接するものは
- * 前後の番組なので触らない
- */
-function alignLengths(cm: Range[], candidates: Boundary[], duration: number): Range[] {
-    const within = (t: number) =>
-        candidates.find((b) => t >= b.silence.start - REACH && t <= b.silence.end + REACH);
-    const fit = (length: number) => isCmLength(length, CHAIN_TOLERANCE);
-    return cm.map((range) => {
-        const length = range.end - range.start;
-        if (range.start <= 0 || range.end >= duration || fit(length)) return range;
-        const units = Math.round(length / 15);
-        if (units < 1 || Math.abs(length - units * 15) > ALIGN_MAX) return range;
-        const pick = (at: number, other: number, way: 1 | -1) => {
-            const b = within(at);
-            if (b === undefined) return null;
-            const found = [...b.cuts, ...b.weak]
-                .filter((t) => t !== at && fit((other - t) * way))
-                .sort((x, y) => Math.abs(x - at) - Math.abs(y - at));
-            return found[0] ?? null;
-        };
-        const start = pick(range.start, range.end, 1);
-        if (start !== null) return { start, end: range.end };
-        const end = pick(range.end, range.start, -1);
-        return end !== null ? { start: range.start, end } : range;
-    });
-}
+    const value = Array.from({ length: n }, () => new Float64Array(STATES).fill(Number.NEGATIVE_INFINITY));
+    /** 戻り道: 前の候補 × STATES + 前の状態 */
+    const from = Array.from({ length: n }, () => new Int32Array(STATES).fill(-1));
+    const relax = (j: number, s: State, v: number, i: number, prev: State) => {
+        if (v > value[j]![s]!) {
+            value[j]![s] = v;
+            from[j]![s] = i * STATES + prev;
+        }
+    };
+    /** 告知だけの CM のまま番組に戻るときの減点 (告知の点を取り消し、尺の合わない CM とみる) */
+    const SOLO = SPOT_FIT * CREDITS + CM_MISFIT;
+    value[0]![State.Program] = 0;
 
-/** CM に挟まれた、ロゴの出ている短い所の最長 (秒)。番組の終わりの次回予告と提供など */
-const ISLAND_MAX = 60;
-/** 局の短い告知の尺 (秒)。CM の尺 (15 秒) より短い */
-const SPOTS = [5, 10];
-/** 告知の尺とみなす誤差 (秒) */
-const SPOT_TOLERANCE = 0.25;
-/** 告知を除いたあとに残す、ロゴの出ている所の最短 (秒) */
-const ISLAND_REST = 15;
+    for (let i = 0; i < n - 1; i++) {
+        const a = nodes[i]!;
+        for (let k = 0; k < STATES; k++) {
+            const s = k as State;
+            const here = value[i]![s]!;
+            if (here === Number.NEGATIVE_INFINITY) continue;
 
-/**
- * **CM に挟まれた短い所の頭の、ロゴの出ている告知は CM にする。** 局の 5 秒の告知はロゴを出したまま流れ、
- * 次回予告との間に無音が無いことがあるので、CM がその手前で終わってしまう (実機で 5 秒の告知 → 次回予告 → 提供)。
- * CM の終わりからちょうど 5 秒・10 秒の所に強い切れ目があれば、そこまで CM を伸ばす。
- * 番組の本編 (長い所) には手を出さない — 本編の頭の数秒にもよく切れ目がある
- */
-function trimSpots(input: CmInput, cm: Range[]): Range[] {
-    const { times, cuts } = input;
-    if (times === undefined || cuts === undefined) return cm;
-    return cm.map((range, i) => {
-        const next = cm[i + 1];
-        if (next === undefined || next.start - range.end > ISLAND_MAX) return range;
-        for (const spot of SPOTS) {
-            const at = range.end + spot;
-            if (next.start - at < ISLAND_REST) break;
-            for (let f = lowerBound(times, at - SPOT_TOLERANCE); f < times.length; f++) {
-                if (times[f]! > at + SPOT_TOLERANCE) break;
-                if (cuts[f]! >= CUT_MIN) return { start: range.start, end: times[f]! };
+            // 番組へ (隣の候補まで。番組どうしは足し算なので、長い番組は隣ずつつなげば同じ)
+            {
+                let v = here + program(a.at, nodes[i + 1]!.at);
+                if (isCm(s)) v -= boundaryCost(i, false) + (s === State.Spot ? SOLO : 0);
+                if (isCredit(s)) v += creditBonus(s, false);
+                relax(i + 1, State.Program, v, i, s);
+            }
+
+            // 提供へ (10 秒の番組)
+            for (let j = i + 1; j < n && nodes[j]!.at - a.at <= CREDITS + CREDIT_TOLERANCE; j++) {
+                const length = nodes[j]!.at - a.at;
+                if (length < CREDITS - CREDIT_TOLERANCE) continue;
+                let v = here + program(a.at, nodes[j]!.at);
+                let next: State = State.CreditAfterProgram;
+                if (isCm(s)) {
+                    v -=
+                        boundaryCost(i, false, s === State.Chain ? null : nodes[j]!.at) +
+                        (s === State.Spot ? SOLO : 0);
+                    next =
+                        s === State.Chain
+                            ? State.CreditAfterChain
+                            : s === State.Fit
+                              ? State.CreditAfterFit
+                              : State.CreditAfterOther;
+                }
+                if (isCredit(s)) v += creditBonus(s, false);
+                relax(j, next, v, i, s);
+            }
+
+            // CM へ。無音の外の切れ目とロゴの出入りからは始めない。告知が無音の外で終わったら次は番組
+            if (s === State.Bare || a.kind === 'bare') continue;
+            const entering = s === State.Program || isCredit(s);
+            let base = here;
+            if (entering) {
+                base -= boundaryCost(
+                    i,
+                    true,
+                    s === State.CreditAfterChain ? null : isCredit(s) ? a.at - CREDITS : undefined,
+                );
+                if (isCredit(s)) base += creditBonus(s, true);
+            }
+            const head = i === 0;
+            for (let j = i + 1; j < n; j++) {
+                const b = nodes[j]!;
+                const length = b.at - a.at;
+                const tail = j === n - 1;
+                if (!head && !tail && length > 180 + CM_TOLERANCE) {
+                    // 尻に接する区間だけは長さを問わない
+                    j = n - 2;
+                    continue;
+                }
+                const lit = index.lit(a.at, b.at);
+                // ロゴの出入りそのものは、録画の頭と尻の CM の端にだけ
+                if ((a.kind === 'logo' && !tail) || (b.kind === 'logo' && !head)) continue;
+                if (head || tail) {
+                    if (b.kind === 'bare') continue;
+                    relax(j, State.Other, base - CM_LOGO * lit, i, s);
+                    continue;
+                }
+                const spot = fitSpot(length);
+                if (b.kind === 'bare') {
+                    // 無音の外の切れ目で終わるのは、CM に挟まれた短い所の頭の告知だけ
+                    if (spot > 0 && !entering && s !== State.Spot && island(a.at, b.at))
+                        relax(j, State.Bare, base + SPOT_ISLAND * spot + PROGRAM_LOGO * lit, i, s);
+                    continue;
+                }
+                const fit = fit15(length);
+                const logoCost = CM_LOGO * lit;
+                const cm = CM_FIT * length * fit - CM_MISFIT * (1 - fit) - logoCost;
+                const next =
+                    fit === 0 ? State.Other : entering || s === State.Chain ? State.Chain : State.Fit;
+                relax(j, next, base + cm, i, s);
+                if (spot > 0) {
+                    const short = SPOT_FIT * length * spot - CM_MISFIT * (1 - spot);
+                    // 番組のあとの告知は、そのあとに CM が続くときだけ (`State.Spot`)
+                    relax(
+                        j,
+                        entering || s === State.Spot ? State.Spot : State.Other,
+                        base + short - logoCost,
+                        i,
+                        s,
+                    );
+                    if (!entering && s !== State.Spot && island(a.at, b.at))
+                        relax(j, State.Other, base + SPOT_ISLAND * spot + PROGRAM_LOGO * lit, i, s);
+                }
             }
         }
-        return range;
-    });
-}
-
-/**
- * CM の並びをたどるときの、15秒の倍数とみなす誤差 (秒)。境目は切れ目のコマで取れているので狭くてよい
- * (実機の CM の継ぎ目どうしは 0.05 秒以内)。広いと番組の中の無音まで並びに入る
- */
-const CHAIN_TOLERANCE = 0.25;
-
-/**
- * `from` から境目を CM の尺 (15秒の倍数) ずつたどって、どこまで行けるか。`step` は向き (1 / -1)。
- * CM の中の無音 (場面の切れ目) は飛ばして、次に尺の合う境目へ進む
- */
-function chain(from: number, limit: number, step: 1 | -1, marks: number[]): number {
-    let at = from;
-    for (;;) {
-        const next = (step > 0 ? marks : [...marks].reverse()).find(
-            (t) =>
-                (t - at) * step > 0 &&
-                (limit - t) * step >= -0.5 &&
-                isCmLength((t - at) * step, CHAIN_TOLERANCE),
-        );
-        if (next === undefined) return at;
-        at = next;
     }
-}
 
-/** 提供の尺 (秒) */
-const CREDITS = 10;
-/** 提供の尺とみなす誤差 (秒) */
-const CREDIT_TOLERANCE = 0.4;
-
-/**
- * ロゴの消えている所を、CM の並びで詰める。`afterProgram`・`beforeProgram` は番組に接している側。
- *
- * - **ロゴが遅れて出る・先に消える**所は CM ではない。片側から CM の尺でたどった並びが
- *   反対側の手前で止まり、残りが CM の尺に足りなければ、そこは番組 (アイキャッチ・ロゴの無い頭)
- * - **番組の間では、無音の無いロゴの出入りを CM の端にしない。** CM は途切れの中の境目から境目まで
- * - **提供は番組に残す。** 番組の直後、または番組の終わりから CM の並びをたどった先にある
- *   10 秒は提供 (CM は 15 秒の倍数)。番組の映像に字を重ねていることが多く、削ると番組が欠ける
- * - **提供の後には CM が続く。** 番組が戻る直前の 10 秒でも、CM の並び (15 秒おき) に続くものは局の番宣で CM
- *   (実機のフジテレビで、CM 120 秒の後、ロゴが戻る直前の 10 秒が番宣だった)。並びの外にあるものだけ提供とみる
- */
-function arrange(
-    from: { at: number; snapped: boolean },
-    to: { at: number; snapped: boolean },
-    all: number[],
-    afterProgram: boolean,
-    beforeProgram: boolean,
-): Range[] {
-    let start = from.at;
-    let end = to.at;
-    const marks = all.filter((t) => t >= start - 0.5 && t <= end + 0.5);
-    const credit = (from: number, to: number) => Math.abs(to - from - CREDITS) <= CREDIT_TOLERANCE;
-    /*
-     * 番組の間で、近くに無音も切れ目も無いロゴの出入りは CM の端にしない。ロゴが場面の途中で消えただけ
-     * (背景に紛れてロゴが判定できなくなった) のことがある (実機の TOKYO MX で、本編の 16 秒が CM になっていた)。
-     * CM は途切れの中の最初の境目から始まり、最後の境目で終わる。境目が無ければ途切れごと番組。
-     * 録画の頭と尻の途切れは、無音が無くてもロゴの出入りから (前後の番組との境目は無音を挟まないことがある)
-     */
-    if (afterProgram && beforeProgram && (!from.snapped || !to.snapped)) {
-        const inside = marks.filter((t) => t >= start && t <= end);
-        if (inside.length === 0) return [];
-        if (!from.snapped) start = inside[0]!;
-        if (!to.snapped) end = inside.at(-1)!;
-        if (end - start < GAP_MIN) return [];
-    }
-    // たどり始めるのは無音の切れ目から (寄せられなかったロゴの出入りからは、尺がたまたま合っても数えない)
-    const forward = afterProgram && from.snapped ? chain(start, end, 1, marks) : start;
-    const backward = beforeProgram && to.snapped ? chain(end, start, -1, marks) : end;
-    // 両側からの並びが出会えば、ロゴの消えている所がそのまま CM
-    if (backward > forward + 0.5) {
-        // 近くに無音の無かったロゴの出入りは当てにしない。CM の並びが止まった所まで
-        const both = afterProgram && beforeProgram;
-        if (beforeProgram && !to.snapped && forward > start) end = forward;
-        else if (afterProgram && !from.snapped && backward < end) start = backward;
-        // 並びの先に残った 10 秒は番組が戻る前の番宣 (提供の後には CM が続く)。番組には戻さない
-        else if (both && forward > start && end - forward < GAP_MIN && !credit(forward, end)) end = forward;
-        else if (both && backward < end && backward - start < GAP_MIN) start = backward;
-    }
-    const inner = marks.filter((t) => t > start + 0.5 && t < end - 0.5);
+    // いちばん点の高い終わり方から戻る
+    let best: State = State.Program;
+    for (let k = 0; k < STATES; k++) if (value[n - 1]![k]! > value[n - 1]![best]!) best = k as State;
     const out: Range[] = [];
-    if (afterProgram) {
-        // 番組の終わりから CM の並びをたどった先 (0 本なら番組の直後)
-        const reach = chain(start, end, 1, inner);
-        const next = inner.find((t) => t > reach + 0.5);
-        if (next !== undefined && credit(reach, next)) {
-            if (reach - start > 0.5) out.push({ start, end: reach });
-            start = next;
+    let j = n - 1;
+    let s: State = best;
+    while (j > 0) {
+        const back = from[j]![s]!;
+        if (back < 0) break;
+        const i = Math.floor(back / STATES);
+        if (isCm(s)) {
+            const first = out[0];
+            if (first !== undefined && first.start === nodes[j]!.at) first.start = nodes[i]!.at;
+            else out.unshift({ start: nodes[i]!.at, end: nodes[j]!.at });
         }
+        s = (back % STATES) as State;
+        j = i;
     }
-    if (beforeProgram) {
-        /*
-         * 番組が戻る直前だけ。手前に CM の尺 (15 秒の倍数) で届く境目があれば、並びに続く番宣。
-         * **ここは誤差を広めに見る** (`CM_TOLERANCE`)。継ぎ目の無音の中の切れ目が少しずれていると、
-         * 並びに続く番宣を提供と取り違えて番組に残す (実機の BS-TBS で、手前の境目から 14.65 秒 (0.35 秒ずれ) の
-         * 所で並びが切れ、最後の 10 秒の番宣が番組の側に残っていた)
-         */
-        const previous = inner.filter((t) => t > start + 0.5).at(-1);
-        const chained = (at: number) =>
-            marks.some((t) => t >= start - 0.5 && t < at - 0.5 && isCmLength(at - t, CM_TOLERANCE));
-        if (previous !== undefined && credit(previous, end) && !chained(previous)) end = previous;
-    }
-    if (end - start > 0.5) out.push({ start, end });
-    return out;
+    return out.filter((r) => r.end - r.start > 0.5);
 }
 
 /** 「15秒の倍数」とみなす誤差 (秒) */
@@ -497,6 +683,6 @@ function byLength(input: CmInput, candidates: Boundary[]): Range[] {
 export function decideCm(input: CmInput): Range[] {
     const { logo } = input;
     return logo !== undefined && logo !== null && logo.length > 0
-        ? byLogo(input, logo, boundaries(input))
+        ? byLogo(input, logo)
         : byLength(input, boundaries(input, SILENCE_MIN_ALONE));
 }
