@@ -12,12 +12,12 @@
  * 色はテーマごとに下の 2 つのブロックで決め、画面側は変数だけを使う
  *
  * **Pico は使う部品だけ読む。** 並びは Pico の `pico/_index.css` と同じ (後に読んだものが勝つので崩さない)。
- * 読まないもの: 並べ方のクラス (container・grid・overflow-auto)・figure・色/日付/ファイルの入力欄・
+ * 読まないもの: landmarks (body > main の余白だけで、画面は SvelteKit の <div style="display: contents"> の中なので当たらない。
+ * body と main の初期化は document にある)・並べ方のクラス (container・grid・overflow-auto)・figure・色/日付/ファイルの入力欄・
  * dropdown・tooltip (どれも当てる要素が無い)、コード・検索欄の虫眼鏡・ナビ (当てたくない。前は読んでから打ち消していた)
  */
 @import "@anyblades/blades/pico/variables" layer(pico);
 @import "@anyblades/blades/pico/layout/document" layer(pico);
-@import "@anyblades/blades/pico/layout/landmarks" layer(pico);
 @import "@anyblades/blades/pico/layout/section" layer(pico);
 @import "@anyblades/blades/pico/content/typography" layer(pico);
 @import "@anyblades/blades/pico/content/link" layer(pico);
@@ -436,7 +436,6 @@ body {
     scrollbar-color: var(--dp-muted) transparent;
 }
 body {
-    margin: 0;
     word-break: auto-phrase;
     line-break: strict;
     /*
