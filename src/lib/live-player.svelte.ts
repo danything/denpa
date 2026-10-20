@@ -38,6 +38,7 @@ import type { GrabSize, RawInput } from '#lib/raw/messages.js';
 import { type CanvasSupport, canvasSupport, rawUnsupported } from '#lib/raw/support.js';
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
+import { KeyGate } from '#lib/ts/key-gate.js';
 import { pickMediaSource } from '#lib/ts/media-source.js';
 import { CEILING, cover, Extreme, FLOOR, GAP_MOST, GAP_WINDOW, nextTarget, pacing } from '#lib/ts/pacing.js';
 import { CLOCK } from '#lib/ts/pes.js';
@@ -161,6 +162,8 @@ const FRAME = 0.02;
  * こないことはある (映像の無い放送・復号に失敗) ので、待ちきりにはしない
  */
 const START_WAIT = 1_500;
+/** 再生位置がキーフレームに着いたとみなす幅 (秒。`pace`)。ブラウザが時刻を丸めるぶん */
+const KEY_SLACK = 0.001;
 
 /**
  * データ放送の通知を、受け取る側ができるまでに取っておく数 (`heldData`)。
@@ -488,6 +491,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 映像が何コマ遅れて出ていても変わらない。**それでこの数が要る**
      */
     let dropped = $state(0);
+    /**
+     * `dropped` の元の数 (`droppedVideoFrames`) を最後に読んだ値。**足し上げるのに要る** (`countDropped`)。
+     *
+     * Safari (WebKit) は**飛ぶたびに数を 0 に戻す**ので、読んだ値をそのまま出すと、
+     * 飛び直し (`unslip`) のたびに消えて見える。前に読んだ値との差を足していき、減っていたら
+     * 戻されたとみなして、読んだ値をそのまま足す
+     */
+    let droppedSeen = 0;
+    /** 途中から入った流れの、最初のキーフレームまでを渡さない係 (`ts/key-gate.ts`)。**始める位置もここで決まる** */
+    const keyGate = new KeyGate();
     /**
      * 映した1枚が、再生位置からどれだけ遅れているか (秒)。**映像だけの遅れ。**
      *
@@ -900,6 +913,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 常用するとそれ自体が「かくつき」になる。
      */
     function pace(video: HTMLVideoElement): void {
+        if (engine === null) countDropped(video);
         if (buffer === null || buffer.updating || buffer.buffered.length === 0) return;
         const end = buffer.buffered.end(buffer.buffered.length - 1);
         const behind = end - video.currentTime;
@@ -982,8 +996,21 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             return;
         }
 
+        /*
+         * **始める位置は最初のキーフレーム** (`keyGate`)。渡すのはキーフレームを含む塊からなので、
+         * 持っている頭はその塊の頭 — キーフレームより1〜2コマ手前のことがある。そこから始めると、
+         * Safari はその手前のコマをデコードしては捨てる (コマ落ちに数える)。
+         *
+         * **飛んだあとは比べない。** Chromium は入れた時刻をマイクロ秒に丸めて返すので、キーフレームの
+         * 時刻とぴったりは揃わない。比べ続けると「まだ手前にいる」と見て飛び続け、始まらない
+         */
+        const first = buffer.buffered.start(0);
+        const key = keyGate.at;
+        const toKey =
+            !running && key !== null && key > first && key < end && video.currentTime < key - KEY_SLACK;
+        const start = toKey ? key : first;
         const next = pacing({
-            start: buffer.buffered.start(0),
+            start,
             end,
             at: video.currentTime,
             playing: running,
@@ -1095,15 +1122,24 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         }
     }
 
+    /**
+     * 捨てられたコマを足し上げる (`droppedSeen`)。**塊が届くたびに読む** (`pace`) — 飛ぶ直前までの
+     * ぶんを、Safari が 0 に戻す前に拾う
+     */
+    function countDropped(video: HTMLVideoElement): void {
+        const now = video.getVideoPlaybackQuality?.().droppedVideoFrames;
+        if (now === undefined) return;
+        const more = now >= droppedSeen ? now - droppedSeen : now;
+        droppedSeen = now;
+        if (more > 0) dropped += more;
+    }
+
     /** 貯める量を決め直す。**止まったら伸ばし、無事が続いたら縮める** */
     function settle(): void {
         const now = Date.now();
         if (!stalled && now - lastSettled < SETTLE_EVERY) return;
-        // 捨てられたコマも同じ間隔で読む。**選局からの通し** (入れ物を作り直すと 0 に戻る)
-        dropped =
-            engine !== null
-                ? engine.dropped
-                : (element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? dropped);
+        // 捨てられたコマも同じ間隔で読む (互換モード。`<video>` のぶんは `pace` が足し上げる)。**選局からの通し**
+        if (engine !== null) dropped = engine.dropped;
         /*
          * **途切れたら飛び直す** (`unslipAfter` の下の説明)。測れた遅れ (`slip`) を
          * 待たない — あれは見えないことがある。変換しない経路には要らない (映像は音の時計を追うだけ)
@@ -1403,6 +1439,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         slip = 0;
         slipMost = 0;
         enoughAt = 0;
+        // 作り直すと元の数も 0 から数え直す。いまの値を起点にして、前の局のぶんを持ち越さない
+        dropped = 0;
+        droppedSeen = element?.getVideoPlaybackQuality?.().droppedVideoFrames ?? 0;
         // 局が変われば物差しごと変わる。次の `clock` を待つ
         broadcast = null;
         fromAir = null;
@@ -2106,10 +2145,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 received += body.byteLength;
                 if (kind === CHANNEL.videoInit) {
                     forgetFlow();
+                    keyGate.init(body);
                 } else {
                     // **足す前の貯まりが、次の塊が届く直前の低いところ** (`lows`)。間隔もここで測る
                     if (element !== null) sampleLow(element);
                     arrive();
+                    // 途中から入ったら、最初のキーフレームまでは渡さない (`ts/key-gate.ts`)
+                    if (!keyGate.pass(body)) return;
                 }
                 pending.push(body);
                 drain();

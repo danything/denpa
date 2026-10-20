@@ -112,3 +112,114 @@ test.describe('ライブの貯め方', () => {
         expect(watched.gap).toBeGreaterThanOrEqual(0.6);
     });
 });
+
+interface Joined {
+    /** 押してから、新しい MediaSource の1枚目が映るまで (ms) */
+    firstFrame: number;
+    /** 捨てられたコマ (Safari は飛ぶたびに 0 に戻すので、差を足し上げる) */
+    dropped: number;
+    /** 鳴り始めた位置と、映った1枚目の時刻の差 (秒)。手前から鳴らすと、映像はキーフレームで止まったまま音だけ進む */
+    ahead: number;
+}
+
+/** いま見ている局を押し直す。**誰かが見ている局に後から入る**のと同じで、塊はキーフレームの途中から届く */
+async function rejoin(page: Page): Promise<Joined> {
+    await page.getByTestId('live-video').evaluate((v) => {
+        const video = v as HTMLVideoElement & {
+            requestVideoFrameCallback(cb: (now: number, meta: { mediaTime: number }) => void): number;
+        };
+        const scope = window as unknown as { __joined: Partial<Joined> & { done?: boolean } };
+        const from = performance.now();
+        const seen: Partial<Joined> & { done?: boolean } = { dropped: 0 };
+        scope.__joined = seen;
+        let last = 0;
+        let playingAt: number | null = null;
+        let media: number | null = null;
+        const settle = () => {
+            if (playingAt !== null && media !== null) seen.ahead = media - playingAt;
+        };
+        video.addEventListener(
+            'loadedmetadata',
+            () => {
+                last = video.getVideoPlaybackQuality().droppedVideoFrames;
+                video.requestVideoFrameCallback((_, meta) => {
+                    seen.firstFrame = performance.now() - from;
+                    media = meta.mediaTime;
+                    settle();
+                });
+                video.addEventListener(
+                    'playing',
+                    () => {
+                        playingAt = video.currentTime;
+                        settle();
+                    },
+                    { once: true },
+                );
+                const timer = setInterval(() => {
+                    const now = video.getVideoPlaybackQuality().droppedVideoFrames;
+                    seen.dropped = (seen.dropped ?? 0) + (now >= last ? now - last : now);
+                    last = now;
+                }, 50);
+                setTimeout(() => {
+                    clearInterval(timer);
+                    seen.done = true;
+                }, 3_000);
+            },
+            { once: true },
+        );
+    });
+    await page.locator('[data-testid="live-channel"][data-current="true"]').click();
+    await expect
+        .poll(
+            () => page.evaluate(() => (window as unknown as { __joined: { done?: boolean } }).__joined.done),
+            {
+                timeout: 30_000,
+            },
+        )
+        .toBe(true);
+    return (await page.evaluate(() => (window as unknown as { __joined: Joined }).__joined)) as Joined;
+}
+
+/*
+ * **途中から入っても、キーフレームから始める** (#1210。`src/lib/ts/key-gate.ts`)。
+ *
+ * キーフレームの手前から渡していた頃は、Safari (WebKit) がそのコマをデコードしては捨てて、選局の直後に
+ * 3〜18 コマ落としていた。Chromium は落とさない代わりに、手前から音だけ鳴らして映像はキーフレームで止めていた。
+ * どちらのブラウザでも同じことを見る (WebKit では `bunx playwright install webkit` のあと
+ * `bunx playwright test 50-live-pacing --browser=webkit`)
+ */
+test.describe('途中から入る', () => {
+    test.beforeEach(async ({ request }) => {
+        await syncEpg(request);
+    });
+    test.afterEach(async ({ stack }) => {
+        rmSync(stack.liveFmp4File, { force: true });
+    });
+
+    test('キーフレームの途中から届いても、コマを落とさず、音と映像を揃えて始める', async ({
+        page,
+        stack,
+    }) => {
+        writeFileSync(stack.liveFmp4File, '');
+        await goto(page, '/live');
+        await page.getByTestId('live-channel').first().click();
+        await expect
+            .poll(() => page.getByTestId('live-video').evaluate((v) => (v as HTMLVideoElement).currentTime), {
+                timeout: 30_000,
+            })
+            .toBeGreaterThan(0.3);
+        // キーフレームは 1 秒おき (`tests/fake/live-h264.mp4`)。入る位置をずらして2回
+        const joined: Joined[] = [];
+        for (const wait of [300, 700]) {
+            await page.waitForTimeout(wait);
+            joined.push(await rejoin(page));
+        }
+        writeFileSync('test-results/live-rejoin.json', JSON.stringify(joined));
+        for (const one of joined) {
+            expect(one.dropped).toBeLessThanOrEqual(1);
+            expect(Math.abs(one.ahead)).toBeLessThanOrEqual(0.05);
+            // 手元で 0.1〜0.7 秒 (キーフレームを待つぶん)。直す前と変わらない
+            expect(one.firstFrame).toBeLessThan(2_000);
+        }
+    });
+});
