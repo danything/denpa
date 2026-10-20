@@ -1,4 +1,5 @@
 <script lang="ts">
+    import '@anyblades/blades/layered/components/modal';
     import { untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { dateTime } from '#lib/format.js';

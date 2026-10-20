@@ -4,37 +4,50 @@
  * 画面ごとの並べ方は各コンポーネントの <style> に書く。
  * 開いたり閉じたりするメニューは `Menu.svelte` (ブラウザの popover)。見た目はここ (`.menu`)。
  *
- * **Pico は `pico` の層 (@layer) に入れる。** 層に入らないこちらの規則は、詳細度に関係なく
- * 必ず Pico に勝つ。Pico の強い selector に合わせて同じ詳細度で書き直す、という張り合いが要らない。
- * 各画面の <style> も同じく層の外なので、Pico より必ず勝つ。
+ * **Pico は `blades` の層 (@layer) に入っている** (`layered/*` は部品ごとに `@layer blades { … }` で包んである)。
+ * 層に入らないこちらの規則は、詳細度に関係なく必ず Pico に勝つ。Pico の強い selector に合わせて
+ * 同じ詳細度で書き直す、という張り合いが要らない。各画面の <style> も同じく層の外なので、Pico より必ず勝つ。
  *
  * テーマは暗いのが既定で、明るいのも選べる。app.html と +layout.svelte が <html data-theme> を付け、Pico はそれに従う。
  * 色はテーマごとに下の 2 つのブロックで決め、画面側は変数だけを使う
  *
- * **Pico は使う部品だけ読む。** 並びは Pico の `pico/_index.css` と同じ (後に読んだものが勝つので崩さない)。
+ * **ここ (全部の画面) で読むのは、どの画面にも要る土台だけ。** 並びは Pico の `pico/_index.css` と同じ (後に読んだものが勝つので崩さない)。
+ * group は上の検索欄 (`SearchField`、+layout.svelte) で毎回要る。card は下で `--pico-card-*` を上書きし、
+ * loading は `--pico-icon-loading` を下で使う (変数は部品のほうにある) のでここに置く。
+ * checkbox-radio-switch はチェックと切り替え (`role="switch"`) が一覧 (表示の切り替え)・予約・設定とほとんどの画面にあるうえ、
+ * 指の形 (`cursor`) が utilities の `[disabled]` と同じ詳細度でぶつかり、後ろに読むと Pico の並びと勝ち負けが逆になるので、ここに置く。
+ *
+ * **限られた画面にしか出ない部品は、それを描くコンポーネントが <script> で読む**
+ * (`import "@anyblades/blades/layered/components/modal";`)。その画面の CSS にだけ入る。
+ * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`
+ * - forms/input-range … `player/SeekBar`
+ * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `Migrate`・`Channels`
+ * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`
+ * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`
+ *
+ * 部品を足すとき: 当てる要素がどの画面にも出るならここに (並びを守って)、そうでなければ描くコンポーネントの
+ * <script> に `import` で足す。**<style> の中で @import しない** (そのコンポーネントだけに閉じ込められ、使うたびに重なって入る)。
+ * 画面ごとの CSS はここより後に読まれるので、utilities など Pico の並びで後ろのものと同じ所を決める部品はここに置く。
+ * 部品どうしの前提 (modal は card、group は button と forms/basics、forms の残りは forms/basics) は、読む所にそろえる。
+ *
  * 読まないもの: landmarks (body > main の余白だけで、画面は SvelteKit の <div style="display: contents"> の中なので当たらない。
  * body と main の初期化は document にある)・並べ方のクラス (container・grid・overflow-auto)・figure・色/日付/ファイルの入力欄・
  * dropdown・tooltip (どれも当てる要素が無い)、コード・検索欄の虫眼鏡・ナビ (当てたくない。前は読んでから打ち消していた)
  */
-@import "@anyblades/blades/pico/variables" layer(pico);
-@import "@anyblades/blades/pico/layout/document" layer(pico);
-@import "@anyblades/blades/pico/layout/section" layer(pico);
-@import "@anyblades/blades/pico/content/typography" layer(pico);
-@import "@anyblades/blades/pico/content/link" layer(pico);
-@import "@anyblades/blades/pico/content/button" layer(pico);
-@import "@anyblades/blades/pico/content/table" layer(pico);
-@import "@anyblades/blades/pico/content/embedded-content" layer(pico);
-@import "@anyblades/blades/pico/content/misc" layer(pico);
-@import "@anyblades/blades/pico/forms/basics" layer(pico);
-@import "@anyblades/blades/pico/forms/checkbox-radio-switch" layer(pico);
-@import "@anyblades/blades/pico/forms/input-range" layer(pico);
-@import "@anyblades/blades/pico/components/accordion" layer(pico);
-@import "@anyblades/blades/pico/components/card" layer(pico);
-@import "@anyblades/blades/pico/components/group" layer(pico);
-@import "@anyblades/blades/pico/components/loading" layer(pico);
-@import "@anyblades/blades/pico/components/modal" layer(pico);
-@import "@anyblades/blades/pico/components/progress" layer(pico);
-@import "@anyblades/blades/pico/utilities" layer(pico);
+@import "@anyblades/blades/layered/variables";
+@import "@anyblades/blades/layered/layout/document";
+@import "@anyblades/blades/layered/layout/section";
+@import "@anyblades/blades/layered/content/typography";
+@import "@anyblades/blades/layered/content/link";
+@import "@anyblades/blades/layered/content/button";
+@import "@anyblades/blades/layered/content/embedded-content";
+@import "@anyblades/blades/layered/content/misc";
+@import "@anyblades/blades/layered/forms/basics";
+@import "@anyblades/blades/layered/forms/checkbox-radio-switch";
+@import "@anyblades/blades/layered/components/card";
+@import "@anyblades/blades/layered/components/group";
+@import "@anyblades/blades/layered/components/loading";
+@import "@anyblades/blades/layered/utilities";
 
 :root {
     --pico-font-family-sans-serif: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;

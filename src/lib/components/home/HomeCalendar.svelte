@@ -9,6 +9,7 @@
      *
      * 日の数え方と升目は `#lib/calendar.ts`。どの日を頭に送るか (まだ描いていない古い日を描かせるのも) はホームが持つ
      */
+    import '@anyblades/blades/layered/content/table';
     import { tick } from 'svelte';
     import {
         type DayMark,

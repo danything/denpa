@@ -1,4 +1,7 @@
 <script lang="ts">
+    import '@anyblades/blades/layered/content/table';
+    import '@anyblades/blades/layered/components/accordion';
+    import '@anyblades/blades/layered/components/progress';
     import { submitting } from '#lib/actions.js';
     import ActionButton from '#lib/components/ActionButton.svelte';
     import JobProgress from '#lib/components/JobProgress.svelte';

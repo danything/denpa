@@ -21,6 +21,7 @@
      * 動かしている間に届く `value` はつまみに使わない (戻って見える)。離したあとも、
      * `value` が動くまでは離した位置に置いておく
      */
+    import '@anyblades/blades/layered/forms/input-range';
     import { playedIn, trackParts } from './seek-track';
 
     /** 下見の間を少なくともこれだけ空ける (ms)。飛ぶのが速い端末でも絵の読み込みを詰めすぎない */

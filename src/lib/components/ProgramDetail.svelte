@@ -1,4 +1,5 @@
 <script lang="ts">
+    import '@anyblades/blades/layered/components/modal';
     import type { Snippet } from 'svelte';
     import ProgramFacts from '#lib/components/ProgramFacts.svelte';
     import type { ProgramDetail } from '#lib/types.js';

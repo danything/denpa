@@ -1,4 +1,5 @@
 <script lang="ts">
+    import '@anyblades/blades/layered/content/table';
     import { arming } from '#lib/arming.svelte.js';
     import { autosave, SaveState } from '#lib/autosave.svelte.js';
     import Lead from '#lib/components/Lead.svelte';

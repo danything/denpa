@@ -11,6 +11,8 @@
      * 開いたらフォーカスは箱に置く — 最初のボタン (取消) に置くと、押していないのに枠が付いて見える。
      * Tab で次はボタンへ進み、後ろへは出ない (モーダルの dialog なので)
      */
+    import '@anyblades/blades/layered/components/modal';
+
     let {
         open,
         onaccept,

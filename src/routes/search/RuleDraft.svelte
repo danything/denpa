@@ -18,6 +18,7 @@
 </script>
 
 <script lang="ts">
+    import '@anyblades/blades/layered/components/accordion';
     import { untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { GENRE_TREE } from '#lib/arib.js';
