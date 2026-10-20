@@ -376,7 +376,8 @@
      * 測る箱 (`container-type: size`) は `.room` で、`<main>` の列そのものにはしない — 測る箱は
      * 中の `position: absolute` の基準になり、列に付けるとアンビエントモードの色 (`AmbientGlow`) の位置がずれる
      */
-    @media (min-width: 768px) {
+    /* 横にしたスマホ (下) は 768px を超えても二段組にしないので、ここから外す (`PlayerLayout` の `PHONE_LANDSCAPE`) */
+    @media (min-width: 768px) and (not ((orientation: landscape) and (max-height: 500px) and (pointer: coarse))) {
         .room {
             display: flex;
             flex: 1 1 0%;
@@ -444,10 +445,7 @@
      * 条件は `PlayerLayout` の `PHONE_LANDSCAPE` と同じ
      */
     @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-        /* 二段組の置き場 (上) は使わない。枠は `PlayerLayout` の `.main` (画面の高さ) に直に置く */
-        .room {
-            display: contents;
-        }
+        /* 二段組の置き場 (上) は使わない (箱を持たないまま)。枠は `PlayerLayout` の `.main` (画面の高さ) に直に置く */
         .stage:not([data-pseudo]) {
             align-self: center;
             aspect-ratio: 16 / 9;

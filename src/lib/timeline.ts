@@ -115,7 +115,7 @@ export function countFilters<T extends TimelineItem>(
 }
 
 /** 側ごとに分けて並べたもの */
-export interface Sections<T extends TimelineItem> {
+interface Sections<T extends TimelineItem> {
     /** 録れたもの。古い順 (描く順) */
     past: T[];
     /** 録画中。始まった順 (線のすぐ上) */
@@ -222,7 +222,7 @@ function bySeries<T extends TimelineItem>(
 }
 
 /** 時間軸の描き方 */
-export interface LineOptions {
+interface LineOptions {
     /** 描いた時刻。どの日を今日とするか (今日の見出しを線の上に立てる) */
     now: number;
     /** まとめて表示 */
@@ -268,7 +268,7 @@ export function timelineLines<T extends TimelineItem>(
 }
 
 /** 画面で1つに包む行 (見出しは包みの中だけで貼り付く) */
-export interface TimelineBlock<T extends TimelineItem> {
+interface TimelineBlock<T extends TimelineItem> {
     key: string;
     lines: TimelineLine<T>[];
 }
