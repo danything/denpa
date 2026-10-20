@@ -380,6 +380,142 @@ test.describe('ホームと画面遷移', () => {
     });
 
     /**
+     * **ほかの画面から番組表へ移るときは、押したらすぐ外枠と骨組みを出す** (`GuidePending`。`+layout.svelte` の `pending`)。
+     *
+     * 外枠もサーバから届くので、待っている間は前の画面が残り、着いた瞬間に番組表へ飛んでいた。
+     * 読み込みを 3 秒遅らせて、押してから 2 コマ以内に骨組み (か表) が見えることを見る。
+     * サービスワーカーは止める (動いていると取得があちら経由になり、`page.route` で遅らせられない)
+     */
+    test.describe('番組表へ移る途中', () => {
+        test.use({ serviceWorkers: 'block' });
+
+        test('番組表を押すと、読み込みを待たずに骨組みが出る', async ({ page, request }) => {
+            await syncEpg(request);
+            await goto(page, '/');
+            await page.route('**/guide/__data.json*', async (route) => {
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+                await route.continue();
+            });
+            await page.evaluate(() => {
+                const w = window as unknown as { shownAfter: number | null };
+                w.shownAfter = null;
+                document.addEventListener(
+                    'click',
+                    () => {
+                        let frames = 0;
+                        const tick = (): void => {
+                            frames++;
+                            const shown = document.querySelector(
+                                '[data-testid="guide-skeleton"], [data-testid="guide-grid"]',
+                            );
+                            if (shown?.checkVisibility()) {
+                                w.shownAfter = frames;
+                                return;
+                            }
+                            if (frames < 600) requestAnimationFrame(tick);
+                        };
+                        requestAnimationFrame(tick);
+                    },
+                    { capture: true, once: true },
+                );
+            });
+
+            await page.getByTestId('nav-guide').click();
+            await expect
+                .poll(() =>
+                    page.evaluate(() => (window as unknown as { shownAfter: number | null }).shownAfter),
+                )
+                .not.toBeNull();
+            const shownAfter = await page.evaluate(
+                () => (window as unknown as { shownAfter: number | null }).shownAfter,
+            );
+            expect(shownAfter, '押してから骨組みが見えるまでのコマ数').toBeLessThanOrEqual(2);
+            // 前の画面は隠れている (残っていると骨組みの上に重なって見える)
+            await expect(page.getByTestId('guide-pending')).toBeVisible();
+            await expect(page.getByTestId('timeline')).toBeHidden();
+
+            // 届けば本物の番組表に替わる
+            await expect(page).toHaveURL(/\/guide/);
+            await expect(page.getByTestId('guide-grid')).toBeVisible();
+            await expect(page.getByTestId('guide-pending')).toHaveCount(0);
+        });
+    });
+
+    /**
+     * **ほかの画面から番組表へ移る間も、種別の字 (「地上波」) を隠さない。**
+     *
+     * 選んでいる種別の面 (`.seg-pill`) に画面の切り替えの名前が付いていると、面だけ別の写しになって
+     * 画面の写し (字の入っている root) より上に描かれ、切り替えの間だけ字が消えて見えていた。
+     * 名前を付けるのは種別を選び直す間だけ (`<html data-nav-within>`)。
+     * 切り替えが始まった瞬間 (`ready`。写しが出そろったところ) の面の名前と字の見え方を見る
+     */
+    test.describe('動かしてよい端末', () => {
+        test.use({ reducedMotion: 'no-preference' });
+
+        test('番組表へ移る間、種別の字は隠れず、面は種別を選び直すときだけ滑る', async ({
+            page,
+            request,
+        }) => {
+            await syncEpg(request);
+            await goto(page, '/');
+            await page.evaluate(() => {
+                type Seen = { pill: string | null; label: string | null; visible: boolean | null };
+                const w = window as unknown as { seen: Seen[] };
+                w.seen = [];
+                const start = document.startViewTransition.bind(document);
+                document.startViewTransition = ((update: () => Promise<void>) => {
+                    const transition = start(update);
+                    void transition.ready
+                        .then(() => {
+                            const pill = document.querySelector('.seg-pill');
+                            const label = document.querySelector(
+                                '[aria-current="page"][data-testid^="type-"]',
+                            );
+                            w.seen.push({
+                                pill: pill === null ? null : getComputedStyle(pill).viewTransitionName,
+                                label: label?.textContent?.trim() ?? null,
+                                visible:
+                                    label === null
+                                        ? null
+                                        : label.checkVisibility({ visibilityProperty: true }),
+                            });
+                        })
+                        .catch(() => {});
+                    return transition;
+                }) as typeof document.startViewTransition;
+            });
+            const seen = () =>
+                page.evaluate(
+                    () =>
+                        (
+                            window as unknown as {
+                                seen: {
+                                    pill: string | null;
+                                    label: string | null;
+                                    visible: boolean | null;
+                                }[];
+                            }
+                        ).seen,
+                );
+
+            // ほかの画面から: 面に名前は無く、字は見えている
+            await page.getByTestId('nav-guide').click();
+            await expect.poll(async () => (await seen()).length).toBeGreaterThanOrEqual(1);
+            expect((await seen())[0]).toEqual({ pill: 'none', label: '地上波', visible: true });
+            await expect(page.getByTestId('guide-grid')).toBeVisible();
+
+            // 種別を選び直すとき: 面に名前が付いて、前の場所から滑る
+            await page.getByTestId('type-BS').click();
+            await expect.poll(async () => (await seen()).length).toBeGreaterThanOrEqual(2);
+            expect((await seen())[1]).toEqual({ pill: 'guide-type', label: 'BS', visible: true });
+            // 終われば外す
+            await expect
+                .poll(() => page.evaluate(() => 'navWithin' in document.documentElement.dataset))
+                .toBe(false);
+        });
+    });
+
+    /**
      * **読み直しは、走っている遷移を畳んでしまう。**
      *
      * SvelteKit は遷移にも `invalidateAll` にも同じトークンを使っていて、後から来た

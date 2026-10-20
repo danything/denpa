@@ -72,6 +72,61 @@ test.describe('操作したときの反応', () => {
         await expect(block).toContainText('予約済み');
     });
 
+    /**
+     * **詳細は押したらすぐ出し、足りない分は届いてから足す** (`guide/+page.svelte` の `open`)。
+     *
+     * 1 件ぶんの取得を待ってから出していた頃は、遠い回線 (車のタブレット) で押してから一拍以上
+     * 何も起きなかった。取得を 3 秒遅らせて、押してから 2 コマ以内に箱が見えることと、
+     * 届いたら音声・映像の札が足されることを見る。
+     * サービスワーカーは止める (動いていると取得があちら経由になり、`page.route` で遅らせられない)
+     */
+    test.describe('詳細の開き方', () => {
+        test.use({ serviceWorkers: 'block' });
+
+        test('番組表の詳細は取得を待たずに開き、届いたら中身が足される', async ({ page }) => {
+            await goto(page, '/guide?type=GR');
+            const [target] = await upcoming(page);
+            await page.route('**/api/programs/*', async (route) => {
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+                await route.continue();
+            });
+            await page.evaluate(() => {
+                const w = window as unknown as { shownAfter: number | null };
+                w.shownAfter = null;
+                document.addEventListener(
+                    'click',
+                    () => {
+                        let frames = 0;
+                        const tick = (): void => {
+                            frames++;
+                            if (document.querySelector('[data-testid="program-detail"]')?.checkVisibility()) {
+                                w.shownAfter = frames;
+                                return;
+                            }
+                            if (frames < 600) requestAnimationFrame(tick);
+                        };
+                        requestAnimationFrame(tick);
+                    },
+                    { capture: true, once: true },
+                );
+            });
+
+            await cellOf(page, target.programId).getByTestId('program-button').click();
+            const detail = page.getByTestId('program-detail');
+            await expect(detail).toBeVisible();
+            const shownAfter = await page.evaluate(
+                () => (window as unknown as { shownAfter: number | null }).shownAfter,
+            );
+            expect(shownAfter, '押してから詳細が見えるまでのコマ数').not.toBeNull();
+            expect(shownAfter).toBeLessThanOrEqual(2);
+            // まだ届いていない分は無く、表が持っている分 (局名) は出ている
+            await expect(detail.getByTestId('detail-video')).toHaveCount(0);
+            await expect(detail).toContainText(/ＴＯＫＹＯ　ＭＸ|フジテレビ/);
+            // 届いたら足される
+            await expect(detail.getByTestId('detail-video')).toHaveText('1080i MPEG-2');
+        });
+    });
+
     test('番組表の時刻は縦横どちらへスクロールしても左に残る', async ({ page }) => {
         // 24時間ぶんを1画面には出せないので、どこを見ていても時刻が分かる必要がある。
         // 横は列ごと、縦は数字を1時間の枠の中で下ろして追従させている

@@ -3,13 +3,13 @@
     import { dragScroll, submitting } from '#lib/actions.js';
     import { GENRE_TREE } from '#lib/arib.js';
     import ChannelNotice from '#lib/components/ChannelNotice.svelte';
+    import GuideSkeleton from '#lib/components/GuideSkeleton.svelte';
     import Menu from '#lib/components/Menu.svelte';
     import NowLine from '#lib/components/NowLine.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
-    import { morph } from '#lib/motion.svelte.js';
     import { reload } from '#lib/reload.svelte.js';
     import { cellsOf, columnsOf, mainOf, SUBCHANNELS_COOKIE, splitOf } from '#lib/subchannels.js';
     import { CHANNEL_TYPES, type ProgramDetail as Facts } from '#lib/types.js';
@@ -167,12 +167,18 @@
     let opening = 0;
 
     /**
-     * **届いてから出す。** 表が持っている分 (タイトル・時刻・概要) で先に出して
-     * あとから差し替える手もあるが、詳細を開いた瞬間にラベル (ジャンル・音声) が
-     * 無く、一拍おいて生える見え方になる。取得するのは同じホストの 1 件で
-     * 数十 ms なので、揃ってから出す。取れなければ (番組表から消えた) 表の分だけ
+     * **押したらすぐ出す。足りない分 (出演者・あらすじ・音声…) は届いてから足す。**
+     *
+     * 前は 1 件ぶんの取得が届くまで待ってから出していた。同じホストなら数十 ms でも、
+     * 車のタブレットのように遠い回線では押してから一拍以上何も起きず、もたついて見えた。
+     * 表が持っている分 (タイトル・時刻・概要) で先に出し、届いたら差し替える。
+     * 取れなければ (番組表から消えた) 表の分のまま。
+     *
+     * **マスから広げる動き (View Transitions) はやめた。** 写しを撮る前後で `<html>` の印を
+     * 付け外しするたびに文書ぜんぶの見た目を計算し直していて、番組の多い表では
+     * 押してから箱が出るまでの大半がそれだった (箱はほかの画面と同じく、少し縮んだ姿から出る)
      */
-    async function open(program: Sheet['programs'][number], from: HTMLElement | null = null): Promise<void> {
+    function open(program: Sheet['programs'][number]): void {
         const token = ++opening;
         const seed: Facts = {
             name: program.name,
@@ -186,42 +192,25 @@
             video_type: null,
             video_resolution: null,
             is_free: true,
-            copy_never: false,
+            copy_never: program.copy_never,
         };
-        let detail = seed;
-        try {
-            const res = await fetch(resolve(`api/programs/${program.id}`));
-            if (res.ok) detail = { ...seed, ...((await res.json()) as Facts) };
-        } catch {
-            // 取れなくても開く。中身は表が持っている分だけ
-        }
-        if (token !== opening) return;
-        // 開いているところへ別の番組を出すとき (検索の結果から) は広げない。箱はもう出ている
-        const fresh = selected === null;
-        origin = from;
-        morph(fresh ? from : null, DETAIL_NAME, 'open', () => {
-            facts = detail;
-            selected = program;
-        });
+        facts = seed;
+        selected = program;
+        void fetch(resolve(`api/programs/${program.id}`))
+            .then(async (res) => (res.ok ? ((await res.json()) as Facts) : null))
+            .catch(() => null)
+            .then((detail) => {
+                // 閉じた・別のマスを開いたあとに届いたものは捨てる
+                if (detail === null || token !== opening) return;
+                facts = { ...seed, ...detail };
+            });
     }
 
     function close(): void {
         opening++;
-        const back = origin;
-        origin = null;
-        if (selected === null) return;
-        morph(back, DETAIL_NAME, 'close', () => {
-            selected = null;
-            facts = null;
-        });
+        selected = null;
+        facts = null;
     }
-
-    /**
-     * 押したマス。**詳細はこのマスから広がって開き、閉じるとここへ縮んで戻る**
-     * (`morph`。名前は詳細の箱にも付ける。使えないブラウザと動かさない設定ではすぐ出てすぐ消える)
-     */
-    let origin: HTMLElement | null = null;
-    const DETAIL_NAME = 'program-detail';
 
     const serviceName = (id: number) => services.find((s) => s.id === id)?.name ?? '';
 
@@ -507,28 +496,6 @@
     });
     const menuSide = $derived(narrow ? 'top' : 'bottom');
 
-    /**
-     * 読み込み中に出す骨組みの形。**中身の数とは関係なく決め打ち。**
-     *
-     * 何局あるかは表と一緒に届くので、この時点では分からない。8列ぶん出して
-     * おけば、狭い画面でも広い画面でも「ここに表が来る」ことは伝わる。
-     *
-     * 高さは**番組の尺のつもり**でばらけさせる。全部同じ高さだと表ではなく
-     * ただの縞に見えた。乱数ではなく決め打ちなのは、描き直すたびに形が変わると
-     * それ自体が動いて見えるため
-     */
-    const SKELETON_COLUMNS = 8;
-    const SKELETON_CELLS = [
-        [3, 1.5, 4.5, 2, 3, 2.5, 4, 1.5, 3, 2],
-        [1.5, 5, 2, 3.5, 2, 3, 1.5, 4, 2.5, 2],
-        [4, 2, 2.5, 4, 1.5, 3, 2, 3.5, 2.5, 2],
-        [2, 3, 6, 1.5, 2.5, 2, 4, 1.5, 3, 1.5],
-        [5, 1.5, 2, 3, 2.5, 4, 1.5, 3, 2, 2.5],
-        [1.5, 4, 3, 2, 3.5, 2.5, 2, 4, 2.5, 2],
-        [3.5, 2.5, 1.5, 5, 2, 3, 2, 2.5, 3, 2],
-        [2, 6, 2.5, 1.5, 3, 2, 3.5, 2, 2.5, 2],
-    ];
-
     /*
      * 放送波を切り替えたら横位置を先頭へ戻す。
      *
@@ -613,7 +580,7 @@
                     data-testid="type-{type}"
                 >
                     {#if data.type === type}<span class="seg-pill" aria-hidden="true"></span>{/if}
-                    {SERVICE_TYPE_LABEL[type]}
+                    <span class="seg-label" style:--seg-label="guide-type-{type}">{SERVICE_TYPE_LABEL[type]}</span>
                 </a>
             {/each}
         </div>
@@ -839,23 +806,7 @@
             (左に時刻の列、上に局名の行) にしておく — 何が出てくるのかが
             分かるし、届いたときに位置が飛ばない
         -->
-        <div
-            class="skeleton"
-            data-testid="guide-skeleton"
-            role="status"
-            aria-label="番組表を読み込んでいます"
-        >
-            <div class="skeleton-rows" aria-hidden="true">
-                {#each { length: SKELETON_COLUMNS } as _, column (column)}
-                    <div class="skeleton-column">
-                        <div class="skeleton-head"></div>
-                        {#each SKELETON_CELLS[column] as height, cell (cell)}
-                            <div class="skeleton-block" style="height: {height}rem"></div>
-                        {/each}
-                    </div>
-                {/each}
-            </div>
-        </div>
+        <GuideSkeleton />
     {:else if services.length === 0}
         <div class="panel empty" data-testid="empty-grid">
             {#if data.typeEmpty}
@@ -1005,7 +956,7 @@
                             data-state={program.reservation_state}
                             data-genre={program.genres?.[0]}
                             class:dim={highlight !== null && program.genres?.[0] !== highlight}
-                            onclick={(event) => void open(program, event.currentTarget)}
+                            onclick={() => open(program)}
                             data-testid="program-button"
                         >
                             <span class="clamp">
@@ -1078,7 +1029,7 @@
         !canCancel && program.reservation_state === null && program.end_at > clock && !program.copy_never}
     <!-- **塗るのは 1 つだけ。** 予約できるなら予約、録れていれば再生、いま流れていれば視聴 -->
     {@const primary = canReserve ? 'reserve' : canPlay ? 'play' : canWatch ? 'watch' : null}
-    <ProgramDetail program={facts} onclose={close} transitionName={DETAIL_NAME}>
+    <ProgramDetail program={facts} onclose={close}>
         {#snippet status()}
             {#if program.reservation_state}
                 <span class="tag info" data-testid="detail-state">
@@ -1241,13 +1192,18 @@
         flex: none;
         width: auto;
     }
-    /* 種別を選び直すと、選んだ面が横へ滑る (`app.css` の「画面の切り替え」) */
-    .seg-pill {
+    /*
+     * 種別を選び直すと、選んだ面が横へ滑る (`app.css` の「画面の切り替え」)。
+     * **名前を付けるのは種別を選び直す間だけ** (`<html data-nav-within>`。`+layout.svelte` の `onNavigate`)。
+     * ほかの画面から来たときに付いていると、面だけ別の写しになって画面の写しより上に描かれ、
+     * 切り替えの間だけ字を覆って消して見せていた。滑っている間も字が面の下に隠れないよう、
+     * 字にも名前を付けて面より上に描かせる (名前は種別ごと。DOM の順で面より後なので上に来る)
+     */
+    :global(:root[data-nav-within]) .seg-pill {
         view-transition-name: guide-type;
     }
-    /* 番組の詳細を広げるときは抜き出さない (`motion.svelte.ts` の `morph`。ヘッダーと同じ) */
-    :global(:root[data-morph]) .seg-pill {
-        view-transition-name: none;
+    :global(:root[data-nav-within]) .seg-label {
+        view-transition-name: var(--seg-label);
     }
     .days {
         display: flex;
@@ -1469,33 +1425,6 @@
         text-align: center;
     }
 
-    /*
-     * 読み込み中の骨組み。**表と同じ場所・同じ高さに置く** ので、
-     * 中身が届いたときに下のものが飛び跳ねない。色と光の筋は `app.css` の `.skeleton`
-     */
-    .skeleton {
-        padding: 0.75rem;
-        /* 表と同じ場所を取っておく。届いた拍子に高さが変わると画面が跳ねる */
-        flex: 1 1 0%;
-        min-height: 0;
-    }
-    .skeleton-rows {
-        display: flex;
-        height: 100%;
-        gap: 0.5rem;
-    }
-    .skeleton-column {
-        display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
-        gap: 0.5rem;
-        /* 狭い画面では右の列がはみ出すが、外側で切る (本物の表も横に流れる) */
-        min-width: 6rem;
-    }
-    /* 局名の行の高さ (色は `app.css`。本物と同じで、ここだけ濃い) */
-    .skeleton-head {
-        height: 1.75rem;
-    }
     /* 表は枠で囲まない。操作の1行の下から画面の端まで (上のコメント) */
     .grid-box {
         flex: 1 1 0%;

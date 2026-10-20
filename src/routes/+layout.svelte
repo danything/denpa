@@ -4,6 +4,7 @@
     import { onMount } from 'svelte';
     import type { ChannelNotice as NoticeKind } from '#lib/channel-notice.js';
     import ChannelNotice from '#lib/components/ChannelNotice.svelte';
+    import GuidePending from '#lib/components/GuidePending.svelte';
     import Measure from '#lib/components/Measure.svelte';
     import Menu from '#lib/components/Menu.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
@@ -58,15 +59,65 @@
         const { from, to } = navigation;
         if (from.url.pathname === to.url.pathname && from.url.search === to.url.search) return;
         if (from.route.id === to.route.id && PLAYING.has(from.route.id ?? '')) return;
+        /*
+         * **同じ画面の中の切り替え (番組表の種別など) だけ `<html data-nav-within>` を付ける。**
+         * 画面の中の印 (`.seg-pill`) に名前を付けるのはこの間だけ (`app.css` の「画面の切り替え」)。
+         * ほかの画面から来たときにも名前があると、印だけ別の写しになって画面の写しより上に描かれ、
+         * 切り替えの間だけ字 (「地上波」) を覆って消して見せていた。古い写しを撮る前に付ける
+         */
+        const within = from.route.id === to.route.id;
+        if (within) beginWithin();
         return new Promise<void>((resolve) => {
             const transition = document.startViewTransition(async () => {
                 resolve();
                 await navigation.complete.catch(() => {});
             });
             transition.ready.catch(() => {});
-            transition.finished.catch(() => {});
+            const done = transition.finished.catch(() => {});
+            if (within) void done.then(endWithin);
         });
     });
+
+    /**
+     * **ほかの画面から番組表へ移る途中は、押したらすぐ番組表の外枠と骨組みに替える** (`GuidePending`)。
+     *
+     * 番組表は外枠もサーバから届く (日付の並びなど)。届くまで前の画面が残り、着いた瞬間に
+     * 番組表へ飛んでいた。読み直したときは外枠と骨組みが先に出るので、それに揃える。
+     * 前の画面は消さずに隠すだけ — 遷移が取り消されても、そのまま戻せる。
+     *
+     * 終わりは `navigating.complete` で見る (上の細いバーと同じ。`navigating` は畳まれた遷移で
+     * 真のまま残るので当てにしない)。着いたら `page.route.id` が番組表になるので、その時点で外す
+     */
+    let pendingTo = $state<URL | null>(null);
+    $effect(() => {
+        const done = navigating.complete;
+        const to = navigating.to;
+        if (done === null || to === null || to.route.id !== '/guide') {
+            pendingTo = null;
+            return;
+        }
+        pendingTo = to.url;
+        let stale = false;
+        const settle = (): void => {
+            if (!stale) pendingTo = null;
+        };
+        void done.then(settle, settle);
+        return () => {
+            stale = true;
+        };
+    });
+    const pending = $derived(pendingTo !== null && page.route.id !== '/guide' ? pendingTo : null);
+
+    /** 走っている「同じ画面の中の切り替え」の数。追い越されても、最後の1つが済んでから印を外す */
+    let withinCount = 0;
+    function beginWithin(): void {
+        withinCount++;
+        document.documentElement.dataset['navWithin'] = '';
+    }
+    function endWithin(): void {
+        withinCount--;
+        if (withinCount === 0) delete document.documentElement.dataset['navWithin'];
+    }
 
     /**
      * **遷移が長引いているときだけ、上端に細いバーを出す。**
@@ -238,7 +289,7 @@
     const FILLED = ['/', '/live', '/watch/[id]', '/chase/[id]', '/guide', '/rules'];
     // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと頭が付く (server/paths.ts)
     const fill = $derived(
-        FILLED.includes(page.route.id ?? '') || here === '/settings',
+        pending !== null || FILLED.includes(page.route.id ?? '') || here === '/settings',
     );
 
     /**
@@ -443,7 +494,13 @@
     {/if}
 
     <main>
-        {@render children()}
+        {#if pending !== null}
+            <GuidePending url={pending} />
+        {/if}
+        <!-- 番組表へ移る途中は前の画面を隠すだけ (上の `pending`)。`display: contents` なので並びは変わらない -->
+        <div class="route" class:hidden={pending !== null}>
+            {@render children()}
+        </div>
     </main>
 
     <!--
@@ -775,16 +832,6 @@
         view-transition-name: tab-indicator;
         pointer-events: none;
     }
-    /*
-     * **元の要素から広げるとき (番組表のマス → 詳細) は抜き出さない** (`motion.svelte.ts` の `morph`)。
-     * 抜き出すと切り替えの間だけ詳細の幕より上に重なり、暗くならずに明るく残ってちらつく
-     */
-    :global(:root[data-morph]) .navbar,
-    :global(:root[data-morph]) .nav-underline,
-    :global(:root[data-morph]) .tabbar,
-    :global(:root[data-morph]) .tabbar :global(.tab-indicator) {
-        view-transition-name: none;
-    }
     /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */
     :global(.tab-more-menu) {
         width: 12rem;
@@ -865,6 +912,13 @@
      * (`PlayerStage`) のに、同じ幅だけ外へはみ出させるため。数字を2か所に
      * 書くと、片方だけ変えたときに映像が横にずれる
      */
+    /* 画面の中身を包むだけ (箱を作らない)。番組表へ移る途中だけ隠す (`pending`) */
+    .route {
+        display: contents;
+    }
+    .route.hidden {
+        display: none;
+    }
     main {
         --dp-gutter: 1rem;
         /*

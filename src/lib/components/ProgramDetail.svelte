@@ -26,7 +26,6 @@
         fps = null,
         actions,
         status,
-        transitionName,
     }: {
         program: ProgramDetail;
         onclose: () => void;
@@ -37,11 +36,6 @@
         actions?: Snippet | undefined;
         /** 時刻の行の末尾に添える状態のバッジ (予約済み・放送終了。`ProgramFacts`)。押すものの並びには混ぜない */
         status?: Snippet | undefined;
-        /**
-         * 箱に付ける画面の切り替えの名前 (View Transitions)。押した要素から広げて開くとき
-         * (番組表のマス。`#lib/motion.svelte.ts` の `morph`) だけ渡す
-         */
-        transitionName?: string | undefined;
     } = $props();
 
     let box: HTMLDivElement | undefined = $state();
@@ -73,7 +67,7 @@
         中身はボタンの間と後ろに透けて見える。
         続きがあるときは、ボタンの手前で中身を薄く消していく (下の CSS)
     -->
-    <div bind:this={box} class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
+    <div bind:this={box} class="detail-box modal-box">
         <!--
             フェードの長さ (`animation-duration`) は要素に直に書く。時間で動くものではない (巻き取った量で濃さが
             決まるだけ) が、動きを減らす設定で Pico の層が `!important` で 1ms に縮める。層の中の `!important` には
@@ -119,7 +113,6 @@
     }
     /*
      * **出るときは、幕は透明から、箱は少し縮んだ姿から** (メニュー・ダイアログと同じ。`app.css`)。
-     * 押したところから広げるとき (`transitionName`) は、箱の動きは画面の切り替えに任せる。
      *
      * 箱の見た目 (面・縁・角丸・影・幅) は `app.css` の `.modal-box` (ダイアログと同じ)。ここは中身を巻き取る並べ方だけ。
      * **巻き取るのは箱いっぱいの中身** (余白は中身の側で取り、スクロールバーは箱の右端に出す)。ボタンの並びは上に重ねる
@@ -137,7 +130,7 @@
         .detail-backdrop {
             opacity: 0;
         }
-        .detail-box:not(.morph) {
+        .detail-box {
             opacity: 0;
             transform: scale(0.96);
         }
@@ -200,7 +193,7 @@
             align-items: flex-end;
         }
         @starting-style {
-            .detail-box:not(.morph) {
+            .detail-box {
                 transform: translateY(1rem);
             }
         }
