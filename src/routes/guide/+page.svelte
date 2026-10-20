@@ -192,6 +192,50 @@
     const drawing = $derived(shownCells < cells.length);
     const visibleCells = $derived(drawing ? cells.slice(0, shownCells) : cells);
 
+    /**
+     * **マスは局ごとの箱 (`.station`) に入れて置く。** 箱は本チャンネルとそのサブの列をまとめたもの
+     * (サブの列へ横に伸びるマスがあるので、列ごとには分けられない)。
+     *
+     * 箱に `content-visibility: auto` を付けると、横に外れた局は箱ごと中身の見た目の計算と
+     * レイアウトを飛ばせる。マスにだけ付けていた頃は、画面の外のマスも 1 つずつ見た目を計算していて、
+     * 地上波 22 局・658 マスで表が届いてからの 1 回の処理が 190ms ほどかかり、その大半がそれだった
+     * (測り方と数字は PR に)。縦に外れたマスは、これまでどおりマスごとの `content-visibility` で飛ばす。
+     *
+     * 箱の中は自前の grid。行は外の表と同じ 5 分 × `SLOT_HEIGHT`、列は箱の幅を等分する
+     * (外の列はどれも同じ幅なので揃う)。`subgrid` は使えない — `content-visibility` が付けるレイアウトの
+     * 封じ込め (layout containment) があると subgrid にならない決まり。
+     * 位置と行数はここで先に出しておき、マークアップは書き写すだけにする
+     */
+    interface PlacedCell {
+        key: string;
+        program: GridProgram;
+        /** 箱の中の位置 (`grid-column` / `grid-row`) と、入る字の行数 (`--lines`) */
+        style: string;
+    }
+    const stations = $derived.by(() => {
+        const groups: { key: number; first: number; width: number; cells: PlacedCell[] }[] = [];
+        const groupOf: number[] = [];
+        columns.forEach((service, i) => {
+            const head = groups.at(-1);
+            if (head !== undefined && (main.get(service.id) ?? service.id) === head.key) head.width++;
+            else groups.push({ key: service.id, first: i, width: 1, cells: [] });
+            groupOf.push(groups.length - 1);
+        });
+        for (const cell of visibleCells) {
+            const group = groups[groupOf[cell.column] ?? -1];
+            if (group === undefined) continue;
+            const from = Math.max(0, Math.floor((cell.start_at - data.start) / SLOT));
+            const to = Math.min(slots, Math.ceil((Math.min(cell.end_at, end) - data.start) / SLOT));
+            const span = Math.max(1, to - from);
+            group.cells.push({
+                key: cell.key,
+                program: cell.program,
+                style: `grid-column: ${cell.column - group.first + 1} / span ${cell.span}; grid-row: ${from + 1} / span ${span}; --lines: ${lines(span)};`,
+            });
+        }
+        return groups;
+    });
+
     /** クリックした番組。詳細を出してから予約するかどうか決める */
     let selected = $state<GridProgram | null>(null);
 
@@ -348,13 +392,6 @@
     });
 
     const end = $derived(data.start + data.hours * HOUR);
-
-    /** 何行目から何行分か。ヘッダーが1行目なので +2 */
-    function place(program: { start_at: number; end_at: number }) {
-        const from = Math.max(0, Math.floor((program.start_at - data.start) / SLOT));
-        const to = Math.min(slots, Math.ceil((Math.min(program.end_at, end) - data.start) / SLOT));
-        return { row: from + 2, span: Math.max(1, to - from) };
-    }
 
     const hourMarks = $derived(
         Array.from({ length: data.hours }, (_, i) => ({
@@ -882,6 +919,7 @@
                 class="rows"
                 style="grid-template-columns: {TIME_COLUMN} repeat({columns.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, {SLOT_HEIGHT}); width: calc({TIME_COLUMN} + {columns.length} * 11rem); min-width: 100%;"
                 data-testid="guide-rows"
+                data-highlight={highlight}
             >
                 <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
                 <div
@@ -985,55 +1023,50 @@
                         {/each}
                     </div>
                 {:else}
-                {#each visibleCells as cell (cell.key)}
-                    {@const program = cell.program}
-                    {@const pos = place(cell)}
+                {#each stations as station (station.key)}
                     <div
-                        class="cell"
-                        style="grid-column: {cell.column + 2} / span {cell.span}; grid-row: {pos.row} / span {pos.span}; --lines: {lines(pos.span)};"
-                        data-testid="grid-program"
-                        data-program-id={program.id}
-                        data-service-id={program.service_id}
-                        data-start-at={program.start_at}
+                        class="station"
+                        style="grid-column: {station.first + 2} / span {station.width}; grid-row: 2 / -1; grid-template-columns: repeat({station.width}, minmax(0, 1fr)); grid-template-rows: repeat({slots}, {SLOT_HEIGHT});"
                     >
-                        <!--
-                        マスは上ぞろえ。button は中身を縦中央に置くので、短い番組と
-                        長い番組で開始時刻の高さが揃わず、横に目で追えなかった。
-                        縦の flex にして上から積む (色の決め方は下の `.program`)
-                    -->
-                        <button type="button"
-                            class="program"
-                            class:reserved={program.reservation_state && program.reservation_state !== 'skipped'}
-                            data-state={program.reservation_state}
-                            data-genre={program.genres?.[0]}
-                            class:dim={highlight !== null && program.genres?.[0] !== highlight}
-                            onclick={() => open(program)}
-                            data-testid="program-button"
-                        >
-                            <span class="clamp">
-                                <span class="title">
-                                    <span class="num">{time(program.start_at)}</span>
-                                    {#if program.name}
-                                        <span class="broadcast">{program.name}</span>
-                                    {:else}
-                                        <span class="faint">(番組情報なし)</span>
-                                    {/if}
-                                    {#if program.copy_never}
-                                        <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
-                                        <span class="copy-never" data-testid="grid-copy-never">コピー禁止</span>
-                                    {/if}
-                                </span>
-                                {#if program.reservation_state}
-                                    <span class="state">
-                                        {stateLabel(program.reservation_state)}
+                        {#each station.cells as cell (cell.key)}
+                            {@const program = cell.program}
+                            <div
+                                class="cell"
+                                style={cell.style}
+                                data-testid="grid-program"
+                                data-program-id={program.id}
+                                data-service-id={program.service_id}
+                                data-start-at={program.start_at}
+                            >
+                                <!--
+                                    マスは上ぞろえ。button は中身を縦中央に置くので、短い番組と
+                                    長い番組で開始時刻の高さが揃わず、横に目で追えなかった。
+                                    縦の flex にして上から積む (色の決め方は下の `.program`)。
+                                    淡くする (ジャンルを1つ目立たせる) のは CSS で決める (`.rows[data-highlight]`)
+                                -->
+                                <button type="button"
+                                    class="program"
+                                    class:reserved={program.reservation_state && program.reservation_state !== 'skipped'}
+                                    data-state={program.reservation_state}
+                                    data-genre={program.genres?.[0]}
+                                    onclick={() => open(program)}
+                                    data-testid="program-button"
+                                >
+                                    <span class="clamp">
+                                        <span class="title">
+                                            <span class="num">{time(program.start_at)}</span>
+                                            <span class={program.name ? 'broadcast' : 'faint'}>{program.name || '(番組情報なし)'}</span>
+                                            {#if program.copy_never}
+                                                <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
+                                                <span class="copy-never" data-testid="grid-copy-never">コピー禁止</span>
+                                            {/if}
+                                        </span>
+                                        <!-- 予約してあれば説明の代わりに状態。`{#if}` にしないのは、マスごとの描く手間を増やさないため (名前の有無も同じ) -->
+                                        <span class={program.reservation_state ? 'state' : 'desc broadcast'}>{program.reservation_state ? stateLabel(program.reservation_state) : program.description}</span>
                                     </span>
-                                {:else}
-                                    <span class="desc broadcast">
-                                        {program.description}
-                                    </span>
-                                {/if}
-                            </span>
-                        </button>
+                                </button>
+                            </div>
+                        {/each}
                     </div>
                 {/each}
                 {/if}
@@ -1584,6 +1617,16 @@
         width: 70%;
         height: 1.25rem;
     }
+    /*
+     * 局ごとの箱 (上の `stations`)。横に外れた局は箱ごと飛ばす。
+     * 大きさは外の表の track で決まる (`contain-intrinsic-size` は中身を組まないときの仮の値)
+     */
+    .station {
+        display: grid;
+        content-visibility: auto;
+        contain-intrinsic-size: auto 11rem auto 216rem;
+    }
+
     .cell {
         overflow: hidden;
         padding: 0.125rem;
@@ -1651,8 +1694,22 @@
     :is(.program, .swatch)[data-genre="9"] { --tint: hsl(325 62% 55%); }  /* 劇場/公演 */
     :is(.program, .swatch)[data-genre="10"] { --tint: hsl(95 62% 55%); }  /* 趣味/教育 */
     :is(.program, .swatch)[data-genre="11"] { --tint: hsl(170 62% 55%); } /* 福祉 */
-    /* ジャンルを1つ目立たせているときの、ほかのマス (`highlight`)。押せるまま淡くするだけ */
-    .program.dim {
+    /*
+     * ジャンルを1つ目立たせているときの、ほかのマス (`highlight`)。押せるまま淡くするだけ。
+     * **表の側の印 (`data-highlight`) と CSS で決める** — マスごとに持たせると、切り替えるたびに全部のマスを書き直す
+     */
+    .rows[data-highlight="0"] .program:not([data-genre="0"]),
+    .rows[data-highlight="1"] .program:not([data-genre="1"]),
+    .rows[data-highlight="2"] .program:not([data-genre="2"]),
+    .rows[data-highlight="3"] .program:not([data-genre="3"]),
+    .rows[data-highlight="4"] .program:not([data-genre="4"]),
+    .rows[data-highlight="5"] .program:not([data-genre="5"]),
+    .rows[data-highlight="6"] .program:not([data-genre="6"]),
+    .rows[data-highlight="7"] .program:not([data-genre="7"]),
+    .rows[data-highlight="8"] .program:not([data-genre="8"]),
+    .rows[data-highlight="9"] .program:not([data-genre="9"]),
+    .rows[data-highlight="10"] .program:not([data-genre="10"]),
+    .rows[data-highlight="11"] .program:not([data-genre="11"]) {
         opacity: 0.3;
     }
     .program.reserved {
