@@ -14,9 +14,8 @@ export async function goto(page: Page, url: string): Promise<void> {
     await page.goto(url);
     await page.locator('[data-hydrated="true"]').waitFor();
     /*
-     * **番組表は外枠だけ先に出る。** 表は後から流れてくるので
-     * (`guide/+page.server.ts` の `gridOf`)、ハイドレーションだけ待って触りに
-     * いくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
+     * **番組表はマスだけ後から届く** (`guide/+page.ts` が `/api/guide` から取る)。
+     * ハイドレーションだけ待って触りにいくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
      * 「局がありません」が出るので、どちらかが出るまで待つ
      */
     const pathname = new URL(url, 'http://localhost').pathname;

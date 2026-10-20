@@ -175,11 +175,11 @@ test.describe('ホームと画面遷移', () => {
     });
 
     /**
-     * **外枠は表を待たずに出す** (`+page.server.ts` の `gridOf`)。
+     * **外枠は表を待たずに出す** (`+page.server.ts`。マスは `+page.ts` が `/api/guide` から後で取る)。
      *
      * 種別のタブ・日送り・検索窓は URL だけで描けるのに、いちばん重い表を待って
-     * いたせいで画面ごと出てこなかった。表だけ後から流すので、最初に届く HTML
-     * には**外枠と骨組みが入っていて、番組はまだ入っていない**。
+     * いたせいで画面ごと出てこなかった。マスだけ後から取るので、最初に届く HTML
+     * には**外枠と局名の行・時刻の列が入っていて、マスのところは骨組み**。
      *
      * ここを HTML で見るのは、**速さに左右されないため**。描き終わりを目で
      * 追うと、中身の少ない試験用の番組表では一瞬で埋まってしまう
@@ -191,13 +191,10 @@ test.describe('ホームと画面遷移', () => {
         // 外枠 (種別タブ・日送り) は最初の HTML に入っている
         expect(html).toContain('data-testid="type-tabs"');
         expect(html).toContain('data-testid="next-day"');
-        // 表のところは骨組み。本物の枠はまだ無い
-        expect(html.indexOf('data-testid="guide-skeleton"')).toBeGreaterThan(-1);
-        expect(html.indexOf('data-testid="guide-skeleton"')).toBeLessThan(
-            html.indexOf('data-testid="guide-rows"') === -1
-                ? Number.POSITIVE_INFINITY
-                : html.indexOf('data-testid="guide-rows"'),
-        );
+        // 局名の行は本物、マスのところは骨組み。番組はまだ無い
+        expect(html).toContain('data-testid="guide-service"');
+        expect(html).toContain('data-testid="guide-skeleton"');
+        expect(html).not.toContain('data-testid="program-button"');
     });
 
     test('番組表はグリッドで出て、種別で切り替えられる', async ({ page }) => {

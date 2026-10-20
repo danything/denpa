@@ -124,9 +124,9 @@ test.describe('局ロゴ', () => {
          */
         await expect(page.getByTestId('logo-sweep')).toHaveCount(0);
 
-        // 番組表の見出しにも出る
+        // 番組表の見出しにも出る (局名の行はサーバで描くので、src は相対 `./api/...`)
         await goto(page, '/guide?type=GR');
-        await expect(page.locator(`img[src="/api/services/${MX.id}/logo"]`).first()).toBeVisible();
+        await expect(page.locator(`img[src$="api/services/${MX.id}/logo"]`).first()).toBeVisible();
     });
 });
 
@@ -163,7 +163,7 @@ test.describe('衛星の局ロゴ', () => {
         }).toPass({ timeout: 60_000 });
 
         await goto(page, '/guide?type=BS');
-        await expect(page.locator(`img[src="/api/services/${BS11.id}/logo"]`).first()).toBeVisible();
+        await expect(page.locator(`img[src$="api/services/${BS11.id}/logo"]`).first()).toBeVisible();
     });
 
     /**

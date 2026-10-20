@@ -15,6 +15,39 @@ export type ChannelType = 'GR' | 'BS' | 'CS' | 'SKY';
 export const CHANNEL_TYPES: readonly ChannelType[] = ['GR', 'BS', 'CS'];
 
 /**
+ * 番組表の 1 マスぶん。**番組の全列は持たない。**
+ *
+ * 出演者やあらすじ (`extended`)、音声 (`audios`)、ジャンルの中分類
+ * (`genre_detail`) は詳細を開いたときにしか使わないのに、BS の 24 時間ぶん
+ * (2,171 件) で応答 1.43 MB のうち 41% を占めていた。しかも前日・翌日の先読みが
+ * 同じ形の応答をもう 2 つ取る。詳細は開いた 1 件だけ `/api/programs/<id>` で取る
+ * (予約・録画の一覧と同じ経路)
+ */
+export interface GridProgram
+    extends Pick<
+        Program,
+        'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres' | 'copy_never'
+    > {
+    reservation_state: ReservationState | null;
+    /**
+     * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。
+     * 録画一覧まで戻って同じ番組を探し直させないため
+     */
+    recording_id: number | null;
+    /** 録画そのものが失敗していれば再生のボタンを出さない (一覧の `hasFile` と同じ) */
+    recording_state: Recording['state'] | null;
+    /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
+    library_path: string | null;
+    ts_path: string | null;
+}
+
+/** 番組表の中身 (`/api/guide`)。組めなかったときは `programs` を空にして、理由を `failed` に入れる */
+export interface GuideSheet {
+    programs: GridProgram[];
+    failed: string | null;
+}
+
+/**
  * 番組詳細に出す分。番組表・ホーム (録画)・検索のどこから開いても同じ見た目で見せる。
  * 予約や録画からは局名しか手元に無いので、局IDではなく名前で持つ。
  */

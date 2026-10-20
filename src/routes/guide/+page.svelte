@@ -3,53 +3,44 @@
     import { dragScroll, submitting } from '#lib/actions.js';
     import { GENRE_TREE } from '#lib/arib.js';
     import ChannelNotice from '#lib/components/ChannelNotice.svelte';
-    import GuideSkeleton from '#lib/components/GuideSkeleton.svelte';
     import Menu from '#lib/components/Menu.svelte';
     import NowLine from '#lib/components/NowLine.svelte';
     import ProgramDetail from '#lib/components/ProgramDetail.svelte';
     import Icon from '#lib/components/player/Icon.svelte';
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
+    import { skeletonMask } from '#lib/guide-skeleton.js';
     import { reload } from '#lib/reload.svelte.js';
     import { cellsOf, columnsOf, mainOf, SUBCHANNELS_COOKIE, splitOf } from '#lib/subchannels.js';
-    import { CHANNEL_TYPES, type ProgramDetail as Facts } from '#lib/types.js';
+    import { CHANNEL_TYPES, type ProgramDetail as Facts, type GridProgram, type GuideSheet } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
+    import { navigating } from '$app/state';
     import Ellipsis from '~icons/lucide/ellipsis';
     import Layers from '~icons/lucide/layers';
     import Palette from '~icons/lucide/palette';
 
     let { data, form } = $props();
 
-    type Sheet = Awaited<typeof data.grid>;
-
     /**
-     * 表の中身。**外枠より後から届く** (`+page.server.ts` の `gridOf`)。
-     * 届くまでは骨組みだけ出しておき、種別のタブ・日送りは先に使えるようにする。
+     * 表のマス。**外枠より後から届く** (`+page.ts`。`/api/guide`)。
+     * 局名の行と時刻の列は外枠と一緒に届くので本物を先に出し、マスのところだけ骨組みにしておく。
      *
      * **通知で読み直したときに骨組みへ戻さない。** 番組表は録画やエンコードの
-     * 通知が来るたびに読み直すので、そのたび表が消えては現れるとちらつく。
+     * 通知が来るたびに読み直すので、そのたびマスが消えては現れるとちらつく。
      * 同じ日・同じ放送波なら前のものを出したままにして、届いたら差し替える
      * (`live-updates.svelte.ts` の `held` と同じ考え方)。
-     * **別の日・別の放送波へ移ったときだけ**捨てる — 選び直したのに前の表が
+     * **別の日・別の放送波へ移ったときだけ**捨てる — 選び直したのに前のマスが
      * 残っていると、タブと中身が食い違って見える
      */
-    let sheet = $state<Sheet | null>(null);
+    let sheet = $state<GuideSheet | null>(null);
     let shownKey = '';
     $effect(() => {
         const key = `${data.type}:${data.start}`;
-        const coming = data.grid;
-        if (key !== shownKey) {
-            /*
-             * 骨組みを挟むと表ごと作り直しになる。縦位置は戻せるように覚えておく。
-             *
-             * **`untrack` で読む。** 素で読むと表が消えた拍子にこの効果がもう一度
-             * 回り、そのとき `grid` は null なので**覚えたばかりの位置を消して**
-             * しまう (実測: 選び直すたびに先頭へ戻った)
-             */
-            keptTop = untrack(() => grid?.scrollTop) ?? null;
-            sheet = null;
-        }
+        const coming = data.sheet;
+        if (key !== shownKey) sheet = null;
+        // サーバで描くときだけ null (取るのはブラウザ。`+page.ts`)
+        if (coming === null) return;
         // 追い越しがあると古いほうで上書きしてしまう
         let stale = false;
         void coming.then((next) => {
@@ -74,8 +65,49 @@
         };
     });
 
-    const services = $derived(sheet?.services ?? []);
-    const programs = $derived(sheet?.programs ?? []);
+    /**
+     * **押した先の日・放送波を待っている間も、マスは骨組みにする。**
+     *
+     * 外枠 (局の並び) が届くまでは前の表がそのまま残り、押しても何も起きていないように見えた。
+     * 押したらすぐマスを骨組みに替え、放送波が変わるなら局名の行も骨組みにする
+     * (同じ放送波の別の日なら局の並びはほぼ同じなので、そのまま残す)。
+     *
+     * 終わりは `navigating.complete` で見る (`+layout.svelte` の `pending` と同じ。`navigating` は
+     * 畳まれた遷移で真のまま残るので当てにしない)
+     */
+    let switchingTo = $state<URL | null>(null);
+    $effect(() => {
+        const done = navigating.complete;
+        const to = navigating.to;
+        if (done === null || to === null || to.route.id !== '/guide') {
+            switchingTo = null;
+            return;
+        }
+        switchingTo = to.url;
+        let stale = false;
+        const settle = (): void => {
+            if (!stale) switchingTo = null;
+        };
+        void done.then(settle, settle);
+        return () => {
+            stale = true;
+        };
+    });
+    /** 押した先の放送波。今と同じ日・同じ放送波 (読み直し・同じリンク) なら null */
+    const switching = $derived.by(() => {
+        if (switchingTo === null) return null;
+        const type = switchingTo.searchParams.get('type') ?? 'GR';
+        const start = switchingTo.searchParams.get('start');
+        if (type === data.type && (start === null || Number(start) === data.start)) return null;
+        return { type };
+    });
+    /** マスを出すか (届いていて、ほかの日・放送波へ移る途中でもない) */
+    const showCells = $derived(sheet !== null && sheet.failed === null && switching === null);
+    /** 局名の行を骨組みにするか (別の放送波へ移る途中) */
+    const headSkeleton = $derived(switching !== null && switching.type !== data.type);
+
+    const services = $derived(data.services);
+    const programs = $derived<GridProgram[]>(sheet?.programs ?? []);
 
     /**
      * サブチャンネル (テレ東2・3、Eテレ2・3、BS朝日2・3 など) の列を出すか。**既定は出す**
@@ -83,14 +115,19 @@
      */
     let subchannels = $state(untrack(() => data.subchannels));
     const main = $derived(mainOf(services));
-    /** サブチャンネルの分割放送。ずっと本チャンネルと同じ番組のサブは入らない */
+    /** サブチャンネルの分割放送 (マスを組むのに使う)。ずっと本チャンネルと同じ番組のサブは入らない */
     const split = $derived(splitOf(programs, main));
+    /**
+     * 分割放送のあるサブ (外枠と一緒に届く。`+page.server.ts` の `split`)。**列はこちらで立てる** —
+     * マスを待たずに局名の行を出すため
+     */
+    const splitColumns = $derived(new Map(data.split.map((id) => [id, []])));
     /**
      * 切り替えは、その日に分割放送があるときだけ出す。無ければ出しても列が増えない
      * (ずっと本チャンネルと同じ番組のサブは列を立てない。CS・SKY は束ねないので出ない)
      */
-    const canSplit = $derived(split.size > 0);
-    const columns = $derived(columnsOf(services, main, subchannels ? split : null));
+    const canSplit = $derived(data.split.length > 0);
+    const columns = $derived(columnsOf(services, main, subchannels ? splitColumns : null));
     /** 表のマス。本チャンネルと同じ番組を流しているサブの列には本チャンネルのマスが伸びてくる */
     const cells = $derived(cellsOf(columns, programs, main, split));
 
@@ -156,7 +193,7 @@
     const visibleCells = $derived(drawing ? cells.slice(0, shownCells) : cells);
 
     /** クリックした番組。詳細を出してから予約するかどうか決める */
-    let selected = $state<Sheet['programs'][number] | null>(null);
+    let selected = $state<GridProgram | null>(null);
 
     /**
      * 開いた番組の中身 (出演者・あらすじ・音声…)。**表は持っていない**
@@ -178,7 +215,7 @@
      * 付け外しするたびに文書ぜんぶの見た目を計算し直していて、番組の多い表では
      * 押してから箱が出るまでの大半がそれだった (箱はほかの画面と同じく、少し縮んだ姿から出る)
      */
-    function open(program: Sheet['programs'][number]): void {
+    function open(program: GridProgram): void {
         const token = ++opening;
         const seed: Facts = {
             name: program.name,
@@ -281,26 +318,15 @@
      * 位置は offsetTop では測れない。offsetTop は「位置指定された親」からの距離で、
      * ここでは body が親になるため、ナビや見出しの高さまで足し込まれて
      * その分だけ下に行き過ぎる。実際に見えている位置の差から出す。
-     */
-    let scrolled = false;
-    /**
-     * 骨組みを挟んでいる間の縦位置。
      *
-     * 放送波や日を選び直すと表を作り直すので、`scrollTop` は 0 に戻ってしまう。
-     * **縦は時刻**で、どの放送波でも同じ意味なので、見ていたところへ戻す
-     * (横は局の並びが別物なので、別の効果で先頭に戻している)
+     * **マスを待たずに動かす。** 局名の行と時刻の列は先に出ていて、行の高さも決まっているので、
+     * 骨組みのうちに「いま」の位置まで送っておける (届いたときに動かない)。
+     * 放送波や日を選び直しても表の枠は作り直さないので、縦位置 (時刻) はそのまま残る
      */
-    let keptTop: number | null = null;
+    let scrolledBox: HTMLElement | null = null;
     $effect(() => {
-        if (grid === null) return;
-        const back = keptTop;
-        if (back !== null) {
-            keptTop = null;
-            grid.scrollTop = back;
-            return;
-        }
-        if (scrolled || nowMark === null) return;
-        scrolled = true;
+        if (grid === null || nowMark === null || scrolledBox === grid) return;
+        scrolledBox = grid;
 
         const target = grid;
         const mark = nowMark;
@@ -521,14 +547,18 @@
      * 「終わってから」は**マスを描き終わってから** (`drawing` が下りてから) —
      * 表が届いた時点で投げていた頃は、マスを描いている最中に BS で 1 件 1 MB 超の
      * 応答が 2 つ届いて、その解読が描画と取り合っていた。
-     * requestIdleCallback は Safari に無いので、無ければ少し置いてから。
+     * **描き終わってもすぐには投げない** (`PREFETCH_DELAY`)。マスを置き終えた直後は、そのぶんの
+     * レイアウトと画面の切り替えの動きがまだ走っていて、本番では描き終わった直後の空き
+     * (`requestIdleCallback`) で投げた 2 つがそれと重なっていた。少し置いてから、空いたときに投げる。
+     * requestIdleCallback は Safari に無いので、無ければ置くだけ。
      * 同じ日・同じ放送波の読み直しでは取り直さない (`prefetchedFor`)
      */
+    const PREFETCH_DELAY = 1000;
     let prefetchedFor = '';
     $effect(() => {
         const soon = prevHref;
         const later = nextHref;
-        if (sheet === null || drawing) return;
+        if (!showCells || drawing) return;
         const key = `${data.type}:${data.start}`;
         if (prefetchedFor === key) return;
         const fetchBoth = () => {
@@ -537,11 +567,17 @@
             void preloadData(later);
         };
         if (typeof requestIdleCallback !== 'function') {
-            const timer = setTimeout(fetchBoth, 500);
+            const timer = setTimeout(fetchBoth, PREFETCH_DELAY);
             return () => clearTimeout(timer);
         }
-        const handle = requestIdleCallback(fetchBoth, { timeout: 3000 });
-        return () => cancelIdleCallback(handle);
+        let handle = 0;
+        const timer = setTimeout(() => {
+            handle = requestIdleCallback(fetchBoth, { timeout: 3000 });
+        }, PREFETCH_DELAY);
+        return () => {
+            clearTimeout(timer);
+            cancelIdleCallback(handle);
+        };
     });
 
     /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
@@ -678,7 +714,7 @@
             <button
                 type="button"
                 class="small secondary outline"
-                disabled={nowSlots === null || sheet === null}
+                disabled={nowSlots === null || grid === null}
                 title={nowSlots === null ? '今日を見ているときだけ' : 'いまの時刻へ'}
                 onclick={jumpNow}
                 data-testid="guide-jump-now"
@@ -687,7 +723,7 @@
                 <button
                     type="button"
                     class="small secondary outline"
-                    disabled={sheet === null}
+                    disabled={grid === null}
                     title={jump.title}
                     onclick={() => jumpTo(jump.hour)}
                     data-testid="guide-jump-{jump.key}"
@@ -790,24 +826,7 @@
         </div>
     </div>
 
-    {#if sheet !== null && sheet.failed !== null}
-        <!--
-            組めなかった。**骨組みのまま放っておかない** — 読み込み中と区別が
-            付かず、いつまでも待たせることになる。本当の理由はサーバのログに出る
-        -->
-        <div class="panel empty">
-            <p class="muted">番組表を読み込めませんでした ({sheet.failed})</p>
-            <button type="button" class="small secondary outline" onclick={reload}>読み直す</button>
-        </div>
-    {:else if sheet === null}
-        <!--
-            **表のところだけ読み込み中にする。** 画面ごと出てこないと、放送波を
-            選び直すのも日を送るのも待たされる。骨組みは本物と同じ形
-            (左に時刻の列、上に局名の行) にしておく — 何が出てくるのかが
-            分かるし、届いたときに位置が飛ばない
-        -->
-        <GuideSkeleton />
-    {:else if services.length === 0}
+    {#if services.length === 0}
         <div class="panel empty" data-testid="empty-grid">
             {#if data.typeEmpty}
                 <!-- 局がまだ無い。上の案内と同じ文とボタンを、表の場所の真ん中に (上の案内はこのとき出さない) -->
@@ -820,6 +839,15 @@
                 <!-- 局はあるが、いま流している番組が無い (番組表を集めている途中など) -->
                 <p class="muted">{SERVICE_TYPE_LABEL[data.type]}の番組表はまだありません。集まるまでお待ちください</p>
             {/if}
+        </div>
+    {:else if sheet !== null && sheet.failed !== null && switching === null}
+        <!--
+            組めなかった。**骨組みのまま放っておかない** — 読み込み中と区別が
+            付かず、いつまでも待たせることになる。本当の理由はサーバのログに出る
+        -->
+        <div class="panel empty">
+            <p class="muted">番組表を読み込めませんでした ({sheet.failed})</p>
+            <button type="button" class="small secondary outline" onclick={reload}>読み直す</button>
         </div>
     {:else}
         <!--
@@ -836,7 +864,7 @@
             use:dragScroll
             bind:this={grid}
             data-testid="guide-grid"
-            aria-busy={drawing ? 'true' : undefined}
+            aria-busy={!showCells || drawing ? 'true' : undefined}
         >
             <!--
             **横幅を数えて入れておく。**
@@ -865,9 +893,13 @@
                     <div
                         class="service"
                         style="grid-column: {i + 2}; grid-row: 1;"
-                        title={service.name}
-                        data-testid="guide-service"
+                        title={headSkeleton ? undefined : service.name}
+                        data-testid={headSkeleton ? 'guide-service-skeleton' : 'guide-service'}
                     >
+                        {#if headSkeleton}
+                            <!-- 別の放送波へ移る途中。局の並びが届くまで名前は出さない (上の `switching`) -->
+                            <span class="skeleton-head head-skeleton" aria-hidden="true"></span>
+                        {:else}
                         <!--
                         ロゴを持たない局もあるので、有るものだけ出す。場所は
                         どちらでも空けておく — 局名の頭が列ごとにずれると、
@@ -884,6 +916,7 @@
                             <span class="tag ch-number">{channelNumber(service)}</span>
                         {/if}
                         <span class="truncate broadcast">{service.name}</span>
+                        {/if}
                     </div>
                 {/each}
 
@@ -934,6 +967,24 @@
                     本チャンネルと同じ番組を流しているサブチャンネルの列へは本チャンネルのマスを横に伸ばす (`span`)。
                     分割放送の前後で幅が変わると、同じ番組が上下2つのマスになる (`cell.key`)
                 -->
+                {#if !showCells}
+                    <!--
+                        **マスのところだけ骨組み。** 局名の行と時刻の列は本物で、骨組みは同じ列 (`subgrid`) に
+                        24 時間ぶん敷く — 画面の下の端まで埋まり、どこまで送っても切れない。
+                        桝は 1 つずつ置かず、列ごとに 1 枚の板を `mask` で切り抜く (局が多いと数千個になる)
+                    -->
+                    <div
+                        class="skeleton cells-skeleton"
+                        style="grid-column: 2 / -1; grid-row: 2 / -1;"
+                        data-testid="guide-skeleton"
+                        role="status"
+                        aria-label="番組表を読み込んでいます"
+                    >
+                        {#each columns as service, i (service.id)}
+                            <div class="cells-skeleton-column" style:mask-image={skeletonMask(i)} aria-hidden="true"></div>
+                        {/each}
+                    </div>
+                {:else}
                 {#each visibleCells as cell (cell.key)}
                     {@const program = cell.program}
                     {@const pos = place(cell)}
@@ -985,6 +1036,7 @@
                         </button>
                     </div>
                 {/each}
+                {/if}
             </div>
         </div>
     {/if}
@@ -992,7 +1044,7 @@
 
 <!-- 時刻へ送るメニューの項目 (「⋯」と、狭い画面の日付のメニュー) -->
 {#snippet jumpItems()}
-    {@const off = nowSlots === null || sheet === null}
+    {@const off = nowSlots === null || grid === null}
     <button
         type="button"
         class="menu-item"
@@ -1006,9 +1058,9 @@
             type="button"
             class="menu-item"
             role="menuitem"
-            aria-disabled={sheet === null ? 'true' : undefined}
-            data-disabled={sheet === null ? '' : undefined}
-            onclick={() => sheet !== null && jumpTo(jump.hour)}
+            aria-disabled={grid === null ? 'true' : undefined}
+            data-disabled={grid === null ? '' : undefined}
+            onclick={() => grid !== null && jumpTo(jump.hour)}
         >{jump.label} <span class="muted">{jump.hour}:00</span></button>
     {/each}
 {/snippet}
@@ -1433,6 +1485,13 @@
         cursor: grab;
         background: var(--dp-surface);
     }
+    /*
+     * **Pico の回るもの (`[aria-busy]::before`) は出さない。** 表の頭に 1 行ぶん差し込まれ、
+     * マスを待つ間だけ表が下にずれて、届いた瞬間に跳ねていた。待っていることは骨組みで見せる
+     */
+    .grid-box[aria-busy="true"]::before {
+        display: none;
+    }
     .grid-box:active {
         cursor: grabbing;
     }
@@ -1507,6 +1566,24 @@
      * 中身を組まなくてもマスの場所は変わらない。`contain-intrinsic-size` は
      * 中身が無いときの仮の大きさで、track に伸ばされるぶんには効かない
      */
+    /*
+     * マスのところの骨組み。列は表と同じ (`subgrid`)。光の筋は `app.css` の `.skeleton`。
+     * 時刻の列・局名の行・いまの線は `z-index` を持つので、この上に重なる
+     */
+    .cells-skeleton {
+        display: grid;
+        grid-template-columns: subgrid;
+    }
+    .cells-skeleton-column {
+        margin-inline: 0.125rem;
+        background: var(--dp-subtle);
+    }
+    /* 別の放送波へ移る途中の局名 (高さは局名の字の行と同じ) */
+    .head-skeleton {
+        display: block;
+        width: 70%;
+        height: 1.25rem;
+    }
     .cell {
         overflow: hidden;
         padding: 0.125rem;
