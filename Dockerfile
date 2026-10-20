@@ -314,8 +314,8 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 # adapter-bun の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
 # bun の組み込み (`bun:sqlite`) だけ。載せていた頃は playwright も vite も
 # typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
-# 置くのは下の5つだけ: build/ (アプリ)、server.js (入口) とそれが読む
-# src/lib/server/address.ts、package.json (`"type": "module"` の宣言)、drizzle/
+# 置くのは下のものだけ: build/ (アプリ)、server.js (入口) とそれが読む
+# src/lib/server/address.ts・compress.ts、package.json (`"type": "module"` の宣言)、drizzle/
 # (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
 # (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy)
 #
@@ -331,6 +331,8 @@ COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/server.js ./server.js
 # 入口が接続元を決めるのに使う (アプリと同じものを共有する。bun は .ts をそのまま読む)
 COPY --from=build /app/src/lib/server/address.ts ./src/lib/server/address.ts
+# 入口が画面の HTML とデータを縮めるのに使う (`src/lib/server/compress.ts`。同じく `node:zlib` しか引かない)
+COPY --from=build /app/src/lib/server/compress.ts ./src/lib/server/compress.ts
 
 EXPOSE 3000
 # 動いている版。ここでは `dev` のまま — リリースのときに、このイメージを土台に

@@ -34,6 +34,7 @@
  */
 
 import { networks, resolveClient, unreadable } from './src/lib/server/address.ts';
+import { compress } from './src/lib/server/compress.ts';
 
 /** `src/lib/server/ws.ts` が置く名前 */
 const LIVE = '__denpaLive';
@@ -145,7 +146,14 @@ const front = (handler) => (request, server) => {
             proxies,
         ),
     );
-    return handler(request, server);
+    /*
+     * **画面の HTML とデータ (JSON) は縮めて返す** (`src/lib/server/compress.ts`)。
+     * 静的ファイルは組むときに縮めてある (`precompress`) が、SvelteKit が組む応答は素のまま出ていた
+     */
+    const response = handler(request, server);
+    return response instanceof Promise
+        ? response.then((res) => res && compress(request, res))
+        : response && compress(request, response);
 };
 
 const serve = Bun.serve;
