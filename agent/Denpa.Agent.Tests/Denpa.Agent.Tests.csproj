@@ -49,7 +49,7 @@
              (Microsoft.NET.Test.Sdk / xunit.runner.visualstudio) は持たない。
              TUnit だけで MTP のテストアプリとして完結する。TUnit はソース
              ジェネレータで動くので、本体と同じく Native AOT でも通る -->
-        <PackageReference Include="TUnit" Version="1.75.0" />
+        <PackageReference Include="TUnit" Version="1.76.0" />
     </ItemGroup>
 
 </Project>
