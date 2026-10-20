@@ -52,6 +52,8 @@ const REACH = 0.2;
 const CUT_MIN = 8;
 /** 弱い切れ目の下限。明るい映像どうしの切り替わりはこのくらい */
 const CUT_WEAK = 3;
+/** 「15秒の倍数」とみなす誤差 (秒) */
+const CM_TOLERANCE = 0.6;
 
 /** 最初に `at` 以上になる位置 */
 function lowerBound(values: ArrayLike<number>, at: number): number {
@@ -212,10 +214,8 @@ function withinProgram(spans: Range[], input: CmInput, candidates: Boundary[]): 
 }
 
 /*
- * ここから、ロゴで決めるときの点数。**全部の分け方の中から点数の合計がいちばん高いものを選ぶ** (`byLogo`)。
- * 境目の候補を時刻の順に並べ、候補から候補までの区間を「番組」か「CM」にする。点数は区間ごとの点
- * (CM の尺・ロゴの出ている秒) と、番組と CM が替わる境目の点 (切れ目・無音・ロゴの出入りからの距離) の和。
- * 規則を順に当てて決めていくと、1つの継ぎ目が 0.3〜0.5 秒ずれただけで CM の並びが途切れ、その先が崩れた
+ * ここから、ロゴで決めるときの点数 (`byLogo`)。区間ごとの点 (CM の尺・ロゴの出ている秒) と、番組と CM が替わる
+ * 境目の点 (切れ目・無音・ロゴの出入りからの距離) の和。規則を順に当てると、継ぎ目が 0.3〜0.5 秒ずれただけで先が崩れる
  */
 
 /** 番組: ロゴの出ている 1 秒ごとの点 */
@@ -364,11 +364,10 @@ function candidates(input: CmInput, logo: Range[]): Candidate[] {
     return merged;
 }
 
-/** 15 秒の倍数への合い方 (ぴったりで 1、`tolerance` 外れて 0)。15〜180 秒の外は 0 */
-function fit15(seconds: number, tolerance = CM_TOLERANCE): number {
-    if (seconds < 15 - tolerance || seconds > 180 + tolerance) return 0;
-    const units = Math.min(12, Math.max(1, Math.round(seconds / 15)));
-    return Math.max(0, 1 - Math.abs(seconds - units * 15) / tolerance);
+/** 15 秒の倍数への合い方 (ぴったりで 1、`CM_TOLERANCE` 外れて 0)。15〜180 秒の外は 0 */
+function fit15(seconds: number): number {
+    if (!isCmLength(seconds)) return 0;
+    return 1 - Math.abs(seconds - Math.round(seconds / 15) * 15) / CM_TOLERANCE;
 }
 
 /** 告知の尺 (5・10 秒) への合い方 */
@@ -458,14 +457,7 @@ function edgeCost(distance: number, flat: number): number {
 
 /**
  * ロゴの出ていない所を CM にする。**分け方を全部比べて、点数の合計がいちばん高いものを選ぶ** (動的計画法)。
- *
- * - **CM の区間** は 180 秒まで。尺が 15 秒の倍数に近いほど高く、ロゴの出ている秒は大きく減らす。録画の頭と尻に接する区間は
- *   前後の番組なので尺を問わない。5・10 秒は CM の続きでだけ告知として低めの点
- * - **番組の区間** はロゴの出ている秒に点、ロゴの無い秒は少し減らす (短いアイキャッチは番組のまま)
- * - **番組と CM が替わる境目** は強い切れ目・長い無音・ロゴの点が替わった所ほど減らさず、ロゴの出入りから離れるほど減らす
- * - **提供**は状態で見る。CM の並びに続く番組が戻る直前の 10 秒は局の番宣 (CM)、それ以外の 10 秒は提供 (番組)
- *
- * 隣り合う CM の区間は1つにまとめて返す
+ * 点数は上の定数 (docs/cm.md の「境目の決め方」)。隣り合う CM の区間は1つにまとめて返す
  */
 function byLogo(input: CmInput, logo: Range[]): Range[] {
     const { duration } = input;
@@ -646,8 +638,6 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
     return out.filter((r) => r.end - r.start > 0.5);
 }
 
-/** 「15秒の倍数」とみなす誤差 (秒) */
-const CM_TOLERANCE = 0.6;
 /** ロゴを使わないとき、CM ブロックとして採る最短 (秒)。単発の 15 秒は本編のコーナーと紛らわしい */
 const BLOCK_MIN = 30;
 

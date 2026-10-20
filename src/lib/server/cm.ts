@@ -378,6 +378,16 @@ export interface CmOptions {
     onStep?: (label: string) => void;
 }
 
+/** 決めた区間と尺を `by` 秒あとへずらす (入れ物の頭からの秒に直す)。材料にはずらした長さを `offset` に残す */
+export function shiftDetection(detection: CmDetection, by: number): CmDetection {
+    return {
+        ...detection,
+        ...(detection.material !== undefined ? { material: { ...detection.material, offset: by } } : {}),
+        cm: detection.cm.map((range) => ({ start: range.start + by, end: range.end + by })),
+        duration: detection.duration + by,
+    };
+}
+
 /** 読み方 (`openCm`) と、読んだ材料からの決め方 */
 export interface CmReading {
     /**
@@ -542,10 +552,9 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
     // ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
     const cm = decideCm(input);
     // 落ちた理由まで書く。**この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)
-    const note = `無音 ${material.silences.length} 箇所`;
     return {
         cm: tooMuchCm(cm, duration) ? [] : cm,
         duration,
-        note: `${note} (${LOGO_UNUSABLE}: ${why})`,
+        note: `無音 ${material.silences.length} 箇所 (${LOGO_UNUSABLE}: ${why})`,
     };
 }

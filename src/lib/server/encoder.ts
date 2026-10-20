@@ -28,6 +28,7 @@ import {
     probeLiveAudio,
     probeVideo,
     type Range,
+    shiftDetection,
     shiftRanges,
 } from './cm';
 import { chapterArgs, cutArgs, cutList, cutPoints, KEY_SCDET, listKeyframes, planCut } from './cm-cut';
@@ -918,13 +919,7 @@ async function decide(
     if (found === null) return { cm: [], duration: Number.NaN, note: 'CM検出の読み込みが失敗しました' };
     try {
         // ロゴを覚え直して枠だけ読み直すときも、エンコードしたときと同じだけ頭を捨てる
-        const decided = await reading.decide(found, { skip, before: inputArgs(skip), video });
-        return {
-            ...decided,
-            ...(decided.material !== undefined ? { material: { ...decided.material, offset: skip } } : {}),
-            cm: decided.cm.map((range) => ({ start: range.start + skip, end: range.end + skip })),
-            duration: decided.duration + skip,
-        };
+        return shiftDetection(await reading.decide(found, { skip, before: inputArgs(skip), video }), skip);
     } catch (error) {
         console.error(`[cm] 検出に失敗しました: ${error}`);
         return { cm: [], duration: Number.NaN, note: `CM検出に失敗しました: ${error}` };
@@ -1733,15 +1728,7 @@ async function runCmJob(jobId: number): Promise<void> {
     try {
         if (stored !== null && stored.logo !== null) {
             setPhase(jobId, 'cm', '控えておいた材料から決め直しています');
-            const decided = decideFromMaterial(stored);
-            detection = {
-                ...decided,
-                cm: decided.cm.map((range) => ({
-                    start: range.start + stored.offset,
-                    end: range.end + stored.offset,
-                })),
-                duration: decided.duration + stored.offset,
-            };
+            detection = shiftDetection(decideFromMaterial(stored), stored.offset);
         } else {
             setPhase(jobId, 'cm', '局ロゴを確かめています');
             const programStart =
@@ -1771,14 +1758,8 @@ async function runCmJob(jobId: number): Promise<void> {
                 fail(jobId, recording, `読み込みに失敗しました (code ${found.code}): ${found.stderr}`, what);
                 return;
             }
-            const decided = await reading.decide(found, { skip: 0, before: [] });
-            detection = {
-                ...decided,
-                cm: decided.cm.map((range) => ({ start: range.start + shift, end: range.end + shift })),
-                duration: decided.duration + shift,
-            };
-            if (decided.material !== undefined)
-                saveMaterial(recording.id, { ...decided.material, offset: shift });
+            detection = shiftDetection(await reading.decide(found, { skip: 0, before: [] }), shift);
+            if (detection.material !== undefined) saveMaterial(recording.id, detection.material);
         }
     } catch (error) {
         if (canceled.has(jobId)) return finishCanceled(jobId, null);
