@@ -480,3 +480,17 @@ describe('CM の端は尺が 15 秒の倍数になる切れ目', () => {
         expect(round(decideCm(ok))[1]).toEqual({ start: 600, end: 660 });
     });
 });
+
+describe('番組が戻る直前の 10 秒の番宣 (並びの境目が少しずれている)', () => {
+    // 実機の BS-TBS の並びを写したもの。CM 600〜660 (60 秒)、5.5 秒の告知、14.65 秒の CM、9.9 秒の番宣、
+    // 690 で番組が戻る (ロゴは 690.3 から)
+    const joints = [10, ...every15(600, 660), 665.47, 680.12, 690.03, 1790, 1805];
+    const logo = [
+        { start: 10.2, end: 599.8 },
+        { start: 690.3, end: 1789.7 },
+    ];
+
+    test('手前の境目から 15 秒の倍数に 0.6 秒以内で届くなら、最後の 10 秒も CM', () => {
+        expect(round(decideCm(recording(1800, joints, logo)))[1]).toEqual({ start: 600, end: 690.03 });
+    });
+});

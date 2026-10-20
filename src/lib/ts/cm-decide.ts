@@ -445,10 +445,15 @@ function arrange(
         }
     }
     if (beforeProgram) {
-        // 番組が戻る直前だけ。手前に CM の尺 (15 秒の倍数) で届く境目があれば、並びに続く番宣
+        /*
+         * 番組が戻る直前だけ。手前に CM の尺 (15 秒の倍数) で届く境目があれば、並びに続く番宣。
+         * **ここは誤差を広めに見る** (`CM_TOLERANCE`)。継ぎ目の無音の中の切れ目が少しずれていると、
+         * 並びに続く番宣を提供と取り違えて番組に残す (実機の BS-TBS で、手前の境目から 14.65 秒 (0.35 秒ずれ) の
+         * 所で並びが切れ、最後の 10 秒の番宣が番組の側に残っていた)
+         */
         const previous = inner.filter((t) => t > start + 0.5).at(-1);
         const chained = (at: number) =>
-            marks.some((t) => t >= start - 0.5 && t < at - 0.5 && isCmLength(at - t, CHAIN_TOLERANCE));
+            marks.some((t) => t >= start - 0.5 && t < at - 0.5 && isCmLength(at - t, CM_TOLERANCE));
         if (previous !== undefined && credit(previous, end) && !chained(previous)) end = previous;
     }
     if (end - start > 0.5) out.push({ start, end });
