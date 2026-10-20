@@ -78,6 +78,11 @@ public class Px4TunerTests
         /// <summary>これだけ流したら、繋いだまま黙る (読む側が待っているところを作る)</summary>
         public int? FramesThenSilence { get; init; }
 
+        /// <summary>STATS に答える (HELLO で STREAM_STATS を認める)。呼ばれた回数を引数に、queue_drops を返す。null なら STATS を持たない</summary>
+        public Func<int, ulong>? Stats { get; init; }
+
+        private int _statsCalls;
+
         /// <summary>どちらのふりをするか (asicend は枠の頭とソケットの置き場だけ違う。AsicenTests)</summary>
         public Px4Wire Wire { get; }
 
@@ -194,6 +199,7 @@ public class Px4TunerTests
                     {
                         var hello = new byte[8];
                         BinaryPrimitives.WriteUInt16LittleEndian(hello, 1);
+                        if (Stats is not null) BinaryPrimitives.WriteUInt32LittleEndian(hello.AsSpan(4), Px4Control.StreamStatsCapability);
                         return (ok, hello);
                     }
                     case Px4Control.Acquire:
@@ -231,6 +237,13 @@ public class Px4TunerTests
                         if (!_active) return (failed, Error(5));
                         _active = false;
                         return (ok, new byte[64]);
+                    case Px4Control.Stats when Stats is not null:
+                    {
+                        if (lease != _lease || _lease == 0) return (failed, Error(3));
+                        var counters = new byte[64];
+                        BinaryPrimitives.WriteUInt64LittleEndian(counters.AsSpan(40), Stats(++_statsCalls));
+                        return (ok, counters);
+                    }
                     case Px4Control.Release:
                         if (lease != _lease || _lease == 0) return (failed, Error(3));
                         _lease = 0;
@@ -419,6 +432,35 @@ public class Px4TunerTests
                 Px4Control.StopStream, Px4Control.Release,
             },
             TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    /// <summary>
+    /// **流している間、px4d の数 (STATS) を聞く** (#1210)。途切れたときに、受信機の側で落ちていたのかを
+    /// 記録から見分けるため。STATS を持たない px4d (HELLO で認めない) には聞かない
+    /// </summary>
+    [Test]
+    public async Task 流している間はSTATSを聞き_持たないpx4dには聞かない(CancellationToken cancel)
+    {
+        await Task.Yield();
+        using (var px4d = new FakePx4d { Stats = calls => (ulong)calls })
+        {
+            var tuner = new Px4Tuner(Id, 2, null, px4d.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
+            tuner.Tune(T27, ChannelTable.NoStreamId);
+            while (px4d.Count(Px4Control.Stats) < 2) await Task.Delay(20, cancel);
+            tuner.Dispose();
+            var after = px4d.Count(Px4Control.Stats);
+            await Task.Delay(200, cancel);
+            // 畳んだら聞かない
+            await Assert.That(px4d.Count(Px4Control.Stats)).IsEqualTo(after);
+        }
+        using (var px4d = new FakePx4d())
+        {
+            var tuner = new Px4Tuner(Id, 2, null, px4d.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
+            tuner.Tune(T27, ChannelTable.NoStreamId);
+            await Task.Delay(300, cancel);
+            tuner.Dispose();
+            await Assert.That(px4d.Count(Px4Control.Stats)).IsEqualTo(0);
+        }
     }
 
     [Test]

@@ -10,6 +10,10 @@
  * 見ると届き方が荒れて止まる。止まったら伸ばし、しばらく無事なら縮める
  * (`nextTarget`)。初めに大きく取ると、開いてから映像が出るまでが遅くなる。
  *
+ * **届く間隔も見る** (`cover`)。止まるのを待たずに、ここ数分でいちばん長く空いた
+ * 間隔を覆えるだけ貯める。止まってから学ぶだけだった頃は、たまに 0.7 秒空く経路で
+ * 2分半に8回止まっていた (#1210)。
+ *
  * DOM を触らないので、ここだけ単体で確かめられる。
  */
 
@@ -57,7 +61,10 @@ const SHRINK_LEAST = 0.1;
  * 縮めにかかる前に次の1回が来て伸びる
  */
 export const SETTLED = 15;
-/** 下限を持ち上げる幅 (秒)。**止まった高さのすぐ上を、次の下限にする** (理由は `nextTarget`) */
+/**
+ * 下限を持ち上げる幅 (秒)。**止まった高さのすぐ上を、次の下限にする** (理由は `nextTarget`)。
+ * 届く間隔で説明がつく詰まりは下限を動かさず、貯める量をその間隔を覆う高さへ一度に上げる (`cover`)
+ */
 const PROBE = 0.3;
 /**
  * 下限そのものを下げ直すまでの静けさ (秒)。**覚えたままにしない。**
@@ -77,7 +84,33 @@ const FORGET = 600;
 /** これ以上離れたら飛ぶ。別のタブへ行って戻ってきたとき */
 export const JUMP = 8;
 /** 詰めるときの速さ。上げすぎると音程が分かるほど狂う */
-const CATCH_UP = 1.05;
+export const CATCH_UP = 1.05;
+/**
+ * 貯まりが狙いを割ったときの速さ。**止まる前に少しだけ遅くして貯め直す。**
+ *
+ * dash.js・hls.js・YouTube・Twitch のライブと同じ手当て。3% ならブラウザが音程を
+ * 保つので (既定の `preservesPitch`)、聞いても分からない。止まるよりずっと目立たない
+ */
+export const SLOW_DOWN = 0.97;
+
+/**
+ * 届く間隔を覚えておく長さ (秒)。**たまにしか来ない長い空きも覚えておく。**
+ *
+ * 15〜30秒おきに 0.7 秒空く経路 (#1210) なら、この中に必ず何回か入る。
+ * 短くすると空きと空きの間で忘れて、また止まる
+ */
+export const GAP_WINDOW = 180;
+/**
+ * 間隔として数える上限 (秒)。**これより長いのは揺れではなく途絶え。**
+ *
+ * サーバの入れ替えや電波の途切れで数秒空いたのを覆おうとすると、そのたびに
+ * 遅延が何秒も伸びる。覆いきれないものは止まるしかない
+ */
+export const GAP_MOST = 2;
+/** 空いた間隔に掛ける余裕。**ちょうどでは足りない** (塊の尺・描くまでの間) */
+const GAP_MARGIN = 1.2;
+/** 余裕に足す量 (秒) */
+const GAP_PAD = 0.1;
 
 export interface Buffered {
     /** 持っている中でいちばん古い時刻 */
@@ -99,6 +132,22 @@ export interface Buffered {
     chasing: boolean;
     /** 追っかけ中の速さ。見ている人が選ぶ。ライブに戻れば使わない */
     speed: number;
+    /**
+     * ここしばらくの貯まりの**いちばん低いところ** (秒)。省けばいまの貯まり (`end - at`)。
+     *
+     * **届いた瞬間の貯まりで決めない。** 塊が届いた直後は貯まりがいちばん多く、束で届けば
+     * 届くたびに跳ねる。そこで「多すぎる」と見て速めると、次の塊が遅れたときに使い切って止まる (#1210)。
+     * 見るのは次が届く直前の低いところに、ここ数秒の届く間隔 (`dip`) を足したもの —
+     * 滑らかに届いていれば今までの「届いた直後の貯まり」と同じ高さになり、遅延は変わらない
+     */
+    low?: number | undefined;
+    /**
+     * ここ数秒でいちばん長く空いた届く間隔 (秒)。`low` に足す (**低いところから届いた直後までの差**)。
+     * 何分も前の長い空きは入れない — そちらは `target` が覆う (`cover`)。足さないと二重に貯めて遅れる
+     */
+    dip?: number;
+    /** いまの再生の速さ。省けば 1。**速めているのか遅くしているのかで、戻す境目が違う** (`steer`) */
+    rate?: number;
 }
 
 export interface Pacing {
@@ -127,7 +176,18 @@ export interface Pacing {
  * 分けていなかった頃は、**止めて再開すると勝手に放送の今へ飛んで**いた —
  * 「止めた所から見られる」と謳っておきながら、8秒より長く止めると戻れなかった。
  */
-export function pacing({ start, end, at, playing, target, chasing, speed }: Buffered): Pacing {
+export function pacing({
+    start,
+    end,
+    at,
+    playing,
+    target,
+    chasing,
+    speed,
+    low,
+    dip,
+    rate,
+}: Buffered): Pacing {
     // 範囲の外にいる。チャンネルを変えた直後もここを通る
     if (at < start || at > end) return { seek: start, play: false, rate: 1, caught: false };
 
@@ -148,18 +208,32 @@ export function pacing({ start, end, at, playing, target, chasing, speed }: Buff
 
     // 大きく離れた。**詰めきれないので飛ぶ** — 別のタブから戻ってきたとき
     if (lag > target + JUMP) return { seek: end - target, play: true, rate: 1, caught: false };
-    /*
-     * 少し離れた。速めて詰める。飛ばないので音は切れない。
-     *
-     * **幅を狭く採る。** 2.5倍まで放っておいた頃は、実機で 0.4 秒を狙って
-     * 0.70 秒に居着いていた — 始めた直後は必ず狙いより溜まる (再生を指示してから
-     * 実際に映像が出るまでの間にも届く) ので、放っておくとそこから下りてこない。
-     */
-    if (lag > target * 1.5) return { seek: null, play: true, rate: CATCH_UP, caught: false };
-    // 追いついた。戻す。**溜まりを使い切る前に戻す**ので、少し余裕を残す
-    if (lag <= target * 1.1) return { seek: null, play: true, rate: 1, caught: false };
-    // その間。速さは今のまま (ここで戻すと、速める・戻すを往復する)
-    return { seek: null, play: true, rate: null, caught: false };
+    // 少し離れた・少し足りない。速さで寄せる。飛ばないので音は切れない
+    const level = low === undefined ? lag : low + (dip ?? 0);
+    return { seek: null, play: true, rate: steer(level, target, rate), caught: false };
+}
+
+/**
+ * 速さを決める。**貯まり (届く直前の低いところ + 届く間隔。`pacing` の `low`) を狙いに寄せる。**
+ *
+ * - 狙いの 1.5 倍より多い … 速めて詰める (`CATCH_UP`)。**幅を狭く採る。** 2.5倍まで
+ *   放っておいた頃は、実機で 0.4 秒を狙って 0.70 秒に居着いていた — 始めた直後は
+ *   必ず狙いより溜まる (再生を指示してから実際に映像が出るまでの間にも届く) ので、
+ *   放っておくとそこから下りてこない
+ * - 狙いを割った … 少し遅くして貯め直す (`SLOW_DOWN`)。止まってから伸ばすより先に効く
+ * - 遅くしていたなら、狙いに戻ったところですぐ等速に戻す (遅延を足すのは足りない間だけ)
+ * - 速めていたなら、狙いの 1.1 倍まで下りたところで等速に戻す。**その間は今のまま** (境目で戻すと、速める・戻すを往復する)
+ *
+ * @param low 貯まり (秒)
+ * @param rate いまの速さ
+ * @returns 次の速さ。null は今のまま
+ */
+export function steer(low: number, target: number, rate = 1): number | null {
+    if (low > target * 1.5) return CATCH_UP;
+    if (low < target) return SLOW_DOWN;
+    // 遅くしていたなら、狙いに戻ったところでやめる (遅延を足すのは足りない間だけ)
+    if (rate < 1) return 1;
+    return low <= target * 1.1 ? 1 : null;
 }
 
 /**
@@ -219,27 +293,105 @@ export interface Buffering {
  * 下限は据え置きにしない (`FORGET`)。経路は変わるので、長く無事なら
  * 少しずつ下げて試し直す。
  *
+ * ## 届く間隔を覆う
+ *
+ * 止まった高さを覚えるだけだと、**止まるたびに 0.3 秒ずつしか上がらない。**
+ * 15〜30秒おきに 0.7 秒空く経路では、下限が 1.5 秒に届くまで 2分半に8回止まった
+ * (#1210)。止まる前から、ここ数分でいちばん長く空いた間隔 (`gap`) を覆えるだけ
+ * 貯める (`cover`)。止まったときも、その空きを覆う高さまで一度に上げる。
+ *
+ * **低い遅延のための作りなので、上げるのは証拠のぶんだけ。** 塊が 0.05 秒ごとに届く宅内
+ * では `cover` は `FLOOR` のまま。空きが来なくなれば数分 (`GAP_WINDOW`) で忘れて縮む。
+ * 空きで説明がつく詰まりは端末に覚える下限を動かさない — 覚えると 10 分に 0.3 秒しか下がらない。
+ *
+ * 覚えた下限の下げ直しは今までどおりゆっくり。**間隔がまだ空いているうちは、それを覆う高さより
+ * 下げない** — 覚えている間隔はそのまま貯める量の下支えにもなる。
+ *
  * @param now いまの量と下限
  * @param stalled 前回からこちら、詰まったか
  * @param settledFor 最後に詰まってから経った秒数
  * @param floorFor 下限を最後に動かしてから経った秒数
+ * @param gap ここ数分 (`GAP_WINDOW`) でいちばん長く空いた届く間隔 (秒)。詰まりを起こした空きも入る
  */
 export function nextTarget(
     now: Buffering,
     stalled: boolean,
     settledFor: number,
     floorFor: number,
+    gap = 0,
 ): Buffering {
+    const covered = cover(gap);
     if (stalled) {
-        return {
-            target: Math.min(CEILING, now.target + GROW),
-            // **いまいた高さは駄目だと分かった。** そのすぐ上から先は試さない
-            floor: Math.min(CEILING, Math.max(now.floor, now.target + PROBE)),
-        };
+        /*
+         * **空きで説明がつく詰まりなら、空きを覆う高さへ一度に上げる。** 覚えている下限は動かさない —
+         * 空きが来なくなれば `GAP_WINDOW` で忘れて、遅延も戻る (1回の空きでずっと遅れて見せない)。
+         * 説明がつかない詰まりだけ、今までどおり止まった高さのすぐ上を下限として覚える
+         */
+        if (covered > now.target) {
+            return { target: Math.min(CEILING, Math.max(covered, now.floor)), floor: now.floor };
+        }
+        const floor = Math.min(CEILING, Math.max(now.floor, now.target + PROBE));
+        return { target: Math.min(CEILING, now.target + GROW), floor };
     }
-    // 長く無事だった。下限そのものを少し下げて、もう一度試す
-    const floor = settledFor >= FORGET && floorFor >= FORGET ? Math.max(FLOOR, now.floor - PROBE) : now.floor;
-    if (settledFor < SETTLED) return { target: Math.max(floor, now.target), floor };
+    // 長く無事だった。下限そのものを少し下げて、もう一度試す。**まだ空く間隔を覆う高さより下げない**
+    const floor =
+        settledFor >= FORGET && floorFor >= FORGET
+            ? Math.max(FLOOR, Math.min(now.floor, Math.max(covered, now.floor - PROBE)))
+            : now.floor;
+    const least = Math.max(floor, covered);
+    if (settledFor < SETTLED) return { target: Math.max(least, now.target), floor };
     const shrunk = now.target - Math.max(SHRINK_LEAST, now.target * SHRINK_RATIO);
-    return { target: Math.max(floor, shrunk), floor };
+    return { target: Math.max(least, shrunk), floor };
+}
+
+/**
+ * 届く間隔 `gap` (秒) を覆うのに要る貯まり (秒)。**1.2 倍に 0.1 秒足す** — ちょうどでは足りない。
+ * 宅内のように塊が 0.05 秒ごとに来ていれば `FLOOR` のまま。長すぎる空き (`GAP_MOST`) は途絶えと見て、そこで打ち止め
+ */
+export function cover(gap: number): number {
+    if (!(gap > 0)) return FLOOR;
+    return Math.min(CEILING, Math.max(FLOOR, Math.min(gap, GAP_MOST) * GAP_MARGIN + GAP_PAD));
+}
+
+/**
+ * ここしばらくのいちばん大きい (小さい) 値。**塊は毎秒20個届くので、全部は並べない。**
+ *
+ * 後から来た値に負ける古い値は、もう答えにならないので捨てる (単調な列)。
+ * 届く間隔 (いちばん長い空き) と、貯まりの低いところ (いちばん少ない) に使う
+ */
+export class Extreme {
+    readonly #items: { at: number; value: number }[] = [];
+    /**
+     * @param span 覚えておく長さ。`at` と同じ単位
+     * @param highest 大きいほうを覚えるか。false なら小さいほう
+     */
+    constructor(
+        readonly span: number,
+        readonly highest: boolean,
+    ) {}
+
+    push(at: number, value: number): void {
+        const items = this.#items;
+        const beaten = (old: number) => (this.highest ? old <= value : old >= value);
+        for (let last = items.at(-1); last !== undefined && beaten(last.value); last = items.at(-1))
+            items.pop();
+        items.push({ at, value });
+        this.#drop(at);
+    }
+
+    /** `at` の時点で覚えている中のいちばん。何も無ければ null */
+    peek(at: number): number | null {
+        this.#drop(at);
+        return this.#items[0]?.value ?? null;
+    }
+
+    clear(): void {
+        this.#items.length = 0;
+    }
+
+    #drop(at: number): void {
+        const items = this.#items;
+        for (let first = items[0]; first !== undefined && first.at < at - this.span; first = items[0])
+            items.shift();
+    }
 }

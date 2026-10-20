@@ -23,6 +23,7 @@ internal sealed class Px4Control : IDisposable
     public const ushort Tune = 0x0022;
     public const ushort StartStream = 0x0023;
     public const ushort StopStream = 0x0024;
+    public const ushort Stats = 0x0025;
     public const ushort CardConnect = 0x0031;
     public const ushort CardDisconnect = 0x0033;
     public const ushort CardReset = 0x0034;
@@ -30,6 +31,9 @@ internal sealed class Px4Control : IDisposable
     public const ushort AttachStream = 0x0040;
     public const ushort TsData = 0x8040;
     public const ushort StreamEnd = 0x80ff;
+
+    /// <summary>HELLO で言う機能: STATS を使う (SPEC 6.4 の capability bit 2)</summary>
+    public const uint StreamStatsCapability = 1 << 2;
 
     public const ushort ResponseFlag = 1 << 0;
     public const ushort ErrorFlag = 1 << 1;
@@ -312,4 +316,52 @@ internal sealed class Px4Error(uint code, string message) : IOException(message)
     public const uint Unknown = uint.MaxValue;
 
     public uint Code { get; } = code;
+}
+
+/// <summary>
+/// px4d が数えている TS の数 (SPEC 6.4 の STATS・STOP_STREAM・STREAM_END の final counters)。
+/// <c>u64 packets, bytes, sync_errors, tei_packets, continuity_errors, queue_drops, usb_errors, empty_intervals</c>。
+///
+/// <para>
+/// **画面で途切れたときに、受信機の側で落ちていたのかを見分けるため** (#1210)。届き方の揺れなら
+/// ここは増えず、取りこぼし (電波・USB・溢れ) なら増える。<c>empty_intervals</c> は正常なときも増える
+/// 診断値 (SPEC) なので見ない。
+/// </para>
+/// </summary>
+internal readonly record struct Px4Counters(
+    ulong Packets, ulong Bytes, ulong SyncErrors, ulong TeiPackets, ulong ContinuityErrors, ulong QueueDrops, ulong UsbErrors)
+{
+    /// <summary>中身の長さ (u64 × 8)</summary>
+    public const int Size = 64;
+
+    /// <summary>読む。短ければ null (版の違うデーモン。止めずに見送る)</summary>
+    public static Px4Counters? Parse(ReadOnlySpan<byte> body)
+    {
+        if (body.Length < Size) return null;
+        Span<ulong> values = stackalloc ulong[7];
+        for (var i = 0; i < values.Length; i++) values[i] = BinaryPrimitives.ReadUInt64LittleEndian(body[(i * 8)..]);
+        return new Px4Counters(values[0], values[1], values[2], values[3], values[4], values[5], values[6]);
+    }
+
+    /// <summary>
+    /// 前回から増えた誤りを1行にする。**増えていなければ null** (記録を埋めない)。
+    /// <paramref name="before"/> が null なら 0 から数える。数え直された (前より減った) ものは今の値をそのまま増えた分とみなす
+    /// </summary>
+    public static string? Describe(Px4Counters? before, Px4Counters now)
+    {
+        var was = before ?? default;
+        static ulong Grew(ulong from, ulong to) => to >= from ? to - from : to;
+        var parts = new (string Label, ulong Was, ulong Now)[]
+        {
+            ("キュー溢れ", was.QueueDrops, now.QueueDrops),
+            ("連続性エラー", was.ContinuityErrors, now.ContinuityErrors),
+            ("同期エラー", was.SyncErrors, now.SyncErrors),
+            ("TEI", was.TeiPackets, now.TeiPackets),
+            ("USB エラー", was.UsbErrors, now.UsbErrors),
+        }
+            .Where(part => Grew(part.Was, part.Now) > 0)
+            .Select(part => $"{part.Label} +{Grew(part.Was, part.Now)} (計 {part.Now})")
+            .ToArray();
+        return parts.Length == 0 ? null : string.Join("、", parts);
+    }
 }

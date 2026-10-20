@@ -1103,6 +1103,12 @@ public sealed class Px4Tuner : ITuneDevice
     /// <summary>15V を落としたことを記録に残したか (<see cref="WarnLnb"/>)</summary>
     private bool _lnbWarned;
 
+    /// <summary>STATS を聞く目覚まし。流している間だけ (<see cref="StartStats"/>)</summary>
+    private Timer? _statsTimer;
+
+    /// <summary>前に聞いた数。**増えたぶんだけ記録に残す** (<see cref="Px4Counters.Describe"/>)</summary>
+    private Px4Counters? _counters;
+
     public Px4Tuner(string id, int receiver, string? lnb)
         : this(id, receiver, lnb, Px4Userland.RuntimeDir, () =>
         {
@@ -1138,6 +1144,12 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>読む側がいないまま溜めが空かなければ、この時間で TS のストリームを畳む</summary>
     internal TimeSpan StallLimit { get; init; } = Px4Stream.DefaultStallLimit;
+
+    /// <summary>
+    /// 流している間に STATS を聞く間隔。**誤りが増えたときだけ記録に残す** — 画面で途切れたとき、
+    /// 受信機の側で落ちていたのか、届き方が揺れただけなのかを見分ける (#1210)
+    /// </summary>
+    internal TimeSpan StatsEvery { get; init; } = TimeSpan.FromSeconds(30);
 
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
@@ -1284,7 +1296,8 @@ public sealed class Px4Tuner : ITuneDevice
     /// <summary>繋いで受信機を取る (HELLO → ACQUIRE)</summary>
     private void Open()
     {
-        var control = Px4Control.Connect(Px4Control.Endpoint(_runtimeDir, _id, "control.sock", _wire), 0, RequestTimeout, _wire);
+        var control = Px4Control.Connect(
+            Px4Control.Endpoint(_runtimeDir, _id, "control.sock", _wire), Px4Control.StreamStatsCapability, RequestTimeout, _wire);
         try
         {
             var answer = control.Request(Px4Control.Acquire, [(byte)_receiver]);
@@ -1325,9 +1338,10 @@ public sealed class Px4Tuner : ITuneDevice
 
         if (_started)
         {
+            StopStats();
             try
             {
-                control.Request(Px4Control.StopStream, lease, RequestTimeout);
+                Counted(control.Request(Px4Control.StopStream, lease, RequestTimeout));
             }
             catch (Px4Error error) when (error.Code == Px4Error.NotReady)
             {
@@ -1361,8 +1375,56 @@ public sealed class Px4Tuner : ITuneDevice
 
         control.Request(Px4Control.StartStream, lease, RequestTimeout);
         _started = true;
+        _counters = null;
         _stream = Px4Stream.Attach(
             Px4Control.Endpoint(_runtimeDir, _id, "stream.sock", _wire), _lease, _nonce, _name, StallLimit, FirstTsGrace, _wire);
+        StartStats(control);
+    }
+
+    /// <summary>
+    /// 流している間、STATS を <see cref="StatsEvery"/> ごとに聞く。**px4d が STATS を持っていなければ聞かない**
+    /// (HELLO で認められた機能に無い。テストの偽物もこれ)
+    /// </summary>
+    private void StartStats(Px4Control control)
+    {
+        StopStats();
+        if ((control.Capabilities & Px4Control.StreamStatsCapability) == 0) return;
+        _statsTimer = new Timer(_ => PollStats(), null, StatsEvery, StatsEvery);
+    }
+
+    private void StopStats()
+    {
+        _statsTimer?.Dispose();
+        _statsTimer = null;
+    }
+
+    /// <summary>
+    /// STATS を1回聞く。**制御ソケットは選局と同じ錠の下で使う** (1本で同時に1つしか送れない)。
+    /// 聞けなくても流れは止めない — 繋がりの不具合なら次の選局が見つける
+    /// </summary>
+    private void PollStats()
+    {
+        lock (_gate)
+        {
+            if (_control is not { } control || !_started || _stream is not { Ended: false } || _statsTimer is null) return;
+            try
+            {
+                Counted(control.Request(Px4Control.Stats, Lease(), RequestTimeout));
+            }
+            catch (IOException error)
+            {
+                Log.Write($"[{_name}] {_wire.Daemon} に TS の数を聞けませんでした。もう聞きません ({error.Message})");
+                StopStats();
+            }
+        }
+    }
+
+    /// <summary>STATS・STOP_STREAM の答え (数) を読み、**誤りが増えていたら記録に残す**</summary>
+    private void Counted(byte[] answer)
+    {
+        if (Px4Counters.Parse(answer) is not { } now) return;
+        if (Px4Counters.Describe(_counters, now) is { } grew) Log.Write($"[{_name}] {_wire.Daemon} の TS の数: {grew}");
+        _counters = now;
     }
 
     /// <summary>
@@ -1398,6 +1460,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// <summary>受信機を返して閉じる。**失敗しても構わない** — 接続を閉じれば px4d の側で返される (SPEC 6.3)</summary>
     private void Close()
     {
+        StopStats();
         DropStream();
         var control = _control;
         _control = null;
@@ -1405,7 +1468,7 @@ public sealed class Px4Tuner : ITuneDevice
         var lease = Lease();
         try
         {
-            if (_started) control.Request(Px4Control.StopStream, lease, RequestTimeout);
+            if (_started) Counted(control.Request(Px4Control.StopStream, lease, RequestTimeout));
         }
         catch (IOException)
         {
@@ -1618,7 +1681,11 @@ internal sealed class Px4Stream
                     Px4Control.Receive(_socket, body, _wire);
                     if (type == Px4Control.StreamEnd && body.Length >= 68)
                     {
-                        // final counters (u64 × 8) のあとに u32 error_code
+                        // final counters (u64 × 8) のあとに u32 error_code。**誤りがあれば数も残す** (途切れの切り分けに)
+                        if (Px4Counters.Parse(body) is { } final && Px4Counters.Describe(null, final) is { } errors)
+                        {
+                            Log.Write($"[{_name}] {_wire.Daemon} の TS の数 (止まるまで): {errors}");
+                        }
                         var code = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(64));
                         End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
                         return;

@@ -632,7 +632,21 @@
                                     `stalls` に書いてある (実測は stream.md#一瞬止まって遅延が増えていく)
                                 -->
                                 {#if player.stalls > 0}
-                                    ・ <span>途切れ {player.stalls}回</span>
+                                    ・ <span data-testid="live-stalls">途切れ {player.stalls}回</span>
+                                {/if}
+                                <!--
+                                    **いま効いている下限と、届く間隔のいちばん長いもの。** 宅内で何も起きていなければ
+                                    出ない。途切れの報告に添えてもらうと、届き方 (間隔) のせいかどうかが分かる
+                                    (`live-player` の `floor` / `gapMost`。#1210)
+                                -->
+                                {#if player.stalls > 0 || player.floor > FLOOR}
+                                    ・ <span
+                                        data-testid="live-floor"
+                                        data-target={player.target}
+                                        data-floor={player.floor}
+                                        data-gap={player.gapMost}
+                                        >下限 {player.floor.toFixed(2)}秒 (受信の間隔 最大 {player.gapMost.toFixed(2)}秒)</span
+                                    >
                                 {/if}
                                 <!--
                                     **描かれずに捨てられたコマ。** 「音と字幕は

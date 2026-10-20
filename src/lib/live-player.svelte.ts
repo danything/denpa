@@ -39,7 +39,7 @@ import { type CanvasSupport, canvasSupport, rawUnsupported } from '#lib/raw/supp
 import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
 import { pickMediaSource } from '#lib/ts/media-source.js';
-import { CEILING, FLOOR, nextTarget, pacing } from '#lib/ts/pacing.js';
+import { CEILING, cover, Extreme, FLOOR, GAP_MOST, GAP_WINDOW, nextTarget, pacing } from '#lib/ts/pacing.js';
 import { CLOCK } from '#lib/ts/pes.js';
 import { resolve } from '$app/paths';
 
@@ -75,6 +75,20 @@ const KEEP_LEAST = 20;
 const BEHIND = 2;
 /** 貯める量を決め直す間隔 (ms)。塊は毎秒20個来るので、そのたびには回さない */
 const SETTLE_EVERY = 5_000;
+/**
+ * 貯まりの低いところを見る長さ (秒。`pacing` の `low`)。**次の塊が届く直前の貯まりを拾う。**
+ *
+ * まとめて届く経路では、塊は 0.3〜0.5 秒おきに束で来る。束の先頭の直前がいちばん低く、
+ * 束の残りは届くたびに高く見える。何回ぶんかの束を収める長さにする
+ */
+const LOW_SPAN = 2;
+/**
+ * 映した1枚ごとに貯まりを見るときの、`pace` を回す間隔 (ms)。**塊が届かない間も止まる前に手を打つ。**
+ *
+ * `pace` は塊が届いたとき (`updateend`) にしか回っていなかったので、空いている間は
+ * 何もできなかった。そこで遅くし始めれば、空きの終わりまで持つことがある
+ */
+const PACE_EVERY = 250;
 /**
  * 選局や飛んだ直後、詰まりを数えない間 (ms)。
  *
@@ -565,6 +579,21 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** 下限を最後に動かした時刻。**下げ直すのはゆっくり** (`pacing` の `FORGET`) */
     let lastFloor = 0;
     /**
+     * 映像の塊が届く間隔のうち、ここ数分でいちばん長いもの (`pacing` の `cover`)。
+     * **止まる前から、空く間隔を覆えるだけ貯める** (#1210)。時刻は秒 (`performance.now`)
+     */
+    const gaps = new Extreme(GAP_WINDOW, true);
+    /** 最後に塊が届いた時刻 (秒)。0 なら次の1つは間隔に数えない (選局した直後・止めている間) */
+    let lastArrival = 0;
+    /** ここしばらくの貯まりの低いところ (`pacing` の `low`)。時刻は秒 */
+    const lows = new Extreme(LOW_SPAN, false);
+    /** ここ数秒の届く間隔のいちばん長いもの (`pacing` の `dip`)。時刻は秒 */
+    const dips = new Extreme(LOW_SPAN, true);
+    /** 映した1枚ごとに `pace` を回した最後の時刻 (ms。`PACE_EVERY`) */
+    let pacedAt = 0;
+    /** 画面に出す、いちばん長く空いた間隔 (秒)。**不具合の報告に要る** (`gapMost`) */
+    let gapMost = $state(0);
+    /**
      * この時刻まで、詰まっても数えない。**自分で起こした詰まりを数えないため。**
      *
      * 選局した直後と、飛んだ直後は必ず `waiting` が上がる。数えていた頃は
@@ -681,8 +710,88 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 if (slip > SLIP_MOST) unslip(video);
             }
             paint(video.currentTime);
+            /*
+             * **塊が届かない間も貯まりを見る。** 減っていくところを拾い (`lows`)、ときどき `pace` を
+             * 回す — 空いている間に遅くし始められる (`PACE_EVERY`)
+             */
+            sampleLow(video);
+            const now = performance.now();
+            if (now - pacedAt >= PACE_EVERY) {
+                pacedAt = now;
+                pace(video);
+            }
             return true;
         });
+    }
+
+    /**
+     * いまの貯まりを、低いところの候補として覚える (`lows`)。**届く直前と、映した1枚ごとに呼ぶ。**
+     * ライブで再生しているときだけ (追っかけは貯まりを狙いに寄せない)
+     */
+    function sampleLow(video: HTMLVideoElement): void {
+        if (buffer === null || buffer.updating || buffer.buffered.length === 0) return;
+        if (!running || paused || chase !== null || chasing) return;
+        lows.push(
+            performance.now() / 1000,
+            buffer.buffered.end(buffer.buffered.length - 1) - video.currentTime,
+        );
+    }
+
+    /**
+     * 映像の塊が届いた。**前の塊との間隔を覚える** (`gaps`)。
+     *
+     * 数えるのは、ライブを再生していて、止めておらず、画面が見えているときだけ。
+     * 隠れているタブは届き方も描き方も絞られるので、混ぜると間隔が長く見える
+     */
+    function arrive(): void {
+        const now = performance.now() / 1000;
+        const counting =
+            running && !paused && chase === null && (typeof document === 'undefined' || !document.hidden);
+        if (counting && lastArrival > 0) {
+            const gap = now - lastArrival;
+            // 長すぎる空きは途絶え (`GAP_MOST`)。覆いにいかない
+            if (gap <= GAP_MOST) {
+                gaps.push(now, gap);
+                dips.push(now, gap);
+            }
+        }
+        lastArrival = counting ? now : 0;
+    }
+
+    /** 届く間隔と貯まりの低いところを忘れる。**選局したとき・飛んだとき** (前の局・前の位置の値は当てにならない) */
+    function forgetFlow(): void {
+        lows.clear();
+        dips.clear();
+        lastArrival = 0;
+    }
+
+    /**
+     * いま覆うべき空き (秒)。覚えている間隔と、**いま空いている最中の間隔**の長いほう —
+     * 詰まりはたいてい空きの途中で起きるので、届くのを待たずに数える
+     */
+    function gapNow(): number {
+        const now = performance.now() / 1000;
+        const ongoing = lastArrival > 0 ? Math.min(GAP_MOST, now - lastArrival) : 0;
+        return Math.max(gaps.peek(now) ?? 0, ongoing);
+    }
+
+    /**
+     * 貯まりの低いところに足す量 (`pacing` の `dip`)。ここ数秒の届く間隔と、**いま空いている最中の間隔**の長いほう —
+     * 覆えている空きの途中で「足りない」と見て遅くしない (遅くするのは本当に足りないときだけ)。
+     * 空いている最中の間隔は、覚えている間隔 (`gaps`) までしか足さない — それより長く空いたら、遅くして持たせにいく
+     */
+    function dipNow(): number {
+        const now = performance.now() / 1000;
+        const ongoing = lastArrival > 0 ? Math.min(gaps.peek(now) ?? 0, now - lastArrival) : 0;
+        return Math.max(dips.peek(now) ?? 0, ongoing);
+    }
+
+    /** 詰まった (`<video>` の `waiting`)。**自分で飛んだぶんと、止めているときは数えない** (`quiet`) */
+    function onWaiting(): void {
+        if (paused || Date.now() < quiet) return;
+        stalled = true;
+        stalls += 1;
+        lastStall = Date.now();
     }
 
     /**
@@ -881,6 +990,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             target,
             chasing,
             speed,
+            // **届いた直後の高いところで決めない** (`pacing` の `low`)
+            low: lows.peek(performance.now() / 1000) ?? undefined,
+            dip: dipNow(),
+            rate: video.playbackRate,
         });
 
         /*
@@ -894,6 +1007,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         if (next.seek !== null) {
             video.currentTime = next.seek;
             quiet = Date.now() + GRACE;
+            lows.clear();
         }
         if (next.rate !== null) video.playbackRate = next.rate;
         if (next.play && !running && canStart(video)) {
@@ -995,11 +1109,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
          * 待たない — あれは見えないことがある。変換しない経路には要らない (映像は音の時計を追うだけ)
          */
         if (stalled && element !== null && !canvas) unslip(element);
+        const gap = gapNow();
+        const most = Math.round(gap * 100) / 100;
+        if (most !== gapMost) gapMost = most;
         const next = nextTarget(
             { target, floor },
             stalled,
             (now - lastStall) / 1000,
             (now - lastFloor) / 1000,
+            gap,
         );
         stalled = false;
         lastSettled = now;
@@ -1123,6 +1241,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         floor = FLOOR;
         lastFloor = Date.now();
         target = FLOOR;
+        // 覚えている届く間隔も、前の経路のもの
+        gaps.clear();
+        gapMost = 0;
+        forgetFlow();
         goLive();
     }
 
@@ -1827,6 +1949,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
              */
             if (kind === CHANNEL.rawTs) {
                 if (fallback !== null || returning) arrived();
+                // 届く間隔は数えない (`arrive`)。元の TS はチューナーから読めたぶんずつ来るので、塊の間合いが決まっていない
                 engine?.feed(data, 9);
                 return;
             }
@@ -1939,6 +2062,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 if (kind === CHANNEL.videoInit) {
                     if (fallback !== null || returning) arrived();
                     engine?.reset();
+                    forgetFlow();
+                } else {
+                    arrive();
                 }
                 engine?.feed(data, 9);
                 return;
@@ -1978,6 +2104,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 // 戻れる幅を決めるのに、どれだけ来ているかを数える (`keepFor`)
                 if (receivedFrom === 0) receivedFrom = Date.now();
                 received += body.byteLength;
+                if (kind === CHANNEL.videoInit) {
+                    forgetFlow();
+                } else {
+                    // **足す前の貯まりが、次の塊が届く直前の低いところ** (`lows`)。間隔もここで測る
+                    if (element !== null) sampleLow(element);
+                    arrive();
+                }
                 pending.push(body);
                 drain();
                 return;
@@ -2105,14 +2238,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
                 /*
                  * **詰まったことを覚えておく。** 宅内と宅外で必要な貯めの量は
                  * 桁違いに違うのに、どちらから見ているかは分からない。
-                 * 実際に止まったかどうかで決める (`nextTarget`)
+                 * 実際に止まったかどうかで決める (`nextTarget`)。
+                 *
+                 * **同じ関数を渡す** (`onWaiting`)。MediaSource は選局や形式の切り替えのたびに作り直すが、
+                 * `<video>` は同じもの。その場で関数を作っていた頃は作り直すたびに聞き手が増え、
+                 * 1回の途切れが3回にも数えられていた (#1210 を追っていて見つけた)
                  */
-                video.addEventListener('waiting', () => {
-                    if (paused || Date.now() < quiet) return;
-                    stalled = true;
-                    stalls += 1;
-                    lastStall = Date.now();
-                });
+                video.addEventListener('waiting', onWaiting);
                 drain();
             },
             { once: true },
@@ -2389,6 +2521,21 @@ export function livePlayer(options: LivePlayerOptions = {}) {
          */
         get remembered() {
             return floor;
+        },
+        /**
+         * いま効いている下限 (秒)。覚えた下限 (`remembered`) と、届く間隔を覆う高さ (`cover`) の高いほう。
+         * **不具合の報告に要る** — 止まった原因が届き方なのか、ほかなのかを切り分ける
+         */
+        get floor() {
+            return Math.max(floor, cover(gapMost));
+        },
+        /** ここ数分でいちばん長く空いた、映像の塊が届く間隔 (秒)。0 なら測っていない */
+        get gapMost() {
+            return gapMost;
+        },
+        /** いま貯めようとしている量 (秒) */
+        get target() {
+            return target;
         },
         /** 放送からの遅れ (秒)。隣のテレビとの差 */
         get fromAir() {

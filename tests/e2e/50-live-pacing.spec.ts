@@ -1,0 +1,114 @@
+import { rmSync, writeFileSync } from 'node:fs';
+import type { Page } from '@playwright/test';
+import { expect, goto, pickCodec, syncEpg, test, wakeControls } from './helpers';
+
+/**
+ * **ライブの貯め方** (`src/lib/ts/pacing.ts`。docs/stream.md#たまに長く空く経路で止まり続ける)。
+ *
+ * 偽 ffmpeg に本物の AV1 の fMP4 を流させ (`stack.liveFmp4File`)、目印に書いた JSON で届き方を荒らす
+ * (`tests/fake/fmp4-loop.ts`)。MSE に入れて実際に再生し、`<video>` の貯まりと途切れ (`waiting`) を数える。
+ *
+ * 実時間で流すので長い (2本で3分ほど)。数字は test-results に残す
+ */
+
+/** 貯まり (`buffered.end - currentTime`) と貯めようとしている量を、再生が落ち着いてから記録し始める */
+async function watch(page: Page, rough: string, stack: { liveFmp4File: string }): Promise<void> {
+    writeFileSync(stack.liveFmp4File, rough);
+    await goto(page, '/live');
+    await page.getByTestId('live-channel').first().click();
+    await expect(page.getByTestId('live-title')).toBeVisible();
+    await wakeControls(page, 'live-frame');
+    await pickCodec(page, 'live', 'av1');
+    await expect
+        .poll(() => page.getByTestId('live-video').evaluate((v) => (v as HTMLVideoElement).currentTime), {
+            timeout: 30_000,
+        })
+        .toBeGreaterThan(0.5);
+    // 始めた直後は貯まりが狙いより多い。落ち着いてから記録する
+    await page.waitForTimeout(3_000);
+    await page.evaluate(() => {
+        const video = document.querySelector('[data-testid="live-video"]') as HTMLVideoElement;
+        const scope = window as unknown as { __lags: number[]; __targets: number[] };
+        scope.__lags = [];
+        scope.__targets = [];
+        setInterval(() => {
+            const ranges = video.buffered;
+            if (ranges.length > 0) scope.__lags.push(ranges.end(ranges.length - 1) - video.currentTime);
+            // 下限が上がっていないときは出ていない (= 貯める量は下限のまま)
+            const shown = document.querySelector('[data-testid="live-floor"]');
+            scope.__targets.push(Number(shown?.getAttribute('data-target') ?? 0.2));
+        }, 100);
+    });
+}
+
+interface Watched {
+    stalls: number;
+    lag: number;
+    target: number;
+    gap: number;
+}
+
+async function result(page: Page, name: string): Promise<Watched> {
+    const seen = await page.evaluate(() => {
+        const scope = window as unknown as { __lags: number[]; __targets: number[] };
+        // 選局してからの途切れ (`live-player` の `stalls`。自分で飛んだぶんは数えない)。0 なら出ていない
+        const stalls = document
+            .querySelector('[data-testid="live-stalls"]')
+            ?.textContent?.match(/[0-9]+/)?.[0];
+        const gap = document.querySelector('[data-testid="live-floor"]')?.getAttribute('data-gap');
+        return {
+            lags: scope.__lags,
+            targets: scope.__targets,
+            stalls: Number(stalls ?? 0),
+            gap: Number(gap ?? 0),
+        };
+    });
+    const median = (values: number[]) =>
+        [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+    const watched = {
+        stalls: seen.stalls,
+        lag: median(seen.lags),
+        target: median(seen.targets),
+        gap: seen.gap,
+    };
+    writeFileSync(`test-results/live-pacing-${name}.json`, JSON.stringify(watched));
+    return watched;
+}
+
+test.describe('ライブの貯め方', () => {
+    test.describe.configure({ mode: 'serial' });
+    test.beforeEach(async ({ request }) => {
+        await syncEpg(request);
+    });
+    test.afterEach(async ({ stack }) => {
+        rmSync(stack.liveFmp4File, { force: true });
+    });
+
+    /*
+     * **低い遅延が先。** 宅内のように滑らかに届くなら、貯める量は下限 (0.2秒) のまま動かさない。
+     * 遅延 (貯まり) も直す前と同じ (手元で中央値 0.185 秒。直す前も 0.185 秒)
+     */
+    test('滑らかに届けば、貯める量も遅延も下限のまま', async ({ page, stack }) => {
+        test.setTimeout(150_000);
+        await watch(page, '', stack);
+        await page.waitForTimeout(60_000);
+        const watched = await result(page, 'smooth');
+        expect(watched.stalls).toBe(0);
+        expect(watched.target).toBeLessThanOrEqual(0.25);
+        expect(watched.lag).toBeLessThanOrEqual(0.25);
+    });
+
+    /*
+     * **たまに長く空く経路** (#1210)。15〜30秒おきに 0.5〜0.9 秒空くと、止まるたびに 0.3 秒ずつ
+     * 上げていた頃は2分半で8回止まった。空いた間隔を覚えて覆うので、止まっても最初の1回まで
+     */
+    test('20秒ほどおきに 0.7 秒空いても、止まるのは1回まで', async ({ page, stack }) => {
+        test.setTimeout(210_000);
+        await watch(page, JSON.stringify({ gapEvery: [18, 22], gapMs: [700, 700] }), stack);
+        await page.waitForTimeout(120_000);
+        const watched = await result(page, 'gaps');
+        expect(watched.stalls).toBeLessThanOrEqual(1);
+        // 画面に出す数で、届き方のせいだと分かる
+        expect(watched.gap).toBeGreaterThanOrEqual(0.6);
+    });
+});
