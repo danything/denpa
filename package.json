@@ -4,7 +4,7 @@
     "devDependencies": {
         "@anyblades/blades": "3.1.0-beta.2",
         "@biomejs/biome": "^2.5.15",
-        "@iconify-json/lucide": "^1.2.146",
+        "@iconify-json/lucide": "^1.2.147",
         "@playwright/test": "^1.64.1",
         "@sveltejs/adapter-bun": "^1.0.0",
         "@sveltejs/kit": "^3.1.0",
