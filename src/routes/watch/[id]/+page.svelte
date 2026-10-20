@@ -1276,39 +1276,23 @@
                 chapters = held.chapters;
                 return;
             }
-            await fetchChapters();
+            // 前に読んだものを持っていても、変わっていないか確かめさせる (CM検出のやり直しは同じファイルを書き直す)
+            const res = await fetch(resolve(`api/recordings/${rec.id}/chapters`), { cache: 'no-cache' });
+            if (!res.ok) return;
+            chapters = (await res.json()).chapters ?? [];
         } catch {
             // 出せないだけ。観るのに支障は無い
         }
     }
 
-    async function fetchChapters(): Promise<void> {
-        // 前にこの画面で読んだものを持っていても、変わっていないか確かめさせる (CM検出のやり直しは同じファイルを書き直す)
-        const res = await fetch(resolve(`api/recordings/${rec.id}/chapters`), { cache: 'no-cache' });
-        if (!res.ok) return;
-        chapters = (await res.json()).chapters ?? [];
-    }
-
     /**
-     * **CM検出をやり直したら、チャプターを取り直す** (`chapters` の通知)。
-     *
-     * 開いたときに1回読んだきりなので、やり直しても CM飛ばしとシークバーの CM が古いままだった。
-     * 差し替えるのはチャプターだけで、位置も再生も触らない。いまいる所が新しく CM になっていて
-     * CM飛ばしが入っていれば、次のコマで `hopCm` がいつもどおり飛ぶ。
-     *
-     * **端末に保存したものは取り直さない。** あちらは落としたときのチャプターを動画と一緒に持っていて、
-     * オフラインでも同じに観られることのほうが大事。新しいものが欲しければ落とし直す
+     * **CM検出をやり直したら、チャプターを取り直す** (`chapters` の通知)。差し替えるのはチャプターだけで、
+     * 位置も再生も触らない (いまいる所が新しく CM になれば、次のコマで `hopCm` が飛ぶ)。
+     * 端末に保存したものは落としたときのチャプターのまま (オフラインでも同じに観られるように)
      */
     liveUpdates([], {
         chapters: (payload) => {
-            if ((payload as { recordingId?: unknown }).recordingId !== rec.id) return;
-            void (async () => {
-                const copy = await localLookup;
-                if ((copy?.chapters as { chapters?: unknown } | undefined)?.chapters !== undefined) return;
-                await fetchChapters();
-            })().catch(() => {
-                // 取り直せなければ前のまま。観るのに支障は無い
-            });
+            if ((payload as { recordingId?: unknown }).recordingId === rec.id) void loadChapters();
         },
     });
 

@@ -15,8 +15,7 @@
      * 読み上げとキーボードは見えない `<input type="range">` が受け持つ。見えている溝は飾り。
      *
      * **つまんで動かす間は、つまみが指にそのまま付いてくる。** 指 (マウス) の位置を自分で持ち、
-     * 映像が飛び終わるのを待たない。動かすたびに飛ぶと、タブレットでは飛び終わるのが追いつかず、
-     * つまみが指から遅れていた。ちゃんと飛ぶのは**離したとき**の1回 (`onseek`)。`preview` を渡した
+     * 映像が飛び終わるのを待たない (タブレットでは飛ぶのが追いつかない)。ちゃんと飛ぶのは**離したとき**の1回 (`onseek`)。`preview` を渡した
      * 画面は、動かしている間もその位置の絵を出す — ただし1度に1つまで・間を空けて、飛び終わってから
      * いちばん新しい位置へ (`preview` が返す約束で終わりを知る)。
      * 動かしている間に届く `value` はつまみに使わない (戻って見える)。離したあとも、
@@ -118,9 +117,11 @@
     let lastPreview = Number.NEGATIVE_INFINITY;
     let lastAsked: number | null = null;
 
-    function ask(at: number): void {
+    /** つまみを指の位置へ。下見があれば頼む */
+    function follow(event: PointerEvent): void {
+        scrub = under(event);
         if (preview === undefined) return;
-        wanted = at;
+        wanted = scrub;
         pump();
     }
 
@@ -162,14 +163,11 @@
         pointer = event.pointerId;
         settled();
         lastAsked = null;
-        scrub = under(event);
-        ask(scrub);
+        follow(event);
     }
 
     function move(event: PointerEvent): void {
-        if (event.pointerId !== pointer) return;
-        scrub = under(event);
-        ask(scrub);
+        if (event.pointerId === pointer) follow(event);
     }
 
     /** 離した。ここで1回だけちゃんと飛ぶ。取り消し (`pointercancel`) でも最後の位置へ */

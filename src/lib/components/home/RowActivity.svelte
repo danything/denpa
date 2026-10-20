@@ -1,9 +1,9 @@
 <script lang="ts">
     /**
      * 行の3段目: いま動いていること・止まっている問題を1段で (`#lib/row-status.ts`)。
-     * 頭に点か印、ラベル、「・」の後ろに中身。録画中・エンコード中・待ち・端末に保存中・競合・失敗などで同じ形。
+     * 頭に点か印、ラベル、「・」の後ろに中身。
      *
-     * 1段で切る (折り返さない)。狭いときは中身から「…」で縮め、全部は `title` と詳細で読める。
+     * 狭いときは中身から「…」で縮め (狭い画面は2行まで)、全部は `title` と詳細で読める。
      * 印は飾り (読み上げはラベルと中身で足りる)
      */
     import Icon from '#lib/components/player/Icon.svelte';
@@ -16,15 +16,13 @@
 </script>
 
 <div
-    class="row-sub row-activity num {status.tone}"
+    class="row-activity num {status.tone}"
     data-testid="row-activity"
     data-kind={status.kind}
     title={detail === '' ? status.label : `${status.label}・${detail}`}
 >
-    {#if status.tone === 'error'}
-        <span class="act-mark"><Icon icon={CircleX} size="size-3.5" /></span>
-    {:else if status.tone === 'warning'}
-        <span class="act-mark"><Icon icon={TriangleAlert} size="size-3.5" /></span>
+    {#if status.tone === 'error' || status.tone === 'warning'}
+        <span class="act-mark"><Icon icon={status.tone === 'error' ? CircleX : TriangleAlert} size="size-3.5" /></span>
     {:else}
         <span class="act-mark" aria-hidden="true"><span class="act-dot" class:rec-dot={status.running === true}></span></span>
     {/if}

@@ -696,9 +696,6 @@ progress.running[value]::-webkit-progress-value {
 .text-error {
     color: var(--dp-rec-text);
 }
-.text-warning {
-    color: var(--dp-warn-text);
-}
 /* 欄の上の小さい見出し。<label class="field"><span>見出し</span><input></label> */
 .field {
     display: flex;
@@ -1723,23 +1720,20 @@ dialog[open] > article {
 /*
  * ---- サイドバー (`.side-panel`・`.side-label`・`.side-list`・`.side-item`・`.side-foot`) ----
  * **録画・ルール・設定のサイドバーは同じ部品。** ライブの局の一覧と検索の「ルールとして保存」の行も、行の形だけ使う。
- * 2 か所以上に同じ値を書いていた頃は、片方だけ直して顔がずれることがあった。幅と左右どちらに置くか (グリッドの列) は使う側で。
+ * 幅と左右どちらに置くか (グリッドの列) は使う側で。
  *
  * - 窓の端とヘッダーに付ける。地・枠・影は付けない
  * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 28px 空ける (最初のグループは 0)。
- *   行は見出しより 12px 深く始め、塗りも一緒に動く。小さく沈めた見出しと線で分けていた頃は、
- *   線ばかりが目に付き、どこからが次のグループかは見出しの字だけでは読みにくかった
- * - **行はどの端末でも 48px。** 指で押す端末だけ高くしていた頃は、同じ画面がマウスとタブレットで違う詰め具合になった。
- *   車の中のタブレットでも押せる高さに揃える
+ *   行は見出しより 12px 深く始め、塗りも一緒に動く
+ * - **行はどの端末でも 48px** (車の中のタブレットでも押せる高さ。マウスとタブレットで詰め具合を変えない)
  * - 選んでいる行 (`aria-current` か `aria-pressed="true"`) は角の丸い薄い塗りと太字。指を乗せた行はそれより淡く
  */
 .side-panel {
-    --side-pad-x: 0.625rem;
     display: flex;
     flex-direction: column;
     min-height: 0;
     overflow-y: auto;
-    padding: 0.75rem var(--side-pad-x) 1.5rem;
+    padding: 0.75rem 0.625rem 1.5rem;
     border: 0;
     background: transparent;
     box-shadow: none;
@@ -1824,11 +1818,6 @@ dialog[open] > article {
 .side-foot {
     margin-top: auto;
     padding-top: 1rem;
-    border: 0;
-}
-/* 下に置くものの見出しは、上の余白と合わせてほかのグループと同じ間 (28px) */
-.side-foot > .side-label:first-child {
-    margin-top: 0.75rem;
 }
 
 /*

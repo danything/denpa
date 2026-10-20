@@ -105,20 +105,11 @@ export function countFilters<T extends TimelineItem>(
     items: T[],
     traitsOf: (item: T) => Traits,
 ): Record<Filter, number> {
-    const counts: Record<Filter, number> = {
-        all: 0,
-        reservations: 0,
-        recording: 0,
-        unfinished: 0,
-        conflict: 0,
-        failed: 0,
-        missed: 0,
-        cmlogo: 0,
-    };
+    const ids = [...FILTERS, ...ATTENTION_FILTERS].map((filter) => filter.id);
+    const counts = Object.fromEntries(ids.map((id) => [id, 0])) as Record<Filter, number>;
     for (const item of items) {
         const traits = traitsOf(item);
-        for (const { id } of [...FILTERS, ...ATTENTION_FILTERS])
-            if (passes(id, item, traits)) counts[id] += 1;
+        for (const id of ids) if (passes(id, item, traits)) counts[id] += 1;
     }
     return counts;
 }
@@ -255,13 +246,10 @@ export function timelineLines<T extends TimelineItem>(
     parts: Sections<T>,
     options: LineOptions,
 ): { past: TimelineLine<T>[]; now: TimelineLine<T>[]; future: TimelineLine<T>[] } {
-    const now: TimelineLine<T>[] = parts.now.map((item) => ({
-        kind: 'row',
-        key: item.key,
-        item,
-        nested: false,
-    }));
-    now.push({ kind: 'now', key: 'now' });
+    const now: TimelineLine<T>[] = [
+        ...parts.now.map((item) => ({ kind: 'row' as const, key: item.key, item, nested: false })),
+        { kind: 'now', key: 'now' },
+    ];
     if (options.grouped) {
         const past = bySeries(parts.past, 'past', options.isOpen);
         if (past.length === 0 && parts.now.length > 0)
@@ -355,8 +343,7 @@ export function lineIndex<T extends TimelineItem>(lines: TimelineLine<T>[], key:
 }
 
 /**
- * **終わった予約と、それで録れた録画を 1 本にまとめる** (「完了した予約も表示」のとき)。
- * 同じ放送が予約の行と録画の行の 2 本で並んでいた。録画が見つかる予約 (録画の `reservation_id` が予約を指すか、
+ * **終わった予約と、それで録れた録画を 1 本にまとめる** (「完了した予約も表示」のとき)。録画が見つかる予約 (録画の `reservation_id` が予約を指すか、
  * 予約を持たない録画と番組が同じ) は行を出さず、録画の行が代わりに立つ。
  *
  * 録画の行に足りないものは予約から持ってくる。いまは番組名だけ — 録った後に番組表の名前が縮んだ録画

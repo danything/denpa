@@ -39,7 +39,7 @@
     const shown = $derived(layout === 'inline' ? status : null);
 </script>
 
-<!-- 「いま」と読み点は目には出さず、読み上げにだけ渡す (「いま 18:01、次の録画まで 3時間59分」) -->
+<!-- 「いま」と読み点は読み上げにだけ渡す -->
 <svelte:element this={heading ? 'h2' : 'div'} bind:this={element} class="now-line {layout} {className}" {...rest}>
     <span class="now-time num" style:width={labelWidth}
         ><span class="visually-hidden">いま </span>{time}{#if shown}<span class="visually-hidden">、</span>{/if}</span
@@ -79,8 +79,7 @@
         font-size: var(--now-time-size, 0.875rem);
     }
     /*
-     * 一言も赤の仲間 (時刻より細い字で、少し地に寄せる)。灰色にしていた頃は、赤い時刻・灰色の字・赤い線と
-     * 色が行き来して落ち着かなかった。字に読める赤 (`--dp-rec-text`) を地と 8:2 で混ぜる —
+     * 一言も赤でそろえる (灰色だと時刻・字・線で色が行き来する)。字の赤 (`--dp-rec-text`) を地と 8:2 で混ぜ、
      * 明るいテーマで 5.2:1、暗いテーマで 5.7:1 (小さい字の AA 4.5 を超える)
      */
     .now-status {

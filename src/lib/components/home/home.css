@@ -1,6 +1,11 @@
-/* 行 (`.row`) の作りの共通部分。高さ・余白・触れたときの塗りは時間軸の行 (`.t-row`) */
+/*
+ * 行 (`.row`) の作りの共通部分。高さ・余白・触れたときの塗りは時間軸の行 (`.t-row`)。
+ * **重なりの層は行で閉じる** (`isolation`)。薄くした字 (`opacity`) は層を作って押せる範囲 (`.row-open::after`)
+ * より上に描かれるので、範囲には `z-index` を付ける。行で閉じれば隣の行や見出しには響かない
+ */
 .board .row {
     position: relative;
+    isolation: isolate;
     cursor: pointer;
 }
 .board .row-body {
@@ -41,15 +46,6 @@
     text-decoration: none;
     cursor: pointer;
 }
-/*
- * **重なりの順を数で書く。** 書かないと、薄くした字 (`.muted`・`.row-meta` の
- * `opacity`) が広げた範囲より上に描かれ、そこを押しても何も起きなかった
- * (`opacity` は重なりの層を作り、後に並ぶものが上に来る)。
- * 行 (`.row`) で層を閉じるので、隣の行や見出しには響かない
- */
-.board .row {
-    isolation: isolate;
-}
 .board .row-open::after {
     content: "";
     position: absolute;
@@ -64,15 +60,8 @@
     outline: 2px solid var(--pico-primary);
     outline-offset: -2px;
 }
-/*
- * 広げた範囲より上に置く。行の中のボタンとリンク (ルール名) はそれぞれの働きのまま押せる。
- * **リンクそのものではなく、それを包む段ごと上げる** — ルール名の段は薄くしてある
- * (`.muted` の `opacity`) ので、そこで重なりの層が閉じ、中のリンクにいくら大きい
- * `z-index` を付けても段ごと広げた範囲の下に潜っていた
- */
-.board .row-actions,
-.board .row-sub:has(a),
-.board .row-sub:has(button) {
+/* 広げた範囲より上に置く。行の中のボタンとリンク (ルール名。下の `.t-rule a`) はそれぞれの働きのまま押せる */
+.board .row-actions {
     position: relative;
     z-index: 2;
 }
@@ -87,9 +76,6 @@
     color: var(--dp-muted);
     overflow-wrap: anywhere;
 }
-.board .row-sub {
-    margin-top: 0.125rem;
-}
 /*
  * **番組名・局と日時・ルール名は1行ずつで切る。** 折り返すとタイトルの長さで行の高さが
  * 変わり、並んだ「詳細」「削除」の位置が行ごとにずれて押しにくかった。はみ出す分は
@@ -97,7 +83,10 @@
  * 押せる範囲 (`.row-open::after`) は `.row` を基準に置いているので、ここで切っても欠けない
  */
 .board .title-line {
+    display: flex;
     flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
     min-width: 0;
 }
 .board .title-line .row-name,
@@ -216,6 +205,7 @@
     align-items: center;
     gap: 0.375rem;
     min-width: 0;
+    margin-top: 0.125rem;
     font-size: var(--dp-text-sm);
     white-space: nowrap;
 }
@@ -250,7 +240,7 @@
     flex: 0 1000 auto;
     color: var(--dp-muted);
 }
-.board .row-activity.rec {
+.board .row-activity:is(.rec, .error) {
     color: var(--dp-rec-text);
 }
 .board .row-activity.rec .act-dot {
@@ -261,9 +251,6 @@
 }
 .board .row-activity.ok {
     color: var(--dp-ok-text);
-}
-.board .row-activity.error {
-    color: var(--dp-rec-text);
 }
 .board .row-activity.warning {
     color: var(--dp-warn-text);
@@ -456,9 +443,9 @@
  * **行。** 幅いっぱいの 2 段の塊。線も枠も影も無く、淡い地 (`--dp-row`。地との差は L で 5 ほど) と角の丸みと 6px の間で 1 本ずつに見せる
  * 触れると一段濃く、最後に詳細を開いた行 (`.picked`) はもう一段。
  *
- * - 1段目: 時刻 · 番組名 · 状態のバッジ、右に押すもの
+ * - 1段目: 時刻 · 番組名、右に押すもの
  * - 2段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の頭 (残りの幅を埋め、「…」で切る)
- * - 言うことがあるときだけ 3 段目 (競合・欠ける・CM の判定・エンコードの進み)
+ * - 言うことがあるときだけ 3 段目 (`.row-activity`)
  *
  * 録れたものは左に大きめのポスター (96×54) を 2 段ぶん置き、途中まで観たものはその下端に細いバー。
  * 高さはマウスの画面で 64px、指で押す端末で 72px
@@ -510,12 +497,6 @@
     flex: 0 1 auto;
     min-width: 4rem;
 }
-.board .title-line {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0;
-}
 .board .t-time {
     flex-shrink: 0;
     color: var(--dp-muted);
@@ -555,7 +536,6 @@
 }
 /*
  * **途中まで観たもの。** ポスターの下端に重ねる 4px のバー (YouTube と同じ置き方)。地は暗く透かし、観たぶんを主の色で。
- * 観たぶん (`.resume-fill`) が中身の無い `<span>` のままで幅が付かず、地だけの 3px の白い線になっていた。
  * ポスターの無い録画は枠の下端に同じものが出る。エンコードの進みは行の下端いっぱい (`.row-bar`) なので重ならない
  */
 .board .t-resume {
@@ -567,7 +547,7 @@
     height: 0.25rem;
     background: rgb(0 0 0 / 0.55);
 }
-/* 中身の無い `<span>` なので、ブロックにしないと幅も高さも付かない (観たぶんが描かれていなかった本当の理由) */
+/* 中身の無い `<span>` なので、ブロックにしないと幅も高さも付かない */
 .board .t-resume .resume-fill {
     display: block;
     height: 100%;
@@ -651,10 +631,7 @@
     background: var(--dp-line);
 }
 
-/*
- * **狭い画面では行の操作を「⋯」1つに** (`TimelineRow`)。詳細と削除のアイコンを2つ並べると番組名が数文字で切れた。
- * 広い画面は今までどおり並べ、「⋯」は出さない
- */
+/* **狭い画面では行の操作を「⋯」1つに** (`TimelineRow`。番組名に幅を回す)。広い画面は並べ、「⋯」は出さない */
 .board .row-more {
     display: none;
 }
@@ -666,9 +643,6 @@
         display: block;
     }
     .board .t-row .row-actions .row-wide {
-        display: none;
-    }
-    .board div.row-wide {
         display: none;
     }
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
     /**
-     * 時間軸の1行 (予約・録画・録り逃し)。どれも同じ形にする: 左に時刻、(録れたものは) ポスター、
-     * 時刻と番組名、局と尺、右に押すもの。行は 48px で、状態を言うときだけ下に段を足す (`RowActivity`。2段まで):
+     * 時間軸の1行 (予約・録画・録り逃し)。どれも同じ形にする: (録れたものは) ポスター、
+     * 時刻と番組名、局と尺、右に押すもの。状態を言うときだけ下に段を足す (`RowActivity`。2段まで):
      * いま動いているもの (録画中・エンコード中・端末に保存中) と、黙っていると「録れたつもり」になるもの
      * (競合・失敗・欠ける・ロゴでCMを判定できなかった)
      */
@@ -77,36 +77,26 @@
         return note === null ? [] : [{ kind: 'clip', tone: 'warning', label: note }];
     }
 
-    /**
-     * 予約の行の段。録画中は「● 録画中・あと21分」(あと何分かは `ctx.clock` で進む)。
-     * 見てほしい状態 (競合・失敗・録画しない・取り消し済み) は理由と1段に
-     */
+    /** 「● 録画中・あと21分」(あと何分かは `ctx.clock` で進む) */
+    function recordingLine(label: string, end: number, testid: string): RowStatus {
+        return { kind: 'recording', tone: 'rec', running: true, label, detail: recordingLeft(ctx.clock, end), testid };
+    }
+
+    /** 予約の行の段。見てほしい状態 (競合・失敗・録画しない・取り消し済み) は理由と1段に */
     function resLines(res: Res, live: boolean): RowStatus[] {
-        const activities: RowStatus[] = live
-            ? [
+        if (live) return statusLines([recordingLine(stateLabel('recording'), res.end_at, 'reservation-state')], clipLine(res));
+        const problems: RowStatus[] = quietState(res.state)
+            ? []
+            : [
                   {
-                      kind: 'recording',
-                      tone: 'rec',
-                      running: true,
-                      label: stateLabel('recording'),
-                      detail: recordingLeft(ctx.clock, res.end_at),
+                      kind: res.state,
+                      tone: toneOf(badgeClass(res.state)),
+                      label: stateLabel(res.state),
+                      detail: res.conflict_reason,
                       testid: 'reservation-state',
                   },
-              ]
-            : [];
-        const problems: RowStatus[] =
-            live || quietState(res.state)
-                ? []
-                : [
-                      {
-                          kind: res.state,
-                          tone: toneOf(badgeClass(res.state)),
-                          label: stateLabel(res.state),
-                          detail: res.conflict_reason,
-                          testid: 'reservation-state',
-                      },
-                  ];
-        return statusLines(activities, [...problems, ...clipLine(res)]);
+              ];
+        return statusLines([], [...problems, ...clipLine(res)]);
     }
 
     /**
@@ -131,14 +121,7 @@
                 detailTestid: encoding ? 'encode-progress' : undefined,
             });
         } else if (rec.state === 'recording') {
-            activities.push({
-                kind: 'recording',
-                tone: 'rec',
-                running: true,
-                label: shown.label,
-                detail: recordingLeft(ctx.clock, rec.end_at),
-                testid: 'recording-state',
-            });
+            activities.push(recordingLine(shown.label, rec.end_at, 'recording-state'));
         } else if (!shown.quiet) {
             problems.push({
                 kind: rec.state,
@@ -292,9 +275,12 @@
     {@const rec = item.rec}
     {@const link = ctx.watchLink(rec)}
     {@const shown = rowState(rec)}
-    {@const lines = recLines(rec)}
     {@const held = offline.entries[rec.id]}
     {@const canDelete = rec.deleted_at === null && rec.job_id === null}
+    {@const openDetail = () => {
+        ctx.select(item.key);
+        ctx.openRecording(rec);
+    }}
     <!--
         **途中まで観たものは残りを出す。** 観た位置は続きから始めるために持っていて、末尾まで観たものは
         消えるので、残っている = まだ途中。ポスターの下端に細いバー、2段目に「残り何分」
@@ -334,11 +320,7 @@
                 state={shown.quiet ? shown.label : undefined}
                 name={rec.name}
                 testid="recording-state"
-                open={link ??
-                    (() => {
-                        ctx.select(item.key);
-                        ctx.openRecording(rec);
-                    })}
+                open={link ?? openDetail}
                 fresh={ctx.unwatched(rec)}
             />
             <RowMeta
@@ -353,16 +335,13 @@
                 rule={rec.from_manual === null ? null : rec.from_manual ? 'manual' : rec}
                 excerpt={rec.description}
             />
-            {#each lines as status (status.kind)}
+            {#each recLines(rec) as status (status.kind)}
                 <RowActivity {status} />
             {/each}
         </div>
         <div class="row-actions">
             {#if link !== null || canDelete}
-                <!--
-                    **狭い画面では「⋯」1つにまとめる。** 詳細と削除のアイコンを2つ並べると、番組名が5文字ほどで
-                    切れていた。中身は詳細と削除 (削除は1回目で聞き返す。行の削除と同じ構え `deleting`)
-                -->
+                <!-- 狭い画面では詳細と削除を「⋯」1つにまとめ、番組名に幅を回す (削除は行の削除と同じ構え `deleting`) -->
                 <div class="row-more">
                     <Menu side="bottom" align="end" class="row-menu" testid="row-menu">
                         {#snippet trigger(props)}
@@ -374,10 +353,7 @@
                             type="button"
                             role="menuitem"
                             class="menu-item"
-                            onclick={() => {
-                                ctx.select(item.key);
-                                ctx.openRecording(rec);
-                            }}
+                            onclick={openDetail}
                             data-testid="row-menu-detail"
                         >
                             <Icon icon={Info} size="size-4" />詳細
@@ -422,10 +398,7 @@
                 <button
                     type="button"
                     class="secondary outline icon row-wide"
-                    onclick={() => {
-                        ctx.select(item.key);
-                        ctx.openRecording(rec);
-                    }}
+                    onclick={openDetail}
                     aria-label="詳細"
                     title="詳細"
                     data-testid="detail-button"
@@ -465,26 +438,18 @@
         <!-- 進み具合は行の下端いっぱいに敷く。取れないときは動いているだけのバー -->
         {#if rec.job_id !== null}
             {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
-            <progress
-                class="row-bar"
-                class:running={rec.job_state === 'running' && barPercent > 0}
-                value={rec.job_state === 'running' && barPercent > 0 ? barPercent : undefined}
-                max="1"
-            ></progress>
+            {@const known = rec.job_state === 'running' && barPercent > 0}
+            <progress class="row-bar" class:running={known} value={known ? barPercent : undefined} max="1"></progress>
         {:else if held?.state === 'downloading'}
             <progress class="row-bar success" class:running={held.progress !== null} value={held.progress ?? undefined} max="1"></progress>
         {/if}
     </div>
 {/snippet}
 
-{#snippet itemRow(item: Item, nested: boolean)}
-    {#if item.kind === 'res'}
-        {@render resRow(item, nested)}
-    {:else if item.kind === 'missed'}
-        {@render missedRow(item, nested)}
-    {:else}
-        {@render recRow(item, nested)}
-    {/if}
-{/snippet}
-
-{@render itemRow(item, nested)}
+{#if item.kind === 'res'}
+    {@render resRow(item, nested)}
+{:else if item.kind === 'missed'}
+    {@render missedRow(item, nested)}
+{:else}
+    {@render recRow(item, nested)}
+{/if}

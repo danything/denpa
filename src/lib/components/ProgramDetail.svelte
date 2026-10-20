@@ -11,8 +11,7 @@
      * snippet で受ける (`actions`・`status`)。
      *
      * **閉じるは左下の「閉じる」** (幕を押しても Esc でも閉じる)。主のボタン (再生・予約) は右下に
-     * 1つだけ塗りで置き、ほかは控えにする。閉じるを右の並びに混ぜていた頃は、どれも同じ控えのボタンで
-     * どれが主なのか読めず、右上の × にしたら × がスクロールバーに重なった。左右に分ければ主が埋もれない
+     * 1つだけ塗りで置き、ほかは控えにする。左右に分ければ主が埋もれない
      * (狭い画面では下から出る一枚になり、主がいちばん上・閉じるがいちばん下の全幅のボタン)。
      *
      * **中身は `ProgramFacts` が持っている** — 観る画面・ライブ・追っかけは
@@ -70,7 +69,7 @@
     <!--
         **巻き取るのは中身だけ。** 押すものは箱の下端に重ねたまま出しておく
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)。並びの地は塗らず、
-        中身はボタンの間と後ろに透けて見える (下に地の帯を敷くと、そこだけ何も書いていない帯になった)。
+        中身はボタンの間と後ろに透けて見える。
         続きがあるときは、ボタンの手前で中身を薄く消していく (下の CSS)
     -->
     <div bind:this={box} class="detail-box modal-box" class:morph={transitionName !== undefined} style:view-transition-name={transitionName}>
@@ -119,9 +118,16 @@
     }
     /*
      * **出るときは、幕は透明から、箱は少し縮んだ姿から** (メニュー・ダイアログと同じ。`app.css`)。
-     * 押したところから広げるとき (`transitionName`) は、箱の動きは画面の切り替えに任せる
+     * 押したところから広げるとき (`transitionName`) は、箱の動きは画面の切り替えに任せる。
+     *
+     * 箱の見た目 (面・縁・角丸・影・幅) は `app.css` の `.modal-box` (ダイアログと同じ)。ここは中身を巻き取る並べ方だけ。
+     * **巻き取るのは箱いっぱいの中身** (余白は中身の側で取り、スクロールバーは箱の右端に出す)。ボタンの並びは上に重ねる
      */
     .detail-box {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
         transition:
             opacity var(--dp-duration) var(--dp-ease),
             transform var(--dp-duration) var(--dp-ease);
@@ -135,25 +141,6 @@
             transform: scale(0.96);
         }
     }
-    /* 箱の見た目 (面・縁・角丸・影・幅) は `app.css` の `.modal-box` (ダイアログと同じ)。ここは中身を巻き取る並べ方だけ */
-    .detail-box {
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        /*
-         * **巻き取るのは箱いっぱいの中身** (余白は中身の側で取る)。スクロールバーは箱の右端に出る
-         * (余白の内側に出すと、字のすぐ横に浮いて見えた)。中身は箱の下端まで巻き取り、ボタンの並びは上に重ねる
-         */
-        padding: 0;
-    }
-    .detail-body {
-        min-height: 0;
-        flex: 1 1 0%;
-        overflow-y: auto;
-        padding: var(--dp-space-5);
-        /* 最後の行がボタンの並びの上まで上がりきるよう、並びの高さと上下の余白ぶん空ける */
-        padding-bottom: var(--detail-bottom);
-    }
     /*
      * **続きがあるときだけ、ボタンの手前で中身を薄く消していく** (フェード)。字がボタンの後ろを
      * そのまま通ると、ボタンも字も読みにくい。マスクは箱 (巻き取る枠) に掛かるので、中身を巻き取っても
@@ -163,6 +150,12 @@
      * 無いブラウザでは、アニメーションがすぐ終わって 0 になり、フェードの無い形になる
      */
     .detail-body {
+        min-height: 0;
+        flex: 1 1 0%;
+        overflow-y: auto;
+        padding: var(--dp-space-5);
+        /* 最後の行がボタンの並びの上まで上がりきるよう、並びの高さと上下の余白ぶん空ける */
+        padding-bottom: var(--detail-bottom);
         mask-image: linear-gradient(
             to bottom,
             #000 calc(100% - var(--detail-bottom) - 1.5rem),
