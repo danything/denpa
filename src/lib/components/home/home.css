@@ -913,7 +913,7 @@
     background: var(--dp-subtle);
 }
 /*
- * 今日は赤い太字の数字 (行が無くても押せる)。赤はタイムラインの「いま」の線と同じ (`NowLine`)。
+ * 今日は赤い太字の数字 (行が無くても押せる)。丸はタイムラインの「いま」の線と同じ赤 (`--dp-rec`)、数字は読みやすい濃さの赤 (`--dp-rec-text`)。
  * **今日を選んでいるときだけ赤い丸を塗る** (Apple のカレンダーと同じ)。丸で囲むだけだった頃は、選んでいる日の
  * 塗りと重なって、どちらがどちらか読みにくかった
  */
@@ -926,6 +926,10 @@
     isolation: isolate;
     background: transparent;
     color: #fff;
+}
+/* 指を乗せても丸の後ろに四角い塗りを出さない (上の :hover のほうが詳細度が高い) */
+.board .cal-day.today.pinned:not([aria-disabled="true"]):hover {
+    background: transparent;
 }
 .board .cal-day.today.pinned::before {
     content: "";
