@@ -82,11 +82,28 @@ export function shim(init: ShimInit): void {
             : url;
     if (relayRoot !== null) {
         // 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る
+        /*
+         * **読み込む要素だけ。** iframe・a の行き先まで中継にすると、中継の返り (sandbox の CSP) の中で script が
+         * 動かなくなる。iframe は CSP の frame-src で止めてあり、a で移った先はアプリの外
+         */
+        const loads = [
+            'SCRIPT',
+            'IMG',
+            'LINK',
+            'SOURCE',
+            'VIDEO',
+            'AUDIO',
+            'OBJECT',
+            'EMBED',
+            'INPUT',
+            'TRACK',
+        ];
         const watched = ['src', 'href', 'data', 'poster'];
         const setAttribute = Element.prototype.setAttribute;
         Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
-            const lower = String(name).toLowerCase();
-            return setAttribute.call(this, name, watched.includes(lower) ? toRelay(String(value)) : value);
+            const rewrite =
+                loads.includes(this.tagName.toUpperCase()) && watched.includes(String(name).toLowerCase());
+            return setAttribute.call(this, name, rewrite ? toRelay(String(value)) : value);
         };
         for (const [Kind, name] of [
             [w.HTMLScriptElement, 'src'],

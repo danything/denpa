@@ -149,12 +149,6 @@ test.describe('データ放送の双方向', () => {
     });
 
     /*
-     * **Hybridcast はデータ放送が起動を求めたときに開く** ([stream.md](../../docs/stream.md#hybridcast))。
-     *
-     * アプリは合成のもの (本物の放送局のアプリは入れない)。中継の返りを差し替えて、
-     * 起動・アプリの通信が中継を通ること・denpa に触れないこと・受信機 API・戻るで閉じる、を見る
-     */
-    /*
      * **http の Hybridcast のアプリの中継** (`server/hc-relay.ts`)。合言葉は http のアプリにだけ出し、
      * 中継は合言葉の配信元へだけ、`/api/bml/proxy` と同じ枠で繋ぐ (内側は断る)
      */
@@ -173,6 +167,12 @@ test.describe('データ放送の双方向', () => {
         );
     });
 
+    /*
+     * **Hybridcast はデータ放送が起動を求めたときに開く** ([stream.md](../../docs/stream.md#hybridcast))。
+     *
+     * アプリは合成のもの (本物の放送局のアプリは入れない)。中継の返りを差し替えて、
+     * 起動・アプリの通信が中継を通ること・denpa に触れないこと・受信機 API・戻るで閉じる、を見る
+     */
     test('データ放送から Hybridcast を開き、戻るで閉じる', async ({ page, baseURL }) => {
         const appUrl = 'https://hybridcast.example.jp/app.html';
         const dataUrl = 'https://hybridcast.example.jp/api/data.json';
