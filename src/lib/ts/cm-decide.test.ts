@@ -356,6 +356,34 @@ describe('番組表の尺で前後の番組を外す', () => {
         expect(round(cm).at(-1)).toEqual({ start: 1810, end: 1825 });
     });
 
+    /*
+     * 実機のテレ東のアニメの並び。頭のロゴはアバンの途中で見失って 7.6 秒しか無く、尻に入った次の番組の
+     * ロゴは 10 秒ある。ロゴの秒数だけで窓を置くと、窓が尻へずれて番組の頭の 30 秒が CM になっていた
+     */
+    test('頭のロゴが短くても、尻の次の番組に引っぱられて頭を削らない', () => {
+        const joints = [
+            6.3,
+            49.4,
+            ...every15(149.3, 209.3),
+            ...every15(758.3, 848.3),
+            ...every15(1586.3, 1646.3),
+            ...every15(1656.3, 1806.3),
+        ];
+        const logo = [
+            { start: 6.64, end: 14.25 },
+            { start: 38.51, end: 148.21 },
+            { start: 209.51, end: 757.29 },
+            { start: 848.51, end: 1583.95 },
+            { start: 1646.51, end: 1655.29 },
+            { start: 1812.54, end: 1822.62 },
+        ];
+        const cm = round(
+            decideCm(recording(1823.86, joints, logo, { programLength: 1800, programStart: 9.15 })),
+        );
+        expect(cm[0]).toEqual({ start: 0, end: 6.3 });
+        expect(cm.at(-1)?.end).toBe(1823.86);
+    });
+
     test('尺が分からなければ外さない', () => {
         const joints = [10, ...every15(600, 660), 1810];
         const logo = [

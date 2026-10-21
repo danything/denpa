@@ -168,17 +168,29 @@ const GAP_MIN = 14.5;
 const WINDOW_SLACK = 0.5;
 /** 録画の端で切れているとみなす幅 (秒) */
 const EDGE = 1;
+/**
+ * 番組の置き場所を番組表どおりの頭からずらすときの減点 (1 秒ずらすごとに、ロゴの出ている秒で)。
+ *
+ * **ロゴの秒数だけで比べると、尻の次の番組に引っぱられる。** 実機のテレ東のアニメで、頭のロゴが 7.6 秒しか拾えず
+ * (アバンの途中でロゴを見失った)、尻に入った次の番組のロゴが 10 秒あったため、窓を 13 秒後ろへずらして
+ * 番組の頭の 30 秒を CM にしていた。番組表の頭はふつう数秒しか外れない。大きくずれた放送 (延長など) は、
+ * ずらしたぶんだけロゴが入るので、この減点を上回る
+ */
+const DRIFT_COST = 0.5;
 
 /**
  * **番組表の尺に収まる所だけを番組にする。** 録画は番組の前後を少し余分に録るので、同じ局の
  * 前の番組の終わり・次の番組の頭にもロゴが出る (CM を挟まずに続くこともある)。
  *
  * 尺の窓を、ロゴの出始めから始まる所・ロゴの消え際で終わる所に置いてみて、**ロゴがいちばん多く入る所**を採る。
- * 同じくらいなら番組表どおりの頭 (`programStart`) に近い所。窓の外のロゴは前後の番組として外し、窓の端は近くの無音の切れ目に寄せる。
+ * 番組表どおりの頭 (`programStart`) から離れるほど減点し (`DRIFT_COST`)、同じくらいなら近い所。窓の外のロゴは前後の番組として外し、窓の端は近くの無音の切れ目に寄せる。
  * ロゴの無い所は窓の中でも外でも CM なので、窓が少しずれても番組は削れない
  */
 function withinProgram(spans: Range[], input: CmInput, candidates: Boundary[]): Range[] {
-    const { duration, programLength: length, programStart = 0 } = input;
+    const { duration, programLength: length } = input;
+    const programStart = input.programStart ?? 0;
+    // 番組表どおりの頭が分からなければ、離れても減点しない
+    const drift = input.programStart === undefined ? 0 : DRIFT_COST;
     if (length === undefined || !(length > 0) || length >= duration) return spans;
     const covered = (from: number) => coverage(spans, { start: from, end: from + length }) * length;
     /*
@@ -193,12 +205,12 @@ function withinProgram(spans: Range[], input: CmInput, candidates: Boundary[]): 
         .filter((at) => at >= 0 && at <= duration - length);
     const scores = (
         places.length > 0 ? places : [Math.min(Math.max(0, programStart), duration - length)]
-    ).map((at) => ({ at, lit: covered(at) }));
-    const best = Math.max(...scores.map((s) => s.lit));
+    ).map((at) => ({ at, value: covered(at) - drift * Math.abs(at - programStart) }));
+    const best = Math.max(...scores.map((s) => s.value));
     let head = 0;
     let distance = Number.POSITIVE_INFINITY;
-    for (const { at, lit } of scores) {
-        if (lit < best - WINDOW_SLACK || Math.abs(at - programStart) >= distance) continue;
+    for (const { at, value } of scores) {
+        if (value < best - WINDOW_SLACK || Math.abs(at - programStart) >= distance) continue;
         distance = Math.abs(at - programStart);
         head = at;
     }
