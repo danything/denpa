@@ -135,10 +135,6 @@
             {/each}
         </div>
     </details>
-
-    <p class="tiny muted">
-        キーボードでも操作できます (矢印キー・Enter・Backspace、色ボタンは B / R / G / Y)
-    </p>
 </div>
 
 <style>
@@ -147,12 +143,8 @@
         flex-direction: column;
         gap: 0.75rem;
         flex-shrink: 0;
-        margin-bottom: 0.5rem;
-        padding: 0.75rem;
-        border: 1px solid var(--dp-line);
-        border-radius: var(--dp-radius-lg);
-        background: var(--dp-surface);
-        box-shadow: var(--dp-shadow);
+        /* カードにしない。ほかのサイドバーと同じく地も枠も影も付けず、局の一覧とは余白で分ける (`app.css` の `.side-panel`) */
+        margin-bottom: 1.75rem;
     }
     .colors {
         display: flex;
