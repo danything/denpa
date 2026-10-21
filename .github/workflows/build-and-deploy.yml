@@ -19,6 +19,7 @@ on:
       - 'drizzle/**'
       - '.github/workflows/build-and-deploy.yml'
       - '.github/image-tags.sh'
+      - '.github/newest-tags.sh'
       - '.github/aio.Dockerfile'
       - '.github/aio-entrypoint.ts'
   workflow_dispatch: {}
@@ -190,6 +191,12 @@ jobs:
           - image: denpa
             tag: denpa
     steps:
+      # main の先頭で数え直すのに要る (.github/newest-tags.sh)
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Download digests
         uses: actions/download-artifact@v8
         with:
@@ -208,12 +215,21 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Create multi-arch manifest
-        working-directory: ${{ runner.temp }}/digests
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           TAG: ${{ matrix.tag == 'agent' && needs.tags.outputs.agent || needs.tags.outputs.denpa }}
+          DIGESTS: ${{ runner.temp }}/digests
         run: |
           set -eu
+          # **古い run は `develop` を書かない** (理由は .github/newest-tags.sh)。`sha-…` の名前は付ける
+          . .github/newest-tags.sh
+          newest=$([ "${{ matrix.tag }}" = agent ] && echo "$NEWEST_AGENT_TAG" || echo "$NEWEST_DENPA_TAG")
+          develop="--tag ${IMAGE}:develop"
+          if [ "$newest" != "$TAG" ]; then
+            echo "main の先頭は ${newest}。${TAG} は古いので develop は付けません"
+            develop=""
+          fi
+          cd "$DIGESTS"
           # arch が欠けたまま束ねない (artifact の取りこぼしで amd64 だけの索引になるのを防ぐ)
           set -- *
           [ "$#" = 2 ] || { echo "digest が2つ揃っていません: $*" >&2; exit 1; }
@@ -223,7 +239,7 @@ jobs:
           # shellcheck disable=SC2086
           docker buildx imagetools create \
             --tag "${IMAGE}:${TAG}" \
-            --tag "${IMAGE}:develop" \
+            $develop \
             $refs
           docker buildx imagetools inspect "${IMAGE}:${TAG}"
 
@@ -291,6 +307,13 @@ jobs:
           # 印を書く先は deploy/application.yaml の helm.valuesObject の中 (imageMarks.agent /
           # imageMarks.denpa)。values はインラインなのでインデントは深い — 行頭の空白は幾つでも許す
           FILES="deploy/application.yaml"
+
+          # **古い run は印を書かない** (理由は .github/newest-tags.sh)。新しいほうの run が書く
+          . .github/newest-tags.sh
+          if [ "$NEWEST_AGENT_TAG" != "$AGENT_TAG" ] || [ "$NEWEST_DENPA_TAG" != "$DENPA_TAG" ]; then
+            echo "main の先頭は agent: ${NEWEST_AGENT_TAG} / denpa: ${NEWEST_DENPA_TAG}。この run のタグは古いので印は書きません"
+            exit 0
+          fi
 
           . .github/bump-pr.sh
           bump_begin bump-image-marks
