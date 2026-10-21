@@ -15,102 +15,102 @@
 name: denpa
 
 services:
-    app:
-        build:
-            context: .
-            target: dev
-        command: bun run dev --host 0.0.0.0 --port 5173
-        environment:
-            TZ: Asia/Tokyo
-            # 開発では本物の ffmpeg (ビルドに数十分) の代わりに偽物を使う。
-            # 実エンコードは本番のイメージ (runtime。distroless で bun の開発サーバもソースも入っていない) を
-            # compose.prod.yml で起こして試す
-            FFMPEG: /app/tests/fake/ffmpeg.sh
-            RECONCILE_INTERVAL: '60000'
-            EPG_COLLECT_INTERVAL: '60000'
-            SCHEDULER_TICK: '2000'
-            ENCODE_CONCURRENCY: '2'
-            # 開発では誰でも通す。来るのは genkan (genkan ネットワークの中) からだけ
-            TRUSTED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-        volumes:
-            - .:/app
-            - app-node-modules:/app/node_modules
-            # 置き場は既定のまま (src/lib/server/config.ts)
-            - denpa-data:/data
-            - denpa-recorded:/media/raw
-            - denpa-library:/media/encoded
-        labels:
-            caddy: http://denpa.localhost
-            caddy.reverse_proxy: '{{upstreams 5173}}'
-        networks: [default, genkan]
-        depends_on:
-            - tuner-agent
+  app:
+    build:
+      context: .
+      target: dev
+    command: bun run dev --host 0.0.0.0 --port 5173
+    environment:
+      TZ: Asia/Tokyo
+      # 開発では本物の ffmpeg (ビルドに数十分) の代わりに偽物を使う。
+      # 実エンコードは本番のイメージ (runtime。distroless で bun の開発サーバもソースも入っていない) を
+      # compose.prod.yml で起こして試す
+      FFMPEG: /app/tests/fake/ffmpeg.sh
+      RECONCILE_INTERVAL: '60000'
+      EPG_COLLECT_INTERVAL: '60000'
+      SCHEDULER_TICK: '2000'
+      ENCODE_CONCURRENCY: '2'
+      # 開発では誰でも通す。来るのは genkan (genkan ネットワークの中) からだけ
+      TRUSTED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+      # 置き場は既定のまま (src/lib/server/config.ts)
+      - denpa-data:/data
+      - denpa-recorded:/media/raw
+      - denpa-library:/media/encoded
+    labels:
+      caddy: http://denpa.localhost
+      caddy.reverse_proxy: '{{upstreams 5173}}'
+    networks: [default, genkan]
+    depends_on:
+      - tuner-agent
 
-    # 実チューナーの代わり。番組表も録画ストリームも、素のTSとしてここが流す
-    tuner-agent:
-        build:
-            context: .
-            target: dev
-        command: bun tests/fake/agent.ts
-        environment:
-            TZ: Asia/Tokyo
-            FAKE_AGENT_PORT: '25252'
-            # 開発中に録画完了まで見届けられるよう、番組を多めに出しておく
-            FAKE_SLOTS: '120'
-        volumes:
-            - .:/app
-            - app-node-modules:/app/node_modules
-        labels:
-            caddy: http://denpa-agent.localhost
-            caddy.reverse_proxy: '{{upstreams 25252}}'
-        networks: [default, genkan]
+  # 実チューナーの代わり。番組表も録画ストリームも、素のTSとしてここが流す
+  tuner-agent:
+    build:
+      context: .
+      target: dev
+    command: bun tests/fake/agent.ts
+    environment:
+      TZ: Asia/Tokyo
+      FAKE_AGENT_PORT: '25252'
+      # 開発中に録画完了まで見届けられるよう、番組を多めに出しておく
+      FAKE_SLOTS: '120'
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
+    labels:
+      caddy: http://denpa-agent.localhost
+      caddy.reverse_proxy: '{{upstreams 25252}}'
+    networks: [default, genkan]
 
-    e2e:
-        build:
-            context: .
-            target: test
-        profiles: ['test']
-        command: bun run test:e2e
-        environment:
-            TZ: Asia/Tokyo
-            CI: '1'
-        volumes:
-            - .:/app
-            - app-node-modules:/app/node_modules
+  e2e:
+    build:
+      context: .
+      target: test
+    profiles: ['test']
+    command: bun run test:e2e
+    environment:
+      TZ: Asia/Tokyo
+      CI: '1'
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
 
-    # README・docs の画像を撮る (scripts/capture-docs.ts)。偽の放送 (作り物の局と番組) だけで撮り、docs/images に置く
-    docs:
-        build:
-            context: .
-            target: docs
-        profiles: ['docs']
-        command: bun scripts/capture-docs.ts
-        environment:
-            TZ: Asia/Tokyo
-        volumes:
-            - .:/app
-            - app-node-modules:/app/node_modules
+  # README・docs の画像を撮る (scripts/capture-docs.ts)。偽の放送 (作り物の局と番組) だけで撮り、docs/images に置く
+  docs:
+    build:
+      context: .
+      target: docs
+    profiles: ['docs']
+    command: bun scripts/capture-docs.ts
+    environment:
+      TZ: Asia/Tokyo
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
 
-    unit:
-        build:
-            context: .
-            target: dev
-        profiles: ['test']
-        command: bun run test:unit
-        environment:
-            TZ: Asia/Tokyo
-            DENPA_DB: /tmp/denpa-unit.db
-        volumes:
-            - .:/app
-            - app-node-modules:/app/node_modules
+  unit:
+    build:
+      context: .
+      target: dev
+    profiles: ['test']
+    command: bun run test:unit
+    environment:
+      TZ: Asia/Tokyo
+      DENPA_DB: /tmp/denpa-unit.db
+    volumes:
+      - .:/app
+      - app-node-modules:/app/node_modules
 
 networks:
-    # genkan が作るネットワーク。ここに入ったコンテナへ、ラベルのホスト名で振り分けてくれる
-    genkan:
-        external: true
+  # genkan が作るネットワーク。ここに入ったコンテナへ、ラベルのホスト名で振り分けてくれる
+  genkan:
+    external: true
 
 volumes:
-    app-node-modules:
-    denpa-data:
-    denpa-recorded:
-    denpa-library:
+  app-node-modules:
+  denpa-data:
+  denpa-recorded:
+  denpa-library:

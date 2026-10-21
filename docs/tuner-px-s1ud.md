@@ -18,10 +18,10 @@ DVB で動いている S1UD を奪うのは論外です。siano-userland 0.1.8 �
 siano-ts 自身が、カーネルのドライバが使っているデバイスを断ります (終了コード 4。
 以前は黙って奪っていた。Khronos31/siano-userland#9)。
 
-| 機材の様子 | 使うドライバ |
-| --- | --- |
-| smsusb が使っている (`/dev/dvb` に出ている) | DVB (`DvbTuner`)。siano-ts は起こさない |
-| どのドライバにも繋がっていない (smsusb を blacklist した・モジュールが無い) | siano-userland (`SianoTuner`) |
+| 機材の様子                                                                  | 使うドライバ                            |
+| --------------------------------------------------------------------------- | --------------------------------------- |
+| smsusb が使っている (`/dev/dvb` に出ている)                                 | DVB (`DvbTuner`)。siano-ts は起こさない |
+| どのドライバにも繋がっていない (smsusb を blacklist した・モジュールが無い) | siano-userland (`SianoTuner`)           |
 
 siano-userland で使うなら、ホストで `smsusb` / `smsdvb` / `smsmdtv` を blacklist して
 再起動します (挿したまま unbind するのは上の理由で勧めません)。

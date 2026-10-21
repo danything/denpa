@@ -15,7 +15,7 @@ image:
   pullPolicy: Always
 
 # 入れ替えの合図 (charts/denpa の imageMarks と同じ)。固定タグなら空でよい
-imageMark: ""
+imageMark: ''
 
 # チューナーとカードリーダーに触るために特権が要る。PX-Q3U4 などはホストにドライバを
 # 入れず、/dev/bus (USB) が見えればイメージ同梱の px4-userland が扱う (docs/tuner-px4.md)
@@ -33,7 +33,7 @@ tolerations: []
 affinity: {}
 
 persistence:
-  storageClassName: ""
+  storageClassName: ''
   # **PVC を ArgoCD に消させない** (Prune=false,Delete=false)。既定は true で、
   # true の間は chart から PVC が消えても・Application ごと消しても ArgoCD は触らない。
   # **false にすると「git で消したものは実際に消える」。** マニフェストから外れた
@@ -42,13 +42,13 @@ persistence:
   # エージェントの設定 (tuners.json / channels.json)
   config:
     size: 128Mi
-    existingClaim: ""
+    existingClaim: ''
   # denpa の元のTSの置き場。**denpa と同じ実体を見せる** (上の説明)。
   # existingClaim に denpa 側の PVC を渡す。空なら chart が自分の分を作る
   # (= 別の機械で動かしていて共有できない構成)
   raw:
     size: 300Gi
-    existingClaim: ""
+    existingClaim: ''
 
 service:
   # 選局・スクランブルの復号の API。denpa の TUNER_AGENT_URL がここを指す

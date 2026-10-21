@@ -9,13 +9,8 @@
             "!playwright-report",
             "!static",
             "!deploy",
-            "!docs",
-            "!.github",
-            // 2.6 から YAML と Markdown も読むようになった。Helm のテンプレート (charts) は YAML として読めず、
-            // compose や文書は今まで整えていなかった。今までどおり JS/TS・CSS・JSON・Svelte だけを見る
-            "!**/*.yaml",
-            "!**/*.yml",
-            "!**/*.md",
+            // Helm のテンプレートは Go のテンプレートで、YAML として読めない
+            "!charts/*/templates",
             // drizzle-kit が出すマイグレーション (SQL と snapshot の JSON)。手では触らない
             "!drizzle",
             "!renovate.json",
@@ -76,6 +71,13 @@
             "quoteStyle": "single",
             "trailingCommas": "all",
             "semicolons": "always"
+        }
+    },
+    // YAML は 2 字下げ (compose・Helm・GitHub Actions の慣わし)
+    "yaml": {
+        "formatter": {
+            "indentWidth": 2,
+            "quoteStyle": "single"
         }
     },
     "css": {

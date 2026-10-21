@@ -8,10 +8,10 @@ denpa が使える内蔵のカードリーダーは無いので、USB のカー�
 
 ## 機材とドライバ
 
-| 機材 | 使うドライバ |
-| --- | --- |
-| PT2 / PT3 (Earthsoft) | mainline の `earth_pt1` / `earth_pt3` |
-| PX-BCUD (ISDB-S / USB) | mainline (Linux 4.7 以降) |
+| 機材                   | 使うドライバ                                                                                                                                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PT2 / PT3 (Earthsoft)  | mainline の `earth_pt1` / `earth_pt3`                                                                                                                                                                |
+| PX-BCUD (ISDB-S / USB) | mainline (Linux 4.7 以降)                                                                                                                                                                            |
 | PX-S1UD (ISDB-T / USB) | mainline の Siano `smsusb` + `smsdvb`。ホストに firmware `isdbt_rio.inp` が要る。smsusb を blacklist すれば、ホストに何も入れない siano-userland でも使えます ([tuner-px-s1ud.md](tuner-px-s1ud.md)) |
 
 手元で確かめている機材は PT3 です。PT3 は1枚で `/dev/dvb` にアダプタが4つ出ます。

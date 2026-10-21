@@ -40,7 +40,6 @@ Kubernetes の `terminationGracePeriodSeconds` と docker compose の
 
 **待っている間も画面は開けます。** ここは2箇所で落ちていました
 (実機では、録画中に同期が来て34分間ずっと画面だけ開けなかった)。
-
 1. **adapter が SIGTERM を受けたその場で listen を閉じる** (adapter-bun は `server.stop()`)。
    止まれの合図は `takeOverSignals` でこちらが受け取り、先に入っていた後始末は外します。
    閉じるのは本当に止まる直前 (`process.exit`) だけです。
@@ -91,13 +90,13 @@ ArgoCD の PreSync フックに置いています (`denpa-prepull`。土台は d
 
 ### イメージのタグ
 
-| タグ | いつ動くか | 誰が指しているか |
-| --- | --- | --- |
-| `develop` | main へ入るたび | `deploy/application.yaml` の `helm.valuesObject` (この構成。入れ替えの合図は `imageMarks`) |
-| `latest` | GitHub でリリースを作ったときだけ | `compose.prod.yml` (入れて使う人) |
-| `1.20` | その系列でリリースを作るたび (1.20.1 を出せばそちらへ) | 版を決めて使う人 |
-| `1.20.0` | 動かない | 固定して使う人・戻したいとき |
-| `sha-<12桁>` | 動かない。中身ごとに1つ | 中身のコミットから辿るとき |
+| タグ         | いつ動くか                                             | 誰が指しているか                                                                           |
+| ------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `develop`    | main へ入るたび                                        | `deploy/application.yaml` の `helm.valuesObject` (この構成。入れ替えの合図は `imageMarks`) |
+| `latest`     | GitHub でリリースを作ったときだけ                      | `compose.prod.yml` (入れて使う人)                                                          |
+| `1.20`       | その系列でリリースを作るたび (1.20.1 を出せばそちらへ) | 版を決めて使う人                                                                           |
+| `1.20.0`     | 動かない                                               | 固定して使う人・戻したいとき                                                               |
+| `sha-<12桁>` | 動かない。中身ごとに1つ                                | 中身のコミットから辿るとき                                                                 |
 
 **どのタグも amd64 と arm64 を束ねた索引 (multi-arch manifest) を指します。** CI は
 arch ごとにその arch のランナー (amd64 は `ubuntu-latest`、arm64 は `ubuntu-24.04-arm`) で
@@ -152,7 +151,6 @@ VA-API のドライバ) だけで、Debian では amd64 にしか無いので ar
 [deploy/application.yaml](../deploy/application.yaml) の Application から同じ chart を当てていて、
 値はそこの `helm.valuesObject` にあります (chart の使い方の実例として読めます。なぜそう置くかは
 ファイルの頭のコメント)。クラスタの初期構築や共通アドオンは別のリポジトリです。chart を当てる前に以下が要ります。
-
 - **StorageClass** — `persistence.storageClassName` (空ならクラスタの既定)。PVC を消させない設定は
   `persistence.protectFromPruning` (values.yaml に理由つき)
 - **Gateway API の Gateway か Ingress** — chart の `httpRoute.parentRefs` / `ingress` が指す先。証明書は
@@ -177,20 +175,20 @@ VA-API のドライバ) だけで、Debian では amd64 にしか無いので ar
 JS として動き**、ログインの控えで API を呼べることになるので、「放送のものを本物の JS として
 動かさない」最後の砦として CSP でも止めます。
 
-| 指令 | 値 | 理由 |
-| --- | --- | --- |
-| `script-src` | `'self'` + nonce | 自分の束 (`_app/`。データ放送のエンジンの遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない** |
-| `script-src-attr` | `'none'` | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの) |
-| `style-src` | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」 |
-| `img-src` | `'self' data: blob:` | 局ロゴ・ポスターは自分。データ放送の画像は作り直して blob:、DRCS (外字) は canvas から data: |
-| `font-src` | `'self' data: blob:` | Denpa Font は自分 (`/api/font/denpa-font.woff2`)。DRCS は FontFace にバイト列で渡すので URL ではない |
-| `media-src` | `'self' blob:` | 録画は自分。ライブの MSE と端末に保存した録画は blob: |
-| `connect-src` | `'self'` | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む |
-| `worker-src` | `'self'` | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker |
-| `object-src` | `'none'` | 使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない |
-| `frame-src` | `'self'` | Hybridcast のアプリを入れる iframe (`/api/bml/hybridcast`) だけ。中身は sandbox で使い捨てのオリジンになり、denpa には触れない ([stream.md](stream.md#hybridcast)) |
-| `base-uri` / `form-action` | `'self'` | `<base>` とフォームの送り先は自分だけ |
-| `default-src` | `'self'` | 上に無いもの (マニフェストなど) |
+| 指令                       | 値                       | 理由                                                                                                                                                                      |
+| -------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `script-src`               | `'self'` + nonce         | 自分の束 (`_app/`。データ放送のエンジンの遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない** |
+| `script-src-attr`          | `'none'`                 | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの)                                                                                                               |
+| `style-src`                | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」                                                                                                                                                |
+| `img-src`                  | `'self' data: blob:`     | 局ロゴ・ポスターは自分。データ放送の画像は作り直して blob:、DRCS (外字) は canvas から data:                                                                              |
+| `font-src`                 | `'self' data: blob:`     | Denpa Font は自分 (`/api/font/denpa-font.woff2`)。DRCS は FontFace にバイト列で渡すので URL ではない                                                                      |
+| `media-src`                | `'self' blob:`           | 録画は自分。ライブの MSE と端末に保存した録画は blob:                                                                                                                     |
+| `connect-src`              | `'self'`                 | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む                                                    |
+| `worker-src`               | `'self'`                 | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker                                                                                             |
+| `object-src`               | `'none'`                 | 使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない                                                                           |
+| `frame-src`                | `'self'`                 | Hybridcast のアプリを入れる iframe (`/api/bml/hybridcast`) だけ。中身は sandbox で使い捨てのオリジンになり、denpa には触れない ([stream.md](stream.md#hybridcast))        |
+| `base-uri` / `form-action` | `'self'`                 | `<base>` とフォームの送り先は自分だけ                                                                                                                                     |
+| `default-src`              | `'self'`                 | 上に無いもの (マニフェストなど)                                                                                                                                           |
 
 **画面の移動は関わりません。** OIDC のログイン (`/login` が Entra へ 302)・
 Hybridcast (別のタブで開く)・更新のお知らせのリンクは移動なので、上のどれにも掛かりません。

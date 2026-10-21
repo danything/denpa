@@ -6,7 +6,6 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 ## 用意するもの
 
 チューナー・カードリーダー・OS の一覧と機材ごとのページは [tuners.md](tuners.md#要るもの) に。
-
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
 - **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
   `compose.override.yml` で渡します (Helm は既定で渡す)。GPU を使えるのは amd64 だけです
@@ -104,12 +103,12 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 ```yaml
 # ~/denpa/compose.override.yml
 services:
-    denpa:
-        environment:
-            TRUSTED_NETWORKS: 192.168.1.0/24
-            OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
-            OIDC_CLIENT_ID: <アプリケーションID>
-            OIDC_CLIENT_SECRET: <クライアントシークレット>
+  denpa:
+    environment:
+      TRUSTED_NETWORKS: 192.168.1.0/24
+      OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
+      OIDC_CLIENT_ID: <アプリケーションID>
+      OIDC_CLIENT_SECRET: <クライアントシークレット>
 ```
 
 Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `denpa.trustedNetworks` と

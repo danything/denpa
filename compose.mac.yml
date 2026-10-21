@@ -13,35 +13,35 @@
 name: denpa
 
 services:
-    denpa:
-        image: ghcr.io/danything/denpa:latest
-        restart: unless-stopped
-        # compose.prod.yml と同じ。録画中に止めようとすると、録画が終わるまで居座ってから止まる
-        stop_grace_period: 6h5m
-        # Docker Desktop と OrbStack は host.docker.internal を最初から引けるが、colima などは
-        # 引けないことがある。host-gateway で OS 自身を指しておけば、どれでも通る
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
-        environment:
-            TZ: Asia/Tokyo
-            TUNER_AGENT_URL: http://host.docker.internal:25252
-            ENCODE_CONCURRENCY: '2'
-            # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じプライベートネットワーク。
-            # ブラウザから localhost で入ると、コンテナに見える送信元は Docker の
-            # ネットワークの出口 (172.16.0.0/12 か 192.168.0.0/16 の中) なので、これで通る。
-            # LAN のほかの機器からも通る (家の外に出すなら OIDC を使う。docs/auth.md)
-            TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
-        volumes:
-            # DB は名前付きボリュームに置く (SQLite のロックが、OS から見せたフォルダ越しだと当てにならない)
-            - denpa-data:/data
-            # 元のTSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RAW_DIR)。
-            # 掛かったまま録れたものを後から復号するとき、エージェントが直に読み書きする
-            # (置き場からの相対パスでリクエストされる)。HOME はシェルのものなので .env は要らない
-            - ${HOME}/Movies/denpa/recorded:/media/raw
-            # 出来上がった録画は Finder からも見える所に
-            - ${HOME}/Movies/denpa/library:/media/encoded
-        ports:
-            - '3000:3000'
+  denpa:
+    image: ghcr.io/danything/denpa:latest
+    restart: unless-stopped
+    # compose.prod.yml と同じ。録画中に止めようとすると、録画が終わるまで居座ってから止まる
+    stop_grace_period: 6h5m
+    # Docker Desktop と OrbStack は host.docker.internal を最初から引けるが、colima などは
+    # 引けないことがある。host-gateway で OS 自身を指しておけば、どれでも通る
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      TZ: Asia/Tokyo
+      TUNER_AGENT_URL: http://host.docker.internal:25252
+      ENCODE_CONCURRENCY: '2'
+      # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じプライベートネットワーク。
+      # ブラウザから localhost で入ると、コンテナに見える送信元は Docker の
+      # ネットワークの出口 (172.16.0.0/12 か 192.168.0.0/16 の中) なので、これで通る。
+      # LAN のほかの機器からも通る (家の外に出すなら OIDC を使う。docs/auth.md)
+      TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+    volumes:
+      # DB は名前付きボリュームに置く (SQLite のロックが、OS から見せたフォルダ越しだと当てにならない)
+      - denpa-data:/data
+      # 元のTSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RAW_DIR)。
+      # 掛かったまま録れたものを後から復号するとき、エージェントが直に読み書きする
+      # (置き場からの相対パスでリクエストされる)。HOME はシェルのものなので .env は要らない
+      - ${HOME}/Movies/denpa/recorded:/media/raw
+      # 出来上がった録画は Finder からも見える所に
+      - ${HOME}/Movies/denpa/library:/media/encoded
+    ports:
+      - '3000:3000'
 
 volumes:
-    denpa-data:
+  denpa-data:

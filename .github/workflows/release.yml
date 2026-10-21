@@ -291,7 +291,7 @@ jobs:
           . .github/bump-pr.sh
           bump_begin bump-chart-version
           for chart in charts/denpa charts/denpa-agent; do
-            sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: \"${v}\"#" "$chart/Chart.yaml"
+            sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: '${v}'#" "$chart/Chart.yaml"
           done
           bump_finish bump-chart-version \
             "chore: chart の版を ${v} に合わせる [skip ci]" \

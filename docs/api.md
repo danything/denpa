@@ -2,7 +2,6 @@
 
 画面の外のもの (テレビのアプリ・Home Assistant の連携・スクリプト) 向けの API です。
 **JSON の形式は保ちます。** 足すのが原則で、やむを得ず外したものはその節に書きます。
-
 - **認証は画面と同じです** ([下記](#認証))。`TRUSTED_NETWORKS` に入っている相手はそのまま通ります
   (家の LAN の Home Assistant など)。それ以外はログインか、アクセストークンが要ります
 - **書き込み (POST・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも)。
@@ -16,13 +15,29 @@
 テレビと同じ並び (地上波 → BS → CS、リモコン番号順)。
 
 ```json
-[{ "id": 3227310008, "type": "GR", "name": "TOKYO MX", "remoteControlKey": 9,
-   "logo": "api/services/3227310008/logo", "live": "api/services/3227310008/live",
-   "now": { "id": 32736103210001, "title": "ニュース", "startAt": 1790000000000, "endAt": 1790001800000,
-            "reserved": false, "recording": false,
-            "audios": [{ "id": "0:main", "stream": 0, "side": "main", "label": "主音声 (日本語)", "main": true },
-                       { "id": "0:sub",  "stream": 0, "side": "sub",  "label": "副音声 (英語)", "main": true },
-                       { "id": "0:both", "stream": 0, "side": "both", "label": "主+副", "main": true }] } }]
+[
+    {
+        "id": 3227310008,
+        "type": "GR",
+        "name": "TOKYO MX",
+        "remoteControlKey": 9,
+        "logo": "api/services/3227310008/logo",
+        "live": "api/services/3227310008/live",
+        "now": {
+            "id": 32736103210001,
+            "title": "ニュース",
+            "startAt": 1790000000000,
+            "endAt": 1790001800000,
+            "reserved": false,
+            "recording": false,
+            "audios": [
+                { "id": "0:main", "stream": 0, "side": "main", "label": "主音声 (日本語)", "main": true },
+                { "id": "0:sub", "stream": 0, "side": "sub", "label": "副音声 (英語)", "main": true },
+                { "id": "0:both", "stream": 0, "side": "both", "label": "主+副", "main": true }
+            ]
+        }
+    }
+]
 ```
 
 - `logo` は局ロゴをまだ取得できていなければ `null`
@@ -37,7 +52,6 @@
 
 局の `now.audios` と録画の `audios` は同じ形式で、画面の音声の切り替えに出るものと同じ一覧です。
 番組表が何も言っていなくても、`{ "id": "0:both", "stream": 0, "side": "both", "label": "音声" }` の1つは必ず入ります。
-
 - `id` … 選ぶときに渡す値 (`<stream>:<side>`)
 - `stream` … 何本目の音声か (0 から)。複数の音声 (解説放送など) はここが分かれる
 - `side` … `both` はそのまま、`main` / `sub` は**デュアルモノ** (二カ国語。1本の左右に別の音声) の
@@ -50,11 +64,11 @@
 流し続けます。閉じれば止まり、誰も見ていなければチューナーを返します (画面のライブと同じ取り合い。
 同じ局・同じ形式を誰かが見ていればそのストリームを共有します)。知らない局は 404。
 
-| `codec` | 中身 | Content-Type | 向いている相手 |
-|---|---|---|---|
-| (なし) / `h264` | H.264 / AAC の fragmented MP4 | `video/mp4` | ブラウザ・テレビのアプリ (いちばん広く再生できる) |
-| `av1` | AV1 / Opus の fragmented MP4 | `video/mp4` | AV1 をデコードできる新しい端末 |
-| `raw` | エンコードせずに1局に絞っただけの TS (MPEG-2) | `video/mp2t` | テレビのアプリ (いちばん軽い。MPEG-2 をハードでデコードできる端末) |
+| `codec`         | 中身                                          | Content-Type | 向いている相手                                                     |
+| --------------- | --------------------------------------------- | ------------ | ------------------------------------------------------------------ |
+| (なし) / `h264` | H.264 / AAC の fragmented MP4                 | `video/mp4`  | ブラウザ・テレビのアプリ (いちばん広く再生できる)                  |
+| `av1`           | AV1 / Opus の fragmented MP4                  | `video/mp4`  | AV1 をデコードできる新しい端末                                     |
+| `raw`           | エンコードせずに1局に絞っただけの TS (MPEG-2) | `video/mp2t` | テレビのアプリ (いちばん軽い。MPEG-2 をハードでデコードできる端末) |
 
 `?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。音声だけを聴くとき向け。
 映像をエンコードしないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` が勝ちます。
@@ -95,17 +109,33 @@
 観られるもの (録り終えてファイルがあるものと、**いま録っているもの**) を新しい順に。`?limit=` と `?offset=` で区切れます。
 
 ```json
-[{ "id": 12, "title": "番組 第1話", "name": "[新]番組 第1話[字]",
-   "serviceId": 3227310008, "serviceName": "TOKYO MX",
-   "startAt": 1790000000000, "endAt": 1790001800000, "durationMs": 1800000, "resumeMs": 754000, "watchedAt": null,
-   "recording": false, "chase": "api/recordings/12/chase", "cmReliable": true,
-   "poster": "api/recordings/12/poster",
-   "files": [
-     { "source": "encoded", "codec": "av1",   "url": "api/recordings/12/file?source=encoded" },
-     { "source": "alt",     "codec": "h264",  "url": "api/recordings/12/file?source=alt" },
-     { "source": "ts",      "codec": "mpeg2", "url": "api/recordings/12/file?source=ts" }],
-   "audio": "api/recordings/12/file?audio=only",
-   "audios": [{ "id": "0:both", "stream": 0, "side": "both", "label": "ステレオ (日本語)", "main": true }] }]
+[
+    {
+        "id": 12,
+        "title": "番組 第1話",
+        "name": "[新]番組 第1話[字]",
+        "serviceId": 3227310008,
+        "serviceName": "TOKYO MX",
+        "startAt": 1790000000000,
+        "endAt": 1790001800000,
+        "durationMs": 1800000,
+        "resumeMs": 754000,
+        "watchedAt": null,
+        "recording": false,
+        "chase": "api/recordings/12/chase",
+        "cmReliable": true,
+        "poster": "api/recordings/12/poster",
+        "files": [
+            { "source": "encoded", "codec": "av1", "url": "api/recordings/12/file?source=encoded" },
+            { "source": "alt", "codec": "h264", "url": "api/recordings/12/file?source=alt" },
+            { "source": "ts", "codec": "mpeg2", "url": "api/recordings/12/file?source=ts" }
+        ],
+        "audio": "api/recordings/12/file?audio=only",
+        "audios": [
+            { "id": "0:both", "stream": 0, "side": "both", "label": "ステレオ (日本語)", "main": true }
+        ]
+    }
+]
 ```
 
 - 時刻は UNIX ミリ秒。`title` は記号 (`[字]` など) を落とした名前、`name` は放送のままの名前
@@ -133,12 +163,11 @@
 
 録っている最中 (と、録り終えてエンコードが終わる前) の録画を、伸びている元のTSから流します。
 
-| `codec` | 中身 | Content-Type |
-|---|---|---|
-| (なし) / `h264` | 画面の追っかけと同じ再エンコード (H.264 / AAC の fragmented MP4) | `video/mp4` |
-| `av1` | AV1 / Opus の fragmented MP4 | `video/mp4` |
-| `raw` | エンコードせずに元のTS (MPEG-2) をそのまま | `video/mp2t` |
-
+| `codec`         | 中身                                                             | Content-Type |
+| --------------- | ---------------------------------------------------------------- | ------------ |
+| (なし) / `h264` | 画面の追っかけと同じ再エンコード (H.264 / AAC の fragmented MP4) | `video/mp4`  |
+| `av1`           | AV1 / Opus の fragmented MP4                                     | `video/mp4`  |
+| `raw`           | エンコードせずに元のTS (MPEG-2) をそのまま                       | `video/mp2t` |
 - `?from=<秒>` で頭からの位置を選びます (既定 0)。**シークは `from` を変えてリクエストし直します**
 - `?audio=<id>` (一覧の `audios` の `id`) で `h264` / `av1` でエンコードする音声を選びます。ライブと同じく、知らないものは主音声、
   選び直すにはリクエストし直し、`raw` では効きません
@@ -166,12 +195,17 @@
 (端末で再生できるか、人が選んだコーデック)。
 
 ```json
-{ "duration": 1790.5, "axis": "encoded",
-  "audios": [{ "id": "0", "label": "主音声" }, { "id": "1", "label": "副音声" }],
-  "offers": [{ "codec": "av1", "way": "file", "source": "encoded", "codecs": "av01.0.08M.08,opus" },
-             { "codec": "h264", "way": "stream", "codecs": "avc1.640029,mp4a.40.2" },
-             { "codec": "av1", "way": "stream", "codecs": "av01.0.08M.08,opus" },
-             { "codec": "mpeg2", "way": "raw" }] }
+{
+    "duration": 1790.5,
+    "axis": "encoded",
+    "audios": [{ "id": "0", "label": "主音声" }, { "id": "1", "label": "副音声" }],
+    "offers": [
+        { "codec": "av1", "way": "file", "source": "encoded", "codecs": "av01.0.08M.08,opus" },
+        { "codec": "h264", "way": "stream", "codecs": "avc1.640029,mp4a.40.2" },
+        { "codec": "av1", "way": "stream", "codecs": "av01.0.08M.08,opus" },
+        { "codec": "mpeg2", "way": "raw" }
+    ]
+}
 ```
 
 - `axis` は**時刻の物差し**。`encoded` はエンコード済みのファイルの時刻、`ts` は元の TS の頭を 0 とした時刻
@@ -187,7 +221,6 @@
 ## 録画を流す `GET /api/recordings/<id>/stream`
 
 `?codec=h264` / `av1` / `mpeg2` (要る。無い・知らない値は 400)、`?from=<秒>` (物差しの上の位置。既定 0)、`?audio=<id>`。**シークは `from` を変えてリクエストし直します。**
-
 - `h264` / `av1` … fragmented MP4 (`video/mp4`)。塊の時刻 (tfdt) は物差しの時刻のまま書きます (頭を 0 に詰め直さない)。
   詰め替えは `from` の手前のキーフレームから、変換は元の TS なら `from` の 1 秒手前の映像から始まります
 - `mpeg2` … 元の TS を `from` の 1 秒手前の映像から流します (`video/mp2t`)。**`X-Denpa-Origin` に物差しの 0 にあたる PTS** (90kHz) を返します。
@@ -201,9 +234,13 @@
 CM 飛ばしの行き先です。観る画面とテレビのアプリが使っています。
 
 ```json
-{ "chapters": [{ "start": 0, "end": 612.4, "title": "本編" },
-               { "start": 612.4, "end": 702.4, "title": "CM" },
-               { "start": 702.4, "end": 1790.5, "title": "本編" }] }
+{
+    "chapters": [
+        { "start": 0, "end": 612.4, "title": "本編" },
+        { "start": 612.4, "end": 702.4, "title": "CM" },
+        { "start": 702.4, "end": 1790.5, "title": "本編" }
+    ]
+}
 ```
 
 - `start`・`end` は秒で、**`playback` の物差し ([上記](#録画の観方-get-apirecordingsidplayback)) の時刻**です。録画の時間そのもので、
@@ -227,7 +264,6 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 
 元の TS (`live?codec=raw`・`chase?codec=raw`・`file?source=ts`) の字幕を、**放送の PTS のまま**流します。
 ブラウザで元のTSを再生する経路と同じもの ([stream.md](stream.md#放送のままのときの字幕))。受け側は映像の PTS がそこを過ぎたら重ね、次が来るまで出しておきます。
-
 - 中身は**文字の配置** (0x22。[下記](#字幕の文字の配置)) です。ブラウザと同じもので、受け側が描きます。
   前の画像 (0x20) はやめ、`?format` は見ません (denpa-tv 0.16.0 より前のアプリでは字幕が出ません)
 - ライブ (`services/<id>/captions`) は**いま変換せずに流している局のストリームを共有するだけ**です。`live?codec=raw` を開いてからリクエストします。
@@ -276,12 +312,42 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 放送どおりの所に出ます。ブラウザの描き方は `src/lib/components/player/caption-draw.ts`。
 
 ```json
-{ "v": 1, "plane": [960, 540], "duration": 3000,
-  "runs": [{ "x": 250, "y": 450, "w": 40, "h": 60, "fx": 2, "fy": 12, "size": 36, "scaleX": 1,
-             "text": "字幕です", "fg": "#ffffffff", "bg": "#00000080" },
-           { "x": 410, "y": 450, "w": 40, "h": 60, "fx": 2, "fy": 12, "size": 36, "scaleX": 1,
-             "text": "〓", "drcs": "65569", "fg": "#ffffffff", "bg": "#00000080", "stroke": "#000000ff" }],
-  "drcs": { "65569": { "w": 72, "h": 72, "depth": 16, "bits": 4, "data": "AAAA…", "md5": "0123…" } } }
+{
+    "v": 1,
+    "plane": [960, 540],
+    "duration": 3000,
+    "runs": [
+        {
+            "x": 250,
+            "y": 450,
+            "w": 40,
+            "h": 60,
+            "fx": 2,
+            "fy": 12,
+            "size": 36,
+            "scaleX": 1,
+            "text": "字幕です",
+            "fg": "#ffffffff",
+            "bg": "#00000080"
+        },
+        {
+            "x": 410,
+            "y": 450,
+            "w": 40,
+            "h": 60,
+            "fx": 2,
+            "fy": 12,
+            "size": 36,
+            "scaleX": 1,
+            "text": "〓",
+            "drcs": "65569",
+            "fg": "#ffffffff",
+            "bg": "#00000080",
+            "stroke": "#000000ff"
+        }
+    ],
+    "drcs": { "65569": { "w": 72, "h": 72, "depth": 16, "bits": 4, "data": "AAAA…", "md5": "0123…" } }
+}
 ```
 
 - `v` は形式の版。**知らない版は描かないでください** (互換の無い変え方をしたら上げます。足すだけなら上げない)
@@ -312,13 +378,23 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 **このエンドポイントだけキーは snake_case** (画面と同じ形式をそのまま返している)。
 
 ```json
-{ "name": "[新]番組 第1話[字]", "service_name": "TOKYO MX",
-  "start_at": 1790000000000, "end_at": 1790001800000,
-  "description": "番組の概要", "extended": { "番組内容": "…", "出演者": "…" },
-  "genre_detail": [{ "lv1": 7, "lv2": 0 }],
-  "audios": [{ "componentType": 3, "langs": ["jpn"], "main": true },
-             { "componentType": 3, "langs": ["jpn"], "text": "解説ステレオ" }],
-  "video_type": "mpeg2", "video_resolution": "1080i", "is_free": true, "copy_never": false }
+{
+    "name": "[新]番組 第1話[字]",
+    "service_name": "TOKYO MX",
+    "start_at": 1790000000000,
+    "end_at": 1790001800000,
+    "description": "番組の概要",
+    "extended": { "番組内容": "…", "出演者": "…" },
+    "genre_detail": [{ "lv1": 7, "lv2": 0 }],
+    "audios": [
+        { "componentType": 3, "langs": ["jpn"], "main": true },
+        { "componentType": 3, "langs": ["jpn"], "text": "解説ステレオ" }
+    ],
+    "video_type": "mpeg2",
+    "video_resolution": "1080i",
+    "is_free": true,
+    "copy_never": false
+}
 ```
 
 - `name` は放送のままの名前 (記号 `[字]` などを含む)。時刻は UNIX ミリ秒
@@ -339,15 +415,51 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 その先にもあるか (`more`) だけを返します。件数は数えません。**キーは snake_case** です。
 
 ```json
-{ "q": "でんぱ",
-  "programs": { "more": true, "rows": [{ "id": 3227310008123, "name": "でんぱ劇場", "service_name": "でんぱテレビ",
-                                         "start_at": 1790000000000, "end_at": 1790001800000, "reservation_state": null }] },
-  "recordings": { "more": false, "rows": [{ "id": 12, "name": "でんぱ劇場 #1", "service_name": "でんぱテレビ",
-                                            "start_at": 1789000000000, "state": "available", "watch": "watch/12" }] },
-  "reservations": { "more": false, "rows": [{ "id": 5, "program_id": 3227310008123, "name": "でんぱ劇場",
-                                              "service_name": "でんぱテレビ", "start_at": 1790000000000,
-                                              "end_at": 1790001800000, "state": "scheduled", "chase": null }] },
-  "rules": { "more": false, "rows": [{ "id": 2, "name": "でんぱ", "enabled": true }] } }
+{
+    "q": "でんぱ",
+    "programs": {
+        "more": true,
+        "rows": [
+            {
+                "id": 3227310008123,
+                "name": "でんぱ劇場",
+                "service_name": "でんぱテレビ",
+                "start_at": 1790000000000,
+                "end_at": 1790001800000,
+                "reservation_state": null
+            }
+        ]
+    },
+    "recordings": {
+        "more": false,
+        "rows": [
+            {
+                "id": 12,
+                "name": "でんぱ劇場 #1",
+                "service_name": "でんぱテレビ",
+                "start_at": 1789000000000,
+                "state": "available",
+                "watch": "watch/12"
+            }
+        ]
+    },
+    "reservations": {
+        "more": false,
+        "rows": [
+            {
+                "id": 5,
+                "program_id": 3227310008123,
+                "name": "でんぱ劇場",
+                "service_name": "でんぱテレビ",
+                "start_at": 1790000000000,
+                "end_at": 1790001800000,
+                "state": "scheduled",
+                "chase": null
+            }
+        ]
+    },
+    "rules": { "more": false, "rows": [{ "id": 2, "name": "でんぱ", "enabled": true }] }
+}
 ```
 
 - `programs` はまだ終わっていない番組 (始まる順)。`reservation_state` は予約が立っていればその状態
@@ -358,8 +470,13 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 ## 番組の中身 `GET /api/recordings/<id>/detail`
 
 ```json
-{ "id": 12, "title": "番組 第1話", "name": "[新]番組 第1話[字]",
-  "description": "番組の概要", "extended": { "出演者": "…", "番組内容": "…" } }
+{
+    "id": 12,
+    "title": "番組 第1話",
+    "name": "[新]番組 第1話[字]",
+    "description": "番組の概要",
+    "extended": { "出演者": "…", "番組内容": "…" }
+}
 ```
 
 - `description` は短い説明、`extended` は放送の詳細 (見出し → 本文)。無ければ `""` / `{}`
@@ -413,11 +530,11 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 
 ## 認証
 
-| 相手 | 認証 |
-|---|---|
-| 信頼するネットワーク (`TRUSTED_NETWORKS`) の中 | 何も要りません |
-| アプリ (テレビなど) | `Authorization: Bearer denpa_…` (下のペアリングで受け取るアクセストークン)。どこから来ても通ります |
-| ブラウザ | OIDC のログイン (Cookie) |
+| 相手                                           | 認証                                                                                               |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 信頼するネットワーク (`TRUSTED_NETWORKS`) の中 | 何も要りません                                                                                     |
+| アプリ (テレビなど)                            | `Authorization: Bearer denpa_…` (下のペアリングで受け取るアクセストークン)。どこから来ても通ります |
+| ブラウザ                                       | OIDC のログイン (Cookie)                                                                           |
 
 **資格の無い API の呼び出しには、いつも同じ 401 の JSON を返します** (`{"error":"unauthorized"}`、
 `WWW-Authenticate: Bearer realm="denpa"`)。ログイン画面の HTML へは回しません。アプリはアクセストークンなしでまず API を呼び、
@@ -434,9 +551,14 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 `POST /api/device/code` (本文 `{ "name": "居間のテレビ" }`。名前は 40 字まで):
 
 ```json
-{ "deviceCode": "…", "userCode": "ABCD-EFGH",
-  "verificationUri": "device", "verificationUriComplete": "device?code=ABCD-EFGH",
-  "expiresIn": 600, "interval": 5 }
+{
+    "deviceCode": "…",
+    "userCode": "ABCD-EFGH",
+    "verificationUri": "device",
+    "verificationUriComplete": "device?code=ABCD-EFGH",
+    "expiresIn": 600,
+    "interval": 5
+}
 ```
 
 - **QR にするのは `verificationUriComplete`** (denpa の根からの相対) です。`userCode`・`verificationUri` は
@@ -445,7 +567,6 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 - 有効なコードが多すぎるときは `429 {"error":"too_many_pending"}` (しばらくして出し直す)
 
 `POST /api/device/token` (本文 `{ "deviceCode": "…" }`) を `interval` 秒おきに:
-
 - 済んでいれば `200 { "token": "denpa_…", "tokenType": "Bearer" }`。**1度だけ**返します
 - まだなら `400 {"error":"authorization_pending"}`、急ぎすぎなら `400 {"error":"slow_down"}`
   (間隔を延ばす)、切れたら `400 {"error":"expired_token"}` (コードの発行からやり直す)、

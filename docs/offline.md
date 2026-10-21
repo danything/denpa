@@ -7,7 +7,6 @@
 下の「ダウンロード」は、端末に保存するためにブラウザが録画を受け取ることを指します (使い方は [watch.md](watch.md#端末に保存して観る-オフライン))。
 
 実装の入口:
-
 - [src/lib/offline-db.ts](../src/lib/offline-db.ts) … IndexedDB (ページと SW の共有層)
 - [src/lib/offline.svelte.ts](../src/lib/offline.svelte.ts) … 画面側 (保存・進捗・削除・outbox)
 - [src/service-worker/index.ts](../src/service-worker/index.ts) … Background Fetch の受け取りとオフラインの入口
@@ -38,7 +37,6 @@
 ## データモデル (IndexedDB)
 
 DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
-
 - `videos` (key: 録画ID) … 保存した録画1本。`video: Blob` と付属のデータ
   (`captionText`: `captions.json` の JSON・`poster: Blob`・`chapters`/`databroadcast`: JSON) を1行にまとめ、
   名前・局名・開始時刻・尺・どちらを保存したか (`source: 'encoded' | 'alt'`)、
@@ -109,7 +107,6 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 ## 決めたこと
 
 コーデック (既定 AV1) とダウンロード方式 (Background Fetch) は上記。ほかに:
-
 - **削除の API: `DELETE /api/recordings/[id]`。** 認証はほかの API と同じ。録画中は 409、
   消し済みは 204、行が無ければ 404 (何度呼んでも同じところに落ちる)。
 - **容量: 保存する前に確かめる** (30分で約300MB)。`navigator.storage.estimate()` の空きが
