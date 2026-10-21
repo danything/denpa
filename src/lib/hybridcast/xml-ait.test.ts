@@ -66,4 +66,10 @@ describe('parseXmlAit', () => {
         expect(parseXmlAit(AIT.replace('https://hc.example.jp/app/', 'javascript:alert(1)//'))).toEqual([]);
         expect(parseXmlAit('<html>not an ait</html>')).toEqual([]);
     });
+
+    test('範囲の外の文字参照があっても、ほかは読む', () => {
+        expect(parseXmlAit(AIT.replace('番組 &amp; 連動', '番組&#x110000;')).map((app) => app.name)).toEqual([
+            '番組',
+        ]);
+    });
 });

@@ -60,11 +60,16 @@ function number(text: string | null): number {
 function decodeXml(text: string): string {
     return text
         .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-        .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
-        .replace(/&#([0-9]+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+        .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => codePoint(Number.parseInt(hex, 16)))
+        .replace(/&#([0-9]+);/g, (_, dec: string) => codePoint(Number(dec)))
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&apos;/g, "'")
         .replace(/&amp;/g, '&');
+}
+
+/** 文字参照の番号を文字に。**範囲の外は捨てる** — 1つの壊れた参照で AIT ごと読めなくしない */
+function codePoint(n: number): string {
+    return Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '';
 }

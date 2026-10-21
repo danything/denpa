@@ -1105,7 +1105,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 - **電波に AIT を載せない局もある** (NHK)。PMT に印が無く、データ放送が `AITTransportMethod` の XML・HTTP を訊いてくる。
   双方向がオンならこれと `AITControlledAppEngineFunction`・`AITControlledApp.Start` に 1 と答え
   (電波の表で運ぶ `AITTransferMethod` は 0)、`startAITControlledApp` に渡された http(s) の URL を XML の AIT として
-  中継で取り、そこにあるアプリを開く (`hybridcast/xml-ait.ts`。ETSI TS 102 809 の形)。文書には取りに行き始めた時点で 1 を返す。
+  中継で取り、そこにあるアプリを開く (`hybridcast/xml-ait.ts`。ETSI TS 102 809 の形)。文書には取りに行き始めた時点で 1 を返す (上の「開けないのに 1 と答えない」とは矛盾しない — 開く手立てがあるから 1 と答えていて、URL を渡されなければ失敗を返す)。
   取れなかったときは `[bml] XML の AIT を読めませんでした` をコンソールに出して、データ放送のまま
 - **開くのは AIT にある行き先だけ。** 電波に AIT があれば、文書が渡した引数に URL があっても使いません
   (XML の AIT の URL として使うのは、電波に AIT が無いときだけ。その場合も開くのは XML の AIT にある行き先)。数の引数は
