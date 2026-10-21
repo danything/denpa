@@ -912,21 +912,31 @@
 .board .cal-day.pinned {
     background: var(--dp-subtle);
 }
-/* 今日は丸で囲む (行が無くても押せる) */
+/*
+ * 今日は赤い太字の数字 (行が無くても押せる)。赤はタイムラインの「いま」の線と同じ (`NowLine`)。
+ * **今日を選んでいるときだけ赤い丸を塗る** (Apple のカレンダーと同じ)。丸で囲むだけだった頃は、選んでいる日の
+ * 塗りと重なって、どちらがどちらか読みにくかった
+ */
 .board .cal-day.today {
-    color: var(--dp-fg);
+    color: var(--dp-rec-text);
     font-weight: var(--dp-weight-bold);
     opacity: 1;
 }
-.board .cal-day.today::before {
+.board .cal-day.today.pinned {
+    isolation: isolate;
+    background: transparent;
+    color: #fff;
+}
+.board .cal-day.today.pinned::before {
     content: "";
     position: absolute;
+    z-index: -1;
     top: 50%;
     left: 50%;
     width: 1.75rem;
     height: 1.75rem;
-    border: 1.5px solid currentColor;
     border-radius: 50%;
+    background: var(--dp-rec);
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
