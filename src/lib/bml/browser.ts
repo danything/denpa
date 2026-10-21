@@ -89,6 +89,13 @@ export interface BrowserHost {
      * organization_id・application_id など)。開けたら true
      */
     startApp?(hint: number[]): boolean;
+    /**
+     * XML の AIT を取りに行けるか (双方向がオン)。**電波に AIT が無くても開ける局がある** — NHK は AIT を電波に載せず、
+     * 文書が XML の AIT の URL を渡してくる (`AITTransportMethod` の XML・HTTP を訊く)
+     */
+    canFetchAit?(): boolean;
+    /** 文書が渡した XML の AIT (`uri`) を取って、そこにあるアプリを開く。取りに行き始めたら true */
+    startAppFrom?(uri: string, hint: number[]): boolean;
 }
 
 /**
@@ -144,10 +151,18 @@ const hex4 = (n: number | null | undefined): string | null =>
 const AIT_QUERIES = new Set(['AITControlledAppEngineFunction', 'AITTransferMethod', 'AITTransportMethod']);
 
 /**
- * getBrowserSupport (TR-B14 第二分冊 5.12.6)。`app` は Hybridcast のアプリを開けるか。
- * AIT の問い合わせは開けるときだけ 1 — 1 と答えて開かないと、放送のアプリは起動を待ったまま返らない
+ * getBrowserSupport (TR-B14 第二分冊 5.12.6)。`app` は電波の AIT にあるアプリを開けるか、`xml` は XML の AIT を
+ * 取りに行けるか (双方向がオン)。AIT の問い合わせは開けるときだけ 1 — 1 と答えて開かないと、放送のアプリは起動を待ったまま返らない。
+ * 運び方 (`AITTransportMethod`) は XML なら `xml`、それ以外 (電波の表) は `app` で答える
  */
-function browserSupport(provider: string, name: string, info: string[], ip: BmlIp, app: boolean): number {
+function browserSupport(
+    provider: string,
+    name: string,
+    info: string[],
+    ip: BmlIp,
+    app: boolean,
+    xml: boolean,
+): number {
     if (provider !== 'ARIB') return 0;
     const [a, b] = info;
     switch (name) {
@@ -158,7 +173,7 @@ function browserSupport(provider: string, name: string, info: string[], ip: BmlI
         }
         case 'APIGroup':
             if (a === 'Com.IP.confirmIP' || a === 'Com.IP.Transmit') return 1;
-            if (a === 'AITControlledApp.Start') return app ? 1 : 0;
+            if (a === 'AITControlledApp.Start') return app || xml ? 1 : 0;
             return a !== undefined && API_GROUPS.has(a) ? 1 : 0;
         case 'Storage':
             return a === 'cachesize' && Number(b) * 1024 <= 10 * 1024 * 1024 ? 1 : 0;
@@ -171,8 +186,10 @@ function browserSupport(provider: string, name: string, info: string[], ip: BmlI
         case 'TransmissionProtocol':
             return a === 'application' && (b === 'HTTP' || b === 'TLS') && ip.connected() ? 1 : 0;
         case 'AITControlledAppEngineFunction':
-        case 'AITTransferMethod':
+            return app || xml ? 1 : 0;
         case 'AITTransportMethod':
+            return (a === 'XML' ? xml : app) ? 1 : 0;
+        case 'AITTransferMethod':
             return app ? 1 : 0;
         case 'IRDID':
         case 'ResidentApp':
@@ -180,6 +197,17 @@ function browserSupport(provider: string, name: string, info: string[], ip: BmlI
             return 0;
     }
     return 0;
+}
+
+/**
+ * startAITControlledApp の引数から XML の AIT の URL を拾う。**http(s) の絶対 URL だけ** — 数 (organisation_id など) と
+ * 相対の名前は手がかりにしない (相対は何に対してかが決まっていない)
+ */
+function aitUri(args: Value[]): string | null {
+    for (const arg of args) {
+        if (typeof arg === 'string' && /^https?:\/\//i.test(arg)) return arg;
+    }
+    return null;
 }
 
 /** 文字列を `Denbun=` の形式に (付属2 7.10。英数と -_.!~*'() のほかは %XX) */
@@ -374,10 +402,11 @@ export function defineBrowser(host: BrowserHost): HostObject {
     });
     fn('isBeingBroadcast', () => false);
     const canStartApp = (): boolean => host.canStartApp?.() === true;
+    const canFetchAit = (): boolean => host.canFetchAit?.() === true;
     fn('getBrowserSupport', (args) => {
         const name = str(args, 1);
         const info = args.slice(2).map((a) => toStr(a));
-        const answer = browserSupport(str(args, 0), name, info, host.ip, canStartApp());
+        const answer = browserSupport(str(args, 0), name, info, host.ip, canStartApp(), canFetchAit());
         // Hybridcast について何を訊かれたかを残す (局が何を見て案内を出し分けているかが分かる)
         if (AIT_QUERIES.has(name) || (name === 'APIGroup' && info[0] === 'AITControlledApp.Start'))
             host.log(`getBrowserSupport(${[str(args, 0), name, ...info].join(', ')}) → ${answer}`);
@@ -449,14 +478,28 @@ export function defineBrowser(host: BrowserHost): HostObject {
     fail('vote');
     fail('setCacheResourceOverIP', 1);
 
-    // Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ (引数に URL があっても使わない)
+    /*
+     * Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ。**電波に AIT があればそちらを使い、引数の URL は使わない。**
+     * 電波に AIT が無い局 (NHK) では、引数の URL を XML の AIT として取り、そこにあるアプリを開く (`startAppFrom`)。
+     * どちらでも、アプリの行き先は AIT から決まる (文書が渡した URL のページをそのまま開くことはしない)
+     */
     fn('startAITControlledApp', (args) => {
         host.log(`startAITControlledApp(${args.map((a) => toStr(a)).join(', ')})`);
         const hint = args.map((a) => toNumber(a)).filter((n) => Number.isFinite(n));
-        return canStartApp() && host.startApp?.(hint) === true ? 1 : Number.NaN;
+        if (canStartApp()) return host.startApp?.(hint) === true ? 1 : Number.NaN;
+        const uri = aitUri(args);
+        return uri !== null && canFetchAit() && host.startAppFrom?.(uri, hint) === true ? 1 : Number.NaN;
     });
-    // AIT は denpa のサーバが選局したときから読んでいる。開けないなら失敗
-    fn('startReceivingAIT', () => (canStartApp() ? 1 : Number.NaN));
+    // AIT は denpa のサーバが選局したときから読んでいる (XML の AIT は起動のときに取る)。開けないなら失敗
+    fn('startReceivingAIT', (args) => {
+        host.log(`startReceivingAIT(${args.map((a) => toStr(a)).join(', ')})`);
+        return canStartApp() || canFetchAit() ? 1 : Number.NaN;
+    });
+    // 受け取った AIT を文書へ渡す形は確かめられていない。何を訊かれたかだけ残して、無いと答える
+    fn('getReceivedAIT', (args) => {
+        host.log(`getReceivedAIT(${args.map((a) => toStr(a)).join(', ')})`);
+        return null;
+    });
 
     // 動かさないもの (選局・予約・外のアプリ・ブックマーク)
     fn('epgTune', (args) => host.tune(str(args, 0)));
@@ -479,8 +522,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
     ]) {
         fail(name);
     }
-    for (const name of ['getReceivedAIT', 'readBookmarkArray', 'getBookmarkInfo', 'getBookmarkInfo2'])
-        fail(name, null);
+    for (const name of ['readBookmarkArray', 'getBookmarkInfo', 'getBookmarkInfo2']) fail(name, null);
     fn('getCCDisplayStatus', (args) => (toNumber(args[0]) === 1 ? 1 : 0));
     fn('getCCLanguageStatus', (args) => (toNumber(args[0]) === 1 ? 1 : 0));
     fn('getTuningLinkageSource', () => '');

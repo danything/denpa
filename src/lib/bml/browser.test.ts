@@ -29,7 +29,10 @@ interface Setup {
     run(source: string): Promise<Value>;
 }
 
-function setup(active = '/40/0000/startup.bml', app?: Pick<BrowserHost, 'canStartApp' | 'startApp'>): Setup {
+function setup(
+    active = '/40/0000/startup.bml',
+    app?: Pick<BrowserHost, 'canStartApp' | 'startApp' | 'canFetchAit' | 'startAppFrom'>,
+): Setup {
     const xml = parseXml(BML);
     if (xml === null) throw new Error();
     const doc = new BmlDocument(xml);
@@ -225,6 +228,40 @@ describe('browser.*', () => {
         ready = false;
         expect(items(await s.run(query))).toEqual([0, 0, Number.NaN, Number.NaN]);
         expect(hints).toHaveLength(1);
+    });
+
+    /*
+     * **電波に AIT を載せない局** (NHK)。文書は XML の AIT を HTTP で取れるかを訊き、起動のときに AIT の URL を渡してくる。
+     * 双方向がオンなら、電波に AIT が無くても開ける
+     */
+    test('電波に AIT が無くても、XML の AIT を取れるなら問い合わせに 1 と答え、渡された AIT の URL から開く', async () => {
+        const opened: [string, number[]][] = [];
+        let online = true;
+        const s = setup(undefined, {
+            canStartApp: () => false,
+            canFetchAit: () => online,
+            startAppFrom: (uri, hint) => {
+                opened.push([uri, hint]);
+                return true;
+            },
+        });
+        const query = `
+            var result = [
+                browser.getBrowserSupport("ARIB", "APIGroup", "AITControlledApp.Start"),
+                browser.getBrowserSupport("ARIB", "AITControlledAppEngineFunction", "IPTV-F", "HTML5_ph0"),
+                browser.getBrowserSupport("ARIB", "AITTransportMethod", "XML", "HTTP"),
+                browser.getBrowserSupport("ARIB", "AITTransferMethod", "section"),
+                browser.startAITControlledApp(16, 1, "https://hc.example.jp/ait.xml"),
+                browser.startAITControlledApp(16, 1)
+            ];
+        `;
+        // 電波の表で運ぶ方法は無いと答える。URL を渡されなければ開けない
+        expect(items(await s.run(query))).toEqual([1, 1, 1, 0, 1, Number.NaN]);
+        expect(opened).toEqual([['https://hc.example.jp/ait.xml', [16, 1]]]);
+        // 双方向がオフなら、どれも無い
+        online = false;
+        expect(items(await s.run(query))).toEqual([0, 0, 0, 0, Number.NaN, Number.NaN]);
+        expect(opened).toHaveLength(1);
     });
 
     test('getBrowserStatus の IRDState は、出している文書が放送か通信かで Broadcast と Link が分かれる', async () => {

@@ -94,9 +94,14 @@ export interface BmlOptions {
     /**
      * Hybridcast (startAITControlledApp)。**開くのは呼び手** — `ready` は開けるか (双方向がオンで、
      * AIT にアプリがある)、`start` は開く (開けたら true)。`hint` は文書が渡した数 (どのアプリかの
-     * 手がかり)。無ければ AIT の問い合わせに 0 と答え、起動は失敗を返す
+     * 手がかり)。無ければ AIT の問い合わせに 0 と答え、起動は失敗を返す。
+     * `startFrom` は文書が XML の AIT の URL を渡したとき (電波に AIT が無い局。`browser.ts` の `canFetchAit`)
      */
-    hybridcast?: { ready(): boolean; start(hint: number[]): boolean };
+    hybridcast?: {
+        ready(): boolean;
+        start(hint: number[]): boolean;
+        startFrom?(uri: string, hint: number[]): boolean;
+    };
     log?: (message: string) => void;
     /** ページを握る長さの決まり (既定は [budget.ts](budget.ts) の DEFAULT_BUDGET。テストで縮める) */
     budget?: Partial<BudgetLimits>;
@@ -1068,6 +1073,14 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
     startApp(hint: number[]): boolean {
         return this.canStartApp() && this.options.hybridcast?.start(hint) === true;
+    }
+
+    canFetchAit(): boolean {
+        return !this.destroyed && this.ip.connected() && this.options.hybridcast?.startFrom !== undefined;
+    }
+
+    startAppFrom(uri: string, hint: number[]): boolean {
+        return this.canFetchAit() && this.options.hybridcast?.startFrom?.(uri, hint) === true;
     }
 
     activeDocument(): string | null {

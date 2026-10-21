@@ -1102,7 +1102,13 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
   (`AITControlledAppEngineFunction`・`AITTransferMethod`・`AITTransportMethod`・APIGroup の
   `AITControlledApp.Start`) に 0 と答え、`startAITControlledApp` は失敗を返す (行き先のボタンだけが残る)。
   **開けないのに 1 と答えてはいけません** — BML が起動を求めてきて、そのまま返らなくなります
-- **開くのは AIT にある行き先だけ。** 文書が渡した引数に URL があっても使いません。数の引数は
+- **電波に AIT を載せない局もある** (NHK)。PMT に印が無く、データ放送が `AITTransportMethod` の XML・HTTP を訊いてくる。
+  双方向がオンならこれと `AITControlledAppEngineFunction`・`AITControlledApp.Start` に 1 と答え
+  (電波の表で運ぶ `AITTransferMethod` は 0)、`startAITControlledApp` に渡された http(s) の URL を XML の AIT として
+  中継で取り、そこにあるアプリを開く (`hybridcast/xml-ait.ts`。ETSI TS 102 809 の形)。文書には取りに行き始めた時点で 1 を返す。
+  取れなかったときは `[bml] XML の AIT を読めませんでした` をコンソールに出して、データ放送のまま
+- **開くのは AIT にある行き先だけ。** 電波に AIT があれば、文書が渡した引数に URL があっても使いません
+  (XML の AIT の URL として使うのは、電波に AIT が無いときだけ。その場合も開くのは XML の AIT にある行き先)。数の引数は
   どのアプリかの手がかり (organisation_id と application_id が合うもの → application_id が合うもの →
   autostart のもの → 先頭)
 - 何を訊かれたか (`getBrowserSupport` の AIT の問い合わせと `startAITControlledApp` の引数) はブラウザの

@@ -49,6 +49,7 @@
     import type { Bml, BmlIp, Rect, Service } from '#lib/bml/engine.js';
     import { type Plane, planeArea } from '#lib/bml/plane.js';
     import { type FrameMessage, type HcState, VIEWPORT } from '#lib/hybridcast/app.js';
+    import { parseXmlAit } from '#lib/hybridcast/xml-ait.js';
     import { read, write } from '#lib/keep.js';
     import type { HybridcastLink } from '#lib/live.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
@@ -160,12 +161,12 @@
      * どのアプリを開くか。文書が渡した数に organisation_id と application_id が両方あればそれ、
      * application_id だけ合うものがあればそれ、無ければ AIT の先頭 (autostart を先に)
      */
-    function pickApp(hint: number[]): HybridcastLink | null {
+    function pickApp(hint: number[], from: HybridcastLink[] = apps): HybridcastLink | null {
         return (
-            apps.find((a) => hint.includes(a.organisationId) && hint.includes(a.applicationId)) ??
-            apps.find((a) => hint.includes(a.applicationId)) ??
-            apps.find((a) => a.autostart) ??
-            apps[0] ??
+            from.find((a) => hint.includes(a.organisationId) && hint.includes(a.applicationId)) ??
+            from.find((a) => hint.includes(a.applicationId)) ??
+            from.find((a) => a.autostart) ??
+            from[0] ??
             null
         );
     }
@@ -173,6 +174,34 @@
     function startApp(hint: number[]): boolean {
         const app = pickApp(hint);
         if (app === null) return false;
+        openApp(app);
+        return true;
+    }
+
+    /**
+     * XML の AIT から開く (電波に AIT が無い局。`bml/browser.ts` の `startAppFrom`)。**取りに行き始めたら true** —
+     * 文書には待たずに答え、届いたら開く。取れない・開けるアプリが無いときは、何を読もうとしたかをコンソールに残してデータ放送のまま
+     */
+    function startAppFrom(uri: string, hint: number[]): boolean {
+        if (!network) return false;
+        void (async () => {
+            try {
+                const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(uri)}`));
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const app = pickApp(hint, parseXmlAit(await response.text()));
+                if (app === null) throw new Error('開けるアプリがありません');
+                // 閉じたあとに届いたら開かない
+                if (engine === null) return;
+                console.warn(`[bml] XML の AIT から開きます: ${app.url}`);
+                openApp(app);
+            } catch (failure) {
+                console.warn(`[bml] XML の AIT を読めませんでした: ${uri} (${failure})`);
+            }
+        })();
+        return true;
+    }
+
+    function openApp(app: HybridcastLink): void {
         // 同じアプリなら開き直さない (文書が何度も呼んでくることがある)。別のアプリなら替える
         if (running?.url !== app.url) {
             running = app;
@@ -183,7 +212,6 @@
             engine?.releaseKeys();
             place();
         }
-        return true;
     }
 
     /** アプリを閉じてデータ放送へ戻る */
@@ -619,7 +647,7 @@
             // 選局は画面に任せる (エンジンは「この局へ」と言うだけ)
             onTune: (service) => tune?.(service) ?? false,
             // Hybridcast。双方向がオフなら開かない (エンジンも問い合わせに「無い」と答える)
-            hybridcast: { ready: () => network && apps.length > 0, start: startApp },
+            hybridcast: { ready: () => network && apps.length > 0, start: startApp, startFrom: startAppFrom },
             log: (message) => console.warn(`[bml] ${message}`),
         });
         engine = made;
