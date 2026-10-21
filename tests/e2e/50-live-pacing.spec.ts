@@ -12,9 +12,14 @@ import { expect, goto, pickCodec, syncEpg, test, wakeControls } from './helpers'
  */
 
 /** 貯まり (`buffered.end - currentTime`) と貯めようとしている量を、再生が落ち着いてから記録し始める */
-async function watch(page: Page, rough: string, stack: { liveFmp4File: string }): Promise<void> {
+async function watch(
+    page: Page,
+    rough: string,
+    stack: { liveFmp4File: string },
+    path = '/live',
+): Promise<void> {
     writeFileSync(stack.liveFmp4File, rough);
-    await goto(page, '/live');
+    await goto(page, path);
     await page.getByTestId('live-channel').first().click();
     await expect(page.getByTestId('live-title')).toBeVisible();
     await wakeControls(page, 'live-frame');
@@ -111,6 +116,42 @@ test.describe('ライブの貯め方', () => {
         // 画面に出す数で、届き方のせいだと分かる
         expect(watched.gap).toBeGreaterThanOrEqual(0.6);
     });
+
+    /*
+     * **Safari は速さを変えるたびにつまずく** (#1210。`pacing.ts` の `Steering`)。荒れた届き方で、
+     * `?steer=off` なら一度も速さを変えないこと、WebKit なら遅くしないことを見る
+     * (WebKit は `--browser=webkit` で手元だけ)
+     */
+    for (const off of [false, true]) {
+        test(`荒れた届き方で、${off ? '?steer=off なら速さを変えない' : 'WebKit なら遅くしない'}`, async ({
+            page,
+            stack,
+            browserName,
+        }) => {
+            test.skip(!off && browserName !== 'webkit', 'WebKit だけの寄せ方');
+            test.setTimeout(120_000);
+            await page.addInitScript(() => {
+                const scope = window as unknown as { __rates: number[] };
+                scope.__rates = [];
+                document.addEventListener(
+                    'ratechange',
+                    (event) => scope.__rates.push((event.target as HTMLVideoElement).playbackRate),
+                    true,
+                );
+            });
+            await watch(
+                page,
+                JSON.stringify({ gapEvery: [4, 6], gapMs: [500, 700] }),
+                stack,
+                off ? '/live?steer=off' : '/live',
+            );
+            await page.waitForTimeout(40_000);
+            const rates = await page.evaluate(() => (window as unknown as { __rates: number[] }).__rates);
+            writeFileSync(`test-results/live-rates-${off ? 'off' : browserName}.json`, JSON.stringify(rates));
+            if (off) expect(rates.filter((r) => r !== 1)).toEqual([]);
+            else expect(Math.min(1, ...rates)).toBe(1);
+        });
+    }
 });
 
 interface Joined {

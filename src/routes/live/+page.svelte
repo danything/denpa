@@ -673,6 +673,16 @@
                                     ・ <span>映像の遅れを補正 {player.slips}回</span>
                                 {/if}
                                 <!--
+                                    **再生の速さ。** 遅延を詰めるのに少し速めたり遅くしたりしている。
+                                    Safari は変えるたびにつまずくので、補正やコマ落ちと並べて見る
+                                    (`ts/pacing.ts` の `Steering`。#1210)
+                                -->
+                                {#if player.rateChanges > 0}
+                                    ・ <span data-testid="live-rate"
+                                        >{player.rate === 1 ? '' : `速さ ${player.rate}倍 ・ `}速さを変えた回数 {player.rateChanges}回</span
+                                    >
+                                {/if}
+                                <!--
                                     **MPEG-2 を1コマデコードするのに掛かっている時間。** 1コマ (33ms) の 8 割を
                                     5 秒超え続けたらエンコードしたものに戻る (`raw/budget.ts`)。
                                     戻る前に余裕がどれだけあるかを読むため

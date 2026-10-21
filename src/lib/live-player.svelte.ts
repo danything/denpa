@@ -40,7 +40,20 @@ import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
 import { type Cue, currentCue, insertCue, showing, trimCues } from '#lib/ts/captions.js';
 import { KeyGate } from '#lib/ts/key-gate.js';
 import { pickMediaSource } from '#lib/ts/media-source.js';
-import { CEILING, cover, Extreme, FLOOR, GAP_MOST, GAP_WINDOW, nextTarget, pacing } from '#lib/ts/pacing.js';
+import {
+    CEILING,
+    cover,
+    Extreme,
+    FIXED,
+    FLOOR,
+    GAP_MOST,
+    GAP_WINDOW,
+    nextTarget,
+    pacing,
+    SMOOTH,
+    STEADY,
+    type Steering,
+} from '#lib/ts/pacing.js';
 import { CLOCK } from '#lib/ts/pes.js';
 import { resolve } from '$app/paths';
 
@@ -224,6 +237,19 @@ function rememberFloor(seconds: number): void {
  */
 function clearFloor(): void {
     forget(FLOOR_KEY);
+}
+
+/**
+ * 速さの寄せ方 (`ts/pacing.ts` の `Steering`)。**Safari (Apple の WebKit) だけ、速さを触る回数を減らす** (`STEADY`)。
+ * iPad と iPhone はどのブラウザも中身が WebKit なので、ここに入る。
+ *
+ * **URL に `?steer=off` を付けると、ライブで速さを変えない** (`FIXED`)。速さを変えるのが乱れの元かを
+ * 確かめるためだけのもので、⚙ には出さない (#1210)
+ */
+function chooseSteering(): Steering {
+    if (typeof location === 'undefined') return SMOOTH;
+    if (new URLSearchParams(location.search).get('steer') === 'off') return FIXED;
+    return navigator.vendor === 'Apple Computer, Inc.' ? STEADY : SMOOTH;
 }
 
 export interface LivePlayerOptions {
@@ -510,6 +536,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     let slip = $state(0);
     /** 飛び直した回数。**画面に出す** — 直し続けているなら、まだ足りていない */
     let slips = $state(0);
+    /** 速さの寄せ方 (`chooseSteering`) */
+    const steering = chooseSteering();
+    /**
+     * 選局してから再生の速さを変えた回数。**画面に出す** — Safari は変えるたびにつまずく
+     * (`ts/pacing.ts` の `Steering`) ので、補正やコマ落ちの数と並べて見る (#1210)
+     */
+    let rateChanges = $state(0);
+    /** いまの再生の速さ。**画面に出す** (等速でないときだけ) */
+    let rate = $state(1);
     /**
      * サーバが受け取った時刻と、エンコードしたものの物差しの対応 (`clock` の通知)。
      * **届くまでは null** — 画面は届いてから出す
@@ -1021,6 +1056,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             low: lows.peek(performance.now() / 1000) ?? undefined,
             dip: dipNow(),
             rate: video.playbackRate,
+            steering,
         });
 
         /*
@@ -1036,7 +1072,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             quiet = Date.now() + GRACE;
             lows.clear();
         }
-        if (next.rate !== null) video.playbackRate = next.rate;
+        if (next.rate !== null) steerTo(video, next.rate);
+        // 読み直すと 1 に戻るので、入れた値ではなく今の値を出す
+        rate = video.playbackRate;
         if (next.play && !running && canStart(video)) {
             running = true;
             state = 'playing';
@@ -1044,6 +1082,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             // 1枚映ってから前のフレームを剥がす。ここで剥がすと一瞬黒くなる
             onFrame(video, thaw);
         }
+    }
+
+    /**
+     * ライブの速さを変える。**同じ値は入れ直さない** — `pacing` は寄せ終わっても 1 を返し続ける。
+     * 変えたら数える (`rateChanges`。追っかけで選んだ速さは数えない)
+     */
+    function steerTo(video: HTMLVideoElement, next: number): void {
+        if (video.playbackRate === next) return;
+        video.playbackRate = next;
+        if (!chasing) rateChanges++;
     }
 
     /**
@@ -1438,6 +1486,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         position = 0;
         slip = 0;
         slipMost = 0;
+        rateChanges = 0;
         enoughAt = 0;
         // 作り直すと元の数も 0 から数え直す。いまの値を起点にして、前の局のぶんを持ち越さない
         dropped = 0;
@@ -2589,6 +2638,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         /** 映像の遅れを直すために飛び直した回数 */
         get slips() {
             return slips;
+        },
+        /** いまの再生の速さ */
+        get rate() {
+            return rate;
+        },
+        /** 選局してから、ライブで再生の速さを変えた回数 */
+        get rateChanges() {
+            return rateChanges;
         },
         /** 押して止めているか */
         get paused() {

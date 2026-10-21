@@ -4,6 +4,7 @@ import {
     CEILING,
     cover,
     Extreme,
+    FIXED,
     FLOOR,
     GAP_MOST,
     GAP_WINDOW,
@@ -12,6 +13,7 @@ import {
     pacing,
     SETTLED,
     SLOW_DOWN,
+    STEADY,
     speedLabel,
     steer,
     stepSpeed,
@@ -449,6 +451,39 @@ describe('steer', () => {
     });
     test('境目の間で等速なら、そのまま', () => {
         expect(steer(t * 1.3, t, 1)).toBeNull();
+    });
+});
+
+/**
+ * **Safari は速さを変えるたびにつまずく** (#1210)。遅くせず、余裕があるときだけ速め、戻すのも余裕のあるうちに
+ */
+describe('steer (STEADY)', () => {
+    const t = 0.5;
+    test('狙いを割っても遅くしない', () => {
+        expect(steer(t * 0.5, t, 1, STEADY)).toBe(1);
+        expect(steer(0, t, 1, STEADY)).toBe(1);
+    });
+    test('狙いより 1 秒多く貯まるまで速めない', () => {
+        expect(steer(t + 0.99, t, 1, STEADY)).toBeNull();
+        expect(steer(t + 1.01, t, 1, STEADY)).toBe(CATCH_UP);
+    });
+    test('速めている間は、狙いの 1.3 倍まで下りたら等速に戻す', () => {
+        expect(steer(t * 1.4, t, CATCH_UP, STEADY)).toBeNull();
+        expect(steer(t * 1.3, t, CATCH_UP, STEADY)).toBe(1);
+    });
+    test('pacing にも効く', () => {
+        expect(at({ end: 100 + FLOOR * 1.4, low: FLOOR * 0.5, steering: STEADY }).rate).toBe(1);
+    });
+});
+
+describe('steer (FIXED)', () => {
+    test('ライブでは速さを変えない。速めていたら等速に戻す', () => {
+        expect(steer(5, 0.5, 1, FIXED)).toBe(1);
+        expect(steer(0, 0.5, 1, FIXED)).toBe(1);
+        expect(steer(0.5, 0.5, CATCH_UP, FIXED)).toBe(1);
+    });
+    test('追っかけの速さはそのまま', () => {
+        expect(at({ end: 100 + 300, chasing: true, speed: 1.5, steering: FIXED }).rate).toBe(1.5);
     });
 });
 

@@ -148,6 +148,8 @@ export interface Buffered {
     dip?: number;
     /** いまの再生の速さ。省けば 1。**速めているのか遅くしているのかで、戻す境目が違う** (`steer`) */
     rate?: number;
+    /** 速さの寄せ方。省けば `SMOOTH` (`Steering`) */
+    steering?: Steering;
 }
 
 export interface Pacing {
@@ -187,6 +189,7 @@ export function pacing({
     low,
     dip,
     rate,
+    steering,
 }: Buffered): Pacing {
     // 範囲の外にいる。チャンネルを変えた直後もここを通る
     if (at < start || at > end) return { seek: start, play: false, rate: 1, caught: false };
@@ -210,30 +213,71 @@ export function pacing({
     if (lag > target + JUMP) return { seek: end - target, play: true, rate: 1, caught: false };
     // 少し離れた・少し足りない。速さで寄せる。飛ばないので音は切れない
     const level = low === undefined ? lag : low + (dip ?? 0);
-    return { seek: null, play: true, rate: steer(level, target, rate), caught: false };
+    return { seek: null, play: true, rate: steer(level, target, rate, steering), caught: false };
 }
+
+/**
+ * 速さの寄せ方。**ブラウザによっては、速さを変えること自体が乱れになる。**
+ *
+ * Safari (Apple の WebKit) は再生中に `playbackRate` を変えるたびに、音と映像が 90ms ほどつまずく
+ * ([WebKit bug 163433](https://bugs.webkit.org/show_bug.cgi?id=163433)、2016年から直っていない)。
+ * 実機の iPad では、貯まりが狙いを割って遅くした瞬間にコマが落ち、映像の遅れの補正が続いていた (#1210)。
+ * dash.js も Safari では 0.25 より小さく速さを変えない。hls.js は遅くせず、1秒より多く貯まっているときだけ速める
+ */
+export interface Steering {
+    /** 狙いを割ったら少し遅くするか (`SLOW_DOWN`) */
+    slowDown: boolean;
+    /** 速め始める貯まり = 狙い × これ + `catchUpPad` */
+    catchUpRatio: number;
+    /** 速め始める貯まりに足す量 (秒) */
+    catchUpPad: number;
+    /** 速めていたのを、狙いの何倍まで下りたら等速に戻すか */
+    settleRatio: number;
+}
+
+/** 速さを細かく動かせるブラウザ。止まる前に遅くし、少し多ければすぐ詰める */
+export const SMOOTH: Steering = { slowDown: true, catchUpRatio: 1.5, catchUpPad: 0, settleRatio: 1.1 };
+
+/**
+ * 速さを変えるとつまずくブラウザ (Safari)。**変える回数を減らし、変えるのは余裕があるときだけ。**
+ *
+ * - 遅くしない。止まりそうなときの守りは、届く間隔を覆う高さまで貯めること (`cover`) と、止まったら伸ばすこと (`nextTarget`) に任せる
+ * - 狙いより 1 秒多く貯まるまで速めない (hls.js と同じ考え方)。1回詰めるごとに上げ下げで2回つまずくので、詰める回数を減らす
+ * - 戻すのは狙いの 1.3 倍。戻すときのつまずきを、貯まりに余裕があるうちに済ませる
+ *
+ * 速める幅は変えない。つまずくのは変えた回数ぶんで、幅を大きくしても上げ下げの2回は減らない
+ */
+export const STEADY: Steering = { slowDown: false, catchUpRatio: 1, catchUpPad: 1, settleRatio: 1.3 };
+
+/** 速さを変えない。**確かめるためだけ** (live-player の `chooseSteering`)。追っかけの速さはそのまま */
+export const FIXED: Steering = {
+    slowDown: false,
+    catchUpRatio: Number.POSITIVE_INFINITY,
+    catchUpPad: 0,
+    settleRatio: Number.POSITIVE_INFINITY,
+};
 
 /**
  * 速さを決める。**貯まり (届く直前の低いところ + 届く間隔。`pacing` の `low`) を狙いに寄せる。**
  *
- * - 狙いの 1.5 倍より多い … 速めて詰める (`CATCH_UP`)。**幅を狭く採る。** 2.5倍まで
+ * - 速め始める貯まりより多い … 速めて詰める (`CATCH_UP`)。`SMOOTH` は狙いの 1.5 倍。**幅を狭く採る。** 2.5倍まで
  *   放っておいた頃は、実機で 0.4 秒を狙って 0.70 秒に居着いていた — 始めた直後は
  *   必ず狙いより溜まる (再生を指示してから実際に映像が出るまでの間にも届く) ので、
  *   放っておくとそこから下りてこない
- * - 狙いを割った … 少し遅くして貯め直す (`SLOW_DOWN`)。止まってから伸ばすより先に効く
+ * - 狙いを割った … 少し遅くして貯め直す (`SLOW_DOWN`)。止まってから伸ばすより先に効く。`STEADY` では遅くしない
  * - 遅くしていたなら、狙いに戻ったところですぐ等速に戻す (遅延を足すのは足りない間だけ)
- * - 速めていたなら、狙いの 1.1 倍まで下りたところで等速に戻す。**その間は今のまま** (境目で戻すと、速める・戻すを往復する)
+ * - 速めていたなら、狙いの 1.1 倍 (`settleRatio`) まで下りたところで等速に戻す。**その間は今のまま** (境目で戻すと、速める・戻すを往復する)
  *
  * @param low 貯まり (秒)
  * @param rate いまの速さ
  * @returns 次の速さ。null は今のまま
  */
-export function steer(low: number, target: number, rate = 1): number | null {
-    if (low > target * 1.5) return CATCH_UP;
-    if (low < target) return SLOW_DOWN;
+export function steer(low: number, target: number, rate = 1, steering: Steering = SMOOTH): number | null {
+    if (low > target * steering.catchUpRatio + steering.catchUpPad) return CATCH_UP;
+    if (steering.slowDown && low < target) return SLOW_DOWN;
     // 遅くしていたなら、狙いに戻ったところでやめる (遅延を足すのは足りない間だけ)
     if (rate < 1) return 1;
-    return low <= target * 1.1 ? 1 : null;
+    return low <= target * steering.settleRatio ? 1 : null;
 }
 
 /**
