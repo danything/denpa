@@ -45,7 +45,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 # 照らし、合うときだけ immutable にする (src/lib/server/font.ts)。
 # 段を分けてあるのは、本番イメージと画像を撮るイメージ (下の `docs` 段) の両方に同じものを置くため
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS denpa-font
+FROM docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS denpa-font
 # renovate: datasource=github-releases depName=danything/denpa-font
 ARG DENPA_FONT_VERSION=v3.4
 ADD --chmod=644 https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/SHA256SUMS \
@@ -109,7 +109,7 @@ CMD ["bun", "scripts/capture-docs.ts"]
 # タグ (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
 # その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
-FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS ffmpeg
+FROM docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS ffmpeg
 SHELL ["/bin/bash", "-c"]
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 と arm64 を別の機械で。QEMU で
 # ffmpeg を組むと何倍も掛かる)。digest は複数 arch の索引を指しているので、上の FROM は
@@ -213,7 +213,7 @@ FROM gcr.io/distroless/cc-debian13:latest AS distroless
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
 # i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS runtime-libs
+FROM docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS runtime-libs
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
