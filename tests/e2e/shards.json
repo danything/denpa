@@ -24,7 +24,8 @@
         "27-encode-cancel",
         "32-chase-api",
         "41-watch-compat-local",
-        "43-raw-cadence"
+        "43-raw-cadence",
+        "51-live-gaps"
     ],
     "3": [
         "09-behaviour",
@@ -37,7 +38,15 @@
         "34-live-yield",
         "46-home-timeline"
     ],
-    "4": ["01-dashboard", "02-reservation", "11-rule-edit", "15-scramble", "17-logo", "39-watch-stream"],
+    "4": [
+        "01-dashboard",
+        "02-reservation",
+        "11-rule-edit",
+        "15-scramble",
+        "17-logo",
+        "39-watch-stream",
+        "50-live-pacing"
+    ],
     "5": [
         "04-external-delete",
         "05-rules",
@@ -47,6 +56,9 @@
         "30-api",
         "38-live-compat",
         "44-ambient",
-        "47-search-rule"
+        "47-search-rule",
+        "46-search",
+        "48-link-hover",
+        "49-guide-skeleton"
     ]
 }
