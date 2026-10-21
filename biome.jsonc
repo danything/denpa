@@ -1,5 +1,5 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+    "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
     "files": {
         "includes": [
             "**",
@@ -11,6 +11,11 @@
             "!deploy",
             "!docs",
             "!.github",
+            // 2.6 から YAML と Markdown も読むようになった。Helm のテンプレート (charts) は YAML として読めず、
+            // compose や文書は今まで整えていなかった。今までどおり JS/TS・CSS・JSON・Svelte だけを見る
+            "!**/*.yaml",
+            "!**/*.yml",
+            "!**/*.md",
             // drizzle-kit が出すマイグレーション (SQL と snapshot の JSON)。手では触らない
             "!drizzle",
             "!renovate.json",
@@ -53,6 +58,12 @@
                 "useMediaCaption": "off",
                 // 行そのものを押せるようにしていて、中にも押せるものが入っている。<button> は入れ子にできない
                 "useSemanticElements": "off"
+            },
+            "correctness": {
+                // 自前の describe() (値や状態を言葉にする関数) を Playwright の describe と取り違える
+                "usePlaywrightValidDescribeCallback": "off",
+                // 行ごとの数がそろっていても、行を分けて書いた grid-template-areas を「数が合わない」と言う (2.6.2。Tuners.svelte)
+                "noInvalidGridAreas": "off"
             },
             "suspicious": {
                 // 覚えた局はサーバが SSR で読む。Cookie Store API では渡らない
