@@ -41,6 +41,12 @@ export interface ShimInit {
     /** 受信機の記憶 (このアプリのぶん) */
     storage: Record<string, string>;
     state: HcState;
+    /**
+     * **http のアプリを denpa の https 越しに読ませる中継** (`server/hc-relay.ts`)。https のアプリなら null。
+     * `root` は中継の頭 (絶対 URL。末尾は /)、`origin` はアプリの配信元 (http://host)。`<base>` と HTML の中の
+     * 配信元の URL は `prepareApp` が中継へ書き換え、後から作られる要素の URL はここで書き換える
+     */
+    relay: { root: string; origin: string } | null;
 }
 
 export function shim(init: ShimInit): void {
@@ -61,6 +67,50 @@ export function shim(init: ShimInit): void {
     };
     let state = init.state;
 
+    // ---- http のアプリの中継 (`ShimInit.relay`) ----
+    const relayRoot = init.relay === null ? null : init.relay.root;
+    const relayFrom = init.relay === null ? null : `${init.relay.origin}/`;
+    /** 配信元の URL を中継へ (読み込み用)。ほかはそのまま */
+    const toRelay = (url: string): string =>
+        relayRoot !== null && relayFrom !== null && url.startsWith(relayFrom)
+            ? relayRoot + url.slice(relayFrom.length)
+            : url;
+    /** 中継の URL を配信元へ戻す (通信は親が中継で取るので、元の行き先を渡す) */
+    const toOrigin = (url: string): string =>
+        relayRoot !== null && relayFrom !== null && url.startsWith(relayRoot)
+            ? relayFrom + url.slice(relayRoot.length)
+            : url;
+    if (relayRoot !== null) {
+        // 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る
+        const watched = ['src', 'href', 'data', 'poster'];
+        const setAttribute = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+            const lower = String(name).toLowerCase();
+            return setAttribute.call(this, name, watched.includes(lower) ? toRelay(String(value)) : value);
+        };
+        for (const [Kind, name] of [
+            [w.HTMLScriptElement, 'src'],
+            [w.HTMLImageElement, 'src'],
+            [w.HTMLLinkElement, 'href'],
+            [w.HTMLMediaElement, 'src'],
+            [w.HTMLSourceElement, 'src'],
+        ] as [{ prototype: object }, string][]) {
+            const own = Object.getOwnPropertyDescriptor(Kind.prototype, name);
+            if (own === undefined || own.set === undefined || own.get === undefined) continue;
+            const { get, set } = own;
+            Object.defineProperty(Kind.prototype, name, {
+                configurable: true,
+                enumerable: own.enumerable === true,
+                get(this: object) {
+                    return toOrigin(String(get.call(this)));
+                },
+                set(this: object, value: unknown) {
+                    set.call(this, toRelay(new URL(String(value), document.baseURI).href));
+                },
+            });
+        }
+    }
+
     // ---- 通信 (親へ渡す) ----
     let nextId = 1;
     const waiting = new Map<number, (reply: Record<string, unknown>) => void>();
@@ -76,7 +126,7 @@ export function shim(init: ShimInit): void {
     const NativeResponse = w.Response as typeof Response;
     w.fetch = async (input: unknown, options?: RequestInit): Promise<Response> => {
         const request = input instanceof w.Request ? (input as Request) : null;
-        const url = new URL(request !== null ? request.url : String(input), document.baseURI).href;
+        const url = toOrigin(new URL(request !== null ? request.url : String(input), document.baseURI).href);
         const method = String(options?.method ?? request?.method ?? 'GET').toUpperCase();
         const headers = new Headers(options?.headers ?? request?.headers);
         let body: ArrayBuffer | null = null;

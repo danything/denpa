@@ -1113,6 +1113,15 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
   autostart のもの → 先頭)
 - 何を訊かれたか (`getBrowserSupport` の AIT の問い合わせと `startAITControlledApp` の引数) はブラウザの
   コンソールに `[bml]` で出します。局が何を見て案内を出し分けているかを見るためです
+- **http のアプリは denpa を通して読ませる** (`server/hc-relay.ts`)。NHK のアプリは `http://hc.nhk.or.jp/` にあり、
+  そこは https に応じないので、https の画面からは script が Mixed Content として止められる。開くときに合言葉をもらい
+  (`POST /api/bml/hc`。ログインした人だけ)、`<base>` と HTML に直に書かれた配信元の URL を `/api/bml/hc/<合言葉>/…`
+  へ書き換える。後から作られる要素の URL は差し込みが書き換え、fetch・XHR は元の行き先に戻して今までどおり中継で取る。
+  - 中継はログインを見ない (使い捨てのオリジンの iframe からの読み込みには cookie が付かない)。合言葉は推測できない乱数で、
+    配信元 1 つに結びつき、6 時間で切れる
+  - 取り方の決まりは `/api/bml/proxy` と同じ。返すものには `sandbox` の CSP と `nosniff` を付け、直に開かれても
+    denpa のオリジンの文書にしない
+  - https のアプリは今までどおり元のサーバから直に読む
 
 ### 画面
 

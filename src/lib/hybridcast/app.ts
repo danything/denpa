@@ -62,6 +62,15 @@ export function prepareApp(html: string, init: ShimInit): string {
             // 読めない <base> は使わない
         }
     }
+    /*
+     * **http のアプリは中継を通す** (`ShimInit.relay`)。`<base>` と、HTML に直に書かれた配信元の URL を中継へ。
+     * script が後から作る要素の URL は差し込みが書き換え、通信 (fetch・XHR) は差し込みが元の行き先へ戻して親へ渡す
+     */
+    if (init.relay !== null) {
+        const from = `${init.relay.origin}/`;
+        if (base.startsWith(from)) base = init.relay.root + base.slice(from.length);
+        html = html.split(from).join(init.relay.root);
+    }
     // </script> で差し込みが切れないように (JSON の中の < は < に)
     const data = JSON.stringify(init).replace(/</g, '\\u003c');
     const inject = `<base href="${attribute(base)}"><script>(${shim.toString()})(${data});</script>`;

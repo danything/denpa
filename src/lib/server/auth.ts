@@ -35,6 +35,9 @@ import { enabled as oidcEnabled } from './oidc';
  * - **ペアリングコードとアクセストークンの受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
  *   まだ何の資格も持っていない。コードを出すだけでは入れず、許すのは `/device` (ここは守る)。
  *   誰でも呼べるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
+ * - **http の Hybridcast のアプリの中継** (`/api/bml/hc/<合言葉>/…`)。アプリは使い捨てのオリジンの iframe にいて、
+ *   そこからの読み込みにはログインの cookie が付かない。推測できない合言葉が許可証で、出すのはログインした人にだけ
+ *   (`POST /api/bml/hc`。hc-relay.ts)
  */
 const OPEN_PATHS = [
     /^\/login(\/|$)/,
@@ -42,6 +45,7 @@ const OPEN_PATHS = [
     /^\/api\/health$/,
     /^\/manifest\.webmanifest$/,
     /^\/api\/device\/(code|token)$/,
+    /^\/api\/bml\/hc\/[0-9a-f]{32}\//,
 ];
 
 export function isOpenPath(pathname: string): boolean {

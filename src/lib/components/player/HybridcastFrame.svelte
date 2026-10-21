@@ -92,12 +92,30 @@
                 applicationId: app.applicationId,
                 storage: remembered(),
                 state: $state.snapshot(hc),
+                relay: await relayFor(app.url),
             });
             hand();
         } catch (failure) {
             console.warn(`[hybridcast] アプリを取得できません: ${app.url} (${String(failure)})`);
             phase = 'failed';
         }
+    }
+
+    /**
+     * **http のアプリは denpa の https 越しに読ませる** (`server/hc-relay.ts`)。https の画面から http の script は
+     * Mixed Content として止められる (NHK のアプリは http にしか無い)。https のアプリには要らない (null)
+     */
+    async function relayFor(url: string): Promise<{ root: string; origin: string } | null> {
+        const target = new URL(url);
+        if (target.protocol !== 'http:' || location.protocol !== 'https:') return null;
+        const response = await fetch(resolve('api/bml/hc'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        if (!response.ok) throw new Error(`中継を用意できません (${response.status})`);
+        const { root } = (await response.json()) as { root: string | null };
+        return root === null ? null : { root: new URL(resolve(root as '/'), location.href).href, origin: target.origin };
     }
 
     /** アプリの通信を中継へ。中継が断った・相手まで行けなかったら error */

@@ -7,6 +7,7 @@ const INIT: ShimInit = {
     applicationId: 1,
     storage: { a: '</script><script>alert(1)</script>' },
     state: { program: null, serviceName: '', captions: true },
+    relay: null,
 };
 
 describe('prepareApp', () => {
@@ -32,6 +33,26 @@ describe('prepareApp', () => {
         const html = prepareApp('<head></head>', INIT);
         // 差し込みの </script> は最後の 1 つだけ
         expect(html.match(/<\/script>/g)).toHaveLength(1);
+    });
+
+    /*
+     * **http のアプリは中継を通す** (NHK は http にしか無く、https の画面からは Mixed Content で止められる)。
+     * <base> と HTML に直に書かれた配信元の URL を中継へ。ほかの配信元は触らない
+     */
+    test('http のアプリは <base> と配信元の URL を中継へ書き換える', () => {
+        const html = prepareApp(
+            '<html><head><script src="http://hc.example.jp/common/a.js"></script><img src="http://other.example/b.png"></head></html>',
+            {
+                ...INIT,
+                url: 'http://hc.example.jp/p/index.html',
+                relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'http://hc.example.jp' },
+            },
+        );
+        expect(html).toContain('<base href="https://denpa.example/api/bml/hc/0123/p/index.html">');
+        expect(html).toContain('<script src="https://denpa.example/api/bml/hc/0123/common/a.js">');
+        expect(html).toContain('http://other.example/b.png');
+        // 差し込みには元の URL を渡す (getAITInfo は元の行き先を返す)
+        expect(html).toContain('"url":"http://hc.example.jp/p/index.html"');
     });
 
     test('head も html も無ければ頭に入れる', () => {
