@@ -909,38 +909,28 @@
 .board .cal-day:not([aria-disabled="true"]):hover {
     background: var(--dp-hover-soft);
 }
-.board .cal-day.pinned {
-    background: var(--dp-subtle);
-}
 /*
- * 今日は赤い太字の数字 (行が無くても押せる)。丸はタイムラインの「いま」の線と同じ赤 (`--dp-rec`)、数字は読みやすい濃さの赤 (`--dp-rec-text`)。
- * **今日を選んでいるときだけ赤い丸を塗る** (Apple のカレンダーと同じ)。丸で囲むだけだった頃は、選んでいる日の
- * 塗りと重なって、どちらがどちらか読みにくかった
+ * **選んでいる日は白黒を反転した角丸の塗り。** 薄い塗りだった頃は、どの日を選んでいるかが読みにくかった。
+ * 形はほかの日の指を乗せたときの塗りと同じ角丸に揃える (今日だけ丸にしない)
  */
-.board .cal-day.today {
-    color: var(--dp-rec-text);
+.board .cal-day.pinned,
+.board .cal-day.pinned:not([aria-disabled="true"]):hover {
+    background: var(--dp-fg);
+    color: var(--dp-bg);
     font-weight: var(--dp-weight-bold);
     opacity: 1;
 }
+/*
+ * 今日は太字に、同じ角丸の細い枠。**色は足さない** — 赤の丸は目立ちすぎた。選んでいるときは上の塗りになる
+ * (行が無くても押せる)
+ */
+.board .cal-day.today {
+    color: var(--dp-fg);
+    font-weight: var(--dp-weight-bold);
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px var(--dp-muted);
+}
 .board .cal-day.today.pinned {
-    isolation: isolate;
-    background: transparent;
-    color: #fff;
-}
-/* 指を乗せても丸の後ろに四角い塗りを出さない (上の :hover のほうが詳細度が高い) */
-.board .cal-day.today.pinned:not([aria-disabled="true"]):hover {
-    background: transparent;
-}
-.board .cal-day.today.pinned::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    top: 50%;
-    left: 50%;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 50%;
-    background: var(--dp-rec);
-    transform: translate(-50%, -50%);
-    pointer-events: none;
+    box-shadow: none;
+    color: var(--dp-bg);
 }
