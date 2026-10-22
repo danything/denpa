@@ -61,13 +61,19 @@ function scopeOf(kind: 'network' | 'common' | 'service', who: Who): string {
 
 /**
  * 置き場の名前 (`Nvram` が `store` に使う鍵) が、その局から読み書きできるものか。
- * **Hybridcast のアプリへは、起動した局から見える分だけ写して渡す** (`hybridcast/compat.ts`)
+ * **Hybridcast のアプリへは、起動した局から見える分だけ写して渡す** (`hybridcast/compat.ts`)。
+ * アプリが書いてきた鍵もこれで確かめるので、`Nvram` が作らない形 (番号の外など) は通さない
  */
 export function visibleFrom(key: string, who: Who): boolean {
-    const [prefix, scope] = key.split(':');
-    if (prefix === 'group') return true;
-    const area = prefix !== undefined && Object.hasOwn(AREAS, prefix) ? AREAS[prefix] : undefined;
-    return area !== undefined && scope === scopeOf(area.scope, who);
+    const match = /^([^:]+):([^:]*):(\d+)$/.exec(key);
+    if (match === null) return false;
+    const [, prefix, scope, blockText] = match;
+    const block = Number(blockText);
+    if (prefix === 'group') return /^[0-9a-f]{2}$/.test(scope!) && block <= 63;
+    const area = Object.hasOwn(AREAS, prefix!) ? AREAS[prefix!] : undefined;
+    return (
+        area !== undefined && block >= area.first && block <= area.last && scope === scopeOf(area.scope, who)
+    );
 }
 
 export class Nvram {

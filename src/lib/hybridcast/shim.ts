@@ -747,8 +747,9 @@ export function shim(init: ShimInit): void {
         } else if (data['type'] === 'state') {
             const before = state.program?.eventId ?? null;
             state = data['state'] as HcState;
+            // 1 つずつ別に呼ぶ (アプリのリスナーが投げても、ほかのリスナーとここの続きは止めない)
             if ((state.program?.eventId ?? null) !== before)
-                for (const listener of eventListeners) listener();
+                for (const listener of eventListeners) setTimeout(listener, 0);
         } else if (data['type'] === 'key') {
             press(data['key'] as string, data['code'] as number, data['down'] === true);
         }

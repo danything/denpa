@@ -39,8 +39,8 @@
         hc: HcState;
         /** データ放送の Greg と NVRAM (ページを開くたびに読む。前のページが書いた Greg も渡す) */
         broadcast: () => CompatInit;
-        /** アプリが Greg・NVRAM に書いた */
-        onwrite: (change: Extract<FrameMessage, { type: 'greg' | 'nvram' }>) => void;
+        /** アプリが Greg・NVRAM に書いた (`who` はいまのページを開いた局) */
+        onwrite: (change: Extract<FrameMessage, { type: 'greg' | 'nvram' }>, who: CompatInit['who']) => void;
         /** 閉じてデータ放送へ戻る */
         onclose: () => void;
         /** 選局 (データ放送の epgTune と同じ範囲)。できなければ false */
@@ -70,6 +70,8 @@
     /** iframe を開き直すたびに変える (同じ入れ物を読み直させる) */
     let round = $state(0);
     let gone = false;
+    /** いまのページを開いた局 (アプリの NVRAM はこの局の領域) */
+    let opened: CompatInit['who'] = { originalNetworkId: null, serviceId: null };
     // svelte-ignore state_referenced_locally
     const key = storageKey(app.organisationId, app.applicationId);
 
@@ -105,6 +107,8 @@
             const text = decodeHtml(body, response.headers.get('content-type') ?? '');
             const relay = await relayFor(target);
             if (target !== url) return;
+            const given = broadcast();
+            opened = given.who;
             html = prepareApp(text, {
                 url: target,
                 organisationId: app.organisationId,
@@ -112,7 +116,7 @@
                 storage: remembered(),
                 state: $state.snapshot(hc),
                 relay,
-                compat: broadcast(),
+                compat: given,
             },
             compat,
             );
@@ -212,7 +216,7 @@
                 break;
             case 'greg':
             case 'nvram':
-                onwrite(message);
+                onwrite(message, opened);
                 break;
             case 'navigate':
                 navigate(message.url);

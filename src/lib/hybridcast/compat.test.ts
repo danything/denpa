@@ -68,4 +68,10 @@ test('visibleFrom: アプリへ写すのは、起動した局から見える NVR
     expect(visibleFrom('local:4.103:0', bs)).toBe(false);
     expect(visibleFrom('~:4.101:0', bs)).toBe(true);
     expect(visibleFrom('unknown:x:0', nhk)).toBe(false);
+    // アプリが書いてきた鍵も確かめる。`Nvram` が作らない形は通さない
+    expect(visibleFrom('group:00:64', nhk)).toBe(false);
+    expect(visibleFrom('group:zz:0', nhk)).toBe(false);
+    expect(visibleFrom('group:00:1:x', nhk)).toBe(false);
+    expect(visibleFrom('local:32736:64', nhk)).toBe(false);
+    expect(visibleFrom('local_web:32736:32', nhk)).toBe(false);
 });

@@ -215,7 +215,6 @@
         }
     }
 
-    /** アプリを閉じてデータ放送へ戻る */
     /**
      * アプリに渡すデータ放送の Greg と NVRAM (`hybridcast/compat.ts`)。**NVRAM はアプリを起動した局から見える分だけ** —
      * 放送の文書と同じ領域を使わせる (アプリは AIT で局が起動させたもの)
@@ -229,16 +228,19 @@
         return { greg: engine?.greg.slice() ?? [], nvram, receiver: { zipcode: postal, prefecture }, who };
     }
 
-    /** アプリが Greg・NVRAM に書いた。**同じ局から見える NVRAM だけ**受け取る (中身はアプリの言うまま。1 ブロック 64 バイトの base64) */
-    function written(change: Extract<FrameMessage, { type: 'greg' | 'nvram' }>): void {
+    /**
+     * アプリが Greg・NVRAM に書いた。**NVRAM はアプリを開いた局 (`who`) から見えるものだけ**受け取る
+     * (中身はアプリの言うまま。1 ブロック 64 バイトの base64)。開いた後に選局していても、開いた局の領域に書く
+     */
+    function written(change: Extract<FrameMessage, { type: 'greg' | 'nvram' }>, who: CompatInit['who']): void {
         if (change.type === 'greg') {
             if (engine !== null) engine.greg[change.index] = change.value.slice(0, 256);
             return;
         }
-        const who = { originalNetworkId: program?.originalNetworkId ?? null, serviceId: program?.serviceId ?? null };
         if (nvramVisible?.(change.key, who) === true && change.value.length <= 88) write(NVRAM_PREFIX + change.key, change.value);
     }
 
+    /** アプリを閉じてデータ放送へ戻る */
     function closeApp(): void {
         if (running === null) return;
         running = null;
