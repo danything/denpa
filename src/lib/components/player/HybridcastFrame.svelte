@@ -89,22 +89,27 @@
     }
 
     async function load(): Promise<void> {
+        // 読み込んでいる間に別のページへ移ったら、古いほうは捨てる (後から届いて新しいページを上書きしない)
+        const target = url;
         try {
-            const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(url)}`));
+            const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(target)}`));
             if (response.headers.get('x-bml-relayed') !== '1' || !response.ok) throw new Error(String(response.status));
             const body = new Uint8Array(await response.arrayBuffer());
             const text = decodeHtml(body, response.headers.get('content-type') ?? '');
+            const relay = await relayFor(target);
+            if (target !== url) return;
             html = prepareApp(text, {
-                url,
+                url: target,
                 organisationId: app.organisationId,
                 applicationId: app.applicationId,
                 storage: remembered(),
                 state: $state.snapshot(hc),
-                relay: await relayFor(url),
+                relay,
             });
             hand();
         } catch (failure) {
-            console.warn(`[hybridcast] アプリを取得できません: ${url} (${String(failure)})`);
+            if (target !== url) return;
+            console.warn(`[hybridcast] アプリを取得できません: ${target} (${String(failure)})`);
             phase = 'failed';
         }
     }

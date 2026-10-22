@@ -105,9 +105,6 @@ export function shim(init: ShimInit): void {
         get search() {
             return appUrl.search;
         },
-        get hash() {
-            return appUrl.hash;
-        },
         assign: go,
         replace: go,
         reload: () => go(appUrl.href),
