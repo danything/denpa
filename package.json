@@ -29,9 +29,8 @@
         "test:unit": "bun test src",
         "test:conformance": "dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r linux-x64 -o agent/publish && AGENT_CMD=\"$PWD/agent/publish/denpa-agent\" bun test agent/conformance.test.ts",
         "test:e2e": "playwright test",
-        "lint": "oxlint && bun run fmt --check",
-        "format": "oxlint --fix && bun run fmt",
-        "fmt": "bunx --package bun@1.4.3-canary.20261021.1 bun fmt"
+        "lint": "oxlint && bun fmt --check",
+        "format": "oxlint --fix && bun fmt"
     },
     "type": "module",
     "imports": {

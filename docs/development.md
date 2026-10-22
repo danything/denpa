@@ -19,9 +19,8 @@ docker compose run --rm unit bun run format # フォーマット適用
 docker compose run --rm unit bun run check  # 型 (svelte-check)
 ```
 
-リントは oxlint (`.oxlintrc.json`)、整形は `bun fmt` (`bunfig.toml` の `[fmt]`)。
-`bun fmt` はまだ canary の bun にしか無いので、`package.json` の `fmt` が版を決めた canary を `bunx` で呼びます
-(bun 本体は今の版のまま)。正式版に入ったら `bun fmt` を直に呼ぶ形に戻します。
+リントは oxlint (`.oxlintrc.json`)、整形は `bun fmt` (`bunfig.toml` の `[fmt]`。bun 1.4.4 から)。
+`package.json` に `fmt` という名前の script は置かない (`bun fmt` はその script を先に呼ぶ)。
 
 依存を足したら `docker compose run --rm unit bun install` を一度回します
 (`node_modules` は名前付きボリュームなので、イメージを作り直す必要はありません)。

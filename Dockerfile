@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # 依存の解決だけを分ける。ソースを変えてもここは再実行されない
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1.4-slim AS deps
+FROM docker.io/oven/bun:1.4.4-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
 RUN bun install
@@ -57,7 +57,7 @@ RUN cd /usr/share/denpa-font && grep ' denpa-font.woff2$' SHA256SUMS | sha256sum
 # ---------------------------------------------------------------------------
 # 開発用。compose からソースを bind mount して使う
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1.4-slim AS dev
+FROM docker.io/oven/bun:1.4.4-slim AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
@@ -297,7 +297,7 @@ ENV NODE_ENV=production \
 COPY --from=runtime-libs /rootfs/ /
 
 # bun 本体。SvelteKit (adapter-bun) の出力を bun で動かす
-COPY --from=docker.io/oven/bun:1.4-slim /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=docker.io/oven/bun:1.4.4-slim /usr/local/bin/bun /usr/local/bin/bun
 
 # 写したライブラリだけで ffmpeg / ffprobe が起きるかを、本番の中身でも見る (シェルが無いので exec の形で)
 RUN ["/usr/local/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-version"]
