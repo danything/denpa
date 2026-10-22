@@ -6,9 +6,9 @@
  * `node:zlib` / `node:buffer` を使うのでブラウザには持ち込めない。
  */
 
-import { BmlDecoder } from './bml';
-import { Carousel } from './carousel';
-import type { TimedMessage } from './data-timeline';
+import { BmlDecoder } from "./bml";
+import { Carousel } from "./carousel";
+import type { TimedMessage } from "./data-timeline";
 
 /**
  * TS を少しずつ食べて、データ放送の変化を実時刻つきで並べる。
@@ -18,33 +18,33 @@ import type { TimedMessage } from './data-timeline';
  * 中のデコード方法は同じ
  */
 export class DataBroadcastCapture {
-    private readonly timeline: TimedMessage[] = [];
-    private readonly decoder: BmlDecoder;
+  private readonly timeline: TimedMessage[] = [];
+  private readonly decoder: BmlDecoder;
 
-    constructor() {
-        // 「配る価値があるか」の判定はライブと同じ土俵に乗せる (変わらない pmt/programInfo は
-        // 落ちる)。中の記憶そのものは使わない — 使うのは take の判定だけ
-        const gate = new Carousel();
-        let at: number | null = null;
-        this.decoder = new BmlDecoder((message) => {
-            // 時計は別に持つ。放送の実時刻はここでしか分からない
-            if (message.type === 'currentTime') {
-                at = message.timeUnixMillis;
-                return;
-            }
-            if (!gate.take(message)) return;
-            this.timeline.push({ at, message });
-        });
-    }
+  constructor() {
+    // 「配る価値があるか」の判定はライブと同じ土俵に乗せる (変わらない pmt/programInfo は
+    // 落ちる)。中の記憶そのものは使わない — 使うのは take の判定だけ
+    const gate = new Carousel();
+    let at: number | null = null;
+    this.decoder = new BmlDecoder((message) => {
+      // 時計は別に持つ。放送の実時刻はここでしか分からない
+      if (message.type === "currentTime") {
+        at = message.timeUnixMillis;
+        return;
+      }
+      if (!gate.take(message)) return;
+      this.timeline.push({ at, message });
+    });
+  }
 
-    feed(chunk: Uint8Array): void {
-        this.decoder.feed(chunk);
-    }
+  feed(chunk: Uint8Array): void {
+    this.decoder.feed(chunk);
+  }
 
-    /** ここまでに並んだ変化。食べ終わってから読む */
-    result(): TimedMessage[] {
-        return this.timeline;
-    }
+  /** ここまでに並んだ変化。食べ終わってから読む */
+  result(): TimedMessage[] {
+    return this.timeline;
+  }
 }
 
 /**
@@ -52,8 +52,10 @@ export class DataBroadcastCapture {
  *
  * @param chunks 1局に絞った TS のチャンク列
  */
-export function captureDataBroadcast(chunks: Iterable<Uint8Array>): TimedMessage[] {
-    const capture = new DataBroadcastCapture();
-    for (const chunk of chunks) capture.feed(chunk);
-    return capture.result();
+export function captureDataBroadcast(
+  chunks: Iterable<Uint8Array>,
+): TimedMessage[] {
+  const capture = new DataBroadcastCapture();
+  for (const chunk of chunks) capture.feed(chunk);
+  return capture.result();
 }

@@ -8,64 +8,64 @@
  * - `resume` … オフライン中に進んだ視聴位置。復帰時にまとめて送る
  */
 
-import type { PlayAxis } from './ts/playback';
+import type { PlayAxis } from "./ts/playback";
 
-const DB = 'denpa-offline';
+const DB = "denpa-offline";
 const VERSION = 1;
 
 /** 落とした録画1本。付き添いは取れなかったら無いまま (観るときに諦める) */
 export interface OfflineVideo {
-    id: number;
-    name: string;
-    /** 局名。/offline の一覧に出す */
-    serviceName: string;
-    startAt: number;
-    /** 実際に録れた長さ (ms)。無ければ null */
-    durationMs: number | null;
-    /** どちらを落としたか。端末が AV1 をデコードできなければ alt (H.264) */
-    source: 'encoded' | 'alt';
-    /**
-     * 何回目の試みか (でたらめな文字列)。**やり直しと前回の残骸を見分ける印。**
-     * 前回の失敗を中止してからやり直すとき、その中止の通知が遅れて届いても、
-     * 印が違えば新しい控えを消さない (`service-worker/index.ts` の drop)
-     */
-    attempt?: string;
-    /**
-     * `downloading` は Background Fetch がまだ運んでいる最中。
-     * `failed` は**消さずに残す** — 失敗した瞬間の通知 (トースト) は一瞬で、
-     * 控えごと消すと「無かったことになった」ように見える。行に残して、やり直す
-     * 入口にする
-     */
-    state: 'downloading' | 'ready' | 'failed';
-    downloadedAt: number;
-    /** 動画の実体。downloading の間は無い */
-    video?: Blob;
-    /**
-     * 字幕 (`captions.json`)。以前は画像字幕 (PGS) を `captions` に持っていたが、もう読まない
-     * (前に保存した控えに残っていても、使わないだけで害は無い)
-     */
-    captionText?: unknown;
-    poster?: Blob;
-    chapters?: unknown;
-    databroadcast?: unknown;
+  id: number;
+  name: string;
+  /** 局名。/offline の一覧に出す */
+  serviceName: string;
+  startAt: number;
+  /** 実際に録れた長さ (ms)。無ければ null */
+  durationMs: number | null;
+  /** どちらを落としたか。端末が AV1 をデコードできなければ alt (H.264) */
+  source: "encoded" | "alt";
+  /**
+   * 何回目の試みか (でたらめな文字列)。**やり直しと前回の残骸を見分ける印。**
+   * 前回の失敗を中止してからやり直すとき、その中止の通知が遅れて届いても、
+   * 印が違えば新しい控えを消さない (`service-worker/index.ts` の drop)
+   */
+  attempt?: string;
+  /**
+   * `downloading` は Background Fetch がまだ運んでいる最中。
+   * `failed` は**消さずに残す** — 失敗した瞬間の通知 (トースト) は一瞬で、
+   * 控えごと消すと「無かったことになった」ように見える。行に残して、やり直す
+   * 入口にする
+   */
+  state: "downloading" | "ready" | "failed";
+  downloadedAt: number;
+  /** 動画の実体。downloading の間は無い */
+  video?: Blob;
+  /**
+   * 字幕 (`captions.json`)。以前は画像字幕 (PGS) を `captions` に持っていたが、もう読まない
+   * (前に保存した控えに残っていても、使わないだけで害は無い)
+   */
+  captionText?: unknown;
+  poster?: Blob;
+  chapters?: unknown;
+  databroadcast?: unknown;
 }
 
 export interface OutboxItem {
-    id: number;
-    op: 'delete';
-    /** 何を消すのか、処理の記録に名前で残す */
-    name: string;
-    queuedAt: number;
+  id: number;
+  op: "delete";
+  /** 何を消すのか、処理の記録に名前で残す */
+  name: string;
+  queuedAt: number;
 }
 
 export interface ResumeItem {
-    id: number;
-    /** 再生位置 (秒)。サーバの `POST …/resume` と同じ形式 */
-    at: number;
-    length: number;
-    /** `at` の物差し (`POST …/resume` の `source`)。無ければサーバの既定 (観る画面と同じ決め方) */
-    axis?: PlayAxis;
-    updatedAt: number;
+  id: number;
+  /** 再生位置 (秒)。サーバの `POST …/resume` と同じ形式 */
+  at: number;
+  length: number;
+  /** `at` の物差し (`POST …/resume` の `source`)。無ければサーバの既定 (観る画面と同じ決め方) */
+  axis?: PlayAxis;
+  updatedAt: number;
 }
 
 /**
@@ -76,23 +76,31 @@ export interface ResumeItem {
  * ブラウザに残っていると、やり直しがそのまま断られていた。試みごとに
  * 変えれば必ず登録でき、残骸は登録前に中止する (offline.svelte.ts)
  */
-export function fetchId(id: number, source: 'encoded' | 'alt', attempt: string): string {
-    return `rec-${id}-${source}-${attempt}`;
+export function fetchId(
+  id: number,
+  source: "encoded" | "alt",
+  attempt: string,
+): string {
+  return `rec-${id}-${source}-${attempt}`;
 }
 
 /** その録画の登録IDか。残骸を探して中止するときの当たり判定 */
 export function fetchIdPrefix(id: number): string {
-    return `rec-${id}-`;
+  return `rec-${id}-`;
 }
 
 /** 登録IDを読み戻す。Background Fetch の成否イベントは ID しか持っていない */
 export function parseFetchId(
-    value: string,
-): { id: number; source: 'encoded' | 'alt'; attempt: string } | null {
-    // 印の無い古い形式 (rec-42-encoded) も読める。付ける前に預けたぶんが残っていることがある
-    const m = /^rec-(\d+)-(encoded|alt)(?:-([a-z0-9]+))?$/.exec(value);
-    if (m === null) return null;
-    return { id: Number(m[1]), source: m[2] as 'encoded' | 'alt', attempt: m[3] ?? '' };
+  value: string,
+): { id: number; source: "encoded" | "alt"; attempt: string } | null {
+  // 印の無い古い形式 (rec-42-encoded) も読める。付ける前に預けたぶんが残っていることがある
+  const m = /^rec-(\d+)-(encoded|alt)(?:-([a-z0-9]+))?$/.exec(value);
+  if (m === null) return null;
+  return {
+    id: Number(m[1]),
+    source: m[2] as "encoded" | "alt",
+    attempt: m[3] ?? "",
+  };
 }
 
 /**
@@ -101,27 +109,30 @@ export function parseFetchId(
  * **頭 (前段の接頭辞。server/paths.ts) は呼ぶ側 (offline.svelte.ts) が付ける。** ここは
  * Service Worker からも読まれ、パスの形で付き添いを見分ける (`kindOf`) ので、ルートからのパスのまま持つ
  */
-export function downloadRequests(id: number, source: 'encoded' | 'alt'): string[] {
-    return [
-        `/api/recordings/${id}/file?source=${source}`,
-        `/api/recordings/${id}/captions.json`,
-        `/api/recordings/${id}/chapters`,
-        `/api/recordings/${id}/databroadcast`,
-        `/api/recordings/${id}/poster`,
-    ];
+export function downloadRequests(
+  id: number,
+  source: "encoded" | "alt",
+): string[] {
+  return [
+    `/api/recordings/${id}/file?source=${source}`,
+    `/api/recordings/${id}/captions.json`,
+    `/api/recordings/${id}/chapters`,
+    `/api/recordings/${id}/databroadcast`,
+    `/api/recordings/${id}/poster`,
+  ];
 }
 
 /** URL がどの付き添いか。Background Fetch の結果を仕分けるのに使う */
 export function kindOf(
-    url: string,
-): 'video' | 'captionText' | 'chapters' | 'databroadcast' | 'poster' | null {
-    const path = new URL(url, 'http://x').pathname;
-    if (path.endsWith('/file')) return 'video';
-    if (path.endsWith('/captions.json')) return 'captionText';
-    if (path.endsWith('/chapters')) return 'chapters';
-    if (path.endsWith('/databroadcast')) return 'databroadcast';
-    if (path.endsWith('/poster')) return 'poster';
-    return null;
+  url: string,
+): "video" | "captionText" | "chapters" | "databroadcast" | "poster" | null {
+  const path = new URL(url, "http://x").pathname;
+  if (path.endsWith("/file")) return "video";
+  if (path.endsWith("/captions.json")) return "captionText";
+  if (path.endsWith("/chapters")) return "chapters";
+  if (path.endsWith("/databroadcast")) return "databroadcast";
+  if (path.endsWith("/poster")) return "poster";
+  return null;
 }
 
 /**
@@ -130,69 +141,76 @@ export function kindOf(
  * 動画だけは読み方を差し替えられる (ページ主導は進み具合を数えながら読む)
  */
 export async function storeResponse(
-    held: OfflineVideo,
-    url: string,
-    response: Response,
-    readVideo: (response: Response) => Promise<Blob> = (r) => r.blob(),
+  held: OfflineVideo,
+  url: string,
+  response: Response,
+  readVideo: (response: Response) => Promise<Blob> = (r) => r.blob(),
 ): Promise<void> {
-    const kind = kindOf(url);
-    if (kind === null) return;
-    if (kind === 'video') held.video = await readVideo(response);
-    else if (kind === 'captionText') held.captionText = await response.json().catch(() => undefined);
-    else if (kind === 'poster') held.poster = await response.blob();
-    else if (kind === 'chapters') held.chapters = await response.json().catch(() => undefined);
-    else held.databroadcast = await response.json().catch(() => undefined);
+  const kind = kindOf(url);
+  if (kind === null) return;
+  if (kind === "video") held.video = await readVideo(response);
+  else if (kind === "captionText")
+    held.captionText = await response.json().catch(() => undefined);
+  else if (kind === "poster") held.poster = await response.blob();
+  else if (kind === "chapters")
+    held.chapters = await response.json().catch(() => undefined);
+  else held.databroadcast = await response.json().catch(() => undefined);
 }
 
 function openDb(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB, VERSION);
-        req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains('videos')) db.createObjectStore('videos', { keyPath: 'id' });
-            if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'id' });
-            if (!db.objectStoreNames.contains('resume')) db.createObjectStore('resume', { keyPath: 'id' });
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-    });
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB, VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("videos"))
+        db.createObjectStore("videos", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("outbox"))
+        db.createObjectStore("outbox", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("resume"))
+        db.createObjectStore("resume", { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-type Store = 'videos' | 'outbox' | 'resume';
+type Store = "videos" | "outbox" | "resume";
 
 async function tx<T>(
-    store: Store,
-    mode: IDBTransactionMode,
-    run: (s: IDBObjectStore) => IDBRequest<T>,
+  store: Store,
+  mode: IDBTransactionMode,
+  run: (s: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
-    const db = await openDb();
-    try {
-        return await new Promise<T>((resolve, reject) => {
-            const req = run(db.transaction(store, mode).objectStore(store));
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    } finally {
-        db.close();
-    }
+  const db = await openDb();
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const req = run(db.transaction(store, mode).objectStore(store));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 export const videos = {
-    get: (id: number) => tx<OfflineVideo | undefined>('videos', 'readonly', (s) => s.get(id)),
-    all: () => tx<OfflineVideo[]>('videos', 'readonly', (s) => s.getAll()),
-    put: (value: OfflineVideo) => tx('videos', 'readwrite', (s) => s.put(value)),
-    remove: (id: number) => tx('videos', 'readwrite', (s) => s.delete(id)),
+  get: (id: number) =>
+    tx<OfflineVideo | undefined>("videos", "readonly", (s) => s.get(id)),
+  all: () => tx<OfflineVideo[]>("videos", "readonly", (s) => s.getAll()),
+  put: (value: OfflineVideo) => tx("videos", "readwrite", (s) => s.put(value)),
+  remove: (id: number) => tx("videos", "readwrite", (s) => s.delete(id)),
 };
 
 export const outbox = {
-    all: () => tx<OutboxItem[]>('outbox', 'readonly', (s) => s.getAll()),
-    put: (value: OutboxItem) => tx('outbox', 'readwrite', (s) => s.put(value)),
-    remove: (id: number) => tx('outbox', 'readwrite', (s) => s.delete(id)),
+  all: () => tx<OutboxItem[]>("outbox", "readonly", (s) => s.getAll()),
+  put: (value: OutboxItem) => tx("outbox", "readwrite", (s) => s.put(value)),
+  remove: (id: number) => tx("outbox", "readwrite", (s) => s.delete(id)),
 };
 
 export const resumeQueue = {
-    get: (id: number) => tx<ResumeItem | undefined>('resume', 'readonly', (s) => s.get(id)),
-    all: () => tx<ResumeItem[]>('resume', 'readonly', (s) => s.getAll()),
-    put: (value: ResumeItem) => tx('resume', 'readwrite', (s) => s.put(value)),
-    remove: (id: number) => tx('resume', 'readwrite', (s) => s.delete(id)),
+  get: (id: number) =>
+    tx<ResumeItem | undefined>("resume", "readonly", (s) => s.get(id)),
+  all: () => tx<ResumeItem[]>("resume", "readonly", (s) => s.getAll()),
+  put: (value: ResumeItem) => tx("resume", "readwrite", (s) => s.put(value)),
+  remove: (id: number) => tx("resume", "readwrite", (s) => s.delete(id)),
 };

@@ -1,26 +1,30 @@
-import type { Notice } from '#lib/components/Toasts.svelte';
-import { pad } from '#lib/format.js';
+import type { Notice } from "#lib/components/Toasts.svelte";
+import { pad } from "#lib/format.js";
 
 /** 写す1コマ。`<video>` か、MPEG-2 で見ているときに worker から貰ったフレーム (`raw/engine.ts` の `grab`) */
 export interface Frame {
-    image: CanvasImageSource;
-    width: number;
-    height: number;
+  image: CanvasImageSource;
+  width: number;
+  height: number;
 }
 
 /** いま映している `<video>` の1コマ。まだフレームが来ていなければ null */
 export function videoFrame(video: HTMLVideoElement | null): Frame | null {
-    if (video === null || video.videoWidth === 0) return null;
-    return { image: video, width: video.videoWidth, height: video.videoHeight };
+  if (video === null || video.videoWidth === 0) return null;
+  return { image: video, width: video.videoWidth, height: video.videoHeight };
 }
 
 /**
  * **MPEG-2 で見ているときは worker に1枚貰う。** 映像は worker の canvas にあって、
  * `<video>` は空のまま (`raw/engine.ts`)
  */
-export async function grabbedFrame(bitmap: Promise<ImageBitmap | null>): Promise<Frame | null> {
-    const image = await bitmap;
-    return image === null ? null : { image, width: image.width, height: image.height };
+export async function grabbedFrame(
+  bitmap: Promise<ImageBitmap | null>,
+): Promise<Frame | null> {
+  const image = await bitmap;
+  return image === null
+    ? null
+    : { image, width: image.width, height: image.height };
 }
 
 /**
@@ -38,17 +42,17 @@ const NAME_MOST = 60;
  * 足していくか、共有先 (写真アプリ) で上書きの確認が出る
  */
 export function shotName(title: string, at: Date): string {
-    const name =
-        title
-            .replace(FORBIDDEN, '_')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, NAME_MOST)
-            // 末尾の点と空白は Windows が黙って落とす
-            .replace(/[. ]+$/, '') || 'denpa';
-    const day = `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}`;
-    const time = `${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`;
-    return `${name}_${day}-${time}.png`;
+  const name =
+    title
+      .replace(FORBIDDEN, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, NAME_MOST)
+      // 末尾の点と空白は Windows が黙って落とす
+      .replace(/[. ]+$/, "") || "denpa";
+  const day = `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}`;
+  const time = `${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`;
+  return `${name}_${day}-${time}.png`;
 }
 
 /**
@@ -58,23 +62,27 @@ export function shotName(title: string, at: Date): string {
  * あちらは落とすほうが早いので使わない
  */
 function prefersShare(file: File): boolean {
-    if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return false;
-    if (!window.matchMedia('(pointer: coarse)').matches) return false;
-    try {
-        return navigator.canShare({ files: [file] });
-    } catch {
-        return false;
-    }
+  if (
+    typeof navigator.share !== "function" ||
+    typeof navigator.canShare !== "function"
+  )
+    return false;
+  if (!window.matchMedia("(pointer: coarse)").matches) return false;
+  try {
+    return navigator.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
 }
 
 /** 落とす。**URL はすぐには捨てない** — Safari と Firefox は押した直後に捨てると落とし損ねる */
 function download(blob: Blob, name: string): void {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /**
@@ -97,46 +105,57 @@ function download(blob: Blob, name: string): void {
  * @param title 番組名 (ファイル名の頭)
  */
 export async function clipFrame(
-    frame: Frame | null,
-    caption: HTMLCanvasElement | null,
-    title: string,
+  frame: Frame | null,
+  caption: HTMLCanvasElement | null,
+  title: string,
 ): Promise<Notice | null> {
-    if (frame === null || frame.width === 0) return null;
-    const canvas = document.createElement('canvas');
-    canvas.width = frame.width;
-    canvas.height = frame.height;
-    const ctx = canvas.getContext('2d');
-    if (ctx === null) return null;
-    ctx.drawImage(frame.image, 0, 0, canvas.width, canvas.height);
-    if (caption !== null && caption.width > 1) {
-        ctx.drawImage(caption, 0, 0, canvas.width, canvas.height);
-    }
+  if (frame === null || frame.width === 0) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = frame.width;
+  canvas.height = frame.height;
+  const ctx = canvas.getContext("2d");
+  if (ctx === null) return null;
+  ctx.drawImage(frame.image, 0, 0, canvas.width, canvas.height);
+  if (caption !== null && caption.width > 1) {
+    ctx.drawImage(caption, 0, 0, canvas.width, canvas.height);
+  }
 
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-    if (blob === null) return null;
-    const name = shotName(title, new Date());
-    const key = `shot-${Date.now()}`;
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/png"),
+  );
+  if (blob === null) return null;
+  const name = shotName(title, new Date());
+  const key = `shot-${Date.now()}`;
 
-    const file = new File([blob], name, { type: 'image/png' });
-    if (prefersShare(file)) {
-        try {
-            await navigator.share({ files: [file] });
-            return null;
-        } catch (error) {
-            // 閉じた (やめた) なら何もしない。それ以外 (勢いが切れた・断られた) は落とす
-            if (error instanceof DOMException && error.name === 'AbortError') return null;
-            // **共有できなかったことは言う。** 黙って落とすと、シートが出なかった理由が分からない
-            download(blob, name);
-            return { key, kind: 'info', text: `共有できなかったので保存しました: ${name}` };
-        }
-    }
-
-    download(blob, name);
+  const file = new File([blob], name, { type: "image/png" });
+  if (prefersShare(file)) {
     try {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        return { key, kind: 'success', text: `切り抜きを保存しました (クリップボードにもコピー): ${name}` };
-    } catch {
-        // 置けない繋ぎ (http) や断られたとき。落としてあるので、それだけ言う
-        return { key, kind: 'success', text: `切り抜きを保存しました: ${name}` };
+      await navigator.share({ files: [file] });
+      return null;
+    } catch (error) {
+      // 閉じた (やめた) なら何もしない。それ以外 (勢いが切れた・断られた) は落とす
+      if (error instanceof DOMException && error.name === "AbortError")
+        return null;
+      // **共有できなかったことは言う。** 黙って落とすと、シートが出なかった理由が分からない
+      download(blob, name);
+      return {
+        key,
+        kind: "info",
+        text: `共有できなかったので保存しました: ${name}`,
+      };
     }
+  }
+
+  download(blob, name);
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return {
+      key,
+      kind: "success",
+      text: `切り抜きを保存しました (クリップボードにもコピー): ${name}`,
+    };
+  } catch {
+    // 置けない繋ぎ (http) や断られたとき。落としてあるので、それだけ言う
+    return { key, kind: "success", text: `切り抜きを保存しました: ${name}` };
+  }
 }

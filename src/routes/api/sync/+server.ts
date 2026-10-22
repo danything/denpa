@@ -1,9 +1,9 @@
-import { json } from '@sveltejs/kit';
-import { count } from 'drizzle-orm';
-import { orm } from '#lib/server/db.js';
-import { sync } from '#lib/server/epg.js';
-import { collectOnce } from '#lib/server/epg-collect.js';
-import { programs } from '#lib/server/schema.js';
+import { json } from "@sveltejs/kit";
+import { count } from "drizzle-orm";
+import { orm } from "#lib/server/db.js";
+import { sync } from "#lib/server/epg.js";
+import { collectOnce } from "#lib/server/epg-collect.js";
+import { programs } from "#lib/server/schema.js";
 
 /**
  * 番組表を今すぐ集め直す。定期実行 (EPG_COLLECT_INTERVAL) を待たずに反映したいとき用。
@@ -16,10 +16,10 @@ import { programs } from '#lib/server/schema.js';
  * 揃っている局は集め直さないので、増えた数だけを返すと「0 件しか無い」に見える。
  */
 export async function POST() {
-    await collectOnce();
-    const result = await sync();
-    return json({
-        ...result,
-        programs: orm().select({ n: count() }).from(programs).get()?.n ?? 0,
-    });
+  await collectOnce();
+  const result = await sync();
+  return json({
+    ...result,
+    programs: orm().select({ n: count() }).from(programs).get()?.n ?? 0,
+  });
 }

@@ -1,131 +1,147 @@
-import { once } from 'node:events';
-import { createWriteStream, mkdirSync, statSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { eq, sql } from 'drizzle-orm';
-import { EpgReader } from '../ts/eit';
-import { ServiceFilter } from '../ts/service-filter';
-import type { Recording, Reservation } from '../types';
-import { config } from './config';
-import { now, orm } from './db';
-import { enqueue } from './encoder';
-import { savePrograms } from './epg';
-import { emit } from './events';
-import { moveFile } from './fsx';
-import { libraryPath, recordedPath } from './library';
-import { writeThumbnail } from './metadata';
-import { recordingSummary } from './recording';
-import { programs, recordings, reservations, services } from './schema';
-import { chunks } from './stream';
-import { parseTitle } from './title';
-import { openChannelStream, recordingUse, type StreamUse } from './tuner';
-import { notify } from './webhook';
+import { once } from "node:events";
+import { createWriteStream, mkdirSync, statSync } from "node:fs";
+import { dirname } from "node:path";
+import { eq, sql } from "drizzle-orm";
+import { EpgReader } from "../ts/eit";
+import { ServiceFilter } from "../ts/service-filter";
+import type { Recording, Reservation } from "../types";
+import { config } from "./config";
+import { now, orm } from "./db";
+import { enqueue } from "./encoder";
+import { savePrograms } from "./epg";
+import { emit } from "./events";
+import { moveFile } from "./fsx";
+import { libraryPath, recordedPath } from "./library";
+import { writeThumbnail } from "./metadata";
+import { recordingSummary } from "./recording";
+import { programs, recordings, reservations, services } from "./schema";
+import { chunks } from "./stream";
+import { parseTitle } from "./title";
+import { openChannelStream, recordingUse, type StreamUse } from "./tuner";
+import { notify } from "./webhook";
 
 /**
  * 録り始めてから PMT でコピー禁止と分かり、1バイトも保存しなかった録画の理由
  * (番組表が古い・無かったとき。ふだんは予約の時点で止まる: `format.COPY_NEVER_REASON`)
  */
-const COPY_NEVER_RECORDING = 'コピー禁止の番組なので録画しませんでした';
+const COPY_NEVER_RECORDING = "コピー禁止の番組なので録画しませんでした";
 
 /** 録画中のストリームを止めるための手段。プロセス内にしか無いので再起動で失われる (起動時に回収する: recoverOrphanedRecordings) */
 const active = new Map<number, AbortController>();
 
 export function activeRecordingIds(): number[] {
-    return [...active.keys()];
+  return [...active.keys()];
 }
 
 export function stopRecording(recordingId: number): void {
-    active.get(recordingId)?.abort();
+  active.get(recordingId)?.abort();
 }
 
 function fail(recordingId: number, error: string): void {
-    /*
-     * 理由を書けば状態は決まる (recordings.state は生成列)。
-     * チューナーを使うのも終わりなので、録り終えた時刻も同時に埋める
-     */
-    orm()
-        .update(recordings)
-        .set({ error, finished_at: sql`COALESCE(${recordings.finished_at}, ${now()})`, updated_at: now() })
-        .where(eq(recordings.id, recordingId))
-        .run();
-    const rec = recordingById(recordingId);
-    if (rec !== undefined) {
-        notify({
-            event: 'recording.failed',
-            text: `録画に失敗しました: ${rec.name} (${rec.service_name})`,
-            recording: recordingSummary(rec),
-            error,
-        });
-    }
-    // 予約側には何も書かない。失敗したことは録画の行が持っている
+  /*
+   * 理由を書けば状態は決まる (recordings.state は生成列)。
+   * チューナーを使うのも終わりなので、録り終えた時刻も同時に埋める
+   */
+  orm()
+    .update(recordings)
+    .set({
+      error,
+      finished_at: sql`COALESCE(${recordings.finished_at}, ${now()})`,
+      updated_at: now(),
+    })
+    .where(eq(recordings.id, recordingId))
+    .run();
+  const rec = recordingById(recordingId);
+  if (rec !== undefined) {
+    notify({
+      event: "recording.failed",
+      text: `録画に失敗しました: ${rec.name} (${rec.service_name})`,
+      recording: recordingSummary(rec),
+      error,
+    });
+  }
+  // 予約側には何も書かない。失敗したことは録画の行が持っている
 }
 
 function recordingById(id: number): Recording | undefined {
-    return orm().select().from(recordings).where(eq(recordings.id, id)).get();
+  return orm().select().from(recordings).where(eq(recordings.id, id)).get();
 }
 
 function createRecording(reservation: Reservation): Recording {
-    const service = orm().select().from(services).where(eq(services.id, reservation.service_id)).get();
-    const program = orm().select().from(programs).where(eq(programs.id, reservation.program_id)).get();
+  const service = orm()
+    .select()
+    .from(services)
+    .where(eq(services.id, reservation.service_id))
+    .get();
+  const program = orm()
+    .select()
+    .from(programs)
+    .where(eq(programs.id, reservation.program_id))
+    .get();
 
-    /*
-     * 名前と概要は**録り始める瞬間の番組表**から取る。
-     *
-     * 番組表は放送直前まで書き換わる (「[新]」が付く、サブタイトルが入る、
-     * 誤字が直る)。予約の行が追い付くのは番組表を集め終えたとき (`epg.settle`) だけ
-     * なので、そのまま写すと**古い名前で保存先に並ぶ**ことがある。
-     *
-     * 逆に、録り終えたあとは動かさない。番組表の行は24時間で消えるうえ、
-     * ファイル名も画面に出す番組情報 (DB) も既に固まっている (docs/data.md)
-     */
-    const name = program?.name ?? reservation.name;
-    const description = program?.description ?? reservation.description;
-    // 詳細(拡張形式)は番組表にしか無い。予約の行は持っていないので program からのみ
-    const extended = program?.extended ?? null;
-    const parsed = parseTitle(name);
-    const at = now();
+  /*
+   * 名前と概要は**録り始める瞬間の番組表**から取る。
+   *
+   * 番組表は放送直前まで書き換わる (「[新]」が付く、サブタイトルが入る、
+   * 誤字が直る)。予約の行が追い付くのは番組表を集め終えたとき (`epg.settle`) だけ
+   * なので、そのまま写すと**古い名前で保存先に並ぶ**ことがある。
+   *
+   * 逆に、録り終えたあとは動かさない。番組表の行は24時間で消えるうえ、
+   * ファイル名も画面に出す番組情報 (DB) も既に固まっている (docs/data.md)
+   */
+  const name = program?.name ?? reservation.name;
+  const description = program?.description ?? reservation.description;
+  // 詳細(拡張形式)は番組表にしか無い。予約の行は持っていないので program からのみ
+  const extended = program?.extended ?? null;
+  const parsed = parseTitle(name);
+  const at = now();
 
-    const { id } = orm()
-        .insert(recordings)
-        // finished_at を入れないので、この行は「録画中」として読まれる
-        .values({
-            reservation_id: reservation.id,
-            program_id: reservation.program_id,
-            service_id: reservation.service_id,
-            service_name: service?.name ?? '',
-            name,
-            series: parsed.series,
-            subtitle: parsed.subtitle,
-            description,
-            extended,
-            start_at: reservation.start_at,
-            end_at: reservation.end_at,
-            /*
-             * **譲った区間を写す。** チューナーの取り合いで頭か尻を譲ったときだけ
-             * 入っている (`conflict.ts` の「入るところまで録る」)。一覧で
-             * 「頭が欠けている」と言うのに要る
-             */
-            record_from: reservation.record_from,
-            record_to: reservation.record_to,
-            audio_type: program?.audio_type ?? null,
-            // 番組表の行は24時間で消える。録り直しのときにも要るので写しておく
-            genre_detail: program?.genre_detail ?? null,
-            // エンコードしたものの音声トラックに番組表と同じ名前を入れるのに要る (`audioTitles`)
-            audios: program?.audios ?? null,
-            created_at: at,
-            updated_at: at,
-        })
-        .returning({ id: recordings.id })
-        .get()!;
-    // ファイル名は録画IDを含めるため、行を作ってからでないと決まらない
-    const path = recordedPath({
-        id,
-        series: parsed.series,
-        subtitle: parsed.subtitle,
-        start_at: reservation.start_at,
-    });
-    orm().update(recordings).set({ ts_path: path }).where(eq(recordings.id, id)).run();
+  const { id } = orm()
+    .insert(recordings)
+    // finished_at を入れないので、この行は「録画中」として読まれる
+    .values({
+      reservation_id: reservation.id,
+      program_id: reservation.program_id,
+      service_id: reservation.service_id,
+      service_name: service?.name ?? "",
+      name,
+      series: parsed.series,
+      subtitle: parsed.subtitle,
+      description,
+      extended,
+      start_at: reservation.start_at,
+      end_at: reservation.end_at,
+      /*
+       * **譲った区間を写す。** チューナーの取り合いで頭か尻を譲ったときだけ
+       * 入っている (`conflict.ts` の「入るところまで録る」)。一覧で
+       * 「頭が欠けている」と言うのに要る
+       */
+      record_from: reservation.record_from,
+      record_to: reservation.record_to,
+      audio_type: program?.audio_type ?? null,
+      // 番組表の行は24時間で消える。録り直しのときにも要るので写しておく
+      genre_detail: program?.genre_detail ?? null,
+      // エンコードしたものの音声トラックに番組表と同じ名前を入れるのに要る (`audioTitles`)
+      audios: program?.audios ?? null,
+      created_at: at,
+      updated_at: at,
+    })
+    .returning({ id: recordings.id })
+    .get()!;
+  // ファイル名は録画IDを含めるため、行を作ってからでないと決まらない
+  const path = recordedPath({
+    id,
+    series: parsed.series,
+    subtitle: parsed.subtitle,
+    start_at: reservation.start_at,
+  });
+  orm()
+    .update(recordings)
+    .set({ ts_path: path })
+    .where(eq(recordings.id, id))
+    .run();
 
-    return recordingById(id)!;
+  return recordingById(id)!;
 }
 
 /**
@@ -136,28 +152,28 @@ function createRecording(reservation: Reservation): Recording {
  * もう離れたものとして選ぶ (引き継ぎ。docs/agent.md「選ぶ順の約束」)
  */
 export async function startRecording(
-    reservation: Reservation,
-    after: readonly StreamUse[] = [],
+  reservation: Reservation,
+  after: readonly StreamUse[] = [],
 ): Promise<Recording> {
-    const recording = createRecording(reservation);
-    emit('recordings');
-    notify({
-        event: 'recording.started',
-        text: `録画を開始しました: ${recording.name} (${recording.service_name})`,
-        recording: recordingSummary(recording),
-    });
-    launch(recording, after);
-    return recording;
+  const recording = createRecording(reservation);
+  emit("recordings");
+  notify({
+    event: "recording.started",
+    text: `録画を開始しました: ${recording.name} (${recording.service_name})`,
+    recording: recordingSummary(recording),
+  });
+  launch(recording, after);
+  return recording;
 }
 
 /** 読み出しを裏で走らせる。止める手段 (`active`) はここで立てる */
 function launch(recording: Recording, after: readonly StreamUse[] = []): void {
-    const controller = new AbortController();
-    active.set(recording.id, controller);
-    void pump(recording, controller, after).catch((error) => {
-        active.delete(recording.id);
-        fail(recording.id, String(error));
-    });
+  const controller = new AbortController();
+  active.set(recording.id, controller);
+  void pump(recording, controller, after).catch((error) => {
+    active.delete(recording.id);
+    fail(recording.id, String(error));
+  });
 }
 
 /**
@@ -170,22 +186,24 @@ const OPEN_RETRIES = 5;
 const OPEN_RETRY_WAIT = 2000;
 
 async function openWithRetry(
-    open: (signal: AbortSignal) => Promise<ReadableStream<Uint8Array>>,
-    signal: AbortSignal,
+  open: (signal: AbortSignal) => Promise<ReadableStream<Uint8Array>>,
+  signal: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
-    let last: unknown;
-    for (let attempt = 0; attempt < OPEN_RETRIES; attempt++) {
-        if (signal.aborted) throw new Error('録画が中止されました');
-        try {
-            return await open(signal);
-        } catch (error) {
-            last = error;
-            if (attempt < OPEN_RETRIES - 1) {
-                await Bun.sleep(OPEN_RETRY_WAIT);
-            }
-        }
+  let last: unknown;
+  for (let attempt = 0; attempt < OPEN_RETRIES; attempt++) {
+    if (signal.aborted) throw new Error("録画が中止されました");
+    try {
+      return await open(signal);
+    } catch (error) {
+      last = error;
+      if (attempt < OPEN_RETRIES - 1) {
+        await Bun.sleep(OPEN_RETRY_WAIT);
+      }
     }
-    throw new Error(`チューナーを ${OPEN_RETRIES} 回試しましたが確保できませんでした: ${last}`);
+  }
+  throw new Error(
+    `チューナーを ${OPEN_RETRIES} 回試しましたが確保できませんでした: ${last}`,
+  );
 }
 
 /**
@@ -198,40 +216,40 @@ async function openWithRetry(
  * 実際にはまだ流れていたときに取り返しがつかない。
  */
 function extendIfLonger(recording: Recording, endAt: number): void {
-    const current = orm()
-        .select({ end_at: recordings.end_at })
-        .from(recordings)
-        .where(eq(recordings.id, recording.id))
-        .get();
-    if (current === undefined || endAt <= current.end_at) return;
+  const current = orm()
+    .select({ end_at: recordings.end_at })
+    .from(recordings)
+    .where(eq(recordings.id, recording.id))
+    .get();
+  if (current === undefined || endAt <= current.end_at) return;
 
-    const at = now();
+  const at = now();
+  orm()
+    .update(recordings)
+    .set({ end_at: endAt, updated_at: at })
+    .where(eq(recordings.id, recording.id))
+    .run();
+  if (recording.reservation_id !== null) {
     orm()
-        .update(recordings)
-        .set({ end_at: endAt, updated_at: at })
-        .where(eq(recordings.id, recording.id))
-        .run();
-    if (recording.reservation_id !== null) {
-        orm()
-            .update(reservations)
-            .set({ end_at: endAt, updated_at: at })
-            .where(eq(reservations.id, recording.reservation_id))
-            .run();
-    }
-    const minutes = Math.round((endAt - current.end_at) / 60000);
-    console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes}分)`);
-    emit('recordings');
-    emit('reservations');
+      .update(reservations)
+      .set({ end_at: endAt, updated_at: at })
+      .where(eq(reservations.id, recording.reservation_id))
+      .run();
+  }
+  const minutes = Math.round((endAt - current.end_at) / 60000);
+  console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes}分)`);
+  emit("recordings");
+  emit("reservations");
 }
 
 /** 実際に録れた長さを足す。再開したぶんも合算するので加算にする */
 function addDuration(recordingId: number, ms: number): void {
-    if (ms <= 0) return;
-    orm()
-        .update(recordings)
-        .set({ duration_ms: sql`COALESCE(${recordings.duration_ms}, 0) + ${ms}` })
-        .where(eq(recordings.id, recordingId))
-        .run();
+  if (ms <= 0) return;
+  orm()
+    .update(recordings)
+    .set({ duration_ms: sql`COALESCE(${recordings.duration_ms}, 0) + ${ms}` })
+    .where(eq(recordings.id, recordingId))
+    .run();
 }
 
 /**
@@ -244,257 +262,276 @@ function addDuration(recordingId: number, ms: number): void {
 const EPG_SAVE_INTERVAL = 5 * 60_000;
 
 async function pump(
-    recording: Recording,
-    controller: AbortController,
-    after: readonly StreamUse[],
+  recording: Recording,
+  controller: AbortController,
+  after: readonly StreamUse[],
 ): Promise<void> {
-    const path = recording.ts_path!;
-    mkdirSync(dirname(path), { recursive: true });
+  const path = recording.ts_path!;
+  mkdirSync(dirname(path), { recursive: true });
 
-    const service = orm().select().from(services).where(eq(services.id, recording.service_id)).get();
-    if (service === undefined) {
-        fail(recording.id, '局の情報がありません。チャンネルスキャンをやり直してください');
-        active.delete(recording.id);
-        return;
-    }
+  const service = orm()
+    .select()
+    .from(services)
+    .where(eq(services.id, recording.service_id))
+    .get();
+  if (service === undefined) {
+    fail(
+      recording.id,
+      "局の情報がありません。チャンネルスキャンをやり直してください",
+    );
+    active.delete(recording.id);
+    return;
+  }
 
-    /*
-     * **物理チャンネルを丸ごと開いて、こちらで局を選り分ける。**
-     *
-     * エージェントは中身を読まないので、1本の TS にその中継に入っている局が
-     * 全部流れてくる。そのまま保存すると1つの録画に複数の番組が入る
-     * (実機の TOKYO MX は MX1 と MX2 が同居している)。
-     */
-    const filter = new ServiceFilter(service.service_id);
-    /*
-     * 同じ TS から番組表も読む。**延長の追従はここから。**
-     * 番組情報を誰かに聞き直す必要は無い
-     */
-    const epg = new EpgReader();
-    const eventId = recording.program_id === null ? null : recording.program_id % 100000;
+  /*
+   * **物理チャンネルを丸ごと開いて、こちらで局を選り分ける。**
+   *
+   * エージェントは中身を読まないので、1本の TS にその中継に入っている局が
+   * 全部流れてくる。そのまま保存すると1つの録画に複数の番組が入る
+   * (実機の TOKYO MX は MX1 と MX2 が同居している)。
+   */
+  const filter = new ServiceFilter(service.service_id);
+  /*
+   * 同じ TS から番組表も読む。**延長の追従はここから。**
+   * 番組情報を誰かに聞き直す必要は無い
+   */
+  const epg = new EpgReader();
+  const eventId =
+    recording.program_id === null ? null : recording.program_id % 100000;
 
-    let written = 0;
-    /** いまコピー禁止で保存を止めているか (変わり目でだけ言う) */
-    let copyNever = false;
-    /**
-     * 番組が始まってから書いたか。開始マージンのぶん (前の番組) は数えない — そこを書いていても、
-     * 番組が始まった時点で禁止なら録画をやめる。再起動をまたいで続きから録るときは、
-     * 番組の途中までもう書いてあるものとして扱う (`recoverOrphanedRecordings`)
-     */
-    let wroteProgram =
-        Date.now() > recording.start_at && (statSync(path, { throwIfNoEntry: false })?.size ?? 0) > 0;
-    /** 始めから禁止だったので録画をやめたか。前の番組のぶんを書いていても失敗にする */
-    let stoppedForCopyNever = false;
-    // 何を使っているのかが設定の「チューナー」に出る。番組名は載せず、IDだけ渡して向こうで引く
-    const use = recordingUse(recording.id);
+  let written = 0;
+  /** いまコピー禁止で保存を止めているか (変わり目でだけ言う) */
+  let copyNever = false;
+  /**
+   * 番組が始まってから書いたか。開始マージンのぶん (前の番組) は数えない — そこを書いていても、
+   * 番組が始まった時点で禁止なら録画をやめる。再起動をまたいで続きから録るときは、
+   * 番組の途中までもう書いてあるものとして扱う (`recoverOrphanedRecordings`)
+   */
+  let wroteProgram =
+    Date.now() > recording.start_at &&
+    (statSync(path, { throwIfNoEntry: false })?.size ?? 0) > 0;
+  /** 始めから禁止だったので録画をやめたか。前の番組のぶんを書いていても失敗にする */
+  let stoppedForCopyNever = false;
+  // 何を使っているのかが設定の「チューナー」に出る。番組名は載せず、IDだけ渡して向こうで引く
+  const use = recordingUse(recording.id);
+
+  try {
+    // 追記で開く。再起動をまたいで録画を再開したときに、それまでの分を消さないため
+    // (MPEG-TS は 188 バイトのパケットの並びなので、そのまま繋げても読める)
+    const sink = createWriteStream(path, { flags: "a" });
+    // 実際に受け取っていた時間を測る。番組表の尺は予定でしかなく、
+    // 途中で止めたときやチューナーを取るのに手間取ったときは実物と合わない。
+    // 再開したときは足していく(ファイルも追記なので合計が実物になる)
+    const from = Date.now();
+    let savedEpgAt = from;
+    let interrupted = 0;
 
     try {
-        // 追記で開く。再起動をまたいで録画を再開したときに、それまでの分を消さないため
-        // (MPEG-TS は 188 バイトのパケットの並びなので、そのまま繋げても読める)
-        const sink = createWriteStream(path, { flags: 'a' });
-        // 実際に受け取っていた時間を測る。番組表の尺は予定でしかなく、
-        // 途中で止めたときやチューナーを取るのに手間取ったときは実物と合わない。
-        // 再開したときは足していく(ファイルも追記なので合計が実物になる)
-        const from = Date.now();
-        let savedEpgAt = from;
-        let interrupted = 0;
+      /*
+       * **選局は自分から切るまで終わらない。** 向こうから終わったなら (EOF でも
+       * 例外でも) チューナーを取り上げられたか切れたかで、終了時刻 (自分の abort) までは取り直す。
+       * EOF を正常終了と読んでいた頃は、チューナーを取り上げられた録画が尻切れのまま「録れた」に
+       * なり (HTTP 越しでは失敗も正常終了に見える。`agent/conformance.test.ts`)、
+       * 例外で抜けていた頃はエージェントの Pod を入れ替えただけで番組が丸ごと
+       * 失敗した (実機)
+       */
+      // 引き継ぎは最初に使うときだけ。取り直すころには、止めた録画はもう離れている
+      let handoff = after;
+      while (!controller.signal.aborted) {
+        /** 切れた理由。EOF なら null のまま */
+        let broke: unknown = null;
+
+        let stream: ReadableStream<Uint8Array>;
+        try {
+          const leaving = handoff;
+          handoff = [];
+          stream = await openWithRetry(
+            (signal) =>
+              openChannelStream(
+                service.type,
+                service.channel,
+                signal,
+                use,
+                undefined,
+                leaving,
+              ),
+            controller.signal,
+          );
+        } catch (error) {
+          // **取り直せなくても諦めない。** エージェントの Pod 入れ替えは
+          // openWithRetry の数十秒を超えることがあり、そこで失敗にすると
+          // 「終了時刻まで掛け直す」という上の約束を破って番組を丸ごと
+          // 落とす。終了時刻(=自分での abort)が来るまでは待って掛け直す
+          if (controller.signal.aborted) break;
+          interrupted++;
+          console.warn(
+            `[recorder] 録画 ${recording.id}: 選局を取り直せません (${interrupted} 回目: ${error})。` +
+              `待って掛け直します`,
+          );
+          await Bun.sleep(OPEN_RETRY_WAIT);
+          continue;
+        }
 
         try {
+          for await (const chunk of chunks(stream)) {
+            if (epg.feed(chunk) && eventId !== null) {
+              const present = epg.present.get(service.service_id);
+              if (
+                present !== undefined &&
+                present.eventId === eventId &&
+                present.startAt !== null &&
+                present.duration !== null
+              ) {
+                extendIfLonger(recording, present.startAt + present.duration);
+              }
+              if (Date.now() - savedEpgAt >= EPG_SAVE_INTERVAL) {
+                savedEpgAt = Date.now();
+                savePrograms(epg.all());
+              }
+            }
+
+            const out = filter.filter(chunk);
             /*
-             * **選局は自分から切るまで終わらない。** 向こうから終わったなら (EOF でも
-             * 例外でも) チューナーを取り上げられたか切れたかで、終了時刻 (自分の abort) までは取り直す。
-             * EOF を正常終了と読んでいた頃は、チューナーを取り上げられた録画が尻切れのまま「録れた」に
-             * なり (HTTP 越しでは失敗も正常終了に見える。`agent/conformance.test.ts`)、
-             * 例外で抜けていた頃はエージェントの Pod を入れ替えただけで番組が丸ごと
-             * 失敗した (実機)
+             * **コピー禁止のあいだは保存しない** (PMT のデジタルコピー制御記述子)。番組表が
+             * 古い・無いときの備えで、ふだんは予約の時点で止まっている (`format.COPY_NEVER_REASON`)。
+             * 決めるのは PMT を読んでから — それまでのぶん (PAT・番組表) も書かない
              */
-            // 引き継ぎは最初に使うときだけ。取り直すころには、止めた録画はもう離れている
-            let handoff = after;
-            while (!controller.signal.aborted) {
-                /** 切れた理由。EOF なら null のまま */
-                let broke: unknown = null;
-
-                let stream: ReadableStream<Uint8Array>;
-                try {
-                    const leaving = handoff;
-                    handoff = [];
-                    stream = await openWithRetry(
-                        (signal) =>
-                            openChannelStream(service.type, service.channel, signal, use, undefined, leaving),
-                        controller.signal,
-                    );
-                } catch (error) {
-                    // **取り直せなくても諦めない。** エージェントの Pod 入れ替えは
-                    // openWithRetry の数十秒を超えることがあり、そこで失敗にすると
-                    // 「終了時刻まで掛け直す」という上の約束を破って番組を丸ごと
-                    // 落とす。終了時刻(=自分での abort)が来るまでは待って掛け直す
-                    if (controller.signal.aborted) break;
-                    interrupted++;
-                    console.warn(
-                        `[recorder] 録画 ${recording.id}: 選局を取り直せません (${interrupted} 回目: ${error})。` +
-                            `待って掛け直します`,
-                    );
-                    await Bun.sleep(OPEN_RETRY_WAIT);
-                    continue;
-                }
-
-                try {
-                    for await (const chunk of chunks(stream)) {
-                        if (epg.feed(chunk) && eventId !== null) {
-                            const present = epg.present.get(service.service_id);
-                            if (
-                                present !== undefined &&
-                                present.eventId === eventId &&
-                                present.startAt !== null &&
-                                present.duration !== null
-                            ) {
-                                extendIfLonger(recording, present.startAt + present.duration);
-                            }
-                            if (Date.now() - savedEpgAt >= EPG_SAVE_INTERVAL) {
-                                savedEpgAt = Date.now();
-                                savePrograms(epg.all());
-                            }
-                        }
-
-                        const out = filter.filter(chunk);
-                        /*
-                         * **コピー禁止のあいだは保存しない** (PMT のデジタルコピー制御記述子)。番組表が
-                         * 古い・無いときの備えで、ふだんは予約の時点で止まっている (`format.COPY_NEVER_REASON`)。
-                         * 決めるのは PMT を読んでから — それまでのぶん (PAT・番組表) も書かない
-                         */
-                        if (!filter.ready) continue;
-                        if (filter.copyNever) {
-                            if (!copyNever) {
-                                copyNever = true;
-                                console.warn(
-                                    `[recorder] 録画 ${recording.id}: コピー禁止なので保存を止めます`,
-                                );
-                            }
-                            /*
-                             * **番組が始まった時点で禁止なら録画をやめてチューナーを返す。** 番組が始まる前
-                             * (開始マージン) の PMT は前の番組のものなので、番組が始まるまでは待つ
-                             * (そのあいだに前の番組のぶんを書いていても、本編を1バイトも書いていなければやめる)。
-                             * 本編を書いたあとで禁止に変わったときは止めない — そこまでのぶんは残し、戻れば続きを書く
-                             */
-                            if (!wroteProgram && Date.now() >= recording.start_at) {
-                                stoppedForCopyNever = true;
-                                controller.abort();
-                                break;
-                            }
-                            continue;
-                        }
-                        if (copyNever) {
-                            copyNever = false;
-                            console.warn(
-                                `[recorder] 録画 ${recording.id}: コピー禁止が解けたので保存を続けます`,
-                            );
-                        }
-                        if (out.length === 0) continue;
-                        if (!wroteProgram && Date.now() >= recording.start_at) wroteProgram = true;
-                        written += out.byteLength;
-                        if (!sink.write(out)) await once(sink, 'drain');
-                    }
-                } catch (error) {
-                    broke = error ?? new Error('不明な理由');
-                }
-
-                // 終了時刻に達して自分で切った。ここだけが正常な終わり方
-                if (controller.signal.aborted) break;
-
-                interrupted++;
+            if (!filter.ready) continue;
+            if (filter.copyNever) {
+              if (!copyNever) {
+                copyNever = true;
                 console.warn(
-                    `[recorder] 録画 ${recording.id}: 選局が切れました (${interrupted} 回目` +
-                        `${broke === null ? '' : `: ${broke}`})。取り直します`,
+                  `[recorder] 録画 ${recording.id}: コピー禁止なので保存を止めます`,
                 );
-                await Bun.sleep(OPEN_RETRY_WAIT);
+              }
+              /*
+               * **番組が始まった時点で禁止なら録画をやめてチューナーを返す。** 番組が始まる前
+               * (開始マージン) の PMT は前の番組のものなので、番組が始まるまでは待つ
+               * (そのあいだに前の番組のぶんを書いていても、本編を1バイトも書いていなければやめる)。
+               * 本編を書いたあとで禁止に変わったときは止めない — そこまでのぶんは残し、戻れば続きを書く
+               */
+              if (!wroteProgram && Date.now() >= recording.start_at) {
+                stoppedForCopyNever = true;
+                controller.abort();
+                break;
+              }
+              continue;
             }
-        } finally {
-            if (interrupted > 0) {
-                console.warn(`[recorder] 録画 ${recording.id}: 途中で ${interrupted} 回切れました`);
+            if (copyNever) {
+              copyNever = false;
+              console.warn(
+                `[recorder] 録画 ${recording.id}: コピー禁止が解けたので保存を続けます`,
+              );
             }
-            addDuration(recording.id, Date.now() - from);
-            await new Promise<void>((resolve, reject) => {
-                sink.end((error?: Error | null) => (error ? reject(error) : resolve()));
-            });
-            // 途中で終わっても、読めたぶんの番組表は残す
-            savePrograms(epg.all());
+            if (out.length === 0) continue;
+            if (!wroteProgram && Date.now() >= recording.start_at)
+              wroteProgram = true;
+            written += out.byteLength;
+            if (!sink.write(out)) await once(sink, "drain");
+          }
+        } catch (error) {
+          broke = error ?? new Error("不明な理由");
         }
-    } catch (error) {
-        // 終了時刻に達して自分で abort した場合は正常終了。それ以外だけ失敗にする
-        if (!controller.signal.aborted) {
-            fail(recording.id, String(error));
-            return;
-        }
+
+        // 終了時刻に達して自分で切った。ここだけが正常な終わり方
+        if (controller.signal.aborted) break;
+
+        interrupted++;
+        console.warn(
+          `[recorder] 録画 ${recording.id}: 選局が切れました (${interrupted} 回目` +
+            `${broke === null ? "" : `: ${broke}`})。取り直します`,
+        );
+        await Bun.sleep(OPEN_RETRY_WAIT);
+      }
     } finally {
-        active.delete(recording.id);
+      if (interrupted > 0) {
+        console.warn(
+          `[recorder] 録画 ${recording.id}: 途中で ${interrupted} 回切れました`,
+        );
+      }
+      addDuration(recording.id, Date.now() - from);
+      await new Promise<void>((resolve, reject) => {
+        sink.end((error?: Error | null) => (error ? reject(error) : resolve()));
+      });
+      // 途中で終わっても、読めたぶんの番組表は残す
+      savePrograms(epg.all());
     }
-
-    /*
-     * 始めから禁止だったものは失敗にする。開始マージンで前の番組のぶんを書いていても、
-     * それだけを「録れた」にしない (元のTSは失敗した録画と同じく残す)
-     */
-    if (stoppedForCopyNever) {
-        fail(recording.id, COPY_NEVER_RECORDING);
-        return;
+  } catch (error) {
+    // 終了時刻に達して自分で abort した場合は正常終了。それ以外だけ失敗にする
+    if (!controller.signal.aborted) {
+      fail(recording.id, String(error));
+      return;
     }
+  } finally {
+    active.delete(recording.id);
+  }
 
-    let size = written;
-    try {
-        size = statSync(path).size;
-    } catch {
-        // 統計が取れなくても書き込み量で代用する
-    }
+  /*
+   * 始めから禁止だったものは失敗にする。開始マージンで前の番組のぶんを書いていても、
+   * それだけを「録れた」にしない (元のTSは失敗した録画と同じく残す)
+   */
+  if (stoppedForCopyNever) {
+    fail(recording.id, COPY_NEVER_RECORDING);
+    return;
+  }
 
-    if (size === 0) {
-        fail(recording.id, 'ストリームから1バイトも受信できませんでした');
-        return;
-    }
+  let size = written;
+  try {
+    size = statSync(path).size;
+  } catch {
+    // 統計が取れなくても書き込み量で代用する
+  }
 
-    finish(recording.id, size);
+  if (size === 0) {
+    fail(recording.id, "ストリームから1バイトも受信できませんでした");
+    return;
+  }
+
+  finish(recording.id, size);
 }
 
 /** 録画完了。エンコードするならキューに積み、しないならそのまま保存先に置く */
 function finish(recordingId: number, size: number): void {
-    const at = now();
-    // 録り終えた時刻が入った時点で「録画済み」になる (recordings.state は生成列)
-    orm()
-        .update(recordings)
-        .set({ finished_at: at, ts_size: size, updated_at: at })
-        .where(eq(recordings.id, recordingId))
-        .run();
+  const at = now();
+  // 録り終えた時刻が入った時点で「録画済み」になる (recordings.state は生成列)
+  orm()
+    .update(recordings)
+    .set({ finished_at: at, ts_size: size, updated_at: at })
+    .where(eq(recordings.id, recordingId))
+    .run();
 
-    const recording = recordingById(recordingId)!;
-    const reservation =
-        recording.reservation_id == null
-            ? undefined
-            : orm()
-                  .select({ encode: reservations.encode })
-                  .from(reservations)
-                  .where(eq(reservations.id, recording.reservation_id))
-                  .get();
+  const recording = recordingById(recordingId)!;
+  const reservation =
+    recording.reservation_id == null
+      ? undefined
+      : orm()
+          .select({ encode: reservations.encode })
+          .from(reservations)
+          .where(eq(reservations.id, recording.reservation_id))
+          .get();
 
-    emit('recordings');
-    notify({
-        event: 'recording.finished',
-        text: `録画が終わりました: ${recording.name} (${recording.service_name})`,
-        recording: recordingSummary(recording),
-    });
+  emit("recordings");
+  notify({
+    event: "recording.finished",
+    text: `録画が終わりました: ${recording.name} (${recording.service_name})`,
+    recording: recordingSummary(recording),
+  });
 
-    if (reservation === undefined || reservation.encode) {
-        enqueue(recording.id);
-        return;
-    }
+  if (reservation === undefined || reservation.encode) {
+    enqueue(recording.id);
+    return;
+  }
 
-    // エンコードしない設定なら元のTSをそのまま保存先へ移す
-    const dest = libraryPath(recording, '.m2ts');
-    moveFile(recording.ts_path!, dest);
-    void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
-    // 保存先に置いた時点で「視聴可能」になる
-    orm()
-        .update(recordings)
-        .set({ library_path: dest, ts_path: null, updated_at: now() })
-        .where(eq(recordings.id, recording.id))
-        .run();
+  // エンコードしない設定なら元のTSをそのまま保存先へ移す
+  const dest = libraryPath(recording, ".m2ts");
+  moveFile(recording.ts_path!, dest);
+  void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
+  // 保存先に置いた時点で「視聴可能」になる
+  orm()
+    .update(recordings)
+    .set({ library_path: dest, ts_path: null, updated_at: now() })
+    .where(eq(recordings.id, recording.id))
+    .run();
 }
 
 /**
@@ -504,8 +541,11 @@ function finish(recordingId: number, size: number): void {
  * (`failStrayRecordings`) で同じ物差しを使う。書き写していると、片方だけ直したときに
  * 「止めた時刻」と「終わっているはずの時刻」がずれる
  */
-export function recordingUntil(rec: { end_at: number; record_to: number | null }): number {
-    return rec.record_to ?? rec.end_at + config.endMargin;
+export function recordingUntil(rec: {
+  end_at: number;
+  record_to: number | null;
+}): number {
+  return rec.record_to ?? rec.end_at + config.endMargin;
 }
 
 /**
@@ -516,25 +556,32 @@ export function recordingUntil(rec: { end_at: number; record_to: number | null }
  * そのまま残り、抜けるのは止まっていた間だけになる。
  * 放送が終わってしまったものは、もう取り返せないので失敗に倒す。
  */
-export function recoverOrphanedRecordings(): { resumed: number; failed: number } {
-    const orphans = orm().select().from(recordings).where(eq(recordings.state, 'recording')).all();
+export function recoverOrphanedRecordings(): {
+  resumed: number;
+  failed: number;
+} {
+  const orphans = orm()
+    .select()
+    .from(recordings)
+    .where(eq(recordings.state, "recording"))
+    .all();
 
-    let resumed = 0;
-    let failed = 0;
-    const at = now();
-    for (const orphan of orphans) {
-        if (orphan.ts_path === null || recordingUntil(orphan) <= at) {
-            fail(orphan.id, 'アプリの再起動により録画が中断されました');
-            failed++;
-            continue;
-        }
-
-        launch(orphan);
-        console.log(`[boot] 録画を再開: ${orphan.name} (${orphan.service_name})`);
-        resumed++;
+  let resumed = 0;
+  let failed = 0;
+  const at = now();
+  for (const orphan of orphans) {
+    if (orphan.ts_path === null || recordingUntil(orphan) <= at) {
+      fail(orphan.id, "アプリの再起動により録画が中断されました");
+      failed++;
+      continue;
     }
-    if (resumed > 0) emit('recordings');
-    return { resumed, failed };
+
+    launch(orphan);
+    console.log(`[boot] 録画を再開: ${orphan.name} (${orphan.service_name})`);
+    resumed++;
+  }
+  if (resumed > 0) emit("recordings");
+  return { resumed, failed };
 }
 
 /**
@@ -562,17 +609,28 @@ const STRAY_GRACE = 60_000;
  *
  * `at` と `owned` を渡せるようにしてあるのは試すため (`recorder-stray.test.ts`)
  */
-export function failStrayRecordings(at = now(), owned: ReadonlySet<number> = new Set(active.keys())): number {
-    const stray = orm()
-        .select({ id: recordings.id, end_at: recordings.end_at, record_to: recordings.record_to })
-        .from(recordings)
-        .where(eq(recordings.state, 'recording'))
-        .all()
-        .filter((rec) => !owned.has(rec.id) && at >= recordingUntil(rec) + STRAY_GRACE);
+export function failStrayRecordings(
+  at = now(),
+  owned: ReadonlySet<number> = new Set(active.keys()),
+): number {
+  const stray = orm()
+    .select({
+      id: recordings.id,
+      end_at: recordings.end_at,
+      record_to: recordings.record_to,
+    })
+    .from(recordings)
+    .where(eq(recordings.state, "recording"))
+    .all()
+    .filter(
+      (rec) => !owned.has(rec.id) && at >= recordingUntil(rec) + STRAY_GRACE,
+    );
 
-    for (const rec of stray) {
-        console.warn(`[recorder] 録画 ${rec.id}: 録っている者がいないまま終了時刻を過ぎました。失敗にします`);
-        fail(rec.id, '録画が中断されたまま終了時刻を過ぎました');
-    }
-    return stray.length;
+  for (const rec of stray) {
+    console.warn(
+      `[recorder] 録画 ${rec.id}: 録っている者がいないまま終了時刻を過ぎました。失敗にします`,
+    );
+    fail(rec.id, "録画が中断されたまま終了時刻を過ぎました");
+  }
+  return stray.length;
 }

@@ -11,7 +11,7 @@
  * - **チャプター送り**は「いま観ているものの頭」を挟む (曲送りと同じ癖)
  */
 
-import { logoUnusable } from '../format';
+import { logoUnusable } from "../format";
 
 /** 1回で動かす秒数。動画アプリの通例に合わせる */
 export const SKIP = 10;
@@ -32,29 +32,29 @@ export const DOUBLE_TAP = 300;
  */
 const EDGE = 0.3;
 
-export type Zone = 'left' | 'center' | 'right';
+export type Zone = "left" | "center" | "right";
 
 /** 押されたのが左端か右端か真ん中か。`x` は映像の左端からの距離 */
 export function zoneOf(x: number, width: number): Zone {
-    if (width <= 0) return 'center';
-    const ratio = x / width;
-    if (ratio < EDGE) return 'left';
-    if (ratio > 1 - EDGE) return 'right';
-    return 'center';
+  if (width <= 0) return "center";
+  const ratio = x / width;
+  if (ratio < EDGE) return "left";
+  if (ratio > 1 - EDGE) return "right";
+  return "center";
 }
 
 export type TapAction =
-    /** 送る・戻す。`undo` が true なら、直前に切り替えた再生/一時停止も戻す */
-    | { kind: 'seek'; by: number; undo: boolean }
-    /** 再生/一時停止 */
-    | { kind: 'play' }
-    /** 操作列の出し入れ */
-    | { kind: 'controls' };
+  /** 送る・戻す。`undo` が true なら、直前に切り替えた再生/一時停止も戻す */
+  | { kind: "seek"; by: number; undo: boolean }
+  /** 再生/一時停止 */
+  | { kind: "play" }
+  /** 操作列の出し入れ */
+  | { kind: "controls" };
 
 /** 前に押されたときのこと。2回目かどうかを決めるのに要る */
 export interface Tap {
-    at: number;
-    zone: Zone;
+  at: number;
+  zone: Zone;
 }
 
 /**
@@ -70,40 +70,48 @@ export interface Tap {
  * @param coarse 指で触っているか (`(pointer: coarse)`)
  */
 export function tap(
-    last: Tap | null,
-    now: number,
-    zone: Zone,
-    coarse: boolean,
+  last: Tap | null,
+  now: number,
+  zone: Zone,
+  coarse: boolean,
 ): { action: TapAction; next: Tap } {
-    const next: Tap = { at: now, zone };
-    const again = last !== null && now - last.at < DOUBLE_TAP && last.zone === zone;
+  const next: Tap = { at: now, zone };
+  const again =
+    last !== null && now - last.at < DOUBLE_TAP && last.zone === zone;
 
-    if (again && zone !== 'center') {
-        /*
-         * **続けて押せば重なる。** 30秒 戻したいときに3回押せるようにしておく
-         * (`next` を残すので、次の1回もまた2回目として届く)。
-         *
-         * 打ち消すのはマウスのときだけ — 指のときの1回目は操作列の出し入れで、
-         * 再生には触っていない
-         */
-        return { action: { kind: 'seek', by: zone === 'left' ? -SKIP : SKIP, undo: !coarse }, next };
-    }
+  if (again && zone !== "center") {
     /*
-     * **真ん中を素早く2回で再生/一時停止** (スマホの VLC と同じ癖)。
-     * 指の1回目は操作列の出し入れなので、2回目で初めて再生に触る。
-     * マウスは1回目で既に切り替えているので、ここには来なくてよい
+     * **続けて押せば重なる。** 30秒 戻したいときに3回押せるようにしておく
+     * (`next` を残すので、次の1回もまた2回目として届く)。
+     *
+     * 打ち消すのはマウスのときだけ — 指のときの1回目は操作列の出し入れで、
+     * 再生には触っていない
      */
-    if (again && coarse) {
-        return { action: { kind: 'play' }, next };
-    }
-    return { action: coarse ? { kind: 'controls' } : { kind: 'play' }, next };
+    return {
+      action: {
+        kind: "seek",
+        by: zone === "left" ? -SKIP : SKIP,
+        undo: !coarse,
+      },
+      next,
+    };
+  }
+  /*
+   * **真ん中を素早く2回で再生/一時停止** (スマホの VLC と同じ癖)。
+   * 指の1回目は操作列の出し入れなので、2回目で初めて再生に触る。
+   * マウスは1回目で既に切り替えているので、ここには来なくてよい
+   */
+  if (again && coarse) {
+    return { action: { kind: "play" }, next };
+  }
+  return { action: coarse ? { kind: "controls" } : { kind: "play" }, next };
 }
 
 /** チャプター1つ。`start` / `end` は秒 */
 export interface Chapter {
-    start: number;
-    end: number;
-    title: string;
+  start: number;
+  end: number;
+  title: string;
 }
 
 /**
@@ -121,10 +129,10 @@ const REWIND_HEAD = 3;
  * **そのままCM飛ばし**になる。
  */
 export function nextChapterAt(chapters: Chapter[], at: number): number | null {
-    for (const chapter of chapters) {
-        if (chapter.start > at + 0.01) return chapter.start;
-    }
-    return null;
+  for (const chapter of chapters) {
+    if (chapter.start > at + 0.01) return chapter.start;
+  }
+  return null;
 }
 
 /**
@@ -133,16 +141,16 @@ export function nextChapterAt(chapters: Chapter[], at: number): number | null {
  * 頭から `REWIND_HEAD` 秒より後ろにいるなら、**いま観ているものの頭**へ戻す。
  */
 export function prevChapterAt(chapters: Chapter[], at: number): number | null {
-    let head: number | null = null;
-    let before: number | null = null;
-    for (const chapter of chapters) {
-        if (chapter.start > at + 0.01) break;
-        before = head;
-        head = chapter.start;
-    }
-    if (head === null) return null;
-    if (at - head > REWIND_HEAD) return head;
-    return before;
+  let head: number | null = null;
+  let before: number | null = null;
+  for (const chapter of chapters) {
+    if (chapter.start > at + 0.01) break;
+    before = head;
+    head = chapter.start;
+  }
+  if (head === null) return null;
+  if (at - head > REWIND_HEAD) return head;
+  return before;
 }
 
 /**
@@ -151,13 +159,13 @@ export function prevChapterAt(chapters: Chapter[], at: number): number | null {
  * 何本目かではなく中身を返す — 画面に出すのは名前 (「本編」「CM」) のほう
  */
 export function chapterAt(chapters: Chapter[], at: number): Chapter | null {
-    let found: Chapter | null = null;
-    for (const chapter of chapters) {
-        if (chapter.start > at + 0.01) break;
-        found = chapter;
-    }
-    if (found === null) return null;
-    return at < found.end ? found : null;
+  let found: Chapter | null = null;
+  for (const chapter of chapters) {
+    if (chapter.start > at + 0.01) break;
+    found = chapter;
+  }
+  if (found === null) return null;
+  return at < found.end ? found : null;
 }
 
 /**
@@ -168,7 +176,7 @@ export function chapterAt(chapters: Chapter[], at: number): Chapter | null {
  * CM とみなさない — 飛ばし損なうより、本編を飛ばすほうが困る
  */
 export function isCm(title: string): boolean {
-    return title.trim().toUpperCase() === 'CM';
+  return title.trim().toUpperCase() === "CM";
 }
 
 /**
@@ -179,24 +187,28 @@ export function isCm(title: string): boolean {
  *
  * @param at いまの位置 (秒)
  */
-export function skipTarget(chapters: Chapter[], at: number, lead = 0): number | null {
-    /*
-     * **`lead` のぶん先を見ます。** 入ってから飛ぶと、気付くまでのコマが必ず
-     * 見えます (画面は飛ぶまで今の映像を出し続けるため)。**跨ぐ直前に飛べば、
-     * 最後に映っているのは本編の1コマ**で、CM のコマは1枚も出ません。
-     * 早く飛んだぶん本編の末尾が欠けますが、境目は場面の切れ目なので
-     * 1コマぶんなら分かりません
-     */
-    const now = chapterAt(chapters, at + lead);
-    if (now === null || !isCm(now.title)) return null;
-    let end = now.end;
-    for (const chapter of chapters) {
-        // まだ手前のもの。`end` は跨いだぶんだけ伸びていく
-        if (chapter.start < end - 0.01) continue;
-        if (!isCm(chapter.title)) break;
-        end = chapter.end;
-    }
-    return end;
+export function skipTarget(
+  chapters: Chapter[],
+  at: number,
+  lead = 0,
+): number | null {
+  /*
+   * **`lead` のぶん先を見ます。** 入ってから飛ぶと、気付くまでのコマが必ず
+   * 見えます (画面は飛ぶまで今の映像を出し続けるため)。**跨ぐ直前に飛べば、
+   * 最後に映っているのは本編の1コマ**で、CM のコマは1枚も出ません。
+   * 早く飛んだぶん本編の末尾が欠けますが、境目は場面の切れ目なので
+   * 1コマぶんなら分かりません
+   */
+  const now = chapterAt(chapters, at + lead);
+  if (now === null || !isCm(now.title)) return null;
+  let end = now.end;
+  for (const chapter of chapters) {
+    // まだ手前のもの。`end` は跨いだぶんだけ伸びていく
+    if (chapter.start < end - 0.01) continue;
+    if (!isCm(chapter.title)) break;
+    end = chapter.end;
+  }
+  return end;
 }
 
 /**
@@ -209,25 +221,33 @@ export function skipTarget(chapters: Chapter[], at: number, lead = 0): number | 
  * エンコードしたもの (切ったので位置が無い) と、CM検出が当たらなかったもの
  */
 export function parseChapters(json: string): Chapter[] {
-    let raw: unknown;
-    try {
-        raw = JSON.parse(json);
-    } catch {
-        return [];
-    }
-    const list = (raw as { chapters?: unknown })?.chapters;
-    if (!Array.isArray(list)) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  const list = (raw as { chapters?: unknown })?.chapters;
+  if (!Array.isArray(list)) return [];
 
-    const chapters: Chapter[] = [];
-    for (const entry of list) {
-        const item = entry as { start_time?: unknown; end_time?: unknown; tags?: { title?: unknown } };
-        const start = Number(item.start_time);
-        const end = Number(item.end_time);
-        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
-        const title = typeof item.tags?.title === 'string' && item.tags.title !== '' ? item.tags.title : '—';
-        chapters.push({ start, end, title });
-    }
-    return chapters.sort((a, b) => a.start - b.start);
+  const chapters: Chapter[] = [];
+  for (const entry of list) {
+    const item = entry as {
+      start_time?: unknown;
+      end_time?: unknown;
+      tags?: { title?: unknown };
+    };
+    const start = Number(item.start_time);
+    const end = Number(item.end_time);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
+      continue;
+    const title =
+      typeof item.tags?.title === "string" && item.tags.title !== ""
+        ? item.tags.title
+        : "—";
+    chapters.push({ start, end, title });
+  }
+  return chapters.sort((a, b) => a.start - b.start);
 }
 
 /**
@@ -247,9 +267,10 @@ export function parseChapters(json: string): Chapter[] {
  * @returns 覚える位置。覚えないなら null
  */
 export function resumePoint(at: number, length: number): number | null {
-    if (!Number.isFinite(at) || at < RESUME_HEAD) return null;
-    if (Number.isFinite(length) && length > 0 && at > length - RESUME_EDGE) return null;
-    return at;
+  if (!Number.isFinite(at) || at < RESUME_HEAD) return null;
+  if (Number.isFinite(length) && length > 0 && at > length - RESUME_EDGE)
+    return null;
+  return at;
 }
 
 /**
@@ -258,7 +279,12 @@ export function resumePoint(at: number, length: number): number | null {
  * 目印は消えたのに未視聴のまま、が起きる。尺が分からなければ観終えたとは言わない
  */
 export function watchedToEnd(at: number, length: number): boolean {
-    return Number.isFinite(at) && Number.isFinite(length) && length > 0 && at > length - RESUME_EDGE;
+  return (
+    Number.isFinite(at) &&
+    Number.isFinite(length) &&
+    length > 0 &&
+    at > length - RESUME_EDGE
+  );
 }
 
 /**
@@ -273,40 +299,40 @@ export function watchedToEnd(at: number, length: number): boolean {
  * 物差しが元の TS そのもの (エンコードしたものが無い・TS で観ている) なら `Ruler` は null
  */
 export interface Ruler {
-    kept: readonly { start: number; end: number }[] | null;
-    skip: number;
+  kept: readonly { start: number; end: number }[] | null;
+  skip: number;
 }
 
 function keptOf(ruler: Ruler): { start: number; end: number }[] {
-    return (ruler.kept ?? []).filter((range) => range.end > range.start);
+  return (ruler.kept ?? []).filter((range) => range.end > range.start);
 }
 
 /** 元の TS の物差しの位置 (秒) を、`ruler` の物差しへ。**切った CM の中は、その後の本編の頭へ寄せる** */
 export function fromTsTime(at: number, ruler: Ruler | null): number {
-    if (ruler === null) return at;
-    const kept = keptOf(ruler);
-    if (kept.length === 0) return Math.max(0, at - ruler.skip);
-    let sum = 0;
-    for (const range of kept) {
-        if (at < range.start) return sum;
-        if (at < range.end) return sum + (at - range.start);
-        sum += range.end - range.start;
-    }
-    return sum;
+  if (ruler === null) return at;
+  const kept = keptOf(ruler);
+  if (kept.length === 0) return Math.max(0, at - ruler.skip);
+  let sum = 0;
+  for (const range of kept) {
+    if (at < range.start) return sum;
+    if (at < range.end) return sum + (at - range.start);
+    sum += range.end - range.start;
+  }
+  return sum;
 }
 
 /** `ruler` の物差しの位置 (秒) を、元の TS の物差しへ (`fromTsTime` の逆) */
 export function toTsTime(at: number, ruler: Ruler | null): number {
-    if (ruler === null) return at;
-    const kept = keptOf(ruler);
-    if (kept.length === 0) return at + ruler.skip;
-    let rest = Math.max(0, at);
-    for (const range of kept) {
-        const length = range.end - range.start;
-        if (rest < length) return range.start + rest;
-        rest -= length;
-    }
-    return kept.at(-1)!.end;
+  if (ruler === null) return at;
+  const kept = keptOf(ruler);
+  if (kept.length === 0) return at + ruler.skip;
+  let rest = Math.max(0, at);
+  for (const range of kept) {
+    const length = range.end - range.start;
+    if (rest < length) return range.start + rest;
+    rest -= length;
+  }
+  return kept.at(-1)!.end;
 }
 
 /** 末尾のここから先は「観終えた」とみなす (秒) */
@@ -326,15 +352,18 @@ const RESUME_HEAD = 15;
  * CM ではなく本編のほうを飛ばす。飛んでから気付くのでは遅いので、精度を
  * 当てにできない1本では黙って飛ばさない。**押せばその場で入る**
  */
-export function skipCmAtStart(cmNote: string | null, remembered: string | null): boolean {
-    if (logoUnusable(cmNote)) return false;
-    return remembered !== '0';
+export function skipCmAtStart(
+  cmNote: string | null,
+  remembered: string | null,
+): boolean {
+  if (logoUnusable(cmNote)) return false;
+  return remembered !== "0";
 }
 
 /** シークバーで塗る区間 (秒) */
 export interface Span {
-    start: number;
-    end: number;
+  start: number;
+  end: number;
 }
 
 /**
@@ -345,17 +374,17 @@ export interface Span {
  * (denpa-tv の `cmRuns` と同じ)
  */
 export function cmSpans(chapters: Chapter[]): Span[] {
-    const spans: Span[] = [];
-    for (const chapter of chapters) {
-        if (!isCm(chapter.title)) continue;
-        const last = spans.at(-1);
-        if (last !== undefined && chapter.start <= last.end + 0.01) {
-            last.end = Math.max(last.end, chapter.end);
-        } else {
-            spans.push({ start: chapter.start, end: chapter.end });
-        }
+  const spans: Span[] = [];
+  for (const chapter of chapters) {
+    if (!isCm(chapter.title)) continue;
+    const last = spans.at(-1);
+    if (last !== undefined && chapter.start <= last.end + 0.01) {
+      last.end = Math.max(last.end, chapter.end);
+    } else {
+      spans.push({ start: chapter.start, end: chapter.end });
     }
-    return spans;
+  }
+  return spans;
 }
 
 /**
@@ -363,11 +392,12 @@ export function cmSpans(chapters: Chapter[]): Span[] {
  * 切れ目だけ (引き継いだ録画の、名前の付いたチャプターなど)
  */
 export function plainMarks(chapters: Chapter[]): number[] {
-    const marks: number[] = [];
-    let before: Chapter | null = null;
-    for (const chapter of chapters) {
-        if (before !== null && !isCm(before.title) && !isCm(chapter.title)) marks.push(chapter.start);
-        before = chapter;
-    }
-    return marks;
+  const marks: number[] = [];
+  let before: Chapter | null = null;
+  for (const chapter of chapters) {
+    if (before !== null && !isCm(before.title) && !isCm(chapter.title))
+      marks.push(chapter.start);
+    before = chapter;
+  }
+  return marks;
 }

@@ -1,5 +1,12 @@
-import { describe, expect, test } from 'bun:test';
-import { type Cue, currentCue, insertCue, KEEP_CUES, showing, trimCues } from './captions';
+import { describe, expect, test } from "bun:test";
+import {
+  type Cue,
+  currentCue,
+  insertCue,
+  KEEP_CUES,
+  showing,
+  trimCues,
+} from "./captions";
 
 const cue = (at: number): Cue => ({ at, page: null });
 
@@ -7,34 +14,34 @@ const cue = (at: number): Cue => ({ at, page: null });
  * **字幕は映像より早く届く。** 映像はエンコードを通るぶん遅れるが、字幕は
  * デコードするだけで通り抜ける。届いた端から出すと、口が動く前に台詞が出る。
  */
-describe('currentCue', () => {
-    const cues = [cue(10), cue(20), cue(30)];
+describe("currentCue", () => {
+  const cues = [cue(10), cue(20), cue(30)];
 
-    /** まだどれも時刻に達していない。**何も出さない** */
-    test('再生位置より先のものは出さない', () => {
-        expect(currentCue(cues, 5)).toBeNull();
-        expect(currentCue(cues, 9.9)).toBeNull();
-    });
+  /** まだどれも時刻に達していない。**何も出さない** */
+  test("再生位置より先のものは出さない", () => {
+    expect(currentCue(cues, 5)).toBeNull();
+    expect(currentCue(cues, 9.9)).toBeNull();
+  });
 
-    /*
-     * **字幕は次が来るまで出しっぱなし。** だから「いま出すもの」は
-     * 追い越していない中の**最後の1つ**で、ちょうど1枚ずつ送り出すのではない
-     */
-    test('過ぎたものの中でいちばん新しい1つを出す', () => {
-        expect(currentCue(cues, 10)?.at).toBe(10);
-        expect(currentCue(cues, 19.9)?.at).toBe(10);
-        expect(currentCue(cues, 20)?.at).toBe(20);
-        expect(currentCue(cues, 999)?.at).toBe(30);
-    });
+  /*
+   * **字幕は次が来るまで出しっぱなし。** だから「いま出すもの」は
+   * 追い越していない中の**最後の1つ**で、ちょうど1枚ずつ送り出すのではない
+   */
+  test("過ぎたものの中でいちばん新しい1つを出す", () => {
+    expect(currentCue(cues, 10)?.at).toBe(10);
+    expect(currentCue(cues, 19.9)?.at).toBe(10);
+    expect(currentCue(cues, 20)?.at).toBe(20);
+    expect(currentCue(cues, 999)?.at).toBe(30);
+  });
 
-    /** 飛んだ直後もこれで追いつく。間の枚を1つずつ出す必要が無い */
-    test('飛んでも間を通らずに追いつく', () => {
-        expect(currentCue(cues, 30)?.at).toBe(30);
-    });
+  /** 飛んだ直後もこれで追いつく。間の枚を1つずつ出す必要が無い */
+  test("飛んでも間を通らずに追いつく", () => {
+    expect(currentCue(cues, 30)?.at).toBe(30);
+  });
 
-    test('何も無ければ null', () => {
-        expect(currentCue([], 10)).toBeNull();
-    });
+  test("何も無ければ null", () => {
+    expect(currentCue([], 10)).toBeNull();
+  });
 });
 
 /**
@@ -42,65 +49,67 @@ describe('currentCue', () => {
  * いま出している1枚を捨ててはいけない (出しっぱなしのものなので、捨てると
  * 次の字幕まで何も出なくなる)。
  */
-describe('trimCues', () => {
-    test('いま出している1枚は残す', () => {
-        const cues = [cue(10), cue(20), cue(30)];
-        const kept = trimCues(cues, 25);
-        expect(kept.map((c) => c.at)).toEqual([20, 30]);
-    });
+describe("trimCues", () => {
+  test("いま出している1枚は残す", () => {
+    const cues = [cue(10), cue(20), cue(30)];
+    const kept = trimCues(cues, 25);
+    expect(kept.map((c) => c.at)).toEqual([20, 30]);
+  });
 
-    test('まだどれも過ぎていなければ何も捨てない', () => {
-        const cues = [cue(10), cue(20)];
-        expect(trimCues(cues, 5)).toHaveLength(2);
-    });
+  test("まだどれも過ぎていなければ何も捨てない", () => {
+    const cues = [cue(10), cue(20)];
+    expect(trimCues(cues, 5)).toHaveLength(2);
+  });
 
-    test('上限を超えたら古いほうから落とす', () => {
-        const cues = Array.from({ length: KEEP_CUES + 50 }, (_, i) => cue(1000 + i));
-        // まだどれも過ぎていないので、落ちるのは上限のぶんだけ
-        const kept = trimCues(cues, 0);
-        expect(kept).toHaveLength(KEEP_CUES);
-        expect(kept[kept.length - 1]!.at).toBe(1000 + KEEP_CUES + 49);
-    });
+  test("上限を超えたら古いほうから落とす", () => {
+    const cues = Array.from({ length: KEEP_CUES + 50 }, (_, i) =>
+      cue(1000 + i),
+    );
+    // まだどれも過ぎていないので、落ちるのは上限のぶんだけ
+    const kept = trimCues(cues, 0);
+    expect(kept).toHaveLength(KEEP_CUES);
+    expect(kept[kept.length - 1]!.at).toBe(1000 + KEEP_CUES + 49);
+  });
 });
 
 /** 別々の経路から来るので、届く順は前後しうる */
-describe('insertCue', () => {
-    test('時刻の順に並べる', () => {
-        let cues: Cue[] = [];
-        cues = insertCue(cues, cue(30));
-        cues = insertCue(cues, cue(10));
-        cues = insertCue(cues, cue(20));
-        expect(cues.map((c) => c.at)).toEqual([10, 20, 30]);
-    });
+describe("insertCue", () => {
+  test("時刻の順に並べる", () => {
+    let cues: Cue[] = [];
+    cues = insertCue(cues, cue(30));
+    cues = insertCue(cues, cue(10));
+    cues = insertCue(cues, cue(20));
+    expect(cues.map((c) => c.at)).toEqual([10, 20, 30]);
+  });
 
-    /** 出し直しなので、同じ時刻なら後から来たほうが正しい */
-    test('同じ時刻は後から来たほうを採る', () => {
-        const first = { at: 10, page: null };
-        const second = { at: 10, page: null };
-        const cues = insertCue(insertCue([], first), second);
-        expect(cues).toHaveLength(1);
-        expect(cues[0]).toBe(second);
-    });
+  /** 出し直しなので、同じ時刻なら後から来たほうが正しい */
+  test("同じ時刻は後から来たほうを採る", () => {
+    const first = { at: 10, page: null };
+    const second = { at: 10, page: null };
+    const cues = insertCue(insertCue([], first), second);
+    expect(cues).toHaveLength(1);
+    expect(cues[0]).toBe(second);
+  });
 });
 
 /** **待ち (TIME) のある字幕は、次が来なくても消える** (libaribcaption の描き手と同じ) */
-describe('showing', () => {
-    const page = (duration: number | null) => ({
-        v: 1 as const,
-        plane: [960, 540] as [number, number],
-        duration,
-        runs: [],
-    });
+describe("showing", () => {
+  const page = (duration: number | null) => ({
+    v: 1 as const,
+    plane: [960, 540] as [number, number],
+    duration,
+    runs: [],
+  });
 
-    test('出しておく長さを過ぎたら消す', () => {
-        const held = { at: 10, page: page(2000) };
-        expect(showing(held, 11.9)).toBe(held.page);
-        expect(showing(held, 12)).toBeNull();
-    });
+  test("出しておく長さを過ぎたら消す", () => {
+    const held = { at: 10, page: page(2000) };
+    expect(showing(held, 11.9)).toBe(held.page);
+    expect(showing(held, 12)).toBeNull();
+  });
 
-    test('長さが無ければ次の1枚まで出しっぱなし', () => {
-        const held = { at: 10, page: page(null) };
-        expect(showing(held, 9999)).toBe(held.page);
-        expect(showing(null, 10)).toBeNull();
-    });
+  test("長さが無ければ次の1枚まで出しっぱなし", () => {
+    const held = { at: 10, page: page(null) };
+    expect(showing(held, 9999)).toBe(held.page);
+    expect(showing(null, 10)).toBeNull();
+  });
 });

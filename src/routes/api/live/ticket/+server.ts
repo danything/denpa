@@ -1,5 +1,5 @@
-import { json } from '@sveltejs/kit';
-import { issue } from '#lib/server/tickets.js';
+import { json } from "@sveltejs/kit";
+import { issue } from "#lib/server/tickets.js";
 
 /**
  * ライブ視聴の WebSocket に繋ぐためのチケットを1枚配る。
@@ -9,5 +9,5 @@ import { issue } from '#lib/server/tickets.js';
  * 認証を通れることをここで示してもらってから繋いでもらう (`tickets.ts`)。
  */
 export function POST() {
-    return json({ ticket: issue() });
+  return json({ ticket: issue() });
 }

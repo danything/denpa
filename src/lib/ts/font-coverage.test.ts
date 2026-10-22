@@ -12,154 +12,164 @@
  * CI では必ず確かめ、手元で取れないとき (オフライン) は飛ばす。
  */
 
-import { describe, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { GAIJI } from './aribtext-gaiji';
+import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { GAIJI } from "./aribtext-gaiji";
 import {
-    ADDITIONAL,
-    ALNUM_FULL,
-    ALNUM_HALF,
-    DRCS_REPLACE,
-    HIRAGANA,
-    JISX0201,
-    JISX0201_HALF,
-    KANA_SYMBOLS_HALF,
-    KANJI_DIFF,
-    KANJI_SYMBOLS_HALF,
-    KATAKANA,
-} from './b24-tables';
+  ADDITIONAL,
+  ALNUM_FULL,
+  ALNUM_HALF,
+  DRCS_REPLACE,
+  HIRAGANA,
+  JISX0201,
+  JISX0201_HALF,
+  KANA_SYMBOLS_HALF,
+  KANJI_DIFF,
+  KANJI_SYMBOLS_HALF,
+  KATAKANA,
+} from "./b24-tables";
 
 /** フォントに入れないと決めた字 (denpa-font の missing.txt と同じ)。いまは無い */
 const ALLOWED_MISSING = new Set<number>([]);
 
-const root = join(import.meta.dir, '../../..');
-const VERSION = readFileSync(join(root, 'Dockerfile'), 'utf8').match(/^ARG DENPA_FONT_VERSION=(\S+)/m)?.[1];
+const root = join(import.meta.dir, "../../..");
+const VERSION = readFileSync(join(root, "Dockerfile"), "utf8").match(
+  /^ARG DENPA_FONT_VERSION=(\S+)/m,
+)?.[1];
 const RELEASE = `https://github.com/danything/denpa-font/releases/download/${VERSION}`;
 
 /** cmap (format 12 か 4) の字 */
 function cmapCodepoints(ttf: Uint8Array): Set<number> {
-    const v = new DataView(ttf.buffer, ttf.byteOffset, ttf.byteLength);
-    let cmap = -1;
-    for (let i = 0; i < v.getUint16(4); i++) {
-        const r = 12 + i * 16;
-        if (String.fromCharCode(...ttf.subarray(r, r + 4)) === 'cmap') cmap = v.getUint32(r + 8);
+  const v = new DataView(ttf.buffer, ttf.byteOffset, ttf.byteLength);
+  let cmap = -1;
+  for (let i = 0; i < v.getUint16(4); i++) {
+    const r = 12 + i * 16;
+    if (String.fromCharCode(...ttf.subarray(r, r + 4)) === "cmap")
+      cmap = v.getUint32(r + 8);
+  }
+  if (cmap < 0) throw new Error("cmap がありません");
+  const out = new Set<number>();
+  let f4 = -1;
+  for (let i = 0; i < v.getUint16(cmap + 2); i++) {
+    const off = cmap + v.getUint32(cmap + 8 + i * 8);
+    const format = v.getUint16(off);
+    if (format === 12) {
+      for (let g = 0; g < v.getUint32(off + 12); g++) {
+        const r = off + 16 + g * 12;
+        for (let c = v.getUint32(r); c <= v.getUint32(r + 4); c++) out.add(c);
+      }
+      return out;
     }
-    if (cmap < 0) throw new Error('cmap がありません');
-    const out = new Set<number>();
-    let f4 = -1;
-    for (let i = 0; i < v.getUint16(cmap + 2); i++) {
-        const off = cmap + v.getUint32(cmap + 8 + i * 8);
-        const format = v.getUint16(off);
-        if (format === 12) {
-            for (let g = 0; g < v.getUint32(off + 12); g++) {
-                const r = off + 16 + g * 12;
-                for (let c = v.getUint32(r); c <= v.getUint32(r + 4); c++) out.add(c);
-            }
-            return out;
-        }
-        if (format === 4) f4 = off;
-    }
-    if (f4 < 0) throw new Error('cmap に Unicode の表がありません');
-    const segs = v.getUint16(f4 + 6) / 2;
-    for (let i = 0; i < segs; i++) {
-        const end = v.getUint16(f4 + 14 + i * 2);
-        const start = v.getUint16(f4 + 16 + segs * 2 + i * 2);
-        for (let c = start; c <= end && c !== 0xffff; c++) out.add(c);
-    }
-    return out;
+    if (format === 4) f4 = off;
+  }
+  if (f4 < 0) throw new Error("cmap に Unicode の表がありません");
+  const segs = v.getUint16(f4 + 6) / 2;
+  for (let i = 0; i < segs; i++) {
+    const end = v.getUint16(f4 + 14 + i * 2);
+    const start = v.getUint16(f4 + 16 + segs * 2 + i * 2);
+    for (let c = start; c <= end && c !== 0xffff; c++) out.add(c);
+  }
+  return out;
 }
 
 /** 表の字 (出しうる字) → どの表の字か */
 function tableCodepoints(): Map<number, string> {
-    const out = new Map<number, string>();
-    const add = (s: string, where: string) => {
-        for (const ch of s) {
-            const c = ch.codePointAt(0)!;
-            if (c >= 0x20 && c !== 0xfffd && !out.has(c)) out.set(c, where);
-        }
-    };
-    const strings = {
-        HIRAGANA,
-        KATAKANA,
-        KANA_SYMBOLS_HALF,
-        JISX0201,
-        JISX0201_HALF,
-        ALNUM_FULL,
-        ALNUM_HALF,
-        KANJI_SYMBOLS_HALF,
-        ADDITIONAL,
-    };
-    for (const [name, value] of Object.entries(strings)) add(value, `b24-tables ${name}`);
-    /*
-     * データ放送の 1〜84 区は `TextDecoder('euc-jp')` が返す字 (`src/lib/bml/euc.ts` と同じ読み方)。
-     * 見るのは JIS X 0208 に字のある区点だけ — WHATWG の EUC-JP は 13 区を NEC 特殊文字
-     * (㍉・㊤ など) として読むが、ARIB の放送はこの区を使わない (同じ字は 90〜94 区の追加記号にあり、
-     * `ADDITIONAL` で見ている)
-     */
-    const decoder = new TextDecoder('euc-jp');
-    const jis0208 = (cell: number): string | null => {
-        if (Math.floor(cell / 94) + 1 === 13) return null;
-        const ch = decoder.decode(Uint8Array.of(0xa1 + Math.floor(cell / 94), 0xa1 + (cell % 94)));
-        return ch === '�' ? null : ch;
-    };
-    // JIS の差分は、放送が使う区点 (JIS X 0208 に字のある区点と外字の 85・86・90〜94 区) の分だけ
-    // (denpa-font の一覧と同じ)
-    const used = (cell: number) => {
-        const ku = Math.floor(cell / 94) + 1;
-        return jis0208(cell) !== null || ku === 85 || ku === 86 || (ku >= 90 && ku <= 94);
-    };
-    for (const [start, s] of KANJI_DIFF) {
-        [...s].forEach((ch, k) => {
-            if (used(start + k)) add(ch, 'b24-tables KANJI_DIFF');
-        });
+  const out = new Map<number, string>();
+  const add = (s: string, where: string) => {
+    for (const ch of s) {
+      const c = ch.codePointAt(0)!;
+      if (c >= 0x20 && c !== 0xfffd && !out.has(c)) out.set(c, where);
     }
-    for (const c of DRCS_REPLACE.values()) add(String.fromCodePoint(c), 'b24-tables DRCS_REPLACE');
-    for (const s of GAIJI.values()) add(s, 'aribtext-gaiji GAIJI');
-    for (let cell = 0; cell < 84 * 94; cell++) add(jis0208(cell) ?? '', 'データ放送 (EUC-JP の 1〜84 区)');
-    return out;
+  };
+  const strings = {
+    HIRAGANA,
+    KATAKANA,
+    KANA_SYMBOLS_HALF,
+    JISX0201,
+    JISX0201_HALF,
+    ALNUM_FULL,
+    ALNUM_HALF,
+    KANJI_SYMBOLS_HALF,
+    ADDITIONAL,
+  };
+  for (const [name, value] of Object.entries(strings))
+    add(value, `b24-tables ${name}`);
+  /*
+   * データ放送の 1〜84 区は `TextDecoder('euc-jp')` が返す字 (`src/lib/bml/euc.ts` と同じ読み方)。
+   * 見るのは JIS X 0208 に字のある区点だけ — WHATWG の EUC-JP は 13 区を NEC 特殊文字
+   * (㍉・㊤ など) として読むが、ARIB の放送はこの区を使わない (同じ字は 90〜94 区の追加記号にあり、
+   * `ADDITIONAL` で見ている)
+   */
+  const decoder = new TextDecoder("euc-jp");
+  const jis0208 = (cell: number): string | null => {
+    if (Math.floor(cell / 94) + 1 === 13) return null;
+    const ch = decoder.decode(
+      Uint8Array.of(0xa1 + Math.floor(cell / 94), 0xa1 + (cell % 94)),
+    );
+    return ch === "�" ? null : ch;
+  };
+  // JIS の差分は、放送が使う区点 (JIS X 0208 に字のある区点と外字の 85・86・90〜94 区) の分だけ
+  // (denpa-font の一覧と同じ)
+  const used = (cell: number) => {
+    const ku = Math.floor(cell / 94) + 1;
+    return (
+      jis0208(cell) !== null || ku === 85 || ku === 86 || (ku >= 90 && ku <= 94)
+    );
+  };
+  for (const [start, s] of KANJI_DIFF) {
+    [...s].forEach((ch, k) => {
+      if (used(start + k)) add(ch, "b24-tables KANJI_DIFF");
+    });
+  }
+  for (const c of DRCS_REPLACE.values())
+    add(String.fromCodePoint(c), "b24-tables DRCS_REPLACE");
+  for (const s of GAIJI.values()) add(s, "aribtext-gaiji GAIJI");
+  for (let cell = 0; cell < 84 * 94; cell++)
+    add(jis0208(cell) ?? "", "データ放送 (EUC-JP の 1〜84 区)");
+  return out;
 }
 
 async function get(name: string): Promise<Uint8Array> {
-    const res = await fetch(`${RELEASE}/${name}`);
-    if (!res.ok) throw new Error(`${RELEASE}/${name}: ${res.status}`);
-    return new Uint8Array(await res.arrayBuffer());
+  const res = await fetch(`${RELEASE}/${name}`);
+  if (!res.ok) throw new Error(`${RELEASE}/${name}: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 /** リリースの ttf を取り、同じリリースの SHA256SUMS で照らす。手元で取れなければ null */
 async function fetchTtf(): Promise<Uint8Array | null> {
-    let sums: string;
-    let ttf: Uint8Array;
-    try {
-        sums = new TextDecoder().decode(await get('SHA256SUMS'));
-        ttf = await get('denpa-font.ttf');
-    } catch (e) {
-        if (process.env['CI']) throw e;
-        console.warn(`フォントを取れないので飛ばす (オフライン?): ${e}`);
-        return null;
-    }
-    const want = sums.match(/^([0-9a-f]{64}) +denpa-font\.ttf$/m)?.[1];
-    expect(createHash('sha256').update(ttf).digest('hex')).toBe(want!);
-    return ttf;
+  let sums: string;
+  let ttf: Uint8Array;
+  try {
+    sums = new TextDecoder().decode(await get("SHA256SUMS"));
+    ttf = await get("denpa-font.ttf");
+  } catch (e) {
+    if (process.env["CI"]) throw e;
+    console.warn(`フォントを取れないので飛ばす (オフライン?): ${e}`);
+    return null;
+  }
+  const want = sums.match(/^([0-9a-f]{64}) +denpa-font\.ttf$/m)?.[1];
+  expect(createHash("sha256").update(ttf).digest("hex")).toBe(want!);
+  return ttf;
 }
 
-describe('字の表とフォント', () => {
-    test('Dockerfile がフォントの版 (タグ) を留めている', () => {
-        expect(VERSION).toMatch(/^v\d+\.\d+$/);
-    });
+describe("字の表とフォント", () => {
+  test("Dockerfile がフォントの版 (タグ) を留めている", () => {
+    expect(VERSION).toMatch(/^v\d+\.\d+$/);
+  });
 
-    test('表の字がフォントに全部ある', async () => {
-        const ttf = await fetchTtf();
-        if (!ttf) return;
-        const have = cmapCodepoints(ttf);
-        const lack = [...tableCodepoints()]
-            .filter(([c]) => !have.has(c) && !ALLOWED_MISSING.has(c))
-            .map(
-                ([c, where]) =>
-                    `U+${c.toString(16).toUpperCase().padStart(4, '0')} ${String.fromCodePoint(c)} (${where})`,
-            );
-        // 無い字を全部出す
-        expect(lack).toEqual([]);
-    }, 60_000);
+  test("表の字がフォントに全部ある", async () => {
+    const ttf = await fetchTtf();
+    if (!ttf) return;
+    const have = cmapCodepoints(ttf);
+    const lack = [...tableCodepoints()]
+      .filter(([c]) => !have.has(c) && !ALLOWED_MISSING.has(c))
+      .map(
+        ([c, where]) =>
+          `U+${c.toString(16).toUpperCase().padStart(4, "0")} ${String.fromCodePoint(c)} (${where})`,
+      );
+    // 無い字を全部出す
+    expect(lack).toEqual([]);
+  }, 60_000);
 });

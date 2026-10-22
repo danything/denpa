@@ -17,40 +17,43 @@
  * 取り上げた録画は、取り上げたチューナーに入る — そのチューナーに録画の利用者がいれば、それが取り上げた相手
  */
 
-import { eq } from 'drizzle-orm';
-import type { YieldedRecording } from '#lib/live.js';
-import { orm } from './db';
-import { recordingUntil } from './recorder';
-import { recordings } from './schema';
-import { displayTitle } from './title';
-import { type AgentTuner, getTuners, recordingOf } from './tuner';
+import { eq } from "drizzle-orm";
+import type { YieldedRecording } from "#lib/live.js";
+import { orm } from "./db";
+import { recordingUntil } from "./recorder";
+import { recordings } from "./schema";
+import { displayTitle } from "./title";
+import { type AgentTuner, getTuners, recordingOf } from "./tuner";
 
-type Listed = Pick<AgentTuner, 'index' | 'channel' | 'users'>;
+type Listed = Pick<AgentTuner, "index" | "channel" | "users">;
 
 /** その利用者がいるチューナー (`index`)。いなければ null */
 export function tunerOf(
-    tuners: readonly Listed[],
-    type: string,
-    channel: string,
-    use: string,
+  tuners: readonly Listed[],
+  type: string,
+  channel: string,
+  use: string,
 ): number | null {
-    const found = tuners.find(
-        (tuner) =>
-            tuner.channel?.type === type &&
-            tuner.channel.channel === channel &&
-            tuner.users.some((user) => user.use === use),
-    );
-    return found?.index ?? null;
+  const found = tuners.find(
+    (tuner) =>
+      tuner.channel?.type === type &&
+      tuner.channel.channel === channel &&
+      tuner.users.some((user) => user.use === use),
+  );
+  return found?.index ?? null;
 }
 
 /** そのチューナーにいる録画の ID。録画の利用者がいなければ null (2つあれば先のほう。どちらも同じチューナーを塞いでいる) */
-export function recordingOn(tuners: readonly Listed[], index: number): number | null {
-    const tuner = tuners.find((t) => t.index === index);
-    for (const user of tuner?.users ?? []) {
-        const id = recordingOf(user.use);
-        if (id !== null) return id;
-    }
-    return null;
+export function recordingOn(
+  tuners: readonly Listed[],
+  index: number,
+): number | null {
+  const tuner = tuners.find((t) => t.index === index);
+  for (const user of tuner?.users ?? []) {
+    const id = recordingOf(user.use);
+    if (id !== null) return id;
+  }
+  return null;
 }
 
 /**
@@ -63,19 +66,24 @@ const LOOK_WAIT = 300;
 
 /** 録画の行から、画面に渡す形式を作る。消された・無い録画なら null */
 function lookup(id: number): YieldedRecording | null {
-    const rec = orm()
-        .select({
-            name: recordings.name,
-            service_name: recordings.service_name,
-            end_at: recordings.end_at,
-            record_to: recordings.record_to,
-            deleted_at: recordings.deleted_at,
-        })
-        .from(recordings)
-        .where(eq(recordings.id, id))
-        .get();
-    if (rec === undefined || rec.deleted_at !== null) return null;
-    return { id, title: displayTitle(rec.name), serviceName: rec.service_name, endAt: recordingUntil(rec) };
+  const rec = orm()
+    .select({
+      name: recordings.name,
+      service_name: recordings.service_name,
+      end_at: recordings.end_at,
+      record_to: recordings.record_to,
+      deleted_at: recordings.deleted_at,
+    })
+    .from(recordings)
+    .where(eq(recordings.id, id))
+    .get();
+  if (rec === undefined || rec.deleted_at !== null) return null;
+  return {
+    id,
+    title: displayTitle(rec.name),
+    serviceName: rec.service_name,
+    endAt: recordingUntil(rec),
+  };
 }
 
 /**
@@ -83,23 +91,23 @@ function lookup(id: number): YieldedRecording | null {
  * いなかった・エージェントに訊けなかった)。そのときは画面はリクエストし直すだけで、追っかけには切り替えない
  */
 export async function yieldedTo(
-    index: number | null,
-    list: () => Promise<readonly Listed[]> = getTuners,
-    find: (id: number) => YieldedRecording | null = lookup,
-    wait: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
+  index: number | null,
+  list: () => Promise<readonly Listed[]> = getTuners,
+  find: (id: number) => YieldedRecording | null = lookup,
+  wait: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
 ): Promise<YieldedRecording | null> {
-    if (index === null) return null;
-    for (let look = 0; look < LOOKS; look++) {
-        if (look > 0) await wait(LOOK_WAIT);
-        let tuners: readonly Listed[];
-        try {
-            tuners = await list();
-        } catch {
-            // エージェントが入れ替わっている最中かもしれない。読み直す
-            continue;
-        }
-        const id = recordingOn(tuners, index);
-        if (id !== null) return find(id);
+  if (index === null) return null;
+  for (let look = 0; look < LOOKS; look++) {
+    if (look > 0) await wait(LOOK_WAIT);
+    let tuners: readonly Listed[];
+    try {
+      tuners = await list();
+    } catch {
+      // エージェントが入れ替わっている最中かもしれない。読み直す
+      continue;
     }
-    return null;
+    const id = recordingOn(tuners, index);
+    if (id !== null) return find(id);
+  }
+  return null;
 }

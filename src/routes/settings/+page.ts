@@ -1,6 +1,6 @@
-import { redirect } from '@sveltejs/kit';
-import { FIRST_GROUP } from '#lib/settings-sections.js';
-import { resolve } from '$app/paths';
+import { redirect } from "@sveltejs/kit";
+import { FIRST_GROUP } from "#lib/settings-sections.js";
+import { resolve } from "$app/paths";
 
 /**
  * **広い画面では先頭のグループへ移る。** 狭い画面の `/settings` はグループの一覧だけを出す画面
@@ -8,7 +8,10 @@ import { resolve } from '$app/paths';
  * 最初に開いたとき (サーバで描いたあと) も、ブラウザでもう1度ここを通る
  */
 export function load() {
-    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches) {
-        redirect(307, resolve(`settings/${FIRST_GROUP}`));
-    }
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia("(min-width: 768px)").matches
+  ) {
+    redirect(307, resolve(`settings/${FIRST_GROUP}`));
+  }
 }

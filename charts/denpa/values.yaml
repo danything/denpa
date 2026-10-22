@@ -25,8 +25,8 @@ image:
 # 書くと、注釈が変わるたびに Pod が入れ替わり、Always で新しいものを引く。
 # 固定タグで運用するなら空のままでよい (タグが変われば Pod は入れ替わる)
 imageMarks:
-  denpa: ''
-  agent: ''
+  denpa: ""
+  agent: ""
 
 denpa:
   # 同時にエンコードする本数。ffmpeg は 1 本で ~4GB 使う
@@ -35,7 +35,7 @@ denpa:
   # ログインなしで通すネットワーク (CIDR のカンマ区切り)。docs/auth.md。
   # 空だと (OIDC も無ければ) 全部 403 で断る。0.0.0.0/0 で全部開くが、
   # それはインターネットに向けて開くのと同じ
-  trustedNetworks: ''
+  trustedNetworks: ""
   # 前段 (Gateway・Ingress コントローラ・Traefik など) が denpa へ繋いでくる住所
   # (CIDR のカンマ区切り)。ここから来たときだけ X-Forwarded-For を読み、本当の接続元を
   # 決める (docs/auth.md)。前段の住所はクラスタの作りで決まるので既定は空 — 前段が
@@ -43,13 +43,13 @@ denpa:
   # 10.42.0.0/16) を入れればよい。空のまま前段の後ろに置くと接続元が前段の住所になり、
   # trustedNetworks が誰にも当たらない (安全側に倒れるだけで、開きはしない)。
   # (以前の addressHeader は廃止。設定していても読まない)
-  trustedProxies: ''
+  trustedProxies: ""
   # ホーム画面に置いたときの名前。`ホスト=名前` のカンマ区切り (docs/watch.md#ホーム画面に置く)
-  pwaNames: ''
+  pwaNames: ""
   # OIDC でのログイン (docs/auth.md)。**Secret の名前だけを渡し**、中身
   # (issuer / client-id / client-secret / group。group は無くてよい) は chart の外で作る
   # (このリポジトリ自身は InfisicalSecret `deploy/oidc-secret.yaml`)。空なら OIDC 無し
-  oidcSecretName: ''
+  oidcSecretName: ""
   # 追加の環境変数 (src/lib/server/config.ts の一覧)。そのまま container.env に入る
   extraEnv: []
   # 録画中に入れ替えが来たら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)。
@@ -105,7 +105,7 @@ prepull:
 
 persistence:
   # 既定の StorageClass。空ならクラスタの既定
-  storageClassName: ''
+  storageClassName: ""
   # **PVC を ArgoCD に消させない** (Prune=false,Delete=false)。ここが消えると録画が消える
   # ので既定は true。true の間は、chart から PVC が消えても・Application ごと消しても
   # ArgoCD は PVC に触らない。
@@ -117,19 +117,19 @@ persistence:
   # denpa の DB
   data:
     size: 5Gi
-    existingClaim: ''
+    existingClaim: ""
   # 元のTSの作業領域。エンコードが終われば消えるのでライブラリほど要らない
   raw:
     size: 300Gi
-    existingClaim: ''
+    existingClaim: ""
   # エンコード済みの置き場
   encoded:
     size: 1Ti
-    existingClaim: ''
+    existingClaim: ""
   # エージェントの設定 (tuners.json / channels.json)。denpa の画面から書く
   agentConfig:
     size: 128Mi
-    existingClaim: ''
+    existingClaim: ""
 
 service:
   port: 3000
@@ -160,7 +160,7 @@ ingress:
   enabled: false
   hosts: []
   # 標準の Ingress
-  className: ''
+  className: ""
   annotations: {}
   tls: []
 traefik:
@@ -169,7 +169,7 @@ traefik:
   enabled: false
   entryPoints:
     - websecure
-  certResolver: ''
+  certResolver: ""
   # **宛先は Traefik に選ばせず ClusterIP へ渡す。** Traefik 3 は
   # terminating の Pod を外すので、居座り中の Pod に届かず 503 になっていた。
   # nativeLB なら kube-proxy が publishNotReadyAddresses を見て届ける

@@ -1,14 +1,14 @@
 {
-    "extends": "$app/tsconfig",
-    "compilerOptions": {
-        "sourceMap": true,
-        "strict": true,
-        "noImplicitOverride": true,
-        "exactOptionalPropertyTypes": true,
-        "noPropertyAccessFromIndexSignature": true,
-        "noUncheckedIndexedAccess": true,
-        "types": ["bun", "$app/types"]
-    },
-    "include": ["src", "tests", "scripts", "vite.config.ts"],
-    "exclude": ["src/service-worker"]
+  "extends": "$app/tsconfig",
+  "compilerOptions": {
+    "sourceMap": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["bun", "$app/types"]
+  },
+  "include": ["src", "tests", "scripts", "vite.config.ts"],
+  "exclude": ["src/service-worker"]
 }

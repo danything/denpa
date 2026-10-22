@@ -1,4 +1,4 @@
-const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /**
  * チャンネル種別の見出し。**どれを出すか (並び) は画面ごとに決める** —
@@ -6,47 +6,49 @@ const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
  * ルールの条件だけだが、余分に持っていても他画面の表示には出ない)
  */
 export const SERVICE_TYPE_LABEL: Record<string, string> = {
-    GR: '地上波',
-    BS: 'BS',
-    CS: 'CS',
-    SKY: 'SKY',
+  GR: "地上波",
+  BS: "BS",
+  CS: "CS",
+  SKY: "SKY",
 };
 
 export function pad(n: number): string {
-    return String(n).padStart(2, '0');
+  return String(n).padStart(2, "0");
 }
 
 export function time(ms: number): string {
-    const d = new Date(ms);
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** 日付だけ。時刻と2行に分けて出すとき用 */
 export function date(ms: number): string {
-    const d = new Date(ms);
-    return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
 }
 
 export function dateTime(ms: number): string {
-    return `${date(ms)} ${time(ms)}`;
+  return `${date(ms)} ${time(ms)}`;
 }
 
 export function durationMs(ms: number): string {
-    const min = Math.round(ms / 60000);
-    if (min < 60) return `${min}分`;
-    const rest = min % 60;
-    // 「24時間0分」のような書き方は読みにくいので、端数が無いときは時間だけ出す
-    return rest === 0 ? `${Math.floor(min / 60)}時間` : `${Math.floor(min / 60)}時間${rest}分`;
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `${min}分`;
+  const rest = min % 60;
+  // 「24時間0分」のような書き方は読みにくいので、端数が無いときは時間だけ出す
+  return rest === 0
+    ? `${Math.floor(min / 60)}時間`
+    : `${Math.floor(min / 60)}時間${rest}分`;
 }
 
 export function duration(startAt: number, endAt: number): string {
-    return durationMs(endAt - startAt);
+  return durationMs(endAt - startAt);
 }
 
 /** 「いま」の線に添える一言 (`NowLine`)。`short` は狭い幅で代わりに出す形 */
 export interface NowStatus {
-    text: string;
-    short: string;
+  text: string;
+  short: string;
 }
 
 /**
@@ -57,12 +59,15 @@ export interface NowStatus {
  * 分は切り上げる。線の時刻は分を切り捨てて出すので、22:00 の録画は 18:01 の間ずっと「3時間59分」になり、
  * 時刻と食い違わない。1日より先は日数で
  */
-export function nowStatus(now: number, next: { start_at: number } | null): NowStatus | null {
-    if (next === null) return null;
-    return {
-        text: `次の録画まで ${untilWords(next.start_at - now)}`,
-        short: `次まで ${untilShort(next.start_at - now)}`,
-    };
+export function nowStatus(
+  now: number,
+  next: { start_at: number } | null,
+): NowStatus | null {
+  if (next === null) return null;
+  return {
+    text: `次の録画まで ${untilWords(next.start_at - now)}`,
+    short: `次まで ${untilShort(next.start_at - now)}`,
+  };
 }
 
 /**
@@ -70,26 +75,28 @@ export function nowStatus(now: number, next: { start_at: number } | null): NowSt
  * 終わりの時刻を過ぎても止まりきるまでは録画中のまま。そのときはあと何分かは言えないので null (「録画中」だけ)
  */
 export function recordingLeft(now: number, endAt: number): string | null {
-    return endAt <= now ? null : `あと${untilWords(endAt - now)}`;
+  return endAt <= now ? null : `あと${untilWords(endAt - now)}`;
 }
 
 /** 切り上げた分。過ぎていても 1 分 (「0分」とは言わない) */
 function minutesUntil(ms: number): number {
-    return Math.max(1, Math.ceil(ms / 60_000));
+  return Math.max(1, Math.ceil(ms / 60_000));
 }
 
 /** 「3時間59分」「12分」「3日」 */
 function untilWords(ms: number): string {
-    const min = minutesUntil(ms);
-    return min < 24 * 60 ? durationMs(min * 60_000) : `${Math.floor(min / (24 * 60))}日`;
+  const min = minutesUntil(ms);
+  return min < 24 * 60
+    ? durationMs(min * 60_000)
+    : `${Math.floor(min / (24 * 60))}日`;
 }
 
 /** 狭い幅の形。「3:59」「12分」「3日」 */
 function untilShort(ms: number): string {
-    const min = minutesUntil(ms);
-    if (min < 60) return `${min}分`;
-    if (min < 24 * 60) return `${Math.floor(min / 60)}:${pad(min % 60)}`;
-    return `${Math.floor(min / (24 * 60))}日`;
+  const min = minutesUntil(ms);
+  if (min < 60) return `${min}分`;
+  if (min < 24 * 60) return `${Math.floor(min / 60)}:${pad(min % 60)}`;
+  return `${Math.floor(min / (24 * 60))}日`;
 }
 
 /**
@@ -103,21 +110,21 @@ function untilShort(ms: number): string {
  * 必ず重なるので、そこまで数えると**ほとんどの録画にラベルが付いて意味を失います**
  */
 export function clipNote(
-    item: {
-        start_at: number;
-        end_at: number;
-        record_from: number | null;
-        record_to: number | null;
-    },
-    done = false,
+  item: {
+    start_at: number;
+    end_at: number;
+    record_from: number | null;
+    record_to: number | null;
+  },
+  done = false,
 ): string | null {
-    const head = item.record_from !== null ? item.record_from - item.start_at : 0;
-    const tail = item.record_to !== null ? item.end_at - item.record_to : 0;
-    const parts: string[] = [];
-    if (head > 0) parts.push(`冒頭 ${durationMs(head)}`);
-    if (tail > 0) parts.push(`末尾 ${durationMs(tail)}`);
-    if (parts.length === 0) return null;
-    return `${parts.join('と')}が${done ? '欠けています' : '欠けます'} (チューナー不足)`;
+  const head = item.record_from !== null ? item.record_from - item.start_at : 0;
+  const tail = item.record_to !== null ? item.end_at - item.record_to : 0;
+  const parts: string[] = [];
+  if (head > 0) parts.push(`冒頭 ${durationMs(head)}`);
+  if (tail > 0) parts.push(`末尾 ${durationMs(tail)}`);
+  if (parts.length === 0) return null;
+  return `${parts.join("と")}が${done ? "欠けています" : "欠けます"} (チューナー不足)`;
 }
 
 /**
@@ -129,12 +136,12 @@ export function clipNote(
  * 位を数えないと読めない
  */
 export function clock(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
-    const whole = Math.floor(seconds);
-    const s = whole % 60;
-    const m = Math.floor(whole / 60) % 60;
-    const h = Math.floor(whole / 3600);
-    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+  const whole = Math.floor(seconds);
+  const s = whole % 60;
+  const m = Math.floor(whole / 60) % 60;
+  const h = Math.floor(whole / 3600);
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
 /**
@@ -144,19 +151,21 @@ export function clock(seconds: number): string {
  * CMを切ったときは出来上がりと合わない。取れていない古い行は予定で代用する。
  */
 export function recordedDuration(recording: {
-    duration_ms: number | null;
-    start_at: number;
-    end_at: number;
+  duration_ms: number | null;
+  start_at: number;
+  end_at: number;
 }): string {
-    return recording.duration_ms != null && recording.duration_ms > 0
-        ? durationMs(recording.duration_ms)
-        : duration(recording.start_at, recording.end_at);
+  return recording.duration_ms != null && recording.duration_ms > 0
+    ? durationMs(recording.duration_ms)
+    : duration(recording.start_at, recording.end_at);
 }
 
 export function size(bytes: number): string {
-    if (bytes <= 0) return '-';
-    const gb = bytes / 1024 ** 3;
-    return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1024 ** 2).toFixed(0)} MB`;
+  if (bytes <= 0) return "-";
+  const gb = bytes / 1024 ** 3;
+  return gb >= 1
+    ? `${gb.toFixed(1)} GB`
+    : `${(bytes / 1024 ** 2).toFixed(0)} MB`;
 }
 
 /**
@@ -167,14 +176,24 @@ export function size(bytes: number): string {
  * 画面の HTML が変わると指紋 (ETag) が合わなくなるので、サーバでこの粗さに丸めてから渡す。
  * 時間は桁に合わせて丸める (目安なので 937 と出すほどの精度は無い)
  */
-export function capacityLabel(free: number, hours: number | null): { free: string; hours: string | null } {
-    const tb = free / 1024 ** 4;
-    const space =
-        tb >= 1 ? `${tb.toFixed(1)}TB` : free >= 1024 ** 3 ? `${Math.floor(free / 1024 ** 3)}GB` : '1GB未満';
-    if (hours === null) return { free: `空き ${space}`, hours: null };
-    if (hours < 1) return { free: `空き ${space}`, hours: '1時間未満' };
-    const step = hours >= 1000 ? 100 : hours >= 100 ? 10 : 1;
-    return { free: `空き ${space}`, hours: `約${Math.floor(hours / step) * step}時間` };
+export function capacityLabel(
+  free: number,
+  hours: number | null,
+): { free: string; hours: string | null } {
+  const tb = free / 1024 ** 4;
+  const space =
+    tb >= 1
+      ? `${tb.toFixed(1)}TB`
+      : free >= 1024 ** 3
+        ? `${Math.floor(free / 1024 ** 3)}GB`
+        : "1GB未満";
+  if (hours === null) return { free: `空き ${space}`, hours: null };
+  if (hours < 1) return { free: `空き ${space}`, hours: "1時間未満" };
+  const step = hours >= 1000 ? 100 : hours >= 100 ? 10 : 1;
+  return {
+    free: `空き ${space}`,
+    hours: `約${Math.floor(hours / step) * step}時間`,
+  };
 }
 
 /**
@@ -184,8 +203,8 @@ export function capacityLabel(free: number, hours: number | null): { free: strin
  * 動いていないのか止まったのか画面から判らなかったので、1桁足してある
  */
 export function percent(value: number): string {
-    const clamped = Math.min(Math.max(value, 0), 1);
-    return `${(clamped * 100).toFixed(1)}%`;
+  const clamped = Math.min(Math.max(value, 0), 1);
+  return `${(clamped * 100).toFixed(1)}%`;
 }
 
 /**
@@ -196,14 +215,14 @@ export function percent(value: number): string {
  * 秒の桁は多少ふらつくが、動いていることそのものが情報になる
  */
 export function eta(ms: number | null): string {
-    if (ms === null || !Number.isFinite(ms) || ms <= 0) return '';
-    const total = Math.round(ms / 1000);
-    const sec = total % 60;
-    const min = Math.floor(total / 60) % 60;
-    const hour = Math.floor(total / 3600);
-    if (hour > 0) return `あと${hour}時間${pad(min)}分${pad(sec)}秒`;
-    if (min > 0) return `あと${min}分${pad(sec)}秒`;
-    return `あと${sec}秒`;
+  if (ms === null || !Number.isFinite(ms) || ms <= 0) return "";
+  const total = Math.round(ms / 1000);
+  const sec = total % 60;
+  const min = Math.floor(total / 60) % 60;
+  const hour = Math.floor(total / 3600);
+  if (hour > 0) return `あと${hour}時間${pad(min)}分${pad(sec)}秒`;
+  if (min > 0) return `あと${min}分${pad(sec)}秒`;
+  return `あと${sec}秒`;
 }
 
 /**
@@ -211,18 +230,20 @@ export function eta(ms: number | null): string {
  * 何をしているところなのかを状態として出す。
  */
 const PHASE_LABEL: Record<string, string> = {
-    descramble: 'スクランブル復号中',
-    cm: 'CM検出中',
-    cut: 'CMカット中',
-    encode: 'エンコード中',
+  descramble: "スクランブル復号中",
+  cm: "CM検出中",
+  cut: "CMカット中",
+  encode: "エンコード中",
 };
 
 /** 行の状態。エンコードが動いていればその段階、そうでなければ録画の状態 */
-function encodeLabel(job: { state: string; phase: string | null } | null): string | null {
-    if (job === null) return null;
-    if (job.state === 'queued') return 'エンコード待ち';
-    if (job.state !== 'running') return null;
-    return PHASE_LABEL[job.phase ?? 'encode'] ?? 'エンコード中';
+function encodeLabel(
+  job: { state: string; phase: string | null } | null,
+): string | null {
+  if (job === null) return null;
+  if (job.state === "queued") return "エンコード待ち";
+  if (job.state !== "running") return null;
+  return PHASE_LABEL[job.phase ?? "encode"] ?? "エンコード中";
 }
 
 /**
@@ -234,20 +255,35 @@ function encodeLabel(job: { state: string; phase: string | null } | null): strin
  * 「失敗」と出て再生できなくなっていた
  */
 export function rowState(rec: {
-    state: string;
-    job_state: string | null;
-    job_phase: string | null;
-    encode_error: string | null;
+  state: string;
+  job_state: string | null;
+  job_phase: string | null;
+  encode_error: string | null;
 }): { label: string; badge: string; quiet: boolean } {
-    const running = encodeLabel(
-        rec.job_state === null ? null : { state: rec.job_state, phase: rec.job_phase },
-    );
-    if (running !== null) return { label: running, badge: badgeClass(rec.job_state ?? ''), quiet: false };
-    // 動いているものが無く、いちばん新しいエンコードが失敗している
-    if (rec.encode_error !== null && rec.encode_error !== '') {
-        return { label: 'エンコード失敗', badge: badgeClass('failed'), quiet: false };
-    }
-    return { label: stateLabel(rec.state), badge: badgeClass(rec.state), quiet: quietState(rec.state) };
+  const running = encodeLabel(
+    rec.job_state === null
+      ? null
+      : { state: rec.job_state, phase: rec.job_phase },
+  );
+  if (running !== null)
+    return {
+      label: running,
+      badge: badgeClass(rec.job_state ?? ""),
+      quiet: false,
+    };
+  // 動いているものが無く、いちばん新しいエンコードが失敗している
+  if (rec.encode_error !== null && rec.encode_error !== "") {
+    return {
+      label: "エンコード失敗",
+      badge: badgeClass("failed"),
+      quiet: false,
+    };
+  }
+  return {
+    label: stateLabel(rec.state),
+    badge: badgeClass(rec.state),
+    quiet: quietState(rec.state),
+  };
 }
 
 /**
@@ -259,23 +295,23 @@ export function rowState(rec: {
  * 済んだものは淡い緑、手を止めてほしいもの(競合・失敗)だけ枠を足して目立たせる
  */
 export function badgeClass(state: string): string {
-    switch (state) {
-        case 'recording':
-        case 'running':
-            return 'solid error';
-        case 'encoding':
-        case 'queued':
-            return 'warning';
-        case 'available':
-        case 'done':
-            return 'success';
-        case 'conflict':
-        case 'failed':
-            return 'error outline';
-        // 予約済み・待ち・取消・削除は「見て欲しいこと」が無いので色を付けない
-        default:
-            return '';
-    }
+  switch (state) {
+    case "recording":
+    case "running":
+      return "solid error";
+    case "encoding":
+    case "queued":
+      return "warning";
+    case "available":
+    case "done":
+      return "success";
+    case "conflict":
+    case "failed":
+      return "error outline";
+    // 予約済み・待ち・取消・削除は「見て欲しいこと」が無いので色を付けない
+    default:
+      return "";
+  }
 }
 
 /**
@@ -284,33 +320,33 @@ export function badgeClass(state: string): string {
  * 見てほしい行が埋もれていた。予約の一覧にいる = 予約済み、ポスターと再生の印がある = 観られる、
  * で分かるので情報は減らない。読み上げ用には残す (画面の外に置く。`.visually-hidden`)
  */
-const QUIET_STATES = new Set(['scheduled', 'available', 'recorded', 'done']);
+const QUIET_STATES = new Set(["scheduled", "available", "recorded", "done"]);
 
 export function quietState(state: string): boolean {
-    return QUIET_STATES.has(state);
+  return QUIET_STATES.has(state);
 }
 
 export const STATE_LABEL: Record<string, string> = {
-    scheduled: '予約済み',
-    conflict: '競合',
-    // コピー禁止の番組。録らないと決めた予約 (`COPY_NEVER_REASON`)
-    skipped: '録画しない',
-    recording: '録画中',
-    done: '完了',
-    failed: '失敗',
-    canceled: '取り消し済み',
-    missed: '録り逃し',
-    recorded: '録画済み',
-    encoding: 'エンコード中',
-    available: '視聴可能',
-    // 消したあとも行は履歴として残る。「視聴可能」のままだと嘘になる
-    deleted: '削除済み',
-    queued: '待機中',
-    running: '実行中',
+  scheduled: "予約済み",
+  conflict: "競合",
+  // コピー禁止の番組。録らないと決めた予約 (`COPY_NEVER_REASON`)
+  skipped: "録画しない",
+  recording: "録画中",
+  done: "完了",
+  failed: "失敗",
+  canceled: "取り消し済み",
+  missed: "録り逃し",
+  recorded: "録画済み",
+  encoding: "エンコード中",
+  available: "視聴可能",
+  // 消したあとも行は履歴として残る。「視聴可能」のままだと嘘になる
+  deleted: "削除済み",
+  queued: "待機中",
+  running: "実行中",
 };
 
 export function stateLabel(state: string): string {
-    return STATE_LABEL[state] ?? state;
+  return STATE_LABEL[state] ?? state;
 }
 
 /**
@@ -318,13 +354,13 @@ export function stateLabel(state: string): string {
  * 予約は「録画しない」(`skipped`) になってこの理由を持ち、手で予約しようとしても
  * この一文で断る。画面とサーバの両方で使うのでここに置く
  */
-export const COPY_NEVER_REASON = 'コピー禁止の番組なので録画しません';
+export const COPY_NEVER_REASON = "コピー禁止の番組なので録画しません";
 
 /**
  * ロゴでの判定が使えなかったときに、CM検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。
  */
-export const LOGO_UNUSABLE = 'ロゴは使えず';
+export const LOGO_UNUSABLE = "ロゴは使えず";
 
 /**
  * その録画を「ロゴでCMを判定できなかった」(無音だけで判定) と扱うか。
@@ -338,7 +374,7 @@ export const LOGO_UNUSABLE = 'ロゴは使えず';
  * 出しておく。理由は覚え書きに書いてあるし、精度が落ちていることに変わりはない。
  */
 export function logoUnusable(cmNote: string | null): boolean {
-    return cmNote?.includes(LOGO_UNUSABLE) === true;
+  return cmNote?.includes(LOGO_UNUSABLE) === true;
 }
 
 /**
@@ -349,14 +385,17 @@ export function logoUnusable(cmNote: string | null): boolean {
  * 文字の途中で1文字ずつ折り返して名前が読めなかった。括弧の無い名前 (px4 の内蔵
  * リーダーなど) はそのまま
  */
-export function splitReaderName(name: string): { name: string; where: string | null } {
-    const found = /^(.+?)\s*\(([^()]+)\)\s*$/.exec(name);
-    if (found === null) return { name, where: null };
-    return { name: found[1] ?? name, where: found[2] ?? null };
+export function splitReaderName(name: string): {
+  name: string;
+  where: string | null;
+} {
+  const found = /^(.+?)\s*\(([^()]+)\)\s*$/.exec(name);
+  if (found === null) return { name, where: null };
+  return { name: found[1] ?? name, where: found[2] ?? null };
 }
 
 /** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */
-export const LOGO_OK = 'ロゴ';
+export const LOGO_OK = "ロゴ";
 
 /**
  * その覚え書きを画面に出すか。
@@ -366,7 +405,7 @@ export const LOGO_OK = 'ロゴ';
  * 何か書いてあること自体が「いつもの精度は出ていない」の合図になります。
  */
 export function cmNoteWorthShowing(cmNote: string | null): boolean {
-    return cmNote !== null && cmNote !== '' && cmNote !== LOGO_OK;
+  return cmNote !== null && cmNote !== "" && cmNote !== LOGO_OK;
 }
 
 /*
@@ -382,25 +421,25 @@ const URL_PATTERN = /https?:\/\/[^\s"'<>）」』】〉、。，]+/g;
 const TRAILING = /[.,!?:;)\]}]+$/;
 
 export interface TextPart {
-    text: string;
-    /** リンクなら宛先。素の文字なら undefined */
-    href?: string;
+  text: string;
+  /** リンクなら宛先。素の文字なら undefined */
+  href?: string;
 }
 
 /** 説明文を「素の文字」と「リンク」に切り分ける。`{@html}` を使わずに済ませるため */
 export function linkify(text: string): TextPart[] {
-    const parts: TextPart[] = [];
-    let cursor = 0;
-    for (const match of text.matchAll(URL_PATTERN)) {
-        const at = match.index;
-        const url = match[0].replace(TRAILING, '');
-        if (url === '') continue;
-        if (at > cursor) parts.push({ text: text.slice(cursor, at) });
-        parts.push({ text: url, href: url });
-        cursor = at + url.length;
-    }
-    if (cursor < text.length) parts.push({ text: text.slice(cursor) });
-    return parts;
+  const parts: TextPart[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const at = match.index;
+    const url = match[0].replace(TRAILING, "");
+    if (url === "") continue;
+    if (at > cursor) parts.push({ text: text.slice(cursor, at) });
+    parts.push({ text: url, href: url });
+    cursor = at + url.length;
+  }
+  if (cursor < text.length) parts.push({ text: text.slice(cursor) });
+  return parts;
 }
 
 /**
@@ -409,9 +448,12 @@ export function linkify(text: string): TextPart[] {
  * 地上波でリモコン番号が分からなければ null (出さない)
  */
 export function channelNumber(service: {
-    type: string;
-    remote_control_key: number | null;
-    service_id: number;
+  type: string;
+  remote_control_key: number | null;
+  service_id: number;
 }): number | null {
-    return service.remote_control_key ?? (service.type === 'GR' ? null : service.service_id);
+  return (
+    service.remote_control_key ??
+    (service.type === "GR" ? null : service.service_id)
+  );
 }

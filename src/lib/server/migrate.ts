@@ -12,31 +12,31 @@
  * ファイルを置き終えてから行を入れるので、途中で止まっても「ファイルの無い行」は残らない ({@link importOne})。
  */
 import {
-    copyFileSync,
-    existsSync,
-    linkSync,
-    mkdirSync,
-    readdirSync,
-    renameSync,
-    rmSync,
-    statSync,
-    unlinkSync,
-} from 'node:fs';
-import { dirname, extname, join } from 'node:path';
-import { SQL } from 'bun';
-import { and, eq, isNull } from 'drizzle-orm';
-import { parseSearchFields, SEARCH_FIELDS } from '#lib/search.js';
-import { array, number, read } from '#lib/shape.js';
-import { toHalfWidth } from '../fold';
-import type { Recording } from '../types';
-import { config } from './config';
-import { now, orm } from './db';
-import { emit } from './events';
-import { type LibraryNameInput, libraryPath, recordedPath } from './library';
-import { writeThumbnail } from './metadata';
-import { reserve } from './reservations';
-import { programs, recordings, rules, services } from './schema';
-import { parseTitle } from './title';
+  copyFileSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
+import { dirname, extname, join } from "node:path";
+import { SQL } from "bun";
+import { and, eq, isNull } from "drizzle-orm";
+import { parseSearchFields, SEARCH_FIELDS } from "#lib/search.js";
+import { array, number, read } from "#lib/shape.js";
+import { toHalfWidth } from "../fold";
+import type { Recording } from "../types";
+import { config } from "./config";
+import { now, orm } from "./db";
+import { emit } from "./events";
+import { type LibraryNameInput, libraryPath, recordedPath } from "./library";
+import { writeThumbnail } from "./metadata";
+import { reserve } from "./reservations";
+import { programs, recordings, rules, services } from "./schema";
+import { parseTitle } from "./title";
 
 const env = (key: string, fallback: string) => process.env[key] ?? fallback;
 
@@ -50,112 +50,113 @@ const env = (key: string, fallback: string) => process.env[key] ?? fallback;
  * 読むだけで、書き込みはしない ([migrate.md](../../../docs/migrate.md))。
  */
 const connectionConfig = {
-    adapter: 'mysql' as const,
-    hostname: env('EPGSTATION_DB_HOST', 'db'),
-    port: Number(env('EPGSTATION_DB_PORT', '3306')),
-    username: env('EPGSTATION_DB_USER', 'root'),
-    password: env('EPGSTATION_DB_PASSWORD', 'epgstation'),
-    database: env('EPGSTATION_DB_NAME', 'epgstation'),
-    /*
-     * **繋がらないときに待たせない。**
-     *
-     * `Bun.SQL` は**断られても繋ぎ直しに行く**ので、宛先がいないと既定の30秒を
-     * 使い切ってから諦める (`mysql2` は ECONNREFUSED をその場で返していた)。
-     * 引き継ぎ元は同じクラスタの中にいるものなので、5秒あれば足りる。
-     * 待たせたぶんだけ「押したのに何も起きない」時間が延びるだけ
-     */
-    connectionTimeout: 5,
+  adapter: "mysql" as const,
+  hostname: env("EPGSTATION_DB_HOST", "db"),
+  port: Number(env("EPGSTATION_DB_PORT", "3306")),
+  username: env("EPGSTATION_DB_USER", "root"),
+  password: env("EPGSTATION_DB_PASSWORD", "epgstation"),
+  database: env("EPGSTATION_DB_NAME", "epgstation"),
+  /*
+   * **繋がらないときに待たせない。**
+   *
+   * `Bun.SQL` は**断られても繋ぎ直しに行く**ので、宛先がいないと既定の30秒を
+   * 使い切ってから諦める (`mysql2` は ECONNREFUSED をその場で返していた)。
+   * 引き継ぎ元は同じクラスタの中にいるものなので、5秒あれば足りる。
+   * 待たせたぶんだけ「押したのに何も起きない」時間が延びるだけ
+   */
+  connectionTimeout: 5,
 };
 
 export const source = {
-    host: connectionConfig.hostname,
-    /** EPGStation のPVCを denpa 側にマウントした場所 */
-    recordedDir: env('EPGSTATION_RECORDED_DIR', '/epgstation-recorded'),
+  host: connectionConfig.hostname,
+  /** EPGStation のPVCを denpa 側にマウントした場所 */
+  recordedDir: env("EPGSTATION_RECORDED_DIR", "/epgstation-recorded"),
 };
 
 /** 引き継ぎ元が見えているか。マウントしていなければ設定画面から実行させない */
 export function available(): boolean {
-    return existsSync(source.recordedDir);
+  return existsSync(source.recordedDir);
 }
 
 export interface MigrateOptions {
-    /** false なら何が起きるかを出すだけでファイルもDBも触らない */
-    apply: boolean;
-    /** コピーではなく移動する。元のPVCに空きが無いとき用 */
-    move: boolean;
+  /** false なら何が起きるかを出すだけでファイルもDBも触らない */
+  apply: boolean;
+  /** コピーではなく移動する。元のPVCに空きが無いとき用 */
+  move: boolean;
 }
 
 export interface MigrateStatus extends MigrateOptions {
-    state: 'idle' | 'running' | 'done' | 'failed';
-    /** 録画の対象の総数。走り出すまでは 0 */
-    total: number;
-    imported: number;
-    skipped: number;
-    missing: number;
-    /** ルールと手動予約。録画と違ってファイルを触らないので、下見でも件数だけ数える */
-    rules: { imported: number; skipped: number };
-    reservations: { imported: number; skipped: number };
-    /** いま扱っている録画の名前 */
-    current: string | null;
-    /** 直近の記録。全部残すと際限が無いので後ろから 200 件だけ持つ */
-    log: string[];
-    error: string | null;
-    startedAt: number | null;
-    finishedAt: number | null;
+  state: "idle" | "running" | "done" | "failed";
+  /** 録画の対象の総数。走り出すまでは 0 */
+  total: number;
+  imported: number;
+  skipped: number;
+  missing: number;
+  /** ルールと手動予約。録画と違ってファイルを触らないので、下見でも件数だけ数える */
+  rules: { imported: number; skipped: number };
+  reservations: { imported: number; skipped: number };
+  /** いま扱っている録画の名前 */
+  current: string | null;
+  /** 直近の記録。全部残すと際限が無いので後ろから 200 件だけ持つ */
+  log: string[];
+  error: string | null;
+  startedAt: number | null;
+  finishedAt: number | null;
 }
 
 const LOG_LIMIT = 200;
 
 /** まっさらな進み具合。起動時と、走らせ直すたびに (`run`) この形に戻す */
 function freshStatus(over: Partial<MigrateStatus> = {}): MigrateStatus {
-    return {
-        state: 'idle',
-        apply: false,
-        move: false,
-        total: 0,
-        imported: 0,
-        skipped: 0,
-        missing: 0,
-        rules: { imported: 0, skipped: 0 },
-        reservations: { imported: 0, skipped: 0 },
-        current: null,
-        log: [],
-        error: null,
-        startedAt: null,
-        finishedAt: null,
-        ...over,
-    };
+  return {
+    state: "idle",
+    apply: false,
+    move: false,
+    total: 0,
+    imported: 0,
+    skipped: 0,
+    missing: 0,
+    rules: { imported: 0, skipped: 0 },
+    reservations: { imported: 0, skipped: 0 },
+    current: null,
+    log: [],
+    error: null,
+    startedAt: null,
+    finishedAt: null,
+    ...over,
+  };
 }
 
 let status_: MigrateStatus = freshStatus();
 
 export function status(): MigrateStatus {
-    return {
-        ...status_,
-        log: [...status_.log],
-        rules: { ...status_.rules },
-        reservations: { ...status_.reservations },
-    };
+  return {
+    ...status_,
+    log: [...status_.log],
+    rules: { ...status_.rules },
+    reservations: { ...status_.reservations },
+  };
 }
 
 function record(message: string): void {
-    status_.log.push(message);
-    if (status_.log.length > LOG_LIMIT) status_.log.splice(0, status_.log.length - LOG_LIMIT);
+  status_.log.push(message);
+  if (status_.log.length > LOG_LIMIT)
+    status_.log.splice(0, status_.log.length - LOG_LIMIT);
 }
 
 export interface Row {
-    id: number;
-    name: string;
-    description: string | null;
-    startAt: number;
-    endAt: number;
-    channelId: number | null;
-    channelName: string | null;
-    serviceId: number | null;
-    networkId: number | null;
-    filePath: string | null;
-    fileType: string | null;
-    fileSize: number | null;
+  id: number;
+  name: string;
+  description: string | null;
+  startAt: number;
+  endAt: number;
+  channelId: number | null;
+  channelName: string | null;
+  serviceId: number | null;
+  networkId: number | null;
+  filePath: string | null;
+  fileType: string | null;
+  fileSize: number | null;
 }
 
 /**
@@ -163,20 +164,22 @@ export interface Row {
  * 相対パスで持っていることも絶対パスのこともあるので両方を見る。
  */
 function sourcePath(filePath: string): string | null {
-    const candidates = [
-        join(source.recordedDir, filePath),
-        filePath.startsWith('/') ? filePath : join(source.recordedDir, filePath.replace(/^\.?\//, '')),
-        join(source.recordedDir, filePath.split('/').pop() ?? ''),
-    ];
-    return candidates.find((path) => existsSync(path)) ?? null;
+  const candidates = [
+    join(source.recordedDir, filePath),
+    filePath.startsWith("/")
+      ? filePath
+      : join(source.recordedDir, filePath.replace(/^\.?\//, "")),
+    join(source.recordedDir, filePath.split("/").pop() ?? ""),
+  ];
+  return candidates.find((path) => existsSync(path)) ?? null;
 }
 
 async function fetchRows(): Promise<Row[]> {
-    const db = new SQL(connectionConfig);
-    try {
-        // EPGStation v2 のテーブル構成。エンコード済みがあればそちらを優先して取る
-        const rows = (await db.unsafe(
-            `SELECT r.id, r.name, r.description, r.startAt, r.endAt,
+  const db = new SQL(connectionConfig);
+  try {
+    // EPGStation v2 のテーブル構成。エンコード済みがあればそちらを優先して取る
+    const rows = (await db.unsafe(
+      `SELECT r.id, r.name, r.description, r.startAt, r.endAt,
                     r.channelId, c.name AS channelName, c.serviceId, c.networkId,
                     v.filePath, v.type AS fileType, v.size AS fileSize
              FROM recorded r
@@ -184,19 +187,22 @@ async function fetchRows(): Promise<Row[]> {
              LEFT JOIN video_file v ON v.recordedId = r.id
              WHERE r.isRecording = 0
              ORDER BY r.startAt`,
-        )) as Row[];
-        // 1つの録画に元のTSとエンコード済みが両方あることがある。エンコード済みを優先
-        const best = new Map<number, Row>();
-        for (const row of rows) {
-            const current = best.get(row.id);
-            if (current === undefined || (current.fileType !== 'encoded' && row.fileType === 'encoded')) {
-                best.set(row.id, row);
-            }
-        }
-        return [...best.values()];
-    } finally {
-        await db.close();
+    )) as Row[];
+    // 1つの録画に元のTSとエンコード済みが両方あることがある。エンコード済みを優先
+    const best = new Map<number, Row>();
+    for (const row of rows) {
+      const current = best.get(row.id);
+      if (
+        current === undefined ||
+        (current.fileType !== "encoded" && row.fileType === "encoded")
+      ) {
+        best.set(row.id, row);
+      }
     }
+    return [...best.values()];
+  } finally {
+    await db.close();
+  }
 }
 
 /**
@@ -209,8 +215,12 @@ async function fetchRows(): Promise<Row[]> {
  */
 const TEMPORARY = /^\.epgstation-\d+\..+\.migrating$/;
 
-function temporaryPath(dir: string, sourceId: number, extension: string): string {
-    return join(dir, `.epgstation-${sourceId}${extension}.migrating`);
+function temporaryPath(
+  dir: string,
+  sourceId: number,
+  extension: string,
+): string {
+  return join(dir, `.epgstation-${sourceId}${extension}.migrating`);
 }
 
 /**
@@ -220,29 +230,31 @@ function temporaryPath(dir: string, sourceId: number, extension: string): string
  * 走るのは一度に1つだけ (`start`) なので、ここで見つかるものは誰も書いていない
  */
 export function sweepTemporaries(): number {
-    const dirs = [config.rawDir, config.encodedDir];
+  const dirs = [config.rawDir, config.encodedDir];
+  try {
+    for (const entry of readdirSync(config.encodedDir, {
+      withFileTypes: true,
+    })) {
+      if (entry.isDirectory()) dirs.push(join(config.encodedDir, entry.name));
+    }
+  } catch {
+    // 保存先がまだ無い。書きかけも無い
+  }
+  let removed = 0;
+  for (const dir of dirs) {
+    let names: string[];
     try {
-        for (const entry of readdirSync(config.encodedDir, { withFileTypes: true })) {
-            if (entry.isDirectory()) dirs.push(join(config.encodedDir, entry.name));
-        }
+      names = readdirSync(dir);
     } catch {
-        // 保存先がまだ無い。書きかけも無い
+      continue;
     }
-    let removed = 0;
-    for (const dir of dirs) {
-        let names: string[];
-        try {
-            names = readdirSync(dir);
-        } catch {
-            continue;
-        }
-        for (const name of names) {
-            if (!TEMPORARY.test(name)) continue;
-            rmSync(join(dir, name), { force: true });
-            removed++;
-        }
+    for (const name of names) {
+      if (!TEMPORARY.test(name)) continue;
+      rmSync(join(dir, name), { force: true });
+      removed++;
     }
-    return removed;
+  }
+  return removed;
 }
 
 /**
@@ -257,31 +269,36 @@ export function sweepTemporaries(): number {
  * 同期処理だけで await を挟まないので、同じプロセスの `reconcile` が割り込む余地は無い
  */
 function stage(from: string, temporary: string, move: boolean): void {
-    if (move) {
-        try {
-            linkSync(from, temporary);
-            return;
-        } catch {
-            // EXDEV (PVCをまたぐ) など。写せば済む
-        }
+  if (move) {
+    try {
+      linkSync(from, temporary);
+      return;
+    } catch {
+      // EXDEV (PVCをまたぐ) など。写せば済む
     }
-    copyFileSync(from, temporary);
+  }
+  copyFileSync(from, temporary);
 }
 
 /** 取り込み済みの行。EPGStation 側のIDの符号を反転して program_id に入れてある */
 function importedRow(sourceId: number): Recording | undefined {
-    return orm()
-        .select()
-        .from(recordings)
-        .where(and(eq(recordings.program_id, -sourceId), isNull(recordings.reservation_id)))
-        .get();
+  return orm()
+    .select()
+    .from(recordings)
+    .where(
+      and(
+        eq(recordings.program_id, -sourceId),
+        isNull(recordings.reservation_id),
+      ),
+    )
+    .get();
 }
 
 /** 行の指すファイルが1つでも実在するか */
 function hasFile(recording: Recording): boolean {
-    return [recording.ts_path, recording.library_path, recording.alt_path].some(
-        (path) => path !== null && existsSync(path),
-    );
+  return [recording.ts_path, recording.library_path, recording.alt_path].some(
+    (path) => path !== null && existsSync(path),
+  );
 }
 
 /**
@@ -301,177 +318,186 @@ function hasFile(recording: Recording): boolean {
  * は戻さない — 消したという判断のほうを尊重する
  */
 export async function importOne(
-    row: Row,
-    options: MigrateOptions,
-): Promise<'imported' | 'skipped' | 'missing'> {
-    const existing = importedRow(row.id);
-    if (existing !== undefined && (existing.deleted_at !== null || hasFile(existing))) return 'skipped';
+  row: Row,
+  options: MigrateOptions,
+): Promise<"imported" | "skipped" | "missing"> {
+  const existing = importedRow(row.id);
+  if (
+    existing !== undefined &&
+    (existing.deleted_at !== null || hasFile(existing))
+  )
+    return "skipped";
 
-    if (row.filePath === null) {
-        record(`ファイルが無い: ${row.name}`);
-        return 'missing';
-    }
-    const from = sourcePath(row.filePath);
-    if (from === null) {
-        record(`見つからない: ${row.filePath} (${row.name})`);
-        return 'missing';
-    }
+  if (row.filePath === null) {
+    record(`ファイルが無い: ${row.name}`);
+    return "missing";
+  }
+  const from = sourcePath(row.filePath);
+  if (from === null) {
+    record(`見つからない: ${row.filePath} (${row.name})`);
+    return "missing";
+  }
 
-    // 番組名は EPGStation が持っていたまま (半角に寄せない。保存先の名前は `sanitizeFileName` が寄せる)
-    const name = row.name;
-    const verb = existing === undefined ? '取り込む' : '取り込み直す';
-    record(`${options.apply ? verb : `${verb}(予定)`}: ${name}`);
-    if (!options.apply) return 'imported';
+  // 番組名は EPGStation が持っていたまま (半角に寄せない。保存先の名前は `sanitizeFileName` が寄せる)
+  const name = row.name;
+  const verb = existing === undefined ? "取り込む" : "取り込み直す";
+  record(`${options.apply ? verb : `${verb}(予定)`}: ${name}`);
+  if (!options.apply) return "imported";
 
-    const parsed = parseTitle(name);
+  const parsed = parseTitle(name);
 
-    /*
-     * 元のTSは保存先ではなく作業領域へ置く。
-     *
-     * EPGStation の video_file.type は 'ts'(未エンコード) か 'encoded'。
-     * 元のTSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
-     * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
-     * 同じ形式 (元のTSは raw、完成品は encoded) に揃える
-     */
-    const raw = row.fileType !== 'encoded';
-    // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の1文字を拡張子と読んでしまう
-    const extension = extname(from) || (raw ? '.m2ts' : '.mkv');
-    const destination = (recording: LibraryNameInput) =>
-        raw ? recordedPath(recording, extension) : libraryPath(recording, extension);
+  /*
+   * 元のTSは保存先ではなく作業領域へ置く。
+   *
+   * EPGStation の video_file.type は 'ts'(未エンコード) か 'encoded'。
+   * 元のTSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
+   * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
+   * 同じ形式 (元のTSは raw、完成品は encoded) に揃える
+   */
+  const raw = row.fileType !== "encoded";
+  // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の1文字を拡張子と読んでしまう
+  const extension = extname(from) || (raw ? ".m2ts" : ".mkv");
+  const destination = (recording: LibraryNameInput) =>
+    raw
+      ? recordedPath(recording, extension)
+      : libraryPath(recording, extension);
 
-    /*
-     * 最終の名前は録画IDから決まる (行を入れるまで分からない) が、置くフォルダは
-     * 決まっている (元のTSの置き場の直下か、保存先のシリーズのフォルダ)。
-     * そこに書きかけを作るので、あとの rename は同じファイルシステムの中で済む
-     */
-    const dir = dirname(
-        destination(
-            existing ?? {
-                id: 0,
-                series: parsed.series,
-                subtitle: parsed.subtitle,
-                start_at: Number(row.startAt),
-            },
-        ),
-    );
-    mkdirSync(dir, { recursive: true });
-    const temporary = temporaryPath(dir, row.id, extension);
+  /*
+   * 最終の名前は録画IDから決まる (行を入れるまで分からない) が、置くフォルダは
+   * 決まっている (元のTSの置き場の直下か、保存先のシリーズのフォルダ)。
+   * そこに書きかけを作るので、あとの rename は同じファイルシステムの中で済む
+   */
+  const dir = dirname(
+    destination(
+      existing ?? {
+        id: 0,
+        series: parsed.series,
+        subtitle: parsed.subtitle,
+        start_at: Number(row.startAt),
+      },
+    ),
+  );
+  mkdirSync(dir, { recursive: true });
+  const temporary = temporaryPath(dir, row.id, extension);
+  rmSync(temporary, { force: true });
+
+  // rename まで済んだら、その置き場所。DB が失敗したときに消すもの
+  let placed: string | null = null;
+  let to: string;
+  try {
+    stage(from, temporary, options.move);
+    const size = statSync(temporary).size;
+
+    // 局が分からない行 (networkId / serviceId が NULL) は照合しない。局名だけ写す
+    const service =
+      row.networkId === null || row.serviceId === null
+        ? undefined
+        : orm()
+            .select({ id: services.id, name: services.name })
+            .from(services)
+            .where(
+              and(
+                eq(services.network_id, row.networkId),
+                eq(services.service_id, row.serviceId),
+              ),
+            )
+            .get();
+
+    to = orm().transaction((tx) => {
+      const at = now();
+      // program_id は EPGStation のIDの符号を反転して入れる。
+      // denpa の番組IDと衝突せず、二重取り込みの判定にも使える
+      const recording =
+        existing ??
+        tx
+          .insert(recordings)
+          .values({
+            reservation_id: null,
+            program_id: -row.id,
+            service_id: service?.id ?? 0,
+            service_name: service?.name ?? row.channelName ?? "",
+            name,
+            series: parsed.series,
+            subtitle: parsed.subtitle,
+            description: row.description ?? "",
+            start_at: Number(row.startAt),
+            end_at: Number(row.endAt),
+            finished_at: at,
+            created_at: at,
+            updated_at: at,
+          })
+          .returning()
+          .get();
+      const target = destination(recording);
+      renameSync(temporary, target);
+      placed = target;
+      // 置き直すときは、行に残っている実体の無いパスも外す
+      tx.update(recordings)
+        .set({
+          ts_path: raw ? target : null,
+          library_path: raw ? null : target,
+          alt_path: null,
+          ts_size: size,
+          updated_at: at,
+        })
+        .where(eq(recordings.id, recording.id))
+        .run();
+      return target;
+    });
+  } catch (error) {
+    // 行は入っていない (トランザクションごと戻る)。置いたものも書きかけも片付けて、
+    // 失敗はこれまでどおり上 (run) へ投げる。元は残っているので次の実行でやり直せる
     rmSync(temporary, { force: true });
-
-    // rename まで済んだら、その置き場所。DB が失敗したときに消すもの
-    let placed: string | null = null;
-    let to: string;
+    if (placed !== null) rmSync(placed, { force: true });
+    throw error;
+  }
+  /*
+   * 移動なら、行が入ってはじめて元を消す。
+   *
+   * **消せなくても取り込みは失敗にしない。** 行もファイルも揃っていて、次の実行は
+   * 取り込み済みとして飛ばす。元の置き場が読み取り専用などで消せないときは、
+   * 元が残ったことだけ記録に出す
+   */
+  if (options.move) {
     try {
-        stage(from, temporary, options.move);
-        const size = statSync(temporary).size;
-
-        // 局が分からない行 (networkId / serviceId が NULL) は照合しない。局名だけ写す
-        const service =
-            row.networkId === null || row.serviceId === null
-                ? undefined
-                : orm()
-                      .select({ id: services.id, name: services.name })
-                      .from(services)
-                      .where(
-                          and(eq(services.network_id, row.networkId), eq(services.service_id, row.serviceId)),
-                      )
-                      .get();
-
-        to = orm().transaction((tx) => {
-            const at = now();
-            // program_id は EPGStation のIDの符号を反転して入れる。
-            // denpa の番組IDと衝突せず、二重取り込みの判定にも使える
-            const recording =
-                existing ??
-                tx
-                    .insert(recordings)
-                    .values({
-                        reservation_id: null,
-                        program_id: -row.id,
-                        service_id: service?.id ?? 0,
-                        service_name: service?.name ?? row.channelName ?? '',
-                        name,
-                        series: parsed.series,
-                        subtitle: parsed.subtitle,
-                        description: row.description ?? '',
-                        start_at: Number(row.startAt),
-                        end_at: Number(row.endAt),
-                        finished_at: at,
-                        created_at: at,
-                        updated_at: at,
-                    })
-                    .returning()
-                    .get();
-            const target = destination(recording);
-            renameSync(temporary, target);
-            placed = target;
-            // 置き直すときは、行に残っている実体の無いパスも外す
-            tx.update(recordings)
-                .set({
-                    ts_path: raw ? target : null,
-                    library_path: raw ? null : target,
-                    alt_path: null,
-                    ts_size: size,
-                    updated_at: at,
-                })
-                .where(eq(recordings.id, recording.id))
-                .run();
-            return target;
-        });
+      unlinkSync(from);
     } catch (error) {
-        // 行は入っていない (トランザクションごと戻る)。置いたものも書きかけも片付けて、
-        // 失敗はこれまでどおり上 (run) へ投げる。元は残っているので次の実行でやり直せる
-        rmSync(temporary, { force: true });
-        if (placed !== null) rmSync(placed, { force: true });
-        throw error;
+      record(`取り込んだが元を消せなかった: ${from} (${String(error)})`);
     }
-    /*
-     * 移動なら、行が入ってはじめて元を消す。
-     *
-     * **消せなくても取り込みは失敗にしない。** 行もファイルも揃っていて、次の実行は
-     * 取り込み済みとして飛ばす。元の置き場が読み取り専用などで消せないときは、
-     * 元が残ったことだけ記録に出す
-     */
-    if (options.move) {
-        try {
-            unlinkSync(from);
-        } catch (error) {
-            record(`取り込んだが元を消せなかった: ${from} (${String(error)})`);
-        }
-    }
+  }
 
-    // サムネイルは保存先に置いたものにだけ付ける。作業領域は画面に出ない
-    if (!raw) {
-        await writeThumbnail(to, (Number(row.endAt) - Number(row.startAt)) / 1000);
-    }
-    return 'imported';
+  // サムネイルは保存先に置いたものにだけ付ける。作業領域は画面に出ない
+  if (!raw) {
+    await writeThumbnail(to, (Number(row.endAt) - Number(row.startAt)) / 1000);
+  }
+  return "imported";
 }
 
 interface RuleRow {
-    id: number;
-    keyword: string | null;
-    ignoreKeyword: string | null;
-    GR: number;
-    BS: number;
-    CS: number;
-    SKY: number;
-    channelIds: string | null;
-    genres: string | null;
-    isFree: number;
-    enable: number;
-    isTimeSpecification: number;
-    /** キーワードを当てる範囲。EPGStation も同じ3つを持っている */
-    name: number;
-    description: number;
-    extended: number;
+  id: number;
+  keyword: string | null;
+  ignoreKeyword: string | null;
+  GR: number;
+  BS: number;
+  CS: number;
+  SKY: number;
+  channelIds: string | null;
+  genres: string | null;
+  isFree: number;
+  enable: number;
+  isTimeSpecification: number;
+  /** キーワードを当てる範囲。EPGStation も同じ3つを持っている */
+  name: number;
+  description: number;
+  extended: number;
 }
 
 interface ReserveRow {
-    programId: number | null;
-    ruleId: number | null;
-    startAt: number;
-    endAt: number;
-    name: string | null;
+  programId: number | null;
+  ruleId: number | null;
+  startAt: number;
+  endAt: number;
+  name: string | null;
 }
 
 /**
@@ -479,7 +505,11 @@ interface ReserveRow {
  * (`tuner.serviceKey`) と作り方が同じなので、そのまま引ける。知らない局なら undefined
  */
 function serviceIdFor(channelId: number): number | undefined {
-    return orm().select({ id: services.id }).from(services).where(eq(services.id, channelId)).get()?.id;
+  return orm()
+    .select({ id: services.id })
+    .from(services)
+    .where(eq(services.id, channelId))
+    .get()?.id;
 }
 
 /**
@@ -493,25 +523,29 @@ function serviceIdFor(channelId: number): number | undefined {
  * 引ける名前の無い値が並ぶことになる。
  */
 export function parseGenres(json: string | null): string[] {
-    if (json === null || json === '') return [];
-    try {
-        const list = JSON.parse(json) as unknown;
-        if (!Array.isArray(list)) return [];
-        return list
-            .map((item) => {
-                // 昔の形式で数値の配列になっていることもある
-                if (typeof item === 'number') return Number.isInteger(item) ? String(item) : null;
-                if (item === null || typeof item !== 'object') return null;
-                const { genre, subGenre } = item as { genre?: unknown; subGenre?: unknown };
-                if (typeof genre !== 'number' || !Number.isInteger(genre)) return null;
-                return typeof subGenre === 'number' && Number.isInteger(subGenre)
-                    ? `${genre}-${subGenre}`
-                    : String(genre);
-            })
-            .filter((value): value is string => value !== null);
-    } catch {
-        return [];
-    }
+  if (json === null || json === "") return [];
+  try {
+    const list = JSON.parse(json) as unknown;
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item) => {
+        // 昔の形式で数値の配列になっていることもある
+        if (typeof item === "number")
+          return Number.isInteger(item) ? String(item) : null;
+        if (item === null || typeof item !== "object") return null;
+        const { genre, subGenre } = item as {
+          genre?: unknown;
+          subGenre?: unknown;
+        };
+        if (typeof genre !== "number" || !Number.isInteger(genre)) return null;
+        return typeof subGenre === "number" && Number.isInteger(subGenre)
+          ? `${genre}-${subGenre}`
+          : String(genre);
+      })
+      .filter((value): value is string => value !== null);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -521,77 +555,97 @@ export function parseGenres(json: string | null): string[] {
  * 重複回避など)がある。落ちるものは落ちると分かるように記録に残す。
  * 時刻指定のルールは番組を探すのではなく時計で録るもので、denpa に対応がないので飛ばす。
  */
-async function importRules(connection: SQL, options: MigrateOptions): Promise<void> {
-    const rows = (await connection.unsafe(
-        `SELECT id, keyword, ignoreKeyword, GR, BS, CS, SKY, channelIds, genres,
+async function importRules(
+  connection: SQL,
+  options: MigrateOptions,
+): Promise<void> {
+  const rows = (await connection.unsafe(
+    `SELECT id, keyword, ignoreKeyword, GR, BS, CS, SKY, channelIds, genres,
                 isFree, enable, isTimeSpecification, name, description, extended
          FROM rule ORDER BY id`,
-    )) as RuleRow[];
+  )) as RuleRow[];
 
-    for (const row of rows) {
-        const source = `epgstation:${row.id}`;
-        if (orm().select({ id: rules.id }).from(rules).where(eq(rules.source, source)).get() !== undefined) {
-            status_.rules.skipped++;
-            continue;
-        }
-        if (row.isTimeSpecification) {
-            record(`時刻指定のルールは取り込めません: #${row.id}`);
-            status_.rules.skipped++;
-            continue;
-        }
-
-        const keyword = toHalfWidth(row.keyword ?? '').trim();
-        const types = (['GR', 'BS', 'CS', 'SKY'] as const).filter((t) => row[t] === 1);
-        const genreIds = parseGenres(row.genres);
-
-        let channels: number[] = [];
-        if (row.channelIds !== null) {
-            try {
-                channels = read(array(number), JSON.parse(row.channelIds), 'EPGStation の channelIds')
-                    .map(serviceIdFor)
-                    .filter((id): id is number => id !== undefined);
-            } catch {
-                channels = [];
-            }
-        }
-
-        if (keyword === '' && types.length === 0 && genreIds.length === 0 && channels.length === 0) {
-            // 条件が空だと全番組にマッチしてしまう。EPGStation 側で他の条件
-            // (正規表現や時間帯)だけで絞っていたものがここに来る
-            record(`条件が空になるので取り込めません: #${row.id}`);
-            status_.rules.skipped++;
-            continue;
-        }
-
-        const name = keyword !== '' ? keyword : `EPGStation #${row.id}`;
-        record(`${options.apply ? 'ルール' : 'ルール(予定)'}: ${name}`);
-        if (!options.apply) {
-            status_.rules.imported++;
-            continue;
-        }
-
-        // エンコード方法は引き継がない。エンコードもCMも全体設定で、エンコードするときに読む
-        orm()
-            .insert(rules)
-            .values({
-                name,
-                keyword,
-                ignore_keyword: toHalfWidth(row.ignoreKeyword ?? '').trim(),
-                // 当てる範囲も向こうから引き継ぐ。既定に寄せると黙って当たらなくなる
-                search_fields: parseSearchFields(
-                    SEARCH_FIELDS.filter((field) => row[field] === 1).join(','),
-                ).join(','),
-                service_ids: channels.length === 0 ? null : channels,
-                service_types: types.length === 0 ? null : types,
-                genres: genreIds.length === 0 ? null : genreIds,
-                enabled: Boolean(row.enable),
-                priority: 1,
-                source,
-                created_at: now(),
-            })
-            .run();
-        status_.rules.imported++;
+  for (const row of rows) {
+    const source = `epgstation:${row.id}`;
+    if (
+      orm()
+        .select({ id: rules.id })
+        .from(rules)
+        .where(eq(rules.source, source))
+        .get() !== undefined
+    ) {
+      status_.rules.skipped++;
+      continue;
     }
+    if (row.isTimeSpecification) {
+      record(`時刻指定のルールは取り込めません: #${row.id}`);
+      status_.rules.skipped++;
+      continue;
+    }
+
+    const keyword = toHalfWidth(row.keyword ?? "").trim();
+    const types = (["GR", "BS", "CS", "SKY"] as const).filter(
+      (t) => row[t] === 1,
+    );
+    const genreIds = parseGenres(row.genres);
+
+    let channels: number[] = [];
+    if (row.channelIds !== null) {
+      try {
+        channels = read(
+          array(number),
+          JSON.parse(row.channelIds),
+          "EPGStation の channelIds",
+        )
+          .map(serviceIdFor)
+          .filter((id): id is number => id !== undefined);
+      } catch {
+        channels = [];
+      }
+    }
+
+    if (
+      keyword === "" &&
+      types.length === 0 &&
+      genreIds.length === 0 &&
+      channels.length === 0
+    ) {
+      // 条件が空だと全番組にマッチしてしまう。EPGStation 側で他の条件
+      // (正規表現や時間帯)だけで絞っていたものがここに来る
+      record(`条件が空になるので取り込めません: #${row.id}`);
+      status_.rules.skipped++;
+      continue;
+    }
+
+    const name = keyword !== "" ? keyword : `EPGStation #${row.id}`;
+    record(`${options.apply ? "ルール" : "ルール(予定)"}: ${name}`);
+    if (!options.apply) {
+      status_.rules.imported++;
+      continue;
+    }
+
+    // エンコード方法は引き継がない。エンコードもCMも全体設定で、エンコードするときに読む
+    orm()
+      .insert(rules)
+      .values({
+        name,
+        keyword,
+        ignore_keyword: toHalfWidth(row.ignoreKeyword ?? "").trim(),
+        // 当てる範囲も向こうから引き継ぐ。既定に寄せると黙って当たらなくなる
+        search_fields: parseSearchFields(
+          SEARCH_FIELDS.filter((field) => row[field] === 1).join(","),
+        ).join(","),
+        service_ids: channels.length === 0 ? null : channels,
+        service_types: types.length === 0 ? null : types,
+        genres: genreIds.length === 0 ? null : genreIds,
+        enabled: Boolean(row.enable),
+        priority: 1,
+        source,
+        created_at: now(),
+      })
+      .run();
+    status_.rules.imported++;
+  }
 }
 
 /**
@@ -600,34 +654,39 @@ async function importRules(connection: SQL, options: MigrateOptions): Promise<vo
  * ルール由来の予約は、ルールを取り込んだあとに denpa が自分で立て直すので触らない。
  * EPGStation の programId は denpa の番組ID (`programKey`) と作り方が同じなので、直に照合できる。
  */
-async function importReservations(connection: SQL, options: MigrateOptions): Promise<void> {
-    const rows = (await connection.unsafe(
-        `SELECT programId, ruleId, startAt, endAt, name
+async function importReservations(
+  connection: SQL,
+  options: MigrateOptions,
+): Promise<void> {
+  const rows = (await connection.unsafe(
+    `SELECT programId, ruleId, startAt, endAt, name
          FROM reserve WHERE ruleId IS NULL AND isSkip = 0 ORDER BY startAt`,
-    )) as ReserveRow[];
+  )) as ReserveRow[];
 
-    const at = now();
-    for (const row of rows) {
-        if (row.programId === null || row.endAt <= at) {
-            status_.reservations.skipped++;
-            continue;
-        }
-        const program = orm()
-            .select({ id: programs.id })
-            .from(programs)
-            .where(eq(programs.id, row.programId))
-            .get();
-        if (program === undefined) {
-            // 番組表を取り込む前だと出る。EPG を取り直してからもう一度実行すれば入る
-            record(`番組表に無いので取り込めません: ${row.name ?? String(row.programId)}`);
-            status_.reservations.skipped++;
-            continue;
-        }
-
-        record(`${options.apply ? '予約' : '予約(予定)'}: ${row.name ?? ''}`);
-        if (options.apply) await reserve(program.id);
-        status_.reservations.imported++;
+  const at = now();
+  for (const row of rows) {
+    if (row.programId === null || row.endAt <= at) {
+      status_.reservations.skipped++;
+      continue;
     }
+    const program = orm()
+      .select({ id: programs.id })
+      .from(programs)
+      .where(eq(programs.id, row.programId))
+      .get();
+    if (program === undefined) {
+      // 番組表を取り込む前だと出る。EPG を取り直してからもう一度実行すれば入る
+      record(
+        `番組表に無いので取り込めません: ${row.name ?? String(row.programId)}`,
+      );
+      status_.reservations.skipped++;
+      continue;
+    }
+
+    record(`${options.apply ? "予約" : "予約(予定)"}: ${row.name ?? ""}`);
+    if (options.apply) await reserve(program.id);
+    status_.reservations.imported++;
+  }
 }
 
 /**
@@ -635,71 +694,77 @@ async function importReservations(connection: SQL, options: MigrateOptions): Pro
  * 画面からは待たずに呼ぶ (`start`)
  */
 async function run(options: MigrateOptions): Promise<void> {
-    status_ = freshStatus({
-        state: 'running',
-        apply: options.apply,
-        move: options.move,
-        startedAt: Date.now(),
-    });
-    emit('migrate');
+  status_ = freshStatus({
+    state: "running",
+    apply: options.apply,
+    move: options.move,
+    startedAt: Date.now(),
+  });
+  emit("migrate");
 
+  try {
+    // ルールと手動予約を先に入れる。録画のコピーは時間がかかるので、
+    // 先にこちらを済ませておけば途中で止めても予約は動き出す
+    const connection = new SQL(connectionConfig);
     try {
-        // ルールと手動予約を先に入れる。録画のコピーは時間がかかるので、
-        // 先にこちらを済ませておけば途中で止めても予約は動き出す
-        const connection = new SQL(connectionConfig);
-        try {
-            await importRules(connection, options);
-            await importReservations(connection, options);
-        } finally {
-            await connection.close();
-        }
-        record(
-            `ルール 取り込み ${status_.rules.imported} 件 / 対象外 ${status_.rules.skipped} 件、` +
-                `予約 取り込み ${status_.reservations.imported} 件 / 対象外 ${status_.reservations.skipped} 件`,
-        );
-        emit('migrate');
-
-        if (options.apply) {
-            const swept = sweepTemporaries();
-            if (swept > 0) record(`前の実行の書きかけを片付けました: ${swept} 件`);
-        }
-
-        const rows = await fetchRows();
-        status_.total = rows.length;
-        record(`対象 ${rows.length} 件`);
-        emit('migrate');
-
-        for (const row of rows) {
-            status_.current = row.name;
-            const result = await importOne(row, options);
-            status_[result]++;
-            emit('migrate');
-        }
-        status_.current = null;
-        status_.state = 'done';
-    } catch (error) {
-        status_.state = 'failed';
-        status_.error = String(error);
-        record(`失敗: ${status_.error}`);
+      await importRules(connection, options);
+      await importReservations(connection, options);
+    } finally {
+      await connection.close();
     }
-    status_.finishedAt = Date.now();
-    emit('migrate');
+    record(
+      `ルール 取り込み ${status_.rules.imported} 件 / 対象外 ${status_.rules.skipped} 件、` +
+        `予約 取り込み ${status_.reservations.imported} 件 / 対象外 ${status_.reservations.skipped} 件`,
+    );
+    emit("migrate");
+
+    if (options.apply) {
+      const swept = sweepTemporaries();
+      if (swept > 0) record(`前の実行の書きかけを片付けました: ${swept} 件`);
+    }
+
+    const rows = await fetchRows();
+    status_.total = rows.length;
+    record(`対象 ${rows.length} 件`);
+    emit("migrate");
+
+    for (const row of rows) {
+      status_.current = row.name;
+      const result = await importOne(row, options);
+      status_[result]++;
+      emit("migrate");
+    }
+    status_.current = null;
+    status_.state = "done";
+  } catch (error) {
+    status_.state = "failed";
+    status_.error = String(error);
+    record(`失敗: ${status_.error}`);
+  }
+  status_.finishedAt = Date.now();
+  emit("migrate");
 }
 
 /**
  * 設定画面から呼ぶ入口。走り出したことだけ返し、終わるのは待たない。
  * 二重に走ると同じファイルを2つのコピーが触るので、走っている間は断る。
  */
-export function start(options: MigrateOptions): { started: boolean; message: string } {
-    if (status_.state === 'running') {
-        return { started: false, message: 'すでに実行中です' };
-    }
-    if (!available()) {
-        return {
-            started: false,
-            message: `引き継ぎ元 ${source.recordedDir} が見つかりません。EPGStation のPVCをマウントしてください`,
-        };
-    }
-    void run(options);
-    return { started: true, message: options.apply ? '取り込みを開始しました' : '下見を開始しました' };
+export function start(options: MigrateOptions): {
+  started: boolean;
+  message: string;
+} {
+  if (status_.state === "running") {
+    return { started: false, message: "すでに実行中です" };
+  }
+  if (!available()) {
+    return {
+      started: false,
+      message: `引き継ぎ元 ${source.recordedDir} が見つかりません。EPGStation のPVCをマウントしてください`,
+    };
+  }
+  void run(options);
+  return {
+    started: true,
+    message: options.apply ? "取り込みを開始しました" : "下見を開始しました",
+  };
 }

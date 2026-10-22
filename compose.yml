@@ -26,10 +26,10 @@ services:
       # 実エンコードは本番のイメージ (runtime。distroless で bun の開発サーバもソースも入っていない) を
       # compose.prod.yml で起こして試す
       FFMPEG: /app/tests/fake/ffmpeg.sh
-      RECONCILE_INTERVAL: '60000'
-      EPG_COLLECT_INTERVAL: '60000'
-      SCHEDULER_TICK: '2000'
-      ENCODE_CONCURRENCY: '2'
+      RECONCILE_INTERVAL: "60000"
+      EPG_COLLECT_INTERVAL: "60000"
+      SCHEDULER_TICK: "2000"
+      ENCODE_CONCURRENCY: "2"
       # 開発では誰でも通す。来るのは genkan (genkan ネットワークの中) からだけ
       TRUSTED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     volumes:
@@ -41,7 +41,7 @@ services:
       - denpa-library:/media/encoded
     labels:
       caddy: http://denpa.localhost
-      caddy.reverse_proxy: '{{upstreams 5173}}'
+      caddy.reverse_proxy: "{{upstreams 5173}}"
     networks: [default, genkan]
     depends_on:
       - tuner-agent
@@ -54,26 +54,26 @@ services:
     command: bun tests/fake/agent.ts
     environment:
       TZ: Asia/Tokyo
-      FAKE_AGENT_PORT: '25252'
+      FAKE_AGENT_PORT: "25252"
       # 開発中に録画完了まで見届けられるよう、番組を多めに出しておく
-      FAKE_SLOTS: '120'
+      FAKE_SLOTS: "120"
     volumes:
       - .:/app
       - app-node-modules:/app/node_modules
     labels:
       caddy: http://denpa-agent.localhost
-      caddy.reverse_proxy: '{{upstreams 25252}}'
+      caddy.reverse_proxy: "{{upstreams 25252}}"
     networks: [default, genkan]
 
   e2e:
     build:
       context: .
       target: test
-    profiles: ['test']
+    profiles: ["test"]
     command: bun run test:e2e
     environment:
       TZ: Asia/Tokyo
-      CI: '1'
+      CI: "1"
     volumes:
       - .:/app
       - app-node-modules:/app/node_modules
@@ -83,7 +83,7 @@ services:
     build:
       context: .
       target: docs
-    profiles: ['docs']
+    profiles: ["docs"]
     command: bun scripts/capture-docs.ts
     environment:
       TZ: Asia/Tokyo
@@ -95,7 +95,7 @@ services:
     build:
       context: .
       target: dev
-    profiles: ['test']
+    profiles: ["test"]
     command: bun run test:unit
     environment:
       TZ: Asia/Tokyo

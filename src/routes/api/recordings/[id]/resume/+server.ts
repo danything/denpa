@@ -1,12 +1,17 @@
-import { error } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
-import { now, orm } from '#lib/server/db.js';
-import { emit } from '#lib/server/events.js';
-import { rulerOf } from '#lib/server/playback.js';
-import { recordingOr404 } from '#lib/server/recording.js';
-import { recordings } from '#lib/server/schema.js';
-import { parseFileSource } from '#lib/source.js';
-import { RESUME_EDGE, resumePoint, toTsTime, watchedToEnd } from '#lib/ts/watch.js';
+import { error } from "@sveltejs/kit";
+import { eq } from "drizzle-orm";
+import { now, orm } from "#lib/server/db.js";
+import { emit } from "#lib/server/events.js";
+import { rulerOf } from "#lib/server/playback.js";
+import { recordingOr404 } from "#lib/server/recording.js";
+import { recordings } from "#lib/server/schema.js";
+import { parseFileSource } from "#lib/source.js";
+import {
+  RESUME_EDGE,
+  resumePoint,
+  toTsTime,
+  watchedToEnd,
+} from "#lib/ts/watch.js";
 
 /**
  * どこまで観たかを覚える。**続きから観るためだけの目印。**
@@ -34,35 +39,40 @@ import { RESUME_EDGE, resumePoint, toTsTime, watchedToEnd } from '#lib/ts/watch.
  * **観終えた1回だけは出す** — 未視聴の印が外れるのは一覧の見た目が変わること
  */
 export async function POST({ params, request }) {
-    const recording = recordingOr404(params.id);
+  const recording = recordingOr404(params.id);
 
-    let at: unknown;
-    let length: unknown;
-    let source: unknown;
-    try {
-        ({ at, length, source } = await request.json());
-    } catch {
-        error(400, 'リクエストの本文を読めませんでした');
-    }
-    if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) error(400, '位置が不正です');
-    const named = typeof source === 'string' ? parseFileSource(source) : null;
-    if (source !== undefined && named === null) error(400, 'source が不正です');
+  let at: unknown;
+  let length: unknown;
+  let source: unknown;
+  try {
+    ({ at, length, source } = await request.json());
+  } catch {
+    error(400, "リクエストの本文を読めませんでした");
+  }
+  if (typeof at !== "number" || !Number.isFinite(at) || at < 0)
+    error(400, "位置が不正です");
+  const named = typeof source === "string" ? parseFileSource(source) : null;
+  if (source !== undefined && named === null) error(400, "source が不正です");
 
-    const seconds = typeof length === 'number' && Number.isFinite(length) ? length : 0;
-    const keep = resumePoint(at, seconds);
-    // 観直して途中で止めても観終えたまま。消すのは「未視聴に戻す」だけ
-    const finished = recording.watched_at === null && watchedToEnd(at, seconds);
+  const seconds =
+    typeof length === "number" && Number.isFinite(length) ? length : 0;
+  const keep = resumePoint(at, seconds);
+  // 観直して途中で止めても観終えたまま。消すのは「未視聴に戻す」だけ
+  const finished = recording.watched_at === null && watchedToEnd(at, seconds);
 
-    orm()
-        .update(recordings)
-        .set({
-            resume_ms: keep === null ? null : Math.round(toTsTime(keep, rulerOf(recording, named)) * 1000),
-            ...(finished ? { watched_at: now() } : {}),
-            updated_at: now(),
-        })
-        .where(eq(recordings.id, recording.id))
-        .run();
-    if (finished) emit('recordings');
+  orm()
+    .update(recordings)
+    .set({
+      resume_ms:
+        keep === null
+          ? null
+          : Math.round(toTsTime(keep, rulerOf(recording, named)) * 1000),
+      ...(finished ? { watched_at: now() } : {}),
+      updated_at: now(),
+    })
+    .where(eq(recordings.id, recording.id))
+    .run();
+  if (finished) emit("recordings");
 
-    return Response.json({ resume: keep, edge: RESUME_EDGE });
+  return Response.json({ resume: keep, edge: RESUME_EDGE });
 }

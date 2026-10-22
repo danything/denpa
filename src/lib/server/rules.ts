@@ -1,51 +1,72 @@
-import { and, eq, getTableColumns, gt, inArray, isNull, ne, or } from 'drizzle-orm';
-import { type Genre, genreMatches } from '#lib/arib.js';
-import { globTerms } from '../fold';
-import { parseSearchFields, type SearchField } from '../search';
-import type { Program, Rule } from '../types';
-import { config } from './config';
-import { now, orm } from './db';
-import { type Airing, episodeOf, firstAirings, type Taken } from './episode';
-import { programs as programTable, recordings, reservations, rules as ruleTable, services } from './schema';
-import { settings } from './settings';
-import { parseTitle, searchable, withoutSeason, withoutSlot } from './title';
+import {
+  and,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  isNull,
+  ne,
+  or,
+} from "drizzle-orm";
+import { type Genre, genreMatches } from "#lib/arib.js";
+import { globTerms } from "../fold";
+import { parseSearchFields, type SearchField } from "../search";
+import type { Program, Rule } from "../types";
+import { config } from "./config";
+import { now, orm } from "./db";
+import { type Airing, episodeOf, firstAirings, type Taken } from "./episode";
+import {
+  programs as programTable,
+  recordings,
+  reservations,
+  rules as ruleTable,
+  services,
+} from "./schema";
+import { settings } from "./settings";
+import { parseTitle, searchable, withoutSeason, withoutSlot } from "./title";
 
 /** 空の並びは「指定なし」。NULL と同じに扱う */
 function nonEmpty<T>(list: T[] | null): T[] | null {
-    return list === null || list.length === 0 ? null : list;
+  return list === null || list.length === 0 ? null : list;
 }
 
 /** 詳細は見出し付き。見出しごと繋いで、素のテキストとして探せるようにする */
 function extendedText(extended: Record<string, string> | null): string {
-    if (extended === null) return '';
-    return Object.entries(extended)
-        .map(([heading, body]) => `${heading} ${body}`)
-        .join(' ');
+  if (extended === null) return "";
+  return Object.entries(extended)
+    .map(([heading, body]) => `${heading} ${body}`)
+    .join(" ");
 }
 
 /** 検索対象のテキスト */
 export function haystack(
-    program: Pick<Program, 'name' | 'description' | 'extended'>,
-    fields: SearchField[],
+  program: Pick<Program, "name" | "description" | "extended">,
+  fields: SearchField[],
 ): string {
-    const parts = fields.map((field) =>
-        field === 'extended' ? extendedText(program.extended) : program[field],
-    );
-    return searchable(parts.join(' '));
+  const parts = fields.map((field) =>
+    field === "extended" ? extendedText(program.extended) : program[field],
+  );
+  return searchable(parts.join(" "));
 }
 
 /**
  * 判定が番組から読む列。**全列は要らない** — 下見 (`rule-preview.ts`) は
  * 読む列を絞って引くので、ここを `Program` にしていると渡せない
  */
-export type Matchable = Pick<Program, 'service_id' | 'is_free' | 'genres' | 'genre_detail'>;
+export type Matchable = Pick<
+  Program,
+  "service_id" | "is_free" | "genres" | "genre_detail"
+>;
 
 /**
  * 番組のジャンル。中分類まで持っている genre_detail を使い、
  * 取り込みが古くて入っていないものは大分類だけの genres で代用する
  */
 function parseGenreDetail(program: Matchable): Genre[] {
-    return nonEmpty(program.genre_detail) ?? (program.genres ?? []).map((lv1) => ({ lv1, lv2: -1 }));
+  return (
+    nonEmpty(program.genre_detail) ??
+    (program.genres ?? []).map((lv1) => ({ lv1, lv2: -1 }))
+  );
 }
 
 /**
@@ -57,27 +78,27 @@ function parseGenreDetail(program: Matchable): Genre[] {
  * ルールを1つ足すだけで十数秒待たされていたのはこれが理由。
  */
 export interface CompiledRule {
-    rule: Rule;
-    services: number[] | null;
-    types: string[] | null;
-    genres: string[] | null;
-    fields: SearchField[];
-    keywords: string[];
-    ignores: string[];
+  rule: Rule;
+  services: number[] | null;
+  types: string[] | null;
+  genres: string[] | null;
+  fields: SearchField[];
+  keywords: string[];
+  ignores: string[];
 }
 
 export function compile(rule: Rule): CompiledRule {
-    return {
-        rule,
-        services: nonEmpty(rule.service_ids),
-        types: nonEmpty(rule.service_types),
-        genres: nonEmpty(rule.genres),
-        fields: parseSearchFields(rule.search_fields),
-        // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ当たる
-        keywords: searchable(rule.keyword).split(/\s+/).filter(Boolean),
-        // 除外キーワードは OR。1つでも当たれば落とす
-        ignores: searchable(rule.ignore_keyword).split(/\s+/).filter(Boolean),
-    };
+  return {
+    rule,
+    services: nonEmpty(rule.service_ids),
+    types: nonEmpty(rule.service_types),
+    genres: nonEmpty(rule.genres),
+    fields: parseSearchFields(rule.search_fields),
+    // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ当たる
+    keywords: searchable(rule.keyword).split(/\s+/).filter(Boolean),
+    // 除外キーワードは OR。1つでも当たれば落とす
+    ignores: searchable(rule.ignore_keyword).split(/\s+/).filter(Boolean),
+  };
 }
 
 /**
@@ -101,9 +122,9 @@ export function compile(rule: Rule): CompiledRule {
  * @returns `GLOB` に渡す形式 (`*語*`)。使えなければ null
  */
 export function globPatterns(compiled: CompiledRule): string[] | null {
-    if (compiled.fields.includes('extended')) return null;
-    const patterns = globTerms(compiled.keywords);
-    return patterns.length === 0 ? null : patterns;
+  if (compiled.fields.includes("extended")) return null;
+  const patterns = globTerms(compiled.keywords);
+  return patterns.length === 0 ? null : patterns;
 }
 
 /**
@@ -116,7 +137,8 @@ export function globPatterns(compiled: CompiledRule): string[] | null {
  * - `keyword` キーワードを含まない
  * - `ignore` 除外する言葉を含む
  */
-export type Miss = 'paid' | 'service' | 'genre' | 'empty' | 'keyword' | 'ignore';
+export type Miss =
+  "paid" | "service" | "genre" | "empty" | "keyword" | "ignore";
 
 /**
  * ほどいたルールに番組が当てはまらない理由。当てはまれば null。
@@ -129,51 +151,58 @@ export type Miss = 'paid' | 'service' | 'genre' | 'empty' | 'keyword' | 'ignore'
  * 「これからの放送」(`search.ts`) はどれもここを通る (`matchesCompiled` はその真偽)
  */
 export function missOf(
-    compiled: CompiledRule,
-    program: Matchable,
-    serviceType: string | undefined,
-    freeOnly: boolean,
-    textOf: (fields: SearchField[]) => string,
+  compiled: CompiledRule,
+  program: Matchable,
+  serviceType: string | undefined,
+  freeOnly: boolean,
+  textOf: (fields: SearchField[]) => string,
 ): Miss | null {
-    if (freeOnly && !program.is_free) return 'paid';
+  if (freeOnly && !program.is_free) return "paid";
 
-    const { services, types, genres, keywords, ignores } = compiled;
+  const { services, types, genres, keywords, ignores } = compiled;
 
-    // チャンネルの条件は「種別」と「個別チャンネル」のOR。
-    // 「地上波全部 + BS11だけ」のような指定ができるようにするため
-    if (services !== null || types !== null) {
-        const byService = services?.includes(program.service_id) ?? false;
-        const byType = serviceType !== undefined && (types?.includes(serviceType) ?? false);
-        if (!byService && !byType) return 'service';
-    }
+  // チャンネルの条件は「種別」と「個別チャンネル」のOR。
+  // 「地上波全部 + BS11だけ」のような指定ができるようにするため
+  if (services !== null || types !== null) {
+    const byService = services?.includes(program.service_id) ?? false;
+    const byType =
+      serviceType !== undefined && (types?.includes(serviceType) ?? false);
+    if (!byService && !byType) return "service";
+  }
 
-    // ジャンルは "7"(大分類だけ)と "7-0"(中分類まで)の2通りで持つ。
-    // 昔のルールは数値の配列だが、読み出し時に文字列へ揃えてある (schema.ts の strings)
-    if (genres !== null) {
-        const detail = parseGenreDetail(program);
-        if (detail.length === 0) return 'genre';
-        if (!genreMatches(genres, detail)) return 'genre';
-    }
+  // ジャンルは "7"(大分類だけ)と "7-0"(中分類まで)の2通りで持つ。
+  // 昔のルールは数値の配列だが、読み出し時に文字列へ揃えてある (schema.ts の strings)
+  if (genres !== null) {
+    const detail = parseGenreDetail(program);
+    if (detail.length === 0) return "genre";
+    if (!genreMatches(genres, detail)) return "genre";
+  }
 
-    // 全条件が空のルールは全番組にマッチしてしまうので無効扱いにする
-    if (keywords.length === 0 && services === null && types === null && genres === null) return 'empty';
+  // 全条件が空のルールは全番組にマッチしてしまうので無効扱いにする
+  if (
+    keywords.length === 0 &&
+    services === null &&
+    types === null &&
+    genres === null
+  )
+    return "empty";
 
-    if (keywords.length === 0 && ignores.length === 0) return null;
+  if (keywords.length === 0 && ignores.length === 0) return null;
 
-    const text = textOf(compiled.fields);
-    if (!keywords.every((k) => text.includes(k))) return 'keyword';
-    return ignores.some((k) => text.includes(k)) ? 'ignore' : null;
+  const text = textOf(compiled.fields);
+  if (!keywords.every((k) => text.includes(k))) return "keyword";
+  return ignores.some((k) => text.includes(k)) ? "ignore" : null;
 }
 
 /** ほどいたルールに番組が当てはまるか ({@link missOf} が理由を返さないか) */
 export function matchesCompiled(
-    compiled: CompiledRule,
-    program: Matchable,
-    serviceType: string | undefined,
-    freeOnly: boolean,
-    textOf: (fields: SearchField[]) => string,
+  compiled: CompiledRule,
+  program: Matchable,
+  serviceType: string | undefined,
+  freeOnly: boolean,
+  textOf: (fields: SearchField[]) => string,
 ): boolean {
-    return missOf(compiled, program, serviceType, freeOnly, textOf) === null;
+  return missOf(compiled, program, serviceType, freeOnly, textOf) === null;
 }
 
 /**
@@ -182,10 +211,19 @@ export function matchesCompiled(
  * 有料放送を対象にするかは全体設定なので、呼ぶ側が渡す
  * (ここで設定を読むと純粋関数でなくなり、テストから条件を作れない)。
  */
-export function matches(rule: Rule, program: Program, serviceType?: string, freeOnly = true): boolean {
-    return matchesCompiled(compile(rule), program, serviceType, freeOnly, (fields) =>
-        haystack(program, fields),
-    );
+export function matches(
+  rule: Rule,
+  program: Program,
+  serviceType?: string,
+  freeOnly = true,
+): boolean {
+  return matchesCompiled(
+    compile(rule),
+    program,
+    serviceType,
+    freeOnly,
+    (fields) => haystack(program, fields),
+  );
 }
 
 /**
@@ -193,36 +231,38 @@ export function matches(rule: Rule, program: Program, serviceType?: string, free
  * ほとんどのルールは同じ範囲 (番組名だけ) を見るので、実際にはほぼ1回で済む。
  */
 function textCache(program: Program): (fields: SearchField[]) => string {
-    const cache = new Map<string, string>();
-    return (fields) => {
-        const key = fields.join(',');
-        let text = cache.get(key);
-        if (text === undefined) {
-            text = haystack(program, fields);
-            cache.set(key, text);
-        }
-        return text;
-    };
+  const cache = new Map<string, string>();
+  return (fields) => {
+    const key = fields.join(",");
+    let text = cache.get(key);
+    if (text === undefined) {
+      text = haystack(program, fields);
+      cache.set(key, text);
+    }
+    return text;
+  };
 }
 
 /** 録画・番組から作るルールの下書き (`prefillFrom`) */
 export interface RulePrefill {
-    keyword: string;
+  keyword: string;
 }
 
 /** 録画・番組から読む分 */
 export interface RuleSource {
-    name: string;
-    service_id: number;
-    genre_detail: Genre[] | null;
+  name: string;
+  service_id: number;
+  genre_detail: Genre[] | null;
 }
 
 /**
  * シリーズ名。**録画でもいまの番組名から切り出す** — 録画の `series` は録ったときの
  * 切り出し方のままで、`「東京リベンジャーズ」三天戦争編` のように鍵括弧ごと残っているものがある
  */
-function seriesOf(source: Pick<RuleSource, 'name'>): string {
-    return source.name.trim() === '' ? '' : withoutSeason(withoutSlot(parseTitle(source.name).series.trim()));
+function seriesOf(source: Pick<RuleSource, "name">): string {
+  return source.name.trim() === ""
+    ? ""
+    : withoutSeason(withoutSlot(parseTitle(source.name).series.trim()));
 }
 
 /**
@@ -239,8 +279,8 @@ function seriesOf(source: Pick<RuleSource, 'name'>): string {
  * シリーズ名が読めなければ null (条件が何も無いので、ルールにならない)
  */
 export function prefillFrom(source: RuleSource): RulePrefill | null {
-    const keyword = seriesOf(source);
-    return keyword === '' ? null : { keyword };
+  const keyword = seriesOf(source);
+  return keyword === "" ? null : { keyword };
 }
 
 /**
@@ -250,26 +290,34 @@ export function prefillFrom(source: RuleSource): RulePrefill | null {
  * 「[新]」のルールにも当たるが、そのルールは第2話を録らない。
  * 次の回のタイトルに何が付くかは分からないので、いちばん素の名前で確かめる
  */
-export function coveringRule(rules: Rule[], source: RuleSource, serviceType?: string): Rule | undefined {
-    const name = seriesOf(source);
-    if (name === '') return undefined;
-    const future = { name, description: '', extended: null };
-    const program = {
-        service_id: source.service_id,
-        is_free: true,
-        genres: null,
-        genre_detail: source.genre_detail,
-    };
-    return [...rules]
-        .sort((a, b) => Number(b.enabled) - Number(a.enabled))
-        .find((rule) =>
-            matchesCompiled(compile(rule), program, serviceType, false, (fields) => haystack(future, fields)),
-        );
+export function coveringRule(
+  rules: Rule[],
+  source: RuleSource,
+  serviceType?: string,
+): Rule | undefined {
+  const name = seriesOf(source);
+  if (name === "") return undefined;
+  const future = { name, description: "", extended: null };
+  const program = {
+    service_id: source.service_id,
+    is_free: true,
+    genres: null,
+    genre_detail: source.genre_detail,
+  };
+  return [...rules]
+    .sort((a, b) => Number(b.enabled) - Number(a.enabled))
+    .find((rule) =>
+      matchesCompiled(compile(rule), program, serviceType, false, (fields) =>
+        haystack(future, fields),
+      ),
+    );
 }
 
 /** 取り消し済みの放送に、番組が当たるかどうか */
 export interface Declined {
-    has(program: Pick<Program, 'name' | 'start_at'> & { channel: string }): boolean;
+  has(
+    program: Pick<Program, "name" | "start_at"> & { channel: string },
+  ): boolean;
 }
 
 /**
@@ -304,38 +352,43 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * その振る舞いを id が変わっても続けるだけ。
  */
 export function canceledBroadcasts(at: number): Declined {
-    const rows = orm()
-        .select({
-            channel: services.channel,
-            name: reservations.name,
-            start_at: reservations.start_at,
-        })
-        .from(reservations)
-        .innerJoin(services, eq(services.id, reservations.service_id))
-        .where(
-            and(
-                eq(reservations.state, 'canceled'),
-                gt(reservations.end_at, at),
-                or(isNull(reservations.canceled_by), ne(reservations.canceled_by, 'system')),
-            ),
-        )
-        .all();
-    /** 物理チャンネル + タイトル → 取り消した回の開始時刻 */
-    const starts = new Map<string, number[]>();
-    for (const row of rows) {
-        if (row.name === '') continue;
-        const key = `${row.channel} ${row.name}`;
-        const list = starts.get(key);
-        if (list === undefined) starts.set(key, [row.start_at]);
-        else list.push(row.start_at);
-    }
-    return {
-        has(program) {
-            const list = starts.get(`${program.channel} ${program.name}`);
-            if (list === undefined) return false;
-            return list.some((start) => Math.abs(start - program.start_at) <= DECLINE_WINDOW);
-        },
-    };
+  const rows = orm()
+    .select({
+      channel: services.channel,
+      name: reservations.name,
+      start_at: reservations.start_at,
+    })
+    .from(reservations)
+    .innerJoin(services, eq(services.id, reservations.service_id))
+    .where(
+      and(
+        eq(reservations.state, "canceled"),
+        gt(reservations.end_at, at),
+        or(
+          isNull(reservations.canceled_by),
+          ne(reservations.canceled_by, "system"),
+        ),
+      ),
+    )
+    .all();
+  /** 物理チャンネル + タイトル → 取り消した回の開始時刻 */
+  const starts = new Map<string, number[]>();
+  for (const row of rows) {
+    if (row.name === "") continue;
+    const key = `${row.channel} ${row.name}`;
+    const list = starts.get(key);
+    if (list === undefined) starts.set(key, [row.start_at]);
+    else list.push(row.start_at);
+  }
+  return {
+    has(program) {
+      const list = starts.get(`${program.channel} ${program.name}`);
+      if (list === undefined) return false;
+      return list.some(
+        (start) => Math.abs(start - program.start_at) <= DECLINE_WINDOW,
+      );
+    },
+  };
 }
 
 /**
@@ -354,56 +407,63 @@ const TAKEN_WINDOW = 30 * 24 * 60 * 60 * 1000;
  * (観て消したものをまた録っても困る)
  */
 function recordedEpisodes(at: number): Taken {
-    const rows = orm()
-        .select({
-            name: recordings.name,
-            description: recordings.description,
-            extended: recordings.extended,
-            start_at: recordings.start_at,
-            service_name: recordings.service_name,
-        })
-        .from(recordings)
-        .where(and(gt(recordings.start_at, at - TAKEN_WINDOW), ne(recordings.state, 'failed')))
-        .orderBy(recordings.start_at)
-        .all();
-    const taken: Taken = [];
-    for (const { start_at, service_name, ...described } of rows) {
-        // 番組表の番組と同じ読み方をする。録画は録ったときのタイトル・概要・詳細を持っている
-        const episode = episodeOf(described);
-        if (episode !== null) taken.push({ episode, start_at, service_name });
-    }
-    return taken;
+  const rows = orm()
+    .select({
+      name: recordings.name,
+      description: recordings.description,
+      extended: recordings.extended,
+      start_at: recordings.start_at,
+      service_name: recordings.service_name,
+    })
+    .from(recordings)
+    .where(
+      and(
+        gt(recordings.start_at, at - TAKEN_WINDOW),
+        ne(recordings.state, "failed"),
+      ),
+    )
+    .orderBy(recordings.start_at)
+    .all();
+  const taken: Taken = [];
+  for (const { start_at, service_name, ...described } of rows) {
+    // 番組表の番組と同じ読み方をする。録画は録ったときのタイトル・概要・詳細を持っている
+    const episode = episodeOf(described);
+    if (episode !== null) taken.push({ episode, start_at, service_name });
+  }
+  return taken;
 }
 
 /** チューナー不足で弾かれている番組。同じ回の次の放送で録る (`episode.firstAirings` の `blocked`) */
 function blockedPrograms(): Set<number> {
-    const rows = orm()
-        .select({ id: reservations.program_id })
-        .from(reservations)
-        .where(eq(reservations.state, 'conflict'))
-        .all();
-    return new Set(rows.map((row) => row.id));
+  const rows = orm()
+    .select({ id: reservations.program_id })
+    .from(reservations)
+    .where(eq(reservations.state, "conflict"))
+    .all();
+  return new Set(rows.map((row) => row.id));
 }
 
 /**
  * **同じ回は最初の放送だけ** (ルールの `dedupe`)。録らない番組 → 理由 (`episode.firstAirings`)。
  * 予約を立てるとき (`applyRules`) と下見 (`rule-preview.ts`) で同じものを使う
  */
-function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string; copy_never: boolean }>(
-    list: T[],
-    at: number,
-) {
-    /*
-     * **コピー禁止の放送も弾かれているのと同じ。** 録らないので、同じ回の次の放送 (禁止でない局) を録る
-     * (`format.COPY_NEVER_REASON`)
-     */
-    const blocked = blockedPrograms();
-    for (const program of list) if (program.copy_never) blocked.add(program.id);
-    return firstAirings(
-        list.map((program) => ({ ...program, type: program.service_type })),
-        blocked,
-        recordedEpisodes(at),
-    );
+function dedupeSkips<
+  T extends Omit<Airing, "type"> & {
+    service_type: string;
+    copy_never: boolean;
+  },
+>(list: T[], at: number) {
+  /*
+   * **コピー禁止の放送も弾かれているのと同じ。** 録らないので、同じ回の次の放送 (禁止でない局) を録る
+   * (`format.COPY_NEVER_REASON`)
+   */
+  const blocked = blockedPrograms();
+  for (const program of list) if (program.copy_never) blocked.add(program.id);
+  return firstAirings(
+    list.map((program) => ({ ...program, type: program.service_type })),
+    blocked,
+    recordedEpisodes(at),
+  );
 }
 
 /**
@@ -411,32 +471,39 @@ function dedupeSkips<T extends Omit<Airing, 'type'> & { service_type: string; co
  * 立てないので、「最初の放送」の候補に入れない
  */
 export function previewSkips<
-    T extends Omit<Airing, 'type'> & { service_type: string; service_channel: string; copy_never: boolean },
+  T extends Omit<Airing, "type"> & {
+    service_type: string;
+    service_channel: string;
+    copy_never: boolean;
+  },
 >(hits: T[], at: number) {
-    const declined = canceledBroadcasts(at);
-    return dedupeSkips(
-        hits.filter((p) => !declined.has({ ...p, channel: p.service_channel })),
-        at,
-    );
+  const declined = canceledBroadcasts(at);
+  return dedupeSkips(
+    hits.filter((p) => !declined.has({ ...p, channel: p.service_channel })),
+    at,
+  );
 }
 
 /**
  * 外れても引っ込めない予約か (`applyRules`)。手動のものと、もうすぐ始まる (猶予の内) もの。
  * 録り始めたものは予約の候補 (`started_at` が空) に入らないので、ここには来ない
  */
-export function keepsReservation(held: { manual: boolean; start_at: number }, at: number): boolean {
-    return held.manual || held.start_at < at + config.ruleRetractGrace;
+export function keepsReservation(
+  held: { manual: boolean; start_at: number },
+  at: number,
+): boolean {
+  return held.manual || held.start_at < at + config.ruleRetractGrace;
 }
 
 export interface RuleSync {
-    /** 新しく立てた予約 */
-    created: number;
-    /** どのルールにも当たらなくなって消した予約 */
-    dropped: number;
-    /** 別のルールが引き取った予約 */
-    moved: number;
-    /** ルールの優先度が変わって、付け替えた予約 */
-    repriced: number;
+  /** 新しく立てた予約 */
+  created: number;
+  /** どのルールにも当たらなくなって消した予約 */
+  dropped: number;
+  /** 別のルールが引き取った予約 */
+  moved: number;
+  /** ルールの優先度が変わって、付け替えた予約 */
+  repriced: number;
 }
 
 /**
@@ -474,195 +541,226 @@ export interface RuleSync {
  *   全ルール × 全番組 (実機で 318 × 25,608) を回し直さずに済む
  */
 export function applyRules(options: { rule?: number } = {}): RuleSync {
-    const result: RuleSync = { created: 0, dropped: 0, moved: 0, repriced: 0 };
-    const rules = orm().select().from(ruleTable).where(eq(ruleTable.enabled, true)).all();
-    const adding = options.rule !== undefined;
-    if (rules.length === 0 && adding) return result;
+  const result: RuleSync = { created: 0, dropped: 0, moved: 0, repriced: 0 };
+  const rules = orm()
+    .select()
+    .from(ruleTable)
+    .where(eq(ruleTable.enabled, true))
+    .all();
+  const adding = options.rule !== undefined;
+  if (rules.length === 0 && adding) return result;
 
-    const at = now();
-    // 録画のしかたは全体で1つ。ルールごとに持たせるとどこで決まったか分からなくなる
-    const recording = settings();
-    // 種別(GR/BS/CS)でも絞り込めるよう、番組にチャンネル種別と物理チャンネルを添えて取る
-    const programs = orm()
-        .select({ ...getTableColumns(programTable), service_type: services.type, channel: services.channel })
-        .from(programTable)
-        .innerJoin(services, eq(services.id, programTable.service_id))
-        .where(gt(programTable.start_at, at))
-        .orderBy(programTable.start_at)
-        .all();
+  const at = now();
+  // 録画のしかたは全体で1つ。ルールごとに持たせるとどこで決まったか分からなくなる
+  const recording = settings();
+  // 種別(GR/BS/CS)でも絞り込めるよう、番組にチャンネル種別と物理チャンネルを添えて取る
+  const programs = orm()
+    .select({
+      ...getTableColumns(programTable),
+      service_type: services.type,
+      channel: services.channel,
+    })
+    .from(programTable)
+    .innerJoin(services, eq(services.id, programTable.service_id))
+    .where(gt(programTable.start_at, at))
+    .orderBy(programTable.start_at)
+    .all();
 
-    const compiled = rules.map(compile);
-    const searching = adding ? compiled.filter((c) => c.rule.id === options.rule) : compiled;
+  const compiled = rules.map(compile);
+  const searching = adding
+    ? compiled.filter((c) => c.rule.id === options.rule)
+    : compiled;
 
-    const declined = canceledBroadcasts(at);
+  const declined = canceledBroadcasts(at);
 
-    /**
-     * 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち**。
-     * `dedupe` は「同じ回は最初の放送だけ」のルールが当たったか、`plain` はそうでない
-     * ルールのうち最初に当たったもの (下の dedupe で外れたときの受け手)
-     */
-    const wanted = new Map<
-        number,
-        { rule: Rule; program: (typeof programs)[number]; dedupe: boolean; plain: Rule | undefined }
-    >();
-    /**
-     * **同じ放送は1本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ番組名が
-     * 流れていたら同じ放送とみなし、いちばん小さい局だけを残す。
-     *
-     * 局は分割放送のために枝番を持っていて (TOKYO MX なら 23608 / 23609、
-     * どちらも名前は「TOKYO MX1」)、**分割していない間は同じ番組が両方に載る**。
-     * 素通しにしていた実機では、同じ回が2本録れたうえに、2つのエンコードが
-     * 同じ名前のファイルへ同時に書いて中身が壊れた。
-     *
-     * 中身が違うとき (MX1 と MX2 で別番組) はタイトルが違うので、両方残る。
-     *
-     * **終了時刻は鍵に入れない。** 延長は枝番ごとに別々のタイミングで届く
-     * (EIT p/f は局ごと) ので、片方だけ `end_at` が動いた回は「別の放送」に
-     * 見えて両方が立っていた。開始とタイトルが同じなら同じ放送。
-     */
-    const simulcast = new Map<string, { serviceId: number; programId: number }>();
-    for (const program of programs) {
-        const textOf = textCache(program);
-        let owner: Rule | undefined;
-        let plain: Rule | undefined;
-        let dedupe = false;
-        // 先勝ちの持ち主のほかに、dedupe の有無どちらのルールが当たるかも見る (下の dedupe)
-        for (const candidate of searching) {
-            if (!matchesCompiled(candidate, program, program.service_type, recording.freeOnly, textOf))
-                continue;
-            owner ??= candidate.rule;
-            if (candidate.rule.dedupe) dedupe = true;
-            else plain ??= candidate.rule;
-            if (dedupe && plain !== undefined) break;
-        }
-        if (owner === undefined) continue;
-        /*
-         * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
-         * (局 + event_id) に付いているので、`INSERT OR IGNORE` だけに頼ると
-         * 枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
-         */
-        if (declined.has(program)) continue;
-        const key = `${program.channel} ${program.start_at} ${program.name}`;
-        const twin = simulcast.get(key);
-        if (twin !== undefined) {
-            // 枝番の小さいほうが本線 (MX1 なら 23608)。並び順に左右されないよう、
-            // あとから小さいものが来たら入れ替える
-            if (twin.serviceId <= program.service_id) continue;
-            wanted.delete(twin.programId);
-        }
-        simulcast.set(key, { serviceId: program.service_id, programId: program.id });
-        wanted.set(program.id, { rule: owner, program, dedupe, plain });
+  /**
+   * 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち**。
+   * `dedupe` は「同じ回は最初の放送だけ」のルールが当たったか、`plain` はそうでない
+   * ルールのうち最初に当たったもの (下の dedupe で外れたときの受け手)
+   */
+  const wanted = new Map<
+    number,
+    {
+      rule: Rule;
+      program: (typeof programs)[number];
+      dedupe: boolean;
+      plain: Rule | undefined;
     }
-
+  >();
+  /**
+   * **同じ放送は1本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ番組名が
+   * 流れていたら同じ放送とみなし、いちばん小さい局だけを残す。
+   *
+   * 局は分割放送のために枝番を持っていて (TOKYO MX なら 23608 / 23609、
+   * どちらも名前は「TOKYO MX1」)、**分割していない間は同じ番組が両方に載る**。
+   * 素通しにしていた実機では、同じ回が2本録れたうえに、2つのエンコードが
+   * 同じ名前のファイルへ同時に書いて中身が壊れた。
+   *
+   * 中身が違うとき (MX1 と MX2 で別番組) はタイトルが違うので、両方残る。
+   *
+   * **終了時刻は鍵に入れない。** 延長は枝番ごとに別々のタイミングで届く
+   * (EIT p/f は局ごと) ので、片方だけ `end_at` が動いた回は「別の放送」に
+   * 見えて両方が立っていた。開始とタイトルが同じなら同じ放送。
+   */
+  const simulcast = new Map<string, { serviceId: number; programId: number }>();
+  for (const program of programs) {
+    const textOf = textCache(program);
+    let owner: Rule | undefined;
+    let plain: Rule | undefined;
+    let dedupe = false;
+    // 先勝ちの持ち主のほかに、dedupe の有無どちらのルールが当たるかも見る (下の dedupe)
+    for (const candidate of searching) {
+      if (
+        !matchesCompiled(
+          candidate,
+          program,
+          program.service_type,
+          recording.freeOnly,
+          textOf,
+        )
+      )
+        continue;
+      owner ??= candidate.rule;
+      if (candidate.rule.dedupe) dedupe = true;
+      else plain ??= candidate.rule;
+      if (dedupe && plain !== undefined) break;
+    }
+    if (owner === undefined) continue;
     /*
-     * **同じ回は最初の放送だけ** (ルールの `dedupe`)。局を替えた再放送・同時放送のうち
-     * いちばん早いものだけ残す (`episode.firstAirings`)。比べるのは dedupe のルールが
-     * 当たった放送すべて — 持ち主が別のルールでも、録るならそれが「最初の放送」になる。
-     * 外したものは、dedupe でないルールも当たっていればそちらが受け持ち、無ければ
-     * 予約を立てず、立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
+     * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
+     * (局 + event_id) に付いているので、`INSERT OR IGNORE` だけに頼ると
+     * 枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
      */
-    const deduping = [...wanted.values()].filter((entry) => entry.dedupe);
-    if (deduping.length > 0) {
-        const skips = dedupeSkips(
-            deduping.map(({ program }) => program),
-            at,
-        );
-        for (const id of skips.keys()) {
-            const entry = wanted.get(id)!;
-            if (entry.plain === undefined) wanted.delete(id);
-            else entry.rule = entry.plain;
-        }
+    if (declined.has(program)) continue;
+    const key = `${program.channel} ${program.start_at} ${program.name}`;
+    const twin = simulcast.get(key);
+    if (twin !== undefined) {
+      // 枝番の小さいほうが本線 (MX1 なら 23608)。並び順に左右されないよう、
+      // あとから小さいものが来たら入れ替える
+      if (twin.serviceId <= program.service_id) continue;
+      wanted.delete(twin.programId);
+    }
+    simulcast.set(key, {
+      serviceId: program.service_id,
+      programId: program.id,
+    });
+    wanted.set(program.id, { rule: owner, program, dedupe, plain });
+  }
+
+  /*
+   * **同じ回は最初の放送だけ** (ルールの `dedupe`)。局を替えた再放送・同時放送のうち
+   * いちばん早いものだけ残す (`episode.firstAirings`)。比べるのは dedupe のルールが
+   * 当たった放送すべて — 持ち主が別のルールでも、録るならそれが「最初の放送」になる。
+   * 外したものは、dedupe でないルールも当たっていればそちらが受け持ち、無ければ
+   * 予約を立てず、立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
+   */
+  const deduping = [...wanted.values()].filter((entry) => entry.dedupe);
+  if (deduping.length > 0) {
+    const skips = dedupeSkips(
+      deduping.map(({ program }) => program),
+      at,
+    );
+    for (const id of skips.keys()) {
+      const entry = wanted.get(id)!;
+      if (entry.plain === undefined) wanted.delete(id);
+      else entry.rule = entry.plain;
+    }
+  }
+
+  /** いまルールが立てている予約。手動と、録り始めたものは入らない */
+  const held = adding
+    ? []
+    : orm()
+        .select({
+          id: reservations.id,
+          program_id: reservations.program_id,
+          rule_id: reservations.rule_id,
+          priority: reservations.priority,
+          start_at: reservations.start_at,
+        })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.manual, false),
+            isNull(reservations.started_at),
+            inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          ),
+        )
+        .all();
+  /** 番組表にまだ載っている番組。読めていないだけのものと区別する */
+  const listed = new Map(programs.map((program) => [program.id, program]));
+  /** まだ生きているルール。消された/止められたぶんは猶予を置かずに引っ込める */
+  const enabled = new Set(rules.map((rule) => rule.id));
+  const grace = at + config.ruleRetractGrace;
+
+  orm().transaction((tx) => {
+    for (const { rule, program } of wanted.values()) {
+      // 同じ番組の予約が既にあれば何もしない (INSERT OR IGNORE)。作れたときだけ行が返る
+      const made = tx
+        .insert(reservations)
+        .values({
+          program_id: program.id,
+          rule_id: rule.id,
+          service_id: program.service_id,
+          name: program.name,
+          description: program.description,
+          start_at: program.start_at,
+          end_at: program.end_at,
+          priority: rule.priority,
+          manual: false,
+          encode: recording.encode,
+          state: "scheduled",
+          created_at: at,
+          updated_at: at,
+        })
+        .onConflictDoNothing()
+        .returning({ id: reservations.id })
+        .get();
+      if (made !== undefined) result.created++;
     }
 
-    /** いまルールが立てている予約。手動と、録り始めたものは入らない */
-    const held = adding
-        ? []
-        : orm()
-              .select({
-                  id: reservations.id,
-                  program_id: reservations.program_id,
-                  rule_id: reservations.rule_id,
-                  priority: reservations.priority,
-                  start_at: reservations.start_at,
-              })
-              .from(reservations)
-              .where(
-                  and(
-                      eq(reservations.manual, false),
-                      isNull(reservations.started_at),
-                      inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
-                  ),
-              )
-              .all();
-    /** 番組表にまだ載っている番組。読めていないだけのものと区別する */
-    const listed = new Map(programs.map((program) => [program.id, program]));
-    /** まだ生きているルール。消された/止められたぶんは猶予を置かずに引っ込める */
-    const enabled = new Set(rules.map((rule) => rule.id));
-    const grace = at + config.ruleRetractGrace;
-
-    orm().transaction((tx) => {
-        for (const { rule, program } of wanted.values()) {
-            // 同じ番組の予約が既にあれば何もしない (INSERT OR IGNORE)。作れたときだけ行が返る
-            const made = tx
-                .insert(reservations)
-                .values({
-                    program_id: program.id,
-                    rule_id: rule.id,
-                    service_id: program.service_id,
-                    name: program.name,
-                    description: program.description,
-                    start_at: program.start_at,
-                    end_at: program.end_at,
-                    priority: rule.priority,
-                    manual: false,
-                    encode: recording.encode,
-                    state: 'scheduled',
-                    created_at: at,
-                    updated_at: at,
-                })
-                .onConflictDoNothing()
-                .returning({ id: reservations.id })
-                .get();
-            if (made !== undefined) result.created++;
+    for (const reservation of held) {
+      const owner = wanted.get(reservation.program_id);
+      if (owner !== undefined) {
+        /*
+         * 別のルールが引き取ったなら付け替えるだけで、録るものは変わらない。
+         *
+         * **同じルールでも、優先度は当て直す。**
+         *
+         * 予約は `INSERT OR IGNORE` で立てるので、**もう立っている
+         * ぶんは作った日の優先度のまま**だった。ルールの優先度を
+         * 上げても効くのは次に立つ予約からで、いま競合している
+         * 予約はいくら上げても負けたまま — 実機で、優先度2に
+         * 上げた「片田舎のおっさん」が優先度1の裏番組に負け続けて
+         * いた (予約側は3件とも1のまま)。
+         *
+         * 優先度はルールが持つものなので、こちらを本物として扱う
+         */
+        const moved = owner.rule.id !== reservation.rule_id;
+        if (moved || owner.rule.priority !== reservation.priority) {
+          tx.update(reservations)
+            .set({
+              rule_id: owner.rule.id,
+              priority: owner.rule.priority,
+              updated_at: at,
+            })
+            .where(eq(reservations.id, reservation.id))
+            .run();
+          if (moved) result.moved++;
+          else result.repriced++;
         }
-
-        for (const reservation of held) {
-            const owner = wanted.get(reservation.program_id);
-            if (owner !== undefined) {
-                /*
-                 * 別のルールが引き取ったなら付け替えるだけで、録るものは変わらない。
-                 *
-                 * **同じルールでも、優先度は当て直す。**
-                 *
-                 * 予約は `INSERT OR IGNORE` で立てるので、**もう立っている
-                 * ぶんは作った日の優先度のまま**だった。ルールの優先度を
-                 * 上げても効くのは次に立つ予約からで、いま競合している
-                 * 予約はいくら上げても負けたまま — 実機で、優先度2に
-                 * 上げた「片田舎のおっさん」が優先度1の裏番組に負け続けて
-                 * いた (予約側は3件とも1のまま)。
-                 *
-                 * 優先度はルールが持つものなので、こちらを本物として扱う
-                 */
-                const moved = owner.rule.id !== reservation.rule_id;
-                if (moved || owner.rule.priority !== reservation.priority) {
-                    tx.update(reservations)
-                        .set({ rule_id: owner.rule.id, priority: owner.rule.priority, updated_at: at })
-                        .where(eq(reservations.id, reservation.id))
-                        .run();
-                    if (moved) result.moved++;
-                    else result.repriced++;
-                }
-                continue;
-            }
-            const program = listed.get(reservation.program_id);
-            // 番組表から消えているだけかもしれない。タイトルが空のものも判断材料にならない
-            if (program === undefined || program.name === '') continue;
-            // ルールが生きているのに外れた = 番組表が動いた。直前なら録っておく
-            const byChurn = reservation.rule_id !== null && enabled.has(reservation.rule_id);
-            if (byChurn && reservation.start_at < grace) continue;
-            tx.delete(reservations).where(eq(reservations.id, reservation.id)).run();
-            result.dropped++;
-        }
-    });
-    return result;
+        continue;
+      }
+      const program = listed.get(reservation.program_id);
+      // 番組表から消えているだけかもしれない。タイトルが空のものも判断材料にならない
+      if (program === undefined || program.name === "") continue;
+      // ルールが生きているのに外れた = 番組表が動いた。直前なら録っておく
+      const byChurn =
+        reservation.rule_id !== null && enabled.has(reservation.rule_id);
+      if (byChurn && reservation.start_at < grace) continue;
+      tx.delete(reservations).where(eq(reservations.id, reservation.id)).run();
+      result.dropped++;
+    }
+  });
+  return result;
 }

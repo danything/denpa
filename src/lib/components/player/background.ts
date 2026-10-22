@@ -5,24 +5,24 @@
  */
 
 /** 端末ごとに覚える鍵 (`keep.ts`)。速さ・CM 飛ばしと同じ置き場 */
-export const BACKGROUND_KEY = 'player-background';
+export const BACKGROUND_KEY = "player-background";
 
 /** 覚えていた値。**既定はオフ** — オンにしたことのある端末だけオンで始まる */
 export function storedBackground(saved: string | null): boolean {
-    return saved === '1';
+  return saved === "1";
 }
 
 export interface Situation {
-    /** バックグラウンド再生をオンにしているか */
-    allowed: boolean;
-    /** ページが裏に回っているか (`visibilityState` が `hidden`、または `pagehide` のあと) */
-    hidden: boolean;
-    /** 押して開いた小窓 (PiP) を出しているか */
-    pip: boolean;
-    /** 止めているか */
-    paused: boolean;
-    /** **こちらが止めたか。** 戻ってきたときに再開するのはこれだけ */
-    held: boolean;
+  /** バックグラウンド再生をオンにしているか */
+  allowed: boolean;
+  /** ページが裏に回っているか (`visibilityState` が `hidden`、または `pagehide` のあと) */
+  hidden: boolean;
+  /** 押して開いた小窓 (PiP) を出しているか */
+  pip: boolean;
+  /** 止めているか */
+  paused: boolean;
+  /** **こちらが止めたか。** 戻ってきたときに再開するのはこれだけ */
+  held: boolean;
 }
 
 /**
@@ -33,8 +33,8 @@ export interface Situation {
  * - **戻ってきたら再開する** — こちらが止めたときだけ。自分で止めて裏に回った人のは再開しない。
  *   裏にいる間に (ロック画面などから) 再開されていれば、そのまま
  */
-export function step(now: Situation): 'pause' | 'resume' | null {
-    if (!now.hidden) return now.held && now.paused ? 'resume' : null;
-    if (now.allowed || now.pip || now.paused || now.held) return null;
-    return 'pause';
+export function step(now: Situation): "pause" | "resume" | null {
+  if (!now.hidden) return now.held && now.paused ? "resume" : null;
+  if (now.allowed || now.pip || now.paused || now.held) return null;
+  return "pause";
 }

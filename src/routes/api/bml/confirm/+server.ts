@@ -9,23 +9,29 @@
  * ([bml-network.ts](../../../../lib/server/bml-network.ts))。
  */
 
-import { error, json } from '@sveltejs/kit';
-import { confirmReachable, refusalMessage, requireBmlNetwork } from '#lib/server/bml-network.js';
-import type { RequestHandler } from './$types';
+import { error, json } from "@sveltejs/kit";
+import {
+  confirmReachable,
+  refusalMessage,
+  requireBmlNetwork,
+} from "#lib/server/bml-network.js";
+import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url }) => {
-    requireBmlNetwork();
+  requireBmlNetwork();
 
-    const to = url.searchParams.get('to');
-    if (to === null || to === '') error(400, 'to がありません');
-    const wait = Number(url.searchParams.get('wait') ?? 4000);
+  const to = url.searchParams.get("to");
+  if (to === null || to === "") error(400, "to がありません");
+  const wait = Number(url.searchParams.get("wait") ?? 4000);
 
-    try {
-        return json(await confirmReachable(to, Number.isFinite(wait) ? wait : 4000));
-    } catch (failure) {
-        const why = refusalMessage(failure, '確認できませんでした');
-        console.warn(`[bml] 疎通を確かめられません: ${to} (${why})`);
-        // **届かないことは失敗ではない。** 放送のアプリはそれを見て出し分ける
-        return json({ success: false, ipAddress: null, responseTimeMillis: null });
-    }
+  try {
+    return json(
+      await confirmReachable(to, Number.isFinite(wait) ? wait : 4000),
+    );
+  } catch (failure) {
+    const why = refusalMessage(failure, "確認できませんでした");
+    console.warn(`[bml] 疎通を確かめられません: ${to} (${why})`);
+    // **届かないことは失敗ではない。** 放送のアプリはそれを見て出し分ける
+    return json({ success: false, ipAddress: null, responseTimeMillis: null });
+  }
 };

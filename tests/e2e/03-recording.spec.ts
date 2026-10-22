@@ -1,377 +1,427 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import {
-    cellOf,
-    expect,
-    goto,
-    recordOne,
-    reserveSoon,
-    setRecording,
-    syncEpg,
-    test,
-    upcoming,
-    waitRowState,
-    waitWatchable,
-} from './helpers';
+  cellOf,
+  expect,
+  goto,
+  recordOne,
+  reserveSoon,
+  setRecording,
+  syncEpg,
+  test,
+  upcoming,
+  waitRowState,
+  waitWatchable,
+} from "./helpers";
 
 /**
  * 録画→エンコード→保存先に入るまでを通しで確認する。
  * 進行はサーバ側のタイマー任せなので、ページを読み直しながら状態が変わるのを待つ。
  */
-test.describe('録画とエンコード', () => {
-    test('予約した番組が録画され、エンコードされて保存先に入る', async ({ page, request, stack }) => {
-        test.setTimeout(180_000);
-        await syncEpg(request);
+test.describe("録画とエンコード", () => {
+  test("予約した番組が録画され、エンコードされて保存先に入る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
 
-        // 節目の通知が実際にどう飛ぶかも、この一連の流れで見ておく
-        await request.post(`${stack.webhookUrl}/__control/reset`);
-        await goto(page, '/settings/integrations');
-        await page.getByTestId('webhook-url').fill(`${stack.webhookUrl}/__control/webhook`);
-        await page.getByTestId('webhook-add').click();
+    // 節目の通知が実際にどう飛ぶかも、この一連の流れで見ておく
+    await request.post(`${stack.webhookUrl}/__control/reset`);
+    await goto(page, "/settings/integrations");
+    await page
+      .getByTestId("webhook-url")
+      .fill(`${stack.webhookUrl}/__control/webhook`);
+    await page.getByTestId("webhook-add").click();
 
-        // BSは他のテストが触らないので、チューナー競合の心配なく録れる
-        const programId = await reserveSoon(page, request, 'BS');
+    // BSは他のテストが触らないので、チューナー競合の心配なく録れる
+    const programId = await reserveSoon(page, request, "BS");
 
-        const recordingRow = `[data-testid="recording-row"][data-program-id="${programId}"]`;
-        await waitWatchable(page, page.locator(recordingRow));
+    const recordingRow = `[data-testid="recording-row"][data-program-id="${programId}"]`;
+    await waitWatchable(page, page.locator(recordingRow));
 
-        // 録り終えた予約は録画の行にまとまる。「完了した予約も表示」でも予約の行は別に出ない (`mergeRecorded`)
-        await goto(page, '/?all=1');
-        await expect(page.locator(recordingRow)).toHaveCount(1);
-        await expect(
-            page.locator(`[data-testid="reservation-row"][data-program-id="${programId}"]`),
-        ).toHaveCount(0);
+    // 録り終えた予約は録画の行にまとまる。「完了した予約も表示」でも予約の行は別に出ない (`mergeRecorded`)
+    await goto(page, "/?all=1");
+    await expect(page.locator(recordingRow)).toHaveCount(1);
+    await expect(
+      page.locator(
+        `[data-testid="reservation-row"][data-program-id="${programId}"]`,
+      ),
+    ).toHaveCount(0);
 
-        // 保存先のパスが決まっていること。実体との突き合わせにこのパスを使う。
-        // 画面には出さない(普段は見ないので)ので、行の属性から取る
-        await goto(page, '/');
-        const recording = page.locator(recordingRow);
-        const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
-        expect(videoPath).toContain(stack.encodedDir);
-        expect(videoPath).toContain('.mkv');
+    // 保存先のパスが決まっていること。実体との突き合わせにこのパスを使う。
+    // 画面には出さない(普段は見ないので)ので、行の属性から取る
+    await goto(page, "/");
+    const recording = page.locator(recordingRow);
+    const videoPath = (await recording.getAttribute("data-library-path")) ?? "";
+    expect(videoPath).toContain(stack.encodedDir);
+    expect(videoPath).toContain(".mkv");
 
-        /*
-         * CM検出が走り、既定のチャプター付与として記録されていること。
-         *
-         * **切った位置は画面に出さない** — チャプターとして動画に入っているので、
-         * 再生すれば分かる。ここでは行の属性から確かめる。
-         * 詳細には「何で見つけたか」だけを出す (ロゴを教えるボタンを出すかの判断にも使う)
-         */
-        expect(await recording.getAttribute('data-cm-ranges')).toContain('300');
-        await recording.getByTestId('detail-button').click();
-        await expect(page.getByTestId('detail-cm-note')).toContainText('無音');
-        await page.getByTestId('detail-close').click();
+    /*
+     * CM検出が走り、既定のチャプター付与として記録されていること。
+     *
+     * **切った位置は画面に出さない** — チャプターとして動画に入っているので、
+     * 再生すれば分かる。ここでは行の属性から確かめる。
+     * 詳細には「何で見つけたか」だけを出す (ロゴを教えるボタンを出すかの判断にも使う)
+     */
+    expect(await recording.getAttribute("data-cm-ranges")).toContain("300");
+    await recording.getByTestId("detail-button").click();
+    await expect(page.getByTestId("detail-cm-note")).toContainText("無音");
+    await page.getByTestId("detail-close").click();
 
-        // 実際に録れた長さが記録されていること。番組表の尺は予定でしかなく、
-        // 途中で止めたときは実物と合わない
-        const recorded = Number(await recording.getAttribute('data-duration-ms'));
-        expect(recorded).toBeGreaterThan(0);
-        // 番組表の尺(BSの偽番組は10秒)から大きく外れていないこと
-        expect(recorded).toBeLessThan(5 * 60_000);
+    // 実際に録れた長さが記録されていること。番組表の尺は予定でしかなく、
+    // 途中で止めたときは実物と合わない
+    const recorded = Number(await recording.getAttribute("data-duration-ms"));
+    expect(recorded).toBeGreaterThan(0);
+    // 番組表の尺(BSの偽番組は10秒)から大きく外れていないこと
+    expect(recorded).toBeLessThan(5 * 60_000);
 
-        // サムネイル (denpa の画面が出す画像) が隣に置かれていること。
-        // 番組情報の .nfo は書かなくなった (Nova/WebDAV 連携をやめた) ので、無いのが正
-        const base = videoPath.replace(/\.mkv$/, '');
-        expect(existsSync(`${base}-poster.jpg`)).toBe(true);
-        expect(existsSync(`${base}.nfo`)).toBe(false);
+    // サムネイル (denpa の画面が出す画像) が隣に置かれていること。
+    // 番組情報の .nfo は書かなくなった (Nova/WebDAV 連携をやめた) ので、無いのが正
+    const base = videoPath.replace(/\.mkv$/, "");
+    expect(existsSync(`${base}-poster.jpg`)).toBe(true);
+    expect(existsSync(`${base}.nfo`)).toBe(false);
 
-        // 観られる録画には再生の印が出ていること。
-        // 再生ボタンは置いていない (行そのものを押すと再生する)
-        await expect(recording.getByTestId('play-hint')).toBeVisible();
+    // 観られる録画には再生の印が出ていること。
+    // 再生ボタンは置いていない (行そのものを押すと再生する)
+    await expect(recording.getByTestId("play-hint")).toBeVisible();
 
-        /*
-         * 何で録れた1本かを出していること。**録画の側では手動とも書く** —
-         * 予約は「ルールでないなら黙る」が、録れたものは後から見返すので、
-         * 「ルールではない」ことにも意味がある (どのルールを直せばいいのか、を
-         * 探し始める前に打ち切れる)
-         */
-        await expect(recording.getByTestId('rule-name')).toHaveText('手動予約');
+    /*
+     * 何で録れた1本かを出していること。**録画の側では手動とも書く** —
+     * 予約は「ルールでないなら黙る」が、録れたものは後から見返すので、
+     * 「ルールではない」ことにも意味がある (どのルールを直せばいいのか、を
+     * 探し始める前に打ち切れる)
+     */
+    await expect(recording.getByTestId("rule-name")).toHaveText("手動予約");
 
-        // 行を押すと番組表と同じ詳細が出る。エンコードしたもののコマ数のラベルも付く
-        await recording.getByTestId('detail-button').click();
-        const detail = page.getByTestId('program-detail');
-        await expect(detail).toBeVisible();
-        await expect(detail.getByTestId('detail-video')).toBeVisible();
-        await expect(detail.getByTestId('detail-fps')).toHaveText('60コマ/秒');
+    // 行を押すと番組表と同じ詳細が出る。エンコードしたもののコマ数のラベルも付く
+    await recording.getByTestId("detail-button").click();
+    const detail = page.getByTestId("program-detail");
+    await expect(detail).toBeVisible();
+    await expect(detail.getByTestId("detail-video")).toBeVisible();
+    await expect(detail.getByTestId("detail-fps")).toHaveText("60コマ/秒");
 
-        /*
-         * 畳んでいる「その他…」のメニューは display:none であること。
-         * dropdown-content に flex を直に載せていた頃、daisyUI の display:none より
-         * 強く効いて閉じても display:flex のまま (opacity 0) になり、ボタンの真上の
-         * 見えない項目がクリックを食っていた (実機で発覚)
-         */
-        expect(
-            await detail.getByTestId('detail-more-menu').evaluate((el) => getComputedStyle(el).display),
-        ).toBe('none');
+    /*
+     * 畳んでいる「その他…」のメニューは display:none であること。
+     * dropdown-content に flex を直に載せていた頃、daisyUI の display:none より
+     * 強く効いて閉じても display:flex のまま (opacity 0) になり、ボタンの真上の
+     * 見えない項目がクリックを食っていた (実機で発覚)
+     */
+    expect(
+      await detail
+        .getByTestId("detail-more-menu")
+        .evaluate((el) => getComputedStyle(el).display),
+    ).toBe("none");
 
-        // 録画をファイルとして持ち出すダウンロードは持たない (Discussion #760)。「その他…」にも出さない
-        await detail.getByTestId('detail-more').click();
-        await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
-        await expect(detail.getByTestId('detail-more-menu')).not.toContainText('ダウンロード');
-        // Esc で畳む (キーボードでも閉じられる)
-        await page.keyboard.press('Escape');
-        await expect(detail.getByTestId('detail-more-menu')).toBeHidden();
-        // 外 (詳細の背景) を押すとメニューだけ閉じる。その押下は下に届かず、詳細は開いたまま
-        await detail.getByTestId('detail-more').click();
-        await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
-        await detail.locator('.detail-backdrop').click({ position: { x: 5, y: 5 } });
-        await expect(detail.getByTestId('detail-more-menu')).toBeHidden();
-        await expect(detail).toBeVisible();
-        // 引き金をもう一度押しても閉じる
-        await detail.getByTestId('detail-more').click();
-        await expect(detail.getByTestId('detail-more-menu')).toBeVisible();
-        await detail.getByTestId('detail-more').click();
-        await expect(detail.getByTestId('detail-more-menu')).toBeHidden();
-        await expect(detail).toBeVisible();
-        await page.getByTestId('detail-close').click();
-        await expect(detail).toHaveCount(0);
+    // 録画をファイルとして持ち出すダウンロードは持たない (Discussion #760)。「その他…」にも出さない
+    await detail.getByTestId("detail-more").click();
+    await expect(detail.getByTestId("detail-more-menu")).toBeVisible();
+    await expect(detail.getByTestId("detail-more-menu")).not.toContainText(
+      "ダウンロード",
+    );
+    // Esc で畳む (キーボードでも閉じられる)
+    await page.keyboard.press("Escape");
+    await expect(detail.getByTestId("detail-more-menu")).toBeHidden();
+    // 外 (詳細の背景) を押すとメニューだけ閉じる。その押下は下に届かず、詳細は開いたまま
+    await detail.getByTestId("detail-more").click();
+    await expect(detail.getByTestId("detail-more-menu")).toBeVisible();
+    await detail
+      .locator(".detail-backdrop")
+      .click({ position: { x: 5, y: 5 } });
+    await expect(detail.getByTestId("detail-more-menu")).toBeHidden();
+    await expect(detail).toBeVisible();
+    // 引き金をもう一度押しても閉じる
+    await detail.getByTestId("detail-more").click();
+    await expect(detail.getByTestId("detail-more-menu")).toBeVisible();
+    await detail.getByTestId("detail-more").click();
+    await expect(detail.getByTestId("detail-more-menu")).toBeHidden();
+    await expect(detail).toBeVisible();
+    await page.getByTestId("detail-close").click();
+    await expect(detail).toHaveCount(0);
 
-        // ファイルは Range で取得できる。プレイヤーはこれでシークするので、
-        // 対応していないと全部落とし終わるまで早送りできない
-        const id = await recording.getAttribute('data-recording-id');
-        expect(id).toBeTruthy();
-        // 信頼したネットワーク (E2E はローカル) からは、資格情報なしでそのまま取れる
-        const part = await request.get(`/api/recordings/${id}/file`, {
-            headers: { Range: 'bytes=0-99' },
-        });
-        expect(part.status()).toBe(206);
-        expect(part.headers()['content-range']).toMatch(/^bytes 0-99\/\d+$/);
-        expect((await part.body()).byteLength).toBe(100);
-
-        // 再生のためのエンドポイントなので、前の `?download=1` を付けても添付にはしない
-        const plain = await request.head(`/api/recordings/${id}/file?download=1`);
-        expect(plain.status()).toBe(200);
-        expect(plain.headers()['content-disposition']).toBeUndefined();
-
-        // 節目ごとに通知が飛び、どれも番組名と一緒にチャンネル名が入っていること。
-        // 番組名だけだと、どの局のものか通知を見ただけでは分からない
-        const state = await (await request.get(`${stack.webhookUrl}/__control/state`)).json();
-        const events = state.webhookCalls.map((call: { event: string }) => call.event);
-        expect(events).toContain('recording.started');
-        expect(events).toContain('recording.finished');
-        expect(events).toContain('encode.finished');
-        for (const call of state.webhookCalls as { text: string; recording?: { service: string } }[]) {
-            expect(call.text).toContain('ＢＳ１１イレブン');
-            expect(call.recording?.service).toBe('ＢＳ１１イレブン');
-        }
-
-        /*
-         * 番組表のほうも「完了」になっていること。
-         *
-         * 予約の行が持っているのは録り始めた時刻だけで、そこから先の状態は
-         * 録画の行から引く。番組表が予約の状態をそのまま出していた頃は、
-         * 録り終えた番組が「予約済み」のまま並び、詳細に取消ボタンまで出ていた
-         * (取り消せるのは scheduled / conflict / recording だけ)
-         */
-        await goto(page, '/guide?type=BS');
-        await expect(cellOf(page, programId)).toContainText('完了');
-
-        // 後続のテストに通知先を持ち越さない
-        await goto(page, '/settings/integrations');
-        await page.getByTestId('webhook-delete').first().click();
-        await page.getByTestId('webhook-delete-confirm').click();
-        await expect(page.getByTestId('webhook-delete-confirm')).toHaveCount(0);
+    // ファイルは Range で取得できる。プレイヤーはこれでシークするので、
+    // 対応していないと全部落とし終わるまで早送りできない
+    const id = await recording.getAttribute("data-recording-id");
+    expect(id).toBeTruthy();
+    // 信頼したネットワーク (E2E はローカル) からは、資格情報なしでそのまま取れる
+    const part = await request.get(`/api/recordings/${id}/file`, {
+      headers: { Range: "bytes=0-99" },
     });
+    expect(part.status()).toBe(206);
+    expect(part.headers()["content-range"]).toMatch(/^bytes 0-99\/\d+$/);
+    expect((await part.body()).byteLength).toBe(100);
+
+    // 再生のためのエンドポイントなので、前の `?download=1` を付けても添付にはしない
+    const plain = await request.head(`/api/recordings/${id}/file?download=1`);
+    expect(plain.status()).toBe(200);
+    expect(plain.headers()["content-disposition"]).toBeUndefined();
+
+    // 節目ごとに通知が飛び、どれも番組名と一緒にチャンネル名が入っていること。
+    // 番組名だけだと、どの局のものか通知を見ただけでは分からない
+    const state = await (
+      await request.get(`${stack.webhookUrl}/__control/state`)
+    ).json();
+    const events = state.webhookCalls.map(
+      (call: { event: string }) => call.event,
+    );
+    expect(events).toContain("recording.started");
+    expect(events).toContain("recording.finished");
+    expect(events).toContain("encode.finished");
+    for (const call of state.webhookCalls as {
+      text: string;
+      recording?: { service: string };
+    }[]) {
+      expect(call.text).toContain("ＢＳ１１イレブン");
+      expect(call.recording?.service).toBe("ＢＳ１１イレブン");
+    }
+
+    /*
+     * 番組表のほうも「完了」になっていること。
+     *
+     * 予約の行が持っているのは録り始めた時刻だけで、そこから先の状態は
+     * 録画の行から引く。番組表が予約の状態をそのまま出していた頃は、
+     * 録り終えた番組が「予約済み」のまま並び、詳細に取消ボタンまで出ていた
+     * (取り消せるのは scheduled / conflict / recording だけ)
+     */
+    await goto(page, "/guide?type=BS");
+    await expect(cellOf(page, programId)).toContainText("完了");
+
+    // 後続のテストに通知先を持ち越さない
+    await goto(page, "/settings/integrations");
+    await page.getByTestId("webhook-delete").first().click();
+    await page.getByTestId("webhook-delete-confirm").click();
+    await expect(page.getByTestId("webhook-delete-confirm")).toHaveCount(0);
+  });
 });
 
-test.describe('CMの実カット', () => {
-    test('CMを切っても字幕は残る', async ({ page, request, stack }) => {
-        test.setTimeout(180_000);
-        await syncEpg(request);
+test.describe("CMの実カット", () => {
+  test("CMを切っても字幕は残る", async ({ page, request, stack }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
 
-        // CM の扱いは全体設定。実際に切る側にしてから録る
-        await goto(page, '/settings/recording');
-        await page.getByTestId('global-cmcut').selectOption('cut');
-        await expect(page.getByTestId('saved-result')).toBeVisible();
+    // CM の扱いは全体設定。実際に切る側にしてから録る
+    await goto(page, "/settings/recording");
+    await page.getByTestId("global-cmcut").selectOption("cut");
+    await expect(page.getByTestId("saved-result")).toBeVisible();
 
-        await goto(page, '/guide?type=BS');
-        const cells = await upcoming(page);
-        const target = cells[0]!;
-        const res = await request.post('/guide?/reserve', {
-            form: { programId: target.programId, options: '1', encode: 'on' },
-        });
-        expect(res.ok()).toBeTruthy();
-
-        const recordingRow = `[data-testid="recording-row"][data-program-id="${target.programId}"]`;
-        await waitRowState(page, '/', page.locator(recordingRow), '視聴可能');
-
-        await goto(page, '/');
-        const recording = page.locator(recordingRow);
-        expect(await recording.getAttribute('data-cm-ranges')).toContain('300');
-
-        // 字幕も CM ごとエンコードして、エンコードしたものと一緒に切る (cm-cut.ts)。
-        // フィルタで切っていた頃は -sn で落とすしかなかった
-        const videoPath = (await recording.getAttribute('data-library-path')) ?? '';
-        expect(videoPath).toContain('.mkv');
-        // 切るための作業ファイル (エンコードしたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
-        // (ffprobe が無くキーフレームが読めない) が、片付けは同じ
-        expect(readdirSync(dirname(videoPath)).filter((name) => /\.(post|ffconcat)$/.test(name))).toEqual([]);
-
-        /*
-         * **1本目は場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ境目を指して
-         * ソフトウェアで再エンコードする** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
-         * 再エンコードまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
-         */
-        const id = (await recording.getAttribute('data-recording-id')) ?? '';
-        const mine = new RegExp(`-${id}\\.m2ts$`);
-        const runs = existsSync(stack.encodeArgsFile)
-            ? readFileSync(stack.encodeArgsFile, 'utf8')
-                  .split('---\n')
-                  .map((run) => run.split('\n'))
-                  .filter((run) => run.some((a) => a.endsWith('.encoding')))
-                  .filter((run) => run.some((a, i) => run[i - 1] === '-i' && mine.test(a)))
-            : [];
-        const keyframes = runs.map((run) => run[run.indexOf('-force_key_frames:v') + 1]);
-        expect(keyframes).toEqual(['scd_metadata', '299.999,359.999']);
-        expect(runs[1]).toContain('libsvtav1');
+    await goto(page, "/guide?type=BS");
+    const cells = await upcoming(page);
+    const target = cells[0]!;
+    const res = await request.post("/guide?/reserve", {
+      form: { programId: target.programId, options: "1", encode: "on" },
     });
+    expect(res.ok()).toBeTruthy();
+
+    const recordingRow = `[data-testid="recording-row"][data-program-id="${target.programId}"]`;
+    await waitRowState(page, "/", page.locator(recordingRow), "視聴可能");
+
+    await goto(page, "/");
+    const recording = page.locator(recordingRow);
+    expect(await recording.getAttribute("data-cm-ranges")).toContain("300");
+
+    // 字幕も CM ごとエンコードして、エンコードしたものと一緒に切る (cm-cut.ts)。
+    // フィルタで切っていた頃は -sn で落とすしかなかった
+    const videoPath = (await recording.getAttribute("data-library-path")) ?? "";
+    expect(videoPath).toContain(".mkv");
+    // 切るための作業ファイル (エンコードしたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
+    // (ffprobe が無くキーフレームが読めない) が、片付けは同じ
+    expect(
+      readdirSync(dirname(videoPath)).filter((name) =>
+        /\.(post|ffconcat)$/.test(name),
+      ),
+    ).toEqual([]);
+
+    /*
+     * **1本目は場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ境目を指して
+     * ソフトウェアで再エンコードする** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
+     * 再エンコードまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
+     */
+    const id = (await recording.getAttribute("data-recording-id")) ?? "";
+    const mine = new RegExp(`-${id}\\.m2ts$`);
+    const runs = existsSync(stack.encodeArgsFile)
+      ? readFileSync(stack.encodeArgsFile, "utf8")
+          .split("---\n")
+          .map((run) => run.split("\n"))
+          .filter((run) => run.some((a) => a.endsWith(".encoding")))
+          .filter((run) =>
+            run.some((a, i) => run[i - 1] === "-i" && mine.test(a)),
+          )
+      : [];
+    const keyframes = runs.map(
+      (run) => run[run.indexOf("-force_key_frames:v") + 1],
+    );
+    expect(keyframes).toEqual(["scd_metadata", "299.999,359.999"]);
+    expect(runs[1]).toContain("libsvtav1");
+  });
 });
 
-test.describe('コーデックを両方エンコードする', () => {
-    test.afterEach(async ({ request }) => {
-        await setRecording(request);
+test.describe("コーデックを両方エンコードする", () => {
+  test.afterEach(async ({ request }) => {
+    await setRecording(request);
+  });
+
+  /*
+   * **両方選ぶと1本の録画が2ファイルになる。** 古いテレビは AV1 をデコードできない
+   * ので H.264 も置いておくと、同じ録画をどちらの端末でも観られる。主は AV1
+   * (`library_path`)、もう一方は H.264 (`alt_path`)。どちらも同じフォルダに
+   * 並ぶので、H.264 のほうは名前に印を付けて分ける ([H264])。
+   */
+  test("AV1 と H.264 の2本ができて、どちらも観られる", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
+    await setRecording(request, { codecs: ["av1", "h264"] });
+
+    const programId = await reserveSoon(page, request, "BS");
+    const row = page.locator(
+      `[data-testid="recording-row"][data-program-id="${programId}"]`,
+    );
+    await waitWatchable(page, row);
+
+    // 主は AV1 (素の .mkv)、もう一方は H.264 ([H264] 付き)。実体も2本ある
+    const av1 = (await row.getAttribute("data-library-path")) ?? "";
+    const alt = (await row.getAttribute("data-alt-path")) ?? "";
+    expect(av1).toMatch(/\.mkv$/);
+    expect(av1).not.toContain("[H264]");
+    expect(alt).toContain("[H264].mkv");
+    expect(existsSync(av1)).toBe(true);
+    expect(existsSync(alt)).toBe(true);
+
+    // どちらのコーデックにもサムネイルが付く (消したとき残ったほうへ主を
+    // 譲れるように、H.264 側へも写してある)
+    for (const video of [av1, alt]) {
+      expect(existsSync(`${video.replace(/\.mkv$/, "")}-poster.jpg`)).toBe(
+        true,
+      );
+    }
+
+    /*
+     * **両方のぶんが行に出る。** 主 (AV1) だけ出していた頃は、画面の数字と
+     * 置き場が実際に使っている量が食い違っていた (H.264 のほうが大きいことも
+     * ある)。「H.264 …」が括弧の中に添う
+     */
+    await expect(row).toContainText(/\(H\.264 [\d.]+ ?[KMGT]?B/);
+
+    // アプリ向けの一覧には両方のコーデックが並ぶ (古いテレビは H.264 を選んで観る)
+    const id = Number(await row.getAttribute("data-recording-id"));
+    const list = (await (await request.get("/api/recordings")).json()) as {
+      id: number;
+      files: { source: string; codec: string }[];
+    }[];
+    expect(list.find((item) => item.id === id)?.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "encoded", codec: "av1" }),
+        expect.objectContaining({ source: "alt", codec: "h264" }),
+      ]),
+    );
+  });
+});
+
+test.describe("エンコードしない", () => {
+  test.afterEach(async ({ request }) => {
+    await setRecording(request);
+  });
+
+  /*
+   * コーデックはチェックで選ぶ。**どちらも外すと「エンコードしない」** —
+   * 別に「エンコードする」のチェックを持たないので、外れていることが
+   * そのまま「エンコードしない」になる
+   */
+  test("コーデックをどちらも外すと、元のTSのまま保存先に置く", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
+
+    await goto(page, "/settings/recording");
+    await page.getByTestId("codec-av1").uncheck();
+    await page.getByTestId("codec-h264").uncheck();
+    await expect(page.getByTestId("saved-result")).toBeVisible();
+    // 選び直しても残っていること (どちらも外れたまま)
+    await goto(page, "/settings/recording");
+    await expect(page.getByTestId("codec-av1")).not.toBeChecked();
+    await expect(page.getByTestId("codec-h264")).not.toBeChecked();
+
+    const programId = await reserveSoon(page, request, "BS");
+    const row = `[data-testid="recording-row"][data-program-id="${programId}"]`;
+    await waitWatchable(page, page.locator(row));
+
+    // エンコードせずに置いたので mkv ではない。エンコードの進み具合も出ない
+    const path =
+      (await page.locator(row).getAttribute("data-library-path")) ?? "";
+    expect(path).toContain(".m2ts");
+    await expect(page.locator(row).getByTestId("encode-progress")).toHaveCount(
+      0,
+    );
+    // 録画の状態の API も「エンコード済みは無い」と答える。観られるかどうかは state のほう
+    const id = await page.locator(row).getAttribute("data-recording-id");
+    const status = await request.get(`/api/recordings/${id}`);
+    expect(await status.json()).toMatchObject({
+      encoded: false,
+      state: "available",
     });
 
     /*
-     * **両方選ぶと1本の録画が2ファイルになる。** 古いテレビは AV1 をデコードできない
-     * ので H.264 も置いておくと、同じ録画をどちらの端末でも観られる。主は AV1
-     * (`library_path`)、もう一方は H.264 (`alt_path`)。どちらも同じフォルダに
-     * 並ぶので、H.264 のほうは名前に印を付けて分ける ([H264])。
+     * 再エンコードのボタンは出ない。**エンコードしない設定では元のTSがそのまま保存先へ移る**ので、
+     * 元にできるTSがもう無い (「元のTSも残す」はエンコードしたときの話)。
+     * エンコードしたくなったらコーデックを選んで録り直すことになる
      */
-    test('AV1 と H.264 の2本ができて、どちらも観られる', async ({ page, request }) => {
-        test.setTimeout(180_000);
-        await syncEpg(request);
-        await setRecording(request, { codecs: ['av1', 'h264'] });
+    await page.locator(row).getByTestId("detail-button").click();
+    const detail = page.getByTestId("program-detail");
+    await expect(detail).toBeVisible();
+    await expect(detail.getByTestId("reencode-button")).toHaveCount(0);
 
-        const programId = await reserveSoon(page, request, 'BS');
-        const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
-        await waitWatchable(page, row);
-
-        // 主は AV1 (素の .mkv)、もう一方は H.264 ([H264] 付き)。実体も2本ある
-        const av1 = (await row.getAttribute('data-library-path')) ?? '';
-        const alt = (await row.getAttribute('data-alt-path')) ?? '';
-        expect(av1).toMatch(/\.mkv$/);
-        expect(av1).not.toContain('[H264]');
-        expect(alt).toContain('[H264].mkv');
-        expect(existsSync(av1)).toBe(true);
-        expect(existsSync(alt)).toBe(true);
-
-        // どちらのコーデックにもサムネイルが付く (消したとき残ったほうへ主を
-        // 譲れるように、H.264 側へも写してある)
-        for (const video of [av1, alt]) {
-            expect(existsSync(`${video.replace(/\.mkv$/, '')}-poster.jpg`)).toBe(true);
-        }
-
-        /*
-         * **両方のぶんが行に出る。** 主 (AV1) だけ出していた頃は、画面の数字と
-         * 置き場が実際に使っている量が食い違っていた (H.264 のほうが大きいことも
-         * ある)。「H.264 …」が括弧の中に添う
-         */
-        await expect(row).toContainText(/\(H\.264 [\d.]+ ?[KMGT]?B/);
-
-        // アプリ向けの一覧には両方のコーデックが並ぶ (古いテレビは H.264 を選んで観る)
-        const id = Number(await row.getAttribute('data-recording-id'));
-        const list = (await (await request.get('/api/recordings')).json()) as {
-            id: number;
-            files: { source: string; codec: string }[];
-        }[];
-        expect(list.find((item) => item.id === id)?.files).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ source: 'encoded', codec: 'av1' }),
-                expect.objectContaining({ source: 'alt', codec: 'h264' }),
-            ]),
-        );
-    });
+    // 後片付け。**エンコードする設定に戻す** (他のテストや本番の既定に揃える)
+    await goto(page, "/settings/recording");
+    await page.getByTestId("codec-av1").check();
+    await expect(page.getByTestId("saved-result")).toBeVisible();
+  });
 });
 
-test.describe('エンコードしない', () => {
-    test.afterEach(async ({ request }) => {
-        await setRecording(request);
-    });
+test.describe("CM検出のやり直し", () => {
+  test.afterEach(async ({ request }) => {
+    await setRecording(request);
+  });
 
-    /*
-     * コーデックはチェックで選ぶ。**どちらも外すと「エンコードしない」** —
-     * 別に「エンコードする」のチェックを持たないので、外れていることが
-     * そのまま「エンコードしない」になる
-     */
-    test('コーデックをどちらも外すと、元のTSのまま保存先に置く', async ({ page, request }) => {
-        test.setTimeout(180_000);
-        await syncEpg(request);
+  /*
+   * **CM 検出だけやり直す** (詳細の「その他…」)。再エンコードせずに CM を探し直して、エンコードしたもののチャプターを
+   * 書き直す (`encoder.runCmJob`)。CM を探さずにエンコードした録画で押せば、探した結果が入る。
+   * 元のTSはエンコードし終えると消える設定 (既定) なので、エンコードしたものから読む
+   */
+  test("CM検出だけやり直せる (再エンコードしない)", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    await setRecording(request, { cmCut: "off" });
+    const { id, libraryPath } = await recordOne(page, request);
+    const row = page.locator(
+      `[data-testid="recording-row"][data-recording-id="${id}"]`,
+    );
+    expect(await row.getAttribute("data-cm-ranges")).toBeNull();
 
-        await goto(page, '/settings/recording');
-        await page.getByTestId('codec-av1').uncheck();
-        await page.getByTestId('codec-h264').uncheck();
-        await expect(page.getByTestId('saved-result')).toBeVisible();
-        // 選び直しても残っていること (どちらも外れたまま)
-        await goto(page, '/settings/recording');
-        await expect(page.getByTestId('codec-av1')).not.toBeChecked();
-        await expect(page.getByTestId('codec-h264')).not.toBeChecked();
+    await setRecording(request, { cmCut: "chapter" });
+    await goto(page, "/");
+    await row.getByTestId("detail-button").click();
+    const detail = page.getByTestId("program-detail");
+    await detail.getByTestId("detail-more").click();
+    await detail.getByTestId("cm-redo-button").click();
 
-        const programId = await reserveSoon(page, request, 'BS');
-        const row = `[data-testid="recording-row"][data-program-id="${programId}"]`;
-        await waitWatchable(page, page.locator(row));
-
-        // エンコードせずに置いたので mkv ではない。エンコードの進み具合も出ない
-        const path = (await page.locator(row).getAttribute('data-library-path')) ?? '';
-        expect(path).toContain('.m2ts');
-        await expect(page.locator(row).getByTestId('encode-progress')).toHaveCount(0);
-        // 録画の状態の API も「エンコード済みは無い」と答える。観られるかどうかは state のほう
-        const id = await page.locator(row).getAttribute('data-recording-id');
-        const status = await request.get(`/api/recordings/${id}`);
-        expect(await status.json()).toMatchObject({ encoded: false, state: 'available' });
-
-        /*
-         * 再エンコードのボタンは出ない。**エンコードしない設定では元のTSがそのまま保存先へ移る**ので、
-         * 元にできるTSがもう無い (「元のTSも残す」はエンコードしたときの話)。
-         * エンコードしたくなったらコーデックを選んで録り直すことになる
-         */
-        await page.locator(row).getByTestId('detail-button').click();
-        const detail = page.getByTestId('program-detail');
-        await expect(detail).toBeVisible();
-        await expect(detail.getByTestId('reencode-button')).toHaveCount(0);
-
-        // 後片付け。**エンコードする設定に戻す** (他のテストや本番の既定に揃える)
-        await goto(page, '/settings/recording');
-        await page.getByTestId('codec-av1').check();
-        await expect(page.getByTestId('saved-result')).toBeVisible();
-    });
-});
-
-test.describe('CM検出のやり直し', () => {
-    test.afterEach(async ({ request }) => {
-        await setRecording(request);
-    });
-
-    /*
-     * **CM 検出だけやり直す** (詳細の「その他…」)。再エンコードせずに CM を探し直して、エンコードしたもののチャプターを
-     * 書き直す (`encoder.runCmJob`)。CM を探さずにエンコードした録画で押せば、探した結果が入る。
-     * 元のTSはエンコードし終えると消える設定 (既定) なので、エンコードしたものから読む
-     */
-    test('CM検出だけやり直せる (再エンコードしない)', async ({ page, request }) => {
-        test.setTimeout(180_000);
-        await setRecording(request, { cmCut: 'off' });
-        const { id, libraryPath } = await recordOne(page, request);
-        const row = page.locator(`[data-testid="recording-row"][data-recording-id="${id}"]`);
-        expect(await row.getAttribute('data-cm-ranges')).toBeNull();
-
-        await setRecording(request, { cmCut: 'chapter' });
-        await goto(page, '/');
-        await row.getByTestId('detail-button').click();
-        const detail = page.getByTestId('program-detail');
-        await detail.getByTestId('detail-more').click();
-        await detail.getByTestId('cm-redo-button').click();
-
-        // エンコードするジョブと同じ待ち行列に並ぶ。終われば CM が入り、置き場所は変わらない (再エンコードしていない)
-        await expect
-            .poll(
-                async () => {
-                    await goto(page, '/');
-                    return row.getAttribute('data-cm-ranges');
-                },
-                { timeout: 60_000, intervals: [500] },
-            )
-            .toContain('300');
-        await waitWatchable(page, row);
-        expect(await row.getAttribute('data-library-path')).toBe(libraryPath);
-    });
+    // エンコードするジョブと同じ待ち行列に並ぶ。終われば CM が入り、置き場所は変わらない (再エンコードしていない)
+    await expect
+      .poll(
+        async () => {
+          await goto(page, "/");
+          return row.getAttribute("data-cm-ranges");
+        },
+        { timeout: 60_000, intervals: [500] },
+      )
+      .toContain("300");
+    await waitWatchable(page, row);
+    expect(await row.getAttribute("data-library-path")).toBe(libraryPath);
+  });
 });

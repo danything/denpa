@@ -1,40 +1,40 @@
 {
-    "name": "denpa",
-    "license": "AGPL-3.0-or-later",
-    "devDependencies": {
-        "@anyblades/blades": "3.1.0-beta.4",
-        "@iconify-json/lucide": "^1.2.147",
-        "@playwright/test": "^1.64.1",
-        "@sveltejs/adapter-bun": "^1.0.0",
-        "@sveltejs/kit": "^3.1.0",
-        "@sveltejs/vite-plugin-svelte": "^7.3.1",
-        "@types/bun": "^1.4.3",
-        "drizzle-kit": "0.31.11",
-        "drizzle-orm": "^0.45.4",
-        "oxlint": "^1.89.0",
-        "svelte": "^5.57.2",
-        "svelte-check": "^4.7.7",
-        "typescript": "^6.0.0",
-        "unplugin-icons": "^24.0.0",
-        "vite": "^8.3.5"
-    },
-    "private": true,
-    "scripts": {
-        "dev": "bunx --bun vite dev",
-        "build": "bunx --bun vite build",
-        "start": "bun ./server.js",
-        "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p src/service-worker/tsconfig.json",
-        "db:generate": "drizzle-kit generate",
-        "test": "bun run lint && bun run check && bun run test:unit && playwright test",
-        "test:unit": "bun test src",
-        "test:conformance": "dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r linux-x64 -o agent/publish && AGENT_CMD=\"$PWD/agent/publish/denpa-agent\" bun test agent/conformance.test.ts",
-        "test:e2e": "playwright test",
-        "lint": "oxlint && bun fmt --check",
-        "format": "oxlint --fix && bun fmt"
-    },
-    "type": "module",
-    "imports": {
-        "#lib": "./src/lib/index.js",
-        "#lib/*": "./src/lib/*"
-    }
+  "name": "denpa",
+  "license": "AGPL-3.0-or-later",
+  "devDependencies": {
+    "@anyblades/blades": "3.1.0-beta.4",
+    "@iconify-json/lucide": "^1.2.147",
+    "@playwright/test": "^1.64.1",
+    "@sveltejs/adapter-bun": "^1.0.0",
+    "@sveltejs/kit": "^3.1.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/bun": "^1.4.3",
+    "drizzle-kit": "0.31.11",
+    "drizzle-orm": "^0.45.4",
+    "oxlint": "^1.89.0",
+    "svelte": "^5.57.2",
+    "svelte-check": "^4.7.7",
+    "typescript": "^6.0.0",
+    "unplugin-icons": "^24.0.0",
+    "vite": "^8.3.5"
+  },
+  "private": true,
+  "scripts": {
+    "dev": "bunx --bun vite dev",
+    "build": "bunx --bun vite build",
+    "start": "bun ./server.js",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p src/service-worker/tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "test": "bun run lint && bun run check && bun run test:unit && playwright test",
+    "test:unit": "bun test src",
+    "test:conformance": "dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r linux-x64 -o agent/publish && AGENT_CMD=\"$PWD/agent/publish/denpa-agent\" bun test agent/conformance.test.ts",
+    "test:e2e": "playwright test",
+    "lint": "oxlint && bun fmt --check",
+    "format": "oxlint --fix && bun fmt"
+  },
+  "type": "module",
+  "imports": {
+    "#lib": "./src/lib/index.js",
+    "#lib/*": "./src/lib/*"
+  }
 }

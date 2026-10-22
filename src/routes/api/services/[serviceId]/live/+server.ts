@@ -1,6 +1,6 @@
-import { error } from '@sveltejs/kit';
-import { askedTrack } from '#lib/arib.js';
-import { liveStream } from '#lib/server/live.js';
+import { error } from "@sveltejs/kit";
+import { askedTrack } from "#lib/arib.js";
+import { liveStream } from "#lib/server/live.js";
 
 /**
  * **ライブを HTTP で流す** (画面の外のもの向けの API。docs/api.md)。
@@ -13,17 +13,27 @@ import { liveStream } from '#lib/server/live.js';
  * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)
  */
 export function GET({ params, url }) {
-    const serviceId = Number(params.serviceId);
-    if (!Number.isInteger(serviceId)) error(400, '局IDが不正です');
-    const asked = url.searchParams.get('codec');
-    const audio = url.searchParams.get('audio');
-    const codec = audio === 'only' ? 'audio' : asked === 'av1' || asked === 'raw' ? asked : 'h264';
-    const stream = liveStream(serviceId, codec, askedTrack(audio));
-    if (stream === null) error(404, '局がありません');
-    return new Response(stream, {
-        headers: {
-            'Content-Type': codec === 'raw' ? 'video/mp2t' : codec === 'audio' ? 'audio/mp4' : 'video/mp4',
-            'Cache-Control': 'no-store',
-        },
-    });
+  const serviceId = Number(params.serviceId);
+  if (!Number.isInteger(serviceId)) error(400, "局IDが不正です");
+  const asked = url.searchParams.get("codec");
+  const audio = url.searchParams.get("audio");
+  const codec =
+    audio === "only"
+      ? "audio"
+      : asked === "av1" || asked === "raw"
+        ? asked
+        : "h264";
+  const stream = liveStream(serviceId, codec, askedTrack(audio));
+  if (stream === null) error(404, "局がありません");
+  return new Response(stream, {
+    headers: {
+      "Content-Type":
+        codec === "raw"
+          ? "video/mp2t"
+          : codec === "audio"
+            ? "audio/mp4"
+            : "video/mp4",
+      "Cache-Control": "no-store",
+    },
+  });
 }

@@ -5,4 +5,9 @@
  * 探ってから構成を確定させる。元のTSを読む ffmpeg の呼び出し (本番のエンコード・CM の切り出し) で同じ値を使う。ここ1つにしてあるのは、片方だけ変えて挙動が
  * 割れないようにするため
  */
-export const TS_PROBE = ['-analyzeduration', '15000000', '-probesize', '30000000'] as const;
+export const TS_PROBE = [
+  "-analyzeduration",
+  "15000000",
+  "-probesize",
+  "30000000",
+] as const;

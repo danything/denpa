@@ -1,7 +1,12 @@
-import { untrack } from 'svelte';
-import { beforeNavigate, goto } from '$app/navigation';
-import { page } from '$app/state';
-import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } from './fullscreen';
+import { untrack } from "svelte";
+import { beforeNavigate, goto } from "$app/navigation";
+import { page } from "$app/state";
+import {
+  exitNative,
+  fullscreenMode,
+  nativeFullscreenElement,
+  requestNative,
+} from "./fullscreen";
 
 /**
  * 舞台 (`PlayerStage`) の全画面。**3画面 (ライブ・追っかけ・録画) で同じもの** (#471)。
@@ -25,140 +30,146 @@ import { exitNative, fullscreenMode, nativeFullscreenElement, requestNative } fr
  *   横に持てば横いっぱいになる
  */
 export interface StageFullscreen {
-    /** 全画面か (本物でも広げたのでも) */
-    readonly active: boolean;
-    /** 広げているか (iPhone) */
-    readonly pseudo: boolean;
-    enter: () => void;
-    exit: () => void;
-    toggle: () => void;
+  /** 全画面か (本物でも広げたのでも) */
+  readonly active: boolean;
+  /** 広げているか (iPhone) */
+  readonly pseudo: boolean;
+  enter: () => void;
+  exit: () => void;
+  toggle: () => void;
 }
 
-export function stageFullscreen(target: () => HTMLElement | null): StageFullscreen {
-    let native = $state(false);
-    let pseudo = $state(false);
+export function stageFullscreen(
+  target: () => HTMLElement | null,
+): StageFullscreen {
+  let native = $state(false);
+  let pseudo = $state(false);
 
-    $effect(() => {
-        const update = () => (native = nativeFullscreenElement(document) !== null);
-        update();
-        document.addEventListener('fullscreenchange', update);
-        document.addEventListener('webkitfullscreenchange', update);
-        return () => {
-            document.removeEventListener('fullscreenchange', update);
-            document.removeEventListener('webkitfullscreenchange', update);
-        };
-    });
-
-    /*
-     * 広げている間: 後ろを止めて黒く、Esc で出る。**枠の中のメニューが開いていれば
-     * そちらに譲る** — メニュー (`Menu.svelte`) は document で Esc を受けて `preventDefault` するので、
-     * window まで上がってきたときには印が付いている
-     */
-    $effect(() => {
-        if (!pseudo) return;
-        const root = document.documentElement;
-        root.setAttribute('data-stage-fullscreen', '');
-        const onKey = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape' || event.defaultPrevented) return;
-            event.preventDefault();
-            exit();
-        };
-        window.addEventListener('keydown', onKey);
-        return () => {
-            root.removeAttribute('data-stage-fullscreen');
-            window.removeEventListener('keydown', onKey);
-        };
-    });
-
-    /*
-     * **戻るで畳む。** 積んだ段 (`fullscreen: true`) から降りたら広げたのをやめる。
-     * 見るのは「立っていた印が消えた」ときだけ — 積む前 (`goto` が済むまで) は
-     * 印がまだ無いので、それを「降りた」と取り違えない。
-     *
-     * **こちらが戻した段** (ボタン・Esc で出た) は、もう出ているので畳まない。
-     * 戻り切る前に入り直されていれば、そこで改めて積む
-     */
-    let stacked = false;
-    $effect(() => {
-        const on = page.state.fullscreen === true;
-        if (stacked && !on) {
-            if (!popping) pseudo = false;
-            else {
-                popping = false;
-                if (untrack(() => pseudo)) push();
-            }
-        }
-        stacked = on;
-    });
-
-    /** 段を積んでいる最中か。済む前に出て入り直したとき、二重に積まない */
-    let pushing = false;
-    /** 積んだ段をこちらから戻している最中か */
-    let popping = false;
-
-    function pop(): void {
-        popping = true;
-        history.back();
-    }
-
-    /*
-     * 積めなくても広げたまま (開いた直後でルーターがまだ動いていないなど)。ボタン・Esc で出られる。
-     * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
-     * `exit` は戻さないので、放っておくと何も広げていない段が1つ残る
-     */
-    function push(): void {
-        pushing = true;
-        goto(location.href, { state: { ...page.state, fullscreen: true }, shallow: true }).then(
-            () => {
-                pushing = false;
-                if (!pseudo && page.state.fullscreen === true) pop();
-            },
-            () => {
-                pushing = false;
-            },
-        );
-    }
-
-    beforeNavigate((navigation) => {
-        if (navigation.to?.url.pathname !== navigation.from?.url.pathname) pseudo = false;
-    });
-
-    function enter(): void {
-        const element = target();
-        if (element === null) return;
-        const mode = fullscreenMode(element, document);
-        if (mode !== 'pseudo') {
-            void requestNative(element, mode);
-            return;
-        }
-        if (pseudo) return;
-        pseudo = true;
-        // 積んでいる・戻している最中なら、済んだところで合わせる (上の effect と push)
-        if (pushing || popping) return;
-        // 印が残っている段 (よそから戻ってきた) なら積み増さない。戻ればそのまま下の段へ降りる
-        if (page.state.fullscreen === true) return;
-        push();
-    }
-
-    function exit(): void {
-        if (native) {
-            void exitNative(document);
-            return;
-        }
-        if (!pseudo) return;
-        pseudo = false;
-        if (page.state.fullscreen === true && !pushing && !popping) pop();
-    }
-
-    return {
-        get active() {
-            return native || pseudo;
-        },
-        get pseudo() {
-            return pseudo;
-        },
-        enter,
-        exit,
-        toggle: () => (native || pseudo ? exit() : enter()),
+  $effect(() => {
+    const update = () => (native = nativeFullscreenElement(document) !== null);
+    update();
+    document.addEventListener("fullscreenchange", update);
+    document.addEventListener("webkitfullscreenchange", update);
+    return () => {
+      document.removeEventListener("fullscreenchange", update);
+      document.removeEventListener("webkitfullscreenchange", update);
     };
+  });
+
+  /*
+   * 広げている間: 後ろを止めて黒く、Esc で出る。**枠の中のメニューが開いていれば
+   * そちらに譲る** — メニュー (`Menu.svelte`) は document で Esc を受けて `preventDefault` するので、
+   * window まで上がってきたときには印が付いている
+   */
+  $effect(() => {
+    if (!pseudo) return;
+    const root = document.documentElement;
+    root.setAttribute("data-stage-fullscreen", "");
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      exit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      root.removeAttribute("data-stage-fullscreen");
+      window.removeEventListener("keydown", onKey);
+    };
+  });
+
+  /*
+   * **戻るで畳む。** 積んだ段 (`fullscreen: true`) から降りたら広げたのをやめる。
+   * 見るのは「立っていた印が消えた」ときだけ — 積む前 (`goto` が済むまで) は
+   * 印がまだ無いので、それを「降りた」と取り違えない。
+   *
+   * **こちらが戻した段** (ボタン・Esc で出た) は、もう出ているので畳まない。
+   * 戻り切る前に入り直されていれば、そこで改めて積む
+   */
+  let stacked = false;
+  $effect(() => {
+    const on = page.state.fullscreen === true;
+    if (stacked && !on) {
+      if (!popping) pseudo = false;
+      else {
+        popping = false;
+        if (untrack(() => pseudo)) push();
+      }
+    }
+    stacked = on;
+  });
+
+  /** 段を積んでいる最中か。済む前に出て入り直したとき、二重に積まない */
+  let pushing = false;
+  /** 積んだ段をこちらから戻している最中か */
+  let popping = false;
+
+  function pop(): void {
+    popping = true;
+    history.back();
+  }
+
+  /*
+   * 積めなくても広げたまま (開いた直後でルーターがまだ動いていないなど)。ボタン・Esc で出られる。
+   * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
+   * `exit` は戻さないので、放っておくと何も広げていない段が1つ残る
+   */
+  function push(): void {
+    pushing = true;
+    goto(location.href, {
+      state: { ...page.state, fullscreen: true },
+      shallow: true,
+    }).then(
+      () => {
+        pushing = false;
+        if (!pseudo && page.state.fullscreen === true) pop();
+      },
+      () => {
+        pushing = false;
+      },
+    );
+  }
+
+  beforeNavigate((navigation) => {
+    if (navigation.to?.url.pathname !== navigation.from?.url.pathname)
+      pseudo = false;
+  });
+
+  function enter(): void {
+    const element = target();
+    if (element === null) return;
+    const mode = fullscreenMode(element, document);
+    if (mode !== "pseudo") {
+      void requestNative(element, mode);
+      return;
+    }
+    if (pseudo) return;
+    pseudo = true;
+    // 積んでいる・戻している最中なら、済んだところで合わせる (上の effect と push)
+    if (pushing || popping) return;
+    // 印が残っている段 (よそから戻ってきた) なら積み増さない。戻ればそのまま下の段へ降りる
+    if (page.state.fullscreen === true) return;
+    push();
+  }
+
+  function exit(): void {
+    if (native) {
+      void exitNative(document);
+      return;
+    }
+    if (!pseudo) return;
+    pseudo = false;
+    if (page.state.fullscreen === true && !pushing && !popping) pop();
+  }
+
+  return {
+    get active() {
+      return native || pseudo;
+    },
+    get pseudo() {
+      return pseudo;
+    },
+    enter,
+    exit,
+    toggle: () => (native || pseudo ? exit() : enter()),
+  };
 }

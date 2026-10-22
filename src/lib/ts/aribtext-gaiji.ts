@@ -21,50 +21,50 @@
  * 鍵は区点そのまま — 第1バイトが 0x20+区、第2バイトが 0x20+点。
  */
 
-import { ADDITIONAL } from './b24-tables';
+import { ADDITIONAL } from "./b24-tables";
 
 /** 番組表だけで違える字。区点 → 字 (上の説明) */
 export const EPG_ONLY = new Map<number, string>([
-    // 92区56〜85点。規格でも私用領域
-    [0x7c58, '(vn)'],
-    [0x7c59, '(ob)'],
-    [0x7c5a, '(cb)'],
-    [0x7c5b, '(ce'],
-    [0x7c5c, 'mb)'],
-    [0x7c5d, '(hp)'],
-    [0x7c5e, '(br)'],
-    [0x7c5f, '(p)'],
-    [0x7c60, '(s)'],
-    [0x7c61, '(ms)'],
-    [0x7c62, '(t)'],
-    [0x7c63, '(bs)'],
-    [0x7c64, '(b)'],
-    [0x7c65, '(tb)'],
-    [0x7c66, '(tp)'],
-    [0x7c67, '(ds)'],
-    [0x7c68, '(ag)'],
-    [0x7c69, '(eg)'],
-    [0x7c6a, '(vo)'],
-    [0x7c6b, '(fl)'],
-    [0x7c6c, '(ke'],
-    [0x7c6d, 'y)'],
-    [0x7c6e, '(sa'],
-    [0x7c6f, 'x)'],
-    [0x7c70, '(sy'],
-    [0x7c71, 'n)'],
-    [0x7c72, '(or'],
-    [0x7c73, 'g)'],
-    [0x7c74, '(pe'],
-    [0x7c75, 'r)'],
-    // 93区46・47点・87点。規格で空き
-    [0x7d4e, '・'],
-    [0x7d4f, '・'],
-    [0x7d77, '　'],
+  // 92区56〜85点。規格でも私用領域
+  [0x7c58, "(vn)"],
+  [0x7c59, "(ob)"],
+  [0x7c5a, "(cb)"],
+  [0x7c5b, "(ce"],
+  [0x7c5c, "mb)"],
+  [0x7c5d, "(hp)"],
+  [0x7c5e, "(br)"],
+  [0x7c5f, "(p)"],
+  [0x7c60, "(s)"],
+  [0x7c61, "(ms)"],
+  [0x7c62, "(t)"],
+  [0x7c63, "(bs)"],
+  [0x7c64, "(b)"],
+  [0x7c65, "(tb)"],
+  [0x7c66, "(tp)"],
+  [0x7c67, "(ds)"],
+  [0x7c68, "(ag)"],
+  [0x7c69, "(eg)"],
+  [0x7c6a, "(vo)"],
+  [0x7c6b, "(fl)"],
+  [0x7c6c, "(ke"],
+  [0x7c6d, "y)"],
+  [0x7c6e, "(sa"],
+  [0x7c6f, "x)"],
+  [0x7c70, "(sy"],
+  [0x7c71, "n)"],
+  [0x7c72, "(or"],
+  [0x7c73, "g)"],
+  [0x7c74, "(pe"],
+  [0x7c75, "r)"],
+  // 93区46・47点・87点。規格で空き
+  [0x7d4e, "・"],
+  [0x7d4f, "・"],
+  [0x7d77, "　"],
 ]);
 
 export const GAIJI = new Map<number, string>();
 [...ADDITIONAL].forEach((char, i) => {
-    if (char === '�') return;
-    GAIJI.set(((0x20 + 85 + Math.floor(i / 94)) << 8) | (0x21 + (i % 94)), char);
+  if (char === "�") return;
+  GAIJI.set(((0x20 + 85 + Math.floor(i / 94)) << 8) | (0x21 + (i % 94)), char);
 });
 for (const [code, text] of EPG_ONLY) GAIJI.set(code, text);

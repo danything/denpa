@@ -19,13 +19,13 @@
  * **置き換え表の MD5 は元の画像から取る** (b24caption.ts)。ここで作った画像は送るためだけのもの。
  */
 
-import type { CaptionDrcs } from '../caption-text';
+import type { CaptionDrcs } from "../caption-text";
 
 /** 濃さ 0〜255 の画像 (左上から1画素1バイト) */
 export interface Grey {
-    width: number;
-    height: number;
-    pixels: Uint8Array;
+  width: number;
+  height: number;
+  pixels: Uint8Array;
 }
 
 /** 送る画像の一辺。これに届くまで倍にする (全画面の字の枠と同じくらい) */
@@ -37,20 +37,20 @@ const BOX = 4;
 
 /** 放送の詰め方 (左上から1画素 `bits` ビット、上の桁から) を開いて、濃さ 0〜255 にする */
 export function decodeGrey(
-    width: number,
-    height: number,
-    depth: number,
-    bits: number,
-    data: Uint8Array,
+  width: number,
+  height: number,
+  depth: number,
+  bits: number,
+  data: Uint8Array,
 ): Grey {
-    const pixels = new Uint8Array(width * height);
-    const mask = (1 << bits) - 1;
-    for (let i = 0; i < width * height; i++) {
-        const bit = i * bits;
-        const value = ((data[bit >> 3] ?? 0) >> (8 - (bit & 7) - bits)) & mask;
-        pixels[i] = Math.round((Math.min(value, depth - 1) * 255) / (depth - 1));
-    }
-    return { width, height, pixels };
+  const pixels = new Uint8Array(width * height);
+  const mask = (1 << bits) - 1;
+  for (let i = 0; i < width * height; i++) {
+    const bit = i * bits;
+    const value = ((data[bit >> 3] ?? 0) >> (8 - (bit & 7) - bits)) & mask;
+    pixels[i] = Math.round((Math.min(value, depth - 1) * 255) / (depth - 1));
+  }
+  return { width, height, pixels };
 }
 
 /**
@@ -58,28 +58,31 @@ export function decodeGrey(
  * 行も同じように見る。畳めなくなるまで繰り返す (4 倍で送ってきても畳める)
  */
 export function collapseDoubled(src: Grey): Grey {
-    let g = src;
-    for (;;) {
-        const { width, height, pixels } = g;
-        let cols = width % 2 === 0;
-        let rows = height % 2 === 0;
-        for (let y = 0; y < height && (cols || rows); y++) {
-            for (let x = 0; x < width; x++) {
-                const p = pixels[y * width + x]!;
-                if (cols && x % 2 === 0 && p !== pixels[y * width + x + 1]) cols = false;
-                if (rows && y % 2 === 0 && p !== pixels[(y + 1) * width + x]) rows = false;
-            }
-        }
-        if (!cols && !rows) return g;
-        const w = cols ? width / 2 : width;
-        const h = rows ? height / 2 : height;
-        const out = new Uint8Array(w * h);
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++)
-                out[y * w + x] = pixels[(rows ? y * 2 : y) * width + (cols ? x * 2 : x)]!;
-        }
-        g = { width: w, height: h, pixels: out };
+  let g = src;
+  for (;;) {
+    const { width, height, pixels } = g;
+    let cols = width % 2 === 0;
+    let rows = height % 2 === 0;
+    for (let y = 0; y < height && (cols || rows); y++) {
+      for (let x = 0; x < width; x++) {
+        const p = pixels[y * width + x]!;
+        if (cols && x % 2 === 0 && p !== pixels[y * width + x + 1])
+          cols = false;
+        if (rows && y % 2 === 0 && p !== pixels[(y + 1) * width + x])
+          rows = false;
+      }
     }
+    if (!cols && !rows) return g;
+    const w = cols ? width / 2 : width;
+    const h = rows ? height / 2 : height;
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++)
+        out[y * w + x] =
+          pixels[(rows ? y * 2 : y) * width + (cols ? x * 2 : x)]!;
+    }
+    g = { width: w, height: h, pixels: out };
+  }
 }
 
 /**
@@ -88,47 +91,53 @@ export function collapseDoubled(src: Grey): Grey {
  * 縁へ抜ける斜めの線にも余計な点が付かない
  */
 export function scale2x(src: Grey): Grey {
-    const { width, height, pixels } = src;
-    const w = width * 2;
-    const out = new Uint8Array(w * height * 2);
-    const at = (x: number, y: number) => {
-        const cx = x < 0 ? Math.min(1, width - 1) : x >= width ? Math.max(0, width - 2) : x;
-        const cy = y < 0 ? Math.min(1, height - 1) : y >= height ? Math.max(0, height - 2) : y;
-        return pixels[cy * width + cx]!;
-    };
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const p = pixels[y * width + x]!;
-            const a = at(x, y - 1); // 上
-            const b = at(x + 1, y); // 右
-            const c = at(x - 1, y); // 左
-            const d = at(x, y + 1); // 下
-            const top = y * 2 * w + x * 2;
-            out[top] = c === a && c !== d && a !== b ? a : p;
-            out[top + 1] = a === b && a !== c && b !== d ? b : p;
-            out[top + w] = d === c && d !== b && c !== a ? c : p;
-            out[top + w + 1] = b === d && b !== a && d !== c ? d : p;
-        }
+  const { width, height, pixels } = src;
+  const w = width * 2;
+  const out = new Uint8Array(w * height * 2);
+  const at = (x: number, y: number) => {
+    const cx =
+      x < 0 ? Math.min(1, width - 1) : x >= width ? Math.max(0, width - 2) : x;
+    const cy =
+      y < 0
+        ? Math.min(1, height - 1)
+        : y >= height
+          ? Math.max(0, height - 2)
+          : y;
+    return pixels[cy * width + cx]!;
+  };
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = pixels[y * width + x]!;
+      const a = at(x, y - 1); // 上
+      const b = at(x + 1, y); // 右
+      const c = at(x - 1, y); // 左
+      const d = at(x, y + 1); // 下
+      const top = y * 2 * w + x * 2;
+      out[top] = c === a && c !== d && a !== b ? a : p;
+      out[top + 1] = a === b && a !== c && b !== d ? b : p;
+      out[top + w] = d === c && d !== b && c !== a ? c : p;
+      out[top + w + 1] = b === d && b !== a && d !== c ? d : p;
     }
-    return { width: w, height: height * 2, pixels: out };
+  }
+  return { width: w, height: height * 2, pixels: out };
 }
 
 /** `n`x`n` ずつ平均して 1/n に縮める (幅・高さは n の倍数であること) */
 export function boxDown(src: Grey, n: number): Grey {
-    const w = src.width / n;
-    const h = src.height / n;
-    const out = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            let sum = 0;
-            for (let dy = 0; dy < n; dy++) {
-                const row = (y * n + dy) * src.width + x * n;
-                for (let dx = 0; dx < n; dx++) sum += src.pixels[row + dx]!;
-            }
-            out[y * w + x] = Math.round(sum / (n * n));
-        }
+  const w = src.width / n;
+  const h = src.height / n;
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let dy = 0; dy < n; dy++) {
+        const row = (y * n + dy) * src.width + x * n;
+        for (let dx = 0; dx < n; dx++) sum += src.pixels[row + dx]!;
+      }
+      out[y * w + x] = Math.round(sum / (n * n));
     }
-    return { width: w, height: h, pixels: out };
+  }
+  return { width: w, height: h, pixels: out };
 }
 
 /**
@@ -136,23 +145,35 @@ export function boxDown(src: Grey, n: number): Grey {
  * 畳んだ 18x18 なら 72x72、36x36 (水増しなし) なら 72x72
  */
 export function smoothDrcs(
-    width: number,
-    height: number,
-    depth: number,
-    bits: number,
-    data: Uint8Array,
+  width: number,
+  height: number,
+  depth: number,
+  bits: number,
+  data: Uint8Array,
 ): CaptionDrcs {
-    if (width <= 0 || height <= 0 || depth < 2 || ![1, 2, 4, 8].includes(bits)) {
-        // 読めない画像はそのまま渡す (受け側も読まない)
-        return { w: width, h: height, depth, bits, data: Buffer.from(data).toString('base64') };
-    }
-    let g = collapseDoubled(decodeGrey(width, height, depth, bits, data));
-    const side = Math.max(g.width, g.height);
-    let scale = 1;
-    while (side * scale < TARGET && side * scale * 2 <= MAX) scale *= 2;
-    for (let s = 1; s < scale * BOX; s *= 2) g = scale2x(g);
-    g = boxDown(g, BOX);
-    return { w: g.width, h: g.height, depth: 16, bits: 4, data: Buffer.from(pack4(g)).toString('base64') };
+  if (width <= 0 || height <= 0 || depth < 2 || ![1, 2, 4, 8].includes(bits)) {
+    // 読めない画像はそのまま渡す (受け側も読まない)
+    return {
+      w: width,
+      h: height,
+      depth,
+      bits,
+      data: Buffer.from(data).toString("base64"),
+    };
+  }
+  let g = collapseDoubled(decodeGrey(width, height, depth, bits, data));
+  const side = Math.max(g.width, g.height);
+  let scale = 1;
+  while (side * scale < TARGET && side * scale * 2 <= MAX) scale *= 2;
+  for (let s = 1; s < scale * BOX; s *= 2) g = scale2x(g);
+  g = boxDown(g, BOX);
+  return {
+    w: g.width,
+    h: g.height,
+    depth: 16,
+    bits: 4,
+    data: Buffer.from(pack4(g)).toString("base64"),
+  };
 }
 
 /**
@@ -160,9 +181,9 @@ export function smoothDrcs(
  * 出ないので、8 ビットで送っても見た目は変わらず倍の大きさになるだけ (外字の画像は字幕の1枚ごとに付く)
  */
 export function pack4(g: Grey): Uint8Array {
-    const out = new Uint8Array(Math.ceil(g.pixels.length / 2));
-    g.pixels.forEach((v, i) => {
-        out[i >> 1]! |= Math.round((v * 15) / 255) << (i & 1 ? 0 : 4);
-    });
-    return out;
+  const out = new Uint8Array(Math.ceil(g.pixels.length / 2));
+  g.pixels.forEach((v, i) => {
+    out[i >> 1]! |= Math.round((v * 15) / 255) << (i & 1 ? 0 : 4);
+  });
+  return out;
 }

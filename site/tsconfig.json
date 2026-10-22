@@ -1,12 +1,12 @@
 {
-    "extends": "astro/tsconfigs/strict",
-    // Vite (rolldown) はファイルごとに tsconfig を探し、ここに入っていないファイルは親 (リポジトリの
-    // ルートの tsconfig.json) まで上がって探す。ルートのは SvelteKit の `$app/tsconfig` を extends して
-    // いて、site/ だけ入れた所では読めずにビルドが落ちる。設定を読む前に探す index.html はここに入れ、
-    // 残り (.md の画像など) は astro.config.ts の `vite.tsconfig` でこの tsconfig に決め打ちする
-    "include": [".astro/types.d.ts", "**/*", "index.html"],
-    "exclude": ["dist"],
-    "compilerOptions": {
-        "allowImportingTsExtensions": true
-    }
+  "extends": "astro/tsconfigs/strict",
+  // Vite (rolldown) はファイルごとに tsconfig を探し、ここに入っていないファイルは親 (リポジトリの
+  // ルートの tsconfig.json) まで上がって探す。ルートのは SvelteKit の `$app/tsconfig` を extends して
+  // いて、site/ だけ入れた所では読めずにビルドが落ちる。設定を読む前に探す index.html はここに入れ、
+  // 残り (.md の画像など) は astro.config.ts の `vite.tsconfig` でこの tsconfig に決め打ちする
+  "include": [".astro/types.d.ts", "**/*", "index.html"],
+  "exclude": ["dist"],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true
+  }
 }

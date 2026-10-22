@@ -1,11 +1,11 @@
-import { statfsSync } from 'node:fs';
-import { and, desc, gte, isNotNull, isNull, or } from 'drizzle-orm';
-import { size } from '../format';
-import { fileSize } from './chase';
-import { config } from './config';
-import { orm } from './db';
-import { activeEncodeJobId, recordings } from './schema';
-import { notify } from './webhook';
+import { statfsSync } from "node:fs";
+import { and, desc, gte, isNotNull, isNull, or } from "drizzle-orm";
+import { size } from "../format";
+import { fileSize } from "./chase";
+import { config } from "./config";
+import { orm } from "./db";
+import { activeEncodeJobId, recordings } from "./schema";
+import { notify } from "./webhook";
 
 /**
  * ディスクの残量を見張る。**録画が全部失敗して初めて気付く、を防ぐ。**
@@ -25,42 +25,42 @@ const warned = new Set<string>();
 
 /** その置き場の空きバイト数。読めなければ null (統計が取れない環境もある) */
 function freeBytes(dir: string): number | null {
-    try {
-        const stat = statfsSync(dir);
-        return stat.bsize * stat.bavail;
-    } catch {
-        return null;
-    }
+  try {
+    const stat = statfsSync(dir);
+    return stat.bsize * stat.bavail;
+  } catch {
+    return null;
+  }
 }
 
 /** 監視する置き場。元のTSの作業領域とエンコード済みの保存先 */
 function watched(): string[] {
-    // 同じパーティションに載っていることもあるので重複は畳む
-    return [...new Set([config.rawDir, config.encodedDir])];
+  // 同じパーティションに載っていることもあるので重複は畳む
+  return [...new Set([config.rawDir, config.encodedDir])];
 }
 
 export function checkDisk(): void {
-    if (config.diskLowThreshold <= 0) return;
+  if (config.diskLowThreshold <= 0) return;
 
-    for (const dir of watched()) {
-        const free = freeBytes(dir);
-        if (free === null) continue;
+  for (const dir of watched()) {
+    const free = freeBytes(dir);
+    if (free === null) continue;
 
-        if (free < config.diskLowThreshold) {
-            // すでに知らせてある置き場は、空けるまで黙る
-            if (warned.has(dir)) continue;
-            warned.add(dir);
-            console.warn(`[disk] 残量わずか: ${dir} (残り ${size(free)})`);
-            notify({
-                event: 'disk.low',
-                text: `ディスクの残りがわずかです: ${dir} (残り ${size(free)} / 閾値 ${size(config.diskLowThreshold)})`,
-            });
-        } else if (warned.has(dir)) {
-            // 閾値より上へ戻った。覚えを消して、次に下回ればまた鳴らす
-            warned.delete(dir);
-            console.log(`[disk] 残量が戻りました: ${dir} (残り ${size(free)})`);
-        }
+    if (free < config.diskLowThreshold) {
+      // すでに知らせてある置き場は、空けるまで黙る
+      if (warned.has(dir)) continue;
+      warned.add(dir);
+      console.warn(`[disk] 残量わずか: ${dir} (残り ${size(free)})`);
+      notify({
+        event: "disk.low",
+        text: `ディスクの残りがわずかです: ${dir} (残り ${size(free)} / 閾値 ${size(config.diskLowThreshold)})`,
+      });
+    } else if (warned.has(dir)) {
+      // 閾値より上へ戻った。覚えを消して、次に下回ればまた鳴らす
+      warned.delete(dir);
+      console.log(`[disk] 残量が戻りました: ${dir} (残り ${size(free)})`);
     }
+  }
 }
 
 /**
@@ -81,9 +81,10 @@ export function checkDisk(): void {
  * 読み直すので、そのたびに statfs と標本の stat を回すことになる。目安なので数十秒古くても困らない
  */
 export function capacity(): Capacity | null {
-    const at = Date.now();
-    if (cached === null || at - cached.at >= CAPACITY_TTL) cached = { at, value: measure() };
-    return cached.value;
+  const at = Date.now();
+  if (cached === null || at - cached.at >= CAPACITY_TTL)
+    cached = { at, value: measure() };
+  return cached.value;
 }
 
 type Capacity = { free: number; hours: number | null };
@@ -93,45 +94,48 @@ let cached: { at: number; value: Capacity | null } | null = null;
 
 /** 量り直す (`capacity`)。試験は覚えを通さずにこちらを呼ぶ */
 export function measure(): Capacity | null {
-    const frees = watched()
-        .map(freeBytes)
-        .filter((free) => free !== null);
-    if (frees.length === 0) return null;
-    const free = Math.min(...frees);
+  const frees = watched()
+    .map(freeBytes)
+    .filter((free) => free !== null);
+  if (frees.length === 0) return null;
+  const free = Math.min(...frees);
 
-    const rows = orm()
-        .select({
-            duration: recordings.duration_ms,
-            size: recordings.ts_size,
-            ts: recordings.ts_path,
-            library: recordings.library_path,
-            alt: recordings.alt_path,
-        })
-        .from(recordings)
-        .where(
-            and(
-                isNotNull(recordings.finished_at),
-                isNull(recordings.deleted_at),
-                gte(recordings.duration_ms, SAMPLE_MIN_MS),
-                or(isNotNull(recordings.library_path), isNull(activeEncodeJobId(recordings.id))),
-            ),
-        )
-        .orderBy(desc(recordings.finished_at))
-        .limit(SAMPLES)
-        .all();
-    if (rows.length < SAMPLES_MIN) return { free, hours: null };
+  const rows = orm()
+    .select({
+      duration: recordings.duration_ms,
+      size: recordings.ts_size,
+      ts: recordings.ts_path,
+      library: recordings.library_path,
+      alt: recordings.alt_path,
+    })
+    .from(recordings)
+    .where(
+      and(
+        isNotNull(recordings.finished_at),
+        isNull(recordings.deleted_at),
+        gte(recordings.duration_ms, SAMPLE_MIN_MS),
+        or(
+          isNotNull(recordings.library_path),
+          isNull(activeEncodeJobId(recordings.id)),
+        ),
+      ),
+    )
+    .orderBy(desc(recordings.finished_at))
+    .limit(SAMPLES)
+    .all();
+  if (rows.length < SAMPLES_MIN) return { free, hours: null };
 
-    let bytes = 0;
-    let ms = 0;
-    for (const row of rows) {
-        // `ts_size` はいま配っているもの (エンコードしていればエンコードしたもの) の大きさ。残した元のTSと控えは別に量る
-        bytes += row.size;
-        if (row.library !== null && row.ts !== null) bytes += fileSize(row.ts) ?? 0;
-        if (row.alt !== null) bytes += fileSize(row.alt) ?? 0;
-        ms += row.duration ?? 0;
-    }
-    const perHour = bytes / (ms / 3_600_000);
-    return { free, hours: perHour > 0 ? free / perHour : null };
+  let bytes = 0;
+  let ms = 0;
+  for (const row of rows) {
+    // `ts_size` はいま配っているもの (エンコードしていればエンコードしたもの) の大きさ。残した元のTSと控えは別に量る
+    bytes += row.size;
+    if (row.library !== null && row.ts !== null) bytes += fileSize(row.ts) ?? 0;
+    if (row.alt !== null) bytes += fileSize(row.alt) ?? 0;
+    ms += row.duration ?? 0;
+  }
+  const perHour = bytes / (ms / 3_600_000);
+  return { free, hours: perHour > 0 ? free / perHour : null };
 }
 
 /** 目安に使う録画の本数。新しいものから。設定を変えたらすぐ追いつくように多くは見ない */

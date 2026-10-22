@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig } from "@playwright/test";
 
 /**
  * **測るだけの Playwright** (CI では流さない。docs/stream.md#デコードしたフレームを持つ数)。E2E と同じ一式
@@ -10,18 +10,18 @@ import { defineConfig } from '@playwright/test';
  * (`playwright.config.ts`) と同じ (GPU 無し・ダーク・動きを止める)
  */
 export default defineConfig({
-    testDir: '.',
-    testMatch: '*.bench.ts',
-    globalSetup: '../global-setup.ts',
-    workers: 1,
-    retries: 0,
-    timeout: 0,
-    reporter: 'list',
-    use: {
-        colorScheme: 'dark',
-        reducedMotion: 'reduce',
-        launchOptions: { args: ['--disable-gpu'] },
-        // service worker の手元の写しを使わず、毎回アプリから読む
-        serviceWorkers: 'block',
-    },
+  testDir: ".",
+  testMatch: "*.bench.ts",
+  globalSetup: "../global-setup.ts",
+  workers: 1,
+  retries: 0,
+  timeout: 0,
+  reporter: "list",
+  use: {
+    colorScheme: "dark",
+    reducedMotion: "reduce",
+    launchOptions: { args: ["--disable-gpu"] },
+    // service worker の手元の写しを使わず、毎回アプリから読む
+    serviceWorkers: "block",
+  },
 });

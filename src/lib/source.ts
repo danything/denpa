@@ -9,8 +9,10 @@
  */
 
 /** エンコードの元にできるファイル。無ければ null */
-export function encodeSource(recording: { ts_path: string | null }): string | null {
-    return recording.ts_path;
+export function encodeSource(recording: {
+  ts_path: string | null;
+}): string | null {
+  return recording.ts_path;
 }
 
 /**
@@ -18,11 +20,11 @@ export function encodeSource(recording: { ts_path: string | null }): string | nu
  * (両方エンコードしたときは AV1)、`alt` = もう一方 (H.264)。名指しが無ければ「今いいほう」。
  * 配るエンドポイント・アプリ向けの録画一覧・端末に保存で同じ語彙を使う
  */
-export type FileSource = 'ts' | 'encoded' | 'alt';
+export type FileSource = "ts" | "encoded" | "alt";
 
 /** クエリの文字を語彙に直す。知らない値は null (= 名指しなし) */
 export function parseFileSource(raw: string | null): FileSource | null {
-    return raw === 'ts' || raw === 'encoded' || raw === 'alt' ? raw : null;
+  return raw === "ts" || raw === "encoded" || raw === "alt" ? raw : null;
 }
 
 /**
@@ -34,13 +36,18 @@ export function parseFileSource(raw: string | null): FileSource | null {
  * - `ok`
  */
 export function cmRedo(recording: {
-    ts_path: string | null;
-    library_path: string | null;
-    cm_kept: unknown[] | null;
-}): { state: 'hidden' | 'ok' | 'prompt' } | { state: 'disabled'; reason: string } {
-    const ts = encodeSource(recording) !== null;
-    if (!ts && recording.library_path === null) return { state: 'hidden' };
-    if (recording.cm_kept === null) return { state: 'ok' };
-    if (ts) return { state: 'prompt' };
-    return { state: 'disabled', reason: 'CMをカットした録画で、元のTSも無いため検出し直せません' };
+  ts_path: string | null;
+  library_path: string | null;
+  cm_kept: unknown[] | null;
+}):
+  | { state: "hidden" | "ok" | "prompt" }
+  | { state: "disabled"; reason: string } {
+  const ts = encodeSource(recording) !== null;
+  if (!ts && recording.library_path === null) return { state: "hidden" };
+  if (recording.cm_kept === null) return { state: "ok" };
+  if (ts) return { state: "prompt" };
+  return {
+    state: "disabled",
+    reason: "CMをカットした録画で、元のTSも無いため検出し直せません",
+  };
 }

@@ -14,10 +14,10 @@
  * - 覚えておくのはプロセスの中だけ。再起動したら、開き直せば出し直す
  */
 
-import { randomBytes } from 'node:crypto';
-import { error } from '@sveltejs/kit';
-import { rewriteLocationBytes, scriptable } from '../hybridcast/location';
-import { type Fetched, fetchForBml, refusalMessage } from './bml-network';
+import { randomBytes } from "node:crypto";
+import { error } from "@sveltejs/kit";
+import { rewriteLocationBytes, scriptable } from "../hybridcast/location";
+import { type Fetched, fetchForBml, refusalMessage } from "./bml-network";
 
 /** 合言葉の寿命 (ms)。番組 1 本を見終えるくらい */
 const TTL = 6 * 60 * 60 * 1000;
@@ -25,8 +25,8 @@ const TTL = 6 * 60 * 60 * 1000;
 const MOST = 64;
 
 interface Grant {
-    origin: string;
-    until: number;
+  origin: string;
+  until: number;
 }
 
 const grants = new Map<string, Grant>();
@@ -36,31 +36,32 @@ export const TOKEN = /^[0-9a-f]{32}$/;
 
 /** `origin` (http://host[:port]) へ中継する合言葉を出す */
 export function grant(origin: string, now = Date.now()): string {
-    for (const [token, entry] of grants) if (entry.until <= now) grants.delete(token);
-    while (grants.size >= MOST) {
-        const oldest = grants.keys().next().value;
-        if (oldest === undefined) break;
-        grants.delete(oldest);
-    }
-    const token = randomBytes(16).toString('hex');
-    grants.set(token, { origin, until: now + TTL });
-    return token;
+  for (const [token, entry] of grants)
+    if (entry.until <= now) grants.delete(token);
+  while (grants.size >= MOST) {
+    const oldest = grants.keys().next().value;
+    if (oldest === undefined) break;
+    grants.delete(oldest);
+  }
+  const token = randomBytes(16).toString("hex");
+  grants.set(token, { origin, until: now + TTL });
+  return token;
 }
 
 /** 合言葉の配信元。知らない・切れた合言葉は null */
 export function originOf(token: string, now = Date.now()): string | null {
-    const entry = grants.get(token);
-    if (entry === undefined) return null;
-    if (entry.until <= now) {
-        grants.delete(token);
-        return null;
-    }
-    return entry.origin;
+  const entry = grants.get(token);
+  if (entry === undefined) return null;
+  if (entry.until <= now) {
+    grants.delete(token);
+    return null;
+  }
+  return entry.origin;
 }
 
 /** テストで覚えたものを捨てる */
 export function forgetGrants(): void {
-    grants.clear();
+  grants.clear();
 }
 
 /**
@@ -70,33 +71,38 @@ export function forgetGrants(): void {
  * denpa のオリジンの文書にはならない (script・画像・CSS として読まれる分には CSP は効かない)
  */
 export async function relayAsset(
-    token: string,
-    path: string,
-    search: string,
-    fetcher: (url: string) => Promise<Fetched> = fetchForBml,
+  token: string,
+  path: string,
+  search: string,
+  fetcher: (url: string) => Promise<Fetched> = fetchForBml,
 ): Promise<Response> {
-    const origin = TOKEN.test(token) ? originOf(token) : null;
-    if (origin === null) error(404, '合言葉が切れています。アプリを開き直してください');
-    const target = `${origin}/${path}${search}`;
-    try {
-        const got = await fetcher(target);
-        return new Response(
-            (scriptable(got.contentType) ? rewriteLocationBytes(got.body) : got.body) as BodyInit,
-            {
-                status: got.status,
-                headers: {
-                    'content-type': got.contentType,
-                    'content-security-policy': 'sandbox',
-                    'x-content-type-options': 'nosniff',
-                    // アプリの部品は番組の間に変わらない。読み直しのたびに取りに行かない。**失敗の返りは溜めない** (一時的な 404・503)
-                    'cache-control':
-                        got.status >= 200 && got.status < 300 ? 'private, max-age=300' : 'no-store',
-                },
-            },
-        );
-    } catch (failure) {
-        const why = refusalMessage(failure, '取得できませんでした');
-        console.warn(`[bml] Hybridcast の中継を断りました: ${target} (${why})`);
-        error(502, why);
-    }
+  const origin = TOKEN.test(token) ? originOf(token) : null;
+  if (origin === null)
+    error(404, "合言葉が切れています。アプリを開き直してください");
+  const target = `${origin}/${path}${search}`;
+  try {
+    const got = await fetcher(target);
+    return new Response(
+      (scriptable(got.contentType)
+        ? rewriteLocationBytes(got.body)
+        : got.body) as BodyInit,
+      {
+        status: got.status,
+        headers: {
+          "content-type": got.contentType,
+          "content-security-policy": "sandbox",
+          "x-content-type-options": "nosniff",
+          // アプリの部品は番組の間に変わらない。読み直しのたびに取りに行かない。**失敗の返りは溜めない** (一時的な 404・503)
+          "cache-control":
+            got.status >= 200 && got.status < 300
+              ? "private, max-age=300"
+              : "no-store",
+        },
+      },
+    );
+  } catch (failure) {
+    const why = refusalMessage(failure, "取得できませんでした");
+    console.warn(`[bml] Hybridcast の中継を断りました: ${target} (${why})`);
+    error(502, why);
+  }
 }

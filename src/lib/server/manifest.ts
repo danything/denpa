@@ -1,4 +1,4 @@
-import { config } from './config';
+import { config } from "./config";
 
 /**
  * ホーム画面に置いたときの見た目 (PWA のマニフェスト)。
@@ -13,7 +13,7 @@ import { config } from './config';
  */
 
 /** 既定の名前。`PWA_NAMES` に載っていない名前で来たらこれ */
-const DEFAULT_NAME = 'denpa';
+const DEFAULT_NAME = "denpa";
 
 /**
  * この名前で来たときの表示名。
@@ -22,46 +22,51 @@ const DEFAULT_NAME = 'denpa';
  * 大文字小文字は問わない。載っていなければ `denpa`。
  */
 export function appName(hostname: string): string {
-    const target = hostname.toLowerCase();
-    for (const raw of config.pwaNames.split(',')) {
-        const at = raw.indexOf('=');
-        if (at < 0) continue;
-        const host = raw.slice(0, at).trim().toLowerCase();
-        const name = raw.slice(at + 1).trim();
-        if (host === target && name !== '') return name;
-    }
-    return DEFAULT_NAME;
+  const target = hostname.toLowerCase();
+  for (const raw of config.pwaNames.split(",")) {
+    const at = raw.indexOf("=");
+    if (at < 0) continue;
+    const host = raw.slice(0, at).trim().toLowerCase();
+    const name = raw.slice(at + 1).trim();
+    if (host === target && name !== "") return name;
+  }
+  return DEFAULT_NAME;
 }
 
 export function manifest(hostname: string): unknown {
-    const name = appName(hostname);
-    return {
-        name,
-        short_name: name,
-        description: 'テレビを録って観るためのもの',
-        lang: 'ja',
-        /*
-         * **`id` も名前ごとに分ける。** 既定は `start_url` なので、
-         * どちらの名前で入れても同じ `/` になる。同じ端末に2つ置いたときに
-         * 片方がもう片方の入れ直しとして扱われないよう、明示しておく
-         */
-        // URL は manifest の置き場からの相対。前段の接頭辞の下でも、その中を指す (server/paths.ts)。
-        // 根で動かしていれば前と同じ `/?host=…` に解決されるので、入れてある PWA は別物にならない
-        id: `./?host=${hostname.toLowerCase()}`,
-        start_url: './',
-        scope: './',
-        display: 'standalone',
-        background_color: '#0b0c0f',
-        theme_color: '#0b0c0f',
-        icons: [
-            { src: './icon-192.png', sizes: '192x192', type: 'image/png' },
-            { src: './icon-512.png', sizes: '512x512', type: 'image/png' },
-            { src: './icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-            { src: './icon.svg', sizes: 'any', type: 'image/svg+xml' },
-        ],
-        shortcuts: [
-            { name: '番組表', url: './guide' },
-            { name: '録画', url: './' },
-        ],
-    };
+  const name = appName(hostname);
+  return {
+    name,
+    short_name: name,
+    description: "テレビを録って観るためのもの",
+    lang: "ja",
+    /*
+     * **`id` も名前ごとに分ける。** 既定は `start_url` なので、
+     * どちらの名前で入れても同じ `/` になる。同じ端末に2つ置いたときに
+     * 片方がもう片方の入れ直しとして扱われないよう、明示しておく
+     */
+    // URL は manifest の置き場からの相対。前段の接頭辞の下でも、その中を指す (server/paths.ts)。
+    // 根で動かしていれば前と同じ `/?host=…` に解決されるので、入れてある PWA は別物にならない
+    id: `./?host=${hostname.toLowerCase()}`,
+    start_url: "./",
+    scope: "./",
+    display: "standalone",
+    background_color: "#0b0c0f",
+    theme_color: "#0b0c0f",
+    icons: [
+      { src: "./icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "./icon-512.png", sizes: "512x512", type: "image/png" },
+      {
+        src: "./icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+      { src: "./icon.svg", sizes: "any", type: "image/svg+xml" },
+    ],
+    shortcuts: [
+      { name: "番組表", url: "./guide" },
+      { name: "録画", url: "./" },
+    ],
+  };
 }

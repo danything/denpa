@@ -1,78 +1,80 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from "bun:test";
 import {
-    capacityLabel,
-    clipNote,
-    clock,
-    duration,
-    durationMs,
-    eta,
-    nowStatus,
-    percent,
-    recordedDuration,
-    recordingLeft,
-    splitReaderName,
-} from './format';
+  capacityLabel,
+  clipNote,
+  clock,
+  duration,
+  durationMs,
+  eta,
+  nowStatus,
+  percent,
+  recordedDuration,
+  recordingLeft,
+  splitReaderName,
+} from "./format";
 
 const MIN = 60_000;
 
-describe('長さの表示', () => {
-    test('1時間未満は分だけ', () => {
-        expect(durationMs(25 * MIN)).toBe('25分');
-    });
+describe("長さの表示", () => {
+  test("1時間未満は分だけ", () => {
+    expect(durationMs(25 * MIN)).toBe("25分");
+  });
 
-    test('端数が無ければ時間だけ', () => {
-        // 「2時間0分」は読みにくい
-        expect(durationMs(120 * MIN)).toBe('2時間');
-    });
+  test("端数が無ければ時間だけ", () => {
+    // 「2時間0分」は読みにくい
+    expect(durationMs(120 * MIN)).toBe("2時間");
+  });
 
-    test('端数があれば時間と分', () => {
-        expect(durationMs(95 * MIN)).toBe('1時間35分');
-    });
+  test("端数があれば時間と分", () => {
+    expect(durationMs(95 * MIN)).toBe("1時間35分");
+  });
 
-    test('放送日時からも出せる', () => {
-        expect(duration(0, 30 * MIN)).toBe('30分');
-    });
+  test("放送日時からも出せる", () => {
+    expect(duration(0, 30 * MIN)).toBe("30分");
+  });
 });
 
-describe('再生位置の表示', () => {
-    test('分と秒。秒は2桁に揃える', () => {
-        expect(clock(0)).toBe('0:00');
-        expect(clock(9)).toBe('0:09');
-        expect(clock(754)).toBe('12:34');
-    });
+describe("再生位置の表示", () => {
+  test("分と秒。秒は2桁に揃える", () => {
+    expect(clock(0)).toBe("0:00");
+    expect(clock(9)).toBe("0:09");
+    expect(clock(754)).toBe("12:34");
+  });
 
-    /** 短いものに「0:12:34」と出ると、位を数えないと読めない */
-    test('1時間を超えたときだけ時間を出す', () => {
-        expect(clock(3599)).toBe('59:59');
-        expect(clock(3723)).toBe('1:02:03');
-    });
+  /** 短いものに「0:12:34」と出ると、位を数えないと読めない */
+  test("1時間を超えたときだけ時間を出す", () => {
+    expect(clock(3599)).toBe("59:59");
+    expect(clock(3723)).toBe("1:02:03");
+  });
 
-    /** 尺が読めるまで duration は NaN。押した拍子に負になることもある */
-    test('読めない値でも 0:00 を返す', () => {
-        expect(clock(Number.NaN)).toBe('0:00');
-        expect(clock(-5)).toBe('0:00');
-        expect(clock(Number.POSITIVE_INFINITY)).toBe('0:00');
-    });
+  /** 尺が読めるまで duration は NaN。押した拍子に負になることもある */
+  test("読めない値でも 0:00 を返す", () => {
+    expect(clock(Number.NaN)).toBe("0:00");
+    expect(clock(-5)).toBe("0:00");
+    expect(clock(Number.POSITIVE_INFINITY)).toBe("0:00");
+  });
 });
 
-describe('録画の長さ', () => {
-    // 番組表の尺は30分
-    const scheduled = { start_at: 0, end_at: 30 * MIN };
+describe("録画の長さ", () => {
+  // 番組表の尺は30分
+  const scheduled = { start_at: 0, end_at: 30 * MIN };
 
-    test('実際に録れた長さがあればそちらを出す', () => {
-        // 途中で止めたので12分しか録れていない
-        expect(recordedDuration({ ...scheduled, duration_ms: 12 * MIN })).toBe('12分');
-    });
+  test("実際に録れた長さがあればそちらを出す", () => {
+    // 途中で止めたので12分しか録れていない
+    expect(recordedDuration({ ...scheduled, duration_ms: 12 * MIN })).toBe(
+      "12分",
+    );
+  });
 
-    test('取れていない古い行は番組表の尺で代用する', () => {
-        expect(recordedDuration({ ...scheduled, duration_ms: null })).toBe('30分');
-    });
+  test("取れていない古い行は番組表の尺で代用する", () => {
+    expect(recordedDuration({ ...scheduled, duration_ms: null })).toBe("30分");
+  });
 
-    test('0 は取れていないものとして扱う', () => {
-        // 1バイトも受信できずに失敗した行が「0分」になると、
-        // 長さが取れていないのか本当に0なのか見分けられない
-        expect(recordedDuration({ ...scheduled, duration_ms: 0 })).toBe('30分');
-    });
+  test("0 は取れていないものとして扱う", () => {
+    // 1バイトも受信できずに失敗した行が「0分」になると、
+    // 長さが取れていないのか本当に0なのか見分けられない
+    expect(recordedDuration({ ...scheduled, duration_ms: 0 })).toBe("30分");
+  });
 });
 
 /*
@@ -81,158 +83,181 @@ describe('録画の長さ', () => {
  * 整数の % と分どまりの残り時間では、1時間かかるエンコードで数字が
  * 30秒以上動かない。止まったのか進んでいるのか画面から判らなかった
  */
-describe('進み具合', () => {
-    test('小数第1位まで出す', () => {
-        expect(percent(0)).toBe('0.0%');
-        expect(percent(0.1234)).toBe('12.3%');
-        expect(percent(1)).toBe('100.0%');
-    });
+describe("進み具合", () => {
+  test("小数第1位まで出す", () => {
+    expect(percent(0)).toBe("0.0%");
+    expect(percent(0.1234)).toBe("12.3%");
+    expect(percent(1)).toBe("100.0%");
+  });
 
-    test('範囲の外は詰める', () => {
-        // 見積もりの総コマ数を超えると 1 を跨ぐことがある
-        expect(percent(1.4)).toBe('100.0%');
-        expect(percent(-0.2)).toBe('0.0%');
-    });
+  test("範囲の外は詰める", () => {
+    // 見積もりの総コマ数を超えると 1 を跨ぐことがある
+    expect(percent(1.4)).toBe("100.0%");
+    expect(percent(-0.2)).toBe("0.0%");
+  });
 });
 
-describe('残り時間の見込み', () => {
-    test('1分未満は秒だけ', () => {
-        expect(eta(45_000)).toBe('あと45秒');
-        expect(eta(1_000)).toBe('あと1秒');
-    });
+describe("残り時間の見込み", () => {
+  test("1分未満は秒だけ", () => {
+    expect(eta(45_000)).toBe("あと45秒");
+    expect(eta(1_000)).toBe("あと1秒");
+  });
 
-    test('1時間未満は分と秒', () => {
-        expect(eta(12 * MIN + 34_000)).toBe('あと12分34秒');
-        // 秒が1桁でも桁を揃える (数字の位置が動くと読みにくい)
-        expect(eta(2 * MIN + 5_000)).toBe('あと2分05秒');
-    });
+  test("1時間未満は分と秒", () => {
+    expect(eta(12 * MIN + 34_000)).toBe("あと12分34秒");
+    // 秒が1桁でも桁を揃える (数字の位置が動くと読みにくい)
+    expect(eta(2 * MIN + 5_000)).toBe("あと2分05秒");
+  });
 
-    test('1時間以上は時間・分・秒', () => {
-        expect(eta(3600_000 + 2 * MIN + 3_000)).toBe('あと1時間02分03秒');
-    });
+  test("1時間以上は時間・分・秒", () => {
+    expect(eta(3600_000 + 2 * MIN + 3_000)).toBe("あと1時間02分03秒");
+  });
 
-    test('見込みが立たないうちは何も出さない', () => {
-        expect(eta(null)).toBe('');
-        expect(eta(0)).toBe('');
-        expect(eta(Number.NaN)).toBe('');
-    });
+  test("見込みが立たないうちは何も出さない", () => {
+    expect(eta(null)).toBe("");
+    expect(eta(0)).toBe("");
+    expect(eta(Number.NaN)).toBe("");
+  });
 });
 
-describe('欠けの表示', () => {
-    const base = { start_at: 0, end_at: 30 * MIN };
+describe("欠けの表示", () => {
+  const base = { start_at: 0, end_at: 30 * MIN };
 
-    test('丸ごと録れるなら何も言わない', () => {
-        expect(clipNote({ ...base, record_from: null, record_to: null })).toBeNull();
-    });
+  test("丸ごと録れるなら何も言わない", () => {
+    expect(
+      clipNote({ ...base, record_from: null, record_to: null }),
+    ).toBeNull();
+  });
 
-    /*
-     * **マージンだけ削られたぶんは言わない。** 隣り合う番組はマージンぶんが
-     * 必ず重なるので、そこまで数えるとほとんどの録画にラベルが付く
-     */
-    test('マージンが削られただけなら言わない', () => {
-        expect(clipNote({ ...base, record_from: 0, record_to: 30 * MIN })).toBeNull();
-    });
+  /*
+   * **マージンだけ削られたぶんは言わない。** 隣り合う番組はマージンぶんが
+   * 必ず重なるので、そこまで数えるとほとんどの録画にラベルが付く
+   */
+  test("マージンが削られただけなら言わない", () => {
+    expect(
+      clipNote({ ...base, record_from: 0, record_to: 30 * MIN }),
+    ).toBeNull();
+  });
 
-    test('頭を譲ったら、どれだけ欠けるかを言う', () => {
-        expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null })).toBe(
-            '冒頭 15分が欠けます (チューナー不足)',
-        );
-    });
+  test("頭を譲ったら、どれだけ欠けるかを言う", () => {
+    expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null })).toBe(
+      "冒頭 15分が欠けます (チューナー不足)",
+    );
+  });
 
-    test('録れたあとは言い方が変わる', () => {
-        expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null }, true)).toBe(
-            '冒頭 15分が欠けています (チューナー不足)',
-        );
-    });
+  test("録れたあとは言い方が変わる", () => {
+    expect(
+      clipNote({ ...base, record_from: 15 * MIN, record_to: null }, true),
+    ).toBe("冒頭 15分が欠けています (チューナー不足)");
+  });
 
-    test('両方譲ったら両方言う', () => {
-        expect(clipNote({ ...base, record_from: 5 * MIN, record_to: 25 * MIN })).toBe(
-            '冒頭 5分と末尾 5分が欠けます (チューナー不足)',
-        );
-    });
+  test("両方譲ったら両方言う", () => {
+    expect(
+      clipNote({ ...base, record_from: 5 * MIN, record_to: 25 * MIN }),
+    ).toBe("冒頭 5分と末尾 5分が欠けます (チューナー不足)");
+  });
 });
 
-describe('カードリーダーの名前', () => {
-    test('後ろの括弧は挿さっている場所として分ける', () => {
-        expect(splitReaderName('Gemplus USB SmartCard Reader (usb 4-11)')).toEqual({
-            name: 'Gemplus USB SmartCard Reader',
-            where: 'usb 4-11',
-        });
+describe("カードリーダーの名前", () => {
+  test("後ろの括弧は挿さっている場所として分ける", () => {
+    expect(splitReaderName("Gemplus USB SmartCard Reader (usb 4-11)")).toEqual({
+      name: "Gemplus USB SmartCard Reader",
+      where: "usb 4-11",
     });
+  });
 
-    test('括弧の無い名前はそのまま', () => {
-        const name = 'px4-userland 0960 Internal Card Reader';
-        expect(splitReaderName(name)).toEqual({ name, where: null });
-    });
+  test("括弧の無い名前はそのまま", () => {
+    const name = "px4-userland 0960 Internal Card Reader";
+    expect(splitReaderName(name)).toEqual({ name, where: null });
+  });
 });
 
-describe('空きと残り時間', () => {
-    const GB = 1024 ** 3;
-    test('1TB からは TB で、時間は桁で丸める', () => {
-        expect(capacityLabel(1.25 * 1024 * GB, 937.4)).toEqual({ free: '空き 1.3TB', hours: '約930時間' });
-        expect(capacityLabel(512.7 * GB, 64.9)).toEqual({ free: '空き 512GB', hours: '約64時間' });
-        expect(capacityLabel(4 * 1024 * GB, 2345)).toEqual({ free: '空き 4.0TB', hours: '約2300時間' });
+describe("空きと残り時間", () => {
+  const GB = 1024 ** 3;
+  test("1TB からは TB で、時間は桁で丸める", () => {
+    expect(capacityLabel(1.25 * 1024 * GB, 937.4)).toEqual({
+      free: "空き 1.3TB",
+      hours: "約930時間",
     });
+    expect(capacityLabel(512.7 * GB, 64.9)).toEqual({
+      free: "空き 512GB",
+      hours: "約64時間",
+    });
+    expect(capacityLabel(4 * 1024 * GB, 2345)).toEqual({
+      free: "空き 4.0TB",
+      hours: "約2300時間",
+    });
+  });
 
-    test('目安が無ければ空きだけ、残りわずかはそう言う', () => {
-        expect(capacityLabel(300 * GB, null)).toEqual({ free: '空き 300GB', hours: null });
-        expect(capacityLabel(0.5 * GB, 0.2)).toEqual({ free: '空き 1GB未満', hours: '1時間未満' });
+  test("目安が無ければ空きだけ、残りわずかはそう言う", () => {
+    expect(capacityLabel(300 * GB, null)).toEqual({
+      free: "空き 300GB",
+      hours: null,
     });
+    expect(capacityLabel(0.5 * GB, 0.2)).toEqual({
+      free: "空き 1GB未満",
+      hours: "1時間未満",
+    });
+  });
 });
 
-describe('「いま」の線の一言', () => {
-    // 18:01:20。線の時刻は 18:01
-    const now = new Date(2026, 9, 19, 18, 1, 20).getTime();
-    const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();
+describe("「いま」の線の一言", () => {
+  // 18:01:20。線の時刻は 18:01
+  const now = new Date(2026, 9, 19, 18, 1, 20).getTime();
+  const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();
 
-    test('次の録画まで。録画中でも次の予約を言う。分は線の時刻と食い違わないよう切り上げる', () => {
-        expect(nowStatus(now, { start_at: at(22, 0) })).toEqual({
-            text: '次の録画まで 3時間59分',
-            short: '次まで 3:59',
-        });
+  test("次の録画まで。録画中でも次の予約を言う。分は線の時刻と食い違わないよう切り上げる", () => {
+    expect(nowStatus(now, { start_at: at(22, 0) })).toEqual({
+      text: "次の録画まで 3時間59分",
+      short: "次まで 3:59",
     });
+  });
 
-    test('1時間を切ると分だけ', () => {
-        expect(nowStatus(now, { start_at: at(18, 13) })).toEqual({
-            text: '次の録画まで 12分',
-            short: '次まで 12分',
-        });
+  test("1時間を切ると分だけ", () => {
+    expect(nowStatus(now, { start_at: at(18, 13) })).toEqual({
+      text: "次の録画まで 12分",
+      short: "次まで 12分",
     });
+  });
 
-    test('ちょうどの時間は時間だけ、狭い形は 0 を埋める', () => {
-        expect(nowStatus(at(18, 0), { start_at: at(20, 5) })).toEqual({
-            text: '次の録画まで 2時間5分',
-            short: '次まで 2:05',
-        });
-        expect(nowStatus(at(18, 0), { start_at: at(20, 0) })?.text).toBe('次の録画まで 2時間');
+  test("ちょうどの時間は時間だけ、狭い形は 0 を埋める", () => {
+    expect(nowStatus(at(18, 0), { start_at: at(20, 5) })).toEqual({
+      text: "次の録画まで 2時間5分",
+      short: "次まで 2:05",
     });
+    expect(nowStatus(at(18, 0), { start_at: at(20, 0) })?.text).toBe(
+      "次の録画まで 2時間",
+    );
+  });
 
-    test('1日より先は日数で', () => {
-        expect(nowStatus(now, { start_at: now + 3 * 24 * 60 * MIN })).toEqual({
-            text: '次の録画まで 3日',
-            short: '次まで 3日',
-        });
+  test("1日より先は日数で", () => {
+    expect(nowStatus(now, { start_at: now + 3 * 24 * 60 * MIN })).toEqual({
+      text: "次の録画まで 3日",
+      short: "次まで 3日",
     });
+  });
 
-    test('始まる時刻を過ぎていても「0分」とは言わない', () => {
-        expect(nowStatus(now, { start_at: now - MIN })?.text).toBe('次の録画まで 1分');
-    });
+  test("始まる時刻を過ぎていても「0分」とは言わない", () => {
+    expect(nowStatus(now, { start_at: now - MIN })?.text).toBe(
+      "次の録画まで 1分",
+    );
+  });
 
-    test('予約が無ければ何も添えない', () => {
-        expect(nowStatus(now, null)).toBeNull();
-    });
+  test("予約が無ければ何も添えない", () => {
+    expect(nowStatus(now, null)).toBeNull();
+  });
 });
 
-describe('録画中の行のあと何分か', () => {
-    const now = new Date(2026, 9, 19, 18, 1, 20).getTime();
-    const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();
+describe("録画中の行のあと何分か", () => {
+  const now = new Date(2026, 9, 19, 18, 1, 20).getTime();
+  const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();
 
-    test('分は切り上げ、1時間を越えれば時間も', () => {
-        expect(recordingLeft(now, at(18, 22))).toBe('あと21分');
-        expect(recordingLeft(now, at(19, 30))).toBe('あと1時間29分');
-    });
+  test("分は切り上げ、1時間を越えれば時間も", () => {
+    expect(recordingLeft(now, at(18, 22))).toBe("あと21分");
+    expect(recordingLeft(now, at(19, 30))).toBe("あと1時間29分");
+  });
 
-    test('終わりの時刻を過ぎても止まりきるまでは録画中なので、あと何分かは言わない', () => {
-        expect(recordingLeft(now, at(18, 0))).toBeNull();
-    });
+  test("終わりの時刻を過ぎても止まりきるまでは録画中なので、あと何分かは言わない", () => {
+    expect(recordingLeft(now, at(18, 0))).toBeNull();
+  });
 });

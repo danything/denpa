@@ -1,5 +1,10 @@
-import type { APIRequestContext, APIResponse, Locator, Page } from '@playwright/test';
-import { expect, test } from '../stack';
+import type {
+  APIRequestContext,
+  APIResponse,
+  Locator,
+  Page,
+} from "@playwright/test";
+import { expect, test } from "../stack";
 
 // テストは必ずここから test / expect を取る。素の @playwright/test から取ると
 // ワーカーごとのアプリ (tests/stack.ts) が立たず、宛先も決まらない
@@ -11,27 +16,32 @@ export { expect, test };
  * 空のまま絞り込みが実行されてしまう。フォームを触るテストは必ずこれを使う。
  */
 export async function goto(page: Page, url: string): Promise<void> {
-    await page.goto(url);
-    await page.locator('[data-hydrated="true"]').waitFor();
-    /*
-     * **番組表はマスだけ後から届く** (`guide/+page.ts` が `/api/guide` から取る)。
-     * ハイドレーションだけ待って触りにいくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
-     * 「局がありません」が出るので、どちらかが出るまで待つ
-     */
-    const pathname = new URL(url, 'http://localhost').pathname;
-    if (pathname === '/guide') {
-        await page.locator('[data-testid="guide-grid"], [data-testid="empty-grid"]').first().waitFor();
-        // マスは数百個ずつ描く (`guide/+page.svelte` の `drawGradually`)。数える前に描き終わるのを待つ
-        await expect(page.locator('[data-testid="guide-grid"][aria-busy="true"]')).toHaveCount(0);
-    }
-    /*
-     * **ホームの一覧は少しずつしか描かない** (`#lib/paging.svelte`)。テストは行を
-     * 番号で名指ししたり件数を数えたりするので、開いた時点で全部出させておく —
-     * 61 件目から先は、巻き取って初めて描かれる
-     */
-    if (pathname === '/') {
-        await revealAll(page, 'timeline', 'recording-more');
-    }
+  await page.goto(url);
+  await page.locator('[data-hydrated="true"]').waitFor();
+  /*
+   * **番組表はマスだけ後から届く** (`guide/+page.ts` が `/api/guide` から取る)。
+   * ハイドレーションだけ待って触りにいくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
+   * 「局がありません」が出るので、どちらかが出るまで待つ
+   */
+  const pathname = new URL(url, "http://localhost").pathname;
+  if (pathname === "/guide") {
+    await page
+      .locator('[data-testid="guide-grid"], [data-testid="empty-grid"]')
+      .first()
+      .waitFor();
+    // マスは数百個ずつ描く (`guide/+page.svelte` の `drawGradually`)。数える前に描き終わるのを待つ
+    await expect(
+      page.locator('[data-testid="guide-grid"][aria-busy="true"]'),
+    ).toHaveCount(0);
+  }
+  /*
+   * **ホームの一覧は少しずつしか描かない** (`#lib/paging.svelte`)。テストは行を
+   * 番号で名指ししたり件数を数えたりするので、開いた時点で全部出させておく —
+   * 61 件目から先は、巻き取って初めて描かれる
+   */
+  if (pathname === "/") {
+    await revealAll(page, "timeline", "recording-more");
+  }
 }
 
 /**
@@ -39,23 +49,25 @@ export async function goto(page: Page, url: string): Promise<void> {
  * 「false であるはず」とだけ出ても、状態番号も本文も分からず追いようがない
  */
 async function ok(res: APIResponse, what: string): Promise<void> {
-    if (res.ok()) return;
-    throw new Error(`${what} が ${res.status()} で返しました: ${(await res.text()).slice(0, 500)}`);
+  if (res.ok()) return;
+  throw new Error(
+    `${what} が ${res.status()} で返しました: ${(await res.text()).slice(0, 500)}`,
+  );
 }
 
 /** EPG を取り込む。定期取得は止めてあるので、テストは必ずこれを先に呼ぶ */
 export async function syncEpg(request: APIRequestContext): Promise<void> {
-    const res = await request.post('/api/sync');
-    await ok(res, 'EPG の取り込み');
-    const body = await res.json();
-    expect(body.services).toBeGreaterThan(0);
-    expect(body.programs).toBeGreaterThan(0);
+  const res = await request.post("/api/sync");
+  await ok(res, "EPG の取り込み");
+  const body = await res.json();
+  expect(body.services).toBeGreaterThan(0);
+  expect(body.programs).toBeGreaterThan(0);
 }
 
 interface Cell {
-    programId: string;
-    serviceId: string;
-    startAt: number;
+  programId: string;
+  serviceId: string;
+  startAt: number;
 }
 
 /**
@@ -65,19 +77,22 @@ interface Cell {
  * 位置で選ぶと過去の番組を予約してしまい、いつまでも録画が始まらない。
  */
 async function allCells(page: Page): Promise<Cell[]> {
-    return await page.getByTestId('grid-program').evaluateAll((nodes) =>
-        nodes.map((node) => ({
-            programId: node.getAttribute('data-program-id') ?? '',
-            serviceId: node.getAttribute('data-service-id') ?? '',
-            startAt: Number(node.getAttribute('data-start-at')),
-        })),
-    );
+  return await page.getByTestId("grid-program").evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      programId: node.getAttribute("data-program-id") ?? "",
+      serviceId: node.getAttribute("data-service-id") ?? "",
+      startAt: Number(node.getAttribute("data-start-at")),
+    })),
+  );
 }
 
 async function cellsOn(page: Page): Promise<Cell[]> {
-    return (await allCells(page))
-        .filter((c) => c.startAt > Date.now())
-        .sort((a, b) => a.startAt - b.startAt || Number(a.serviceId) - Number(b.serviceId));
+  return (await allCells(page))
+    .filter((c) => c.startAt > Date.now())
+    .sort(
+      (a, b) =>
+        a.startAt - b.startAt || Number(a.serviceId) - Number(b.serviceId),
+    );
 }
 
 /**
@@ -87,52 +102,58 @@ async function cellsOn(page: Page): Promise<Cell[]> {
  * 少しずつ描くので (`goto` と同じ)、押した直後に数えると**前の日のマス**を数え、
  * 入れ替わった後には無いマスを押していた (放送日の終わり際の 3 時台に CI で落ちた)
  */
-async function turnDay(page: Page, which: 'next-day' | 'prev-day'): Promise<void> {
-    const before = page.url();
-    /*
-     * **広い画面は日付を並べて直接押す** (← → は入りきらないときと、前日に番組があるときだけ)。
-     * 矢印が隠れていれば、選んでいる日の隣を押す
-     */
-    const arrow = page.getByTestId(which);
-    if (await arrow.isVisible()) await arrow.click();
-    else
-        await page
-            .locator(
-                which === 'next-day'
-                    ? '[data-testid="guide-day"][aria-current="date"] + [data-testid="guide-day"]'
-                    : '[data-testid="guide-day"]:has(+ [data-testid="guide-day"][aria-current="date"])',
-            )
-            .click();
-    await page.waitForURL((url) => url.href !== before);
-    await page.locator('[data-hydrated="true"]').waitFor();
-    /*
-     * 送った先の日は `start` (その日の 4:00) から 24 時間。いちばん遅く始まるマスがその中に
-     * 入っていれば、入れ替わっている (前の日の表は、翌日へ送ったなら手前、前日へ送ったなら先に外れる)
-     */
-    const start = Number(new URL(page.url()).searchParams.get('start'));
-    const day = 24 * 60 * 60 * 1000;
-    await expect
-        .poll(
-            async () => {
-                const last = Math.max(...(await allCells(page)).map((c) => c.startAt));
-                return last >= start && last < start + day;
-            },
-            { timeout: 30_000 },
-        )
-        .toBe(true);
-    await expect(page.locator('[data-testid="guide-grid"][aria-busy="true"]')).toHaveCount(0);
+async function turnDay(
+  page: Page,
+  which: "next-day" | "prev-day",
+): Promise<void> {
+  const before = page.url();
+  /*
+   * **広い画面は日付を並べて直接押す** (← → は入りきらないときと、前日に番組があるときだけ)。
+   * 矢印が隠れていれば、選んでいる日の隣を押す
+   */
+  const arrow = page.getByTestId(which);
+  if (await arrow.isVisible()) await arrow.click();
+  else
+    await page
+      .locator(
+        which === "next-day"
+          ? '[data-testid="guide-day"][aria-current="date"] + [data-testid="guide-day"]'
+          : '[data-testid="guide-day"]:has(+ [data-testid="guide-day"][aria-current="date"])',
+      )
+      .click();
+  await page.waitForURL((url) => url.href !== before);
+  await page.locator('[data-hydrated="true"]').waitFor();
+  /*
+   * 送った先の日は `start` (その日の 4:00) から 24 時間。いちばん遅く始まるマスがその中に
+   * 入っていれば、入れ替わっている (前の日の表は、翌日へ送ったなら手前、前日へ送ったなら先に外れる)
+   */
+  const start = Number(new URL(page.url()).searchParams.get("start"));
+  const day = 24 * 60 * 60 * 1000;
+  await expect
+    .poll(
+      async () => {
+        const last = Math.max(...(await allCells(page)).map((c) => c.startAt));
+        return last >= start && last < start + day;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  await expect(
+    page.locator('[data-testid="guide-grid"][aria-busy="true"]'),
+  ).toHaveCount(0);
 }
 
 /** 番組表に出ているうち、もう終わったもの。放送日の頭(4時台)では前日に送って探す */
 export async function past(page: Page): Promise<Cell[]> {
-    const stale = (cells: Cell[]) => cells.filter((c) => c.startAt < Date.now() - 60 * 60 * 1000);
-    let found = stale(await allCells(page));
-    if (found.length === 0) {
-        await turnDay(page, 'prev-day');
-        found = stale(await allCells(page));
-    }
-    expect(found.length).toBeGreaterThan(0);
-    return found;
+  const stale = (cells: Cell[]) =>
+    cells.filter((c) => c.startAt < Date.now() - 60 * 60 * 1000);
+  let found = stale(await allCells(page));
+  if (found.length === 0) {
+    await turnDay(page, "prev-day");
+    found = stale(await allCells(page));
+  }
+  expect(found.length).toBeGreaterThan(0);
+  return found;
 }
 
 /**
@@ -143,31 +164,32 @@ export async function past(page: Page): Promise<Cell[]> {
  */
 /** 1つは要る。型でも「先頭がある」と言う (`const [target] = await upcoming(page)` がそのまま使える) */
 function atLeastOne(cells: Cell[], what: string): [Cell, ...Cell[]] {
-    const [head, ...rest] = cells;
-    if (head === undefined) throw new Error(`${what}が1つも無い`);
-    return [head, ...rest];
+  const [head, ...rest] = cells;
+  if (head === undefined) throw new Error(`${what}が1つも無い`);
+  return [head, ...rest];
 }
 
 export async function airing(page: Page): Promise<[Cell, ...Cell[]]> {
-    const at = Date.now();
-    const latest = new Map<string, Cell>();
-    for (const cell of await allCells(page)) {
-        if (cell.startAt > at) continue;
-        const held = latest.get(cell.serviceId);
-        if (held === undefined || cell.startAt > held.startAt) latest.set(cell.serviceId, cell);
-    }
-    return atLeastOne([...latest.values()], 'いま流れている番組');
+  const at = Date.now();
+  const latest = new Map<string, Cell>();
+  for (const cell of await allCells(page)) {
+    if (cell.startAt > at) continue;
+    const held = latest.get(cell.serviceId);
+    if (held === undefined || cell.startAt > held.startAt)
+      latest.set(cell.serviceId, cell);
+  }
+  return atLeastOne([...latest.values()], "いま流れている番組");
 }
 
 export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
-    let soon = await cellsOn(page);
-    if (soon.length === 0) {
-        // 放送日の終わり際(深夜3時台など)は、この日にこれから始まる番組が
-        // 1つも残っていない。翌日に送って探す
-        await turnDay(page, 'next-day');
-        soon = await cellsOn(page);
-    }
-    return atLeastOne(soon, 'これから始まる番組');
+  let soon = await cellsOn(page);
+  if (soon.length === 0) {
+    // 放送日の終わり際(深夜3時台など)は、この日にこれから始まる番組が
+    // 1つも残っていない。翌日に送って探す
+    await turnDay(page, "next-day");
+    soon = await cellsOn(page);
+  }
+  return atLeastOne(soon, "これから始まる番組");
 }
 
 /**
@@ -178,14 +200,18 @@ export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
  * (3:30〜4:00 に CI で落ちていた)。4時を跨いで「今日」が変わっても同じ日が開く
  */
 export async function shownDay(page: Page): Promise<string> {
-    const href = await page.locator('[data-testid^="type-"][aria-current="page"]').getAttribute('href');
-    if (href === null) throw new Error('番組表の種別のリンクが無い');
-    return href;
+  const href = await page
+    .locator('[data-testid^="type-"][aria-current="page"]')
+    .getAttribute("href");
+  if (href === null) throw new Error("番組表の種別のリンクが無い");
+  return href;
 }
 
 /** 番組表のマスをIDで探す。番組が終わると並びがずれるので位置では追わない */
 export function cellOf(page: Page, programId: string) {
-    return page.locator(`[data-testid="grid-program"][data-program-id="${programId}"]`);
+  return page.locator(
+    `[data-testid="grid-program"][data-program-id="${programId}"]`,
+  );
 }
 
 /**
@@ -194,13 +220,20 @@ export function cellOf(page: Page, programId: string) {
  * BSの偽番組は5秒しかなく、番組表のグリッドではマスが潰れて押せない。
  * ここで見たいのは録画そのものなので、予約は画面ではなくアクションに直接投げる。
  */
-export async function reserveSoon(page: Page, request: APIRequestContext, type: string, skip = 0) {
-    await goto(page, `/guide?type=${type}`);
-    const cells = await upcoming(page);
-    const target = cells[Math.min(skip, cells.length - 1)]!;
-    const res = await request.post('/guide?/reserve', { form: { programId: target.programId } });
-    await ok(res, '予約');
-    return target.programId;
+export async function reserveSoon(
+  page: Page,
+  request: APIRequestContext,
+  type: string,
+  skip = 0,
+) {
+  await goto(page, `/guide?type=${type}`);
+  const cells = await upcoming(page);
+  const target = cells[Math.min(skip, cells.length - 1)]!;
+  const res = await request.post("/guide?/reserve", {
+    form: { programId: target.programId },
+  });
+  await ok(res, "予約");
+  return target.programId;
 }
 
 /**
@@ -210,16 +243,19 @@ export async function reserveSoon(page: Page, request: APIRequestContext, type: 
  * (行が通知で書き換わらない場面 = 予約が録画の行に化けるところ を跨ぐため)
  */
 export async function waitRowState(
-    page: Page,
-    url: string,
-    row: Locator,
-    expected: string,
-    timeoutMs = 90_000,
+  page: Page,
+  url: string,
+  row: Locator,
+  expected: string,
+  timeoutMs = 90_000,
 ): Promise<void> {
-    await goto(page, url);
-    await expect(
-        row.getByTestId('recording-state').or(row.getByTestId('reservation-state')).first(),
-    ).toContainText(expected, { timeout: timeoutMs });
+  await goto(page, url);
+  await expect(
+    row
+      .getByTestId("recording-state")
+      .or(row.getByTestId("reservation-state"))
+      .first(),
+  ).toContainText(expected, { timeout: timeoutMs });
 }
 
 /**
@@ -230,11 +266,18 @@ export async function waitRowState(
  * 最悪90秒後になっていた (録画を待つテストが軒並み1〜2分掛かっていた正体)。
  * 1秒待って読み直すほうが、待ち時間が録画の実尺に近づく
  */
-export async function waitWatchable(page: Page, row: Locator, path = '/', timeout = 120_000): Promise<void> {
-    await expect(async () => {
-        await goto(page, path);
-        await expect(row.getByTestId('recording-state')).toHaveText('視聴可能', { timeout: 1_000 });
-    }).toPass({ timeout, intervals: [500] });
+export async function waitWatchable(
+  page: Page,
+  row: Locator,
+  path = "/",
+  timeout = 120_000,
+): Promise<void> {
+  await expect(async () => {
+    await goto(page, path);
+    await expect(row.getByTestId("recording-state")).toHaveText("視聴可能", {
+      timeout: 1_000,
+    });
+  }).toPass({ timeout, intervals: [500] });
 }
 
 /**
@@ -245,18 +288,20 @@ export async function waitWatchable(page: Page, row: Locator, path = '/', timeou
  * 立つようになったので、自分のぶんは自分で用意する
  */
 export async function recordOne(
-    page: Page,
-    request: APIRequestContext,
+  page: Page,
+  request: APIRequestContext,
 ): Promise<{ id: string; libraryPath: string }> {
-    await syncEpg(request);
-    // BS の偽番組は5秒。すぐ録り終わる
-    const programId = await reserveSoon(page, request, 'BS');
-    const row = page.locator(`[data-testid="recording-row"][data-program-id="${programId}"]`);
-    await waitWatchable(page, row);
-    return {
-        id: (await row.getAttribute('data-recording-id')) ?? '',
-        libraryPath: (await row.getAttribute('data-library-path')) ?? '',
-    };
+  await syncEpg(request);
+  // BS の偽番組は5秒。すぐ録り終わる
+  const programId = await reserveSoon(page, request, "BS");
+  const row = page.locator(
+    `[data-testid="recording-row"][data-program-id="${programId}"]`,
+  );
+  await waitWatchable(page, row);
+  return {
+    id: (await row.getAttribute("data-recording-id")) ?? "",
+    libraryPath: (await row.getAttribute("data-library-path")) ?? "",
+  };
 }
 
 /**
@@ -265,68 +310,73 @@ export async function recordOne(
  * エンコードしないときは codec に 'none' を渡す (専用のチェックは無い)
  */
 export async function setRecording(
-    request: APIRequestContext,
-    patch: {
-        /** エンコードするコーデック。両方エンコードするなら `['av1', 'h264']`、エンコードしないなら `[]`。省けば av1 */
-        codecs?: string[];
-        cmCut?: string;
-        keepOriginal?: boolean;
-        freeOnly?: boolean;
-        /** その場で変換する本数の上限 (空は自動)。省けば前のまま */
-        transcodeLimit?: string;
-    } = {},
+  request: APIRequestContext,
+  patch: {
+    /** エンコードするコーデック。両方エンコードするなら `['av1', 'h264']`、エンコードしないなら `[]`。省けば av1 */
+    codecs?: string[];
+    cmCut?: string;
+    keepOriginal?: boolean;
+    freeOnly?: boolean;
+    /** その場で変換する本数の上限 (空は自動)。省けば前のまま */
+    transcodeLimit?: string;
+  } = {},
 ): Promise<void> {
-    const chosen = patch.codecs ?? ['av1'];
+  const chosen = patch.codecs ?? ["av1"];
 
-    /*
-     * **`codecs` は同じ名前で複数送る** (`codecs=av1&codecs=h264`)。
-     * サーバは `formData().getAll('codecs')` で読む。Playwright の `form`
-     * オブジェクトは同じキーを繰り返せないので、body を手で組む
-     */
-    const encoding = new URLSearchParams();
-    for (const codec of chosen) encoding.append('codecs', codec);
-    if (patch.keepOriginal === true) encoding.append('keepOriginal', 'on');
-    if (patch.transcodeLimit !== undefined) encoding.append('transcodeLimit', patch.transcodeLimit);
-    const reserve = new URLSearchParams();
-    if (patch.freeOnly === true) reserve.append('freeOnly', 'on');
-    // 画面では節ごとにフォームが分かれている (エンコード・CM・自動予約)。同じ3つを投げる
-    await saveRecordingPart(request, 'saveEncoding', encoding);
-    await saveRecordingPart(request, 'saveCm', new URLSearchParams({ cmCut: patch.cmCut ?? 'chapter' }));
-    await saveRecordingPart(request, 'saveReserve', reserve);
+  /*
+   * **`codecs` は同じ名前で複数送る** (`codecs=av1&codecs=h264`)。
+   * サーバは `formData().getAll('codecs')` で読む。Playwright の `form`
+   * オブジェクトは同じキーを繰り返せないので、body を手で組む
+   */
+  const encoding = new URLSearchParams();
+  for (const codec of chosen) encoding.append("codecs", codec);
+  if (patch.keepOriginal === true) encoding.append("keepOriginal", "on");
+  if (patch.transcodeLimit !== undefined)
+    encoding.append("transcodeLimit", patch.transcodeLimit);
+  const reserve = new URLSearchParams();
+  if (patch.freeOnly === true) reserve.append("freeOnly", "on");
+  // 画面では節ごとにフォームが分かれている (エンコード・CM・自動予約)。同じ3つを投げる
+  await saveRecordingPart(request, "saveEncoding", encoding);
+  await saveRecordingPart(
+    request,
+    "saveCm",
+    new URLSearchParams({ cmCut: patch.cmCut ?? "chapter" }),
+  );
+  await saveRecordingPart(request, "saveReserve", reserve);
 }
 
 async function saveRecordingPart(
-    request: APIRequestContext,
-    action: string,
-    body: URLSearchParams,
+  request: APIRequestContext,
+  action: string,
+  body: URLSearchParams,
 ): Promise<void> {
-    /*
-     * **1回だけ投げ直す。**
-     *
-     * CI で 1回、**中身の空の 400** が返って落ちました (保存の action は
-     * 不正な値でしか 400 を出さず、そのときは理由の入ったページを返すので、
-     * 出どころはこちらのフォームではない)。手元では同じ条件で走らせても出ず、
-     * 4つ並べて走らせている CI でだけ出ています。
-     *
-     * ここは**確かめたいことではなく前準備**なので、1回投げ直す。それでも
-     * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
-     */
-    for (let 回 = 0; ; 回++) {
-        const res = await request.post(`/settings/recording?/${action}`, {
-            data: body.toString(),
-            headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        });
-        if (res.ok() || 回 >= 1) {
-            await ok(res, `録画のしかたの保存 (${action})`);
-            return;
-        }
+  /*
+   * **1回だけ投げ直す。**
+   *
+   * CI で 1回、**中身の空の 400** が返って落ちました (保存の action は
+   * 不正な値でしか 400 を出さず、そのときは理由の入ったページを返すので、
+   * 出どころはこちらのフォームではない)。手元では同じ条件で走らせても出ず、
+   * 4つ並べて走らせている CI でだけ出ています。
+   *
+   * ここは**確かめたいことではなく前準備**なので、1回投げ直す。それでも
+   * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
+   */
+  for (let 回 = 0; ; 回++) {
+    const res = await request.post(`/settings/recording?/${action}`, {
+      data: body.toString(),
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    if (res.ok() || 回 >= 1) {
+      await ok(res, `録画のしかたの保存 (${action})`);
+      return;
     }
+  }
 }
 
 /** ルールを1件消す。一覧 (`/rules`) の行の削除を2回押す */
 export async function deleteRule(row: Locator): Promise<void> {
-    await row.getByTestId('rule-delete').click();
-    await row.getByTestId('rule-delete-confirm').click();
+  await row.getByTestId("rule-delete").click();
+  await row.getByTestId("rule-delete-confirm").click();
 }
 
 /**
@@ -335,21 +385,25 @@ export async function deleteRule(row: Locator): Promise<void> {
  * 作ったら保存したルールへのリンクが出るまで待つ。画面は検索のまま
  */
 export async function makeRule(
-    page: Page,
-    keyword: string,
-    options: { dedupe?: boolean; fields?: Record<string, string | string[]> } = {},
+  page: Page,
+  keyword: string,
+  options: {
+    dedupe?: boolean;
+    fields?: Record<string, string | string[]>;
+  } = {},
 ): Promise<void> {
-    const params = new URLSearchParams({ q: keyword, keyword });
-    if (options.dedupe === false) params.set('dedupe', '0');
-    for (const [key, value] of Object.entries(options.fields ?? {})) {
-        params.delete(key);
-        for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
-    }
-    await goto(page, `/search?${params}`);
-    const open = page.getByTestId('rule-draft-open');
-    if (await open.isVisible()) await open.click();
-    await page.getByTestId('rule-submit').click();
-    await expect(page.getByTestId('rule-saved-link')).toBeVisible();
+  const params = new URLSearchParams({ q: keyword, keyword });
+  if (options.dedupe === false) params.set("dedupe", "0");
+  for (const [key, value] of Object.entries(options.fields ?? {})) {
+    params.delete(key);
+    for (const v of Array.isArray(value) ? value : [value])
+      params.append(key, v);
+  }
+  await goto(page, `/search?${params}`);
+  const open = page.getByTestId("rule-draft-open");
+  if (await open.isVisible()) await open.click();
+  await page.getByTestId("rule-submit").click();
+  await expect(page.getByTestId("rule-saved-link")).toBeVisible();
 }
 
 /**
@@ -360,20 +414,20 @@ export async function makeRule(
  * 消すと、そのルールが立てた予約も一緒に引っ込みます。
  */
 export async function clearRules(page: Page): Promise<void> {
-    await goto(page, '/rules');
-    /*
-     * **消えるのを待ってから次を押す。** 数えた直後に前の削除が反映されて
-     * 行が消える (か、送信中で `disabled` になる) と、`first().click()` が
-     * 押せる要素をテストのタイムアウトいっぱい (2分) 待っていた
-     */
-    const rows = page.getByTestId('rule-row');
-    for (let i = 0; i < 20; i++) {
-        const count = await rows.count();
-        if (count === 0) break;
-        await deleteRule(rows.first());
-        await expect(rows).toHaveCount(count - 1);
-    }
-    await expect(rows).toHaveCount(0);
+  await goto(page, "/rules");
+  /*
+   * **消えるのを待ってから次を押す。** 数えた直後に前の削除が反映されて
+   * 行が消える (か、送信中で `disabled` になる) と、`first().click()` が
+   * 押せる要素をテストのタイムアウトいっぱい (2分) 待っていた
+   */
+  const rows = page.getByTestId("rule-row");
+  for (let i = 0; i < 20; i++) {
+    const count = await rows.count();
+    if (count === 0) break;
+    await deleteRule(rows.first());
+    await expect(rows).toHaveCount(count - 1);
+  }
+  await expect(rows).toHaveCount(0);
 }
 
 /**
@@ -391,36 +445,45 @@ export async function clearRules(page: Page): Promise<void> {
  * @param listTestId 一覧の `data-testid` (`timeline` など)
  * @param moreTestId 続きを足す印の `data-testid`
  */
-async function revealAll(page: Page, listTestId: string, moreTestId: string): Promise<void> {
-    const list = page.getByTestId(listTestId);
-    const more = page.getByTestId(moreTestId);
-    const rows = list.locator('[data-testid$="-row"]');
-    for (let i = 0; i < 100; i++) {
-        if ((await more.count()) === 0) return;
-        const before = await rows.count();
-        await more.first().evaluate((node) => node.scrollIntoView({ block: 'center' }));
-        await expect
-            .poll(async () => (await more.count()) === 0 || (await rows.count()) > before, {
-                timeout: 10_000,
-                message: `${listTestId} の続きが出ません (${before} 行のまま)`,
-            })
-            .toBe(true);
-    }
-    await expect(more).toHaveCount(0);
+async function revealAll(
+  page: Page,
+  listTestId: string,
+  moreTestId: string,
+): Promise<void> {
+  const list = page.getByTestId(listTestId);
+  const more = page.getByTestId(moreTestId);
+  const rows = list.locator('[data-testid$="-row"]');
+  for (let i = 0; i < 100; i++) {
+    if ((await more.count()) === 0) return;
+    const before = await rows.count();
+    await more
+      .first()
+      .evaluate((node) => node.scrollIntoView({ block: "center" }));
+    await expect
+      .poll(
+        async () => (await more.count()) === 0 || (await rows.count()) > before,
+        {
+          timeout: 10_000,
+          message: `${listTestId} の続きが出ません (${before} 行のまま)`,
+        },
+      )
+      .toBe(true);
+  }
+  await expect(more).toHaveCount(0);
 }
 
 /** 通知先を全部消す (10-webhook の後片付け)。消えるのを待ってから次を押す */
 export async function clearWebhooks(page: Page): Promise<void> {
-    await goto(page, '/settings/integrations');
-    const rows = page.getByTestId('webhook-delete');
-    for (let i = 0; i < 10; i++) {
-        const count = await rows.count();
-        if (count === 0) break;
-        // 削除は2回押し (`ArmedDelete`)。1回目で「確定」に変わるだけなので、確定まで押す
-        await rows.first().click();
-        await page.getByTestId('webhook-delete-confirm').click();
-        await expect(page.getByTestId('webhook-row')).toHaveCount(count - 1);
-    }
+  await goto(page, "/settings/integrations");
+  const rows = page.getByTestId("webhook-delete");
+  for (let i = 0; i < 10; i++) {
+    const count = await rows.count();
+    if (count === 0) break;
+    // 削除は2回押し (`ArmedDelete`)。1回目で「確定」に変わるだけなので、確定まで押す
+    await rows.first().click();
+    await page.getByTestId("webhook-delete-confirm").click();
+    await expect(page.getByTestId("webhook-row")).toHaveCount(count - 1);
+  }
 }
 
 /**
@@ -430,16 +493,16 @@ export async function clearWebhooks(page: Page): Promise<void> {
  * 件数の検証が「何を数えているのか分からない」ものになります。
  */
 export async function cancelAllReservations(page: Page): Promise<void> {
-    await goto(page, '/');
-    // 消えるのを待ってから次を押す (clearRules と同じ理由)
-    const buttons = page.getByTestId('cancel-button');
-    for (let i = 0; i < 80; i++) {
-        const count = await buttons.count();
-        if (count === 0) break;
-        await buttons.first().click();
-        await expect(buttons).toHaveCount(count - 1);
-    }
-    await expect(page.getByTestId('reservation-row')).toHaveCount(0);
+  await goto(page, "/");
+  // 消えるのを待ってから次を押す (clearRules と同じ理由)
+  const buttons = page.getByTestId("cancel-button");
+  for (let i = 0; i < 80; i++) {
+    const count = await buttons.count();
+    if (count === 0) break;
+    await buttons.first().click();
+    await expect(buttons).toHaveCount(count - 1);
+  }
+  await expect(page.getByTestId("reservation-row")).toHaveCount(0);
 }
 
 /**
@@ -454,12 +517,12 @@ export async function cancelAllReservations(page: Page): Promise<void> {
  * 中身が動いただけでもブラウザは投げてくる)、**2回、違う場所へ動かします**
  */
 export async function wakeControls(page: Page, stage: string): Promise<void> {
-    const box = await page.getByTestId(stage).boundingBox();
-    if (box === null) return;
-    const x = box.x + box.width / 2;
-    const y = box.y + box.height / 2;
-    await page.mouse.move(x, y);
-    await page.mouse.move(x, y - 4);
+  const box = await page.getByTestId(stage).boundingBox();
+  if (box === null) return;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.move(x, y - 4);
 }
 
 /**
@@ -467,26 +530,36 @@ export async function wakeControls(page: Page, stage: string): Promise<void> {
  * 操作列が引っ込んでいると押せないので、待ちを挟んだ先では先に `wakeControls` を呼ぶ
  */
 export async function openSettings(page: Page, prefix: string): Promise<void> {
-    const menu = page.getByTestId(`${prefix}-settings-menu`);
-    if (await menu.isVisible()) return;
-    await page.getByTestId(`${prefix}-settings`).click();
-    await expect(menu).toBeVisible();
+  const menu = page.getByTestId(`${prefix}-settings-menu`);
+  if (await menu.isVisible()) return;
+  await page.getByTestId(`${prefix}-settings`).click();
+  await expect(menu).toBeVisible();
 }
 
 /** 再生の設定からコーデックを選ぶ (選ぶとメニューは閉じる) */
-export async function pickCodec(page: Page, prefix: string, codec: string): Promise<void> {
-    await openSettings(page, prefix);
-    await page.getByTestId(`${prefix}-codec`).click();
-    await page.locator(`[data-testid="${prefix}-codec-option"][data-codec="${codec}"]`).click();
-    await expect(page.getByTestId(`${prefix}-settings-menu`)).toBeHidden();
+export async function pickCodec(
+  page: Page,
+  prefix: string,
+  codec: string,
+): Promise<void> {
+  await openSettings(page, prefix);
+  await page.getByTestId(`${prefix}-codec`).click();
+  await page
+    .locator(`[data-testid="${prefix}-codec-option"][data-codec="${codec}"]`)
+    .click();
+  await expect(page.getByTestId(`${prefix}-settings-menu`)).toBeHidden();
 }
 
 /** 再生の設定の切り替え (`skip-cm` / `ambient` / `background`) を押して、メニューを閉じる */
-export async function flipSetting(page: Page, prefix: string, id: string): Promise<void> {
-    await openSettings(page, prefix);
-    await page.getByTestId(`${prefix}-${id}`).click();
-    await page.keyboard.press('Escape');
-    await expect(page.getByTestId(`${prefix}-settings-menu`)).toBeHidden();
+export async function flipSetting(
+  page: Page,
+  prefix: string,
+  id: string,
+): Promise<void> {
+  await openSettings(page, prefix);
+  await page.getByTestId(`${prefix}-${id}`).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId(`${prefix}-settings-menu`)).toBeHidden();
 }
 
 /**
@@ -494,38 +567,45 @@ export async function flipSetting(page: Page, prefix: string, id: string): Promi
  * いないか (箱が交わらないか)、枠からはみ出していないか。見えていないもの (畳んだもの・
  * 幅 0) は数えない。返すのは困りごとの一覧 (空なら良し)
  */
-export async function overlayTroubles(page: Page, stage: string): Promise<string[]> {
-    return page.evaluate((testid) => {
-        const root = document.querySelector(`[data-testid="${testid}"]`);
-        if (root === null) return [`${testid} がありません`];
-        const frame = root.getBoundingClientRect();
-        const name = (el: Element) =>
-            el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.textContent;
-        const boxes = [...root.querySelectorAll('.ov-btn')]
-            .map((el) => ({ el, r: el.getBoundingClientRect() }))
-            .filter(({ r }) => r.width > 0 && r.height > 0);
-        const troubles: string[] = [];
-        for (const { el, r } of boxes) {
-            if (
-                r.left < frame.left - 0.5 ||
-                r.right > frame.right + 0.5 ||
-                r.top < frame.top - 0.5 ||
-                r.bottom > frame.bottom + 0.5
-            )
-                troubles.push(`${name(el)} が枠の外`);
-        }
-        for (let i = 0; i < boxes.length; i++) {
-            for (let j = i + 1; j < boxes.length; j++) {
-                const a = boxes[i]!.r;
-                const b = boxes[j]!.r;
-                const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
-                const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-                if (w > 0.5 && h > 0.5)
-                    troubles.push(`${name(boxes[i]!.el)} と ${name(boxes[j]!.el)} が重なる`);
-            }
-        }
-        return troubles;
-    }, stage);
+export async function overlayTroubles(
+  page: Page,
+  stage: string,
+): Promise<string[]> {
+  return page.evaluate((testid) => {
+    const root = document.querySelector(`[data-testid="${testid}"]`);
+    if (root === null) return [`${testid} がありません`];
+    const frame = root.getBoundingClientRect();
+    const name = (el: Element) =>
+      el.getAttribute("data-testid") ??
+      el.getAttribute("aria-label") ??
+      el.textContent;
+    const boxes = [...root.querySelectorAll(".ov-btn")]
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && r.height > 0);
+    const troubles: string[] = [];
+    for (const { el, r } of boxes) {
+      if (
+        r.left < frame.left - 0.5 ||
+        r.right > frame.right + 0.5 ||
+        r.top < frame.top - 0.5 ||
+        r.bottom > frame.bottom + 0.5
+      )
+        troubles.push(`${name(el)} が枠の外`);
+    }
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i]!.r;
+        const b = boxes[j]!.r;
+        const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (w > 0.5 && h > 0.5)
+          troubles.push(
+            `${name(boxes[i]!.el)} と ${name(boxes[j]!.el)} が重なる`,
+          );
+      }
+    }
+    return troubles;
+  }, stage);
 }
 
 /**
@@ -533,32 +613,43 @@ export async function overlayTroubles(page: Page, stage: string): Promise<string
  * 上端がそろい、行の高さが1段ぶん (いちばん高いボタンと同じ)、行からはみ出したものが無く、
  * どれも 40px 以上あること。畳んだもの (幅 0) は数えない。返すのは困りごとの一覧 (空なら良し)
  */
-export async function oneRowTroubles(page: Page, row: string): Promise<string[]> {
-    return page.evaluate((testid) => {
-        const root = document.querySelector(`[data-testid="${testid}"]`);
-        if (root === null) return [`${testid} がありません`];
-        const frame = root.getBoundingClientRect();
-        const name = (el: Element) =>
-            el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.textContent ?? '';
-        const buttons = [...root.querySelectorAll('.ov-btn')]
-            .map((el) => ({ el, r: el.getBoundingClientRect() }))
-            .filter(({ r }) => r.width > 0 && r.height > 0);
-        if (buttons.length === 0) return ['ボタンが1つも見えていない'];
-        const top = Math.min(...buttons.map(({ r }) => r.top));
-        const tallest = Math.max(...buttons.map(({ r }) => r.height));
-        const troubles: string[] = [];
-        for (const { el, r } of buttons) {
-            if (r.top - top > 1.5)
-                troubles.push(`${name(el)} が別の行 (上端が ${Math.round(r.top - top)}px 下)`);
-            if (r.left < frame.left - 0.5 || r.right > frame.right + 0.5)
-                troubles.push(`${name(el)} が行からはみ出す`);
-            if (Math.min(r.width, r.height) < 39.5) troubles.push(`${name(el)} が 40px より小さい`);
-        }
-        if (frame.height > tallest + 1.5) {
-            troubles.push(`行の高さが ${Math.round(frame.height)}px (1段は ${Math.round(tallest)}px)`);
-        }
-        return troubles;
-    }, row);
+export async function oneRowTroubles(
+  page: Page,
+  row: string,
+): Promise<string[]> {
+  return page.evaluate((testid) => {
+    const root = document.querySelector(`[data-testid="${testid}"]`);
+    if (root === null) return [`${testid} がありません`];
+    const frame = root.getBoundingClientRect();
+    const name = (el: Element) =>
+      el.getAttribute("data-testid") ??
+      el.getAttribute("aria-label") ??
+      el.textContent ??
+      "";
+    const buttons = [...root.querySelectorAll(".ov-btn")]
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && r.height > 0);
+    if (buttons.length === 0) return ["ボタンが1つも見えていない"];
+    const top = Math.min(...buttons.map(({ r }) => r.top));
+    const tallest = Math.max(...buttons.map(({ r }) => r.height));
+    const troubles: string[] = [];
+    for (const { el, r } of buttons) {
+      if (r.top - top > 1.5)
+        troubles.push(
+          `${name(el)} が別の行 (上端が ${Math.round(r.top - top)}px 下)`,
+        );
+      if (r.left < frame.left - 0.5 || r.right > frame.right + 0.5)
+        troubles.push(`${name(el)} が行からはみ出す`);
+      if (Math.min(r.width, r.height) < 39.5)
+        troubles.push(`${name(el)} が 40px より小さい`);
+    }
+    if (frame.height > tallest + 1.5) {
+      troubles.push(
+        `行の高さが ${Math.round(frame.height)}px (1段は ${Math.round(tallest)}px)`,
+      );
+    }
+    return troubles;
+  }, row);
 }
 
 /**
@@ -566,8 +657,12 @@ export async function oneRowTroubles(page: Page, row: string): Promise<string[]>
  * (操作バーを映像の下に出した形) を見るときに呼ぶ
  */
 export async function leaveFullscreen(page: Page): Promise<void> {
-    await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
-    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+  await page.evaluate(
+    () => document.fullscreenElement && document.exitFullscreen(),
+  );
+  await expect
+    .poll(() => page.evaluate(() => document.fullscreenElement === null))
+    .toBe(true);
 }
 
 /**
@@ -575,20 +670,32 @@ export async function leaveFullscreen(page: Page): Promise<void> {
  * 字が載っている」(`data-ink`。描く係が書くもの) と書き込み、字の下端が操作バーの上端より
  * 上へ来るのを待つ。偽の放送には字幕が乗っていないので、載っている範囲だけを作る
  */
-export async function captionsClearOfBar(page: Page, canvas: string, bar: string): Promise<void> {
-    await page.getByTestId(canvas).evaluate((el) => el.setAttribute('data-ink', '0.8000,0.9700'));
-    await expect
-        .poll(() =>
-            page.evaluate(
-                ([c, b]) => {
-                    const canvasBox = document.querySelector(`[data-testid="${c}"]`)!.getBoundingClientRect();
-                    const barBox = document.querySelector(`[data-testid="${b}"]`)!.getBoundingClientRect();
-                    return Math.round(canvasBox.top + canvasBox.height * 0.97 - barBox.top);
-                },
-                [canvas, bar] as const,
-            ),
-        )
-        .toBeLessThanOrEqual(0);
+export async function captionsClearOfBar(
+  page: Page,
+  canvas: string,
+  bar: string,
+): Promise<void> {
+  await page
+    .getByTestId(canvas)
+    .evaluate((el) => el.setAttribute("data-ink", "0.8000,0.9700"));
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ([c, b]) => {
+          const canvasBox = document
+            .querySelector(`[data-testid="${c}"]`)!
+            .getBoundingClientRect();
+          const barBox = document
+            .querySelector(`[data-testid="${b}"]`)!
+            .getBoundingClientRect();
+          return Math.round(
+            canvasBox.top + canvasBox.height * 0.97 - barBox.top,
+          );
+        },
+        [canvas, bar] as const,
+      ),
+    )
+    .toBeLessThanOrEqual(0);
 }
 
 /**
@@ -602,95 +709,112 @@ export async function captionsClearOfBar(page: Page, canvas: string, bar: string
  * `extra` は `<body>` の終わりに足す BML (放送が書くものを試すとき。tests/e2e/35-csp.spec.ts)
  */
 const DATA_WINDOW = { left: 480, top: 270, width: 480, height: 270 } as const;
-export function fakeDataBroadcast(extra = ''): Record<string, unknown>[] {
-    const { left, top, width, height } = DATA_WINDOW;
-    const bml = [
-        '<?xml version="1.0" encoding="EUC-JP" ?>',
-        '<!DOCTYPE bml PUBLIC "+//ARIB STD-B24:1999//DTD BML Document for Japanese//JA" "http://www.arib.or.jp/B24/DTD/bml_1_0.dtd">',
-        '<?bml bml-version="1.0" ?>',
-        '<bml><head><title>e2e</title></head>',
-        '<body style="background-color:#0000ff;">',
-        `<object type="video/X-arib-mpeg2" style="left:${left}px;top:${top}px;width:${width}px;height:${height}px;"/>`,
-        extra,
-        '</body></bml>',
-    ].join('\n');
-    const dataEventId = 1;
-    return [
+export function fakeDataBroadcast(extra = ""): Record<string, unknown>[] {
+  const { left, top, width, height } = DATA_WINDOW;
+  const bml = [
+    '<?xml version="1.0" encoding="EUC-JP" ?>',
+    '<!DOCTYPE bml PUBLIC "+//ARIB STD-B24:1999//DTD BML Document for Japanese//JA" "http://www.arib.or.jp/B24/DTD/bml_1_0.dtd">',
+    '<?bml bml-version="1.0" ?>',
+    "<bml><head><title>e2e</title></head>",
+    '<body style="background-color:#0000ff;">',
+    `<object type="video/X-arib-mpeg2" style="left:${left}px;top:${top}px;width:${width}px;height:${height}px;"/>`,
+    extra,
+    "</body></bml>",
+  ].join("\n");
+  const dataEventId = 1;
+  return [
+    {
+      type: "pmt",
+      components: [
         {
-            type: 'pmt',
-            components: [
-                {
-                    pid: 0x0740,
-                    componentId: 0x40,
-                    streamType: 0x0d,
-                    // 地上波 (A プロファイル)
-                    dataComponentId: 0x0c,
-                    bxmlInfo: {
-                        transmissionFormat: 0,
-                        entryPointFlag: true,
-                        entryPointInfo: {
-                            autoStartFlag: true,
-                            documentResolution: 0,
-                            useXML: false,
-                            defaultVersionFlag: true,
-                            independentFlag: true,
-                            styleForTVFlag: false,
-                            bmlMajorVersion: 1,
-                            bmlMinorVersion: 0,
-                        },
-                    },
-                },
+          pid: 0x0740,
+          componentId: 0x40,
+          streamType: 0x0d,
+          // 地上波 (A プロファイル)
+          dataComponentId: 0x0c,
+          bxmlInfo: {
+            transmissionFormat: 0,
+            entryPointFlag: true,
+            entryPointInfo: {
+              autoStartFlag: true,
+              documentResolution: 0,
+              useXML: false,
+              defaultVersionFlag: true,
+              independentFlag: true,
+              styleForTVFlag: false,
+              bmlMajorVersion: 1,
+              bmlMinorVersion: 0,
+            },
+          },
+        },
+      ],
+    },
+    {
+      type: "moduleListUpdated",
+      componentId: 0x40,
+      modules: [{ id: 0, version: 1, size: bml.length }],
+      dataEventId,
+    },
+    {
+      type: "moduleDownloaded",
+      componentId: 0x40,
+      moduleId: 0,
+      version: 1,
+      dataEventId,
+      files: [
+        {
+          contentLocation: "startup.bml",
+          contentType: {
+            type: "text",
+            originalType: "text",
+            subtype: "x-arib-bml",
+            originalSubtype: "X-arib-bml",
+            parameters: [
+              {
+                attribute: "charset",
+                originalAttribute: "charset",
+                value: "euc-jp",
+              },
             ],
+          },
+          dataBase64: Buffer.from(bml).toString("base64"),
         },
-        {
-            type: 'moduleListUpdated',
-            componentId: 0x40,
-            modules: [{ id: 0, version: 1, size: bml.length }],
-            dataEventId,
-        },
-        {
-            type: 'moduleDownloaded',
-            componentId: 0x40,
-            moduleId: 0,
-            version: 1,
-            dataEventId,
-            files: [
-                {
-                    contentLocation: 'startup.bml',
-                    contentType: {
-                        type: 'text',
-                        originalType: 'text',
-                        subtype: 'x-arib-bml',
-                        originalSubtype: 'X-arib-bml',
-                        parameters: [{ attribute: 'charset', originalAttribute: 'charset', value: 'euc-jp' }],
-                    },
-                    dataBase64: Buffer.from(bml).toString('base64'),
-                },
-            ],
-        },
-    ];
+      ],
+    },
+  ];
 }
 
 /** 取っておいた要素 (`holdMedia`)。ページの中の `window.__media` */
 interface HeldMedia {
-    __media: { video: HTMLElement; captions: HTMLCanvasElement; stage: HTMLElement };
+  __media: {
+    video: HTMLElement;
+    captions: HTMLCanvasElement;
+    stage: HTMLElement;
+  };
 }
 
 /**
  * 映像・字幕・枠の要素を取っておく (`captionsSeenInDataWindow` が使う)。d を押す前に呼ぶ
  */
-export async function holdMedia(page: Page, video: string, captions: string, stage: string): Promise<void> {
-    await page.evaluate(
-        ([v, c, s]) => {
-            const held = window as unknown as HeldMedia;
-            held.__media = {
-                video: document.querySelector(`[data-testid="${v}"]`) as HTMLElement,
-                captions: document.querySelector(`[data-testid="${c}"]`) as HTMLCanvasElement,
-                stage: document.querySelector(`[data-testid="${s}"]`) as HTMLElement,
-            };
-        },
-        [video, captions, stage] as const,
-    );
+export async function holdMedia(
+  page: Page,
+  video: string,
+  captions: string,
+  stage: string,
+): Promise<void> {
+  await page.evaluate(
+    ([v, c, s]) => {
+      const held = window as unknown as HeldMedia;
+      held.__media = {
+        video: document.querySelector(`[data-testid="${v}"]`) as HTMLElement,
+        captions: document.querySelector(
+          `[data-testid="${c}"]`,
+        ) as HTMLCanvasElement,
+        stage: document.querySelector(`[data-testid="${s}"]`) as HTMLElement,
+      };
+    },
+    [video, captions, stage] as const,
+  );
 }
 
 /**
@@ -706,115 +830,132 @@ export async function holdMedia(page: Page, video: string, captions: string, sta
  *   小窓の外 (左上) はその色でない (字幕が枠いっぱいに残っていない)
  */
 export async function captionsSeenInDataWindow(page: Page): Promise<void> {
-    type Box = { x: number; y: number; width: number; height: number };
-    const boxes = () =>
-        page.evaluate(() => {
-            const { video, captions, stage } = (window as unknown as HeldMedia).__media;
-            const box = (el: Element): Box => {
-                const r = el.getBoundingClientRect();
-                return { x: r.x, y: r.y, width: r.width, height: r.height };
-            };
-            return {
-                video: box(video),
-                captions: box(captions),
-                stage: box(stage),
-                sameBox: captions.parentElement === video.parentElement,
-                inShadow: video.getRootNode() !== document,
-                translate: getComputedStyle(captions).translate,
-            };
-        });
-    // 映像が小窓に縮むまで (BML を組むのはエンジンができてから)
-    await expect
-        .poll(
-            async () => {
-                const { video, stage } = await boxes();
-                const want = {
-                    x: stage.x + (stage.width * DATA_WINDOW.left) / 960,
-                    y: stage.y + (stage.height * DATA_WINDOW.top) / 540,
-                    width: (stage.width * DATA_WINDOW.width) / 960,
-                };
-                return [video.x - want.x, video.y - want.y, video.width - want.width].every(
-                    (d) => Math.abs(d) < 2,
-                );
-            },
-            { message: '映像がデータ放送の小窓へ移らない (偽の BML が効いていない)' },
-        )
-        .toBe(true);
-    // 持ち上げを戻すのは `--dp-duration` かけて動く (PlayerStage の transition)。戻り終わるまで待つ
-    await expect
-        .poll(async () => (await boxes()).translate, { message: '小窓の中で字幕が持ち上げられたまま' })
-        .toBe('none');
-    const { video, captions, stage, sameBox, inShadow, translate } = await boxes();
-    expect.soft(inShadow, '映像の箱が影の中へ移されている').toBe(false);
-    expect.soft(sameBox, '字幕が映像と同じ箱に入っていない (小窓へ一緒に行かない)').toBe(true);
-    expect.soft(translate, '小窓の中で字幕が持ち上げられたまま').toBe('none');
-    // 字幕の面は小窓 (映像の箱) の中に収まる
-    expect.soft(captions.x).toBeGreaterThanOrEqual(video.x - 1);
-    expect.soft(captions.y).toBeGreaterThanOrEqual(video.y - 1);
-    expect.soft(captions.x + captions.width).toBeLessThanOrEqual(video.x + video.width + 1);
-    expect.soft(captions.y + captions.height).toBeLessThanOrEqual(video.y + video.height + 1);
-
-    /*
-     * **画像で見る。** 字幕を塗りつぶして撮り、塗った色の画素の割合を数える。字幕を描く係が
-     * 描き直すと塗りが消えるので、塗るのと撮るのを1組にして待つ
-     */
-    const share = async (clip: Box): Promise<number> => {
-        await page.evaluate(() => {
-            const canvas = (window as unknown as HeldMedia).__media.captions;
-            const ctx = canvas.getContext('2d');
-            if (ctx === null) return;
-            ctx.fillStyle = '#ff00ff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        });
-        const png = await page.screenshot({ clip });
-        return page.evaluate(async (b64) => {
-            const image = new Image();
-            image.src = `data:image/png;base64,${b64}`;
-            await image.decode();
-            const canvas = document.createElement('canvas');
-            canvas.width = image.width;
-            canvas.height = image.height;
-            const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-            ctx.drawImage(image, 0, 0);
-            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            let hit = 0;
-            for (let i = 0; i < data.length; i += 4) {
-                // 塗った色 (マゼンタ)。読み込み中の幕 (半透明の黒) が被っていても色味で見分ける
-                const [r = 0, g = 255, b = 0] = [data[i], data[i + 1], data[i + 2]];
-                if (r > 90 && b > 90 && g * 3 < r && g * 3 < b) hit++;
-            }
-            return hit / (data.length / 4);
-        }, png.toString('base64'));
-    };
-    const around = (x: number, y: number): Box => ({
-        x: Math.round(x) - 10,
-        y: Math.round(y) - 10,
-        width: 20,
-        height: 20,
+  type Box = { x: number; y: number; width: number; height: number };
+  const boxes = () =>
+    page.evaluate(() => {
+      const { video, captions, stage } = (window as unknown as HeldMedia)
+        .__media;
+      const box = (el: Element): Box => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      };
+      return {
+        video: box(video),
+        captions: box(captions),
+        stage: box(stage),
+        sameBox: captions.parentElement === video.parentElement,
+        inShadow: video.getRootNode() !== document,
+        translate: getComputedStyle(captions).translate,
+      };
     });
-    await expect
-        .poll(() => share(around(video.x + video.width / 2, video.y + video.height / 2)), {
-            message: '小窓の真ん中に字幕が見えない (データ放送の面の下に隠れている)',
-        })
-        .toBeGreaterThan(0.9);
-    expect(
-        await share(around(stage.x + stage.width / 4, stage.y + stage.height / 4)),
-        '字幕が枠いっぱいに残っている (映像と一緒に縮んでいない)',
-    ).toBeLessThan(0.1);
+  // 映像が小窓に縮むまで (BML を組むのはエンジンができてから)
+  await expect
+    .poll(
+      async () => {
+        const { video, stage } = await boxes();
+        const want = {
+          x: stage.x + (stage.width * DATA_WINDOW.left) / 960,
+          y: stage.y + (stage.height * DATA_WINDOW.top) / 540,
+          width: (stage.width * DATA_WINDOW.width) / 960,
+        };
+        return [
+          video.x - want.x,
+          video.y - want.y,
+          video.width - want.width,
+        ].every((d) => Math.abs(d) < 2);
+      },
+      { message: "映像がデータ放送の小窓へ移らない (偽の BML が効いていない)" },
+    )
+    .toBe(true);
+  // 持ち上げを戻すのは `--dp-duration` かけて動く (PlayerStage の transition)。戻り終わるまで待つ
+  await expect
+    .poll(async () => (await boxes()).translate, {
+      message: "小窓の中で字幕が持ち上げられたまま",
+    })
+    .toBe("none");
+  const { video, captions, stage, sameBox, inShadow, translate } =
+    await boxes();
+  expect.soft(inShadow, "映像の箱が影の中へ移されている").toBe(false);
+  expect
+    .soft(sameBox, "字幕が映像と同じ箱に入っていない (小窓へ一緒に行かない)")
+    .toBe(true);
+  expect.soft(translate, "小窓の中で字幕が持ち上げられたまま").toBe("none");
+  // 字幕の面は小窓 (映像の箱) の中に収まる
+  expect.soft(captions.x).toBeGreaterThanOrEqual(video.x - 1);
+  expect.soft(captions.y).toBeGreaterThanOrEqual(video.y - 1);
+  expect
+    .soft(captions.x + captions.width)
+    .toBeLessThanOrEqual(video.x + video.width + 1);
+  expect
+    .soft(captions.y + captions.height)
+    .toBeLessThanOrEqual(video.y + video.height + 1);
+
+  /*
+   * **画像で見る。** 字幕を塗りつぶして撮り、塗った色の画素の割合を数える。字幕を描く係が
+   * 描き直すと塗りが消えるので、塗るのと撮るのを1組にして待つ
+   */
+  const share = async (clip: Box): Promise<number> => {
+    await page.evaluate(() => {
+      const canvas = (window as unknown as HeldMedia).__media.captions;
+      const ctx = canvas.getContext("2d");
+      if (ctx === null) return;
+      ctx.fillStyle = "#ff00ff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+    const png = await page.screenshot({ clip });
+    return page.evaluate(async (b64) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${b64}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+      ctx.drawImage(image, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let hit = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        // 塗った色 (マゼンタ)。読み込み中の幕 (半透明の黒) が被っていても色味で見分ける
+        const [r = 0, g = 255, b = 0] = [data[i], data[i + 1], data[i + 2]];
+        if (r > 90 && b > 90 && g * 3 < r && g * 3 < b) hit++;
+      }
+      return hit / (data.length / 4);
+    }, png.toString("base64"));
+  };
+  const around = (x: number, y: number): Box => ({
+    x: Math.round(x) - 10,
+    y: Math.round(y) - 10,
+    width: 20,
+    height: 20,
+  });
+  await expect
+    .poll(
+      () =>
+        share(around(video.x + video.width / 2, video.y + video.height / 2)),
+      {
+        message:
+          "小窓の真ん中に字幕が見えない (データ放送の面の下に隠れている)",
+      },
+    )
+    .toBeGreaterThan(0.9);
+  expect(
+    await share(around(stage.x + stage.width / 4, stage.y + stage.height / 4)),
+    "字幕が枠いっぱいに残っている (映像と一緒に縮んでいない)",
+  ).toBeLessThan(0.1);
 }
 
 /** 字幕の canvas を取っておく先 (`holdCaptions`) */
 interface HeldCaptions {
-    __captions: HTMLCanvasElement;
+  __captions: HTMLCanvasElement;
 }
 
 /** 字幕の canvas を取っておく */
 export async function holdCaptions(page: Page, testid: string): Promise<void> {
-    await page.evaluate((id) => {
-        (window as unknown as HeldCaptions).__captions = document.querySelector(
-            `[data-testid="${id}"]`,
-        ) as HTMLCanvasElement;
-    }, testid);
+  await page.evaluate((id) => {
+    (window as unknown as HeldCaptions).__captions = document.querySelector(
+      `[data-testid="${id}"]`,
+    ) as HTMLCanvasElement;
+  }, testid);
 }
 
 /**
@@ -826,75 +967,94 @@ export async function holdCaptions(page: Page, testid: string): Promise<void> {
  * 字幕がぼやけていた (面ごと `scale` で伸ばしていた頃と、`%` の大きさで端数が出るとき)。
  * `holdCaptions` で取ってから呼ぶ。描いていない (`data-drawn` が無い) うちは待つ
  */
-export async function expectSharpCaptions(page: Page, where: string): Promise<void> {
-    await expect
-        .poll(
-            () =>
-                page.evaluate(() => {
-                    const canvas = (window as unknown as HeldCaptions).__captions;
-                    if (canvas.dataset['drawn'] === undefined) return '描いていない';
-                    const rect = canvas.getBoundingClientRect();
-                    let { width, height } = rect;
-                    if (getComputedStyle(canvas).objectFit === 'contain') {
-                        const scale = Math.min(width / canvas.width, height / canvas.height);
-                        width = canvas.width * scale;
-                        height = canvas.height * scale;
-                    }
-                    const dpr = window.devicePixelRatio;
-                    const shown = [width * dpr, height * dpr];
-                    const sharp =
-                        Math.abs(canvas.width - shown[0]!) <= 1 && Math.abs(canvas.height - shown[1]!) <= 1;
-                    return sharp
-                        ? 'ok'
-                        : `描く画素 ${canvas.width}x${canvas.height} / 見えている大きさ × DPR ${shown.map((n) => n.toFixed(1)).join('x')} (DPR ${dpr})`;
-                }),
-            { message: `${where}: 字幕の canvas の画素が見えている大きさ × DPR と合わない (ぼやける)` },
-        )
-        .toBe('ok');
+export async function expectSharpCaptions(
+  page: Page,
+  where: string,
+): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const canvas = (window as unknown as HeldCaptions).__captions;
+          if (canvas.dataset["drawn"] === undefined) return "描いていない";
+          const rect = canvas.getBoundingClientRect();
+          let { width, height } = rect;
+          if (getComputedStyle(canvas).objectFit === "contain") {
+            const scale = Math.min(
+              width / canvas.width,
+              height / canvas.height,
+            );
+            width = canvas.width * scale;
+            height = canvas.height * scale;
+          }
+          const dpr = window.devicePixelRatio;
+          const shown = [width * dpr, height * dpr];
+          const sharp =
+            Math.abs(canvas.width - shown[0]!) <= 1 &&
+            Math.abs(canvas.height - shown[1]!) <= 1;
+          return sharp
+            ? "ok"
+            : `描く画素 ${canvas.width}x${canvas.height} / 見えている大きさ × DPR ${shown.map((n) => n.toFixed(1)).join("x")} (DPR ${dpr})`;
+        }),
+      {
+        message: `${where}: 字幕の canvas の画素が見えている大きさ × DPR と合わない (ぼやける)`,
+      },
+    )
+    .toBe("ok");
 }
 
 /** 開いた WebSocket を覚えておく (`feedCaption`・`feedData`)。**開く前に呼ぶ** */
 export async function captureSockets(page: Page): Promise<void> {
-    await page.addInitScript(() => {
-        const seen = window as unknown as { __sockets: WebSocket[] };
-        seen.__sockets = [];
-        const Original = window.WebSocket;
-        window.WebSocket = class extends Original {
-            constructor(url: string | URL, protocols?: string | string[]) {
-                super(url, protocols);
-                seen.__sockets.push(this);
-            }
-        };
-    });
+  await page.addInitScript(() => {
+    const seen = window as unknown as { __sockets: WebSocket[] };
+    seen.__sockets = [];
+    const Original = window.WebSocket;
+    window.WebSocket = class extends Original {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        seen.__sockets.push(this);
+      }
+    };
+  });
 }
 
 /**
  * **データ放送の通知を流す** (`CHANNEL.data` = 0x30 + 多重化の頭 8 バイト + JSON。時刻は 0)。
  * `captureSockets` してから開いた画面で、エンジンができてから呼ぶ (`fakeDataBroadcast` など)
  */
-export async function feedData(page: Page, messages: Record<string, unknown>[]): Promise<void> {
-    await page.evaluate((messages) => {
-        const socket = (window as unknown as { __sockets: WebSocket[] }).__sockets.at(-1);
-        for (const message of messages) {
-            const body = new TextEncoder().encode(JSON.stringify(message));
-            const data = new Uint8Array(9 + body.length);
-            data[0] = 0x30;
-            data.set(body, 9);
-            socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
-        }
-    }, messages);
+export async function feedData(
+  page: Page,
+  messages: Record<string, unknown>[],
+): Promise<void> {
+  await page.evaluate((messages) => {
+    const socket = (
+      window as unknown as { __sockets: WebSocket[] }
+    ).__sockets.at(-1);
+    for (const message of messages) {
+      const body = new TextEncoder().encode(JSON.stringify(message));
+      const data = new Uint8Array(9 + body.length);
+      data[0] = 0x30;
+      data.set(body, 9);
+      socket?.dispatchEvent(new MessageEvent("message", { data: data.buffer }));
+    }
+  }, messages);
 }
 
 /** データ放送の描いたものから探す (エンジンは開いた影に描く)。見つからなければ null */
 export function dataElement(page: Page, selector: string) {
-    return page.evaluate((query) => {
-        for (const host of document.querySelectorAll('[data-testid="live-data"] div')) {
-            const found = host.shadowRoot?.querySelector(query);
-            if (found)
-                return { text: found.textContent, attributes: [...found.attributes].map((a) => a.name) };
-        }
-        return null;
-    }, selector);
+  return page.evaluate((query) => {
+    for (const host of document.querySelectorAll(
+      '[data-testid="live-data"] div',
+    )) {
+      const found = host.shadowRoot?.querySelector(query);
+      if (found)
+        return {
+          text: found.textContent,
+          attributes: [...found.attributes].map((a) => a.name),
+        };
+    }
+    return null;
+  }, selector);
 }
 
 /**
@@ -902,24 +1062,24 @@ export function dataElement(page: Page, selector: string) {
  * 偽の放送にも偽の録画にも字幕は乗っていないので、これを渡して描かせる
  */
 export const FAKE_CAPTION = {
-    v: 1,
-    plane: [960, 540],
-    duration: null,
-    runs: [
-        {
-            x: 240,
-            y: 450,
-            w: 40,
-            h: 60,
-            fx: 2,
-            fy: 12,
-            size: 36,
-            scaleX: 1,
-            text: '字幕はくっきり',
-            fg: '#000000ff',
-            bg: '#ffffffff',
-        },
-    ],
+  v: 1,
+  plane: [960, 540],
+  duration: null,
+  runs: [
+    {
+      x: 240,
+      y: 450,
+      w: 40,
+      h: 60,
+      fx: 2,
+      fy: 12,
+      size: 36,
+      scaleX: 1,
+      text: "字幕はくっきり",
+      fg: "#000000ff",
+      bg: "#ffffffff",
+    },
+  ],
 };
 
 /**
@@ -930,31 +1090,42 @@ export const FAKE_CAPTION = {
  * 描くきっかけ (`paint`) は字幕のボタンを2回押して作る (消して出す)。
  * `captureSockets` してから開いた画面で呼ぶ
  */
-export async function feedCaption(page: Page, prefix: 'live' | 'chase'): Promise<void> {
-    const captions = { type: 'captions', tracks: [{ index: 0, lang: 'jpn', label: '字幕' }], track: 0 };
-    await page.evaluate(
-        ([notice, caption]) => {
-            const socket = (window as unknown as { __sockets: WebSocket[] }).__sockets.at(-1);
-            for (const [kind, json] of [
-                [0x40, notice],
-                [0x22, caption],
-            ] as const) {
-                const body = new TextEncoder().encode(json);
-                const data = new Uint8Array(9 + body.length);
-                data[0] = kind;
-                data.set(body, 9);
-                socket?.dispatchEvent(new MessageEvent('message', { data: data.buffer }));
-            }
-        },
-        [JSON.stringify(captions), JSON.stringify(FAKE_CAPTION)] as const,
-    );
-    // 押すのは要素に直に (操作列が引っ込んでいても、データ放送の面が上に被っていても届く)
-    const button = page.getByTestId(`${prefix}-caption`);
-    await expect(button).toHaveAttribute('aria-pressed', 'true');
-    await button.evaluate((el) => (el as HTMLElement).click());
-    await expect(button).toHaveAttribute('aria-pressed', 'false');
-    await button.evaluate((el) => (el as HTMLElement).click());
-    await expect(button).toHaveAttribute('aria-pressed', 'true');
+export async function feedCaption(
+  page: Page,
+  prefix: "live" | "chase",
+): Promise<void> {
+  const captions = {
+    type: "captions",
+    tracks: [{ index: 0, lang: "jpn", label: "字幕" }],
+    track: 0,
+  };
+  await page.evaluate(
+    ([notice, caption]) => {
+      const socket = (
+        window as unknown as { __sockets: WebSocket[] }
+      ).__sockets.at(-1);
+      for (const [kind, json] of [
+        [0x40, notice],
+        [0x22, caption],
+      ] as const) {
+        const body = new TextEncoder().encode(json);
+        const data = new Uint8Array(9 + body.length);
+        data[0] = kind;
+        data.set(body, 9);
+        socket?.dispatchEvent(
+          new MessageEvent("message", { data: data.buffer }),
+        );
+      }
+    },
+    [JSON.stringify(captions), JSON.stringify(FAKE_CAPTION)] as const,
+  );
+  // 押すのは要素に直に (操作列が引っ込んでいても、データ放送の面が上に被っていても届く)
+  const button = page.getByTestId(`${prefix}-caption`);
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  await button.evaluate((el) => (el as HTMLElement).click());
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await button.evaluate((el) => (el as HTMLElement).click());
+  await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
 /**
@@ -962,12 +1133,23 @@ export async function feedCaption(page: Page, prefix: 'live' | 'chase'): Promise
  * スマホの縦 (DPR 3)。`browser.newContext` にそのまま渡す
  */
 export const CAPTION_SCREENS = [
-    ['PC 1600x900 (DPR 1)', { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 }],
-    ['PC 1600x900 (DPR 2)', { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 }],
-    [
-        'スマホ縦 390x844 (DPR 3)',
-        { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
-    ],
+  [
+    "PC 1600x900 (DPR 1)",
+    { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 },
+  ],
+  [
+    "PC 1600x900 (DPR 2)",
+    { viewport: { width: 1600, height: 900 }, deviceScaleFactor: 2 },
+  ],
+  [
+    "スマホ縦 390x844 (DPR 3)",
+    {
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+    },
+  ],
 ] as const;
 
 /**
@@ -975,9 +1157,9 @@ export const CAPTION_SCREENS = [
  * `captions.json` を `FAKE_CAPTION` を 0 秒に置いたものに差し替える。開く前に呼ぶ
  */
 export async function routeCaptions(page: Page): Promise<void> {
-    await page.route('**/api/recordings/*/captions.json', (route) =>
-        route.fulfill({ json: { v: 1, pages: [{ at: 0, page: FAKE_CAPTION }] } }),
-    );
+  await page.route("**/api/recordings/*/captions.json", (route) =>
+    route.fulfill({ json: { v: 1, pages: [{ at: 0, page: FAKE_CAPTION }] } }),
+  );
 }
 
 /**
@@ -985,12 +1167,12 @@ export async function routeCaptions(page: Page): Promise<void> {
  * 広い画面 (1000px 以上) はサイドバーの「表示」、狭い画面は一覧の頭の1行の「⋯」から出るメニュー
  */
 export async function homeTools(page: Page): Promise<Locator> {
-    const side = page.getByTestId('sidebar');
-    if (await side.isVisible()) return side;
-    const menu = page.getByTestId('view-menu');
-    if (!(await menu.isVisible())) await page.getByTestId('view-toggle').click();
-    await expect(menu).toBeVisible();
-    return menu;
+  const side = page.getByTestId("sidebar");
+  if (await side.isVisible()) return side;
+  const menu = page.getByTestId("view-menu");
+  if (!(await menu.isVisible())) await page.getByTestId("view-toggle").click();
+  await expect(menu).toBeVisible();
+  return menu;
 }
 
 /**
@@ -998,11 +1180,13 @@ export async function homeTools(page: Page): Promise<Locator> {
  * 広い画面はサイドバーの行、狭い画面は一覧の頭のチップ
  */
 export async function homeFilter(page: Page, id: string): Promise<void> {
-    const side = page.getByTestId('sidebar');
-    const box = (await side.isVisible()) ? side : page.getByTestId('timeline-toolbar');
-    const button = box.locator(`[data-filter="${id}"]`);
-    await button.click();
-    await expect(button).toHaveAttribute('aria-pressed', 'true');
+  const side = page.getByTestId("sidebar");
+  const box = (await side.isVisible())
+    ? side
+    : page.getByTestId("timeline-toolbar");
+  const button = box.locator(`[data-filter="${id}"]`);
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
 /**
@@ -1013,30 +1197,37 @@ export async function homeFilter(page: Page, id: string): Promise<void> {
  * 中で、絵の縦横比 (`videoWidth`/`width`) を `object-fit: contain` で収めた矩形。絵の大きさがまだ分からなければ
  * 要素そのもの。列の最初のものは外枠 (枠線を含む `getBoundingClientRect`)
  */
-export async function expectSideAligned(page: Page, media: string, first: string): Promise<void> {
-    const picture = await page
-        .locator(media)
-        .first()
-        .evaluate((el) => {
-            const box = el.getBoundingClientRect();
-            const w =
-                el instanceof HTMLVideoElement
-                    ? el.videoWidth
-                    : el instanceof HTMLCanvasElement
-                      ? el.width
-                      : 0;
-            const h =
-                el instanceof HTMLVideoElement
-                    ? el.videoHeight
-                    : el instanceof HTMLCanvasElement
-                      ? el.height
-                      : 0;
-            if (w === 0 || h === 0) return box.top;
-            const scale = Math.min(box.width / w, box.height / h);
-            return box.top + (box.height - h * scale) / 2;
-        });
-    const head = (await page.locator(first).first().boundingBox())!;
-    expect(Math.abs(picture - head.y), `${media} の絵と ${first} の上端`).toBeLessThanOrEqual(1);
+export async function expectSideAligned(
+  page: Page,
+  media: string,
+  first: string,
+): Promise<void> {
+  const picture = await page
+    .locator(media)
+    .first()
+    .evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const w =
+        el instanceof HTMLVideoElement
+          ? el.videoWidth
+          : el instanceof HTMLCanvasElement
+            ? el.width
+            : 0;
+      const h =
+        el instanceof HTMLVideoElement
+          ? el.videoHeight
+          : el instanceof HTMLCanvasElement
+            ? el.height
+            : 0;
+      if (w === 0 || h === 0) return box.top;
+      const scale = Math.min(box.width / w, box.height / h);
+      return box.top + (box.height - h * scale) / 2;
+    });
+  const head = (await page.locator(first).first().boundingBox())!;
+  expect(
+    Math.abs(picture - head.y),
+    `${media} の絵と ${first} の上端`,
+  ).toBeLessThanOrEqual(1);
 }
 
 /**
@@ -1046,17 +1237,27 @@ export async function expectSideAligned(page: Page, media: string, first: string
  * 低い窓では枠が映像の形に縮んで、映像の列の真ん中に来る (`PlayerStage`)。映像の左右に同じだけ空きが足されるので、
  * 映像の左と映像から列の中身までは同じまま。列の右の余白は、映像の列 (`.main`) の左端と比べる
  */
-export async function expectSideFrame(page: Page, media: string, first: string): Promise<void> {
-    const picture = (await page.locator(media).first().boundingBox())!;
-    const head = (await page.locator(first).first().boundingBox())!;
-    const column = (await page.locator('[data-player-layout] > .main').first().boundingBox())!;
-    const width = await page.evaluate(() => document.documentElement.clientWidth);
-    const left = picture.x;
-    const gap = head.x - (picture.x + picture.width);
-    const right = width - (head.x + head.width);
-    expect(Math.abs(gap - left), `映像の左 ${left} と、映像から ${first} まで ${gap}`).toBeLessThanOrEqual(1);
-    expect(
-        Math.abs(right - column.x),
-        `映像の列の左 ${column.x} と、${first} の右 ${right}`,
-    ).toBeLessThanOrEqual(1);
+export async function expectSideFrame(
+  page: Page,
+  media: string,
+  first: string,
+): Promise<void> {
+  const picture = (await page.locator(media).first().boundingBox())!;
+  const head = (await page.locator(first).first().boundingBox())!;
+  const column = (await page
+    .locator("[data-player-layout] > .main")
+    .first()
+    .boundingBox())!;
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  const left = picture.x;
+  const gap = head.x - (picture.x + picture.width);
+  const right = width - (head.x + head.width);
+  expect(
+    Math.abs(gap - left),
+    `映像の左 ${left} と、映像から ${first} まで ${gap}`,
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(right - column.x),
+    `映像の列の左 ${column.x} と、${first} の右 ${right}`,
+  ).toBeLessThanOrEqual(1);
 }

@@ -15,12 +15,12 @@
  * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面で、読んだコマを `fmp4` と
  *   同じ経路でデコードして描く (`mkv.ts`)。音は選んだ1本 (`audio` の何本目か)
  */
-export type RawInput = 'ts-mpeg2' | 'fmp4' | 'mkv';
+export type RawInput = "ts-mpeg2" | "fmp4" | "mkv";
 
 /** 縮めて返す大きさ (`grab`) */
 export interface GrabSize {
-    width: number;
-    height: number;
+  width: number;
+  height: number;
 }
 
 /**
@@ -28,103 +28,113 @@ export interface GrabSize {
  * (worker の中は `downscale.ts`)。`high` で縮める — 低いほど 1920 から 32 へ点で拾い、写すたびに色が揺れる
  */
 export function shrink(size: GrabSize): ImageBitmapOptions {
-    return { resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'high' };
+  return {
+    resizeWidth: size.width,
+    resizeHeight: size.height,
+    resizeQuality: "high",
+  };
 }
 
 /** 画面 → worker */
 export type ToWorker =
-    | {
-          type: 'init';
-          /** 描く先。`transferControlToOffscreen` で渡す */
-          canvas: OffscreenCanvas;
-          /** デコーダの置き場 (`/api/live/mpeg2`)。worker からは絶対 URL で読む */
-          decoder: string;
-          input: RawInput;
-          /**
-           * 放送の今を追わないか (互換モードの追っかけ)。溜まっても先へ飛ばず、止めている間も
-           * 捨てない。そのかわり溢れそうなら受け取るのをやめて `full` を返す
-           */
-          follow: boolean;
-      }
-    /**
-     * 届いたもの (TS、または fMP4 の init・媒体1つ)。**頭の9バイト (多重化の頭) を飛ばした位置から**。
-     * fMP4 は箱の切れ目で届く (サーバが割ってから送る。`ts/fmp4.ts` の `Fmp4Splitter`)
-     */
-    | { type: 'data'; buffer: ArrayBuffer; offset: number }
-    /**
-     * いま鳴っている PTS (90kHz。伸ばしたもの) と、それが鳴った時刻 (`performance.timeOrigin +
-     * performance.now()` の ms)。**null は「止まっている」** — 映像もそこで止める
-     */
-    | { type: 'clock'; pts: number | null; at: number }
-    /**
-     * 画面が切り替わった時刻 (画面の requestAnimationFrame。`performance.timeOrigin + performance.now()` の ms)。
-     * worker はこれで次の切り替わりを見越し、その時点で出すフィールドを選ぶ (`cadence.ts`)
-     */
-    | { type: 'vsync'; at: number }
-    /**
-     * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる。** `from` (90kHz。届くものの PTS の物差しで、
-     * 元の TS なら一周の中) があれば、それより前のコマはデコードするだけで描かない — サーバは飛び先の少し手前
-     * (キーフレーム・1 秒前) から流すので、手前の映像 (CM を飛ばしたなら CM の映像) を出さないため
-     */
-    | { type: 'reset'; from?: number | null }
-    /** もう届かない (録画の尻まで読んだ。`engine.ts` の `finish`)。Matroska は待たせているコマを出しきる (`mkv.ts`) */
-    | { type: 'end' }
-    /** 何本目の音声をデコードするか (`AudioTrack.stream`) */
-    | { type: 'audio'; index: number }
-    /**
-     * いま出しているコマを1枚ください (切り抜き)。**映像は worker の canvas にあって、
-     * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
-     * `id` は返事 (`frame`) と組にするため。
-     *
-     * `size` を付けると、その大きさに縮めたものを返す (アンビエントモードの 32x18。`ambient.ts`)。
-     * 縮めるのは worker の中で、元の大きさの画素は読み出さない
-     */
-    | { type: 'grab'; id: number; size?: GrabSize }
-    /**
-     * 小窓 (PiP) へ出す映像の書き込み先 (`MediaStreamTrackGenerator` の `writable`)。
-     * **描いた1コマをその場で書き込む** — canvas の画面への更新を待たない (`engine.ts` の `pipStream`)
-     */
-    | { type: 'pip'; writable: WritableStream<VideoFrame> }
-    /** 小窓へ書き込むか。出していない間は書かない (1コマごとに写すぶん重い) */
-    | { type: 'pipFlow'; on: boolean }
-    /**
-     * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない** — 同じ端末で 2 本見ていると、
-     * 裏に回したほうも 1 コマ 10ms 前後デコードし続けて、見ているほうが間に合わなくなっていた。音は流し続ける
-     */
-    | { type: 'visible'; on: boolean };
+  | {
+      type: "init";
+      /** 描く先。`transferControlToOffscreen` で渡す */
+      canvas: OffscreenCanvas;
+      /** デコーダの置き場 (`/api/live/mpeg2`)。worker からは絶対 URL で読む */
+      decoder: string;
+      input: RawInput;
+      /**
+       * 放送の今を追わないか (互換モードの追っかけ)。溜まっても先へ飛ばず、止めている間も
+       * 捨てない。そのかわり溢れそうなら受け取るのをやめて `full` を返す
+       */
+      follow: boolean;
+    }
+  /**
+   * 届いたもの (TS、または fMP4 の init・媒体1つ)。**頭の9バイト (多重化の頭) を飛ばした位置から**。
+   * fMP4 は箱の切れ目で届く (サーバが割ってから送る。`ts/fmp4.ts` の `Fmp4Splitter`)
+   */
+  | { type: "data"; buffer: ArrayBuffer; offset: number }
+  /**
+   * いま鳴っている PTS (90kHz。伸ばしたもの) と、それが鳴った時刻 (`performance.timeOrigin +
+   * performance.now()` の ms)。**null は「止まっている」** — 映像もそこで止める
+   */
+  | { type: "clock"; pts: number | null; at: number }
+  /**
+   * 画面が切り替わった時刻 (画面の requestAnimationFrame。`performance.timeOrigin + performance.now()` の ms)。
+   * worker はこれで次の切り替わりを見越し、その時点で出すフィールドを選ぶ (`cadence.ts`)
+   */
+  | { type: "vsync"; at: number }
+  /**
+   * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる。** `from` (90kHz。届くものの PTS の物差しで、
+   * 元の TS なら一周の中) があれば、それより前のコマはデコードするだけで描かない — サーバは飛び先の少し手前
+   * (キーフレーム・1 秒前) から流すので、手前の映像 (CM を飛ばしたなら CM の映像) を出さないため
+   */
+  | { type: "reset"; from?: number | null }
+  /** もう届かない (録画の尻まで読んだ。`engine.ts` の `finish`)。Matroska は待たせているコマを出しきる (`mkv.ts`) */
+  | { type: "end" }
+  /** 何本目の音声をデコードするか (`AudioTrack.stream`) */
+  | { type: "audio"; index: number }
+  /**
+   * いま出しているコマを1枚ください (切り抜き)。**映像は worker の canvas にあって、
+   * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
+   * `id` は返事 (`frame`) と組にするため。
+   *
+   * `size` を付けると、その大きさに縮めたものを返す (アンビエントモードの 32x18。`ambient.ts`)。
+   * 縮めるのは worker の中で、元の大きさの画素は読み出さない
+   */
+  | { type: "grab"; id: number; size?: GrabSize }
+  /**
+   * 小窓 (PiP) へ出す映像の書き込み先 (`MediaStreamTrackGenerator` の `writable`)。
+   * **描いた1コマをその場で書き込む** — canvas の画面への更新を待たない (`engine.ts` の `pipStream`)
+   */
+  | { type: "pip"; writable: WritableStream<VideoFrame> }
+  /** 小窓へ書き込むか。出していない間は書かない (1コマごとに写すぶん重い) */
+  | { type: "pipFlow"; on: boolean }
+  /**
+   * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない** — 同じ端末で 2 本見ていると、
+   * 裏に回したほうも 1 コマ 10ms 前後デコードし続けて、見ているほうが間に合わなくなっていた。音は流し続ける
+   */
+  | { type: "visible"; on: boolean };
 
 /** worker → 画面 */
 export type FromWorker =
-    /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の方式に移るか止まるかは画面が決める** */
-    | { type: 'fail'; reason: string }
-    /**
-     * デコードできた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
-     */
-    | {
-          type: 'audio';
-          pts: number;
-          duration: number;
-          sampleRate: number;
-          planes: Float32Array[];
-      }
-    /** 選局し直してから最初のフレームを描いた。**前の局の静止画を剥がす合図** */
-    | { type: 'shown' }
-    /**
-     * 描いている絵の大きさ (見せる大きさ。画素の縦横比を掛けたもの)。**変わったときだけ** 送る。
-     * canvas は worker に渡してあるので、画面の側からは絵の形が分からない (`PlayerStage` が枠をこの形にする)
-     */
-    | { type: 'size'; width: number; height: number }
-    /**
-     * デコーダ (WASM) を読み終え、それまで溜めていたものを渡しきった。**これより前は「尻まで読んだのに
-     * 音が来ない」を終わりと見なさない** (`RawEngine.finish`)
-     */
-    | { type: 'ready' }
-    /** 数字 (1秒ごと)。画面に出すもの */
-    | { type: 'stats'; dropped: number; p95: number; shown: number; thinned: boolean }
-    /** `grab` の返事。まだ何も出していなければ null */
-    | { type: 'frame'; id: number; bitmap: ImageBitmap | null }
-    /**
-     * 抱えきれなくなったので、届いたものを捨て始めた (`follow` のときだけ)。**画面は手元が尽きる前に
-     * 再生している位置からリクエストし直す** (`live-player.svelte.ts` の `starved`)
-     */
-    | { type: 'full' };
+  /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の方式に移るか止まるかは画面が決める** */
+  | { type: "fail"; reason: string }
+  /**
+   * デコードできた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
+   */
+  | {
+      type: "audio";
+      pts: number;
+      duration: number;
+      sampleRate: number;
+      planes: Float32Array[];
+    }
+  /** 選局し直してから最初のフレームを描いた。**前の局の静止画を剥がす合図** */
+  | { type: "shown" }
+  /**
+   * 描いている絵の大きさ (見せる大きさ。画素の縦横比を掛けたもの)。**変わったときだけ** 送る。
+   * canvas は worker に渡してあるので、画面の側からは絵の形が分からない (`PlayerStage` が枠をこの形にする)
+   */
+  | { type: "size"; width: number; height: number }
+  /**
+   * デコーダ (WASM) を読み終え、それまで溜めていたものを渡しきった。**これより前は「尻まで読んだのに
+   * 音が来ない」を終わりと見なさない** (`RawEngine.finish`)
+   */
+  | { type: "ready" }
+  /** 数字 (1秒ごと)。画面に出すもの */
+  | {
+      type: "stats";
+      dropped: number;
+      p95: number;
+      shown: number;
+      thinned: boolean;
+    }
+  /** `grab` の返事。まだ何も出していなければ null */
+  | { type: "frame"; id: number; bitmap: ImageBitmap | null }
+  /**
+   * 抱えきれなくなったので、届いたものを捨て始めた (`follow` のときだけ)。**画面は手元が尽きる前に
+   * 再生している位置からリクエストし直す** (`live-player.svelte.ts` の `starved`)
+   */
+  | { type: "full" };

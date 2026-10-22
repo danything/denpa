@@ -20,9 +20,9 @@
  * 間隔が空く)。
  */
 
-import { BmlDecoder } from '#lib/ts/bml.js';
-import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
-import { Carousel } from '#lib/ts/carousel.js';
+import { BmlDecoder } from "#lib/ts/bml.js";
+import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
+import { Carousel } from "#lib/ts/carousel.js";
 
 export type { ResponseMessage };
 
@@ -33,57 +33,57 @@ export type { ResponseMessage };
  * 覚えているモジュールを持ち越すと前の局の画面が出る。
  */
 export class DataBroadcast {
-    private readonly decoder: BmlDecoder;
-    private readonly held = new Carousel();
-    private closed = false;
+  private readonly decoder: BmlDecoder;
+  private readonly held = new Carousel();
+  private closed = false;
 
-    /** @param onMessage 組み立て終わったものが出るたび */
-    constructor(private readonly onMessage: (message: ResponseMessage) => void) {
-        this.decoder = new BmlDecoder((message) => {
-            if (this.closed) return;
-            // 配る価値のあるものだけ通す ([Carousel](../ts/carousel.ts))
-            if (this.held.take(message)) this.onMessage(message);
-        });
-    }
+  /** @param onMessage 組み立て終わったものが出るたび */
+  constructor(private readonly onMessage: (message: ResponseMessage) => void) {
+    this.decoder = new BmlDecoder((message) => {
+      if (this.closed) return;
+      // 配る価値のあるものだけ通す ([Carousel](../ts/carousel.ts))
+      if (this.held.take(message)) this.onMessage(message);
+    });
+  }
 
-    /**
-     * 1局に絞った TS を食わせる。**転んでも投げ返さない。**
-     *
-     * データ放送は映像の付け足しなので、デコードする側が転んだらそこで諦めて、映像は
-     * 流し続ける。**投げ返すと TS を送り込んでいるところ (`Session.pump`) ごと
-     * 落ちて、映像まで出なくなる** — 実際に落としたことがある。
-     */
-    feed(chunk: Uint8Array): void {
-        if (this.closed) return;
-        try {
-            this.decoder.feed(chunk);
-        } catch (error) {
-            this.fell(error);
-        }
+  /**
+   * 1局に絞った TS を食わせる。**転んでも投げ返さない。**
+   *
+   * データ放送は映像の付け足しなので、デコードする側が転んだらそこで諦めて、映像は
+   * 流し続ける。**投げ返すと TS を送り込んでいるところ (`Session.pump`) ごと
+   * 落ちて、映像まで出なくなる** — 実際に落としたことがある。
+   */
+  feed(chunk: Uint8Array): void {
+    if (this.closed) return;
+    try {
+      this.decoder.feed(chunk);
+    } catch (error) {
+      this.fell(error);
     }
+  }
 
-    /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket`)。転び方は `feed` と同じ */
-    feedPacket(packet: Uint8Array): void {
-        if (this.closed) return;
-        try {
-            this.decoder.feedPacket(packet);
-        } catch (error) {
-            this.fell(error);
-        }
+  /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket`)。転び方は `feed` と同じ */
+  feedPacket(packet: Uint8Array): void {
+    if (this.closed) return;
+    try {
+      this.decoder.feedPacket(packet);
+    } catch (error) {
+      this.fell(error);
     }
+  }
 
-    private fell(error: unknown): void {
-        // 言うのは1回だけ。転び続けると記録がそれで埋まる
-        console.error(`[data] データ放送をデコードするのをやめました: ${error}`);
-        this.close();
-    }
+  private fell(error: unknown): void {
+    // 言うのは1回だけ。転び続けると記録がそれで埋まる
+    console.error(`[data] データ放送をデコードするのをやめました: ${error}`);
+    this.close();
+  }
 
-    /** 繋いできた人に配り直すぶん ([Carousel](../ts/carousel.ts)) */
-    replay(): ResponseMessage[] {
-        return this.held.replay();
-    }
+  /** 繋いできた人に配り直すぶん ([Carousel](../ts/carousel.ts)) */
+  replay(): ResponseMessage[] {
+    return this.held.replay();
+  }
 
-    close(): void {
-        this.closed = true;
-    }
+  close(): void {
+    this.closed = true;
+  }
 }

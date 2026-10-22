@@ -113,54 +113,54 @@ const GAP_MARGIN = 1.2;
 const GAP_PAD = 0.1;
 
 export interface Buffered {
-    /** 持っている中でいちばん古い時刻 */
-    start: number;
-    /** いちばん新しい時刻 = 放送の今 */
-    end: number;
-    /** いま再生している時刻 */
-    at: number;
-    /** もう再生を始めているか */
-    playing: boolean;
-    /** どれだけ貯めてから出すか */
-    target: number;
-    /**
-     * 追っかけ再生か。**放送の今を追わない。**
-     *
-     * 止めて見ていたり、シークバーを戻したりして**わざと遅れて見ている**状態。
-     * ここで勝手に飛ぶと、見ようとしていた場面を飛ばすことになる
-     */
-    chasing: boolean;
-    /** 追っかけ中の速さ。見ている人が選ぶ。ライブに戻れば使わない */
-    speed: number;
-    /**
-     * ここしばらくの貯まりの**いちばん低いところ** (秒)。省けばいまの貯まり (`end - at`)。
-     *
-     * **届いた瞬間の貯まりで決めない。** 塊が届いた直後は貯まりがいちばん多く、束で届けば
-     * 届くたびに跳ねる。そこで「多すぎる」と見て速めると、次の塊が遅れたときに使い切って止まる (#1210)。
-     * 見るのは次が届く直前の低いところに、ここ数秒の届く間隔 (`dip`) を足したもの —
-     * 滑らかに届いていれば今までの「届いた直後の貯まり」と同じ高さになり、遅延は変わらない
-     */
-    low?: number | undefined;
-    /**
-     * ここ数秒でいちばん長く空いた届く間隔 (秒)。`low` に足す (**低いところから届いた直後までの差**)。
-     * 何分も前の長い空きは入れない — そちらは `target` が覆う (`cover`)。足さないと二重に貯めて遅れる
-     */
-    dip?: number;
-    /** いまの再生の速さ。省けば 1。**速めているのか遅くしているのかで、戻す境目が違う** (`steer`) */
-    rate?: number;
-    /** 速さの寄せ方。省けば `SMOOTH` (`Steering`) */
-    steering?: Steering;
+  /** 持っている中でいちばん古い時刻 */
+  start: number;
+  /** いちばん新しい時刻 = 放送の今 */
+  end: number;
+  /** いま再生している時刻 */
+  at: number;
+  /** もう再生を始めているか */
+  playing: boolean;
+  /** どれだけ貯めてから出すか */
+  target: number;
+  /**
+   * 追っかけ再生か。**放送の今を追わない。**
+   *
+   * 止めて見ていたり、シークバーを戻したりして**わざと遅れて見ている**状態。
+   * ここで勝手に飛ぶと、見ようとしていた場面を飛ばすことになる
+   */
+  chasing: boolean;
+  /** 追っかけ中の速さ。見ている人が選ぶ。ライブに戻れば使わない */
+  speed: number;
+  /**
+   * ここしばらくの貯まりの**いちばん低いところ** (秒)。省けばいまの貯まり (`end - at`)。
+   *
+   * **届いた瞬間の貯まりで決めない。** 塊が届いた直後は貯まりがいちばん多く、束で届けば
+   * 届くたびに跳ねる。そこで「多すぎる」と見て速めると、次の塊が遅れたときに使い切って止まる (#1210)。
+   * 見るのは次が届く直前の低いところに、ここ数秒の届く間隔 (`dip`) を足したもの —
+   * 滑らかに届いていれば今までの「届いた直後の貯まり」と同じ高さになり、遅延は変わらない
+   */
+  low?: number | undefined;
+  /**
+   * ここ数秒でいちばん長く空いた届く間隔 (秒)。`low` に足す (**低いところから届いた直後までの差**)。
+   * 何分も前の長い空きは入れない — そちらは `target` が覆う (`cover`)。足さないと二重に貯めて遅れる
+   */
+  dip?: number;
+  /** いまの再生の速さ。省けば 1。**速めているのか遅くしているのかで、戻す境目が違う** (`steer`) */
+  rate?: number;
+  /** 速さの寄せ方。省けば `SMOOTH` (`Steering`) */
+  steering?: Steering;
 }
 
 export interface Pacing {
-    /** ここへ移る。移らないなら null */
-    seek: number | null;
-    /** ここで再生を始める */
-    play: boolean;
-    /** 再生の速さ。**null は今のまま** (毎回入れ直すと往復する) */
-    rate: number | null;
-    /** 追っかけが放送の今に追いついた。**呼ぶ側はライブに戻す** */
-    caught: boolean;
+  /** ここへ移る。移らないなら null */
+  seek: number | null;
+  /** ここで再生を始める */
+  play: boolean;
+  /** 再生の速さ。**null は今のまま** (毎回入れ直すと往復する) */
+  rate: number | null;
+  /** 追っかけが放送の今に追いついた。**呼ぶ側はライブに戻す** */
+  caught: boolean;
 }
 
 /**
@@ -179,41 +179,50 @@ export interface Pacing {
  * 「止めた所から見られる」と謳っておきながら、8秒より長く止めると戻れなかった。
  */
 export function pacing({
-    start,
-    end,
-    at,
-    playing,
-    target,
-    chasing,
-    speed,
-    low,
-    dip,
-    rate,
-    steering,
+  start,
+  end,
+  at,
+  playing,
+  target,
+  chasing,
+  speed,
+  low,
+  dip,
+  rate,
+  steering,
 }: Buffered): Pacing {
-    // 範囲の外にいる。チャンネルを変えた直後もここを通る
-    if (at < start || at > end) return { seek: start, play: false, rate: 1, caught: false };
+  // 範囲の外にいる。チャンネルを変えた直後もここを通る
+  if (at < start || at > end)
+    return { seek: start, play: false, rate: 1, caught: false };
 
-    // まだ貯まっていない。始めると、すぐ足りなくなって止まる
-    if (!playing) return { seek: null, play: end - at >= target, rate: 1, caught: false };
+  // まだ貯まっていない。始めると、すぐ足りなくなって止まる
+  if (!playing)
+    return { seek: null, play: end - at >= target, rate: 1, caught: false };
 
-    const lag = end - at;
+  const lag = end - at;
 
-    if (chasing) {
-        /*
-         * **追いついた。** ここから先はライブと同じ扱いにする — 選んだ速さのまま
-         * だと放送を追い越してしまい、溜まりを使い切って止まる
-         */
-        if (lag <= target * 1.1) return { seek: null, play: true, rate: 1, caught: true };
-        // 飛ばない。選ばれた速さのまま進む
-        return { seek: null, play: true, rate: speed, caught: false };
-    }
+  if (chasing) {
+    /*
+     * **追いついた。** ここから先はライブと同じ扱いにする — 選んだ速さのまま
+     * だと放送を追い越してしまい、溜まりを使い切って止まる
+     */
+    if (lag <= target * 1.1)
+      return { seek: null, play: true, rate: 1, caught: true };
+    // 飛ばない。選ばれた速さのまま進む
+    return { seek: null, play: true, rate: speed, caught: false };
+  }
 
-    // 大きく離れた。**詰めきれないので飛ぶ** — 別のタブから戻ってきたとき
-    if (lag > target + JUMP) return { seek: end - target, play: true, rate: 1, caught: false };
-    // 少し離れた・少し足りない。速さで寄せる。飛ばないので音は切れない
-    const level = low === undefined ? lag : low + (dip ?? 0);
-    return { seek: null, play: true, rate: steer(level, target, rate, steering), caught: false };
+  // 大きく離れた。**詰めきれないので飛ぶ** — 別のタブから戻ってきたとき
+  if (lag > target + JUMP)
+    return { seek: end - target, play: true, rate: 1, caught: false };
+  // 少し離れた・少し足りない。速さで寄せる。飛ばないので音は切れない
+  const level = low === undefined ? lag : low + (dip ?? 0);
+  return {
+    seek: null,
+    play: true,
+    rate: steer(level, target, rate, steering),
+    caught: false,
+  };
 }
 
 /**
@@ -225,18 +234,23 @@ export function pacing({
  * dash.js も Safari では 0.25 より小さく速さを変えない。hls.js は遅くせず、1秒より多く貯まっているときだけ速める
  */
 export interface Steering {
-    /** 狙いを割ったら少し遅くするか (`SLOW_DOWN`) */
-    slowDown: boolean;
-    /** 速め始める貯まり = 狙い × これ + `catchUpPad` */
-    catchUpRatio: number;
-    /** 速め始める貯まりに足す量 (秒) */
-    catchUpPad: number;
-    /** 速めていたのを、狙いの何倍まで下りたら等速に戻すか */
-    settleRatio: number;
+  /** 狙いを割ったら少し遅くするか (`SLOW_DOWN`) */
+  slowDown: boolean;
+  /** 速め始める貯まり = 狙い × これ + `catchUpPad` */
+  catchUpRatio: number;
+  /** 速め始める貯まりに足す量 (秒) */
+  catchUpPad: number;
+  /** 速めていたのを、狙いの何倍まで下りたら等速に戻すか */
+  settleRatio: number;
 }
 
 /** 速さを細かく動かせるブラウザ。止まる前に遅くし、少し多ければすぐ詰める */
-export const SMOOTH: Steering = { slowDown: true, catchUpRatio: 1.5, catchUpPad: 0, settleRatio: 1.1 };
+export const SMOOTH: Steering = {
+  slowDown: true,
+  catchUpRatio: 1.5,
+  catchUpPad: 0,
+  settleRatio: 1.1,
+};
 
 /**
  * 速さを変えるとつまずくブラウザ (Safari)。**変える回数を減らし、変えるのは余裕があるときだけ。**
@@ -247,14 +261,19 @@ export const SMOOTH: Steering = { slowDown: true, catchUpRatio: 1.5, catchUpPad:
  *
  * 速める幅は変えない。つまずくのは変えた回数ぶんで、幅を大きくしても上げ下げの2回は減らない
  */
-export const STEADY: Steering = { slowDown: false, catchUpRatio: 1, catchUpPad: 1, settleRatio: 1.3 };
+export const STEADY: Steering = {
+  slowDown: false,
+  catchUpRatio: 1,
+  catchUpPad: 1,
+  settleRatio: 1.3,
+};
 
 /** 速さを変えない。**確かめるためだけ** (live-player の `chooseSteering`)。追っかけの速さはそのまま */
 export const FIXED: Steering = {
-    slowDown: false,
-    catchUpRatio: Number.POSITIVE_INFINITY,
-    catchUpPad: 0,
-    settleRatio: Number.POSITIVE_INFINITY,
+  slowDown: false,
+  catchUpRatio: Number.POSITIVE_INFINITY,
+  catchUpPad: 0,
+  settleRatio: Number.POSITIVE_INFINITY,
 };
 
 /**
@@ -272,12 +291,18 @@ export const FIXED: Steering = {
  * @param rate いまの速さ
  * @returns 次の速さ。null は今のまま
  */
-export function steer(low: number, target: number, rate = 1, steering: Steering = SMOOTH): number | null {
-    if (low > target * steering.catchUpRatio + steering.catchUpPad) return CATCH_UP;
-    if (steering.slowDown && low < target) return SLOW_DOWN;
-    // 遅くしていたなら、狙いに戻ったところでやめる (遅延を足すのは足りない間だけ)
-    if (rate < 1) return 1;
-    return low <= target * steering.settleRatio ? 1 : null;
+export function steer(
+  low: number,
+  target: number,
+  rate = 1,
+  steering: Steering = SMOOTH,
+): number | null {
+  if (low > target * steering.catchUpRatio + steering.catchUpPad)
+    return CATCH_UP;
+  if (steering.slowDown && low < target) return SLOW_DOWN;
+  // 遅くしていたなら、狙いに戻ったところでやめる (遅延を足すのは足りない間だけ)
+  if (rate < 1) return 1;
+  return low <= target * steering.settleRatio ? 1 : null;
 }
 
 /**
@@ -293,8 +318,8 @@ export const SPEEDS = [1, 1.25, 1.5, 2] as const;
  * **戻る側も持つ** — 行き過ぎたら戻れないと不便。並びに無い速さからは等速の位置から数える
  */
 export function stepSpeed(speed: number, by: number): number {
-    const at = Math.max(0, SPEEDS.indexOf(speed as (typeof SPEEDS)[number]));
-    return SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, at + by))] ?? speed;
+  const at = Math.max(0, SPEEDS.indexOf(speed as (typeof SPEEDS)[number]));
+  return SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, at + by))] ?? speed;
 }
 
 /**
@@ -303,15 +328,15 @@ export function stepSpeed(speed: number, by: number): number {
  * 読み上げでも同じことが分かるように
  */
 export function speedLabel(label: string, speed: number): string {
-    return speed === 1 ? label : `${label} ${speed}倍`;
+  return speed === 1 ? label : `${label} ${speed}倍`;
 }
 
 /** 貯める量と、その下限 */
 export interface Buffering {
-    /** どれだけ貯めてから出すか (秒) */
-    target: number;
-    /** ここより下へは戻さない (秒)。**止まった高さを覚えている** */
-    floor: number;
+  /** どれだけ貯めてから出すか (秒) */
+  target: number;
+  /** ここより下へは戻さない (秒)。**止まった高さを覚えている** */
+  floor: number;
 }
 
 /**
@@ -358,34 +383,41 @@ export interface Buffering {
  * @param gap ここ数分 (`GAP_WINDOW`) でいちばん長く空いた届く間隔 (秒)。詰まりを起こした空きも入る
  */
 export function nextTarget(
-    now: Buffering,
-    stalled: boolean,
-    settledFor: number,
-    floorFor: number,
-    gap = 0,
+  now: Buffering,
+  stalled: boolean,
+  settledFor: number,
+  floorFor: number,
+  gap = 0,
 ): Buffering {
-    const covered = cover(gap);
-    if (stalled) {
-        /*
-         * **空きで説明がつく詰まりなら、空きを覆う高さへ一度に上げる。** 覚えている下限は動かさない —
-         * 空きが来なくなれば `GAP_WINDOW` で忘れて、遅延も戻る (1回の空きでずっと遅れて見せない)。
-         * 説明がつかない詰まりだけ、今までどおり止まった高さのすぐ上を下限として覚える
-         */
-        if (covered > now.target) {
-            return { target: Math.min(CEILING, Math.max(covered, now.floor)), floor: now.floor };
-        }
-        const floor = Math.min(CEILING, Math.max(now.floor, now.target + PROBE));
-        return { target: Math.min(CEILING, now.target + GROW), floor };
+  const covered = cover(gap);
+  if (stalled) {
+    /*
+     * **空きで説明がつく詰まりなら、空きを覆う高さへ一度に上げる。** 覚えている下限は動かさない —
+     * 空きが来なくなれば `GAP_WINDOW` で忘れて、遅延も戻る (1回の空きでずっと遅れて見せない)。
+     * 説明がつかない詰まりだけ、今までどおり止まった高さのすぐ上を下限として覚える
+     */
+    if (covered > now.target) {
+      return {
+        target: Math.min(CEILING, Math.max(covered, now.floor)),
+        floor: now.floor,
+      };
     }
-    // 長く無事だった。下限そのものを少し下げて、もう一度試す。**まだ空く間隔を覆う高さより下げない**
-    const floor =
-        settledFor >= FORGET && floorFor >= FORGET
-            ? Math.max(FLOOR, Math.min(now.floor, Math.max(covered, now.floor - PROBE)))
-            : now.floor;
-    const least = Math.max(floor, covered);
-    if (settledFor < SETTLED) return { target: Math.max(least, now.target), floor };
-    const shrunk = now.target - Math.max(SHRINK_LEAST, now.target * SHRINK_RATIO);
-    return { target: Math.max(least, shrunk), floor };
+    const floor = Math.min(CEILING, Math.max(now.floor, now.target + PROBE));
+    return { target: Math.min(CEILING, now.target + GROW), floor };
+  }
+  // 長く無事だった。下限そのものを少し下げて、もう一度試す。**まだ空く間隔を覆う高さより下げない**
+  const floor =
+    settledFor >= FORGET && floorFor >= FORGET
+      ? Math.max(
+          FLOOR,
+          Math.min(now.floor, Math.max(covered, now.floor - PROBE)),
+        )
+      : now.floor;
+  const least = Math.max(floor, covered);
+  if (settledFor < SETTLED)
+    return { target: Math.max(least, now.target), floor };
+  const shrunk = now.target - Math.max(SHRINK_LEAST, now.target * SHRINK_RATIO);
+  return { target: Math.max(least, shrunk), floor };
 }
 
 /**
@@ -393,8 +425,11 @@ export function nextTarget(
  * 宅内のように塊が 0.05 秒ごとに来ていれば `FLOOR` のまま。長すぎる空き (`GAP_MOST`) は途絶えと見て、そこで打ち止め
  */
 export function cover(gap: number): number {
-    if (!(gap > 0)) return FLOOR;
-    return Math.min(CEILING, Math.max(FLOOR, Math.min(gap, GAP_MOST) * GAP_MARGIN + GAP_PAD));
+  if (!(gap > 0)) return FLOOR;
+  return Math.min(
+    CEILING,
+    Math.max(FLOOR, Math.min(gap, GAP_MOST) * GAP_MARGIN + GAP_PAD),
+  );
 }
 
 /**
@@ -404,38 +439,47 @@ export function cover(gap: number): number {
  * 届く間隔 (いちばん長い空き) と、貯まりの低いところ (いちばん少ない) に使う
  */
 export class Extreme {
-    readonly #items: { at: number; value: number }[] = [];
-    /**
-     * @param span 覚えておく長さ。`at` と同じ単位
-     * @param highest 大きいほうを覚えるか。false なら小さいほう
-     */
-    constructor(
-        readonly span: number,
-        readonly highest: boolean,
-    ) {}
+  readonly #items: { at: number; value: number }[] = [];
+  /**
+   * @param span 覚えておく長さ。`at` と同じ単位
+   * @param highest 大きいほうを覚えるか。false なら小さいほう
+   */
+  constructor(
+    readonly span: number,
+    readonly highest: boolean,
+  ) {}
 
-    push(at: number, value: number): void {
-        const items = this.#items;
-        const beaten = (old: number) => (this.highest ? old <= value : old >= value);
-        for (let last = items.at(-1); last !== undefined && beaten(last.value); last = items.at(-1))
-            items.pop();
-        items.push({ at, value });
-        this.#drop(at);
-    }
+  push(at: number, value: number): void {
+    const items = this.#items;
+    const beaten = (old: number) =>
+      this.highest ? old <= value : old >= value;
+    for (
+      let last = items.at(-1);
+      last !== undefined && beaten(last.value);
+      last = items.at(-1)
+    )
+      items.pop();
+    items.push({ at, value });
+    this.#drop(at);
+  }
 
-    /** `at` の時点で覚えている中のいちばん。何も無ければ null */
-    peek(at: number): number | null {
-        this.#drop(at);
-        return this.#items[0]?.value ?? null;
-    }
+  /** `at` の時点で覚えている中のいちばん。何も無ければ null */
+  peek(at: number): number | null {
+    this.#drop(at);
+    return this.#items[0]?.value ?? null;
+  }
 
-    clear(): void {
-        this.#items.length = 0;
-    }
+  clear(): void {
+    this.#items.length = 0;
+  }
 
-    #drop(at: number): void {
-        const items = this.#items;
-        for (let first = items[0]; first !== undefined && first.at < at - this.span; first = items[0])
-            items.shift();
-    }
+  #drop(at: number): void {
+    const items = this.#items;
+    for (
+      let first = items[0];
+      first !== undefined && first.at < at - this.span;
+      first = items[0]
+    )
+      items.shift();
+  }
 }

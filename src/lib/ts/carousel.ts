@@ -49,7 +49,7 @@
  * 映像が出ないより先に、こういう形で出る
  */
 
-import type { ResponseMessage } from './bml-protocol';
+import type { ResponseMessage } from "./bml-protocol";
 
 /**
  * 覚えておくモジュールの上限。**溜め込みすぎない歯止め。**
@@ -62,78 +62,81 @@ export const KEEP_MODULES = 256;
 
 /** コンポーネントとモジュールの組で1つ */
 function moduleKey(message: { componentId: number; moduleId: number }): string {
-    return `${message.componentId}/${message.moduleId}`;
+  return `${message.componentId}/${message.moduleId}`;
 }
 
 export class Carousel {
-    private pmt: ResponseMessage | null = null;
-    private programInfo: ResponseMessage | null = null;
-    /** DII。**コンポーネントごとに最後の1つ** (上の説明) */
-    private readonly lists = new Map<number, ResponseMessage>();
-    private readonly modules = new Map<string, ResponseMessage>();
+  private pmt: ResponseMessage | null = null;
+  private programInfo: ResponseMessage | null = null;
+  /** DII。**コンポーネントごとに最後の1つ** (上の説明) */
+  private readonly lists = new Map<number, ResponseMessage>();
+  private readonly modules = new Map<string, ResponseMessage>();
 
-    /**
-     * 1つ受ける。**覚えるかどうかと、配る価値があるかをここで決める**
-     *
-     * @returns 配る価値があるか (上の説明)
+  /**
+   * 1つ受ける。**覚えるかどうかと、配る価値があるかをここで決める**
+   *
+   * @returns 配る価値があるか (上の説明)
+   */
+  take(message: ResponseMessage): boolean {
+    if (message.type === "pmt") {
+      const same =
+        this.pmt !== null &&
+        JSON.stringify(this.pmt) === JSON.stringify(message);
+      this.pmt = message;
+      return !same;
+    }
+    if (message.type === "programInfo") {
+      const same =
+        this.programInfo !== null &&
+        JSON.stringify(this.programInfo) === JSON.stringify(message);
+      this.programInfo = message;
+      return !same;
+    }
+    /*
+     * **DII は覚えるが、通すのは毎回。** 放送のアプリは「変わったこと」を
+     * DII の繰り返しで知る (版とデータイベント番号を突き合わせる) ので、
+     * 同じものでも間引かない
      */
-    take(message: ResponseMessage): boolean {
-        if (message.type === 'pmt') {
-            const same = this.pmt !== null && JSON.stringify(this.pmt) === JSON.stringify(message);
-            this.pmt = message;
-            return !same;
-        }
-        if (message.type === 'programInfo') {
-            const same =
-                this.programInfo !== null && JSON.stringify(this.programInfo) === JSON.stringify(message);
-            this.programInfo = message;
-            return !same;
-        }
-        /*
-         * **DII は覚えるが、通すのは毎回。** 放送のアプリは「変わったこと」を
-         * DII の繰り返しで知る (版とデータイベント番号を突き合わせる) ので、
-         * 同じものでも間引かない
-         */
-        if (message.type === 'moduleListUpdated') {
-            this.lists.set(message.componentId, message);
-            return true;
-        }
-        if (message.type !== 'moduleDownloaded') return true;
-        const key = moduleKey(message);
-        /*
-         * **入れ直す前に消す。** Map は入れた順に並ぶので、上書きしただけでは
-         * 古い位置に居座る。溢れたときに落とすのは「いちばん古く**来た**もの」で
-         * ありたいので、来るたびに末尾へ動かす
-         */
-        this.modules.delete(key);
-        this.modules.set(key, message);
-        while (this.modules.size > KEEP_MODULES) {
-            const oldest = this.modules.keys().next().value;
-            if (oldest === undefined) break;
-            this.modules.delete(oldest);
-        }
-        return true;
+    if (message.type === "moduleListUpdated") {
+      this.lists.set(message.componentId, message);
+      return true;
     }
-
-    /**
-     * 繋いできた人に渡すぶん。
-     *
-     * **出す順は pmt → programInfo → DII → モジュール** — 何番のコンポーネントを
-     * 出すかが決まってからでないと、モジュールを渡しても置き場所が無い。DII は
-     * モジュールより先に置く (「在る」と言う前に中身だけ来ても、受け側は
-     * 在ることを知らないまま)
+    if (message.type !== "moduleDownloaded") return true;
+    const key = moduleKey(message);
+    /*
+     * **入れ直す前に消す。** Map は入れた順に並ぶので、上書きしただけでは
+     * 古い位置に居座る。溢れたときに落とすのは「いちばん古く**来た**もの」で
+     * ありたいので、来るたびに末尾へ動かす
      */
-    replay(): ResponseMessage[] {
-        const out: ResponseMessage[] = [];
-        if (this.pmt !== null) out.push(this.pmt);
-        if (this.programInfo !== null) out.push(this.programInfo);
-        for (const held of this.lists.values()) out.push(held);
-        for (const held of this.modules.values()) out.push(held);
-        return out;
+    this.modules.delete(key);
+    this.modules.set(key, message);
+    while (this.modules.size > KEEP_MODULES) {
+      const oldest = this.modules.keys().next().value;
+      if (oldest === undefined) break;
+      this.modules.delete(oldest);
     }
+    return true;
+  }
 
-    /** 覚えているモジュールの数。**画面には出さない** (切り分け用) */
-    get held(): number {
-        return this.modules.size;
-    }
+  /**
+   * 繋いできた人に渡すぶん。
+   *
+   * **出す順は pmt → programInfo → DII → モジュール** — 何番のコンポーネントを
+   * 出すかが決まってからでないと、モジュールを渡しても置き場所が無い。DII は
+   * モジュールより先に置く (「在る」と言う前に中身だけ来ても、受け側は
+   * 在ることを知らないまま)
+   */
+  replay(): ResponseMessage[] {
+    const out: ResponseMessage[] = [];
+    if (this.pmt !== null) out.push(this.pmt);
+    if (this.programInfo !== null) out.push(this.programInfo);
+    for (const held of this.lists.values()) out.push(held);
+    for (const held of this.modules.values()) out.push(held);
+    return out;
+  }
+
+  /** 覚えているモジュールの数。**画面には出さない** (切り分け用) */
+  get held(): number {
+    return this.modules.size;
+  }
 }

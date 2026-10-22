@@ -1,4 +1,4 @@
-import { manifest } from '#lib/server/manifest.js';
+import { manifest } from "#lib/server/manifest.js";
 
 /**
  * PWA のマニフェスト。**静的ファイルではなく、ここで組み立てる。**
@@ -8,12 +8,12 @@ import { manifest } from '#lib/server/manifest.js';
  * アイコンが2つ並ぶ。
  */
 export function GET({ url, setHeaders }) {
-    /*
-     * **覚えさせない。** 名前を変えたときに、古い名前のまま入れ直されるのを
-     * 避ける。1回きりの小さな JSON なので、毎回聞かせても困らない
-     */
-    setHeaders({ 'cache-control': 'no-cache' });
-    return new Response(JSON.stringify(manifest(url.hostname)), {
-        headers: { 'content-type': 'application/manifest+json' },
-    });
+  /*
+   * **覚えさせない。** 名前を変えたときに、古い名前のまま入れ直されるのを
+   * 避ける。1回きりの小さな JSON なので、毎回聞かせても困らない
+   */
+  setHeaders({ "cache-control": "no-cache" });
+  return new Response(JSON.stringify(manifest(url.hostname)), {
+    headers: { "content-type": "application/manifest+json" },
+  });
 }

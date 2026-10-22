@@ -8,12 +8,12 @@
 
 - **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
 
-    | チューナー                                                                                            | 使う仕組み                                                       | ホストに入れるもの                    |
-    | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------- |
-    | PT2 / PT3、PX-BCUD、PX-S1UD など ([tuner-pt3.md](tuner-pt3.md))                                       | Linux DVB                                                        | ドライバ                              |
-    | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も。[tuner-px4.md](tuner-px4.md)) | px4-userland (同梱)                                              | なし (Windows はドライバを WinUSB に) |
-    | PX-S1UD (smsusb を blacklist したとき。Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))              | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に) |
-    | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))                             | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし                                  |
+  | チューナー                                                                                            | 使う仕組み                                                       | ホストに入れるもの                    |
+  | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------- |
+  | PT2 / PT3、PX-BCUD、PX-S1UD など ([tuner-pt3.md](tuner-pt3.md))                                       | Linux DVB                                                        | ドライバ                              |
+  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も。[tuner-px4.md](tuner-px4.md)) | px4-userland (同梱)                                              | なし (Windows はドライバを WinUSB に) |
+  | PX-S1UD (smsusb を blacklist したとき。Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))              | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に) |
+  | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))                             | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし                                  |
 
 - **B-CASカード** と PC/SC のカードリーダー (px4-userland の機材は内蔵リーダーでもよい。[下記](#カードリーダー))
 - **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
@@ -108,19 +108,25 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
 
 ```json
 {
-    "ok": true,
-    "message": "",
-    "source": "local",
-    "readers": [
-        {
-            "name": "Gemplus USB SmartCard Reader (usb 4-11)",
-            "card": true,
-            "ids": ["0000012345678901"],
-            "active": true,
-            "tuners": ["PT3-T1", "PT3-S1"]
-        },
-        { "name": "PX4 内蔵リーダー", "card": false, "ids": [], "active": false, "tuners": [] }
-    ]
+  "ok": true,
+  "message": "",
+  "source": "local",
+  "readers": [
+    {
+      "name": "Gemplus USB SmartCard Reader (usb 4-11)",
+      "card": true,
+      "ids": ["0000012345678901"],
+      "active": true,
+      "tuners": ["PT3-T1", "PT3-S1"]
+    },
+    {
+      "name": "PX4 内蔵リーダー",
+      "card": false,
+      "ids": [],
+      "active": false,
+      "tuners": []
+    }
+  ]
 }
 ```
 

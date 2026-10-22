@@ -10,49 +10,49 @@
  * 前の URL は `MOVED_SECTIONS` で送る
  */
 export const SETTINGS_GROUPS = [
-    {
-        slug: 'recording',
-        label: '録画',
-        sections: [
-            { slug: 'encoding', label: 'エンコード' },
-            { slug: 'cm', label: 'CM' },
-            { slug: 'reserve', label: '自動予約' },
-        ],
-    },
-    {
-        slug: 'reception',
-        label: '受信',
-        sections: [
-            { slug: 'tuners', label: 'チューナー' },
-            { slug: 'channels', label: 'チャンネル' },
-            { slug: 'broadcast', label: 'データ放送' },
-        ],
-    },
-    {
-        slug: 'integrations',
-        label: '連携',
-        sections: [
-            { slug: 'notifications', label: '通知' },
-            { slug: 'tv', label: 'テレビのアプリ' },
-            { slug: 'migrate', label: 'EPGStation からの引き継ぎ' },
-        ],
-    },
-    {
-        slug: 'general',
-        label: 'その他',
-        sections: [
-            { slug: 'browser', label: 'この端末' },
-            { slug: 'login', label: 'ログイン' },
-            { slug: 'version', label: 'バージョン' },
-        ],
-    },
+  {
+    slug: "recording",
+    label: "録画",
+    sections: [
+      { slug: "encoding", label: "エンコード" },
+      { slug: "cm", label: "CM" },
+      { slug: "reserve", label: "自動予約" },
+    ],
+  },
+  {
+    slug: "reception",
+    label: "受信",
+    sections: [
+      { slug: "tuners", label: "チューナー" },
+      { slug: "channels", label: "チャンネル" },
+      { slug: "broadcast", label: "データ放送" },
+    ],
+  },
+  {
+    slug: "integrations",
+    label: "連携",
+    sections: [
+      { slug: "notifications", label: "通知" },
+      { slug: "tv", label: "テレビのアプリ" },
+      { slug: "migrate", label: "EPGStation からの引き継ぎ" },
+    ],
+  },
+  {
+    slug: "general",
+    label: "その他",
+    sections: [
+      { slug: "browser", label: "この端末" },
+      { slug: "login", label: "ログイン" },
+      { slug: "version", label: "バージョン" },
+    ],
+  },
 ] as const satisfies readonly {
-    slug: string;
-    label: string;
-    sections: readonly { slug: string; label: string }[];
+  slug: string;
+  label: string;
+  sections: readonly { slug: string; label: string }[];
 }[];
 
-export const FIRST_GROUP = 'recording';
+export const FIRST_GROUP = "recording";
 
 /**
  * **前の節ごとの画面の URL** (`/settings/<節>`) → 移った先 (`<グループ>#<節>`)。
@@ -60,20 +60,20 @@ export const FIRST_GROUP = 'recording';
  * `general` と `recording` はグループの画面の URL と同じなので要らない
  */
 export const MOVED_SECTIONS: Readonly<Record<string, string>> = {
-    browser: 'general#browser',
-    tuners: 'reception#tuners',
-    channels: 'reception#channels',
-    // ロゴの節は受信できるチャンネルの表に入った (局ロゴ・CMロゴの列)
-    logos: 'reception#channels',
-    broadcast: 'reception#broadcast',
-    notifications: 'integrations#notifications',
-    tv: 'integrations#tv',
-    migrate: 'integrations#migrate',
+  browser: "general#browser",
+  tuners: "reception#tuners",
+  channels: "reception#channels",
+  // ロゴの節は受信できるチャンネルの表に入った (局ロゴ・CMロゴの列)
+  logos: "reception#channels",
+  broadcast: "reception#broadcast",
+  notifications: "integrations#notifications",
+  tv: "integrations#tv",
+  migrate: "integrations#migrate",
 };
 
 /** グループの名前。画面のタイトルに使う */
 export function groupLabel(slug: string): string | null {
-    return SETTINGS_GROUPS.find((group) => group.slug === slug)?.label ?? null;
+  return SETTINGS_GROUPS.find((group) => group.slug === slug)?.label ?? null;
 }
 
 /**
@@ -81,5 +81,5 @@ export function groupLabel(slug: string): string | null {
  * その節へ飛んで URL も書き換える (`routes/settings/+layout.svelte`)。`#` は手元にしか来ないので、サーバでは送れない
  */
 export const SECTION_ALIASES: Readonly<Record<string, string>> = {
-    logos: 'channels',
+  logos: "channels",
 };

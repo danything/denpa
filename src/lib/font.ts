@@ -7,13 +7,15 @@
  * 毎回確かめさせる (`api/font/denpa-font.woff2/+server.ts`)
  */
 
-import { resolve } from '$app/paths';
+import { resolve } from "$app/paths";
 
 /** 組んだときの Denpa Font の版 (`v2.1` など)。読めなければ空 (版なしの URL になる) */
-const DENPA_FONT_VERSION: string = import.meta.env.DENPA_FONT_VERSION ?? '';
+const DENPA_FONT_VERSION: string = import.meta.env.DENPA_FONT_VERSION ?? "";
 
 /** 字の URL。接頭辞の下でも動くよう、呼ぶたびに `resolve` を通す */
 export function denpaFontUrl(): string {
-    const url = resolve('api/font/denpa-font.woff2');
-    return DENPA_FONT_VERSION === '' ? url : `${url}?v=${encodeURIComponent(DENPA_FONT_VERSION)}`;
+  const url = resolve("api/font/denpa-font.woff2");
+  return DENPA_FONT_VERSION === ""
+    ? url
+    : `${url}?v=${encodeURIComponent(DENPA_FONT_VERSION)}`;
 }

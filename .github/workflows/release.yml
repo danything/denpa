@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: '貼る先 (タグ名かコミット)'
+        description: "貼る先 (タグ名かコミット)"
         required: true
 
 permissions:
@@ -175,7 +175,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: "10.0.402"
 
       # 名前はタグから `v` を落とした版で (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
       # 中身は実行ファイル1個。.sha256 は install.sh が確かめる
@@ -204,7 +204,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: "10.0.402"
 
       # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1個) と .sha256 (shasum と同じ形式)
       - name: Build and attach to the release
@@ -291,7 +291,7 @@ jobs:
           . .github/bump-pr.sh
           bump_begin bump-chart-version
           for chart in charts/denpa charts/denpa-agent; do
-            sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: '${v}'#" "$chart/Chart.yaml"
+            sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: \"${v}\"#" "$chart/Chart.yaml"
           done
           bump_finish bump-chart-version \
             "chore: chart の版を ${v} に合わせる [skip ci]" \

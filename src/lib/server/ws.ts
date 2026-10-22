@@ -14,82 +14,87 @@
  * 入口はアプリの束の外にあるので直に import できない。`globalThis` 越しに渡す。
  */
 
-import type { ServerWebSocket, WebSocketHandler } from 'bun';
+import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 /** 入口が見る名前。`server.js` と揃えること */
-const LIVE = '__denpaLive';
+const LIVE = "__denpaLive";
 
 /** 溜まってよい量。超えたら捨ててよいもの (`droppable`) を捨てる。何を捨ててよいかは live.ts の `hand` */
 const BACKLOG_LIMIT = 4 * 1024 * 1024;
 
 /** 接続1本ぶんの持ち物。`server.upgrade()` に渡して `ws.data` になる */
 interface SocketData {
-    url: URL;
-    connection: Connection | null;
+  url: URL;
+  connection: Connection | null;
 }
 
 /** 開いている1本。**送るのは binary、受けるのは小さな指示だけ** */
 export class Connection {
-    /** ブラウザからの指示。JSON でデコードできなかったものは渡さない */
-    onmessage: ((message: Record<string, unknown>) => void) | null = null;
-    onclose: (() => void) | null = null;
+  /** ブラウザからの指示。JSON でデコードできなかったものは渡さない */
+  onmessage: ((message: Record<string, unknown>) => void) | null = null;
+  onclose: (() => void) | null = null;
 
-    constructor(private readonly ws: ServerWebSocket<SocketData>) {}
+  constructor(private readonly ws: ServerWebSocket<SocketData>) {}
 
-    /**
-     * 1つ送る。**多重化の頭を自分で付ける** (stream.md#websocket-プロトコル)。
-     *
-     *     [1 byte: 種別][8 bytes: PTS (90kHz, BE)][中身...]
-     *
-     * 時刻は受け側の物差し (エンコードの経路は mp4 の 0 起点、放送そのままの経路は放送の PTS)。運ぶのは
-     * 字幕だけで、映像・データ放送・制御は 0 を渡す — 字幕を映像と同じ物差しに乗せるため。
-     *
-     * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / そのままの TS) だけ true
-     */
-    send(kind: number, pts: bigint, payload: Uint8Array, droppable = false): void {
-        if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) return;
-        const out = new Uint8Array(9 + payload.length);
-        out[0] = kind;
-        new DataView(out.buffer).setBigUint64(1, pts);
-        out.set(payload, 9);
-        this.ws.sendBinary(out);
+  /**
+   * 1つ送る。**多重化の頭を自分で付ける** (stream.md#websocket-プロトコル)。
+   *
+   *     [1 byte: 種別][8 bytes: PTS (90kHz, BE)][中身...]
+   *
+   * 時刻は受け側の物差し (エンコードの経路は mp4 の 0 起点、放送そのままの経路は放送の PTS)。運ぶのは
+   * 字幕だけで、映像・データ放送・制御は 0 を渡す — 字幕を映像と同じ物差しに乗せるため。
+   *
+   * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / そのままの TS) だけ true
+   */
+  send(
+    kind: number,
+    pts: bigint,
+    payload: Uint8Array,
+    droppable = false,
+  ): void {
+    if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) return;
+    const out = new Uint8Array(9 + payload.length);
+    out[0] = kind;
+    new DataView(out.buffer).setBigUint64(1, pts);
+    out.set(payload, 9);
+    this.ws.sendBinary(out);
+  }
+
+  /** bun から渡されたものをデコードする。**JSON 以外は黙って捨てる** */
+  receive(message: string | Buffer): void {
+    if (typeof message !== "string") return;
+    try {
+      const parsed: unknown = JSON.parse(message);
+      if (typeof parsed === "object" && parsed !== null) {
+        this.onmessage?.(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // 読めない指示は捨てる。切るほどのことではない
     }
+  }
 
-    /** bun から渡されたものをデコードする。**JSON 以外は黙って捨てる** */
-    receive(message: string | Buffer): void {
-        if (typeof message !== 'string') return;
-        try {
-            const parsed: unknown = JSON.parse(message);
-            if (typeof parsed === 'object' && parsed !== null) {
-                this.onmessage?.(parsed as Record<string, unknown>);
-            }
-        } catch {
-            // 読めない指示は捨てる。切るほどのことではない
-        }
-    }
-
-    finish(): void {
-        this.onclose?.();
-        this.onclose = null;
-    }
+  finish(): void {
+    this.onclose?.();
+    this.onclose = null;
+  }
 }
 
 interface Route {
-    /**
-     * 握手してよいか。**握手より前に呼ばれる。**
-     *
-     * ここで断れば普通の HTTP として返せるので、理由を伝えられる。
-     * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない。
-     */
-    accept(url: URL): boolean;
-    open(connection: Connection): void;
+  /**
+   * 握手してよいか。**握手より前に呼ばれる。**
+   *
+   * ここで断れば普通の HTTP として返せるので、理由を伝えられる。
+   * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない。
+   */
+  accept(url: URL): boolean;
+  open(connection: Connection): void;
 }
 
 const routes = new Map<string, Route>();
 
 /** このパスに来た接続を受け持つ。ライブ視聴が `/api/live/socket` で登録する */
 export function serve(pathname: string, route: Route): void {
-    routes.set(pathname, route);
+  routes.set(pathname, route);
 }
 
 /**
@@ -100,38 +105,38 @@ export function serve(pathname: string, route: Route): void {
  * ここに置くのは1回で足りる。
  */
 interface LiveEntry {
-    /** そもそも受け持つパスか。**断り方を変えるために `accept` と分けてある** */
-    handles(url: URL): boolean;
-    /** 握手してよいか。ここでチケットを使い切る */
-    accept(url: URL): boolean;
-    websocket: WebSocketHandler<SocketData>;
+  /** そもそも受け持つパスか。**断り方を変えるために `accept` と分けてある** */
+  handles(url: URL): boolean;
+  /** 握手してよいか。ここでチケットを使い切る */
+  accept(url: URL): boolean;
+  websocket: WebSocketHandler<SocketData>;
 }
 
 const entry: LiveEntry = {
-    handles(url) {
-        return routes.has(url.pathname);
+  handles(url) {
+    return routes.has(url.pathname);
+  },
+  accept(url) {
+    return routes.get(url.pathname)?.accept(url) === true;
+  },
+  websocket: {
+    open(ws) {
+      const route = routes.get(ws.data.url.pathname);
+      if (route === undefined) {
+        ws.close();
+        return;
+      }
+      const connection = new Connection(ws);
+      ws.data.connection = connection;
+      route.open(connection);
     },
-    accept(url) {
-        return routes.get(url.pathname)?.accept(url) === true;
+    message(ws, message) {
+      ws.data.connection?.receive(message);
     },
-    websocket: {
-        open(ws) {
-            const route = routes.get(ws.data.url.pathname);
-            if (route === undefined) {
-                ws.close();
-                return;
-            }
-            const connection = new Connection(ws);
-            ws.data.connection = connection;
-            route.open(connection);
-        },
-        message(ws, message) {
-            ws.data.connection?.receive(message);
-        },
-        close(ws) {
-            ws.data.connection?.finish();
-        },
+    close(ws) {
+      ws.data.connection?.finish();
     },
+  },
 };
 
 (globalThis as Record<string, unknown>)[LIVE] = entry;

@@ -1,29 +1,31 @@
-import { error } from '@sveltejs/kit';
-import { and, eq, isNull } from 'drizzle-orm';
-import type { Recording } from '../types';
-import { orm } from './db';
-import { recordings } from './schema';
-import type { Payload } from './webhook';
+import { error } from "@sveltejs/kit";
+import { and, eq, isNull } from "drizzle-orm";
+import type { Recording } from "../types";
+import { orm } from "./db";
+import { recordings } from "./schema";
+import type { Payload } from "./webhook";
 
 /**
  * 通知 (webhook) に載せる録画の要点。録画とエンコードの節目で同じ形式。
  * webhook.ts に置かないのは、試験がそちらを差し替える (`disk.test.ts`) ため
  */
-export function recordingSummary(recording: Recording): NonNullable<Payload['recording']> {
-    return {
-        id: recording.id,
-        name: recording.name,
-        service: recording.service_name,
-        startAt: recording.start_at,
-        endAt: recording.end_at,
-    };
+export function recordingSummary(
+  recording: Recording,
+): NonNullable<Payload["recording"]> {
+  return {
+    id: recording.id,
+    name: recording.name,
+    service: recording.service_name,
+    startAt: recording.start_at,
+    endAt: recording.end_at,
+  };
 }
 
 /** フォームの `id` から録画を引く (画面のアクション用)。無ければ undefined。消した行も引く */
 export function recordingFromForm(form: FormData): Recording | undefined {
-    const id = Number(form.get('id'));
-    if (!Number.isFinite(id)) return undefined;
-    return orm().select().from(recordings).where(eq(recordings.id, id)).get();
+  const id = Number(form.get("id"));
+  if (!Number.isFinite(id)) return undefined;
+  return orm().select().from(recordings).where(eq(recordings.id, id)).get();
 }
 
 /**
@@ -36,13 +38,17 @@ export function recordingFromForm(form: FormData): Recording | undefined {
  *   見分けたいので true で呼ぶ
  */
 export function recordingOr404(idLike: string, deleted = false): Recording {
-    const id = Number(idLike);
-    if (!Number.isFinite(id)) error(400, '録画IDが不正です');
-    const recording = orm()
-        .select()
-        .from(recordings)
-        .where(deleted ? eq(recordings.id, id) : and(eq(recordings.id, id), isNull(recordings.deleted_at)))
-        .get();
-    if (recording === undefined) error(404, '録画が見つかりません');
-    return recording;
+  const id = Number(idLike);
+  if (!Number.isFinite(id)) error(400, "録画IDが不正です");
+  const recording = orm()
+    .select()
+    .from(recordings)
+    .where(
+      deleted
+        ? eq(recordings.id, id)
+        : and(eq(recordings.id, id), isNull(recordings.deleted_at)),
+    )
+    .get();
+  if (recording === undefined) error(404, "録画が見つかりません");
+  return recording;
 }

@@ -12,51 +12,51 @@
  *   (確かめる窓) と、UA の既定で入っている端末で初めて canvas で再生する前に出す
  */
 
-import { read, write } from '#lib/keep.js';
+import { read, write } from "#lib/keep.js";
 
 /** オンかオフか (`on` / `off`)。無ければ UA で決める */
-const CANVAS_VIDEO = 'canvas-video';
+const CANVAS_VIDEO = "canvas-video";
 /** 運転中の注意を見せたか (`1`) */
-const DRIVE_NOTICE = 'canvas-drive-notice';
+const DRIVE_NOTICE = "canvas-drive-notice";
 
-export type CanvasChoice = 'on' | 'off' | null;
+export type CanvasChoice = "on" | "off" | null;
 
 /** テスラの車載ブラウザの UA か (`Tesla/2026.32.1` のような印) */
 export function isTesla(ua: string): boolean {
-    return /\bTesla\/\d/.test(ua);
+  return /\bTesla\/\d/.test(ua);
 }
 
 /** 明示した値と UA から、オンにするかを決める。**明示した値が勝つ** */
 export function decide(choice: CanvasChoice, ua: string): boolean {
-    return choice === null ? isTesla(ua) : choice === 'on';
+  return choice === null ? isTesla(ua) : choice === "on";
 }
 
 /** 明示した値。触っていなければ null */
 function canvasChoice(): CanvasChoice {
-    const value = read(CANVAS_VIDEO);
-    return value === 'on' || value === 'off' ? value : null;
+  const value = read(CANVAS_VIDEO);
+  return value === "on" || value === "off" ? value : null;
 }
 
 function userAgent(): string {
-    return typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  return typeof navigator === "undefined" ? "" : navigator.userAgent;
 }
 
 /** この端末で互換モードを使うか */
 export function canvasVideo(): boolean {
-    return decide(canvasChoice(), userAgent());
+  return decide(canvasChoice(), userAgent());
 }
 
 /** オン・オフを決める。**明示した値として覚える** (UA の既定より勝つ) */
 export function chooseCanvas(on: boolean): void {
-    write(CANVAS_VIDEO, on ? 'on' : 'off');
+  write(CANVAS_VIDEO, on ? "on" : "off");
 }
 
 /** 運転中の注意をもう見せたか */
 export function driveNoticeSeen(): boolean {
-    return read(DRIVE_NOTICE) === '1';
+  return read(DRIVE_NOTICE) === "1";
 }
 
 /** 運転中の注意を見せた (「わかりました」を押した) */
 export function seeDriveNotice(): void {
-    write(DRIVE_NOTICE, '1');
+  write(DRIVE_NOTICE, "1");
 }

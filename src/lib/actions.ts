@@ -1,5 +1,5 @@
-import { tick } from 'svelte';
-import { enhance, type SubmitFunction } from '$app/forms';
+import { tick } from "svelte";
+import { enhance, type SubmitFunction } from "$app/forms";
 
 /**
  * `use:enhance` の代わり。**送信中は押したボタンの上に回るものを出し**、
@@ -20,52 +20,57 @@ import { enhance, type SubmitFunction } from '$app/forms';
  * 回るものの見た目と、**幅を動かさない**ための細工は `app.css` の「読み込み中」。
  */
 export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
-    // 型引数は `SubmitFunction` の既定に揃える。省くと `| undefined` 側に推論され、after に渡せない
-    return enhance<Record<string, unknown>, Record<string, unknown>>(node, (input) => {
-        /*
-         * 中のボタンに加えて、外から `form` 属性で繋いだボタンも (ルール画面の保存。書く欄の外の下の行にある)。
-         * `elements` はどちらも含む
-         */
-        const buttons = [...node.elements].filter((el) => el instanceof HTMLButtonElement);
-        /*
-         * 出すのは**押したボタン**。Enter で送ったときは押されたものが無いので、
-         * そのフォームの最初の送信ボタンに出す (見ている人が待つのはそこ)。
-         * `<input type="submit">` は回るものを載せられないので、同じ扱いで逃がす
-         */
-        const pressed =
-            input.submitter instanceof HTMLButtonElement
-                ? input.submitter
-                : (buttons.find((button) => button.type === 'submit') ?? null);
-        pressed?.setAttribute('aria-busy', 'true');
-        for (const button of buttons) button.disabled = true;
+  // 型引数は `SubmitFunction` の既定に揃える。省くと `| undefined` 側に推論され、after に渡せない
+  return enhance<Record<string, unknown>, Record<string, unknown>>(
+    node,
+    (input) => {
+      /*
+       * 中のボタンに加えて、外から `form` 属性で繋いだボタンも (ルール画面の保存。書く欄の外の下の行にある)。
+       * `elements` はどちらも含む
+       */
+      const buttons = [...node.elements].filter(
+        (el) => el instanceof HTMLButtonElement,
+      );
+      /*
+       * 出すのは**押したボタン**。Enter で送ったときは押されたものが無いので、
+       * そのフォームの最初の送信ボタンに出す (見ている人が待つのはそこ)。
+       * `<input type="submit">` は回るものを載せられないので、同じ扱いで逃がす
+       */
+      const pressed =
+        input.submitter instanceof HTMLButtonElement
+          ? input.submitter
+          : (buttons.find((button) => button.type === "submit") ?? null);
+      pressed?.setAttribute("aria-busy", "true");
+      for (const button of buttons) button.disabled = true;
 
-        const after = submit?.(input);
+      const after = submit?.(input);
 
-        return async (received) => {
-            /*
-             * **送ったあとも今の画面にいる** (`navigate: false`)。SvelteKit 3 の既定は
-             * 素のフォーム送信をまねて「アクションの URL」へ移る。そこは**サーバから見た
-             * パス** (`/rules`) なので、前段が接頭辞を剥がしていると接頭辞の外へ出てしまう
-             * (server/paths.ts)。`?edit=` のような今の画面の問い合わせも落ちる。
-             * 押したら同じ画面のまま中身だけ変わる、という今までの振る舞いに揃える
-             */
-            const options = {
-                ...received,
-                update: (opts?: Parameters<typeof received.update>[0]) =>
-                    received.update({ navigate: false, ...opts }),
-            };
-            try {
-                // 先に止めると、止まってから一拍おいて画面が変わる。
-                // 新しい内容が描き終わるまで回したままにする
-                if (typeof after === 'function') await after(options);
-                else await options.update();
-                await tick();
-            } finally {
-                pressed?.removeAttribute('aria-busy');
-                for (const button of buttons) button.disabled = false;
-            }
+      return async (received) => {
+        /*
+         * **送ったあとも今の画面にいる** (`navigate: false`)。SvelteKit 3 の既定は
+         * 素のフォーム送信をまねて「アクションの URL」へ移る。そこは**サーバから見た
+         * パス** (`/rules`) なので、前段が接頭辞を剥がしていると接頭辞の外へ出てしまう
+         * (server/paths.ts)。`?edit=` のような今の画面の問い合わせも落ちる。
+         * 押したら同じ画面のまま中身だけ変わる、という今までの振る舞いに揃える
+         */
+        const options = {
+          ...received,
+          update: (opts?: Parameters<typeof received.update>[0]) =>
+            received.update({ navigate: false, ...opts }),
         };
-    });
+        try {
+          // 先に止めると、止まってから一拍おいて画面が変わる。
+          // 新しい内容が描き終わるまで回したままにする
+          if (typeof after === "function") await after(options);
+          else await options.update();
+          await tick();
+        } finally {
+          pressed?.removeAttribute("aria-busy");
+          for (const button of buttons) button.disabled = false;
+        }
+      };
+    },
+  );
 }
 
 /**
@@ -82,68 +87,68 @@ export function submitting(node: HTMLFormElement, submit?: SubmitFunction) {
  * (実測: 6px ずれると開かない。指で6px は普通に起きる)。
  */
 export function dragScroll(node: HTMLElement) {
-    /**
-     * ここを超えたら「動かした」とみなす。
-     *
-     * **5px では狭すぎた。** マウスでも、押した拍子に数px動くことはある。
-     * 動かしたぶんが 10px に満たないなら画面はほとんど動いていないので、
-     * 押したかったのだと読むほうが当たる
-     */
-    const THRESHOLD = 10;
-    let active = false;
-    let dragged = false;
-    let startX = 0;
-    let startY = 0;
-    let fromLeft = 0;
-    let fromTop = 0;
+  /**
+   * ここを超えたら「動かした」とみなす。
+   *
+   * **5px では狭すぎた。** マウスでも、押した拍子に数px動くことはある。
+   * 動かしたぶんが 10px に満たないなら画面はほとんど動いていないので、
+   * 押したかったのだと読むほうが当たる
+   */
+  const THRESHOLD = 10;
+  let active = false;
+  let dragged = false;
+  let startX = 0;
+  let startY = 0;
+  let fromLeft = 0;
+  let fromTop = 0;
 
-    const down = (event: PointerEvent) => {
-        if (event.button !== 0) return;
-        // 指とペンはブラウザに任せる (こちらが動かすと二重になる)
-        if (event.pointerType !== 'mouse') return;
-        active = true;
-        dragged = false;
-        startX = event.clientX;
-        startY = event.clientY;
-        fromLeft = node.scrollLeft;
-        fromTop = node.scrollTop;
-    };
+  const down = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    // 指とペンはブラウザに任せる (こちらが動かすと二重になる)
+    if (event.pointerType !== "mouse") return;
+    active = true;
+    dragged = false;
+    startX = event.clientX;
+    startY = event.clientY;
+    fromLeft = node.scrollLeft;
+    fromTop = node.scrollTop;
+  };
 
-    const move = (event: PointerEvent) => {
-        if (!active) return;
-        const dx = event.clientX - startX;
-        const dy = event.clientY - startY;
-        if (!dragged && Math.hypot(dx, dy) < THRESHOLD) return;
-        dragged = true;
-        node.scrollLeft = fromLeft - dx;
-        node.scrollTop = fromTop - dy;
-        // ドラッグ中に文字が選択されると使い心地が悪い
-        event.preventDefault();
-    };
+  const move = (event: PointerEvent) => {
+    if (!active) return;
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    if (!dragged && Math.hypot(dx, dy) < THRESHOLD) return;
+    dragged = true;
+    node.scrollLeft = fromLeft - dx;
+    node.scrollTop = fromTop - dy;
+    // ドラッグ中に文字が選択されると使い心地が悪い
+    event.preventDefault();
+  };
 
-    const up = () => {
-        active = false;
-    };
+  const up = () => {
+    active = false;
+  };
 
-    // ドラッグした後のクリックで番組を開かない
-    const click = (event: MouseEvent) => {
-        if (!dragged) return;
-        event.preventDefault();
-        event.stopPropagation();
-        dragged = false;
-    };
+  // ドラッグした後のクリックで番組を開かない
+  const click = (event: MouseEvent) => {
+    if (!dragged) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragged = false;
+  };
 
-    node.addEventListener('pointerdown', down);
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    node.addEventListener('click', click, true);
+  node.addEventListener("pointerdown", down);
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+  node.addEventListener("click", click, true);
 
-    return {
-        destroy() {
-            node.removeEventListener('pointerdown', down);
-            window.removeEventListener('pointermove', move);
-            window.removeEventListener('pointerup', up);
-            node.removeEventListener('click', click, true);
-        },
-    };
+  return {
+    destroy() {
+      node.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      node.removeEventListener("click", click, true);
+    },
+  };
 }

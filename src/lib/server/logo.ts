@@ -1,16 +1,33 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { and, eq, sql } from 'drizzle-orm';
-import { LogoCollector, logoTypeOfPng, PREFERRED_LOGO_TYPE, replacesLogo } from '../ts/logo';
-import { withPalette } from '../ts/logo-palette';
-import type { ChannelType } from '../types';
-import { config } from './config';
-import { orm } from './db';
-import { CURRENT_SERVICES } from './epg';
-import { emit } from './events';
-import { services } from './schema';
-import { chunks } from './stream';
-import { type AgentTuner, getTuners, openChannelStream, type StreamUse } from './tuner';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { join } from "node:path";
+import { and, eq, sql } from "drizzle-orm";
+import {
+  LogoCollector,
+  logoTypeOfPng,
+  PREFERRED_LOGO_TYPE,
+  replacesLogo,
+} from "../ts/logo";
+import { withPalette } from "../ts/logo-palette";
+import type { ChannelType } from "../types";
+import { config } from "./config";
+import { orm } from "./db";
+import { CURRENT_SERVICES } from "./epg";
+import { emit } from "./events";
+import { services } from "./schema";
+import { chunks } from "./stream";
+import {
+  type AgentTuner,
+  getTuners,
+  openChannelStream,
+  type StreamUse,
+} from "./tuner";
 
 /**
  * 局ロゴを集める。
@@ -90,12 +107,12 @@ const SWEEP_TUNERS = 2;
 const RELAY_RETRY = 7 * 24 * 60 * 60_000;
 
 function logoDir(): string {
-    return join(config.dataDir, 'logos');
+  return join(config.dataDir, "logos");
 }
 
 /** サービスIDごとのファイル。局の内部IDをそのまま名前にする */
 function logoPath(serviceId: number): string {
-    return join(logoDir(), `${serviceId}.png`);
+  return join(logoDir(), `${serviceId}.png`);
 }
 
 /**
@@ -105,26 +122,26 @@ function logoPath(serviceId: number): string {
  * 決めてあるため (`reconcile`)。置き場ごと消えたら、また調べ直せばいい。
  */
 function relayPath(): string {
-    return join(logoDir(), 'satellite-relays.json');
+  return join(logoDir(), "satellite-relays.json");
 }
 
 /** 書きかけを読ませない。番組表は同時に見に来るので、別名に書いてから置き換える */
 function writeWhole(path: string, data: string | Uint8Array): void {
-    const working = `${path}.writing`;
-    writeFileSync(working, data);
-    renameSync(working, path);
+  const working = `${path}.writing`;
+  writeFileSync(working, data);
+  renameSync(working, path);
 }
 
 interface RelayNotes {
-    /** ロゴを積んでいなかった中継と、そう分かった時刻 */
-    noCarousel: Record<string, number>;
-    /** カルーセルを読み切っても来なかった局 (局ID → そう分かった時刻) */
-    absent: Record<string, number>;
-    /**
-     * 地上波で、開けるだけ開けても**大きいロゴ (64×36) が来なかった**局 (局ID → 時刻)。
-     * 控えておかないと、小さいロゴしか流さない局のために定期チェックのたびに6分開き直す
-     */
-    gaveUp: Record<string, number>;
+  /** ロゴを積んでいなかった中継と、そう分かった時刻 */
+  noCarousel: Record<string, number>;
+  /** カルーセルを読み切っても来なかった局 (局ID → そう分かった時刻) */
+  absent: Record<string, number>;
+  /**
+   * 地上波で、開けるだけ開けても**大きいロゴ (64×36) が来なかった**局 (局ID → 時刻)。
+   * 控えておかないと、小さいロゴしか流さない局のために定期チェックのたびに6分開き直す
+   */
+  gaveUp: Record<string, number>;
 }
 
 /**
@@ -137,45 +154,47 @@ interface RelayNotes {
 let relays: RelayNotes | null = null;
 
 function notes(): RelayNotes {
-    if (relays !== null) return relays;
-    try {
-        const parsed = JSON.parse(readFileSync(relayPath(), 'utf8')) as Partial<RelayNotes>;
-        relays = {
-            noCarousel: parsed.noCarousel ?? {},
-            absent: parsed.absent ?? {},
-            gaveUp: parsed.gaveUp ?? {},
-        };
-    } catch {
-        relays = { noCarousel: {}, absent: {}, gaveUp: {} };
-    }
-    return relays;
+  if (relays !== null) return relays;
+  try {
+    const parsed = JSON.parse(
+      readFileSync(relayPath(), "utf8"),
+    ) as Partial<RelayNotes>;
+    relays = {
+      noCarousel: parsed.noCarousel ?? {},
+      absent: parsed.absent ?? {},
+      gaveUp: parsed.gaveUp ?? {},
+    };
+  } catch {
+    relays = { noCarousel: {}, absent: {}, gaveUp: {} };
+  }
+  return relays;
 }
 
 function save(next: RelayNotes): void {
-    relays = next;
-    try {
-        mkdirSync(logoDir(), { recursive: true });
-        writeWhole(relayPath(), JSON.stringify(next));
-    } catch {
-        // 控えられなくても集めることはできる。次の機会に
-    }
+  relays = next;
+  try {
+    mkdirSync(logoDir(), { recursive: true });
+    writeWhole(relayPath(), JSON.stringify(next));
+  } catch {
+    // 控えられなくても集めることはできる。次の機会に
+  }
 }
 
 /** その中継は今回は飛ばしてよいか。確かめてから RELAY_RETRY の間だけ */
 function skipRelay(channel: string): boolean {
-    const at = notes().noCarousel[channel];
-    return at !== undefined && Date.now() - at < RELAY_RETRY;
+  const at = notes().noCarousel[channel];
+  return at !== undefined && Date.now() - at < RELAY_RETRY;
 }
 
 /** 「この中継にロゴは載っていない」/「載っていた」を書き留める */
 function markRelay(channel: string, hasLogo: boolean): void {
-    const known = notes();
-    // 何も変わらないなら書きに行かない
-    if (hasLogo === (known.noCarousel[channel] === undefined)) return;
-    const noCarousel = { ...known.noCarousel };
-    if (hasLogo) delete noCarousel[channel];
-    else noCarousel[channel] = Date.now();
-    save({ ...known, noCarousel });
+  const known = notes();
+  // 何も変わらないなら書きに行かない
+  if (hasLogo === (known.noCarousel[channel] === undefined)) return;
+  const noCarousel = { ...known.noCarousel };
+  if (hasLogo) delete noCarousel[channel];
+  else noCarousel[channel] = Date.now();
+  save({ ...known, noCarousel });
 }
 
 /**
@@ -189,28 +208,29 @@ function markRelay(channel: string, hasLogo: boolean): void {
  * **局ごとに控える。** 消えたロゴは「控えに無い = まだ取れるはず」になって自然に取得し直す。
  */
 function markAbsent(): void {
-    const known = notes();
-    const absent = { ...known.absent };
-    for (const service of currentServices()) {
-        if (service.type !== 'GR' && needsLogo(service)) absent[service.id] = Date.now();
-    }
-    save({ ...known, absent });
+  const known = notes();
+  const absent = { ...known.absent };
+  for (const service of currentServices()) {
+    if (service.type !== "GR" && needsLogo(service))
+      absent[service.id] = Date.now();
+  }
+  save({ ...known, absent });
 }
 
 /** その局はカルーセルに載っていないと分かっているか */
 function absentFromCarousel(serviceId: number): boolean {
-    const at = notes().absent[serviceId];
-    return at !== undefined && Date.now() - at < LOGO_MAX_AGE;
+  const at = notes().absent[serviceId];
+  return at !== undefined && Date.now() - at < LOGO_MAX_AGE;
 }
 
 export function readLogo(serviceId: number): Uint8Array | null {
-    const path = logoPath(serviceId);
-    if (!existsSync(path)) return null;
-    try {
-        return readFileSync(path);
-    } catch {
-        return null;
-    }
+  const path = logoPath(serviceId);
+  if (!existsSync(path)) return null;
+  try {
+    return readFileSync(path);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -219,30 +239,44 @@ export function readLogo(serviceId: number): Uint8Array | null {
  * 放送波の service_id は ARIB のもので、denpa が持っている services.id とは
  * 別物。network_id と合わせて引き直す。
  */
-function store(networkId: number, serviceIds: number[], logoType: number, data: Uint8Array): number {
-    mkdirSync(logoDir(), { recursive: true });
+function store(
+  networkId: number,
+  serviceIds: number[],
+  logoType: number,
+  data: Uint8Array,
+): number {
+  mkdirSync(logoDir(), { recursive: true });
 
-    let saved = 0;
-    for (const serviceId of serviceIds) {
-        const matched = orm()
-            .select({ id: services.id })
-            .from(services)
-            .where(and(eq(services.network_id, networkId), eq(services.service_id, serviceId)))
-            .all();
-        for (const { id } of matched) {
-            // **小さいものへは戻さない。** 局は6種類の大きさを順に流していて、どれが先に来るかは開くたびに違う
-            if (!replacesLogo(storedLogoType(id), logoType)) continue;
-            writeWhole(logoPath(id), data);
-            /*
-             * **`updated_at` は触らない。** あれは「最後に取り込んだ時刻」で、番組表は
-             * *いちばん新しいものと同じ時刻の局だけ* を出す (`CURRENT_SERVICES`)。
-             * 進めると、その局だけが「いまの局」になって番組表から他が消える
-             */
-            orm().update(services).set({ has_logo: true }).where(eq(services.id, id)).run();
-            saved++;
-        }
+  let saved = 0;
+  for (const serviceId of serviceIds) {
+    const matched = orm()
+      .select({ id: services.id })
+      .from(services)
+      .where(
+        and(
+          eq(services.network_id, networkId),
+          eq(services.service_id, serviceId),
+        ),
+      )
+      .all();
+    for (const { id } of matched) {
+      // **小さいものへは戻さない。** 局は6種類の大きさを順に流していて、どれが先に来るかは開くたびに違う
+      if (!replacesLogo(storedLogoType(id), logoType)) continue;
+      writeWhole(logoPath(id), data);
+      /*
+       * **`updated_at` は触らない。** あれは「最後に取り込んだ時刻」で、番組表は
+       * *いちばん新しいものと同じ時刻の局だけ* を出す (`CURRENT_SERVICES`)。
+       * 進めると、その局だけが「いまの局」になって番組表から他が消える
+       */
+      orm()
+        .update(services)
+        .set({ has_logo: true })
+        .where(eq(services.id, id))
+        .run();
+      saved++;
     }
-    return saved;
+  }
+  return saved;
 }
 
 /**
@@ -251,43 +285,45 @@ function store(networkId: number, serviceIds: number[], logoType: number, data: 
  * 失敗しても黙って諦める。ロゴが無くても番組表は出るし、録画には何の関係も無い。
  */
 function watch(networkId: number): Feed {
-    const collector = new LogoCollector(networkId);
-    let broken = false;
-    /** 同じものを何度も書きに行かない。ロゴは滅多に変わらない */
-    const written = new Set<string>();
+  const collector = new LogoCollector(networkId);
+  let broken = false;
+  /** 同じものを何度も書きに行かない。ロゴは滅多に変わらない */
+  const written = new Set<string>();
 
-    const feed = (chunk: Uint8Array) => {
-        if (broken) return;
-        try {
-            collector.feed(chunk);
-            const found = collector.collected();
-            if (found.length === 0) return;
+  const feed = (chunk: Uint8Array) => {
+    if (broken) return;
+    try {
+      collector.feed(chunk);
+      const found = collector.collected();
+      if (found.length === 0) return;
 
-            // **開いている間は取得し続ける。** 1つのTSにはその物理チャンネルの局が全部流れていて、ロゴは局ごとに別々に来る
-            let saved = 0;
-            for (const { networkId: network, serviceIds, logo } of found) {
-                // 衛星は他ネットワークの局も混ざる。どのネットワークのぶんかは
-                // ロゴ自身が知っているので、そちらで引く
-                const key = `${network}:${logo.logoId}:${logo.logoType}:${logo.logoVersion}`;
-                if (written.has(key)) continue;
-                written.add(key);
-                saved += store(network, serviceIds, logo.logoType, logo.data);
-            }
-            if (saved > 0) emit('services');
-        } catch (error) {
-            console.error(`[logo] 取り込みに失敗しました: ${error}`);
-            broken = true;
-        }
-    };
-    /** 外れの中継を早く見切るために覗く。地上波では使わない */
-    Object.defineProperty(feed, 'hasSatelliteLogo', { get: () => collector.hasSatelliteLogo });
-    return feed as Feed;
+      // **開いている間は取得し続ける。** 1つのTSにはその物理チャンネルの局が全部流れていて、ロゴは局ごとに別々に来る
+      let saved = 0;
+      for (const { networkId: network, serviceIds, logo } of found) {
+        // 衛星は他ネットワークの局も混ざる。どのネットワークのぶんかは
+        // ロゴ自身が知っているので、そちらで引く
+        const key = `${network}:${logo.logoId}:${logo.logoType}:${logo.logoVersion}`;
+        if (written.has(key)) continue;
+        written.add(key);
+        saved += store(network, serviceIds, logo.logoType, logo.data);
+      }
+      if (saved > 0) emit("services");
+    } catch (error) {
+      console.error(`[logo] 取り込みに失敗しました: ${error}`);
+      broken = true;
+    }
+  };
+  /** 外れの中継を早く見切るために覗く。地上波では使わない */
+  Object.defineProperty(feed, "hasSatelliteLogo", {
+    get: () => collector.hasSatelliteLogo,
+  });
+  return feed as Feed;
 }
 
 /** データを渡す入口。ついでに「この中継にロゴがあるか」を覗ける */
 interface Feed {
-    (chunk: Uint8Array): void;
-    readonly hasSatelliteLogo: boolean | null;
+  (chunk: Uint8Array): void;
+  readonly hasSatelliteLogo: boolean | null;
 }
 
 /**
@@ -306,40 +342,46 @@ interface Feed {
  * 取得し直すと局によっては何時間もかかるので、置いてあるものを直す。
  */
 export function reconcile(): number {
-    const rows = orm().select({ id: services.id, has_logo: services.has_logo }).from(services).all();
-    let changed = 0;
-    orm().transaction((tx) => {
-        for (const row of rows) {
-            const actual = existsSync(logoPath(row.id));
-            if (actual) repaint(row.id);
-            if (actual === row.has_logo) continue;
-            tx.update(services).set({ has_logo: actual }).where(eq(services.id, row.id)).run();
-            changed++;
-        }
-    });
-    if (changed > 0) emit('services');
-    return changed;
+  const rows = orm()
+    .select({ id: services.id, has_logo: services.has_logo })
+    .from(services)
+    .all();
+  let changed = 0;
+  orm().transaction((tx) => {
+    for (const row of rows) {
+      const actual = existsSync(logoPath(row.id));
+      if (actual) repaint(row.id);
+      if (actual === row.has_logo) continue;
+      tx.update(services)
+        .set({ has_logo: actual })
+        .where(eq(services.id, row.id))
+        .run();
+      changed++;
+    }
+  });
+  if (changed > 0) emit("services");
+  return changed;
 }
 
 /** 置いてある PNG に色の表が入っていなければ入れ直す */
 function repaint(serviceId: number): void {
-    try {
-        const path = logoPath(serviceId);
-        const stored = readFileSync(path);
-        const fixed = withPalette(stored);
-        if (fixed.length === stored.length) return;
-        writeWhole(path, fixed);
-        console.log(`[logo] ${serviceId} の色の表を入れ直しました`);
-    } catch {
-        // 直せなくても番組表は出る。次の機会に
-    }
+  try {
+    const path = logoPath(serviceId);
+    const stored = readFileSync(path);
+    const fixed = withPalette(stored);
+    if (fixed.length === stored.length) return;
+    writeWhole(path, fixed);
+    console.log(`[logo] ${serviceId} の色の表を入れ直しました`);
+  } catch {
+    // 直せなくても番組表は出る。次の機会に
+  }
 }
 
 /** ロゴを取得する単位。1つの物理チャンネルと、そこに入っている局 */
 interface Target {
-    type: string;
-    channel: string;
-    network_id: number;
+  type: string;
+  channel: string;
+  network_id: number;
 }
 
 /**
@@ -353,8 +395,8 @@ const LOGO_MAX_AGE = 7 * 24 * 60 * 60_000;
 
 /** 置いてあるロゴの logo_type。無い・読めない・規格に無い寸法なら null */
 function storedLogoType(serviceId: number): number | null {
-    const stored = readLogo(serviceId);
-    return stored === null ? null : logoTypeOfPng(stored);
+  const stored = readLogo(serviceId);
+  return stored === null ? null : logoTypeOfPng(stored);
 }
 
 /**
@@ -370,17 +412,19 @@ function storedLogoType(serviceId: number): number | null {
  * 地上波にしか無い — 衛星まで見ると、万一のときに毎回20分待つことになる
  */
 function needsLogo(service: { id: number; type: string }): boolean {
-    const serviceId = service.id;
-    let age: number;
-    try {
-        age = Date.now() - statSync(logoPath(serviceId)).mtimeMs;
-    } catch {
-        return true;
-    }
-    const at = notes().gaveUp[serviceId];
-    if (at !== undefined && Date.now() - at < LOGO_MAX_AGE) return false;
-    if (age > LOGO_MAX_AGE) return true;
-    return service.type === 'GR' && storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE;
+  const serviceId = service.id;
+  let age: number;
+  try {
+    age = Date.now() - statSync(logoPath(serviceId)).mtimeMs;
+  } catch {
+    return true;
+  }
+  const at = notes().gaveUp[serviceId];
+  if (at !== undefined && Date.now() - at < LOGO_MAX_AGE) return false;
+  if (age > LOGO_MAX_AGE) return true;
+  return (
+    service.type === "GR" && storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE
+  );
 }
 
 /**
@@ -388,30 +432,40 @@ function needsLogo(service: { id: number; type: string }): boolean {
  * **ロゴを1つも持っていない局は控えない** — そちらは今までどおり毎回取得する
  */
 function markGaveUp(channel: string): void {
-    const known = notes();
-    const gaveUp = { ...known.gaveUp };
-    let changed = false;
-    for (const service of currentServices()) {
-        if (service.channel !== channel || !existsSync(logoPath(service.id)) || !needsLogo(service)) continue;
-        gaveUp[service.id] = Date.now();
-        changed = true;
-    }
-    if (changed) save({ ...known, gaveUp });
+  const known = notes();
+  const gaveUp = { ...known.gaveUp };
+  let changed = false;
+  for (const service of currentServices()) {
+    if (
+      service.channel !== channel ||
+      !existsSync(logoPath(service.id)) ||
+      !needsLogo(service)
+    )
+      continue;
+    gaveUp[service.id] = Date.now();
+    changed = true;
+  }
+  if (changed) save({ ...known, gaveUp });
 }
 
 /** いま選局できる局。取り残しは見に行かない */
-function currentServices(): { id: number; type: string; channel: string; network_id: number }[] {
-    return orm()
-        .select({
-            id: services.id,
-            type: services.type,
-            channel: services.channel,
-            network_id: services.network_id,
-        })
-        .from(services)
-        .where(sql.raw(CURRENT_SERVICES))
-        .orderBy(services.type, services.channel)
-        .all();
+function currentServices(): {
+  id: number;
+  type: string;
+  channel: string;
+  network_id: number;
+}[] {
+  return orm()
+    .select({
+      id: services.id,
+      type: services.type,
+      channel: services.channel,
+      network_id: services.network_id,
+    })
+    .from(services)
+    .where(sql.raw(CURRENT_SERVICES))
+    .orderBy(services.type, services.channel)
+    .all();
 }
 
 /**
@@ -422,46 +476,55 @@ function currentServices(): { id: number; type: string; channel: string; network
  * 本当に要る局まで順番が回ってこない。
  */
 function missing(): Target[] {
-    const services = currentServices();
-    const targets = new Map<string, Target>();
-    const add = (service: { type: string; channel: string; network_id: number }) => {
-        const key = `${service.type}:${service.channel}`;
-        if (targets.has(key)) return;
-        targets.set(key, { type: service.type, channel: service.channel, network_id: service.network_id });
-    };
+  const services = currentServices();
+  const targets = new Map<string, Target>();
+  const add = (service: {
+    type: string;
+    channel: string;
+    network_id: number;
+  }) => {
+    const key = `${service.type}:${service.channel}`;
+    if (targets.has(key)) return;
+    targets.set(key, {
+      type: service.type,
+      channel: service.channel,
+      network_id: service.network_id,
+    });
+  };
 
-    // 地上波は中継ごとに入っている局が違う。その中継の局が足りないときだけ開く
+  // 地上波は中継ごとに入っている局が違う。その中継の局が足りないときだけ開く
+  for (const service of services) {
+    if (service.type === "GR" && needsLogo(service)) add(service);
+  }
+
+  /*
+   * **衛星は「その中継の局が足りているか」では選べない。**
+   *
+   * ロゴを積んだ中継1つに BS も CS も全部載っているので、中継ごとに見ると
+   * BS が揃った時点でその中継が候補から外れ、**そこにしか無い CS が永久に
+   * 埋まらない**。
+   *
+   * 衛星の局が1つでも足りなければ、**まだ外れと分かっていない中継**を当たる。
+   * どれが当たりかは開いてみないと分からないが (実機の BS はネットワーク4の
+   * 26中継のうち `BS15_0` だけ)、外れは PAT を見た時点で1秒ほどで切り上げ、
+   * 書き留めて二度目からは飛ばす (`collect` / `markRelay`)。
+   *
+   * ただし**カルーセルに載っていないと分かっている局は数に入れない**。
+   * 読み切ってなお来なかった局は行っても来ないので、そこだけを理由に
+   * 中継を開き直すと同じことの繰り返しになる
+   */
+  if (missingSatellites() > 0) {
     for (const service of services) {
-        if (service.type === 'GR' && needsLogo(service)) add(service);
+      if (service.type !== "GR" && !skipRelay(service.channel)) add(service);
     }
-
-    /*
-     * **衛星は「その中継の局が足りているか」では選べない。**
-     *
-     * ロゴを積んだ中継1つに BS も CS も全部載っているので、中継ごとに見ると
-     * BS が揃った時点でその中継が候補から外れ、**そこにしか無い CS が永久に
-     * 埋まらない**。
-     *
-     * 衛星の局が1つでも足りなければ、**まだ外れと分かっていない中継**を当たる。
-     * どれが当たりかは開いてみないと分からないが (実機の BS はネットワーク4の
-     * 26中継のうち `BS15_0` だけ)、外れは PAT を見た時点で1秒ほどで切り上げ、
-     * 書き留めて二度目からは飛ばす (`collect` / `markRelay`)。
-     *
-     * ただし**カルーセルに載っていないと分かっている局は数に入れない**。
-     * 読み切ってなお来なかった局は行っても来ないので、そこだけを理由に
-     * 中継を開き直すと同じことの繰り返しになる
-     */
-    if (missingSatellites() > 0) {
-        for (const service of services) {
-            if (service.type !== 'GR' && !skipRelay(service.channel)) add(service);
-        }
-    }
-    return [...targets.values()];
+  }
+  return [...targets.values()];
 }
 
 /** その物理チャンネルに入っている局のうち、ロゴを取り直したい数 */
 function missingOn(channel: string): number {
-    return currentServices().filter((s) => s.channel === channel && needsLogo(s)).length;
+  return currentServices().filter((s) => s.channel === channel && needsLogo(s))
+    .length;
 }
 
 /**
@@ -472,8 +535,9 @@ function missingOn(channel: string): number {
  * **BS と CS の全局ぶん**が入っている。開いた中継の局だけで数えると、先に来る BS で閉じて CS を取りこぼす。
  */
 function missingSatellites(): number {
-    return currentServices().filter((s) => s.type !== 'GR' && needsLogo(s) && !absentFromCarousel(s.id))
-        .length;
+  return currentServices().filter(
+    (s) => s.type !== "GR" && needsLogo(s) && !absentFromCarousel(s.id),
+  ).length;
 }
 
 /**
@@ -496,92 +560,101 @@ const collecting = new Set<string>();
  * 揃うか時間切れになるまで読む。
  */
 async function collect(
-    target: Target,
-    timeout: number,
-    signal?: AbortSignal,
-    after: readonly StreamUse[] = [],
+  target: Target,
+  timeout: number,
+  signal?: AbortSignal,
+  after: readonly StreamUse[] = [],
 ): Promise<number> {
-    const before = target.type !== 'GR' ? missingSatellites() : missingOn(target.channel);
-    /** 当たり外れを書き留めたか。毎回書きに行かないための印 */
-    let marked = false;
-    const controller = new AbortController();
-    /** 上限まで開けきったか。横から止められた・取り上げられたのとは区別する */
-    let ranOut = false;
-    const stop = setTimeout(() => {
-        ranOut = true;
-        controller.abort();
-    }, timeout);
-    collecting.add(target.channel);
-    // 外から止められるようにする。衛星に20分かけている最中でも譲れるように
-    const give = () => controller.abort();
-    signal?.addEventListener('abort', give, { once: true });
-    try {
-        const stream = await openChannelStream(
-            target.type,
-            target.channel,
-            controller.signal,
-            // 何を使っているのかが設定の「チューナー」に出る
-            logoUse(target),
-            SWEEP_PRIORITY,
-            after,
-        );
-        const feed = watch(target.network_id);
-        const satellite = target.type !== 'GR';
-        let left = before;
-        let progressed = Date.now();
-        for await (const chunk of chunks(stream)) {
-            feed(chunk);
-            // 衛星は「開いた中継の局」では見ない (`missingSatellites`)
-            const now = satellite ? missingSatellites() : missingOn(target.channel);
-            if (now < left) {
-                left = now;
-                progressed = Date.now();
-            }
-            // 全部揃ったら、これ以上開けておく理由がない
-            if (now === 0) {
-                if (satellite) markAbsent();
-                break;
-            }
-            /*
-             * 衛星は揃いきらないことがある (カルーセルに載っていない局がある)。
-             * 取得できたあと何も来なくなったら、そこで切り上げる。これが無いと
-             * 載っていない局が1つでもあるだけで毎回20分丸ごと待つことになる。
-             *
-             * ここまで来たなら**カルーセルは1回ぶん読み切った**。残っている局は
-             * 載っていない局なので、そう書き留めて次からは行かない
-             */
-            if (satellite && left < before && Date.now() - progressed > SATELLITE_QUIET) {
-                markAbsent();
-                break;
-            }
-            /*
-             * **衛星のロゴは1つの中継にしかない** (`RELAY_RETRY`)。外れの中継は PAT を
-             * 見た時点で分かるので、待たずに次へ行く。当たり外れは書き留めておく —
-             * そうしないと、二度と来ないものを定期チェックのたびに開き直すことになる
-             */
-            if (satellite && !marked && feed.hasSatelliteLogo !== null) {
-                marked = true;
-                markRelay(target.channel, feed.hasSatelliteLogo);
-                if (!feed.hasSatelliteLogo) break;
-            }
-        }
-    } catch {
-        // 取れなければ次の機会に。チューナーが空いていないだけのことも多い
-    } finally {
-        clearTimeout(stop);
-        collecting.delete(target.channel);
-        signal?.removeEventListener('abort', give);
-        controller.abort();
+  const before =
+    target.type !== "GR" ? missingSatellites() : missingOn(target.channel);
+  /** 当たり外れを書き留めたか。毎回書きに行かないための印 */
+  let marked = false;
+  const controller = new AbortController();
+  /** 上限まで開けきったか。横から止められた・取り上げられたのとは区別する */
+  let ranOut = false;
+  const stop = setTimeout(() => {
+    ranOut = true;
+    controller.abort();
+  }, timeout);
+  collecting.add(target.channel);
+  // 外から止められるようにする。衛星に20分かけている最中でも譲れるように
+  const give = () => controller.abort();
+  signal?.addEventListener("abort", give, { once: true });
+  try {
+    const stream = await openChannelStream(
+      target.type,
+      target.channel,
+      controller.signal,
+      // 何を使っているのかが設定の「チューナー」に出る
+      logoUse(target),
+      SWEEP_PRIORITY,
+      after,
+    );
+    const feed = watch(target.network_id);
+    const satellite = target.type !== "GR";
+    let left = before;
+    let progressed = Date.now();
+    for await (const chunk of chunks(stream)) {
+      feed(chunk);
+      // 衛星は「開いた中継の局」では見ない (`missingSatellites`)
+      const now = satellite ? missingSatellites() : missingOn(target.channel);
+      if (now < left) {
+        left = now;
+        progressed = Date.now();
+      }
+      // 全部揃ったら、これ以上開けておく理由がない
+      if (now === 0) {
+        if (satellite) markAbsent();
+        break;
+      }
+      /*
+       * 衛星は揃いきらないことがある (カルーセルに載っていない局がある)。
+       * 取得できたあと何も来なくなったら、そこで切り上げる。これが無いと
+       * 載っていない局が1つでもあるだけで毎回20分丸ごと待つことになる。
+       *
+       * ここまで来たなら**カルーセルは1回ぶん読み切った**。残っている局は
+       * 載っていない局なので、そう書き留めて次からは行かない
+       */
+      if (
+        satellite &&
+        left < before &&
+        Date.now() - progressed > SATELLITE_QUIET
+      ) {
+        markAbsent();
+        break;
+      }
+      /*
+       * **衛星のロゴは1つの中継にしかない** (`RELAY_RETRY`)。外れの中継は PAT を
+       * 見た時点で分かるので、待たずに次へ行く。当たり外れは書き留めておく —
+       * そうしないと、二度と来ないものを定期チェックのたびに開き直すことになる
+       */
+      if (satellite && !marked && feed.hasSatelliteLogo !== null) {
+        marked = true;
+        markRelay(target.channel, feed.hasSatelliteLogo);
+        if (!feed.hasSatelliteLogo) break;
+      }
     }
-    // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
-    if (target.type === 'GR' && ranOut && timeout >= SWEEP_TIMEOUT) markGaveUp(target.channel);
-    // 衛星は開いた中継以外の局も一緒に取得できる。数えるほうも合わせる
-    return before - (target.type !== 'GR' ? missingSatellites() : missingOn(target.channel));
+  } catch {
+    // 取れなければ次の機会に。チューナーが空いていないだけのことも多い
+  } finally {
+    clearTimeout(stop);
+    collecting.delete(target.channel);
+    signal?.removeEventListener("abort", give);
+    controller.abort();
+  }
+  // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
+  if (target.type === "GR" && ranOut && timeout >= SWEEP_TIMEOUT)
+    markGaveUp(target.channel);
+  // 衛星は開いた中継以外の局も一緒に取得できる。数えるほうも合わせる
+  return (
+    before -
+    (target.type !== "GR" ? missingSatellites() : missingOn(target.channel))
+  );
 }
 
 /** 設定の「チューナー」に出る名乗り。引き継ぎ (`after`) でも同じものを渡す */
 function logoUse(target: Target): StreamUse {
-    return `logo ${target.type}/${target.channel}`;
+  return `logo ${target.type}/${target.channel}`;
 }
 
 /**
@@ -594,39 +667,46 @@ function logoUse(target: Target): StreamUse {
  * そこにしかいないなら空きとして数え、開くときに `after` で引き継ぐ
  */
 export function countFree(
-    tuners: readonly Pick<AgentTuner, 'disabled' | 'types' | 'channel' | 'users'>[],
-    type: string,
-    leaving: readonly string[] = [],
+  tuners: readonly Pick<
+    AgentTuner,
+    "disabled" | "types" | "channel" | "users"
+  >[],
+  type: string,
+  leaving: readonly string[] = [],
 ): number {
-    return tuners.filter(
-        (tuner) =>
-            !tuner.disabled &&
-            tuner.types.includes(type as ChannelType) &&
-            (tuner.channel === null ||
-                (tuner.users.length > 0 && tuner.users.every((user) => leaving.includes(user.use)))),
-    ).length;
+  return tuners.filter(
+    (tuner) =>
+      !tuner.disabled &&
+      tuner.types.includes(type as ChannelType) &&
+      (tuner.channel === null ||
+        (tuner.users.length > 0 &&
+          tuner.users.every((user) => leaving.includes(user.use)))),
+  ).length;
 }
 
 /**
  * 空きチューナーの数 (`countFree`)。無ければ自分では開かない。
  * ロゴの優先度はいちばん下なので、番組表集めに譲る特別扱いは要らない (エージェントが断る・取り上げる)。
  */
-async function freeTuners(type: string, leaving: readonly string[] = []): Promise<number> {
-    try {
-        return countFree(await getTuners(), type, leaving);
-    } catch {
-        // エージェントに聞けないなら開きに行かない
-        return 0;
-    }
+async function freeTuners(
+  type: string,
+  leaving: readonly string[] = [],
+): Promise<number> {
+  try {
+    return countFree(await getTuners(), type, leaving);
+  } catch {
+    // エージェントに聞けないなら開きに行かない
+    return 0;
+  }
 }
 
 /** いまエージェントが開けている物理チャンネル */
 function openChannels(tuners: AgentTuner[]): Set<string> {
-    const open = new Set<string>();
-    for (const tuner of tuners) {
-        if (tuner.channel !== null) open.add(tuner.channel.channel);
-    }
-    return open;
+  const open = new Set<string>();
+  for (const tuner of tuners) {
+    if (tuner.channel !== null) open.add(tuner.channel.channel);
+  }
+  return open;
 }
 
 /** 同時に2つ走らせない。共有の合図 (エージェントの `tuners`) は連続して飛んでくる */
@@ -636,29 +716,29 @@ let riding = false;
  * 取得している最中の様子。画面はこれを見る (1チャンネルに数分かける仕事なので、進み具合を出す)。
  */
 interface SweepState {
-    running: boolean;
-    /** いま開いている物理チャンネル。地上波は2つ並ぶ */
-    channels: string[];
-    /** 見終えた物理チャンネル数と、その総数 */
-    done: number;
-    total: number;
-    /** この取得を始めてからロゴが書き込まれた局の数 (`writtenSince`) */
-    found: number;
-    /** いまの様子、または終わった理由。そのまま画面に出す */
-    message: string;
-    startedAt: number | null;
-    finishedAt: number | null;
+  running: boolean;
+  /** いま開いている物理チャンネル。地上波は2つ並ぶ */
+  channels: string[];
+  /** 見終えた物理チャンネル数と、その総数 */
+  done: number;
+  total: number;
+  /** この取得を始めてからロゴが書き込まれた局の数 (`writtenSince`) */
+  found: number;
+  /** いまの様子、または終わった理由。そのまま画面に出す */
+  message: string;
+  startedAt: number | null;
+  finishedAt: number | null;
 }
 
 const IDLE: SweepState = {
-    running: false,
-    channels: [],
-    done: 0,
-    total: 0,
-    found: 0,
-    message: '',
-    startedAt: null,
-    finishedAt: null,
+  running: false,
+  channels: [],
+  done: 0,
+  total: 0,
+  found: 0,
+  message: "",
+  startedAt: null,
+  finishedAt: null,
 };
 
 /**
@@ -668,12 +748,12 @@ const IDLE: SweepState = {
 let state: SweepState = IDLE;
 
 export function sweepState(): SweepState {
-    return state;
+  return state;
 }
 
 function update(patch: Partial<SweepState>): void {
-    state = { ...state, ...patch };
-    emit('logos');
+  state = { ...state, ...patch };
+  emit("logos");
 }
 
 /**
@@ -686,45 +766,47 @@ function update(patch: Partial<SweepState>): void {
  * 待つことを人数ぶん繰り返すことになる。
  */
 async function drain(
-    queue: Target[],
-    parallel: number,
-    signal: AbortSignal,
-    stamps: Map<number, number>,
+  queue: Target[],
+  parallel: number,
+  signal: AbortSignal,
+  stamps: Map<number, number>,
 ): Promise<void> {
-    /** 空きが無くなった種別。**その種別だけ**諦める (衛星の満杯で地上波を止めない) */
-    const full = new Set<string>();
-    const worker = async () => {
-        /** この手で閉じたばかりの選局。次を開くときに引き継ぐ (`freeTuners`) */
-        let left: StreamUse[] = [];
-        for (;;) {
-            const target = queue.shift();
-            if (target === undefined || signal.aborted) return;
-            // 諦めたぶんも見終えたものとして数える。進み具合が総数に届かなくなる
-            if (full.has(target.type)) {
-                update({ done: state.done + 1 });
-                continue;
-            }
-            if ((await freeTuners(target.type, left)) === 0) {
-                full.add(target.type);
-                update({
-                    done: state.done + 1,
-                    message: `${target.type} の空きチューナーが無くなったため、残りは取りやめました`,
-                });
-                continue;
-            }
-            update({ channels: [...state.channels, target.channel] });
-            // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
-            const limit = target.type === 'GR' ? SWEEP_TIMEOUT : SATELLITE_TIMEOUT;
-            await collect(target, limit, signal, left);
-            left = [logoUse(target)];
-            update({
-                channels: state.channels.filter((channel) => channel !== target.channel),
-                done: state.done + 1,
-                found: writtenSince(stamps),
-            });
-        }
-    };
-    await Promise.all(Array.from({ length: parallel }, worker));
+  /** 空きが無くなった種別。**その種別だけ**諦める (衛星の満杯で地上波を止めない) */
+  const full = new Set<string>();
+  const worker = async () => {
+    /** この手で閉じたばかりの選局。次を開くときに引き継ぐ (`freeTuners`) */
+    let left: StreamUse[] = [];
+    for (;;) {
+      const target = queue.shift();
+      if (target === undefined || signal.aborted) return;
+      // 諦めたぶんも見終えたものとして数える。進み具合が総数に届かなくなる
+      if (full.has(target.type)) {
+        update({ done: state.done + 1 });
+        continue;
+      }
+      if ((await freeTuners(target.type, left)) === 0) {
+        full.add(target.type);
+        update({
+          done: state.done + 1,
+          message: `${target.type} の空きチューナーが無くなったため、残りは取りやめました`,
+        });
+        continue;
+      }
+      update({ channels: [...state.channels, target.channel] });
+      // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
+      const limit = target.type === "GR" ? SWEEP_TIMEOUT : SATELLITE_TIMEOUT;
+      await collect(target, limit, signal, left);
+      left = [logoUse(target)];
+      update({
+        channels: state.channels.filter(
+          (channel) => channel !== target.channel,
+        ),
+        done: state.done + 1,
+        found: writtenSince(stamps),
+      });
+    }
+  };
+  await Promise.all(Array.from({ length: parallel }, worker));
 }
 
 /**
@@ -737,30 +819,30 @@ async function drain(
  * 合図はエージェントの `tuners`。開いた瞬間に飛んでくるので、閉じるまでの間に読み切る。
  */
 export async function ride(): Promise<number> {
-    if (riding) return 0;
-    riding = true;
-    try {
-        reconcile();
-        const need = missing();
-        if (need.length === 0) return 0;
+  if (riding) return 0;
+  riding = true;
+  try {
+    reconcile();
+    const need = missing();
+    if (need.length === 0) return 0;
 
-        const open = openChannels(await getTuners());
-        if (open.size === 0) return 0;
+    const open = openChannels(await getTuners());
+    if (open.size === 0) return 0;
 
-        let found = 0;
-        for (const target of need) {
-            if (!open.has(target.channel)) continue;
-            // 自分で開けたものは共有しない。同じチャンネルを二重に読むことになる
-            if (collecting.has(target.channel)) continue;
-            found += await collect(target, RIDE_TIMEOUT);
-        }
-        return found;
-    } catch {
-        // エージェントに聞けなければ何もしない。次の通知でまた来る
-        return 0;
-    } finally {
-        riding = false;
+    let found = 0;
+    for (const target of need) {
+      if (!open.has(target.channel)) continue;
+      // 自分で開けたものは共有しない。同じチャンネルを二重に読むことになる
+      if (collecting.has(target.channel)) continue;
+      found += await collect(target, RIDE_TIMEOUT);
     }
+    return found;
+  } catch {
+    // エージェントに聞けなければ何もしない。次の通知でまた来る
+    return 0;
+  } finally {
+    riding = false;
+  }
 }
 
 /**
@@ -771,10 +853,10 @@ export async function ride(): Promise<number> {
  * すぐ欲しいときは画面の「ロゴをいますぐ集める」(`sweepNow`) がある。
  */
 export async function sweep(): Promise<number> {
-    // 立っているだけでファイルが無い局を先に取得し直す。そうしないと
-    // 「もう持っている」とみなして永久に取得しない
-    reconcile();
-    return ride();
+  // 立っているだけでファイルが無い局を先に取得し直す。そうしないと
+  // 「もう持っている」とみなして永久に取得しない
+  reconcile();
+  return ride();
 }
 
 /**
@@ -784,40 +866,46 @@ export async function sweep(): Promise<number> {
  * まとめて揃い、外れは PAT を見た時点 (1秒ほど) で次へ行く。当たり外れを
  * 書き留めておくので、二度目からは当たりの中継しか開かない。
  */
-export async function sweepNow(): Promise<{ started: boolean; message: string }> {
-    /*
-     * 前の取得が回っていても譲ってもらう。1チャンネルに数分〜20分開くので、
-     * 待たせると押した人の用が済まない。只で読める共有 (ride) は
-     * 別勘定なので、ここでは触らない
-     */
-    if (state.running) {
-        inflight?.abort();
-        if (!(await settled())) return { started: false, message: 'まだ前の取得が終わっていません' };
-    }
-    reconcile();
-    const targets = missing();
-    if (targets.length === 0) {
-        return { started: false, message: 'ロゴはすべて取得済みです' };
-    }
-    // 空きは**種別ごとに数える** (`freeTuners`)
-    const free = new Map<string, number>();
-    for (const type of new Set(targets.map((target) => target.type))) {
-        free.set(type, await freeTuners(type));
-    }
-    if ([...free.values()].every((count) => count === 0)) {
-        return { started: false, message: '空いているチューナーがありません' };
-    }
-    // 地上波を先に回す。中継ごとに違う局が入っているので、数が捌けるのはこちら
-    const ordered = [...targets].sort((a, b) => Number(b.type === 'GR') - Number(a.type === 'GR'));
-    const parallel = Math.min(SWEEP_TUNERS, Math.max(...free.values()));
-    // 終わるのは数分後。押した人を待たせず、進み具合は画面へ流す
-    void run(ordered, parallel);
-    return {
-        started: true,
-        message:
-            `${targets.length} チャンネルをチューナー ${parallel} 台で取得します。` +
-            'ロゴが流れてくるまで数分かかります',
-    };
+export async function sweepNow(): Promise<{
+  started: boolean;
+  message: string;
+}> {
+  /*
+   * 前の取得が回っていても譲ってもらう。1チャンネルに数分〜20分開くので、
+   * 待たせると押した人の用が済まない。只で読める共有 (ride) は
+   * 別勘定なので、ここでは触らない
+   */
+  if (state.running) {
+    inflight?.abort();
+    if (!(await settled()))
+      return { started: false, message: "まだ前の取得が終わっていません" };
+  }
+  reconcile();
+  const targets = missing();
+  if (targets.length === 0) {
+    return { started: false, message: "ロゴはすべて取得済みです" };
+  }
+  // 空きは**種別ごとに数える** (`freeTuners`)
+  const free = new Map<string, number>();
+  for (const type of new Set(targets.map((target) => target.type))) {
+    free.set(type, await freeTuners(type));
+  }
+  if ([...free.values()].every((count) => count === 0)) {
+    return { started: false, message: "空いているチューナーがありません" };
+  }
+  // 地上波を先に回す。中継ごとに違う局が入っているので、数が捌けるのはこちら
+  const ordered = [...targets].sort(
+    (a, b) => Number(b.type === "GR") - Number(a.type === "GR"),
+  );
+  const parallel = Math.min(SWEEP_TUNERS, Math.max(...free.values()));
+  // 終わるのは数分後。押した人を待たせず、進み具合は画面へ流す
+  void run(ordered, parallel);
+  return {
+    started: true,
+    message:
+      `${targets.length} チャンネルをチューナー ${parallel} 台で取得します。` +
+      "ロゴが流れてくるまで数分かかります",
+  };
 }
 
 /** 走っている取得を外から止めるための手段。譲ってもらうときに使う */
@@ -825,8 +913,8 @@ let inflight: AbortController | null = null;
 
 /** 止まるのを待つ。開いているストリームを畳むだけなのですぐ終わる */
 async function settled(): Promise<boolean> {
-    for (let i = 0; i < 50 && state.running; i++) await Bun.sleep(100);
-    return !state.running;
+  for (let i = 0; i < 50 && state.running; i++) await Bun.sleep(100);
+  return !state.running;
 }
 
 /**
@@ -838,19 +926,21 @@ async function settled(): Promise<boolean> {
  * 「12 局のロゴを取得しました」と出ていた。共有 (`ride`) が同じ間に取得したものも
  * 入らなかった。**この取得の間にロゴが書き込まれた局**を数えれば、どこから来ても数が合う
  */
-export function logoStamps(ids: Iterable<number> = currentServices().map((s) => s.id)): Map<number, number> {
-    const stamps = new Map<number, number>();
-    for (const id of ids) stamps.set(id, writtenAt(id));
-    return stamps;
+export function logoStamps(
+  ids: Iterable<number> = currentServices().map((s) => s.id),
+): Map<number, number> {
+  const stamps = new Map<number, number>();
+  for (const id of ids) stamps.set(id, writtenAt(id));
+  return stamps;
 }
 
 /** その局のロゴを書き込んだ時刻。まだ持っていなければ 0 */
 function writtenAt(serviceId: number): number {
-    try {
-        return statSync(logoPath(serviceId)).mtimeMs;
-    } catch {
-        return 0;
-    }
+  try {
+    return statSync(logoPath(serviceId)).mtimeMs;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -861,58 +951,58 @@ function writtenAt(serviceId: number): number {
  * 控えにだけあって今は無い局 (消えた局) は数えない
  */
 export function writtenSince(
-    stamps: Map<number, number>,
-    ids: Iterable<number> = currentServices().map((s) => s.id),
+  stamps: Map<number, number>,
+  ids: Iterable<number> = currentServices().map((s) => s.id),
 ): number {
-    let count = 0;
-    for (const id of ids) {
-        const now = writtenAt(id);
-        if (now > 0 && now > (stamps.get(id) ?? 0)) count++;
-    }
-    return count;
+  let count = 0;
+  for (const id of ids) {
+    const now = writtenAt(id);
+    if (now > 0 && now > (stamps.get(id) ?? 0)) count++;
+  }
+  return count;
 }
 
 /** 実際に回すところ。走っている印を立て、終わったら結果を残す */
 async function run(targets: Target[], parallel: number): Promise<void> {
-    const controller = new AbortController();
-    inflight = controller;
-    const stamps = logoStamps();
-    state = {
-        running: true,
-        channels: [],
-        done: 0,
-        total: targets.length,
-        found: 0,
-        message: '',
-        startedAt: Date.now(),
-        finishedAt: null,
-    };
-    emit('logos');
-    try {
-        await drain([...targets], parallel, controller.signal, stamps);
-    } finally {
-        inflight = null;
-        const found = writtenSince(stamps);
-        /*
-         * 残りも**局で**数える (画面の「14 / 14 局」と同じ物差し)。取得するチャンネルの
-         * 数 (`missing`) で「未取得のチャンネルは残り N」と出していた頃は、局の数と並べて
-         * 何の数なのか読めなかった。放送に載っていない局は残りに入れない
-         */
-        const { have, total, unavailable } = stats();
-        const left = total - have - unavailable;
-        update({
-            running: false,
-            channels: [],
-            finishedAt: Date.now(),
-            found,
-            message:
-                state.message !== ''
-                    ? state.message
-                    : `${found} 局のロゴを取得しました${left > 0 ? ` (まだの局は残り ${left})` : ''}`,
-        });
-        if (state.found > 0) console.log(`[logo] ${state.message}`);
-        emit('services');
-    }
+  const controller = new AbortController();
+  inflight = controller;
+  const stamps = logoStamps();
+  state = {
+    running: true,
+    channels: [],
+    done: 0,
+    total: targets.length,
+    found: 0,
+    message: "",
+    startedAt: Date.now(),
+    finishedAt: null,
+  };
+  emit("logos");
+  try {
+    await drain([...targets], parallel, controller.signal, stamps);
+  } finally {
+    inflight = null;
+    const found = writtenSince(stamps);
+    /*
+     * 残りも**局で**数える (画面の「14 / 14 局」と同じ物差し)。取得するチャンネルの
+     * 数 (`missing`) で「未取得のチャンネルは残り N」と出していた頃は、局の数と並べて
+     * 何の数なのか読めなかった。放送に載っていない局は残りに入れない
+     */
+    const { have, total, unavailable } = stats();
+    const left = total - have - unavailable;
+    update({
+      running: false,
+      channels: [],
+      finishedAt: Date.now(),
+      found,
+      message:
+        state.message !== ""
+          ? state.message
+          : `${found} 局のロゴを取得しました${left > 0 ? ` (まだの局は残り ${left})` : ""}`,
+    });
+    if (state.found > 0) console.log(`[logo] ${state.message}`);
+    emit("services");
+  }
 }
 
 /**
@@ -929,14 +1019,19 @@ async function run(targets: Target[], parallel: number): Promise<void> {
  * 取れる局まで「取れません」と出てしまう。
  * カルーセルを読み切った後になお足りない局だけが、本当に取れない局。
  */
-export function stats(): { have: number; total: number; pending: number; unavailable: number } {
-    const states = currentServices().map((service) => logoState(service.id));
-    return {
-        have: states.filter((state) => state === 'have').length,
-        total: states.length,
-        pending: missing().length,
-        unavailable: states.filter((state) => state === 'absent').length,
-    };
+export function stats(): {
+  have: number;
+  total: number;
+  pending: number;
+  unavailable: number;
+} {
+  const states = currentServices().map((service) => logoState(service.id));
+  return {
+    have: states.filter((state) => state === "have").length,
+    total: states.length,
+    pending: missing().length,
+    unavailable: states.filter((state) => state === "absent").length,
+  };
 }
 
 /**
@@ -946,7 +1041,7 @@ export function stats(): { have: number; total: number; pending: number; unavail
  * - `absent` … カルーセルに載っていないと分かった局 (取れない。`stats` の `unavailable`)
  * - `missing` … まだ取れていない
  */
-export function logoState(serviceId: number): 'have' | 'absent' | 'missing' {
-    if (existsSync(logoPath(serviceId))) return 'have';
-    return absentFromCarousel(serviceId) ? 'absent' : 'missing';
+export function logoState(serviceId: number): "have" | "absent" | "missing" {
+  if (existsSync(logoPath(serviceId))) return "have";
+  return absentFromCarousel(serviceId) ? "absent" : "missing";
 }

@@ -19,7 +19,7 @@
  *   往復で失われないようにする
  */
 
-import { ADDITIONAL } from '#lib/ts/b24-tables.js';
+import { ADDITIONAL } from "#lib/ts/b24-tables.js";
 
 /** 85 区 1 点の置き場所 */
 export const PUA_ADDITIONAL = 0xe000;
@@ -42,126 +42,136 @@ let emptyEnd = PUA_EMPTY;
 
 /** 1〜84 区を `TextDecoder` で一度だけデコードする */
 function table(): string {
-    if (forward !== null) return forward;
-    const bytes = new Uint8Array(84 * 94 * 2);
-    for (let i = 0; i < 84 * 94; i++) {
-        bytes[i * 2] = 0xa1 + Math.floor(i / 94);
-        bytes[i * 2 + 1] = 0xa1 + (i % 94);
-    }
-    const decoded = new TextDecoder('euc-jp').decode(bytes);
-    let out = '';
-    let at = 0;
-    let empty = PUA_EMPTY;
-    for (let i = 0; i < 84 * 94; i++) {
-        const code = decoded.codePointAt(at) ?? 0xfffd;
-        at += code > 0xffff ? 2 : 1;
-        // 1 単位に収まらない字・読めない点は私用領域に置く (上の説明)
-        out += String.fromCharCode(code === 0xfffd || code > 0xffff ? empty++ : code);
-    }
-    emptyEnd = empty;
-    forward = out;
-    return out;
+  if (forward !== null) return forward;
+  const bytes = new Uint8Array(84 * 94 * 2);
+  for (let i = 0; i < 84 * 94; i++) {
+    bytes[i * 2] = 0xa1 + Math.floor(i / 94);
+    bytes[i * 2 + 1] = 0xa1 + (i % 94);
+  }
+  const decoded = new TextDecoder("euc-jp").decode(bytes);
+  let out = "";
+  let at = 0;
+  let empty = PUA_EMPTY;
+  for (let i = 0; i < 84 * 94; i++) {
+    const code = decoded.codePointAt(at) ?? 0xfffd;
+    at += code > 0xffff ? 2 : 1;
+    // 1 単位に収まらない字・読めない点は私用領域に置く (上の説明)
+    out += String.fromCharCode(
+      code === 0xfffd || code > 0xffff ? empty++ : code,
+    );
+  }
+  emptyEnd = empty;
+  forward = out;
+  return out;
 }
 
 function reverse(): Map<number, number> {
-    if (backward !== null) return backward;
-    const map = new Map<number, number>();
-    const all = table();
-    for (let i = 0; i < all.length; i++) {
-        const unit = all.charCodeAt(i);
-        // 同じ字が 2 か所にあるときは若い番号 (NEC 特殊文字より JIS の本来の位置)
-        if (!map.has(unit)) map.set(unit, ((0xa1 + Math.floor(i / 94)) << 8) | (0xa1 + (i % 94)));
-    }
-    backward = map;
-    return map;
+  if (backward !== null) return backward;
+  const map = new Map<number, number>();
+  const all = table();
+  for (let i = 0; i < all.length; i++) {
+    const unit = all.charCodeAt(i);
+    // 同じ字が 2 か所にあるときは若い番号 (NEC 特殊文字より JIS の本来の位置)
+    if (!map.has(unit))
+      map.set(unit, ((0xa1 + Math.floor(i / 94)) << 8) | (0xa1 + (i % 94)));
+  }
+  backward = map;
+  return map;
 }
 
 /** EUC-JP の 2 バイト符号を中の字 1 単位に */
 function fromPair(lead: number, trail: number): string {
-    const ku = lead - 0xa0;
-    const ten = trail - 0xa0;
-    if (ku >= 85) return String.fromCharCode(PUA_ADDITIONAL + (ku - 85) * 94 + (ten - 1));
-    return table()[(ku - 1) * 94 + (ten - 1)] ?? '�';
+  const ku = lead - 0xa0;
+  const ten = trail - 0xa0;
+  if (ku >= 85)
+    return String.fromCharCode(PUA_ADDITIONAL + (ku - 85) * 94 + (ten - 1));
+  return table()[(ku - 1) * 94 + (ten - 1)] ?? "�";
 }
 
 /** EUC-JP のバイト列を中の文字列に */
 export function decodeEuc(data: Uint8Array): string {
-    const parts: string[] = [];
-    for (let i = 0; i < data.length; i++) {
-        const byte = data[i]!;
-        if (byte < 0x80) {
-            parts.push(String.fromCharCode(byte));
-        } else if (byte >= 0xa1 && byte <= 0xfe) {
-            const trail = data[i + 1];
-            if (trail === undefined || trail < 0xa1 || trail > 0xfe) {
-                parts.push('�');
-                continue;
-            }
-            parts.push(fromPair(byte, trail));
-            i++;
-        } else if (byte === 0x8e && (data[i + 1] ?? 0) >= 0xa1 && (data[i + 1] ?? 0) <= 0xdf) {
-            // 半角カナ。運用されないが、読めるものは読む
-            parts.push(String.fromCharCode(0xff61 + data[i + 1]! - 0xa1));
-            i++;
-        } else {
-            // 3 バイト (JIS X 0212) も運用されない
-            if (byte === 0x8f) i += 2;
-            parts.push('�');
-        }
+  const parts: string[] = [];
+  for (let i = 0; i < data.length; i++) {
+    const byte = data[i]!;
+    if (byte < 0x80) {
+      parts.push(String.fromCharCode(byte));
+    } else if (byte >= 0xa1 && byte <= 0xfe) {
+      const trail = data[i + 1];
+      if (trail === undefined || trail < 0xa1 || trail > 0xfe) {
+        parts.push("�");
+        continue;
+      }
+      parts.push(fromPair(byte, trail));
+      i++;
+    } else if (
+      byte === 0x8e &&
+      (data[i + 1] ?? 0) >= 0xa1 &&
+      (data[i + 1] ?? 0) <= 0xdf
+    ) {
+      // 半角カナ。運用されないが、読めるものは読む
+      parts.push(String.fromCharCode(0xff61 + data[i + 1]! - 0xa1));
+      i++;
+    } else {
+      // 3 バイト (JIS X 0212) も運用されない
+      if (byte === 0x8f) i += 2;
+      parts.push("�");
     }
-    return parts.join('');
+  }
+  return parts.join("");
 }
 
 /** 中の字 1 単位の EUC-JP の符号 (`charCodeAt`)。読めない字は 〓 */
 export function eucCode(unit: number): number {
-    if (unit < 0x80) return unit;
-    if (unit >= PUA_ADDITIONAL && unit < PUA_ADDITIONAL + ADDITIONAL_POINTS) {
-        const i = unit - PUA_ADDITIONAL;
-        return ((0xa1 + 84 + Math.floor(i / 94)) << 8) | (0xa1 + (i % 94));
-    }
-    if (unit >= 0xff61 && unit <= 0xff9f) return 0x8e00 | (unit - 0xff61 + 0xa1);
-    return reverse().get(unit) ?? GETA;
+  if (unit < 0x80) return unit;
+  if (unit >= PUA_ADDITIONAL && unit < PUA_ADDITIONAL + ADDITIONAL_POINTS) {
+    const i = unit - PUA_ADDITIONAL;
+    return ((0xa1 + 84 + Math.floor(i / 94)) << 8) | (0xa1 + (i % 94));
+  }
+  if (unit >= 0xff61 && unit <= 0xff9f) return 0x8e00 | (unit - 0xff61 + 0xa1);
+  return reverse().get(unit) ?? GETA;
 }
 
 /** EUC-JP の符号から中の字 (`String.fromCharCode`)。2 バイトの形でなければ符号そのまま */
 export function fromEucCode(code: number): string {
-    const lead = (code >> 8) & 0xff;
-    const trail = code & 0xff;
-    if (lead >= 0xa1 && lead <= 0xfe && trail >= 0xa1 && trail <= 0xfe) return fromPair(lead, trail);
-    if (lead === 0x8e && trail >= 0xa1 && trail <= 0xdf) return String.fromCharCode(0xff61 + trail - 0xa1);
-    return String.fromCharCode(code & 0xffff);
+  const lead = (code >> 8) & 0xff;
+  const trail = code & 0xff;
+  if (lead >= 0xa1 && lead <= 0xfe && trail >= 0xa1 && trail <= 0xfe)
+    return fromPair(lead, trail);
+  if (lead === 0x8e && trail >= 0xa1 && trail <= 0xdf)
+    return String.fromCharCode(0xff61 + trail - 0xa1);
+  return String.fromCharCode(code & 0xffff);
 }
 
 /** 中の文字列を EUC-JP のバイト列に (通信で送る・NVRAM に書く) */
 export function encodeEuc(text: string): Uint8Array {
-    const out = new Uint8Array(text.length * 2);
-    let at = 0;
-    for (let i = 0; i < text.length; i++) {
-        const code = eucCode(text.charCodeAt(i));
-        if (code < 0x100) out[at++] = code;
-        else {
-            out[at++] = code >> 8;
-            out[at++] = code & 0xff;
-        }
+  const out = new Uint8Array(text.length * 2);
+  let at = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = eucCode(text.charCodeAt(i));
+    if (code < 0x100) out[at++] = code;
+    else {
+      out[at++] = code >> 8;
+      out[at++] = code & 0xff;
     }
-    return out.subarray(0, at);
+  }
+  return out.subarray(0, at);
 }
 
 /** EUC-JP の符号の順で比べる (`<` など)。負・0・正 */
 export function compareEuc(a: string, b: string): number {
-    const n = Math.min(a.length, b.length);
-    for (let i = 0; i < n; i++) {
-        const x = a.charCodeAt(i);
-        const y = b.charCodeAt(i);
-        if (x === y) continue;
-        return eucCode(x) - eucCode(y);
-    }
-    return a.length - b.length;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const x = a.charCodeAt(i);
+    const y = b.charCodeAt(i);
+    if (x === y) continue;
+    return eucCode(x) - eucCode(y);
+  }
+  return a.length - b.length;
 }
 
 /** DRCS の字か (87・88 区) */
 export function isDrcs(unit: number): boolean {
-    return unit >= DRCS_FIRST && unit <= DRCS_LAST;
+  return unit >= DRCS_FIRST && unit <= DRCS_LAST;
 }
 
 /**
@@ -169,29 +179,29 @@ export function isDrcs(unit: number): boolean {
  * **DRCS はここでは開かない** (画像は描く側が持つ。`isDrcs` で見分ける)
  */
 export function toDisplay(text: string): string {
-    let out = '';
-    let from = 0;
-    for (let i = 0; i < text.length; i++) {
-        const unit = text.charCodeAt(i);
-        if (unit < PUA_ADDITIONAL || unit >= emptyEnd || isDrcs(unit)) continue;
-        out += text.slice(from, i);
-        if (unit >= PUA_EMPTY) out += '〓';
-        else {
-            additional ??= [...ADDITIONAL];
-            const char = additional[unit - PUA_ADDITIONAL];
-            out += char === undefined || char === '�' ? '〓' : char;
-        }
-        from = i + 1;
+  let out = "";
+  let from = 0;
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    if (unit < PUA_ADDITIONAL || unit >= emptyEnd || isDrcs(unit)) continue;
+    out += text.slice(from, i);
+    if (unit >= PUA_EMPTY) out += "〓";
+    else {
+      additional ??= [...ADDITIONAL];
+      const char = additional[unit - PUA_ADDITIONAL];
+      out += char === undefined || char === "�" ? "〓" : char;
     }
-    return from === 0 ? text : out + text.slice(from);
+    from = i + 1;
+  }
+  return from === 0 ? text : out + text.slice(from);
 }
 
 /** 1 文字 2 バイトまでとして、EUC-JP で n バイトに切る (Ureg/Greg は 256 バイト) */
 export function clipEuc(text: string, bytes: number): string {
-    let size = 0;
-    for (let i = 0; i < text.length; i++) {
-        size += text.charCodeAt(i) < 0x80 ? 1 : 2;
-        if (size > bytes) return text.slice(0, i);
-    }
-    return text;
+  let size = 0;
+  for (let i = 0; i < text.length; i++) {
+    size += text.charCodeAt(i) < 0x80 ? 1 : 2;
+    if (size > bytes) return text.slice(0, i);
+  }
+  return text;
 }

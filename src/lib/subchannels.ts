@@ -12,24 +12,24 @@
  * 録画のルールには関わらない (サブチャンネルも局として扱い続ける)。ライブの一覧は
  * いま本チャンネルと同じ番組を流しているサブを外す (`epg.airing`)。決め方はここ (`splitOf`) と同じ
  */
-import { toHalfWidth } from './fold';
+import { toHalfWidth } from "./fold";
 
 /** 局の見分けに使う列 (`services` の行) */
 export interface Station {
-    id: number;
-    service_id: number;
-    /** 物理チャンネル (`T27`、`BS01_3`)。選局に使う名前で、1つの TS を指す */
-    channel: string;
-    type: string;
+  id: number;
+  service_id: number;
+  /** 物理チャンネル (`T27`、`BS01_3`)。選局に使う名前で、1つの TS を指す */
+  channel: string;
+  type: string;
 }
 
 /** 表に置く番組 */
 export interface Airing {
-    id: number;
-    service_id: number;
-    start_at: number;
-    end_at: number;
-    name: string;
+  id: number;
+  service_id: number;
+  start_at: number;
+  end_at: number;
+  name: string;
 }
 
 /**
@@ -53,21 +53,27 @@ export interface Airing {
  * チャンネルの名前は TS ごとに1つ (同じ TS を指す写しはスキャンで落とす。`tuner.twinOf`)
  */
 export function mainOf(services: Station[]): Map<number, number> {
-    const tsOf = (service: Station) =>
-        service.type === 'GR' || service.type === 'BS' ? `${service.type}:${service.channel}` : null;
-    const first = new Map<string, Station>();
-    for (const service of services) {
-        const ts = tsOf(service);
-        if (ts === null) continue;
-        const known = first.get(ts);
-        if (known === undefined || service.service_id < known.service_id) first.set(ts, service);
-    }
-    return new Map(
-        services.map((service) => {
-            const ts = tsOf(service);
-            return [service.id, ts === null ? service.id : (first.get(ts)?.id ?? service.id)];
-        }),
-    );
+  const tsOf = (service: Station) =>
+    service.type === "GR" || service.type === "BS"
+      ? `${service.type}:${service.channel}`
+      : null;
+  const first = new Map<string, Station>();
+  for (const service of services) {
+    const ts = tsOf(service);
+    if (ts === null) continue;
+    const known = first.get(ts);
+    if (known === undefined || service.service_id < known.service_id)
+      first.set(ts, service);
+  }
+  return new Map(
+    services.map((service) => {
+      const ts = tsOf(service);
+      return [
+        service.id,
+        ts === null ? service.id : (first.get(ts)?.id ?? service.id),
+      ];
+    }),
+  );
 }
 
 /**
@@ -90,33 +96,34 @@ export function mainOf(services: Station[]): Map<number, number> {
  * 番組表 (`cellsOf`) とライブの一覧 (`epg.airing`) で同じ決め方をする。
  * 片方だけ直すと、番組表で独立していない局がライブに並ぶ
  */
-export function splitOf<P extends Omit<Airing, 'id'>>(
-    programs: P[],
-    main: Map<number, number>,
+export function splitOf<P extends Omit<Airing, "id">>(
+  programs: P[],
+  main: Map<number, number>,
 ): Map<number, P[]> {
-    const ofMain = new Map<number, P[]>();
-    for (const program of programs) {
-        if (main.get(program.service_id) !== program.service_id) continue;
-        const list = ofMain.get(program.service_id);
-        if (list === undefined) ofMain.set(program.service_id, [program]);
-        else list.push(program);
-    }
-    const split = new Map<number, P[]>();
-    for (const program of programs) {
-        const of = main.get(program.service_id);
-        if (of === undefined || of === program.service_id || program.name === '') continue;
-        const same = (ofMain.get(of) ?? []).some(
-            (m) =>
-                toHalfWidth(m.name) === toHalfWidth(program.name) &&
-                (m.start_at === program.start_at ||
-                    (m.start_at < program.end_at && m.end_at > program.start_at)),
-        );
-        if (same) continue;
-        const list = split.get(program.service_id);
-        if (list === undefined) split.set(program.service_id, [program]);
-        else list.push(program);
-    }
-    return split;
+  const ofMain = new Map<number, P[]>();
+  for (const program of programs) {
+    if (main.get(program.service_id) !== program.service_id) continue;
+    const list = ofMain.get(program.service_id);
+    if (list === undefined) ofMain.set(program.service_id, [program]);
+    else list.push(program);
+  }
+  const split = new Map<number, P[]>();
+  for (const program of programs) {
+    const of = main.get(program.service_id);
+    if (of === undefined || of === program.service_id || program.name === "")
+      continue;
+    const same = (ofMain.get(of) ?? []).some(
+      (m) =>
+        toHalfWidth(m.name) === toHalfWidth(program.name) &&
+        (m.start_at === program.start_at ||
+          (m.start_at < program.end_at && m.end_at > program.start_at)),
+    );
+    if (same) continue;
+    const list = split.get(program.service_id);
+    if (list === undefined) split.set(program.service_id, [program]);
+    else list.push(program);
+  }
+  return split;
 }
 
 /**
@@ -131,39 +138,39 @@ export function splitOf<P extends Omit<Airing, 'id'>>(
  * @param split 分割放送 (`splitOf`)。サブを出さないときは null
  */
 export function columnsOf<S extends Station>(
-    services: S[],
-    main: Map<number, number>,
-    split: Map<number, unknown[]> | null,
+  services: S[],
+  main: Map<number, number>,
+  split: Map<number, unknown[]> | null,
 ): S[] {
-    const children = new Map<number, S[]>();
-    for (const service of services) {
-        const of = main.get(service.id) ?? service.id;
-        if (of === service.id || !split?.has(service.id)) continue;
-        const list = children.get(of);
-        if (list === undefined) children.set(of, [service]);
-        else list.push(service);
-    }
-    const columns: S[] = [];
-    for (const service of services) {
-        if ((main.get(service.id) ?? service.id) !== service.id) continue;
-        columns.push(service);
-        columns.push(...(children.get(service.id) ?? []));
-    }
-    return columns;
+  const children = new Map<number, S[]>();
+  for (const service of services) {
+    const of = main.get(service.id) ?? service.id;
+    if (of === service.id || !split?.has(service.id)) continue;
+    const list = children.get(of);
+    if (list === undefined) children.set(of, [service]);
+    else list.push(service);
+  }
+  const columns: S[] = [];
+  for (const service of services) {
+    if ((main.get(service.id) ?? service.id) !== service.id) continue;
+    columns.push(service);
+    columns.push(...(children.get(service.id) ?? []));
+  }
+  return columns;
 }
 
 /** 表の1マス。同じ番組が2つ以上のマスになることがある (分割放送の前後で幅が変わるとき) */
 export interface Cell<P extends Airing> {
-    /** 描くときの鍵。番組の id だけでは重なる */
-    key: string;
-    program: P;
-    /** 左から何列目か (0 始まり。時刻の列は数えない) */
-    column: number;
-    /** 何列ぶん横に伸ばすか */
-    span: number;
-    /** このマスが受け持つ時間。番組の途中で幅が変わると、番組の時間より短くなる */
-    start_at: number;
-    end_at: number;
+  /** 描くときの鍵。番組の id だけでは重なる */
+  key: string;
+  program: P;
+  /** 左から何列目か (0 始まり。時刻の列は数えない) */
+  column: number;
+  /** 何列ぶん横に伸ばすか */
+  span: number;
+  /** このマスが受け持つ時間。番組の途中で幅が変わると、番組の時間より短くなる */
+  start_at: number;
+  end_at: number;
 }
 
 /**
@@ -176,104 +183,118 @@ export interface Cell<P extends Airing> {
  * 並びは受け持つ時刻の早い順。少しずつ描くとき (`drawGradually`) に朝の側から出る
  */
 export function cellsOf<S extends Station, P extends Airing>(
-    columns: S[],
-    programs: P[],
-    main: Map<number, number>,
-    split: Map<number, P[]>,
+  columns: S[],
+  programs: P[],
+  main: Map<number, number>,
+  split: Map<number, P[]>,
 ): Cell<P>[] {
-    const index = new Map(columns.map((service, i) => [service.id, i]));
-    const byService = new Map<number, P[]>();
-    for (const program of programs) {
-        if (!index.has(program.service_id)) continue;
-        const list = byService.get(program.service_id);
-        if (list === undefined) byService.set(program.service_id, [program]);
-        else list.push(program);
-    }
+  const index = new Map(columns.map((service, i) => [service.id, i]));
+  const byService = new Map<number, P[]>();
+  for (const program of programs) {
+    if (!index.has(program.service_id)) continue;
+    const list = byService.get(program.service_id);
+    if (list === undefined) byService.set(program.service_id, [program]);
+    else list.push(program);
+  }
 
-    const cells: Cell<P>[] = [];
-    const add = (program: P, column: number, span: number, start: number, end: number) =>
-        cells.push({
-            key: `${program.id}:${column}:${start}`,
-            program,
-            column,
-            span,
-            start_at: start,
-            end_at: end,
-        });
-
-    columns.forEach((service, column) => {
-        if ((main.get(service.id) ?? service.id) !== service.id) return;
-        const own = byService.get(service.id) ?? [];
-        // 右に続くサブの列 (`columnsOf` で隣に寄せてある)
-        const subs: S[] = [];
-        for (let i = column + 1; i < columns.length && main.get(columns[i]!.id) === service.id; i++) {
-            subs.push(columns[i]!);
-        }
-        if (subs.length === 0) {
-            for (const program of own) add(program, column, 1, program.start_at, program.end_at);
-            return;
-        }
-
-        // サブごとの分割放送
-        const lists = subs.map((sub) => split.get(sub.id) ?? []);
-        lists.forEach((list, i) => {
-            for (const program of list) add(program, column + 1 + i, 1, program.start_at, program.end_at);
-        });
-
-        for (const program of own) {
-            // 長さの無い枠は切りようが無い。これまでどおり本チャンネルの列に1行だけ出す (`place`)
-            if (program.end_at <= program.start_at) {
-                add(program, column, 1, program.start_at, program.end_at);
-                continue;
-            }
-            // 番組の中で、分割放送が始まる・終わる時刻で切る
-            const edges = new Set([program.start_at, program.end_at]);
-            for (const list of lists) {
-                for (const p of list) {
-                    if (p.start_at > program.start_at && p.start_at < program.end_at) edges.add(p.start_at);
-                    if (p.end_at > program.start_at && p.end_at < program.end_at) edges.add(p.end_at);
-                }
-            }
-            const cuts = [...edges].sort((a, b) => a - b);
-
-            // 区切りごとに、本チャンネルの番組を出す列のかたまり ([左端, 列数])
-            let runs: [number, number][] = [];
-            let from = cuts[0]!;
-            const flush = (to: number) => {
-                for (const [left, span] of runs) add(program, left, span, from, to);
-            };
-            for (let c = 0; c + 1 < cuts.length; c++) {
-                const start = cuts[c]!;
-                const end = cuts[c + 1]!;
-                const next: [number, number][] = [[column, 1]];
-                lists.forEach((list, i) => {
-                    if (list.some((p) => p.start_at < end && p.end_at > start)) return;
-                    const last = next[next.length - 1]!;
-                    // 1つ左の列も出しているなら、そのマスを伸ばす
-                    if (last[0] + last[1] === column + 1 + i) last[1]++;
-                    else next.push([column + 1 + i, 1]);
-                });
-                // 幅が変わらなければ切らない (分割放送が続けて並んでいるだけ)
-                if (c > 0 && String(next) !== String(runs)) {
-                    flush(start);
-                    from = start;
-                }
-                runs = next;
-            }
-            flush(cuts[cuts.length - 1]!);
-        }
+  const cells: Cell<P>[] = [];
+  const add = (
+    program: P,
+    column: number,
+    span: number,
+    start: number,
+    end: number,
+  ) =>
+    cells.push({
+      key: `${program.id}:${column}:${start}`,
+      program,
+      column,
+      span,
+      start_at: start,
+      end_at: end,
     });
 
-    return cells.sort((a, b) => a.start_at - b.start_at || a.column - b.column);
+  columns.forEach((service, column) => {
+    if ((main.get(service.id) ?? service.id) !== service.id) return;
+    const own = byService.get(service.id) ?? [];
+    // 右に続くサブの列 (`columnsOf` で隣に寄せてある)
+    const subs: S[] = [];
+    for (
+      let i = column + 1;
+      i < columns.length && main.get(columns[i]!.id) === service.id;
+      i++
+    ) {
+      subs.push(columns[i]!);
+    }
+    if (subs.length === 0) {
+      for (const program of own)
+        add(program, column, 1, program.start_at, program.end_at);
+      return;
+    }
+
+    // サブごとの分割放送
+    const lists = subs.map((sub) => split.get(sub.id) ?? []);
+    lists.forEach((list, i) => {
+      for (const program of list)
+        add(program, column + 1 + i, 1, program.start_at, program.end_at);
+    });
+
+    for (const program of own) {
+      // 長さの無い枠は切りようが無い。これまでどおり本チャンネルの列に1行だけ出す (`place`)
+      if (program.end_at <= program.start_at) {
+        add(program, column, 1, program.start_at, program.end_at);
+        continue;
+      }
+      // 番組の中で、分割放送が始まる・終わる時刻で切る
+      const edges = new Set([program.start_at, program.end_at]);
+      for (const list of lists) {
+        for (const p of list) {
+          if (p.start_at > program.start_at && p.start_at < program.end_at)
+            edges.add(p.start_at);
+          if (p.end_at > program.start_at && p.end_at < program.end_at)
+            edges.add(p.end_at);
+        }
+      }
+      const cuts = [...edges].sort((a, b) => a - b);
+
+      // 区切りごとに、本チャンネルの番組を出す列のかたまり ([左端, 列数])
+      let runs: [number, number][] = [];
+      let from = cuts[0]!;
+      const flush = (to: number) => {
+        for (const [left, span] of runs) add(program, left, span, from, to);
+      };
+      for (let c = 0; c + 1 < cuts.length; c++) {
+        const start = cuts[c]!;
+        const end = cuts[c + 1]!;
+        const next: [number, number][] = [[column, 1]];
+        lists.forEach((list, i) => {
+          if (list.some((p) => p.start_at < end && p.end_at > start)) return;
+          const last = next[next.length - 1]!;
+          // 1つ左の列も出しているなら、そのマスを伸ばす
+          if (last[0] + last[1] === column + 1 + i) last[1]++;
+          else next.push([column + 1 + i, 1]);
+        });
+        // 幅が変わらなければ切らない (分割放送が続けて並んでいるだけ)
+        if (c > 0 && String(next) !== String(runs)) {
+          flush(start);
+          from = start;
+        }
+        runs = next;
+      }
+      flush(cuts[cuts.length - 1]!);
+    }
+  });
+
+  return cells.sort((a, b) => a.start_at - b.start_at || a.column - b.column);
 }
 
 /**
  * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`) — 描く前に
  * どちらの形か分かっていれば、覚えを読むまで列が出たり消えたりしない
  */
-export const SUBCHANNELS_COOKIE = 'denpa_guide_subchannels';
+export const SUBCHANNELS_COOKIE = "denpa_guide_subchannels";
 
 /** 覚えていた値。**既定は出す** — 隠すのは「サブch」を切った ("0") ときだけ */
 export function storedSubchannels(saved: string | undefined): boolean {
-    return saved !== '0';
+  return saved !== "0";
 }

@@ -1,17 +1,20 @@
-import { error } from '@sveltejs/kit';
-import { readLogo } from '#lib/server/logo.js';
+import { error } from "@sveltejs/kit";
+import { readLogo } from "#lib/server/logo.js";
 
 /**
  * 局ロゴ。denpa が放送波から取得したものを配る (src/lib/server/logo.ts)。
  * 滅多に変わらないので長めにキャッシュさせる。
  */
 export function GET({ params, setHeaders }) {
-    const serviceId = Number(params.serviceId);
-    if (!Number.isFinite(serviceId)) error(400, '局IDが不正です');
+  const serviceId = Number(params.serviceId);
+  if (!Number.isFinite(serviceId)) error(400, "局IDが不正です");
 
-    const logo = readLogo(serviceId);
-    if (logo === null) error(404, 'ロゴがありません');
+  const logo = readLogo(serviceId);
+  if (logo === null) error(404, "ロゴがありません");
 
-    setHeaders({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
-    return new Response(logo as BodyInit);
+  setHeaders({
+    "Content-Type": "image/png",
+    "Cache-Control": "public, max-age=86400",
+  });
+  return new Response(logo as BodyInit);
 }

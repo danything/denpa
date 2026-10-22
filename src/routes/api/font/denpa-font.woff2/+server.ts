@@ -11,38 +11,38 @@
  * 端末のフォントへ落ちる。
  */
 
-import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { error } from '@sveltejs/kit';
-import { fontCacheControl } from '#lib/server/font.js';
-import type { RequestHandler } from './$types';
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { error } from "@sveltejs/kit";
+import { fontCacheControl } from "#lib/server/font.js";
+import type { RequestHandler } from "./$types";
 
 /** Dockerfile が置く場所 (リリースの woff2 そのまま) */
-const FONT = '/usr/share/denpa-font/denpa-font.woff2';
+const FONT = "/usr/share/denpa-font/denpa-font.woff2";
 /** 入っている版 (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
-const VERSION = '/usr/share/denpa-font/VERSION';
+const VERSION = "/usr/share/denpa-font/VERSION";
 
 /** 中身の指紋と版。字はイメージに組み込んであり、動いている間は変わらないので1度だけ読む */
 let tag: string | null = null;
 let installed: string | null = null;
 
 export const GET: RequestHandler = ({ request, url }) => {
-    if (!existsSync(FONT)) error(404, 'フォントが入っていません');
-    tag ??= `"${createHash('sha256').update(readFileSync(FONT)).digest('base64url')}"`;
-    installed ??= existsSync(VERSION) ? readFileSync(VERSION, 'utf8').trim() : '';
-    /*
-     * 版付きの URL で版が合えば1年持たせる。それ以外は**持たせてよいが、毎回確かめさせる**
-     * (`no-cache` + ETag)。理由は `#lib/server/font.ts`
-     */
-    const headers = {
-        'content-type': 'font/woff2',
-        'cache-control': fontCacheControl(url.searchParams.get('v'), installed),
-        etag: tag,
-    };
-    // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
-    const asked = (request.headers.get('if-none-match') ?? '')
-        .split(',')
-        .map((t) => t.trim().replace(/^W\//, ''));
-    if (asked.includes(tag)) return new Response(null, { status: 304, headers });
-    return new Response(Bun.file(FONT).stream(), { headers });
+  if (!existsSync(FONT)) error(404, "フォントが入っていません");
+  tag ??= `"${createHash("sha256").update(readFileSync(FONT)).digest("base64url")}"`;
+  installed ??= existsSync(VERSION) ? readFileSync(VERSION, "utf8").trim() : "";
+  /*
+   * 版付きの URL で版が合えば1年持たせる。それ以外は**持たせてよいが、毎回確かめさせる**
+   * (`no-cache` + ETag)。理由は `#lib/server/font.ts`
+   */
+  const headers = {
+    "content-type": "font/woff2",
+    "cache-control": fontCacheControl(url.searchParams.get("v"), installed),
+    etag: tag,
+  };
+  // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
+  const asked = (request.headers.get("if-none-match") ?? "")
+    .split(",")
+    .map((t) => t.trim().replace(/^W\//, ""));
+  if (asked.includes(tag)) return new Response(null, { status: 304, headers });
+  return new Response(Bun.file(FONT).stream(), { headers });
 };

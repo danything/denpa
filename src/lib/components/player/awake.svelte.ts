@@ -21,51 +21,52 @@
  * 取り直さないと、一度タブを離れただけで効かなくなる
  */
 export interface Awake {
-    /** 起こしておきたいか。呼ぶ側が入れる (たいていは「その画面を開いている間」) */
-    on: boolean;
+  /** 起こしておきたいか。呼ぶ側が入れる (たいていは「その画面を開いている間」) */
+  on: boolean;
 }
 
 export function screenAwake(): Awake {
-    let want = $state(false);
+  let want = $state(false);
 
-    $effect(() => {
-        const api = (navigator as Navigator & { wakeLock?: WakeLock }).wakeLock;
-        if (!want || api === undefined) return;
+  $effect(() => {
+    const api = (navigator as Navigator & { wakeLock?: WakeLock }).wakeLock;
+    if (!want || api === undefined) return;
 
-        let lock: WakeLockSentinel | null = null;
-        let dropped = false;
+    let lock: WakeLockSentinel | null = null;
+    let dropped = false;
 
-        const grab = (): void => {
-            if (dropped || lock !== null || document.visibilityState !== 'visible') return;
-            void api
-                .request('screen')
-                .then((next) => {
-                    if (dropped) void next.release().catch(() => undefined);
-                    else {
-                        lock = next;
-                        // OS が外したら覚えておく。次に戻ったときに取り直せる
-                        next.addEventListener('release', () => (lock = null));
-                    }
-                })
-                .catch(() => undefined);
-        };
-
-        grab();
-        document.addEventListener('visibilitychange', grab);
-        return () => {
-            dropped = true;
-            document.removeEventListener('visibilitychange', grab);
-            void lock?.release().catch(() => undefined);
-            lock = null;
-        };
-    });
-
-    return {
-        get on(): boolean {
-            return want;
-        },
-        set on(value: boolean) {
-            want = value;
-        },
+    const grab = (): void => {
+      if (dropped || lock !== null || document.visibilityState !== "visible")
+        return;
+      void api
+        .request("screen")
+        .then((next) => {
+          if (dropped) void next.release().catch(() => undefined);
+          else {
+            lock = next;
+            // OS が外したら覚えておく。次に戻ったときに取り直せる
+            next.addEventListener("release", () => (lock = null));
+          }
+        })
+        .catch(() => undefined);
     };
+
+    grab();
+    document.addEventListener("visibilitychange", grab);
+    return () => {
+      dropped = true;
+      document.removeEventListener("visibilitychange", grab);
+      void lock?.release().catch(() => undefined);
+      lock = null;
+    };
+  });
+
+  return {
+    get on(): boolean {
+      return want;
+    },
+    set on(value: boolean) {
+      want = value;
+    },
+  };
 }

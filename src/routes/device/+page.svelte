@@ -9,40 +9,48 @@
 -->
 
 <script lang="ts">
-    import { onMount } from 'svelte';
+  import { onMount } from "svelte";
 
-    let { data, form } = $props();
+  let { data, form } = $props();
 
-    const view = $derived(form?.view ?? data.view);
-    // 送る前の `form` は SvelteKit では null のことも undefined のこともある。どちらも「まだ送っていない」
-    const pending = $derived(!form && !data.viaToken && data.view?.state === 'pending');
+  const view = $derived(form?.view ?? data.view);
+  // 送る前の `form` は SvelteKit では null のことも undefined のこともある。どちらも「まだ送っていない」
+  const pending = $derived(
+    !form && !data.viaToken && data.view?.state === "pending",
+  );
 
-    let auto: HTMLFormElement | undefined = $state();
-    onMount(() => {
-        if (pending) auto?.requestSubmit();
-    });
+  let auto: HTMLFormElement | undefined = $state();
+  onMount(() => {
+    if (pending) auto?.requestSubmit();
+  });
 </script>
 
 <svelte:head><title>テレビのペアリング - denpa</title></svelte:head>
 
 <div class="solo" data-testid="device-page">
-    {#if data.viaToken || form?.viaToken}
-        <h1>アクセストークンではペアリングできません</h1>
-        <p>テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン) で開いてください。</p>
-    {:else if view === null}
-        <h1>このペアリングコードは見つかりません</h1>
-        <p>QR を読み直すか、テレビでペアリングをやり直してください。コードの期限は10分です。</p>
-    {:else if pending}
-        <h1>{view.name} とペアリングしています…</h1>
-        <form method="POST" bind:this={auto}>
-            <input type="hidden" name="code" value={view.userCode} />
-            <noscript><button type="submit">ペアリング</button></noscript>
-        </form>
-    {:else if view.state === 'approved' || view.state === 'consumed'}
-        <h1 data-testid="device-done">{view.name} とペアリングしました</h1>
-        <p>テレビに戻ってください。</p>
-    {:else}
-        <h1>このペアリングコードは期限切れです</h1>
-        <p>テレビでペアリングをやり直してください。コードの期限は10分です。</p>
-    {/if}
+  {#if data.viaToken || form?.viaToken}
+    <h1>アクセストークンではペアリングできません</h1>
+    <p>
+      テレビのペアリングは、ブラウザ (信頼するネットワークか OIDC のログイン)
+      で開いてください。
+    </p>
+  {:else if view === null}
+    <h1>このペアリングコードは見つかりません</h1>
+    <p>
+      QR
+      を読み直すか、テレビでペアリングをやり直してください。コードの期限は10分です。
+    </p>
+  {:else if pending}
+    <h1>{view.name} とペアリングしています…</h1>
+    <form method="POST" bind:this={auto}>
+      <input type="hidden" name="code" value={view.userCode} />
+      <noscript><button type="submit">ペアリング</button></noscript>
+    </form>
+  {:else if view.state === "approved" || view.state === "consumed"}
+    <h1 data-testid="device-done">{view.name} とペアリングしました</h1>
+    <p>テレビに戻ってください。</p>
+  {:else}
+    <h1>このペアリングコードは期限切れです</h1>
+    <p>テレビでペアリングをやり直してください。コードの期限は10分です。</p>
+  {/if}
 </div>

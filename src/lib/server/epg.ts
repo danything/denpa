@@ -1,14 +1,31 @@
-import { and, count, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
-import { toHalfWidth } from '../fold';
-import { type Airing, mainOf, type Station, splitOf } from '../subchannels';
-import type { EitEvent } from '../ts/eit';
-import { config } from './config';
-import { affected, now, orm } from './db';
-import { emit } from './events';
-import { applyRules } from './rules';
-import { resolveConflicts } from './scheduler';
-import { programs, recordings, reservations, services } from './schema';
-import { type AgentChannel, getChannels, programKey, serviceKey } from './tuner';
+import {
+  and,
+  count,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
+import { toHalfWidth } from "../fold";
+import { type Airing, mainOf, type Station, splitOf } from "../subchannels";
+import type { EitEvent } from "../ts/eit";
+import { config } from "./config";
+import { affected, now, orm } from "./db";
+import { emit } from "./events";
+import { applyRules } from "./rules";
+import { resolveConflicts } from "./scheduler";
+import { programs, recordings, reservations, services } from "./schema";
+import {
+  type AgentChannel,
+  getChannels,
+  programKey,
+  serviceKey,
+} from "./tuner";
 
 /**
  * 録画できるサービスかどうか。ARIB のサービス種別 (STD-B10) で決める。
@@ -33,20 +50,21 @@ const DIGITAL_TV = 1;
  * 実機では、スキャンをやり直した結果 知っているのは32局なのに denpa 側には
  * 120局が残っていて、番組表に空の列が並んでいた。
  */
-export const CURRENT_SERVICES = 'updated_at >= (SELECT MAX(updated_at) FROM services)';
+export const CURRENT_SERVICES =
+  "updated_at >= (SELECT MAX(updated_at) FROM services)";
 
 /**
  * いま選局できる局の数を種別ごとに。局が無いときの案内に使う (`#lib/channel-notice.ts`)。
  * 局が1つも無い種別は入らない
  */
 export function serviceCounts(): Record<string, number> {
-    const rows = orm()
-        .select({ type: services.type, n: count() })
-        .from(services)
-        .where(sql.raw(CURRENT_SERVICES))
-        .groupBy(services.type)
-        .all();
-    return Object.fromEntries(rows.map((row) => [row.type, row.n]));
+  const rows = orm()
+    .select({ type: services.type, n: count() })
+    .from(services)
+    .where(sql.raw(CURRENT_SERVICES))
+    .groupBy(services.type)
+    .all();
+  return Object.fromEntries(rows.map((row) => [row.type, row.n]));
 }
 
 /**
@@ -59,7 +77,8 @@ export function serviceCounts(): Record<string, number> {
  * 地上波で同じリモコン番号の局が複数あるとき (NHK総合1と2) も、
  * サービスID順で 1 → 2 になる。
  */
-export const SERVICE_ORDER = 'remote_control_key IS NULL, remote_control_key, service_id';
+export const SERVICE_ORDER =
+  "remote_control_key IS NULL, remote_control_key, service_id";
 /** 種別ごとの順。地上波 → BS → CS。テレビの切り替えもこの順 */
 export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 ELSE 2 END`;
 
@@ -85,14 +104,21 @@ export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 E
  * **1局も残らないときは全部出す。** 入れたばかりで番組表がまだ空のときに
  * 列ごと消えると、何も映らない画面から先へ進めない
  */
-export function airing<S extends Station, P extends Omit<Airing, 'id'>>(services: S[], programs: P[]): S[] {
-    const main = mainOf(services);
-    const split = splitOf(programs, main);
-    const named = new Set(programs.filter((program) => program.name !== '').map((p) => p.service_id));
-    const shown = services.filter(
-        (service) => named.has(service.id) && (main.get(service.id) === service.id || split.has(service.id)),
-    );
-    return shown.length === 0 ? services : shown;
+export function airing<S extends Station, P extends Omit<Airing, "id">>(
+  services: S[],
+  programs: P[],
+): S[] {
+  const main = mainOf(services);
+  const split = splitOf(programs, main);
+  const named = new Set(
+    programs.filter((program) => program.name !== "").map((p) => p.service_id),
+  );
+  const shown = services.filter(
+    (service) =>
+      named.has(service.id) &&
+      (main.get(service.id) === service.id || split.has(service.id)),
+  );
+  return shown.length === 0 ? services : shown;
 }
 
 /**
@@ -111,105 +137,105 @@ export function airing<S extends Station, P extends Omit<Airing, 'id'>>(services
  * 直したときに同じ番組の詳細でも「視聴」が出たり出なかったりする
  */
 export function watchableServices(at: number): number[] {
-    return airing(
-        orm()
-            .select({
-                id: services.id,
-                service_id: services.service_id,
-                channel: services.channel,
-                type: services.type,
-            })
-            .from(services)
-            .where(sql.raw(CURRENT_SERVICES))
-            .all(),
-        orm()
-            .select({
-                service_id: programs.service_id,
-                name: programs.name,
-                start_at: programs.start_at,
-                end_at: programs.end_at,
-            })
-            .from(programs)
-            .where(and(lte(programs.start_at, at), gt(programs.end_at, at)))
-            .all(),
-    ).map((service) => service.id);
+  return airing(
+    orm()
+      .select({
+        id: services.id,
+        service_id: services.service_id,
+        channel: services.channel,
+        type: services.type,
+      })
+      .from(services)
+      .where(sql.raw(CURRENT_SERVICES))
+      .all(),
+    orm()
+      .select({
+        service_id: programs.service_id,
+        name: programs.name,
+        start_at: programs.start_at,
+        end_at: programs.end_at,
+      })
+      .from(programs)
+      .where(and(lte(programs.start_at, at), gt(programs.end_at, at)))
+      .all(),
+  ).map((service) => service.id);
 }
 
 export function syncServices(channels: AgentChannel[]): number {
-    const at = now();
-    let count = 0;
-    const dropped: number[] = [];
+  const at = now();
+  let count = 0;
+  const dropped: number[] = [];
+  /*
+   * この回で見かけた局。**時刻では数えない** (2回の取り込みが同じミリ秒に入ることがある)
+   */
+  const seen = new Set<number>();
+  let canceled = 0;
+  orm().transaction((tx) => {
+    const known = new Map(
+      tx
+        .select({ id: services.id, name: services.name })
+        .from(services)
+        .all()
+        .map((row) => [row.id, row.name]),
+    );
+    for (const channel of channels) {
+      for (const service of channel.services) {
+        const id = serviceKey(channel.networkId, service.serviceId);
+        // 映像の入っていないサービスは録っても仕方がない
+        if (service.serviceType !== DIGITAL_TV) {
+          dropped.push(id);
+          continue;
+        }
+        seen.add(id);
+        tx.insert(services)
+          .values({
+            id,
+            service_id: service.serviceId,
+            network_id: channel.networkId,
+            name: widthKept(known.get(id), service.name),
+            type: channel.type,
+            service_type: service.serviceType,
+            channel: channel.channel,
+            remote_control_key: channel.remoteControlKeyId,
+            // ロゴは放送波から取得したときに立てる (logo.ts)
+            has_logo: false,
+            updated_at: at,
+          })
+          .onConflictDoUpdate({
+            target: services.id,
+            set: {
+              service_id: sql`excluded.service_id`,
+              network_id: sql`excluded.network_id`,
+              name: sql`excluded.name`,
+              type: sql`excluded.type`,
+              service_type: sql`excluded.service_type`,
+              channel: sql`excluded.channel`,
+              remote_control_key: sql`excluded.remote_control_key`,
+              updated_at: sql`excluded.updated_at`,
+            },
+          })
+          .run();
+        count++;
+      }
+    }
     /*
-     * この回で見かけた局。**時刻では数えない** (2回の取り込みが同じミリ秒に入ることがある)
+     * 以前の取り込みで入ってしまったデータ放送やワンセグを片付ける。
+     * 残っていると番組表に並び続け、ルールが引っかけて録画が失敗する。
+     *
+     * **ここだけは局の行ごと消す。** 選局できなくなった局 (`forgetMissing`)
+     * とは違って、そもそも映像が無く**録画も予約も1つも紐付いていない**ので、
+     * 辿れなくなるものが無い
      */
-    const seen = new Set<number>();
-    let canceled = 0;
-    orm().transaction((tx) => {
-        const known = new Map(
-            tx
-                .select({ id: services.id, name: services.name })
-                .from(services)
-                .all()
-                .map((row) => [row.id, row.name]),
-        );
-        for (const channel of channels) {
-            for (const service of channel.services) {
-                const id = serviceKey(channel.networkId, service.serviceId);
-                // 映像の入っていないサービスは録っても仕方がない
-                if (service.serviceType !== DIGITAL_TV) {
-                    dropped.push(id);
-                    continue;
-                }
-                seen.add(id);
-                tx.insert(services)
-                    .values({
-                        id,
-                        service_id: service.serviceId,
-                        network_id: channel.networkId,
-                        name: widthKept(known.get(id), service.name),
-                        type: channel.type,
-                        service_type: service.serviceType,
-                        channel: channel.channel,
-                        remote_control_key: channel.remoteControlKeyId,
-                        // ロゴは放送波から取得したときに立てる (logo.ts)
-                        has_logo: false,
-                        updated_at: at,
-                    })
-                    .onConflictDoUpdate({
-                        target: services.id,
-                        set: {
-                            service_id: sql`excluded.service_id`,
-                            network_id: sql`excluded.network_id`,
-                            name: sql`excluded.name`,
-                            type: sql`excluded.type`,
-                            service_type: sql`excluded.service_type`,
-                            channel: sql`excluded.channel`,
-                            remote_control_key: sql`excluded.remote_control_key`,
-                            updated_at: sql`excluded.updated_at`,
-                        },
-                    })
-                    .run();
-                count++;
-            }
-        }
-        /*
-         * 以前の取り込みで入ってしまったデータ放送やワンセグを片付ける。
-         * 残っていると番組表に並び続け、ルールが引っかけて録画が失敗する。
-         *
-         * **ここだけは局の行ごと消す。** 選局できなくなった局 (`forgetMissing`)
-         * とは違って、そもそも映像が無く**録画も予約も1つも紐付いていない**ので、
-         * 辿れなくなるものが無い
-         */
-        for (const id of dropped) {
-            clearBelongings(at, id);
-            tx.delete(services).where(eq(services.id, id)).run();
-        }
-        // この回で見かけなかった局の持ち物を片付ける
-        if (count > 0) canceled = forgetMissing(at, seen);
-    });
-    // 取り消した予約は一覧に出ている。同じものを見ている端末が食い違わないように
-    if (canceled > 0) emit('reservations');
-    return count;
+    for (const id of dropped) {
+      clearBelongings(at, id);
+      tx.delete(services).where(eq(services.id, id)).run();
+    }
+    // この回で見かけなかった局の持ち物を片付ける
+    if (count > 0) canceled = forgetMissing(at, seen);
+  });
+  // 取り消した予約は一覧に出ている。同じものを見ている端末が食い違わないように
+  if (canceled > 0) emit("reservations");
+  return count;
 }
 
 /**
@@ -221,7 +247,9 @@ export function syncServices(channels: AgentChannel[]): number {
  * それが消えるので、半角に寄せて同じなら触らない。名前そのものが変わったときだけ入れ替える
  */
 function widthKept(current: string | undefined, incoming: string): string {
-    return current !== undefined && toHalfWidth(current) === toHalfWidth(incoming) ? current : incoming;
+  return current !== undefined && toHalfWidth(current) === toHalfWidth(incoming)
+    ? current
+    : incoming;
 }
 
 /**
@@ -235,27 +263,42 @@ function widthKept(current: string | undefined, incoming: string): string {
  *
  * @returns 書き換えた局の数
  */
-export function widenServices(networkId: number, found: { serviceId: number; name: string }[]): number {
-    let changed = 0;
-    orm().transaction((tx) => {
-        for (const service of found) {
-            const id = serviceKey(networkId, service.serviceId);
-            const row = tx.select({ name: services.name }).from(services).where(eq(services.id, id)).get();
-            if (row === undefined || row.name === service.name) continue;
-            if (toHalfWidth(row.name) !== toHalfWidth(service.name)) continue;
-            tx.update(services).set({ name: service.name }).where(eq(services.id, id)).run();
-            tx.update(recordings)
-                .set({ service_name: service.name })
-                .where(and(eq(recordings.service_id, id), eq(recordings.service_name, row.name)))
-                .run();
-            changed++;
-        }
-    });
-    if (changed > 0) {
-        emit('services');
-        emit('recordings');
+export function widenServices(
+  networkId: number,
+  found: { serviceId: number; name: string }[],
+): number {
+  let changed = 0;
+  orm().transaction((tx) => {
+    for (const service of found) {
+      const id = serviceKey(networkId, service.serviceId);
+      const row = tx
+        .select({ name: services.name })
+        .from(services)
+        .where(eq(services.id, id))
+        .get();
+      if (row === undefined || row.name === service.name) continue;
+      if (toHalfWidth(row.name) !== toHalfWidth(service.name)) continue;
+      tx.update(services)
+        .set({ name: service.name })
+        .where(eq(services.id, id))
+        .run();
+      tx.update(recordings)
+        .set({ service_name: service.name })
+        .where(
+          and(
+            eq(recordings.service_id, id),
+            eq(recordings.service_name, row.name),
+          ),
+        )
+        .run();
+      changed++;
     }
-    return changed;
+  });
+  if (changed > 0) {
+    emit("services");
+    emit("recordings");
+  }
+  return changed;
 }
 
 /**
@@ -266,23 +309,28 @@ export function widenServices(networkId: number, found: { serviceId: number; nam
  * **局の行そのものには触らない。** 消すかどうかは呼ぶ側が決める
  * (消すと、その局で録った録画や過去の予約が辿れなくなる)。
  */
-function clearBelongings(at: number, serviceId: number): { programs: number; reservations: number } {
-    const canceled = affected(
-        orm()
-            .update(reservations)
-            // システムの取り消し。人が押したものと違い、局が戻ればルールが立て直してよい
-            .set({ state: 'canceled', canceled_by: 'system', updated_at: at })
-            .where(
-                and(
-                    eq(reservations.service_id, serviceId),
-                    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
-                    // 録り始めたものは触らない。取り消しても録画は戻らない
-                    isNull(reservations.started_at),
-                ),
-            ),
-    );
-    const removed = affected(orm().delete(programs).where(eq(programs.service_id, serviceId)));
-    return { programs: removed, reservations: canceled };
+function clearBelongings(
+  at: number,
+  serviceId: number,
+): { programs: number; reservations: number } {
+  const canceled = affected(
+    orm()
+      .update(reservations)
+      // システムの取り消し。人が押したものと違い、局が戻ればルールが立て直してよい
+      .set({ state: "canceled", canceled_by: "system", updated_at: at })
+      .where(
+        and(
+          eq(reservations.service_id, serviceId),
+          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          // 録り始めたものは触らない。取り消しても録画は戻らない
+          isNull(reservations.started_at),
+        ),
+      ),
+  );
+  const removed = affected(
+    orm().delete(programs).where(eq(programs.service_id, serviceId)),
+  );
+  return { programs: removed, reservations: canceled };
 }
 
 /**
@@ -309,28 +357,37 @@ function clearBelongings(at: number, serviceId: number): { programs: number; res
  * エージェントが一時的に転んだだけなら、戻ってきた時点で時計が巻き戻る。
  */
 function forgetMissing(at: number, seen: Set<number>): number {
-    const stale = orm()
-        .select({ id: services.id, name: services.name, updated_at: services.updated_at })
-        .from(services)
-        .all()
-        .filter((service) => !seen.has(service.id) && at - service.updated_at >= config.serviceForgetAfter);
-    if (stale.length === 0) return 0;
-
-    let programs = 0;
-    let reservations = 0;
-    const names: string[] = [];
-    for (const service of stale) {
-        const cleared = clearBelongings(at, service.id);
-        programs += cleared.programs;
-        reservations += cleared.reservations;
-        if (cleared.programs > 0 || cleared.reservations > 0) names.push(service.name);
-    }
-    if (programs === 0 && reservations === 0) return 0;
-    console.log(
-        `[epg] 選局できなくなった局を片付けました: ${names.join(', ')} ` +
-            `(番組 ${programs} 件 / 予約 ${reservations} 件を取り消し)`,
+  const stale = orm()
+    .select({
+      id: services.id,
+      name: services.name,
+      updated_at: services.updated_at,
+    })
+    .from(services)
+    .all()
+    .filter(
+      (service) =>
+        !seen.has(service.id) &&
+        at - service.updated_at >= config.serviceForgetAfter,
     );
-    return reservations;
+  if (stale.length === 0) return 0;
+
+  let programs = 0;
+  let reservations = 0;
+  const names: string[] = [];
+  for (const service of stale) {
+    const cleared = clearBelongings(at, service.id);
+    programs += cleared.programs;
+    reservations += cleared.reservations;
+    if (cleared.programs > 0 || cleared.reservations > 0)
+      names.push(service.name);
+  }
+  if (programs === 0 && reservations === 0) return 0;
+  console.log(
+    `[epg] 選局できなくなった局を片付けました: ${names.join(", ")} ` +
+      `(番組 ${programs} 件 / 予約 ${reservations} 件を取り消し)`,
+  );
+  return reservations;
 }
 
 /**
@@ -341,16 +398,20 @@ function forgetMissing(at: number, seen: Set<number>): number {
  * 番組表が空のまま何も出ない時間が続く。
  */
 export function syncServicesOnly(channels: AgentChannel[]): number {
-    const current = () =>
-        orm().select({ n: count() }).from(services).where(sql.raw(CURRENT_SERVICES)).get()?.n ?? 0;
-    const before = current();
-    const synced = syncServices(channels);
-    /*
-     * 数が変わったときだけ知らせる。毎回知らせると、番組表を開いている端末が
-     * 何も変わっていないのに1分おきに読み直すことになる
-     */
-    if (current() !== before) emit('services');
-    return synced;
+  const current = () =>
+    orm()
+      .select({ n: count() })
+      .from(services)
+      .where(sql.raw(CURRENT_SERVICES))
+      .get()?.n ?? 0;
+  const before = current();
+  const synced = syncServices(channels);
+  /*
+   * 数が変わったときだけ知らせる。毎回知らせると、番組表を開いている端末が
+   * 何も変わっていないのに1分おきに読み直すことになる
+   */
+  if (current() !== before) emit("services");
+  return synced;
 }
 
 /**
@@ -361,150 +422,174 @@ export function syncServicesOnly(channels: AgentChannel[]): number {
  * 番組が丸ごと出なくなる。networkId と合わせて引き直す。
  */
 function serviceIdIndex(): Map<string, number> {
-    const rows = orm()
-        .select({ id: services.id, network_id: services.network_id, service_id: services.service_id })
-        .from(services)
-        .all();
-    return new Map(rows.map((s) => [`${s.network_id}:${s.service_id}`, s.id]));
+  const rows = orm()
+    .select({
+      id: services.id,
+      network_id: services.network_id,
+      service_id: services.service_id,
+    })
+    .from(services)
+    .all();
+  return new Map(rows.map((s) => [`${s.network_id}:${s.service_id}`, s.id]));
 }
 
 /** 読み取った番組をDBへ。取り込めた件数を返す */
 export function savePrograms(events: EitEvent[]): number {
-    const index = serviceIdIndex();
-    /**
-     * 同じ番組が来たら上書きする中身。
-     *
-     * service_id も上書きする。ここを更新しないと、一度おかしな値で入った行が
-     * 取り込み直しても直らない (番組表が空のままになる)。
-     *
-     * **タイトルと概要は空で塗り潰さない。** 番組表は「基本」(タイトル) と「詳細」(番組内容) の
-     * 2つの表に分かれて流れてきて、片方しか読めなかった回がある
-     * (ts/eit.ts の EpgReader.merge)。読めたところだけ書く
-     */
-    const refresh = {
-        service_id: sql`excluded.service_id`,
-        network_id: sql`excluded.network_id`,
-        start_at: sql`excluded.start_at`,
-        end_at: sql`excluded.end_at`,
-        name: sql`CASE WHEN excluded.name = '' THEN ${programs.name} ELSE excluded.name END`,
-        description: sql`CASE WHEN excluded.description = '' THEN ${programs.description} ELSE excluded.description END`,
-        extended: sql`COALESCE(excluded.extended, ${programs.extended})`,
-        genres: sql`excluded.genres`,
-        genre_detail: sql`excluded.genre_detail`,
-        is_free: sql`excluded.is_free`,
-        audio_type: sql`excluded.audio_type`,
-        audios: sql`excluded.audios`,
-        video_type: sql`excluded.video_type`,
-        video_resolution: sql`excluded.video_resolution`,
-        // コピー禁止か。**表が言っていない回 (NULL) は前のまま** (`EitEvent.copyNever`)
-        copy_never: sql`COALESCE(${sql.placeholder('copy_never')}, ${programs.copy_never})`,
-        updated_at: sql`excluded.updated_at`,
-    };
+  const index = serviceIdIndex();
+  /**
+   * 同じ番組が来たら上書きする中身。
+   *
+   * service_id も上書きする。ここを更新しないと、一度おかしな値で入った行が
+   * 取り込み直しても直らない (番組表が空のままになる)。
+   *
+   * **タイトルと概要は空で塗り潰さない。** 番組表は「基本」(タイトル) と「詳細」(番組内容) の
+   * 2つの表に分かれて流れてきて、片方しか読めなかった回がある
+   * (ts/eit.ts の EpgReader.merge)。読めたところだけ書く
+   */
+  const refresh = {
+    service_id: sql`excluded.service_id`,
+    network_id: sql`excluded.network_id`,
+    start_at: sql`excluded.start_at`,
+    end_at: sql`excluded.end_at`,
+    name: sql`CASE WHEN excluded.name = '' THEN ${programs.name} ELSE excluded.name END`,
+    description: sql`CASE WHEN excluded.description = '' THEN ${programs.description} ELSE excluded.description END`,
+    extended: sql`COALESCE(excluded.extended, ${programs.extended})`,
+    genres: sql`excluded.genres`,
+    genre_detail: sql`excluded.genre_detail`,
+    is_free: sql`excluded.is_free`,
+    audio_type: sql`excluded.audio_type`,
+    audios: sql`excluded.audios`,
+    video_type: sql`excluded.video_type`,
+    video_resolution: sql`excluded.video_resolution`,
+    // コピー禁止か。**表が言っていない回 (NULL) は前のまま** (`EitEvent.copyNever`)
+    copy_never: sql`COALESCE(${sql.placeholder("copy_never")}, ${programs.copy_never})`,
+    updated_at: sql`excluded.updated_at`,
+  };
+  /*
+   * **同じ局で時間が重なった行は、あとから来たほうが勝つ。**
+   *
+   * 野球が延びると、いま流れている番組の終わりが EIT で後ろへ動く (延長)。
+   * このとき**潰された側の番組はすぐには書き換わらない** — 局は後から新しい
+   * 時刻で送り直してくるが、それまでの間、古い行が延長された行の下に
+   * 重なったまま残り、番組表の1マスに2つ3つの番組が重なって出ていた。
+   * 受信機の流儀に合わせて、重なった古い行はここで消す (送り直しが来れば
+   * event_id ごと戻ってくる)
+   */
+  const at = now();
+  let count = 0;
+  orm().transaction((tx) => {
     /*
-     * **同じ局で時間が重なった行は、あとから来たほうが勝つ。**
-     *
-     * 野球が延びると、いま流れている番組の終わりが EIT で後ろへ動く (延長)。
-     * このとき**潰された側の番組はすぐには書き換わらない** — 局は後から新しい
-     * 時刻で送り直してくるが、それまでの間、古い行が延長された行の下に
-     * 重なったまま残り、番組表の1マスに2つ3つの番組が重なって出ていた。
-     * 受信機の流儀に合わせて、重なった古い行はここで消す (送り直しが来れば
-     * event_id ごと戻ってくる)
+     * **文は1回だけ組んで使い回す** (番組ごとに組むと1番組 190µs かかり、全局ぶんで数秒止まる)
      */
-    const at = now();
-    let count = 0;
-    orm().transaction((tx) => {
-        /*
-         * **文は1回だけ組んで使い回す** (番組ごとに組むと1番組 190µs かかり、全局ぶんで数秒止まる)
-         */
-        const overlap = tx
-            .delete(programs)
-            .where(
-                and(
-                    eq(programs.service_id, sql.placeholder('service_id')),
-                    ne(programs.id, sql.placeholder('id')),
-                    lt(programs.start_at, sql.placeholder('end_at')),
-                    gt(programs.end_at, sql.placeholder('start_at')),
-                ),
-            )
-            .prepare();
-        const upsert = tx
-            .insert(programs)
-            .values({
-                id: sql.placeholder('id'),
-                service_id: sql.placeholder('service_id'),
-                network_id: sql.placeholder('network_id'),
-                event_id: sql.placeholder('event_id'),
-                start_at: sql.placeholder('start_at'),
-                end_at: sql.placeholder('end_at'),
-                name: sql.placeholder('name'),
-                description: sql.placeholder('description'),
-                // JSON の列は**こちらで畳んで渡す** (`encoded`)。drizzle に任せると null まで "null" になる
-                extended: sql`${sql.placeholder('extended')}`,
-                genres: sql`${sql.placeholder('genres')}`,
-                genre_detail: sql`${sql.placeholder('genre_detail')}`,
-                is_free: sql.placeholder('is_free'),
-                audio_type: sql.placeholder('audio_type'),
-                audios: sql`${sql.placeholder('audios')}`,
-                video_type: sql.placeholder('video_type'),
-                video_resolution: sql.placeholder('video_resolution'),
-                copy_never: sql`COALESCE(${sql.placeholder('copy_never')}, 0)`,
-                updated_at: sql.placeholder('updated_at'),
-            })
-            .onConflictDoUpdate({ target: programs.id, set: refresh })
-            .prepare();
+    const overlap = tx
+      .delete(programs)
+      .where(
+        and(
+          eq(programs.service_id, sql.placeholder("service_id")),
+          ne(programs.id, sql.placeholder("id")),
+          lt(programs.start_at, sql.placeholder("end_at")),
+          gt(programs.end_at, sql.placeholder("start_at")),
+        ),
+      )
+      .prepare();
+    const upsert = tx
+      .insert(programs)
+      .values({
+        id: sql.placeholder("id"),
+        service_id: sql.placeholder("service_id"),
+        network_id: sql.placeholder("network_id"),
+        event_id: sql.placeholder("event_id"),
+        start_at: sql.placeholder("start_at"),
+        end_at: sql.placeholder("end_at"),
+        name: sql.placeholder("name"),
+        description: sql.placeholder("description"),
+        // JSON の列は**こちらで畳んで渡す** (`encoded`)。drizzle に任せると null まで "null" になる
+        extended: sql`${sql.placeholder("extended")}`,
+        genres: sql`${sql.placeholder("genres")}`,
+        genre_detail: sql`${sql.placeholder("genre_detail")}`,
+        is_free: sql.placeholder("is_free"),
+        audio_type: sql.placeholder("audio_type"),
+        audios: sql`${sql.placeholder("audios")}`,
+        video_type: sql.placeholder("video_type"),
+        video_resolution: sql.placeholder("video_resolution"),
+        copy_never: sql`COALESCE(${sql.placeholder("copy_never")}, 0)`,
+        updated_at: sql.placeholder("updated_at"),
+      })
+      .onConflictDoUpdate({ target: programs.id, set: refresh })
+      .prepare();
 
-        for (const event of events) {
-            // 開始も尺も決まっていないものは録画の時刻が決まらない
-            if (event.startAt === null || event.duration === null || event.duration === 0) continue;
-            // チャンネル設定に無いサービスの番組は録れないので捨てる
-            const serviceId = index.get(`${event.originalNetworkId}:${event.serviceId}`);
-            if (serviceId === undefined) continue;
-            const extended = Object.keys(event.extended).length === 0 ? null : event.extended;
-            const key = programKey(event.originalNetworkId, event.serviceId, event.eventId);
-            const endAt = event.startAt + event.duration;
-            overlap.run({ service_id: serviceId, id: key, end_at: endAt, start_at: event.startAt });
-            upsert.run({
-                id: key,
-                service_id: serviceId,
-                network_id: event.originalNetworkId,
-                event_id: event.eventId,
-                start_at: event.startAt,
-                end_at: endAt,
-                name: event.name,
-                description: event.description,
-                extended: encoded(programs.extended, extended),
-                genres: encoded(
-                    programs.genres,
-                    event.genres.length === 0 ? null : event.genres.map((g) => g.lv1),
-                ),
-                genre_detail: encoded(programs.genre_detail, event.genres.length === 0 ? null : event.genres),
-                is_free: event.isFree,
-                audio_type: event.audios[0]?.componentType ?? null,
-                audios: encoded(
-                    programs.audios,
-                    event.audios.length === 0
-                        ? null
-                        : /*
-                           * **放送が付けた名前も残す。** 解説放送や二重音声は、
-                           * 種別も言語も同じ音声が2本並ぶので、符号だけでは
-                           * 「ステレオ (日本語)」が2つになって見分けが付かない
-                           */
-                          event.audios.map((a) => ({
-                              componentType: a.componentType,
-                              langs: a.langs,
-                              ...(a.text === undefined ? {} : { text: a.text }),
-                              ...(a.main === undefined ? {} : { main: a.main }),
-                          })),
-                ),
-                video_type: event.video?.type ?? null,
-                video_resolution: event.video?.resolution ?? null,
-                copy_never: event.copyNever,
-                updated_at: at,
-            });
-            count++;
-        }
-    });
-    return count;
+    for (const event of events) {
+      // 開始も尺も決まっていないものは録画の時刻が決まらない
+      if (
+        event.startAt === null ||
+        event.duration === null ||
+        event.duration === 0
+      )
+        continue;
+      // チャンネル設定に無いサービスの番組は録れないので捨てる
+      const serviceId = index.get(
+        `${event.originalNetworkId}:${event.serviceId}`,
+      );
+      if (serviceId === undefined) continue;
+      const extended =
+        Object.keys(event.extended).length === 0 ? null : event.extended;
+      const key = programKey(
+        event.originalNetworkId,
+        event.serviceId,
+        event.eventId,
+      );
+      const endAt = event.startAt + event.duration;
+      overlap.run({
+        service_id: serviceId,
+        id: key,
+        end_at: endAt,
+        start_at: event.startAt,
+      });
+      upsert.run({
+        id: key,
+        service_id: serviceId,
+        network_id: event.originalNetworkId,
+        event_id: event.eventId,
+        start_at: event.startAt,
+        end_at: endAt,
+        name: event.name,
+        description: event.description,
+        extended: encoded(programs.extended, extended),
+        genres: encoded(
+          programs.genres,
+          event.genres.length === 0 ? null : event.genres.map((g) => g.lv1),
+        ),
+        genre_detail: encoded(
+          programs.genre_detail,
+          event.genres.length === 0 ? null : event.genres,
+        ),
+        is_free: event.isFree,
+        audio_type: event.audios[0]?.componentType ?? null,
+        audios: encoded(
+          programs.audios,
+          event.audios.length === 0
+            ? null
+            : /*
+               * **放送が付けた名前も残す。** 解説放送や二重音声は、
+               * 種別も言語も同じ音声が2本並ぶので、符号だけでは
+               * 「ステレオ (日本語)」が2つになって見分けが付かない
+               */
+              event.audios.map((a) => ({
+                componentType: a.componentType,
+                langs: a.langs,
+                ...(a.text === undefined ? {} : { text: a.text }),
+                ...(a.main === undefined ? {} : { main: a.main }),
+              })),
+        ),
+        video_type: event.video?.type ?? null,
+        video_resolution: event.video?.resolution ?? null,
+        copy_never: event.copyNever,
+        updated_at: at,
+      });
+      count++;
+    }
+  });
+  return count;
 }
 
 /**
@@ -523,31 +608,48 @@ export function savePrograms(events: EitEvent[]): number {
  * @returns 書いたか
  */
 export function followOnAir(events: readonly EitEvent[]): boolean {
-    const differs = events.some((event) => {
-        // 時刻や尺が未定の番組は写せない (`savePrograms` も捨てる)
-        if (event.startAt === null || event.duration === null || event.duration === 0) return false;
-        const row = orm()
-            .select({ start_at: programs.start_at, end_at: programs.end_at, name: programs.name })
-            .from(programs)
-            .where(eq(programs.id, programKey(event.originalNetworkId, event.serviceId, event.eventId)))
-            .get();
-        return (
-            row === undefined ||
-            row.start_at !== event.startAt ||
-            row.end_at !== event.startAt + event.duration ||
-            // タイトルの無い回は、入っているタイトルを消さない (`savePrograms`)。違うとも言わない
-            (event.name !== '' && row.name !== event.name)
-        );
-    });
-    // 知らない局 (チャンネル設定に無い) のぶんは書かれない。書けなければ知らせない
-    if (!differs || savePrograms([...events]) === 0) return false;
-    emit('programs');
-    return true;
+  const differs = events.some((event) => {
+    // 時刻や尺が未定の番組は写せない (`savePrograms` も捨てる)
+    if (
+      event.startAt === null ||
+      event.duration === null ||
+      event.duration === 0
+    )
+      return false;
+    const row = orm()
+      .select({
+        start_at: programs.start_at,
+        end_at: programs.end_at,
+        name: programs.name,
+      })
+      .from(programs)
+      .where(
+        eq(
+          programs.id,
+          programKey(event.originalNetworkId, event.serviceId, event.eventId),
+        ),
+      )
+      .get();
+    return (
+      row === undefined ||
+      row.start_at !== event.startAt ||
+      row.end_at !== event.startAt + event.duration ||
+      // タイトルの無い回は、入っているタイトルを消さない (`savePrograms`)。違うとも言わない
+      (event.name !== "" && row.name !== event.name)
+    );
+  });
+  // 知らない局 (チャンネル設定に無い) のぶんは書かれない。書けなければ知らせない
+  if (!differs || savePrograms([...events]) === 0) return false;
+  emit("programs");
+  return true;
 }
 
 /** 列の畳み方で DB に渡す形式にする。null は null のまま (drizzle がふだん通す形式と同じ) */
-function encoded<T>(column: { mapToDriverValue(value: T): unknown }, value: T | null): unknown {
-    return value === null ? null : column.mapToDriverValue(value);
+function encoded<T>(
+  column: { mapToDriverValue(value: T): unknown },
+  value: T | null,
+): unknown {
+  return value === null ? null : column.mapToDriverValue(value);
 }
 
 /**
@@ -558,48 +660,48 @@ function encoded<T>(column: { mapToDriverValue(value: T): unknown }, value: T | 
  * 変わることがある (古い名前のまま録画の名前になる)。
  */
 function syncReservationTimes(): number {
-    return affected(
-        orm()
-            .update(reservations)
-            .set({
-                start_at: programs.start_at,
-                end_at: programs.end_at,
-                name: programs.name,
-                description: programs.description,
-                updated_at: now(),
-            })
-            .from(programs)
-            .where(
-                and(
-                    eq(programs.id, reservations.program_id),
-                    inArray(reservations.state, ['scheduled', 'conflict', 'skipped']),
-                    // 録り始めた予約は動かさない。延長への追従は録画の行のほうでやる
-                    isNull(reservations.started_at),
-                    or(
-                        ne(reservations.start_at, programs.start_at),
-                        ne(reservations.end_at, programs.end_at),
-                        ne(reservations.name, programs.name),
-                        ne(reservations.description, programs.description),
-                    ),
-                ),
-            ),
-    );
+  return affected(
+    orm()
+      .update(reservations)
+      .set({
+        start_at: programs.start_at,
+        end_at: programs.end_at,
+        name: programs.name,
+        description: programs.description,
+        updated_at: now(),
+      })
+      .from(programs)
+      .where(
+        and(
+          eq(programs.id, reservations.program_id),
+          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          // 録り始めた予約は動かさない。延長への追従は録画の行のほうでやる
+          isNull(reservations.started_at),
+          or(
+            ne(reservations.start_at, programs.start_at),
+            ne(reservations.end_at, programs.end_at),
+            ne(reservations.name, programs.name),
+            ne(reservations.description, programs.description),
+          ),
+        ),
+      ),
+  );
 }
 
 /** 終わった番組を消す。番組表は未来しか見ないので、直近の分だけ残せば足りる */
 function pruneOldPrograms(): number {
-    const cutoff = now() - config.programRetention;
-    return affected(orm().delete(programs).where(lt(programs.end_at, cutoff)));
+  const cutoff = now() - config.programRetention;
+  return affected(orm().delete(programs).where(lt(programs.end_at, cutoff)));
 }
 
 interface SyncResult {
-    services: number;
-    programs: number;
-    retimed: number;
-    pruned: number;
-    reserved: number;
-    /** 条件から外れて引っ込めた予約 */
-    dropped: number;
+  services: number;
+  programs: number;
+  retimed: number;
+  pruned: number;
+  reserved: number;
+  /** 条件から外れて引っ込めた予約 */
+  dropped: number;
 }
 
 /**
@@ -614,17 +716,17 @@ interface SyncResult {
  * 外れたものは引っ込む (`rules.applyRules`)。
  */
 export function settle(programs = 0): SyncResult {
-    const rules = applyRules();
-    const result: SyncResult = {
-        services: 0,
-        programs,
-        retimed: syncReservationTimes(),
-        pruned: pruneOldPrograms(),
-        reserved: rules.created,
-        dropped: rules.dropped,
-    };
-    emit('programs');
-    return result;
+  const rules = applyRules();
+  const result: SyncResult = {
+    services: 0,
+    programs,
+    retimed: syncReservationTimes(),
+    pruned: pruneOldPrograms(),
+    reserved: rules.created,
+    dropped: rules.dropped,
+  };
+  emit("programs");
+  return result;
 }
 
 /**
@@ -634,9 +736,9 @@ export function settle(programs = 0): SyncResult {
  * 使って予約を組み直すだけ**。
  */
 export async function sync(): Promise<SyncResult> {
-    const services = syncServices(await getChannels());
-    const result = settle();
-    result.services = services;
-    await resolveConflicts();
-    return result;
+  const services = syncServices(await getChannels());
+  const result = settle();
+  result.services = services;
+  await resolveConflicts();
+  return result;
 }

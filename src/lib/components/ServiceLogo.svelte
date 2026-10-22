@@ -1,49 +1,55 @@
 <script lang="ts">
-    import { resolve } from '$app/paths';
+  import { resolve } from "$app/paths";
 
-    /**
-     * 局ロゴ。放送波から取得したもの (`/api/services/<id>/logo`)。録画の一覧・番組表・ライブで同じエンドポイント。
-     *
-     * **まだ取得できていない局** (`has` が偽) は `fallback` を出す — 文字を入れればラベル (ライブの局名の頭の 1 字)、
-     * 空文字なら場所だけ (番組表。局名の頭が列ごとにずれないように)、省けば何も出さない
-     * (一覧。行が細く、代わりの箱を置くと局名より目立つ)。
-     *
-     * **出せなかったときに引っ込めない** (`onerror` で消すと Svelte の節点を横から触ることになる)。
-     * `alt=""` なので、出せなければ場所だけが残る = 持っていない局と同じ見た目になる
-     */
-    let {
-        id,
-        has,
-        style = '',
-        fallback,
-    }: {
-        id: number;
-        has: boolean | null;
-        /** 大きさと置き方。画面ごとに違う */
-        style?: string;
-        fallback?: string;
-    } = $props();
+  /**
+   * 局ロゴ。放送波から取得したもの (`/api/services/<id>/logo`)。録画の一覧・番組表・ライブで同じエンドポイント。
+   *
+   * **まだ取得できていない局** (`has` が偽) は `fallback` を出す — 文字を入れればラベル (ライブの局名の頭の 1 字)、
+   * 空文字なら場所だけ (番組表。局名の頭が列ごとにずれないように)、省けば何も出さない
+   * (一覧。行が細く、代わりの箱を置くと局名より目立つ)。
+   *
+   * **出せなかったときに引っ込めない** (`onerror` で消すと Svelte の節点を横から触ることになる)。
+   * `alt=""` なので、出せなければ場所だけが残る = 持っていない局と同じ見た目になる
+   */
+  let {
+    id,
+    has,
+    style = "",
+    fallback,
+  }: {
+    id: number;
+    has: boolean | null;
+    /** 大きさと置き方。画面ごとに違う */
+    style?: string;
+    fallback?: string;
+  } = $props();
 </script>
 
 {#if has}
-    <img src={resolve(`api/services/${id}/logo`)} alt="" loading="lazy" class="logo" {style} />
+  <img
+    src={resolve(`api/services/${id}/logo`)}
+    alt=""
+    loading="lazy"
+    class="logo"
+    {style}
+  />
 {:else if fallback !== undefined}
-    <span class="logo empty" {style}>{fallback}</span>
+  <span class="logo empty" {style}>{fallback}</span>
 {/if}
 
 <style>
-    .logo {
-        flex-shrink: 0;
-        border-radius: var(--dp-radius-sm);
-        object-fit: contain;
-    }
-    .empty {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: var(--dp-text-xs);
-    }
-    .empty:not(:empty) {
-        background: var(--dp-line);
-    }
+  .logo {
+    flex-shrink: 0;
+    border-radius: var(--dp-radius-sm);
+    object-fit: contain;
+  }
+  .empty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--dp-text-xs);
+  }
+  .empty:not(:empty) {
+    background: var(--dp-line);
+  }
 </style>

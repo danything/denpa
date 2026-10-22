@@ -1,198 +1,211 @@
-import { mkdirSync } from 'node:fs';
-import { SOCKET_PATH } from '#lib/live.js';
-import { listen } from './agent-events';
-import { warnIfClosed } from './auth';
-import { seedChannels } from './channel-seed';
-import { config } from './config';
-import { pruneCodes } from './device-auth';
-import { checkDisk } from './disk';
-import { pump, requeueOrphanedJobs } from './encoder';
-import { sync, syncServicesOnly } from './epg';
-import { collectOnce } from './epg-collect';
-import { emit } from './events';
-import { pruneHistory, reconcile } from './files';
-import { probe } from './hwenc';
-import { attend } from './live';
-import { reconcile as logoReconcile, ride, sweep } from './logo';
-import { activeRecordingIds, recoverOrphanedRecordings } from './recorder';
-import { restoreWidths } from './restore-width';
-import { tick } from './scheduler';
-import { prune as pruneSessions } from './session';
-import { beginDraining } from './shutdown';
-import { redeem } from './tickets';
-import { getChannels } from './tuner';
-import { checkForUpdate } from './update';
-import { notify } from './webhook';
-import { serve } from './ws';
+import { mkdirSync } from "node:fs";
+import { SOCKET_PATH } from "#lib/live.js";
+import { listen } from "./agent-events";
+import { warnIfClosed } from "./auth";
+import { seedChannels } from "./channel-seed";
+import { config } from "./config";
+import { pruneCodes } from "./device-auth";
+import { checkDisk } from "./disk";
+import { pump, requeueOrphanedJobs } from "./encoder";
+import { sync, syncServicesOnly } from "./epg";
+import { collectOnce } from "./epg-collect";
+import { emit } from "./events";
+import { pruneHistory, reconcile } from "./files";
+import { probe } from "./hwenc";
+import { attend } from "./live";
+import { reconcile as logoReconcile, ride, sweep } from "./logo";
+import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
+import { restoreWidths } from "./restore-width";
+import { tick } from "./scheduler";
+import { prune as pruneSessions } from "./session";
+import { beginDraining } from "./shutdown";
+import { redeem } from "./tickets";
+import { getChannels } from "./tuner";
+import { checkForUpdate } from "./update";
+import { notify } from "./webhook";
+import { serve } from "./ws";
 
 let started = false;
 const timers: ReturnType<typeof setInterval>[] = [];
 let unlisten: (() => void) | null = null;
 
-async function guard(name: string, fn: () => Promise<unknown> | unknown): Promise<void> {
-    try {
-        await fn();
-    } catch (error) {
-        // ループを止めないことが最優先。次の周回で自然に復帰する
-        console.error(`[${name}] ${error}`);
-    }
+async function guard(
+  name: string,
+  fn: () => Promise<unknown> | unknown,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (error) {
+    // ループを止めないことが最優先。次の周回で自然に復帰する
+    console.error(`[${name}] ${error}`);
+  }
 }
 
-function every(ms: number, name: string, fn: () => Promise<unknown> | unknown): void {
-    const timer = setInterval(() => void guard(name, fn), ms);
-    // このタイマーのためにイベントループを生かしておく必要はない
-    timer.unref?.();
-    timers.push(timer);
+function every(
+  ms: number,
+  name: string,
+  fn: () => Promise<unknown> | unknown,
+): void {
+  const timer = setInterval(() => void guard(name, fn), ms);
+  // このタイマーのためにイベントループを生かしておく必要はない
+  timer.unref?.();
+  timers.push(timer);
 }
 
 /** いま1回走らせて、あとは `every` と同じ */
-function nowAndEvery(ms: number, name: string, fn: () => Promise<unknown> | unknown): void {
-    void guard(name, fn);
-    every(ms, name, fn);
+function nowAndEvery(
+  ms: number,
+  name: string,
+  fn: () => Promise<unknown> | unknown,
+): void {
+  void guard(name, fn);
+  every(ms, name, fn);
 }
 
 export function start(): void {
-    if (started) return;
-    started = true;
+  if (started) return;
+  started = true;
 
-    /*
-     * 前の版の置き場の変数は読まない (docs/config.md「置き場を変えた」)。黙って既定に変わると
-     * 空の置き場を見て「録画が全部消えた」ように見えるので、残っていたら言う
-     */
-    for (const old of ['RECORDED_DIR', 'LIBRARY_DIR']) {
-        if (process.env[old]) {
-            console.warn(
-                `[boot] ${old} はもう読みません。RAW_DIR / ENCODED_DIR か MEDIA_DIR に書き直してください`,
-            );
-        }
+  /*
+   * 前の版の置き場の変数は読まない (docs/config.md「置き場を変えた」)。黙って既定に変わると
+   * 空の置き場を見て「録画が全部消えた」ように見えるので、残っていたら言う
+   */
+  for (const old of ["RECORDED_DIR", "LIBRARY_DIR"]) {
+    if (process.env[old]) {
+      console.warn(
+        `[boot] ${old} はもう読みません。RAW_DIR / ENCODED_DIR か MEDIA_DIR に書き直してください`,
+      );
     }
-    mkdirSync(config.rawDir, { recursive: true });
-    mkdirSync(config.encodedDir, { recursive: true });
+  }
+  mkdirSync(config.rawDir, { recursive: true });
+  mkdirSync(config.encodedDir, { recursive: true });
 
-    /*
-     * **ログインする方法が無ければ、無いことを起動ログに出す。** 何も設定していなければ
-     * 全アクセスを断る作り (auth.configured) なので、閉まっていること自体は安全 —
-     * ただし気付けないと「なぜか入れない」にしか見えない。
-     *
-     * バックグラウンド処理より先にやる — `DENPA_AUTOSTART=0` でも出すべき
-     */
-    warnIfClosed();
+  /*
+   * **ログインする方法が無ければ、無いことを起動ログに出す。** 何も設定していなければ
+   * 全アクセスを断る作り (auth.configured) なので、閉まっていること自体は安全 —
+   * ただし気付けないと「なぜか入れない」にしか見えない。
+   *
+   * バックグラウンド処理より先にやる — `DENPA_AUTOSTART=0` でも出すべき
+   */
+  warnIfClosed();
 
-    /*
-     * **GPU でエンコードできるか、ffmpeg に確かめさせておく** (hwenc.ts)。数秒かかるので
-     * 待たずに進む — 設定画面は終わるまで「確認中」を出し、エンコードするときは
-     * そのとき分かっている範囲で決める。`DENPA_AUTOSTART=0` でも回す:
-     * 触るのは ffmpeg だけで、チューナーには行かない
-     */
-    void probe();
+  /*
+   * **GPU でエンコードできるか、ffmpeg に確かめさせておく** (hwenc.ts)。数秒かかるので
+   * 待たずに進む — 設定画面は終わるまで「確認中」を出し、エンコードするときは
+   * そのとき分かっている範囲で決める。`DENPA_AUTOSTART=0` でも回す:
+   * 触るのは ffmpeg だけで、チューナーには行かない
+   */
+  void probe();
 
-    /*
-     * **ライブ視聴のエンドポイントを開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —
-     * 押されたときだけ動くもので、勝手にチューナーを使いはしない。
-     *
-     * 認証は使い捨てのチケットで見る。ブラウザは WebSocket の握手に `Authorization` を
-     * 付けてくれないので、画面が先に `/api/live/ticket` から取ってくる (`tickets.ts`)
-     */
-    serve(SOCKET_PATH, {
-        // **握手より前に見る。** ここで断れば普通の HTTP で理由を返せる
-        accept: (url) => redeem(url.searchParams.get('ticket')),
-        open: (connection) => attend(connection),
-    });
+  /*
+   * **ライブ視聴のエンドポイントを開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —
+   * 押されたときだけ動くもので、勝手にチューナーを使いはしない。
+   *
+   * 認証は使い捨てのチケットで見る。ブラウザは WebSocket の握手に `Authorization` を
+   * 付けてくれないので、画面が先に `/api/live/ticket` から取ってくる (`tickets.ts`)
+   */
+  serve(SOCKET_PATH, {
+    // **握手より前に見る。** ここで断れば普通の HTTP で理由を返せる
+    accept: (url) => redeem(url.searchParams.get("ticket")),
+    open: (connection) => attend(connection),
+  });
 
-    const recovered = recoverOrphanedRecordings();
-    const orphanedJobs = requeueOrphanedJobs();
-    if (recovered.resumed > 0 || recovered.failed > 0 || orphanedJobs > 0) {
-        console.log(
-            `[boot] 前回の異常終了を回収: 録画 ${recovered.resumed} 件を再開 / ` +
-                `${recovered.failed} 件を失敗扱い / エンコード ${orphanedJobs} 件を再投入`,
-        );
+  const recovered = recoverOrphanedRecordings();
+  const orphanedJobs = requeueOrphanedJobs();
+  if (recovered.resumed > 0 || recovered.failed > 0 || orphanedJobs > 0) {
+    console.log(
+      `[boot] 前回の異常終了を回収: 録画 ${recovered.resumed} 件を再開 / ` +
+        `${recovered.failed} 件を失敗扱い / エンコード ${orphanedJobs} 件を再投入`,
+    );
+  }
+  installShutdownHooks();
+
+  /*
+   * **新しい版が出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
+   * 1 時間おき。`DENPA_AUTOSTART=0` でも回す — チューナーには行かない
+   */
+  nowAndEvery(config.updateCheckInterval, "update", checkForUpdate);
+
+  if (!config.autostart) {
+    console.log(
+      "[boot] DENPA_AUTOSTART=0 のためバックグラウンド処理は起動しません",
+    );
+    return;
+  }
+
+  /*
+   * 局を取り込んで、溜まっている番組表で予約を組み直す。
+   * 局の一覧はエージェントが持っている (スキャンの結果) ので、そこから取る
+   */
+  void guard("epg", sync);
+  nowAndEvery(config.channelSyncInterval, "services", syncChannels);
+
+  /*
+   * **番組表を自分で集める。**
+   * チューナーが空いているだけ並列に回し、薄い局から先に行く (epg-collect.ts)。
+   * 起動直後に1回走らせるので、初回は数分で番組表が出る
+   */
+  nowAndEvery(config.epgCollectInterval, "epg-collect", collectOnce);
+
+  listenToAgent();
+
+  every(config.schedulerTick, "scheduler", async () => {
+    await tick();
+    pump();
+  });
+
+  /*
+   * 実体とDBを突き合わせ、外から消されたものを一覧から落とす。
+   *
+   * inotify (fs.watch) で消した瞬間に気づけないか試したが、この構成では
+   * 最初の1件しかイベントが来ず当てにできなかったので定期実行にしてある。
+   * すぐ反映したいときは画面の「実体と照合」を押す。
+   */
+  nowAndEvery(config.reconcileInterval, "reconcile", reconcile);
+
+  /*
+   * ディスク残量を見張る。埋まると始まる録画が片っ端から失敗するので、
+   * 下回ったところで知らせる (disk.ts)。照合と同じ周期でよい
+   */
+  nowAndEvery(config.reconcileInterval, "disk", checkDisk);
+
+  /*
+   * 古い履歴を畳む。終わった予約と、消した録画の行が対象。
+   * 実体はもう無いので、消えて困るものはない。照合と同じ周期でよい
+   */
+  nowAndEvery(config.reconcileInterval, "prune", pruneHistory);
+
+  /*
+   * 番組名を半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す
+   * (restore-width.ts)。見た録画は覚えるので、2回目からは録り終えた新しいぶんだけ見る
+   */
+  nowAndEvery(config.reconcileInterval, "restore-width", async () => {
+    const result = await restoreWidths();
+    if (result.restored > 0 || result.missed > 0) {
+      console.log(
+        `[restore-width] 録画 ${result.seen} 件を見ました: 元のTSから戻した ${result.restored} 件 / ` +
+          `もとから放送のとおり ${result.already} 件 / 戻せなかった ${result.missed} 件`,
+      );
     }
-    installShutdownHooks();
+  });
 
-    /*
-     * **新しい版が出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
-     * 1 時間おき。`DENPA_AUTOSTART=0` でも回す — チューナーには行かない
-     */
-    nowAndEvery(config.updateCheckInterval, 'update', checkForUpdate);
+  /*
+   * 切れたログインの控えを片付ける。**入れなくなる人はいません** — 切れたものは
+   * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
+   */
+  nowAndEvery(config.reconcileInterval, "sessions", pruneSessions);
+  // 切れたペアリングコードも同じく (device-auth.ts)
+  nowAndEvery(config.reconcileInterval, "device-codes", pruneCodes);
 
-    if (!config.autostart) {
-        console.log('[boot] DENPA_AUTOSTART=0 のためバックグラウンド処理は起動しません');
-        return;
-    }
-
-    /*
-     * 局を取り込んで、溜まっている番組表で予約を組み直す。
-     * 局の一覧はエージェントが持っている (スキャンの結果) ので、そこから取る
-     */
-    void guard('epg', sync);
-    nowAndEvery(config.channelSyncInterval, 'services', syncChannels);
-
-    /*
-     * **番組表を自分で集める。**
-     * チューナーが空いているだけ並列に回し、薄い局から先に行く (epg-collect.ts)。
-     * 起動直後に1回走らせるので、初回は数分で番組表が出る
-     */
-    nowAndEvery(config.epgCollectInterval, 'epg-collect', collectOnce);
-
-    listenToAgent();
-
-    every(config.schedulerTick, 'scheduler', async () => {
-        await tick();
-        pump();
-    });
-
-    /*
-     * 実体とDBを突き合わせ、外から消されたものを一覧から落とす。
-     *
-     * inotify (fs.watch) で消した瞬間に気づけないか試したが、この構成では
-     * 最初の1件しかイベントが来ず当てにできなかったので定期実行にしてある。
-     * すぐ反映したいときは画面の「実体と照合」を押す。
-     */
-    nowAndEvery(config.reconcileInterval, 'reconcile', reconcile);
-
-    /*
-     * ディスク残量を見張る。埋まると始まる録画が片っ端から失敗するので、
-     * 下回ったところで知らせる (disk.ts)。照合と同じ周期でよい
-     */
-    nowAndEvery(config.reconcileInterval, 'disk', checkDisk);
-
-    /*
-     * 古い履歴を畳む。終わった予約と、消した録画の行が対象。
-     * 実体はもう無いので、消えて困るものはない。照合と同じ周期でよい
-     */
-    nowAndEvery(config.reconcileInterval, 'prune', pruneHistory);
-
-    /*
-     * 番組名を半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す
-     * (restore-width.ts)。見た録画は覚えるので、2回目からは録り終えた新しいぶんだけ見る
-     */
-    nowAndEvery(config.reconcileInterval, 'restore-width', async () => {
-        const result = await restoreWidths();
-        if (result.restored > 0 || result.missed > 0) {
-            console.log(
-                `[restore-width] 録画 ${result.seen} 件を見ました: 元のTSから戻した ${result.restored} 件 / ` +
-                    `もとから放送のとおり ${result.already} 件 / 戻せなかった ${result.missed} 件`,
-            );
-        }
-    });
-
-    /*
-     * 切れたログインの控えを片付ける。**入れなくなる人はいません** — 切れたものは
-     * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
-     */
-    nowAndEvery(config.reconcileInterval, 'sessions', pruneSessions);
-    // 切れたペアリングコードも同じく (device-auth.ts)
-    nowAndEvery(config.reconcileInterval, 'device-codes', pruneCodes);
-
-    /*
-     * 局ロゴ。放送波から取得するしかないので、持っていない局のぶんを少しずつ取得する。
-     * 開いている選局を共有するだけなので、チューナーは増えない
-     *
-     * 起動のたびに、印 (`has_logo`) とファイルを突き合わせ直す。置き場ごと
-     * 消えることは実際にあり、印だけ残っていると番組表に壊れた画像が並ぶ
-     */
-    void guard('logo', logoReconcile);
-    every(config.logoSweepInterval, 'logo', sweep);
+  /*
+   * 局ロゴ。放送波から取得するしかないので、持っていない局のぶんを少しずつ取得する。
+   * 開いている選局を共有するだけなので、チューナーは増えない
+   *
+   * 起動のたびに、印 (`has_logo`) とファイルを突き合わせ直す。置き場ごと
+   * 消えることは実際にあり、印だけ残っていると番組表に壊れた画像が並ぶ
+   */
+  void guard("logo", logoReconcile);
+  every(config.logoSweepInterval, "logo", sweep);
 }
 
 /**
@@ -201,9 +214,9 @@ export function start(): void {
  * 次の周期 (`CHANNEL_SYNC_INTERVAL`、既定1分) で入る
  */
 async function syncChannels(): Promise<void> {
-    const channels = await getChannels();
-    syncServicesOnly(channels);
-    await seedChannels(channels);
+  const channels = await getChannels();
+  syncServicesOnly(channels);
+  await seedChannels(channels);
 }
 
 /**
@@ -217,56 +230,59 @@ async function syncChannels(): Promise<void> {
  * 可能性まで消せるわけではないので、保険として置いておく。
  */
 function listenToAgent(): void {
-    unlisten = listen(
-        (event) => {
-            switch (event.name) {
-                case 'tuners':
-                    emit('tuners');
-                    /*
-                     * 誰かがチューナーを開いた、かもしれない。そこへ同じチャンネルを
-                     * 要求するとエージェントが選局を共有させるので、ロゴを只で読める。
-                     * 開いた瞬間に来る通知なので、ここで共有する
-                     */
-                    void guard('logo', ride);
-                    break;
-                case 'channels':
-                    // スキャンで局が入れ替わった。取り込み直して番組表も集め直す
-                    void guard('epg', async () => {
-                        await sync();
-                        await collectOnce();
-                    });
-                    break;
-                default:
-                    break;
-            }
-        },
-        // エージェントに繋がらない状態が続いたら知らせる。黙って落ちても、
-        // 次の録画が失敗するまで気付けなかったのを埋める (agent-events.ts が切り替えを判定)
-        (up) => {
-            if (up) {
-                console.log('[agent] チューナーに繋がりました');
-                notify({ event: 'agent.up', text: 'チューナーエージェントに繋がりました' });
-            } else {
-                console.error('[agent] チューナーに繋がりません');
-                notify({
-                    event: 'agent.down',
-                    text: 'チューナーエージェントに繋がりません。いまは録画できません',
-                });
-            }
-        },
-    );
+  unlisten = listen(
+    (event) => {
+      switch (event.name) {
+        case "tuners":
+          emit("tuners");
+          /*
+           * 誰かがチューナーを開いた、かもしれない。そこへ同じチャンネルを
+           * 要求するとエージェントが選局を共有させるので、ロゴを只で読める。
+           * 開いた瞬間に来る通知なので、ここで共有する
+           */
+          void guard("logo", ride);
+          break;
+        case "channels":
+          // スキャンで局が入れ替わった。取り込み直して番組表も集め直す
+          void guard("epg", async () => {
+            await sync();
+            await collectOnce();
+          });
+          break;
+        default:
+          break;
+      }
+    },
+    // エージェントに繋がらない状態が続いたら知らせる。黙って落ちても、
+    // 次の録画が失敗するまで気付けなかったのを埋める (agent-events.ts が切り替えを判定)
+    (up) => {
+      if (up) {
+        console.log("[agent] チューナーに繋がりました");
+        notify({
+          event: "agent.up",
+          text: "チューナーエージェントに繋がりました",
+        });
+      } else {
+        console.error("[agent] チューナーに繋がりません");
+        notify({
+          event: "agent.down",
+          text: "チューナーエージェントに繋がりません。いまは録画できません",
+        });
+      }
+    },
+  );
 }
 
 function stop(): void {
-    for (const timer of timers) clearInterval(timer);
-    timers.length = 0;
-    unlisten?.();
-    unlisten = null;
-    started = false;
+  for (const timer of timers) clearInterval(timer);
+  timers.length = 0;
+  unlisten?.();
+  unlisten = null;
+  started = false;
 }
 
 /** 入口 (`server.js`) が見る名前。あちらと揃えること */
-const TAKE_OVER = '__denpaTakeOverSignals';
+const TAKE_OVER = "__denpaTakeOverSignals";
 
 /**
  * Pod の入れ替えなどで止められたときの後始末。
@@ -286,32 +302,33 @@ const TAKE_OVER = '__denpaTakeOverSignals';
  * 待っている途中で SIGKILL され、居座った意味が無くなる。
  */
 function installShutdownHooks(): void {
-    /*
-     * **落ちても降りる。** `drain` の中で投げると、`void` で捨てているぶん
-     * 誰も受け止めず、**プロセスが生きたまま残る** = 入れ替えが止まる。
-     * 受け止めて、使っているものだけ放して降りる
-     */
-    const onSignal = (signal: NodeJS.Signals) => {
-        drain(signal).catch((error) => {
-            console.warn(`[boot] 停止の途中で失敗しました: ${error}`);
-            process.exit(0);
-        });
-    };
-    const take = () => takeOverSignals(onSignal);
-    take();
-    /*
-     * **もう一度、あとから引き取り直す。** adapter-bun が後始末を登録するのは
-     * `build/index.js` の**いちばん最後**で、こちら (`hooks.server.ts`) はその手前なので、
-     * 最初の引き取りでは外す相手がまだいない (外す理由は `takeOverSignals`)。
-     * 入口の `server.js` が `build/index.js` を読み終えたところで呼ぶ。
-     * `setImmediate` では足りない — adapter はアプリの初期化を `await` してから登録するので、
-     * 先に走ることがありうる。
-     */
-    (globalThis as Record<string, unknown>)[TAKE_OVER] = (): number => {
-        const taken = take();
-        if (taken > 0) console.log(`[boot] 止まれの合図を引き取りました (${taken} 件)`);
-        return taken;
-    };
+  /*
+   * **落ちても降りる。** `drain` の中で投げると、`void` で捨てているぶん
+   * 誰も受け止めず、**プロセスが生きたまま残る** = 入れ替えが止まる。
+   * 受け止めて、使っているものだけ放して降りる
+   */
+  const onSignal = (signal: NodeJS.Signals) => {
+    drain(signal).catch((error) => {
+      console.warn(`[boot] 停止の途中で失敗しました: ${error}`);
+      process.exit(0);
+    });
+  };
+  const take = () => takeOverSignals(onSignal);
+  take();
+  /*
+   * **もう一度、あとから引き取り直す。** adapter-bun が後始末を登録するのは
+   * `build/index.js` の**いちばん最後**で、こちら (`hooks.server.ts`) はその手前なので、
+   * 最初の引き取りでは外す相手がまだいない (外す理由は `takeOverSignals`)。
+   * 入口の `server.js` が `build/index.js` を読み終えたところで呼ぶ。
+   * `setImmediate` では足りない — adapter はアプリの初期化を `await` してから登録するので、
+   * 先に走ることがありうる。
+   */
+  (globalThis as Record<string, unknown>)[TAKE_OVER] = (): number => {
+    const taken = take();
+    if (taken > 0)
+      console.log(`[boot] 止まれの合図を引き取りました (${taken} 件)`);
+    return taken;
+  };
 }
 
 /**
@@ -332,20 +349,22 @@ function installShutdownHooks(): void {
  * 自分の後始末が外れ、2度目は**誰も聞いていない**状態になっていた。そこへ
  * デプロイがもう一度走ると、既定どおりその場で終わる — 録画の途中でも。
  */
-export function takeOverSignals(onSignal: (signal: NodeJS.Signals) => void): number {
-    let taken = 0;
-    let draining = false;
-    for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-        taken += process.listenerCount(signal);
-        process.removeAllListeners(signal);
-        process.on(signal, () => {
-            // もう畳んでいる最中。2度目からは受け取るだけで何もしない
-            if (draining) return;
-            draining = true;
-            onSignal(signal);
-        });
-    }
-    return taken;
+export function takeOverSignals(
+  onSignal: (signal: NodeJS.Signals) => void,
+): number {
+  let taken = 0;
+  let draining = false;
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    taken += process.listenerCount(signal);
+    process.removeAllListeners(signal);
+    process.on(signal, () => {
+      // もう畳んでいる最中。2度目からは受け取るだけで何もしない
+      if (draining) return;
+      draining = true;
+      onSignal(signal);
+    });
+  }
+  return taken;
 }
 
 /** 5秒ごとに様子を見る。録画は分単位なので、これ以上細かく見ても意味が無い */
@@ -367,56 +386,60 @@ const DRAIN_REPORT = 60_000;
  * 「入れ替えが6時間止まる」だけは起こさない
  */
 function forceExitAfter(ms: number, why: string): void {
-    const timer = setTimeout(() => {
-        console.warn(`[boot] ${why}。これ以上待たずに停止します`);
-        try {
-            stop();
-        } catch (error) {
-            console.warn(`[boot] 後始末に失敗しました: ${error}`);
-        }
-        process.exit(0);
-    }, ms);
-    // 目覚ましそのものがプロセスを生かし続けないように
-    timer.unref?.();
+  const timer = setTimeout(() => {
+    console.warn(`[boot] ${why}。これ以上待たずに停止します`);
+    try {
+      stop();
+    } catch (error) {
+      console.warn(`[boot] 後始末に失敗しました: ${error}`);
+    }
+    process.exit(0);
+  }, ms);
+  // 目覚ましそのものがプロセスを生かし続けないように
+  timer.unref?.();
 }
 
 async function drain(signal: string): Promise<void> {
-    /*
-     * **まず残す。** 何をしているかを先に書いておかないと、この先で躓いたときに
-     * 「合図を受け取ったのかどうか」すら分からない。実際、降りてこない Pod を
-     * 調べたときに、記録から読み取れることが何も無かった
-     */
-    const recordings = activeRecordingIds().length;
-    console.log(`[boot] ${signal} を受けました (録画 ${recordings} 件)`);
+  /*
+   * **まず残す。** 何をしているかを先に書いておかないと、この先で躓いたときに
+   * 「合図を受け取ったのかどうか」すら分からない。実際、降りてこない Pod を
+   * 調べたときに、記録から読み取れることが何も無かった
+   */
+  const recordings = activeRecordingIds().length;
+  console.log(`[boot] ${signal} を受けました (録画 ${recordings} 件)`);
 
-    if (config.shutdownWait <= 0 || recordings === 0) {
-        stop();
-        process.exit(0);
-    }
-
-    // 輪を回す前に掛ける。**この先で何が起きても降りる**
-    forceExitAfter(config.shutdownWait, '待ち時間を使い切りました');
-
-    beginDraining();
-    console.log(`[boot] 録画が終わるまで待ちます (この間も画面は開けます)`);
-
-    const until = Date.now() + config.shutdownWait;
-    let reported = Date.now();
-    while (activeRecordingIds().length > 0 && Date.now() < until) {
-        await Bun.sleep(DRAIN_CHECK);
-        // **黙って待たない。** 何を待っているのかが分からないと、外からは固まって見える
-        if (Date.now() - reported >= DRAIN_REPORT) {
-            reported = Date.now();
-            console.log(`[boot] まだ待っています (録画 ${activeRecordingIds().length} 件)`);
-        }
-    }
-
-    const left = activeRecordingIds().length;
-    if (left > 0) {
-        console.warn(`[boot] 待ち時間を使い切りました。録画 ${left} 件を残して停止します`);
-    } else {
-        console.log('[boot] 録画が終わったので停止します');
-    }
+  if (config.shutdownWait <= 0 || recordings === 0) {
     stop();
     process.exit(0);
+  }
+
+  // 輪を回す前に掛ける。**この先で何が起きても降りる**
+  forceExitAfter(config.shutdownWait, "待ち時間を使い切りました");
+
+  beginDraining();
+  console.log(`[boot] 録画が終わるまで待ちます (この間も画面は開けます)`);
+
+  const until = Date.now() + config.shutdownWait;
+  let reported = Date.now();
+  while (activeRecordingIds().length > 0 && Date.now() < until) {
+    await Bun.sleep(DRAIN_CHECK);
+    // **黙って待たない。** 何を待っているのかが分からないと、外からは固まって見える
+    if (Date.now() - reported >= DRAIN_REPORT) {
+      reported = Date.now();
+      console.log(
+        `[boot] まだ待っています (録画 ${activeRecordingIds().length} 件)`,
+      );
+    }
+  }
+
+  const left = activeRecordingIds().length;
+  if (left > 0) {
+    console.warn(
+      `[boot] 待ち時間を使い切りました。録画 ${left} 件を残して停止します`,
+    );
+  } else {
+    console.log("[boot] 録画が終わったので停止します");
+  }
+  stop();
+  process.exit(0);
 }

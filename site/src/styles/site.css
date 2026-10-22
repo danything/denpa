@@ -7,85 +7,86 @@
  * テーマの既定は Starlight のまま「自動」(OS の設定に合わせる)。暗いほうも同じ段から選ぶ
  */
 :root {
-    --sl-font: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
-    --dp-radius: 0.65rem;
+  --sl-font:
+    "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --dp-radius: 0.65rem;
 }
 
 /* 暗いほう。Starlight は :root を暗いほうとして書く */
 :root {
-    --sl-color-accent-low: #092a3d; /* --pico-text-selection-color (#01aaff の 19%) を地 (#0b0c0f) に重ねた色 */
-    --sl-color-accent: #01aaff; /* --pico-primary */
-    --sl-color-accent-high: #79c0ff; /* --pico-primary-hover */
+  --sl-color-accent-low: #092a3d; /* --pico-text-selection-color (#01aaff の 19%) を地 (#0b0c0f) に重ねた色 */
+  --sl-color-accent: #01aaff; /* --pico-primary */
+  --sl-color-accent-high: #79c0ff; /* --pico-primary-hover */
 
-    --sl-color-white: #fff;
-    --sl-color-gray-1: #dfe3eb; /* slate-100 */
-    --sl-color-gray-2: #c2c7d0; /* Pico の本文 */
-    --sl-color-gray-3: #969fb2; /* Pico の --pico-muted-color を、地の上で読める明るさまで上げたもの */
-    --sl-color-gray-4: #50545e; /* app.css の --pico-secondary-hover-border */
-    --sl-color-gray-5: #3a3d46; /* app.css の --dp-line-strong */
-    --sl-color-gray-6: #26282e; /* app.css の --dp-line */
-    --sl-color-black: #121318; /* app.css の --dp-surface */
+  --sl-color-white: #fff;
+  --sl-color-gray-1: #dfe3eb; /* slate-100 */
+  --sl-color-gray-2: #c2c7d0; /* Pico の本文 */
+  --sl-color-gray-3: #969fb2; /* Pico の --pico-muted-color を、地の上で読める明るさまで上げたもの */
+  --sl-color-gray-4: #50545e; /* app.css の --pico-secondary-hover-border */
+  --sl-color-gray-5: #3a3d46; /* app.css の --dp-line-strong */
+  --sl-color-gray-6: #26282e; /* app.css の --dp-line */
+  --sl-color-black: #121318; /* app.css の --dp-surface */
 
-    /*
+  /*
      * 地は上の帯・サイドバー・目次も本文と同じ 1 色 (app.css の --dp-bg) にし、境は地より少し明るい 1px の線だけ。
      * 灰色の面 (app.css の --dp-subtle) はコード・表の見出しのような、中身を分けるところだけ
      */
-    --sl-color-bg: #0b0c0f;
-    --sl-color-bg-nav: #0b0c0f;
-    --sl-color-bg-sidebar: #0b0c0f;
-    --sl-color-bg-inline-code: #1a1b20;
-    --sl-color-hairline-light: #2e3037;
-    --sl-color-hairline: #26282e;
-    --sl-color-hairline-shade: #26282e;
-    /* 上の帯を透かすときの地 (bg を 80% に) */
-    --dp-nav-glass: rgb(11 12 15 / 0.8);
-    --dp-surface: #1a1b20; /* 表の見出しの面 */
+  --sl-color-bg: #0b0c0f;
+  --sl-color-bg-nav: #0b0c0f;
+  --sl-color-bg-sidebar: #0b0c0f;
+  --sl-color-bg-inline-code: #1a1b20;
+  --sl-color-hairline-light: #2e3037;
+  --sl-color-hairline: #26282e;
+  --sl-color-hairline-shade: #26282e;
+  /* 上の帯を透かすときの地 (bg を 80% に) */
+  --dp-nav-glass: rgb(11 12 15 / 0.8);
+  --dp-surface: #1a1b20; /* 表の見出しの面 */
 }
 
-:root[data-theme='light'] {
-    --sl-color-accent-low: #c0e6f9; /* --pico-text-selection-color (#029ae8 の 25%) を白に重ねた色 */
-    --sl-color-accent: #0172ad; /* --pico-primary */
-    --sl-color-accent-high: #015887; /* --pico-primary-hover */
+:root[data-theme="light"] {
+  --sl-color-accent-low: #c0e6f9; /* --pico-text-selection-color (#029ae8 の 25%) を白に重ねた色 */
+  --sl-color-accent: #0172ad; /* --pico-primary */
+  --sl-color-accent-high: #015887; /* --pico-primary-hover */
 
-    --sl-color-white: #181c25; /* slate-900 */
-    --sl-color-gray-1: #2a3140; /* slate-800 */
-    --sl-color-gray-2: #373c44; /* Pico の本文 */
-    --sl-color-gray-3: #525f7a; /* slate-600 */
-    --sl-color-gray-4: #7b8495;
-    --sl-color-gray-5: #cfd5e2; /* slate-150 */
-    --sl-color-gray-6: #dfe3eb; /* slate-100 */
-    --sl-color-gray-7: #eff1f4; /* slate-50 */
-    --sl-color-black: #fff;
+  --sl-color-white: #181c25; /* slate-900 */
+  --sl-color-gray-1: #2a3140; /* slate-800 */
+  --sl-color-gray-2: #373c44; /* Pico の本文 */
+  --sl-color-gray-3: #525f7a; /* slate-600 */
+  --sl-color-gray-4: #7b8495;
+  --sl-color-gray-5: #cfd5e2; /* slate-150 */
+  --sl-color-gray-6: #dfe3eb; /* slate-100 */
+  --sl-color-gray-7: #eff1f4; /* slate-50 */
+  --sl-color-black: #fff;
 
-    /*
+  /*
      * 地は白 1 色 (上の帯・サイドバー・目次も)。境は地より少し濃い 1px の線だけ。
      * 灰色の面はコード・表の見出しのような、中身を分けるところだけ
      */
-    --sl-color-bg: #fff;
-    --sl-color-bg-nav: #fff;
-    --sl-color-bg-sidebar: #fff;
-    /* インラインの code は slate-50 よりわずかに淡い面に枠を付ける。slate-50 だとリンクの色 (#0172ad) が 4.5:1 ぎりぎり */
-    --sl-color-bg-inline-code: #f4f5f8;
-    --sl-color-hairline-light: #e6e9ef;
-    --sl-color-hairline: #e6e9ef;
-    --sl-color-hairline-shade: #e6e9ef;
-    --dp-nav-glass: rgb(255 255 255 / 0.8);
-    --dp-surface: #f4f5f8;
+  --sl-color-bg: #fff;
+  --sl-color-bg-nav: #fff;
+  --sl-color-bg-sidebar: #fff;
+  /* インラインの code は slate-50 よりわずかに淡い面に枠を付ける。slate-50 だとリンクの色 (#0172ad) が 4.5:1 ぎりぎり */
+  --sl-color-bg-inline-code: #f4f5f8;
+  --sl-color-hairline-light: #e6e9ef;
+  --sl-color-hairline: #e6e9ef;
+  --sl-color-hairline-shade: #e6e9ef;
+  --dp-nav-glass: rgb(255 255 255 / 0.8);
+  --dp-surface: #f4f5f8;
 }
 
 /* 狭い画面で開くサイドバーも、本文と同じ地に (Starlight の既定は --sl-color-black) */
 .sidebar-pane {
-    background-color: var(--sl-color-bg-sidebar);
+  background-color: var(--sl-color-bg-sidebar);
 }
 
 /*
  * サイドバーの開いているページは淡い面で (アプリのサイドバーの一覧と同じ)。
  * Starlight の既定は主の色で塗って白い字で、一覧の中でそこだけが強すぎた
  */
-.sidebar-content a[aria-current='page'],
-.sidebar-content a[aria-current='page']:is(:hover, :focus) {
-    background-color: var(--sl-color-gray-6);
-    color: var(--sl-color-white);
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:is(:hover, :focus) {
+  background-color: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
 }
 
 /*
@@ -93,31 +94,39 @@
  * 主の色 (azure) はリンクと選んでいるものに残す (src/app.css の「ボタン」)
  */
 .sl-link-button.primary {
-    border-color: var(--sl-color-gray-1);
-    background-color: var(--sl-color-gray-1);
-    color: var(--sl-color-bg);
+  border-color: var(--sl-color-gray-1);
+  background-color: var(--sl-color-gray-1);
+  color: var(--sl-color-bg);
 }
 .sl-link-button.primary:hover {
-    border-color: color-mix(in srgb, var(--sl-color-gray-1) 82%, var(--sl-color-bg));
-    background-color: color-mix(in srgb, var(--sl-color-gray-1) 82%, var(--sl-color-bg));
-    color: var(--sl-color-bg);
+  border-color: color-mix(
+    in srgb,
+    var(--sl-color-gray-1) 82%,
+    var(--sl-color-bg)
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--sl-color-gray-1) 82%,
+    var(--sl-color-bg)
+  );
+  color: var(--sl-color-bg);
 }
 
 /* 上の帯は貼り付いたまま、下を流れる本文を少し透かしてぼかす。ぼかせないブラウザでは地の色のまま */
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .page > .header {
-        background-color: var(--dp-nav-glass);
-        -webkit-backdrop-filter: saturate(1.5) blur(12px);
-        backdrop-filter: saturate(1.5) blur(12px);
-    }
+  .page > .header {
+    background-color: var(--dp-nav-glass);
+    -webkit-backdrop-filter: saturate(1.5) blur(12px);
+    backdrop-filter: saturate(1.5) blur(12px);
+  }
 }
 
 /* 表の見出しは面で分ける (見出しの面があるので、端の字も詰めずに内側へ寄せる) */
 .sl-markdown-content th:not(:where(.not-content *)) {
-    background-color: var(--dp-surface);
+  background-color: var(--dp-surface);
 }
 .sl-markdown-content :is(th, td):not(:where(.not-content *)) {
-    padding-inline: 0.75rem;
+  padding-inline: 0.75rem;
 }
 
 /* 角丸をそろえる */
@@ -126,54 +135,54 @@
 .sl-markdown-content table,
 .card,
 .sl-link-card {
-    border-radius: var(--dp-radius);
+  border-radius: var(--dp-radius);
 }
 .sl-markdown-content img {
-    height: auto;
+  height: auto;
 }
 
 /* 放送の映像が映る画像の下の添え書き (scripts/import-docs.ts が足す) */
 .sl-markdown-content .video-note {
-    margin-top: 0.25rem;
-    font-size: var(--sl-text-sm);
-    color: var(--sl-color-gray-3);
+  margin-top: 0.25rem;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
 }
 
 /* README の画像を並べたところ (scripts/import-docs.ts が表から直したもの) */
 .sl-markdown-content .shots {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
 }
 .sl-markdown-content .shots > p {
-    margin: 0;
-    font-size: var(--sl-text-sm);
+  margin: 0;
+  font-size: var(--sl-text-sm);
 }
 .sl-markdown-content .shots img {
-    display: block;
-    margin-bottom: 0.25rem;
+  display: block;
+  margin-bottom: 0.25rem;
 }
 
 /* インラインの code の枠 (白い地で面が見えるように)。暗いほうは地との差があるので枠は付けない */
-:root[data-theme='light'] .sl-markdown-content :not(pre) > code {
-    border: 1px solid var(--sl-color-hairline-light);
+:root[data-theme="light"] .sl-markdown-content :not(pre) > code {
+  border: 1px solid var(--sl-color-hairline-light);
 }
 
 /* 前後のページへのカード (Starlight の Pagination)。影はやめて細い線だけ、ページ名は本文くらいの大きさ */
 .pagination-links a {
-    border-color: var(--sl-color-hairline-light);
-    box-shadow: none;
-    font-size: var(--sl-text-xs);
-    color: var(--sl-color-gray-3);
-    transition:
-        border-color 0.15s,
-        background-color 0.15s;
+  border-color: var(--sl-color-hairline-light);
+  box-shadow: none;
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
 }
 .pagination-links a:hover {
-    border-color: var(--sl-color-accent);
-    background-color: var(--dp-surface);
+  border-color: var(--sl-color-accent);
+  background-color: var(--dp-surface);
 }
 .pagination-links .link-title {
-    font-size: var(--sl-text-base);
-    color: var(--sl-color-white);
+  font-size: var(--sl-text-base);
+  color: var(--sl-color-white);
 }

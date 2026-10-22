@@ -9,8 +9,15 @@
  * DOM も WASM も触らないので、ここだけ単体で確かめられる (`pes.test.ts`)。
  */
 
-import { joinBytes } from './bytes';
-import { PACKET, PacketStream, PID_PAT, parsePat, pmtStreams, SectionAssembler } from './psi';
+import { joinBytes } from "./bytes";
+import {
+  PACKET,
+  PacketStream,
+  PID_PAT,
+  parsePat,
+  pmtStreams,
+  SectionAssembler,
+} from "./psi";
 
 /** PTS・PCR の刻み (90kHz)。取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
 export const CLOCK = 90_000;
@@ -22,55 +29,56 @@ const STREAM_MPEG2 = 0x02;
 const STREAM_AAC = 0x0f;
 
 export interface Pes {
-    pid: number;
-    kind: 'video' | 'audio';
-    /** 90kHz。無ければ null */
-    pts: number | null;
-    /** 90kHz。PTS と同じなら書かれないので、そのときは PTS を入れる */
-    dts: number | null;
-    /** PES の中身 (ES) */
-    data: Uint8Array;
+  pid: number;
+  kind: "video" | "audio";
+  /** 90kHz。無ければ null */
+  pts: number | null;
+  /** 90kHz。PTS と同じなら書かれないので、そのときは PTS を入れる */
+  dts: number | null;
+  /** PES の中身 (ES) */
+  data: Uint8Array;
 }
 
 /** PMT から分かったこと。**音声は並んだ順** — 画面の「何本目の音声」(`AudioTrack.stream`) と揃う */
 export interface Streams {
-    video: number | null;
-    audio: number[];
+  video: number | null;
+  audio: number[];
 }
 
 /** 5バイトの PTS / DTS を読む (ISO/IEC 13818-1 2.4.3.7) */
 export function readStamp(data: Uint8Array, at: number): number {
-    return (
-        ((data[at]! >> 1) & 0x07) * 2 ** 30 +
-        (data[at + 1]! << 22) +
-        ((data[at + 2]! >> 1) << 15) +
-        (data[at + 3]! << 7) +
-        (data[at + 4]! >> 1)
-    );
+  return (
+    ((data[at]! >> 1) & 0x07) * 2 ** 30 +
+    (data[at + 1]! << 22) +
+    ((data[at + 2]! >> 1) << 15) +
+    (data[at + 3]! << 7) +
+    (data[at + 4]! >> 1)
+  );
 }
 
 /** PES の頭を読んで中身を切り出す。**壊れていれば null** (頭の 00 00 01 が無いなど) */
 export function parsePes(
-    data: Uint8Array,
+  data: Uint8Array,
 ): { pts: number | null; dts: number | null; data: Uint8Array } | null {
-    if (data.length < 9 || data[0] !== 0 || data[1] !== 0 || data[2] !== 1) return null;
-    const flags = data[7]! >> 6;
-    const headerLength = data[8]!;
-    const start = 9 + headerLength;
-    if (start > data.length) return null;
-    const length = (data[4]! << 8) | data[5]!;
-    // 長さが書いてあればそこまで (後ろに詰め物が付くことがある)。0 は「次の頭まで」
-    const end = length === 0 ? data.length : Math.min(data.length, 6 + length);
-    const pts = flags & 0x02 && data.length >= 14 ? readStamp(data, 9) : null;
-    const dts = flags === 0x03 && data.length >= 19 ? readStamp(data, 14) : pts;
-    return { pts, dts, data: data.subarray(start, end) };
+  if (data.length < 9 || data[0] !== 0 || data[1] !== 0 || data[2] !== 1)
+    return null;
+  const flags = data[7]! >> 6;
+  const headerLength = data[8]!;
+  const start = 9 + headerLength;
+  if (start > data.length) return null;
+  const length = (data[4]! << 8) | data[5]!;
+  // 長さが書いてあればそこまで (後ろに詰め物が付くことがある)。0 は「次の頭まで」
+  const end = length === 0 ? data.length : Math.min(data.length, 6 + length);
+  const pts = flags & 0x02 && data.length >= 14 ? readStamp(data, 9) : null;
+  const dts = flags === 0x03 && data.length >= 19 ? readStamp(data, 14) : pts;
+  return { pts, dts, data: data.subarray(start, end) };
 }
 
 interface Partial {
-    parts: Uint8Array[];
-    size: number;
-    /** 書いてある長さ (頭の6バイトを含む)。0 なら次の頭まで */
-    expected: number;
+  parts: Uint8Array[];
+  size: number;
+  /** 書いてある長さ (頭の6バイトを含む)。0 なら次の頭まで */
+  expected: number;
 }
 
 /**
@@ -80,132 +88,147 @@ interface Partial {
  * 音声は長さが書いてあるので揃った時点で出す
  */
 export class PesDemuxer {
-    private readonly packets = new PacketStream();
-    private readonly pat = new SectionAssembler(PID_PAT);
-    private pmt: SectionAssembler | null = null;
-    private pmtPid: number | null = null;
-    private readonly partial = new Map<number, Partial>();
-    /** いま分かっている ES。**変わったら `feed` の返りで知らせる** */
-    streams: Streams = { video: null, audio: [] };
-    /** デコードする音声の PID。**選ばれた1本だけ**組み立てる (他は捨てる) */
-    audioPid: number | null = null;
-    /** 何本目の音声を取り出すか (`AudioTrack.stream`)。無ければ先頭に落とす */
-    audioIndex = 0;
+  private readonly packets = new PacketStream();
+  private readonly pat = new SectionAssembler(PID_PAT);
+  private pmt: SectionAssembler | null = null;
+  private pmtPid: number | null = null;
+  private readonly partial = new Map<number, Partial>();
+  /** いま分かっている ES。**変わったら `feed` の返りで知らせる** */
+  streams: Streams = { video: null, audio: [] };
+  /** デコードする音声の PID。**選ばれた1本だけ**組み立てる (他は捨てる) */
+  audioPid: number | null = null;
+  /** 何本目の音声を取り出すか (`AudioTrack.stream`)。無ければ先頭に落とす */
+  audioIndex = 0;
 
-    feed(chunk: Uint8Array): { pes: Pes[]; changed: boolean } {
-        const out: Pes[] = [];
-        let changed = false;
-        for (const packet of this.packets.feed(chunk)) {
-            // 誤りの印が立っているもの・スクランブルが残っているものは読まない
-            if (packet[1]! & 0x80 || packet[3]! & 0xc0) continue;
-            const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-            if (pid === PID_PAT) {
-                for (const section of this.pat.feed(packet)) this.readPat(section);
-                continue;
-            }
-            if (pid === this.pmtPid && this.pmt !== null) {
-                for (const section of this.pmt.feed(packet)) changed = this.readPmt(section) || changed;
-                continue;
-            }
-            if (pid === this.streams.video) this.collect(packet, pid, 'video', out);
-            else if (pid === this.audioPid) this.collect(packet, pid, 'audio', out);
-        }
-        return { pes: out, changed };
+  feed(chunk: Uint8Array): { pes: Pes[]; changed: boolean } {
+    const out: Pes[] = [];
+    let changed = false;
+    for (const packet of this.packets.feed(chunk)) {
+      // 誤りの印が立っているもの・スクランブルが残っているものは読まない
+      if (packet[1]! & 0x80 || packet[3]! & 0xc0) continue;
+      const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+      if (pid === PID_PAT) {
+        for (const section of this.pat.feed(packet)) this.readPat(section);
+        continue;
+      }
+      if (pid === this.pmtPid && this.pmt !== null) {
+        for (const section of this.pmt.feed(packet))
+          changed = this.readPmt(section) || changed;
+        continue;
+      }
+      if (pid === this.streams.video) this.collect(packet, pid, "video", out);
+      else if (pid === this.audioPid) this.collect(packet, pid, "audio", out);
     }
+    return { pes: out, changed };
+  }
 
-    /** 音声を選び直す。**組み立てかけのものは捨てる** (前の音声の続きになる) */
-    selectAudio(index: number): void {
-        this.audioIndex = index;
-        const next = this.streams.audio[index] ?? this.streams.audio[0] ?? null;
-        if (next !== this.audioPid && this.audioPid !== null) this.partial.delete(this.audioPid);
-        this.audioPid = next;
+  /** 音声を選び直す。**組み立てかけのものは捨てる** (前の音声の続きになる) */
+  selectAudio(index: number): void {
+    this.audioIndex = index;
+    const next = this.streams.audio[index] ?? this.streams.audio[0] ?? null;
+    if (next !== this.audioPid && this.audioPid !== null)
+      this.partial.delete(this.audioPid);
+    this.audioPid = next;
+  }
+
+  private readPat(section: Uint8Array): void {
+    // 絞ってあるので1つだけのはず。万一複数あっても先頭を採る
+    const first = [...parsePat(section).values()][0];
+    if (first === undefined || first === this.pmtPid) return;
+    this.pmtPid = first;
+    this.pmt = new SectionAssembler(first);
+  }
+
+  private readPmt(section: Uint8Array): boolean {
+    let video: number | null = null;
+    const audio: number[] = [];
+    for (const [type, pid] of pmtStreams(section)) {
+      if (type === STREAM_MPEG2 && video === null) video = pid;
+      else if (type === STREAM_AAC) audio.push(pid);
     }
+    const same =
+      video === this.streams.video &&
+      audio.length === this.streams.audio.length &&
+      audio.every((pid, i) => pid === this.streams.audio[i]);
+    if (same) return false;
+    this.streams = { video, audio };
+    this.partial.clear();
+    this.selectAudio(this.audioIndex);
+    return true;
+  }
 
-    private readPat(section: Uint8Array): void {
-        // 絞ってあるので1つだけのはず。万一複数あっても先頭を採る
-        const first = [...parsePat(section).values()][0];
-        if (first === undefined || first === this.pmtPid) return;
-        this.pmtPid = first;
-        this.pmt = new SectionAssembler(first);
+  private collect(
+    packet: Uint8Array,
+    pid: number,
+    kind: Pes["kind"],
+    out: Pes[],
+  ): void {
+    const control = (packet[3]! >> 4) & 0x03;
+    if (control === 0 || control === 2) return;
+    let offset = 4;
+    if (control === 3) offset += 1 + packet[4]!;
+    if (offset >= PACKET) return;
+    const payload = packet.subarray(offset);
+
+    if (packet[1]! & 0x40) {
+      // 次の頭が来た。**長さ 0 の PES (映像) はここで終わりが分かる**
+      this.finish(pid, kind, out);
+      const expected =
+        payload.length >= 6 ? 6 + ((payload[4]! << 8) | payload[5]!) : 0;
+      // 溜めるものは写す。パケットは届いた塊の上の窓で、塊は使い回される (psi.ts の PacketStream)
+      this.partial.set(pid, {
+        parts: [payload.slice()],
+        size: payload.length,
+        expected: expected === 6 ? 0 : expected,
+      });
+    } else {
+      const partial = this.partial.get(pid);
+      // 頭を見ていない続きは捨てる (途中から受け取った)
+      if (partial === undefined) return;
+      partial.parts.push(payload.slice());
+      partial.size += payload.length;
     }
-
-    private readPmt(section: Uint8Array): boolean {
-        let video: number | null = null;
-        const audio: number[] = [];
-        for (const [type, pid] of pmtStreams(section)) {
-            if (type === STREAM_MPEG2 && video === null) video = pid;
-            else if (type === STREAM_AAC) audio.push(pid);
-        }
-        const same =
-            video === this.streams.video &&
-            audio.length === this.streams.audio.length &&
-            audio.every((pid, i) => pid === this.streams.audio[i]);
-        if (same) return false;
-        this.streams = { video, audio };
-        this.partial.clear();
-        this.selectAudio(this.audioIndex);
-        return true;
+    const partial = this.partial.get(pid);
+    if (
+      partial !== undefined &&
+      partial.expected > 0 &&
+      partial.size >= partial.expected
+    ) {
+      this.finish(pid, kind, out);
     }
+  }
 
-    private collect(packet: Uint8Array, pid: number, kind: Pes['kind'], out: Pes[]): void {
-        const control = (packet[3]! >> 4) & 0x03;
-        if (control === 0 || control === 2) return;
-        let offset = 4;
-        if (control === 3) offset += 1 + packet[4]!;
-        if (offset >= PACKET) return;
-        const payload = packet.subarray(offset);
-
-        if (packet[1]! & 0x40) {
-            // 次の頭が来た。**長さ 0 の PES (映像) はここで終わりが分かる**
-            this.finish(pid, kind, out);
-            const expected = payload.length >= 6 ? 6 + ((payload[4]! << 8) | payload[5]!) : 0;
-            // 溜めるものは写す。パケットは届いた塊の上の窓で、塊は使い回される (psi.ts の PacketStream)
-            this.partial.set(pid, {
-                parts: [payload.slice()],
-                size: payload.length,
-                expected: expected === 6 ? 0 : expected,
-            });
-        } else {
-            const partial = this.partial.get(pid);
-            // 頭を見ていない続きは捨てる (途中から受け取った)
-            if (partial === undefined) return;
-            partial.parts.push(payload.slice());
-            partial.size += payload.length;
-        }
-        const partial = this.partial.get(pid);
-        if (partial !== undefined && partial.expected > 0 && partial.size >= partial.expected) {
-            this.finish(pid, kind, out);
-        }
+  private finish(pid: number, kind: Pes["kind"], out: Pes[]): void {
+    const partial = this.partial.get(pid);
+    if (partial === undefined) return;
+    this.partial.delete(pid);
+    const joined = new Uint8Array(partial.size);
+    let at = 0;
+    for (const part of partial.parts) {
+      joined.set(part, at);
+      at += part.length;
     }
-
-    private finish(pid: number, kind: Pes['kind'], out: Pes[]): void {
-        const partial = this.partial.get(pid);
-        if (partial === undefined) return;
-        this.partial.delete(pid);
-        const joined = new Uint8Array(partial.size);
-        let at = 0;
-        for (const part of partial.parts) {
-            joined.set(part, at);
-            at += part.length;
-        }
-        const parsed = parsePes(joined);
-        if (parsed === null || parsed.data.length === 0) return;
-        out.push({ pid, kind, ...parsed });
-    }
+    const parsed = parsePes(joined);
+    if (parsed === null || parsed.data.length === 0) return;
+    out.push({ pid, kind, ...parsed });
+  }
 }
 
 /** ADTS の標本化周波数の表 (ISO/IEC 14496-3 表 1.18) */
-const RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+const RATES = [
+  96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,
+  8000, 7350,
+];
 
 export interface AdtsFrame {
-    /** 頭 (7 か 9 バイト) ごと。WASM の AAC デコーダは ADTS のまま受け取る */
-    data: Uint8Array;
-    /** 90kHz */
-    pts: number;
-    sampleRate: number;
-    channels: number;
-    /** このコマの長さ (90kHz)。AAC は1コマ 1024 標本 */
-    duration: number;
+  /** 頭 (7 か 9 バイト) ごと。WASM の AAC デコーダは ADTS のまま受け取る */
+  data: Uint8Array;
+  /** 90kHz */
+  pts: number;
+  sampleRate: number;
+  channels: number;
+  /** このコマの長さ (90kHz)。AAC は1コマ 1024 標本 */
+  duration: number;
 }
 
 /**
@@ -215,53 +238,57 @@ export interface AdtsFrame {
  * 余りから始まるコマは、前の続きの時刻になる
  */
 export class AdtsSplitter {
-    private rest = new Uint8Array(0);
-    private next: number | null = null;
+  private rest = new Uint8Array(0);
+  private next: number | null = null;
 
-    feed(data: Uint8Array, pts: number | null): AdtsFrame[] {
-        // 余りが無いときだけ PES の時刻に合わせ直す (余りがあれば頭のコマはその続き)
-        if (pts !== null && this.rest.length === 0) this.next = pts;
-        const buffer = this.rest.length === 0 ? data : joinBytes([this.rest, data]);
-        const out: AdtsFrame[] = [];
-        let at = 0;
-        while (at + 7 <= buffer.length) {
-            if (buffer[at] !== 0xff || (buffer[at + 1]! & 0xf6) !== 0xf0) {
-                at++;
-                continue;
-            }
-            const length = ((buffer[at + 3]! & 0x03) << 11) | (buffer[at + 4]! << 3) | (buffer[at + 5]! >> 5);
-            if (length < 7) {
-                at++;
-                continue;
-            }
-            if (at + length > buffer.length) break;
-            const rate = RATES[(buffer[at + 2]! >> 2) & 0x0f] ?? 48000;
-            const channels = ((buffer[at + 2]! & 0x01) << 2) | (buffer[at + 3]! >> 6);
-            const duration = Math.round((1024 * CLOCK) / rate);
-            if (this.next !== null) {
-                out.push({
-                    data: buffer.slice(at, at + length),
-                    pts: this.next,
-                    sampleRate: rate,
-                    // 0 は「中身に書いてある」(PCE)。放送のデュアルモノはここに来るので、2本とみなす
-                    channels: channels === 0 ? 2 : channels,
-                    duration,
-                });
-                this.next += duration;
-            }
-            at += length;
-        }
-        this.rest = buffer.slice(at);
-        // 同期が取れないまま溜め込まない
-        if (this.rest.length > 8192) this.rest = new Uint8Array(0);
-        if (pts !== null && this.rest.length === 0 && out.length === 0) this.next = pts;
-        return out;
+  feed(data: Uint8Array, pts: number | null): AdtsFrame[] {
+    // 余りが無いときだけ PES の時刻に合わせ直す (余りがあれば頭のコマはその続き)
+    if (pts !== null && this.rest.length === 0) this.next = pts;
+    const buffer = this.rest.length === 0 ? data : joinBytes([this.rest, data]);
+    const out: AdtsFrame[] = [];
+    let at = 0;
+    while (at + 7 <= buffer.length) {
+      if (buffer[at] !== 0xff || (buffer[at + 1]! & 0xf6) !== 0xf0) {
+        at++;
+        continue;
+      }
+      const length =
+        ((buffer[at + 3]! & 0x03) << 11) |
+        (buffer[at + 4]! << 3) |
+        (buffer[at + 5]! >> 5);
+      if (length < 7) {
+        at++;
+        continue;
+      }
+      if (at + length > buffer.length) break;
+      const rate = RATES[(buffer[at + 2]! >> 2) & 0x0f] ?? 48000;
+      const channels = ((buffer[at + 2]! & 0x01) << 2) | (buffer[at + 3]! >> 6);
+      const duration = Math.round((1024 * CLOCK) / rate);
+      if (this.next !== null) {
+        out.push({
+          data: buffer.slice(at, at + length),
+          pts: this.next,
+          sampleRate: rate,
+          // 0 は「中身に書いてある」(PCE)。放送のデュアルモノはここに来るので、2本とみなす
+          channels: channels === 0 ? 2 : channels,
+          duration,
+        });
+        this.next += duration;
+      }
+      at += length;
     }
+    this.rest = buffer.slice(at);
+    // 同期が取れないまま溜め込まない
+    if (this.rest.length > 8192) this.rest = new Uint8Array(0);
+    if (pts !== null && this.rest.length === 0 && out.length === 0)
+      this.next = pts;
+    return out;
+  }
 
-    reset(): void {
-        this.rest = new Uint8Array(0);
-        this.next = null;
-    }
+  reset(): void {
+    this.rest = new Uint8Array(0);
+    this.next = null;
+  }
 }
 
 /**
@@ -275,5 +302,5 @@ export class AdtsSplitter {
  * @param near 手元の物差し (90kHz。伸ばしたもの)
  */
 export function unwrap(pts: number, near: number): number {
-    return pts + Math.round((near - pts) / WRAP) * WRAP;
+  return pts + Math.round((near - pts) / WRAP) * WRAP;
 }

@@ -1,6 +1,6 @@
-import { json } from '@sveltejs/kit';
-import { recordingOr404 } from '#lib/server/recording.js';
-import { displayTitle } from '#lib/server/title.js';
+import { json } from "@sveltejs/kit";
+import { recordingOr404 } from "#lib/server/recording.js";
+import { displayTitle } from "#lib/server/title.js";
 
 /**
  * **番組の中身** (テレビのアプリの詳細で出す。docs/api.md)。
@@ -12,12 +12,12 @@ import { displayTitle } from '#lib/server/title.js';
  * 説明は録り始めに `recordings` へ写してあるので、番組表から消えた録画でも出る
  */
 export function GET({ params }) {
-    const recording = recordingOr404(params.id);
-    return json({
-        id: recording.id,
-        title: displayTitle(recording.name),
-        name: recording.name,
-        description: recording.description,
-        extended: recording.extended ?? {},
-    });
+  const recording = recordingOr404(params.id);
+  return json({
+    id: recording.id,
+    title: displayTitle(recording.name),
+    name: recording.name,
+    description: recording.description,
+    extended: recording.extended ?? {},
+  });
 }

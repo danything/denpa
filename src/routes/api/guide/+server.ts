@@ -1,7 +1,12 @@
-import { json } from '@sveltejs/kit';
-import { HOUR, programsOf, requestedDay, WINDOW_HOURS } from '#lib/server/guide.js';
-import type { GuideSheet } from '#lib/types.js';
-import { CHANNEL_TYPES } from '#lib/types.js';
+import { json } from "@sveltejs/kit";
+import {
+  HOUR,
+  programsOf,
+  requestedDay,
+  WINDOW_HOURS,
+} from "#lib/server/guide.js";
+import type { GuideSheet } from "#lib/types.js";
+import { CHANNEL_TYPES } from "#lib/types.js";
 
 /**
  * 番組表のマス (`guide/+page.ts` が取る)。**外枠 (局の並び・日付) とは別に取る。**
@@ -13,15 +18,18 @@ import { CHANNEL_TYPES } from '#lib/types.js';
  * (本当の理由はサーバのログにも残す)
  */
 export function GET({ url }) {
-    const type = CHANNEL_TYPES.find((t) => t === url.searchParams.get('type')) ?? 'GR';
-    const start = requestedDay(url.searchParams.get('start'));
-    try {
-        return json({
-            programs: programsOf(type, start, start + WINDOW_HOURS * HOUR),
-            failed: null,
-        } satisfies GuideSheet);
-    } catch (error) {
-        console.error('[guide] 番組表を組めませんでした', error);
-        return json({ programs: [], failed: String(error) } satisfies GuideSheet, { status: 500 });
-    }
+  const type =
+    CHANNEL_TYPES.find((t) => t === url.searchParams.get("type")) ?? "GR";
+  const start = requestedDay(url.searchParams.get("start"));
+  try {
+    return json({
+      programs: programsOf(type, start, start + WINDOW_HOURS * HOUR),
+      failed: null,
+    } satisfies GuideSheet);
+  } catch (error) {
+    console.error("[guide] 番組表を組めませんでした", error);
+    return json({ programs: [], failed: String(error) } satisfies GuideSheet, {
+      status: 500,
+    });
+  }
 }

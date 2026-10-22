@@ -11,19 +11,19 @@
  * 無ければ 404。画面はそれを見てエンコードしたものに戻る (`raw/worker.ts`)
  */
 
-import { existsSync, statSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
-import { brotliCompress, constants, gzip } from 'node:zlib';
-import { error } from '@sveltejs/kit';
-import { config } from '#lib/server/config.js';
-import type { RequestHandler } from './$types';
+import { existsSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { brotliCompress, constants, gzip } from "node:zlib";
+import { error } from "@sveltejs/kit";
+import { config } from "#lib/server/config.js";
+import type { RequestHandler } from "./$types";
 
 const TYPES: Record<string, string> = {
-    'decoder.mjs': 'text/javascript; charset=utf-8',
-    // **これでないと `instantiateStreaming` が受け取らない** (ローダーがそれを使う)
-    'decoder.wasm': 'application/wasm',
+  "decoder.mjs": "text/javascript; charset=utf-8",
+  // **これでないと `instantiateStreaming` が受け取らない** (ローダーがそれを使う)
+  "decoder.wasm": "application/wasm",
 };
 
 /**
@@ -45,47 +45,61 @@ const gzipped = promisify(gzip);
 
 /** 縮めたもの。**まだなら null** (縮めはじめるので、今回は縮めずに返す) */
 function pack(path: string, tag: string): Packed | null {
-    const hit = packed.get(path);
-    if (hit?.tag === tag) return hit.ready;
-    const entry: { tag: string; ready: Packed | null } = { tag, ready: null };
-    packed.set(path, entry);
-    void (async () => {
-        const raw = await readFile(path);
-        const [br, gz] = await Promise.all([
-            brotli(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }),
-            gzipped(raw, { level: 9 }),
-        ]);
-        entry.ready = { br: br as Buffer<ArrayBuffer>, gzip: gz as Buffer<ArrayBuffer> };
-    })().catch((failure) => {
-        // 縮められなくても配れる。次にリクエストされたときにもう一度試す
-        console.warn(`[mpeg2] ${path} を縮められません: ${failure}`);
-        if (packed.get(path) === entry) packed.delete(path);
-    });
-    return null;
+  const hit = packed.get(path);
+  if (hit?.tag === tag) return hit.ready;
+  const entry: { tag: string; ready: Packed | null } = { tag, ready: null };
+  packed.set(path, entry);
+  void (async () => {
+    const raw = await readFile(path);
+    const [br, gz] = await Promise.all([
+      brotli(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }),
+      gzipped(raw, { level: 9 }),
+    ]);
+    entry.ready = {
+      br: br as Buffer<ArrayBuffer>,
+      gzip: gz as Buffer<ArrayBuffer>,
+    };
+  })().catch((failure) => {
+    // 縮められなくても配れる。次にリクエストされたときにもう一度試す
+    console.warn(`[mpeg2] ${path} を縮められません: ${failure}`);
+    if (packed.get(path) === entry) packed.delete(path);
+  });
+  return null;
 }
 
 export const GET: RequestHandler = ({ params, request }) => {
-    // `constructor` などの継いだ名前に当たらない
-    const type = Object.hasOwn(TYPES, params.file) ? TYPES[params.file] : undefined;
-    if (type === undefined) error(404, 'ファイルが見つかりません');
-    const path = join(config.mpeg2Dir, params.file);
-    if (!existsSync(path)) error(404, 'MPEG-2 の再生に必要なファイルが入っていません');
-    /*
-     * **持たせてよいが、毎回確かめさせる** (`no-cache` + ETag)。イメージを入れ替えると
-     * 中身が変わるのに URL は同じなので、長く持たせると mjs と wasm の版が食い違いうる
-     */
-    const stat = statSync(path);
-    const tag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
-    const headers: Record<string, string> = {
-        'content-type': type,
-        'cache-control': 'no-cache',
-        etag: tag,
-        vary: 'Accept-Encoding',
-    };
-    if (request.headers.get('if-none-match') === tag) return new Response(null, { status: 304, headers });
-    const accept = request.headers.get('accept-encoding') ?? '';
-    const encoding = /\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null;
-    const ready = encoding === null ? null : pack(path, tag);
-    if (encoding === null || ready === null) return new Response(Bun.file(path).stream(), { headers });
-    return new Response(ready[encoding], { headers: { ...headers, 'content-encoding': encoding } });
+  // `constructor` などの継いだ名前に当たらない
+  const type = Object.hasOwn(TYPES, params.file)
+    ? TYPES[params.file]
+    : undefined;
+  if (type === undefined) error(404, "ファイルが見つかりません");
+  const path = join(config.mpeg2Dir, params.file);
+  if (!existsSync(path))
+    error(404, "MPEG-2 の再生に必要なファイルが入っていません");
+  /*
+   * **持たせてよいが、毎回確かめさせる** (`no-cache` + ETag)。イメージを入れ替えると
+   * 中身が変わるのに URL は同じなので、長く持たせると mjs と wasm の版が食い違いうる
+   */
+  const stat = statSync(path);
+  const tag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
+  const headers: Record<string, string> = {
+    "content-type": type,
+    "cache-control": "no-cache",
+    etag: tag,
+    vary: "Accept-Encoding",
+  };
+  if (request.headers.get("if-none-match") === tag)
+    return new Response(null, { status: 304, headers });
+  const accept = request.headers.get("accept-encoding") ?? "";
+  const encoding = /\bbr\b/.test(accept)
+    ? "br"
+    : /\bgzip\b/.test(accept)
+      ? "gzip"
+      : null;
+  const ready = encoding === null ? null : pack(path, tag);
+  if (encoding === null || ready === null)
+    return new Response(Bun.file(path).stream(), { headers });
+  return new Response(ready[encoding], {
+    headers: { ...headers, "content-encoding": encoding },
+  });
 };

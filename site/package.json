@@ -1,22 +1,22 @@
 {
-    "name": "denpa-site",
-    "private": true,
-    "type": "module",
-    "scripts": {
-        "import-docs": "bun scripts/import-docs.ts",
-        "predev": "bun run import-docs",
-        "dev": "astro dev",
-        "prebuild": "bun run import-docs",
-        "build": "astro build",
-        "preview": "astro preview",
-        "test:a11y": "playwright test"
-    },
-    "dependencies": {
-        "@astrojs/starlight": "0.42.6",
-        "astro": "7.4.2"
-    },
-    "devDependencies": {
-        "@axe-core/playwright": "4.14.0",
-        "@playwright/test": "1.64.1"
-    }
+  "name": "denpa-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "import-docs": "bun scripts/import-docs.ts",
+    "predev": "bun run import-docs",
+    "dev": "astro dev",
+    "prebuild": "bun run import-docs",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test:a11y": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.6",
+    "astro": "7.4.2"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1"
+  }
 }

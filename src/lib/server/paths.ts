@@ -18,15 +18,16 @@
  * `../login`。前段が剥がした接頭辞は、ブラウザが自分のいる URL から補う
  */
 export function relative(from: URL, to: string): string {
-    const depth = from.pathname.split('/').length - 2;
-    return (depth > 0 ? '../'.repeat(depth) : './') + to.slice(1);
+  const depth = from.pathname.split("/").length - 2;
+  return (depth > 0 ? "../".repeat(depth) : "./") + to.slice(1);
 }
 
 /** 外に渡す絶対 URL の頭。`https://example.com/denpa` のように、末尾の `/` は付けない */
 export function publicBase(url: URL, headers: Headers): string {
-    const prefix = (headers.get('x-forwarded-prefix') ?? headers.get('x-ingress-path') ?? '').replace(
-        /\/+$/,
-        '',
-    );
-    return url.origin + (/^\/(?!\/)/.test(prefix) ? prefix : '');
+  const prefix = (
+    headers.get("x-forwarded-prefix") ??
+    headers.get("x-ingress-path") ??
+    ""
+  ).replace(/\/+$/, "");
+  return url.origin + (/^\/(?!\/)/.test(prefix) ? prefix : "");
 }

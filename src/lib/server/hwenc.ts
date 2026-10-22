@@ -1,18 +1,18 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import {
-    CODEC_LABEL,
-    HW_CODECS,
-    HW_KIND_LABEL,
-    HW_KINDS,
-    type HwAllow,
-    type HwCodec,
-    type HwKind,
-    hwAllowed,
-} from '../hw';
-import { config } from './config';
-import { run } from './stream';
+  CODEC_LABEL,
+  HW_CODECS,
+  HW_KIND_LABEL,
+  HW_KINDS,
+  type HwAllow,
+  type HwCodec,
+  type HwKind,
+  hwAllowed,
+} from "../hw";
+import { config } from "./config";
+import { run } from "./stream";
 
 /**
  * **GPU でエンコードできるか、起動時に ffmpeg に確かめさせる。**
@@ -30,49 +30,49 @@ import { run } from './stream';
 
 /** 1つのデバイス (GPU) で何がエンコードできるか */
 export interface HwDevice {
-    /** `/dev/dri/renderD128` のようなデバイス */
-    path: string;
-    /** 画面に出す名前。`renderD128 (Intel)` のように、デバイスの名前と作り手 */
-    label: string;
-    /** QSV でエンコードできたコーデック */
-    qsv: HwCodec[];
-    /** VA-API でエンコードできたコーデック */
-    vaapi: HwCodec[];
-    /**
-     * VA-API のうち、**ICQ が通らず CQP でだけエンコードできた**コーデック。
-     * i965 (Gemini Lake などの古いドライバ) は ICQ を持たない (`hwArgs`)
-     */
-    cqp: HwCodec[];
-    /**
-     * VA-API のうち、**放送の MPEG-2 を GPU でデコードして、GPU でインタレ解除してエンコードできる**と
-     * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU にフレームを降ろさない (`liveHwArgs`)
-     */
-    full: HwCodec[];
+  /** `/dev/dri/renderD128` のようなデバイス */
+  path: string;
+  /** 画面に出す名前。`renderD128 (Intel)` のように、デバイスの名前と作り手 */
+  label: string;
+  /** QSV でエンコードできたコーデック */
+  qsv: HwCodec[];
+  /** VA-API でエンコードできたコーデック */
+  vaapi: HwCodec[];
+  /**
+   * VA-API のうち、**ICQ が通らず CQP でだけエンコードできた**コーデック。
+   * i965 (Gemini Lake などの古いドライバ) は ICQ を持たない (`hwArgs`)
+   */
+  cqp: HwCodec[];
+  /**
+   * VA-API のうち、**放送の MPEG-2 を GPU でデコードして、GPU でインタレ解除してエンコードできる**と
+   * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU にフレームを降ろさない (`liveHwArgs`)
+   */
+  full: HwCodec[];
 }
 
 export interface HwEncode {
-    /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/recording/+page.server.ts) */
-    probed: boolean;
-    /** 見つかったデバイス、`HW_DEVICES` に当たった順。空なら GPU が見えていない */
-    devices: HwDevice[];
-    /** 画面に出す一言。何が使えて、使えないなら何が理由か */
-    message: string;
+  /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/recording/+page.server.ts) */
+  probed: boolean;
+  /** 見つかったデバイス、`HW_DEVICES` に当たった順。空なら GPU が見えていない */
+  devices: HwDevice[];
+  /** 画面に出す一言。何が使えて、使えないなら何が理由か */
+  message: string;
 }
 
 /** エンコードする1回ぶんの方式。どのデバイスを、どちらの方式で */
 export interface HwWay {
-    device: string;
-    kind: HwKind;
-    /** VA-API を ICQ ではなく CQP で指定する (`HwDevice.cqp`)。試しのエンコードの結果から `hwChain` が付ける */
-    cqp?: true;
+  device: string;
+  kind: HwKind;
+  /** VA-API を ICQ ではなく CQP で指定する (`HwDevice.cqp`)。試しのエンコードの結果から `hwChain` が付ける */
+  cqp?: true;
 }
 
-let state: HwEncode = { probed: false, devices: [], message: '' };
+let state: HwEncode = { probed: false, devices: [], message: "" };
 let running: Promise<HwEncode> | null = null;
 
 /** いまの見立て。`probe()` が終わるまでは `probed: false` */
 export function hwEncode(): HwEncode {
-    return state;
+  return state;
 }
 
 /**
@@ -83,21 +83,28 @@ export function hwEncode(): HwEncode {
  * ジョブごとに先頭を入れ替えて、2本並べてエンコードするとき片方に寄らないようにする。
  * 同じデバイスの中では QSV → VA-API
  */
-export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = state.devices): HwWay[] {
-    const perDevice = devices
-        .map((device) =>
-            HW_KINDS.filter(
-                (kind) => device[kind].includes(codec) && hwAllowed(allow, device.path, kind, codec),
-            ).map((kind): HwWay =>
-                kind === 'vaapi' && device.cqp.includes(codec)
-                    ? { device: device.path, kind, cqp: true }
-                    : { device: device.path, kind },
-            ),
-        )
-        .filter((ways) => ways.length > 0);
-    if (perDevice.length === 0) return [];
-    const start = turn % perDevice.length;
-    return [...perDevice.slice(start), ...perDevice.slice(0, start)].flat();
+export function hwChain(
+  codec: HwCodec,
+  allow: HwAllow,
+  turn = 0,
+  devices = state.devices,
+): HwWay[] {
+  const perDevice = devices
+    .map((device) =>
+      HW_KINDS.filter(
+        (kind) =>
+          device[kind].includes(codec) &&
+          hwAllowed(allow, device.path, kind, codec),
+      ).map((kind): HwWay =>
+        kind === "vaapi" && device.cqp.includes(codec)
+          ? { device: device.path, kind, cqp: true }
+          : { device: device.path, kind },
+      ),
+    )
+    .filter((ways) => ways.length > 0);
+  if (perDevice.length === 0) return [];
+  const start = turn % perDevice.length;
+  return [...perDevice.slice(start), ...perDevice.slice(0, start)].flat();
 }
 
 /**
@@ -129,33 +136,39 @@ export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = stat
  * 変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなるはず)
  */
 export function hwArgs(
-    way: HwWay,
-    codec: HwCodec,
+  way: HwWay,
+  codec: HwCodec,
 ): { device: string[]; filter: string[]; encoder: string[] } {
-    if (way.kind === 'qsv') {
-        return {
-            device: ['-init_hw_device', `qsv=hw:hw,child_device=${way.device}`],
-            filter: ['format=nv12'],
-            encoder: [`${codec}_qsv`, '-preset', 'medium', '-global_quality', '24'],
-        };
-    }
+  if (way.kind === "qsv") {
     return {
-        device: ['-init_hw_device', `vaapi=va:${way.device}`, '-filter_hw_device', 'va'],
-        filter: ['format=nv12', 'hwupload'],
-        encoder: [`${codec}_vaapi`, ...vaapiQuality(way, codec)],
+      device: ["-init_hw_device", `qsv=hw:hw,child_device=${way.device}`],
+      filter: ["format=nv12"],
+      encoder: [`${codec}_qsv`, "-preset", "medium", "-global_quality", "24"],
     };
+  }
+  return {
+    device: [
+      "-init_hw_device",
+      `vaapi=va:${way.device}`,
+      "-filter_hw_device",
+      "va",
+    ],
+    filter: ["format=nv12", "hwupload"],
+    encoder: [`${codec}_vaapi`, ...vaapiQuality(way, codec)],
+  };
 }
 
 /** VA-API の画質の指定方法。ICQ を持たないドライバには CQP (`hwArgs` の説明) */
 function vaapiQuality(way: HwWay, codec: HwCodec): string[] {
-    if (way.cqp === true) return ['-rc_mode', 'CQP', '-qp', codec === 'av1' ? '120' : '24'];
-    return ['-rc_mode', 'ICQ', '-global_quality', '24'];
+  if (way.cqp === true)
+    return ["-rc_mode", "CQP", "-qp", codec === "av1" ? "120" : "24"];
+  return ["-rc_mode", "ICQ", "-global_quality", "24"];
 }
 
 /** ライブで GPU を使うときの方式。`full` ならデコードとインタレ解除まで GPU (`liveHwArgs`) */
 export interface LiveHw {
-    way: HwWay;
-    full: boolean;
+  way: HwWay;
+  full: boolean;
 }
 
 /**
@@ -167,14 +180,21 @@ export interface LiveHw {
  * (issue #417 の実測: Celeron J4125 で3本同時、エンコードするだけ GPU 0.76x / 全部 GPU 1.2x)。
  * 同じデバイスの QSV より VA-API の全部 GPU を上に置くのはそのため
  */
-export function liveHw(codec: HwCodec, allow: HwAllow, turn = 0, devices = state.devices): LiveHw | null {
-    const chain = hwChain(codec, allow, turn, devices);
-    const full = chain.find(
-        (way) => way.kind === 'vaapi' && devices.some((d) => d.path === way.device && d.full.includes(codec)),
-    );
-    if (full !== undefined) return { way: full, full: true };
-    const first = chain[0];
-    return first === undefined ? null : { way: first, full: false };
+export function liveHw(
+  codec: HwCodec,
+  allow: HwAllow,
+  turn = 0,
+  devices = state.devices,
+): LiveHw | null {
+  const chain = hwChain(codec, allow, turn, devices);
+  const full = chain.find(
+    (way) =>
+      way.kind === "vaapi" &&
+      devices.some((d) => d.path === way.device && d.full.includes(codec)),
+  );
+  if (full !== undefined) return { way: full, full: true };
+  const first = chain[0];
+  return first === undefined ? null : { way: first, full: false };
 }
 
 /**
@@ -202,47 +222,54 @@ export function liveHw(codec: HwCodec, allow: HwAllow, turn = 0, devices = state
  * 呼ぶ側が CPU の bwdif を前に足す
  */
 export function liveHwArgs(
-    hw: LiveHw,
-    codec: HwCodec,
+  hw: LiveHw,
+  codec: HwCodec,
 ): { input: string[]; filter: string[]; encoder: string[] } {
-    const { way } = hw;
-    if (way.kind === 'qsv') {
-        const base = hwArgs(way, codec);
-        return {
-            input: base.device,
-            filter: base.filter,
-            encoder: [
-                `${codec}_qsv`,
-                '-preset',
-                'veryfast',
-                '-global_quality',
-                '24',
-                '-bf',
-                '0',
-                '-async_depth',
-                '1',
-            ],
-        };
-    }
-    const encoder = [`${codec}_vaapi`, ...vaapiQuality(way, codec), '-bf', '0', '-async_depth', '1'];
-    if (!hw.full) {
-        const base = hwArgs(way, codec);
-        return { input: base.device, filter: base.filter, encoder };
-    }
+  const { way } = hw;
+  if (way.kind === "qsv") {
+    const base = hwArgs(way, codec);
     return {
-        input: [
-            '-init_hw_device',
-            `vaapi=va:${way.device}`,
-            '-hwaccel',
-            'vaapi',
-            '-hwaccel_output_format',
-            'vaapi',
-            '-hwaccel_device',
-            'va',
-        ],
-        filter: ['deinterlace_vaapi=rate=field'],
-        encoder,
+      input: base.device,
+      filter: base.filter,
+      encoder: [
+        `${codec}_qsv`,
+        "-preset",
+        "veryfast",
+        "-global_quality",
+        "24",
+        "-bf",
+        "0",
+        "-async_depth",
+        "1",
+      ],
     };
+  }
+  const encoder = [
+    `${codec}_vaapi`,
+    ...vaapiQuality(way, codec),
+    "-bf",
+    "0",
+    "-async_depth",
+    "1",
+  ];
+  if (!hw.full) {
+    const base = hwArgs(way, codec);
+    return { input: base.device, filter: base.filter, encoder };
+  }
+  return {
+    input: [
+      "-init_hw_device",
+      `vaapi=va:${way.device}`,
+      "-hwaccel",
+      "vaapi",
+      "-hwaccel_output_format",
+      "vaapi",
+      "-hwaccel_device",
+      "va",
+    ],
+    filter: ["deinterlace_vaapi=rate=field"],
+    encoder,
+  };
 }
 
 /**
@@ -250,27 +277,37 @@ export function liveHwArgs(
  * (実機で見たことはないが) に起動が止まらないように
  */
 async function tryEncode(args: string[]): Promise<boolean> {
-    const result = await run([config.ffmpeg, '-v', 'error', '-nostdin', ...args, '-f', 'null', '-'], {
-        timeoutMs: config.hwProbeTimeout,
-    });
-    return result.code === 0;
+  const result = await run(
+    [config.ffmpeg, "-v", "error", "-nostdin", ...args, "-f", "null", "-"],
+    {
+      timeoutMs: config.hwProbeTimeout,
+    },
+  );
+  return result.code === 0;
 }
 
 /** 試しのエンコードの素材。小さく短く — 何が使えるかを見るだけで、速さは測らない */
-const SOURCE = ['-f', 'lavfi', '-i', 'nullsrc=s=256x256:r=30:d=0.2'];
+const SOURCE = ["-f", "lavfi", "-i", "nullsrc=s=256x256:r=30:d=0.2"];
 
 /** PCI の作り手の番号 → 名前。sysfs から読めたときだけ添える */
-const VENDOR: Record<string, string> = { '0x8086': 'Intel', '0x1002': 'AMD', '0x10de': 'NVIDIA' };
+const VENDOR: Record<string, string> = {
+  "0x8086": "Intel",
+  "0x1002": "AMD",
+  "0x10de": "NVIDIA",
+};
 
 /** デバイスの名前。`renderD128 (Intel)` — 作り手は `/sys/class/drm/<デバイス>/device/vendor` から */
 function labelOf(path: string): string {
-    const name = basename(path);
-    try {
-        const vendor = readFileSync(`/sys/class/drm/${name}/device/vendor`, 'utf8').trim();
-        return `${name} (${VENDOR[vendor] ?? vendor})`;
-    } catch {
-        return name;
-    }
+  const name = basename(path);
+  try {
+    const vendor = readFileSync(
+      `/sys/class/drm/${name}/device/vendor`,
+      "utf8",
+    ).trim();
+    return `${name} (${VENDOR[vendor] ?? vendor})`;
+  } catch {
+    return name;
+  }
 }
 
 /**
@@ -279,65 +316,84 @@ function labelOf(path: string): string {
  * デバイスは普通のファイルでもフォルダでもないので、glob の道具に頼らない
  */
 export function findDevices(pattern = config.hwDevices): string[] {
-    const dir = dirname(pattern);
-    const name = new RegExp(`^${basename(pattern).split('*').map(escapeRegExp).join('.*')}$`);
-    let entries: string[];
-    try {
-        entries = readdirSync(dir);
-    } catch {
-        return [];
-    }
-    return entries
-        .filter((entry) => name.test(entry))
-        .sort()
-        .map((entry) => `${dir}/${entry}`);
+  const dir = dirname(pattern);
+  const name = new RegExp(
+    `^${basename(pattern).split("*").map(escapeRegExp).join(".*")}$`,
+  );
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => name.test(entry))
+    .sort()
+    .map((entry) => `${dir}/${entry}`);
 }
 
 function escapeRegExp(text: string): string {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
  * 探し直す。同時に2回押されても ffmpeg は1組しか走らせない
  */
 export function probe(): Promise<HwEncode> {
-    if (running !== null) return running;
-    // 終わったら手を離す。**中で null にしない** — 待たずに終わる場合 (デバイスが無い) では
-    // 代入より先に走り終えてしまい、済んだ promise を握ったままになる
-    running = probeOnce().finally(() => {
-        running = null;
-    });
-    return running;
+  if (running !== null) return running;
+  // 終わったら手を離す。**中で null にしない** — 待たずに終わる場合 (デバイスが無い) では
+  // 代入より先に走り終えてしまい、済んだ promise を握ったままになる
+  running = probeOnce().finally(() => {
+    running = null;
+  });
+  return running;
 }
 
 async function probeOnce(): Promise<HwEncode> {
-    const devices: HwDevice[] = [];
-    for (const path of findDevices()) {
-        const device: HwDevice = { path, label: labelOf(path), qsv: [], vaapi: [], cqp: [], full: [] };
-        for (const kind of HW_KINDS) {
-            for (const codec of HW_CODECS) {
-                if (await tryWay({ device: path, kind }, codec)) {
-                    device[kind].push(codec);
-                } else if (kind === 'vaapi' && (await tryWay({ device: path, kind, cqp: true }, codec))) {
-                    // ICQ を持たないドライバ (i965)。CQP でエンコードする (`hwArgs` の説明)
-                    device[kind].push(codec);
-                    device.cqp.push(codec);
-                }
-            }
+  const devices: HwDevice[] = [];
+  for (const path of findDevices()) {
+    const device: HwDevice = {
+      path,
+      label: labelOf(path),
+      qsv: [],
+      vaapi: [],
+      cqp: [],
+      full: [],
+    };
+    for (const kind of HW_KINDS) {
+      for (const codec of HW_CODECS) {
+        if (await tryWay({ device: path, kind }, codec)) {
+          device[kind].push(codec);
+        } else if (
+          kind === "vaapi" &&
+          (await tryWay({ device: path, kind, cqp: true }, codec))
+        ) {
+          // ICQ を持たないドライバ (i965)。CQP でエンコードする (`hwArgs` の説明)
+          device[kind].push(codec);
+          device.cqp.push(codec);
         }
-        devices.push(device);
+      }
     }
-    await probeFull(devices);
-    const next: HwEncode = { probed: true, devices, message: describe(devices) };
-    state = next;
-    console.log(`[hwenc] ${next.message}`);
-    return next;
+    devices.push(device);
+  }
+  await probeFull(devices);
+  const next: HwEncode = { probed: true, devices, message: describe(devices) };
+  state = next;
+  console.log(`[hwenc] ${next.message}`);
+  return next;
 }
 
 /** 録画と同じ引数で1コマエンコードしてみる */
 function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
-    const hw = hwArgs(way, codec);
-    return tryEncode([...hw.device, ...SOURCE, '-vf', hw.filter.join(','), '-c:v', ...hw.encoder]);
+  const hw = hwArgs(way, codec);
+  return tryEncode([
+    ...hw.device,
+    ...SOURCE,
+    "-vf",
+    hw.filter.join(","),
+    "-c:v",
+    ...hw.encoder,
+  ]);
 }
 
 /**
@@ -352,55 +408,57 @@ function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
  * 「通った = GPU でデコードできた」と読んでよい
  */
 async function probeFull(devices: HwDevice[]): Promise<void> {
-    if (!devices.some((d) => d.vaapi.length > 0)) return;
-    const dir = mkdtempSync(join(tmpdir(), 'denpa-hw-'));
-    try {
-        const sample = join(dir, 'mpeg2.ts');
-        const made = await run(
-            [
-                config.ffmpeg,
-                '-v',
-                'error',
-                '-nostdin',
-                '-f',
-                'lavfi',
-                '-i',
-                'nullsrc=s=320x240:r=30000/1001:d=0.3',
-                '-c:v',
-                'mpeg2video',
-                '-flags',
-                '+ilme+ildct',
-                '-f',
-                'mpegts',
-                sample,
-            ],
-            { timeoutMs: config.hwProbeTimeout },
-        );
-        if (made.code !== 0) {
-            console.warn('[hwenc] MPEG-2 の試し素材を作れなかったので、デコードから GPU は使いません');
-            return;
-        }
-        for (const device of devices) {
-            for (const codec of device.vaapi) {
-                const way: HwWay = device.cqp.includes(codec)
-                    ? { device: device.path, kind: 'vaapi', cqp: true }
-                    : { device: device.path, kind: 'vaapi' };
-                const hw = liveHwArgs({ way, full: true }, codec);
-                const ok = await tryEncode([
-                    ...hw.input,
-                    '-i',
-                    sample,
-                    '-vf',
-                    hw.filter.join(','),
-                    '-c:v',
-                    ...hw.encoder,
-                ]);
-                if (ok) device.full.push(codec);
-            }
-        }
-    } finally {
-        rmSync(dir, { recursive: true, force: true });
+  if (!devices.some((d) => d.vaapi.length > 0)) return;
+  const dir = mkdtempSync(join(tmpdir(), "denpa-hw-"));
+  try {
+    const sample = join(dir, "mpeg2.ts");
+    const made = await run(
+      [
+        config.ffmpeg,
+        "-v",
+        "error",
+        "-nostdin",
+        "-f",
+        "lavfi",
+        "-i",
+        "nullsrc=s=320x240:r=30000/1001:d=0.3",
+        "-c:v",
+        "mpeg2video",
+        "-flags",
+        "+ilme+ildct",
+        "-f",
+        "mpegts",
+        sample,
+      ],
+      { timeoutMs: config.hwProbeTimeout },
+    );
+    if (made.code !== 0) {
+      console.warn(
+        "[hwenc] MPEG-2 の試し素材を作れなかったので、デコードから GPU は使いません",
+      );
+      return;
     }
+    for (const device of devices) {
+      for (const codec of device.vaapi) {
+        const way: HwWay = device.cqp.includes(codec)
+          ? { device: device.path, kind: "vaapi", cqp: true }
+          : { device: device.path, kind: "vaapi" };
+        const hw = liveHwArgs({ way, full: true }, codec);
+        const ok = await tryEncode([
+          ...hw.input,
+          "-i",
+          sample,
+          "-vf",
+          hw.filter.join(","),
+          "-c:v",
+          ...hw.encoder,
+        ]);
+        if (ok) device.full.push(codec);
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -409,28 +467,34 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
  * 通せるもの (ライブで使う) は最後に分けて書く
  */
 export function describeDevice(device: HwDevice): string {
-    const parts = HW_KINDS.filter((kind) => device[kind].length > 0).map(
-        (kind) =>
-            `${HW_KIND_LABEL[kind]}: ${device[kind]
-                .map((c) =>
-                    kind === 'vaapi' && device.cqp.includes(c) ? `${CODEC_LABEL[c]} (CQP)` : CODEC_LABEL[c],
-                )
-                .join(' / ')}`,
+  const parts = HW_KINDS.filter((kind) => device[kind].length > 0).map(
+    (kind) =>
+      `${HW_KIND_LABEL[kind]}: ${device[kind]
+        .map((c) =>
+          kind === "vaapi" && device.cqp.includes(c)
+            ? `${CODEC_LABEL[c]} (CQP)`
+            : CODEC_LABEL[c],
+        )
+        .join(" / ")}`,
+  );
+  if (device.full.length > 0) {
+    parts.push(
+      `ライブはデコードから GPU: ${device.full.map((c) => CODEC_LABEL[c]).join(" / ")}`,
     );
-    if (device.full.length > 0) {
-        parts.push(`ライブはデコードから GPU: ${device.full.map((c) => CODEC_LABEL[c]).join(' / ')}`);
-    }
-    return parts.length > 0
-        ? parts.join('、')
-        : 'GPU でエンコードできません (ドライバが合っていないか、権限がありません)';
+  }
+  return parts.length > 0
+    ? parts.join("、")
+    : "GPU でエンコードできません (ドライバが合っていないか、権限がありません)";
 }
 
 function describe(devices: HwDevice[]): string {
-    if (devices.length === 0) {
-        return `GPU が見つかりません (${config.hwDevices} に該当するデバイスがありません)。ソフトウェアでエンコードします`;
-    }
-    const usable = devices.filter((d) => d.qsv.length > 0 || d.vaapi.length > 0).length;
-    if (usable === 0)
-        return `デバイスが ${devices.length} 個見つかりましたが、どれも GPU でエンコードできません。ソフトウェアでエンコードします`;
-    return `デバイスが ${devices.length} 個見つかり、${usable} 個で GPU エンコードできます`;
+  if (devices.length === 0) {
+    return `GPU が見つかりません (${config.hwDevices} に該当するデバイスがありません)。ソフトウェアでエンコードします`;
+  }
+  const usable = devices.filter(
+    (d) => d.qsv.length > 0 || d.vaapi.length > 0,
+  ).length;
+  if (usable === 0)
+    return `デバイスが ${devices.length} 個見つかりましたが、どれも GPU でエンコードできません。ソフトウェアでエンコードします`;
+  return `デバイスが ${devices.length} 個見つかり、${usable} 個で GPU エンコードできます`;
 }

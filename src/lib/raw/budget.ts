@@ -46,71 +46,80 @@ const DROP_LEAST = 5;
 export const QUEUE_STUCK = 3;
 
 export class DecodeBudget {
-    private samples: number[] = [];
-    private from = Number.NaN;
-    private worstLate = 0;
-    private leastQueued = Number.POSITIVE_INFINITY;
-    private strikes = 0;
-    /** 窓の頭での、捨てたコマと出したコマの数 (通しの数。窓ごとの差を見る) */
-    private droppedFrom = Number.NaN;
-    /** 直近の窓の 95 パーセンタイル (ms)。画面に出す */
-    p95 = 0;
+  private samples: number[] = [];
+  private from = Number.NaN;
+  private worstLate = 0;
+  private leastQueued = Number.POSITIVE_INFINITY;
+  private strikes = 0;
+  /** 窓の頭での、捨てたコマと出したコマの数 (通しの数。窓ごとの差を見る) */
+  private droppedFrom = Number.NaN;
+  /** 直近の窓の 95 パーセンタイル (ms)。画面に出す */
+  p95 = 0;
 
-    /**
-     * @param timed 1コマの時間で判じるか。WebCodecs の経路は判じない (上の説明)。時間は画面に出すので数える
-     */
-    constructor(private readonly timed = true) {}
+  /**
+   * @param timed 1コマの時間で判じるか。WebCodecs の経路は判じない (上の説明)。時間は画面に出すので数える
+   */
+  constructor(private readonly timed = true) {}
 
-    /** 1コマデコードした時間 (ms) */
-    record(ms: number): void {
-        this.samples.push(ms);
-    }
+  /** 1コマデコードした時間 (ms) */
+  record(ms: number): void {
+    this.samples.push(ms);
+  }
 
-    /**
-     * 刻むたびに呼ぶ。**諦めるべきなら true。**
-     *
-     * @param now いまの時刻 (ms)
-     * @param frameMs 1コマの長さ (ms)。29.97 コマなら 33.4
-     * @param late 映像が時計からどれだけ遅れているか (秒)。遅れていなければ 0
-     * @param queued デコーダに渡したまま出てきていない枚数 (WebCodecs の `decodeQueueSize`)
-     * @param stretch 1 枚のデコードに使ってよい時間を何倍にするか。B フレームを飛ばしている間は 2 (デコードする枚数が減るぶん、1 枚に掛けてよい)
-     * @param dropped 間に合わずに捨てたコマの数 (通し)。**割る数は窓の長さぶんのコマ数** (出した数は飛び越し走査ではフィールドごとに数えるので使わない)
-     */
-    tick(now: number, frameMs: number, late: number, queued = 0, dropped = 0, stretch = 1): boolean {
-        if (Number.isNaN(this.from)) this.from = now;
-        if (Number.isNaN(this.droppedFrom)) this.droppedFrom = dropped;
-        if (late > this.worstLate) this.worstLate = late;
-        if (queued < this.leastQueued) this.leastQueued = queued;
-        if (now - this.from < WINDOW) return false;
-        const samples = this.samples;
-        const worst = this.worstLate;
-        const least = this.leastQueued;
-        this.samples = [];
-        this.worstLate = 0;
-        this.leastQueued = Number.POSITIVE_INFINITY;
-        this.from = now;
-        const lost = dropped - this.droppedFrom;
-        this.droppedFrom = dropped;
-        if (samples.length < LEAST) return false;
-        samples.sort((a, b) => a - b);
-        this.p95 = samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.95))]!;
-        const choppy = lost >= DROP_LEAST && lost >= (WINDOW / frameMs) * DROP_SHARE;
-        const bad =
-            (this.timed && this.p95 > frameMs * SHARE * stretch) ||
-            worst > LATE ||
-            least >= QUEUE_STUCK ||
-            choppy;
-        this.strikes = bad ? this.strikes + 1 : 0;
-        return this.strikes >= STRIKES;
-    }
+  /**
+   * 刻むたびに呼ぶ。**諦めるべきなら true。**
+   *
+   * @param now いまの時刻 (ms)
+   * @param frameMs 1コマの長さ (ms)。29.97 コマなら 33.4
+   * @param late 映像が時計からどれだけ遅れているか (秒)。遅れていなければ 0
+   * @param queued デコーダに渡したまま出てきていない枚数 (WebCodecs の `decodeQueueSize`)
+   * @param stretch 1 枚のデコードに使ってよい時間を何倍にするか。B フレームを飛ばしている間は 2 (デコードする枚数が減るぶん、1 枚に掛けてよい)
+   * @param dropped 間に合わずに捨てたコマの数 (通し)。**割る数は窓の長さぶんのコマ数** (出した数は飛び越し走査ではフィールドごとに数えるので使わない)
+   */
+  tick(
+    now: number,
+    frameMs: number,
+    late: number,
+    queued = 0,
+    dropped = 0,
+    stretch = 1,
+  ): boolean {
+    if (Number.isNaN(this.from)) this.from = now;
+    if (Number.isNaN(this.droppedFrom)) this.droppedFrom = dropped;
+    if (late > this.worstLate) this.worstLate = late;
+    if (queued < this.leastQueued) this.leastQueued = queued;
+    if (now - this.from < WINDOW) return false;
+    const samples = this.samples;
+    const worst = this.worstLate;
+    const least = this.leastQueued;
+    this.samples = [];
+    this.worstLate = 0;
+    this.leastQueued = Number.POSITIVE_INFINITY;
+    this.from = now;
+    const lost = dropped - this.droppedFrom;
+    this.droppedFrom = dropped;
+    if (samples.length < LEAST) return false;
+    samples.sort((a, b) => a - b);
+    this.p95 =
+      samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.95))]!;
+    const choppy =
+      lost >= DROP_LEAST && lost >= (WINDOW / frameMs) * DROP_SHARE;
+    const bad =
+      (this.timed && this.p95 > frameMs * SHARE * stretch) ||
+      worst > LATE ||
+      least >= QUEUE_STUCK ||
+      choppy;
+    this.strikes = bad ? this.strikes + 1 : 0;
+    return this.strikes >= STRIKES;
+  }
 
-    /** 選局し直したとき。**前の局のぶんは持ち越さない** */
-    reset(): void {
-        this.samples = [];
-        this.from = Number.NaN;
-        this.worstLate = 0;
-        this.leastQueued = Number.POSITIVE_INFINITY;
-        this.strikes = 0;
-        this.droppedFrom = Number.NaN;
-    }
+  /** 選局し直したとき。**前の局のぶんは持ち越さない** */
+  reset(): void {
+    this.samples = [];
+    this.from = Number.NaN;
+    this.worstLate = 0;
+    this.leastQueued = Number.POSITIVE_INFINITY;
+    this.strikes = 0;
+    this.droppedFrom = Number.NaN;
+  }
 }

@@ -11,9 +11,14 @@
  */
 
 /** 版が合ったときの持たせ方 */
-export const FONT_IMMUTABLE = 'public, max-age=31536000, immutable';
+export const FONT_IMMUTABLE = "public, max-age=31536000, immutable";
 
 /** `asked` は URL の `v`、`installed` はイメージに入っている版 (Dockerfile が書く印) */
-export function fontCacheControl(asked: string | null, installed: string | null): string {
-    return asked !== null && asked !== '' && asked === installed ? FONT_IMMUTABLE : 'no-cache';
+export function fontCacheControl(
+  asked: string | null,
+  installed: string | null,
+): string {
+  return asked !== null && asked !== "" && asked === installed
+    ? FONT_IMMUTABLE
+    : "no-cache";
 }

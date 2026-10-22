@@ -26,7 +26,14 @@ export const CLUSTER = 0x1f43b675;
 export const BLOCK_GROUP = 0xa0;
 export const TRACKS = 0x1654ae6b;
 export const TRACK_ENTRY = 0xae;
-const DESCEND = new Set([SEGMENT, INFO, CLUSTER, BLOCK_GROUP, TRACKS, TRACK_ENTRY]);
+const DESCEND = new Set([
+  SEGMENT,
+  INFO,
+  CLUSTER,
+  BLOCK_GROUP,
+  TRACKS,
+  TRACK_ENTRY,
+]);
 
 /** 中身を読むもの */
 export const TIMESTAMP_SCALE = 0x2ad7b1;
@@ -44,17 +51,17 @@ export const DEFAULT_SCALE = 1_000_000;
 
 /** 取り出した1コマ */
 export interface MkvFrame {
-    /** そのコマの時刻 (ミリ秒)。**映像の mp4 と同じ物差し** (stream.md#時刻同期) */
-    at: number;
-    /** 中身そのまま。字幕なら字幕の PES の中身 (`S_ARIBSUB`) */
-    data: Uint8Array;
+  /** そのコマの時刻 (ミリ秒)。**映像の mp4 と同じ物差し** (stream.md#時刻同期) */
+  at: number;
+  /** 中身そのまま。字幕なら字幕の PES の中身 (`S_ARIBSUB`) */
+  data: Uint8Array;
 }
 
 /** 読めた見出し。`body` は中身の先頭位置 */
 export interface EbmlHead {
-    id: number;
-    size: number;
-    body: number;
+  id: number;
+  size: number;
+  body: number;
 }
 
 /**
@@ -66,43 +73,43 @@ export interface EbmlHead {
  * @returns 読めなければ null (まだ足りない)
  */
 export function vint(
-    buffer: Uint8Array,
-    at: number,
-    keepMarker: boolean,
+  buffer: Uint8Array,
+  at: number,
+  keepMarker: boolean,
 ): { value: number; next: number } | null {
-    if (at >= buffer.length) return null;
-    const first = buffer[at]!;
-    if (first === 0) return null;
-    let length = 1;
-    while (length <= 8 && (first & (0x80 >> (length - 1))) === 0) length++;
-    if (length > 8 || at + length > buffer.length) return null;
+  if (at >= buffer.length) return null;
+  const first = buffer[at]!;
+  if (first === 0) return null;
+  let length = 1;
+  while (length <= 8 && (first & (0x80 >> (length - 1))) === 0) length++;
+  if (length > 8 || at + length > buffer.length) return null;
 
-    const mask = length >= 8 ? 0 : 0xff >> length;
-    let value = keepMarker ? first : first & mask;
-    // 印を落とした桁が全部 1 なら「大きさは不明」。頭だけ書いて流すときに出てくる
-    let allOnes = (first & mask) === mask;
-    for (let i = 1; i < length; i++) {
-        value = value * 256 + buffer[at + i]!;
-        if (buffer[at + i] !== 0xff) allOnes = false;
-    }
-    if (!keepMarker && allOnes) return { value: UNKNOWN, next: at + length };
-    return { value, next: at + length };
+  const mask = length >= 8 ? 0 : 0xff >> length;
+  let value = keepMarker ? first : first & mask;
+  // 印を落とした桁が全部 1 なら「大きさは不明」。頭だけ書いて流すときに出てくる
+  let allOnes = (first & mask) === mask;
+  for (let i = 1; i < length; i++) {
+    value = value * 256 + buffer[at + i]!;
+    if (buffer[at + i] !== 0xff) allOnes = false;
+  }
+  if (!keepMarker && allOnes) return { value: UNKNOWN, next: at + length };
+  return { value, next: at + length };
 }
 
 /** 符号なし整数 (ビッグエンディアン、長さは中身のぶんだけ) */
 export function uint(body: Uint8Array): number {
-    let value = 0;
-    for (const byte of body) value = value * 256 + byte;
-    return value;
+  let value = 0;
+  for (const byte of body) value = value * 256 + byte;
+  return value;
 }
 
 /** `[ID][大きさ]` の見出しを読む。足りなければ null */
 export function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
-    const id = vint(buffer, at, true);
-    if (id === null) return null;
-    const size = vint(buffer, id.next, false);
-    if (size === null) return null;
-    return { id: id.value, size: size.value, body: size.next };
+  const id = vint(buffer, at, true);
+  if (id === null) return null;
+  const size = vint(buffer, id.next, false);
+  if (size === null) return null;
+  return { id: id.value, size: size.value, body: size.next };
 }
 
 /**
@@ -112,63 +119,64 @@ export function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
  * 途中で切れているのが普通
  */
 export class MkvSplitter {
-    private buffer = new Uint8Array(0);
-    /** 時刻の刻み (ナノ秒)。Info に書いてあれば差し替える */
-    private scale = DEFAULT_SCALE;
-    /** いまいる塊の頭の時刻 (刻みの単位) */
-    private base = 0;
-    /** 見出しに書いてあったトラックの種類 (書いてある順) */
-    readonly codecs: string[] = [];
+  private buffer = new Uint8Array(0);
+  /** 時刻の刻み (ナノ秒)。Info に書いてあれば差し替える */
+  private scale = DEFAULT_SCALE;
+  /** いまいる塊の頭の時刻 (刻みの単位) */
+  private base = 0;
+  /** 見出しに書いてあったトラックの種類 (書いてある順) */
+  readonly codecs: string[] = [];
 
-    feed(chunk: Uint8Array): MkvFrame[] {
-        const joined = new Uint8Array(this.buffer.length + chunk.length);
-        joined.set(this.buffer);
-        joined.set(chunk, this.buffer.length);
-        this.buffer = joined;
+  feed(chunk: Uint8Array): MkvFrame[] {
+    const joined = new Uint8Array(this.buffer.length + chunk.length);
+    joined.set(this.buffer);
+    joined.set(chunk, this.buffer.length);
+    this.buffer = joined;
 
-        const out: MkvFrame[] = [];
-        let at = 0;
-        for (;;) {
-            const head = ebmlHead(this.buffer, at);
-            if (head === null) break;
-            // 中に入るものは、見出しだけ食べて先へ進む
-            if (DESCEND.has(head.id) || head.size === UNKNOWN) {
-                at = head.body;
-                continue;
-            }
-            const end = head.body + head.size;
-            if (end > this.buffer.length) break;
-            const body = this.buffer.subarray(head.body, end);
-            if (head.id === TIMESTAMP_SCALE) this.scale = uint(body) || DEFAULT_SCALE;
-            else if (head.id === TIMESTAMP) this.base = uint(body);
-            else if (head.id === CODEC_ID) this.codecs.push(new TextDecoder().decode(body));
-            else if (head.id === SIMPLE_BLOCK || head.id === BLOCK) {
-                const frame = this.block(body);
-                if (frame !== null) out.push(frame);
-            }
-            at = end;
-        }
-        this.buffer = this.buffer.slice(at);
-        return out;
+    const out: MkvFrame[] = [];
+    let at = 0;
+    for (;;) {
+      const head = ebmlHead(this.buffer, at);
+      if (head === null) break;
+      // 中に入るものは、見出しだけ食べて先へ進む
+      if (DESCEND.has(head.id) || head.size === UNKNOWN) {
+        at = head.body;
+        continue;
+      }
+      const end = head.body + head.size;
+      if (end > this.buffer.length) break;
+      const body = this.buffer.subarray(head.body, end);
+      if (head.id === TIMESTAMP_SCALE) this.scale = uint(body) || DEFAULT_SCALE;
+      else if (head.id === TIMESTAMP) this.base = uint(body);
+      else if (head.id === CODEC_ID)
+        this.codecs.push(new TextDecoder().decode(body));
+      else if (head.id === SIMPLE_BLOCK || head.id === BLOCK) {
+        const frame = this.block(body);
+        if (frame !== null) out.push(frame);
+      }
+      at = end;
     }
+    this.buffer = this.buffer.slice(at);
+    return out;
+  }
 
-    /**
-     * コマ1つ。`[トラック番号(可変長)][頭からの差(2バイト、符号あり)][旗][中身…]`
-     *
-     * **束ね (lacing) は来ない。** 1つの塊に複数のコマを詰める書き方だが、
-     * ffmpeg は映像では使わない。万一来たら、その塊は捨てる — 変に読むより
-     * 1枚落とすほうが安い (字幕は次が来る)
-     */
-    private block(body: Uint8Array): MkvFrame | null {
-        const track = vint(body, 0, false);
-        if (track === null || track.next + 3 > body.length) return null;
-        const view = new DataView(body.buffer, body.byteOffset);
-        const offset = view.getInt16(track.next);
-        const flags = body[track.next + 2]!;
-        if ((flags & 0x06) !== 0) return null;
-        return {
-            at: ((this.base + offset) * this.scale) / 1_000_000,
-            data: body.slice(track.next + 3),
-        };
-    }
+  /**
+   * コマ1つ。`[トラック番号(可変長)][頭からの差(2バイト、符号あり)][旗][中身…]`
+   *
+   * **束ね (lacing) は来ない。** 1つの塊に複数のコマを詰める書き方だが、
+   * ffmpeg は映像では使わない。万一来たら、その塊は捨てる — 変に読むより
+   * 1枚落とすほうが安い (字幕は次が来る)
+   */
+  private block(body: Uint8Array): MkvFrame | null {
+    const track = vint(body, 0, false);
+    if (track === null || track.next + 3 > body.length) return null;
+    const view = new DataView(body.buffer, body.byteOffset);
+    const offset = view.getInt16(track.next);
+    const flags = body[track.next + 2]!;
+    if ((flags & 0x06) !== 0) return null;
+    return {
+      at: ((this.base + offset) * this.scale) / 1_000_000,
+      data: body.slice(track.next + 3),
+    };
+  }
 }

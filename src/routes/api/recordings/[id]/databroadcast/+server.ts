@@ -1,7 +1,7 @@
-import { json } from '@sveltejs/kit';
-import { sidecarPaths } from '#lib/server/metadata.js';
-import { loadRecordedBml, withProgramInfo } from '#lib/server/recorded-bml.js';
-import { recordingOr404 } from '#lib/server/recording.js';
+import { json } from "@sveltejs/kit";
+import { sidecarPaths } from "#lib/server/metadata.js";
+import { loadRecordedBml, withProgramInfo } from "#lib/server/recorded-bml.js";
+import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
  * 録画のデータ放送 (再生位置つきの変化ログ)。**d ボタンで開いたときに読む。**
@@ -11,12 +11,15 @@ import { recordingOr404 } from '#lib/server/recording.js';
  * (データ放送の無い局・古い録画) は空を返す — 画面はそれで「出せない」を出す。
  */
 export function GET({ params }) {
-    const recording = recordingOr404(params.id);
-    // サイドカーは主 (library_path) の隣。エンコードが終わっていなければ持っていない
-    if (recording.library_path === null) return json([]);
+  const recording = recordingOr404(params.id);
+  // サイドカーは主 (library_path) の隣。エンコードが終わっていなければ持っていない
+  if (recording.library_path === null) return json([]);
 
-    // 番組の名乗りが無いと描く側が入口を開かない。書いていなかった頃のサイドカーにも足す
-    return json(
-        withProgramInfo(loadRecordedBml(sidecarPaths(recording.library_path).dataBroadcast), recording),
-    );
+  // 番組の名乗りが無いと描く側が入口を開かない。書いていなかった頃のサイドカーにも足す
+  return json(
+    withProgramInfo(
+      loadRecordedBml(sidecarPaths(recording.library_path).dataBroadcast),
+      recording,
+    ),
+  );
 }

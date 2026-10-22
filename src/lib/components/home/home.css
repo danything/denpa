@@ -4,24 +4,24 @@
  * より上に描かれるので、範囲には `z-index` を付ける。行で閉じれば隣の行や見出しには響かない
  */
 .board .row {
-    position: relative;
-    isolation: isolate;
-    cursor: pointer;
+  position: relative;
+  isolation: isolate;
+  cursor: pointer;
 }
 .board .row-body {
-    min-width: 0;
-    flex: 1 1 14rem;
+  min-width: 0;
+  flex: 1 1 14rem;
 }
 .board .row-actions {
-    display: flex;
-    flex-shrink: 0;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.25rem;
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
 }
 .board .row-name {
-    font-weight: var(--dp-weight);
-    overflow-wrap: anywhere;
+  font-weight: var(--dp-weight);
+  overflow-wrap: anywhere;
 }
 /*
  * 行の入口 (上の `title`)。**見た目は番組名の字のまま** — リンクの色も下線も、
@@ -29,41 +29,41 @@
  * (`.row` は `position: relative`) いっぱいに広げる
  */
 .board .row-open {
-    display: inline;
-    width: auto;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    color: inherit;
-    /* 字の形は `.broadcast` に任せる (`font` でまとめて戻すと放送の字が外れる) */
-    font-size: inherit;
-    font-weight: var(--dp-weight);
-    line-height: inherit;
-    text-align: inherit;
-    text-decoration: none;
-    cursor: pointer;
+  display: inline;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  /* 字の形は `.broadcast` に任せる (`font` でまとめて戻すと放送の字が外れる) */
+  font-size: inherit;
+  font-weight: var(--dp-weight);
+  line-height: inherit;
+  text-align: inherit;
+  text-decoration: none;
+  cursor: pointer;
 }
 .board .row-open::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 /* 焦点の線は名前ではなく行のまわりに。外へ出すと一覧の枠で切れるので内側に引く */
 .board .row-open:focus-visible {
-    outline: none;
+  outline: none;
 }
 .board .row-open:focus-visible::after {
-    outline: 2px solid var(--pico-primary);
-    outline-offset: -2px;
+  outline: 2px solid var(--pico-primary);
+  outline-offset: -2px;
 }
 /* 広げた範囲より上に置く。行の中のボタンとリンク (ルール名。下の `.t-rule a`) はそれぞれの働きのまま押せる */
 .board .row-actions {
-    position: relative;
-    z-index: 2;
+  position: relative;
+  z-index: 2;
 }
 /*
     flex にしない。録画済みの行は書くことが多く (サイズ・コーデック)、flex-wrap だと
@@ -71,10 +71,10 @@
     ロゴを文の中の1文字として流せば、折り返すのは文の途中になる
 */
 .board .row-meta {
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
-    color: var(--dp-muted);
-    overflow-wrap: anywhere;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--dp-muted);
+  overflow-wrap: anywhere;
 }
 /*
  * **番組名・局と日時・ルール名は1行ずつで切る。** 折り返すとタイトルの長さで行の高さが
@@ -83,22 +83,22 @@
  * 押せる範囲 (`.row-open::after`) は `.row` を基準に置いているので、ここで切っても欠けない
  */
 .board .title-line {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
 }
 .board .title-line .row-name,
 .board div.row-meta {
-    display: block;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .board .row-empty {
-    padding: 0.75rem;
+  padding: 0.75rem;
 }
 /*
  * **一覧が空のとき。** 「録画はありません」を行と同じ小さな字で左上に置いていた
@@ -106,52 +106,52 @@
  * 真ん中に寄せて上下に余白を取り、次にすること (番組表・ルール) へのリンクを添える
  */
 .board .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 2.5rem 1rem;
-    text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
 }
 .board .empty-title {
-    font-weight: var(--dp-weight-bold);
-    overflow-wrap: anywhere;
+  font-weight: var(--dp-weight-bold);
+  overflow-wrap: anywhere;
 }
 .board .empty-hint {
-    font-size: 0.875rem;
-    color: var(--dp-muted);
+  font-size: 0.875rem;
+  color: var(--dp-muted);
 }
 .board .empty-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 .board .view-dot {
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--pico-primary-background);
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: var(--dp-radius-full);
+  background: var(--pico-primary-background);
 }
 /* まだ観ていない録画の点 (`unwatched`)。続きのバーと同じ主の色 */
 .board .unwatched-dot {
-    display: inline-block;
-    width: 0.5rem;
-    height: 0.5rem;
-    margin-right: 0.3rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--pico-primary-background);
-    vertical-align: 0.1em;
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.3rem;
+  border-radius: var(--dp-radius-full);
+  background: var(--pico-primary-background);
+  vertical-align: 0.1em;
 }
 .board .group-unwatched {
-    display: inline-flex;
-    align-items: center;
-    white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
 .board .truncated {
-    border-bottom: 1px solid var(--dp-line);
+  border-bottom: 1px solid var(--dp-line);
 }
 /*
  * 番組の見出し。**行と同じ形** (左にポスター、右に名前と日付) にして、
@@ -159,126 +159,126 @@
  * 押すものなので button だが、ボタンの見た目 (地・枠・中寄せ) は外す
  */
 .board .group-head {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    border: 0;
-    border-radius: var(--dp-radius);
-    box-shadow: none;
-    color: inherit;
-    font-size: inherit;
-    font-weight: inherit;
-    text-align: left;
-    cursor: pointer;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  border-radius: var(--dp-radius);
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .board .group-head:focus-visible {
-    outline: 2px solid var(--pico-primary-background);
-    outline-offset: -2px;
+  outline: 2px solid var(--pico-primary-background);
+  outline-offset: -2px;
 }
 .board .group-head .row-body,
 .board .group-head .row-meta {
-    display: block;
+  display: block;
 }
 .board .group-chevron {
-    display: inline-flex;
-    align-self: center;
-    transition: transform var(--dp-duration);
+  display: inline-flex;
+  align-self: center;
+  transition: transform var(--dp-duration);
 }
 .board .group-chevron.open {
-    transform: rotate(90deg);
+  transform: rotate(90deg);
 }
 /* 開いた番組の頭の押すもの。中身の行と同じだけ下げる */
 .board .t-block > .group-tools {
-    padding: 0 0.5rem 0.5rem 2.25rem;
+  padding: 0 0.5rem 0.5rem 2.25rem;
 }
 .board .poster-img {
-    height: 100%;
-    width: 100%;
-    object-fit: cover;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
 }
 /*
  * **行の3段目: 動いていること・止まっている問題** (`RowActivity`)。頭に点か印、ラベル (状態の色)、
  * 中身 (地の字)。1段で切り、狭いときは中身から「…」で縮める (ラベルは最後まで残す)
  */
 .board .row-activity {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    min-width: 0;
-    margin-top: 0.125rem;
-    font-size: var(--dp-text-sm);
-    white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  margin-top: 0.125rem;
+  font-size: var(--dp-text-sm);
+  white-space: nowrap;
 }
 .board .act-mark {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    width: 0.875rem;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 0.875rem;
 }
 .board .act-dot {
-    display: block;
-    width: 0.375rem;
-    height: 0.375rem;
-    border-radius: var(--dp-radius-full);
-    background: currentColor;
+  display: block;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--dp-radius-full);
+  background: currentColor;
 }
 .board .act-text {
-    display: flex;
-    min-width: 0;
+  display: flex;
+  min-width: 0;
 }
 .board .act-label,
 .board .act-detail {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .board .act-label {
-    flex: 0 1 auto;
-    font-weight: 600;
+  flex: 0 1 auto;
+  font-weight: 600;
 }
 .board .act-detail {
-    flex: 0 1000 auto;
-    color: var(--dp-muted);
+  flex: 0 1000 auto;
+  color: var(--dp-muted);
 }
 .board .row-activity:is(.rec, .error) {
-    color: var(--dp-rec-text);
+  color: var(--dp-rec-text);
 }
 .board .row-activity.rec .act-dot {
-    background: var(--dp-rec);
+  background: var(--dp-rec);
 }
 .board .row-activity.busy {
-    color: var(--dp-primary-text);
+  color: var(--dp-primary-text);
 }
 .board .row-activity.ok {
-    color: var(--dp-ok-text);
+  color: var(--dp-ok-text);
 }
 .board .row-activity.warning {
-    color: var(--dp-warn-text);
+  color: var(--dp-warn-text);
 }
 .board .row-activity.wait,
 .board .row-activity.neutral {
-    color: var(--dp-muted);
+  color: var(--dp-muted);
 }
 .board .row-activity.wait .act-label,
 .board .row-activity.neutral .act-label {
-    font-weight: 400;
+  font-weight: 400;
 }
 /* 進み具合は行の下端いっぱいに敷く */
 .board .row-bar {
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    height: 0.25rem;
-    border-radius: 0;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 0.25rem;
+  border-radius: 0;
 }
 .board .row-bar.success {
-    --pico-progress-color: var(--dp-ok);
+  --pico-progress-color: var(--dp-ok);
 }
 .board .row-bar.rec {
-    --pico-progress-color: var(--dp-rec);
+  --pico-progress-color: var(--dp-rec);
 }
 .board .menu-form {
-    display: contents;
+  display: contents;
 }
 /*
  * ---- 1本の時間軸 ----
@@ -288,115 +288,116 @@
  * 狭い画面はページごとスクロールし、頭の1行だけ上に貼り付く
  */
 .board {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 @media (min-width: 768px) {
-    .board {
-        height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
-        margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
-    }
+  .board {
+    height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
+    margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
+      calc(-1 * var(--dp-gutter));
+  }
 }
 .board .t-main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    flex: 1;
-    min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
 }
 .board .t-list {
-    position: relative;
-    min-width: 0;
+  position: relative;
+  min-width: 0;
 }
 @media (min-width: 768px) {
-    .board .t-list {
-        overflow-y: auto;
-        /* 足した行で読んでいる所が動かないように、位置合わせは自分でする (開いたときの `place`) */
-        overflow-anchor: none;
-        padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
-    }
+  .board .t-list {
+    overflow-y: auto;
+    /* 足した行で読んでいる所が動かないように、位置合わせは自分でする (開いたときの `place`) */
+    overflow-anchor: none;
+    padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
+  }
 }
 /*
  * 狭い画面の頭。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、表示の切り替えの一枚を開くアイコン。
  * ページごと動くので上に貼り付ける
  */
 .board .t-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    height: 2.75rem;
-    background: var(--dp-bg);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 2.75rem;
+  background: var(--dp-bg);
 }
 .board .t-chips {
-    display: flex;
-    flex: 1;
-    gap: 0.375rem;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-    /* 右端は切れているのが分かるように淡く消す (横に流せる印) */
-    mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  display: flex;
+  flex: 1;
+  gap: 0.375rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* 右端は切れているのが分かるように淡く消す (横に流せる印) */
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
 }
 .board .t-chips::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 /* つないだボタンの角を落とす規則 (`app.css` の `[role="group"] > button`) に負けないよう、頭の段から書く */
 .board .t-toolbar .t-chips > .t-chip {
-    border-radius: var(--dp-radius-full);
-    --pico-background-color: var(--dp-btn-tonal);
-    --pico-color: var(--dp-btn-text);
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: 0.35rem;
-    width: auto;
-    height: 2.125rem;
-    margin: 0;
-    padding: 0 0.75rem;
-    font-size: 0.8125rem;
-    white-space: nowrap;
+  border-radius: var(--dp-radius-full);
+  --pico-background-color: var(--dp-btn-tonal);
+  --pico-color: var(--dp-btn-text);
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.35rem;
+  width: auto;
+  height: 2.125rem;
+  margin: 0;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
 }
 .board .t-chip .num {
-    color: var(--dp-muted);
+  color: var(--dp-muted);
 }
 .board .t-toolbar .t-chips > .t-chip:hover {
-    --pico-background-color: var(--dp-btn-tonal-hover);
+  --pico-background-color: var(--dp-btn-tonal-hover);
 }
 /* 選んでいるチップは色を付けず、一覧の選んだ行と同じ地に太字 (`app.css` の `.chip` と同じ。青は焦点とリンクだけ) */
-.board .t-toolbar .t-chips > .t-chip[aria-pressed='true'] {
-    --pico-background-color: var(--dp-row-selected);
-    --pico-color: var(--dp-fg);
-    font-weight: var(--dp-weight-bold);
+.board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
+  --pico-background-color: var(--dp-row-selected);
+  --pico-color: var(--dp-fg);
+  font-weight: var(--dp-weight-bold);
 }
 /* 日付の見出し。小さく沈めた字で、一覧の頭に貼り付く */
 .board .t-day {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    margin: 0;
-    /* 上の余白は画面の頭の余白 (`--dp-page-top`) と同じ。いちばん上の見出しがほかの画面の最初の行とそろう */
-    padding: var(--dp-page-top, 0.875rem) 0.5rem 0.25rem;
-    background: var(--dp-bg);
-    color: var(--dp-muted);
-    font-size: 0.75rem;
-    font-weight: var(--dp-weight-bold);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  /* 上の余白は画面の頭の余白 (`--dp-page-top`) と同じ。いちばん上の見出しがほかの画面の最初の行とそろう */
+  padding: var(--dp-page-top, 0.875rem) 0.5rem 0.25rem;
+  background: var(--dp-bg);
+  color: var(--dp-muted);
+  font-size: 0.75rem;
+  font-weight: var(--dp-weight-bold);
 }
 .board .t-day-name {
-    color: var(--pico-color);
+  color: var(--pico-color);
 }
 .board .t-day-date {
-    font-weight: var(--dp-weight);
+  font-weight: var(--dp-weight);
 }
 /* タブレットの縦 (640〜767px) は頭の1行が上にあるので、その下に貼り付く */
 @media (min-width: 640px) and (max-width: 767px) {
-    .board .t-day {
-        top: 2.75rem;
-    }
+  .board .t-day {
+    top: 2.75rem;
+  }
 }
 /*
  * **スマホ (下のタブがある幅) では、頭の1行を下のタブのすぐ上に貼り付ける。** 押すものは下に置く (指の届く所)。
@@ -404,27 +405,28 @@
  * 日付の見出しは上の安全域 (ノッチ) のすぐ下に貼り付く
  */
 @media (max-width: 639.98px) {
-    .board .t-toolbar {
-        order: 2;
-        top: auto;
-        bottom: var(--dp-tabbar, 0px);
-        margin-inline: calc(-1 * var(--dp-gutter, 1rem));
-        padding-inline: var(--dp-gutter, 1rem);
-        border-top: 1px solid var(--dp-line);
-    }
-    .board .t-main {
-        order: 1;
-    }
-    /* 一覧が短くても頭の1行が下のタブのすぐ上に来るよう、ページの高さいっぱいまで伸ばす (下の余白は打ち消す) */
-    .board {
-        min-height: calc(
-            100svh - env(safe-area-inset-top, 0px) - var(--dp-page-top, 0.5rem) - var(--dp-tabbar, 0px)
-        );
-        margin-bottom: calc(-1 * var(--dp-gutter, 1rem));
-    }
-    .board .t-day {
-        top: env(safe-area-inset-top, 0px);
-    }
+  .board .t-toolbar {
+    order: 2;
+    top: auto;
+    bottom: var(--dp-tabbar, 0px);
+    margin-inline: calc(-1 * var(--dp-gutter, 1rem));
+    padding-inline: var(--dp-gutter, 1rem);
+    border-top: 1px solid var(--dp-line);
+  }
+  .board .t-main {
+    order: 1;
+  }
+  /* 一覧が短くても頭の1行が下のタブのすぐ上に来るよう、ページの高さいっぱいまで伸ばす (下の余白は打ち消す) */
+  .board {
+    min-height: calc(
+      100svh - env(safe-area-inset-top, 0px) - var(--dp-page-top, 0.5rem) -
+        var(--dp-tabbar, 0px)
+    );
+    margin-bottom: calc(-1 * var(--dp-gutter, 1rem));
+  }
+  .board .t-day {
+    top: env(safe-area-inset-top, 0px);
+  }
 }
 
 /*
@@ -432,8 +434,8 @@
  * (行の内側の余白と同じ。狭い画面は下の 768px 未満で詰める)。`.t-rows` まで書くのは、部品の `margin: 0` より強くするため
  */
 .board .t-rows .t-now {
-    --now-inset: 0.75rem;
-    margin: 0.125rem 0;
+  --now-inset: 0.75rem;
+  margin: 0.125rem 0;
 }
 
 /*
@@ -449,265 +451,269 @@
  */
 .board .t-rows,
 .board .t-block {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
 }
 .board .t-row,
 .board .group-head {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem 0.875rem;
-    min-height: 4rem;
-    margin: 0;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--dp-radius);
-    background: var(--dp-row);
-    transition: background-color var(--dp-duration);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem 0.875rem;
+  min-height: 4rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--dp-radius);
+  background: var(--dp-row);
+  transition: background-color var(--dp-duration);
 }
 .board .t-row:hover,
 .board .group-head:hover {
-    background: var(--dp-row-hover);
+  background: var(--dp-row-hover);
 }
 .board .t-row.picked {
-    background: var(--dp-row-selected);
+  background: var(--dp-row-selected);
 }
 .board .t-row.live {
-    background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row));
+  background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row));
 }
 .board .t-row.live:hover,
 .board .t-row.live.picked {
-    background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row-hover));
+  background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row-hover));
 }
 .board .t-row .row-body {
-    display: flex;
-    flex: 1 1 0%;
-    flex-direction: column;
-    gap: 0.125rem;
-    min-width: 0;
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
 }
 .board .t-row .row-meta {
-    margin: 0;
-    font-size: 0.8125rem;
+  margin: 0;
+  font-size: 0.8125rem;
 }
 .board .title-line .row-name {
-    flex: 0 1 auto;
-    min-width: 4rem;
+  flex: 0 1 auto;
+  min-width: 4rem;
 }
 .board .t-time {
-    flex-shrink: 0;
-    color: var(--dp-muted);
-    font-size: 0.875rem;
-    white-space: nowrap;
+  flex-shrink: 0;
+  color: var(--dp-muted);
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 .board .t-excerpt {
-    color: var(--dp-muted);
-    opacity: 0.85;
+  color: var(--dp-muted);
+  opacity: 0.85;
 }
 .board .t-thumb {
-    position: relative;
-    flex-shrink: 0;
-    width: 6rem;
-    aspect-ratio: 16 / 9;
-    overflow: hidden;
-    border-radius: var(--dp-radius-sm);
-    background: var(--dp-line-strong);
+  position: relative;
+  flex-shrink: 0;
+  width: 6rem;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--dp-radius-sm);
+  background: var(--dp-line-strong);
 }
 .board .t-play {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    opacity: 0;
-    background: rgb(0 0 0 / 0.45);
-    transition: opacity var(--dp-duration);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  opacity: 0;
+  background: rgb(0 0 0 / 0.45);
+  transition: opacity var(--dp-duration);
 }
 .board .t-play .poster-icon {
-    width: 1.5rem;
-    height: 1.5rem;
+  width: 1.5rem;
+  height: 1.5rem;
 }
 .board .playable:hover .t-play {
-    opacity: 1;
+  opacity: 1;
 }
 /*
  * **途中まで観たもの。** ポスターの下端に重ねる 4px のバー (YouTube と同じ置き方)。地は暗く透かし、観たぶんを主の色で。
  * ポスターの無い録画は枠の下端に同じものが出る。エンコードの進みは行の下端いっぱい (`.row-bar`) なので重ならない
  */
 .board .t-resume {
-    display: block;
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    z-index: 1;
-    height: 0.25rem;
-    background: rgb(0 0 0 / 0.55);
+  display: block;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 1;
+  height: 0.25rem;
+  background: rgb(0 0 0 / 0.55);
 }
 /* 中身の無い `<span>` なので、ブロックにしないと幅も高さも付かない */
 .board .t-resume .resume-fill {
-    display: block;
-    height: 100%;
-    min-width: 0.25rem;
-    background: var(--pico-primary-background);
+  display: block;
+  height: 100%;
+  min-width: 0.25rem;
+  background: var(--pico-primary-background);
 }
 .board .t-rule a {
-    position: relative;
-    z-index: 2;
+  position: relative;
+  z-index: 2;
 }
 /*
  * **狭い画面 (768px 未満)。** 同じ 2 段の形のまま、ポスターを 80px に、説明の頭とルールは外す
  * (番組名に幅を回す)。押すものは「⋯」1つ (下の `.row-more`)
  */
 @media (max-width: 767px) {
-    .board .t-row,
-    .board .group-head {
-        gap: 0.25rem 0.625rem;
-        padding: 0.5rem;
-    }
-    .board .t-thumb {
-        width: 5rem;
-    }
-    .board .t-end,
-    .board .t-excerpt,
-    .board .t-rule {
-        display: none;
-    }
-    .board .t-time {
-        font-size: 0.8125rem;
-    }
-    .board .t-rows .t-now {
-        --now-inset: 0.5rem;
-        --now-time-size: 0.8125rem;
-    }
-    /*
+  .board .t-row,
+  .board .group-head {
+    gap: 0.25rem 0.625rem;
+    padding: 0.5rem;
+  }
+  .board .t-thumb {
+    width: 5rem;
+  }
+  .board .t-end,
+  .board .t-excerpt,
+  .board .t-rule {
+    display: none;
+  }
+  .board .t-time {
+    font-size: 0.8125rem;
+  }
+  .board .t-rows .t-now {
+    --now-inset: 0.5rem;
+    --now-time-size: 0.8125rem;
+  }
+  /*
      * 状態の段は2行まで折り返す。押すものに幅を取られて、1行で切ると「エンコー…」のように
      * 状態そのものまで欠けていた (進みとあと何分かは消える)
      */
-    .board .row-activity {
-        align-items: flex-start;
-        white-space: normal;
-    }
-    .board .act-mark {
-        height: 1lh;
-    }
-    .board .act-text {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        overflow: hidden;
-        overflow-wrap: anywhere;
-    }
-    .board .act-label,
-    .board .act-detail {
-        overflow: visible;
-    }
-    /* 行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
-    .board .t-row .row-actions button:not([data-testid='delete-confirm']) .btn-label {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-    }
-    .board .t-row .row-actions :is(button, a.button) {
-        padding-inline: 0.5rem;
-    }
+  .board .row-activity {
+    align-items: flex-start;
+    white-space: normal;
+  }
+  .board .act-mark {
+    height: 1lh;
+  }
+  .board .act-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  .board .act-label,
+  .board .act-detail {
+    overflow: visible;
+  }
+  /* 行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
+  .board
+    .t-row
+    .row-actions
+    button:not([data-testid="delete-confirm"])
+    .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .board .t-row .row-actions :is(button, a.button) {
+    padding-inline: 0.5rem;
+  }
 }
 /* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
 .board .row.nested {
-    padding-left: 2.25rem;
+  padding-left: 2.25rem;
 }
 .board .row.nested::before {
-    content: '';
-    position: absolute;
-    inset-block: 0;
-    left: 1.25rem;
-    width: 2px;
-    background: var(--dp-line);
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 1.25rem;
+  width: 2px;
+  background: var(--dp-line);
 }
 
 /* **狭い画面では行の操作を「⋯」1つに** (`TimelineRow`。番組名に幅を回す)。広い画面は並べ、「⋯」は出さない */
 .board .row-more {
-    display: none;
+  display: none;
 }
 .board div.row-wide {
-    display: contents;
+  display: contents;
 }
 @media (max-width: 767px) {
-    .board .row-more {
-        display: block;
-    }
-    .board .t-row .row-actions .row-wide {
-        display: none;
-    }
+  .board .row-more {
+    display: block;
+  }
+  .board .t-row .row-actions .row-wide {
+    display: none;
+  }
 }
 /* 「⋯」の中の項目。行の操作のボタンの決まり (`app.css` の `.row-actions`) を、メニューの項目の形に戻す */
 .board .t-row .row-actions .row-menu .menu-item {
-    justify-content: flex-start;
-    gap: 0.5rem;
-    min-height: 2.75rem;
-    padding: 0.4rem 0.75rem;
-    font-size: var(--dp-text-base);
+  justify-content: flex-start;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.75rem;
+  font-size: var(--dp-text-base);
 }
 .board .t-row .row-actions .row-menu .menu-danger {
-    color: var(--dp-rec-text);
+  color: var(--dp-rec-text);
 }
 
 /* 表示の切り替えのスイッチ (`ViewList`)。押せるのは行ぜんぶで、これは入っているかの印だけ */
 .board .s-switch {
-    position: relative;
-    flex-shrink: 0;
-    width: 2rem;
-    height: 1.125rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-line-strong);
-    transition: background-color var(--dp-duration) var(--dp-ease);
+  position: relative;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 1.125rem;
+  border-radius: var(--dp-radius-full);
+  background: var(--dp-line-strong);
+  transition: background-color var(--dp-duration) var(--dp-ease);
 }
 .board .s-switch::after {
-    content: '';
-    position: absolute;
-    top: 0.1875rem;
-    left: 0.1875rem;
-    width: 0.75rem;
-    height: 0.75rem;
-    border-radius: var(--dp-radius-full);
-    background: #fff;
-    transition: transform var(--dp-duration) var(--dp-ease);
+  content: "";
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--dp-radius-full);
+  background: #fff;
+  transition: transform var(--dp-duration) var(--dp-ease);
 }
 .board .s-switch.on {
-    background: var(--pico-primary-background);
+  background: var(--pico-primary-background);
 }
 .board .s-switch.on::after {
-    transform: translateX(0.875rem);
+  transform: translateX(0.875rem);
 }
 
 .board .t-more {
-    position: relative;
-    flex-shrink: 0;
-    margin: 0;
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
 }
 .board .t-more .view-dot {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
 }
 @media (min-width: 768px) {
-    .board .t-toolbar {
-        position: static;
-        gap: 0.75rem;
-        padding: 0.5rem var(--dp-gutter) 0.25rem;
-    }
+  .board .t-toolbar {
+    position: static;
+    gap: 0.75rem;
+    padding: 0.5rem var(--dp-gutter) 0.25rem;
+  }
 }
 /* 「⋯」の中。切り替えは右にスイッチ、空きは押せない1行 */
 .board .view-menu {
-    min-width: 15rem;
+  min-width: 15rem;
 }
 .board .menu-item.view-item {
-    justify-content: space-between;
-    gap: 1rem;
-    min-height: 2.5rem;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.5rem;
 }
 
 /*
@@ -716,22 +722,22 @@
  * 間を空ける。チップと「⋯」の中の項目も指の大きさに。マウスの画面 (`pointer: fine`) の詰め具合は変えない
  */
 @media (pointer: coarse) {
-    .board .t-row,
-    .board .group-head {
-        min-height: 4.5rem;
-    }
-    .board .t-row .row-actions {
-        --dp-btn-h: 2.75rem;
-        --dp-btn-h-sm: 2.75rem;
-        gap: 0.5rem;
-    }
-    .board .t-row .row-actions :is(button, a.button) {
-        min-width: 2.75rem;
-        min-height: 2.75rem;
-    }
-    .board .menu-item.view-item {
-        min-height: 3rem;
-    }
+  .board .t-row,
+  .board .group-head {
+    min-height: 4.5rem;
+  }
+  .board .t-row .row-actions {
+    --dp-btn-h: 2.75rem;
+    --dp-btn-h-sm: 2.75rem;
+    gap: 0.5rem;
+  }
+  .board .t-row .row-actions :is(button, a.button) {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  .board .menu-item.view-item {
+    min-height: 3rem;
+  }
 }
 
 /*
@@ -740,194 +746,194 @@
  * 形は `app.css` のサイドバーの部品 (`.side-panel` など)。ここは幅と、出すかどうかだけ。この幅では頭の1行は出さず、一覧はいちばん上から始まる
  */
 .board .t-side {
-    display: none;
+  display: none;
 }
 @media (min-width: 1000px) {
-    .board .t-main {
-        grid-template-columns: minmax(0, 1fr) 20rem;
-    }
-    .board .t-side {
-        display: flex;
-    }
-    .board .t-toolbar {
-        display: none;
-    }
+  .board .t-main {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+  }
+  .board .t-side {
+    display: flex;
+  }
+  .board .t-toolbar {
+    display: none;
+  }
 }
 @media (min-width: 1600px) {
-    .board .t-main {
-        grid-template-columns: minmax(0, 1fr) 22rem;
-    }
+  .board .t-main {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
 }
 .board .a-state dt,
 .board .a-state dd {
-    margin: 0;
-    font-weight: var(--dp-weight);
+  margin: 0;
+  font-weight: var(--dp-weight);
 }
 .board .a-state dt {
-    min-width: 0;
+  min-width: 0;
 }
 /* 絞り込みのうち手を止めてほしいもの (競合・失敗など)。注意の色とアイコン (選んでいるときは内側の塗りに注意の色を混ぜる) */
 .board .a-warn {
-    color: var(--dp-warn-text);
+  color: var(--dp-warn-text);
 }
 .board .a-warn .side-sub {
-    color: inherit;
-    font-weight: var(--dp-weight-bold);
+  color: inherit;
+  font-weight: var(--dp-weight-bold);
 }
-.board .a-warn[aria-pressed='true'] {
-    background: color-mix(in srgb, var(--dp-warn) 16%, transparent);
+.board .a-warn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--dp-warn) 16%, transparent);
 }
 .board .a-warn-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 /* 狭い画面の、手を止めてほしいもののチップ。注意の色 */
 .board .t-toolbar .t-chips > .t-chip.warn {
-    --pico-background-color: color-mix(in srgb, var(--dp-warn) 16%, transparent);
-    --pico-color: var(--dp-warn-text);
+  --pico-background-color: color-mix(in srgb, var(--dp-warn) 16%, transparent);
+  --pico-color: var(--dp-warn-text);
 }
-.board .t-toolbar .t-chips > .t-chip.warn[aria-pressed='true'] {
-    --pico-background-color: var(--dp-warn);
-    --pico-color: #1a1300;
+.board .t-toolbar .t-chips > .t-chip.warn[aria-pressed="true"] {
+  --pico-background-color: var(--dp-warn);
+  --pico-color: #1a1300;
 }
 .board .t-chip.warn .num {
-    color: inherit;
+  color: inherit;
 }
 /* 「⋯」の頭の状態。押せない (区切りの線で切り替えと分ける) */
 .board .view-menu .menu-head {
-    margin: 0 0 0.25rem;
-    padding: 0 0 0.25rem;
-    border-bottom: 1px solid var(--dp-line);
+  margin: 0 0 0.25rem;
+  padding: 0 0 0.25rem;
+  border-bottom: 1px solid var(--dp-line);
 }
 .board .view-menu .menu-head .side-list {
-    padding: 0;
+  padding: 0;
 }
 .board .view-menu .menu-head .side-item {
-    min-height: 2rem;
-    padding: 0 0.6rem;
-    font-size: var(--dp-text-sm);
+  min-height: 2rem;
+  padding: 0 0.6rem;
+  font-size: var(--dp-text-sm);
 }
 /*
  * サイドバーの月のカレンダー (`HomeCalendar`)。行は 48px にしない (升は 32px。幅は 7 等分で 40px ほどあるので、押す所は升いっぱい)。
  * 見出しはほかのグループと同じ太字で、右に ‹ ›。点は数字の下 (録画・予約のある日)。今日は丸、頭に貼り付いている日は薄い塗り
  */
 .board .cal-head {
-    display: flex;
-    align-items: center;
-    margin-top: 1.75rem;
+  display: flex;
+  align-items: center;
+  margin-top: 1.75rem;
 }
 /* いちばん上に来たとき (日ごとに並べているときはいつも) は上を空けない */
 .board .t-side > .cal:first-child > .cal-head {
-    margin-top: 0;
+  margin-top: 0;
 }
 .board .cal-head .side-label {
-    flex: 1;
-    margin: 0;
+  flex: 1;
+  margin: 0;
 }
 .board .cal-step {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: var(--dp-radius);
-    background: transparent;
-    box-shadow: none;
-    color: var(--dp-fg);
-    transition: background-color var(--dp-duration);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dp-radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--dp-fg);
+  transition: background-color var(--dp-duration);
 }
 .board .cal-step:hover:not(:disabled) {
-    background: var(--dp-hover-soft);
+  background: var(--dp-hover-soft);
 }
 .board .cal-step:disabled {
-    background: transparent;
-    color: var(--dp-muted);
-    opacity: 0.4;
+  background: transparent;
+  color: var(--dp-muted);
+  opacity: 0.4;
 }
 .board .cal-grid {
-    width: calc(100% - 0.75rem);
-    margin: 0.25rem 0 0 0.75rem;
-    border-collapse: collapse;
-    table-layout: fixed;
+  width: calc(100% - 0.75rem);
+  margin: 0.25rem 0 0 0.75rem;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 .board .cal-grid :is(th, td) {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    text-align: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: center;
 }
 .board .cal-grid th {
-    height: 1.5rem;
-    color: var(--dp-muted);
-    font-size: 0.6875rem;
-    font-weight: var(--dp-weight);
+  height: 1.5rem;
+  color: var(--dp-muted);
+  font-size: 0.6875rem;
+  font-weight: var(--dp-weight);
 }
 .board .cal-day {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 2rem;
-    margin: 0;
-    padding: 0 0 0.25rem;
-    border: 0;
-    border-radius: var(--dp-radius);
-    background: transparent;
-    box-shadow: none;
-    color: var(--dp-muted);
-    font-size: 0.8125rem;
-    font-weight: var(--dp-weight);
-    transition: background-color var(--dp-duration);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 2rem;
+  margin: 0;
+  padding: 0 0 0.25rem;
+  border: 0;
+  border-radius: var(--dp-radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--dp-muted);
+  font-size: 0.8125rem;
+  font-weight: var(--dp-weight);
+  transition: background-color var(--dp-duration);
 }
 /* 行の無い日は沈めて押せない (読み上げには aria-disabled) */
-.board .cal-day[aria-disabled='true'] {
-    opacity: 0.5;
-    cursor: default;
+.board .cal-day[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
 }
 .board .cal-day.has {
-    color: var(--dp-fg);
+  color: var(--dp-fg);
 }
 .board .cal-day.has::after {
-    content: '';
-    position: absolute;
-    bottom: 0.3125rem;
-    left: 50%;
-    width: 0.25rem;
-    height: 0.25rem;
-    border-radius: 50%;
-    background: currentColor;
-    transform: translateX(-50%);
+  content: "";
+  position: absolute;
+  bottom: 0.3125rem;
+  left: 50%;
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateX(-50%);
 }
-.board .cal-day:not([aria-disabled='true']):hover {
-    background: var(--dp-hover-soft);
+.board .cal-day:not([aria-disabled="true"]):hover {
+  background: var(--dp-hover-soft);
 }
 /*
  * **選んでいる日は白黒を反転した角丸の塗り。** 薄い塗りだった頃は、どの日を選んでいるかが読みにくかった。
  * 形はほかの日の指を乗せたときの塗りと同じ角丸に揃える (今日だけ丸にしない)
  */
 .board .cal-day.pinned,
-.board .cal-day.pinned:not([aria-disabled='true']):hover {
-    background: var(--dp-fg);
-    color: var(--dp-bg);
-    font-weight: var(--dp-weight-bold);
-    opacity: 1;
+.board .cal-day.pinned:not([aria-disabled="true"]):hover {
+  background: var(--dp-fg);
+  color: var(--dp-bg);
+  font-weight: var(--dp-weight-bold);
+  opacity: 1;
 }
 /*
  * 今日は太字に、同じ角丸の細い枠。**色は足さない** — 赤の丸は目立ちすぎた。選んでいるときは上の塗りになる
  * (行が無くても押せる)
  */
 .board .cal-day.today {
-    color: var(--dp-fg);
-    font-weight: var(--dp-weight-bold);
-    opacity: 1;
-    box-shadow: inset 0 0 0 1px var(--dp-muted);
+  color: var(--dp-fg);
+  font-weight: var(--dp-weight-bold);
+  opacity: 1;
+  box-shadow: inset 0 0 0 1px var(--dp-muted);
 }
 .board .cal-day.today.pinned {
-    box-shadow: none;
-    color: var(--dp-bg);
+  box-shadow: none;
+  color: var(--dp-bg);
 }

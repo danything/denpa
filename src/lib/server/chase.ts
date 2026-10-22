@@ -14,9 +14,9 @@
  * シークのたびに ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。
  */
 
-import { statSync } from 'node:fs';
-import { open } from 'node:fs/promises';
-import { PACKET } from '../ts/psi';
+import { statSync } from "node:fs";
+import { open } from "node:fs/promises";
+import { PACKET } from "../ts/psi";
 
 /** 1回に読む量。露骨に小さいと read の回数だけ損する */
 const READ_SIZE = 256 * 1024;
@@ -38,16 +38,16 @@ const WAIT_READER = 50;
 const PACE = 2;
 
 export interface ChasePlan {
-    /** 読み始めるバイト位置 (188 に揃えてある) */
-    offset: number;
-    /** 実際に始まる再生位置 (秒)。リクエストされた位置を録れている範囲に収めた後 */
-    at: number;
-    /** いま録れている長さ (秒)。シークバーの右端 */
-    recordedSec: number;
-    /** 送り込みの上限 (バイト/秒)。実測レート × PACE */
-    paceBytesPerSec: number;
-    /** 実測レート (バイト/秒)。読んだ量を秒に直すのに使う (`resumeFrom`) */
-    bytesPerSec: number;
+  /** 読み始めるバイト位置 (188 に揃えてある) */
+  offset: number;
+  /** 実際に始まる再生位置 (秒)。リクエストされた位置を録れている範囲に収めた後 */
+  at: number;
+  /** いま録れている長さ (秒)。シークバーの右端 */
+  recordedSec: number;
+  /** 送り込みの上限 (バイト/秒)。実測レート × PACE */
+  paceBytesPerSec: number;
+  /** 実測レート (バイト/秒)。読んだ量を秒に直すのに使う (`resumeFrom`) */
+  bytesPerSec: number;
 }
 
 /**
@@ -59,12 +59,12 @@ export interface ChasePlan {
  * 作り直しを繰り返す。**近くをリクエストされたら、変わったところのバイトから読む** (`resumePlan`)
  */
 export interface ChaseResume {
-    /** 変わったところ (秒。`ChasePlan.at` と同じ物差し) */
-    at: number;
-    /** 変わったところ (バイト。188 に揃えてある) */
-    offset: number;
-    /** これを過ぎたら使わない (ms) */
-    until: number;
+  /** 変わったところ (秒。`ChasePlan.at` と同じ物差し) */
+  at: number;
+  /** 変わったところ (バイト。188 に揃えてある) */
+  offset: number;
+  /** これを過ぎたら使わない (ms) */
+  until: number;
 }
 
 /** 作り直したところから、これだけ (秒) の内をリクエストされたら、そこから読む (`resumePlan`) */
@@ -76,19 +76,31 @@ const RESUME_KEEP = 10 * 60_000;
  * 読んだ量 (`consumed` バイト。`plan` の頭から) のところで作り直した。どこからリクエストし直せばいいかを返す。
  * 塊の途中で変わったので、**読んだ塊の尻**から — 頭からだと前の番組の PMT をまた読む
  */
-export function resumeFrom(plan: ChasePlan, consumed: number, now = Date.now()): ChaseResume {
-    return {
-        at: plan.at + consumed / plan.bytesPerSec,
-        offset: plan.offset + Math.ceil(consumed / PACKET) * PACKET,
-        until: now + RESUME_KEEP,
-    };
+export function resumeFrom(
+  plan: ChasePlan,
+  consumed: number,
+  now = Date.now(),
+): ChaseResume {
+  return {
+    at: plan.at + consumed / plan.bytesPerSec,
+    offset: plan.offset + Math.ceil(consumed / PACKET) * PACKET,
+    until: now + RESUME_KEEP,
+  };
 }
 
 /** 作り直したところの近く (`RESUME_NEAR`) をリクエストされたら、変わったところのバイトから読む */
-export function resumePlan(plan: ChasePlan, resume: ChaseResume | undefined, now = Date.now()): ChasePlan {
-    if (resume === undefined || now > resume.until || Math.abs(plan.at - resume.at) > RESUME_NEAR)
-        return plan;
-    return { ...plan, offset: resume.offset, at: resume.at };
+export function resumePlan(
+  plan: ChasePlan,
+  resume: ChaseResume | undefined,
+  now = Date.now(),
+): ChasePlan {
+  if (
+    resume === undefined ||
+    now > resume.until ||
+    Math.abs(plan.at - resume.at) > RESUME_NEAR
+  )
+    return plan;
+  return { ...plan, offset: resume.offset, at: resume.at };
 }
 
 /**
@@ -98,22 +110,26 @@ export function resumePlan(plan: ChasePlan, resume: ChaseResume | undefined, now
  * @param recordedSec いま録れている長さ (秒)。録画中は「録り始めてからの経過」
  * @param atSec リクエストされた再生位置 (秒)
  */
-export function chasePlan(size: number, recordedSec: number, atSec: number): ChasePlan {
-    const usable = Math.max(1, recordedSec);
-    const bytesPerSec = size / usable;
-    /*
-     * 書き込み中の端 (いま書いているところ) ぎりぎりから始めると、キーフレーム待ちで
-     * 何も出ないまま追い付いてしまう。少し手前に置く
-     */
-    const at = Math.min(Math.max(0, atSec), Math.max(0, usable - 5));
-    const offset = Math.floor((at * bytesPerSec) / PACKET) * PACKET;
-    return {
-        offset: Math.min(offset, Math.max(0, size - PACKET)),
-        at,
-        recordedSec: usable,
-        paceBytesPerSec: Math.max(1_000_000, bytesPerSec) * PACE,
-        bytesPerSec,
-    };
+export function chasePlan(
+  size: number,
+  recordedSec: number,
+  atSec: number,
+): ChasePlan {
+  const usable = Math.max(1, recordedSec);
+  const bytesPerSec = size / usable;
+  /*
+   * 書き込み中の端 (いま書いているところ) ぎりぎりから始めると、キーフレーム待ちで
+   * 何も出ないまま追い付いてしまう。少し手前に置く
+   */
+  const at = Math.min(Math.max(0, atSec), Math.max(0, usable - 5));
+  const offset = Math.floor((at * bytesPerSec) / PACKET) * PACKET;
+  return {
+    offset: Math.min(offset, Math.max(0, size - PACKET)),
+    at,
+    recordedSec: usable,
+    paceBytesPerSec: Math.max(1_000_000, bytesPerSec) * PACE,
+    bytesPerSec,
+  };
 }
 
 /**
@@ -133,60 +149,66 @@ export function chasePlan(size: number, recordedSec: number, atSec: number): Cha
  *   手前から読み始めて観ている位置を追い越すのに使う (`live.ts` の `recordingCaptions`)。省けば 0
  */
 export function followFile(
-    path: string,
-    offset: number,
-    paceBytesPerSec: number,
-    done: () => boolean,
-    hold: () => boolean = () => false,
-    burst = 0,
+  path: string,
+  offset: number,
+  paceBytesPerSec: number,
+  done: () => boolean,
+  hold: () => boolean = () => false,
+  burst = 0,
 ): ReadableStream<Uint8Array> {
-    let cancelled = false;
-    return new ReadableStream<Uint8Array>({
-        async start(controller) {
-            const started = Date.now();
-            let sent = 0;
-            let position = offset;
-            const handle = await open(path, 'r');
-            try {
-                const buffer = new Uint8Array(READ_SIZE);
-                while (!cancelled) {
-                    if ((controller.desiredSize ?? 1) <= 0 || hold()) {
-                        await Bun.sleep(WAIT_READER);
-                        continue;
-                    }
-                    const { bytesRead } = await handle.read(buffer, 0, READ_SIZE, position);
-                    if (bytesRead > 0) {
-                        position += bytesRead;
-                        sent += bytesRead;
-                        controller.enqueue(buffer.slice(0, bytesRead));
-                        // 倍速より先へは行かない (上の説明)。遅れているぶんは眠らず進む
-                        const ahead =
-                            Math.max(0, sent - burst) / paceBytesPerSec - (Date.now() - started) / 1000;
-                        if (ahead > 0) await Bun.sleep(ahead * 1000);
-                        continue;
-                    }
-                    // 尻に着いた。録画が終わっていれば読み切った、まだなら待って読み足す
-                    if (done()) break;
-                    await Bun.sleep(WAIT_MORE);
-                }
-                controller.close();
-            } catch (error) {
-                controller.error(error);
-            } finally {
-                await handle.close();
-            }
-        },
-        cancel() {
-            cancelled = true;
-        },
-    });
+  let cancelled = false;
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const started = Date.now();
+      let sent = 0;
+      let position = offset;
+      const handle = await open(path, "r");
+      try {
+        const buffer = new Uint8Array(READ_SIZE);
+        while (!cancelled) {
+          if ((controller.desiredSize ?? 1) <= 0 || hold()) {
+            await Bun.sleep(WAIT_READER);
+            continue;
+          }
+          const { bytesRead } = await handle.read(
+            buffer,
+            0,
+            READ_SIZE,
+            position,
+          );
+          if (bytesRead > 0) {
+            position += bytesRead;
+            sent += bytesRead;
+            controller.enqueue(buffer.slice(0, bytesRead));
+            // 倍速より先へは行かない (上の説明)。遅れているぶんは眠らず進む
+            const ahead =
+              Math.max(0, sent - burst) / paceBytesPerSec -
+              (Date.now() - started) / 1000;
+            if (ahead > 0) await Bun.sleep(ahead * 1000);
+            continue;
+          }
+          // 尻に着いた。録画が終わっていれば読み切った、まだなら待って読み足す
+          if (done()) break;
+          await Bun.sleep(WAIT_MORE);
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        await handle.close();
+      }
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
 }
 
 /** いまのファイルの大きさ。無ければ null (消された・まだ書き始めていない) */
 export function fileSize(path: string): number | null {
-    try {
-        return statSync(path).size;
-    } catch {
-        return null;
-    }
+  try {
+    return statSync(path).size;
+  } catch {
+    return null;
+  }
 }

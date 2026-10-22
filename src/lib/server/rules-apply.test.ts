@@ -1,9 +1,9 @@
-import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { eq } from 'drizzle-orm';
-import type { ChannelType } from '../types';
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
+import type { ChannelType } from "../types";
 
 /**
  * ルールを番組表に当て直して、予約をそろえるところ。
@@ -12,28 +12,28 @@ import type { ChannelType } from '../types';
  * 引っ込めるところまで含めて1つの動き。ただし手違いで消すほうが余分に録るより
  * 高くつくので、迷う場面では残す。その線引きをここで見る。
  */
-const { config } = await import('./config');
-config.dbPath = join(mkdtempSync(join(tmpdir(), 'denpa-rules-')), 'denpa.db');
+const { config } = await import("./config");
+config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-rules-")), "denpa.db");
 
-const { now, orm } = await import('./db');
-const { applyRules, keepsReservation, previewSkips } = await import('./rules');
+const { now, orm } = await import("./db");
+const { applyRules, keepsReservation, previewSkips } = await import("./rules");
 const {
-    programs,
-    recordings,
-    reservations: reservationTable,
-    rules: ruleTable,
-    services,
-} = await import('./schema');
+  programs,
+  recordings,
+  reservations: reservationTable,
+  rules: ruleTable,
+  services,
+} = await import("./schema");
 
 const SERVICE = 3239123608;
 const HOUR = 60 * 60 * 1000;
 
 function clear(): void {
-    orm().delete(recordings).run();
-    orm().delete(reservationTable).run();
-    orm().delete(programs).run();
-    orm().delete(ruleTable).run();
-    orm().delete(services).run();
+  orm().delete(recordings).run();
+  orm().delete(reservationTable).run();
+  orm().delete(programs).run();
+  orm().delete(ruleTable).run();
+  orm().delete(services).run();
 }
 
 /*
@@ -53,295 +53,339 @@ afterAll(clear);
 let base = now();
 
 function reset(): void {
-    base = now();
-    clear();
-    sub(SERVICE, 'TOKYO MX1');
+  base = now();
+  clear();
+  sub(SERVICE, "TOKYO MX1");
 }
 
 /** 局を1つ置く (置き直し)。MX の枝番も同じ物理チャンネルに入る */
-function sub(id: number, name: string, channel = 'T16', type: ChannelType = 'GR'): void {
-    orm().delete(services).where(eq(services.id, id)).run();
-    orm()
-        .insert(services)
-        .values({
-            id,
-            service_id: id % 100000,
-            network_id: 32391,
-            name,
-            type,
-            service_type: 1,
-            channel,
-            updated_at: now(),
-        })
-        .run();
+function sub(
+  id: number,
+  name: string,
+  channel = "T16",
+  type: ChannelType = "GR",
+): void {
+  orm().delete(services).where(eq(services.id, id)).run();
+  orm()
+    .insert(services)
+    .values({
+      id,
+      service_id: id % 100000,
+      network_id: 32391,
+      name,
+      type,
+      service_type: 1,
+      channel,
+      updated_at: now(),
+    })
+    .run();
 }
 
 /** 局を指定して番組を1つ置く (置き直し)。既定は3時間後から (猶予の外) */
-function on(serviceId: number, id: number, name: string, startsIn = 3 * HOUR): void {
-    const start = base + startsIn;
-    orm().delete(programs).where(eq(programs.id, id)).run();
-    orm()
-        .insert(programs)
-        .values({
-            id,
-            service_id: serviceId,
-            network_id: 32391,
-            event_id: id,
-            start_at: start,
-            end_at: start + HOUR,
-            name,
-            updated_at: now(),
-        })
-        .run();
+function on(
+  serviceId: number,
+  id: number,
+  name: string,
+  startsIn = 3 * HOUR,
+): void {
+  const start = base + startsIn;
+  orm().delete(programs).where(eq(programs.id, id)).run();
+  orm()
+    .insert(programs)
+    .values({
+      id,
+      service_id: serviceId,
+      network_id: 32391,
+      event_id: id,
+      start_at: start,
+      end_at: start + HOUR,
+      name,
+      updated_at: now(),
+    })
+    .run();
 }
 
 /** 番組を1つ置く。既定は3時間後から (猶予の外) */
 function program(id: number, name: string, startsIn = 3 * HOUR): void {
-    on(SERVICE, id, name, startsIn);
+  on(SERVICE, id, name, startsIn);
 }
 
-function rule(id: number, keyword: string, enabled = true, priority = 1, dedupe = false): void {
-    orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
-    orm()
-        .insert(ruleTable)
-        .values({
-            id,
-            name: keyword,
-            keyword,
-            search_fields: 'name',
-            enabled,
-            priority,
-            dedupe,
-            created_at: now(),
-        })
-        .run();
+function rule(
+  id: number,
+  keyword: string,
+  enabled = true,
+  priority = 1,
+  dedupe = false,
+): void {
+  orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
+  orm()
+    .insert(ruleTable)
+    .values({
+      id,
+      name: keyword,
+      keyword,
+      search_fields: "name",
+      enabled,
+      priority,
+      dedupe,
+      created_at: now(),
+    })
+    .run();
 }
 
 const priorityOf = (programId: number): number | undefined =>
-    orm()
-        .select({ priority: reservationTable.priority })
-        .from(reservationTable)
-        .where(eq(reservationTable.program_id, programId))
-        .get()?.priority;
+  orm()
+    .select({ priority: reservationTable.priority })
+    .from(reservationTable)
+    .where(eq(reservationTable.program_id, programId))
+    .get()?.priority;
 
 const reservations = () =>
+  orm()
+    .select({
+      program_id: reservationTable.program_id,
+      rule_id: reservationTable.rule_id,
+      state: reservationTable.state,
+    })
+    .from(reservationTable)
+    .orderBy(reservationTable.program_id)
+    .all();
+
+describe("ルールを当て直す", () => {
+  test("当たる番組に予約が立つ", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    program(11, "まったく別の番組");
+
+    expect(applyRules()).toEqual({
+      created: 1,
+      dropped: 0,
+      moved: 0,
+      repriced: 0,
+    });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "scheduled" },
+    ]);
+  });
+
+  /**
+   * **優先度はルールが持つもの。もう立っている予約にも当て直す。**
+   *
+   * 予約は `INSERT OR IGNORE` で立てるので、当て直していなかった頃は
+   * **作った日の優先度のまま**だった。上げても効くのは次に立つ予約からで、
+   * いま競合している予約はいくら上げても負けたまま — 実機で、優先度2に
+   * 上げたルールの予約が優先度1の裏番組に負け続けていた (予約の側は
+   * 3件とも 1 のままだった)
+   */
+  test("ルールの優先度を変えると、もう立っている予約にも効く", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
+    expect(priorityOf(10)).toBe(1);
+
+    rule(1, "無職転生", true, 2);
+    expect(applyRules()).toEqual({
+      created: 0,
+      dropped: 0,
+      moved: 0,
+      repriced: 1,
+    });
+    expect(priorityOf(10)).toBe(2);
+
+    // 変わっていなければ触らない
+    expect(applyRules()).toEqual({
+      created: 0,
+      dropped: 0,
+      moved: 0,
+      repriced: 0,
+    });
+  });
+
+  /*
+   * **取り消しではなく削除。** 取り消しは*人が押したこと*の記録で、ルールは
+   * 二度と作り直さない (INSERT OR IGNORE)。番組表が動いただけのものを取り消しに
+   * すると、条件に戻ってきても永久に予約が立たなくなる
+   */
+  test("条件から外れた予約は消す。取り消しにはしない", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
+
+    // 番組表が書き換わって、名前が変わった
+    program(10, "(番組の差し替え) 特別番組");
+
+    expect(applyRules()).toMatchObject({ dropped: 1 });
+    expect(reservations()).toEqual([]);
+  });
+
+  test("人が取り消した予約は作り直さない", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
     orm()
-        .select({
-            program_id: reservationTable.program_id,
-            rule_id: reservationTable.rule_id,
-            state: reservationTable.state,
-        })
-        .from(reservationTable)
-        .orderBy(reservationTable.program_id)
-        .all();
+      .update(reservationTable)
+      .set({ state: "canceled" })
+      .where(eq(reservationTable.program_id, 10))
+      .run();
 
-describe('ルールを当て直す', () => {
-    test('当たる番組に予約が立つ', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        program(11, 'まったく別の番組');
+    expect(applyRules()).toMatchObject({ created: 0, dropped: 0 });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "canceled" },
+    ]);
+  });
 
-        expect(applyRules()).toEqual({ created: 1, dropped: 0, moved: 0, repriced: 0 });
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
+  test("手動の予約は触らない", () => {
+    reset();
+    program(10, "手で入れた番組");
+    orm()
+      .insert(reservationTable)
+      .values({
+        program_id: 10,
+        rule_id: null,
+        service_id: SERVICE,
+        name: "手で入れた番組",
+        start_at: now() + 3 * HOUR,
+        end_at: now() + 4 * HOUR,
+        manual: true,
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+
+    expect(applyRules()).toMatchObject({ dropped: 0 });
+    expect(reservations()).toHaveLength(1);
+  });
+
+  test("録り始めた予約は触らない", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
+    orm()
+      .update(reservationTable)
+      .set({ started_at: now() })
+      .where(eq(reservationTable.program_id, 10))
+      .run();
+    program(10, "差し替え");
+
+    expect(applyRules()).toMatchObject({ dropped: 0 });
+    expect(reservations()).toHaveLength(1);
+  });
+
+  /*
+   * 番組が消えているのは「条件から外れた」のか「まだ読めていない」のか
+   * 区別が付かない。実機では番組表の取り込みが1チャンネルずつなので、
+   * 途中の状態を何度も見ることになる
+   */
+  test("番組表からその番組ごと消えているだけなら残す", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
+    orm().delete(programs).where(eq(programs.id, 10)).run();
+
+    expect(applyRules()).toMatchObject({ dropped: 0 });
+    expect(reservations()).toHaveLength(1);
+  });
+
+  /*
+   * 番組表は基本 (タイトル) と詳細 (番組内容) の2つの表に分かれて流れてくる。
+   * 詳細しか読めていない番組はタイトルが空で、キーワードには当たりようがない。
+   * 実機では 23,000 件のうち 11,000 件がこの状態だった
+   */
+  test("タイトルが空の番組では判断しない", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
+    program(10, "");
+
+    expect(applyRules()).toMatchObject({ dropped: 0 });
+    expect(reservations()).toHaveLength(1);
+  });
+
+  test("もうすぐ始まるものは、条件から外れても引っ込めない", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6", 10 * 60 * 1000);
+    applyRules();
+    // 放送直前の書き換えで条件から外れた
+    program(10, "急な差し替え", 10 * 60 * 1000);
+
+    expect(applyRules()).toMatchObject({ dropped: 0 });
+    expect(reservations()).toHaveLength(1);
+  });
+
+  test("ルールを止めたぶんは、直前でも引っ込める", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6", 10 * 60 * 1000);
+    applyRules();
+    rule(1, "無職転生", false);
+
+    expect(applyRules()).toMatchObject({ dropped: 1 });
+    expect(reservations()).toEqual([]);
+  });
+
+  test("別のルールが引き取ったら付け替える", () => {
+    reset();
+    rule(1, "無職転生");
+    rule(2, "Ⅲ");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "scheduled" },
+    ]);
+
+    // 1 を消した。2 がまだ当たるので、予約は生き続ける
+    orm().delete(ruleTable).where(eq(ruleTable.id, 1)).run();
+
+    expect(applyRules()).toMatchObject({ dropped: 0, moved: 1 });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 2, state: "scheduled" },
+    ]);
+  });
+
+  test("引き取り手が無ければ消える", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    applyRules();
+    orm().delete(ruleTable).where(eq(ruleTable.id, 1)).run();
+
+    expect(applyRules()).toMatchObject({ dropped: 1 });
+    expect(reservations()).toEqual([]);
+  });
+
+  /*
+   * 足したばかりのルールは他の予約を外せないので、範囲を絞れる。
+   * 実機ではルール 318 本 × これから放送される番組 25,608 件を回すことになる
+   */
+  test("ルールを1本だけ当てるときは、足すだけで消さない", () => {
+    reset();
+    rule(1, "無職転生");
+    program(10, "無職転生Ⅲ #6");
+    program(11, "さよならララ #6");
+    applyRules();
+
+    // 2 を足した。1 の予約には触らない (このとき 1 は当てにも行かない)
+    rule(2, "さよならララ");
+
+    expect(applyRules({ rule: 2 })).toEqual({
+      created: 1,
+      dropped: 0,
+      moved: 0,
+      repriced: 0,
     });
-
-    /**
-     * **優先度はルールが持つもの。もう立っている予約にも当て直す。**
-     *
-     * 予約は `INSERT OR IGNORE` で立てるので、当て直していなかった頃は
-     * **作った日の優先度のまま**だった。上げても効くのは次に立つ予約からで、
-     * いま競合している予約はいくら上げても負けたまま — 実機で、優先度2に
-     * 上げたルールの予約が優先度1の裏番組に負け続けていた (予約の側は
-     * 3件とも 1 のままだった)
-     */
-    test('ルールの優先度を変えると、もう立っている予約にも効く', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-        expect(priorityOf(10)).toBe(1);
-
-        rule(1, '無職転生', true, 2);
-        expect(applyRules()).toEqual({ created: 0, dropped: 0, moved: 0, repriced: 1 });
-        expect(priorityOf(10)).toBe(2);
-
-        // 変わっていなければ触らない
-        expect(applyRules()).toEqual({ created: 0, dropped: 0, moved: 0, repriced: 0 });
-    });
-
-    /*
-     * **取り消しではなく削除。** 取り消しは*人が押したこと*の記録で、ルールは
-     * 二度と作り直さない (INSERT OR IGNORE)。番組表が動いただけのものを取り消しに
-     * すると、条件に戻ってきても永久に予約が立たなくなる
-     */
-    test('条件から外れた予約は消す。取り消しにはしない', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-
-        // 番組表が書き換わって、名前が変わった
-        program(10, '(番組の差し替え) 特別番組');
-
-        expect(applyRules()).toMatchObject({ dropped: 1 });
-        expect(reservations()).toEqual([]);
-    });
-
-    test('人が取り消した予約は作り直さない', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-        orm()
-            .update(reservationTable)
-            .set({ state: 'canceled' })
-            .where(eq(reservationTable.program_id, 10))
-            .run();
-
-        expect(applyRules()).toMatchObject({ created: 0, dropped: 0 });
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'canceled' }]);
-    });
-
-    test('手動の予約は触らない', () => {
-        reset();
-        program(10, '手で入れた番組');
-        orm()
-            .insert(reservationTable)
-            .values({
-                program_id: 10,
-                rule_id: null,
-                service_id: SERVICE,
-                name: '手で入れた番組',
-                start_at: now() + 3 * HOUR,
-                end_at: now() + 4 * HOUR,
-                manual: true,
-                created_at: now(),
-                updated_at: now(),
-            })
-            .run();
-
-        expect(applyRules()).toMatchObject({ dropped: 0 });
-        expect(reservations()).toHaveLength(1);
-    });
-
-    test('録り始めた予約は触らない', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-        orm()
-            .update(reservationTable)
-            .set({ started_at: now() })
-            .where(eq(reservationTable.program_id, 10))
-            .run();
-        program(10, '差し替え');
-
-        expect(applyRules()).toMatchObject({ dropped: 0 });
-        expect(reservations()).toHaveLength(1);
-    });
-
-    /*
-     * 番組が消えているのは「条件から外れた」のか「まだ読めていない」のか
-     * 区別が付かない。実機では番組表の取り込みが1チャンネルずつなので、
-     * 途中の状態を何度も見ることになる
-     */
-    test('番組表からその番組ごと消えているだけなら残す', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-        orm().delete(programs).where(eq(programs.id, 10)).run();
-
-        expect(applyRules()).toMatchObject({ dropped: 0 });
-        expect(reservations()).toHaveLength(1);
-    });
-
-    /*
-     * 番組表は基本 (タイトル) と詳細 (番組内容) の2つの表に分かれて流れてくる。
-     * 詳細しか読めていない番組はタイトルが空で、キーワードには当たりようがない。
-     * 実機では 23,000 件のうち 11,000 件がこの状態だった
-     */
-    test('タイトルが空の番組では判断しない', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-        program(10, '');
-
-        expect(applyRules()).toMatchObject({ dropped: 0 });
-        expect(reservations()).toHaveLength(1);
-    });
-
-    test('もうすぐ始まるものは、条件から外れても引っ込めない', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6', 10 * 60 * 1000);
-        applyRules();
-        // 放送直前の書き換えで条件から外れた
-        program(10, '急な差し替え', 10 * 60 * 1000);
-
-        expect(applyRules()).toMatchObject({ dropped: 0 });
-        expect(reservations()).toHaveLength(1);
-    });
-
-    test('ルールを止めたぶんは、直前でも引っ込める', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6', 10 * 60 * 1000);
-        applyRules();
-        rule(1, '無職転生', false);
-
-        expect(applyRules()).toMatchObject({ dropped: 1 });
-        expect(reservations()).toEqual([]);
-    });
-
-    test('別のルールが引き取ったら付け替える', () => {
-        reset();
-        rule(1, '無職転生');
-        rule(2, 'Ⅲ');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
-
-        // 1 を消した。2 がまだ当たるので、予約は生き続ける
-        orm().delete(ruleTable).where(eq(ruleTable.id, 1)).run();
-
-        expect(applyRules()).toMatchObject({ dropped: 0, moved: 1 });
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 2, state: 'scheduled' }]);
-    });
-
-    test('引き取り手が無ければ消える', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        applyRules();
-        orm().delete(ruleTable).where(eq(ruleTable.id, 1)).run();
-
-        expect(applyRules()).toMatchObject({ dropped: 1 });
-        expect(reservations()).toEqual([]);
-    });
-
-    /*
-     * 足したばかりのルールは他の予約を外せないので、範囲を絞れる。
-     * 実機ではルール 318 本 × これから放送される番組 25,608 件を回すことになる
-     */
-    test('ルールを1本だけ当てるときは、足すだけで消さない', () => {
-        reset();
-        rule(1, '無職転生');
-        program(10, '無職転生Ⅲ #6');
-        program(11, 'さよならララ #6');
-        applyRules();
-
-        // 2 を足した。1 の予約には触らない (このとき 1 は当てにも行かない)
-        rule(2, 'さよならララ');
-
-        expect(applyRules({ rule: 2 })).toEqual({ created: 1, dropped: 0, moved: 0, repriced: 0 });
-        expect(reservations()).toEqual([
-            { program_id: 10, rule_id: 1, state: 'scheduled' },
-            { program_id: 11, rule_id: 2, state: 'scheduled' },
-        ]);
-    });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "scheduled" },
+      { program_id: 11, rule_id: 2, state: "scheduled" },
+    ]);
+  });
 });
 
 /**
@@ -352,86 +396,92 @@ describe('ルールを当て直す', () => {
  * していた実機では同じ回が2本録れ、さらに2つのエンコードが同じ名前のファイルへ
  * 同時に書いて中身まで壊れた。
  */
-describe('同じ放送は1本だけ', () => {
-    const MX2 = 3239123610;
+describe("同じ放送は1本だけ", () => {
+  const MX2 = 3239123610;
 
-    test('枝番の小さいほうだけ録る', () => {
-        reset();
-        // 23609 は MX1 の枝番。名前まで同じで、同じ回が載っている
-        sub(SERVICE + 1, 'TOKYO MX1');
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        on(SERVICE + 1, 11, '幼女戦記Ⅱ #5「貧乏籤」');
+  test("枝番の小さいほうだけ録る", () => {
+    reset();
+    // 23609 は MX1 の枝番。名前まで同じで、同じ回が載っている
+    sub(SERVICE + 1, "TOKYO MX1");
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    on(SERVICE + 1, 11, "幼女戦記Ⅱ #5「貧乏籤」");
 
-        expect(applyRules()).toMatchObject({ created: 1 });
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
-    });
+    expect(applyRules()).toMatchObject({ created: 1 });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "scheduled" },
+    ]);
+  });
 
-    test('番組表に載る順が逆でも同じ答え', () => {
-        reset();
-        sub(SERVICE + 1, 'TOKYO MX1');
-        rule(1, '幼女戦記');
-        // 枝番の大きいほうを先に見る並び (id が小さいほうが先に出る)
-        on(SERVICE + 1, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        on(SERVICE, 11, '幼女戦記Ⅱ #5「貧乏籤」');
+  test("番組表に載る順が逆でも同じ答え", () => {
+    reset();
+    sub(SERVICE + 1, "TOKYO MX1");
+    rule(1, "幼女戦記");
+    // 枝番の大きいほうを先に見る並び (id が小さいほうが先に出る)
+    on(SERVICE + 1, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    on(SERVICE, 11, "幼女戦記Ⅱ #5「貧乏籤」");
 
-        expect(applyRules()).toMatchObject({ created: 1 });
-        expect(reservations()).toEqual([{ program_id: 11, rule_id: 1, state: 'scheduled' }]);
-    });
+    expect(applyRules()).toMatchObject({ created: 1 });
+    expect(reservations()).toEqual([
+      { program_id: 11, rule_id: 1, state: "scheduled" },
+    ]);
+  });
 
-    test('中身が違えば両方録る', () => {
-        reset();
-        // 分割している時間。MX1 と MX2 で別の番組を流している
-        sub(MX2, 'TOKYO MX2');
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        on(MX2, 11, '幼女戦記Ⅱ 一挙放送');
+  test("中身が違えば両方録る", () => {
+    reset();
+    // 分割している時間。MX1 と MX2 で別の番組を流している
+    sub(MX2, "TOKYO MX2");
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    on(MX2, 11, "幼女戦記Ⅱ 一挙放送");
 
-        expect(applyRules()).toMatchObject({ created: 2 });
-        expect(reservations()).toHaveLength(2);
-    });
+    expect(applyRules()).toMatchObject({ created: 2 });
+    expect(reservations()).toHaveLength(2);
+  });
 
-    test('時刻が違えば別の放送', () => {
-        reset();
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        // 同じ局の再放送。名前もチャンネルも同じだが、時刻が違う
-        on(SERVICE, 11, '幼女戦記Ⅱ #5「貧乏籤」', 27 * HOUR);
+  test("時刻が違えば別の放送", () => {
+    reset();
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    // 同じ局の再放送。名前もチャンネルも同じだが、時刻が違う
+    on(SERVICE, 11, "幼女戦記Ⅱ #5「貧乏籤」", 27 * HOUR);
 
-        expect(applyRules()).toMatchObject({ created: 2 });
-    });
+    expect(applyRules()).toMatchObject({ created: 2 });
+  });
 
-    test('別のチャンネルなら両方録る', () => {
-        reset();
-        // 系列局の同時ネット。チューナーも別なので、どちらも録れる
-        sub(3273801040, 'テレビ愛知', 'T23');
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        on(3273801040, 11, '幼女戦記Ⅱ #5「貧乏籤」');
+  test("別のチャンネルなら両方録る", () => {
+    reset();
+    // 系列局の同時ネット。チューナーも別なので、どちらも録れる
+    sub(3273801040, "テレビ愛知", "T23");
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    on(3273801040, 11, "幼女戦記Ⅱ #5「貧乏籤」");
 
-        expect(applyRules()).toMatchObject({ created: 2 });
-    });
+    expect(applyRules()).toMatchObject({ created: 2 });
+  });
 
-    /*
-     * 延長は枝番ごとに別々のタイミングで届く (EIT p/f は局ごと)。終了時刻まで
-     * 鍵に入れていた頃は、片方だけ動いた回が「別の放送」に見えて両方立った
-     */
-    test('終了時刻だけ違う枝番の組は1本だけ', () => {
-        reset();
-        sub(SERVICE + 1, 'TOKYO MX1');
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        on(SERVICE + 1, 11, '幼女戦記Ⅱ #5「貧乏籤」');
-        // 23609 側にだけ延長が先に届いた
-        orm()
-            .update(programs)
-            .set({ end_at: base + 4 * HOUR + 30 * 60 * 1000 })
-            .where(eq(programs.id, 11))
-            .run();
+  /*
+   * 延長は枝番ごとに別々のタイミングで届く (EIT p/f は局ごと)。終了時刻まで
+   * 鍵に入れていた頃は、片方だけ動いた回が「別の放送」に見えて両方立った
+   */
+  test("終了時刻だけ違う枝番の組は1本だけ", () => {
+    reset();
+    sub(SERVICE + 1, "TOKYO MX1");
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    on(SERVICE + 1, 11, "幼女戦記Ⅱ #5「貧乏籤」");
+    // 23609 側にだけ延長が先に届いた
+    orm()
+      .update(programs)
+      .set({ end_at: base + 4 * HOUR + 30 * 60 * 1000 })
+      .where(eq(programs.id, 11))
+      .run();
 
-        expect(applyRules()).toMatchObject({ created: 1 });
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
-    });
+    expect(applyRules()).toMatchObject({ created: 1 });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "scheduled" },
+    ]);
+  });
 });
 
 /**
@@ -443,343 +493,373 @@ describe('同じ放送は1本だけ', () => {
  * (局が送り直して番組の行が別 id になる)。どちらも物理チャンネル・タイトル・開始時刻は
  * 変わらないので、そこで当てる (`canceledBroadcasts`)。
  */
-describe('取り消した放送には立てない', () => {
-    const MIN = 60 * 1000;
+describe("取り消した放送には立てない", () => {
+  const MIN = 60 * 1000;
 
-    /** 人が押した取り消し (reservations.cancel と同じ形式) */
-    function cancel(programId: number): void {
-        orm()
-            .update(reservationTable)
-            .set({ state: 'canceled', canceled_by: 'user' })
-            .where(eq(reservationTable.program_id, programId))
-            .run();
-    }
+  /** 人が押した取り消し (reservations.cancel と同じ形式) */
+  function cancel(programId: number): void {
+    orm()
+      .update(reservationTable)
+      .set({ state: "canceled", canceled_by: "user" })
+      .where(eq(reservationTable.program_id, programId))
+      .run();
+  }
 
-    test('取り消したあと枝番違いに同じ回が載っても立てない', () => {
-        reset();
-        sub(SERVICE + 1, 'TOKYO MX1');
-        rule(1, '幼女戦記');
-        // 取り消したときは 23609 側にしか載っていなかった
-        on(SERVICE + 1, 11, '幼女戦記Ⅱ #5「貧乏籤」');
-        applyRules();
-        cancel(11);
+  test("取り消したあと枝番違いに同じ回が載っても立てない", () => {
+    reset();
+    sub(SERVICE + 1, "TOKYO MX1");
+    rule(1, "幼女戦記");
+    // 取り消したときは 23609 側にしか載っていなかった
+    on(SERVICE + 1, 11, "幼女戦記Ⅱ #5「貧乏籤」");
+    applyRules();
+    cancel(11);
 
-        // あとから 23608 側にも載った。本線はこちらに移るが、同じ放送なので立てない
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        expect(applyRules()).toMatchObject({ created: 0 });
-        expect(reservations()).toEqual([{ program_id: 11, rule_id: 1, state: 'canceled' }]);
-    });
+    // あとから 23608 側にも載った。本線はこちらに移るが、同じ放送なので立てない
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    expect(applyRules()).toMatchObject({ created: 0 });
+    expect(reservations()).toEqual([
+      { program_id: 11, rule_id: 1, state: "canceled" },
+    ]);
+  });
 
-    test('取り消したあと event_id が変わっても立てない', () => {
-        reset();
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        applyRules();
-        cancel(10);
+  test("取り消したあと event_id が変わっても立てない", () => {
+    reset();
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    applyRules();
+    cancel(10);
 
-        // 局が同じ番組を別の event_id で送り直した。番組表の取り込みは重なる行を消して入れ直す
-        orm().delete(programs).where(eq(programs.id, 10)).run();
-        on(SERVICE, 12, '幼女戦記Ⅱ #5「貧乏籤」');
-        expect(applyRules()).toMatchObject({ created: 0 });
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'canceled' }]);
-    });
+    // 局が同じ番組を別の event_id で送り直した。番組表の取り込みは重なる行を消して入れ直す
+    orm().delete(programs).where(eq(programs.id, 10)).run();
+    on(SERVICE, 12, "幼女戦記Ⅱ #5「貧乏籤」");
+    expect(applyRules()).toMatchObject({ created: 0 });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "canceled" },
+    ]);
+  });
 
-    test('少し繰り下がっただけなら同じ放送', () => {
-        reset();
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        applyRules();
-        cancel(10);
+  test("少し繰り下がっただけなら同じ放送", () => {
+    reset();
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    applyRules();
+    cancel(10);
 
-        orm().delete(programs).where(eq(programs.id, 10)).run();
-        on(SERVICE, 12, '幼女戦記Ⅱ #5「貧乏籤」', 3 * HOUR + 5 * MIN);
-        expect(applyRules()).toMatchObject({ created: 0 });
-    });
+    orm().delete(programs).where(eq(programs.id, 10)).run();
+    on(SERVICE, 12, "幼女戦記Ⅱ #5「貧乏籤」", 3 * HOUR + 5 * MIN);
+    expect(applyRules()).toMatchObject({ created: 0 });
+  });
 
-    test('10 分以上ずれた別の回 (再放送) は立つ', () => {
-        reset();
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        applyRules();
-        cancel(10);
+  test("10 分以上ずれた別の回 (再放送) は立つ", () => {
+    reset();
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    applyRules();
+    cancel(10);
 
-        on(SERVICE, 13, '幼女戦記Ⅱ #5「貧乏籤」', 3 * HOUR + 30 * MIN);
-        expect(applyRules()).toMatchObject({ created: 1 });
-        expect(reservations()).toEqual([
-            { program_id: 10, rule_id: 1, state: 'canceled' },
-            { program_id: 13, rule_id: 1, state: 'scheduled' },
-        ]);
-    });
+    on(SERVICE, 13, "幼女戦記Ⅱ #5「貧乏籤」", 3 * HOUR + 30 * MIN);
+    expect(applyRules()).toMatchObject({ created: 1 });
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "canceled" },
+      { program_id: 13, rule_id: 1, state: "scheduled" },
+    ]);
+  });
 
-    test('手動で立てて取り消した回にも、ルールは立てない', () => {
-        reset();
-        rule(1, '幼女戦記');
-        on(SERVICE, 10, '幼女戦記Ⅱ #5「貧乏籤」');
-        orm()
-            .insert(reservationTable)
-            .values({
-                program_id: 10,
-                rule_id: null,
-                service_id: SERVICE,
-                name: '幼女戦記Ⅱ #5「貧乏籤」',
-                start_at: base + 3 * HOUR,
-                end_at: base + 4 * HOUR,
-                manual: true,
-                state: 'canceled',
-                created_at: now(),
-                updated_at: now(),
-            })
-            .run();
+  test("手動で立てて取り消した回にも、ルールは立てない", () => {
+    reset();
+    rule(1, "幼女戦記");
+    on(SERVICE, 10, "幼女戦記Ⅱ #5「貧乏籤」");
+    orm()
+      .insert(reservationTable)
+      .values({
+        program_id: 10,
+        rule_id: null,
+        service_id: SERVICE,
+        name: "幼女戦記Ⅱ #5「貧乏籤」",
+        start_at: base + 3 * HOUR,
+        end_at: base + 4 * HOUR,
+        manual: true,
+        state: "canceled",
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
 
-        orm().delete(programs).where(eq(programs.id, 10)).run();
-        on(SERVICE, 12, '幼女戦記Ⅱ #5「貧乏籤」');
-        expect(applyRules()).toMatchObject({ created: 0 });
-    });
+    orm().delete(programs).where(eq(programs.id, 10)).run();
+    on(SERVICE, 12, "幼女戦記Ⅱ #5「貧乏籤」");
+    expect(applyRules()).toMatchObject({ created: 0 });
+  });
 
-    test('局ごと消えた取り消しは数えない (戻ったなら録る)', () => {
-        reset();
-        sub(3273801040, 'テレビ愛知', 'T23');
-        rule(1, '幼女戦記');
-        on(3273801040, 20, '幼女戦記Ⅱ #5「貧乏籤」');
-        applyRules();
-        // 局が選局できなくなった。システムが予約を取り消し (epg.clearBelongings)、局の行ごと消す
-        orm()
-            .update(reservationTable)
-            .set({ state: 'canceled', canceled_by: 'system' })
-            .where(eq(reservationTable.program_id, 20))
-            .run();
-        orm().delete(programs).where(eq(programs.id, 20)).run();
-        orm().delete(services).where(eq(services.id, 3273801040)).run();
+  test("局ごと消えた取り消しは数えない (戻ったなら録る)", () => {
+    reset();
+    sub(3273801040, "テレビ愛知", "T23");
+    rule(1, "幼女戦記");
+    on(3273801040, 20, "幼女戦記Ⅱ #5「貧乏籤」");
+    applyRules();
+    // 局が選局できなくなった。システムが予約を取り消し (epg.clearBelongings)、局の行ごと消す
+    orm()
+      .update(reservationTable)
+      .set({ state: "canceled", canceled_by: "system" })
+      .where(eq(reservationTable.program_id, 20))
+      .run();
+    orm().delete(programs).where(eq(programs.id, 20)).run();
+    orm().delete(services).where(eq(services.id, 3273801040)).run();
 
-        // 局が戻ってきた
-        sub(3273801040, 'テレビ愛知', 'T23');
-        on(3273801040, 21, '幼女戦記Ⅱ #5「貧乏籤」');
-        expect(applyRules()).toMatchObject({ created: 1 });
-    });
+    // 局が戻ってきた
+    sub(3273801040, "テレビ愛知", "T23");
+    on(3273801040, 21, "幼女戦記Ⅱ #5「貧乏籤」");
+    expect(applyRules()).toMatchObject({ created: 1 });
+  });
 });
 
 /**
  * **同じ回は最初の放送だけ** (ルールの `dedupe`)。判定そのものは `episode.test.ts` で見ていて、
  * ここではそれが予約にどう効くか (立てない・引っ込める・録ったものを数える) を見る
  */
-describe('同じ回は最初の放送だけ録る', () => {
-    const BS11 = 400211;
-    const DAY = 24 * HOUR;
+describe("同じ回は最初の放送だけ録る", () => {
+  const BS11 = 400211;
+  const DAY = 24 * HOUR;
 
-    function withBs(): void {
-        reset();
-        sub(BS11, 'BS11', 'BS09_0', 'BS');
-    }
+  function withBs(): void {
+    reset();
+    sub(BS11, "BS11", "BS09_0", "BS");
+  }
 
-    test('いちばん早い放送だけ予約し、局を替えた再放送には立てない', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        program(10, '[新]テストアニメ #1「はじまり」');
-        on(BS11, 11, 'テストアニメ #1「はじまり」', DAY);
-        program(12, 'テストアニメ #2「つづき」', 7 * DAY);
+  test("いちばん早い放送だけ予約し、局を替えた再放送には立てない", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    program(10, "[新]テストアニメ #1「はじまり」");
+    on(BS11, 11, "テストアニメ #1「はじまり」", DAY);
+    program(12, "テストアニメ #2「つづき」", 7 * DAY);
 
-        expect(applyRules()).toMatchObject({ created: 2 });
-        expect(reservations().map((r) => r.program_id)).toEqual([10, 12]);
-    });
+    expect(applyRules()).toMatchObject({ created: 2 });
+    expect(reservations().map((r) => r.program_id)).toEqual([10, 12]);
+  });
 
-    test('入れていないルール (列を足す前のもの) は今までどおり全部録る', () => {
-        withBs();
-        rule(1, 'テストアニメ');
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1', DAY);
+  test("入れていないルール (列を足す前のもの) は今までどおり全部録る", () => {
+    withBs();
+    rule(1, "テストアニメ");
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1", DAY);
 
-        applyRules();
-        expect(reservations().map((r) => r.program_id)).toEqual([10, 11]);
-    });
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([10, 11]);
+  });
 
-    test('同じ時刻の同時放送は字幕のある衛星を録る', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1[字]');
+  test("同じ時刻の同時放送は字幕のある衛星を録る", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1[字]");
 
-        applyRules();
-        expect(reservations().map((r) => r.program_id)).toEqual([11]);
-    });
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([11]);
+  });
 
-    test('入れた後は、もう立っている再放送の予約を引っ込める', () => {
-        withBs();
-        rule(1, 'テストアニメ');
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1', DAY);
-        applyRules();
+  test("入れた後は、もう立っている再放送の予約を引っ込める", () => {
+    withBs();
+    rule(1, "テストアニメ");
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1", DAY);
+    applyRules();
 
-        rule(1, 'テストアニメ', true, 1, true);
-        expect(applyRules()).toMatchObject({ dropped: 1 });
-        expect(reservations().map((r) => r.program_id)).toEqual([10]);
-    });
+    rule(1, "テストアニメ", true, 1, true);
+    expect(applyRules()).toMatchObject({ dropped: 1 });
+    expect(reservations().map((r) => r.program_id)).toEqual([10]);
+  });
 
-    test('最初の放送を録ったあと、再放送が繰り上がって録れることはない', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        // 最初の放送はもう終わっていて、録画が残っている
-        orm()
-            .insert(recordings)
-            .values({
-                service_id: SERVICE,
-                service_name: 'TOKYO MX1',
-                name: '[新]テストアニメ #1「はじまり」',
-                start_at: base - DAY,
-                end_at: base - DAY + HOUR,
-                finished_at: base - DAY + HOUR,
-                created_at: now(),
-                updated_at: now(),
-            })
-            .run();
-        on(BS11, 11, 'テストアニメ #1「はじまり」', DAY);
+  test("最初の放送を録ったあと、再放送が繰り上がって録れることはない", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    // 最初の放送はもう終わっていて、録画が残っている
+    orm()
+      .insert(recordings)
+      .values({
+        service_id: SERVICE,
+        service_name: "TOKYO MX1",
+        name: "[新]テストアニメ #1「はじまり」",
+        start_at: base - DAY,
+        end_at: base - DAY + HOUR,
+        finished_at: base - DAY + HOUR,
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+    on(BS11, 11, "テストアニメ #1「はじまり」", DAY);
 
-        expect(applyRules()).toMatchObject({ created: 0 });
-    });
+    expect(applyRules()).toMatchObject({ created: 0 });
+  });
 
-    test('タイトルに話数が無くても、録画の概要の話数で録った回を見つける', () => {
-        withBs();
-        rule(1, '薬屋のひとりごと', true, 1, true);
-        orm()
-            .insert(recordings)
-            .values({
-                service_id: SERVICE,
-                service_name: '日テレ1',
-                name: '薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]',
-                description: '第18話「月下の花」',
-                start_at: base - DAY,
-                end_at: base - DAY + HOUR,
-                finished_at: base - DAY + HOUR,
-                created_at: now(),
-                updated_at: now(),
-            })
-            .run();
-        on(BS11, 11, 'アニメ 薬屋のひとりごと');
-        on(BS11, 12, 'アニメ 薬屋のひとりごと', 7 * DAY);
-        orm().update(programs).set({ description: '#18「月下の花」' }).where(eq(programs.id, 11)).run();
-        orm().update(programs).set({ description: '#19「蝉の声」' }).where(eq(programs.id, 12)).run();
+  test("タイトルに話数が無くても、録画の概要の話数で録った回を見つける", () => {
+    withBs();
+    rule(1, "薬屋のひとりごと", true, 1, true);
+    orm()
+      .insert(recordings)
+      .values({
+        service_id: SERVICE,
+        service_name: "日テレ1",
+        name: "薬屋のひとりごと FRIDAY ANIME NIGHT[字][デ]",
+        description: "第18話「月下の花」",
+        start_at: base - DAY,
+        end_at: base - DAY + HOUR,
+        finished_at: base - DAY + HOUR,
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+    on(BS11, 11, "アニメ 薬屋のひとりごと");
+    on(BS11, 12, "アニメ 薬屋のひとりごと", 7 * DAY);
+    orm()
+      .update(programs)
+      .set({ description: "#18「月下の花」" })
+      .where(eq(programs.id, 11))
+      .run();
+    orm()
+      .update(programs)
+      .set({ description: "#19「蝉の声」" })
+      .where(eq(programs.id, 12))
+      .run();
 
-        applyRules();
-        expect(reservations().map((r) => r.program_id)).toEqual([12]);
-    });
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([12]);
+  });
 
-    test('最初の放送がチューナー不足で弾かれていたら、次の放送も予約する', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1', DAY);
-        applyRules();
-        expect(reservations().map((r) => r.program_id)).toEqual([10]);
+  test("最初の放送がチューナー不足で弾かれていたら、次の放送も予約する", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1", DAY);
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([10]);
 
-        orm()
-            .update(reservationTable)
-            .set({ state: 'conflict' })
-            .where(eq(reservationTable.program_id, 10))
-            .run();
-        applyRules();
-        expect(reservations()).toEqual([
-            { program_id: 10, rule_id: 1, state: 'conflict' },
-            { program_id: 11, rule_id: 1, state: 'scheduled' },
-        ]);
-    });
+    orm()
+      .update(reservationTable)
+      .set({ state: "conflict" })
+      .where(eq(reservationTable.program_id, 10))
+      .run();
+    applyRules();
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "conflict" },
+      { program_id: 11, rule_id: 1, state: "scheduled" },
+    ]);
+  });
 
-    /* コピー禁止の放送は録らない (`format.COPY_NEVER_REASON`)。弾かれたのと同じで、禁止でない次の放送を録る */
-    test('最初の放送がコピー禁止なら、次の放送も予約する', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        program(10, 'テストアニメ #1');
-        orm().update(programs).set({ copy_never: true }).where(eq(programs.id, 10)).run();
-        on(BS11, 11, 'テストアニメ #1', DAY);
+  /* コピー禁止の放送は録らない (`format.COPY_NEVER_REASON`)。弾かれたのと同じで、禁止でない次の放送を録る */
+  test("最初の放送がコピー禁止なら、次の放送も予約する", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    program(10, "テストアニメ #1");
+    orm()
+      .update(programs)
+      .set({ copy_never: true })
+      .where(eq(programs.id, 10))
+      .run();
+    on(BS11, 11, "テストアニメ #1", DAY);
 
-        applyRules();
-        // 禁止の放送にも予約は立つ (「録画しない」と理由を出すため。`scheduler.resolveConflicts`)
-        expect(reservations().map((r) => r.program_id)).toEqual([10, 11]);
-    });
+    applyRules();
+    // 禁止の放送にも予約は立つ (「録画しない」と理由を出すため。`scheduler.resolveConflicts`)
+    expect(reservations().map((r) => r.program_id)).toEqual([10, 11]);
+  });
 
-    test('取り合いが解消したら次の放送は引っ込める。直前 (猶予の内) なら残す', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1', DAY);
-        // #2 は最初の放送も次の放送も直前 (猶予の内)
-        on(BS11, 12, 'テストアニメ #2', 10 * 60 * 1000);
-        on(SERVICE, 13, 'テストアニメ #2', 30 * 60 * 1000);
-        applyRules();
-        expect(reservations().map((r) => r.program_id)).toEqual([10, 12]);
+  test("取り合いが解消したら次の放送は引っ込める。直前 (猶予の内) なら残す", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1", DAY);
+    // #2 は最初の放送も次の放送も直前 (猶予の内)
+    on(BS11, 12, "テストアニメ #2", 10 * 60 * 1000);
+    on(SERVICE, 13, "テストアニメ #2", 30 * 60 * 1000);
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([10, 12]);
 
-        // 最初の放送がどちらも弾かれた → 次の放送も立つ
-        orm().update(reservationTable).set({ state: 'conflict' }).run();
-        applyRules();
-        expect(reservations().map((r) => r.program_id)).toEqual([10, 11, 12, 13]);
+    // 最初の放送がどちらも弾かれた → 次の放送も立つ
+    orm().update(reservationTable).set({ state: "conflict" }).run();
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([10, 11, 12, 13]);
 
-        // 取り合いが解消した。翌日の再放送 (11) は引っ込め、直前の 13 は録っておく
-        orm().update(reservationTable).set({ state: 'scheduled' }).run();
-        expect(applyRules()).toMatchObject({ dropped: 1 });
-        expect(reservations().map((r) => r.program_id)).toEqual([10, 12, 13]);
-    });
+    // 取り合いが解消した。翌日の再放送 (11) は引っ込め、直前の 13 は録っておく
+    orm().update(reservationTable).set({ state: "scheduled" }).run();
+    expect(applyRules()).toMatchObject({ dropped: 1 });
+    expect(reservations().map((r) => r.program_id)).toEqual([10, 12, 13]);
+  });
 
-    test('外した再放送でも、入れていない別のルールが当たっていればそちらで録る', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        rule(2, 'テストアニメ');
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1', DAY);
+  test("外した再放送でも、入れていない別のルールが当たっていればそちらで録る", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    rule(2, "テストアニメ");
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1", DAY);
 
-        applyRules();
-        expect(reservations()).toEqual([
-            { program_id: 10, rule_id: 1, state: 'scheduled' },
-            { program_id: 11, rule_id: 2, state: 'scheduled' },
-        ]);
-    });
+    applyRules();
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "scheduled" },
+      { program_id: 11, rule_id: 2, state: "scheduled" },
+    ]);
+  });
 
-    test('最初の放送を入れていないルールが持っていても、再放送は録らない', () => {
-        withBs();
-        // 最初の放送 (10) は先に当たるルール 1 (入れていない。MX だけ) が持つ。再放送 (11) にはルール 2 だけが当たる
-        rule(1, 'テストアニメ');
-        orm()
-            .update(ruleTable)
-            .set({ service_ids: [SERVICE] })
-            .where(eq(ruleTable.id, 1))
-            .run();
-        rule(2, 'テストアニメ', true, 1, true);
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1', DAY);
+  test("最初の放送を入れていないルールが持っていても、再放送は録らない", () => {
+    withBs();
+    // 最初の放送 (10) は先に当たるルール 1 (入れていない。MX だけ) が持つ。再放送 (11) にはルール 2 だけが当たる
+    rule(1, "テストアニメ");
+    orm()
+      .update(ruleTable)
+      .set({ service_ids: [SERVICE] })
+      .where(eq(ruleTable.id, 1))
+      .run();
+    rule(2, "テストアニメ", true, 1, true);
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1", DAY);
 
-        applyRules();
-        expect(reservations()).toEqual([{ program_id: 10, rule_id: 1, state: 'scheduled' }]);
-    });
+    applyRules();
+    expect(reservations()).toEqual([
+      { program_id: 10, rule_id: 1, state: "scheduled" },
+    ]);
+  });
 
-    /** 下見に渡す形式 (ルール画面の `readPreview` と同じ列) */
-    function hit(id: number, serviceId: number, type: string, channel: string) {
-        const row = orm().select().from(programs).where(eq(programs.id, id)).get()!;
-        return { ...row, service_type: type, service_channel: channel, service_name: String(serviceId) };
-    }
+  /** 下見に渡す形式 (ルール画面の `readPreview` と同じ列) */
+  function hit(id: number, serviceId: number, type: string, channel: string) {
+    const row = orm().select().from(programs).where(eq(programs.id, id)).get()!;
+    return {
+      ...row,
+      service_type: type,
+      service_channel: channel,
+      service_name: String(serviceId),
+    };
+  }
 
-    test('下見: 人が取り消した放送は最初の放送に選ばず、次の放送を録ると出す', () => {
-        withBs();
-        rule(1, 'テストアニメ', true, 1, true);
-        program(10, 'テストアニメ #1');
-        on(BS11, 11, 'テストアニメ #1', DAY);
-        applyRules();
-        orm()
-            .update(reservationTable)
-            .set({ state: 'canceled', canceled_by: 'user' })
-            .where(eq(reservationTable.program_id, 10))
-            .run();
-        applyRules();
-        expect(reservations().map((r) => [r.program_id, r.state])).toEqual([
-            [10, 'canceled'],
-            [11, 'scheduled'],
-        ]);
+  test("下見: 人が取り消した放送は最初の放送に選ばず、次の放送を録ると出す", () => {
+    withBs();
+    rule(1, "テストアニメ", true, 1, true);
+    program(10, "テストアニメ #1");
+    on(BS11, 11, "テストアニメ #1", DAY);
+    applyRules();
+    orm()
+      .update(reservationTable)
+      .set({ state: "canceled", canceled_by: "user" })
+      .where(eq(reservationTable.program_id, 10))
+      .run();
+    applyRules();
+    expect(reservations().map((r) => [r.program_id, r.state])).toEqual([
+      [10, "canceled"],
+      [11, "scheduled"],
+    ]);
 
-        const skips = previewSkips([hit(10, SERVICE, 'GR', 'T16'), hit(11, BS11, 'BS', 'BS09_0')], now());
-        expect(skips.has(11)).toBe(false);
-    });
+    const skips = previewSkips(
+      [hit(10, SERVICE, "GR", "T16"), hit(11, BS11, "BS", "BS09_0")],
+      now(),
+    );
+    expect(skips.has(11)).toBe(false);
+  });
 
-    test('下見: 手動と猶予の内の予約は引っ込めないので「録らない」と言わない', () => {
-        const at = now();
-        const later = at + config.ruleRetractGrace + HOUR;
-        expect(keepsReservation({ manual: false, start_at: later }, at)).toBe(false);
-        expect(keepsReservation({ manual: true, start_at: later }, at)).toBe(true);
-        expect(keepsReservation({ manual: false, start_at: at + 10 * 60 * 1000 }, at)).toBe(true);
-    });
+  test("下見: 手動と猶予の内の予約は引っ込めないので「録らない」と言わない", () => {
+    const at = now();
+    const later = at + config.ruleRetractGrace + HOUR;
+    expect(keepsReservation({ manual: false, start_at: later }, at)).toBe(
+      false,
+    );
+    expect(keepsReservation({ manual: true, start_at: later }, at)).toBe(true);
+    expect(
+      keepsReservation({ manual: false, start_at: at + 10 * 60 * 1000 }, at),
+    ).toBe(true);
+  });
 });

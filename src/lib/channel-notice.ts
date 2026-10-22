@@ -8,16 +8,16 @@
  * アンテナが衛星だけの家では消えない案内になっていた。種別ごとの空きは番組表が表の場所で言う
  * (`guide/+page.svelte` の `typeEmpty`)
  */
-export type ChannelNotice = 'all';
+export type ChannelNotice = "all";
 
 /** いま選局できる局の数 (種別ごと。`server/epg.ts` の `serviceCounts`) */
 export type ServiceCounts = Record<string, number>;
 
 export function channelNotice(counts: ServiceCounts): ChannelNotice | null {
-    const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
-    return total === 0 ? 'all' : null;
+  const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  return total === 0 ? "all" : null;
 }
 
 export const CHANNEL_NOTICE_TEXT: Record<ChannelNotice, string> = {
-    all: 'チャンネルがありません。チャンネルスキャンをしてください',
+  all: "チャンネルがありません。チャンネルスキャンをしてください",
 };

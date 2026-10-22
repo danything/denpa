@@ -15,93 +15,101 @@
  * (`vite.config.ts` の `?inject`) 差し込みの後ろに入れる
  */
 
-import type { Cell } from '../bml/binary';
-import { clipEuc } from '../bml/euc';
-import { Nvram, type ReceiverInfo, type Who } from '../bml/nvram';
+import type { Cell } from "../bml/binary";
+import { clipEuc } from "../bml/euc";
+import { Nvram, type ReceiverInfo, type Who } from "../bml/nvram";
 
 export interface CompatInit {
-    /** データ放送の Greg (64 本) */
-    greg: string[];
-    /** NVRAM の置き場の中身 (起動した局から見える分。鍵は `Nvram` のもの) */
-    nvram: Record<string, string>;
-    receiver: ReceiverInfo;
-    /** 起動した局 */
-    who: Who;
+  /** データ放送の Greg (64 本) */
+  greg: string[];
+  /** NVRAM の置き場の中身 (起動した局から見える分。鍵は `Nvram` のもの) */
+  nvram: Record<string, string>;
+  receiver: ReceiverInfo;
+  /** 起動した局 */
+  who: Who;
 }
 
 /** 親へ知らせるもの (`FrameMessage` の `greg`・`nvram`・`close`) */
 export type CompatPost = (message: Record<string, unknown>) => void;
 
 export function bmlCompat(
-    init: CompatInit,
-    post: CompatPost,
+  init: CompatInit,
+  post: CompatPost,
 ): { bmlCompat: unknown; applicationManager: unknown } {
-    const greg = init.greg.slice(0, 64);
-    while (greg.length < 64) greg.push('');
-    const gregs = new Proxy(greg, {
-        set: (target, key, value) => {
-            const index = typeof key === 'string' ? Number(key) : Number.NaN;
-            if (!Number.isInteger(index) || index < 0 || index >= 64) return true;
-            target[index] = clipEuc(String(value), 256);
-            post({ type: 'greg', index, value: target[index] });
-            return true;
+  const greg = init.greg.slice(0, 64);
+  while (greg.length < 64) greg.push("");
+  const gregs = new Proxy(greg, {
+    set: (target, key, value) => {
+      const index = typeof key === "string" ? Number(key) : Number.NaN;
+      if (!Number.isInteger(index) || index < 0 || index >= 64) return true;
+      target[index] = clipEuc(String(value), 256);
+      post({ type: "greg", index, value: target[index] });
+      return true;
+    },
+  });
+  const kept = { ...init.nvram };
+  const nvram = new Nvram(
+    {
+      get: (key) => (Object.hasOwn(kept, key) ? kept[key]! : null),
+      set: (key, value) => {
+        kept[key] = value;
+        post({ type: "nvram", key, value });
+      },
+    },
+    () => init.receiver,
+    () => init.who,
+    (message) => post({ type: "log", message }),
+  );
+  const cells = (values: unknown): Cell[] =>
+    Array.isArray(values)
+      ? values.map((v) =>
+          typeof v === "boolean" || typeof v === "number" ? v : String(v),
+        )
+      : [];
+  return {
+    bmlCompat: {
+      browserPseudo: {
+        Greg: gregs,
+        readPersistentArray: (uri: unknown, structure: unknown) => {
+          const values = nvram.read(String(uri), String(structure));
+          return values === null
+            ? null
+            : values.map((v) => (typeof v === "object" ? null : v));
         },
-    });
-    const kept = { ...init.nvram };
-    const nvram = new Nvram(
-        {
-            get: (key) => (Object.hasOwn(kept, key) ? kept[key]! : null),
-            set: (key, value) => {
-                kept[key] = value;
-                post({ type: 'nvram', key, value });
-            },
-        },
-        () => init.receiver,
-        () => init.who,
-        (message) => post({ type: 'log', message }),
-    );
-    const cells = (values: unknown): Cell[] =>
-        Array.isArray(values)
-            ? values.map((v) => (typeof v === 'boolean' || typeof v === 'number' ? v : String(v)))
-            : [];
-    return {
-        bmlCompat: {
-            browserPseudo: {
-                Greg: gregs,
-                readPersistentArray: (uri: unknown, structure: unknown) => {
-                    const values = nvram.read(String(uri), String(structure));
-                    return values === null ? null : values.map((v) => (typeof v === 'object' ? null : v));
-                },
-                writePersistentArray: (uri: unknown, structure: unknown, values: unknown) =>
-                    nvram.write(String(uri), String(structure), cells(values)),
-                checkAccessInfoOfPersistentArray: (uri: unknown) => nvram.check(String(uri)),
-            },
-        },
-        applicationManager: {
-            // 戻る先の部品 (component_tag) は選べない。いま出ているデータ放送へ戻る
-            launchDataBroadcastingBrowser: () => post({ type: 'close' }),
-        },
-    };
+        writePersistentArray: (
+          uri: unknown,
+          structure: unknown,
+          values: unknown,
+        ) => nvram.write(String(uri), String(structure), cells(values)),
+        checkAccessInfoOfPersistentArray: (uri: unknown) =>
+          nvram.check(String(uri)),
+      },
+    },
+    applicationManager: {
+      // 戻る先の部品 (component_tag) は選べない。いま出ているデータ放送へ戻る
+      launchDataBroadcastingBrowser: () => post({ type: "close" }),
+    },
+  };
 }
 
 /** 差し込み (`shim.ts`) が `__hcCompat` に置いたものを読んで、navigator に置く */
 function install(): void {
-    // oxlint-disable-next-line typescript/no-explicit-any -- アプリの文書の中で動く (型の無い世界)
-    const w = globalThis as any;
-    const init = w.__hcCompat as CompatInit | undefined;
-    if (init === undefined || w.navigator === undefined) return;
-    delete w.__hcCompat;
-    const made = bmlCompat(init, (message) => {
-        message['hc'] = 1;
-        w.parent.postMessage(message, '*');
-    });
-    for (const [name, value] of Object.entries(made)) {
-        try {
-            Object.defineProperty(w.navigator, name, { value, configurable: true });
-        } catch {
-            // 置けなければ無いまま
-        }
+  // oxlint-disable-next-line typescript/no-explicit-any -- アプリの文書の中で動く (型の無い世界)
+  const w = globalThis as any;
+  const init = w.__hcCompat as CompatInit | undefined;
+  if (init === undefined || w.navigator === undefined) return;
+  delete w.__hcCompat;
+  const made = bmlCompat(init, (message) => {
+    message["hc"] = 1;
+    w.parent.postMessage(message, "*");
+  });
+  for (const [name, value] of Object.entries(made)) {
+    try {
+      Object.defineProperty(w.navigator, name, { value, configurable: true });
+    } catch {
+      // 置けなければ無いまま
     }
+  }
 }
 
 install();

@@ -15,58 +15,62 @@
  */
 
 export interface BudgetLimits {
-    /** 1 つの仕事で握ってよい長さ (ms) */
-    slice: number;
-    /** 暴れているかを見る区間 (ms) */
-    window: number;
-    /** 区間のうち、動いていてよい割合 */
-    ratio: number;
+  /** 1 つの仕事で握ってよい長さ (ms) */
+  slice: number;
+  /** 暴れているかを見る区間 (ms) */
+  window: number;
+  /** 区間のうち、動いていてよい割合 */
+  ratio: number;
 }
 
-export const DEFAULT_BUDGET: BudgetLimits = { slice: 5, window: 10_000, ratio: 0.4 };
+export const DEFAULT_BUDGET: BudgetLimits = {
+  slice: 5,
+  window: 10_000,
+  ratio: 0.4,
+};
 
 export class Budget {
-    readonly limits: BudgetLimits;
-    /** 今の仕事の始まり。次のタスクで null に戻す */
-    private turn: number | null = null;
-    private windowStart = performance.now();
-    private windowBusy = 0;
+  readonly limits: BudgetLimits;
+  /** 今の仕事の始まり。次のタスクで null に戻す */
+  private turn: number | null = null;
+  private windowStart = performance.now();
+  private windowBusy = 0;
 
-    constructor(limits: Partial<BudgetLimits> = {}) {
-        this.limits = { ...DEFAULT_BUDGET, ...limits };
-    }
+  constructor(limits: Partial<BudgetLimits> = {}) {
+    this.limits = { ...DEFAULT_BUDGET, ...limits };
+  }
 
-    /** 今の仕事の締め切り (`performance.now()` の値) */
-    deadline(): number {
-        if (this.turn === null) {
-            const start = performance.now();
-            this.turn = start;
-            // ここに来るのは今のタスクとマイクロタスクが全部終わってから
-            setTimeout(() => {
-                if (this.turn === start) this.turn = null;
-            }, 0);
-        }
-        return this.turn + this.limits.slice;
+  /** 今の仕事の締め切り (`performance.now()` の値) */
+  deadline(): number {
+    if (this.turn === null) {
+      const start = performance.now();
+      this.turn = start;
+      // ここに来るのは今のタスクとマイクロタスクが全部終わってから
+      setTimeout(() => {
+        if (this.turn === start) this.turn = null;
+      }, 0);
     }
+    return this.turn + this.limits.slice;
+  }
 
-    /** 今の仕事の区切りを使い切ったか */
-    spent(): boolean {
-        return performance.now() >= this.deadline();
-    }
+  /** 今の仕事の区切りを使い切ったか */
+  spent(): boolean {
+    return performance.now() >= this.deadline();
+  }
 
-    /**
-     * 動いた時間を足す。区間が終わっていれば締めて、動きすぎていたら true (文書を止める)
-     *
-     * @param ms 動いた長さ
-     */
-    account(ms: number): boolean {
-        this.windowBusy += ms;
-        const now = performance.now();
-        const elapsed = now - this.windowStart;
-        if (elapsed < this.limits.window) return false;
-        const busy = this.windowBusy / elapsed;
-        this.windowStart = now;
-        this.windowBusy = 0;
-        return busy > this.limits.ratio;
-    }
+  /**
+   * 動いた時間を足す。区間が終わっていれば締めて、動きすぎていたら true (文書を止める)
+   *
+   * @param ms 動いた長さ
+   */
+  account(ms: number): boolean {
+    this.windowBusy += ms;
+    const now = performance.now();
+    const elapsed = now - this.windowStart;
+    if (elapsed < this.limits.window) return false;
+    const busy = this.windowBusy / elapsed;
+    this.windowStart = now;
+    this.windowBusy = 0;
+    return busy > this.limits.ratio;
+  }
 }

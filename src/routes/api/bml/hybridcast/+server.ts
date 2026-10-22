@@ -14,23 +14,23 @@
  * 双方向を切ってあれば 403 (Hybridcast も起動しない)。
  */
 
-import { requireBmlNetwork } from '#lib/server/bml-network.js';
-import type { RequestHandler } from './$types';
+import { requireBmlNetwork } from "#lib/server/bml-network.js";
+import type { RequestHandler } from "./$types";
 
 const CSP = [
-    'sandbox allow-scripts',
-    "default-src 'none'",
-    "script-src * data: blob: 'unsafe-inline' 'unsafe-eval'",
-    "style-src * data: blob: 'unsafe-inline'",
-    'img-src * data: blob:',
-    'font-src * data: blob:',
-    'media-src * data: blob:',
-    "connect-src 'none'",
-    "frame-src 'none'",
-    "worker-src 'none'",
-    "object-src 'none'",
-    "form-action 'none'",
-].join('; ');
+  "sandbox allow-scripts",
+  "default-src 'none'",
+  "script-src * data: blob: 'unsafe-inline' 'unsafe-eval'",
+  "style-src * data: blob: 'unsafe-inline'",
+  "img-src * data: blob:",
+  "font-src * data: blob:",
+  "media-src * data: blob:",
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "worker-src 'none'",
+  "object-src 'none'",
+  "form-action 'none'",
+].join("; ");
 
 /** 画面から HTML を受け取って開く。受け取るのは親 (denpa の画面) からだけ */
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body><script>
@@ -45,14 +45,14 @@ parent.postMessage({ hc: 1, type: 'ready' }, '*');
 </script></body></html>`;
 
 export const GET: RequestHandler = () => {
-    requireBmlNetwork();
-    return new Response(PAGE, {
-        headers: {
-            'content-type': 'text/html; charset=utf-8',
-            'content-security-policy': CSP,
-            'cache-control': 'no-store',
-            'referrer-policy': 'no-referrer',
-            'x-content-type-options': 'nosniff',
-        },
-    });
+  requireBmlNetwork();
+  return new Response(PAGE, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": CSP,
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+    },
+  });
 };

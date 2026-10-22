@@ -23,24 +23,24 @@
  * DOM も時計も触らないので、ここだけ単体で確かめられる。
  */
 
-import type { ResponseMessage } from './bml-protocol';
-import { Carousel } from './carousel';
+import type { ResponseMessage } from "./bml-protocol";
+import { Carousel } from "./carousel";
 
 export interface TimedMessage {
-    /**
-     * 放送の実時刻 (TDT/TOT 由来, unix ms)。**頭で時計を見る前のものは null。**
-     *
-     * TDT は数秒おきにしか来ないので、間のメッセージは「最後に見た時刻」を負う。
-     * データ放送は秒単位で変わるものなので、この粒度で足りる
-     */
-    at: number | null;
-    message: ResponseMessage;
+  /**
+   * 放送の実時刻 (TDT/TOT 由来, unix ms)。**頭で時計を見る前のものは null。**
+   *
+   * TDT は数秒おきにしか来ないので、間のメッセージは「最後に見た時刻」を負う。
+   * データ放送は秒単位で変わるものなので、この粒度で足りる
+   */
+  at: number | null;
+  message: ResponseMessage;
 }
 
 /** CM を実カットした録画で残した区間 (秒)。off/chapter のときは切らないので null */
 export interface KeptRange {
-    start: number;
-    end: number;
+  start: number;
+  end: number;
 }
 
 /**
@@ -58,26 +58,26 @@ export interface KeptRange {
  * そのまま比例する。
  */
 export function playbackMsAt(
-    atUnixMs: number,
-    anchorUnixMs: number,
-    keep: readonly KeptRange[] | null,
+  atUnixMs: number,
+  anchorUnixMs: number,
+  keep: readonly KeptRange[] | null,
 ): number {
-    const tsSeconds = (atUnixMs - anchorUnixMs) / 1000;
-    if (tsSeconds <= 0) return 0;
-    if (keep === null) return Math.round(tsSeconds * 1000);
-    let kept = 0;
-    for (const range of keep) {
-        if (tsSeconds <= range.start) break;
-        kept += Math.min(tsSeconds, range.end) - range.start;
-    }
-    return Math.round(kept * 1000);
+  const tsSeconds = (atUnixMs - anchorUnixMs) / 1000;
+  if (tsSeconds <= 0) return 0;
+  if (keep === null) return Math.round(tsSeconds * 1000);
+  let kept = 0;
+  for (const range of keep) {
+    if (tsSeconds <= range.start) break;
+    kept += Math.min(tsSeconds, range.end) - range.start;
+  }
+  return Math.round(kept * 1000);
 }
 
 /** 再生位置 (ms) を負ったメッセージ。サイドカーに書くのはこの形式 */
 export interface PlacedMessage {
-    /** 動画の再生位置 (ms)。頭の準備 (`at === null`) は 0 に寄せる */
-    at: number;
-    message: ResponseMessage;
+  /** 動画の再生位置 (ms)。頭の準備 (`at === null`) は 0 に寄せる */
+  at: number;
+  message: ResponseMessage;
 }
 
 /**
@@ -87,22 +87,22 @@ export interface PlacedMessage {
  * 再生側は `video.currentTime` と比べるだけでよく、基準も CM も知らずに済む。
  */
 export function toPlaybackTimeline(
-    timeline: readonly TimedMessage[],
-    anchorUnixMs: number,
-    keep: readonly KeptRange[] | null,
+  timeline: readonly TimedMessage[],
+  anchorUnixMs: number,
+  keep: readonly KeptRange[] | null,
 ): PlacedMessage[] {
-    return timeline.map((item) => ({
-        at: item.at === null ? 0 : playbackMsAt(item.at, anchorUnixMs, keep),
-        message: item.message,
-    }));
+  return timeline.map((item) => ({
+    at: item.at === null ? 0 : playbackMsAt(item.at, anchorUnixMs, keep),
+    message: item.message,
+  }));
 }
 
 /** 再生駆動が「次に何をするか」。`reset` なら入れ物を作り直してから `messages` を流す */
 export interface Feed {
-    /** 入れ物を作り直すか。**戻ったとき** (先に出した画面を捨てて積み直す) だけ true */
-    reset: boolean;
-    /** エンジン (`Bml.feed`) に順に流すもの */
-    messages: ResponseMessage[];
+  /** 入れ物を作り直すか。**戻ったとき** (先に出した画面を捨てて積み直す) だけ true */
+  reset: boolean;
+  /** エンジン (`Bml.feed`) に順に流すもの */
+  messages: ResponseMessage[];
 }
 
 /**
@@ -115,16 +115,20 @@ export interface Feed {
  *
  * `fromMs` に負の値 (まだ一度も流していない) を渡せば、頭から `toMs` まで積む。
  */
-export function feedFor(timeline: readonly PlacedMessage[], fromMs: number, toMs: number): Feed {
-    // 戻った (シークで巻き戻し)。先に出した画面を捨てて、頭から積み直す
-    if (toMs < fromMs) return { reset: true, messages: replayAt(timeline, toMs) };
-    // 進んだ。その間に配られた変化だけ足す (入れ物はそのまま)
-    const messages: ResponseMessage[] = [];
-    for (const item of timeline) {
-        if (item.at > toMs) break;
-        if (item.at > fromMs) messages.push(item.message);
-    }
-    return { reset: false, messages };
+export function feedFor(
+  timeline: readonly PlacedMessage[],
+  fromMs: number,
+  toMs: number,
+): Feed {
+  // 戻った (シークで巻き戻し)。先に出した画面を捨てて、頭から積み直す
+  if (toMs < fromMs) return { reset: true, messages: replayAt(timeline, toMs) };
+  // 進んだ。その間に配られた変化だけ足す (入れ物はそのまま)
+  const messages: ResponseMessage[] = [];
+  for (const item of timeline) {
+    if (item.at > toMs) break;
+    if (item.at > fromMs) messages.push(item.message);
+  }
+  return { reset: false, messages };
 }
 
 /**
@@ -141,13 +145,16 @@ export function feedFor(timeline: readonly PlacedMessage[], fromMs: number, toMs
  * @param timeline `captureDataBroadcast` の出力、または `toPlaybackTimeline` で写したもの
  * @param at その時刻 (放送の実時刻 unix ms / 再生位置 ms) までに配られたものを積む
  */
-export function replayAt(timeline: readonly TimedMessage[], at: number): ResponseMessage[] {
-    const carousel = new Carousel();
-    for (const item of timeline) {
-        // 時計を見る前のもの (at === null) は頭の準備なので常に含める。
-        // 実時刻が付いていて、それが越えていたら、そこから先はまだ配られていない
-        if (item.at !== null && item.at > at) break;
-        carousel.take(item.message);
-    }
-    return carousel.replay();
+export function replayAt(
+  timeline: readonly TimedMessage[],
+  at: number,
+): ResponseMessage[] {
+  const carousel = new Carousel();
+  for (const item of timeline) {
+    // 時計を見る前のもの (at === null) は頭の準備なので常に含める。
+    // 実時刻が付いていて、それが越えていたら、そこから先はまだ配られていない
+    if (item.at !== null && item.at > at) break;
+    carousel.take(item.message);
+  }
+  return carousel.replay();
 }

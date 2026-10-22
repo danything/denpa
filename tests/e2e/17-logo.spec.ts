@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { emptyOrientation, encodeModel } from '../../src/lib/ts/logo-detect';
-import { BS_NO_LOGO, BS11, FUJI, MX } from '../fake/services';
-import { expect, goto, syncEpg, test } from './helpers';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { emptyOrientation, encodeModel } from "../../src/lib/ts/logo-detect";
+import { BS_NO_LOGO, BS11, FUJI, MX } from "../fake/services";
+import { expect, goto, syncEpg, test } from "./helpers";
 
 /**
  * 局ロゴ。
@@ -14,120 +14,146 @@ import { expect, goto, syncEpg, test } from './helpers';
  * 実機では BS をサービス単位で3分・427MB 読んでも1つも来なかった。
  * 偽エージェントも同じようにしてある (ロゴを載せるのはチャンネル丸ごとのエンドポイントだけ)。
  */
-test.describe('局ロゴ', () => {
-    /**
-     * 画面から取得すると、地上波も衛星もまとめて回る。地上波は中継ごとに
-     * 入っている局が違うので、チューナー2つで並べて回る。
+test.describe("局ロゴ", () => {
+  /**
+   * 画面から取得すると、地上波も衛星もまとめて回る。地上波は中継ごとに
+   * 入っている局が違うので、チューナー2つで並べて回る。
+   */
+  test("地上波を2チャンネル並べて取得し、番組表に出る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(120_000);
+    await syncEpg(request);
+
+    // 先に走ったテストで取得できていることがあるので、一度捨てる
+    for (const service of [MX, FUJI]) {
+      rmSync(`${stack.root}/logos/${service.id}.png`, { force: true });
+    }
+    // 持っていなければ配れない
+    expect((await request.get(`/api/services/${MX.id}/logo`)).status()).toBe(
+      404,
+    );
+
+    /*
+     * **CS の局が入ってから押す。** CS はスキャンしなくても標準の表から入る (`channel-seed.ts`) が、
+     * 入るのは起動のあと。入る前に押すと衛星は BS の2中継だけで終わり、入ったあとだと
+     * BS の外れの中継を閉じた直後に CS の空きを訊く。閉じたことがエージェントに届く前なので
+     * 空きが0に見え、CS を諦めていた (CI で時々落ち、やり直すと通っていた)。
+     * どちらになるかを起動からの時間に任せず、いつも後者で確かめる
      */
-    test('地上波を2チャンネル並べて取得し、番組表に出る', async ({ page, request, stack }) => {
-        test.setTimeout(120_000);
-        await syncEpg(request);
+    await expect
+      .poll(async () => {
+        const list = (await (await request.get("/api/services")).json()) as {
+          type: string;
+        }[];
+        return list.some((service) => service.type === "CS");
+      })
+      .toBe(true);
 
-        // 先に走ったテストで取得できていることがあるので、一度捨てる
-        for (const service of [MX, FUJI]) {
-            rmSync(`${stack.root}/logos/${service.id}.png`, { force: true });
-        }
-        // 持っていなければ配れない
-        expect((await request.get(`/api/services/${MX.id}/logo`)).status()).toBe(404);
+    // 普段は10分ごとに少しずつ取得している。押すと今すぐ取得する
+    await goto(page, "/settings/reception");
+    await page.getByTestId("logo-sweep").click();
 
+    /*
+     * **空いている地上波チューナーの数だけ並べる。** 種別を見ずに
+     * 「1台でも空いていれば」で数えていた頃は、地上波が1台しか空いて
+     * いなくても2チャンネルを同時に開きに行っていた
+     */
+    await expect(page.getByTestId("tuner-notice")).toContainText(
+      "チューナー 2 台",
+    );
+
+    /*
+     * 押しても何も起きていないように見えないこと。1チャンネルに数分かかるので、
+     * どこまで進んだかを出さないと動いているのか失敗したのか区別が付かない
+     */
+    await expect(page.getByTestId("logo-sweep-progress")).toBeVisible();
+
+    for (const service of [MX, FUJI]) {
+      await expect(async () => {
+        const logo = await request.get(`/api/services/${service.id}/logo`);
+        expect(logo.status()).toBe(200);
+        expect(logo.headers()["content-type"]).toContain("image/png");
         /*
-         * **CS の局が入ってから押す。** CS はスキャンしなくても標準の表から入る (`channel-seed.ts`) が、
-         * 入るのは起動のあと。入る前に押すと衛星は BS の2中継だけで終わり、入ったあとだと
-         * BS の外れの中継を閉じた直後に CS の空きを訊く。閉じたことがエージェントに届く前なので
-         * 空きが0に見え、CS を諦めていた (CI で時々落ち、やり直すと通っていた)。
-         * どちらになるかを起動からの時間に任せず、いつも後者で確かめる
+         * 色の表を入れ直してあること。放送に乗るのはパレットの抜けた PNG で、
+         * そのまま置くとブラウザは何も描かない。実機では15局ぶん取得できているのに
+         * 番組表が空のままだった
          */
-        await expect
-            .poll(async () => {
-                const list = (await (await request.get('/api/services')).json()) as { type: string }[];
-                return list.some((service) => service.type === 'CS');
-            })
-            .toBe(true);
-
-        // 普段は10分ごとに少しずつ取得している。押すと今すぐ取得する
-        await goto(page, '/settings/reception');
-        await page.getByTestId('logo-sweep').click();
-
+        const bytes = await logo.body();
+        expect(bytes.includes(Buffer.from("PLTE"))).toBeTruthy();
+        expect(bytes.includes(Buffer.from("tRNS"))).toBeTruthy();
         /*
-         * **空いている地上波チューナーの数だけ並べる。** 種別を見ずに
-         * 「1台でも空いていれば」で数えていた頃は、地上波が1台しか空いて
-         * いなくても2チャンネルを同時に開きに行っていた
+         * **残るのは大きいほう (64x36)。** 偽の放送は小さいもの (48x24) を先に流す。
+         * 最初に来た1つで閉じていた頃は、実機の地上波26局が小さいロゴのままで、
+         * 番組表に並ぶと局ごとに大きさが違って見えた
          */
-        await expect(page.getByTestId('tuner-notice')).toContainText('チューナー 2 台');
+        expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([
+          64, 36,
+        ]);
+      }).toPass({ timeout: 60_000 });
+    }
 
-        /*
-         * 押しても何も起きていないように見えないこと。1チャンネルに数分かかるので、
-         * どこまで進んだかを出さないと動いているのか失敗したのか区別が付かない
-         */
-        await expect(page.getByTestId('logo-sweep-progress')).toBeVisible();
+    /*
+     * 見終えて、結果が残っていること。
+     *
+     * 地上波が揃ってもまだ終わりではない。同じ一回で衛星の中継も回っていて、
+     * そちらは**最後に取得してからしばらく待って**から切り上げる (カルーセルは
+     * まとまって来るので、来なくなったことが分かるまで開けておく)
+     */
+    await expect(async () => {
+      await goto(page, "/settings/reception");
+      await expect(page.getByTestId("logo-sweep-done")).toContainText(
+        "ロゴを取得しました",
+      );
+    }).toPass({ timeout: 60_000 });
 
-        for (const service of [MX, FUJI]) {
-            await expect(async () => {
-                const logo = await request.get(`/api/services/${service.id}/logo`);
-                expect(logo.status()).toBe(200);
-                expect(logo.headers()['content-type']).toContain('image/png');
-                /*
-                 * 色の表を入れ直してあること。放送に乗るのはパレットの抜けた PNG で、
-                 * そのまま置くとブラウザは何も描かない。実機では15局ぶん取得できているのに
-                 * 番組表が空のままだった
-                 */
-                const bytes = await logo.body();
-                expect(bytes.includes(Buffer.from('PLTE'))).toBeTruthy();
-                expect(bytes.includes(Buffer.from('tRNS'))).toBeTruthy();
-                /*
-                 * **残るのは大きいほう (64x36)。** 偽の放送は小さいもの (48x24) を先に流す。
-                 * 最初に来た1つで閉じていた頃は、実機の地上波26局が小さいロゴのままで、
-                 * 番組表に並ぶと局ごとに大きさが違って見えた
-                 */
-                expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([64, 36]);
-            }).toPass({ timeout: 60_000 });
-        }
+    // 何局ぶん持っているかもここに出す。番組表にロゴが出ないとき、
+    // まだ取得できていないのか出し方が悪いのかを見分けるため
+    await expect(page.getByTestId("status-logos")).toContainText("局");
+    // 局ごとの表にも出る (局ごとに確かめられる)
+    const row = page.locator(
+      `[data-testid="channel-row"][data-service-id="${MX.id}"]`,
+    );
+    await expect(row).toHaveAttribute("data-logo", "have");
+    await expect(
+      row.getByTestId("logo-zoom-station").locator("img"),
+    ).toBeVisible();
 
-        /*
-         * 見終えて、結果が残っていること。
-         *
-         * 地上波が揃ってもまだ終わりではない。同じ一回で衛星の中継も回っていて、
-         * そちらは**最後に取得してからしばらく待って**から切り上げる (カルーセルは
-         * まとまって来るので、来なくなったことが分かるまで開けておく)
-         */
-        await expect(async () => {
-            await goto(page, '/settings/reception');
-            await expect(page.getByTestId('logo-sweep-done')).toContainText('ロゴを取得しました');
-        }).toPass({ timeout: 60_000 });
+    // 押すと大きく見られる。画素をぼかさずに整数倍で、× で閉じる
+    await row
+      .getByRole("button", { name: `${MX.name} のロゴを大きく見る` })
+      .click();
+    const zoom = page.getByTestId("logo-zoom");
+    await expect(zoom).toBeVisible();
+    await expect(zoom).toContainText(MX.name);
+    await expect(zoom).toContainText("局ロゴ");
+    const large = zoom.getByTestId("logo-zoom-image");
+    await expect
+      .poll(() => large.evaluate((img: HTMLImageElement) => img.naturalWidth))
+      .toBe(64);
+    await expect
+      .poll(async () => (await large.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(64 * 4);
+    await zoom.getByTestId("logo-zoom-close").click();
+    await expect(zoom).toBeHidden();
 
-        // 何局ぶん持っているかもここに出す。番組表にロゴが出ないとき、
-        // まだ取得できていないのか出し方が悪いのかを見分けるため
-        await expect(page.getByTestId('status-logos')).toContainText('局');
-        // 局ごとの表にも出る (局ごとに確かめられる)
-        const row = page.locator(`[data-testid="channel-row"][data-service-id="${MX.id}"]`);
-        await expect(row).toHaveAttribute('data-logo', 'have');
-        await expect(row.getByTestId('logo-zoom-station').locator('img')).toBeVisible();
+    /*
+     * 取得するものが無くなったら**ボタンも消える**。押しても「もう全部持って
+     * います」と断るだけのボタンを出しておく意味がない。
+     *
+     * ここで消えるのは、衛星ぶんも同じ一回で取得できているから。地上波と衛星は
+     * 伝送方式が違うだけで、開けば両方流れてくる
+     */
+    await expect(page.getByTestId("logo-sweep")).toHaveCount(0);
 
-        // 押すと大きく見られる。画素をぼかさずに整数倍で、× で閉じる
-        await row.getByRole('button', { name: `${MX.name} のロゴを大きく見る` }).click();
-        const zoom = page.getByTestId('logo-zoom');
-        await expect(zoom).toBeVisible();
-        await expect(zoom).toContainText(MX.name);
-        await expect(zoom).toContainText('局ロゴ');
-        const large = zoom.getByTestId('logo-zoom-image');
-        await expect.poll(() => large.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(64);
-        await expect.poll(async () => (await large.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(64 * 4);
-        await zoom.getByTestId('logo-zoom-close').click();
-        await expect(zoom).toBeHidden();
-
-        /*
-         * 取得するものが無くなったら**ボタンも消える**。押しても「もう全部持って
-         * います」と断るだけのボタンを出しておく意味がない。
-         *
-         * ここで消えるのは、衛星ぶんも同じ一回で取得できているから。地上波と衛星は
-         * 伝送方式が違うだけで、開けば両方流れてくる
-         */
-        await expect(page.getByTestId('logo-sweep')).toHaveCount(0);
-
-        // 番組表の見出しにも出る (局名の行はサーバで描くので、src は相対 `./api/...`)
-        await goto(page, '/guide?type=GR');
-        await expect(page.locator(`img[src$="api/services/${MX.id}/logo"]`).first()).toBeVisible();
-    });
+    // 番組表の見出しにも出る (局名の行はサーバで描くので、src は相対 `./api/...`)
+    await goto(page, "/guide?type=GR");
+    await expect(
+      page.locator(`img[src$="api/services/${MX.id}/logo"]`).first(),
+    ).toBeVisible();
+  });
 });
 
 /**
@@ -140,73 +166,85 @@ test.describe('局ロゴ', () => {
  * 読めていなかった頃は、実機で BS を26中継・CS を12中継ぶん開いても
  * 0/38・0/54 のままだった (地上波は12中継で 29/29 揃う)。
  */
-test.describe('衛星の局ロゴ', () => {
-    test('データカルーセルから取得して番組表に出る', async ({ page, request, stack }) => {
-        test.setTimeout(120_000);
-        await syncEpg(request);
+test.describe("衛星の局ロゴ", () => {
+  test("データカルーセルから取得して番組表に出る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(120_000);
+    await syncEpg(request);
 
-        rmSync(`${stack.root}/logos/${BS11.id}.png`, { force: true });
+    rmSync(`${stack.root}/logos/${BS11.id}.png`, { force: true });
 
-        await goto(page, '/settings/reception');
-        /*
-         * **番組表を集めるだけでも取得できることがある。** 衛星のチャンネルも
-         * 開くので、そこにカルーセルが流れていれば只で埋まる。押すボタンが
-         * 出ていなければ、もう取得できているということ
-         */
-        const sweep = page.getByTestId('logo-sweep');
-        if ((await sweep.count()) > 0) await sweep.click();
-
-        await expect(async () => {
-            const logo = await request.get(`/api/services/${BS11.id}/logo`);
-            expect(logo.status()).toBe(200);
-            expect(logo.headers()['content-type']).toContain('image/png');
-        }).toPass({ timeout: 60_000 });
-
-        await goto(page, '/guide?type=BS');
-        await expect(page.locator(`img[src$="api/services/${BS11.id}/logo"]`).first()).toBeVisible();
-    });
-
-    /**
-     * カルーセルに載っていない局を**見切ること**。
-     *
-     * 外れの中継 (エンジニアリングサービスがいない) は PAT を見た時点で分かるので
-     * 数秒で次へ行く。当たりの中継を読み切ってもなお埋まらない局は、そもそも
-     * カルーセルに載っていない局なので、そこで諦める。
-     *
-     * 見切れないと、その局はいつまでも「まだ取れていない」ままになり、
-     * 取得のボタンが消えず、定期チェックのたびに中継を開き直すことになる。
-     *
-     * **中継の当たり外れで数えてはいけない。** CS の中継にはロゴが無いが、
-     * CS のロゴは BS の中継から降ってくる。中継で数えていた頃は、取れる
-     * CS の54局をまとめて「取れません」と出していた。
+    await goto(page, "/settings/reception");
+    /*
+     * **番組表を集めるだけでも取得できることがある。** 衛星のチャンネルも
+     * 開くので、そこにカルーセルが流れていれば只で埋まる。押すボタンが
+     * 出ていなければ、もう取得できているということ
      */
-    test('カルーセルに載っていない局は見切って、取れない局として数える', async ({ page, request, stack }) => {
-        test.setTimeout(120_000);
-        await syncEpg(request);
+    const sweep = page.getByTestId("logo-sweep");
+    if ((await sweep.count()) > 0) await sweep.click();
 
-        rmSync(`${stack.root}/logos/${BS_NO_LOGO.id}.png`, { force: true });
+    await expect(async () => {
+      const logo = await request.get(`/api/services/${BS11.id}/logo`);
+      expect(logo.status()).toBe(200);
+      expect(logo.headers()["content-type"]).toContain("image/png");
+    }).toPass({ timeout: 60_000 });
 
-        await goto(page, '/settings/reception');
-        // 既に見切ったあとならボタンは出ていない。出ていれば押して確かめる
-        const sweep = page.getByTestId('logo-sweep');
-        if ((await sweep.count()) > 0) await sweep.click();
+    await goto(page, "/guide?type=BS");
+    await expect(
+      page.locator(`img[src$="api/services/${BS11.id}/logo"]`).first(),
+    ).toBeVisible();
+  });
 
-        /*
-         * 取得するところが無くなる = 外れの中継を覚えた、ということ。
-         * 覚えられていないと `missing()` に残り続けてボタンが消えない
-         */
-        await expect(async () => {
-            await goto(page, '/settings/reception');
-            await expect(page.getByTestId('logo-sweep')).toHaveCount(0);
-        }).toPass({ timeout: 90_000 });
+  /**
+   * カルーセルに載っていない局を**見切ること**。
+   *
+   * 外れの中継 (エンジニアリングサービスがいない) は PAT を見た時点で分かるので
+   * 数秒で次へ行く。当たりの中継を読み切ってもなお埋まらない局は、そもそも
+   * カルーセルに載っていない局なので、そこで諦める。
+   *
+   * 見切れないと、その局はいつまでも「まだ取れていない」ままになり、
+   * 取得のボタンが消えず、定期チェックのたびに中継を開き直すことになる。
+   *
+   * **中継の当たり外れで数えてはいけない。** CS の中継にはロゴが無いが、
+   * CS のロゴは BS の中継から降ってくる。中継で数えていた頃は、取れる
+   * CS の54局をまとめて「取れません」と出していた。
+   */
+  test("カルーセルに載っていない局は見切って、取れない局として数える", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(120_000);
+    await syncEpg(request);
 
-        // 取れない局は取れないと書く。黙って足りないままだと不具合と区別が付かない
-        await expect(page.getByTestId('status-logos')).toContainText('局');
-        await expect(page.getByTestId('logo-unavailable')).toContainText(
-            'ロゴが放送に載っていないため取れません',
-        );
-        expect((await request.get(`/api/services/${BS_NO_LOGO.id}/logo`)).status()).toBe(404);
-    });
+    rmSync(`${stack.root}/logos/${BS_NO_LOGO.id}.png`, { force: true });
+
+    await goto(page, "/settings/reception");
+    // 既に見切ったあとならボタンは出ていない。出ていれば押して確かめる
+    const sweep = page.getByTestId("logo-sweep");
+    if ((await sweep.count()) > 0) await sweep.click();
+
+    /*
+     * 取得するところが無くなる = 外れの中継を覚えた、ということ。
+     * 覚えられていないと `missing()` に残り続けてボタンが消えない
+     */
+    await expect(async () => {
+      await goto(page, "/settings/reception");
+      await expect(page.getByTestId("logo-sweep")).toHaveCount(0);
+    }).toPass({ timeout: 90_000 });
+
+    // 取れない局は取れないと書く。黙って足りないままだと不具合と区別が付かない
+    await expect(page.getByTestId("status-logos")).toContainText("局");
+    await expect(page.getByTestId("logo-unavailable")).toContainText(
+      "ロゴが放送に載っていないため取れません",
+    );
+    expect(
+      (await request.get(`/api/services/${BS_NO_LOGO.id}/logo`)).status(),
+    ).toBe(404);
+  });
 });
 /**
  * CM検出のために覚えたロゴ (受信できるチャンネルの表の「CMロゴ」の列)。**番組表に出す局ロゴとは別物。**
@@ -215,107 +253,131 @@ test.describe('衛星の局ロゴ', () => {
  * 本物と同じ形式で置いておく (`logo-detect.encodeModel`)。見るのは、覚えた局の行に
  * 画像が開かずに出ていること、押すと大きく見られ、窓の中の「覚え直す」で消すと済んだ色で知らせること
  */
-test.describe('CM検出のロゴ', () => {
-    test('覚えた局の行に画像を出し、「覚え直す」で消すと済んだ通知で出る', async ({
-        page,
-        request,
-        stack,
-    }) => {
-        await syncEpg(request);
+test.describe("CM検出のロゴ", () => {
+  test("覚えた局の行に画像を出し、「覚え直す」で消すと済んだ通知で出る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await syncEpg(request);
 
-        // 縁が一筋だけ揃っている 40×20 の枠
-        const orientation = emptyOrientation(40, 20);
-        orientation.count = 10;
-        for (let x = 0; x < 40; x++) orientation.sx[10 * 40 + x] = 10;
-        const repo = `${stack.root}/logos/cm/${BS11.id}`;
-        mkdirSync(repo, { recursive: true });
-        writeFileSync(
-            `${repo}/own-logo-1440x1080.bin`,
-            encodeModel({
-                frameWidth: 1440,
-                frameHeight: 1080,
-                rect: { x: 1300, y: 40, width: 40, height: 20 },
-                orientation,
-            }),
-        );
+    // 縁が一筋だけ揃っている 40×20 の枠
+    const orientation = emptyOrientation(40, 20);
+    orientation.count = 10;
+    for (let x = 0; x < 40; x++) orientation.sx[10 * 40 + x] = 10;
+    const repo = `${stack.root}/logos/cm/${BS11.id}`;
+    mkdirSync(repo, { recursive: true });
+    writeFileSync(
+      `${repo}/own-logo-1440x1080.bin`,
+      encodeModel({
+        frameWidth: 1440,
+        frameHeight: 1080,
+        rect: { x: 1300, y: 40, width: 40, height: 20 },
+        orientation,
+      }),
+    );
 
-        const image = await request.get(`/api/services/${BS11.id}/logo-data`);
-        expect(image.status()).toBe(200);
-        expect(image.headers()['content-type']).toContain('image/png');
+    const image = await request.get(`/api/services/${BS11.id}/logo-data`);
+    expect(image.status()).toBe(200);
+    expect(image.headers()["content-type"]).toContain("image/png");
 
-        await goto(page, '/settings/reception');
-        // 数の行に「CMロゴ n / m 局」
-        await expect(page.getByTestId('status-cm-logos')).toContainText('局');
-        // 局ごとの表の、その局の行に出る。開け閉めは無い
-        const station = page.locator(`[data-testid="channel-row"][data-service-id="${BS11.id}"]`);
-        const thumb = station.getByTestId('logo-zoom-cm');
-        await expect(thumb).toBeVisible();
-        // 画像として読めていること (壊れた PNG だと幅が 0 になる)
-        await expect
-            .poll(() => thumb.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth))
-            .toBe(40);
-        // 列の見出しが「CMロゴ」なので、セルの中では名乗らない。「覚え直す」は窓の中だけ (行を低く保つ)
-        const cmCell = station.locator('td.logo-col').nth(1);
-        await expect(cmCell).toHaveText('');
-        await expect(station.getByRole('button', { name: '覚え直す' })).toHaveCount(0);
-        // 覚えていない局には何も出さない (「まだ」とも書かない)
-        const other = page.locator(`[data-testid="channel-row"][data-service-id="${MX.id}"]`);
-        await expect(other.getByTestId('logo-zoom-cm')).toHaveCount(0);
-        await expect(other.locator('td.logo-col').nth(1)).toHaveText('');
+    await goto(page, "/settings/reception");
+    // 数の行に「CMロゴ n / m 局」
+    await expect(page.getByTestId("status-cm-logos")).toContainText("局");
+    // 局ごとの表の、その局の行に出る。開け閉めは無い
+    const station = page.locator(
+      `[data-testid="channel-row"][data-service-id="${BS11.id}"]`,
+    );
+    const thumb = station.getByTestId("logo-zoom-cm");
+    await expect(thumb).toBeVisible();
+    // 画像として読めていること (壊れた PNG だと幅が 0 になる)
+    await expect
+      .poll(() =>
+        thumb
+          .locator("img")
+          .evaluate((img: HTMLImageElement) => img.naturalWidth),
+      )
+      .toBe(40);
+    // 列の見出しが「CMロゴ」なので、セルの中では名乗らない。「覚え直す」は窓の中だけ (行を低く保つ)
+    const cmCell = station.locator("td.logo-col").nth(1);
+    await expect(cmCell).toHaveText("");
+    await expect(station.getByRole("button", { name: "覚え直す" })).toHaveCount(
+      0,
+    );
+    // 覚えていない局には何も出さない (「まだ」とも書かない)
+    const other = page.locator(
+      `[data-testid="channel-row"][data-service-id="${MX.id}"]`,
+    );
+    await expect(other.getByTestId("logo-zoom-cm")).toHaveCount(0);
+    await expect(other.locator("td.logo-col").nth(1)).toHaveText("");
 
-        /*
-         * **狭い幅ではロゴの列をたたみ、局名の前に出す。** 列のまま 6 つ並べると、表が横にはみ出す。
-         * 押せば同じ窓が開く
-         */
-        const viewport = page.viewportSize();
-        await page.setViewportSize({ width: 390, height: 844 });
-        await expect(station.locator('td.logo-col').first()).toBeHidden();
-        const inline = station.getByRole('button', { name: `${BS11.name} のCMロゴを大きく見る` });
-        await expect(inline).toBeVisible();
-        const wrap = page
-            .getByTestId('channel-list')
-            .locator('xpath=ancestor::div[contains(@class, "table-wrap")]');
-        await expect
-            .poll(() => wrap.evaluate((element) => element.scrollWidth - element.clientWidth))
-            .toBeLessThanOrEqual(1);
-        await inline.click();
-        await expect(page.getByTestId('logo-zoom')).toBeVisible();
-        await page.keyboard.press('Escape');
-        await expect(page.getByTestId('logo-zoom')).toBeHidden();
-        if (viewport !== null) await page.setViewportSize(viewport);
-
-        /*
-         * 押すと大きく見られる。白い縁だけの画像なので、暗い地に画素をぼかさず整数倍で。
-         * Esc でも、幕を押しても閉じる
-         */
-        const zoom = page.getByTestId('logo-zoom');
-        await station.getByRole('button', { name: `${BS11.name} のCMロゴを大きく見る` }).click();
-        await expect(zoom).toBeVisible();
-        await expect(zoom).toContainText(BS11.name);
-        await expect(zoom).toContainText('CMロゴ');
-        await expect(zoom.getByTestId('logo-zoom-learned')).toContainText('に覚えました');
-        const large = zoom.getByRole('img', { name: `${BS11.name} のCM検出のロゴ` });
-        await expect(large).toHaveCSS('image-rendering', 'pixelated');
-        await expect.poll(async () => (await large.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(40 * 8);
-        await page.keyboard.press('Escape');
-        await expect(zoom).toBeHidden();
-
-        await thumb.click();
-        await expect(zoom).toBeVisible();
-        await page.mouse.click(5, 5);
-        await expect(zoom).toBeHidden();
-
-        // 窓の中の「覚え直す」。消えたら窓も閉じる
-        await thumb.click();
-        await zoom.getByRole('button', { name: '覚え直す' }).click();
-        await expect(zoom).toBeHidden();
-
-        const done = page.getByTestId('tuner-done');
-        await expect(done).toContainText('覚えたロゴを消しました');
-        await expect(done).toHaveClass(/\bsuccess\b/);
-        await expect(page.getByTestId('tuner-error')).toHaveCount(0);
-        await expect(station.getByTestId('logo-zoom-cm')).toHaveCount(0);
-        expect(existsSync(repo)).toBe(false);
-        expect((await request.get(`/api/services/${BS11.id}/logo-data`)).status()).toBe(404);
+    /*
+     * **狭い幅ではロゴの列をたたみ、局名の前に出す。** 列のまま 6 つ並べると、表が横にはみ出す。
+     * 押せば同じ窓が開く
+     */
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(station.locator("td.logo-col").first()).toBeHidden();
+    const inline = station.getByRole("button", {
+      name: `${BS11.name} のCMロゴを大きく見る`,
     });
+    await expect(inline).toBeVisible();
+    const wrap = page
+      .getByTestId("channel-list")
+      .locator('xpath=ancestor::div[contains(@class, "table-wrap")]');
+    await expect
+      .poll(() =>
+        wrap.evaluate((element) => element.scrollWidth - element.clientWidth),
+      )
+      .toBeLessThanOrEqual(1);
+    await inline.click();
+    await expect(page.getByTestId("logo-zoom")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("logo-zoom")).toBeHidden();
+    if (viewport !== null) await page.setViewportSize(viewport);
+
+    /*
+     * 押すと大きく見られる。白い縁だけの画像なので、暗い地に画素をぼかさず整数倍で。
+     * Esc でも、幕を押しても閉じる
+     */
+    const zoom = page.getByTestId("logo-zoom");
+    await station
+      .getByRole("button", { name: `${BS11.name} のCMロゴを大きく見る` })
+      .click();
+    await expect(zoom).toBeVisible();
+    await expect(zoom).toContainText(BS11.name);
+    await expect(zoom).toContainText("CMロゴ");
+    await expect(zoom.getByTestId("logo-zoom-learned")).toContainText(
+      "に覚えました",
+    );
+    const large = zoom.getByRole("img", {
+      name: `${BS11.name} のCM検出のロゴ`,
+    });
+    await expect(large).toHaveCSS("image-rendering", "pixelated");
+    await expect
+      .poll(async () => (await large.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(40 * 8);
+    await page.keyboard.press("Escape");
+    await expect(zoom).toBeHidden();
+
+    await thumb.click();
+    await expect(zoom).toBeVisible();
+    await page.mouse.click(5, 5);
+    await expect(zoom).toBeHidden();
+
+    // 窓の中の「覚え直す」。消えたら窓も閉じる
+    await thumb.click();
+    await zoom.getByRole("button", { name: "覚え直す" }).click();
+    await expect(zoom).toBeHidden();
+
+    const done = page.getByTestId("tuner-done");
+    await expect(done).toContainText("覚えたロゴを消しました");
+    await expect(done).toHaveClass(/\bsuccess\b/);
+    await expect(page.getByTestId("tuner-error")).toHaveCount(0);
+    await expect(station.getByTestId("logo-zoom-cm")).toHaveCount(0);
+    expect(existsSync(repo)).toBe(false);
+    expect(
+      (await request.get(`/api/services/${BS11.id}/logo-data`)).status(),
+    ).toBe(404);
+  });
 });

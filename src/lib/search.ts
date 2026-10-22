@@ -5,21 +5,23 @@
  * 詳細まで広げると出演者でも当たる(出演者は詳細にしか入っていない)。
  */
 
-export const SEARCH_FIELDS = ['name', 'description', 'extended'] as const;
+export const SEARCH_FIELDS = ["name", "description", "extended"] as const;
 export type SearchField = (typeof SEARCH_FIELDS)[number];
 
 /** 当てる範囲のチップの字 (ルールとして保存) */
 export const SEARCH_FIELD_LABEL: Record<SearchField, string> = {
-    name: '番組名',
-    description: '概要',
-    extended: '詳細',
+  name: "番組名",
+  description: "概要",
+  extended: "詳細",
 };
 
 /** カンマ区切りを読む。全部外れているルールは全番組に当たるので番組名だけに戻す */
-export function parseSearchFields(value: string | null | undefined): SearchField[] {
-    const wanted = String(value ?? '')
-        .split(',')
-        .map((part) => part.trim());
-    const fields = SEARCH_FIELDS.filter((field) => wanted.includes(field));
-    return fields.length === 0 ? ['name'] : fields;
+export function parseSearchFields(
+  value: string | null | undefined,
+): SearchField[] {
+  const wanted = String(value ?? "")
+    .split(",")
+    .map((part) => part.trim());
+  const fields = SEARCH_FIELDS.filter((field) => wanted.includes(field));
+  return fields.length === 0 ? ["name"] : fields;
 }

@@ -1,6 +1,6 @@
-import { untrack } from 'svelte';
-import { read, write } from '#lib/keep.js';
-import { BACKGROUND_KEY, step, storedBackground } from './background';
+import { untrack } from "svelte";
+import { read, write } from "#lib/keep.js";
+import { BACKGROUND_KEY, step, storedBackground } from "./background";
 
 /**
  * バックグラウンド再生。**3画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオフ。**
@@ -27,76 +27,82 @@ import { BACKGROUND_KEY, step, storedBackground } from './background';
  * 聴きたいが、居間のテレビでは要らない、のように端末で変わる
  */
 interface Options {
-    /** 押して開いた小窓を出しているか (`pip.active`) */
-    pip: () => boolean;
-    /** 止めているか */
-    paused: () => boolean;
-    /** 裏に回ったので止める */
-    pause: () => void;
-    /** 戻ってきたので再開する */
-    resume: () => void;
+  /** 押して開いた小窓を出しているか (`pip.active`) */
+  pip: () => boolean;
+  /** 止めているか */
+  paused: () => boolean;
+  /** 裏に回ったので止める */
+  pause: () => void;
+  /** 戻ってきたので再開する */
+  resume: () => void;
 }
 
 export interface Background {
-    /** オンにしているか */
-    readonly on: boolean;
-    toggle: () => void;
+  /** オンにしているか */
+  readonly on: boolean;
+  toggle: () => void;
 }
 
 export function backgroundPlayback(options: Options): Background {
-    /** 開いた端末で決まる。サーバで組むときは無いので、開いてから読む */
-    let on = $state(false);
-    /** こちらが止めたか。戻ってきたときに再開するのはこれだけ */
-    let held = false;
-    /** `pagehide` のあと。`visibilityState` がまだ `visible` のまま来ることがある */
-    let gone = false;
+  /** 開いた端末で決まる。サーバで組むときは無いので、開いてから読む */
+  let on = $state(false);
+  /** こちらが止めたか。戻ってきたときに再開するのはこれだけ */
+  let held = false;
+  /** `pagehide` のあと。`visibilityState` がまだ `visible` のまま来ることがある */
+  let gone = false;
 
-    $effect(() => {
-        on = storedBackground(read(BACKGROUND_KEY));
+  $effect(() => {
+    on = storedBackground(read(BACKGROUND_KEY));
+  });
+
+  function check(): void {
+    const hidden = gone || document.visibilityState === "hidden";
+    const act = step({
+      allowed: on,
+      hidden,
+      pip: options.pip(),
+      paused: options.paused(),
+      held,
     });
+    if (!hidden) held = false;
+    if (act === "pause") {
+      held = true;
+      options.pause();
+    } else if (act === "resume") options.resume();
+  }
 
-    function check(): void {
-        const hidden = gone || document.visibilityState === 'hidden';
-        const act = step({ allowed: on, hidden, pip: options.pip(), paused: options.paused(), held });
-        if (!hidden) held = false;
-        if (act === 'pause') {
-            held = true;
-            options.pause();
-        } else if (act === 'resume') options.resume();
-    }
-
-    $effect(() => {
-        const hide = () => {
-            gone = true;
-            check();
-        };
-        const show = () => {
-            gone = false;
-            check();
-        };
-        document.addEventListener('visibilitychange', check);
-        window.addEventListener('pagehide', hide);
-        window.addEventListener('pageshow', show);
-        return () => {
-            document.removeEventListener('visibilitychange', check);
-            window.removeEventListener('pagehide', hide);
-            window.removeEventListener('pageshow', show);
-        };
-    });
-
-    // 小窓を閉じた時点でまだ裏なら、そこで止める
-    $effect(() => {
-        options.pip();
-        untrack(check);
-    });
-
-    return {
-        get on() {
-            return on;
-        },
-        toggle() {
-            on = !on;
-            write(BACKGROUND_KEY, on ? '1' : '0');
-        },
+  $effect(() => {
+    const hide = () => {
+      gone = true;
+      check();
     };
+    const show = () => {
+      gone = false;
+      check();
+    };
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener("pageshow", show);
+    };
+  });
+
+  // 小窓を閉じた時点でまだ裏なら、そこで止める
+  $effect(() => {
+    options.pip();
+    untrack(check);
+  });
+
+  return {
+    get on() {
+      return on;
+    },
+    toggle() {
+      on = !on;
+      write(BACKGROUND_KEY, on ? "1" : "0");
+    },
+  };
 }

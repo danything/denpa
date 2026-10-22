@@ -1,163 +1,166 @@
 <script lang="ts" module>
-    export interface Notice {
-        /** どの通知か。テストの目印も兼ねる (`data-testid`) */
-        key: string;
-        /** 見た目。error だけは自分では消えない */
-        kind: 'error' | 'info' | 'success';
-        text: string;
-    }
+  export interface Notice {
+    /** どの通知か。テストの目印も兼ねる (`data-testid`) */
+    key: string;
+    /** 見た目。error だけは自分では消えない */
+    kind: "error" | "info" | "success";
+    text: string;
+  }
 
-    /**
-     * `form?.message` (fail の言葉) をトーストの形に。無ければ空。
-     * どの画面も同じ1行を書いていたので、綴りをここにまとめた。
-     * スプレッドでも `push(...)` でもそのまま混ぜられるよう、配列で返す
-     */
-    export function errorNotice(form: unknown, key: string): Notice[] {
-        if (form === null || typeof form !== 'object' || !('message' in form)) return [];
-        const { message } = form as { message: unknown };
-        if (typeof message !== 'string' || message === '') return [];
-        return [{ key, kind: 'error', text: message }];
-    }
+  /**
+   * `form?.message` (fail の言葉) をトーストの形に。無ければ空。
+   * どの画面も同じ1行を書いていたので、綴りをここにまとめた。
+   * スプレッドでも `push(...)` でもそのまま混ぜられるよう、配列で返す
+   */
+  export function errorNotice(form: unknown, key: string): Notice[] {
+    if (form === null || typeof form !== "object" || !("message" in form))
+      return [];
+    const { message } = form as { message: unknown };
+    if (typeof message !== "string" || message === "") return [];
+    return [{ key, kind: "error", text: message }];
+  }
 </script>
 
 <script lang="ts">
-    import { untrack } from 'svelte';
-    import X from '~icons/lucide/x';
-    import Icon from './player/Icon.svelte';
+  import { untrack } from "svelte";
+  import X from "~icons/lucide/x";
+  import Icon from "./player/Icon.svelte";
 
+  /**
+   * 操作の結果を画面の右下に浮かせて出す。
+   *
+   * **本文の上に差し込まない。** 一覧の上に置くと、通知が出た分だけ表が下へずれ、
+   * 画面からはみ出して外側にスクロールバーが生えていた。読み終わって消えると
+   * 今度は逆に飛び上がる。浮かせておけば、下の内容は動かない。
+   *
+   * 出す場所を1箇所に決めておくのは、画面ごとに違う場所へ出ていると
+   * 「どこを見れば結果が分かるのか」が覚えられないため。
+   *
+   * **ここに出すのは「押した結果」だけ。** 「スキャンに失敗しました」のような
+   * *状態*は、そのカードの中に出したままにする (浮かせて消してしまうと、
+   * あとから画面を開いた人には何も見えない)。
+   */
+  let {
+    notices,
+    source,
+    ondismiss,
+  }: {
+    notices: Notice[];
     /**
-     * 操作の結果を画面の右下に浮かせて出す。
+     * この通知の出どころ (たいてい `form`)。**同一性だけ見る。**
      *
-     * **本文の上に差し込まない。** 一覧の上に置くと、通知が出た分だけ表が下へずれ、
-     * 画面からはみ出して外側にスクロールバーが生えていた。読み終わって消えると
-     * 今度は逆に飛び上がる。浮かせておけば、下の内容は動かない。
-     *
-     * 出す場所を1箇所に決めておくのは、画面ごとに違う場所へ出ていると
-     * 「どこを見れば結果が分かるのか」が覚えられないため。
-     *
-     * **ここに出すのは「押した結果」だけ。** 「スキャンに失敗しました」のような
-     * *状態*は、そのカードの中に出したままにする (浮かせて消してしまうと、
-     * あとから画面を開いた人には何も見えない)。
+     * 同じ操作を2回した結果は文面まで同じになるので、文面で見分けると
+     * 「一度閉じたらもう二度と出ない」ことになる。SvelteKit は返事が来るたびに
+     * 新しい `form` を渡してくるので、それが変わったら閉じたことは忘れる
      */
-    let {
-        notices,
-        source,
-        ondismiss,
-    }: {
-        notices: Notice[];
-        /**
-         * この通知の出どころ (たいてい `form`)。**同一性だけ見る。**
-         *
-         * 同じ操作を2回した結果は文面まで同じになるので、文面で見分けると
-         * 「一度閉じたらもう二度と出ない」ことになる。SvelteKit は返事が来るたびに
-         * 新しい `form` を渡してくるので、それが変わったら閉じたことは忘れる
-         */
-        source?: unknown;
-        /**
-         * 閉じた (自分で消えた) ことを持ち主に返す。
-         *
-         * `form` から作る通知は `source` が変わればそれ自身も作り直されるが、
-         * 画面が自分で持っている通知 (端末に保存した) は
-         * そのまま残る。閉じたことを忘れるたびに**それまで一緒に蘇っていた**。
-         * 持ち主がここで捨てれば、出し直すものが無い
-         */
-        ondismiss?: (key: string) => void;
-    } = $props();
+    source?: unknown;
+    /**
+     * 閉じた (自分で消えた) ことを持ち主に返す。
+     *
+     * `form` から作る通知は `source` が変わればそれ自身も作り直されるが、
+     * 画面が自分で持っている通知 (端末に保存した) は
+     * そのまま残る。閉じたことを忘れるたびに**それまで一緒に蘇っていた**。
+     * 持ち主がここで捨てれば、出し直すものが無い
+     */
+    ondismiss?: (key: string) => void;
+  } = $props();
 
-    /** 自分で消える時間。読み切れるだけ出したら引っ込める */
-    const AUTO_HIDE = 6000;
+  /** 自分で消える時間。読み切れるだけ出したら引っ込める */
+  const AUTO_HIDE = 6000;
 
-    /** 閉じられた通知。key で覚える */
-    let dismissed = $state<string[]>([]);
+  /** 閉じられた通知。key で覚える */
+  let dismissed = $state<string[]>([]);
 
-    // 新しい返事が来たら、閉じたことは忘れて出し直す
-    $effect(() => {
-        void source;
-        dismissed = [];
-    });
+  // 新しい返事が来たら、閉じたことは忘れて出し直す
+  $effect(() => {
+    void source;
+    dismissed = [];
+  });
 
-    /** 中身が変わったときだけ数え直す (親が描き直すたびに countdown を戻さない) */
-    const ids = $derived(notices.map((notice) => notice.key).join('\n'));
-    $effect(() => {
-        void ids;
-        const timers = untrack(() => notices)
-            // 失敗は自分では消さない。読み終わる前に消えると、何が起きたのか分からなくなる
-            .filter((notice) => notice.kind !== 'error')
-            .map((notice) => setTimeout(() => dismiss(notice.key), AUTO_HIDE));
-        return () => {
-            for (const timer of timers) clearTimeout(timer);
-        };
-    });
+  /** 中身が変わったときだけ数え直す (親が描き直すたびに countdown を戻さない) */
+  const ids = $derived(notices.map((notice) => notice.key).join("\n"));
+  $effect(() => {
+    void ids;
+    const timers = untrack(() => notices)
+      // 失敗は自分では消さない。読み終わる前に消えると、何が起きたのか分からなくなる
+      .filter((notice) => notice.kind !== "error")
+      .map((notice) => setTimeout(() => dismiss(notice.key), AUTO_HIDE));
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  });
 
-    // 無くなった通知の閉じた印は捨てる。同じ key で次に来るものは別の通知
-    $effect(() => {
-        const alive = new Set(notices.map((notice) => notice.key));
-        const kept = untrack(() => dismissed).filter((key) => alive.has(key));
-        if (kept.length !== untrack(() => dismissed).length) dismissed = kept;
-    });
+  // 無くなった通知の閉じた印は捨てる。同じ key で次に来るものは別の通知
+  $effect(() => {
+    const alive = new Set(notices.map((notice) => notice.key));
+    const kept = untrack(() => dismissed).filter((key) => alive.has(key));
+    if (kept.length !== untrack(() => dismissed).length) dismissed = kept;
+  });
 
-    function dismiss(key: string): void {
-        if (dismissed.includes(key)) return;
-        dismissed = [...dismissed, key];
-        ondismiss?.(key);
-    }
+  function dismiss(key: string): void {
+    if (dismissed.includes(key)) return;
+    dismissed = [...dismissed, key];
+    ondismiss?.(key);
+  }
 
-    const shown = $derived(notices.filter((notice) => !dismissed.includes(notice.key)));
+  const shown = $derived(
+    notices.filter((notice) => !dismissed.includes(notice.key)),
+  );
 </script>
 
 {#if shown.length > 0}
-    <!-- 右下に浮かせる。z-index はモーダル(60)の下・本文の上 -->
-    <div class="toasts">
-        {#each shown as notice (notice.key)}
-            <!-- 見た目は app.css の notice (error / info / success。kind と同じ名前) -->
-            <div class="notice {notice.kind} toast" data-testid={notice.key}>
-                <span class="text">{notice.text}</span>
-                <button
-                    type="button"
-                    class="ghost xs close"
-                    onclick={() => dismiss(notice.key)}
-                    aria-label="閉じる"
-                    data-testid="{notice.key}-close"
-                >
-                    <Icon icon={X} size="size-4.5" />
-                </button>
-            </div>
-        {/each}
-    </div>
+  <!-- 右下に浮かせる。z-index はモーダル(60)の下・本文の上 -->
+  <div class="toasts">
+    {#each shown as notice (notice.key)}
+      <!-- 見た目は app.css の notice (error / info / success。kind と同じ名前) -->
+      <div class="notice {notice.kind} toast" data-testid={notice.key}>
+        <span class="text">{notice.text}</span>
+        <button
+          type="button"
+          class="ghost xs close"
+          onclick={() => dismiss(notice.key)}
+          aria-label="閉じる"
+          data-testid="{notice.key}-close"
+        >
+          <Icon icon={X} size="size-4.5" />
+        </button>
+      </div>
+    {/each}
+  </div>
 {/if}
 
 <style>
-    .toasts {
-        position: fixed;
-        right: 1rem;
-        bottom: calc(1rem + var(--dp-tabbar, 0px));
-        z-index: 50;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 0.5rem;
-        max-width: min(28rem, calc(100vw - 2rem));
-    }
-    .toast {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        /*
+  .toasts {
+    position: fixed;
+    right: 1rem;
+    bottom: calc(1rem + var(--dp-tabbar, 0px));
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+    max-width: min(28rem, calc(100vw - 2rem));
+  }
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    /*
          * 枠は左以外の3辺だけ。左は種類の色の線 (app.css の .notice)。`border` 1行で書くと
          * 左の線ごと上書きして、どの通知も同じ灰色の枠になっていた
          */
-        border-top: 1px solid var(--dp-line);
-        border-right: 1px solid var(--dp-line);
-        border-bottom: 1px solid var(--dp-line);
-        box-shadow: var(--dp-shadow-pop);
-    }
-    .text {
-        white-space: pre-wrap;
-    }
-    .close {
-        flex: none;
-        display: inline-flex;
-        align-items: center;
-        border-radius: var(--dp-radius-full);
-    }
+    border-top: 1px solid var(--dp-line);
+    border-right: 1px solid var(--dp-line);
+    border-bottom: 1px solid var(--dp-line);
+    box-shadow: var(--dp-shadow-pop);
+  }
+  .text {
+    white-space: pre-wrap;
+  }
+  .close {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--dp-radius-full);
+  }
 </style>

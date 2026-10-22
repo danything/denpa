@@ -13,12 +13,14 @@
 
 /** 映した1枚のこと。`requestVideoFrameCallback` を持つブラウザでだけ分かる */
 export interface Frame {
-    /** **そのフレームの時刻。** 再生位置 (`currentTime`) とは違う — あちらは先に進む */
-    mediaTime: number;
+  /** **そのフレームの時刻。** 再生位置 (`currentTime`) とは違う — あちらは先に進む */
+  mediaTime: number;
 }
 
 type WithCallback = HTMLVideoElement & {
-    requestVideoFrameCallback?(callback: (at: number, frame: Frame) => void): number;
+  requestVideoFrameCallback?(
+    callback: (at: number, frame: Frame) => void,
+  ): number;
 };
 
 /**
@@ -31,18 +33,21 @@ type WithCallback = HTMLVideoElement & {
  *
  * **止めて見ている間は来ません** (`requestVideoFrameCallback` の決まり)。
  */
-export function eachFrame(video: HTMLVideoElement, run: (frame?: Frame) => boolean): void {
-    const step = (): void => {
-        const request = (video as WithCallback).requestVideoFrameCallback;
-        if (typeof request === 'function') {
-            request.call(video, (_at, frame) => {
-                if (run(frame)) step();
-            });
-        } else {
-            requestAnimationFrame(() => {
-                if (run()) step();
-            });
-        }
-    };
-    step();
+export function eachFrame(
+  video: HTMLVideoElement,
+  run: (frame?: Frame) => boolean,
+): void {
+  const step = (): void => {
+    const request = (video as WithCallback).requestVideoFrameCallback;
+    if (typeof request === "function") {
+      request.call(video, (_at, frame) => {
+        if (run(frame)) step();
+      });
+    } else {
+      requestAnimationFrame(() => {
+        if (run()) step();
+      });
+    }
+  };
+  step();
 }

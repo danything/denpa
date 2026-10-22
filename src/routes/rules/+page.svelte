@@ -1,113 +1,129 @@
 <script lang="ts">
-    import { submitting } from '#lib/actions.js';
-    import { arming } from '#lib/arming.svelte.js';
-    import ArmedDelete from '#lib/components/ArmedDelete.svelte';
-    import Toasts, { errorNotice, type Notice } from '#lib/components/Toasts.svelte';
-    import { date } from '#lib/format.js';
-    import { Paged, sentinel } from '#lib/paging.svelte.js';
-    import { conditionSummary, upcomingLabel } from '#lib/rule-summary.js';
-    import type { SubmitFunction } from '$app/forms';
-    import { resolve } from '$app/paths';
+  import { submitting } from "#lib/actions.js";
+  import { arming } from "#lib/arming.svelte.js";
+  import ArmedDelete from "#lib/components/ArmedDelete.svelte";
+  import Toasts, {
+    errorNotice,
+    type Notice,
+  } from "#lib/components/Toasts.svelte";
+  import { date } from "#lib/format.js";
+  import { Paged, sentinel } from "#lib/paging.svelte.js";
+  import { conditionSummary, upcomingLabel } from "#lib/rule-summary.js";
+  import type { SubmitFunction } from "$app/forms";
+  import { resolve } from "$app/paths";
 
-    let { data, form } = $props();
+  let { data, form } = $props();
 
-    /**
-     * **ルールの一覧と管理。** 並べて見比べ、スイッチで止める・戻す、2回押しで消す。
-     * 作る・直すのは検索の画面の「ルールとして保存」(行を押すと `/search?rule=<ID>`)
-     */
+  /**
+   * **ルールの一覧と管理。** 並べて見比べ、スイッチで止める・戻す、2回押しで消す。
+   * 作る・直すのは検索の画面の「ルールとして保存」(行を押すと `/search?rule=<ID>`)
+   */
 
-    type Filter = 'all' | 'on' | 'off' | 'idle' | 'conflict';
-    const FILTERS: { key: Filter; label: string; test: (rule: (typeof data.rules)[number]) => boolean }[] = [
-        { key: 'all', label: 'すべて', test: () => true },
-        { key: 'on', label: '有効', test: (rule) => rule.enabled },
-        { key: 'off', label: '無効', test: (rule) => !rule.enabled },
-        { key: 'idle', label: '次の放送なし', test: (rule) => rule.next === null },
-        { key: 'conflict', label: '競合あり', test: (rule) => rule.conflicts > 0 },
-    ];
-    let filter = $state<Filter>('all');
+  type Filter = "all" | "on" | "off" | "idle" | "conflict";
+  const FILTERS: {
+    key: Filter;
+    label: string;
+    test: (rule: (typeof data.rules)[number]) => boolean;
+  }[] = [
+    { key: "all", label: "すべて", test: () => true },
+    { key: "on", label: "有効", test: (rule) => rule.enabled },
+    { key: "off", label: "無効", test: (rule) => !rule.enabled },
+    { key: "idle", label: "次の放送なし", test: (rule) => rule.next === null },
+    { key: "conflict", label: "競合あり", test: (rule) => rule.conflicts > 0 },
+  ];
+  let filter = $state<Filter>("all");
 
-    type Sort = 'next' | 'new' | 'name' | 'reservations' | 'recorded';
-    const SORTS: { key: Sort; label: string }[] = [
-        { key: 'next', label: '次の放送が近い順' },
-        { key: 'new', label: '新しい順' },
-        { key: 'name', label: '名前順' },
-        { key: 'reservations', label: '予約が多い順' },
-        { key: 'recorded', label: '最近録れた順' },
-    ];
-    let sort = $state<Sort>('next');
+  type Sort = "next" | "new" | "name" | "reservations" | "recorded";
+  const SORTS: { key: Sort; label: string }[] = [
+    { key: "next", label: "次の放送が近い順" },
+    { key: "new", label: "新しい順" },
+    { key: "name", label: "名前順" },
+    { key: "reservations", label: "予約が多い順" },
+    { key: "recorded", label: "最近録れた順" },
+  ];
+  let sort = $state<Sort>("next");
 
-    /** 並べ替え。決まらないものは新しいルールを上に (読み込んだ順) */
-    function compare(a: (typeof data.rules)[number], b: (typeof data.rules)[number]): number {
-        switch (sort) {
-            case 'next':
-                return (a.next?.start_at ?? Infinity) - (b.next?.start_at ?? Infinity);
-            case 'name':
-                return a.name.localeCompare(b.name, 'ja');
-            case 'reservations':
-                return b.reservations - a.reservations;
-            case 'recorded':
-                return (b.last_recorded_at ?? -Infinity) - (a.last_recorded_at ?? -Infinity);
-            default:
-                return 0;
-        }
+  /** 並べ替え。決まらないものは新しいルールを上に (読み込んだ順) */
+  function compare(
+    a: (typeof data.rules)[number],
+    b: (typeof data.rules)[number],
+  ): number {
+    switch (sort) {
+      case "next":
+        return (a.next?.start_at ?? Infinity) - (b.next?.start_at ?? Infinity);
+      case "name":
+        return a.name.localeCompare(b.name, "ja");
+      case "reservations":
+        return b.reservations - a.reservations;
+      case "recorded":
+        return (
+          (b.last_recorded_at ?? -Infinity) - (a.last_recorded_at ?? -Infinity)
+        );
+      default:
+        return 0;
     }
-    const shownRules = $derived(
-        data.rules
-            .filter(FILTERS.find((f) => f.key === filter)!.test)
-            .sort((a, b) => compare(a, b) || b.id - a.id),
-    );
-    /** 少しずつ出す (`paging.svelte.ts`)。ルールが数百あっても開いた直後に止まらない */
-    const paged = new Paged(() => shownRules, 60);
-    $effect(() => {
-        void filter;
-        void sort;
-        paged.reset();
-    });
+  }
+  const shownRules = $derived(
+    data.rules
+      .filter(FILTERS.find((f) => f.key === filter)!.test)
+      .sort((a, b) => compare(a, b) || b.id - a.id),
+  );
+  /** 少しずつ出す (`paging.svelte.ts`)。ルールが数百あっても開いた直後に止まらない */
+  const paged = new Paged(() => shownRules, 60);
+  $effect(() => {
+    void filter;
+    void sort;
+    paged.reset();
+  });
 
-    /** 絞り込みごとの件数 */
-    const counts = $derived(
-        Object.fromEntries(FILTERS.map((f) => [f.key, data.rules.filter(f.test).length])) as Record<
-            Filter,
-            number
-        >,
-    );
-    const serviceNames = $derived(new Map(data.services.map((s) => [s.id, s.name])));
-    /** 「今日」「明日」の切れ目に使う時計。分で刻む */
-    let clock = $state(Date.now());
-    $effect(() => {
-        const timer = setInterval(() => (clock = Date.now()), 60_000);
-        return () => clearInterval(timer);
-    });
+  /** 絞り込みごとの件数 */
+  const counts = $derived(
+    Object.fromEntries(
+      FILTERS.map((f) => [f.key, data.rules.filter(f.test).length]),
+    ) as Record<Filter, number>,
+  );
+  const serviceNames = $derived(
+    new Map(data.services.map((s) => [s.id, s.name])),
+  );
+  /** 「今日」「明日」の切れ目に使う時計。分で刻む */
+  let clock = $state(Date.now());
+  $effect(() => {
+    const timer = setInterval(() => (clock = Date.now()), 60_000);
+    return () => clearInterval(timer);
+  });
 
-    /** ルールの削除は2回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
-    const deleting = arming('[data-testid^="rule-delete"]');
-    /**
-     * 行のスイッチを送るとき。**送っている間は押せなくする** (連打で何度も切り替わらない)。
-     * 断られたら見た目を戻す
-     */
-    const switched: SubmitFunction = ({ formElement }) => {
-        const box = formElement.querySelector<HTMLInputElement>('input[role="switch"]');
-        if (box !== null) box.disabled = true;
-        return async ({ result, update }) => {
-            await update();
-            if (box !== null) {
-                if (result.type !== 'success' && result.type !== 'redirect') box.checked = !box.checked;
-                box.disabled = false;
-            }
-        };
+  /** ルールの削除は2回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
+  const deleting = arming('[data-testid^="rule-delete"]');
+  /**
+   * 行のスイッチを送るとき。**送っている間は押せなくする** (連打で何度も切り替わらない)。
+   * 断られたら見た目を戻す
+   */
+  const switched: SubmitFunction = ({ formElement }) => {
+    const box = formElement.querySelector<HTMLInputElement>(
+      'input[role="switch"]',
+    );
+    if (box !== null) box.disabled = true;
+    return async ({ result, update }) => {
+      await update();
+      if (box !== null) {
+        if (result.type !== "success" && result.type !== "redirect")
+          box.checked = !box.checked;
+        box.disabled = false;
+      }
     };
+  };
 
-    const notices = $derived.by<Notice[]>(() => {
-        const list = errorNotice(form, 'rule-error');
-        if (form?.canceled !== undefined) {
-            const text =
-                form.canceled > 0
-                    ? `ルールを削除しました (予約 ${form.canceled} 件を取り消し)`
-                    : 'ルールを削除しました';
-            list.push({ key: 'rule-deleted', kind: 'success', text });
-        }
-        return list;
-    });
+  const notices = $derived.by<Notice[]>(() => {
+    const list = errorNotice(form, "rule-error");
+    if (form?.canceled !== undefined) {
+      const text =
+        form.canceled > 0
+          ? `ルールを削除しました (予約 ${form.canceled} 件を取り消し)`
+          : "ルールを削除しました";
+      list.push({ key: "rule-deleted", kind: "success", text });
+    }
+    return list;
+  });
 </script>
 
 <svelte:window onclick={deleting.stand} />
@@ -120,414 +136,451 @@
     スマホ (下のタブがある幅) では画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
 <div class="rules-board">
-    <div class="rules-list" data-testid="rule-list">
-        <!-- 狭い画面の集計。広い画面ではサイドバーの「集計」 -->
-        <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
-            これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた
-            <span class="num">{data.summary.lastWeekRecordings}</span> 本
-        </p>
+  <div class="rules-list" data-testid="rule-list">
+    <!-- 狭い画面の集計。広い画面ではサイドバーの「集計」 -->
+    <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
+      これから7日の予約 <span class="num">{data.summary.weekReservations}</span>
+      件 ・ この7日で録れた
+      <span class="num">{data.summary.lastWeekRecordings}</span> 本
+    </p>
 
-        {#if data.rules.length === 0}
-            <div class="empty" data-testid="rule-empty">
-                <p class="bold">ルールはまだありません</p>
-                <p class="small muted">
-                    <a href={resolve('search')}>検索</a
-                    >で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
-                </p>
-            </div>
-        {:else}
-            <ul class="rows" data-testid="rule-table">
-                {#each paged.rows as rule (rule.id)}
-                    <!--
+    {#if data.rules.length === 0}
+      <div class="empty" data-testid="rule-empty">
+        <p class="bold">ルールはまだありません</p>
+        <p class="small muted">
+          <a href={resolve("search")}>検索</a
+          >で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
+        </p>
+      </div>
+    {:else}
+      <ul class="rows" data-testid="rule-table">
+        {#each paged.rows as rule (rule.id)}
+          <!--
                         **2段の塊。** 1段目に名前、右にスイッチと削除。2段目に条件・次の放送・予約と録画の数・最後に録れた日。
                         塊を押すと検索の画面でそのルールを直す。スイッチと削除はリンクの外 (隣) なので、押してもルールは開かない
                     -->
-                    <li class="row" class:off={!rule.enabled} data-testid="rule-row" data-rule-id={rule.id}>
-                        <a class="row-body" href={resolve(`search?rule=${rule.id}`)} data-testid="rule-open">
-                            <span class="name">
-                                <span class="truncate">{rule.name}</span>
-                                {#if !rule.enabled}<span class="tag">無効</span>{/if}
-                                {#if rule.conflicts > 0}<span class="tag error outline"
-                                        >競合 {rule.conflicts}</span
-                                    >{/if}
-                            </span>
-                            <span class="meta small muted">
-                                <span class="wide-part"
-                                    ><span class="cond"
-                                        >{conditionSummary(rule, (id) => serviceNames.get(id))}</span
-                                    >
-                                    <span class="sep" aria-hidden="true">・</span></span
-                                >
-                                <span class="next" data-testid="rule-next">
-                                    {#if rule.next === null}
-                                        予定なし
-                                    {:else}
-                                        次 {upcomingLabel(rule.next.start_at, clock)}
-                                        <span class="broadcast">{rule.next.service_name}</span>
-                                    {/if}
-                                </span>
-                                <span class="sep" aria-hidden="true">・</span>
-                                <span class="num"
-                                    >予約 <span data-testid="rule-reservations">{rule.reservations}</span
-                                    ></span
-                                >
-                                <span class="sep" aria-hidden="true">・</span>
-                                <span class="num">録画 {rule.recordings}</span>
-                                {#if rule.last_recorded_at !== null}
-                                    <span class="wide-part"
-                                        ><span class="sep" aria-hidden="true">・</span>
-                                        <span>最後に録れた {date(rule.last_recorded_at)}</span></span
-                                    >
-                                {/if}
-                            </span>
-                        </a>
-                        <form method="POST" action="?/toggle" class="switch" use:submitting={switched}>
-                            <input type="hidden" name="id" value={rule.id} />
-                            <input
-                                type="checkbox"
-                                role="switch"
-                                aria-checked={rule.enabled}
-                                checked={rule.enabled}
-                                aria-label="「{rule.name}」を有効にする"
-                                onchange={(event) => event.currentTarget.form?.requestSubmit()}
-                                data-testid="rule-switch"
-                            />
-                        </form>
-                        <ArmedDelete
-                            {deleting}
-                            armKey={rule.id}
-                            fields={{ id: rule.id }}
-                            class="xs"
-                            testid="rule-delete"
-                        />
-                    </li>
-                {:else}
-                    <li class="none small muted" data-testid="rule-none">
-                        この絞り込みに当たるルールはありません
-                    </li>
-                {/each}
-                {#if paged.more}
-                    <li class="none small muted" use:sentinel={() => paged.reveal()}>残り {paged.rest} 件</li>
+          <li
+            class="row"
+            class:off={!rule.enabled}
+            data-testid="rule-row"
+            data-rule-id={rule.id}
+          >
+            <a
+              class="row-body"
+              href={resolve(`search?rule=${rule.id}`)}
+              data-testid="rule-open"
+            >
+              <span class="name">
+                <span class="truncate">{rule.name}</span>
+                {#if !rule.enabled}<span class="tag">無効</span>{/if}
+                {#if rule.conflicts > 0}<span class="tag error outline"
+                    >競合 {rule.conflicts}</span
+                  >{/if}
+              </span>
+              <span class="meta small muted">
+                <span class="wide-part"
+                  ><span class="cond"
+                    >{conditionSummary(rule, (id) =>
+                      serviceNames.get(id),
+                    )}</span
+                  >
+                  <span class="sep" aria-hidden="true">・</span></span
+                >
+                <span class="next" data-testid="rule-next">
+                  {#if rule.next === null}
+                    予定なし
+                  {:else}
+                    次 {upcomingLabel(rule.next.start_at, clock)}
+                    <span class="broadcast">{rule.next.service_name}</span>
+                  {/if}
+                </span>
+                <span class="sep" aria-hidden="true">・</span>
+                <span class="num"
+                  >予約 <span data-testid="rule-reservations"
+                    >{rule.reservations}</span
+                  ></span
+                >
+                <span class="sep" aria-hidden="true">・</span>
+                <span class="num">録画 {rule.recordings}</span>
+                {#if rule.last_recorded_at !== null}
+                  <span class="wide-part"
+                    ><span class="sep" aria-hidden="true">・</span>
+                    <span>最後に録れた {date(rule.last_recorded_at)}</span
+                    ></span
+                  >
                 {/if}
-            </ul>
+              </span>
+            </a>
+            <form
+              method="POST"
+              action="?/toggle"
+              class="switch"
+              use:submitting={switched}
+            >
+              <input type="hidden" name="id" value={rule.id} />
+              <input
+                type="checkbox"
+                role="switch"
+                aria-checked={rule.enabled}
+                checked={rule.enabled}
+                aria-label="「{rule.name}」を有効にする"
+                onchange={(event) => event.currentTarget.form?.requestSubmit()}
+                data-testid="rule-switch"
+              />
+            </form>
+            <ArmedDelete
+              {deleting}
+              armKey={rule.id}
+              fields={{ id: rule.id }}
+              class="xs"
+              testid="rule-delete"
+            />
+          </li>
+        {:else}
+          <li class="none small muted" data-testid="rule-none">
+            この絞り込みに当たるルールはありません
+          </li>
+        {/each}
+        {#if paged.more}
+          <li class="none small muted" use:sentinel={() => paged.reveal()}>
+            残り {paged.rest} 件
+          </li>
         {/if}
+      </ul>
+    {/if}
+  </div>
+
+  <!-- 1000px から。絞り込み・並び・集計 (ホームのサイドバーと同じ行) -->
+  <aside
+    class="rules-side side-panel"
+    aria-label="絞り込みと並び"
+    data-testid="rule-sidebar"
+  >
+    <h2 class="side-label">絞り込み</h2>
+    <div
+      class="side-list"
+      role="group"
+      aria-label="絞り込み"
+      data-testid="rule-filters"
+    >
+      {#each FILTERS as f (f.key)}
+        <button
+          type="button"
+          class="side-item"
+          aria-pressed={filter === f.key}
+          onclick={() => (filter = f.key)}
+          data-testid="rule-filter-{f.key}"
+        >
+          <span>{f.label}</span>
+          <span class="side-sub num">{counts[f.key]}</span>
+        </button>
+      {/each}
     </div>
+    <h2 class="side-label">並び</h2>
+    <div class="side-list" role="group" aria-label="並び">
+      {#each SORTS as s (s.key)}
+        <button
+          type="button"
+          class="side-item"
+          aria-pressed={sort === s.key}
+          onclick={() => (sort = s.key)}
+          data-testid="rule-sort-{s.key}"
+        >
+          {s.label}
+        </button>
+      {/each}
+    </div>
+    <h2 class="side-label">集計</h2>
+    <dl class="side-list stats" data-testid="rule-summary">
+      <div class="side-item static">
+        <dt>これから7日の予約</dt>
+        <dd class="num">{data.summary.weekReservations} 件</dd>
+      </div>
+      <div class="side-item static">
+        <dt>この7日で録れた</dt>
+        <dd class="num">{data.summary.lastWeekRecordings} 本</dd>
+      </div>
+    </dl>
+    <div class="side-foot">
+      <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->
+      <a class="button small" href={resolve("search")} data-testid="rule-new"
+        >ルールを作る</a
+      >
+    </div>
+  </aside>
 
-    <!-- 1000px から。絞り込み・並び・集計 (ホームのサイドバーと同じ行) -->
-    <aside class="rules-side side-panel" aria-label="絞り込みと並び" data-testid="rule-sidebar">
-        <h2 class="side-label">絞り込み</h2>
-        <div class="side-list" role="group" aria-label="絞り込み" data-testid="rule-filters">
-            {#each FILTERS as f (f.key)}
-                <button
-                    type="button"
-                    class="side-item"
-                    aria-pressed={filter === f.key}
-                    onclick={() => (filter = f.key)}
-                    data-testid="rule-filter-{f.key}"
-                >
-                    <span>{f.label}</span>
-                    <span class="side-sub num">{counts[f.key]}</span>
-                </button>
-            {/each}
-        </div>
-        <h2 class="side-label">並び</h2>
-        <div class="side-list" role="group" aria-label="並び">
-            {#each SORTS as s (s.key)}
-                <button
-                    type="button"
-                    class="side-item"
-                    aria-pressed={sort === s.key}
-                    onclick={() => (sort = s.key)}
-                    data-testid="rule-sort-{s.key}"
-                >
-                    {s.label}
-                </button>
-            {/each}
-        </div>
-        <h2 class="side-label">集計</h2>
-        <dl class="side-list stats" data-testid="rule-summary">
-            <div class="side-item static">
-                <dt>これから7日の予約</dt>
-                <dd class="num">{data.summary.weekReservations} 件</dd>
-            </div>
-            <div class="side-item static">
-                <dt>この7日で録れた</dt>
-                <dd class="num">{data.summary.lastWeekRecordings} 本</dd>
-            </div>
-        </dl>
-        <div class="side-foot">
-            <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->
-            <a class="button small" href={resolve('search')} data-testid="rule-new">ルールを作る</a>
-        </div>
-    </aside>
-
-    <!--
+  <!--
         1000px より狭いときの細い帯。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
         スマホでは画面の下 (タブの上) に貼り付ける
     -->
-    <div class="rules-bar" data-testid="rule-bar">
-        <div class="bar-chips" role="group" aria-label="絞り込み">
-            {#each FILTERS as f (f.key)}
-                <button
-                    type="button"
-                    class="chip-button"
-                    class:on={filter === f.key}
-                    aria-pressed={filter === f.key}
-                    onclick={() => (filter = f.key)}
-                    data-testid="rule-bar-filter-{f.key}"
-                >
-                    {f.label} <span class="num">{counts[f.key]}</span>
-                </button>
-            {/each}
-        </div>
-        <select bind:value={sort} aria-label="並び" data-testid="rule-sort">
-            {#each SORTS as s (s.key)}
-                <option value={s.key}>{s.label}</option>
-            {/each}
-        </select>
-        <a class="button small" href={resolve('search')} data-testid="rule-new-narrow">作る</a>
+  <div class="rules-bar" data-testid="rule-bar">
+    <div class="bar-chips" role="group" aria-label="絞り込み">
+      {#each FILTERS as f (f.key)}
+        <button
+          type="button"
+          class="chip-button"
+          class:on={filter === f.key}
+          aria-pressed={filter === f.key}
+          onclick={() => (filter = f.key)}
+          data-testid="rule-bar-filter-{f.key}"
+        >
+          {f.label} <span class="num">{counts[f.key]}</span>
+        </button>
+      {/each}
     </div>
+    <select bind:value={sort} aria-label="並び" data-testid="rule-sort">
+      {#each SORTS as s (s.key)}
+        <option value={s.key}>{s.label}</option>
+      {/each}
+    </select>
+    <a
+      class="button small"
+      href={resolve("search")}
+      data-testid="rule-new-narrow">作る</a
+    >
+  </div>
 </div>
 
 <style>
-    /*
+  /*
      * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧が自分で巻き取る** (ホームと同じ。
      * `+layout.svelte` の `FILLED`)。窓はスクロールしない。1000px からは右にサイドバーを置き、画面の右端と
      * ヘッダーの下に付けて高さいっぱいに伸ばす (中身があふれたときだけサイドバーの中で巻き取る)。
      * 狭い画面はページごとスクロールする
      */
+  .rules-board {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-space-3);
+  }
+  .rules-list {
+    min-width: 0;
+  }
+  .rules-side {
+    display: none;
+  }
+  @media (min-width: 768px) {
     .rules-board {
-        display: flex;
-        flex-direction: column;
-        gap: var(--dp-space-3);
+      height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
+      margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
+        calc(-1 * var(--dp-gutter));
+      gap: 0;
     }
     .rules-list {
-        min-width: 0;
+      flex: 1 1 0%;
+      min-height: 0;
+      overflow-y: auto;
+      padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
+    }
+  }
+  /* 768〜999px は細い帯が一覧の上。帯は動かず、その下の一覧だけが巻き取る */
+  @media (min-width: 768px) and (max-width: 999.98px) {
+    .rules-bar {
+      padding: var(--dp-page-top) var(--dp-gutter) 0;
+    }
+    .rules-list {
+      padding-top: var(--dp-space-3);
+    }
+  }
+  @media (min-width: 1000px) {
+    .rules-board {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 20rem;
+      grid-template-rows: minmax(0, 1fr);
     }
     .rules-side {
-        display: none;
+      display: flex;
     }
-    @media (min-width: 768px) {
-        .rules-board {
-            height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
-            margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
-            gap: 0;
-        }
-        .rules-list {
-            flex: 1 1 0%;
-            min-height: 0;
-            overflow-y: auto;
-            padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
-        }
+    .rules-bar,
+    .narrow-summary {
+      display: none;
     }
-    /* 768〜999px は細い帯が一覧の上。帯は動かず、その下の一覧だけが巻き取る */
-    @media (min-width: 768px) and (max-width: 999.98px) {
-        .rules-bar {
-            padding: var(--dp-page-top) var(--dp-gutter) 0;
-        }
-        .rules-list {
-            padding-top: var(--dp-space-3);
-        }
+  }
+  @media (min-width: 1600px) {
+    .rules-board {
+      grid-template-columns: minmax(0, 1fr) 22rem;
     }
-    @media (min-width: 1000px) {
-        .rules-board {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 20rem;
-            grid-template-rows: minmax(0, 1fr);
-        }
-        .rules-side {
-            display: flex;
-        }
-        .rules-bar,
-        .narrow-summary {
-            display: none;
-        }
-    }
-    @media (min-width: 1600px) {
-        .rules-board {
-            grid-template-columns: minmax(0, 1fr) 22rem;
-        }
-    }
-    .stats {
-        margin: 0;
-    }
-    .stats dt,
-    .stats dd {
-        margin: 0;
-        font-weight: var(--dp-weight);
-    }
-    .stats dd {
-        color: var(--dp-muted);
-    }
-    /*
+  }
+  .stats {
+    margin: 0;
+  }
+  .stats dt,
+  .stats dd {
+    margin: 0;
+    font-weight: var(--dp-weight);
+  }
+  .stats dd {
+    color: var(--dp-muted);
+  }
+  /*
      * 「ルールを作る」はサイドバーの下端。低い画面でサイドバーの中身があふれても、下に貼り付けて見えたままにする
      * (下の余白はサイドバーの余白 (1.5rem) を打ち消して自分で持つ。貼り付く位置もその余白の内側から測られるので同じだけ下げる)
      */
-    .side-foot {
-        position: sticky;
-        bottom: -1.5rem;
-        margin-bottom: -1.5rem;
-        padding: 1rem 0.75rem 1.5rem;
-        background: var(--dp-bg);
-    }
-    .side-foot .button {
-        width: 100%;
-        margin: 0;
-    }
+  .side-foot {
+    position: sticky;
+    bottom: -1.5rem;
+    margin-bottom: -1.5rem;
+    padding: 1rem 0.75rem 1.5rem;
+    background: var(--dp-bg);
+  }
+  .side-foot .button {
+    width: 100%;
+    margin: 0;
+  }
 
-    /*
+  /*
      * **行は2段の淡い塊** (ホームの行と同じ。`--dp-row`、線も枠も無く、6px 空けて並べる)。触れると一段濃く
      */
-    .rows {
-        display: flex;
-        flex-direction: column;
-        gap: 0.375rem;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-    .row {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem 0.75rem;
-        min-height: 4rem;
-        margin: 0;
-        padding: 0.5rem 0.75rem;
-        border-radius: var(--dp-radius);
-        background: var(--dp-row);
-        list-style: none;
-        transition: background-color var(--dp-duration);
-    }
-    .row:hover {
-        background: var(--dp-row-hover);
-    }
-    .row-body {
-        display: flex;
-        flex: 1 1 0%;
-        flex-direction: column;
-        gap: 0.125rem;
-        min-width: 0;
-        color: inherit;
-        text-decoration: none;
-    }
-    .name {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        min-width: 0;
-    }
-    .meta {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    .sep {
-        margin-inline: 0.25rem;
-    }
-    /* 無効のルールは中身を沈める (印の「無効」と合わせて、色だけに頼らない) */
-    .row.off .row-body {
-        opacity: 0.55;
-    }
-    .switch {
-        display: flex;
-        margin: 0;
-    }
-    .switch input {
-        margin: 0;
-    }
-    .none {
-        margin: 0;
-        padding: var(--dp-space-3);
-        text-align: center;
-        list-style: none;
-    }
-    .empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--dp-space-2);
-        padding: 3rem 1rem;
-        text-align: center;
-    }
-    .empty p,
-    .narrow-summary {
-        margin: 0;
-    }
-    .narrow-summary {
-        margin-bottom: var(--dp-space-2);
-    }
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    min-height: 4rem;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--dp-radius);
+    background: var(--dp-row);
+    list-style: none;
+    transition: background-color var(--dp-duration);
+  }
+  .row:hover {
+    background: var(--dp-row-hover);
+  }
+  .row-body {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+  }
+  .name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sep {
+    margin-inline: 0.25rem;
+  }
+  /* 無効のルールは中身を沈める (印の「無効」と合わせて、色だけに頼らない) */
+  .row.off .row-body {
+    opacity: 0.55;
+  }
+  .switch {
+    display: flex;
+    margin: 0;
+  }
+  .switch input {
+    margin: 0;
+  }
+  .none {
+    margin: 0;
+    padding: var(--dp-space-3);
+    text-align: center;
+    list-style: none;
+  }
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--dp-space-2);
+    padding: 3rem 1rem;
+    text-align: center;
+  }
+  .empty p,
+  .narrow-summary {
+    margin: 0;
+  }
+  .narrow-summary {
+    margin-bottom: var(--dp-space-2);
+  }
 
-    /* ---- 1000px より狭いときの細い帯 ---- */
-    @media (max-width: 999.98px) {
-        .rules-bar {
-            display: flex;
-            align-items: center;
-            gap: var(--dp-space-2);
-            order: -1;
-        }
+  /* ---- 1000px より狭いときの細い帯 ---- */
+  @media (max-width: 999.98px) {
+    .rules-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--dp-space-2);
+      order: -1;
     }
-    .bar-chips {
-        display: flex;
-        flex: 1 1 0%;
-        gap: var(--dp-space-1);
-        min-width: 0;
-        overflow-x: auto;
-        scrollbar-width: none;
-    }
-    .chip-button {
-        flex: none;
-        width: auto;
-        margin: 0;
-        padding: 0.3rem 0.75rem;
-        border: 0;
-        border-radius: var(--dp-radius-full);
-        background: transparent;
-        color: var(--dp-muted);
-        font-size: var(--dp-text-sm);
-    }
-    /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (一覧の選んだ行の地に太字) */
-    .chip-button.on {
-        background: var(--dp-row-selected);
-        color: var(--dp-fg);
-        font-weight: var(--dp-weight-bold);
-    }
-    .rules-bar select {
-        flex: none;
-        width: auto;
-        margin: 0;
-        padding-block: 0.25rem;
-        border: 0;
-        background-color: transparent;
-        color: var(--dp-muted);
-        font-size: var(--dp-text-sm);
-    }
-    .rules-bar .button {
-        flex: none;
-        margin: 0;
-    }
-    /*
+  }
+  .bar-chips {
+    display: flex;
+    flex: 1 1 0%;
+    gap: var(--dp-space-1);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chip-button {
+    flex: none;
+    width: auto;
+    margin: 0;
+    padding: 0.3rem 0.75rem;
+    border: 0;
+    border-radius: var(--dp-radius-full);
+    background: transparent;
+    color: var(--dp-muted);
+    font-size: var(--dp-text-sm);
+  }
+  /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (一覧の選んだ行の地に太字) */
+  .chip-button.on {
+    background: var(--dp-row-selected);
+    color: var(--dp-fg);
+    font-weight: var(--dp-weight-bold);
+  }
+  .rules-bar select {
+    flex: none;
+    width: auto;
+    margin: 0;
+    padding-block: 0.25rem;
+    border: 0;
+    background-color: transparent;
+    color: var(--dp-muted);
+    font-size: var(--dp-text-sm);
+  }
+  .rules-bar .button {
+    flex: none;
+    margin: 0;
+  }
+  /*
      * **スマホでは帯を画面の下、タブのすぐ上に貼り付ける** (押すものは指の届く下に)。
      * 一覧の最後の行が帯に隠れないよう、帯の高さぶん下を空ける
      */
-    @media (max-width: 639.98px) {
-        .rules-bar {
-            position: fixed;
-            inset-inline: 0;
-            bottom: var(--dp-tabbar, 0px);
-            z-index: 30;
-            padding: var(--dp-space-2) var(--dp-gutter);
-            border-top: 1px solid var(--dp-line);
-            background: var(--dp-bg);
-        }
-        .rules-list {
-            padding-bottom: 3.5rem;
-        }
-        .row {
-            min-height: 3.75rem;
-        }
-        /* 狭い幅の2段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る) */
-        .wide-part {
-            display: none;
-        }
+  @media (max-width: 639.98px) {
+    .rules-bar {
+      position: fixed;
+      inset-inline: 0;
+      bottom: var(--dp-tabbar, 0px);
+      z-index: 30;
+      padding: var(--dp-space-2) var(--dp-gutter);
+      border-top: 1px solid var(--dp-line);
+      background: var(--dp-bg);
     }
+    .rules-list {
+      padding-bottom: 3.5rem;
+    }
+    .row {
+      min-height: 3.75rem;
+    }
+    /* 狭い幅の2段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る) */
+    .wide-part {
+      display: none;
+    }
+  }
 </style>

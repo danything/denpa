@@ -1,9 +1,9 @@
-import { statSync } from 'node:fs';
-import { config } from '#lib/server/config.js';
-import { encodedPath, tsChapters } from '#lib/server/playback.js';
-import { recordingOr404 } from '#lib/server/recording.js';
-import { run } from '#lib/server/stream.js';
-import { parseChapters } from '#lib/ts/watch.js';
+import { statSync } from "node:fs";
+import { config } from "#lib/server/config.js";
+import { encodedPath, tsChapters } from "#lib/server/playback.js";
+import { recordingOr404 } from "#lib/server/recording.js";
+import { run } from "#lib/server/stream.js";
+import { parseChapters } from "#lib/ts/watch.js";
 
 /**
  * エンコードしたものに入っているチャプターを返す。**CM飛ばしの行き先。**
@@ -45,39 +45,52 @@ import { parseChapters } from '#lib/ts/watch.js';
 const TIMEOUT = 15_000;
 
 export async function GET({ params, request }) {
-    const recording = recordingOr404(params.id);
-    const path = encodedPath(recording);
-    // エンコードが終われば中身が変わるので控えさせない
-    if (path === null) {
-        return Response.json(
-            { chapters: await tsChapters(recording) },
-            { headers: { 'Cache-Control': 'no-store' } },
-        );
-    }
-
-    const stat = statSync(path, { throwIfNoEntry: false });
-    const tag =
-        stat === undefined ? null : `"${stat.size.toString(36)}-${Math.trunc(stat.mtimeMs).toString(36)}"`;
-    const headers: Record<string, string> = { 'Cache-Control': 'private, no-cache' };
-    if (tag !== null) {
-        headers['ETag'] = tag;
-        // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
-        const asked = (request.headers.get('if-none-match') ?? '')
-            .split(',')
-            .map((t) => t.trim().replace(/^W\//, ''));
-        if (asked.includes(tag)) return new Response(null, { status: 304, headers });
-    }
-
-    /*
-     * **読めなくても空を返す。** ffprobe が無い・ファイルが壊れている・
-     * そもそもチャプターが無い、のどれでも画面のすることは同じ (送りを出さない)。
-     * ここで転ぶと、**観られるはずの録画が観られなくなる**
-     */
-    const probed = await run(
-        [config.ffprobe, '-v', 'error', '-show_chapters', '-print_format', 'json', path],
-        { timeoutMs: TIMEOUT, stdout: true },
+  const recording = recordingOr404(params.id);
+  const path = encodedPath(recording);
+  // エンコードが終われば中身が変わるので控えさせない
+  if (path === null) {
+    return Response.json(
+      { chapters: await tsChapters(recording) },
+      { headers: { "Cache-Control": "no-store" } },
     );
-    const out = new TextDecoder().decode(probed.stdout);
+  }
 
-    return Response.json({ chapters: parseChapters(out) }, { headers });
+  const stat = statSync(path, { throwIfNoEntry: false });
+  const tag =
+    stat === undefined
+      ? null
+      : `"${stat.size.toString(36)}-${Math.trunc(stat.mtimeMs).toString(36)}"`;
+  const headers: Record<string, string> = {
+    "Cache-Control": "private, no-cache",
+  };
+  if (tag !== null) {
+    headers["ETag"] = tag;
+    // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
+    const asked = (request.headers.get("if-none-match") ?? "")
+      .split(",")
+      .map((t) => t.trim().replace(/^W\//, ""));
+    if (asked.includes(tag))
+      return new Response(null, { status: 304, headers });
+  }
+
+  /*
+   * **読めなくても空を返す。** ffprobe が無い・ファイルが壊れている・
+   * そもそもチャプターが無い、のどれでも画面のすることは同じ (送りを出さない)。
+   * ここで転ぶと、**観られるはずの録画が観られなくなる**
+   */
+  const probed = await run(
+    [
+      config.ffprobe,
+      "-v",
+      "error",
+      "-show_chapters",
+      "-print_format",
+      "json",
+      path,
+    ],
+    { timeoutMs: TIMEOUT, stdout: true },
+  );
+  const out = new TextDecoder().decode(probed.stdout);
+
+  return Response.json({ chapters: parseChapters(out) }, { headers });
 }

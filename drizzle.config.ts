@@ -1,4 +1,4 @@
-import { defineConfig } from 'drizzle-kit';
+import { defineConfig } from "drizzle-kit";
 
 /**
  * マイグレーションの出し方 (`bun run db:generate`)。
@@ -8,7 +8,7 @@ import { defineConfig } from 'drizzle-kit';
  * 当てるのは起動時 (`server/db.ts`)。手順は docs/development.md
  */
 export default defineConfig({
-    dialect: 'sqlite',
-    schema: './src/lib/server/schema.ts',
-    out: './drizzle',
+  dialect: "sqlite",
+  schema: "./src/lib/server/schema.ts",
+  out: "./drizzle",
 });

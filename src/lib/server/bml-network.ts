@@ -31,13 +31,13 @@
  * 作らないためで、切り分けのときにいちばん効きます。
  */
 
-import { Resolver } from 'node:dns/promises';
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
-import { connect } from 'node:net';
-import { error } from '@sveltejs/kit';
-import { config } from './config';
-import { settings } from './settings';
+import { Resolver } from "node:dns/promises";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { connect } from "node:net";
+import { error } from "@sveltejs/kit";
+import { config } from "./config";
+import { settings } from "./settings";
 
 /** 追いかける上限。放送局は https へ寄せるのに1回挟むことがある */
 const HOPS = 3;
@@ -47,12 +47,12 @@ const LIMIT = 4 * 1024 * 1024;
 const TIMEOUT = 10_000;
 
 /** 送るものの既定の形式 (データ放送の `Denbun=…`) */
-const FORM = 'application/x-www-form-urlencoded';
+const FORM = "application/x-www-form-urlencoded";
 
 export interface Fetched {
-    status: number;
-    contentType: string;
-    body: Uint8Array;
+  status: number;
+  contentType: string;
+  body: Uint8Array;
 }
 
 /** 断った理由。**画面にもログにも同じ言葉で出す** */
@@ -63,12 +63,13 @@ export class Refused extends Error {}
  * エンドポイントごとの言い方 (`fallback`)。3 つのエンドポイント (proxy / post / confirm) で同じ形式
  */
 export function refusalMessage(failure: unknown, fallback: string): string {
-    return failure instanceof Refused ? failure.message : fallback;
+  return failure instanceof Refused ? failure.message : fallback;
 }
 
 /** 双方向を切ってあるなら 403。`/api/bml/*` のどのエンドポイントも入口で呼ぶ (Hybridcast の入れ物も) */
 export function requireBmlNetwork(): void {
-    if (!settings().bmlNetwork) error(403, 'データ放送の双方向通信はオフになっています');
+  if (!settings().bmlNetwork)
+    error(403, "データ放送の双方向通信はオフになっています");
 }
 
 /**
@@ -85,9 +86,9 @@ export function requireBmlNetwork(): void {
  */
 const resolver = new Resolver();
 const BML_DNS = config.bmlDns
-    .split(',')
-    .map((server) => server.trim())
-    .filter((server) => server !== '');
+  .split(",")
+  .map((server) => server.trim())
+  .filter((server) => server !== "");
 if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
 
 /**
@@ -97,45 +98,49 @@ if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
  * 被せただけなので、剥がしてから見ないと素通りします
  */
 export function isPublicAddress(address: string): boolean {
-    /*
-     * `::ffff:1.2.3.4` のほかに **16進の綴り (`::ffff:0102:0304`) も受ける** —
-     * `new URL()` は括弧の中のドット形をこちらに直すので、ドット形だけ見ていると
-     * `http://[::ffff:127.0.0.1]/` が素通りする
-     */
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
-    const hexMapped = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/i.exec(address);
-    const target =
-        mapped !== null
-            ? mapped[1]!
-            : hexMapped !== null
-              ? [
-                    Number.parseInt(hexMapped[1]!, 16) >> 8,
-                    Number.parseInt(hexMapped[1]!, 16) & 255,
-                    Number.parseInt(hexMapped[2]!, 16) >> 8,
-                    Number.parseInt(hexMapped[2]!, 16) & 255,
-                ].join('.')
-              : address;
+  /*
+   * `::ffff:1.2.3.4` のほかに **16進の綴り (`::ffff:0102:0304`) も受ける** —
+   * `new URL()` は括弧の中のドット形をこちらに直すので、ドット形だけ見ていると
+   * `http://[::ffff:127.0.0.1]/` が素通りする
+   */
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+  const hexMapped = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/i.exec(address);
+  const target =
+    mapped !== null
+      ? mapped[1]!
+      : hexMapped !== null
+        ? [
+            Number.parseInt(hexMapped[1]!, 16) >> 8,
+            Number.parseInt(hexMapped[1]!, 16) & 255,
+            Number.parseInt(hexMapped[2]!, 16) >> 8,
+            Number.parseInt(hexMapped[2]!, 16) & 255,
+          ].join(".")
+        : address;
 
-    if (target.includes(':')) {
-        const lower = target.toLowerCase();
-        // ループバック / 未指定 / リンクローカル (fe80::/10) / ユニークローカル (fc00::/7)
-        if (lower === '::1' || lower === '::') return false;
-        if (/^fe[89ab]/.test(lower)) return false;
-        if (/^f[cd]/.test(lower)) return false;
-        return true;
-    }
-
-    const parts = target.split('.').map(Number);
-    if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-    const [a, b] = parts;
-    if (a === undefined || b === undefined) return false;
-    if (a === 0 || a === 10 || a === 127) return false;
-    if (a === 169 && b === 254) return false; // リンクローカル (雲のメタデータもここ)
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 100 && b >= 64 && b <= 127) return false; // 事業者内 (CGNAT)
-    if (a >= 224) return false; // マルチキャストと予約
+  if (target.includes(":")) {
+    const lower = target.toLowerCase();
+    // ループバック / 未指定 / リンクローカル (fe80::/10) / ユニークローカル (fc00::/7)
+    if (lower === "::1" || lower === "::") return false;
+    if (/^fe[89ab]/.test(lower)) return false;
+    if (/^f[cd]/.test(lower)) return false;
     return true;
+  }
+
+  const parts = target.split(".").map(Number);
+  if (
+    parts.length !== 4 ||
+    parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)
+  )
+    return false;
+  const [a, b] = parts;
+  if (a === undefined || b === undefined) return false;
+  if (a === 0 || a === 10 || a === 127) return false;
+  if (a === 169 && b === 254) return false; // リンクローカル (雲のメタデータもここ)
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false; // 事業者内 (CGNAT)
+  if (a >= 224) return false; // マルチキャストと予約
+  return true;
 }
 
 /**
@@ -146,67 +151,73 @@ export function isPublicAddress(address: string): boolean {
  * (いわゆる DNS リバインディング) が抜けます
  */
 async function resolvable(host: string): Promise<string> {
-    /*
-     * IPv6 リテラルの [] を自分で剥がす。**`new URL().hostname` は剥がさない** —
-     * `[::1]` のままだと綴りの判定に1つも掛からず、内側のアドレスなのに
-     * 公開扱いで素通りしていた
-     */
-    const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
-    // IP を直に書いてあるなら引かずに見る
-    if (/^[\d.]+$/.test(bare) || bare.includes(':')) {
-        if (!isPublicAddress(bare)) throw new Refused(`内部ネットワークのアドレスです (${host})`);
-        return bare;
-    }
+  /*
+   * IPv6 リテラルの [] を自分で剥がす。**`new URL().hostname` は剥がさない** —
+   * `[::1]` のままだと綴りの判定に1つも掛からず、内側のアドレスなのに
+   * 公開扱いで素通りしていた
+   */
+  const bare =
+    host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  // IP を直に書いてあるなら引かずに見る
+  if (/^[\d.]+$/.test(bare) || bare.includes(":")) {
+    if (!isPublicAddress(bare))
+      throw new Refused(`内部ネットワークのアドレスです (${host})`);
+    return bare;
+  }
 
-    let found: string[];
+  let found: string[];
+  try {
+    found = await resolver.resolve4(host);
+  } catch {
     try {
-        found = await resolver.resolve4(host);
+      found = await resolver.resolve6(host);
     } catch {
-        try {
-            found = await resolver.resolve6(host);
-        } catch {
-            throw new Refused(`名前解決できません (${host})`);
-        }
+      throw new Refused(`名前解決できません (${host})`);
     }
-    if (found.length === 0) throw new Refused(`名前解決できません (${host})`);
-    for (const address of found) {
-        if (!isPublicAddress(address))
-            throw new Refused(`内部ネットワークのアドレスです (${host} → ${address})`);
-    }
-    return found[0]!;
+  }
+  if (found.length === 0) throw new Refused(`名前解決できません (${host})`);
+  for (const address of found) {
+    if (!isPublicAddress(address))
+      throw new Refused(
+        `内部ネットワークのアドレスです (${host} → ${address})`,
+      );
+  }
+  return found[0]!;
 }
 
 /**
  * その URL を取得してよいか。行けるなら整えた URL と、確かめたアドレスを返す。
  * 繋ぐのはそのアドレスへ直に — 引き直すと、確かめたのと違う先に化かされうる
  */
-export async function allowed(raw: string): Promise<{ url: URL; address: string }> {
-    let url: URL;
-    try {
-        url = new URL(raw);
-    } catch {
-        throw new Refused('URL として読めません');
-    }
-    /*
-     * **http も通す。**
-     *
-     * 最初は https だけにしていた。**放送がそう作られていない。** NHK は
-     * `http://beacon.nhk.jp/` へ投げてくるし、通信系コンテンツはおおむね
-     * 素の http で組まれている (受信機がそうしているから)。https だけに
-     * すると、双方向を入れても「接続されていません」のまま — 実機で
-     * そうなった。
-     *
-     * 覗かれる経路を開けることは承知の上。ただし**これは放送のアプリの
-     * 通信**で、denpa の資格情報も利用者の秘密も乗らない (cookie も認証も
-     * 渡さない。`doRequest`)。実機のテレビが出す通信と同じもので、それ以上に
-     * 危なくはならない。
-     *
-     * `file:` や `data:` のような別の仕組みへ逃がす経路は塞いだままにする
-     */
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-        throw new Refused(`http か https のみ使えます (${url.protocol})`);
-    }
-    return { url, address: await resolvable(url.hostname) };
+export async function allowed(
+  raw: string,
+): Promise<{ url: URL; address: string }> {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Refused("URL として読めません");
+  }
+  /*
+   * **http も通す。**
+   *
+   * 最初は https だけにしていた。**放送がそう作られていない。** NHK は
+   * `http://beacon.nhk.jp/` へ投げてくるし、通信系コンテンツはおおむね
+   * 素の http で組まれている (受信機がそうしているから)。https だけに
+   * すると、双方向を入れても「接続されていません」のまま — 実機で
+   * そうなった。
+   *
+   * 覗かれる経路を開けることは承知の上。ただし**これは放送のアプリの
+   * 通信**で、denpa の資格情報も利用者の秘密も乗らない (cookie も認証も
+   * 渡さない。`doRequest`)。実機のテレビが出す通信と同じもので、それ以上に
+   * 危なくはならない。
+   *
+   * `file:` や `data:` のような別の仕組みへ逃がす経路は塞いだままにする
+   */
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Refused(`http か https のみ使えます (${url.protocol})`);
+  }
+  return { url, address: await resolvable(url.hostname) };
 }
 
 /**
@@ -223,62 +234,70 @@ export async function allowed(raw: string): Promise<{ url: URL; address: string 
  * 乗せないし、素の http すら通しているので、検証を外して増える危険は無い
  */
 function doRequest(
-    url: URL,
-    address: string,
-    method: 'GET' | 'POST',
-    body: Uint8Array | undefined,
-    contentType = FORM,
-): Promise<{ status: number; location: string | null; contentType: string; body: Uint8Array }> {
-    return new Promise((resolve, reject) => {
-        const https = url.protocol === 'https:';
-        const req = (https ? httpsRequest : httpRequest)(
-            {
-                host: address,
-                port: url.port === '' ? (https ? 443 : 80) : Number(url.port),
-                path: `${url.pathname}${url.search}`,
-                method,
-                setHost: false,
-                headers: {
-                    host: url.host,
-                    accept: '*/*',
-                    ...(method === 'POST' && body !== undefined
-                        ? {
-                              'content-type': contentType,
-                              'content-length': body.length,
-                          }
-                        : {}),
-                },
-                ...(https ? { servername: url.hostname, rejectUnauthorized: false } : {}),
-                timeout: TIMEOUT,
-            },
-            (res) => {
-                const chunks: Buffer[] = [];
-                let size = 0;
-                res.on('data', (chunk: Buffer) => {
-                    size += chunk.length;
-                    // **受け取りながら測る。** 上限を超えたぶんは渡さずに断る
-                    if (size > LIMIT) {
-                        req.destroy();
-                        reject(new Refused(`大きすぎます (${size} バイト)`));
-                        return;
-                    }
-                    chunks.push(chunk);
-                });
-                res.on('end', () => {
-                    resolve({
-                        status: res.statusCode ?? 0,
-                        location: res.headers.location ?? null,
-                        contentType: res.headers['content-type'] ?? 'application/octet-stream',
-                        body: new Uint8Array(Buffer.concat(chunks)),
-                    });
-                });
-                res.on('error', reject);
-            },
-        );
-        req.on('timeout', () => req.destroy(new Error('時間切れ')));
-        req.on('error', reject);
-        req.end(body);
-    });
+  url: URL,
+  address: string,
+  method: "GET" | "POST",
+  body: Uint8Array | undefined,
+  contentType = FORM,
+): Promise<{
+  status: number;
+  location: string | null;
+  contentType: string;
+  body: Uint8Array;
+}> {
+  return new Promise((resolve, reject) => {
+    const https = url.protocol === "https:";
+    const req = (https ? httpsRequest : httpRequest)(
+      {
+        host: address,
+        port: url.port === "" ? (https ? 443 : 80) : Number(url.port),
+        path: `${url.pathname}${url.search}`,
+        method,
+        setHost: false,
+        headers: {
+          host: url.host,
+          accept: "*/*",
+          ...(method === "POST" && body !== undefined
+            ? {
+                "content-type": contentType,
+                "content-length": body.length,
+              }
+            : {}),
+        },
+        ...(https
+          ? { servername: url.hostname, rejectUnauthorized: false }
+          : {}),
+        timeout: TIMEOUT,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          // **受け取りながら測る。** 上限を超えたぶんは渡さずに断る
+          if (size > LIMIT) {
+            req.destroy();
+            reject(new Refused(`大きすぎます (${size} バイト)`));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            location: res.headers.location ?? null,
+            contentType:
+              res.headers["content-type"] ?? "application/octet-stream",
+            body: new Uint8Array(Buffer.concat(chunks)),
+          });
+        });
+        res.on("error", reject);
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error("時間切れ")));
+    req.on("error", reject);
+    req.end(body);
+  });
 }
 
 /**
@@ -288,7 +307,7 @@ function doRequest(
  * 手で追いかけて、行き先ごとに `allowed` を通します
  */
 export function fetchForBml(raw: string): Promise<Fetched> {
-    return follow(raw, 'GET', undefined);
+  return follow(raw, "GET", undefined);
 }
 
 /**
@@ -309,30 +328,40 @@ export function fetchForBml(raw: string): Promise<Fetched> {
  * 飛ばされたときの手の変わりかたは web と同じ規則にします —
  * 301/302/303 は GET へ、307/308 は POST のまま。**行き先は毎回確かめ直す**
  */
-export function postForBml(raw: string, body: Uint8Array, contentType = FORM): Promise<Fetched> {
-    return follow(raw, 'POST', body, contentType);
+export function postForBml(
+  raw: string,
+  body: Uint8Array,
+  contentType = FORM,
+): Promise<Fetched> {
+  return follow(raw, "POST", body, contentType);
 }
 
 /** 飛ばされるのを1つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
 async function follow(
-    raw: string,
-    first: 'GET' | 'POST',
-    body: Uint8Array | undefined,
-    contentType = FORM,
+  raw: string,
+  first: "GET" | "POST",
+  body: Uint8Array | undefined,
+  contentType = FORM,
 ): Promise<Fetched> {
-    let { url, address } = await allowed(raw);
-    let method = first;
-    for (let hop = 0; ; hop++) {
-        const got = await doRequest(url, address, method, method === 'POST' ? body : undefined, contentType);
+  let { url, address } = await allowed(raw);
+  let method = first;
+  for (let hop = 0; ; hop++) {
+    const got = await doRequest(
+      url,
+      address,
+      method,
+      method === "POST" ? body : undefined,
+      contentType,
+    );
 
-        if (got.status >= 300 && got.status < 400 && got.location !== null) {
-            if (hop >= HOPS) throw new Refused('リダイレクトが多すぎます');
-            if (got.status !== 307 && got.status !== 308) method = 'GET';
-            ({ url, address } = await allowed(new URL(got.location, url).toString()));
-            continue;
-        }
-        return { status: got.status, contentType: got.contentType, body: got.body };
+    if (got.status >= 300 && got.status < 400 && got.location !== null) {
+      if (hop >= HOPS) throw new Refused("リダイレクトが多すぎます");
+      if (got.status !== 307 && got.status !== 308) method = "GET";
+      ({ url, address } = await allowed(new URL(got.location, url).toString()));
+      continue;
     }
+    return { status: got.status, contentType: got.contentType, body: got.body };
+  }
 }
 
 /**
@@ -349,34 +378,38 @@ async function follow(
  * 繋ぎ先は `allowed` と同じ枠で見ます — 内側を確かめる道具にしない
  */
 export async function confirmReachable(
-    destination: string,
-    timeoutMs: number,
-): Promise<{ success: boolean; ipAddress: string | null; responseTimeMillis: number | null }> {
-    // `example.jp` でも `https://example.jp/x` でも受ける
-    const host = destination.includes('://')
-        ? new URL(destination).hostname
-        : (destination.replace(/^\/+/, '').split('/')[0] ?? '');
-    if (host === '') throw new Refused('宛先がありません');
+  destination: string,
+  timeoutMs: number,
+): Promise<{
+  success: boolean;
+  ipAddress: string | null;
+  responseTimeMillis: number | null;
+}> {
+  // `example.jp` でも `https://example.jp/x` でも受ける
+  const host = destination.includes("://")
+    ? new URL(destination).hostname
+    : (destination.replace(/^\/+/, "").split("/")[0] ?? "");
+  if (host === "") throw new Refused("宛先がありません");
 
-    const started = Date.now();
-    // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
-    const address = await resolvable(host);
-    return await new Promise((resolve) => {
-        const socket = connect({
-            host: address,
-            port: 443,
-            timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)),
-        });
-        const done = (success: boolean) => {
-            socket.destroy();
-            resolve({
-                success,
-                ipAddress: address,
-                responseTimeMillis: success ? Date.now() - started : null,
-            });
-        };
-        socket.once('connect', () => done(true));
-        socket.once('timeout', () => done(false));
-        socket.once('error', () => done(false));
+  const started = Date.now();
+  // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
+  const address = await resolvable(host);
+  return await new Promise((resolve) => {
+    const socket = connect({
+      host: address,
+      port: 443,
+      timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)),
     });
+    const done = (success: boolean) => {
+      socket.destroy();
+      resolve({
+        success,
+        ipAddress: address,
+        responseTimeMillis: success ? Date.now() - started : null,
+      });
+    };
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
 }

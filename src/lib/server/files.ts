@@ -1,16 +1,34 @@
-import { type Dirent, existsSync, readdirSync, rmdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { and, eq, inArray, isNotNull, isNull, lt, max, ne, notInArray, or, sql } from 'drizzle-orm';
-import type { Recording } from '../types';
-import { config } from './config';
-import { affected, now, orm } from './db';
-import { pruneEmptyDirs, removeIfExists } from './fsx';
-import { removeSidecars, SIDECAR_SUFFIXES } from './metadata';
-import { encodeJobs, recordings, reservations } from './schema';
+import {
+  type Dirent,
+  existsSync,
+  readdirSync,
+  rmdirSync,
+  statSync,
+} from "node:fs";
+import { join } from "node:path";
+import {
+  and,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  max,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
+import type { Recording } from "../types";
+import { config } from "./config";
+import { affected, now, orm } from "./db";
+import { pruneEmptyDirs, removeIfExists } from "./fsx";
+import { removeSidecars, SIDECAR_SUFFIXES } from "./metadata";
+import { encodeJobs, recordings, reservations } from "./schema";
 
 const SIDECAR_ORPHAN = new RegExp(
-    `^(.+?)(?:${SIDECAR_SUFFIXES.map((suffix) => suffix.replace(/[.-]/g, '\\$&')).join('|')})$`,
-    'i',
+  `^(.+?)(?:${SIDECAR_SUFFIXES.map((suffix) => suffix.replace(/[.-]/g, "\\$&")).join("|")})$`,
+  "i",
 );
 
 /**
@@ -20,30 +38,33 @@ const SIDECAR_ORPHAN = new RegExp(
  * 消されることもあるので、DBと実体を突き合わせて消えたものを一覧から落とす仕組みも持つ。
  */
 
-export function deleteRecordingFiles(recording: Recording, reason: string): void {
-    // 両方のコーデックをエンコードしていれば2本ある。どちらもサイドカーごと消す
-    for (const path of [recording.library_path, recording.alt_path]) {
-        if (path === null) continue;
-        removeIfExists(path);
-        // 付き添い (ポスター・データ放送) も一緒に。取り残すと片付かないゴミになる
-        removeSidecars(path);
-        pruneEmptyDirs(path);
-    }
-    removeIfExists(recording.ts_path);
-    // 失敗した録画を消したときに理由を上書きすると、なぜ失敗したのかが分からなくなる。
-    // 元の理由があるならそちらを残す
-    orm()
-        .update(recordings)
-        .set({
-            deleted_at: now(),
-            library_path: null,
-            alt_path: null,
-            ts_path: null,
-            error: sql`COALESCE(NULLIF(${recordings.error}, ''), ${reason})`,
-            updated_at: now(),
-        })
-        .where(eq(recordings.id, recording.id))
-        .run();
+export function deleteRecordingFiles(
+  recording: Recording,
+  reason: string,
+): void {
+  // 両方のコーデックをエンコードしていれば2本ある。どちらもサイドカーごと消す
+  for (const path of [recording.library_path, recording.alt_path]) {
+    if (path === null) continue;
+    removeIfExists(path);
+    // 付き添い (ポスター・データ放送) も一緒に。取り残すと片付かないゴミになる
+    removeSidecars(path);
+    pruneEmptyDirs(path);
+  }
+  removeIfExists(recording.ts_path);
+  // 失敗した録画を消したときに理由を上書きすると、なぜ失敗したのかが分からなくなる。
+  // 元の理由があるならそちらを残す
+  orm()
+    .update(recordings)
+    .set({
+      deleted_at: now(),
+      library_path: null,
+      alt_path: null,
+      ts_path: null,
+      error: sql`COALESCE(NULLIF(${recordings.error}, ''), ${reason})`,
+      updated_at: now(),
+    })
+    .where(eq(recordings.id, recording.id))
+    .run();
 }
 
 /**
@@ -51,18 +72,18 @@ export function deleteRecordingFiles(recording: Recording, reason: string): void
  * はぐれファイルを片付けるとき、万一の同名衝突で他の録画を巻き添えにしないために見る
  */
 export function usedByOther(path: string, recordingId: number): boolean {
-    return (
-        orm()
-            .select({ id: recordings.id })
-            .from(recordings)
-            .where(
-                and(
-                    or(eq(recordings.library_path, path), eq(recordings.alt_path, path)),
-                    ne(recordings.id, recordingId),
-                ),
-            )
-            .get() !== undefined
-    );
+  return (
+    orm()
+      .select({ id: recordings.id })
+      .from(recordings)
+      .where(
+        and(
+          or(eq(recordings.library_path, path), eq(recordings.alt_path, path)),
+          ne(recordings.id, recordingId),
+        ),
+      )
+      .get() !== undefined
+  );
 }
 
 /**
@@ -77,52 +98,62 @@ export function usedByOther(path: string, recordingId: number): boolean {
  * 数だけ数えて、消すかどうかは人が決める。
  */
 export function reconcile(): {
-    checked: number;
-    removed: number;
-    swept: number;
-    strays: number;
-    pruned: number;
+  checked: number;
+  removed: number;
+  swept: number;
+  strays: number;
+  pruned: number;
 } {
-    const placed = orm()
-        .select()
-        .from(recordings)
-        .where(and(isNotNull(recordings.library_path), isNull(recordings.deleted_at)))
-        .all();
+  const placed = orm()
+    .select()
+    .from(recordings)
+    .where(
+      and(isNotNull(recordings.library_path), isNull(recordings.deleted_at)),
+    )
+    .all();
 
-    let removed = 0;
-    for (const recording of placed) {
-        // もう一方 (H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
-        if (recording.alt_path !== null && !existsSync(recording.alt_path)) {
-            orm()
-                .update(recordings)
-                .set({ alt_path: null, updated_at: now() })
-                .where(eq(recordings.id, recording.id))
-                .run();
-            removeSidecars(recording.alt_path);
-            console.log(`[files] もう一方が消えていたので控えを外しました: ${recording.name}`);
-        }
-        if (existsSync(recording.library_path!)) continue;
-        /*
-         * **主が外から消えても、もう一方が残っていれば繰り上げる。** 両方の
-         * コーデックをエンコードした録画で、外からAV1のほうだけ消されたときに録画ごと
-         * 消してしまわないため。もう一方も無ければ、いつもどおり削除済みに倒す
-         */
-        if (recording.alt_path !== null && existsSync(recording.alt_path)) {
-            orm()
-                .update(recordings)
-                .set({ library_path: recording.alt_path, alt_path: null, updated_at: now() })
-                .where(eq(recordings.id, recording.id))
-                .run();
-            console.log(`[files] 主が消えたので繰り上げました: ${recording.name}`);
-            continue;
-        }
-        deleteRecordingFiles(recording, '保存先から消えていました');
-        removed++;
-        console.log(`[files] 保存先から消えていたので削除済みにしました: ${recording.name}`);
+  let removed = 0;
+  for (const recording of placed) {
+    // もう一方 (H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
+    if (recording.alt_path !== null && !existsSync(recording.alt_path)) {
+      orm()
+        .update(recordings)
+        .set({ alt_path: null, updated_at: now() })
+        .where(eq(recordings.id, recording.id))
+        .run();
+      removeSidecars(recording.alt_path);
+      console.log(
+        `[files] もう一方が消えていたので控えを外しました: ${recording.name}`,
+      );
     }
+    if (existsSync(recording.library_path!)) continue;
+    /*
+     * **主が外から消えても、もう一方が残っていれば繰り上げる。** 両方の
+     * コーデックをエンコードした録画で、外からAV1のほうだけ消されたときに録画ごと
+     * 消してしまわないため。もう一方も無ければ、いつもどおり削除済みに倒す
+     */
+    if (recording.alt_path !== null && existsSync(recording.alt_path)) {
+      orm()
+        .update(recordings)
+        .set({
+          library_path: recording.alt_path,
+          alt_path: null,
+          updated_at: now(),
+        })
+        .where(eq(recordings.id, recording.id))
+        .run();
+      console.log(`[files] 主が消えたので繰り上げました: ${recording.name}`);
+      continue;
+    }
+    deleteRecordingFiles(recording, "保存先から消えていました");
+    removed++;
+    console.log(
+      `[files] 保存先から消えていたので削除済みにしました: ${recording.name}`,
+    );
+  }
 
-    const left = sweepLeftovers();
-    return { checked: placed.length, removed, ...left };
+  const left = sweepLeftovers();
+  return { checked: placed.length, removed, ...left };
 }
 
 /** 動画そのもの。これに付き添うものが「付き添い」 */
@@ -144,11 +175,11 @@ const SETTLE = 60 * 60_000;
 
 /** まだ書いている最中かもしれないもの。**読めないものも触らない** */
 function settling(path: string, at: number): boolean {
-    try {
-        return at - statSync(path).mtimeMs < SETTLE;
-    } catch {
-        return true;
-    }
+  try {
+    return at - statSync(path).mtimeMs < SETTLE;
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -162,103 +193,106 @@ function settling(path: string, at: number): boolean {
  * 元のTSを残さない設定だと、TS が消えたあとも付き添いだけが居座り、録るたびに積もる。
  */
 function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
-    const known = new Set(
-        orm()
-            .select({
-                ts_path: recordings.ts_path,
-                library_path: recordings.library_path,
-                alt_path: recordings.alt_path,
-            })
-            .from(recordings)
-            .all()
-            .flatMap((row) => [row.ts_path, row.library_path, row.alt_path])
-            .filter((path): path is string => path !== null),
-    );
+  const known = new Set(
+    orm()
+      .select({
+        ts_path: recordings.ts_path,
+        library_path: recordings.library_path,
+        alt_path: recordings.alt_path,
+      })
+      .from(recordings)
+      .all()
+      .flatMap((row) => [row.ts_path, row.library_path, row.alt_path])
+      .filter((path): path is string => path !== null),
+  );
 
-    const at = now();
-    let swept = 0;
-    let strays = 0;
-    for (const root of [config.rawDir, config.encodedDir]) {
-        const { files } = walk(root);
-        const videos = new Set(files.filter((path) => VIDEO.test(path)));
-        for (const path of videos) {
-            // 動画は消さない。手で置いたものかもしれないので、数えるだけ。
-            // エンコードしている途中の切り出し (`<入力>.cut.m2ts`) を数に入れないよう、書きたては飛ばす
-            if (!known.has(path) && !settling(path, at)) strays++;
-        }
-        for (const path of files) {
-            if (videos.has(path)) continue;
-            if (!orphan(path, videos)) continue;
-            if (settling(path, at)) continue;
-            removeIfExists(path);
-            pruneEmptyDirs(path);
-            swept++;
-        }
+  const at = now();
+  let swept = 0;
+  let strays = 0;
+  for (const root of [config.rawDir, config.encodedDir]) {
+    const { files } = walk(root);
+    const videos = new Set(files.filter((path) => VIDEO.test(path)));
+    for (const path of videos) {
+      // 動画は消さない。手で置いたものかもしれないので、数えるだけ。
+      // エンコードしている途中の切り出し (`<入力>.cut.m2ts`) を数に入れないよう、書きたては飛ばす
+      if (!known.has(path) && !settling(path, at)) strays++;
     }
-
-    /*
-     * **すでに空のフォルダも畳む。**
-     *
-     * 上の掃除は「ファイルを消した道すがら」しか畳まない。ファイルの無い
-     * フォルダは `walk` (ファイルだけを返す) の目に入らず、**一生残る**。
-     *
-     * 深いものから試す。親は子が消えてはじめて空になる。**空でなければ
-     * `rmdir` が断ってくれる**ので、中身の確認はしない。作りたては飛ばす —
-     * エンコードがこれからファイルを置くところかもしれない。
-     *
-     * **古さは消す前にまとめて見る。** 子を `rmdir` すると親の mtime が
-     * いま になるので、消しながら見ると**自分の掃除で親が作りたてに化けて**
-     * シリーズのフォルダだけ残る
-     */
-    const dirs = walk(config.encodedDir)
-        .dirs.filter((dir) => !settling(dir, at))
-        .sort((a, b) => b.length - a.length);
-    let pruned = 0;
-    for (const dir of dirs) {
-        try {
-            rmdirSync(dir);
-            pruned++;
-        } catch {
-            // 空でない。それが正常
-        }
+    for (const path of files) {
+      if (videos.has(path)) continue;
+      if (!orphan(path, videos)) continue;
+      if (settling(path, at)) continue;
+      removeIfExists(path);
+      pruneEmptyDirs(path);
+      swept++;
     }
+  }
 
-    if (swept > 0) console.log(`[files] 連れ合いの無い付き添いを片付けました: ${swept} 件`);
-    if (pruned > 0) console.log(`[files] 空のフォルダを畳みました: ${pruned} 件`);
-    return { swept, strays, pruned };
+  /*
+   * **すでに空のフォルダも畳む。**
+   *
+   * 上の掃除は「ファイルを消した道すがら」しか畳まない。ファイルの無い
+   * フォルダは `walk` (ファイルだけを返す) の目に入らず、**一生残る**。
+   *
+   * 深いものから試す。親は子が消えてはじめて空になる。**空でなければ
+   * `rmdir` が断ってくれる**ので、中身の確認はしない。作りたては飛ばす —
+   * エンコードがこれからファイルを置くところかもしれない。
+   *
+   * **古さは消す前にまとめて見る。** 子を `rmdir` すると親の mtime が
+   * いま になるので、消しながら見ると**自分の掃除で親が作りたてに化けて**
+   * シリーズのフォルダだけ残る
+   */
+  const dirs = walk(config.encodedDir)
+    .dirs.filter((dir) => !settling(dir, at))
+    .sort((a, b) => b.length - a.length);
+  let pruned = 0;
+  for (const dir of dirs) {
+    try {
+      rmdirSync(dir);
+      pruned++;
+    } catch {
+      // 空でない。それが正常
+    }
+  }
+
+  if (swept > 0)
+    console.log(`[files] 連れ合いの無い付き添いを片付けました: ${swept} 件`);
+  if (pruned > 0) console.log(`[files] 空のフォルダを畳みました: ${pruned} 件`);
+  return { swept, strays, pruned };
 }
 
 /** 付き添いで、かつ連れ合いの動画が1つも無いか */
 function orphan(path: string, videos: Set<string>): boolean {
-    // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`)
-    const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
-    if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
-    // ポスター・データ放送。動画の拡張子を取り替えた名前 (metadata.ts の SIDECAR_SUFFIXES)
-    const base = SIDECAR_ORPHAN.exec(path);
-    if (base === null) return false;
-    // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る
-    return !['m2ts', 'ts', 'mkv', 'mp4'].some((extension) => videos.has(`${base[1]}.${extension}`));
+  // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`)
+  const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
+  if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
+  // ポスター・データ放送。動画の拡張子を取り替えた名前 (metadata.ts の SIDECAR_SUFFIXES)
+  const base = SIDECAR_ORPHAN.exec(path);
+  if (base === null) return false;
+  // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る
+  return !["m2ts", "ts", "mkv", "mp4"].some((extension) =>
+    videos.has(`${base[1]}.${extension}`),
+  );
 }
 
 /** 置き場の下を全部集める (ファイルとフォルダを分けて)。置き場がまだ無ければ空 */
 function walk(
-    dir: string,
-    out = { files: [] as string[], dirs: [] as string[] },
+  dir: string,
+  out = { files: [] as string[], dirs: [] as string[] },
 ): { files: string[]; dirs: string[] } {
-    let entries: Dirent[];
-    try {
-        entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-        return out;
-    }
-    for (const entry of entries) {
-        const path = join(dir, entry.name);
-        if (entry.isDirectory()) {
-            out.dirs.push(path);
-            walk(path, out);
-        } else out.files.push(path);
-    }
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
     return out;
+  }
+  for (const entry of entries) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.dirs.push(path);
+      walk(path, out);
+    } else out.files.push(path);
+  }
+  return out;
 }
 
 /**
@@ -268,69 +302,90 @@ function walk(
  * 対象は**終わった予約**と**消した録画の行**だけ。ファイルが残っているものには
  * 触らない(消すかどうかはユーザーが決めること)。
  */
-export function pruneHistory(): { reservations: number; recordings: number; jobs: number } {
-    const cutoff = now() - config.historyRetention;
+export function pruneHistory(): {
+  reservations: number;
+  recordings: number;
+  jobs: number;
+} {
+  const cutoff = now() - config.historyRetention;
 
-    /*
-     * 録画中や予約中のものは、いつ立てたかに関係なく残す。
-     * 「終わった予約」は**取り消し・録り逃し・録画しない (コピー禁止) か、もう録り始めたもの**。
-     * 録り始めたあとの顛末は録画の行が持っているので、予約側では見ない
-     */
-    const droppedReservations = affected(
-        orm()
-            .delete(reservations)
-            .where(
-                and(
-                    or(
-                        inArray(reservations.state, ['canceled', 'missed', 'skipped']),
-                        isNotNull(reservations.started_at),
-                    ),
-                    lt(reservations.end_at, cutoff),
-                ),
-            ),
-    );
-
-    // 実体はもう無い (deleted_at が立つときに消してある)
-    const droppedRecordings = affected(
-        orm()
-            .delete(recordings)
-            .where(and(isNotNull(recordings.deleted_at), lt(recordings.deleted_at, cutoff))),
-    );
-
-    // 録画の行を消したら、ぶら下がっていたエンコードの記録も要らない
+  /*
+   * 録画中や予約中のものは、いつ立てたかに関係なく残す。
+   * 「終わった予約」は**取り消し・録り逃し・録画しない (コピー禁止) か、もう録り始めたもの**。
+   * 録り始めたあとの顛末は録画の行が持っているので、予約側では見ない
+   */
+  const droppedReservations = affected(
     orm()
-        .delete(encodeJobs)
-        .where(notInArray(encodeJobs.recording_id, orm().select({ id: recordings.id }).from(recordings)))
-        .run();
+      .delete(reservations)
+      .where(
+        and(
+          or(
+            inArray(reservations.state, ["canceled", "missed", "skipped"]),
+            isNotNull(reservations.started_at),
+          ),
+          lt(reservations.end_at, cutoff),
+        ),
+      ),
+  );
 
-    /*
-     * 終わったエンコードの記録も期限を切る (録画の行が残っていても)。
-     *
-     * **いちばん新しい1件だけは残す。** 一覧はそれを見て
-     * 「いま失敗しているか」を決めているため、消してしまうと状態が読めなくなる。
-     */
-    const jobs = affected(
-        orm()
-            .delete(encodeJobs)
-            .where(
-                and(
-                    inArray(encodeJobs.state, ['done', 'failed', 'canceled']),
-                    lt(sql`COALESCE(${encodeJobs.finished_at}, ${encodeJobs.created_at})`, cutoff),
-                    notInArray(
-                        encodeJobs.id,
-                        orm()
-                            .select({ id: max(encodeJobs.id) })
-                            .from(encodeJobs)
-                            .groupBy(encodeJobs.recording_id),
-                    ),
-                ),
-            ),
+  // 実体はもう無い (deleted_at が立つときに消してある)
+  const droppedRecordings = affected(
+    orm()
+      .delete(recordings)
+      .where(
+        and(
+          isNotNull(recordings.deleted_at),
+          lt(recordings.deleted_at, cutoff),
+        ),
+      ),
+  );
+
+  // 録画の行を消したら、ぶら下がっていたエンコードの記録も要らない
+  orm()
+    .delete(encodeJobs)
+    .where(
+      notInArray(
+        encodeJobs.recording_id,
+        orm().select({ id: recordings.id }).from(recordings),
+      ),
+    )
+    .run();
+
+  /*
+   * 終わったエンコードの記録も期限を切る (録画の行が残っていても)。
+   *
+   * **いちばん新しい1件だけは残す。** 一覧はそれを見て
+   * 「いま失敗しているか」を決めているため、消してしまうと状態が読めなくなる。
+   */
+  const jobs = affected(
+    orm()
+      .delete(encodeJobs)
+      .where(
+        and(
+          inArray(encodeJobs.state, ["done", "failed", "canceled"]),
+          lt(
+            sql`COALESCE(${encodeJobs.finished_at}, ${encodeJobs.created_at})`,
+            cutoff,
+          ),
+          notInArray(
+            encodeJobs.id,
+            orm()
+              .select({ id: max(encodeJobs.id) })
+              .from(encodeJobs)
+              .groupBy(encodeJobs.recording_id),
+          ),
+        ),
+      ),
+  );
+
+  if (droppedReservations > 0 || droppedRecordings > 0 || jobs > 0) {
+    console.log(
+      `[files] 古い履歴を片付けました: 予約 ${droppedReservations} 件 / 録画 ${droppedRecordings} 件 / エンコード ${jobs} 件`,
     );
-
-    if (droppedReservations > 0 || droppedRecordings > 0 || jobs > 0) {
-        console.log(
-            `[files] 古い履歴を片付けました: 予約 ${droppedReservations} 件 / 録画 ${droppedRecordings} 件 / エンコード ${jobs} 件`,
-        );
-    }
-    return { reservations: droppedReservations, recordings: droppedRecordings, jobs };
+  }
+  return {
+    reservations: droppedReservations,
+    recordings: droppedRecordings,
+    jobs,
+  };
 }

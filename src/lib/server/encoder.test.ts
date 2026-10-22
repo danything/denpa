@@ -1,63 +1,72 @@
-import { describe, expect, test } from 'bun:test';
-import { closeSync, mkdtempSync, openSync, readSync, realpathSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, test } from "bun:test";
 import {
-    buildArgs,
-    encodeProgress,
-    expectedFrames,
-    failureReason,
-    findInputFd,
-    headSkip,
-    inputSkip,
-    readInputPos,
-} from './encoder';
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  buildArgs,
+  encodeProgress,
+  expectedFrames,
+  failureReason,
+  findInputFd,
+  headSkip,
+  inputSkip,
+  readInputPos,
+} from "./encoder";
 
 function argValue(args: string[], key: string): string | undefined {
-    const i = args.indexOf(key);
-    return i === -1 ? undefined : args[i + 1];
+  const i = args.indexOf(key);
+  return i === -1 ? undefined : args[i + 1];
 }
 
-describe('録画エンコードの引数', () => {
-    test('既定は AV1 8bit で、コマ数は増やさない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(args).toContain('libsvtav1');
-        // send_field だとコマ数が倍になり、時間もサイズも約2倍になる
-        expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,format=yuv420p');
-        expect(args.at(-1)).toBe('/out.mkv');
-    });
+describe("録画エンコードの引数", () => {
+  test("既定は AV1 8bit で、コマ数は増やさない", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(args).toContain("libsvtav1");
+    // send_field だとコマ数が倍になり、時間もサイズも約2倍になる
+    expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=yuv420p");
+    expect(args.at(-1)).toBe("/out.mkv");
+  });
 
-    // 上流の既定 preset は版で変わる (encoder.videoArgs の実測)。書いてあることを守る。
-    // **10 に戻さない** — M10 以上はシーンの変わり目でブロックノイズが出る
-    // (docs/encode.md「preset は 9・crf 35 (値は書いておく)」)
-    test('AV1 の preset と crf は書いてある', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(argValue(args, '-preset')).toBe('9');
-        expect(argValue(args, '-crf')).toBe('35');
-    });
+  // 上流の既定 preset は版で変わる (encoder.videoArgs の実測)。書いてあることを守る。
+  // **10 に戻さない** — M10 以上はシーンの変わり目でブロックノイズが出る
+  // (docs/encode.md「preset は 9・crf 35 (値は書いておく)」)
+  test("AV1 の preset と crf は書いてある", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(argValue(args, "-preset")).toBe("9");
+    expect(argValue(args, "-crf")).toBe("35");
+  });
 
-    /*
-     * **H.264 の crf は AV1 と同じ画質になる値。** 24 だった頃は、実写の忙しい
-     * ところで AV1 より 0.94dB 低く、そのぶん小さいだけだった。実測の表は docs/encode.md「H.264 は crf 23」
-     */
-    test('H.264 の crf は AV1 と同じ画質の 23', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264');
-        expect(argValue(args, '-preset')).toBe('medium');
-        expect(argValue(args, '-crf')).toBe('23');
-    });
+  /*
+   * **H.264 の crf は AV1 と同じ画質になる値。** 24 だった頃は、実写の忙しい
+   * ところで AV1 より 0.94dB 低く、そのぶん小さいだけだった。実測の表は docs/encode.md「H.264 は crf 23」
+   */
+  test("H.264 の crf は AV1 と同じ画質の 23", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264");
+    expect(argValue(args, "-preset")).toBe("medium");
+    expect(argValue(args, "-crf")).toBe("23");
+  });
 
-    test('なめらかにすると1フィールドごとに1コマ出す', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { smoothMotion: true });
-        expect(argValue(args, '-vf')).toBe('bwdif,format=yuv420p');
+  test("なめらかにすると1フィールドごとに1コマ出す", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      smoothMotion: true,
     });
+    expect(argValue(args, "-vf")).toBe("bwdif,format=yuv420p");
+  });
 
-    // どちらも 8bit (理由と実測は encoder.videoArgs)
-    test('10bit では出さない', () => {
-        for (const codec of ['av1', 'h264'] as const) {
-            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec);
-            expect(argValue(args, '-vf'), codec).not.toContain('10le');
-        }
-    });
+  // どちらも 8bit (理由と実測は encoder.videoArgs)
+  test("10bit では出さない", () => {
+    for (const codec of ["av1", "h264"] as const) {
+      const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec);
+      expect(argValue(args, "-vf"), codec).not.toContain("10le");
+    }
+  });
 });
 
 /**
@@ -66,436 +75,495 @@ describe('録画エンコードの引数', () => {
  * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
  * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない。
  */
-describe('トラックの名前', () => {
-    const title = (args: string[], key: string) => argValue(args, key);
+describe("トラックの名前", () => {
+  const title = (args: string[], key: string) => argValue(args, key);
 
-    test('音声に番組表と同じ名前を入れる', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            audioTitles: ['主音声 (日本語)', '解説 (日本語)'],
-        });
-        expect(title(args, '-metadata:s:a:0')).toBe('title=主音声 (日本語)');
-        expect(title(args, '-metadata:s:a:1')).toBe('title=解説 (日本語)');
+  test("音声に番組表と同じ名前を入れる", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      audioTitles: ["主音声 (日本語)", "解説 (日本語)"],
     });
+    expect(title(args, "-metadata:s:a:0")).toBe("title=主音声 (日本語)");
+    expect(title(args, "-metadata:s:a:1")).toBe("title=解説 (日本語)");
+  });
 
-    /*
-     * **多すぎても困らない。** 番組表が言っている本数と実際に入っている本数は
-     * 食い違いうるが、ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
-     * (実機で確認)。名前が無いものは何も言わない
-     */
-    test('名前が無ければ何も言わない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(args.some((arg) => arg.startsWith('-metadata:s:a:'))).toBe(false);
+  /*
+   * **多すぎても困らない。** 番組表が言っている本数と実際に入っている本数は
+   * 食い違いうるが、ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
+   * (実機で確認)。名前が無いものは何も言わない
+   */
+  test("名前が無ければ何も言わない", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(args.some((arg) => arg.startsWith("-metadata:s:a:"))).toBe(false);
+  });
+
+  test("空の名前は入れない", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      audioTitles: ["", "副音声"],
     });
+    expect(args).not.toContain("-metadata:s:a:0");
+    expect(title(args, "-metadata:s:a:1")).toBe("title=副音声");
+  });
 
-    test('空の名前は入れない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioTitles: ['', '副音声'] });
-        expect(args).not.toContain('-metadata:s:a:0');
-        expect(title(args, '-metadata:s:a:1')).toBe('title=副音声');
+  /** 頭に中身の無い音声 (次の番組の副音声) は使わない。分からなければ全部使う */
+  test("使う音声を名指しされたらそれだけを map する", () => {
+    const all = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(all).toContain("0:a");
+
+    const picked = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      audioStreams: [0, 2],
     });
+    expect(picked).not.toContain("0:a");
+    expect(picked).toContain("0:a:0");
+    expect(picked).toContain("0:a:2");
+    expect(picked).not.toContain("0:a:1");
 
-    /** 頭に中身の無い音声 (次の番組の副音声) は使わない。分からなければ全部使う */
-    test('使う音声を名指しされたらそれだけを map する', () => {
-        const all = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(all).toContain('0:a');
+    expect(
+      buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", { audioStreams: [] }),
+    ).toContain("0:a");
+  });
 
-        const picked = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioStreams: [0, 2] });
-        expect(picked).not.toContain('0:a');
-        expect(picked).toContain('0:a:0');
-        expect(picked).toContain('0:a:2');
-        expect(picked).not.toContain('0:a:1');
+  /** 字幕には「字幕」と日本語の名前 */
+  test("字幕にも名前を入れる", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(title(args, "-metadata:s:s:0")).toBe("title=字幕");
+  });
 
-        expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { audioStreams: [] })).toContain('0:a');
+  /** 入れ物の title は番組名 */
+  test("入れ物に番組名を入れる", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      mediaTitle: "転生したらスライムだった件 #88",
     });
+    expect(title(args, "-metadata")).toBe(
+      "title=転生したらスライムだった件 #88",
+    );
 
-    /** 字幕には「字幕」と日本語の名前 */
-    test('字幕にも名前を入れる', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(title(args, '-metadata:s:s:0')).toBe('title=字幕');
-    });
-
-    /** 入れ物の title は番組名 */
-    test('入れ物に番組名を入れる', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            mediaTitle: '転生したらスライムだった件 #88',
-        });
-        expect(title(args, '-metadata')).toBe('title=転生したらスライムだった件 #88');
-
-        // 無ければ書かない (空の title で上書きしない)
-        const plain = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(plain).not.toContain('-metadata');
-    });
+    // 無ければ書かない (空の title で上書きしない)
+    const plain = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(plain).not.toContain("-metadata");
+  });
 });
 
-describe('エンコードの引数 (入れ物・コーデック・字幕・頭捨て)', () => {
-    test('入れ物は拡張子ではなく引数で決める', () => {
-        // 書いている間は .mkv.encoding という名前なので、拡張子からは決まらない
-        const args = buildArgs('/in.m2ts', '/out.mkv.encoding', 1, null);
-        expect(argValue(args, '-f')).toBe('matroska');
-        expect(args.at(-1)).toBe('/out.mkv.encoding');
-    });
+describe("エンコードの引数 (入れ物・コーデック・字幕・頭捨て)", () => {
+  test("入れ物は拡張子ではなく引数で決める", () => {
+    // 書いている間は .mkv.encoding という名前なので、拡張子からは決まらない
+    const args = buildArgs("/in.m2ts", "/out.mkv.encoding", 1, null);
+    expect(argValue(args, "-f")).toBe("matroska");
+    expect(args.at(-1)).toBe("/out.mkv.encoding");
+  });
 
-    test('h264 を選ぶと x264 の 8bit になる', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264');
-        expect(args).toContain('libx264');
-        expect(args).not.toContain('libsvtav1');
-        expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,format=yuv420p');
-        expect(args).toContain('-preset');
-    });
+  test("h264 を選ぶと x264 の 8bit になる", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264");
+    expect(args).toContain("libx264");
+    expect(args).not.toContain("libsvtav1");
+    expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=yuv420p");
+    expect(args).toContain("-preset");
+  });
 
-    test('GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を渡す', () => {
-        // QSV は自分で上げるので hwupload は無い。画質は ICQ で、コーデックが違っても同じ 24
-        for (const codec of ['av1', 'h264'] as const) {
-            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec, {
-                hardware: { device: '/dev/dri/renderD129', kind: 'qsv' },
-            });
-            expect(args.indexOf('-init_hw_device')).toBeLessThan(args.indexOf('-i'));
-            expect(argValue(args, '-init_hw_device')).toBe('qsv=hw:hw,child_device=/dev/dri/renderD129');
-            expect(args).toContain(`${codec}_qsv`);
-            expect(argValue(args, '-global_quality')).toBe('24');
-            expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,format=nv12');
-            expect(args).not.toContain('libx264');
-            expect(args).not.toContain('libsvtav1');
-        }
-        // VA-API は上げるところまで自分でやる
-        const va = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264', {
-            hardware: { device: '/dev/dri/renderD128', kind: 'vaapi' },
-        });
-        expect(argValue(va, '-init_hw_device')).toBe('vaapi=va:/dev/dri/renderD128');
-        expect(argValue(va, '-filter_hw_device')).toBe('va');
-        expect(argValue(va, '-vf')).toBe('bwdif=mode=send_frame,format=nv12,hwupload');
-        expect(va).toContain('h264_vaapi');
-        expect(argValue(va, '-rc_mode')).toBe('ICQ');
-        // 渡さなければソフトウェア。GPU のデバイスも開けない
-        expect(buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264')).not.toContain('-init_hw_device');
+  test("GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を渡す", () => {
+    // QSV は自分で上げるので hwupload は無い。画質は ICQ で、コーデックが違っても同じ 24
+    for (const codec of ["av1", "h264"] as const) {
+      const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec, {
+        hardware: { device: "/dev/dri/renderD129", kind: "qsv" },
+      });
+      expect(args.indexOf("-init_hw_device")).toBeLessThan(args.indexOf("-i"));
+      expect(argValue(args, "-init_hw_device")).toBe(
+        "qsv=hw:hw,child_device=/dev/dri/renderD129",
+      );
+      expect(args).toContain(`${codec}_qsv`);
+      expect(argValue(args, "-global_quality")).toBe("24");
+      expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=nv12");
+      expect(args).not.toContain("libx264");
+      expect(args).not.toContain("libsvtav1");
+    }
+    // VA-API は上げるところまで自分でやる
+    const va = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
+      hardware: { device: "/dev/dri/renderD128", kind: "vaapi" },
     });
+    expect(argValue(va, "-init_hw_device")).toBe(
+      "vaapi=va:/dev/dri/renderD128",
+    );
+    expect(argValue(va, "-filter_hw_device")).toBe("va");
+    expect(argValue(va, "-vf")).toBe(
+      "bwdif=mode=send_frame,format=nv12,hwupload",
+    );
+    expect(va).toContain("h264_vaapi");
+    expect(argValue(va, "-rc_mode")).toBe("ICQ");
+    // 渡さなければソフトウェア。GPU のデバイスも開けない
+    expect(buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264")).not.toContain(
+      "-init_hw_device",
+    );
+  });
 
-    test('字幕は1本だけ。入力も1回しか開かない', () => {
-        for (const codec of ['av1', 'h264'] as const) {
-            const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, codec);
-            /*
-             * ASS (外字が「〓」になる) と dvdsub (1枚4色) を作るために同じ入力を
-             * 2回開いていた頃の名残を残さない
-             */
-            expect(args.filter((a) => a === '/in.m2ts')).toHaveLength(1);
-            expect(args).not.toContain('ass');
-            expect(args).not.toContain('dvdsub');
-            expect(argValue(args, '-disposition:s:0')).toBe('default');
-            expect(argValue(args, '-c:s:1')).toBeUndefined();
-            expect(argValue(args, '-c:a')).toBe('libopus');
-        }
-    });
+  test("字幕は1本だけ。入力も1回しか開かない", () => {
+    for (const codec of ["av1", "h264"] as const) {
+      const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec);
+      /*
+       * ASS (外字が「〓」になる) と dvdsub (1枚4色) を作るために同じ入力を
+       * 2回開いていた頃の名残を残さない
+       */
+      expect(args.filter((a) => a === "/in.m2ts")).toHaveLength(1);
+      expect(args).not.toContain("ass");
+      expect(args).not.toContain("dvdsub");
+      expect(argValue(args, "-disposition:s:0")).toBe("default");
+      expect(argValue(args, "-c:s:1")).toBeUndefined();
+      expect(argValue(args, "-c:a")).toBe("libopus");
+    }
+  });
 
-    test('デュアルモノは左右を別トラックに分ける', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 2, null);
-        expect(argValue(args, '-filter_complex')).toContain('channelsplit');
-        expect(args).toContain('language=jpn');
-        expect(args).toContain('language=und');
-    });
+  test("デュアルモノは左右を別トラックに分ける", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 2, null);
+    expect(argValue(args, "-filter_complex")).toContain("channelsplit");
+    expect(args).toContain("language=jpn");
+    expect(args).toContain("language=und");
+  });
 
-    test('再試行時は頭を捨てる', () => {
-        expect(argValue(buildArgs('/in.m2ts', '/out.mkv', 1, 0.2), '-ss')).toBe('0.2');
-    });
+  test("再試行時は頭を捨てる", () => {
+    expect(argValue(buildArgs("/in.m2ts", "/out.mkv", 1, 0.2), "-ss")).toBe(
+      "0.2",
+    );
+  });
 
-    test('CMを切っても字幕は落とさない', () => {
-        // 字幕も CM ごと写して、エンコードしたものと一緒に切る (cm-cut.ts)
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { keyframes: 'scene' });
-        expect(args).not.toContain('-sn');
-        expect(argValue(args, '-c:s')).toBe('copy');
+  test("CMを切っても字幕は落とさない", () => {
+    // 字幕も CM ごと写して、エンコードしたものと一緒に切る (cm-cut.ts)
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      keyframes: "scene",
     });
+    expect(args).not.toContain("-sn");
+    expect(argValue(args, "-c:s")).toBe("copy");
+  });
 
-    test('チャプターだけならそれが2つ目の入力になる', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { chaptersFile: '/tmp/c.txt' });
-        expect(args).toContain('/tmp/c.txt');
-        expect(argValue(args, '-map_chapters')).toBe('1');
+  test("チャプターだけならそれが2つ目の入力になる", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      chaptersFile: "/tmp/c.txt",
     });
+    expect(args).toContain("/tmp/c.txt");
+    expect(argValue(args, "-map_chapters")).toBe("1");
+  });
 
-    test('字幕は放送の ARIB 字幕を局で名指しして写す', () => {
-        // 名指ししない既定の選び方では ARIB の字幕が落ちる。Matroska には S_ARIBSUB で入る
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { program: 1024 });
-        expect(args).toContain('0:p:1024:s:0?');
-        expect(argValue(args, '-c:s')).toBe('copy');
-        // 局が分からなければ入力の頭の字幕
-        expect(buildArgs('/in.m2ts', '/out.mkv', 1, null)).toContain('0:s:0?');
+  test("字幕は放送の ARIB 字幕を局で名指しして写す", () => {
+    // 名指ししない既定の選び方では ARIB の字幕が落ちる。Matroska には S_ARIBSUB で入る
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      program: 1024,
     });
+    expect(args).toContain("0:p:1024:s:0?");
+    expect(argValue(args, "-c:s")).toBe("copy");
+    // 局が分からなければ入力の頭の字幕
+    expect(buildArgs("/in.m2ts", "/out.mkv", 1, null)).toContain("0:s:0?");
+  });
 
-    /**
-     * TS は音声のほうが先に始まっていることが多い。実機では映像の1コマ目が
-     * 0.930 秒あとで、エンコードしたものも音声だけの区間から始まっていた。
-     * 1コマ目を 0 秒として数えるプレイヤーでは、そのぶん字幕が早く出る。
-     *
-     * **ずらすのではなく捨てる。** `-output_ts_offset` では直らなかった —
-     * Matroska は負の時刻を持てないので、下がった音声を muxer が押し戻し、
-     * 全トラックまとめて元の位置に戻る (実測: 0.363 渡して動いたのは 0.022 だけ)。
-     * 捨てれば映像も音声も 0.000 から始まる (実測で確認)
-     */
-    test('映像が出るまでの音声だけの区間は捨てる', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { videoStart: 0.93 });
-        expect(argValue(args, '-ss')).toBe('0.93');
-        // ずらす方式は効かないので使わない
-        expect(args).not.toContain('-output_ts_offset');
+  /**
+   * TS は音声のほうが先に始まっていることが多い。実機では映像の1コマ目が
+   * 0.930 秒あとで、エンコードしたものも音声だけの区間から始まっていた。
+   * 1コマ目を 0 秒として数えるプレイヤーでは、そのぶん字幕が早く出る。
+   *
+   * **ずらすのではなく捨てる。** `-output_ts_offset` では直らなかった —
+   * Matroska は負の時刻を持てないので、下がった音声を muxer が押し戻し、
+   * 全トラックまとめて元の位置に戻る (実測: 0.363 渡して動いたのは 0.022 だけ)。
+   * 捨てれば映像も音声も 0.000 から始まる (実測で確認)
+   */
+  test("映像が出るまでの音声だけの区間は捨てる", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      videoStart: 0.93,
     });
+    expect(argValue(args, "-ss")).toBe("0.93");
+    // ずらす方式は効かないので使わない
+    expect(args).not.toContain("-output_ts_offset");
+  });
 
-    test('捨てるのは入力側 (最初の -i より前)', () => {
-        // 出力側に置くと、読み飛ばさずに全部復号してから捨てることになる
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { videoStart: 0.93 });
-        expect(args.indexOf('-ss')).toBeLessThan(args.indexOf('-i'));
+  test("捨てるのは入力側 (最初の -i より前)", () => {
+    // 出力側に置くと、読み飛ばさずに全部復号してから捨てることになる
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      videoStart: 0.93,
     });
+    expect(args.indexOf("-ss")).toBeLessThan(args.indexOf("-i"));
+  });
 
-    test('ほぼ 0 なら捨てない', () => {
-        // 数ミリ秒のずれのために seek を掛けても、得るものが無い
-        expect(argValue(buildArgs('/in.m2ts', '/out.mkv', 1, null), '-ss')).toBeUndefined();
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { videoStart: 0.02 });
-        expect(argValue(args, '-ss')).toBeUndefined();
+  test("ほぼ 0 なら捨てない", () => {
+    // 数ミリ秒のずれのために seek を掛けても、得るものが無い
+    expect(
+      argValue(buildArgs("/in.m2ts", "/out.mkv", 1, null), "-ss"),
+    ).toBeUndefined();
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      videoStart: 0.02,
     });
+    expect(argValue(args, "-ss")).toBeUndefined();
+  });
 
-    test('再試行の頭捨てと足し算になる', () => {
-        // 再試行 (PAT/PMT が固まる前) と音声だけの区間は別の理由。両方捨てる
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, 0.2, 'av1', { videoStart: 0.93 });
-        expect(Number(argValue(args, '-ss'))).toBeCloseTo(1.13, 5);
+  test("再試行の頭捨てと足し算になる", () => {
+    // 再試行 (PAT/PMT が固まる前) と音声だけの区間は別の理由。両方捨てる
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, 0.2, "av1", {
+      videoStart: 0.93,
     });
+    expect(Number(argValue(args, "-ss"))).toBeCloseTo(1.13, 5);
+  });
 
-    /**
-     * 地上波HDは 1440x1080 の横長画素で送られてくる。添え書きを見ない
-     * 添え書きを見ないプレイヤー (実機の Android) では 4:3 に潰れるので、正方形に直して出す。
-     * **大きさは測って渡す** — `iw*sar` と式で書くと、SAR が読めない素材で
-     * 幅が 0 になって落ちる
-     */
-    test('横長の画素は正方形に直した大きさへ引き伸ばす', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            displaySize: { width: 1920, height: 1080 },
-        });
-        expect(argValue(args, '-vf')).toBe('bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=yuv420p');
+  /**
+   * 地上波HDは 1440x1080 の横長画素で送られてくる。添え書きを見ない
+   * 添え書きを見ないプレイヤー (実機の Android) では 4:3 に潰れるので、正方形に直して出す。
+   * **大きさは測って渡す** — `iw*sar` と式で書くと、SAR が読めない素材で
+   * 幅が 0 になって落ちる
+   */
+  test("横長の画素は正方形に直した大きさへ引き伸ばす", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      displaySize: { width: 1920, height: 1080 },
     });
+    expect(argValue(args, "-vf")).toBe(
+      "bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=yuv420p",
+    );
+  });
 
-    test('渡されなければ引き伸ばさない', () => {
-        // もともと正方形の素材。同じ大きさへの scale は仕事が増えるだけ
-        expect(argValue(buildArgs('/in.m2ts', '/out.mkv', 1, null), '-vf')).toBe(
-            'bwdif=mode=send_frame,format=yuv420p',
-        );
-    });
+  test("渡されなければ引き伸ばさない", () => {
+    // もともと正方形の素材。同じ大きさへの scale は仕事が増えるだけ
+    expect(argValue(buildArgs("/in.m2ts", "/out.mkv", 1, null), "-vf")).toBe(
+      "bwdif=mode=send_frame,format=yuv420p",
+    );
+  });
 });
 
-describe('inputSkip', () => {
-    /*
-     * **エンコードするほう (`-ss`) と進み具合の分母で同じ値を使う。** 片方だけ変わると、
-     * 捨てた量と分母から引いた量がずれて、進み具合が最後まで届かなくなる
-     */
-    test('頭出しと頭捨ての足し算', () => {
-        expect(inputSkip(0.5, 1.5)).toBe(2);
-    });
+describe("inputSkip", () => {
+  /*
+   * **エンコードするほう (`-ss`) と進み具合の分母で同じ値を使う。** 片方だけ変わると、
+   * 捨てた量と分母から引いた量がずれて、進み具合が最後まで届かなくなる
+   */
+  test("頭出しと頭捨ての足し算", () => {
+    expect(inputSkip(0.5, 1.5)).toBe(2);
+  });
 
-    test('どちらも無ければ 0', () => {
-        expect(inputSkip(null, undefined)).toBe(0);
-    });
+  test("どちらも無ければ 0", () => {
+    expect(inputSkip(null, undefined)).toBe(0);
+  });
 
-    test('1コマにも満たない頭捨ては数えない (headSkip と同じ判断)', () => {
-        expect(inputSkip(null, 0.01)).toBe(0);
-        expect(inputSkip(0.5, 0.01)).toBe(0.5);
-    });
+  test("1コマにも満たない頭捨ては数えない (headSkip と同じ判断)", () => {
+    expect(inputSkip(null, 0.01)).toBe(0);
+    expect(inputSkip(0.5, 0.01)).toBe(0.5);
+  });
 });
 
-describe('expectedFrames', () => {
-    // 1080i の放送 = 毎秒 29.97 コマ。60コマで出すならインタレ解除が倍にする
-    const hd = { duration: 100, fps: 30000 / 1001 };
+describe("expectedFrames", () => {
+  // 1080i の放送 = 毎秒 29.97 コマ。60コマで出すならインタレ解除が倍にする
+  const hd = { duration: 100, fps: 30000 / 1001 };
 
-    test('60コマで出すなら入力のコマ数の2倍', () => {
-        expect(expectedFrames(hd, 0, true)).toBeCloseTo(5994, 0);
-    });
+  test("60コマで出すなら入力のコマ数の2倍", () => {
+    expect(expectedFrames(hd, 0, true)).toBeCloseTo(5994, 0);
+  });
 
-    test('30コマで出すなら入力のコマ数そのまま', () => {
-        expect(expectedFrames(hd, 0, false)).toBeCloseTo(2997, 0);
-    });
+  test("30コマで出すなら入力のコマ数そのまま", () => {
+    expect(expectedFrames(hd, 0, false)).toBeCloseTo(2997, 0);
+  });
 
-    /*
-     * **出力の毎秒コマ数を決め打ちにしない。** 720p で送っている局は入力が
-     * 59.94 で、60コマ決め打ちだと分母が半分になり 50% で頭打ちになる
-     */
-    test('入力が 59.94 の素材でも当たる (出力を決め打ちにしない)', () => {
-        expect(expectedFrames({ duration: 100, fps: 60000 / 1001 }, 0, true)).toBeCloseTo(11988, 0);
-    });
+  /*
+   * **出力の毎秒コマ数を決め打ちにしない。** 720p で送っている局は入力が
+   * 59.94 で、60コマ決め打ちだと分母が半分になり 50% で頭打ちになる
+   */
+  test("入力が 59.94 の素材でも当たる (出力を決め打ちにしない)", () => {
+    expect(
+      expectedFrames({ duration: 100, fps: 60000 / 1001 }, 0, true),
+    ).toBeCloseTo(11988, 0);
+  });
 
-    test('頭から捨てるぶんはエンコードしないので引く', () => {
-        expect(expectedFrames(hd, 10, false)).toBeCloseTo(2697, 0);
-    });
+  test("頭から捨てるぶんはエンコードしないので引く", () => {
+    expect(expectedFrames(hd, 10, false)).toBeCloseTo(2697, 0);
+  });
 
-    test('測れていなければ NaN (呼ぶ側が読み位置に落ちる)', () => {
-        expect(expectedFrames(undefined, 0, true)).toBeNaN();
-        expect(expectedFrames({ duration: NaN, fps: 30 }, 0, true)).toBeNaN();
-        expect(expectedFrames({ duration: 100, fps: NaN }, 0, true)).toBeNaN();
-        // 捨てるぶんが尺より長い (測り違え)。0コマや負のコマ数は出さない
-        expect(expectedFrames(hd, 200, true)).toBeNaN();
-    });
+  test("測れていなければ NaN (呼ぶ側が読み位置に落ちる)", () => {
+    expect(expectedFrames(undefined, 0, true)).toBeNaN();
+    expect(expectedFrames({ duration: NaN, fps: 30 }, 0, true)).toBeNaN();
+    expect(expectedFrames({ duration: 100, fps: NaN }, 0, true)).toBeNaN();
+    // 捨てるぶんが尺より長い (測り違え)。0コマや負のコマ数は出さない
+    expect(expectedFrames(hd, 200, true)).toBeNaN();
+  });
 });
 
-describe('encodeProgress', () => {
-    /*
-     * out_time_us はわざとほぼ最後を指す値にしてある。実機の TOKYO MX 録画で、
-     * 入力を 65% しか読んでいないのに時刻だけ 99.1% に飛んで「あと1秒」のまま
-     * 数分止まって見えた。割合はエンコードできたコマ数だけを信じ、時刻には釣られないこと
-     */
-    const at = (frame: number) => ({
-        progress: 'continue',
-        frame: String(frame),
-        out_time_us: '1810000000',
-        total_size: '1048576',
-        bitrate: '2000.0',
-        speed: '8.0x',
-        drop_frames: '0',
-    });
-    const block = at(0);
+describe("encodeProgress", () => {
+  /*
+   * out_time_us はわざとほぼ最後を指す値にしてある。実機の TOKYO MX 録画で、
+   * 入力を 65% しか読んでいないのに時刻だけ 99.1% に飛んで「あと1秒」のまま
+   * 数分止まって見えた。割合はエンコードできたコマ数だけを信じ、時刻には釣られないこと
+   */
+  const at = (frame: number) => ({
+    progress: "continue",
+    frame: String(frame),
+    out_time_us: "1810000000",
+    total_size: "1048576",
+    bitrate: "2000.0",
+    speed: "8.0x",
+    drop_frames: "0",
+  });
+  const block = at(0);
 
-    test('エンコードできたコマ数から割合を出す。ffmpeg の言う時刻には釣られない', () => {
-        expect(encodeProgress(1000, 1000)(0, 0, at(500), 0).percent).toBeCloseTo(0.5, 3);
-    });
+  test("エンコードできたコマ数から割合を出す。ffmpeg の言う時刻には釣られない", () => {
+    expect(encodeProgress(1000, 1000)(0, 0, at(500), 0).percent).toBeCloseTo(
+      0.5,
+      3,
+    );
+  });
 
-    /*
-     * **実機で踏んだ例** (2026-09、7.4GB の映画)。デマクサだけ先に走って入力を
-     * 読み切り、エンコードするほうは半分。読み位置で出していた頃は 99% に貼り付いて
-     * 「あと50分」の間ずっと止まって見えた
-     */
-    test('入力を読み切っていても、エンコードできた量で答える', () => {
-        const p = encodeProgress(1000, 1000)(0, 1000, at(500), 0);
-        expect(p.percent).toBeCloseTo(0.5, 3);
-    });
+  /*
+   * **実機で踏んだ例** (2026-09、7.4GB の映画)。デマクサだけ先に走って入力を
+   * 読み切り、エンコードするほうは半分。読み位置で出していた頃は 99% に貼り付いて
+   * 「あと50分」の間ずっと止まって見えた
+   */
+  test("入力を読み切っていても、エンコードできた量で答える", () => {
+    const p = encodeProgress(1000, 1000)(0, 1000, at(500), 0);
+    expect(p.percent).toBeCloseTo(0.5, 3);
+  });
 
-    test('コマ数が数えられなければ読み位置に落ちる', () => {
-        expect(encodeProgress(NaN, 1000)(0, 500, at(0), 0).percent).toBeCloseTo(0.5, 3);
-    });
+  test("コマ数が数えられなければ読み位置に落ちる", () => {
+    expect(encodeProgress(NaN, 1000)(0, 500, at(0), 0).percent).toBeCloseTo(
+      0.5,
+      3,
+    );
+  });
 
-    test('どちらも取れない間は直前の値を保つ', () => {
-        expect(encodeProgress(NaN, NaN)(0, NaN, block, 0.42).percent).toBe(0.42);
-    });
+  test("どちらも取れない間は直前の値を保つ", () => {
+    expect(encodeProgress(NaN, NaN)(0, NaN, block, 0.42).percent).toBe(0.42);
+  });
 
-    test('割合は巻き戻らない', () => {
-        const report = encodeProgress(1000, 1000);
-        report(0, 0, at(800), 0);
-        expect(report(1000, 0, at(700), 0.8).percent).toBe(0.8);
-    });
+  test("割合は巻き戻らない", () => {
+    const report = encodeProgress(1000, 1000);
+    report(0, 0, at(800), 0);
+    expect(report(1000, 0, at(700), 0.8).percent).toBe(0.8);
+  });
 
-    test('progress=end で必ず100%にする', () => {
-        expect(encodeProgress(NaN, NaN)(0, NaN, { progress: 'end' }, 0.9).percent).toBe(1);
-    });
+  test("progress=end で必ず100%にする", () => {
+    expect(
+      encodeProgress(NaN, NaN)(0, NaN, { progress: "end" }, 0.9).percent,
+    ).toBe(1);
+  });
 
-    test('エンコードし切っても、終わるまでは99%で止める', () => {
-        // 最後のコマをエンコードしたあとも吐き出しと mux の締めが残っている。100.0% で
-        // 止まって見えるより、99% のまま「まだ終わっていない」と言うほうが正直
-        expect(encodeProgress(1000, 1000)(0, 0, at(1000), 0).percent).toBe(0.99);
-    });
+  test("エンコードし切っても、終わるまでは99%で止める", () => {
+    // 最後のコマをエンコードしたあとも吐き出しと mux の締めが残っている。100.0% で
+    // 止まって見えるより、99% のまま「まだ終わっていない」と言うほうが正直
+    expect(encodeProgress(1000, 1000)(0, 0, at(1000), 0).percent).toBe(0.99);
+  });
 
-    test('残り時間は直近にエンコードできたぶんから出す。速さが読めないうちは null', () => {
-        const report = encodeProgress(10_000, NaN);
-        expect(report(0, NaN, at(1000), 0).etaMs).toBeNull(); // 窓がまだ短い
-        // 5秒で1000コマエンコードできた → 残り8000コマは40秒
-        expect(report(5000, NaN, at(2000), 0.1).etaMs).toBe(40_000);
-    });
+  test("残り時間は直近にエンコードできたぶんから出す。速さが読めないうちは null", () => {
+    const report = encodeProgress(10_000, NaN);
+    expect(report(0, NaN, at(1000), 0).etaMs).toBeNull(); // 窓がまだ短い
+    // 5秒で1000コマエンコードできた → 残り8000コマは40秒
+    expect(report(5000, NaN, at(2000), 0.1).etaMs).toBe(40_000);
+  });
 
-    test('エンコードするほうが止まったら残り時間を出さない (「あと1秒」で張り付かせない)', () => {
-        const report = encodeProgress(10_000, NaN);
-        report(0, NaN, at(2000), 0);
-        report(31_000, NaN, at(2000), 0.2); // 窓から最初の1点が落ちる
-        expect(report(36_000, NaN, at(2000), 0.2).etaMs).toBeNull();
-    });
+  test("エンコードするほうが止まったら残り時間を出さない (「あと1秒」で張り付かせない)", () => {
+    const report = encodeProgress(10_000, NaN);
+    report(0, NaN, at(2000), 0);
+    report(31_000, NaN, at(2000), 0.2); // 窓から最初の1点が落ちる
+    expect(report(36_000, NaN, at(2000), 0.2).etaMs).toBeNull();
+  });
 
-    /** 詰まった時の見立てに、読み位置とコマ数の両方を残す */
-    test('控えの読み位置もログに残る', () => {
-        const log = encodeProgress(1000, 10 * 1024 * 1024)(0, 5 * 1024 * 1024, at(500), 0).log;
-        expect(log).toContain('frame: 500/1000');
-        expect(log).toContain('input: 5/10MB');
-    });
+  /** 詰まった時の見立てに、読み位置とコマ数の両方を残す */
+  test("控えの読み位置もログに残る", () => {
+    const log = encodeProgress(1000, 10 * 1024 * 1024)(
+      0,
+      5 * 1024 * 1024,
+      at(500),
+      0,
+    ).log;
+    expect(log).toContain("frame: 500/1000");
+    expect(log).toContain("input: 5/10MB");
+  });
 });
 
-describe('入力の読み位置を /proc から覗く', () => {
-    test('自分が開いているファイルの fd と読み位置が見える', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'denpa-pos-'));
-        const path = join(dir, 'input.ts');
-        writeFileSync(path, 'abcdefgh');
+describe("入力の読み位置を /proc から覗く", () => {
+  test("自分が開いているファイルの fd と読み位置が見える", () => {
+    const dir = mkdtempSync(join(tmpdir(), "denpa-pos-"));
+    const path = join(dir, "input.ts");
+    writeFileSync(path, "abcdefgh");
 
-        // /proc の fd は実体のパスで見えるので、実装と同じく解決してから探す
-        const fd = openSync(realpathSync(path), 'r');
-        try {
-            expect(findInputFd(process.pid, realpathSync(path))).toBe(fd);
-            expect(readInputPos(process.pid, fd)).toBe(0);
-            readSync(fd, Buffer.alloc(3), 0, 3, null);
-            expect(readInputPos(process.pid, fd)).toBe(3);
-        } finally {
-            closeSync(fd);
-        }
-        // 開いていない fd は読めない (ffmpeg は入力を読み終えると閉じる)
-        expect(readInputPos(process.pid, 999_999)).toBeNaN();
-        expect(findInputFd(process.pid, join(dir, 'closed.ts'))).toBeNull();
-    });
+    // /proc の fd は実体のパスで見えるので、実装と同じく解決してから探す
+    const fd = openSync(realpathSync(path), "r");
+    try {
+      expect(findInputFd(process.pid, realpathSync(path))).toBe(fd);
+      expect(readInputPos(process.pid, fd)).toBe(0);
+      readSync(fd, Buffer.alloc(3), 0, 3, null);
+      expect(readInputPos(process.pid, fd)).toBe(3);
+    } finally {
+      closeSync(fd);
+    }
+    // 開いていない fd は読めない (ffmpeg は入力を読み終えると閉じる)
+    expect(readInputPos(process.pid, 999_999)).toBeNaN();
+    expect(findInputFd(process.pid, join(dir, "closed.ts"))).toBeNull();
+  });
 });
 
-describe('failureReason', () => {
-    test('警告に埋もれずエラー行を読み取る', () => {
-        const stderr = [
-            '[in#0/mpegts] Codec AVOption font has not been used for any stream.',
-            'Stream mapping: Stream #0:3 -> #0:0 (mpeg2video -> av1)',
-            '[libsvtav1 @ 0x1] Error initializing the encoder',
-            'Conversion failed!',
-        ].join('\n');
-        const reason = failureReason(stderr);
-        expect(reason).toContain('Error initializing the encoder');
-        expect(reason).toContain('Conversion failed!');
-        expect(reason).not.toContain('has not been used for any stream');
-    });
+describe("failureReason", () => {
+  test("警告に埋もれずエラー行を読み取る", () => {
+    const stderr = [
+      "[in#0/mpegts] Codec AVOption font has not been used for any stream.",
+      "Stream mapping: Stream #0:3 -> #0:0 (mpeg2video -> av1)",
+      "[libsvtav1 @ 0x1] Error initializing the encoder",
+      "Conversion failed!",
+    ].join("\n");
+    const reason = failureReason(stderr);
+    expect(reason).toContain("Error initializing the encoder");
+    expect(reason).toContain("Conversion failed!");
+    expect(reason).not.toContain("has not been used for any stream");
+  });
 
-    test('エラー行が無ければ末尾をそのまま出す', () => {
-        expect(failureReason('a\nb\nc')).toBe('a\nb\nc');
-    });
+  test("エラー行が無ければ末尾をそのまま出す", () => {
+    expect(failureReason("a\nb\nc")).toBe("a\nb\nc");
+  });
 });
 
-describe('CM を探しながらエンコードする', () => {
-    const outputs = ['-an', '-vf', 'scdet@cm=threshold=0', '-f', 'null', '-'];
+describe("CM を探しながらエンコードする", () => {
+  const outputs = ["-an", "-vf", "scdet@cm=threshold=0", "-f", "null", "-"];
 
-    test('CM 検出の出口はエンコードする出口のあとに足す', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', { analysis: outputs });
-        // -map は出口ごとなので、エンコードする出口の指定が検出の出口に効かないよう後ろに置く
-        expect(args.indexOf('/out.mkv')).toBeLessThan(args.indexOf('scdet@cm=threshold=0'));
-        expect(args.slice(-outputs.length)).toEqual(outputs);
+  test("CM 検出の出口はエンコードする出口のあとに足す", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      analysis: outputs,
     });
+    // -map は出口ごとなので、エンコードする出口の指定が検出の出口に効かないよう後ろに置く
+    expect(args.indexOf("/out.mkv")).toBeLessThan(
+      args.indexOf("scdet@cm=threshold=0"),
+    );
+    expect(args.slice(-outputs.length)).toEqual(outputs);
+  });
 
-    test('進み具合は fd 3 へ (標準出力はロゴの枠、標準エラーは検出の行が使う)', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(argValue(args, '-progress')).toBe('pipe:3');
-        expect(args).toContain('-nostats');
-    });
+  test("進み具合は fd 3 へ (標準出力はロゴの枠、標準エラーは検出の行が使う)", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(argValue(args, "-progress")).toBe("pipe:3");
+    expect(args).toContain("-nostats");
+  });
 });
 
-describe('CM を切るときのキーフレーム', () => {
-    test('1本目は場面の切れ目ごと。CM 検出と同じコマで測って印を付ける', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'av1', {
-            keyframes: 'scene',
-            displaySize: { width: 1920, height: 1080 },
-        });
-        const filter = argValue(args, '-vf') ?? '';
-        // CM 検出と同じコマ (インタレ解除の前) で測る
-        expect(filter.indexOf('scdet@key')).toBeLessThan(filter.indexOf('bwdif'));
-        expect(argValue(args, '-force_key_frames:v')).toBe('scd_metadata');
+describe("CM を切るときのキーフレーム", () => {
+  test("1本目は場面の切れ目ごと。CM 検出と同じコマで測って印を付ける", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      keyframes: "scene",
+      displaySize: { width: 1920, height: 1080 },
     });
+    const filter = argValue(args, "-vf") ?? "";
+    // CM 検出と同じコマ (インタレ解除の前) で測る
+    expect(filter.indexOf("scdet@key")).toBeLessThan(filter.indexOf("bwdif"));
+    expect(argValue(args, "-force_key_frames:v")).toBe("scd_metadata");
+  });
 
-    test('境目が決まっていれば、その時刻を 1ms 手前で指す', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264', { keyframes: [120.5, 300] });
-        expect(argValue(args, '-force_key_frames:v')).toBe('120.499,299.999');
-        expect(argValue(args, '-vf')).not.toContain('scdet');
+  test("境目が決まっていれば、その時刻を 1ms 手前で指す", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
+      keyframes: [120.5, 300],
     });
+    expect(argValue(args, "-force_key_frames:v")).toBe("120.499,299.999");
+    expect(argValue(args, "-vf")).not.toContain("scdet");
+  });
 
-    test('QSV は指定しないと IDR にならない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null, 'h264', {
-            keyframes: 'scene',
-            hardware: { kind: 'qsv', device: '/dev/dri/renderD128' },
-        });
-        expect(argValue(args, '-forced_idr')).toBe('1');
-        // 印は GPU へ上げる前に付ける
-        const filter = argValue(args, '-vf') ?? '';
-        expect(filter.indexOf('scdet@key')).toBeLessThan(filter.indexOf('format=nv12'));
+  test("QSV は指定しないと IDR にならない", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
+      keyframes: "scene",
+      hardware: { kind: "qsv", device: "/dev/dri/renderD128" },
     });
+    expect(argValue(args, "-forced_idr")).toBe("1");
+    // 印は GPU へ上げる前に付ける
+    const filter = argValue(args, "-vf") ?? "";
+    expect(filter.indexOf("scdet@key")).toBeLessThan(
+      filter.indexOf("format=nv12"),
+    );
+  });
 
-    test('切らないなら何も足さない', () => {
-        const args = buildArgs('/in.m2ts', '/out.mkv', 1, null);
-        expect(args).not.toContain('-force_key_frames:v');
-        expect(argValue(args, '-vf')).not.toContain('scdet');
-    });
+  test("切らないなら何も足さない", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
+    expect(args).not.toContain("-force_key_frames:v");
+    expect(argValue(args, "-vf")).not.toContain("scdet");
+  });
 });
 
 /*
@@ -503,15 +571,15 @@ describe('CM を切るときのキーフレーム', () => {
  * 片方だけ「短いから捨てない」と判断すると、そのぶん字幕がずれる。
  * 判断そのものを1箇所に置いてある
  */
-describe('頭から捨てる長さ', () => {
-    test('そのまま返す', () => {
-        expect(headSkip(0.93)).toBe(0.93);
-    });
+describe("頭から捨てる長さ", () => {
+  test("そのまま返す", () => {
+    expect(headSkip(0.93)).toBe(0.93);
+  });
 
-    test('ごく短いものと、測れなかったものは捨てない', () => {
-        expect(headSkip(0.02)).toBe(0);
-        expect(headSkip(0)).toBe(0);
-        expect(headSkip(undefined)).toBe(0);
-        expect(headSkip(Number.NaN)).toBe(0);
-    });
+  test("ごく短いものと、測れなかったものは捨てない", () => {
+    expect(headSkip(0.02)).toBe(0);
+    expect(headSkip(0)).toBe(0);
+    expect(headSkip(undefined)).toBe(0);
+    expect(headSkip(Number.NaN)).toBe(0);
+  });
 });

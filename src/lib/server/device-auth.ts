@@ -16,11 +16,11 @@
  * ではなく**渡すときに作る** — 許してから渡すまでの間に、平文のアクセストークンを預かっておく場所が要らない
  */
 
-import { createHash } from 'node:crypto';
-import { and, count, eq, gt, isNull, lte } from 'drizzle-orm';
-import { affected, now, orm } from './db';
-import { randomToken } from './oidc';
-import { apiTokens, deviceCodes } from './schema';
+import { createHash } from "node:crypto";
+import { and, count, eq, gt, isNull, lte } from "drizzle-orm";
+import { affected, now, orm } from "./db";
+import { randomToken } from "./oidc";
+import { apiTokens, deviceCodes } from "./schema";
 
 /** コードの寿命 (秒で返すのは `expiresIn`) */
 export const CODE_TTL_MS = 10 * 60 * 1000;
@@ -34,7 +34,7 @@ export const MAX_PENDING = 20;
 /** 名前の長さ。画面で見分けるためだけのもの */
 const NAME_MAX = 40;
 /** アクセストークンの頭。ほかの Bearer (前段の SSO など) と取り違えないための印 */
-export const TOKEN_PREFIX = 'denpa_';
+export const TOKEN_PREFIX = "denpa_";
 /** 最後に使った時刻を書く間隔。映像は Range ごとに来るので、毎回は書かない */
 const TOUCH_INTERVAL_MS = 60 * 1000;
 /**
@@ -44,84 +44,93 @@ const TOUCH_INTERVAL_MS = 60 * 1000;
 const POLL_SLACK_MS = 1000;
 
 /** 見間違えない字だけ (0/O・1/I を外す)。ちょうど32字なので、1バイトを 32 で割っても偏らない */
-const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export function sha256(value: string): string {
-    return createHash('sha256').update(value).digest('hex');
+  return createHash("sha256").update(value).digest("hex");
 }
 
 /** QR の URL に入れるコード。`ABCD-EFGH` (RFC 8628 の user_code の形式) */
 export function newUserCode(): string {
-    const bytes = crypto.getRandomValues(new Uint8Array(8));
-    const chars = [...bytes].map((byte) => ALPHABET[byte % ALPHABET.length]).join('');
-    return `${chars.slice(0, 4)}-${chars.slice(4)}`;
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const chars = [...bytes]
+    .map((byte) => ALPHABET[byte % ALPHABET.length])
+    .join("");
+  return `${chars.slice(0, 4)}-${chars.slice(4)}`;
 }
 
 /** URL から来たコードを揃える (小文字・ハイフン抜け・空白を許す)。形式が違えば null */
 export function normalizeUserCode(input: string): string | null {
-    const chars = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (chars.length !== 8 || [...chars].some((c) => !ALPHABET.includes(c))) return null;
-    return `${chars.slice(0, 4)}-${chars.slice(4)}`;
+  const chars = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (chars.length !== 8 || [...chars].some((c) => !ALPHABET.includes(c)))
+    return null;
+  return `${chars.slice(0, 4)}-${chars.slice(4)}`;
 }
 
 export interface IssuedCode {
-    deviceCode: string;
-    userCode: string;
+  deviceCode: string;
+  userCode: string;
 }
 
 /** コードを出す。有効なコードが上限に達していれば null (呼ぶ側が 429 で返す) */
 export function issueCode(name: string, at = now()): IssuedCode | null {
-    const alive =
-        orm()
-            .select({ n: count() })
-            .from(deviceCodes)
-            .where(and(gt(deviceCodes.expires_at, at), isNull(deviceCodes.consumed_at)))
-            .get()?.n ?? 0;
-    if (alive >= MAX_PENDING) return null;
+  const alive =
+    orm()
+      .select({ n: count() })
+      .from(deviceCodes)
+      .where(
+        and(gt(deviceCodes.expires_at, at), isNull(deviceCodes.consumed_at)),
+      )
+      .get()?.n ?? 0;
+  if (alive >= MAX_PENDING) return null;
 
-    const deviceCode = randomToken(32);
-    // コードは短いので、まれに重なる。重なったら引き直す (unique で弾かれる)
-    for (let attempt = 0; attempt < 5; attempt++) {
-        const userCode = newUserCode();
-        try {
-            orm()
-                .insert(deviceCodes)
-                .values({
-                    device_code_hash: sha256(deviceCode),
-                    user_code: userCode,
-                    name: name.trim().slice(0, NAME_MAX) || 'テレビ',
-                    created_at: at,
-                    expires_at: at + CODE_TTL_MS,
-                })
-                .run();
-            return { deviceCode, userCode };
-        } catch (error) {
-            if (!String(error).includes('UNIQUE')) throw error;
-        }
+  const deviceCode = randomToken(32);
+  // コードは短いので、まれに重なる。重なったら引き直す (unique で弾かれる)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const userCode = newUserCode();
+    try {
+      orm()
+        .insert(deviceCodes)
+        .values({
+          device_code_hash: sha256(deviceCode),
+          user_code: userCode,
+          name: name.trim().slice(0, NAME_MAX) || "テレビ",
+          created_at: at,
+          expires_at: at + CODE_TTL_MS,
+        })
+        .run();
+      return { deviceCode, userCode };
+    } catch (error) {
+      if (!String(error).includes("UNIQUE")) throw error;
     }
-    throw new Error('ペアリングコードを作れませんでした');
+  }
+  throw new Error("ペアリングコードを作れませんでした");
 }
 
-type CodeState = 'pending' | 'approved' | 'expired' | 'consumed';
+type CodeState = "pending" | "approved" | "expired" | "consumed";
 
 export interface CodeView {
-    userCode: string;
-    name: string;
-    state: CodeState;
+  userCode: string;
+  name: string;
+  state: CodeState;
 }
 
 function stateOf(row: typeof deviceCodes.$inferSelect, at: number): CodeState {
-    if (row.consumed_at !== null) return 'consumed';
-    if (row.expires_at <= at) return 'expired';
-    if (row.approved_at !== null) return 'approved';
-    return 'pending';
+  if (row.consumed_at !== null) return "consumed";
+  if (row.expires_at <= at) return "expired";
+  if (row.approved_at !== null) return "approved";
+  return "pending";
 }
 
 /** 許す画面 (`/device`) に出すもの。コードが無ければ null */
 export function viewCode(userCode: string, at = now()): CodeView | null {
-    const row = orm().select().from(deviceCodes).where(eq(deviceCodes.user_code, userCode)).get();
-    if (row === undefined) return null;
-    return { userCode: row.user_code, name: row.name, state: stateOf(row, at) };
+  const row = orm()
+    .select()
+    .from(deviceCodes)
+    .where(eq(deviceCodes.user_code, userCode))
+    .get();
+  if (row === undefined) return null;
+  return { userCode: row.user_code, name: row.name, state: stateOf(row, at) };
 }
 
 /**
@@ -131,127 +140,165 @@ export function viewCode(userCode: string, at = now()): CodeView | null {
  * **アクセストークンで入った相手は許せない** (`viaToken`)。盗まれたアクセストークンで別のものを作れると、
  * 元のものを取り消しても作ったものが生き残る。許すのはブラウザ (信頼するネットワークか OIDC) だけ
  */
-export function approve(userCode: string, by: string, viaToken: boolean, at = now()): CodeView | null {
-    if (viaToken) throw new TokenCannotApprove();
-    const row = orm().select().from(deviceCodes).where(eq(deviceCodes.user_code, userCode)).get();
-    if (row === undefined) return null;
-    const state = stateOf(row, at);
-    if (state === 'pending') {
-        orm()
-            .update(deviceCodes)
-            .set({ approved_at: at, approved_by: by })
-            .where(eq(deviceCodes.id, row.id))
-            .run();
-    }
-    return { userCode: row.user_code, name: row.name, state: state === 'pending' ? 'approved' : state };
+export function approve(
+  userCode: string,
+  by: string,
+  viaToken: boolean,
+  at = now(),
+): CodeView | null {
+  if (viaToken) throw new TokenCannotApprove();
+  const row = orm()
+    .select()
+    .from(deviceCodes)
+    .where(eq(deviceCodes.user_code, userCode))
+    .get();
+  if (row === undefined) return null;
+  const state = stateOf(row, at);
+  if (state === "pending") {
+    orm()
+      .update(deviceCodes)
+      .set({ approved_at: at, approved_by: by })
+      .where(eq(deviceCodes.id, row.id))
+      .run();
+  }
+  return {
+    userCode: row.user_code,
+    name: row.name,
+    state: state === "pending" ? "approved" : state,
+  };
 }
 
 /** アクセストークンで許そうとした (`approve`) */
 export class TokenCannotApprove extends Error {
-    constructor() {
-        super('アクセストークンではペアリングできません');
-    }
+  constructor() {
+    super("アクセストークンではペアリングできません");
+  }
 }
 
 /** 端末への答え (RFC 8628 の名前)。断る手順が無いので `access_denied` は返さない */
-export type PollError = 'authorization_pending' | 'slow_down' | 'expired_token' | 'invalid_grant';
+export type PollError =
+  "authorization_pending" | "slow_down" | "expired_token" | "invalid_grant";
 
 /**
  * 端末が聞きに来た。許されていれば**ここでアクセストークンを作り**、1度だけ返す。
  * 答えの名前は RFC 8628 のものに揃えてある (アプリの側で読み替えずに済むように)
  */
-export function poll(deviceCode: string, at = now()): { token: string } | { error: PollError } {
-    const row = orm()
-        .select()
-        .from(deviceCodes)
-        .where(eq(deviceCodes.device_code_hash, sha256(deviceCode)))
-        .get();
-    if (row === undefined) return { error: 'invalid_grant' };
-    const state = stateOf(row, at);
-    if (state === 'consumed') return { error: 'invalid_grant' };
-    if (state === 'expired') return { error: 'expired_token' };
+export function poll(
+  deviceCode: string,
+  at = now(),
+): { token: string } | { error: PollError } {
+  const row = orm()
+    .select()
+    .from(deviceCodes)
+    .where(eq(deviceCodes.device_code_hash, sha256(deviceCode)))
+    .get();
+  if (row === undefined) return { error: "invalid_grant" };
+  const state = stateOf(row, at);
+  if (state === "consumed") return { error: "invalid_grant" };
+  if (state === "expired") return { error: "expired_token" };
 
-    const tooSoon = row.last_polled_at !== null && at - row.last_polled_at < POLL_INTERVAL_MS - POLL_SLACK_MS;
-    orm().update(deviceCodes).set({ last_polled_at: at }).where(eq(deviceCodes.id, row.id)).run();
-    if (tooSoon) return { error: 'slow_down' };
-    if (state === 'pending') return { error: 'authorization_pending' };
+  const tooSoon =
+    row.last_polled_at !== null &&
+    at - row.last_polled_at < POLL_INTERVAL_MS - POLL_SLACK_MS;
+  orm()
+    .update(deviceCodes)
+    .set({ last_polled_at: at })
+    .where(eq(deviceCodes.id, row.id))
+    .run();
+  if (tooSoon) return { error: "slow_down" };
+  if (state === "pending") return { error: "authorization_pending" };
 
-    const token = `${TOKEN_PREFIX}${randomToken(32)}`;
-    orm().transaction((tx) => {
-        const created = tx
-            .insert(apiTokens)
-            .values({
-                name: row.name,
-                token_hash: sha256(token),
-                created_at: at,
-                created_by: row.approved_by,
-            })
-            .returning({ id: apiTokens.id })
-            .get();
-        tx.update(deviceCodes)
-            .set({ consumed_at: at, approved_token_id: created.id })
-            .where(eq(deviceCodes.id, row.id))
-            .run();
-    });
-    return { token };
+  const token = `${TOKEN_PREFIX}${randomToken(32)}`;
+  orm().transaction((tx) => {
+    const created = tx
+      .insert(apiTokens)
+      .values({
+        name: row.name,
+        token_hash: sha256(token),
+        created_at: at,
+        created_by: row.approved_by,
+      })
+      .returning({ id: apiTokens.id })
+      .get();
+    tx.update(deviceCodes)
+      .set({ consumed_at: at, approved_token_id: created.id })
+      .where(eq(deviceCodes.id, row.id))
+      .run();
+  });
+  return { token };
 }
 
 export interface TokenOwner {
-    id: number;
-    name: string;
+  id: number;
+  name: string;
 }
 
 /** `Authorization` の値から denpa のアクセストークンを取り出す。denpa のものでなければ null (ほかの Bearer は見ない) */
 export function bearerToken(authorization: string | null): string | null {
-    if (authorization === null) return null;
-    const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
-    if (match === null || !match[1]?.startsWith(TOKEN_PREFIX)) return null;
-    return match[1];
+  if (authorization === null) return null;
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization.trim());
+  if (match === null || !match[1]?.startsWith(TOKEN_PREFIX)) return null;
+  return match[1];
 }
 
 /** アクセストークンが有効なら持ち主。無効にした・知らないものなら null */
 export function verifyToken(token: string, at = now()): TokenOwner | null {
-    const row = orm()
-        .select({ id: apiTokens.id, name: apiTokens.name, last_used_at: apiTokens.last_used_at })
-        .from(apiTokens)
-        .where(and(eq(apiTokens.token_hash, sha256(token)), isNull(apiTokens.revoked_at)))
-        .get();
-    if (row === undefined) return null;
-    if (row.last_used_at === null || at - row.last_used_at >= TOUCH_INTERVAL_MS) {
-        orm().update(apiTokens).set({ last_used_at: at }).where(eq(apiTokens.id, row.id)).run();
-    }
-    return { id: row.id, name: row.name };
+  const row = orm()
+    .select({
+      id: apiTokens.id,
+      name: apiTokens.name,
+      last_used_at: apiTokens.last_used_at,
+    })
+    .from(apiTokens)
+    .where(
+      and(
+        eq(apiTokens.token_hash, sha256(token)),
+        isNull(apiTokens.revoked_at),
+      ),
+    )
+    .get();
+  if (row === undefined) return null;
+  if (row.last_used_at === null || at - row.last_used_at >= TOUCH_INTERVAL_MS) {
+    orm()
+      .update(apiTokens)
+      .set({ last_used_at: at })
+      .where(eq(apiTokens.id, row.id))
+      .run();
+  }
+  return { id: row.id, name: row.name };
 }
 
 /** アクセストークンを無効にする (設定画面の「取り消す」と、アプリの「サーバーから外す」) */
 export function revokeToken(id: number, at = now()): boolean {
-    return (
-        affected(
-            orm()
-                .update(apiTokens)
-                .set({ revoked_at: at })
-                .where(and(eq(apiTokens.id, id), isNull(apiTokens.revoked_at))),
-        ) > 0
-    );
+  return (
+    affected(
+      orm()
+        .update(apiTokens)
+        .set({ revoked_at: at })
+        .where(and(eq(apiTokens.id, id), isNull(apiTokens.revoked_at))),
+    ) > 0
+  );
 }
 
 /** 有効なアクセストークン。設定画面に並べる */
 export function liveTokens() {
-    return orm()
-        .select({
-            id: apiTokens.id,
-            name: apiTokens.name,
-            created_at: apiTokens.created_at,
-            last_used_at: apiTokens.last_used_at,
-            created_by: apiTokens.created_by,
-        })
-        .from(apiTokens)
-        .where(isNull(apiTokens.revoked_at))
-        .orderBy(apiTokens.created_at)
-        .all();
+  return orm()
+    .select({
+      id: apiTokens.id,
+      name: apiTokens.name,
+      created_at: apiTokens.created_at,
+      last_used_at: apiTokens.last_used_at,
+      created_by: apiTokens.created_by,
+    })
+    .from(apiTokens)
+    .where(isNull(apiTokens.revoked_at))
+    .orderBy(apiTokens.created_at)
+    .all();
 }
 
 /** 切れたコードを片付ける。使い終えたコードも、切れたあとは要らない */
 export function pruneCodes(at = now()): number {
-    return affected(orm().delete(deviceCodes).where(lte(deviceCodes.expires_at, at)));
+  return affected(
+    orm().delete(deviceCodes).where(lte(deviceCodes.expires_at, at)),
+  );
 }

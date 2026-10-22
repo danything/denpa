@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm';
-import type { WebhookEvent } from '../webhook-events';
-import { now, orm } from './db';
-import { webhooks } from './schema';
+import { eq } from "drizzle-orm";
+import type { WebhookEvent } from "../webhook-events";
+import { now, orm } from "./db";
+import { webhooks } from "./schema";
 
 /**
  * 録画の節目を外部に知らせる。
@@ -14,60 +14,65 @@ import { webhooks } from './schema';
 export type Webhook = typeof webhooks.$inferSelect;
 
 export interface Payload {
-    event: WebhookEvent;
-    /** 人が読む1行。Discord や Slack にそのまま出せる形式にしておく */
-    text: string;
-    recording?: {
-        id: number;
-        name: string;
-        service: string;
-        startAt: number;
-        endAt: number;
-    };
-    error?: string;
+  event: WebhookEvent;
+  /** 人が読む1行。Discord や Slack にそのまま出せる形式にしておく */
+  text: string;
+  recording?: {
+    id: number;
+    name: string;
+    service: string;
+    startAt: number;
+    endAt: number;
+  };
+  error?: string;
 }
 
 /** 空なら全部受け取る。壊れた行は列の読み取り関数が空にする (`schema.ts`) ので、ここでは構えない */
 function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
-    return webhook.events.length === 0 || webhook.events.includes(event);
+  return webhook.events.length === 0 || webhook.events.includes(event);
 }
 
 /** 送って、結果を行に残す。戻り値も同じ結果 (`ok` か失敗の理由) */
 async function post(webhook: Webhook, payload: Payload): Promise<string> {
-    const at = now();
-    let status = 'ok';
-    try {
-        const res = await fetch(webhook.url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            // 相手が遅くても録画側を待たせない
-            signal: AbortSignal.timeout(10_000),
-            body: JSON.stringify({ ...payload, sentAt: at }),
-        });
-        if (!res.ok) status = `${res.status} ${(await res.text()).slice(0, 200)}`;
-    } catch (error) {
-        status = String(error instanceof Error ? error.message : error);
-    }
+  const at = now();
+  let status = "ok";
+  try {
+    const res = await fetch(webhook.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // 相手が遅くても録画側を待たせない
+      signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ ...payload, sentAt: at }),
+    });
+    if (!res.ok) status = `${res.status} ${(await res.text()).slice(0, 200)}`;
+  } catch (error) {
+    status = String(error instanceof Error ? error.message : error);
+  }
 
-    orm()
-        .update(webhooks)
-        .set({ last_status: status, last_sent_at: at })
-        .where(eq(webhooks.id, webhook.id))
-        .run();
-    if (status !== 'ok') console.error(`[webhook] ${webhook.url} への送信に失敗: ${status}`);
-    return status;
+  orm()
+    .update(webhooks)
+    .set({ last_status: status, last_sent_at: at })
+    .where(eq(webhooks.id, webhook.id))
+    .run();
+  if (status !== "ok")
+    console.error(`[webhook] ${webhook.url} への送信に失敗: ${status}`);
+  return status;
 }
 
 /** 投げっぱなしにする。呼び出し側は待たない */
 export function notify(payload: Payload): void {
-    const enabled = orm().select().from(webhooks).where(eq(webhooks.enabled, true)).all();
-    for (const webhook of enabled) {
-        if (!subscribed(webhook, payload.event)) continue;
-        void post(webhook, payload);
-    }
+  const enabled = orm()
+    .select()
+    .from(webhooks)
+    .where(eq(webhooks.enabled, true))
+    .all();
+  for (const webhook of enabled) {
+    if (!subscribed(webhook, payload.event)) continue;
+    void post(webhook, payload);
+  }
 }
 
 /** 設定画面の「テスト送信」。こちらは結果を見たいので待つ */
 export function send(webhook: Webhook, payload: Payload): Promise<string> {
-    return post(webhook, payload);
+  return post(webhook, payload);
 }

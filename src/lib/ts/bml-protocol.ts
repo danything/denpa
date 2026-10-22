@@ -12,40 +12,40 @@
 
 /** PMT の ES 1本。**部品タグ (`componentId`) を持つものだけ**並ぶ (bml.ts の `parsePmt`) */
 export interface ComponentPMT {
-    pid: number;
-    componentId: number;
-    bxmlInfo?: AdditionalAribBXMLInfo;
-    streamType: number;
-    dataComponentId?: number;
+  pid: number;
+  componentId: number;
+  bxmlInfo?: AdditionalAribBXMLInfo;
+  streamType: number;
+  dataComponentId?: number;
 }
 
 /** データ符号化方式記述子の後半 (bml.ts の `parseBxmlInfo`) */
 export interface AdditionalAribBXMLInfo {
-    transmissionFormat: number;
-    entryPointFlag: boolean;
-    entryPointInfo?: AdditionalAribBXMLEntryPointInfo;
-    additionalAribCarouselInfo?: AdditionalAribCarouselInfo;
+  transmissionFormat: number;
+  entryPointFlag: boolean;
+  entryPointInfo?: AdditionalAribBXMLEntryPointInfo;
+  additionalAribCarouselInfo?: AdditionalAribCarouselInfo;
 }
 
 export interface AdditionalAribBXMLEntryPointInfo {
-    autoStartFlag: boolean;
-    documentResolution: number;
-    useXML: boolean;
-    defaultVersionFlag: boolean;
-    independentFlag: boolean;
-    styleForTVFlag: boolean;
-    bmlMajorVersion: number;
-    bmlMinorVersion: number;
-    bxmlMajorVersion?: number;
-    bxmlMinorVersion?: number;
+  autoStartFlag: boolean;
+  documentResolution: number;
+  useXML: boolean;
+  defaultVersionFlag: boolean;
+  independentFlag: boolean;
+  styleForTVFlag: boolean;
+  bmlMajorVersion: number;
+  bmlMinorVersion: number;
+  bxmlMajorVersion?: number;
+  bxmlMinorVersion?: number;
 }
 
 export interface AdditionalAribCarouselInfo {
-    dataEventId: number;
-    eventSectionFlag: boolean;
-    ondemandRetrievalFlag: boolean;
-    fileStorableFlag: boolean;
-    startPriority: number;
+  dataEventId: number;
+  eventSectionFlag: boolean;
+  ondemandRetrievalFlag: boolean;
+  fileStorableFlag: boolean;
+  startPriority: number;
 }
 
 /**
@@ -53,116 +53,116 @@ export interface AdditionalAribCarouselInfo {
  * ([multipart.ts](multipart.ts) の `parseMediaType`)
  */
 export interface MediaType {
-    type: string;
-    originalType: string;
-    subtype: string;
-    originalSubtype: string;
-    parameters: MediaTypeParameter[];
+  type: string;
+  originalType: string;
+  subtype: string;
+  originalSubtype: string;
+  parameters: MediaTypeParameter[];
 }
 
 export interface MediaTypeParameter {
-    attribute: string;
-    originalAttribute: string;
-    value: string;
+  attribute: string;
+  originalAttribute: string;
+  value: string;
 }
 
 /** モジュールの中のファイル1つ。中身は base64 (JSON で運ぶため) */
 export interface ModuleFile {
-    contentLocation: string | null;
-    contentType: MediaType;
-    dataBase64: string;
+  contentLocation: string | null;
+  contentType: MediaType;
+  dataBase64: string;
 }
 
 export interface PMTMessage {
-    type: 'pmt';
-    components: ComponentPMT[];
+  type: "pmt";
+  components: ComponentPMT[];
 }
 
 export interface ModuleDownloadedMessage {
-    type: 'moduleDownloaded';
-    componentId: number;
-    moduleId: number;
-    files: ModuleFile[];
-    version: number;
-    dataEventId: number;
+  type: "moduleDownloaded";
+  componentId: number;
+  moduleId: number;
+  files: ModuleFile[];
+  version: number;
+  dataEventId: number;
 }
 
 export interface ModuleListEntry {
-    id: number;
-    version: number;
-    size: number;
+  id: number;
+  version: number;
+  size: number;
 }
 
 export interface ModuleListUpdatedMessage {
-    type: 'moduleListUpdated';
-    componentId: number;
-    modules: ModuleListEntry[];
-    dataEventId: number;
-    returnToEntryFlag?: boolean;
+  type: "moduleListUpdated";
+  componentId: number;
+  modules: ModuleListEntry[];
+  dataEventId: number;
+  returnToEntryFlag?: boolean;
 }
 
 export type ESEvent = ESImmediateEvent | ESNPTEvent | NPTReference;
 
 export interface ESImmediateEvent {
-    type: 'immediateEvent';
-    eventMessageGroupId: number;
-    timeMode: 0;
-    eventMessageType: number;
-    eventMessageId: number;
-    privateDataByte: number[];
+  type: "immediateEvent";
+  eventMessageGroupId: number;
+  timeMode: 0;
+  eventMessageType: number;
+  eventMessageId: number;
+  privateDataByte: number[];
 }
 
 export interface ESNPTEvent {
-    type: 'nptEvent';
-    eventMessageGroupId: number;
-    timeMode: 2;
-    eventMessageNPT: number;
-    eventMessageType: number;
-    eventMessageId: number;
-    privateDataByte: number[];
+  type: "nptEvent";
+  eventMessageGroupId: number;
+  timeMode: 2;
+  eventMessageNPT: number;
+  eventMessageType: number;
+  eventMessageId: number;
+  privateDataByte: number[];
 }
 
 export interface NPTReference {
-    type: 'nptReference';
-    postDiscontinuityIndicator: boolean;
-    dsmContentId: number;
-    STCReference: number;
-    NPTReference: number;
-    scaleNumerator: number;
-    scaleDenominator: number;
+  type: "nptReference";
+  postDiscontinuityIndicator: boolean;
+  dsmContentId: number;
+  STCReference: number;
+  NPTReference: number;
+  scaleNumerator: number;
+  scaleDenominator: number;
 }
 
 export interface ESEventUpdatedMessage {
-    type: 'esEventUpdated';
-    componentId: number;
-    events: ESEvent[];
-    dataEventId: number;
+  type: "esEventUpdated";
+  componentId: number;
+  events: ESEvent[];
+  dataEventId: number;
 }
 
 /** 番組の名乗り。TS からではなく DB から組む (`server/live.ts`・`server/recorded-bml.ts`) */
 export interface ProgramInfoMessage {
-    type: 'programInfo';
-    originalNetworkId: number | null;
-    transportStreamId: number | null;
-    serviceId: number | null;
-    eventId: number | null;
-    eventName: string | null;
-    startTimeUnixMillis: number | null;
-    durationSeconds: number | null;
-    indefiniteDuration: boolean | null;
-    networkId: number | null;
+  type: "programInfo";
+  originalNetworkId: number | null;
+  transportStreamId: number | null;
+  serviceId: number | null;
+  eventId: number | null;
+  eventName: string | null;
+  startTimeUnixMillis: number | null;
+  durationSeconds: number | null;
+  indefiniteDuration: boolean | null;
+  networkId: number | null;
 }
 
 /** 放送の時刻 (TDT/TOT) */
 export interface CurrentTime {
-    type: 'currentTime';
-    timeUnixMillis: number;
+  type: "currentTime";
+  timeUnixMillis: number;
 }
 
 export type ResponseMessage =
-    | PMTMessage
-    | ModuleDownloadedMessage
-    | ModuleListUpdatedMessage
-    | ESEventUpdatedMessage
-    | ProgramInfoMessage
-    | CurrentTime;
+  | PMTMessage
+  | ModuleDownloadedMessage
+  | ModuleListUpdatedMessage
+  | ESEventUpdatedMessage
+  | ProgramInfoMessage
+  | CurrentTime;

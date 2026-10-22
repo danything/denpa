@@ -19,8 +19,8 @@
  * DOM もファイルも触らない (読む関数は受け取る) ので、合成した TS で確かめられる (`seek.test.ts`)
  */
 
-import { CLOCK, readStamp, WRAP } from './pes';
-import { findSync, PACKET, SYNC } from './psi';
+import { CLOCK, readStamp, WRAP } from "./pes";
+import { findSync, PACKET, SYNC } from "./psi";
 
 /** PES の頭の印 (stream_id)。映像 0xE0〜0xEF、音声 0xC0〜0xDF、字幕などは private_stream_1 (0xBD) */
 const isVideo = (id: number) => id >= 0xe0 && id <= 0xef;
@@ -32,12 +32,12 @@ const BEFORE_HEAD = 600;
 
 /** 見つけた PES の頭 */
 export interface PesMark {
-    /** stream_id */
-    id: number;
-    /** 90kHz。一周の中 */
-    pts: number;
-    /** その PES が始まる TS パケットの位置 (渡したバイト列の頭から) */
-    at: number;
+  /** stream_id */
+  id: number;
+  /** 90kHz。一周の中 */
+  pts: number;
+  /** その PES が始まる TS パケットの位置 (渡したバイト列の頭から) */
+  at: number;
 }
 
 /**
@@ -45,36 +45,41 @@ export interface PesMark {
  * 切れ目が見つからなければ何も出さない
  */
 export function* pesMarks(bytes: Uint8Array): Generator<PesMark> {
-    const start = findSync(bytes);
-    if (start < 0) return;
-    for (let at = start; at + PACKET <= bytes.length; at += PACKET) {
-        if (bytes[at] !== SYNC) {
-            // 切れ目を見失った (途中が欠けている)。探し直す
-            const next = findSync(bytes, at + 1);
-            if (next < 0) return;
-            at = next - PACKET;
-            continue;
-        }
-        const b1 = bytes[at + 1]!;
-        const b3 = bytes[at + 3]!;
-        // 頭 (payload_unit_start) だけ。誤り・スクランブルは読まない
-        if (!(b1 & 0x40) || b1 & 0x80 || b3 & 0xc0) continue;
-        const control = (b3 >> 4) & 0x03;
-        if (!(control & 0x01)) continue;
-        const offset = at + 4 + (control & 0x02 ? 1 + bytes[at + 4]! : 0);
-        // 頭の 9 バイト + PTS の 5 バイトがパケットの中に収まっていること
-        if (offset + 14 > at + PACKET) continue;
-        if (bytes[offset] !== 0 || bytes[offset + 1] !== 0 || bytes[offset + 2] !== 1) continue;
-        const id = bytes[offset + 3]!;
-        if (!(bytes[offset + 7]! & 0x80)) continue;
-        yield { id, pts: readStamp(bytes, offset + 9), at };
+  const start = findSync(bytes);
+  if (start < 0) return;
+  for (let at = start; at + PACKET <= bytes.length; at += PACKET) {
+    if (bytes[at] !== SYNC) {
+      // 切れ目を見失った (途中が欠けている)。探し直す
+      const next = findSync(bytes, at + 1);
+      if (next < 0) return;
+      at = next - PACKET;
+      continue;
     }
+    const b1 = bytes[at + 1]!;
+    const b3 = bytes[at + 3]!;
+    // 頭 (payload_unit_start) だけ。誤り・スクランブルは読まない
+    if (!(b1 & 0x40) || b1 & 0x80 || b3 & 0xc0) continue;
+    const control = (b3 >> 4) & 0x03;
+    if (!(control & 0x01)) continue;
+    const offset = at + 4 + (control & 0x02 ? 1 + bytes[at + 4]! : 0);
+    // 頭の 9 バイト + PTS の 5 バイトがパケットの中に収まっていること
+    if (offset + 14 > at + PACKET) continue;
+    if (
+      bytes[offset] !== 0 ||
+      bytes[offset + 1] !== 0 ||
+      bytes[offset + 2] !== 1
+    )
+      continue;
+    const id = bytes[offset + 3]!;
+    if (!(bytes[offset + 7]! & 0x80)) continue;
+    yield { id, pts: readStamp(bytes, offset + 9), at };
+  }
 }
 
 /** 一周の中の差 `a - b` を、-半周〜+半周に置き直す (90kHz) */
 function delta(a: number, b: number): number {
-    const d = (((a - b) % WRAP) + WRAP) % WRAP;
-    return d >= WRAP / 2 ? d - WRAP : d;
+  const d = (((a - b) % WRAP) + WRAP) % WRAP;
+  return d >= WRAP / 2 ? d - WRAP : d;
 }
 
 /**
@@ -86,31 +91,33 @@ function delta(a: number, b: number): number {
  * 早い PTS があるので、見えた中でいちばん早いものを採る
  */
 export function tsHead(bytes: Uint8Array): number | null {
-    let ref: number | null = null;
-    let av: number | null = null;
-    let text: number | null = null;
-    for (const mark of pesMarks(bytes)) {
-        ref ??= mark.pts;
-        const d = delta(mark.pts, ref);
-        if (isVideo(mark.id) || isAudio(mark.id)) av = av === null ? d : Math.min(av, d);
-        else if (mark.id === PRIVATE_1) text = text === null ? d : Math.min(text, d);
-    }
-    if (ref === null || av === null) return null;
-    const first = text !== null && text < av && av - text < CLOCK ? text : av;
-    return (((ref + first) % WRAP) + WRAP) % WRAP;
+  let ref: number | null = null;
+  let av: number | null = null;
+  let text: number | null = null;
+  for (const mark of pesMarks(bytes)) {
+    ref ??= mark.pts;
+    const d = delta(mark.pts, ref);
+    if (isVideo(mark.id) || isAudio(mark.id))
+      av = av === null ? d : Math.min(av, d);
+    else if (mark.id === PRIVATE_1)
+      text = text === null ? d : Math.min(text, d);
+  }
+  if (ref === null || av === null) return null;
+  const first = text !== null && text < av && av - text < CLOCK ? text : av;
+  return (((ref + first) % WRAP) + WRAP) % WRAP;
 }
 
 /** 頭から数えた秒。一周をまたいでも増え続ける (録画は一周より短い)。頭の少し前は負 */
 export function sinceHead(pts: number, head: number): number {
-    const d = (((pts - head) % WRAP) + WRAP) % WRAP;
-    return (d > WRAP - BEFORE_HEAD * CLOCK ? d - WRAP : d) / CLOCK;
+  const d = (((pts - head) % WRAP) + WRAP) % WRAP;
+  return (d > WRAP - BEFORE_HEAD * CLOCK ? d - WRAP : d) / CLOCK;
 }
 
 /** 映像の PES の、いちばん後ろの PTS。録画の尻のバイト列から尺を出すのに使う。無ければ null */
 export function lastVideoPts(bytes: Uint8Array): number | null {
-    let last: number | null = null;
-    for (const mark of pesMarks(bytes)) if (isVideo(mark.id)) last = mark.pts;
-    return last;
+  let last: number | null = null;
+  for (const mark of pesMarks(bytes)) if (isVideo(mark.id)) last = mark.pts;
+  return last;
 }
 
 /** ファイルを少しずつ読む関数。`length` より短く返ってよい (尻) */
@@ -127,14 +134,14 @@ const NARROW = PACKET * 256;
  * `offset` から先で最初の映像の PES。`at` はファイルの頭からの位置。無ければ null
  */
 async function videoAt(read: ReadAt, offset: number): Promise<PesMark | null> {
-    for (let from = offset; from < offset + SEARCH; from += WINDOW - PACKET * 3) {
-        const bytes = await read(from, WINDOW);
-        for (const mark of pesMarks(bytes)) {
-            if (isVideo(mark.id)) return { ...mark, at: from + mark.at };
-        }
-        if (bytes.length < WINDOW) return null;
+  for (let from = offset; from < offset + SEARCH; from += WINDOW - PACKET * 3) {
+    const bytes = await read(from, WINDOW);
+    for (const mark of pesMarks(bytes)) {
+      if (isVideo(mark.id)) return { ...mark, at: from + mark.at };
     }
-    return null;
+    if (bytes.length < WINDOW) return null;
+  }
+  return null;
 }
 
 /**
@@ -148,37 +155,37 @@ async function videoAt(read: ReadAt, offset: number): Promise<PesMark | null> {
  * @param head 入れ物の始まり (`tsHead`)
  */
 export async function seekTs(
-    read: ReadAt,
-    size: number,
-    head: number,
-    target: number,
+  read: ReadAt,
+  size: number,
+  head: number,
+  target: number,
 ): Promise<PesMark | null> {
-    const first = await videoAt(read, 0);
-    if (first === null) return null;
-    if (target <= sinceHead(first.pts, head)) return first;
-    let best = first;
-    let lo = first.at;
-    let hi = size;
-    while (hi - lo > NARROW) {
-        const mid = lo + Math.floor((hi - lo) / 2 / PACKET) * PACKET;
-        const mark = await videoAt(read, mid);
-        if (mark === null || mark.at >= hi) {
-            hi = mid;
-            continue;
-        }
-        if (sinceHead(mark.pts, head) <= target) {
-            best = mark;
-            lo = mark.at + PACKET;
-        } else {
-            hi = mid;
-        }
+  const first = await videoAt(read, 0);
+  if (first === null) return null;
+  if (target <= sinceHead(first.pts, head)) return first;
+  let best = first;
+  let lo = first.at;
+  let hi = size;
+  while (hi - lo > NARROW) {
+    const mid = lo + Math.floor((hi - lo) / 2 / PACKET) * PACKET;
+    const mark = await videoAt(read, mid);
+    if (mark === null || mark.at >= hi) {
+      hi = mid;
+      continue;
     }
-    // 狭めた残りは順に読んで、いちばん近い映像の PES まで詰める
-    const base = best.at;
-    for (const mark of pesMarks(await read(base, hi - base + WINDOW))) {
-        if (!isVideo(mark.id)) continue;
-        if (sinceHead(mark.pts, head) > target) break;
-        best = { ...mark, at: base + mark.at };
+    if (sinceHead(mark.pts, head) <= target) {
+      best = mark;
+      lo = mark.at + PACKET;
+    } else {
+      hi = mid;
     }
-    return best;
+  }
+  // 狭めた残りは順に読んで、いちばん近い映像の PES まで詰める
+  const base = best.at;
+  for (const mark of pesMarks(await read(base, hi - base + WINDOW))) {
+    if (!isVideo(mark.id)) continue;
+    if (sinceHead(mark.pts, head) > target) break;
+    best = { ...mark, at: base + mark.at };
+  }
+  return best;
 }

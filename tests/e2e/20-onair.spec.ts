@@ -1,4 +1,4 @@
-import { expect, test } from './helpers';
+import { expect, test } from "./helpers";
 
 /**
  * 放送の延長への追従。
@@ -9,13 +9,18 @@ import { expect, test } from './helpers';
  *
  * 延長そのものは 21 で見る (時間がかかるので分けてある)。
  */
-test.describe('放送の延長', () => {
-    test('エージェントの通知を聞いている', async ({ request, stack }) => {
-        /*
-         * チューナーの様子もスキャンの進み具合も、これを聞いて動く。
-         * 繋がっていないと定期実行の保険だけになり、気付くのが分単位まで遅れる
-         */
-        const status = await (await request.get(`${stack.agentUrl}/__control/listeners`)).json();
-        expect(status.listeners, 'denpa が /denpa/events に繋いでいない').toBeGreaterThan(0);
-    });
+test.describe("放送の延長", () => {
+  test("エージェントの通知を聞いている", async ({ request, stack }) => {
+    /*
+     * チューナーの様子もスキャンの進み具合も、これを聞いて動く。
+     * 繋がっていないと定期実行の保険だけになり、気付くのが分単位まで遅れる
+     */
+    const status = await (
+      await request.get(`${stack.agentUrl}/__control/listeners`)
+    ).json();
+    expect(
+      status.listeners,
+      "denpa が /denpa/events に繋いでいない",
+    ).toBeGreaterThan(0);
+  });
 });

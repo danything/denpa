@@ -39,8 +39,14 @@
  * 永久には持たず、**30秒ごとに選び直します** (直前の区切りのぶんも残して比べる)
  */
 
-import { CLOCK } from './pes';
-import { PacketStream, PID_PAT, parsePat, SectionAssembler, TABLE_PMT } from './psi';
+import { CLOCK } from "./pes";
+import {
+  PacketStream,
+  PID_PAT,
+  parsePat,
+  SectionAssembler,
+  TABLE_PMT,
+} from "./psi";
 
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = 2 ** 33 / CLOCK;
@@ -49,10 +55,10 @@ const WINDOW = 30_000;
 
 /** 受け取った時刻と、そのとき着いた PCR */
 export interface Anchor {
-    /** そのとき着いた PCR (秒) */
-    pcr: number;
-    /** サーバが受け取った時刻 (unix ms) */
-    unixMs: number;
+  /** そのとき着いた PCR (秒) */
+  pcr: number;
+  /** サーバが受け取った時刻 (unix ms) */
+  unixMs: number;
 }
 
 /**
@@ -62,26 +68,26 @@ export interface Anchor {
  * 27MHz ぶんの端数で、秒に直すと 1/27,000,000 なので要らない
  */
 export function readPcr(packet: Uint8Array): number {
-    if (packet.length < 12 || packet[0] !== 0x47) return Number.NaN;
-    // 適応フィールドを持つか (2 = 適応のみ, 3 = 適応 + 中身)
-    const control = (packet[3]! >> 4) & 0x03;
-    if (control !== 2 && control !== 3) return Number.NaN;
-    const length = packet[4]!;
-    if (length < 7) return Number.NaN;
-    // PCR_flag
-    if ((packet[5]! & 0x10) === 0) return Number.NaN;
-    const base =
-        packet[6]! * 2 ** 25 +
-        packet[7]! * 2 ** 17 +
-        packet[8]! * 2 ** 9 +
-        packet[9]! * 2 +
-        (packet[10]! >> 7);
-    return base / CLOCK;
+  if (packet.length < 12 || packet[0] !== 0x47) return Number.NaN;
+  // 適応フィールドを持つか (2 = 適応のみ, 3 = 適応 + 中身)
+  const control = (packet[3]! >> 4) & 0x03;
+  if (control !== 2 && control !== 3) return Number.NaN;
+  const length = packet[4]!;
+  if (length < 7) return Number.NaN;
+  // PCR_flag
+  if ((packet[5]! & 0x10) === 0) return Number.NaN;
+  const base =
+    packet[6]! * 2 ** 25 +
+    packet[7]! * 2 ** 17 +
+    packet[8]! * 2 ** 9 +
+    packet[9]! * 2 +
+    (packet[10]! >> 7);
+  return base / CLOCK;
 }
 
 /** `受け取った時刻 − PCR` (秒)。**小さいほど遅れずに着いた組** */
 function lag(anchor: Anchor): number {
-    return anchor.unixMs / 1000 - anchor.pcr;
+  return anchor.unixMs / 1000 - anchor.pcr;
 }
 
 /**
@@ -91,82 +97,89 @@ function lag(anchor: Anchor): number {
  * その局の ES を残すので、PCR を運ぶ ES も通っている
  */
 export class BroadcastClock {
-    private readonly packets = new PacketStream();
-    private readonly pat = new SectionAssembler(PID_PAT);
-    private pmt: SectionAssembler | null = null;
-    private pmtPid: number | null = null;
-    private pcrPid: number | null = null;
-    private pcr = Number.NaN;
-    /** いまの区切りで採っている組 */
-    private current: Anchor | null = null;
-    /** 1つ前の区切りで採った組。**区切りの直後に遅れた組しか無くても困らないように** */
-    private previous: Anchor | null = null;
-    private windowFrom = Number.NaN;
+  private readonly packets = new PacketStream();
+  private readonly pat = new SectionAssembler(PID_PAT);
+  private pmt: SectionAssembler | null = null;
+  private pmtPid: number | null = null;
+  private pcrPid: number | null = null;
+  private pcr = Number.NaN;
+  /** いまの区切りで採っている組 */
+  private current: Anchor | null = null;
+  /** 1つ前の区切りで採った組。**区切りの直後に遅れた組しか無くても困らないように** */
+  private previous: Anchor | null = null;
+  private windowFrom = Number.NaN;
 
-    /** いちばん遅れずに着いた組。まだ PCR を読めていなければ null */
-    get anchor(): Anchor | null {
-        const current = this.current;
-        const previous = this.previous;
-        if (current === null || previous === null) return current ?? previous;
-        return lag(previous) < lag(current) ? previous : current;
-    }
+  /** いちばん遅れずに着いた組。まだ PCR を読めていなければ null */
+  get anchor(): Anchor | null {
+    const current = this.current;
+    const previous = this.previous;
+    if (current === null || previous === null) return current ?? previous;
+    return lag(previous) < lag(current) ? previous : current;
+  }
 
-    /** 直近の PCR (秒)。まだ読めていなければ NaN */
-    get now(): number {
-        return this.pcr;
-    }
+  /** 直近の PCR (秒)。まだ読めていなければ NaN */
+  get now(): number {
+    return this.pcr;
+  }
 
-    /**
-     * @param receivedAt その塊を受け取った時刻 (unix ms, サーバの時計)。
-     *   塊の中の PCR はどれもこの時刻で組にする — 早く着いた PCR ほど遅れて
-     *   見えるだけで、塊の最後の PCR がいちばん小さく出て選ばれる
-     */
-    feed(chunk: Uint8Array, receivedAt = Date.now()): void {
-        for (const packet of this.packets.feed(chunk)) this.feedPacket(packet, receivedAt);
-    }
+  /**
+   * @param receivedAt その塊を受け取った時刻 (unix ms, サーバの時計)。
+   *   塊の中の PCR はどれもこの時刻で組にする — 早く着いた PCR ほど遅れて
+   *   見えるだけで、塊の最後の PCR がいちばん小さく出て選ばれる
+   */
+  feed(chunk: Uint8Array, receivedAt = Date.now()): void {
+    for (const packet of this.packets.feed(chunk))
+      this.feedPacket(packet, receivedAt);
+  }
 
-    /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket` と同じ事情) */
-    feedPacket(packet: Uint8Array, receivedAt: number): void {
-        const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-        if (this.pcrPid === null || pid === this.pcrPid) {
-            const at = readPcr(packet);
-            if (Number.isFinite(at)) this.onPcr(at, receivedAt);
-        }
-        if (pid === PID_PAT) for (const section of this.pat.feed(packet)) this.onPat(section);
-        if (pid === this.pmtPid) for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
+  /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket` と同じ事情) */
+  feedPacket(packet: Uint8Array, receivedAt: number): void {
+    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+    if (this.pcrPid === null || pid === this.pcrPid) {
+      const at = readPcr(packet);
+      if (Number.isFinite(at)) this.onPcr(at, receivedAt);
     }
+    if (pid === PID_PAT)
+      for (const section of this.pat.feed(packet)) this.onPat(section);
+    if (pid === this.pmtPid)
+      for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
+  }
 
-    private onPcr(at: number, receivedAt: number): void {
-        // 一周した (または選局で飛んだ)。結びつけ直す
-        if (Number.isFinite(this.pcr) && (at < this.pcr - 1 || at > this.pcr + WRAP / 2)) {
-            this.current = null;
-            this.previous = null;
-            this.windowFrom = Number.NaN;
-        }
-        this.pcr = at;
-        if (!(receivedAt - this.windowFrom < WINDOW)) {
-            this.previous = this.current;
-            this.current = null;
-            this.windowFrom = receivedAt;
-        }
-        const anchor = { pcr: at, unixMs: receivedAt };
-        if (this.current === null || lag(anchor) < lag(this.current)) this.current = anchor;
+  private onPcr(at: number, receivedAt: number): void {
+    // 一周した (または選局で飛んだ)。結びつけ直す
+    if (
+      Number.isFinite(this.pcr) &&
+      (at < this.pcr - 1 || at > this.pcr + WRAP / 2)
+    ) {
+      this.current = null;
+      this.previous = null;
+      this.windowFrom = Number.NaN;
     }
+    this.pcr = at;
+    if (!(receivedAt - this.windowFrom < WINDOW)) {
+      this.previous = this.current;
+      this.current = null;
+      this.windowFrom = receivedAt;
+    }
+    const anchor = { pcr: at, unixMs: receivedAt };
+    if (this.current === null || lag(anchor) < lag(this.current))
+      this.current = anchor;
+  }
 
-    private onPat(section: Uint8Array): void {
-        // 絞ったあとなので番組は1つだけ。最初のものを見る
-        const pid = [...parsePat(section).values()][0];
-        if (pid === undefined || this.pmtPid === pid) return;
-        this.pmtPid = pid;
-        this.pmt = new SectionAssembler(pid);
-    }
+  private onPat(section: Uint8Array): void {
+    // 絞ったあとなので番組は1つだけ。最初のものを見る
+    const pid = [...parsePat(section).values()][0];
+    if (pid === undefined || this.pmtPid === pid) return;
+    this.pmtPid = pid;
+    this.pmt = new SectionAssembler(pid);
+  }
 
-    private onPmt(section: Uint8Array): void {
-        if (section[0] !== TABLE_PMT || section.length < 12) return;
-        const pid = ((section[8]! & 0x1f) << 8) | section[9]!;
-        // 0x1fff は「PCR を運ぶ ES は無い」の意味
-        this.pcrPid = pid === 0x1fff ? null : pid;
-    }
+  private onPmt(section: Uint8Array): void {
+    if (section[0] !== TABLE_PMT || section.length < 12) return;
+    const pid = ((section[8]! & 0x1f) << 8) | section[9]!;
+    // 0x1fff は「PCR を運ぶ ES は無い」の意味
+    this.pcrPid = pid === 0x1fff ? null : pid;
+  }
 }
 
 /**
@@ -179,8 +192,8 @@ export class BroadcastClock {
  * 映像だけ 0 に詰められることはない (頭は同じフレームで埋まる。docs/stream.md)
  */
 export function parseStart(line: string): number {
-    const match = /\bstart:\s*(-?\d+(?:\.\d+)?)/.exec(line);
-    if (match === null) return Number.NaN;
-    const at = Number(match[1]);
-    return Number.isFinite(at) ? at : Number.NaN;
+  const match = /\bstart:\s*(-?\d+(?:\.\d+)?)/.exec(line);
+  if (match === null) return Number.NaN;
+  const at = Number(match[1]);
+  return Number.isFinite(at) ? at : Number.NaN;
 }

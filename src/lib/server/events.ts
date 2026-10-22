@@ -7,55 +7,55 @@
  * (WebSocket は入口の `server.js` でしか受けられない。`ws.ts`)。
  */
 
-import type { YieldedRecording } from '#lib/live.js';
+import type { YieldedRecording } from "#lib/live.js";
 
 export type DenpaEvent =
-    | 'recordings'
-    | 'reservations'
-    | 'migrate'
-    | 'scan'
-    | 'services'
-    /** 番組表が増えた・書き換わった。1チャンネル集め終わるたびに飛ぶ */
-    | 'programs'
-    /** 局ロゴを取得している最中の進み具合。1チャンネルに数分かかる */
-    | 'logos'
-    | 'tuners'
-    /**
-     * エンコードの進み具合。**これだけ中身 (payload) を運ぶ** — 数秒おきに
-     * 飛ぶので、そのたびにページ全体を読み直させない。画面は該当行の
-     * 数字だけを書き換える (`encode-live.svelte.ts`)
-     */
-    | 'encode'
-    /**
-     * **ライブがチューナーを録画に譲った** (`server/live.ts` の `lose`)。中身は `Yielded`。
-     * HTTP でライブを観ているもの (テレビのアプリ) 向け — ストリームの中では伝えられないので、ここで知る。
-     * 画面 (WebSocket) は同じものを `lost` の通知で受け取るので、これは読まない
-     */
-    | 'yielded'
-    /**
-     * **録画のチャプターが書き換わった** (CM検出のやり直し。`encoder.runCmJob`)。中身は `ChaptersChanged`。
-     * 開いている観る画面がチャプターを取り直す — 開いたときに読んだきりなので、CM飛ばしとシークバーが古いままになる
-     */
-    | 'chapters';
+  | "recordings"
+  | "reservations"
+  | "migrate"
+  | "scan"
+  | "services"
+  /** 番組表が増えた・書き換わった。1チャンネル集め終わるたびに飛ぶ */
+  | "programs"
+  /** 局ロゴを取得している最中の進み具合。1チャンネルに数分かかる */
+  | "logos"
+  | "tuners"
+  /**
+   * エンコードの進み具合。**これだけ中身 (payload) を運ぶ** — 数秒おきに
+   * 飛ぶので、そのたびにページ全体を読み直させない。画面は該当行の
+   * 数字だけを書き換える (`encode-live.svelte.ts`)
+   */
+  | "encode"
+  /**
+   * **ライブがチューナーを録画に譲った** (`server/live.ts` の `lose`)。中身は `Yielded`。
+   * HTTP でライブを観ているもの (テレビのアプリ) 向け — ストリームの中では伝えられないので、ここで知る。
+   * 画面 (WebSocket) は同じものを `lost` の通知で受け取るので、これは読まない
+   */
+  | "yielded"
+  /**
+   * **録画のチャプターが書き換わった** (CM検出のやり直し。`encoder.runCmJob`)。中身は `ChaptersChanged`。
+   * 開いている観る画面がチャプターを取り直す — 開いたときに読んだきりなので、CM飛ばしとシークバーが古いままになる
+   */
+  | "chapters";
 
 /** `chapters` イベントの中身 */
 export interface ChaptersChanged {
-    recordingId: number;
+  recordingId: number;
 }
 
 /** `yielded` イベントの中身 */
 export interface Yielded {
-    /** 外されたライブの局 (`services.id`)。その局を観ていた人だけが読む */
-    serviceId: number;
-    recording: YieldedRecording;
+  /** 外されたライブの局 (`services.id`)。その局を観ていた人だけが読む */
+  serviceId: number;
+  recording: YieldedRecording;
 }
 
 /** `encode` イベントの中身。一覧の行を名指しで書き換えられるだけの情報 */
 export interface EncodeProgress {
-    recordingId: number;
-    percent: number;
-    etaMs: number | null;
-    log: string;
+  recordingId: number;
+  percent: number;
+  etaMs: number | null;
+  log: string;
 }
 
 type Listener = (event: DenpaEvent, payload?: unknown) => void;
@@ -63,16 +63,16 @@ type Listener = (event: DenpaEvent, payload?: unknown) => void;
 const listeners = new Set<Listener>();
 
 export function emit(event: DenpaEvent, payload?: unknown): void {
-    for (const listener of listeners) {
-        try {
-            listener(event, payload);
-        } catch {
-            // 1つの購読者の失敗で他に波及させない
-        }
+  for (const listener of listeners) {
+    try {
+      listener(event, payload);
+    } catch {
+      // 1つの購読者の失敗で他に波及させない
     }
+  }
 }
 
 export function subscribe(listener: Listener): () => void {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }

@@ -1,43 +1,43 @@
 <script lang="ts">
-    import Lead from './Lead.svelte';
+  import Lead from "./Lead.svelte";
 
-    /**
-     * チェック + 見出し + 1行の要点 (設定の画面の決まりの形)。
-     *
-     * 要点と「詳しく」は label の外に置く — label の中に開け閉めを入れると、
-     * 「詳しく」を押したつもりでチェックまで切り替わりかねない
-     */
-    let {
-        name,
-        checked,
-        testid,
-        title,
-        hint,
-        detail = '',
-    }: {
-        name: string;
-        checked: boolean;
-        testid?: string;
-        title: string;
-        hint: string;
-        /** 「詳しく」で開く続き。空なら「詳しく」は出さない */
-        detail?: string;
-    } = $props();
+  /**
+   * チェック + 見出し + 1行の要点 (設定の画面の決まりの形)。
+   *
+   * 要点と「詳しく」は label の外に置く — label の中に開け閉めを入れると、
+   * 「詳しく」を押したつもりでチェックまで切り替わりかねない
+   */
+  let {
+    name,
+    checked,
+    testid,
+    title,
+    hint,
+    detail = "",
+  }: {
+    name: string;
+    checked: boolean;
+    testid?: string;
+    title: string;
+    hint: string;
+    /** 「詳しく」で開く続き。空なら「詳しく」は出さない */
+    detail?: string;
+  } = $props();
 </script>
 
 <div class="check-item">
-    <label class="check-row">
-        <input type="checkbox" {name} {checked} data-testid={testid} />
-        <span>{title}</span>
-    </label>
-    {#if detail === ''}
-        <Lead class="indent">{hint}</Lead>
-    {:else}
-        <Lead class="indent">
-            {hint}
-            {#snippet more()}
-                <p>{detail}</p>
-            {/snippet}
-        </Lead>
-    {/if}
+  <label class="check-row">
+    <input type="checkbox" {name} {checked} data-testid={testid} />
+    <span>{title}</span>
+  </label>
+  {#if detail === ""}
+    <Lead class="indent">{hint}</Lead>
+  {:else}
+    <Lead class="indent">
+      {hint}
+      {#snippet more()}
+        <p>{detail}</p>
+      {/snippet}
+    </Lead>
+  {/if}
 </div>

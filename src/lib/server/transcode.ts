@@ -18,8 +18,8 @@
  * GPU があるかは録画・ライブと同じ印で見る (`hwenc.liveHw`。印を外していれば無いのと同じ)
  */
 
-import { liveHw } from './hwenc';
-import { settings } from './settings';
+import { liveHw } from "./hwenc";
+import { settings } from "./settings";
 
 /** 既定の本数。GPU が無いとき / あるとき */
 export const TRANSCODE_DEFAULT = { cpu: 2, gpu: 4 } as const;
@@ -28,35 +28,35 @@ let used = 0;
 
 /** GPU でエンコードできるか (H.264 か AV1 のどちらかに印が付いた使える方式がある) */
 function gpuReady(): boolean {
-    const allow = settings().hwAllow;
-    return liveHw('h264', allow) !== null || liveHw('av1', allow) !== null;
+  const allow = settings().hwAllow;
+  return liveHw("h264", allow) !== null || liveHw("av1", allow) !== null;
 }
 
 /** 自動のときの本数 */
 export function transcodeAuto(): number {
-    return gpuReady() ? TRANSCODE_DEFAULT.gpu : TRANSCODE_DEFAULT.cpu;
+  return gpuReady() ? TRANSCODE_DEFAULT.gpu : TRANSCODE_DEFAULT.cpu;
 }
 
 /** いまの上限 */
 export function transcodeLimit(): number {
-    return settings().transcodeLimit ?? transcodeAuto();
+  return settings().transcodeLimit ?? transcodeAuto();
 }
 
 /** いま変換している本数 */
 export function transcodesInUse(): number {
-    return used;
+  return used;
 }
 
 /**
  * 1 本ぶん枠を取る。**取れたら返す関数を返す** (何度呼んでも 1 回だけ返す)。埋まっていれば null
  */
 export function holdTranscode(): (() => void) | null {
-    if (used >= transcodeLimit()) return null;
-    used++;
-    let held = true;
-    return () => {
-        if (!held) return;
-        held = false;
-        used--;
-    };
+  if (used >= transcodeLimit()) return null;
+  used++;
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    used--;
+  };
 }

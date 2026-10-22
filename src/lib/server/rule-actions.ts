@@ -1,9 +1,9 @@
-import { and, eq, isNotNull, isNull, not } from 'drizzle-orm';
-import { now, orm } from './db';
-import { conditionsOf, EMPTY_RULE, type Fields, ruleValues } from './rule-form';
-import { applyRules } from './rules';
-import { resolveConflicts } from './scheduler';
-import { reservations, rules as ruleTable } from './schema';
+import { and, eq, isNotNull, isNull, not } from "drizzle-orm";
+import { now, orm } from "./db";
+import { conditionsOf, EMPTY_RULE, type Fields, ruleValues } from "./rule-form";
+import { applyRules } from "./rules";
+import { resolveConflicts } from "./scheduler";
+import { reservations, rules as ruleTable } from "./schema";
 
 /**
  * **ルールを足す・直す・止める・消す。** 検索の画面の「ルールとして保存」とルールの一覧の
@@ -23,62 +23,67 @@ import { reservations, rules as ruleTable } from './schema';
  * @returns どのルールにも当たらなくなって消した予約の数
  */
 async function reapply(rule?: number): Promise<number> {
-    const { dropped } = applyRules(rule === undefined ? {} : { rule });
-    await resolveConflicts();
-    return dropped;
+  const { dropped } = applyRules(rule === undefined ? {} : { rule });
+  await resolveConflicts();
+  return dropped;
 }
 
 /** 足したルール・直したルール */
 export interface Saved {
-    id: number;
-    name: string;
+  id: number;
+  name: string;
 }
 
 /** 書く欄の値でルールを足す。新しいルールは有効で、「同じ回は最初の放送だけ」は入れて始める */
-export async function createRule(form: Fields): Promise<Saved | { error: string }> {
-    const conditions = conditionsOf(form);
-    if (conditions.empty) return { error: EMPTY_RULE };
-    const created = orm()
-        .insert(ruleTable)
-        .values({
-            ...ruleValues(conditions, form),
-            dedupe: conditions.dedupe ?? true,
-            enabled: true,
-            created_at: now(),
-        })
-        .returning({ id: ruleTable.id, name: ruleTable.name })
-        .get()!;
-    // 足したルールは他の予約を外せないので、そのルールだけ当てれば足りる
-    await reapply(created.id);
-    return created;
+export async function createRule(
+  form: Fields,
+): Promise<Saved | { error: string }> {
+  const conditions = conditionsOf(form);
+  if (conditions.empty) return { error: EMPTY_RULE };
+  const created = orm()
+    .insert(ruleTable)
+    .values({
+      ...ruleValues(conditions, form),
+      dedupe: conditions.dedupe ?? true,
+      enabled: true,
+      created_at: now(),
+    })
+    .returning({ id: ruleTable.id, name: ruleTable.name })
+    .get()!;
+  // 足したルールは他の予約を外せないので、そのルールだけ当てれば足りる
+  await reapply(created.id);
+  return created;
 }
 
 /**
  * 書く欄の値でルールを直す。条件が変わったので、これから録るぶんは組み直す。
  * **条件に入ったものは立ち、外れたものは引っ込む** (`rules.applyRules`)
  */
-export async function updateRule(id: number, form: Fields): Promise<Saved | { error: string }> {
-    const conditions = conditionsOf(form);
-    if (conditions.empty) return { error: EMPTY_RULE };
-    const saved = orm()
-        .update(ruleTable)
-        .set(ruleValues(conditions, form))
-        .where(eq(ruleTable.id, id))
-        .returning({ id: ruleTable.id, name: ruleTable.name })
-        .get();
-    if (saved === undefined) return { error: 'ルールが見つかりません' };
-    await reapply();
-    return saved;
+export async function updateRule(
+  id: number,
+  form: Fields,
+): Promise<Saved | { error: string }> {
+  const conditions = conditionsOf(form);
+  if (conditions.empty) return { error: EMPTY_RULE };
+  const saved = orm()
+    .update(ruleTable)
+    .set(ruleValues(conditions, form))
+    .where(eq(ruleTable.id, id))
+    .returning({ id: ruleTable.id, name: ruleTable.name })
+    .get();
+  if (saved === undefined) return { error: "ルールが見つかりません" };
+  await reapply();
+  return saved;
 }
 
 /** 有効と無効を入れ替える。止めたルールの予約は猶予を置かずに引っ込む (`rules.applyRules`) */
 export async function toggleRule(id: number): Promise<void> {
-    orm()
-        .update(ruleTable)
-        .set({ enabled: not(ruleTable.enabled) })
-        .where(eq(ruleTable.id, id))
-        .run();
-    await reapply();
+  orm()
+    .update(ruleTable)
+    .set({ enabled: not(ruleTable.enabled) })
+    .where(eq(ruleTable.id, id))
+    .run();
+  await reapply();
 }
 
 /**
@@ -95,22 +100,24 @@ export async function toggleRule(id: number): Promise<void> {
  * @returns 引き取り手が無くて消えた予約の数 (猶予は効かない = 人が押した結果なので)
  */
 export async function deleteRule(id: number): Promise<number> {
-    orm()
-        .delete(reservations)
-        .where(
-            and(
-                eq(reservations.rule_id, id),
-                isNull(reservations.started_at),
-                eq(reservations.state, 'canceled'),
-            ),
-        )
-        .run();
-    // 録画中・録画済みのぶんは履歴として残すので、ルールとの紐付けだけ外す
-    orm()
-        .update(reservations)
-        .set({ rule_id: null })
-        .where(and(eq(reservations.rule_id, id), isNotNull(reservations.started_at)))
-        .run();
-    orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
-    return reapply();
+  orm()
+    .delete(reservations)
+    .where(
+      and(
+        eq(reservations.rule_id, id),
+        isNull(reservations.started_at),
+        eq(reservations.state, "canceled"),
+      ),
+    )
+    .run();
+  // 録画中・録画済みのぶんは履歴として残すので、ルールとの紐付けだけ外す
+  orm()
+    .update(reservations)
+    .set({ rule_id: null })
+    .where(
+      and(eq(reservations.rule_id, id), isNotNull(reservations.started_at)),
+    )
+    .run();
+  orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
+  return reapply();
 }

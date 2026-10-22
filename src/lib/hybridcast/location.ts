@@ -17,17 +17,24 @@
  */
 
 /** `hash` は入れない — ハッシュで画面を切り替えるアプリは、iframe の中の本物の `location.hash` を書き換えて動く */
-const PARTS = 'hostname|host|origin|href|protocol|port|pathname|search|assign|replace|reload';
-const READ = new RegExp(`(?<![\\w$.])(?:(?:window|self|document)\\.)?location\\.(${PARTS})\\b`, 'g');
+const PARTS =
+  "hostname|host|origin|href|protocol|port|pathname|search|assign|replace|reload";
+const READ = new RegExp(
+  `(?<![\\w$.])(?:(?:window|self|document)\\.)?location\\.(${PARTS})\\b`,
+  "g",
+);
 
 /** 文字の中の `location.hostname` などを、差し込みの `__hcLocation` を通すものに置き換える */
 export function rewriteLocation(text: string): string {
-    return text.replace(READ, (_, part: string) => `(self.__hcLocation||location).${part}`);
+  return text.replace(
+    READ,
+    (_, part: string) => `(self.__hcLocation||location).${part}`,
+  );
 }
 
 /** script と HTML か (中の `location.hostname` などを置き換えるもの) */
 export function scriptable(contentType: string): boolean {
-    return /javascript|ecmascript|html/i.test(contentType);
+  return /javascript|ecmascript|html/i.test(contentType);
 }
 
 /**
@@ -35,12 +42,12 @@ export function scriptable(contentType: string): boolean {
  * 置き換えるのは ASCII だけなので、1 バイトを 1 字として読めば文字の符号に関係なく壊さない
  */
 export function rewriteLocationBytes(body: Uint8Array): Uint8Array {
-    let text = '';
-    for (let i = 0; i < body.length; i += 0x8000)
-        text += String.fromCharCode(...body.subarray(i, i + 0x8000));
-    const out = rewriteLocation(text);
-    if (out === text) return body;
-    const bytes = new Uint8Array(out.length);
-    for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i);
-    return bytes;
+  let text = "";
+  for (let i = 0; i < body.length; i += 0x8000)
+    text += String.fromCharCode(...body.subarray(i, i + 0x8000));
+  const out = rewriteLocation(text);
+  if (out === text) return body;
+  const bytes = new Uint8Array(out.length);
+  for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i);
+  return bytes;
 }

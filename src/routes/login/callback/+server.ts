@@ -1,15 +1,20 @@
-import { redirect } from '@sveltejs/kit';
-import { config } from '#lib/server/config.js';
-import { complete, enabled, readPending, redirectUri } from '#lib/server/oidc.js';
-import { publicBase, relative } from '#lib/server/paths.js';
-import { COOKIE, create, PENDING_COOKIE } from '#lib/server/session.js';
+import { redirect } from "@sveltejs/kit";
+import { config } from "#lib/server/config.js";
+import {
+  complete,
+  enabled,
+  readPending,
+  redirectUri,
+} from "#lib/server/oidc.js";
+import { publicBase, relative } from "#lib/server/paths.js";
+import { COOKIE, create, PENDING_COOKIE } from "#lib/server/session.js";
 
 function failed(message: string): Response {
-    // ここは人が見る画面。何が起きたか読めないと、設定のどこが悪いのか追えない
-    return new Response(`ログインできませんでした: ${message}`, {
-        status: 403,
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-    });
+  // ここは人が見る画面。何が起きたか読めないと、設定のどこが悪いのか追えない
+  return new Response(`ログインできませんでした: ${message}`, {
+    status: 403,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
 }
 
 /**
@@ -19,40 +24,50 @@ function failed(message: string): Response {
  * Cookie にしか無いので、他所のサイトから貼られたリンクでは通らない。
  */
 export async function GET({ url, cookies, request }) {
-    if (!enabled()) return new Response('OIDC が設定されていません', { status: 404 });
+  if (!enabled())
+    return new Response("OIDC が設定されていません", { status: 404 });
 
-    const pending = readPending(cookies.get(PENDING_COOKIE));
-    // 使い捨て。成否によらずここで捨てる
-    cookies.delete(PENDING_COOKIE, { path: '/' });
+  const pending = readPending(cookies.get(PENDING_COOKIE));
+  // 使い捨て。成否によらずここで捨てる
+  cookies.delete(PENDING_COOKIE, { path: "/" });
 
-    const error = url.searchParams.get('error');
-    if (error !== null) {
-        return failed(`${error} ${url.searchParams.get('error_description') ?? ''}`.trim());
-    }
-    if (pending === null) return failed('ログインの途中経過が見つかりません。もう一度ログインしてください');
+  const error = url.searchParams.get("error");
+  if (error !== null) {
+    return failed(
+      `${error} ${url.searchParams.get("error_description") ?? ""}`.trim(),
+    );
+  }
+  if (pending === null)
+    return failed(
+      "ログインの途中経過が見つかりません。もう一度ログインしてください",
+    );
 
-    const state = url.searchParams.get('state');
-    if (state !== pending.state) return failed('state が合いません');
+  const state = url.searchParams.get("state");
+  if (state !== pending.state) return failed("state が合いません");
 
-    const code = url.searchParams.get('code');
-    if (code === null) return failed('code がありません');
+  const code = url.searchParams.get("code");
+  if (code === null) return failed("code がありません");
 
-    let who: { subject: string; name: string };
-    try {
-        who = await complete(code, redirectUri(publicBase(url, request.headers)), pending);
-    } catch (cause) {
-        console.warn(`[auth] ログインを断りました: ${cause}`);
-        return failed(String(cause instanceof Error ? cause.message : cause));
-    }
+  let who: { subject: string; name: string };
+  try {
+    who = await complete(
+      code,
+      redirectUri(publicBase(url, request.headers)),
+      pending,
+    );
+  } catch (cause) {
+    console.warn(`[auth] ログインを断りました: ${cause}`);
+    return failed(String(cause instanceof Error ? cause.message : cause));
+  }
 
-    const session = create(who.subject, who.name);
-    console.log(`[auth] ログイン: ${who.name || who.subject}`);
-    cookies.set(COOKIE, session.id, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: url.protocol === 'https:',
-        maxAge: Math.floor(config.oidcSessionTtl / 1000),
-    });
-    redirect(303, relative(url, pending.to));
+  const session = create(who.subject, who.name);
+  console.log(`[auth] ログイン: ${who.name || who.subject}`);
+  cookies.set(COOKIE, session.id, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: url.protocol === "https:",
+    maxAge: Math.floor(config.oidcSessionTtl / 1000),
+  });
+  redirect(303, relative(url, pending.to));
 }

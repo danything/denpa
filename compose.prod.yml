@@ -32,8 +32,8 @@ services:
     # USB (189) と DVB (212) の文字デバイスを開いてよい。**挿し直しで増えるノードも。**
     # `devices:` だけだと起こした時点のノードしか開けず、挿し直すと再起動まで使えない
     device_cgroup_rules:
-      - 'c 189:* rmw'
-      - 'c 212:* rmw'
+      - "c 189:* rmw"
+      - "c 212:* rmw"
     volumes:
       # 設定。チューナーもチャンネルも denpa の画面から書く。
       # スキャンの結果 (channels.json) も同じところへ書き戻される
@@ -44,7 +44,7 @@ services:
       - /dev/bus/usb:/dev/bus/usb
       - /dev/dvb:/dev/dvb
     ports:
-      - '25252:25252'
+      - "25252:25252"
       # 鍵を同じ世帯の別の機器 (LAN の中) へ配るなら (docs/agent.md「鍵を配るのは LAN の中だけ」)、
       # compose.override.yml でこのポートを IPv4 だけで出し、environment に
       # CARD_SHARE_PORT: '25253' と CARD_TTL: '2' (ブリッジの出入りで1つ減る) を書く。既定では配らない
@@ -63,7 +63,7 @@ services:
       TZ: Asia/Tokyo
       # エージェントの場所 (tuner-agent:25252) と置き場所は既定値のまま
       # (src/lib/server/config.ts。同じ値を書き写さない)
-      ENCODE_CONCURRENCY: '2'
+      ENCODE_CONCURRENCY: "2"
       # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断る。**
       # このネットワークからのアクセスはログインなしで通す。自分の LAN に合わせて書き換える。
       # 0.0.0.0/0 で全部開くが、インターネットに向けて開くのと同じなので、
@@ -76,7 +76,7 @@ services:
       - denpa-recorded:/media/raw
       - denpa-library:/media/encoded
     ports:
-      - '3000:3000'
+      - "3000:3000"
     # Intel の GPU でエンコードするなら /dev/dri を渡す (docs/encode.md「GPU でエンコードする」)。
     # 見えれば起動時に見つけて使い、無ければソフトウェアでエンコードする
     # devices:

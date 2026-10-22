@@ -13,7 +13,7 @@ export type TrackPart = { from: number; to: number; cm: boolean };
 
 /** 比を 4 桁で丸める (1時間で 0.4 秒。溝の 1px より細かい) */
 function round(ratio: number): number {
-    return Math.round(ratio * 10000) / 10000;
+  return Math.round(ratio * 10000) / 10000;
 }
 
 /**
@@ -23,42 +23,47 @@ function round(ratio: number): number {
  * 戻れる範囲が無い) は区切らず1本にする。バーの外の区間・切れ目は捨てる
  */
 export function trackParts(
-    spans: { start: number; end: number }[],
-    marks: number[],
-    min: number,
-    max: number,
+  spans: { start: number; end: number }[],
+  marks: number[],
+  min: number,
+  max: number,
 ): TrackPart[] {
-    const span = max - min;
-    if (!(span > 0)) return [{ from: 0, to: 1, cm: false }];
-    const ratio = (at: number) => round(Math.min(1, Math.max(0, (at - min) / span)));
+  const span = max - min;
+  if (!(span > 0)) return [{ from: 0, to: 1, cm: false }];
+  const ratio = (at: number) =>
+    round(Math.min(1, Math.max(0, (at - min) / span)));
 
-    const cms = spans
-        .filter((s) => s.end > s.start && s.end > min && s.start < max)
-        .map((s) => ({ from: ratio(s.start), to: ratio(s.end) }))
-        .filter((s) => s.to > s.from);
-    const cuts = new Set<number>([0, 1]);
-    for (const s of cms) {
-        cuts.add(s.from);
-        cuts.add(s.to);
-    }
-    for (const at of marks) {
-        if (at > min && at < max) cuts.add(ratio(at));
-    }
-    const sorted = [...cuts].sort((a, b) => a - b);
+  const cms = spans
+    .filter((s) => s.end > s.start && s.end > min && s.start < max)
+    .map((s) => ({ from: ratio(s.start), to: ratio(s.end) }))
+    .filter((s) => s.to > s.from);
+  const cuts = new Set<number>([0, 1]);
+  for (const s of cms) {
+    cuts.add(s.from);
+    cuts.add(s.to);
+  }
+  for (const at of marks) {
+    if (at > min && at < max) cuts.add(ratio(at));
+  }
+  const sorted = [...cuts].sort((a, b) => a - b);
 
-    const parts: TrackPart[] = [];
-    for (let i = 1; i < sorted.length; i++) {
-        const from = sorted[i - 1] as number;
-        const to = sorted[i] as number;
-        const middle = (from + to) / 2;
-        parts.push({ from, to, cm: cms.some((s) => s.from <= middle && middle < s.to) });
-    }
-    return parts;
+  const parts: TrackPart[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const from = sorted[i - 1] as number;
+    const to = sorted[i] as number;
+    const middle = (from + to) / 2;
+    parts.push({
+      from,
+      to,
+      cm: cms.some((s) => s.from <= middle && middle < s.to),
+    });
+  }
+  return parts;
 }
 
 /** 部分の中で観たぶんの比 (0〜1)。`at` はバー全体での比 */
 export function playedIn(part: TrackPart, at: number): number {
-    if (!(at > part.from)) return 0;
-    if (at >= part.to) return 1;
-    return round((at - part.from) / (part.to - part.from));
+  if (!(at > part.from)) return 0;
+  if (at >= part.to) return 1;
+  return round((at - part.from) / (part.to - part.from));
 }

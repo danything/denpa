@@ -19,63 +19,67 @@ let answer: string | null | undefined;
 
 /** デコードできない理由。デコードできるなら null。**1回だけ調べて覚える** */
 export function rawUnsupported(): Promise<string | null> {
-    if (answer === undefined) answer = probe();
-    return Promise.resolve(answer);
+  if (answer === undefined) answer = probe();
+  return Promise.resolve(answer);
 }
 
 function probe(): string | null {
-    const common = commonProblem();
-    if (common !== null) return common;
-    // 画面の側で WebGL2 が作れれば、worker の OffscreenCanvas でも作れる (どちらも同じ GPU の経路)
-    if (document.createElement('canvas').getContext('webgl2') === null) return 'WebGL2 が使えません';
-    return null;
+  const common = commonProblem();
+  if (common !== null) return common;
+  // 画面の側で WebGL2 が作れれば、worker の OffscreenCanvas でも作れる (どちらも同じ GPU の経路)
+  if (document.createElement("canvas").getContext("webgl2") === null)
+    return "WebGL2 が使えません";
+  return null;
 }
 
 /** 変換しない経路でも互換モードでも要るもの */
 function commonProblem(): string | null {
-    if (typeof WebAssembly !== 'object') return 'WebAssembly が使えません';
-    if (typeof Worker !== 'function') return 'worker が使えません';
-    if (typeof AudioContext !== 'function') return '音声を再生できません (AudioContext がありません)';
-    const canvas = document.createElement('canvas');
-    if (typeof canvas.transferControlToOffscreen !== 'function') return 'OffscreenCanvas が使えません';
-    return null;
+  if (typeof WebAssembly !== "object") return "WebAssembly が使えません";
+  if (typeof Worker !== "function") return "worker が使えません";
+  if (typeof AudioContext !== "function")
+    return "音声を再生できません (AudioContext がありません)";
+  const canvas = document.createElement("canvas");
+  if (typeof canvas.transferControlToOffscreen !== "function")
+    return "OffscreenCanvas が使えません";
+  return null;
 }
 
 /** 互換モードで描ける形式 (`canvasSupport`) */
 export interface CanvasSupport {
-    h264: boolean;
-    av1: boolean;
+  h264: boolean;
+  av1: boolean;
 }
 
 /**
  * 問い合わせる形式。サーバがエンコードする形式と同じ (`server/live.ts` の `codecsFor`)。
  * 実際にデコードするときは moov から読んだ形式で開く (`ts/fmp4.ts` の `readInit`) — エンコード方式が同じなので同じになる
  */
-const PROBE = { h264: 'avc1.640029', av1: 'av01.0.08M.08' } as const;
+const PROBE = { h264: "avc1.640029", av1: "av01.0.08M.08" } as const;
 
 let canvasAnswer: Promise<CanvasSupport> | undefined;
 
 /** 互換モードで H.264 / AV1 を描けるか。**1回だけ調べて覚える** */
 export function canvasSupport(): Promise<CanvasSupport> {
-    canvasAnswer ??= probeCanvas();
-    return canvasAnswer;
+  canvasAnswer ??= probeCanvas();
+  return canvasAnswer;
 }
 
 async function probeCanvas(): Promise<CanvasSupport> {
-    const none = { h264: false, av1: false };
-    if (commonProblem() !== null || typeof VideoDecoder !== 'function') return none;
-    const ask = async (codec: string): Promise<boolean> => {
-        try {
-            const result = await VideoDecoder.isConfigSupported({
-                codec,
-                codedWidth: 1920,
-                codedHeight: 1080,
-            });
-            return result.supported === true;
-        } catch {
-            return false;
-        }
-    };
-    const [h264, av1] = await Promise.all([ask(PROBE.h264), ask(PROBE.av1)]);
-    return { h264, av1 };
+  const none = { h264: false, av1: false };
+  if (commonProblem() !== null || typeof VideoDecoder !== "function")
+    return none;
+  const ask = async (codec: string): Promise<boolean> => {
+    try {
+      const result = await VideoDecoder.isConfigSupported({
+        codec,
+        codedWidth: 1920,
+        codedHeight: 1080,
+      });
+      return result.supported === true;
+    } catch {
+      return false;
+    }
+  };
+  const [h264, av1] = await Promise.all([ask(PROBE.h264), ask(PROBE.av1)]);
+  return { h264, av1 };
 }

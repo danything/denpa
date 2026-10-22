@@ -45,71 +45,84 @@ const FPS_MIN_SECONDS = 5;
  * **主映像 (HD) に固定する** (`0:v:0`)。GR には 1seg (H.264 320x180) が混じっていて、
  * 指さないとフィルタがそちらに当たる (実測で判明)
  */
-export function fpsArgs(input: string, at: number, seconds = FPS_WINDOW): string[] {
-    const filter =
-        '[0:v:0]split[t][f];' +
-        '[t]field=type=top,signalstats,metadata@top=mode=print:key=lavfi.signalstats.YDIF[top];' +
-        '[f]separatefields,signalstats,metadata@fields=mode=print:key=lavfi.signalstats.YDIF[fields]';
-    return [
-        '-hide_banner',
-        '-nostats',
-        '-ss',
-        String(Math.max(0, at)),
-        '-t',
-        String(seconds),
-        '-i',
-        input,
-        '-filter_complex',
-        filter,
-        ...['top', 'fields'].flatMap((out) => [
-            '-map',
-            `[${out}]`,
-            '-fps_mode',
-            'passthrough',
-            '-f',
-            'null',
-            '-',
-        ]),
-    ];
+export function fpsArgs(
+  input: string,
+  at: number,
+  seconds = FPS_WINDOW,
+): string[] {
+  const filter =
+    "[0:v:0]split[t][f];" +
+    "[t]field=type=top,signalstats,metadata@top=mode=print:key=lavfi.signalstats.YDIF[top];" +
+    "[f]separatefields,signalstats,metadata@fields=mode=print:key=lavfi.signalstats.YDIF[fields]";
+  return [
+    "-hide_banner",
+    "-nostats",
+    "-ss",
+    String(Math.max(0, at)),
+    "-t",
+    String(seconds),
+    "-i",
+    input,
+    "-filter_complex",
+    filter,
+    ...["top", "fields"].flatMap((out) => [
+      "-map",
+      `[${out}]`,
+      "-fps_mode",
+      "passthrough",
+      "-f",
+      "null",
+      "-",
+    ]),
+  ];
 }
 
 /** フィルタが出した差の列。どちらも先頭 (前が無いので 0) は捨ててある */
 export interface FieldDiffs {
-    top: number[];
-    fields: number[];
+  top: number[];
+  fields: number[];
 }
 
 /** ffmpeg の標準エラーから、`metadata@top` / `metadata@fields` の YDIF を拾う */
 export function parseFieldDiffs(lines: Iterable<string>): FieldDiffs {
-    const out: FieldDiffs = { top: [], fields: [] };
-    for (const line of lines) {
-        const m = line.match(/\[metadata@(top|fields) @ [^\]]*\] lavfi\.signalstats\.YDIF=([\d.]+)/);
-        if (m) out[m[1] as keyof FieldDiffs].push(Number(m[2]));
-    }
-    return { top: out.top.slice(1), fields: out.fields.slice(1) };
+  const out: FieldDiffs = { top: [], fields: [] };
+  for (const line of lines) {
+    const m = line.match(
+      /\[metadata@(top|fields) @ [^\]]*\] lavfi\.signalstats\.YDIF=([\d.]+)/,
+    );
+    if (m) out[m[1] as keyof FieldDiffs].push(Number(m[2]));
+  }
+  return { top: out.top.slice(1), fields: out.fields.slice(1) };
 }
 
 /** 値と、それを出せた (動いていた) 秒の数 */
 export interface Score {
-    value: number;
-    seconds: number;
+  value: number;
+  seconds: number;
 }
 
 function mean(values: number[]): number {
-    return values.reduce((a, b) => a + b, 0) / values.length;
+  return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
 /** 列を1秒ずつ切り、動いている秒だけ `score` に掛けて中央値を採る */
-function perSecond(values: number[], perSec: number, score: (second: number[]) => number): Score {
-    const scores: number[] = [];
-    for (let i = 0; i + perSec <= values.length; i += perSec) {
-        const second = values.slice(i, i + perSec);
-        if (mean(second) < FPS_MOTION) continue;
-        const s = score(second);
-        if (Number.isFinite(s)) scores.push(s);
-    }
-    scores.sort((a, b) => a - b);
-    return { value: scores[Math.floor(scores.length / 2)] ?? Number.NaN, seconds: scores.length };
+function perSecond(
+  values: number[],
+  perSec: number,
+  score: (second: number[]) => number,
+): Score {
+  const scores: number[] = [];
+  for (let i = 0; i + perSec <= values.length; i += perSec) {
+    const second = values.slice(i, i + perSec);
+    if (mean(second) < FPS_MOTION) continue;
+    const s = score(second);
+    if (Number.isFinite(s)) scores.push(s);
+  }
+  scores.sort((a, b) => a - b);
+  return {
+    value: scores[Math.floor(scores.length / 2)] ?? Number.NaN,
+    seconds: scores.length,
+  };
 }
 
 /**
@@ -118,15 +131,15 @@ function perSecond(values: number[], perSec: number, score: (second: number[]) =
  * 0 に近く、60i と 30p は 1 に近い
  */
 export function fpsRepeat(top: number[]): Score {
-    return perSecond(top, 30, (second) => {
-        const phase = [0, 0, 0, 0, 0];
-        second.forEach((v, i) => {
-            phase[i % 5] = (phase[i % 5] ?? 0) + v;
-        });
-        const min = Math.min(...phase);
-        const others = (phase.reduce((a, b) => a + b, 0) - min) / 4;
-        return others > 0 ? min / others : Number.NaN;
+  return perSecond(top, 30, (second) => {
+    const phase = [0, 0, 0, 0, 0];
+    second.forEach((v, i) => {
+      phase[i % 5] = (phase[i % 5] ?? 0) + v;
     });
+    const min = Math.min(...phase);
+    const others = (phase.reduce((a, b) => a + b, 0) - min) / 4;
+    return others > 0 ? min / others : Number.NaN;
+  });
 }
 
 /**
@@ -135,45 +148,45 @@ export function fpsRepeat(top: number[]): Score {
  * 60i とテレシネは 1 に近い
  */
 export function fpsWeave(fields: number[]): Score {
-    return perSecond(fields, 60, (second) => {
-        const within = mean(second.filter((_, i) => i % 2 === 0));
-        const across = mean(second.filter((_, i) => i % 2 === 1));
-        const max = Math.max(within, across);
-        return max > 0 ? Math.min(within, across) / max : Number.NaN;
-    });
+  return perSecond(fields, 60, (second) => {
+    const within = mean(second.filter((_, i) => i % 2 === 0));
+    const across = mean(second.filter((_, i) => i % 2 === 1));
+    const max = Math.max(within, across);
+    return max > 0 ? Math.min(within, across) / max : Number.NaN;
+  });
 }
 
 /** 窓の素材。`null` は測れない (静止・黒・失敗) */
-export type FpsKind = '24p' | '30p' | '60i' | null;
+export type FpsKind = "24p" | "30p" | "60i" | null;
 
 /** 窓1つを、繰り返し (`rep`) と上下の差 (`wr`) から分ける */
 export function classifyWindow(rep: Score, wr: Score): FpsKind {
-    if (rep.seconds < FPS_MIN_SECONDS) return null;
-    if (rep.value < FPS_REPEAT) return '24p';
-    if (wr.seconds < FPS_MIN_SECONDS) return null;
-    return wr.value < FPS_WEAVE ? '30p' : '60i';
+  if (rep.seconds < FPS_MIN_SECONDS) return null;
+  if (rep.value < FPS_REPEAT) return "24p";
+  if (wr.seconds < FPS_MIN_SECONDS) return null;
+  return wr.value < FPS_WEAVE ? "30p" : "60i";
 }
 
 /** 1窓の測った結果 */
 export interface FpsWindow {
-    rep: Score;
-    wr: Score;
-    kind: FpsKind;
+  rep: Score;
+  wr: Score;
+  kind: FpsKind;
 }
 
 /** 測れなかった窓 (ffmpeg の失敗など) */
 export const UNMEASURED: FpsWindow = {
-    rep: { value: Number.NaN, seconds: 0 },
-    wr: { value: Number.NaN, seconds: 0 },
-    kind: null,
+  rep: { value: Number.NaN, seconds: 0 },
+  wr: { value: Number.NaN, seconds: 0 },
+  kind: null,
 };
 
 /** ffmpeg (`fpsArgs`) の標準エラーの行から、1窓を分ける */
 export function judgeWindow(lines: Iterable<string>): FpsWindow {
-    const diffs = parseFieldDiffs(lines);
-    const rep = fpsRepeat(diffs.top);
-    const wr = fpsWeave(diffs.fields);
-    return { rep, wr, kind: classifyWindow(rep, wr) };
+  const diffs = parseFieldDiffs(lines);
+  const rep = fpsRepeat(diffs.top);
+  const wr = fpsWeave(diffs.fields);
+  return { rep, wr, kind: classifyWindow(rep, wr) };
 }
 
 /**
@@ -181,13 +194,13 @@ export function judgeWindow(lines: Iterable<string>): FpsWindow {
  * または測れた窓が無ければ 60。本物の 60i を 30コマに落とすと動きが崩れるが、逆は無駄が出るだけ
  */
 export function pickSmooth(kinds: FpsKind[]): boolean {
-    const smooth = kinds.filter((k) => k === '60i').length;
-    const film = kinds.filter((k) => k === '24p' || k === '30p').length;
-    return smooth >= film;
+  const smooth = kinds.filter((k) => k === "60i").length;
+  const film = kinds.filter((k) => k === "24p" || k === "30p").length;
+  return smooth >= film;
 }
 
 /** ログに出す1窓。`24p (rep 0.12 / wr 0.95)`。閾値を詰め直すときの材料 */
 export function windowLabel(w: FpsWindow): string {
-    const n = (s: Score) => (Number.isFinite(s.value) ? s.value.toFixed(2) : '-');
-    return `${w.kind ?? '測れず'} (rep ${n(w.rep)} / wr ${n(w.wr)})`;
+  const n = (s: Score) => (Number.isFinite(s.value) ? s.value.toFixed(2) : "-");
+  return `${w.kind ?? "測れず"} (rep ${n(w.rep)} / wr ${n(w.wr)})`;
 }

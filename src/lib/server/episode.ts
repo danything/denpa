@@ -8,66 +8,66 @@
  * 判定は画面に触らない純粋な計算にしてある (単体テストで固定する)。
  * DB を読むのは呼ぶ側 (`rules.applyRules` とルール画面の下見)。
  */
-import { toHalfWidth } from '../fold';
-import { displayTitle, parseTitle, searchable, withoutSlot } from './title';
+import { toHalfWidth } from "../fold";
+import { displayTitle, parseTitle, searchable, withoutSlot } from "./title";
 
 /** 比べる前に揃える。空白の有無・大文字小文字は局によって揺れる。外字は昔の書き方に (`fold.ts`) */
 function squash(text: string): string {
-    return searchable(text).replace(/\s+/g, '');
+  return searchable(text).replace(/\s+/g, "");
 }
 
 /** 回を読む元。番組表の番組と録画のどちらも持っている */
 export interface Described {
-    name: string;
-    description: string;
-    /** 詳細 (拡張形式)。JSON {見出し:本文} */
-    extended: Record<string, string> | null;
+  name: string;
+  description: string;
+  /** 詳細 (拡張形式)。JSON {見出し:本文} */
+  extended: Record<string, string> | null;
 }
 
 /** その回が何か (`episodeOf`)。2つが同じ回かは `sameEpisode` */
 export interface Episode {
-    /** シリーズ名 (編まで) を均したもの */
-    series: string;
-    /** 編を除いた作品名を均したもの */
-    work: string;
-    /** 編 (`parseTitle` の `arc`) を均したもの。無ければ空 */
-    arc: string;
-    /** シリーズ名のうちいちばん長い語。局ごとの飾り (頭の「アニメ」、後ろの枠の名前) を除けた芯 */
-    core: string;
-    number: number | null;
-    /** 副題を均したもの */
-    subtitle: string;
-    /**
-     * 副題が確かでない (タイトルに話数しか無く概要から足したもの、括弧の無い副題、タイトルの印の後ろ)。
-     * 揃えば同じ回の決め手にするが、食い違っても別の回とはしない (`sameEpisode`)
-     */
-    inferred: boolean;
-    /**
-     * 概要を均したもの。短いもの (`SUMMARY_MIN` 文字未満) は空。局を替えても概要はそのまま
-     * 流れることが多く、話数と概要がぴったり同じなら、タイトルの飾りや副題が違っても同じ回とみる (`sameSummary`)
-     */
-    summary: string;
+  /** シリーズ名 (編まで) を均したもの */
+  series: string;
+  /** 編を除いた作品名を均したもの */
+  work: string;
+  /** 編 (`parseTitle` の `arc`) を均したもの。無ければ空 */
+  arc: string;
+  /** シリーズ名のうちいちばん長い語。局ごとの飾り (頭の「アニメ」、後ろの枠の名前) を除けた芯 */
+  core: string;
+  number: number | null;
+  /** 副題を均したもの */
+  subtitle: string;
+  /**
+   * 副題が確かでない (タイトルに話数しか無く概要から足したもの、括弧の無い副題、タイトルの印の後ろ)。
+   * 揃えば同じ回の決め手にするが、食い違っても別の回とはしない (`sameEpisode`)
+   */
+  inferred: boolean;
+  /**
+   * 概要を均したもの。短いもの (`SUMMARY_MIN` 文字未満) は空。局を替えても概要はそのまま
+   * 流れることが多く、話数と概要がぴったり同じなら、タイトルの飾りや副題が違っても同じ回とみる (`sameSummary`)
+   */
+  summary: string;
 }
 
 /** 回の決め手にする概要の長さ。短いものはどの回にも当たりやすい */
 const SUMMARY_MIN = 30;
 
-const KANJI_DIGITS = '〇一二三四五六七八九';
+const KANJI_DIGITS = "〇一二三四五六七八九";
 const NUMERAL = `\\d{1,4}|[${KANJI_DIGITS}十百]{1,5}`;
 /** 英語の話数 (`Chapter 15` `Episode.2` `EP108`)。語の途中 (`Step12`) は読まない */
-const LABEL = '(?<![A-Za-z0-9])(?:chapter|episode|ep)\\s*\\.?\\s*(\\d{1,4})';
+const LABEL = "(?<![A-Za-z0-9])(?:chapter|episode|ep)\\s*\\.?\\s*(\\d{1,4})";
 /** 概要に出る話数と副題。`#18「月下の花」` `第18話「…」` `第十八話『…』` `Chapter 18「…」` */
 const NUMBERED_SUBTITLE = new RegExp(
-    `(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*[話回]|${LABEL})\\s*[「『]([^」』]{1,80})[」』]`,
-    'gi',
+  `(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*[話回]|${LABEL})\\s*[「『]([^」』]{1,80})[」』]`,
+  "gi",
 );
 /**
  * 副題の無い話数。**行の頭に単独で出たものだけ** (`#18 猫猫は…`)。地の文の「第3話から登場」
  * 「#1ヒット」は読まない。「第3回」も地の文に紛れやすいので読まない
  */
 const NUMBER_ONLY = new RegExp(
-    `^\\s*(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*話|${LABEL})(?=[\\s「『:.、。]|$)`,
-    'gmi',
+  `^\\s*(?:#\\s*(\\d{1,4})|第\\s*(${NUMERAL})\\s*話|${LABEL})(?=[\\s「『:.、。]|$)`,
+  "gmi",
 );
 /**
  * 行の頭の話数に続く、括弧の無い副題 (`Chapter 15 百足坑道の主`)。行の残りが短く、
@@ -89,51 +89,56 @@ const ANOTHER_EPISODE = /前回|次回|予告/;
 
 /** `18` / `十八` / `一〇` を数に */
 function numeral(text: string): number {
-    if (/^\d+$/.test(text)) return Number(text);
-    if (!/[十百]/.test(text)) return Number([...text].map((c) => KANJI_DIGITS.indexOf(c)).join(''));
-    let total = 0;
-    let current = 0;
-    for (const c of text) {
-        if (c === '百' || c === '十') {
-            total += (current || 1) * (c === '百' ? 100 : 10);
-            current = 0;
-        } else current = KANJI_DIGITS.indexOf(c);
-    }
-    return total + current;
+  if (/^\d+$/.test(text)) return Number(text);
+  if (!/[十百]/.test(text))
+    return Number([...text].map((c) => KANJI_DIGITS.indexOf(c)).join(""));
+  let total = 0;
+  let current = 0;
+  for (const c of text) {
+    if (c === "百" || c === "十") {
+      total += (current || 1) * (c === "百" ? 100 : 10);
+      current = 0;
+    } else current = KANJI_DIGITS.indexOf(c);
+  }
+  return total + current;
 }
 
 /** 概要・詳細から、この回の話数と副題 (読めなければ null) */
 function describedEpisode(
-    texts: string[],
+  texts: string[],
 ): { number: number | null; subtitle: string; bracketed: boolean } | null {
-    for (const [pattern, withSubtitle] of [
-        [NUMBERED_SUBTITLE, true],
-        [NUMBER_ONLY, false],
-    ] as const) {
-        for (const text of texts) {
-            for (const match of text.matchAll(pattern)) {
-                const sentence =
-                    text
-                        .slice(0, match.index)
-                        .split(/[。\n」』]/)
-                        .at(-1) ?? '';
-                if (ANOTHER_EPISODE.test(sentence)) continue;
-                const line = text
-                    .slice(match.index + match[0].length)
-                    .split('\n')[0]!
-                    .split(SUBTITLE_END)[0]!
-                    .replace(/^[\s:.]+/, '')
-                    .trim();
-                const subtitle = withSubtitle ? match[4]! : BARE_SUBTITLE.test(line) ? line : '';
-                return {
-                    number: numeral((match[1] ?? match[2] ?? match[3])!),
-                    subtitle: squash(subtitle),
-                    bracketed: withSubtitle,
-                };
-            }
-        }
+  for (const [pattern, withSubtitle] of [
+    [NUMBERED_SUBTITLE, true],
+    [NUMBER_ONLY, false],
+  ] as const) {
+    for (const text of texts) {
+      for (const match of text.matchAll(pattern)) {
+        const sentence =
+          text
+            .slice(0, match.index)
+            .split(/[。\n」』]/)
+            .at(-1) ?? "";
+        if (ANOTHER_EPISODE.test(sentence)) continue;
+        const line = text
+          .slice(match.index + match[0].length)
+          .split("\n")[0]!
+          .split(SUBTITLE_END)[0]!
+          .replace(/^[\s:.]+/, "")
+          .trim();
+        const subtitle = withSubtitle
+          ? match[4]!
+          : BARE_SUBTITLE.test(line)
+            ? line
+            : "";
+        return {
+          number: numeral((match[1] ?? match[2] ?? match[3])!),
+          subtitle: squash(subtitle),
+          bracketed: withSubtitle,
+        };
+      }
     }
-    return null;
+  }
+  return null;
 }
 
 /**
@@ -154,51 +159,55 @@ function describedEpisode(
  *   同じ時刻に同じタイトルが流れる同時放送だけは束ねる (`firstAirings`)
  */
 export function episodeOf(program: Described): Episode | null {
-    // 番組名は放送のとおり全角混じり。この下の規則 (`SLOT` の英字など) は半角で書いてあるので寄せてから読む
-    const parsed = parseTitle(toHalfWidth(program.name));
-    let number = parsed.episode;
-    let subtitle = squash(parsed.subtitle);
-    let inferred = MARKED.test(subtitle);
-    if (subtitle === '' || inferred) {
-        const texts = [program.description, Object.values(program.extended ?? {}).join('\n')].map(
-            toHalfWidth,
-        );
-        const described = describedEpisode(texts);
-        if (number === null) {
-            if (subtitle === '') {
-                if (described === null) return null;
-                ({ number, subtitle } = described);
-                inferred = !described.bracketed;
-            }
-        } else if (described?.number === number && described.subtitle !== '') {
-            subtitle = described.subtitle;
-            inferred = true;
-        }
+  // 番組名は放送のとおり全角混じり。この下の規則 (`SLOT` の英字など) は半角で書いてあるので寄せてから読む
+  const parsed = parseTitle(toHalfWidth(program.name));
+  let number = parsed.episode;
+  let subtitle = squash(parsed.subtitle);
+  let inferred = MARKED.test(subtitle);
+  if (subtitle === "" || inferred) {
+    const texts = [
+      program.description,
+      Object.values(program.extended ?? {}).join("\n"),
+    ].map(toHalfWidth);
+    const described = describedEpisode(texts);
+    if (number === null) {
+      if (subtitle === "") {
+        if (described === null) return null;
+        ({ number, subtitle } = described);
+        inferred = !described.bracketed;
+      }
+    } else if (described?.number === number && described.subtitle !== "") {
+      subtitle = described.subtitle;
+      inferred = true;
     }
-    // ARIB の囲み文字 (🈑🈞) は局によって付いたり付かなかったりする
-    const bare = (text: string) => text.replace(/[\u{1F210}-\u{1F23B}]/gu, ' ');
-    const work = withoutSlot(parsed.series);
-    const series = bare(`${work} ${parsed.arc}`);
-    const words = series
-        .split(/[\s[\]【】<>()〈〉《》≪≫]+/)
-        .map(squash)
-        .filter((word) => word !== '');
-    const core = words.reduce((longest, word) => (word.length > longest.length ? word : longest), '');
-    return {
-        series: squash(series),
-        work: squash(bare(work)),
-        arc: squash(bare(parsed.arc)),
-        core,
-        number,
-        subtitle,
-        inferred,
-        summary: summaryOf(program.description),
-    };
+  }
+  // ARIB の囲み文字 (🈑🈞) は局によって付いたり付かなかったりする
+  const bare = (text: string) => text.replace(/[\u{1F210}-\u{1F23B}]/gu, " ");
+  const work = withoutSlot(parsed.series);
+  const series = bare(`${work} ${parsed.arc}`);
+  const words = series
+    .split(/[\s[\]【】<>()〈〉《》≪≫]+/)
+    .map(squash)
+    .filter((word) => word !== "");
+  const core = words.reduce(
+    (longest, word) => (word.length > longest.length ? word : longest),
+    "",
+  );
+  return {
+    series: squash(series),
+    work: squash(bare(work)),
+    arc: squash(bare(parsed.arc)),
+    core,
+    number,
+    subtitle,
+    inferred,
+    summary: summaryOf(program.description),
+  };
 }
 
 function summaryOf(description: string): string {
-    const summary = squash(description ?? '');
-    return summary.length >= SUMMARY_MIN ? summary : '';
+  const summary = squash(description ?? "");
+  return summary.length >= SUMMARY_MIN ? summary : "";
 }
 
 /**
@@ -206,11 +215,14 @@ function summaryOf(description: string): string {
  * `東京リベンジャーズ #51`) は、作品名が同じなら同じシリーズとみる
  */
 function sameSeries(a: Episode, b: Episode): boolean {
-    return a.series === b.series || (a.work === b.work && (a.arc === '' || b.arc === ''));
+  return (
+    a.series === b.series ||
+    (a.work === b.work && (a.arc === "" || b.arc === ""))
+  );
 }
 
 /** シリーズ名の中の数字 (`汚職特捜班 5` の 5)。期の数字のことが多い */
-const digits = (text: string) => text.match(/\d+/g)?.join(' ') ?? '';
+const digits = (text: string) => text.match(/\d+/g)?.join(" ") ?? "";
 
 /**
  * 話数と概要がぴったり同じか (`Episode.summary`)。シリーズ名は同じか、片方がもう片方を
@@ -220,12 +232,28 @@ const digits = (text: string) => text.match(/\d+/g)?.join(' ') ?? '';
  * (`汚職特捜班 5 #6` と `汚職特捜班 6 #6` が「エピソード6」+ 番組紹介 の同じ概要を持つ) も除く
  */
 function sameSummary(a: Episode, b: Episode): boolean {
-    if (a.number === null || a.number !== b.number || a.summary === '' || a.summary !== b.summary)
-        return false;
-    if (a.subtitle !== '' && b.subtitle !== '' && a.subtitle !== b.subtitle && !a.inferred && !b.inferred)
-        return false;
-    if (a.series !== b.series && digits(a.series) !== digits(b.series)) return false;
-    return sameSeries(a, b) || a.series.includes(b.series) || b.series.includes(a.series);
+  if (
+    a.number === null ||
+    a.number !== b.number ||
+    a.summary === "" ||
+    a.summary !== b.summary
+  )
+    return false;
+  if (
+    a.subtitle !== "" &&
+    b.subtitle !== "" &&
+    a.subtitle !== b.subtitle &&
+    !a.inferred &&
+    !b.inferred
+  )
+    return false;
+  if (a.series !== b.series && digits(a.series) !== digits(b.series))
+    return false;
+  return (
+    sameSeries(a, b) ||
+    a.series.includes(b.series) ||
+    b.series.includes(a.series)
+  );
 }
 
 /**
@@ -250,62 +278,69 @@ function sameSummary(a: Episode, b: Episode): boolean {
  * **編がどちらにも書いてあって違えば別の回** (`水戸黄門・第36部 #9` と `第37部 #9`)
  */
 export function sameEpisode(a: Episode, b: Episode): boolean {
-    if (a.number !== b.number) return false;
-    if (a.arc !== '' && b.arc !== '' && a.arc !== b.arc) return false;
-    if (sameSummary(a, b)) return true;
-    if (a.subtitle === '' || b.subtitle === '') return sameSeries(a, b);
-    // 確かでない副題は、食い違っても副題が無いものとして見る
-    if (a.subtitle !== b.subtitle) return (a.inferred || b.inferred) && sameSeries(a, b);
-    if (sameSeries(a, b)) return true;
-    return (
-        (a.core.length >= 3 && b.series.includes(a.core)) || (b.core.length >= 3 && a.series.includes(b.core))
-    );
+  if (a.number !== b.number) return false;
+  if (a.arc !== "" && b.arc !== "" && a.arc !== b.arc) return false;
+  if (sameSummary(a, b)) return true;
+  if (a.subtitle === "" || b.subtitle === "") return sameSeries(a, b);
+  // 確かでない副題は、食い違っても副題が無いものとして見る
+  if (a.subtitle !== b.subtitle)
+    return (a.inferred || b.inferred) && sameSeries(a, b);
+  if (sameSeries(a, b)) return true;
+  return (
+    (a.core.length >= 3 && b.series.includes(a.core)) ||
+    (b.core.length >= 3 && a.series.includes(b.core))
+  );
 }
 
 /** 字幕付きか。放送のタイトルに `[字]` (外字。ARIB の囲み文字なら 🈑) が付く */
 export function captioned(name: string): boolean {
-    return /\[字\]|【字】|🈑/u.test(toHalfWidth(name));
+  return /\[字\]|【字】|🈑/u.test(toHalfWidth(name));
 }
 
 /** 衛星 (BS/CS)。地上波と同時に流れているなら、地方の差し替えが無いぶんこちらを録る */
 function satellite(type: string): boolean {
-    return type !== 'GR';
+  return type !== "GR";
 }
 
 export interface Airing extends Described {
-    id: number;
-    start_at: number;
-    end_at: number;
-    service_id: number;
-    /** チャンネル種別 (GR/BS/CS/SKY) */
-    type: string;
+  id: number;
+  start_at: number;
+  end_at: number;
+  service_id: number;
+  /** チャンネル種別 (GR/BS/CS/SKY) */
+  type: string;
 }
 
 /** 録ったことのある回と、いつ・どこで録ったか。同じ回は `sameEpisode` で探す */
-export type Taken = { episode: Episode; start_at: number; service_name: string }[];
+export type Taken = {
+  episode: Episode;
+  start_at: number;
+  service_name: string;
+}[];
 
 /** 録らない放送と、その理由 */
 export type Skip<T extends Airing> =
-    /** 同じ回を別の放送で録る */
-    | { kind: 'repeat'; first: T }
-    /** 同じ回をもう録ってある */
-    | { kind: 'recorded'; start_at: number; service_name: string };
+  /** 同じ回を別の放送で録る */
+  | { kind: "repeat"; first: T }
+  /** 同じ回をもう録ってある */
+  | { kind: "recorded"; start_at: number; service_name: string };
 
 /**
  * 同時に流れているものの中で、どれを録るか。
  * **字幕のあるもの → 衛星 → 早く始まるもの** の順
  */
 function better<T extends Airing>(a: T, b: T): number {
-    return (
-        Number(captioned(b.name)) - Number(captioned(a.name)) ||
-        Number(satellite(b.type)) - Number(satellite(a.type)) ||
-        a.start_at - b.start_at ||
-        a.service_id - b.service_id ||
-        a.id - b.id
-    );
+  return (
+    Number(captioned(b.name)) - Number(captioned(a.name)) ||
+    Number(satellite(b.type)) - Number(satellite(a.type)) ||
+    a.start_at - b.start_at ||
+    a.service_id - b.service_id ||
+    a.id - b.id
+  );
 }
 
-const overlaps = (a: Airing, b: Airing) => a.start_at < b.end_at && b.start_at < a.end_at;
+const overlaps = (a: Airing, b: Airing) =>
+  a.start_at < b.end_at && b.start_at < a.end_at;
 
 /**
  * 同じ回の放送のうち、**録らないもの**を返す (番組ID → 理由)。返らなかったものは録る。
@@ -327,89 +362,96 @@ const overlaps = (a: Airing, b: Airing) => a.start_at < b.end_at && b.start_at <
  * @param taken 録ったことのある回
  */
 export function firstAirings<T extends Airing>(
-    airings: readonly T[],
-    blocked: ReadonlySet<number> = new Set(),
-    taken: Taken = [],
+  airings: readonly T[],
+  blocked: ReadonlySet<number> = new Set(),
+  taken: Taken = [],
 ): Map<number, Skip<T>> {
-    const skips = new Map<number, Skip<T>>();
-    /** 話数が同じ放送。この中で `sameEpisode` で束ねる */
-    const numbered = new Map<string, { airing: T; episode: Episode }[]>();
-    /** 回の分からない放送。タイトルごとに、同じ時刻のものだけ束ねる */
-    const loose = new Map<string, T[]>();
-    for (const airing of airings) {
-        const episode = episodeOf(airing);
-        if (episode === null) {
-            const at = squash(displayTitle(airing.name));
-            const list = loose.get(at);
-            if (list === undefined) loose.set(at, [airing]);
-            else list.push(airing);
-            continue;
-        }
-        const at = String(episode.number);
-        const list = numbered.get(at);
-        if (list === undefined) numbered.set(at, [{ airing, episode }]);
-        else list.push({ airing, episode });
+  const skips = new Map<number, Skip<T>>();
+  /** 話数が同じ放送。この中で `sameEpisode` で束ねる */
+  const numbered = new Map<string, { airing: T; episode: Episode }[]>();
+  /** 回の分からない放送。タイトルごとに、同じ時刻のものだけ束ねる */
+  const loose = new Map<string, T[]>();
+  for (const airing of airings) {
+    const episode = episodeOf(airing);
+    if (episode === null) {
+      const at = squash(displayTitle(airing.name));
+      const list = loose.get(at);
+      if (list === undefined) loose.set(at, [airing]);
+      else list.push(airing);
+      continue;
     }
-    // 話数の違う回にも出てくる概要は、毎週同じ番組紹介。回の決め手にしない。
-    // 数字は除いて比べる (「エピソード6」+ 番組紹介 のように話数だけ差し替えるものがある)
-    const template = (summary: string) => summary.replace(/\d+/g, '#');
-    const numbers = new Map<string, Set<number | null>>();
-    const known = [
-        ...[...numbered.values()].flat().map(({ episode }) => episode),
-        ...taken.map((t) => t.episode),
-    ];
-    for (const { summary, number } of known) {
-        if (summary === '') continue;
-        const key = template(summary);
-        const seen = numbers.get(key);
-        if (seen === undefined) numbers.set(key, new Set([number]));
-        else seen.add(number);
-    }
-    const generic = (e: Episode) => e.summary !== '' && numbers.get(template(e.summary))!.size > 1;
-    for (const list of numbered.values())
-        for (const entry of list)
-            if (generic(entry.episode)) entry.episode = { ...entry.episode, summary: '' };
-    const recorded = taken.map((t) =>
-        generic(t.episode) ? { ...t, episode: { ...t.episode, summary: '' } } : t,
+    const at = String(episode.number);
+    const list = numbered.get(at);
+    if (list === undefined) numbered.set(at, [{ airing, episode }]);
+    else list.push({ airing, episode });
+  }
+  // 話数の違う回にも出てくる概要は、毎週同じ番組紹介。回の決め手にしない。
+  // 数字は除いて比べる (「エピソード6」+ 番組紹介 のように話数だけ差し替えるものがある)
+  const template = (summary: string) => summary.replace(/\d+/g, "#");
+  const numbers = new Map<string, Set<number | null>>();
+  const known = [
+    ...[...numbered.values()].flat().map(({ episode }) => episode),
+    ...taken.map((t) => t.episode),
+  ];
+  for (const { summary, number } of known) {
+    if (summary === "") continue;
+    const key = template(summary);
+    const seen = numbers.get(key);
+    if (seen === undefined) numbers.set(key, new Set([number]));
+    else seen.add(number);
+  }
+  const generic = (e: Episode) =>
+    e.summary !== "" && numbers.get(template(e.summary))!.size > 1;
+  for (const list of numbered.values())
+    for (const entry of list)
+      if (generic(entry.episode))
+        entry.episode = { ...entry.episode, summary: "" };
+  const recorded = taken.map((t) =>
+    generic(t.episode) ? { ...t, episode: { ...t.episode, summary: "" } } : t,
+  );
+
+  /** 束ねたものから録る1本 (弾かれていれば次も) を選び、残りを録らないことにする */
+  function settle(cluster: T[]): void {
+    const rest = [...cluster].sort(
+      (a, b) => a.start_at - b.start_at || better(a, b),
     );
+    let chosen: T | undefined;
+    while (rest.length > 0) {
+      const earliest = rest[0]!;
+      const pick = rest.filter((a) => overlaps(a, earliest)).sort(better)[0]!;
+      rest.splice(rest.indexOf(pick), 1);
+      chosen = pick;
+      if (!blocked.has(pick.id)) break;
+    }
+    for (const airing of rest)
+      skips.set(airing.id, { kind: "repeat", first: chosen! });
+  }
 
-    /** 束ねたものから録る1本 (弾かれていれば次も) を選び、残りを録らないことにする */
-    function settle(cluster: T[]): void {
-        const rest = [...cluster].sort((a, b) => a.start_at - b.start_at || better(a, b));
-        let chosen: T | undefined;
-        while (rest.length > 0) {
-            const earliest = rest[0]!;
-            const pick = rest.filter((a) => overlaps(a, earliest)).sort(better)[0]!;
-            rest.splice(rest.indexOf(pick), 1);
-            chosen = pick;
-            if (!blocked.has(pick.id)) break;
-        }
-        for (const airing of rest) skips.set(airing.id, { kind: 'repeat', first: chosen! });
+  for (const list of numbered.values()) {
+    for (const cluster of episodes(list)) {
+      const done = recorded.find((t) =>
+        cluster.some(({ episode }) => sameEpisode(t.episode, episode)),
+      );
+      if (done !== undefined) {
+        const { start_at, service_name } = done;
+        for (const { airing } of cluster)
+          skips.set(airing.id, { kind: "recorded", start_at, service_name });
+        continue;
+      }
+      settle(cluster.map(({ airing }) => airing));
     }
-
-    for (const list of numbered.values()) {
-        for (const cluster of episodes(list)) {
-            const done = recorded.find((t) => cluster.some(({ episode }) => sameEpisode(t.episode, episode)));
-            if (done !== undefined) {
-                const { start_at, service_name } = done;
-                for (const { airing } of cluster)
-                    skips.set(airing.id, { kind: 'recorded', start_at, service_name });
-                continue;
-            }
-            settle(cluster.map(({ airing }) => airing));
-        }
+  }
+  for (const list of loose.values()) {
+    // 同じタイトルでも別の時刻なら別の放送。重なっているものだけを1つに束ねる
+    const rest = [...list].sort((a, b) => a.start_at - b.start_at);
+    while (rest.length > 0) {
+      const earliest = rest[0]!;
+      const cluster = rest.filter((a) => overlaps(a, earliest));
+      for (const airing of cluster) rest.splice(rest.indexOf(airing), 1);
+      if (cluster.length > 1) settle(cluster);
     }
-    for (const list of loose.values()) {
-        // 同じタイトルでも別の時刻なら別の放送。重なっているものだけを1つに束ねる
-        const rest = [...list].sort((a, b) => a.start_at - b.start_at);
-        while (rest.length > 0) {
-            const earliest = rest[0]!;
-            const cluster = rest.filter((a) => overlaps(a, earliest));
-            for (const airing of cluster) rest.splice(rest.indexOf(airing), 1);
-            if (cluster.length > 1) settle(cluster);
-        }
-    }
-    return skips;
+  }
+  return skips;
 }
 
 /**
@@ -421,51 +463,58 @@ export function firstAirings<T extends Airing>(
  *    互いに相手が1つに決まるときだけ繋ぐ。`X #5` に `「X」A編 #5` と `「X」B編 #5` の
  *    両方が当たるなら、どちらとも繋がない — 1本多く録るだけで、取り違えて録り逃すよりよい
  */
-function episodes<T>(list: { airing: T; episode: Episode }[]): { airing: T; episode: Episode }[][] {
-    // 確かでない副題 (`Episode.inferred`) は、揃わなければ副題が無いものとして見る。
-    // ただし確かでない副題どうしが食い違うなら、確かとはしない (相手が1つに決まるときだけ繋ぐ)
-    const blank = (e: Episode) => e.subtitle === '' || e.inferred;
-    const sure = (a: Episode, b: Episode) =>
-        sameSummary(a, b) ||
-        (a.subtitle !== '' && a.subtitle === b.subtitle
-            ? sameEpisode(a, b)
-            : (a.subtitle === '' || b.subtitle === '') && blank(a) && blank(b) && a.series === b.series);
-    const group = list.map((_, i) => i);
-    const root = (i: number): number => {
-        let at = i;
-        while (group[at] !== at) at = group[at]!;
-        return at;
-    };
-    for (let i = 0; i < list.length; i++)
-        for (let j = i + 1; j < list.length; j++)
-            if (sure(list[i]!.episode, list[j]!.episode)) group[root(j)] = root(i);
-    const roots = new Map<number, { airing: T; episode: Episode }[]>();
-    list.forEach((entry, i) => {
-        const cluster = roots.get(root(i));
-        if (cluster === undefined) roots.set(root(i), [entry]);
-        else cluster.push(entry);
-    });
-    const clusters = [...roots.values()];
+function episodes<T>(
+  list: { airing: T; episode: Episode }[],
+): { airing: T; episode: Episode }[][] {
+  // 確かでない副題 (`Episode.inferred`) は、揃わなければ副題が無いものとして見る。
+  // ただし確かでない副題どうしが食い違うなら、確かとはしない (相手が1つに決まるときだけ繋ぐ)
+  const blank = (e: Episode) => e.subtitle === "" || e.inferred;
+  const sure = (a: Episode, b: Episode) =>
+    sameSummary(a, b) ||
+    (a.subtitle !== "" && a.subtitle === b.subtitle
+      ? sameEpisode(a, b)
+      : (a.subtitle === "" || b.subtitle === "") &&
+        blank(a) &&
+        blank(b) &&
+        a.series === b.series);
+  const group = list.map((_, i) => i);
+  const root = (i: number): number => {
+    let at = i;
+    while (group[at] !== at) at = group[at]!;
+    return at;
+  };
+  for (let i = 0; i < list.length; i++)
+    for (let j = i + 1; j < list.length; j++)
+      if (sure(list[i]!.episode, list[j]!.episode)) group[root(j)] = root(i);
+  const roots = new Map<number, { airing: T; episode: Episode }[]>();
+  list.forEach((entry, i) => {
+    const cluster = roots.get(root(i));
+    if (cluster === undefined) roots.set(root(i), [entry]);
+    else cluster.push(entry);
+  });
+  const clusters = [...roots.values()];
 
-    /** 束どうしで、同じ回と読める組み合わせがあるもの。飾りの違う局は副題で束ねてあるので、どれか1つと読めればよい */
-    const partners = clusters.map((one) =>
-        clusters.filter(
-            (other) =>
-                other !== one &&
-                one.some(({ episode: a }) => other.some(({ episode: b }) => sameEpisode(a, b))),
+  /** 束どうしで、同じ回と読める組み合わせがあるもの。飾りの違う局は副題で束ねてあるので、どれか1つと読めればよい */
+  const partners = clusters.map((one) =>
+    clusters.filter(
+      (other) =>
+        other !== one &&
+        one.some(({ episode: a }) =>
+          other.some(({ episode: b }) => sameEpisode(a, b)),
         ),
-    );
-    const merged: { airing: T; episode: Episode }[][] = [];
-    clusters.forEach((cluster, i) => {
-        const [only, ...more] = partners[i]!;
-        if (only === undefined || more.length > 0) {
-            merged.push(cluster);
-            return;
-        }
-        const j = clusters.indexOf(only);
-        // 相手も自分しか候補が無いときだけ1つにする。2つ目の側で足す (二重に足さない)
-        if (partners[j]!.length !== 1) merged.push(cluster);
-        else if (j < i) merged.push([...only, ...cluster]);
-    });
-    return merged;
+    ),
+  );
+  const merged: { airing: T; episode: Episode }[][] = [];
+  clusters.forEach((cluster, i) => {
+    const [only, ...more] = partners[i]!;
+    if (only === undefined || more.length > 0) {
+      merged.push(cluster);
+      return;
+    }
+    const j = clusters.indexOf(only);
+    // 相手も自分しか候補が無いときだけ1つにする。2つ目の側で足す (二重に足さない)
+    if (partners[j]!.length !== 1) merged.push(cluster);
+    else if (j < i) merged.push([...only, ...cluster]);
+  });
+  return merged;
 }

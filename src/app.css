@@ -34,26 +34,27 @@
  * body と main の初期化は document にある)・並べ方のクラス (container・grid・overflow-auto)・figure・色/日付/ファイルの入力欄・
  * dropdown・tooltip (どれも当てる要素が無い)、コード・検索欄の虫眼鏡・ナビ (当てたくない。前は読んでから打ち消していた)
  */
-@import '@anyblades/blades/layered/variables';
-@import '@anyblades/blades/layered/layout/document';
-@import '@anyblades/blades/layered/layout/section';
-@import '@anyblades/blades/layered/content/typography';
-@import '@anyblades/blades/layered/content/link';
-@import '@anyblades/blades/layered/content/button';
-@import '@anyblades/blades/layered/content/embedded-content';
-@import '@anyblades/blades/layered/content/misc';
-@import '@anyblades/blades/layered/forms/basics';
-@import '@anyblades/blades/layered/forms/checkbox-radio-switch';
-@import '@anyblades/blades/layered/components/card';
-@import '@anyblades/blades/layered/components/group';
-@import '@anyblades/blades/layered/components/loading';
-@import '@anyblades/blades/layered/utilities';
+@import "@anyblades/blades/layered/variables";
+@import "@anyblades/blades/layered/layout/document";
+@import "@anyblades/blades/layered/layout/section";
+@import "@anyblades/blades/layered/content/typography";
+@import "@anyblades/blades/layered/content/link";
+@import "@anyblades/blades/layered/content/button";
+@import "@anyblades/blades/layered/content/embedded-content";
+@import "@anyblades/blades/layered/content/misc";
+@import "@anyblades/blades/layered/forms/basics";
+@import "@anyblades/blades/layered/forms/checkbox-radio-switch";
+@import "@anyblades/blades/layered/components/card";
+@import "@anyblades/blades/layered/components/group";
+@import "@anyblades/blades/layered/components/loading";
+@import "@anyblades/blades/layered/utilities";
 
 :root {
-    --pico-font-family-sans-serif: "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
-    /* 16px(Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
-    --pico-font-size: 16px;
-    /*
+  --pico-font-family-sans-serif:
+    "BIZ UDPGothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  /* 16px(Tailwind の頃と同じ)。番組表の 1 マスなど rem で組んだ寸法がそのまま保たれる */
+  --pico-font-size: 16px;
+  /*
      * **放送から来た字は Denpa Font で** (番組名・説明・番組表のマス・録画の名前・局名)。
      * 字幕・データ放送と同じ丸ゴシックで、ARIB の外字 (🈑 Ⓗ など) を持っているので
      * テレビと同じ白黒の字で出る。`@font-face` は版付きの URL が要るので
@@ -61,49 +62,50 @@
      * こちらで書いた文言 (ボタン・見出し・設定) は画面の字のまま。`.broadcast` で付ける
      * (全角英数字を詰める palt も一緒に付く)
      */
-    --broadcast-font: "Denpa Font", var(--pico-font-family-sans-serif);
-    /*
+  --broadcast-font: "Denpa Font", var(--pico-font-family-sans-serif);
+  /*
      * **本文の字の色。** ここ (`<html>`) で決まった値をそのまま受け継ぐ。`--pico-color` は要素ごとに
      * 書き換わる (ボタンの中では主のボタンの字 = 地の色) ので、ボタンの中から本文の色を指すときはこちら
      */
-    --dp-fg: var(--pico-color);
-    /* 等幅 (デバイスのパス・カードの番号・URL)。端末にある等幅の字を使い、Pico の等幅もこれに揃える */
-    --dp-font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, monospace;
-    --pico-font-family-monospace: var(--dp-font-mono);
-    --pico-line-height: 1.6;
-    --pico-spacing: 1rem;
-    --pico-typography-spacing-vertical: 0.75rem;
-    --pico-form-element-spacing-vertical: 0.45rem;
-    --pico-form-element-spacing-horizontal: 0.75rem;
-    /*
+  --dp-fg: var(--pico-color);
+  /* 等幅 (デバイスのパス・カードの番号・URL)。端末にある等幅の字を使い、Pico の等幅もこれに揃える */
+  --dp-font-mono:
+    ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, monospace;
+  --pico-font-family-monospace: var(--dp-font-mono);
+  --pico-line-height: 1.6;
+  --pico-spacing: 1rem;
+  --pico-typography-spacing-vertical: 0.75rem;
+  --pico-form-element-spacing-vertical: 0.45rem;
+  --pico-form-element-spacing-horizontal: 0.75rem;
+  /*
      * ---- 形のトークン ----
      * **角丸・影・余白・字の大きさ・動きは、この段から選ぶ。** 画面ごとに 0.25〜1rem の角丸と
      * 4 通りの影が散っていた頃は、同じ「カード」が画面を移ると違う顔で出ていた。
      * 段を増やすときは、まず今ある段で足りないかを見る
      */
-    /* 角丸。小 (タグの中・メニューの項目・番組表のマス)・中 (ボタン・入力欄・通知)・大 (一覧の枠・メニュー・ダイアログ) */
-    --dp-radius-sm: 0.375rem;
-    --dp-radius: 0.5rem;
-    --dp-radius-lg: 0.75rem;
-    --dp-radius-full: 999px;
-    --pico-border-radius: var(--dp-radius);
-    /* 余白。4px 刻みの 6 段 */
-    --dp-space-1: 0.25rem;
-    --dp-space-2: 0.5rem;
-    --dp-space-3: 0.75rem;
-    --dp-space-4: 1rem;
-    --dp-space-5: 1.5rem;
-    --dp-space-6: 2rem;
-    /* 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない) */
-    --dp-text-xs: 0.75rem;
-    --dp-text-sm: 0.875rem;
-    --dp-text-base: 1rem;
-    --dp-text-lg: 1.125rem;
-    --dp-text-xl: 1.5rem;
-    /* 字の太さは 2 段だけ。BIZ UDPゴシックは 400 と 700 しか持たないので、数字で書かずにこの2つを使う */
-    --dp-weight: 400;
-    --dp-weight-bold: 700;
-    /*
+  /* 角丸。小 (タグの中・メニューの項目・番組表のマス)・中 (ボタン・入力欄・通知)・大 (一覧の枠・メニュー・ダイアログ) */
+  --dp-radius-sm: 0.375rem;
+  --dp-radius: 0.5rem;
+  --dp-radius-lg: 0.75rem;
+  --dp-radius-full: 999px;
+  --pico-border-radius: var(--dp-radius);
+  /* 余白。4px 刻みの 6 段 */
+  --dp-space-1: 0.25rem;
+  --dp-space-2: 0.5rem;
+  --dp-space-3: 0.75rem;
+  --dp-space-4: 1rem;
+  --dp-space-5: 1.5rem;
+  --dp-space-6: 2rem;
+  /* 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない) */
+  --dp-text-xs: 0.75rem;
+  --dp-text-sm: 0.875rem;
+  --dp-text-base: 1rem;
+  --dp-text-lg: 1.125rem;
+  --dp-text-xl: 1.5rem;
+  /* 字の太さは 2 段だけ。BIZ UDPゴシックは 400 と 700 しか持たないので、数字で書かずにこの2つを使う */
+  --dp-weight: 400;
+  --dp-weight-bold: 700;
+  /*
      * 動き。**長さは全部 80ms (`--dp-duration`) にそろえる。** 待たされている感じを出さない。 出るときは終わりをゆっくり (`--dp-ease`)、
      * 引っ込むときは頭をゆっくり (`--dp-ease-exit`)。動かさない設定の端末では全部止める
      * (下の prefers-reduced-motion。滑る印は JS でも見る — `#lib/motion.svelte.ts` の `slide`)
@@ -112,13 +114,13 @@
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
      * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
      */
-    --dp-duration: 80ms;
-    --dp-ease: cubic-bezier(0.2, 0, 0, 1);
-    --dp-ease-exit: cubic-bezier(0.3, 0, 1, 1);
-    --dp-pulse: 2s;
-    --dp-shine: 1.8s;
-    --pico-transition: var(--dp-duration) var(--dp-ease);
-    /*
+  --dp-duration: 80ms;
+  --dp-ease: cubic-bezier(0.2, 0, 0, 1);
+  --dp-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  --dp-pulse: 2s;
+  --dp-shine: 1.8s;
+  --pico-transition: var(--dp-duration) var(--dp-ease);
+  /*
 	 * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
 	 * そのまま使う (上書きしない。アイコンの水色とも揃う)。
 	 * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・通知 cyan)。
@@ -129,18 +131,18 @@
 	 * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
 	 * ふつうの状態は地の色に混ぜた淡いバッジにして、目は録画中の赤だけに行くようにする
 	 */
-    --dp-rec: #d93526; /* red-500 */
-    --dp-ok: #00895a; /* jade-500 */
-    --dp-warn: #c79400; /* amber-350 */
-    --dp-info: #058686; /* cyan-500 */
-    --dp-error: var(--dp-rec);
-    /*
+  --dp-rec: #d93526; /* red-500 */
+  --dp-ok: #00895a; /* jade-500 */
+  --dp-warn: #c79400; /* amber-350 */
+  --dp-info: #058686; /* cyan-500 */
+  --dp-error: var(--dp-rec);
+  /*
      * 指を乗せた項目・選んでいる項目の地 (メニュー・番組表のマス・ルールのプレビュー)。
      * 選んでいる行を `--dp-subtle` で塗る一覧 (サイドバーの `.side-item`) は、指を乗せた行を
      * それより淡い `--dp-hover-soft` にして、選んでいる行と見分ける
      */
-    --dp-hover: var(--dp-subtle);
-    --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+  --dp-hover: var(--dp-subtle);
+  --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
 }
 /*
  * テーマごとの色。**明るいほうの値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
@@ -169,132 +171,134 @@
  * - `--dp-glass-*` … 磨りガラス (`.glass`)。面 (`tint`)・透かさないときの面 (`solid`)・裏のぼかし (`filter`)・縁 (`rim`)。
  *   中身は下の「磨りガラス」
  */
-:root:not([data-theme='dark']),
-[data-theme='light'] {
-    --pico-background-color: #fff;
-    --dp-bg: #fff;
-    --dp-surface: #fff;
-    --dp-subtle: #eff1f4; /* slate-50 */
-    /* 一覧の行の塊 (ホームの時間軸)。地との差は L で 5 ほど。指を乗せた・選んだ行はさらに一段ずつ (`home.css`) */
-    --dp-row: #f0f2f5;
-    --dp-row-hover: #e6e9ee;
-    --dp-row-selected: #dde1e8;
-    --dp-line: #dfe3eb; /* slate-100 */
-    --dp-line-strong: #cfd5e2; /* slate-150 */
-    --dp-pop: #fff;
-    --dp-pop-hover: var(--dp-subtle);
-    --dp-muted: #555e70; /* 白・淡い面・選んでいる局の地のどれでも 4.5 以上 */
-    --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
-    --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
-    --dp-shadow-pop: 0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
-    --dp-backdrop: rgb(24 28 37 / 0.16);
-    /* 磨りガラス (下の「磨りガラス」)。地を 90% 残すと、裏が黒くても控えた字・主の色の字が 4.5 以上 */
-    --dp-glass-tint: rgb(255 255 255 / 0.9);
-    --dp-glass-solid: #fff;
-    --dp-glass-filter: blur(20px) saturate(1.8);
-    --dp-glass-rim: rgb(24 28 37 / 0.1);
-    --pico-form-element-background-color: #fff;
-    --pico-form-element-border-color: var(--dp-line-strong);
-    --pico-table-border-color: var(--dp-line);
-    --pico-muted-border-color: var(--dp-line);
-    /*
+:root:not([data-theme="dark"]),
+[data-theme="light"] {
+  --pico-background-color: #fff;
+  --dp-bg: #fff;
+  --dp-surface: #fff;
+  --dp-subtle: #eff1f4; /* slate-50 */
+  /* 一覧の行の塊 (ホームの時間軸)。地との差は L で 5 ほど。指を乗せた・選んだ行はさらに一段ずつ (`home.css`) */
+  --dp-row: #f0f2f5;
+  --dp-row-hover: #e6e9ee;
+  --dp-row-selected: #dde1e8;
+  --dp-line: #dfe3eb; /* slate-100 */
+  --dp-line-strong: #cfd5e2; /* slate-150 */
+  --dp-pop: #fff;
+  --dp-pop-hover: var(--dp-subtle);
+  --dp-muted: #555e70; /* 白・淡い面・選んでいる局の地のどれでも 4.5 以上 */
+  --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
+  --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
+  --dp-shadow-pop:
+    0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
+  --dp-backdrop: rgb(24 28 37 / 0.16);
+  /* 磨りガラス (下の「磨りガラス」)。地を 90% 残すと、裏が黒くても控えた字・主の色の字が 4.5 以上 */
+  --dp-glass-tint: rgb(255 255 255 / 0.9);
+  --dp-glass-solid: #fff;
+  --dp-glass-filter: blur(20px) saturate(1.8);
+  --dp-glass-rim: rgb(24 28 37 / 0.1);
+  --pico-form-element-background-color: #fff;
+  --pico-form-element-border-color: var(--dp-line-strong);
+  --pico-table-border-color: var(--dp-line);
+  --pico-muted-border-color: var(--dp-line);
+  /*
      * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
      * 地に沈んで「押せない」ように見えたので、本文と同じ濃さにする。ボタンの色はここから採る (下の「ボタン」)
      */
-    --pico-secondary: #3d475c; /* slate-700 */
-    --pico-secondary-hover: #2a3140; /* slate-800 */
-    /* 淡いバッジの文字。地が白寄りなので塗り色より一段濃くする */
-    --dp-rec-text: #9b2318; /* red-650 */
-    --dp-ok-text: #005f3d; /* jade-650 */
-    --dp-warn-text: #694d00; /* amber-650 */
-    --dp-info-text: #025d5d; /* cyan-650 */
-    /* 骨組みの上を流れる光 (`.skeleton`)。白い地の上でも見えるよう、明るいほうは濃く */
-    --dp-sweep: rgb(255 255 255 / 0.65);
+  --pico-secondary: #3d475c; /* slate-700 */
+  --pico-secondary-hover: #2a3140; /* slate-800 */
+  /* 淡いバッジの文字。地が白寄りなので塗り色より一段濃くする */
+  --dp-rec-text: #9b2318; /* red-650 */
+  --dp-ok-text: #005f3d; /* jade-650 */
+  --dp-warn-text: #694d00; /* amber-650 */
+  --dp-info-text: #025d5d; /* cyan-650 */
+  /* 骨組みの上を流れる光 (`.skeleton`)。白い地の上でも見えるよう、明るいほうは濃く */
+  --dp-sweep: rgb(255 255 255 / 0.65);
 }
-[data-theme='dark'] {
-    /*
+[data-theme="dark"] {
+  /*
      * 暗いほうは Pico の段 (slate) を使わず、**ほぼ黒で色みを抑えた段**を自前で刻む。slate-950 の地は
      * 青みがかった紺に見え、最近のアプリ (ほぼ黒の地) と並ぶと暗さが足りなかった。
      * 青みはわずかに残す (真っ黒の灰色より、主の色の azure と馴染む)。
      * 段は地 → 面 → 淡い面 → 線 → 押せるものの縁の順に、ほぼ等しく明るくする
      */
-    --pico-background-color: #0b0c0f; /* 地 (theme-color と同じ) */
-    --dp-sweep: rgb(255 255 255 / 0.06);
-    --dp-bg: #0b0c0f;
-    --dp-surface: #121318;
-    --dp-subtle: #1a1b20;
-    --dp-row: #16171c;
-    --dp-row-hover: #1f2127;
-    --dp-row-selected: #272a31;
-    --dp-line: #26282e;
-    --dp-line-strong: #3a3d46;
-    /*
+  --pico-background-color: #0b0c0f; /* 地 (theme-color と同じ) */
+  --dp-sweep: rgb(255 255 255 / 0.06);
+  --dp-bg: #0b0c0f;
+  --dp-surface: #121318;
+  --dp-subtle: #1a1b20;
+  --dp-row: #16171c;
+  --dp-row-hover: #1f2127;
+  --dp-row-selected: #272a31;
+  --dp-line: #26282e;
+  --dp-line-strong: #3a3d46;
+  /*
      * 影は黒い地では見えないので、メニューは面より明るい色で浮かせる (ダイアログの中で開いても分かる)。
      * 選んでいる項目の地もそのぶん明るく
      */
-    --dp-pop: #1f2026;
-    --dp-pop-hover: #2c2e35;
-    --dp-muted: #9aa3b5; /* 地・面・メニューのどれでも 4.5 以上 */
-    --dp-primary-text: var(--pico-primary);
-    --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
-    --dp-shadow-pop: 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
-    --dp-backdrop: rgb(0 0 0 / 0.45);
-    /*
+  --dp-pop: #1f2026;
+  --dp-pop-hover: #2c2e35;
+  --dp-muted: #9aa3b5; /* 地・面・メニューのどれでも 4.5 以上 */
+  --dp-primary-text: var(--pico-primary);
+  --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  --dp-shadow-pop:
+    0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
+  --dp-backdrop: rgb(0 0 0 / 0.45);
+  /*
      * 磨りガラス。暗いほうは裏を 70% の明るさに落としてから面を重ねる。白い裏でも控えた字が 4.5 以上
      * (面の色は `--dp-surface` と同じ)
      */
-    --dp-glass-tint: rgb(18 19 24 / 0.84);
-    --dp-glass-solid: var(--dp-surface);
-    --dp-glass-filter: blur(20px) saturate(1.6) brightness(0.7);
-    --dp-glass-rim: rgb(255 255 255 / 0.1);
-    --pico-form-element-background-color: var(--dp-bg);
-    --pico-form-element-active-background-color: var(--dp-surface);
-    --pico-form-element-selected-background-color: var(--dp-line);
-    --pico-form-element-border-color: var(--dp-line-strong);
-    --pico-table-border-color: var(--dp-line);
-    --pico-muted-border-color: var(--dp-line);
-    /* Pico の既定は slate の段のままなので、カード・スイッチ・つまみ・進み具合も同じ段に寄せる */
-    --pico-card-background-color: var(--dp-surface);
-    --pico-card-sectioning-background-color: var(--dp-subtle);
-    --pico-switch-background-color: var(--dp-line-strong);
-    --pico-range-border-color: var(--dp-subtle);
-    --pico-range-active-border-color: var(--dp-line);
-    --pico-progress-background-color: var(--dp-subtle);
-    /* 暗いほうも同じ考え。文字は本文並みの明るさ */
-    --pico-secondary: #bfc7d9; /* slate-200 */
-    --pico-secondary-hover: #dfe3eb; /* slate-100 */
-    /* 暗いほうは逆に、塗り色より明るくしないと読めない */
-    --dp-rec-text: #f38f79; /* red-300 */
-    --dp-ok-text: #00cc88; /* jade-250 */
-    --dp-warn-text: #fecc63; /* amber-150 */
-    --dp-info-text: #0ccece; /* cyan-250 */
+  --dp-glass-tint: rgb(18 19 24 / 0.84);
+  --dp-glass-solid: var(--dp-surface);
+  --dp-glass-filter: blur(20px) saturate(1.6) brightness(0.7);
+  --dp-glass-rim: rgb(255 255 255 / 0.1);
+  --pico-form-element-background-color: var(--dp-bg);
+  --pico-form-element-active-background-color: var(--dp-surface);
+  --pico-form-element-selected-background-color: var(--dp-line);
+  --pico-form-element-border-color: var(--dp-line-strong);
+  --pico-table-border-color: var(--dp-line);
+  --pico-muted-border-color: var(--dp-line);
+  /* Pico の既定は slate の段のままなので、カード・スイッチ・つまみ・進み具合も同じ段に寄せる */
+  --pico-card-background-color: var(--dp-surface);
+  --pico-card-sectioning-background-color: var(--dp-subtle);
+  --pico-switch-background-color: var(--dp-line-strong);
+  --pico-range-border-color: var(--dp-subtle);
+  --pico-range-active-border-color: var(--dp-line);
+  --pico-progress-background-color: var(--dp-subtle);
+  /* 暗いほうも同じ考え。文字は本文並みの明るさ */
+  --pico-secondary: #bfc7d9; /* slate-200 */
+  --pico-secondary-hover: #dfe3eb; /* slate-100 */
+  /* 暗いほうは逆に、塗り色より明るくしないと読めない */
+  --dp-rec-text: #f38f79; /* red-300 */
+  --dp-ok-text: #00cc88; /* jade-250 */
+  --dp-warn-text: #fecc63; /* amber-150 */
+  --dp-info-text: #0ccece; /* cyan-250 */
 }
 /* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ ---- */
 .rec-dot {
-    display: inline-block;
-    flex-shrink: 0;
-    width: 0.375rem;
-    height: 0.375rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-rec);
-    animation: rec-pulse var(--dp-pulse) ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--dp-radius-full);
+  background: var(--dp-rec);
+  animation: rec-pulse var(--dp-pulse) ease-in-out infinite;
 }
 @keyframes rec-pulse {
-    50% {
-        opacity: 0.35;
-    }
+  50% {
+    opacity: 0.35;
+  }
 }
 /* 赤く塗ったバッジ (録画中) の中では、字と同じ白にする */
 .tag.solid .rec-dot {
-    background: currentColor;
+  background: currentColor;
 }
 
 /* ---- 読み込めたらふわっと出る画像 (`use:fadeIn`。`#lib/motion.svelte.ts`) ---- */
 img[data-fade] {
-    transition: opacity var(--dp-duration) var(--dp-ease);
+  transition: opacity var(--dp-duration) var(--dp-ease);
 }
-img[data-fade='pending'] {
-    opacity: 0;
+img[data-fade="pending"] {
+  opacity: 0;
 }
 
 /*
@@ -303,23 +307,23 @@ img[data-fade='pending'] {
  * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)
  */
 .flash {
-    animation: flash var(--flash-for, 2.5s) linear both;
+  animation: flash var(--flash-for, 2.5s) linear both;
 }
 @keyframes flash {
-    0% {
-        opacity: 0;
-        translate: 0 2px;
-    }
-    8% {
-        opacity: 1;
-        translate: 0 0;
-    }
-    88% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0;
-    }
+  0% {
+    opacity: 0;
+    translate: 0 2px;
+  }
+  8% {
+    opacity: 1;
+    translate: 0 0;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 /*
  * **キーボードで触っているところは、主の色の線で囲む。**
@@ -334,35 +338,42 @@ img[data-fade='pending'] {
  * `:where()` で詳細度を 0 にしてあるので、行や見出しのように内側へ引きたい
  * ところは各画面の <style> で `outline-offset` を書けば勝つ
  */
-:where(a, button, summary, select, [tabindex], input:is([type='checkbox'], [type='radio'])):focus-visible {
-    outline: 2px solid var(--pico-primary);
-    outline-offset: 2px;
+:where(
+  a,
+  button,
+  summary,
+  select,
+  [tabindex],
+  input:is([type="checkbox"], [type="radio"])
+):focus-visible {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
 }
 /* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅に */
-button[type='submit'] {
-    width: auto;
+button[type="submit"] {
+  width: auto;
 }
 /*
  * 押せる入れ物 (行やカードを丸ごと押すもの。`<div role="button">`)。Pico は [role=button] をボタンの見た目にするので、
  * 入れ物には当てない(色も枠も余白も親のまま。見た目は各画面の <style>)
  */
-div[role='button'] {
-    --pico-background-color: transparent;
-    --pico-border-color: transparent;
-    --pico-color: inherit;
-    --pico-box-shadow: none;
-    display: block;
-    width: auto;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    color: inherit;
-    font-weight: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    text-align: inherit;
-    box-shadow: none;
+div[role="button"] {
+  --pico-background-color: transparent;
+  --pico-border-color: transparent;
+  --pico-color: inherit;
+  --pico-box-shadow: none;
+  display: block;
+  width: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  box-shadow: none;
 }
 /*
  * **画面の高さは、単位ではなく `html` から採る。**
@@ -377,13 +388,13 @@ div[role='button'] {
  */
 html,
 body {
-    height: 100%;
+  height: 100%;
 }
 /* 番組の詳細のフェードの濃さ (`ProgramDetail`)。数として登録しておくと、スクロールに合わせて滑らかに変わる */
 @property --detail-fade {
-    syntax: '<number>';
-    inherits: false;
-    initial-value: 0;
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
 }
 
 /*
@@ -394,23 +405,23 @@ body {
  * 隠している所 (`scrollbar-width: none`) はそれぞれの指定が勝つ
  */
 * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--dp-line-strong) transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dp-line-strong) transparent;
 }
 *:hover {
-    scrollbar-color: var(--dp-muted) transparent;
+  scrollbar-color: var(--dp-muted) transparent;
 }
 body {
-    word-break: auto-phrase;
-    line-break: strict;
-    /*
+  word-break: auto-phrase;
+  line-break: strict;
+  /*
      * **外字は絵文字ではなく字で出す (市販のテレビと同じ白黒)。** 番組表の ⚡ ⛅ 🈚 は
      * 何もしないとカラーの絵文字になる。文字列に VS15 (U+FE0E) を足さずに CSS で
      * 言うのは、保存する番組名を規格の字のままにしておくため (探すとき・比べるときに
      * 余計な字が挟まらない)。データ放送の中にも引き継がれる。字幕の canvas は
      * CSS が効かないので、描くときに VS15 を足す (`player/caption-draw.ts`)
      */
-    font-variant-emoji: text;
+  font-variant-emoji: text;
 }
 /*
  * **舞台を広げている間 (iPhone の全画面の代わり。`player/fullscreen.svelte.ts`) は
@@ -419,29 +430,29 @@ body {
  */
 html[data-stage-fullscreen],
 html[data-stage-fullscreen] body {
-    overflow: hidden;
-    overscroll-behavior: none;
-    background: #000;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #000;
 }
 /*
  * コード (<pre>)。Pico のコードの部品は読まないので、字は素の等幅。文章の決まり (typography) が
  * 付ける字の色と太さだけ外し、周り (注記・エラー) に合わせる
  */
 pre {
-    color: inherit;
-    font-weight: inherit;
+  color: inherit;
+  font-weight: inherit;
 }
 
 /* Pico は入力欄・表・段落の下に大きな余白を付ける。並べ方は各画面の gap で決めるので外す */
-input:not([type='checkbox'], [type='radio']),
+input:not([type="checkbox"], [type="radio"]),
 select,
 textarea,
 button,
-[type='button'],
-[type='submit'],
-[type='reset'],
-[type='file'],
-[role='button'],
+[type="button"],
+[type="submit"],
+[type="reset"],
+[type="file"],
+[role="button"],
 fieldset,
 table,
 p,
@@ -454,10 +465,10 @@ h3,
 h4,
 progress,
 details,
-[role='group'],
+[role="group"],
 label,
 section {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 /*
  * 文字の大きさは html の 16px を据え置いたまま、小さい側を一段上げてある。
@@ -465,61 +476,61 @@ section {
  * **番組表のマスは各画面の <style> で大きさを決めている** ので、ここを変えても動かない
  */
 h1 {
-    font-size: var(--dp-text-xl);
+  font-size: var(--dp-text-xl);
 }
 h2 {
-    font-size: 1.25rem;
+  font-size: 1.25rem;
 }
 h3 {
-    font-size: var(--dp-text-lg);
+  font-size: var(--dp-text-lg);
 }
 table {
-    font-size: 0.95rem;
+  font-size: 0.95rem;
 }
 th,
 td {
-    padding: 0.45rem 0.6rem;
+  padding: 0.45rem 0.6rem;
 }
 /*
  * 表の見出しは地を塗らず、小さく沈めた字だけ。行の区切りは線 1 本 (`--pico-table-border-color` = `--dp-line`)。
  * 淡い面に太字だった頃は、見出しの帯が中身より目立っていた
  */
 thead th {
-    background: transparent;
-    color: var(--dp-muted);
-    font-size: var(--dp-text-xs);
-    font-weight: var(--dp-weight);
-    border-bottom-width: 1px;
+  background: transparent;
+  color: var(--dp-muted);
+  font-size: var(--dp-text-xs);
+  font-weight: var(--dp-weight);
+  border-bottom-width: 1px;
 }
 /*
  * **押せないものは押せないと分かるように。** Pico は薄くするだけなので、指 (カーソル) も変える。
  * 押せるもの (ボタン・枠のボタン・入力欄の縁) は `--dp-line-strong` 以上の縁を持ち、押せない面 (一覧の枠) は
  * `--dp-line` の縁しか持たない
  */
-:is(button, [role='button'], input, select, textarea):disabled,
-[aria-disabled='true'] {
-    cursor: not-allowed;
+:is(button, [role="button"], input, select, textarea):disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 /* ---- 並べる ---- */
 /* 縦に積む / 横に並べて折り返す */
 .stack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--gap, 0.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap, 0.75rem);
 }
 .cluster {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--gap, 0.5rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap, 0.5rem);
 }
 .spread {
-    justify-content: space-between;
+  justify-content: space-between;
 }
 .grow {
-    flex: 1 1 0;
-    min-width: 0;
+  flex: 1 1 0;
+  min-width: 0;
 }
 /*
  * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表集め)。値が変わったら
@@ -528,37 +539,42 @@ thead th {
  * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
  */
 progress[value]::-webkit-progress-value {
-    transition: inline-size var(--dp-duration) var(--dp-ease);
+  transition: inline-size var(--dp-duration) var(--dp-ease);
 }
 progress.running[value]::-webkit-progress-value {
-    background-image: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.35) 50%, transparent 100%);
-    background-repeat: no-repeat;
-    background-size: 40% 100%;
-    animation: progress-shine var(--dp-shine) ease-in-out infinite;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.35) 50%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 40% 100%;
+  animation: progress-shine var(--dp-shine) ease-in-out infinite;
 }
 @keyframes progress-shine {
-    from {
-        background-position: -100% 0;
-    }
-    to {
-        background-position: 200% 0;
-    }
+  from {
+    background-position: -100% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
 }
 /* 走っている取り込み・スキャンの状態と記録 */
 .progress-block {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 /* ---- 面 ---- */
 /* 枠で囲んだ白い面 */
 .panel {
-    background: var(--dp-surface);
-    border: 1px solid var(--dp-line);
-    border-radius: var(--dp-radius-lg);
-    padding: 1rem;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-radius-lg);
+  padding: 1rem;
 }
 
 /*
@@ -567,25 +583,25 @@ progress.running[value]::-webkit-progress-value {
  * 文が数文字ずつで折り返して読みにくかった。読みやすい幅 (32rem) で止め、画面の上のほうに置く
  */
 .solo {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--dp-space-3);
-    max-width: 32rem;
-    margin: clamp(2rem, 16vh, 9rem) auto 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--dp-space-3);
+  max-width: 32rem;
+  margin: clamp(2rem, 16vh, 9rem) auto 2rem;
 }
 .solo h1 {
-    font-size: var(--dp-text-xl);
-    line-height: 1.35;
+  font-size: var(--dp-text-xl);
+  line-height: 1.35;
 }
 .solo p {
-    color: var(--dp-muted);
+  color: var(--dp-muted);
 }
 .solo .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--dp-space-2);
-    margin-top: var(--dp-space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dp-space-2);
+  margin-top: var(--dp-space-2);
 }
 
 /* ---- 文字 ---- */
@@ -595,16 +611,16 @@ progress.running[value]::-webkit-progress-value {
  * 中のリンクも主の色のまま読める
  */
 .muted {
-    color: var(--dp-muted);
+  color: var(--dp-muted);
 }
 .small {
-    font-size: var(--dp-text-sm);
+  font-size: var(--dp-text-sm);
 }
 .tiny {
-    font-size: var(--dp-text-xs);
+  font-size: var(--dp-text-xs);
 }
 .bold {
-    font-weight: var(--dp-weight-bold);
+  font-weight: var(--dp-weight-bold);
 }
 /*
  * **変わる数字・縦に並ぶ数字は、桁の幅を揃える** (`.num`)。時刻 (一覧・番組表・詳細)・残り時間・
@@ -612,13 +628,13 @@ progress.running[value]::-webkit-progress-value {
  * 文章には当てない (ふつうの字詰めのほうが読みやすい)
  */
 .num {
-    font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 .nowrap {
-    white-space: nowrap;
+  white-space: nowrap;
 }
 .mono {
-    font-family: var(--pico-font-family-monospace);
+  font-family: var(--pico-font-family-monospace);
 }
 /*
  * 放送から来た字は、全角の英数字・記号 (ＢＳ・ＴＶ・！ など。EPG の字はほとんど全角で来る) を詰めて組む (`palt`)。
@@ -627,30 +643,30 @@ progress.running[value]::-webkit-progress-value {
  * どちらも `.broadcast` の外で描く (`caption-draw.ts`・`DataBroadcast.svelte`)
  */
 .broadcast {
-    font-family: var(--broadcast-font);
-    font-feature-settings: 'palt';
+  font-family: var(--broadcast-font);
+  font-feature-settings: "palt";
 }
 /* 画面には出さず、読み上げにだけ渡す字 (一覧のふつうの状態など) */
 .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 .truncate {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* 控えめな記号・空の印 (→・番組情報なし) */
 .faint {
-    opacity: 0.4;
+  opacity: 0.4;
 }
 /*
  * 本文の中の色つき文字。**塗り用の色ではなく「文字用」を使う。**
@@ -658,59 +674,59 @@ progress.running[value]::-webkit-progress-value {
  * 明るいテーマでは薄く、暗いテーマでは沈む
  */
 .text-error {
-    color: var(--dp-rec-text);
+  color: var(--dp-rec-text);
 }
 /* 欄の上の小さい見出し。<label class="field"><span>見出し</span><input></label> */
 .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
 }
 .field > span:first-child,
 .field-label {
-    font-size: var(--dp-text-xs);
-    font-weight: var(--dp-weight);
-    color: var(--dp-muted);
+  font-size: var(--dp-text-xs);
+  font-weight: var(--dp-weight);
+  color: var(--dp-muted);
 }
 /*
  * **チェックボックスは角の丸い四角、ラジオだけ丸。** Pico はチェックボックスにも入力欄と同じ角丸 (0.5rem) を
  * 付けるので、小さな箱ではほとんど丸に見え、ラジオと見分けが付かなかった。スイッチ (`role="switch"`) は丸いまま
  */
-input[type='checkbox']:not([role='switch']) {
-    border-radius: 0.25rem;
+input[type="checkbox"]:not([role="switch"]) {
+  border-radius: 0.25rem;
 }
 /* チェックボックス + 文 */
 .check {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
 }
 .check input {
-    margin: 0;
+  margin: 0;
 }
 /*
  * チェック + 見出しの行と、その下の要点 (`CheckRow`。要点に太字を混ぜたいときは同じ形を直に書く)。
  * 要点 (`Lead`) と「詳しく」の続きは、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem)
  */
 .check-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
 }
 .check-item .more-body {
-    margin-inline-start: 1.75rem;
+  margin-inline-start: 1.75rem;
 }
 .check-row {
-    display: flex;
-    cursor: pointer;
-    align-items: flex-start;
-    gap: 0.5rem;
+  display: flex;
+  cursor: pointer;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 .check-row input {
-    margin: 0.15rem 0 0;
-    flex-shrink: 0;
+  margin: 0.15rem 0 0;
+  flex-shrink: 0;
 }
 /*
  * 説明の続き。`<details class="more"><summary>詳しく</summary><p>…</p></details>`
@@ -722,29 +738,29 @@ input[type='checkbox']:not([role='switch']) {
  * 文の下に添える小さな開け閉めなので、**矢印を字のすぐ後ろに寄せて、押せる幅も字のぶんだけ**にする
  */
 details.more > summary {
-    display: inline-flex;
-    align-items: center;
-    width: fit-content;
-    color: var(--dp-muted);
-    font-size: var(--dp-text-xs);
-    line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  color: var(--dp-muted);
+  font-size: var(--dp-text-xs);
+  line-height: 1.5;
 }
 details.more > summary::after {
-    width: 0.8rem;
-    height: 0.8rem;
-    margin-inline-start: 0.2rem;
-    float: none;
-    background-size: 0.8rem auto;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-inline-start: 0.2rem;
+  float: none;
+  background-size: 0.8rem auto;
 }
 details.more[open] > summary {
-    margin-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 details.more > :not(summary) {
-    font-size: var(--dp-text-sm);
-    color: var(--dp-muted);
+  font-size: var(--dp-text-sm);
+  color: var(--dp-muted);
 }
 details.more > :not(summary) + :not(summary) {
-    margin-top: 0.35rem;
+  margin-top: 0.35rem;
 }
 
 /* ---- ボタン ---- */
@@ -770,88 +786,138 @@ details.more > :not(summary) + :not(summary) {
  * 上の `:focus-visible` の線だけで示す。押したあとに地の色が残らない)
  */
 :root {
-    /* 角。ふつうのボタン・小さいボタン・アイコンのボタンで同じ値を使う (丸い形なら正方形は円になる) */
-    --dp-btn-radius: var(--dp-radius-full);
-    /* 主のボタン。字の色で塗り、字は地の色で抜く。指を乗せると地の色へ少し寄せる */
-    --dp-btn-solid: var(--pico-secondary-hover);
-    --dp-btn-solid-hover: color-mix(in srgb, var(--pico-secondary-hover) 82%, var(--dp-bg));
-    --dp-btn-solid-text: var(--dp-bg);
-    /* 控えのボタンの地。字の色を薄く混ぜるので、地・カード・メニューのどの上でも同じ濃さに見える */
-    --dp-btn-tonal: color-mix(in srgb, var(--pico-secondary) 10%, transparent);
-    --dp-btn-tonal-hover: color-mix(in srgb, var(--pico-secondary) 18%, transparent);
-    --dp-btn-text: var(--pico-secondary-hover);
-    /* 高さ。アイコンのボタンの幅にも使う */
-    --dp-btn-h: 2.625rem;
-    --dp-btn-h-sm: 2.125rem;
-    --dp-btn-h-xs: 1.625rem;
+  /* 角。ふつうのボタン・小さいボタン・アイコンのボタンで同じ値を使う (丸い形なら正方形は円になる) */
+  --dp-btn-radius: var(--dp-radius-full);
+  /* 主のボタン。字の色で塗り、字は地の色で抜く。指を乗せると地の色へ少し寄せる */
+  --dp-btn-solid: var(--pico-secondary-hover);
+  --dp-btn-solid-hover: color-mix(
+    in srgb,
+    var(--pico-secondary-hover) 82%,
+    var(--dp-bg)
+  );
+  --dp-btn-solid-text: var(--dp-bg);
+  /* 控えのボタンの地。字の色を薄く混ぜるので、地・カード・メニューのどの上でも同じ濃さに見える */
+  --dp-btn-tonal: color-mix(in srgb, var(--pico-secondary) 10%, transparent);
+  --dp-btn-tonal-hover: color-mix(
+    in srgb,
+    var(--pico-secondary) 18%,
+    transparent
+  );
+  --dp-btn-text: var(--pico-secondary-hover);
+  /* 高さ。アイコンのボタンの幅にも使う */
+  --dp-btn-h: 2.625rem;
+  --dp-btn-h-sm: 2.125rem;
+  --dp-btn-h-xs: 1.625rem;
 }
 @media (pointer: coarse) {
-    :root {
-        --dp-btn-h-sm: 2.5rem;
-        --dp-btn-h-xs: 2.5rem;
-    }
+  :root {
+    --dp-btn-h-sm: 2.5rem;
+    --dp-btn-h-xs: 2.5rem;
+  }
 }
-:where(button, [type='button'], [type='submit'], [type='reset'], [role='button'], a.button):not(div) {
-    --pico-background-color: var(--dp-btn-solid);
-    --pico-border-color: transparent;
-    --pico-color: var(--dp-btn-solid-text);
-    --pico-box-shadow: none;
-    border-radius: var(--dp-btn-radius);
+:where(
+  button,
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  [role="button"],
+  a.button
+):not(div) {
+  --pico-background-color: var(--dp-btn-solid);
+  --pico-border-color: transparent;
+  --pico-color: var(--dp-btn-solid-text);
+  --pico-box-shadow: none;
+  border-radius: var(--dp-btn-radius);
 }
-:where(button, [type='button'], [type='submit'], [type='reset'], [role='button'], a.button):not(div):where(
-        :hover,
-        :active
-    ) {
-    --pico-background-color: var(--dp-btn-solid-hover);
+:where(
+    button,
+    [type="button"],
+    [type="submit"],
+    [type="reset"],
+    [role="button"],
+    a.button
+  ):not(div):where(:hover, :active) {
+  --pico-background-color: var(--dp-btn-solid-hover);
 }
 /*
  * **入っている切り替え (`aria-pressed="true"`) は主の色で。** 「選んでいるもの」なので、主のボタン
  * (押すと何かが起きる) とは塗り分ける (番組表の「サブch」)
  */
-:where(button, a.button)[aria-pressed='true']:where(:not(.secondary, .outline, .ghost)) {
-    --pico-background-color: var(--pico-primary-background);
-    --pico-color: #fff;
+:where(button, a.button)[aria-pressed="true"]:where(
+    :not(.secondary, .outline, .ghost)
+  ) {
+  --pico-background-color: var(--pico-primary-background);
+  --pico-color: #fff;
 }
 /* リンクのままボタンの見た目にする (role="button" にするとリンクでなくなる)。<a class="button"> */
 a.button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    padding: var(--pico-form-element-spacing-vertical) var(--pico-form-element-spacing-horizontal);
-    border: var(--pico-border-width) solid var(--pico-border-color);
-    background-color: var(--pico-background-color);
-    color: var(--pico-color);
-    text-align: center;
-    text-decoration: none;
-    cursor: pointer;
-    transition:
-        background-color var(--pico-transition),
-        color var(--pico-transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: var(--pico-form-element-spacing-vertical)
+    var(--pico-form-element-spacing-horizontal);
+  border: var(--pico-border-width) solid var(--pico-border-color);
+  background-color: var(--pico-background-color);
+  color: var(--pico-color);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--pico-transition),
+    color var(--pico-transition);
 }
-:where(button, [type='button'], [type='submit'], [type='reset'], [role='button'], a.button).secondary,
-:where(button, [type='button'], [type='submit'], [type='reset'], [role='button'], a.button).outline {
-    --pico-background-color: var(--dp-btn-tonal);
-    --pico-color: var(--dp-btn-text);
+:where(
+  button,
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  [role="button"],
+  a.button
+).secondary,
+:where(
+  button,
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  [role="button"],
+  a.button
+).outline {
+  --pico-background-color: var(--dp-btn-tonal);
+  --pico-color: var(--dp-btn-text);
 }
-:where(button, [type='button'], [type='submit'], [type='reset'], [role='button'], a.button).ghost {
-    --pico-background-color: transparent;
-    --pico-color: inherit;
+:where(
+  button,
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  [role="button"],
+  a.button
+).ghost {
+  --pico-background-color: transparent;
+  --pico-color: inherit;
 }
-:where(button, [type='button'], [type='submit'], [type='reset'], [role='button'], a.button):is(
-        .secondary,
-        .outline,
-        .ghost
-    ):where(:hover, :active, [aria-current]:not([aria-current='false'])) {
-    --pico-background-color: var(--dp-btn-tonal-hover);
+:where(
+    button,
+    [type="button"],
+    [type="submit"],
+    [type="reset"],
+    [role="button"],
+    a.button
+  ):is(.secondary, .outline, .ghost):where(
+    :hover,
+    :active,
+    [aria-current]:not([aria-current="false"])
+  ) {
+  --pico-background-color: var(--dp-btn-tonal-hover);
 }
 /* 危ない操作。確定のボタンは赤で塗る */
 :where(button, a.button).danger {
-    --pico-background-color: var(--dp-error);
-    --pico-color: #fff;
+  --pico-background-color: var(--dp-error);
+  --pico-color: #fff;
 }
 :where(button, a.button).danger:where(:hover, :active) {
-    --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
+  --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
 }
 /*
  * 1 回目の削除・取消 (`.outline.danger`)。**待っている間は赤くしない。**
@@ -859,43 +925,47 @@ a.button {
  * 赤は押そうとしたときと、確定のボタンだけにする
  */
 :where(button, a.button).outline.danger {
-    --pico-background-color: var(--dp-btn-tonal);
-    --pico-color: var(--dp-btn-text);
+  --pico-background-color: var(--dp-btn-tonal);
+  --pico-color: var(--dp-btn-text);
 }
 :where(button, a.button).outline.danger:where(:hover, :active) {
-    --pico-background-color: color-mix(in srgb, var(--dp-rec) 14%, transparent);
-    --pico-color: var(--dp-rec-text);
+  --pico-background-color: color-mix(in srgb, var(--dp-rec) 14%, transparent);
+  --pico-color: var(--dp-rec-text);
 }
 /*
  * 大きさ。ふつうのボタンの高さは Pico の余白のまま (入力欄と同じ 42px)。小さいボタンとアイコンのボタンは
  * 高さをトークンで決め、字は真ん中に置く
  */
-:where(button, [type='button'], [type='submit'], a.button):is(.small, .xs, .icon) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-    padding-block: 0;
+:where(button, [type="button"], [type="submit"], a.button):is(
+  .small,
+  .xs,
+  .icon
+) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding-block: 0;
 }
-:where(button, [type='button'], [type='submit'], a.button).small {
-    min-height: var(--dp-btn-h-sm);
-    padding-inline: 0.75rem;
-    font-size: var(--dp-text-sm);
+:where(button, [type="button"], [type="submit"], a.button).small {
+  min-height: var(--dp-btn-h-sm);
+  padding-inline: 0.75rem;
+  font-size: var(--dp-text-sm);
 }
-:where(button, [type='button'], [type='submit'], a.button).xs {
-    min-height: var(--dp-btn-h-xs);
-    padding-inline: 0.5rem;
-    font-size: var(--dp-text-xs);
+:where(button, [type="button"], [type="submit"], a.button).xs {
+  min-height: var(--dp-btn-h-xs);
+  padding-inline: 0.5rem;
+  font-size: var(--dp-text-xs);
 }
 /* アイコンだけのボタン。幅を高さに揃える (丸い形なら円、角の丸い形なら角の丸い正方形) */
 :where(button, a.button).icon {
-    width: var(--dp-btn-h);
-    min-height: var(--dp-btn-h);
-    padding: 0;
+  width: var(--dp-btn-h);
+  min-height: var(--dp-btn-h);
+  padding: 0;
 }
 :where(button, a.button).icon.small {
-    width: var(--dp-btn-h-sm);
-    min-height: var(--dp-btn-h-sm);
+  width: var(--dp-btn-h-sm);
+  min-height: var(--dp-btn-h-sm);
 }
 
 /* ---- 行の操作 (`.row-actions`。録画の「詳細」「削除」、予約の「取消」など) ---- */
@@ -906,23 +976,23 @@ a.button {
  * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする。塗ったボタン (追っかけ・削除の「確定」) は塗ったまま
  */
 .row-actions {
-    --dp-btn-tonal: transparent;
-    --dp-btn-h: 2.5rem;
-    --dp-btn-h-sm: 2.5rem;
-    margin-inline-start: auto;
+  --dp-btn-tonal: transparent;
+  --dp-btn-h: 2.5rem;
+  --dp-btn-h-sm: 2.5rem;
+  margin-inline-start: auto;
 }
 .row-actions :is(button, a.button) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-    min-height: var(--dp-btn-h);
-    padding-block: 0;
-    padding-inline: 0.65rem;
-    font-size: var(--dp-text-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: var(--dp-btn-h);
+  padding-block: 0;
+  padding-inline: 0.65rem;
+  font-size: var(--dp-text-sm);
 }
 .row-actions .outline.danger {
-    --dp-btn-text: var(--dp-muted);
+  --dp-btn-text: var(--dp-muted);
 }
 
 /*
@@ -932,28 +1002,31 @@ a.button {
  * タブ (`.segmented`) は下で別に決める。サイドバーの行 (`.side-list`) はつないだ形ではないので外す
  * (外さないと、まん中の行の塗りが角の無い四角になっていた)
  */
-:is([role='group'], [role='search']):not(.segmented, .side-list) > :is(button, a.button) {
-    margin: 0;
-    border-radius: var(--pico-border-radius);
+:is([role="group"], [role="search"]):not(.segmented, .side-list)
+  > :is(button, a.button) {
+  margin: 0;
+  border-radius: var(--pico-border-radius);
 }
 /* 検索欄の入力欄は Pico が `[role="search"]` で 5rem の丸い端にする。ボタンの外側の角もそれに揃える */
-[role='search']:not(.segmented) > :is(button, a.button) {
-    border-radius: var(--dp-radius-full);
+[role="search"]:not(.segmented) > :is(button, a.button) {
+  border-radius: var(--dp-radius-full);
 }
-:is([role='group'], [role='search']):not(.segmented, .side-list) > :is(button, a.button):not(:first-child) {
-    border-start-start-radius: 0;
-    border-end-start-radius: 0;
+:is([role="group"], [role="search"]):not(.segmented, .side-list)
+  > :is(button, a.button):not(:first-child) {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
 }
-:is([role='group'], [role='search']):not(.segmented, .side-list) > :is(button, a.button):not(:last-child) {
-    border-start-end-radius: 0;
-    border-end-end-radius: 0;
+:is([role="group"], [role="search"]):not(.segmented, .side-list)
+  > :is(button, a.button):not(:last-child) {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
 }
 
 /* 入力欄とくっつけたボタンは折り返さない */
-[role='group'] > button,
-[role='group'] > a.button {
-    white-space: nowrap;
-    flex: 0 0 auto;
+[role="group"] > button,
+[role="group"] > a.button {
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 /* ---- タブ (`<div role="group" class="segmented">`。番組表とライブの種別) ---- */
@@ -963,54 +1036,55 @@ a.button {
  * 映像の上端やすぐ下の一覧の行とそのままそろう。主の色では塗らない (隣の「予約」などの主のボタンと見分けるため)。
  * 選んでいるものは面と太字で示す (色だけにしない)。選んでいないものも本文並みの字で、押せると分かる
  */
-[role='group'].segmented {
-    display: inline-flex;
-    gap: 2px;
-    width: auto;
-    padding: 0;
-    border: 0;
-    border-radius: var(--dp-btn-radius);
-    background: none;
-    box-shadow: none;
+[role="group"].segmented {
+  display: inline-flex;
+  gap: 2px;
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dp-btn-radius);
+  background: none;
+  box-shadow: none;
 }
-[role='group'].segmented > :is(button, a.button) {
-    --pico-background-color: transparent;
-    --pico-border-color: transparent;
-    --pico-color: var(--pico-secondary);
-    --pico-box-shadow: none;
-    margin: 0;
-    border-radius: var(--dp-btn-radius);
-    box-shadow: none;
+[role="group"].segmented > :is(button, a.button) {
+  --pico-background-color: transparent;
+  --pico-border-color: transparent;
+  --pico-color: var(--pico-secondary);
+  --pico-box-shadow: none;
+  margin: 0;
+  border-radius: var(--dp-btn-radius);
+  box-shadow: none;
 }
-[role='group'].segmented > :is(button, a.button):hover {
-    --pico-background-color: var(--dp-row-hover, var(--dp-subtle));
-    --pico-border-color: transparent;
-    --pico-color: var(--pico-secondary-hover);
+[role="group"].segmented > :is(button, a.button):hover {
+  --pico-background-color: var(--dp-row-hover, var(--dp-subtle));
+  --pico-border-color: transparent;
+  --pico-color: var(--pico-secondary-hover);
 }
-[role='group'].segmented > :is(button, a.button):is([aria-current='page'], [aria-pressed='true']) {
-    --pico-background-color: var(--dp-row-selected, var(--dp-subtle));
-    --pico-border-color: transparent;
-    --pico-color: var(--pico-h1-color, var(--pico-color));
-    font-weight: var(--dp-weight-bold);
+[role="group"].segmented
+  > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]) {
+  --pico-background-color: var(--dp-row-selected, var(--dp-subtle));
+  --pico-border-color: transparent;
+  --pico-color: var(--pico-h1-color, var(--pico-color));
+  font-weight: var(--dp-weight-bold);
 }
 /*
  * **選んだ面を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
  * 面は前の場所から新しい場所へ動く (`#lib/motion.svelte.js` の `slide`)。
  * 字は動かさない (面の上に重ねたまま)。見た目は上の「選んでいるもの」と同じ
  */
-[role='group'].segmented > :is(button, a.button):has(> .seg-pill) {
-    --pico-background-color: transparent;
-    --pico-border-color: transparent;
-    position: relative;
-    isolation: isolate;
+[role="group"].segmented > :is(button, a.button):has(> .seg-pill) {
+  --pico-background-color: transparent;
+  --pico-border-color: transparent;
+  position: relative;
+  isolation: isolate;
 }
 .seg-pill {
-    position: absolute;
-    inset: -1px;
-    z-index: -1;
-    border-radius: inherit;
-    background: var(--dp-row-selected, var(--dp-subtle));
-    pointer-events: none;
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--dp-row-selected, var(--dp-subtle));
+  pointer-events: none;
 }
 
 /* ---- タグ ---- */
@@ -1020,34 +1094,34 @@ a.button {
  * 一覧では 1 行にバッジが 2〜3 個並ぶので、全部塗ると色の縞になって読めなかった
  */
 .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.05rem 0.5rem;
-    border-radius: var(--dp-radius-full);
-    font-size: var(--dp-text-xs);
-    line-height: 1.6;
-    white-space: nowrap;
-    background: var(--dp-subtle);
-    color: inherit;
-    border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--dp-radius-full);
+  font-size: var(--dp-text-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+  background: var(--dp-subtle);
+  color: inherit;
+  border: 1px solid transparent;
 }
 /* 淡い地は、状態の色を地の色 (--dp-surface) に 14% 混ぜる (通知は 10%)。バッジと通知で同じ考え */
 .tag.success {
-    background: color-mix(in srgb, var(--dp-ok) 14%, var(--dp-surface));
-    color: var(--dp-ok-text);
+  background: color-mix(in srgb, var(--dp-ok) 14%, var(--dp-surface));
+  color: var(--dp-ok-text);
 }
 .tag.error {
-    background: color-mix(in srgb, var(--dp-rec) 14%, var(--dp-surface));
-    color: var(--dp-rec-text);
+  background: color-mix(in srgb, var(--dp-rec) 14%, var(--dp-surface));
+  color: var(--dp-rec-text);
 }
 .tag.warning {
-    background: color-mix(in srgb, var(--dp-warn) 14%, var(--dp-surface));
-    color: var(--dp-warn-text);
+  background: color-mix(in srgb, var(--dp-warn) 14%, var(--dp-surface));
+  color: var(--dp-warn-text);
 }
 .tag.info {
-    background: color-mix(in srgb, var(--dp-info) 14%, var(--dp-surface));
-    color: var(--dp-info-text);
+  background: color-mix(in srgb, var(--dp-info) 14%, var(--dp-surface));
+  color: var(--dp-info-text);
 }
 /*
  * **バッジの形は 1 つだけ** (淡い地に濃い字)。前は塗ったもの (`.solid`。録画中)・枠だけのもの (`.outline`。競合・失敗)・
@@ -1055,8 +1129,8 @@ a.button {
  * `.solid` (いま動いているもの) は脈打つ点 (`.rec-dot`) を添えて見分ける。`.outline` は前の書き方の名残で、見た目は変えない
  */
 .tag.solid:not(.success, .error, .warning, .info) {
-    background: color-mix(in srgb, var(--pico-primary) 14%, var(--dp-surface));
-    color: var(--pico-primary);
+  background: color-mix(in srgb, var(--pico-primary) 14%, var(--dp-surface));
+  color: var(--pico-primary);
 }
 
 /* ---- 通知 ---- */
@@ -1065,26 +1139,26 @@ a.button {
  * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった
  */
 .notice {
-    border-radius: var(--dp-radius);
-    padding: 0.75rem 1rem;
-    background: var(--dp-subtle);
-    border-left: 3px solid transparent;
+  border-radius: var(--dp-radius);
+  padding: 0.75rem 1rem;
+  background: var(--dp-subtle);
+  border-left: 3px solid transparent;
 }
 .notice.warning {
-    background: color-mix(in srgb, var(--dp-warn) 10%, var(--dp-surface));
-    border-left-color: var(--dp-warn);
+  background: color-mix(in srgb, var(--dp-warn) 10%, var(--dp-surface));
+  border-left-color: var(--dp-warn);
 }
 .notice.error {
-    background: color-mix(in srgb, var(--dp-rec) 10%, var(--dp-surface));
-    border-left-color: var(--dp-rec);
+  background: color-mix(in srgb, var(--dp-rec) 10%, var(--dp-surface));
+  border-left-color: var(--dp-rec);
 }
 .notice.success {
-    background: color-mix(in srgb, var(--dp-ok) 10%, var(--dp-surface));
-    border-left-color: var(--dp-ok);
+  background: color-mix(in srgb, var(--dp-ok) 10%, var(--dp-surface));
+  border-left-color: var(--dp-ok);
 }
 .notice.info {
-    background: color-mix(in srgb, var(--dp-info) 10%, var(--dp-surface));
-    border-left-color: var(--dp-info);
+  background: color-mix(in srgb, var(--dp-info) 10%, var(--dp-surface));
+  border-left-color: var(--dp-info);
 }
 
 /* ---- 読み込み中 (送信中のボタン。`actions.ts` の `submitting` が付ける) ---- */
@@ -1098,35 +1172,35 @@ a.button {
  * 中身は**消さずに隠す**。場所を取ったままなので、ボタンの大きさは送信の前後で
  * 1px も変わらない。回るものはその上に重ねる
  */
-button[aria-busy='true'] {
-    position: relative;
-    /* 文字を透かす。場所は取ったままなので幅は変わらない。アイコンは
+button[aria-busy="true"] {
+  position: relative;
+  /* 文字を透かす。場所は取ったままなので幅は変わらない。アイコンは
 	   `currentColor` で塗っているので、これだけで一緒に消える (`Icon.svelte`) */
-    color: transparent;
-    /* 押せているように見せる。Pico は `[disabled]` を半分に透かすが、動いている
+  color: transparent;
+  /* 押せているように見せる。Pico は `[disabled]` を半分に透かすが、動いている
 	   ことを見せたいので戻す */
-    opacity: 1;
+  opacity: 1;
 }
-button[aria-busy='true']::before {
-    /* Pico が文字の前に足すぶん。重ねるほうを使うので出さない */
-    display: none;
+button[aria-busy="true"]::before {
+  /* Pico が文字の前に足すぶん。重ねるほうを使うので出さない */
+  display: none;
 }
-button[aria-busy='true'] > * {
-    /* `currentColor` で塗っていないもの (画像・別に色を持つ印) の保険 */
-    visibility: hidden;
+button[aria-busy="true"] > * {
+  /* `currentColor` で塗っていないもの (画像・別に色を持つ印) の保険 */
+  visibility: hidden;
 }
-button[aria-busy='true']::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    /* 1em では小さすぎて、何が起きているのか一目で分からなかった */
-    width: 1.25em;
-    height: 1.25em;
-    background-image: var(--pico-icon-loading);
-    background-size: 1.25em auto;
-    background-repeat: no-repeat;
-    background-position: center;
+button[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  /* 1em では小さすぎて、何が起きているのか一目で分からなかった */
+  width: 1.25em;
+  height: 1.25em;
+  background-image: var(--pico-icon-loading);
+  background-size: 1.25em auto;
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 /*
@@ -1138,28 +1212,28 @@ button[aria-busy='true']::after {
  * 字の色は `--dp-fg`、地は透明
  */
 button.text-button {
-    --pico-background-color: transparent;
-    --pico-color: var(--dp-muted);
-    display: inline;
-    width: auto;
-    margin: 0 0 0 0.25rem;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    color: var(--dp-muted);
-    font: inherit;
-    text-decoration: underline;
-    text-decoration-color: var(--dp-line-strong);
-    text-underline-offset: 0.2em;
-    cursor: pointer;
+  --pico-background-color: transparent;
+  --pico-color: var(--dp-muted);
+  display: inline;
+  width: auto;
+  margin: 0 0 0 0.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--dp-muted);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--dp-line-strong);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
 }
 button.text-button:hover {
-    --pico-background-color: transparent;
-    --pico-color: var(--dp-fg);
-    color: var(--dp-fg);
-    text-decoration-color: currentColor;
+  --pico-background-color: transparent;
+  --pico-color: var(--dp-fg);
+  color: var(--dp-fg);
+  text-decoration-color: currentColor;
 }
 
 /* ---- メニュー (`Menu.svelte`) の見た目。開け閉めは popover、見た目はここ ---- */
@@ -1173,23 +1247,23 @@ button.text-button:hover {
  * 使えないブラウザと、枠に収めたいとき (映像の舞台) は `Menu` が JS で置き、ここは上書きされる
  */
 .menu {
-    inset: auto;
-    margin: 0;
-    min-width: 10rem;
-    /* anchor-size を知らないブラウザは上の 10rem を使う */
-    min-width: max(10rem, anchor-size(width));
-    max-height: 100%;
-    overflow-y: auto;
-    padding: 0.25rem;
-    border-radius: var(--dp-radius-lg);
-    /* 選んでいる項目の地もメニューの面に合わせる (暗いほうは面より明るいので、ふつうの --dp-hover だと沈む) */
-    --dp-hover: var(--dp-pop-hover);
-    background: var(--dp-pop);
-    color: var(--pico-color);
-    border: 1px solid var(--dp-line);
-    box-shadow: var(--dp-shadow-pop);
-    outline: none;
-    position-try-fallbacks: flip-block;
+  inset: auto;
+  margin: 0;
+  min-width: 10rem;
+  /* anchor-size を知らないブラウザは上の 10rem を使う */
+  min-width: max(10rem, anchor-size(width));
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 0.25rem;
+  border-radius: var(--dp-radius-lg);
+  /* 選んでいる項目の地もメニューの面に合わせる (暗いほうは面より明るいので、ふつうの --dp-hover だと沈む) */
+  --dp-hover: var(--dp-pop-hover);
+  background: var(--dp-pop);
+  color: var(--pico-color);
+  border: 1px solid var(--dp-line);
+  box-shadow: var(--dp-shadow-pop);
+  outline: none;
+  position-try-fallbacks: flip-block;
 }
 /*
  * 開いているときだけ flex にする。閉じているときはブラウザの `display: none` のまま。
@@ -1200,89 +1274,89 @@ button.text-button:hover {
  * 動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさ (`offsetHeight`) は変わらない
  */
 .menu {
-    /* 並べる向きは閉じている間も持たせる。開いているときだけにすると、閉じる動きの間 (`display` はまだ flex) に
+  /* 並べる向きは閉じている間も持たせる。開いているときだけにすると、閉じる動きの間 (`display` はまだ flex) に
      * 横並びへ戻り、一瞬横向きのメニューが見えた */
-    flex-direction: column;
-    opacity: 0;
-    transform: scale(0.96);
-    transform-origin: top left;
-    transition:
-        opacity var(--dp-duration) var(--dp-ease-exit),
-        transform var(--dp-duration) var(--dp-ease-exit),
-        overlay var(--dp-duration) allow-discrete,
-        display var(--dp-duration) allow-discrete;
+  flex-direction: column;
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: top left;
+  transition:
+    opacity var(--dp-duration) var(--dp-ease-exit),
+    transform var(--dp-duration) var(--dp-ease-exit),
+    overlay var(--dp-duration) allow-discrete,
+    display var(--dp-duration) allow-discrete;
 }
-.menu[data-align='end'] {
-    transform-origin: top right;
+.menu[data-align="end"] {
+  transform-origin: top right;
 }
-.menu[data-side='top'] {
-    transform-origin: bottom left;
+.menu[data-side="top"] {
+  transform-origin: bottom left;
 }
-.menu[data-side='top'][data-align='end'] {
-    transform-origin: bottom right;
+.menu[data-side="top"][data-align="end"] {
+  transform-origin: bottom right;
 }
 .menu:popover-open {
-    display: flex;
-    opacity: 1;
-    transform: none;
-    transition-duration: var(--dp-duration);
-    transition-timing-function: var(--dp-ease);
+  display: flex;
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--dp-duration);
+  transition-timing-function: var(--dp-ease);
 }
 @starting-style {
-    .menu:popover-open {
-        opacity: 0;
-        transform: scale(0.96);
-    }
+  .menu:popover-open {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 /* 引き金から 4px 離し、入りきる側へ広げる */
-.menu[data-side='bottom'] {
-    margin-top: 4px;
+.menu[data-side="bottom"] {
+  margin-top: 4px;
 }
-.menu[data-side='top'] {
-    margin-bottom: 4px;
+.menu[data-side="top"] {
+  margin-bottom: 4px;
 }
-.menu[data-side='bottom'][data-align='start'] {
-    position-area: bottom span-right;
+.menu[data-side="bottom"][data-align="start"] {
+  position-area: bottom span-right;
 }
-.menu[data-side='bottom'][data-align='end'] {
-    position-area: bottom span-left;
+.menu[data-side="bottom"][data-align="end"] {
+  position-area: bottom span-left;
 }
-.menu[data-side='top'][data-align='start'] {
-    position-area: top span-right;
+.menu[data-side="top"][data-align="start"] {
+  position-area: top span-right;
 }
-.menu[data-side='top'][data-align='end'] {
-    position-area: top span-left;
+.menu[data-side="top"][data-align="end"] {
+  position-area: top span-left;
 }
 /* 項目。`<button>` も `<a>` も同じ見た目にする (Pico のボタンの地・枠・フォーカスの輪を消す) */
 .menu-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    margin: 0;
-    padding: 0.4rem 0.6rem;
-    border: 0;
-    border-radius: var(--dp-radius-sm);
-    box-shadow: none;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    text-decoration: none;
-    cursor: pointer;
-    outline: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: var(--dp-radius-sm);
+  box-shadow: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
 }
 /* いま選んでいるもの (↑↓・マウスを乗せたもの)。フォーカスで示す */
 .menu-item:is(:hover, :active, :focus, :focus-visible) {
-    box-shadow: none;
-    color: inherit;
+  box-shadow: none;
+  color: inherit;
 }
 .menu-item:focus {
-    background: var(--dp-hover);
+  background: var(--dp-hover);
 }
 .menu-item[data-disabled] {
-    cursor: not-allowed;
-    opacity: 0.5;
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 /*
  * ---- 磨りガラス ----
@@ -1296,35 +1370,35 @@ button.text-button:hover {
  * 透かしを減らす設定 (`prefers-reduced-transparency`) と、ぼかせないブラウザでは透かさない面 (`--dp-glass-solid`)
  */
 .overlay-menu {
-    /*
+  /*
      * テーマにかかわらず暗い面。裏を 75% の明るさに落としてから黒 70% を重ねる。
      * 真っ白な映像の上でも白い字で 7:1 ほど、控えた字 (白 72%) で 4.7:1 ほど
      */
-    --dp-glass-tint: rgb(20 21 25 / 0.7);
-    --dp-glass-solid: #141519;
-    --dp-glass-filter: blur(16px) saturate(1.5) brightness(0.75);
-    --dp-glass-rim: rgb(255 255 255 / 0.14);
+  --dp-glass-tint: rgb(20 21 25 / 0.7);
+  --dp-glass-solid: #141519;
+  --dp-glass-filter: blur(16px) saturate(1.5) brightness(0.75);
+  --dp-glass-rim: rgb(255 255 255 / 0.14);
 }
 .glass,
 .overlay-menu {
-    border: 1px solid var(--dp-glass-rim);
-    background: var(--dp-glass-solid);
+  border: 1px solid var(--dp-glass-rim);
+  background: var(--dp-glass-solid);
 }
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .glass,
-    .overlay-menu {
-        background: var(--dp-glass-tint);
-        -webkit-backdrop-filter: var(--dp-glass-filter);
-        backdrop-filter: var(--dp-glass-filter);
-    }
+  .glass,
+  .overlay-menu {
+    background: var(--dp-glass-tint);
+    -webkit-backdrop-filter: var(--dp-glass-filter);
+    backdrop-filter: var(--dp-glass-filter);
+  }
 }
 @media (prefers-reduced-transparency: reduce) {
-    .glass,
-    .overlay-menu {
-        background: var(--dp-glass-solid);
-        -webkit-backdrop-filter: none;
-        backdrop-filter: none;
-    }
+  .glass,
+  .overlay-menu {
+    background: var(--dp-glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 /*
@@ -1336,31 +1410,31 @@ button.text-button:hover {
  * 選んでいる選択肢は白を薄く敷く (主の色 (青) はリンクとフォーカスだけ)。ページのメニューは今までどおり
  */
 .overlay-menu {
-    --dp-hover: rgb(255 255 255 / 0.12);
-    --dp-line: rgb(255 255 255 / 0.14);
-    --dp-muted: rgb(255 255 255 / 0.72);
-    --pico-color: #fff;
-    gap: 0.125rem;
-    width: max-content;
-    max-width: min(20rem, 90vw);
-    padding: 0.5rem;
-    color: #fff;
+  --dp-hover: rgb(255 255 255 / 0.12);
+  --dp-line: rgb(255 255 255 / 0.14);
+  --dp-muted: rgb(255 255 255 / 0.72);
+  --pico-color: #fff;
+  gap: 0.125rem;
+  width: max-content;
+  max-width: min(20rem, 90vw);
+  padding: 0.5rem;
+  color: #fff;
 }
 .overlay-menu .option {
-    padding: 0.4rem 0.75rem;
+  padding: 0.4rem 0.75rem;
 }
 .overlay-menu .option[data-active] {
-    background: rgb(255 255 255 / 0.2);
-    color: #fff;
+  background: rgb(255 255 255 / 0.2);
+  color: #fff;
 }
 /* 映像の上に出す短い通知 (`StageNote`・追っかけの「エンコード済みを観る」・ライブの「録画のため局を切り替えました」) */
 .stage-note {
-    max-width: 100%;
-    padding: 0.25rem 0.75rem;
-    border-radius: var(--dp-radius-lg);
-    background: rgb(0 0 0 / 0.6);
-    font-size: var(--dp-text-xs);
-    color: #fff;
+  max-width: 100%;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--dp-radius-lg);
+  background: rgb(0 0 0 / 0.6);
+  font-size: var(--dp-text-xs);
+  color: #fff;
 }
 
 /*
@@ -1372,75 +1446,75 @@ button.text-button:hover {
  * 箱も透かさない (縁と影で浮かせる)。ぼかすほどの読みにくさが無く、重いだけだった (上の「磨りガラス」)
  */
 dialog {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    background-color: var(--dp-backdrop);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: var(--dp-backdrop);
 }
 .modal-box {
-    position: relative;
-    box-sizing: border-box;
-    width: calc(100% - 2rem);
-    max-width: 42rem;
-    max-height: calc(100% - 2rem);
-    margin: 0;
-    padding: var(--dp-space-5);
-    overflow: auto;
-    border: 1px solid var(--dp-line);
-    border-radius: var(--dp-radius-lg);
-    background: var(--dp-surface);
-    box-shadow: var(--dp-shadow-pop);
+  position: relative;
+  box-sizing: border-box;
+  width: calc(100% - 2rem);
+  max-width: 42rem;
+  max-height: calc(100% - 2rem);
+  margin: 0;
+  padding: var(--dp-space-5);
+  overflow: auto;
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-radius-lg);
+  background: var(--dp-surface);
+  box-shadow: var(--dp-shadow-pop);
 }
 /* 開いたときは箱にフォーカスを置く (`DriveNotice`)。箱そのものに枠は出さない */
 .modal-box:focus {
-    outline: none;
+  outline: none;
 }
 .modal-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    align-items: center;
-    gap: var(--dp-space-2);
-    margin: var(--dp-space-5) 0 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--dp-space-2);
+  margin: var(--dp-space-5) 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
 }
 .modal-actions button,
-.modal-actions [role='button'] {
-    margin: 0;
+.modal-actions [role="button"] {
+  margin: 0;
 }
 /*
  * **狭い画面では下から出る一枚。** 中央に浮かせた箱だとボタンが2段に折れて、どれを押すのか探すことになった。
  * 下端に付けて角は上だけ丸め、ボタンは全幅で縦に積む。主のボタン (並びの最後) がいちばん上
  */
 @media (max-width: 639.98px) {
-    .modal-box {
-        width: 100%;
-        max-width: none;
-        max-height: calc(100% - 2.5rem);
-        border-width: 1px 0 0;
-        border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
-        padding-bottom: calc(var(--dp-space-5) + env(safe-area-inset-bottom));
-    }
-    dialog:has(> article.modal-box) {
-        padding: 0;
-    }
-    dialog > article.modal-box {
-        margin-top: auto;
-    }
-    .modal-actions {
-        flex-direction: column-reverse;
-        align-items: stretch;
-    }
-    .modal-actions > *,
-    .modal-actions > form > button,
-    .modal-actions > * > :is(button, a.button) {
-        width: 100%;
-    }
-    .modal-actions :is(button, a.button) {
-        justify-content: center;
-    }
+  .modal-box {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100% - 2.5rem);
+    border-width: 1px 0 0;
+    border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
+    padding-bottom: calc(var(--dp-space-5) + env(safe-area-inset-bottom));
+  }
+  dialog:has(> article.modal-box) {
+    padding: 0;
+  }
+  dialog > article.modal-box {
+    margin-top: auto;
+  }
+  .modal-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .modal-actions > *,
+  .modal-actions > form > button,
+  .modal-actions > * > :is(button, a.button) {
+    width: 100%;
+  }
+  .modal-actions :is(button, a.button) {
+    justify-content: center;
+  }
 }
 
 /*
@@ -1448,35 +1522,35 @@ dialog {
  * 閉じるときは短く引っ込む。Pico の dialog は全面の幕そのもので、箱はその中の `article`
  */
 dialog {
-    transition:
-        opacity var(--dp-duration) var(--dp-ease-exit),
-        overlay var(--dp-duration) allow-discrete,
-        display var(--dp-duration) allow-discrete;
+  transition:
+    opacity var(--dp-duration) var(--dp-ease-exit),
+    overlay var(--dp-duration) allow-discrete,
+    display var(--dp-duration) allow-discrete;
 }
 dialog:not([open]) {
-    opacity: 0;
+  opacity: 0;
 }
 dialog > article {
-    transition: transform var(--dp-duration) var(--dp-ease-exit);
+  transition: transform var(--dp-duration) var(--dp-ease-exit);
 }
 dialog:not([open]) > article {
-    transform: scale(0.96);
+  transform: scale(0.96);
 }
 dialog[open] {
-    transition-duration: var(--dp-duration);
-    transition-timing-function: var(--dp-ease);
+  transition-duration: var(--dp-duration);
+  transition-timing-function: var(--dp-ease);
 }
 dialog[open] > article {
-    transition-duration: var(--dp-duration);
-    transition-timing-function: var(--dp-ease);
+  transition-duration: var(--dp-duration);
+  transition-timing-function: var(--dp-ease);
 }
 @starting-style {
-    dialog[open] {
-        opacity: 0;
-    }
-    dialog[open] > article {
-        transform: scale(0.96);
-    }
+  dialog[open] {
+    opacity: 0;
+  }
+  dialog[open] > article {
+    transform: scale(0.96);
+  }
 }
 
 /* ---- 設定の並べ方 (設定の画面。`routes/settings`) ---- */
@@ -1486,42 +1560,42 @@ dialog[open] > article {
  * 左の一覧の隣に左寄せで置く。文と欄だけの節は読みやすい幅で止める (`.readable`)。表のある節は広く使う
  */
 .sections {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 .sections.readable {
-    max-width: 45rem;
+  max-width: 45rem;
 }
 .section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-space-3);
-    min-width: 0;
-    padding-block: var(--dp-space-5);
-    border-top: 1px solid var(--dp-line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dp-space-3);
+  min-width: 0;
+  padding-block: var(--dp-space-5);
+  border-top: 1px solid var(--dp-line);
 }
 .section:first-child {
-    padding-top: 0;
-    border-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 .section-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--dp-space-2) var(--dp-space-3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--dp-space-2) var(--dp-space-3);
 }
 .section-head h2 {
-    font-size: var(--dp-text-lg);
+  font-size: var(--dp-text-lg);
 }
 .sections .fields {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dp-space-4);
 }
 .sections .hint {
-    display: block;
-    font-size: var(--dp-text-sm);
-    color: var(--dp-muted);
+  display: block;
+  font-size: var(--dp-text-sm);
+  color: var(--dp-muted);
 }
 /*
  * **設定の欄は低く (36px)。** 欄が 42px のままだと、項目の多い画面で欄ばかりが目に付いた。
@@ -1529,17 +1603,17 @@ dialog[open] > article {
  * 指で押す端末では 40px 以上を保つ。中のボタン (`.small` でないもの) も同じ高さに揃う
  */
 .sections {
-    --pico-form-element-spacing-vertical: 0.25rem;
-    --pico-form-element-spacing-horizontal: 0.625rem;
+  --pico-form-element-spacing-vertical: 0.25rem;
+  --pico-form-element-spacing-horizontal: 0.625rem;
 }
 @media (pointer: coarse) {
-    .sections {
-        --pico-form-element-spacing-vertical: 0.45rem;
-    }
+  .sections {
+    --pico-form-element-spacing-vertical: 0.45rem;
+  }
 }
 /* 選ぶ欄は中身の幅で足りる。横いっぱいに伸ばすと、どこまでが欄なのか読みにくい */
 .sections .narrow {
-    max-width: 20rem;
+  max-width: 20rem;
 }
 /*
  * チェックの下の要点は、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem)。
@@ -1547,24 +1621,24 @@ dialog[open] > article {
  */
 .lead.indent,
 .lead.indent + .more-body {
-    margin-inline-start: 1.75rem;
+  margin-inline-start: 1.75rem;
 }
-.check:has(> [role='switch']) ~ :is(.lead.indent, .lead.indent + .more-body) {
-    margin-inline-start: 2.75rem;
+.check:has(> [role="switch"]) ~ :is(.lead.indent, .lead.indent + .more-body) {
+  margin-inline-start: 2.75rem;
 }
 /* 設定の表 (チューナー・チャンネル)。入りきらなければ横に巻き、欄の間は詰める。`.wide` の列が余った幅を取る */
 .table-wrap {
-    overflow-x: auto;
+  overflow-x: auto;
 }
 .table-wrap table {
-    margin: 0;
+  margin: 0;
 }
 .table-wrap th,
 .table-wrap td {
-    padding: 0.35rem 0.5rem;
+  padding: 0.35rem 0.5rem;
 }
 .table-wrap .wide {
-    width: 100%;
+  width: 100%;
 }
 /*
  * **広い画面では「名前 (左) ｜ 操作 (右)」の 2 段組の行にする** (`.setting-rows` の中の `.field`)。
@@ -1575,35 +1649,37 @@ dialog[open] > article {
  * 左に一覧が付くので、768px の画面でも右の列は 480px ほどしかない
  */
 @container (min-width: 40rem) {
-    .setting-rows > .field {
-        display: grid;
-        grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
-        grid-auto-flow: row dense;
-        align-items: start;
-        gap: var(--dp-space-1) var(--dp-space-5);
+  .setting-rows > .field {
+    display: grid;
+    grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
+    grid-auto-flow: row dense;
+    align-items: start;
+    gap: var(--dp-space-1) var(--dp-space-5);
+  }
+  .setting-rows > .field > * {
+    grid-column: 2;
+  }
+  .setting-rows > .field > .field-label {
+    grid-row: 1;
+    grid-column: 1;
+    padding-top: 0.2rem;
+    /* 行の名前なので、欄の上の小さな見出しより一段強く */
+    color: var(--pico-color);
+    font-size: var(--dp-text-sm);
+  }
+  /* 右が字を打つ欄・選ぶ欄の行は、名前を欄の字の高さに下ろす (欄 36px、指で押す端末は 42px) */
+  .setting-rows
+    > .field:has(> :is(input:not([type="checkbox"], [type="radio"]), select))
+    > .field-label {
+    padding-top: 0.45rem;
+  }
+  @media (pointer: coarse) {
+    .setting-rows
+      > .field:has(> :is(input:not([type="checkbox"], [type="radio"]), select))
+      > .field-label {
+      padding-top: 0.6rem;
     }
-    .setting-rows > .field > * {
-        grid-column: 2;
-    }
-    .setting-rows > .field > .field-label {
-        grid-row: 1;
-        grid-column: 1;
-        padding-top: 0.2rem;
-        /* 行の名前なので、欄の上の小さな見出しより一段強く */
-        color: var(--pico-color);
-        font-size: var(--dp-text-sm);
-    }
-    /* 右が字を打つ欄・選ぶ欄の行は、名前を欄の字の高さに下ろす (欄 36px、指で押す端末は 42px) */
-    .setting-rows > .field:has(> :is(input:not([type='checkbox'], [type='radio']), select)) > .field-label {
-        padding-top: 0.45rem;
-    }
-    @media (pointer: coarse) {
-        .setting-rows
-            > .field:has(> :is(input:not([type='checkbox'], [type='radio']), select))
-            > .field-label {
-            padding-top: 0.6rem;
-        }
-    }
+  }
 }
 
 /*
@@ -1612,49 +1688,49 @@ dialog[open] > article {
  * 入っているものは枠と淡い地と太字 (色だけにしない)。チェックボックスは隠さない (押せる的のまま)
  */
 .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--dp-space-1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dp-space-1);
 }
 .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    margin: 0;
-    padding: 0.15rem 0.55rem 0.15rem 0.4rem;
-    border: 1px solid var(--dp-line-strong);
-    border-radius: var(--dp-radius-full);
-    font-size: var(--dp-text-xs);
-    line-height: 1.6;
-    white-space: nowrap;
-    cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.15rem 0.55rem 0.15rem 0.4rem;
+  border: 1px solid var(--dp-line-strong);
+  border-radius: var(--dp-radius-full);
+  font-size: var(--dp-text-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
 }
 /*
  * チップの中の印は見せない (選んでいるかはチップの地と太字で分かる。印を青く塗るとそこだけ色が付いて見えた)。
  * 押せる・読み上げられるよう、入力欄そのものは残して見えなくするだけ。焦点はチップの外枠で示す
  */
-.chip input[type='checkbox'] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-    cursor: pointer;
+.chip input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 .chip {
-    position: relative;
+  position: relative;
 }
 .chip:has(input:focus-visible) {
-    outline: 2px solid var(--pico-primary);
-    outline-offset: 2px;
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
 }
 /* 選んでいるものは色を付けず、地を一段濃くして太字に (ほかの絞り込みのチップと同じ。青は焦点とリンクだけ) */
 .chip:has(input:checked) {
-    border-color: transparent;
-    background: var(--dp-row-selected, var(--dp-subtle));
-    color: var(--dp-fg, inherit);
-    font-weight: var(--dp-weight-bold);
+  border-color: transparent;
+  background: var(--dp-row-selected, var(--dp-subtle));
+  color: var(--dp-fg, inherit);
+  font-weight: var(--dp-weight-bold);
 }
 
 /*
@@ -1663,17 +1739,17 @@ dialog[open] > article {
  * 上の決まりに勝つよう、ファイルの最後に置く
  */
 @media (prefers-reduced-motion: reduce) {
-    :root {
-        --dp-duration: 0s;
-    }
-    .rec-dot,
-    .flash {
-        animation: none;
-    }
-    progress.running[value]::-webkit-progress-value {
-        animation: none;
-        background-image: none;
-    }
+  :root {
+    --dp-duration: 0s;
+  }
+  .rec-dot,
+  .flash {
+    animation: none;
+  }
+  progress.running[value]::-webkit-progress-value {
+    animation: none;
+    background-image: none;
+  }
 }
 
 /*
@@ -1688,95 +1764,101 @@ dialog[open] > article {
  * - 選んでいる行 (`aria-current` か `aria-pressed="true"`) は角の丸い薄い塗りと太字。指を乗せた行はそれより淡く
  */
 .side-panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 0.75rem 0.625rem 1.5rem;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 0.625rem 1.5rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 /* グループの見出し。リンクのときも見出しの顔のまま (設定) */
 .side-label {
-    display: flex;
-    align-items: center;
-    min-height: 1.5rem;
-    margin: 1.75rem 0 0.125rem;
-    padding: 0 0.75rem;
-    color: var(--dp-fg);
-    font-size: 0.8125rem;
-    font-weight: var(--dp-weight-bold);
-    line-height: 1.5;
-    text-decoration: none;
+  display: flex;
+  align-items: center;
+  min-height: 1.5rem;
+  margin: 1.75rem 0 0.125rem;
+  padding: 0 0.75rem;
+  color: var(--dp-fg);
+  font-size: 0.8125rem;
+  font-weight: var(--dp-weight-bold);
+  line-height: 1.5;
+  text-decoration: none;
 }
 .side-panel > .side-label:first-child,
 .side-panel > ul > li:first-child > .side-label {
-    margin-top: 0;
+  margin-top: 0;
 }
 .side-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    margin: 0;
-    padding: 0 0 0 0.75rem;
-    list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0 0 0 0.75rem;
+  list-style: none;
 }
 .side-list > li {
-    margin: 0;
-    list-style: none;
+  margin: 0;
+  list-style: none;
 }
 .side-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    width: 100%;
-    min-height: 3rem;
-    margin: 0;
-    padding: 0 0.75rem;
-    border: 0;
-    border-radius: var(--dp-radius);
-    background: transparent;
-    box-shadow: none;
-    color: inherit;
-    font-size: 0.875rem;
-    font-weight: var(--dp-weight);
-    text-align: left;
-    text-decoration: none;
-    transition: background-color var(--dp-duration);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3rem;
+  margin: 0;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--dp-radius);
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-size: 0.875rem;
+  font-weight: var(--dp-weight);
+  text-align: left;
+  text-decoration: none;
+  transition: background-color var(--dp-duration);
 }
 .side-item:hover {
-    background: var(--dp-hover-soft);
+  background: var(--dp-hover-soft);
 }
 /*
  * 選んでいる行。リンク (`aria-current`) か切り替え (`aria-pressed`)。2 つのボタンを並べた行 (ライブの選局と (i)) は、
  * 主のボタンが選ばれていれば行ごと塗る (太字にはしない)
  */
-.side-item:is([aria-current]:not([aria-current='false']), [aria-pressed='true']),
-.side-item:has(> [aria-current]:not([aria-current='false'])) {
-    background: var(--dp-subtle);
+.side-item:is(
+  [aria-current]:not([aria-current="false"]),
+  [aria-pressed="true"]
+),
+.side-item:has(> [aria-current]:not([aria-current="false"])) {
+  background: var(--dp-subtle);
 }
-.side-item:is([aria-current]:not([aria-current='false']), [aria-pressed='true']) {
-    font-weight: var(--dp-weight-bold);
+.side-item:is(
+  [aria-current]:not([aria-current="false"]),
+  [aria-pressed="true"]
+) {
+  font-weight: var(--dp-weight-bold);
 }
 /* 見せるだけの行 (集計・状態)。指を乗せても塗らない */
 .side-item.static:hover {
-    background: transparent;
+  background: transparent;
 }
 /* 行の右の控えた値 (件数・値) */
 .side-item .side-sub {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: 0.25rem;
-    color: var(--dp-muted);
-    font-size: 0.75rem;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--dp-muted);
+  font-size: 0.75rem;
 }
 /* いちばん下に置くもの (状態・主のボタン)。線では分けず、余白で下に押す */
 .side-foot {
-    margin-top: auto;
-    padding-top: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
 }
 
 /*
@@ -1787,36 +1869,41 @@ dialog[open] > article {
  * 白の 6% だけだった頃は、明るいテーマでは光が見えなかった
  */
 .skeleton {
-    position: relative;
-    overflow: hidden;
+  position: relative;
+  overflow: hidden;
 }
 .skeleton-block,
 .skeleton-head {
-    flex-shrink: 0;
-    border-radius: var(--dp-radius-sm);
-    background: var(--dp-subtle);
+  flex-shrink: 0;
+  border-radius: var(--dp-radius-sm);
+  background: var(--dp-subtle);
 }
 /* 見出しの行。本物と同じで、ここだけ濃い */
 .skeleton-head {
-    background: var(--dp-line);
+  background: var(--dp-line);
 }
 .skeleton::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent 0%, var(--dp-sweep) 50%, transparent 100%);
-    transform: translateX(-100%);
-    animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
-    pointer-events: none;
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--dp-sweep) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
+  pointer-events: none;
 }
 @keyframes skeleton-sweep {
-    to {
-        transform: translateX(100%);
-    }
+  to {
+    transform: translateX(100%);
+  }
 }
 /* 動くものが苦手な人には動かさない (Pico と同じ約束) */
 @media (prefers-reduced-motion: reduce) {
-    .skeleton::after {
-        animation: none;
-    }
+  .skeleton::after {
+    animation: none;
+  }
 }

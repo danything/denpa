@@ -15,17 +15,22 @@
 
 /** 見つけた枠 (コマの座標) */
 export interface Rect {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /**
  * 探す隅。**右上から見ます** — 国内の地上波はほぼここ。
  * 決め打ちにしないのは、確かめられたのが手元の局だけだからです
  */
-export const CORNERS = ['top-right', 'top-left', 'bottom-right', 'bottom-left'] as const;
+export const CORNERS = [
+  "top-right",
+  "top-left",
+  "bottom-right",
+  "bottom-left",
+] as const;
 export type Corner = (typeof CORNERS)[number];
 
 /** 隅として見る範囲。横は 1/3、縦は 1/5 まで */
@@ -98,33 +103,38 @@ const MERGE_SHARE = 0.1;
 
 /** 隅の範囲。`width`/`height` はコマの大きさ */
 export function regionOf(corner: Corner, width: number, height: number): Rect {
-    const w = Math.round(width * REGION_W);
-    const h = Math.round(height * REGION_H);
-    return {
-        x: corner === 'top-right' || corner === 'bottom-right' ? width - w : 0,
-        y: corner === 'top-left' || corner === 'top-right' ? 0 : height - h,
-        width: w,
-        height: h,
-    };
+  const w = Math.round(width * REGION_W);
+  const h = Math.round(height * REGION_H);
+  return {
+    x: corner === "top-right" || corner === "bottom-right" ? width - w : 0,
+    y: corner === "top-left" || corner === "top-right" ? 0 : height - h,
+    width: w,
+    height: h,
+  };
 }
 
 /** 印を太らせて、近いものどうしを繋ぐ */
-function dilate(mask: Uint8Array, w: number, h: number, radius: number): Uint8Array {
-    const out = new Uint8Array(mask.length);
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            if (mask[y * w + x] === 0) continue;
-            for (let dy = -radius; dy <= radius; dy++) {
-                const yy = y + dy;
-                if (yy < 0 || yy >= h) continue;
-                for (let dx = -radius; dx <= radius; dx++) {
-                    const xx = x + dx;
-                    if (xx >= 0 && xx < w) out[yy * w + xx] = 1;
-                }
-            }
+function dilate(
+  mask: Uint8Array,
+  w: number,
+  h: number,
+  radius: number,
+): Uint8Array {
+  const out = new Uint8Array(mask.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (mask[y * w + x] === 0) continue;
+      for (let dy = -radius; dy <= radius; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -radius; dx <= radius; dx++) {
+          const xx = x + dx;
+          if (xx >= 0 && xx < w) out[yy * w + xx] = 1;
         }
+      }
     }
-    return out;
+  }
+  return out;
 }
 
 /**
@@ -133,46 +143,56 @@ function dilate(mask: Uint8Array, w: number, h: number, radius: number): Uint8Ar
  * かたまりで見るのは、**ロゴは一箇所にまとまっている**ため。散らばった縁を
  * 1つの枠に括ると、枠が隅いっぱいに広がります
  */
-function blobs(mask: Uint8Array, strong: Uint8Array, w: number, h: number): { rect: Rect; strong: number }[] {
-    const seen = new Uint8Array(mask.length);
-    const found: { rect: Rect; strong: number }[] = [];
-    const stack: number[] = [];
-    for (let start = 0; start < mask.length; start++) {
-        if (mask[start] === 0 || seen[start] === 1) continue;
-        stack.push(start);
-        seen[start] = 1;
-        let own = 0;
-        let minX = w;
-        let maxX = -1;
-        let minY = h;
-        let maxY = -1;
-        while (stack.length > 0) {
-            const at = stack.pop() as number;
-            const x = at % w;
-            const y = (at / w) | 0;
-            own += strong[at]!;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-            // 上下左右だけ。斜めまで繋ぐと、隣の縁と橋が架かる
-            for (const next of [
-                x > 0 ? at - 1 : -1,
-                x < w - 1 ? at + 1 : -1,
-                y > 0 ? at - w : -1,
-                y < h - 1 ? at + w : -1,
-            ]) {
-                if (next < 0 || seen[next] === 1 || mask[next] === 0) continue;
-                seen[next] = 1;
-                stack.push(next);
-            }
-        }
-        found.push({
-            rect: { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 },
-            strong: own,
-        });
+function blobs(
+  mask: Uint8Array,
+  strong: Uint8Array,
+  w: number,
+  h: number,
+): { rect: Rect; strong: number }[] {
+  const seen = new Uint8Array(mask.length);
+  const found: { rect: Rect; strong: number }[] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < mask.length; start++) {
+    if (mask[start] === 0 || seen[start] === 1) continue;
+    stack.push(start);
+    seen[start] = 1;
+    let own = 0;
+    let minX = w;
+    let maxX = -1;
+    let minY = h;
+    let maxY = -1;
+    while (stack.length > 0) {
+      const at = stack.pop() as number;
+      const x = at % w;
+      const y = (at / w) | 0;
+      own += strong[at]!;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      // 上下左右だけ。斜めまで繋ぐと、隣の縁と橋が架かる
+      for (const next of [
+        x > 0 ? at - 1 : -1,
+        x < w - 1 ? at + 1 : -1,
+        y > 0 ? at - w : -1,
+        y < h - 1 ? at + w : -1,
+      ]) {
+        if (next < 0 || seen[next] === 1 || mask[next] === 0) continue;
+        seen[next] = 1;
+        stack.push(next);
+      }
     }
-    return found;
+    found.push({
+      rect: {
+        x: minX,
+        y: minY,
+        width: maxX - minX + 1,
+        height: maxY - minY + 1,
+      },
+      strong: own,
+    });
+  }
+  return found;
 }
 
 /**
@@ -183,74 +203,90 @@ function blobs(mask: Uint8Array, strong: Uint8Array, w: number, h: number): { re
  * 当てても合致しなかった (logoframe に渡していた頃。108×54 なら 88%)
  */
 function trim(mask: Uint8Array, w: number, rect: Rect): Rect {
-    const cols = new Array<number>(rect.width).fill(0);
-    const rows = new Array<number>(rect.height).fill(0);
-    let total = 0;
-    for (let y = 0; y < rect.height; y++) {
-        for (let x = 0; x < rect.width; x++) {
-            if (mask[(rect.y + y) * w + rect.x + x] === 0) continue;
-            cols[x]!++;
-            rows[y]!++;
-            total++;
-        }
+  const cols = new Array<number>(rect.width).fill(0);
+  const rows = new Array<number>(rect.height).fill(0);
+  let total = 0;
+  for (let y = 0; y < rect.height; y++) {
+    for (let x = 0; x < rect.width; x++) {
+      if (mask[(rect.y + y) * w + rect.x + x] === 0) continue;
+      cols[x]!++;
+      rows[y]!++;
+      total++;
     }
-    const span = (counts: number[]): [number, number] => {
-        const cut = total * TRIM;
-        let from = 0;
-        for (let sum = 0; from < counts.length - 1 && sum + counts[from]! <= cut; from++)
-            sum += counts[from]!;
-        let to = counts.length - 1;
-        for (let sum = 0; to > from && sum + counts[to]! <= cut; to--) sum += counts[to]!;
-        return [from, to];
-    };
-    const [x0, x1] = span(cols);
-    const [y0, y1] = span(rows);
-    return { x: rect.x + x0, y: rect.y + y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+  }
+  const span = (counts: number[]): [number, number] => {
+    const cut = total * TRIM;
+    let from = 0;
+    for (
+      let sum = 0;
+      from < counts.length - 1 && sum + counts[from]! <= cut;
+      from++
+    )
+      sum += counts[from]!;
+    let to = counts.length - 1;
+    for (let sum = 0; to > from && sum + counts[to]! <= cut; to--)
+      sum += counts[to]!;
+    return [from, to];
+  };
+  const [x0, x1] = span(cols);
+  const [y0, y1] = span(rows);
+  return {
+    x: rect.x + x0,
+    y: rect.y + y0,
+    width: x1 - x0 + 1,
+    height: y1 - y0 + 1,
+  };
 }
 
 /** 2つの枠の離れ (重なっていれば 0) */
 function gap(a: Rect, b: Rect): number {
-    const dx = Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width));
-    const dy = Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height));
-    return Math.max(dx, dy);
+  const dx = Math.max(
+    0,
+    Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width),
+  );
+  const dy = Math.max(
+    0,
+    Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height),
+  );
+  return Math.max(dx, dy);
 }
 
 function union(a: Rect, b: Rect): Rect {
-    const x = Math.min(a.x, b.x);
-    const y = Math.min(a.y, b.y);
-    return {
-        x,
-        y,
-        width: Math.max(a.x + a.width, b.x + b.width) - x,
-        height: Math.max(a.y + a.height, b.y + b.height) - y,
-    };
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return {
+    x,
+    y,
+    width: Math.max(a.x + a.width, b.x + b.width) - x,
+    height: Math.max(a.y + a.height, b.y + b.height) - y,
+  };
 }
 
 /** 太らせたぶんを削る。潰れないよう最低 1 画素は残す */
 function deflate(rect: Rect, by: number): Rect {
-    const width = Math.max(1, rect.width - by * 2);
-    const height = Math.max(1, rect.height - by * 2);
-    return {
-        x: rect.x + Math.round((rect.width - width) / 2),
-        y: rect.y + Math.round((rect.height - height) / 2),
-        width,
-        height,
-    };
+  const width = Math.max(1, rect.width - by * 2);
+  const height = Math.max(1, rect.height - by * 2);
+  return {
+    x: rect.x + Math.round((rect.width - width) / 2),
+    y: rect.y + Math.round((rect.height - height) / 2),
+    width,
+    height,
+  };
 }
 
 /** 余白を足して、コマからはみ出さないところまで戻す */
 function padded(rect: Rect, width: number, height: number): Rect {
-    const px = Math.max(PAD_MIN, Math.round(rect.width * PAD_RATIO));
-    const py = Math.max(PAD_MIN, Math.round(rect.height * PAD_RATIO));
-    const x = Math.max(0, rect.x - px);
-    const y = Math.max(0, rect.y - py);
-    return {
-        x,
-        y,
-        // コマからはみ出すと切り出せない
-        width: Math.min(width - x, rect.width + px * 2),
-        height: Math.min(height - y, rect.height + py * 2),
-    };
+  const px = Math.max(PAD_MIN, Math.round(rect.width * PAD_RATIO));
+  const py = Math.max(PAD_MIN, Math.round(rect.height * PAD_RATIO));
+  const x = Math.max(0, rect.x - px);
+  const y = Math.max(0, rect.y - py);
+  return {
+    x,
+    y,
+    // コマからはみ出すと切り出せない
+    width: Math.min(width - x, rect.width + px * 2),
+    height: Math.min(height - y, rect.height + py * 2),
+  };
 }
 
 /**
@@ -261,65 +297,78 @@ function padded(rect: Rect, width: number, height: number): Rect {
  * 返す枠はコマの座標で、余白を足してある
  */
 export function pickArea(
-    strength: Float32Array,
-    region: Rect,
-    width: number,
-    height: number,
-    floor: number,
+  strength: Float32Array,
+  region: Rect,
+  width: number,
+  height: number,
+  floor: number,
 ): Rect | null {
-    const sorted = Array.from(strength).sort((a, b) => a - b);
-    const middle = sorted[Math.floor(sorted.length * 0.5)]!;
-    const limit = sorted[Math.floor(sorted.length * (1 - EDGE_TOP))]!;
-    // ロゴを出していない隅では、上位 1% も中央値とたいして変わらない
-    if (limit < floor || limit < middle * EDGE_RATIO) return null;
+  const sorted = Array.from(strength).sort((a, b) => a - b);
+  const middle = sorted[Math.floor(sorted.length * 0.5)]!;
+  const limit = sorted[Math.floor(sorted.length * (1 - EDGE_TOP))]!;
+  // ロゴを出していない隅では、上位 1% も中央値とたいして変わらない
+  if (limit < floor || limit < middle * EDGE_RATIO) return null;
 
-    const mask = new Uint8Array(strength.length);
-    for (let at = 0; at < strength.length; at++) mask[at] = strength[at]! >= limit ? 1 : 0;
+  const mask = new Uint8Array(strength.length);
+  for (let at = 0; at < strength.length; at++)
+    mask[at] = strength[at]! >= limit ? 1 : 0;
 
-    /*
-     * **太らせたぶんを戻す。** 外接枠は「縁を繋ぐために広げた幅」と
-     * 「Sobel が縁の外側にも出す1画素」のぶんだけ大きくなっているので、
-     * そのまま大きさを見ると本物より太って見え、余白もそのぶん過剰になる
-     */
-    const found = blobs(
-        dilate(mask, region.width, region.height, DILATE),
-        mask,
-        region.width,
-        region.height,
-    ).map((blob) => ({ ...blob, rect: deflate(blob.rect, DILATE + 1) }));
-    /*
-     * **ロゴより大きいかたまりは、ロゴと張り合わない。** いちばん大きいかたまりだけを
-     * 見ていた頃は、BSテレ東 でテロップの帯の下の線 (343×9) を選んで大きさで弾き、
-     * 隣にあるロゴを見ずに諦めていた。帯・黒帯の縁は画面の幅ほどあるので、ここで除ける
-     */
-    const tooBig = (r: Rect) => r.width > width * MAX_W || r.height > height * MAX_H;
-    const fits = (r: Rect) => !tooBig(r) && r.width >= width * MIN_W && r.height >= height * MIN_H;
-    let rivals = 0;
-    let best: { rect: Rect; strong: number } | null = null;
-    for (const blob of found) {
-        if (tooBig(blob.rect)) continue;
-        rivals += blob.strong;
-        if (fits(blob.rect) && (best === null || blob.strong > best.strong)) best = blob;
-    }
-    if (best === null) return null;
+  /*
+   * **太らせたぶんを戻す。** 外接枠は「縁を繋ぐために広げた幅」と
+   * 「Sobel が縁の外側にも出す1画素」のぶんだけ大きくなっているので、
+   * そのまま大きさを見ると本物より太って見え、余白もそのぶん過剰になる
+   */
+  const found = blobs(
+    dilate(mask, region.width, region.height, DILATE),
+    mask,
+    region.width,
+    region.height,
+  ).map((blob) => ({ ...blob, rect: deflate(blob.rect, DILATE + 1) }));
+  /*
+   * **ロゴより大きいかたまりは、ロゴと張り合わない。** いちばん大きいかたまりだけを
+   * 見ていた頃は、BSテレ東 でテロップの帯の下の線 (343×9) を選んで大きさで弾き、
+   * 隣にあるロゴを見ずに諦めていた。帯・黒帯の縁は画面の幅ほどあるので、ここで除ける
+   */
+  const tooBig = (r: Rect) =>
+    r.width > width * MAX_W || r.height > height * MAX_H;
+  const fits = (r: Rect) =>
+    !tooBig(r) && r.width >= width * MIN_W && r.height >= height * MIN_H;
+  let rivals = 0;
+  let best: { rect: Rect; strong: number } | null = null;
+  for (const blob of found) {
+    if (tooBig(blob.rect)) continue;
+    rivals += blob.strong;
+    if (fits(blob.rect) && (best === null || blob.strong > best.strong))
+      best = blob;
+  }
+  if (best === null) return null;
 
-    /*
-     * **すぐ隣のかたまりは同じロゴとして括る。** テレビ朝日 のロゴは図形と文字が
-     * 縦に離れていて、文字だけの枠では覚えられなかった (両方入れると覚える)
-     */
-    let rect = best.rect;
-    let strong = best.strong;
-    for (const blob of found) {
-        if (blob === best || tooBig(blob.rect) || blob.strong < best.strong * MERGE_SHARE) continue;
-        if (gap(rect, blob.rect) > MERGE_GAP) continue;
-        const merged = union(rect, blob.rect);
-        if (!fits(merged)) continue;
-        rect = merged;
-        strong += blob.strong;
-    }
-    // 強い縁が隅のあちこちに散っている。ロゴと言い切れない (EDGE_SHARE)
-    if (strong < rivals * EDGE_SHARE) return null;
+  /*
+   * **すぐ隣のかたまりは同じロゴとして括る。** テレビ朝日 のロゴは図形と文字が
+   * 縦に離れていて、文字だけの枠では覚えられなかった (両方入れると覚える)
+   */
+  let rect = best.rect;
+  let strong = best.strong;
+  for (const blob of found) {
+    if (
+      blob === best ||
+      tooBig(blob.rect) ||
+      blob.strong < best.strong * MERGE_SHARE
+    )
+      continue;
+    if (gap(rect, blob.rect) > MERGE_GAP) continue;
+    const merged = union(rect, blob.rect);
+    if (!fits(merged)) continue;
+    rect = merged;
+    strong += blob.strong;
+  }
+  // 強い縁が隅のあちこちに散っている。ロゴと言い切れない (EDGE_SHARE)
+  if (strong < rivals * EDGE_SHARE) return null;
 
-    const core = trim(mask, region.width, rect);
-    return padded({ ...core, x: core.x + region.x, y: core.y + region.y }, width, height);
+  const core = trim(mask, region.width, rect);
+  return padded(
+    { ...core, x: core.x + region.x, y: core.y + region.y },
+    width,
+    height,
+  );
 }

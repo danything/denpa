@@ -6,11 +6,11 @@
  * - 取り方の決まりは `/api/bml/proxy` と同じ (`fetchForBml`。公開アドレスだけ・10 秒・4MB)。双方向を切ってあれば 403
  */
 
-import { requireBmlNetwork } from '#lib/server/bml-network.js';
-import { relayAsset } from '#lib/server/hc-relay.js';
-import type { RequestHandler } from './$types';
+import { requireBmlNetwork } from "#lib/server/bml-network.js";
+import { relayAsset } from "#lib/server/hc-relay.js";
+import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = ({ params, url }) => {
-    requireBmlNetwork();
-    return relayAsset(params.token, params.path, url.search);
+  requireBmlNetwork();
+  return relayAsset(params.token, params.path, url.search);
 };

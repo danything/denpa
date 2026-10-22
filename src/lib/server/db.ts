@@ -1,11 +1,11 @@
-import { Database, type SQLQueryBindings } from 'bun:sqlite';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { getTableColumns, getTableName, is, Table } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { config } from './config';
-import * as schema from './schema';
+import { Database, type SQLQueryBindings } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { getTableColumns, getTableName, is, Table } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { config } from "./config";
+import * as schema from "./schema";
 
 /**
  * SQLite への接続。
@@ -20,23 +20,23 @@ let instance: Database | null = null;
  * 一時ファイルへ差し替える (`bun test` は全部を1つのプロセスで走らせる)。最初に開いた
  * 1本を使い回していた頃は、前のファイルが残した行が次のファイルの試験に混ざっていた
  */
-let openedPath = '';
+let openedPath = "";
 
 function database(): Database {
-    if (instance !== null && openedPath === config.dbPath) return instance;
+  if (instance !== null && openedPath === config.dbPath) return instance;
 
-    mkdirSync(dirname(config.dbPath), { recursive: true });
-    const db = new Database(config.dbPath, { create: true });
+  mkdirSync(dirname(config.dbPath), { recursive: true });
+  const db = new Database(config.dbPath, { create: true });
 
-    // WAL でないと、録画中の書き込みとUIの読み取りが SQLITE_BUSY で衝突する
-    db.exec('PRAGMA journal_mode = WAL');
-    db.exec('PRAGMA busy_timeout = 5000');
-    db.exec('PRAGMA synchronous = NORMAL');
-    bootstrap(db);
+  // WAL でないと、録画中の書き込みとUIの読み取りが SQLITE_BUSY で衝突する
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.exec("PRAGMA synchronous = NORMAL");
+  bootstrap(db);
 
-    instance = db;
-    openedPath = config.dbPath;
-    return instance;
+  instance = db;
+  openedPath = config.dbPath;
+  return instance;
 }
 
 /**
@@ -44,7 +44,7 @@ function database(): Database {
  * `bun test` もリポジトリ直下で動き、コンテナは `/app` に COPY してある (Dockerfile)。
  * vite に束ねさせない (`?raw` は bun test の直接実行で読めない)
  */
-export const MIGRATIONS = 'drizzle';
+export const MIGRATIONS = "drizzle";
 
 /**
  * DB を今の構成にする。**当てるのは `drizzle/` のマイグレーションだけ** (schema.ts が正)。
@@ -55,8 +55,8 @@ export const MIGRATIONS = 'drizzle';
  * `CREATE TABLE IF NOT EXISTS` と足りない列の追加で同じ構成に整えていた
  */
 export function bootstrap(db: Database): void {
-    migrate(drizzle({ client: db }), { migrationsFolder: MIGRATIONS });
-    verify(db);
+  migrate(drizzle({ client: db }), { migrationsFolder: MIGRATIONS });
+  verify(db);
 }
 
 /**
@@ -67,24 +67,26 @@ export function bootstrap(db: Database): void {
  * 動き出してから `no such column` で落ちるより、起動で言って止まるほうが分かる
  */
 function verify(db: Database): void {
-    for (const table of Object.values(schema)) {
-        if (!is(table, Table)) continue;
-        const name = getTableName(table);
-        // table_info は生成列 (recordings.state) を出さない。xinfo なら hidden 付きで出る
-        const have = new Set(
-            (db.query(`PRAGMA table_xinfo(${name})`).all() as { name: string }[]).map((c) => c.name),
-        );
-        for (const column of Object.values(getTableColumns(table))) {
-            if (have.has(column.name)) continue;
-            throw new Error(
-                `DB に ${name}.${column.name} がありません。1.7.x を一度起動して DB を整えてから上げてください`,
-            );
-        }
+  for (const table of Object.values(schema)) {
+    if (!is(table, Table)) continue;
+    const name = getTableName(table);
+    // table_info は生成列 (recordings.state) を出さない。xinfo なら hidden 付きで出る
+    const have = new Set(
+      (db.query(`PRAGMA table_xinfo(${name})`).all() as { name: string }[]).map(
+        (c) => c.name,
+      ),
+    );
+    for (const column of Object.values(getTableColumns(table))) {
+      if (have.has(column.name)) continue;
+      throw new Error(
+        `DB に ${name}.${column.name} がありません。1.7.x を一度起動して DB を整えてから上げてください`,
+      );
     }
+  }
 }
 
 function wrap(client: Database) {
-    return drizzle({ client, schema });
+  return drizzle({ client, schema });
 }
 
 let typed: ReturnType<typeof wrap> | null = null;
@@ -99,12 +101,12 @@ let typedFor: Database | null = null;
  * 挟む。素の SQL の文字列に型を付けて返す関数は置かない (キャストになるので)
  */
 export function orm() {
-    const client = database();
-    if (typed === null || typedFor !== client) {
-        typed = wrap(client);
-        typedFor = client;
-    }
-    return typed;
+  const client = database();
+  if (typed === null || typedFor !== client) {
+    typed = wrap(client);
+    typedFor = client;
+  }
+  return typed;
 }
 
 /**
@@ -117,13 +119,15 @@ export function orm() {
  * 接続は `orm()` と同じ1本なので、drizzle のトランザクションの中から呼んでも
  * その中で流れる (epg.ts の syncServices → clearBelongings がそれ)
  */
-export function affected(query: { toSQL(): { sql: string; params: unknown[] } }): number {
-    const { sql, params } = query.toSQL();
-    return database()
-        .query(sql)
-        .run(...(params as SQLQueryBindings[])).changes;
+export function affected(query: {
+  toSQL(): { sql: string; params: unknown[] };
+}): number {
+  const { sql, params } = query.toSQL();
+  return database()
+    .query(sql)
+    .run(...(params as SQLQueryBindings[])).changes;
 }
 
 export function now(): number {
-    return Date.now();
+  return Date.now();
 }

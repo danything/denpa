@@ -13,7 +13,7 @@
  * 渡さなければ、どちらも始める位置がキーフレームになります (`at`)。待つ長さは変わりません —
  * 映せる1枚目はどのみちキーフレームです
  */
-import { type Fmp4Track, readFragment, readInit } from './fmp4';
+import { type Fmp4Track, readFragment, readInit } from "./fmp4";
 
 /**
  * キーフレームを待つ上限 (秒。映像の尺で数える)。**待ちきりにはしない。**
@@ -24,52 +24,52 @@ import { type Fmp4Track, readFragment, readInit } from './fmp4';
 export const KEY_WAIT = 4;
 
 export class KeyGate {
-    #tracks: Fmp4Track[] = [];
-    #video: Fmp4Track | undefined;
-    #waiting = false;
-    /** 待っている間に見送った映像の尺 (秒) */
-    #skipped = 0;
-    /** 最初のキーフレームの時刻 (秒。MSE の時刻と同じ物差し)。見つかるまで・待たなかったときは null */
-    at: number | null = null;
+  #tracks: Fmp4Track[] = [];
+  #video: Fmp4Track | undefined;
+  #waiting = false;
+  /** 待っている間に見送った映像の尺 (秒) */
+  #skipped = 0;
+  /** 最初のキーフレームの時刻 (秒。MSE の時刻と同じ物差し)。見つかるまで・待たなかったときは null */
+  at: number | null = null;
 
-    /** init が来た。**ここから数え直す** (選局・音声や形式の選び直しで作り直す) */
-    init(bytes: Uint8Array): void {
-        try {
-            this.#tracks = readInit(bytes);
-        } catch {
-            this.#tracks = [];
-        }
-        this.#video = this.#tracks.find((t) => t.kind === 'video');
-        // 映像の無い放送は待たない
-        this.#waiting = this.#video !== undefined;
-        this.#skipped = 0;
-        this.at = null;
+  /** init が来た。**ここから数え直す** (選局・音声や形式の選び直しで作り直す) */
+  init(bytes: Uint8Array): void {
+    try {
+      this.#tracks = readInit(bytes);
+    } catch {
+      this.#tracks = [];
     }
+    this.#video = this.#tracks.find((t) => t.kind === "video");
+    // 映像の無い放送は待たない
+    this.#waiting = this.#video !== undefined;
+    this.#skipped = 0;
+    this.at = null;
+  }
 
-    /** この塊を MSE に渡してよいか。**キーフレームを含む塊から先は全部渡す** */
-    pass(bytes: Uint8Array): boolean {
-        const video = this.#video;
-        if (!this.#waiting || video === undefined) return true;
-        let samples: ReturnType<typeof readFragment>;
-        try {
-            samples = readFragment(bytes, this.#tracks);
-        } catch {
-            this.#waiting = false;
-            return true;
-        }
-        for (const sample of samples) {
-            if (sample.track !== video.id) continue;
-            if (sample.key) {
-                this.at = sample.pts / video.timescale;
-                this.#waiting = false;
-                return true;
-            }
-            this.#skipped += sample.duration / video.timescale;
-        }
-        if (this.#skipped >= KEY_WAIT) {
-            this.#waiting = false;
-            return true;
-        }
-        return false;
+  /** この塊を MSE に渡してよいか。**キーフレームを含む塊から先は全部渡す** */
+  pass(bytes: Uint8Array): boolean {
+    const video = this.#video;
+    if (!this.#waiting || video === undefined) return true;
+    let samples: ReturnType<typeof readFragment>;
+    try {
+      samples = readFragment(bytes, this.#tracks);
+    } catch {
+      this.#waiting = false;
+      return true;
     }
+    for (const sample of samples) {
+      if (sample.track !== video.id) continue;
+      if (sample.key) {
+        this.at = sample.pts / video.timescale;
+        this.#waiting = false;
+        return true;
+      }
+      this.#skipped += sample.duration / video.timescale;
+    }
+    if (this.#skipped >= KEY_WAIT) {
+      this.#waiting = false;
+      return true;
+    }
+    return false;
+  }
 }

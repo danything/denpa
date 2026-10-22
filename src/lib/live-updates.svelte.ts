@@ -1,5 +1,5 @@
-import { resolve } from '$app/paths';
-import { reload } from './reload.svelte';
+import { resolve } from "$app/paths";
+import { reload } from "./reload.svelte";
 
 /**
  * サーバからの通知を受けて画面を読み直す。
@@ -39,97 +39,98 @@ import { reload } from './reload.svelte';
  * @param handlers 中身 (payload) を運ぶイベント。読み直さず、届いた中身を渡す
  */
 export function liveUpdates(
-    events: string[],
-    handlers: Record<string, (payload: unknown) => void> = {},
+  events: string[],
+  handlers: Record<string, (payload: unknown) => void> = {},
 ): void {
-    $effect(() => {
-        let source: EventSource | null = null;
-        let timer: ReturnType<typeof setTimeout> | null = null;
-        let retry: ReturnType<typeof setTimeout> | null = null;
-        let lastSeen = Date.now();
-        let everOpened = false;
+  $effect(() => {
+    let source: EventSource | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let lastSeen = Date.now();
+    let everOpened = false;
 
-        const refresh = () => {
-            if (timer !== null) clearTimeout(timer);
-            timer = setTimeout(reload, 200);
-        };
+    const refresh = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(reload, 200);
+    };
 
-        const connect = () => {
-            source?.close();
-            lastSeen = Date.now(); // 新しい繋ぎに60秒の猶予をやる
-            source = new EventSource(resolve('api/events'));
-            source.addEventListener('open', () => {
-                lastSeen = Date.now();
-                // 繋ぎ直しは、切れていた間のことを知らない。1回読み直して追いつく。
-                // 最初の1回は要らない — 画面を組んだばかりで、もう新しい
-                if (everOpened) refresh();
-                everOpened = true;
-            });
-            source.addEventListener('ping', () => {
-                lastSeen = Date.now();
-            });
-            source.addEventListener('error', () => {
-                // 途中の揺れは EventSource が自分で繋ぎ直す。諦めたときだけ引き取る
-                if (source?.readyState !== EventSource.CLOSED) return;
-                if (retry !== null) clearTimeout(retry);
-                retry = setTimeout(connect, 3000);
-            });
-            for (const event of events) {
-                source.addEventListener(event, () => {
-                    lastSeen = Date.now();
-                    refresh();
-                });
-            }
-            for (const [event, handle] of Object.entries(handlers)) {
-                source.addEventListener(event, (raw) => {
-                    lastSeen = Date.now();
-                    try {
-                        handle(JSON.parse((raw as MessageEvent).data));
-                    } catch {
-                        // 読めない中身は捨てる。次の通知で追いつく
-                    }
-                });
-            }
-        };
+    const connect = () => {
+      source?.close();
+      lastSeen = Date.now(); // 新しい繋ぎに60秒の猶予をやる
+      source = new EventSource(resolve("api/events"));
+      source.addEventListener("open", () => {
+        lastSeen = Date.now();
+        // 繋ぎ直しは、切れていた間のことを知らない。1回読み直して追いつく。
+        // 最初の1回は要らない — 画面を組んだばかりで、もう新しい
+        if (everOpened) refresh();
+        everOpened = true;
+      });
+      source.addEventListener("ping", () => {
+        lastSeen = Date.now();
+      });
+      source.addEventListener("error", () => {
+        // 途中の揺れは EventSource が自分で繋ぎ直す。諦めたときだけ引き取る
+        if (source?.readyState !== EventSource.CLOSED) return;
+        if (retry !== null) clearTimeout(retry);
+        retry = setTimeout(connect, 3000);
+      });
+      for (const event of events) {
+        source.addEventListener(event, () => {
+          lastSeen = Date.now();
+          refresh();
+        });
+      }
+      for (const [event, handle] of Object.entries(handlers)) {
+        source.addEventListener(event, (raw) => {
+          lastSeen = Date.now();
+          try {
+            handle(JSON.parse((raw as MessageEvent).data));
+          } catch {
+            // 読めない中身は捨てる。次の通知で追いつく
+          }
+        });
+      }
+    };
+    connect();
+
+    // 番犬。ping (25秒おき) が2回続けて見えなければ、死んだ繋ぎとみなす
+    const watchdog = setInterval(() => {
+      if (document.visibilityState !== "visible") return; // 裏のタブで空騒ぎしない
+      if (Date.now() - lastSeen > 60_000) connect();
+    }, 15_000);
+
+    // 凍らされている間に切られた繋ぎは、開き直しても黙ったまま (上の説明)
+    const revive = () => {
+      if (document.visibilityState !== "visible") return;
+      if (source === null || source.readyState === EventSource.CLOSED)
         connect();
+    };
+    document.addEventListener("visibilitychange", revive);
+    // Android の Chrome は凍らせた画面を `resume` で戻す。凍って戻るだけの
+    // 往復では `visibilitychange` が出ないことがある (`+layout.svelte`)
+    document.addEventListener("resume", revive);
+    window.addEventListener("pageshow", revive);
+    // 回線が戻ったら、番犬の周期を待たずにすぐ
+    const online = () => connect();
+    window.addEventListener("online", online);
 
-        // 番犬。ping (25秒おき) が2回続けて見えなければ、死んだ繋ぎとみなす
-        const watchdog = setInterval(() => {
-            if (document.visibilityState !== 'visible') return; // 裏のタブで空騒ぎしない
-            if (Date.now() - lastSeen > 60_000) connect();
-        }, 15_000);
-
-        // 凍らされている間に切られた繋ぎは、開き直しても黙ったまま (上の説明)
-        const revive = () => {
-            if (document.visibilityState !== 'visible') return;
-            if (source === null || source.readyState === EventSource.CLOSED) connect();
-        };
-        document.addEventListener('visibilitychange', revive);
-        // Android の Chrome は凍らせた画面を `resume` で戻す。凍って戻るだけの
-        // 往復では `visibilitychange` が出ないことがある (`+layout.svelte`)
-        document.addEventListener('resume', revive);
-        window.addEventListener('pageshow', revive);
-        // 回線が戻ったら、番犬の周期を待たずにすぐ
-        const online = () => connect();
-        window.addEventListener('online', online);
-
-        return () => {
-            if (timer !== null) clearTimeout(timer);
-            if (retry !== null) clearTimeout(retry);
-            clearInterval(watchdog);
-            document.removeEventListener('visibilitychange', revive);
-            document.removeEventListener('resume', revive);
-            window.removeEventListener('pageshow', revive);
-            window.removeEventListener('online', online);
-            source?.close();
-        };
-    });
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      if (retry !== null) clearTimeout(retry);
+      clearInterval(watchdog);
+      document.removeEventListener("visibilitychange", revive);
+      document.removeEventListener("resume", revive);
+      window.removeEventListener("pageshow", revive);
+      window.removeEventListener("online", online);
+      source?.close();
+    };
+  });
 }
 
 /** 前に届いた中身を持ったままの入れ物 */
 export interface Held<T> {
-    /** 最後に届いた中身。まだ一度も届いていないときだけ undefined */
-    readonly value: T | undefined;
+  /** 最後に届いた中身。まだ一度も届いていないときだけ undefined */
+  readonly value: T | undefined;
 }
 
 /**
@@ -146,28 +147,28 @@ export interface Held<T> {
  * (= 変わったところだけが変わる)。
  */
 export function held<T>(source: () => Promise<T>): Held<T> {
-    let value = $state<T | undefined>(undefined);
+  let value = $state<T | undefined>(undefined);
 
-    $effect(() => {
-        const promise = source();
-        // 追い越しがあると古いほうで上書きしてしまう
-        let stale = false;
-        promise.then(
-            (next) => {
-                if (!stale) value = next;
-            },
-            // 失敗しても前の中身をそのまま出しておく。握り潰さないと未処理の
-            // 拒否になって、画面と関係のないところで落ちる
-            () => {},
-        );
-        return () => {
-            stale = true;
-        };
-    });
-
-    return {
-        get value() {
-            return value;
-        },
+  $effect(() => {
+    const promise = source();
+    // 追い越しがあると古いほうで上書きしてしまう
+    let stale = false;
+    promise.then(
+      (next) => {
+        if (!stale) value = next;
+      },
+      // 失敗しても前の中身をそのまま出しておく。握り潰さないと未処理の
+      // 拒否になって、画面と関係のないところで落ちる
+      () => {},
+    );
+    return () => {
+      stale = true;
     };
+  });
+
+  return {
+    get value() {
+      return value;
+    },
+  };
 }

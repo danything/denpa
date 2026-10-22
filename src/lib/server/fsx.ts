@@ -1,27 +1,34 @@
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmdirSync, unlinkSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { config } from './config';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmdirSync,
+  unlinkSync,
+} from "node:fs";
+import { dirname } from "node:path";
+import { config } from "./config";
 
 /**
  * 元のTSと保存先は別PVCなので rename が EXDEV で失敗する。
  * その場合だけコピー+削除にフォールバックする。
  */
 export function moveFile(from: string, to: string): void {
-    mkdirSync(dirname(to), { recursive: true });
-    try {
-        renameSync(from, to);
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
-        copyFileSync(from, to);
-        unlinkSync(from);
-    }
+  mkdirSync(dirname(to), { recursive: true });
+  try {
+    renameSync(from, to);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+    copyFileSync(from, to);
+    unlinkSync(from);
+  }
 }
 
 export function removeIfExists(path: string | null | undefined): boolean {
-    if (path == null || path === '') return false;
-    if (!existsSync(path)) return false;
-    unlinkSync(path);
-    return true;
+  if (path == null || path === "") return false;
+  if (!existsSync(path)) return false;
+  unlinkSync(path);
+  return true;
 }
 
 /**
@@ -29,14 +36,14 @@ export function removeIfExists(path: string | null | undefined): boolean {
  * encodedDir 自身より上には絶対に遡らない。
  */
 export function pruneEmptyDirs(path: string): void {
-    let dir = dirname(path);
-    while (dir.startsWith(config.encodedDir) && dir !== config.encodedDir) {
-        try {
-            rmdirSync(dir);
-        } catch {
-            // 空でなければここで止まる。それが正常な終了条件
-            return;
-        }
-        dir = dirname(dir);
+  let dir = dirname(path);
+  while (dir.startsWith(config.encodedDir) && dir !== config.encodedDir) {
+    try {
+      rmdirSync(dir);
+    } catch {
+      // 空でなければここで止まる。それが正常な終了条件
+      return;
     }
+    dir = dirname(dir);
+  }
 }

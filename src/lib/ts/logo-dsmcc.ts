@@ -26,9 +26,16 @@
  * PNG は地上波と同じく色の表が抜けているので、入れ直してから返す。
  */
 
-import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from './dsmcc';
-import { withPalette } from './logo-palette';
-import { descriptors, PID_PAT, parsePat, pmtStreams, SectionAssembler, TABLE_PMT } from './psi';
+import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from "./dsmcc";
+import { withPalette } from "./logo-palette";
+import {
+  descriptors,
+  PID_PAT,
+  parsePat,
+  pmtStreams,
+  SectionAssembler,
+  TABLE_PMT,
+} from "./psi";
 
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
 const ESS_SERVICE_ID = 929;
@@ -38,31 +45,33 @@ const DESC_STREAM_IDENTIFIER = 0x52;
 const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 
 /** モジュール記述子の名前。ロゴかどうかはこれで見分ける */
-const LOGO_MODULE_NAMES = new Set(['LOGO-05', 'CS_LOGO-05']);
+const LOGO_MODULE_NAMES = new Set(["LOGO-05", "CS_LOGO-05"]);
 
 /**
  * PMT から、ロゴのカルーセルが流れている ES の PID を読み取る。
  * 見るのは `stream_identifier_descriptor` の component_tag だけ。
  */
-function parseLogoEsPids(section: Uint8Array): { serviceId: number; pids: number[] } | null {
-    if (section[0] !== TABLE_PMT) return null;
-    const pids: number[] = [];
-    for (const [, pid, info] of pmtStreams(section)) {
-        for (const [tag, descriptor] of descriptors(info)) {
-            if (tag !== DESC_STREAM_IDENTIFIER || descriptor.length < 1) continue;
-            if (LOGO_COMPONENT_TAGS.has(descriptor[0]!)) pids.push(pid);
-        }
+function parseLogoEsPids(
+  section: Uint8Array,
+): { serviceId: number; pids: number[] } | null {
+  if (section[0] !== TABLE_PMT) return null;
+  const pids: number[] = [];
+  for (const [, pid, info] of pmtStreams(section)) {
+    for (const [tag, descriptor] of descriptors(info)) {
+      if (tag !== DESC_STREAM_IDENTIFIER || descriptor.length < 1) continue;
+      if (LOGO_COMPONENT_TAGS.has(descriptor[0]!)) pids.push(pid);
     }
-    return { serviceId: u16(section, 3), pids };
+  }
+  return { serviceId: u16(section, 3), pids };
 }
 
 export interface ModuleLogo {
-    logoId: number;
-    logoType: number;
-    /** そのロゴを使う局。ロゴのほうが「どの局か」を持っている (SDT を待たなくていい) */
-    services: { networkId: number; serviceId: number }[];
-    /** そのまま画面に出せる PNG (色の表を入れ直したもの) */
-    data: Uint8Array;
+  logoId: number;
+  logoType: number;
+  /** そのロゴを使う局。ロゴのほうが「どの局か」を持っている (SDT を待たなくていい) */
+  services: { networkId: number; serviceId: number }[];
+  /** そのまま画面に出せる PNG (色の表を入れ直したもの) */
+  data: Uint8Array;
 }
 
 /**
@@ -76,32 +85,37 @@ export interface ModuleLogo {
  * ```
  */
 export function parseLogoModule(data: Uint8Array): ModuleLogo[] {
-    if (data.length < 3) return [];
-    const logoType = data[0]!;
-    const count = u16(data, 1);
-    let at = 3;
+  if (data.length < 3) return [];
+  const logoType = data[0]!;
+  const count = u16(data, 1);
+  let at = 3;
 
-    const logos: ModuleLogo[] = [];
-    for (let i = 0; i < count; i++) {
-        if (at + 3 > data.length) break;
-        const logoId = ((data[at]! & 0x01) << 8) | data[at + 1]!;
-        const serviceCount = data[at + 2]!;
-        at += 3;
+  const logos: ModuleLogo[] = [];
+  for (let i = 0; i < count; i++) {
+    if (at + 3 > data.length) break;
+    const logoId = ((data[at]! & 0x01) << 8) | data[at + 1]!;
+    const serviceCount = data[at + 2]!;
+    at += 3;
 
-        const services: { networkId: number; serviceId: number }[] = [];
-        for (let j = 0; j < serviceCount; j++) {
-            if (at + 6 > data.length) return logos;
-            services.push({ networkId: u16(data, at), serviceId: u16(data, at + 4) });
-            at += 6;
-        }
-        if (at + 2 > data.length) break;
-        const size = u16(data, at);
-        at += 2;
-        if (at + size > data.length) break;
-        logos.push({ logoId, logoType, services, data: withPalette(data.slice(at, at + size)) });
-        at += size;
+    const services: { networkId: number; serviceId: number }[] = [];
+    for (let j = 0; j < serviceCount; j++) {
+      if (at + 6 > data.length) return logos;
+      services.push({ networkId: u16(data, at), serviceId: u16(data, at + 4) });
+      at += 6;
     }
-    return logos;
+    if (at + 2 > data.length) break;
+    const size = u16(data, at);
+    at += 2;
+    if (at + size > data.length) break;
+    logos.push({
+      logoId,
+      logoType,
+      services,
+      data: withPalette(data.slice(at, at + size)),
+    });
+    at += size;
+  }
+  return logos;
 }
 
 /**
@@ -113,7 +127,7 @@ export function parseLogoModule(data: Uint8Array): ModuleLogo[] {
  * CS のロゴが永久に揃わなかった。
  */
 function downloadKey(downloadId: number, moduleId: number): string {
-    return `${downloadId}:${moduleId}`;
+  return `${downloadId}:${moduleId}`;
 }
 
 /**
@@ -123,7 +137,7 @@ function downloadKey(downloadId: number, moduleId: number): string {
  * logo_id だけを鍵にしていると、同じ番号の BS と CS のロゴが上書きし合う。
  */
 function logoKey(logo: ModuleLogo): string {
-    return `${logo.logoType}:${logo.logoId}:${logo.services[0]?.networkId ?? 0}`;
+  return `${logo.logoType}:${logo.logoId}:${logo.services[0]?.networkId ?? 0}`;
 }
 
 /**
@@ -133,101 +147,112 @@ function logoKey(logo: ModuleLogo): string {
  * `SectionAssembler` を必要になった時点で足していく。
  */
 export class DsmccLogoCollector {
-    private readonly pat = new SectionAssembler(PID_PAT);
-    /** ESS の PMT。PAT を読んでから足す */
-    private pmt: SectionAssembler | null = null;
-    /** カルーセルが流れている ES。PMT を読んでから足す */
-    private readonly carousels = new Map<number, SectionAssembler>();
+  private readonly pat = new SectionAssembler(PID_PAT);
+  /** ESS の PMT。PAT を読んでから足す */
+  private pmt: SectionAssembler | null = null;
+  /** カルーセルが流れている ES。PMT を読んでから足す */
+  private readonly carousels = new Map<number, SectionAssembler>();
 
-    /** 組み立て中のモジュール (downloadId + moduleId ごと) */
-    private readonly downloads = new Map<string, ModuleBuilder>();
-    /** 揃ったロゴ */
-    private readonly logos = new Map<string, ModuleLogo>();
-    /** PAT を読んだか。読むまでは「この中継にロゴがあるか」を判断できない */
-    private sawPat = false;
-    private ess = false;
+  /** 組み立て中のモジュール (downloadId + moduleId ごと) */
+  private readonly downloads = new Map<string, ModuleBuilder>();
+  /** 揃ったロゴ */
+  private readonly logos = new Map<string, ModuleLogo>();
+  /** PAT を読んだか。読むまでは「この中継にロゴがあるか」を判断できない */
+  private sawPat = false;
+  private ess = false;
 
-    /** パケットを1つ食わせる */
-    feed(packet: Uint8Array): void {
-        for (const section of this.pat.feed(packet)) {
-            const pmtPid = parsePat(section).get(ESS_SERVICE_ID);
-            this.sawPat = true;
-            this.ess = pmtPid !== undefined;
-            if (pmtPid !== undefined && this.pmt === null) this.pmt = new SectionAssembler(pmtPid);
-        }
-
-        for (const section of this.pmt?.feed(packet) ?? []) {
-            const found = parseLogoEsPids(section);
-            if (found === null || found.serviceId !== ESS_SERVICE_ID) continue;
-            for (const pid of found.pids) {
-                // DSM-CC は section_syntax_indicator が立たないことがある (psi.ts)
-                if (!this.carousels.has(pid)) this.carousels.set(pid, new SectionAssembler(pid, 'syntax'));
-            }
-        }
-
-        for (const carousel of this.carousels.values()) {
-            for (const section of carousel.feed(packet)) this.onSection(section);
-        }
+  /** パケットを1つ食わせる */
+  feed(packet: Uint8Array): void {
+    for (const section of this.pat.feed(packet)) {
+      const pmtPid = parsePat(section).get(ESS_SERVICE_ID);
+      this.sawPat = true;
+      this.ess = pmtPid !== undefined;
+      if (pmtPid !== undefined && this.pmt === null)
+        this.pmt = new SectionAssembler(pmtPid);
     }
 
-    private onSection(section: Uint8Array): void {
-        if (section[0] === TABLE_DII) {
-            const dii = parseDii(section);
-            if (dii === null) return;
-            /*
-             * **合致するモジュールは全部取得する。** 1つのカルーセルに `LOGO-05` と
-             * `CS_LOGO-05` が並んで流れてくる (実機の BS15_0)。最初の1つで
-             * 打ち切っていた頃は、CS のロゴが永久に揃わなかった
-             */
-            for (const module of dii.modules) {
-                if (module.name === null || !LOGO_MODULE_NAMES.has(module.name)) continue;
-                const key = downloadKey(dii.downloadId, module.moduleId);
-                const building = this.downloads.get(key);
-                // 組み立て中のものを作り直さない (受け取ったブロックが消える)
-                if (building !== undefined && building.moduleVersion === module.moduleVersion) continue;
-                this.downloads.set(
-                    key,
-                    new ModuleBuilder(module.moduleVersion, module.moduleSize, dii.blockSize),
-                );
-            }
-            return;
-        }
-
-        const ddb = parseDdb(section);
-        if (ddb === null) return;
-        const key = downloadKey(ddb.downloadId, ddb.moduleId);
-        const download = this.downloads.get(key);
-        if (download === undefined) return;
-        // 版が変わったら組み立て直し。混ぜると壊れた PNG ができる
-        if (download.moduleVersion !== ddb.moduleVersion) {
-            this.downloads.delete(key);
-            return;
-        }
-        if (!download.add(ddb.blockNumber, ddb.block)) return;
-
-        // 揃った。次の版が来るまで組み立て直さない
-        this.downloads.delete(key);
-        for (const logo of parseLogoModule(download.data)) {
-            if (logo.data.length > 0) this.logos.set(logoKey(logo), logo);
-        }
+    for (const section of this.pmt?.feed(packet) ?? []) {
+      const found = parseLogoEsPids(section);
+      if (found === null || found.serviceId !== ESS_SERVICE_ID) continue;
+      for (const pid of found.pids) {
+        // DSM-CC は section_syntax_indicator が立たないことがある (psi.ts)
+        if (!this.carousels.has(pid))
+          this.carousels.set(pid, new SectionAssembler(pid, "syntax"));
+      }
     }
 
-    collected(): ModuleLogo[] {
-        return [...this.logos.values()];
+    for (const carousel of this.carousels.values()) {
+      for (const section of carousel.feed(packet)) this.onSection(section);
+    }
+  }
+
+  private onSection(section: Uint8Array): void {
+    if (section[0] === TABLE_DII) {
+      const dii = parseDii(section);
+      if (dii === null) return;
+      /*
+       * **合致するモジュールは全部取得する。** 1つのカルーセルに `LOGO-05` と
+       * `CS_LOGO-05` が並んで流れてくる (実機の BS15_0)。最初の1つで
+       * 打ち切っていた頃は、CS のロゴが永久に揃わなかった
+       */
+      for (const module of dii.modules) {
+        if (module.name === null || !LOGO_MODULE_NAMES.has(module.name))
+          continue;
+        const key = downloadKey(dii.downloadId, module.moduleId);
+        const building = this.downloads.get(key);
+        // 組み立て中のものを作り直さない (受け取ったブロックが消える)
+        if (
+          building !== undefined &&
+          building.moduleVersion === module.moduleVersion
+        )
+          continue;
+        this.downloads.set(
+          key,
+          new ModuleBuilder(
+            module.moduleVersion,
+            module.moduleSize,
+            dii.blockSize,
+          ),
+        );
+      }
+      return;
     }
 
-    /**
-     * この中継にロゴのカルーセルが載っているか。
-     *
-     * `null` … まだ PAT を読んでいない (判断できない)
-     * `false` … 載っていないので、いくら開いても来ない
-     *
-     * **衛星のロゴは1つの中継にしかない。** 実機の BS はネットワーク4に26の中継が
-     * あるが、エンジニアリングサービス (929) がいるのは `BS15_0` だけだった
-     * (NHK BS と同じ中継)。他を開いても永久に来ないので、PAT を見た時点で切り上げる。
-     * PAT は1秒に何度も流れてくるので、外れの中継はすぐ諦められる。
-     */
-    get hasLogoService(): boolean | null {
-        return this.sawPat ? this.ess : null;
+    const ddb = parseDdb(section);
+    if (ddb === null) return;
+    const key = downloadKey(ddb.downloadId, ddb.moduleId);
+    const download = this.downloads.get(key);
+    if (download === undefined) return;
+    // 版が変わったら組み立て直し。混ぜると壊れた PNG ができる
+    if (download.moduleVersion !== ddb.moduleVersion) {
+      this.downloads.delete(key);
+      return;
     }
+    if (!download.add(ddb.blockNumber, ddb.block)) return;
+
+    // 揃った。次の版が来るまで組み立て直さない
+    this.downloads.delete(key);
+    for (const logo of parseLogoModule(download.data)) {
+      if (logo.data.length > 0) this.logos.set(logoKey(logo), logo);
+    }
+  }
+
+  collected(): ModuleLogo[] {
+    return [...this.logos.values()];
+  }
+
+  /**
+   * この中継にロゴのカルーセルが載っているか。
+   *
+   * `null` … まだ PAT を読んでいない (判断できない)
+   * `false` … 載っていないので、いくら開いても来ない
+   *
+   * **衛星のロゴは1つの中継にしかない。** 実機の BS はネットワーク4に26の中継が
+   * あるが、エンジニアリングサービス (929) がいるのは `BS15_0` だけだった
+   * (NHK BS と同じ中継)。他を開いても永久に来ないので、PAT を見た時点で切り上げる。
+   * PAT は1秒に何度も流れてくるので、外れの中継はすぐ諦められる。
+   */
+  get hasLogoService(): boolean | null {
+    return this.sawPat ? this.ess : null;
+  }
 }

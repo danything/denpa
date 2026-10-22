@@ -10,7 +10,7 @@
  * Mirakurun も同じことをしている (aribts の TsLogo.decode)。
  */
 
-import { pngChunk } from './png';
+import { pngChunk } from "./png";
 
 /**
  * 放送で決まっている色の表。R,G,B,A の順に129色ぶん。
@@ -64,19 +64,25 @@ const AFTER_IHDR = 33;
 const COLOR_TYPE_PALETTE = 3;
 
 function isPaletteImage(png: Uint8Array): boolean {
-    if (png.length < AFTER_IHDR + 12) return false;
-    if (png[12] !== 0x49 || png[13] !== 0x48 || png[14] !== 0x44 || png[15] !== 0x52) return false; // IHDR
-    return png[25] === COLOR_TYPE_PALETTE;
+  if (png.length < AFTER_IHDR + 12) return false;
+  if (
+    png[12] !== 0x49 ||
+    png[13] !== 0x48 ||
+    png[14] !== 0x44 ||
+    png[15] !== 0x52
+  )
+    return false; // IHDR
+  return png[25] === COLOR_TYPE_PALETTE;
 }
 
 function hasPalette(png: Uint8Array): boolean {
-    // IHDR の次のかたまりが PLTE かどうか
-    return (
-        png[AFTER_IHDR + 4] === 0x50 &&
-        png[AFTER_IHDR + 5] === 0x4c &&
-        png[AFTER_IHDR + 6] === 0x54 &&
-        png[AFTER_IHDR + 7] === 0x45
-    );
+  // IHDR の次のかたまりが PLTE かどうか
+  return (
+    png[AFTER_IHDR + 4] === 0x50 &&
+    png[AFTER_IHDR + 5] === 0x4c &&
+    png[AFTER_IHDR + 6] === 0x54 &&
+    png[AFTER_IHDR + 7] === 0x45
+  );
 }
 
 /**
@@ -84,23 +90,23 @@ function hasPalette(png: Uint8Array): boolean {
  * すでに入っているもの・形式が違うものはそのまま返す (取得し直す手間を増やさない)。
  */
 export function withPalette(png: Uint8Array): Uint8Array {
-    if (!isPaletteImage(png) || hasPalette(png)) return png;
+  if (!isPaletteImage(png) || hasPalette(png)) return png;
 
-    const rgb = new Uint8Array(COLORS * 3);
-    const alpha = new Uint8Array(COLORS);
-    for (let i = 0; i < COLORS; i++) {
-        rgb[i * 3] = CLUT[i * 4]!;
-        rgb[i * 3 + 1] = CLUT[i * 4 + 1]!;
-        rgb[i * 3 + 2] = CLUT[i * 4 + 2]!;
-        alpha[i] = CLUT[i * 4 + 3]!;
-    }
+  const rgb = new Uint8Array(COLORS * 3);
+  const alpha = new Uint8Array(COLORS);
+  for (let i = 0; i < COLORS; i++) {
+    rgb[i * 3] = CLUT[i * 4]!;
+    rgb[i * 3 + 1] = CLUT[i * 4 + 1]!;
+    rgb[i * 3 + 2] = CLUT[i * 4 + 2]!;
+    alpha[i] = CLUT[i * 4 + 3]!;
+  }
 
-    const plte = pngChunk('PLTE', rgb);
-    const trns = pngChunk('tRNS', alpha);
-    const out = new Uint8Array(png.length + plte.length + trns.length);
-    out.set(png.subarray(0, AFTER_IHDR), 0);
-    out.set(plte, AFTER_IHDR);
-    out.set(trns, AFTER_IHDR + plte.length);
-    out.set(png.subarray(AFTER_IHDR), AFTER_IHDR + plte.length + trns.length);
-    return out;
+  const plte = pngChunk("PLTE", rgb);
+  const trns = pngChunk("tRNS", alpha);
+  const out = new Uint8Array(png.length + plte.length + trns.length);
+  out.set(png.subarray(0, AFTER_IHDR), 0);
+  out.set(plte, AFTER_IHDR);
+  out.set(trns, AFTER_IHDR + plte.length);
+  out.set(png.subarray(AFTER_IHDR), AFTER_IHDR + plte.length + trns.length);
+  return out;
 }

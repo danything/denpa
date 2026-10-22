@@ -17,27 +17,45 @@
 
 ```json
 [
-    {
-        "id": 3227310008,
-        "type": "GR",
-        "name": "TOKYO MX",
-        "remoteControlKey": 9,
-        "logo": "api/services/3227310008/logo",
-        "live": "api/services/3227310008/live",
-        "now": {
-            "id": 32736103210001,
-            "title": "ニュース",
-            "startAt": 1790000000000,
-            "endAt": 1790001800000,
-            "reserved": false,
-            "recording": false,
-            "audios": [
-                { "id": "0:main", "stream": 0, "side": "main", "label": "主音声 (日本語)", "main": true },
-                { "id": "0:sub", "stream": 0, "side": "sub", "label": "副音声 (英語)", "main": true },
-                { "id": "0:both", "stream": 0, "side": "both", "label": "主+副", "main": true }
-            ]
+  {
+    "id": 3227310008,
+    "type": "GR",
+    "name": "TOKYO MX",
+    "remoteControlKey": 9,
+    "logo": "api/services/3227310008/logo",
+    "live": "api/services/3227310008/live",
+    "now": {
+      "id": 32736103210001,
+      "title": "ニュース",
+      "startAt": 1790000000000,
+      "endAt": 1790001800000,
+      "reserved": false,
+      "recording": false,
+      "audios": [
+        {
+          "id": "0:main",
+          "stream": 0,
+          "side": "main",
+          "label": "主音声 (日本語)",
+          "main": true
+        },
+        {
+          "id": "0:sub",
+          "stream": 0,
+          "side": "sub",
+          "label": "副音声 (英語)",
+          "main": true
+        },
+        {
+          "id": "0:both",
+          "stream": 0,
+          "side": "both",
+          "label": "主+副",
+          "main": true
         }
+      ]
     }
+  }
 ]
 ```
 
@@ -112,31 +130,49 @@
 
 ```json
 [
-    {
-        "id": 12,
-        "title": "番組 第1話",
-        "name": "[新]番組 第1話[字]",
-        "serviceId": 3227310008,
-        "serviceName": "TOKYO MX",
-        "startAt": 1790000000000,
-        "endAt": 1790001800000,
-        "durationMs": 1800000,
-        "resumeMs": 754000,
-        "watchedAt": null,
-        "recording": false,
-        "chase": "api/recordings/12/chase",
-        "cmReliable": true,
-        "poster": "api/recordings/12/poster",
-        "files": [
-            { "source": "encoded", "codec": "av1", "url": "api/recordings/12/file?source=encoded" },
-            { "source": "alt", "codec": "h264", "url": "api/recordings/12/file?source=alt" },
-            { "source": "ts", "codec": "mpeg2", "url": "api/recordings/12/file?source=ts" }
-        ],
-        "audio": "api/recordings/12/file?audio=only",
-        "audios": [
-            { "id": "0:both", "stream": 0, "side": "both", "label": "ステレオ (日本語)", "main": true }
-        ]
-    }
+  {
+    "id": 12,
+    "title": "番組 第1話",
+    "name": "[新]番組 第1話[字]",
+    "serviceId": 3227310008,
+    "serviceName": "TOKYO MX",
+    "startAt": 1790000000000,
+    "endAt": 1790001800000,
+    "durationMs": 1800000,
+    "resumeMs": 754000,
+    "watchedAt": null,
+    "recording": false,
+    "chase": "api/recordings/12/chase",
+    "cmReliable": true,
+    "poster": "api/recordings/12/poster",
+    "files": [
+      {
+        "source": "encoded",
+        "codec": "av1",
+        "url": "api/recordings/12/file?source=encoded"
+      },
+      {
+        "source": "alt",
+        "codec": "h264",
+        "url": "api/recordings/12/file?source=alt"
+      },
+      {
+        "source": "ts",
+        "codec": "mpeg2",
+        "url": "api/recordings/12/file?source=ts"
+      }
+    ],
+    "audio": "api/recordings/12/file?audio=only",
+    "audios": [
+      {
+        "id": "0:both",
+        "stream": 0,
+        "side": "both",
+        "label": "ステレオ (日本語)",
+        "main": true
+      }
+    ]
+  }
 ]
 ```
 
@@ -199,28 +235,33 @@
 
 ```json
 {
-    "duration": 1790.5,
-    "axis": "encoded",
-    "audios": [
-        { "id": "0", "label": "主音声" },
-        { "id": "1", "label": "副音声" }
-    ],
-    "offers": [
-        { "codec": "av1", "way": "file", "source": "encoded", "codecs": "av01.0.08M.08,opus" },
-        { "codec": "h264", "way": "stream", "codecs": "avc1.640029,mp4a.40.2" },
-        { "codec": "av1", "way": "stream", "codecs": "av01.0.08M.08,opus" },
-        { "codec": "mpeg2", "way": "raw" }
-    ]
+  "duration": 1790.5,
+  "axis": "encoded",
+  "audios": [
+    { "id": "0", "label": "主音声" },
+    { "id": "1", "label": "副音声" }
+  ],
+  "offers": [
+    {
+      "codec": "av1",
+      "way": "file",
+      "source": "encoded",
+      "codecs": "av01.0.08M.08,opus"
+    },
+    { "codec": "h264", "way": "stream", "codecs": "avc1.640029,mp4a.40.2" },
+    { "codec": "av1", "way": "stream", "codecs": "av01.0.08M.08,opus" },
+    { "codec": "mpeg2", "way": "raw" }
+  ]
 }
 ```
 
 - `axis` は**時刻の物差し**。`encoded` はエンコード済みのファイルの時刻、`ts` は元の TS の頭を 0 とした時刻
   (エンコード済みが無い録画)。`duration`・下の `from`・ストリームの時刻・字幕 (`captions.json`)・チャプターはどれもこれで数えます
 - `offers` の `way`:
-    - `file` … エンコード済みのファイルそのまま (`api/recordings/<id>/file?source=<source>`)。`codecs` は入れ物の中身 (読めなければ無い)
-    - `stream` … `stream?codec=<codec>` で fragmented MP4。`codecs` は MP4 の中身。エンコード済みと同じコーデックなら詰め替えるだけ
-      (軽い)、違えばエンコード済み (無ければ元の TS) から変換します
-    - `raw` … `stream?codec=mpeg2` で元の TS をそのまま。元の TS が残っていて、CM を切らずにエンコードした録画 (か、エンコード済みが無い録画) だけ
+  - `file` … エンコード済みのファイルそのまま (`api/recordings/<id>/file?source=<source>`)。`codecs` は入れ物の中身 (読めなければ無い)
+  - `stream` … `stream?codec=<codec>` で fragmented MP4。`codecs` は MP4 の中身。エンコード済みと同じコーデックなら詰め替えるだけ
+    (軽い)、違えばエンコード済み (無ければ元の TS) から変換します
+  - `raw` … `stream?codec=mpeg2` で元の TS をそのまま。元の TS が残っていて、CM を切らずにエンコードした録画 (か、エンコード済みが無い録画) だけ
 - `audios` の `id` を `stream?audio=` に渡します
 - 録っている最中の録画、エンコード済みも元の TS も無い録画は 404
 
@@ -242,11 +283,11 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 
 ```json
 {
-    "chapters": [
-        { "start": 0, "end": 612.4, "title": "本編" },
-        { "start": 612.4, "end": 702.4, "title": "CM" },
-        { "start": 702.4, "end": 1790.5, "title": "本編" }
-    ]
+  "chapters": [
+    { "start": 0, "end": 612.4, "title": "本編" },
+    { "start": 612.4, "end": 702.4, "title": "CM" },
+    { "start": 702.4, "end": 1790.5, "title": "本編" }
+  ]
 }
 ```
 
@@ -321,40 +362,49 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 
 ```json
 {
-    "v": 1,
-    "plane": [960, 540],
-    "duration": 3000,
-    "runs": [
-        {
-            "x": 250,
-            "y": 450,
-            "w": 40,
-            "h": 60,
-            "fx": 2,
-            "fy": 12,
-            "size": 36,
-            "scaleX": 1,
-            "text": "字幕です",
-            "fg": "#ffffffff",
-            "bg": "#00000080"
-        },
-        {
-            "x": 410,
-            "y": 450,
-            "w": 40,
-            "h": 60,
-            "fx": 2,
-            "fy": 12,
-            "size": 36,
-            "scaleX": 1,
-            "text": "〓",
-            "drcs": "65569",
-            "fg": "#ffffffff",
-            "bg": "#00000080",
-            "stroke": "#000000ff"
-        }
-    ],
-    "drcs": { "65569": { "w": 72, "h": 72, "depth": 16, "bits": 4, "data": "AAAA…", "md5": "0123…" } }
+  "v": 1,
+  "plane": [960, 540],
+  "duration": 3000,
+  "runs": [
+    {
+      "x": 250,
+      "y": 450,
+      "w": 40,
+      "h": 60,
+      "fx": 2,
+      "fy": 12,
+      "size": 36,
+      "scaleX": 1,
+      "text": "字幕です",
+      "fg": "#ffffffff",
+      "bg": "#00000080"
+    },
+    {
+      "x": 410,
+      "y": 450,
+      "w": 40,
+      "h": 60,
+      "fx": 2,
+      "fy": 12,
+      "size": 36,
+      "scaleX": 1,
+      "text": "〓",
+      "drcs": "65569",
+      "fg": "#ffffffff",
+      "bg": "#00000080",
+      "stroke": "#000000ff"
+    }
+  ],
+  "drcs": {
+    "65569": {
+      "w": 72,
+      "h": 72,
+      "depth": 16,
+      "bits": 4,
+      "data": "AAAA…",
+      "md5": "0123…"
+    }
+  }
 }
 ```
 
@@ -363,15 +413,15 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 - `duration` は出しておく長さ (ms)。`null` なら次の1枚まで。過ぎたら次を待たずに消します
 - `runs` は描く順。1つの run は同じ見た目で横に並ぶ字で、`text` の1字 (コードポイント) ごとに幅 `w`・高さ `h` の
   **区画**を `x` から右へ使います
-    - 背景: 区画を `bg` で塗る (空白の字も塗る)
-    - 字: 区画の左上から (`fx`, `fy`) ずらした所が**字の枠** (高さ `size`・幅 `size × scaleX`)。字の大きさは `size` (em) で、
-      横だけ `scaleX` 倍に縮める (中くらいの全角は 0.5。半角の英数・カナは 1 のまま)。ペンは字の枠の左端。
-      **縦は「永」の墨の上下が字の枠の真ん中に来るように基準線を置きます**
-    - 空白 (U+0020・U+3000 など) は字を描かない
-    - `stroke` があれば字の外側へ太さ 1.5 (面の単位) で縁取る (字より先に)
-    - `underline` は区画の幅で字の下に線。`box` は区画の縁に字の色の線 (1 下・2 右・4 上・8 左の和、太さは面の 1 単位)
-    - `flash` は点滅 (0.5 秒ずつ出す・消す)。`ruby` はルビらしい小さな字 (隠したければ隠してよい)。`bold` / `italic` は印だけ (描き分けなくてよい)
-    - `drcs` は置き換えられなかった外字。`text` は「〓」で、`drcs` の画像を字の枠いっぱいに `fg` で描く
+  - 背景: 区画を `bg` で塗る (空白の字も塗る)
+  - 字: 区画の左上から (`fx`, `fy`) ずらした所が**字の枠** (高さ `size`・幅 `size × scaleX`)。字の大きさは `size` (em) で、
+    横だけ `scaleX` 倍に縮める (中くらいの全角は 0.5。半角の英数・カナは 1 のまま)。ペンは字の枠の左端。
+    **縦は「永」の墨の上下が字の枠の真ん中に来るように基準線を置きます**
+  - 空白 (U+0020・U+3000 など) は字を描かない
+  - `stroke` があれば字の外側へ太さ 1.5 (面の単位) で縁取る (字より先に)
+  - `underline` は区画の幅で字の下に線。`box` は区画の縁に字の色の線 (1 下・2 右・4 上・8 左の和、太さは面の 1 単位)
+  - `flash` は点滅 (0.5 秒ずつ出す・消す)。`ruby` はルビらしい小さな字 (隠したければ隠してよい)。`bold` / `italic` は印だけ (描き分けなくてよい)
+  - `drcs` は置き換えられなかった外字。`text` は「〓」で、`drcs` の画像を字の枠いっぱいに `fg` で描く
 - `drcs` の画像は左上から1画素 `bits` ビットずつ上の桁から詰めたもの (base64)。値 v の濃さは v / (`depth` − 1)。
   いまは denpa が放送の白黒の画像 (16〜36 画素) の斜めを丸め、**濃淡の画像** (`bits` 4・`depth` 16、一辺 64〜256。18x18 の字なら 72x72 で base64 3.5KB ほど) にして送ります。
   濃さを `fg` の不透明度に掛けて塗り、字の枠いっぱいへなめらかに (双線形などで) 引き伸ばしてください。`bits` は 1・2・4・8 のどれでも
@@ -387,21 +437,21 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 
 ```json
 {
-    "name": "[新]番組 第1話[字]",
-    "service_name": "TOKYO MX",
-    "start_at": 1790000000000,
-    "end_at": 1790001800000,
-    "description": "番組の概要",
-    "extended": { "番組内容": "…", "出演者": "…" },
-    "genre_detail": [{ "lv1": 7, "lv2": 0 }],
-    "audios": [
-        { "componentType": 3, "langs": ["jpn"], "main": true },
-        { "componentType": 3, "langs": ["jpn"], "text": "解説ステレオ" }
-    ],
-    "video_type": "mpeg2",
-    "video_resolution": "1080i",
-    "is_free": true,
-    "copy_never": false
+  "name": "[新]番組 第1話[字]",
+  "service_name": "TOKYO MX",
+  "start_at": 1790000000000,
+  "end_at": 1790001800000,
+  "description": "番組の概要",
+  "extended": { "番組内容": "…", "出演者": "…" },
+  "genre_detail": [{ "lv1": 7, "lv2": 0 }],
+  "audios": [
+    { "componentType": 3, "langs": ["jpn"], "main": true },
+    { "componentType": 3, "langs": ["jpn"], "text": "解説ステレオ" }
+  ],
+  "video_type": "mpeg2",
+  "video_resolution": "1080i",
+  "is_free": true,
+  "copy_never": false
 }
 ```
 
@@ -424,49 +474,52 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 
 ```json
 {
-    "q": "でんぱ",
-    "programs": {
-        "more": true,
-        "rows": [
-            {
-                "id": 3227310008123,
-                "name": "でんぱ劇場",
-                "service_name": "でんぱテレビ",
-                "start_at": 1790000000000,
-                "end_at": 1790001800000,
-                "reservation_state": null
-            }
-        ]
-    },
-    "recordings": {
-        "more": false,
-        "rows": [
-            {
-                "id": 12,
-                "name": "でんぱ劇場 #1",
-                "service_name": "でんぱテレビ",
-                "start_at": 1789000000000,
-                "state": "available",
-                "watch": "watch/12"
-            }
-        ]
-    },
-    "reservations": {
-        "more": false,
-        "rows": [
-            {
-                "id": 5,
-                "program_id": 3227310008123,
-                "name": "でんぱ劇場",
-                "service_name": "でんぱテレビ",
-                "start_at": 1790000000000,
-                "end_at": 1790001800000,
-                "state": "scheduled",
-                "chase": null
-            }
-        ]
-    },
-    "rules": { "more": false, "rows": [{ "id": 2, "name": "でんぱ", "enabled": true }] }
+  "q": "でんぱ",
+  "programs": {
+    "more": true,
+    "rows": [
+      {
+        "id": 3227310008123,
+        "name": "でんぱ劇場",
+        "service_name": "でんぱテレビ",
+        "start_at": 1790000000000,
+        "end_at": 1790001800000,
+        "reservation_state": null
+      }
+    ]
+  },
+  "recordings": {
+    "more": false,
+    "rows": [
+      {
+        "id": 12,
+        "name": "でんぱ劇場 #1",
+        "service_name": "でんぱテレビ",
+        "start_at": 1789000000000,
+        "state": "available",
+        "watch": "watch/12"
+      }
+    ]
+  },
+  "reservations": {
+    "more": false,
+    "rows": [
+      {
+        "id": 5,
+        "program_id": 3227310008123,
+        "name": "でんぱ劇場",
+        "service_name": "でんぱテレビ",
+        "start_at": 1790000000000,
+        "end_at": 1790001800000,
+        "state": "scheduled",
+        "chase": null
+      }
+    ]
+  },
+  "rules": {
+    "more": false,
+    "rows": [{ "id": 2, "name": "でんぱ", "enabled": true }]
+  }
 }
 ```
 
@@ -479,11 +532,11 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 
 ```json
 {
-    "id": 12,
-    "title": "番組 第1話",
-    "name": "[新]番組 第1話[字]",
-    "description": "番組の概要",
-    "extended": { "出演者": "…", "番組内容": "…" }
+  "id": 12,
+  "title": "番組 第1話",
+  "name": "[新]番組 第1話[字]",
+  "description": "番組の概要",
+  "extended": { "出演者": "…", "番組内容": "…" }
 }
 ```
 
@@ -526,13 +579,13 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 - `yielded` は**ライブがチューナーを録画に譲った** (チューナーを取り上げられた) ことの通知。`serviceId` の局を観ていた人だけが読みます。
   譲った録画が分かったときだけ来ます
 
-    ```
-    event: yielded
-    data: {"serviceId":3239123608,"recording":{"id":12,"title":"ニュース","serviceName":"TOKYO MX","endAt":1790001815000}}
-    ```
+  ```
+  event: yielded
+  data: {"serviceId":3239123608,"recording":{"id":12,"title":"ニュース","serviceName":"TOKYO MX","endAt":1790001815000}}
+  ```
 
-    `recording.endAt` は録り終える時刻 (UNIX ミリ秒。終わりのマージン込み)。それまでそのチューナーは空きません。
-    使い方は [ライブ](#ライブ-get-apiservicesidlive) の「録画にチューナーを譲ると閉じます」
+  `recording.endAt` は録り終える時刻 (UNIX ミリ秒。終わりのマージン込み)。それまでそのチューナーは空きません。
+  使い方は [ライブ](#ライブ-get-apiservicesidlive) の「録画にチューナーを譲ると閉じます」
 
 - 25 秒おきに `event: ping` が来ます。60 秒ほど何も届かなければ繋ぎ直してください (黙って切れた繋ぎを見分けるため)
 - 繋ぎ直したら一覧を1度読み直してください。切れていた間の通知は送り直しません (`Last-Event-ID` は使わない)
@@ -561,12 +614,12 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 
 ```json
 {
-    "deviceCode": "…",
-    "userCode": "ABCD-EFGH",
-    "verificationUri": "device",
-    "verificationUriComplete": "device?code=ABCD-EFGH",
-    "expiresIn": 600,
-    "interval": 5
+  "deviceCode": "…",
+  "userCode": "ABCD-EFGH",
+  "verificationUri": "device",
+  "verificationUriComplete": "device?code=ABCD-EFGH",
+  "expiresIn": 600,
+  "interval": 5
 }
 ```
 

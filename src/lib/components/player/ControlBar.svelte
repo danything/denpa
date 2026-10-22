@@ -1,5 +1,5 @@
 <script lang="ts">
-    /**
+  /**
      * 映像に重ねる操作列。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
      *
      * - **黒いぼかしの上に置く。** 明るい映像の上でも読めるように
@@ -57,71 +57,76 @@
      * スマホの縦でも操作バーは映像に重ね、触らなければ引っ込める (以前は映像の下に段を足して出しっぱなしに
      * していた。理由と今の形は `PlayerStage` の `narrow`)
      */
-    let {
-        shown = true,
-        side = false,
-        testid,
-        children,
-    }: { shown?: boolean; side?: boolean; testid?: string; children: import('svelte').Snippet } = $props();
+  let {
+    shown = true,
+    side = false,
+    testid,
+    children,
+  }: {
+    shown?: boolean;
+    side?: boolean;
+    testid?: string;
+    children: import("svelte").Snippet;
+  } = $props();
 
-    /**
-     * **敷くのは下端だけ。**
-     *
-     * 下は映像の幅いっぱいに渡るので、まっすぐ上へ流せば端が出ない。文字 (時刻・
-     * 番組名) を載せるのもこちらなので、明るい映像の上でも読めるように要る。
-     *
-     * **右端には敷かない。** 載っているのは丸いボタンだけで、そのひとつずつが
-     * 既に黒く敷いてある (`OVERLAY`)。全体にも敷くと、映像の上に**四角い影が
-     * 貼り付いて**見える — 直線のぼかしは色の変わり目が一方向にしか進まない
-     * ので、横へ流せば下端が、斜めへ流せば左端と下端が直線で切れる。
-     * 角から丸く散らす手もあるが、要らないものを丁寧に薄くしているだけだった
-     */
+  /**
+   * **敷くのは下端だけ。**
+   *
+   * 下は映像の幅いっぱいに渡るので、まっすぐ上へ流せば端が出ない。文字 (時刻・
+   * 番組名) を載せるのもこちらなので、明るい映像の上でも読めるように要る。
+   *
+   * **右端には敷かない。** 載っているのは丸いボタンだけで、そのひとつずつが
+   * 既に黒く敷いてある (`OVERLAY`)。全体にも敷くと、映像の上に**四角い影が
+   * 貼り付いて**見える — 直線のぼかしは色の変わり目が一方向にしか進まない
+   * ので、横へ流せば下端が、斜めへ流せば左端と下端が直線で切れる。
+   * 角から丸く散らす手もあるが、要らないものを丁寧に薄くしているだけだった
+   */
 </script>
 
 <div
-    class="bar"
-    class:side
-    class:bottom={!side}
-    class:away={!shown}
-    data-testid={testid}
-    data-shown={shown}
-    data-stage-bar={side ? undefined : ''}
+  class="bar"
+  class:side
+  class:bottom={!side}
+  class:away={!shown}
+  data-testid={testid}
+  data-shown={shown}
+  data-stage-bar={side ? undefined : ""}
 >
-    {@render children()}
+  {@render children()}
 </div>
 
 <style>
-    .bar {
-        position: absolute;
-        z-index: 10;
-        color: #fff;
-        transition: opacity var(--dp-duration);
-    }
-    .bar.away {
-        pointer-events: none;
-        opacity: 0;
-    }
-    .side {
-        top: 0;
-        right: 0;
-        display: flex;
-        /* 縦に積む (車のタブレットで指が届く右の縁。上の説明)。横一行に直さない */
-        flex-direction: column;
-        align-items: center;
-        /* 丸どうしは 8px 空ける (指で隣を押さない) */
-        gap: 0.5rem;
-        /* 角に寄せる (上と右の空きは 8px)。丸が角から離れて浮いて見えないように */
-        padding: 0.5rem;
-    }
+  .bar {
+    position: absolute;
+    z-index: 10;
+    color: #fff;
+    transition: opacity var(--dp-duration);
+  }
+  .bar.away {
+    pointer-events: none;
+    opacity: 0;
+  }
+  .side {
+    top: 0;
+    right: 0;
+    display: flex;
+    /* 縦に積む (車のタブレットで指が届く右の縁。上の説明)。横一行に直さない */
+    flex-direction: column;
+    align-items: center;
+    /* 丸どうしは 8px 空ける (指で隣を押さない) */
+    gap: 0.5rem;
+    /* 角に寄せる (上と右の空きは 8px)。丸が角から離れて浮いて見えないように */
+    padding: 0.5rem;
+  }
 
-    .bottom {
-        left: 0;
-        right: 0;
-        bottom: 0;
-        padding: 2rem 0.75rem 0.75rem;
-        background: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent);
-    }
-    :global(.stage[data-compact]) .bottom {
-        padding: 1rem 0.375rem 0.375rem;
-    }
+  .bottom {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 2rem 0.75rem 0.75rem;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent);
+  }
+  :global(.stage[data-compact]) .bottom {
+    padding: 1rem 0.375rem 0.375rem;
+  }
 </style>

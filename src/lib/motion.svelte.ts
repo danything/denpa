@@ -12,49 +12,56 @@
  */
 const RECENT = 500;
 const DURATION = 80;
-const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
+const EASE = "cubic-bezier(0.2, 0, 0, 1)";
 /** 組ごとの、いま出ている印 */
 const live = new Map<string, HTMLElement>();
 /** 組ごとの、最後に消えた印の場所と時刻 */
 const gone = new Map<string, { rect: DOMRect; at: number }>();
 
 function still(): boolean {
-    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return (
+    typeof matchMedia === "function" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 export function slide(node: HTMLElement, group: string) {
-    const before = live.get(group);
-    const left = gone.get(group);
-    const from = before?.isConnected
-        ? before.getBoundingClientRect()
-        : left !== undefined && performance.now() - left.at < RECENT
-          ? left.rect
-          : null;
-    live.set(group, node);
-    // 消えるときには外れていて測れないことがあるので、できたときの場所を覚えておく
-    let rect = node.getBoundingClientRect();
-    if (from !== null && !still()) {
-        const to = rect;
-        if (to.width > 0 && (Math.abs(from.left - to.left) > 0.5 || Math.abs(from.width - to.width) > 0.5)) {
-            node.animate(
-                [
-                    {
-                        transform: `translateX(${from.left - to.left}px) scaleX(${from.width / to.width})`,
-                        transformOrigin: 'left center',
-                    },
-                    { transform: 'none', transformOrigin: 'left center' },
-                ],
-                { duration: DURATION, easing: EASE },
-            );
-        }
+  const before = live.get(group);
+  const left = gone.get(group);
+  const from = before?.isConnected
+    ? before.getBoundingClientRect()
+    : left !== undefined && performance.now() - left.at < RECENT
+      ? left.rect
+      : null;
+  live.set(group, node);
+  // 消えるときには外れていて測れないことがあるので、できたときの場所を覚えておく
+  let rect = node.getBoundingClientRect();
+  if (from !== null && !still()) {
+    const to = rect;
+    if (
+      to.width > 0 &&
+      (Math.abs(from.left - to.left) > 0.5 ||
+        Math.abs(from.width - to.width) > 0.5)
+    ) {
+      node.animate(
+        [
+          {
+            transform: `translateX(${from.left - to.left}px) scaleX(${from.width / to.width})`,
+            transformOrigin: "left center",
+          },
+          { transform: "none", transformOrigin: "left center" },
+        ],
+        { duration: DURATION, easing: EASE },
+      );
     }
-    return {
-        destroy() {
-            if (live.get(group) === node) live.delete(group);
-            if (node.isConnected) rect = node.getBoundingClientRect();
-            gone.set(group, { rect, at: performance.now() });
-        },
-    };
+  }
+  return {
+    destroy() {
+      if (live.get(group) === node) live.delete(group);
+      if (node.isConnected) rect = node.getBoundingClientRect();
+      gone.set(group, { rect, at: performance.now() });
+    },
+  };
 }
 
 /**
@@ -65,11 +72,11 @@ export function slide(node: HTMLElement, group: string) {
  * 読めなかったときも透明を外す (隠すかどうかは呼ぶ側。録画の一覧はポスターに付けるもの (`+page.svelte` の `poster`) で隠す)
  */
 export function fadeIn(image: HTMLImageElement): void {
-    if (image.complete) return;
-    image.dataset['fade'] = 'pending';
-    const shown = (): void => {
-        image.dataset['fade'] = 'in';
-    };
-    image.addEventListener('load', shown, { once: true });
-    image.addEventListener('error', shown, { once: true });
+  if (image.complete) return;
+  image.dataset["fade"] = "pending";
+  const shown = (): void => {
+    image.dataset["fade"] = "in";
+  };
+  image.addEventListener("load", shown, { once: true });
+  image.addEventListener("error", shown, { once: true });
 }

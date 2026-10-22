@@ -1,76 +1,76 @@
 <script lang="ts">
-    import '@anyblades/blades/layered/components/accordion';
-    import ArrowDown from '~icons/lucide/arrow-down';
-    import ArrowLeft from '~icons/lucide/arrow-left';
-    import ArrowRight from '~icons/lucide/arrow-right';
-    import ArrowUp from '~icons/lucide/arrow-up';
-    import Icon from './Icon.svelte';
+  import "@anyblades/blades/layered/components/accordion";
+  import ArrowDown from "~icons/lucide/arrow-down";
+  import ArrowLeft from "~icons/lucide/arrow-left";
+  import ArrowRight from "~icons/lucide/arrow-right";
+  import ArrowUp from "~icons/lucide/arrow-up";
+  import Icon from "./Icon.svelte";
 
-    /**
-     * 指で押すリモコン。**データ放送を出している間だけ、右の列に出す。**
-     *
-     * データ放送は十字と決定と色ボタンで操作するもので、キーボードのある
-     * 端末では既に渡している (`DataBroadcast.svelte` の `key`)。**指で見る
-     * 端末には押す場所が無い**ので、ここで用意する。
-     *
-     * 映像の上に重ねない — 番組の中身と同じで、**観ながら押すものは右の列**に
-     * 置く (`live/+page.svelte`)。放送の作った画面は枠を下まで塗り潰すので、
-     * 上に重ねると押すものが放送の映像に埋もれる。
-     *
-     * **「消す」は置きません。** 文書が d を使っている間は d では消せないから、と
-     * 逃げ道を1つ置いていたが、**消すボタンは既に右の縦列にある** (d のボタン。押せば
-     * その場で畳む)。同じことをするボタンを2つ置かない
-     */
+  /**
+   * 指で押すリモコン。**データ放送を出している間だけ、右の列に出す。**
+   *
+   * データ放送は十字と決定と色ボタンで操作するもので、キーボードのある
+   * 端末では既に渡している (`DataBroadcast.svelte` の `key`)。**指で見る
+   * 端末には押す場所が無い**ので、ここで用意する。
+   *
+   * 映像の上に重ねない — 番組の中身と同じで、**観ながら押すものは右の列**に
+   * 置く (`live/+page.svelte`)。放送の作った画面は枠を下まで塗り潰すので、
+   * 上に重ねると押すものが放送の映像に埋もれる。
+   *
+   * **「消す」は置きません。** 文書が d を使っている間は d では消せないから、と
+   * 逃げ道を1つ置いていたが、**消すボタンは既に右の縦列にある** (d のボタン。押せば
+   * その場で畳む)。同じことをするボタンを2つ置かない
+   */
 
-    interface Props {
-        /** 押されたキーを BML へ渡す。`AribKeyCode` の番号 */
-        press: (code: number) => void;
-    }
+  interface Props {
+    /** 押されたキーを BML へ渡す。`AribKeyCode` の番号 */
+    press: (code: number) => void;
+  }
 
-    const { press }: Props = $props();
+  const { press }: Props = $props();
 
-    /**
-     * `AribKeyCode` (エンジンの `KEY`。`src/lib/bml/engine.ts`) と同じ値。
-     *
-     * **番号で書くのは、エンジンを読み込まずに済ませるため** — 値として
-     * import すると、このリモコンが載っているだけでエンジン全体が
-     * 落ちてくる。データ放送を出す前から出ている画面なので、それは困る
-     */
-    /** d (DataButton)。放送の文書に「d が押された」と伝える (`DataBroadcast` の DATA_BUTTON と同じ) */
-    const DATA = 20;
-    const UP = 1;
-    const DOWN = 2;
-    const LEFT = 3;
-    const RIGHT = 4;
-    const ENTER = 18;
-    const BACK = 19;
-    const BLUE = 21;
-    const RED = 22;
-    const GREEN = 23;
-    const YELLOW = 24;
+  /**
+   * `AribKeyCode` (エンジンの `KEY`。`src/lib/bml/engine.ts`) と同じ値。
+   *
+   * **番号で書くのは、エンジンを読み込まずに済ませるため** — 値として
+   * import すると、このリモコンが載っているだけでエンジン全体が
+   * 落ちてくる。データ放送を出す前から出ている画面なので、それは困る
+   */
+  /** d (DataButton)。放送の文書に「d が押された」と伝える (`DataBroadcast` の DATA_BUTTON と同じ) */
+  const DATA = 20;
+  const UP = 1;
+  const DOWN = 2;
+  const LEFT = 3;
+  const RIGHT = 4;
+  const ENTER = 18;
+  const BACK = 19;
+  const BLUE = 21;
+  const RED = 22;
+  const GREEN = 23;
+  const YELLOW = 24;
 
-    /**
-     * 色ボタン。**並びは実機のリモコンと同じ 青・赤・緑・黄。**
-     *
-     * 色は放送が名指しするもので、番組が「青を押して」と言うときの青。
-     * テーマの色 (info など) に寄せると、**放送の言う色と画面の色が
-     * 食い違う**ので、じかに塗る
-     */
-    const COLORS = [
-        { code: BLUE, name: '青', paint: '#2563eb', ink: '#fff' },
-        { code: RED, name: '赤', paint: '#dc2626', ink: '#fff' },
-        { code: GREEN, name: '緑', paint: '#16a34a', ink: '#fff' },
-        { code: YELLOW, name: '黄', paint: '#facc15', ink: '#000' },
-    ];
+  /**
+   * 色ボタン。**並びは実機のリモコンと同じ 青・赤・緑・黄。**
+   *
+   * 色は放送が名指しするもので、番組が「青を押して」と言うときの青。
+   * テーマの色 (info など) に寄せると、**放送の言う色と画面の色が
+   * 食い違う**ので、じかに塗る
+   */
+  const COLORS = [
+    { code: BLUE, name: "青", paint: "#2563eb", ink: "#fff" },
+    { code: RED, name: "赤", paint: "#dc2626", ink: "#fff" },
+    { code: GREEN, name: "緑", paint: "#16a34a", ink: "#fff" },
+    { code: YELLOW, name: "黄", paint: "#facc15", ink: "#000" },
+  ];
 
-    /**
-     * 数字。**並びは実機のリモコンと同じ** (1〜9・0・10・11)。
-     * `AribKeyCode` は `Digit0` が 5 で、そこから数の順に並んでいる。
-     *
-     * **畳んである** — 使う放送のほうが少ない (投票や郵便番号の入力)
-     */
-    const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '10', '11'];
-    const digit = (name: string): number => 5 + Number(name);
+  /**
+   * 数字。**並びは実機のリモコンと同じ** (1〜9・0・10・11)。
+   * `AribKeyCode` は `Digit0` が 5 で、そこから数の順に並んでいる。
+   *
+   * **畳んである** — 使う放送のほうが少ない (投票や郵便番号の入力)
+   */
+  const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "10", "11"];
+  const digit = (name: string): number => 5 + Number(name);
 </script>
 
 <!--
@@ -78,119 +78,141 @@
     十字と決定は正方形で大きめに取る
 -->
 <div class="remote" data-testid="live-remote">
-    <div class="colors">
-        {#each COLORS as color (color.code)}
-            <button
-                type="button"
-                class="color"
-                style="--paint: {color.paint}; --ink: {color.ink}"
-                onclick={() => press(color.code)}
-                data-testid="live-remote-{color.code}"
-            >
-                {color.name}
-            </button>
-        {/each}
-    </div>
+  <div class="colors">
+    {#each COLORS as color (color.code)}
+      <button
+        type="button"
+        class="color"
+        style="--paint: {color.paint}; --ink: {color.ink}"
+        onclick={() => press(color.code)}
+        data-testid="live-remote-{color.code}"
+      >
+        {color.name}
+      </button>
+    {/each}
+  </div>
 
-    <!-- 十字と決定。**真ん中が決定**で、実機と同じ形 -->
-    <div class="pad">
-        <div></div>
-        <button type="button" class="secondary key" onclick={() => press(UP)} aria-label="上"
-            ><Icon icon={ArrowUp} size="size-5" /></button
-        >
-        <div></div>
-        <button type="button" class="secondary key" onclick={() => press(LEFT)} aria-label="左"
-            ><Icon icon={ArrowLeft} size="size-5" /></button
-        >
-        <button type="button" class="key enter" onclick={() => press(ENTER)}>決定</button>
-        <button type="button" class="secondary key" onclick={() => press(RIGHT)} aria-label="右"
-            ><Icon icon={ArrowRight} size="size-5" /></button
-        >
-        <div></div>
-        <button type="button" class="secondary key" onclick={() => press(DOWN)} aria-label="下"
-            ><Icon icon={ArrowDown} size="size-5" /></button
-        >
-        <div></div>
-    </div>
+  <!-- 十字と決定。**真ん中が決定**で、実機と同じ形 -->
+  <div class="pad">
+    <div></div>
+    <button
+      type="button"
+      class="secondary key"
+      onclick={() => press(UP)}
+      aria-label="上"><Icon icon={ArrowUp} size="size-5" /></button
+    >
+    <div></div>
+    <button
+      type="button"
+      class="secondary key"
+      onclick={() => press(LEFT)}
+      aria-label="左"><Icon icon={ArrowLeft} size="size-5" /></button
+    >
+    <button type="button" class="key enter" onclick={() => press(ENTER)}
+      >決定</button
+    >
+    <button
+      type="button"
+      class="secondary key"
+      onclick={() => press(RIGHT)}
+      aria-label="右"><Icon icon={ArrowRight} size="size-5" /></button
+    >
+    <div></div>
+    <button
+      type="button"
+      class="secondary key"
+      onclick={() => press(DOWN)}
+      aria-label="下"><Icon icon={ArrowDown} size="size-5" /></button
+    >
+    <div></div>
+  </div>
 
-    <div class="row">
-        <button type="button" class="secondary small grow" onclick={() => press(BACK)}> 戻る </button>
-        <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
-        <button type="button" class="secondary small" onclick={() => press(DATA)}> d </button>
-    </div>
+  <div class="row">
+    <button
+      type="button"
+      class="secondary small grow"
+      onclick={() => press(BACK)}
+    >
+      戻る
+    </button>
+    <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
+    <button type="button" class="secondary small" onclick={() => press(DATA)}>
+      d
+    </button>
+  </div>
 
-    <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->
-    <details class="digits small">
-        <summary>数字</summary>
-        <div class="digit-grid">
-            {#each DIGITS as name (name)}
-                <button
-                    type="button"
-                    class="secondary small"
-                    onclick={() => press(digit(name))}
-                    data-testid="live-remote-digit-{name}"
-                >
-                    {name}
-                </button>
-            {/each}
-        </div>
-    </details>
+  <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->
+  <details class="digits small">
+    <summary>数字</summary>
+    <div class="digit-grid">
+      {#each DIGITS as name (name)}
+        <button
+          type="button"
+          class="secondary small"
+          onclick={() => press(digit(name))}
+          data-testid="live-remote-digit-{name}"
+        >
+          {name}
+        </button>
+      {/each}
+    </div>
+  </details>
 </div>
 
 <style>
-    .remote {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        flex-shrink: 0;
-        /* カードにしない。ほかのサイドバーと同じく地も枠も影も付けず、局の一覧とは余白で分ける (`app.css` の `.side-panel`) */
-        margin-bottom: 1.75rem;
-    }
-    .colors {
-        display: flex;
-        gap: 0.25rem;
-    }
-    /* 放送の言う色をじかに塗る (テーマの色に寄せない) */
-    .color {
-        --pico-background-color: var(--paint);
-        --pico-border-color: var(--paint);
-        --pico-color: var(--ink);
-        flex: 1;
-        height: 2rem;
-        padding: 0;
-        font-size: var(--dp-text-sm);
-    }
-    /* 押したときの色は Pico (層の中) に勝つ上の変数のまま。明るさだけ上げる */
-    .color:is(:hover, :focus, :active) {
-        filter: brightness(1.1);
-    }
-    .pad {
-        display: grid;
-        grid-template-columns: repeat(3, 3rem);
-        gap: 0.25rem;
-        margin: 0 auto;
-    }
-    .key {
-        width: 3rem;
-        height: 3rem;
-        padding: 0;
-        font-size: var(--dp-text-lg);
-    }
-    .enter {
-        font-size: var(--dp-text-xs);
-    }
-    .row {
-        display: flex;
-        gap: 0.5rem;
-    }
-    .digits summary {
-        cursor: pointer;
-        user-select: none;
-    }
-    .digit-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.25rem;
-        margin-top: 0.5rem;
-    }
+  .remote {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex-shrink: 0;
+    /* カードにしない。ほかのサイドバーと同じく地も枠も影も付けず、局の一覧とは余白で分ける (`app.css` の `.side-panel`) */
+    margin-bottom: 1.75rem;
+  }
+  .colors {
+    display: flex;
+    gap: 0.25rem;
+  }
+  /* 放送の言う色をじかに塗る (テーマの色に寄せない) */
+  .color {
+    --pico-background-color: var(--paint);
+    --pico-border-color: var(--paint);
+    --pico-color: var(--ink);
+    flex: 1;
+    height: 2rem;
+    padding: 0;
+    font-size: var(--dp-text-sm);
+  }
+  /* 押したときの色は Pico (層の中) に勝つ上の変数のまま。明るさだけ上げる */
+  .color:is(:hover, :focus, :active) {
+    filter: brightness(1.1);
+  }
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(3, 3rem);
+    gap: 0.25rem;
+    margin: 0 auto;
+  }
+  .key {
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    font-size: var(--dp-text-lg);
+  }
+  .enter {
+    font-size: var(--dp-text-xs);
+  }
+  .row {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .digits summary {
+    cursor: pointer;
+    user-select: none;
+  }
+  .digit-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+  }
 </style>

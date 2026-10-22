@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'deploy/**'
-      - 'docs/**'
-      - '**.md'
+      - "deploy/**"
+      - "docs/**"
+      - "**.md"
   # PR はパスで絞らない。main は `check` を必須にして守っているので、絞ると
   # docs だけの PR に check が付かず、いつまでもマージできない
   # (paths-ignore で飛ばした workflow の check は「保留」のまま残る仕様)
@@ -97,7 +97,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: "10.0.402"
 
       # 設定の読み書き、選局表、チューナー自動検出の値の読み取り。
       # MTP の方式 (global.json の test.runner) ではプロジェクトは --project で渡す
@@ -140,7 +140,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: "10.0.402"
 
       - name: Unit tests (.NET agent, asicend --mock)
         run: ASICEN_USERLAND_DIR="$PWD/asicen-build" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --treenode-filter '/*/*/AsicenMockTests/*'
@@ -220,7 +220,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: "10.0.402"
 
       # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
       # 1本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
@@ -312,7 +312,7 @@ jobs:
         run: |
           "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" >> $env:GITHUB_ENV
           "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" >> $env:GITHUB_ENV
-          $sdk = (Select-String -Path .github/workflows/test.yml -Pattern "dotnet-version: '([^']+)'").Matches[0].Groups[1].Value
+          $sdk = (Select-String -Path .github/workflows/test.yml -Pattern 'dotnet-version: "([^"]+)"').Matches[0].Groups[1].Value
           "sdk=$sdk" >> $env:GITHUB_OUTPUT
 
       - name: Restore the SDK and NuGet packages
@@ -326,7 +326,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: "10.0.402"
 
       # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある。
       # 測るだけのテスト (Px4StreamBenchTests。並べずに1本で流れる) も Windows では飛ばす (Linux と Mac で流れる)
@@ -347,7 +347,7 @@ jobs:
         run: |
           "DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" >> $env:GITHUB_ENV
           "NUGET_PACKAGES=$env:RUNNER_TEMP\nuget" >> $env:GITHUB_ENV
-          $sdk = (Select-String -Path .github/workflows/test.yml -Pattern "dotnet-version: '([^']+)'").Matches[0].Groups[1].Value
+          $sdk = (Select-String -Path .github/workflows/test.yml -Pattern 'dotnet-version: "([^"]+)"').Matches[0].Groups[1].Value
           "sdk=$sdk" >> $env:GITHUB_OUTPUT
 
       # 鍵はテストのジョブと分ける。中の NuGet が違う (こちらは ILCompiler、あちらは TUnit) ので、
@@ -363,7 +363,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: "10.0.402"
 
       - name: Publish (Native AOT, win-x64)
         run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out

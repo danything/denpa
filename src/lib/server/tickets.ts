@@ -20,22 +20,22 @@ const issued = new Map<string, number>();
 
 /** 期限切れを片付ける。**配るときと使うときに掃く** (別に走らせるほどの量ではない) */
 function sweep(at: number): void {
-    for (const [token, until] of issued) {
-        if (until <= at) issued.delete(token);
-    }
+  for (const [token, until] of issued) {
+    if (until <= at) issued.delete(token);
+  }
 }
 
 /** 1枚配る */
 export function issue(at: number = Date.now()): string {
-    sweep(at);
-    const token = crypto.randomUUID();
-    issued.set(token, at + LIFETIME);
-    return token;
+  sweep(at);
+  const token = crypto.randomUUID();
+  issued.set(token, at + LIFETIME);
+  return token;
 }
 
 /** 使う。**使えるのは1回だけ** */
 export function redeem(token: string | null, at: number = Date.now()): boolean {
-    if (token === null) return false;
-    sweep(at);
-    return issued.delete(token);
+  if (token === null) return false;
+  sweep(at);
+  return issued.delete(token);
 }

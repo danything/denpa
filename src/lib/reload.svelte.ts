@@ -1,5 +1,5 @@
-import { refreshAll } from '$app/navigation';
-import { navigating } from '$app/state';
+import { refreshAll } from "$app/navigation";
+import { navigating } from "$app/state";
 
 /**
  * 画面の読み直し。**走っている遷移に重ねない。**
@@ -35,9 +35,9 @@ import { navigating } from '$app/state';
 let owed = false;
 
 function flush(): void {
-    if (!owed) return;
-    owed = false;
-    void refreshAll();
+  if (!owed) return;
+  owed = false;
+  void refreshAll();
 }
 
 /**
@@ -48,25 +48,25 @@ function flush(): void {
  * いなくなる。
  */
 export function followNavigation(): void {
-    $effect(() => {
-        const done = navigating.complete;
-        // 遷移していない。持ち越しがあれば、いま流す
-        if (done === null) {
-            flush();
-            return;
-        }
-        let stale = false;
-        // 畳まれた遷移は `complete` が転ぶ。どちらでも同じように片を付ける
-        const settle = (): void => {
-            // 次の遷移がもう始まっているなら、流すのはあちらが終わってから
-            if (stale) return;
-            flush();
-        };
-        void done.then(settle, settle);
-        return () => {
-            stale = true;
-        };
-    });
+  $effect(() => {
+    const done = navigating.complete;
+    // 遷移していない。持ち越しがあれば、いま流す
+    if (done === null) {
+      flush();
+      return;
+    }
+    let stale = false;
+    // 畳まれた遷移は `complete` が転ぶ。どちらでも同じように片を付ける
+    const settle = (): void => {
+      // 次の遷移がもう始まっているなら、流すのはあちらが終わってから
+      if (stale) return;
+      flush();
+    };
+    void done.then(settle, settle);
+    return () => {
+      stale = true;
+    };
+  });
 }
 
 /**
@@ -76,9 +76,9 @@ export function followNavigation(): void {
  * 呼ばれるので、写し取った状態では始まった直後の一拍を取りこぼす。
  */
 export function reload(): void {
-    if (navigating.complete !== null) {
-        owed = true;
-        return;
-    }
-    void refreshAll();
+  if (navigating.complete !== null) {
+    owed = true;
+    return;
+  }
+  void refreshAll();
 }

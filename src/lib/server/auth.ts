@@ -1,6 +1,6 @@
-import { inAny, networks, unreadable } from './address';
-import { config } from './config';
-import { enabled as oidcEnabled } from './oidc';
+import { inAny, networks, unreadable } from "./address";
+import { config } from "./config";
+import { enabled as oidcEnabled } from "./oidc";
 
 /**
  * 誰を通すか。**どこでも通る方法が3つと、エンドポイントを限った方法が1つ。**
@@ -40,16 +40,16 @@ import { enabled as oidcEnabled } from './oidc';
  *   (`POST /api/bml/hc`。hc-relay.ts)
  */
 const OPEN_PATHS = [
-    /^\/login(\/|$)/,
-    /^\/logout$/,
-    /^\/api\/health$/,
-    /^\/manifest\.webmanifest$/,
-    /^\/api\/device\/(code|token)$/,
-    /^\/api\/bml\/hc\/[0-9a-f]{32}\//,
+  /^\/login(\/|$)/,
+  /^\/logout$/,
+  /^\/api\/health$/,
+  /^\/manifest\.webmanifest$/,
+  /^\/api\/device\/(code|token)$/,
+  /^\/api\/bml\/hc\/[0-9a-f]{32}\//,
 ];
 
 export function isOpenPath(pathname: string): boolean {
-    return OPEN_PATHS.some((pattern) => pattern.test(pathname));
+  return OPEN_PATHS.some((pattern) => pattern.test(pathname));
 }
 
 /**
@@ -60,29 +60,34 @@ export function isOpenPath(pathname: string): boolean {
  * 掛かってはいるが**受け取り損ねると誰も入れない**うえ、その状態と区別が付かなかった。
  */
 export function configured(): boolean {
-    return oidcEnabled() || networks(config.trustedNetworks).length > 0;
+  return oidcEnabled() || networks(config.trustedNetworks).length > 0;
 }
 
 /** ログイン方法が無いまま上がったとき (と、TRUSTED_NETWORKS の書き損じ) の案内。起動ログに1度だけ出す */
 export function warnIfClosed(): void {
-    // 書き損じは当たらないだけなので、気づけるように知らせる
-    for (const entry of unreadable(networks(config.trustedNetworks))) {
-        console.warn(`[boot] TRUSTED_NETWORKS の「${entry}」は読めないので無視します`);
-    }
-    if (configured()) return;
+  // 書き損じは当たらないだけなので、気づけるように知らせる
+  for (const entry of unreadable(networks(config.trustedNetworks))) {
     console.warn(
-        '[boot] ログイン方法が設定されていないため、すべてのアクセスを断ります。\n' +
-            '       OIDC (docs/auth.md) か TRUSTED_NETWORKS (CIDR のカンマ区切り) を設定してください。\n' +
-            '       すべて開けるなら TRUSTED_NETWORKS=0.0.0.0/0 (公開時の注意は docs/auth.md)',
+      `[boot] TRUSTED_NETWORKS の「${entry}」は読めないので無視します`,
     );
+  }
+  if (configured()) return;
+  console.warn(
+    "[boot] ログイン方法が設定されていないため、すべてのアクセスを断ります。\n" +
+      "       OIDC (docs/auth.md) か TRUSTED_NETWORKS (CIDR のカンマ区切り) を設定してください。\n" +
+      "       すべて開けるなら TRUSTED_NETWORKS=0.0.0.0/0 (公開時の注意は docs/auth.md)",
+  );
 }
 
 /** ログイン方法が無い相手への返事。理由が分からない 403 にしない */
 export function denied(): Response {
-    const text = configured()
-        ? 'このページは、信頼したネットワーク (TRUSTED_NETWORKS) の中からでないと開けません'
-        : 'ログイン方法が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)';
-    return new Response(text, { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  const text = configured()
+    ? "このページは、信頼したネットワーク (TRUSTED_NETWORKS) の中からでないと開けません"
+    : "ログイン方法が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)";
+  return new Response(text, {
+    status: 403,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
 }
 
 /**
@@ -97,7 +102,7 @@ export function denied(): Response {
  * 片方だけ直して食い違うほうが危ない。
  */
 export function trusted(address: string): boolean {
-    return inAny(address, networks(config.trustedNetworks));
+  return inAny(address, networks(config.trustedNetworks));
 }
 
 /**
@@ -112,14 +117,14 @@ export function trusted(address: string): boolean {
  * 分からないほうを通すと、ヘッダを外すだけで認証を抜けられてしまう
  */
 export function clientAddress(event: { getClientAddress(): string }): string {
-    try {
-        return event.getClientAddress();
-    } catch {
-        return '';
-    }
+  try {
+    return event.getClientAddress();
+  } catch {
+    return "";
+  }
 }
 
 /** OIDC でログインを求めるか (素通しのエンドポイントは呼ぶ側 (hooks) が先に振り分ける) */
 export function needsLogin(): boolean {
-    return oidcEnabled();
+  return oidcEnabled();
 }

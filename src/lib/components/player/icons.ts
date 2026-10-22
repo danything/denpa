@@ -19,11 +19,11 @@
  * 並びは読み込み元の名前順
  */
 
-import type { Component } from 'svelte';
-import type { SvelteHTMLElements } from 'svelte/elements';
+import type { Component } from "svelte";
+import type { SvelteHTMLElements } from "svelte/elements";
 
 /** アイコン1つの型 (`~icons/*` が返す部品) */
-export type IconShape = Component<SvelteHTMLElements['svg']>;
+export type IconShape = Component<SvelteHTMLElements["svg"]>;
 
 /**
  * データ放送。**テレビのリモコンと同じ「d」**。
@@ -31,68 +31,68 @@ export type IconShape = Component<SvelteHTMLElements['svg']>;
  * 図柄では何のことか伝わらないので、字そのものを形にしてある (角丸の四角に d)。
  * Lucide に無いので自前 (`src/lib/icons/data.svg`)。線の太さと角は Lucide に揃える
  */
-export { default as DATA } from '~icons/denpa/data';
+export { default as DATA } from "~icons/denpa/data";
 /** 音声を選ぶ (主・副・二か国語) */
-export { default as AUDIO } from '~icons/lucide/audio-lines';
+export { default as AUDIO } from "~icons/lucide/audio-lines";
 /** 切り抜き (いまの1コマを PNG に) */
-export { default as CAMERA } from '~icons/lucide/camera';
-export { default as CAPTION } from '~icons/lucide/captions';
+export { default as CAMERA } from "~icons/lucide/camera";
+export { default as CAPTION } from "~icons/lucide/captions";
 /** 聞き返しの2回目 (レ点)。**文字を出さずに「これでいいか」を言う** */
-export { default as CHECK } from '~icons/lucide/check';
+export { default as CHECK } from "~icons/lucide/check";
 /** 再生の設定 (`SettingsMenu`) の選択肢の並びから戻る / 選択肢の並びに入る */
-export { default as BACK } from '~icons/lucide/chevron-left';
-export { default as FORWARD } from '~icons/lucide/chevron-right';
+export { default as BACK } from "~icons/lucide/chevron-left";
+export { default as FORWARD } from "~icons/lucide/chevron-right";
 /** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる。丸に点 (録画の印) */
-export { default as RECORD } from '~icons/lucide/circle-dot';
+export { default as RECORD } from "~icons/lucide/circle-dot";
 /**
  * Hybridcast。**別のタブへ出ていく**ので「四角から飛び出す矢印」。
  *
  * データ放送の `d` と並べるものなので、**同じ形にはしない** — あちらは
  * denpa の中で開くもの、こちらは外へ出ていくもので、押した結果がまるで違う
  */
-export { default as OPEN_OUT } from '~icons/lucide/external-link';
+export { default as OPEN_OUT } from "~icons/lucide/external-link";
 /** コーデック (再生の設定の行) */
-export { default as CODEC } from '~icons/lucide/film';
+export { default as CODEC } from "~icons/lucide/film";
 /**
  * 再生の速さ (`SpeedMenu`)。針の付いたメーター。**等速のときだけ出す** —
  * 速めている間はアイコンをやめて数字 (「1.25」) だけにする
  */
-export { default as SPEED } from '~icons/lucide/gauge';
+export { default as SPEED } from "~icons/lucide/gauge";
 /**
  * バックグラウンド再生 (裏に回しても止めない)。ヘッドホン — 裏で続けるのはたいてい
  * 聴くため。再生の設定 (⚙ `SettingsMenu`) の行のアイコン
  */
-export { default as BACKGROUND } from '~icons/lucide/headphones';
+export { default as BACKGROUND } from "~icons/lucide/headphones";
 /** 中身を読む。丸に i */
-export { default as INFO } from '~icons/lucide/info';
+export { default as INFO } from "~icons/lucide/info";
 /** 全画面にする / 戻す */
-export { default as EXPAND } from '~icons/lucide/maximize';
-export { default as SHRINK } from '~icons/lucide/minimize';
+export { default as EXPAND } from "~icons/lucide/maximize";
+export { default as SHRINK } from "~icons/lucide/minimize";
 /** 互換モード (再生の設定の行。動画が止まる端末向けに canvas に描く。`canvas-video.ts`) */
-export { default as COMPAT } from '~icons/lucide/monitor-play';
-export { default as PAUSE } from '~icons/lucide/pause';
+export { default as COMPAT } from "~icons/lucide/monitor-play";
+export { default as PAUSE } from "~icons/lucide/pause";
 /**
  * ピクチャーインピクチャー (小窓)。大きな枠の右下に小さな枠。
  * 出している間は押されている見た目 (`OVERLAY_ON`)
  */
-export { default as PIP } from '~icons/lucide/picture-in-picture-2';
-export { default as PLAY } from '~icons/lucide/play';
+export { default as PIP } from "~icons/lucide/picture-in-picture-2";
+export { default as PLAY } from "~icons/lucide/play";
 /** CM飛ばし。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
-export { default as CUT } from '~icons/lucide/scissors';
+export { default as CUT } from "~icons/lucide/scissors";
 /** 再生の設定 (⚙ `SettingsMenu`)。端末ごとに決めるもの (CMスキップ・アンビエントモード・バックグラウンド再生・互換モード・字幕・音声・コーデック) をまとめたメニュー */
-export { default as SETTINGS } from '~icons/lucide/settings';
+export { default as SETTINGS } from "~icons/lucide/settings";
 /** チャプター送り・戻し */
-export { default as PREV } from '~icons/lucide/skip-back';
-export { default as NEXT } from '~icons/lucide/skip-forward';
+export { default as PREV } from "~icons/lucide/skip-back";
+export { default as NEXT } from "~icons/lucide/skip-forward";
 /**
  * アンビエントモード (映像の色を周りにぼかして広げる。`AmbientGlow.svelte`)。弱い光を放つ太陽。
  * 再生の設定 (⚙ `SettingsMenu`) の行のアイコン
  */
-export { default as AMBIENT } from '~icons/lucide/sun-dim';
-export { default as TRASH } from '~icons/lucide/trash';
-export { default as SOUND_ON } from '~icons/lucide/volume-2';
-export { default as SOUND_OFF } from '~icons/lucide/volume-off';
-export { default as CLOSE } from '~icons/lucide/x';
+export { default as AMBIENT } from "~icons/lucide/sun-dim";
+export { default as TRASH } from "~icons/lucide/trash";
+export { default as SOUND_ON } from "~icons/lucide/volume-2";
+export { default as SOUND_OFF } from "~icons/lucide/volume-off";
+export { default as CLOSE } from "~icons/lucide/x";
 
 /**
  * 映像の上に置くボタンの見た目。**読めるように黒く敷く。**
@@ -103,7 +103,7 @@ export { default as CLOSE } from '~icons/lucide/x';
  * **クラスの中身は `ControlButton.svelte` の `<style>` (`:global`)。** 3画面とも
  * ControlButton を読み込むので、そこに置けば必ず届く
  */
-export const OVERLAY = 'ov';
+export const OVERLAY = "ov";
 
 /**
  * 映像の上に置くボタンの大きさ。**3画面で同じ。**
@@ -114,10 +114,10 @@ export const OVERLAY = 'ov';
  * メニュー (速さ・再生の設定) のボタンも同じ大きさで揃える (どちらも
  * ボタンは ControlButton)。ボタンでない `<a>` (閉じる) にはここの字を直に当てる
  */
-export const OVERLAY_BTN = 'ov-btn';
+export const OVERLAY_BTN = "ov-btn";
 
 /** 丸いボタン (アイコンだけのとき)。`OVERLAY_BTN` と一緒に使う */
-export const OVERLAY_ROUND = 'ov-round';
+export const OVERLAY_ROUND = "ov-round";
 
 /**
  * 聞き返しの2回目の見た目 (削除)。**大きさは変えない。**
@@ -127,7 +127,7 @@ export const OVERLAY_ROUND = 'ov-round';
  * 変えるのは色とアイコンだけ — 鋏や送りと違い、**赤いレ点は「これでいいか」以外に
  * 読みようが無い**
  */
-export const OVERLAY_DANGER = 'ov-danger';
+export const OVERLAY_DANGER = "ov-danger";
 
 /** 押されている間の見た目 (字幕を出しているときなど。ライブにいるときは EdgeButton の OVERLAY_DANGER) */
-export const OVERLAY_ON = 'ov-on';
+export const OVERLAY_ON = "ov-on";

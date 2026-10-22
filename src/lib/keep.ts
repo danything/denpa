@@ -8,41 +8,41 @@
  */
 
 export function read(key: string): string | null {
-    try {
-        return localStorage.getItem(key);
-    } catch {
-        return null;
-    }
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
 export function write(key: string, value: string): void {
-    try {
-        localStorage.setItem(key, value);
-    } catch {
-        // 覚えられなくても支障は無い
-    }
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // 覚えられなくても支障は無い
+  }
 }
 
 export function forget(key: string): void {
-    try {
-        localStorage.removeItem(key);
-    } catch {
-        // 消せなくても支障は無い
-    }
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // 消せなくても支障は無い
+  }
 }
 
 /** 頭が `prefix` のものを全部 (鍵は頭を外したもの)。読めなければ空 */
 export function readAll(prefix: string): Record<string, string> {
-    const out: Record<string, string> = {};
-    try {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key === null || !key.startsWith(prefix)) continue;
-            const value = localStorage.getItem(key);
-            if (value !== null) out[key.slice(prefix.length)] = value;
-        }
-    } catch {
-        // 読めなければ何も無いことにする
+  const out: Record<string, string> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === null || !key.startsWith(prefix)) continue;
+      const value = localStorage.getItem(key);
+      if (value !== null) out[key.slice(prefix.length)] = value;
     }
-    return out;
+  } catch {
+    // 読めなければ何も無いことにする
+  }
+  return out;
 }

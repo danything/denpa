@@ -16,9 +16,9 @@
  *   IPv4 に戻す — Bun は IPv4 の相手をこの形式で渡すことがある
  */
 export function normalize(address: string): string | null {
-    const parsed = parse(address);
-    if (parsed === null) return null;
-    return parsed.v4 ? formatV4(parsed.value) : formatV6(parsed.value);
+  const parsed = parse(address);
+  if (parsed === null) return null;
+  return parsed.v4 ? formatV4(parsed.value) : formatV6(parsed.value);
 }
 
 /**
@@ -27,11 +27,12 @@ export function normalize(address: string): string | null {
  * (`::ffff:a.b.c.d` は IPv4 として扱う)。書き方が読めなければ当たらない
  */
 export function inNetwork(address: string, entry: string): boolean {
-    const target = parse(address.trim());
-    const network = parseEntry(entry);
-    if (target === null || network === null || target.v4 !== network.v4) return false;
-    const shift = BigInt((target.v4 ? 32 : 128) - network.length);
-    return target.value >> shift === network.value >> shift;
+  const target = parse(address.trim());
+  const network = parseEntry(entry);
+  if (target === null || network === null || target.v4 !== network.v4)
+    return false;
+  const shift = BigInt((target.v4 ? 32 : 128) - network.length);
+  return target.value >> shift === network.value >> shift;
 }
 
 /**
@@ -39,31 +40,31 @@ export function inNetwork(address: string, entry: string): boolean {
  * (`TRUSTED_PROXIES` は server.js、`TRUSTED_NETWORKS` は auth.ts)
  */
 export function unreadable(entries: readonly string[]): string[] {
-    return entries.filter((entry) => parseEntry(entry) === null);
+  return entries.filter((entry) => parseEntry(entry) === null);
 }
 
 function parseEntry(entry: string): (Parsed & { length: number }) | null {
-    const [network = '', bits, ...rest] = entry.trim().split('/');
-    const base = parse(network);
-    if (base === null || rest.length > 0) return null;
-    const width = base.v4 ? 32 : 128;
-    if (bits === undefined) return { ...base, length: width };
-    if (!/^\d{1,3}$/.test(bits)) return null;
-    const length = Number(bits);
-    return length > width ? null : { ...base, length };
+  const [network = "", bits, ...rest] = entry.trim().split("/");
+  const base = parse(network);
+  if (base === null || rest.length > 0) return null;
+  const width = base.v4 ? 32 : 128;
+  if (bits === undefined) return { ...base, length: width };
+  if (!/^\d{1,3}$/.test(bits)) return null;
+  const length = Number(bits);
+  return length > width ? null : { ...base, length };
 }
 
 /** カンマ区切りの並び (`TRUSTED_NETWORKS`・`TRUSTED_PROXIES`) を項目に分ける */
 export function networks(list: string): string[] {
-    return list
-        .split(',')
-        .map((raw) => raw.trim())
-        .filter((raw) => raw !== '');
+  return list
+    .split(",")
+    .map((raw) => raw.trim())
+    .filter((raw) => raw !== "");
 }
 
 /** どれかのネットワークの中か */
 export function inAny(address: string, entries: readonly string[]): boolean {
-    return entries.some((entry) => inNetwork(address, entry));
+  return entries.some((entry) => inNetwork(address, entry));
 }
 
 /**
@@ -80,83 +81,90 @@ export function inAny(address: string, entries: readonly string[]): boolean {
  *
  * 返すアドレスは `normalize` した形式。相手が読めなければ空文字 (どの CIDR にも当たらない)
  */
-export function resolveClient(peer: string, forwardedFor: string | null, proxies: readonly string[]): string {
-    let client = normalize(peer) ?? '';
-    if (client === '' || !inAny(client, proxies) || !forwardedFor) return client;
+export function resolveClient(
+  peer: string,
+  forwardedFor: string | null,
+  proxies: readonly string[],
+): string {
+  let client = normalize(peer) ?? "";
+  if (client === "" || !inAny(client, proxies) || !forwardedFor) return client;
 
-    const hops = forwardedFor.split(',').map((raw) => raw.trim());
-    for (let i = hops.length - 1; i >= 0; i--) {
-        const hop = normalize(hops[i] ?? '');
-        if (hop === null) break;
-        client = hop;
-        if (!inAny(hop, proxies)) break;
-    }
-    return client;
+  const hops = forwardedFor.split(",").map((raw) => raw.trim());
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const hop = normalize(hops[i] ?? "");
+    if (hop === null) break;
+    client = hop;
+    if (!inAny(hop, proxies)) break;
+  }
+  return client;
 }
 
 type Parsed = { v4: boolean; value: bigint };
 
 function parse(raw: string): Parsed | null {
-    const v4 = parseV4(raw);
-    if (v4 !== null) return { v4: true, value: v4 };
-    const v6 = parseV6(raw);
-    if (v6 === null) return null;
-    // ::ffff:0:0/96 は IPv4 を写したもの
-    if (v6 >> 32n === 0xffffn) return { v4: true, value: v6 & 0xffffffffn };
-    return { v4: false, value: v6 };
+  const v4 = parseV4(raw);
+  if (v4 !== null) return { v4: true, value: v4 };
+  const v6 = parseV6(raw);
+  if (v6 === null) return null;
+  // ::ffff:0:0/96 は IPv4 を写したもの
+  if (v6 >> 32n === 0xffffn) return { v4: true, value: v6 & 0xffffffffn };
+  return { v4: false, value: v6 };
 }
 
 function parseV4(raw: string): bigint | null {
-    const parts = raw.split('.');
-    if (parts.length !== 4) return null;
-    let out = 0n;
-    for (const part of parts) {
-        if (!/^\d{1,3}$/.test(part)) return null;
-        const byte = Number(part);
-        if (byte > 255) return null;
-        out = (out << 8n) | BigInt(byte);
-    }
-    return out;
+  const parts = raw.split(".");
+  if (parts.length !== 4) return null;
+  let out = 0n;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const byte = Number(part);
+    if (byte > 255) return null;
+    out = (out << 8n) | BigInt(byte);
+  }
+  return out;
 }
 
 function parseV6(raw: string): bigint | null {
-    if (!raw.includes(':')) return null;
-    let text = raw.toLowerCase();
-    // 末尾が IPv4 の書き方 (::ffff:10.0.0.1) なら 16bit 2つに直す
-    const tail = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
-    if (tail) {
-        const v4 = parseV4(tail[2]!);
-        if (v4 === null) return null;
-        text = `${tail[1]}${(v4 >> 16n).toString(16)}:${(v4 & 0xffffn).toString(16)}`;
-    }
-    const halves = text.split('::');
-    if (halves.length > 2) return null;
-    const groups = (part: string | undefined) => (part ? part.split(':') : []);
-    const head = groups(halves[0]);
-    const rest = groups(halves[1]);
-    let all: string[];
-    if (halves.length === 2) {
-        const missing = 8 - head.length - rest.length;
-        if (missing < 1) return null;
-        all = [...head, ...Array<string>(missing).fill('0'), ...rest];
-    } else {
-        all = head;
-    }
-    if (all.length !== 8) return null;
-    let out = 0n;
-    for (const group of all) {
-        if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
-        out = (out << 16n) | BigInt(Number.parseInt(group, 16));
-    }
-    return out;
+  if (!raw.includes(":")) return null;
+  let text = raw.toLowerCase();
+  // 末尾が IPv4 の書き方 (::ffff:10.0.0.1) なら 16bit 2つに直す
+  const tail = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
+  if (tail) {
+    const v4 = parseV4(tail[2]!);
+    if (v4 === null) return null;
+    text = `${tail[1]}${(v4 >> 16n).toString(16)}:${(v4 & 0xffffn).toString(16)}`;
+  }
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const groups = (part: string | undefined) => (part ? part.split(":") : []);
+  const head = groups(halves[0]);
+  const rest = groups(halves[1]);
+  let all: string[];
+  if (halves.length === 2) {
+    const missing = 8 - head.length - rest.length;
+    if (missing < 1) return null;
+    all = [...head, ...Array<string>(missing).fill("0"), ...rest];
+  } else {
+    all = head;
+  }
+  if (all.length !== 8) return null;
+  let out = 0n;
+  for (const group of all) {
+    if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
+    out = (out << 16n) | BigInt(Number.parseInt(group, 16));
+  }
+  return out;
 }
 
 function formatV4(value: bigint): string {
-    return [24n, 16n, 8n, 0n].map((shift) => String((value >> shift) & 0xffn)).join('.');
+  return [24n, 16n, 8n, 0n]
+    .map((shift) => String((value >> shift) & 0xffn))
+    .join(".");
 }
 
 function formatV6(value: bigint): string {
-    const groups: string[] = [];
-    for (let shift = 112n; shift >= 0n; shift -= 16n) groups.push(((value >> shift) & 0xffffn).toString(16));
-    return groups.join(':');
+  const groups: string[] = [];
+  for (let shift = 112n; shift >= 0n; shift -= 16n)
+    groups.push(((value >> shift) & 0xffffn).toString(16));
+  return groups.join(":");
 }

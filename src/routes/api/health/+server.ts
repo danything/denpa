@@ -1,10 +1,10 @@
-import { json } from '@sveltejs/kit';
-import { count } from 'drizzle-orm';
-import { config } from '#lib/server/config.js';
-import { orm } from '#lib/server/db.js';
-import { activeRecordingIds } from '#lib/server/recorder.js';
-import { services } from '#lib/server/schema.js';
-import { updateAvailable } from '#lib/server/update.js';
+import { json } from "@sveltejs/kit";
+import { count } from "drizzle-orm";
+import { config } from "#lib/server/config.js";
+import { orm } from "#lib/server/db.js";
+import { activeRecordingIds } from "#lib/server/recorder.js";
+import { services } from "#lib/server/schema.js";
+import { updateAvailable } from "#lib/server/update.js";
 
 /**
  * compose の healthcheck と E2E の起動待ちに使う。DBまで触って初めて ok を返す。
@@ -14,13 +14,13 @@ import { updateAvailable } from '#lib/server/update.js';
  * 版も返す (`DENPA_VERSION`。リリースのイメージだけが持つ。手元と develop は `dev`) — 何が動いているかを外から確かめるため
  */
 export function GET() {
-    const row = orm().select({ n: count() }).from(services).get();
-    return json({
-        ok: true,
-        version: config.version,
-        // 新しい版が出ていれば、そのタグと場所 (update.ts)。無ければ null
-        update: updateAvailable(),
-        services: row?.n ?? 0,
-        recording: activeRecordingIds().length,
-    });
+  const row = orm().select({ n: count() }).from(services).get();
+  return json({
+    ok: true,
+    version: config.version,
+    // 新しい版が出ていれば、そのタグと場所 (update.ts)。無ければ null
+    update: updateAvailable(),
+    services: row?.n ?? 0,
+    recording: activeRecordingIds().length,
+  });
 }

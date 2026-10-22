@@ -1,6 +1,6 @@
-import { type ChildProcess, spawn } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
-import { test as base } from '@playwright/test';
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdirSync, rmSync } from "node:fs";
+import { test as base } from "@playwright/test";
 
 /**
  * ワーカーごとに1式ずつ、denpa と偽チューナーエージェント / 偽通知先を立てる。
@@ -14,7 +14,7 @@ import { test as base } from '@playwright/test';
  */
 
 /** 作業領域。global-setup で毎回まっさらにする */
-export const TEST_ROOT = '/tmp/denpa-e2e';
+export const TEST_ROOT = "/tmp/denpa-e2e";
 
 /*
  * ワーカー番号ごとにずらす幅。
@@ -32,238 +32,249 @@ const BOOT_POLL = 200;
 const BOOT_ASK = 5_000;
 
 export interface Stack {
-    /** このワーカーの作業領域 */
-    root: string;
-    appUrl: string;
-    agentUrl: string;
-    webhookUrl: string;
-    rawDir: string;
-    encodedDir: string;
-    /** 引き継ぎ元。あえて作らずに始めて、マウント前後の見え方を試す */
-    epgstationDir: string;
-    /** これを置くと偽 ffmpeg がエンコードに失敗する */
-    failFile: string;
-    /**
-     * これを置くと偽 ffmpeg のエンコードが長引く (20秒ほど)。
-     * **走っている最中に押す**ものを試すのに使う (エンコード中止)
-     */
-    slowFile: string;
-    /** ライブ視聴で偽 ffmpeg に渡された引数。エンコード方式の指定を確かめるのに使う */
-    liveArgsFile: string;
-    /**
-     * これを置くとライブ視聴の映像側の偽 ffmpeg が、実機と同じ言い分を残して降りる。
-     * **黙って消えず、画面に理由が出る**ことを確かめるのに使う
-     */
-    liveFailFile: string;
-    /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1局に絞れているかを見る */
-    liveTsFile: string;
-    /**
-     * これを置くとライブの AV1 の偽 ffmpeg が、本物の AV1 + Opus の fMP4 を流す (`tests/fake/fmp4-loop.ts`)。
-     * 互換モード (canvas に描く経路) が実際にデコードして描くところまで見るのに使う
-     */
-    liveFmp4File: string;
-    /**
-     * **偽の GPU の置き場。** ここに `renderD128` のような名前でファイルを置くと、
-     * denpa は `HW_DEVICES` (`<ここ>/renderD*`) のデバイスとして見つけ、偽 ffmpeg は渡された
-     * デバイスが在るのを見て「GPU がある」と答える (QSV / VA-API の試しのエンコードが通る)。
-     * 消せば、エンコードしようとした GPU の経路が本物と同じく初期化で落ちる
-     */
-    hwDir: string;
-    /** エンコードするときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
-    encodeArgsFile: string;
+  /** このワーカーの作業領域 */
+  root: string;
+  appUrl: string;
+  agentUrl: string;
+  webhookUrl: string;
+  rawDir: string;
+  encodedDir: string;
+  /** 引き継ぎ元。あえて作らずに始めて、マウント前後の見え方を試す */
+  epgstationDir: string;
+  /** これを置くと偽 ffmpeg がエンコードに失敗する */
+  failFile: string;
+  /**
+   * これを置くと偽 ffmpeg のエンコードが長引く (20秒ほど)。
+   * **走っている最中に押す**ものを試すのに使う (エンコード中止)
+   */
+  slowFile: string;
+  /** ライブ視聴で偽 ffmpeg に渡された引数。エンコード方式の指定を確かめるのに使う */
+  liveArgsFile: string;
+  /**
+   * これを置くとライブ視聴の映像側の偽 ffmpeg が、実機と同じ言い分を残して降りる。
+   * **黙って消えず、画面に理由が出る**ことを確かめるのに使う
+   */
+  liveFailFile: string;
+  /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1局に絞れているかを見る */
+  liveTsFile: string;
+  /**
+   * これを置くとライブの AV1 の偽 ffmpeg が、本物の AV1 + Opus の fMP4 を流す (`tests/fake/fmp4-loop.ts`)。
+   * 互換モード (canvas に描く経路) が実際にデコードして描くところまで見るのに使う
+   */
+  liveFmp4File: string;
+  /**
+   * **偽の GPU の置き場。** ここに `renderD128` のような名前でファイルを置くと、
+   * denpa は `HW_DEVICES` (`<ここ>/renderD*`) のデバイスとして見つけ、偽 ffmpeg は渡された
+   * デバイスが在るのを見て「GPU がある」と答える (QSV / VA-API の試しのエンコードが通る)。
+   * 消せば、エンコードしようとした GPU の経路が本物と同じく初期化で落ちる
+   */
+  hwDir: string;
+  /** エンコードするときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
+  encodeArgsFile: string;
 }
 
 /** 資格情報を持たずに呼ぶ関数。返るのは素の Response */
 type Anonymous = (path: string, init?: RequestInit) => Promise<Response>;
 
 interface Started {
-    proc: ChildProcess;
-    /** 立ち上がらなかったときに出す。何も出ないと原因が分からない */
-    output: () => string;
+  proc: ChildProcess;
+  /** 立ち上がらなかったときに出す。何も出ないと原因が分からない */
+  output: () => string;
 }
 
-function start(command: [string, ...string[]], env: Record<string, string>): Started {
-    const [bin, ...args] = command;
-    const proc = spawn(bin, args, {
-        env: { ...process.env, ...env },
-        stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let log = '';
-    const keep = (chunk: Buffer) => {
-        if (process.env['DENPA_E2E_LOG'] === '1') process.stdout.write(chunk);
-        log += chunk.toString();
-        // 落ちたときの手掛かりが欲しいだけなので、後ろだけ持つ
-        if (log.length > 20_000) log = log.slice(-20_000);
-    };
-    proc.stdout?.on('data', keep);
-    proc.stderr?.on('data', keep);
-    return { proc, output: () => log };
+function start(
+  command: [string, ...string[]],
+  env: Record<string, string>,
+): Started {
+  const [bin, ...args] = command;
+  const proc = spawn(bin, args, {
+    env: { ...process.env, ...env },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let log = "";
+  const keep = (chunk: Buffer) => {
+    if (process.env["DENPA_E2E_LOG"] === "1") process.stdout.write(chunk);
+    log += chunk.toString();
+    // 落ちたときの手掛かりが欲しいだけなので、後ろだけ持つ
+    if (log.length > 20_000) log = log.slice(-20_000);
+  };
+  proc.stdout?.on("data", keep);
+  proc.stderr?.on("data", keep);
+  return { proc, output: () => log };
 }
 
-async function waitFor(url: string, started: Started, what: string): Promise<void> {
-    const until = Date.now() + BOOT_TIMEOUT;
-    /*
-     * **最後に何が返ったかを持っておく。** 待ち受けているのに応答しないとき、断られたのか
-     * (ECONNREFUSED)、返事が来ないのか (時間切れ)、ok でない状態が返ったのかで、原因が違う。
-     * 1回ずつ上限を切る — 返事の来ない接続を1つ待ち続けると、BOOT_TIMEOUT を丸ごと使ってしまう
-     */
-    let last = 'まだ一度も訊いていません';
-    while (Date.now() < until) {
-        if (started.proc.exitCode !== null) {
-            throw new Error(`${what} が起動直後に終了しました:\n${started.output()}`);
-        }
-        try {
-            const res = await fetch(url, { signal: AbortSignal.timeout(BOOT_ASK) });
-            if (res.ok) return;
-            last = `HTTP ${res.status} ${(await res.text()).slice(0, 200)}`;
-        } catch (error) {
-            // まだ待ち受けていない (ECONNREFUSED)・返事が来ない (時間切れ)・fetch が断った (bad port) など。
-            // 何だったかは cause にしか書かれていない
-            last = `${error} (${String((error as { cause?: unknown }).cause)})`;
-        }
-        await new Promise((resolve) => setTimeout(resolve, BOOT_POLL));
+async function waitFor(
+  url: string,
+  started: Started,
+  what: string,
+): Promise<void> {
+  const until = Date.now() + BOOT_TIMEOUT;
+  /*
+   * **最後に何が返ったかを持っておく。** 待ち受けているのに応答しないとき、断られたのか
+   * (ECONNREFUSED)、返事が来ないのか (時間切れ)、ok でない状態が返ったのかで、原因が違う。
+   * 1回ずつ上限を切る — 返事の来ない接続を1つ待ち続けると、BOOT_TIMEOUT を丸ごと使ってしまう
+   */
+  let last = "まだ一度も訊いていません";
+  while (Date.now() < until) {
+    if (started.proc.exitCode !== null) {
+      throw new Error(`${what} が起動直後に終了しました:\n${started.output()}`);
     }
-    throw new Error(`${what} が ${url} で応答しませんでした (最後: ${last}):\n${started.output()}`);
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(BOOT_ASK) });
+      if (res.ok) return;
+      last = `HTTP ${res.status} ${(await res.text()).slice(0, 200)}`;
+    } catch (error) {
+      // まだ待ち受けていない (ECONNREFUSED)・返事が来ない (時間切れ)・fetch が断った (bad port) など。
+      // 何だったかは cause にしか書かれていない
+      last = `${error} (${String((error as { cause?: unknown }).cause)})`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, BOOT_POLL));
+  }
+  throw new Error(
+    `${what} が ${url} で応答しませんでした (最後: ${last}):\n${started.output()}`,
+  );
 }
 
 async function stop(started: Started): Promise<void> {
-    if (started.proc.exitCode !== null) return;
-    started.proc.kill('SIGTERM');
-    // SHUTDOWN_WAIT=0 なのですぐ止まる。それでも降りてこなければ強制終了する
-    const until = Date.now() + 5000;
-    while (started.proc.exitCode === null && Date.now() < until) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    if (started.proc.exitCode === null) started.proc.kill('SIGKILL');
+  if (started.proc.exitCode !== null) return;
+  started.proc.kill("SIGTERM");
+  // SHUTDOWN_WAIT=0 なのですぐ止まる。それでも降りてこなければ強制終了する
+  const until = Date.now() + 5000;
+  while (started.proc.exitCode === null && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  if (started.proc.exitCode === null) started.proc.kill("SIGKILL");
 }
 
 /** 1式立てる。テストはワーカーごとに下の `stack` から、スクリーンショットを撮るときは scripts/capture-docs.ts から */
-export async function boot(index: number): Promise<{ stack: Stack; shutdown: () => Promise<void> }> {
-    const appPort = APP_PORT + index * STRIDE;
-    const agentPort = AGENT_PORT + index * STRIDE;
-    const webhookPort = WEBHOOK_PORT + index * STRIDE;
+export async function boot(
+  index: number,
+): Promise<{ stack: Stack; shutdown: () => Promise<void> }> {
+  const appPort = APP_PORT + index * STRIDE;
+  const agentPort = AGENT_PORT + index * STRIDE;
+  const webhookPort = WEBHOOK_PORT + index * STRIDE;
 
-    const root = `${TEST_ROOT}/w${index}`;
-    const stack: Stack = {
-        root,
-        appUrl: `http://127.0.0.1:${appPort}`,
-        agentUrl: `http://127.0.0.1:${agentPort}`,
-        webhookUrl: `http://127.0.0.1:${webhookPort}`,
-        rawDir: `${root}/raw`,
-        encodedDir: `${root}/encoded`,
-        epgstationDir: `${root}/epgstation-recorded`,
-        failFile: `${root}/fail-encode`,
-        slowFile: `${root}/slow-encode`,
-        liveArgsFile: `${root}/live-ffmpeg-args`,
-        liveFailFile: `${root}/fail-live`,
-        liveTsFile: `${root}/live-ffmpeg-ts`,
-        liveFmp4File: `${root}/live-fmp4`,
-        hwDir: `${root}/gpu`,
-        encodeArgsFile: `${root}/encode-ffmpeg-args`,
-    };
+  const root = `${TEST_ROOT}/w${index}`;
+  const stack: Stack = {
+    root,
+    appUrl: `http://127.0.0.1:${appPort}`,
+    agentUrl: `http://127.0.0.1:${agentPort}`,
+    webhookUrl: `http://127.0.0.1:${webhookPort}`,
+    rawDir: `${root}/raw`,
+    encodedDir: `${root}/encoded`,
+    epgstationDir: `${root}/epgstation-recorded`,
+    failFile: `${root}/fail-encode`,
+    slowFile: `${root}/slow-encode`,
+    liveArgsFile: `${root}/live-ffmpeg-args`,
+    liveFailFile: `${root}/fail-live`,
+    liveTsFile: `${root}/live-ffmpeg-ts`,
+    liveFmp4File: `${root}/live-fmp4`,
+    hwDir: `${root}/gpu`,
+    encodeArgsFile: `${root}/encode-ffmpeg-args`,
+  };
 
-    rmSync(root, { recursive: true, force: true });
-    mkdirSync(stack.rawDir, { recursive: true });
-    mkdirSync(stack.encodedDir, { recursive: true });
-    mkdirSync(stack.hwDir, { recursive: true });
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(stack.rawDir, { recursive: true });
+  mkdirSync(stack.encodedDir, { recursive: true });
+  mkdirSync(stack.hwDir, { recursive: true });
 
-    const started: Started[] = [];
-    const shutdown = async () => {
-        await Promise.all(started.map(stop));
-    };
+  const started: Started[] = [];
+  const shutdown = async () => {
+    await Promise.all(started.map(stop));
+  };
 
-    try {
-        const agent = start(['bun', 'tests/fake/agent.ts'], {
-            FAKE_AGENT_PORT: String(agentPort),
-            // 尺は tests/fake/services.ts で局ごとに決めている
-            FAKE_SLOTS: '30',
-            // スクランブル解除はパスだけ受け取って直接ファイルを触る。
-            // 本物でも denpa とエージェントの両方に同じ置き場を見せている
-            RAW_DIR: stack.rawDir,
-        });
-        started.push(agent);
+  try {
+    const agent = start(["bun", "tests/fake/agent.ts"], {
+      FAKE_AGENT_PORT: String(agentPort),
+      // 尺は tests/fake/services.ts で局ごとに決めている
+      FAKE_SLOTS: "30",
+      // スクランブル解除はパスだけ受け取って直接ファイルを触る。
+      // 本物でも denpa とエージェントの両方に同じ置き場を見せている
+      RAW_DIR: stack.rawDir,
+    });
+    started.push(agent);
 
-        const webhook = start(['bun', 'tests/fake/webhook.ts'], {
-            FAKE_WEBHOOK_PORT: String(webhookPort),
-        });
-        started.push(webhook);
+    const webhook = start(["bun", "tests/fake/webhook.ts"], {
+      FAKE_WEBHOOK_PORT: String(webhookPort),
+    });
+    started.push(webhook);
 
-        const app = start(['bun', './server.js'], {
-            TZ: 'Asia/Tokyo',
-            HOST: '127.0.0.1',
-            PORT: String(appPort),
-            /*
-             * 平文で呼んでいることは伝えない。前段の無い `http://<IP>:3000` と同じく、
-             * server.js が受けた接続から `x-forwarded-proto: http` を入れる (#437)
-             */
-            DENPA_DB: `${root}/denpa.db`,
-            RAW_DIR: stack.rawDir,
-            ENCODED_DIR: stack.encodedDir,
-            FFMPEG: './tests/fake/ffmpeg.sh',
-            // 選局もスクランブル解除もスキャンも、窓口はここ1つ
-            TUNER_AGENT_URL: stack.agentUrl,
-            // 引き継ぎ画面。何も待ち受けていない先を指して、失敗したときの見え方も試す
-            EPGSTATION_RECORDED_DIR: stack.epgstationDir,
-            EPGSTATION_DB_HOST: '127.0.0.1',
-            EPGSTATION_DB_PORT: '1',
-            FAKE_FFMPEG_FAIL_FILE: stack.failFile,
-            FAKE_FFMPEG_SLOW_FILE: stack.slowFile,
-            FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
-            FAKE_FFMPEG_LIVE_FAIL_FILE: stack.liveFailFile,
-            FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
-            FAKE_FFMPEG_LIVE_FMP4_FILE: stack.liveFmp4File,
-            // 偽の GPU。denpa にはデバイスとして、偽 ffmpeg には「ある」印として同じファイルを見せる
-            HW_DEVICES: `${stack.hwDir}/renderD*`,
-            FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
-            /*
-             * 新しい版の通知。GitHub の代わりに偽通知先が「最新のリリース」を返す
-             * (既定は無し)。動いている版は古めにして、置いたリリースが必ず新しく見えるように
-             */
-            DENPA_VERSION: 'v1.0.0',
-            DENPA_GITHUB_API: stack.webhookUrl,
-            UPDATE_CHECK_INTERVAL: '1000',
-            // 定期処理は止め、テストからボタン/APIで明示的に走らせる(タイミング依存を避ける)
-            RECONCILE_INTERVAL: '86400000',
-            EPG_COLLECT_INTERVAL: '86400000',
-            CHANNEL_SYNC_INTERVAL: '86400000',
-            // 1チャンネル読むのに待つ上限。偽エージェントは開いた直後に全部流す
-            EPG_CHANNEL_TIMEOUT: '10000',
-            // 偽の放送にはほかの中継の番組表が無い。初回の全局読みで待たない
-            EPG_SWEEP_SETTLE: '500',
-            SCHEDULER_TICK: '500',
-            START_MARGIN: '0',
-            END_MARGIN: '500',
-            // 録画が終わるまで待たれるとテストが終わらない
-            SHUTDOWN_WAIT: '0',
-            ENCODE_CONCURRENCY: '2',
-            // ローカルからの接続は信頼したネットワークとして素通しにする。
-            // 認証の手段の無い構成 (全部断る) は 14-serve が別のインスタンスで確かめる
-            TRUSTED_NETWORKS: '127.0.0.1',
-        });
-        started.push(app);
+    const app = start(["bun", "./server.js"], {
+      TZ: "Asia/Tokyo",
+      HOST: "127.0.0.1",
+      PORT: String(appPort),
+      /*
+       * 平文で呼んでいることは伝えない。前段の無い `http://<IP>:3000` と同じく、
+       * server.js が受けた接続から `x-forwarded-proto: http` を入れる (#437)
+       */
+      DENPA_DB: `${root}/denpa.db`,
+      RAW_DIR: stack.rawDir,
+      ENCODED_DIR: stack.encodedDir,
+      FFMPEG: "./tests/fake/ffmpeg.sh",
+      // 選局もスクランブル解除もスキャンも、窓口はここ1つ
+      TUNER_AGENT_URL: stack.agentUrl,
+      // 引き継ぎ画面。何も待ち受けていない先を指して、失敗したときの見え方も試す
+      EPGSTATION_RECORDED_DIR: stack.epgstationDir,
+      EPGSTATION_DB_HOST: "127.0.0.1",
+      EPGSTATION_DB_PORT: "1",
+      FAKE_FFMPEG_FAIL_FILE: stack.failFile,
+      FAKE_FFMPEG_SLOW_FILE: stack.slowFile,
+      FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
+      FAKE_FFMPEG_LIVE_FAIL_FILE: stack.liveFailFile,
+      FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
+      FAKE_FFMPEG_LIVE_FMP4_FILE: stack.liveFmp4File,
+      // 偽の GPU。denpa にはデバイスとして、偽 ffmpeg には「ある」印として同じファイルを見せる
+      HW_DEVICES: `${stack.hwDir}/renderD*`,
+      FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
+      /*
+       * 新しい版の通知。GitHub の代わりに偽通知先が「最新のリリース」を返す
+       * (既定は無し)。動いている版は古めにして、置いたリリースが必ず新しく見えるように
+       */
+      DENPA_VERSION: "v1.0.0",
+      DENPA_GITHUB_API: stack.webhookUrl,
+      UPDATE_CHECK_INTERVAL: "1000",
+      // 定期処理は止め、テストからボタン/APIで明示的に走らせる(タイミング依存を避ける)
+      RECONCILE_INTERVAL: "86400000",
+      EPG_COLLECT_INTERVAL: "86400000",
+      CHANNEL_SYNC_INTERVAL: "86400000",
+      // 1チャンネル読むのに待つ上限。偽エージェントは開いた直後に全部流す
+      EPG_CHANNEL_TIMEOUT: "10000",
+      // 偽の放送にはほかの中継の番組表が無い。初回の全局読みで待たない
+      EPG_SWEEP_SETTLE: "500",
+      SCHEDULER_TICK: "500",
+      START_MARGIN: "0",
+      END_MARGIN: "500",
+      // 録画が終わるまで待たれるとテストが終わらない
+      SHUTDOWN_WAIT: "0",
+      ENCODE_CONCURRENCY: "2",
+      // ローカルからの接続は信頼したネットワークとして素通しにする。
+      // 認証の手段の無い構成 (全部断る) は 14-serve が別のインスタンスで確かめる
+      TRUSTED_NETWORKS: "127.0.0.1",
+    });
+    started.push(app);
 
-        await Promise.all([
-            waitFor(`${stack.agentUrl}/denpa/tuners`, agent, '偽エージェント'),
-            waitFor(`${stack.webhookUrl}/__control/state`, webhook, '偽通知先'),
-        ]);
-        await waitFor(`${stack.appUrl}/api/health`, app, 'denpa');
-    } catch (error) {
-        await shutdown();
-        throw error;
-    }
+    await Promise.all([
+      waitFor(`${stack.agentUrl}/denpa/tuners`, agent, "偽エージェント"),
+      waitFor(`${stack.webhookUrl}/__control/state`, webhook, "偽通知先"),
+    ]);
+    await waitFor(`${stack.appUrl}/api/health`, app, "denpa");
+  } catch (error) {
+    await shutdown();
+    throw error;
+  }
 
-    return { stack, shutdown };
+  return { stack, shutdown };
 }
 
 export interface OidcStack {
-    /** 偽 Entra。`/__control/groups` で誰を通すか差し替えられる */
-    idpUrl: string;
-    /** OIDC を有効にした denpa。普段の `stack.appUrl` とは別のインスタンス */
-    appUrl: string;
-    /** 何も聞かずに通すネットワーク (TRUSTED_NETWORKS に入れてある) */
-    trustedNetwork: string;
-    clientId: string;
-    group: string;
+  /** 偽 Entra。`/__control/groups` で誰を通すか差し替えられる */
+  idpUrl: string;
+  /** OIDC を有効にした denpa。普段の `stack.appUrl` とは別のインスタンス */
+  appUrl: string;
+  /** 何も聞かずに通すネットワーク (TRUSTED_NETWORKS に入れてある) */
+  trustedNetwork: string;
+  clientId: string;
+  group: string;
 }
 
 /**
@@ -275,73 +286,77 @@ export interface OidcStack {
  * ポートはワーカーごとの範囲 (STRIDE=10) の中から取るので、並べて流しても衝突しない。
  */
 export async function bootOidc(
-    index: number,
-    root: string,
+  index: number,
+  root: string,
 ): Promise<{ oidc: OidcStack; shutdown: () => Promise<void> }> {
-    const appPort = APP_PORT + index * STRIDE + 5;
-    const idpPort = WEBHOOK_PORT + index * STRIDE + 5;
-    const oidc: OidcStack = {
-        idpUrl: `http://127.0.0.1:${idpPort}`,
-        appUrl: `http://127.0.0.1:${appPort}`,
-        trustedNetwork: '10.10.0.0/16',
-        clientId: 'denpa-e2e',
-        group: 'admins',
-    };
+  const appPort = APP_PORT + index * STRIDE + 5;
+  const idpPort = WEBHOOK_PORT + index * STRIDE + 5;
+  const oidc: OidcStack = {
+    idpUrl: `http://127.0.0.1:${idpPort}`,
+    appUrl: `http://127.0.0.1:${appPort}`,
+    trustedNetwork: "10.10.0.0/16",
+    clientId: "denpa-e2e",
+    group: "admins",
+  };
 
-    const started: Started[] = [];
-    const shutdown = async () => {
-        await Promise.all(started.map(stop));
-    };
+  const started: Started[] = [];
+  const shutdown = async () => {
+    await Promise.all(started.map(stop));
+  };
 
-    try {
-        const idp = start(['bun', 'tests/fake/idp.ts'], {
-            FAKE_IDP_PORT: String(idpPort),
-            FAKE_IDP_ISSUER: oidc.idpUrl,
-            FAKE_IDP_GROUPS: oidc.group,
-        });
-        started.push(idp);
-        await waitFor(`${oidc.idpUrl}/.well-known/openid-configuration`, idp, '偽 IdP');
+  try {
+    const idp = start(["bun", "tests/fake/idp.ts"], {
+      FAKE_IDP_PORT: String(idpPort),
+      FAKE_IDP_ISSUER: oidc.idpUrl,
+      FAKE_IDP_GROUPS: oidc.group,
+    });
+    started.push(idp);
+    await waitFor(
+      `${oidc.idpUrl}/.well-known/openid-configuration`,
+      idp,
+      "偽 IdP",
+    );
 
-        const app = start(['bun', './server.js'], {
-            TZ: 'Asia/Tokyo',
-            HOST: '127.0.0.1',
-            PORT: String(appPort),
-            /*
-             * Entra へ送る戻り先 (`redirect_uri`) は**来たリクエストから組み立てる**ので、
-             * 本番と同じくリクエストごとのヘッダから決めさせる
-             */
-            /*
-             * **名前は `x-forwarded-host` から読ませる。** 本番は既定の `host` だが、
-             * Node の fetch は `Host` を禁止ヘッダとして**黙って落とす**ので、
-             * テストからは名前を差し替えられない (Bun の fetch は通す)。
-             * denpa 側が見るのは `event.url.hostname` で、どちらのヘッダから
-             * 組み立てられたかは同じなので、試している経路は変わらない
-             */
-            HOST_HEADER: 'x-forwarded-host',
-            DENPA_DB: `${root}/oidc.db`,
-            RAW_DIR: `${root}/oidc-recorded`,
-            ENCODED_DIR: `${root}/oidc-library`,
-            // 常駐処理は要らない。ログインの流れだけ見る
-            DENPA_AUTOSTART: '0',
-            SHUTDOWN_WAIT: '0',
-            OIDC_ISSUER: oidc.idpUrl,
-            OIDC_CLIENT_ID: oidc.clientId,
-            OIDC_CLIENT_SECRET: 'e2e-secret',
-            OIDC_GROUP: oidc.group,
-            // このネットワークから来たら何も聞かない
-            TRUSTED_NETWORKS: oidc.trustedNetwork,
-            // テストは 127.0.0.1 から前段のふりをして x-forwarded-for を付ける
-            TRUSTED_PROXIES: '127.0.0.1',
-        });
-        started.push(app);
-        // 死活確認は守られていないので、ログインを通さずに待てる
-        await waitFor(`${oidc.appUrl}/api/health`, app, 'denpa (OIDC)');
-    } catch (error) {
-        await shutdown();
-        throw error;
-    }
+    const app = start(["bun", "./server.js"], {
+      TZ: "Asia/Tokyo",
+      HOST: "127.0.0.1",
+      PORT: String(appPort),
+      /*
+       * Entra へ送る戻り先 (`redirect_uri`) は**来たリクエストから組み立てる**ので、
+       * 本番と同じくリクエストごとのヘッダから決めさせる
+       */
+      /*
+       * **名前は `x-forwarded-host` から読ませる。** 本番は既定の `host` だが、
+       * Node の fetch は `Host` を禁止ヘッダとして**黙って落とす**ので、
+       * テストからは名前を差し替えられない (Bun の fetch は通す)。
+       * denpa 側が見るのは `event.url.hostname` で、どちらのヘッダから
+       * 組み立てられたかは同じなので、試している経路は変わらない
+       */
+      HOST_HEADER: "x-forwarded-host",
+      DENPA_DB: `${root}/oidc.db`,
+      RAW_DIR: `${root}/oidc-recorded`,
+      ENCODED_DIR: `${root}/oidc-library`,
+      // 常駐処理は要らない。ログインの流れだけ見る
+      DENPA_AUTOSTART: "0",
+      SHUTDOWN_WAIT: "0",
+      OIDC_ISSUER: oidc.idpUrl,
+      OIDC_CLIENT_ID: oidc.clientId,
+      OIDC_CLIENT_SECRET: "e2e-secret",
+      OIDC_GROUP: oidc.group,
+      // このネットワークから来たら何も聞かない
+      TRUSTED_NETWORKS: oidc.trustedNetwork,
+      // テストは 127.0.0.1 から前段のふりをして x-forwarded-for を付ける
+      TRUSTED_PROXIES: "127.0.0.1",
+    });
+    started.push(app);
+    // 死活確認は守られていないので、ログインを通さずに待てる
+    await waitFor(`${oidc.appUrl}/api/health`, app, "denpa (OIDC)");
+  } catch (error) {
+    await shutdown();
+    throw error;
+  }
 
-    return { oidc, shutdown };
+  return { oidc, shutdown };
 }
 
 /**
@@ -350,41 +365,41 @@ export async function bootOidc(
  * 普段の `stack` はローカルを信頼したネットワークにしてあるので、これは別に立てる。
  */
 export async function bootClosed(
-    index: number,
-    root: string,
-    /** 認証の手段を足して試すとき (TRUSTED_NETWORKS など)。省けば何も設定しない = 全部断る */
-    extra: Record<string, string> = {},
+  index: number,
+  root: string,
+  /** 認証の手段を足して試すとき (TRUSTED_NETWORKS など)。省けば何も設定しない = 全部断る */
+  extra: Record<string, string> = {},
 ): Promise<{ appUrl: string; shutdown: () => Promise<void> }> {
-    /*
-     * 範囲の +3 (内側は +4)。**+7 にしていた頃は、ワーカー番号 1 で 4190 になり、毎回立ち上がりを
-     * 待ちきれずに落ちていた** — 4190 (ManageSieve) は fetch の仕様の「bad port」で、Node の fetch は
-     * 繋ぎにも行かずに断る (`fetch failed`、cause は `bad port`)。denpa は待ち受けているのに
-     * 2 分待って落ち、別のワーカーでやり直すと通るので、揺れに見えていた (31-device・14-serve)。
-     * 範囲にポートを足すときは、その番号が bad port に当たらないか確かめること
-     */
-    const port = APP_PORT + index * STRIDE + 3;
-    const appUrl = `http://127.0.0.1:${port}`;
-    const app = start(['bun', './server.js'], {
-        TZ: 'Asia/Tokyo',
-        HOST: '127.0.0.1',
-        PORT: String(port),
-        DENPA_DB: `${root}/closed.db`,
-        RAW_DIR: `${root}/closed-recorded`,
-        ENCODED_DIR: `${root}/closed-library`,
-        // 常駐処理は要らない。断り方だけを見る
-        DENPA_AUTOSTART: '0',
-        SHUTDOWN_WAIT: '0',
-        ...extra,
-    });
-    const shutdown = async () => stop(app);
-    try {
-        // 死活確認はログイン方法が無くても通る (守ると livenessProbe が落ちるため)
-        await waitFor(`${appUrl}/api/health`, app, 'denpa (閉)');
-    } catch (error) {
-        await shutdown();
-        throw error;
-    }
-    return { appUrl, shutdown };
+  /*
+   * 範囲の +3 (内側は +4)。**+7 にしていた頃は、ワーカー番号 1 で 4190 になり、毎回立ち上がりを
+   * 待ちきれずに落ちていた** — 4190 (ManageSieve) は fetch の仕様の「bad port」で、Node の fetch は
+   * 繋ぎにも行かずに断る (`fetch failed`、cause は `bad port`)。denpa は待ち受けているのに
+   * 2 分待って落ち、別のワーカーでやり直すと通るので、揺れに見えていた (31-device・14-serve)。
+   * 範囲にポートを足すときは、その番号が bad port に当たらないか確かめること
+   */
+  const port = APP_PORT + index * STRIDE + 3;
+  const appUrl = `http://127.0.0.1:${port}`;
+  const app = start(["bun", "./server.js"], {
+    TZ: "Asia/Tokyo",
+    HOST: "127.0.0.1",
+    PORT: String(port),
+    DENPA_DB: `${root}/closed.db`,
+    RAW_DIR: `${root}/closed-recorded`,
+    ENCODED_DIR: `${root}/closed-library`,
+    // 常駐処理は要らない。断り方だけを見る
+    DENPA_AUTOSTART: "0",
+    SHUTDOWN_WAIT: "0",
+    ...extra,
+  });
+  const shutdown = async () => stop(app);
+  try {
+    // 死活確認はログイン方法が無くても通る (守ると livenessProbe が落ちるため)
+    await waitFor(`${appUrl}/api/health`, app, "denpa (閉)");
+  } catch (error) {
+    await shutdown();
+    throw error;
+  }
+  return { appUrl, shutdown };
 }
 
 /**
@@ -392,49 +407,51 @@ export async function bootClosed(
  * 立ち上がった状態で始まる (`baseURL` がこれに乗っているため)。
  */
 export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
-    stack: [
-        // oxlint-disable-next-line no-empty-pattern -- Playwright は分割代入でないと受け付けない
-        async ({}, use, workerInfo) => {
-            const { stack, shutdown } = await boot(workerInfo.workerIndex);
-            await use(stack);
-            await shutdown();
-        },
-        { scope: 'worker', auto: true },
-    ],
-    // page.goto('/') や request.post('/api/sync') の宛先。ワーカーごとに違う
-    baseURL: async ({ stack }, use) => {
-        await use(stack.appUrl);
+  stack: [
+    // oxlint-disable-next-line no-empty-pattern -- Playwright は分割代入でないと受け付けない
+    async ({}, use, workerInfo) => {
+      const { stack, shutdown } = await boot(workerInfo.workerIndex);
+      await use(stack);
+      await shutdown();
     },
-    /*
-     * API から直接投げるとき用。
-     *
-     * SvelteKit はフォーム形式の POST を Origin ヘッダで見ていて、付いていないものは
-     * 「別のサイトからの送信」として断る。素の APIRequestContext は Origin を付けない
-     * ので、フォームアクション (`?/reserve` など) が全部 403 になっていた。
-     *
-     * ブラウザ側には手を入れない。ブラウザは自分で正しい Origin を付ける
-     */
-    request: async ({ playwright, stack, httpCredentials }, use) => {
-        const context = await playwright.request.newContext({
-            baseURL: stack.appUrl,
-            extraHTTPHeaders: { Origin: stack.appUrl },
-            ...(httpCredentials === undefined ? {} : { httpCredentials }),
-        });
-        await use(context);
-        await context.dispose();
-    },
+    { scope: "worker", auto: true },
+  ],
+  // page.goto('/') や request.post('/api/sync') の宛先。ワーカーごとに違う
+  baseURL: async ({ stack }, use) => {
+    await use(stack.appUrl);
+  },
+  /*
+   * API から直接投げるとき用。
+   *
+   * SvelteKit はフォーム形式の POST を Origin ヘッダで見ていて、付いていないものは
+   * 「別のサイトからの送信」として断る。素の APIRequestContext は Origin を付けない
+   * ので、フォームアクション (`?/reserve` など) が全部 403 になっていた。
+   *
+   * ブラウザ側には手を入れない。ブラウザは自分で正しい Origin を付ける
+   */
+  request: async ({ playwright, stack, httpCredentials }, use) => {
+    const context = await playwright.request.newContext({
+      baseURL: stack.appUrl,
+      extraHTTPHeaders: { Origin: stack.appUrl },
+      ...(httpCredentials === undefined ? {} : { httpCredentials }),
+    });
+    await use(context);
+    await context.dispose();
+  },
 
-    /*
-     * **資格情報を持たない fetch。** 断られることを確かめるためのもの。
-     *
-     * **Playwright の APIRequestContext は使えない。** `newContext` に資格情報を
-     * 渡していなくても認証を通ってしまう — 実測で、素の fetch が 401 を返す同じエンドポイントに
-     * 対して 200 が返った (`test.use({ httpCredentials: undefined })` でも同じ)。
-     * 素の fetch なら確実に持たない。
-     */
-    anonymous: async ({ stack }, use) => {
-        await use((path, init) => fetch(`${stack.appUrl}${path}`, { redirect: 'manual', ...init }));
-    },
+  /*
+   * **資格情報を持たない fetch。** 断られることを確かめるためのもの。
+   *
+   * **Playwright の APIRequestContext は使えない。** `newContext` に資格情報を
+   * 渡していなくても認証を通ってしまう — 実測で、素の fetch が 401 を返す同じエンドポイントに
+   * 対して 200 が返った (`test.use({ httpCredentials: undefined })` でも同じ)。
+   * 素の fetch なら確実に持たない。
+   */
+  anonymous: async ({ stack }, use) => {
+    await use((path, init) =>
+      fetch(`${stack.appUrl}${path}`, { redirect: "manual", ...init }),
+    );
+  },
 });
 
-export { expect } from '@playwright/test';
+export { expect } from "@playwright/test";

@@ -25,28 +25,28 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'Dockerfile'
-      - 'agent/**'
-      - 'patches/**'
-      - 'wasm/**'
-      - 'package.json'
-      - 'bun.lock'
+      - "Dockerfile"
+      - "agent/**"
+      - "patches/**"
+      - "wasm/**"
+      - "package.json"
+      - "bun.lock"
       # 下は runtime に個別に入るもの (Dockerfile の COPY・組み立ての設定)。E2E は手元の木で
       # 動くので、イメージに入れ忘れても PR の間は分からない
-      - 'server.js'
-      - 'src/lib/server/address.ts'
-      - 'vite.config.ts'
-      - 'drizzle/**'
-      - '.dockerignore'
+      - "server.js"
+      - "src/lib/server/address.ts"
+      - "vite.config.ts"
+      - "drizzle/**"
+      - ".dockerignore"
       # 配布用 (下の `dist`)
-      - '.github/aio.Dockerfile'
-      - '.github/aio-entrypoint.ts'
-      - '.github/release.Dockerfile'
-      - '.github/workflows/docker-build-check.yml'
-      - '.github/image-smoke.sh'
+      - ".github/aio.Dockerfile"
+      - ".github/aio-entrypoint.ts"
+      - ".github/release.Dockerfile"
+      - ".github/workflows/docker-build-check.yml"
+      - ".github/image-smoke.sh"
       # image-smoke がイメージの ffmpeg で確かめるもの
-      - 'src/lib/server/fps.ts'
-      - 'scripts/fps-smoke.ts'
+      - "src/lib/server/fps.ts"
+      - "scripts/fps-smoke.ts"
   workflow_dispatch: {}
 
 concurrency:
@@ -104,7 +104,7 @@ jobs:
         image:
           - name: denpa-agent
             file: agent/Dockerfile
-            target: ''
+            target: ""
             scope: agent
           - name: denpa
             file: Dockerfile

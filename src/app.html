@@ -1,37 +1,45 @@
 <!doctype html>
 <html lang="ja">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
-        <!-- ホーム画面に置いてアプリのように開けるようにする -->
-        <link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
-        <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
-        <!-- ブラウザの枠の色。下のスクリプトがテーマの地に合わせ、その後は theme-color.ts が持つ -->
-        <meta name="theme-color" content="#0b0c0f" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <title>denpa</title>
-        <!-- nonce が無いと CSP で止まる (vite.config.ts の csp。毎回 SvelteKit が入れる) -->
-        <script nonce="%sveltekit.nonce%">
-            // ハイドレーションを待つと一瞬ちがう色で表示されてしまうので、ここで当てる。
-            // 保存が無ければダーク (映像を観るものはダークが基本。端末に合わせるのは選んだときだけ)
-            (() => {
-                const saved = localStorage.getItem('theme');
-                const mode = saved === 'light' || saved === 'system' ? saved : 'dark';
-                const dark =
-                    mode === 'dark' ||
-                    (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-                document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-                document.documentElement.dataset.themeMode = mode;
-                // CSS はまだ読んでいないので、地の色 (app.css の --dp-bg) を直に書く
-                document
-                    .querySelector('meta[name="theme-color"]')
-                    ?.setAttribute('content', dark ? '#0b0c0f' : '#ffffff');
-            })();
-        </script>
-        %sveltekit.head%
-    </head>
-    <body data-sveltekit-preload-data="hover">
-        <div style="display: contents">%sveltekit.body%</div>
-    </body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="icon"
+      href="%sveltekit.assets%/favicon.svg"
+      type="image/svg+xml"
+    />
+    <!-- ホーム画面に置いてアプリのように開けるようにする -->
+    <link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+    <link
+      rel="apple-touch-icon"
+      href="%sveltekit.assets%/apple-touch-icon.png"
+    />
+    <!-- ブラウザの枠の色。下のスクリプトがテーマの地に合わせ、その後は theme-color.ts が持つ -->
+    <meta name="theme-color" content="#0b0c0f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>denpa</title>
+    <!-- nonce が無いと CSP で止まる (vite.config.ts の csp。毎回 SvelteKit が入れる) -->
+    <script nonce="%sveltekit.nonce%">
+      // ハイドレーションを待つと一瞬ちがう色で表示されてしまうので、ここで当てる。
+      // 保存が無ければダーク (映像を観るものはダークが基本。端末に合わせるのは選んだときだけ)
+      (() => {
+        const saved = localStorage.getItem("theme");
+        const mode = saved === "light" || saved === "system" ? saved : "dark";
+        const dark =
+          mode === "dark" ||
+          (mode === "system" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        document.documentElement.dataset.themeMode = mode;
+        // CSS はまだ読んでいないので、地の色 (app.css の --dp-bg) を直に書く
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute("content", dark ? "#0b0c0f" : "#ffffff");
+      })();
+    </script>
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
 </html>

@@ -14,20 +14,20 @@
  * `BmlDecoder` にそのまま流せる。
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { open } from 'node:fs/promises';
-import { eq } from 'drizzle-orm';
-import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
-import { DataBroadcastCapture } from '#lib/ts/data-capture.js';
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
+import { eq } from "drizzle-orm";
+import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
+import { DataBroadcastCapture } from "#lib/ts/data-capture.js";
 import {
-    type KeptRange,
-    type PlacedMessage,
-    type TimedMessage,
-    toPlaybackTimeline,
-} from '#lib/ts/data-timeline.js';
-import type { Recording } from '../types';
-import { orm } from './db';
-import { programs, services } from './schema';
+  type KeptRange,
+  type PlacedMessage,
+  type TimedMessage,
+  toPlaybackTimeline,
+} from "#lib/ts/data-timeline.js";
+import type { Recording } from "../types";
+import { orm } from "./db";
+import { programs, services } from "./schema";
 
 /**
  * **番組の名乗り (`programInfo`)。描く側は局の番号をこれで知る** — `arib-dc://` の名前を
@@ -43,32 +43,35 @@ import { programs, services } from './schema';
  * 録画の行に足しても、確かめようが無い
  */
 function programInfoOf(recording: Recording): ResponseMessage | null {
-    const service = orm()
-        .select({ service_id: services.service_id, network_id: services.network_id })
-        .from(services)
-        .where(eq(services.id, recording.service_id))
-        .get();
-    if (service === undefined) return null;
-    const program =
-        recording.program_id === null
-            ? undefined
-            : orm()
-                  .select({ event_id: programs.event_id })
-                  .from(programs)
-                  .where(eq(programs.id, recording.program_id))
-                  .get();
-    return {
-        type: 'programInfo',
-        originalNetworkId: service.network_id,
-        networkId: service.network_id,
-        transportStreamId: null,
-        serviceId: service.service_id,
-        eventId: program?.event_id ?? null,
-        eventName: recording.name,
-        startTimeUnixMillis: recording.start_at,
-        durationSeconds: Math.round((recording.end_at - recording.start_at) / 1000),
-        indefiniteDuration: false,
-    };
+  const service = orm()
+    .select({
+      service_id: services.service_id,
+      network_id: services.network_id,
+    })
+    .from(services)
+    .where(eq(services.id, recording.service_id))
+    .get();
+  if (service === undefined) return null;
+  const program =
+    recording.program_id === null
+      ? undefined
+      : orm()
+          .select({ event_id: programs.event_id })
+          .from(programs)
+          .where(eq(programs.id, recording.program_id))
+          .get();
+  return {
+    type: "programInfo",
+    originalNetworkId: service.network_id,
+    networkId: service.network_id,
+    transportStreamId: null,
+    serviceId: service.service_id,
+    eventId: program?.event_id ?? null,
+    eventName: recording.name,
+    startTimeUnixMillis: recording.start_at,
+    durationSeconds: Math.round((recording.end_at - recording.start_at) / 1000),
+    indefiniteDuration: false,
+  };
 }
 
 /**
@@ -76,11 +79,17 @@ function programInfoOf(recording: Recording): ResponseMessage | null {
  * 書く側は `event_id` が番組表から消える前に写し取るため (`epg.ts` の
  * `pruneOldPrograms`)、読む側は名乗りを書いていなかった頃のサイドカーのため
  */
-export function withProgramInfo(timeline: PlacedMessage[], recording: Recording): PlacedMessage[] {
-    if (timeline.length === 0 || timeline.some((item) => item.message.type === 'programInfo'))
-        return timeline;
-    const info = programInfoOf(recording);
-    return info === null ? timeline : [{ at: 0, message: info }, ...timeline];
+export function withProgramInfo(
+  timeline: PlacedMessage[],
+  recording: Recording,
+): PlacedMessage[] {
+  if (
+    timeline.length === 0 ||
+    timeline.some((item) => item.message.type === "programInfo")
+  )
+    return timeline;
+  const info = programInfoOf(recording);
+  return info === null ? timeline : [{ at: 0, message: info }, ...timeline];
 }
 
 /** 1回に読む大きさ */
@@ -97,19 +106,19 @@ const CHUNK = 1 << 20;
  * 終わっていて、最後のこの一手で全部を捨てていた
  */
 async function capture(path: string): Promise<TimedMessage[]> {
-    const found = new DataBroadcastCapture();
-    const file = await open(path, 'r');
-    try {
-        const buffer = Buffer.alloc(CHUNK);
-        for (;;) {
-            const { bytesRead } = await file.read(buffer, 0, CHUNK, null);
-            if (bytesRead <= 0) break;
-            found.feed(buffer.subarray(0, bytesRead));
-        }
-    } finally {
-        await file.close();
+  const found = new DataBroadcastCapture();
+  const file = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(CHUNK);
+    for (;;) {
+      const { bytesRead } = await file.read(buffer, 0, CHUNK, null);
+      if (bytesRead <= 0) break;
+      found.feed(buffer.subarray(0, bytesRead));
     }
-    return found.result();
+  } finally {
+    await file.close();
+  }
+  return found.result();
 }
 
 /**
@@ -122,28 +131,35 @@ async function capture(path: string): Promise<TimedMessage[]> {
  * @returns 書いた変化の数。**0 なら書かない** (データ放送を持たない録画)
  */
 export async function saveRecordedBml(
-    tsPath: string,
-    sidecarPath: string,
-    recording: Recording,
-    keep: readonly KeptRange[] | null,
+  tsPath: string,
+  sidecarPath: string,
+  recording: Recording,
+  keep: readonly KeptRange[] | null,
 ): Promise<number> {
-    const timeline = await capture(tsPath);
-    /*
-     * **描けるモジュールが1つも無ければ書かない。** データ放送の載っていない局でも
-     * `pmt` は必ず1つ出る (timeline は空にならない) ので、それだけでは持たせない —
-     * 実際に画面になるのは `moduleDownloaded`。無ければサイドカーを作らない
-     */
-    if (!timeline.some((item) => item.message.type === 'moduleDownloaded')) return 0;
-    const placed = withProgramInfo(toPlaybackTimeline(timeline, recording.start_at, keep), recording);
-    writeFileSync(sidecarPath, `${placed.map((item) => JSON.stringify(item)).join('\n')}\n`);
-    return placed.length;
+  const timeline = await capture(tsPath);
+  /*
+   * **描けるモジュールが1つも無ければ書かない。** データ放送の載っていない局でも
+   * `pmt` は必ず1つ出る (timeline は空にならない) ので、それだけでは持たせない —
+   * 実際に画面になるのは `moduleDownloaded`。無ければサイドカーを作らない
+   */
+  if (!timeline.some((item) => item.message.type === "moduleDownloaded"))
+    return 0;
+  const placed = withProgramInfo(
+    toPlaybackTimeline(timeline, recording.start_at, keep),
+    recording,
+  );
+  writeFileSync(
+    sidecarPath,
+    `${placed.map((item) => JSON.stringify(item)).join("\n")}\n`,
+  );
+  return placed.length;
 }
 
 /** サイドカーを読む。無ければ空 (データ放送を持たない録画・古い録画) */
 export function loadRecordedBml(sidecarPath: string): PlacedMessage[] {
-    if (!existsSync(sidecarPath)) return [];
-    return readFileSync(sidecarPath, 'utf8')
-        .split('\n')
-        .filter((line) => line.length > 0)
-        .map((line) => JSON.parse(line) as PlacedMessage);
+  if (!existsSync(sidecarPath)) return [];
+  return readFileSync(sidecarPath, "utf8")
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as PlacedMessage);
 }

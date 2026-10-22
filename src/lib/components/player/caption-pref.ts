@@ -1,4 +1,4 @@
-import type { CaptionLanguage } from '#lib/caption-text.js';
+import type { CaptionLanguage } from "#lib/caption-text.js";
 
 /**
  * 字幕の出し入れと言語の覚え方 (`caption-pref.test.ts`)。**3画面 (ライブ・追っかけ・観る画面) で同じ。端末ごとに覚える** (`keep.ts`)。
@@ -9,21 +9,30 @@ import type { CaptionLanguage } from '#lib/caption-text.js';
  */
 
 /** 出し入れの鍵。`1` / `0` */
-export const CAPTION_ON_KEY = 'caption-on';
+export const CAPTION_ON_KEY = "caption-on";
 /** 言語の鍵。ISO 639 の3文字 */
-export const CAPTION_LANGUAGE_KEY = 'caption-language';
+export const CAPTION_LANGUAGE_KEY = "caption-language";
 
 /** 覚えていた出し入れ。**既定は出す** */
 export function storedCaptionsOn(saved: string | null): boolean {
-    return saved !== '0';
+  return saved !== "0";
 }
 
 /**
  * 覚えている言語 (`code`) が載っていればそれ、無ければ第1言語 (載っている中のいちばん若い番号) の番号。
  * 何も分かっていなければ 1
  */
-export function pickLanguage(languages: CaptionLanguage[], code: string | null): number {
-    const found = code === null || code === '' ? undefined : languages.find((l) => l.code === code);
-    if (found !== undefined) return found.index;
-    return languages.reduce((least, l) => Math.min(least, l.index), languages[0]?.index ?? 1);
+export function pickLanguage(
+  languages: CaptionLanguage[],
+  code: string | null,
+): number {
+  const found =
+    code === null || code === ""
+      ? undefined
+      : languages.find((l) => l.code === code);
+  if (found !== undefined) return found.index;
+  return languages.reduce(
+    (least, l) => Math.min(least, l.index),
+    languages[0]?.index ?? 1,
+  );
 }

@@ -1,4 +1,4 @@
-import { SKIP } from '#lib/ts/watch.js';
+import { SKIP } from "#lib/ts/watch.js";
 
 /**
  * 再生画面のキー操作。**観る画面と追っかけで同じ割り当てにする。**
@@ -15,43 +15,51 @@ import { SKIP } from '#lib/ts/watch.js';
  * 入力欄・ボタン・リンクの上では取らない — 空白でボタンを押せなくなる
  */
 export interface PlayerKeys {
-    /** 空白 / k */
-    togglePlay: () => void;
-    /** ← → (10秒。`ts/watch.ts` の端2回タップと同じ幅) */
-    seekBy: (seconds: number) => void;
-    /** c。持っていない画面は省く */
-    toggleCaptions?: () => void;
-    /** s */
-    snapshot?: () => void;
-    /** f */
-    toggleFull?: () => void;
-    /** `>` `<`。順送りと、行き過ぎたときの戻り */
-    stepSpeed?: (direction: number) => void;
-    /** m */
-    toggleMute?: () => void;
+  /** 空白 / k */
+  togglePlay: () => void;
+  /** ← → (10秒。`ts/watch.ts` の端2回タップと同じ幅) */
+  seekBy: (seconds: number) => void;
+  /** c。持っていない画面は省く */
+  toggleCaptions?: () => void;
+  /** s */
+  snapshot?: () => void;
+  /** f */
+  toggleFull?: () => void;
+  /** `>` `<`。順送りと、行き過ぎたときの戻り */
+  stepSpeed?: (direction: number) => void;
+  /** m */
+  toggleMute?: () => void;
 }
 
-export function playerKeys(actions: PlayerKeys): (event: KeyboardEvent) => void {
-    return (event: KeyboardEvent) => {
-        if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
-        if ((event.target as HTMLElement).closest('input, button, a, [role="menu"]') !== null) return;
+export function playerKeys(
+  actions: PlayerKeys,
+): (event: KeyboardEvent) => void {
+  return (event: KeyboardEvent) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing)
+      return;
+    if (
+      (event.target as HTMLElement).closest(
+        'input, button, a, [role="menu"]',
+      ) !== null
+    )
+      return;
 
-        const { stepSpeed } = actions;
-        const map: Record<string, (() => void) | undefined> = {
-            ' ': actions.togglePlay,
-            k: actions.togglePlay,
-            ArrowLeft: () => actions.seekBy(-SKIP),
-            ArrowRight: () => actions.seekBy(SKIP),
-            c: actions.toggleCaptions,
-            s: actions.snapshot,
-            f: actions.toggleFull,
-            '>': stepSpeed === undefined ? undefined : () => stepSpeed(1),
-            '<': stepSpeed === undefined ? undefined : () => stepSpeed(-1),
-            m: actions.toggleMute,
-        };
-        const run = map[event.key];
-        if (run === undefined) return;
-        event.preventDefault();
-        run();
+    const { stepSpeed } = actions;
+    const map: Record<string, (() => void) | undefined> = {
+      " ": actions.togglePlay,
+      k: actions.togglePlay,
+      ArrowLeft: () => actions.seekBy(-SKIP),
+      ArrowRight: () => actions.seekBy(SKIP),
+      c: actions.toggleCaptions,
+      s: actions.snapshot,
+      f: actions.toggleFull,
+      ">": stepSpeed === undefined ? undefined : () => stepSpeed(1),
+      "<": stepSpeed === undefined ? undefined : () => stepSpeed(-1),
+      m: actions.toggleMute,
     };
+    const run = map[event.key];
+    if (run === undefined) return;
+    event.preventDefault();
+    run();
+  };
 }

@@ -1,7 +1,7 @@
-import type { CaptionLanguage } from '#lib/caption-text.js';
-import { LIVE_CODECS, type LiveCodec } from '#lib/live.js';
-import { SPEEDS } from '#lib/ts/pacing.js';
-import type { IconShape } from './icons';
+import type { CaptionLanguage } from "#lib/caption-text.js";
+import { LIVE_CODECS, type LiveCodec } from "#lib/live.js";
+import { SPEEDS } from "#lib/ts/pacing.js";
+import type { IconShape } from "./icons";
 
 /**
  * 再生の設定 (⚙ `SettingsMenu`) に並べるもの。**3画面 (ライブ・追っかけ・観る画面) で同じ形。**
@@ -12,44 +12,44 @@ import type { IconShape } from './icons';
  * 何を覚えるか (端末ごと) は今までどおり各画面と `ambient.svelte.ts`・`background.svelte.ts` が持つ。ここは並べ方だけ
  */
 export interface SettingOption {
-    key: string | number;
-    label: string;
-    /** いま選ばれているか (`aria-checked`) */
-    active: boolean;
-    /** 並べるが押せない (互換モードでこの端末が描けない形式) */
-    disabled?: boolean;
+  key: string | number;
+  label: string;
+  /** いま選ばれているか (`aria-checked`) */
+  active: boolean;
+  /** 並べるが押せない (互換モードでこの端末が描けない形式) */
+  disabled?: boolean;
 }
 
 export interface SettingChoice {
-    /** testid の後ろ (`{prefix}-{id}`、選択肢は `{prefix}-{id}-option`) と、選択肢の `data-{id}` */
-    id: string;
-    label: string;
-    icon: IconShape;
-    /** 行に出すいまの値。注記 (再生できません) は付けない */
-    value: string;
-    options: SettingOption[];
-    pick: (key: string | number) => void;
+  /** testid の後ろ (`{prefix}-{id}`、選択肢は `{prefix}-{id}-option`) と、選択肢の `data-{id}` */
+  id: string;
+  label: string;
+  icon: IconShape;
+  /** 行に出すいまの値。注記 (再生できません) は付けない */
+  value: string;
+  options: SettingOption[];
+  pick: (key: string | number) => void;
 }
 
 export interface SettingToggle {
-    id: string;
-    label: string;
-    icon: IconShape;
-    on: boolean;
-    toggle: () => void;
-    /**
-     * 押したらメニューを閉じる (既定は閉じない)。押したあとに窓を出すもの (互換モードの運転中の注意) — 開いたままだと、
-     * 窓のボタンを押した1回目がメニューの外を押したことになって、閉じるだけで終わる
-     */
-    closes?: boolean;
+  id: string;
+  label: string;
+  icon: IconShape;
+  on: boolean;
+  toggle: () => void;
+  /**
+   * 押したらメニューを閉じる (既定は閉じない)。押したあとに窓を出すもの (互換モードの運転中の注意) — 開いたままだと、
+   * 窓のボタンを押した1回目がメニューの外を押したことになって、閉じるだけで終わる
+   */
+  closes?: boolean;
 }
 
 /** 押せない形式に添える注記 (docs/writing.md「同じことは同じ文言で」) */
 function unplayable(label: string, disabled: boolean): string {
-    return disabled ? `${label} (再生できません)` : label;
+  return disabled ? `${label} (再生できません)` : label;
 }
 
-const MPEG2 = 'mpeg2';
+const MPEG2 = "mpeg2";
 
 /**
  * ライブと追っかけのコーデック。押すと再エンコードになるので映像が一瞬止まるが、前の映像を貼ったまま差し替わる。
@@ -59,37 +59,39 @@ const MPEG2 = 'mpeg2';
  * `unavailable` に挙げた形式は、並べるが押せない (`live-player.svelte.ts` の `unavailable`)
  */
 export function liveCodecs(opts: {
-    icon: IconShape;
-    codec: LiveCodec;
-    raw?: boolean;
-    unavailable: LiveCodec[];
-    onselect: (codec: LiveCodec) => void;
-    onraw?: () => void;
+  icon: IconShape;
+  codec: LiveCodec;
+  raw?: boolean;
+  unavailable: LiveCodec[];
+  onselect: (codec: LiveCodec) => void;
+  onraw?: () => void;
 }): SettingChoice {
-    const raw = opts.raw === true;
-    const current = raw ? MPEG2 : opts.codec;
-    return {
-        id: 'codec',
-        label: 'コーデック',
-        icon: opts.icon,
-        value: raw ? 'MPEG-2' : (LIVE_CODECS.find((c) => c.id === current)?.label ?? 'H.264'),
-        options: [
-            ...LIVE_CODECS.map((c) => {
-                const off = opts.unavailable.includes(c.id);
-                return {
-                    key: c.id as string,
-                    label: unplayable(c.label, off),
-                    active: c.id === current,
-                    disabled: off,
-                };
-            }),
-            ...(opts.onraw ? [{ key: MPEG2, label: 'MPEG-2', active: raw }] : []),
-        ],
-        pick: (key) => {
-            if (key === MPEG2) opts.onraw?.();
-            else opts.onselect(key as LiveCodec);
-        },
-    };
+  const raw = opts.raw === true;
+  const current = raw ? MPEG2 : opts.codec;
+  return {
+    id: "codec",
+    label: "コーデック",
+    icon: opts.icon,
+    value: raw
+      ? "MPEG-2"
+      : (LIVE_CODECS.find((c) => c.id === current)?.label ?? "H.264"),
+    options: [
+      ...LIVE_CODECS.map((c) => {
+        const off = opts.unavailable.includes(c.id);
+        return {
+          key: c.id as string,
+          label: unplayable(c.label, off),
+          active: c.id === current,
+          disabled: off,
+        };
+      }),
+      ...(opts.onraw ? [{ key: MPEG2, label: "MPEG-2", active: raw }] : []),
+    ],
+    pick: (key) => {
+      if (key === MPEG2) opts.onraw?.();
+      else opts.onselect(key as LiveCodec);
+    },
+  };
 }
 
 /**
@@ -97,24 +99,26 @@ export function liveCodecs(opts: {
  * (`ts/playback.ts` の `codecChoices`)。`disabled` は互換モードでこの端末が描けない形式 (`canvasChoices`)
  */
 export function recordingCodecs(opts: {
-    icon: IconShape;
-    choices: { key: string; label: string; disabled?: boolean }[];
-    selected: string;
-    onpick: (key: string) => void;
+  icon: IconShape;
+  choices: { key: string; label: string; disabled?: boolean }[];
+  selected: string;
+  onpick: (key: string) => void;
 }): SettingChoice {
-    return {
-        id: 'codec',
-        label: 'コーデック',
-        icon: opts.icon,
-        value: (opts.choices.find((c) => c.key === opts.selected) ?? opts.choices[0])?.label ?? '',
-        options: opts.choices.map((c) => ({
-            key: c.key,
-            label: unplayable(c.label, c.disabled === true),
-            active: c.key === opts.selected,
-            disabled: c.disabled === true,
-        })),
-        pick: (key) => opts.onpick(String(key)),
-    };
+  return {
+    id: "codec",
+    label: "コーデック",
+    icon: opts.icon,
+    value:
+      (opts.choices.find((c) => c.key === opts.selected) ?? opts.choices[0])
+        ?.label ?? "",
+    options: opts.choices.map((c) => ({
+      key: c.key,
+      label: unplayable(c.label, c.disabled === true),
+      active: c.key === opts.selected,
+      disabled: c.disabled === true,
+    })),
+    pick: (key) => opts.onpick(String(key)),
+  };
 }
 
 /**
@@ -123,18 +127,18 @@ export function recordingCodecs(opts: {
  * (ライブは再エンコードで切り替え、録画はコンテナの中から選ぶ)
  */
 export function audioTracks<T extends string | number>(opts: {
-    icon: IconShape;
-    items: { key: T; label: string; active: boolean }[];
-    onselect: (key: T) => void;
+  icon: IconShape;
+  items: { key: T; label: string; active: boolean }[];
+  onselect: (key: T) => void;
 }): SettingChoice {
-    return {
-        id: 'audio',
-        label: '音声',
-        icon: opts.icon,
-        value: opts.items.find((item) => item.active)?.label ?? '',
-        options: opts.items,
-        pick: (key) => opts.onselect(key as T),
-    };
+  return {
+    id: "audio",
+    label: "音声",
+    icon: opts.icon,
+    value: opts.items.find((item) => item.active)?.label ?? "",
+    options: opts.items,
+    pick: (key) => opts.onselect(key as T),
+  };
 }
 
 /**
@@ -146,62 +150,75 @@ export function audioTracks<T extends string | number>(opts: {
  * 出すものを替えるだけ (`onlanguage`)
  */
 export function subtitles(opts: {
-    icon: IconShape;
-    on: boolean;
-    /** 字幕のストリーム (ライブ・追っかけ)。観る画面は1本なので省く */
-    tracks?: { index: number; label: string }[];
-    track?: number;
-    languages: CaptionLanguage[];
-    language: number;
-    onoff: (on: boolean) => void;
-    ontrack?: (index: number) => void;
-    onlanguage: (index: number) => void;
+  icon: IconShape;
+  on: boolean;
+  /** 字幕のストリーム (ライブ・追っかけ)。観る画面は1本なので省く */
+  tracks?: { index: number; label: string }[];
+  track?: number;
+  languages: CaptionLanguage[];
+  language: number;
+  onoff: (on: boolean) => void;
+  ontrack?: (index: number) => void;
+  onlanguage: (index: number) => void;
 }): SettingChoice {
-    const tracks = opts.tracks ?? [];
-    const current = opts.track ?? 0;
-    const languages = opts.languages.length > 1 ? opts.languages : [];
-    const options: SettingOption[] = [{ key: 'off', label: 'オフ', active: !opts.on }];
-    const one = (key: string, label: string, active: boolean) =>
-        options.push({ key, label, active: opts.on && active });
-    if (tracks.length > 1) {
-        for (const t of tracks) {
-            if (t.index === current && languages.length > 0) {
-                for (const l of languages)
-                    one(`${t.index}:${l.index}`, `${t.label} ${l.label}`, opts.language === l.index);
-            } else {
-                one(`${t.index}:0`, t.label, t.index === current);
-            }
-        }
-    } else if (languages.length > 0) {
-        for (const l of languages) one(`${current}:${l.index}`, l.label, opts.language === l.index);
-    } else {
-        // 選ぶものが無い (言語が1つだけ・まだ分からない)。出すか消すかだけ
-        const only = opts.languages[0];
-        one(`${current}:0`, only !== undefined && only.code !== '' ? only.label : 'オン', true);
+  const tracks = opts.tracks ?? [];
+  const current = opts.track ?? 0;
+  const languages = opts.languages.length > 1 ? opts.languages : [];
+  const options: SettingOption[] = [
+    { key: "off", label: "オフ", active: !opts.on },
+  ];
+  const one = (key: string, label: string, active: boolean) =>
+    options.push({ key, label, active: opts.on && active });
+  if (tracks.length > 1) {
+    for (const t of tracks) {
+      if (t.index === current && languages.length > 0) {
+        for (const l of languages)
+          one(
+            `${t.index}:${l.index}`,
+            `${t.label} ${l.label}`,
+            opts.language === l.index,
+          );
+      } else {
+        one(`${t.index}:0`, t.label, t.index === current);
+      }
     }
-    const chosen = options.find((o) => o.active && o.key !== 'off');
-    return {
-        id: 'subtitle',
-        label: '字幕',
-        icon: opts.icon,
-        value: opts.on ? (chosen?.label ?? 'オン') : 'オフ',
-        options,
-        pick: (key) => {
-            if (key === 'off') return opts.onoff(false);
-            const [track = current, language = 0] = String(key).split(':').map(Number);
-            opts.onoff(true);
-            if (track !== current) opts.ontrack?.(track);
-            else if (language > 0) opts.onlanguage(language);
-        },
-    };
+  } else if (languages.length > 0) {
+    for (const l of languages)
+      one(`${current}:${l.index}`, l.label, opts.language === l.index);
+  } else {
+    // 選ぶものが無い (言語が1つだけ・まだ分からない)。出すか消すかだけ
+    const only = opts.languages[0];
+    one(
+      `${current}:0`,
+      only !== undefined && only.code !== "" ? only.label : "オン",
+      true,
+    );
+  }
+  const chosen = options.find((o) => o.active && o.key !== "off");
+  return {
+    id: "subtitle",
+    label: "字幕",
+    icon: opts.icon,
+    value: opts.on ? (chosen?.label ?? "オン") : "オフ",
+    options,
+    pick: (key) => {
+      if (key === "off") return opts.onoff(false);
+      const [track = current, language = 0] = String(key)
+        .split(":")
+        .map(Number);
+      opts.onoff(true);
+      if (track !== current) opts.ontrack?.(track);
+      else if (language > 0) opts.onlanguage(language);
+    },
+  };
 }
 
 /** 押すだけの行 (Hybridcast を別のタブで開く、など)。押したらメニューは閉じる */
 export interface SettingAction {
-    id: string;
-    label: string;
-    icon: IconShape;
-    run: () => void;
+  id: string;
+  label: string;
+  icon: IconShape;
+  run: () => void;
 }
 
 /**
@@ -209,26 +226,30 @@ export interface SettingAction {
  * 操作バーと同じ順に並べる (`kind` で見分ける)。広い枠では操作バーに出ているので並べない
  */
 export type SettingRow =
-    | ({ kind: 'action' } & SettingAction)
-    | ({ kind: 'toggle' } & SettingToggle)
-    | ({ kind: 'choice' } & SettingChoice);
+  | ({ kind: "action" } & SettingAction)
+  | ({ kind: "toggle" } & SettingToggle)
+  | ({ kind: "choice" } & SettingChoice);
 
 /**
  * 速さ (`pace`)。操作バーの速さ (`SpeedMenu`) を畳んだときの行。選択肢も同じ (×1〜×2)。
  * `label` は画面の言葉 (ライブは「追っかけの速さ」、他は「再生の速さ」)
  */
 export function speeds(opts: {
-    icon: IconShape;
-    label: string;
-    speed: number;
-    onselect: (speed: number) => void;
+  icon: IconShape;
+  label: string;
+  speed: number;
+  onselect: (speed: number) => void;
 }): SettingChoice {
-    return {
-        id: 'pace',
-        label: opts.label,
-        icon: opts.icon,
-        value: `×${opts.speed}`,
-        options: SPEEDS.map((value) => ({ key: value, label: `×${value}`, active: value === opts.speed })),
-        pick: (key) => opts.onselect(Number(key)),
-    };
+  return {
+    id: "pace",
+    label: opts.label,
+    icon: opts.icon,
+    value: `×${opts.speed}`,
+    options: SPEEDS.map((value) => ({
+      key: value,
+      label: `×${value}`,
+      active: value === opts.speed,
+    })),
+    pick: (key) => opts.onselect(Number(key)),
+  };
 }

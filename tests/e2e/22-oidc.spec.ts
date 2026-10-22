@@ -1,5 +1,5 @@
-import { bootOidc, type OidcStack } from '../stack';
-import { test as base, expect } from './helpers';
+import { bootOidc, type OidcStack } from "../stack";
+import { test as base, expect } from "./helpers";
 
 /**
  * OIDC でのログインと、ネットワークで素通しにする仕組み。
@@ -18,255 +18,286 @@ import { test as base, expect } from './helpers';
  * 共有して困らない。偽 IdP の振る舞いを変えるテスト (グループ) だけが終わりに戻す
  */
 const test = base.extend<Record<never, never>, { oidc: OidcStack }>({
-    oidc: [
-        async ({ stack }, use, workerInfo) => {
-            const { oidc, shutdown } = await bootOidc(workerInfo.workerIndex, stack.root);
-            await use(oidc);
-            await shutdown();
-        },
-        { scope: 'worker' },
-    ],
+  oidc: [
+    async ({ stack }, use, workerInfo) => {
+      const { oidc, shutdown } = await bootOidc(
+        workerInfo.workerIndex,
+        stack.root,
+      );
+      await use(oidc);
+      await shutdown();
+    },
+    { scope: "worker" },
+  ],
 });
 
 /** LAN の外から来たことにするアドレス */
-const OUTSIDE = '203.0.113.9';
+const OUTSIDE = "203.0.113.9";
 /** 素通しにしてあるネットワークの中 */
-const INSIDE = '10.10.5.9';
+const INSIDE = "10.10.5.9";
 
 /** Cookie を持って回る、素の fetch */
-function client(oidc: OidcStack, { xff = OUTSIDE, host = 'denpa.test' } = {}) {
-    const jar = new Map<string, string>();
-    return async (path: string, init: RequestInit = {}) => {
-        const headers: Record<string, string> = {
-            accept: 'text/html',
-            /*
-             * **名前は `x-forwarded-host` で渡す。** Node の fetch は `Host` を
-             * 禁止ヘッダとして黙って落とすので、そちらでは差し替えられない
-             * (アプリ側は `HOST_HEADER` でここを見るようにしてある)
-             */
-            'x-forwarded-host': host,
-            'x-forwarded-proto': 'https',
-            'x-forwarded-for': xff,
-            ...(init.headers as Record<string, string> | undefined),
-        };
-        if (jar.size > 0) headers['cookie'] = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
-        const res = await fetch(`${oidc.appUrl}${path}`, { ...init, headers, redirect: 'manual' });
-        for (const raw of res.headers.getSetCookie?.() ?? []) {
-            const [pair = ''] = raw.split(';');
-            const at = pair.indexOf('=');
-            const name = pair.slice(0, at).trim();
-            const value = pair.slice(at + 1).trim();
-            if (value === '' || /Max-Age=0/i.test(raw)) jar.delete(name);
-            else jar.set(name, value);
-        }
-        return { res, jar };
+function client(oidc: OidcStack, { xff = OUTSIDE, host = "denpa.test" } = {}) {
+  const jar = new Map<string, string>();
+  return async (path: string, init: RequestInit = {}) => {
+    const headers: Record<string, string> = {
+      accept: "text/html",
+      /*
+       * **名前は `x-forwarded-host` で渡す。** Node の fetch は `Host` を
+       * 禁止ヘッダとして黙って落とすので、そちらでは差し替えられない
+       * (アプリ側は `HOST_HEADER` でここを見るようにしてある)
+       */
+      "x-forwarded-host": host,
+      "x-forwarded-proto": "https",
+      "x-forwarded-for": xff,
+      ...(init.headers as Record<string, string> | undefined),
     };
+    if (jar.size > 0)
+      headers["cookie"] = [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+    const res = await fetch(`${oidc.appUrl}${path}`, {
+      ...init,
+      headers,
+      redirect: "manual",
+    });
+    for (const raw of res.headers.getSetCookie?.() ?? []) {
+      const [pair = ""] = raw.split(";");
+      const at = pair.indexOf("=");
+      const name = pair.slice(0, at).trim();
+      const value = pair.slice(at + 1).trim();
+      if (value === "" || /Max-Age=0/i.test(raw)) jar.delete(name);
+      else jar.set(name, value);
+    }
+    return { res, jar };
+  };
 }
 
 /** 認可エンドポイントまで行って、戻ってきた callback を呼ぶ */
 async function login(get: ReturnType<typeof client>) {
-    const started = await get('/login');
-    const authorize = started.res.headers.get('location') ?? '';
-    const back = (await fetch(authorize, { redirect: 'manual' })).headers.get('location') ?? '';
-    const url = new URL(back);
-    return get(url.pathname + url.search);
+  const started = await get("/login");
+  const authorize = started.res.headers.get("location") ?? "";
+  const back =
+    (await fetch(authorize, { redirect: "manual" })).headers.get("location") ??
+    "";
+  const url = new URL(back);
+  return get(url.pathname + url.search);
 }
 
-test.describe('OIDC でのログイン', () => {
-    test('ログインしていないと、画面はログインへ送られる', async ({ oidc }) => {
-        const get = client(oidc);
-        const { res } = await get('/');
-        expect(res.status).toBe(302);
-        // 転送は、いまの URL からの相対 (前段の接頭辞の下でも効くように。server/paths.ts)
-        expect(res.headers.get('location')).toBe('./login?to=%2F');
+test.describe("OIDC でのログイン", () => {
+  test("ログインしていないと、画面はログインへ送られる", async ({ oidc }) => {
+    const get = client(oidc);
+    const { res } = await get("/");
+    expect(res.status).toBe(302);
+    // 転送は、いまの URL からの相対 (前段の接頭辞の下でも効くように。server/paths.ts)
+    expect(res.headers.get("location")).toBe("./login?to=%2F");
+  });
+
+  /*
+   * 画面の読み込み以外を 302 で送ると、返ってきた HTML を JSON として読もうとして
+   * 意味の分からない失敗になる。401 なら画面側は「切れた」と分かる
+   */
+  test("画面の読み込み以外は 401 にする", async ({ oidc }) => {
+    const get = client(oidc);
+    const { res } = await get("/", { headers: { accept: "application/json" } });
+    expect(res.status).toBe(401);
+  });
+
+  test("認可エンドポイントへは PKCE と state / nonce を付けて送る", async ({
+    oidc,
+  }) => {
+    const get = client(oidc);
+    const { res, jar } = await get("/login");
+    const url = new URL(res.headers.get("location") ?? "");
+    expect(url.origin).toBe(oidc.idpUrl);
+    expect(url.searchParams.get("client_id")).toBe(oidc.clientId);
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://denpa.test/login/callback",
+    );
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("state")).toBeTruthy();
+    expect(url.searchParams.get("nonce")).toBeTruthy();
+    // 途中の控えは Cookie に預ける
+    expect(jar.has("denpa_login")).toBe(true);
+  });
+
+  /*
+   * **戻り先は自分のところだけ。** そのまま使うと `?to=//evil.example` で
+   * 外へ飛ばす踏み台になる (`//` は「同じ scheme の別ホスト」を指す)
+   */
+  test("外へ飛ばす戻り先は受け付けない", async ({ oidc }) => {
+    const get = client(oidc);
+    const { jar } = await get("/login?to=%2F%2Fevil.example");
+    const pending = JSON.parse(
+      decodeURIComponent(jar.get("denpa_login") ?? "{}"),
+    );
+    expect(pending.to).toBe("/");
+  });
+
+  test("通って戻ると、もとの行き先へ帰る", async ({ oidc }) => {
+    const get = client(oidc);
+    // 先に行き先を覚えさせてから通す
+    const started = await get("/login?to=%2Fsettings");
+    const authorize = started.res.headers.get("location") ?? "";
+    const back = new URL(
+      (await fetch(authorize, { redirect: "manual" })).headers.get(
+        "location",
+      ) ?? "",
+    );
+    const { res, jar } = await get(back.pathname + back.search);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("../settings");
+    expect(jar.has("denpa_session")).toBe(true);
+    // 使い捨て。成否によらず捨てる
+    expect(jar.has("denpa_login")).toBe(false);
+
+    // これで画面が開く
+    expect((await get("/")).res.status).toBe(200);
+  });
+
+  /*
+   * **`state` が「自分が始めたログイン」の証拠。** 合言葉は Cookie にしか無いので、
+   * 他所のサイトから貼られたリンクでは通らない
+   */
+  test("state が合わなければ断る", async ({ oidc }) => {
+    const get = client(oidc);
+    await get("/login");
+    const { res, jar } = await get("/login/callback?code=code-1&state=ちがう");
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain("state");
+    expect(jar.has("denpa_session")).toBe(false);
+  });
+
+  test("途中の控えが無ければ断る", async ({ oidc }) => {
+    // Cookie を持たずにいきなり callback を呼ぶ
+    const get = client(oidc);
+    const { res } = await get("/login/callback?code=code-1&state=x");
+    expect(res.status).toBe(403);
+  });
+
+  test("ログアウトすると控えが消え、また求められる", async ({ oidc }) => {
+    const get = client(oidc);
+    await login(get);
+    expect((await get("/")).res.status).toBe(200);
+
+    // ブラウザと同じく Origin を付ける。SvelteKit 3 は Content-Type の無い POST も
+    // CSRF の判定に掛けるので、付けないと「よそからの送信」として断られる
+    const { res, jar } = await get("/logout", {
+      method: "POST",
+      headers: { origin: "https://denpa.test" },
     });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("./login/out");
+    expect(jar.has("denpa_session")).toBe(false);
+    expect((await get("/")).res.status).toBe(302);
+  });
 
-    /*
-     * 画面の読み込み以外を 302 で送ると、返ってきた HTML を JSON として読もうとして
-     * 意味の分からない失敗になる。401 なら画面側は「切れた」と分かる
-     */
-    test('画面の読み込み以外は 401 にする', async ({ oidc }) => {
-        const get = client(oidc);
-        const { res } = await get('/', { headers: { accept: 'application/json' } });
-        expect(res.status).toBe(401);
+  /*
+   * **設定の「その他」の「ほかの端末からもログアウト」。** いまの控えだけ残して、ほかは消す。
+   * 一式はワーカーで共有しているので、ほかのテストの控えも一緒に消える (数は決め打ちしない)
+   */
+  test("ほかの端末からもログアウトすると、ほかの端末だけ入り直しになる", async ({
+    oidc,
+  }) => {
+    const mine = client(oidc);
+    const other = client(oidc);
+    await login(mine);
+    await login(other);
+    expect((await other("/")).res.status).toBe(200);
+
+    const page = await mine("/settings/general");
+    expect(page.res.status).toBe(200);
+    const html = await page.res.text();
+    expect(html).toContain('data-testid="logout"');
+    expect(html).toContain("件のログインがあります");
+
+    const { res } = await mine("/settings/general?/logoutOthers", {
+      method: "POST",
+      headers: {
+        origin: "https://denpa.test",
+        accept: "application/json",
+        "x-sveltekit-action": "true",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: "",
     });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { type: string; data: string };
+    expect(body.type).toBe("success");
+    expect(body.data).toContain("loggedOut");
 
-    test('認可エンドポイントへは PKCE と state / nonce を付けて送る', async ({ oidc }) => {
-        const get = client(oidc);
-        const { res, jar } = await get('/login');
-        const url = new URL(res.headers.get('location') ?? '');
-        expect(url.origin).toBe(oidc.idpUrl);
-        expect(url.searchParams.get('client_id')).toBe(oidc.clientId);
-        expect(url.searchParams.get('redirect_uri')).toBe('https://denpa.test/login/callback');
-        expect(url.searchParams.get('code_challenge_method')).toBe('S256');
-        expect(url.searchParams.get('state')).toBeTruthy();
-        expect(url.searchParams.get('nonce')).toBeTruthy();
-        // 途中の控えは Cookie に預ける
-        expect(jar.has('denpa_login')).toBe(true);
-    });
+    // ほかの端末は入り直し、押した端末はそのまま
+    expect((await other("/")).res.status).toBe(302);
+    expect((await mine("/")).res.status).toBe(200);
+  });
 
-    /*
-     * **戻り先は自分のところだけ。** そのまま使うと `?to=//evil.example` で
-     * 外へ飛ばす踏み台になる (`//` は「同じ scheme の別ホスト」を指す)
-     */
-    test('外へ飛ばす戻り先は受け付けない', async ({ oidc }) => {
-        const get = client(oidc);
-        const { jar } = await get('/login?to=%2F%2Fevil.example');
-        const pending = JSON.parse(decodeURIComponent(jar.get('denpa_login') ?? '{}'));
-        expect(pending.to).toBe('/');
-    });
-
-    test('通って戻ると、もとの行き先へ帰る', async ({ oidc }) => {
-        const get = client(oidc);
-        // 先に行き先を覚えさせてから通す
-        const started = await get('/login?to=%2Fsettings');
-        const authorize = started.res.headers.get('location') ?? '';
-        const back = new URL((await fetch(authorize, { redirect: 'manual' })).headers.get('location') ?? '');
-        const { res, jar } = await get(back.pathname + back.search);
-
-        expect(res.status).toBe(303);
-        expect(res.headers.get('location')).toBe('../settings');
-        expect(jar.has('denpa_session')).toBe(true);
-        // 使い捨て。成否によらず捨てる
-        expect(jar.has('denpa_login')).toBe(false);
-
-        // これで画面が開く
-        expect((await get('/')).res.status).toBe(200);
-    });
-
-    /*
-     * **`state` が「自分が始めたログイン」の証拠。** 合言葉は Cookie にしか無いので、
-     * 他所のサイトから貼られたリンクでは通らない
-     */
-    test('state が合わなければ断る', async ({ oidc }) => {
-        const get = client(oidc);
-        await get('/login');
-        const { res, jar } = await get('/login/callback?code=code-1&state=ちがう');
-        expect(res.status).toBe(403);
-        expect(await res.text()).toContain('state');
-        expect(jar.has('denpa_session')).toBe(false);
-    });
-
-    test('途中の控えが無ければ断る', async ({ oidc }) => {
-        // Cookie を持たずにいきなり callback を呼ぶ
-        const get = client(oidc);
-        const { res } = await get('/login/callback?code=code-1&state=x');
-        expect(res.status).toBe(403);
-    });
-
-    test('ログアウトすると控えが消え、また求められる', async ({ oidc }) => {
-        const get = client(oidc);
-        await login(get);
-        expect((await get('/')).res.status).toBe(200);
-
-        // ブラウザと同じく Origin を付ける。SvelteKit 3 は Content-Type の無い POST も
-        // CSRF の判定に掛けるので、付けないと「よそからの送信」として断られる
-        const { res, jar } = await get('/logout', {
-            method: 'POST',
-            headers: { origin: 'https://denpa.test' },
-        });
-        expect(res.status).toBe(303);
-        expect(res.headers.get('location')).toBe('./login/out');
-        expect(jar.has('denpa_session')).toBe(false);
-        expect((await get('/')).res.status).toBe(302);
-    });
-
-    /*
-     * **設定の「その他」の「ほかの端末からもログアウト」。** いまの控えだけ残して、ほかは消す。
-     * 一式はワーカーで共有しているので、ほかのテストの控えも一緒に消える (数は決め打ちしない)
-     */
-    test('ほかの端末からもログアウトすると、ほかの端末だけ入り直しになる', async ({ oidc }) => {
-        const mine = client(oidc);
-        const other = client(oidc);
-        await login(mine);
-        await login(other);
-        expect((await other('/')).res.status).toBe(200);
-
-        const page = await mine('/settings/general');
-        expect(page.res.status).toBe(200);
-        const html = await page.res.text();
-        expect(html).toContain('data-testid="logout"');
-        expect(html).toContain('件のログインがあります');
-
-        const { res } = await mine('/settings/general?/logoutOthers', {
-            method: 'POST',
-            headers: {
-                origin: 'https://denpa.test',
-                accept: 'application/json',
-                'x-sveltekit-action': 'true',
-                'content-type': 'application/x-www-form-urlencoded',
-            },
-            body: '',
-        });
-        expect(res.status).toBe(200);
-        const body = (await res.json()) as { type: string; data: string };
-        expect(body.type).toBe('success');
-        expect(body.data).toContain('loggedOut');
-
-        // ほかの端末は入り直し、押した端末はそのまま
-        expect((await other('/')).res.status).toBe(302);
-        expect((await mine('/')).res.status).toBe(200);
-    });
-
-    test('素通しで入っていれば、その他にはログアウトを出さない', async ({ oidc }) => {
-        const get = client(oidc, { xff: INSIDE });
-        const { res } = await get('/settings/general');
-        expect(res.status).toBe(200);
-        const html = await res.text();
-        expect(html).toContain('data-testid="login-none"');
-        expect(html).not.toContain('data-testid="logout"');
-    });
+  test("素通しで入っていれば、その他にはログアウトを出さない", async ({
+    oidc,
+  }) => {
+    const get = client(oidc, { xff: INSIDE });
+    const { res } = await get("/settings/general");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('data-testid="login-none"');
+    expect(html).not.toContain('data-testid="logout"');
+  });
 });
 
 /**
  * **通すかどうかはグループかロールで決める。** 誰がログインしたかでは決めない。
  * 断るときは理由を出す — 黙って弾くと「なぜか自分だけ入れない」になる。
  */
-test.describe('グループかロールで絞る', () => {
-    const setGroups = (oidc: OidcStack, body: { groups?: string[]; roles?: string[]; omit?: boolean }) =>
-        fetch(`${oidc.idpUrl}/__control/groups`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-
-    // 一式はワーカーで共有しているので、変えた振る舞いは戻す
-    test.afterEach(async ({ oidc }) => {
-        await setGroups(oidc, { groups: [oidc.group], roles: [], omit: false });
+test.describe("グループかロールで絞る", () => {
+  const setGroups = (
+    oidc: OidcStack,
+    body: { groups?: string[]; roles?: string[]; omit?: boolean },
+  ) =>
+    fetch(`${oidc.idpUrl}/__control/groups`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
     });
 
-    test('入っていなければ断り、理由を出す', async ({ oidc }) => {
-        await setGroups(oidc, { groups: ['others'] });
-        const { res, jar } = await login(client(oidc));
-        expect(res.status).toBe(403);
-        expect(await res.text()).toContain('のグループにもロールにも入っていません');
-        expect(jar.has('denpa_session')).toBe(false);
-    });
+  // 一式はワーカーで共有しているので、変えた振る舞いは戻す
+  test.afterEach(async ({ oidc }) => {
+    await setGroups(oidc, { groups: [oidc.group], roles: [], omit: false });
+  });
 
-    /*
-     * グループクレームからアプリロールへ移している最中なので、`roles` だけでも通す。
-     * これが通らないと、Entra 側を切り替えた瞬間に誰も入れなくなる
-     */
-    test('groups が載っていなくても、roles にあれば通す', async ({ oidc }) => {
-        await setGroups(oidc, { roles: [oidc.group], omit: true });
-        const get = client(oidc);
-        const { res, jar } = await login(get);
-        expect(res.status).toBe(303);
-        expect(jar.has('denpa_session')).toBe(true);
-        expect((await get('/')).res.status).toBe(200);
-    });
+  test("入っていなければ断り、理由を出す", async ({ oidc }) => {
+    await setGroups(oidc, { groups: ["others"] });
+    const { res, jar } = await login(client(oidc));
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain(
+      "のグループにもロールにも入っていません",
+    );
+    expect(jar.has("denpa_session")).toBe(false);
+  });
 
-    /*
-     * アプリ登録で `groupMembershipClaims` を有効にせず、ロールも割り当てていないと
-     * こうなる。「入っていない」と同じ扱いにすると、設定漏れなのか本当にいないのか
-     * 分からない
-     */
-    test('groups も roles も載っていなければ、そう分かる理由を出す', async ({ oidc }) => {
-        await setGroups(oidc, { omit: true });
-        const { res } = await login(client(oidc));
-        expect(res.status).toBe(403);
-        expect(await res.text()).toContain('groupMembershipClaims');
-    });
+  /*
+   * グループクレームからアプリロールへ移している最中なので、`roles` だけでも通す。
+   * これが通らないと、Entra 側を切り替えた瞬間に誰も入れなくなる
+   */
+  test("groups が載っていなくても、roles にあれば通す", async ({ oidc }) => {
+    await setGroups(oidc, { roles: [oidc.group], omit: true });
+    const get = client(oidc);
+    const { res, jar } = await login(get);
+    expect(res.status).toBe(303);
+    expect(jar.has("denpa_session")).toBe(true);
+    expect((await get("/")).res.status).toBe(200);
+  });
+
+  /*
+   * アプリ登録で `groupMembershipClaims` を有効にせず、ロールも割り当てていないと
+   * こうなる。「入っていない」と同じ扱いにすると、設定漏れなのか本当にいないのか
+   * 分からない
+   */
+  test("groups も roles も載っていなければ、そう分かる理由を出す", async ({
+    oidc,
+  }) => {
+    await setGroups(oidc, { omit: true });
+    const { res } = await login(client(oidc));
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain("groupMembershipClaims");
+  });
 });
 
 /**
@@ -275,31 +306,33 @@ test.describe('グループかロールで絞る', () => {
  * LAN のテレビのアプリに資格情報を入れずに使わせるためのもの。
  * ここに当たると OIDC も掛からない。
  */
-test.describe('ネットワークで素通し', () => {
-    test('ネットワークの中なら、何も聞かずに通す', async ({ oidc }) => {
-        const get = client(oidc, { xff: INSIDE });
-        expect((await get('/')).res.status).toBe(200);
-        // ファイルのエンドポイントも。ここが素通しになるのが狙い (404 = 認証は抜けて、録画が無いだけ)
-        expect((await get('/api/recordings/1/file')).res.status).toBe(404);
-    });
+test.describe("ネットワークで素通し", () => {
+  test("ネットワークの中なら、何も聞かずに通す", async ({ oidc }) => {
+    const get = client(oidc, { xff: INSIDE });
+    expect((await get("/")).res.status).toBe(200);
+    // ファイルのエンドポイントも。ここが素通しになるのが狙い (404 = 認証は抜けて、録画が無いだけ)
+    expect((await get("/api/recordings/1/file")).res.status).toBe(404);
+  });
 
-    test('ネットワークの外は通さない', async ({ oidc }) => {
-        const get = client(oidc, { xff: OUTSIDE });
-        expect((await get('/')).res.status).toBe(302);
-        // ファイルのエンドポイントもほかの API と同じ。ログインの控えが無ければ 401 (ログイン画面へは回さない)
-        expect((await get('/api/recordings/1/file')).res.status).toBe(401);
-    });
+  test("ネットワークの外は通さない", async ({ oidc }) => {
+    const get = client(oidc, { xff: OUTSIDE });
+    expect((await get("/")).res.status).toBe(302);
+    // ファイルのエンドポイントもほかの API と同じ。ログインの控えが無ければ 401 (ログイン画面へは回さない)
+    expect((await get("/api/recordings/1/file")).res.status).toBe(401);
+  });
 
-    test('どの名前で来たかは問わない', async ({ oidc }) => {
-        // 名前で分けるのは前段 (Traefik) の仕事。ここではアドレスだけ見る
-        const get = client(oidc, { host: 'lan.denpa.test', xff: INSIDE });
-        expect((await get('/')).res.status).toBe(200);
-    });
+  test("どの名前で来たかは問わない", async ({ oidc }) => {
+    // 名前で分けるのは前段 (Traefik) の仕事。ここではアドレスだけ見る
+    const get = client(oidc, { host: "lan.denpa.test", xff: INSIDE });
+    expect((await get("/")).res.status).toBe(200);
+  });
 
-    test('死活確認はどこからでも通る', async ({ oidc }) => {
-        // ここを守ると Kubernetes の livenessProbe が落ち、Pod が再起動を繰り返す
-        const get = client(oidc, { xff: OUTSIDE });
-        const { res } = await get('/api/health', { headers: { accept: 'application/json' } });
-        expect(res.status).toBe(200);
+  test("死活確認はどこからでも通る", async ({ oidc }) => {
+    // ここを守ると Kubernetes の livenessProbe が落ち、Pod が再起動を繰り返す
+    const get = client(oidc, { xff: OUTSIDE });
+    const { res } = await get("/api/health", {
+      headers: { accept: "application/json" },
     });
+    expect(res.status).toBe(200);
+  });
 });

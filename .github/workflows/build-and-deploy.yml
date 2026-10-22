@@ -4,24 +4,24 @@ on:
   push:
     branches: [main]
     paths:
-      - 'agent/**'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'src/**'
-      - 'static/**'
-      - 'package.json'
-      - 'bun.lock'
-      - 'vite.config.ts'
+      - "agent/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "src/**"
+      - "static/**"
+      - "package.json"
+      - "bun.lock"
+      - "vite.config.ts"
       # ここから下も denpa のイメージに入る (.github/image-tags.sh の denpa_paths と揃える)
-      - 'server.js'
-      - 'patches/**'
-      - 'wasm/**'
-      - 'drizzle/**'
-      - '.github/workflows/build-and-deploy.yml'
-      - '.github/image-tags.sh'
-      - '.github/newest-tags.sh'
-      - '.github/aio.Dockerfile'
-      - '.github/aio-entrypoint.ts'
+      - "server.js"
+      - "patches/**"
+      - "wasm/**"
+      - "drizzle/**"
+      - ".github/workflows/build-and-deploy.yml"
+      - ".github/image-tags.sh"
+      - ".github/newest-tags.sh"
+      - ".github/aio.Dockerfile"
+      - ".github/aio-entrypoint.ts"
   workflow_dispatch: {}
 
 # この workflow が書き換えるのは deploy/application.yaml だけで、そのパスは上の
@@ -87,7 +87,7 @@ jobs:
           # 捨てるのは clang を入れ直す 20 秒ほど
           - name: denpa-agent
             file: agent/Dockerfile
-            target: ''
+            target: ""
             scope: agent
             cache-mode: min
           - name: denpa

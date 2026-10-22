@@ -17,21 +17,21 @@
  * 使っているチューナーは取られないだけ (空きが無ければ待ち、飛ばさない)。
  */
 
-import { type EitEvent, EpgReader } from '../ts/eit';
-import { type FoundService, ServiceReader } from '../ts/psi';
-import type { ChannelType } from '../types';
-import { config } from './config';
-import { savePrograms, settle, sync } from './epg';
-import { collectOnce } from './epg-collect';
-import { emit } from './events';
+import { type EitEvent, EpgReader } from "../ts/eit";
+import { type FoundService, ServiceReader } from "../ts/psi";
+import type { ChannelType } from "../types";
+import { config } from "./config";
+import { savePrograms, settle, sync } from "./epg";
+import { collectOnce } from "./epg-collect";
+import { emit } from "./events";
 import {
-    type AgentChannel,
-    getTuners,
-    openChannelStream,
-    putChannels,
-    TunerBusyError,
-    twinOf,
-} from './tuner';
+  type AgentChannel,
+  getTuners,
+  openChannelStream,
+  putChannels,
+  TunerBusyError,
+  twinOf,
+} from "./tuner";
 
 /**
  * 1チャンネルあたりの待ち時間。
@@ -49,12 +49,12 @@ const BUSY_RETRY = 10_000;
 const LOG_LIMIT = 400;
 
 /** 総当たりできる種別。`SKY` (スカパー!プレミアム) は持っていないので対象外 */
-type ScannableType = Extract<ChannelType, 'GR' | 'BS' | 'CS'>;
+type ScannableType = Extract<ChannelType, "GR" | "BS" | "CS">;
 
 const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
-    GR: { min: 13, max: 62 },
-    BS: { min: 1, max: 23 },
-    CS: { min: 2, max: 24 },
+  GR: { min: 13, max: 62 },
+  BS: { min: 1, max: 23 },
+  CS: { min: 2, max: 24 },
 };
 
 /** BS は1つの物理チャンネルに最大4本の TS が入っている */
@@ -67,23 +67,26 @@ const BS_SLOTS = 4;
  * 総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
  */
 export function channelsFor(type: ScannableType): string[] {
-    const { min, max } = CHANNEL_RANGES[type];
-    const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  const { min, max } = CHANNEL_RANGES[type];
+  const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
 
-    if (type === 'GR') return range.map((ch) => `T${ch}`);
-    if (type === 'BS') {
-        return range.flatMap((ch) =>
-            Array.from({ length: BS_SLOTS }, (_, slot) => `BS${String(ch).padStart(2, '0')}_${slot}`),
-        );
-    }
-    return range.map((ch) => `CS${String(ch).padStart(2, '0')}`);
+  if (type === "GR") return range.map((ch) => `T${ch}`);
+  if (type === "BS") {
+    return range.flatMap((ch) =>
+      Array.from(
+        { length: BS_SLOTS },
+        (_, slot) => `BS${String(ch).padStart(2, "0")}_${slot}`,
+      ),
+    );
+  }
+  return range.map((ch) => `CS${String(ch).padStart(2, "0")}`);
 }
 
 export interface ScanResult {
-    services: FoundService[] | null;
-    error: string | null;
-    /** TS が1バイトでも来たか。アンテナの問題と読み取りの問題を分ける手掛かり */
-    signal: boolean;
+  services: FoundService[] | null;
+  error: string | null;
+  /** TS が1バイトでも来たか。アンテナの問題と読み取りの問題を分ける手掛かり */
+  signal: boolean;
 }
 
 /**
@@ -96,96 +99,110 @@ export interface ScanResult {
  * 読めなかった」は原因がまるで違い、まとめてしまうと直しようがない。
  */
 export async function readServices(
-    stream: ReadableStream<Uint8Array>,
-    timeout = TUNE_TIMEOUT,
-    abort?: AbortSignal,
-    /** 同じストリームから番組表も取得する。読む時間は延ばさない (揃った時点で打ち切るのは同じ) */
-    epg?: EpgReader,
+  stream: ReadableStream<Uint8Array>,
+  timeout = TUNE_TIMEOUT,
+  abort?: AbortSignal,
+  /** 同じストリームから番組表も取得する。読む時間は延ばさない (揃った時点で打ち切るのは同じ) */
+  epg?: EpgReader,
 ): Promise<ScanResult> {
-    const reader = new ServiceReader();
-    const source = stream.getReader();
-    let bytes = 0;
-    let message = '';
+  const reader = new ServiceReader();
+  const source = stream.getReader();
+  let bytes = 0;
+  let message = "";
 
-    const deadline = new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, timeout);
-        timer.unref?.();
-        abort?.addEventListener('abort', () => resolve(), { once: true });
-    });
+  const deadline = new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, timeout);
+    timer.unref?.();
+    abort?.addEventListener("abort", () => resolve(), { once: true });
+  });
 
-    const read = (async () => {
-        for (;;) {
-            const { done, value } = await source.read();
-            if (done || value === undefined) return;
-            bytes += value.byteLength;
-            epg?.feed(value);
-            if (reader.feed(value)) return;
-        }
-    })().catch((error: unknown) => {
-        // 選局が落ちた理由はここに来る (デバイスが無い・使用中など)
-        message = String(error);
-    });
-
-    await Promise.race([read, deadline]);
-    await source.cancel().catch(() => undefined);
-
-    const signal = bytes > 0;
-    if (reader.complete) return { services: reader.services(), error: null, signal };
-
-    const tail = message.trim().split('\n').at(-1)?.trim();
-    const detail = tail === undefined || tail === '' ? '' : ` (${tail})`;
-    if (!signal) return { services: null, error: `受信できませんでした${detail}`, signal };
-    if (reader.network === null && reader.transport === null) {
-        return { services: null, error: `受信はできましたが、局の情報を読み取れません${detail}`, signal };
+  const read = (async () => {
+    for (;;) {
+      const { done, value } = await source.read();
+      if (done || value === undefined) return;
+      bytes += value.byteLength;
+      epg?.feed(value);
+      if (reader.feed(value)) return;
     }
-    const missing = reader.network === null ? 'NIT' : 'SDT';
-    return { services: null, error: `${missing} を受信できませんでした${detail}`, signal };
+  })().catch((error: unknown) => {
+    // 選局が落ちた理由はここに来る (デバイスが無い・使用中など)
+    message = String(error);
+  });
+
+  await Promise.race([read, deadline]);
+  await source.cancel().catch(() => undefined);
+
+  const signal = bytes > 0;
+  if (reader.complete)
+    return { services: reader.services(), error: null, signal };
+
+  const tail = message.trim().split("\n").at(-1)?.trim();
+  const detail = tail === undefined || tail === "" ? "" : ` (${tail})`;
+  if (!signal)
+    return { services: null, error: `受信できませんでした${detail}`, signal };
+  if (reader.network === null && reader.transport === null) {
+    return {
+      services: null,
+      error: `受信はできましたが、局の情報を読み取れません${detail}`,
+      signal,
+    };
+  }
+  const missing = reader.network === null ? "NIT" : "SDT";
+  return {
+    services: null,
+    error: `${missing} を受信できませんでした${detail}`,
+    signal,
+  };
 }
 
 /** スキャンで分かったことを1件にまとめる */
-export function channelEntry(type: ScannableType, channel: string, services: FoundService[]): AgentChannel {
-    const first = services[0];
-    return {
-        type,
-        channel,
-        networkId: first?.networkId ?? 0,
-        transportStreamId: first?.transportStreamId ?? 0,
-        remoteControlKeyId: first?.remoteControlKeyId ?? null,
-        services: services
-            .map((service) => ({
-                serviceId: service.serviceId,
-                serviceType: service.serviceType,
-                name: service.name,
-            }))
-            .sort((a, b) => a.serviceId - b.serviceId),
-    };
+export function channelEntry(
+  type: ScannableType,
+  channel: string,
+  services: FoundService[],
+): AgentChannel {
+  const first = services[0];
+  return {
+    type,
+    channel,
+    networkId: first?.networkId ?? 0,
+    transportStreamId: first?.transportStreamId ?? 0,
+    remoteControlKeyId: first?.remoteControlKeyId ?? null,
+    services: services
+      .map((service) => ({
+        serviceId: service.serviceId,
+        serviceType: service.serviceType,
+        name: service.name,
+      }))
+      .sort((a, b) => a.serviceId - b.serviceId),
+  };
 }
 
 export interface ScanState {
-    state: 'idle' | 'running' | 'done' | 'failed' | 'canceled';
-    /** いま何をしているか。そのまま画面に出す */
-    phase: string;
-    log: string[];
-    /** 選局し終えた物理チャンネル数と、その総数。進捗バーに使う */
-    scanned: number;
-    total: number;
-    /** 見つかったチャンネル数 */
-    channels: number;
-    error: string | null;
-    startedAt: number | null;
-    finishedAt: number | null;
+  state: "idle" | "running" | "done" | "failed" | "canceled";
+  /** いま何をしているか。そのまま画面に出す */
+  phase: string;
+  log: string[];
+  /** 選局し終えた物理チャンネル数と、その総数。進捗バーに使う */
+  scanned: number;
+  total: number;
+  /** 見つかったチャンネル数 */
+  channels: number;
+  error: string | null;
+  startedAt: number | null;
+  finishedAt: number | null;
 }
 
 const IDLE: ScanState = {
-    state: 'idle',
-    phase: '',
-    log: [],
-    scanned: 0,
-    total: 0,
-    channels: 0,
-    error: null,
-    startedAt: null,
-    finishedAt: null,
+  state: "idle",
+  phase: "",
+  log: [],
+  scanned: 0,
+  total: 0,
+  channels: 0,
+  error: null,
+  startedAt: null,
+  finishedAt: null,
 };
 
 let current: ScanState = IDLE;
@@ -193,310 +210,360 @@ let current: ScanState = IDLE;
 let running: Scanner | null = null;
 
 function push(
-    line?: string,
-    counts: { scanned?: number; channels?: number; skipped?: number } = {},
-    fields: Partial<ScanState> = {},
+  line?: string,
+  counts: { scanned?: number; channels?: number; skipped?: number } = {},
+  fields: Partial<ScanState> = {},
 ): void {
-    current = {
-        ...current,
-        ...fields,
-        log: line === undefined ? current.log : [...current.log, line].slice(-LOG_LIMIT),
-        scanned: current.scanned + (counts.scanned ?? 0) + (counts.skipped ?? 0),
-        channels: current.channels + (counts.channels ?? 0),
-    };
-    emit('scan');
+  current = {
+    ...current,
+    ...fields,
+    log:
+      line === undefined
+        ? current.log
+        : [...current.log, line].slice(-LOG_LIMIT),
+    scanned: current.scanned + (counts.scanned ?? 0) + (counts.skipped ?? 0),
+    channels: current.channels + (counts.channels ?? 0),
+  };
+  emit("scan");
 }
 
 interface Progress {
-    line?: string;
-    scanned?: number;
-    channels?: number;
-    skipped?: number;
+  line?: string;
+  scanned?: number;
+  channels?: number;
+  skipped?: number;
 }
 
 /** 総当たりの1件。どの種別のどの物理チャンネルか */
 interface Job {
-    type: ScannableType;
-    channel: string;
+  type: ScannableType;
+  channel: string;
 }
 
 /** チューナーの台数ぶん並べて総当たりする */
 class Scanner {
-    /** 中断の合図。押されたら選局を切り、残りのチャンネルには行かない */
-    private readonly aborter = new AbortController();
-    private readonly found = new Map<string, AgentChannel>();
-    /** 電波が来た(TSが1バイトでも出た)チャンネル数。種別ごと */
-    private readonly tuned = new Map<ScannableType, number>();
-    /** 電波は来たのに局情報が揃わなかったチャンネル。1周したあとで回し直す */
-    private retry: Job[] = [];
-    /**
-     * 局を探している間に流れてきた番組表。**ついでに取得しておく。** NIT と SDT を待つ
-     * 数秒〜十数秒で「いま・次」と今日ぶんくらいは来るので、スキャンが終わった
-     * 時点で番組表が空にならない。局が DB に入ってから書く (`runScan`)
-     */
-    readonly events: EitEvent[] = [];
+  /** 中断の合図。押されたら選局を切り、残りのチャンネルには行かない */
+  private readonly aborter = new AbortController();
+  private readonly found = new Map<string, AgentChannel>();
+  /** 電波が来た(TSが1バイトでも出た)チャンネル数。種別ごと */
+  private readonly tuned = new Map<ScannableType, number>();
+  /** 電波は来たのに局情報が揃わなかったチャンネル。1周したあとで回し直す */
+  private retry: Job[] = [];
+  /**
+   * 局を探している間に流れてきた番組表。**ついでに取得しておく。** NIT と SDT を待つ
+   * 数秒〜十数秒で「いま・次」と今日ぶんくらいは来るので、スキャンが終わった
+   * 時点で番組表が空にならない。局が DB に入ってから書く (`runScan`)
+   */
+  readonly events: EitEvent[] = [];
 
-    constructor(private readonly onProgress: (progress: Progress) => void) {}
+  constructor(private readonly onProgress: (progress: Progress) => void) {}
 
-    /**
-     * 中断する。
+  /**
+   * 中断する。
+   *
+   * 地上波の総当たりは十数分かかる。始めてから「いま録りたい」に気づいたときに
+   * 待つしかないのは困るので、途中で降りられるようにしてある
+   */
+  stop(): void {
+    this.aborter.abort();
+  }
+
+  get aborted(): boolean {
+    return this.aborter.signal.aborted;
+  }
+
+  /** targets は [種別, チャンネル一覧] の並び。見つかったチャンネル定義を返す */
+  async run(targets: [ScannableType, string[]][]): Promise<AgentChannel[]> {
+    const tuners = (await getTuners().catch(() => [])).filter(
+      (tuner) => !tuner.disabled,
+    );
+
+    /*
+     * **種別をまたいで1つの列にする。**
      *
-     * 地上波の総当たりは十数分かかる。始めてから「いま録りたい」に気づいたときに
-     * 待つしかないのは困るので、途中で降りられるようにしてある
+     * 種別ごとに順に回していた頃は、地上波を50ch 撃ち終わるまで衛星に
+     * 行かなかった。使うチューナーが別なので、待たせている間ずっと
+     * 衛星のチューナーが遊んでいる。1つの列を全チューナーで引けば同時に進む
      */
-    stop(): void {
-        this.aborter.abort();
+    const queue: Job[] = [];
+    for (const [type, channels] of targets) {
+      if (!tuners.some((tuner) => tuner.types.includes(type))) {
+        this.onProgress({
+          line: `${type}: 対応するチューナーがありません`,
+          skipped: channels.length,
+        });
+        continue;
+      }
+      for (const channel of channels) queue.push({ type, channel });
     }
 
-    get aborted(): boolean {
-        return this.aborter.signal.aborted;
-    }
+    /** そのチューナーで引けるものが1つでもあるチューナーだけ動かす */
+    const wanted = new Set(queue.map((job) => job.type));
+    const workers = tuners.filter((tuner) =>
+      tuner.types.some((type) => wanted.has(type as ScannableType)),
+    );
 
-    /** targets は [種別, チャンネル一覧] の並び。見つかったチャンネル定義を返す */
-    async run(targets: [ScannableType, string[]][]): Promise<AgentChannel[]> {
-        const tuners = (await getTuners().catch(() => [])).filter((tuner) => !tuner.disabled);
+    if (workers.length > 0) {
+      await Promise.all(workers.map((tuner) => this.work(tuner.types, queue)));
 
-        /*
-         * **種別をまたいで1つの列にする。**
-         *
-         * 種別ごとに順に回していた頃は、地上波を50ch 撃ち終わるまで衛星に
-         * 行かなかった。使うチューナーが別なので、待たせている間ずっと
-         * 衛星のチューナーが遊んでいる。1つの列を全チューナーで引けば同時に進む
-         */
-        const queue: Job[] = [];
-        for (const [type, channels] of targets) {
-            if (!tuners.some((tuner) => tuner.types.includes(type))) {
-                this.onProgress({
-                    line: `${type}: 対応するチューナーがありません`,
-                    skipped: channels.length,
-                });
-                continue;
-            }
-            for (const channel of channels) queue.push({ type, channel });
-        }
-
-        /** そのチューナーで引けるものが1つでもあるチューナーだけ動かす */
-        const wanted = new Set(queue.map((job) => job.type));
-        const workers = tuners.filter((tuner) =>
-            tuner.types.some((type) => wanted.has(type as ScannableType)),
+      /*
+       * 電波は来たのに揃わなかったチャンネルは、もう一度だけ回す。
+       *
+       * NIT は 10 秒に1回しか流れてこないので、選局が落ち着くのが遅れると
+       * 待ち時間の中に1回も入らないことがある。**受信できたチャンネルだけ**を
+       * 対象にするので、総当たりの時間はほとんど増えない
+       */
+      const retry = this.retry;
+      this.retry = [];
+      if (retry.length > 0 && !this.aborted) {
+        this.onProgress({ line: `${retry.length}ch をもう一度試します` });
+        await Promise.all(
+          workers.map((tuner) => this.work(tuner.types, retry, false)),
         );
-
-        if (workers.length > 0) {
-            await Promise.all(workers.map((tuner) => this.work(tuner.types, queue)));
-
-            /*
-             * 電波は来たのに揃わなかったチャンネルは、もう一度だけ回す。
-             *
-             * NIT は 10 秒に1回しか流れてこないので、選局が落ち着くのが遅れると
-             * 待ち時間の中に1回も入らないことがある。**受信できたチャンネルだけ**を
-             * 対象にするので、総当たりの時間はほとんど増えない
-             */
-            const retry = this.retry;
-            this.retry = [];
-            if (retry.length > 0 && !this.aborted) {
-                this.onProgress({ line: `${retry.length}ch をもう一度試します` });
-                await Promise.all(workers.map((tuner) => this.work(tuner.types, retry, false)));
-            }
-        }
-
-        /*
-         * 種別ごとに1行でまとめる。
-         *
-         * 「電波は来たのに局情報が揃わなかった」のか「そもそも何も来なかった」のかで
-         * 疑うところがまるで違う (前者は受信環境、後者は配線やデバイス指定)。
-         * 総当たりのログは何十行も流れるので、最後に要約が無いと読み取れない
-         */
-        for (const [type, channels] of targets) {
-            const found = [...this.found.keys()].filter((key) => key.startsWith(`${type}:`)).length;
-            const tuned = this.tuned.get(type) ?? 0;
-            this.onProgress({
-                line: `${type}: ${channels.length}ch 中 ${tuned}ch で受信、うち ${found}ch で局情報が揃いました`,
-            });
-        }
-
-        const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
-        return [...this.found.entries()]
-            .sort(([a], [b]) => {
-                const [typeA = '', channelA = ''] = a.split(':');
-                const [typeB = '', channelB = ''] = b.split(':');
-                return (order[typeA] ?? 9) - (order[typeB] ?? 9) || channelA.localeCompare(channelB);
-            })
-            .map(([, entry]) => entry);
+      }
     }
 
-    /** そのチューナーで引ける先頭の1件を取り出す。引けないものは飛ばして次を見る */
-    private take(queue: Job[], types: ChannelType[]): Job | undefined {
-        const at = queue.findIndex((job) => types.includes(job.type));
-        return at === -1 ? undefined : queue.splice(at, 1)[0];
-    }
-
-    /**
-     * チューナー1台ぶんの担当。列が尽きるまで引き続ける。
+    /*
+     * 種別ごとに1行でまとめる。
      *
-     * `types` はそのチューナーが受けられる種別。地上波のチューナーは地上波の分だけ、衛星のチューナーは
-     * 衛星の分だけを引くので、片方が先に終わってももう片方は止まらない。
-     *
-     * first が false のときは数え直さない (同じチャンネルを2回数えないため)
+     * 「電波は来たのに局情報が揃わなかった」のか「そもそも何も来なかった」のかで
+     * 疑うところがまるで違う (前者は受信環境、後者は配線やデバイス指定)。
+     * 総当たりのログは何十行も流れるので、最後に要約が無いと読み取れない
      */
-    private async work(types: ChannelType[], queue: Job[], first = true): Promise<void> {
-        for (;;) {
-            if (this.aborted) return;
-            const job = this.take(queue, types);
-            if (job === undefined) return;
-            const { type, channel } = job;
-
-            /*
-             * 1チャンネルごとに切る手段を持つ。読み終えたらここで接続を落とし、
-             * エージェントにチューナーを返す
-             */
-            const closer = new AbortController();
-            let stream: ReadableStream<Uint8Array>;
-            try {
-                stream = await openChannelStream(
-                    type,
-                    channel,
-                    closer.signal,
-                    `scan ${channel}`,
-                    config.priority.scan,
-                );
-            } catch (error) {
-                /*
-                 * チューナーが全部塞がっている。**飛ばさずに待つ。**
-                 * 録画中のチューナーは取り上げられないので、ここで諦めるとその
-                 * チャンネルだけ設定から消える
-                 */
-                if (error instanceof TunerBusyError) {
-                    this.onProgress({ line: `${channel}: 空きを待っています` });
-                    queue.unshift(job);
-                    await Bun.sleep(BUSY_RETRY);
-                    continue;
-                }
-                const counts = first ? { scanned: 1 } : {};
-                this.onProgress({ line: `${channel}: ${error}`, ...counts });
-                continue;
-            }
-
-            const epg = new EpgReader();
-            const { services, error, signal } = await readServices(
-                stream,
-                TUNE_TIMEOUT,
-                this.aborter.signal,
-                epg,
-            );
-            closer.abort();
-            if (this.aborted) return;
-            const counts = first ? { scanned: 1 } : {};
-            if (first && signal) this.tuned.set(type, (this.tuned.get(type) ?? 0) + 1);
-
-            if (error !== null) {
-                // 電波は来ているのに揃わなかったものだけ、あとでもう一度回す
-                if (first && signal) this.retry.push(job);
-                this.onProgress({ line: `${channel}: ${error}`, ...counts });
-                continue;
-            }
-            if (services === null || services.length === 0) {
-                this.onProgress({ line: `${channel}: 録画できる局がありません`, ...counts });
-                continue;
-            }
-
-            const entry = channelEntry(type, channel, services);
-            const twin = twinOf(this.found.values(), entry);
-            if (twin !== null) {
-                // 無い相対番号を指したので、先頭の TS が返ってきただけ
-                this.onProgress({
-                    line: `${channel}: ${twin} と同じ TS (${entry.transportStreamId}) なので使いません`,
-                    ...counts,
-                });
-                continue;
-            }
-
-            this.found.set(`${type}:${channel}`, entry);
-            this.events.push(...epg.all());
-            this.onProgress({ line: `${channel}: ${services.length} 局`, ...counts, channels: 1 });
-        }
+    for (const [type, channels] of targets) {
+      const found = [...this.found.keys()].filter((key) =>
+        key.startsWith(`${type}:`),
+      ).length;
+      const tuned = this.tuned.get(type) ?? 0;
+      this.onProgress({
+        line: `${type}: ${channels.length}ch 中 ${tuned}ch で受信、うち ${found}ch で局情報が揃いました`,
+      });
     }
+
+    const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
+    return [...this.found.entries()]
+      .sort(([a], [b]) => {
+        const [typeA = "", channelA = ""] = a.split(":");
+        const [typeB = "", channelB = ""] = b.split(":");
+        return (
+          (order[typeA] ?? 9) - (order[typeB] ?? 9) ||
+          channelA.localeCompare(channelB)
+        );
+      })
+      .map(([, entry]) => entry);
+  }
+
+  /** そのチューナーで引ける先頭の1件を取り出す。引けないものは飛ばして次を見る */
+  private take(queue: Job[], types: ChannelType[]): Job | undefined {
+    const at = queue.findIndex((job) => types.includes(job.type));
+    return at === -1 ? undefined : queue.splice(at, 1)[0];
+  }
+
+  /**
+   * チューナー1台ぶんの担当。列が尽きるまで引き続ける。
+   *
+   * `types` はそのチューナーが受けられる種別。地上波のチューナーは地上波の分だけ、衛星のチューナーは
+   * 衛星の分だけを引くので、片方が先に終わってももう片方は止まらない。
+   *
+   * first が false のときは数え直さない (同じチャンネルを2回数えないため)
+   */
+  private async work(
+    types: ChannelType[],
+    queue: Job[],
+    first = true,
+  ): Promise<void> {
+    for (;;) {
+      if (this.aborted) return;
+      const job = this.take(queue, types);
+      if (job === undefined) return;
+      const { type, channel } = job;
+
+      /*
+       * 1チャンネルごとに切る手段を持つ。読み終えたらここで接続を落とし、
+       * エージェントにチューナーを返す
+       */
+      const closer = new AbortController();
+      let stream: ReadableStream<Uint8Array>;
+      try {
+        stream = await openChannelStream(
+          type,
+          channel,
+          closer.signal,
+          `scan ${channel}`,
+          config.priority.scan,
+        );
+      } catch (error) {
+        /*
+         * チューナーが全部塞がっている。**飛ばさずに待つ。**
+         * 録画中のチューナーは取り上げられないので、ここで諦めるとその
+         * チャンネルだけ設定から消える
+         */
+        if (error instanceof TunerBusyError) {
+          this.onProgress({ line: `${channel}: 空きを待っています` });
+          queue.unshift(job);
+          await Bun.sleep(BUSY_RETRY);
+          continue;
+        }
+        const counts = first ? { scanned: 1 } : {};
+        this.onProgress({ line: `${channel}: ${error}`, ...counts });
+        continue;
+      }
+
+      const epg = new EpgReader();
+      const { services, error, signal } = await readServices(
+        stream,
+        TUNE_TIMEOUT,
+        this.aborter.signal,
+        epg,
+      );
+      closer.abort();
+      if (this.aborted) return;
+      const counts = first ? { scanned: 1 } : {};
+      if (first && signal)
+        this.tuned.set(type, (this.tuned.get(type) ?? 0) + 1);
+
+      if (error !== null) {
+        // 電波は来ているのに揃わなかったものだけ、あとでもう一度回す
+        if (first && signal) this.retry.push(job);
+        this.onProgress({ line: `${channel}: ${error}`, ...counts });
+        continue;
+      }
+      if (services === null || services.length === 0) {
+        this.onProgress({
+          line: `${channel}: 録画できる局がありません`,
+          ...counts,
+        });
+        continue;
+      }
+
+      const entry = channelEntry(type, channel, services);
+      const twin = twinOf(this.found.values(), entry);
+      if (twin !== null) {
+        // 無い相対番号を指したので、先頭の TS が返ってきただけ
+        this.onProgress({
+          line: `${channel}: ${twin} と同じ TS (${entry.transportStreamId}) なので使いません`,
+          ...counts,
+        });
+        continue;
+      }
+
+      this.found.set(`${type}:${channel}`, entry);
+      this.events.push(...epg.all());
+      this.onProgress({
+        line: `${channel}: ${services.length} 局`,
+        ...counts,
+        channels: 1,
+      });
+    }
+  }
 }
 
 interface ScanOptions {
-    types: ChannelType[];
+  types: ChannelType[];
 }
 
 async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
-    const scanner = new Scanner((progress) => push(progress.line, progress));
-    running = scanner;
-    try {
-        push('チャンネルを探しています...', {}, { phase: 'スキャン中' });
-        const found = await scanner.run(targets);
+  const scanner = new Scanner((progress) => push(progress.line, progress));
+  running = scanner;
+  try {
+    push("チャンネルを探しています...", {}, { phase: "スキャン中" });
+    const found = await scanner.run(targets);
 
-        /*
-         * 中断されたら**何も書かない**。
-         * 途中までの結果で上書きすると、まだ回っていない種別やチャンネルの
-         * 定義が消える。押した人は「やめたい」だけで「消したい」ではない
-         */
-        if (scanner.aborted) {
-            push('中断しました', {}, { state: 'canceled', phase: '中断', finishedAt: Date.now() });
-            return;
-        }
-
-        // 1件も見つからないまま上書きすると、今まで録れていた局まで消える
-        if (found.length === 0) {
-            throw new Error('チャンネルが1件も見つかりませんでした。チューナーとアンテナを確認してください');
-        }
-
-        push('チャンネルを保存しています...', {}, { phase: '保存' });
-        await putChannels(
-            found,
-            targets.map(([type]) => type),
-        );
-        push('完了しました', {}, { state: 'done', phase: '完了', finishedAt: Date.now() });
-
-        /*
-         * 局が入れ替わった。**取り込み直して、番組表を集め直す。**
-         *
-         * 番組表を持っているのは denpa なので、**待つ相手がいない**。
-         * 見つかった局をその場で取り込んで、そのまま集めに行く
-         */
-        await sync().catch(() => undefined);
-        // 局が入ったので、スキャン中に取得した番組表を書ける
-        // ついでの保存なので、失敗しても局の通知と番組表集めは止めない
-        if (scanner.events.length > 0) {
-            try {
-                const saved = savePrograms(scanner.events);
-                if (saved > 0) settle(saved);
-            } catch (error) {
-                console.warn(`[scan] スキャン中に拾った番組表を書けませんでした: ${error}`);
-            }
-        }
-        emit('services');
-        void collectOnce().catch(() => undefined);
-    } catch (error) {
-        push(`失敗しました: ${error}`, {}, { state: 'failed', error: String(error), finishedAt: Date.now() });
-    } finally {
-        running = null;
+    /*
+     * 中断されたら**何も書かない**。
+     * 途中までの結果で上書きすると、まだ回っていない種別やチャンネルの
+     * 定義が消える。押した人は「やめたい」だけで「消したい」ではない
+     */
+    if (scanner.aborted) {
+      push(
+        "中断しました",
+        {},
+        { state: "canceled", phase: "中断", finishedAt: Date.now() },
+      );
+      return;
     }
+
+    // 1件も見つからないまま上書きすると、今まで録れていた局まで消える
+    if (found.length === 0) {
+      throw new Error(
+        "チャンネルが1件も見つかりませんでした。チューナーとアンテナを確認してください",
+      );
+    }
+
+    push("チャンネルを保存しています...", {}, { phase: "保存" });
+    await putChannels(
+      found,
+      targets.map(([type]) => type),
+    );
+    push(
+      "完了しました",
+      {},
+      { state: "done", phase: "完了", finishedAt: Date.now() },
+    );
+
+    /*
+     * 局が入れ替わった。**取り込み直して、番組表を集め直す。**
+     *
+     * 番組表を持っているのは denpa なので、**待つ相手がいない**。
+     * 見つかった局をその場で取り込んで、そのまま集めに行く
+     */
+    await sync().catch(() => undefined);
+    // 局が入ったので、スキャン中に取得した番組表を書ける
+    // ついでの保存なので、失敗しても局の通知と番組表集めは止めない
+    if (scanner.events.length > 0) {
+      try {
+        const saved = savePrograms(scanner.events);
+        if (saved > 0) settle(saved);
+      } catch (error) {
+        console.warn(
+          `[scan] スキャン中に拾った番組表を書けませんでした: ${error}`,
+        );
+      }
+    }
+    emit("services");
+    void collectOnce().catch(() => undefined);
+  } catch (error) {
+    push(
+      `失敗しました: ${error}`,
+      {},
+      { state: "failed", error: String(error), finishedAt: Date.now() },
+    );
+  } finally {
+    running = null;
+  }
 }
 
-export function start(options: ScanOptions): { started: boolean; message: string } {
-    const types = options.types.filter((type): type is ScannableType => type in CHANNEL_RANGES);
-    if (types.length === 0) return { started: false, message: 'チャンネル種別の指定が不正です' };
-    if (current.state === 'running') return { started: false, message: 'すでに実行中です' };
+export function start(options: ScanOptions): {
+  started: boolean;
+  message: string;
+} {
+  const types = options.types.filter(
+    (type): type is ScannableType => type in CHANNEL_RANGES,
+  );
+  if (types.length === 0)
+    return { started: false, message: "チャンネル種別の指定が不正です" };
+  if (current.state === "running")
+    return { started: false, message: "すでに実行中です" };
 
-    const targets: [ScannableType, string[]][] = types.map((type) => [type, channelsFor(type)]);
+  const targets: [ScannableType, string[]][] = types.map((type) => [
+    type,
+    channelsFor(type),
+  ]);
 
-    current = {
-        state: 'running',
-        phase: '準備中',
-        log: [],
-        scanned: 0,
-        total: targets.reduce((sum, [, channels]) => sum + channels.length, 0),
-        channels: 0,
-        error: null,
-        startedAt: Date.now(),
-        finishedAt: null,
-    };
-    emit('scan');
-    void runScan(targets);
-    return { started: true, message: 'チャンネルスキャンを始めました' };
+  current = {
+    state: "running",
+    phase: "準備中",
+    log: [],
+    scanned: 0,
+    total: targets.reduce((sum, [, channels]) => sum + channels.length, 0),
+    channels: 0,
+    error: null,
+    startedAt: Date.now(),
+    finishedAt: null,
+  };
+  emit("scan");
+  void runScan(targets);
+  return { started: true, message: "チャンネルスキャンを始めました" };
 }
 
 /**
@@ -507,12 +574,12 @@ export function start(options: ScanOptions): { started: boolean; message: string
  * 上書きすると、まだ回っていない局の定義が消える)。
  */
 export function stop(): { stopped: boolean; message: string } {
-    if (current.state !== 'running' || running === null) {
-        return { stopped: false, message: '実行中ではありません' };
-    }
-    running.stop();
-    push('中断しています...', {}, { phase: '中断中' });
-    return { stopped: true, message: 'チャンネルスキャンを中断しています' };
+  if (current.state !== "running" || running === null) {
+    return { stopped: false, message: "実行中ではありません" };
+  }
+  running.stop();
+  push("中断しています...", {}, { phase: "中断中" });
+  return { stopped: true, message: "チャンネルスキャンを中断しています" };
 }
 
 /**
@@ -523,5 +590,5 @@ export function stop(): { stopped: boolean; message: string } {
  * いた頃は、走っていないのに「スキャン中」が残ることがあった)。
  */
 export function refresh(): ScanState {
-    return current;
+  return current;
 }

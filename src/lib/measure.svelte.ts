@@ -9,32 +9,32 @@
  * 別の端末や別の人に付いて回るものではない
  */
 
-import { forget, read, write } from '#lib/keep.js';
-import type { ReadonlyURL } from '$app/state';
+import { forget, read, write } from "#lib/keep.js";
+import type { ReadonlyURL } from "$app/state";
 
-const KEY = 'denpa_measure';
+const KEY = "denpa_measure";
 
 let on = $state(false);
 
 export const measure = {
-    get on(): boolean {
-        return on;
-    },
+  get on(): boolean {
+    return on;
+  },
 
-    /** オン/オフ。覚えるので、リロードしても消えない (それが要る場面で使う) */
-    set(next: boolean): void {
-        on = next;
-        if (next) write(KEY, '1');
-        else forget(KEY);
-    },
+  /** オン/オフ。覚えるので、リロードしても消えない (それが要る場面で使う) */
+  set(next: boolean): void {
+    on = next;
+    if (next) write(KEY, "1");
+    else forget(KEY);
+  },
 
-    /**
-     * 読み込み時とページ移動のたびに読み直す。
-     *
-     * `?measure` は**覚えない** — 1回だけ見たいときの手で、付けた URL を
-     * 誰かに渡したときに相手の端末に居座らせない
-     */
-    start(url: ReadonlyURL): void {
-        on = url.searchParams.has('measure') || read(KEY) === '1';
-    },
+  /**
+   * 読み込み時とページ移動のたびに読み直す。
+   *
+   * `?measure` は**覚えない** — 1回だけ見たいときの手で、付けた URL を
+   * 誰かに渡したときに相手の端末に居座らせない
+   */
+  start(url: ReadonlyURL): void {
+    on = url.searchParams.has("measure") || read(KEY) === "1";
+  },
 };

@@ -17,11 +17,11 @@
  * 飛ぶたびに `reset(from)`、尻まで読んだら `finish`
  */
 
-import type { AudioSide } from '#lib/arib.js';
-import { CLOCK, unwrap } from '#lib/ts/pes.js';
-import { resolve } from '$app/paths';
-import type { FromWorker, GrabSize, RawInput, ToWorker } from './messages';
-import { type Chunk, Playout, type Scheduled } from './playout';
+import type { AudioSide } from "#lib/arib.js";
+import { CLOCK, unwrap } from "#lib/ts/pes.js";
+import { resolve } from "$app/paths";
+import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
+import { type Chunk, Playout, type Scheduled } from "./playout";
 
 /** 刻み (ms)。音の予約と時計の配り直しをここで回す */
 const TICK = 20;
@@ -30,7 +30,7 @@ const NO_AUDIO = 5_000;
 /** 切り抜きの返事を待つ上限 (ms)。1080 の1枚を読み出して渡すのは数十 ms */
 const GRAB_WAIT = 2_000;
 /** デコーダの置き場 (`routes/api/live/mpeg2`) */
-const DECODER = '/api/live/mpeg2';
+const DECODER = "/api/live/mpeg2";
 /**
  * **`<audio>` を通したとき、出口から耳までの遅れの見込み (秒)** (`RawEngine.route`)。
  *
@@ -43,30 +43,30 @@ const DECODER = '/api/live/mpeg2';
 const STREAM_OUT = 0.03;
 
 interface AudioChunk extends Chunk {
-    sampleRate: number;
-    planes: Float32Array[];
+  sampleRate: number;
+  planes: Float32Array[];
 }
 
 export interface RawEvents {
-    /** 選局し直してから最初のフレームが出た */
-    shown(): void;
-    /** 貯めを使い切って止まった (エンコードする経路の `waiting` にあたる) */
-    stalled(): void;
-    /** **使えなくなった。** 次の方式に移るか止まるかは画面が決める (理由は画面に出す) */
-    gaveUp(reason: string): void;
-    /**
-     * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —
-     * ロック画面・車のハンドルの再生ボタン・ブラウザの再生中の通知は `<audio>` を直に
-     * 止めるので、画面の「止めているか」をそれに合わせる (`RawEngine.route`)
-     */
-    remote(paused: boolean): void;
-    /**
-     * 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ)。**手元が尽きる前に、再生している位置から
-     * リクエストし直してもらう**
-     */
-    full(): void;
-    /** 終わりまで鳴らした (`finish` のあと。録画) */
-    ended?(): void;
+  /** 選局し直してから最初のフレームが出た */
+  shown(): void;
+  /** 貯めを使い切って止まった (エンコードする経路の `waiting` にあたる) */
+  stalled(): void;
+  /** **使えなくなった。** 次の方式に移るか止まるかは画面が決める (理由は画面に出す) */
+  gaveUp(reason: string): void;
+  /**
+   * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —
+   * ロック画面・車のハンドルの再生ボタン・ブラウザの再生中の通知は `<audio>` を直に
+   * 止めるので、画面の「止めているか」をそれに合わせる (`RawEngine.route`)
+   */
+  remote(paused: boolean): void;
+  /**
+   * 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ)。**手元が尽きる前に、再生している位置から
+   * リクエストし直してもらう**
+   */
+  full(): void;
+  /** 終わりまで鳴らした (`finish` のあと。録画) */
+  ended?(): void;
 }
 
 /**
@@ -84,607 +84,633 @@ export interface RawEvents {
  * これが言える端末 (Safari) では `<audio>` を通さない (`RawEngine.route`)
  */
 function playbackSession(on: boolean): void {
-    const session = audioSession();
-    if (session === undefined) return;
-    try {
-        session.type = on ? 'playback' : 'auto';
-    } catch {
-        // 受け付けない種類。言えなくても鳴らすことはできる
-    }
+  const session = audioSession();
+  if (session === undefined) return;
+  try {
+    session.type = on ? "playback" : "auto";
+  } catch {
+    // 受け付けない種類。言えなくても鳴らすことはできる
+  }
 }
 
 function audioSession(): { type: string } | undefined {
-    return (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+  return (navigator as Navigator & { audioSession?: { type: string } })
+    .audioSession;
 }
 
 /** `<audio>` を通す出口。**要るまで作らない** (`RawEngine.route`) */
 interface Through {
-    audio: HTMLAudioElement;
-    destination: MediaStreamAudioDestinationNode;
+  audio: HTMLAudioElement;
+  destination: MediaStreamAudioDestinationNode;
 }
 
 export class RawEngine {
-    readonly canvas: HTMLCanvasElement;
-    private readonly worker: Worker;
-    private readonly context: AudioContext;
-    private readonly gain: GainNode;
-    private readonly playout: Playout<AudioChunk>;
-    private readonly nodes = new Set<AudioBufferSourceNode>();
-    private readonly timer: ReturnType<typeof setInterval>;
-    /** 画面の切り替わりを worker へ知らせる requestAnimationFrame (`cadence.ts`) */
-    private frame = 0;
-    /** 壁時計を時計にしているか。**音を鳴らせない間 (自動再生を断られた) はこちら** */
-    private wall: boolean;
-    /** 選局し直してから音が来たか。来ないまま映像だけ出ているなら諦める (`NO_AUDIO`) */
-    private heardAt = 0;
-    private shownAt = 0;
-    /** デコードできた音のコマ数 (選局からの通しではなく、このエンジンを作ってからの通し) */
-    private heard = 0;
-    private gone = false;
-    /** worker がデコーダを読み終えたか (`ready`)。それまでは尻まで読んでも終わりにしない (`finish`) */
-    private ready = false;
-    /** デコーダを読み終える前に尻まで読んだ。読み終えたら `Playout` に伝える */
-    private finishing = false;
-    /** デュアルモノのどちらを両耳へ配るか (`AudioTrack.side`) */
-    private side: AudioSide = 'both';
-    /** 最後に知った PTS。字幕や時計の通知を伸ばすのに使う (`unwrap`) */
-    private near: number | null = null;
-    /** 鳴らし始める所 (`reset` の `from`。一周の中)。最初の音のコマで伸ばして `Playout` に渡す */
-    private aim: number | null = null;
-    /** 切り抜きの返事待ち (`grab`)。id ごと */
-    private readonly grabs = new Map<number, (bitmap: ImageBitmap | null) => void>();
-    private grabbed = 0;
-    /** `<audio>` を通したいか (`background`)。通しているかは `through` */
-    private wanted: boolean;
-    /** `<audio>` の出口。一度作ったら畳むまで使い回す */
-    private out: Through | null = null;
-    /** **いま音を `<audio>` へ流しているか。** 時計の引き方が変わる (`clock`) */
-    private through = false;
-    /** 止めているか (押して)。`<audio>` も止めておく — 外から見て「止まっている」と分かるように */
-    private held = false;
-    /** 描かれずに捨てたコマ (worker が数える) */
-    dropped = 0;
-    /** 1コマをデコードする時間の 95 パーセンタイル (ms) */
-    decodeMs = 0;
-    /** 間に合わないので B フレームを飛ばしているか (`worker.ts` の `thin`) */
-    thinned = false;
+  readonly canvas: HTMLCanvasElement;
+  private readonly worker: Worker;
+  private readonly context: AudioContext;
+  private readonly gain: GainNode;
+  private readonly playout: Playout<AudioChunk>;
+  private readonly nodes = new Set<AudioBufferSourceNode>();
+  private readonly timer: ReturnType<typeof setInterval>;
+  /** 画面の切り替わりを worker へ知らせる requestAnimationFrame (`cadence.ts`) */
+  private frame = 0;
+  /** 壁時計を時計にしているか。**音を鳴らせない間 (自動再生を断られた) はこちら** */
+  private wall: boolean;
+  /** 選局し直してから音が来たか。来ないまま映像だけ出ているなら諦める (`NO_AUDIO`) */
+  private heardAt = 0;
+  private shownAt = 0;
+  /** デコードできた音のコマ数 (選局からの通しではなく、このエンジンを作ってからの通し) */
+  private heard = 0;
+  private gone = false;
+  /** worker がデコーダを読み終えたか (`ready`)。それまでは尻まで読んでも終わりにしない (`finish`) */
+  private ready = false;
+  /** デコーダを読み終える前に尻まで読んだ。読み終えたら `Playout` に伝える */
+  private finishing = false;
+  /** デュアルモノのどちらを両耳へ配るか (`AudioTrack.side`) */
+  private side: AudioSide = "both";
+  /** 最後に知った PTS。字幕や時計の通知を伸ばすのに使う (`unwrap`) */
+  private near: number | null = null;
+  /** 鳴らし始める所 (`reset` の `from`。一周の中)。最初の音のコマで伸ばして `Playout` に渡す */
+  private aim: number | null = null;
+  /** 切り抜きの返事待ち (`grab`)。id ごと */
+  private readonly grabs = new Map<
+    number,
+    (bitmap: ImageBitmap | null) => void
+  >();
+  private grabbed = 0;
+  /** `<audio>` を通したいか (`background`)。通しているかは `through` */
+  private wanted: boolean;
+  /** `<audio>` の出口。一度作ったら畳むまで使い回す */
+  private out: Through | null = null;
+  /** **いま音を `<audio>` へ流しているか。** 時計の引き方が変わる (`clock`) */
+  private through = false;
+  /** 止めているか (押して)。`<audio>` も止めておく — 外から見て「止まっている」と分かるように */
+  private held = false;
+  /** 描かれずに捨てたコマ (worker が数える) */
+  dropped = 0;
+  /** 1コマをデコードする時間の 95 パーセンタイル (ms) */
+  decodeMs = 0;
+  /** 間に合わないので B フレームを飛ばしているか (`worker.ts` の `thin`) */
+  thinned = false;
 
-    /**
-     * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
-     * @param before この前に差し込む (字幕の canvas より下に来るように)
-     * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
-     * @param input 何を受け取るか (`messages.ts` の `RawInput`)。元の TS か、エンコードしたもの (fMP4。互換モード)
-     * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても飛ばず、止めて再開は止めた所から
-     *   (`playout.ts` と worker の `follow`)。録画 (`canvas-player.ts`) は飛ぶ先 (`reset` の `from`) と終わり
-     *   (`finish`) も使う
-     */
-    constructor(
-        host: HTMLElement,
-        before: Element | null,
-        target: number,
-        private readonly events: RawEvents,
-        background = false,
-        readonly input: RawInput = 'ts-mpeg2',
-        readonly chase = false,
-    ) {
-        this.playout = new Playout(target);
-        this.playout.follow = chase;
-        this.wanted = background;
-        this.canvas = document.createElement('canvas');
-        this.canvas.setAttribute('data-testid', 'live-raw');
-        this.canvas.setAttribute('aria-hidden', 'true');
-        this.canvas.dataset['input'] = input;
-        // 押すのは下の <video> (押されたときの処理がそこに付いている。`MediaStack`)
-        this.canvas.style.cssText =
-            'position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;';
-        host.insertBefore(this.canvas, before);
+  /**
+   * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
+   * @param before この前に差し込む (字幕の canvas より下に来るように)
+   * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
+   * @param input 何を受け取るか (`messages.ts` の `RawInput`)。元の TS か、エンコードしたもの (fMP4。互換モード)
+   * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても飛ばず、止めて再開は止めた所から
+   *   (`playout.ts` と worker の `follow`)。録画 (`canvas-player.ts`) は飛ぶ先 (`reset` の `from`) と終わり
+   *   (`finish`) も使う
+   */
+  constructor(
+    host: HTMLElement,
+    before: Element | null,
+    target: number,
+    private readonly events: RawEvents,
+    background = false,
+    readonly input: RawInput = "ts-mpeg2",
+    readonly chase = false,
+  ) {
+    this.playout = new Playout(target);
+    this.playout.follow = chase;
+    this.wanted = background;
+    this.canvas = document.createElement("canvas");
+    this.canvas.setAttribute("data-testid", "live-raw");
+    this.canvas.setAttribute("aria-hidden", "true");
+    this.canvas.dataset["input"] = input;
+    // 押すのは下の <video> (押されたときの処理がそこに付いている。`MediaStack`)
+    this.canvas.style.cssText =
+      "position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;";
+    host.insertBefore(this.canvas, before);
 
-        // 途中で転んだら (呼ぶ側がエンコードしたものに戻す) 作ったものを残さない
-        let context: AudioContext | null = null;
-        let worker: Worker | null = null;
-        try {
-            playbackSession(background);
-            this.context = context = new AudioContext({ latencyHint: 'playback' });
-            this.gain = context.createGain();
-            this.gain.connect(context.destination);
-            this.wall = context.state !== 'running';
-            // 押される前でも鳴らせることがある (前に押したことのあるサイト)。駄目なら押すまで壁時計
-            void context.resume().catch(() => undefined);
-            context.onstatechange = () => this.follow();
+    // 途中で転んだら (呼ぶ側がエンコードしたものに戻す) 作ったものを残さない
+    let context: AudioContext | null = null;
+    let worker: Worker | null = null;
+    try {
+      playbackSession(background);
+      this.context = context = new AudioContext({ latencyHint: "playback" });
+      this.gain = context.createGain();
+      this.gain.connect(context.destination);
+      this.wall = context.state !== "running";
+      // 押される前でも鳴らせることがある (前に押したことのあるサイト)。駄目なら押すまで壁時計
+      void context.resume().catch(() => undefined);
+      context.onstatechange = () => this.follow();
 
-            this.worker = worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-            worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
-            worker.onerror = () =>
-                this.giveUp(input !== 'ts-mpeg2' ? '再生が止まりました' : 'MPEG-2 の再生が止まりました');
-            const offscreen = this.canvas.transferControlToOffscreen();
-            this.send(
-                {
-                    type: 'init',
-                    canvas: offscreen,
-                    decoder: `${resolve('')}${DECODER.slice(1)}`,
-                    input,
-                    follow: chase,
-                },
-                [offscreen],
-            );
-        } catch (error) {
-            worker?.terminate();
-            void context?.close().catch(() => undefined);
-            playbackSession(false);
-            this.canvas.remove();
-            throw error;
-        }
-
-        this.timer = setInterval(() => this.tick(), TICK);
-        /*
-         * **画面の切り替わりの時刻を worker へ流す。** worker は次の切り替わりの時点で出すフィールドを
-         * 選ぶ (`cadence.ts`)。worker の rAF は描いたものが画面に出る速さに引っ張られるので、画面のものを使う
-         */
-        const onFrame = (at: number) => {
-            if (this.gone) return;
-            this.send({ type: 'vsync', at: performance.timeOrigin + at });
-            this.frame = requestAnimationFrame(onFrame);
-        };
-        this.frame = requestAnimationFrame(onFrame);
-        document.addEventListener('visibilitychange', this.onVisibility);
-        this.onVisibility();
-        this.route();
-    }
-
-    /** 見えているかを worker へ (`visible`)。見えていない間は映像をデコードしない */
-    private readonly onVisibility = (): void => {
-        this.send({ type: 'visible', on: document.visibilityState === 'visible' });
-    };
-
-    /** どれだけ貯めるか (秒)。**決めるのはエンコードする経路と同じ `pacing.nextTarget`** (live-player) */
-    set target(seconds: number) {
-        this.playout.target = seconds;
-    }
-
-    /**
-     * 「再生する音」だと言うか (`playbackSession`)、`<audio>` を通すか (`route`)。
-     * バックグラウンド再生・小窓の出し入れで変わる
-     */
-    set background(on: boolean) {
-        if (this.gone) return;
-        playbackSession(on);
-        this.wanted = on;
-        this.route();
-    }
-
-    /** 音を鳴らせていないか (自動再生を断られた)。**押して `unmute` してもらう** */
-    get blocked(): boolean {
-        return this.context.state !== 'running';
-    }
-
-    /** 届いた TS を渡す。**写さずに worker へ移す** (1局 15Mbit/s ぶんを毎秒写さない) */
-    feed(buffer: ArrayBuffer, offset: number): void {
-        this.send({ type: 'data', buffer, offset }, [buffer]);
-    }
-
-    /**
-     * 選局し直した・録画で飛んだ。**前の局の音も映像の待ちも捨てる** (いま出ているフレームは、次が出るまで残る)。
-     *
-     * `from` (90kHz。届くものの PTS の物差し。元の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
-     * (録画。`canvas-player.ts`)。サーバは飛び先の少し手前から流すので、手前のコマは描かずに捨て、
-     * 音もそこから鳴らす。一周をまたぐかもしれないので、届いた最初のコマの近くに伸ばしてから決める
-     */
-    reset(from: number | null = null): void {
-        this.stopAll();
-        this.playout.reset();
-        this.aim = from;
-        this.near = null;
-        this.heardAt = 0;
-        this.shownAt = 0;
-        this.finishing = false;
-        this.send({ type: 'reset', from });
-    }
-
-    /**
-     * もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `ended`。
-     *
-     * **デコーダを読み終えるまでは `Playout` に伝えない。** 伝えると「尻まで読んだのに鳴らすものが無い」が
-     * `LAST_WAIT` (2秒) 続いた時点で終わりになる。残りが短い (短い録画・尻の近くへ飛んだ) と、読み込みの間に
-     * 尻まで読み切ってしまい、遅い回線でデコーダが 2 秒より遅れると、1コマも出さずに「観終わった」になっていた
-     */
-    finish(): void {
-        if (this.ready) this.playout.finish();
-        else this.finishing = true;
-        this.send({ type: 'end' });
-    }
-
-    /**
-     * 音声を選ぶ。**再エンコードにならない** — 元の TS には全部の音声が入っているので、
-     * どれをデコードするか (worker) と、デュアルモノのどちら側を両耳へ配るか (ここ) を変えるだけ
-     */
-    selectAudio(stream: number, side: AudioSide): void {
-        this.side = side;
-        this.send({ type: 'audio', index: stream });
-    }
-
-    /**
-     * 止める。**再開は放送の今から** (MPEG-2 では遡れるだけ持っていない。stream.md#放送そのままmpeg-2を送る)。
-     * 追っかけ (`follow`) は止めた所から (`playout.ts`)
-     */
-    pause(): void {
-        this.held = true;
-        this.playout.hold(this.now());
-        this.stopAll();
-        this.tellClock();
-        if (this.through) this.out?.audio.pause();
-    }
-
-    resume(): void {
-        this.held = false;
-        this.playout.resume();
-        this.route();
-    }
-
-    /** 音を消す。**消すのは GainNode だけ** — `<audio>` を通していてもいなくても同じ所で効く */
-    mute(): void {
-        this.gain.gain.value = 0;
-    }
-
-    /** 音を出す。**押されて呼ばれる** — 自動再生で断られていても、ここなら鳴らせる (`<audio>` も) */
-    unmute(): void {
-        this.gain.gain.value = 1;
-        void this.context.resume().catch(() => undefined);
-        this.route();
-    }
-
-    /** いま出している PTS (秒、伸ばしたもの)。**鳴らしていなければ null** */
-    get position(): number | null {
-        const at = this.clock();
-        return at === null ? null : at.pts / CLOCK;
-    }
-
-    /** 手元にあと何秒ぶん持っているか (エンコードする経路の `buffered.end - currentTime`) */
-    get lead(): number {
-        return this.playout.lead(this.now());
-    }
-
-    get playing(): boolean {
-        return this.playout.playing;
-    }
-
-    /** 放送の PTS (90kHz、一周の中) を、いま出しているものの近くへ伸ばす。**字幕と時計の通知用** */
-    unwrap(pts: number): number {
-        return this.near === null ? pts : unwrap(pts, this.near);
-    }
-
-    /**
-     * いま出しているコマを1枚 (切り抜き)。**映像は worker の canvas にある**ので、
-     * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null。
-     * `size` を付けると worker の中で縮めたものが返る (アンビエントモード)
-     */
-    grab(size?: GrabSize): Promise<ImageBitmap | null> {
-        if (this.gone) return Promise.resolve(null);
-        const id = ++this.grabbed;
-        return new Promise((resolve) => {
-            const timer = setTimeout(() => settle(null), GRAB_WAIT);
-            const settle = (bitmap: ImageBitmap | null) => {
-                clearTimeout(timer);
-                this.grabs.delete(id);
-                resolve(bitmap);
-            };
-            this.grabs.set(id, settle);
-            this.send(size === undefined ? { type: 'grab', id } : { type: 'grab', id, size });
-        });
-    }
-
-    /**
-     * 小窓 (PiP) へ出す映像ストリーム。**Chrome は worker が描いたコマを直に書き込む**
-     * (`MediaStreamTrackGenerator`。`worker.ts` の `toPip`)。canvas の画面への更新から取る
-     * (`captureStream`) と、窓が隠れて画面の更新が止まったとき映像も止まる。
-     *
-     * 書き込む API が無い Safari は `captureStream` (iPhone で小窓に出せている)。
-     * Firefox はどちらも無い (worker に渡した canvas からはストリームを取れない) ので null
-     */
-    pipStream(): MediaStream | null {
-        const Generator = (
-            globalThis as {
-                MediaStreamTrackGenerator?: new (init: {
-                    kind: 'video';
-                }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> };
-            }
-        ).MediaStreamTrackGenerator;
-        try {
-            if (typeof Generator === 'function') {
-                const generator = new Generator({ kind: 'video' });
-                this.send({ type: 'pip', writable: generator.writable }, [generator.writable]);
-                return new MediaStream([generator]);
-            }
-            return this.canvas.captureStream();
-        } catch {
-            return null;
-        }
-    }
-
-    /** 小窓へ書き込むか (`pipStream` の直に書き込む経路だけ)。出していない間は写さない */
-    pipFlow(on: boolean): void {
-        this.send({ type: 'pipFlow', on });
-    }
-
-    destroy(): void {
-        if (this.gone) return;
-        this.gone = true;
-        for (const settle of [...this.grabs.values()]) settle(null);
-        clearInterval(this.timer);
-        cancelAnimationFrame(this.frame);
-        document.removeEventListener('visibilitychange', this.onVisibility);
-        this.stopAll();
-        this.worker.terminate();
-        if (this.out !== null) {
-            this.out.audio.pause();
-            this.out.audio.srcObject = null;
-            this.out.audio.remove();
-        }
-        void this.context.close().catch(() => undefined);
-        playbackSession(false);
-        this.canvas.remove();
-    }
-
-    /**
-     * **音の出口を決め直す。** バックグラウンド再生をオンにしているとき・押して小窓を開いている間
-     * (`wanted`) は、ページから直に鳴らさず、ストリーム (`createMediaStreamDestination`) にして
-     * `<audio>` で鳴らす。
-     *
-     * Web Audio の音を、ブラウザによっては効果音と同じに扱い、**裏へ回すと止める**
-     * (テスラの車載ブラウザ。Chromium 系)。`<audio>` が鳴らしていれば「メディアの再生」で、
-     * エンコードする経路の `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、
-     * そこで押された止める・再開は `remote` で画面に伝える。
-     *
-     * - **Safari は通さない** — Audio Session を `playback` にすれば裏でも止まらない
-     *   (`playbackSession`。iPhone で確かめてある)。iOS で MediaStream を鳴らすと、出口が
-     *   通話の扱いに寄ることがあった
-     * - ストリームを作れない端末は直に鳴らすまま
-     * - **`play()` を断られたら (自動再生) 直に鳴らす。** 押されたら (`unmute`・`resume`) また試す
-     * - 音を消すのは GainNode (`mute`)。`<audio>` の `volume`/`muted` は触らない
-     */
-    private route(): void {
-        if (this.gone) return;
-        const want =
-            this.wanted &&
-            audioSession() === undefined &&
-            typeof this.context.createMediaStreamDestination === 'function';
-        if (!want) {
-            this.direct();
-            return;
-        }
-        let out = this.out;
-        if (out === null) {
-            try {
-                out = this.out = this.makeOut();
-            } catch {
-                return;
-            }
-        }
-        if (!this.through) {
-            this.gain.disconnect();
-            this.gain.connect(out.destination);
-            this.through = true;
-        }
-        if (this.held || !out.audio.paused) return;
-        const { audio } = out;
-        void audio.play().catch(() => {
-            // 断られた。**黙らせない** — 直に鳴らして、押されたらまた試す
-            if (this.out?.audio === audio && audio.paused) this.direct();
-        });
-    }
-
-    /** 直に鳴らす (`route`) */
-    private direct(): void {
-        if (!this.through) return;
-        this.through = false;
-        this.gain.disconnect();
-        this.gain.connect(this.context.destination);
-        this.out?.audio.pause();
-    }
-
-    private makeOut(): Through {
-        const destination = this.context.createMediaStreamDestination();
-        const audio = document.createElement('audio');
-        audio.setAttribute('data-testid', 'live-raw-audio');
-        audio.srcObject = destination.stream;
-        /*
-         * **外から止められた・再開されたら画面に伝える。** こちらが止めた・再開したもの
-         * (`held` と合っている) と、直に鳴らしている間のものには反応しない
-         */
-        const sync = () => {
-            if (this.gone || !this.through || audio.paused === this.held) return;
-            this.events.remote(audio.paused);
-        };
-        audio.addEventListener('pause', sync);
-        audio.addEventListener('play', sync);
-        // 操作 UI (`controls`) を出さないので、置いても見えない
-        this.canvas.after(audio);
-        return { audio, destination };
-    }
-
-    private send(message: ToWorker, transfer: Transferable[] = []): void {
-        if (!this.gone) this.worker.postMessage(message, transfer);
-    }
-
-    private giveUp(reason: string): void {
-        if (this.gone) return;
-        this.events.gaveUp(reason);
-    }
-
-    private receive(message: FromWorker): void {
-        switch (message.type) {
-            case 'audio': {
-                if (this.heardAt === 0) this.heardAt = Date.now();
-                this.heard++;
-                const chunk: AudioChunk = message;
-                this.near = message.pts;
-                if (this.aim !== null) {
-                    this.playout.aim(unwrap(this.aim, message.pts));
-                    this.aim = null;
-                }
-                const scheduled = this.playout.push(chunk, this.now());
-                if (scheduled !== null) this.play(scheduled);
-                break;
-            }
-            case 'ready':
-                this.ready = true;
-                if (this.finishing) {
-                    this.finishing = false;
-                    this.playout.finish();
-                }
-                break;
-            case 'shown':
-                this.shownAt = Date.now();
-                this.events.shown();
-                break;
-            case 'size':
-                // 絵の形。枠 (`PlayerStage`) がこれを読んで、同じ形になる
-                this.canvas.dataset['aspect'] = `${message.width} / ${message.height}`;
-                break;
-            case 'stats':
-                this.dropped = message.dropped;
-                this.decodeMs = message.p95;
-                this.thinned = message.thinned;
-                /*
-                 * **外から読める形で出しておく。** 映像は worker の canvas にあって、画面の側からは
-                 * 画素を読めない。描いたコマ数とデコードできた音のコマ数が進んでいれば、変換しない経路は動いている
-                 * (E2E が見る。手元で切り分けるときも DevTools で読める)
-                 */
-                this.canvas.dataset['shown'] = String(message.shown);
-                this.canvas.dataset['audio'] = String(this.heard);
-                break;
-            case 'fail':
-                this.giveUp(message.reason);
-                break;
-            case 'full':
-                if (!this.gone) this.events.full();
-                break;
-            case 'frame': {
-                const settle = this.grabs.get(message.id);
-                // 待ちきれずに諦めたあとに届いたもの。持たずに捨てる
-                if (settle === undefined) message.bitmap?.close();
-                else settle(message.bitmap);
-                break;
-            }
-        }
-    }
-
-    /** 時計の秒。**音が鳴っていれば音の時間、鳴らせなければ壁時計** */
-    private now(): number {
-        return this.wall ? performance.now() / 1000 : this.context.currentTime;
-    }
-
-    /**
-     * いま耳に届いている PTS と、それが届いた時刻 (performance の ms)。
-     * **音の時間は「いま予約している位置」なので、出口までの遅れを引く** (`getOutputTimestamp`)
-     *
-     * **`<audio>` を通している間は、引くものを差し替える** (`route`)。音は組んだその場でストリームに
-     * 乗るので、ページの出口の遅れ (`baseLatency + outputLatency`) は掛からず、`<audio>` の
-     * 出口の遅れ (`STREAM_OUT`) が掛かる。滑らかさは `getOutputTimestamp` の組のまま使い、
-     * PTS をその差だけ先へずらす
-     */
-    private clock(): { pts: number; at: number } | null {
-        if (this.wall) {
-            const at = performance.now();
-            const pts = this.playout.position(at / 1000);
-            return pts === null ? null : { pts, at };
-        }
-        const page = (this.context.baseLatency || 0) + (this.context.outputLatency || 0);
-        const ahead = this.through ? page - STREAM_OUT : 0;
-        const stamp = this.context.getOutputTimestamp();
-        const contextTime = stamp.contextTime ?? 0;
-        if (contextTime > 0 && stamp.performanceTime !== undefined) {
-            const pts = this.playout.position(contextTime + ahead);
-            return pts === null ? null : { pts, at: stamp.performanceTime };
-        }
-        const latency = this.through
-            ? STREAM_OUT
-            : this.context.outputLatency || this.context.baseLatency || 0;
-        const pts = this.playout.position(this.context.currentTime - latency);
-        return pts === null ? null : { pts, at: performance.now() };
-    }
-
-    private tellClock(): void {
-        const at = this.clock();
-        this.send(
-            at === null
-                ? { type: 'clock', pts: null, at: 0 }
-                : { type: 'clock', pts: at.pts, at: performance.timeOrigin + at.at },
+      this.worker = worker = new Worker(
+        new URL("./worker.ts", import.meta.url),
+        { type: "module" },
+      );
+      worker.onmessage = (event: MessageEvent<FromWorker>) =>
+        this.receive(event.data);
+      worker.onerror = () =>
+        this.giveUp(
+          input !== "ts-mpeg2"
+            ? "再生が止まりました"
+            : "MPEG-2 の再生が止まりました",
         );
+      const offscreen = this.canvas.transferControlToOffscreen();
+      this.send(
+        {
+          type: "init",
+          canvas: offscreen,
+          decoder: `${resolve("")}${DECODER.slice(1)}`,
+          input,
+          follow: chase,
+        },
+        [offscreen],
+      );
+    } catch (error) {
+      worker?.terminate();
+      void context?.close().catch(() => undefined);
+      playbackSession(false);
+      this.canvas.remove();
+      throw error;
     }
 
-    private tick(): void {
-        const decided = this.playout.tick(this.now());
-        if (decided.kind === 'start') {
-            for (const scheduled of decided.schedule) this.play(scheduled);
-        } else if (decided.kind === 'stall') {
-            this.stopAll();
-            this.events.stalled();
-        } else if (decided.kind === 'jump') {
-            this.stopAll();
-            for (const scheduled of decided.schedule) this.play(scheduled);
-        } else if (decided.kind === 'end') {
-            this.stopAll();
-            this.events.ended?.();
-        }
-        this.tellClock();
-        // 映像は出ているのに音が来ない。**音の出ない MPEG-2 より、エンコードしたもののほうがいい**
-        if (this.shownAt > 0 && this.heardAt === 0 && Date.now() - this.shownAt > NO_AUDIO) {
-            this.giveUp(
-                this.input !== 'ts-mpeg2'
-                    ? '音声を再生できません'
-                    : '音声を再生できないため、変換した映像に切り替えました',
-            );
-        }
-    }
-
-    /**
-     * 時計を替える。**鳴っている位置はそのまま。** 自動再生の許しが出たら音へ、音が止められたら
-     * (出口が外れた・OS に止められた) 壁時計へ — 止まった音の時計に映像まで付いて止まらないように
+    this.timer = setInterval(() => this.tick(), TICK);
+    /*
+     * **画面の切り替わりの時刻を worker へ流す。** worker は次の切り替わりの時点で出すフィールドを
+     * 選ぶ (`cadence.ts`)。worker の rAF は描いたものが画面に出る速さに引っ張られるので、画面のものを使う
      */
-    private follow(): void {
-        const wall = this.context.state !== 'running';
-        if (this.gone || wall === this.wall) return;
-        const position = this.playout.position(this.now());
-        this.wall = wall;
-        if (wall) this.stopAll();
-        if (position === null) return;
-        for (const scheduled of this.playout.rebase(position, this.now())) this.play(scheduled);
-    }
+    const onFrame = (at: number) => {
+      if (this.gone) return;
+      this.send({ type: "vsync", at: performance.timeOrigin + at });
+      this.frame = requestAnimationFrame(onFrame);
+    };
+    this.frame = requestAnimationFrame(onFrame);
+    document.addEventListener("visibilitychange", this.onVisibility);
+    this.onVisibility();
+    this.route();
+  }
 
-    private play(scheduled: Scheduled<AudioChunk>): void {
-        if (this.wall) return;
-        const { chunk } = scheduled;
-        const frames = chunk.planes[0]?.length ?? 0;
-        if (frames === 0) return;
-        const buffer = this.context.createBuffer(2, frames, chunk.sampleRate);
-        /*
-         * **デュアルモノは片側を両耳へ** (エンコードする経路の `pan` と同じ)。
-         *
-         * 5.1ch の番組は**頭の2本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
-         * 分かっている (worker の WASM がデコードする) が、中央と後ろを混ぜる下げ方はまだ持っていない
-         */
-        const left = chunk.planes[0]!;
-        const right = chunk.planes[1] ?? left;
-        const [l, r] =
-            this.side === 'main' ? [left, left] : this.side === 'sub' ? [right, right] : [left, right];
-        buffer.copyToChannel(l as Float32Array<ArrayBuffer>, 0);
-        buffer.copyToChannel(r as Float32Array<ArrayBuffer>, 1);
-        const node = this.context.createBufferSource();
-        node.buffer = buffer;
-        node.connect(this.gain);
-        node.onended = () => this.nodes.delete(node);
-        node.start(scheduled.when, scheduled.offset);
-        this.nodes.add(node);
-    }
+  /** 見えているかを worker へ (`visible`)。見えていない間は映像をデコードしない */
+  private readonly onVisibility = (): void => {
+    this.send({ type: "visible", on: document.visibilityState === "visible" });
+  };
 
-    private stopAll(): void {
-        for (const node of this.nodes) {
-            try {
-                node.stop();
-            } catch {
-                // まだ始まっていない・もう終わっている
-            }
+  /** どれだけ貯めるか (秒)。**決めるのはエンコードする経路と同じ `pacing.nextTarget`** (live-player) */
+  set target(seconds: number) {
+    this.playout.target = seconds;
+  }
+
+  /**
+   * 「再生する音」だと言うか (`playbackSession`)、`<audio>` を通すか (`route`)。
+   * バックグラウンド再生・小窓の出し入れで変わる
+   */
+  set background(on: boolean) {
+    if (this.gone) return;
+    playbackSession(on);
+    this.wanted = on;
+    this.route();
+  }
+
+  /** 音を鳴らせていないか (自動再生を断られた)。**押して `unmute` してもらう** */
+  get blocked(): boolean {
+    return this.context.state !== "running";
+  }
+
+  /** 届いた TS を渡す。**写さずに worker へ移す** (1局 15Mbit/s ぶんを毎秒写さない) */
+  feed(buffer: ArrayBuffer, offset: number): void {
+    this.send({ type: "data", buffer, offset }, [buffer]);
+  }
+
+  /**
+   * 選局し直した・録画で飛んだ。**前の局の音も映像の待ちも捨てる** (いま出ているフレームは、次が出るまで残る)。
+   *
+   * `from` (90kHz。届くものの PTS の物差し。元の TS なら一周の中) を渡すと、そこから鳴らし・描き始める
+   * (録画。`canvas-player.ts`)。サーバは飛び先の少し手前から流すので、手前のコマは描かずに捨て、
+   * 音もそこから鳴らす。一周をまたぐかもしれないので、届いた最初のコマの近くに伸ばしてから決める
+   */
+  reset(from: number | null = null): void {
+    this.stopAll();
+    this.playout.reset();
+    this.aim = from;
+    this.near = null;
+    this.heardAt = 0;
+    this.shownAt = 0;
+    this.finishing = false;
+    this.send({ type: "reset", from });
+  }
+
+  /**
+   * もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `ended`。
+   *
+   * **デコーダを読み終えるまでは `Playout` に伝えない。** 伝えると「尻まで読んだのに鳴らすものが無い」が
+   * `LAST_WAIT` (2秒) 続いた時点で終わりになる。残りが短い (短い録画・尻の近くへ飛んだ) と、読み込みの間に
+   * 尻まで読み切ってしまい、遅い回線でデコーダが 2 秒より遅れると、1コマも出さずに「観終わった」になっていた
+   */
+  finish(): void {
+    if (this.ready) this.playout.finish();
+    else this.finishing = true;
+    this.send({ type: "end" });
+  }
+
+  /**
+   * 音声を選ぶ。**再エンコードにならない** — 元の TS には全部の音声が入っているので、
+   * どれをデコードするか (worker) と、デュアルモノのどちら側を両耳へ配るか (ここ) を変えるだけ
+   */
+  selectAudio(stream: number, side: AudioSide): void {
+    this.side = side;
+    this.send({ type: "audio", index: stream });
+  }
+
+  /**
+   * 止める。**再開は放送の今から** (MPEG-2 では遡れるだけ持っていない。stream.md#放送そのままmpeg-2を送る)。
+   * 追っかけ (`follow`) は止めた所から (`playout.ts`)
+   */
+  pause(): void {
+    this.held = true;
+    this.playout.hold(this.now());
+    this.stopAll();
+    this.tellClock();
+    if (this.through) this.out?.audio.pause();
+  }
+
+  resume(): void {
+    this.held = false;
+    this.playout.resume();
+    this.route();
+  }
+
+  /** 音を消す。**消すのは GainNode だけ** — `<audio>` を通していてもいなくても同じ所で効く */
+  mute(): void {
+    this.gain.gain.value = 0;
+  }
+
+  /** 音を出す。**押されて呼ばれる** — 自動再生で断られていても、ここなら鳴らせる (`<audio>` も) */
+  unmute(): void {
+    this.gain.gain.value = 1;
+    void this.context.resume().catch(() => undefined);
+    this.route();
+  }
+
+  /** いま出している PTS (秒、伸ばしたもの)。**鳴らしていなければ null** */
+  get position(): number | null {
+    const at = this.clock();
+    return at === null ? null : at.pts / CLOCK;
+  }
+
+  /** 手元にあと何秒ぶん持っているか (エンコードする経路の `buffered.end - currentTime`) */
+  get lead(): number {
+    return this.playout.lead(this.now());
+  }
+
+  get playing(): boolean {
+    return this.playout.playing;
+  }
+
+  /** 放送の PTS (90kHz、一周の中) を、いま出しているものの近くへ伸ばす。**字幕と時計の通知用** */
+  unwrap(pts: number): number {
+    return this.near === null ? pts : unwrap(pts, this.near);
+  }
+
+  /**
+   * いま出しているコマを1枚 (切り抜き)。**映像は worker の canvas にある**ので、
+   * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null。
+   * `size` を付けると worker の中で縮めたものが返る (アンビエントモード)
+   */
+  grab(size?: GrabSize): Promise<ImageBitmap | null> {
+    if (this.gone) return Promise.resolve(null);
+    const id = ++this.grabbed;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => settle(null), GRAB_WAIT);
+      const settle = (bitmap: ImageBitmap | null) => {
+        clearTimeout(timer);
+        this.grabs.delete(id);
+        resolve(bitmap);
+      };
+      this.grabs.set(id, settle);
+      this.send(
+        size === undefined ? { type: "grab", id } : { type: "grab", id, size },
+      );
+    });
+  }
+
+  /**
+   * 小窓 (PiP) へ出す映像ストリーム。**Chrome は worker が描いたコマを直に書き込む**
+   * (`MediaStreamTrackGenerator`。`worker.ts` の `toPip`)。canvas の画面への更新から取る
+   * (`captureStream`) と、窓が隠れて画面の更新が止まったとき映像も止まる。
+   *
+   * 書き込む API が無い Safari は `captureStream` (iPhone で小窓に出せている)。
+   * Firefox はどちらも無い (worker に渡した canvas からはストリームを取れない) ので null
+   */
+  pipStream(): MediaStream | null {
+    const Generator = (
+      globalThis as {
+        MediaStreamTrackGenerator?: new (init: {
+          kind: "video";
+        }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> };
+      }
+    ).MediaStreamTrackGenerator;
+    try {
+      if (typeof Generator === "function") {
+        const generator = new Generator({ kind: "video" });
+        this.send({ type: "pip", writable: generator.writable }, [
+          generator.writable,
+        ]);
+        return new MediaStream([generator]);
+      }
+      return this.canvas.captureStream();
+    } catch {
+      return null;
+    }
+  }
+
+  /** 小窓へ書き込むか (`pipStream` の直に書き込む経路だけ)。出していない間は写さない */
+  pipFlow(on: boolean): void {
+    this.send({ type: "pipFlow", on });
+  }
+
+  destroy(): void {
+    if (this.gone) return;
+    this.gone = true;
+    for (const settle of [...this.grabs.values()]) settle(null);
+    clearInterval(this.timer);
+    cancelAnimationFrame(this.frame);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.stopAll();
+    this.worker.terminate();
+    if (this.out !== null) {
+      this.out.audio.pause();
+      this.out.audio.srcObject = null;
+      this.out.audio.remove();
+    }
+    void this.context.close().catch(() => undefined);
+    playbackSession(false);
+    this.canvas.remove();
+  }
+
+  /**
+   * **音の出口を決め直す。** バックグラウンド再生をオンにしているとき・押して小窓を開いている間
+   * (`wanted`) は、ページから直に鳴らさず、ストリーム (`createMediaStreamDestination`) にして
+   * `<audio>` で鳴らす。
+   *
+   * Web Audio の音を、ブラウザによっては効果音と同じに扱い、**裏へ回すと止める**
+   * (テスラの車載ブラウザ。Chromium 系)。`<audio>` が鳴らしていれば「メディアの再生」で、
+   * エンコードする経路の `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、
+   * そこで押された止める・再開は `remote` で画面に伝える。
+   *
+   * - **Safari は通さない** — Audio Session を `playback` にすれば裏でも止まらない
+   *   (`playbackSession`。iPhone で確かめてある)。iOS で MediaStream を鳴らすと、出口が
+   *   通話の扱いに寄ることがあった
+   * - ストリームを作れない端末は直に鳴らすまま
+   * - **`play()` を断られたら (自動再生) 直に鳴らす。** 押されたら (`unmute`・`resume`) また試す
+   * - 音を消すのは GainNode (`mute`)。`<audio>` の `volume`/`muted` は触らない
+   */
+  private route(): void {
+    if (this.gone) return;
+    const want =
+      this.wanted &&
+      audioSession() === undefined &&
+      typeof this.context.createMediaStreamDestination === "function";
+    if (!want) {
+      this.direct();
+      return;
+    }
+    let out = this.out;
+    if (out === null) {
+      try {
+        out = this.out = this.makeOut();
+      } catch {
+        return;
+      }
+    }
+    if (!this.through) {
+      this.gain.disconnect();
+      this.gain.connect(out.destination);
+      this.through = true;
+    }
+    if (this.held || !out.audio.paused) return;
+    const { audio } = out;
+    void audio.play().catch(() => {
+      // 断られた。**黙らせない** — 直に鳴らして、押されたらまた試す
+      if (this.out?.audio === audio && audio.paused) this.direct();
+    });
+  }
+
+  /** 直に鳴らす (`route`) */
+  private direct(): void {
+    if (!this.through) return;
+    this.through = false;
+    this.gain.disconnect();
+    this.gain.connect(this.context.destination);
+    this.out?.audio.pause();
+  }
+
+  private makeOut(): Through {
+    const destination = this.context.createMediaStreamDestination();
+    const audio = document.createElement("audio");
+    audio.setAttribute("data-testid", "live-raw-audio");
+    audio.srcObject = destination.stream;
+    /*
+     * **外から止められた・再開されたら画面に伝える。** こちらが止めた・再開したもの
+     * (`held` と合っている) と、直に鳴らしている間のものには反応しない
+     */
+    const sync = () => {
+      if (this.gone || !this.through || audio.paused === this.held) return;
+      this.events.remote(audio.paused);
+    };
+    audio.addEventListener("pause", sync);
+    audio.addEventListener("play", sync);
+    // 操作 UI (`controls`) を出さないので、置いても見えない
+    this.canvas.after(audio);
+    return { audio, destination };
+  }
+
+  private send(message: ToWorker, transfer: Transferable[] = []): void {
+    if (!this.gone) this.worker.postMessage(message, transfer);
+  }
+
+  private giveUp(reason: string): void {
+    if (this.gone) return;
+    this.events.gaveUp(reason);
+  }
+
+  private receive(message: FromWorker): void {
+    switch (message.type) {
+      case "audio": {
+        if (this.heardAt === 0) this.heardAt = Date.now();
+        this.heard++;
+        const chunk: AudioChunk = message;
+        this.near = message.pts;
+        if (this.aim !== null) {
+          this.playout.aim(unwrap(this.aim, message.pts));
+          this.aim = null;
         }
-        this.nodes.clear();
+        const scheduled = this.playout.push(chunk, this.now());
+        if (scheduled !== null) this.play(scheduled);
+        break;
+      }
+      case "ready":
+        this.ready = true;
+        if (this.finishing) {
+          this.finishing = false;
+          this.playout.finish();
+        }
+        break;
+      case "shown":
+        this.shownAt = Date.now();
+        this.events.shown();
+        break;
+      case "size":
+        // 絵の形。枠 (`PlayerStage`) がこれを読んで、同じ形になる
+        this.canvas.dataset["aspect"] = `${message.width} / ${message.height}`;
+        break;
+      case "stats":
+        this.dropped = message.dropped;
+        this.decodeMs = message.p95;
+        this.thinned = message.thinned;
+        /*
+         * **外から読める形で出しておく。** 映像は worker の canvas にあって、画面の側からは
+         * 画素を読めない。描いたコマ数とデコードできた音のコマ数が進んでいれば、変換しない経路は動いている
+         * (E2E が見る。手元で切り分けるときも DevTools で読める)
+         */
+        this.canvas.dataset["shown"] = String(message.shown);
+        this.canvas.dataset["audio"] = String(this.heard);
+        break;
+      case "fail":
+        this.giveUp(message.reason);
+        break;
+      case "full":
+        if (!this.gone) this.events.full();
+        break;
+      case "frame": {
+        const settle = this.grabs.get(message.id);
+        // 待ちきれずに諦めたあとに届いたもの。持たずに捨てる
+        if (settle === undefined) message.bitmap?.close();
+        else settle(message.bitmap);
+        break;
+      }
     }
+  }
+
+  /** 時計の秒。**音が鳴っていれば音の時間、鳴らせなければ壁時計** */
+  private now(): number {
+    return this.wall ? performance.now() / 1000 : this.context.currentTime;
+  }
+
+  /**
+   * いま耳に届いている PTS と、それが届いた時刻 (performance の ms)。
+   * **音の時間は「いま予約している位置」なので、出口までの遅れを引く** (`getOutputTimestamp`)
+   *
+   * **`<audio>` を通している間は、引くものを差し替える** (`route`)。音は組んだその場でストリームに
+   * 乗るので、ページの出口の遅れ (`baseLatency + outputLatency`) は掛からず、`<audio>` の
+   * 出口の遅れ (`STREAM_OUT`) が掛かる。滑らかさは `getOutputTimestamp` の組のまま使い、
+   * PTS をその差だけ先へずらす
+   */
+  private clock(): { pts: number; at: number } | null {
+    if (this.wall) {
+      const at = performance.now();
+      const pts = this.playout.position(at / 1000);
+      return pts === null ? null : { pts, at };
+    }
+    const page =
+      (this.context.baseLatency || 0) + (this.context.outputLatency || 0);
+    const ahead = this.through ? page - STREAM_OUT : 0;
+    const stamp = this.context.getOutputTimestamp();
+    const contextTime = stamp.contextTime ?? 0;
+    if (contextTime > 0 && stamp.performanceTime !== undefined) {
+      const pts = this.playout.position(contextTime + ahead);
+      return pts === null ? null : { pts, at: stamp.performanceTime };
+    }
+    const latency = this.through
+      ? STREAM_OUT
+      : this.context.outputLatency || this.context.baseLatency || 0;
+    const pts = this.playout.position(this.context.currentTime - latency);
+    return pts === null ? null : { pts, at: performance.now() };
+  }
+
+  private tellClock(): void {
+    const at = this.clock();
+    this.send(
+      at === null
+        ? { type: "clock", pts: null, at: 0 }
+        : { type: "clock", pts: at.pts, at: performance.timeOrigin + at.at },
+    );
+  }
+
+  private tick(): void {
+    const decided = this.playout.tick(this.now());
+    if (decided.kind === "start") {
+      for (const scheduled of decided.schedule) this.play(scheduled);
+    } else if (decided.kind === "stall") {
+      this.stopAll();
+      this.events.stalled();
+    } else if (decided.kind === "jump") {
+      this.stopAll();
+      for (const scheduled of decided.schedule) this.play(scheduled);
+    } else if (decided.kind === "end") {
+      this.stopAll();
+      this.events.ended?.();
+    }
+    this.tellClock();
+    // 映像は出ているのに音が来ない。**音の出ない MPEG-2 より、エンコードしたもののほうがいい**
+    if (
+      this.shownAt > 0 &&
+      this.heardAt === 0 &&
+      Date.now() - this.shownAt > NO_AUDIO
+    ) {
+      this.giveUp(
+        this.input !== "ts-mpeg2"
+          ? "音声を再生できません"
+          : "音声を再生できないため、変換した映像に切り替えました",
+      );
+    }
+  }
+
+  /**
+   * 時計を替える。**鳴っている位置はそのまま。** 自動再生の許しが出たら音へ、音が止められたら
+   * (出口が外れた・OS に止められた) 壁時計へ — 止まった音の時計に映像まで付いて止まらないように
+   */
+  private follow(): void {
+    const wall = this.context.state !== "running";
+    if (this.gone || wall === this.wall) return;
+    const position = this.playout.position(this.now());
+    this.wall = wall;
+    if (wall) this.stopAll();
+    if (position === null) return;
+    for (const scheduled of this.playout.rebase(position, this.now()))
+      this.play(scheduled);
+  }
+
+  private play(scheduled: Scheduled<AudioChunk>): void {
+    if (this.wall) return;
+    const { chunk } = scheduled;
+    const frames = chunk.planes[0]?.length ?? 0;
+    if (frames === 0) return;
+    const buffer = this.context.createBuffer(2, frames, chunk.sampleRate);
+    /*
+     * **デュアルモノは片側を両耳へ** (エンコードする経路の `pan` と同じ)。
+     *
+     * 5.1ch の番組は**頭の2本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
+     * 分かっている (worker の WASM がデコードする) が、中央と後ろを混ぜる下げ方はまだ持っていない
+     */
+    const left = chunk.planes[0]!;
+    const right = chunk.planes[1] ?? left;
+    const [l, r] =
+      this.side === "main"
+        ? [left, left]
+        : this.side === "sub"
+          ? [right, right]
+          : [left, right];
+    buffer.copyToChannel(l as Float32Array<ArrayBuffer>, 0);
+    buffer.copyToChannel(r as Float32Array<ArrayBuffer>, 1);
+    const node = this.context.createBufferSource();
+    node.buffer = buffer;
+    node.connect(this.gain);
+    node.onended = () => this.nodes.delete(node);
+    node.start(scheduled.when, scheduled.offset);
+    this.nodes.add(node);
+  }
+
+  private stopAll(): void {
+    for (const node of this.nodes) {
+      try {
+        node.stop();
+      } catch {
+        // まだ始まっていない・もう終わっている
+      }
+    }
+    this.nodes.clear();
+  }
 }

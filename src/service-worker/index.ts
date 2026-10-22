@@ -10,11 +10,16 @@
  * 預けたダウンロードが終わったら IndexedDB へ移す。配信のキャッシュはしない。
  */
 
-import { type OfflineVideo, parseFetchId, storeResponse, videos } from '#lib/offline-db.js';
-import { version } from '$app/env';
-import { assets, immutable } from '$app/manifest';
-import { asset, resolve } from '$app/paths';
-import { self as worker } from '$app/service-worker';
+import {
+  type OfflineVideo,
+  parseFetchId,
+  storeResponse,
+  videos,
+} from "#lib/offline-db.js";
+import { version } from "$app/env";
+import { assets, immutable } from "$app/manifest";
+import { asset, resolve } from "$app/paths";
+import { self as worker } from "$app/service-worker";
 
 /*
  * **頭 (前段の接頭辞込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
@@ -25,78 +30,85 @@ import { self as worker } from '$app/service-worker';
 const CACHE = `denpa-${version}`;
 /** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない。パスは base からの相対で来る */
 const SHELL = [
-    // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。頭だけ借りる
-    ...immutable.map((file) => `${resolve('')}${file.path}`),
-    ...assets.filter((file) => !file.path.endsWith('robots.txt')).map((file) => asset(file.path)),
+  // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。頭だけ借りる
+  ...immutable.map((file) => `${resolve("")}${file.path}`),
+  ...assets
+    .filter((file) => !file.path.endsWith("robots.txt"))
+    .map((file) => asset(file.path)),
 ];
 /**
  * オフラインの入口。電波の無いところで開いたとき、どの画面への行き先も
  * これで受ける (下の fetch)。**殻と違って HTML なので、版が変わる**。
  * install のたびに取り直す
  */
-const OFFLINE_PAGE = resolve('offline');
+const OFFLINE_PAGE = resolve("offline");
 
-worker.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(CACHE).then(async (cache) => {
-            await cache.addAll(SHELL);
-            // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
-            await cache.add(OFFLINE_PAGE).catch(() => {});
-        }),
-    );
-    void worker.skipWaiting();
+worker.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then(async (cache) => {
+      await cache.addAll(SHELL);
+      // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
+      await cache.add(OFFLINE_PAGE).catch(() => {});
+    }),
+  );
+  void worker.skipWaiting();
 });
 
-worker.addEventListener('activate', (event) => {
-    // 版が変われば古い殻は用済み
-    event.waitUntil(
-        caches
-            .keys()
-            .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
-            .then(() => worker.clients.claim()),
-    );
+worker.addEventListener("activate", (event) => {
+  // 版が変われば古い殻は用済み
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)),
+        ),
+      )
+      .then(() => worker.clients.claim()),
+  );
 });
 
-worker.addEventListener('fetch', (event) => {
-    const { request } = event;
-    if (request.method !== 'GET') return;
+worker.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
 
-    const url = new URL(request.url);
-    if (url.origin !== location.origin) return;
-    /*
-     * API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
-     * どちらもキャッシュに載せると壊れる
-     */
-    if (url.pathname.startsWith(`${resolve('')}api/`)) return;
+  const url = new URL(request.url);
+  if (url.origin !== location.origin) return;
+  /*
+   * API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
+   * どちらもキャッシュに載せると壊れる
+   */
+  if (url.pathname.startsWith(`${resolve("")}api/`)) return;
 
-    /*
-     * 画面への移動は**サーバ優先、繋がらなければオフラインの入口**。
-     * 一覧や番組表を古いまま見せない方針はそのままに、電波の無いところでは
-     * 真っ白なエラーではなく、落としてある録画の一覧に落ちる
-     */
-    if (request.mode === 'navigate') {
-        event.respondWith(
-            fetch(request).catch(async () => {
-                const fallback = await caches.match(OFFLINE_PAGE);
-                return fallback ?? Response.error();
-            }),
-        );
-        return;
-    }
-
+  /*
+   * 画面への移動は**サーバ優先、繋がらなければオフラインの入口**。
+   * 一覧や番組表を古いまま見せない方針はそのままに、電波の無いところでは
+   * 真っ白なエラーではなく、落としてある録画の一覧に落ちる
+   */
+  if (request.mode === "navigate") {
     event.respondWith(
-        caches.match(request).then((hit) => {
-            // 殻はキャッシュから。それ以外は毎回サーバに聞く
-            return hit ?? fetch(request);
-        }),
+      fetch(request).catch(async () => {
+        const fallback = await caches.match(OFFLINE_PAGE);
+        return fallback ?? Response.error();
+      }),
     );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((hit) => {
+      // 殻はキャッシュから。それ以外は毎回サーバに聞く
+      return hit ?? fetch(request);
+    }),
+  );
 });
 
 /* ---------- オフライン視聴: Background Fetch の受け取り ---------- */
 
 /** 画面へ「変わったよ」と伝える。開いていなければ何も起きない (次に開いたとき読む) */
 async function tellClients(message: unknown): Promise<void> {
-    for (const client of await worker.clients.matchAll()) client.postMessage(message);
+  for (const client of await worker.clients.matchAll())
+    client.postMessage(message);
 }
 
 /**
@@ -104,51 +116,54 @@ async function tellClients(message: unknown): Promise<void> {
  * (やり直したあとに届いた前回の残骸) なら null** — やり直しの控えを
  * 前回の残骸の通知が上書きしないように、印を照合する
  */
-async function heldFor(event: BackgroundFetchEvent): Promise<OfflineVideo | null> {
-    const parsed = parseFetchId(event.registration.id);
-    if (parsed === null) return null;
-    const held = await videos.get(parsed.id);
-    if (held === undefined || (held.attempt ?? '') !== parsed.attempt) return null;
-    return held;
+async function heldFor(
+  event: BackgroundFetchEvent,
+): Promise<OfflineVideo | null> {
+  const parsed = parseFetchId(event.registration.id);
+  if (parsed === null) return null;
+  const held = await videos.get(parsed.id);
+  if (held === undefined || (held.attempt ?? "") !== parsed.attempt)
+    return null;
+  return held;
 }
 
 /** 失敗として残す (あとでやり直せる) */
 async function markFailed(held: OfflineVideo): Promise<void> {
-    held.state = 'failed';
-    await videos.put(held);
-    await tellClients({ type: 'offline-failed', id: held.id });
+  held.state = "failed";
+  await videos.put(held);
+  await tellClients({ type: "offline-failed", id: held.id });
 }
 
 /**
  * ブラウザが運び終えた。**結果を IndexedDB へ移して初めて「保存済み」になる。**
  * 動画以外の付き添いは無い録画もある (404)。取れたぶんだけ持つ
  */
-worker.addEventListener('backgroundfetchsuccess', (event) => {
-    event.waitUntil(
-        (async () => {
-            const held = await heldFor(event);
-            if (held === null) return;
+worker.addEventListener("backgroundfetchsuccess", (event) => {
+  event.waitUntil(
+    (async () => {
+      const held = await heldFor(event);
+      if (held === null) return;
 
-            for (const record of await event.registration.matchAll()) {
-                // 1つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
-                try {
-                    const response = await record.responseReady.catch(() => null);
-                    if (response === null || !response.ok) continue;
-                    await storeResponse(held, record.request.url, response);
-                } catch {
-                    // その1つを諦める
-                }
-            }
+      for (const record of await event.registration.matchAll()) {
+        // 1つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
+        try {
+          const response = await record.responseReady.catch(() => null);
+          if (response === null || !response.ok) continue;
+          await storeResponse(held, record.request.url, response);
+        } catch {
+          // その1つを諦める
+        }
+      }
 
-            // 肝心の動画が無いなら保存とは言えない
-            if (held.video === undefined) return markFailed(held);
-            held.state = 'ready';
-            held.downloadedAt = Date.now();
-            await videos.put(held);
-            await event.updateUI?.({ title: `保存しました: ${held.name}` });
-            await tellClients({ type: 'offline-saved', id: held.id });
-        })(),
-    );
+      // 肝心の動画が無いなら保存とは言えない
+      if (held.video === undefined) return markFailed(held);
+      held.state = "ready";
+      held.downloadedAt = Date.now();
+      await videos.put(held);
+      await event.updateUI?.({ title: `保存しました: ${held.name}` });
+      await tellClients({ type: "offline-saved", id: held.id });
+    })(),
+  );
 });
 
 /**
@@ -158,12 +173,16 @@ worker.addEventListener('backgroundfetchsuccess', (event) => {
  * 見えていた。残った行から、そのままやり直せる
  */
 function drop(event: BackgroundFetchEvent): void {
-    event.waitUntil(heldFor(event).then((held) => (held === null ? undefined : markFailed(held))));
+  event.waitUntil(
+    heldFor(event).then((held) =>
+      held === null ? undefined : markFailed(held),
+    ),
+  );
 }
-worker.addEventListener('backgroundfetchfail', drop);
-worker.addEventListener('backgroundfetchabort', drop);
+worker.addEventListener("backgroundfetchfail", drop);
+worker.addEventListener("backgroundfetchabort", drop);
 
 /** ブラウザのダウンロード表示を押したら、保存済みの一覧を開く */
-worker.addEventListener('backgroundfetchclick', (event) => {
-    event.waitUntil(worker.clients.openWindow(OFFLINE_PAGE));
+worker.addEventListener("backgroundfetchclick", (event) => {
+  event.waitUntil(worker.clients.openWindow(OFFLINE_PAGE));
 });

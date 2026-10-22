@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test';
-import { parseXmlAit } from './xml-ait';
+import { describe, expect, test } from "bun:test";
+import { parseXmlAit } from "./xml-ait";
 
 /** ETSI TS 102 809 の形。値は作りもの */
 const AIT = `<?xml version="1.0" encoding="UTF-8"?>
@@ -32,44 +32,50 @@ const AIT = `<?xml version="1.0" encoding="UTF-8"?>
   </mhp:ApplicationDiscovery>
 </mhp:ServiceDiscovery>`;
 
-describe('parseXmlAit', () => {
-    test('開けるアプリの名前・識別・行き先を拾う。KILL は出さない', () => {
-        expect(parseXmlAit(AIT)).toEqual([
-            {
-                name: '番組 & 連動',
-                url: 'https://hc.example.jp/app/index.html?a=1&b=2',
-                organisationId: 16,
-                applicationId: 3,
-                autostart: true,
-            },
-        ]);
-    });
+describe("parseXmlAit", () => {
+  test("開けるアプリの名前・識別・行き先を拾う。KILL は出さない", () => {
+    expect(parseXmlAit(AIT)).toEqual([
+      {
+        name: "番組 & 連動",
+        url: "https://hc.example.jp/app/index.html?a=1&b=2",
+        organisationId: 16,
+        applicationId: 3,
+        autostart: true,
+      },
+    ]);
+  });
 
-    test('接頭辞が無くても読む。controlCode が無ければ PRESENT', () => {
-        const plain = `<ServiceDiscovery><ApplicationList><Application>
+  test("接頭辞が無くても読む。controlCode が無ければ PRESENT", () => {
+    const plain = `<ServiceDiscovery><ApplicationList><Application>
             <applicationIdentifier><orgId>0x10</orgId><appId>1</appId></applicationIdentifier>
             <applicationTransport><URLBase>http://a.example/</URLBase></applicationTransport>
             <applicationLocation>top.html</applicationLocation>
         </Application></ApplicationList></ServiceDiscovery>`;
-        expect(parseXmlAit(plain)).toEqual([
-            {
-                name: '',
-                url: 'http://a.example/top.html',
-                organisationId: 16,
-                applicationId: 1,
-                autostart: false,
-            },
-        ]);
-    });
+    expect(parseXmlAit(plain)).toEqual([
+      {
+        name: "",
+        url: "http://a.example/top.html",
+        organisationId: 16,
+        applicationId: 1,
+        autostart: false,
+      },
+    ]);
+  });
 
-    test('URL の頭が http(s) でないもの・壊れたものは出さない', () => {
-        expect(parseXmlAit(AIT.replace('https://hc.example.jp/app/', 'javascript:alert(1)//'))).toEqual([]);
-        expect(parseXmlAit('<html>not an ait</html>')).toEqual([]);
-    });
+  test("URL の頭が http(s) でないもの・壊れたものは出さない", () => {
+    expect(
+      parseXmlAit(
+        AIT.replace("https://hc.example.jp/app/", "javascript:alert(1)//"),
+      ),
+    ).toEqual([]);
+    expect(parseXmlAit("<html>not an ait</html>")).toEqual([]);
+  });
 
-    test('範囲の外の文字参照があっても、ほかは読む', () => {
-        expect(parseXmlAit(AIT.replace('番組 &amp; 連動', '番組&#x110000;')).map((app) => app.name)).toEqual([
-            '番組',
-        ]);
-    });
+  test("範囲の外の文字参照があっても、ほかは読む", () => {
+    expect(
+      parseXmlAit(AIT.replace("番組 &amp; 連動", "番組&#x110000;")).map(
+        (app) => app.name,
+      ),
+    ).toEqual(["番組"]);
+  });
 });

@@ -1,4 +1,4 @@
-import type { EncodeProgress } from '#lib/server/events.js';
+import type { EncodeProgress } from "#lib/server/events.js";
 
 /**
  * エンコード進捗の**リアルタイム表示**。SSE の `encode` イベント (中身付き) を録画IDごとに持つ。
@@ -15,23 +15,24 @@ import type { EncodeProgress } from '#lib/server/events.js';
 let live = $state<Record<number, EncodeProgress>>({});
 
 export const encodeLive = {
-    get entries(): Record<number, EncodeProgress> {
-        return live;
-    },
+  get entries(): Record<number, EncodeProgress> {
+    return live;
+  },
 };
 
 /** SSE から届いた中身を仕舞う。形式が違うものは黙って捨てる (画面を壊さない) */
 export function applyEncodeProgress(payload: unknown): void {
-    const p = payload as Partial<EncodeProgress> | null;
-    if (p === null || typeof p !== 'object' || typeof p.recordingId !== 'number') return;
-    if (typeof p.percent !== 'number') return;
-    live = {
-        ...live,
-        [p.recordingId]: {
-            recordingId: p.recordingId,
-            percent: p.percent,
-            etaMs: typeof p.etaMs === 'number' ? p.etaMs : null,
-            log: typeof p.log === 'string' ? p.log : '',
-        },
-    };
+  const p = payload as Partial<EncodeProgress> | null;
+  if (p === null || typeof p !== "object" || typeof p.recordingId !== "number")
+    return;
+  if (typeof p.percent !== "number") return;
+  live = {
+    ...live,
+    [p.recordingId]: {
+      recordingId: p.recordingId,
+      percent: p.percent,
+      etaMs: typeof p.etaMs === "number" ? p.etaMs : null,
+      log: typeof p.log === "string" ? p.log : "",
+    },
+  };
 }

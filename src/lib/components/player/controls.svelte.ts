@@ -17,7 +17,7 @@
  * 出す・消すを決めるだけで、DOM も映像も触りません
  */
 
-import { getContext } from 'svelte';
+import { getContext } from "svelte";
 
 /**
  * 触らなくなってから消えるまで (ms)。**指もマウスも同じ長さ。**
@@ -33,133 +33,133 @@ const LINGER = 2500;
 const TICK = 250;
 
 /** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`stageMenu`) が読む鍵 */
-export const PLAYER_CONTROLS = Symbol('player-controls');
+export const PLAYER_CONTROLS = Symbol("player-controls");
 
 /** 舞台の枠そのもの。**メニューを枠の中に収める**のに使う (`stageMenu`) */
-export const PLAYER_STAGE = Symbol('player-stage');
+export const PLAYER_STAGE = Symbol("player-stage");
 
 export interface PlayerControls {
-    /** いま出ているか */
-    readonly shown: boolean;
-    /** 押されたり動かされたりしたとき。出して、時計を巻き直す */
-    wake: (event: PointerEvent) => void;
-    /** 出ていく先で消す。**指のときは消さない** */
-    away: (event: PointerEvent) => void;
-    /** キーボードで触っている間は残す */
-    keyboard: boolean;
-    /** メニューが開いている間は残す。**選んでいる最中に消えては選べない** */
-    hold: boolean;
-    /** その場で出し直す (ボタンを押した直後など) */
-    stir: () => void;
-    /** その場で消す (指で1回押して引っ込めるとき) */
-    hide: () => void;
-    /**
-     * 指で映像を押した。**押す前に出ていたかで決める** (`wake` の項)。
-     * マウスのときは何もしない
-     */
-    toggle: () => void;
+  /** いま出ているか */
+  readonly shown: boolean;
+  /** 押されたり動かされたりしたとき。出して、時計を巻き直す */
+  wake: (event: PointerEvent) => void;
+  /** 出ていく先で消す。**指のときは消さない** */
+  away: (event: PointerEvent) => void;
+  /** キーボードで触っている間は残す */
+  keyboard: boolean;
+  /** メニューが開いている間は残す。**選んでいる最中に消えては選べない** */
+  hold: boolean;
+  /** その場で出し直す (ボタンを押した直後など) */
+  stir: () => void;
+  /** その場で消す (指で1回押して引っ込めるとき) */
+  hide: () => void;
+  /**
+   * 指で映像を押した。**押す前に出ていたかで決める** (`wake` の項)。
+   * マウスのときは何もしない
+   */
+  toggle: () => void;
 }
 
 export function playerControls(): PlayerControls {
-    let touched = $state(Date.now());
-    let now = $state(Date.now());
-    /** 直前に触ったのが指 (かペン) か。**マウスの繋がっていない端末もある** */
-    let byTouch = $state(false);
-    /** 押される直前に出ていたか。`toggle` が読む */
-    let wasShown = false;
-    let keyboard = $state(false);
-    let hold = $state(false);
-    /** 前にいた場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
-    let lastX = Number.NaN;
-    let lastY = Number.NaN;
+  let touched = $state(Date.now());
+  let now = $state(Date.now());
+  /** 直前に触ったのが指 (かペン) か。**マウスの繋がっていない端末もある** */
+  let byTouch = $state(false);
+  /** 押される直前に出ていたか。`toggle` が読む */
+  let wasShown = false;
+  let keyboard = $state(false);
+  let hold = $state(false);
+  /** 前にいた場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
+  let lastX = Number.NaN;
+  let lastY = Number.NaN;
 
-    /*
-     * **見るのは「触ったか」だけ** (キーボードと、開いているメニューを除く)。再生や
-     * 一時停止の状態を混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
-     * 確かめようが無かった
+  /*
+   * **見るのは「触ったか」だけ** (キーボードと、開いているメニューを除く)。再生や
+   * 一時停止の状態を混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
+   * 確かめようが無かった
+   */
+  const shown = $derived(keyboard || hold || now - touched < LINGER);
+
+  $effect(() => {
+    if (!shown) return;
+    const timer = setInterval(() => (now = Date.now()), TICK);
+    return () => clearInterval(timer);
+  });
+
+  return {
+    get shown(): boolean {
+      return shown;
+    },
+    get keyboard(): boolean {
+      return keyboard;
+    },
+    set keyboard(value: boolean) {
+      keyboard = value;
+    },
+    get hold(): boolean {
+      return hold;
+    },
+    set hold(value: boolean) {
+      hold = value;
+    },
+    /**
+     * **指とマウスで別の出し方をする。**
+     *
+     * *指* … 押したときだけ出す。指を滑らせただけ (`pointermove`) では
+     * 何もしない — 出し入れは押したときの1回で決める。**消えるまでは
+     * マウスと同じ長さ** (`LINGER` の項)。
+     *
+     * *マウス* … 動かせば出て、しばらくで消える。**本当に動いたときだけ** —
+     * ブラウザは、止まっているカーソルの下で中身が動いただけでも
+     * `pointermove` を投げてくる。時計は毎秒書き換わるので、**全画面に
+     * したまま何もしなくても操作列が消えなくなって**いた (実機のPC)
      */
-    const shown = $derived(keyboard || hold || now - touched < LINGER);
-
-    $effect(() => {
-        if (!shown) return;
-        const timer = setInterval(() => (now = Date.now()), TICK);
-        return () => clearInterval(timer);
-    });
-
-    return {
-        get shown(): boolean {
-            return shown;
-        },
-        get keyboard(): boolean {
-            return keyboard;
-        },
-        set keyboard(value: boolean) {
-            keyboard = value;
-        },
-        get hold(): boolean {
-            return hold;
-        },
-        set hold(value: boolean) {
-            hold = value;
-        },
-        /**
-         * **指とマウスで別の出し方をする。**
-         *
-         * *指* … 押したときだけ出す。指を滑らせただけ (`pointermove`) では
-         * 何もしない — 出し入れは押したときの1回で決める。**消えるまでは
-         * マウスと同じ長さ** (`LINGER` の項)。
-         *
-         * *マウス* … 動かせば出て、しばらくで消える。**本当に動いたときだけ** —
-         * ブラウザは、止まっているカーソルの下で中身が動いただけでも
-         * `pointermove` を投げてくる。時計は毎秒書き換わるので、**全画面に
-         * したまま何もしなくても操作列が消えなくなって**いた (実機のPC)
-         */
-        wake(event: PointerEvent): void {
-            if (event.pointerType !== 'mouse') {
-                if (event.type !== 'pointerdown') return;
-                byTouch = true;
-                // 巻き直す前に読む。`toggle` は「押す前に出ていたか」で決める
-                wasShown = shown;
-                touched = Date.now();
-                now = touched;
-                return;
-            }
-            if (event.clientX === lastX && event.clientY === lastY) return;
-            lastX = event.clientX;
-            lastY = event.clientY;
-            byTouch = false;
-            touched = Date.now();
-            now = touched;
-        },
-        /*
-         * 指を離すとブラウザはその場でポインタを取り下げるので、`pointerleave` が
-         * **触った直後に必ず飛ぶ**。マウスと同じに扱っていた頃は、タッチの端末で
-         * **触った瞬間に操作列が消えて**いた。マウスは映像の外へ出たなら本当に
-         * 離れているので、そちらは今までどおり消す
-         */
-        away(event: PointerEvent): void {
-            if (event.pointerType === 'mouse') touched = 0;
-        },
-        stir(): void {
-            touched = Date.now();
-            now = touched;
-        },
-        hide(): void {
-            touched = 0;
-            now = Date.now();
-        },
-        /*
-         * **押す前に出ていたかで決める。** いまの状態で決めていた頃は、
-         * 押した瞬間に `wake` が出したものを見て「出ている→消す」と読み、
-         * **指では二度と出せなかった**
-         */
-        toggle(): void {
-            if (!byTouch) return;
-            if (!wasShown) return;
-            touched = 0;
-            now = Date.now();
-        },
-    };
+    wake(event: PointerEvent): void {
+      if (event.pointerType !== "mouse") {
+        if (event.type !== "pointerdown") return;
+        byTouch = true;
+        // 巻き直す前に読む。`toggle` は「押す前に出ていたか」で決める
+        wasShown = shown;
+        touched = Date.now();
+        now = touched;
+        return;
+      }
+      if (event.clientX === lastX && event.clientY === lastY) return;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      byTouch = false;
+      touched = Date.now();
+      now = touched;
+    },
+    /*
+     * 指を離すとブラウザはその場でポインタを取り下げるので、`pointerleave` が
+     * **触った直後に必ず飛ぶ**。マウスと同じに扱っていた頃は、タッチの端末で
+     * **触った瞬間に操作列が消えて**いた。マウスは映像の外へ出たなら本当に
+     * 離れているので、そちらは今までどおり消す
+     */
+    away(event: PointerEvent): void {
+      if (event.pointerType === "mouse") touched = 0;
+    },
+    stir(): void {
+      touched = Date.now();
+      now = touched;
+    },
+    hide(): void {
+      touched = 0;
+      now = Date.now();
+    },
+    /*
+     * **押す前に出ていたかで決める。** いまの状態で決めていた頃は、
+     * 押した瞬間に `wake` が出したものを見て「出ている→消す」と読み、
+     * **指では二度と出せなかった**
+     */
+    toggle(): void {
+      if (!byTouch) return;
+      if (!wasShown) return;
+      touched = 0;
+      now = Date.now();
+    },
+  };
 }
 
 /**
@@ -172,14 +172,18 @@ export function playerControls(): PlayerControls {
  *   返す枠を `Menu` の `boundary` に渡すと、入りきらなければメニューの中を巻き取る。
  *   舞台の外 (と、枠がまだ無いうち) は画面に収める
  */
-export function stageMenu(isOpen: () => boolean): (() => HTMLElement | null) | undefined {
-    const controls = getContext<(() => PlayerControls) | undefined>(PLAYER_CONTROLS);
-    $effect(() => {
-        if (controls === undefined) return;
-        controls().hold = isOpen();
-        return () => {
-            controls().hold = false;
-        };
-    });
-    return getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
+export function stageMenu(
+  isOpen: () => boolean,
+): (() => HTMLElement | null) | undefined {
+  const controls = getContext<(() => PlayerControls) | undefined>(
+    PLAYER_CONTROLS,
+  );
+  $effect(() => {
+    if (controls === undefined) return;
+    controls().hold = isOpen();
+    return () => {
+      controls().hold = false;
+    };
+  });
+  return getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
 }

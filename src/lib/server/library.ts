@@ -1,18 +1,18 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { pad } from '#lib/format.js';
-import { config } from './config';
-import { parseTitle, sanitizeFileName } from './title';
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { pad } from "#lib/format.js";
+import { config } from "./config";
+import { parseTitle, sanitizeFileName } from "./title";
 
 export interface LibraryNameInput {
-    id: number;
-    series: string;
-    subtitle: string;
-    start_at: number;
-    /** いま置いてある場所。再エンコードのとき、自分自身を「衝突」と読まないために要る */
-    library_path?: string | null;
-    /** もう一方のコーデックの置き場所。これも「自分自身」なので衝突と読まない */
-    alt_path?: string | null;
+  id: number;
+  series: string;
+  subtitle: string;
+  start_at: number;
+  /** いま置いてある場所。再エンコードのとき、自分自身を「衝突」と読まないために要る */
+  library_path?: string | null;
+  /** もう一方のコーデックの置き場所。これも「自分自身」なので衝突と読まない */
+  alt_path?: string | null;
 }
 
 /**
@@ -25,7 +25,7 @@ export interface LibraryNameInput {
  * `untitled/` に入るが、一覧で無関係な番組が1つにまとまっても探しにくいだけなので
  */
 export function seriesFolder(series: string, name: string): string {
-    return sanitizeFileName(series === '' ? parseTitle(name).series : series);
+  return sanitizeFileName(series === "" ? parseTitle(name).series : series);
 }
 
 /**
@@ -37,16 +37,17 @@ export function seriesFolder(series: string, name: string): string {
  * 日時はコンテナの TZ (Asia/Tokyo) のローカル時刻。放送日で並ぶのが期待値なので UTC にはしない。
  */
 function libraryRelPath(rec: LibraryNameInput, ext: string): string {
-    const d = new Date(rec.start_at);
-    const series = sanitizeFileName(rec.series);
-    const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const time = `${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const d = new Date(rec.start_at);
+  const series = sanitizeFileName(rec.series);
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const time = `${pad(d.getHours())}${pad(d.getMinutes())}`;
 
-    // 同一シリーズが同じ分に2本並ぶことはまず無い (万一衝突したら libraryPath が録画IDで分ける)
-    const subtitle = rec.subtitle === '' ? '' : ` ${sanitizeFileName(rec.subtitle)}`;
-    const base = `${series} - ${date} - ${time}${subtitle}`;
+  // 同一シリーズが同じ分に2本並ぶことはまず無い (万一衝突したら libraryPath が録画IDで分ける)
+  const subtitle =
+    rec.subtitle === "" ? "" : ` ${sanitizeFileName(rec.subtitle)}`;
+  const base = `${series} - ${date} - ${time}${subtitle}`;
 
-    return join(series, `${base}${ext}`);
+  return join(series, `${base}${ext}`);
 }
 
 /**
@@ -56,11 +57,12 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
  * `[録画ID]` 付きが入れ替わる)。
  */
 export function libraryPath(rec: LibraryNameInput, ext: string): string {
-    const rel = libraryRelPath(rec, ext);
-    const abs = join(config.encodedDir, rel);
-    // 自分がいま置いてある2本 (主・もう一方) は衝突ではない
-    if (!existsSync(abs) || abs === rec.library_path || abs === rec.alt_path) return abs;
-    return join(config.encodedDir, libraryRelPath(rec, ` [${rec.id}]${ext}`));
+  const rel = libraryRelPath(rec, ext);
+  const abs = join(config.encodedDir, rel);
+  // 自分がいま置いてある2本 (主・もう一方) は衝突ではない
+  if (!existsSync(abs) || abs === rec.library_path || abs === rec.alt_path)
+    return abs;
+  return join(config.encodedDir, libraryRelPath(rec, ` [${rec.id}]${ext}`));
 }
 
 /**
@@ -70,13 +72,16 @@ export function libraryPath(rec: LibraryNameInput, ext: string): string {
  * ため、両方 mkv で揃える。**H.264 のほうは名前に印を付ける** (`[H264]`)。
  * 同じフォルダに2本並ぶので、名前が違わないと衝突する。
  */
-export function encodedPath(rec: LibraryNameInput, codec: 'av1' | 'h264'): string {
-    return libraryPath(rec, codec === 'h264' ? ' [H264].mkv' : '.mkv');
+export function encodedPath(
+  rec: LibraryNameInput,
+  codec: "av1" | "h264",
+): string {
+  return libraryPath(rec, codec === "h264" ? " [H264].mkv" : ".mkv");
 }
 
 /** 置き場の名前 (`… [H264].mkv`) からコーデックを見分ける (`encodedPath` の逆) */
-export function encodedCodec(path: string): 'av1' | 'h264' {
-    return / \[H264\]\.mkv$/i.test(path) ? 'h264' : 'av1';
+export function encodedCodec(path: string): "av1" | "h264" {
+  return / \[H264\]\.mkv$/i.test(path) ? "h264" : "av1";
 }
 
 /**
@@ -87,13 +92,21 @@ export function encodedCodec(path: string): 'av1' | 'h264' {
  * 含めて片付けるために使う (残っていると `libraryPath` がそれを「衝突」と読む)。
  */
 export function libraryFamily(rec: LibraryNameInput): string[] {
-    const exts = ['.mkv', ` [${rec.id}].mkv`, ' [H264].mkv', ` [${rec.id}] [H264].mkv`];
-    return exts.map((ext) => join(config.encodedDir, libraryRelPath(rec, ext)));
+  const exts = [
+    ".mkv",
+    ` [${rec.id}].mkv`,
+    " [H264].mkv",
+    ` [${rec.id}] [H264].mkv`,
+  ];
+  return exts.map((ext) => join(config.encodedDir, libraryRelPath(rec, ext)));
 }
 
 /** 元のTSの置き場。保存先と違い人が見るものではないので平置きでよい */
-export function recordedPath(rec: LibraryNameInput, ext = '.m2ts'): string {
-    const d = new Date(rec.start_at);
-    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-    return join(config.rawDir, `${sanitizeFileName(rec.series)}-${stamp}-${rec.id}${ext}`);
+export function recordedPath(rec: LibraryNameInput, ext = ".m2ts"): string {
+  const d = new Date(rec.start_at);
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return join(
+    config.rawDir,
+    `${sanitizeFileName(rec.series)}-${stamp}-${rec.id}${ext}`,
+  );
 }

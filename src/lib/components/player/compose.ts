@@ -21,35 +21,51 @@
  * 用意するのは小窓に出している間だけ (`pip.svelte.ts`)
  */
 
-type Processor = new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> };
-type Generator = new (init: { kind: 'video' }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> };
+type Processor = new (init: { track: MediaStreamTrack }) => {
+  readable: ReadableStream<VideoFrame>;
+};
+type Generator = new (init: {
+  kind: "video";
+}) => MediaStreamTrack & { writable: WritableStream<VideoFrame> };
 
 function apis(): { Processor: Processor; Generator: Generator } | null {
-    const scope = globalThis as {
-        MediaStreamTrackProcessor?: Processor;
-        MediaStreamTrackGenerator?: Generator;
-    };
-    const { MediaStreamTrackProcessor: Processor, MediaStreamTrackGenerator: Generator } = scope;
-    if (typeof Processor !== 'function' || typeof Generator !== 'function') return null;
-    if (typeof OffscreenCanvas !== 'function' || typeof VideoFrame !== 'function') return null;
-    return { Processor, Generator };
+  const scope = globalThis as {
+    MediaStreamTrackProcessor?: Processor;
+    MediaStreamTrackGenerator?: Generator;
+  };
+  const {
+    MediaStreamTrackProcessor: Processor,
+    MediaStreamTrackGenerator: Generator,
+  } = scope;
+  if (typeof Processor !== "function" || typeof Generator !== "function")
+    return null;
+  if (typeof OffscreenCanvas !== "function" || typeof VideoFrame !== "function")
+    return null;
+  return { Processor, Generator };
 }
 
 /** この端末で字幕を重ねられるか */
 export function canCompose(): boolean {
-    return apis() !== null;
+  return apis() !== null;
 }
 
 /** 字幕を描いているか (`caption-draw.ts` の `CaptionPainter` が出し入れする印) */
-export function captionDrawn(canvas: HTMLCanvasElement | null): canvas is HTMLCanvasElement {
-    return canvas !== null && canvas.dataset['drawn'] !== undefined && canvas.width > 0 && canvas.height > 0;
+export function captionDrawn(
+  canvas: HTMLCanvasElement | null,
+): canvas is HTMLCanvasElement {
+  return (
+    canvas !== null &&
+    canvas.dataset["drawn"] !== undefined &&
+    canvas.width > 0 &&
+    canvas.height > 0
+  );
 }
 
 export interface Composed {
-    /** 字幕を重ねたストリーム。代わりの `<video>` に繋ぐ */
-    readonly stream: MediaStream;
-    /** 畳む。**元のストリームも止める** (`captureStream` で取ったものは止めないと取り続ける) */
-    stop: () => void;
+  /** 字幕を重ねたストリーム。代わりの `<video>` に繋ぐ */
+  readonly stream: MediaStream;
+  /** 畳む。**元のストリームも止める** (`captureStream` で取ったものは止めないと取り続ける) */
+  stop: () => void;
 }
 
 /**
@@ -57,59 +73,66 @@ export interface Composed {
  * 字幕の面は映像のある枠いっぱいに敷いている (`paint.ts` の `fitRect`) ので、これで同じ所に出る。
  * 使えない端末では null
  */
-export function compose(input: MediaStreamTrack, overlay: () => HTMLCanvasElement | null): Composed | null {
-    const found = apis();
-    if (found === null) return null;
-    let processor: InstanceType<Processor>;
-    let generator: InstanceType<Generator>;
-    try {
-        processor = new found.Processor({ track: input });
-        generator = new found.Generator({ kind: 'video' });
-    } catch {
-        return null;
-    }
-    let canvas: OffscreenCanvas | null = null;
-    let context: OffscreenCanvasRenderingContext2D | null = null;
-    const transform = new TransformStream<VideoFrame, VideoFrame>({
-        transform(frame, controller) {
-            const caption = overlay();
-            if (!captionDrawn(caption)) {
-                controller.enqueue(frame);
-                return;
-            }
-            const width = frame.displayWidth;
-            const height = frame.displayHeight;
-            if (canvas === null || canvas.width !== width || canvas.height !== height) {
-                canvas = new OffscreenCanvas(width, height);
-                context = canvas.getContext('2d');
-            }
-            if (context === null) {
-                controller.enqueue(frame);
-                return;
-            }
-            let composed: VideoFrame;
-            try {
-                context.drawImage(frame, 0, 0, width, height);
-                context.drawImage(caption, 0, 0, width, height);
-                composed = new VideoFrame(canvas, { timestamp: frame.timestamp });
-            } catch {
-                // 重ねられなかった1枚は字幕無しで出す。捨てると小窓の映像が飛ぶ
-                controller.enqueue(frame);
-                return;
-            }
-            frame.close();
-            controller.enqueue(composed);
-        },
-    });
-    void processor.readable
-        .pipeThrough(transform)
-        .pipeTo(generator.writable)
-        .catch(() => undefined);
-    return {
-        stream: new MediaStream([generator]),
-        stop() {
-            input.stop();
-            generator.stop();
-        },
-    };
+export function compose(
+  input: MediaStreamTrack,
+  overlay: () => HTMLCanvasElement | null,
+): Composed | null {
+  const found = apis();
+  if (found === null) return null;
+  let processor: InstanceType<Processor>;
+  let generator: InstanceType<Generator>;
+  try {
+    processor = new found.Processor({ track: input });
+    generator = new found.Generator({ kind: "video" });
+  } catch {
+    return null;
+  }
+  let canvas: OffscreenCanvas | null = null;
+  let context: OffscreenCanvasRenderingContext2D | null = null;
+  const transform = new TransformStream<VideoFrame, VideoFrame>({
+    transform(frame, controller) {
+      const caption = overlay();
+      if (!captionDrawn(caption)) {
+        controller.enqueue(frame);
+        return;
+      }
+      const width = frame.displayWidth;
+      const height = frame.displayHeight;
+      if (
+        canvas === null ||
+        canvas.width !== width ||
+        canvas.height !== height
+      ) {
+        canvas = new OffscreenCanvas(width, height);
+        context = canvas.getContext("2d");
+      }
+      if (context === null) {
+        controller.enqueue(frame);
+        return;
+      }
+      let composed: VideoFrame;
+      try {
+        context.drawImage(frame, 0, 0, width, height);
+        context.drawImage(caption, 0, 0, width, height);
+        composed = new VideoFrame(canvas, { timestamp: frame.timestamp });
+      } catch {
+        // 重ねられなかった1枚は字幕無しで出す。捨てると小窓の映像が飛ぶ
+        controller.enqueue(frame);
+        return;
+      }
+      frame.close();
+      controller.enqueue(composed);
+    },
+  });
+  void processor.readable
+    .pipeThrough(transform)
+    .pipeTo(generator.writable)
+    .catch(() => undefined);
+  return {
+    stream: new MediaStream([generator]),
+    stop() {
+      input.stop();
+      generator.stop();
+    },
+  };
 }

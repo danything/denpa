@@ -113,172 +113,221 @@ const SD_SPACES = new Set([5, 6]);
 
 /** 1コマぶんの面。`data` は WASM のメモリの上の見え方 (写さずに上げる) */
 export interface Planes {
-    width: number;
-    height: number;
-    /** 各面の1行のバイト数 (右に詰め物がある) */
-    strides: [number, number, number];
-    data: [Uint8Array, Uint8Array, Uint8Array];
-    /** AVColorSpace。2 (未指定) なら高さで決める */
-    colorspace: number;
+  width: number;
+  height: number;
+  /** 各面の1行のバイト数 (右に詰め物がある) */
+  strides: [number, number, number];
+  data: [Uint8Array, Uint8Array, Uint8Array];
+  /** AVColorSpace。2 (未指定) なら高さで決める */
+  colorspace: number;
 }
 
 export class YuvRenderer {
-    private readonly gl: WebGL2RenderingContext;
-    private readonly textures: WebGLTexture[];
-    private readonly program: WebGLProgram;
-    private size = { width: 0, height: 0 };
-    /**
-     * 輝度のテクスチャ 2 枚 (今のコマと前のコマ)。上げるたびに入れ替える。
-     * `lumaSize` はそれぞれに今の大きさで上げてあるか (局を変えて大きさが変わると、前のコマは使えない)
-     */
-    private readonly lumas: [WebGLTexture, WebGLTexture];
-    private readonly lumaSize = ['', ''];
-    private turn = 0;
-    private hasPrev = false;
-    private matrix = BT709;
+  private readonly gl: WebGL2RenderingContext;
+  private readonly textures: WebGLTexture[];
+  private readonly program: WebGLProgram;
+  private size = { width: 0, height: 0 };
+  /**
+   * 輝度のテクスチャ 2 枚 (今のコマと前のコマ)。上げるたびに入れ替える。
+   * `lumaSize` はそれぞれに今の大きさで上げてあるか (局を変えて大きさが変わると、前のコマは使えない)
+   */
+  private readonly lumas: [WebGLTexture, WebGLTexture];
+  private readonly lumaSize = ["", ""];
+  private turn = 0;
+  private hasPrev = false;
+  private matrix = BT709;
 
-    constructor(private readonly canvas: OffscreenCanvas) {
-        // 描いたものを読み戻さないので、残しておく必要は無い
-        const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false });
-        if (gl === null) throw new Error('WebGL2 が使えません');
-        this.gl = gl;
-        this.program = link(gl);
-        gl.useProgram(this.program);
+  constructor(private readonly canvas: OffscreenCanvas) {
+    // 描いたものを読み戻さないので、残しておく必要は無い
+    const gl = canvas.getContext("webgl2", {
+      alpha: false,
+      antialias: false,
+      depth: false,
+    });
+    if (gl === null) throw new Error("WebGL2 が使えません");
+    this.gl = gl;
+    this.program = link(gl);
+    gl.useProgram(this.program);
 
-        const quad = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-        const pos = gl.getAttribLocation(this.program, 'pos');
-        gl.enableVertexAttribArray(pos);
-        gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+    const quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      gl.STATIC_DRAW,
+    );
+    const pos = gl.getAttribLocation(this.program, "pos");
+    gl.enableVertexAttribArray(pos);
+    gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
 
-        this.textures = ['planeY', 'planeU', 'planeV', 'planeYPrev'].map((name, unit) => {
-            const texture = gl.createTexture();
-            gl.activeTexture(gl.TEXTURE0 + unit);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.uniform1i(gl.getUniformLocation(this.program, name), unit);
-            return texture;
-        });
-        this.lumas = [this.textures[0]!, this.textures[3]!];
-        // 面の幅は 4 の倍数とは限らない
-        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    this.textures = ["planeY", "planeU", "planeV", "planeYPrev"].map(
+      (name, unit) => {
+        const texture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.uniform1i(gl.getUniformLocation(this.program, name), unit);
+        return texture;
+      },
+    );
+    this.lumas = [this.textures[0]!, this.textures[3]!];
+    // 面の幅は 4 の倍数とは限らない
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  }
+
+  /**
+   * 1コマ上げる。**大きさが変わったらテクスチャごと作り直す** (局を変えると 1440 ⇔ 1920 がある)
+   *
+   * @param displayWidth 見せる幅 (画素の縦横比を掛けたもの。1440x1080 の放送は 1920)
+   */
+  upload(planes: Planes, displayWidth: number): void {
+    const gl = this.gl;
+    const { width, height } = planes;
+    const resized = width !== this.size.width || height !== this.size.height;
+    if (resized) this.size = { width, height };
+    if (this.canvas.width !== displayWidth || this.canvas.height !== height) {
+      this.canvas.width = displayWidth;
+      this.canvas.height = height;
     }
-
-    /**
-     * 1コマ上げる。**大きさが変わったらテクスチャごと作り直す** (局を変えると 1440 ⇔ 1920 がある)
-     *
-     * @param displayWidth 見せる幅 (画素の縦横比を掛けたもの。1440x1080 の放送は 1920)
-     */
-    upload(planes: Planes, displayWidth: number): void {
-        const gl = this.gl;
-        const { width, height } = planes;
-        const resized = width !== this.size.width || height !== this.size.height;
-        if (resized) this.size = { width, height };
-        if (this.canvas.width !== displayWidth || this.canvas.height !== height) {
-            this.canvas.width = displayWidth;
-            this.canvas.height = height;
-        }
-        const sd = SD_SPACES.has(planes.colorspace) || (planes.colorspace === 2 && height <= 576);
-        this.matrix = sd ? BT601 : BT709;
-        // 輝度は前のコマのテクスチャを残し、もう 1 枚へ上げる (入れ替えて、今のを 0 番、前のを 3 番に置く)
-        const sized = `${width}x${height}`;
-        const next = 1 - this.turn;
-        this.hasPrev = this.lumaSize[this.turn] === sized;
-        const luma = this.lumas[next]!;
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, luma);
-        this.put(planes, 0, width, height, this.lumaSize[next] !== sized);
-        this.lumaSize[next] = sized;
-        this.turn = next;
-        gl.activeTexture(gl.TEXTURE3);
-        gl.bindTexture(gl.TEXTURE_2D, this.lumas[1 - next]!);
-        for (let i = 1; i < 3; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, this.textures[i]!);
-            this.put(planes, i, (width + 1) >> 1, (height + 1) >> 1, resized);
-        }
-        gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+    const sd =
+      SD_SPACES.has(planes.colorspace) ||
+      (planes.colorspace === 2 && height <= 576);
+    this.matrix = sd ? BT601 : BT709;
+    // 輝度は前のコマのテクスチャを残し、もう 1 枚へ上げる (入れ替えて、今のを 0 番、前のを 3 番に置く)
+    const sized = `${width}x${height}`;
+    const next = 1 - this.turn;
+    this.hasPrev = this.lumaSize[this.turn] === sized;
+    const luma = this.lumas[next]!;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, luma);
+    this.put(planes, 0, width, height, this.lumaSize[next] !== sized);
+    this.lumaSize[next] = sized;
+    this.turn = next;
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.lumas[1 - next]!);
+    for (let i = 1; i < 3; i++) {
+      gl.activeTexture(gl.TEXTURE0 + i);
+      gl.bindTexture(gl.TEXTURE_2D, this.textures[i]!);
+      this.put(planes, i, (width + 1) >> 1, (height + 1) >> 1, resized);
     }
+    gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+  }
 
-    /** 面を 1 枚、いま結び付けてあるテクスチャへ上げる。`fresh` なら大きさごと作り直す */
-    private put(planes: Planes, i: number, w: number, h: number, fresh: boolean): void {
-        const gl = this.gl;
-        gl.pixelStorei(gl.UNPACK_ROW_LENGTH, planes.strides[i]!);
-        const data = planes.data[i]!;
-        if (fresh) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, w, h, 0, gl.RED, gl.UNSIGNED_BYTE, data);
-        else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RED, gl.UNSIGNED_BYTE, data);
-    }
+  /** 面を 1 枚、いま結び付けてあるテクスチャへ上げる。`fresh` なら大きさごと作り直す */
+  private put(
+    planes: Planes,
+    i: number,
+    w: number,
+    h: number,
+    fresh: boolean,
+  ): void {
+    const gl = this.gl;
+    gl.pixelStorei(gl.UNPACK_ROW_LENGTH, planes.strides[i]!);
+    const data = planes.data[i]!;
+    if (fresh)
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.R8,
+        w,
+        h,
+        0,
+        gl.RED,
+        gl.UNSIGNED_BYTE,
+        data,
+      );
+    else
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        w,
+        h,
+        gl.RED,
+        gl.UNSIGNED_BYTE,
+        data,
+      );
+  }
 
-    /** 描く。`field` は 0 (上) / 1 (下) / -1 (プログレッシブ) */
-    draw(field: number): void {
-        const gl = this.gl;
-        if (this.size.width === 0) return;
-        gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        gl.uniform1i(gl.getUniformLocation(this.program, 'field'), field);
-        gl.uniform1i(gl.getUniformLocation(this.program, 'hasPrev'), this.hasPrev ? 1 : 0);
-        gl.uniform2f(
-            gl.getUniformLocation(this.program, 'rows'),
-            this.size.height,
-            (this.size.height + 1) >> 1,
-        );
-        gl.uniformMatrix3fv(gl.getUniformLocation(this.program, 'matrix'), false, this.matrix);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
+  /** 描く。`field` は 0 (上) / 1 (下) / -1 (プログレッシブ) */
+  draw(field: number): void {
+    const gl = this.gl;
+    if (this.size.width === 0) return;
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.uniform1i(gl.getUniformLocation(this.program, "field"), field);
+    gl.uniform1i(
+      gl.getUniformLocation(this.program, "hasPrev"),
+      this.hasPrev ? 1 : 0,
+    );
+    gl.uniform2f(
+      gl.getUniformLocation(this.program, "rows"),
+      this.size.height,
+      (this.size.height + 1) >> 1,
+    );
+    gl.uniformMatrix3fv(
+      gl.getUniformLocation(this.program, "matrix"),
+      false,
+      this.matrix,
+    );
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
 
-    /**
-     * いま上げてあるコマを描き直して、画素を読み出す (切り抜き)。
-     *
-     * **描き直してから読む。** 描いたものは残さない作り (`preserveDrawingBuffer` 無し) なので、
-     * 画面へ渡した後の面は空になっている。同じコマを描き直せば、その回のうちは読める。
-     * 読み出しは下から上の順なので、上下を返す
-     */
-    capture(field: number): ImageData | null {
-        const gl = this.gl;
-        if (this.size.width === 0) return null;
-        this.draw(field);
-        const { width, height } = this.canvas;
-        const pixels = new Uint8ClampedArray(width * height * 4);
-        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        const row = width * 4;
-        const swap = new Uint8ClampedArray(row);
-        for (let top = 0, bottom = height - 1; top < bottom; top++, bottom--) {
-            const a = top * row;
-            const b = bottom * row;
-            swap.set(pixels.subarray(a, a + row));
-            pixels.copyWithin(a, b, b + row);
-            pixels.set(swap, b);
-        }
-        return new ImageData(pixels, width, height);
+  /**
+   * いま上げてあるコマを描き直して、画素を読み出す (切り抜き)。
+   *
+   * **描き直してから読む。** 描いたものは残さない作り (`preserveDrawingBuffer` 無し) なので、
+   * 画面へ渡した後の面は空になっている。同じコマを描き直せば、その回のうちは読める。
+   * 読み出しは下から上の順なので、上下を返す
+   */
+  capture(field: number): ImageData | null {
+    const gl = this.gl;
+    if (this.size.width === 0) return null;
+    this.draw(field);
+    const { width, height } = this.canvas;
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const row = width * 4;
+    const swap = new Uint8ClampedArray(row);
+    for (let top = 0, bottom = height - 1; top < bottom; top++, bottom--) {
+      const a = top * row;
+      const b = bottom * row;
+      swap.set(pixels.subarray(a, a + row));
+      pixels.copyWithin(a, b, b + row);
+      pixels.set(swap, b);
     }
+    return new ImageData(pixels, width, height);
+  }
 
-    /** 黒で塗る。**出せなくなったときに前の局の映像を残さない** */
-    clear(): void {
-        const gl = this.gl;
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-    }
+  /** 黒で塗る。**出せなくなったときに前の局の映像を残さない** */
+  clear(): void {
+    const gl = this.gl;
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
 }
 
 function link(gl: WebGL2RenderingContext): WebGLProgram {
-    const compile = (type: number, source: string) => {
-        const shader = gl.createShader(type) as WebGLShader;
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            throw new Error(`シェーダを作れません: ${gl.getShaderInfoLog(shader)}`);
-        }
-        return shader;
-    };
-    const program = gl.createProgram() as WebGLProgram;
-    gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX));
-    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        throw new Error(`シェーダをリンクできません: ${gl.getProgramInfoLog(program)}`);
+  const compile = (type: number, source: string) => {
+    const shader = gl.createShader(type) as WebGLShader;
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      throw new Error(`シェーダを作れません: ${gl.getShaderInfoLog(shader)}`);
     }
-    return program;
+    return shader;
+  };
+  const program = gl.createProgram() as WebGLProgram;
+  gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX));
+  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT));
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    throw new Error(
+      `シェーダをリンクできません: ${gl.getProgramInfoLog(program)}`,
+    );
+  }
+  return program;
 }

@@ -17,36 +17,36 @@
 
 /** まとめられる行。予約・録画・録り逃しの行を、この形式にして渡す */
 export interface Groupable {
-    /** 行の鍵 (`res-5` / `rec-12` / `missed-3`) */
-    key: string;
-    /** 放送の開始時刻。並びはこれで決める */
-    at: number;
-    /** まとめる鍵 (シリーズのフォルダ名) */
-    group: string;
-    /** 見出しに出す番組名 */
-    groupName: string;
+  /** 行の鍵 (`res-5` / `rec-12` / `missed-3`) */
+  key: string;
+  /** 放送の開始時刻。並びはこれで決める */
+  at: number;
+  /** まとめる鍵 (シリーズのフォルダ名) */
+  group: string;
+  /** 見出しに出す番組名 */
+  groupName: string;
 }
 
 /** 2本以上ある番組 */
 export interface SeriesGroup<T extends Groupable> {
-    /** 見出しの鍵。行の鍵 (`rec-` / `missed-`) と混ざらないよう接頭辞を付ける */
-    key: string;
-    /** まとめる鍵そのもの。開いているかどうかはこれで覚える */
-    group: string;
-    name: string;
-    /** 放送順 (古い回が先) */
-    items: T[];
-    /** いちばん新しい回 */
-    newest: T;
+  /** 見出しの鍵。行の鍵 (`rec-` / `missed-`) と混ざらないよう接頭辞を付ける */
+  key: string;
+  /** まとめる鍵そのもの。開いているかどうかはこれで覚える */
+  group: string;
+  name: string;
+  /** 放送順 (古い回が先) */
+  items: T[];
+  /** いちばん新しい回 */
+  newest: T;
 }
 
 export type GroupEntry<T extends Groupable> =
-    { kind: 'single'; item: T } | { kind: 'group'; group: SeriesGroup<T> };
+  { kind: "single"; item: T } | { kind: "group"; group: SeriesGroup<T> };
 
 /** 画面に描く1行。見出しか、行そのもの (`nested` は番組の中の行) */
 export type GroupLine<T extends Groupable> =
-    | { kind: 'head'; key: string; group: SeriesGroup<T>; open: boolean }
-    | { kind: 'row'; key: string; item: T; nested: boolean };
+  | { kind: "head"; key: string; group: SeriesGroup<T>; open: boolean }
+  | { kind: "row"; key: string; item: T; nested: boolean };
 
 /**
  * 番組ごとにまとめて並べる。渡す順は問わない。
@@ -56,33 +56,39 @@ export type GroupLine<T extends Groupable> =
  *     `earliest` はいちばん早い回 (これからの予約。次に録る回の位置に置く)。どちらも並びは時刻の遅い順
  */
 export function groupBySeries<T extends Groupable>(
-    items: T[],
-    anchor: 'latest' | 'earliest' = 'latest',
+  items: T[],
+  anchor: "latest" | "earliest" = "latest",
 ): GroupEntry<T>[] {
-    const buckets = new Map<string, T[]>();
-    for (const item of items) {
-        const bucket = buckets.get(item.group);
-        if (bucket === undefined) buckets.set(item.group, [item]);
-        else bucket.push(item);
-    }
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const bucket = buckets.get(item.group);
+    if (bucket === undefined) buckets.set(item.group, [item]);
+    else bucket.push(item);
+  }
 
-    const entries: { at: number; entry: GroupEntry<T> }[] = [];
-    for (const [group, bucket] of buckets) {
-        const ordered = [...bucket].sort((a, b) => a.at - b.at);
-        const newest = ordered[ordered.length - 1]!;
-        if (ordered.length === 1) {
-            entries.push({ at: newest.at, entry: { kind: 'single', item: newest } });
-            continue;
-        }
-        entries.push({
-            at: anchor === 'latest' ? newest.at : ordered[0]!.at,
-            entry: {
-                kind: 'group',
-                group: { key: `group-${group}`, group, name: newest.groupName, items: ordered, newest },
-            },
-        });
+  const entries: { at: number; entry: GroupEntry<T> }[] = [];
+  for (const [group, bucket] of buckets) {
+    const ordered = [...bucket].sort((a, b) => a.at - b.at);
+    const newest = ordered[ordered.length - 1]!;
+    if (ordered.length === 1) {
+      entries.push({ at: newest.at, entry: { kind: "single", item: newest } });
+      continue;
     }
-    return entries.sort((a, b) => b.at - a.at).map(({ entry }) => entry);
+    entries.push({
+      at: anchor === "latest" ? newest.at : ordered[0]!.at,
+      entry: {
+        kind: "group",
+        group: {
+          key: `group-${group}`,
+          group,
+          name: newest.groupName,
+          items: ordered,
+          newest,
+        },
+      },
+    });
+  }
+  return entries.sort((a, b) => b.at - a.at).map(({ entry }) => entry);
 }
 
 /**
@@ -91,30 +97,41 @@ export function groupBySeries<T extends Groupable>(
  * @param isOpen その番組 (まとめる鍵) を開いているか
  */
 export function groupLines<T extends Groupable>(
-    entries: GroupEntry<T>[],
-    isOpen: (group: string) => boolean,
+  entries: GroupEntry<T>[],
+  isOpen: (group: string) => boolean,
 ): GroupLine<T>[] {
-    const lines: GroupLine<T>[] = [];
-    for (const entry of entries) {
-        if (entry.kind === 'single') {
-            lines.push({ kind: 'row', key: entry.item.key, item: entry.item, nested: false });
-            continue;
-        }
-        const open = isOpen(entry.group.group);
-        lines.push({ kind: 'head', key: entry.group.key, group: entry.group, open });
-        if (!open) continue;
-        for (const item of entry.group.items) lines.push({ kind: 'row', key: item.key, item, nested: true });
+  const lines: GroupLine<T>[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "single") {
+      lines.push({
+        kind: "row",
+        key: entry.item.key,
+        item: entry.item,
+        nested: false,
+      });
+      continue;
     }
-    return lines;
+    const open = isOpen(entry.group.group);
+    lines.push({
+      kind: "head",
+      key: entry.group.key,
+      group: entry.group,
+      open,
+    });
+    if (!open) continue;
+    for (const item of entry.group.items)
+      lines.push({ kind: "row", key: item.key, item, nested: true });
+  }
+  return lines;
 }
 
 /**
  * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`) — 描く前に
  * どちらの表示か分かっていれば、覚えを読むまで枠を隠さずに済む
  */
-export const GROUPED_COOKIE = 'denpa_recordings_grouped';
+export const GROUPED_COOKIE = "denpa_recordings_grouped";
 
 /** 覚えていた値。**既定はまとめない** (今までどおりの一覧) */
 export function storedGrouped(saved: string | undefined): boolean {
-    return saved === '1';
+  return saved === "1";
 }

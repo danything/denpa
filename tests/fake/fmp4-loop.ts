@@ -21,16 +21,16 @@
  * 入口 (TS) は読んで捨てる。読まないとパイプが詰まって、送る側 (`server/live.ts`) が止まる
  */
 
-import { readFileSync } from 'node:fs';
-import { readClip, shiftFragment } from './fmp4-clip';
+import { readFileSync } from "node:fs";
+import { readClip, shiftFragment } from "./fmp4-clip";
 
-const clip = readClip(new Uint8Array(readFileSync(process.argv[2] ?? '')));
+const clip = readClip(new Uint8Array(readFileSync(process.argv[2] ?? "")));
 
 // 入口の TS は読んで捨てる (上の説明)
 void (async () => {
-    for await (const _ of Bun.stdin.stream()) {
-        // 捨てる
-    }
+  for await (const _ of Bun.stdin.stream()) {
+    // 捨てる
+  }
 })();
 
 const out = Bun.stdout.writer();
@@ -45,41 +45,50 @@ await out.flush();
  * - `burstMs` [最短, 最長] (ms) … いつも束にして出す。届き方が荒い経路のまね
  */
 interface Rough {
-    gapEvery?: [number, number];
-    gapMs?: [number, number];
-    burstMs?: [number, number];
+  gapEvery?: [number, number];
+  gapMs?: [number, number];
+  burstMs?: [number, number];
 }
 const rough: Rough = (() => {
-    try {
-        const text = readFileSync(process.env['FAKE_FFMPEG_LIVE_FMP4_FILE'] ?? '', 'utf8').trim();
-        return text === '' ? {} : (JSON.parse(text) as Rough);
-    } catch {
-        return {};
-    }
+  try {
+    const text = readFileSync(
+      process.env["FAKE_FFMPEG_LIVE_FMP4_FILE"] ?? "",
+      "utf8",
+    ).trim();
+    return text === "" ? {} : (JSON.parse(text) as Rough);
+  } catch {
+    return {};
+  }
 })();
-const between = ([low, high]: [number, number]) => low + Math.random() * (high - low);
+const between = ([low, high]: [number, number]) =>
+  low + Math.random() * (high - low);
 /** 次に長く空ける時刻 (ms) */
-let nextGap = rough.gapEvery === undefined ? Number.POSITIVE_INFINITY : between(rough.gapEvery) * 1000;
+let nextGap =
+  rough.gapEvery === undefined
+    ? Number.POSITIVE_INFINITY
+    : between(rough.gapEvery) * 1000;
 /** この時刻 (ms) までは出さずに溜める */
 let holdUntil = 0;
 const held: Uint8Array[] = [];
 
 const started = performance.now();
 for (let round = 0; ; round++) {
-    for (const fragment of clip.fragments) {
-        const data = shiftFragment(clip, fragment, clip.period * round);
-        const due = (round * clip.period + fragment.seconds) * 1000 - (performance.now() - started);
-        if (due > 0) await Bun.sleep(due);
-        held.push(data);
-        const now = performance.now() - started;
-        if (rough.gapEvery !== undefined && now >= nextGap) {
-            holdUntil = now + between(rough.gapMs ?? [700, 700]);
-            nextGap = holdUntil + between(rough.gapEvery) * 1000;
-        }
-        if (now < holdUntil) continue;
-        for (const piece of held) out.write(piece);
-        held.length = 0;
-        await out.flush();
-        if (rough.burstMs !== undefined) holdUntil = now + between(rough.burstMs);
+  for (const fragment of clip.fragments) {
+    const data = shiftFragment(clip, fragment, clip.period * round);
+    const due =
+      (round * clip.period + fragment.seconds) * 1000 -
+      (performance.now() - started);
+    if (due > 0) await Bun.sleep(due);
+    held.push(data);
+    const now = performance.now() - started;
+    if (rough.gapEvery !== undefined && now >= nextGap) {
+      holdUntil = now + between(rough.gapMs ?? [700, 700]);
+      nextGap = holdUntil + between(rough.gapEvery) * 1000;
     }
+    if (now < holdUntil) continue;
+    for (const piece of held) out.write(piece);
+    held.length = 0;
+    await out.flush();
+    if (rough.burstMs !== undefined) holdUntil = now + between(rough.burstMs);
+  }
 }

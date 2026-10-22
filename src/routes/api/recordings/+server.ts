@@ -1,13 +1,13 @@
-import { json } from '@sveltejs/kit';
-import { and, desc, eq, isNotNull, ne, or } from 'drizzle-orm';
-import { audioTracks, parseAudios } from '#lib/arib.js';
-import { logoUnusable } from '#lib/format.js';
-import { orm } from '#lib/server/db.js';
-import { encodedCodec } from '#lib/server/library.js';
-import { rulerOf } from '#lib/server/playback.js';
-import { recordings } from '#lib/server/schema.js';
-import { displayTitle } from '#lib/server/title.js';
-import { fromTsTime } from '#lib/ts/watch.js';
+import { json } from "@sveltejs/kit";
+import { and, desc, eq, isNotNull, ne, or } from "drizzle-orm";
+import { audioTracks, parseAudios } from "#lib/arib.js";
+import { logoUnusable } from "#lib/format.js";
+import { orm } from "#lib/server/db.js";
+import { encodedCodec } from "#lib/server/library.js";
+import { rulerOf } from "#lib/server/playback.js";
+import { recordings } from "#lib/server/schema.js";
+import { displayTitle } from "#lib/server/title.js";
+import { fromTsTime } from "#lib/ts/watch.js";
 
 /**
  * **観られる録画の一覧** (画面の外のもの向けの API。docs/api.md)。新しい順。
@@ -23,98 +23,112 @@ import { fromTsTime } from '#lib/ts/watch.js';
  * `?limit=` と `?offset=` で区切れる (既定は全部)
  */
 export function GET({ url }) {
-    const limit = Number(url.searchParams.get('limit') ?? NaN);
-    const offset = Number(url.searchParams.get('offset') ?? 0);
-    const query = orm()
-        .select({
-            id: recordings.id,
-            name: recordings.name,
-            serviceId: recordings.service_id,
-            serviceName: recordings.service_name,
-            startAt: recordings.start_at,
-            endAt: recordings.end_at,
-            durationMs: recordings.duration_ms,
-            resumeMs: recordings.resume_ms,
-            cmKept: recordings.cm_kept,
-            encodeSkip: recordings.encode_skip,
-            watchedAt: recordings.watched_at,
-            library: recordings.library_path,
-            alt: recordings.alt_path,
-            ts: recordings.ts_path,
-            state: recordings.state,
-            cmNote: recordings.cm_note,
-            audio_type: recordings.audio_type,
-            audios: recordings.audios,
-        })
-        .from(recordings)
-        .where(
-            and(
-                ne(recordings.state, 'deleted'),
-                // 録り終えたもの (エンコードしたか元のTSがある) と、いま録っていて元のTSが伸びているもの
-                or(
-                    and(
-                        isNotNull(recordings.finished_at),
-                        or(isNotNull(recordings.library_path), isNotNull(recordings.ts_path)),
-                    ),
-                    and(eq(recordings.state, 'recording'), isNotNull(recordings.ts_path)),
-                ),
+  const limit = Number(url.searchParams.get("limit") ?? NaN);
+  const offset = Number(url.searchParams.get("offset") ?? 0);
+  const query = orm()
+    .select({
+      id: recordings.id,
+      name: recordings.name,
+      serviceId: recordings.service_id,
+      serviceName: recordings.service_name,
+      startAt: recordings.start_at,
+      endAt: recordings.end_at,
+      durationMs: recordings.duration_ms,
+      resumeMs: recordings.resume_ms,
+      cmKept: recordings.cm_kept,
+      encodeSkip: recordings.encode_skip,
+      watchedAt: recordings.watched_at,
+      library: recordings.library_path,
+      alt: recordings.alt_path,
+      ts: recordings.ts_path,
+      state: recordings.state,
+      cmNote: recordings.cm_note,
+      audio_type: recordings.audio_type,
+      audios: recordings.audios,
+    })
+    .from(recordings)
+    .where(
+      and(
+        ne(recordings.state, "deleted"),
+        // 録り終えたもの (エンコードしたか元のTSがある) と、いま録っていて元のTSが伸びているもの
+        or(
+          and(
+            isNotNull(recordings.finished_at),
+            or(
+              isNotNull(recordings.library_path),
+              isNotNull(recordings.ts_path),
             ),
-        )
-        .orderBy(desc(recordings.start_at))
-        .limit(Number.isInteger(limit) && limit > 0 ? limit : -1)
-        .offset(Number.isInteger(offset) && offset > 0 ? offset : 0);
+          ),
+          and(eq(recordings.state, "recording"), isNotNull(recordings.ts_path)),
+        ),
+      ),
+    )
+    .orderBy(desc(recordings.start_at))
+    .limit(Number.isInteger(limit) && limit > 0 ? limit : -1)
+    .offset(Number.isInteger(offset) && offset > 0 ? offset : 0);
 
-    return json(
-        query.all().map((row) => {
-            const file = (source: string) => `api/recordings/${row.id}/file?source=${source}`;
-            const files = [
-                ...(row.library === null
-                    ? []
-                    : [{ source: 'encoded', codec: encodedCodec(row.library), url: file('encoded') }]),
-                ...(row.alt === null
-                    ? []
-                    : [{ source: 'alt', codec: encodedCodec(row.alt), url: file('alt') }]),
-                ...(row.ts === null ? [] : [{ source: 'ts', codec: 'mpeg2', url: file('ts') }]),
-            ];
-            return {
-                id: row.id,
-                title: displayTitle(row.name),
-                name: row.name,
-                serviceId: row.serviceId,
-                serviceName: row.serviceName,
-                startAt: row.startAt,
-                endAt: row.endAt,
-                durationMs: row.durationMs,
-                // 続きから観る位置 (画面と同じ。`POST api/recordings/<id>/resume` で書く)。観終えた・未視聴なら null。
-                // 覚えているのは元の TS の物差しなので、観る画面と同じ物差し (エンコードしたものがあればそれ) に直す
-                resumeMs:
-                    row.resumeMs === null
-                        ? null
-                        : Math.round(
-                              fromTsTime(
-                                  row.resumeMs / 1000,
-                                  rulerOf(
-                                      {
-                                          library_path: row.library,
-                                          cm_kept: row.cmKept,
-                                          encode_skip: row.encodeSkip,
-                                      },
-                                      null,
-                                  ),
-                              ) * 1000,
-                          ),
-                // 末尾まで観た時刻 (ms)。まだなら null。null かつ resumeMs も null なら未視聴 (画面の印と同じ)
-                watchedAt: row.watchedAt,
-                recording: row.state === 'recording',
-                // 元のTSがある間 (録画中・エンコードする前) は追っかけで観られる
-                chase: row.ts === null ? null : `api/recordings/${row.id}/chase`,
-                cmReliable: !logoUnusable(row.cmNote),
-                poster: `api/recordings/${row.id}/poster`,
-                files,
-                audio: `api/recordings/${row.id}/file?audio=only`,
-                // 放送の音声の構成 (画面の追っかけと同じ一覧)。`chase?audio=<id>` で選ぶ
-                audios: audioTracks(parseAudios(row)),
-            };
-        }),
-    );
+  return json(
+    query.all().map((row) => {
+      const file = (source: string) =>
+        `api/recordings/${row.id}/file?source=${source}`;
+      const files = [
+        ...(row.library === null
+          ? []
+          : [
+              {
+                source: "encoded",
+                codec: encodedCodec(row.library),
+                url: file("encoded"),
+              },
+            ]),
+        ...(row.alt === null
+          ? []
+          : [
+              { source: "alt", codec: encodedCodec(row.alt), url: file("alt") },
+            ]),
+        ...(row.ts === null
+          ? []
+          : [{ source: "ts", codec: "mpeg2", url: file("ts") }]),
+      ];
+      return {
+        id: row.id,
+        title: displayTitle(row.name),
+        name: row.name,
+        serviceId: row.serviceId,
+        serviceName: row.serviceName,
+        startAt: row.startAt,
+        endAt: row.endAt,
+        durationMs: row.durationMs,
+        // 続きから観る位置 (画面と同じ。`POST api/recordings/<id>/resume` で書く)。観終えた・未視聴なら null。
+        // 覚えているのは元の TS の物差しなので、観る画面と同じ物差し (エンコードしたものがあればそれ) に直す
+        resumeMs:
+          row.resumeMs === null
+            ? null
+            : Math.round(
+                fromTsTime(
+                  row.resumeMs / 1000,
+                  rulerOf(
+                    {
+                      library_path: row.library,
+                      cm_kept: row.cmKept,
+                      encode_skip: row.encodeSkip,
+                    },
+                    null,
+                  ),
+                ) * 1000,
+              ),
+        // 末尾まで観た時刻 (ms)。まだなら null。null かつ resumeMs も null なら未視聴 (画面の印と同じ)
+        watchedAt: row.watchedAt,
+        recording: row.state === "recording",
+        // 元のTSがある間 (録画中・エンコードする前) は追っかけで観られる
+        chase: row.ts === null ? null : `api/recordings/${row.id}/chase`,
+        cmReliable: !logoUnusable(row.cmNote),
+        poster: `api/recordings/${row.id}/poster`,
+        files,
+        audio: `api/recordings/${row.id}/file?audio=only`,
+        // 放送の音声の構成 (画面の追っかけと同じ一覧)。`chase?audio=<id>` で選ぶ
+        audios: audioTracks(parseAudios(row)),
+      };
+    }),
+  );
 }

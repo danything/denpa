@@ -1,5 +1,5 @@
-import { cpus } from 'node:os';
-import { defineConfig } from '@playwright/test';
+import { cpus } from "node:os";
+import { defineConfig } from "@playwright/test";
 
 /**
  * ワーカーの数。上限6の実測と理由は docs/development.md「並べて流す」。
@@ -18,35 +18,35 @@ import { defineConfig } from '@playwright/test';
 const WORKERS = process.env.CI ? 3 : Math.max(2, Math.min(6, cpus().length));
 
 export default defineConfig({
-    testDir: 'tests/e2e',
-    // 並ぶのはファイル単位。中は順番 (前のテストが作った予約や録画を次が当てにしている)
-    fullyParallel: false,
-    workers: WORKERS,
-    timeout: 120_000,
-    expect: { timeout: 30_000 },
-    // ごく稀に落ちるのは中身ではなく混み具合。1回だけやり直す
-    retries: 1,
-    reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
-    // 消してから、アプリを1度だけ組む。ワーカーはその出力を共有する
-    globalSetup: './tests/global-setup.ts',
-    use: {
-        // baseURL はワーカーごとに違うので tests/stack.ts で入れる
-        // 「端末に合わせる」がダークになる前提でテストする
-        colorScheme: 'dark',
-        /*
-         * **動きを止めて流す** (`prefers-reduced-motion: reduce`)。画面の切り替え (View Transitions) の
-         * 最中は写しが画面を覆って押せず、メニューは閉じる動きの間も見えている。止めておけば、
-         * 押した次の瞬間に次の姿になっている (動かさない設定の端末と同じ。`app.css`・`#lib/motion.svelte.ts`)
-         */
-        reducedMotion: 'reduce',
-        trace: 'retain-on-failure',
-        /*
-         * **GPU プロセスを起こさない。** CI でも手元 (WSL) でも GPU は無く
-         * (`drmGetDevices2() has not found any devices`)、それでも起こしに行った
-         * GPU プロセスが `browser.newContext` の途中で SEGV (`SEGV_MAPERR 0000000001b0`、
-         * 毎回同じ番地) して、テストが「ブラウザが閉じられた」で落ちていた。
-         * CI の直近 6 回のうち 4 回で、揺れの大半がこれ
-         */
-        launchOptions: { args: ['--disable-gpu'] },
-    },
+  testDir: "tests/e2e",
+  // 並ぶのはファイル単位。中は順番 (前のテストが作った予約や録画を次が当てにしている)
+  fullyParallel: false,
+  workers: WORKERS,
+  timeout: 120_000,
+  expect: { timeout: 30_000 },
+  // ごく稀に落ちるのは中身ではなく混み具合。1回だけやり直す
+  retries: 1,
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
+  // 消してから、アプリを1度だけ組む。ワーカーはその出力を共有する
+  globalSetup: "./tests/global-setup.ts",
+  use: {
+    // baseURL はワーカーごとに違うので tests/stack.ts で入れる
+    // 「端末に合わせる」がダークになる前提でテストする
+    colorScheme: "dark",
+    /*
+     * **動きを止めて流す** (`prefers-reduced-motion: reduce`)。画面の切り替え (View Transitions) の
+     * 最中は写しが画面を覆って押せず、メニューは閉じる動きの間も見えている。止めておけば、
+     * 押した次の瞬間に次の姿になっている (動かさない設定の端末と同じ。`app.css`・`#lib/motion.svelte.ts`)
+     */
+    reducedMotion: "reduce",
+    trace: "retain-on-failure",
+    /*
+     * **GPU プロセスを起こさない。** CI でも手元 (WSL) でも GPU は無く
+     * (`drmGetDevices2() has not found any devices`)、それでも起こしに行った
+     * GPU プロセスが `browser.newContext` の途中で SEGV (`SEGV_MAPERR 0000000001b0`、
+     * 毎回同じ番地) して、テストが「ブラウザが閉じられた」で落ちていた。
+     * CI の直近 6 回のうち 4 回で、揺れの大半がこれ
+     */
+    launchOptions: { args: ["--disable-gpu"] },
+  },
 });

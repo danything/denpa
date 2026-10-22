@@ -1,4 +1,4 @@
-import { type Tap, tap, zoneOf } from '#lib/ts/watch.js';
+import { type Tap, tap, zoneOf } from "#lib/ts/watch.js";
 
 /**
  * 映像を押されたときの処理。**観る画面と追っかけで同じ** — 観ているものはエンコードが終わった
@@ -12,28 +12,28 @@ import { type Tap, tap, zoneOf } from '#lib/ts/watch.js';
  * タッチのノートPCでも当たる)
  */
 export function stageTap(on: {
-    toggle: () => void;
-    controls: () => void;
-    seekBy: (seconds: number) => void;
+  toggle: () => void;
+  controls: () => void;
+  seekBy: (seconds: number) => void;
 }): (event: MouseEvent) => void {
-    let last: Tap | null = null;
-    return (event) => {
-        const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-        const coarse = window.matchMedia('(pointer: coarse)').matches;
-        const { action, next } = tap(
-            last,
-            event.timeStamp,
-            zoneOf(event.clientX - box.left, box.width),
-            coarse,
-        );
-        last = next;
-        if (action.kind === 'play') on.toggle();
-        // 出し入れの判断は `controls` が持つ (押す前に出ていたかで決める)
-        else if (action.kind === 'controls') on.controls();
-        else {
-            // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
-            if (action.undo) on.toggle();
-            on.seekBy(action.by);
-        }
-    };
+  let last: Tap | null = null;
+  return (event) => {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const { action, next } = tap(
+      last,
+      event.timeStamp,
+      zoneOf(event.clientX - box.left, box.width),
+      coarse,
+    );
+    last = next;
+    if (action.kind === "play") on.toggle();
+    // 出し入れの判断は `controls` が持つ (押す前に出ていたかで決める)
+    else if (action.kind === "controls") on.controls();
+    else {
+      // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
+      if (action.undo) on.toggle();
+      on.seekBy(action.by);
+    }
+  };
 }

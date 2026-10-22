@@ -33,13 +33,17 @@
  * (名前は charts/denpa/values.yaml の httpRoute.hostnames。無ければ ingress.hosts)。
  */
 
-import { networks, resolveClient, unreadable } from './src/lib/server/address.ts';
-import { compress } from './src/lib/server/compress.ts';
+import {
+  networks,
+  resolveClient,
+  unreadable,
+} from "./src/lib/server/address.ts";
+import { compress } from "./src/lib/server/compress.ts";
 
 /** `src/lib/server/ws.ts` が置く名前 */
-const LIVE = '__denpaLive';
+const LIVE = "__denpaLive";
 /** `src/lib/server/runtime.ts` が置く名前 */
-const TAKE_OVER = '__denpaTakeOverSignals';
+const TAKE_OVER = "__denpaTakeOverSignals";
 
 /*
  * **スキームは常に `x-forwarded-proto` から読む** (選べるオプションにしない)。
@@ -62,116 +66,120 @@ const TAKE_OVER = '__denpaTakeOverSignals';
  * 名乗れた。**`ADDRESS_HEADER` はもう読まない** (互換の経路は残さない。docs/auth.md の
  * 「前段の後ろに置くとき」)。設定してあれば起動時に1行だけ知らせる
  */
-process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
-const REMOTE_HEADER = 'x-denpa-remote';
-if (process.env.ADDRESS_HEADER && process.env.ADDRESS_HEADER !== REMOTE_HEADER) {
-    console.warn(
-        `ADDRESS_HEADER=${process.env.ADDRESS_HEADER} はもう読みません。前段 (リバースプロキシ) の後ろにいるなら ` +
-            'TRUSTED_PROXIES に前段のアドレス (CIDR) を設定してください。設定するまで、前段越しの接続元は前段のアドレスになります',
-    );
+process.env.PROTOCOL_HEADER = "x-forwarded-proto";
+const REMOTE_HEADER = "x-denpa-remote";
+if (
+  process.env.ADDRESS_HEADER &&
+  process.env.ADDRESS_HEADER !== REMOTE_HEADER
+) {
+  console.warn(
+    `ADDRESS_HEADER=${process.env.ADDRESS_HEADER} はもう読みません。前段 (リバースプロキシ) の後ろにいるなら ` +
+      "TRUSTED_PROXIES に前段のアドレス (CIDR) を設定してください。設定するまで、前段越しの接続元は前段のアドレスになります",
+  );
 }
 process.env.ADDRESS_HEADER = REMOTE_HEADER;
-const proxies = networks(process.env.TRUSTED_PROXIES ?? '');
+const proxies = networks(process.env.TRUSTED_PROXIES ?? "");
 // 書き損じは当たらないだけなので、気づけるように知らせる
 for (const entry of unreadable(proxies)) {
-    console.warn(`TRUSTED_PROXIES の「${entry}」は読めないので無視します`);
+  console.warn(`TRUSTED_PROXIES の「${entry}」は読めないので無視します`);
 }
 
 const upgrading = (request) =>
-    request.headers.get('upgrade')?.toLowerCase() === 'websocket' &&
-    request.headers.get('connection')?.toLowerCase().includes('upgrade') === true;
+  request.headers.get("upgrade")?.toLowerCase() === "websocket" &&
+  request.headers.get("connection")?.toLowerCase().includes("upgrade") === true;
 
 /** アプリが置いたもの。**毎回引き直す** — 読み込みが遅れることがある */
 const live = () => globalThis[LIVE];
 
 const websocket = {
-    // **死んだ客を畳むための ping/pong を効かせる** (2026-08-14 フリーズの主因)。
-    //
-    // ライブ視聴の後片付けは `onclose → leave() → ffmpeg kill` に頼っている
-    // (`live.ts`)。ところが serve 直下の `idleTimeout: 0` (vite.config.ts) を WebSocket も
-    // 継ぐと、Bun の自動 ping が止まり、**正常な close を送らずに消えた客**
-    // (モバイルのスリープ・Wi-Fi 断・タブの強制終了・クラッシュ) の close が
-    // TCP が諦めるまで (既定で十数分〜永久に) 来ない。その間そのセッションの
-    // ffmpeg は残り続け、ライブを繰り返すうちに ffmpeg が積み上がって
-    // ノードの 46GB + swap を食い潰し、フリーズに至っていた。
-    //
-    // 映像はサーバ→客の一方向なので、この値は「客からの pong が途切れて
-    // よい上限」。ブラウザは ping に自動で pong を返すため、**生きている客は
-    // 映像が流れているだけで切れない**。返さなくなった客だけを畳む。
-    // serve 直下は 0 のまま — 録画のファイルや SSE は別勘定。
-    idleTimeout: 120,
-    sendPings: true,
-    open(ws) {
-        live()?.websocket.open(ws);
-    },
-    message(ws, message) {
-        live()?.websocket.message(ws, message);
-    },
-    close(ws, code, reason) {
-        live()?.websocket.close(ws, code, reason);
-    },
+  // **死んだ客を畳むための ping/pong を効かせる** (2026-08-14 フリーズの主因)。
+  //
+  // ライブ視聴の後片付けは `onclose → leave() → ffmpeg kill` に頼っている
+  // (`live.ts`)。ところが serve 直下の `idleTimeout: 0` (vite.config.ts) を WebSocket も
+  // 継ぐと、Bun の自動 ping が止まり、**正常な close を送らずに消えた客**
+  // (モバイルのスリープ・Wi-Fi 断・タブの強制終了・クラッシュ) の close が
+  // TCP が諦めるまで (既定で十数分〜永久に) 来ない。その間そのセッションの
+  // ffmpeg は残り続け、ライブを繰り返すうちに ffmpeg が積み上がって
+  // ノードの 46GB + swap を食い潰し、フリーズに至っていた。
+  //
+  // 映像はサーバ→客の一方向なので、この値は「客からの pong が途切れて
+  // よい上限」。ブラウザは ping に自動で pong を返すため、**生きている客は
+  // 映像が流れているだけで切れない**。返さなくなった客だけを畳む。
+  // serve 直下は 0 のまま — 録画のファイルや SSE は別勘定。
+  idleTimeout: 120,
+  sendPings: true,
+  open(ws) {
+    live()?.websocket.open(ws);
+  },
+  message(ws, message) {
+    live()?.websocket.message(ws, message);
+  },
+  close(ws, code, reason) {
+    live()?.websocket.close(ws, code, reason);
+  },
 };
 
 /** adapter の `fetch` の前に挟む */
 const front = (handler) => (request, server) => {
-    const url = new URL(request.url);
+  const url = new URL(request.url);
 
-    if (upgrading(request) && live()?.handles(url) === true) {
-        /*
-         * **断るのは握手の前。** ここなら普通の HTTP として理由を返せる。
-         * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない
-         */
-        if (!live().accept(url)) return new Response('ticket required', { status: 403 });
-        const data = { url, connection: null };
-        if (server.upgrade(request, { data })) return undefined;
-        return new Response('upgrade failed', { status: 400 });
-    }
+  if (upgrading(request) && live()?.handles(url) === true) {
+    /*
+     * **断るのは握手の前。** ここなら普通の HTTP として理由を返せる。
+     * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない
+     */
+    if (!live().accept(url))
+      return new Response("ticket required", { status: 403 });
+    const data = { url, connection: null };
+    if (server.upgrade(request, { data })) return undefined;
+    return new Response("upgrade failed", { status: 400 });
+  }
 
-    /*
-     * **前段が無ければ、受けた接続のスキームを `x-forwarded-proto` に入れる。**
-     * adapter はこのヘッダが無いと自分を https と決め打つ。`http://<IP>:3000` に
-     * 直に繋ぐと、ブラウザの Origin (http) と食い違って POST が全部 CSRF の 403 になり、
-     * ライブのチケット (POST) も取れず「繋がりませんでした」になっていた (#437)。
-     * 前段が付けてきた値はそのまま使う
-     */
-    if (!request.headers.has('x-forwarded-proto')) {
-        request.headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
-    }
-    // 本当の接続元 (上の説明)
-    request.headers.set(
-        REMOTE_HEADER,
-        resolveClient(
-            server.requestIP(request)?.address ?? '',
-            request.headers.get('x-forwarded-for'),
-            proxies,
-        ),
-    );
-    /*
-     * **画面の HTML とデータ (JSON) は縮めて返す** (`src/lib/server/compress.ts`)。
-     * 静的ファイルは組むときに縮めてある (`precompress`) が、SvelteKit が組む応答は素のまま出ていた
-     */
-    const response = handler(request, server);
-    return response instanceof Promise
-        ? response.then((res) => res && compress(request, res))
-        : response && compress(request, response);
+  /*
+   * **前段が無ければ、受けた接続のスキームを `x-forwarded-proto` に入れる。**
+   * adapter はこのヘッダが無いと自分を https と決め打つ。`http://<IP>:3000` に
+   * 直に繋ぐと、ブラウザの Origin (http) と食い違って POST が全部 CSRF の 403 になり、
+   * ライブのチケット (POST) も取れず「繋がりませんでした」になっていた (#437)。
+   * 前段が付けてきた値はそのまま使う
+   */
+  if (!request.headers.has("x-forwarded-proto")) {
+    request.headers.set("x-forwarded-proto", url.protocol.slice(0, -1));
+  }
+  // 本当の接続元 (上の説明)
+  request.headers.set(
+    REMOTE_HEADER,
+    resolveClient(
+      server.requestIP(request)?.address ?? "",
+      request.headers.get("x-forwarded-for"),
+      proxies,
+    ),
+  );
+  /*
+   * **画面の HTML とデータ (JSON) は縮めて返す** (`src/lib/server/compress.ts`)。
+   * 静的ファイルは組むときに縮めてある (`precompress`) が、SvelteKit が組む応答は素のまま出ていた
+   */
+  const response = handler(request, server);
+  return response instanceof Promise
+    ? response.then((res) => res && compress(request, res))
+    : response && compress(request, response);
 };
 
 const serve = Bun.serve;
 let served = false;
 Bun.serve = (options) => {
-    Bun.serve = serve;
-    served = true;
-    return serve({ ...options, fetch: front(options.fetch), websocket });
+  Bun.serve = serve;
+  served = true;
+  return serve({ ...options, fetch: front(options.fetch), websocket });
 };
 try {
-    await import('./build/index.js');
+  await import("./build/index.js");
 } finally {
-    Bun.serve = serve;
+  Bun.serve = serve;
 }
 if (!served)
-    throw new Error(
-        'build/index.js が Bun.serve を呼びませんでした。adapter-bun の作りが変わっていないか確かめてください',
-    );
+  throw new Error(
+    "build/index.js が Bun.serve を呼びませんでした。adapter-bun の作りが変わっていないか確かめてください",
+  );
 
 /*
  * **止まれの合図をアプリにもう一度引き取らせる。** adapter は読み込みのいちばん最後で
@@ -184,28 +192,31 @@ if (!served)
  * adapter の2件) と違うだけなら知らせる。adapter があとから登録する作りに変わったときのために、
  * 少し置いてもう一度見て、ついていたら引き取り直して知らせる
  */
-const SIGNALS = ['SIGTERM', 'SIGINT'];
+const SIGNALS = ["SIGTERM", "SIGINT"];
 const takeOver = globalThis[TAKE_OVER];
-if (typeof takeOver !== 'function') {
-    throw new Error('アプリが止まれの合図を引き取る関数を置いていません (src/lib/server/runtime.ts)');
+if (typeof takeOver !== "function") {
+  throw new Error(
+    "アプリが止まれの合図を引き取る関数を置いていません (src/lib/server/runtime.ts)",
+  );
 }
 const taken = takeOver();
-const extra = () => SIGNALS.filter((signal) => process.listenerCount(signal) !== 1);
+const extra = () =>
+  SIGNALS.filter((signal) => process.listenerCount(signal) !== 1);
 if (extra().length > 0) {
-    throw new Error(
-        `止まれの合図を引き取れません (${extra().join('・')})。adapter-bun の作りが変わっていないか確かめてください`,
-    );
+  throw new Error(
+    `止まれの合図を引き取れません (${extra().join("・")})。adapter-bun の作りが変わっていないか確かめてください`,
+  );
 }
 if (taken !== 4) {
-    console.warn(
-        `[boot] 止まれの合図の数が想定 (4 件) と違います (${taken} 件)。adapter-bun の作りが変わっていないか確かめてください`,
-    );
+  console.warn(
+    `[boot] 止まれの合図の数が想定 (4 件) と違います (${taken} 件)。adapter-bun の作りが変わっていないか確かめてください`,
+  );
 }
 setTimeout(() => {
-    const late = extra();
-    if (late.length === 0) return;
-    takeOver();
-    console.warn(
-        `[boot] 起動のあとで止まれの合図に後始末が足されていました (${late.join('・')})。引き取り直しました。adapter-bun の作りが変わっていないか確かめてください`,
-    );
+  const late = extra();
+  if (late.length === 0) return;
+  takeOver();
+  console.warn(
+    `[boot] 起動のあとで止まれの合図に後始末が足されていました (${late.join("・")})。引き取り直しました。adapter-bun の作りが変わっていないか確かめてください`,
+  );
 }, 1000).unref();

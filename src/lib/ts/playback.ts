@@ -7,7 +7,7 @@
  */
 
 /** 出せる映像の形式 */
-export type PlayCodec = 'h264' | 'av1' | 'mpeg2';
+export type PlayCodec = "h264" | "av1" | "mpeg2";
 
 /**
  * 出し方。
@@ -17,28 +17,28 @@ export type PlayCodec = 'h264' | 'av1' | 'mpeg2';
  *   詰め替えるだけ、違えばエンコードし直す。シークは `from` を変えてリクエストし直す
  * - `raw` … 元の TS を飛び先から流す (`/stream?codec=mpeg2`)。画面が自分で再生する
  */
-export type PlayWay = 'file' | 'stream' | 'raw';
+export type PlayWay = "file" | "stream" | "raw";
 
 /** 配るファイルの名指し (`#lib/source.ts` の `FileSource` のうち、エンコード済み) */
-export type EncodedSource = 'encoded' | 'alt';
+export type EncodedSource = "encoded" | "alt";
 
 export interface PlayOffer {
-    codec: PlayCodec;
-    way: PlayWay;
-    /** `file` のとき、どのファイルか */
-    source?: EncodedSource;
-    /**
-     * 中身の codecs (`avc1.640028,opus`)。`file` は入れ物 (Matroska / WebM) の、`stream` は fMP4 の。
-     * 画面が `canPlayType` / `isTypeSupported` に聞くのに使う。`file` で中身を読めなかったときは無い
-     */
-    codecs?: string;
+  codec: PlayCodec;
+  way: PlayWay;
+  /** `file` のとき、どのファイルか */
+  source?: EncodedSource;
+  /**
+   * 中身の codecs (`avc1.640028,opus`)。`file` は入れ物 (Matroska / WebM) の、`stream` は fMP4 の。
+   * 画面が `canPlayType` / `isTypeSupported` に聞くのに使う。`file` で中身を読めなかったときは無い
+   */
+  codecs?: string;
 }
 
 export interface PlayAudio {
-    /** `/stream?audio=` に渡すもの */
-    id: string;
-    /** 画面に出す名前。無名は空 */
-    label: string;
+  /** `/stream?audio=` に渡すもの */
+  id: string;
+  /** 画面に出す名前。無名は空 */
+  label: string;
 }
 
 /**
@@ -48,15 +48,15 @@ export interface PlayAudio {
  * - `encoded` … エンコード済みのファイルの時刻
  * - `ts` … 元の TS の頭を 0 とした時刻 (エンコード済みが無い録画)
  */
-export type PlayAxis = 'encoded' | 'ts';
+export type PlayAxis = "encoded" | "ts";
 
 export interface PlaybackInfo {
-    /** 尺 (秒)。物差しの上の長さ */
-    duration: number;
-    axis: PlayAxis;
-    audios: PlayAudio[];
-    /** 出せるもの。並びに意味は無い (どれを使うかは画面が決める) */
-    offers: PlayOffer[];
+  /** 尺 (秒)。物差しの上の長さ */
+  duration: number;
+  axis: PlayAxis;
+  audios: PlayAudio[];
+  /** 出せるもの。並びに意味は無い (どれを使うかは画面が決める) */
+  offers: PlayOffer[];
 }
 
 /**
@@ -64,18 +64,18 @@ export interface PlaybackInfo {
  * 元の TS の頭の PTS に、エンコードしたときに捨てた頭 (`encode_skip`) を足したもの。
  * 画面の時刻 = (PTS − これ) を一周の中で取って 90000 で割ったもの (`ts/seek.ts` の `sinceHead`)
  */
-export const ORIGIN_HEADER = 'X-Denpa-Origin';
+export const ORIGIN_HEADER = "X-Denpa-Origin";
 
 /** 混んでいて断ったときの言い分 (503) */
-export const BUSY = 'サーバが混んでいます';
+export const BUSY = "サーバが混んでいます";
 
 /** サーバが「混んでいます」と断ったか (`server/playback.ts` の 503)。デプロイの最中の 503 (前段が返すもの) とは言い分で見分ける */
 export async function busyAnswer(response: Response): Promise<boolean> {
-    try {
-        return ((await response.json()) as { message?: unknown }).message === BUSY;
-    } catch {
-        return false;
-    }
+  try {
+    return ((await response.json()) as { message?: unknown }).message === BUSY;
+  } catch {
+    return false;
+  }
 }
 
 /*
@@ -86,66 +86,72 @@ export async function busyAnswer(response: Response): Promise<boolean> {
  */
 
 /** 流しているものの様子。繋ぎ直している・諦めた・戻った・混んでいて断られた */
-export type StreamState = 'flowing' | 'retrying' | 'failed' | 'busy';
+export type StreamState = "flowing" | "retrying" | "failed" | "busy";
 
 /** 続けてリクエストし直す上限 */
 export const STREAM_RETRIES = 8;
 
 /** `retries` 回リクエストし直したあと、次にリクエストするまで待つ時間 (ms)。倍々に伸ばして 10秒で頭打ち (デプロイの入れ替えは数十秒かかる) */
 export function retryWait(retries: number): number {
-    return Math.min(10_000, 1000 * 2 ** retries);
+  return Math.min(10_000, 1000 * 2 ** retries);
 }
 
 /** リクエストし直せば直りうる失敗か (繋がらない・途中で落ちた・サーバの 5xx)。4xx・読めない中身は何度やっても同じ */
 export function retryable(error: unknown): boolean {
-    return error instanceof TypeError || String(error).startsWith('Error: HTTP 5');
+  return (
+    error instanceof TypeError || String(error).startsWith("Error: HTTP 5")
+  );
 }
 
 /** 画面が選べるコーデック。`auto` は端末に合わせて決める (`pickOffer`) */
-export type CodecChoice = 'auto' | 'h264' | 'av1';
+export type CodecChoice = "auto" | "h264" | "av1";
 
 /** ブラウザに問い合わせる関数。**試しで差し替えられるように**受け取る */
 export interface MediaAbility {
-    /** `<video>` にそのまま渡して読めるか (`canPlayType` が空でない) */
-    play(type: string): boolean;
-    /** MSE が受け取れるか (`isTypeSupported`)。MediaSource が無ければ false */
-    mse(type: string): boolean;
+  /** `<video>` にそのまま渡して読めるか (`canPlayType` が空でない) */
+  play(type: string): boolean;
+  /** MSE が受け取れるか (`isTypeSupported`)。MediaSource が無ければ false */
+  mse(type: string): boolean;
 }
 
 /** どれで観るか */
 export type Picked =
-    | { way: 'file'; codec: PlayCodec; source: EncodedSource }
-    | { way: 'stream'; codec: 'h264' | 'av1'; type: string };
+  | { way: "file"; codec: PlayCodec; source: EncodedSource }
+  | { way: "stream"; codec: "h264" | "av1"; type: string };
 
 /**
  * そのままのファイルを読めるか。Matroska と WebM の両方で聞く — Chrome は `video/x-matroska` に答えるが、
  * Safari は WebM としてしか答えない (AV1 の Matroska はそれで読める)。中身が分からないものは false
  */
 function playsFile(offer: PlayOffer, can: MediaAbility): boolean {
-    if (offer.way !== 'file' || offer.codecs === undefined) return false;
-    return (
-        can.play(`video/x-matroska; codecs="${offer.codecs}"`) ||
-        can.play(`video/webm; codecs="${offer.codecs}"`)
-    );
+  if (offer.way !== "file" || offer.codecs === undefined) return false;
+  return (
+    can.play(`video/x-matroska; codecs="${offer.codecs}"`) ||
+    can.play(`video/webm; codecs="${offer.codecs}"`)
+  );
 }
 
 /** MSE に渡す型 */
 export function streamType(offer: PlayOffer): string {
-    return `video/mp4; codecs="${offer.codecs ?? ''}"`;
+  return `video/mp4; codecs="${offer.codecs ?? ""}"`;
 }
 
 function playsStream(offer: PlayOffer, can: MediaAbility): boolean {
-    return offer.way === 'stream' && offer.codecs !== undefined && can.mse(streamType(offer));
+  return (
+    offer.way === "stream" &&
+    offer.codecs !== undefined &&
+    can.mse(streamType(offer))
+  );
 }
 
 function asPicked(offer: PlayOffer): Picked | null {
-    if (offer.way === 'file' && offer.source !== undefined) {
-        return { way: 'file', codec: offer.codec, source: offer.source };
-    }
-    if (offer.way === 'stream' && offer.codec !== 'mpeg2') {
-        return { way: 'stream', codec: offer.codec, type: streamType(offer) };
-    }
-    return null;
+  if (offer.way === "file" && offer.source !== undefined) {
+    return { way: "file", codec: offer.codec, source: offer.source };
+  }
+  if (offer.way === "stream" && offer.codec !== "mpeg2") {
+    return { way: "stream", codec: offer.codec, type: streamType(offer) };
+  }
+  return null;
 }
 
 /**
@@ -160,26 +166,33 @@ function asPicked(offer: PlayOffer): Picked | null {
  * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する方式は画面の設定で別に決める)。何も無ければ null
  */
 export function pickOffer(
-    info: PlaybackInfo,
-    can: MediaAbility,
-    choice: CodecChoice = 'auto',
+  info: PlaybackInfo,
+  can: MediaAbility,
+  choice: CodecChoice = "auto",
 ): Picked | null {
-    const files = info.offers.filter((offer) => offer.way === 'file');
-    const streams = info.offers.filter((offer) => offer.way === 'stream');
-    if (choice !== 'auto') {
-        const file = files.find((offer) => offer.codec === choice && playsFile(offer, can));
-        const stream = streams.find((offer) => offer.codec === choice && playsStream(offer, can));
-        const chosen = file ?? stream;
-        if (chosen !== undefined) return asPicked(chosen);
-    }
-    const order = [
-        ...files.filter((offer) => playsFile(offer, can)),
-        ...streams.filter((offer) => playsStream(offer, can) && files.some((f) => f.codec === offer.codec)),
-        ...streams.filter((offer) => playsStream(offer, can)),
-        ...files,
-    ];
-    const first = order[0];
-    return first === undefined ? null : asPicked(first);
+  const files = info.offers.filter((offer) => offer.way === "file");
+  const streams = info.offers.filter((offer) => offer.way === "stream");
+  if (choice !== "auto") {
+    const file = files.find(
+      (offer) => offer.codec === choice && playsFile(offer, can),
+    );
+    const stream = streams.find(
+      (offer) => offer.codec === choice && playsStream(offer, can),
+    );
+    const chosen = file ?? stream;
+    if (chosen !== undefined) return asPicked(chosen);
+  }
+  const order = [
+    ...files.filter((offer) => playsFile(offer, can)),
+    ...streams.filter(
+      (offer) =>
+        playsStream(offer, can) && files.some((f) => f.codec === offer.codec),
+    ),
+    ...streams.filter((offer) => playsStream(offer, can)),
+    ...files,
+  ];
+  const first = order[0];
+  return first === undefined ? null : asPicked(first);
 }
 
 /**
@@ -190,21 +203,30 @@ export function pickOffer(
  * 同じコーデックの詰め替え (サーバは軽い) を先に、無ければ `pickOffer` と同じ順の変換。MSE が
  * 受け取れるものが無ければ null (= 移れないので、音声の切り替えは出さない)
  */
-export function streamForAudio(info: PlaybackInfo, can: MediaAbility, codec: PlayCodec): Picked | null {
-    const streams = info.offers.filter((offer) => playsStream(offer, can));
-    const chosen = streams.find((offer) => offer.codec === codec) ?? streams[0];
-    return chosen === undefined ? null : asPicked(chosen);
+export function streamForAudio(
+  info: PlaybackInfo,
+  can: MediaAbility,
+  codec: PlayCodec,
+): Picked | null {
+  const streams = info.offers.filter((offer) => playsStream(offer, can));
+  const chosen = streams.find((offer) => offer.codec === codec) ?? streams[0];
+  return chosen === undefined ? null : asPicked(chosen);
 }
 
 /**
  * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → AV1)
  */
-export function codecChoices(info: PlaybackInfo, can: MediaAbility): ('h264' | 'av1')[] {
-    return (['h264', 'av1'] as const).filter((codec) =>
-        info.offers.some(
-            (offer) => offer.codec === codec && (playsFile(offer, can) || playsStream(offer, can)),
-        ),
-    );
+export function codecChoices(
+  info: PlaybackInfo,
+  can: MediaAbility,
+): ("h264" | "av1")[] {
+  return (["h264", "av1"] as const).filter((codec) =>
+    info.offers.some(
+      (offer) =>
+        offer.codec === codec &&
+        (playsFile(offer, can) || playsStream(offer, can)),
+    ),
+  );
 }
 
 /*
@@ -223,16 +245,18 @@ export type CanvasAbility = Record<CanvasCodec, boolean>;
 
 /** 互換モードのメニューに並べるもの。**出せるものは描けなくても並べる** (押せなくして、理由を添える) */
 export function canvasChoices(
-    info: PlaybackInfo,
-    can: CanvasAbility,
+  info: PlaybackInfo,
+  can: CanvasAbility,
 ): { codec: CanvasCodec; drawable: boolean }[] {
-    return (['h264', 'av1', 'mpeg2'] as const)
-        .filter((codec) =>
-            info.offers.some(
-                (offer) => offer.codec === codec && offer.way === (codec === 'mpeg2' ? 'raw' : 'stream'),
-            ),
-        )
-        .map((codec) => ({ codec, drawable: can[codec] }));
+  return (["h264", "av1", "mpeg2"] as const)
+    .filter((codec) =>
+      info.offers.some(
+        (offer) =>
+          offer.codec === codec &&
+          offer.way === (codec === "mpeg2" ? "raw" : "stream"),
+      ),
+    )
+    .map((codec) => ({ codec, drawable: can[codec] }));
 }
 
 /**
@@ -245,33 +269,44 @@ export function canvasChoices(
  * `avoid` は諦めた形式 (描いている途中で間に合わなくなった)。何も描けなければ null
  */
 export function pickCanvas(
-    info: PlaybackInfo,
-    can: CanvasAbility,
-    choice: CodecChoice | 'mpeg2' = 'auto',
-    avoid: readonly CanvasCodec[] = [],
+  info: PlaybackInfo,
+  can: CanvasAbility,
+  choice: CodecChoice | "mpeg2" = "auto",
+  avoid: readonly CanvasCodec[] = [],
 ): CanvasCodec | null {
-    const usable = canvasChoices(info, can)
-        .filter((item) => item.drawable && !avoid.includes(item.codec))
-        .map((item) => item.codec);
-    if (choice !== 'auto' && usable.includes(choice)) return choice;
-    const light = usable.filter(
-        (codec) =>
-            codec !== 'mpeg2' && info.offers.some((offer) => offer.way === 'file' && offer.codec === codec),
-    );
-    return [...light, ...usable][0] ?? null;
+  const usable = canvasChoices(info, can)
+    .filter((item) => item.drawable && !avoid.includes(item.codec))
+    .map((item) => item.codec);
+  if (choice !== "auto" && usable.includes(choice)) return choice;
+  const light = usable.filter(
+    (codec) =>
+      codec !== "mpeg2" &&
+      info.offers.some(
+        (offer) => offer.way === "file" && offer.codec === codec,
+      ),
+  );
+  return [...light, ...usable][0] ?? null;
 }
 
 /** 互換モードで、その形式で観るとサーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
-export function canvasTranscodes(info: PlaybackInfo, codec: CanvasCodec): boolean {
-    return codec !== 'mpeg2' && !info.offers.some((offer) => offer.way === 'file' && offer.codec === codec);
+export function canvasTranscodes(
+  info: PlaybackInfo,
+  codec: CanvasCodec,
+): boolean {
+  return (
+    codec !== "mpeg2" &&
+    !info.offers.some((offer) => offer.way === "file" && offer.codec === codec)
+  );
 }
 
 /** 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
 export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
-    return (
-        picked.way === 'stream' &&
-        !info.offers.some((offer) => offer.way === 'file' && offer.codec === picked.codec)
-    );
+  return (
+    picked.way === "stream" &&
+    !info.offers.some(
+      (offer) => offer.way === "file" && offer.codec === picked.codec,
+    )
+  );
 }
 
 /** `TimeRanges` を配列にしたもの (`[始まり, 終わり]` 秒) */
@@ -279,10 +314,10 @@ export type Ranges = readonly (readonly [number, number])[];
 
 /** `t` を含む区間の、`t` から先に溜まっている長さ (秒)。含む区間が無ければ 0 */
 export function aheadOf(ranges: Ranges, t: number): number {
-    for (const [start, end] of ranges) {
-        if (start <= t + GAP && t < end) return end - t;
-    }
-    return 0;
+  for (const [start, end] of ranges) {
+    if (start <= t + GAP && t < end) return end - t;
+  }
+  return 0;
 }
 
 /**
@@ -301,13 +336,18 @@ const GAP = 0.5;
  *
  * @param from 読んでいるストリームのリクエストした位置。読んでいなければ null
  */
-export function covers(ranges: Ranges, t: number, from: number | null, slack: number): boolean {
-    if (aheadOf(ranges, t) > 0) return true;
-    if (from === null || t < from - GAP) return false;
-    // リクエストした位置から伸びている区間の尻。まだ何も届いていなければリクエストした位置
-    let end = from;
-    for (const [start, stop] of ranges) {
-        if (start <= from + GAP && stop >= from) end = Math.max(end, stop);
-    }
-    return t <= end + slack;
+export function covers(
+  ranges: Ranges,
+  t: number,
+  from: number | null,
+  slack: number,
+): boolean {
+  if (aheadOf(ranges, t) > 0) return true;
+  if (from === null || t < from - GAP) return false;
+  // リクエストした位置から伸びている区間の尻。まだ何も届いていなければリクエストした位置
+  let end = from;
+  for (const [start, stop] of ranges) {
+    if (start <= from + GAP && stop >= from) end = Math.max(end, stop);
+  }
+  return t <= end + slack;
 }

@@ -17,9 +17,16 @@
  * ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  */
 
-import { decodeAribText } from './aribtext';
-import { u16, u32 } from './dsmcc';
-import { descriptors, PacketStream, PID_PAT, parsePat, pmtStreams, SectionAssembler } from './psi';
+import { decodeAribText } from "./aribtext";
+import { u16, u32 } from "./dsmcc";
+import {
+  descriptors,
+  PacketStream,
+  PID_PAT,
+  parsePat,
+  pmtStreams,
+  SectionAssembler,
+} from "./psi";
 
 /** AIT のセクション */
 const TABLE_AIT = 0x74;
@@ -50,32 +57,32 @@ export const APPLICATION_TYPE_HTML5 = 0x0010;
  * 動かさないので、**画面に出すときの言い方が変わるだけ**です
  */
 export const CONTROL = {
-    autostart: 0x01,
-    present: 0x02,
-    destroy: 0x03,
-    kill: 0x04,
-    prefetch: 0x05,
-    remote: 0x06,
-    disabled: 0x07,
-    playbackAutostart: 0x08,
+  autostart: 0x01,
+  present: 0x02,
+  destroy: 0x03,
+  kill: 0x04,
+  prefetch: 0x05,
+  remote: 0x06,
+  disabled: 0x07,
+  playbackAutostart: 0x08,
 } as const;
 
 interface HybridcastApp {
-    /** 放送局を表す番号 (organisation_id) */
-    organisationId: number;
-    applicationId: number;
-    /** `CONTROL` のどれか。生の値をそのまま持つ (知らない値でも捨てない) */
-    controlCode: number;
-    /** アプリの名前。放送が入れていなければ空 */
-    name: string;
-    /** 取得先。`transport_protocol` と `location` を繋いだもの */
-    url: string;
+  /** 放送局を表す番号 (organisation_id) */
+  organisationId: number;
+  applicationId: number;
+  /** `CONTROL` のどれか。生の値をそのまま持つ (知らない値でも捨てない) */
+  controlCode: number;
+  /** アプリの名前。放送が入れていなければ空 */
+  name: string;
+  /** 取得先。`transport_protocol` と `location` を繋いだもの */
+  url: string;
 }
 
 export interface Ait {
-    /** `APPLICATION_TYPE_HTML5` なら Hybridcast */
-    applicationType: number;
-    applications: HybridcastApp[];
+  /** `APPLICATION_TYPE_HTML5` なら Hybridcast */
+  applicationType: number;
+  applications: HybridcastApp[];
 }
 
 /**
@@ -86,16 +93,16 @@ export interface Ait {
  * 名乗るので、型だけでは見分けが付きません
  */
 export function aitPidsFromPmt(section: Uint8Array): number[] {
-    const pids: number[] = [];
-    for (const [, pid, info] of pmtStreams(section)) {
-        for (const [tag] of descriptors(info)) {
-            if (tag === DESC_APPLICATION_SIGNALLING) {
-                pids.push(pid);
-                break;
-            }
-        }
+  const pids: number[] = [];
+  for (const [, pid, info] of pmtStreams(section)) {
+    for (const [tag] of descriptors(info)) {
+      if (tag === DESC_APPLICATION_SIGNALLING) {
+        pids.push(pid);
+        break;
+      }
     }
-    return pids;
+  }
+  return pids;
 }
 
 /**
@@ -105,12 +112,12 @@ export function aitPidsFromPmt(section: Uint8Array): number[] {
  * 運ぶアプリ (データ放送と同じ経路) で、Hybridcast の話ではありません
  */
 function transportUrl(body: Uint8Array): string | null {
-    if (body.length < 3) return null;
-    if (u16(body, 0) !== PROTOCOL_HTTP) return null;
-    // [0..1] protocol_id, [2] transport_protocol_label, [3] URL_base_length
-    const baseLength = body[3]!;
-    if (body.length < 4 + baseLength) return null;
-    return new TextDecoder().decode(body.subarray(4, 4 + baseLength));
+  if (body.length < 3) return null;
+  if (u16(body, 0) !== PROTOCOL_HTTP) return null;
+  // [0..1] protocol_id, [2] transport_protocol_label, [3] URL_base_length
+  const baseLength = body[3]!;
+  if (body.length < 4 + baseLength) return null;
+  return new TextDecoder().decode(body.subarray(4, 4 + baseLength));
 }
 
 /**
@@ -120,11 +127,11 @@ function transportUrl(body: Uint8Array): string | null {
  * ARIB の8単位符号なので、番組名と同じ方法で読みます (`aribtext.ts`)
  */
 function applicationName(body: Uint8Array): string {
-    // [0..2] ISO_639_language_code, [3] application_name_length
-    if (body.length < 4) return '';
-    const length = body[3]!;
-    if (body.length < 4 + length) return '';
-    return decodeAribText(body.subarray(4, 4 + length)).trim();
+  // [0..2] ISO_639_language_code, [3] application_name_length
+  if (body.length < 4) return "";
+  const length = body[3]!;
+  if (body.length < 4 + length) return "";
+  return decodeAribText(body.subarray(4, 4 + length)).trim();
 }
 
 /**
@@ -132,39 +139,48 @@ function applicationName(body: Uint8Array): string {
  * 読めないものが来るのは普通のこと)
  */
 export function parseAit(section: Uint8Array): Ait | null {
-    if (section[0] !== TABLE_AIT || section.length < 16) return null;
-    const applicationType = u16(section, 3) & 0x7fff;
-    const commonLength = ((section[8]! & 0x0f) << 8) | section[9]!;
-    let at = 10 + commonLength;
-    const end = section.length - 4;
-    if (at + 2 > end) return null;
-    const loopLength = ((section[at]! & 0x0f) << 8) | section[at + 1]!;
-    at += 2;
-    const stop = Math.min(at + loopLength, end);
+  if (section[0] !== TABLE_AIT || section.length < 16) return null;
+  const applicationType = u16(section, 3) & 0x7fff;
+  const commonLength = ((section[8]! & 0x0f) << 8) | section[9]!;
+  let at = 10 + commonLength;
+  const end = section.length - 4;
+  if (at + 2 > end) return null;
+  const loopLength = ((section[at]! & 0x0f) << 8) | section[at + 1]!;
+  at += 2;
+  const stop = Math.min(at + loopLength, end);
 
-    const applications: HybridcastApp[] = [];
-    while (at + 9 <= stop) {
-        const organisationId = u32(section, at);
-        const applicationId = u16(section, at + 4);
-        const controlCode = section[at + 6]!;
-        const infoLength = ((section[at + 7]! & 0x0f) << 8) | section[at + 8]!;
-        const info = section.subarray(at + 9, at + 9 + infoLength);
-        at += 9 + infoLength;
+  const applications: HybridcastApp[] = [];
+  while (at + 9 <= stop) {
+    const organisationId = u32(section, at);
+    const applicationId = u16(section, at + 4);
+    const controlCode = section[at + 6]!;
+    const infoLength = ((section[at + 7]! & 0x0f) << 8) | section[at + 8]!;
+    const info = section.subarray(at + 9, at + 9 + infoLength);
+    at += 9 + infoLength;
 
-        let base: string | null = null;
-        let path = '';
-        let name = '';
-        for (const [tag, descriptor] of descriptors(info)) {
-            if (tag === DESC_TRANSPORT_PROTOCOL) base = transportUrl(descriptor) ?? base;
-            else if (tag === DESC_SIMPLE_APPLICATION_LOCATION) path = new TextDecoder().decode(descriptor);
-            else if (tag === DESC_APPLICATION_NAME) name = applicationName(descriptor);
-            // application_descriptor (優先度と可視性) は読まない。動かさないので使い道がない
-        }
-        // **URL の無いものは出さない。** 在ることだけ言われても行き先が無い
-        if (base === null) continue;
-        applications.push({ organisationId, applicationId, controlCode, name, url: base + path });
+    let base: string | null = null;
+    let path = "";
+    let name = "";
+    for (const [tag, descriptor] of descriptors(info)) {
+      if (tag === DESC_TRANSPORT_PROTOCOL)
+        base = transportUrl(descriptor) ?? base;
+      else if (tag === DESC_SIMPLE_APPLICATION_LOCATION)
+        path = new TextDecoder().decode(descriptor);
+      else if (tag === DESC_APPLICATION_NAME)
+        name = applicationName(descriptor);
+      // application_descriptor (優先度と可視性) は読まない。動かさないので使い道がない
     }
-    return { applicationType, applications };
+    // **URL の無いものは出さない。** 在ることだけ言われても行き先が無い
+    if (base === null) continue;
+    applications.push({
+      organisationId,
+      applicationId,
+      controlCode,
+      name,
+      url: base + path,
+    });
+  }
+  return { applicationType, applications };
 }
 
 /**
@@ -177,51 +193,53 @@ export function parseAit(section: Uint8Array): Ait | null {
  * — その局では永久に何も返さないのが正しい振る舞いです。
  */
 export class AitReader {
-    private readonly packets = new PacketStream();
-    private readonly pat = new SectionAssembler(PID_PAT);
-    /** PMT を組み立てるもの。**PID が決まってから作る** */
-    private pmt: SectionAssembler | null = null;
-    private pmtPid: number | null = null;
-    /** AIT を組み立てるもの。PID ごとに1つ */
-    private aits = new Map<number, SectionAssembler>();
+  private readonly packets = new PacketStream();
+  private readonly pat = new SectionAssembler(PID_PAT);
+  /** PMT を組み立てるもの。**PID が決まってから作る** */
+  private pmt: SectionAssembler | null = null;
+  private pmtPid: number | null = null;
+  /** AIT を組み立てるもの。PID ごとに1つ */
+  private aits = new Map<number, SectionAssembler>();
 
-    constructor(private readonly serviceId: number) {}
+  constructor(private readonly serviceId: number) {}
 
-    /**
-     * TS を食べて、見つかったものを返す。**見つからない間は空**。
-     *
-     * 同じものが何度も返るのは呼ぶ側で畳んでください — 放送は同じ表を
-     * 繰り返し流すので、ここで覚えると「局を変えても消えない」になります
-     */
-    public feed(chunk: Uint8Array): Ait[] {
-        const found: Ait[] = [];
-        for (const packet of this.packets.feed(chunk)) this.feedPacket(packet, found);
-        return found;
+  /**
+   * TS を食べて、見つかったものを返す。**見つからない間は空**。
+   *
+   * 同じものが何度も返るのは呼ぶ側で畳んでください — 放送は同じ表を
+   * 繰り返し流すので、ここで覚えると「局を変えても消えない」になります
+   */
+  public feed(chunk: Uint8Array): Ait[] {
+    const found: Ait[] = [];
+    for (const packet of this.packets.feed(chunk))
+      this.feedPacket(packet, found);
+    return found;
+  }
+
+  /** 切り分け済みのパケットを1つ。見つかったものは `found` に足す (`BmlDecoder.feedPacket` と同じ事情) */
+  public feedPacket(packet: Uint8Array, found: Ait[]): void {
+    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+    if (pid === PID_PAT) {
+      for (const section of this.pat.feed(packet)) {
+        const next = parsePat(section).get(this.serviceId);
+        if (next === undefined || next === this.pmtPid) continue;
+        // 局が変わった。PMT も AIT も読み直す
+        this.pmtPid = next;
+        this.pmt = new SectionAssembler(next);
+        this.aits = new Map();
+      }
     }
-
-    /** 切り分け済みのパケットを1つ。見つかったものは `found` に足す (`BmlDecoder.feedPacket` と同じ事情) */
-    public feedPacket(packet: Uint8Array, found: Ait[]): void {
-        const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-        if (pid === PID_PAT) {
-            for (const section of this.pat.feed(packet)) {
-                const next = parsePat(section).get(this.serviceId);
-                if (next === undefined || next === this.pmtPid) continue;
-                // 局が変わった。PMT も AIT も読み直す
-                this.pmtPid = next;
-                this.pmt = new SectionAssembler(next);
-                this.aits = new Map();
-            }
+    if (pid === this.pmtPid) {
+      for (const section of this.pmt?.feed(packet) ?? []) {
+        for (const ait of aitPidsFromPmt(section)) {
+          if (!this.aits.has(ait))
+            this.aits.set(ait, new SectionAssembler(ait));
         }
-        if (pid === this.pmtPid) {
-            for (const section of this.pmt?.feed(packet) ?? []) {
-                for (const ait of aitPidsFromPmt(section)) {
-                    if (!this.aits.has(ait)) this.aits.set(ait, new SectionAssembler(ait));
-                }
-            }
-        }
-        for (const section of this.aits.get(pid)?.feed(packet) ?? []) {
-            const ait = parseAit(section);
-            if (ait !== null) found.push(ait);
-        }
+      }
     }
+    for (const section of this.aits.get(pid)?.feed(packet) ?? []) {
+      const ait = parseAit(section);
+      if (ait !== null) found.push(ait);
+    }
+  }
 }

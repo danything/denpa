@@ -14,32 +14,32 @@
  *   構える押し方 (この後 `arm` が入れ直す)、「確定」はまさに実行する押し方
  */
 export function arming(spare: string) {
-    let armed = $state<number | null>(null);
-    let disarm: ReturnType<typeof setTimeout> | undefined;
+  let armed = $state<number | null>(null);
+  let disarm: ReturnType<typeof setTimeout> | undefined;
 
-    return {
-        /** 聞き返し中の id。構えていなければ null */
-        get armed(): number | null {
-            return armed;
-        },
-        arm(id: number): void {
-            armed = id;
-            clearTimeout(disarm);
-            disarm = setTimeout(() => (armed = null), 5000);
-        },
-        /** 実行した (フォーム送信でない削除は、消したら自分で下ろす) */
-        fire(): void {
-            clearTimeout(disarm);
-            armed = null;
-        },
-        /** `<svelte:window onclick={...}>` に。他所を触ったら取り下げる */
-        stand(event: MouseEvent): void {
-            if (armed === null) return;
-            if ((event.target as HTMLElement | null)?.closest(spare)) return;
-            clearTimeout(disarm);
-            armed = null;
-        },
-    };
+  return {
+    /** 聞き返し中の id。構えていなければ null */
+    get armed(): number | null {
+      return armed;
+    },
+    arm(id: number): void {
+      armed = id;
+      clearTimeout(disarm);
+      disarm = setTimeout(() => (armed = null), 5000);
+    },
+    /** 実行した (フォーム送信でない削除は、消したら自分で下ろす) */
+    fire(): void {
+      clearTimeout(disarm);
+      armed = null;
+    },
+    /** `<svelte:window onclick={...}>` に。他所を触ったら取り下げる */
+    stand(event: MouseEvent): void {
+      if (armed === null) return;
+      if ((event.target as HTMLElement | null)?.closest(spare)) return;
+      clearTimeout(disarm);
+      armed = null;
+    },
+  };
 }
 
 export type Arming = ReturnType<typeof arming>;

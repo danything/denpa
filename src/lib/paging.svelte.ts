@@ -1,4 +1,4 @@
-import { revealed, shownUpTo } from './paging';
+import { revealed, shownUpTo } from "./paging";
 
 /**
  * 長い一覧を**少しずつ出す**。
@@ -21,69 +21,69 @@ import { revealed, shownUpTo } from './paging';
  * ```
  */
 export class Paged<T> {
-    /** いま出している行数 (頭から) */
-    shown = $state(0);
+  /** いま出している行数 (頭から) */
+  shown = $state(0);
 
-    /**
-     * @param items 元の一覧。絞り込み後のものを渡す
-     * @param step 一度に足す行数。1画面ぶんより少し多め
-     * @param first 最初に出す行数。**開いた瞬間に作る行を減らす** — 残りは表示したあとで `fill` で `step` まで足す
-     */
-    constructor(
-        private readonly items: () => T[],
-        readonly step = 60,
-        readonly first = step,
-    ) {
-        this.reset();
-    }
+  /**
+   * @param items 元の一覧。絞り込み後のものを渡す
+   * @param step 一度に足す行数。1画面ぶんより少し多め
+   * @param first 最初に出す行数。**開いた瞬間に作る行を減らす** — 残りは表示したあとで `fill` で `step` まで足す
+   */
+  constructor(
+    private readonly items: () => T[],
+    readonly step = 60,
+    readonly first = step,
+  ) {
+    this.reset();
+  }
 
-    /** 出す行。残りが無くなれば全部 */
-    get rows(): T[] {
-        const items = this.items();
-        return this.shown >= items.length ? items : items.slice(0, this.shown);
-    }
+  /** 出す行。残りが無くなれば全部 */
+  get rows(): T[] {
+    const items = this.items();
+    return this.shown >= items.length ? items : items.slice(0, this.shown);
+  }
 
-    /** まだ出していない行があるか */
-    get more(): boolean {
-        return this.rest > 0;
-    }
+  /** まだ出していない行があるか */
+  get more(): boolean {
+    return this.rest > 0;
+  }
 
-    /** 出していない残り */
-    get rest(): number {
-        return Math.max(0, this.items().length - this.shown);
-    }
+  /** 出していない残り */
+  get rest(): number {
+    return Math.max(0, this.items().length - this.shown);
+  }
 
-    /** 続きを足す */
-    reveal(): void {
-        this.shown = revealed(this.shown, this.step, this.items().length);
-    }
+  /** 続きを足す */
+  reveal(): void {
+    this.shown = revealed(this.shown, this.step, this.items().length);
+  }
 
-    /**
-     * 頭から `count` 行目までは出す。開いたときに映したい行が、まだ描いていない所にあるとき。
-     * 足す単位 (`step`) に切り上げる (下端の印が、すぐまた鳴らないように)
-     */
-    showUpTo(count: number): void {
-        this.shown = shownUpTo(this.shown, count, this.step, this.items().length);
-    }
+  /**
+   * 頭から `count` 行目までは出す。開いたときに映したい行が、まだ描いていない所にあるとき。
+   * 足す単位 (`step`) に切り上げる (下端の印が、すぐまた鳴らないように)
+   */
+  showUpTo(count: number): void {
+    this.shown = shownUpTo(this.shown, count, this.step, this.items().length);
+  }
 
-    /**
-     * 頭から `count` 行目までは出す (切り上げない)。開いたときに映したい行まで、余分を作らずに出す。
-     * 残りは表示したあとで `fill` が足す
-     */
-    showAtLeast(count: number): void {
-        // 今の一覧の長さで切らない — 空のときに 0 にすると、あとで行が増えたときに頭を描かなくなる (`rows` が長さで止める)
-        this.shown = Math.max(this.shown, count);
-    }
+  /**
+   * 頭から `count` 行目までは出す (切り上げない)。開いたときに映したい行まで、余分を作らずに出す。
+   * 残りは表示したあとで `fill` が足す
+   */
+  showAtLeast(count: number): void {
+    // 今の一覧の長さで切らない — 空のときに 0 にすると、あとで行が増えたときに頭を描かなくなる (`rows` が長さで止める)
+    this.shown = Math.max(this.shown, count);
+  }
 
-    /** `first` で始めたぶんを `step` まで足す (表示したあとで呼ぶ) */
-    fill(): void {
-        this.shown = Math.max(this.shown, this.step);
-    }
+  /** `first` で始めたぶんを `step` まで足す (表示したあとで呼ぶ) */
+  fill(): void {
+    this.shown = Math.max(this.shown, this.step);
+  }
 
-    /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */
-    reset(): void {
-        this.shown = this.first;
-    }
+  /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */
+  reset(): void {
+    this.shown = this.first;
+  }
 }
 
 /**
@@ -94,41 +94,41 @@ export class Paged<T> {
  * **変わった**ときにしか鳴らないので、外して付け直す。
  */
 export function sentinel(node: HTMLElement, onSeen: () => void) {
-    let observer: IntersectionObserver | null = null;
-    let seen = onSeen;
-    let frame = 0;
-    /**
-     * 外されたか。**外されたあとに積んであった `watch` が走ると、外れた要素を
-     * 見張る observer がもう1つできて、誰にも切られない** — 最後の1回を足した
-     * 直後に一覧が出尽くして印ごと消えるとそうなる
-     */
-    let gone = false;
+  let observer: IntersectionObserver | null = null;
+  let seen = onSeen;
+  let frame = 0;
+  /**
+   * 外されたか。**外されたあとに積んであった `watch` が走ると、外れた要素を
+   * 見張る observer がもう1つできて、誰にも切られない** — 最後の1回を足した
+   * 直後に一覧が出尽くして印ごと消えるとそうなる
+   */
+  let gone = false;
 
-    const watch = (): void => {
-        if (gone) return;
-        observer?.disconnect();
-        observer = new IntersectionObserver(
-            (entries) => {
-                if (!entries.some((entry) => entry.isIntersecting)) return;
-                seen();
-                // 足したあとにまだ見えているなら、もう一度鳴らす
-                frame = requestAnimationFrame(watch);
-            },
-            { rootMargin: '200px 0px' },
-        );
-        observer.observe(node);
-    };
-    watch();
+  const watch = (): void => {
+    if (gone) return;
+    observer?.disconnect();
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        seen();
+        // 足したあとにまだ見えているなら、もう一度鳴らす
+        frame = requestAnimationFrame(watch);
+      },
+      { rootMargin: "200px 0px" },
+    );
+    observer.observe(node);
+  };
+  watch();
 
-    return {
-        update(next: () => void) {
-            seen = next;
-        },
-        destroy() {
-            gone = true;
-            cancelAnimationFrame(frame);
-            observer?.disconnect();
-            observer = null;
-        },
-    };
+  return {
+    update(next: () => void) {
+      seen = next;
+    },
+    destroy() {
+      gone = true;
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      observer = null;
+    },
+  };
 }

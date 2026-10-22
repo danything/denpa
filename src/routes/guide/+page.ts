@@ -1,5 +1,5 @@
-import type { GuideSheet } from '#lib/types.js';
-import { resolve } from '$app/paths';
+import type { GuideSheet } from "#lib/types.js";
+import { resolve } from "$app/paths";
 
 /**
  * 番組表のマスを取る。**外枠 (`+page.server.ts`) とは別の取得にして、promise のまま渡す。**
@@ -15,19 +15,29 @@ import { resolve } from '$app/paths';
  * 理由を中身として返す (`GuideSheet.failed`)
  */
 export function load({ data, fetch }) {
-    return {
-        ...data,
-        sheet: typeof window !== 'undefined' ? sheetOf(fetch, data.type, data.start) : null,
-    };
+  return {
+    ...data,
+    sheet:
+      typeof window !== "undefined"
+        ? sheetOf(fetch, data.type, data.start)
+        : null,
+  };
 }
 
-async function sheetOf(fetch: typeof globalThis.fetch, type: string, start: number): Promise<GuideSheet> {
-    try {
-        const res = await fetch(resolve(`api/guide?type=${type}&start=${start}`));
-        const body = (await res.json().catch(() => null)) as GuideSheet | null;
-        if (res.ok && body !== null) return body;
-        return { programs: [], failed: body?.failed ?? `${res.status} ${res.statusText}` };
-    } catch (error) {
-        return { programs: [], failed: String(error) };
-    }
+async function sheetOf(
+  fetch: typeof globalThis.fetch,
+  type: string,
+  start: number,
+): Promise<GuideSheet> {
+  try {
+    const res = await fetch(resolve(`api/guide?type=${type}&start=${start}`));
+    const body = (await res.json().catch(() => null)) as GuideSheet | null;
+    if (res.ok && body !== null) return body;
+    return {
+      programs: [],
+      failed: body?.failed ?? `${res.status} ${res.statusText}`,
+    };
+  } catch (error) {
+    return { programs: [], failed: String(error) };
+  }
 }

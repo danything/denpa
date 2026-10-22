@@ -10,39 +10,40 @@
 -->
 
 <script lang="ts">
-    import { resolve } from '$app/paths';
-    import { page } from '$app/state';
+  import { resolve } from "$app/paths";
+  import { page } from "$app/state";
 
-    /** 理由が書かれていなければ、番号から言う (素の `Not Found` は英語なので使わない) */
-    const FALLBACK: Record<number, string> = {
-        404: 'ページが見つかりません',
-        410: 'もうありません',
-    };
-    /** 次に何をすればよいか。番号ごとに1行 */
-    const HINT: Record<number, string> = {
-        404: 'リンクが古いか、もう無いものを開いたのかもしれません。',
-        410: '消したものは戻せません。',
-    };
+  /** 理由が書かれていなければ、番号から言う (素の `Not Found` は英語なので使わない) */
+  const FALLBACK: Record<number, string> = {
+    404: "ページが見つかりません",
+    410: "もうありません",
+  };
+  /** 次に何をすればよいか。番号ごとに1行 */
+  const HINT: Record<number, string> = {
+    404: "リンクが古いか、もう無いものを開いたのかもしれません。",
+    410: "消したものは戻せません。",
+  };
 
-    const message = $derived.by(() => {
-        const text = page.error?.message ?? '';
-        if (text !== '' && text !== 'Not Found' && text !== 'Internal Error') return text;
-        return FALLBACK[page.status] ?? 'うまく開けませんでした';
-    });
-    const hint = $derived(
-        HINT[page.status] ??
-            (page.status >= 500
-                ? '時間をおいて開き直してください。続くときはサーバのログに理由が出ています。'
-                : ''),
-    );
+  const message = $derived.by(() => {
+    const text = page.error?.message ?? "";
+    if (text !== "" && text !== "Not Found" && text !== "Internal Error")
+      return text;
+    return FALLBACK[page.status] ?? "うまく開けませんでした";
+  });
+  const hint = $derived(
+    HINT[page.status] ??
+      (page.status >= 500
+        ? "時間をおいて開き直してください。続くときはサーバのログに理由が出ています。"
+        : ""),
+  );
 </script>
 
 <svelte:head><title>{message} - denpa</title></svelte:head>
 
 <div class="solo" data-testid="error-page">
-    <h1>{message}</h1>
-    <p>{hint} <span class="num">({page.status})</span></p>
-    <div class="actions">
-        <a class="button" href={resolve('')} data-testid="error-home">録画へ戻る</a>
-    </div>
+  <h1>{message}</h1>
+  <p>{hint} <span class="num">({page.status})</span></p>
+  <div class="actions">
+    <a class="button" href={resolve("")} data-testid="error-home">録画へ戻る</a>
+  </div>
 </div>

@@ -9,21 +9,21 @@
  */
 
 import {
-    array,
-    boolean,
-    type Infer,
-    literal,
-    nullable,
-    number,
-    object,
-    optional,
-    type Shape,
-    string,
-    tolerate,
-} from '../shape';
-import type { ChannelType } from '../types';
-import { config } from './config';
-import type { Busy } from './conflict';
+  array,
+  boolean,
+  type Infer,
+  literal,
+  nullable,
+  number,
+  object,
+  optional,
+  type Shape,
+  string,
+  tolerate,
+} from "../shape";
+import type { ChannelType } from "../types";
+import { config } from "./config";
+import type { Busy } from "./conflict";
 
 /*
  * **エージェントが返すものの形式は、ここで確かめてから型にする** (`shape.ts`)。
@@ -33,50 +33,55 @@ import type { Busy } from './conflict';
  * **違っていても止めない** (`tolerate`)。版がずれただけで録画が止まるのでは
  * 困るので、警告を出して来たものをそのまま使う。直すのは人
  */
-const CHANNEL_TYPE: Shape<ChannelType> = literal('GR', 'BS', 'CS', 'SKY');
+const CHANNEL_TYPE: Shape<ChannelType> = literal("GR", "BS", "CS", "SKY");
 
 /** エージェントが知っているチャンネル。スキャンの結果そのもの */
 const AGENT_CHANNEL = object({
-    type: CHANNEL_TYPE,
-    channel: string,
-    networkId: number,
-    transportStreamId: number,
-    remoteControlKeyId: nullable(number),
-    services: array(object({ serviceId: number, serviceType: number, name: string })),
+  type: CHANNEL_TYPE,
+  channel: string,
+  networkId: number,
+  transportStreamId: number,
+  remoteControlKeyId: nullable(number),
+  services: array(
+    object({ serviceId: number, serviceType: number, name: string }),
+  ),
 });
 export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
 
 const AGENT_TUNER = object({
-    index: number,
-    name: string,
-    types: array(CHANNEL_TYPE),
-    disabled: boolean,
-    /**
-     * エージェントが選ぶ順。小さいほど先に使う。無効なチューナーは null。予約の割り振りはこの順どおりに
-     * 使われる前提で数える (`conflict.ts`、docs/agent.md「選ぶ順の約束」)
-     */
-    rank: nullable(number),
-    /** 選局に使うデバイス。エージェントはこれを直に開く */
-    device: nullable(string),
-    /** 衛星の給電。要る構成だけ */
-    lnb: nullable(string),
-    /** いま使っているチャンネル。空いていれば null */
-    channel: nullable(object({ type: CHANNEL_TYPE, channel: string })),
-    users: array(object({ use: string, priority: number })),
-    pid: nullable(number),
-    error: nullable(string),
+  index: number,
+  name: string,
+  types: array(CHANNEL_TYPE),
+  disabled: boolean,
+  /**
+   * エージェントが選ぶ順。小さいほど先に使う。無効なチューナーは null。予約の割り振りはこの順どおりに
+   * 使われる前提で数える (`conflict.ts`、docs/agent.md「選ぶ順の約束」)
+   */
+  rank: nullable(number),
+  /** 選局に使うデバイス。エージェントはこれを直に開く */
+  device: nullable(string),
+  /** 衛星の給電。要る構成だけ */
+  lnb: nullable(string),
+  /** いま使っているチャンネル。空いていれば null */
+  channel: nullable(object({ type: CHANNEL_TYPE, channel: string })),
+  users: array(object({ use: string, priority: number })),
+  pid: nullable(number),
+  error: nullable(string),
 });
 export type AgentTuner = Infer<typeof AGENT_TUNER>;
 
-const TUNERS = object({ tuners: array(AGENT_TUNER), detected: optional(boolean) });
+const TUNERS = object({
+  tuners: array(AGENT_TUNER),
+  detected: optional(boolean),
+});
 
 /** 画面から書き換えられる部分だけ */
 export interface TunerConfig {
-    name: string;
-    types: ChannelType[];
-    device: string | null;
-    lnb: string | null;
-    disabled: boolean;
+  name: string;
+  types: ChannelType[];
+  device: string | null;
+  lnb: string | null;
+  disabled: boolean;
 }
 
 /**
@@ -86,27 +91,37 @@ export interface TunerConfig {
  * 過去の録画が辿れなくなる (docs/data.md)。
  */
 export function serviceKey(networkId: number, serviceId: number): number {
-    return networkId * 100000 + serviceId;
+  return networkId * 100000 + serviceId;
 }
 
 /** 番組のID。局の内部ID + event_id */
-export function programKey(networkId: number, serviceId: number, eventId: number): number {
-    return serviceKey(networkId, serviceId) * 100000 + eventId;
+export function programKey(
+  networkId: number,
+  serviceId: number,
+  eventId: number,
+): number {
+  return serviceKey(networkId, serviceId) * 100000 + eventId;
 }
 
-async function get<T>(path: string, shape: Shape<T>, timeout = 10_000): Promise<T> {
-    const res = await fetch(`${config.agentUrl}${path}`, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(timeout),
-    });
-    if (!res.ok) {
-        throw new Error(`エージェント ${path} -> ${res.status} ${await res.text()}`);
-    }
-    return tolerate(shape, await res.json(), `エージェントの ${path}`);
+async function get<T>(
+  path: string,
+  shape: Shape<T>,
+  timeout = 10_000,
+): Promise<T> {
+  const res = await fetch(`${config.agentUrl}${path}`, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `エージェント ${path} -> ${res.status} ${await res.text()}`,
+    );
+  }
+  return tolerate(shape, await res.json(), `エージェントの ${path}`);
 }
 
 export function getChannels(): Promise<AgentChannel[]> {
-    return get('/denpa/channels', array(AGENT_CHANNEL));
+  return get("/denpa/channels", array(AGENT_CHANNEL));
 }
 
 /**
@@ -119,24 +134,34 @@ export function getChannels(): Promise<AgentChannel[]> {
  * `scanned` には**探した種別**を渡す。地上波だけ探したときに全部を置き換えると
  * BS と CS が設定から消える。
  */
-export async function putChannels(found: AgentChannel[], scanned: ChannelType[]): Promise<AgentChannel[]> {
-    const res = await fetch(`${config.agentUrl}/denpa/channels`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channels: found, scanned }),
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`チャンネルを保存できません (${res.status}) ${await res.text()}`);
-    return tolerate(array(AGENT_CHANNEL), await res.json(), 'エージェントの PUT /denpa/channels');
+export async function putChannels(
+  found: AgentChannel[],
+  scanned: ChannelType[],
+): Promise<AgentChannel[]> {
+  const res = await fetch(`${config.agentUrl}/denpa/channels`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channels: found, scanned }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok)
+    throw new Error(
+      `チャンネルを保存できません (${res.status}) ${await res.text()}`,
+    );
+  return tolerate(
+    array(AGENT_CHANNEL),
+    await res.json(),
+    "エージェントの PUT /denpa/channels",
+  );
 }
 
 /** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を1度に */
 export function tunerList(): Promise<Infer<typeof TUNERS>> {
-    return get('/denpa/tuners', TUNERS);
+  return get("/denpa/tuners", TUNERS);
 }
 
 export async function getTuners(): Promise<AgentTuner[]> {
-    return (await tunerList()).tuners;
+  return (await tunerList()).tuners;
 }
 
 /**
@@ -148,17 +173,24 @@ export async function getTuners(): Promise<AgentTuner[]> {
  * **空を渡すと定義そのものが消える** = 自動検出に戻す。
  */
 export async function putTuners(tuners: TunerConfig[]): Promise<void> {
-    const res = await fetch(`${config.agentUrl}/denpa/tuners`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tuners }),
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const error = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined;
-        throw new Error(typeof error === 'string' ? error : `チューナーを保存できません (${res.status})`);
-    }
+  const res = await fetch(`${config.agentUrl}/denpa/tuners`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tuners }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const error =
+      typeof body === "object" && body !== null && "error" in body
+        ? body.error
+        : undefined;
+    throw new Error(
+      typeof error === "string"
+        ? error
+        : `チューナーを保存できません (${res.status})`,
+    );
+  }
 }
 
 /**
@@ -168,11 +200,15 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
  * 画面側でやる (routes/settings/reception/tuners.server.ts)。
  */
 export type StreamUse =
-    `rec ${number}` | `logo ${string}` | `epg ${string}` | `scan ${string}` | `live ${string}`;
+  | `rec ${number}`
+  | `logo ${string}`
+  | `epg ${string}`
+  | `scan ${string}`
+  | `live ${string}`;
 
 /** 録画の利用者の名乗り。読むほう (`recordingOf`) と対にしておく */
 export function recordingUse(id: number): StreamUse {
-    return `rec ${id}`;
+  return `rec ${id}`;
 }
 
 /**
@@ -180,8 +216,8 @@ export function recordingUse(id: number): StreamUse {
  * エージェントの一覧から読むのに使う (`recordingHolds`)
  */
 export function recordingOf(use: string): number | null {
-    const found = /^rec (\d+)$/.exec(use);
-    return found === null ? null : Number(found[1]);
+  const found = /^rec (\d+)$/.exec(use);
+  return found === null ? null : Number(found[1]);
 }
 
 /**
@@ -197,26 +233,30 @@ export function recordingOf(use: string): number | null {
  * 終わる時刻の分からない録画 (DB に無い) も入れない
  */
 export function recordingHolds(
-    tuners: readonly Pick<AgentTuner, 'disabled' | 'rank' | 'channel' | 'users'>[],
-    untilOf: (recordingId: number) => number | undefined,
+  tuners: readonly Pick<
+    AgentTuner,
+    "disabled" | "rank" | "channel" | "users"
+  >[],
+  untilOf: (recordingId: number) => number | undefined,
 ): Busy[] {
-    return tuners.flatMap((tuner) => {
-        if (tuner.disabled || tuner.rank === null || tuner.channel === null) return [];
-        const ends = tuner.users.flatMap((u) => {
-            const id = recordingOf(u.use);
-            const until = id === null ? undefined : untilOf(id);
-            return until === undefined ? [] : [until];
-        });
-        if (ends.length === 0) return [];
-        return [
-            {
-                type: tuner.channel.type,
-                channel: tuner.channel.channel,
-                rank: tuner.rank,
-                until: Math.max(...ends),
-            },
-        ];
+  return tuners.flatMap((tuner) => {
+    if (tuner.disabled || tuner.rank === null || tuner.channel === null)
+      return [];
+    const ends = tuner.users.flatMap((u) => {
+      const id = recordingOf(u.use);
+      const until = id === null ? undefined : untilOf(id);
+      return until === undefined ? [] : [until];
     });
+    if (ends.length === 0) return [];
+    return [
+      {
+        type: tuner.channel.type,
+        channel: tuner.channel.channel,
+        rank: tuner.rank,
+        until: Math.max(...ends),
+      },
+    ];
+  });
 }
 
 /**
@@ -238,22 +278,30 @@ export class TunerBusyError extends Error {}
  * 読み飛ばして、ふつうに選ぶ
  */
 export async function openChannelStream(
-    type: string,
-    channel: string,
-    signal: AbortSignal,
-    use: StreamUse,
-    priority = config.priority.recording,
-    after: readonly StreamUse[] = [],
+  type: string,
+  channel: string,
+  signal: AbortSignal,
+  use: StreamUse,
+  priority = config.priority.recording,
+  after: readonly StreamUse[] = [],
 ): Promise<ReadableStream<Uint8Array>> {
-    const query = new URLSearchParams({ type, channel, priority: String(priority), use });
-    for (const leaving of after) query.append('after', leaving);
-    const res = await fetch(`${config.agentUrl}/denpa/stream?${query}`, { signal });
-    if (!res.ok || res.body === null) {
-        const detail = await res.text().catch(() => '');
-        if (res.status === 409) throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
-        throw new Error(`選局できません (${res.status}) ${detail}`);
-    }
-    return res.body;
+  const query = new URLSearchParams({
+    type,
+    channel,
+    priority: String(priority),
+    use,
+  });
+  for (const leaving of after) query.append("after", leaving);
+  const res = await fetch(`${config.agentUrl}/denpa/stream?${query}`, {
+    signal,
+  });
+  if (!res.ok || res.body === null) {
+    const detail = await res.text().catch(() => "");
+    if (res.status === 409)
+      throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
+    throw new Error(`選局できません (${res.status}) ${detail}`);
+  }
+  return res.body;
 }
 
 /** 空き待ちで掛け直す回数と間隔 (ms)。待つのは前のチャンネルが離れるまで */
@@ -275,14 +323,17 @@ const BUSY_WAIT = 700;
  * 限らず、終了時刻まで取り直す)。
  */
 export function openWhenFree(
-    type: string,
-    channel: string,
-    signal: AbortSignal,
-    use: StreamUse,
-    priority: number,
-    giveUp: () => boolean,
+  type: string,
+  channel: string,
+  signal: AbortSignal,
+  use: StreamUse,
+  priority: number,
+  giveUp: () => boolean,
 ): Promise<ReadableStream<Uint8Array>> {
-    return retryWhileBusy(() => openChannelStream(type, channel, signal, use, priority), giveUp);
+  return retryWhileBusy(
+    () => openChannelStream(type, channel, signal, use, priority),
+    giveUp,
+  );
 }
 
 /**
@@ -292,18 +343,19 @@ export function openWhenFree(
  * 判断だけを確かめられる (`tuner.test.ts`)
  */
 export async function retryWhileBusy<T>(
-    open: () => Promise<T>,
-    giveUp: () => boolean = () => false,
-    wait: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
+  open: () => Promise<T>,
+  giveUp: () => boolean = () => false,
+  wait: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
 ): Promise<T> {
-    for (let tries = 0; ; tries++) {
-        try {
-            return await open();
-        } catch (error) {
-            if (!(error instanceof TunerBusyError) || tries >= BUSY_TRIES || giveUp()) throw error;
-            await wait(BUSY_WAIT);
-        }
+  for (let tries = 0; ; tries++) {
+    try {
+      return await open();
+    } catch (error) {
+      if (!(error instanceof TunerBusyError) || tries >= BUSY_TRIES || giveUp())
+        throw error;
+      await wait(BUSY_WAIT);
     }
+  }
 }
 
 /**
@@ -319,15 +371,21 @@ export async function retryWhileBusy<T>(
  * **中身は1つも減りません。** 実機で見つかった BS の 26 TS は、放送自身が
  * 名乗っている 26 TS と一致していました (docs/data.md「相対番号の穴」)。
  */
-export function twinOf(found: Iterable<AgentChannel>, entry: AgentChannel): string | null {
-    // TSID が分からないものは判断できない。地上波は1周波数1TSなので、そもそも起きない
-    if (entry.transportStreamId <= 0) return null;
-    for (const other of found) {
-        if (other.type === entry.type && other.transportStreamId === entry.transportStreamId) {
-            return other.channel;
-        }
+export function twinOf(
+  found: Iterable<AgentChannel>,
+  entry: AgentChannel,
+): string | null {
+  // TSID が分からないものは判断できない。地上波は1周波数1TSなので、そもそも起きない
+  if (entry.transportStreamId <= 0) return null;
+  for (const other of found) {
+    if (
+      other.type === entry.type &&
+      other.transportStreamId === entry.transportStreamId
+    ) {
+      return other.channel;
     }
-    return null;
+  }
+  return null;
 }
 
 /**
@@ -339,9 +397,9 @@ export function twinOf(found: Iterable<AgentChannel>, entry: AgentChannel): stri
  * 控えが何であれ二度は開かない。
  */
 export function withoutTwins(channels: AgentChannel[]): AgentChannel[] {
-    const kept: AgentChannel[] = [];
-    for (const channel of channels) {
-        if (twinOf(kept, channel) === null) kept.push(channel);
-    }
-    return kept;
+  const kept: AgentChannel[] = [];
+  for (const channel of channels) {
+    if (twinOf(kept, channel) === null) kept.push(channel);
+  }
+  return kept;
 }

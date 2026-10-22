@@ -1,5 +1,5 @@
-import { config } from './config';
-import { chunks } from './stream';
+import { config } from "./config";
+import { chunks } from "./stream";
 
 /**
  * エージェントが起きたことを教えてくれるエンドポイント (`GET /denpa/events`, SSE)。
@@ -19,8 +19,8 @@ import { chunks } from './stream';
  */
 
 export interface AgentEvent {
-    name: string;
-    data: Record<string, unknown>;
+  name: string;
+  data: Record<string, unknown>;
 }
 
 /** つなぎ直しの待ち。すぐ繋ぎ直すと、相手が落ちている間に呼び続けることになる */
@@ -29,36 +29,41 @@ const RETRY_MAX = 60_000;
 
 /** SSE の1ブロックを解釈する。`event:` と `data:` だけ見れば足りる */
 export function parseBlock(block: string): AgentEvent | null {
-    let name = '';
-    let data = '';
-    for (const line of block.split('\n')) {
-        if (line.startsWith('event:')) name = line.slice(6).trim();
-        else if (line.startsWith('data:')) data += line.slice(5).trim();
-    }
-    if (name === '') return null;
-    try {
-        return { name, data: data === '' ? {} : (JSON.parse(data) as Record<string, unknown>) };
-    } catch {
-        return { name, data: {} };
-    }
+  let name = "";
+  let data = "";
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) name = line.slice(6).trim();
+    else if (line.startsWith("data:")) data += line.slice(5).trim();
+  }
+  if (name === "") return null;
+  try {
+    return {
+      name,
+      data: data === "" ? {} : (JSON.parse(data) as Record<string, unknown>),
+    };
+  } catch {
+    return { name, data: {} };
+  }
 }
 
 /**
  * 流れてきたバイト列をブロックに割る。
  * SSE の区切りは空行なので、途中で切れた分は次のチャンクまで持ち越す。
  */
-export async function* blocks(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-    const decoder = new TextDecoder();
-    let buffer = '';
-    for await (const chunk of chunks(stream)) {
-        buffer += decoder.decode(chunk, { stream: true });
-        let at = buffer.indexOf('\n\n');
-        while (at !== -1) {
-            yield buffer.slice(0, at);
-            buffer = buffer.slice(at + 2);
-            at = buffer.indexOf('\n\n');
-        }
+export async function* blocks(
+  stream: ReadableStream<Uint8Array>,
+): AsyncGenerator<string> {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for await (const chunk of chunks(stream)) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let at = buffer.indexOf("\n\n");
+    while (at !== -1) {
+      yield buffer.slice(0, at);
+      buffer = buffer.slice(at + 2);
+      at = buffer.indexOf("\n\n");
     }
+  }
 }
 
 /**
@@ -72,60 +77,66 @@ export async function* blocks(stream: ReadableStream<Uint8Array>): AsyncGenerato
  * 気付けなかったのを埋める (webhook は `runtime.ts` が繋ぐ)
  */
 export function listen(
-    onEvent: (event: AgentEvent) => void,
-    onReachable?: (up: boolean) => void,
+  onEvent: (event: AgentEvent) => void,
+  onReachable?: (up: boolean) => void,
 ): () => void {
-    let stopped = false;
-    const controller = new AbortController();
-    let retry = RETRY_MIN;
-    /** いま繋がっていると報告済みか。null は起動直後 (まだどちらも報告していない) */
-    let reachable: boolean | null = null;
-    /** 繋がらなくなった時刻。猶予を測る起点。繋がっている間は null */
-    let downSince: number | null = null;
+  let stopped = false;
+  const controller = new AbortController();
+  let retry = RETRY_MIN;
+  /** いま繋がっていると報告済みか。null は起動直後 (まだどちらも報告していない) */
+  let reachable: boolean | null = null;
+  /** 繋がらなくなった時刻。猶予を測る起点。繋がっている間は null */
+  let downSince: number | null = null;
 
-    const loop = async () => {
-        while (!stopped) {
-            try {
-                const res = await fetch(`${config.agentUrl}/denpa/events`, {
-                    signal: controller.signal,
-                    headers: { Accept: 'text/event-stream' },
-                });
-                if (!res.ok || res.body === null) throw new Error(`/denpa/events -> ${res.status}`);
+  const loop = async () => {
+    while (!stopped) {
+      try {
+        const res = await fetch(`${config.agentUrl}/denpa/events`, {
+          signal: controller.signal,
+          headers: { Accept: "text/event-stream" },
+        });
+        if (!res.ok || res.body === null)
+          throw new Error(`/denpa/events -> ${res.status}`);
 
-                // 繋がった時点で待ち時間を戻す。長く繋がっていたのに1度切れただけで
-                // 1分待つ、ということにならないように
-                retry = RETRY_MIN;
-                downSince = null;
-                // 落ちていると知らせたあとに繋がったときだけ「復帰」を鳴らす
-                if (reachable === false) onReachable?.(true);
-                reachable = true;
-                console.log('[agent] 通知の購読を開始しました');
+        // 繋がった時点で待ち時間を戻す。長く繋がっていたのに1度切れただけで
+        // 1分待つ、ということにならないように
+        retry = RETRY_MIN;
+        downSince = null;
+        // 落ちていると知らせたあとに繋がったときだけ「復帰」を鳴らす
+        if (reachable === false) onReachable?.(true);
+        reachable = true;
+        console.log("[agent] 通知の購読を開始しました");
 
-                for await (const block of blocks(res.body)) {
-                    const event = parseBlock(block);
-                    if (event !== null) onEvent(event);
-                }
-                if (!stopped) console.warn('[agent] 通知が途切れました。繋ぎ直します');
-            } catch (error) {
-                if (stopped) return;
-                console.warn(`[agent] 通知に繋げません (${Math.round(retry / 1000)}秒後に再試行): ${error}`);
-            }
-            // 繋がらない状態が猶予を超えて続いたら、一度だけ「落ちている」を鳴らす
-            if (downSince === null) downSince = Date.now();
-            if (reachable !== false && Date.now() - downSince >= config.agentDownGrace) {
-                reachable = false;
-                onReachable?.(false);
-            }
-            if (stopped) return;
-            await Bun.sleep(retry);
-            retry = Math.min(retry * 2, RETRY_MAX);
+        for await (const block of blocks(res.body)) {
+          const event = parseBlock(block);
+          if (event !== null) onEvent(event);
         }
-    };
+        if (!stopped) console.warn("[agent] 通知が途切れました。繋ぎ直します");
+      } catch (error) {
+        if (stopped) return;
+        console.warn(
+          `[agent] 通知に繋げません (${Math.round(retry / 1000)}秒後に再試行): ${error}`,
+        );
+      }
+      // 繋がらない状態が猶予を超えて続いたら、一度だけ「落ちている」を鳴らす
+      if (downSince === null) downSince = Date.now();
+      if (
+        reachable !== false &&
+        Date.now() - downSince >= config.agentDownGrace
+      ) {
+        reachable = false;
+        onReachable?.(false);
+      }
+      if (stopped) return;
+      await Bun.sleep(retry);
+      retry = Math.min(retry * 2, RETRY_MAX);
+    }
+  };
 
-    void loop();
+  void loop();
 
-    return () => {
-        stopped = true;
-        controller.abort();
-    };
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
 }

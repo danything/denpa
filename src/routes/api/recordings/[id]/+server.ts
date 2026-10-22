@@ -1,8 +1,8 @@
-import { error, json } from '@sveltejs/kit';
-import { emit } from '#lib/server/events.js';
-import { deleteRecordingFiles } from '#lib/server/files.js';
-import { encodedPath } from '#lib/server/playback.js';
-import { recordingOr404 } from '#lib/server/recording.js';
+import { error, json } from "@sveltejs/kit";
+import { emit } from "#lib/server/events.js";
+import { deleteRecordingFiles } from "#lib/server/files.js";
+import { encodedPath } from "#lib/server/playback.js";
+import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
  * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を聞く API** —
@@ -16,13 +16,13 @@ import { recordingOr404 } from '#lib/server/recording.js';
  * これで「録り終えて最後まで観たか」を確かめる (一覧を丸ごと取り直さずに済む)
  */
 export function GET({ params }) {
-    const recording = recordingOr404(params.id);
-    return json({
-        id: recording.id,
-        encoded: encodedPath(recording) !== null,
-        state: recording.state,
-        durationMs: recording.duration_ms,
-    });
+  const recording = recordingOr404(params.id);
+  return json({
+    id: recording.id,
+    encoded: encodedPath(recording) !== null,
+    state: recording.state,
+    durationMs: recording.duration_ms,
+  });
 }
 
 /**
@@ -37,14 +37,14 @@ export function GET({ params }) {
  * 行そのものが無ければ 404 (呼んだ側はこれも「済んだ」と読む)。
  */
 export async function DELETE({ params }) {
-    // 消した行も引く (deleted)。「もう消えている」を 204 で伝えるため
-    const recording = recordingOr404(params.id, true);
-    if (recording.deleted_at !== null) return new Response(null, { status: 204 });
+  // 消した行も引く (deleted)。「もう消えている」を 204 で伝えるため
+  const recording = recordingOr404(params.id, true);
+  if (recording.deleted_at !== null) return new Response(null, { status: 204 });
 
-    // 録画中のものは消させない。使っているチューナーと書きかけのファイルが残る
-    if (recording.finished_at === null) error(409, '録画中は消せません');
+  // 録画中のものは消させない。使っているチューナーと書きかけのファイルが残る
+  if (recording.finished_at === null) error(409, "録画中は消せません");
 
-    deleteRecordingFiles(recording, '端末から削除');
-    emit('recordings');
-    return new Response(null, { status: 204 });
+  deleteRecordingFiles(recording, "端末から削除");
+  emit("recordings");
+  return new Response(null, { status: 204 });
 }

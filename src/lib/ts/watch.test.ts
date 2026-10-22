@@ -1,375 +1,379 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from "bun:test";
 import {
-    chapterAt,
-    cmSpans,
-    DOUBLE_TAP,
-    fromTsTime,
-    isCm,
-    nextChapterAt,
-    parseChapters,
-    plainMarks,
-    prevChapterAt,
-    resumePoint,
-    SKIP,
-    skipCmAtStart,
-    skipTarget,
-    tap,
-    toTsTime,
-    watchedToEnd,
-    zoneOf,
-} from './watch';
+  chapterAt,
+  cmSpans,
+  DOUBLE_TAP,
+  fromTsTime,
+  isCm,
+  nextChapterAt,
+  parseChapters,
+  plainMarks,
+  prevChapterAt,
+  resumePoint,
+  SKIP,
+  skipCmAtStart,
+  skipTarget,
+  tap,
+  toTsTime,
+  watchedToEnd,
+  zoneOf,
+} from "./watch";
 
-describe('押された場所', () => {
-    test('左右の端と真ん中を分ける', () => {
-        expect(zoneOf(10, 1000)).toBe('left');
-        expect(zoneOf(500, 1000)).toBe('center');
-        expect(zoneOf(990, 1000)).toBe('right');
-    });
+describe("押された場所", () => {
+  test("左右の端と真ん中を分ける", () => {
+    expect(zoneOf(10, 1000)).toBe("left");
+    expect(zoneOf(500, 1000)).toBe("center");
+    expect(zoneOf(990, 1000)).toBe("right");
+  });
 
-    /**
-     * **真ん中を広く取る。** 3分割にすると、映像の中央付近を押したつもりが
-     * 送りになる。左右それぞれ3割にして中央に4割残す
-     */
-    test('真ん中は広めに残す', () => {
-        expect(zoneOf(350, 1000)).toBe('center');
-        expect(zoneOf(650, 1000)).toBe('center');
-        expect(zoneOf(299, 1000)).toBe('left');
-        expect(zoneOf(701, 1000)).toBe('right');
-    });
+  /**
+   * **真ん中を広く取る。** 3分割にすると、映像の中央付近を押したつもりが
+   * 送りになる。左右それぞれ3割にして中央に4割残す
+   */
+  test("真ん中は広めに残す", () => {
+    expect(zoneOf(350, 1000)).toBe("center");
+    expect(zoneOf(650, 1000)).toBe("center");
+    expect(zoneOf(299, 1000)).toBe("left");
+    expect(zoneOf(701, 1000)).toBe("right");
+  });
 
-    test('幅が分からないときは真ん中扱い', () => {
-        expect(zoneOf(0, 0)).toBe('center');
-    });
+  test("幅が分からないときは真ん中扱い", () => {
+    expect(zoneOf(0, 0)).toBe("center");
+  });
 });
 
-describe('押したときに何をするか', () => {
-    /**
-     * **1回目はその場で効かせる。** 2回目を待ってから決めると、押してから
-     * 止まるまでに間合いのぶん遅れる
-     */
-    test('マウスは1回で再生・一時停止', () => {
-        const { action } = tap(null, 1000, 'center', false);
-        expect(action).toEqual({ kind: 'play' });
-    });
+describe("押したときに何をするか", () => {
+  /**
+   * **1回目はその場で効かせる。** 2回目を待ってから決めると、押してから
+   * 止まるまでに間合いのぶん遅れる
+   */
+  test("マウスは1回で再生・一時停止", () => {
+    const { action } = tap(null, 1000, "center", false);
+    expect(action).toEqual({ kind: "play" });
+  });
 
-    test('指は1回で操作列の出し入れ', () => {
-        const { action } = tap(null, 1000, 'center', true);
-        expect(action).toEqual({ kind: 'controls' });
-    });
+  test("指は1回で操作列の出し入れ", () => {
+    const { action } = tap(null, 1000, "center", true);
+    expect(action).toEqual({ kind: "controls" });
+  });
 
-    test('左端を素早く2回で 10秒 戻る', () => {
-        const first = tap(null, 1000, 'left', true);
-        const { action } = tap(first.next, 1000 + DOUBLE_TAP - 1, 'left', true);
-        expect(action).toEqual({ kind: 'seek', by: -SKIP, undo: false });
-    });
+  test("左端を素早く2回で 10秒 戻る", () => {
+    const first = tap(null, 1000, "left", true);
+    const { action } = tap(first.next, 1000 + DOUBLE_TAP - 1, "left", true);
+    expect(action).toEqual({ kind: "seek", by: -SKIP, undo: false });
+  });
 
-    test('右端を素早く2回で 10秒 送る', () => {
-        const first = tap(null, 1000, 'right', true);
-        const { action } = tap(first.next, 1100, 'right', true);
-        expect(action).toEqual({ kind: 'seek', by: SKIP, undo: false });
-    });
+  test("右端を素早く2回で 10秒 送る", () => {
+    const first = tap(null, 1000, "right", true);
+    const { action } = tap(first.next, 1100, "right", true);
+    expect(action).toEqual({ kind: "seek", by: SKIP, undo: false });
+  });
 
-    /**
-     * マウスの1回目は再生を切り替えてしまっているので、2回目でそれを戻す。
-     * 戻さないと「送ったら止まった」になる
-     */
-    test('マウスの2回目は、1回目の再生切り替えを打ち消す', () => {
-        const first = tap(null, 1000, 'right', false);
-        expect(first.action).toEqual({ kind: 'play' });
-        const { action } = tap(first.next, 1100, 'right', false);
-        expect(action).toEqual({ kind: 'seek', by: SKIP, undo: true });
-    });
+  /**
+   * マウスの1回目は再生を切り替えてしまっているので、2回目でそれを戻す。
+   * 戻さないと「送ったら止まった」になる
+   */
+  test("マウスの2回目は、1回目の再生切り替えを打ち消す", () => {
+    const first = tap(null, 1000, "right", false);
+    expect(first.action).toEqual({ kind: "play" });
+    const { action } = tap(first.next, 1100, "right", false);
+    expect(action).toEqual({ kind: "seek", by: SKIP, undo: true });
+  });
 
-    test('間合いを過ぎたら2回目にしない', () => {
-        const first = tap(null, 1000, 'left', true);
-        const { action } = tap(first.next, 1000 + DOUBLE_TAP, 'left', true);
-        expect(action).toEqual({ kind: 'controls' });
-    });
+  test("間合いを過ぎたら2回目にしない", () => {
+    const first = tap(null, 1000, "left", true);
+    const { action } = tap(first.next, 1000 + DOUBLE_TAP, "left", true);
+    expect(action).toEqual({ kind: "controls" });
+  });
 
-    test('違う端なら2回目にしない', () => {
-        const first = tap(null, 1000, 'left', true);
-        const { action } = tap(first.next, 1100, 'right', true);
-        expect(action).toEqual({ kind: 'controls' });
-    });
+  test("違う端なら2回目にしない", () => {
+    const first = tap(null, 1000, "left", true);
+    const { action } = tap(first.next, 1100, "right", true);
+    expect(action).toEqual({ kind: "controls" });
+  });
 
-    test('真ん中は何回押しても送りにならない', () => {
-        const first = tap(null, 1000, 'center', true);
-        const { action } = tap(first.next, 1100, 'center', true);
-        expect(action).toEqual({ kind: 'play' });
-    });
+  test("真ん中は何回押しても送りにならない", () => {
+    const first = tap(null, 1000, "center", true);
+    const { action } = tap(first.next, 1100, "center", true);
+    expect(action).toEqual({ kind: "play" });
+  });
 
-    /** スマホの VLC と同じ癖。1回目は操作列の出し入れで、2回目で再生に触る */
-    test('指は真ん中を素早く2回で再生・一時停止', () => {
-        const first = tap(null, 1000, 'center', true);
-        expect(first.action).toEqual({ kind: 'controls' });
-        const { action } = tap(first.next, 1000 + DOUBLE_TAP - 1, 'center', true);
-        expect(action).toEqual({ kind: 'play' });
-    });
+  /** スマホの VLC と同じ癖。1回目は操作列の出し入れで、2回目で再生に触る */
+  test("指は真ん中を素早く2回で再生・一時停止", () => {
+    const first = tap(null, 1000, "center", true);
+    expect(first.action).toEqual({ kind: "controls" });
+    const { action } = tap(first.next, 1000 + DOUBLE_TAP - 1, "center", true);
+    expect(action).toEqual({ kind: "play" });
+  });
 
-    test('真ん中でも間合いを過ぎたら操作列の出し入れのまま', () => {
-        const first = tap(null, 1000, 'center', true);
-        const { action } = tap(first.next, 1000 + DOUBLE_TAP, 'center', true);
-        expect(action).toEqual({ kind: 'controls' });
-    });
+  test("真ん中でも間合いを過ぎたら操作列の出し入れのまま", () => {
+    const first = tap(null, 1000, "center", true);
+    const { action } = tap(first.next, 1000 + DOUBLE_TAP, "center", true);
+    expect(action).toEqual({ kind: "controls" });
+  });
 
-    /** 30秒 戻したいときに3回押せる */
-    test('続けて押せばそのぶん重なる', () => {
-        let state = tap(null, 1000, 'left', true).next;
-        const seconds: number[] = [];
-        for (let i = 1; i <= 3; i++) {
-            const step = tap(state, 1000 + i * 100, 'left', true);
-            if (step.action.kind === 'seek') seconds.push(step.action.by);
-            state = step.next;
-        }
-        expect(seconds).toEqual([-SKIP, -SKIP, -SKIP]);
-    });
+  /** 30秒 戻したいときに3回押せる */
+  test("続けて押せばそのぶん重なる", () => {
+    let state = tap(null, 1000, "left", true).next;
+    const seconds: number[] = [];
+    for (let i = 1; i <= 3; i++) {
+      const step = tap(state, 1000 + i * 100, "left", true);
+      if (step.action.kind === "seek") seconds.push(step.action.by);
+      state = step.next;
+    }
+    expect(seconds).toEqual([-SKIP, -SKIP, -SKIP]);
+  });
 });
 
 const CHAPTERS = [
-    { start: 0, end: 60, title: '本編' },
-    { start: 60, end: 120, title: 'CM' },
-    { start: 120, end: 300, title: '本編' },
+  { start: 0, end: 60, title: "本編" },
+  { start: 60, end: 120, title: "CM" },
+  { start: 120, end: 300, title: "本編" },
 ];
 
-describe('チャプター送り', () => {
-    test('次はいまより後ろの最初の頭', () => {
-        expect(nextChapterAt(CHAPTERS, 10)).toBe(60);
-        expect(nextChapterAt(CHAPTERS, 60)).toBe(120);
-    });
+describe("チャプター送り", () => {
+  test("次はいまより後ろの最初の頭", () => {
+    expect(nextChapterAt(CHAPTERS, 10)).toBe(60);
+    expect(nextChapterAt(CHAPTERS, 60)).toBe(120);
+  });
 
-    test('最後のチャプターにいるなら次は無い', () => {
-        expect(nextChapterAt(CHAPTERS, 200)).toBeNull();
-    });
+  test("最後のチャプターにいるなら次は無い", () => {
+    expect(nextChapterAt(CHAPTERS, 200)).toBeNull();
+  });
 
-    /** 曲送りと同じ癖。押し間違えたときに1つ前まで飛ばない */
-    test('戻すと、まずいま観ているものの頭へ', () => {
-        expect(prevChapterAt(CHAPTERS, 100)).toBe(60);
-    });
+  /** 曲送りと同じ癖。押し間違えたときに1つ前まで飛ばない */
+  test("戻すと、まずいま観ているものの頭へ", () => {
+    expect(prevChapterAt(CHAPTERS, 100)).toBe(60);
+  });
 
-    test('頭のすぐ後ろなら1つ前へ', () => {
-        expect(prevChapterAt(CHAPTERS, 62)).toBe(0);
-    });
+  test("頭のすぐ後ろなら1つ前へ", () => {
+    expect(prevChapterAt(CHAPTERS, 62)).toBe(0);
+  });
 
-    test('1本目の頭にいるなら戻り先は無い', () => {
-        expect(prevChapterAt(CHAPTERS, 1)).toBeNull();
-    });
+  test("1本目の頭にいるなら戻り先は無い", () => {
+    expect(prevChapterAt(CHAPTERS, 1)).toBeNull();
+  });
 
-    test('チャプターが無ければどちらも無い', () => {
-        expect(nextChapterAt([], 10)).toBeNull();
-        expect(prevChapterAt([], 10)).toBeNull();
-    });
+  test("チャプターが無ければどちらも無い", () => {
+    expect(nextChapterAt([], 10)).toBeNull();
+    expect(prevChapterAt([], 10)).toBeNull();
+  });
 
-    test('いま観ているものが分かる', () => {
-        expect(chapterAt(CHAPTERS, 70)?.title).toBe('CM');
-        expect(chapterAt(CHAPTERS, 0)?.title).toBe('本編');
-        // 最後のチャプターより後ろ (端数で行き過ぎたとき)
-        expect(chapterAt(CHAPTERS, 400)).toBeNull();
-    });
+  test("いま観ているものが分かる", () => {
+    expect(chapterAt(CHAPTERS, 70)?.title).toBe("CM");
+    expect(chapterAt(CHAPTERS, 0)?.title).toBe("本編");
+    // 最後のチャプターより後ろ (端数で行き過ぎたとき)
+    expect(chapterAt(CHAPTERS, 400)).toBeNull();
+  });
 });
 
-describe('CMを自動で飛ばす', () => {
-    /** 検出はCMを1本ずつの区間で返す。**続いていればまとめて跨ぐ** */
-    const RUN = [
-        { start: 0, end: 60, title: '本編' },
-        { start: 60, end: 75, title: 'CM' },
-        { start: 75, end: 90, title: 'CM' },
-        { start: 90, end: 105, title: 'CM' },
-        { start: 105, end: 300, title: '本編' },
-    ];
+describe("CMを自動で飛ばす", () => {
+  /** 検出はCMを1本ずつの区間で返す。**続いていればまとめて跨ぐ** */
+  const RUN = [
+    { start: 0, end: 60, title: "本編" },
+    { start: 60, end: 75, title: "CM" },
+    { start: 75, end: 90, title: "CM" },
+    { start: 90, end: 105, title: "CM" },
+    { start: 105, end: 300, title: "本編" },
+  ];
 
-    test('CMの中にいたら、続いているぶんの終わりまで', () => {
-        expect(skipTarget(RUN, 65)).toBe(105);
-        expect(skipTarget(RUN, 80)).toBe(105);
-    });
+  test("CMの中にいたら、続いているぶんの終わりまで", () => {
+    expect(skipTarget(RUN, 65)).toBe(105);
+    expect(skipTarget(RUN, 80)).toBe(105);
+  });
 
-    test('本編にいるなら飛ばない', () => {
-        expect(skipTarget(RUN, 10)).toBeNull();
-        expect(skipTarget(RUN, 200)).toBeNull();
-    });
+  test("本編にいるなら飛ばない", () => {
+    expect(skipTarget(RUN, 10)).toBeNull();
+    expect(skipTarget(RUN, 200)).toBeNull();
+  });
 
-    /**
-     * **跨ぐ手前で飛ぶ。** 入ってから飛ぶと、気付くまでのコマが必ず見える。
-     * `lead` のぶん先を見て、CM の1コマ目を出す前に飛ぶ
-     */
-    test('先読みすると、跨ぐ直前でもう飛ぶ', () => {
-        // 60 から CM。59.98 はまだ本編だが、先読み 0.05 秒で CM に入る
-        expect(skipTarget(RUN, 59.98)).toBeNull();
-        expect(skipTarget(RUN, 59.98, 0.05)).toBe(105);
-    });
+  /**
+   * **跨ぐ手前で飛ぶ。** 入ってから飛ぶと、気付くまでのコマが必ず見える。
+   * `lead` のぶん先を見て、CM の1コマ目を出す前に飛ぶ
+   */
+  test("先読みすると、跨ぐ直前でもう飛ぶ", () => {
+    // 60 から CM。59.98 はまだ本編だが、先読み 0.05 秒で CM に入る
+    expect(skipTarget(RUN, 59.98)).toBeNull();
+    expect(skipTarget(RUN, 59.98, 0.05)).toBe(105);
+  });
 
-    /** 先読みしても、CM から遠ければ飛ばない */
-    test('先読みしても本編の途中では飛ばない', () => {
-        expect(skipTarget(RUN, 10, 0.05)).toBeNull();
-    });
+  /** 先読みしても、CM から遠ければ飛ばない */
+  test("先読みしても本編の途中では飛ばない", () => {
+    expect(skipTarget(RUN, 10, 0.05)).toBeNull();
+  });
 
-    test('チャプターの外・空でも飛ばない', () => {
-        expect(skipTarget(RUN, 400)).toBeNull();
-        expect(skipTarget([], 10)).toBeNull();
-    });
+  test("チャプターの外・空でも飛ばない", () => {
+    expect(skipTarget(RUN, 400)).toBeNull();
+    expect(skipTarget([], 10)).toBeNull();
+  });
 
-    /**
-     * **知らない名前はCMとみなさない。** 引き継いだ録画 (EPGStation) は
-     * 名前が違うことがあり、飛ばし損なうより本編を飛ばすほうが困る
-     */
-    test('CMという名前のものだけ飛ばす', () => {
-        expect(isCm('CM')).toBe(true);
-        expect(isCm(' cm ')).toBe(true);
-        expect(isCm('本編')).toBe(false);
-        expect(isCm('Chapter 1')).toBe(false);
-        expect(skipTarget([{ start: 0, end: 60, title: 'Chapter 1' }], 10)).toBeNull();
-    });
+  /**
+   * **知らない名前はCMとみなさない。** 引き継いだ録画 (EPGStation) は
+   * 名前が違うことがあり、飛ばし損なうより本編を飛ばすほうが困る
+   */
+  test("CMという名前のものだけ飛ばす", () => {
+    expect(isCm("CM")).toBe(true);
+    expect(isCm(" cm ")).toBe(true);
+    expect(isCm("本編")).toBe(false);
+    expect(isCm("Chapter 1")).toBe(false);
+    expect(
+      skipTarget([{ start: 0, end: 60, title: "Chapter 1" }], 10),
+    ).toBeNull();
+  });
 });
 
-describe('ffprobe のチャプターを読む', () => {
-    /** 実物の形式 (`-show_chapters -print_format json`) */
-    const REAL = JSON.stringify({
-        chapters: [
-            {
-                id: 0,
-                time_base: '1/1000',
-                start: 0,
-                start_time: '0.000000',
-                end: 60000,
-                end_time: '60.000000',
-                tags: { title: '本編' },
-            },
-            {
-                id: 1,
-                time_base: '1/1000',
-                start: 60000,
-                start_time: '60.000000',
-                end: 120000,
-                end_time: '120.000000',
-                tags: { title: 'CM' },
-            },
-        ],
-    });
+describe("ffprobe のチャプターを読む", () => {
+  /** 実物の形式 (`-show_chapters -print_format json`) */
+  const REAL = JSON.stringify({
+    chapters: [
+      {
+        id: 0,
+        time_base: "1/1000",
+        start: 0,
+        start_time: "0.000000",
+        end: 60000,
+        end_time: "60.000000",
+        tags: { title: "本編" },
+      },
+      {
+        id: 1,
+        time_base: "1/1000",
+        start: 60000,
+        start_time: "60.000000",
+        end: 120000,
+        end_time: "120.000000",
+        tags: { title: "CM" },
+      },
+    ],
+  });
 
-    test('頭・終わり・名前を取り出す', () => {
-        expect(parseChapters(REAL)).toEqual([
-            { start: 0, end: 60, title: '本編' },
-            { start: 60, end: 120, title: 'CM' },
-        ]);
-    });
+  test("頭・終わり・名前を取り出す", () => {
+    expect(parseChapters(REAL)).toEqual([
+      { start: 0, end: 60, title: "本編" },
+      { start: 60, end: 120, title: "CM" },
+    ]);
+  });
 
-    /** CMを切ってエンコードしたものにはチャプターが無い */
-    test('1つも無ければ空', () => {
-        expect(parseChapters(JSON.stringify({ chapters: [] }))).toEqual([]);
-    });
+  /** CMを切ってエンコードしたものにはチャプターが無い */
+  test("1つも無ければ空", () => {
+    expect(parseChapters(JSON.stringify({ chapters: [] }))).toEqual([]);
+  });
 
-    test('読めなければ空。落とさない', () => {
-        expect(parseChapters('')).toEqual([]);
-        expect(parseChapters('{')).toEqual([]);
-        expect(parseChapters(JSON.stringify({ streams: [] }))).toEqual([]);
-    });
+  test("読めなければ空。落とさない", () => {
+    expect(parseChapters("")).toEqual([]);
+    expect(parseChapters("{")).toEqual([]);
+    expect(parseChapters(JSON.stringify({ streams: [] }))).toEqual([]);
+  });
 
-    test('長さの無いものと壊れた行は捨てる', () => {
-        const broken = JSON.stringify({
-            chapters: [
-                { start_time: '10.0', end_time: '10.0', tags: { title: '長さ0' } },
-                { start_time: 'x', end_time: '5', tags: { title: '読めない' } },
-                { start_time: '0', end_time: '5' },
-            ],
-        });
-        expect(parseChapters(broken)).toEqual([{ start: 0, end: 5, title: '—' }]);
+  test("長さの無いものと壊れた行は捨てる", () => {
+    const broken = JSON.stringify({
+      chapters: [
+        { start_time: "10.0", end_time: "10.0", tags: { title: "長さ0" } },
+        { start_time: "x", end_time: "5", tags: { title: "読めない" } },
+        { start_time: "0", end_time: "5" },
+      ],
     });
+    expect(parseChapters(broken)).toEqual([{ start: 0, end: 5, title: "—" }]);
+  });
 
-    test('順に並べ直す', () => {
-        const shuffled = JSON.stringify({
-            chapters: [
-                { start_time: '60', end_time: '120', tags: { title: 'CM' } },
-                { start_time: '0', end_time: '60', tags: { title: '本編' } },
-            ],
-        });
-        expect(parseChapters(shuffled).map((c) => c.start)).toEqual([0, 60]);
+  test("順に並べ直す", () => {
+    const shuffled = JSON.stringify({
+      chapters: [
+        { start_time: "60", end_time: "120", tags: { title: "CM" } },
+        { start_time: "0", end_time: "60", tags: { title: "本編" } },
+      ],
     });
+    expect(parseChapters(shuffled).map((c) => c.start)).toEqual([0, 60]);
+  });
 });
 
-describe('続きの位置の物差し', () => {
-    // 元の TS の 10〜100 秒と 160〜300 秒を残し、100〜160 秒の CM を切った
-    const cut = {
-        kept: [
-            { start: 10, end: 100 },
-            { start: 160, end: 300 },
-        ],
-        skip: 3,
-    };
-    const plain = { kept: null, skip: 3 };
+describe("続きの位置の物差し", () => {
+  // 元の TS の 10〜100 秒と 160〜300 秒を残し、100〜160 秒の CM を切った
+  const cut = {
+    kept: [
+      { start: 10, end: 100 },
+      { start: 160, end: 300 },
+    ],
+    skip: 3,
+  };
+  const plain = { kept: null, skip: 3 };
 
-    test('CM を切ったものは、残した区間をつないで数える', () => {
-        expect(fromTsTime(50, cut)).toBe(40);
-        expect(fromTsTime(200, cut)).toBe(130);
-        expect(toTsTime(40, cut)).toBe(50);
-        expect(toTsTime(130, cut)).toBe(200);
-    });
+  test("CM を切ったものは、残した区間をつないで数える", () => {
+    expect(fromTsTime(50, cut)).toBe(40);
+    expect(fromTsTime(200, cut)).toBe(130);
+    expect(toTsTime(40, cut)).toBe(50);
+    expect(toTsTime(130, cut)).toBe(200);
+  });
 
-    /** 元の TS (追っかけ) で CM の途中まで観たら、エンコードしたものでは CM の後の本編から */
-    test('切った CM の中は、その後の本編の頭へ寄せる', () => {
-        expect(fromTsTime(120, cut)).toBe(90);
-        expect(fromTsTime(5, cut)).toBe(0);
-        expect(fromTsTime(400, cut)).toBe(230);
-        expect(toTsTime(500, cut)).toBe(300);
-    });
+  /** 元の TS (追っかけ) で CM の途中まで観たら、エンコードしたものでは CM の後の本編から */
+  test("切った CM の中は、その後の本編の頭へ寄せる", () => {
+    expect(fromTsTime(120, cut)).toBe(90);
+    expect(fromTsTime(5, cut)).toBe(0);
+    expect(fromTsTime(400, cut)).toBe(230);
+    expect(toTsTime(500, cut)).toBe(300);
+  });
 
-    test('切っていないものは、捨てた頭のぶんだけずらす', () => {
-        expect(fromTsTime(50, plain)).toBe(47);
-        expect(toTsTime(47, plain)).toBe(50);
-        expect(fromTsTime(1, plain)).toBe(0);
-    });
+  test("切っていないものは、捨てた頭のぶんだけずらす", () => {
+    expect(fromTsTime(50, plain)).toBe(47);
+    expect(toTsTime(47, plain)).toBe(50);
+    expect(fromTsTime(1, plain)).toBe(0);
+  });
 
-    test('区間の終わりちょうどは次の区間の頭。往復すると元に戻る', () => {
-        expect(fromTsTime(100, cut)).toBe(90);
-        expect(toTsTime(90, cut)).toBe(160);
-        for (const at of [10, 50, 99, 160, 250]) expect(toTsTime(fromTsTime(at, cut), cut)).toBe(at);
-        for (const at of [0, 40, 90, 200]) expect(fromTsTime(toTsTime(at, cut), cut)).toBe(at);
-    });
+  test("区間の終わりちょうどは次の区間の頭。往復すると元に戻る", () => {
+    expect(fromTsTime(100, cut)).toBe(90);
+    expect(toTsTime(90, cut)).toBe(160);
+    for (const at of [10, 50, 99, 160, 250])
+      expect(toTsTime(fromTsTime(at, cut), cut)).toBe(at);
+    for (const at of [0, 40, 90, 200])
+      expect(fromTsTime(toTsTime(at, cut), cut)).toBe(at);
+  });
 
-    test('残した区間が空なら、切っていないものと同じ', () => {
-        expect(fromTsTime(50, { kept: [], skip: 3 })).toBe(47);
-        expect(toTsTime(47, { kept: [], skip: 3 })).toBe(50);
-    });
+  test("残した区間が空なら、切っていないものと同じ", () => {
+    expect(fromTsTime(50, { kept: [], skip: 3 })).toBe(47);
+    expect(toTsTime(47, { kept: [], skip: 3 })).toBe(50);
+  });
 
-    test('元の TS で観るときはそのまま', () => {
-        expect(fromTsTime(120, null)).toBe(120);
-        expect(toTsTime(120, null)).toBe(120);
-    });
+  test("元の TS で観るときはそのまま", () => {
+    expect(fromTsTime(120, null)).toBe(120);
+    expect(toTsTime(120, null)).toBe(120);
+  });
 });
 
-describe('続きから観る', () => {
-    test('途中で止めたところは覚える', () => {
-        expect(resumePoint(600, 1800)).toBe(600);
-    });
+describe("続きから観る", () => {
+  test("途中で止めたところは覚える", () => {
+    expect(resumePoint(600, 1800)).toBe(600);
+  });
 
-    /** 覚えると、次に開いたときエンドロールから始まる */
-    test('末尾まで観たものは覚えない', () => {
-        expect(resumePoint(1790, 1800)).toBeNull();
-        expect(resumePoint(1770, 1800)).toBe(1770);
-    });
+  /** 覚えると、次に開いたときエンドロールから始まる */
+  test("末尾まで観たものは覚えない", () => {
+    expect(resumePoint(1790, 1800)).toBeNull();
+    expect(resumePoint(1770, 1800)).toBe(1770);
+  });
 
-    /** 「続きがある」と見えるぶんだけ紛らわしい */
-    test('頭のすぐそばも覚えない', () => {
-        expect(resumePoint(5, 1800)).toBeNull();
-        expect(resumePoint(20, 1800)).toBe(20);
-    });
+  /** 「続きがある」と見えるぶんだけ紛らわしい */
+  test("頭のすぐそばも覚えない", () => {
+    expect(resumePoint(5, 1800)).toBeNull();
+    expect(resumePoint(20, 1800)).toBe(20);
+  });
 
-    test('尺が分からなければ末尾の判断はしない', () => {
-        expect(resumePoint(600, 0)).toBe(600);
-    });
+  test("尺が分からなければ末尾の判断はしない", () => {
+    expect(resumePoint(600, 0)).toBe(600);
+  });
 });
 
 /** 一覧の「未視聴」を外す境目。続きの目印を消す境目と揃える */
-describe('観終えたか', () => {
-    test('目印を消すところから先が観終えた', () => {
-        expect(watchedToEnd(1790, 1800)).toBe(true);
-        expect(resumePoint(1790, 1800)).toBeNull();
-        expect(watchedToEnd(1770, 1800)).toBe(false);
-    });
+describe("観終えたか", () => {
+  test("目印を消すところから先が観終えた", () => {
+    expect(watchedToEnd(1790, 1800)).toBe(true);
+    expect(resumePoint(1790, 1800)).toBeNull();
+    expect(watchedToEnd(1770, 1800)).toBe(false);
+  });
 
-    test('頭のそばや尺が分からないときは観終えていない', () => {
-        expect(watchedToEnd(5, 1800)).toBe(false);
-        expect(watchedToEnd(600, 0)).toBe(false);
-        expect(watchedToEnd(600, Number.NaN)).toBe(false);
-    });
+  test("頭のそばや尺が分からないときは観終えていない", () => {
+    expect(watchedToEnd(5, 1800)).toBe(false);
+    expect(watchedToEnd(600, 0)).toBe(false);
+    expect(watchedToEnd(600, Number.NaN)).toBe(false);
+  });
 });
 
 /**
@@ -379,62 +383,63 @@ describe('観終えたか', () => {
  * **ロゴでの判定に失敗した1本だけは切って始める** — 無音だけで当てていて
  * 外れやすく、外れると本編のほうを飛ばすため。
  */
-describe('観はじめの CM 飛ばし', () => {
-    /** ロゴで当てられた録画。無音検出だけの覚え書きは「失敗」ではない */
-    const ok = '無音 8 箇所';
-    /** ロゴが使えず無音検出に落ちた録画 (format.LOGO_UNUSABLE がこの形式で入る) */
-    const fell = '無音 8 箇所 (ロゴは使えず: ロゴの写っているコマがありませんでした)';
+describe("観はじめの CM 飛ばし", () => {
+  /** ロゴで当てられた録画。無音検出だけの覚え書きは「失敗」ではない */
+  const ok = "無音 8 箇所";
+  /** ロゴが使えず無音検出に落ちた録画 (format.LOGO_UNUSABLE がこの形式で入る) */
+  const fell =
+    "無音 8 箇所 (ロゴは使えず: ロゴの写っているコマがありませんでした)";
 
-    test('覚えていなければ入れて始める', () => {
-        expect(skipCmAtStart(ok, null)).toBe(true);
-        expect(skipCmAtStart(null, null)).toBe(true);
-    });
+  test("覚えていなければ入れて始める", () => {
+    expect(skipCmAtStart(ok, null)).toBe(true);
+    expect(skipCmAtStart(null, null)).toBe(true);
+  });
 
-    test('前に切った端末では切ったままにする', () => {
-        expect(skipCmAtStart(ok, '0')).toBe(false);
-    });
+  test("前に切った端末では切ったままにする", () => {
+    expect(skipCmAtStart(ok, "0")).toBe(false);
+  });
 
-    test('前に入れた端末では入れる', () => {
-        expect(skipCmAtStart(ok, '1')).toBe(true);
-    });
+  test("前に入れた端末では入れる", () => {
+    expect(skipCmAtStart(ok, "1")).toBe(true);
+  });
 
-    /** ここが今回の肝。外れやすい1本で黙って本編を飛ばさない */
-    test('ロゴでの判定に失敗した録画は、覚えていても切って始める', () => {
-        expect(skipCmAtStart(fell, '1')).toBe(false);
-        expect(skipCmAtStart(fell, null)).toBe(false);
-        expect(skipCmAtStart(fell, '0')).toBe(false);
-    });
+  /** ここが今回の肝。外れやすい1本で黙って本編を飛ばさない */
+  test("ロゴでの判定に失敗した録画は、覚えていても切って始める", () => {
+    expect(skipCmAtStart(fell, "1")).toBe(false);
+    expect(skipCmAtStart(fell, null)).toBe(false);
+    expect(skipCmAtStart(fell, "0")).toBe(false);
+  });
 });
 
-describe('シークバーの CM の塗り', () => {
-    const chapters = [
-        { start: 0, end: 8.7, title: 'CM' },
-        { start: 8.7, end: 609.7, title: '本編' },
-        { start: 609.7, end: 624.7, title: 'CM' },
-        { start: 624.7, end: 669.7, title: 'CM' },
-        { start: 669.7, end: 1370.7, title: '本編' },
+describe("シークバーの CM の塗り", () => {
+  const chapters = [
+    { start: 0, end: 8.7, title: "CM" },
+    { start: 8.7, end: 609.7, title: "本編" },
+    { start: 609.7, end: 624.7, title: "CM" },
+    { start: 624.7, end: 669.7, title: "CM" },
+    { start: 669.7, end: 1370.7, title: "本編" },
+  ];
+
+  test("続いている CM は1本の区間にまとめる", () => {
+    expect(cmSpans(chapters)).toEqual([
+      { start: 0, end: 8.7 },
+      { start: 609.7, end: 669.7 },
+    ]);
+  });
+
+  test("CM が無ければ塗らない (引き継いだ録画の名前の違うチャプターも)", () => {
+    expect(cmSpans([{ start: 0, end: 10, title: "Chapter 1" }])).toEqual([]);
+    expect(cmSpans([])).toEqual([]);
+  });
+
+  test("目盛りは CM の端には打たない (塗りの縁が言う)", () => {
+    expect(plainMarks(chapters)).toEqual([]);
+    const named = [
+      { start: 0, end: 10, title: "アバン" },
+      { start: 10, end: 20, title: "Aパート" },
+      { start: 20, end: 30, title: "CM" },
+      { start: 30, end: 40, title: "Bパート" },
     ];
-
-    test('続いている CM は1本の区間にまとめる', () => {
-        expect(cmSpans(chapters)).toEqual([
-            { start: 0, end: 8.7 },
-            { start: 609.7, end: 669.7 },
-        ]);
-    });
-
-    test('CM が無ければ塗らない (引き継いだ録画の名前の違うチャプターも)', () => {
-        expect(cmSpans([{ start: 0, end: 10, title: 'Chapter 1' }])).toEqual([]);
-        expect(cmSpans([])).toEqual([]);
-    });
-
-    test('目盛りは CM の端には打たない (塗りの縁が言う)', () => {
-        expect(plainMarks(chapters)).toEqual([]);
-        const named = [
-            { start: 0, end: 10, title: 'アバン' },
-            { start: 10, end: 20, title: 'Aパート' },
-            { start: 20, end: 30, title: 'CM' },
-            { start: 30, end: 40, title: 'Bパート' },
-        ];
-        expect(plainMarks(named)).toEqual([10]);
-    });
+    expect(plainMarks(named)).toEqual([10]);
+  });
 });

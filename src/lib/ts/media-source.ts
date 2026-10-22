@@ -12,29 +12,30 @@
  * TS の lib.dom にはまだ無いので、使うぶんだけ書いておく
  */
 export interface MediaSourceClass {
-    new (): MediaSource;
-    isTypeSupported(type: string): boolean;
+  new (): MediaSource;
+  isTypeSupported(type: string): boolean;
 }
 
 export interface PickedMediaSource {
-    Source: MediaSourceClass;
-    /** `ManagedMediaSource` のほうか。**`disableRemotePlayback` を立てるかの分かれ目** */
-    managed: boolean;
+  Source: MediaSourceClass;
+  /** `ManagedMediaSource` のほうか。**`disableRemotePlayback` を立てるかの分かれ目** */
+  managed: boolean;
 }
 
 /** MediaSource のありか。**試しで差し替えられるように**受け取る (既定は `globalThis`) */
 export interface MediaSourceScope {
-    MediaSource?: MediaSourceClass;
-    ManagedMediaSource?: MediaSourceClass;
+  MediaSource?: MediaSourceClass;
+  ManagedMediaSource?: MediaSourceClass;
 }
 
 /** 使える実装。**どちらも無ければ null** (この端末ではエンコードしたものを出せない) */
 export function pickMediaSource(
-    scope: MediaSourceScope = globalThis as unknown as MediaSourceScope,
+  scope: MediaSourceScope = globalThis as unknown as MediaSourceScope,
 ): PickedMediaSource | null {
-    if (typeof scope.MediaSource === 'function') return { Source: scope.MediaSource, managed: false };
-    if (typeof scope.ManagedMediaSource === 'function') {
-        return { Source: scope.ManagedMediaSource, managed: true };
-    }
-    return null;
+  if (typeof scope.MediaSource === "function")
+    return { Source: scope.MediaSource, managed: false };
+  if (typeof scope.ManagedMediaSource === "function") {
+    return { Source: scope.ManagedMediaSource, managed: true };
+  }
+  return null;
 }

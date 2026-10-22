@@ -1,18 +1,18 @@
 import type {
-    ENCODE_KINDS,
-    ENCODE_PHASES,
-    encodeJobs,
-    programs,
-    recordings,
-    reservations,
-    rules,
-    services,
-} from './server/schema';
+  ENCODE_KINDS,
+  ENCODE_PHASES,
+  encodeJobs,
+  programs,
+  recordings,
+  reservations,
+  rules,
+  services,
+} from "./server/schema";
 
-export type ChannelType = 'GR' | 'BS' | 'CS' | 'SKY';
+export type ChannelType = "GR" | "BS" | "CS" | "SKY";
 
 /** 受信の設定・番組表・ライブで並べる種別とその順 (地上波・BS・CS)。SKY を選べるのはルールの条件だけ */
-export const CHANNEL_TYPES: readonly ChannelType[] = ['GR', 'BS', 'CS'];
+export const CHANNEL_TYPES: readonly ChannelType[] = ["GR", "BS", "CS"];
 
 /**
  * 番組表の 1 マスぶん。**番組の全列は持たない。**
@@ -24,26 +24,33 @@ export const CHANNEL_TYPES: readonly ChannelType[] = ['GR', 'BS', 'CS'];
  * (予約・録画の一覧と同じ経路)
  */
 export interface GridProgram extends Pick<
-    Program,
-    'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres' | 'copy_never'
+  Program,
+  | "id"
+  | "service_id"
+  | "start_at"
+  | "end_at"
+  | "name"
+  | "description"
+  | "genres"
+  | "copy_never"
 > {
-    reservation_state: ReservationState | null;
-    /**
-     * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。
-     * 録画一覧まで戻って同じ番組を探し直させないため
-     */
-    recording_id: number | null;
-    /** 録画そのものが失敗していれば再生のボタンを出さない (一覧の `hasFile` と同じ) */
-    recording_state: Recording['state'] | null;
-    /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
-    library_path: string | null;
-    ts_path: string | null;
+  reservation_state: ReservationState | null;
+  /**
+   * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。
+   * 録画一覧まで戻って同じ番組を探し直させないため
+   */
+  recording_id: number | null;
+  /** 録画そのものが失敗していれば再生のボタンを出さない (一覧の `hasFile` と同じ) */
+  recording_state: Recording["state"] | null;
+  /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
+  library_path: string | null;
+  ts_path: string | null;
 }
 
 /** 番組表の中身 (`/api/guide`)。組めなかったときは `programs` を空にして、理由を `failed` に入れる */
 export interface GuideSheet {
-    programs: GridProgram[];
-    failed: string | null;
+  programs: GridProgram[];
+  failed: string | null;
 }
 
 /**
@@ -51,19 +58,19 @@ export interface GuideSheet {
  * 予約や録画からは局名しか手元に無いので、局IDではなく名前で持つ。
  */
 export interface ProgramDetail {
-    name: string;
-    service_name: string;
-    start_at: number;
-    end_at: number;
-    description: string;
-    extended: Program['extended'];
-    genre_detail: Program['genre_detail'];
-    audios: Program['audios'];
-    video_type: string | null;
-    video_resolution: string | null;
-    is_free: boolean;
-    /** コピー禁止の番組か。禁止の番組は録らない (`format.COPY_NEVER_REASON`) */
-    copy_never: boolean;
+  name: string;
+  service_name: string;
+  start_at: number;
+  end_at: number;
+  description: string;
+  extended: Program["extended"];
+  genre_detail: Program["genre_detail"];
+  audios: Program["audios"];
+  video_type: string | null;
+  video_resolution: string | null;
+  is_free: boolean;
+  /** コピー禁止の番組か。禁止の番組は録らない (`format.COPY_NEVER_REASON`) */
+  copy_never: boolean;
 }
 
 /**
@@ -72,7 +79,7 @@ export interface ProgramDetail {
  * chapter : CM区間をチャプターとして書き込むだけ(ファイルは切らない)
  * cut     : CM区間を実際に落とす。検出を誤ると本編が消えるので明示指定のときだけ
  */
-export type CmMode = 'off' | 'chapter' | 'cut';
+export type CmMode = "off" | "chapter" | "cut";
 
 /**
  * 録画をどう出すか。
@@ -85,7 +92,7 @@ export type CmMode = 'off' | 'chapter' | 'cut';
  * 別に「エンコードする」のチェックを持っていた頃は、外したときにコーデックの
  * 選択だけが残って、どちらが効いているのか画面から読めなかった。それで `none` もここに入れる
  */
-export type VideoCodec = 'av1' | 'h264' | 'none';
+export type VideoCodec = "av1" | "h264" | "none";
 
 /*
  * **行の型はテーブルの定義から導く** (`server/schema.ts`)。
@@ -108,7 +115,8 @@ export type Rule = typeof rules.$inferSelect;
  * (routes/+page.server.ts で録画の行から引く)。
  * 予約側にも書き写していた頃は、録画が失敗しても予約は録画中のまま残っていた
  */
-export type ReservationState = Reservation['state'] | 'recording' | 'done' | 'failed';
+export type ReservationState =
+  Reservation["state"] | "recording" | "done" | "failed";
 
 export type Reservation = typeof reservations.$inferSelect;
 

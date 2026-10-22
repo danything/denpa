@@ -1,13 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from "bun:test";
 import {
-    EpgReader,
-    PresentFollowing,
-    parseBcdDuration,
-    parseEit,
-    parseMjdTime,
-    ScheduleProgress,
-} from './eit';
-import { eitSection, packetize, type SynthEvent } from './synth';
+  EpgReader,
+  PresentFollowing,
+  parseBcdDuration,
+  parseEit,
+  parseMjdTime,
+  ScheduleProgress,
+} from "./eit";
+import { eitSection, packetize, type SynthEvent } from "./synth";
 
 const NETWORK = 32736;
 const TSID = 32736;
@@ -24,626 +24,726 @@ const NOON = Date.UTC(2026, 7, 3, 3, 0, 0);
 const DAY_START = Date.UTC(2026, 7, 2, 15, 10, 0);
 
 function event(overrides: Partial<SynthEvent> = {}): SynthEvent {
-    return {
-        eventId: 1,
-        startAt: NOON,
-        duration: 30 * 60 * 1000,
-        name: 'テスト番組',
-        description: 'これは説明です',
-        ...overrides,
-    };
+  return {
+    eventId: 1,
+    startAt: NOON,
+    duration: 30 * 60 * 1000,
+    name: "テスト番組",
+    description: "これは説明です",
+    ...overrides,
+  };
 }
 
 function section(events: SynthEvent[], options: Record<string, number> = {}) {
-    return eitSection({
-        tableId: 0x50,
-        serviceId: SERVICE,
-        transportStreamId: TSID,
-        originalNetworkId: NETWORK,
-        events,
-        ...options,
-    });
+  return eitSection({
+    tableId: 0x50,
+    serviceId: SERVICE,
+    transportStreamId: TSID,
+    originalNetworkId: NETWORK,
+    events,
+    ...options,
+  });
 }
 
-describe('時刻', () => {
-    test('MJD + BCD は日本時間として読む', () => {
-        const data = section([event()]);
-        expect(parseEit(data)?.events[0]?.startAt).toBe(NOON);
-    });
+describe("時刻", () => {
+  test("MJD + BCD は日本時間として読む", () => {
+    const data = section([event()]);
+    expect(parseEit(data)?.events[0]?.startAt).toBe(NOON);
+  });
 
-    test('全ビット1は「未定」。番組表に置けないので null', () => {
-        const data = Uint8Array.from([0xff, 0xff, 0xff, 0xff, 0xff]);
-        expect(parseMjdTime(data, 0)).toBeNull();
-        expect(parseBcdDuration(data, 0)).toBeNull();
-    });
+  test("全ビット1は「未定」。番組表に置けないので null", () => {
+    const data = Uint8Array.from([0xff, 0xff, 0xff, 0xff, 0xff]);
+    expect(parseMjdTime(data, 0)).toBeNull();
+    expect(parseBcdDuration(data, 0)).toBeNull();
+  });
 
-    test('尺は BCD の時分秒', () => {
-        // 1時間30分
-        expect(parseBcdDuration(Uint8Array.from([0x01, 0x30, 0x00]), 0)).toBe(90 * 60 * 1000);
-    });
+  test("尺は BCD の時分秒", () => {
+    // 1時間30分
+    expect(parseBcdDuration(Uint8Array.from([0x01, 0x30, 0x00]), 0)).toBe(
+      90 * 60 * 1000,
+    );
+  });
 });
 
-describe('EIT の解析', () => {
-    test('番組名と概要を ARIB の文字符号から起こす', () => {
-        const parsed = parseEit(section([event()]));
-        expect(parsed?.events).toHaveLength(1);
-        expect(parsed?.events[0]?.name).toBe('テスト番組');
-        expect(parsed?.events[0]?.description).toBe('これは説明です');
-        expect(parsed?.events[0]?.duration).toBe(30 * 60 * 1000);
+describe("EIT の解析", () => {
+  test("番組名と概要を ARIB の文字符号から起こす", () => {
+    const parsed = parseEit(section([event()]));
+    expect(parsed?.events).toHaveLength(1);
+    expect(parsed?.events[0]?.name).toBe("テスト番組");
+    expect(parsed?.events[0]?.description).toBe("これは説明です");
+    expect(parsed?.events[0]?.duration).toBe(30 * 60 * 1000);
+  });
+
+  test("局とネットワークは番組にも写す。番組表の JOIN がこれで決まる", () => {
+    const parsed = parseEit(section([event()]));
+    expect(parsed?.events[0]?.serviceId).toBe(SERVICE);
+    expect(parsed?.events[0]?.originalNetworkId).toBe(NETWORK);
+    expect(parsed?.events[0]?.transportStreamId).toBe(TSID);
+  });
+
+  /**
+   * **分割された項目は、繋いでから復号する。**
+   *
+   * バイトは実機の放送から取ったもの (テレ東 LIAR GAME の「番組概要」)。
+   * 部分ごとに復号して文字列を繋いでいた頃は、続きが別の文字で出ていた —
+   * 「音楽制作ずはのづ ねふびどっ」(正しくは「音楽制作:ONE MUSIC」)。
+   * 分割点が二バイト文字の途中に来ており、文字集合の状態も持ち越されるため
+   */
+  test("分割された詳細情報は、繋いでから復号する", () => {
+    const hex = (text: string) =>
+      (text.match(/../g) ?? []).map((pair) => Number.parseInt(pair, 16));
+    /** 見出し「番組概要」 */
+    const heading = hex("4856414833354d57");
+    /** 1つ目。上限いっぱいで「音楽：菅野祐」の途中まで */
+    const first = hex(
+      "38363a6e1b7eba39434865432b47260d416d34464644ba3a3446234d3a3b300d34464644ba406e4c6e4b63487e0d2537256a213c253a393d402eba313a482a432349270d1b7cade3e9afbf213cc7b6a4f3fe416d3a6e3268344646441b7eba455a3230373d0d487e3d51405f446aba3f793b333f383b4b0d3f273a4c405f3757ba436646623e48487e0d4a543d38ba444d3e6f3f3f4d7d3b520d323b364134464644ba3e2e4074352a32700d323b3641387a324cba3b33432b3e303f4d0d4f3f323b44344030ba45374c6e4e364d4e0d323b335aba3f7b4c6e4d3438",
+    );
+    /** 2つ目。**見出しが空** = 続き。頭は前の文字の片割れから始まる */
+    const second = hex(
+      "670d323b335a40293a6eba89cfcec58a2089cdd5d3c9c30d8a323b364140293a6eba1b7cd3c3c8b0eb213cd6d7ede2213cb7e7f30da2cbe1213cb7e7f340293a6e0e3adec3c9cfa6b90d",
+    );
+    const body = (numbering: number, items: number[]) => [
+      numbering,
+      0x6a,
+      0x70,
+      0x6e,
+      items.length,
+      ...items,
+      0x00,
+    ];
+    const one = body(0x01, [
+      heading.length,
+      ...heading,
+      first.length,
+      ...first,
+    ]);
+    const two = body(0x11, [0x00, second.length, ...second]);
+
+    const parsed = parseEit(
+      section([
+        event({
+          rawDescriptors: [0x4e, one.length, ...one, 0x4e, two.length, ...two],
+        }),
+      ]),
+    );
+
+    // 実際の放送のバイト。区切りのコロンは英数を標準の大きさで送っているので全角、
+    // 「ONE MUSIC」は字だけ中型 (MSZ) で半角・間の空白は標準で全角。テレビもこう描く
+    expect(parsed?.events[0]?.extended["番組概要"]).toContain("音楽：菅野祐悟");
+    expect(parsed?.events[0]?.extended["番組概要"]).toContain(
+      "音楽制作：ONE　MUSIC",
+    );
+    expect(parsed?.events[0]?.extended["番組概要"]).toContain(
+      "音響制作：ビットグルーブプロモーション",
+    );
+  });
+
+  test("詳細情報は見出しごとに繋ぎ直す", () => {
+    const parsed = parseEit(
+      section([
+        event({ extended: { 出演者: "ゲスト太郎", 番組内容: "あらすじ" } }),
+      ]),
+    );
+    expect(parsed?.events[0]?.extended).toEqual({
+      出演者: "ゲスト太郎",
+      番組内容: "あらすじ",
     });
+  });
 
-    test('局とネットワークは番組にも写す。番組表の JOIN がこれで決まる', () => {
-        const parsed = parseEit(section([event()]));
-        expect(parsed?.events[0]?.serviceId).toBe(SERVICE);
-        expect(parsed?.events[0]?.originalNetworkId).toBe(NETWORK);
-        expect(parsed?.events[0]?.transportStreamId).toBe(TSID);
-    });
+  test("ジャンル・音声・映像", () => {
+    const parsed = parseEit(
+      section([
+        event({ genres: [[7, 0]], audios: [{ type: 3 }], video: [0x01, 0xb1] }),
+      ]),
+    );
+    const found = parsed?.events[0];
+    expect(found?.genres).toEqual([{ lv1: 7, lv2: 0 }]);
+    expect(found?.audios).toEqual([
+      { componentType: 3, langs: ["jpn"], samplingRate: 48000, main: true },
+    ]);
+    expect(found?.video).toEqual({ type: "mpeg2", resolution: "1080i" });
+  });
 
-    /**
-     * **分割された項目は、繋いでから復号する。**
-     *
-     * バイトは実機の放送から取ったもの (テレ東 LIAR GAME の「番組概要」)。
-     * 部分ごとに復号して文字列を繋いでいた頃は、続きが別の文字で出ていた —
-     * 「音楽制作ずはのづ ねふびどっ」(正しくは「音楽制作:ONE MUSIC」)。
-     * 分割点が二バイト文字の途中に来ており、文字集合の状態も持ち越されるため
-     */
-    test('分割された詳細情報は、繋いでから復号する', () => {
-        const hex = (text: string) => (text.match(/../g) ?? []).map((pair) => Number.parseInt(pair, 16));
-        /** 見出し「番組概要」 */
-        const heading = hex('4856414833354d57');
-        /** 1つ目。上限いっぱいで「音楽：菅野祐」の途中まで */
-        const first = hex(
-            '38363a6e1b7eba39434865432b47260d416d34464644ba3a3446234d3a3b300d34464644ba406e4c6e4b63487e0d2537256a213c253a393d402eba313a482a432349270d1b7cade3e9afbf213cc7b6a4f3fe416d3a6e3268344646441b7eba455a3230373d0d487e3d51405f446aba3f793b333f383b4b0d3f273a4c405f3757ba436646623e48487e0d4a543d38ba444d3e6f3f3f4d7d3b520d323b364134464644ba3e2e4074352a32700d323b3641387a324cba3b33432b3e303f4d0d4f3f323b44344030ba45374c6e4e364d4e0d323b335aba3f7b4c6e4d3438',
-        );
-        /** 2つ目。**見出しが空** = 続き。頭は前の文字の片割れから始まる */
-        const second = hex(
-            '670d323b335a40293a6eba89cfcec58a2089cdd5d3c9c30d8a323b364140293a6eba1b7cd3c3c8b0eb213cd6d7ede2213cb7e7f30da2cbe1213cb7e7f340293a6e0e3adec3c9cfa6b90d',
-        );
-        const body = (numbering: number, items: number[]) => [
-            numbering,
-            0x6a,
-            0x70,
-            0x6e,
-            items.length,
-            ...items,
-            0x00,
-        ];
-        const one = body(0x01, [heading.length, ...heading, first.length, ...first]);
-        const two = body(0x11, [0x00, second.length, ...second]);
+  /*
+   * **放送が付けた名前まで読む。**
+   *
+   * 解説放送や二重音声は、種別も言語も同じ音声が2本並ぶ。実機の日テレ
+   * 「金曜ロードショー[解]」はどちらも `component_type=3 lang=jpn` で、
+   * 見分けが付くのは `text_char` の「主音声ステレオ」「解説ステレオ」だけ。
+   * 読み落としていた頃は、番組表の詳細に**同じラベルが2つ**出ていた
+   */
+  test("音声が名乗っている名前と、どちらが主音声か", () => {
+    const parsed = parseEit(
+      section([
+        event({
+          audios: [
+            { type: 3, text: "主音声ステレオ" },
+            { type: 3, text: "解説ステレオ", main: false },
+          ],
+        }),
+      ]),
+    );
+    expect(parsed?.events[0]?.audios).toEqual([
+      {
+        componentType: 3,
+        langs: ["jpn"],
+        samplingRate: 48000,
+        text: "主音声ステレオ",
+        main: true,
+      },
+      {
+        componentType: 3,
+        langs: ["jpn"],
+        samplingRate: 48000,
+        text: "解説ステレオ",
+        main: false,
+      },
+    ]);
+  });
 
-        const parsed = parseEit(
-            section([event({ rawDescriptors: [0x4e, one.length, ...one, 0x4e, two.length, ...two] })]),
-        );
+  /** 名乗らない放送のほうが多い。**空の名前は持たない** (ラベルに空白が出る) */
+  test("名乗らなければ名前は持たない", () => {
+    const parsed = parseEit(section([event({ audios: [{ type: 3 }] })]));
+    expect(parsed?.events[0]?.audios[0]).not.toHaveProperty("text");
+  });
 
-        // 実際の放送のバイト。区切りのコロンは英数を標準の大きさで送っているので全角、
-        // 「ONE MUSIC」は字だけ中型 (MSZ) で半角・間の空白は標準で全角。テレビもこう描く
-        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽：菅野祐悟');
-        expect(parsed?.events[0]?.extended['番組概要']).toContain('音楽制作：ONE　MUSIC');
-        expect(parsed?.events[0]?.extended['番組概要']).toContain('音響制作：ビットグルーブプロモーション');
-    });
+  test("有料放送は free_CA_mode で分かる", () => {
+    expect(parseEit(section([event()]))?.events[0]?.isFree).toBe(true);
+    expect(
+      parseEit(section([event({ isFree: false })]))?.events[0]?.isFree,
+    ).toBe(false);
+  });
 
-    test('詳細情報は見出しごとに繋ぎ直す', () => {
-        const parsed = parseEit(
-            section([event({ extended: { 出演者: 'ゲスト太郎', 番組内容: 'あらすじ' } })]),
-        );
-        expect(parsed?.events[0]?.extended).toEqual({ 出演者: 'ゲスト太郎', 番組内容: 'あらすじ' });
-    });
+  /*
+   * コピー禁止の番組は録らない (docs/data.md「コピー禁止の番組」)。記録制御の2ビットが 11 のときだけ。
+   * 1世代のみ (10) は今までどおり録る
+   */
+  test("コピー禁止はデジタルコピー制御記述子の先頭2ビットで分かる", () => {
+    const copyNever = (copyControl?: number) =>
+      parseEit(
+        section([event(copyControl === undefined ? {} : { copyControl })]),
+      )?.events[0]?.copyNever;
+    expect(copyNever(0b11)).toBe(true);
+    expect(copyNever(0b10)).toBe(false);
+    expect(copyNever(0b00)).toBe(false);
+    // 載っていなければ禁止ではない
+    expect(copyNever()).toBe(false);
+  });
 
-    test('ジャンル・音声・映像', () => {
-        const parsed = parseEit(
-            section([event({ genres: [[7, 0]], audios: [{ type: 3 }], video: [0x01, 0xb1] })]),
-        );
-        const found = parsed?.events[0];
-        expect(found?.genres).toEqual([{ lv1: 7, lv2: 0 }]);
-        expect(found?.audios).toEqual([
-            { componentType: 3, langs: ['jpn'], samplingRate: 48000, main: true },
-        ]);
-        expect(found?.video).toEqual({ type: 'mpeg2', resolution: '1080i' });
-    });
+  test("詳細の表は記述子を載せないので、コピー禁止かどうかは「言っていない」(null)", () => {
+    expect(
+      parseEit(section([event()], { tableId: 0x58 }))?.events[0]?.copyNever,
+    ).toBeNull();
+    // p/f は基本と同じく言う
+    expect(
+      parseEit(section([event()], { tableId: 0x4e }))?.events[0]?.copyNever,
+    ).toBe(false);
+  });
 
-    /*
-     * **放送が付けた名前まで読む。**
-     *
-     * 解説放送や二重音声は、種別も言語も同じ音声が2本並ぶ。実機の日テレ
-     * 「金曜ロードショー[解]」はどちらも `component_type=3 lang=jpn` で、
-     * 見分けが付くのは `text_char` の「主音声ステレオ」「解説ステレオ」だけ。
-     * 読み落としていた頃は、番組表の詳細に**同じラベルが2つ**出ていた
-     */
-    test('音声が名乗っている名前と、どちらが主音声か', () => {
-        const parsed = parseEit(
-            section([
-                event({
-                    audios: [
-                        { type: 3, text: '主音声ステレオ' },
-                        { type: 3, text: '解説ステレオ', main: false },
-                    ],
-                }),
-            ]),
-        );
-        expect(parsed?.events[0]?.audios).toEqual([
-            { componentType: 3, langs: ['jpn'], samplingRate: 48000, text: '主音声ステレオ', main: true },
-            { componentType: 3, langs: ['jpn'], samplingRate: 48000, text: '解説ステレオ', main: false },
-        ]);
-    });
+  test("他局の番組表 (0x4F / 0x60〜) は読まない", () => {
+    expect(parseEit(section([event()], { tableId: 0x4f }))).toBeNull();
+    expect(parseEit(section([event()], { tableId: 0x60 }))).toBeNull();
+  });
 
-    /** 名乗らない放送のほうが多い。**空の名前は持たない** (ラベルに空白が出る) */
-    test('名乗らなければ名前は持たない', () => {
-        const parsed = parseEit(section([event({ audios: [{ type: 3 }] })]));
-        expect(parsed?.events[0]?.audios[0]).not.toHaveProperty('text');
-    });
-
-    test('有料放送は free_CA_mode で分かる', () => {
-        expect(parseEit(section([event()]))?.events[0]?.isFree).toBe(true);
-        expect(parseEit(section([event({ isFree: false })]))?.events[0]?.isFree).toBe(false);
-    });
-
-    /*
-     * コピー禁止の番組は録らない (docs/data.md「コピー禁止の番組」)。記録制御の2ビットが 11 のときだけ。
-     * 1世代のみ (10) は今までどおり録る
-     */
-    test('コピー禁止はデジタルコピー制御記述子の先頭2ビットで分かる', () => {
-        const copyNever = (copyControl?: number) =>
-            parseEit(section([event(copyControl === undefined ? {} : { copyControl })]))?.events[0]
-                ?.copyNever;
-        expect(copyNever(0b11)).toBe(true);
-        expect(copyNever(0b10)).toBe(false);
-        expect(copyNever(0b00)).toBe(false);
-        // 載っていなければ禁止ではない
-        expect(copyNever()).toBe(false);
-    });
-
-    test('詳細の表は記述子を載せないので、コピー禁止かどうかは「言っていない」(null)', () => {
-        expect(parseEit(section([event()], { tableId: 0x58 }))?.events[0]?.copyNever).toBeNull();
-        // p/f は基本と同じく言う
-        expect(parseEit(section([event()], { tableId: 0x4e }))?.events[0]?.copyNever).toBe(false);
-    });
-
-    test('他局の番組表 (0x4F / 0x60〜) は読まない', () => {
-        expect(parseEit(section([event()], { tableId: 0x4f }))).toBeNull();
-        expect(parseEit(section([event()], { tableId: 0x60 }))).toBeNull();
-    });
-
-    test('1セクションに複数の番組が並ぶ', () => {
-        const events = [
-            event({ eventId: 1 }),
-            event({ eventId: 2, startAt: NOON + 1800_000, name: '次の番組' }),
-        ];
-        const parsed = parseEit(section(events));
-        expect(parsed?.events.map((e) => e.name)).toEqual(['テスト番組', '次の番組']);
-    });
+  test("1セクションに複数の番組が並ぶ", () => {
+    const events = [
+      event({ eventId: 1 }),
+      event({ eventId: 2, startAt: NOON + 1800_000, name: "次の番組" }),
+    ];
+    const parsed = parseEit(section(events));
+    expect(parsed?.events.map((e) => e.name)).toEqual([
+      "テスト番組",
+      "次の番組",
+    ]);
+  });
 });
 
-describe('集まり具合', () => {
-    const progressAt = (now: number = DAY_START) => new ScheduleProgress(() => now);
+describe("集まり具合", () => {
+  const progressAt = (now: number = DAY_START) =>
+    new ScheduleProgress(() => now);
 
-    /** セクション1本ぶんの控えを組み立てる */
-    const at = (tableId: number, sectionNumber: number, last: number, segmentLast = last) => ({
-        tableId,
-        serviceId: SERVICE,
-        transportStreamId: TSID,
-        originalNetworkId: NETWORK,
-        version: 1,
-        sectionNumber,
-        lastSectionNumber: last,
-        segmentLastSectionNumber: segmentLast,
-        lastTableId: tableId,
-        events: [],
-    });
+  /** セクション1本ぶんの控えを組み立てる */
+  const at = (
+    tableId: number,
+    sectionNumber: number,
+    last: number,
+    segmentLast = last,
+  ) => ({
+    tableId,
+    serviceId: SERVICE,
+    transportStreamId: TSID,
+    originalNetworkId: NETWORK,
+    version: 1,
+    sectionNumber,
+    lastSectionNumber: last,
+    segmentLastSectionNumber: segmentLast,
+    lastTableId: tableId,
+    events: [],
+  });
 
-    test('使われているセクションが全部揃えば完了', () => {
-        const progress = progressAt();
-        expect(progress.complete).toBe(false);
-        progress.add(at(0x50, 0, 1, 1));
-        expect(progress.complete).toBe(false);
-        progress.add(at(0x50, 1, 1, 1));
-        expect(progress.complete).toBe(true);
-    });
+  test("使われているセクションが全部揃えば完了", () => {
+    const progress = progressAt();
+    expect(progress.complete).toBe(false);
+    progress.add(at(0x50, 0, 1, 1));
+    expect(progress.complete).toBe(false);
+    progress.add(at(0x50, 1, 1, 1));
+    expect(progress.complete).toBe(true);
+  });
 
-    /**
-     * **使われていないセクションは永久に来ない。** セグメントの最後の番号を
-     * 見ずに「0〜last_section_number が全部」で待つと、いつまでも終わらない
-     */
-    test('セグメントの中で使われていない番号は待たない', () => {
-        const progress = progressAt();
-        // 2つのセグメント。どちらも先頭1本しか使っていない
-        progress.add(at(0x50, 0, 8, 0));
-        progress.add(at(0x50, 8, 8, 8));
-        expect(progress.complete).toBe(true);
-    });
+  /**
+   * **使われていないセクションは永久に来ない。** セグメントの最後の番号を
+   * 見ずに「0〜last_section_number が全部」で待つと、いつまでも終わらない
+   */
+  test("セグメントの中で使われていない番号は待たない", () => {
+    const progress = progressAt();
+    // 2つのセグメント。どちらも先頭1本しか使っていない
+    progress.add(at(0x50, 0, 8, 0));
+    progress.add(at(0x50, 8, 8, 8));
+    expect(progress.complete).toBe(true);
+  });
 
-    test('last_table_id の先まで揃うまでは完了にしない', () => {
-        const progress = progressAt();
-        progress.add({ ...at(0x50, 0, 0), lastTableId: 0x51 });
-        expect(progress.complete).toBe(false);
-        progress.add({ ...at(0x51, 0, 0), lastTableId: 0x51 });
-        expect(progress.complete).toBe(true);
-    });
+  test("last_table_id の先まで揃うまでは完了にしない", () => {
+    const progress = progressAt();
+    progress.add({ ...at(0x50, 0, 0), lastTableId: 0x51 });
+    expect(progress.complete).toBe(false);
+    progress.add({ ...at(0x51, 0, 0), lastTableId: 0x51 });
+    expect(progress.complete).toBe(true);
+  });
 
-    /*
-     * **番号は飛ぶ。** 1つの table_id が受け持つのは4日ぶんで、基本は 0x50 から、
-     * 詳細は 0x58 から始まる。8日ぶんの放送なら 0x52〜0x57 は永久に来ない。
-     * 0x50 から last_table_id まで全部待っていた頃は、詳細を積んでいる局が
-     * **一度も揃わず**、5分の上限まで開きっぱなしになっていた
-     */
-    test('間の使われていない表は待たない', () => {
-        const progress = progressAt();
-        progress.add({ ...at(0x50, 0, 0), lastTableId: 0x59 });
-        progress.add({ ...at(0x51, 0, 0), lastTableId: 0x59 });
-        progress.add({ ...at(0x58, 0, 0), lastTableId: 0x59 });
-        // 0x52〜0x57 は来ないが、いちばん後ろの 0x59 はまだ
-        expect(progress.complete).toBe(false);
-        progress.add({ ...at(0x59, 0, 0), lastTableId: 0x59 });
-        expect(progress.complete).toBe(true);
-    });
+  /*
+   * **番号は飛ぶ。** 1つの table_id が受け持つのは4日ぶんで、基本は 0x50 から、
+   * 詳細は 0x58 から始まる。8日ぶんの放送なら 0x52〜0x57 は永久に来ない。
+   * 0x50 から last_table_id まで全部待っていた頃は、詳細を積んでいる局が
+   * **一度も揃わず**、5分の上限まで開きっぱなしになっていた
+   */
+  test("間の使われていない表は待たない", () => {
+    const progress = progressAt();
+    progress.add({ ...at(0x50, 0, 0), lastTableId: 0x59 });
+    progress.add({ ...at(0x51, 0, 0), lastTableId: 0x59 });
+    progress.add({ ...at(0x58, 0, 0), lastTableId: 0x59 });
+    // 0x52〜0x57 は来ないが、いちばん後ろの 0x59 はまだ
+    expect(progress.complete).toBe(false);
+    progress.add({ ...at(0x59, 0, 0), lastTableId: 0x59 });
+    expect(progress.complete).toBe(true);
+  });
 
-    test('版が変わったら数え直す。古い版で揃ったことにしない', () => {
-        const progress = progressAt();
-        progress.add(at(0x50, 0, 0));
-        expect(progress.complete).toBe(true);
-        progress.add({ ...at(0x50, 0, 1, 1), version: 2 });
-        expect(progress.complete).toBe(false);
-    });
+  test("版が変わったら数え直す。古い版で揃ったことにしない", () => {
+    const progress = progressAt();
+    progress.add(at(0x50, 0, 0));
+    expect(progress.complete).toBe(true);
+    progress.add({ ...at(0x50, 0, 1, 1), version: 2 });
+    expect(progress.complete).toBe(false);
+  });
 
-    /*
-     * **版は table_id ごとに別々に振られる。** 番組表の1つの表は
-     * table_id + 局 + TS で決まり、`version_number` はその単位で動く。
-     * 局に1つだけ持っていた頃は、基本 (0x50〜) と詳細 (0x58〜) を行き来する
-     * たびに数えたものを全部捨てていて、**揃ったと分かることが二度と無かった**。
-     * どのチャンネルも上限の5分まで開きっぱなしになる
-     */
-    test('別の表の版が違っても、こちらの数えたものは捨てない', () => {
-        const progress = progressAt();
-        progress.add({ ...at(0x50, 0, 0), lastTableId: 0x58 });
-        // 詳細の表は別の版で流れてくる。ここで基本のぶんを捨ててはいけない
-        progress.add({ ...at(0x58, 0, 0), lastTableId: 0x58, version: 9 });
+  /*
+   * **版は table_id ごとに別々に振られる。** 番組表の1つの表は
+   * table_id + 局 + TS で決まり、`version_number` はその単位で動く。
+   * 局に1つだけ持っていた頃は、基本 (0x50〜) と詳細 (0x58〜) を行き来する
+   * たびに数えたものを全部捨てていて、**揃ったと分かることが二度と無かった**。
+   * どのチャンネルも上限の5分まで開きっぱなしになる
+   */
+  test("別の表の版が違っても、こちらの数えたものは捨てない", () => {
+    const progress = progressAt();
+    progress.add({ ...at(0x50, 0, 0), lastTableId: 0x58 });
+    // 詳細の表は別の版で流れてくる。ここで基本のぶんを捨ててはいけない
+    progress.add({ ...at(0x58, 0, 0), lastTableId: 0x58, version: 9 });
 
-        // 0x51〜0x57 は使われていないので、この2つで揃っている
-        expect(progress.complete).toBe(true);
-    });
+    // 0x51〜0x57 は使われていないので、この2つで揃っている
+    expect(progress.complete).toBe(true);
+  });
 
-    test('同じ表の版が変わったときだけ、その表を数え直す', () => {
-        const progress = progressAt();
-        progress.add({ ...at(0x50, 0, 0), lastTableId: 0x58 });
-        progress.add({ ...at(0x58, 0, 0), lastTableId: 0x58, version: 9 });
-        expect(progress.complete).toBe(true);
+  test("同じ表の版が変わったときだけ、その表を数え直す", () => {
+    const progress = progressAt();
+    progress.add({ ...at(0x50, 0, 0), lastTableId: 0x58 });
+    progress.add({ ...at(0x58, 0, 0), lastTableId: 0x58, version: 9 });
+    expect(progress.complete).toBe(true);
 
-        // 詳細だけ版が上がった。基本はそのまま、詳細だけ待ち直す
-        progress.add({ ...at(0x58, 0, 1, 1), lastTableId: 0x58, version: 10 });
-        expect(progress.complete).toBe(false);
-        progress.add({ ...at(0x58, 1, 1, 1), lastTableId: 0x58, version: 10 });
-        expect(progress.complete).toBe(true);
-    });
+    // 詳細だけ版が上がった。基本はそのまま、詳細だけ待ち直す
+    progress.add({ ...at(0x58, 0, 1, 1), lastTableId: 0x58, version: 10 });
+    expect(progress.complete).toBe(false);
+    progress.add({ ...at(0x58, 1, 1, 1), lastTableId: 0x58, version: 10 });
+    expect(progress.complete).toBe(true);
+  });
 
-    /*
-     * **揃わなかったときは、何が足りないかを言う。**
-     *
-     * 実測でチューナーを1台 600秒 (上限ちょうど) 使っているのを見つけたが、
-     * 電波が欠けていたのか、来ない表を待っていたのかは記録が無くて追えなかった。
-     * 直し方がまるで違うので、区別が付くように残す
-     */
-    test('揃わなかった理由を言える', () => {
-        const empty = progressAt();
-        expect(empty.report()).toContain('1つも来ていない');
+  /*
+   * **揃わなかったときは、何が足りないかを言う。**
+   *
+   * 実測でチューナーを1台 600秒 (上限ちょうど) 使っているのを見つけたが、
+   * 電波が欠けていたのか、来ない表を待っていたのかは記録が無くて追えなかった。
+   * 直し方がまるで違うので、区別が付くように残す
+   */
+  test("揃わなかった理由を言える", () => {
+    const empty = progressAt();
+    expect(empty.report()).toContain("1つも来ていない");
 
-        // いちばん後ろの表が来ない (来ない表を待っている状態)
-        const waiting = progressAt();
-        waiting.add({ ...at(0x50, 0, 0), lastTableId: 0x59 });
-        expect(waiting.report()).toContain('0x59');
-        expect(waiting.report()).toContain('一度も来ない');
+    // いちばん後ろの表が来ない (来ない表を待っている状態)
+    const waiting = progressAt();
+    waiting.add({ ...at(0x50, 0, 0), lastTableId: 0x59 });
+    expect(waiting.report()).toContain("0x59");
+    expect(waiting.report()).toContain("一度も来ない");
 
-        // 節が欠けている (電波が届いていない状態)
-        const holes = progressAt();
-        holes.add(at(0x50, 0, 3, 3));
-        holes.add(at(0x50, 2, 3, 3));
-        expect(holes.report()).toContain('0x50 の 1,3');
+    // 節が欠けている (電波が届いていない状態)
+    const holes = progressAt();
+    holes.add(at(0x50, 0, 3, 3));
+    holes.add(at(0x50, 2, 3, 3));
+    expect(holes.report()).toContain("0x50 の 1,3");
 
-        const done = progressAt();
-        done.add(at(0x50, 0, 0));
-        expect(done.report()).toBe('揃っている');
-    });
+    const done = progressAt();
+    done.add(at(0x50, 0, 0));
+    expect(done.report()).toBe("揃っている");
+  });
 
-    /*
-     * **過ぎた時間帯のセグメントは流れてこない。**
-     *
-     * セグメントは 0:00 から3時間ずつの枠で、終わった枠は放送に乗らない。
-     * 「空でも先頭の1本 (8の倍数) は来る」として待っていた頃は、**実機の
-     * 14チャンネルが1つ残らず上限の600秒を使い切って**いた — 揃って離せたのは
-     * 0本で、早く離す仕組みがまるごと働いていなかった。
-     *
-     * 実機の記録がそのまま出方を教えてくれた。16:59 に閉じた回はどの局も
-     * `0x50/0x58 の 0,8,16,24,32` (= 0:00〜15:00 の5枠)、18:19 に閉じた回は
-     * そこに `40` が増えていた。**時計が進むと欠けが1つ増える** — 電波の
-     * 欠けでは起きない動き方で、待ち方のほうが誤っていると分かる。
-     *
-     * 過ぎた枠のぶんの番組は、そこがまだ未来だった数日前に取り込んである。
-     */
-    test('もう過ぎた時間帯のセグメントは待たない', () => {
-        // 15:30 JST。0:00〜15:00 の5枠 (節 0,8,16,24,32) は終わっている
-        const afternoon = Date.UTC(2026, 7, 3, 6, 30, 0);
-        const progress = progressAt(afternoon);
+  /*
+   * **過ぎた時間帯のセグメントは流れてこない。**
+   *
+   * セグメントは 0:00 から3時間ずつの枠で、終わった枠は放送に乗らない。
+   * 「空でも先頭の1本 (8の倍数) は来る」として待っていた頃は、**実機の
+   * 14チャンネルが1つ残らず上限の600秒を使い切って**いた — 揃って離せたのは
+   * 0本で、早く離す仕組みがまるごと働いていなかった。
+   *
+   * 実機の記録がそのまま出方を教えてくれた。16:59 に閉じた回はどの局も
+   * `0x50/0x58 の 0,8,16,24,32` (= 0:00〜15:00 の5枠)、18:19 に閉じた回は
+   * そこに `40` が増えていた。**時計が進むと欠けが1つ増える** — 電波の
+   * 欠けでは起きない動き方で、待ち方のほうが誤っていると分かる。
+   *
+   * 過ぎた枠のぶんの番組は、そこがまだ未来だった数日前に取り込んである。
+   */
+  test("もう過ぎた時間帯のセグメントは待たない", () => {
+    // 15:30 JST。0:00〜15:00 の5枠 (節 0,8,16,24,32) は終わっている
+    const afternoon = Date.UTC(2026, 7, 3, 6, 30, 0);
+    const progress = progressAt(afternoon);
 
-        // いま (15:00〜18:00) の枠から先だけが流れてくる
-        for (let start = 40; start <= 248; start += 8) progress.add(at(0x50, start, 255, start));
-        expect(progress.complete).toBe(true);
-        expect(progress.report()).toBe('揃っている');
+    // いま (15:00〜18:00) の枠から先だけが流れてくる
+    for (let start = 40; start <= 248; start += 8)
+      progress.add(at(0x50, start, 255, start));
+    expect(progress.complete).toBe(true);
+    expect(progress.report()).toBe("揃っている");
 
-        // 過ぎていない枠が欠けているのは、これまで通り「足りない」
-        const missing = progressAt(afternoon);
-        for (let start = 40; start <= 248; start += 8) {
-            if (start !== 48) missing.add(at(0x50, start, 255, start));
-        }
-        expect(missing.complete).toBe(false);
-        expect(missing.report()).toContain('0x50 の 48');
-    });
-
-    /*
-     * 枠の位置は `table_id` でずれる。0x50 が当日 0:00 から4日ぶん (32枠) で、
-     * 0x51 はその次の4日ぶん。**先の表には過ぎた枠が1つも無い。**
-     *
-     * 「見えていない先頭は飛ばす」という時計を使わない直し方も採れたが、
-     * それだとカルーセルの途中から読み始めた回に、まだ来ていないだけの先頭を
-     * 飛ばして 0x51 を揃ったことにしてしまう (4〜7日先が丸ごと落ちる)
-     */
-    test('先の日を持つ表では、どの枠も飛ばさない', () => {
-        const afternoon = Date.UTC(2026, 7, 3, 6, 30, 0);
-        const progress = progressAt(afternoon);
-        progress.add({ ...at(0x50, 40, 40), lastTableId: 0x51 });
-        // 0x51 は4日先から。先頭の枠もまだ過ぎていない
-        progress.add({ ...at(0x51, 8, 8), lastTableId: 0x51 });
-        expect(progress.complete).toBe(false);
-        expect(progress.report()).toContain('0x51 の 0');
-    });
-});
-
-describe('EpgReader', () => {
-    const packets = (data: Uint8Array) => packetize(0x0012, data);
-
-    test('TS を食わせると番組が溜まる', () => {
-        const reader = new EpgReader();
-        expect(reader.feed(packets(section([event()])))).toBe(true);
-        expect(reader.all().map((e) => e.name)).toEqual(['テスト番組']);
-    });
-
-    test('同じ番組が何度来ても増えない。あとから来たほうで上書きする', () => {
-        const reader = new EpgReader();
-        reader.feed(packets(section([event()])));
-        reader.feed(packets(section([event({ name: '差し替え後' })])));
-        expect(reader.all()).toHaveLength(1);
-        expect(reader.all()[0]!.name).toBe('差し替え後');
-    });
-
-    /*
-     * **実機で踏んだところ。** 番組表は2つの表に分かれて流れてくる。
-     *
-     * - 基本 (0x50〜0x57) … タイトルと短い説明
-     * - 詳細 (0x58〜0x5F) … 「番組内容」「出演者」など
-     *
-     * 同じ event_id が両方に載っていて、それぞれ自分のぶんしか持っていない。
-     * 丸ごと上書きしていた頃は、あとに届いたほうで相手のぶんが消えていた。
-     * 実機では番組 23,000 件のうち 11,000 件が名無しになり、番組表に
-     * 「(番組情報なし)」の列が並んだ
-     */
-    test('詳細だけの表があとから来てもタイトルを消さない', () => {
-        const reader = new EpgReader();
-        reader.feed(packets(section([event()])));
-        reader.feed(
-            packets(
-                section([event({ name: '', description: '', extended: { 番組内容: 'あらすじ' } })], {
-                    tableId: 0x58,
-                }),
-            ),
-        );
-
-        const program = reader.all()[0]!;
-        expect(program.name).toBe('テスト番組');
-        expect(program.description).toBe('これは説明です');
-        expect(program.extended).toEqual({ 番組内容: 'あらすじ' });
-    });
-
-    test('基本の表があとから来ても番組内容を消さない', () => {
-        const reader = new EpgReader();
-        reader.feed(
-            packets(
-                section([event({ name: '', description: '', extended: { 番組内容: 'あらすじ' } })], {
-                    tableId: 0x58,
-                }),
-            ),
-        );
-        reader.feed(packets(section([event()])));
-
-        const program = reader.all()[0]!;
-        expect(program.name).toBe('テスト番組');
-        expect(program.extended).toEqual({ 番組内容: 'あらすじ' });
-    });
-
-    test('詳細だけの表があとから来ても、コピー禁止の印を消さない', () => {
-        const reader = new EpgReader();
-        reader.feed(packets(section([event({ copyControl: 0b11 })])));
-        reader.feed(
-            packets(section([event({ name: '', extended: { 番組内容: 'あらすじ' } })], { tableId: 0x58 })),
-        );
-        expect(reader.all()[0]!.copyNever).toBe(true);
-
-        // 基本の表が「禁止ではない」と言い直せば外れる
-        reader.feed(packets(section([event()])));
-        expect(reader.all()[0]!.copyNever).toBe(false);
-    });
-
-    test('開始時刻や尺が未定の番組は溜めない。録画の時刻が決まらない', () => {
-        const reader = new EpgReader();
-        // 尺だけ未定にする (BCD の全ビット1)
-        const data = section([event()]);
-        data[14 + 7] = 0xff;
-        data[14 + 8] = 0xff;
-        data[14 + 9] = 0xff;
-        reader.feed(packets(data));
-        expect(reader.all()).toHaveLength(0);
-    });
-
-    /**
-     * 1つの物理チャンネルには複数の局が入っている (地上波なら MX1 と MX2)。
-     * 先に揃ったほうで閉じると、残りが永久に埋まらない
-     */
-    test('入っている局が全部揃うまで完了にしない', () => {
-        // 揃ったかどうかを見るので、枠が過ぎていない時刻で止めておく
-        const reader = new EpgReader(() => DAY_START);
-        reader.feed(packets(section([event()])));
-        expect(reader.complete).toBe(true);
-        reader.feed(packets(section([event()], { serviceId: SERVICE + 1, lastSectionNumber: 1 })));
-        expect(reader.complete).toBe(false);
-        expect(reader.services()).toEqual([SERVICE, SERVICE + 1]);
-    });
-
-    /*
-     * 衛星の初回 (epg-collect の firstSweeps)。ほかの中継の局の番組表は
-     * 0x60〜 で来る。並びは自局の 0x50〜 と同じなので、揃い方も同じに数える
-     */
-    test('ほかの TS の局は、求めたときだけ読む', () => {
-        const other = section([event()], {
-            tableId: 0x60,
-            serviceId: SERVICE + 1,
-            transportStreamId: TSID + 1,
-        });
-        expect(parseEit(other)).toBeNull();
-        expect(parseEit(other, { other: true })?.tableId).toBe(0x50);
-
-        let at = DAY_START;
-        const reader = new EpgReader(() => at, { other: true, settle: 60_000 });
-        reader.feed(packets(section([event()])));
-        reader.feed(packets(other));
-        expect(reader.services()).toEqual([SERVICE, SERVICE + 1]);
-        expect(reader.all()).toHaveLength(2);
-        // 見かけた局は揃っても、まだ来ていない局があるかもしれないので待つ
-        expect(reader.complete).toBe(false);
-        at += 60_000;
-        expect(reader.complete).toBe(true);
-    });
-
-    test('前に取り出してから増えた・変わった番組だけを返す (読みながら保存するため)', () => {
-        const reader = new EpgReader();
-        reader.feed(packets(section([event()])));
-        expect(reader.takeChanged().map((e) => e.eventId)).toEqual([1]);
-        expect(reader.takeChanged()).toEqual([]);
-        reader.feed(packets(section([event({ eventId: 2 })], { sectionNumber: 1, lastSectionNumber: 1 })));
-        expect(reader.takeChanged().map((e) => e.eventId)).toEqual([2]);
-    });
-
-    test('来るはずの局が全部見えて揃えば、待たずに閉じる', () => {
-        const reader = new EpgReader(() => DAY_START, {
-            other: true,
-            settle: 60_000,
-            expect: [SERVICE, SERVICE + 1],
-        });
-        reader.feed(packets(section([event()])));
-        expect(reader.complete).toBe(false);
-        reader.feed(packets(section([event()], { tableId: 0x60, serviceId: SERVICE + 1 })));
-        expect(reader.complete).toBe(true);
-    });
-
-    test('EIT[p/f] の「放送中」は別に持つ。録画の延長追従に使う', () => {
-        const reader = new EpgReader();
-        const pf = section([event({ runningStatus: 4, name: 'いま放送中' })], { tableId: 0x4e });
-        reader.feed(packets(pf));
-        expect(reader.present.get(SERVICE)?.name).toBe('いま放送中');
-        // p/f だけでは番組表が揃ったことにはならない
-        expect(reader.complete).toBe(false);
-    });
-
-    /*
-     * **実機で踏んだところ。** running_status を 4 にしてくれない局がある
-     * (NHK は 74 節ぜんぶ 0 だった)。4 だけを見ていると、そういう局では
-     * 延長追従が丸ごと効かない。p/f は仕様で section 0 が現在なので、
-     * 0 (未定義) のときはそちらで決める (docs/agent.md)
-     */
-    test('running_status を入れてこない局でも「放送中」が分かる', () => {
-        const reader = new EpgReader();
-        reader.feed(
-            packets(
-                section([event({ runningStatus: 0, name: 'いま放送中' })], {
-                    tableId: 0x4e,
-                    sectionNumber: 0,
-                    lastSectionNumber: 1,
-                }),
-            ),
-        );
-        expect(reader.present.get(SERVICE)?.name).toBe('いま放送中');
-    });
-
-    test('次の番組は「放送中」にしない', () => {
-        const reader = new EpgReader();
-        reader.feed(
-            packets(
-                section([event({ runningStatus: 0, name: 'つぎの番組' })], {
-                    tableId: 0x4e,
-                    sectionNumber: 1,
-                    lastSectionNumber: 1,
-                }),
-            ),
-        );
-        expect(reader.present.has(SERVICE)).toBe(false);
-    });
-});
-
-describe('PresentFollowing', () => {
-    /** p/f の1節を 188 バイトずつ食わせる。どれかで変わったと言えば true */
-    function feed(
-        reader: PresentFollowing,
-        events: SynthEvent[],
-        options: Record<string, number> = {},
-    ): boolean {
-        const data = packetize(0x0012, section(events, { tableId: 0x4e, ...options }));
-        let changed = false;
-        for (let at = 0; at < data.length; at += 188) {
-            if (reader.feedPacket(data.subarray(at, at + 188))) changed = true;
-        }
-        return changed;
+    // 過ぎていない枠が欠けているのは、これまで通り「足りない」
+    const missing = progressAt(afternoon);
+    for (let start = 40; start <= 248; start += 8) {
+      if (start !== 48) missing.add(at(0x50, start, 255, start));
     }
+    expect(missing.complete).toBe(false);
+    expect(missing.report()).toContain("0x50 の 48");
+  });
 
-    test('いまと次を節の番号で分けて読む', () => {
-        const reader = new PresentFollowing(SERVICE);
-        expect(feed(reader, [event({ runningStatus: 4 })])).toBe(true);
-        const next = event({ eventId: 2, name: '次の番組', startAt: NOON + 30 * 60_000 });
-        expect(feed(reader, [next], { sectionNumber: 1 })).toBe(true);
-        expect(reader.present?.name).toBe('テスト番組');
-        expect(reader.following?.name).toBe('次の番組');
-    });
+  /*
+   * 枠の位置は `table_id` でずれる。0x50 が当日 0:00 から4日ぶん (32枠) で、
+   * 0x51 はその次の4日ぶん。**先の表には過ぎた枠が1つも無い。**
+   *
+   * 「見えていない先頭は飛ばす」という時計を使わない直し方も採れたが、
+   * それだとカルーセルの途中から読み始めた回に、まだ来ていないだけの先頭を
+   * 飛ばして 0x51 を揃ったことにしてしまう (4〜7日先が丸ごと落ちる)
+   */
+  test("先の日を持つ表では、どの枠も飛ばさない", () => {
+    const afternoon = Date.UTC(2026, 7, 3, 6, 30, 0);
+    const progress = progressAt(afternoon);
+    progress.add({ ...at(0x50, 40, 40), lastTableId: 0x51 });
+    // 0x51 は4日先から。先頭の枠もまだ過ぎていない
+    progress.add({ ...at(0x51, 8, 8), lastTableId: 0x51 });
+    expect(progress.complete).toBe(false);
+    expect(progress.report()).toContain("0x51 の 0");
+  });
+});
 
-    test('同じものが繰り返し来ても、変わったとは言わない', () => {
-        const reader = new PresentFollowing(SERVICE);
-        feed(reader, [event()]);
-        expect(feed(reader, [event()])).toBe(false);
-    });
+describe("EpgReader", () => {
+  const packets = (data: Uint8Array) => packetize(0x0012, data);
 
-    /*
-     * 延長は version を上げて送り直してくるはずだが、**中身で比べる**。
-     * 上げない送り手でも取りこぼさない
-     */
-    test('延びたら (尺が変わったら) 変わったと言う。版が同じでも', () => {
-        const reader = new PresentFollowing(SERVICE);
-        feed(reader, [event()]);
-        expect(feed(reader, [event({ duration: 40 * 60_000 })])).toBe(true);
-        expect(reader.present?.duration).toBe(40 * 60_000);
-    });
+  test("TS を食わせると番組が溜まる", () => {
+    const reader = new EpgReader();
+    expect(reader.feed(packets(section([event()])))).toBe(true);
+    expect(reader.all().map((e) => e.name)).toEqual(["テスト番組"]);
+  });
 
-    test('番組が繰り上がったら変わったと言う', () => {
-        const reader = new PresentFollowing(SERVICE);
-        feed(reader, [event()]);
-        const next = event({ eventId: 2, name: '次の番組', startAt: NOON + 30 * 60_000 });
-        expect(feed(reader, [next])).toBe(true);
-        expect(reader.present?.eventId).toBe(2);
-    });
+  test("同じ番組が何度来ても増えない。あとから来たほうで上書きする", () => {
+    const reader = new EpgReader();
+    reader.feed(packets(section([event()])));
+    reader.feed(packets(section([event({ name: "差し替え後" })])));
+    expect(reader.all()).toHaveLength(1);
+    expect(reader.all()[0]!.name).toBe("差し替え後");
+  });
 
-    test('放送が「いま」を空けたら null', () => {
-        const reader = new PresentFollowing(SERVICE);
-        feed(reader, [event()]);
-        expect(feed(reader, [])).toBe(true);
-        expect(reader.present).toBeNull();
-    });
+  /*
+   * **実機で踏んだところ。** 番組表は2つの表に分かれて流れてくる。
+   *
+   * - 基本 (0x50〜0x57) … タイトルと短い説明
+   * - 詳細 (0x58〜0x5F) … 「番組内容」「出演者」など
+   *
+   * 同じ event_id が両方に載っていて、それぞれ自分のぶんしか持っていない。
+   * 丸ごと上書きしていた頃は、あとに届いたほうで相手のぶんが消えていた。
+   * 実機では番組 23,000 件のうち 11,000 件が名無しになり、番組表に
+   * 「(番組情報なし)」の列が並んだ
+   */
+  test("詳細だけの表があとから来てもタイトルを消さない", () => {
+    const reader = new EpgReader();
+    reader.feed(packets(section([event()])));
+    reader.feed(
+      packets(
+        section(
+          [
+            event({
+              name: "",
+              description: "",
+              extended: { 番組内容: "あらすじ" },
+            }),
+          ],
+          {
+            tableId: 0x58,
+          },
+        ),
+      ),
+    );
 
-    test('ほかの局の p/f と番組表 (schedule) は読まない', () => {
-        const reader = new PresentFollowing(SERVICE);
-        expect(feed(reader, [event()], { serviceId: SERVICE + 1 })).toBe(false);
-        expect(feed(reader, [event()], { tableId: 0x50 })).toBe(false);
-        expect(reader.present).toBeNull();
+    const program = reader.all()[0]!;
+    expect(program.name).toBe("テスト番組");
+    expect(program.description).toBe("これは説明です");
+    expect(program.extended).toEqual({ 番組内容: "あらすじ" });
+  });
+
+  test("基本の表があとから来ても番組内容を消さない", () => {
+    const reader = new EpgReader();
+    reader.feed(
+      packets(
+        section(
+          [
+            event({
+              name: "",
+              description: "",
+              extended: { 番組内容: "あらすじ" },
+            }),
+          ],
+          {
+            tableId: 0x58,
+          },
+        ),
+      ),
+    );
+    reader.feed(packets(section([event()])));
+
+    const program = reader.all()[0]!;
+    expect(program.name).toBe("テスト番組");
+    expect(program.extended).toEqual({ 番組内容: "あらすじ" });
+  });
+
+  test("詳細だけの表があとから来ても、コピー禁止の印を消さない", () => {
+    const reader = new EpgReader();
+    reader.feed(packets(section([event({ copyControl: 0b11 })])));
+    reader.feed(
+      packets(
+        section([event({ name: "", extended: { 番組内容: "あらすじ" } })], {
+          tableId: 0x58,
+        }),
+      ),
+    );
+    expect(reader.all()[0]!.copyNever).toBe(true);
+
+    // 基本の表が「禁止ではない」と言い直せば外れる
+    reader.feed(packets(section([event()])));
+    expect(reader.all()[0]!.copyNever).toBe(false);
+  });
+
+  test("開始時刻や尺が未定の番組は溜めない。録画の時刻が決まらない", () => {
+    const reader = new EpgReader();
+    // 尺だけ未定にする (BCD の全ビット1)
+    const data = section([event()]);
+    data[14 + 7] = 0xff;
+    data[14 + 8] = 0xff;
+    data[14 + 9] = 0xff;
+    reader.feed(packets(data));
+    expect(reader.all()).toHaveLength(0);
+  });
+
+  /**
+   * 1つの物理チャンネルには複数の局が入っている (地上波なら MX1 と MX2)。
+   * 先に揃ったほうで閉じると、残りが永久に埋まらない
+   */
+  test("入っている局が全部揃うまで完了にしない", () => {
+    // 揃ったかどうかを見るので、枠が過ぎていない時刻で止めておく
+    const reader = new EpgReader(() => DAY_START);
+    reader.feed(packets(section([event()])));
+    expect(reader.complete).toBe(true);
+    reader.feed(
+      packets(
+        section([event()], { serviceId: SERVICE + 1, lastSectionNumber: 1 }),
+      ),
+    );
+    expect(reader.complete).toBe(false);
+    expect(reader.services()).toEqual([SERVICE, SERVICE + 1]);
+  });
+
+  /*
+   * 衛星の初回 (epg-collect の firstSweeps)。ほかの中継の局の番組表は
+   * 0x60〜 で来る。並びは自局の 0x50〜 と同じなので、揃い方も同じに数える
+   */
+  test("ほかの TS の局は、求めたときだけ読む", () => {
+    const other = section([event()], {
+      tableId: 0x60,
+      serviceId: SERVICE + 1,
+      transportStreamId: TSID + 1,
     });
+    expect(parseEit(other)).toBeNull();
+    expect(parseEit(other, { other: true })?.tableId).toBe(0x50);
+
+    let at = DAY_START;
+    const reader = new EpgReader(() => at, { other: true, settle: 60_000 });
+    reader.feed(packets(section([event()])));
+    reader.feed(packets(other));
+    expect(reader.services()).toEqual([SERVICE, SERVICE + 1]);
+    expect(reader.all()).toHaveLength(2);
+    // 見かけた局は揃っても、まだ来ていない局があるかもしれないので待つ
+    expect(reader.complete).toBe(false);
+    at += 60_000;
+    expect(reader.complete).toBe(true);
+  });
+
+  test("前に取り出してから増えた・変わった番組だけを返す (読みながら保存するため)", () => {
+    const reader = new EpgReader();
+    reader.feed(packets(section([event()])));
+    expect(reader.takeChanged().map((e) => e.eventId)).toEqual([1]);
+    expect(reader.takeChanged()).toEqual([]);
+    reader.feed(
+      packets(
+        section([event({ eventId: 2 })], {
+          sectionNumber: 1,
+          lastSectionNumber: 1,
+        }),
+      ),
+    );
+    expect(reader.takeChanged().map((e) => e.eventId)).toEqual([2]);
+  });
+
+  test("来るはずの局が全部見えて揃えば、待たずに閉じる", () => {
+    const reader = new EpgReader(() => DAY_START, {
+      other: true,
+      settle: 60_000,
+      expect: [SERVICE, SERVICE + 1],
+    });
+    reader.feed(packets(section([event()])));
+    expect(reader.complete).toBe(false);
+    reader.feed(
+      packets(section([event()], { tableId: 0x60, serviceId: SERVICE + 1 })),
+    );
+    expect(reader.complete).toBe(true);
+  });
+
+  test("EIT[p/f] の「放送中」は別に持つ。録画の延長追従に使う", () => {
+    const reader = new EpgReader();
+    const pf = section([event({ runningStatus: 4, name: "いま放送中" })], {
+      tableId: 0x4e,
+    });
+    reader.feed(packets(pf));
+    expect(reader.present.get(SERVICE)?.name).toBe("いま放送中");
+    // p/f だけでは番組表が揃ったことにはならない
+    expect(reader.complete).toBe(false);
+  });
+
+  /*
+   * **実機で踏んだところ。** running_status を 4 にしてくれない局がある
+   * (NHK は 74 節ぜんぶ 0 だった)。4 だけを見ていると、そういう局では
+   * 延長追従が丸ごと効かない。p/f は仕様で section 0 が現在なので、
+   * 0 (未定義) のときはそちらで決める (docs/agent.md)
+   */
+  test("running_status を入れてこない局でも「放送中」が分かる", () => {
+    const reader = new EpgReader();
+    reader.feed(
+      packets(
+        section([event({ runningStatus: 0, name: "いま放送中" })], {
+          tableId: 0x4e,
+          sectionNumber: 0,
+          lastSectionNumber: 1,
+        }),
+      ),
+    );
+    expect(reader.present.get(SERVICE)?.name).toBe("いま放送中");
+  });
+
+  test("次の番組は「放送中」にしない", () => {
+    const reader = new EpgReader();
+    reader.feed(
+      packets(
+        section([event({ runningStatus: 0, name: "つぎの番組" })], {
+          tableId: 0x4e,
+          sectionNumber: 1,
+          lastSectionNumber: 1,
+        }),
+      ),
+    );
+    expect(reader.present.has(SERVICE)).toBe(false);
+  });
+});
+
+describe("PresentFollowing", () => {
+  /** p/f の1節を 188 バイトずつ食わせる。どれかで変わったと言えば true */
+  function feed(
+    reader: PresentFollowing,
+    events: SynthEvent[],
+    options: Record<string, number> = {},
+  ): boolean {
+    const data = packetize(
+      0x0012,
+      section(events, { tableId: 0x4e, ...options }),
+    );
+    let changed = false;
+    for (let at = 0; at < data.length; at += 188) {
+      if (reader.feedPacket(data.subarray(at, at + 188))) changed = true;
+    }
+    return changed;
+  }
+
+  test("いまと次を節の番号で分けて読む", () => {
+    const reader = new PresentFollowing(SERVICE);
+    expect(feed(reader, [event({ runningStatus: 4 })])).toBe(true);
+    const next = event({
+      eventId: 2,
+      name: "次の番組",
+      startAt: NOON + 30 * 60_000,
+    });
+    expect(feed(reader, [next], { sectionNumber: 1 })).toBe(true);
+    expect(reader.present?.name).toBe("テスト番組");
+    expect(reader.following?.name).toBe("次の番組");
+  });
+
+  test("同じものが繰り返し来ても、変わったとは言わない", () => {
+    const reader = new PresentFollowing(SERVICE);
+    feed(reader, [event()]);
+    expect(feed(reader, [event()])).toBe(false);
+  });
+
+  /*
+   * 延長は version を上げて送り直してくるはずだが、**中身で比べる**。
+   * 上げない送り手でも取りこぼさない
+   */
+  test("延びたら (尺が変わったら) 変わったと言う。版が同じでも", () => {
+    const reader = new PresentFollowing(SERVICE);
+    feed(reader, [event()]);
+    expect(feed(reader, [event({ duration: 40 * 60_000 })])).toBe(true);
+    expect(reader.present?.duration).toBe(40 * 60_000);
+  });
+
+  test("番組が繰り上がったら変わったと言う", () => {
+    const reader = new PresentFollowing(SERVICE);
+    feed(reader, [event()]);
+    const next = event({
+      eventId: 2,
+      name: "次の番組",
+      startAt: NOON + 30 * 60_000,
+    });
+    expect(feed(reader, [next])).toBe(true);
+    expect(reader.present?.eventId).toBe(2);
+  });
+
+  test("放送が「いま」を空けたら null", () => {
+    const reader = new PresentFollowing(SERVICE);
+    feed(reader, [event()]);
+    expect(feed(reader, [])).toBe(true);
+    expect(reader.present).toBeNull();
+  });
+
+  test("ほかの局の p/f と番組表 (schedule) は読まない", () => {
+    const reader = new PresentFollowing(SERVICE);
+    expect(feed(reader, [event()], { serviceId: SERVICE + 1 })).toBe(false);
+    expect(feed(reader, [event()], { tableId: 0x50 })).toBe(false);
+    expect(reader.present).toBeNull();
+  });
 });

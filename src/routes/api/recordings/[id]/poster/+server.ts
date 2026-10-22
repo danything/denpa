@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { error } from '@sveltejs/kit';
-import { sidecarPaths } from '#lib/server/metadata.js';
-import { recordingOr404 } from '#lib/server/recording.js';
+import { existsSync, readFileSync } from "node:fs";
+import { error } from "@sveltejs/kit";
+import { sidecarPaths } from "#lib/server/metadata.js";
+import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
  * 録画のポスターを返す。**一覧のサムネイル用。**
@@ -14,17 +14,17 @@ import { recordingOr404 } from '#lib/server/recording.js';
  * 失敗したもの。そのときは 404 を返して、一覧は画像を出さずに済ませる (`+page.svelte`)。
  */
 export function GET({ params }) {
-    const recording = recordingOr404(params.id);
-    if (recording.library_path === null) error(404, 'ポスターがありません');
+  const recording = recordingOr404(params.id);
+  if (recording.library_path === null) error(404, "ポスターがありません");
 
-    const poster = sidecarPaths(recording.library_path).thumbnail;
-    if (!existsSync(poster)) error(404, 'ポスターがありません');
+  const poster = sidecarPaths(recording.library_path).thumbnail;
+  if (!existsSync(poster)) error(404, "ポスターがありません");
 
-    return new Response(readFileSync(poster), {
-        headers: {
-            'Content-Type': 'image/jpeg',
-            // エンコードしたら変わらない画像。一覧を開くたびに取り直させない
-            'Cache-Control': 'private, max-age=86400',
-        },
-    });
+  return new Response(readFileSync(poster), {
+    headers: {
+      "Content-Type": "image/jpeg",
+      // エンコードしたら変わらない画像。一覧を開くたびに取り直させない
+      "Cache-Control": "private, max-age=86400",
+    },
+  });
 }

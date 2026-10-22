@@ -14,28 +14,33 @@ let ambient: string | null = null;
 
 /** `#rgb`・`#rrggbb` を `#rrggbb` にそろえる。読めなければ null */
 export function normalizeHex(value: string): string | null {
-    const text = value.trim().toLowerCase();
-    if (/^#[0-9a-f]{6}$/.test(text)) return text;
-    if (/^#[0-9a-f]{3}$/.test(text)) return `#${[...text.slice(1)].map((c) => c + c).join('')}`;
-    return null;
+  const text = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(text)) return text;
+  if (/^#[0-9a-f]{3}$/.test(text))
+    return `#${[...text.slice(1)].map((c) => c + c).join("")}`;
+  return null;
 }
 
 /** いまのテーマの地 (`--dp-bg`)。読めなければ暗いほうの地 */
 export function themeBackground(): string {
-    const value = getComputedStyle(document.documentElement).getPropertyValue('--dp-bg');
-    return normalizeHex(value) ?? '#0b0c0f';
+  const value = getComputedStyle(document.documentElement).getPropertyValue(
+    "--dp-bg",
+  );
+  return normalizeHex(value) ?? "#0b0c0f";
 }
 
 /** 枠の色を、いまの持ち主 (アンビエントの色かテーマの地) に合わせる */
 export function syncThemeColor(): void {
-    const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-    if (meta === null) return;
-    const next = ambient ?? themeBackground();
-    if (meta.content !== next) meta.content = next;
+  const meta = document.querySelector<HTMLMetaElement>(
+    'meta[name="theme-color"]',
+  );
+  if (meta === null) return;
+  const next = ambient ?? themeBackground();
+  if (meta.content !== next) meta.content = next;
 }
 
 /** アンビエントモードの色を当てる。null でテーマの地に戻す */
 export function setAmbientThemeColor(color: string | null): void {
-    ambient = color;
-    syncThemeColor();
+  ambient = color;
+  syncThemeColor();
 }

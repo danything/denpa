@@ -21,11 +21,11 @@ services:
     # Docker Desktop と OrbStack は host.docker.internal を最初から引けるが、colima などは
     # 引けないことがある。host-gateway で OS 自身を指しておけば、どれでも通る
     extra_hosts:
-      - 'host.docker.internal:host-gateway'
+      - "host.docker.internal:host-gateway"
     environment:
       TZ: Asia/Tokyo
       TUNER_AGENT_URL: http://host.docker.internal:25252
-      ENCODE_CONCURRENCY: '2'
+      ENCODE_CONCURRENCY: "2"
       # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じプライベートネットワーク。
       # ブラウザから localhost で入ると、コンテナに見える送信元は Docker の
       # ネットワークの出口 (172.16.0.0/12 か 192.168.0.0/16 の中) なので、これで通る。
@@ -41,7 +41,7 @@ services:
       # 出来上がった録画は Finder からも見える所に
       - ${HOME}/Movies/denpa/library:/media/encoded
     ports:
-      - '3000:3000'
+      - "3000:3000"
 
 volumes:
   denpa-data:

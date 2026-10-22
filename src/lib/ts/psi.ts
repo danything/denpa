@@ -10,7 +10,7 @@
  * どのみち要るので [aribtext.ts](aribtext.ts) に寄せてある。
  */
 
-import { decodeAribText } from './aribtext';
+import { decodeAribText } from "./aribtext";
 
 export const PACKET = 188;
 export const SYNC = 0x47;
@@ -37,24 +37,26 @@ const DESC_TS_INFORMATION = 0xcd;
 const SERVICE_TYPES = new Set([0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0]);
 
 const CRC32_TABLE = (() => {
-    const table = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-        let crc = i << 24;
-        for (let bit = 0; bit < 8; bit++) {
-            crc = crc & 0x80000000 ? ((crc << 1) ^ 0x04c11db7) >>> 0 : (crc << 1) >>> 0;
-        }
-        table[i] = crc >>> 0;
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let crc = i << 24;
+    for (let bit = 0; bit < 8; bit++) {
+      crc =
+        crc & 0x80000000 ? ((crc << 1) ^ 0x04c11db7) >>> 0 : (crc << 1) >>> 0;
     }
-    return table;
+    table[i] = crc >>> 0;
+  }
+  return table;
 })();
 
 /** MPEG-2 の CRC32。セクション末尾の4バイトを含めて回すと 0 になる */
 function crc32(data: Uint8Array): number {
-    let crc = 0xffffffff;
-    for (const byte of data) {
-        crc = (((crc << 8) >>> 0) ^ CRC32_TABLE[((crc >>> 24) ^ byte) & 0xff]!) >>> 0;
-    }
-    return crc >>> 0;
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc =
+      (((crc << 8) >>> 0) ^ CRC32_TABLE[((crc >>> 24) ^ byte) & 0xff]!) >>> 0;
+  }
+  return crc >>> 0;
 }
 
 /**
@@ -65,34 +67,34 @@ function crc32(data: Uint8Array): number {
  * 捨てるだけなので、1箇所に置く。
  */
 export function withCrc(body: number[]): Uint8Array {
-    const section = Uint8Array.from(body);
-    const length = section.length - 3 + 4;
-    section[1] = 0xb0 | ((length >> 8) & 0x0f);
-    section[2] = length & 0xff;
+  const section = Uint8Array.from(body);
+  const length = section.length - 3 + 4;
+  section[1] = 0xb0 | ((length >> 8) & 0x0f);
+  section[2] = length & 0xff;
 
-    const out = new Uint8Array(section.length + 4);
-    out.set(section);
-    new DataView(out.buffer).setUint32(section.length, crc32(section));
-    return out;
+  const out = new Uint8Array(section.length + 4);
+  out.set(section);
+  new DataView(out.buffer).setUint32(section.length, crc32(section));
+  return out;
 }
 
 export interface Service {
-    serviceId: number;
-    serviceType: number;
-    /** 局名。SDT からしか取れないので、NIT 由来のものは空 */
-    name: string;
+  serviceId: number;
+  serviceType: number;
+  /** 局名。SDT からしか取れないので、NIT 由来のものは空 */
+  name: string;
 }
 
 export interface TransportInfo {
-    transportStreamId: number;
-    originalNetworkId: number;
-    services: Service[];
+  transportStreamId: number;
+  originalNetworkId: number;
+  services: Service[];
 }
 
 export interface NetworkInfo {
-    networkId: number;
-    remoteControlKeyId: number | null;
-    transportStreams: TransportInfo[];
+  networkId: number;
+  remoteControlKeyId: number | null;
+  transportStreams: TransportInfo[];
 }
 
 /** 何も組み上がらなかったときの返り。使い回すので凍らせてある */
@@ -106,87 +108,87 @@ const NONE: readonly Uint8Array[] = Object.freeze([]);
  * 頭を合わせ、section_length ぶん溜まったら1本として吐く。
  */
 export class SectionAssembler {
-    private buffer = new Uint8Array(0);
+  private buffer = new Uint8Array(0);
 
-    /**
-     * @param pid 読むPID
-     * @param crc CRC の見方。
-     *   `always` … 末尾4バイトを CRC32 とみなして必ず確かめる (PSI はこちら)
-     *   `syntax` … `section_syntax_indicator` が立っているときだけ確かめる。
-     *     DSM-CC は立っていないと末尾が CRC ではなく Checksum なので、
-     *     いつも確かめると**全部捨ててしまう**
-     */
-    constructor(
-        private readonly pid: number,
-        private readonly crc: 'always' | 'syntax' = 'always',
-    ) {}
+  /**
+   * @param pid 読むPID
+   * @param crc CRC の見方。
+   *   `always` … 末尾4バイトを CRC32 とみなして必ず確かめる (PSI はこちら)
+   *   `syntax` … `section_syntax_indicator` が立っているときだけ確かめる。
+   *     DSM-CC は立っていないと末尾が CRC ではなく Checksum なので、
+   *     いつも確かめると**全部捨ててしまう**
+   */
+  constructor(
+    private readonly pid: number,
+    private readonly crc: "always" | "syntax" = "always",
+  ) {}
 
-    /**
-     * パケットを1つ食わせる。組み上がったセクションを返す。
-     *
-     * 返りは**読むだけ**にすること。何も組み上がらないとき (ほとんどのパケット) は
-     * 使い回しの空配列を返す — 関係ないパケットのたびに配列を作っていた
-     */
-    feed(packet: Uint8Array): readonly Uint8Array[] {
-        if (packet[0] !== SYNC) return NONE;
-        const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-        if (pid !== this.pid) return NONE;
-        // トランスポートエラーが立っているものは信用しない
-        if (packet[1]! & 0x80) return NONE;
+  /**
+   * パケットを1つ食わせる。組み上がったセクションを返す。
+   *
+   * 返りは**読むだけ**にすること。何も組み上がらないとき (ほとんどのパケット) は
+   * 使い回しの空配列を返す — 関係ないパケットのたびに配列を作っていた
+   */
+  feed(packet: Uint8Array): readonly Uint8Array[] {
+    if (packet[0] !== SYNC) return NONE;
+    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+    if (pid !== this.pid) return NONE;
+    // トランスポートエラーが立っているものは信用しない
+    if (packet[1]! & 0x80) return NONE;
 
-        const adaptation = (packet[3]! >> 4) & 0x03;
-        if (adaptation === 0 || adaptation === 2) return NONE;
-        let offset = 4;
-        if (adaptation === 3) offset += 1 + packet[4]!;
-        if (offset >= PACKET) return NONE;
+    const adaptation = (packet[3]! >> 4) & 0x03;
+    if (adaptation === 0 || adaptation === 2) return NONE;
+    let offset = 4;
+    if (adaptation === 3) offset += 1 + packet[4]!;
+    if (offset >= PACKET) return NONE;
 
-        const payload = packet.subarray(offset);
-        if (packet[1]! & 0x40) {
-            const pointer = payload[0]!;
-            if (1 + pointer > payload.length) return NONE;
-            // pointer_field の手前は前のセクションの続き
-            this.append(payload.subarray(1, 1 + pointer));
-            const done = this.flush();
-            // 写す。パケットは届いた塊の上の窓で、塊は使い回される (PacketStream)
-            this.buffer = payload.slice(1 + pointer);
-            const next = this.flush();
-            if (done.length === 0) return next;
-            return next.length === 0 ? done : [...done, ...next];
-        }
-
-        this.append(payload);
-        return this.flush();
+    const payload = packet.subarray(offset);
+    if (packet[1]! & 0x40) {
+      const pointer = payload[0]!;
+      if (1 + pointer > payload.length) return NONE;
+      // pointer_field の手前は前のセクションの続き
+      this.append(payload.subarray(1, 1 + pointer));
+      const done = this.flush();
+      // 写す。パケットは届いた塊の上の窓で、塊は使い回される (PacketStream)
+      this.buffer = payload.slice(1 + pointer);
+      const next = this.flush();
+      if (done.length === 0) return next;
+      return next.length === 0 ? done : [...done, ...next];
     }
 
-    private append(data: Uint8Array): void {
-        if (this.buffer.length === 0) return;
-        const joined = new Uint8Array(this.buffer.length + data.length);
-        joined.set(this.buffer);
-        joined.set(data, this.buffer.length);
-        this.buffer = joined;
-    }
+    this.append(payload);
+    return this.flush();
+  }
 
-    private flush(): readonly Uint8Array[] {
-        let sections: Uint8Array[] | null = null;
-        for (;;) {
-            if (this.buffer.length < 3) return sections ?? NONE;
-            // 詰め物。ここから先にセクションは無い
-            if (this.buffer[0] === 0xff) {
-                this.buffer = new Uint8Array(0);
-                return sections ?? NONE;
-            }
-            const length = 3 + (((this.buffer[1]! & 0x0f) << 8) | this.buffer[2]!);
-            if (this.buffer.length < length) return sections ?? NONE;
-            const section = this.buffer.slice(0, length);
-            this.buffer = this.buffer.slice(length);
-            // 壊れたセクションを読むと嘘の局が並ぶので、CRC を通ったものだけ使う
-            const syntax = (section[1]! & 0x80) !== 0;
-            if ((this.crc === 'syntax' && !syntax) || crc32(section) === 0) {
-                sections ??= [];
-                sections.push(section);
-            }
-        }
+  private append(data: Uint8Array): void {
+    if (this.buffer.length === 0) return;
+    const joined = new Uint8Array(this.buffer.length + data.length);
+    joined.set(this.buffer);
+    joined.set(data, this.buffer.length);
+    this.buffer = joined;
+  }
+
+  private flush(): readonly Uint8Array[] {
+    let sections: Uint8Array[] | null = null;
+    for (;;) {
+      if (this.buffer.length < 3) return sections ?? NONE;
+      // 詰め物。ここから先にセクションは無い
+      if (this.buffer[0] === 0xff) {
+        this.buffer = new Uint8Array(0);
+        return sections ?? NONE;
+      }
+      const length = 3 + (((this.buffer[1]! & 0x0f) << 8) | this.buffer[2]!);
+      if (this.buffer.length < length) return sections ?? NONE;
+      const section = this.buffer.slice(0, length);
+      this.buffer = this.buffer.slice(length);
+      // 壊れたセクションを読むと嘘の局が並ぶので、CRC を通ったものだけ使う
+      const syntax = (section[1]! & 0x80) !== 0;
+      if ((this.crc === "syntax" && !syntax) || crc32(section) === 0) {
+        sections ??= [];
+        sections.push(section);
+      }
     }
+  }
 }
 
 /**
@@ -196,18 +198,26 @@ export class SectionAssembler {
 const CONFIRM = 3;
 
 /** `from` 以降 `until` の手前までで、188 間隔に 0x47 が続くところを探す。無ければ -1 (`seek.ts` も使う) */
-export function findSync(data: Uint8Array, from = 0, until = data.length): number {
-    for (let at = from; at < until && at + PACKET * (CONFIRM - 1) < data.length; at++) {
-        let ok = true;
-        for (let i = 0; i < CONFIRM; i++) {
-            if (data[at + i * PACKET] !== SYNC) {
-                ok = false;
-                break;
-            }
-        }
-        if (ok) return at;
+export function findSync(
+  data: Uint8Array,
+  from = 0,
+  until = data.length,
+): number {
+  for (
+    let at = from;
+    at < until && at + PACKET * (CONFIRM - 1) < data.length;
+    at++
+  ) {
+    let ok = true;
+    for (let i = 0; i < CONFIRM; i++) {
+      if (data[at + i * PACKET] !== SYNC) {
+        ok = false;
+        break;
+      }
     }
-    return -1;
+    if (ok) return at;
+  }
+  return -1;
 }
 
 /**
@@ -223,84 +233,88 @@ export function findSync(data: Uint8Array, from = 0, until = data.length): numbe
  * いまのパーサ (`SectionAssembler`・`PesDemuxer`) は溜めるときに写している
  */
 export class PacketStream {
-    private rest = new Uint8Array(0);
+  private rest = new Uint8Array(0);
 
-    *feed(chunk: Uint8Array): Generator<Uint8Array> {
-        /*
-         * 前の残り (`rest`) と塊を繋いだ並びの上を歩く。位置 `at` はその並びでの位置。
-         * 繋ぐのは**残りに頭があるパケットを読むのに要るぶんだけ** (頭を探すのに
-         * 3パケットぶん先まで見る)
-         */
-        const split = this.rest.length;
-        const total = split + chunk.length;
-        let at = 0;
-        let lost = false;
-        if (split > 0) {
-            const head = new Uint8Array(split + Math.min(chunk.length, PACKET * CONFIRM));
-            head.set(this.rest);
-            head.set(chunk.subarray(0, head.length - split), split);
-            while (at < split && at + PACKET <= total) {
-                if (head[at] !== SYNC) {
-                    const found = findSync(head, at, split);
-                    // 残りの中には無い。塊のほうを探す
-                    if (found < 0) {
-                        lost = true;
-                        break;
-                    }
-                    at = found;
-                }
-                yield head.subarray(at, at + PACKET);
-                at += PACKET;
-            }
+  *feed(chunk: Uint8Array): Generator<Uint8Array> {
+    /*
+     * 前の残り (`rest`) と塊を繋いだ並びの上を歩く。位置 `at` はその並びでの位置。
+     * 繋ぐのは**残りに頭があるパケットを読むのに要るぶんだけ** (頭を探すのに
+     * 3パケットぶん先まで見る)
+     */
+    const split = this.rest.length;
+    const total = split + chunk.length;
+    let at = 0;
+    let lost = false;
+    if (split > 0) {
+      const head = new Uint8Array(
+        split + Math.min(chunk.length, PACKET * CONFIRM),
+      );
+      head.set(this.rest);
+      head.set(chunk.subarray(0, head.length - split), split);
+      while (at < split && at + PACKET <= total) {
+        if (head[at] !== SYNC) {
+          const found = findSync(head, at, split);
+          // 残りの中には無い。塊のほうを探す
+          if (found < 0) {
+            lost = true;
+            break;
+          }
+          at = found;
         }
-
-        let offset = at - split;
-        if (lost) {
-            const found = findSync(chunk);
-            if (found >= 0) {
-                offset = found;
-                lost = false;
-            }
-        }
-        if (!lost) {
-            while (offset + PACKET <= chunk.length) {
-                if (chunk[offset] !== SYNC) {
-                    const found = findSync(chunk, offset);
-                    if (found < 0) break;
-                    offset = found;
-                    if (offset + PACKET > chunk.length) break;
-                }
-                yield chunk.subarray(offset, offset + PACKET);
-                offset += PACKET;
-            }
-            at = split + offset;
-        }
-
-        // 同期が取れないまま溜め込まないよう、頭を探せるぶんだけ残す
-        const from = Math.max(at, total - PACKET * CONFIRM);
-        if (from >= split) {
-            this.rest = chunk.slice(from - split);
-        } else {
-            // 塊が短くて、前の残りにまだ食い込んでいる
-            const rest = new Uint8Array(total - from);
-            rest.set(this.rest.subarray(from));
-            rest.set(chunk, split - from);
-            this.rest = rest;
-        }
+        yield head.subarray(at, at + PACKET);
+        at += PACKET;
+      }
     }
+
+    let offset = at - split;
+    if (lost) {
+      const found = findSync(chunk);
+      if (found >= 0) {
+        offset = found;
+        lost = false;
+      }
+    }
+    if (!lost) {
+      while (offset + PACKET <= chunk.length) {
+        if (chunk[offset] !== SYNC) {
+          const found = findSync(chunk, offset);
+          if (found < 0) break;
+          offset = found;
+          if (offset + PACKET > chunk.length) break;
+        }
+        yield chunk.subarray(offset, offset + PACKET);
+        offset += PACKET;
+      }
+      at = split + offset;
+    }
+
+    // 同期が取れないまま溜め込まないよう、頭を探せるぶんだけ残す
+    const from = Math.max(at, total - PACKET * CONFIRM);
+    if (from >= split) {
+      this.rest = chunk.slice(from - split);
+    } else {
+      // 塊が短くて、前の残りにまだ食い込んでいる
+      const rest = new Uint8Array(total - from);
+      rest.set(this.rest.subarray(from));
+      rest.set(chunk, split - from);
+      this.rest = rest;
+    }
+  }
 }
 
 /** 記述子の並びを (tag, 中身) に切り分ける */
-export function* descriptors(data: Uint8Array): Generator<[number, Uint8Array]> {
-    let at = 0;
-    while (at + 2 <= data.length) {
-        const tag = data[at]!;
-        const length = data[at + 1]!;
-        const body = data.subarray(at + 2, at + 2 + length);
-        if (body.length < length) return;
-        yield [tag, body];
-        at += 2 + length;
-    }
+export function* descriptors(
+  data: Uint8Array,
+): Generator<[number, Uint8Array]> {
+  let at = 0;
+  while (at + 2 <= data.length) {
+    const tag = data[at]!;
+    const length = data[at + 1]!;
+    const body = data.subarray(at + 2, at + 2 + length);
+    if (body.length < length) return;
+    yield [tag, body];
+    at += 2 + length;
+  }
 }
 
 /** デジタルコピー制御記述子。EIT の番組ごとと PMT に入る */
@@ -314,16 +328,16 @@ export const DESC_DIGITAL_COPY_CONTROL = 0xc1;
  * ([data.md](../../../docs/data.md)「コピー禁止の番組」)
  */
 export function isCopyNever(data: Uint8Array): boolean {
-    return data.length >= 1 && data[0]! >> 6 === 0b11;
+  return data.length >= 1 && data[0]! >> 6 === 0b11;
 }
 
 /**
  * PMT の**番組ぜんたいに掛かる記述子** (program_info)。CA (ECM の PID) はここにも入る
  */
 export function pmtProgramInfo(section: Uint8Array): Uint8Array {
-    if (section[0] !== TABLE_PMT || section.length < 16) return new Uint8Array(0);
-    const length = ((section[10]! & 0x0f) << 8) | section[11]!;
-    return section.subarray(12, 12 + length);
+  if (section[0] !== TABLE_PMT || section.length < 16) return new Uint8Array(0);
+  const length = ((section[10]! & 0x0f) << 8) | section[11]!;
+  return section.subarray(12, 12 + length);
 }
 
 /**
@@ -334,30 +348,35 @@ export function pmtProgramInfo(section: Uint8Array): Uint8Array {
  * (component_tag や application_signalling) です。だからここは**素通しで並べる
  * だけ**にして、選り分けは呼ぶ側に置いてあります。
  */
-export function* pmtStreams(section: Uint8Array): Generator<[number, number, Uint8Array]> {
-    if (section[0] !== TABLE_PMT || section.length < 16) return;
-    const programInfoLength = ((section[10]! & 0x0f) << 8) | section[11]!;
-    let at = 12 + programInfoLength;
-    const end = section.length - 4;
-    while (at + 5 <= end) {
-        const pid = ((section[at + 1]! & 0x1f) << 8) | section[at + 2]!;
-        const infoLength = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
-        yield [section[at]!, pid, section.subarray(at + 5, at + 5 + infoLength)];
-        at += 5 + infoLength;
-    }
+export function* pmtStreams(
+  section: Uint8Array,
+): Generator<[number, number, Uint8Array]> {
+  if (section[0] !== TABLE_PMT || section.length < 16) return;
+  const programInfoLength = ((section[10]! & 0x0f) << 8) | section[11]!;
+  let at = 12 + programInfoLength;
+  const end = section.length - 4;
+  while (at + 5 <= end) {
+    const pid = ((section[at + 1]! & 0x1f) << 8) | section[at + 2]!;
+    const infoLength = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
+    yield [section[at]!, pid, section.subarray(at + 5, at + 5 + infoLength)];
+    at += 5 + infoLength;
+  }
 }
 
 /** PAT から `サービスID → PMT の PID`。サービス0 は NIT なので飛ばす */
 export function parsePat(section: Uint8Array): Map<number, number> {
-    const programs = new Map<number, number>();
-    if (section[0] !== TABLE_PAT) return programs;
-    const end = section.length - 4;
-    for (let at = 8; at + 4 <= end; at += 4) {
-        const serviceId = (section[at]! << 8) | section[at + 1]!;
-        if (serviceId === 0) continue;
-        programs.set(serviceId, ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!);
-    }
-    return programs;
+  const programs = new Map<number, number>();
+  if (section[0] !== TABLE_PAT) return programs;
+  const end = section.length - 4;
+  for (let at = 8; at + 4 <= end; at += 4) {
+    const serviceId = (section[at]! << 8) | section[at + 1]!;
+    if (serviceId === 0) continue;
+    programs.set(
+      serviceId,
+      ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!,
+    );
+  }
+  return programs;
 }
 
 /**
@@ -366,93 +385,105 @@ export function parsePat(section: Uint8Array): Map<number, number> {
  * **読む側が2つある。** 局名 (`parseSdt`) とロゴの対応 (`ts/logo.ts`) で、
  * 欲しい記述子が違うだけで歩き方は同じ。並びの読み方をここ1箇所に置く。
  */
-export function* sdtServices(section: Uint8Array): Generator<[number, Uint8Array]> {
-    let at = 11;
-    const end = section.length - 4;
-    while (at + 5 <= end) {
-        const serviceId = (section[at]! << 8) | section[at + 1]!;
-        const loop = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
-        yield [serviceId, section.subarray(at + 5, at + 5 + loop)];
-        at += 5 + loop;
-    }
+export function* sdtServices(
+  section: Uint8Array,
+): Generator<[number, Uint8Array]> {
+  let at = 11;
+  const end = section.length - 4;
+  while (at + 5 <= end) {
+    const serviceId = (section[at]! << 8) | section[at + 1]!;
+    const loop = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
+    yield [serviceId, section.subarray(at + 5, at + 5 + loop)];
+    at += 5 + loop;
+  }
 }
 
 /** SDT からサービスの一覧を読む。自分の TS のものだけ */
 export function parseSdt(section: Uint8Array): TransportInfo | null {
-    if (section[0] !== TABLE_SDT_ACTUAL) return null;
+  if (section[0] !== TABLE_SDT_ACTUAL) return null;
 
-    const services: Service[] = [];
-    for (const [serviceId, body] of sdtServices(section)) {
-        for (const [tag, descriptor] of descriptors(body)) {
-            if (tag === DESC_SERVICE && descriptor.length > 0) {
-                /*
-                 * service_descriptor は 種別 → 事業者名 → サービス名 の順。
-                 * 事業者名 (「東京メトロポリタンテレビジョン」) は要らないので飛ばし、
-                 * その先のサービス名 (「TOKYO MX1」) を取る
-                 */
-                const providerLength = descriptor[1] ?? 0;
-                const nameAt = 2 + providerLength;
-                const nameLength = descriptor[nameAt] ?? 0;
-                services.push({
-                    serviceId,
-                    serviceType: descriptor[0]!,
-                    name: decodeAribText(descriptor.subarray(nameAt + 1, nameAt + 1 + nameLength)),
-                });
-                break;
-            }
-        }
+  const services: Service[] = [];
+  for (const [serviceId, body] of sdtServices(section)) {
+    for (const [tag, descriptor] of descriptors(body)) {
+      if (tag === DESC_SERVICE && descriptor.length > 0) {
+        /*
+         * service_descriptor は 種別 → 事業者名 → サービス名 の順。
+         * 事業者名 (「東京メトロポリタンテレビジョン」) は要らないので飛ばし、
+         * その先のサービス名 (「TOKYO MX1」) を取る
+         */
+        const providerLength = descriptor[1] ?? 0;
+        const nameAt = 2 + providerLength;
+        const nameLength = descriptor[nameAt] ?? 0;
+        services.push({
+          serviceId,
+          serviceType: descriptor[0]!,
+          name: decodeAribText(
+            descriptor.subarray(nameAt + 1, nameAt + 1 + nameLength),
+          ),
+        });
+        break;
+      }
     }
+  }
 
-    return {
-        transportStreamId: (section[3]! << 8) | section[4]!,
-        originalNetworkId: (section[8]! << 8) | section[9]!,
-        services,
-    };
+  return {
+    transportStreamId: (section[3]! << 8) | section[4]!,
+    originalNetworkId: (section[8]! << 8) | section[9]!,
+    services,
+  };
 }
 
 /** NIT からネットワークIDとリモコン番号、他の TS の顔ぶれを読む */
 export function parseNit(section: Uint8Array): NetworkInfo | null {
-    if (section[0] !== TABLE_NIT_ACTUAL) return null;
+  if (section[0] !== TABLE_NIT_ACTUAL) return null;
 
-    const networkLength = ((section[8]! & 0x0f) << 8) | section[9]!;
-    let at = 10 + networkLength;
-    if (at + 2 > section.length) return null;
-    at += 2; // transport_stream_loop_length
+  const networkLength = ((section[8]! & 0x0f) << 8) | section[9]!;
+  let at = 10 + networkLength;
+  if (at + 2 > section.length) return null;
+  at += 2; // transport_stream_loop_length
 
-    let remoteControlKeyId: number | null = null;
-    const transportStreams: TransportInfo[] = [];
-    const end = section.length - 4;
-    while (at + 6 <= end) {
-        const transportStreamId = (section[at]! << 8) | section[at + 1]!;
-        const originalNetworkId = (section[at + 2]! << 8) | section[at + 3]!;
-        const loop = ((section[at + 4]! & 0x0f) << 8) | section[at + 5]!;
-        const body = section.subarray(at + 6, at + 6 + loop);
-        at += 6 + loop;
+  let remoteControlKeyId: number | null = null;
+  const transportStreams: TransportInfo[] = [];
+  const end = section.length - 4;
+  while (at + 6 <= end) {
+    const transportStreamId = (section[at]! << 8) | section[at + 1]!;
+    const originalNetworkId = (section[at + 2]! << 8) | section[at + 3]!;
+    const loop = ((section[at + 4]! & 0x0f) << 8) | section[at + 5]!;
+    const body = section.subarray(at + 6, at + 6 + loop);
+    at += 6 + loop;
 
-        const services: Service[] = [];
-        for (const [tag, descriptor] of descriptors(body)) {
-            if (tag === DESC_TS_INFORMATION && descriptor.length > 0 && remoteControlKeyId === null) {
-                remoteControlKeyId = descriptor[0]!;
-            } else if (tag === DESC_SERVICE_LIST) {
-                for (let i = 0; i + 3 <= descriptor.length; i += 3) {
-                    services.push({
-                        serviceId: (descriptor[i]! << 8) | descriptor[i + 1]!,
-                        serviceType: descriptor[i + 2]!,
-                        name: '',
-                    });
-                }
-            }
+    const services: Service[] = [];
+    for (const [tag, descriptor] of descriptors(body)) {
+      if (
+        tag === DESC_TS_INFORMATION &&
+        descriptor.length > 0 &&
+        remoteControlKeyId === null
+      ) {
+        remoteControlKeyId = descriptor[0]!;
+      } else if (tag === DESC_SERVICE_LIST) {
+        for (let i = 0; i + 3 <= descriptor.length; i += 3) {
+          services.push({
+            serviceId: (descriptor[i]! << 8) | descriptor[i + 1]!,
+            serviceType: descriptor[i + 2]!,
+            name: "",
+          });
         }
-        transportStreams.push({ transportStreamId, originalNetworkId, services });
+      }
     }
+    transportStreams.push({ transportStreamId, originalNetworkId, services });
+  }
 
-    return { networkId: (section[3]! << 8) | section[4]!, remoteControlKeyId, transportStreams };
+  return {
+    networkId: (section[3]! << 8) | section[4]!,
+    remoteControlKeyId,
+    transportStreams,
+  };
 }
 
 export interface FoundService extends Service {
-    networkId: number;
-    transportStreamId: number;
-    remoteControlKeyId: number | null;
+  networkId: number;
+  transportStreamId: number;
+  remoteControlKeyId: number | null;
 }
 
 /**
@@ -463,41 +494,46 @@ export interface FoundService extends Service {
  * 分からないと設定に書けない。
  */
 export class ServiceReader {
-    private readonly nit = new SectionAssembler(PID_NIT);
-    private readonly sdt = new SectionAssembler(PID_SDT);
-    private readonly packets = new PacketStream();
+  private readonly nit = new SectionAssembler(PID_NIT);
+  private readonly sdt = new SectionAssembler(PID_SDT);
+  private readonly packets = new PacketStream();
 
-    network: NetworkInfo | null = null;
-    transport: TransportInfo | null = null;
+  network: NetworkInfo | null = null;
+  transport: TransportInfo | null = null;
 
-    get complete(): boolean {
-        return this.network !== null && this.transport !== null;
-    }
+  get complete(): boolean {
+    return this.network !== null && this.transport !== null;
+  }
 
-    /** 任意の長さのバイト列を食わせる。揃ったら true */
-    feed(chunk: Uint8Array): boolean {
-        for (const packet of this.packets.feed(chunk)) {
-            if (this.network === null) {
-                for (const section of this.nit.feed(packet)) {
-                    this.network = parseNit(section) ?? this.network;
-                }
-            }
-            if (this.transport === null) {
-                for (const section of this.sdt.feed(packet)) {
-                    this.transport = parseSdt(section) ?? this.transport;
-                }
-            }
+  /** 任意の長さのバイト列を食わせる。揃ったら true */
+  feed(chunk: Uint8Array): boolean {
+    for (const packet of this.packets.feed(chunk)) {
+      if (this.network === null) {
+        for (const section of this.nit.feed(packet)) {
+          this.network = parseNit(section) ?? this.network;
         }
-        return this.complete;
+      }
+      if (this.transport === null) {
+        for (const section of this.sdt.feed(packet)) {
+          this.transport = parseSdt(section) ?? this.transport;
+        }
+      }
     }
+    return this.complete;
+  }
 
-    /** 録るに値するサービスだけ。リモコン番号は NIT のものを配る */
-    services(): FoundService[] {
-        if (this.network === null || this.transport === null) return [];
-        const { networkId, remoteControlKeyId } = this.network;
-        const { transportStreamId } = this.transport;
-        return this.transport.services
-            .filter((service) => SERVICE_TYPES.has(service.serviceType))
-            .map((service) => ({ ...service, networkId, transportStreamId, remoteControlKeyId }));
-    }
+  /** 録るに値するサービスだけ。リモコン番号は NIT のものを配る */
+  services(): FoundService[] {
+    if (this.network === null || this.transport === null) return [];
+    const { networkId, remoteControlKeyId } = this.network;
+    const { transportStreamId } = this.transport;
+    return this.transport.services
+      .filter((service) => SERVICE_TYPES.has(service.serviceType))
+      .map((service) => ({
+        ...service,
+        networkId,
+        transportStreamId,
+        remoteControlKeyId,
+      }));
+  }
 }

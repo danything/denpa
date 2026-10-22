@@ -1,5 +1,5 @@
-import { streamResponse } from '#lib/server/playback.js';
-import { recordingOr404 } from '#lib/server/recording.js';
+import { streamResponse } from "#lib/server/playback.js";
+import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
  * **録画をその場で流す** (`server/playback.ts`)。
@@ -12,5 +12,5 @@ import { recordingOr404 } from '#lib/server/recording.js';
  * `?audio=<id>` は `playback` の `audios` の `id` (MPEG-2 では効かない。全部の音声を流す)
  */
 export function GET({ params, url }) {
-    return streamResponse(recordingOr404(params.id), url.searchParams);
+  return streamResponse(recordingOr404(params.id), url.searchParams);
 }
