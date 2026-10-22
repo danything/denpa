@@ -577,7 +577,7 @@ export function shim(init: ShimInit): void {
      */
     const seen = (o: HTMLObjectElement): boolean =>
         typeof o.checkVisibility === 'function'
-            ? o.checkVisibility({ visibilityProperty: true, opacityProperty: true })
+            ? o.checkVisibility({ visibilityProperty: true })
             : getComputedStyle(o).visibility !== 'hidden';
     /** 映像をどこに出すか。object が無ければ全面、止めてある・隠してあれば出さない */
     const watch = (): void => {
