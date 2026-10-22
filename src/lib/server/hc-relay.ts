@@ -13,6 +13,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { error } from '@sveltejs/kit';
+import { rewriteLocation } from '../hybridcast/location';
 import { type Fetched, fetchForBml, refusalMessage } from './bml-network';
 
 /** 合言葉の寿命 (ms)。番組 1 本を見終えるくらい */
@@ -76,7 +77,7 @@ export async function relayAsset(
     const target = `${origin}/${path}${search}`;
     try {
         const got = await fetcher(target);
-        return new Response(got.body as BodyInit, {
+        return new Response((scriptable(got.contentType) ? located(got.body) : got.body) as BodyInit, {
             status: got.status,
             headers: {
                 'content-type': got.contentType,
@@ -91,4 +92,14 @@ export async function relayAsset(
         console.warn(`[bml] Hybridcast の中継を断りました: ${target} (${why})`);
         error(502, why);
     }
+}
+
+/** script と HTML か (中の `location.hostname` などを置き換えるもの。`hybridcast/location.ts`) */
+function scriptable(contentType: string): boolean {
+    return /javascript|ecmascript|html/i.test(contentType);
+}
+
+/** バイトのまま (latin1) 置き換える。置き換えるのは ASCII だけなので、文字の符号に関係なく壊さない */
+function located(body: Uint8Array): Uint8Array {
+    return Buffer.from(rewriteLocation(Buffer.from(body).toString('latin1')), 'latin1');
 }

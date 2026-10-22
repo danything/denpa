@@ -181,6 +181,7 @@ test.describe('データ放送の双方向', () => {
         const app = `<!DOCTYPE html><html><head><title>hc</title></head><body>
 <object id="v" type="video/broadcast" style="position:absolute;left:960px;top:0px;width:960px;height:540px"></object>
 <p id="out" style="position:absolute;left:0;top:600px">-</p>
+<button id="go" style="position:absolute;left:0;top:700px" onclick="location.href = 'https://' + location.hostname.split('.')[0] + '.example.jp/next.html'">次へ</button>
 <script>
 (async function () {
     var out = {};
@@ -202,10 +203,18 @@ test.describe('データ放送の双方向', () => {
     document.getElementById('out').textContent = JSON.stringify(out);
 })();
 </script></body></html>`;
+        // アプリの中のページ移動の行き先 (NHK のアプリと同じく、自分の名前の頭から組み立てる)
+        const nextUrl = 'https://hybridcast.example.jp/next.html';
         const asked: string[] = [];
         await page.route('**/api/bml/proxy**', (route) => {
             const target = new URL(route.request().url()).searchParams.get('url') ?? '';
             asked.push(target);
+            if (target === nextUrl)
+                return route.fulfill({
+                    status: 200,
+                    headers: { 'x-bml-relayed': '1', 'content-type': 'text/html' },
+                    body: '<!DOCTYPE html><html><head></head><body><p id="next">next</p></body></html>',
+                });
             if (target === appUrl)
                 return route.fulfill({
                     status: 200,
@@ -280,8 +289,17 @@ test.describe('データ放送の双方向', () => {
         // 受信機の記憶はアプリごとの置き場に
         expect(await page.evaluate(() => localStorage.getItem('denpa_hybridcast_7e87_1'))).toBe('{"n":"1"}');
 
+        // アプリが別のページへ移る。iframe ごと移らせず、自分の元の名前で組み立てた住所を同じ手順で開き直す
+        await page.frameLocator('[data-testid=live-hybridcast-app] iframe').locator('#go').click();
+        await expect(frame).toHaveAttribute('data-url', nextUrl, { timeout: 10_000 });
+        await expect(
+            page.frameLocator('[data-testid=live-hybridcast-app] iframe').locator('#next'),
+        ).toHaveText('next', {
+            timeout: 10_000,
+        });
+
         // 戻るで閉じて、データ放送へ戻る
-        await out.click();
+        await page.frameLocator('[data-testid=live-hybridcast-app] iframe').locator('#next').click();
         await page.keyboard.press('Backspace');
         await expect(frame).toHaveCount(0);
         await expect(overlay).toHaveAttribute('data-showing', 'true');

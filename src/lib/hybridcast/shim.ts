@@ -67,6 +67,53 @@ export function shim(init: ShimInit): void {
     };
     let state = init.state;
 
+    /*
+     * ---- アプリの元の場所 (`location.ts`)。配った script の `location.hostname` などはここを読み書きする ----
+     * 読むとアプリの元の URL の値。移る (`href` に入れる・`assign`・`replace`・`reload`) と、iframe ごと移らずに
+     * 親に新しいアプリとして開き直してもらう (`toOrigin` は下の中継のところ。呼ばれるのは差し込みが動き終えたあと)
+     */
+    const appUrl = new URL(init.url);
+    const go = (to: unknown): void => {
+        const url = toOrigin(new URL(String(to), document.baseURI).href);
+        if (/^https?:\/\//i.test(url)) post({ type: 'navigate', url });
+    };
+    w.__hcLocation = {
+        get href() {
+            return appUrl.href;
+        },
+        set href(to: string) {
+            go(to);
+        },
+        get hostname() {
+            return appUrl.hostname;
+        },
+        get host() {
+            return appUrl.host;
+        },
+        get origin() {
+            return appUrl.origin;
+        },
+        get protocol() {
+            return appUrl.protocol;
+        },
+        get port() {
+            return appUrl.port;
+        },
+        get pathname() {
+            return appUrl.pathname;
+        },
+        get search() {
+            return appUrl.search;
+        },
+        get hash() {
+            return appUrl.hash;
+        },
+        assign: go,
+        replace: go,
+        reload: () => go(appUrl.href),
+        toString: () => appUrl.href,
+    };
+
     // ---- http のアプリの中継 (`ShimInit.relay`) ----
     const relayRoot = init.relay === null ? null : init.relay.root;
     const relayFrom = init.relay === null ? null : `${init.relay.origin}/`;

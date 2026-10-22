@@ -31,6 +31,26 @@ describe('Hybridcast の中継', () => {
         expect(response.headers.get('cache-control')).toBe('private, max-age=300');
     });
 
+    test('script と HTML は、中の location.hostname などをアプリの元の場所から読むものに置き換える', async () => {
+        const js = async (url: string): Promise<Fetched> => {
+            fetched.push(url);
+            return {
+                status: 200,
+                contentType: 'application/javascript',
+                body: new TextEncoder().encode('var h = window.location.hostname;'),
+            };
+        };
+        const response = await relayAsset(grant('http://hc.example.jp'), 'p/index.js', '', js);
+        expect(await response.text()).toBe('var h = (self.__hcLocation||location).hostname;');
+        // 画像などは触らない
+        const png = await relayAsset(grant('http://hc.example.jp'), 'p/a.png', '', async () => ({
+            status: 200,
+            contentType: 'image/png',
+            body: new TextEncoder().encode('location.hostname'),
+        }));
+        expect(await png.text()).toBe('location.hostname');
+    });
+
     test('配信元の失敗の返りは溜めない', async () => {
         const response = await relayAsset(grant('http://hc.example.jp'), 'p/index.js', '', fetcher(503));
         expect(response.status).toBe(503);

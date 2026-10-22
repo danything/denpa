@@ -54,6 +54,14 @@
     /** 渡す HTML (取れたら入る) と、iframe が受け取れるようになったか */
     let html: string | null = null;
     let ready = false;
+    /**
+     * いま開いているページ。**アプリが別のページへ移ったら替わる** (`navigate`。NHK は Hybridcast のトップへ移る)。
+     * 同じアプリの続きとして扱う (受信機の記憶・識別は最初のアプリのまま)
+     */
+    // svelte-ignore state_referenced_locally
+    let url = $state(app.url);
+    /** iframe を開き直すたびに変える (同じ入れ物を読み直させる) */
+    let round = $state(0);
     let gone = false;
     // svelte-ignore state_referenced_locally
     const key = storageKey(app.organisationId, app.applicationId);
@@ -82,21 +90,21 @@
 
     async function load(): Promise<void> {
         try {
-            const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(app.url)}`));
+            const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(url)}`));
             if (response.headers.get('x-bml-relayed') !== '1' || !response.ok) throw new Error(String(response.status));
             const body = new Uint8Array(await response.arrayBuffer());
             const text = decodeHtml(body, response.headers.get('content-type') ?? '');
             html = prepareApp(text, {
-                url: app.url,
+                url,
                 organisationId: app.organisationId,
                 applicationId: app.applicationId,
                 storage: remembered(),
                 state: $state.snapshot(hc),
-                relay: await relayFor(app.url),
+                relay: await relayFor(url),
             });
             hand();
         } catch (failure) {
-            console.warn(`[hybridcast] アプリを取得できません: ${app.url} (${String(failure)})`);
+            console.warn(`[hybridcast] アプリを取得できません: ${url} (${String(failure)})`);
             phase = 'failed';
         }
     }
@@ -187,7 +195,21 @@
             case 'log':
                 console.warn(`[hybridcast] ${message.message}`);
                 break;
+            case 'navigate':
+                navigate(message.url);
+                break;
         }
+    }
+
+    /** アプリが別のページへ移った。入れ物を読み直して、そのページを同じ手順 (中継・差し込み) で開く */
+    function navigate(next: string): void {
+        console.warn(`[hybridcast] 別のページへ移ります: ${next}`);
+        url = next;
+        html = null;
+        ready = false;
+        phase = 'loading';
+        round += 1;
+        void load();
     }
 
     // いまの局・番組・字幕が変わったら送り直す
@@ -235,12 +257,12 @@
     class="app"
     data-testid="live-hybridcast-app"
     data-state={phase}
-    data-url={app.url}
+    data-url={url}
 >
     <iframe
         bind:this={frame}
         title={app.name === '' ? 'Hybridcast' : app.name}
-        src={resolve('api/bml/hybridcast')}
+        src="{resolve('api/bml/hybridcast')}{round === 0 ? '' : `?page=${round}`}"
         sandbox="allow-scripts"
         allow="autoplay"
         referrerpolicy="no-referrer"

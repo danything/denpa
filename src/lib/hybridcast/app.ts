@@ -15,6 +15,7 @@
  * script が動かないため (緩めると denpa の画面の CSP の意味がなくなる)。
  */
 
+import { rewriteLocation } from './location';
 import { type ShimInit, shim } from './shim';
 
 export type { HcState, ShimInit } from './shim';
@@ -84,6 +85,8 @@ export function prepareApp(html: string, init: ShimInit): string {
                 ),
         );
     }
+    // 中の script がアプリの元の場所を読むように (`location.ts`)。差し込みが `__hcLocation` を置く
+    html = rewriteLocation(html);
     // </script> で差し込みが切れないように (JSON の中の < は < に)
     const data = JSON.stringify(init).replace(/</g, '\\u003c');
     const inject = `<base href="${attribute(base)}"><script>(${shim.toString()})(${data});</script>`;
@@ -116,7 +119,9 @@ export type FrameMessage =
     | { type: 'tune'; onid: number; tsid: number | null; sid: number }
     | { type: 'captions'; on: boolean }
     | { type: 'close' }
-    | { type: 'log'; message: string };
+    | { type: 'log'; message: string }
+    /** アプリが別のページへ移ろうとした (`shim.ts` の `__hcLocation`)。そこを新しいアプリとして開き直す */
+    | { type: 'navigate'; url: string };
 
 /** 受け取ったものを確かめる (型の分からないものは捨てる) */
 export function frameMessage(data: unknown): FrameMessage | null {
@@ -173,6 +178,10 @@ export function frameMessage(data: unknown): FrameMessage | null {
         case 'log':
             return typeof m['message'] === 'string'
                 ? { type: 'log', message: m['message'].slice(0, 500) }
+                : null;
+        case 'navigate':
+            return typeof m['url'] === 'string' && /^https?:\/\//i.test(m['url'])
+                ? { type: 'navigate', url: m['url'] }
                 : null;
     }
     return null;

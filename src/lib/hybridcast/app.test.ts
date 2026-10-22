@@ -89,6 +89,14 @@ test('decodeHtml は content-type、無ければ meta の charset で読む', ()
     expect(decodeHtml(new TextEncoder().encode('あ'), 'text/html')).toBe('あ');
 });
 
+test('frameMessage は別のページへの移動を http(s) のときだけ受ける', () => {
+    expect(frameMessage({ hc: 1, type: 'navigate', url: 'https://hc.example.jp/top/index.html' })).toEqual({
+        type: 'navigate',
+        url: 'https://hc.example.jp/top/index.html',
+    });
+    expect(frameMessage({ hc: 1, type: 'navigate', url: 'javascript:alert(1)' })).toBeNull();
+});
+
 test('frameMessage は形式の合わないものを捨てる', () => {
     expect(frameMessage({ type: 'close' })).toBeNull();
     expect(frameMessage({ hc: 1, type: 'close' })).toEqual({ type: 'close' });
