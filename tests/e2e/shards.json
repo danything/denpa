@@ -39,14 +39,7 @@
         "34-live-yield",
         "46-home-timeline"
     ],
-    "4": [
-        "01-dashboard",
-        "02-reservation",
-        "11-rule-edit",
-        "15-scramble",
-        "17-logo",
-        "39-watch-stream"
-    ],
+    "4": ["01-dashboard", "02-reservation", "11-rule-edit", "15-scramble", "17-logo", "39-watch-stream"],
     "5": [
         "04-external-delete",
         "05-rules",
