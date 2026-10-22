@@ -439,76 +439,58 @@ test.describe('ホームと画面遷移', () => {
     });
 
     /**
-     * **ほかの画面から番組表へ移る間も、種別の字 (「地上波」) を隠さない。**
+     * **ページを移るときは画面の写しを取らず、選んでいる印だけを前の場所から滑らせる** (`#lib/motion.svelte.js` の `slide`)。
      *
-     * 選んでいる種別の面 (`.seg-pill`) に画面の切り替えの名前が付いていると、面だけ別の写しになって
-     * 画面の写し (字の入っている root) より上に描かれ、切り替えの間だけ字が消えて見えていた。
-     * 名前を付けるのは種別を選び直す間だけ (`<html data-nav-within>`)。
-     * 切り替えが始まった瞬間 (`ready`。写しが出そろったところ) の面の名前と字の見え方を見る
+     * 写しを取っていた頃 (View Transitions) は、押してから一拍遅れて切り替わっていた。
+     * 番組表の種別の面は、種別を選び直すときだけ滑る (ほかの画面から来たときはその場に出す)
      */
     test.describe('動かしてよい端末', () => {
         test.use({ reducedMotion: 'no-preference' });
 
-        test('番組表へ移る間、種別の字は隠れず、面は種別を選び直すときだけ滑る', async ({
-            page,
-            request,
-        }) => {
+        test('写しは取らず、ナビの下線は滑り、種別の面は選び直すときだけ滑る', async ({ page, request }) => {
             await syncEpg(request);
             await goto(page, '/');
             await page.evaluate(() => {
-                type Seen = { pill: string | null; label: string | null; visible: boolean | null };
-                const w = window as unknown as { seen: Seen[] };
-                w.seen = [];
-                const start = document.startViewTransition.bind(document);
-                document.startViewTransition = ((update: () => Promise<void>) => {
-                    const transition = start(update);
-                    void transition.ready
-                        .then(() => {
-                            const pill = document.querySelector('.seg-pill');
-                            const label = document.querySelector(
-                                '[aria-current="page"][data-testid^="type-"]',
-                            );
-                            w.seen.push({
-                                pill: pill === null ? null : getComputedStyle(pill).viewTransitionName,
-                                label: label?.textContent?.trim() ?? null,
-                                visible:
-                                    label === null
-                                        ? null
-                                        : label.checkVisibility({ visibilityProperty: true }),
-                            });
-                        })
-                        .catch(() => {});
-                    return transition;
-                }) as typeof document.startViewTransition;
+                const w = window as unknown as { slid: string[]; snapshots: number };
+                w.slid = [];
+                w.snapshots = 0;
+                const animate = Element.prototype.animate;
+                Element.prototype.animate = function (
+                    this: Element,
+                    ...args: Parameters<Element['animate']>
+                ) {
+                    w.slid.push(this.className);
+                    return animate.apply(this, args);
+                };
+                if (typeof document.startViewTransition === 'function') {
+                    const start = document.startViewTransition.bind(document);
+                    document.startViewTransition = ((
+                        ...args: Parameters<Document['startViewTransition']>
+                    ) => {
+                        w.snapshots++;
+                        return start(...args);
+                    }) as Document['startViewTransition'];
+                }
             });
             const seen = () =>
-                page.evaluate(
-                    () =>
-                        (
-                            window as unknown as {
-                                seen: {
-                                    pill: string | null;
-                                    label: string | null;
-                                    visible: boolean | null;
-                                }[];
-                            }
-                        ).seen,
-                );
+                page.evaluate(() => {
+                    const w = window as unknown as { slid: string[]; snapshots: number };
+                    return { slid: [...w.slid], snapshots: w.snapshots };
+                });
 
-            // ほかの画面から: 面に名前は無く、字は見えている
+            // ほかの画面から番組表へ: 下線は滑り、種別の面は滑らない。写しは取らない
             await page.getByTestId('nav-guide').click();
-            await expect.poll(async () => (await seen()).length).toBeGreaterThanOrEqual(1);
-            expect((await seen())[0]).toEqual({ pill: 'none', label: '地上波', visible: true });
             await expect(page.getByTestId('guide-grid')).toBeVisible();
-
-            // 種別を選び直すとき: 面に名前が付いて、前の場所から滑る
-            await page.getByTestId('type-BS').click();
-            await expect.poll(async () => (await seen()).length).toBeGreaterThanOrEqual(2);
-            expect((await seen())[1]).toEqual({ pill: 'guide-type', label: 'BS', visible: true });
-            // 終われば外す
             await expect
-                .poll(() => page.evaluate(() => 'navWithin' in document.documentElement.dataset))
-                .toBe(false);
+                .poll(async () => (await seen()).slid.some((c) => c.includes('nav-underline')))
+                .toBe(true);
+            expect((await seen()).slid.some((c) => c.includes('seg-pill'))).toBe(false);
+
+            // 種別を選び直すとき: 面が前の場所から滑る
+            await page.getByTestId('type-BS').click();
+            await expect(page.locator('[aria-current="page"][data-testid="type-BS"]')).toBeVisible();
+            await expect.poll(async () => (await seen()).slid.some((c) => c.includes('seg-pill'))).toBe(true);
+            expect((await seen()).snapshots).toBe(0);
         });
     });
 

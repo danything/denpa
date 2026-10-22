@@ -11,12 +11,12 @@
     import SearchField from '#lib/components/SearchField.svelte';
     import { denpaFontUrl } from '#lib/font.js';
     import { measure } from '#lib/measure.svelte.js';
-    import { canTransition } from '#lib/motion.svelte.js';
+    import { slide } from '#lib/motion.svelte.js';
     import { startOffline } from '#lib/offline.svelte.js';
     import { followNavigation, reload } from '#lib/reload.svelte.js';
     import { groupLabel } from '#lib/settings-sections.js';
     import { THEME_LABEL, theme } from '#lib/theme.svelte.js';
-    import { goto, onNavigate } from '$app/navigation';
+    import { goto } from '$app/navigation';
     import { navigating, page } from '$app/state';
     import CalendarDays from '~icons/lucide/calendar-days';
     import Contrast from '~icons/lucide/contrast';
@@ -40,43 +40,10 @@
      */
     followNavigation();
 
-    /**
-     * **ページを移るときは、選んでいる印を前の場所から滑らせる** (View Transitions。中身はすぐ替わる。見た目は `app.css` の
-     * 「画面の切り替え」)。ヘッダーと下のタブは名前を付けて抜き出してあるので動かない。
-     *
-     * `onNavigate` は次の画面のデータが揃ってから呼ばれるので、写しを取って待たせるのは
-     * 中身を描き替える一瞬だけ (読み込みの間は今の画面のまま、上の細いバーも出る)。
-     *
-     * 動かさないもの:
-     * - **使えないブラウザと、動かさない設定の端末** (`canTransition`)。今までどおりすぐ替わる
-     * - **同じ URL** (読み直し・全画面の段を積む・戻す)。替わるものが無い
-     * - **映像の画面の中での移動** (ライブ・観る・追っかけ)。切り替えの間は画面が写しになるので、
-     *   映っているものを止めて見せることになる
+    /*
+     * **ページを移るときに画面の写しは取らない** (View Transitions はやめた)。選んでいる印だけを前の場所から滑らせる
+     * (`#lib/motion.svelte.js` の `slide`)。写しを取ると、押してから一拍遅れて切り替わっていた (本番で 70〜100ms)
      */
-    const PLAYING = new Set(['/live', '/watch/[id]', '/chase/[id]']);
-    onNavigate((navigation) => {
-        if (!canTransition() || navigation.to === null || navigation.from === null) return;
-        const { from, to } = navigation;
-        if (from.url.pathname === to.url.pathname && from.url.search === to.url.search) return;
-        if (from.route.id === to.route.id && PLAYING.has(from.route.id ?? '')) return;
-        /*
-         * **同じ画面の中の切り替え (番組表の種別など) だけ `<html data-nav-within>` を付ける。**
-         * 画面の中の印 (`.seg-pill`) に名前を付けるのはこの間だけ (`app.css` の「画面の切り替え」)。
-         * ほかの画面から来たときにも名前があると、印だけ別の写しになって画面の写しより上に描かれ、
-         * 切り替えの間だけ字 (「地上波」) を覆って消して見せていた。古い写しを撮る前に付ける
-         */
-        const within = from.route.id === to.route.id;
-        if (within) beginWithin();
-        return new Promise<void>((resolve) => {
-            const transition = document.startViewTransition(async () => {
-                resolve();
-                await navigation.complete.catch(() => {});
-            });
-            transition.ready.catch(() => {});
-            const done = transition.finished.catch(() => {});
-            if (within) void done.then(endWithin);
-        });
-    });
 
     /**
      * **ほかの画面から番組表へ移る途中は、押したらすぐ番組表の外枠と骨組みに替える** (`GuidePending`)。
@@ -107,17 +74,6 @@
         };
     });
     const pending = $derived(pendingTo !== null && page.route.id !== '/guide' ? pendingTo : null);
-
-    /** 走っている「同じ画面の中の切り替え」の数。追い越されても、最後の1つが済んでから印を外す */
-    let withinCount = 0;
-    function beginWithin(): void {
-        withinCount++;
-        document.documentElement.dataset['navWithin'] = '';
-    }
-    function endWithin(): void {
-        withinCount--;
-        if (withinCount === 0) delete document.documentElement.dataset['navWithin'];
-    }
 
     /**
      * **遷移が長引いているときだけ、上端に細いバーを出す。**
@@ -465,7 +421,7 @@
                             data-testid="nav-{link.href === '/' ? 'home' : link.href.slice(1)}"
                         >
                             {link.label}
-                            {#if here === link.href}<span class="nav-underline" aria-hidden="true"></span>{/if}
+                            {#if here === link.href}<span class="nav-underline" aria-hidden="true" use:slide={'nav-underline'}></span>{/if}
                         </a>
                     </li>
                 {/each}
@@ -520,7 +476,7 @@
                     aria-current={here === tab.href ? 'page' : undefined}
                     data-testid="tab-{tab.href === '/' ? 'home' : tab.href.slice(1)}"
                 >
-                    {#if here === tab.href}<span class="tab-indicator" aria-hidden="true"></span>{/if}
+                    {#if here === tab.href}<span class="tab-indicator" aria-hidden="true" use:slide={'tab-indicator'}></span>{/if}
                     <Icon icon={tab.icon} size="size-5" />
                     <span>{tab.label}</span>
                 </a>
@@ -535,7 +491,7 @@
                             class="tab"
                             aria-current={moreCurrent ? 'page' : undefined}
                         >
-                            {#if moreCurrent}<span class="tab-indicator" aria-hidden="true"></span>{/if}
+                            {#if moreCurrent}<span class="tab-indicator" aria-hidden="true" use:slide={'tab-indicator'}></span>{/if}
                             <Icon icon={Ellipsis} size="size-5" />
                             <span>その他</span>
                         </button>
@@ -639,8 +595,6 @@
         min-height: 3.5rem;
         padding: 0.5rem var(--dp-space-3);
         background: var(--dp-bg);
-        /* 画面の切り替えでは抜き出して動かさない (`app.css` の「画面の切り替え」) */
-        view-transition-name: site-header;
     }
     /*
      * **本文との間に線を引かない** (巻いても出さない)。高さはちょうど 3.5rem。
@@ -731,7 +685,7 @@
     ul.links a.button.ghost[aria-current='page']:hover {
         --pico-background-color: var(--dp-subtle);
     }
-    /* 下線は別の要素にして、画面を移ると前の画面の下線から横に滑らせる (`app.css` の「画面の切り替え」) */
+    /* 下線は別の要素にして、画面を移ると前の画面の下線から横に滑らせる (`#lib/motion.svelte.js` の `slide`) */
     .nav-underline {
         position: absolute;
         inset-inline: 0.65rem;
@@ -739,7 +693,6 @@
         height: 2px;
         border-radius: 1px;
         background: var(--pico-primary);
-        view-transition-name: nav-underline;
         pointer-events: none;
     }
     /*
@@ -780,7 +733,6 @@
         padding-bottom: env(safe-area-inset-bottom);
         border-width: 1px 0 0;
         border-radius: 0;
-        view-transition-name: site-tabbar;
     }
     .tabbar .tab,
     .tab-more :global(.tab) {
@@ -818,7 +770,7 @@
     }
     /*
      * いまの画面の印。タブの上端 (区切りの線の上) に短い線を置く。画面を移ると
-     * 前のタブから横に滑る (`app.css` の「画面の切り替え」)
+     * 前のタブから横に滑る (`#lib/motion.svelte.js` の `slide`)
      */
     .tabbar :global(.tab-indicator) {
         position: absolute;
@@ -829,7 +781,6 @@
         margin-left: -1rem;
         border-radius: 1px;
         background: var(--dp-primary-text);
-        view-transition-name: tab-indicator;
         pointer-events: none;
     }
     /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */

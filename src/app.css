@@ -106,9 +106,9 @@
     /*
      * 動き。**長さは全部 80ms (`--dp-duration`) にそろえる。** 待たされている感じを出さない。 出るときは終わりをゆっくり (`--dp-ease`)、
      * 引っ込むときは頭をゆっくり (`--dp-ease-exit`)。動かさない設定の端末では全部止める
-     * (下の prefers-reduced-motion。画面の切り替えは JS でも見る — `#lib/motion.svelte.ts`)
+     * (下の prefers-reduced-motion。滑る印は JS でも見る — `#lib/motion.svelte.ts` の `slide`)
      *
-     * - `--dp-duration` … 画面の切り替え・滑る下線・メニューやダイアログ・伸びるバー・色や影の移り変わり。ぜんぶこれ
+     * - `--dp-duration` … 滑る印 (下線・タブ・番組表の種別)・メニューやダイアログ・伸びるバー・色や影の移り変わり。ぜんぶこれ
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
      * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
      */
@@ -269,46 +269,6 @@
     --dp-warn-text: #fecc63; /* amber-150 */
     --dp-info-text: #0ccece; /* cyan-250 */
 }
-/* ---- 画面の切り替え (View Transitions。始めるのは `+layout.svelte` の `onNavigate`) ---- */
-/*
- * **中身はすぐ入れ替え、選んでいる印だけを滑らせる。** (ふつうは画面全体 (root) がふわっと入れ替わるが、それは止めてある)
- * ヘッダーと下のタブは名前を付けて抜き出し、**動かさない** (古いほうは描かず、新しいほうをそのまま置く)。
- * 選んでいる印 (上のナビの下線・下のタブの印・番組表の種別) も名前で抜き出してあるので、
- * 前の場所から新しい場所へ横に滑る。番組表の種別の印は、種別を選び直すときだけ名前を付ける
- * (ほかの画面から来たときにも抜き出すと、印の写しが画面の写しより上に重なって字を隠す)
- */
-::view-transition-group(*) {
-    animation-duration: var(--dp-duration);
-    animation-timing-function: var(--dp-ease);
-}
-/*
- * 中身は**動かさずにすぐ入れ替える**。動くのは選んでいる印 (下線・タブの印・種別) だけ。
- * 印が横に滑る横で中身がフェードすると、動きの向きがちぐはぐで、待たされて見えた
- */
-::view-transition-old(root),
-::view-transition-new(root) {
-    animation: none;
-}
-::view-transition-old(site-header),
-::view-transition-old(site-tabbar) {
-    display: none;
-}
-::view-transition-new(site-header),
-::view-transition-new(site-tabbar) {
-    animation: none;
-}
-/* 印は形が変わらないので、古いのと新しいのを重ねて混ぜない (そのまま滑らせる) */
-::view-transition-old(nav-underline),
-::view-transition-old(tab-indicator),
-::view-transition-old(guide-type) {
-    display: none;
-}
-::view-transition-new(nav-underline),
-::view-transition-new(tab-indicator),
-::view-transition-new(guide-type) {
-    animation: none;
-}
-
 /* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ ---- */
 .rec-dot {
     display: inline-block;
@@ -1035,7 +995,7 @@ a.button {
 }
 /*
  * **選んだ面を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
- * 面に画面の切り替えの名前を付けておけば、前の場所から新しい場所へ動く (View Transitions)。
+ * 面は前の場所から新しい場所へ動く (`#lib/motion.svelte.js` の `slide`)。
  * 字は動かさない (面の上に重ねたまま)。見た目は上の「選んでいるもの」と同じ
  */
 [role="group"].segmented > :is(button, a.button):has(> .seg-pill) {
@@ -1699,7 +1659,7 @@ dialog[open] > article {
 
 /*
  * **動かさない設定の端末では、全部止める。** 移り変わりは時間のトークンを 0 に、
- * 繰り返すもの (録画中の点・光の筋・「保存しました」) と画面の切り替え (View Transitions) は動きそのものを外す。
+ * 繰り返すもの (録画中の点・光の筋・「保存しました」) は動きそのものを外す (滑る印は `slide` が動かさない)。
  * 上の決まりに勝つよう、ファイルの最後に置く
  */
 @media (prefers-reduced-motion: reduce) {
@@ -1713,11 +1673,6 @@ dialog[open] > article {
     progress.running[value]::-webkit-progress-value {
         animation: none;
         background-image: none;
-    }
-    ::view-transition-group(*),
-    ::view-transition-old(*),
-    ::view-transition-new(*) {
-        animation: none;
     }
 }
 

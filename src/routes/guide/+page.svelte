@@ -10,6 +10,7 @@
     import ServiceLogo from '#lib/components/ServiceLogo.svelte';
     import { channelNumber, date, SERVICE_TYPE_LABEL, stateLabel, time } from '#lib/format.js';
     import { skeletonMask } from '#lib/guide-skeleton.js';
+    import { slide } from '#lib/motion.svelte.js';
     import { reload } from '#lib/reload.svelte.js';
     import { cellsOf, columnsOf, mainOf, SUBCHANNELS_COOKIE, splitOf } from '#lib/subchannels.js';
     import { CHANNEL_TYPES, type ProgramDetail as Facts, type GridProgram, type GuideSheet } from '#lib/types.js';
@@ -585,7 +586,7 @@
      * 表が届いた時点で投げていた頃は、マスを描いている最中に BS で 1 件 1 MB 超の
      * 応答が 2 つ届いて、その解読が描画と取り合っていた。
      * **描き終わってもすぐには投げない** (`PREFETCH_DELAY`)。マスを置き終えた直後は、そのぶんの
-     * レイアウトと画面の切り替えの動きがまだ走っていて、本番では描き終わった直後の空き
+     * レイアウトがまだ走っていて、本番では描き終わった直後の空き
      * (`requestIdleCallback`) で投げた 2 つがそれと重なっていた。少し置いてから、空いたときに投げる。
      * requestIdleCallback は Safari に無いので、無ければ置くだけ。
      * 同じ日・同じ放送波の読み直しでは取り直さない (`prefetchedFor`)
@@ -652,8 +653,8 @@
                     href={href({ type, start: String(data.start) })}
                     data-testid="type-{type}"
                 >
-                    {#if data.type === type}<span class="seg-pill" aria-hidden="true"></span>{/if}
-                    <span class="seg-label" style:--seg-label="guide-type-{type}">{SERVICE_TYPE_LABEL[type]}</span>
+                    {#if data.type === type}<span class="seg-pill" aria-hidden="true" use:slide={'guide-type'}></span>{/if}
+                    <span class="seg-label">{SERVICE_TYPE_LABEL[type]}</span>
                 </a>
             {/each}
         </div>
@@ -1277,19 +1278,7 @@
         flex: none;
         width: auto;
     }
-    /*
-     * 種別を選び直すと、選んだ面が横へ滑る (`app.css` の「画面の切り替え」)。
-     * **名前を付けるのは種別を選び直す間だけ** (`<html data-nav-within>`。`+layout.svelte` の `onNavigate`)。
-     * ほかの画面から来たときに付いていると、面だけ別の写しになって画面の写しより上に描かれ、
-     * 切り替えの間だけ字を覆って消して見せていた。滑っている間も字が面の下に隠れないよう、
-     * 字にも名前を付けて面より上に描かせる (名前は種別ごと。DOM の順で面より後なので上に来る)
-     */
-    :global(:root[data-nav-within]) .seg-pill {
-        view-transition-name: guide-type;
-    }
-    :global(:root[data-nav-within]) .seg-label {
-        view-transition-name: var(--seg-label);
-    }
+    /* 種別を選び直すと、選んだ面が横へ滑る (`#lib/motion.svelte.js` の `slide`) */
     .days {
         display: flex;
         flex: 0 1 auto;
