@@ -133,6 +133,7 @@ export const sidebarGroups: { label: string; items: string[] }[] = [
       "logo",
       "development",
       "writing",
+      "design",
       "licenses",
     ],
   },

@@ -1,7 +1,7 @@
 # 書き方
 
 画面の文言・docs・コードのコメント・テスト名の言葉の決まりです (手を入れる人向け)。
-画面そのものの説明は [screens.md](screens.md)。
+画面そのものの説明は [screens.md](screens.md)、見た目の決まりは [design.md](design.md)。
 
 ## 画面の言葉
 
