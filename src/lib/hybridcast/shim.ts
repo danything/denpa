@@ -46,11 +46,12 @@ export interface ShimInit {
     storage: Record<string, string>;
     state: HcState;
     /**
-     * **http のアプリを denpa の https 越しに読ませる中継** (`server/hc-relay.ts`)。https のアプリなら null。
-     * `root` は中継の頭 (絶対 URL。末尾は /)、`origin` はアプリの配信元 (http://host)。`<base>` と HTML の中の
+     * **アプリを denpa 越しに読ませる中継** (`server/hc-relay.ts`)。http のアプリは https の画面から読めず (Mixed Content)、
+     * https のアプリも中の script の `location.*` を置き換えないと iframe ごと外へ移ろうとして止められる (`location.ts`)。
+     * `root` は中継の頭 (絶対 URL。末尾は /)、`origin` はアプリの配信元 (http(s)://host)。`<base>` と HTML の中の
      * 配信元の URL は `prepareApp` が中継へ書き換え、後から作られる要素の URL はここで書き換える
      */
-    relay: { root: string; origin: string } | null;
+    relay: { root: string; origin: string };
     /** データ放送の Greg と NVRAM (`compat.ts` へ渡す) */
     compat: CompatInit;
 }
@@ -117,17 +118,16 @@ export function shim(init: ShimInit): void {
         toString: () => appUrl.href,
     };
 
-    // ---- http のアプリの中継 (`ShimInit.relay`) ----
-    const relayRoot = init.relay === null ? null : init.relay.root;
-    const relayFrom = init.relay === null ? null : `${init.relay.origin}/`;
+    // ---- アプリの中継 (`ShimInit.relay`) ----
+    const relayRoot = init.relay.root;
+    const relayFrom = `${init.relay.origin}/`;
     /**
      * denpa の頭 (https://denpa/)。**`/` から始まる住所はここへ解決される** — `<base>` を中継にしても、
      * NHK のアプリの `/common/…` は中継の外 (denpa の頭) を指す。配信元の頭として扱う
      */
-    const denpaTop = relayRoot === null ? null : `${new URL(relayRoot).origin}/`;
+    const denpaTop = `${new URL(relayRoot).origin}/`;
     /** 配信元の URL を中継へ (読み込み用)。`/` から始まって denpa の頭に解決されたものも。ほかはそのまま */
     const toRelay = (url: string): string => {
-        if (relayRoot === null || relayFrom === null || denpaTop === null) return url;
         if (url.startsWith(relayFrom)) return relayRoot + url.slice(relayFrom.length);
         if (url.startsWith(denpaTop) && !url.startsWith(relayRoot))
             return relayRoot + url.slice(denpaTop.length);
@@ -135,67 +135,67 @@ export function shim(init: ShimInit): void {
     };
     /** 中継の URL (と denpa の頭に解決された URL) を配信元へ戻す (通信は親が中継で取るので、元の行き先を渡す) */
     const toOrigin = (url: string): string => {
-        if (relayRoot === null || relayFrom === null || denpaTop === null) return url;
         if (url.startsWith(relayRoot)) return relayFrom + url.slice(relayRoot.length);
         if (url.startsWith(denpaTop)) return relayFrom + url.slice(denpaTop.length);
         return url;
     };
-    if (relayRoot !== null) {
-        // 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る
-        /*
-         * **読み込む要素だけ。** iframe・a の行き先まで中継にすると、中継の返り (sandbox の CSP) の中で script が
-         * 動かなくなる。iframe は CSP の frame-src で止めてあり、a で移った先はアプリの外
-         */
-        const loads = [
-            'SCRIPT',
-            'IMG',
-            'LINK',
-            'SOURCE',
-            'VIDEO',
-            'AUDIO',
-            'OBJECT',
-            'EMBED',
-            'INPUT',
-            'TRACK',
-        ];
-        const watched = ['src', 'href', 'data', 'poster'];
-        const setAttribute = Element.prototype.setAttribute;
-        Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
-            const rewrite =
-                loads.includes(this.tagName.toUpperCase()) && watched.includes(String(name).toLowerCase());
-            if (!rewrite) return setAttribute.call(this, name, value);
-            // `/common/…` のような住所は、解決してから中継へ (そのままでは denpa の頭を指す)
-            let resolved = String(value);
-            // 空は解決しない (<base> の URL になってしまう)
-            if (resolved === '') return setAttribute.call(this, name, value);
+    // 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る
+    /*
+     * **読み込む要素だけ。** iframe・a の行き先まで中継にすると、中継の返り (sandbox の CSP) の中で script が
+     * 動かなくなる。iframe は CSP の frame-src で止めてあり、a で移った先はアプリの外
+     */
+    const loads = ['SCRIPT', 'IMG', 'LINK', 'SOURCE', 'VIDEO', 'AUDIO', 'OBJECT', 'EMBED', 'INPUT', 'TRACK'];
+    const watched = ['src', 'href', 'data', 'poster'];
+    /**
+     * style の中の `url(…)` も中継へ (NHK は `style="background:url(/hc-data/…)"` と書く。`/` から始まる住所は
+     * denpa の頭に解決されて 404 になる)
+     */
+    const styleUrls = (css: string): string =>
+        css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (whole: string, quote: string, url: string) => {
             try {
-                resolved = new URL(resolved, document.baseURI).href;
+                return `url(${quote}${toRelay(new URL(url, document.baseURI).href)}${quote})`;
             } catch {
-                // 読めない住所はそのまま
+                return whole;
             }
-            return setAttribute.call(this, name, toRelay(resolved));
-        };
-        for (const [Kind, name] of [
-            [w.HTMLScriptElement, 'src'],
-            [w.HTMLImageElement, 'src'],
-            [w.HTMLLinkElement, 'href'],
-            [w.HTMLMediaElement, 'src'],
-            [w.HTMLSourceElement, 'src'],
-        ] as [{ prototype: object }, string][]) {
-            const own = Object.getOwnPropertyDescriptor(Kind.prototype, name);
-            if (own === undefined || own.set === undefined || own.get === undefined) continue;
-            const { get, set } = own;
-            Object.defineProperty(Kind.prototype, name, {
-                configurable: true,
-                enumerable: own.enumerable === true,
-                get(this: object) {
-                    return toOrigin(String(get.call(this)));
-                },
-                set(this: object, value: unknown) {
-                    set.call(this, toRelay(new URL(String(value), document.baseURI).href));
-                },
-            });
+        });
+    const setAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+        if (String(name).toLowerCase() === 'style')
+            return setAttribute.call(this, name, styleUrls(String(value)));
+        const rewrite =
+            loads.includes(this.tagName.toUpperCase()) && watched.includes(String(name).toLowerCase());
+        if (!rewrite) return setAttribute.call(this, name, value);
+        // `/common/…` のような住所は、解決してから中継へ (そのままでは denpa の頭を指す)
+        let resolved = String(value);
+        // 空は解決しない (<base> の URL になってしまう)
+        if (resolved === '') return setAttribute.call(this, name, value);
+        try {
+            resolved = new URL(resolved, document.baseURI).href;
+        } catch {
+            // 読めない住所はそのまま
         }
+        return setAttribute.call(this, name, toRelay(resolved));
+    };
+    for (const [Kind, name] of [
+        [w.HTMLScriptElement, 'src'],
+        [w.HTMLImageElement, 'src'],
+        [w.HTMLLinkElement, 'href'],
+        [w.HTMLMediaElement, 'src'],
+        [w.HTMLSourceElement, 'src'],
+    ] as [{ prototype: object }, string][]) {
+        const own = Object.getOwnPropertyDescriptor(Kind.prototype, name);
+        if (own === undefined || own.set === undefined || own.get === undefined) continue;
+        const { get, set } = own;
+        Object.defineProperty(Kind.prototype, name, {
+            configurable: true,
+            enumerable: own.enumerable === true,
+            get(this: object) {
+                return toOrigin(String(get.call(this)));
+            },
+            set(this: object, value: unknown) {
+                set.call(this, toRelay(new URL(String(value), document.baseURI).href));
+            },
+        });
     }
 
     // ---- 通信 (親へ渡す) ----

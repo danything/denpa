@@ -143,22 +143,22 @@
     }
 
     /**
-     * **http のアプリは denpa の https 越しに読ませる** (`server/hc-relay.ts`)。https の画面から http の script は
-     * Mixed Content として止められる (NHK のアプリは http にしか無い)。https のアプリには要らない (null)
+     * **アプリは denpa 越しに読ませる** (`server/hc-relay.ts`)。
+     *
+     * - http のアプリは、https の画面から script を読むと Mixed Content として止められる (NHK のアプリは http にしか無い)
+     * - **https のアプリも通す。** 中継は script の `location.href = …` などを差し込みへ向ける (`location.ts`)。
+     *   通さないと、移るときに iframe ごと外へ行こうとして止められる (NHK の「番組表」は https)
      */
-    async function relayFor(url: string): Promise<{ root: string; origin: string } | null> {
+    async function relayFor(url: string): Promise<{ root: string; origin: string }> {
         const target = new URL(url);
-        if (target.protocol !== 'http:' || location.protocol !== 'https:') return null;
         const response = await fetch(resolve('api/bml/hc'), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ url }),
         });
         if (!response.ok) throw new Error(`中継を用意できません (${response.status})`);
-        const { root } = (await response.json()) as { root: string | null };
-        return root === null
-            ? null
-            : { root: new URL(resolve(root as '/'), location.href).href, origin: target.origin };
+        const { root } = (await response.json()) as { root: string };
+        return { root: new URL(resolve(root as '/'), location.href).href, origin: target.origin };
     }
 
     /** アプリの通信を中継へ。中継が断った・相手まで行けなかったら error */

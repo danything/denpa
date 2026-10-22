@@ -149,12 +149,15 @@ test.describe('データ放送の双方向', () => {
     });
 
     /*
-     * **http の Hybridcast のアプリの中継** (`server/hc-relay.ts`)。合言葉は http のアプリにだけ出し、
+     * **Hybridcast のアプリの中継** (`server/hc-relay.ts`)。合言葉は http・https のアプリに出し、
      * 中継は合言葉の配信元へだけ、`/api/bml/proxy` と同じ枠で繋ぐ (内側は断る)
      */
-    test('http のアプリの中継は、合言葉の配信元へだけ、内側は断って繋ぐ', async ({ request }) => {
+    test('アプリの中継は、合言葉の配信元へだけ、内側は断って繋ぐ', async ({ request }) => {
         const issue = async (url: string) => request.post('/api/bml/hc', { data: { url } });
-        expect(await (await issue('https://hc.example.jp/p/')).json()).toEqual({ root: null });
+        // https のアプリにも出す (配る script の location.* を書き換えるため)
+        expect(((await (await issue('https://hc.example.jp/p/')).json()) as { root: string }).root).toMatch(
+            /^api\/bml\/hc\/[0-9a-f]{32}\/$/,
+        );
         expect((await issue('file:///etc/passwd')).status()).toBe(400);
 
         const { root } = (await (await issue('http://127.0.0.1/p/index.html')).json()) as { root: string };
@@ -176,7 +179,10 @@ test.describe('データ放送の双方向', () => {
     test('データ放送から Hybridcast を開き、戻るで閉じる', async ({ page, baseURL }) => {
         const appUrl = 'https://hybridcast.example.jp/app.html';
         const dataUrl = 'https://hybridcast.example.jp/api/data.json';
-        // denpa 自身の API。アプリが中継で取ろうとしても、内側なので中継が断る
+        /*
+         * denpa 自身の API。アプリは denpa の中継から読まれているので、denpa の名前の住所は
+         * **アプリの配信元の同じ経路へ読み替わる** (差し込みの `toOrigin`)。denpa 自身には届かない
+         */
         const denpaUrl = new URL('/api/settings', baseURL).href;
         const app = `<!DOCTYPE html><html><head><title>hc</title></head><body>
 <object id="v" type="video/broadcast" style="position:absolute;left:960px;top:0px;width:960px;height:540px"></object>
@@ -204,6 +210,11 @@ test.describe('データ放送の双方向', () => {
     out.ua = navigator.userAgent.indexOf('Hybridcast/') >= 0;
     // キーの番号は素の名前でも読める (NHK のアプリは case VK_LEFT: と書く)
     out.vk = typeof VK_LEFT === 'number' && typeof VK_DBUTTON === 'number';
+    // style の中の '/' から始まる住所も中継へ (NHK は background:url(/hc-data/...) と書く)
+    var tile = document.createElement('span');
+    tile.setAttribute('style', 'background:url(/hc-data/a.png)');
+    var styled = tile.getAttribute('style');
+    out.style = styled.indexOf('/api/bml/hc/') >= 0 && styled.indexOf('/hc-data/a.png') >= 0;
     var pseudo = navigator.bmlCompat.browserPseudo;
     pseudo.Greg[55] = 'nhk:test';
     out.greg = pseudo.Greg[55];
@@ -289,6 +300,7 @@ test.describe('データ放送の双方向', () => {
             xhr: 'relayed',
             ua: true,
             vk: true,
+            style: true,
             greg: 'nhk:test',
             write: true,
             read: [15, 'あ'],
@@ -296,7 +308,10 @@ test.describe('データ放送の双方向', () => {
             event: 0x1234,
         });
         // アプリの通信は中継を通った
-        expect(asked).toEqual(expect.arrayContaining([appUrl, dataUrl, denpaUrl]));
+        expect(asked).toEqual(
+            expect.arrayContaining([appUrl, dataUrl, 'https://hybridcast.example.jp/api/settings']),
+        );
+        expect(asked).not.toContain(denpaUrl);
         // 映像はアプリの object の場所 (右上の 4 分の 1)
         await expect
             .poll(() =>

@@ -1,6 +1,6 @@
 /**
- * http の Hybridcast のアプリを中継する合言葉を出す ([hc-relay.ts](../../../../lib/server/hc-relay.ts))。
- * **ここはログインした人だけ** (いつもの守り)。https のアプリには要らないので出さない (`root: null`)
+ * Hybridcast のアプリを中継する合言葉を出す ([hc-relay.ts](../../../../lib/server/hc-relay.ts))。
+ * **ここはログインした人だけ** (いつもの守り)。http も https も出す
  */
 
 import { error, json } from '@sveltejs/kit';
@@ -18,7 +18,7 @@ export const POST: RequestHandler = async ({ request }) => {
     } catch {
         error(400, 'url が読めません');
     }
-    if (target.protocol === 'https:') return json({ root: null });
-    if (target.protocol !== 'http:') error(400, 'http か https の URL だけです');
+    if (target.protocol !== 'http:' && target.protocol !== 'https:')
+        error(400, 'http か https の URL だけです');
     return json({ root: `api/bml/hc/${grant(target.origin)}/` });
 };

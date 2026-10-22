@@ -1,9 +1,12 @@
 /**
- * **http の Hybridcast のアプリを、denpa の https 越しに読ませる** ([docs/stream.md](../../../docs/stream.md#hybridcast))。
+ * **Hybridcast のアプリを、denpa 越しに読ませる** ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  *
- * NHK のアプリは `http://hc.nhk.or.jp/` にあり、そこは https に応じない。denpa の画面は https なので、アプリの
- * script・画像・CSS はブラウザに Mixed Content として止められる。アプリを開くときに合言葉を出し、
- * `/api/bml/hc/<合言葉>/<経路>` をアプリの配信元の同じ経路へ中継する (`routes/api/bml/hc`)。
+ * - NHK のアプリは `http://hc.nhk.or.jp/` にあり、そこは https に応じない。denpa の画面は https なので、アプリの
+ *   script・画像・CSS はブラウザに Mixed Content として止められる
+ * - **https のアプリも通す。** 配る script の `location.href = …` などを差し込みへ向ける (`hybridcast/location.ts`)。
+ *   元のサーバから直に読ませると書き換えられず、アプリが移るときに iframe ごと外へ行こうとして止められる
+ *
+ * アプリを開くときに合言葉を出し、`/api/bml/hc/<合言葉>/<経路>` をアプリの配信元の同じ経路へ中継する (`routes/api/bml/hc`)。
  *
  * - **合言葉が許可証。** アプリは使い捨てのオリジンの iframe にいて、そこからの読み込みにはログインの cookie が付かない。
  *   だから中継の側はログインを見ない (`auth.ts` の `OPEN_PATHS`)。合言葉は推測できない乱数で、配信元 1 つに結びつき、

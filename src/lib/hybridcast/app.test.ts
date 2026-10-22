@@ -7,7 +7,7 @@ const INIT: ShimInit = {
     applicationId: 1,
     storage: { a: '</script><script>alert(1)</script>' },
     state: { program: null, serviceName: '', captions: true },
-    relay: null,
+    relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'https://hc.example.jp' },
     compat: {
         greg: [],
         nvram: {},
@@ -28,7 +28,7 @@ describe('prepareApp', () => {
         );
         expect(
             html.startsWith(
-                '<!DOCTYPE html><html><head><base href="https://hc.example.jp/app/index.html"><script>(',
+                '<!DOCTYPE html><html><head><base href="https://denpa.example/api/bml/hc/0123/app/index.html"><script>(',
             ),
         ).toBe(true);
         expect(html.indexOf('<title>')).toBeGreaterThan(html.indexOf('</script>'));
@@ -36,7 +36,7 @@ describe('prepareApp', () => {
 
     test('アプリ自身の <base> は、アプリの URL から解決したものを先に置く', () => {
         const html = prepareApp('<html><head><base href="../common/"></head></html>', INIT, COMPAT);
-        expect(html).toContain('<base href="https://hc.example.jp/common/">');
+        expect(html).toContain('<base href="https://denpa.example/api/bml/hc/0123/common/">');
     });
 
     test('記憶の中身で差し込みの script が切れない', () => {

@@ -66,27 +66,20 @@ export function prepareApp(html: string, init: ShimInit, compat: string): string
         }
     }
     /*
-     * **http のアプリは中継を通す** (`ShimInit.relay`)。`<base>` と、HTML に直に書かれた配信元の URL を中継へ。
+     * **アプリは中継を通す** (`ShimInit.relay`)。`<base>` と、HTML に直に書かれた配信元の URL を中継へ。
      * script が後から作る要素の URL は差し込みが書き換え、通信 (fetch・XHR) は差し込みが元の行き先へ戻して親へ渡す
      */
-    if (init.relay !== null) {
-        const from = `${init.relay.origin}/`;
-        if (base.startsWith(from)) base = init.relay.root + base.slice(from.length);
-        html = html.split(from).join(init.relay.root);
-        /*
-         * `/` から始まる住所は <base> を中継にしても denpa の頭へ解決される (NHK の `/common/…`)。中継の頭へ。
-         * **読み込む要素のタグの中だけ** — a の行き先には触らない (script の中の文字列に読み込む要素のタグがあれば、それは書き換わる)
-         */
-        const root = init.relay.root;
-        html = html.replace(
-            /<(?:script|img|link|source|video|audio|object|embed|input|track)\b[^>]*>/gi,
-            (tag) =>
-                tag.replace(
-                    /(\s(?:src|href|data|poster)\s*=\s*["']?)\/(?!\/)/gi,
-                    (_, head: string) => head + root,
-                ),
-        );
-    }
+    const from = `${init.relay.origin}/`;
+    if (base.startsWith(from)) base = init.relay.root + base.slice(from.length);
+    html = html.split(from).join(init.relay.root);
+    /*
+     * `/` から始まる住所は <base> を中継にしても denpa の頭へ解決される (NHK の `/common/…`)。中継の頭へ。
+     * **読み込む要素のタグの中だけ** — a の行き先には触らない (script の中の文字列に読み込む要素のタグがあれば、それは書き換わる)
+     */
+    const root = init.relay.root;
+    html = html.replace(/<(?:script|img|link|source|video|audio|object|embed|input|track)\b[^>]*>/gi, (tag) =>
+        tag.replace(/(\s(?:src|href|data|poster)\s*=\s*["']?)\/(?!\/)/gi, (_, head: string) => head + root),
+    );
     // 中の script がアプリの元の場所を読むように (`location.ts`)。差し込みが `__hcLocation` を置く
     html = rewriteLocation(html);
     // </script> で差し込みが切れないように (JSON の中の < は < に)
