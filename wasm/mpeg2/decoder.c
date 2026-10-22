@@ -18,8 +18,8 @@
  * - `dec_peek` / `dec_pop` … いちばん古い1枚を覗く・捨てる。表示順で並んでいる
  *   (B フレームの並べ替えはデコーダが済ませている)
  *
- * スレッドも SIMD も使わない。スレッド版は COOP/COEP (crossOriginIsolated) が要り、
- * 実測でも 1 本で 1080i を実時間の 3 倍でデコードできたので、払う理由が無い (docs/stream.md#放送そのままmpeg-2を送る)。
+ * スレッドは使わない。スレッド版は COOP/COEP (crossOriginIsolated) が要る (docs/stream.md#放送そのままmpeg-2を送る)。
+ * SIMD はコンパイラに任せて使う (build.sh)
  */
 #include <emscripten/emscripten.h>
 #include <libavcodec/avcodec.h>
