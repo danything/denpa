@@ -16,7 +16,7 @@
 import type { ProgramInfoMessage } from '#lib/ts/bml-protocol.js';
 import { type Cell, Table } from './binary';
 import { HostObject } from './dom';
-import { decodeEuc, encodeEuc } from './euc';
+import { clipEuc, decodeEuc, encodeEuc } from './euc';
 import type { Nvram } from './nvram';
 import { isRemote, type LockKind } from './resources';
 import type { Sound } from './sound';
@@ -134,16 +134,6 @@ const API_GROUPS = new Set([
     'Misc.Greg',
 ]);
 
-/** 1 文字 2 バイトまでとして、EUC-JP で n バイトに切る (Ureg/Greg は 256 バイト) */
-function clip(text: string, bytes: number): string {
-    let size = 0;
-    for (let i = 0; i < text.length; i++) {
-        size += text.charCodeAt(i) < 0x80 ? 1 : 2;
-        if (size > bytes) return text.slice(0, i);
-    }
-    return text;
-}
-
 const hex4 = (n: number | null | undefined): string | null =>
     n == null ? null : `0x${n.toString(16).padStart(4, '0')}`;
 
@@ -246,7 +236,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
                 String(i),
                 () => registers[i],
                 (value) => {
-                    registers[i] = clip(toStr(value), 256);
+                    registers[i] = clipEuc(toStr(value), 256);
                 },
             );
         }

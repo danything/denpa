@@ -32,7 +32,7 @@ export interface ReceiverInfo {
     prefecture: number;
 }
 
-interface Who {
+export interface Who {
     originalNetworkId: number | null;
     serviceId: number | null;
 }
@@ -47,6 +47,28 @@ const AREAS: Record<string, { first: number; last: number; scope: 'network' | 'c
     '~/ext': { first: 16, last: 63, scope: 'service' },
     common: { first: 0, last: 15, scope: 'common' },
 };
+
+/** 局の領域を分ける頭 (置き場の名前の真ん中) */
+function scopeOf(kind: 'network' | 'common' | 'service', who: Who): string {
+    // BS・CS (original_network_id 4・6・7) は局どうしで同じ番号なので、局の領域もサービスで分ける
+    const network = who.originalNetworkId;
+    const satellite = network === 4 || network === 6 || network === 7;
+    if (kind === 'network' && !satellite) return String(network ?? 'unknown');
+    if (kind === 'network' || kind === 'service')
+        return `${network ?? 'unknown'}.${who.serviceId ?? 'unknown'}`;
+    return '';
+}
+
+/**
+ * 置き場の名前 (`Nvram` が `store` に使う鍵) が、その局から読み書きできるものか。
+ * **Hybridcast のアプリへは、起動した局から見える分だけ写して渡す** (`hybridcast/compat.ts`)
+ */
+export function visibleFrom(key: string, who: Who): boolean {
+    const [prefix, scope] = key.split(':');
+    if (prefix === 'group') return true;
+    const area = prefix !== undefined && Object.hasOwn(AREAS, prefix) ? AREAS[prefix] : undefined;
+    return area !== undefined && scope === scopeOf(area.scope, who);
+}
 
 export class Nvram {
     constructor(
@@ -74,16 +96,7 @@ export class Nvram {
             this.log(`NVRAM の番号が領域の外です (${prefix} は ${area.first}〜${area.last}): ${uri}`);
             return null;
         }
-        const who = this.who();
-        let scope = '';
-        // BS・CS (original_network_id 4・6・7) は局どうしで同じ番号なので、局の領域もサービスで分ける
-        const network = who.originalNetworkId;
-        const satellite = network === 4 || network === 6 || network === 7;
-        if (area.scope === 'network' && !satellite) scope = String(network ?? 'unknown');
-        else if (area.scope === 'network') scope = `${network}.${who.serviceId ?? 'unknown'}`;
-        else if (area.scope === 'service')
-            scope = `${who.originalNetworkId ?? 'unknown'}.${who.serviceId ?? 'unknown'}`;
-        return `${prefix}:${scope}:${block}`;
+        return `${prefix}:${scopeOf(area.scope, this.who())}:${block}`;
     }
 
     private bytes(uri: string): Uint8Array | null {

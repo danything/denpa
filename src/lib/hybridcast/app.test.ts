@@ -8,13 +8,23 @@ const INIT: ShimInit = {
     storage: { a: '</script><script>alert(1)</script>' },
     state: { program: null, serviceName: '', captions: true },
     relay: null,
+    compat: {
+        greg: [],
+        nvram: {},
+        receiver: { zipcode: '', prefecture: 255 },
+        who: { originalNetworkId: null, serviceId: null },
+    },
 };
+
+/** 束ねた `compat.ts` の代わり */
+const COMPAT = '/* compat */';
 
 describe('prepareApp', () => {
     test('<head> の直後に <base> と差し込みを入れる (doctype は先頭のまま)', () => {
         const html = prepareApp(
             '<!DOCTYPE html><html><head><title>t</title></head><body>x</body></html>',
             INIT,
+            COMPAT,
         );
         expect(
             html.startsWith(
@@ -25,14 +35,15 @@ describe('prepareApp', () => {
     });
 
     test('アプリ自身の <base> は、アプリの URL から解決したものを先に置く', () => {
-        const html = prepareApp('<html><head><base href="../common/"></head></html>', INIT);
+        const html = prepareApp('<html><head><base href="../common/"></head></html>', INIT, COMPAT);
         expect(html).toContain('<base href="https://hc.example.jp/common/">');
     });
 
     test('記憶の中身で差し込みの script が切れない', () => {
-        const html = prepareApp('<head></head>', INIT);
-        // 差し込みの </script> は最後の 1 つだけ
-        expect(html.match(/<\/script>/g)).toHaveLength(1);
+        const html = prepareApp('<head></head>', INIT, COMPAT);
+        // </script> は差し込みと、その後ろの `compat.ts` の 2 つだけ
+        expect(html.match(/<\/script>/g)).toHaveLength(2);
+        expect(html).toContain(`</script><script>${COMPAT}</script>`);
     });
 
     /*
@@ -47,6 +58,7 @@ describe('prepareApp', () => {
                 url: 'http://hc.example.jp/p/index.html',
                 relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'http://hc.example.jp' },
             },
+            COMPAT,
         );
         expect(html).toContain('<base href="https://denpa.example/api/bml/hc/0123/p/index.html">');
         expect(html).toContain('<script src="https://denpa.example/api/bml/hc/0123/common/a.js">');
@@ -59,6 +71,7 @@ describe('prepareApp', () => {
                 url: 'http://hc.example.jp/p/index.html',
                 relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'http://hc.example.jp' },
             },
+            COMPAT,
         );
         expect(rooted).toContain('<script src="https://denpa.example/api/bml/hc/0123/common/b.js">');
         expect(rooted).toContain('src="//cdn.example/c.png"');
@@ -70,6 +83,7 @@ describe('prepareApp', () => {
                 url: 'http://hc.example.jp/p/index.html',
                 relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'http://hc.example.jp' },
             },
+            COMPAT,
         );
         expect(links).toContain('<a href="/x">');
         // 差し込みには元の URL を渡す (getAITInfo は元の行き先を返す)
@@ -77,7 +91,7 @@ describe('prepareApp', () => {
     });
 
     test('head も html も無ければ頭に入れる', () => {
-        expect(prepareApp('<p>x</p>', INIT).startsWith('<base ')).toBe(true);
+        expect(prepareApp('<p>x</p>', INIT, COMPAT).startsWith('<base ')).toBe(true);
     });
 });
 
@@ -124,7 +138,18 @@ test('frameMessage は形式の合わないものを捨てる', () => {
     });
 });
 
-test('receiverKey: 色ボタンは 403〜406、戻ると d は閉じる', () => {
+test('frameMessage は Greg の番号と NVRAM の中身を確かめる', () => {
+    expect(frameMessage({ hc: 1, type: 'greg', index: 55, value: 'nhk:x' })).toEqual({
+        type: 'greg',
+        index: 55,
+        value: 'nhk:x',
+    });
+    expect(frameMessage({ hc: 1, type: 'greg', index: 64, value: 'x' })).toBeNull();
+    expect(frameMessage({ hc: 1, type: 'greg', index: 1.5, value: 'x' })).toBeNull();
+    expect(frameMessage({ hc: 1, type: 'nvram', key: 'group:00:14', value: 1 })).toBeNull();
+});
+
+test('receiverKey:色ボタンは 403〜406、戻ると d は閉じる', () => {
     expect(receiverKey(22)).toEqual({ key: 'r', code: 403 });
     expect(receiverKey(21)).toEqual({ key: 'b', code: 406 });
     expect(receiverKey(18)).toEqual({ key: 'Enter', code: 13 });

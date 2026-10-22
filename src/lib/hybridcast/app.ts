@@ -52,8 +52,10 @@ const attribute = (text: string): string =>
 /**
  * 差し込みを入れた HTML。`<base>` はアプリの URL (アプリ自身の `<base>` があれば、それをアプリの URL
  * から解決したもの) で、**どの名前より先に**置く。差し込みはアプリの script より先に動く
+ *
+ * @param compat 差し込みの後ろに入れる、束ねた `compat.ts` (`import compat from '#lib/hybridcast/compat.ts?inject'`)
  */
-export function prepareApp(html: string, init: ShimInit): string {
+export function prepareApp(html: string, init: ShimInit, compat: string): string {
     let base = init.url;
     const own = /<base\s[^>]*href\s*=\s*["']?([^"'\s>]+)/i.exec(html);
     if (own !== null) {
@@ -89,7 +91,7 @@ export function prepareApp(html: string, init: ShimInit): string {
     html = rewriteLocation(html);
     // </script> で差し込みが切れないように (JSON の中の < は < に)
     const data = JSON.stringify(init).replace(/</g, '\\u003c');
-    const inject = `<base href="${attribute(base)}"><script>(${shim.toString()})(${data});</script>`;
+    const inject = `<base href="${attribute(base)}"><script>(${shim.toString()})(${data});</script><script>${compat}</script>`;
     for (const pattern of [/<head(\s[^>]*)?>/i, /<html(\s[^>]*)?>/i, /<!doctype[^>]*>/i]) {
         const found = pattern.exec(html);
         if (found !== null) {
@@ -120,6 +122,9 @@ export type FrameMessage =
     | { type: 'captions'; on: boolean }
     | { type: 'close' }
     | { type: 'log'; message: string }
+    /** アプリが Greg を書いた・NVRAM に書いた (`compat.ts`)。データ放送のほうへ戻す */
+    | { type: 'greg'; index: number; value: string }
+    | { type: 'nvram'; key: string; value: string }
     /** アプリが別のページへ移ろうとした (`shim.ts` の `__hcLocation`)。そこを新しいアプリとして開き直す */
     | { type: 'navigate'; url: string };
 
@@ -178,6 +183,18 @@ export function frameMessage(data: unknown): FrameMessage | null {
         case 'log':
             return typeof m['message'] === 'string'
                 ? { type: 'log', message: m['message'].slice(0, 500) }
+                : null;
+        case 'greg':
+            return typeof m['index'] === 'number' &&
+                Number.isInteger(m['index']) &&
+                m['index'] >= 0 &&
+                m['index'] < 64 &&
+                typeof m['value'] === 'string'
+                ? { type: 'greg', index: m['index'], value: m['value'] }
+                : null;
+        case 'nvram':
+            return typeof m['key'] === 'string' && typeof m['value'] === 'string'
+                ? { type: 'nvram', key: m['key'], value: m['value'] }
                 : null;
         case 'navigate':
             return typeof m['url'] === 'string' && /^https?:\/\//i.test(m['url'])

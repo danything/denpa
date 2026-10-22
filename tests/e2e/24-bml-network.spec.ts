@@ -200,6 +200,15 @@ test.describe('データ放送の双方向', () => {
     xhr.responseType = 'json';
     await new Promise(function (done) { xhr.onload = done; xhr.onerror = done; xhr.send(); });
     out.xhr = xhr.response && xhr.response.v;
+    // 受信機を名乗り、データ放送の Greg と NVRAM を使える (NHK のアプリが当てにする)
+    out.ua = navigator.userAgent.indexOf('Hybridcast/') >= 0;
+    var pseudo = navigator.bmlCompat.browserPseudo;
+    pseudo.Greg[55] = 'nhk:test';
+    out.greg = pseudo.Greg[55];
+    out.write = !isNaN(pseudo.writePersistentArray('nvram://00;group/14', 'U:1B,S:1V', [15, 'あ']));
+    out.read = pseudo.readPersistentArray('nvram://00;group/14', 'U:1B,S:1V');
+    out.onair = navigator.receiverDevice.streamEvent.sourceIs('onair');
+    out.event = await new Promise(function (done) { navigator.receiverDevice.getCurrentEventInformation(function (e) { done(e && e.event_id); }); });
     document.getElementById('out').textContent = JSON.stringify(out);
 })();
 </script></body></html>`;
@@ -213,7 +222,8 @@ test.describe('データ放送の双方向', () => {
                 return route.fulfill({
                     status: 200,
                     headers: { 'x-bml-relayed': '1', 'content-type': 'text/html' },
-                    body: '<!DOCTYPE html><html><head></head><body><p id="next">next</p></body></html>',
+                    // 前のページが書いた Greg は、データ放送を通って次のページにも見える
+                    body: '<!DOCTYPE html><html><head></head><body><p id="next">-</p><script>document.getElementById("next").textContent = navigator.bmlCompat.browserPseudo.Greg[55];</script></body></html>',
                 });
             if (target === appUrl)
                 return route.fulfill({
@@ -275,6 +285,12 @@ test.describe('データ放送の双方向', () => {
             fetch: 'relayed',
             denpa: 'refused',
             xhr: 'relayed',
+            ua: true,
+            greg: 'nhk:test',
+            write: true,
+            read: [15, 'あ'],
+            onair: true,
+            event: 0x1234,
         });
         // アプリの通信は中継を通った
         expect(asked).toEqual(expect.arrayContaining([appUrl, dataUrl, denpaUrl]));
@@ -288,13 +304,15 @@ test.describe('データ放送の双方向', () => {
             .toBe('50%');
         // 受信機の記憶はアプリごとの置き場に
         expect(await page.evaluate(() => localStorage.getItem('denpa_hybridcast_7e87_1'))).toBe('{"n":"1"}');
+        // NVRAM はデータ放送と同じ置き場に
+        expect(await page.evaluate(() => localStorage.getItem('denpa_bml_own_group:00:14'))).not.toBeNull();
 
         // アプリが別のページへ移る。iframe ごと移らせず、自分の元の名前で組み立てた住所を同じ手順で開き直す
         await page.frameLocator('[data-testid=live-hybridcast-app] iframe').locator('#go').click();
         await expect(frame).toHaveAttribute('data-url', nextUrl, { timeout: 10_000 });
         await expect(
             page.frameLocator('[data-testid=live-hybridcast-app] iframe').locator('#next'),
-        ).toHaveText('next', {
+        ).toHaveText('nhk:test', {
             timeout: 10_000,
         });
 

@@ -58,6 +58,8 @@ import { type Realm, Vm } from './vm';
 import { parseXml } from './xml';
 
 export type { BmlIp } from './browser';
+/** Hybridcast のアプリへ写す NVRAM を選ぶ (画面はエンジンと一緒に読む。`hybridcast/compat.ts`) */
+export { visibleFrom } from './nvram';
 export type { Rect } from './render';
 
 /** 局 (`arib://<original_network_id>.<transport_stream_id>.<service_id>` を読み取ったもの) */
@@ -117,6 +119,8 @@ export interface Bml {
     releaseKeys(): void;
     /** いまの局と番組 (放送の programInfo)。Hybridcast のアプリに渡す */
     program(): ProgramInfoMessage | null;
+    /** Greg (64 本。局が変わっても消えない)。Hybridcast のアプリと共有する (`hybridcast/compat.ts`) */
+    readonly greg: string[];
     readonly plane: Plane;
     /** 切り分け用 (今の文書の名前) */
     readonly path: string | null;

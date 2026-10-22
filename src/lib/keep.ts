@@ -30,3 +30,19 @@ export function forget(key: string): void {
         // 消せなくても支障は無い
     }
 }
+
+/** 頭が `prefix` のものを全部 (鍵は頭を外したもの)。読めなければ空 */
+export function readAll(prefix: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key === null || !key.startsWith(prefix)) continue;
+            const value = localStorage.getItem(key);
+            if (value !== null) out[key.slice(prefix.length)] = value;
+        }
+    } catch {
+        // 読めなければ何も無いことにする
+    }
+    return out;
+}

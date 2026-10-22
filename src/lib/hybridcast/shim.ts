@@ -11,10 +11,14 @@
  *   無いものは「使えない」(null) を返し、何を呼ばれたかを親に知らせる (本物の放送で、どの API が
  *   要るかを見るため)
  * - キー (色ボタン・戻る) を受信機のキーに直す
+ * - **受信機を名乗る** (UA の `Hybridcast/`)。データ放送の受信機の機能 (`navigator.bmlCompat` など) は
+ *   `compat.ts` が置く (`bml/` の部品を使うので、別に束ねて後ろに差し込む。ここは渡すものを置くだけ)
  *
  * **この関数は文字にして差し込む** (`Function.prototype.toString`)。外の名前を使わない・クラスの
  * フィールド宣言やオブジェクトの `...` を使わない (束ねるときに外の補助関数へ置き換わりうる) こと。
  */
+
+import type { CompatInit } from './compat';
 
 /** アプリに見せる、いまの局と番組と字幕 (親が変わるたびに送り直す) */
 export interface HcState {
@@ -47,6 +51,8 @@ export interface ShimInit {
      * 配信元の URL は `prepareApp` が中継へ書き換え、後から作られる要素の URL はここで書き換える
      */
     relay: { root: string; origin: string } | null;
+    /** データ放送の Greg と NVRAM (`compat.ts` へ渡す) */
+    compat: CompatInit;
 }
 
 export function shim(init: ShimInit): void {
@@ -462,6 +468,20 @@ export function shim(init: ShimInit): void {
         // 置けなくても、使えないことに変わりはない
     }
 
+    // ---- 受信機を名乗る ----
+    /*
+     * **UA に `Hybridcast/` を足す** (アプリの中から見えるものだけ。中継は局へ UA を送らない)。NHK のアプリは
+     * これが無いと PC 向けの案内のページへ移る。メーカー・機種などは空 (受信機を見分けるものは持たない)
+     */
+    try {
+        const ua = `${navigator.userAgent} Hybridcast/1.0 (;;;;;)`;
+        Object.defineProperty(w.navigator, 'userAgent', { get: () => ua, configurable: true });
+    } catch {
+        // 置けなければ名乗らないまま
+    }
+    // `compat.ts` が読んで消す
+    w.__hcCompat = init.compat;
+
     // ---- 放送の映像 (object type="video/broadcast") ----
     const channel = (): Record<string, unknown> | null => {
         const p = state.program;
@@ -579,6 +599,45 @@ export function shim(init: ShimInit): void {
     requestAnimationFrame(loop);
 
     // ---- 受信機 API ----
+    /** 番組が変わったら呼ぶもの (`streamEvent.addEventIDUpdateListener`) */
+    const eventListeners = new Set<() => void>();
+    /** いまの番組 (`getCurrentEventInformation`。ARIB の名前で。次の番組は持たない) */
+    const eventInformation = (): Record<string, unknown> | undefined => {
+        const p = state.program;
+        if (p === null) return undefined;
+        return {
+            original_network_id: p.originalNetworkId,
+            transport_stream_id: p.transportStreamId,
+            service_id: p.serviceId,
+            event_id: p.eventId,
+            start_time: p.startTimeUnixMillis === null ? null : new Date(p.startTimeUnixMillis),
+            duration: p.durationSeconds,
+            name: p.eventName ?? '',
+            desc: '',
+            f_event_id: null,
+            f_start_time: null,
+            f_duration: null,
+            f_name: '',
+            f_desc: '',
+        };
+    };
+    /*
+     * 放送の中のイベント (`streamEvent`)。**イベントメッセージは届けない** (denpa は Hybridcast へ流さない) —
+     * 聞くのは受け付けるだけ。番組が変わったことは知らせる。登録されたら一度すぐ呼ぶ (いまの番組はもう分かっている)
+     */
+    const streamEvent: Record<string, unknown> = {
+        sourceIs: (source: unknown) => source === 'onair',
+        addEventIDUpdateListener: (listener: unknown) => {
+            if (typeof listener !== 'function') return;
+            eventListeners.add(listener as () => void);
+            setTimeout(() => {
+                if (eventListeners.has(listener as () => void)) (listener as () => void)();
+            }, 0);
+        },
+        removeEventIDUpdateListener: (listener: unknown) => eventListeners.delete(listener as () => void),
+        addGeneralEventMessageListener: () => {},
+        removeGeneralEventMessageListener: () => {},
+    };
     const receiver: Record<string, unknown> = {
         getAITInfo: () => ({
             url: init.url,
@@ -588,6 +647,12 @@ export function shim(init: ShimInit): void {
         getCurrentChannel: () => channel(),
         getCurrentProgram: () => programme()[0] ?? null,
         getProgramInfo: () => programme()[0] ?? null,
+        getCurrentEventInformation: (callback: unknown) => {
+            const info = eventInformation();
+            if (typeof callback === 'function') setTimeout(() => callback(info), 0);
+            return info;
+        },
+        streamEvent,
         tune: (onid: number, tsid: number | null, sid: number) => post({ type: 'tune', onid, tsid, sid }),
         getCCStatus: () => (state.captions ? 1 : 0),
         setCCStatus: (on: unknown) => post({ type: 'captions', on: on === true || on === 1 }),
@@ -680,7 +745,10 @@ export function shim(init: ShimInit): void {
             waiting.delete(id);
             done?.(data);
         } else if (data['type'] === 'state') {
+            const before = state.program?.eventId ?? null;
             state = data['state'] as HcState;
+            if ((state.program?.eventId ?? null) !== before)
+                for (const listener of eventListeners) listener();
         } else if (data['type'] === 'key') {
             press(data['key'] as string, data['code'] as number, data['down'] === true);
         }

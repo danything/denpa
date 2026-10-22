@@ -185,3 +185,13 @@ export function toDisplay(text: string): string {
     }
     return from === 0 ? text : out + text.slice(from);
 }
+
+/** 1 文字 2 バイトまでとして、EUC-JP で n バイトに切る (Ureg/Greg は 256 バイト) */
+export function clipEuc(text: string, bytes: number): string {
+    let size = 0;
+    for (let i = 0; i < text.length; i++) {
+        size += text.charCodeAt(i) < 0x80 ? 1 : 2;
+        if (size > bytes) return text.slice(0, i);
+    }
+    return text;
+}

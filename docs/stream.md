@@ -1086,6 +1086,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
           ─ startAITControlledApp(…) → 画面が AIT のアプリを開く
 画面 ─ アプリの HTML を中継で取得 (/api/bml/proxy)
      ─ 頭に <base href="アプリの URL"> と差し込み (src/lib/hybridcast/shim.ts) を入れる
+       (後ろに、データ放送の Greg・NVRAM を使わせる compat.ts を束ねて入れる。vite.config.ts の ?inject)
      ─ sandbox="allow-scripts" の iframe (/api/bml/hybridcast) へ postMessage で渡し、document.write で開く
 アプリ ─ 画像・script・CSS は <base> から元のサーバへ直に取得 (CORS は要らない)
        ─ fetch・XMLHttpRequest・受信機の記憶・受信機 API は postMessage で画面へ
@@ -1127,30 +1128,35 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 
 ### できること・できないこと
 
-| 機能                                     | denpa |                                                                                                                              |
-| ---------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 放送の映像の表示と縮小                   | ○     | `video/broadcast` の object (`bindToCurrentChannel`・`stop`・`setFullScreen`・`currentChannel`・`programmes`)                |
-| いまの局と番組                           | ○     | 放送の programInfo と局の一覧から。`navigator.receiverDevice.getCurrentChannel()`・`getCurrentProgram()`                     |
-| 選局                                     | △     | データ放送の `epgTune` と同じ範囲 (局の一覧にある局だけ)。局が変わるとアプリは閉じる                                         |
-| 字幕の表示の切り替え                     | ○     | `getCCStatus`・`setCCStatus`                                                                                                 |
-| 受信機の記憶 (`localStorage`)            | ○     | アプリごとに分けて覚える (`denpa_hybridcast_<organisation_id>_<application_id>`。256KB まで)。denpa のほかの記憶とは混ぜない |
-| アプリの通信 (`fetch`・`XMLHttpRequest`) | ○     | 中継を通す。GET と POST だけ。POST の形式はフォーム・JSON・文字だけ                                                          |
-| 受信機 ID・証明書・機種                  | ×     | 持たない。`getReceiverId` などは null                                                                                        |
-| WebSocket・EventSource・sendBeacon       | ×     | 差し込みで中継へ渡せないので使えない                                                                                         |
-| 同期の XMLHttpRequest                    | △     | 非同期で返す                                                                                                                 |
-| cookie                                   | ×     | 持たない。`document.cookie` は空                                                                                             |
-| DRM 付きの動画                           | ×     | ライセンスサーバが受信機を見る                                                                                               |
-| スマホ連携 (Hybridcast Connect)          | ×     | 家の LAN にエンドポイントを開けることになるので作らない                                                                      |
-| 録画の再生中                             | ×     | データ放送の通信と同じく放送中だけ                                                                                           |
+| 機能                                     | denpa |                                                                                                                                                                               |
+| ---------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 放送の映像の表示と縮小                   | ○     | `video/broadcast` の object (`bindToCurrentChannel`・`stop`・`setFullScreen`・`currentChannel`・`programmes`)                                                                 |
+| いまの局と番組                           | ○     | 放送の programInfo と局の一覧から。`navigator.receiverDevice.getCurrentChannel()`・`getCurrentProgram()`                                                                      |
+| 選局                                     | △     | データ放送の `epgTune` と同じ範囲 (局の一覧にある局だけ)。局が変わるとアプリは閉じる                                                                                          |
+| 字幕の表示の切り替え                     | ○     | `getCCStatus`・`setCCStatus`                                                                                                                                                  |
+| 受信機の記憶 (`localStorage`)            | ○     | アプリごとに分けて覚える (`denpa_hybridcast_<organisation_id>_<application_id>`。256KB まで)。denpa のほかの記憶とは混ぜない                                                  |
+| データ放送の Greg と NVRAM               | ○     | `navigator.bmlCompat.browserPseudo` (`Greg`・`readPersistentArray`・`writePersistentArray`)。データ放送と同じもの。NVRAM は放送の文書と同じ領域で、起動した局から見える分だけ |
+| データ放送へ戻る                         | ○     | `navigator.applicationManager.launchDataBroadcastingBrowser`。アプリを閉じる (戻る先の部品は選べない)                                                                         |
+| 番組の変わり目                           | △     | `receiverDevice.streamEvent` の番組が変わったことだけ知らせる。放送のイベントメッセージは届けない                                                                             |
+| アプリの通信 (`fetch`・`XMLHttpRequest`) | ○     | 中継を通す。GET と POST だけ。POST の形式はフォーム・JSON・文字だけ                                                                                                           |
+| 受信機 ID・証明書・機種                  | ×     | 持たない。`getReceiverId` などは null                                                                                                                                         |
+| WebSocket・EventSource・sendBeacon       | ×     | 差し込みで中継へ渡せないので使えない                                                                                                                                          |
+| 同期の XMLHttpRequest                    | △     | 非同期で返す                                                                                                                                                                  |
+| cookie                                   | ×     | 持たない。`document.cookie` は空                                                                                                                                              |
+| DRM 付きの動画                           | ×     | ライセンスサーバが受信機を見る                                                                                                                                                |
+| スマホ連携 (Hybridcast Connect)          | ×     | 家の LAN にエンドポイントを開けることになるので作らない                                                                                                                       |
+| 録画の再生中                             | ×     | データ放送の通信と同じく放送中だけ                                                                                                                                            |
 
 受信機 API の名前は IPTVFJ STD-0010 の本文で確かめていません。差し込みは知らない名前の呼び出しにも
 null (使えない) を返し、何を呼ばれたかをコンソールに `[hybridcast] … は使えません` で出します。
 本物の放送でここを見て、要るものを足していきます。
 
-### 受信機を名乗らない
+### 受信機の名乗り
 
-UA に `Hybridcast` や実在のメーカーを入れません (中継は UA も送らない)。受信機 ID・証明書も持ちません。
-そのため、受信機を確かめるアプリ (UA を見る・証明書を求める・会員や視聴の記録を受信機に結ぶ) は動きません。
+アプリの中の `navigator.userAgent` には `Hybridcast/1.0 (;;;;;)` を足します。NHK のアプリは、これが無いと
+PC 向けの案内のページ (`www.nhk.or.jp/hybridcast/`) へ移り、Hybridcast のトップを出しません。
+**メーカー・機種などは空です。** 中継は今までどおり UA を送りません。受信機 ID・証明書も持ちません。
+そのため、受信機を確かめるアプリ (メーカーや機種を見る・証明書を求める・会員や視聴の記録を受信機に結ぶ) は動きません。
 **denpa 側の努力では越えられないので、作り込みません。**
 
 ### 安全のための作り

@@ -4,7 +4,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import Icons from 'unplugin-icons/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 
 /**
  * イメージに入れる Denpa Font の版 (Dockerfile の `ARG DENPA_FONT_VERSION`)。
@@ -23,6 +23,34 @@ const denpaFontVersion = (() => {
         console.warn('Dockerfile から DENPA_FONT_VERSION を読めません。字の URL に版が付きません');
     return found;
 })();
+
+/**
+ * **`import code from './x.ts?inject'` で、x.ts を import ごと 1 本の script (文字) に束ねて読む。**
+ * 別のオリジンの文書へ文字で差し込むもの (Hybridcast のアプリの中で動く `hybridcast/compat.ts`) に使う —
+ * 向こうからは denpa の束を読めないので、使う部品ごと持ち込む。束ねるのは bun (`vite` は bun の上で動かす)
+ */
+function inject(): Plugin {
+    const SUFFIX = '?inject';
+    return {
+        name: 'denpa-inject',
+        async load(id) {
+            if (!id.endsWith(SUFFIX)) return null;
+            const file = id.slice(0, -SUFFIX.length);
+            const built = await Bun.build({
+                entrypoints: [file],
+                target: 'browser',
+                format: 'iife',
+                minify: true,
+            });
+            const output = built.outputs[0];
+            if (!built.success || output === undefined)
+                throw new AggregateError(built.logs, `${file} を束ねられません`);
+            this.addWatchFile(file);
+            // 差し込む先は <script> の中なので、</script> で切れないように
+            return `export default ${JSON.stringify((await output.text()).replace(/<\/(script)/gi, '<\\/$1'))};`;
+        },
+    };
+}
 
 export default defineConfig({
     define: {
@@ -105,6 +133,7 @@ export default defineConfig({
                 denpa: FileSystemIconLoader('./src/lib/icons'),
             },
         }),
+        inject(),
     ],
     server: {
         // compose 上の Jellyfin はサービス名(`http://app:5173`)で開発サーバにアクセスする。

@@ -49,8 +49,9 @@
     import type { Bml, BmlIp, Rect, Service } from '#lib/bml/engine.js';
     import { type Plane, planeArea } from '#lib/bml/plane.js';
     import { type FrameMessage, type HcState, VIEWPORT } from '#lib/hybridcast/app.js';
+    import type { CompatInit } from '#lib/hybridcast/compat.js';
     import { parseXmlAit } from '#lib/hybridcast/xml-ait.js';
-    import { read, write } from '#lib/keep.js';
+    import { read, readAll, write } from '#lib/keep.js';
     import type { HybridcastLink } from '#lib/live.js';
     import type { ResponseMessage } from '#lib/ts/bml-protocol.js';
     import HybridcastFrame from './HybridcastFrame.svelte';
@@ -215,6 +216,29 @@
     }
 
     /** アプリを閉じてデータ放送へ戻る */
+    /**
+     * アプリに渡すデータ放送の Greg と NVRAM (`hybridcast/compat.ts`)。**NVRAM はアプリを起動した局から見える分だけ** —
+     * 放送の文書と同じ領域を使わせる (アプリは AIT で局が起動させたもの)
+     */
+    function broadcastFor(): CompatInit {
+        const who = { originalNetworkId: program?.originalNetworkId ?? null, serviceId: program?.serviceId ?? null };
+        const visible = nvramVisible;
+        const nvram = Object.fromEntries(
+            Object.entries(readAll(NVRAM_PREFIX)).filter(([key]) => visible?.(key, who) === true),
+        );
+        return { greg: engine?.greg.slice() ?? [], nvram, receiver: { zipcode: postal, prefecture }, who };
+    }
+
+    /** アプリが Greg・NVRAM に書いた。**同じ局から見える NVRAM だけ**受け取る (中身はアプリの言うまま。1 ブロック 64 バイトの base64) */
+    function written(change: Extract<FrameMessage, { type: 'greg' | 'nvram' }>): void {
+        if (change.type === 'greg') {
+            if (engine !== null) engine.greg[change.index] = change.value.slice(0, 256);
+            return;
+        }
+        const who = { originalNetworkId: program?.originalNetworkId ?? null, serviceId: program?.serviceId ?? null };
+        if (nvramVisible?.(change.key, who) === true && change.value.length <= 88) write(NVRAM_PREFIX + change.key, change.value);
+    }
+
     function closeApp(): void {
         if (running === null) return;
         running = null;
@@ -332,6 +356,8 @@
     let roundFont: FontFace | null = null;
     /** キーを AribKeyCode に (エンジンを読み込んだら入る。キーの処理で待たずに preventDefault するため) */
     let toAribKey: ((key: string) => number) | null = null;
+    /** NVRAM の鍵が、その局から見えるものか (エンジンと一緒に読む。Hybridcast のアプリへ写す分を選ぶ) */
+    let nvramVisible: typeof import('#lib/bml/nvram.js').visibleFrom | null = null;
 
     /**
      * 双方向 (通信系コンテンツ)。**中継はサーバがやる**
@@ -608,8 +634,9 @@
         const mine = ++generation;
         loading = true;
         // 押されてから取得する (上の説明)
-        const { createBml, aribKey } = await import('#lib/bml/engine.js');
+        const { createBml, aribKey, visibleFrom } = await import('#lib/bml/engine.js');
         toAribKey = aribKey;
+        nvramVisible = visibleFrom;
         // 待っている間に離されていたら、作らない
         if (mine !== generation || host === null || media === null) return;
         const into = makeMount(host);
@@ -778,6 +805,8 @@
         <HybridcastFrame
             app={running}
             hc={hcState}
+            broadcast={broadcastFor}
+            onwrite={written}
             onclose={closeApp}
             ontune={(service) => tune?.(service) ?? false}
             oncaptions={(on) => setCaptions?.(on)}
