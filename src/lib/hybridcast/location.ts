@@ -24,3 +24,23 @@ const READ = new RegExp(`(?<![\\w$.])(?:(?:window|self|document)\\.)?location\\.
 export function rewriteLocation(text: string): string {
     return text.replace(READ, (_, part: string) => `(self.__hcLocation||location).${part}`);
 }
+
+/** script と HTML か (中の `location.hostname` などを置き換えるもの) */
+export function scriptable(contentType: string): boolean {
+    return /javascript|ecmascript|html/i.test(contentType);
+}
+
+/**
+ * バイトのまま置き換える (中継で配る script・HTML と、アプリが通信で取って実行する script。jQuery の `getScript` など)。
+ * 置き換えるのは ASCII だけなので、1 バイトを 1 字として読めば文字の符号に関係なく壊さない
+ */
+export function rewriteLocationBytes(body: Uint8Array): Uint8Array {
+    let text = '';
+    for (let i = 0; i < body.length; i += 0x8000)
+        text += String.fromCharCode(...body.subarray(i, i + 0x8000));
+    const out = rewriteLocation(text);
+    if (out === text) return body;
+    const bytes = new Uint8Array(out.length);
+    for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i);
+    return bytes;
+}

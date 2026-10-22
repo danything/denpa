@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { rewriteLocation } from './location';
+import { rewriteLocation, rewriteLocationBytes, scriptable } from './location';
 
 describe('rewriteLocation', () => {
     test('location の名前・頭・オリジンの読み出しを、差し込みの __hcLocation から読ませる', () => {
@@ -23,4 +23,17 @@ describe('rewriteLocation', () => {
         const code = 'x.location.hostname;locationHost;a.location.href';
         expect(rewriteLocation(code)).toBe(code);
     });
+});
+
+test('rewriteLocationBytes はバイトのまま置き換え、ASCII 以外の文字を壊さない', () => {
+    // Shift_JIS の「あ」(0x82 0xa0) を挟む
+    const head = new TextEncoder().encode('a=location.href;"');
+    const body = Uint8Array.from([...head, 0x82, 0xa0, 0x22]);
+    const out = rewriteLocationBytes(body);
+    expect(new TextDecoder('shift_jis').decode(out)).toBe('a=(self.__hcLocation||location).href;"あ"');
+    // 置き換えるものが無ければ同じものを返す
+    const plain = Uint8Array.of(0x82, 0xa0);
+    expect(rewriteLocationBytes(plain)).toBe(plain);
+    expect(scriptable('application/javascript; charset=Shift_JIS')).toBe(true);
+    expect(scriptable('image/png')).toBe(false);
 });

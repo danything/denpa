@@ -26,6 +26,7 @@
     } from '#lib/hybridcast/app.js';
     import type { CompatInit } from '#lib/hybridcast/compat.js';
     import compat from '#lib/hybridcast/compat.ts?inject';
+    import { rewriteLocationBytes, scriptable } from '#lib/hybridcast/location.js';
     import { read, write } from '#lib/keep.js';
     import type { HybridcastLink } from '#lib/live.js';
     import { resolve } from '$app/paths';
@@ -179,8 +180,12 @@
                 throw new Error(message.method);
             }
             if (response.headers.get('x-bml-relayed') !== '1') throw new Error(String(response.status));
-            const body = await response.arrayBuffer();
             const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+            // 通信で取って実行する script (jQuery の `getScript` など) も、中の `location.*` をアプリの元の場所に (`location.ts`)
+            const got = await response.arrayBuffer();
+            const body = scriptable(contentType)
+                ? rewriteLocationBytes(new Uint8Array(got)).slice().buffer
+                : got;
             post({ type: 'response', id: message.id, status: response.status, contentType, body }, [body]);
         } catch (failure) {
             console.warn(

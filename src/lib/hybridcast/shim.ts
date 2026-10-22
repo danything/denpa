@@ -689,9 +689,13 @@ export function shim(init: ShimInit): void {
         VK_GREEN: 404,
         VK_YELLOW: 405,
         VK_BLUE: 406,
+        // d は差し込みが受けてアプリを閉じるので、アプリには届かない。名前だけ置く (どのキーとも重ならない番号)
+        VK_DBUTTON: -1,
     };
     for (let i = 0; i <= 9; i++) VK[`VK_${i}`] = 48 + i;
     if (w.KeyEvent === undefined) w.KeyEvent = VK;
+    // **素の名前でも読む** (NHK のアプリは `case VK_LEFT:` と書く。無いと switch の途中で転び、キーが効かない)
+    for (const name of Object.keys(VK)) if (!(name in w)) w[name] = VK[name];
     const COLOR: Record<string, number> = { r: 403, g: 404, y: 405, b: 406 };
     /** 受信機のキーとして打つ */
     const press = (key: string, code: number, down: boolean): void => {

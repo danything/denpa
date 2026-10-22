@@ -480,6 +480,11 @@
             }
             const share = (n: number): string => `${n * 100}%`;
             media.style.opacity = '';
+            /*
+             * **アプリの上に出す。** テレビは映像を放送の object の場所に描く。アプリは枠の周りを塗る
+             * (NHK は枠を黒、画面を灰色) ので、下に敷いたままだと隠れる。操作列 (10) よりは下
+             */
+            media.style.zIndex = '6';
             media.style.inset = 'auto';
             media.style.left = share(appVideo.left / VIEWPORT.width);
             media.style.top = share(appVideo.top / VIEWPORT.height);

@@ -202,6 +202,8 @@ test.describe('データ放送の双方向', () => {
     out.xhr = xhr.response && xhr.response.v;
     // 受信機を名乗り、データ放送の Greg と NVRAM を使える (NHK のアプリが当てにする)
     out.ua = navigator.userAgent.indexOf('Hybridcast/') >= 0;
+    // キーの番号は素の名前でも読める (NHK のアプリは case VK_LEFT: と書く)
+    out.vk = typeof VK_LEFT === 'number' && typeof VK_DBUTTON === 'number';
     var pseudo = navigator.bmlCompat.browserPseudo;
     pseudo.Greg[55] = 'nhk:test';
     out.greg = pseudo.Greg[55];
@@ -286,6 +288,7 @@ test.describe('データ放送の双方向', () => {
             denpa: 'refused',
             xhr: 'relayed',
             ua: true,
+            vk: true,
             greg: 'nhk:test',
             write: true,
             read: [15, 'あ'],
@@ -302,6 +305,10 @@ test.describe('データ放送の双方向', () => {
                 ),
             )
             .toBe('50%');
+        // テレビと同じく、映像はアプリの上に出す (アプリは枠の周りを塗る)
+        expect(
+            await page.evaluate(() => document.querySelector<HTMLElement>('[data-bml-window]')?.style.zIndex),
+        ).toBe('6');
         // 受信機の記憶はアプリごとの置き場に
         expect(await page.evaluate(() => localStorage.getItem('denpa_hybridcast_7e87_1'))).toBe('{"n":"1"}');
         // NVRAM はデータ放送と同じ置き場に
