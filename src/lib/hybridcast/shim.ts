@@ -571,12 +571,20 @@ export function shim(init: ShimInit): void {
     ])
         method(name, () => unsupported(`object.${name}`));
 
-    /** 映像をどこに出すか。object が無ければ全面、止めてあれば出さない */
+    /**
+     * object が見えているか。**隠した object には出さない** — NHK の番組表は画面いっぱいの object を
+     * `visibility: hidden` で置いたままにする。映像はアプリの上に重ねるので、出すと番組表を覆う
+     */
+    const seen = (o: HTMLObjectElement): boolean =>
+        typeof o.checkVisibility === 'function'
+            ? o.checkVisibility({ visibilityProperty: true, opacityProperty: true })
+            : getComputedStyle(o).visibility !== 'hidden';
+    /** 映像をどこに出すか。object が無ければ全面、止めてある・隠してあれば出さない */
     const watch = (): void => {
         const objects = [...document.querySelectorAll('object')].filter(isBroadcast);
         let place: unknown = 'full';
         if (objects.length > 0) {
-            const shown = objects.find((o) => !stopped.has(o));
+            const shown = objects.find((o) => !stopped.has(o) && seen(o));
             if (shown === undefined) place = 'hidden';
             else if (!full) {
                 const r = shown.getBoundingClientRect();

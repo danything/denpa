@@ -324,6 +324,18 @@ test.describe('データ放送の双方向', () => {
         expect(
             await page.evaluate(() => document.querySelector<HTMLElement>('[data-bml-window]')?.style.zIndex),
         ).toBe('6');
+        // object を隠したら映像も出さない (NHK の番組表は画面いっぱいの object を visibility: hidden で置く。出すと覆う)
+        await page
+            .frameLocator('[data-testid=live-hybridcast-app] iframe')
+            .locator('#v')
+            .evaluate((el: HTMLElement) => {
+                el.style.visibility = 'hidden';
+            });
+        await expect
+            .poll(() =>
+                page.evaluate(() => document.querySelector<HTMLElement>('[data-bml-window]')?.style.opacity),
+            )
+            .toBe('0');
         // 受信機の記憶はアプリごとの置き場に
         expect(await page.evaluate(() => localStorage.getItem('denpa_hybridcast_7e87_1'))).toBe('{"n":"1"}');
         // NVRAM はデータ放送と同じ置き場に
