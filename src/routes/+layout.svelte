@@ -475,9 +475,9 @@
             >
               {link.label}
               {#if here === link.href}<span
-                  class="nav-pill"
+                  class="nav-underline"
                   aria-hidden="true"
-                  use:slide={"nav-pill"}
+                  use:slide={"nav-underline"}
                 ></span>{/if}
             </a>
           </li>
@@ -731,15 +731,16 @@
     min-height: 2.5rem;
   }
   /*
-     * **いまの画面は、サイドバーの選んでいる行と同じく角丸で塗り、太い字にする** (`.side-item`。塗りは `--dp-subtle`、
-     * 指を乗せたときは `--dp-hover-soft`)。下線で示していた頃は、選んでいるものの見せ方がサイドバーと 2 通りあった。
-     * ほかの画面へのリンクは薄い字 (`--dp-muted`) で、指を乗せると本文の字になる。
+     * **いまの画面は太い字と主の色の下線で示す。** ほかの画面へのリンクは薄い字 (`--dp-muted`) で、
+     * 指を乗せると本文の字になる。薄い灰色の地を敷くだけだった頃は、
+     * ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
+     * 地は塗らない (指を乗せたときの灰色と混ざらないように)。下線は押す場所の
+     * 内側に引くので、ヘッダーの高さは変わらない。
      * `.button.ghost` まで書くのは、`app.css` の ghost の `[aria-current]` (灰色の地と
      * 継いだ字の色) より強くするため。短く書くとあちらが勝って色が付かない
      */
   ul.links a.button {
     position: relative;
-    isolation: isolate;
     font-size: var(--dp-text-sm);
   }
   ul.links a.button.ghost:not([aria-current="page"]) {
@@ -747,20 +748,23 @@
   }
   ul.links a.button.ghost:not([aria-current="page"]):hover {
     --pico-color: inherit;
-    --pico-background-color: var(--dp-hover-soft);
   }
   ul.links a.button.ghost[aria-current="page"] {
     --pico-background-color: transparent;
     --pico-color: var(--pico-h1-color, var(--pico-color));
     font-weight: var(--dp-weight-bold);
   }
-  /* 塗りは別の要素にして、画面を移ると前の画面の塗りから横に滑らせる (`#lib/motion.svelte.js` の `slide`)。字の下に敷く */
-  .nav-pill {
+  ul.links a.button.ghost[aria-current="page"]:hover {
+    --pico-background-color: var(--dp-subtle);
+  }
+  /* 下線は別の要素にして、画面を移ると前の画面の下線から横に滑らせる (`#lib/motion.svelte.js` の `slide`) */
+  .nav-underline {
     position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: var(--dp-radius);
-    background: var(--dp-subtle);
+    inset-inline: 0.65rem;
+    bottom: 0.2rem;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--pico-primary);
     pointer-events: none;
   }
   /*

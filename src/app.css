@@ -1827,26 +1827,39 @@ dialog[open] > article {
   text-align: left;
   text-decoration: none;
   transition: background-color var(--dp-duration);
+  position: relative;
 }
 .side-item:hover {
   background: var(--dp-hover-soft);
 }
 /*
- * 選んでいる行。リンク (`aria-current`) か切り替え (`aria-pressed`)。2 つのボタンを並べた行 (ライブの選局と (i)) は、
- * 主のボタンが選ばれていれば行ごと塗る (太字にはしない)
+ * **いまいる場所は線、選んだ中身は塗り。**
+ *
+ * - いまいる場所 (行そのものがリンクの `aria-current` か切り替えの `aria-pressed`。設定の項目・絞り込み・並び) は
+ *   太い字と、左の主の色の縦線。ヘッダーのナビの下線と同じ印 (横に並ぶものは下線、縦に並ぶものは左の線)
+ * - 選んだ中身 (2 つのボタンを並べた行の主のボタンが選ばれている。ライブの局) は行ごと塗る (太字にはしない)。
+ *   一覧の行・チップの選択と同じ
  */
-.side-item:is(
-  [aria-current]:not([aria-current="false"]),
-  [aria-pressed="true"]
-),
-.side-item:has(> [aria-current]:not([aria-current="false"])) {
-  background: var(--dp-subtle);
-}
 .side-item:is(
   [aria-current]:not([aria-current="false"]),
   [aria-pressed="true"]
 ) {
   font-weight: var(--dp-weight-bold);
+}
+.side-item:is(
+    [aria-current]:not([aria-current="false"]),
+    [aria-pressed="true"]
+  )::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.625rem;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--pico-primary);
+}
+.side-item:has(> [aria-current]:not([aria-current="false"])) {
+  background: var(--dp-subtle);
 }
 /* 見せるだけの行 (集計・状態)。指を乗せても塗らない */
 .side-item.static:hover {
