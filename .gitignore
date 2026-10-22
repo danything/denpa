@@ -13,6 +13,8 @@ playwright-report/
 
 # 偽 ffmpeg が `pipe:1` を出力先と読んで作ってしまう置き土産
 pipe:*
+# Windows の側から作ると `:` が U+F03A に化ける (WSL のコンテナで回したとき)
+pipe*
 # 画像を撮ったときのコマ (scripts/capture-docs.ts)
 docs/images/.capture/
 
