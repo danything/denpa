@@ -70,16 +70,25 @@ export function shim(init: ShimInit): void {
     // ---- http のアプリの中継 (`ShimInit.relay`) ----
     const relayRoot = init.relay === null ? null : init.relay.root;
     const relayFrom = init.relay === null ? null : `${init.relay.origin}/`;
-    /** 配信元の URL を中継へ (読み込み用)。ほかはそのまま */
-    const toRelay = (url: string): string =>
-        relayRoot !== null && relayFrom !== null && url.startsWith(relayFrom)
-            ? relayRoot + url.slice(relayFrom.length)
-            : url;
-    /** 中継の URL を配信元へ戻す (通信は親が中継で取るので、元の行き先を渡す) */
-    const toOrigin = (url: string): string =>
-        relayRoot !== null && relayFrom !== null && url.startsWith(relayRoot)
-            ? relayFrom + url.slice(relayRoot.length)
-            : url;
+    /**
+     * denpa の頭 (https://denpa/)。**`/` から始まる住所はここへ解決される** — `<base>` を中継にしても、
+     * NHK のアプリの `/common/…` は中継の外 (denpa の頭) を指す。配信元の頭として扱う
+     */
+    const denpaTop = relayRoot === null ? null : `${new URL(relayRoot).origin}/`;
+    /** 配信元の URL を中継へ (読み込み用)。`/` から始まって denpa の頭に解決されたものも。ほかはそのまま */
+    const toRelay = (url: string): string => {
+        if (relayRoot === null || relayFrom === null || denpaTop === null) return url;
+        if (url.startsWith(relayFrom)) return relayRoot + url.slice(relayFrom.length);
+        if (url.startsWith(denpaTop) && !url.startsWith(relayRoot)) return relayRoot + url.slice(denpaTop.length);
+        return url;
+    };
+    /** 中継の URL (と denpa の頭に解決された URL) を配信元へ戻す (通信は親が中継で取るので、元の行き先を渡す) */
+    const toOrigin = (url: string): string => {
+        if (relayRoot === null || relayFrom === null || denpaTop === null) return url;
+        if (url.startsWith(relayRoot)) return relayFrom + url.slice(relayRoot.length);
+        if (url.startsWith(denpaTop)) return relayFrom + url.slice(denpaTop.length);
+        return url;
+    };
     if (relayRoot !== null) {
         // 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る
         /*
@@ -103,7 +112,15 @@ export function shim(init: ShimInit): void {
         Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
             const rewrite =
                 loads.includes(this.tagName.toUpperCase()) && watched.includes(String(name).toLowerCase());
-            return setAttribute.call(this, name, rewrite ? toRelay(String(value)) : value);
+            if (!rewrite) return setAttribute.call(this, name, value);
+            // `/common/…` のような住所は、解決してから中継へ (そのままでは denpa の頭を指す)
+            let resolved = String(value);
+            try {
+                resolved = new URL(resolved, document.baseURI).href;
+            } catch {
+                // 読めない住所はそのまま
+            }
+            return setAttribute.call(this, name, toRelay(resolved));
         };
         for (const [Kind, name] of [
             [w.HTMLScriptElement, 'src'],
@@ -426,7 +443,9 @@ export function shim(init: ShimInit): void {
             },
         ];
     };
-    const isBroadcast = (element: HTMLObjectElement): boolean => /^video\/broadcast$/i.test(element.type);
+    // IPTV フォーラムの形式 (video/x-iptvf-broadcast) も同じもの。NHK のアプリはこちらで書く
+    const isBroadcast = (element: HTMLObjectElement): boolean =>
+        /^video\/(x-iptvf-)?broadcast$/i.test(element.type);
     const stopped = new WeakSet<HTMLObjectElement>();
     /** 全面に出せと言われたか (setFullScreen) と、最後に知らせた置き場 */
     let full = false;

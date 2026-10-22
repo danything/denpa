@@ -70,6 +70,12 @@ export function prepareApp(html: string, init: ShimInit): string {
         const from = `${init.relay.origin}/`;
         if (base.startsWith(from)) base = init.relay.root + base.slice(from.length);
         html = html.split(from).join(init.relay.root);
+        // `/` から始まる住所は <base> を中継にしても denpa の頭へ解決される (NHK の `/common/…`)。中継の頭へ
+        const root = init.relay.root;
+        html = html.replace(
+            /(\s(?:src|href|data|poster)\s*=\s*["']?)\/(?!\/)/gi,
+            (_, head: string) => head + root,
+        );
     }
     // </script> で差し込みが切れないように (JSON の中の < は < に)
     const data = JSON.stringify(init).replace(/</g, '\\u003c');
