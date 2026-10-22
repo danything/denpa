@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-    import { onDestroy, tick, untrack } from 'svelte';
+    import { tick, untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import { type Item, type Res, setHome } from '#lib/components/home/context.js';
@@ -422,7 +422,8 @@
      * 上に足すぶん読んでいる所は動かさない (`holdPlace`)
      */
     let filling = 0;
-    onDestroy(() => cancelAnimationFrame(filling));
+    // 画面を離れたら取り消す。onDestroy はサーバで描くときにも呼ばれる (そこに cancelAnimationFrame は無い) ので、effect の後片付けで
+    $effect(() => () => cancelAnimationFrame(filling));
     function fillSoon(): void {
         if (filling !== 0) return;
         filling = requestAnimationFrame(() => {
