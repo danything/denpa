@@ -1,0 +1,7 @@
+# git blame で飛ばすコミット (整形し直しだけで、中身は変わらないもの)。GitHub の blame も読む。
+# 手元では `git config blame.ignoreRevsFile .git-blame-ignore-revs`
+
+# biome をやめ、整形を bun fmt にした (#1276)
+3c5cea831a90e0d0e4a412776e42196a7cae966d
+# 整形の設定を既定 (2 字下げ・80 桁・二重引用符) に揃えた (#1289)
+0d28125eebdd58335ce0ec614b1679774d30fe85
