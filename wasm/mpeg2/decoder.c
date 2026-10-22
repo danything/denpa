@@ -38,6 +38,11 @@ static AVFrame *queue[QUEUE];
 static int head, count;
 /** 直近の dec_push に掛かった時間 (ms)。**デコードするのが間に合っているかの物差し** */
 static double last_ms;
+/**
+ * B フレーム (参照されないコマ) をデコードしないか (`dec_skip`)。**間に合わないときだけ** JS が立てる —
+ * 動きは 1 秒 10〜15 コマに落ちるが、紙芝居になって飛び越し走査のフィールドの順番が崩れるよりは見やすい
+ */
+static int skip_nonref;
 /** JS へ渡す1枚ぶんの控え (dec_peek) */
 static int info[12];
 static double info_pts;
@@ -62,6 +67,12 @@ EMSCRIPTEN_KEEPALIVE int dec_open(void) {
     ctx = avcodec_alloc_context3(codec);
     if (parser == NULL || ctx == NULL) return -2;
     ctx->pkt_timebase = (AVRational){1, 90000};
+    /*
+     * **規格どおりでなくてよい速さの工夫を許す** (`AV_CODEC_FLAG2_FAST`)。MPEG-2 では、ブロックを読むときの
+     * 不一致の補正 (mismatch control) を省く版を使う。見た目の差は出ない
+     */
+    ctx->flags2 |= AV_CODEC_FLAG2_FAST;
+    ctx->skip_frame = skip_nonref ? AVDISCARD_NONREF : AVDISCARD_DEFAULT;
     if (avcodec_open2(ctx, codec, NULL) < 0) return -3;
     if (pkt == NULL) pkt = av_packet_alloc();
     return 0;
@@ -113,6 +124,12 @@ EMSCRIPTEN_KEEPALIVE int dec_push(const uint8_t *data, int len, double pts) {
     }
     last_ms = emscripten_get_now() - started;
     return count;
+}
+
+/** B フレームを飛ばすか (`skip_nonref`)。開いたあとにも効く (次に渡すコマから) */
+EMSCRIPTEN_KEEPALIVE void dec_skip(int on) {
+    skip_nonref = on;
+    if (ctx != NULL) ctx->skip_frame = on ? AVDISCARD_NONREF : AVDISCARD_DEFAULT;
 }
 
 EMSCRIPTEN_KEEPALIVE int dec_count(void) { return count; }

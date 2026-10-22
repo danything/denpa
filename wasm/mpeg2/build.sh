@@ -16,10 +16,11 @@
 # (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
 #
 # - `--disable-asm` … x86 の手書きアセンブリは wasm では使えない
-# - スレッドも SIMD も使わない。スレッド版は SharedArrayBuffer のために COOP/COEP
+# - スレッドは使わない。スレッド版は SharedArrayBuffer のために COOP/COEP
 #   (crossOriginIsolated) を全ページに要求することになり、denpa の画面 (データ放送の
-#   中継・ロゴ・別オリジンの Hybridcast) と噛み合わない。実測で 1 本でも 1080i を
-#   実時間の 3 倍でデコードできたので払う理由が無い。SIMD も 1 割ほどしか変わらなかった
+#   中継・ロゴ・別オリジンの Hybridcast) と噛み合わない
+# - **SIMD は使う** (`-msimd128`。コンパイラが自動でベクトルにする)。1 本なら 1080i を実時間の 3 倍で
+#   デコードできるが、同じ端末で 2 本見ると間に合わなくなった。1 割でも縮める (今のブラウザはどれも対応している)
 set -euo pipefail
 SRC=$1
 OUT=$2
@@ -36,14 +37,14 @@ emconfigure "$SRC/configure" \
     --disable-avdevice --disable-avformat --disable-avfilter --disable-swscale \
     --disable-everything --enable-decoder=mpeg2video,aac,opus --enable-parser=mpegvideo \
     --nm=emnm --ar=emar --ranlib=emranlib --cc=emcc --cxx=em++ --objcc=emcc --dep-cc=emcc \
-    --extra-cflags=-O3 >configure.log
+    --extra-cflags="-O3 -msimd128" >configure.log
 emmake make -j"$(nproc)" >make.log 2>&1 || { tail -50 make.log; exit 1; }
 emmake make install >/dev/null
 
 mkdir -p "$OUT"
 # **ローダーは ES の module にして、ワーカーの中からだけ読む** (ENVIRONMENT=worker)。
 # ファイルの読み書き (FILESYSTEM) は使わないので外す — それだけで 40KB ほど縮む
-emcc -O3 "$HERE/decoder.c" -I"$PREFIX/include" -L"$PREFIX/lib" -lavcodec -lswresample -lavutil \
+emcc -O3 -msimd128 "$HERE/decoder.c" -I"$PREFIX/include" -L"$PREFIX/lib" -lavcodec -lswresample -lavutil \
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB \
     -sENVIRONMENT=worker -sFILESYSTEM=0 \
     -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDecoder \

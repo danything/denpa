@@ -146,6 +146,8 @@ export class RawEngine {
     dropped = 0;
     /** 1コマをデコードする時間の 95 パーセンタイル (ms) */
     decodeMs = 0;
+    /** 間に合わないので B フレームを飛ばしているか (`worker.ts` の `thin`) */
+    thinned = false;
 
     /**
      * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
@@ -541,6 +543,7 @@ export class RawEngine {
             case 'stats':
                 this.dropped = message.dropped;
                 this.decodeMs = message.p95;
+                this.thinned = message.thinned;
                 /*
                  * **外から読める形で出しておく。** 映像は worker の canvas にあって、画面の側からは
                  * 画素を読めない。描いたコマ数とデコードできた音のコマ数が進んでいれば、変換しない経路は動いている

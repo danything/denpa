@@ -120,7 +120,7 @@ export type FromWorker =
      */
     | { type: 'ready' }
     /** 数字 (1秒ごと)。画面に出すもの */
-    | { type: 'stats'; dropped: number; p95: number; shown: number }
+    | { type: 'stats'; dropped: number; p95: number; shown: number; thinned: boolean }
     /** `grab` の返事。まだ何も出していなければ null */
     | { type: 'frame'; id: number; bitmap: ImageBitmap | null }
     /**

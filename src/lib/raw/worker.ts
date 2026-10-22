@@ -86,6 +86,7 @@ interface Decoder {
     _dec_pts_at(index: number): number;
     _dec_pop(): void;
     _dec_last_ms(): number;
+    _dec_skip(on: number): void;
     _malloc(size: number): number;
     _free(pointer: number): void;
     HEAPU8: Uint8Array;
@@ -522,7 +523,48 @@ function tick(): void {
         current === null || decoder._dec_count() > 0
             ? 0
             : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
-    watch(late, frameTicks, 0, '再生が追いつかないため、変換した映像に切り替えました');
+    thin(decoder, late);
+    watch(late, frameTicks, 0, '再生が追いつかないため、変換した映像に切り替えました', thinning ? 2 : 1);
+}
+
+/*
+ * ---- 間に合わないときは B フレームを飛ばす (`dec_skip`) ----
+ * 1 秒の間にコマを `THIN_DROPS` 枚以上捨てたか、映像が `THIN_LATE` 秒以上遅れたら、参照されないコマ (B) をデコードしない。
+ * 動きは 1 秒 10〜15 コマに落ちるが、デコードに掛かる時間は半分ほどになり、紙芝居 (テロップが震える) にならずに済む。
+ * 決めた長さ (`thinHold`) が過ぎたら戻してみて、戻してすぐまた遅れたら次は倍の長さにする。
+ * それでも間に合わなければ、いつもどおりエンコードしたものに戻る (`budget.ts`)
+ */
+const THIN_DROPS = 3;
+const THIN_LATE = 0.1;
+/** 最初に飛ばし続ける長さ (ms) と、伸ばす上限 */
+const THIN_FIRST = 20_000;
+const THIN_LONGEST = 300_000;
+/** 戻してからこれだけのうちにまた遅れたら、次は長く飛ばす (ms) */
+const THIN_RELAPSE = 10_000;
+let thinning = false;
+let thinUntil = 0;
+let thinHold = THIN_FIRST;
+let thinOffAt = Number.NEGATIVE_INFINITY;
+let thinCheckAt = 0;
+let thinDropped = 0;
+
+function thin(decoder: Decoder, late: number): void {
+    const wall = performance.now();
+    if (wall - thinCheckAt < 1000) return;
+    const lost = dropped - thinDropped;
+    thinDropped = dropped;
+    thinCheckAt = wall;
+    if (!thinning) {
+        if (lost < THIN_DROPS && late < THIN_LATE) return;
+        thinHold = wall - thinOffAt < THIN_RELAPSE ? Math.min(THIN_LONGEST, thinHold * 2) : THIN_FIRST;
+        thinning = true;
+        thinUntil = wall + thinHold;
+        decoder._dec_skip(1);
+    } else if (wall >= thinUntil) {
+        thinning = false;
+        thinOffAt = wall;
+        decoder._dec_skip(0);
+    }
 }
 
 /** 番が来たコマを上げ、`at` に出すフィールドを描く。描いたら true */
@@ -553,9 +595,9 @@ function tickFmp4(video: Fmp4Video): void {
 }
 
 /** 間に合っているかを見張り (`budget.ts`)、1秒ごとに数を出す */
-function watch(late: number, frame: number, queued: number, reason: string): void {
+function watch(late: number, frame: number, queued: number, reason: string, stretch = 1): void {
     const wall = performance.now();
-    if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued, dropped)) fail(reason);
+    if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued, dropped, stretch)) fail(reason);
     report();
 }
 
@@ -564,7 +606,7 @@ function report(): void {
     const wall = performance.now();
     if (wall - statsAt < 1000) return;
     statsAt = wall;
-    post({ type: 'stats', dropped, p95: budget.p95, shown });
+    post({ type: 'stats', dropped, p95: budget.p95, shown, thinned: thinning });
 }
 
 let scheduled = false;
@@ -585,6 +627,13 @@ function schedule(): void {
 }
 
 function reset(from: number | null): void {
+    // 局が変われば重さも変わる。飛ばすのはやめて、数え直す
+    if (thinning) decoder?._dec_skip(0);
+    thinning = false;
+    thinHold = THIN_FIRST;
+    thinOffAt = Number.NEGATIVE_INFINITY;
+    thinCheckAt = performance.now();
+    thinDropped = dropped;
     demuxer = new PesDemuxer();
     demuxer.audioIndex = audioIndex;
     adts.reset();

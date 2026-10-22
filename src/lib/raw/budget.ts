@@ -73,9 +73,10 @@ export class DecodeBudget {
      * @param frameMs 1コマの長さ (ms)。29.97 コマなら 33.4
      * @param late 映像が時計からどれだけ遅れているか (秒)。遅れていなければ 0
      * @param queued デコーダに渡したまま出てきていない枚数 (WebCodecs の `decodeQueueSize`)
+     * @param stretch 1 枚のデコードに使ってよい時間を何倍にするか。B フレームを飛ばしている間は 2 (デコードする枚数が減るぶん、1 枚に掛けてよい)
      * @param dropped 間に合わずに捨てたコマの数 (通し)。**割る数は窓の長さぶんのコマ数** (出した数は飛び越し走査ではフィールドごとに数えるので使わない)
      */
-    tick(now: number, frameMs: number, late: number, queued = 0, dropped = 0): boolean {
+    tick(now: number, frameMs: number, late: number, queued = 0, dropped = 0, stretch = 1): boolean {
         if (Number.isNaN(this.from)) this.from = now;
         if (Number.isNaN(this.droppedFrom)) this.droppedFrom = dropped;
         if (late > this.worstLate) this.worstLate = late;
@@ -95,7 +96,10 @@ export class DecodeBudget {
         this.p95 = samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.95))]!;
         const choppy = lost >= DROP_LEAST && lost >= (WINDOW / frameMs) * DROP_SHARE;
         const bad =
-            (this.timed && this.p95 > frameMs * SHARE) || worst > LATE || least >= QUEUE_STUCK || choppy;
+            (this.timed && this.p95 > frameMs * SHARE * stretch) ||
+            worst > LATE ||
+            least >= QUEUE_STUCK ||
+            choppy;
         this.strikes = bad ? this.strikes + 1 : 0;
         return this.strikes >= STRIKES;
     }

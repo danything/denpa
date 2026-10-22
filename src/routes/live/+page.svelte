@@ -688,7 +688,7 @@
                                     戻る前に余裕がどれだけあるかを読むため
                                 -->
                                 {#if player.canvas && player.decodeMs > 0}
-                                    ・ <span>デコード {player.decodeMs.toFixed(1)}ms</span>
+                                    ・ <span>デコード {player.decodeMs.toFixed(1)}ms{player.thinned ? ' (コマを間引いています)' : ''}</span>
                                 {/if}
                             {/snippet}
                         </InfoBlock>

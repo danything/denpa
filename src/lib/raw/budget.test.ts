@@ -26,6 +26,24 @@ describe('DecodeBudget', () => {
     /*
      * **デコードの時間がぎりぎり間に合っていても、コマを捨て続けていれば諦める** (同じ端末で 2 本見ていたとき)
      */
+    /** B フレームを飛ばしている間は、デコードする枚数が減るぶん 1 枚に掛けてよい時間を伸ばす (`worker.ts` の `thin`) */
+    test('B を飛ばしている間は 1 枚に 2 倍まで掛けてよい', () => {
+        const budget = new DecodeBudget();
+        budget.tick(0, 33.4, 0);
+        const window = (s: number, stretch: number) => {
+            for (let i = 0; i < 10; i++) budget.record(40);
+            return budget.tick(s * WINDOW, 33.4, 0, 0, 0, stretch);
+        };
+        // 1 枚 40ms は 1 コマ (33.4ms) の 8 割を超えるが、2 倍までなら間に合っている
+        expect([window(1, 2), window(2, 2), window(3, 2), window(4, 2)]).toEqual([
+            false,
+            false,
+            false,
+            false,
+        ]);
+        expect([window(5, 1), window(6, 1), window(7, 1)]).toEqual([false, false, true]);
+    });
+
     test('出すはずのコマの 15% 以上を捨て続けたら諦める', () => {
         const budget = new DecodeBudget();
         budget.tick(0, 33.4, 0, 0, 0);

@@ -481,6 +481,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     let rawTimer: ReturnType<typeof setInterval> | null = null;
     /** MPEG-2 で1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。**画面に出す** */
     let decodeMs = $state(0);
+    /** MPEG-2 のコマを間引いているか (間に合わないので B フレームを飛ばしている。`raw/worker.ts` の `thin`) */
+    let thinned = $state(false);
 
     let socket: WebSocket | null = null;
     let source: MediaSource | null = null;
@@ -2450,6 +2452,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         raw = false;
         canvas = false;
         decodeMs = 0;
+        thinned = false;
         if (element !== null) element.style.opacity = '';
     }
 
@@ -2499,6 +2502,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         const at = engine.position;
         const cost = Math.round(engine.decodeMs * 10) / 10;
         if (cost !== decodeMs) decodeMs = cost;
+        if (engine.thinned !== thinned) thinned = engine.thinned;
         const rounded = running ? Math.round(engine.lead * 10) / 10 : null;
         if (rounded !== delay) delay = rounded;
         if (!live) live = true;
@@ -2579,6 +2583,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         /** MPEG-2 で1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。MPEG-2 でなければ 0 */
         get decodeMs() {
             return decodeMs;
+        },
+        /** MPEG-2 のコマを間引いているか */
+        get thinned() {
+            return thinned;
         },
         get message() {
             return message;
