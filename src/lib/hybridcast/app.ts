@@ -70,11 +70,18 @@ export function prepareApp(html: string, init: ShimInit): string {
         const from = `${init.relay.origin}/`;
         if (base.startsWith(from)) base = init.relay.root + base.slice(from.length);
         html = html.split(from).join(init.relay.root);
-        // `/` から始まる住所は <base> を中継にしても denpa の頭へ解決される (NHK の `/common/…`)。中継の頭へ
+        /*
+         * `/` から始まる住所は <base> を中継にしても denpa の頭へ解決される (NHK の `/common/…`)。中継の頭へ。
+         * **読み込む要素のタグの中だけ** — a の行き先には触らない (script の中の文字列に読み込む要素のタグがあれば、それは書き換わる)
+         */
         const root = init.relay.root;
         html = html.replace(
-            /(\s(?:src|href|data|poster)\s*=\s*["']?)\/(?!\/)/gi,
-            (_, head: string) => head + root,
+            /<(?:script|img|link|source|video|audio|object|embed|input|track)\b[^>]*>/gi,
+            (tag) =>
+                tag.replace(
+                    /(\s(?:src|href|data|poster)\s*=\s*["']?)\/(?!\/)/gi,
+                    (_, head: string) => head + root,
+                ),
         );
     }
     // </script> で差し込みが切れないように (JSON の中の < は < に)

@@ -52,13 +52,26 @@ describe('prepareApp', () => {
         expect(html).toContain('<script src="https://denpa.example/api/bml/hc/0123/common/a.js">');
         expect(html).toContain('http://other.example/b.png');
         // `/` から始まる住所も中継の頭へ (NHK のアプリはこう書く)。`//` から始まるものは別の配信元なので触らない
-        const rooted = prepareApp('<head><script src="/common/b.js"></script><img src="//cdn.example/c.png"></head>', {
-            ...INIT,
-            url: 'http://hc.example.jp/p/index.html',
-            relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'http://hc.example.jp' },
-        });
+        const rooted = prepareApp(
+            '<head><script src="/common/b.js"></script><img src="//cdn.example/c.png"></head>',
+            {
+                ...INIT,
+                url: 'http://hc.example.jp/p/index.html',
+                relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'http://hc.example.jp' },
+            },
+        );
         expect(rooted).toContain('<script src="https://denpa.example/api/bml/hc/0123/common/b.js">');
         expect(rooted).toContain('src="//cdn.example/c.png"');
+        // a の行き先は触らない
+        const links = prepareApp(
+            `<head></head><a href="/x">x</a><script>var s = '<img src="/y">';</script>`,
+            {
+                ...INIT,
+                url: 'http://hc.example.jp/p/index.html',
+                relay: { root: 'https://denpa.example/api/bml/hc/0123/', origin: 'http://hc.example.jp' },
+            },
+        );
+        expect(links).toContain('<a href="/x">');
         // 差し込みには元の URL を渡す (getAITInfo は元の行き先を返す)
         expect(html).toContain('"url":"http://hc.example.jp/p/index.html"');
     });

@@ -79,7 +79,8 @@ export function shim(init: ShimInit): void {
     const toRelay = (url: string): string => {
         if (relayRoot === null || relayFrom === null || denpaTop === null) return url;
         if (url.startsWith(relayFrom)) return relayRoot + url.slice(relayFrom.length);
-        if (url.startsWith(denpaTop) && !url.startsWith(relayRoot)) return relayRoot + url.slice(denpaTop.length);
+        if (url.startsWith(denpaTop) && !url.startsWith(relayRoot))
+            return relayRoot + url.slice(denpaTop.length);
         return url;
     };
     /** 中継の URL (と denpa の頭に解決された URL) を配信元へ戻す (通信は親が中継で取るので、元の行き先を渡す) */
@@ -115,6 +116,8 @@ export function shim(init: ShimInit): void {
             if (!rewrite) return setAttribute.call(this, name, value);
             // `/common/…` のような住所は、解決してから中継へ (そのままでは denpa の頭を指す)
             let resolved = String(value);
+            // 空は解決しない (<base> の URL になってしまう)
+            if (resolved === '') return setAttribute.call(this, name, value);
             try {
                 resolved = new URL(resolved, document.baseURI).href;
             } catch {
