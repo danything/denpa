@@ -76,6 +76,7 @@
         align = 'start',
         boundary,
         nav = false,
+        lazy = false,
         class: className = '',
         testid,
     }: {
@@ -93,6 +94,11 @@
          * リンクを並べるだけのナビ。`menu` と読ませず (role を付けない)、Tab でそのまま外へ出られる
          */
         nav?: boolean;
+        /**
+         * 中身を開くまで作らない (`filled`)。一覧の行ごとに置くメニュー用 — 開かないメニューの中身まで、
+         * 一覧を開いた瞬間に作らないように。中身の状態を開く前から読むメニュー (⚙ など) では使わない
+         */
+        lazy?: boolean;
         class?: string;
         testid?: string | undefined;
     } = $props();
@@ -105,6 +111,12 @@
     const menuRole = $derived(nav ? {} : { role: 'menu', 'aria-labelledby': triggerId });
 
     let content = $state<HTMLElement | null>(null);
+    /**
+     * 中身を作ったか。`lazy` なら**開くまで作らない** — 一覧の行ごとにメニューがあると、開かないメニューの中身 (項目とアイコン) まで
+     * 開いた瞬間に作ることになり、ホームが一コマ重くなっていた。開きそうになったら (押し始め・キー・開けと言われた) 作り、
+     * 一度作ったら残す (閉じるたびに作り直さない)
+     */
+    let filled = $state(!lazy);
     /** 指やマウスで開いたか。キーボードで開いたときだけ先頭の項目に入る (WAI-ARIA の menu button) */
     let byPointer = false;
     /** ↑で開いたら末尾の項目に入る */
@@ -122,7 +134,10 @@
     $effect(() => {
         if (content === null) return;
         const shown = content.matches(':popover-open');
-        if (open && !shown) content.showPopover();
+        if (open && !shown) {
+            filled = true;
+            content.showPopover();
+        }
         else if (!open && shown) content.hidePopover();
     });
 
@@ -148,8 +163,15 @@
             byPointer = false;
             fromEnd = false;
         };
+        const onbefore = (event: Event) => {
+            if ((event as ToggleEvent).newState === 'open') filled = true;
+        };
+        element.addEventListener('beforetoggle', onbefore);
         element.addEventListener('toggle', ontoggle);
-        return () => element.removeEventListener('toggle', ontoggle);
+        return () => {
+            element.removeEventListener('beforetoggle', onbefore);
+            element.removeEventListener('toggle', ontoggle);
+        };
     });
 
     /**
@@ -261,6 +283,7 @@
     }
 
     function onTriggerKey(event: KeyboardEvent): void {
+        filled = true;
         if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
         event.preventDefault();
         fromEnd = event.key === 'ArrowUp';
@@ -330,7 +353,10 @@
     'aria-expanded': open,
     'aria-controls': menuId,
     style: `anchor-name: ${anchor}`,
-    onpointerdown: () => (byPointer = true),
+    onpointerdown: () => {
+        byPointer = true;
+        filled = true;
+    },
     onkeydown: onTriggerKey,
 })}
 <div
@@ -349,5 +375,5 @@
     {onpointermove}
     {onpointerleave}
 >
-    {@render children()}
+    {#if filled}{@render children()}{/if}
 </div>

@@ -380,27 +380,59 @@
     function setGrouped(on: boolean): void {
         grouped = on;
         pastPage.reset();
+        futureShown = FIRST_ROWS;
+        fillSoon();
         // パスは接頭辞込み (`live-player.svelte.ts` の `remember` と同じ)
         document.cookie = `${GROUPED_COOKIE}=${on ? '1' : '0'}; path=${resolve('')}; max-age=31536000; samesite=lax`;
     }
 
     const lines = $derived(timelineLines(parts, { now: clock, grouped, isOpen }));
+    /** 開いた瞬間に作る行数 (線の上と下それぞれ)。1 画面に収まるくらい。残りは表示したあとで足す (`fillSoon`) */
+    const FIRST_ROWS = 15;
+    /** 映したい行の上に余分に作る行数 (見出しの貼り付きと、上に少し送ったときのため) */
+    const FIRST_MARGIN = 4;
     /*
      * **線より上 (録れたもの) だけ少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
      * 開いた直後に一瞬止まって見えた。描くのは線の側 (新しいほう) から `pastPage.shown` 行で、
      * 古いほうは一覧の頭に近づいたら上へ足す。足しても読んでいる所は動かさない (`holdPlace`)。
      * 録画中と線より下 (予約) は全部描く
      */
-    const pastPage = new Paged(() => lines.past, 60);
+    const pastPage = new Paged(() => lines.past, 60, FIRST_ROWS);
+    /**
+     * 線より下 (予約) を何行描くか。**開いた瞬間は頭の数行だけ** — 残りは表示したあとで足す (`fillSoon`)。
+     * 予約が多いと、画面の外の行まで作るぶん開くのが一コマ重くなっていた
+     */
+    let futureShown = $state(FIRST_ROWS);
+    const futureRows = $derived(lines.future.length <= futureShown ? lines.future : lines.future.slice(0, futureShown));
     /** 描く頭の行。見出しの途中から描かないよう、見出しまで戻す (`pageStart`) */
     const pastStart = $derived(pageStart(lines.past, pastPage.shown));
     const pastRows = $derived(lines.past.slice(pastStart));
     /** 描く行を見出しごとに包む (`blocks`)。今日の包みは線と今日の予約まで抱える */
-    const shownBlocks = $derived(blocks([...pastRows, ...lines.now, ...lines.future]));
-    /** 線の側から数えて、その行まで描く (開いたとき・絞り込みを替えたときに映したい行) */
+    const shownBlocks = $derived(blocks([...pastRows, ...lines.now, ...futureRows]));
+    /**
+     * 線の側から数えて、その行まで描く (開いたとき・絞り込みを替えたときに映したい行)。**切り上げない** —
+     * 映す行の上に何行か余分に作るだけで、残りは表示したあとで足す (`fillSoon`)
+     */
     function showPastUpTo(key: string): void {
         const index = lineIndex(lines.past, key);
-        if (index >= 0 && index < pastStart) pastPage.showUpTo(lines.past.length - index);
+        if (index >= 0 && index < pastStart) pastPage.showAtLeast(lines.past.length - index + FIRST_MARGIN);
+    }
+
+    /**
+     * 開いた瞬間に作らなかった行を足す。**表示した次のコマで** — 開くのを一コマで済ませ、画面の外の行は後から作る。
+     * 上に足すぶん読んでいる所は動かさない (`holdPlace`)
+     */
+    let filling = 0;
+    function fillSoon(): void {
+        if (filling !== 0) return;
+        filling = requestAnimationFrame(() => {
+            filling = 0;
+            if (listBox === undefined) return;
+            const restore = holdPlace(listBox);
+            pastPage.fill();
+            futureShown = Number.POSITIVE_INFINITY;
+            void tick().then(restore);
+        });
     }
 
     /**
@@ -469,6 +501,7 @@
                 alignTop(list);
             }
             ready = true;
+            fillSoon();
         });
     }
 
@@ -489,9 +522,11 @@
         const anchor = listBox === undefined ? null : topRow(listBox);
         filter = next;
         pastPage.reset();
+        futureShown = FIRST_ROWS;
         if (anchor !== null) showPastUpTo(anchor.key);
         await tick();
         if (listBox !== undefined) restoreRow(listBox, anchor);
+        fillSoon();
     }
 
     /**

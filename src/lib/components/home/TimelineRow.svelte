@@ -344,7 +344,7 @@
             {#if link !== null || canDelete}
                 <!-- 狭い画面では詳細と削除を「⋯」1つにまとめ、番組名に幅を回す (削除は行の削除と同じ構え `deleting`) -->
                 <div class="row-more">
-                    <Menu side="bottom" align="end" class="row-menu" testid="row-menu">
+                    <Menu side="bottom" align="end" lazy class="row-menu" testid="row-menu">
                         {#snippet trigger(props)}
                             <button {...props} type="button" class="ghost icon" title="操作" data-testid="row-more">
                                 <Icon icon={Ellipsis} size="size-4" /><span class="visually-hidden">操作</span>

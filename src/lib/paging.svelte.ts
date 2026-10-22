@@ -27,10 +27,12 @@ export class Paged<T> {
     /**
      * @param items 元の一覧。絞り込み後のものを渡す
      * @param step 一度に足す行数。1画面ぶんより少し多め
+     * @param first 最初に出す行数。**開いた瞬間に作る行を減らす** — 残りは表示したあとで `fill` で `step` まで足す
      */
     constructor(
         private readonly items: () => T[],
         readonly step = 60,
+        readonly first = step,
     ) {
         this.reset();
     }
@@ -64,9 +66,22 @@ export class Paged<T> {
         this.shown = shownUpTo(this.shown, count, this.step, this.items().length);
     }
 
+    /**
+     * 頭から `count` 行目までは出す (切り上げない)。開いたときに映したい行まで、余分を作らずに出す。
+     * 残りは表示したあとで `fill` が足す
+     */
+    showAtLeast(count: number): void {
+        this.shown = Math.min(this.items().length, Math.max(this.shown, count));
+    }
+
+    /** `first` で始めたぶんを `step` まで足す (表示したあとで呼ぶ) */
+    fill(): void {
+        this.shown = Math.min(this.items().length, Math.max(this.shown, this.step));
+    }
+
     /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */
     reset(): void {
-        this.shown = this.step;
+        this.shown = this.first;
     }
 }
 
