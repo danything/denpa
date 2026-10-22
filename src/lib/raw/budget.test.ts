@@ -28,19 +28,19 @@ describe('DecodeBudget', () => {
      */
     test('出すはずのコマの 15% 以上を捨て続けたら諦める', () => {
         const budget = new DecodeBudget();
-        budget.tick(0, 33.4, 0, 0, 0, 0);
-        const window = (s: number, dropped: number, shown: number) => {
+        budget.tick(0, 33.4, 0, 0, 0);
+        const window = (s: number, dropped: number) => {
             for (let i = 0; i < 10; i++) budget.record(20);
-            return budget.tick(s * WINDOW, 33.4, 0, 0, dropped, shown);
+            return budget.tick(s * WINDOW, 33.4, 0, 0, dropped);
         };
-        // 1秒に 6 枚捨てて 24 枚出す (20%)
-        expect([window(1, 6, 24), window(2, 12, 48), window(3, 18, 72)]).toEqual([false, false, true]);
+        // 1秒 (30 コマ) に 6 枚捨てる (20%)
+        expect([window(1, 6), window(2, 12), window(3, 18)]).toEqual([false, false, true]);
         // 捨てるのが少なければ (1秒に 2 枚) 数えない
         const calm = new DecodeBudget();
-        calm.tick(0, 33.4, 0, 0, 0, 0);
+        calm.tick(0, 33.4, 0, 0, 0);
         for (const s of [1, 2, 3, 4]) {
             for (let i = 0; i < 10; i++) calm.record(20);
-            expect(calm.tick(s * WINDOW, 33.4, 0, 0, s * 2, s * 28)).toBe(false);
+            expect(calm.tick(s * WINDOW, 33.4, 0, 0, s * 2)).toBe(false);
         }
     });
 

@@ -451,6 +451,7 @@ function toPip(): void {
 function tick(): void {
     if (decoder === null || failed) return;
     schedule();
+    // 互換モード (WebCodecs) は見えていなくても止めない — デコードするのはたいてい GPU で、端末の CPU を取り合わない
     if (fmp4 !== null) {
         tickFmp4(fmp4);
         return;
@@ -554,7 +555,7 @@ function tickFmp4(video: Fmp4Video): void {
 /** 間に合っているかを見張り (`budget.ts`)、1秒ごとに数を出す */
 function watch(late: number, frame: number, queued: number, reason: string): void {
     const wall = performance.now();
-    if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued, dropped, shown)) fail(reason);
+    if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued, dropped)) fail(reason);
     report();
 }
 
