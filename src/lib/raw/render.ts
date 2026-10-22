@@ -4,24 +4,28 @@
  * 面は3枚 (Y・Cb・Cr) を別々のテクスチャに上げ、RGB への変換はシェーダでやる。
  * CPU で RGB にすると 1080 の1コマで 600 万画素ぶんの計算が毎コマ要る。
  *
- * ## インタレ解除は bob に「**櫛になっていないところは織る**」を足したもの
+ * ## インタレ解除は bob に「**止まっているところと、櫛になっていないところは織る**」を足したもの
  *
  * 放送は 1080i — 1コマに時刻の違う2枚 (フィールド) が1行おきに入っている。そのまま
  * 出すと動くところが櫛になる。エンコードする経路の `bwdif` は前後のコマまで見て埋め方を選ぶが、
- * ここでは**そのコマの中だけ**で決める:
+ * ここでは**そのコマと、ひとつ前のコマ**で決める:
  *
  * - フィールドごとに出す。**動きが 60 枚/秒のまま出る** (スポーツやスクロールする字幕が
  *   滑らか。エンコードする経路と同じ)
- * - 抜けた行は、**もう片方のフィールドのその行が上下の行の間に収まっていれば、そのまま
- *   使う** (織る)。はみ出していれば櫛 (2枚の間に動いた) なので、上下の平均で埋める (bob)
- * - **前後のコマを持たなくてよい。** 上げたテクスチャ1組だけで描ける。GPU の手間も
- *   1画素につきテクスチャを3回読むだけで、どの端末でも誤差
+ * - 抜けた行は、**前のコマから変わっていなければ、もう片方のフィールドのその行をそのまま使う** (織る)
+ * - 変わっていれば、**もう片方のフィールドのその行が上下の行の間に収まっていれば織る**。
+ *   はみ出していれば櫛 (2枚の間に動いた) なので、上下の平均で埋める (bob)
+ * - 前のコマは輝度のテクスチャを 1 枚残しておくだけ (2 枚を交互に使うので、上げ直しは増えない)
  *
  * 平均で埋めるだけ (素の bob) だと、**止まっているテロップの縁が 1 行ぶん上下に揺れて
  * ちらつく** — 上のフィールドと下のフィールドでは縁になる行が1行ずれるので、交互に出すと
  * 縁が毎秒 30 回上下する。止まっているところは、どちらのフィールドの番でも織った同じ映像に
- * なるので揺れない。残るのは 1 行だけの細い横線 (上下の行の間に収まらない) くらいで、
- * 放送はインタレの画面でちらつかないよう縦をぼかしてあるので、まず出てこない
+ * なるので揺れない。
+ *
+ * **そのコマの中だけでは、止まっているかを決めきれない。** 縁取りのある字や細い横線は縦にくっきり
+ * した模様で、上下の行の間に収まらない — 櫛と見分けがつかず、埋める側に回ってちらついていた。
+ * そこで抜けた行とその上下の行を、**前のコマの同じ行と比べる** (2 フィールド離れた、同じ並びの行どうし)。
+ * 局を変えた直後や大きさが変わった直後は前のコマが無いので、そのコマの中だけで決める
  *
  * プログレッシブのコマ (720p や、インタレの印が無いもの) はそのまま出す。
  */
@@ -37,7 +41,7 @@ void main() {
 /*
  * `field` が 0 なら上のフィールド (偶数行)、1 なら下 (奇数行)、負ならそのまま。
  * 色差 (4:2:0) もインタレでは1行おきにフィールドが入れ替わるので、同じ埋め方をする
- * (織るか埋めるかも面ごとに決める)。
+ * (はみ出しで織るか埋めるかは面ごと、止まっているかは輝度で決める)。
  * 縦は行の真ん中を読む (隣の行と混ぜない)、横は LINEAR で補う (1440 → 1920 の引き伸ばし)
  */
 const FRAGMENT = `#version 300 es
@@ -45,6 +49,9 @@ precision highp float;
 uniform sampler2D planeY;
 uniform sampler2D planeU;
 uniform sampler2D planeV;
+/** 前のコマの輝度 (止まっているかを見る) */
+uniform sampler2D planeYPrev;
+uniform bool hasPrev;
 uniform int field;
 uniform vec2 rows;
 uniform mat3 matrix;
@@ -55,7 +62,26 @@ float at(sampler2D plane, float row, float count) {
     return texture(plane, vec2(uv.x, (row + 0.5) / count)).r;
 }
 
-float pick(sampler2D plane, float count) {
+/*
+ * 抜けた行が止まっている度合い (1 止まっている〜0 動いている)。抜けた行とその上下の行を、前のコマの
+ * 同じ行と比べる。**輝度だけで決めて色差にも使う** (4:2:0 の色差は行が粗い)。
+ * 4/255 までは雑音として止まっている、12/255 からは動いている (間はなだらかに)
+ */
+float stillness() {
+    if (field < 0 || !hasPrev) return 0.0;
+    float count = rows.x;
+    float row = min(floor(uv.y * count), count - 1.0);
+    if (mod(row, 2.0) == float(field)) return 0.0;
+    float up = row - 1.0 < 0.0 ? row + 1.0 : row - 1.0;
+    float down = row + 1.0 > count - 1.0 ? row - 1.0 : row + 1.0;
+    float moved = max(
+        abs(at(planeY, row, count) - at(planeYPrev, row, count)),
+        max(abs(at(planeY, up, count) - at(planeYPrev, up, count)), abs(at(planeY, down, count) - at(planeYPrev, down, count)))
+    );
+    return 1.0 - smoothstep(4.0 / 255.0, 12.0 / 255.0, moved);
+}
+
+float pick(sampler2D plane, float count, float still) {
     if (field < 0) return texture(plane, uv).r;
     float row = min(floor(uv.y * count), count - 1.0);
     if (mod(row, 2.0) == float(field)) return at(plane, row, count);
@@ -65,14 +91,17 @@ float pick(sampler2D plane, float count) {
     // 上下の間からどれだけはみ出しているか。**8/255 までは雑音として織り、16/255 からは
     // 櫛として埋める** (間はなだらかに混ぜる。画素ごとに織る・埋めるが入れ替わってざらつかないように)
     float over = max(other - max(a, b), min(a, b) - other);
-    return mix(other, 0.5 * (a + b), smoothstep(8.0 / 255.0, 16.0 / 255.0, over));
+    float filled = mix(other, 0.5 * (a + b), smoothstep(8.0 / 255.0, 16.0 / 255.0, over));
+    // 止まっていれば、はみ出していても織る (縁取りのある字・細い横線)
+    return mix(filled, other, still);
 }
 
 void main() {
+    float still = stillness();
     // 放送は限定レンジ (Y 16〜235 / C 16〜240)
-    float y = (pick(planeY, rows.x) - 16.0 / 255.0) * (255.0 / 219.0);
-    float u = (pick(planeU, rows.y) - 128.0 / 255.0) * (255.0 / 224.0);
-    float v = (pick(planeV, rows.y) - 128.0 / 255.0) * (255.0 / 224.0);
+    float y = (pick(planeY, rows.x, still) - 16.0 / 255.0) * (255.0 / 219.0);
+    float u = (pick(planeU, rows.y, still) - 128.0 / 255.0) * (255.0 / 224.0);
+    float v = (pick(planeV, rows.y, still) - 128.0 / 255.0) * (255.0 / 224.0);
     color = vec4(clamp(matrix * vec3(y, u, v), 0.0, 1.0), 1.0);
 }`;
 
@@ -98,6 +127,14 @@ export class YuvRenderer {
     private readonly textures: WebGLTexture[];
     private readonly program: WebGLProgram;
     private size = { width: 0, height: 0 };
+    /**
+     * 輝度のテクスチャ 2 枚 (今のコマと前のコマ)。上げるたびに入れ替える。
+     * `lumaSize` はそれぞれに今の大きさで上げてあるか (局を変えて大きさが変わると、前のコマは使えない)
+     */
+    private readonly lumas: [WebGLTexture, WebGLTexture];
+    private readonly lumaSize = ['', ''];
+    private turn = 0;
+    private hasPrev = false;
     private matrix = BT709;
 
     constructor(private readonly canvas: OffscreenCanvas) {
@@ -115,7 +152,7 @@ export class YuvRenderer {
         gl.enableVertexAttribArray(pos);
         gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
 
-        this.textures = ['planeY', 'planeU', 'planeV'].map((name, unit) => {
+        this.textures = ['planeY', 'planeU', 'planeV', 'planeYPrev'].map((name, unit) => {
             const texture = gl.createTexture();
             gl.activeTexture(gl.TEXTURE0 + unit);
             gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -126,6 +163,7 @@ export class YuvRenderer {
             gl.uniform1i(gl.getUniformLocation(this.program, name), unit);
             return texture;
         });
+        this.lumas = [this.textures[0]!, this.textures[3]!];
         // 面の幅は 4 の倍数とは限らない
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     }
@@ -146,17 +184,33 @@ export class YuvRenderer {
         }
         const sd = SD_SPACES.has(planes.colorspace) || (planes.colorspace === 2 && height <= 576);
         this.matrix = sd ? BT601 : BT709;
-        for (let i = 0; i < 3; i++) {
-            const w = i === 0 ? width : (width + 1) >> 1;
-            const h = i === 0 ? height : (height + 1) >> 1;
+        // 輝度は前のコマのテクスチャを残し、もう 1 枚へ上げる (入れ替えて、今のを 0 番、前のを 3 番に置く)
+        const sized = `${width}x${height}`;
+        const next = 1 - this.turn;
+        this.hasPrev = this.lumaSize[this.turn] === sized;
+        const luma = this.lumas[next]!;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, luma);
+        this.put(planes, 0, width, height, this.lumaSize[next] !== sized);
+        this.lumaSize[next] = sized;
+        this.turn = next;
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, this.lumas[1 - next]!);
+        for (let i = 1; i < 3; i++) {
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, this.textures[i]!);
-            gl.pixelStorei(gl.UNPACK_ROW_LENGTH, planes.strides[i]!);
-            const data = planes.data[i]!;
-            if (resized) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, w, h, 0, gl.RED, gl.UNSIGNED_BYTE, data);
-            else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RED, gl.UNSIGNED_BYTE, data);
+            this.put(planes, i, (width + 1) >> 1, (height + 1) >> 1, resized);
         }
         gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+    }
+
+    /** 面を 1 枚、いま結び付けてあるテクスチャへ上げる。`fresh` なら大きさごと作り直す */
+    private put(planes: Planes, i: number, w: number, h: number, fresh: boolean): void {
+        const gl = this.gl;
+        gl.pixelStorei(gl.UNPACK_ROW_LENGTH, planes.strides[i]!);
+        const data = planes.data[i]!;
+        if (fresh) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, w, h, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+        else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RED, gl.UNSIGNED_BYTE, data);
     }
 
     /** 描く。`field` は 0 (上) / 1 (下) / -1 (プログレッシブ) */
@@ -165,6 +219,7 @@ export class YuvRenderer {
         if (this.size.width === 0) return;
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         gl.uniform1i(gl.getUniformLocation(this.program, 'field'), field);
+        gl.uniform1i(gl.getUniformLocation(this.program, 'hasPrev'), this.hasPrev ? 1 : 0);
         gl.uniform2f(
             gl.getUniformLocation(this.program, 'rows'),
             this.size.height,
