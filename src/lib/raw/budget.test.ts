@@ -23,9 +23,6 @@ describe('DecodeBudget', () => {
         expect(STRIKES).toBe(3);
     });
 
-    /*
-     * **デコードの時間がぎりぎり間に合っていても、コマを捨て続けていれば諦める** (同じ端末で 2 本見ていたとき)
-     */
     /** B フレームを飛ばしている間は、デコードする枚数が減るぶん 1 枚に掛けてよい時間を伸ばす (`worker.ts` の `thin`) */
     test('B を飛ばしている間は 1 枚に 2 倍まで掛けてよい', () => {
         const budget = new DecodeBudget();
@@ -43,6 +40,10 @@ describe('DecodeBudget', () => {
         ]);
         expect([window(5, 1), window(6, 1), window(7, 1)]).toEqual([false, false, true]);
     });
+
+    /*
+     * **デコードの時間がぎりぎり間に合っていても、コマを捨て続けていれば諦める** (同じ端末で 2 本見ていたとき)
+     */
 
     test('出すはずのコマの 15% 以上を捨て続けたら諦める', () => {
         const budget = new DecodeBudget();
