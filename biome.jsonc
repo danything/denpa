@@ -60,6 +60,10 @@
                 // 行ごとの数がそろっていても、行を分けて書いた grid-template-areas を「数が合わない」と言う (2.6.2。Tuners.svelte)
                 "noInvalidGridAreas": "off"
             },
+            "performance": {
+                // 試験と計測は「画面に見えている文字」を読む (改行・隠れた要素の扱いが textContent と違う)
+                "useDomNodeTextContent": "off"
+            },
             "suspicious": {
                 // 覚えた局はサーバが SSR で読む。Cookie Store API では渡らない
                 "noDocumentCookie": "off"

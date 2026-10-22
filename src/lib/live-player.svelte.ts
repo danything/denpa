@@ -753,7 +753,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
              */
             if (frame !== undefined) {
                 const late = video.currentTime - frame.mediaTime;
-                slip = late > 0 ? late : 0;
+                slip = Math.max(late, 0);
                 if (slip > slipMost) slipMost = slip;
                 if (slip > SLIP_MOST) unslip(video);
             }

@@ -12,7 +12,8 @@
         "37-playback",
         "40-watch-compat",
         "42-copy-never",
-        "45-buttons"
+        "45-buttons",
+        "50-live-pacing"
     ],
     "2": [
         "03-recording",

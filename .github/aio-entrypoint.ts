@@ -28,7 +28,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     });
 }
 
-const first = await Promise.race(children.map(async (child) => (await child.exited, child)));
+const first = await Promise.race(children.map((child) => child.exited.then(() => child)));
 stop();
 await Promise.all(children.map((child) => child.exited));
 // 止めるよう言われたなら 0。自分から落ちたなら、落ちたほうの終了コードを返す

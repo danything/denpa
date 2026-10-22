@@ -224,7 +224,7 @@ const LOGO_COLORS = [1, 4, 2, 5, 6, 3, 1, 4, 2, 5, 6, 3];
 /** 角を落とした色の四角に、白い丸と電波の弧を2本。どの局も同じ形で、色だけ違う */
 export function docsLogo(service: FakeService, width: number, height: number): Uint8Array {
     const index = DOCS_SERVICES.indexOf(service);
-    const color = LOGO_COLORS[(index < 0 ? 0 : index) % LOGO_COLORS.length]!;
+    const color = LOGO_COLORS[Math.max(index, 0) % LOGO_COLORS.length]!;
     const r = Math.round(height / 5);
     const cx = width * 0.3;
     const cy = height / 2;

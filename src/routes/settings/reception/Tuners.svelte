@@ -645,6 +645,10 @@
             border-end-end-radius: 0;
             background: var(--dp-hover-soft);
         }
+        /* 開いた行の中身。行 (.main) の td より先に置く (別の行なので並びで効き方は変わらない) */
+        .detail td {
+            padding: 0 var(--dp-space-2) var(--dp-space-2);
+        }
         .tuners .main td,
         .tuners .main:hover td,
         .tuners .main:has(+ .detail.open) td {
@@ -678,9 +682,6 @@
         }
         .tuners .detail.open {
             display: block;
-        }
-        .detail td {
-            padding: 0 var(--dp-space-2) var(--dp-space-2);
         }
         .detail-body .field,
         .add .field {
