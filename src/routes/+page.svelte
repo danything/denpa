@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-    import { tick, untrack } from 'svelte';
+    import { onDestroy, tick, untrack } from 'svelte';
     import { submitting } from '#lib/actions.js';
     import { arming } from '#lib/arming.svelte.js';
     import { type Item, type Res, setHome } from '#lib/components/home/context.js';
@@ -380,7 +380,6 @@
     function setGrouped(on: boolean): void {
         grouped = on;
         pastPage.reset();
-        futureShown = FIRST_ROWS;
         fillSoon();
         // パスは接頭辞込み (`live-player.svelte.ts` の `remember` と同じ)
         document.cookie = `${GROUPED_COOKIE}=${on ? '1' : '0'}; path=${resolve('')}; max-age=31536000; samesite=lax`;
@@ -423,6 +422,7 @@
      * 上に足すぶん読んでいる所は動かさない (`holdPlace`)
      */
     let filling = 0;
+    onDestroy(() => cancelAnimationFrame(filling));
     function fillSoon(): void {
         if (filling !== 0) return;
         filling = requestAnimationFrame(() => {
@@ -522,7 +522,7 @@
         const anchor = listBox === undefined ? null : topRow(listBox);
         filter = next;
         pastPage.reset();
-        futureShown = FIRST_ROWS;
+        // 予約の行は戻さない (深く送っているときに、見ていた行が一度消えて位置が飛ぶ)
         if (anchor !== null) showPastUpTo(anchor.key);
         await tick();
         if (listBox !== undefined) restoreRow(listBox, anchor);

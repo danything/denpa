@@ -71,12 +71,13 @@ export class Paged<T> {
      * 残りは表示したあとで `fill` が足す
      */
     showAtLeast(count: number): void {
-        this.shown = Math.min(this.items().length, Math.max(this.shown, count));
+        // 今の一覧の長さで切らない — 空のときに 0 にすると、あとで行が増えたときに頭を描かなくなる (`rows` が長さで止める)
+        this.shown = Math.max(this.shown, count);
     }
 
     /** `first` で始めたぶんを `step` まで足す (表示したあとで呼ぶ) */
     fill(): void {
-        this.shown = Math.min(this.items().length, Math.max(this.shown, this.step));
+        this.shown = Math.max(this.shown, this.step);
     }
 
     /** 先頭に戻す。絞り込みや並べ替えで顔ぶれが変わったとき */

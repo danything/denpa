@@ -116,6 +116,7 @@
      * 開いた瞬間に作ることになり、ホームが一コマ重くなっていた。開きそうになったら (押し始め・キー・開けと言われた) 作り、
      * 一度作ったら残す (閉じるたびに作り直さない)
      */
+    // svelte-ignore state_referenced_locally
     let filled = $state(!lazy);
     /** 指やマウスで開いたか。キーボードで開いたときだけ先頭の項目に入る (WAI-ARIA の menu button) */
     let byPointer = false;
