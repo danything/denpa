@@ -51,9 +51,15 @@
     <span class="t-time num">{time(start)}<span class="t-end">–{time(end)}</span></span>
     {#if typeof open === 'string'}
         <!-- 行いっぱいが的なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
-        <a class="row-name row-open broadcast" href={open} data-sveltekit-preload-data="tap" data-testid="row-open">
+        <a
+            class="row-name row-open broadcast"
+            href={open}
+            data-sveltekit-preload-data="tap"
+            data-testid="row-open"
+        >
             {#if fresh}
-                <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"></span>
+                <span class="unwatched-dot" role="img" aria-label="未視聴" data-testid="recording-unwatched"
+                ></span>
             {/if}
             {name}
         </a>

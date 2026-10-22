@@ -231,7 +231,8 @@
     $effect(() => {
         const codec = canvasCodec;
         // 端末に保存したものはオフラインでも描く (`playback` が聞けなくてよい)
-        if (codec === null || (info === null && localMkv === null) || mediaBox === null || canvas !== null) return;
+        if (codec === null || (info === null && localMkv === null) || mediaBox === null || canvas !== null)
+            return;
         untrack(() => startCanvas(codec));
     });
 
@@ -282,7 +283,9 @@
                 tick: canvasTick,
             });
         } catch (error) {
-            canvasFallBack(`再生を始められませんでした (${error instanceof Error ? error.message : String(error)})`);
+            canvasFallBack(
+                `再生を始められませんでした (${error instanceof Error ? error.message : String(error)})`,
+            );
             return;
         }
         canvas = made;
@@ -327,7 +330,10 @@
          */
         if (wasLocal) {
             localMkv = null;
-            const next = info !== null && canvasAbility !== null ? pickCanvas(info, canvasAbility, choice, canvasGaveUp) : null;
+            const next =
+                info !== null && canvasAbility !== null
+                    ? pickCanvas(info, canvasAbility, choice, canvasGaveUp)
+                    : null;
             if (next === null) {
                 canvasProblem = reason;
                 return;
@@ -541,7 +547,8 @@
     /** その場で流すなら、プレイヤーを作って流しはじめる。**続きの位置からリクエストする** (頭から読んで捨てない) */
     $effect(() => {
         const plan = picked;
-        if (!localChecked || plan?.way !== 'stream' || info === null || video === null || remux !== null) return;
+        if (!localChecked || plan?.way !== 'stream' || info === null || video === null || remux !== null)
+            return;
         const source = pickMediaSource();
         if (source === null) return;
         const total = info.duration;
@@ -707,7 +714,9 @@
                 // 端末に保存したものから。オフラインでも d が効く
                 dataTimeline = localCopy.databroadcast as PlacedMessage[];
             } else {
-                const response = await fetch(resolve(`api/recordings/${rec.id}/databroadcast`)).catch(() => null);
+                const response = await fetch(resolve(`api/recordings/${rec.id}/databroadcast`)).catch(
+                    () => null,
+                );
                 dataTimeline = response?.ok ? await response.json() : [];
             }
         }
@@ -1185,7 +1194,9 @@
             return;
         }
         if (picked?.way === 'stream' || canvas !== null) {
-            audios = (info?.audios ?? []).map((audio, i) => ({ label: audio.label.trim() || `音声 ${i + 1}` }));
+            audios = (info?.audios ?? []).map((audio, i) => ({
+                label: audio.label.trim() || `音声 ${i + 1}`,
+            }));
             return;
         }
         const tracks = audioTrackList();
@@ -1197,7 +1208,9 @@
             audios =
                 audioFallback() === null
                     ? []
-                    : (info?.audios ?? []).map((audio, i) => ({ label: audio.label.trim() || `音声 ${i + 1}` }));
+                    : (info?.audios ?? []).map((audio, i) => ({
+                          label: audio.label.trim() || `音声 ${i + 1}`,
+                      }));
             return;
         }
         const list: { label: string }[] = [];
@@ -1782,22 +1795,22 @@
 
 <!-- **ライブ (`/live`) と同じレイアウト・同じ作り** (PlayerLayout)。映像が左、読むものが右 -->
 <PlayerLayout testid="watch">
-        {#if !ready}
-            <!-- 録っている最中は load が追っかけへ送るので、ここに来るのはエンコード済みも元の TS も無い録画 -->
-            <div class="panel stack not-ready">
-                <h2>まだ観られません</h2>
-                <p class="small muted">観られるファイルがありません。</p>
-                {#if rec.encode_error}
-                    <p class="small muted">{rec.encode_error}</p>
-                {/if}
-            </div>
-        {:else}
-            <!--
+    {#if !ready}
+        <!-- 録っている最中は load が追っかけへ送るので、ここに来るのはエンコード済みも元の TS も無い録画 -->
+        <div class="panel stack not-ready">
+            <h2>まだ観られません</h2>
+            <p class="small muted">観られるファイルがありません。</p>
+            {#if rec.encode_error}
+                <p class="small muted">{rec.encode_error}</p>
+            {/if}
+        </div>
+    {:else}
+        <!--
                 舞台 (映像と操作をまとめた箱。全画面にするのはここ) は3画面で共通 (PlayerStage)。
                 全画面はこちら側の癖 (開いた時点で入る) が要るので自前のまま
             -->
-            <PlayerStage {controls} {fullscreen} {ambient} testid="watch-stage" bind:element={stage}>
-                {#snippet children(layout)}
+        <PlayerStage {controls} {fullscreen} {ambient} testid="watch-stage" bind:element={stage}>
+            {#snippet children(layout)}
                 <!--
                     **押すのは映像そのもの。** ボタンを避けて敷くのではなく、
                     ボタンを上に重ねる (z-index 10)。押したときの処理は自分で繋ぐ (`press` の effect)
@@ -1811,58 +1824,55 @@
                 <!--
                     **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ
                 -->
-                <div
-                    bind:this={mediaBox}
-                    style="position:absolute; inset:0; width:100%; height:100%;"
-                >
-                <video
-                    bind:this={video}
-                    {src}
-                    style="width:100%; height:100%; background:#000;"
-                    playsinline
-                    onclick={press}
-                    onplay={() => {
-                        playing = true;
-                        if (video !== null) follow(video);
-                        // 出たので、繋ぎ直しは済み。次に切れたらまた1秒から待つ
-                        retries = 0;
-                        resuming = false;
-                        controls.stir();
-                    }}
-                    onpause={() => {
-                        playing = false;
-                        // 止めたのは詰まりではない。輪は引っ込める
-                        flowing();
-                    }}
-                    onended={finished}
-                    onwaiting={stall}
-                    onstalled={stall}
-                    onseeking={stall}
-                    onplaying={flowing}
-                    oncanplay={flowing}
-                    ontimeupdate={() => {
-                        at = video?.currentTime ?? 0;
-                        hopCm();
-                        paint();
-                        feedData();
-                    }}
-                    onseeked={feedData}
-                    onloadstart={() => {
-                        // **読み込みが始まった瞬間に速さを掛け直す。** src を入れ替えると
-                        // (端末のコピーへの差し替え) ブラウザは playbackRate を 1 に戻す。
-                        // metadata を待ってからでは、その間だけ選んだ速さが外れて見える
-                        if (video !== null && speed !== 1) video.playbackRate = speed;
-                    }}
-                    onloadedmetadata={() => {
-                        resume();
-                        syncAudio();
-                    }}
-                    onvolumechange={() => (muted = video?.muted ?? false)}
-                    onerror={recover}
-                    data-testid="watch-video"
-                >
-                </video>
-                <!--
+                <div bind:this={mediaBox} style="position:absolute; inset:0; width:100%; height:100%;">
+                    <video
+                        bind:this={video}
+                        {src}
+                        style="width:100%; height:100%; background:#000;"
+                        playsinline
+                        onclick={press}
+                        onplay={() => {
+                            playing = true;
+                            if (video !== null) follow(video);
+                            // 出たので、繋ぎ直しは済み。次に切れたらまた1秒から待つ
+                            retries = 0;
+                            resuming = false;
+                            controls.stir();
+                        }}
+                        onpause={() => {
+                            playing = false;
+                            // 止めたのは詰まりではない。輪は引っ込める
+                            flowing();
+                        }}
+                        onended={finished}
+                        onwaiting={stall}
+                        onstalled={stall}
+                        onseeking={stall}
+                        onplaying={flowing}
+                        oncanplay={flowing}
+                        ontimeupdate={() => {
+                            at = video?.currentTime ?? 0;
+                            hopCm();
+                            paint();
+                            feedData();
+                        }}
+                        onseeked={feedData}
+                        onloadstart={() => {
+                            // **読み込みが始まった瞬間に速さを掛け直す。** src を入れ替えると
+                            // (端末のコピーへの差し替え) ブラウザは playbackRate を 1 に戻す。
+                            // metadata を待ってからでは、その間だけ選んだ速さが外れて見える
+                            if (video !== null && speed !== 1) video.playbackRate = speed;
+                        }}
+                        onloadedmetadata={() => {
+                            resume();
+                            syncAudio();
+                        }}
+                        onvolumechange={() => (muted = video?.muted ?? false)}
+                        onerror={recover}
+                        data-testid="watch-video"
+                    >
+                    </video>
+                    <!--
                     **放送の字幕は映像と同じ箱の中に置く** (ライブの `MediaStack` と同じ)。
                     データ放送を出すと、この箱ごと BML の小窓へ寄せる。外に置いて
                     いた頃は**映像だけが小窓へ行き、字幕は枠いっぱいのまま**データ放送の面
@@ -1870,26 +1880,26 @@
                     位置と大きさは `place` が映像に合わせて style で書く。
                     **押す邪魔をしない** (`pointer-events: none`) — 下の映像を押して止められなくなる
                 -->
-                <canvas
-                    bind:this={overlay}
-                    style="position:absolute; pointer-events:none;"
-                    data-testid="watch-captions-canvas"
-                    data-on={captions && hasCaptions}
-                    aria-hidden="true"
-                ></canvas>
-                <!--
+                    <canvas
+                        bind:this={overlay}
+                        style="position:absolute; pointer-events:none;"
+                        data-testid="watch-captions-canvas"
+                        data-on={captions && hasCaptions}
+                        aria-hidden="true"
+                    ></canvas>
+                    <!--
                     **CM を跨ぐ間の蓋。** 字幕より後ろに置く = 字幕の上に載る
                     (CM の字幕まで隠すため)。操作バーや通知 (z-index 10) の下には残す。
                     字幕と同じ理由で箱の中に置く (小窓の中でも CM を隠す)。
                     出し入れは `hidden` のまま — style に式を書くと `hopping` が変わるたびに
                     属性ごと書き直され、`place` が JS で書いた位置と大きさが消える
                 -->
-                <canvas
-                    bind:this={cover}
-                    style="position:absolute; pointer-events:none;"
-                    hidden={!hopping}
-                    aria-hidden="true"
-                ></canvas>
+                    <canvas
+                        bind:this={cover}
+                        style="position:absolute; pointer-events:none;"
+                        hidden={!hopping}
+                        aria-hidden="true"
+                    ></canvas>
                 </div>
                 <!--
                     **録画のデータ放送。** エンコードするときに取り出した変化ログ (`data.hasData`) を、
@@ -1968,8 +1978,8 @@
                     <!-- **黙って黒いままにしない。** 観られる先を案内する (外のプレイヤーは相手にしない) -->
                     <div class="broken" data-testid="watch-broken">
                         <p class="small">
-                            このブラウザでは再生できませんでした。<br
-                            />Chrome・Edge か、テレビのアプリ (denpa-tv) で観てください。
+                            このブラウザでは再生できませんでした。<br />Chrome・Edge か、テレビのアプリ
+                            (denpa-tv) で観てください。
                         </p>
                     </div>
                 {/if}
@@ -2006,7 +2016,13 @@
                     <form method="POST" action="?/delete" use:submitting>
                         <input type="hidden" name="id" value={rec.id} />
                         {#if deleting.armed !== null}
-                            <ControlButton icon={CHECK} label="削除を確定" danger submit testid="watch-delete-confirm" />
+                            <ControlButton
+                                icon={CHECK}
+                                label="削除を確定"
+                                danger
+                                submit
+                                testid="watch-delete-confirm"
+                            />
                         {:else}
                             <ControlButton
                                 icon={TRASH}
@@ -2115,9 +2131,7 @@
                             {#snippet badge()}
                                 {#if localSrc !== null || drawingLocal}
                                     <!-- サーバではなく端末のコピーで観ている印。操作バーのタイトルの並びに出す -->
-                                    <span class="tag success local">
-                                        端末
-                                    </span>
+                                    <span class="tag success local"> 端末 </span>
                                 {/if}
                             {/snippet}
                             {#snippet status()}
@@ -2128,7 +2142,9 @@
                                     狭い枠では位置と長さだけにする (`.long` を省く。`InfoBlock`)
                                 -->
                                 <span class="clock" data-testid="watch-clock">
-                                    {clock(scrub ?? at)} / {clock(length)}<span class="long">{' · 残り '}{clock(remaining)}</span>
+                                    {clock(scrub ?? at)} / {clock(length)}<span class="long"
+                                        >{' · 残り '}{clock(remaining)}</span
+                                    >
                                 </span>
                                 {#if current !== null}
                                     <span class="long">{' · '}<span>{current.title}</span></span>
@@ -2190,7 +2206,10 @@
                             stage={layout}
                             cm={hasCm ? { on: skipCm, toggle: toggleSkipCm } : undefined}
                             data={data.hasData
-                                ? { on: showData, toggle: () => pressD(showData, dataButton, (on) => void setData(on)) }
+                                ? {
+                                      on: showData,
+                                      toggle: () => pressD(showData, dataButton, (on) => void setData(on)),
+                                  }
                                 : undefined}
                             subtitle={hasCaptions
                                 ? subtitles({
@@ -2206,7 +2225,9 @@
                                 ? recordingCodecs({
                                       icon: CODEC,
                                       choices: codecMenu,
-                                      selected: codecMenu.some((item) => item.key === choice) ? choice : 'auto',
+                                      selected: codecMenu.some((item) => item.key === choice)
+                                          ? choice
+                                          : 'auto',
                                       onpick: (key) => chooseCodec(key as CodecChoice | 'mpeg2'),
                                   })
                                 : undefined}
@@ -2224,64 +2245,64 @@
                         />
                     </ControlRow>
                 </ControlBar>
-                {/snippet}
+            {/snippet}
 
-                <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
-                {#snippet notes()}
-                    {#if continued}
-                        <!--
+            <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->
+            {#snippet notes()}
+                {#if continued}
+                    <!--
                             **続きから出したことを言う。** 黙って途中から始まると、
                             壊れているのか飛んだのか分からない
                         -->
-                        <StageNote testid="watch-resumed">続きから再生しています</StageNote>
-                    {/if}
-                    {#if skipped}
-                        <!-- **黙って飛ばない。** 何が起きたか言わないと壊れて見える -->
-                        <StageNote testid="watch-skipped">CMを飛ばしました</StageNote>
-                    {/if}
-                    {#if warning !== null}
-                        <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
-                        <StageNote>{warning}</StageNote>
-                    {/if}
-                {/snippet}
-            </PlayerStage>
-        {/if}
+                    <StageNote testid="watch-resumed">続きから再生しています</StageNote>
+                {/if}
+                {#if skipped}
+                    <!-- **黙って飛ばない。** 何が起きたか言わないと壊れて見える -->
+                    <StageNote testid="watch-skipped">CMを飛ばしました</StageNote>
+                {/if}
+                {#if warning !== null}
+                    <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
+                    <StageNote>{warning}</StageNote>
+                {/if}
+            {/snippet}
+        </PlayerStage>
+    {/if}
 
     <!--
         **右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。**
         中身は一覧のモーダルと同じ部品 (`ProgramFacts`)。枠は追っかけと同じ部品 (FactsAside)
     -->
     {#snippet aside()}
-    <FactsAside testid="watch-facts">
-        {#snippet top()}
-            <!--
+        <FactsAside testid="watch-facts">
+            {#snippet top()}
+                <!--
                 **データ放送のリモコンは、映像の上ではなく右の列に出す** (ライブと同じ)。
                 データ放送を出している間だけ、番組の中身の上に出す
             -->
-            {#if dataPress !== null}
-                <Remote press={dataPress} />
-            {/if}
-        {/snippet}
+                {#if dataPress !== null}
+                    <Remote press={dataPress} />
+                {/if}
+            {/snippet}
 
-        <!--
+            <!--
             **引き直せたらそちらを出す。** 録画の行が持っているのは名前と
             説明までで、出演者などは番組表の側にある。古い録画は番組表から
             消えているので引けず、そのときは行のぶんだけが出たままになる
         -->
-        <ProgramFacts
-            program={detail.current ?? facts}
-            cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null}
-            fps={rec.fps}
-        />
+            <ProgramFacts
+                program={detail.current ?? facts}
+                cmNote={cmNoteWorthShowing(rec.cm_note) ? rec.cm_note : null}
+                fps={rec.fps}
+            />
 
-        <div class="small muted meta num" data-testid="watch-meta">
-            {recordedDuration(rec)} ・ {size(rec.ts_size)}
-        </div>
-        <!--
+            <div class="small muted meta num" data-testid="watch-meta">
+                {recordedDuration(rec)} ・ {size(rec.ts_size)}
+            </div>
+            <!--
             **押すものは置かない。** 「一覧へ」は映像の右上の「×」と同じ行き先、削除も映像の上の列にある
             (全画面のタブレットで使うので、映像から出さない)
         -->
-    </FactsAside>
+        </FactsAside>
     {/snippet}
 </PlayerLayout>
 

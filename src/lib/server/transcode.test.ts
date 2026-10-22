@@ -18,9 +18,8 @@ afterAll(() => {
 });
 
 const { parseTranscodeLimit, saveSettings, settings } = await import('./settings');
-const { holdTranscode, TRANSCODE_DEFAULT, transcodeAuto, transcodeLimit, transcodesInUse } = await import(
-    './transcode'
-);
+const { holdTranscode, TRANSCODE_DEFAULT, transcodeAuto, transcodeLimit, transcodesInUse } =
+    await import('./transcode');
 
 test('既定は GPU の有無で 2 本か 4 本', () => {
     const defaults: number[] = [TRANSCODE_DEFAULT.cpu, TRANSCODE_DEFAULT.gpu];

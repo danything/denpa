@@ -33,7 +33,7 @@ describe('MNG', () => {
         expect(png?.width).toBe(2);
         expect(png?.height).toBe(1);
         const names: string[] = [];
-        for (let at = 8; at + 8 <= png!.data.length; ) {
+        for (let at = 8; at + 8 <= png!.data.length;) {
             const length = new DataView(png!.data.buffer).getUint32(at);
             names.push(String.fromCharCode(...png!.data.subarray(at + 4, at + 8)));
             at += 12 + length;

@@ -63,7 +63,12 @@
                 <SaveNote status={encodingSave} />
             </div>
             <Lead>すべての録画に効きます。ルールや予約ごとには変えられません</Lead>
-            <form method="POST" action="?/saveEncoding" use:autosave={encodingSave} class="fields setting-rows">
+            <form
+                method="POST"
+                action="?/saveEncoding"
+                use:autosave={encodingSave}
+                class="fields setting-rows"
+            >
                 <!--
                     **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。** 選べるのは、そのコーデックを
                     GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
@@ -95,12 +100,18 @@
                                             aria-label={`${CODEC_LABEL[codec]} のエンコーダ`}
                                             data-testid={`hw-${codec}`}
                                         >
-                                            <option value={HW_SOFTWARE} selected={choice === HW_SOFTWARE}>ソフトウェア</option>
+                                            <option value={HW_SOFTWARE} selected={choice === HW_SOFTWARE}
+                                                >ソフトウェア</option
+                                            >
                                             {#each usable as device (device.path)}
-                                                <option value={device.path} selected={choice === device.path}>{device.label}</option>
+                                                <option value={device.path} selected={choice === device.path}
+                                                    >{device.label}</option
+                                                >
                                             {/each}
                                             {#if usable.length > 1}
-                                                <option value={HW_EVERY} selected={choice === HW_EVERY}>GPU を順番に使う</option>
+                                                <option value={HW_EVERY} selected={choice === HW_EVERY}
+                                                    >GPU を順番に使う</option
+                                                >
                                             {/if}
                                         </select>
                                     {:else if hw.devices.length > 0}
@@ -121,16 +132,26 @@
                                     一度だけの操作なので、その場で保存する欄とは別のフォーム (下の `probe-hw`) で送る。
                                     `form` で指すので、この節の保存には混ざらない
                                 -->
-                                <button type="submit" form="probe-hw" class="text-button" data-testid="hw-probe">確かめ直す</button>
+                                <button
+                                    type="submit"
+                                    form="probe-hw"
+                                    class="text-button"
+                                    data-testid="hw-probe">確かめ直す</button
+                                >
                                 {#snippet more()}
                                     <p>使える GPU は Intel QSV / VA-API です。見つかれば自動で使います。</p>
-                                    <p>QSV → VA-API → ソフトウェアの順に試し、失敗したら次の方法でやり直します。</p>
                                     <p>
-                                        ライブと追っかけも、ここで選んだエンコーダを使います (チェックを外したコーデックも)。MPEG-2
-                                        のデコードまで GPU でできるデバイスでは、デコードとインターレース解除も GPU で行います。
+                                        QSV → VA-API →
+                                        ソフトウェアの順に試し、失敗したら次の方法でやり直します。
                                     </p>
                                     <p>
-                                        GPU が2枚あれば「AV1 はこちら、H.264 はあちら」のように分けられます。「GPU を順番に使う」では、
+                                        ライブと追っかけも、ここで選んだエンコーダを使います
+                                        (チェックを外したコーデックも)。MPEG-2 のデコードまで GPU
+                                        でできるデバイスでは、デコードとインターレース解除も GPU で行います。
+                                    </p>
+                                    <p>
+                                        GPU が2枚あれば「AV1 はこちら、H.264
+                                        はあちら」のように分けられます。「GPU を順番に使う」では、
                                         エンコードのたびに使う GPU を入れ替えます。
                                     </p>
                                     {#each hw.devices as device (device.path)}
@@ -176,7 +197,8 @@
                         録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません
                         {#snippet more()}
                             <p>
-                                自動では GPU が無ければ 2本、あれば 4本です。埋まっているときにリクエストされた再生は断り、
+                                自動では GPU が無ければ 2本、あれば
+                                4本です。埋まっているときにリクエストされた再生は断り、
                                 エンコード済みの動画か元のTSでの再生を勧めます。
                             </p>
                         {/snippet}
@@ -230,7 +252,9 @@
                         <option value="cut" selected={recording.cmCut === 'cut'}>切り取る</option>
                         <option value="off" selected={recording.cmCut === 'off'}>何もしない</option>
                     </select>
-                    <span class="hint">局ロゴの消えている所をCMとみます。ロゴが使えなければ無音と長さで決めます</span>
+                    <span class="hint"
+                        >局ロゴの消えている所をCMとみます。ロゴが使えなければ無音と長さで決めます</span
+                    >
                 </label>
             </form>
         </section>

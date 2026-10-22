@@ -40,15 +40,17 @@ Kubernetes の `terminationGracePeriodSeconds` と docker compose の
 
 **待っている間も画面は開けます。** ここは2箇所で落ちていました
 (実機では、録画中に同期が来て34分間ずっと画面だけ開けなかった)。
+
 1. **adapter が SIGTERM を受けたその場で listen を閉じる** (adapter-bun は `server.stop()`)。
    止まれの合図は `takeOverSignals` でこちらが受け取り、先に入っていた後始末は外します。
    閉じるのは本当に止まる直前 (`process.exit`) だけです。
 
-   **引き取りは1回では足りません。** adapter が合図を登録するのは `build/index.js` の
-   いちばん最後で、こちらはその手前 (`hooks.server.ts` はアプリの読み込みで走る) なので、
-   最初の引き取りでは外すものがまだ無い。そのままだとプロセスは生きたままポートだけ閉じます。
-   入口の `server.js` が `build/index.js` を読み終えたところで、もう一度引き取らせます。
-   2度目の合図でも落ちないようにしてあります (`once` で受けていた頃は、2回目のデプロイで録画の途中でも終わっていた)。
+    **引き取りは1回では足りません。** adapter が合図を登録するのは `build/index.js` の
+    いちばん最後で、こちらはその手前 (`hooks.server.ts` はアプリの読み込みで走る) なので、
+    最初の引き取りでは外すものがまだ無い。そのままだとプロセスは生きたままポートだけ閉じます。
+    入口の `server.js` が `build/index.js` を読み終えたところで、もう一度引き取らせます。
+    2度目の合図でも落ちないようにしてあります (`once` で受けていた頃は、2回目のデプロイで録画の途中でも終わっていた)。
+
 2. **Kubernetes は `deletionTimestamp` が付いた Pod を Service から外す。**
    Service に `publishNotReadyAddresses: true` を付けると、止まりかけの Pod にも回ります。
    readinessProbe は無く、`strategy: Recreate` で新旧の Pod が並ぶこともないので、副作用はありません。
@@ -151,6 +153,7 @@ VA-API のドライバ) だけで、Debian では amd64 にしか無いので ar
 [deploy/application.yaml](../deploy/application.yaml) の Application から同じ chart を当てていて、
 値はそこの `helm.valuesObject` にあります (chart の使い方の実例として読めます。なぜそう置くかは
 ファイルの頭のコメント)。クラスタの初期構築や共通アドオンは別のリポジトリです。chart を当てる前に以下が要ります。
+
 - **StorageClass** — `persistence.storageClassName` (空ならクラスタの既定)。PVC を消させない設定は
   `persistence.protectFromPruning` (values.yaml に理由つき)
 - **Gateway API の Gateway か Ingress** — chart の `httpRoute.parentRefs` / `ingress` が指す先。証明書は

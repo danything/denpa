@@ -13,6 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 コンテナに入れられません。denpa のコンテナからは
 `host.docker.internal` でエージェントを呼びます (`compose.mac.yml`。
 compose.prod.yml から tuner-agent を外したもの)。
+
 1. **エージェント** — 最新のリリースから取り、LaunchAgent
    (`~/Library/LaunchAgents/io.github.danything.denpa-agent.plist`) に載せます。
    ログインで起き、落ちたら起き直し、止めるときは録画の終わりを待ちます
@@ -35,6 +36,7 @@ compose.prod.yml から tuner-agent を外したもの)。
 | `~/Movies/denpa/library`                     | 出来上がった録画 (Finder から見える)                                                                                                                                                      |
 | Docker のボリューム `denpa_denpa-data`       | DB。SQLite の錠は Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに                                                                                                  |
 | `~/Library/Logs/denpa-agent.log`             | エージェントのログ                                                                                                                                                                        |
+
 - もう一度流せば上げ直し (エージェントも denpa のイメージも最新のリリースへ)。
   消すときは `… | bash -s -- --uninstall`。エージェント・LaunchAgent・キャッシュを外し、
   コンテナを畳みます。`~/denpa` (compose と設定)・録画・DB は残し、消し方を言います (Linux と同じ)
@@ -52,6 +54,7 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
 手元で切り出します (ハッシュ3つで確かめる)。
 
 **Linux と違うところ。**
+
 - **チューナーは px4-userland と siano-userland の機材だけ。** macOS には DVB が無いので、
   PT2/PT3 のような PCI の機材は使えません
 - **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。USB のリーダーは

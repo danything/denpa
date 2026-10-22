@@ -200,7 +200,10 @@
      */
     const here = $derived.by(() => {
         const route = page.route.id ?? '';
-        return pages.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ?? null;
+        return (
+            pages.find((l) => route === l.href || (l.href !== '/' && route.startsWith(`${l.href}/`)))?.href ??
+            null
+        );
     });
 
     /**
@@ -239,9 +242,7 @@
      */
     const FILLED = ['/', '/live', '/watch/[id]', '/chase/[id]', '/guide', '/rules'];
     // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと頭が付く (server/paths.ts)
-    const fill = $derived(
-        pending !== null || FILLED.includes(page.route.id ?? '') || here === '/settings',
-    );
+    const fill = $derived(pending !== null || FILLED.includes(page.route.id ?? '') || here === '/settings');
 
     /**
      * **狭い画面では、ナビを画面の下のタブにする** (下の `.tabbar`)。
@@ -282,10 +283,17 @@
     function searchShortcut(event: KeyboardEvent): void {
         if (event.defaultPrevented || event.isComposing) return;
         const slash = event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey;
-        const k = event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+        const k =
+            event.key.toLowerCase() === 'k' &&
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            !event.shiftKey;
         if (!slash && !k) return;
         const target = event.target;
-        if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select') !== null)) {
+        if (
+            target instanceof HTMLElement &&
+            (target.isContentEditable || target.closest('input, textarea, select') !== null)
+        ) {
             return;
         }
         event.preventDefault();
@@ -324,7 +332,7 @@
     `%` なら JS も要らず、**描く前から正しい**。**二段組の線 (768px) は横に
     倒した携帯も越える** (915x412 など) ので、768px 以上の `.fill` のほうも同じ採り方
 -->
-<div class="shell" class:fill={fill} data-root data-hydrated={hydrated ? 'true' : undefined}>
+<div class="shell" class:fill data-root data-hydrated={hydrated ? 'true' : undefined}>
     <!--
         遷移の進み具合 (上の `slow`)。長さの分からない読み込みなので、
         光が左から右へ走るだけの不確定のバー。ヘッダーの上端に貼る
@@ -359,7 +367,11 @@
                     「denpa」の p が下で切れて見えた (行の高さを広げても字の形は変わらない)。
                     同じ字 (Bold) の輪郭から作り、p の下だけを伸ばしてある。読み上げには字で渡す
                 -->
-                <svg class="logo-word" viewBox="95 0 7016 2134" aria-hidden="true"><path d="M1045 692L1045 0L1313 0L1313 1757L1063 1757L1063 1591Q1018 1656 955 1699Q823 1788 650 1788Q376 1788 219 1576Q95 1407 95 1152Q95 941 182 785Q265 635 410 564Q519 510 643 510Q908 510 1045 692ZM1045 1329L1045 924Q899 717 712 717Q539 717 445 872Q375 987 375 1156Q375 1305 429 1408Q518 1579 710 1579Q844 1579 946 1479Q1005 1422 1045 1329ZM2773 1129L2773 1199L1872 1199Q1879 1358 1972 1457Q2084 1574 2257 1574Q2461 1574 2618 1383L2778 1545Q2581 1793 2232 1793Q1946 1793 1771 1610Q1604 1434 1604 1156Q1604 930 1713 763Q1810 615 1972 548Q2083 502 2209 502Q2410 502 2552 614Q2699 728 2750 933Q2773 1026 2773 1129ZM1889 1004L2505 1004Q2497 901 2451 832Q2364 705 2201 705Q2055 705 1961 823Q1903 896 1889 1004ZM3092 543L3350 543L3350 752Q3518 520 3770 520Q3947 520 4064 622Q4196 737 4196 998L4196 1751L3926 1751L3926 1032Q3926 890 3873 814Q3822 741 3701 741Q3577 741 3476 845Q3402 921 3362 1041L3362 1751L3092 1751L3092 543ZM4565 543L4813 543L4813 707Q4979 510 5230 510Q5482 510 5636 678Q5783 837 5783 1106Q5783 1333 5678 1486Q5527 1706 5234 1706Q4968 1706 4833 1524L4833 2134L4565 2134L4565 543ZM4833 957L4833 1292Q4977 1499 5169 1499Q5322 1499 5411 1398Q5503 1294 5503 1103Q5503 930 5426 831Q5338 719 5169 719Q5048 719 4952 795Q4877 854 4833 957ZM6670 973L6777 973L6777 954Q6777 707 6542 707Q6322 707 6146 840L6044 655Q6275 504 6551 504Q6817 504 6948 657Q7039 762 7039 967L7039 1389Q7039 1623 7111 1751L6867 1751Q6824 1668 6810 1561L6803 1561Q6752 1661 6639 1730Q6547 1786 6396 1786Q6217 1786 6100 1681Q5978 1571 5978 1401Q5978 973 6670 973ZM6777 1249L6777 1161L6697 1161Q6463 1161 6346 1221Q6246 1272 6246 1397Q6246 1481 6306 1530Q6363 1577 6454 1577Q6575 1577 6671 1491Q6777 1397 6777 1249Z" /></svg>
+                <svg class="logo-word" viewBox="95 0 7016 2134" aria-hidden="true"
+                    ><path
+                        d="M1045 692L1045 0L1313 0L1313 1757L1063 1757L1063 1591Q1018 1656 955 1699Q823 1788 650 1788Q376 1788 219 1576Q95 1407 95 1152Q95 941 182 785Q265 635 410 564Q519 510 643 510Q908 510 1045 692ZM1045 1329L1045 924Q899 717 712 717Q539 717 445 872Q375 987 375 1156Q375 1305 429 1408Q518 1579 710 1579Q844 1579 946 1479Q1005 1422 1045 1329ZM2773 1129L2773 1199L1872 1199Q1879 1358 1972 1457Q2084 1574 2257 1574Q2461 1574 2618 1383L2778 1545Q2581 1793 2232 1793Q1946 1793 1771 1610Q1604 1434 1604 1156Q1604 930 1713 763Q1810 615 1972 548Q2083 502 2209 502Q2410 502 2552 614Q2699 728 2750 933Q2773 1026 2773 1129ZM1889 1004L2505 1004Q2497 901 2451 832Q2364 705 2201 705Q2055 705 1961 823Q1903 896 1889 1004ZM3092 543L3350 543L3350 752Q3518 520 3770 520Q3947 520 4064 622Q4196 737 4196 998L4196 1751L3926 1751L3926 1032Q3926 890 3873 814Q3822 741 3701 741Q3577 741 3476 845Q3402 921 3362 1041L3362 1751L3092 1751L3092 543ZM4565 543L4813 543L4813 707Q4979 510 5230 510Q5482 510 5636 678Q5783 837 5783 1106Q5783 1333 5678 1486Q5527 1706 5234 1706Q4968 1706 4833 1524L4833 2134L4565 2134L4565 543ZM4833 957L4833 1292Q4977 1499 5169 1499Q5322 1499 5411 1398Q5503 1294 5503 1103Q5503 930 5426 831Q5338 719 5169 719Q5048 719 4952 795Q4877 854 4833 957ZM6670 973L6777 973L6777 954Q6777 707 6542 707Q6322 707 6146 840L6044 655Q6275 504 6551 504Q6817 504 6948 657Q7039 762 7039 967L7039 1389Q7039 1623 7111 1751L6867 1751Q6824 1668 6810 1561L6803 1561Q6752 1661 6639 1730Q6547 1786 6396 1786Q6217 1786 6100 1681Q5978 1571 5978 1401Q5978 973 6670 973ZM6777 1249L6777 1161L6697 1161Q6463 1161 6346 1221Q6246 1272 6246 1397Q6246 1481 6306 1530Q6363 1577 6454 1577Q6575 1577 6671 1491Q6777 1397 6777 1249Z"
+                    /></svg
+                >
                 <span class="visually-hidden">denpa</span>
             </a>
             <!--
@@ -391,7 +403,8 @@
             狭い幅ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
         -->
         <nav class="actions">
-            <button type="button"
+            <button
+                type="button"
                 class="ghost small icon"
                 onclick={theme.cycle}
                 aria-label="テーマを切り替える"
@@ -416,13 +429,16 @@
                             data-testid="nav-{link.href === '/' ? 'home' : link.href.slice(1)}"
                         >
                             {link.label}
-                            {#if here === link.href}<span class="nav-underline" aria-hidden="true" use:slide={'nav-underline'}></span>{/if}
+                            {#if here === link.href}<span
+                                    class="nav-underline"
+                                    aria-hidden="true"
+                                    use:slide={'nav-underline'}
+                                ></span>{/if}
                         </a>
                     </li>
                 {/each}
             </ul>
         </nav>
-
     </div>
 
     <!--
@@ -471,7 +487,11 @@
                     aria-current={here === tab.href ? 'page' : undefined}
                     data-testid="tab-{tab.href === '/' ? 'home' : tab.href.slice(1)}"
                 >
-                    {#if here === tab.href}<span class="tab-indicator" aria-hidden="true" use:slide={'tab-indicator'}></span>{/if}
+                    {#if here === tab.href}<span
+                            class="tab-indicator"
+                            aria-hidden="true"
+                            use:slide={'tab-indicator'}
+                        ></span>{/if}
                     <Icon icon={tab.icon} size="size-5" />
                     <span>{tab.label}</span>
                 </a>
@@ -486,7 +506,11 @@
                             class="tab"
                             aria-current={moreCurrent ? 'page' : undefined}
                         >
-                            {#if moreCurrent}<span class="tab-indicator" aria-hidden="true" use:slide={'tab-indicator'}></span>{/if}
+                            {#if moreCurrent}<span
+                                    class="tab-indicator"
+                                    aria-hidden="true"
+                                    use:slide={'tab-indicator'}
+                                ></span>{/if}
                             <Icon icon={Ellipsis} size="size-5" />
                             <span>その他</span>
                         </button>

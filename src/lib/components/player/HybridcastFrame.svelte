@@ -52,7 +52,17 @@
         press?: ((code: number, down: boolean) => void) | null;
     }
 
-    let { app, hc, broadcast, onwrite, onclose, ontune, oncaptions, onvideo, press = $bindable(null) }: Props = $props();
+    let {
+        app,
+        hc,
+        broadcast,
+        onwrite,
+        onclose,
+        ontune,
+        oncaptions,
+        onvideo,
+        press = $bindable(null),
+    }: Props = $props();
 
     let box = $state<HTMLDivElement | null>(null);
     let frame = $state<HTMLIFrameElement | null>(null);
@@ -102,23 +112,26 @@
         const target = url;
         try {
             const response = await fetch(resolve(`api/bml/proxy?url=${encodeURIComponent(target)}`));
-            if (response.headers.get('x-bml-relayed') !== '1' || !response.ok) throw new Error(String(response.status));
+            if (response.headers.get('x-bml-relayed') !== '1' || !response.ok)
+                throw new Error(String(response.status));
             const body = new Uint8Array(await response.arrayBuffer());
             const text = decodeHtml(body, response.headers.get('content-type') ?? '');
             const relay = await relayFor(target);
             if (target !== url) return;
             const given = broadcast();
             opened = given.who;
-            html = prepareApp(text, {
-                url: target,
-                organisationId: app.organisationId,
-                applicationId: app.applicationId,
-                storage: remembered(),
-                state: $state.snapshot(hc),
-                relay,
-                compat: given,
-            },
-            compat,
+            html = prepareApp(
+                text,
+                {
+                    url: target,
+                    organisationId: app.organisationId,
+                    applicationId: app.applicationId,
+                    storage: remembered(),
+                    state: $state.snapshot(hc),
+                    relay,
+                    compat: given,
+                },
+                compat,
             );
             hand();
         } catch (failure) {
@@ -142,7 +155,9 @@
         });
         if (!response.ok) throw new Error(`中継を用意できません (${response.status})`);
         const { root } = (await response.json()) as { root: string | null };
-        return root === null ? null : { root: new URL(resolve(root as '/'), location.href).href, origin: target.origin };
+        return root === null
+            ? null
+            : { root: new URL(resolve(root as '/'), location.href).href, origin: target.origin };
     }
 
     /** アプリの通信を中継へ。中継が断った・相手まで行けなかったら error */
@@ -168,7 +183,9 @@
             const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
             post({ type: 'response', id: message.id, status: response.status, contentType, body }, [body]);
         } catch (failure) {
-            console.warn(`[hybridcast] 通信を中継できません: ${message.method} ${message.url} (${String(failure)})`);
+            console.warn(
+                `[hybridcast] 通信を中継できません: ${message.method} ${message.url} (${String(failure)})`,
+            );
             post({ type: 'response', id: message.id, error: true });
         }
     }
@@ -189,7 +206,10 @@
             case 'store': {
                 const json = JSON.stringify(message.items);
                 if (json.length <= STORAGE_LIMIT) write(key, json);
-                else console.warn(`[hybridcast] 受信機の記憶が上限を超えたので覚えません (${json.length} 文字)`);
+                else
+                    console.warn(
+                        `[hybridcast] 受信機の記憶が上限を超えたので覚えません (${json.length} 文字)`,
+                    );
                 break;
             }
             case 'video':
@@ -275,13 +295,7 @@
 
 <svelte:window onmessage={receive} />
 
-<div
-    bind:this={box}
-    class="app"
-    data-testid="live-hybridcast-app"
-    data-state={phase}
-    data-url={url}
->
+<div bind:this={box} class="app" data-testid="live-hybridcast-app" data-state={phase} data-url={url}>
     <iframe
         bind:this={frame}
         title={app.name === '' ? 'Hybridcast' : app.name}
@@ -296,7 +310,9 @@
     {#if phase !== 'ready'}
         <div class="corner">
             <StageNote>
-                {phase === 'loading' ? 'Hybridcast を読み込み中…' : 'Hybridcast のアプリを読み込めませんでした (戻るで閉じる)'}
+                {phase === 'loading'
+                    ? 'Hybridcast を読み込み中…'
+                    : 'Hybridcast のアプリを読み込めませんでした (戻るで閉じる)'}
             </StageNote>
         </div>
     {/if}

@@ -126,7 +126,10 @@
              * 狭い画面は上に節の行 (とヘッダー) が重なるので、その下から数える。
              * rootMargin は px か % だけ (rem は投げる)
              */
-            { root, rootMargin: `-${root === null ? Math.round(jumpRow?.getBoundingClientRect().bottom ?? 0) + 8 : 16}px 0px -55% 0px` },
+            {
+                root,
+                rootMargin: `-${root === null ? Math.round(jumpRow?.getBoundingClientRect().bottom ?? 0) + 8 : 16}px 0px -55% 0px`,
+            },
         );
         for (const part of parts) observer.observe(part);
         const target = root ?? window;

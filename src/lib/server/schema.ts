@@ -161,7 +161,9 @@ export const webhooks = sqliteTable('webhooks', {
     url: text('url').notNull(),
     /** JSON 配列。空配列は「全部」 */
     events: json('events', strings).notNull(),
-    enabled: flag('enabled').notNull().default(sql`1`),
+    enabled: flag('enabled')
+        .notNull()
+        .default(sql`1`),
     /** 直近の送信結果。設定画面で出す */
     last_status: text('last_status'),
     last_sent_at: integer('last_sent_at'),
@@ -183,7 +185,9 @@ export const services = sqliteTable('services', {
     /** 物理チャンネル。同一チャンネルの同時録画はチューナーを共有できる */
     channel: text('channel').notNull(),
     remote_control_key: integer('remote_control_key'),
-    has_logo: flag('has_logo').notNull().default(sql`0`),
+    has_logo: flag('has_logo')
+        .notNull()
+        .default(sql`0`),
     updated_at: integer('updated_at').notNull(),
 });
 
@@ -205,7 +209,9 @@ export const programs = sqliteTable(
         genres: json('genres', numbers),
         /** JSON: [{lv1, lv2}]。表示用 */
         genre_detail: json('genre_detail', objects<Genre>()),
-        is_free: flag('is_free').notNull().default(sql`1`),
+        is_free: flag('is_free')
+            .notNull()
+            .default(sql`1`),
         /** ARIB の componentType。2 がデュアルモノ */
         audio_type: integer('audio_type'),
         /** JSON: [{componentType, langs, text?, main?}]。表示用 */
@@ -218,7 +224,9 @@ export const programs = sqliteTable(
          * **コピー禁止の番組か** (EIT のデジタルコピー制御記述子)。禁止の番組は録らない —
          * 予約は「録画しない」になる (`scheduler.resolveConflicts`)。docs/data.md「コピー禁止の番組」
          */
-        copy_never: flag('copy_never').notNull().default(sql`0`),
+        copy_never: flag('copy_never')
+            .notNull()
+            .default(sql`0`),
         updated_at: integer('updated_at').notNull(),
     },
     (t) => [
@@ -244,7 +252,9 @@ export const rules = sqliteTable('rules', {
     service_types: json('service_types', strings),
     /** JSON 配列。`"7"` (大分類) か `"7-0"` (中分類まで)。NULL は全ジャンル */
     genres: json('genres', strings),
-    enabled: flag('enabled').notNull().default(sql`1`),
+    enabled: flag('enabled')
+        .notNull()
+        .default(sql`1`),
     /**
      * チューナーが足りないとき、どの予約を残すか。大きいほうが残る (conflict.ts)。
      * **エージェントに渡すチューナーの取り合いの優先度 (`config.priority`) とは別物** (docs/agent.md)。
@@ -257,7 +267,9 @@ export const rules = sqliteTable('rules', {
      * 画面で新しく作るルールは入れた状態で始まる。列を足す前のルールは 0 のまま
      * (今までどおり全部録る。黙って振る舞いを変えない)
      */
-    dedupe: flag('dedupe').notNull().default(sql`0`),
+    dedupe: flag('dedupe')
+        .notNull()
+        .default(sql`0`),
     created_at: integer('created_at').notNull(),
     /** 引き継ぎ元での識別子 (例: epgstation:12)。自分で作ったものは NULL */
     source: text('source'),
@@ -283,12 +295,16 @@ export const reservations = sqliteTable(
         start_at: integer('start_at').notNull(),
         end_at: integer('end_at').notNull(),
         priority: integer('priority').notNull().default(2),
-        manual: flag('manual').notNull().default(sql`0`),
+        manual: flag('manual')
+            .notNull()
+            .default(sql`0`),
         /**
          * 「エンコードするか否か」だけは予約した時点で固定する (recorder が読む)。エンコード方法の細目
          * (元のTSを残すか・CMの扱い・コーデック) は持たず、エンコードするときに settings を見る
          */
-        encode: flag('encode').notNull().default(sql`1`),
+        encode: flag('encode')
+            .notNull()
+            .default(sql`1`),
         /**
          * missed = 始まらないまま放送が終わったもの (アプリが止まっていた等)。
          * skipped = **録らないと決めたもの** (コピー禁止の番組。`scheduler.resolveConflicts`)。

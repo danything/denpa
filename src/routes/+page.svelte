@@ -256,7 +256,8 @@
      */
     function openMissed(res: (typeof data.missed)[number]): void {
         const text =
-            res.conflict_reason ?? 'アプリが止まっていたなどの理由で、録画を始められないまま放送が終わりました';
+            res.conflict_reason ??
+            'アプリが止まっていたなどの理由で、録画を始められないまま放送が終わりました';
         openDetail(res.program_id, res, [{ title: '録り逃しました', text }]);
     }
 
@@ -286,40 +287,34 @@
     const merged = $derived(mergeRecorded(data.reservations, data.recordings, clock));
 
     const items = $derived<Item[]>([
-        ...merged.reservations.map(
-            (res): Item => ({
-                kind: 'res',
-                key: `res-${res.id}`,
-                at: res.start_at,
-                zone: zoneOf(res, clock),
-                group: res.group_key,
-                groupName: res.group_name,
-                res,
-            }),
-        ),
-        ...data.recordings.map(
-            (rec): Item => ({
-                kind: 'rec',
-                key: `rec-${rec.id}`,
-                at: rec.start_at,
-                zone: 'past',
-                group: rec.group_key,
-                groupName: rec.group_name,
-                // 予約にしか無かった副題は予約の名前で (`mergeRecorded` の `names`)
-                rec: merged.names.has(rec.id) ? { ...rec, name: merged.names.get(rec.id) ?? rec.name } : rec,
-            }),
-        ),
-        ...data.missed.map(
-            (res): Item => ({
-                kind: 'missed',
-                key: `missed-${res.id}`,
-                at: res.start_at,
-                zone: 'past',
-                group: res.group_key,
-                groupName: res.group_name,
-                res,
-            }),
-        ),
+        ...merged.reservations.map((res): Item => ({
+            kind: 'res',
+            key: `res-${res.id}`,
+            at: res.start_at,
+            zone: zoneOf(res, clock),
+            group: res.group_key,
+            groupName: res.group_name,
+            res,
+        })),
+        ...data.recordings.map((rec): Item => ({
+            kind: 'rec',
+            key: `rec-${rec.id}`,
+            at: rec.start_at,
+            zone: 'past',
+            group: rec.group_key,
+            groupName: rec.group_name,
+            // 予約にしか無かった副題は予約の名前で (`mergeRecorded` の `names`)
+            rec: merged.names.has(rec.id) ? { ...rec, name: merged.names.get(rec.id) ?? rec.name } : rec,
+        })),
+        ...data.missed.map((res): Item => ({
+            kind: 'missed',
+            key: `missed-${res.id}`,
+            at: res.start_at,
+            zone: 'past',
+            group: res.group_key,
+            groupName: res.group_name,
+            res,
+        })),
     ]);
 
     /**
@@ -336,7 +331,7 @@
         return {
             unfinished: unfinished(item),
             failed:
-                (item.kind === 'rec' && (item.rec.state === 'failed' || (item.rec.encode_error ?? '') !== '')),
+                item.kind === 'rec' && (item.rec.state === 'failed' || (item.rec.encode_error ?? '') !== ''),
             missed: item.kind === 'missed',
             conflict: item.kind === 'res' && item.res.state === 'conflict',
             cmlogo: item.kind === 'rec' && item.rec.deleted_at === null && logoUnusable(item.rec.cm_note),
@@ -402,7 +397,9 @@
      * 予約が多いと、画面の外の行まで作るぶん開くのが一コマ重くなっていた
      */
     let futureShown = $state(FIRST_ROWS);
-    const futureRows = $derived(lines.future.length <= futureShown ? lines.future : lines.future.slice(0, futureShown));
+    const futureRows = $derived(
+        lines.future.length <= futureShown ? lines.future : lines.future.slice(0, futureShown),
+    );
     /** 描く頭の行。見出しの途中から描かないよう、見出しまで戻す (`pageStart`) */
     const pastStart = $derived(pageStart(lines.past, pastPage.shown));
     const pastRows = $derived(lines.past.slice(pastStart));
@@ -593,7 +590,6 @@
     }
     const calendar = $derived({ marks: dayMarks, today, pinned, onpick: (day: number) => void pickDay(day) });
 
-
     setHome({
         get clock() {
             return clock;
@@ -646,7 +642,9 @@
         {#each Object.entries(fields) as [name, value] (name)}
             <input type="hidden" {name} {value} />
         {/each}
-        <button type="submit" role="menuitem" class="menu-item" data-keep-open data-testid={testid}>{label}</button>
+        <button type="submit" role="menuitem" class="menu-item" data-keep-open data-testid={testid}
+            >{label}</button
+        >
     </form>
 {/snippet}
 
@@ -668,7 +666,13 @@
     />
 
     <div class="t-main">
-        <section class="t-list" bind:this={listBox} onscroll={trackPinned} aria-label="予約と録画" data-testid="timeline">
+        <section
+            class="t-list"
+            bind:this={listBox}
+            onscroll={trackPinned}
+            aria-label="予約と録画"
+            data-testid="timeline"
+        >
             <!--
                 **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
                 上限に当たっていたら、いちばん古い録画の上 (一覧の頭) に検索へ誘う一行を出す (`+page.server.ts` の LIMIT 300)
@@ -680,7 +684,11 @@
             {/if}
             {#if pastStart > 0}
                 <!-- 頭に近づいたら古いほうを上へ足す (`sentinel`・`revealOlder`)。残りが無くなれば消える -->
-                <div class="row-empty muted small num" use:sentinel={() => void revealOlder()} data-testid="recording-more">
+                <div
+                    class="row-empty muted small num"
+                    use:sentinel={() => void revealOlder()}
+                    data-testid="recording-more"
+                >
                     残り {pastRest} 件
                 </div>
             {/if}
@@ -705,7 +713,8 @@
                         <p class="empty-hint">番組表から予約するか、ルールを作ると自動で入ります</p>
                         <div class="empty-actions">
                             <a class="button small" href={resolve('guide')}>番組表を開く</a>
-                            <a class="button secondary outline small" href={resolve('search')}>ルールを作る</a>
+                            <a class="button secondary outline small" href={resolve('search')}>ルールを作る</a
+                            >
                         </div>
                     </div>
                 {:else}
@@ -856,7 +865,9 @@
             -->
             <Menu side="top" align="end" class="more-menu" testid="detail-more-menu">
                 {#snippet trigger(props)}
-                    <button {...props} type="button" class="secondary outline" data-testid="detail-more">その他…</button>
+                    <button {...props} type="button" class="secondary outline" data-testid="detail-more"
+                        >その他…</button
+                    >
                 {/snippet}
                 <!--
                     **未視聴の印を付け外しする** (`?/watched`)。末尾まで観れば勝手に外れる
@@ -876,7 +887,13 @@
                         録り直しの元になるのは元のTS。エンコード済みを元にしても
                         画質は戻らないので、元のTSがあるときだけ出す
                     -->
-                    {@render menuSubmit('?/reencode', '再エンコード', 'reencode-button', { id: rec.id }, detail.close)}
+                    {@render menuSubmit(
+                        '?/reencode',
+                        '再エンコード',
+                        'reencode-button',
+                        { id: rec.id },
+                        detail.close,
+                    )}
                 {/if}
                 {#if rec.job_id === null && cmRedo(rec).state !== 'hidden'}
                     {@const redo = cmRedo(rec)}
@@ -887,12 +904,25 @@
                         閉じるのは投げ終わってから (再エンコードと同じ)
                     -->
                     {#if redo.state === 'disabled'}
-                        <div role="menuitem" class="menu-item" aria-disabled="true" data-disabled tabindex="-1" data-testid="cm-redo-button">
+                        <div
+                            role="menuitem"
+                            class="menu-item"
+                            aria-disabled="true"
+                            data-disabled
+                            tabindex="-1"
+                            data-testid="cm-redo-button"
+                        >
                             CM検出をやり直す
                         </div>
                         <div class="menu-note muted small">{redo.reason}</div>
                     {:else}
-                        {@render menuSubmit('?/redetectCm', 'CM検出をやり直す', 'cm-redo-button', { id: rec.id }, detail.close)}
+                        {@render menuSubmit(
+                            '?/redetectCm',
+                            'CM検出をやり直す',
+                            'cm-redo-button',
+                            { id: rec.id },
+                            detail.close,
+                        )}
                     {/if}
                 {/if}
             </Menu>

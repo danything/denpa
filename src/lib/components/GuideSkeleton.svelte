@@ -10,7 +10,12 @@
     列は 11rem から。届いたときに表の位置が飛ばない。
     桝は列ごとに 1 枚の板を切り抜いて作る (`skeletonMask`)。下の端まで埋まる
 -->
-<div class="skeleton guide-skeleton" data-testid="guide-skeleton" role="status" aria-label="番組表を読み込んでいます">
+<div
+    class="skeleton guide-skeleton"
+    data-testid="guide-skeleton"
+    role="status"
+    aria-label="番組表を読み込んでいます"
+>
     <div class="time" aria-hidden="true"></div>
     {#each { length: SKELETON_COLUMNS } as _, column (column)}
         <div class="column" aria-hidden="true">

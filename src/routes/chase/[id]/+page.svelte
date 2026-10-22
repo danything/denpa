@@ -15,7 +15,17 @@
     import FactsAside from '#lib/components/player/FactsAside.svelte';
     import { stageFullscreen } from '#lib/components/player/fullscreen.svelte.js';
     import InfoBlock from '#lib/components/player/InfoBlock.svelte';
-    import { AUDIO, CAMERA, CAPTION, CODEC, PAUSE, PLAY, SOUND_OFF, SOUND_ON, SPEED } from '#lib/components/player/icons.js';
+    import {
+        AUDIO,
+        CAMERA,
+        CAPTION,
+        CODEC,
+        PAUSE,
+        PLAY,
+        SOUND_OFF,
+        SOUND_ON,
+        SPEED,
+    } from '#lib/components/player/icons.js';
     import { playerKeys } from '#lib/components/player/keys.js';
     import MediaStack from '#lib/components/player/MediaStack.svelte';
     import PlayerLayout from '#lib/components/player/PlayerLayout.svelte';
@@ -250,61 +260,57 @@
     <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
     <PlayerStage {controls} {fullscreen} {ambient} testid="chase" bind:element={stageEl}>
         {#snippet children(stage)}
-        <MediaStack
-            holding={player.holding}
-            captionsOn={player.captions && player.hasCaptions}
-            onclick={press}
-            prefix="chase"
-            bind:video
-            bind:still
-            bind:overlay
-        />
-
-        <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き) -->
-        <ControlBar side shown={controls.shown}>
-            <CloseLink />
-            <ControlButton
-                icon={CAMERA}
-                label="この場面を切り抜く"
-                onclick={() => void snapshot()}
+            <MediaStack
+                holding={player.holding}
+                captionsOn={player.captions && player.hasCaptions}
+                onclick={press}
+                prefix="chase"
+                bind:video
+                bind:still
+                bind:overlay
             />
-        </ControlBar>
 
-        <ControlBar shown={controls.shown} testid="chase-controls">
-            <!-- シークバーは番組の全長。**録れていないところ (右側) へは飛べない** (`seekTo`) -->
-            <SeekBar value={pos} max={total} step={1} onseek={seekTo} paused={player.paused} />
+            <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き) -->
+            <ControlBar side shown={controls.shown}>
+                <CloseLink />
+                <ControlButton icon={CAMERA} label="この場面を切り抜く" onclick={() => void snapshot()} />
+            </ControlBar>
 
-            <!-- **並びはライブと同じ。** 再生・音・字幕、端 (最新)、読みもの、速さ、再生の設定 (⚙)、全画面 -->
-            <ControlRow testid="chase-buttons">
-                <ControlButton
-                    icon={player.paused ? PLAY : PAUSE}
-                    label={player.paused ? '再生' : '一時停止'}
-                    testid="chase-play"
-                    onclick={() => player.toggle()}
-                />
-                <!--
+            <ControlBar shown={controls.shown} testid="chase-controls">
+                <!-- シークバーは番組の全長。**録れていないところ (右側) へは飛べない** (`seekTo`) -->
+                <SeekBar value={pos} max={total} step={1} onseek={seekTo} paused={player.paused} />
+
+                <!-- **並びはライブと同じ。** 再生・音・字幕、端 (最新)、読みもの、速さ、再生の設定 (⚙)、全画面 -->
+                <ControlRow testid="chase-buttons">
+                    <ControlButton
+                        icon={player.paused ? PLAY : PAUSE}
+                        label={player.paused ? '再生' : '一時停止'}
+                        testid="chase-play"
+                        onclick={() => player.toggle()}
+                    />
+                    <!--
                     **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・最新・読みもの・再生の設定 (⚙)・全画面だけ。**
                     音・字幕と速さ・小窓は再生の設定 (⚙) の頭に入れる (`Extras`・`StageTail` の `fold`。観る画面と同じ)
                 -->
-                <Extras>
-                <ControlButton
-                    icon={player.silenced ? SOUND_OFF : SOUND_ON}
-                    label={player.silenced ? '音を出す' : '音を消す'}
-                    testid="chase-sound"
-                    onclick={() => (player.silenced ? player.unmute() : player.mute())}
-                />
-                {#if player.hasCaptions}
-                    <ControlButton
-                        icon={CAPTION}
-                        label={player.captions ? '字幕を消す' : '字幕を出す'}
-                        on={player.captions}
-                        testid="chase-caption"
-                        onclick={() => player.toggleCaptions()}
-                    />
-                {/if}
-                </Extras>
+                    <Extras>
+                        <ControlButton
+                            icon={player.silenced ? SOUND_OFF : SOUND_ON}
+                            label={player.silenced ? '音を出す' : '音を消す'}
+                            testid="chase-sound"
+                            onclick={() => (player.silenced ? player.unmute() : player.mute())}
+                        />
+                        {#if player.hasCaptions}
+                            <ControlButton
+                                icon={CAPTION}
+                                label={player.captions ? '字幕を消す' : '字幕を出す'}
+                                on={player.captions}
+                                testid="chase-caption"
+                                onclick={() => player.toggleCaptions()}
+                            />
+                        {/if}
+                    </Extras>
 
-                <!--
+                    <!--
                     いま録れているところへ。ライブの「ライブ」に相当し、場所も同じ。
 
                     **録り終わっていたら出しません。** 「最新」は伸びていく端に
@@ -313,129 +319,135 @@
                     録り終えたあともこの画面にいられる (録画済みと出る) ので、
                     そのとき意味の無いボタンが残っていました
                 -->
-                {#if line !== null && !line.finished}
-                    <EdgeButton
-                        active={recorded - pos < 20}
-                        label="最新"
-                        onclick={() => seekTo(recorded)}
-                        testid="chase-edge"
-                    />
-                {/if}
+                    {#if line !== null && !line.finished}
+                        <EdgeButton
+                            active={recorded - pos < 20}
+                            label="最新"
+                            onclick={() => seekTo(recorded)}
+                            testid="chase-edge"
+                        />
+                    {/if}
 
-                <!-- 読みものは3画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
-                <InfoBlock
-                    range={{ start: data.rec.start_at, end: data.rec.end_at }}
-                    service={data.rec.service_name}
-                    title={data.rec.name}
-                    titleTestid="chase-title"
-                >
-                    {#snippet status()}
-                        <span class="clock num">{clockLabel(pos)} / {clockLabel(recorded)}</span>
-                        {#if line !== null && !line.finished}
-                            <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
-                            ・ <span class="rec"><span class="rec-dot"></span>録画中</span>
-                        {:else if line !== null}
-                            ・ 録画済み
-                        {/if}
-                    {/snippet}
-                </InfoBlock>
+                    <!-- 読みものは3画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
+                    <InfoBlock
+                        range={{ start: data.rec.start_at, end: data.rec.end_at }}
+                        service={data.rec.service_name}
+                        title={data.rec.name}
+                        titleTestid="chase-title"
+                    >
+                        {#snippet status()}
+                            <span class="clock num">{clockLabel(pos)} / {clockLabel(recorded)}</span>
+                            {#if line !== null && !line.finished}
+                                <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
+                                ・ <span class="rec"><span class="rec-dot"></span>録画中</span>
+                            {:else if line !== null}
+                                ・ 録画済み
+                            {/if}
+                        {/snippet}
+                    </InfoBlock>
 
-                <!--
+                    <!--
                     追っかけは常に速さを選べる (録れている範囲の中を進むだけ)。
                     **互換モード (canvas に描く) では出さない** — 音を自前で鳴らしていて、等速だけ
                 -->
-                {#if !player.canvas}
-                    <Extras>
-                        <SpeedMenu
-                            testid="chase-speed"
-                            label="再生の速さ"
-                            speed={want}
-                            onselect={setSpeed}
-                        />
-                    </Extras>
-                {/if}
+                    {#if !player.canvas}
+                        <Extras>
+                            <SpeedMenu
+                                testid="chase-speed"
+                                label="再生の速さ"
+                                speed={want}
+                                onselect={setSpeed}
+                            />
+                        </Extras>
+                    {/if}
 
-                <!--
+                    <!--
                     コーデックと音声は再生の設定 (⚙)。コーデックは選び直すと再生していた位置から再エンコード (ライブと同じ)
                 -->
-                <StageTail
-                    prefix="chase"
-                    fold={[
-                        {
-                            kind: 'toggle' as const,
-                            id: 'mute',
-                            label: '消音',
-                            icon: SOUND_OFF,
-                            on: player.silenced,
-                            toggle: () => (player.silenced ? player.unmute() : player.mute()),
-                        },
-                        ...(player.canvas
-                            ? []
-                            : [
-                                  {
-                                      kind: 'choice' as const,
-                                      ...speeds({ icon: SPEED, label: '再生の速さ', speed: want, onselect: setSpeed }),
-                                  },
-                              ]),
-                    ]}
-                    {background}
-                    {ambient}
-                    {pip}
-                    {fullscreen}
-                    {stage}
-                    codec={liveCodecs({
-                        icon: CODEC,
-                        codec: player.codec,
-                        unavailable: player.unavailable,
-                        onselect: (key) => player.setCodec(key),
-                    })}
-                    audio={player.audios.length > 1
-                        ? audioTracks({
-                              icon: AUDIO,
-                              items: player.audios.map((a) => ({
-                                  key: a.id,
-                                  label: a.label,
-                                  active: a.id === player.audio,
-                              })),
-                              onselect: (key) => player.setAudio(key),
-                          })
-                        : undefined}
-                    subtitle={player.hasCaptions
-                        ? subtitles({
-                              icon: CAPTION,
-                              on: player.captions,
-                              tracks: player.captionTracks,
-                              track: player.captionTrack,
-                              languages: player.captionLanguages,
-                              language: player.captionLanguage,
-                              onoff: (on) => player.setCaptions(on),
-                              ontrack: (index) => player.setCaptionTrack(index),
-                              onlanguage: (index) => player.setCaptionLanguage(index),
-                          })
-                        : undefined}
-                />
-            </ControlRow>
-        </ControlBar>
+                    <StageTail
+                        prefix="chase"
+                        fold={[
+                            {
+                                kind: 'toggle' as const,
+                                id: 'mute',
+                                label: '消音',
+                                icon: SOUND_OFF,
+                                on: player.silenced,
+                                toggle: () => (player.silenced ? player.unmute() : player.mute()),
+                            },
+                            ...(player.canvas
+                                ? []
+                                : [
+                                      {
+                                          kind: 'choice' as const,
+                                          ...speeds({
+                                              icon: SPEED,
+                                              label: '再生の速さ',
+                                              speed: want,
+                                              onselect: setSpeed,
+                                          }),
+                                      },
+                                  ]),
+                        ]}
+                        {background}
+                        {ambient}
+                        {pip}
+                        {fullscreen}
+                        {stage}
+                        codec={liveCodecs({
+                            icon: CODEC,
+                            codec: player.codec,
+                            unavailable: player.unavailable,
+                            onselect: (key) => player.setCodec(key),
+                        })}
+                        audio={player.audios.length > 1
+                            ? audioTracks({
+                                  icon: AUDIO,
+                                  items: player.audios.map((a) => ({
+                                      key: a.id,
+                                      label: a.label,
+                                      active: a.id === player.audio,
+                                  })),
+                                  onselect: (key) => player.setAudio(key),
+                              })
+                            : undefined}
+                        subtitle={player.hasCaptions
+                            ? subtitles({
+                                  icon: CAPTION,
+                                  on: player.captions,
+                                  tracks: player.captionTracks,
+                                  track: player.captionTrack,
+                                  languages: player.captionLanguages,
+                                  language: player.captionLanguage,
+                                  onoff: (on) => player.setCaptions(on),
+                                  ontrack: (index) => player.setCaptionTrack(index),
+                                  onlanguage: (index) => player.setCaptionLanguage(index),
+                              })
+                            : undefined}
+                    />
+                </ControlRow>
+            </ControlBar>
 
-        {#if player.state !== 'playing'}
-            <!-- 見た目の決まりはライブと共通 (`PlayerVeil`)。前のフレームを貼っている間は塗り潰さない -->
-            <PlayerVeil
-                holding={player.holding}
-                busy={player.state !== 'error'}
-                note={player.resuming ? '繋ぎ直しています' : ''}
-                error={player.state === 'error' ? player.message : ''}
-                testid="chase-status"
-            >
-                {#snippet actions()}
-                    <button type="button"
-                        class="small"
-                        onclick={() => video !== null && void player.openChase(video, data.rec.id, pos)}
-                    >
-                        やり直す
-                    </button>
-                {/snippet}
-            </PlayerVeil>
-        {/if}
+            {#if player.state !== 'playing'}
+                <!-- 見た目の決まりはライブと共通 (`PlayerVeil`)。前のフレームを貼っている間は塗り潰さない -->
+                <PlayerVeil
+                    holding={player.holding}
+                    busy={player.state !== 'error'}
+                    note={player.resuming ? '繋ぎ直しています' : ''}
+                    error={player.state === 'error' ? player.message : ''}
+                    testid="chase-status"
+                >
+                    {#snippet actions()}
+                        <button
+                            type="button"
+                            class="small"
+                            onclick={() => video !== null && void player.openChase(video, data.rec.id, pos)}
+                        >
+                            やり直す
+                        </button>
+                    {/snippet}
+                </PlayerVeil>
+            {/if}
         {/snippet}
 
         <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。いくつ出ても重ならない -->

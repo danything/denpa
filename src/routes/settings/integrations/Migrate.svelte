@@ -56,7 +56,12 @@
                     detail="既定はコピーです。中身を確かめてから EPGStation 側を消せます。"
                 />
                 <div>
-                    <button type="submit" class="small" disabled={migrate.state === 'running'} data-testid="migrate-run">
+                    <button
+                        type="submit"
+                        class="small"
+                        disabled={migrate.state === 'running'}
+                        data-testid="migrate-run"
+                    >
                         {migrate.state === 'running' ? '実行中…' : '実行'}
                     </button>
                 </div>

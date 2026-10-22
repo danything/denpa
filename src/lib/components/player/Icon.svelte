@@ -7,8 +7,7 @@
      * 各画面が同じ `{#snippet icon}` を別々に持っていたのをまとめたもの。
      * 読み上げはボタンの `aria-label` に任せるので、アイコンそのものは隠す
      */
-    let { icon: Shape, size = 'size-6' }: { icon: IconShape; size?: string } =
-        $props();
+    let { icon: Shape, size = 'size-6' }: { icon: IconShape; size?: string } = $props();
     /** 大きさは `size-N` (N × 0.25rem。Tailwind の頃の書き方をそのまま受ける) */
     const rem = $derived(Number(/^size-(\d+(?:\.\d+)?)$/.exec(size)?.[1] ?? 6) * 0.25);
 </script>

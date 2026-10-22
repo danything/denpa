@@ -1,0 +1,37 @@
+# 整形 (`bun fmt`。`package.json` の format・lint から呼ぶ)
+[fmt]
+tabWidth = 4
+printWidth = 110
+singleQuote = true
+trailingComma = "all"
+semi = true
+ignorePatterns = [
+    "static/",
+    "deploy/",
+    # Helm のテンプレートは Go のテンプレートで、YAML として読めない
+    "charts/*/templates/",
+    # drizzle-kit が出すマイグレーション (SQL と snapshot の JSON)。手では触らない
+    "drizzle/",
+    "renovate.json",
+    "agent/Denpa.Agent/",
+    "agent/Denpa.Agent.Tests/",
+    "agent/publish/",
+    # 文書サイト。ビルドの成果物と、scripts/import-docs.ts が docs から書き出すもの
+    # アイコンは static/ の写し (static/ と同じく外す)
+    "site/public/",
+    "site/src/assets/logo.svg",
+    "site/dist/",
+    "site/.astro/",
+    "site/src/content/docs/",
+    "site/src/assets/docs/",
+    "site/src/generated/",
+    "site/test-results/",
+    "site/playwright-report/",
+    # 区点と突き合わせる表
+    "src/lib/ts/b24-tables.ts",
+]
+
+# YAML は 2 字下げ (compose・Helm・GitHub Actions の慣わし)
+[[fmt.overrides]]
+files = ["*.yml", "*.yaml"]
+options = { tabWidth = 2 }

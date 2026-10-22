@@ -128,7 +128,9 @@
     }
 
     function items(): HTMLElement[] {
-        return content === null ? [] : [...content.querySelectorAll<HTMLElement>('.menu-item:not([data-disabled])')];
+        return content === null
+            ? []
+            : [...content.querySelectorAll<HTMLElement>('.menu-item:not([data-disabled])')];
     }
 
     /** `open` を枠に写す (呼び出し側が閉じることもある。送り終えたときなど) */
@@ -138,8 +140,7 @@
         if (open && !shown) {
             filled = true;
             content.showPopover();
-        }
-        else if (!open && shown) content.hidePopover();
+        } else if (!open && shown) content.hidePopover();
     });
 
     /** 枠の開け閉めを `open` に写す */
@@ -185,7 +186,8 @@
         if (!open) return;
         const onpointerdown = (event: PointerEvent) => {
             const target = event.target;
-            if (target instanceof Node && (content?.contains(target) || triggerElement()?.contains(target))) return;
+            if (target instanceof Node && (content?.contains(target) || triggerElement()?.contains(target)))
+                return;
             swallowPress(event);
             open = false;
         };
@@ -238,7 +240,16 @@
         const area = boundary?.() ?? null;
         const style = element.style;
         if (area === null && anchorSupported) {
-            for (const name of ['position-area', 'position-try-fallbacks', 'inset', 'margin', 'top', 'left', 'min-width', 'max-height']) {
+            for (const name of [
+                'position-area',
+                'position-try-fallbacks',
+                'inset',
+                'margin',
+                'top',
+                'left',
+                'min-width',
+                'max-height',
+            ]) {
                 style.removeProperty(name);
             }
             placed = sizeOf(element);
@@ -329,7 +340,8 @@
     /** 項目を押したら閉じる。押せない項目と、送り終えてから閉じる項目 (`data-keep-open`) はそのまま */
     function onclick(event: MouseEvent): void {
         const item = (event.target as Element).closest('.menu-item');
-        if (item === null || item.hasAttribute('data-disabled') || item.hasAttribute('data-keep-open')) return;
+        if (item === null || item.hasAttribute('data-disabled') || item.hasAttribute('data-keep-open'))
+            return;
         open = false;
     }
 

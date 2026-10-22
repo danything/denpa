@@ -42,7 +42,7 @@
     --dp-surface: #1a1b20; /* 表の見出しの面 */
 }
 
-:root[data-theme="light"] {
+:root[data-theme='light'] {
     --sl-color-accent-low: #c0e6f9; /* --pico-text-selection-color (#029ae8 の 25%) を白に重ねた色 */
     --sl-color-accent: #0172ad; /* --pico-primary */
     --sl-color-accent-high: #015887; /* --pico-primary-hover */
@@ -82,8 +82,8 @@
  * サイドバーの開いているページは淡い面で (アプリのサイドバーの一覧と同じ)。
  * Starlight の既定は主の色で塗って白い字で、一覧の中でそこだけが強すぎた
  */
-.sidebar-content a[aria-current="page"],
-.sidebar-content a[aria-current="page"]:is(:hover, :focus) {
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:is(:hover, :focus) {
     background-color: var(--sl-color-gray-6);
     color: var(--sl-color-white);
 }
@@ -155,7 +155,7 @@
 }
 
 /* インラインの code の枠 (白い地で面が見えるように)。暗いほうは地との差があるので枠は付けない */
-:root[data-theme="light"] .sl-markdown-content :not(pre) > code {
+:root[data-theme='light'] .sl-markdown-content :not(pre) > code {
     border: 1px solid var(--sl-color-hairline-light);
 }
 

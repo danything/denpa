@@ -122,7 +122,11 @@
                         使えなくすると「BSを取っている間ずっと押せない」に逆戻りする
                     -->
                     {#if data.logos.pending > 0}
-                        <ActionButton action="?/logoSweep" class="small secondary outline" testid="logo-sweep">
+                        <ActionButton
+                            action="?/logoSweep"
+                            class="small secondary outline"
+                            testid="logo-sweep"
+                        >
                             {data.logoSweep.running ? 'ロゴを集めています…' : 'ロゴをいますぐ集める'}
                         </ActionButton>
                     {/if}
@@ -155,7 +159,9 @@
                 <span class="logo-counts">
                     <span class="muted">局ロゴ</span>
                     <span
-                        class="tag num {data.logos.have + data.logos.unavailable >= data.logos.total ? 'success' : ''}"
+                        class="tag num {data.logos.have + data.logos.unavailable >= data.logos.total
+                            ? 'success'
+                            : ''}"
                         data-testid="status-logos"
                     >
                         {data.logos.have} / {data.logos.total} 局
@@ -173,7 +179,8 @@
                     CS のロゴは BS の中継から降ってくる
                 -->
                 <div class="tiny muted" data-testid="logo-unavailable">
-                    <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません (1週間後にまた確かめます)
+                    <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません
+                    (1週間後にまた確かめます)
                 </div>
             {/if}
         {/if}
@@ -245,29 +252,35 @@
                 1つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません
                 {#snippet more()}
                     <p>
-                        スキャンは空いているチューナーを全部使います (録画中のチューナーは使いません)。録画中でも実行でき、
+                        スキャンは空いているチューナーを全部使います
+                        (録画中のチューナーは使いません)。録画中でも実行でき、
                         画面を閉じてもサーバで続きます。終わると番組表も集め直します。
                     </p>
                     <p>
-                        番組表はスキャンのあと、局ごとに埋まっていきます。BS の初回は、1つの中継から全局の番組名を先に入れ (数分)、
+                        番組表はスキャンのあと、局ごとに埋まっていきます。BS
+                        の初回は、1つの中継から全局の番組名を先に入れ (数分)、
                         番組内容などの詳細はそのあと中継ごとに回って足します。
                     </p>
                     <p>
-                        待てないときは<strong>「番組表をいますぐ集める」</strong>で、録画とライブ視聴に使っていないチューナーを全部使って集められます
+                        待てないときは<strong>「番組表をいますぐ集める」</strong
+                        >で、録画とライブ視聴に使っていないチューナーを全部使って集められます
                         (スキャンやロゴの取得は止めます)。
                     </p>
                     <!-- 局ロゴ。放送波から取得するしかない。番組表に出ないとき、取れていないのか出し方が悪いのかをここで見分ける -->
                     <p>
-                        <strong>局ロゴ</strong>は番組表と一覧に出すもので、番組表を集めるときにあわせて取得します。
-                        放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong>で、取れたロゴも1週間ごとに取り直します。
-                        点線の枠は、まだ取れていない局です。
+                        <strong>局ロゴ</strong
+                        >は番組表と一覧に出すもので、番組表を集めるときにあわせて取得します。
+                        放送波に流れるのは数十秒〜数分に一度、<strong>衛星は十数分に一度</strong
+                        >で、取れたロゴも1週間ごとに取り直します。 点線の枠は、まだ取れていない局です。
                     </p>
                     <p>
-                        「ロゴをいますぐ集める」では衛星の分も集めます。<strong>BS と CS のロゴは同じ1つの中継で流れる</strong>ため、
-                        そこだけ最大20分かかります (他の中継は数秒で終わります)。
+                        「ロゴをいますぐ集める」では衛星の分も集めます。<strong
+                            >BS と CS のロゴは同じ1つの中継で流れる</strong
+                        >ため、 そこだけ最大20分かかります (他の中継は数秒で終わります)。
                     </p>
                     <p>
-                        <strong>CMロゴ</strong>は、CM検出のために録画から覚えたロゴの位置と形です。録画をエンコードするときに自動で覚えます。
+                        <strong>CMロゴ</strong
+                        >は、CM検出のために録画から覚えたロゴの位置と形です。録画をエンコードするときに自動で覚えます。
                         ロゴを押すと大きく見られます。ロゴの形になっていなければ、そこで「覚え直す」で消すと、次の録画で覚え直します。
                     </p>
                 {/snippet}
@@ -325,12 +338,15 @@
                                             <span class="broadcast">{service.name}</span>
                                         </span>
                                     </td>
-                                    <td class="logo-col">{@render stationLogo(service.id, service.name, true)}</td>
+                                    <td class="logo-col"
+                                        >{@render stationLogo(service.id, service.name, true)}</td
+                                    >
                                     <!-- まだ覚えていない局と、CM検出の対象でない局 (サブチャンネルなど) は空けておく -->
                                     <td class="logo-col">{@render cmLogo(service.id, service.name, true)}</td>
                                     <td class="small nowrap num">
                                         {#if service.programs > 0}
-                                            {service.programs} 件 <span class="tiny muted until">{until(service.until)}</span>
+                                            {service.programs} 件
+                                            <span class="tiny muted until">{until(service.until)}</span>
                                         {:else}
                                             <span class="muted">—</span>
                                         {/if}

@@ -10,13 +10,18 @@
     import { home, type Item } from './context';
     import Poster from './Poster.svelte';
 
-    let { group, zone, open }: { group: SeriesGroup<Item>; zone: 'future' | 'past'; open: boolean } = $props();
+    let { group, zone, open }: { group: SeriesGroup<Item>; zone: 'future' | 'past'; open: boolean } =
+        $props();
     const ctx = home();
 
     const posterRec = $derived(
-        group.items.findLast((item) => item.kind === 'rec' && item.rec.library_path !== null && item.rec.deleted_at === null),
+        group.items.findLast(
+            (item) => item.kind === 'rec' && item.rec.library_path !== null && item.rec.deleted_at === null,
+        ),
     );
-    const fresh = $derived(group.items.filter((item) => item.kind === 'rec' && ctx.unwatched(item.rec)).length);
+    const fresh = $derived(
+        group.items.filter((item) => item.kind === 'rec' && ctx.unwatched(item.rec)).length,
+    );
     const next = $derived(zone === 'future' ? (group.items[0] ?? group.newest) : group.newest);
 </script>
 

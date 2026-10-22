@@ -510,7 +510,7 @@ class Timeline {
             if (mine === undefined) return base;
             return byTime(base, mine) <= 0 ? base : mine;
         };
-        for (let mark = next(); mark !== undefined; ) {
+        for (let mark = next(); mark !== undefined;) {
             const at = mark.at;
             for (; mark !== undefined && mark.at === at; mark = next()) {
                 if (mark === this.marks[n]) n++;
@@ -560,7 +560,7 @@ class Timeline {
         const times: number[] = [];
         const before: Tuners[] = [];
         let resume: number | null = null;
-        for (let n = firstAt(this.marks, start); n < this.marks.length; ) {
+        for (let n = firstAt(this.marks, start); n < this.marks.length;) {
             const at = this.marks[n]!.at;
             times.push(at);
             before.push(tuners.clone());

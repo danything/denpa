@@ -47,7 +47,7 @@
     cursor: pointer;
 }
 .board .row-open::after {
-    content: "";
+    content: '';
     position: absolute;
     inset: 0;
     z-index: 1;
@@ -365,7 +365,7 @@
     --pico-background-color: var(--dp-btn-tonal-hover);
 }
 /* 選んでいるチップは色を付けず、一覧の選んだ行と同じ地に太字 (`app.css` の `.chip` と同じ。青は焦点とリンクだけ) */
-.board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
+.board .t-toolbar .t-chips > .t-chip[aria-pressed='true'] {
     --pico-background-color: var(--dp-row-selected);
     --pico-color: var(--dp-fg);
     font-weight: var(--dp-weight-bold);
@@ -418,10 +418,7 @@
     /* 一覧が短くても頭の1行が下のタブのすぐ上に来るよう、ページの高さいっぱいまで伸ばす (下の余白は打ち消す) */
     .board {
         min-height: calc(
-            100svh -
-            env(safe-area-inset-top, 0px) -
-            var(--dp-page-top, 0.5rem) -
-            var(--dp-tabbar, 0px)
+            100svh - env(safe-area-inset-top, 0px) - var(--dp-page-top, 0.5rem) - var(--dp-tabbar, 0px)
         );
         margin-bottom: calc(-1 * var(--dp-gutter, 1rem));
     }
@@ -606,7 +603,7 @@
         overflow: visible;
     }
     /* 行の操作はアイコンだけ (字は読み上げにだけ渡す)。番組名に幅を回す */
-    .board .t-row .row-actions button:not([data-testid="delete-confirm"]) .btn-label {
+    .board .t-row .row-actions button:not([data-testid='delete-confirm']) .btn-label {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -623,7 +620,7 @@
     padding-left: 2.25rem;
 }
 .board .row.nested::before {
-    content: "";
+    content: '';
     position: absolute;
     inset-block: 0;
     left: 1.25rem;
@@ -669,7 +666,7 @@
     transition: background-color var(--dp-duration) var(--dp-ease);
 }
 .board .s-switch::after {
-    content: "";
+    content: '';
     position: absolute;
     top: 0.1875rem;
     left: 0.1875rem;
@@ -777,7 +774,7 @@
     color: inherit;
     font-weight: var(--dp-weight-bold);
 }
-.board .a-warn[aria-pressed="true"] {
+.board .a-warn[aria-pressed='true'] {
     background: color-mix(in srgb, var(--dp-warn) 16%, transparent);
 }
 .board .a-warn-label {
@@ -790,7 +787,7 @@
     --pico-background-color: color-mix(in srgb, var(--dp-warn) 16%, transparent);
     --pico-color: var(--dp-warn-text);
 }
-.board .t-toolbar .t-chips > .t-chip.warn[aria-pressed="true"] {
+.board .t-toolbar .t-chips > .t-chip.warn[aria-pressed='true'] {
     --pico-background-color: var(--dp-warn);
     --pico-color: #1a1300;
 }
@@ -888,7 +885,7 @@
     transition: background-color var(--dp-duration);
 }
 /* 行の無い日は沈めて押せない (読み上げには aria-disabled) */
-.board .cal-day[aria-disabled="true"] {
+.board .cal-day[aria-disabled='true'] {
     opacity: 0.5;
     cursor: default;
 }
@@ -896,7 +893,7 @@
     color: var(--dp-fg);
 }
 .board .cal-day.has::after {
-    content: "";
+    content: '';
     position: absolute;
     bottom: 0.3125rem;
     left: 50%;
@@ -906,7 +903,7 @@
     background: currentColor;
     transform: translateX(-50%);
 }
-.board .cal-day:not([aria-disabled="true"]):hover {
+.board .cal-day:not([aria-disabled='true']):hover {
     background: var(--dp-hover-soft);
 }
 /*
@@ -914,7 +911,7 @@
  * 形はほかの日の指を乗せたときの塗りと同じ角丸に揃える (今日だけ丸にしない)
  */
 .board .cal-day.pinned,
-.board .cal-day.pinned:not([aria-disabled="true"]):hover {
+.board .cal-day.pinned:not([aria-disabled='true']):hover {
     background: var(--dp-fg);
     color: var(--dp-bg);
     font-weight: var(--dp-weight-bold);

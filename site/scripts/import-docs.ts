@@ -196,7 +196,7 @@ function top() {
     };
     const lines = readmeText.split('\n');
     const from = (findH1(lines)?.index ?? -1) + 1;
-    const next = lines.findIndex((l, i) => i >= from && /^## /.test(l));
+    const next = lines.findIndex((l, i) => i >= from && l.startsWith('## '));
     // サイトそのものへの案内 (GitHub で読む人向けの 1 行) はトップには出さない
     const intro = write(
         'intro',

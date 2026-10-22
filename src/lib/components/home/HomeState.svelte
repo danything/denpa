@@ -40,7 +40,10 @@
     {#if capacity !== null}
         <div class="side-item static">
             <dt>空き</dt>
-            <dd class="side-sub num" data-testid={where === 'side' ? 'recordings-capacity' : 'recordings-capacity-menu'}>
+            <dd
+                class="side-sub num"
+                data-testid={where === 'side' ? 'recordings-capacity' : 'recordings-capacity-menu'}
+            >
                 {capacity.free.replace(/^空き\s*/, '')}{capacity.hours === null ? '' : `・${capacity.hours}`}
             </dd>
         </div>

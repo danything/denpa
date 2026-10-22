@@ -57,8 +57,20 @@
         /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
         subtitle?: SettingChoice | undefined;
     }
-    let { prefix, background, ambient, pip, fullscreen, stage, codec, audio, cm, data, subtitle, fold = [] }: Props =
-        $props();
+    let {
+        prefix,
+        background,
+        ambient,
+        pip,
+        fullscreen,
+        stage,
+        codec,
+        audio,
+        cm,
+        data,
+        subtitle,
+        fold = [],
+    }: Props = $props();
 
     /** 狭い枠で ⚙ の頭に入れるもの。小窓は出せる端末だけ */
     const head = $derived<SettingRow[]>(
@@ -107,12 +119,29 @@
     }
 
     const toggles = $derived<SettingToggle[]>([
-        ...(cm === undefined ? [] : [{ id: 'skip-cm', label: 'CMスキップ', icon: CUT, on: cm.on, toggle: cm.toggle }]),
+        ...(cm === undefined
+            ? []
+            : [{ id: 'skip-cm', label: 'CMスキップ', icon: CUT, on: cm.on, toggle: cm.toggle }]),
         // 出すとリモコンが右の列に出るので、メニューは閉じる
         ...(data === undefined
             ? []
-            : [{ id: 'data', label: 'データ放送', icon: DATA, on: data.on, toggle: data.toggle, closes: true }]),
-        { id: 'ambient', label: 'アンビエントモード', icon: AMBIENT, on: ambient.on, toggle: () => ambient.toggle() },
+            : [
+                  {
+                      id: 'data',
+                      label: 'データ放送',
+                      icon: DATA,
+                      on: data.on,
+                      toggle: data.toggle,
+                      closes: true,
+                  },
+              ]),
+        {
+            id: 'ambient',
+            label: 'アンビエントモード',
+            icon: AMBIENT,
+            on: ambient.on,
+            toggle: () => ambient.toggle(),
+        },
         {
             id: 'background',
             label: 'バックグラウンド再生',

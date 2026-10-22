@@ -246,7 +246,14 @@ export function searchRecordings(q: string, options: SearchOptions) {
         options,
         page,
         (rec) => hasAll(words, rec.name, rec.series, rec.subtitle, rec.service_name),
-        () => counted(orm().select({ n: sql<number>`count(*)` }).from(recordings).where(where).get()),
+        () =>
+            counted(
+                orm()
+                    .select({ n: sql<number>`count(*)` })
+                    .from(recordings)
+                    .where(where)
+                    .get(),
+            ),
     );
     // 配信は library_path ?? ts_path を返す。どちらも無ければ観られない (パスそのものは画面に渡さない)
     return {

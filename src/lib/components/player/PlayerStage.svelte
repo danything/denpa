@@ -112,7 +112,8 @@
              * 幅で畳んでいるときは見ない (操作バーを下に出すと、枠の高さに操作バーが入る)
              */
             const height = target.clientHeight;
-            short = !narrow && ((height < 300 && height < (target.clientWidth * 9) / 16 - 1) || phone.matches);
+            short =
+                !narrow && ((height < 300 && height < (target.clientWidth * 9) / 16 - 1) || phone.matches);
         };
         measure();
         const watcher = new ResizeObserver(measure);
@@ -152,7 +153,12 @@
         target.addEventListener('loadedmetadata', read, true);
         // エンジンの canvas が出入りした・形を書き換えた
         const changes = new MutationObserver(read);
-        changes.observe(target, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-aspect'] });
+        changes.observe(target, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ['data-aspect'],
+        });
         return () => {
             target.removeEventListener('resize', read, true);
             target.removeEventListener('loadedmetadata', read, true);
@@ -203,7 +209,8 @@
          */
         const inner = new MutationObserver((records) => {
             const isElement = (node: Node) => node.nodeType === Node.ELEMENT_NODE;
-            if (records.some((r) => [...r.addedNodes].some(isElement) || [...r.removedNodes].some(isElement))) measure();
+            if (records.some((r) => [...r.addedNodes].some(isElement) || [...r.removedNodes].some(isElement)))
+                measure();
         });
         const attach = () => {
             const next = target.querySelector<HTMLElement>(':scope > [data-stage-bar] [data-stage-row]');
@@ -288,7 +295,12 @@
          * データ放送の小窓へ出入りしたとき (`data-bml-window`)・canvas が足されたとき (`childList`) に測り直す
          */
         const inks = new MutationObserver(lift);
-        inks.observe(stage, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-ink', 'data-bml-window'] });
+        inks.observe(stage, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ['data-ink', 'data-bml-window'],
+        });
         const sizes = new ResizeObserver(lift);
         sizes.observe(stage);
         const bar = stage.querySelector(':scope > [data-stage-bar]');
@@ -297,7 +309,8 @@
         return () => {
             inks.disconnect();
             sizes.disconnect();
-            for (const canvas of stage.querySelectorAll<HTMLElement>('canvas[data-ink]')) canvas.style.translate = '';
+            for (const canvas of stage.querySelectorAll<HTMLElement>('canvas[data-ink]'))
+                canvas.style.translate = '';
         };
     });
 </script>
@@ -310,47 +323,47 @@
     枠の置き場。二段組では、枠が使える広さ (列の幅と高さ) をここで測る (下の style の `container-type`)
 -->
 <div class="room">
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!--
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!--
     **映像の周りは黒** (letterbox の帯にテーマ色を出さない)。縦横比は 16:9 (二段組では映像の形。下の style) で、高さは
     画面に収まるまで。**低くしすぎない** (224px) — 上下と右に操作バーを重ねるので、
     それより低いと操作バーどうしが重なって押せなくなる
 -->
-<div
-    bind:this={element}
-    class="stage"
-    style:--dp-aspect={aspect}
-    class:quiet={!controls.shown}
-    data-compact={compact ? '' : undefined}
-    data-fold={fold ? '' : undefined}
-    data-narrow={slim ? '' : undefined}
-    data-pseudo={fullscreen.pseudo ? '' : undefined}
-    onpointermove={controls.wake}
-    onpointerdown={controls.wake}
-    onpointerleave={controls.away}
-    onfocusin={(event) => {
-        /*
-         * **キーボードで来たときだけ残す。**
-         *
-         * `focusin` は**マウスで押したときにも飛ぶ**ので、そのまま真にすると
-         * ボタンを1回押しただけで焦点がそこに残り、**操作列が消えなくなる**
-         * (焦点が枠の外へ出るまで居座る)。`:focus-visible` はキーボードで
-         * 辿ってきたときにだけ立つので、それで見分ける
-         */
-        const target = event.target;
-        controls.keyboard = target instanceof Element && target.matches(':focus-visible');
-    }}
-    onfocusout={() => (controls.keyboard = false)}
-    data-testid={testid}
->
-    {@render children({
-        compact,
-        fold,
-    })}
-    {#if notes}
-        <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
-    {/if}
-</div>
+    <div
+        bind:this={element}
+        class="stage"
+        style:--dp-aspect={aspect}
+        class:quiet={!controls.shown}
+        data-compact={compact ? '' : undefined}
+        data-fold={fold ? '' : undefined}
+        data-narrow={slim ? '' : undefined}
+        data-pseudo={fullscreen.pseudo ? '' : undefined}
+        onpointermove={controls.wake}
+        onpointerdown={controls.wake}
+        onpointerleave={controls.away}
+        onfocusin={(event) => {
+            /*
+             * **キーボードで来たときだけ残す。**
+             *
+             * `focusin` は**マウスで押したときにも飛ぶ**ので、そのまま真にすると
+             * ボタンを1回押しただけで焦点がそこに残り、**操作列が消えなくなる**
+             * (焦点が枠の外へ出るまで居座る)。`:focus-visible` はキーボードで
+             * 辿ってきたときにだけ立つので、それで見分ける
+             */
+            const target = event.target;
+            controls.keyboard = target instanceof Element && target.matches(':focus-visible');
+        }}
+        onfocusout={() => (controls.keyboard = false)}
+        data-testid={testid}
+    >
+        {@render children({
+            compact,
+            fold,
+        })}
+        {#if notes}
+            <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
+        {/if}
+    </div>
 </div>
 
 <style>

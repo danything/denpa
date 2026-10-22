@@ -177,7 +177,14 @@
             preview = (result.data as { preview: Preview | null } | undefined)?.preview ?? null;
         } catch (error) {
             // 黙って空にしない。もう1度変えれば送り直す
-            preview = { total: 0, skipped: 0, programs: [], conflicts: 0, verdicts: {}, failed: String(error) };
+            preview = {
+                total: 0,
+                skipped: 0,
+                programs: [],
+                conflicts: 0,
+                verdicts: {},
+                failed: String(error),
+            };
             shownKey = null;
         } finally {
             inflight = false;
@@ -212,23 +219,27 @@
     // ---- 保存 ----
     /** 足した・直したルール。書く欄の下にそのルールへの入口を出す */
     let saved = $state<{ id: number; name: string; created: boolean } | null>(null);
-    const saving: SubmitFunction = () => async ({ result, update }) => {
-        await update({ reset: false });
-        if (result.type === 'success' && result.data?.['saved']) {
-            saved = result.data['saved'] as { id: number; name: string; created: boolean };
-        }
-    };
+    const saving: SubmitFunction =
+        () =>
+        async ({ result, update }) => {
+            await update({ reset: false });
+            if (result.type === 'success' && result.data?.['saved']) {
+                saved = result.data['saved'] as { id: number; name: string; created: boolean };
+            }
+        };
     /**
      * 直しているルールを消したら、`?rule=` を外して出直す。残すと、無くなったルールの画面が
      * 新しいルールの欄に化けて見える。戻る先の履歴にも残さない。「削除しました」は移ったあとに当てる
      */
-    const leaveDeleted: SubmitFunction = () => async ({ result, update }) => {
-        if (result.type !== 'success') return update();
-        const url = new URL(page.url.href);
-        url.searchParams.delete('rule');
-        await goto(url, { replaceState: true });
-        await applyAction(result);
-    };
+    const leaveDeleted: SubmitFunction =
+        () =>
+        async ({ result, update }) => {
+            if (result.type !== 'success') return update();
+            const url = new URL(page.url.href);
+            url.searchParams.delete('rule');
+            await goto(url, { replaceState: true });
+            await applyAction(result);
+        };
 
     // ---- 局とジャンル ----
     /** 局は50以上あるので種別ごとにまとめる */
@@ -262,7 +273,13 @@
             {/if}
         </div>
         <!-- 狭い画面だけ。下から出した欄を閉じる -->
-        <button type="button" class="ghost close" aria-label="閉じる" onclick={() => (open = false)} data-testid="rule-draft-close">
+        <button
+            type="button"
+            class="ghost close"
+            aria-label="閉じる"
+            onclick={() => (open = false)}
+            data-testid="rule-draft-close"
+        >
             <Icon icon={X} size="size-4" />
         </button>
     </div>
@@ -274,7 +291,10 @@
             <p class="notice warning small" data-testid="rule-origin">{what}が見つかりませんでした</p>
         {:else if draft.origin.rule !== null}
             <p class="notice info small" data-testid="rule-origin">
-                この番組はルール「<a href={resolve(`search?rule=${draft.origin.rule.id}`)} data-testid="rule-origin-link">{draft.origin.rule.name}</a>」で録っています{draft.origin.rule.enabled ? '' : ' (いまは無効)'}
+                この番組はルール「<a
+                    href={resolve(`search?rule=${draft.origin.rule.id}`)}
+                    data-testid="rule-origin-link">{draft.origin.rule.name}</a
+                >」で録っています{draft.origin.rule.enabled ? '' : ' (いまは無効)'}
             </p>
         {:else}
             <p class="notice info small" data-testid="rule-origin">
@@ -296,7 +316,13 @@
         {/if}
         <label class="field">
             <span class="field-label">キーワード</span>
-            <input name="keyword" bind:value={keyword} oninput={() => (typed = true)} placeholder="例: 名探偵" data-testid="rule-keyword" />
+            <input
+                name="keyword"
+                bind:value={keyword}
+                oninput={() => (typed = true)}
+                placeholder="例: 名探偵"
+                data-testid="rule-keyword"
+            />
         </label>
         <!-- 当てる範囲。既定は番組名だけ。概要まで広げると番宣で名前が出ただけの番組まで当たる -->
         <div class="chips" role="group" aria-label="キーワードを探す所" data-testid="rule-search-fields">
@@ -309,7 +335,12 @@
         </div>
         <label class="field">
             <span class="field-label">除外する言葉</span>
-            <input name="ignoreKeyword" bind:value={ignoreKeyword} placeholder="例: 再放送 総集編" data-testid="rule-ignore" />
+            <input
+                name="ignoreKeyword"
+                bind:value={ignoreKeyword}
+                placeholder="例: 再放送 総集編"
+                data-testid="rule-ignore"
+            />
         </label>
 
         <!-- 局・同じ回・優先度・ジャンルは枠の無い行に (サイドバーの行と同じ形)。名前は左、いまの値は右 -->
@@ -324,7 +355,12 @@
                     <div class="chips" data-testid="rule-types">
                         {#each grouped as group (group.type)}
                             <label class="chip">
-                                <input type="checkbox" name="serviceTypes" value={group.type} bind:group={serviceTypes} />
+                                <input
+                                    type="checkbox"
+                                    name="serviceTypes"
+                                    value={group.type}
+                                    bind:group={serviceTypes}
+                                />
                                 {SERVICE_TYPE_LABEL[group.type] ?? group.type} ({group.services.length})
                             </label>
                         {/each}
@@ -336,14 +372,21 @@
                                 <div class="group-title">{SERVICE_TYPE_LABEL[group.type] ?? group.type}</div>
                                 {#each group.services as service (service.id)}
                                     <label class="check">
-                                        <input type="checkbox" name="serviceIds" value={service.id} bind:group={serviceIds} />
+                                        <input
+                                            type="checkbox"
+                                            name="serviceIds"
+                                            value={service.id}
+                                            bind:group={serviceIds}
+                                        />
                                         <span class="truncate small broadcast">{service.name}</span>
                                     </label>
                                 {/each}
                             </div>
                         {:else}
                             <p class="small muted">
-                                局がまだありません。<a href={`${resolve('settings/reception')}#channels`}>チャンネルスキャン</a>をしてください。
+                                局がまだありません。<a href={`${resolve('settings/reception')}#channels`}
+                                    >チャンネルスキャン</a
+                                >をしてください。
                             </p>
                         {/each}
                     </div>
@@ -353,7 +396,15 @@
                 <span>同じ回は最初の放送だけ</span>
                 <!-- 外したスイッチは何も送らない。「外した」と「指定なし」を分けるための隠し (`rule-form.dedupeOf`) -->
                 <input type="hidden" name="dedupe" value="0" />
-                <input type="checkbox" role="switch" aria-checked={dedupe} name="dedupe" value="1" bind:checked={dedupe} data-testid="rule-dedupe" />
+                <input
+                    type="checkbox"
+                    role="switch"
+                    aria-checked={dedupe}
+                    name="dedupe"
+                    value="1"
+                    bind:checked={dedupe}
+                    data-testid="rule-dedupe"
+                />
             </label>
             <label class="row side-item">
                 <span>優先度 <span class="tiny muted">(大きいほうを先に録る)</span></span>
@@ -373,7 +424,12 @@
                     {#each GENRE_TREE as group (group.value)}
                         <div>
                             <label class="check">
-                                <input type="checkbox" name="genres" value={group.value} bind:group={genres} />
+                                <input
+                                    type="checkbox"
+                                    name="genres"
+                                    value={group.value}
+                                    bind:group={genres}
+                                />
                                 <span class="small bold">{group.label}</span>
                                 <span class="tiny muted">(すべて)</span>
                             </label>
@@ -381,7 +437,12 @@
                                 <div class="children">
                                     {#each group.children as child (child.value)}
                                         <label class="check">
-                                            <input type="checkbox" name="genres" value={child.value} bind:group={genres} />
+                                            <input
+                                                type="checkbox"
+                                                name="genres"
+                                                value={child.value}
+                                                bind:group={genres}
+                                            />
                                             <span class="truncate tiny">{child.label}</span>
                                         </label>
                                     {/each}
@@ -393,7 +454,9 @@
             </details>
         </div>
         <p class="tiny muted">
-            録画のしかた{draft.freeOnly ? 'と、無料放送だけ録ること' : ''}は<a href={resolve('settings/recording')}>設定</a>で決めます
+            録画のしかた{draft.freeOnly ? 'と、無料放送だけ録ること' : ''}は<a
+                href={resolve('settings/recording')}>設定</a
+            >で決めます
         </p>
     </form>
 
@@ -417,22 +480,55 @@
         {/if}
         {#if draft.editing !== null}
             <div class="edit-actions">
-                <ActionButton action="?/toggleRule" fields={{ id: draft.editing.id }} class="small secondary outline" testid="rule-toggle">
+                <ActionButton
+                    action="?/toggleRule"
+                    fields={{ id: draft.editing.id }}
+                    class="small secondary outline"
+                    testid="rule-toggle"
+                >
                     {draft.editing.enabled ? '無効化' : '有効化'}
                 </ActionButton>
-                <ArmedDelete {deleting} armKey={draft.editing.id} action="?/deleteRule" fields={{ id: draft.editing.id }} submit={leaveDeleted} class="small" testid="rule-delete" />
+                <ArmedDelete
+                    {deleting}
+                    armKey={draft.editing.id}
+                    action="?/deleteRule"
+                    fields={{ id: draft.editing.id }}
+                    submit={leaveDeleted}
+                    class="small"
+                    testid="rule-delete"
+                />
             </div>
-            <button type="submit" form="rule-draft-form" class="save" disabled={empty} data-testid="rule-update">更新</button>
+            <button
+                type="submit"
+                form="rule-draft-form"
+                class="save"
+                disabled={empty}
+                data-testid="rule-update">更新</button
+            >
         {:else}
-            <button type="submit" form="rule-draft-form" class="save" disabled={empty} data-testid="rule-submit">
-                {recordable === null || recordable === 0 ? 'ルールを保存' : `${recordable} 件を録るルールを保存`}
+            <button
+                type="submit"
+                form="rule-draft-form"
+                class="save"
+                disabled={empty}
+                data-testid="rule-submit"
+            >
+                {recordable === null || recordable === 0
+                    ? 'ルールを保存'
+                    : `${recordable} 件を録るルールを保存`}
             </button>
         {/if}
     </div>
 </aside>
 <!-- 狭い画面で下から出しているときの後ろの幕。押すと閉じる -->
 {#if open}
-    <button type="button" class="sheet-backdrop" aria-label="閉じる" tabindex="-1" onclick={() => (open = false)}></button>
+    <button
+        type="button"
+        class="sheet-backdrop"
+        aria-label="閉じる"
+        tabindex="-1"
+        onclick={() => (open = false)}
+    ></button>
 {/if}
 
 <style>

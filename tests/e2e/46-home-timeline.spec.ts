@@ -40,7 +40,9 @@ async function filterBox(page: Page) {
     return (await side.isVisible()) ? side : page.getByTestId('timeline-toolbar');
 }
 async function countOf(page: Page, id: string): Promise<number> {
-    const text = await (await filterBox(page))
+    const text = await (
+        await filterBox(page)
+    )
         .locator(`[data-filter="${id}"] [data-testid="filter-count"]`)
         .innerText();
     return Number(text.trim());

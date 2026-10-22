@@ -39,9 +39,8 @@ class FakeSourceBuffer extends EventTarget {
     remove(start: number, end: number): void {
         this.later(() => {
             this.ranges = this.ranges
-                .map(
-                    ([a, b]): Range =>
-                        a >= start && b <= end ? [0, 0] : a < end && a >= start ? [end, b] : [a, b],
+                .map(([a, b]): Range =>
+                    a >= start && b <= end ? [0, 0] : a < end && a >= start ? [end, b] : [a, b],
                 )
                 .filter(([a, b]) => b > a);
         });

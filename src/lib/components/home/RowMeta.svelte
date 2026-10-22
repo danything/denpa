@@ -33,7 +33,10 @@
         has={row.has_logo}
         style="height: 1rem; margin-right: 0.375rem; vertical-align: -0.1875rem"
     />
-    <span><span class="broadcast">{service}</span>{service && rest ? ' ・ ' : ''}<span class="num">{rest}</span></span>
+    <span
+        ><span class="broadcast">{service}</span>{service && rest ? ' ・ ' : ''}<span class="num">{rest}</span
+        ></span
+    >
     {#if rule === 'manual'}
         <span class="t-rule"> ・ <span data-testid="rule-name">手動予約</span></span>
     {:else if rule !== null}
@@ -42,7 +45,9 @@
             <span data-testid="rule-name">
                 ルール:
                 {#if rule.rule_id !== null}
-                    <a href={resolve(`search?rule=${rule.rule_id}`)} title={rule.rule_name ?? undefined}>{rule.rule_name}</a>
+                    <a href={resolve(`search?rule=${rule.rule_id}`)} title={rule.rule_name ?? undefined}
+                        >{rule.rule_name}</a
+                    >
                 {:else}
                     (削除済み)
                 {/if}

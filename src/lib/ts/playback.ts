@@ -98,7 +98,7 @@ export function retryWait(retries: number): number {
 
 /** リクエストし直せば直りうる失敗か (繋がらない・途中で落ちた・サーバの 5xx)。4xx・読めない中身は何度やっても同じ */
 export function retryable(error: unknown): boolean {
-    return error instanceof TypeError || /^Error: HTTP 5/.test(String(error));
+    return error instanceof TypeError || String(error).startsWith('Error: HTTP 5');
 }
 
 /** 画面が選べるコーデック。`auto` は端末に合わせて決める (`pickOffer`) */

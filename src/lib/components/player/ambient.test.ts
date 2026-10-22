@@ -387,6 +387,7 @@ describe('映像の中の動き', () => {
         const dot = (n: number) => {
             const data = new Uint8ClampedArray(GLANCE.width * GLANCE.height * 4);
             for (let i = 0; i < GLANCE.width * GLANCE.height; i++) data.set([60, 140, 110, 255], i * 4);
+            // oxlint-disable-next-line oxc/erasing-op -- 0 行目 (行と列で書いておく)
             data.set([250, 220, 40, 255], (0 * GLANCE.width + 4 + 2 * n) * 4);
             return data;
         };

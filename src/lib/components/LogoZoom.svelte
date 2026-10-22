@@ -55,7 +55,12 @@
                 return;
             }
             const before = shown;
-            if (before === null || before.id !== next.id || before.kind !== next.kind || before.learnedAt !== next.learnedAt) {
+            if (
+                before === null ||
+                before.id !== next.id ||
+                before.kind !== next.kind ||
+                before.learnedAt !== next.learnedAt
+            ) {
                 natural = { width: 0, height: 0 };
             }
             shown = next;
@@ -92,7 +97,8 @@
 <!-- Esc は dialog がそのまま閉じる。閉じたことは `close` で受け取る -->
 <dialog bind:this={dialog} {onclose} aria-labelledby="logo-zoom-title" data-testid="logo-zoom">
     <!-- 幕を押したら閉じる (番組の詳細と同じく、箱の後ろに全面のボタンを敷く)。Tab では止まらない -->
-    <button type="button" class="backdrop" tabindex="-1" aria-label="閉じる" onclick={() => dialog?.close()}></button>
+    <button type="button" class="backdrop" tabindex="-1" aria-label="閉じる" onclick={() => dialog?.close()}
+    ></button>
     <article class="modal-box" bind:this={box} tabindex="-1">
         <button
             type="button"

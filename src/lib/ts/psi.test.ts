@@ -205,7 +205,7 @@ function damaged(next: () => number, packets: number): Uint8Array {
 function cut(next: () => number, data: Uint8Array): Uint8Array[] {
     const sizes = [1, 2, 187, 188, 189, 375, 564, 565, 1000, 24064];
     const out: Uint8Array[] = [];
-    for (let at = 0; at < data.length; ) {
+    for (let at = 0; at < data.length;) {
         const size = next() < 0.5 ? sizes[Math.floor(next() * sizes.length)]! : 1 + Math.floor(next() * 3000);
         out.push(data.subarray(at, at + size));
         at += size;

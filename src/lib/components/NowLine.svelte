@@ -40,13 +40,21 @@
 </script>
 
 <!-- 「いま」と読み点は読み上げにだけ渡す -->
-<svelte:element this={heading ? 'h2' : 'div'} bind:this={element} class="now-line {layout} {className}" {...rest}>
+<svelte:element
+    this={heading ? 'h2' : 'div'}
+    bind:this={element}
+    class="now-line {layout} {className}"
+    {...rest}
+>
     <span class="now-time num" style:width={labelWidth}
-        ><span class="visually-hidden">いま </span>{time}{#if shown}<span class="visually-hidden">、</span>{/if}</span
+        ><span class="visually-hidden">いま </span>{time}{#if shown}<span class="visually-hidden">、</span
+            >{/if}</span
     >
     {#if shown}
         <span class="now-status">
-            <span class="now-full">{shown.text}</span><span class="now-short" aria-hidden="true">{shown.short}</span>
+            <span class="now-full">{shown.text}</span><span class="now-short" aria-hidden="true"
+                >{shown.short}</span
+            >
         </span>
     {/if}
     {#if layout === 'inline'}<span class="now-rule" aria-hidden="true"></span>{/if}

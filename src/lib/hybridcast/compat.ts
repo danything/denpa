@@ -86,7 +86,7 @@ export function bmlCompat(
 
 /** 差し込み (`shim.ts`) が `__hcCompat` に置いたものを読んで、navigator に置く */
 function install(): void {
-    // biome-ignore lint/suspicious/noExplicitAny: アプリの文書の中で動く (型の無い世界)
+    // oxlint-disable-next-line typescript/no-explicit-any -- アプリの文書の中で動く (型の無い世界)
     const w = globalThis as any;
     const init = w.__hcCompat as CompatInit | undefined;
     if (init === undefined || w.navigator === undefined) return;

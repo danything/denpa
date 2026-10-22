@@ -34,7 +34,11 @@
                             </div>
                         </div>
                         <div class="row-actions">
-                            <ActionButton action="?/revokeDevice" fields={{ id: device.id }} class="small outline danger">
+                            <ActionButton
+                                action="?/revokeDevice"
+                                fields={{ id: device.id }}
+                                class="small outline danger"
+                            >
                                 取消
                             </ActionButton>
                         </div>

@@ -13,7 +13,12 @@
     import { slide } from '#lib/motion.svelte.js';
     import { reload } from '#lib/reload.svelte.js';
     import { cellsOf, columnsOf, mainOf, SUBCHANNELS_COOKIE, splitOf } from '#lib/subchannels.js';
-    import { CHANNEL_TYPES, type ProgramDetail as Facts, type GridProgram, type GuideSheet } from '#lib/types.js';
+    import {
+        CHANNEL_TYPES,
+        type ProgramDetail as Facts,
+        type GridProgram,
+        type GuideSheet,
+    } from '#lib/types.js';
     import { preloadData } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { navigating } from '$app/state';
@@ -653,7 +658,8 @@
                     href={href({ type, start: String(data.start) })}
                     data-testid="type-{type}"
                 >
-                    {#if data.type === type}<span class="seg-pill" aria-hidden="true" use:slide={'guide-type'}></span>{/if}
+                    {#if data.type === type}<span class="seg-pill" aria-hidden="true" use:slide={'guide-type'}
+                        ></span>{/if}
                     <span class="seg-label">{SERVICE_TYPE_LABEL[type]}</span>
                 </a>
             {/each}
@@ -670,8 +676,8 @@
                 href={prevHref}
                 aria-label="前日"
                 data-testid="prev-day"
-                bind:this={prevArrow}
-            >←</a>
+                bind:this={prevArrow}>←</a
+            >
             <nav class="strip" aria-label="日付" bind:this={strip}>
                 {#each days as day (day.start)}
                     {@const selected = day.start === data.start}
@@ -683,10 +689,13 @@
                             class:past={day.past}
                             href={href({ start: String(day.start) })}
                             aria-current={selected ? 'date' : undefined}
-                            aria-label={day.start === data.today ? `今日 ${date(day.start)}` : date(day.start)}
+                            aria-label={day.start === data.today
+                                ? `今日 ${date(day.start)}`
+                                : date(day.start)}
                             data-testid="guide-day"
                             data-start={day.start}
-                        >{#if day.today}<span class="today-mark">今日</span>{/if}{day.label}</a>
+                            >{#if day.today}<span class="today-mark">今日</span>{/if}{day.label}</a
+                        >
                     {:else}
                         <!-- 番組がまだ届いていない日。並びの幅を保つために置いて、押せなくする -->
                         <span
@@ -695,7 +704,8 @@
                             data-testid="guide-day"
                             data-start={day.start}
                             aria-disabled="true"
-                        >{day.label}<span class="visually-hidden"> (番組表なし)</span></span>
+                            >{day.label}<span class="visually-hidden"> (番組表なし)</span></span
+                        >
                     {/if}
                 {/each}
             </nav>
@@ -707,8 +717,8 @@
                         type="button"
                         class="small secondary outline date-label"
                         title="{shownDate} (4:00〜翌4:00)"
-                        data-testid="guide-date"
-                    >{day}</button>
+                        data-testid="guide-date">{day}</button
+                    >
                 {/snippet}
                 {#each days as day (day.start)}
                     {@const selected = day.start === data.start}
@@ -720,15 +730,16 @@
                             role="menuitem"
                             href={href({ start: String(day.start) })}
                             aria-current={selected ? 'date' : undefined}
-                        >{day.start === data.today ? `今日 ${date(day.start)}` : date(day.start)}</a>
+                            >{day.start === data.today ? `今日 ${date(day.start)}` : date(day.start)}</a
+                        >
                     {:else}
                         <button
                             type="button"
                             class="menu-item {weekday(day.start) ?? ''}"
                             role="menuitem"
                             aria-disabled="true"
-                            data-disabled
-                        >{date(day.start)} <span class="muted">番組表なし</span></button>
+                            data-disabled>{date(day.start)} <span class="muted">番組表なし</span></button
+                        >
                     {/if}
                 {/each}
                 <hr />
@@ -739,11 +750,13 @@
                 href={nextHref}
                 aria-label="翌日"
                 data-testid="next-day"
-                bind:this={nextArrow}
-            >→</a>
+                bind:this={nextArrow}>→</a
+            >
             <!-- 狭い画面だけ。今日を見ているときは出さない (押しても同じ表のまま) -->
             {#if nowSlots === null}
-                <a class="button small secondary outline today" href={href({})} data-testid="guide-today">今日</a>
+                <a class="button small secondary outline today" href={href({})} data-testid="guide-today"
+                    >今日</a
+                >
             {/if}
         </div>
 
@@ -755,8 +768,8 @@
                 disabled={nowSlots === null || grid === null}
                 title={nowSlots === null ? '今日を見ているときだけ' : 'いまの時刻へ'}
                 onclick={jumpNow}
-                data-testid="guide-jump-now"
-            >今</button>
+                data-testid="guide-jump-now">今</button
+            >
             {#each JUMPS as jump (jump.key)}
                 <button
                     type="button"
@@ -764,14 +777,20 @@
                     disabled={grid === null}
                     title={jump.title}
                     onclick={() => jumpTo(jump.hour)}
-                    data-testid="guide-jump-{jump.key}"
-                >{jump.label}</button>
+                    data-testid="guide-jump-{jump.key}">{jump.label}</button
+                >
             {/each}
         </div>
         <div class="more">
             <Menu side={menuSide} align="end" class="guide-menu" testid="guide-more-menu">
                 {#snippet trigger(props)}
-                    <button {...props} type="button" class="small secondary outline icon" aria-label="時刻へ移動" data-testid="guide-more">
+                    <button
+                        {...props}
+                        type="button"
+                        class="small secondary outline icon"
+                        aria-label="時刻へ移動"
+                        data-testid="guide-more"
+                    >
                         <Icon icon={Ellipsis} size="size-4" />
                     </button>
                 {/snippet}
@@ -875,7 +894,9 @@
                 />
             {:else}
                 <!-- 局はあるが、いま流している番組が無い (番組表を集めている途中など) -->
-                <p class="muted">{SERVICE_TYPE_LABEL[data.type]}の番組表はまだありません。集まるまでお待ちください</p>
+                <p class="muted">
+                    {SERVICE_TYPE_LABEL[data.type]}の番組表はまだありません。集まるまでお待ちください
+                </p>
             {/if}
         </div>
     {:else if sheet !== null && sheet.failed !== null && switching === null}
@@ -923,11 +944,7 @@
                 data-highlight={highlight}
             >
                 <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
-                <div
-                    class="corner"
-                    style="grid-column: 1; grid-row: 1;"
-                    bind:clientHeight={headHeight}
-                ></div>
+                <div class="corner" style="grid-column: 1; grid-row: 1;" bind:clientHeight={headHeight}></div>
                 {#each columns as service, i (service.id)}
                     <div
                         class="service"
@@ -939,22 +956,22 @@
                             <!-- 別の放送波へ移る途中。局の並びが届くまで名前は出さない (上の `switching`) -->
                             <span class="skeleton-head head-skeleton" aria-hidden="true"></span>
                         {:else}
-                        <!--
+                            <!--
                         ロゴを持たない局もあるので、有るものだけ出す。場所は
                         どちらでも空けておく — 局名の頭が列ごとにずれると、
                         横に並べたときにどれがどの局か追いにくい
                     -->
-                        <ServiceLogo
-                            id={service.id}
-                            has={service.has_logo}
-                            style="display: block; width: 2rem; height: 1.25rem"
-                            fallback=""
-                        />
-                        <!-- テレビに出ている番号。ラベルの形はライブの一覧と同じ (format.ts の channelNumber) -->
-                        {#if channelNumber(service) !== null}
-                            <span class="tag ch-number">{channelNumber(service)}</span>
-                        {/if}
-                        <span class="truncate broadcast">{service.name}</span>
+                            <ServiceLogo
+                                id={service.id}
+                                has={service.has_logo}
+                                style="display: block; width: 2rem; height: 1.25rem"
+                                fallback=""
+                            />
+                            <!-- テレビに出ている番号。ラベルの形はライブの一覧と同じ (format.ts の channelNumber) -->
+                            {#if channelNumber(service) !== null}
+                                <span class="tag ch-number">{channelNumber(service)}</span>
+                            {/if}
+                            <span class="truncate broadcast">{service.name}</span>
                         {/if}
                     </div>
                 {/each}
@@ -973,10 +990,7 @@
                 (高さは実測する。決め打ちだと1pxずれて数字が見出しの裏へ潜る)
             -->
                 {#each hourMarks as mark (mark.at)}
-                    <div
-                        class="hour"
-                        style="grid-column: 1; grid-row: {mark.row} / span {mark.span};"
-                    >
+                    <div class="hour" style="grid-column: 1; grid-row: {mark.row} / span {mark.span};">
                         <span class="hour-label num" style="top: {headHeight}px;">
                             {new Date(mark.at).getHours()}
                         </span>
@@ -1020,56 +1034,72 @@
                         aria-label="番組表を読み込んでいます"
                     >
                         {#each columns as service, i (service.id)}
-                            <div class="cells-skeleton-column" style:mask-image={skeletonMask(i)} aria-hidden="true"></div>
+                            <div
+                                class="cells-skeleton-column"
+                                style:mask-image={skeletonMask(i)}
+                                aria-hidden="true"
+                            ></div>
                         {/each}
                     </div>
                 {:else}
-                {#each stations as station (station.key)}
-                    <div
-                        class="station"
-                        style="grid-column: {station.first + 2} / span {station.width}; grid-row: 2 / -1; grid-template-columns: repeat({station.width}, minmax(0, 1fr)); grid-template-rows: repeat({slots}, {SLOT_HEIGHT});"
-                    >
-                        {#each station.cells as cell (cell.key)}
-                            {@const program = cell.program}
-                            <div
-                                class="cell"
-                                style={cell.style}
-                                data-testid="grid-program"
-                                data-program-id={program.id}
-                                data-service-id={program.service_id}
-                                data-start-at={program.start_at}
-                            >
-                                <!--
+                    {#each stations as station (station.key)}
+                        <div
+                            class="station"
+                            style="grid-column: {station.first +
+                                2} / span {station.width}; grid-row: 2 / -1; grid-template-columns: repeat({station.width}, minmax(0, 1fr)); grid-template-rows: repeat({slots}, {SLOT_HEIGHT});"
+                        >
+                            {#each station.cells as cell (cell.key)}
+                                {@const program = cell.program}
+                                <div
+                                    class="cell"
+                                    style={cell.style}
+                                    data-testid="grid-program"
+                                    data-program-id={program.id}
+                                    data-service-id={program.service_id}
+                                    data-start-at={program.start_at}
+                                >
+                                    <!--
                                     マスは上ぞろえ。button は中身を縦中央に置くので、短い番組と
                                     長い番組で開始時刻の高さが揃わず、横に目で追えなかった。
                                     縦の flex にして上から積む (色の決め方は下の `.program`)。
                                     淡くする (ジャンルを1つ目立たせる) のは CSS で決める (`.rows[data-highlight]`)
                                 -->
-                                <button type="button"
-                                    class="program"
-                                    class:reserved={program.reservation_state && program.reservation_state !== 'skipped'}
-                                    data-state={program.reservation_state}
-                                    data-genre={program.genres?.[0]}
-                                    onclick={() => open(program)}
-                                    data-testid="program-button"
-                                >
-                                    <span class="clamp">
-                                        <span class="title">
-                                            <span class="num">{time(program.start_at)}</span>
-                                            <span class={program.name ? 'broadcast' : 'faint'}>{program.name || '(番組情報なし)'}</span>
-                                            {#if program.copy_never}
-                                                <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
-                                                <span class="copy-never" data-testid="grid-copy-never">コピー禁止</span>
-                                            {/if}
+                                    <button
+                                        type="button"
+                                        class="program"
+                                        class:reserved={program.reservation_state &&
+                                            program.reservation_state !== 'skipped'}
+                                        data-state={program.reservation_state}
+                                        data-genre={program.genres?.[0]}
+                                        onclick={() => open(program)}
+                                        data-testid="program-button"
+                                    >
+                                        <span class="clamp">
+                                            <span class="title">
+                                                <span class="num">{time(program.start_at)}</span>
+                                                <span class={program.name ? 'broadcast' : 'faint'}
+                                                    >{program.name || '(番組情報なし)'}</span
+                                                >
+                                                {#if program.copy_never}
+                                                    <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
+                                                    <span class="copy-never" data-testid="grid-copy-never"
+                                                        >コピー禁止</span
+                                                    >
+                                                {/if}
+                                            </span>
+                                            <!-- 予約してあれば説明の代わりに状態。`{#if}` にしないのは、マスごとの描く手間を増やさないため (名前の有無も同じ) -->
+                                            <span
+                                                class={program.reservation_state ? 'state' : 'desc broadcast'}
+                                                >{program.reservation_state
+                                                    ? stateLabel(program.reservation_state)
+                                                    : program.description}</span
+                                            >
                                         </span>
-                                        <!-- 予約してあれば説明の代わりに状態。`{#if}` にしないのは、マスごとの描く手間を増やさないため (名前の有無も同じ) -->
-                                        <span class={program.reservation_state ? 'state' : 'desc broadcast'}>{program.reservation_state ? stateLabel(program.reservation_state) : program.description}</span>
-                                    </span>
-                                </button>
-                            </div>
-                        {/each}
-                    </div>
-                {/each}
+                                    </button>
+                                </div>
+                            {/each}
+                        </div>
+                    {/each}
                 {/if}
             </div>
         </div>
@@ -1086,7 +1116,8 @@
         aria-disabled={off ? 'true' : undefined}
         data-disabled={off ? '' : undefined}
         onclick={() => !off && jumpNow()}
-    >今 <span class="muted">{off ? '(今日だけ)' : time(clock)}</span></button>
+        >今 <span class="muted">{off ? '(今日だけ)' : time(clock)}</span></button
+    >
     {#each JUMPS as jump (jump.key)}
         <button
             type="button"
@@ -1095,7 +1126,8 @@
             aria-disabled={grid === null ? 'true' : undefined}
             data-disabled={grid === null ? '' : undefined}
             onclick={() => grid !== null && jumpTo(jump.hour)}
-        >{jump.label} <span class="muted">{jump.hour}:00</span></button>
+            >{jump.label} <span class="muted">{jump.hour}:00</span></button
+        >
     {/each}
 {/snippet}
 
@@ -1107,7 +1139,8 @@
         program.recording_id !== null &&
         program.recording_state !== 'failed' &&
         (program.library_path ?? program.ts_path) !== null}
-    {@const canWatch = program.start_at <= clock && program.end_at > clock && watchable.has(program.service_id)}
+    {@const canWatch =
+        program.start_at <= clock && program.end_at > clock && watchable.has(program.service_id)}
     {@const canCancel =
         CANCELABLE.includes(program.reservation_state ?? '') &&
         !(program.reservation_state === 'skipped' && program.end_at <= clock)}
@@ -1152,7 +1185,11 @@
                 (`search/+page.server.ts`。`rule-form.originOf`)。毎回録りたい番組を番組表で
                 見つけたとき、検索で探し直さずに済む
             -->
-            <a class="button secondary" href={resolve(`search?from=program:${program.id}`)} data-testid="detail-rule">
+            <a
+                class="button secondary"
+                href={resolve(`search?from=program:${program.id}`)}
+                data-testid="detail-rule"
+            >
                 ルールを作る
             </a>
 
@@ -1199,7 +1236,11 @@
 
             {#if canPlay}
                 <!-- エンコードする前の元のTSは観る画面が追っかけ (`/chase`) へ送る -->
-                <a class="button" class:secondary={primary !== 'play'} href={resolve(`watch/${program.recording_id}`)}>
+                <a
+                    class="button"
+                    class:secondary={primary !== 'play'}
+                    href={resolve(`watch/${program.recording_id}`)}
+                >
                     再生
                 </a>
             {/if}
@@ -1471,7 +1512,7 @@
     :global(.guide-menu) .menu-item.selected {
         font-weight: var(--dp-weight-bold);
     }
-    :global(.guide-menu) .menu-item[aria-checked="true"] {
+    :global(.guide-menu) .menu-item[aria-checked='true'] {
         background: var(--dp-hover);
         font-weight: var(--dp-weight-bold);
     }
@@ -1511,7 +1552,7 @@
      * **Pico の回るもの (`[aria-busy]::before`) は出さない。** 表の頭に 1 行ぶん差し込まれ、
      * マスを待つ間だけ表が下にずれて、届いた瞬間に跳ねていた。待っていることは骨組みで見せる
      */
-    .grid-box[aria-busy="true"]::before {
+    .grid-box[aria-busy='true']::before {
         display: none;
     }
     .grid-box:active {
@@ -1652,7 +1693,7 @@
         font-weight: var(--dp-weight);
         line-height: normal;
     }
-    :global([data-theme="dark"]) :is(.program, .swatch) {
+    :global([data-theme='dark']) :is(.program, .swatch) {
         --wash: 14%;
     }
     .program:hover {
@@ -1671,34 +1712,58 @@
      * 濃さが揃っていれば、色は「種類が違う」ことだけを伝える。
      * ジャンルの見本 (`.swatch`) も同じ規則で受ける (値を2か所に書かない)
      */
-    :is(.program, .swatch)[data-genre="0"] { --tint: hsl(210 62% 55%); }  /* ニュース/報道 */
-    :is(.program, .swatch)[data-genre="1"] { --tint: hsl(145 62% 55%); }  /* スポーツ */
-    :is(.program, .swatch)[data-genre="2"] { --tint: hsl(190 62% 55%); }  /* 情報/ワイドショー */
-    :is(.program, .swatch)[data-genre="3"] { --tint: hsl(350 62% 55%); }  /* ドラマ */
-    :is(.program, .swatch)[data-genre="4"] { --tint: hsl(280 62% 55%); }  /* 音楽 */
-    :is(.program, .swatch)[data-genre="5"] { --tint: hsl(25 62% 55%); }   /* バラエティ */
-    :is(.program, .swatch)[data-genre="6"] { --tint: hsl(250 62% 55%); }  /* 映画 */
-    :is(.program, .swatch)[data-genre="7"] { --tint: hsl(310 62% 55%); }  /* アニメ/特撮 */
-    :is(.program, .swatch)[data-genre="8"] { --tint: hsl(45 62% 55%); }   /* ドキュメンタリー/教養 */
-    :is(.program, .swatch)[data-genre="9"] { --tint: hsl(325 62% 55%); }  /* 劇場/公演 */
-    :is(.program, .swatch)[data-genre="10"] { --tint: hsl(95 62% 55%); }  /* 趣味/教育 */
-    :is(.program, .swatch)[data-genre="11"] { --tint: hsl(170 62% 55%); } /* 福祉 */
+    :is(.program, .swatch)[data-genre='0'] {
+        --tint: hsl(210 62% 55%);
+    } /* ニュース/報道 */
+    :is(.program, .swatch)[data-genre='1'] {
+        --tint: hsl(145 62% 55%);
+    } /* スポーツ */
+    :is(.program, .swatch)[data-genre='2'] {
+        --tint: hsl(190 62% 55%);
+    } /* 情報/ワイドショー */
+    :is(.program, .swatch)[data-genre='3'] {
+        --tint: hsl(350 62% 55%);
+    } /* ドラマ */
+    :is(.program, .swatch)[data-genre='4'] {
+        --tint: hsl(280 62% 55%);
+    } /* 音楽 */
+    :is(.program, .swatch)[data-genre='5'] {
+        --tint: hsl(25 62% 55%);
+    } /* バラエティ */
+    :is(.program, .swatch)[data-genre='6'] {
+        --tint: hsl(250 62% 55%);
+    } /* 映画 */
+    :is(.program, .swatch)[data-genre='7'] {
+        --tint: hsl(310 62% 55%);
+    } /* アニメ/特撮 */
+    :is(.program, .swatch)[data-genre='8'] {
+        --tint: hsl(45 62% 55%);
+    } /* ドキュメンタリー/教養 */
+    :is(.program, .swatch)[data-genre='9'] {
+        --tint: hsl(325 62% 55%);
+    } /* 劇場/公演 */
+    :is(.program, .swatch)[data-genre='10'] {
+        --tint: hsl(95 62% 55%);
+    } /* 趣味/教育 */
+    :is(.program, .swatch)[data-genre='11'] {
+        --tint: hsl(170 62% 55%);
+    } /* 福祉 */
     /*
      * ジャンルを1つ目立たせているときの、ほかのマス (`highlight`)。押せるまま淡くするだけ。
      * **表の側の印 (`data-highlight`) と CSS で決める** — マスごとに持たせると、切り替えるたびに全部のマスを書き直す
      */
-    .rows[data-highlight="0"] .program:not([data-genre="0"]),
-    .rows[data-highlight="1"] .program:not([data-genre="1"]),
-    .rows[data-highlight="2"] .program:not([data-genre="2"]),
-    .rows[data-highlight="3"] .program:not([data-genre="3"]),
-    .rows[data-highlight="4"] .program:not([data-genre="4"]),
-    .rows[data-highlight="5"] .program:not([data-genre="5"]),
-    .rows[data-highlight="6"] .program:not([data-genre="6"]),
-    .rows[data-highlight="7"] .program:not([data-genre="7"]),
-    .rows[data-highlight="8"] .program:not([data-genre="8"]),
-    .rows[data-highlight="9"] .program:not([data-genre="9"]),
-    .rows[data-highlight="10"] .program:not([data-genre="10"]),
-    .rows[data-highlight="11"] .program:not([data-genre="11"]) {
+    .rows[data-highlight='0'] .program:not([data-genre='0']),
+    .rows[data-highlight='1'] .program:not([data-genre='1']),
+    .rows[data-highlight='2'] .program:not([data-genre='2']),
+    .rows[data-highlight='3'] .program:not([data-genre='3']),
+    .rows[data-highlight='4'] .program:not([data-genre='4']),
+    .rows[data-highlight='5'] .program:not([data-genre='5']),
+    .rows[data-highlight='6'] .program:not([data-genre='6']),
+    .rows[data-highlight='7'] .program:not([data-genre='7']),
+    .rows[data-highlight='8'] .program:not([data-genre='8']),
+    .rows[data-highlight='9'] .program:not([data-genre='9']),
+    .rows[data-highlight='10'] .program:not([data-genre='10']),
+    .rows[data-highlight='11'] .program:not([data-genre='11']) {
         opacity: 0.3;
     }
     .program.reserved {
@@ -1709,7 +1774,7 @@
     .program.reserved:hover {
         background: color-mix(in srgb, var(--tint) calc(var(--wash) + 14%), var(--dp-surface));
     }
-    .program[data-state="recording"] {
+    .program[data-state='recording'] {
         --tint: var(--dp-rec);
     }
     /*
@@ -1719,11 +1784,11 @@
      * 録画中 (赤く塗ったマス) と見分けるため、**地は塗らずに枠と字だけ**赤くする —
      * 「いま動いているもの」だけを塗る決まり (`app.css`) のとおり
      */
-    .program[data-state="conflict"] {
+    .program[data-state='conflict'] {
         --tint: var(--dp-rec);
         background: var(--dp-surface);
     }
-    .program[data-state="conflict"]:hover {
+    .program[data-state='conflict']:hover {
         background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
     }
     /*
@@ -1750,14 +1815,14 @@
         font-weight: var(--dp-weight);
         color: var(--dp-primary-text);
     }
-    .program:is([data-state="recording"], [data-state="conflict"]) .state {
+    .program:is([data-state='recording'], [data-state='conflict']) .state {
         color: var(--dp-rec-text);
     }
     /*
      * **録らないと決めた予約 (コピー禁止) は予約済みの青にしない** — 青だと「録れる」に見える。
      * 待っているだけで手を止めてほしいものでもないので、字を控えるだけにする
      */
-    .program[data-state="skipped"] .state {
+    .program[data-state='skipped'] .state {
         color: inherit;
         opacity: 0.8;
     }

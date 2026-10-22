@@ -92,7 +92,9 @@
             event.preventDefault();
             void go(null);
         } else if (view === null && event.key === 'ArrowRight') {
-            const id = (event.target as HTMLElement).closest<HTMLElement>('[data-choice]')?.dataset['setting'];
+            const id = (event.target as HTMLElement).closest<HTMLElement>('[data-choice]')?.dataset[
+                'setting'
+            ];
             if (id === undefined) return;
             event.preventDefault();
             void go(id);
@@ -150,7 +152,14 @@
     </button>
 {/snippet}
 
-<Menu bind:open side="top" align="end" boundary={stage} class="overlay-menu settings-menu" testid="{prefix}-settings-menu">
+<Menu
+    bind:open
+    side="top"
+    align="end"
+    boundary={stage}
+    class="overlay-menu settings-menu"
+    testid="{prefix}-settings-menu"
+>
     {#snippet trigger(menu)}
         <ControlButton {menu} icon={SETTINGS} label="再生の設定" testid="{prefix}-settings" />
     {/snippet}

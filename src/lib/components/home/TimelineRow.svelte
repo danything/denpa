@@ -80,12 +80,23 @@
 
     /** 「● 録画中・あと21分」(あと何分かは `ctx.clock` で進む) */
     function recordingLine(label: string, end: number, testid: string): RowStatus {
-        return { kind: 'recording', tone: 'rec', running: true, label, detail: recordingLeft(ctx.clock, end), testid };
+        return {
+            kind: 'recording',
+            tone: 'rec',
+            running: true,
+            label,
+            detail: recordingLeft(ctx.clock, end),
+            testid,
+        };
     }
 
     /** 予約の行の段。見てほしい状態 (競合・失敗・録画しない・取り消し済み) は理由と1段に */
     function resLines(res: Res, live: boolean): RowStatus[] {
-        if (live) return statusLines([recordingLine(stateLabel('recording'), res.end_at, 'reservation-state')], clipLine(res));
+        if (live)
+            return statusLines(
+                [recordingLine(stateLabel('recording'), res.end_at, 'reservation-state')],
+                clipLine(res),
+            );
         const problems: RowStatus[] = quietState(res.state)
             ? []
             : [
@@ -144,7 +155,12 @@
         } else if (held?.state === 'ready') {
             problems.push({ kind: 'saved', tone: 'ok', label: '端末に保存済み' });
         } else if (held?.state === 'failed') {
-            problems.push({ kind: 'save-failed', tone: 'error', label: '端末に保存できませんでした', detail: '詳細からやり直せます' });
+            problems.push({
+                kind: 'save-failed',
+                tone: 'error',
+                label: '端末に保存できませんでした',
+                detail: '詳細からやり直せます',
+            });
         }
         problems.push(...clipLine(rec, true));
         if (logoUnusable(rec.cm_note) && rec.deleted_at === null) {
@@ -193,7 +209,13 @@
                     ctx.openReservation(res);
                 }}
             />
-            <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? null : res} excerpt={res.description} />
+            <RowMeta
+                service={res.service_name}
+                parts={[duration(res.start_at, res.end_at)]}
+                row={res}
+                rule={res.manual ? null : res}
+                excerpt={res.description}
+            />
             {#each resLines(res, item.zone === 'now') as status (status.kind)}
                 <RowActivity {status} />
             {/each}
@@ -201,15 +223,27 @@
         <div class="row-actions">
             {#if res.recording_id !== null}
                 <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
-                <a class="button" href={resolve(`chase/${res.recording_id}`)} data-testid="chase-button">追っかけ</a>
+                <a class="button" href={resolve(`chase/${res.recording_id}`)} data-testid="chase-button"
+                    >追っかけ</a
+                >
             {/if}
             {#if ctx.cancelable(res)}
-                <ActionButton action="?/cancel" fields={{ id: res.id }} class="outline danger" testid="cancel-button">
+                <ActionButton
+                    action="?/cancel"
+                    fields={{ id: res.id }}
+                    class="outline danger"
+                    testid="cancel-button"
+                >
                     <Icon icon={X} size="size-4" /><span class="btn-label">取消</span>
                 </ActionButton>
             {:else if res.state === 'canceled' && res.end_at > ctx.clock}
                 <!-- 取り消した予約はルールが作り直さないので、気が変わったときに戻せるのはここだけ -->
-                <ActionButton action="?/restore" fields={{ id: res.id }} class="secondary" testid="restore-button">
+                <ActionButton
+                    action="?/restore"
+                    fields={{ id: res.id }}
+                    class="secondary"
+                    testid="restore-button"
+                >
                     戻す
                 </ActionButton>
             {/if}
@@ -250,8 +284,21 @@
                     ctx.openMissed(res);
                 }}
             />
-            <RowMeta service={res.service_name} parts={[duration(res.start_at, res.end_at)]} row={res} rule={res.manual ? 'manual' : res} excerpt={res.description} />
-            <RowActivity status={{ kind: 'missed', tone: 'warning', label: stateLabel('missed'), testid: 'missed-state' }} />
+            <RowMeta
+                service={res.service_name}
+                parts={[duration(res.start_at, res.end_at)]}
+                row={res}
+                rule={res.manual ? 'manual' : res}
+                excerpt={res.description}
+            />
+            <RowActivity
+                status={{
+                    kind: 'missed',
+                    tone: 'warning',
+                    label: stateLabel('missed'),
+                    testid: 'missed-state',
+                }}
+            />
         </div>
         <div class="row-actions">
             <!-- 構えの鍵は負の値にして、録画のIDと混ざらないようにする (deleting は録画と共用) -->
@@ -310,8 +357,13 @@
             {/if}
             {#if progress !== null}
                 <span class="t-resume" data-testid="resume"
-                    ><span class="resume-fill" style="width: {(progress.length > 0 ? Math.min(1, progress.at / progress.length) : 0) * 100}%"></span
-                ></span>
+                    ><span
+                        class="resume-fill"
+                        style="width: {(progress.length > 0
+                            ? Math.min(1, progress.at / progress.length)
+                            : 0) * 100}%"
+                    ></span></span
+                >
             {/if}
         </span>
         <div class="row-body" data-testid="row-body">
@@ -346,8 +398,15 @@
                 <div class="row-more">
                     <Menu side="bottom" align="end" lazy class="row-menu" testid="row-menu">
                         {#snippet trigger(props)}
-                            <button {...props} type="button" class="ghost icon" title="操作" data-testid="row-more">
-                                <Icon icon={Ellipsis} size="size-4" /><span class="visually-hidden">操作</span>
+                            <button
+                                {...props}
+                                type="button"
+                                class="ghost icon"
+                                title="操作"
+                                data-testid="row-more"
+                            >
+                                <Icon icon={Ellipsis} size="size-4" /><span class="visually-hidden">操作</span
+                                >
                             </button>
                         {/snippet}
                         <button
@@ -374,7 +433,12 @@
                             >
                                 <input type="hidden" name="id" value={rec.id} />
                                 {#if ctx.deleting.armed === rec.id}
-                                    <button type="submit" role="menuitem" class="menu-item menu-danger" data-testid="row-menu-delete-confirm">
+                                    <button
+                                        type="submit"
+                                        role="menuitem"
+                                        class="menu-item menu-danger"
+                                        data-testid="row-menu-delete-confirm"
+                                    >
                                         <Icon icon={Trash} size="size-4" />削除を確定
                                     </button>
                                 {:else}
@@ -412,11 +476,22 @@
                     <!-- 動いている間は中断だけ。裏で ffmpeg が元のTSを読んでいるので、消させると道連れになる。
                         狭い画面はアイコンだけ (3段目のエンコードの進みに幅を回す。字は読み上げに残す) -->
                     {#if rec.job_canceling}
-                        <button type="button" class="outline danger" disabled aria-busy="true" data-testid="encode-cancel">
+                        <button
+                            type="button"
+                            class="outline danger"
+                            disabled
+                            aria-busy="true"
+                            data-testid="encode-cancel"
+                        >
                             <Icon icon={X} size="size-4" /><span class="btn-label">エンコード中断</span>
                         </button>
                     {:else}
-                        <ActionButton action="?/cancelEncode" fields={{ id: rec.job_id }} class="outline danger" testid="encode-cancel">
+                        <ActionButton
+                            action="?/cancelEncode"
+                            fields={{ id: rec.job_id }}
+                            class="outline danger"
+                            testid="encode-cancel"
+                        >
                             <Icon icon={X} size="size-4" /><span class="btn-label">エンコード中断</span>
                         </ActionButton>
                     {/if}
@@ -440,9 +515,15 @@
         {#if rec.job_id !== null}
             {@const barPercent = encodeLive.entries[rec.id]?.percent ?? rec.job_percent ?? 0}
             {@const known = rec.job_state === 'running' && barPercent > 0}
-            <progress class="row-bar" class:running={known} value={known ? barPercent : undefined} max="1"></progress>
+            <progress class="row-bar" class:running={known} value={known ? barPercent : undefined} max="1"
+            ></progress>
         {:else if held?.state === 'downloading'}
-            <progress class="row-bar success" class:running={held.progress !== null} value={held.progress ?? undefined} max="1"></progress>
+            <progress
+                class="row-bar success"
+                class:running={held.progress !== null}
+                value={held.progress ?? undefined}
+                max="1"
+            ></progress>
         {/if}
     </div>
 {/snippet}

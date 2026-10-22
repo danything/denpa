@@ -23,11 +23,10 @@ export const CHANNEL_TYPES: readonly ChannelType[] = ['GR', 'BS', 'CS'];
  * 同じ形の応答をもう 2 つ取る。詳細は開いた 1 件だけ `/api/programs/<id>` で取る
  * (予約・録画の一覧と同じ経路)
  */
-export interface GridProgram
-    extends Pick<
-        Program,
-        'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres' | 'copy_never'
-    > {
+export interface GridProgram extends Pick<
+    Program,
+    'id' | 'service_id' | 'start_at' | 'end_at' | 'name' | 'description' | 'genres' | 'copy_never'
+> {
     reservation_state: ReservationState | null;
     /**
      * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。

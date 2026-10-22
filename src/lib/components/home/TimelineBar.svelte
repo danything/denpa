@@ -75,18 +75,33 @@
                 data-testid="filter-chip"
                 data-filter={f.id}
             >
-                <Icon icon={TriangleAlert} size="size-4" />{f.label}<span class="num" data-testid="filter-count"
-                    >{counts[f.id]}</span
+                <Icon icon={TriangleAlert} size="size-4" />{f.label}<span
+                    class="num"
+                    data-testid="filter-count">{counts[f.id]}</span
                 >
             </button>
         {/each}
     </div>
 
-    <Menu bind:open={viewOpen} side={phone.current ? 'top' : 'bottom'} align="end" class="view-menu" testid="view-menu">
+    <Menu
+        bind:open={viewOpen}
+        side={phone.current ? 'top' : 'bottom'}
+        align="end"
+        class="view-menu"
+        testid="view-menu"
+    >
         {#snippet trigger(props)}
-            <button {...props} type="button" class="ghost icon t-more" title="状態と表示の切り替え" data-testid="view-toggle">
-                <Icon icon={Ellipsis} size="size-5" /><span class="visually-hidden">状態と表示の切り替え</span>
-                {#if grouped || showDeleted || showFinished}<span class="view-dot" aria-hidden="true"></span>{/if}
+            <button
+                {...props}
+                type="button"
+                class="ghost icon t-more"
+                title="状態と表示の切り替え"
+                data-testid="view-toggle"
+            >
+                <Icon icon={Ellipsis} size="size-5" /><span class="visually-hidden">状態と表示の切り替え</span
+                >
+                {#if grouped || showDeleted || showFinished}<span class="view-dot" aria-hidden="true"
+                    ></span>{/if}
             </button>
         {/snippet}
         <!-- 状態は押せない頭 (サイドバーの無い幅でも読めるように) -->

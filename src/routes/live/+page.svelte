@@ -330,7 +330,13 @@
         ...pip.notices,
         // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか断られたかを言う
         ...(form?.recorded
-            ? [{ key: `record-${form.recorded}`, kind: 'info' as const, text: `録画を始めます: ${form.recorded}` }]
+            ? [
+                  {
+                      key: `record-${form.recorded}`,
+                      kind: 'info' as const,
+                      text: `録画を始めます: ${form.recorded}`,
+                  },
+              ]
             : []),
         ...errorNotice(form, 'record-error'),
     ]);
@@ -356,14 +362,14 @@
     外枠は観る画面・追っかけと同じ (PlayerLayout)
 -->
 <PlayerLayout testid="live">
-        <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
-        <!--
+    <!-- 映像は高さのほうを上限にする。横幅いっぱいにすると縦がはみ出す -->
+    <!--
             **舞台の配線は3画面で共通** ([PlayerStage.svelte](../../lib/components/player/PlayerStage.svelte))。
             映像と重ねものの束も追っかけと共通 ([MediaStack.svelte](../../lib/components/player/MediaStack.svelte)) —
             なぜ style で書くか・なぜ入れ物を分けるかはあちらに
         -->
-        <PlayerStage {controls} {fullscreen} {ambient} testid="live-frame" bind:element={stageEl}>
-            {#snippet children(stage)}
+    <PlayerStage {controls} {fullscreen} {ambient} testid="live-frame" bind:element={stageEl}>
+        {#snippet children(stage)}
             <MediaStack
                 holding={player.holding}
                 captionsOn={player.captions && player.hasCaptions}
@@ -423,7 +429,12 @@
                     {#if player.tuned !== null}
                         <form method="POST" action="?/record" use:submitting>
                             <input type="hidden" name="service" value={player.tuned.serviceId} />
-                            <ControlButton icon={RECORD} label="いまの番組を録画する" submit testid="live-record" />
+                            <ControlButton
+                                icon={RECORD}
+                                label="いまの番組を録画する"
+                                submit
+                                testid="live-record"
+                            />
                         </form>
                         <ControlButton
                             icon={DATA}
@@ -501,14 +512,14 @@
                             広い枠では包みは何もしないので、並びは今までどおり (観る画面と同じ)
                         -->
                         <Extras>
-                        <ControlButton
-                            icon={player.silenced ? SOUND_OFF : SOUND_ON}
-                            label={player.silenced ? '音を出す' : '音を消す'}
-                            testid="live-sound"
-                            onclick={() => (player.silenced ? player.unmute() : player.mute())}
-                        />
+                            <ControlButton
+                                icon={player.silenced ? SOUND_OFF : SOUND_ON}
+                                label={player.silenced ? '音を出す' : '音を消す'}
+                                testid="live-sound"
+                                onclick={() => (player.silenced ? player.unmute() : player.mute())}
+                            />
 
-                        <!--
+                            <!--
                         **字幕の出し入れ。字幕を持っている番組でだけ出す。**
 
                         字幕の無い番組で押せる形にしておくと、押しても何も起きない
@@ -520,17 +531,17 @@
                         `TrackList`)。届いてから出していた頃は、間隔の空く番組で
                         ボタンが出なかった
                     -->
-                        {#if player.hasCaptions}
-                            <ControlButton
-                                icon={CAPTION}
-                                label={player.captions ? '字幕を消す' : '字幕を出す'}
-                                on={player.captions}
-                                testid="live-caption"
-                                onclick={() => player.toggleCaptions()}
-                            />
-                        {/if}
+                            {#if player.hasCaptions}
+                                <ControlButton
+                                    icon={CAPTION}
+                                    label={player.captions ? '字幕を消す' : '字幕を出す'}
+                                    on={player.captions}
+                                    testid="live-caption"
+                                    onclick={() => player.toggleCaptions()}
+                                />
+                            {/if}
 
-                        <!--
+                            <!--
                         データ放送 (d) と切り抜きは**右端の縦の列** —
                         観る画面と同じ場所に揃えてある。
 
@@ -549,15 +560,15 @@
                         できないものをできる顔で出さないために、d ボタンと同じ
                         形にはせず「外へ出ていく」印にしてあります
                     -->
-                        {#if player.hybridcast[0] !== undefined}
-                            {@const app = player.hybridcast[0]}
-                            <ControlButton
-                                icon={OPEN_OUT}
-                                label="{app.name === '' ? 'Hybridcast' : app.name} を別のタブで開く"
-                                testid="live-hybridcast"
-                                onclick={() => window.open(app.url, '_blank', 'noopener,noreferrer')}
-                            />
-                        {/if}
+                            {#if player.hybridcast[0] !== undefined}
+                                {@const app = player.hybridcast[0]}
+                                <ControlButton
+                                    icon={OPEN_OUT}
+                                    label="{app.name === '' ? 'Hybridcast' : app.name} を別のタブで開く"
+                                    testid="live-hybridcast"
+                                    onclick={() => window.open(app.url, '_blank', 'noopener,noreferrer')}
+                                />
+                            {/if}
                         </Extras>
 
                         <!--
@@ -619,7 +630,8 @@
                                     ([ControlBar.svelte](../../lib/components/player/ControlBar.svelte))
                                 -->
                                 {#if player.remembered > FLOOR}
-                                    <button type="button"
+                                    <button
+                                        type="button"
                                         class="relearn"
                                         onclick={() => player.relearn()}
                                         data-testid="live-relearn">測り直す</button
@@ -645,7 +657,9 @@
                                         data-target={player.target}
                                         data-floor={player.floor}
                                         data-gap={player.gapMost}
-                                        >下限 {player.floor.toFixed(2)}秒 (受信の間隔 最大 {player.gapMost.toFixed(2)}秒)</span
+                                        >下限 {player.floor.toFixed(2)}秒 (受信の間隔 最大 {player.gapMost.toFixed(
+                                            2,
+                                        )}秒)</span
                                     >
                                 {/if}
                                 <!--
@@ -665,9 +679,7 @@
                                     出るのは直した回数のほう
                                 -->
                                 {#if player.slipMost > 0}
-                                    ・ <span
-                                        >映像の遅れ 最大 {Math.round(player.slipMost * 1000)}ms</span
-                                    >
+                                    ・ <span>映像の遅れ 最大 {Math.round(player.slipMost * 1000)}ms</span>
                                 {/if}
                                 {#if player.slips > 0}
                                     ・ <span>映像の遅れを補正 {player.slips}回</span>
@@ -679,7 +691,9 @@
                                 -->
                                 {#if player.rateChanges > 0}
                                     ・ <span data-testid="live-rate"
-                                        >{player.rate === 1 ? '' : `速さ ${player.rate}倍 ・ `}速さを変えた回数 {player.rateChanges}回</span
+                                        >{player.rate === 1
+                                            ? ''
+                                            : `速さ ${player.rate}倍 ・ `}速さを変えた回数 {player.rateChanges}回</span
                                     >
                                 {/if}
                                 <!--
@@ -688,7 +702,11 @@
                                     戻る前に余裕がどれだけあるかを読むため
                                 -->
                                 {#if player.canvas && player.decodeMs > 0}
-                                    ・ <span>デコード {player.decodeMs.toFixed(1)}ms{player.thinned ? ' (コマを間引いています)' : ''}</span>
+                                    ・ <span
+                                        >デコード {player.decodeMs.toFixed(1)}ms{player.thinned
+                                            ? ' (コマを間引いています)'
+                                            : ''}</span
+                                    >
                                 {/if}
                             {/snippet}
                         </InfoBlock>
@@ -737,7 +755,8 @@
                                               icon: OPEN_OUT,
                                               run: () => {
                                                   const app = player.hybridcast[0];
-                                                  if (app !== undefined) window.open(app.url, '_blank', 'noopener,noreferrer');
+                                                  if (app !== undefined)
+                                                      window.open(app.url, '_blank', 'noopener,noreferrer');
                                               },
                                           },
                                       ]),
@@ -804,10 +823,7 @@
                     ブラウザが音ありの再生を断る。押せる場所を出す
                 -->
                 <!-- 映像の上に置くものなので、色も他の重ねボタンと同じ (OVERLAY) -->
-                <button type="button"
-                    class="small unmute {OVERLAY}"
-                    onclick={() => player.unmute()}
-                >
+                <button type="button" class="small unmute {OVERLAY}" onclick={() => player.unmute()}>
                     音を出す
                 </button>
             {/if}
@@ -832,7 +848,8 @@
                             録画に譲っている間は出さない。上の通知の「ライブに戻る」と同じ動きで、2つ並ぶと迷う
                         -->
                         {#if player.yielded === null}
-                            <button type="button"
+                            <button
+                                type="button"
                                 class="small secondary"
                                 onclick={() => current && select(current)}
                                 data-testid="live-retry">やり直す</button
@@ -841,48 +858,49 @@
                     {/snippet}
                 </PlayerVeil>
             {/if}
-            {/snippet}
+        {/snippet}
 
-            <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。幕 (`PlayerVeil`) の文言は真ん中なので重ならない -->
-            {#snippet notes()}
-                <!--
+        <!-- 映像の上の通知は舞台の列に積む (`PlayerStage` の `notes`)。幕 (`PlayerVeil`) の文言は真ん中なので重ならない -->
+        {#snippet notes()}
+            <!--
                     **録画に譲った。** ライブのチューナーを録画に取り上げられ、リクエストし直しても入れなかったので、
                     チューナーを取り上げた録画の追っかけを観ている (`live-player` の `giveWay`)。テレビのアプリも同じ言い方。
                     StageNote は押せない表示なので、「ライブに戻る」を置くこの通知だけ押せる形で並べる
                     (見た目は同じ角丸の黒いラベル。追っかけの「観る画面で」と同じ扱い)
                 -->
-                {#if player.yielded}
-                    {@const yielded = player.yielded}
-                    <span class="stage-note yielded" data-testid="live-yielded">
-                        <span class="yielded-text">
-                            録画のため局を切り替えました: <span class="broadcast">{yielded.recording.title}</span>
-                            (録画中を再生しています)
-                        </span>
-                        <button type="button"
-                            class="back-live"
-                            disabled={player.returning}
-                            onclick={() => player.backToLive()}
-                            data-testid="live-back">ライブに戻る</button
-                        >
+            {#if player.yielded}
+                {@const yielded = player.yielded}
+                <span class="stage-note yielded" data-testid="live-yielded">
+                    <span class="yielded-text">
+                        録画のため局を切り替えました: <span class="broadcast">{yielded.recording.title}</span>
+                        (録画中を再生しています)
                     </span>
-                    {#if yielded.refused}
-                        <StageNote testid="live-refused"
-                            >録画が終わるまでライブは見られません ({time(yielded.recording.endAt)})</StageNote
-                        >
-                    {/if}
+                    <button
+                        type="button"
+                        class="back-live"
+                        disabled={player.returning}
+                        onclick={() => player.backToLive()}
+                        data-testid="live-back">ライブに戻る</button
+                    >
+                </span>
+                {#if yielded.refused}
+                    <StageNote testid="live-refused"
+                        >録画が終わるまでライブは見られません ({time(yielded.recording.endAt)})</StageNote
+                    >
                 {/if}
-                <!--
+            {/if}
+            <!--
                     **指定されたとおりにできなかったときの断り書き。**
 
                     失敗ではないので、映像は出ている。「AV1 を出せない端末なので H.264 に
                     戻した」と「GPU でエンコードできずにソフトウェアでエンコードしている」(サーバから)。
                     黙って別の形式にすると、なぜ切り替えが効かないのか分からない
                 -->
-                {#if player.warning}
-                    <StageNote testid="live-warning">{player.warning}</StageNote>
-                {/if}
-            {/snippet}
-        </PlayerStage>
+            {#if player.warning}
+                <StageNote testid="live-warning">{player.warning}</StageNote>
+            {/if}
+        {/snippet}
+    </PlayerStage>
 
     <!--
         **右の列。** 幅は固定にして、映像側だけ伸ばす。番組表と同じ並び
@@ -893,82 +911,84 @@
         余白があるのに一覧のほうが先に終わっていた
     -->
     {#snippet aside()}
-    {#if detail.current}
-        <!--
+        {#if detail.current}
+            <!--
             **番組の中身は、この列を入れ替えて出す。モーダルにしない** —
             映像の上に被さると観ながら読めない (観る画面と同じ考え方)。
             読んでいる間はチャンネルを選ばないので、一覧は退けてよい。
             枠は3画面共通 (FactsAside)
         -->
-        <FactsAside
-            testid="live-detail"
-            back={{ label: '局の一覧', onclick: () => detail.close(), testid: 'live-detail-close' }}
-        >
-            <ProgramFacts program={detail.current} />
-        </FactsAside>
-    {:else}
-        <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
-        <aside class="live-side">
-            <!--
+            <FactsAside
+                testid="live-detail"
+                back={{ label: '局の一覧', onclick: () => detail.close(), testid: 'live-detail-close' }}
+            >
+                <ProgramFacts program={detail.current} />
+            </FactsAside>
+        {:else}
+            <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
+            <aside class="live-side">
+                <!--
                 **データ放送を出している間だけ、リモコンを一覧の上に出す。**
 
                 番組の中身と違って**入れ替えない** — 押しながら局も変えたいし、
                 リモコンを引っ込める操作を覚えることにもなる。一覧は残りの高さで
                 巻き取られる (`.channels` の `flex: 1`)
             -->
-            {#if dataPress !== null}
-                <Remote press={dataPress} />
-            {/if}
+                {#if dataPress !== null}
+                    <Remote press={dataPress} />
+                {/if}
 
-            <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
-            <div role="group" class="type-tabs segmented">
-                {#each types as type (type)}
-                    <!-- いま出している種別は aria-pressed で言う (色だけにしない) -->
-                    <button type="button"
-                        class="small {shown === type ? '' : 'secondary outline'}"
-                        aria-pressed={shown === type}
-                        onclick={() => (picked = type)}
-                        data-testid="live-type-{type}"
-                    >
-                        {SERVICE_TYPE_LABEL[type]}
-                    </button>
-                {/each}
-            </div>
-            <!--
+                <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->
+                <div role="group" class="type-tabs segmented">
+                    {#each types as type (type)}
+                        <!-- いま出している種別は aria-pressed で言う (色だけにしない) -->
+                        <button
+                            type="button"
+                            class="small {shown === type ? '' : 'secondary outline'}"
+                            aria-pressed={shown === type}
+                            onclick={() => (picked = type)}
+                            data-testid="live-type-{type}"
+                        >
+                            {SERVICE_TYPE_LABEL[type]}
+                        </button>
+                    {/each}
+                </div>
+                <!--
                 **枠の無い行を並べる** (アプリのサイドバーの一覧と同じ形)。一行ずつ枠を付けた
                 カードにしていた頃は、枠と行の間の余白が幅を取り、局名と番組名が先に潰れた。
                 押せることは、指を乗せたときの淡い地と、いま映している行の地で分かる
             -->
-            <ul bind:this={list} class="channels side-list" data-testid="live-channels">
-                {#each listed as channel (channel.id)}
-                    <!-- いま映しているものかどうかは、この行の中で何度も使う -->
-                    {@const tuned = current?.id === channel.id}
-                    <li class="channel-item side-item" class:tuned>
-                        <button type="button"
-                            bind:this={rows[channel.id]}
-                            class="channel"
-                            class:tuned
-                            onclick={() => {
-                                select(channel);
-                                backToPicture();
-                            }}
-                            aria-current={tuned ? 'true' : undefined}
-                            data-testid="live-channel"
-                            data-current={tuned ? 'true' : 'false'}
-                            data-channel="{channel.type}/{channel.channel}"
-                            data-service={channel.id}
-                        >
-                            <!--
+                <ul bind:this={list} class="channels side-list" data-testid="live-channels">
+                    {#each listed as channel (channel.id)}
+                        <!-- いま映しているものかどうかは、この行の中で何度も使う -->
+                        {@const tuned = current?.id === channel.id}
+                        <li class="channel-item side-item" class:tuned>
+                            <button
+                                type="button"
+                                bind:this={rows[channel.id]}
+                                class="channel"
+                                class:tuned
+                                onclick={() => {
+                                    select(channel);
+                                    backToPicture();
+                                }}
+                                aria-current={tuned ? 'true' : undefined}
+                                data-testid="live-channel"
+                                data-current={tuned ? 'true' : 'false'}
+                                data-channel="{channel.type}/{channel.channel}"
+                                data-service={channel.id}
+                            >
+                                <!--
                                 ロゴのまだ無い局は、局名の頭の 1 字 (「GR」のような種別の札だと、
                                 どの局も同じ灰色の箱になって見分けられない)
                             -->
-                            <ServiceLogo
-                                id={channel.id}
-                                has={channel.hasLogo}
-                                style="width: 2rem; height: 2rem; font-size: var(--dp-text-sm)"
-                                fallback={Array.from(channel.name.trim())[0] ?? channel.type}
-                            />
-                            <!--
+                                <ServiceLogo
+                                    id={channel.id}
+                                    has={channel.hasLogo}
+                                    style="width: 2rem; height: 2rem; font-size: var(--dp-text-sm)"
+                                    fallback={Array.from(channel.name.trim())[0] ?? channel.type}
+                                />
+                                <!--
                                 **いま映しているものは、行の地だけで示す。** 局名の前の印 (▶) や
                                 局名の色まで変えると、一覧の中でそこだけが騒がしかった。
                                 行の地は色ではなく明るさの差なので、色の見え方に頼らない。
@@ -976,51 +996,53 @@
                                 行の右に「視聴中」のバッジを置いていた頃は、狭い列 (スマホの横・PC の
                                 256px) でバッジが幅を取り、局名も番組名も「で…」まで潰れていた
                             -->
-                            <span class="channel-text">
-                                <!--
+                                <span class="channel-text">
+                                    <!--
                                     **テレビに出ている番号を局名の頭に添える** (「3 チバテレ1」)。地上波は
                                     リモコン番号、BS/CS は3桁番号 (BS朝日1=151)。局名だけだと、テレビで
                                     覚えている番号から探せない。ロゴの前に番号の列を取っていた頃は、狭い列
                                     (256px) でその列が幅を取り、局名が「J:COMチャン…」まで潰れていた。
                                     番号の無い局 (リモコン番号の無い地上波) も幅は取る — 同じ一覧の中で局名の頭がそろう
                                 -->
-                                <span class="channel-name broadcast">
-                                    {#if tuned}<span class="visually-hidden" data-testid="live-tuned-mark">視聴中</span
-                                        >{/if}{#if channel.number !== null}<span class="visually-hidden"
-                                            >{channel.type === 'GR' ? 'リモコン' : 'チャンネル'}</span
-                                        >{/if}<span class="channel-number" data-testid="live-number"
-                                        >{channel.number ?? ''}</span
-                                    >{channel.name}
-                                </span>
-                                {#if channel.now}
-                                    <span class="channel-now broadcast">
-                                        {channel.now.name}
+                                    <span class="channel-name broadcast">
+                                        {#if tuned}<span class="visually-hidden" data-testid="live-tuned-mark"
+                                                >視聴中</span
+                                            >{/if}{#if channel.number !== null}<span class="visually-hidden"
+                                                >{channel.type === 'GR' ? 'リモコン' : 'チャンネル'}</span
+                                            >{/if}<span class="channel-number" data-testid="live-number"
+                                            >{channel.number ?? ''}</span
+                                        >{channel.name}
                                     </span>
-                                {/if}
-                            </span>
-                        </button>
+                                    {#if channel.now}
+                                        <span class="channel-now broadcast">
+                                            {channel.now.name}
+                                        </span>
+                                    {/if}
+                                </span>
+                            </button>
 
-                        <!--
+                            <!--
                         **中身を読むボタンは行と別に置く。** 行そのものは選局
                         (テレビと同じで、押したら映るのがいちばん多い用) なので、
                         あらすじや出演者を見たいだけのときにチャンネルが変わっては困る。
                         番組の分からない局 (番組表がまだ薄い) には出さない
                     -->
-                        {#if channel.now}
-                            <button type="button"
-                                class="ghost small channel-detail"
-                                onclick={() => openDetail(channel)}
-                                aria-label="{channel.now.name} の詳細"
-                                data-testid="live-channel-detail"
-                            >
-                                <Icon icon={INFO} size="size-5" />
-                            </button>
-                        {/if}
-                    </li>
-                {/each}
-            </ul>
-        </aside>
-    {/if}
+                            {#if channel.now}
+                                <button
+                                    type="button"
+                                    class="ghost small channel-detail"
+                                    onclick={() => openDetail(channel)}
+                                    aria-label="{channel.now.name} の詳細"
+                                    data-testid="live-channel-detail"
+                                >
+                                    <Icon icon={INFO} size="size-5" />
+                                </button>
+                            {/if}
+                        </li>
+                    {/each}
+                </ul>
+            </aside>
+        {/if}
     {/snippet}
 </PlayerLayout>
 

@@ -106,7 +106,9 @@
     /** 最後に写した1枚と、最後に入れ替えた1枚の違い (`frameDelta`)。E2E が「止まった映像では 0 に近い」を見る */
     let delta = $state<number | null>(null);
 
-    const now = $derived(plan({ on: ambient.on, room, fullscreen, hidden, reduced, playing: ambient.playing, lit }));
+    const now = $derived(
+        plan({ on: ambient.on, room, fullscreen, hidden, reduced, playing: ambient.playing, lit }),
+    );
     /** 光を出しているか。置き場はこれが変わったときだけ測り直す (写す・止めるの切り替えでは測らない) */
     const visible = $derived(now !== 'off');
 
@@ -335,7 +337,9 @@
             const bounds: Rect = stacked
                 ? { left: 0, top: m.top, right: width, bottom: m.bottom }
                 : { left: 0, top: 0, right: width, bottom: window.innerHeight };
-            const spread = stacked ? reach(s.width, false) : Math.max(reach(s.width, true), farthest(s, bounds));
+            const spread = stacked
+                ? reach(s.width, false)
+                : Math.max(reach(s.width, true), farthest(s, bounds));
             const area = region(s, bounds, spread);
             /*
              * 範囲の座標は入れ物 (いちばん近い位置を持つ祖先。無ければ文書) の内側から。

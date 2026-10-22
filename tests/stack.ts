@@ -393,7 +393,7 @@ export async function bootClosed(
  */
 export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
     stack: [
-        // biome-ignore lint/correctness/noEmptyPattern: Playwright は分割代入でないと受け付けない
+        // oxlint-disable-next-line no-empty-pattern -- Playwright は分割代入でないと受け付けない
         async ({}, use, workerInfo) => {
             const { stack, shutdown } = await boot(workerInfo.workerIndex);
             await use(stack);

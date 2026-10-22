@@ -129,7 +129,8 @@
             flex-direction: column;
             gap: 1rem;
             height: calc(100% + var(--dp-page-top, 1rem) + var(--dp-gutter, 1rem));
-            margin: calc(-1 * var(--dp-page-top, 1rem)) calc(-1 * var(--dp-gutter, 1rem)) calc(-1 * var(--dp-gutter, 1rem));
+            margin: calc(-1 * var(--dp-page-top, 1rem)) calc(-1 * var(--dp-gutter, 1rem))
+                calc(-1 * var(--dp-gutter, 1rem));
             overflow-y: auto;
         }
         .main {

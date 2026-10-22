@@ -8,6 +8,7 @@
 <script lang="ts">
     import { resolve } from '$app/paths';
 </script>
+
 <div class="solo">
     <h1>ログアウトしました</h1>
     <p>

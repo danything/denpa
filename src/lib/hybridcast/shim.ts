@@ -56,7 +56,7 @@ export interface ShimInit {
 }
 
 export function shim(init: ShimInit): void {
-    // biome-ignore lint/suspicious/noExplicitAny: アプリの文書の中で動く (型の無い世界)
+    // oxlint-disable-next-line typescript/no-explicit-any -- アプリの文書の中で動く (型の無い世界)
     const w = window as any;
     const post = (message: Record<string, unknown>): void => {
         message['hc'] = 1;

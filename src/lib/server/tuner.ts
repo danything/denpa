@@ -168,11 +168,7 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
  * 画面側でやる (routes/settings/reception/tuners.server.ts)。
  */
 export type StreamUse =
-    | `rec ${number}`
-    | `logo ${string}`
-    | `epg ${string}`
-    | `scan ${string}`
-    | `live ${string}`;
+    `rec ${number}` | `logo ${string}` | `epg ${string}` | `scan ${string}` | `live ${string}`;
 
 /** 録画の利用者の名乗り。読むほう (`recordingOf`) と対にしておく */
 export function recordingUse(id: number): StreamUse {

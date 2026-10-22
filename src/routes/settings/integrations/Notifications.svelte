@@ -89,10 +89,20 @@
                             {/if}
                         </div>
                         <div class="cluster row-actions">
-                            <ActionButton action="?/testWebhook" fields={{ id: webhook.id }} class="small secondary" testid="webhook-test">
+                            <ActionButton
+                                action="?/testWebhook"
+                                fields={{ id: webhook.id }}
+                                class="small secondary"
+                                testid="webhook-test"
+                            >
                                 テスト送信
                             </ActionButton>
-                            <ActionButton action="?/toggleWebhook" fields={{ id: webhook.id }} class="small secondary" testid="webhook-toggle">
+                            <ActionButton
+                                action="?/toggleWebhook"
+                                fields={{ id: webhook.id }}
+                                class="small secondary"
+                                testid="webhook-toggle"
+                            >
                                 {webhook.enabled ? '無効化' : '有効化'}
                             </ActionButton>
                             <!-- 押し間違い防止に2回押させる (録画・ルールの削除と同じ) -->

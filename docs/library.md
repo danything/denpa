@@ -197,6 +197,7 @@ denpa を通さずに消されたものは `RECONCILE_INTERVAL` (既定5分) ご
 
 録画の節目を Webhook で外に飛ばせます。設定の「連携」の「通知」に Discord や Slack の
 Incoming Webhook の URL をそのまま入れられます。
+
 - 録画開始 / 録画完了 / 録画失敗 / エンコード完了 / エンコード失敗、および録画の外側の
   変事 (ディスク残量わずか / チューナーエージェント切断 / チューナーエージェント復帰)。選ばなければ全部
   (種類は `src/lib/webhook-events.ts`)

@@ -147,7 +147,7 @@ export async function readBroadcastText(
     let event: EitEvent | null = null;
     try {
         const buffer = Buffer.alloc(CHUNK);
-        for (let offset = 0; offset < READ_LIMIT; ) {
+        for (let offset = 0; offset < READ_LIMIT;) {
             const { bytesRead } = await file.read(buffer, 0, CHUNK, offset);
             if (bytesRead === 0) break;
             offset += bytesRead;

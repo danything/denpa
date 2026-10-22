@@ -49,6 +49,7 @@
 `currentColor` で文字の色に従う）。読み込みは **Iconify のアイコンデータの束 (`@iconify-json/*`) を
 [unplugin-icons](https://github.com/unplugin/unplugin-icons) で組むときに Svelte の部品へ
 変える**やり方です（`import Play from '~icons/lucide/play'`。`vite.config.ts`）。
+
 - **実行中に取得しない。** denpa は家の LAN だけ・オフラインでも開くものなので、
   Iconify の API からアイコンデータを取る `@iconify/svelte` の既定の使い方は採りません。束に入るのは
   使ったアイコンの `<svg>` だけで、SSR でもそのまま出ます（後からアイコンが差し込まれてずれることもない）。

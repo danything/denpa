@@ -95,28 +95,28 @@
     <!-- 十字と決定。**真ん中が決定**で、実機と同じ形 -->
     <div class="pad">
         <div></div>
-        <button type="button" class="secondary key" onclick={() => press(UP)}
-            aria-label="上"><Icon icon={ArrowUp} size="size-5" /></button>
+        <button type="button" class="secondary key" onclick={() => press(UP)} aria-label="上"
+            ><Icon icon={ArrowUp} size="size-5" /></button
+        >
         <div></div>
-        <button type="button" class="secondary key" onclick={() => press(LEFT)}
-            aria-label="左"><Icon icon={ArrowLeft} size="size-5" /></button>
+        <button type="button" class="secondary key" onclick={() => press(LEFT)} aria-label="左"
+            ><Icon icon={ArrowLeft} size="size-5" /></button
+        >
         <button type="button" class="key enter" onclick={() => press(ENTER)}>決定</button>
-        <button type="button" class="secondary key" onclick={() => press(RIGHT)}
-            aria-label="右"><Icon icon={ArrowRight} size="size-5" /></button>
+        <button type="button" class="secondary key" onclick={() => press(RIGHT)} aria-label="右"
+            ><Icon icon={ArrowRight} size="size-5" /></button
+        >
         <div></div>
-        <button type="button" class="secondary key" onclick={() => press(DOWN)}
-            aria-label="下"><Icon icon={ArrowDown} size="size-5" /></button>
+        <button type="button" class="secondary key" onclick={() => press(DOWN)} aria-label="下"
+            ><Icon icon={ArrowDown} size="size-5" /></button
+        >
         <div></div>
     </div>
 
     <div class="row">
-        <button type="button" class="secondary small grow" onclick={() => press(BACK)}>
-            戻る
-        </button>
+        <button type="button" class="secondary small grow" onclick={() => press(BACK)}> 戻る </button>
         <!-- d は放送に渡す (DataButtonPressed)。待機ページからメニューを開くのはこれ -->
-        <button type="button" class="secondary small" onclick={() => press(DATA)}>
-            d
-        </button>
+        <button type="button" class="secondary small" onclick={() => press(DATA)}> d </button>
     </div>
 
     <!-- **畳んでおく。** 使う放送のほうが少ないので、いつも場所を取らせない -->

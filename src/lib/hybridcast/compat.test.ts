@@ -9,7 +9,7 @@ const INIT: CompatInit = {
     who: { originalNetworkId: 0x7fe0, serviceId: 1024 },
 };
 
-// biome-ignore lint/suspicious/noExplicitAny: アプリから見える形 (型の無い世界) で触る
+// oxlint-disable-next-line typescript/no-explicit-any -- アプリから見える形 (型の無い世界) で触る
 function make(init: CompatInit = INIT): { api: any; posted: Record<string, unknown>[] } {
     const posted: Record<string, unknown>[] = [];
     return { api: bmlCompat(init, (message) => posted.push(message)), posted };

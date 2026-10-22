@@ -88,11 +88,10 @@ export function hwChain(codec: HwCodec, allow: HwAllow, turn = 0, devices = stat
         .map((device) =>
             HW_KINDS.filter(
                 (kind) => device[kind].includes(codec) && hwAllowed(allow, device.path, kind, codec),
-            ).map(
-                (kind): HwWay =>
-                    kind === 'vaapi' && device.cqp.includes(codec)
-                        ? { device: device.path, kind, cqp: true }
-                        : { device: device.path, kind },
+            ).map((kind): HwWay =>
+                kind === 'vaapi' && device.cqp.includes(codec)
+                    ? { device: device.path, kind, cqp: true }
+                    : { device: device.path, kind },
             ),
         )
         .filter((ways) => ways.length > 0);

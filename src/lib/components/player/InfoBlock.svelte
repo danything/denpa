@@ -54,13 +54,14 @@
             並びの隙間 (`gap`) が前を受け持つ
         -->
         <span class="keep">
-            {#if range !== null}<span data-testid={rangeTestid}>{time(range.start)} 〜 {time(range.end)}</span><span class="sep">・</span>{/if}<span
-                class="broadcast">{service}</span
-            >
+            {#if range !== null}<span data-testid={rangeTestid}>{time(range.start)} 〜 {time(range.end)}</span
+                ><span class="sep">・</span>{/if}<span class="broadcast">{service}</span>
         </span>
         {#if title !== null && title !== ''}
             <span class="truncate">
-                <span class="sep lead">・</span><span class="broadcast" data-testid={titleTestid}>{title}</span>
+                <span class="sep lead">・</span><span class="broadcast" data-testid={titleTestid}
+                    >{title}</span
+                >
             </span>
         {/if}
     </div>

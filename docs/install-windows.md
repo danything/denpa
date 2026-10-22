@@ -14,6 +14,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 **エージェントは Windows の上でそのまま、denpa 本体は WSL のコンテナ (`wslc`) で動かします。** Docker Desktop は
 要りません (wslc は WSL に入っていて、`wsl --update` で使えるようになる)。コンテナには USB を渡せないので、
 チューナーとカードに触るエージェントはコンテナに入れられません。
+
 1. **エージェント** — 最新のリリースから取り、タスク スケジューラに「ログオンしたら起こす」
    タスク (`denpa-agent`) を載せます。自分のアカウントのタスクなので管理者は要りません。窓は出さず
    (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` の輪。
@@ -22,6 +23,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
    載せて、いま1度流します。起こすのは `denpa-start.ps1` (install.ps1 が書く)
 
 `denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
+
 - **コンテナから Windows のエージェントへは、Hyper-V の Default Switch の IP で届きます。**
   `host.docker.internal` のような名前はありません。その IP は Windows を起こし直すと変わりうるので、
   起こすたびに調べ、`TUNER_AGENT_URL` か版か `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
@@ -40,6 +42,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 `compose.yml` を `compose.yml.docker` に退けます。`compose.override.yml` に足していた環境変数は引き継がないので、
 `denpa.env` に書き移します (退けたときにそう言う)。このときだけ Docker Desktop を起こしておく必要があります
 (移したあとは要りません。Docker のボリュームは消さずに残す)。
+
 - **WSL は勝手に入れません。** wslc が無いときは、エージェントだけ入れて `wsl --update` (WSL が無ければ
   管理者で `wsl --install --no-distribution`) を流すよう言って終わります
 - ドライバは入れません (下)。刺さっているチューナーが WinUSB でなければ、そう言います
@@ -56,6 +59,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 | wslc のボリューム `denpa-data` | DB                                                                                                                                                               |
 
 **使えるもの。**
+
 - **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 版 (0.2.0 から。
   入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
   受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
@@ -77,6 +81,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   並びます (USB のリーダーが先)
 
 **px4-userland の機材で Windows だけ違うところ。**
+
 - **px4d は標準入力で止めます** (`--exit-on-stdin-eof`)。Windows には SIGTERM が無いので、エージェントは px4d の
   標準入力を開けたまま持ち、止めるときに閉じます。px4d は後片付け (LNB を 0V に戻す・ソケットを消す) をしてから
   終わります。エージェントが落ちても書く側が閉じるので、**px4d が USB を持ったまま残りません**
@@ -94,6 +99,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
 
 **使えないもの。**
+
 - **PT2/PT3 などの DVB の機材** — Windows に DVB はありません
 - **PX-W3U3 (asicen-userland)** — Windows 版がありません
 - **止めるときに録画を待てません。** Windows には「止まれ」を伝える手 (SIGTERM) が無く、
@@ -102,6 +108,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
   siano-ts も同じく、止めるときに `quit` を読めなければ Kill になります (USB は OS が閉じる)
 
 **Linux・Mac と違うところ。**
+
 - 子の標準出力は poll できないので、裏のスレッドが読みます (`DeviceStream`)。pipe は 4KB ほどで広げられず、
   読む側が少し止まったぶんは siano-ts の中の溜め (16KB × 256) が吸います。px4d から受ける TS は pipe を使わないので 8MB の溜め
 - タスクの優先度は普通にしてあります (既定の「低い」だと、エンコードで CPU が埋まる間 siano-ts や px4d が後回しになる)

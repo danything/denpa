@@ -41,8 +41,7 @@ export interface SeriesGroup<T extends Groupable> {
 }
 
 export type GroupEntry<T extends Groupable> =
-    | { kind: 'single'; item: T }
-    | { kind: 'group'; group: SeriesGroup<T> };
+    { kind: 'single'; item: T } | { kind: 'group'; group: SeriesGroup<T> };
 
 /** 画面に描く1行。見出しか、行そのもの (`nested` は番組の中の行) */
 export type GroupLine<T extends Groupable> =

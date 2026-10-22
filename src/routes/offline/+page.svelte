@@ -2,7 +2,13 @@
     import { onMount } from 'svelte';
     import { arming } from '#lib/arming.svelte.js';
     import { dateTime, durationMs, percent, size } from '#lib/format.js';
-    import { offline, rememberResume, removeEverywhere, removeLocal, startOffline } from '#lib/offline.svelte.js';
+    import {
+        offline,
+        rememberResume,
+        removeEverywhere,
+        removeLocal,
+        startOffline,
+    } from '#lib/offline.svelte.js';
     import { type OfflineVideo, resumeQueue, videos } from '#lib/offline-db.js';
 
     /**
@@ -177,13 +183,7 @@
                     {:else if item.state === 'failed'}
                         <span class="tag error keep">保存に失敗</span>
                     {:else}
-                        <button
-                            type="button"
-                            class="small keep"
-                            onclick={() => play(item)}
-                        >
-                            観る
-                        </button>
+                        <button type="button" class="small keep" onclick={() => play(item)}> 観る </button>
                     {/if}
                     {#if item.state === 'failed'}
                         <!-- 失敗した控えの片付け。**サーバの録画には触らない** (中身が無いだけ) -->

@@ -96,13 +96,17 @@
             </div>
             {#if data.user && data.others !== null}
                 <form method="POST" action={resolve('logout')}>
-                    <button type="submit" class="small secondary outline" data-testid="logout">ログアウト</button>
+                    <button type="submit" class="small secondary outline" data-testid="logout"
+                        >ログアウト</button
+                    >
                 </form>
 
                 <div class="others">
                     <form method="POST" action="?/logoutOthers" use:submitting={sent}>
                         {#if confirming.armed === 0}
-                            <button type="submit" class="small danger" data-testid="logout-others-confirm">ログアウトを確定</button>
+                            <button type="submit" class="small danger" data-testid="logout-others-confirm"
+                                >ログアウトを確定</button
+                            >
                         {:else}
                             <button
                                 type="button"
@@ -127,7 +131,8 @@
                             </p>
                             <p>
                                 テレビのアプリは止まりません。テレビは
-                                <a href={`${resolve('settings/integrations')}#tv`}>テレビのアプリ</a>で1台ずつ取り消します。
+                                <a href={`${resolve('settings/integrations')}#tv`}>テレビのアプリ</a
+                                >で1台ずつ取り消します。
                             </p>
                         {/snippet}
                     </Lead>
@@ -135,7 +140,8 @@
             {:else}
                 <!-- 素通し (TRUSTED_NETWORKS) で入っている。控えが無いので、切るものも無い -->
                 <p class="small muted" data-testid="login-none">
-                    ログインせずに使っています (信頼するネットワークから入っているため)。ログアウトするものはありません
+                    ログインせずに使っています
+                    (信頼するネットワークから入っているため)。ログアウトするものはありません
                 </p>
             {/if}
         </section>

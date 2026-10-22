@@ -22,9 +22,13 @@
     title={detail === '' ? status.label : `${status.label}・${detail}`}
 >
     {#if status.tone === 'error' || status.tone === 'warning'}
-        <span class="act-mark"><Icon icon={status.tone === 'error' ? CircleX : TriangleAlert} size="size-3.5" /></span>
+        <span class="act-mark"
+            ><Icon icon={status.tone === 'error' ? CircleX : TriangleAlert} size="size-3.5" /></span
+        >
     {:else}
-        <span class="act-mark" aria-hidden="true"><span class="act-dot" class:rec-dot={status.running === true}></span></span>
+        <span class="act-mark" aria-hidden="true"
+            ><span class="act-dot" class:rec-dot={status.running === true}></span></span
+        >
     {/if}
     <span class="act-text"
         ><span class="act-label" data-testid={status.testid}>{status.label}</span>{#if detail !== ''}<span

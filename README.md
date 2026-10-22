@@ -27,6 +27,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 ## 使ってよい範囲
 
 denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的に**録画して観るためのものです。
+
 - 録画やライブを、世帯の外の人に観せない
 - カードの鍵を、世帯の外の機器に配らない
 - カードを書き換えない
@@ -92,6 +93,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 ## もっと詳しく
 
 **はじめる**
+
 - [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
 - [docs/install-mac.md](docs/install-mac.md) — Mac に入れる
 - [docs/install-windows.md](docs/install-windows.md) — Windows に入れる
@@ -100,28 +102,34 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [docs/v2.md](docs/v2.md) — 2.0 で変わったこと
 
 **チューナー**
+
 - [docs/tuners.md](docs/tuners.md) — **使えるチューナー** (一覧・カードリーダー・B-CAS・直らないとき)
 - [docs/tuner-pt3.md](docs/tuner-pt3.md) — PT2・PT3・PX-BCUD (Linux DVB)
 - [docs/tuner-px4.md](docs/tuner-px4.md) — PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
 - [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD (siano-userland)
 
 **乗り換え**
+
 - [docs/switch.md](docs/switch.md) — **ほかの録画ソフトから乗り換える** (Mirakurun・EPGStation・KonomiTV・EDCB)
 - [docs/migrate.md](docs/migrate.md) — **EPGStation からの引き継ぎ**
 
 **使う**
+
 - [docs/watch.md](docs/watch.md) — **観る** (ライブ・操作バー・ホーム画面に置く)
 - [docs/offline.md](docs/offline.md) — 端末に保存して電波の無いところで観る
 - [docs/library.md](docs/library.md) — 録画の置き場と配り方 (テレビのアプリ・削除・通知)
 
 **運用**
+
 - [docs/config.md](docs/config.md) — **環境変数** (一覧と、前の版から上げるとき)
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング)
 
 **外から使う**
+
 - [docs/api.md](docs/api.md) — **外から使う API**
 
 **仕組み**
+
 - [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴・画面で動いてよいもの (CSP))
 - [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・画面・状態遷移・テスト)
 - [docs/agent.md](docs/agent.md) — **チューナーエージェント** (取り合い・共有・選局・設定ファイル・B25・鍵の配布)
@@ -140,12 +148,14 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 ## 謝辞
 
 **手を入れてくれた人** (ありがとうございます):
+
 - [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
 - [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU でエンコードできるようになりました (#417)
 - [@fetburner](https://github.com/fetburner) — ルール画面の下見でチューナーの取り合いを数えるところを、時刻順に1回なぞるやり方にして、全件で 20 倍ほど速くしてくれました (#662)
 - [@sirius128](https://github.com/sirius128) — 古い Intel の内蔵 GPU (Haswell など) でも GPU でエンコードできるように、イメージに i965 のドライバを足してくれました。Pentium G3250 と PT3 の実機で確かめてくれています (#775)
 
 **土台にしている仕事**:
+
 - [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — ホストにドライバを入れずにチューナーを使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
 - [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送は長くこれで描いていました。自前のエンジン (`src/lib/bml/`) は、その振る舞いを手本にしています
 

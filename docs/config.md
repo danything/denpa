@@ -66,6 +66,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 
 **「再生リンクをコピー」と、それが作っていた期限付きの URL (`/api/recordings/<id>/file?token=…`) をやめました。**
 外部のプレイヤーには対応しないので、ログインせずに録画を開ける URL を出す理由が無くなりました。
+
 - **出したリンクは、上げた時点で開けなくなる** (期限内でも)。テーブル (`share_links`) はマイグレーションで消える
   (`drizzle/0011_drop-share-links.sql`)。リンクを作る API (`POST /api/recordings/<id>/share`) も無くなった
 - 画面からの再生は、画面と同じ資格 (信頼したネットワークか、ログインの Cookie) でファイルのエンドポイントから取得する
@@ -78,6 +79,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 **`ADDRESS_HEADER` を読まなくなりました。** 前段 (リバースプロキシ) の後ろに置いているなら、前段の
 アドレスを `TRUSTED_PROXIES` に書きます (chart は `denpa.trustedProxies`)。古い名前を読み替える仕組みは持ちません。
 決め方と書き方の例は [auth.md](auth.md#前段の後ろに置くとき-trusted_proxies) にあります。
+
 - 前は `ADDRESS_HEADER=x-forwarded-for` を渡すと、**誰から来た** `X-Forwarded-For` でも右端を信じていた。
   denpa のポートへ前段を通らずに届く経路があると、ヘッダを付けるだけで `TRUSTED_NETWORKS` を名乗れた。
   いまは段数 (前の `XFF_DEPTH`) も数えなくてよい
@@ -99,6 +101,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 | 元のTS (エージェント) | `/denpa-recorded` (`RECORDED_DIR`) | `/media/raw` (`RAW_DIR`。本体と同じ) |
 | エンコードしたもの    | `/library` (`LIBRARY_DIR`)         | `/media/encoded` (`ENCODED_DIR`)     |
 | エージェントの設定    | `/app-config`                      | `/config`                            |
+
 - `RECORDED_DIR` / `LIBRARY_DIR` は読まない (残っていたら本体が起動時に記録で知らせる)。置き場を変えていたなら
   `RAW_DIR` / `ENCODED_DIR` に書き直すか、親の `MEDIA_DIR` 1つにまとめる (本体とエージェントの両方が見る)
 - **DB の中の録画ファイルの場所は、起動時のマイグレーションで置き場からの相対に直る**
@@ -121,6 +124,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 
 **そのまま上げると、新しい名前の空の PVC ができます。** 古い PVC は `helm.sh/resource-policy: keep`
 で残るので消えはしませんが、録画は見えなくなります。どちらかで繋ぎます。
+
 - **古い PVC をそのまま使う**: `persistence.raw.existingClaim: denpa-recorded` /
   `persistence.encoded.existingClaim: denpa-library`(denpa-agent の chart は `persistence.raw.existingClaim`)
 - **名前ごと移す**: アプリを止め、PV の reclaim を `Retain` にして古い PVC を消し、PV の

@@ -177,7 +177,7 @@ function splitParts(body: Uint8Array, boundary: string): Entity[] | null {
     if (at === -1) return null;
     at += open.length;
     const parts: Entity[] = [];
-    for (let from = at; ; ) {
+    for (let from = at; ;) {
         const end = find(body, next, from);
         if (end === -1) return null;
         const after = end + next.length;

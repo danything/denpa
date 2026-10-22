@@ -122,7 +122,7 @@ async function frames(stream: ReadableStream<Uint8Array>) {
     const body = new Uint8Array(await new Response(stream).arrayBuffer());
     const view = new DataView(body.buffer);
     const out: { kind: number; pts: bigint; payload: Uint8Array }[] = [];
-    for (let at = 0; at < body.length; ) {
+    for (let at = 0; at < body.length;) {
         const length = view.getUint32(at);
         out.push({
             kind: view.getUint8(at + 4),
@@ -166,9 +166,8 @@ describe('録画の字幕 (recordingCaptions)', () => {
      * (録っている最中の録画は書き足しを待ち続けるので、畳まない限り閉じない)
      */
     test('1本の録画に起こす ffmpeg は上限まで。超えたら古いものを畳む', async () => {
-        const streams = Array.from(
-            { length: CAPTION_PER_RECORDING + 1 },
-            () => recordingCaptions(RECORDING_NOW, 0)!,
+        const streams = Array.from({ length: CAPTION_PER_RECORDING + 1 }, () =>
+            recordingCaptions(RECORDING_NOW, 0)!,
         );
         // いちばん古いものは閉じる (読み切れる)
         await new Response(streams[0]).arrayBuffer();

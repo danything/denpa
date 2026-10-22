@@ -18,7 +18,8 @@ import { pngChunk } from './png';
  * 前半128色が本体で、最後の1色は全面の半透明。
  * (@chinachu/aribts の lib/logo_clut.js と同じ並び)
  */
-// biome-ignore format: 4色ずつの並びのまま置いておきたい
+// 4色ずつの並びのまま置いておきたい
+// prettier-ignore
 const CLUT = new Uint8Array([
     0, 0, 0, 255,  255, 0, 0, 255,  0, 255, 0, 255,  255, 255, 0, 255,
     0, 0, 255, 255,  255, 0, 255, 255,  0, 255, 255, 255,  255, 255, 255, 255,

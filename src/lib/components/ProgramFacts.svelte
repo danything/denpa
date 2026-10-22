@@ -59,9 +59,7 @@
      * 目印は番号にしてあるが、そもそも重なるものを渡さない。
      */
     const genres = $derived([
-        ...new Set(
-            (program.genre_detail ?? []).map(genreLabel).filter((label) => label !== ''),
-        ),
+        ...new Set((program.genre_detail ?? []).map(genreLabel).filter((label) => label !== '')),
     ]);
     const audios = $derived((program.audios ?? []).map(audioLabel));
     const video = $derived(videoLabel(program.video_resolution, program.video_type));
@@ -81,7 +79,9 @@
 
 <h3 class="title broadcast">{program.name}</h3>
 <p class="meta small muted num">
-    <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)} 〜 {time(program.end_at)}
+    <span class="broadcast">{program.service_name}</span> ・ {dateTime(program.start_at)} 〜 {time(
+        program.end_at,
+    )}
     ({duration(program.start_at, program.end_at)})
     {#if status}
         <span class="meta-status">{@render status()}</span>

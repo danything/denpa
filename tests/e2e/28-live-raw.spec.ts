@@ -450,7 +450,7 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
     test('デコードできない端末ではエンコードしたものに戻り、理由を出す', async ({ page }) => {
         // worker へ描く先を渡せない端末 (OffscreenCanvas の無い古い Safari)
         await page.addInitScript(() => {
-            // biome-ignore lint/suspicious/noExplicitAny: 端末に無いことにする
+            // oxlint-disable-next-line typescript/no-explicit-any -- 端末に無いことにする
             delete (HTMLCanvasElement.prototype as any).transferControlToOffscreen;
         });
         await goto(page, '/live');

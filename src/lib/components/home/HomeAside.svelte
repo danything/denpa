@@ -48,7 +48,12 @@
         encoding: Rec[];
         capacity: { free: string; hours: string | null } | null;
         /** カレンダーに渡すもの (`HomeCalendar`) */
-        calendar: { marks: Map<number, DayMark>; today: number; pinned: number | null; onpick: (day: number) => void };
+        calendar: {
+            marks: Map<number, DayMark>;
+            today: number;
+            pinned: number | null;
+            onpick: (day: number) => void;
+        };
     } = $props();
 
     const attention = $derived(ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id));
@@ -97,6 +102,14 @@
 
     <h2 class="side-label">表示</h2>
     <div class="side-list" role="group" aria-label="表示の切り替え">
-        <ViewList {grouped} {setGrouped} {finishedHref} {deletedHref} {showFinished} {showDeleted} variant="list" />
+        <ViewList
+            {grouped}
+            {setGrouped}
+            {finishedHref}
+            {deletedHref}
+            {showFinished}
+            {showDeleted}
+            variant="list"
+        />
     </div>
 </aside>

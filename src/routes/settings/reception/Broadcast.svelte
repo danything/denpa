@@ -31,7 +31,9 @@
                     テレビの初期設定で入れる郵便番号と都道府県です。データ放送の
                     <strong>天気・地域のニュース・防災情報</strong>は、これで地域が決まります。
                 </p>
-                <p>郵便番号が未設定だと「郵便番号が正しく設定されていません」と表示され、その欄は空のままです。</p>
+                <p>
+                    郵便番号が未設定だと「郵便番号が正しく設定されていません」と表示され、その欄は空のままです。
+                </p>
                 <p>都道府県で地域の情報を出し分ける局もあります。</p>
             {/snippet}
         </Lead>
@@ -53,11 +55,17 @@
                 <label class="field">
                     <span class="field-label">都道府県</span>
                     <select name="prefecture" data-testid="prefecture">
-                        <option value={PREFECTURE_UNSET} selected={data.broadcast.prefecture === PREFECTURE_UNSET}>
+                        <option
+                            value={PREFECTURE_UNSET}
+                            selected={data.broadcast.prefecture === PREFECTURE_UNSET}
+                        >
                             未設定
                         </option>
                         {#each PREFECTURES as prefecture (prefecture.code)}
-                            <option value={prefecture.code} selected={data.broadcast.prefecture === prefecture.code}>
+                            <option
+                                value={prefecture.code}
+                                selected={data.broadcast.prefecture === prefecture.code}
+                            >
                                 {prefecture.name}
                             </option>
                         {/each}
@@ -75,7 +83,12 @@
             -->
             <div class="check-item">
                 <label class="check-row">
-                    <input type="checkbox" name="bmlNetwork" checked={data.broadcast.bmlNetwork} data-testid="bml-network" />
+                    <input
+                        type="checkbox"
+                        name="bmlNetwork"
+                        checked={data.broadcast.bmlNetwork}
+                        data-testid="bml-network"
+                    />
                     <span>双方向 (通信系コンテンツ) を使う</span>
                 </label>
                 <Lead class="indent">

@@ -1,0 +1,40 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript", "unicorn", "oxc"],
+    "categories": {
+        "correctness": "error"
+    },
+    "rules": {
+        "typescript/no-explicit-any": "error",
+        // `new Array(64).fill('')` で長さを決めて埋める
+        "unicorn/no-new-array": "off",
+        // `[...map.keys()]` は回しながら消すための写し
+        "unicorn/no-useless-spread": "off",
+        // データ放送の構文木は `if` の節を `then` に持つ
+        "unicorn/no-thenable": "off",
+        // 原型をたどる for の始まりに `this` を置く
+        "typescript/no-this-alias": "off",
+        // 放送の文字 (全角の空白) をそのまま書いた説明と例
+        "no-irregular-whitespace": [
+            "error",
+            { "skipComments": true, "skipStrings": true, "skipTemplates": true }
+        ]
+    },
+    "overrides": [
+        {
+            // Svelte の `$effect` は、読むだけの式で何に付いていくかを決める
+            "files": ["**/*.svelte"],
+            "rules": { "no-unused-expressions": "off" }
+        }
+    ],
+    "ignorePatterns": [
+        "static/**",
+        "deploy/**",
+        "drizzle/**",
+        "agent/publish/**",
+        "site/public/**",
+        "site/dist/**",
+        "site/.astro/**",
+        "site/src/generated/**"
+    ]
+}

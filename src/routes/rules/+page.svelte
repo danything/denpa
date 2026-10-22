@@ -52,7 +52,9 @@
         }
     }
     const shownRules = $derived(
-        data.rules.filter(FILTERS.find((f) => f.key === filter)!.test).sort((a, b) => compare(a, b) || b.id - a.id),
+        data.rules
+            .filter(FILTERS.find((f) => f.key === filter)!.test)
+            .sort((a, b) => compare(a, b) || b.id - a.id),
     );
     /** 少しずつ出す (`paging.svelte.ts`)。ルールが数百あっても開いた直後に止まらない */
     const paged = new Paged(() => shownRules, 60);
@@ -64,7 +66,10 @@
 
     /** 絞り込みごとの件数 */
     const counts = $derived(
-        Object.fromEntries(FILTERS.map((f) => [f.key, data.rules.filter(f.test).length])) as Record<Filter, number>,
+        Object.fromEntries(FILTERS.map((f) => [f.key, data.rules.filter(f.test).length])) as Record<
+            Filter,
+            number
+        >,
     );
     const serviceNames = $derived(new Map(data.services.map((s) => [s.id, s.name])));
     /** 「今日」「明日」の切れ目に使う時計。分で刻む */
@@ -95,7 +100,10 @@
     const notices = $derived.by<Notice[]>(() => {
         const list = errorNotice(form, 'rule-error');
         if (form?.canceled !== undefined) {
-            const text = form.canceled > 0 ? `ルールを削除しました (予約 ${form.canceled} 件を取り消し)` : 'ルールを削除しました';
+            const text =
+                form.canceled > 0
+                    ? `ルールを削除しました (予約 ${form.canceled} 件を取り消し)`
+                    : 'ルールを削除しました';
             list.push({ key: 'rule-deleted', kind: 'success', text });
         }
         return list;
@@ -115,14 +123,16 @@
     <div class="rules-list" data-testid="rule-list">
         <!-- 狭い画面の集計。広い画面ではサイドバーの「集計」 -->
         <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
-            これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた <span class="num">{data.summary.lastWeekRecordings}</span> 本
+            これから7日の予約 <span class="num">{data.summary.weekReservations}</span> 件 ・ この7日で録れた
+            <span class="num">{data.summary.lastWeekRecordings}</span> 本
         </p>
 
         {#if data.rules.length === 0}
             <div class="empty" data-testid="rule-empty">
                 <p class="bold">ルールはまだありません</p>
                 <p class="small muted">
-                    <a href={resolve('search')}>検索</a>で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
+                    <a href={resolve('search')}>検索</a
+                    >で番組を探して「ルールとして保存」を押すと、合う番組を自動で予約するルールができます
                 </p>
             </div>
         {:else}
@@ -137,25 +147,37 @@
                             <span class="name">
                                 <span class="truncate">{rule.name}</span>
                                 {#if !rule.enabled}<span class="tag">無効</span>{/if}
-                                {#if rule.conflicts > 0}<span class="tag error outline">競合 {rule.conflicts}</span>{/if}
+                                {#if rule.conflicts > 0}<span class="tag error outline"
+                                        >競合 {rule.conflicts}</span
+                                    >{/if}
                             </span>
                             <span class="meta small muted">
-                                <span class="wide-part"><span class="cond">{conditionSummary(rule, (id) => serviceNames.get(id))}</span>
-                                <span class="sep" aria-hidden="true">・</span></span>
+                                <span class="wide-part"
+                                    ><span class="cond"
+                                        >{conditionSummary(rule, (id) => serviceNames.get(id))}</span
+                                    >
+                                    <span class="sep" aria-hidden="true">・</span></span
+                                >
                                 <span class="next" data-testid="rule-next">
                                     {#if rule.next === null}
                                         予定なし
                                     {:else}
-                                        次 {upcomingLabel(rule.next.start_at, clock)} <span class="broadcast">{rule.next.service_name}</span>
+                                        次 {upcomingLabel(rule.next.start_at, clock)}
+                                        <span class="broadcast">{rule.next.service_name}</span>
                                     {/if}
                                 </span>
                                 <span class="sep" aria-hidden="true">・</span>
-                                <span class="num">予約 <span data-testid="rule-reservations">{rule.reservations}</span></span>
+                                <span class="num"
+                                    >予約 <span data-testid="rule-reservations">{rule.reservations}</span
+                                    ></span
+                                >
                                 <span class="sep" aria-hidden="true">・</span>
                                 <span class="num">録画 {rule.recordings}</span>
                                 {#if rule.last_recorded_at !== null}
-                                    <span class="wide-part"><span class="sep" aria-hidden="true">・</span>
-                                    <span>最後に録れた {date(rule.last_recorded_at)}</span></span>
+                                    <span class="wide-part"
+                                        ><span class="sep" aria-hidden="true">・</span>
+                                        <span>最後に録れた {date(rule.last_recorded_at)}</span></span
+                                    >
                                 {/if}
                             </span>
                         </a>
@@ -171,10 +193,18 @@
                                 data-testid="rule-switch"
                             />
                         </form>
-                        <ArmedDelete {deleting} armKey={rule.id} fields={{ id: rule.id }} class="xs" testid="rule-delete" />
+                        <ArmedDelete
+                            {deleting}
+                            armKey={rule.id}
+                            fields={{ id: rule.id }}
+                            class="xs"
+                            testid="rule-delete"
+                        />
                     </li>
                 {:else}
-                    <li class="none small muted" data-testid="rule-none">この絞り込みに当たるルールはありません</li>
+                    <li class="none small muted" data-testid="rule-none">
+                        この絞り込みに当たるルールはありません
+                    </li>
                 {/each}
                 {#if paged.more}
                     <li class="none small muted" use:sentinel={() => paged.reveal()}>残り {paged.rest} 件</li>
@@ -216,8 +246,14 @@
         </div>
         <h2 class="side-label">集計</h2>
         <dl class="side-list stats" data-testid="rule-summary">
-            <div class="side-item static"><dt>これから7日の予約</dt><dd class="num">{data.summary.weekReservations} 件</dd></div>
-            <div class="side-item static"><dt>この7日で録れた</dt><dd class="num">{data.summary.lastWeekRecordings} 本</dd></div>
+            <div class="side-item static">
+                <dt>これから7日の予約</dt>
+                <dd class="num">{data.summary.weekReservations} 件</dd>
+            </div>
+            <div class="side-item static">
+                <dt>この7日で録れた</dt>
+                <dd class="num">{data.summary.lastWeekRecordings} 本</dd>
+            </div>
         </dl>
         <div class="side-foot">
             <!-- 作るのは検索の画面。言葉を打つ欄に入った状態で開く -->

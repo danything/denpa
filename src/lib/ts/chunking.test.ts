@@ -167,7 +167,7 @@ const ts = broadcast();
 function reused(data: Uint8Array, seed: number, feed: (chunk: Uint8Array) => void): void {
     const next = random(seed);
     const buffer = new Uint8Array(4000);
-    for (let at = 0; at < data.length; ) {
+    for (let at = 0; at < data.length;) {
         const size = Math.min(data.length - at, 1 + Math.floor(next() * buffer.length));
         buffer.set(data.subarray(at, at + size));
         feed(buffer.subarray(0, size));

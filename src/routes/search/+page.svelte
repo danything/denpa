@@ -206,10 +206,14 @@
             list.push({
                 key: 'rule-deleted',
                 kind: 'success',
-                text: canceled > 0 ? `ルールを削除しました (予約 ${canceled} 件を取り消し)` : 'ルールを削除しました',
+                text:
+                    canceled > 0
+                        ? `ルールを削除しました (予約 ${canceled} 件を取り消し)`
+                        : 'ルールを削除しました',
             });
         }
-        if (form?.toggled) list.push({ key: 'rule-toggled', kind: 'success', text: 'ルールを切り替えました' });
+        if (form?.toggled)
+            list.push({ key: 'rule-toggled', kind: 'success', text: 'ルールを切り替えました' });
         return list;
     });
 </script>
@@ -228,213 +232,308 @@
     下のボタンで下から出す。書く欄の条件を変えると、結果の「これからの放送」の行ごとに録るかが出る
 -->
 <div class="search-layout" class:drafting>
-<div class="search-page">
-    <!-- 検索の欄はこの画面には置かない。ヘッダー (狭い幅では上の帯) の欄がそのまま言葉を持っている -->
-    {#if q === ''}
-        {#if drafting}
-            <!--
+    <div class="search-page">
+        <!-- 検索の欄はこの画面には置かない。ヘッダー (狭い幅では上の帯) の欄がそのまま言葉を持っている -->
+        {#if q === ''}
+            {#if drafting}
+                <!--
                 **言葉なしでルールを開いたとき** (`?rule=`)。結果の代わりに、そのルールで録る番組を出す
                 (下見の行。予約を立てるときと同じ判定)
             -->
-            {@render rulePreview()}
-        {:else if recent.length > 0}
-            <section class="hits-section" aria-labelledby="recent-head">
+                {@render rulePreview()}
+            {:else if recent.length > 0}
+                <section class="hits-section" aria-labelledby="recent-head">
+                    <div class="hits-head">
+                        <h2 id="recent-head">最近の検索</h2>
+                        <button
+                            type="button"
+                            class="link-button small"
+                            onclick={clearRecent}
+                            data-testid="recent-clear">履歴を消す</button
+                        >
+                    </div>
+                    <ul class="hits" data-testid="recent-searches">
+                        {#each recent as word (word)}
+                            <li class="hit">
+                                <a class="hit-main" href={resolve(`search?q=${encodeURIComponent(word)}`)}
+                                    >{word}</a
+                                >
+                            </li>
+                        {/each}
+                    </ul>
+                </section>
+            {/if}
+        {:else}
+            <p class="summary muted small" role="status" data-testid="search-summary">
+                「<span class="bold">{q}</span>」の検索結果 {total} 件
+            </p>
+
+            <!-- これからの放送 (番組表)。予約の入口で、右の書く欄の条件で録るかどうかも行に出す -->
+            <section class="hits-section" aria-labelledby="programs-head" data-testid="search-programs">
                 <div class="hits-head">
-                    <h2 id="recent-head">最近の検索</h2>
-                    <button type="button" class="link-button small" onclick={clearRecent} data-testid="recent-clear">履歴を消す</button>
+                    <h2 id="programs-head">
+                        これからの放送 <span class="count">{data.programs.total}</span>
+                    </h2>
+                    {#if recordingCount !== null && data.programs.total > 0}
+                        <span class="small muted" data-testid="search-recording-count">
+                            いまの条件で録るのは <span class="bold">{recordingCount}</span> 件{data.programs
+                                .total > data.programs.rows.length
+                                ? ` (先頭 ${data.programs.rows.length} 件のうち)`
+                                : ''}
+                        </span>
+                    {/if}
                 </div>
-                <ul class="hits" data-testid="recent-searches">
-                    {#each recent as word (word)}
-                        <li class="hit">
-                            <a class="hit-main" href={resolve(`search?q=${encodeURIComponent(word)}`)}>{word}</a>
-                        </li>
-                    {/each}
-                </ul>
+                {#if data.programs.total === 0}
+                    <p class="none small muted">番組表に一致する番組はありません</p>
+                {:else}
+                    <ul class="hits">
+                        {#each shown('programs', data.programs.rows) as program (program.id)}
+                            {@const verdict = verdictOf(program.id)}
+                            <li
+                                class="hit"
+                                class:dim={verdict?.kind === 'skip' && program.reservation_state === null}
+                                data-testid="search-program"
+                                data-program-id={program.id}
+                                data-verdict={verdict?.kind}
+                            >
+                                <button
+                                    type="button"
+                                    class="hit-main"
+                                    onclick={() => showProgram(program)}
+                                    data-testid="search-open"
+                                >
+                                    <span class="hit-title">
+                                        <!-- 立っている予約は本当のこととして先に出す。無ければ書く欄の条件で録るか -->
+                                        {#if program.reservation_state !== null}
+                                            <span
+                                                class="tag {badgeClass(program.reservation_state)}"
+                                                data-testid="search-program-state"
+                                            >
+                                                {stateLabel(program.reservation_state)}
+                                            </span>
+                                        {:else if verdict?.kind === 'record'}
+                                            <span class="tag success" data-testid="search-verdict">録る</span>
+                                        {:else if verdict?.kind === 'skip'}
+                                            <span class="tag" data-testid="search-verdict">録らない</span>
+                                        {/if}
+                                        <span class="truncate broadcast">{program.name}</span>
+                                    </span>
+                                    <span class="hit-meta tiny muted">
+                                        <ServiceLogo
+                                            id={program.service_id}
+                                            has={program.has_logo}
+                                            style="height: 0.875rem; vertical-align: -0.125rem"
+                                        />
+                                        <span class="broadcast">{program.service_name}</span> ・
+                                        <span class="num"
+                                            >{dateTime(program.start_at)}〜{time(program.end_at)}</span
+                                        >
+                                        {#if verdict?.kind === 'skip' && program.reservation_state === null}
+                                            ・ <span data-testid="search-verdict-reason"
+                                                >{SKIP_LABEL[verdict.reason]}</span
+                                            >
+                                        {/if}
+                                    </span>
+                                </button>
+                                <div class="row-actions">
+                                    {#if program.reservation_id !== null}
+                                        <ActionButton
+                                            action="?/cancel"
+                                            fields={{ reservationId: program.reservation_id }}
+                                            class="small outline danger"
+                                            testid="search-cancel"
+                                        >
+                                            取消
+                                        </ActionButton>
+                                    {:else if !program.copy_never}
+                                        <ActionButton
+                                            action="?/reserve"
+                                            fields={{ programId: program.id }}
+                                            class="small outline"
+                                            testid="search-reserve"
+                                        >
+                                            予約
+                                        </ActionButton>
+                                    {/if}
+                                </div>
+                            </li>
+                        {/each}
+                    </ul>
+                    {@render more('programs', data.programs.rows.length, data.programs.total)}
+                {/if}
+            </section>
+
+            <section class="hits-section" aria-labelledby="recordings-head" data-testid="search-recordings">
+                <div class="hits-head">
+                    <h2 id="recordings-head">録画 <span class="count">{data.recordings.total}</span></h2>
+                </div>
+                {#if data.recordings.total === 0}
+                    <p class="none small muted">一致する録画はありません</p>
+                {:else}
+                    <ul class="hits">
+                        {#each shown('recordings', data.recordings.rows) as rec (rec.id)}
+                            {@const link = watchLink(rec)}
+                            <li class="hit" data-testid="search-recording" data-recording-id={rec.id}>
+                                <svelte:element
+                                    this={link === null ? 'div' : 'a'}
+                                    class="hit-main"
+                                    href={link ?? undefined}
+                                    data-testid="search-play"
+                                >
+                                    <span class="hit-title">
+                                        {#if !quietState(rec.state)}
+                                            <span class="tag {badgeClass(rec.state)}"
+                                                >{stateLabel(rec.state)}</span
+                                            >
+                                        {/if}
+                                        <span class="truncate broadcast">{rec.name}</span>
+                                    </span>
+                                    <span class="hit-meta tiny muted">
+                                        <ServiceLogo
+                                            id={rec.service_id}
+                                            has={rec.has_logo}
+                                            style="height: 0.875rem; vertical-align: -0.125rem"
+                                        />
+                                        <span class="broadcast">{rec.service_name}</span> ・
+                                        <span class="num"
+                                            >{dateTime(rec.start_at)} ・ {recordedDuration(rec)}</span
+                                        >
+                                    </span>
+                                </svelte:element>
+                                {#if rec.state !== 'recording'}
+                                    <div class="row-actions">
+                                        <ArmedDelete
+                                            {deleting}
+                                            armKey={rec.id}
+                                            fields={{ id: rec.id }}
+                                            class="small"
+                                            testid="search-delete"
+                                        />
+                                    </div>
+                                {/if}
+                            </li>
+                        {/each}
+                    </ul>
+                    {@render more('recordings', data.recordings.rows.length, data.recordings.total)}
+                {/if}
+            </section>
+
+            <section
+                class="hits-section"
+                aria-labelledby="reservations-head"
+                data-testid="search-reservations"
+            >
+                <div class="hits-head">
+                    <h2 id="reservations-head">予約 <span class="count">{data.reservations.total}</span></h2>
+                </div>
+                {#if data.reservations.total === 0}
+                    <p class="none small muted">一致する予約はありません</p>
+                {:else}
+                    <ul class="hits">
+                        {#each shown('reservations', data.reservations.rows) as res (res.id)}
+                            <li class="hit" data-testid="search-reservation" data-program-id={res.program_id}>
+                                <button type="button" class="hit-main" onclick={() => showReservation(res)}>
+                                    <span class="hit-title">
+                                        {#if !quietState(res.state)}
+                                            <span class="tag {badgeClass(res.state)}"
+                                                >{stateLabel(res.state)}</span
+                                            >
+                                        {/if}
+                                        <span class="truncate broadcast">{res.name}</span>
+                                    </span>
+                                    <span class="hit-meta tiny muted">
+                                        <ServiceLogo
+                                            id={res.service_id}
+                                            has={res.has_logo}
+                                            style="height: 0.875rem; vertical-align: -0.125rem"
+                                        />
+                                        <span class="broadcast">{res.service_name}</span> ・
+                                        <span class="num">{dateTime(res.start_at)}〜{time(res.end_at)}</span>
+                                        ・ {res.manual
+                                            ? '手動予約'
+                                            : `ルール: ${res.rule_name ?? '(削除済み)'}`}
+                                    </span>
+                                </button>
+                                <div class="row-actions">
+                                    {#if res.recording_id !== null}
+                                        <a
+                                            class="button small ghost"
+                                            href={resolve(`chase/${res.recording_id}`)}>追っかけ再生</a
+                                        >
+                                    {:else}
+                                        <ActionButton
+                                            action="?/cancel"
+                                            fields={{ reservationId: res.id }}
+                                            class="small outline danger"
+                                            testid="search-reservation-cancel"
+                                        >
+                                            取消
+                                        </ActionButton>
+                                    {/if}
+                                </div>
+                            </li>
+                        {/each}
+                    </ul>
+                    {@render more('reservations', data.reservations.rows.length, data.reservations.total)}
+                {/if}
+            </section>
+
+            <section class="hits-section" aria-labelledby="rules-head" data-testid="search-rules">
+                <div class="hits-head">
+                    <h2 id="rules-head">ルール <span class="count">{data.rules.total}</span></h2>
+                </div>
+                {#if data.rules.total === 0}
+                    <p class="none small muted">一致するルールはありません</p>
+                {:else}
+                    <ul class="hits">
+                        {#each shown('rules', data.rules.rows) as rule (rule.id)}
+                            <li class="hit" data-testid="search-rule">
+                                <a class="hit-main" href={resolve(`search?rule=${rule.id}`)}>
+                                    <span class="hit-title">
+                                        {#if !rule.enabled}<span class="tag">無効</span>{/if}
+                                        <span class="truncate">{rule.name}</span>
+                                    </span>
+                                    <span class="hit-meta tiny muted">
+                                        {#if rule.keyword !== ''}キーワード: {rule.keyword} ・{/if}
+                                        優先度 {rule.priority} ・ 予約 {rule.reservations} 件
+                                    </span>
+                                </a>
+                            </li>
+                        {/each}
+                    </ul>
+                    {@render more('rules', data.rules.rows.length, data.rules.total)}
+                {/if}
             </section>
         {/if}
-    {:else}
-        <p class="summary muted small" role="status" data-testid="search-summary">
-            「<span class="bold">{q}</span>」の検索結果 {total} 件
-        </p>
-
-        <!-- これからの放送 (番組表)。予約の入口で、右の書く欄の条件で録るかどうかも行に出す -->
-        <section class="hits-section" aria-labelledby="programs-head" data-testid="search-programs">
-            <div class="hits-head">
-                <h2 id="programs-head">これからの放送 <span class="count">{data.programs.total}</span></h2>
-                {#if recordingCount !== null && data.programs.total > 0}
-                    <span class="small muted" data-testid="search-recording-count">
-                        いまの条件で録るのは <span class="bold">{recordingCount}</span> 件{data.programs.total > data.programs.rows.length ? ` (先頭 ${data.programs.rows.length} 件のうち)` : ''}
-                    </span>
-                {/if}
-            </div>
-            {#if data.programs.total === 0}
-                <p class="none small muted">番組表に一致する番組はありません</p>
-            {:else}
-                <ul class="hits">
-                    {#each shown('programs', data.programs.rows) as program (program.id)}
-                        {@const verdict = verdictOf(program.id)}
-                        <li class="hit" class:dim={verdict?.kind === 'skip' && program.reservation_state === null} data-testid="search-program" data-program-id={program.id} data-verdict={verdict?.kind}>
-                            <button type="button" class="hit-main" onclick={() => showProgram(program)} data-testid="search-open">
-                                <span class="hit-title">
-                                    <!-- 立っている予約は本当のこととして先に出す。無ければ書く欄の条件で録るか -->
-                                    {#if program.reservation_state !== null}
-                                        <span class="tag {badgeClass(program.reservation_state)}" data-testid="search-program-state">
-                                            {stateLabel(program.reservation_state)}
-                                        </span>
-                                    {:else if verdict?.kind === 'record'}
-                                        <span class="tag success" data-testid="search-verdict">録る</span>
-                                    {:else if verdict?.kind === 'skip'}
-                                        <span class="tag" data-testid="search-verdict">録らない</span>
-                                    {/if}
-                                    <span class="truncate broadcast">{program.name}</span>
-                                </span>
-                                <span class="hit-meta tiny muted">
-                                    <ServiceLogo id={program.service_id} has={program.has_logo} style="height: 0.875rem; vertical-align: -0.125rem" />
-                                    <span class="broadcast">{program.service_name}</span> ・
-                                    <span class="num">{dateTime(program.start_at)}〜{time(program.end_at)}</span>
-                                    {#if verdict?.kind === 'skip' && program.reservation_state === null}
-                                        ・ <span data-testid="search-verdict-reason">{SKIP_LABEL[verdict.reason]}</span>
-                                    {/if}
-                                </span>
-                            </button>
-                            <div class="row-actions">
-                                {#if program.reservation_id !== null}
-                                    <ActionButton action="?/cancel" fields={{ reservationId: program.reservation_id }} class="small outline danger" testid="search-cancel">
-                                        取消
-                                    </ActionButton>
-                                {:else if !program.copy_never}
-                                    <ActionButton action="?/reserve" fields={{ programId: program.id }} class="small outline" testid="search-reserve">
-                                        予約
-                                    </ActionButton>
-                                {/if}
-                            </div>
-                        </li>
-                    {/each}
-                </ul>
-                {@render more('programs', data.programs.rows.length, data.programs.total)}
-            {/if}
-        </section>
-
-        <section class="hits-section" aria-labelledby="recordings-head" data-testid="search-recordings">
-            <div class="hits-head">
-                <h2 id="recordings-head">録画 <span class="count">{data.recordings.total}</span></h2>
-            </div>
-            {#if data.recordings.total === 0}
-                <p class="none small muted">一致する録画はありません</p>
-            {:else}
-                <ul class="hits">
-                    {#each shown('recordings', data.recordings.rows) as rec (rec.id)}
-                        {@const link = watchLink(rec)}
-                        <li class="hit" data-testid="search-recording" data-recording-id={rec.id}>
-                            <svelte:element this={link === null ? 'div' : 'a'} class="hit-main" href={link ?? undefined} data-testid="search-play">
-                                <span class="hit-title">
-                                    {#if !quietState(rec.state)}
-                                        <span class="tag {badgeClass(rec.state)}">{stateLabel(rec.state)}</span>
-                                    {/if}
-                                    <span class="truncate broadcast">{rec.name}</span>
-                                </span>
-                                <span class="hit-meta tiny muted">
-                                    <ServiceLogo id={rec.service_id} has={rec.has_logo} style="height: 0.875rem; vertical-align: -0.125rem" />
-                                    <span class="broadcast">{rec.service_name}</span> ・
-                                    <span class="num">{dateTime(rec.start_at)} ・ {recordedDuration(rec)}</span>
-                                </span>
-                            </svelte:element>
-                            {#if rec.state !== 'recording'}
-                                <div class="row-actions">
-                                    <ArmedDelete {deleting} armKey={rec.id} fields={{ id: rec.id }} class="small" testid="search-delete" />
-                                </div>
-                            {/if}
-                        </li>
-                    {/each}
-                </ul>
-                {@render more('recordings', data.recordings.rows.length, data.recordings.total)}
-            {/if}
-        </section>
-
-        <section class="hits-section" aria-labelledby="reservations-head" data-testid="search-reservations">
-            <div class="hits-head">
-                <h2 id="reservations-head">予約 <span class="count">{data.reservations.total}</span></h2>
-            </div>
-            {#if data.reservations.total === 0}
-                <p class="none small muted">一致する予約はありません</p>
-            {:else}
-                <ul class="hits">
-                    {#each shown('reservations', data.reservations.rows) as res (res.id)}
-                        <li class="hit" data-testid="search-reservation" data-program-id={res.program_id}>
-                            <button type="button" class="hit-main" onclick={() => showReservation(res)}>
-                                <span class="hit-title">
-                                    {#if !quietState(res.state)}
-                                        <span class="tag {badgeClass(res.state)}">{stateLabel(res.state)}</span>
-                                    {/if}
-                                    <span class="truncate broadcast">{res.name}</span>
-                                </span>
-                                <span class="hit-meta tiny muted">
-                                    <ServiceLogo id={res.service_id} has={res.has_logo} style="height: 0.875rem; vertical-align: -0.125rem" />
-                                    <span class="broadcast">{res.service_name}</span> ・
-                                    <span class="num">{dateTime(res.start_at)}〜{time(res.end_at)}</span>
-                                    ・ {res.manual ? '手動予約' : `ルール: ${res.rule_name ?? '(削除済み)'}`}
-                                </span>
-                            </button>
-                            <div class="row-actions">
-                                {#if res.recording_id !== null}
-                                    <a class="button small ghost" href={resolve(`chase/${res.recording_id}`)}>追っかけ再生</a>
-                                {:else}
-                                    <ActionButton action="?/cancel" fields={{ reservationId: res.id }} class="small outline danger" testid="search-reservation-cancel">
-                                        取消
-                                    </ActionButton>
-                                {/if}
-                            </div>
-                        </li>
-                    {/each}
-                </ul>
-                {@render more('reservations', data.reservations.rows.length, data.reservations.total)}
-            {/if}
-        </section>
-
-        <section class="hits-section" aria-labelledby="rules-head" data-testid="search-rules">
-            <div class="hits-head">
-                <h2 id="rules-head">ルール <span class="count">{data.rules.total}</span></h2>
-            </div>
-            {#if data.rules.total === 0}
-                <p class="none small muted">一致するルールはありません</p>
-            {:else}
-                <ul class="hits">
-                    {#each shown('rules', data.rules.rows) as rule (rule.id)}
-                        <li class="hit" data-testid="search-rule">
-                            <a class="hit-main" href={resolve(`search?rule=${rule.id}`)}>
-                                <span class="hit-title">
-                                    {#if !rule.enabled}<span class="tag">無効</span>{/if}
-                                    <span class="truncate">{rule.name}</span>
-                                </span>
-                                <span class="hit-meta tiny muted">
-                                    {#if rule.keyword !== ''}キーワード: {rule.keyword} ・{/if}
-                                    優先度 {rule.priority} ・ 予約 {rule.reservations} 件
-                                </span>
-                            </a>
-                        </li>
-                    {/each}
-                </ul>
-                {@render more('rules', data.rules.rows.length, data.rules.total)}
-            {/if}
-        </section>
-    {/if}
-</div>
-{#if drafting}
-    <RuleDraft draft={data.draft} {q} ids={programIds} refresh={data} deleting={ruleDeleting} bind:preview bind:open={sheetOpen} />
-    <!-- 狭い画面だけ。書く欄を下から出す (下のタブの上に貼り付ける) -->
-    <div class="sheet-bar">
-        <button type="button" onclick={() => (sheetOpen = true)} data-testid="rule-draft-open">
-            {data.draft.editing === null ? 'ルールとして保存' : `ルール「${data.draft.editing.name}」を直す`}
-        </button>
     </div>
-{/if}
+    {#if drafting}
+        <RuleDraft
+            draft={data.draft}
+            {q}
+            ids={programIds}
+            refresh={data}
+            deleting={ruleDeleting}
+            bind:preview
+            bind:open={sheetOpen}
+        />
+        <!-- 狭い画面だけ。書く欄を下から出す (下のタブの上に貼り付ける) -->
+        <div class="sheet-bar">
+            <button type="button" onclick={() => (sheetOpen = true)} data-testid="rule-draft-open">
+                {data.draft.editing === null
+                    ? 'ルールとして保存'
+                    : `ルール「${data.draft.editing.name}」を直す`}
+            </button>
+        </div>
+    {/if}
 </div>
 
 <!-- 言葉なしでルールを開いたときの、そのルールで録る番組 (`rule-preview.ts` の行) -->
 {#snippet rulePreview()}
     <section class="hits-section" aria-labelledby="rule-preview-head" data-testid="rule-preview">
         <div class="hits-head">
-            <h2 id="rule-preview-head">この条件で録る番組 <span class="count">{preview?.total ?? '…'}</span></h2>
+            <h2 id="rule-preview-head">
+                この条件で録る番組 <span class="count">{preview?.total ?? '…'}</span>
+            </h2>
             {#if preview !== null && preview.skipped > 0}
                 <span class="small muted">うち {preview.skipped} 件は録りません</span>
             {/if}
@@ -446,13 +545,25 @@
         {:else}
             <ul class="hits">
                 {#each preview.programs as row (row.id)}
-                    <li class="hit" class:dim={row.skip !== null || !row.matched} data-testid="preview-row" data-program-id={row.id}>
-                        <button type="button" class="hit-main" onclick={() => showPreview(row)} data-testid="preview-open">
+                    <li
+                        class="hit"
+                        class:dim={row.skip !== null || !row.matched}
+                        data-testid="preview-row"
+                        data-program-id={row.id}
+                    >
+                        <button
+                            type="button"
+                            class="hit-main"
+                            onclick={() => showPreview(row)}
+                            data-testid="preview-open"
+                        >
                             <span class="hit-title">
                                 {#if row.skip !== null || !row.matched}
                                     <span class="tag">録らない</span>
                                 {:else if row.reservation_state !== null}
-                                    <span class="tag {badgeClass(row.reservation_state)}">{stateLabel(row.reservation_state)}</span>
+                                    <span class="tag {badgeClass(row.reservation_state)}"
+                                        >{stateLabel(row.reservation_state)}</span
+                                    >
                                 {:else}
                                     <span class="tag success">録る</span>
                                 {/if}
@@ -467,18 +578,31 @@
                                     ・ {SKIP_LABEL[row.skip.kind]}
                                 {/if}
                                 {#if row.conflicts.length > 0 || row.conflict_reason !== null}
-                                    ・ <span class="text-error">{row.conflict_reason ?? `チューナーの競合 ${row.conflicts.length} 件`}</span>
+                                    ・ <span class="text-error"
+                                        >{row.conflict_reason ??
+                                            `チューナーの競合 ${row.conflicts.length} 件`}</span
+                                    >
                                 {/if}
                             </span>
                         </button>
                         <!-- 1件ずつ: 立っている予約は取り消し、録る行はその1本だけ予約できる (ホーム・結果の行と同じ action) -->
                         <div class="row-actions">
                             {#if row.reservation_id !== null && row.reservation_state !== 'skipped'}
-                                <ActionButton action="?/cancel" fields={{ reservationId: row.reservation_id }} class="small outline danger" testid="preview-cancel">
+                                <ActionButton
+                                    action="?/cancel"
+                                    fields={{ reservationId: row.reservation_id }}
+                                    class="small outline danger"
+                                    testid="preview-cancel"
+                                >
                                     取消
                                 </ActionButton>
                             {:else if row.reservation_id === null && row.matched && row.skip === null}
-                                <ActionButton action="?/reserve" fields={{ programId: row.id }} class="small outline" testid="preview-reserve">
+                                <ActionButton
+                                    action="?/reserve"
+                                    fields={{ programId: row.id }}
+                                    class="small outline"
+                                    testid="preview-reserve"
+                                >
                                     予約
                                 </ActionButton>
                             {/if}
@@ -496,7 +620,12 @@
 <!-- 「もっと見る」。受け取ったぶんを出し切っても残りがあれば、言葉を足してもらう -->
 {#snippet more(key: Key, received: number, all: number)}
     {#if !expanded[key] && received > FIRST}
-        <button type="button" class="link-button small more" onclick={() => (expanded = { ...expanded, [key]: true })} data-testid="search-more-{key}">
+        <button
+            type="button"
+            class="link-button small more"
+            onclick={() => (expanded = { ...expanded, [key]: true })}
+            data-testid="search-more-{key}"
+        >
             もっと見る ({all - FIRST} 件)
         </button>
     {:else if expanded[key] && all > received}
@@ -512,7 +641,9 @@
             {/if}
             <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは右上の × (`ProgramDetail`) -->
             {#if opened !== null}
-                <a class="button secondary" href={resolve(`search?from=program:${opened.program_id}`)}>ルールを作る</a>
+                <a class="button secondary" href={resolve(`search?from=program:${opened.program_id}`)}
+                    >ルールを作る</a
+                >
             {/if}
             {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
                 <a class="button outline" href={resolve(`live?service=${opened.service_id}`)}>視聴</a>
@@ -528,7 +659,9 @@
                         }}
                 >
                     <input type="hidden" name="reservationId" value={opened.reservation_id} />
-                    <button type="submit" class="outline danger" data-testid="search-detail-cancel">予約取消</button>
+                    <button type="submit" class="outline danger" data-testid="search-detail-cancel"
+                        >予約取消</button
+                    >
                 </form>
             {:else if opened !== null && opened.end_at > clock && !opened.copy_never}
                 <form

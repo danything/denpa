@@ -6,6 +6,7 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 ## 用意するもの
 
 チューナー・カードリーダー・OS の一覧と機材ごとのページは [tuners.md](tuners.md#要るもの) に。
+
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
 - **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
   `compose.override.yml` で渡します (Helm は既定で渡す)。GPU を使えるのは amd64 だけです
@@ -103,12 +104,12 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 ```yaml
 # ~/denpa/compose.override.yml
 services:
-  denpa:
-    environment:
-      TRUSTED_NETWORKS: 192.168.1.0/24
-      OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
-      OIDC_CLIENT_ID: <アプリケーションID>
-      OIDC_CLIENT_SECRET: <クライアントシークレット>
+    denpa:
+        environment:
+            TRUSTED_NETWORKS: 192.168.1.0/24
+            OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
+            OIDC_CLIENT_ID: <アプリケーションID>
+            OIDC_CLIENT_SECRET: <クライアントシークレット>
 ```
 
 Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `denpa.trustedNetworks` と
@@ -147,18 +148,18 @@ kubectl debug -it deploy/denpa --image=busybox --target=denpa -n denpa
   「繋がりませんでした」になります。Caddy・Traefik・Envoy (Gateway API) は何もしなくても満たします。
   Nginx Proxy Manager は「Websockets Support」を入れます。nginx は自分で書きます:
 
-  ```nginx
-  location / {
-      proxy_pass http://<denpa>:3000;
-      proxy_set_header Host $host;
-      proxy_set_header X-Forwarded-Proto $scheme;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_http_version 1.1;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
-      proxy_buffering off;  # SSE とライブを溜めずに流す
-  }
-  ```
+    ```nginx
+    location / {
+        proxy_pass http://<denpa>:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_buffering off;  # SSE とライブを溜めずに流す
+    }
+    ```
 
 - **`/denpa` のような接頭辞の下にも置けます** (Home Assistant の Ingress など)。接頭辞は denpa に教えません。
   OIDC に渡す絶対 URL にだけ、前段が付ける `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を

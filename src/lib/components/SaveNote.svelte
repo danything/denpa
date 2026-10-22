@@ -15,7 +15,9 @@
     {#if status.state === 'saving'}
         <span class="muted">保存中…</span>
     {:else if status.state === 'saved'}
-        <span class="saved flash" style:--flash-for="{SAVED_FOR}ms" data-testid="saved-result">保存しました</span>
+        <span class="saved flash" style:--flash-for="{SAVED_FOR}ms" data-testid="saved-result"
+            >保存しました</span
+        >
     {:else if status.state === 'error'}
         <span class="text-error" data-testid="settings-error">
             保存できませんでした{status.message === '' ? '' : `: ${status.message}`}

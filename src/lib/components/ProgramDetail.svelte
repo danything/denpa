@@ -46,7 +46,8 @@
 <svelte:window
     onkeydown={(e) => {
         // 箱の中で開いたメニュー (「その他…」) があれば、Esc はそれを閉じるだけにする (よそのポップオーバーは見ない)
-        if (e.key === 'Escape' && !e.defaultPrevented && box?.querySelector(':popover-open') == null) onclose();
+        if (e.key === 'Escape' && !e.defaultPrevented && box?.querySelector(':popover-open') == null)
+            onclose();
     }}
 />
 
@@ -60,7 +61,8 @@
     ここは箱と背景だけで足りる
 -->
 <div class="detail-modal" role="dialog" aria-modal="true" data-testid="program-detail">
-    <button type="button" class="detail-backdrop" onclick={onclose} aria-label="閉じる" tabindex="-1"></button>
+    <button type="button" class="detail-backdrop" onclick={onclose} aria-label="閉じる" tabindex="-1"
+    ></button>
     <!--
         **巻き取るのは中身だけ。** 押すものは箱の下端に重ねたまま出しておく
         (説明が長くても開いた時点で見える。FactsAside と同じ考え方)。並びの地は塗らず、
@@ -73,12 +75,18 @@
             決まるだけ) が、動きを減らす設定で Pico の層が `!important` で 1ms に縮める。層の中の `!important` には
             層の外の規則では勝てず、要素に直に書いたものだけが勝つ
         -->
-        <div class="detail-body" style:--detail-bottom={`calc(${actionsHeight}px + 2 * var(--dp-space-5))`} style:animation-duration|important="auto">
+        <div
+            class="detail-body"
+            style:--detail-bottom={`calc(${actionsHeight}px + 2 * var(--dp-space-5))`}
+            style:animation-duration|important="auto"
+        >
             <ProgramFacts {program} {notes} {cmNote} {fps} {status} />
         </div>
 
         <div class="detail-actions modal-actions" bind:offsetHeight={actionsHeight}>
-            <button type="button" class="secondary detail-close" onclick={onclose} data-testid="detail-close">閉じる</button>
+            <button type="button" class="secondary detail-close" onclick={onclose} data-testid="detail-close"
+                >閉じる</button
+            >
             {#if actions}
                 {@render actions()}
             {/if}

@@ -220,7 +220,10 @@
      * 放送の文書と同じ領域を使わせる (アプリは AIT で局が起動させたもの)
      */
     function broadcastFor(): CompatInit {
-        const who = { originalNetworkId: program?.originalNetworkId ?? null, serviceId: program?.serviceId ?? null };
+        const who = {
+            originalNetworkId: program?.originalNetworkId ?? null,
+            serviceId: program?.serviceId ?? null,
+        };
         const visible = nvramVisible;
         const nvram = Object.fromEntries(
             Object.entries(readAll(NVRAM_PREFIX)).filter(([key]) => visible?.(key, who) === true),
@@ -232,12 +235,16 @@
      * アプリが Greg・NVRAM に書いた。**NVRAM はアプリを開いた局 (`who`) から見えるものだけ**受け取る
      * (中身はアプリの言うまま。1 ブロック 64 バイトの base64)。開いた後に選局していても、開いた局の領域に書く
      */
-    function written(change: Extract<FrameMessage, { type: 'greg' | 'nvram' }>, who: CompatInit['who']): void {
+    function written(
+        change: Extract<FrameMessage, { type: 'greg' | 'nvram' }>,
+        who: CompatInit['who'],
+    ): void {
         if (change.type === 'greg') {
             if (engine !== null) engine.greg[change.index] = change.value.slice(0, 256);
             return;
         }
-        if (nvramVisible?.(change.key, who) === true && change.value.length <= 88) write(NVRAM_PREFIX + change.key, change.value);
+        if (nvramVisible?.(change.key, who) === true && change.value.length <= 88)
+            write(NVRAM_PREFIX + change.key, change.value);
     }
 
     /** アプリを閉じてデータ放送へ戻る */
@@ -650,9 +657,16 @@
         const round = "'denpa-bml-round', 'Hiragino Maru Gothic ProN', 'Meiryo', sans-serif";
         const made = createBml({
             root: into,
-            fonts: { round, boldRound: round, square: "'Hiragino Kaku Gothic ProN', 'Meiryo', 'MS Gothic', sans-serif" },
+            fonts: {
+                round,
+                boldRound: round,
+                square: "'Hiragino Kaku Gothic ProN', 'Meiryo', 'MS Gothic', sans-serif",
+            },
             ip,
-            store: { get: (key) => read(NVRAM_PREFIX + key), set: (key, value) => write(NVRAM_PREFIX + key, value) },
+            store: {
+                get: (key) => read(NVRAM_PREFIX + key),
+                set: (key, value) => write(NVRAM_PREFIX + key, value),
+            },
             clock: () => clock?.() ?? null,
             receiver: { zipcode: postal, prefecture },
             onVideoRect: (rect, size) => {
@@ -756,7 +770,10 @@
         if (engine === null || toAribKey === null) return;
         // 入力欄で打っている字は文書へ渡さない
         const target = event.target;
-        if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
+        if (
+            target instanceof HTMLElement &&
+            (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+        ) {
             return;
         }
         // 離すほうは修飾キーを見ない (押しっぱなしの扱いが残らないように)
@@ -804,20 +821,20 @@
     -->
     {#if running !== null}
         {#key running.url}
-        <HybridcastFrame
-            app={running}
-            hc={hcState}
-            broadcast={broadcastFor}
-            onwrite={written}
-            onclose={closeApp}
-            ontune={(service) => tune?.(service) ?? false}
-            oncaptions={(on) => setCaptions?.(on)}
-            onvideo={(where) => {
-                appVideo = where;
-                place();
-            }}
-            bind:press={appPress}
-        />
+            <HybridcastFrame
+                app={running}
+                hc={hcState}
+                broadcast={broadcastFor}
+                onwrite={written}
+                onclose={closeApp}
+                ontune={(service) => tune?.(service) ?? false}
+                oncaptions={(on) => setCaptions?.(on)}
+                onvideo={(where) => {
+                    appVideo = where;
+                    place();
+                }}
+                bind:press={appPress}
+            />
         {/key}
     {/if}
     {#if on && running === null && (loading || receiving)}

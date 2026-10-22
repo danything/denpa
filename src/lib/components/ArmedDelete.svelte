@@ -57,7 +57,12 @@
             {#if icon}<Icon icon={Trash} size="size-4" />{/if}<span class="btn-label">削除を確定</span>
         </button>
     {:else}
-        <button type="button" class="{size} outline danger" onclick={() => deleting.arm(armKey)} data-testid={testid}>
+        <button
+            type="button"
+            class="{size} outline danger"
+            onclick={() => deleting.arm(armKey)}
+            data-testid={testid}
+        >
             {#if icon}<Icon icon={Trash} size="size-4" />{/if}<span class="btn-label">削除</span>
         </button>
     {/if}

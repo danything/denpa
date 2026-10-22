@@ -1,7 +1,12 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import Icon from '#lib/components/player/Icon.svelte';
-    import { resultsHref, type SuggestGroup, type SuggestResponse, suggestGroups } from '#lib/search-suggest.js';
+    import {
+        resultsHref,
+        type SuggestGroup,
+        type SuggestResponse,
+        suggestGroups,
+    } from '#lib/search-suggest.js';
     import { afterNavigate, goto } from '$app/navigation';
     import { resolve } from '$app/paths';
     import { page } from '$app/state';
@@ -76,7 +81,9 @@
         const mine = new AbortController();
         controller = mine;
         try {
-            const res = await fetch(`${resolve('api/search')}?${new URLSearchParams({ q })}`, { signal: mine.signal });
+            const res = await fetch(`${resolve('api/search')}?${new URLSearchParams({ q })}`, {
+                signal: mine.signal,
+            });
             if (!res.ok) throw new Error(String(res.status));
             const body = (await res.json()) as SuggestResponse;
             if (controller !== mine) return;
@@ -243,7 +250,9 @@
                             onmousemove={() => (active = index)}
                         >
                             <span class="suggest-text">
-                                <span class="suggest-label truncate" class:broadcast={item.broadcast}>{item.label}</span>
+                                <span class="suggest-label truncate" class:broadcast={item.broadcast}
+                                    >{item.label}</span
+                                >
                                 {#if item.meta !== ''}
                                     <span class="suggest-meta tiny muted truncate">{item.meta}</span>
                                 {/if}

@@ -48,7 +48,9 @@
         <p>運転中に画面を注視することは法律で禁じられています。</p>
         <footer class="modal-actions">
             {#if oncancel}
-                <button type="button" class="secondary" onclick={oncancel} data-testid="drive-notice-cancel">取消</button>
+                <button type="button" class="secondary" onclick={oncancel} data-testid="drive-notice-cancel"
+                    >取消</button
+                >
             {/if}
             <button type="button" onclick={onaccept} data-testid="drive-notice-accept">わかりました</button>
         </footer>

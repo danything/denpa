@@ -14,7 +14,7 @@ function firstTfdt(bytes: Uint8Array): number | null {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const type = (at: number) => new TextDecoder().decode(bytes.subarray(at + 4, at + 8));
     const walk = (from: number, to: number, path: string[]): number | null => {
-        for (let at = from; at + 8 <= to; ) {
+        for (let at = from; at + 8 <= to;) {
             const size = view.getUint32(at);
             if (size < 8) return null;
             const name = type(at);

@@ -56,7 +56,15 @@
     const stage = stageMenu(() => open);
 </script>
 
-<Menu bind:open side="top" {align} boundary={stage} {trigger} class="overlay-menu {size}" testid={testid && `${testid}-menu`}>
+<Menu
+    bind:open
+    side="top"
+    {align}
+    boundary={stage}
+    {trigger}
+    class="overlay-menu {size}"
+    testid={testid && `${testid}-menu`}
+>
     {#each items as item (item.key)}
         {@const extra = attrName === undefined ? {} : { [`data-${attrName}`]: item.key }}
         <button

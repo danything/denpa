@@ -14,13 +14,17 @@
     const notices = $derived.by(() => {
         const list: Notice[] = [];
         list.push(...errorNotice(form, 'settings-error'));
-        if (form?.webhookAdded) list.push({ key: 'webhook-added', kind: 'success', text: '通知先を追加しました' });
+        if (form?.webhookAdded)
+            list.push({ key: 'webhook-added', kind: 'success', text: '通知先を追加しました' });
         if (form?.tested) {
             list.push({
                 key: 'webhook-tested',
                 kind: form.tested === 'ok' ? 'success' : 'error',
                 // 届いたら `ok` が返る (`server/webhook.ts`)。英語のまま出さない
-                text: form.tested === 'ok' ? 'テスト送信が届きました' : `テスト送信に失敗しました: ${form.tested}`,
+                text:
+                    form.tested === 'ok'
+                        ? 'テスト送信が届きました'
+                        : `テスト送信に失敗しました: ${form.tested}`,
             });
         }
         if (form?.migrate) list.push({ key: 'migrate-started', kind: 'info', text: form.migrate });

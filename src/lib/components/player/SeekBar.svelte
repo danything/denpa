@@ -250,7 +250,7 @@
     }
     @media (pointer: coarse) {
         .seek::before {
-            content: "";
+            content: '';
             position: absolute;
             inset: -1.25rem 0 -0.25rem;
         }
@@ -288,14 +288,14 @@
     .part:last-child .bar {
         margin-right: 0;
     }
-    .part[data-part="cm"] .bar {
+    .part[data-part='cm'] .bar {
         background: var(--seek-cm);
     }
     .played {
         height: 100%;
         background: var(--seek-played);
     }
-    .part[data-part="cm"] .played {
+    .part[data-part='cm'] .played {
         background: var(--seek-cm-played);
     }
     .thumb {
