@@ -302,7 +302,7 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
      * 車載ブラウザ)。AudioContext の出口をストリームにして `<audio>` に渡し、メディアの再生にする。
      *
      * 裏に回すのは別のタブを前に出し、`visibilityState` も差し替えて通知を送る (ヘッドレスは
-     * タブを移っても `visible` のまま)。裏でも音と映像のコマが進み続けること、`<audio>` が鳴って
+     * タブを移っても `visible` のまま)。裏でも音は進み続け、**映像はデコードしない** (CPU を使わない。戻れば出す) こと、`<audio>` が鳴って
      * いること、`<audio>` を外から止める・再開する (ロック画面・車の操作) と操作バーが合うこと、
      * 切れば直に鳴らすのに戻ること、CSP に止められないことを見る
      */
@@ -349,12 +349,15 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
             Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
             document.dispatchEvent(new Event('visibilitychange'));
         });
+        // 数は 1 秒ごとに書き出される。隠す前のぶんが出そろってから数え始める
+        await page.waitForTimeout(1_500);
         const heard = await count('audio');
         const shown = await count('shown');
         await page.waitForTimeout(5_000);
         // 音は1秒に 47 コマ (48kHz・1024 サンプル)。5秒で半分より多くは進む
         expect((await count('audio')) - heard).toBeGreaterThan(100);
-        expect((await count('shown')) - shown).toBeGreaterThan(50);
+        // 映像は裏ではデコードしない (同じ端末で見ているほかのタブに CPU を回す。`raw/worker.ts` の `hidden`)
+        expect((await count('shown')) - shown).toBeLessThan(5);
         expect(await paused()).toBe(false);
         const play = page.getByTestId('live-play');
         await expect(play).toHaveAttribute('aria-label', '一時停止');
@@ -366,6 +369,9 @@ test.describe('ライブを MPEG-2 のまま見る', () => {
             Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
             document.dispatchEvent(new Event('visibilitychange'));
         });
+        // 戻れば映像も出す (いちばん新しいキーフレームから)
+        const back = await count('shown');
+        await expect.poll(() => count('shown'), { timeout: 10_000 }).toBeGreaterThan(back + 20);
 
         // `<audio>` を外から止める・再開すると (ロック画面・車の操作)、操作バーも止まる・再開する
         await audio.evaluate((a) => (a as HTMLAudioElement).pause());

@@ -86,7 +86,12 @@ export type ToWorker =
      */
     | { type: 'pip'; writable: WritableStream<VideoFrame> }
     /** 小窓へ書き込むか。出していない間は書かない (1コマごとに写すぶん重い) */
-    | { type: 'pipFlow'; on: boolean };
+    | { type: 'pipFlow'; on: boolean }
+    /**
+     * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない** — 同じ端末で 2 本見ていると、
+     * 裏に回したほうも 1 コマ 10ms 前後デコードし続けて、見ているほうが間に合わなくなっていた。音は流し続ける
+     */
+    | { type: 'visible'; on: boolean };
 
 /** worker → 画面 */
 export type FromWorker =

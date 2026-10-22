@@ -125,6 +125,8 @@ let surface: OffscreenCanvas | null = null;
 /** 小窓 (PiP) の書き込み先と、書き込むか (`messages.ts` の `pip` / `pipFlow`) */
 let pip: WritableStreamDefaultWriter<VideoFrame> | null = null;
 let pipFlowing = true;
+/** 画面が見えていないか (`visible`)。見えていない間は、小窓へ書いていなければ映像をデコードしない */
+let hidden = false;
 /** 最後に描いたもの。**同じなら描き直さない** */
 let drawn = { pts: Number.NaN, field: Number.NaN };
 let frameTicks = FRAME;
@@ -456,6 +458,16 @@ function tick(): void {
     const at = now();
 
     /*
+     * **見えていない間は映像をデコードしない** (小窓へ書いているときは別)。待たせている圧縮は、溜まりすぎたら
+     * いちばん新しい I から持ち直す (`onVideo` の `PENDING_MOST`)。見えるようになったら、大きく遅れているので I まで飛んで
+     * デコードし直す (下の `BEHIND_MOST`)。**ここでデコーダを開き直さない** — 音と共通なので、音まで止まる
+     */
+    if (hidden && (pip === null || !pipFlowing)) {
+        report();
+        return;
+    }
+
+    /*
      * **新しい局の1枚目は、デコードできたらすぐ出して待つ** — 前の局の映像のまま新しい局の音を
      * 聞かせると、見えているものと聞こえるものが食い違う。音の時計が動き出していても
      * 待たない: 放送の映像は音より先に届く (VBV の遅れ) ので、番を待つと 1 枚目が
@@ -542,11 +554,16 @@ function tickFmp4(video: Fmp4Video): void {
 /** 間に合っているかを見張り (`budget.ts`)、1秒ごとに数を出す */
 function watch(late: number, frame: number, queued: number, reason: string): void {
     const wall = performance.now();
-    if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued)) fail(reason);
-    if (wall - statsAt >= 1000) {
-        statsAt = wall;
-        post({ type: 'stats', dropped, p95: budget.p95, shown });
-    }
+    if (budget.tick(wall, (frame / CLOCK) * 1000, late, queued, dropped, shown)) fail(reason);
+    report();
+}
+
+/** 1秒ごとに数を出す (見えていない間も。音のコマ数は画面がこの知らせで書き出す) */
+function report(): void {
+    const wall = performance.now();
+    if (wall - statsAt < 1000) return;
+    statsAt = wall;
+    post({ type: 'stats', dropped, p95: budget.p95, shown });
 }
 
 let scheduled = false;
@@ -796,6 +813,11 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
             break;
         case 'pipFlow':
             pipFlowing = message.on;
+            break;
+        case 'visible':
+            hidden = !message.on;
+            // 見えていない間に溜まった遅れは数えない (戻った直後に「間に合っていない」と見ない)
+            budget.reset();
             break;
     }
 };

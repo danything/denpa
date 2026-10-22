@@ -15,21 +15,42 @@ describe('DecodeBudget', () => {
         expect(budget.p95).toBe(10);
     });
 
-    test('重いのが5秒続いたら諦める。**1回の重さでは戻さない**', () => {
+    test('重いのが3秒続いたら諦める。**1回の重さでは戻さない**', () => {
         const budget = new DecodeBudget();
         budget.tick(0, 33.4, 0);
-        const results = [1, 2, 3, 4, 5].map((s) => second(budget, s * WINDOW, 30));
-        expect(results).toEqual([false, false, false, false, true]);
-        expect(STRIKES).toBe(5);
+        const results = [1, 2, 3].map((s) => second(budget, s * WINDOW, 30));
+        expect(results).toEqual([false, false, true]);
+        expect(STRIKES).toBe(3);
+    });
+
+    /*
+     * **デコードの時間がぎりぎり間に合っていても、コマを捨て続けていれば諦める** (同じ端末で 2 本見ていたとき)
+     */
+    test('出すはずのコマの 15% 以上を捨て続けたら諦める', () => {
+        const budget = new DecodeBudget();
+        budget.tick(0, 33.4, 0, 0, 0, 0);
+        const window = (s: number, dropped: number, shown: number) => {
+            for (let i = 0; i < 10; i++) budget.record(20);
+            return budget.tick(s * WINDOW, 33.4, 0, 0, dropped, shown);
+        };
+        // 1秒に 6 枚捨てて 24 枚出す (20%)
+        expect([window(1, 6, 24), window(2, 12, 48), window(3, 18, 72)]).toEqual([false, false, true]);
+        // 捨てるのが少なければ (1秒に 2 枚) 数えない
+        const calm = new DecodeBudget();
+        calm.tick(0, 33.4, 0, 0, 0, 0);
+        for (const s of [1, 2, 3, 4]) {
+            for (let i = 0; i < 10; i++) calm.record(20);
+            expect(calm.tick(s * WINDOW, 33.4, 0, 0, s * 2, s * 28)).toBe(false);
+        }
     });
 
     test('途中で間に合えば数え直す', () => {
         const budget = new DecodeBudget();
         budget.tick(0, 33.4, 0);
-        for (const s of [1, 2, 3, 4]) second(budget, s * WINDOW, 30);
-        expect(second(budget, 5 * WINDOW, 10)).toBe(false);
-        for (const s of [6, 7, 8, 9]) expect(second(budget, s * WINDOW, 30)).toBe(false);
-        expect(second(budget, 10 * WINDOW, 30)).toBe(true);
+        for (const s of [1, 2]) second(budget, s * WINDOW, 30);
+        expect(second(budget, 3 * WINDOW, 10)).toBe(false);
+        for (const s of [4, 5]) expect(second(budget, s * WINDOW, 30)).toBe(false);
+        expect(second(budget, 6 * WINDOW, 30)).toBe(true);
     });
 
     test('デコードする時間が軽くても、映像が遅れ続けていれば諦める', () => {
@@ -63,12 +84,12 @@ describe('DecodeBudget (WebCodecs の経路)', () => {
         expect(budget.p95).toBe(60);
     });
 
-    test('窓の間ずっと捌けきらないのが5秒続いたら諦める', () => {
+    test('窓の間ずっと捌けきらないのが3秒続いたら諦める', () => {
         const budget = new DecodeBudget(false);
         budget.tick(0, 16.7, 0, QUEUE_STUCK);
-        const results = [1, 2, 3, 4, 5].map((s) =>
+        const results = [1, 2, 3].map((s) =>
             webSecond(budget, s * WINDOW, 5, [QUEUE_STUCK, QUEUE_STUCK + 2]),
         );
-        expect(results).toEqual([false, false, false, false, true]);
+        expect(results).toEqual([false, false, true]);
     });
 });

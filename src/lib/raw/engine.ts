@@ -224,8 +224,15 @@ export class RawEngine {
             this.frame = requestAnimationFrame(onFrame);
         };
         this.frame = requestAnimationFrame(onFrame);
+        document.addEventListener('visibilitychange', this.onVisibility);
+        this.onVisibility();
         this.route();
     }
+
+    /** 見えているかを worker へ (`visible`)。見えていない間は映像をデコードしない */
+    private readonly onVisibility = (): void => {
+        this.send({ type: 'visible', on: document.visibilityState === 'visible' });
+    };
 
     /** どれだけ貯めるか (秒)。**決めるのはエンコードする経路と同じ `pacing.nextTarget`** (live-player) */
     set target(seconds: number) {
@@ -402,6 +409,7 @@ export class RawEngine {
         for (const settle of [...this.grabs.values()]) settle(null);
         clearInterval(this.timer);
         cancelAnimationFrame(this.frame);
+        document.removeEventListener('visibilitychange', this.onVisibility);
         this.stopAll();
         this.worker.terminate();
         if (this.out !== null) {
