@@ -1472,9 +1472,10 @@
   }
   /*
      * 日付の1つ。ふだんは字だけ (押せることは字の濃さと、指を乗せたときの地で)。
-     * **選んでいる日は内側を塗る** (控えのボタンの地より一段濃い地と、内側の細い縁)。太字も添えて、色だけにしない
+     * **選んでいる日は主の色の下線と字・太字** (ほかの選んでいるものと同じ。塗らない)。土日は土日の字の色のまま
      */
   .day-chip {
+    position: relative;
     display: inline-flex;
     flex: none;
     align-items: center;
@@ -1493,13 +1494,21 @@
     color: var(--pico-secondary-hover);
   }
   .day-chip.selected {
-    background: var(--dp-btn-tonal-hover);
-    box-shadow: inset 0 0 0 1px var(--dp-line-strong);
-    color: var(--pico-h1-color, var(--pico-color));
+    color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }
+  .day-chip.selected::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0.55rem;
+    bottom: 0.2rem;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--pico-primary);
+    pointer-events: none;
+  }
   /*
-     * **今日は日付の前に小さく「今日」** (主の色の字・太字)。選んでいる日の塗りとは別の印なので、
+     * **今日は日付の前に小さく「今日」** (主の色の字・太字)。選んでいる日の下線とは別の印なので、
      * 前の日を見ているときも今日がどれか分かる
      */
   .today-mark {

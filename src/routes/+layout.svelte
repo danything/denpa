@@ -731,7 +731,7 @@
     min-height: 2.5rem;
   }
   /*
-     * **いまの画面は太い字と主の色の下線で示す。** ほかの画面へのリンクは薄い字 (`--dp-muted`) で、
+     * **いまの画面は主の色の太い字と下線で示す** (選んでいるものはどこも線と字。塗らない)。 ほかの画面へのリンクは薄い字 (`--dp-muted`) で、
      * 指を乗せると本文の字になる。薄い灰色の地を敷くだけだった頃は、
      * ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
      * 地は塗らない (指を乗せたときの灰色と混ざらないように)。下線は押す場所の
@@ -751,7 +751,7 @@
   }
   ul.links a.button.ghost[aria-current="page"] {
     --pico-background-color: transparent;
-    --pico-color: var(--pico-h1-color, var(--pico-color));
+    --pico-color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }
   ul.links a.button.ghost[aria-current="page"]:hover {

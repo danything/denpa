@@ -1217,9 +1217,8 @@
     }
   }
   /*
-     * 一行 = 局を選ぶボタンと中身を読むボタン。地は行 (`li`) ごと塗る — 選ぶボタンだけを
-     * 塗ると、右の (i) の所だけ地が欠ける。塗り (指を乗せた・映している) はサイドバーの行と同じ
-     * (`app.css` の `.side-item`。選ぶボタンの `aria-current` で行ごと塗る)。高さは中身 (2 行とロゴ) で決まる
+     * 一行 = 局を選ぶボタンと中身を読むボタン。指を乗せた塗りと、映している局の左の縦線は行 (`li`) に付ける
+     * (`app.css` の `.side-item`。選ぶボタンの `aria-current` で決まる)。映している局は局名を主の色の太字に。高さは中身 (2 行とロゴ) で決まる
      */
   .channel-item {
     flex-shrink: 0;
@@ -1274,6 +1273,10 @@
   .channel-name {
     font-size: var(--dp-text-sm);
     font-weight: var(--dp-weight);
+  }
+  .channel[aria-current] .channel-name {
+    color: var(--dp-primary-text);
+    font-weight: var(--dp-weight-bold);
   }
   .channel-now {
     font-size: var(--dp-text-xs);

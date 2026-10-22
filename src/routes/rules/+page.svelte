@@ -538,10 +538,10 @@
     color: var(--dp-muted);
     font-size: var(--dp-text-sm);
   }
-  /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (一覧の選んだ行の地に太字) */
+  /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (主の色の細い枠と字・太字) */
   .chip-button.on {
-    background: var(--dp-row-selected);
-    color: var(--dp-fg);
+    box-shadow: inset 0 0 0 1px var(--pico-primary);
+    color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }
   .rules-bar select {

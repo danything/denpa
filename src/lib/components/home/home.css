@@ -372,10 +372,10 @@
 .board .t-toolbar .t-chips > .t-chip:hover {
   --pico-background-color: var(--dp-btn-tonal-hover);
 }
-/* 選んでいるチップは色を付けず、一覧の選んだ行と同じ地に太字 (`app.css` の `.chip` と同じ。青は焦点とリンクだけ) */
+/* 選んでいるチップは塗らず、主の色の細い枠と字・太字 (`app.css` の `.chip` と同じ) */
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
-  --pico-background-color: var(--dp-row-selected);
-  --pico-color: var(--dp-fg);
+  --pico-color: var(--dp-primary-text);
+  box-shadow: inset 0 0 0 1px var(--pico-primary);
   font-weight: var(--dp-weight-bold);
 }
 /* 日付の見出し。小さく沈めた字で、一覧の頭に貼り付く */
@@ -478,14 +478,29 @@
 .board .group-head:hover {
   background: var(--dp-row-hover);
 }
-.board .t-row.picked {
-  background: var(--dp-row-selected);
+/*
+ * 詳細を開いている行。**塗りは行の塊のまま、左の主の色の縦線と主の色の題名で示す** (ほかの選んでいるものと同じ。
+ * 塗りを一段濃くしていた頃は、指を乗せた行とほとんど見分けが付かなかった)
+ */
+.board .t-row.picked::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset-block: 0.625rem;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--pico-primary);
+  pointer-events: none;
+}
+.board .t-row.picked .row-name {
+  color: var(--dp-primary-text);
+  font-weight: var(--dp-weight-bold);
 }
 .board .t-row.live {
   background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row));
 }
-.board .t-row.live:hover,
-.board .t-row.live.picked {
+.board .t-row.live:hover {
   background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row-hover));
 }
 .board .t-row .row-body {

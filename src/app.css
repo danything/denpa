@@ -159,7 +159,7 @@
  * - `--dp-bg` … 地 (ページ・ヘッダー)
  * - `--dp-surface` … ダイアログ・下から出す一枚
  * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
- * - `--dp-row` … ホームの一覧の行の塊。`--dp-row-hover` (指を乗せた)・`--dp-row-selected` (詳細を開いた) で一段ずつ濃く
+ * - `--dp-row` … ホームの一覧の行の塊。`--dp-row-hover` (指を乗せた) で一段濃く。詳細を開いた行は塗らずに線と字で示す
  * - `--dp-line` … 区切りの線 (行の間・節の間)
  * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
@@ -177,10 +177,9 @@
   --dp-bg: #fff;
   --dp-surface: #fff;
   --dp-subtle: #eff1f4; /* slate-50 */
-  /* 一覧の行の塊 (ホームの時間軸)。地との差は L で 5 ほど。指を乗せた・選んだ行はさらに一段ずつ (`home.css`) */
+  /* 一覧の行の塊 (ホームの時間軸)。地との差は L で 5 ほど。指を乗せた行はさらに一段 (`home.css`) */
   --dp-row: #f0f2f5;
   --dp-row-hover: #e6e9ee;
-  --dp-row-selected: #dde1e8;
   --dp-line: #dfe3eb; /* slate-100 */
   --dp-line-strong: #cfd5e2; /* slate-150 */
   --dp-pop: #fff;
@@ -228,7 +227,6 @@
   --dp-subtle: #1a1b20;
   --dp-row: #16171c;
   --dp-row-hover: #1f2127;
-  --dp-row-selected: #272a31;
   --dp-line: #26282e;
   --dp-line-strong: #3a3d46;
   /*
@@ -1031,10 +1029,9 @@ a.button {
 
 /* ---- タブ (`<div role="group" class="segmented">`。番組表とライブの種別) ---- */
 /*
- * **溝 (枠と地) は付けず、選んでいるものだけをリストの選んだ行と同じ面 (`--dp-row-selected`) で塗る。**
+ * **溝 (枠と地) は付けず、選んでいるものは主の色の下線と字・太字で示す** (ヘッダーのナビと同じ。塗りは使わない)。
  * 溝を淡い面で塗っていた頃は、アンビエントモードの色がタブの所だけ届かず浮いて見えた。外の端は中のボタンの端なので、
- * 映像の上端やすぐ下の一覧の行とそのままそろう。主の色では塗らない (隣の「予約」などの主のボタンと見分けるため)。
- * 選んでいるものは面と太字で示す (色だけにしない)。選んでいないものも本文並みの字で、押せると分かる
+ * 映像の上端やすぐ下の一覧の行とそのままそろう。選んでいないものも本文並みの字で、押せると分かる
  */
 [role="group"].segmented {
   display: inline-flex;
@@ -1047,6 +1044,7 @@ a.button {
   box-shadow: none;
 }
 [role="group"].segmented > :is(button, a.button) {
+  position: relative;
   --pico-background-color: transparent;
   --pico-border-color: transparent;
   --pico-color: var(--pico-secondary);
@@ -1062,15 +1060,28 @@ a.button {
 }
 [role="group"].segmented
   > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]) {
-  --pico-background-color: var(--dp-row-selected, var(--dp-subtle));
+  --pico-background-color: transparent;
   --pico-border-color: transparent;
-  --pico-color: var(--pico-h1-color, var(--pico-color));
+  --pico-color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
+/* 下線 (`.seg-pill` を置かないもの)。押す場所の内側に引くので高さは変わらない */
+[role="group"].segmented
+  > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]):not(
+    :has(> .seg-pill)
+  )::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0.65rem;
+  bottom: 0.2rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--pico-primary);
+  pointer-events: none;
+}
 /*
- * **選んだ面を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
- * 面は前の場所から新しい場所へ動く (`#lib/motion.svelte.js` の `slide`)。
- * 字は動かさない (面の上に重ねたまま)。見た目は上の「選んでいるもの」と同じ
+ * **下線を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
+ * 線は前の場所から新しい場所へ動く (`#lib/motion.svelte.js` の `slide`)。見た目は上の下線と同じ
  */
 [role="group"].segmented > :is(button, a.button):has(> .seg-pill) {
   --pico-background-color: transparent;
@@ -1080,10 +1091,11 @@ a.button {
 }
 .seg-pill {
   position: absolute;
-  inset: -1px;
-  z-index: -1;
-  border-radius: inherit;
-  background: var(--dp-row-selected, var(--dp-subtle));
+  inset-inline: 0.65rem;
+  bottom: 0.2rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--pico-primary);
   pointer-events: none;
 }
 
@@ -1725,11 +1737,10 @@ dialog[open] > article {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
 }
-/* 選んでいるものは色を付けず、地を一段濃くして太字に (ほかの絞り込みのチップと同じ。青は焦点とリンクだけ) */
+/* 選んでいるものは塗らず、枠と字を主の色に・太字に (ほかの選んでいるものと同じく、線と字で示す) */
 .chip:has(input:checked) {
-  border-color: transparent;
-  background: var(--dp-row-selected, var(--dp-subtle));
-  color: var(--dp-fg, inherit);
+  border-color: var(--pico-primary);
+  color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
 
@@ -1833,23 +1844,23 @@ dialog[open] > article {
   background: var(--dp-hover-soft);
 }
 /*
- * **いまいる場所は線、選んだ中身は塗り。**
- *
- * - いまいる場所 (行そのものがリンクの `aria-current` か切り替えの `aria-pressed`。設定の項目・絞り込み・並び) は
- *   太い字と、左の主の色の縦線。ヘッダーのナビの下線と同じ印 (横に並ぶものは下線、縦に並ぶものは左の線)
- * - 選んだ中身 (2 つのボタンを並べた行の主のボタンが選ばれている。ライブの局) は行ごと塗る (太字にはしない)。
- *   一覧の行・チップの選択と同じ
+ * **選んでいるものは、主の色の線と字・太字で示す。塗らない** (塗りは面の境界に見える)。
+ * 横に並ぶもの (ヘッダーのナビ・種別の切り替え) は下線、縦に並ぶもの (ここ) は左の縦線。
+ * 行そのものがリンクの `aria-current` か切り替えの `aria-pressed` (設定の項目・絞り込み・並び) も、
+ * 2 つのボタンを並べた行の主のボタンが選ばれているもの (ライブの局) も同じ
  */
 .side-item:is(
   [aria-current]:not([aria-current="false"]),
   [aria-pressed="true"]
 ) {
+  color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
 .side-item:is(
     [aria-current]:not([aria-current="false"]),
     [aria-pressed="true"]
-  )::before {
+  )::before,
+.side-item:has(> [aria-current]:not([aria-current="false"]))::before {
   content: "";
   position: absolute;
   inset-block: 0.625rem;
@@ -1858,8 +1869,9 @@ dialog[open] > article {
   border-radius: 1px;
   background: var(--pico-primary);
 }
-.side-item:has(> [aria-current]:not([aria-current="false"])) {
-  background: var(--dp-subtle);
+.side-item:has(> [aria-current]:not([aria-current="false"]))
+  > [aria-current]:not([aria-current="false"]) {
+  color: var(--dp-primary-text);
 }
 /* 見せるだけの行 (集計・状態)。指を乗せても塗らない */
 .side-item.static:hover {
