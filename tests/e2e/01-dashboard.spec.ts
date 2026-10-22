@@ -565,12 +565,12 @@ test.describe("ホームと画面遷移", () => {
           return { slid: [...w.slid], snapshots: w.snapshots };
         });
 
-      // ほかの画面から番組表へ: 下線は滑り、種別の面は滑らない。写しは取らない
+      // ほかの画面から番組表へ: ヘッダーの塗りは滑り、種別の面は滑らない。写しは取らない
       await page.getByTestId("nav-guide").click();
       await expect(page.getByTestId("guide-grid")).toBeVisible();
       await expect
         .poll(async () =>
-          (await seen()).slid.some((c) => c.includes("nav-underline")),
+          (await seen()).slid.some((c) => c.includes("nav-pill")),
         )
         .toBe(true);
       expect((await seen()).slid.some((c) => c.includes("seg-pill"))).toBe(

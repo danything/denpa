@@ -1797,6 +1797,12 @@ dialog[open] > article {
   margin: 0;
   padding: 0 0 0 0.75rem;
   list-style: none;
+  /*
+   * 束ねるだけの `role="group"` (絞り込み・並び)。Pico は中のボタンに焦点が当たると束ごと影の枠で囲む
+   * (入力欄とボタンを並べた組のための見た目) ので、マウスで押しても一覧全体が枠で囲まれていた。
+   * 焦点は押したボタンの `:focus-visible` の線だけで示す
+   */
+  box-shadow: none;
 }
 .side-list > li {
   margin: 0;
