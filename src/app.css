@@ -1359,8 +1359,10 @@ button.text-button:hover {
  * 映像の上のメニュー (速さの `OverlayMenu`・再生の設定の `SettingsMenu`)。
  * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。
  *
- * **面はテーマにかかわらず暗く、透かさない。縁は付けず、近い影と遠い影の 2 段で浮かせる** (docs/design.md)。
- * 透かしもぼかしも使わない — 明るい映像の上でも字の濃さが変わらず、ぼかしの重さも無い (車のタブレットで観ながら使う)。
+ * **面はテーマにかかわらず暗く、映像を少し透かす** (操作バーの影と同じく、映像の上に重ねるものは映像を透かす。docs/design.md)。
+ * ぼかしは使わない (動く映像の上では毎コマ計算し直して重い。車のタブレットで観ながら使う)。
+ * 地を 86% 残すので、真っ白な映像の上でも白い字で 10:1 ほど、控えた字 (白 72%) で 5:1 ほど。縁は付けず、近い影と遠い影の 2 段で浮かせる。
+ * 透かしを減らす設定では透かさない。
  * 選んでいる選択肢は、ほかの選んでいるものと同じく塗らずに左の縦線と太字。色は映像の上のボタンのオンと同じ空色
  */
 .overlay-menu {
@@ -1373,11 +1375,16 @@ button.text-button:hover {
   max-width: min(20rem, 90vw);
   padding: 0.5rem;
   border: 0;
-  background: #17191e;
+  background: rgb(23 25 30 / 0.86);
   box-shadow:
     0 2px 6px rgb(0 0 0 / 0.35),
     0 18px 40px rgb(0 0 0 / 0.45);
   color: #fff;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .overlay-menu {
+    background: #17191e;
+  }
 }
 .overlay-menu .option {
   position: relative;
