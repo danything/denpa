@@ -96,6 +96,8 @@
   --dp-space-4: 1rem;
   --dp-space-5: 1.5rem;
   --dp-space-6: 2rem;
+  /* 何行かある一覧の件と件の間。枠も地も線も無いので、件の中 (2px) よりはっきり離して境目にする */
+  --dp-list-gap: 0.875rem;
   /* 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない) */
   --dp-text-xs: 0.75rem;
   --dp-text-sm: 0.875rem;

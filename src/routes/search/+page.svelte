@@ -851,8 +851,8 @@
     margin: 0;
   }
   /*
-     * **節は見出しと細い線だけ** (カードで囲まない)。行は名前と小さな説明の2段で、
-     * 線で区切る。指を乗せると淡い地 (押せる範囲は行の中身いっぱい)
+     * **節は見出しだけ** (カードで囲まず、線も引かない)。行は名前と小さな説明の2段で、
+     * ホームの行と同じく件の間の余白 (`--dp-list-gap`) で分ける。指を乗せると淡い地 (押せる範囲は行の中身いっぱい)
      */
   .hits-section {
     display: flex;
@@ -866,7 +866,6 @@
     justify-content: space-between;
     gap: var(--dp-space-2) var(--dp-space-3);
     padding-bottom: var(--dp-space-2);
-    border-bottom: 1px solid var(--dp-line);
   }
   .hits-head h2 {
     margin: 0;
@@ -882,6 +881,7 @@
   .hits {
     display: flex;
     flex-direction: column;
+    gap: var(--dp-list-gap);
     margin: 0;
     padding: 0;
   }
@@ -891,7 +891,6 @@
     gap: var(--dp-space-2);
     margin: 0;
     list-style: none;
-    border-bottom: 1px solid var(--dp-line);
   }
   .hit-main {
     display: flex;

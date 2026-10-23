@@ -434,7 +434,7 @@
   .rows {
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
+    gap: var(--dp-list-gap);
     margin: 0;
     padding: 0;
     list-style: none;

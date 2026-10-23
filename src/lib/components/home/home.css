@@ -483,7 +483,7 @@
 .board .t-block {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: var(--dp-list-gap);
 }
 .board .t-row,
 .board .group-head {
