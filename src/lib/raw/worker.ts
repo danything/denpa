@@ -633,6 +633,11 @@ function resetThin(grace = 0): void {
 
 function thin(decoder: Decoder, late: number): void {
   const wall = performance.now();
+  // 裏から戻った直後 (`resetThin` の `grace`)。追いつくまでに捨てたコマは数えない
+  if (wall < thinCheckAt) {
+    thinDropped = dropped;
+    return;
+  }
   if (wall - thinCheckAt < 1000) return;
   const lost = dropped - thinDropped;
   thinDropped = dropped;
