@@ -3,7 +3,7 @@
 
   /**
    * 「今」へ張り付くボタン — ライブの「ライブ」と追っかけの「最新」。
-   * 張り付いている間は赤 (`OVERLAY_DANGER`)、離れていれば黒地に赤丸。
+   * 張り付いている間は赤い字と赤い短い線 (`OVERLAY_DANGER`)、離れていれば白い字に赤い点。
    * 文字は小さくして、幅は詰める (大きい余白のままだと
    * 操作バーの中でこれだけ太って見えた)
    */
@@ -44,7 +44,7 @@
     background: var(--dp-error);
   }
   .dot.active {
-    background: #fff;
+    background: currentColor;
   }
   /* 狭い枠では余白を詰める (押す的の高さは 40px のまま) */
   :global(.stage[data-compact]) .edge {

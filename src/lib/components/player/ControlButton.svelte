@@ -12,8 +12,8 @@
   /**
    * 映像の上に置くボタン。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
    *
-   * 黒く敷くのも、押されている間だけ色を変えるのも、`aria-pressed` を
-   * 立てるのもここ1箇所。別々に書いていた頃は、画面ごとに敷き方も
+   * 押されている間だけ色を変えるのも、`aria-pressed` を立てるのもここ1箇所
+   * (裏の影は並び全体に `ControlBar` が敷く)。別々に書いていた頃は、画面ごとに敷き方も
    * 押されている表現も違っていた。
    *
    * **`aria-pressed` は切り替えのボタンにだけ付ける** (`on` を渡したとき)。いつも
@@ -87,10 +87,12 @@
      * Pico はボタンの色を変数 (`--pico-background-color` など) で持つので、変数を差し替える。
      * Pico は層 (`@layer blades`) の中なので、`:hover` などで主の色に戻されることはない。
      *
-     * **ガラスにはしない** (照り・光の縁・影を付けると安っぽく見えた)。ただの暗い半透明の丸。
-     * 真っ白な映像の上でも白いアイコンが 4.5:1 以上になる濃さ (黒 60% で 5:1 ほど)
+     * **ボタンは塗らない** (docs/design.md)。明るい映像の上でも読めるよう、**並び全体の裏に影を敷く**
+     * (下の操作バーと右の列。`ControlBar`)。アイコンと字にも小さな影を付け、影の端に掛かっても読めるようにする。
+     * 指を乗せた・キーボードで触っているボタンだけ、ごく薄い地で示す
      */
   :global(.ov-btn) {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -130,36 +132,43 @@
     width: 2.5rem;
     padding: 0;
   }
-  /* `.ov` だけで使うものもある (ライブの「音を出す」) */
-  :global(.ov) {
-    --pico-background-color: rgb(0 0 0 / 0.6);
+  /* `.ov` だけで使うものもある (ライブの「音を出す」。そちらは自分で地を敷く) */
+  :global(.ov),
+  :global(.ov-btn) {
+    --pico-background-color: transparent;
     --pico-border-color: transparent;
     --pico-color: #fff;
     --pico-box-shadow: none;
+    filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.6));
   }
-  :global(.ov:is(:hover, :focus-visible)) {
-    --pico-background-color: rgb(0 0 0 / 0.75);
+  :global(.ov-btn:is(:hover, :focus-visible)) {
+    --pico-background-color: rgb(255 255 255 / 0.14);
   }
   /*
-     * 押されている間 (字幕を出している・速めているなど) は白い地に暗いアイコン。主の色 (青) で塗っていた頃は、
-     * 映像の上で青い丸だけが目立った。青はリンクとフォーカスに残す。
-     * 白を薄く (22%) 敷いていた頃は、明るい映像の上で白いアイコンが地に溶けた (2:1 を割る)。
-     * 指を乗せても白いまま — 上の `.ov:is(:hover, :focus-visible)` と詳細度が同じなので、**この順で後に置く**
+     * **オン (字幕を出している・速めているなど) は空色のアイコンと、下の短い線。** 塗らない。
+     * 戻せないものの 2 回目 (削除の確認) と、「今」へ張り付いている「ライブ」「最新」は赤い字と赤い短い線。
+     * どちらも暗い影の上で 4.5:1 以上になる明るさにしてある
      */
   :global(.ov-btn.ov-on) {
-    --pico-background-color: rgb(255 255 255 / 0.88);
-    --pico-color: #16171b;
+    --pico-color: #7dd3fc;
   }
   :global(.ov-btn.ov-danger) {
-    --pico-background-color: var(--dp-error);
-    --pico-color: #fff;
+    --pico-color: #ff8a7a;
   }
-  /* 透かしを減らす設定では透かさない地にする */
+  :global(.ov-btn:is(.ov-on, .ov-danger))::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0.3rem;
+    width: 1rem;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    transform: translateX(-50%);
+  }
+  /* 透かしを減らす設定では、乗せたときの地も透かさない (並びの裏の影は `ControlBar` が透かさない地にする) */
   @media (prefers-reduced-transparency: reduce) {
-    :global(.ov) {
-      --pico-background-color: #141519;
-    }
-    :global(.ov:is(:hover, :focus-visible)) {
+    :global(.ov-btn:is(:hover, :focus-visible)) {
       --pico-background-color: #26282e;
     }
   }

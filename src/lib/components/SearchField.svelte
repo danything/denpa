@@ -388,7 +388,7 @@
   /*
      * 候補。欄の真下に浮かせ、欄より少し広く取る (ヘッダーの欄が縮んでも読める幅)。
      * 節は小さな見出しと行だけ (カードにしない)。選んでいる行は淡い地。
-     * 箱は透かさない面に縁と影 (ぼかさない。`app.css` の「磨りガラス」)
+     * 箱はメニューと同じ面 (`--dp-pop`) に影だけ (縁もぼかしも付けない。docs/design.md)
      */
   .suggest {
     position: absolute;
@@ -399,9 +399,9 @@
     max-height: min(70vh, 36rem);
     overflow-y: auto;
     padding: var(--dp-space-1);
-    border: 1px solid var(--dp-line);
+    border: 0;
     border-radius: var(--dp-radius-lg);
-    background: var(--dp-bg);
+    background: var(--dp-pop);
     box-shadow: var(--dp-shadow-pop);
     transform: translateX(-50%);
   }

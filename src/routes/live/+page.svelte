@@ -878,7 +878,7 @@
                     始める作りなので、開いた直後は「押した」ことになっておらず、
                     ブラウザが音ありの再生を断る。押せる場所を出す
                 -->
-        <!-- 映像の上に置くものなので、色も他の重ねボタンと同じ (OVERLAY) -->
+        <!-- 映像の上に置くものなので、字の色と影は他の重ねボタンと同じ (OVERLAY)。並びの外に 1 つだけ浮かぶので、地は映像の上の通知と同じに自分で敷く -->
         <button
           type="button"
           class="small unmute {OVERLAY}"
@@ -1186,6 +1186,7 @@
     background: rgb(255 255 255 / 0.15);
   }
   .unmute {
+    --pico-background-color: rgb(0 0 0 / 0.6);
     position: absolute;
     top: 0.75rem;
     left: 0.75rem;
