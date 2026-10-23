@@ -952,14 +952,30 @@
 
 /*
  * **ヘッダーは中身の上に浮く** (`+layout.svelte`。docs/design.md の操作の層)。一覧と右の列は画面の上端から始め、
- * 頭にヘッダーのぶん (`--dp-header-space`。右の列は `.side-panel` が空ける) を空ける。巻くと行はヘッダーの下を流れる。
- * 日付の見出しはヘッダーのすぐ下に貼り付く
+ * 頭にヘッダーのぶん (`--dp-header-space`。右の列は `.side-panel` が空ける) を空ける。
+ * **空けた所は地の色の覆い (`::before`) で埋めたまま上に貼り付ける。** 巻いた行は覆いの下に隠れ、
+ * ヘッダーの裏や、ヘッダーと日付の見出しの間に透けて見えない。日付の見出しは覆いのすぐ下に貼り付く
  */
 @media (min-width: 768px) {
   .board .t-list {
     padding-top: var(--dp-header-space, 0px);
   }
-  /* 貼り付く位置は巻き取る箱の内側の余白 (上の頭の空き) から数える */
+  /*
+   * 覆いは頭の空き (内側の余白) に重ねて置き、高さを打ち消す (`margin-top`)。貼り付く位置は内側の余白から数えるので、
+   * そのぶん上 (`top` を負に) に貼り付けて画面の上端に合わせる。左右は内側の余白の外まで
+   */
+  .board .t-list::before {
+    content: "";
+    position: sticky;
+    top: calc(-1 * var(--dp-header-space, 0px));
+    z-index: 4;
+    display: block;
+    height: var(--dp-header-space, 0px);
+    margin: calc(-1 * var(--dp-header-space, 0px))
+      calc(0.5rem - var(--dp-gutter)) 0;
+    background: var(--dp-bg);
+  }
+  /* 貼り付く位置は巻き取る箱の内側の余白 (上の頭の空き) から数える。覆いのすぐ下 */
   .board .t-day {
     top: 0;
     padding-top: 0.25rem;

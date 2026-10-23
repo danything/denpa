@@ -1677,13 +1677,13 @@
     text-align: center;
   }
 
-  /* 表は枠で囲まない。操作の1行の下から画面の端まで (上のコメント) */
+  /* 表は枠で囲まない。操作の1行の下から画面の端まで (上のコメント)。地はページの地のまま (マスだけが面) */
   .grid-box {
     flex: 1 1 0%;
     min-height: 0;
     overflow: auto;
     cursor: grab;
-    background: var(--dp-surface);
+    background: var(--dp-bg);
   }
   /*
      * **Pico の回るもの (`[aria-busy]::before`) は出さない。** 表の頭に 1 行ぶん差し込まれ、
@@ -1698,20 +1698,17 @@
   .rows {
     display: grid;
   }
+  /* 局名の行と時の列はページの地のまま。線は引かない (地の層。マスとは面の色で分かれる) */
   .corner,
   .service,
   .hour {
-    background: var(--dp-surface);
-    border-color: var(--dp-line);
-    border-style: solid;
-    border-width: 0;
+    background: var(--dp-bg);
   }
   .corner {
     position: sticky;
     top: 0;
     left: 0;
     z-index: 30;
-    border-right-width: 1px;
   }
   .service {
     position: sticky;
@@ -1722,10 +1719,9 @@
     gap: 0.375rem;
     overflow: hidden;
     white-space: nowrap;
-    border-bottom-width: 1px;
     padding: 0.5rem;
     font-size: 0.875rem;
-    /* 行の高さ(= 時刻の数字が止まる位置 headHeight)を Tailwind の頃の 37px に揃える */
+    /* 行の高さ (= 時刻の数字が止まる位置 headHeight) は 36px */
     line-height: 1.25rem;
     font-weight: var(--dp-weight);
   }
@@ -1737,8 +1733,6 @@
     position: sticky;
     left: 0;
     z-index: 10;
-    border-top-width: 1px;
-    border-right-width: 1px;
     padding-inline: 0.25rem;
     font-size: 0.75rem;
     /* 数字の行の高さは 1rem に揃える。高いと、前の時間の数字が枠の下に残って次の時間の数字と並んで見える */

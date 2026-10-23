@@ -31,13 +31,12 @@
     display: flex;
     flex: 1 1 0%;
     min-height: 0;
-    background: var(--dp-surface);
+    background: var(--dp-bg);
   }
-  /* 時刻の列 (表の `.corner`・`.hour` と同じ幅と線) */
+  /* 時刻の列 (表の `.corner`・`.hour` と同じ幅。線は引かない) */
   .time {
     flex: none;
     width: 2.5rem;
-    border-right: 1px solid var(--dp-line);
   }
   .column {
     display: flex;
@@ -46,11 +45,10 @@
     /* 狭い画面では右の列がはみ出すが、外側で切る (本物の表も横に流れる) */
     min-width: 11rem;
   }
-  /* 局名の行 (表の `.service` と同じ高さ: 上下 0.5rem + 1.25rem + 線) */
+  /* 局名の行 (表の `.service` と同じ高さ: 上下 0.5rem + 1.25rem) */
   .head {
     flex: none;
     padding: 0.5rem;
-    border-bottom: 1px solid var(--dp-line);
   }
   .head .skeleton-head {
     display: block;

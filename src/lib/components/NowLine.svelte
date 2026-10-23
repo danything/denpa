@@ -154,7 +154,7 @@
     z-index: 1;
     display: block;
     transform: translateY(-50%);
-    background: var(--dp-surface);
+    background: var(--dp-bg);
     text-align: center;
     font-size: 0.6875rem;
     line-height: 1rem;
