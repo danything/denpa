@@ -894,10 +894,9 @@
 }
 /*
  * 日のマス。**印は 1 つの意味に 1 つ** (docs/design.md):
- * - 行のある日は点 (控えた色)。字の濃さは変えない (点と字の 2 つで同じことを言わない)
- * - 今日は太字と赤い点 (「いま」の線と同じ赤)。行があっても点は 1 つ
+ * - 行のある日は本文の字。行の無い日 (今日を除く) は押せず (読み上げには aria-disabled)、控えた字にして指を乗せても塗らない
+ * - 今日は赤い点 (「いま」の線と同じ赤)
  * - 選んでいる日は主の色の下線と主の色の太字 (ほかの選んでいるものと同じ。塗らない)。下線が点の代わり
- * 行の無い日 (今日を除く) は押せない (読み上げには aria-disabled)。字を控えた色にして、指を乗せても塗らない
  */
 .board .cal-day {
   position: relative;
@@ -921,7 +920,7 @@
   color: var(--dp-muted);
   cursor: default;
 }
-.board .cal-day:is(.has, .today)::after {
+.board .cal-day.today::after {
   content: "";
   position: absolute;
   bottom: 0.3125rem;
@@ -929,17 +928,11 @@
   width: 0.25rem;
   height: 0.25rem;
   border-radius: 50%;
-  background: var(--dp-muted);
+  background: var(--dp-rec);
   transform: translateX(-50%);
 }
 .board .cal-day:not([aria-disabled="true"]):hover {
   background: var(--dp-hover-soft);
-}
-.board .cal-day.today {
-  font-weight: var(--dp-weight-bold);
-}
-.board .cal-day.today::after {
-  background: var(--dp-rec);
 }
 .board .cal-day.pinned {
   color: var(--dp-primary-text);

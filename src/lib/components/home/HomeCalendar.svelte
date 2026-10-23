@@ -136,7 +136,6 @@
                   class="cal-day num"
                   class:today={day === today}
                   class:pinned={day === pinned}
-                  class:has={marks.has(day)}
                   aria-label={dayAriaLabel(day, marks.get(day), today)}
                   aria-current={day === today ? "date" : undefined}
                   aria-disabled={!enabled(day)}
