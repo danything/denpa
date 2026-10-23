@@ -1053,7 +1053,8 @@ a.button {
   box-shadow:
     var(--dp-input-inset),
     inset 0 -1px 0 var(--pico-primary);
-  outline: none;
+  /* 透明の線はハイコントラスト (`forced-colors`) では見える線になる (影はそこで消える) */
+  outline: 2px solid transparent;
 }
 
 /* ---- 行の操作 (`.row-actions`。録画の「詳細」「削除」、予約の「取消」など) ---- */
