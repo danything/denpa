@@ -503,8 +503,6 @@
     return Math.max(0, parts.past.length - shown);
   });
 
-  /** 最後に詳細を開いた行 (薄く塗って、どれを開いていたかを見せる) */
-  let selectedKey = $state<string | null>(null);
   /** エンコードを待っている・している録画 (動いているものが先) */
   const encoding = $derived(
     data.recordings
@@ -672,11 +670,8 @@
     get nowStatus() {
       return lineStatus;
     },
-    get pickedKey() {
-      return selectedKey;
-    },
-    select(key) {
-      selectedKey = key;
+    get firstLiveKey() {
+      return parts.now[0]?.key ?? null;
     },
     deleting,
     cancelable,

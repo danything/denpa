@@ -3,7 +3,7 @@
    * **「いま」の線。** ホームの一覧 (`home/TimelineHeading`) と番組表で同じ見た目にする:
    * 赤い太字の時刻と、細い赤い線。塗った丸い札は使わない。
    *
-   * - `inline` (ホーム) … 時刻・赤みを少し抑えた一言 (`status`)・残りの幅を埋める線を1行に並べる。
+   * - `inline` (ホーム) … 赤い点・時刻・残りの幅を埋める線・控えた字の一言 (`status`。右端) を1行に並べる。
    *   字の下には線を引かない。幅が足りなければ一言を短い形 (`status.short`) に替え、それでも入らなければ「…」で切る (折り返さない)
    * - `overlay` (番組表) … 線は枠の上端。時刻は左端に貼り付き (`sticky`)、線をまたいで乗る。
    *   下のマスや時の数字の上に乗るので、時刻だけ地の色を敷く
@@ -51,6 +51,8 @@
         class="visually-hidden">、</span
       >{/if}</span
   >
+  {#if layout === "inline"}<span class="now-rule" aria-hidden="true"
+    ></span>{/if}
   {#if shown}
     <span class="now-status">
       <span class="now-full">{shown.text}</span><span
@@ -59,8 +61,6 @@
       >
     </span>
   {/if}
-  {#if layout === "inline"}<span class="now-rule" aria-hidden="true"
-    ></span>{/if}
 </svelte:element>
 
 <style>
@@ -89,15 +89,28 @@
     flex-shrink: 0;
     font-size: var(--now-time-size, 0.875rem);
   }
-  /*
-     * 一言も赤でそろえる (灰色だと時刻・字・線で色が行き来する)。字の赤 (`--dp-rec-text`) を地と 8:2 で混ぜ、
-     * 明るいテーマで 5.2:1、暗いテーマで 5.7:1 (小さい字の AA 4.5 を超える)
-     */
+  /* 線の頭の赤い点 (「いま」の印。カレンダーの今日の点と同じ赤) */
+  /* 時刻の左の余白に置く (時刻の左端は行の時刻にそろえたまま) */
+  .inline {
+    position: relative;
+  }
+  .inline::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: max(0px, calc(var(--now-inset, 0px) - 0.625rem));
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--dp-rec);
+    transform: translateY(-50%);
+  }
+  /* 一言は控えた字で右端に (補足なので、時刻と線ほど目立たせない) */
   .now-status {
     flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
-    color: color-mix(in srgb, var(--dp-rec-text) 80%, var(--dp-bg));
+    color: var(--dp-muted);
     font-size: 0.8125rem;
     text-overflow: ellipsis;
     white-space: nowrap;

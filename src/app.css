@@ -159,7 +159,6 @@
  * - `--dp-bg` … 地 (ページ・ヘッダー)
  * - `--dp-surface` … ダイアログ・下から出す一枚
  * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
- * - `--dp-row` … ホームの一覧の行の塊。`--dp-row-hover` (指を乗せた) で一段濃く。詳細を開いた行は塗らずに線と字で示す
  * - `--dp-line` … 区切りの線 (行の間・節の間)
  * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
@@ -177,9 +176,6 @@
   --dp-bg: #fff;
   --dp-surface: #fff;
   --dp-subtle: #eff1f4; /* slate-50 */
-  /* 一覧の行の塊 (ホームの時間軸)。地との差は L で 5 ほど。指を乗せた行はさらに一段 (`home.css`) */
-  --dp-row: #f0f2f5;
-  --dp-row-hover: #e6e9ee;
   --dp-line: #dfe3eb; /* slate-100 */
   --dp-line-strong: #cfd5e2; /* slate-150 */
   --dp-pop: #fff;
@@ -225,8 +221,6 @@
   --dp-bg: #0b0c0f;
   --dp-surface: #121318;
   --dp-subtle: #1a1b20;
-  --dp-row: #16171c;
-  --dp-row-hover: #1f2127;
   --dp-line: #26282e;
   --dp-line-strong: #3a3d46;
   /*
@@ -1054,7 +1048,7 @@ a.button {
   box-shadow: none;
 }
 [role="group"].segmented > :is(button, a.button):hover {
-  --pico-background-color: var(--dp-row-hover, var(--dp-subtle));
+  --pico-background-color: var(--dp-hover-soft);
   --pico-border-color: transparent;
   --pico-color: var(--pico-secondary-hover);
 }

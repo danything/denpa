@@ -27,6 +27,7 @@
     rowState,
     size,
     stateLabel,
+    time,
   } from "#lib/format.js";
   import { offline, removeLocal } from "#lib/offline.svelte.js";
   import { type RowStatus, statusLines, toneOf } from "#lib/row-status.js";
@@ -218,7 +219,6 @@
     class="row t-row"
     class:nested
     class:live={item.zone === "now"}
-    class:picked={ctx.pickedKey === item.key}
   >
     <div class="row-body" data-testid="row-body">
       <RowTitle
@@ -228,7 +228,6 @@
         name={res.name}
         testid="reservation-state"
         open={() => {
-          ctx.select(item.key);
           ctx.openReservation(res);
         }}
       />
@@ -273,18 +272,31 @@
         </ActionButton>
       {/if}
     </div>
-    <!-- 録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは3段目が言う) -->
+    <!--
+      録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは3段目が言う)。
+      **いちばん上の録画中の行は、バーの先に「いま」の時刻を出す** — いまは録っている番組の途中なので、
+      「いま」の線を行の下に別に引かない (線は読み上げの見出しとして残す。`TimelineHeading`)
+    -->
     {#if item.zone === "now" && res.end_at > res.start_at}
+      {@const done = Math.min(
+        1,
+        Math.max(0, (ctx.clock - res.start_at) / (res.end_at - res.start_at)),
+      )}
       <progress
         class="row-bar rec"
-        value={Math.min(
-          1,
-          Math.max(0, (ctx.clock - res.start_at) / (res.end_at - res.start_at)),
-        )}
+        value={done}
         max="1"
         aria-label="録画の進み"
         data-testid="recording-progress"
       ></progress>
+      {#if ctx.firstLiveKey === item.key}
+        <span
+          class="row-bar-now num"
+          style:--done={done}
+          aria-hidden="true"
+          data-testid="recording-now">{time(ctx.clock)}</span
+        >
+      {/if}
     {/if}
   </div>
 {/snippet}
@@ -298,7 +310,6 @@
     data-key={item.key}
     class="row t-row"
     class:nested
-    class:picked={ctx.pickedKey === item.key}
   >
     <span class="t-thumb" aria-hidden="true"></span>
     <div class="row-body" data-testid="row-body">
@@ -308,7 +319,6 @@
         name={res.name}
         testid="missed-state"
         open={() => {
-          ctx.select(item.key);
           ctx.openMissed(res);
         }}
       />
@@ -354,7 +364,6 @@
   {@const held = offline.entries[rec.id]}
   {@const canDelete = rec.deleted_at === null && rec.job_id === null}
   {@const openDetail = () => {
-    ctx.select(item.key);
     ctx.openRecording(rec);
   }}
   <!--
@@ -376,7 +385,6 @@
     data-key={item.key}
     class="row t-row playable"
     class:nested
-    class:picked={ctx.pickedKey === item.key}
   >
     <!-- ポスター。無い録画もあるので、読めなければ画像を隠して枠だけ残す。再生の印は観られるものだけ -->
     <span

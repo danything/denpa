@@ -143,7 +143,9 @@ test.describe("ホームの1本の一覧", () => {
 
   /*
    * **録画中の行は「いま」の線のすぐ上。** 並びは始まった時刻の順で、いまより前に始まったものは線の上に来る。
-   * あと何分かは行の3段目が言い、線は次の録画までを言う (録画中とは言わない)。開いたときも線と一緒に見える
+   * あと何分かは行の3段目が言い、線は次の録画までを言う (録画中とは言わない)。
+   * **録画中は線を目に見せず** (読み上げの見出しには残す)、いまの時刻はいちばん上の録画中の行の進み具合のバーの先に出す。
+   * 開いたときにその行が見えている
    */
   test("録画中の行は線のすぐ上にあり、あと何分かは行の3段目が言う", async ({
     page,
@@ -207,12 +209,16 @@ test.describe("ホームの1本の一覧", () => {
         });
         expect(before).toContain("録画中試験");
 
-        // 線は次の録画までを言い、録画中とは言わない
+        // 線は次の録画までを言い、録画中とは言わない。目には見せず、時刻は行のバーの先に出る
         const line = page.getByTestId("timeline-now");
         await expect(line).toContainText(/次の録画まで|次まで/);
         await expect(line).not.toContainText("録画中");
+        await expect(line).toHaveClass(/visually-hidden/);
+        await expect(row.getByTestId("recording-now")).toHaveText(
+          /^\d{1,2}:\d{2}$/,
+        );
 
-        // 開いたときに、録画中の行も線も見えている
+        // 開いたときに、録画中の行 (とバーの先の時刻) が見えている
         const seen = await page.getByTestId("timeline").evaluate((list) => {
           const box =
             getComputedStyle(list).overflowY === "auto"
@@ -238,10 +244,10 @@ test.describe("ホームの1本の一覧", () => {
           ].find((node) => (node.textContent ?? "").includes("録画中試験"));
           return {
             row: inside(live ?? null),
-            line: inside(list.querySelector('[data-testid="timeline-now"]')),
+            now: inside(list.querySelector('[data-testid="recording-now"]')),
           };
         });
-        expect(seen).toEqual({ row: true, line: true });
+        expect(seen).toEqual({ row: true, now: true });
       }
 
       // 「録画中」に絞っても、行は線の上に残る
@@ -249,9 +255,17 @@ test.describe("ホームの1本の一覧", () => {
       const row = page
         .getByTestId("reservation-row")
         .filter({ hasText: "録画中試験" });
-      const rowBox = (await row.boundingBox())!;
-      const lineBox = (await page.getByTestId("timeline-now").boundingBox())!;
-      expect(rowBox.y).toBeLessThan(lineBox.y);
+      await expect(row.getByTestId("recording-now")).toBeVisible();
+      expect(
+        await row.evaluate(
+          (node) =>
+            !!(
+              node.compareDocumentPosition(
+                document.querySelector('[data-testid="timeline-now"]')!,
+              ) & Node.DOCUMENT_POSITION_FOLLOWING
+            ),
+        ),
+      ).toBe(true);
     } finally {
       sqlite(
         `${stack.root}/denpa.db`,
