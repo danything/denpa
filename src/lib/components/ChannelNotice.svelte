@@ -46,13 +46,12 @@
     margin: 0;
   }
   /*
-     * **枠で囲まない、画面の幅いっぱいの1行。** ヘッダーの下に貼り、下の細い線で中身と分ける。
+     * **枠で囲まない、画面の幅いっぱいの1行。** ヘッダーの下に貼る。線は引かず、案内の色の地で中身と分ける。
      * 地の色は案内 (info) をごく薄く。狭い画面で文が長ければ折り返し、ボタンは右に残す
      */
   .bar {
     justify-content: space-between;
     padding: 0.375rem 1rem;
-    border-bottom: 1px solid var(--dp-line);
     background: color-mix(in srgb, var(--dp-info) 8%, var(--dp-surface));
     color: var(--dp-info-text);
     font-size: var(--dp-text-sm);

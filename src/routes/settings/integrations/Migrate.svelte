@@ -125,9 +125,10 @@
 </div>
 
 <style>
+  /* 記録はコードと同じ淡い面 (枠は付けない) */
   .log {
-    border: 1px solid var(--dp-line);
-    border-radius: var(--dp-radius-lg);
+    border-radius: var(--dp-radius);
+    background: var(--dp-subtle);
   }
   .log summary {
     padding: 0.5rem 1rem;

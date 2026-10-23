@@ -412,12 +412,14 @@
     flex-shrink: 0;
     padding: 0.3rem 0.65rem;
     border-radius: var(--dp-radius-full);
-    color: var(--dp-muted);
+    color: inherit;
     text-decoration: none;
   }
+  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 */
   .jump a.selected {
-    background: var(--dp-subtle);
-    color: inherit;
+    background: linear-gradient(var(--pico-primary), var(--pico-primary))
+      no-repeat center bottom 0.1rem / calc(100% - 1.3rem) 2px;
+    color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }
   /* 戻るは字だけのアイコンのボタン */

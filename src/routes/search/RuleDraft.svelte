@@ -626,10 +626,14 @@
   }
   /*
      * **狭い画面では下から出す** (`open`)。結果の一覧の上半分は見えたままなので、条件を変えると
-     * 行の「録る / 録らない」が変わるのも見える。下のタブより上に重ねる
+     * 行の「録る / 録らない」が変わるのも見える。下のタブより上に重ねる。
+     * 浮いている一枚なので、中の主のボタン (保存) は浮かせず太字だけ (`app.css` の「ボタン」。浮きの上に浮きを重ねない)
      */
   @media (max-width: 1023.98px) {
     .draft {
+      --dp-btn-solid: transparent;
+      --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+      --dp-btn-lift: none;
       position: fixed;
       inset: auto 0 0;
       z-index: 60;

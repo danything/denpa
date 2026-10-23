@@ -145,6 +145,13 @@
      */
   --dp-hover: var(--dp-subtle);
   --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
+  /*
+     * **操作の層の面** (ヘッダー・下のタブ・主のボタン。docs/design.md の「地・件の面・操作の層」)。メニューと同じ面 (`--dp-pop`) を
+     * 92% 残して、下を流れる中身をうっすら見せる。ぼかさない。暗いほうは面が地より明るいので、影が見えなくても縁が分かる
+     */
+  --dp-float: color-mix(in srgb, var(--dp-pop) 92%, transparent);
+  /* 件の面の角。中のポスターの角 (`--dp-radius`) と件の余白 (0.5rem) の入れ子 */
+  --dp-item-radius: calc(var(--dp-radius) + 0.5rem);
 }
 /*
  * テーマごとの色。**明るいほうの値は Pico の色見本 (pico.colors.css の 50〜950 の段) から選ぶ。**
@@ -161,6 +168,8 @@
  * - `--dp-bg` … 地 (ページ・ヘッダー)
  * - `--dp-surface` … ダイアログ・下から出す一枚
  * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
+ * - `--dp-item` … 件の面 (1 件が 2〜3 行の一覧。地より一段上の層)・`--dp-item-hover` … 指を乗せた件・`--dp-item-shadow` … 件の影 (明るいほうだけ)
+ * - `--dp-field` … 入力欄の面
  * - `--dp-line` … 区切りの線 (行の間・節の間)
  * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
@@ -183,15 +192,13 @@
   --dp-pop-hover: var(--dp-subtle);
   --dp-muted: #555e70; /* 白・淡い面・選んでいる局の地のどれでも 4.5 以上 */
   --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
-  /* 浮かせた主のボタンの影 (ふだん・乗せた・押している)。近い影と遠い影の 2 段 */
-  --dp-raise: 0 1px 2px rgb(24 28 37 / 0.14), 0 4px 10px rgb(24 28 37 / 0.1);
-  --dp-raise-hover:
-    0 2px 4px rgb(24 28 37 / 0.16), 0 8px 18px rgb(24 28 37 / 0.14);
-  --dp-raise-active: 0 1px 1px rgb(24 28 37 / 0.14);
-  /* 入力欄。凹み (少し暗い地と、上の縁の内側の影) と下の線。線は地に対して 3:1 以上 */
-  --dp-input-well: #f4f5f8;
-  --dp-input-inset: inset 0 1px 2px rgb(24 28 37 / 0.1);
-  --dp-input-line: #8a93a6;
+  /* 入力欄の面。線も凹みも無く、地より一段濃い面だけ (地との差 1.24:1) */
+  --dp-field: #e3e7ed;
+  /* 件の面 (1 件が 2〜3 行の一覧)。白い面にごく薄い近い影。縁は付けない */
+  --dp-item: #fff;
+  --dp-item-hover: #f5f6f9;
+  --dp-item-shadow:
+    0 1px 2px rgb(24 28 37 / 0.08), 0 2px 8px rgb(24 28 37 / 0.06);
   --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
   --dp-shadow-pop:
     0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
@@ -238,19 +245,12 @@
   --dp-pop-hover: #2c2e35;
   --dp-muted: #9aa3b5; /* 地・面・メニューのどれでも 4.5 以上 */
   --dp-primary-text: var(--pico-primary);
-  /* 黒い地では影が見えにくいので、主のボタンは面を明るく (`--dp-pop`) し、上の縁に細い光を足す */
-  --dp-raise:
-    inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.5),
-    0 4px 12px rgb(0 0 0 / 0.45);
-  --dp-raise-hover:
-    inset 0 1px 0 rgb(255 255 255 / 0.08), 0 2px 4px rgb(0 0 0 / 0.55),
-    0 8px 20px rgb(0 0 0 / 0.5);
-  --dp-raise-active:
-    inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 1px rgb(0 0 0 / 0.5);
-  /* 暗いほうは地より暗くして凹ませる */
-  --dp-input-well: #07080a;
-  --dp-input-inset: inset 0 1px 2px rgb(0 0 0 / 0.6);
-  --dp-input-line: #666d7d;
+  /* 入力欄の面。地より一段明るい面だけ (地との差 1.31:1、面 `--dp-surface` とは 1.24:1) */
+  --dp-field: #25272e;
+  /* 件の面。黒い地では影が見えないので、地より一段明るい面だけで分ける (白い影・光は使わない) */
+  --dp-item: #16171c;
+  --dp-item-hover: #1d1e24;
+  --dp-item-shadow: none;
   --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
   --dp-shadow-pop:
     0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
@@ -574,11 +574,8 @@ progress.running[value]::-webkit-progress-value {
 }
 
 /* ---- 面 ---- */
-/* 枠で囲んだ白い面 */
+/* まとまりの箱。地の上に置き、枠も地も付けず余白だけで囲む */
 .panel {
-  background: var(--dp-surface);
-  border: 1px solid var(--dp-line);
-  border-radius: var(--dp-radius-lg);
   padding: 1rem;
 }
 
@@ -770,14 +767,17 @@ details.more > :not(summary) + :not(summary) {
 
 /* ---- ボタン ---- */
 /*
- * **ボタンは 3 段だけ。強弱は塗りや枠ではなく影のあるなしで付ける** (docs/design.md)。色と形はトークン (`--dp-btn-*`) で決め、画面ごとに塗り直さない。
+ * **主の操作は色ではなく層で示す** (docs/design.md の「地・件の面・操作の層」)。色と形はトークン (`--dp-btn-*`) で決め、画面ごとに塗り直さない。
  *
- * - 主 (クラス無し) … **浮かせる** (面と 2 段の影 `--dp-raise`。字は本文の色の太字)。1 画面に 1 つか 2 つ (保存・追加・確定)。
- *   乗せると影を深く、押している間は 1px 沈めて影を浅く
- * - 控え (`.secondary` / `.outline`) … 平ら。地も枠も影も無く、本文の字。乗せると薄い地
- * - 字だけ (`.ghost`) … 控えと同じく平ら。字の色は周りのまま
+ * - 主 (クラス無し・`.small`・`.xs`・`.save`・`.keep`・`.danger`・`a.button`) … **操作の層に乗せる**。
+ *   ヘッダー・下のタブと同じ材質 (`--dp-float`。ぼかさない半透明の面) に浮かぶものの影 (`--dp-shadow-pop`) のカプセル。
+ *   字は本文の色の太字。主の色では塗らない。押している間は少し縮める
+ * - 控え (`.secondary` / `.outline`) と字だけ (`.ghost`) … 平らで、地も枠も影も無い。乗せると薄い地
  *
- * 危ない操作は `.danger` (確定のボタン。浮かせて赤い字) と `.outline.danger` (待っている間は控えと同じ。
+ * **浮いたものの中では浮かせない** (浮きの上に浮きを重ねない)。メニュー・ダイアログ・下から出す一枚は
+ * `--dp-btn-solid: transparent` と `--dp-btn-lift: none` を置き、中の主のボタンは太字だけになる (下の「浮いたものの中」)。
+ *
+ * 危ない操作は `.danger` (確定のボタン。主と同じ層で赤い字) と `.outline.danger` (待っている間は控えと同じ。
  * 押そうとしたときだけ赤い字)。字だけのボタンは `.icon` を足すと正方形 (丸い形なら円) になる。
  *
  * **大きさは 3 段** (ふつう・`.small`・`.xs`)。ふつうは入力欄と同じ高さ (42px)。
@@ -789,10 +789,12 @@ details.more > :not(summary) + :not(summary) {
  * 上の `:focus-visible` の線だけで示す。押したあとに地の色が残らない)
  */
 :root {
-  /* 角。ふつうのボタン・小さいボタン・アイコンのボタンで同じ値を使う (行・メニューと同じ角の丸み) */
-  --dp-btn-radius: var(--dp-radius);
-  /* 主のボタンの面と字。明るいほうは地と同じ白、暗いほうはメニューと同じ明るい面 (影が見えにくいので) */
-  --dp-btn-solid: var(--dp-pop);
+  /* 角。ボタンはカプセル (操作の層の形)。アイコンだけのボタンは円 */
+  --dp-btn-radius: var(--dp-radius-full);
+  /* 主のボタンの面・影・字。面と影は操作の層と同じ。浮いたものの中では消す */
+  --dp-btn-solid: var(--dp-float);
+  --dp-btn-solid-hover: var(--dp-pop);
+  --dp-btn-lift: var(--dp-shadow-pop);
   --dp-btn-solid-text: var(--dp-fg);
   /* 控えのボタンは地を持たない。乗せたときだけ薄い地 */
   --dp-btn-tonal: transparent;
@@ -828,7 +830,7 @@ details.more > :not(summary) + :not(summary) {
     transform var(--dp-duration);
 }
 /*
- * **浮かせるのは主のボタンだけ** (クラスが無いか、大きさ・危ない操作・保存などのクラスだけのもの、`a.button`)。
+ * **操作の層に乗せるのは主のボタンだけ** (クラスが無いか、大きさ・危ない操作・保存などのクラスだけのもの、`a.button`)。
  * 画面ごとに自前の見た目を持つボタン (行・メニューの項目・タブ・チップ・リモコン) は名前のクラスを持つので、ここに入らず平らのまま
  */
 :where(
@@ -836,7 +838,7 @@ details.more > :not(summary) + :not(summary) {
     :is(button, a.button):is(.small, .xs, .danger, .save, .keep),
     a.button
   ):where(:not(.secondary, .outline, .ghost, [aria-pressed="true"])):not(div) {
-  --pico-box-shadow: var(--dp-raise);
+  --pico-box-shadow: var(--dp-btn-lift);
   font-weight: var(--dp-weight-bold);
 }
 :where(
@@ -846,7 +848,7 @@ details.more > :not(summary) + :not(summary) {
   ):where(:not(.secondary, .outline, .ghost, [aria-pressed="true"])):not(
     div
   ):where(:hover) {
-  --pico-box-shadow: var(--dp-raise-hover);
+  --pico-background-color: var(--dp-btn-solid-hover);
 }
 :where(
     button:not([class]),
@@ -855,8 +857,16 @@ details.more > :not(summary) + :not(summary) {
   ):where(:not(.secondary, .outline, .ghost, [aria-pressed="true"])):not(
     div
   ):where(:active) {
-  --pico-box-shadow: var(--dp-raise-active);
-  transform: translateY(1px);
+  transform: scale(0.97);
+}
+/*
+ * **浮いたものの中** (メニュー・番組の詳細などの `popover`・ダイアログ)。中の主のボタンは面も影も持たず、太字だけ。
+ * 下から出す書く欄 (`RuleDraft` の `.draft`) は狭い画面でだけ浮くので、そちらの <style> で同じ値を置く
+ */
+:where(dialog, [popover], .modal-box) {
+  --dp-btn-solid: transparent;
+  --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+  --dp-btn-lift: none;
 }
 /*
  * **入っている切り替え (`aria-pressed="true"`) は、ほかの選んでいるものと同じく主の色の短い下線と字** (番組表の「サブch」)。
@@ -942,7 +952,7 @@ a.button {
   --pico-box-shadow: none;
   transform: none;
 }
-/* 危ない操作。確定のボタンは浮かせて赤い字 (塗らない) */
+/* 危ない操作。確定のボタンは主と同じ層に乗せて赤い字 (塗らない) */
 :where(button, a.button).danger {
   --pico-color: var(--dp-rec-text);
 }
@@ -997,10 +1007,10 @@ a.button {
 
 /* ---- 入力欄 ---- */
 /*
- * **入力欄は凹ませる** (docs/design.md の「奥行き」。押すものは浮かせ、書き込むものは凹ませる)。
- * 少し暗い地 (`--dp-input-well`) と上の縁の内側の影 (`--dp-input-inset`) でくぼませ、枠では囲まない。
- * 境目は下の線 (`--dp-input-line`。地に対して 3:1 以上) で示す。凹みの影だけでは境目の濃さが足りない。
- * 字を打っている間 (焦点) は下の線を主の色の 2px にする。外側の焦点の線は引かない (線そのものが焦点の印)
+ * **入力欄は浮かせず平ら** (docs/design.md の「入力欄」)。線も凹みの影も付けず、地より一段濃い面 (`--dp-field`) だけで示す。
+ * 角は行やボタンの中と同じ入れ子の丸み (`--dp-radius`)。ラベルはいつも見せ、欄の場所はラベルと面で分かるようにする。
+ * 面と地の差は 1.24:1 (明るい)・1.31:1 (暗い) で、境目の 3:1 (WCAG 1.4.11) には届かない (線を引かないと決めたため)。
+ * 字を打っている間 (焦点) は、ほかの焦点と同じ外側の 2px の主の色の線
  */
 :where(
   input:not(
@@ -1013,14 +1023,13 @@ a.button {
   select,
   textarea
 ) {
-  --pico-form-element-background-color: var(--dp-input-well);
-  --pico-form-element-active-background-color: var(--dp-input-well);
+  --pico-form-element-background-color: var(--dp-field);
+  --pico-form-element-active-background-color: var(--dp-field);
   --pico-form-element-focus-color: transparent;
   --pico-box-shadow: none;
-  border-width: 0 0 1px;
-  border-color: var(--dp-input-line);
-  border-radius: var(--dp-radius) var(--dp-radius) 0 0;
-  box-shadow: var(--dp-input-inset);
+  border-width: 0;
+  border-radius: var(--dp-radius);
+  box-shadow: none;
 }
 :where(
   input:not(
@@ -1034,12 +1043,8 @@ a.button {
   textarea
 ):focus {
   --pico-box-shadow: none;
-  border-color: var(--pico-primary);
-  box-shadow:
-    var(--dp-input-inset),
-    inset 0 -1px 0 var(--pico-primary);
-  /* 透明の線はハイコントラスト (`forced-colors`) では見える線になる (影はそこで消える) */
-  outline: 2px solid transparent;
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
 }
 
 /* ---- 行の操作 (`.row-actions`。録画の「詳細」「削除」、予約の「取消」など) ---- */
@@ -1751,9 +1756,9 @@ dialog[open] > article {
 }
 
 /*
- * **小さな切り替え (チップ)。** チェックボックスを字と一緒に丸い枠に入れ、横に並べる
- * (チューナーの「受信できる種別」)。縦に 3 つ積んでいた頃は、表の行が 3 段の高さになっていた。
- * 入っているものは枠と淡い地と太字 (色だけにしない)。チェックボックスは隠さない (押せる的のまま)
+ * **小さな切り替え (チップ)。** チェックボックスを字と一緒に丸い形に入れ、横に並べる。枠も地も付けない
+ * (チューナーの「受信できる種別」・検索の書く欄の当てる範囲)。縦に 3 つ積んでいた頃は、表の行が 3 段の高さになっていた。
+ * 入っているものは、ほかの選んでいるものと同じく主の色の太字と字の幅いっぱいの下線 (色だけにしない)
  */
 .chips {
   display: flex;
@@ -1765,16 +1770,16 @@ dialog[open] > article {
   align-items: center;
   gap: 0.3rem;
   margin: 0;
-  padding: 0.15rem 0.55rem 0.15rem 0.4rem;
-  border: 1px solid var(--dp-line-strong);
+  padding: 0.15rem 0.55rem;
   border-radius: var(--dp-radius-full);
+  transition: background-color var(--dp-duration);
   font-size: var(--dp-text-xs);
   line-height: 1.6;
   white-space: nowrap;
   cursor: pointer;
 }
 /*
- * チップの中の印は見せない (選んでいるかはチップの地と太字で分かる。印を青く塗るとそこだけ色が付いて見えた)。
+ * チップの中の印は見せない (選んでいるかは字と下線で分かる。印を青く塗るとそこだけ色が付いて見えた)。
  * 押せる・読み上げられるよう、入力欄そのものは残して見えなくするだけ。焦点はチップの外枠で示す
  */
 .chip input[type="checkbox"] {
@@ -1793,9 +1798,13 @@ dialog[open] > article {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
 }
-/* 選んでいるものは塗らず、枠と字を主の色に・太字に (ほかの選んでいるものと同じく、線と字で示す) */
+.chip:hover {
+  background-color: var(--dp-hover-soft);
+}
+/* 選んでいるものは塗らず、主の色の太字と字の幅いっぱいの下線 (ほかの選んでいるものと同じ) */
 .chip:has(input:checked) {
-  border-color: var(--pico-primary);
+  text-decoration: underline 2px var(--pico-primary);
+  text-underline-offset: 0.3em;
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }

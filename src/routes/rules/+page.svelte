@@ -429,7 +429,7 @@
   }
 
   /*
-     * **行は2段の件** (ホームの行と同じ。ふだんは地も線も枠も無く、余白で分ける)。触れると件全体をごく薄く塗る
+     * **行は2段の件** (ホームの行と同じ。件の面 (`--dp-item`) に乗せ、線も枠も付けず、件の間は余白)。触れると件の面を一段変える
      */
   .rows {
     display: flex;
@@ -446,13 +446,18 @@
     min-height: 4rem;
     margin: 0;
     padding: 0.5rem 0.75rem;
-    border-radius: var(--dp-radius);
-    background: transparent;
+    border-radius: var(--dp-item-radius);
+    background: var(--dp-item);
+    box-shadow: var(--dp-item-shadow);
+    /* 件の中のボタンは浮かせない (浮きの上に浮きを重ねない) */
+    --dp-btn-solid: transparent;
+    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+    --dp-btn-lift: none;
     list-style: none;
     transition: background-color var(--dp-duration);
   }
   .row:hover {
-    background: var(--dp-hover-soft);
+    background: var(--dp-item-hover);
   }
   .row-body {
     display: flex;
@@ -538,9 +543,10 @@
     color: var(--dp-muted);
     font-size: var(--dp-text-sm);
   }
-  /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (主の色の細い枠と字・太字) */
+  /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (囲まず、主の色の太字と字の幅いっぱいの下線) */
   .chip-button.on {
-    box-shadow: inset 0 0 0 1px var(--pico-primary);
+    text-decoration: underline 2px var(--pico-primary);
+    text-underline-offset: 0.3em;
     color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }

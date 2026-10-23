@@ -844,7 +844,7 @@
     }
   }
   /* 書く欄の条件では録らない行。消さずに出すが、録るものより沈める */
-  .hit.dim {
+  .hit.dim > * {
     opacity: 0.5;
   }
   .summary {
@@ -885,12 +885,25 @@
     margin: 0;
     padding: 0;
   }
+  /* 件は件の面 (`--dp-item`) に乗せる (ホームの行と同じ)。指を乗せると件の面を一段変える */
   .hit {
     display: flex;
     align-items: center;
     gap: var(--dp-space-2);
     margin: 0;
+    padding-inline-end: var(--dp-space-2);
+    border-radius: var(--dp-item-radius);
+    background: var(--dp-item);
+    box-shadow: var(--dp-item-shadow);
+    /* 件の中のボタンは浮かせない (浮きの上に浮きを重ねない) */
+    --dp-btn-solid: transparent;
+    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+    --dp-btn-lift: none;
     list-style: none;
+    transition: background-color var(--dp-duration);
+  }
+  .hit:has(:is(a, button).hit-main:hover) {
+    background: var(--dp-item-hover);
   }
   .hit-main {
     display: flex;
@@ -899,9 +912,9 @@
     gap: 0.125rem;
     min-width: 0;
     margin: 0;
-    padding: var(--dp-space-2) var(--dp-space-2);
+    padding: var(--dp-space-2) var(--dp-space-3);
     border: 0;
-    border-radius: var(--dp-radius-sm);
+    border-radius: var(--dp-item-radius);
     background: transparent;
     color: inherit;
     font: inherit;
@@ -910,9 +923,6 @@
   }
   :is(a, button).hit-main {
     cursor: pointer;
-  }
-  :is(a, button).hit-main:hover {
-    background: var(--dp-hover);
   }
   .hit-title {
     display: flex;

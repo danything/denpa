@@ -1647,8 +1647,10 @@
   :global(.guide-menu) .menu-item.selected {
     font-weight: var(--dp-weight-bold);
   }
+  /* 入っている項目は塗らず、ほかのメニューの選んでいる項目と同じく左の縦線と主の色の太字 */
   :global(.guide-menu) .menu-item[aria-checked="true"] {
-    background: var(--dp-hover);
+    box-shadow: inset 2px 0 0 var(--pico-primary);
+    color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }
   .menu-item .muted {

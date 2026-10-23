@@ -397,10 +397,11 @@
 .board .t-toolbar .t-chips > .t-chip:hover {
   --pico-background-color: var(--dp-btn-tonal-hover);
 }
-/* 選んでいるチップは塗らず、主の色の細い枠と字・太字 (`app.css` の `.chip` と同じ) */
+/* 選んでいるチップは塗らず囲まず、主の色の太字と字の幅いっぱいの下線 (`app.css` の `.chip` と同じ) */
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
   --pico-color: var(--dp-primary-text);
-  box-shadow: inset 0 0 0 1px var(--pico-primary);
+  text-decoration: underline 2px var(--pico-primary);
+  text-underline-offset: 0.3em;
   font-weight: var(--dp-weight-bold);
 }
 /* 日付の見出し。小さく沈めた字で、一覧の頭に貼り付く */
@@ -471,8 +472,8 @@
 }
 
 /*
- * **行。** 幅いっぱいの 2 段の件。**ふだんは地も線も枠も影も無く、件の間の余白で 1 本ずつに見せる** (docs/design.md の「何行かある一覧」)。
- * 指を乗せると件全体 (右端のボタンまで) の地をごく薄く変え、ひとまとまりだと見せる。
+ * **行。** 幅いっぱいの 2 段の件。**件の面 (`--dp-item`) に乗せ、件の間の余白で 1 本ずつに見せる** (docs/design.md の「何行かある一覧」)。
+ * 線と枠は付けない。指を乗せると件の面 (右端のボタンまで) を一段変え、ひとまとまりだと見せる。
  *
  * - 1段目: 時刻 · 番組名、右に押すもの
  * - 2段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の頭 (残りの幅を埋め、「…」で切る)
@@ -495,13 +496,18 @@
   min-height: 4rem;
   margin: 0;
   padding: 0.5rem 0.75rem;
-  border-radius: var(--dp-radius);
-  background: transparent;
+  border-radius: var(--dp-item-radius);
+  background: var(--dp-item);
+  box-shadow: var(--dp-item-shadow);
+  /* 件の中のボタンは浮かせない (浮きの上に浮きを重ねない) */
+  --dp-btn-solid: transparent;
+  --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+  --dp-btn-lift: none;
   transition: background-color var(--dp-duration);
 }
 .board .t-row:hover,
 .board .group-head:hover {
-  background: var(--dp-hover-soft);
+  background: var(--dp-item-hover);
 }
 .board .t-row .row-body {
   display: flex;
@@ -814,10 +820,6 @@
 .board .t-toolbar .t-chips > .t-chip.warn {
   --pico-background-color: color-mix(in srgb, var(--dp-warn) 16%, transparent);
   --pico-color: var(--dp-warn-text);
-}
-.board .t-toolbar .t-chips > .t-chip.warn[aria-pressed="true"] {
-  --pico-background-color: var(--dp-warn);
-  --pico-color: #1a1300;
 }
 .board .t-chip.warn .num {
   color: inherit;

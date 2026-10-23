@@ -75,7 +75,6 @@
     .toolbar {
       order: 1;
       padding-inline: var(--dp-space-2);
-      border-top: 1px solid var(--dp-line);
     }
     .toolbar a.button {
       padding-inline: 0.4rem;
