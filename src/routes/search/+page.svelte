@@ -907,7 +907,7 @@
     list-style: none;
     transition: background-color var(--dp-duration);
   }
-  .hit:has(:is(a, button).hit-main:hover) {
+  .hit:hover {
     background: var(--dp-item-hover);
   }
   .hit-main {

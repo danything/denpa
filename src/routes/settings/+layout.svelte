@@ -414,7 +414,7 @@
     color: inherit;
     text-decoration: none;
   }
-  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 */
+  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 (幅は左右の余白 0.65rem×2 を引いた字の幅。余白を変えたらここも) */
   .jump a.selected {
     background: linear-gradient(var(--pico-primary), var(--pico-primary))
       no-repeat center bottom 0.1rem / calc(100% - 1.3rem) 2px;
