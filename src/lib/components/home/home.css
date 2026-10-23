@@ -897,7 +897,7 @@
  * - 行のある日は点 (控えた色)。字の濃さは変えない (点と字の 2 つで同じことを言わない)
  * - 今日は太字と赤い点 (「いま」の線と同じ赤)。行があっても点は 1 つ
  * - 選んでいる日は主の色の下線と主の色の太字 (ほかの選んでいるものと同じ。塗らない)。下線が点の代わり
- * 行の無い日 (今日を除く) は押せない (読み上げには aria-disabled)。見た目は同じで、指を乗せても塗らない
+ * 行の無い日 (今日を除く) は押せない (読み上げには aria-disabled)。字を控えた色にして、指を乗せても塗らない
  */
 .board .cal-day {
   position: relative;
@@ -918,6 +918,7 @@
   transition: background-color var(--dp-duration);
 }
 .board .cal-day[aria-disabled="true"] {
+  color: var(--dp-muted);
   cursor: default;
 }
 .board .cal-day:is(.has, .today)::after {
