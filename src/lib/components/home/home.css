@@ -951,3 +951,43 @@
   background: var(--pico-primary);
   transform: translateX(-50%);
 }
+
+/*
+ * **ヘッダーは中身の上に浮く** (`+layout.svelte`。docs/design.md の操作の層)。一覧と右の列は画面の上端から始め、
+ * 頭にヘッダーのぶん (`--dp-header-space`) を空ける。巻くと行はヘッダーの下を流れる。
+ * 日付の見出しはヘッダーのすぐ下に貼り付き、ヘッダーが引っ込んだら上端に上がる
+ */
+@media (min-width: 768px) {
+  .board .t-list {
+    padding-top: var(--dp-header-space, 0px);
+  }
+  /* 貼り付く位置は巻き取る箱の内側の余白 (上の頭の空き) から数える */
+  .board .t-day {
+    top: 0;
+    padding-top: 0.25rem;
+  }
+  [data-retract] .board .t-day {
+    top: calc(-1 * var(--dp-header-space, 0px));
+  }
+  .board .t-side {
+    padding-top: calc(var(--dp-header-space, 0px) + 0.75rem);
+  }
+}
+/* 狭い画面: 頭の1行も操作の層。下のタブの上に、同じ半透明のカプセルで浮かせる (縁の線は引かない) */
+@media (max-width: 639.98px) {
+  .board .t-toolbar {
+    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
+    padding-inline: 0.5rem;
+    border-top: 0;
+    border-radius: 1.375rem;
+    background: color-mix(in srgb, var(--dp-bg) 86%, transparent);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration) var(--dp-ease);
+  }
+  [data-retract] .board .t-toolbar {
+    transform: translateY(
+      calc(var(--dp-tabbar, 0px) + 0.375rem + 100%)
+    );
+  }
+}

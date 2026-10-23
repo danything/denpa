@@ -33,6 +33,33 @@
   onMount(() => startOffline());
 
   /*
+   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送るとヘッダーと下のタブを隠し、上へ戻すと出す。
+   * 中身の巻き取りは窓のこともあれば画面の中の箱 (ホームの一覧など) のこともあるので、
+   * 文書の `scroll` を捕まえ (`capture`)、窓の半分より低い箱 (チップの横の並びなど) は数えない
+   */
+  let retract = $state(false);
+  onMount(() => {
+    const last = new WeakMap<Element, number>();
+    const onScroll = (e: Event) => {
+      const el =
+        e.target === document ? document.scrollingElement : e.target;
+      if (!(el instanceof Element) || el.clientHeight < innerHeight / 2) return;
+      const y = el.scrollTop;
+      const prev = last.get(el) ?? y;
+      last.set(el, y);
+      if (y < 48) retract = false;
+      else if (y - prev > 4) retract = true;
+      else if (prev - y > 4) retract = false;
+    };
+    document.addEventListener("scroll", onScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      document.removeEventListener("scroll", onScroll, { capture: true });
+  });
+
+  /*
    * 画面遷移の終わりを自前で見る。**`navigating` は畳まれた遷移で真のまま残る**
    * ので、あれを当てにすると「遷移が終わったら流す」が永久に来ない (理由は
    * [reload.svelte.ts](../lib/reload.svelte.ts))。土台は画面遷移で作り直されない
@@ -365,6 +392,7 @@
   class="shell"
   class:fill
   data-root
+  data-retract={retract ? "" : undefined}
   data-hydrated={hydrated ? "true" : undefined}
 >
   <!--
@@ -778,17 +806,33 @@
      * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
      * 位置に使う (タブに被らないように)
      */
+  /*
+   * **操作の層** (docs/design.md)。左右と下から離したカプセルにして、中身の上に浮かせる。
+   * 面は地を 86% 残した半透明 (ぼかさない)。下を流れる中身がうっすら見える。
+   * 角は入れ子でそろえる: 外 (2rem) = 中のタブ (1.75rem) + 間の余白 (0.25rem)
+   */
   .tabbar {
     position: fixed;
-    inset: auto 0 0 0;
+    inset: auto 0.75rem calc(0.5rem + env(safe-area-inset-bottom)) 0.75rem;
     z-index: 40;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    padding-bottom: env(safe-area-inset-bottom);
+    padding: 0.25rem;
     border: 0;
-    border-radius: 0;
-    background: var(--dp-bg);
-    box-shadow: var(--dp-shadow-up);
+    border-radius: 2rem;
+    background: color-mix(in srgb, var(--dp-bg) 86%, transparent);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration) var(--dp-ease);
+  }
+  .shell[data-retract] .tabbar {
+    transform: translateY(
+      calc(100% + 0.5rem + env(safe-area-inset-bottom))
+    );
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .tabbar {
+      background: var(--dp-bg);
+    }
   }
   .tabbar .tab,
   .tab-more :global(.tab) {
@@ -803,7 +847,7 @@
     margin: 0;
     padding: 0.25rem 0;
     border: 0;
-    border-radius: 0;
+    border-radius: 1.75rem;
     background: transparent;
     box-shadow: none;
     color: inherit;
@@ -832,7 +876,7 @@
      */
   .tabbar :global(.tab-indicator) {
     position: absolute;
-    top: -1px;
+    top: 0.125rem;
     left: 50%;
     width: 2rem;
     height: 2px;
@@ -874,7 +918,7 @@
   }
   @media (max-width: 639.98px) {
     :global(:root:has(.tabbar)) {
-      --dp-tabbar: calc(3.5rem + 1px + env(safe-area-inset-bottom));
+      --dp-tabbar: calc(4rem + 0.5rem + env(safe-area-inset-bottom));
     }
     /*
          * 下のタブがある画面ではヘッダーを隠す。リンクはタブと重なり、残りは「その他」に移したので、
@@ -943,6 +987,31 @@
   @media (min-width: 640px) {
     ul.links {
       display: flex;
+    }
+    /*
+     * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / 0.75rem 離した角の丸い帯にして、中身の上に浮かせる。
+     * 面は地を 86% 残した半透明 (ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、巻くと下を流れる。
+     * 角は入れ子でそろえる: 外 (0.875rem) = 中のボタン (`--dp-radius` 0.5rem) + 間の余白 (0.375rem)
+     */
+    :global(:root) {
+      --dp-header-space: 4.25rem;
+    }
+    main {
+      --dp-page-top: var(--dp-header-space);
+    }
+    .navbar {
+      position: fixed;
+      top: 0.5rem;
+      inset-inline: 0.75rem;
+      min-height: 3.25rem;
+      padding: 0.375rem 0.375rem 0.375rem 0.75rem;
+      border-radius: 0.875rem;
+      background: color-mix(in srgb, var(--dp-bg) 86%, transparent);
+      box-shadow: var(--dp-shadow-pop);
+      transition: transform var(--dp-duration) var(--dp-ease);
+    }
+    .shell[data-retract] .navbar {
+      transform: translateY(calc(-100% - 2.5rem));
     }
     .navbar {
       display: grid;
