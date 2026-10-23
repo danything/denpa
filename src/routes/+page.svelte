@@ -671,7 +671,12 @@
       return lineStatus;
     },
     get firstLiveKey() {
-      return parts.now[0]?.key ?? null;
+      // バー (と時刻) を出せる最初の行。長さの分からない予約はバーが無いので飛ばす (無ければ線を見せる)
+      return (
+        parts.now.find(
+          (item) => item.kind === "res" && item.res.end_at > item.res.start_at,
+        )?.key ?? null
+      );
     },
     deleting,
     cancelable,
