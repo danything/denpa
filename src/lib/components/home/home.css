@@ -274,6 +274,8 @@
 .board .row-bar {
   position: absolute;
   inset-inline: 0.75rem;
+  /* Pico の `progress` は幅 100%。残すと左右の寄せのぶん右へはみ出す */
+  width: auto;
   bottom: 0.25rem;
   height: 3px;
   border-radius: 2px;
