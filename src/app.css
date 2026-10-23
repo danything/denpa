@@ -186,6 +186,13 @@
   --dp-pop-hover: var(--dp-subtle);
   --dp-muted: #555e70; /* 白・淡い面・選んでいる局の地のどれでも 4.5 以上 */
   --dp-primary-text: #02659a; /* azure-600。主の色を淡い地の上で字にするとき */
+  /* 浮かせた主のボタンの影 (ふだん・乗せた・押している)。近い影と遠い影の 2 段 */
+  --dp-raise: 0 1px 2px rgb(24 28 37 / 0.14), 0 4px 10px rgb(24 28 37 / 0.1);
+  --dp-raise-hover:
+    0 2px 4px rgb(24 28 37 / 0.16), 0 8px 18px rgb(24 28 37 / 0.14);
+  --dp-raise-active: 0 1px 1px rgb(24 28 37 / 0.14);
+  /* 入力欄の下の線。地に対して 3:1 以上 */
+  --dp-input-line: #8a93a6;
   --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
   --dp-shadow-pop:
     0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
@@ -237,6 +244,16 @@
   --dp-pop-hover: #2c2e35;
   --dp-muted: #9aa3b5; /* 地・面・メニューのどれでも 4.5 以上 */
   --dp-primary-text: var(--pico-primary);
+  /* 黒い地では影が見えにくいので、主のボタンは面を明るく (`--dp-pop`) し、上の縁に細い光を足す */
+  --dp-raise:
+    inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.5),
+    0 4px 12px rgb(0 0 0 / 0.45);
+  --dp-raise-hover:
+    inset 0 1px 0 rgb(255 255 255 / 0.08), 0 2px 4px rgb(0 0 0 / 0.55),
+    0 8px 20px rgb(0 0 0 / 0.5);
+  --dp-raise-active:
+    inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 1px rgb(0 0 0 / 0.5);
+  --dp-input-line: #666d7d;
   --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
   --dp-shadow-pop:
     0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
@@ -763,17 +780,15 @@ details.more > :not(summary) + :not(summary) {
 
 /* ---- ボタン ---- */
 /*
- * **ボタンは 3 段だけ。色と形はトークン (`--dp-btn-*`) で決め、画面ごとに塗り直さない。**
+ * **ボタンは 3 段だけ。強弱は塗りや枠ではなく影のあるなしで付ける** (docs/design.md)。色と形はトークン (`--dp-btn-*`) で決め、画面ごとに塗り直さない。
  *
- * - 主 (クラス無し) … 塗ったボタン。1 画面に 1 つか 2 つ (保存・追加・確定)。**主の色 (azure) では塗らず、
- *   本文の字の色で塗る** (明るいほうはほぼ黒、暗いほうはほぼ白)。色を塗るのは「いま動いているもの」と
- *   「押すと戻せないもの」だけ (上の「色」の決まり)。主の色はリンク・選んでいるもの・オンの印・フォーカスに残す
- * - 控え (`.secondary` / `.outline`) … 淡い地だけで枠は引かない。`outline` も同じ見た目
- *   (枠のボタンが並ぶと、枠の列が字より目立っていた)
- * - 字だけ (`.ghost`) … 地も枠も無し。指を乗せると淡い地
+ * - 主 (クラス無し) … **浮かせる** (面と 2 段の影 `--dp-raise`。字は本文の色の太字)。1 画面に 1 つか 2 つ (保存・追加・確定)。
+ *   乗せると影を深く、押している間は 1px 沈めて影を浅く
+ * - 控え (`.secondary` / `.outline`) … 平ら。地も枠も影も無く、本文の字。乗せると薄い地
+ * - 字だけ (`.ghost`) … 控えと同じく平ら。字の色は周りのまま
  *
- * 危ない操作は `.danger` (赤で塗る。確定のボタン) と `.outline.danger` (待っている間は控えと同じ。
- * 押そうとしたときだけ赤)。字だけのボタンは `.icon` を足すと正方形 (丸い形なら円) になる。
+ * 危ない操作は `.danger` (確定のボタン。浮かせて赤い字) と `.outline.danger` (待っている間は控えと同じ。
+ * 押そうとしたときだけ赤い字)。字だけのボタンは `.icon` を足すと正方形 (丸い形なら円) になる。
  *
  * **大きさは 3 段** (ふつう・`.small`・`.xs`)。ふつうは入力欄と同じ高さ (42px)。
  * 指で押す端末では小さいほうも 40px 以上にする (iPad で押し外さない)。
@@ -784,23 +799,14 @@ details.more > :not(summary) + :not(summary) {
  * 上の `:focus-visible` の線だけで示す。押したあとに地の色が残らない)
  */
 :root {
-  /* 角。ふつうのボタン・小さいボタン・アイコンのボタンで同じ値を使う (丸い形なら正方形は円になる) */
-  --dp-btn-radius: var(--dp-radius-full);
-  /* 主のボタン。字の色で塗り、字は地の色で抜く。指を乗せると地の色へ少し寄せる */
-  --dp-btn-solid: var(--pico-secondary-hover);
-  --dp-btn-solid-hover: color-mix(
-    in srgb,
-    var(--pico-secondary-hover) 82%,
-    var(--dp-bg)
-  );
-  --dp-btn-solid-text: var(--dp-bg);
-  /* 控えのボタンの地。字の色を薄く混ぜるので、地・カード・メニューのどの上でも同じ濃さに見える */
-  --dp-btn-tonal: color-mix(in srgb, var(--pico-secondary) 10%, transparent);
-  --dp-btn-tonal-hover: color-mix(
-    in srgb,
-    var(--pico-secondary) 18%,
-    transparent
-  );
+  /* 角。ふつうのボタン・小さいボタン・アイコンのボタンで同じ値を使う (行・メニューと同じ角の丸み) */
+  --dp-btn-radius: var(--dp-radius);
+  /* 主のボタンの面と字。明るいほうは地と同じ白、暗いほうはメニューと同じ明るい面 (影が見えにくいので) */
+  --dp-btn-solid: var(--dp-pop);
+  --dp-btn-solid-text: var(--dp-fg);
+  /* 控えのボタンは地を持たない。乗せたときだけ薄い地 */
+  --dp-btn-tonal: transparent;
+  --dp-btn-tonal-hover: var(--dp-hover-soft);
   --dp-btn-text: var(--pico-secondary-hover);
   /* 高さ。アイコンのボタンの幅にも使う */
   --dp-btn-h: 2.625rem;
@@ -826,26 +832,56 @@ details.more > :not(summary) + :not(summary) {
   --pico-color: var(--dp-btn-solid-text);
   --pico-box-shadow: none;
   border-radius: var(--dp-btn-radius);
-}
-:where(
-    button,
-    [type="button"],
-    [type="submit"],
-    [type="reset"],
-    [role="button"],
-    a.button
-  ):not(div):where(:hover, :active) {
-  --pico-background-color: var(--dp-btn-solid-hover);
+  transition:
+    background-color var(--dp-duration),
+    box-shadow var(--dp-duration),
+    transform var(--dp-duration);
 }
 /*
- * **入っている切り替え (`aria-pressed="true"`) は主の色で。** 「選んでいるもの」なので、主のボタン
- * (押すと何かが起きる) とは塗り分ける (番組表の「サブch」)
+ * **浮かせるのは主のボタンだけ** (クラスが無いか、大きさ・危ない操作・保存などのクラスだけのもの、`a.button`)。
+ * 画面ごとに自前の見た目を持つボタン (行・メニューの項目・タブ・チップ・リモコン) は名前のクラスを持つので、ここに入らず平らのまま
+ */
+:where(
+    button:not([class]),
+    :is(button, a.button):is(.small, .xs, .danger, .save, .keep),
+    a.button
+  ):where(:not(.secondary, .outline, .ghost, [aria-pressed="true"])):not(div) {
+  --pico-box-shadow: var(--dp-raise);
+  font-weight: var(--dp-weight-bold);
+}
+:where(
+    button:not([class]),
+    :is(button, a.button):is(.small, .xs, .danger, .save, .keep),
+    a.button
+  ):where(:not(.secondary, .outline, .ghost, [aria-pressed="true"])):not(
+    div
+  ):where(:hover) {
+  --pico-box-shadow: var(--dp-raise-hover);
+}
+:where(
+    button:not([class]),
+    :is(button, a.button):is(.small, .xs, .danger, .save, .keep),
+    a.button
+  ):where(:not(.secondary, .outline, .ghost, [aria-pressed="true"])):not(
+    div
+  ):where(:active) {
+  --pico-box-shadow: var(--dp-raise-active);
+  transform: translateY(1px);
+}
+/*
+ * **入っている切り替え (`aria-pressed="true"`) は、ほかの選んでいるものと同じく主の色の短い下線と字** (番組表の「サブch」)。
+ * 塗らない。浮かせもしない (押すと何かが起きるボタンとは見分ける)
  */
 :where(button, a.button)[aria-pressed="true"]:where(
     :not(.secondary, .outline, .ghost)
   ) {
-  --pico-background-color: var(--pico-primary-background);
-  --pico-color: #fff;
+  --pico-background-color: transparent;
+  --pico-box-shadow: none;
+  --pico-color: var(--dp-primary-text);
+  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
+  background-repeat: no-repeat;
+  background-position: center bottom 0.2rem;
+  background-size: 1rem 2px;
 }
 /* リンクのままボタンの見た目にする (role="button" にするとリンクでなくなる)。<a class="button"> */
 a.button {
@@ -857,6 +893,7 @@ a.button {
     var(--pico-form-element-spacing-horizontal);
   border: var(--pico-border-width) solid var(--pico-border-color);
   background-color: var(--pico-background-color);
+  box-shadow: var(--pico-box-shadow);
   color: var(--pico-color);
   text-align: center;
   text-decoration: none;
@@ -883,6 +920,8 @@ a.button {
 ).outline {
   --pico-background-color: var(--dp-btn-tonal);
   --pico-color: var(--dp-btn-text);
+  --pico-box-shadow: none;
+  font-weight: var(--dp-weight);
 }
 :where(
   button,
@@ -894,6 +933,8 @@ a.button {
 ).ghost {
   --pico-background-color: transparent;
   --pico-color: inherit;
+  --pico-box-shadow: none;
+  font-weight: var(--dp-weight);
 }
 :where(
     button,
@@ -908,14 +949,12 @@ a.button {
     [aria-current]:not([aria-current="false"])
   ) {
   --pico-background-color: var(--dp-btn-tonal-hover);
+  --pico-box-shadow: none;
+  transform: none;
 }
-/* 危ない操作。確定のボタンは赤で塗る */
+/* 危ない操作。確定のボタンは浮かせて赤い字 (塗らない) */
 :where(button, a.button).danger {
-  --pico-background-color: var(--dp-error);
-  --pico-color: #fff;
-}
-:where(button, a.button).danger:where(:hover, :active) {
-  --pico-background-color: color-mix(in srgb, var(--dp-error) 85%, #000);
+  --pico-color: var(--dp-rec-text);
 }
 /*
  * 1 回目の削除・取消 (`.outline.danger`)。**待っている間は赤くしない。**
@@ -927,7 +966,7 @@ a.button {
   --pico-color: var(--dp-btn-text);
 }
 :where(button, a.button).outline.danger:where(:hover, :active) {
-  --pico-background-color: color-mix(in srgb, var(--dp-rec) 14%, transparent);
+  --pico-background-color: var(--dp-btn-tonal-hover);
   --pico-color: var(--dp-rec-text);
 }
 /*
@@ -964,6 +1003,49 @@ a.button {
 :where(button, a.button).icon.small {
   width: var(--dp-btn-h-sm);
   min-height: var(--dp-btn-h-sm);
+}
+
+/* ---- 入力欄 ---- */
+/*
+ * **入力欄は囲まず、下の線だけ** (docs/design.md)。線は地に対して 3:1 以上 (`--dp-input-line`)。
+ * 字を打っている間 (焦点) は線を主の色の 2px にする。外側の焦点の線は引かない (線そのものが焦点の印)。
+ * 地は塗らないので、地・面・メニューのどの上でも同じに見える。入力欄とつなげたボタンも同じ高さのまま並ぶ
+ */
+:where(
+  input:not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="range"],
+    [type="file"],
+    [type="color"]
+  ),
+  select,
+  textarea
+) {
+  --pico-form-element-background-color: transparent;
+  --pico-form-element-active-background-color: transparent;
+  --pico-form-element-focus-color: transparent;
+  --pico-box-shadow: none;
+  border-width: 0 0 1px;
+  border-color: var(--dp-input-line);
+  border-radius: 0;
+  padding-inline: 0.125rem;
+}
+:where(
+  input:not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="range"],
+    [type="file"],
+    [type="color"]
+  ),
+  select,
+  textarea
+):focus {
+  --pico-box-shadow: none;
+  border-color: var(--pico-primary);
+  box-shadow: inset 0 -1px 0 var(--pico-primary);
+  outline: none;
 }
 
 /* ---- 行の操作 (`.row-actions`。録画の「詳細」「削除」、予約の「取消」など) ---- */
