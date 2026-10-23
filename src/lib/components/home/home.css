@@ -157,9 +157,6 @@
   align-items: center;
   white-space: nowrap;
 }
-.board .truncated {
-  border-bottom: 1px solid var(--dp-line);
-}
 /*
  * 番組の見出し。**行と同じ形** (左にポスター、右に名前と日付) にして、
  * 1本だけの番組 (まとめずに混ぜる行) と並んでも浮かないようにする。
@@ -444,7 +441,6 @@
     bottom: var(--dp-tabbar, 0px);
     margin-inline: calc(-1 * var(--dp-gutter, 1rem));
     padding-inline: var(--dp-gutter, 1rem);
-    border-top: 1px solid var(--dp-line);
   }
   .board .t-main {
     order: 1;
@@ -952,4 +948,35 @@
   border-radius: 1px;
   background: var(--pico-primary);
   transform: translateX(-50%);
+}
+
+/*
+ * **ヘッダーは中身の上に浮く** (`+layout.svelte`。docs/design.md の操作の層)。一覧と右の列は画面の上端から始め、
+ * 頭にヘッダーのぶん (`--dp-header-space`。右の列は `.side-panel` が空ける) を空ける。巻くと行はヘッダーの下を流れる。
+ * 日付の見出しはヘッダーのすぐ下に貼り付く
+ */
+@media (min-width: 768px) {
+  .board .t-list {
+    padding-top: var(--dp-header-space, 0px);
+  }
+  /* 貼り付く位置は巻き取る箱の内側の余白 (上の頭の空き) から数える */
+  .board .t-day {
+    top: 0;
+    padding-top: 0.25rem;
+  }
+}
+/* 狭い画面: 頭の1行も操作の層。下のタブの上に、同じ半透明のカプセルで浮かせる (縁の線は引かない) */
+@media (max-width: 639.98px) {
+  .board .t-toolbar {
+    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
+    padding-inline: 0.5rem;
+    border-radius: 1.375rem;
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration) var(--dp-ease);
+  }
+  [data-retract] .board .t-toolbar:not(:focus-within) {
+    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
+  }
 }

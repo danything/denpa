@@ -278,8 +278,9 @@
     padding: 0.75rem;
     list-style: none;
   }
+  /* 件の間は線を引かず余白で分ける (docs/design.md の「何行かある一覧」) */
   .row + .row {
-    border-top: 1px solid var(--dp-line);
+    margin-top: var(--dp-list-gap);
   }
   .thumb {
     width: 5rem;

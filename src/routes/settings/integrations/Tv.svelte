@@ -57,8 +57,9 @@
 </div>
 
 <style>
+  /* 件の間は線を引かず余白で分ける (docs/design.md の「何行かある一覧」) */
   .rows > .row + .row {
-    border-top: 1px solid var(--dp-line);
+    margin-top: var(--dp-list-gap);
   }
   .device {
     display: flex;

@@ -757,7 +757,7 @@
                 上限に当たっていたら、いちばん古い録画の上 (一覧の頭) に検索へ誘う一行を出す (`+page.server.ts` の LIMIT 300)
             -->
       {#if data.recordings.length >= 300 && pastStart === 0}
-        <div class="row-empty truncated muted small">
+        <div class="row-empty muted small">
           新しい順に300件まで表示しています。古いものは検索で探してください。
         </div>
       {/if}

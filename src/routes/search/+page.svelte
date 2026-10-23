@@ -821,7 +821,8 @@
     }
   }
   /*
-     * 狭い画面では書く欄を下から出すボタンを、下のタブの上に貼り付ける。
+     * 狭い画面では書く欄を下から出すボタンを、下のタブの上に浮かせる。帯の地も線も敷かず、ボタン (主のボタン) だけが浮く
+     * (浮きの上に浮きを重ねない。docs/design.md)。読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
      * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
      */
   @media (max-width: 1023.98px) {
@@ -830,17 +831,21 @@
     }
     .sheet-bar {
       position: fixed;
-      inset-inline: 0;
-      bottom: var(--dp-tabbar, 0px);
+      inset-inline: 0.75rem;
+      bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
       z-index: 30;
-      padding: var(--dp-space-2) var(--dp-gutter);
-      border-top: 1px solid var(--dp-line);
-      background: var(--dp-bg);
+      transition: transform var(--dp-duration) var(--dp-ease);
     }
     .sheet-bar button {
       width: 100%;
       margin: 0;
       border-radius: var(--dp-radius-full);
+    }
+  }
+  /* 引っ込むのは下のタブがある幅だけ */
+  @media (max-width: 639.98px) {
+    :global([data-retract]) .sheet-bar:not(:focus-within) {
+      transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
     }
   }
   /* 書く欄の条件では録らない行。消さずに出すが、録るものより沈める */

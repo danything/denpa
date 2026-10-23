@@ -360,17 +360,16 @@
     }
   }
   /*
-     * **節どうしは細い線1本と、上下にたっぷりの余白で区切る** (左の一覧のグループの境目と同じ考え。カードにはしない)。
-     * 線の上下を広めに取り、節の中の行の間より目に見えて空ける。飛んだ先が見出しの上にぴったり付くよう、
-     * 巻き取りの余白を取る (狭い画面はヘッダーと節の行の下)
+     * **節どうしは線を引かず、上下にたっぷりの余白で区切る** (左の一覧のグループの境目と同じ考え。カードにはしない)。
+     * 節の中の行の間より目に見えて空ける。飛んだ先が見出しの上にぴったり付くよう、
+     * 巻き取りの余白を取る (広い画面は浮いたヘッダーの下、狭い画面はヘッダーと節の行の下)
      */
   .main-inner :global([data-part] + [data-part]) {
     margin-top: var(--dp-space-4);
     padding-top: var(--dp-space-6);
-    border-top: 1px solid var(--dp-line);
   }
   .main-inner :global([data-part]) {
-    scroll-margin-top: var(--dp-gutter);
+    scroll-margin-top: calc(var(--dp-header-space, 0px) + var(--dp-gutter));
   }
   @media (max-width: 767px) {
     .main-inner :global([data-part]) {

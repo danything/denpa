@@ -12,6 +12,16 @@ function scroller(list: HTMLElement): HTMLElement | null {
 }
 
 /**
+ * 枠の見えている所の上端。**枠の頭の内側の余白の下** (広い画面は浮いたヘッダーのぶん空けてあり、その裏は見えていない扱い)
+ */
+function boxTop(box: HTMLElement): number {
+  return (
+    box.getBoundingClientRect().top +
+    (Number.parseFloat(getComputedStyle(box).paddingTop) || 0)
+  );
+}
+
+/**
  * 一覧の頭の1行。**上に貼り付いているときだけ**返す (スマホでは下のタブの上に貼り付くので、上には被さらない)
  */
 function topBar(): HTMLElement | null {
@@ -53,10 +63,7 @@ function scrollToTop(
 ): void {
   const box = scroller(list);
   if (box !== null) {
-    box.scrollTop +=
-      element.getBoundingClientRect().top -
-      box.getBoundingClientRect().top -
-      offset;
+    box.scrollTop += element.getBoundingClientRect().top - boxTop(box) - offset;
   } else {
     window.scrollTo({
       top: window.scrollY + element.getBoundingClientRect().top - offset,
@@ -73,7 +80,10 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
   const now = list.querySelector<HTMLElement>('[data-testid="timeline-now"]');
   if (now === null) return;
   const box = scroller(list);
-  const height = box !== null ? box.clientHeight : window.innerHeight;
+  const height =
+    box !== null
+      ? box.getBoundingClientRect().bottom - boxTop(box)
+      : window.innerHeight;
   const cover = coverOf();
   // 見えている所の高さ (狭い画面は下のタブと頭の1行が下に被さる)
   const view = height - cover - (box === null ? bottomCover() : 0);
@@ -82,8 +92,7 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
    * 録れたものが少ないと線は頭の近くにあり、7 割まで下げる余地が無い
    */
   const lineTop =
-    now.getBoundingClientRect().top -
-    (box !== null ? box.getBoundingClientRect().top : 0);
+    now.getBoundingClientRect().top - (box !== null ? boxTop(box) : 0);
   if (lineTop < cover + view * 0.4 || lineTop > cover + view - now.offsetHeight)
     scrollToTop(list, now, cover + view * 0.7);
   // 貼り付いた日付の見出しの下端。行はその少し下に置く (`alignTop` が見出しの裏へ送らないように)
@@ -111,11 +120,7 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
         list.querySelector<HTMLElement>(`[data-group-rows~="${target}"]`));
   if (row !== null) {
     if (row.getBoundingClientRect().top < line) {
-      scrollToTop(
-        list,
-        row,
-        line + 8 - (box !== null ? box.getBoundingClientRect().top : 0),
-      );
+      scrollToTop(list, row, line + 8 - (box !== null ? boxTop(box) : 0));
     }
   }
   alignTop(list);
@@ -124,7 +129,7 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
 /** 一覧の見えている所の上端 (広い画面は枠の上、狭い画面は貼り付いた頭の段の下) */
 function topEdge(list: HTMLElement): number {
   const box = scroller(list);
-  if (box !== null) return box.getBoundingClientRect().top;
+  if (box !== null) return boxTop(box);
   const bar = topBar();
   if (bar !== null) return bar.getBoundingClientRect().bottom;
   // 上に被さるものが無いときは、日付の見出しが貼り付く線 (上の安全域の下)

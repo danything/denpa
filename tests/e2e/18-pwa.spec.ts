@@ -297,8 +297,9 @@ test.describe("PWA", () => {
     const tabbar = page.getByTestId("tabbar");
     await expect(tabbar).toBeVisible();
     const bar = (await tabbar.boundingBox())!;
-    expect(bar.y + bar.height, "タブが画面の下に付いていない").toBeCloseTo(
-      780,
+    // 下の端から 0.5rem 離して浮かせる (操作の層。docs/design.md)
+    expect(bar.y + bar.height, "タブが画面の下に浮いていない").toBeCloseTo(
+      780 - 8,
       0,
     );
     await expect(page.getByTestId("tab-home")).toHaveAttribute(
@@ -341,5 +342,29 @@ test.describe("PWA", () => {
     await expect(tabbar).toBeHidden();
     await goto(page, "/");
     await expect(page.getByTestId("header-search")).toBeVisible();
+  });
+
+  test("狭い画面の下のタブは、下へ読むと引っ込み、上へ戻すと出る", async ({
+    page,
+  }) => {
+    /*
+     * **読んでいる間は操作の層を引っ込める** (docs/design.md の「地・件の面・操作の層」)。
+     * 窓ごと巻く画面 (受信の設定) で、下へ送るとタブは画面の外へ、上へ戻すと元の位置に戻る
+     */
+    await page.setViewportSize({ width: 390, height: 780 });
+    await goto(page, "/settings/reception");
+    const tabbar = page.getByTestId("tabbar");
+    const bottom = async () => {
+      const box = (await tabbar.boundingBox())!;
+      return box.y + box.height;
+    };
+    await expect.poll(bottom).toBeLessThanOrEqual(780);
+    await page.mouse.move(195, 300);
+    await page.mouse.wheel(0, 600);
+    await expect
+      .poll(async () => (await tabbar.boundingBox())!.y)
+      .toBeGreaterThanOrEqual(780);
+    await page.mouse.wheel(0, -600);
+    await expect.poll(bottom).toBeLessThanOrEqual(780);
   });
 });

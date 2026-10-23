@@ -806,10 +806,6 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.5rem 0.75rem;
       padding-block: 0.75rem;
-      border-top: 1px solid var(--dp-line);
-    }
-    .row-cards tr:first-child {
-      border-top: 0;
     }
     .table-wrap .row-cards td {
       padding: 0;
