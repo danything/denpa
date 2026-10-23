@@ -370,9 +370,13 @@ test.describe("操作したときの反応", () => {
     // 1366px で全部が1行に収まる (時刻のボタンも「⋯」に畳まない)
     await expect(page.getByTestId("guide-jump-19")).toBeVisible();
     await expect(page.getByTestId("guide-more")).toBeHidden();
-    const bar = (await page.getByTestId("guide-toolbar").boundingBox())!;
-    // 1行なら 70px ほど (上の余白は画面の頭の余白 `--dp-page-top`。いまは 0)。2行に折れると 110px を超える
-    expect(bar.height).toBeLessThan(80);
+    const toolbar = page.getByTestId("guide-toolbar");
+    const bar = (await toolbar.boundingBox())!;
+    // 上の余白 (画面の頭の余白 `--dp-page-top`。浮いたヘッダーのぶん) を除いて、1行なら 70px ほど。2行に折れると 110px を超える
+    const top = await toolbar.evaluate((el) =>
+      Number.parseFloat(getComputedStyle(el).paddingTop),
+    );
+    expect(bar.height - top).toBeLessThan(80);
 
     // 番組の無い日は押せない (偽の放送は 30 時間ぶんなので、朝に流すと翌日はまだ無い)
     const later = page.locator(

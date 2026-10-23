@@ -297,8 +297,9 @@ test.describe("PWA", () => {
     const tabbar = page.getByTestId("tabbar");
     await expect(tabbar).toBeVisible();
     const bar = (await tabbar.boundingBox())!;
-    expect(bar.y + bar.height, "タブが画面の下に付いていない").toBeCloseTo(
-      780,
+    // 下の端から 0.5rem 離して浮かせる (操作の層。docs/design.md)
+    expect(bar.y + bar.height, "タブが画面の下に浮いていない").toBeCloseTo(
+      780 - 8,
       0,
     );
     await expect(page.getByTestId("tab-home")).toHaveAttribute(
