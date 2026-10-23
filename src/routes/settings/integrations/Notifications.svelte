@@ -134,9 +134,9 @@
 </div>
 
 <style>
-  /* 件の間は線を引かず余白で分ける (docs/design.md の「何行かある一覧」) */
+  /* 地に置く並び。件の間は線を引かず余白で分ける (面に乗せた一覧より広く) */
   .rows > .row + .row {
-    margin-top: var(--dp-list-gap);
+    margin-top: var(--dp-space-4);
   }
   .events {
     display: flex;
