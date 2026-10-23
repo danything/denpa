@@ -820,7 +820,8 @@
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration) var(--dp-ease);
   }
-  .shell[data-retract] .tabbar {
+  /* キーボードで中に触っている間は引っ込めない (見えないまま操作させない) */
+  .shell[data-retract] .tabbar:not(:focus-within) {
     transform: translateY(calc(100% + 0.5rem + env(safe-area-inset-bottom)));
   }
   .tabbar .tab,
@@ -997,8 +998,6 @@
       border-radius: 0.875rem;
       background: var(--dp-float);
       box-shadow: var(--dp-shadow-pop);
-    }
-    .navbar {
       display: grid;
       grid-template-columns:
         minmax(max-content, 1fr) minmax(8rem, 36rem)

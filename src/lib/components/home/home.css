@@ -974,7 +974,7 @@
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration) var(--dp-ease);
   }
-  [data-retract] .board .t-toolbar {
+  [data-retract] .board .t-toolbar:not(:focus-within) {
     transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
 }

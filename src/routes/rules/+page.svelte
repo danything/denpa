@@ -576,11 +576,11 @@
       box-shadow: var(--dp-shadow-pop);
       transition: transform var(--dp-duration) var(--dp-ease);
     }
-    :global([data-retract]) .rules-bar {
+    :global([data-retract]) .rules-bar:not(:focus-within) {
       transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
     }
     .rules-list {
-      padding-bottom: 3.5rem;
+      padding-bottom: 4rem;
     }
     .row {
       min-height: 3.75rem;

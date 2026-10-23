@@ -343,4 +343,28 @@ test.describe("PWA", () => {
     await goto(page, "/");
     await expect(page.getByTestId("header-search")).toBeVisible();
   });
+
+  test("狭い画面の下のタブは、下へ読むと引っ込み、上へ戻すと出る", async ({
+    page,
+  }) => {
+    /*
+     * **読んでいる間は操作の層を引っ込める** (docs/design.md の「中身の層と操作の層」)。
+     * 窓ごと巻く画面 (受信の設定) で、下へ送るとタブは画面の外へ、上へ戻すと元の位置に戻る
+     */
+    await page.setViewportSize({ width: 390, height: 780 });
+    await goto(page, "/settings/reception");
+    const tabbar = page.getByTestId("tabbar");
+    const bottom = async () => {
+      const box = (await tabbar.boundingBox())!;
+      return box.y + box.height;
+    };
+    await expect.poll(bottom).toBeLessThanOrEqual(780);
+    await page.mouse.move(195, 300);
+    await page.mouse.wheel(0, 600);
+    await expect
+      .poll(async () => (await tabbar.boundingBox())!.y)
+      .toBeGreaterThanOrEqual(780);
+    await page.mouse.wheel(0, -600);
+    await expect.poll(bottom).toBeLessThanOrEqual(780);
+  });
 });

@@ -844,7 +844,7 @@
   }
   /* 引っ込むのは下のタブがある幅だけ */
   @media (max-width: 639.98px) {
-    :global([data-retract]) .sheet-bar {
+    :global([data-retract]) .sheet-bar:not(:focus-within) {
       transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
     }
   }
