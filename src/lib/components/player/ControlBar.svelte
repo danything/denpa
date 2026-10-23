@@ -144,14 +144,26 @@
       transparent
     );
   }
-  /* 透かしを減らす設定では、影を透かさない地にする */
+  /*
+   * 透かしを減らす設定では、影を濃くする (中のボタンの所はほとんど透けない)。まったく透かさない帯にすると、
+   * 操作バーが出ている間だけ映像の右端と下端が四角く欠けて見えるので、端へ向かって消えていくのは残す
+   */
   @media (prefers-reduced-transparency: reduce) {
     .bottom {
-      background: #141519;
+      background: linear-gradient(
+        to top,
+        rgb(20 21 25 / 0.95),
+        rgb(20 21 25 / 0.85) 60%,
+        transparent
+      );
     }
     .side::before {
-      width: 4rem;
-      background: #141519;
+      background: linear-gradient(
+        to left,
+        rgb(20 21 25 / 0.95),
+        rgb(20 21 25 / 0.85) 50%,
+        transparent
+      );
     }
   }
   :global(.stage[data-compact]) .bottom {
