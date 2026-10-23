@@ -30,7 +30,7 @@
  */
 .board .row-open {
   display: inline;
-  width: calc(100% - 1.5rem);
+  width: auto;
   margin: 0;
   padding: 0;
   border: 0;
@@ -384,7 +384,7 @@
   flex-shrink: 0;
   align-items: center;
   gap: 0.35rem;
-  width: calc(100% - 1.5rem);
+  width: auto;
   height: 2.125rem;
   margin: 0;
   padding: 0 0.75rem;
