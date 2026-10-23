@@ -63,43 +63,58 @@ float at(sampler2D plane, float row, float count) {
 }
 
 /*
- * 抜けた行が止まっている度合い (1 止まっている〜0 動いている)。抜けた行とその上下の行を、前のコマの
- * 同じ行と比べる。**輝度だけで決めて色差にも使う** (4:2:0 の色差は行が粗い)。
- * 4/255 までは雑音として止まっている、12/255 からは動いている (間はなだらかに)
+ * 抜けた行の値。上下の行 (\`a\`・\`b\`) と、もう片方のフィールドのその行 (\`other\`) から決める。
+ * 上下の間からどれだけはみ出しているか (\`over\`) を見て、**8/255 までは雑音として織り、16/255 からは
+ * 櫛として埋める** (間はなだらかに混ぜる。画素ごとに織る・埋めるが入れ替わってざらつかないように)。
+ * \`still\` (1 止まっている〜0 動いている) の分は、はみ出していても織る (縁取りのある字・細い横線)
  */
-float stillness() {
-    if (field < 0 || !hasPrev) return 0.0;
-    float count = rows.x;
-    float row = min(floor(uv.y * count), count - 1.0);
-    if (mod(row, 2.0) == float(field)) return 0.0;
-    float up = row - 1.0 < 0.0 ? row + 1.0 : row - 1.0;
-    float down = row + 1.0 > count - 1.0 ? row - 1.0 : row + 1.0;
-    float moved = max(
-        abs(at(planeY, row, count) - at(planeYPrev, row, count)),
-        max(abs(at(planeY, up, count) - at(planeYPrev, up, count)), abs(at(planeY, down, count) - at(planeYPrev, down, count)))
-    );
-    return 1.0 - smoothstep(4.0 / 255.0, 12.0 / 255.0, moved);
+float weave(float other, float a, float b, float still) {
+    float over = max(other - max(a, b), min(a, b) - other);
+    float filled = mix(other, 0.5 * (a + b), smoothstep(8.0 / 255.0, 16.0 / 255.0, over));
+    return mix(filled, other, still);
 }
 
+/*
+ * 輝度。抜けた行が止まっている度合いもここで決めて \`still\` に返す (色差にも使う。4:2:0 の色差は行が粗い)。
+ * 抜けた行とその上下の行を、前のコマの同じ行と比べる。4/255 までは雑音として止まっている、12/255 からは動いている。
+ * **前のコマを読むのは、はみ出していて埋める側に回りそうな画素だけ** — 収まっている画素はどのみち織るので、
+ * 読みに行かない (GPU の無い端末では、描く手間がそのまま CPU に乗る)
+ */
+float pickLuma(out float still) {
+    still = 0.0;
+    if (field < 0) return texture(planeY, uv).r;
+    float count = rows.x;
+    float row = min(floor(uv.y * count), count - 1.0);
+    if (mod(row, 2.0) == float(field)) return at(planeY, row, count);
+    float up = row - 1.0 < 0.0 ? row + 1.0 : row - 1.0;
+    float down = row + 1.0 > count - 1.0 ? row - 1.0 : row + 1.0;
+    float a = at(planeY, up, count);
+    float b = at(planeY, down, count);
+    float other = at(planeY, row, count);
+    if (hasPrev && max(other - max(a, b), min(a, b) - other) > 8.0 / 255.0) {
+        float moved = max(
+            abs(other - at(planeYPrev, row, count)),
+            max(abs(a - at(planeYPrev, up, count)), abs(b - at(planeYPrev, down, count)))
+        );
+        still = 1.0 - smoothstep(4.0 / 255.0, 12.0 / 255.0, moved);
+    }
+    return weave(other, a, b, still);
+}
+
+/* 色差。行の選び方は輝度と同じ。止まっているかは輝度で決めたもの */
 float pick(sampler2D plane, float count, float still) {
     if (field < 0) return texture(plane, uv).r;
     float row = min(floor(uv.y * count), count - 1.0);
     if (mod(row, 2.0) == float(field)) return at(plane, row, count);
     float a = at(plane, row - 1.0 < 0.0 ? row + 1.0 : row - 1.0, count);
     float b = at(plane, row + 1.0 > count - 1.0 ? row - 1.0 : row + 1.0, count);
-    float other = at(plane, row, count);
-    // 上下の間からどれだけはみ出しているか。**8/255 までは雑音として織り、16/255 からは
-    // 櫛として埋める** (間はなだらかに混ぜる。画素ごとに織る・埋めるが入れ替わってざらつかないように)
-    float over = max(other - max(a, b), min(a, b) - other);
-    float filled = mix(other, 0.5 * (a + b), smoothstep(8.0 / 255.0, 16.0 / 255.0, over));
-    // 止まっていれば、はみ出していても織る (縁取りのある字・細い横線)
-    return mix(filled, other, still);
+    return weave(at(plane, row, count), a, b, still);
 }
 
 void main() {
-    float still = stillness();
+    float still;
     // 放送は限定レンジ (Y 16〜235 / C 16〜240)
-    float y = (pick(planeY, rows.x, still) - 16.0 / 255.0) * (255.0 / 219.0);
+    float y = (pickLuma(still) - 16.0 / 255.0) * (255.0 / 219.0);
     float u = (pick(planeU, rows.y, still) - 128.0 / 255.0) * (255.0 / 224.0);
     float v = (pick(planeV, rows.y, still) - 128.0 / 255.0) * (255.0 / 224.0);
     color = vec4(clamp(matrix * vec3(y, u, v), 0.0, 1.0), 1.0);

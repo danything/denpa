@@ -159,7 +159,6 @@
  * - `--dp-bg` … 地 (ページ・ヘッダー)
  * - `--dp-surface` … ダイアログ・下から出す一枚
  * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
- * - `--dp-row` … ホームの一覧の行の塊。`--dp-row-hover` (指を乗せた) で一段濃く。詳細を開いた行は塗らずに線と字で示す
  * - `--dp-line` … 区切りの線 (行の間・節の間)
  * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
@@ -168,8 +167,7 @@
  * - `--dp-shadow` … 持ち上げた面の影 (リモコン。ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)。
  *   箱は縁と影 (`--dp-shadow-pop`) で浮かせる
- * - `--dp-glass-*` … 磨りガラス (`.glass`)。面 (`tint`)・透かさないときの面 (`solid`)・裏のぼかし (`filter`)・縁 (`rim`)。
- *   中身は下の「磨りガラス」
+ * - `--dp-shadow-up` … 下の端に貼り付くもの (画面の下のタブ) の上向きの影
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
@@ -177,9 +175,6 @@
   --dp-bg: #fff;
   --dp-surface: #fff;
   --dp-subtle: #eff1f4; /* slate-50 */
-  /* 一覧の行の塊 (ホームの時間軸)。地との差は L で 5 ほど。指を乗せた行はさらに一段 (`home.css`) */
-  --dp-row: #f0f2f5;
-  --dp-row-hover: #e6e9ee;
   --dp-line: #dfe3eb; /* slate-100 */
   --dp-line-strong: #cfd5e2; /* slate-150 */
   --dp-pop: #fff;
@@ -199,11 +194,8 @@
   --dp-shadow-pop:
     0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
   --dp-backdrop: rgb(24 28 37 / 0.16);
-  /* 磨りガラス (下の「磨りガラス」)。地を 90% 残すと、裏が黒くても控えた字・主の色の字が 4.5 以上 */
-  --dp-glass-tint: rgb(255 255 255 / 0.9);
-  --dp-glass-solid: #fff;
-  --dp-glass-filter: blur(20px) saturate(1.8);
-  --dp-glass-rim: rgb(24 28 37 / 0.1);
+  --dp-shadow-up:
+    0 -1px 2px rgb(24 28 37 / 0.06), 0 -8px 24px rgb(24 28 37 / 0.1);
   --pico-form-element-background-color: #fff;
   --pico-form-element-border-color: var(--dp-line-strong);
   --pico-table-border-color: var(--dp-line);
@@ -234,8 +226,6 @@
   --dp-bg: #0b0c0f;
   --dp-surface: #121318;
   --dp-subtle: #1a1b20;
-  --dp-row: #16171c;
-  --dp-row-hover: #1f2127;
   --dp-line: #26282e;
   --dp-line-strong: #3a3d46;
   /*
@@ -263,14 +253,7 @@
   --dp-shadow-pop:
     0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
   --dp-backdrop: rgb(0 0 0 / 0.45);
-  /*
-     * 磨りガラス。暗いほうは裏を 70% の明るさに落としてから面を重ねる。白い裏でも控えた字が 4.5 以上
-     * (面の色は `--dp-surface` と同じ)
-     */
-  --dp-glass-tint: rgb(18 19 24 / 0.84);
-  --dp-glass-solid: var(--dp-surface);
-  --dp-glass-filter: blur(20px) saturate(1.6) brightness(0.7);
-  --dp-glass-rim: rgb(255 255 255 / 0.1);
+  --dp-shadow-up: 0 -1px 2px rgb(0 0 0 / 0.4), 0 -8px 24px rgb(0 0 0 / 0.5);
   --pico-form-element-background-color: var(--dp-bg);
   --pico-form-element-active-background-color: var(--dp-surface);
   --pico-form-element-selected-background-color: var(--dp-line);
@@ -1145,7 +1128,7 @@ a.button {
   box-shadow: none;
 }
 [role="group"].segmented > :is(button, a.button):hover {
-  --pico-background-color: var(--dp-row-hover, var(--dp-subtle));
+  --pico-background-color: var(--dp-hover-soft);
   --pico-border-color: transparent;
   --pico-color: var(--pico-secondary-hover);
 }
@@ -1363,7 +1346,8 @@ button.text-button:hover {
   --dp-hover: var(--dp-pop-hover);
   background: var(--dp-pop);
   color: var(--pico-color);
-  border: 1px solid var(--dp-line);
+  /* 縁は付けず、影 (`--dp-shadow-pop`) だけで浮かせる (docs/design.md) */
+  border: 0;
   box-shadow: var(--dp-shadow-pop);
   outline: none;
   position-try-fallbacks: flip-block;
@@ -1461,59 +1445,17 @@ button.text-button:hover {
   cursor: not-allowed;
   opacity: 0.5;
 }
-/*
- * ---- 磨りガラス ----
- * **ぼかすのは、動く中身の上で字を読ませる箱だけ** — 映像の上のメニュー (速さ・再生の設定 `.overlay-menu`) と、
- * 一覧の上に重なる下のタブ (`.glass`)。ぼかし (`backdrop-filter`) は描くたびに裏を写し取ってぼかすので、
- * 置いた数だけ重い (車のタブレットで観ながら使う)。
- *
- * ダイアログ・検索の候補・ボタンはぼかさない (透かさない面と影、ボタンは暗い丸)。照り・内側の光の縁も付けない —
- * 試したら安っぽく見え、重さのわりに読みやすさが変わらなかった (#1082)。縁は細い線 1 本だけ。
- *
- * 透かしを減らす設定 (`prefers-reduced-transparency`) と、ぼかせないブラウザでは透かさない面 (`--dp-glass-solid`)
- */
-.overlay-menu {
-  /*
-     * テーマにかかわらず暗い面。裏を 75% の明るさに落としてから黒 70% を重ねる。
-     * 真っ白な映像の上でも白い字で 7:1 ほど、控えた字 (白 72%) で 4.7:1 ほど
-     */
-  --dp-glass-tint: rgb(20 21 25 / 0.7);
-  --dp-glass-solid: #141519;
-  --dp-glass-filter: blur(16px) saturate(1.5) brightness(0.75);
-  --dp-glass-rim: rgb(255 255 255 / 0.14);
-}
-.glass,
-.overlay-menu {
-  border: 1px solid var(--dp-glass-rim);
-  background: var(--dp-glass-solid);
-}
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .glass,
-  .overlay-menu {
-    background: var(--dp-glass-tint);
-    -webkit-backdrop-filter: var(--dp-glass-filter);
-    backdrop-filter: var(--dp-glass-filter);
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  .glass,
-  .overlay-menu {
-    background: var(--dp-glass-solid);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
 
 /*
  * 映像の上のメニュー (速さの `OverlayMenu`・再生の設定の `SettingsMenu`)。
  * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。
  *
- * **面はテーマにかかわらず暗い磨りガラス** (YouTube やテレビのプレイヤーと同じ。上の「磨りガラス」)。
- * 後ろの映像が透けて、どこに被さっているかが分かる。
- * 選んでいる選択肢は白を薄く敷く (主の色 (青) はリンクとフォーカスだけ)。ページのメニューは今までどおり
+ * **面はテーマにかかわらず暗く、透かさない。縁は付けず、近い影と遠い影の 2 段で浮かせる** (docs/design.md)。
+ * 透かしもぼかしも使わない — 明るい映像の上でも字の濃さが変わらず、ぼかしの重さも無い (車のタブレットで観ながら使う)。
+ * 選んでいる選択肢は、ほかの選んでいるものと同じく塗らずに左の縦線と太字。色は映像の上のボタンのオンと同じ空色
  */
 .overlay-menu {
-  --dp-hover: rgb(255 255 255 / 0.12);
+  --dp-hover: rgb(255 255 255 / 0.1);
   --dp-line: rgb(255 255 255 / 0.14);
   --dp-muted: rgb(255 255 255 / 0.72);
   --pico-color: #fff;
@@ -1521,14 +1463,29 @@ button.text-button:hover {
   width: max-content;
   max-width: min(20rem, 90vw);
   padding: 0.5rem;
+  border: 0;
+  background: #17191e;
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 0.35),
+    0 18px 40px rgb(0 0 0 / 0.45);
   color: #fff;
 }
 .overlay-menu .option {
+  position: relative;
   padding: 0.4rem 0.75rem;
 }
 .overlay-menu .option[data-active] {
-  background: rgb(255 255 255 / 0.2);
-  color: #fff;
+  color: #7dd3fc;
+  font-weight: var(--dp-weight-bold);
+}
+.overlay-menu .option[data-active]::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.5rem;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: currentColor;
 }
 /* 映像の上に出す短い通知 (`StageNote`・追っかけの「エンコード済みを観る」・ライブの「録画のため局を切り替えました」) */
 .stage-note {
@@ -1546,7 +1503,7 @@ button.text-button:hover {
  * 同じクラスを使う。Pico の card (`article`) の区切り (本文の下の線・灰色の footer) は使わず、
  * 押すものは右下に並べるだけ (`.modal-actions`。閉じる・取消は `secondary`、主は塗り)。
  * 後ろの幕はぼかさない (`--dp-backdrop`)。Pico の dialog は全面の幕そのものなので、その地を替える。
- * 箱も透かさない (縁と影で浮かせる)。ぼかすほどの読みにくさが無く、重いだけだった (上の「磨りガラス」)
+ * 箱も透かさない。縁は付けず、影 (`--dp-shadow-pop`) だけで浮かせる (メニュー・検索の候補と同じ。docs/design.md)
  */
 dialog {
   -webkit-backdrop-filter: none;
@@ -1562,7 +1519,7 @@ dialog {
   margin: 0;
   padding: var(--dp-space-5);
   overflow: auto;
-  border: 1px solid var(--dp-line);
+  border: 0;
   border-radius: var(--dp-radius-lg);
   background: var(--dp-surface);
   box-shadow: var(--dp-shadow-pop);
@@ -1596,7 +1553,6 @@ dialog {
     width: 100%;
     max-width: none;
     max-height: calc(100% - 2.5rem);
-    border-width: 1px 0 0;
     border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
     padding-bottom: calc(var(--dp-space-5) + env(safe-area-inset-bottom));
   }

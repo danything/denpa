@@ -503,8 +503,6 @@
     return Math.max(0, parts.past.length - shown);
   });
 
-  /** 最後に詳細を開いた行 (薄く塗って、どれを開いていたかを見せる) */
-  let selectedKey = $state<string | null>(null);
   /** エンコードを待っている・している録画 (動いているものが先) */
   const encoding = $derived(
     data.recordings
@@ -672,11 +670,13 @@
     get nowStatus() {
       return lineStatus;
     },
-    get pickedKey() {
-      return selectedKey;
-    },
-    select(key) {
-      selectedKey = key;
+    get firstLiveKey() {
+      // バー (と時刻) を出せる最初の行。長さの分からない予約はバーが無いので飛ばす (無ければ線を見せる)
+      return (
+        parts.now.find(
+          (item) => item.kind === "res" && item.res.end_at > item.res.start_at,
+        )?.key ?? null
+      );
     },
     deleting,
     cancelable,

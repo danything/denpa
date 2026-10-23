@@ -524,7 +524,7 @@
         下の安全域 (ホームバー) のぶんは内側の余白で避ける
     -->
   {#if showTabbar}
-    <nav class="tabbar glass" aria-label="主な画面" data-testid="tabbar">
+    <nav class="tabbar" aria-label="主な画面" data-testid="tabbar">
       {#each tabs as tab (tab.href)}
         <a
           href={resolve(tab.href)}
@@ -668,22 +668,9 @@
   }
   /*
      * **本文との間に線を引かない** (巻いても出さない)。高さはちょうど 3.5rem。
-     * 下を流れる中身とは、次のぼかし (透けてぼける地) で分かれる。サイドバーとの間も線は引かず、
-     * 地の色か余白で分ける (`app.css` の「地は 1 色」)
+     * **ヘッダーは本文と同じ地に、透かさずに置く** (透かしもぼかしも使わない。docs/design.md)。下を流れる中身は
+     * ヘッダーの地の下に隠れる。サイドバーとの間も線は引かず、地の色か余白で分ける (`app.css` の「地は 1 色」)
      */
-  /*
-     * **ヘッダーは本文と同じ地に置く。** スクロールすると下を流れる中身が
-     * ぼけて透ける (地を 80% にしてぼかす)。ぼかせないブラウザは上の地の色のまま
-     */
-  @supports (
-    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
-  ) {
-    .navbar {
-      background: color-mix(in srgb, var(--dp-bg) 80%, transparent);
-      -webkit-backdrop-filter: saturate(1.8) blur(12px);
-      backdrop-filter: saturate(1.8) blur(12px);
-    }
-  }
   .brand {
     display: flex;
     flex: 1 1 0%;
@@ -792,7 +779,7 @@
     background: var(--dp-bg);
   }
   /*
-     * 画面の下のタブ (狭い幅だけ)。磨りガラス (`.glass`。`app.css`) に上の線 1 本。スクロールすると下の中身が透けてぼける。
+     * 画面の下のタブ (狭い幅だけ)。透かさない地に、上向きの影 (`--dp-shadow-up`) で本文の上に浮かせる (線も透かしも使わない)。
      * 1 つの的は幅を等分し、高さは 3.5rem (アイコンと小さな字)。下の安全域は内側の余白で避ける。
      * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
      * 位置に使う (タブに被らないように)
@@ -804,8 +791,10 @@
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     padding-bottom: env(safe-area-inset-bottom);
-    border-width: 1px 0 0;
+    border: 0;
     border-radius: 0;
+    background: var(--dp-bg);
+    box-shadow: var(--dp-shadow-up);
   }
   .tabbar .tab,
   .tab-more :global(.tab) {

@@ -540,15 +540,13 @@
     position: relative;
   }
   /*
-     * **二段組では、見出しも同じ色の上に載せる** (YouTube と同じ)。見出しの地とぼかしを外す。右の列と見出しの
+     * **二段組では、見出しも同じ色の上に載せる** (YouTube と同じ)。見出しの地を外す。右の列と見出しの
      * 区切りの線は、色の有る無しに関わらず付けない (`PlayerLayout`・`+layout.svelte`)。字はどれも色の上に直に載るが、色の明るさを
      * 抑えてあるので 4.5 以上で読める (`WASH_LUMINANCE`)
      */
   @media (min-width: 768px) {
     :global(html[data-ambient] .navbar) {
       background: transparent;
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
     }
   }
 </style>

@@ -263,8 +263,14 @@ test.describe("元の TS を出す間合い", () => {
     /*
      * 飛びと重なりは、ほぼ無い。手元 (Xvfb の上で headed) で 150 回の切り替わりのうち、直す前は
      * 重なり 9・飛び 8、直した後は 0・0 (ヘッドレスで 2・1)。CI は混むので少し余裕を持たせる。
-     * rAF が来なかった回 (`missed`) のぶん進んだのは飛びに数えない (`cadence`)
+     * rAF が来なかった回 (`missed`) のぶん進んだのは飛びに数えない (`cadence`)。
+     *
+     * **rAF が来ない回が多いほど、前後の回もずれる** (ページが止められている)。CI で落ちたときは 150 回のうち
+     * 来なかった回が 19〜53 で、重なりと飛びはその 4 分の 1 ほど。映像は 256x144 なので描く手間ではなく、
+     * ランナーの混み具合。来なかった回の 4 分の 1 までは余裕に足す (直す前の手元の 17 は、来なかった回が少なくても超える)
      */
-    expect(result.repeats + result.skips).toBeLessThanOrEqual(8);
+    expect(result.repeats + result.skips).toBeLessThanOrEqual(
+      8 + Math.floor(result.missed / 4),
+    );
   });
 });

@@ -2,7 +2,7 @@
   /**
      * 映像に重ねる操作列。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
      *
-     * - **黒いぼかしの上に置く。** 明るい映像の上でも読めるように
+     * - **端から濃くなる影の上に置く。** ボタンは塗らないので、明るい映像の上でも読めるように並び全体の裏に敷く
      * - **しばらく触らなければ消える** (`shown`)。映像の上に居座るものなので、
      *   見ている間は引っ込んでいるほうがいい
      * - 消えている間は押せなくする (`pointer-events: none`)。見えないものが
@@ -70,16 +70,12 @@
   } = $props();
 
   /**
-   * **敷くのは下端だけ。**
+   * **影は下端と右端の両方に敷く** (ボタンは塗らない。docs/design.md)。
    *
-   * 下は映像の幅いっぱいに渡るので、まっすぐ上へ流せば端が出ない。文字 (時刻・
-   * 番組名) を載せるのもこちらなので、明るい映像の上でも読めるように要る。
-   *
-   * **右端には敷かない。** 載っているのは丸いボタンだけで、そのひとつずつが
-   * 既に黒く敷いてある (`OVERLAY`)。全体にも敷くと、映像の上に**四角い影が
-   * 貼り付いて**見える — 直線のぼかしは色の変わり目が一方向にしか進まない
-   * ので、横へ流せば下端が、斜めへ流せば左端と下端が直線で切れる。
-   * 角から丸く散らす手もあるが、要らないものを丁寧に薄くしているだけだった
+   * 下は映像の幅いっぱいに渡るので、まっすぐ上へ流せば端が出ない。文字 (時刻・番組名) を載せるのもこちら。
+   * 右は**舞台の高さいっぱい**に、右の縁から左へ流す。ボタンの所だけの四角に敷くと、映像の上に
+   * 四角い影が貼り付いて見えた (直線のぼかしは変わり目が一方向にしか進まず、下の端が直線で切れる)。
+   * 縁から縁まで渡せば切れ目が出ない。影の帯は押せない (下の映像を押せる)。押せるのは中のボタンだけ
    */
 </script>
 
@@ -109,6 +105,8 @@
   .side {
     top: 0;
     right: 0;
+    bottom: 0;
+    pointer-events: none;
     display: flex;
     /* 縦に積む (車のタブレットで指が届く右の縁。上の説明)。横一行に直さない */
     flex-direction: column;
@@ -118,13 +116,55 @@
     /* 角に寄せる (上と右の空きは 8px)。丸が角から離れて浮いて見えないように */
     padding: 0.5rem;
   }
+  .side > :global(*) {
+    pointer-events: auto;
+  }
+  .side.away > :global(*) {
+    pointer-events: none;
+  }
+  .side::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: -1;
+    width: 7.5rem;
+    background: linear-gradient(to left, rgb(0 0 0 / 0.62), transparent);
+    pointer-events: none;
+  }
 
   .bottom {
     left: 0;
     right: 0;
     bottom: 0;
-    padding: 2rem 0.75rem 0.75rem;
-    background: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent);
+    padding: 2.5rem 0.75rem 0.75rem;
+    background: linear-gradient(
+      to top,
+      rgb(0 0 0 / 0.82),
+      rgb(0 0 0 / 0.55) 55%,
+      transparent
+    );
+  }
+  /*
+   * 透かしを減らす設定では、影を濃くする (中のボタンの所はほとんど透けない)。まったく透かさない帯にすると、
+   * 操作バーが出ている間だけ映像の右端と下端が四角く欠けて見えるので、端へ向かって消えていくのは残す
+   */
+  @media (prefers-reduced-transparency: reduce) {
+    .bottom {
+      background: linear-gradient(
+        to top,
+        rgb(20 21 25 / 0.95),
+        rgb(20 21 25 / 0.85) 60%,
+        transparent
+      );
+    }
+    .side::before {
+      background: linear-gradient(
+        to left,
+        rgb(20 21 25 / 0.95),
+        rgb(20 21 25 / 0.85) 50%,
+        transparent
+      );
+    }
   }
   :global(.stage[data-compact]) .bottom {
     padding: 1rem 0.375rem 0.375rem;

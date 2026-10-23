@@ -77,7 +77,7 @@
   overflow-wrap: anywhere;
 }
 /*
- * ルール名のリンクは淡い地向けの主の色。行に指を乗せると地が一段濃くなり (`--dp-row-hover`)、
+ * ルール名のリンクは淡い地向けの主の色。行に指を乗せると地が薄く塗られ、
  * Pico の主の色のままでは 4.5:1 に届かなかった (#0172ad / #e6e9ee で 4.3)
  */
 .board .row-meta a {
@@ -273,10 +273,33 @@
 /* 進み具合は行の下端いっぱいに敷く */
 .board .row-bar {
   position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 0.25rem;
-  border-radius: 0;
+  inset-inline: 0.75rem;
+  bottom: 0.25rem;
+  height: 3px;
+  border-radius: 2px;
+}
+/*
+ * **録画中のいちばん上の行は、バーの先に「いま」の時刻** (`TimelineRow`。録画中は「いま」の線を別に引かない)。
+ * 時刻は行の中に置く (はみ出さないよう、両端はバーの端から内に寄せる)。そのぶん行の下を空け、3 段目の字と重ねない
+ */
+.board .t-row:has(> .row-bar-now) {
+  padding-bottom: 1.375rem;
+}
+.board .row-bar-now {
+  position: absolute;
+  bottom: calc(0.25rem + 3px + 0.125rem);
+  left: clamp(
+    1.5rem,
+    calc(0.75rem + (100% - 1.5rem) * var(--done)),
+    calc(100% - 1.5rem)
+  );
+  transform: translateX(-50%);
+  color: var(--dp-rec-text);
+  font-size: 0.6875rem;
+  font-weight: var(--dp-weight-bold);
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .board .row-bar.success {
   --pico-progress-color: var(--dp-ok);
@@ -446,8 +469,8 @@
 }
 
 /*
- * **行。** 幅いっぱいの 2 段の塊。線も枠も影も無く、淡い地 (`--dp-row`。地との差は L で 5 ほど) と角の丸みと 6px の間で 1 本ずつに見せる
- * 触れると一段濃く、最後に詳細を開いた行 (`.picked`) はもう一段。
+ * **行。** 幅いっぱいの 2 段の件。**ふだんは地も線も枠も影も無く、件の間の余白で 1 本ずつに見せる** (docs/design.md の「何行かある一覧」)。
+ * 指を乗せると件全体 (右端のボタンまで) の地をごく薄く変え、ひとまとまりだと見せる。
  *
  * - 1段目: 時刻 · 番組名、右に押すもの
  * - 2段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の頭 (残りの幅を埋め、「…」で切る)
@@ -471,37 +494,12 @@
   margin: 0;
   padding: 0.5rem 0.75rem;
   border-radius: var(--dp-radius);
-  background: var(--dp-row);
+  background: transparent;
   transition: background-color var(--dp-duration);
 }
 .board .t-row:hover,
 .board .group-head:hover {
-  background: var(--dp-row-hover);
-}
-/*
- * 詳細を開いている行。**塗りは行の塊のまま、左の主の色の縦線と主の色の題名で示す** (ほかの選んでいるものと同じ。
- * 塗りを一段濃くしていた頃は、指を乗せた行とほとんど見分けが付かなかった)
- */
-.board .t-row.picked::after {
-  content: "";
-  position: absolute;
-  z-index: 1;
-  inset-block: 0.625rem;
-  left: 0;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--pico-primary);
-  pointer-events: none;
-}
-.board .t-row.picked .row-name {
-  color: var(--dp-primary-text);
-  font-weight: var(--dp-weight-bold);
-}
-.board .t-row.live {
-  background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row));
-}
-.board .t-row.live:hover {
-  background: color-mix(in srgb, var(--dp-rec) 12%, var(--dp-row-hover));
+  background: var(--dp-hover-soft);
 }
 .board .t-row .row-body {
   display: flex;
@@ -894,6 +892,13 @@
   font-size: 0.6875rem;
   font-weight: var(--dp-weight);
 }
+/*
+ * 日のマス。**印は 1 つの意味に 1 つ** (docs/design.md):
+ * - 行のある日は点 (控えた色)。字の濃さは変えない (点と字の 2 つで同じことを言わない)
+ * - 今日は太字と赤い点 (「いま」の線と同じ赤)。行があっても点は 1 つ
+ * - 選んでいる日は主の色の下線と主の色の太字 (ほかの選んでいるものと同じ。塗らない)。下線が点の代わり
+ * 行の無い日 (今日を除く) は押せない (読み上げには aria-disabled)。見た目は同じで、指を乗せても塗らない
+ */
 .board .cal-day {
   position: relative;
   display: flex;
@@ -907,20 +912,15 @@
   border-radius: var(--dp-radius);
   background: transparent;
   box-shadow: none;
-  color: var(--dp-muted);
+  color: var(--dp-fg);
   font-size: 0.8125rem;
   font-weight: var(--dp-weight);
   transition: background-color var(--dp-duration);
 }
-/* 行の無い日は沈めて押せない (読み上げには aria-disabled) */
 .board .cal-day[aria-disabled="true"] {
-  opacity: 0.5;
   cursor: default;
 }
-.board .cal-day.has {
-  color: var(--dp-fg);
-}
-.board .cal-day.has::after {
+.board .cal-day:is(.has, .today)::after {
   content: "";
   position: absolute;
   bottom: 0.3125rem;
@@ -928,34 +928,30 @@
   width: 0.25rem;
   height: 0.25rem;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--dp-muted);
   transform: translateX(-50%);
 }
 .board .cal-day:not([aria-disabled="true"]):hover {
   background: var(--dp-hover-soft);
 }
-/*
- * **選んでいる日は白黒を反転した角丸の塗り。** 薄い塗りだった頃は、どの日を選んでいるかが読みにくかった。
- * 形はほかの日の指を乗せたときの塗りと同じ角丸に揃える (今日だけ丸にしない)
- */
-.board .cal-day.pinned,
-.board .cal-day.pinned:not([aria-disabled="true"]):hover {
-  background: var(--dp-fg);
-  color: var(--dp-bg);
-  font-weight: var(--dp-weight-bold);
-  opacity: 1;
-}
-/*
- * 今日は太字に、同じ角丸の細い枠。**色は足さない** — 赤の丸は目立ちすぎた。選んでいるときは上の塗りになる
- * (行が無くても押せる)
- */
 .board .cal-day.today {
-  color: var(--dp-fg);
   font-weight: var(--dp-weight-bold);
-  opacity: 1;
-  box-shadow: inset 0 0 0 1px var(--dp-muted);
 }
-.board .cal-day.today.pinned {
-  box-shadow: none;
-  color: var(--dp-bg);
+.board .cal-day.today::after {
+  background: var(--dp-rec);
+}
+.board .cal-day.pinned {
+  color: var(--dp-primary-text);
+  font-weight: var(--dp-weight-bold);
+}
+.board .cal-day.pinned::after {
+  content: "";
+  position: absolute;
+  bottom: 0.25rem;
+  left: 50%;
+  width: 1rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--pico-primary);
+  transform: translateX(-50%);
 }
