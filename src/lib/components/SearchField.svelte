@@ -328,7 +328,7 @@
   }
   /*
      * **欄の形は虫眼鏡と字と `/` の印だけ。** 欄そのものの線は外し、包んだ `form` に引く (虫眼鏡も欄の中に見せる)。
-     * ほかの入力欄と同じく**囲まず下の線だけ** (`app.css` の「入力欄」)。字を打っている間は主の色の 2px
+     * ほかの入力欄と同じく**凹ませて下の線** (`app.css` の「入力欄」)。字を打っている間は下の線を主の色の 2px
      */
   .search-field {
     display: flex;
@@ -341,13 +341,16 @@
     padding-inline: var(--dp-space-3) var(--dp-space-2);
     border: 0;
     border-bottom: 1px solid var(--dp-input-line);
-    border-radius: 0;
-    background: transparent;
+    border-radius: var(--dp-radius) var(--dp-radius) 0 0;
+    background: var(--dp-input-well);
+    box-shadow: var(--dp-input-inset);
     color: var(--dp-muted);
   }
   .search-field:focus-within {
     border-bottom-color: var(--pico-primary);
-    box-shadow: inset 0 -1px 0 var(--pico-primary);
+    box-shadow:
+      var(--dp-input-inset),
+      inset 0 -1px 0 var(--pico-primary);
   }
   /* Pico の role=search は中の物を等分に伸ばす。欄だけを伸ばし、虫眼鏡と印は字の幅のまま */
   .search-field > :global(*) {

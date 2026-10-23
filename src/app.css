@@ -191,7 +191,9 @@
   --dp-raise-hover:
     0 2px 4px rgb(24 28 37 / 0.16), 0 8px 18px rgb(24 28 37 / 0.14);
   --dp-raise-active: 0 1px 1px rgb(24 28 37 / 0.14);
-  /* 入力欄の下の線。地に対して 3:1 以上 */
+  /* 入力欄。凹み (少し暗い地と、上の縁の内側の影) と下の線。線は地に対して 3:1 以上 */
+  --dp-input-well: #f4f5f8;
+  --dp-input-inset: inset 0 1px 2px rgb(24 28 37 / 0.1);
   --dp-input-line: #8a93a6;
   --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
   --dp-shadow-pop:
@@ -253,6 +255,9 @@
     0 8px 20px rgb(0 0 0 / 0.5);
   --dp-raise-active:
     inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 1px rgb(0 0 0 / 0.5);
+  /* 暗いほうは地より暗くして凹ませる */
+  --dp-input-well: #07080a;
+  --dp-input-inset: inset 0 1px 2px rgb(0 0 0 / 0.6);
   --dp-input-line: #666d7d;
   --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
   --dp-shadow-pop:
@@ -1007,9 +1012,10 @@ a.button {
 
 /* ---- 入力欄 ---- */
 /*
- * **入力欄は囲まず、下の線だけ** (docs/design.md)。線は地に対して 3:1 以上 (`--dp-input-line`)。
- * 字を打っている間 (焦点) は線を主の色の 2px にする。外側の焦点の線は引かない (線そのものが焦点の印)。
- * 地は塗らないので、地・面・メニューのどの上でも同じに見える。入力欄とつなげたボタンも同じ高さのまま並ぶ
+ * **入力欄は凹ませる** (docs/design.md の「奥行き」。押すものは浮かせ、書き込むものは凹ませる)。
+ * 少し暗い地 (`--dp-input-well`) と上の縁の内側の影 (`--dp-input-inset`) でくぼませ、枠では囲まない。
+ * 境目は下の線 (`--dp-input-line`。地に対して 3:1 以上) で示す。凹みの影だけでは境目の濃さが足りない。
+ * 字を打っている間 (焦点) は下の線を主の色の 2px にする。外側の焦点の線は引かない (線そのものが焦点の印)
  */
 :where(
   input:not(
@@ -1022,14 +1028,14 @@ a.button {
   select,
   textarea
 ) {
-  --pico-form-element-background-color: transparent;
-  --pico-form-element-active-background-color: transparent;
+  --pico-form-element-background-color: var(--dp-input-well);
+  --pico-form-element-active-background-color: var(--dp-input-well);
   --pico-form-element-focus-color: transparent;
   --pico-box-shadow: none;
   border-width: 0 0 1px;
   border-color: var(--dp-input-line);
-  border-radius: 0;
-  padding-inline: 0.125rem;
+  border-radius: var(--dp-radius) var(--dp-radius) 0 0;
+  box-shadow: var(--dp-input-inset);
 }
 :where(
   input:not(
@@ -1044,7 +1050,9 @@ a.button {
 ):focus {
   --pico-box-shadow: none;
   border-color: var(--pico-primary);
-  box-shadow: inset 0 -1px 0 var(--pico-primary);
+  box-shadow:
+    var(--dp-input-inset),
+    inset 0 -1px 0 var(--pico-primary);
   outline: none;
 }
 

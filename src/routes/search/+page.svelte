@@ -277,7 +277,7 @@
             <h2 id="recent-head">最近の検索</h2>
             <button
               type="button"
-              class="link-button small"
+              class="link-button small ghost"
               onclick={clearRecent}
               data-testid="recent-clear">履歴を消す</button
             >
@@ -718,7 +718,7 @@
   {#if !expanded[key] && received > FIRST}
     <button
       type="button"
-      class="link-button small more"
+      class="link-button small ghost more"
       onclick={() => (expanded = { ...expanded, [key]: true })}
       data-testid="search-more-{key}"
     >
