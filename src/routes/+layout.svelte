@@ -806,7 +806,7 @@
     border-radius: 0;
     background: transparent;
     box-shadow: none;
-    color: var(--dp-muted);
+    color: inherit;
     font-size: 0.6875rem;
     line-height: 1.2;
     text-decoration: none;
