@@ -559,18 +559,25 @@
     margin: 0;
   }
   /*
-     * **スマホでは帯を画面の下、タブのすぐ上に貼り付ける** (押すものは指の届く下に)。
+     * **スマホでは帯を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に)。下のタブと同じ操作の層なので、
+     * 同じ半透明のカプセル (`--dp-float`) にして、読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
      * 一覧の最後の行が帯に隠れないよう、帯の高さぶん下を空ける
      */
   @media (max-width: 639.98px) {
     .rules-bar {
       position: fixed;
-      inset-inline: 0;
-      bottom: var(--dp-tabbar, 0px);
+      inset-inline: 0.75rem;
+      bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
       z-index: 30;
-      padding: var(--dp-space-2) var(--dp-gutter);
-      border-top: 1px solid var(--dp-line);
-      background: var(--dp-bg);
+      padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
+        var(--dp-space-3);
+      border-radius: 1.375rem;
+      background: var(--dp-float);
+      box-shadow: var(--dp-shadow-pop);
+      transition: transform var(--dp-duration) var(--dp-ease);
+    }
+    :global([data-retract]) .rules-bar {
+      transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
     }
     .rules-list {
       padding-bottom: 3.5rem;

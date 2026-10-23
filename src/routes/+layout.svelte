@@ -33,7 +33,8 @@
   onMount(() => startOffline());
 
   /*
-   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送るとヘッダーと下のタブを隠し、上へ戻すと出す。
+   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると狭い画面の下のタブ (とホームの頭の1行) を隠し、上へ戻すと出す。
+   * 広い画面のヘッダーは引っ込めない (検索の欄を見せたまま)。
    * 中身の巻き取りは窓のこともあれば画面の中の箱 (ホームの一覧など) のこともあるので、
    * 文書の `scroll` を捕まえ (`capture`)、窓の半分より低い箱 (チップの横の並びなど) は数えない
    */
@@ -41,11 +42,11 @@
   onMount(() => {
     const last = new WeakMap<Element, number>();
     const onScroll = (e: Event) => {
-      const el =
-        e.target === document ? document.scrollingElement : e.target;
+      const el = e.target === document ? document.scrollingElement : e.target;
       if (!(el instanceof Element) || el.clientHeight < innerHeight / 2) return;
       const y = el.scrollTop;
-      const prev = last.get(el) ?? y;
+      // 窓の巻き取りは 0 から始まる。画面の中の箱は最初の巻き (今の時刻へ飛ぶなど) を起点にする
+      const prev = last.get(el) ?? (el === document.scrollingElement ? 0 : y);
       last.set(el, y);
       if (y < 48) retract = false;
       else if (y - prev > 4) retract = true;
@@ -696,8 +697,7 @@
   }
   /*
      * **本文との間に線を引かない** (巻いても出さない)。高さはちょうど 3.5rem。
-     * **ヘッダーは本文と同じ地に、透かさずに置く** (透かしもぼかしも使わない。docs/design.md)。下を流れる中身は
-     * ヘッダーの地の下に隠れる。サイドバーとの間も線は引かず、地の色か余白で分ける (`app.css` の「地は 1 色」)
+     * 広い画面では中身の上に浮かせる (下の 640px からの所)。サイドバーとの間も線は引かず、地の色か余白で分ける (`app.css` の「地は 1 色」)
      */
   .brand {
     display: flex;
@@ -801,14 +801,10 @@
     background: var(--dp-bg);
   }
   /*
-     * 画面の下のタブ (狭い幅だけ)。透かさない地に、上向きの影 (`--dp-shadow-up`) で本文の上に浮かせる (線も透かしも使わない)。
-     * 1 つの的は幅を等分し、高さは 3.5rem (アイコンと小さな字)。下の安全域は内側の余白で避ける。
-     * いまの画面は主の色の字。タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の
-     * 位置に使う (タブに被らないように)
-     */
-  /*
-   * **操作の層** (docs/design.md)。左右と下から離したカプセルにして、中身の上に浮かせる。
-   * 面は地を 86% 残した半透明 (ぼかさない)。下を流れる中身がうっすら見える。
+   * 画面の下のタブ (狭い幅だけ)。**操作の層** (docs/design.md)。1 つの的は幅を等分する。
+   * タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の位置に使う (タブに被らないように)。
+   * 左右と下から離したカプセルにして、中身の上に浮かせる。
+   * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。下を流れる中身がうっすら見える。
    * 角は入れ子でそろえる: 外 (2rem) = 中のタブ (1.75rem) + 間の余白 (0.25rem)
    */
   .tabbar {
@@ -820,19 +816,12 @@
     padding: 0.25rem;
     border: 0;
     border-radius: 2rem;
-    background: color-mix(in srgb, var(--dp-bg) 86%, transparent);
+    background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration) var(--dp-ease);
   }
   .shell[data-retract] .tabbar {
-    transform: translateY(
-      calc(100% + 0.5rem + env(safe-area-inset-bottom))
-    );
-  }
-  @media (prefers-reduced-transparency: reduce) {
-    .tabbar {
-      background: var(--dp-bg);
-    }
+    transform: translateY(calc(100% + 0.5rem + env(safe-area-inset-bottom)));
   }
   .tabbar .tab,
   .tab-more :global(.tab) {
@@ -990,7 +979,7 @@
     }
     /*
      * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / 0.75rem 離した角の丸い帯にして、中身の上に浮かせる。
-     * 面は地を 86% 残した半透明 (ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、巻くと下を流れる。
+     * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、巻くと下を流れる。
      * 角は入れ子でそろえる: 外 (0.875rem) = 中のボタン (`--dp-radius` 0.5rem) + 間の余白 (0.375rem)
      */
     :global(:root) {
@@ -1006,12 +995,8 @@
       min-height: 3.25rem;
       padding: 0.375rem 0.375rem 0.375rem 0.75rem;
       border-radius: 0.875rem;
-      background: color-mix(in srgb, var(--dp-bg) 86%, transparent);
+      background: var(--dp-float);
       box-shadow: var(--dp-shadow-pop);
-      transition: transform var(--dp-duration) var(--dp-ease);
-    }
-    .shell[data-retract] .navbar {
-      transform: translateY(calc(-100% - 2.5rem));
     }
     .navbar {
       display: grid;

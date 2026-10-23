@@ -753,7 +753,9 @@ test.describe("ホームの1本の一覧", () => {
             const top =
               box === null
                 ? Number.parseFloat(getComputedStyle(node).top) || 0
-                : box.getBoundingClientRect().top;
+                : // 頭は箱の内側の余白の下 (浮いたヘッダーのぶん空けてある)
+                  box.getBoundingClientRect().top +
+                  Number.parseFloat(getComputedStyle(box).paddingTop);
             const head = node.getBoundingClientRect();
             const line = [
               ...list.querySelectorAll<HTMLElement>("[data-key]"),
@@ -867,7 +869,12 @@ test.describe("ホームの1本の一覧", () => {
         // 見出しは一覧の頭にあり、カレンダーはその日を頭の日として塗る
         const top = await page
           .getByTestId("timeline")
-          .evaluate((list) => list.getBoundingClientRect().top);
+          // 頭は一覧の内側の余白の下 (浮いたヘッダーのぶん空けてある)
+          .evaluate(
+            (list) =>
+              list.getBoundingClientRect().top +
+              Number.parseFloat(getComputedStyle(list).paddingTop),
+          );
         expect(Math.abs((await head.boundingBox())!.y - top)).toBeLessThan(2);
         await expect(cell).toHaveClass(/pinned/);
         // 行の無い日 (いちばん古い日の前の日) は押せない

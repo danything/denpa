@@ -98,6 +98,12 @@
   --dp-space-6: 2rem;
   /* 何行かある一覧の件と件の間。枠も地も線も無いので、件の中 (2px) よりはっきり離して境目にする */
   --dp-list-gap: 0.875rem;
+  /*
+   * **操作の層の面** (ヘッダー・下のタブ。docs/design.md の「中身の層と操作の層」)。メニューと同じ面 (`--dp-pop`) を
+   * 92% 残して、下を流れる中身をうっすら見せる。ぼかさない。暗いほうは面が地より明るいので、影が見えなくても縁が分かる。
+   * 透かしを減らす設定では透かさない (下)
+   */
+  --dp-float: color-mix(in srgb, var(--dp-pop) 92%, transparent);
   /* 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない) */
   --dp-text-xs: 0.75rem;
   --dp-text-sm: 0.875rem;
@@ -169,7 +175,6 @@
  * - `--dp-shadow` … 持ち上げた面の影 (リモコン。ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
  * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)。
  *   箱は縁と影 (`--dp-shadow-pop`) で浮かせる
- * - `--dp-shadow-up` … 下の端に貼り付くもの (画面の下のタブ) の上向きの影
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
@@ -196,11 +201,9 @@
   --dp-shadow-pop:
     0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
   --dp-backdrop: rgb(24 28 37 / 0.16);
-  --dp-shadow-up:
-    0 -1px 2px rgb(24 28 37 / 0.06), 0 -8px 24px rgb(24 28 37 / 0.1);
   --pico-form-element-background-color: #fff;
   --pico-form-element-border-color: var(--dp-line-strong);
-  --pico-table-border-color: var(--dp-line);
+  --pico-table-border-color: transparent;
   --pico-muted-border-color: var(--dp-line);
   /*
      * **押せるが主ではないもの**(日送り・選んでいない種別)。Pico の既定の灰色は
@@ -255,12 +258,11 @@
   --dp-shadow-pop:
     0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
   --dp-backdrop: rgb(0 0 0 / 0.45);
-  --dp-shadow-up: 0 -1px 2px rgb(0 0 0 / 0.4), 0 -8px 24px rgb(0 0 0 / 0.5);
   --pico-form-element-background-color: var(--dp-bg);
   --pico-form-element-active-background-color: var(--dp-surface);
   --pico-form-element-selected-background-color: var(--dp-line);
   --pico-form-element-border-color: var(--dp-line-strong);
-  --pico-table-border-color: var(--dp-line);
+  --pico-table-border-color: transparent;
   --pico-muted-border-color: var(--dp-line);
   /* Pico の既定は slate の段のままなので、カード・スイッチ・つまみ・進み具合も同じ段に寄せる */
   --pico-card-background-color: var(--dp-surface);
@@ -395,6 +397,10 @@ html,
 body {
   height: 100%;
 }
+/* 窓ごと巻く画面で飛んだ先 (`#節`) が、浮いたヘッダー (`--dp-header-space`。広い画面だけ) の下に隠れないように */
+html {
+  scroll-padding-top: var(--dp-header-space, 0px);
+}
 /* 番組の詳細のフェードの濃さ (`ProgramDetail`)。数として登録しておくと、スクロールに合わせて滑らかに変わる */
 @property --detail-fade {
   syntax: "<number>";
@@ -497,7 +503,7 @@ td {
   padding: 0.45rem 0.6rem;
 }
 /*
- * 表の見出しは地を塗らず、小さく沈めた字だけ。行の区切りは線 1 本 (`--pico-table-border-color` = `--dp-line`)。
+ * 表の見出しは地を塗らず、小さく沈めた字だけ。行の区切りの線も引かない (`--pico-table-border-color` は透明。行の上下の余白で分ける)。
  * 淡い面に太字だった頃は、見出しの帯が中身より目立っていた
  */
 thead th {
@@ -1478,6 +1484,9 @@ button.text-button:hover {
   .overlay-menu {
     background: #17191e;
   }
+  :root {
+    --dp-float: var(--dp-pop);
+  }
 }
 .overlay-menu .option {
   position: relative;
@@ -1623,7 +1632,7 @@ dialog[open] > article {
 
 /* ---- 設定の並べ方 (設定の画面。`routes/settings`) ---- */
 /*
- * **節は枠で囲まず、見出しと細い線で区切る** (`<div class="sections">` に `<section class="section">` を並べる)。
+ * **節は枠で囲まず、線も引かず、見出しと上下の余白で区切る** (`<div class="sections">` に `<section class="section">` を並べる)。
  * カードを 2 列に積んでいた頃は、目が左右を行き来して、どこまで読んだのか分からなくなった。
  * 左の一覧の隣に左寄せで置く。文と欄だけの節は読みやすい幅で止める (`.readable`)。表のある節は広く使う
  */
@@ -1640,11 +1649,9 @@ dialog[open] > article {
   gap: var(--dp-space-3);
   min-width: 0;
   padding-block: var(--dp-space-5);
-  border-top: 1px solid var(--dp-line);
 }
 .section:first-child {
   padding-top: 0;
-  border-top: 0;
 }
 .section-head {
   display: flex;
@@ -1835,7 +1842,9 @@ dialog[open] > article {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.75rem 0.625rem 1.5rem;
+  /* 画面の上端から始まる列なので、頭に浮いたヘッダーのぶん (`--dp-header-space`。広い画面だけ) を空ける */
+  padding: calc(var(--dp-header-space, 0px) + 0.75rem) 0.625rem 1.5rem;
+  scroll-padding-top: var(--dp-header-space, 0px);
   border: 0;
   background: transparent;
   box-shadow: none;
