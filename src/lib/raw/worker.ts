@@ -608,6 +608,8 @@ const THIN_FIRST = 20_000;
 const THIN_LONGEST = 300_000;
 /** 戻してからこれだけのうちにまた遅れたら、次は長く飛ばす (ms) */
 const THIN_RELAPSE = 10_000;
+/** 裏から戻ってから、捨てたコマ・遅れを数えはじめるまで (ms)。追いつくのに掛かる時間 (I まで飛んでデコードし直す) */
+const BACK_GRACE = 2_000;
 let thinning = false;
 let thinUntil = 0;
 let thinHold = THIN_FIRST;
@@ -615,8 +617,27 @@ let thinOffAt = Number.NEGATIVE_INFINITY;
 let thinCheckAt = 0;
 let thinDropped = 0;
 
+/**
+ * 飛ばすのをやめて、数え直す。局を変えたとき (`reset`) と、裏から戻ったとき。
+ * **戻った直後は追いつくまでコマを捨てる** (飛び先の I まで捨て、番を過ぎたものも捨てる) ので、それを
+ * 「間に合っていない」と数えると、戻るたびに B を飛ばしはじめていた。`grace` (ms) のあいだは数えない
+ */
+function resetThin(grace = 0): void {
+  if (thinning) decoder?._dec_skip(0);
+  thinning = false;
+  thinHold = THIN_FIRST;
+  thinOffAt = Number.NEGATIVE_INFINITY;
+  thinCheckAt = performance.now() + grace;
+  thinDropped = dropped;
+}
+
 function thin(decoder: Decoder, late: number): void {
   const wall = performance.now();
+  // 裏から戻った直後 (`resetThin` の `grace`)。追いつくまでに捨てたコマは数えない
+  if (wall < thinCheckAt) {
+    thinDropped = dropped;
+    return;
+  }
   if (wall - thinCheckAt < 1000) return;
   const lost = dropped - thinDropped;
   thinDropped = dropped;
@@ -704,13 +725,8 @@ function schedule(): void {
 }
 
 function reset(from: number | null): void {
-  // 局が変われば重さも変わる。飛ばすのはやめて、数え直す
-  if (thinning) decoder?._dec_skip(0);
-  thinning = false;
-  thinHold = THIN_FIRST;
-  thinOffAt = Number.NEGATIVE_INFINITY;
-  thinCheckAt = performance.now();
-  thinDropped = dropped;
+  // 局が変われば重さも変わる
+  resetThin();
   demuxer = new PesDemuxer();
   demuxer.audioIndex = audioIndex;
   adts.reset();
@@ -966,6 +982,7 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
       hidden = !message.on;
       // 見えていない間に溜まった遅れは数えない (戻った直後に「間に合っていない」と見ない)
       budget.reset();
+      if (message.on) resetThin(BACK_GRACE);
       break;
   }
 };

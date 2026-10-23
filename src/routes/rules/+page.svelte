@@ -429,7 +429,7 @@
   }
 
   /*
-     * **行は2段の淡い塊** (ホームの行と同じ。`--dp-row`、線も枠も無く、6px 空けて並べる)。触れると一段濃く
+     * **行は2段の件** (ホームの行と同じ。ふだんは地も線も枠も無く、余白で分ける)。触れると件全体をごく薄く塗る
      */
   .rows {
     display: flex;
@@ -447,12 +447,12 @@
     margin: 0;
     padding: 0.5rem 0.75rem;
     border-radius: var(--dp-radius);
-    background: var(--dp-row);
+    background: transparent;
     list-style: none;
     transition: background-color var(--dp-duration);
   }
   .row:hover {
-    background: var(--dp-row-hover);
+    background: var(--dp-hover-soft);
   }
   .row-body {
     display: flex;

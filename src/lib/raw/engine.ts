@@ -567,6 +567,7 @@ export class RawEngine {
          */
         this.canvas.dataset["shown"] = String(message.shown);
         this.canvas.dataset["audio"] = String(this.heard);
+        this.canvas.dataset["thinned"] = String(message.thinned);
         break;
       case "fail":
         this.giveUp(message.reason);

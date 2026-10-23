@@ -27,10 +27,11 @@ export interface HomeContext {
   readonly clock: number;
   /** 「いま」の線に添える一言 (次の録画まで)。次の予約が無ければ null */
   readonly nowStatus: NowStatus | null;
-  /** 最後に詳細を開いた行の鍵 (薄く塗る) */
-  readonly pickedKey: string | null;
-  /** その行を覚える (詳細を開くとき) */
-  select(key: string): void;
+  /**
+   * 進み具合のバーを出せる、いちばん上の録画中の行の鍵 (無ければ null。そのときは「いま」の線を見せる)。**録画中は「いま」をその行の進み具合のバーの先に出す** —
+   * いまは録っている番組の途中なので、別の線を行の下に引かない。時刻を出すのは 1 本だけ
+   */
+  readonly firstLiveKey: string | null;
   /** 削除の2回押し (録画と録り逃しで共用。録り逃しの鍵は負の値) */
   readonly deleting: Arming;
   /** 取り消せる予約か */

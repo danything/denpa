@@ -428,6 +428,12 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await expect
       .poll(() => count("shown"), { timeout: 10_000 })
       .toBeGreaterThan(back + 20);
+    /*
+     * 戻った直後に追いつくまでコマを捨てても、B を飛ばしはじめない (`raw/worker.ts` の `resetThin`)。
+     * 数えはじめるのは戻ってから 2 秒後。飛ばしはじめれば最初は 20 秒続くので、その後の数秒で見える
+     */
+    await page.waitForTimeout(4_000);
+    await expect(canvas).toHaveAttribute("data-thinned", "false");
 
     // `<audio>` を外から止める・再開すると (ロック画面・車の操作)、操作バーも止まる・再開する
     await audio.evaluate((a) => (a as HTMLAudioElement).pause());
