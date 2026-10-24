@@ -1958,8 +1958,8 @@
     font-weight: var(--dp-weight);
   }
   /*
-     * 予約の状態。説明の代わりに太字で出し、前に印を添える (色だけに頼らない):
-     * 予約済みは主の色の ✓、録画中は録画の赤の点、競合は赤い ⚠ (一覧の競合と同じ印)。
+     * 予約の状態。説明の代わりに太字で出す。印は時刻のすぐ後ろに添える (色だけに頼らない。説明の行が切れる短いマスでも見える):
+     * 予約済みは主の色の ✓、録画中は録画の赤の ●、競合は赤い ⚠ (一覧の競合と同じ印)。
      * **競合は予約済みと同じ青にしない** — 青だと「録れる」に見え、チューナーが足りずに落ちる番組を見落とす
      */
   .state {
@@ -1969,16 +1969,25 @@
     font-weight: var(--dp-weight-bold);
     color: var(--dp-primary-text);
   }
-  .program[data-state="scheduled"] .state::before {
-    content: "✓ ";
-  }
-  .program[data-state="recording"] .state::before {
-    content: "● ";
-  }
-  .program[data-state="conflict"] .state::before {
-    content: "⚠ ";
-  }
   .program:is([data-state="recording"], [data-state="conflict"]) .state {
+    color: var(--dp-rec-text);
+  }
+  .program[data-state="scheduled"] .num::after,
+  .program[data-state="recording"] .num::after,
+  .program[data-state="conflict"] .num::after {
+    margin-inline-start: 0.25rem;
+    color: var(--dp-primary-text);
+    font-weight: var(--dp-weight-bold);
+  }
+  .program[data-state="scheduled"] .num::after {
+    content: "✓";
+  }
+  .program[data-state="recording"] .num::after {
+    content: "●";
+    color: var(--dp-rec-text);
+  }
+  .program[data-state="conflict"] .num::after {
+    content: "⚠";
     color: var(--dp-rec-text);
   }
   /*
