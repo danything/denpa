@@ -1625,14 +1625,15 @@
   .service {
     isolation: isolate;
   }
+  /* 操作の1行と同じ高さに並べるので、影は近い影だけ (`--dp-shadow-tight`)。上は操作の1行との隙間 (0.25rem) をそのまま使う */
   .service::before {
     content: "";
     position: absolute;
-    inset: 0.125rem;
+    inset: 0 0.125rem 0.125rem;
     z-index: -1;
     border-radius: 0.875rem;
     background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
+    box-shadow: var(--dp-shadow-tight);
     pointer-events: none;
   }
   .hour {

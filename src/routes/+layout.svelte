@@ -607,7 +607,7 @@
     }
     to {
       background: var(--dp-float);
-      box-shadow: var(--dp-shadow-pop);
+      box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -987,7 +987,7 @@
       padding: 0.375rem 0.375rem 0.375rem 0.75rem;
       border-radius: 0.875rem;
       background: var(--dp-float);
-      box-shadow: var(--dp-shadow-pop);
+      box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
       display: grid;
       grid-template-columns:
         minmax(max-content, 1fr) minmax(8rem, 36rem)
@@ -1060,6 +1060,13 @@
       .shell.fill .navbar {
         animation-timeline: --guide;
       }
+    }
+    /*
+         * 番組表ではヘッダー・操作の1行・局名の面が隙間を詰めて重なるように並ぶ。遠い影を落とすと上の影が下の面に掛かって
+         * 段々に見えるので、3 つとも近い影だけにして同じ高さに並べる (`--dp-shadow-tight`)
+         */
+    .shell.fill:has(.guide-frame) .navbar {
+      --navbar-shadow: var(--dp-shadow-tight);
     }
   }
 </style>

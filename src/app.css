@@ -225,6 +225,8 @@
     0 1px 2px rgb(24 28 37 / 0.08), 0 2px 8px rgb(24 28 37 / 0.06);
   --dp-shadow-pop:
     0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
+  /* 隙間を詰めて並ぶ浮いた面どうし (番組表のヘッダー・操作の1行・局名)。遠い影が隣の面に掛からない近い影だけ */
+  --dp-shadow-tight: 0 1px 3px rgb(24 28 37 / 0.12);
   --dp-backdrop: rgb(24 28 37 / 0.16);
   --pico-form-element-background-color: #fff;
   --pico-form-element-border-color: var(--dp-line-strong);
@@ -274,6 +276,7 @@
   --dp-item-shadow: none;
   --dp-shadow-pop:
     0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
+  --dp-shadow-tight: 0 1px 3px rgb(0 0 0 / 0.45);
   --dp-backdrop: rgb(0 0 0 / 0.45);
   --pico-form-element-background-color: var(--dp-bg);
   --pico-form-element-active-background-color: var(--dp-surface);
@@ -683,7 +686,7 @@ progress.running[value]::-webkit-progress-value {
      * 操作の1行は、ヘッダーと同じ角丸の帯 (`--guide-bar-gap` 離して、中に `--guide-bar-pad` の余白)。
      * 帯の下にも同じだけ空けて、局名の行はその下に付く
      */
-    --guide-bar-gap: calc(var(--dp-header-space) - var(--dp-header-bottom));
+    --guide-bar-gap: 0.25rem;
     --guide-bar-pad: 0.375rem;
     --guide-bar-h: calc(
       var(--guide-bar-gap) * 2 + var(--guide-bar-pad) * 2 + var(--dp-btn-h-sm)
@@ -706,7 +709,7 @@ progress.running[value]::-webkit-progress-value {
     z-index: -1;
     border-radius: 0.875rem;
     background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
+    box-shadow: var(--dp-shadow-tight);
     pointer-events: none;
   }
 }
