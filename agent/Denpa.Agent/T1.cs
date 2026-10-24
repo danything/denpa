@@ -247,8 +247,7 @@ public sealed class T1Protocol
             if (reply is not { } block)
             {
                 if (++errors > MaxRetries) throw new IOException("カードとのやり取りが化け続けます (T=1)");
-                // 誤りの種類: 1 = EDC / パリティ、2 = それ以外
-                toSend = Block((byte)(RBlock | (_nr << 4) | (raw is null ? 2 : 1)), []);
+                toSend = Ready(raw is null ? 2 : 1);
                 continue;
             }
 
@@ -266,14 +265,14 @@ public sealed class T1Protocol
                 {
                     // 前に受けたものの繰り返し。もう一度求め直す
                     if (++errors > MaxRetries) throw new IOException("カードの I ブロックの番号が合いません (T=1)");
-                    toSend = Block((byte)(RBlock | (_nr << 4)), []);
+                    toSend = Ready();
                     continue;
                 }
                 _nr ^= 1;
                 errors = 0;
                 response.AddRange(block.Inf);
                 if ((pcb & 0x20) == 0) return [.. response];
-                toSend = Block((byte)(RBlock | (_nr << 4)), []);
+                toSend = Ready();
             }
             else if ((pcb & 0xC0) == RBlock)
             {
@@ -283,13 +282,12 @@ public sealed class T1Protocol
                     // 連結の途中の I ブロックを受け取った。次を送る
                     _ns ^= 1;
                     errors = 0;
-                    current = NextChunk(command, ref offset);
-                    toSend = current;
+                    toSend = current = NextChunk(command, ref offset);
                     continue;
                 }
                 // 送り直しの求め (こちらが最後に送ったものが届いていない)
                 if (++errors > MaxRetries) throw new IOException("カードが再送を求め続けます (T=1)");
-                toSend = sending ? current : Block((byte)(RBlock | (_nr << 4)), []);
+                toSend = sending ? current : Ready();
             }
             else
             {
@@ -309,12 +307,15 @@ public sealed class T1Protocol
                         throw new IOException("カードがやり取りを打ち切りました (T=1 S(ABORT))");
                     default:
                         if (++errors > MaxRetries) throw new IOException($"カードから予期しない S ブロックが来ました (PCB 0x{pcb:X2})");
-                        toSend = sending ? current : Block((byte)(RBlock | (_nr << 4)), []);
+                        toSend = sending ? current : Ready();
                         break;
                 }
             }
         }
     }
+
+    /// <summary>R ブロック (次に欲しい番号)。<paramref name="error"/> は誤りの種類 (1 = EDC / パリティ、2 = それ以外)</summary>
+    private byte[] Ready(int error = 0) => Block((byte)(RBlock | (_nr << 4) | error), []);
 
     private byte[] NextChunk(byte[] command, ref int offset)
     {

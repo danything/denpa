@@ -302,20 +302,11 @@ public static class Scramble
     /// <summary>掛かったまま録れてしまったものを、後から復号する (<see cref="Descrambler"/>)</summary>
     public static JsonObject Decode(string recorded, string? input, string? output)
     {
+        static JsonObject Failed(string error) => new() { ["ok"] = false, ["error"] = error };
         var source = Inside(recorded, input);
         var target = Inside(recorded, output);
-        if (source is null || target is null)
-        {
-            return new JsonObject { ["ok"] = false, ["error"] = "元のTSの保存先の外にあるファイルは復号できません" };
-        }
-        if (!File.Exists(source))
-        {
-            return new JsonObject
-            {
-                ["ok"] = false,
-                ["error"] = $"{source} が見つかりません。denpa と同じ保存先をこのコンテナにもマウントしてください",
-            };
-        }
+        if (source is null || target is null) return Failed("元のTSの保存先の外にあるファイルは復号できません");
+        if (!File.Exists(source)) return Failed($"{source} が見つかりません。denpa と同じ保存先をこのコンテナにもマウントしてください");
 
         try
         {
@@ -330,16 +321,12 @@ public static class Scramble
              */
             if (b25.Undecodable * 100 > b25.Decoded)
             {
-                return new JsonObject
-                {
-                    ["ok"] = false,
-                    ["error"] = $"{b25.Undecodable} パケットがスクランブルのままです ({b25.LastError ?? "鍵を受け取れませんでした"})",
-                };
+                return Failed($"{b25.Undecodable} パケットがスクランブルのままです ({b25.LastError ?? "鍵を受け取れませんでした"})");
             }
         }
         catch (Exception error)
         {
-            return new JsonObject { ["ok"] = false, ["error"] = error.Message };
+            return Failed(error.Message);
         }
         return new JsonObject { ["ok"] = true, ["error"] = "" };
     }

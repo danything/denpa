@@ -5,39 +5,18 @@ namespace Denpa.Agent;
 /// (PLEX PX-W3U3。ASICEN 系)。**試験的。上流がまだリリースを出していない。**
 ///
 /// <para>
-/// **配布物が無ければ何もしない。** <see cref="Dir"/> に <c>asicend</c> と <c>asicenctl</c> が
-/// 無ければ機材を挙げず、選局もしない。イメージには上流が 0.1.0 を出すまで入らない
-/// (agent/Dockerfile の <c>ASICEN_USERLAND_VERSION=0.0.0</c> が「まだ無い」の印)。
-/// </para>
-///
-/// <para>
-/// **IPC は px4-userland と同じ。** asicen-userland は px4-userland の portable IPC を取り込み、
-/// 枠の頭とソケットの置き場だけ変えている (<see cref="Px4Wire.Asicen"/>)。受信機の取得と返却・選局・
-/// TS・内蔵カードは px4d と同じ経路 (<see cref="Px4Tuner"/> / <see cref="Px4Card"/>) を通す。
-/// 同梱の <c>asicen-ts</c> (1回1チャンネルの CLI) と IFD ハンドラ (<c>libifd-asicen.so</c>) は使わない
-/// (px4-ts と px4-userland の IFD を使わないのと同じ理由。docs/agent.md)。
+/// **配布物が無ければ何もしない** (<see cref="Installed"/>。agent/Dockerfile の <c>ASICEN_USERLAND_VERSION=0.0.0</c> が「まだ無い」の印)。
+/// **IPC は px4-userland と同じ**で、違うのは枠の頭とソケットの置き場だけ (<see cref="Px4Wire.Asicen"/>)。
+/// 受信機・TS・内蔵カードは px4d と同じ経路 (<see cref="Px4Tuner"/> / <see cref="Px4Card"/>) を通す。
+/// 機材は sysfs で見つける (<see cref="Scan"/>。上流に並べる道具がまだ無い)。作りは docs/agent.md「asicen-userland の作り」。
 /// </para>
 ///
 /// <para>
 /// **USB の serial が無いので、ポートで見分ける。** PX-W3U3 は1つの筐体に USB 機能が2つあり
 /// (内蔵ハブの <c>.1</c> と <c>.2</c>)、それぞれに衛星と地上波の受信機が1つずつ。筐体の名前は
-/// 内蔵ハブのポート (<c>1-2</c>) にし、<c>asicend --instance</c> とソケットの置き場にもそのまま使う
-/// (px4-userland の PX-M1UR をポートで見分けるのと同じ考え。Px4.cs)。
+/// 内蔵ハブのポート (<c>1-2</c>) にし、<c>asicend --instance</c> とソケットの置き場にもそのまま使う。
 /// **ポートを変えると別のチューナーになる。** 受信機は上流の決まりどおり <c>0:S, 1:T, 2:S, 3:T</c>。
-/// </para>
-///
-/// <para>
-/// **機材は sysfs で見つける。** 上流の配布物 (bin/ の asicend・asicenctl・asicen-ts) には並べる道具が無く
-/// (<c>asicen-probe</c> は入らない。<c>asicend --list</c> も実機ではまだ並べない)、asicend には USB の
-/// アドレスとポートを自分で渡す決まりなので、<c>/sys/bus/usb/devices</c> の USB ID とアドレスを読む
-/// (siano-userland でカーネルが使っているかを見るのと同じ場所)。見る USB ID は上流の asicend が受け付けるもの
-/// (<c>0b06:0005</c> と、ファームウェア待ちの <c>1738:5211</c> / <c>1738:5216</c>) だけ。
-/// 上流が一覧を出す API を用意したら、そちらに聞くよう変える。
-/// </para>
-///
-/// <para>
 /// 設定の <c>device</c> は <c>asicen:&lt;ポート&gt;:&lt;受信機&gt;</c> (<c>asicen:1-2:1</c>)。
-/// 刺さっていれば <see cref="Detect"/> が組み立てるので、普通は書かなくてよい。
 /// </para>
 /// </summary>
 public static class AsicenUserland
@@ -252,12 +231,7 @@ public static class AsicenUserland
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
-    [
-        .. enclosures.SelectMany(enclosure => enclosure.Receivers
-            .Where(receiver => receiver.Types.Length > 0)
-            .Select(receiver => new TunerSpec(
-                Name(enclosure.Model, enclosure.Id, receiver.Index), receiver.Types, false, Device(enclosure.Id, receiver.Index)))),
-    ];
+        Px4Userland.Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
 
     /// <summary>設定に出てくる筐体。asicend を起こす相手</summary>
     public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);

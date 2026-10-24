@@ -38,18 +38,12 @@ public sealed record TunerSpec(
         var name = item["name"]?.GetValue<string>() ?? "";
         if (name.Length == 0) return null;
 
-        var types = new List<string>();
-        if (item["types"] is JsonArray list)
-        {
-            foreach (var entry in list)
-            {
-                if (entry?.GetValue<string>() is { Length: > 0 } type) types.Add(type);
-            }
-        }
-
+        string[] types = item["types"] is JsonArray list
+            ? [.. list.Select(entry => entry?.GetValue<string>()).OfType<string>().Where(type => type.Length > 0)]
+            : [];
         return new TunerSpec(
             name,
-            [.. types],
+            types,
             item["disabled"]?.GetValue<bool>() ?? false,
             item["device"]?.GetValue<string>(),
             item["lnb"]?.GetValue<string>());
@@ -106,15 +100,7 @@ public sealed class Config(string tunersFile, string channelsFile)
         File.Move(working, path, overwrite: true);
     }
 
-    public List<TunerSpec> LoadTuners()
-    {
-        var found = new List<TunerSpec>();
-        foreach (var node in ReadArray(TunersFile, "tuners"))
-        {
-            if (TunerSpec.FromJson(node) is { } spec) found.Add(spec);
-        }
-        return found;
-    }
+    public List<TunerSpec> LoadTuners() => [.. ReadArray(TunersFile, "tuners").Select(TunerSpec.FromJson).OfType<TunerSpec>()];
 
     /// <summary>
     /// 画面から預かった機材で置き換える。
@@ -134,9 +120,7 @@ public sealed class Config(string tunersFile, string channelsFile)
             return;
         }
 
-        var list = new JsonArray();
-        foreach (var tuner in tuners) list.Add((JsonNode)tuner.ToJson());
-        WriteAtomic(TunersFile, new JsonObject { ["tuners"] = list });
+        WriteAtomic(TunersFile, new JsonObject { ["tuners"] = new JsonArray([.. tuners.Select(tuner => (JsonNode)tuner.ToJson())]) });
         Log.Write($"チューナーの定義を保存しました: {tuners.Count} 台");
     }
 
@@ -203,29 +187,14 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// </summary>
     public JsonArray SaveChannels(JsonArray found, HashSet<string> scanned)
     {
-        var entries = new List<JsonNode>();
-        foreach (var kept in LoadChannels())
-        {
-            if (kept is null) continue;
-            var type = kept["type"]?.GetValue<string>() ?? "";
-            if (!scanned.Contains(type)) entries.Add(kept.DeepClone());
-        }
-        foreach (var entry in found)
-        {
-            if (entry is not null) entries.Add(entry.DeepClone());
-        }
-
-        // 種別ごとにまとまっているほうが読みやすい (画面もこの順で出る)
-        entries.Sort((a, b) =>
-        {
-            var order = TypeOrder(a) - TypeOrder(b);
-            if (order != 0) return order;
-            return string.CompareOrdinal(
-                a["channel"]?.GetValue<string>() ?? "", b["channel"]?.GetValue<string>() ?? "");
-        });
-
-        var merged = new JsonArray();
-        foreach (var entry in entries) merged.Add(entry);
+        var entries = LoadChannels().OfType<JsonNode>()
+            .Where(kept => !scanned.Contains(kept["type"]?.GetValue<string>() ?? ""))
+            .Concat(found.OfType<JsonNode>())
+            .Select(entry => entry.DeepClone())
+            // 種別ごとにまとまっているほうが読みやすい (画面もこの順で出る)
+            .OrderBy(TypeOrder)
+            .ThenBy(entry => entry["channel"]?.GetValue<string>() ?? "", StringComparer.Ordinal);
+        JsonArray merged = [.. entries];
         WriteAtomic(ChannelsFile, merged);
         return merged;
     }

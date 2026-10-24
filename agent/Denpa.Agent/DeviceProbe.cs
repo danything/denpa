@@ -47,21 +47,16 @@ public static class DeviceProbe
     /// この構成では出てこないが、来たら CS として扱う。
     /// </para>
     /// </summary>
-    public static string[] TypesFor(IEnumerable<int> delivery)
-    {
-        var types = new List<string>();
-        foreach (var system in delivery)
+    public static string[] TypesFor(IEnumerable<int> delivery) =>
+    [
+        .. delivery.SelectMany(system => system switch
         {
-            if (system == ChannelTable.SysIsdbt && !types.Contains("GR")) types.Add("GR");
-            if (system == ChannelTable.SysIsdbs)
-            {
-                if (!types.Contains("BS")) types.Add("BS");
-                if (!types.Contains("CS")) types.Add("CS");
-            }
-            if (system == SysIsdbc && !types.Contains("CS")) types.Add("CS");
-        }
-        return [.. types];
-    }
+            ChannelTable.SysIsdbt => ["GR"],
+            ChannelTable.SysIsdbs => ["BS", "CS"],
+            SysIsdbc => ["CS"],
+            _ => Array.Empty<string>(),
+        }).Distinct(),
+    ];
 
     /// <summary>
     /// 名前からの当てずっぽう。**ioctl が答えなかったときだけ。**
@@ -141,14 +136,11 @@ public static class DeviceProbe
     public static List<TunerSpec> Detect()
     {
         var found = new List<TunerSpec>();
-
         foreach (var adapter in Directories("/dev/dvb", "adapter*"))
         {
             foreach (var frontend in Files(adapter, "frontend*"))
             {
-                var types = Ask(frontend);
-                if (types.Length == 0) continue;
-                found.Add(new TunerSpec(Path.GetFileName(adapter), types, false, frontend));
+                if (Ask(frontend) is { Length: > 0 } types) found.Add(new TunerSpec(Path.GetFileName(adapter), types, false, frontend));
             }
         }
 

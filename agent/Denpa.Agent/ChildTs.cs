@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// <summary>
 /// 選局した TS を **pipe で受け取る**ときの共通部分。子プロセス (siano-ts) の標準出力を
 /// 読み出し側にするところ (<see cref="Stdout"/>) と、pipe の扱い (<see cref="WidenPipe"/> /
-/// <see cref="ReaderDrain"/>)、子の印 (<see cref="TsChild"/>)。px4d から受けた TS の溜め
+/// <see cref="ReaderDrain"/>)。px4d から受けた TS の溜め
 /// (Px4Stream。Px4.cs。pipe ではなく Pipelines) も、閉じ方 (<see cref="ReaderDrain"/>) はここに揃える。
 ///
 /// <para>
@@ -98,37 +98,5 @@ internal static class ChildTs
         var handle = StdoutHandle(process);
         WidenPipe((int)handle.DangerousGetHandle(), name);
         return new DeviceStream(handle, ended);
-    }
-}
-
-/// <summary>
-/// 子1つぶん (siano-ts)。**印は子ごとに持つ。** 止めたかどうかを1つの旗で
-/// 持つと、前の子の後始末が次の子の旗を読む (起こし直した直後に前の子の終了が回ってくる)
-/// </summary>
-internal class TsChild(string program, Process process)
-{
-    public Process Process { get; } = process;
-
-    /// <summary>stderr の最後の行。失敗・終わった理由はここに出る</summary>
-    public volatile string Stderr = "";
-
-    /// <summary>こちらから止めたか。**自分で止めた終わりは失敗ではない**</summary>
-    public volatile bool Dropped;
-
-    public string Exited(int code)
-    {
-        var stderr = Stderr;
-        return $"{program} が終了しました (exit {code}{(stderr.Length == 0 ? "" : $": {stderr}")})";
-    }
-
-    /// <summary>
-    /// 読み出し側が尽きたときの理由。**理由の分かる終わり方をする** (DeviceStream)。
-    /// EOF は子が終わったということなので、終了コードと stderr の末尾を添える
-    /// </summary>
-    public string? EndReason()
-    {
-        if (Dropped) return null;
-        if (!Process.WaitForExit(TimeSpan.FromSeconds(2))) return $"{program} が応答しなくなりました";
-        return Exited(Process.ExitCode);
     }
 }
