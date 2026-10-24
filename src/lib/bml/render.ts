@@ -358,9 +358,7 @@ export class Renderer {
     if (clip !== null && !contains && block) css.push(`clip-path:${clip}`);
     if (block && s.borderStyle !== "none" && s.borderWidth > 0) {
       const [t, r, b, l] = s.borderColorIndex.map((i) => cssColor(clut[i]));
-      css.push(
-        `border:${s.borderWidth}px ${s.borderStyle === "solid" ? "solid" : s.borderStyle}`,
-      );
+      css.push(`border:${s.borderWidth}px ${s.borderStyle}`);
       css.push(`border-color:${t} ${r} ${b} ${l}`);
     }
     if (block) css.push(`padding:${s.padding.map((n) => `${n}px`).join(" ")}`);

@@ -20,6 +20,9 @@ export type Declarations = Map<string, string>;
 
 export type State = "normal" | "focus" | "active";
 
+/** 上・右・下・左の 4 つ */
+type Sides = [number, number, number, number];
+
 /** 決まった見た目 */
 export interface Computed {
   left: number;
@@ -34,8 +37,8 @@ export interface Computed {
   borderWidth: number;
   borderStyle: string;
   /** 上・右・下・左 */
-  borderColorIndex: [number, number, number, number];
-  padding: [number, number, number, number];
+  borderColorIndex: Sides;
+  padding: Sides;
   fontSize: number;
   /** 丸ゴシック・太丸ゴシック・角ゴシック */
   fontFamily: string;
@@ -103,20 +106,22 @@ const DEFAULTS: Record<string, [string, string][]> = {
   object: [["background-color-index", "8"]],
 };
 
-const ZERO_PADDING: [string, string][] = ["top", "right", "bottom", "left"].map(
-  (side) => [`padding-${side}`, "0"],
-);
+/** 上・右・下・左 (padding・枠の色の並び) */
+export const SIDES = ["top", "right", "bottom", "left"] as const;
+
+const ZERO_PADDING: [string, string][] = SIDES.map((side) => [
+  `padding-${side}`,
+  "0",
+]);
 
 /** span・a は見える見えないを必ず継ぐ (既定のスタイルの `visibility: inherit !important`) */
+const INHERIT_INLINE: [string, string][] = [
+  ["visibility", "inherit"],
+  ["letter-spacing", "inherit"],
+];
 const FORCED: Record<string, [string, string][]> = {
-  span: [
-    ["visibility", "inherit"],
-    ["letter-spacing", "inherit"],
-  ],
-  a: [
-    ["visibility", "inherit"],
-    ["letter-spacing", "inherit"],
-  ],
+  span: INHERIT_INLINE,
+  a: INHERIT_INLINE,
   body: [["visibility", "visible"], ...ZERO_PADDING],
   div: ZERO_PADDING,
   object: [...ZERO_PADDING, ["border-width", "0"], ["border-style", "none"]],
@@ -126,20 +131,12 @@ const FORCED: Record<string, [string, string][]> = {
 export function expand(property: string, value: string): [string, string][] {
   switch (property) {
     case "padding": {
-      const parts = value.split(/\s+/);
-      const [t, r = t, b = t, l = r] = parts;
-      return [
-        ["padding-top", t!],
-        ["padding-right", r!],
-        ["padding-bottom", b!],
-        ["padding-left", l!],
-      ];
+      const [t, r = t, b = t, l = r] = value.split(/\s+/);
+      const values = [t!, r!, b!, l!];
+      return SIDES.map((side, i) => [`padding-${side}`, values[i]!]);
     }
     case "border-color-index":
-      return ["top", "right", "bottom", "left"].map((side) => [
-        `border-${side}-color-index`,
-        value,
-      ]);
+      return SIDES.map((side) => [`border-${side}-color-index`, value]);
     default:
       return [[property, value]];
   }
@@ -204,14 +201,18 @@ function parsePx(value: string | null): number | null {
   return match === null ? null : Number(match[1]);
 }
 
-function parseIndex(value: string | null, fallback: number): number {
+/** 0〜`max` の整数。違えば null */
+function intUpTo(value: string | null, max: number): number | null {
   const n = value === null ? Number.NaN : Number(value.trim());
-  return Number.isInteger(n) && n >= 0 && n <= 255 ? n : fallback;
+  return Number.isInteger(n) && n >= 0 && n <= max ? n : null;
+}
+
+function parseIndex(value: string | null, fallback: number): number {
+  return intUpTo(value, 255) ?? fallback;
 }
 
 function parseNav(value: string | null): number | null {
-  const n = value === null ? Number.NaN : Number(value.trim());
-  return Number.isInteger(n) && n >= 0 && n <= 32767 ? n : null;
+  return intUpTo(value, 32767);
 }
 
 /** 枠の線の種類。**列挙のどれかだけ** (放送の文字列をそのまま CSS に入れない) */
@@ -303,12 +304,10 @@ export function compute(
       : grayscale(),
     borderWidth: px("border-width", 0),
     borderStyle: borderStyle(get("border-style")),
-    borderColorIndex: (["top", "right", "bottom", "left"] as const).map(
-      (side) => parseIndex(get(`border-${side}-color-index`), 0),
-    ) as [number, number, number, number],
-    padding: (["top", "right", "bottom", "left"] as const).map((side) =>
-      px(`padding-${side}`, 0),
-    ) as [number, number, number, number],
+    borderColorIndex: SIDES.map((side) =>
+      parseIndex(get(`border-${side}-color-index`), 0),
+    ) as Sides,
+    padding: SIDES.map((side) => px(`padding-${side}`, 0)) as Sides,
     fontSize: inherits("font-size") ? parent!.fontSize : px("font-size", 24),
     fontFamily: inherits("font-family")
       ? parent!.fontFamily

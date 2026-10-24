@@ -20,56 +20,22 @@ export interface Token {
 
 export class ScriptSyntaxError extends Error {}
 
-const PUNCTUATORS = [
-  ">>>=",
-  "===",
-  "!==",
-  ">>>",
-  "<<=",
-  ">>=",
-  "<=",
-  ">=",
-  "==",
-  "!=",
-  "&&",
-  "||",
-  "++",
-  "--",
-  "+=",
-  "-=",
-  "*=",
-  "/=",
-  "%=",
-  "&=",
-  "|=",
-  "^=",
-  "<<",
-  ">>",
-  "{",
-  "}",
-  "(",
-  ")",
-  "[",
-  "]",
-  ";",
-  ",",
-  "<",
-  ">",
-  "+",
-  "-",
-  "*",
-  "/",
-  "%",
-  "&",
-  "|",
-  "^",
-  "!",
-  "~",
-  "?",
-  ":",
-  "=",
-  ".",
-];
+/** 区切りの記号。長いものから試す */
+const PUNCTUATORS = (
+  ">>>= === !== >>> <<= >>= <= >= == != && || ++ -- += -= *= /= %= &= |= ^= " +
+  "<< >> { } ( ) [ ] ; , < > + - * / % & | ^ ! ~ ? : = ."
+).split(" ");
+
+/** `\` に続く 1 字の書き方 */
+const ESCAPES: Record<string, string> = {
+  n: "\n",
+  t: "\t",
+  r: "\r",
+  b: "\b",
+  f: "\f",
+  v: "\v",
+  "0": "\0",
+};
 
 function isIdentStart(c: string): boolean {
   return (
@@ -194,28 +160,12 @@ export function tokenize(source: string): Token[] {
           continue;
         }
         const e = source[at++] ?? "";
+        const escaped = ESCAPES[e];
+        if (escaped !== undefined) {
+          out += escaped;
+          continue;
+        }
         switch (e) {
-          case "n":
-            out += "\n";
-            break;
-          case "t":
-            out += "\t";
-            break;
-          case "r":
-            out += "\r";
-            break;
-          case "b":
-            out += "\b";
-            break;
-          case "f":
-            out += "\f";
-            break;
-          case "v":
-            out += "\v";
-            break;
-          case "0":
-            out += "\0";
-            break;
           case "x":
           case "u": {
             const size = e === "x" ? 2 : 4;

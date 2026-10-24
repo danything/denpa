@@ -20,6 +20,7 @@ import type {
   ProgramInfoMessage,
   ResponseMessage,
 } from "#lib/ts/bml-protocol.js";
+import { ascii, u16 } from "#lib/ts/bytes.js";
 import {
   type BmlIp,
   type BrowserHost,
@@ -234,8 +235,7 @@ interface Timer {
 function looksLikeBml(file: CarouselFile): boolean {
   if (file.type.type === "text" && file.type.subtype === "x-arib-bml")
     return true;
-  const head = String.fromCharCode(...file.data.subarray(0, 1024));
-  return /<bml[\s>]/i.test(head);
+  return /<bml[\s>]/i.test(ascii(file.data, 0, 1024));
 }
 
 /** JPEG の大きさ (SOF) */
@@ -244,23 +244,31 @@ function jpegSize(data: Uint8Array): { width: number; height: number } | null {
   while (at + 9 < data.length) {
     if (data[at] !== 0xff) return null;
     const marker = data[at + 1]!;
-    const length = (data[at + 2]! << 8) | data[at + 3]!;
     if (
       marker >= 0xc0 &&
       marker <= 0xcf &&
       marker !== 0xc4 &&
       marker !== 0xc8 &&
       marker !== 0xcc
-    ) {
-      return {
-        height: (data[at + 5]! << 8) | data[at + 6]!,
-        width: (data[at + 7]! << 8) | data[at + 8]!,
-      };
-    }
-    at += 2 + length;
+    )
+      return { height: u16(data, at + 5), width: u16(data, at + 7) };
+    at += 2 + u16(data, at + 2);
   }
   return null;
 }
+
+/** 中身を指す blob: の URL */
+function blobUrl(data: Uint8Array, type: string): string {
+  return URL.createObjectURL(
+    new Blob([data as Uint8Array<ArrayBuffer>], { type }),
+  );
+}
+
+/** 受け手の `f();` の形。関数を呼ぶだけのもの */
+const CALL = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/;
+
+/** 入口のモジュール */
+const ENTRY = `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}`;
 
 class Engine implements DomHost, BrowserHost, RenderHost {
   readonly resources = new Resources();
@@ -377,11 +385,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.queue = [];
     this.clearTimers();
     if (this.ticker !== null) clearInterval(this.ticker);
-    for (const stop of this.playing.values()) stop();
-    this.playing.clear();
+    this.stopMedia();
     this.renderer?.destroy();
     this.renderer = null;
-    this.unloadDrcs();
     this.resources.destroy();
     this.sound.destroy();
   }
@@ -671,16 +677,15 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   private async startup(): Promise<void> {
     if (this.halted) return;
-    const base = `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}`;
-    const ref = this.resources.resolve(base, null)!;
+    const ref = this.resources.resolve(ENTRY, null)!;
     this.loading = true;
     const token = this.token;
     await this.resources.fetch({ ...ref, file: "startup.bml" });
     // 待つ間に別の文書を読み始めた・止めたなら、そちらに任せる
     if (token !== this.token || this.destroyed) return;
     const named = this.resources.file({ ...ref, file: "startup.bml" });
-    if (named !== null) await this.load(`${base}/startup.bml`, true);
-    else if (this.resources.file(ref) !== null) await this.load(base, true);
+    if (named !== null) await this.load(`${ENTRY}/startup.bml`, true);
+    else if (this.resources.file(ref) !== null) await this.load(ENTRY, true);
     else this.exit();
   }
 
@@ -720,11 +725,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
     // 入口の文書が読めない文書へ移ろうとしたなら、入口のまま止める (出直すと同じ遷移を
     // 繰り返して回り続ける)。そうでなければ入口から出直す
-    if (
-      this.current?.replace(/[?#].*$/, "") ===
-      `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}/startup.bml`
-    )
-      return;
+    if (this.current?.replace(/[?#].*$/, "") === `${ENTRY}/startup.bml`) return;
     setTimeout(() => {
       if (token === this.token && !this.destroyed) this.restart();
     }, 0);
@@ -735,9 +736,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.loading = false;
     this.preparing = false;
     this.resources.unlockAll();
-    for (const stop of this.playing.values()) stop();
-    this.playing.clear();
-    this.unloadDrcs();
+    this.stopMedia();
     this.renderer?.destroy();
     this.renderer = null;
     this.doc = null;
@@ -826,9 +825,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     ) {
       this.resources.unlockAll("lock");
     }
-    for (const stop of this.playing.values()) stop();
-    this.playing.clear();
-    this.unloadDrcs();
+    this.stopMedia();
     this.current = path;
     this.resources.newPage();
     this.table = table;
@@ -973,9 +970,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             vm.startProgram(job.code ?? compileScript(job.source, job.name));
             this.currentEvent = dom.event({});
           } else {
-            const name = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(
-              job.handler,
-            )?.[1];
+            const name = CALL.exec(job.handler)?.[1];
             if (name === undefined)
               throw new ScriptError(`受け手の形が読めません: ${job.handler}`);
             this.currentEvent = dom.event({
@@ -1015,22 +1010,17 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       case "yield":
         setTimeout(() => this.step(token, vm), 0);
         return;
-      case "suspend":
+      case "suspend": {
         // 待つ間 (sleep など) に、ここまでの変化を見せる
         this.draw();
-        void result.promise.then(
-          (value) => {
-            if (token !== this.token || vm !== this.vm) return;
-            vm.resume(value);
-            this.step(token, vm);
-          },
-          () => {
-            if (token !== this.token || vm !== this.vm) return;
-            vm.resume(undefined);
-            this.step(token, vm);
-          },
-        );
+        const go = (value: Value) => {
+          if (token !== this.token || vm !== this.vm) return;
+          vm.resume(value);
+          this.step(token, vm);
+        };
+        void result.promise.then(go, () => go(undefined));
         return;
+      }
       case "error":
         this.log(`スクリプトの誤り: ${result.error.message}`);
         break;
@@ -1201,11 +1191,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   canStartApp(): boolean {
-    return (
-      !this.destroyed &&
-      this.ip.connected() &&
-      this.options.hybridcast?.ready() === true
-    );
+    return this.online() && this.options.hybridcast?.ready() === true;
   }
 
   startApp(hint: number[]): boolean {
@@ -1213,11 +1199,11 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   canFetchAit(): boolean {
-    return (
-      !this.destroyed &&
-      this.ip.connected() &&
-      this.options.hybridcast?.startFrom !== undefined
-    );
+    return this.online() && this.options.hybridcast?.startFrom !== undefined;
+  }
+
+  private online(): boolean {
+    return !this.destroyed && this.ip.connected();
   }
 
   startAppFrom(uri: string, hint: number[]): boolean {
@@ -1406,8 +1392,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
     // `f();` は関数を呼ぶだけ。引数つきの呼び出し (`f(3);`) などは式として読んで、刻みごとに動かす
     // (STD-B24 第二編 7.6.10: 第 1 引数は動かすスクリプトの文字列)。自前の VM で動かすので eval は使わない
-    const call =
-      /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/.exec(code)?.[1] ?? null;
+    const call = CALL.exec(code)?.[1] ?? null;
     let program: Code | null = null;
     if (call === null) {
       try {
@@ -1495,17 +1480,17 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     if (!locked) this.renderer?.draw();
   }
 
-  private moduleRef(module: string): Ref | null {
+  private moduleRef(module: string): (Ref & { module: number }) | null {
     const ref = this.resources.resolve(module, this.current);
     // 押さえられるのはカルーセルのモジュールだけ (通信のものは押さえない)
     return ref === null || ref.module === null || ref.url !== undefined
       ? null
-      : ref;
+      : { ...ref, module: ref.module };
   }
 
   lock(module: string, kind: LockKind): number {
     const ref = this.moduleRef(module);
-    if (ref === null || ref.module === null) return Number.NaN;
+    if (ref === null) return Number.NaN;
     // Ex で押さえられるのは 0x40・0x50・0x60 の部品だけ。地上波 (TR-B14 第二分冊 5.12.6.9・2.3.6.1) も
     // BS (TR-B15 第一分冊 10.3.3 表10-3「lockModuleOnMemoryEx() (tag values 0x40, 0x50, and 0x60)」) も
     // 同じ。受信機はこの 3 つと見ている部品の 4 つまでしか並べて取らない。0x61 などにあるモジュールは、
@@ -1535,9 +1520,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   unlock(module: string, kind?: LockKind): boolean {
     const ref = this.moduleRef(module);
     return (
-      ref !== null &&
-      ref.module !== null &&
-      this.resources.unlock(ref.component, ref.module, kind)
+      ref !== null && this.resources.unlock(ref.component, ref.module, kind)
     );
   }
 
@@ -1586,7 +1569,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       : ((await this.resources.fetch(ref))?.data ?? null);
   }
 
-  private unloadDrcs(): void {
+  /** 文書の音を止め、外字を捨てる (文書を替える・閉じる) */
+  private stopMedia(): void {
+    for (const stop of this.playing.values()) stop();
+    this.playing.clear();
     for (const glyph of this.glyphs.values())
       if (glyph.url !== null) URL.revokeObjectURL(glyph.url);
     this.glyphs.clear();
@@ -1614,11 +1600,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         for (const made of frames) URL.revokeObjectURL(made.url);
         return null;
       }
-      const url = URL.createObjectURL(
-        new Blob([fixed.data], { type: "image/png" }),
-      );
       frames.push({
-        url,
+        url: blobUrl(fixed.data, "image/png"),
         x: frame.x,
         y: frame.y,
         delay: frame.delay,
@@ -1687,21 +1670,14 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     } else if (png) {
       const fixed = applyClut(file.data, this.table);
       if (fixed !== null) {
-        source = {
-          url: URL.createObjectURL(
-            new Blob([fixed.data], { type: "image/png" }),
-          ),
-          width: fixed.width,
-          height: fixed.height,
-        };
+        const { width, height } = fixed;
+        source = { url: blobUrl(fixed.data, "image/png"), width, height };
       }
     } else {
       const mime = `${file.type.type}/${file.type.subtype}`;
       const size = mime === "image/jpeg" ? jpegSize(file.data) : null;
       source = {
-        url: URL.createObjectURL(
-          new Blob([file.data as Uint8Array<ArrayBuffer>], { type: mime }),
-        ),
+        url: blobUrl(file.data, mime),
         width: size?.width ?? null,
         height: size?.height ?? null,
       };
@@ -1715,10 +1691,9 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       this.glyphs.get(`${unit}:${fontSize}:${fontIdOf(family)}`) ??
       this.glyphs.get(`${unit}:${fontSize}:1`);
     if (glyph === undefined) return null;
-    glyph.url ??= URL.createObjectURL(
-      new Blob([alphaPng(glyph.width, glyph.height, glyph.alpha)], {
-        type: "image/png",
-      }),
+    glyph.url ??= blobUrl(
+      alphaPng(glyph.width, glyph.height, glyph.alpha),
+      "image/png",
     );
     return glyph.url;
   }
@@ -1799,13 +1774,16 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const focused = this.focusedElement;
     if (focused === null) return;
     // 十字キーで nav-* の先へ。見えない要素は飛ばす (付属2 5.4.13.3)
-    const s = focused.style();
-    const next = {
-      [KEY.up]: s.navUp,
-      [KEY.down]: s.navDown,
-      [KEY.left]: s.navLeft,
-      [KEY.right]: s.navRight,
-    }[code];
+    const nav = (element: BmlElement) => {
+      const s = element.style();
+      return {
+        [KEY.up]: s.navUp,
+        [KEY.down]: s.navDown,
+        [KEY.left]: s.navLeft,
+        [KEY.right]: s.navRight,
+      }[code];
+    };
+    const next = nav(focused);
     if (next !== undefined && next !== null) {
       const seen = new Set<number>();
       let index: number | null = next;
@@ -1817,14 +1795,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
           this.focus(target);
           break;
         }
-        const t = target.style();
-        index =
-          {
-            [KEY.up]: t.navUp,
-            [KEY.down]: t.navDown,
-            [KEY.left]: t.navLeft,
-            [KEY.right]: t.navRight,
-          }[code] ?? null;
+        index = nav(target) ?? null;
       }
       return;
     }
@@ -1890,47 +1861,28 @@ export function createBml(options: BmlOptions): Bml {
   return new Engine(options);
 }
 
+/** 押したキー (KeyboardEvent.key) → AribKeyCode。英字は大文字でも同じ */
+const KEYS = new Map<string, number>([
+  ["ArrowUp", KEY.up],
+  ["ArrowDown", KEY.down],
+  ["ArrowLeft", KEY.left],
+  ["ArrowRight", KEY.right],
+  ["Enter", KEY.enter],
+  [" ", KEY.enter],
+  ["Backspace", KEY.back],
+  ["x", KEY.back],
+  ["d", KEY.data],
+  ["b", KEY.blue],
+  ["r", KEY.red],
+  ["g", KEY.green],
+  ["y", KEY.yellow],
+  ["e", KEY.data1],
+  ["f", KEY.data2],
+]);
+
 /** 押したキー (KeyboardEvent.key) を AribKeyCode に。対応が無ければ -1 */
 export function aribKey(key: string): number {
   if (key >= "0" && key <= "9" && key.length === 1)
     return KEY.digit0 + Number(key);
-  switch (key) {
-    case "ArrowUp":
-      return KEY.up;
-    case "ArrowDown":
-      return KEY.down;
-    case "ArrowLeft":
-      return KEY.left;
-    case "ArrowRight":
-      return KEY.right;
-    case "Enter":
-    case " ":
-      return KEY.enter;
-    case "Backspace":
-    case "x":
-    case "X":
-      return KEY.back;
-    case "d":
-    case "D":
-      return KEY.data;
-    case "b":
-    case "B":
-      return KEY.blue;
-    case "r":
-    case "R":
-      return KEY.red;
-    case "g":
-    case "G":
-      return KEY.green;
-    case "y":
-    case "Y":
-      return KEY.yellow;
-    case "e":
-    case "E":
-      return KEY.data1;
-    case "f":
-    case "F":
-      return KEY.data2;
-  }
-  return -1;
+  return KEYS.get(key.length === 1 ? key.toLowerCase() : key) ?? -1;
 }
