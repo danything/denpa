@@ -289,10 +289,10 @@ export function rowState(rec: {
 /**
  * 状態のラベル(app.css の `.tag`)の色。空は色なし(地の色のラベル)。
  *
- * **塗る(`solid`)のはいま動いているものだけ。** 一覧は 1 画面に何十行も並ぶので、
+ * **`solid` はいま動いているものの印** (行の段の色を決める。`row-status.ts`)。一覧は 1 画面に何十行も並ぶので、
  * 予約済み(青)・視聴可能(緑)・録画中(赤)を全部塗っていた頃は色の列が 3 本立ち、
  * どれが急ぐ話なのか分からなくなっていた。**待っているだけの状態は色を付けない**、
- * 済んだものは淡い緑、手を止めてほしいもの(競合・失敗)だけ枠を足して目立たせる
+ * 済んだものは淡い緑、手を止めてほしいもの(競合・失敗)は淡い赤
  */
 export function badgeClass(state: string): string {
   switch (state) {
@@ -307,7 +307,7 @@ export function badgeClass(state: string): string {
       return "success";
     case "conflict":
     case "failed":
-      return "error outline";
+      return "error";
     // 予約済み・待ち・取消・削除は「見て欲しいこと」が無いので色を付けない
     default:
       return "";

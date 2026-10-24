@@ -79,11 +79,11 @@
           <span class="tag" data-testid="migrate-state">
             {stateLabel(migrate.state)}
           </span>
-          <span class="tag outline"
+          <span class="tag"
             >{migrate.apply ? "取り込み" : "下見 (変更なし)"}</span
           >
           {#if migrate.move}
-            <span class="tag outline">移動</span>
+            <span class="tag">移動</span>
           {/if}
           <span>
             新規 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し

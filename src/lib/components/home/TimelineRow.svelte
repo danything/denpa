@@ -216,7 +216,7 @@
     data-reservation-id={res.id}
     data-program-id={res.program_id}
     data-key={item.key}
-    class="row t-row"
+    class="row t-row item"
     class:nested
     class:live={item.zone === "now"}
   >
@@ -308,7 +308,7 @@
     data-testid="missed-row"
     data-program-id={res.program_id}
     data-key={item.key}
-    class="row t-row"
+    class="row t-row item"
     class:nested
   >
     <span class="t-thumb" aria-hidden="true"></span>
@@ -383,7 +383,7 @@
       ? null
       : JSON.stringify(rec.cm_ranges)}
     data-key={item.key}
-    class="row t-row playable"
+    class="row t-row item playable"
     class:nested
   >
     <!-- ポスター。無い録画もあるので、読めなければ画像を隠して枠だけ残す。再生の印は観られるものだけ -->

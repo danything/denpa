@@ -1261,7 +1261,7 @@
     program.reservation_state === null &&
     program.end_at > clock &&
     !program.copy_never}
-  <!-- **塗るのは 1 つだけ。** 予約できるなら予約、録れていれば再生、いま流れていれば視聴 -->
+  <!-- **主は 1 つだけ。** 予約できるなら予約、録れていれば再生、いま流れていれば視聴 -->
   {@const primary = canReserve
     ? "reserve"
     : canPlay
@@ -1297,7 +1297,7 @@
       {/if}
 
       <!--
-                **並びは控えから主へ。** 主 (塗ったボタン) はいちばん右 (狭い画面ではいちばん上)。
+                **並びは控えから主へ。** 主 (クラスの無いボタン) はいちばん右 (狭い画面ではいちばん上)。
                 閉じるは右上の × (`ProgramDetail`)
             -->
 
@@ -1597,7 +1597,6 @@
       order: 1;
       gap: var(--dp-space-1);
       padding-inline: var(--dp-space-2);
-      border-top: 1px solid var(--dp-line);
       overflow-x: auto;
       scrollbar-width: none;
     }
@@ -1923,7 +1922,7 @@
   /*
      * **競合は予約済みと同じ青にしない。** 青のままだと「録れる」に見え、
      * チューナーが足りずに落ちる番組を表の上で見落とす。一覧のバッジ
-     * (`format.ts` の `badgeClass`。赤い字と赤い枠) と同じ色にそろえる。
+     * (`format.ts` の `badgeClass`。淡い赤の地に赤い字) と同じ赤にそろえる。
      * 録画中 (赤く塗ったマス) と見分けるため、**地は塗らずに枠と字だけ**赤くする —
      * 「いま動いているもの」だけを塗る決まり (`app.css`) のとおり
      */

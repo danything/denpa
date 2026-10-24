@@ -684,6 +684,10 @@
       background: var(--pico-primary-background);
     }
   }
+  /*
+     * ヘッダー。下のタブの無い狭い画面では地の上の帯 (高さちょうど 3.5rem)。
+     * 広い画面では操作の層として中身の上に浮かせる (下の 640px からの所)
+     */
   .navbar {
     position: sticky;
     top: 0;
@@ -695,10 +699,6 @@
     padding: 0.5rem var(--dp-space-3);
     background: var(--dp-bg);
   }
-  /*
-     * **本文との間に線を引かない** (巻いても出さない)。高さはちょうど 3.5rem。
-     * 広い画面では中身の上に浮かせる (下の 640px からの所)。サイドバーとの間も線は引かず、地の色か余白で分ける (`app.css` の「地は 1 色」)
-     */
   .brand {
     display: flex;
     flex: 1 1 0%;
@@ -764,7 +764,7 @@
     font-weight: var(--dp-weight-bold);
   }
   ul.links a.button.ghost[aria-current="page"]:hover {
-    --pico-background-color: var(--dp-subtle);
+    --pico-background-color: var(--dp-btn-tonal-hover);
   }
   /* 下線は別の要素にして、画面を移ると前の画面の下線から横に滑らせる (`#lib/motion.svelte.js` の `slide`) */
   .nav-underline {
@@ -861,7 +861,7 @@
     display: flex;
   }
   /*
-     * いまの画面の印。タブの上端 (区切りの線の上) に短い線を置く。画面を移ると
+     * いまの画面の印。タブの上端に短い線を置く。画面を移ると
      * 前のタブから横に滑る (`#lib/motion.svelte.js` の `slide`)
      */
   .tabbar :global(.tab-indicator) {
@@ -933,8 +933,6 @@
     }
     .shell:has(.tabbar) main {
       padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
-    }
-    .shell:has(.tabbar) main {
       padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
     }
     /* 局が無いときの案内がいちばん上に来る。安全域はそちらで避け、本文は普通の余白に戻す */
@@ -950,11 +948,6 @@
   :global(html[data-stage-fullscreen]) :is(.tabbar, .notice-slot) {
     display: none;
   }
-  /*
-     * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる
-     * (`PlayerStage`) のに、同じ幅だけ外へはみ出させるため。数字を2か所に
-     * 書くと、片方だけ変えたときに映像が横にずれる
-     */
   /* 画面の中身を包むだけ (箱を作らない)。番組表へ移る途中だけ隠す (`pending`) */
   .route {
     display: contents;
@@ -963,13 +956,17 @@
     display: none;
   }
   main {
+    /*
+         * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる
+         * (`PlayerStage`) のに、同じ幅だけ外へはみ出させるため。数字を2か所に
+         * 書くと、片方だけ変えたときに映像が横にずれる
+         */
     --dp-gutter: 1rem;
     /*
-         * **ヘッダーから最初の中身までは、どの画面も `--dp-page-top` (0)。** ヘッダーに区切りの線を引かないので、
-         * 余白を空けずに中身をヘッダーのすぐ下から始める (空けると、線も無いのに浮いた帯に見えた)。
-         * 左右と下の余白 (`--dp-gutter`) は広い画面で 1.5rem に広がるが、上は広げない。
-         * 余白の外まで広げる画面 (番組表・録画・設定・観る画面の右の列など) も、上はこの値だけ打ち消し、
-         * 最初の行をこの線にそろえる
+         * **ヘッダーから最初の中身までは `--dp-page-top`。** 地の上のヘッダーなら 0 (すぐ下から始める)、
+         * 浮いたヘッダーの画面はそのぶん (`--dp-header-space`。下の 640px から)。左右と下の余白 (`--dp-gutter`) は
+         * 広い画面で 1.5rem に広がるが、上は広げない。余白の外まで広げる画面 (番組表・録画・設定・観る画面の右の列など) も、
+         * 上はこの値だけ打ち消す
          */
     --dp-page-top: 0rem;
     padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
@@ -1027,19 +1024,15 @@
          * 文書を基準に置かれ、この箱で切られずにページの高さを伸ばす。ライブでは局の一覧の下のほう
          * (一覧の中で隠れている行) の「リモコン」が窓の下に出て、映像の色が付くまで (右の列が
          * `position: relative` になるまで) の1秒ほど、窓にスクロールバーが出ていた。E2E 20 で毎コマ見る
+         *
+         * **自分で巻き取る画面は、浮いたヘッダーの下から始める** (docs/design.md の「地・件の面・操作の層」の 2 番)。
+         * 中では頭の空き (`--dp-page-top`) を 0 にする
          */
     .shell.fill {
       position: relative;
       height: 100%;
       min-height: 0;
       overflow: hidden;
-    }
-    /*
-         * **自分で巻き取る画面は、浮いたヘッダーの下から始める。** ヘッダーの裏まで箱を伸ばすと、
-         * 巻き取る箱のスクロールバーだけがヘッダーの透かしの裏に見えていた。
-         * 中では頭の空き (`--dp-page-top`) を 0 にし、箱の頭はヘッダーの下の線にそろう
-         */
-    .shell.fill {
       padding-top: var(--dp-header-space, 0px);
     }
     .shell.fill main {

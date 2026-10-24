@@ -617,8 +617,8 @@
   /*
    * ---- サイドバーのカレンダー (`HomeCalendar`・`#lib/calendar.ts`) ----
    *
-   * 点は**一覧に出ている行** (絞り込みの後) で打つ。頭に貼り付いている日 (`pinned`) は送るたびに読み直し、
-   * カレンダーで薄く塗る。日を押したらその日の見出しへ送る
+   * 押せる日は**一覧に出ている行** (絞り込みの後) で決める。頭に貼り付いている日 (`pinned`) は送るたびに読み直し、
+   * カレンダーで下線を引く。日を押したらその日の見出しへ送る
    */
   const today = $derived(dayStart(clock));
   const dayMarks = $derived(markDays(shownItems, today));
@@ -1028,7 +1028,7 @@
     {/if}
     {@const watch = watchLink(rec)}
     {#if watch !== null}
-      <!-- **主のボタンは再生だけ** (塗る。並びのいちばん右・狭い画面ではいちばん上) -->
+      <!-- **主のボタンは再生だけ** (並びのいちばん右・狭い画面ではいちばん上) -->
       <a class="button" href={watch} data-testid="detail-play">再生</a>
     {/if}
   {/if}

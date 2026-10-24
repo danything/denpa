@@ -237,7 +237,7 @@
             >{STATE_LABEL[scan.state]}</span
           >
           {#if scan.phase}
-            <span class="tag outline">{scan.phase}</span>
+            <span class="tag">{scan.phase}</span>
           {/if}
           <span class="num" data-testid="scan-found"
             >見つかったチャンネル {scan.channels}</span

@@ -160,7 +160,7 @@
                         塊を押すと検索の画面でそのルールを直す。スイッチと削除はリンクの外 (隣) なので、押してもルールは開かない
                     -->
           <li
-            class="row"
+            class="row item"
             class:off={!rule.enabled}
             data-testid="rule-row"
             data-rule-id={rule.id}
@@ -173,7 +173,7 @@
               <span class="name">
                 <span class="truncate">{rule.name}</span>
                 {#if !rule.enabled}<span class="tag">無効</span>{/if}
-                {#if rule.conflicts > 0}<span class="tag error outline"
+                {#if rule.conflicts > 0}<span class="tag error"
                     >競合 {rule.conflicts}</span
                   >{/if}
               </span>
@@ -429,7 +429,7 @@
   }
 
   /*
-     * **行は2段の件** (ホームの行と同じ。件の面 (`--dp-item`) に乗せ、線も枠も付けず、件の間は余白)。触れると件の面を一段変える
+     * **行は2段の件** (ホームの行と同じく件の面 (`app.css` の `.item`) に乗せ、件の間は余白)
      */
   .rows {
     display: flex;
@@ -446,18 +446,7 @@
     min-height: 4rem;
     margin: 0;
     padding: 0.5rem 0.75rem;
-    border-radius: var(--dp-item-radius);
-    background: var(--dp-item);
-    box-shadow: var(--dp-item-shadow);
-    /* 件の中のボタンは浮かせない (浮きの上に浮きを重ねない) */
-    --dp-btn-solid: transparent;
-    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-    --dp-btn-lift: none;
     list-style: none;
-    transition: background-color var(--dp-duration);
-  }
-  .row:hover {
-    background: var(--dp-item-hover);
   }
   .row-body {
     display: flex;

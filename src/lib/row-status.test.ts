@@ -14,9 +14,9 @@ const line = (
 });
 
 describe("行の状態の段", () => {
-  test("バッジの色から段の色へ。塗ったものは録画中", () => {
+  test("バッジの色から段の色へ。solid は録画中", () => {
     expect(toneOf("solid error")).toBe("rec");
-    expect(toneOf("error outline")).toBe("error");
+    expect(toneOf("error")).toBe("error");
     expect(toneOf("warning")).toBe("warning");
     expect(toneOf("success")).toBe("ok");
     expect(toneOf("")).toBe("neutral");

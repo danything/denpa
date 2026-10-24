@@ -284,7 +284,7 @@
           </div>
           <ul class="hits" data-testid="recent-searches">
             {#each recent as word (word)}
-              <li class="hit">
+              <li class="hit item">
                 <a
                   class="hit-main"
                   href={resolve(`search?q=${encodeURIComponent(word)}`)}
@@ -326,7 +326,7 @@
             {#each shown("programs", data.programs.rows) as program (program.id)}
               {@const verdict = verdictOf(program.id)}
               <li
-                class="hit"
+                class="hit item"
                 class:dim={verdict?.kind === "skip" &&
                   program.reservation_state === null}
                 data-testid="search-program"
@@ -427,7 +427,7 @@
             {#each shown("recordings", data.recordings.rows) as rec (rec.id)}
               {@const link = watchLink(rec)}
               <li
-                class="hit"
+                class="hit item"
                 data-testid="search-recording"
                 data-recording-id={rec.id}
               >
@@ -495,7 +495,7 @@
           <ul class="hits">
             {#each shown("reservations", data.reservations.rows) as res (res.id)}
               <li
-                class="hit"
+                class="hit item"
                 data-testid="search-reservation"
                 data-program-id={res.program_id}
               >
@@ -571,7 +571,7 @@
         {:else}
           <ul class="hits">
             {#each shown("rules", data.rules.rows) as rule (rule.id)}
-              <li class="hit" data-testid="search-rule">
+              <li class="hit item" data-testid="search-rule">
                 <a class="hit-main" href={resolve(`search?rule=${rule.id}`)}>
                   <span class="hit-title">
                     {#if !rule.enabled}<span class="tag">無効</span>{/if}
@@ -638,7 +638,7 @@
       <ul class="hits">
         {#each preview.programs as row (row.id)}
           <li
-            class="hit"
+            class="hit item"
             class:dim={row.skip !== null || !row.matched}
             data-testid="preview-row"
             data-program-id={row.id}
@@ -890,25 +890,14 @@
     margin: 0;
     padding: 0;
   }
-  /* 件は件の面 (`--dp-item`) に乗せる (ホームの行と同じ)。指を乗せると件の面を一段変える */
+  /* 件は件の面 (`app.css` の `.item`) に乗せる */
   .hit {
     display: flex;
     align-items: center;
     gap: var(--dp-space-2);
     margin: 0;
     padding-inline-end: var(--dp-space-2);
-    border-radius: var(--dp-item-radius);
-    background: var(--dp-item);
-    box-shadow: var(--dp-item-shadow);
-    /* 件の中のボタンは浮かせない (浮きの上に浮きを重ねない) */
-    --dp-btn-solid: transparent;
-    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-    --dp-btn-lift: none;
     list-style: none;
-    transition: background-color var(--dp-duration);
-  }
-  .hit:hover {
-    background: var(--dp-item-hover);
   }
   .hit-main {
     display: flex;
@@ -919,7 +908,6 @@
     margin: 0;
     padding: var(--dp-space-2) var(--dp-space-3);
     border: 0;
-    border-radius: var(--dp-item-radius);
     background: transparent;
     color: inherit;
     font: inherit;

@@ -134,7 +134,7 @@
 	 * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・通知 cyan)。
 	 * 「通知」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
 	 *
-	 * **塗るのは「いま動いているもの」と「押すと戻せないもの」だけ。**
+	 * **状態の色は状態にだけ使い、ふつうの状態には付けない。**
 	 * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
 	 * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
 	 * ふつうの状態は地の色に混ぜた淡いバッジにして、目は録画中の赤だけに行くようにする
@@ -143,7 +143,6 @@
   --dp-ok: #00895a; /* jade-500 */
   --dp-warn: #c79400; /* amber-350 */
   --dp-info: #058686; /* cyan-500 */
-  --dp-error: var(--dp-rec);
   /*
      * **映像の上の色。** 舞台はテーマにかかわらず黒いので、ダーク・ライトで変えない。
      * 字は白、控えた字は白 72% (暗い影の上で 4.5:1 以上)。オンは空色、戻せないものの 2 回目と「今」は赤。
@@ -161,9 +160,8 @@
   --dp-video-veil: rgb(0 0 0 / 0.6);
   --dp-video-veil-strong: rgb(0 0 0 / 0.8);
   /*
-     * 指を乗せた項目・選んでいる項目の地 (メニュー・番組表のマス・ルールのプレビュー)。
-     * 選んでいる行を `--dp-subtle` で塗る一覧 (サイドバーの `.side-item`) は、指を乗せた行を
-     * それより淡い `--dp-hover-soft` にして、選んでいる行と見分ける
+     * 指を乗せた地。`--dp-hover` はメニューで ↑↓ が指す項目・番組表のマス、
+     * `--dp-hover-soft` は地の上の 1 行の並び (サイドバー・控えのボタン・チップ)。選んでいる印には使わない
      */
   --dp-hover: var(--dp-subtle);
   --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
@@ -176,25 +174,20 @@
  * 主の色 (azure) も Pico の段から来ているので、同じ物差しで並べると色の系統がそろう。
  * Pico も [data-theme] と :root:not([data-theme=dark]) に書くが、層の外のこちらが勝つ。
  *
- * **地は 1 色。** ヘッダー・ナビ・本文の地は同じ `--dp-bg`。**ヘッダーと本文、サイドバーと本文の間に線は引かない**
- * — 分けるのは余白か地の色だけ。線 (`--dp-line`) は中身の中の区切り (表の行・節・「いま」など) に使う。
- * 色の付いた面は**中身を区切るところだけ** — ダイアログ・下から出す一枚 (`--dp-surface`)、コードの枠・表の見出し・
- * 指を乗せた行 (`--dp-subtle`)、通知。面の色を段々に重ねて分けていた頃は、暗いほうで
- * ヘッダー・地・面の 3 色が近すぎて、どこが押せる面なのかが読めなかった
+ * **層は地・件の面・操作の層の 3 段** (docs/design.md の「地・件の面・操作の層」)。中身に線は引かない
  *
- * - `--dp-bg` … 地 (ページ・ヘッダー)
+ * - `--dp-bg` … 地 (ページ。1 行の並び・番組表・映像)
  * - `--dp-surface` … ダイアログ・下から出す一枚
- * - `--dp-subtle` … 淡い面 (表の見出し・コード・指を乗せた行)
+ * - `--dp-subtle` … 淡い面 (骨組み・バッジと通知の既定の地・番組表のマス)
  * - `--dp-item` … 件の面 (1 件が 2〜3 行の一覧。地より一段上の層)・`--dp-item-hover` … 指を乗せた件・`--dp-item-shadow` … 件の影 (明るいほうだけ)
  * - `--dp-field` … 入力欄の面。**下を透かす薄い色** で、地・件の面・浮いたヘッダーのどれの上でも、その一段濃い (暗いほうは明るい) 面になる
- * - `--dp-line` … 区切りの線 (行の間・節の間)
- * - `--dp-line-strong` … 押せるものの縁 (入力欄)。線より一段濃くして、押せない面と見分ける
+ * - `--dp-line` … 細い線と、それほどの濃さの面 (メニューの中の区切り・ロゴの無い局の印・骨組みの見出し)
+ * - `--dp-line-strong` … 線より一段濃い色 (スクロールバーのつまみ・切り替えのオフ・ポスターの無い枠)
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
  * - `--dp-fg` … 本文の字。ボタンの中でも本文の色のまま (`--pico-color` はボタンの中では地の色になる)
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
- * - `--dp-shadow` … 持ち上げた面の影 (リモコン。ほとんど見えない程度)・`--dp-shadow-pop` … 浮かぶもの (メニュー・ダイアログ・通知)
- * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)。
- *   箱は縁と影 (`--dp-shadow-pop`) で浮かせる
+ * - `--dp-shadow-pop` … 浮かぶもの (操作の層・メニュー・ダイアログ・通知)
+ * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
@@ -215,7 +208,6 @@
   --dp-item-hover: #f5f6f9;
   --dp-item-shadow:
     0 1px 2px rgb(24 28 37 / 0.08), 0 2px 8px rgb(24 28 37 / 0.06);
-  --dp-shadow: 0 1px 2px rgb(24 28 37 / 0.05);
   --dp-shadow-pop:
     0 4px 12px rgb(24 28 37 / 0.08), 0 16px 32px -8px rgb(24 28 37 / 0.16);
   --dp-backdrop: rgb(24 28 37 / 0.16);
@@ -265,7 +257,6 @@
   --dp-item: #16171c;
   --dp-item-hover: #1d1e24;
   --dp-item-shadow: none;
-  --dp-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
   --dp-shadow-pop:
     0 4px 12px rgb(0 0 0 / 0.3), 0 16px 40px -8px rgb(0 0 0 / 0.5);
   --dp-backdrop: rgb(0 0 0 / 0.45);
@@ -306,10 +297,6 @@
     opacity: 0.35;
   }
 }
-/* 赤く塗ったバッジ (録画中) の中では、字と同じ白にする */
-.tag.solid .rec-dot {
-  background: currentColor;
-}
 
 /* ---- 読み込めたらふわっと出る画像 (`use:fadeIn`。`#lib/motion.svelte.ts`) ---- */
 img[data-fade] {
@@ -349,10 +336,9 @@ img[data-fade="pending"] {
  * Pico の焦点の印は主の色を 25% に薄めた影 (`--pico-primary-focus`) だけで、
  * 暗い地では押せるものの縁とほとんど見分けが付かず、Tab で進んでも
  * いまどこにいるのかが読めなかった。線は外側に 2px 離して引くので、
- * 塗ったボタンの上でも地の色と混ざらない。
+ * 面のあるボタンの上でも地の色と混ざらない。
  *
- * 字を打つ欄は外す。マウスで押しても `:focus-visible` になるうえ、
- * 枠の色が変わるのでフォーカスの位置は分かる (線まで引くと押すたびに太い枠が出る)。
+ * 字を打つ欄はマウスで押しても `:focus-visible` になるので、ここでは外し、下の「入力欄」で `:focus` に同じ線を引く。
  * `:where()` で詳細度を 0 にしてあるので、行や見出しのように内側へ引きたい
  * ところは各画面の <style> で `outline-offset` を書けば勝つ
  */
@@ -524,11 +510,7 @@ thead th {
   font-weight: var(--dp-weight);
   border-bottom-width: 1px;
 }
-/*
- * **押せないものは押せないと分かるように。** Pico は薄くするだけなので、指 (カーソル) も変える。
- * 押せるもの (ボタン・枠のボタン・入力欄の縁) は `--dp-line-strong` 以上の縁を持ち、押せない面 (一覧の枠) は
- * `--dp-line` の縁しか持たない
- */
+/* **押せないものは押せないと分かるように。** Pico は薄くするだけなので、指 (カーソル) も変える */
 :is(button, [role="button"], input, select, textarea):disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
@@ -689,7 +671,7 @@ progress.running[value]::-webkit-progress-value {
 }
 /*
  * 本文の中の色つき文字。**塗り用の色ではなく「文字用」を使う。**
- * 塗り用は白抜きのバッジを前提に選んでいるので、地の上に文字として置くと
+ * 塗り用はバー・点・淡い地に混ぜる色として選んでいるので、地の上に文字として置くと
  * 明るいテーマでは薄く、暗いテーマでは沈む
  */
 .text-error {
@@ -877,13 +859,26 @@ details.more > :not(summary) + :not(summary) {
   transform: scale(0.97);
 }
 /*
- * **浮いたものの中** (メニュー・番組の詳細などの `popover`・ダイアログ)。中の主のボタンは面も影も持たず、太字だけ。
+ * **浮いたものの中** (メニュー・番組の詳細などの `popover`・ダイアログ) **と件の面** (`.item`)。中の主のボタンは面も影も持たず、太字だけ。
  * 下から出す書く欄 (`RuleDraft` の `.draft`) は狭い画面でだけ浮くので、そちらの <style> で同じ値を置く
  */
-:where(dialog, [popover], .modal-box) {
+:where(dialog, [popover], .modal-box, .item) {
   --dp-btn-solid: transparent;
   --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
   --dp-btn-lift: none;
+}
+/*
+ * **件の面** (`.item`。1 件が 2〜3 行ある一覧の件。docs/design.md の「何行かある一覧」)。ホームの行・ルール・検索の結果で同じ。
+ * 並べ方と余白は使う側で。指を乗せると面を一段変える
+ */
+.item {
+  border-radius: var(--dp-item-radius);
+  background: var(--dp-item);
+  box-shadow: var(--dp-item-shadow);
+  transition: background-color var(--dp-duration);
+}
+.item:hover {
+  background: var(--dp-item-hover);
 }
 /*
  * **入っている切り替え (`aria-pressed="true"`) は、ほかの選んでいるものと同じく主の色の短い下線と字** (番組表の「サブch」)。
@@ -1025,9 +1020,7 @@ a.button {
 /* ---- 入力欄 ---- */
 /*
  * **入力欄は浮かせず平ら** (docs/design.md の「入力欄」)。線も凹みの影も付けず、地より一段濃い面 (`--dp-field`) だけで示す。
- * 角は行やボタンの中と同じ入れ子の丸み (`--dp-radius`)。ラベルはいつも見せ、欄の場所はラベルと面で分かるようにする。
- * 面と地の差は 1.24:1 (明るい)・1.31:1 (暗い) で、境目の 3:1 (WCAG 1.4.11) には届かない (線を引かないと決めたため)。
- * 字を打っている間 (焦点) は、ほかの焦点と同じ外側の 2px の主の色の線
+ * 角は `--dp-radius`。字を打っている間 (焦点) は、ほかの焦点と同じ外側の 2px の主の色の線
  */
 :where(
   input:not(
@@ -1069,10 +1062,9 @@ a.button {
  * **控えのボタンも字だけにする。** 一覧では行ごとに同じボタンが並ぶので、地の付いたボタンの列が
  * 縦に立つと番組名より目立つ。押せることは字の色・指を乗せたときの地・カーソルで分かる。
  * 押す的は 40px (観る画面の操作列と同じ物差し。`player/ControlButton.svelte`)。行の右に寄せる。
- * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする。塗ったボタン (追っかけ・削除の「確定」) は塗ったまま
+ * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする。主のボタン (追っかけ・削除の「確定」) は件の面の上なので太字だけ (`home.css`)
  */
 .row-actions {
-  --dp-btn-tonal: transparent;
   --dp-btn-h: 2.5rem;
   --dp-btn-h-sm: 2.5rem;
   margin-inline-start: auto;
@@ -1163,31 +1155,20 @@ a.button {
   --pico-color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
-/* 下線 (`.seg-pill` を置かないもの)。押す場所の内側に引くので高さは変わらない */
+/*
+ * 下線。押す場所の内側に引くので高さは変わらない。
+ * **下線を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
+ * 線は前の場所から新しい場所へ動く (`#lib/motion.svelte.js` の `slide`)
+ */
+[role="group"].segmented > :is(button, a.button):has(> .seg-pill) {
+  isolation: isolate;
+}
 [role="group"].segmented
   > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]):not(
     :has(> .seg-pill)
-  )::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0.65rem;
-  bottom: 0.2rem;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--pico-primary);
-  pointer-events: none;
-}
-/*
- * **下線を別の要素 (`.seg-pill`) にすると、選び直したときに横へ滑る** (番組表の種別)。
- * 線は前の場所から新しい場所へ動く (`#lib/motion.svelte.js` の `slide`)。見た目は上の下線と同じ
- */
-[role="group"].segmented > :is(button, a.button):has(> .seg-pill) {
-  --pico-background-color: transparent;
-  --pico-border-color: transparent;
-  position: relative;
-  isolation: isolate;
-}
+  )::after,
 .seg-pill {
+  content: "";
   position: absolute;
   inset-inline: 0.65rem;
   bottom: 0.2rem;
@@ -1199,9 +1180,9 @@ a.button {
 
 /* ---- タグ ---- */
 /*
- * 状態のバッジ。**既定は淡い地に濃い文字。** 塗るのは `.solid` を付けたものだけで、
- * それは「いま動いているもの」(録画中・視聴中)に限る。
- * 一覧では 1 行にバッジが 2〜3 個並ぶので、全部塗ると色の縞になって読めなかった
+ * 状態のバッジ (状態だけ。docs/design.md の「見た目の役目」)。**形は 1 つだけで、淡い地に濃い字。**
+ * 前は塗ったもの・枠だけのもの・淡いものが混ざり、同じ一覧に 3 通りの顔が並んでいた。違いは色だけで出す。
+ * `.solid` (いま動いているもの。`format.ts` の `badgeClass`) は見た目を変えず、行の段の色を決める印だけ (`row-status.ts`)
  */
 .tag {
   display: inline-flex;
@@ -1232,15 +1213,6 @@ a.button {
 .tag.info {
   background: color-mix(in srgb, var(--dp-info) 14%, var(--dp-surface));
   color: var(--dp-info-text);
-}
-/*
- * **バッジの形は 1 つだけ** (淡い地に濃い字)。前は塗ったもの (`.solid`。録画中)・枠だけのもの (`.outline`。競合・失敗)・
- * 淡いものが混ざり、同じ一覧に 3 通りの顔が並んでいた。違いは色だけで出す。
- * `.solid` (いま動いているもの) は脈打つ点 (`.rec-dot`) を添えて見分ける。`.outline` は前の書き方の名残で、見た目は変えない
- */
-.tag.solid:not(.success, .error, .warning, .info) {
-  background: color-mix(in srgb, var(--pico-primary) 14%, var(--dp-surface));
-  color: var(--pico-primary);
 }
 
 /* ---- 通知 ---- */
@@ -1535,7 +1507,7 @@ button.text-button:hover {
  * ---- 浮かぶ箱 (ダイアログ・番組の詳細) ----
  * **見た目は 1 つ。** `<dialog>` の中の `<article class="modal-box">` と、番組の詳細 (`ProgramDetail.svelte`) が
  * 同じクラスを使う。Pico の card (`article`) の区切り (本文の下の線・灰色の footer) は使わず、
- * 押すものは右下に並べるだけ (`.modal-actions`。閉じる・取消は `secondary`、主は塗り)。
+ * 押すものは右下に並べるだけ (`.modal-actions`。閉じる・取消は `secondary`、主は太字。浮いたものの中なので浮かせない)。
  * 後ろの幕はぼかさない (`--dp-backdrop`)。Pico の dialog は全面の幕そのものなので、その地を替える。
  * 箱も透かさない。縁は付けず、影 (`--dp-shadow-pop`) だけで浮かせる (メニュー・検索の候補と同じ。docs/design.md)
  */
@@ -1690,7 +1662,7 @@ dialog[open] > article {
 }
 /*
  * **設定の欄は低く (36px)。** 欄が 42px のままだと、項目の多い画面で欄ばかりが目に付いた。
- * 縁は 1px の線のまま、字の大きさも変えない (16px より小さいと iPhone は押したときに拡大する)。
+ * 字の大きさは変えない (16px より小さいと iPhone は押したときに拡大する)。
  * 指で押す端末では 40px 以上を保つ。中のボタン (`.small` でないもの) も同じ高さに揃う
  */
 .sections {
@@ -1855,7 +1827,7 @@ dialog[open] > article {
  * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 28px 空ける (最初のグループは 0)。
  *   行は見出しより 12px 深く始め、塗りも一緒に動く
  * - **行はどの端末でも 48px** (車の中のタブレットでも押せる高さ。マウスとタブレットで詰め具合を変えない)
- * - 選んでいる行 (`aria-current` か `aria-pressed="true"`) は角の丸い薄い塗りと太字。指を乗せた行はそれより淡く
+ * - 選んでいる行 (`aria-current` か `aria-pressed="true"`) は左の縦線と主の色の太字 (下)。指を乗せた行だけ薄い地
  */
 .side-panel {
   display: flex;

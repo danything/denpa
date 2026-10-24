@@ -41,7 +41,7 @@
     width: 0.5rem;
     height: 0.5rem;
     border-radius: var(--dp-radius-full);
-    background: var(--dp-error);
+    background: var(--dp-rec);
   }
   .dot.active {
     background: currentColor;

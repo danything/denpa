@@ -639,7 +639,6 @@
       z-index: 60;
       max-height: 80dvh;
       overflow-y: auto;
-      border-top: 1px solid var(--dp-line);
       border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
       box-shadow: var(--dp-shadow-pop);
       padding-bottom: env(safe-area-inset-bottom);

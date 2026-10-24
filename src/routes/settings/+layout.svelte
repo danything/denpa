@@ -14,7 +14,7 @@
     SETTINGS_GROUPS.find((g) => g.slug === current) ?? null,
   );
 
-  /** 見えている節 (左の一覧と、狭い画面の上の行で塗る) */
+  /** 見えている節 (左の一覧と、狭い画面の上の行で印を付ける) */
   let active = $state<string | null>(null);
 
   let main = $state<HTMLElement>();
@@ -86,7 +86,7 @@
   }
   onDestroy(() => unpin());
 
-  /** 押した節へ飛んでいる間は、見えている節を数え直さない (途中の節が点々と塗られる) */
+  /** 押した節へ飛んでいる間は、見えている節を数え直さない (途中の節に次々と印が付く) */
   let jumping: ReturnType<typeof setTimeout> | undefined;
   function jump(slug: string): void {
     active = slug;
@@ -149,7 +149,7 @@
 <!--
     **一覧と詳細の形**。左にグループとその節の一覧、右にグループの画面。
     **グループごとに1つの画面** (`/settings/<グループ>`) で、節は上から積む。節を押すとそこへ滑らかに巻き、
-    巻いていくと見えている節が左の一覧で塗られる。並びは `#lib/settings-sections.ts`。
+    巻いていくと左の一覧で見えている節に印が付く。並びは `#lib/settings-sections.ts`。
 
     **横に並べはじめる幅は全画面で 768px** ([+layout.svelte](../+layout.svelte) の `FILLED`)。
     並べたらページごとは動かさず、左右がそれぞれ自分で巻き取る。左の列は画面の左端とヘッダーの下に付け、
@@ -161,7 +161,7 @@
 <div class="page settings-page" class:list-view={current === null}>
   <!--
         **行は線で区切らない** (録画の画面のサイドバーと同じ部品)。グループは太字の見出し、
-        節はそれより一段深い行。見えている節だけ角の丸い薄い塗り
+        節はそれより一段深い行。見えている節は左の縦線と主の色の太字
     -->
   <nav
     class="side side-panel"

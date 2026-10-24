@@ -44,7 +44,7 @@ const RANK: Record<StatusTone, number> = {
 };
 
 /**
- * バッジの色 (`badgeClass`) を段の色に。塗ったもの (`solid`) はいま動いているもの (録画中)
+ * バッジの色 (`badgeClass`) を段の色に。`solid` はいま動いているもの (録画中)
  */
 export function toneOf(badge: string): StatusTone {
   if (badge.includes("solid")) return "rec";

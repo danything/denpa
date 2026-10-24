@@ -37,7 +37,7 @@
 
 <button
   type="button"
-  class="group-head"
+  class="group-head item"
   aria-expanded={open}
   onclick={() => ctx.toggleGroup(zone, group.group)}
   data-testid="recording-group"

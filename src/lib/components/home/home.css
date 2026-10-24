@@ -1,5 +1,5 @@
 /*
- * 行 (`.row`) の作りの共通部分。高さ・余白・触れたときの塗りは時間軸の行 (`.t-row`)。
+ * 行 (`.row`) の作りの共通部分。高さ・余白・件の面は時間軸の行 (`.t-row`)。
  * **重なりの層は行で閉じる** (`isolation`)。薄くした字 (`opacity`) は層を作って押せる範囲 (`.row-open::after`)
  * より上に描かれるので、範囲には `z-index` を付ける。行で閉じれば隣の行や見出しには響かない
  */
@@ -12,7 +12,10 @@
   min-width: 0;
   flex: 1 1 14rem;
 }
+/* 行いっぱいに広げた入口 (下の `.row-open::after`) より上に置く。行の中のボタンとリンク (ルール名。下の `.t-rule a`) はそれぞれの働きのまま押せる */
 .board .row-actions {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -52,18 +55,13 @@
   inset: 0;
   z-index: 1;
 }
-/* 焦点の線は名前ではなく行のまわりに。外へ出すと一覧の枠で切れるので内側に引く */
+/* 焦点の線は名前ではなく行のまわりに。外へ出すと巻き取る一覧で切れるので内側に引く */
 .board .row-open:focus-visible {
   outline: none;
 }
 .board .row-open:focus-visible::after {
   outline: 2px solid var(--pico-primary);
   outline-offset: -2px;
-}
-/* 広げた範囲より上に置く。行の中のボタンとリンク (ルール名。下の `.t-rule a`) はそれぞれの働きのまま押せる */
-.board .row-actions {
-  position: relative;
-  z-index: 2;
 }
 /*
     flex にしない。録画済みの行は書くことが多く (サイズ・コーデック)、flex-wrap だと
@@ -76,10 +74,7 @@
   color: var(--dp-muted);
   overflow-wrap: anywhere;
 }
-/*
- * ルール名のリンクは淡い地向けの主の色。行に指を乗せると地が薄く塗られ、
- * Pico の主の色のままでは 4.5:1 に届かなかった (#0172ad / #e6e9ee で 4.3)
- */
+/* ルール名のリンクは淡い地向けの主の色。Pico の主の色のままでは、指を乗せた件の面の上で 4.5:1 に届かないことがある */
 .board .row-meta a {
   color: var(--dp-primary-text);
 }
@@ -163,12 +158,8 @@
  * 押すものなので button だが、ボタンの見た目 (地・枠・中寄せ) は外す
  */
 .board .group-head {
-  display: flex;
-  align-items: center;
   width: 100%;
   border: 0;
-  border-radius: var(--dp-radius);
-  box-shadow: none;
   color: inherit;
   font-size: inherit;
   font-weight: inherit;
@@ -468,8 +459,7 @@
 }
 
 /*
- * **行。** 幅いっぱいの 2 段の件。**件の面 (`--dp-item`) に乗せ、件の間の余白で 1 本ずつに見せる** (docs/design.md の「何行かある一覧」)。
- * 線と枠は付けない。指を乗せると件の面 (右端のボタンまで) を一段変え、ひとまとまりだと見せる。
+ * **行。** 幅いっぱいの 2 段の件。件の面 (`app.css` の `.item`) に乗せ、件の間の余白で 1 本ずつに見せる。
  *
  * - 1段目: 時刻 · 番組名、右に押すもの
  * - 2段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の頭 (残りの幅を埋め、「…」で切る)
@@ -492,18 +482,6 @@
   min-height: 4rem;
   margin: 0;
   padding: 0.5rem 0.75rem;
-  border-radius: var(--dp-item-radius);
-  background: var(--dp-item);
-  box-shadow: var(--dp-item-shadow);
-  /* 件の中のボタンは浮かせない (浮きの上に浮きを重ねない) */
-  --dp-btn-solid: transparent;
-  --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-  --dp-btn-lift: none;
-  transition: background-color var(--dp-duration);
-}
-.board .t-row:hover,
-.board .group-head:hover {
-  background: var(--dp-item-hover);
 }
 .board .t-row .row-body {
   display: flex;
@@ -645,17 +623,12 @@
     padding-inline: 0.5rem;
   }
 }
-/* 番組の中の行。一段下げて、左に線を引いてどの見出しの中かを見せる */
+/*
+ * 番組の中の行。中身を一段下げて、どの見出しの中かを見せる (線は引かない。左の縦線は「選んでいる」の印なので)。
+ * 開いた番組の頭の押すもの (`.group-tools`) と同じ深さ
+ */
 .board .row.nested {
   padding-left: 2.25rem;
-}
-.board .row.nested::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  left: 1.25rem;
-  width: 2px;
-  background: var(--dp-line);
 }
 
 /* **狭い画面では行の操作を「⋯」1つに** (`TimelineRow`。番組名に幅を回す)。広い画面は並べ、「⋯」は出さない */
@@ -766,7 +739,7 @@
 
 /*
  * ---- 右のサイドバー (`HomeAside`) ----
- * 1000px 以上。右の端まで寄せ、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (一覧の行の塗りと余白で分かれる)。
+ * 1000px 以上。右の端まで寄せ、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (件の面と余白で分かれる)。
  * 形は `app.css` のサイドバーの部品 (`.side-panel` など)。ここは幅と、出すかどうかだけ。この幅では頭の1行は出さず、一覧はいちばん上から始まる
  */
 .board .t-side {
@@ -796,7 +769,7 @@
 .board .a-state dt {
   min-width: 0;
 }
-/* 絞り込みのうち手を止めてほしいもの (競合・失敗など)。注意の色とアイコン (選んでいるときは内側の塗りに注意の色を混ぜる) */
+/* 絞り込みのうち手を止めてほしいもの (競合・失敗など)。注意の色の字とアイコン。選んでいるときもほかの行と同じく線と太字で、塗らない */
 .board .a-warn {
   color: var(--dp-warn-text);
 }
@@ -804,17 +777,13 @@
   color: inherit;
   font-weight: var(--dp-weight-bold);
 }
-.board .a-warn[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--dp-warn) 16%, transparent);
-}
 .board .a-warn-label {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
 }
-/* 狭い画面の、手を止めてほしいもののチップ。注意の色 */
+/* 狭い画面の、手を止めてほしいもののチップ。注意の色の字 (塗らない) */
 .board .t-toolbar .t-chips > .t-chip.warn {
-  --pico-background-color: color-mix(in srgb, var(--dp-warn) 16%, transparent);
   --pico-color: var(--dp-warn-text);
 }
 .board .t-chip.warn .num {
@@ -836,7 +805,7 @@
 }
 /*
  * サイドバーの月のカレンダー (`HomeCalendar`)。行は 48px にしない (升は 32px。幅は 7 等分で 40px ほどあるので、押す所は升いっぱい)。
- * 見出しはほかのグループと同じ太字で、右に ‹ ›。点は数字の下 (録画・予約のある日)。今日は丸、頭に貼り付いている日は薄い塗り
+ * 見出しはほかのグループと同じ太字で、右に ‹ ›。日の印は下の「日のマス」
  */
 .board .cal-head {
   display: flex;
