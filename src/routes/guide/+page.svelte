@@ -1706,7 +1706,12 @@
     isolation: isolate;
   }
   .program::before {
-    --past: clamp(0, (var(--now) - var(--s)) / (var(--e) - var(--s)), 1);
+    /* 長さ 0 の番組で 0 で割らないよう、分母に下限を置く */
+    --past: clamp(
+      0,
+      (var(--now) - var(--s)) / max(var(--e) - var(--s), 0.001),
+      1
+    );
     content: "";
     position: absolute;
     inset: 0 0 auto;
