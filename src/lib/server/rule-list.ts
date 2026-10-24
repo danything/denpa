@@ -45,6 +45,7 @@ export interface RuleRow {
   enabled: boolean;
   priority: number;
   dedupe: boolean;
+  skip_earlier: boolean;
   /** これから録る予約の数 */
   reservations: number;
   /** そのうちチューナーが足りないもの */

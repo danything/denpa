@@ -4,12 +4,19 @@
  * `[新]` のようなゆるい条件で選ぶと、同じ回が局を替えて何度も流れる
  * (MX → BS11 → 地方局、地上波と BS の同時放送)。全部録ってもディスクが
  * 埋まるだけなので、**いちばん早い放送だけ**を予約する。
+ * ルールの「前の回は録らない」(`earlierAirings`) も、同じ回の読み方 (`episodeOf`) を使うのでここに置く。
  *
  * 判定は画面に触らない純粋な計算にしてある (単体テストで固定する)。
  * DB を読むのは呼ぶ側 (`rules.applyRules` とルール画面の下見)。
  */
 import { toHalfWidth } from "../fold";
-import { displayTitle, parseTitle, searchable, withoutSlot } from "./title";
+import {
+  displayTitle,
+  hasSeason,
+  parseTitle,
+  searchable,
+  withoutSlot,
+} from "./title";
 
 /** 比べる前に揃える。空白の有無・大文字小文字は局によって揺れる。外字は昔の書き方に (`fold.ts`) */
 function squash(text: string): string {
@@ -32,6 +39,8 @@ export interface Episode {
   work: string;
   /** 編 (`parseTitle` の `arc`) を均したもの。無ければ空 */
   arc: string;
+  /** 編に期 (`第2期`) が入っているか (`title.hasSeason`)。期を書かないタイトルとは別のシリーズ (`sameSeries`) */
+  season: boolean;
   /** シリーズ名のうちいちばん長い語。局ごとの飾り (頭の「アニメ」、後ろの枠の名前) を除けた芯 */
   core: string;
   number: number | null;
@@ -197,6 +206,7 @@ export function episodeOf(program: Described): Episode | null {
     series: squash(series),
     work: squash(bare(work)),
     arc: squash(bare(parsed.arc)),
+    season: hasSeason(parsed.arc),
     core,
     number,
     subtitle,
@@ -212,12 +222,15 @@ function summaryOf(description: string): string {
 
 /**
  * シリーズ名が同じか。編を書く局と書かない局 (`「東京リベンジャーズ」三天戦争編 第51話` と
- * `東京リベンジャーズ #51`) は、作品名が同じなら同じシリーズとみる
+ * `東京リベンジャーズ #51`) は、作品名が同じなら同じシリーズとみる。
+ * **期は別** — `X 第2期 #1` と `X #1` は、期を書かない1期の回かもしれないので同じシリーズとみない
+ * (取り違えて2期を録り逃すより、1本多く録るほうがよい)
  */
 function sameSeries(a: Episode, b: Episode): boolean {
   return (
     a.series === b.series ||
-    (a.work === b.work && (a.arc === "" || b.arc === ""))
+    (a.work === b.work &&
+      ((a.arc === "" && !b.season) || (b.arc === "" && !a.season)))
   );
 }
 
@@ -311,7 +324,10 @@ export interface Airing extends Described {
   type: string;
 }
 
-/** 録ったことのある回と、いつ・どこで録ったか。同じ回は `sameEpisode` で探す */
+/**
+ * 録ったことのある回と、いつ・どこで録ったか。同じ回は `sameEpisode` で探す。
+ * よそから引き継いだ履歴 (`schema.recordedHistory`) は終わりの時刻しか持たないので、`start_at` にそれが入る
+ */
 export type Taken = {
   episode: Episode;
   start_at: number;
@@ -323,7 +339,9 @@ export type Skip<T extends Airing> =
   /** 同じ回を別の放送で録る */
   | { kind: "repeat"; first: T }
   /** 同じ回をもう録ってある */
-  | { kind: "recorded"; start_at: number; service_name: string };
+  | { kind: "recorded"; start_at: number; service_name: string }
+  /** 先の回をもう録ったか予約してある (`earlierAirings`) */
+  | { kind: "earlier"; number: number };
 
 /**
  * 同時に流れているものの中で、どれを録るか。
@@ -447,6 +465,54 @@ export function firstAirings<T extends Airing>(
       for (const airing of cluster) rest.splice(rest.indexOf(airing), 1);
       if (cluster.length > 1) settle(cluster);
     }
+  }
+  return skips;
+}
+
+/** 録ったか予約してある回と、その放送の始まり (`earlierAirings`) */
+export type Known = { episode: Episode; start_at: number }[];
+
+/**
+ * **前の回は録らない** (ルールの「前の回は録らない」)。録らない放送を返す (番組ID → 理由)。
+ *
+ * 同じシリーズで、**その放送より前に流れた (流れる) 回のいちばん大きい話数より小さい**話数の放送は録らない。
+ * 4話から追っているところへ1〜3話の一挙放送が来たときのためのもの。
+ *
+ * - 比べる相手は、録った回・予約した回 (`known`) と、渡された放送そのもの。**その放送より前に始まるものだけ** —
+ *   番組表には来週の回も載っているので、時刻を見ないと今週の5話が来週の6話のせいで録れなくなる
+ * - シリーズは名前がぴったり同じもの (`Episode.series`。編・期まで含む) だけ。二期や、編ごとに
+ *   1話から数え直す番組 (`X 〇〇編 #1`) を前の回にしない。飾りの違う局どうしも比べない (録る側に倒す)
+ * - 話数の読めない放送は録らないことにしない。話数の読めない回は相手にもならない
+ *
+ * 番組名が同じまま1話から数え直すシリーズは飛ばしてしまうので、ルールでは入れたときだけ当てる
+ */
+export function earlierAirings<T extends Airing>(
+  airings: readonly T[],
+  known: Known = [],
+): Map<number, Skip<T>> {
+  const skips = new Map<number, Skip<T>>();
+  const read = airings.flatMap((airing) => {
+    const episode = episodeOf(airing);
+    return episode?.number == null
+      ? []
+      : [{ airing, episode, start_at: airing.start_at }];
+  });
+  const bySeries = Map.groupBy(
+    [...known.filter((k) => k.episode.number !== null), ...read],
+    (k) => k.episode.series,
+  );
+  for (const { airing, episode } of read) {
+    const ahead = bySeries
+      .get(episode.series)!
+      .filter(
+        (k) =>
+          k.start_at < airing.start_at && k.episode.number! > episode.number!,
+      );
+    if (ahead.length === 0) continue;
+    skips.set(airing.id, {
+      kind: "earlier",
+      number: Math.max(...ahead.map((k) => k.episode.number!)),
+    });
   }
   return skips;
 }

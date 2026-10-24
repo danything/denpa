@@ -16,9 +16,18 @@ import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";
 import { config } from "./config";
 import { now, orm } from "./db";
-import { type Airing, episodeOf, firstAirings, type Taken } from "./episode";
+import {
+  type Airing,
+  earlierAirings,
+  episodeOf,
+  firstAirings,
+  type Known,
+  type Skip,
+  type Taken,
+} from "./episode";
 import {
   programs as programTable,
+  recordedHistory,
   recordings,
   reservations,
   rules as ruleTable,
@@ -391,13 +400,17 @@ export function canceledBroadcasts(at: number): Declined {
 const TAKEN_WINDOW = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * **もう録ってある回** (`episode.firstAirings` の `taken`)。
+ * **もう録ってある回** (`episode.firstAirings` の `taken`。「前の回は録らない」も見る)。
  *
  * これが無いと、いちばん早い放送を録り終えた途端 (番組表の「これから」から
  * 抜けた途端)、次の再放送が「いちばん早い放送」に繰り上がって録れてしまう。
  *
  * **失敗した録画は数えない** — 再放送は録り直す好機。消したものは数える
- * (観て消したものをまた録っても困る)
+ * (観て消したものをまた録っても困る)。
+ *
+ * **よそから引き継いだ履歴** (`schema.recordedHistory`) も入れる。EPGStation で録った回を
+ * denpa がまた録らないように。こちらは引き継いだときで増えなくなるので、期間で切らずに全部読む
+ * (引き継ぎのあとに来る一挙放送は、前の回を録ってから何か月も先のことがある)
  */
 function recordedEpisodes(at: number): Taken {
   const rows = orm()
@@ -423,7 +436,47 @@ function recordedEpisodes(at: number): Taken {
     const episode = episodeOf(described);
     if (episode !== null) taken.push({ episode, start_at, service_name });
   }
+  const history = orm()
+    .select({
+      name: recordedHistory.name,
+      end_at: recordedHistory.end_at,
+      service_name: recordedHistory.service_name,
+    })
+    .from(recordedHistory)
+    .all();
+  for (const { name, end_at, service_name } of history) {
+    // 履歴はタイトルしか持たない。始まりの時刻も無いので、終わりの時刻を入れる
+    const episode = episodeOf({ name, description: "", extended: null });
+    if (episode !== null)
+      taken.push({ episode, start_at: end_at, service_name });
+  }
   return taken;
+}
+
+/**
+ * **予約してある回** (「前の回は録らない」の相手。`episode.earlierAirings`)。録り始めたものは録画の行
+ * ({@link recordedEpisodes}) にいるので入れない。録らないと決めた予約 (`skipped`) と取り消しも入れない
+ */
+function reservedEpisodes(at: number): Known {
+  const rows = orm()
+    .select({
+      name: reservations.name,
+      description: reservations.description,
+      start_at: reservations.start_at,
+    })
+    .from(reservations)
+    .where(
+      and(
+        inArray(reservations.state, ["scheduled", "conflict"]),
+        isNull(reservations.started_at),
+        gt(reservations.end_at, at),
+      ),
+    )
+    .all();
+  return rows.flatMap(({ start_at, ...described }) => {
+    const episode = episodeOf({ ...described, extended: null });
+    return episode === null ? [] : [{ episode, start_at }];
+  });
 }
 
 /** チューナー不足で弾かれている番組。同じ回の次の放送で録る (`episode.firstAirings` の `blocked`) */
@@ -436,45 +489,73 @@ function blockedPrograms(): Set<number> {
   return new Set(rows.map((row) => row.id));
 }
 
+/** 「録らない」を決めるのに渡す放送。番組表の行に局の種別を添えたもの */
+type Candidate = Omit<Airing, "type"> & {
+  service_type: string;
+  copy_never: boolean;
+};
+
 /**
- * **同じ回は最初の放送だけ** (ルールの `dedupe`)。録らない番組 → 理由 (`episode.firstAirings`)。
+ * **同じ回の読み方で決める「録らない」** — ルールの「同じ回は最初の放送だけ」(`dedupe`。
+ * `episode.firstAirings`) と「前の回は録らない」(`skip_earlier`。`episode.earlierAirings`)。
+ * それぞれ、そのスイッチを入れたルールが当たった放送を渡す。録らない番組 → 理由。
  * 予約を立てるとき (`applyRules`) と下見 (`rule-preview.ts`) で同じものを使う
  */
-function dedupeSkips<
-  T extends Omit<Airing, "type"> & {
-    service_type: string;
-    copy_never: boolean;
-  },
->(list: T[], at: number) {
+function episodeSkips<T extends Candidate>(
+  lists: { dedupe: T[]; earlier: T[] },
+  at: number,
+): {
+  dedupe: Map<number, Skip<T & Airing>>;
+  earlier: Map<number, Skip<T & Airing>>;
+} {
+  if (lists.dedupe.length === 0 && lists.earlier.length === 0)
+    return { dedupe: new Map(), earlier: new Map() };
+  const taken = recordedEpisodes(at);
+  const typed = (list: T[]) =>
+    list.map((program) => ({ ...program, type: program.service_type }));
   /*
    * **コピー禁止の放送も弾かれているのと同じ。** 録らないので、同じ回の次の放送 (禁止でない局) を録る
    * (`format.COPY_NEVER_REASON`)
    */
   const blocked = blockedPrograms();
-  for (const program of list) if (program.copy_never) blocked.add(program.id);
-  return firstAirings(
-    list.map((program) => ({ ...program, type: program.service_type })),
-    blocked,
-    recordedEpisodes(at),
-  );
+  for (const program of lists.dedupe)
+    if (program.copy_never) blocked.add(program.id);
+  return {
+    dedupe:
+      lists.dedupe.length === 0
+        ? new Map()
+        : firstAirings(typed(lists.dedupe), blocked, taken),
+    earlier:
+      lists.earlier.length === 0
+        ? new Map()
+        : earlierAirings(typed(lists.earlier), [
+            ...taken,
+            ...reservedEpisodes(at),
+          ]),
+  };
 }
 
 /**
- * 下見 (`rule-preview.ts`) の「録らない」({@link dedupeSkips})。人が取り消した放送は `applyRules` も
- * 立てないので、「最初の放送」の候補に入れない
+ * 下見 (`rule-preview.ts`) の「録らない」({@link episodeSkips})。人が取り消した放送は `applyRules` も
+ * 立てないので、「最初の放送」の候補に入れない。両方当たるなら同じ回のほう (`repeat` / `recorded`) を返す
  */
-export function previewSkips<
-  T extends Omit<Airing, "type"> & {
-    service_type: string;
-    service_channel: string;
-    copy_never: boolean;
-  },
->(hits: T[], at: number) {
+export function previewSkips<T extends Candidate & { service_channel: string }>(
+  hits: T[],
+  at: number,
+  rule: Pick<Rule, "dedupe" | "skip_earlier">,
+): Map<number, Skip<T & Airing>> {
   const declined = canceledBroadcasts(at);
-  return dedupeSkips(
-    hits.filter((p) => !declined.has({ ...p, channel: p.service_channel })),
+  const list = hits.filter(
+    (p) => !declined.has({ ...p, channel: p.service_channel }),
+  );
+  const { dedupe, earlier } = episodeSkips(
+    {
+      dedupe: rule.dedupe ? list : [],
+      earlier: rule.skip_earlier ? list : [],
+    },
     at,
   );
+  return new Map([...earlier, ...dedupe]);
 }
 
 /**
@@ -568,16 +649,15 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
 
   /**
    * 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち**。
-   * `dedupe` は「同じ回は最初の放送だけ」のルールが当たったか、`plain` はそうでない
-   * ルールのうち最初に当たったもの (下の dedupe で外れたときの受け手)
+   * `matched` は当たったルールすべて (当たった順)。下の「同じ回は最初の放送だけ」「前の回は録らない」で
+   * 外れたとき、そのスイッチを入れていないルールが受け持つ
    */
   const wanted = new Map<
     number,
     {
       rule: Rule;
       program: (typeof programs)[number];
-      dedupe: boolean;
-      plain: Rule | undefined;
+      matched: Rule[];
     }
   >();
   /**
@@ -598,26 +678,19 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const simulcast = new Map<string, { serviceId: number; programId: number }>();
   for (const program of programs) {
     const textOf = textCache(program);
-    let owner: Rule | undefined;
-    let plain: Rule | undefined;
-    let dedupe = false;
-    // 先勝ちの持ち主のほかに、dedupe の有無どちらのルールが当たるかも見る (下の dedupe)
-    for (const candidate of searching) {
-      if (
-        !matchesCompiled(
+    // 先勝ちの持ち主のほかに、当たったルールを全部見る (下の dedupe / skip_earlier の受け手)
+    const matched = searching
+      .filter((candidate) =>
+        matchesCompiled(
           candidate,
           program,
           program.service_type,
           recording.freeOnly,
           textOf,
-        )
+        ),
       )
-        continue;
-      owner ??= candidate.rule;
-      if (candidate.rule.dedupe) dedupe = true;
-      else plain ??= candidate.rule;
-      if (dedupe && plain !== undefined) break;
-    }
+      .map((candidate) => candidate.rule);
+    const owner = matched[0];
     if (owner === undefined) continue;
     /*
      * **人が取り消した放送には立てない。** 取り消しの記録は番組の id
@@ -637,27 +710,38 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
       serviceId: program.service_id,
       programId: program.id,
     });
-    wanted.set(program.id, { rule: owner, program, dedupe, plain });
+    wanted.set(program.id, { rule: owner, program, matched });
   }
 
   /*
-   * **同じ回は最初の放送だけ** (ルールの `dedupe`)。局を替えた再放送・同時放送のうち
-   * いちばん早いものだけ残す (`episode.firstAirings`)。比べるのは dedupe のルールが
-   * 当たった放送すべて — 持ち主が別のルールでも、録るならそれが「最初の放送」になる。
-   * 外したものは、dedupe でないルールも当たっていればそちらが受け持ち、無ければ
-   * 予約を立てず、立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
+   * **同じ回は最初の放送だけ** (ルールの `dedupe`) と **前の回は録らない** (`skip_earlier`)。
+   * 同じ回は、局を替えた再放送・同時放送のうちいちばん早いものだけ残す (`episode.firstAirings`)。
+   * 前の回は、先の回を録った・予約したあとに流れる前の話数を外す (`episode.earlierAirings`)。
+   * 比べるのはそのスイッチのルールが当たった放送すべて — 持ち主が別のルールでも、録るならそれが
+   * 「最初の放送」になる。外したものは、外したスイッチを入れていないルールも当たっていればそちらが
+   * 受け持ち、無ければ予約を立てず、立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
    */
-  const deduping = [...wanted.values()].filter((entry) => entry.dedupe);
-  if (deduping.length > 0) {
-    const skips = dedupeSkips(
-      deduping.map(({ program }) => program),
-      at,
+  const entries = [...wanted.values()];
+  const skips = episodeSkips(
+    {
+      dedupe: entries
+        .filter((entry) => entry.matched.some((rule) => rule.dedupe))
+        .map(({ program }) => program),
+      earlier: entries
+        .filter((entry) => entry.matched.some((rule) => rule.skip_earlier))
+        .map(({ program }) => program),
+    },
+    at,
+  );
+  for (const id of new Set([...skips.dedupe.keys(), ...skips.earlier.keys()])) {
+    const entry = wanted.get(id)!;
+    const keeper = entry.matched.find(
+      (rule) =>
+        !(rule.dedupe && skips.dedupe.has(id)) &&
+        !(rule.skip_earlier && skips.earlier.has(id)),
     );
-    for (const id of skips.keys()) {
-      const entry = wanted.get(id)!;
-      if (entry.plain === undefined) wanted.delete(id);
-      else entry.rule = entry.plain;
-    }
+    if (keeper === undefined) wanted.delete(id);
+    else entry.rule = keeper;
   }
 
   /** いまルールが立てている予約。手動と、録り始めたものは入らない */

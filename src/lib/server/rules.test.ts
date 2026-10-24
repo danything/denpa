@@ -31,6 +31,7 @@ function rule(fields: Partial<Rule>): Rule {
     enabled: true,
     priority: 2,
     dedupe: false,
+    skip_earlier: false,
     source: null,
     created_at: 0,
     ...fields,

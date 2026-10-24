@@ -9,6 +9,7 @@ describe("ルールの条件を1行で", () => {
     service_types: null,
     genres: null,
     dedupe: false,
+    skip_earlier: false,
     ignore_keyword: "",
   };
   const names = new Map([
@@ -21,18 +22,21 @@ describe("ルールの条件を1行で", () => {
   test("探す所と全局だけ", () => {
     expect(conditionSummary(base, name)).toBe("番組名 ・ 全局");
   });
-  test("同じ回・除外・概要まで", () => {
+  test("同じ回・前の回・除外・概要まで", () => {
     expect(
       conditionSummary(
         {
           ...base,
           search_fields: "name,description",
           dedupe: true,
+          skip_earlier: true,
           ignore_keyword: " 再放送 ",
         },
         name,
       ),
-    ).toBe("番組名・概要 ・ 全局 ・ 同じ回は1度 ・ 除外: 再放送");
+    ).toBe(
+      "番組名・概要 ・ 全局 ・ 同じ回は1度 ・ 前の回は録らない ・ 除外: 再放送",
+    );
   });
   test("局は2つまで名前、それより多いと数", () => {
     expect(conditionSummary({ ...base, service_ids: [2] }, name)).toBe(

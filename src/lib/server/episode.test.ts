@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type Airing,
   captioned,
+  earlierAirings,
   episodeOf,
   firstAirings,
   sameEpisode,
@@ -772,5 +773,80 @@ describe("firstAirings", () => {
       { episode: recorded, start_at: base - 7 * DAY, service_name: "MONDO TV" },
     ];
     expect(firstAirings([one, sp], new Set(), taken).size).toBe(0);
+  });
+});
+
+describe("二期", () => {
+  const base = Date.UTC(2026, 9, 1, 14);
+
+  test("期を書かないタイトルと「第2期」は、副題が無くても別の回", () => {
+    expect(same("テストアニメ #1", "テストアニメ 第2期 #1")).toBe(false);
+    expect(same("テストアニメ #1", "テストアニメ【第2期】 #1")).toBe(false);
+    // 編 (期でないもの) を書かない局とは、今までどおり同じ回
+    expect(
+      same("東京リベンジャーズ #51", "「東京リベンジャーズ」三天戦争編 第51話"),
+    ).toBe(true);
+  });
+
+  test("引き継いだ履歴 (タイトルだけ) にある回は録らず、二期の同じ話数は録る", () => {
+    // EPGStation の履歴は概要を持たない。半角に寄せ、[新] などを外した名前
+    const recorded = episodeOf({
+      name: "テストアニメ #3",
+      description: "",
+      extended: null,
+    })!;
+    const taken = [
+      { episode: recorded, start_at: base - 90 * DAY, service_name: "" },
+    ];
+    const rerun = airing("[再]テストアニメ #3", base);
+    const second = airing("テストアニメ 第2期 #3", base + HOUR);
+    const skips = firstAirings([rerun, second], new Set(), taken);
+    expect(skips.get(rerun.id)?.kind).toBe("recorded");
+    expect(skips.has(second.id)).toBe(false);
+  });
+});
+
+describe("earlierAirings", () => {
+  const base = Date.UTC(2026, 9, 1, 14);
+  const known = (name: string, at: number) => ({
+    episode: episodeOf({ name, description: "", extended: null })!,
+    start_at: at,
+  });
+
+  test("予約した4話より前の1〜3話は、4話のあとに流れるなら録らない", () => {
+    const binge = [1, 2, 3].map((n) =>
+      airing(`テストアニメ #${n}`, base + DAY + n * HOUR),
+    );
+    const skips = earlierAirings(binge, [known("テストアニメ #4", base)]);
+    expect(binge.map((a) => skips.get(a.id))).toEqual([
+      { kind: "earlier", number: 4 },
+      { kind: "earlier", number: 4 },
+      { kind: "earlier", number: 4 },
+    ]);
+  });
+
+  test("渡した放送どうしも比べる。来週の6話のせいで今週の5話を外さない", () => {
+    const five = airing("テストアニメ #5", base);
+    const six = airing("テストアニメ #6", base + 7 * DAY);
+    const rerun = airing("テストアニメ #5", base + 8 * DAY);
+    const skips = earlierAirings([five, six, rerun]);
+    expect(skips.has(five.id)).toBe(false);
+    expect(skips.has(six.id)).toBe(false);
+    expect(skips.get(rerun.id)).toEqual({ kind: "earlier", number: 6 });
+  });
+
+  test("話数の読めない回は録らないことにしない", () => {
+    const special = airing("テストアニメ 特別編", base + DAY);
+    expect(
+      earlierAirings([special], [known("テストアニメ #4", base)]).size,
+    ).toBe(0);
+  });
+
+  test("二期と、名前の違うシリーズは比べない", () => {
+    const second = airing("テストアニメ 第2期 #1", base + DAY);
+    const other = airing("テストアニメ外伝 #1", base + DAY);
+    expect(
+      earlierAirings([second, other], [known("テストアニメ #4", base)]).size,
+    ).toBe(0);
   });
 });

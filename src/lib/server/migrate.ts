@@ -38,7 +38,13 @@ import { emit } from "./events";
 import { type LibraryNameInput, libraryPath, recordedPath } from "./library";
 import { writeThumbnail } from "./metadata";
 import { reserve } from "./reservations";
-import { programs, recordings, rules, services } from "./schema";
+import {
+  programs,
+  recordedHistory,
+  recordings,
+  rules,
+  services,
+} from "./schema";
 import { parseTitle } from "./title";
 
 const env = (key: string, fallback: string) => process.env[key] ?? fallback;
@@ -98,6 +104,8 @@ export interface MigrateStatus extends MigrateOptions {
   /** ルールと手動予約。録画と違ってファイルを触らないので、下見でも件数だけ数える */
   rules: { imported: number; skipped: number };
   reservations: { imported: number; skipped: number };
+  /** 録画の履歴 (`importHistory`)。ルールと同じく、下見でも件数だけ数える */
+  history: { imported: number; skipped: number };
   /** いま扱っている録画の名前 */
   current: string | null;
   /** 直近の記録。全部残すと際限が無いので後ろから 200 件だけ持つ */
@@ -121,6 +129,7 @@ function freshStatus(over: Partial<MigrateStatus> = {}): MigrateStatus {
     missing: 0,
     rules: { imported: 0, skipped: 0 },
     reservations: { imported: 0, skipped: 0 },
+    history: { imported: 0, skipped: 0 },
     current: null,
     log: [],
     error: null,
@@ -138,6 +147,7 @@ export function status(): MigrateStatus {
     log: [...status_.log],
     rules: { ...status_.rules },
     reservations: { ...status_.reservations },
+    history: { ...status_.history },
   };
 }
 
@@ -690,6 +700,93 @@ async function importReservations(
   }
 }
 
+/** EPGStation の `recorded_history` の1行。`channelId` と `endAt` は bigint なので、文字で来ることがある */
+export interface HistoryRow {
+  id: number;
+  name: string;
+  channelId: number | string | null;
+  channelName: string | null;
+  endAt: number | string;
+}
+
+/**
+ * **録画の履歴を引き継ぐ** (EPGStation の `recorded_history`)。
+ *
+ * EPGStation は録画を消しても、ルールで録った番組の名前・局・終わりの時刻をここに残している
+ * (既定で 90 日。向こうの設定の `recordedHistoryRetentionPeriodDays`)。これを「録ったことのある回」の
+ * 控え (`schema.recordedHistory`) に入れると、ルールの「同じ回は最初の放送だけ」と「前の回は録らない」が見て、
+ * EPGStation で録った回を録り直さない。録画の行にはしない (ファイルが無い)。
+ *
+ * 表が無ければ (古い版など) 記録に残して先へ進む。録画とルールの引き継ぎは止めない。
+ * 繋がらないときはここで投げる (ルールと同じく、走らせ直してもらう)
+ */
+async function importHistory(
+  connection: SQL,
+  options: MigrateOptions,
+): Promise<void> {
+  const tables = (await connection.unsafe(
+    `SHOW TABLES LIKE 'recorded_history'`,
+  )) as unknown[];
+  if (tables.length === 0) {
+    record("録画の履歴 (recorded_history) が無いので飛ばします");
+    return;
+  }
+  const rows = (await connection.unsafe(
+    `SELECT h.id, h.name, h.channelId, c.name AS channelName, h.endAt
+         FROM recorded_history h
+         LEFT JOIN channel c ON c.id = h.channelId
+         ORDER BY h.id`,
+  )) as HistoryRow[];
+  importHistoryRows(rows, options);
+}
+
+/**
+ * 読んだ履歴を控えに入れる。**取り込み済みは EPGStation 側のIDで判別して飛ばす** (`source`。ルールと同じ)。
+ * 局の名前は denpa の局から引き (`serviceIdFor` と同じく、チャンネルIDがそのまま局の内部ID)、
+ * 知らない局なら EPGStation の名前を写す
+ */
+export function importHistoryRows(
+  rows: HistoryRow[],
+  options: MigrateOptions,
+): void {
+  for (const row of rows) {
+    const source = `epgstation:${row.id}`;
+    if (
+      orm()
+        .select({ id: recordedHistory.id })
+        .from(recordedHistory)
+        .where(eq(recordedHistory.source, source))
+        .get() !== undefined
+    ) {
+      status_.history.skipped++;
+      continue;
+    }
+    if (!options.apply) {
+      status_.history.imported++;
+      continue;
+    }
+    const service =
+      row.channelId === null
+        ? undefined
+        : orm()
+            .select({ name: services.name })
+            .from(services)
+            .where(eq(services.id, Number(row.channelId)))
+            .get();
+    orm()
+      .insert(recordedHistory)
+      .values({
+        name: row.name,
+        service_name: service?.name ?? row.channelName ?? "",
+        end_at: Number(row.endAt),
+        source,
+      })
+      .onConflictDoNothing()
+      .run();
+    status_.history.imported++;
+  }
+}
+
 /**
  * 取り込みを走らせる。進捗は {@link status} に入る。
  * 画面からは待たずに呼ぶ (`start`)
@@ -705,16 +802,19 @@ async function run(options: MigrateOptions): Promise<void> {
 
   try {
     // ルールと手動予約を先に入れる。録画のコピーは時間がかかるので、
-    // 先にこちらを済ませておけば途中で止めても予約は動き出す
+    // 先にこちらを済ませておけば途中で止めても予約は動き出す。
+    // 録画の履歴はルールより前に入れる — ルールが当たり出したときに、もう録った回を予約しないように
     const connection = new SQL(connectionConfig);
     try {
+      await importHistory(connection, options);
       await importRules(connection, options);
       await importReservations(connection, options);
     } finally {
       await connection.close();
     }
     record(
-      `ルール 取り込み ${status_.rules.imported} 件 / 対象外 ${status_.rules.skipped} 件、` +
+      `録画の履歴 取り込み ${status_.history.imported} 件 / 取り込み済み ${status_.history.skipped} 件、` +
+        `ルール 取り込み ${status_.rules.imported} 件 / 対象外 ${status_.rules.skipped} 件、` +
         `予約 取り込み ${status_.reservations.imported} 件 / 対象外 ${status_.reservations.skipped} 件`,
     );
     emit("migrate");

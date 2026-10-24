@@ -178,6 +178,7 @@ export function searchPrograms(q: string, options: SearchOptions) {
     enabled: true,
     priority: 1,
     dedupe: false,
+    skip_earlier: false,
     source: null,
     created_at: 0,
   };

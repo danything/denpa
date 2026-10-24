@@ -19,6 +19,7 @@ const FORM_KEYS = [
   "genres",
   "priority",
   "dedupe",
+  "skipEarlier",
 ];
 
 /**

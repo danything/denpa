@@ -4,7 +4,7 @@ import { parseSearchFields, SEARCH_FIELD_LABEL } from "./search";
 
 /**
  * **ルールの条件を1行で** (ルールの一覧の「条件」の列)。
- * 探す所 ・ 局 ・ ジャンル ・ 同じ回は1度 ・ 除外、の順。キーワードは名前の列に出ているので書かない
+ * 探す所 ・ 局 ・ ジャンル ・ 同じ回は1度 ・ 前の回は録らない ・ 除外、の順。キーワードは名前の列に出ているので書かない
  */
 
 export interface Summarized {
@@ -13,6 +13,7 @@ export interface Summarized {
   service_types: string[] | null;
   genres: string[] | null;
   dedupe: boolean;
+  skip_earlier: boolean;
   ignore_keyword: string;
 }
 
@@ -42,6 +43,7 @@ export function conditionSummary(
   if (rule.genres !== null && rule.genres.length > 0)
     parts.push(rule.genres.map(genreName).join("・"));
   if (rule.dedupe) parts.push("同じ回は1度");
+  if (rule.skip_earlier) parts.push("前の回は録らない");
   if (rule.ignore_keyword.trim() !== "")
     parts.push(`除外: ${rule.ignore_keyword.trim()}`);
   return parts.join(" ・ ");

@@ -179,6 +179,43 @@ test.describe("検索からルールを作る", () => {
   });
 
   /**
+   * **前の回は録らない** (`rules.skip_earlier`)。1話から数え直すシリーズを飛ばさないよう、新しいルールでも
+   * 切って始まる。入れて保存すれば、直すときも一覧でも入ったまま。判定そのものは rules-apply.test.ts が見る
+   */
+  test("「前の回は録らない」は切って始まり、入れて保存すると直すときも入っている", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await goto(page, `/search?q=${encodeURIComponent("どこにも無い番組")}`);
+    const toggle = page.getByTestId("rule-skip-earlier");
+    await expect(toggle).not.toBeChecked();
+    await expect(page.getByTestId("rule-dedupe")).toBeChecked();
+    await toggle.check();
+    await page.getByTestId("rule-submit").click();
+    const link = page.getByTestId("rule-saved-link");
+    await expect(link).toHaveText("どこにも無い番組");
+
+    await link.click();
+    await page.waitForURL(/\/search\?rule=\d+$/);
+    await expect(page.getByTestId("rule-skip-earlier")).toBeChecked();
+    await page.getByTestId("rule-skip-earlier").uncheck();
+    await page.getByTestId("rule-update").click();
+    await expect(page.getByTestId("rule-saved")).toContainText("更新しました");
+    await page.reload();
+    await expect(page.getByTestId("rule-skip-earlier")).not.toBeChecked();
+    await page.getByTestId("rule-skip-earlier").check();
+    await page.getByTestId("rule-update").click();
+    await expect(page.getByTestId("rule-saved")).toContainText("更新しました");
+
+    // ルールの一覧の条件にも出る
+    await goto(page, "/rules");
+    await expect(
+      page.getByTestId("rule-row").filter({ hasText: "どこにも無い番組" }),
+    ).toContainText("前の回は録らない");
+    await clearRules(page);
+  });
+
+  /**
    * **狭い画面では下から出す。** 結果の一覧の下に貼り付いたボタンで開き、上半分の一覧は見えたまま
    */
   test("狭い画面ではボタンで下から出す", async ({ page }) => {

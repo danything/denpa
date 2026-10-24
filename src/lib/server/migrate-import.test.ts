@@ -32,8 +32,8 @@ config.rawDir = join(root, "raw");
 config.encodedDir = join(root, "encoded");
 
 const { orm } = await import("./db");
-const { recordings } = await import("./schema");
-const { importOne, source, status, sweepTemporaries } =
+const { recordedHistory, recordings, services } = await import("./schema");
+const { importHistoryRows, importOne, source, status, sweepTemporaries } =
   await import("./migrate");
 type Row = import("./migrate").Row;
 
@@ -88,6 +88,8 @@ function failOn(event: "INSERT" | "UPDATE"): void {
 
 beforeEach(() => {
   orm().delete(recordings).run();
+  orm().delete(recordedHistory).run();
+  orm().delete(services).run();
   rmSync(config.rawDir, { recursive: true, force: true });
   rmSync(config.encodedDir, { recursive: true, force: true });
   rmSync(sourceDir, { recursive: true, force: true });
@@ -234,5 +236,87 @@ describe("録画の取り込み", () => {
     expect(readdirSync(series)).toEqual([
       "番組 - 2026-09-07 - 1200.mkv.1.av1.encoding",
     ]);
+  });
+});
+
+/**
+ * **録画の履歴の引き継ぎ** (EPGStation の `recorded_history`)。録画の行にはせず控えに入れ、
+ * もう一度回しても増えない。それが予約にどう効くかは `rules-apply.test.ts`
+ */
+describe("録画の履歴の取り込み", () => {
+  const MX = 3239123608;
+  const history = [
+    // channelId と endAt は bigint。MySQL から文字で来ても読む
+    {
+      id: 1,
+      name: "テストアニメ #1",
+      channelId: String(MX),
+      channelName: "MX",
+      endAt: String(START),
+    },
+    {
+      id: 2,
+      name: "テストアニメ #2",
+      channelId: 400211,
+      channelName: "BS11イレブン",
+      endAt: START + 7 * 24 * 60 * 60_000,
+    },
+  ];
+  const rows = () =>
+    orm()
+      .select({
+        name: recordedHistory.name,
+        service_name: recordedHistory.service_name,
+        end_at: recordedHistory.end_at,
+        source: recordedHistory.source,
+      })
+      .from(recordedHistory)
+      .orderBy(recordedHistory.id)
+      .all();
+
+  test("控えに入れ、録画にはしない。局の名前は denpa の局から引き、知らない局は向こうの名前", () => {
+    orm()
+      .insert(services)
+      .values({
+        id: MX,
+        service_id: 23608,
+        network_id: 32391,
+        name: "TOKYO MX1",
+        type: "GR",
+        channel: "T16",
+        updated_at: 0,
+      })
+      .run();
+    const before = status().history.imported;
+    importHistoryRows(history, apply);
+    expect(rows()).toEqual([
+      {
+        name: "テストアニメ #1",
+        service_name: "TOKYO MX1",
+        end_at: START,
+        source: "epgstation:1",
+      },
+      {
+        name: "テストアニメ #2",
+        service_name: "BS11イレブン",
+        end_at: START + 7 * 24 * 60 * 60_000,
+        source: "epgstation:2",
+      },
+    ]);
+    expect(status().history.imported - before).toBe(2);
+    expect(orm().select().from(recordings).all()).toEqual([]);
+  });
+
+  test("もう一度取り込んでも増えない", () => {
+    importHistoryRows(history, apply);
+    const skipped = status().history.skipped;
+    importHistoryRows(history, apply);
+    expect(rows()).toHaveLength(2);
+    expect(status().history.skipped - skipped).toBe(2);
+  });
+
+  test("下見では入れない", () => {
+    importHistoryRows(history, { apply: false, move: false });
+    expect(rows()).toEqual([]);
   });
 });

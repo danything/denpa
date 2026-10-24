@@ -131,6 +131,17 @@ describe("書く欄を読む", () => {
     expect(conditionsOf(form({ keyword: "a" })).dedupe).toBeNull();
   });
 
+  test("「前の回は録らない」は送られてこなければ切る。入れたら入る", () => {
+    expect(draftRule(form({ keyword: "a" }))?.skip_earlier).toBe(false);
+    expect(
+      draftRule(form({ keyword: "a", skipEarlier: ["0", "1"] }))?.skip_earlier,
+    ).toBe(true);
+    expect(
+      draftRule(form({ keyword: "a", skipEarlier: "0" }))?.skip_earlier,
+    ).toBe(false);
+    expect(conditionsOf(form({ keyword: "a" })).skipEarlier).toBeNull();
+  });
+
   test("優先度は空なら 1、0 はそのまま", () => {
     expect(rulePriority(form({ priority: "" }))).toBe(1);
     expect(rulePriority(form({ priority: "0" }))).toBe(0);

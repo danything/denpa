@@ -21,6 +21,7 @@ const { now, orm } = await import("./db");
 const { applyRules, keepsReservation, previewSkips } = await import("./rules");
 const {
   programs,
+  recordedHistory,
   recordings,
   reservations: reservationTable,
   rules: ruleTable,
@@ -32,6 +33,7 @@ const HOUR = 60 * 60 * 1000;
 
 function clear(): void {
   orm().delete(recordings).run();
+  orm().delete(recordedHistory).run();
   orm().delete(reservationTable).run();
   orm().delete(programs).run();
   orm().delete(ruleTable).run();
@@ -118,6 +120,7 @@ function rule(
   enabled = true,
   priority = 1,
   dedupe = false,
+  skipEarlier = false,
 ): void {
   orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
   orm()
@@ -130,6 +133,7 @@ function rule(
       enabled,
       priority,
       dedupe,
+      skip_earlier: skipEarlier,
       created_at: now(),
     })
     .run();
@@ -849,6 +853,7 @@ describe("同じ回は最初の放送だけ録る", () => {
     const skips = previewSkips(
       [hit(10, SERVICE, "GR", "T16"), hit(11, BS11, "BS", "BS09_0")],
       now(),
+      { dedupe: true, skip_earlier: false },
     );
     expect(skips.has(11)).toBe(false);
   });
@@ -863,5 +868,134 @@ describe("同じ回は最初の放送だけ録る", () => {
     expect(
       keepsReservation({ manual: false, start_at: at + 10 * 60 * 1000 }, at),
     ).toBe(true);
+  });
+});
+
+/**
+ * **EPGStation から引き継いだ録画の履歴** (`schema.recordedHistory`)。録画の行は無くても、
+ * 「同じ回は最初の放送だけ」は録ったことのある回として見る。読み方は `episode.test.ts`
+ */
+describe("引き継いだ録画の履歴", () => {
+  function history(name: string, endsAgo: number, id = 1): void {
+    orm()
+      .insert(recordedHistory)
+      .values({
+        name,
+        service_name: "TOKYO MX1",
+        end_at: base - endsAgo,
+        source: `epgstation:${id}`,
+      })
+      .run();
+  }
+
+  test("履歴にある回は予約しない。二期の同じ話数は予約する", () => {
+    reset();
+    rule(1, "テストアニメ", true, 1, true);
+    // 何か月も前に EPGStation で録ったもの。録画の行を読む期間 (30日) より昔でも見る
+    history("テストアニメ #2", 120 * 24 * HOUR);
+    program(10, "テストアニメ #2");
+    program(11, "テストアニメ 第2期 #2", 24 * HOUR);
+
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([11]);
+  });
+
+  test("「同じ回は最初の放送だけ」を切ったルールは履歴を見ない", () => {
+    reset();
+    rule(1, "テストアニメ");
+    history("テストアニメ #2", 24 * HOUR);
+    program(10, "テストアニメ #2");
+
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([10]);
+  });
+});
+
+/**
+ * **前の回は録らない** (ルールの `skip_earlier`)。判定そのものは `episode.test.ts` で見ていて、
+ * ここではスイッチの有無と、予約・録画・履歴を相手にするところを見る
+ */
+describe("前の回は録らない", () => {
+  const DAY = 24 * HOUR;
+
+  test("予約した4話のあとに流れる1〜3話は予約しない", () => {
+    reset();
+    rule(1, "テストアニメ", true, 1, false, true);
+    program(4, "テストアニメ #4");
+    program(1, "テストアニメ #1", DAY);
+    program(2, "テストアニメ #2", DAY + HOUR);
+    program(3, "テストアニメ #3", DAY + 2 * HOUR);
+
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([4]);
+  });
+
+  test("スイッチを切っていれば全部予約する", () => {
+    reset();
+    rule(1, "テストアニメ");
+    program(4, "テストアニメ #4");
+    program(1, "テストアニメ #1", DAY);
+
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([1, 4]);
+  });
+
+  test("外したものは、スイッチを入れていない別のルールが受け持つ", () => {
+    reset();
+    rule(1, "テストアニメ", true, 1, false, true);
+    rule(2, "テスト");
+    program(4, "テストアニメ #4");
+    program(1, "テストアニメ #1", DAY);
+
+    applyRules();
+    expect(reservations().map((r) => [r.program_id, r.rule_id])).toEqual([
+      [1, 2],
+      [4, 1],
+    ]);
+  });
+
+  test("録った回・引き継いだ履歴も相手にする。話数の読めない回と二期は予約する", () => {
+    reset();
+    rule(1, "テストアニメ", true, 1, false, true);
+    orm()
+      .insert(recordedHistory)
+      .values({
+        name: "テストアニメ #4",
+        end_at: base - DAY,
+        source: "epgstation:1",
+      })
+      .run();
+    program(1, "テストアニメ #1");
+    program(2, "テストアニメ 第2期 #1", HOUR);
+    program(3, "テストアニメ 特別編", 2 * HOUR);
+
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([2, 3]);
+  });
+
+  test("下見も同じところを通り、理由は「前の回」", () => {
+    reset();
+    rule(1, "テストアニメ", true, 1, false, true);
+    program(4, "テストアニメ #4");
+    program(1, "テストアニメ #1", DAY);
+    applyRules();
+
+    const hit = (id: number) => ({
+      ...orm().select().from(programs).where(eq(programs.id, id)).get()!,
+      service_type: "GR",
+      service_channel: "T16",
+      service_name: "TOKYO MX1",
+    });
+    const skips = previewSkips([hit(4), hit(1)], now(), {
+      dedupe: false,
+      skip_earlier: true,
+    });
+    expect([...skips]).toEqual([[1, { kind: "earlier", number: 4 }]]);
+    expect(
+      previewSkips([hit(4), hit(1)], now(), {
+        dedupe: false,
+        skip_earlier: false,
+      }).size,
+    ).toBe(0);
   });
 });

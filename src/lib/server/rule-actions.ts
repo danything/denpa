@@ -35,7 +35,10 @@ export interface Saved {
   name: string;
 }
 
-/** 書く欄の値でルールを足す。新しいルールは有効で、「同じ回は最初の放送だけ」は入れて始める */
+/**
+ * 書く欄の値でルールを足す。新しいルールは有効で、「同じ回は最初の放送だけ」は入れて、
+ * 「前の回は録らない」は切って始める (1話から数え直すシリーズを飛ばさないため)
+ */
 export async function createRule(
   form: Fields,
 ): Promise<Saved | { error: string }> {
@@ -46,6 +49,7 @@ export async function createRule(
     .values({
       ...ruleValues(conditions, form),
       dedupe: conditions.dedupe ?? true,
+      skip_earlier: conditions.skipEarlier ?? false,
       enabled: true,
       created_at: now(),
     })

@@ -51,11 +51,13 @@ const stillHeld = () =>
 /**
  * **録らない理由** (同じ回は最初の放送だけ。`episode.firstAirings`)。
  * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある。
+ * `earlier` は前の回 (先の回 `number` 話を録った・予約した。`episode.earlierAirings`)。
  * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)。`declined` は人が取り消した放送
  * (ルールは立て直さない。`rules.canceledBroadcasts`)
  */
 export type Skip =
   | { kind: "repeat" | "recorded"; service_name: string; start_at: number }
+  | { kind: "earlier"; number: number }
   | { kind: "copy-never" | "declined" }
   | null;
 
@@ -101,7 +103,13 @@ export type Verdict =
   | {
       kind: "skip";
       reason:
-        "repeat" | "recorded" | "copy-never" | "declined" | "airing" | Miss;
+        | "repeat"
+        | "recorded"
+        | "earlier"
+        | "copy-never"
+        | "declined"
+        | "airing"
+        | Miss;
     };
 
 /**
@@ -251,7 +259,9 @@ async function countPreview(
   const select = {
     ...light,
     extended:
-      compiled.fields.includes("extended") || conditions.dedupe
+      compiled.fields.includes("extended") ||
+      conditions.dedupe ||
+      conditions.skip_earlier
         ? extended
         : sql<Program["extended"]>`NULL`,
     service_type: serviceTable.type,
@@ -277,12 +287,11 @@ async function countPreview(
   const hits = all.filter((program) => missFor(program) === null);
 
   /*
-   * **同じ回は最初の放送だけ。** 録らないものも行には出す (黙って消すと、
+   * **同じ回は最初の放送だけ・前の回は録らない。** 録らないものも行には出す (黙って消すと、
    * 条件が当たっていないのか、当たったうえで外したのか読めない)。
    * 選び方は予約を立てるときと同じもの (`rules.previewSkips`)
    */
-  const skips: ReturnType<typeof previewSkips<(typeof hits)[number]>> =
-    conditions.dedupe ? previewSkips(hits, at) : new Map();
+  const skips = previewSkips(hits, at, conditions);
   /**
    * **人が取り消した放送は録らない** (`applyRules` も立て直さない)。下見で「録る」と出して、
    * 保存しても予約が立たない、ということが無いように
@@ -295,17 +304,22 @@ async function countPreview(
       return { kind: "declined" };
     const skip = skips.get(p.id);
     if (skip === undefined) return null;
-    return skip.kind === "repeat"
-      ? {
+    switch (skip.kind) {
+      case "repeat":
+        return {
           kind: "repeat",
           service_name: skip.first.service_name,
           start_at: skip.first.start_at,
-        }
-      : {
+        };
+      case "recorded":
+        return {
           kind: "recorded",
           service_name: skip.service_name,
           start_at: skip.start_at,
         };
+      case "earlier":
+        return { kind: "earlier", number: skip.number };
+    }
   };
 
   /*

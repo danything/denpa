@@ -34,8 +34,10 @@ export interface Conditions {
   serviceIds: number[] | null;
   serviceTypes: string[] | null;
   genres: string[] | null;
-  /** 同じ回は最初の放送だけ録る (`rules.dedupe`)。送られてこなければ null (`dedupeOf`) */
+  /** 同じ回は最初の放送だけ録る (`rules.dedupe`)。送られてこなければ null (`switchOf`) */
   dedupe: boolean | null;
+  /** 前の回は録らない (`rules.skip_earlier`)。送られてこなければ null (`switchOf`) */
+  skipEarlier: boolean | null;
   /** 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない */
   empty: boolean;
 }
@@ -58,7 +60,8 @@ export function conditionsOf(fields: Fields): Conditions {
     serviceIds: some(ids),
     serviceTypes: some(types),
     genres: some(genres),
-    dedupe: dedupeOf(fields),
+    dedupe: switchOf(fields, "dedupe"),
+    skipEarlier: switchOf(fields, "skipEarlier"),
     empty:
       keyword === "" &&
       ids.length === 0 &&
@@ -68,16 +71,16 @@ export function conditionsOf(fields: Fields): Conditions {
 }
 
 /**
- * 「同じ回は最初の放送だけ」。フォームは**隠しの `0` とチェックの `1`** を両方送る
- * (外したチェックは何も送らないので、隠しが無いと「外した」と「指定なし」が
+ * 「同じ回は最初の放送だけ」「前の回は録らない」のスイッチ。フォームは**隠しの `0` とチェックの `1`** を
+ * 両方送る (外したチェックは何も送らないので、隠しが無いと「外した」と「指定なし」が
  * 区別できない)。
  *
- * **送られてこなければ null。** 新しく作るとき (下見・追加) は入れる。
+ * **送られてこなければ null。** 新しく作るとき (下見・追加) は既定 (同じ回は入れる、前の回は切る) にする。
  * **更新では今の値のまま** — 書く欄は必ず送るが、それ以外の経路から来た更新で、
  * 入れていないルールが黙って変わらないように
  */
-function dedupeOf(fields: Fields): boolean | null {
-  const sent = fields.getAll("dedupe").map(String);
+function switchOf(fields: Fields, key: string): boolean | null {
+  const sent = fields.getAll(key).map(String);
   return sent.length === 0 ? null : sent.includes("1");
 }
 
@@ -130,6 +133,7 @@ export function draftRule(fields: Fields): Rule | null {
      */
     priority: rulePriority(fields),
     dedupe: conditions.dedupe ?? true,
+    skip_earlier: conditions.skipEarlier ?? false,
     source: null,
     created_at: 0,
   };
@@ -180,6 +184,9 @@ export function ruleValues(conditions: Conditions, form: Fields) {
     priority: rulePriority(form),
     // 送られてこなければ触らない (更新では今の値のまま。追加は呼ぶ側で入れる)
     ...(conditions.dedupe === null ? {} : { dedupe: conditions.dedupe }),
+    ...(conditions.skipEarlier === null
+      ? {}
+      : { skip_earlier: conditions.skipEarlier }),
   };
 }
 

@@ -98,6 +98,10 @@
             予約 {migrate.reservations.imported} 件 / 対象外 {migrate
               .reservations.skipped} 件
           </span>
+          <span data-testid="migrate-history">
+            録画の履歴 {migrate.history.imported} 件 / 取り込み済み {migrate
+              .history.skipped} 件
+          </span>
         </div>
 
         {#if migrate.total > 0}

@@ -268,6 +268,14 @@ export function parseTitle(rawName: string): ParsedTitle {
 }
 
 /**
+ * 編 (`parseTitle` の `arc`) に期 (`第2期` `第3シーズン`) が入っているか。期を書かないタイトルと
+ * 同じシリーズとみるかどうか (`episode.ts` の `sameSeries`) を分けるのに使う
+ */
+export function hasSeason(arc: string): boolean {
+  return SEASON.test(arc);
+}
+
+/**
  * ファイル名・ディレクトリ名に使える形式に落とす。**全角の英数は半角に寄せる** —
  * 番組名を放送のまま持つようになる前に録ったものと、同じ名前に並べるため。
  * ext4 で壊れるのは `/` と NUL だけだが、SMB 経由で覗くことを考えて Windows の禁止文字も落とす。

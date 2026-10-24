@@ -8,6 +8,7 @@
   > = {
     repeat: "同じ回",
     recorded: "録画済み",
+    earlier: "前の回",
     "copy-never": "コピー禁止",
     declined: "取り消し済み",
     airing: "放送中",
@@ -86,6 +87,7 @@
   let serviceIds = $state<number[]>([]);
   let genres = $state<string[]>([]);
   let dedupe = $state(true);
+  let skipEarlier = $state(false);
   let priority = $state(1);
   /** キーワードを手で直したか。直すまでは探した言葉に付いていく */
   let typed = false;
@@ -108,6 +110,7 @@
       serviceIds = seed?.service_ids ?? [];
       genres = seed?.genres ?? [];
       dedupe = seed?.dedupe ?? true;
+      skipEarlier = seed?.skip_earlier ?? false;
       priority = seed?.priority ?? 1;
       typed = false;
       saved = null;
@@ -153,6 +156,8 @@
     for (const genre of genres) out.append("genres", genre);
     out.append("dedupe", "0");
     if (dedupe) out.append("dedupe", "1");
+    out.append("skipEarlier", "0");
+    if (skipEarlier) out.append("skipEarlier", "1");
     out.set("priority", String(priority));
     if (draft.editing !== null) out.set("edit", String(draft.editing.id));
     for (const id of ids) out.append("ids", String(id));
@@ -459,6 +464,23 @@
       </label>
       <label class="row side-item">
         <span
+          >前の回は録らない <span class="tiny muted"
+            >(4話まで録ったあとの1〜3話など)</span
+          ></span
+        >
+        <input type="hidden" name="skipEarlier" value="0" />
+        <input
+          type="checkbox"
+          role="switch"
+          aria-checked={skipEarlier}
+          name="skipEarlier"
+          value="1"
+          bind:checked={skipEarlier}
+          data-testid="rule-skip-earlier"
+        />
+      </label>
+      <label class="row side-item">
+        <span
           >優先度 <span class="tiny muted">(大きいほうを先に録る)</span></span
         >
         <select
@@ -688,7 +710,7 @@
     margin: 0;
   }
   /*
-     * 局・同じ回・優先度・ジャンル。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
+     * 局・同じ回・前の回・優先度・ジャンル。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
      * 行の塗りは左右に字の余白ぶんはみ出し、字の頭は上の欄の頭にそろえる
      */
   .rows {
