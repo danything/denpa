@@ -519,13 +519,7 @@ export function savePrograms(events: EitEvent[]): number {
       .prepare();
 
     for (const event of events) {
-      // 開始も尺も決まっていないものは録画の時刻が決まらない
-      if (
-        event.startAt === null ||
-        event.duration === null ||
-        event.duration === 0
-      )
-        continue;
+      if (!timed(event)) continue;
       // チャンネル設定に無いサービスの番組は録れないので捨てる
       const serviceId = index.get(
         `${event.originalNetworkId}:${event.serviceId}`,
@@ -610,12 +604,7 @@ export function savePrograms(events: EitEvent[]): number {
 export function followOnAir(events: readonly EitEvent[]): boolean {
   const differs = events.some((event) => {
     // 時刻や尺が未定の番組は写せない (`savePrograms` も捨てる)
-    if (
-      event.startAt === null ||
-      event.duration === null ||
-      event.duration === 0
-    )
-      return false;
+    if (!timed(event)) return false;
     const row = orm()
       .select({
         start_at: programs.start_at,
@@ -642,6 +631,15 @@ export function followOnAir(events: readonly EitEvent[]): boolean {
   if (!differs || savePrograms([...events]) === 0) return false;
   emit("programs");
   return true;
+}
+
+/** 開始と尺が決まっているか。決まっていないものは録画の時刻が決まらない */
+function timed(
+  event: EitEvent,
+): event is EitEvent & { startAt: number; duration: number } {
+  return (
+    event.startAt !== null && event.duration !== null && event.duration !== 0
+  );
 }
 
 /** 列の畳み方で DB に渡す形式にする。null は null のまま (drizzle がふだん通す形式と同じ) */

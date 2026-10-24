@@ -182,8 +182,7 @@ function save(next: RelayNotes): void {
 
 /** その中継は今回は飛ばしてよいか。確かめてから RELAY_RETRY の間だけ */
 function skipRelay(channel: string): boolean {
-  const at = notes().noCarousel[channel];
-  return at !== undefined && Date.now() - at < RELAY_RETRY;
+  return fresh(notes().noCarousel[channel], RELAY_RETRY);
 }
 
 /** 「この中継にロゴは載っていない」/「載っていた」を書き留める */
@@ -219,8 +218,12 @@ function markAbsent(): void {
 
 /** その局はカルーセルに載っていないと分かっているか */
 function absentFromCarousel(serviceId: number): boolean {
-  const at = notes().absent[serviceId];
-  return at !== undefined && Date.now() - at < LOGO_MAX_AGE;
+  return fresh(notes().absent[serviceId], LOGO_MAX_AGE);
+}
+
+/** 控えた時刻 `at` から `ms` が過ぎていないか (控えが無ければ false) */
+function fresh(at: number | undefined, ms: number): boolean {
+  return at !== undefined && Date.now() - at < ms;
 }
 
 export function readLogo(serviceId: number): Uint8Array | null {
@@ -413,15 +416,10 @@ function storedLogoType(serviceId: number): number | null {
  */
 function needsLogo(service: { id: number; type: string }): boolean {
   const serviceId = service.id;
-  let age: number;
-  try {
-    age = Date.now() - statSync(logoPath(serviceId)).mtimeMs;
-  } catch {
-    return true;
-  }
-  const at = notes().gaveUp[serviceId];
-  if (at !== undefined && Date.now() - at < LOGO_MAX_AGE) return false;
-  if (age > LOGO_MAX_AGE) return true;
+  const written = writtenAt(serviceId);
+  if (written === 0) return true;
+  if (fresh(notes().gaveUp[serviceId], LOGO_MAX_AGE)) return false;
+  if (Date.now() - written > LOGO_MAX_AGE) return true;
   return (
     service.type === "GR" && storedLogoType(serviceId) !== PREFERRED_LOGO_TYPE
   );
@@ -565,8 +563,11 @@ async function collect(
   signal?: AbortSignal,
   after: readonly StreamUse[] = [],
 ): Promise<number> {
-  const before =
-    target.type !== "GR" ? missingSatellites() : missingOn(target.channel);
+  const satellite = target.type !== "GR";
+  // 衛星は「開いた中継の局」では見ない。開いた中継以外の局も一緒に取得できる (`missingSatellites`)
+  const remaining = () =>
+    satellite ? missingSatellites() : missingOn(target.channel);
+  const before = remaining();
   /** 当たり外れを書き留めたか。毎回書きに行かないための印 */
   let marked = false;
   const controller = new AbortController();
@@ -591,13 +592,11 @@ async function collect(
       after,
     );
     const feed = watch(target.network_id);
-    const satellite = target.type !== "GR";
     let left = before;
     let progressed = Date.now();
     for await (const chunk of chunks(stream)) {
       feed(chunk);
-      // 衛星は「開いた中継の局」では見ない (`missingSatellites`)
-      const now = satellite ? missingSatellites() : missingOn(target.channel);
+      const now = remaining();
       if (now < left) {
         left = now;
         progressed = Date.now();
@@ -643,13 +642,9 @@ async function collect(
     controller.abort();
   }
   // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
-  if (target.type === "GR" && ranOut && timeout >= SWEEP_TIMEOUT)
+  if (!satellite && ranOut && timeout >= SWEEP_TIMEOUT)
     markGaveUp(target.channel);
-  // 衛星は開いた中継以外の局も一緒に取得できる。数えるほうも合わせる
-  return (
-    before -
-    (target.type !== "GR" ? missingSatellites() : missingOn(target.channel))
-  );
+  return before - remaining();
 }
 
 /** 設定の「チューナー」に出る名乗り。引き継ぎ (`after`) でも同じものを渡す */
@@ -968,14 +963,10 @@ async function run(targets: Target[], parallel: number): Promise<void> {
   inflight = controller;
   const stamps = logoStamps();
   state = {
+    ...IDLE,
     running: true,
-    channels: [],
-    done: 0,
     total: targets.length,
-    found: 0,
-    message: "",
     startedAt: Date.now(),
-    finishedAt: null,
   };
   emit("logos");
   try {

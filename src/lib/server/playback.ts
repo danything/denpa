@@ -70,11 +70,12 @@ import {
   audioArgs,
   blameLiveHw,
   codecsFor,
+  panArgs,
   pickLiveHw,
   videoArgs,
 } from "./live";
 import { settings } from "./settings";
-import { run } from "./stream";
+import { endInput, run } from "./stream";
 import { holdTranscode } from "./transcode";
 
 /** エンコード済みのファイル 1 本の中身 (ffprobe で読む。`probeMedia`) */
@@ -171,6 +172,13 @@ const probed = new Map<string, { mtime: number; file: MediaFile }>();
 /** 控えの上限。古いものから捨てる */
 const KEEP = 64;
 
+/** 控えに入れる。新しいものを後ろに置き、上限を超えたら古いもの (頭) から捨てる */
+function keep<T>(memo: Map<string, T>, path: string, value: T): void {
+  memo.delete(path);
+  memo.set(path, value);
+  if (memo.size > KEEP) memo.delete(memo.keys().next().value as string);
+}
+
 /** エンコードしたファイルの中身を読む (見出しだけ。一瞬で返る) */
 async function probeMedia(
   source: EncodedSource,
@@ -202,11 +210,7 @@ async function probeMedia(
     source,
     result.code === 0 ? new TextDecoder().decode(result.stdout) : "",
   );
-  if (result.code === 0) {
-    probed.delete(path);
-    probed.set(path, { mtime, file });
-    if (probed.size > KEEP) probed.delete(probed.keys().next().value as string);
-  }
+  if (result.code === 0) keep(probed, path, { mtime, file });
   return file;
 }
 /** エンコード済みのファイル 1 本 */
@@ -305,10 +309,7 @@ async function probeTs(path: string): Promise<TsFile | null> {
       duration: duration !== null && duration > 0 ? duration : null,
     };
   }
-  tsProbed.delete(path);
-  tsProbed.set(path, { key, ts });
-  if (tsProbed.size > KEEP)
-    tsProbed.delete(tsProbed.keys().next().value as string);
+  keep(tsProbed, path, { key, ts });
   return ts;
 }
 
@@ -423,6 +424,9 @@ export async function playbackPlan(
   };
 }
 
+/** 失敗の理由だけ出させる (`transcodeBody` がログへ回す) */
+const QUIET = ["-hide_banner", "-nostats", "-loglevel", "error"];
+
 /** 詰め替えの共通の出口。時刻はそのまま書かせる (`copyArgs` の説明) */
 const FMP4_OUT = [
   "-f",
@@ -465,10 +469,7 @@ export function copyArgs(
   codec: LiveCodec,
 ): string[] {
   return [
-    "-hide_banner",
-    "-nostats",
-    "-loglevel",
-    "error",
+    ...QUIET,
     ...(from > 0 ? ["-ss", from.toFixed(3)] : []),
     "-copyts",
     "-i",
@@ -500,10 +501,7 @@ export function fileTranscodeArgs(
 ): string[] {
   const video = videoArgs(codec, hw, false);
   return [
-    "-hide_banner",
-    "-nostats",
-    "-loglevel",
-    "error",
+    ...QUIET,
     ...video.input,
     ...(from > 0 ? ["-ss", from.toFixed(3)] : []),
     "-copyts",
@@ -577,17 +575,8 @@ export function tsTranscodeArgs(
 ): string[] {
   const video = videoArgs(codec, hw, true);
   const from = programSpec(program);
-  const pan =
-    audio.side === "main"
-      ? "pan=stereo|c0=c0|c1=c0"
-      : audio.side === "sub"
-        ? "pan=stereo|c0=c1|c1=c1"
-        : null;
   return [
-    "-hide_banner",
-    "-nostats",
-    "-loglevel",
-    "error",
+    ...QUIET,
     ...video.input,
     "-copyts",
     "-f",
@@ -606,7 +595,7 @@ export function tsTranscodeArgs(
     // 「矛盾している」と断って変換が始まらない。探りは既定の大きさなのでコマ数を読み違えない
     "-fps_mode",
     "passthrough",
-    ...(pan === null ? [] : ["-af", pan]),
+    ...panArgs(audio),
     ...audioArgs(codec),
     "-output_ts_offset",
     offset.toFixed(6),
@@ -762,11 +751,7 @@ function spawnAttempt(attempt: Attempt) {
           await writer.flush();
         }
       } finally {
-        try {
-          writer.end();
-        } catch {
-          // もう閉じている
-        }
+        endInput(proc);
       }
     })().catch(() => undefined);
   }
@@ -783,6 +768,16 @@ function spawnAttempt(attempt: Attempt) {
 
 /** TS を流しはじめる位置を、求められた時刻のこれだけ手前にする (秒)。キーフレームを 1 つ含めるため */
 const LEAD = 1;
+
+/** 物差しの `from` 秒を流すために、TS のどこから読むか (`ts/seek.ts`)。読めなければ null */
+function seekFrom(ts: TsFile, skip: number, from: number) {
+  return seekTs(
+    reader(ts.path),
+    ts.size,
+    ts.head,
+    Math.max(0, from + skip - LEAD),
+  );
+}
 
 /** `?audio=` の、入れ物の中の何本目か (エンコード済みが元)。読めなければ 0 */
 function audioIndex(asked: string | null): number {
@@ -849,21 +844,15 @@ export async function streamResponse(
   const source = plan.encoded.find((file) => file.codec !== null);
   let attempts: Attempt[] | null;
   try {
-    attempts = await (source !== undefined
-      ? Promise.resolve(
-          fileAttempts(
-            source.path,
+    attempts =
+      source !== undefined
+        ? fileAttempts(source.path, from, audioIndex(query.get("audio")), codec)
+        : await tsAttempts(
+            plan,
             from,
-            audioIndex(query.get("audio")),
+            pickTrack(plan.tracks, query.get("audio") ?? undefined),
             codec,
-          ),
-        )
-      : tsAttempts(
-          plan,
-          from,
-          pickTrack(plan.tracks, query.get("audio") ?? undefined),
-          codec,
-        ));
+          );
   } catch (failure) {
     // TS を読めなかった (消されたなど)。取った枠は返す
     release();
@@ -909,12 +898,7 @@ async function tsAttempts(
 ): Promise<Attempt[] | null> {
   const ts = plan.ts;
   if (ts === null) return null;
-  const mark = await seekTs(
-    reader(ts.path),
-    ts.size,
-    ts.head,
-    Math.max(0, from + plan.skip - LEAD),
-  );
+  const mark = await seekFrom(ts, plan.skip, from);
   if (mark === null) return null;
   const offset = tsOffset(mark.pts, sinceHead(mark.pts, ts.head) - plan.skip);
   const input = () => Bun.file(ts.path).slice(mark.at).stream();
@@ -937,12 +921,7 @@ async function rawResponse(
 ): Promise<Response> {
   const ts = plan.ts;
   if (ts === null) error(404, "この形式では再生できません");
-  const mark = await seekTs(
-    reader(ts.path),
-    ts.size,
-    ts.head,
-    Math.max(0, from + plan.skip - LEAD),
-  );
+  const mark = await seekFrom(ts, plan.skip, from);
   if (mark === null) error(404, "この形式では再生できません");
   const origin =
     (((ts.head + Math.round(plan.skip * CLOCK)) % WRAP) + WRAP) % WRAP;

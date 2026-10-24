@@ -234,3 +234,12 @@ export function ffmpegBody(
     },
   });
 }
+
+/** 子プロセスの標準入力を閉じる。もう閉じていてもいい */
+export function endInput(proc: { stdin: unknown }): void {
+  try {
+    (proc.stdin as import("bun").FileSink).end();
+  } catch {
+    // もう閉じている
+  }
+}
