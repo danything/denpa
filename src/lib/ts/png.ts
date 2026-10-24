@@ -3,16 +3,9 @@
  * (データ放送の `bml/png.ts`、局ロゴの `logo-palette.ts`、覚えたロゴの画像の `server/logo-data.ts`)
  */
 
-export const PNG_SIGNATURE = Uint8Array.of(
-  0x89,
-  0x50,
-  0x4e,
-  0x47,
-  0x0d,
-  0x0a,
-  0x1a,
-  0x0a,
-);
+export const PNG_SIGNATURE = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
 
 /** PNG の塊に付ける CRC-32 (zlib と同じ多項式) */
 const CRC_TABLE = (() => {
