@@ -789,7 +789,7 @@
 .board .t-chip.warn .num {
   color: inherit;
 }
-/* 「⋯」の頭の状態。押せない (区切りの線で切り替えと分ける) */
+/* 「⋯」の頭の状態。押せない (余白で切り替えと分ける) */
 .board .view-menu .menu-head {
   margin: 0 0 0.5rem;
 }
