@@ -733,7 +733,12 @@
               type="button"
               class="small {shown === type ? '' : 'secondary outline'}"
               aria-pressed={shown === type}
-              onclick={() => (picked = type)}
+              onclick={(event) => {
+                picked = type;
+                // マウスや指で押したときは焦点を外す。残すと、あとで何かキーを押したときに焦点の線が下線と二重に出る
+                // (`detail` が 0 ならキーボードで押したので残す)
+                if (event.detail > 0) event.currentTarget.blur();
+              }}
               data-testid="live-type-{type}"
             >
               {SERVICE_TYPE_LABEL[type]}

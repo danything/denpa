@@ -1718,7 +1718,7 @@
     z-index: -1;
     height: calc(var(--past) * 100%);
     border-radius: inherit;
-    background: color-mix(in srgb, var(--dp-bg) 55%, transparent);
+    background: color-mix(in srgb, var(--dp-bg) 78%, transparent);
     pointer-events: none;
     transition: height var(--dp-duration-move) var(--dp-ease);
   }
