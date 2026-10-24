@@ -1159,13 +1159,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 一覧は同じ局のものなので残す (`forget`)
     forget(true);
     captionTrack = index;
-    send({
-      type: "tune",
-      ...tuned,
-      caption: index,
-      language: captionLanguage,
-      raw: wantsRaw(),
-    });
+    const command = wantedCommand();
+    if (command !== null) send(command);
   }
 
   /**
@@ -1264,11 +1259,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     ending = false;
   }
 
-  /** 繋ぎも含めて畳む。**画面を離れるときと、繋ぎ直すとき** */
-  function reset(): void {
+  /**
+   * 繋ぎも含めて畳む。**画面を離れるときと、繋ぎ直すとき**
+   *
+   * @param keepList 選んでいる字幕を残すか (`forget`)。同じ局へ繋ぎ直すときだけ true
+   */
+  function reset(keepList = false): void {
     socket?.close();
     socket = null;
-    forget(false);
+    forget(keepList);
   }
 
   /**
@@ -1626,6 +1625,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return {
         type: "tune",
         ...tuned,
+        caption: captionTrack,
         language: captionLanguage,
         raw: wantsRaw(),
       };
@@ -1717,7 +1717,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 繋がっていれば繋ぎ直さない (1本に何度でも指示を送れる。`server/live.ts` の `attend`)
     const open = socket !== null && socket.readyState === WebSocket.OPEN;
     if (open) forget(keepList);
-    else reset();
+    else reset(keepList);
 
     state = "connecting";
     message = "";
@@ -1816,6 +1816,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           const now = Date.now();
           const calm = now - restartedAt >= RESTART_CALM;
           restartedAt = now;
+          // 字幕の本数も変わるかもしれない。無い番号を頼むと字幕ごと外されるので1本目に戻す
+          if (chase === null) captionTrack = 0;
           if (chase !== null) resumeChase(!calm);
           else if (!calm) reconnect();
           else if (tuned !== null && element !== null)

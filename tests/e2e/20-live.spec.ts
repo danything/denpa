@@ -2018,6 +2018,76 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
+   * **選んだ字幕は、リクエストし直しても続く。** 選局の指示に字幕の番号を載せ忘れると、
+   * エンコード方式を選び直したり繋ぎ直したりしたとき、サーバだけ1本目に戻っていた
+   */
+  test("2本目の字幕を選んだまま、エンコード方式を選び直しても字幕は2本目", async ({
+    page,
+  }) => {
+    await captureSockets(page);
+    // 送ったものを控える (繋ぎ直しても数えられるよう、作る前から)
+    await page.addInitScript(() => {
+      const seen = window as unknown as { __sent: string[] };
+      seen.__sent = [];
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (data) {
+        seen.__sent.push(String(data));
+        send.call(this, data);
+      };
+    });
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    const notice = {
+      type: "captions",
+      tracks: [
+        { index: 0, lang: "jpn", label: "字幕1" },
+        { index: 1, lang: "jpn", label: "字幕2" },
+      ],
+      track: 0,
+    };
+    await page.evaluate((json) => {
+      const socket = (
+        window as unknown as { __sockets: WebSocket[] }
+      ).__sockets.at(-1);
+      const body = new TextEncoder().encode(json);
+      const data = new Uint8Array(9 + body.length);
+      data[0] = 0x40;
+      data.set(body, 9);
+      socket?.dispatchEvent(new MessageEvent("message", { data: data.buffer }));
+    }, JSON.stringify(notice));
+
+    const tunes = async () =>
+      (
+        await page.evaluate(
+          () => (window as unknown as { __sent: string[] }).__sent,
+        )
+      )
+        .map(
+          (s) =>
+            JSON.parse(s) as { type: string; codec?: string; caption?: number },
+        )
+        .filter((c) => c.type === "tune");
+
+    await wakeControls(page, "live-frame");
+    await openSettings(page, "live");
+    await page.getByTestId("live-subtitle").click();
+    await page
+      .locator('[data-testid="live-subtitle-option"][data-subtitle="1:0"]')
+      .click();
+    await expect.poll(async () => (await tunes()).at(-1)?.caption).toBe(1);
+
+    await wakeControls(page, "live-frame");
+    await pickCodec(page, "live", "av1");
+    await expect
+      .poll(async () => {
+        const last = (await tunes()).at(-1);
+        return [last?.codec, last?.caption];
+      })
+      .toEqual(["av1", 1]);
+  });
+
+  /*
    * **字幕は映像と同じ ffmpeg がエンコードする。** 出口を2つ持つ1本しか起きない。
    *
    * **それが時刻を揃える唯一の方法だった。** 別々に起こした2本は入口で時刻を
