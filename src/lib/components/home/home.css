@@ -258,15 +258,22 @@
 .board .row-activity.neutral .act-label {
   font-weight: 400;
 }
-/* 進み具合は行の下端いっぱいに敷く */
+/*
+ * **進み具合は行の面の下端いっぱいに敷く。** 面の角丸で切り落とすので、行は中身を角の外へ出さない
+ * (`overflow: clip`。「⋯」のメニューは最前面に出るので切れない)
+ */
+.board .t-row:has(> .row-bar) {
+  overflow: clip;
+}
 .board .row-bar {
   position: absolute;
-  inset-inline: 0.75rem;
-  /* Pico の `progress` は幅 100%、ブラウザの既定にも固有の幅がある。左右の寄せの内側の幅を明示する */
-  width: calc(100% - 1.5rem);
-  bottom: 0.25rem;
+  inset-inline: 0;
+  /* Pico の `progress` は幅 100%、ブラウザの既定にも固有の幅がある。行の幅を明示する */
+  width: 100%;
+  bottom: 0;
   height: 3px;
-  border-radius: 2px;
+  margin: 0;
+  border-radius: 0;
 }
 /*
  * **録画中のいちばん上の行は、バーの先に「いま」の時刻** (`TimelineRow`。録画中は「いま」の線を別に引かない)。
@@ -277,12 +284,8 @@
 }
 .board .row-bar-now {
   position: absolute;
-  bottom: calc(0.25rem + 3px + 0.125rem);
-  left: clamp(
-    1.5rem,
-    calc(0.75rem + (100% - 1.5rem) * var(--done)),
-    calc(100% - 1.5rem)
-  );
+  bottom: calc(3px + 0.25rem);
+  left: clamp(1.5rem, calc(100% * var(--done)), calc(100% - 1.5rem));
   transform: translateX(-50%);
   color: var(--dp-rec-text);
   font-size: 0.6875rem;

@@ -226,6 +226,16 @@ test.describe("ホームの1本の一覧", () => {
           "「録画中・あと21分」が縮んでいる",
         ).toBe(true);
         await expect(row.getByTestId("recording-progress")).toBeVisible();
+        // 進み具合のバーは面の下端いっぱいに付く
+        const rowBox = (await row.boundingBox())!;
+        const barBox = (await row
+          .getByTestId("recording-progress")
+          .boundingBox())!;
+        expect(Math.abs(barBox.x - rowBox.x)).toBeLessThan(1);
+        expect(Math.abs(barBox.width - rowBox.width)).toBeLessThan(1);
+        expect(
+          Math.abs(barBox.y + barBox.height - (rowBox.y + rowBox.height)),
+        ).toBeLessThan(1);
 
         // 線のすぐ上 (線の手前の行がこの行)
         const before = await page.getByTestId("timeline").evaluate((list) => {
