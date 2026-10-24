@@ -211,6 +211,16 @@ export function missOf(
     if (!genreMatches(genres, detail)) return "genre";
   }
 
+  // 全条件が空のルールは全番組にマッチしてしまうので無効扱いにする。時間帯と曜日は絞り込みで、それだけでは
+  // その時間の全局を録ってディスクを埋めるので条件に数えない
+  if (
+    keywords.length === 0 &&
+    services === null &&
+    types === null &&
+    genres === null
+  )
+    return "empty";
+
   // 時間帯と曜日は番組の始まる時刻を日本時間で見る。日をまたぐ時間帯も、曜日は始まる日の暦 (`rule-time.ts`)
   if (time !== null || weekdays !== null) {
     const start = jstOf(program.start_at);
@@ -219,17 +229,6 @@ export function missOf(
     if (weekdays !== null && !weekdays.includes(start.weekday))
       return "weekday";
   }
-
-  // 全条件が空のルールは全番組にマッチしてしまうので無効扱いにする
-  if (
-    keywords.length === 0 &&
-    services === null &&
-    types === null &&
-    genres === null &&
-    time === null &&
-    weekdays === null
-  )
-    return "empty";
 
   if (keywords.length === 0 && ignores.length === 0) return null;
 

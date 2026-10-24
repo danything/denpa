@@ -19,8 +19,11 @@ export interface Slot {
   weekdays: number[] | null;
 }
 
-/** 書く欄の曜日の並び。月曜から */
-export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+/**
+ * 要約で曜日を並べる順。月曜から (「月〜金」「土・日」)。書く欄のチップは日曜から
+ * (ホームのカレンダーと同じ。並びは `WEEKDAYS` のまま)
+ */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;

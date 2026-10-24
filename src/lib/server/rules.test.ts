@@ -514,11 +514,19 @@ describe("時間帯と曜日", () => {
     expect(miss({ weekdays: [0, 1, 2, 3, 4, 5, 6] }, at(friday(3)))).toBeNull();
   });
 
-  test("時間帯や曜日だけでも条件になる", () => {
+  test("時間帯や曜日だけでは条件にならない (その時間の全局に当たるので当てない)", () => {
     const bare = (fields: Partial<Rule>, p: Program) =>
       missOf(compile(rule(fields)), p, "GR", true, () => p.name);
-    expect(bare({ weekdays: [5] }, at(friday(12)))).toBeNull();
-    expect(bare(evening, at(friday(12)))).toBe("time");
+    expect(bare({ weekdays: [5] }, at(friday(12)))).toBe("empty");
+    expect(bare(evening, at(friday(19)))).toBe("empty");
+    expect(bare(evening, at(friday(12)))).toBe("empty");
+    // 局が入れば、時間帯は絞り込みとして効く
+    expect(
+      bare({ ...evening, service_types: ["GR"] }, at(friday(19))),
+    ).toBeNull();
+    expect(bare({ ...evening, service_types: ["GR"] }, at(friday(12)))).toBe(
+      "time",
+    );
     expect(bare({}, at(friday(12)))).toBe("empty");
   });
 });

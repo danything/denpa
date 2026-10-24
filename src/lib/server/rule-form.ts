@@ -44,7 +44,10 @@ export interface Conditions {
   dedupe: boolean | null;
   /** 前の回は録らない (`rules.skip_earlier`)。送られてこなければ null (`switchOf`) */
   skipEarlier: boolean | null;
-  /** 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない */
+  /**
+   * 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない。
+   * 時間帯と曜日は絞り込みなので数えない (それだけではその時間の全局に当たる)
+   */
   empty: boolean;
   /** 保存できない理由 (時間帯の片方だけ・始まりと終わりが同じ)。無ければ null */
   invalid: string | null;
@@ -106,15 +109,11 @@ export function conditionsOf(fields: Fields): Conditions {
     weekdays: slot.weekdays,
     dedupe: switchOf(fields, "dedupe"),
     skipEarlier: switchOf(fields, "skipEarlier"),
-    // 時間帯と曜日も条件になる (EPGStation の時間帯だけのルールも入れられるように)
     empty:
       keyword === "" &&
       ids.length === 0 &&
       types.length === 0 &&
-      genres.length === 0 &&
-      slot.timeFrom === null &&
-      slot.weekdays === null &&
-      slot.invalid === null,
+      genres.length === 0,
     invalid: slot.invalid,
   };
 }
@@ -229,7 +228,7 @@ function ruleName(conditions: Conditions): string {
 
 /** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
 export const EMPTY_RULE =
-  "キーワード・局・ジャンル・時間帯・曜日のいずれかを指定してください";
+  "キーワード・局・ジャンルのいずれかを指定してください";
 
 /**
  * create と update で同じもの。**エンコード方式は書かない** — エンコードもCMも全体設定で、

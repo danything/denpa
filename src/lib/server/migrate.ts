@@ -702,12 +702,10 @@ async function importRules(
       keyword === "" &&
       types.length === 0 &&
       genreIds.length === 0 &&
-      channels.length === 0 &&
-      times.time_from === null &&
-      times.weekdays === null
+      channels.length === 0
     ) {
-      // 条件が空だと全番組にマッチしてしまう。EPGStation 側で他の条件
-      // (正規表現など)だけで絞っていたものがここに来る
+      // 条件が空だと全番組にマッチしてしまう。EPGStation 側で他の条件 (正規表現など) だけで
+      // 絞っていたものがここに来る。時間帯と曜日は絞り込みなので、それだけのルールもここに来る
       record(`条件が空になるので取り込めません: #${row.id}`);
       status_.rules.skipped++;
       continue;

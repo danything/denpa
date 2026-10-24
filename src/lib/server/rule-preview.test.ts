@@ -198,9 +198,12 @@ describe("書く欄を読む", () => {
     ).toBe(HALF_TIME);
   });
 
-  test("時間帯や曜日だけでも条件になる", () => {
-    expect(conditionsOf(form({ weekdays: "6" })).empty).toBe(false);
-    const rule = draftRule(form({ timeFrom: "19:00", timeTo: "20:00" }));
+  test("時間帯や曜日だけでは条件にならない。局などと組めば入る", () => {
+    expect(conditionsOf(form({ weekdays: "6" })).empty).toBe(true);
+    expect(draftRule(form({ timeFrom: "19:00", timeTo: "20:00" }))).toBeNull();
+    const rule = draftRule(
+      form({ serviceTypes: "GR", timeFrom: "19:00", timeTo: "20:00" }),
+    );
     expect([rule?.time_from, rule?.time_to, rule?.weekdays]).toEqual([
       19 * 60,
       20 * 60,

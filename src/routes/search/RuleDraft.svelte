@@ -39,12 +39,7 @@
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import { SERVICE_TYPE_LABEL, WEEKDAYS } from "#lib/format.js";
-  import {
-    clockOf,
-    minutesOf,
-    slotSummary,
-    WEEK_ORDER,
-  } from "#lib/rule-time.js";
+  import { clockOf, minutesOf, slotSummary } from "#lib/rule-time.js";
   import {
     parseSearchFields,
     SEARCH_FIELD_LABEL,
@@ -171,14 +166,12 @@
     }) ?? "いつでも",
   );
 
+  /** 条件が無い。時間帯と曜日は絞り込みなので数えない (`rule-form.conditionsOf`) */
   const empty = $derived(
     keyword.trim() === "" &&
       serviceTypes.length === 0 &&
       serviceIds.length === 0 &&
-      genres.length === 0 &&
-      timeFrom === "" &&
-      timeTo === "" &&
-      weekdays.length === 0,
+      genres.length === 0,
   );
 
   // ---- 下見 ----
@@ -575,7 +568,7 @@
           {/if}
           <div class="group-title">曜日</div>
           <div class="chips" data-testid="rule-weekdays">
-            {#each WEEK_ORDER as day (day)}
+            {#each WEEKDAYS as label, day (day)}
               <label class="chip">
                 <input
                   type="checkbox"
@@ -583,7 +576,7 @@
                   value={day}
                   bind:group={weekdays}
                 />
-                {WEEKDAYS[day]}
+                {label}
               </label>
             {/each}
           </div>
