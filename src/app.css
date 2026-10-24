@@ -605,6 +605,60 @@ progress.running[value]::-webkit-progress-value {
   margin-top: var(--dp-space-2);
 }
 
+/*
+ * ---- 番組表の外枠 (`.guide-frame`) と操作の1行 (`.guide-bar`) ----
+ * 番組表 (`guide/+page.svelte`) と、ほかの画面から移る途中の姿 (`GuidePending`) で同じにする — 着いたときに表の位置が飛ばない。
+ * 本文の余白 (`--dp-gutter`) を打ち消して端から端まで使い、高さも同じぶん足す。広い幅は `+layout.svelte` の `FILLED` から `%` で降ろす。
+ * **狭い幅だけ `%` で降ろせない** (途中の入れ物に高さが決まっておらず、`%` が解決しない)。そこは `svh` で採る —
+ * `svh` だけが見えている範囲を超えない (`vh` と `dvh` は実機の PWA でアドレスバーの高さぶん超えた)。
+ * 狭い幅は画面の高さから上下の固定のもの (ナビ 3.5rem・下のタブ・ノッチ) を引き、ページごとではなく表だけを動かす
+ */
+.guide-frame {
+  --page-h: calc(100% + var(--dp-page-top) + var(--dp-gutter));
+  display: flex;
+  flex-direction: column;
+  margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
+    calc(-1 * var(--dp-gutter));
+  height: var(--page-h);
+}
+/* 1行に収める。表との間に線は引かない (表の頭の局の行が区切りになる) */
+.guide-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--dp-space-2);
+  padding: var(--dp-space-1) var(--dp-space-3);
+}
+/* Pico の `[role=group]` は横いっぱいに広がる */
+.guide-bar > .segmented {
+  flex: none;
+}
+/* 広い画面では上の余白を画面の頭の余白にし、最初の行 (種別のタブ) をほかの画面とそろえる */
+@media (min-width: 768px) {
+  .guide-bar {
+    padding-top: var(--dp-page-top);
+    padding-bottom: var(--dp-space-2);
+  }
+}
+/* 狭い画面では操作の1行は表の下 (下のタブのすぐ上。親指が届く) */
+@media (max-width: 767px) {
+  .guide-frame {
+    --page-h: calc(100svh - 3.5rem - env(safe-area-inset-bottom));
+  }
+  .guide-bar {
+    order: 1;
+    padding-inline: var(--dp-space-2);
+  }
+  .guide-bar > .segmented > a.button {
+    padding-inline: 0.4rem;
+  }
+}
+@media (max-width: 639.98px) {
+  .guide-frame {
+    --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
+  }
+}
+
 /* ---- 文字 ---- */
 /*
  * 控えた字 (注記・補足・日時)。**透かさずに `--dp-muted` の色で。** 透かしていた頃は、淡い面や
@@ -766,19 +820,8 @@ details.more > :not(summary) + :not(summary) {
 
 /* ---- ボタン ---- */
 /*
- * **主の操作は色ではなく層で示す** (docs/design.md の「地・件の面・操作の層」)。色と形はトークン (`--dp-btn-*`) で決め、画面ごとに塗り直さない。
- *
- * - 主 (クラス無し・`.small`・`.xs`・`.save`・`.keep`・`.danger`・`a.button`) … **操作の層に乗せる**。
- *   ヘッダー・下のタブと同じ材質 (`--dp-float`。ぼかさない半透明の面) に浮かぶものの影 (`--dp-shadow-pop`) のカプセル。
- *   字は本文の色の太字。主の色では塗らない。押している間は少し縮める
- * - 控え (`.secondary` / `.outline`) と字だけ (`.ghost`) … 平らで、地も枠も影も無い。乗せると薄い地
- *
- * **浮いたものの中では浮かせない** (浮きの上に浮きを重ねない)。メニュー・ダイアログ・下から出す一枚は
- * `--dp-btn-solid: transparent` と `--dp-btn-lift: none` を置き、中の主のボタンは太字だけになる (下の「浮いたものの中」)。
- *
- * 危ない操作は `.danger` (確定のボタン。主と同じ層で赤い字) と `.outline.danger` (待っている間は控えと同じ。
- * 押そうとしたときだけ赤い字)。字だけのボタンは `.icon` を足すと正方形 (丸い形なら円) になる。
- *
+ * 主・控え・字だけ・危ない操作の決まりは docs/design.md の「ボタン」。色と形はトークン (`--dp-btn-*`) で決め、画面ごとに塗り直さない。
+ * 字だけのボタンは `.icon` を足すと正方形 (丸い形なら円) になる。
  * **大きさは 3 段** (ふつう・`.small`・`.xs`)。ふつうは入力欄と同じ高さ (42px)。
  * 指で押す端末では小さいほうも 40px 以上にする (iPad で押し外さない)。
  *
@@ -921,15 +964,7 @@ a.button {
   [type="reset"],
   [role="button"],
   a.button
-).secondary,
-:where(
-  button,
-  [type="button"],
-  [type="submit"],
-  [type="reset"],
-  [role="button"],
-  a.button
-).outline {
+):is(.secondary, .outline) {
   --pico-background-color: var(--dp-btn-tonal);
   --pico-color: var(--dp-btn-text);
   --pico-box-shadow: none;
@@ -1052,7 +1087,6 @@ a.button {
   select,
   textarea
 ):focus {
-  --pico-box-shadow: none;
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
 }
@@ -1347,18 +1381,13 @@ button.text-button:hover {
   box-shadow: var(--dp-shadow-pop);
   outline: none;
   position-try-fallbacks: flip-block;
-}
-/*
- * 開いているときだけ flex にする。閉じているときはブラウザの `display: none` のまま。
- *
- * **引き金の側から、少し縮んだ透明な姿で開き、閉じるときは引っ込む (どちらも `--dp-duration`)。**
- * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
- * 知らないブラウザはすぐ消える)。動かさない設定では時間が 0 で、すぐ出てすぐ消える。
- * 動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさ (`offsetHeight`) は変わらない
- */
-.menu {
-  /* 並べる向きは閉じている間も持たせる。開いているときだけにすると、閉じる動きの間 (`display` はまだ flex) に
-     * 横並びへ戻り、一瞬横向きのメニューが見えた */
+  /*
+   * 開いているときだけ flex にする (閉じているときはブラウザの `display: none`)。
+   * **引き金の側から、少し縮んだ透明な姿で開き、閉じるときは引っ込む。**
+   * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
+   * 知らないブラウザはすぐ消える)。動かすのは transform と透明度だけ — `Menu` が JS で置くときに測る大きさは変わらない。
+   * 並べる向きは閉じている間も持たせる。開いているときだけにすると、閉じる動きの間に一瞬横向きのメニューが見えた
+   */
   flex-direction: column;
   opacity: 0;
   transform: scale(0.96);
@@ -1377,8 +1406,13 @@ button.text-button:hover {
 .menu[data-align="end"] {
   transform-origin: top right;
 }
+/* 引き金から 4px 離し、入りきる側へ広げる */
 .menu[data-side="top"] {
+  margin-bottom: 4px;
   transform-origin: bottom left;
+}
+.menu[data-side="bottom"] {
+  margin-top: 4px;
 }
 .menu[data-side="top"][data-align="end"] {
   transform-origin: bottom right;
@@ -1395,13 +1429,6 @@ button.text-button:hover {
     opacity: 0;
     transform: scale(0.96);
   }
-}
-/* 引き金から 4px 離し、入りきる側へ広げる */
-.menu[data-side="bottom"] {
-  margin-top: 4px;
-}
-.menu[data-side="top"] {
-  margin-bottom: 4px;
 }
 .menu[data-side="bottom"][data-align="start"] {
   position-area: bottom span-right;
@@ -1606,10 +1633,7 @@ dialog > article {
 dialog:not([open]) > article {
   transform: scale(0.96);
 }
-dialog[open] {
-  transition-duration: var(--dp-duration);
-  transition-timing-function: var(--dp-ease);
-}
+dialog[open],
 dialog[open] > article {
   transition-duration: var(--dp-duration);
   transition-timing-function: var(--dp-ease);
@@ -1628,10 +1652,21 @@ dialog[open] > article {
  * **節は枠で囲まず、線も引かず、見出しと上下の余白で区切る** (`<div class="sections">` に `<section class="section">` を並べる)。
  * カードを 2 列に積んでいた頃は、目が左右を行き来して、どこまで読んだのか分からなくなった。
  * 左の一覧の隣に左寄せで置く。文と欄だけの節は読みやすい幅で止める (`.readable`)。表のある節は広く使う
+ *
+ * **設定の欄は低く (36px)。** 欄が 42px のままだと、項目の多い画面で欄ばかりが目に付いた。
+ * 字の大きさは変えない (16px より小さいと iPhone は押したときに拡大する)。
+ * 指で押す端末では 40px 以上を保つ。中のボタン (`.small` でないもの) も同じ高さに揃う
  */
 .sections {
+  --pico-form-element-spacing-vertical: 0.25rem;
+  --pico-form-element-spacing-horizontal: 0.625rem;
   display: flex;
   flex-direction: column;
+}
+@media (pointer: coarse) {
+  .sections {
+    --pico-form-element-spacing-vertical: 0.45rem;
+  }
 }
 .sections.readable {
   max-width: 45rem;
@@ -1664,20 +1699,6 @@ dialog[open] > article {
   display: block;
   font-size: var(--dp-text-sm);
   color: var(--dp-muted);
-}
-/*
- * **設定の欄は低く (36px)。** 欄が 42px のままだと、項目の多い画面で欄ばかりが目に付いた。
- * 字の大きさは変えない (16px より小さいと iPhone は押したときに拡大する)。
- * 指で押す端末では 40px 以上を保つ。中のボタン (`.small` でないもの) も同じ高さに揃う
- */
-.sections {
-  --pico-form-element-spacing-vertical: 0.25rem;
-  --pico-form-element-spacing-horizontal: 0.625rem;
-}
-@media (pointer: coarse) {
-  .sections {
-    --pico-form-element-spacing-vertical: 0.45rem;
-  }
 }
 /* 選ぶ欄は中身の幅で足りる。横いっぱいに伸ばすと、どこまでが欄なのか読みにくい */
 .sections .narrow {
@@ -1761,6 +1782,7 @@ dialog[open] > article {
   gap: var(--dp-space-1);
 }
 .chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -1786,9 +1808,6 @@ dialog[open] > article {
   opacity: 0;
   cursor: pointer;
 }
-.chip {
-  position: relative;
-}
 .chip:has(input:focus-visible) {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
@@ -1802,25 +1821,6 @@ dialog[open] > article {
   text-underline-offset: 0.3em;
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
-}
-
-/*
- * **動かさない設定の端末では、全部止める。** 移り変わりは時間のトークンを 0 に、
- * 繰り返すもの (録画中の点・光の筋・「保存しました」) は動きそのものを外す (滑る印は `slide` が動かさない)。
- * 上の決まりに勝つよう、ファイルの最後に置く
- */
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --dp-duration: 0s;
-  }
-  .rec-dot,
-  .flash {
-    animation: none;
-  }
-  progress.running[value]::-webkit-progress-value {
-    animation: none;
-    background-image: none;
-  }
 }
 
 /*
@@ -2005,9 +2005,23 @@ dialog[open] > article {
     transform: translateX(100%);
   }
 }
-/* 動くものが苦手な人には動かさない (Pico と同じ約束) */
+
+/*
+ * **動かさない設定の端末では、全部止める。** 移り変わりは時間のトークンを 0 に、
+ * 繰り返すもの (録画中の点・光の筋・「保存しました」・骨組みの光) は動きそのものを外す (滑る印は `slide` が動かさない)。
+ * 上の決まりに勝つよう、ファイルの最後に置く
+ */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --dp-duration: 0s;
+  }
+  .rec-dot,
+  .flash,
   .skeleton::after {
     animation: none;
+  }
+  progress.running[value]::-webkit-progress-value {
+    animation: none;
+    background-image: none;
   }
 }

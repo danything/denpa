@@ -4,7 +4,9 @@
   import { onMount } from "svelte";
   import type { ChannelNotice as NoticeKind } from "#lib/channel-notice.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
-  import GuidePending from "#lib/components/GuidePending.svelte";
+  import GuidePending, {
+    guideNavigation,
+  } from "#lib/components/GuidePending.svelte";
   import Measure from "#lib/components/Measure.svelte";
   import Menu from "#lib/components/Menu.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
@@ -74,31 +76,10 @@
    * 番組表は外枠もサーバから届く (日付の並びなど)。届くまで前の画面が残り、着いた瞬間に
    * 番組表へ飛んでいた。読み直したときは外枠と骨組みが先に出るので、それに揃える。
    * 前の画面は消さずに隠すだけ — 遷移が取り消されても、そのまま戻せる。
-   *
-   * 終わりは `navigating.complete` で見る (上の細いバーと同じ。`navigating` は畳まれた遷移で
-   * 真のまま残るので当てにしない)。着いたら `page.route.id` が番組表になるので、その時点で外す
+   * 着いたら `page.route.id` が番組表になるので、その時点で外す
    */
-  let pendingTo = $state<URL | null>(null);
-  $effect(() => {
-    const done = navigating.complete;
-    const to = navigating.to;
-    if (done === null || to === null || to.route.id !== "/guide") {
-      pendingTo = null;
-      return;
-    }
-    pendingTo = to.url;
-    let stale = false;
-    const settle = (): void => {
-      if (!stale) pendingTo = null;
-    };
-    void done.then(settle, settle);
-    return () => {
-      stale = true;
-    };
-  });
-  const pending = $derived(
-    pendingTo !== null && page.route.id !== "/guide" ? pendingTo : null,
-  );
+  const toGuide = guideNavigation();
+  const pending = $derived(page.route.id !== "/guide" ? toGuide.to : null);
 
   /**
    * **遷移が長引いているときだけ、上端に細いバーを出す。**
@@ -223,6 +204,8 @@
   /** 検索 (`/search`)。ヘッダーでは欄にして、狭い画面では下のタブに置く (上の `links` には並べない) */
   const SEARCH = { href: "/search", label: "検索" } as const;
   const pages = [...links, SEARCH];
+  /** テストの目印 (`nav-*`・`tab-*`) に使う画面の名前 */
+  const slug = (href: string) => (href === "/" ? "home" : href.slice(1));
 
   /**
    * いま開いている画面のナビの行き先。**設定はグループごとに経路が分かれている** (`/settings/reception` など) ので、
@@ -265,11 +248,8 @@
    * - **番組表** … 表が画面の残りをぜんぶ使う。`max-height: 75vh` で切っていた頃は、
    *   **画面の下に余白があるのに表のほうが先に終わって**いた
    *
-   * **一覧の画面 (録画・ルール・設定・検索) は入れない。** ページごと巻き、中身は浮いたヘッダーの裏を流れる
-   * (ヘッダーの透かしが見える)。サイドバーはヘッダーの下に貼り付ける (`app.css` の `.side-panel`)。
-   * 一覧の箱が自分で巻き取っていた頃は、箱のスクロールバーがヘッダーの透かしの裏に見えていた。
-   * 窓ごと巻けばスクロールバーは窓の右端 (ヘッダーの外) で、戻ったときに見ていた位置へも帰る。
-   * 畳まれる幅ではどの画面も普通にページごとスクロールさせる。
+   * **一覧の画面 (録画・ルール・設定・検索) は入れない** (ページごと巻く。docs/design.md の「地・件の面・操作の層」)。
+   * 窓ごと巻けば、戻ったときに見ていた位置へも帰る。畳まれる幅ではどの画面もページごとスクロールさせる。
    *
    * **二段組にする幅は全画面で `md` (768px)。** 画面ごとに違えていた頃は、
    * **同じ幅なのに画面によって形が変わって**いた (縦のiPad 820px で、
@@ -487,9 +467,7 @@
               href={resolve(link.href)}
               class="button ghost small"
               aria-current={here === link.href ? "page" : undefined}
-              data-testid="nav-{link.href === '/'
-                ? 'home'
-                : link.href.slice(1)}"
+              data-testid="nav-{slug(link.href)}"
             >
               {link.label}
               {#if here === link.href}<span
@@ -548,7 +526,7 @@
           href={resolve(tab.href)}
           class="tab"
           aria-current={here === tab.href ? "page" : undefined}
-          data-testid="tab-{tab.href === '/' ? 'home' : tab.href.slice(1)}"
+          data-testid="tab-{slug(tab.href)}"
         >
           {#if here === tab.href}<span
               class="tab-indicator"

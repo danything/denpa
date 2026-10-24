@@ -77,6 +77,7 @@
 
   /* ---- 1行に並べる (ホーム) ---- */
   .inline {
+    position: relative;
     container-type: inline-size;
     display: flex;
     align-items: center;
@@ -89,11 +90,7 @@
     flex-shrink: 0;
     font-size: var(--now-time-size, 0.875rem);
   }
-  /* 線の頭の赤い点 (「いま」の印。カレンダーの今日の点と同じ赤) */
-  /* 時刻の左の余白に置く (時刻の左端は行の時刻にそろえたまま) */
-  .inline {
-    position: relative;
-  }
+  /* 線の頭の赤い点 (「いま」の印。カレンダーの今日の点と同じ赤)。時刻の左の余白に置く */
   .inline::before {
     content: "";
     position: absolute;

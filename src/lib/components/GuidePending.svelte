@@ -1,3 +1,38 @@
+<script lang="ts" module>
+  import { navigating } from "$app/state";
+
+  /**
+   * 番組表 (`/guide`) へ移っている途中なら、その行き先。着いた・取り消されたら null。
+   * 終わりは `navigating.complete` で見る (`navigating` は畳まれた遷移で真のまま残るので当てにしない。
+   * [reload.svelte.ts](../reload.svelte.ts))。土台 (`+layout.svelte`) と番組表が使う
+   */
+  export function guideNavigation(): { readonly to: URL | null } {
+    let to = $state<URL | null>(null);
+    $effect(() => {
+      const done = navigating.complete;
+      const next = navigating.to;
+      if (done === null || next === null || next.route.id !== "/guide") {
+        to = null;
+        return;
+      }
+      to = next.url;
+      let stale = false;
+      const settle = (): void => {
+        if (!stale) to = null;
+      };
+      void done.then(settle, settle);
+      return () => {
+        stale = true;
+      };
+    });
+    return {
+      get to() {
+        return to;
+      },
+    };
+  }
+</script>
+
 <script lang="ts">
   import GuideSkeleton from "#lib/components/GuideSkeleton.svelte";
   import { SERVICE_TYPE_LABEL } from "#lib/format.js";
@@ -11,8 +46,7 @@
    * 残り、着いた瞬間に番組表へ飛んでいた (読み直したときは外枠と骨組みが先に出る)。
    * 押したらすぐこれに替えて、読み直したときと同じ「外枠 → 骨組み → 表」に見せる。
    *
-   * 出すのは URL だけで決まる種別のタブと骨組み。並びと高さは番組表の操作の1行
-   * (`guide/+page.svelte` の `.toolbar`) と同じにしておく — 着いたときに表の位置が飛ばない
+   * 出すのは URL だけで決まる種別のタブと骨組み。外枠と操作の1行は番組表と同じ (`app.css` の `.guide-frame`・`.guide-bar`)
    */
   let { url }: { url: URL } = $props();
 
@@ -22,8 +56,9 @@
   );
 </script>
 
-<div class="page" data-testid="guide-pending">
-  <div class="toolbar">
+<div class="guide-frame" data-testid="guide-pending">
+  <!-- `toolbar` は e2e の目印 (49-guide-skeleton) -->
+  <div class="toolbar guide-bar">
     <div role="group" class="segmented">
       {#each CHANNEL_TYPES as each (each)}
         <a
@@ -38,51 +73,3 @@
   </div>
   <GuideSkeleton />
 </div>
-
-<style>
-  /* 外枠は `guide/+page.svelte` の `.page`・`.toolbar` と同じ (本文の余白を打ち消し、画面の残りをぜんぶ使う) */
-  .page {
-    --page-h: calc(100% + var(--dp-page-top) + var(--dp-gutter));
-    display: flex;
-    flex-direction: column;
-    margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
-      calc(-1 * var(--dp-gutter));
-    height: var(--page-h);
-  }
-  .toolbar {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--dp-space-2);
-    padding: var(--dp-space-1) var(--dp-space-3);
-  }
-  /* 番組表の `.types` と同じ。Pico の `[role=group]` は横いっぱいに広がる */
-  .segmented {
-    flex: none;
-    width: auto;
-  }
-  @media (min-width: 768px) {
-    .toolbar {
-      padding-top: var(--dp-page-top);
-      padding-bottom: var(--dp-space-2);
-    }
-  }
-  @media (max-width: 767px) {
-    .page {
-      --page-h: calc(100svh - 3.5rem - env(safe-area-inset-bottom));
-    }
-    /* 狭い画面では操作の1行は表の下 (下のタブのすぐ上) */
-    .toolbar {
-      order: 1;
-      padding-inline: var(--dp-space-2);
-    }
-    .toolbar a.button {
-      padding-inline: 0.4rem;
-    }
-  }
-  @media (max-width: 639.98px) {
-    .page {
-      --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
-    }
-  }
-</style>

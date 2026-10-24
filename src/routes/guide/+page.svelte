@@ -3,6 +3,7 @@
   import { dragScroll, submitting } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
+  import { guideNavigation } from "#lib/components/GuidePending.svelte";
   import Menu from "#lib/components/Menu.svelte";
   import NowLine from "#lib/components/NowLine.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
@@ -31,9 +32,9 @@
     type GridProgram,
     type GuideSheet,
   } from "#lib/types.js";
+  import type { SubmitFunction } from "$app/forms";
   import { preloadData } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { navigating } from "$app/state";
   import Ellipsis from "~icons/lucide/ellipsis";
   import Layers from "~icons/lucide/layers";
   import Palette from "~icons/lucide/palette";
@@ -89,34 +90,15 @@
    *
    * 外枠 (局の並び) が届くまでは前の表がそのまま残り、押しても何も起きていないように見えた。
    * 押したらすぐマスを骨組みに替え、放送波が変わるなら局名の行も骨組みにする
-   * (同じ放送波の別の日なら局の並びはほぼ同じなので、そのまま残す)。
-   *
-   * 終わりは `navigating.complete` で見る (`+layout.svelte` の `pending` と同じ。`navigating` は
-   * 畳まれた遷移で真のまま残るので当てにしない)
+   * (同じ放送波の別の日なら局の並びはほぼ同じなので、そのまま残す)
    */
-  let switchingTo = $state<URL | null>(null);
-  $effect(() => {
-    const done = navigating.complete;
-    const to = navigating.to;
-    if (done === null || to === null || to.route.id !== "/guide") {
-      switchingTo = null;
-      return;
-    }
-    switchingTo = to.url;
-    let stale = false;
-    const settle = (): void => {
-      if (!stale) switchingTo = null;
-    };
-    void done.then(settle, settle);
-    return () => {
-      stale = true;
-    };
-  });
+  const toGuide = guideNavigation();
   /** 押した先の放送波。今と同じ日・同じ放送波 (読み直し・同じリンク) なら null */
   const switching = $derived.by(() => {
-    if (switchingTo === null) return null;
-    const type = switchingTo.searchParams.get("type") ?? "GR";
-    const start = switchingTo.searchParams.get("start");
+    const to = toGuide.to;
+    if (to === null) return null;
+    const type = to.searchParams.get("type") ?? "GR";
+    const start = to.searchParams.get("start");
     if (type === data.type && (start === null || Number(start) === data.start))
       return null;
     return { type };
@@ -331,6 +313,14 @@
     facts = null;
   }
 
+  /** 予約・取消を送ったあと。失敗したときは開いたままにして、中に理由を出す */
+  const closeOnSuccess: SubmitFunction =
+    () =>
+    async ({ result, update }) => {
+      await update();
+      if (result.type === "success") close();
+    };
+
   const serviceName = (id: number) =>
     services.find((s) => s.id === id)?.name ?? "";
 
@@ -415,15 +405,8 @@
 
     const target = grid;
     const mark = nowMark;
-    // 「いま」を上端ちょうどに置くと直前の番組が見えず、放送中のものが
-    // 頭から切れて分かりにくい。画面の4分の1あたりに来るようにする
     const place = () => {
-      const top =
-        mark.getBoundingClientRect().top - target.getBoundingClientRect().top;
-      target.scrollTop = Math.max(
-        0,
-        target.scrollTop + top - target.clientHeight / 4,
-      );
+      target.scrollTop = Math.max(0, nowTop(target, mark));
     };
 
     place();
@@ -472,6 +455,8 @@
     const entry = (day: { start: number; has: boolean }) => ({
       ...day,
       label: dayLabel(day.start),
+      name: `${day.start === data.today ? "今日 " : ""}${date(day.start)}`,
+      weekday: weekday(day.start),
       today: day.start === data.today,
       past: day.start < data.today,
     });
@@ -489,9 +474,9 @@
     return text.slice(text.indexOf("/") + 1);
   }
 
-  function weekday(start: number): "sat" | "sun" | null {
+  function weekday(start: number): "sat" | "sun" | "" {
     const day = new Date(start).getDay();
-    return day === 6 ? "sat" : day === 0 ? "sun" : null;
+    return day === 6 ? "sat" : day === 0 ? "sun" : "";
   }
 
   /**
@@ -595,11 +580,18 @@
     scrollGrid(slot * Number.parseFloat(SLOT_HEIGHT) * rem);
   }
 
-  function jumpNow(): void {
-    if (grid === null || nowMark === null) return;
+  /**
+   * 「いま」を表の4分の1あたりに置く縦位置。上端ちょうどに置くと直前の番組が見えず、
+   * 放送中のものが頭から切れて分かりにくい
+   */
+  function nowTop(box: HTMLElement, mark: HTMLElement): number {
     const top =
-      nowMark.getBoundingClientRect().top - grid.getBoundingClientRect().top;
-    scrollGrid(grid.scrollTop + top - grid.clientHeight / 4);
+      mark.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    return box.scrollTop + top - box.clientHeight / 4;
+  }
+
+  function jumpNow(): void {
+    if (grid !== null && nowMark !== null) scrollGrid(nowTop(grid, nowMark));
   }
 
   /**
@@ -690,14 +682,9 @@
 
 <!--
     **表は画面の残りをぜんぶ使う。** 枠 (カード) で囲まず、本文の余白も打ち消して
-    端から端まで表にする (`.page` の負のマージン)。1画面に入る局と時間を増やすため。
-    広い幅の高さは `+layout.svelte` の `FILLED` から `%` で降ろす。
-
-    **狭い幅だけ `%` で降ろせない** (途中の入れ物に高さが決まっておらず、`%` が解決しない)。
-    そこは `svh` で採る — `svh` だけが見えている範囲を超えない
-    (`vh` と `dvh` は実機の PWA でアドレスバーの高さぶん超えた)。天井なので小さく出る側に倒す
+    端から端まで表にする (`app.css` の `.guide-frame`)。1画面に入る局と時間を増やすため
 -->
-<div class="page">
+<div class="guide-frame">
   <!--
         **どこを見るかは表の外の細い1行にまとめる** (種別・日付・時刻・サブch・ジャンル)。縦は表に回す。
 
@@ -706,11 +693,11 @@
         局名の行に入れると、操作の幅のぶん局名が隠れる。表の外の1行なら、
         隠れるものも押す回数も増えない。
 
-        **狭い画面では表の下、下のタブのすぐ上に置く** (親指が届く。`.toolbar` の `order`)。
+        **狭い画面では表の下、下のタブのすぐ上に置く** (親指が届く。`.guide-bar` の `order`)。
         DOM の順 (種別 → 日付 → 時刻 → …) は読み上げの順なので変えない。
         入りきらない幅では、時刻のボタンを「⋯」に、さらに狭いと日付のメニューに移す
     -->
-  <div class="toolbar" data-testid="guide-toolbar">
+  <div class="toolbar guide-bar" data-testid="guide-toolbar">
     <div role="group" class="types segmented" data-testid="type-tabs">
       {#each CHANNEL_TYPES as type (type)}
         <a
@@ -747,15 +734,13 @@
           {@const selected = day.start === data.start}
           {#if day.has || selected}
             <a
-              class="day-chip {weekday(day.start) ?? ''}"
+              class="day-chip {day.weekday}"
               class:selected
               class:present={day.today}
               class:past={day.past}
               href={href({ start: String(day.start) })}
               aria-current={selected ? "date" : undefined}
-              aria-label={day.start === data.today
-                ? `今日 ${date(day.start)}`
-                : date(day.start)}
+              aria-label={day.name}
               data-testid="guide-day"
               data-start={day.start}
               >{#if day.today}<span class="today-mark">今日</span
@@ -764,7 +749,7 @@
           {:else}
             <!-- 番組がまだ届いていない日。並びの幅を保つために置いて、押せなくする -->
             <span
-              class="day-chip disabled {weekday(day.start) ?? ''}"
+              class="day-chip disabled {day.weekday}"
               title="番組表がまだありません"
               data-testid="guide-day"
               data-start={day.start}
@@ -791,20 +776,17 @@
           {@const selected = day.start === data.start}
           {#if day.has || selected}
             <a
-              class="menu-item {weekday(day.start) ?? ''}"
+              class="menu-item {day.weekday}"
               class:selected
               class:past={day.past}
               role="menuitem"
               href={href({ start: String(day.start) })}
-              aria-current={selected ? "date" : undefined}
-              >{day.start === data.today
-                ? `今日 ${date(day.start)}`
-                : date(day.start)}</a
+              aria-current={selected ? "date" : undefined}>{day.name}</a
             >
           {:else}
             <button
               type="button"
-              class="menu-item {weekday(day.start) ?? ''}"
+              class="menu-item {day.weekday}"
               role="menuitem"
               aria-disabled="true"
               data-disabled
@@ -1316,15 +1298,7 @@
 
       {#if canCancel}
         <!-- 予約したあと番組表から止められないと、わざわざ予約一覧まで行くことになる -->
-        <form
-          method="POST"
-          action="?/cancel"
-          use:submitting={() =>
-            async ({ result, update }) => {
-              await update();
-              if (result.type === "success") close();
-            }}
-        >
+        <form method="POST" action="?/cancel" use:submitting={closeOnSuccess}>
           <input type="hidden" name="programId" value={program.id} />
           <button
             type="submit"
@@ -1377,16 +1351,7 @@
                     分からなくなる)。コピー禁止の番組には出さない — 押しても断るだけ
                     (`reservations.reserve`)。理由は詳細の「コピー禁止」に添えてある
                 -->
-        <form
-          method="POST"
-          action="?/reserve"
-          use:submitting={() =>
-            async ({ result, update }) => {
-              await update();
-              // 失敗したときは開いたままにして、中に理由を出す
-              if (result.type === "success") close();
-            }}
-        >
+        <form method="POST" action="?/reserve" use:submitting={closeOnSuccess}>
           <input type="hidden" name="programId" value={program.id} />
           <button type="submit" data-testid="detail-reserve">予約</button>
         </form>
@@ -1397,55 +1362,9 @@
 
 <style>
   /*
-     * **本文の余白 (`--dp-gutter`) を打ち消して、端から端まで使う** (上のコメント)。
-     * 高さも同じぶん足す。広い幅は `FILLED` の `%`、狭い幅は下の `svh`
+     * 外枠と操作の1行の形は `app.css` の `.guide-frame`・`.guide-bar`。
+     * 入りきらないぶんは日付の並びが縮んで横に流れ、時刻は「⋯」へ (下の幅ごとの決まり)
      */
-  .page {
-    --page-h: calc(100% + var(--dp-page-top) + var(--dp-gutter));
-    display: flex;
-    flex-direction: column;
-    margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
-      calc(-1 * var(--dp-gutter));
-    height: var(--page-h);
-  }
-  /*
-     * 狭い幅は画面の高さから上下の固定のもの (ナビ・下のタブ・ノッチ) を引く。
-     * ページごとスクロールさせず、表だけを動かす (表の中と外の二重のスクロールにしない)
-     */
-  @media (max-width: 767px) {
-    .page {
-      /* ナビは 3.5rem (`+layout.svelte` の `.navbar`。下の線は無い)。下のタブは無いので、下の安全域だけ空ける */
-      --page-h: calc(100svh - 3.5rem - env(safe-area-inset-bottom));
-    }
-  }
-  @media (max-width: 639.98px) {
-    .page {
-      --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
-    }
-  }
-  /*
-     * **1行に収める** (折り返さない)。入りきらないぶんは日付の並びが縮んで横に流れ、時刻は「⋯」へ (下の幅ごとの決まり)。
-     * 表との間に線は引かない (ヘッダーと同じ。表の頭の局の行が区切りになる)
-     */
-  .toolbar {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: var(--dp-space-2);
-    padding: var(--dp-space-1) var(--dp-space-3);
-  }
-  /* 広い画面では上の余白を画面の頭の余白 (`--dp-page-top`) にし、最初の行 (種別のタブ) をほかの画面とそろえる */
-  @media (min-width: 768px) {
-    .toolbar {
-      padding-top: var(--dp-page-top);
-      padding-bottom: var(--dp-space-2);
-    }
-  }
-  .types {
-    flex: none;
-    width: auto;
-  }
-  /* 種別を選び直すと、選んだ面が横へ滑る (`#lib/motion.svelte.js` の `slide`) */
   .days {
     display: flex;
     flex: 0 1 auto;
@@ -1594,13 +1513,10 @@
      */
   @media (max-width: 767px) {
     .toolbar {
-      order: 1;
       gap: var(--dp-space-1);
-      padding-inline: var(--dp-space-2);
       overflow-x: auto;
       scrollbar-width: none;
     }
-    .types > a.button,
     .days > a.button,
     .date-label {
       padding-inline: 0.4rem;
@@ -1747,19 +1663,6 @@
     transition: translate var(--dp-duration) var(--dp-ease);
   }
   /*
-     * **画面の外のマスは中身を組まない** (`content-visibility: auto`)。
-     *
-     * 288 行 (5 分刻み) × 局数の grid に BS で 2,000 個超の `<button>` を置く。
-     * マスを足すたびに表全体の Layout がやり直しになり、実データ相当 (BS 60 局・
-     * 2,171 マス) で 1 回 450ms × 7 回 = 描き終わりまで 12 秒かかっていた。
-     * 見えている範囲のマスだけ中身を組めば Layout は 11 秒 → 2 秒、描き終わりは
-     * 12 秒 → 3.4 秒 (CPU を 4 倍遅くしても 23 秒 → 10 秒)。
-     *
-     * 大きさは grid の track で決まる (列は `minmax(11rem, 1fr)`、行は 0.75rem) ので、
-     * 中身を組まなくてもマスの場所は変わらない。`contain-intrinsic-size` は
-     * 中身が無いときの仮の大きさで、track に伸ばされるぶんには効かない
-     */
-  /*
      * マスのところの骨組み。列は表と同じ (`subgrid`)。光の筋は `app.css` の `.skeleton`。
      * 時刻の列・局名の行・いまの線は `z-index` を持つので、この上に重なる
      */
@@ -1786,7 +1689,12 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 11rem auto 216rem;
   }
-
+  /*
+     * **画面の外のマスは中身を組まない** (`content-visibility: auto`)。BS 60 局・2,171 マスで、マスを足すたびの
+     * Layout が 1 回 450ms × 7 回かかり、描き終わりまで 12 秒だった (付けて 3.4 秒)。
+     * 大きさは grid の track で決まるので、中身を組まなくてもマスの場所は変わらない
+     * (`contain-intrinsic-size` は中身が無いときの仮の大きさ)
+     */
   .cell {
     overflow: hidden;
     padding: 0.125rem;
@@ -1944,17 +1852,15 @@
     line-clamp: var(--lines);
     overflow: hidden;
   }
-  .title {
+  .title,
+  .state,
+  .desc {
     display: block;
     font-size: 0.75rem;
     line-height: 1.25;
     font-weight: var(--dp-weight);
   }
   .state {
-    display: block;
-    font-size: 0.75rem;
-    line-height: 1.25;
-    font-weight: var(--dp-weight);
     color: var(--dp-primary-text);
   }
   .program:is([data-state="recording"], [data-state="conflict"]) .state {
@@ -1976,9 +1882,6 @@
   }
   /* 説明は番組名より一段だけ控える。0.6 まで落とすと淡い下地の上で字が溶けた */
   .desc {
-    display: block;
-    font-size: 0.75rem;
-    line-height: 1.25;
     opacity: 0.8;
   }
   /* 押すものの並び (`.modal-actions`) の中で、1行まるごと使う */
