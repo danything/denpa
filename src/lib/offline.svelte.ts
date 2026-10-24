@@ -200,12 +200,13 @@ export function startOffline(): void {
 }
 
 /** 端末が AV1 をデコードできるか。デコードできなければ H.264 (`alt`) を落とす */
+const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
 async function canPlayAv1(): Promise<boolean> {
   try {
     const info = await navigator.mediaCapabilities.decodingInfo({
       type: "file",
       video: {
-        contentType: 'video/mp4; codecs="av01.0.08M.08"',
+        contentType: AV1,
         width: 1920,
         height: 1080,
         bitrate: 4_000_000,
@@ -214,32 +215,20 @@ async function canPlayAv1(): Promise<boolean> {
     });
     return info.supported;
   } catch {
-    return (
-      document
-        .createElement("video")
-        .canPlayType('video/mp4; codecs="av01.0.08M.08"') !== ""
-    );
+    return document.createElement("video").canPlayType(AV1) !== "";
   }
 }
 
 /** 保存に使ってよい残り容量か。動画そのもの + 一時領域ぶんの遊びを見る */
 async function ensureRoom(bytes: number): Promise<void> {
-  try {
-    const { usage, quota } = await navigator.storage.estimate();
-    if (
-      quota !== undefined &&
-      usage !== undefined &&
-      quota - usage < bytes * 1.2
-    ) {
-      throw new Error(
-        `端末の空き容量が足りません (残り ${Math.round((quota - usage) / 1e6)}MB)`,
-      );
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("端末の空き"))
-      throw error;
-    // 測れないブラウザでは黙って進む (入らなければ落とすところで転ぶ)
-  }
+  // 測れないブラウザでは黙って進む (入らなければ落とすところで転ぶ)
+  const { usage, quota } = await navigator.storage
+    .estimate()
+    .catch((): StorageEstimate => ({}));
+  if (quota !== undefined && usage !== undefined && quota - usage < bytes * 1.2)
+    throw new Error(
+      `端末の空き容量が足りません (残り ${Math.round((quota - usage) / 1e6)}MB)`,
+    );
   // ブラウザの都合で勝手に消されないようにリクエストする。断られても致命ではない
   await navigator.storage.persist?.().catch(() => {});
 }
@@ -470,34 +459,32 @@ export async function rememberResume(
 /**
  * オンラインに戻ったらサーバへ伝える。
  * 削除は `DELETE /api/recordings/<id>`、視聴位置は `POST …/resume`。
- * 404 は「もう無い」なので済んだことにする。他の失敗は残して次の復帰で再試行
+ * 404 は「もう無い」なので済んだことにする。他の失敗 (まだ繋がっていない) は残して次の復帰で再試行
  */
 async function flush(): Promise<void> {
-  for (const item of await outbox.all()) {
-    try {
-      const res = await fetch(resolve(`api/recordings/${item.id}`), {
-        method: "DELETE",
-      });
-      if (res.ok || res.status === 404) await outbox.remove(item.id);
-    } catch {
-      // まだ繋がっていない。次の online で
+  const send = async <T extends { id: number }>(
+    queue: { all(): Promise<T[]>; remove(id: number): Promise<unknown> },
+    request: (item: T) => Promise<Response>,
+  ) => {
+    for (const item of await queue.all()) {
+      const res = await request(item).catch(() => null);
+      if (res !== null && (res.ok || res.status === 404))
+        await queue.remove(item.id);
     }
-  }
-  for (const item of await resumeQueue.all()) {
-    try {
-      const res = await fetch(resolve(`api/recordings/${item.id}/resume`), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          at: item.at,
-          length: item.length,
-          source: item.axis,
-        }),
-      });
-      if (res.ok || res.status === 404) await resumeQueue.remove(item.id);
-    } catch {
-      // 同上
-    }
-  }
+  };
+  await send(outbox, (item) =>
+    fetch(resolve(`api/recordings/${item.id}`), { method: "DELETE" }),
+  );
+  await send(resumeQueue, (item) =>
+    fetch(resolve(`api/recordings/${item.id}/resume`), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        at: item.at,
+        length: item.length,
+        source: item.axis,
+      }),
+    }),
+  );
   await refresh();
 }

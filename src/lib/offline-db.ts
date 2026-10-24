@@ -149,32 +149,25 @@ export async function storeResponse(
   const kind = kindOf(url);
   if (kind === null) return;
   if (kind === "video") held.video = await readVideo(response);
-  else if (kind === "captionText")
-    held.captionText = await response.json().catch(() => undefined);
   else if (kind === "poster") held.poster = await response.blob();
-  else if (kind === "chapters")
-    held.chapters = await response.json().catch(() => undefined);
-  else held.databroadcast = await response.json().catch(() => undefined);
+  else held[kind] = await response.json().catch(() => undefined);
 }
+
+type Store = "videos" | "outbox" | "resume";
+const STORES: Store[] = ["videos", "outbox", "resume"];
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, VERSION);
     req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains("videos"))
-        db.createObjectStore("videos", { keyPath: "id" });
-      if (!db.objectStoreNames.contains("outbox"))
-        db.createObjectStore("outbox", { keyPath: "id" });
-      if (!db.objectStoreNames.contains("resume"))
-        db.createObjectStore("resume", { keyPath: "id" });
+      for (const name of STORES)
+        if (!req.result.objectStoreNames.contains(name))
+          req.result.createObjectStore(name, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-
-type Store = "videos" | "outbox" | "resume";
 
 async function tx<T>(
   store: Store,
@@ -193,24 +186,16 @@ async function tx<T>(
   }
 }
 
-export const videos = {
-  get: (id: number) =>
-    tx<OfflineVideo | undefined>("videos", "readonly", (s) => s.get(id)),
-  all: () => tx<OfflineVideo[]>("videos", "readonly", (s) => s.getAll()),
-  put: (value: OfflineVideo) => tx("videos", "readwrite", (s) => s.put(value)),
-  remove: (id: number) => tx("videos", "readwrite", (s) => s.delete(id)),
-};
+/** 1つの置き場の読み書き。どの置き場も `id` で引く */
+function table<T>(store: Store) {
+  return {
+    get: (id: number) => tx<T | undefined>(store, "readonly", (s) => s.get(id)),
+    all: () => tx<T[]>(store, "readonly", (s) => s.getAll()),
+    put: (value: T) => tx(store, "readwrite", (s) => s.put(value)),
+    remove: (id: number) => tx(store, "readwrite", (s) => s.delete(id)),
+  };
+}
 
-export const outbox = {
-  all: () => tx<OutboxItem[]>("outbox", "readonly", (s) => s.getAll()),
-  put: (value: OutboxItem) => tx("outbox", "readwrite", (s) => s.put(value)),
-  remove: (id: number) => tx("outbox", "readwrite", (s) => s.delete(id)),
-};
-
-export const resumeQueue = {
-  get: (id: number) =>
-    tx<ResumeItem | undefined>("resume", "readonly", (s) => s.get(id)),
-  all: () => tx<ResumeItem[]>("resume", "readonly", (s) => s.getAll()),
-  put: (value: ResumeItem) => tx("resume", "readwrite", (s) => s.put(value)),
-  remove: (id: number) => tx("resume", "readwrite", (s) => s.delete(id)),
-};
+export const videos = table<OfflineVideo>("videos");
+export const outbox = table<OutboxItem>("outbox");
+export const resumeQueue = table<ResumeItem>("resume");
