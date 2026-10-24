@@ -27,6 +27,7 @@ import type {
   ModuleFile,
   ResponseMessage,
 } from "./bml-protocol";
+import { u16, u32 } from "./bytes";
 import type { Dii, DiiModule } from "./dsmcc";
 import {
   dataEventIdOf,
@@ -35,16 +36,14 @@ import {
   parseDii,
   TABLE_DII,
   TABLE_STREAM_DESCRIPTOR,
-  u16,
-  u32,
 } from "./dsmcc";
 import { PID_TIME, parseTimeTable } from "./eit";
 import { parseMediaType, readEntity } from "./multipart";
 import {
   descriptors,
   PacketStream,
-  PID_PAT,
-  parsePat,
+  PmtTracker,
+  packetPid,
   pmtStreams,
   SectionAssembler,
 } from "./psi";
@@ -167,10 +166,14 @@ function parsePmt(section: Uint8Array): ComponentPMT[] {
   return components;
 }
 
+/** `at` の下位1ビットと続く4バイトで 33 ビット (STC・NPT) */
+const u33 = (data: Uint8Array, at: number) =>
+  (data[at]! & 1) * 0x100000000 + u32(data, at + 1);
+
 /** ストリーム記述子 (table_id 0x3D)。NPT と イベントメッセージが載っている */
 function parseEsEvents(section: Uint8Array): ESEvent[] {
   const events: ESEvent[] = [];
-  const length = ((section[1]! & 0x0f) << 8) | section[2]!;
+  const length = u16(section, 1) & 0x0fff;
   const body = section.subarray(8, Math.min(3 + length - 4, section.length));
   for (const [tag, descriptor] of descriptors(body)) {
     if (tag === 0x17 && descriptor.length >= 18) {
@@ -179,39 +182,29 @@ function parseEsEvents(section: Uint8Array): ESEvent[] {
         type: "nptReference",
         postDiscontinuityIndicator: (descriptor[0]! & 0x80) !== 0,
         dsmContentId: descriptor[0]! & 0x7f,
-        STCReference: u32(descriptor, 2) + (descriptor[1]! & 1) * 0x100000000,
-        NPTReference: u32(descriptor, 10) + (descriptor[9]! & 1) * 0x100000000,
+        STCReference: u33(descriptor, 1),
+        NPTReference: u33(descriptor, 9),
         scaleNumerator: u16(descriptor, 14),
         scaleDenominator: u16(descriptor, 16),
       });
     } else if (tag === 0x40 && descriptor.length >= 11) {
       // 汎用イベントメッセージ記述子。運用されるのは time_mode 0 と 2 だけ
-      const groupId = (u16(descriptor, 0) >> 4) & 0x0fff;
       const timeMode = descriptor[2];
-      const eventMessageType = descriptor[8]!;
-      const eventMessageId = u16(descriptor, 9);
-      const privateDataByte = [...descriptor.subarray(11)];
-      if (timeMode === 0) {
-        events.push({
-          type: "immediateEvent",
-          timeMode: 0,
-          eventMessageGroupId: groupId,
-          eventMessageType,
-          eventMessageId,
-          privateDataByte,
-        });
-      } else if (timeMode === 2) {
+      const message = {
+        eventMessageGroupId: (u16(descriptor, 0) >> 4) & 0x0fff,
+        eventMessageType: descriptor[8]!,
+        eventMessageId: u16(descriptor, 9),
+        privateDataByte: [...descriptor.subarray(11)],
+      };
+      if (timeMode === 0)
+        events.push({ type: "immediateEvent", timeMode: 0, ...message });
+      else if (timeMode === 2)
         events.push({
           type: "nptEvent",
           timeMode: 2,
-          eventMessageGroupId: groupId,
-          eventMessageNPT:
-            u32(descriptor, 4) + (descriptor[3]! & 1) * 0x100000000,
-          eventMessageType,
-          eventMessageId,
-          privateDataByte,
+          eventMessageNPT: u33(descriptor, 3),
+          ...message,
         });
-      }
     }
   }
   return events;
@@ -268,11 +261,10 @@ interface Component {
  */
 export class BmlDecoder {
   private readonly packets = new PacketStream();
-  private readonly pat = new SectionAssembler(PID_PAT);
+  /** **1局に絞ったあとを食わせる前提。** 入っているサービスは1つなので、最初の局の PMT を追う */
+  private readonly pmt = new PmtTracker();
   // TDT は CRC を持たない。DSM-CC と同じ理由で 'syntax' で受ける
   private readonly time = new SectionAssembler(PID_TIME, "syntax");
-  private pmt: SectionAssembler | null = null;
-  private pmtPid: number | null = null;
   /** カルーセルが流れている ES。PID ごと */
   private readonly components = new Map<number, Component>();
   /** 最後に配った PMT。**変わったときだけ配る** */
@@ -296,31 +288,15 @@ export class BmlDecoder {
    * 持つなら写すこと** — 塊の入れ物は使い回される
    */
   feedPacket(packet: Uint8Array): void {
-    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+    const pid = packetPid(packet);
     // 同じ PID を2役が名乗ることもあるので、else でつながない
-    if (pid === PID_PAT)
-      for (const section of this.pat.feed(packet)) this.onPat(section);
-    if (pid === this.pmtPid)
-      for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
+    for (const section of this.pmt.feed(packet, pid)) this.onPmt(section);
     if (pid === PID_TIME)
       for (const section of this.time.feed(packet)) this.onTime(section);
     const component = this.components.get(pid);
     if (component !== undefined) {
       for (const section of component.sections.feed(packet))
         this.onCarousel(component, section);
-    }
-  }
-
-  private onPat(section: Uint8Array): void {
-    /*
-     * **1局に絞ったあとを食わせる前提。** 入っているサービスは1つなので、
-     * 最初に見つかったものの PMT を追う
-     */
-    for (const pmtPid of parsePat(section).values()) {
-      if (this.pmtPid === pmtPid) return;
-      this.pmtPid = pmtPid;
-      this.pmt = new SectionAssembler(pmtPid);
-      return;
     }
   }
 

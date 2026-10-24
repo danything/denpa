@@ -15,6 +15,7 @@
  * そちらは別仕立て (`logo-dsmcc.ts`)。両方まとめてここで面倒を見る。
  */
 
+import { u16 } from "./bytes";
 import { DsmccLogoCollector } from "./logo-dsmcc";
 import { withPalette } from "./logo-palette";
 import {
@@ -102,15 +103,15 @@ export function parseCdt(section: Uint8Array): LogoData | null {
   if (section[0] !== TABLE_CDT) return null;
   if (section[10] !== DATA_TYPE_LOGO) return null;
 
-  const descriptorsLength = ((section[11]! & 0x0f) << 8) | section[12]!;
+  const descriptorsLength = u16(section, 11) & 0x0fff;
   let at = 13 + descriptorsLength;
   const end = section.length - 4;
   if (at + 7 > end) return null;
 
   const logoType = section[at]!;
   const logoId = ((section[at + 1]! & 0x01) << 8) | section[at + 2]!;
-  const logoVersion = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
-  const size = (section[at + 5]! << 8) | section[at + 6]!;
+  const logoVersion = u16(section, at + 3) & 0x0fff;
+  const size = u16(section, at + 5);
   at += 7;
   if (at + size > end) return null;
 

@@ -78,19 +78,10 @@ export class Carousel {
    * @returns 配る価値があるか (上の説明)
    */
   take(message: ResponseMessage): boolean {
-    if (message.type === "pmt") {
-      const same =
-        this.pmt !== null &&
-        JSON.stringify(this.pmt) === JSON.stringify(message);
-      this.pmt = message;
-      return !same;
-    }
-    if (message.type === "programInfo") {
-      const same =
-        this.programInfo !== null &&
-        JSON.stringify(this.programInfo) === JSON.stringify(message);
-      this.programInfo = message;
-      return !same;
+    if (message.type === "pmt" || message.type === "programInfo") {
+      const held = this[message.type];
+      this[message.type] = message;
+      return held === null || JSON.stringify(held) !== JSON.stringify(message);
     }
     /*
      * **DII は覚えるが、通すのは毎回。** 放送のアプリは「変わったこと」を
@@ -110,11 +101,8 @@ export class Carousel {
      */
     this.modules.delete(key);
     this.modules.set(key, message);
-    while (this.modules.size > KEEP_MODULES) {
-      const oldest = this.modules.keys().next().value;
-      if (oldest === undefined) break;
-      this.modules.delete(oldest);
-    }
+    if (this.modules.size > KEEP_MODULES)
+      this.modules.delete(this.modules.keys().next().value!);
     return true;
   }
 

@@ -42,6 +42,7 @@ import {
   KANJI_SYMBOLS_HALF,
   KATAKANA,
 } from "./b24-tables";
+import { u16 } from "./bytes";
 import { smoothDrcs } from "./drcs-smooth";
 
 /** 符号の集合。DRCS は 0〜15 の面 */
@@ -352,7 +353,7 @@ export class B24CaptionDecoder {
     const begin = 3 + (data[2]! & 0x0f);
     if (begin + 5 > data.length) return null;
     const groupId = data[begin]! >> 2;
-    const size = (data[begin + 3]! << 8) | data[begin + 4]!;
+    const size = u16(data, begin + 3);
     if (size === 0 || begin + 5 + size > data.length) return null;
     const body = data.subarray(begin + 5, begin + 5 + size);
 
@@ -469,7 +470,7 @@ export class B24CaptionDecoder {
     while (at + 5 <= data.length) {
       if (data[at] !== 0x1f) return;
       const parameter = data[at + 1]!;
-      const size = (data[at + 2]! << 16) | (data[at + 3]! << 8) | data[at + 4]!;
+      const size = (data[at + 2]! << 16) | u16(data, at + 3);
       if (size === 0 || at + 5 + size > data.length) return;
       const unit = data.subarray(at + 5, at + 5 + size);
       if (parameter === 0x20) this.body(unit);
@@ -505,7 +506,7 @@ export class B24CaptionDecoder {
     const codes = data[0]!;
     for (let i = 0; i < codes; i++) {
       if (at + 3 > data.length) return;
-      const code = (data[at]! << 8) | data[at + 1]!;
+      const code = u16(data, at);
       const fonts = data[at + 2]!;
       at += 3;
       for (let j = 0; j < fonts; j++) {
@@ -545,7 +546,7 @@ export class B24CaptionDecoder {
         } else {
           // 幾何図形。読み飛ばす
           if (at + 4 > data.length) return;
-          at += 4 + ((data[at + 2]! << 8) | data[at + 3]!);
+          at += 4 + u16(data, at + 2);
         }
       }
     }

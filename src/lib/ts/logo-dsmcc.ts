@@ -26,7 +26,8 @@
  * PNG は地上波と同じく色の表が抜けているので、入れ直してから返す。
  */
 
-import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from "./dsmcc";
+import { u16 } from "./bytes";
+import { ModuleBuilder, parseDdb, parseDii, TABLE_DII } from "./dsmcc";
 import { withPalette } from "./logo-palette";
 import {
   descriptors,

@@ -18,6 +18,7 @@
  * 末尾4バイトが CRC ではなく Checksum なので、いつも確かめると全部捨ててしまう。
  */
 
+import { u16, u32 } from "./bytes";
 import { descriptors } from "./psi";
 
 export const TABLE_DII = 0x3b;
@@ -32,20 +33,6 @@ const MODULE_DESC_COMPRESSION = 0xc2;
 
 /** DII が blockSize を持っていないときの既定 (ARIB TR-B15) */
 const DEFAULT_BLOCK_SIZE = 4066;
-
-export function u16(data: Uint8Array, at: number): number {
-  return (data[at]! << 8) | data[at + 1]!;
-}
-
-export function u32(data: Uint8Array, at: number): number {
-  return (
-    ((data[at]! << 24) |
-      (data[at + 1]! << 16) |
-      (data[at + 2]! << 8) |
-      data[at + 3]!) >>>
-    0
-  );
-}
 
 /**
  * 同じカルーセルの中の「回」。**downloadId の上位4ビットに入っている**
@@ -92,7 +79,7 @@ export interface Ddb {
 
 /** DSM-CC セクションの中身 (メッセージ本体) を切り出す */
 function messageOf(section: Uint8Array): Uint8Array | null {
-  const length = ((section[1]! & 0x0f) << 8) | section[2]!;
+  const length = u16(section, 1) & 0x0fff;
   const end = 3 + length - 4;
   if (end <= 8 || end > section.length) return null;
   return section.subarray(8, end);

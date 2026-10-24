@@ -16,7 +16,7 @@
 
 import type { Genre } from "../arib";
 import { decodeAribText } from "./aribtext";
-import { joinBytes } from "./bytes";
+import { joinBytes, u16 } from "./bytes";
 import {
   DESC_DIGITAL_COPY_CONTROL,
   descriptors,
@@ -161,7 +161,7 @@ export function parseMjdTime(data: Uint8Array, at: number): number | null {
   }
   if (allOnes) return null;
 
-  const mjd = (data[at]! << 8) | data[at + 1]!;
+  const mjd = u16(data, at);
   const seconds =
     (mjd - MJD_EPOCH) * 86400 +
     bcd(data[at + 2]!) * 3600 +
@@ -367,12 +367,12 @@ export function parseEit(
 
   const result: EitSection = {
     tableId,
-    serviceId: (section[3]! << 8) | section[4]!,
+    serviceId: u16(section, 3),
     version: (section[5]! >> 1) & 0x1f,
     sectionNumber: section[6]!,
     lastSectionNumber: section[7]!,
-    transportStreamId: (section[8]! << 8) | section[9]!,
-    originalNetworkId: (section[10]! << 8) | section[11]!,
+    transportStreamId: u16(section, 8),
+    originalNetworkId: u16(section, 10),
     segmentLastSectionNumber: section[12]!,
     lastTableId: section[13]! - shift,
     events: [],
@@ -381,14 +381,13 @@ export function parseEit(
   let at = 14;
   const end = section.length - 4;
   while (at + 12 <= end) {
-    const descriptorsLength =
-      ((section[at + 10]! & 0x0f) << 8) | section[at + 11]!;
+    const descriptorsLength = u16(section, at + 10) & 0x0fff;
     const body = section.subarray(at + 12, at + 12 + descriptorsLength);
     const event: EitEvent = {
       serviceId: result.serviceId,
       transportStreamId: result.transportStreamId,
       originalNetworkId: result.originalNetworkId,
-      eventId: (section[at]! << 8) | section[at + 1]!,
+      eventId: u16(section, at),
       startAt: parseMjdTime(section, at + 2),
       duration: parseBcdDuration(section, at + 7),
       runningStatus: (section[at + 10]! >> 5) & 0x07,
@@ -841,7 +840,7 @@ export class PresentFollowing {
     for (const raw of this.sections.feed(packet)) {
       // 番組表 (schedule) と他局の p/f は読まずに捨てる。同じ PID に流れてくる
       if (raw[0] !== TABLE_PF_ACTUAL || raw.length < 18) continue;
-      if (((raw[3]! << 8) | raw[4]!) !== this.serviceId) continue;
+      if (u16(raw, 3) !== this.serviceId) continue;
       const section = parseEit(raw);
       if (section === null || section.sectionNumber > 1) continue;
       const slot = section.sectionNumber as 0 | 1;

@@ -11,9 +11,15 @@
  */
 
 import { decodeAribText } from "./aribtext";
+import { concatBytes, u16 } from "./bytes";
 
 export const PACKET = 188;
 export const SYNC = 0x47;
+
+/** TS パケットの PID */
+export function packetPid(packet: Uint8Array): number {
+  return ((packet[1]! & 0x1f) << 8) | packet[2]!;
+}
 
 /** PAT。どの PID に PMT があるかを持つ。**入口はいつもここ** */
 export const PID_PAT = 0x0000;
@@ -130,11 +136,13 @@ export class SectionAssembler {
    * 使い回しの空配列を返す — 関係ないパケットのたびに配列を作っていた
    */
   feed(packet: Uint8Array): readonly Uint8Array[] {
-    if (packet[0] !== SYNC) return NONE;
-    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-    if (pid !== this.pid) return NONE;
     // トランスポートエラーが立っているものは信用しない
-    if (packet[1]! & 0x80) return NONE;
+    if (
+      packet[0] !== SYNC ||
+      packetPid(packet) !== this.pid ||
+      packet[1]! & 0x80
+    )
+      return NONE;
 
     const adaptation = (packet[3]! >> 4) & 0x03;
     if (adaptation === 0 || adaptation === 2) return NONE;
@@ -161,11 +169,7 @@ export class SectionAssembler {
   }
 
   private append(data: Uint8Array): void {
-    if (this.buffer.length === 0) return;
-    const joined = new Uint8Array(this.buffer.length + data.length);
-    joined.set(this.buffer);
-    joined.set(data, this.buffer.length);
-    this.buffer = joined;
+    if (this.buffer.length > 0) this.buffer = concatBytes([this.buffer, data]);
   }
 
   private flush(): readonly Uint8Array[] {
@@ -177,7 +181,7 @@ export class SectionAssembler {
         this.buffer = new Uint8Array(0);
         return sections ?? NONE;
       }
-      const length = 3 + (((this.buffer[1]! & 0x0f) << 8) | this.buffer[2]!);
+      const length = 3 + (u16(this.buffer, 1) & 0x0fff);
       if (this.buffer.length < length) return sections ?? NONE;
       const section = this.buffer.slice(0, length);
       this.buffer = this.buffer.slice(length);
@@ -208,14 +212,9 @@ export function findSync(
     at < until && at + PACKET * (CONFIRM - 1) < data.length;
     at++
   ) {
-    let ok = true;
-    for (let i = 0; i < CONFIRM; i++) {
-      if (data[at + i * PACKET] !== SYNC) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok) return at;
+    let i = 0;
+    while (i < CONFIRM && data[at + i * PACKET] === SYNC) i++;
+    if (i === CONFIRM) return at;
   }
   return -1;
 }
@@ -302,6 +301,36 @@ export class PacketStream {
   }
 }
 
+/**
+ * PAT から1つの局の PMT を追う。`serviceId` を渡さなければ PAT の最初の局
+ * (1局に絞った TS を食わせるところ)。PAT で PMT の PID が替われば組み立て直す
+ */
+export class PmtTracker {
+  private readonly pat = new SectionAssembler(PID_PAT);
+  private pmt: SectionAssembler | null = null;
+  /** 追っている PMT の PID。PAT を読むまでは null。替わったかは呼ぶ前後で比べる */
+  pid: number | null = null;
+
+  constructor(private readonly serviceId?: number) {}
+
+  /** パケットを1つ (`pid` はその PID)。組み上がった PMT のセクションを返す */
+  feed(packet: Uint8Array, pid: number): readonly Uint8Array[] {
+    if (pid === PID_PAT) {
+      for (const section of this.pat.feed(packet)) {
+        const programs = parsePat(section);
+        const next =
+          this.serviceId === undefined
+            ? programs.values().next().value
+            : programs.get(this.serviceId);
+        if (next === undefined || next === this.pid) continue;
+        this.pid = next;
+        this.pmt = new SectionAssembler(next);
+      }
+    }
+    return pid === this.pid ? this.pmt!.feed(packet) : NONE;
+  }
+}
+
 /** 記述子の並びを (tag, 中身) に切り分ける */
 export function* descriptors(
   data: Uint8Array,
@@ -336,7 +365,7 @@ export function isCopyNever(data: Uint8Array): boolean {
  */
 export function pmtProgramInfo(section: Uint8Array): Uint8Array {
   if (section[0] !== TABLE_PMT || section.length < 16) return new Uint8Array(0);
-  const length = ((section[10]! & 0x0f) << 8) | section[11]!;
+  const length = u16(section, 10) & 0x0fff;
   return section.subarray(12, 12 + length);
 }
 
@@ -352,12 +381,12 @@ export function* pmtStreams(
   section: Uint8Array,
 ): Generator<[number, number, Uint8Array]> {
   if (section[0] !== TABLE_PMT || section.length < 16) return;
-  const programInfoLength = ((section[10]! & 0x0f) << 8) | section[11]!;
+  const programInfoLength = u16(section, 10) & 0x0fff;
   let at = 12 + programInfoLength;
   const end = section.length - 4;
   while (at + 5 <= end) {
-    const pid = ((section[at + 1]! & 0x1f) << 8) | section[at + 2]!;
-    const infoLength = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
+    const pid = u16(section, at + 1) & 0x1fff;
+    const infoLength = u16(section, at + 3) & 0x0fff;
     yield [section[at]!, pid, section.subarray(at + 5, at + 5 + infoLength)];
     at += 5 + infoLength;
   }
@@ -369,12 +398,9 @@ export function parsePat(section: Uint8Array): Map<number, number> {
   if (section[0] !== TABLE_PAT) return programs;
   const end = section.length - 4;
   for (let at = 8; at + 4 <= end; at += 4) {
-    const serviceId = (section[at]! << 8) | section[at + 1]!;
+    const serviceId = u16(section, at);
     if (serviceId === 0) continue;
-    programs.set(
-      serviceId,
-      ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!,
-    );
+    programs.set(serviceId, u16(section, at + 2) & 0x1fff);
   }
   return programs;
 }
@@ -391,8 +417,8 @@ export function* sdtServices(
   let at = 11;
   const end = section.length - 4;
   while (at + 5 <= end) {
-    const serviceId = (section[at]! << 8) | section[at + 1]!;
-    const loop = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
+    const serviceId = u16(section, at);
+    const loop = u16(section, at + 3) & 0x0fff;
     yield [serviceId, section.subarray(at + 5, at + 5 + loop)];
     at += 5 + loop;
   }
@@ -427,8 +453,8 @@ export function parseSdt(section: Uint8Array): TransportInfo | null {
   }
 
   return {
-    transportStreamId: (section[3]! << 8) | section[4]!,
-    originalNetworkId: (section[8]! << 8) | section[9]!,
+    transportStreamId: u16(section, 3),
+    originalNetworkId: u16(section, 8),
     services,
   };
 }
@@ -437,7 +463,7 @@ export function parseSdt(section: Uint8Array): TransportInfo | null {
 export function parseNit(section: Uint8Array): NetworkInfo | null {
   if (section[0] !== TABLE_NIT_ACTUAL) return null;
 
-  const networkLength = ((section[8]! & 0x0f) << 8) | section[9]!;
+  const networkLength = u16(section, 8) & 0x0fff;
   let at = 10 + networkLength;
   if (at + 2 > section.length) return null;
   at += 2; // transport_stream_loop_length
@@ -446,9 +472,9 @@ export function parseNit(section: Uint8Array): NetworkInfo | null {
   const transportStreams: TransportInfo[] = [];
   const end = section.length - 4;
   while (at + 6 <= end) {
-    const transportStreamId = (section[at]! << 8) | section[at + 1]!;
-    const originalNetworkId = (section[at + 2]! << 8) | section[at + 3]!;
-    const loop = ((section[at + 4]! & 0x0f) << 8) | section[at + 5]!;
+    const transportStreamId = u16(section, at);
+    const originalNetworkId = u16(section, at + 2);
+    const loop = u16(section, at + 4) & 0x0fff;
     const body = section.subarray(at + 6, at + 6 + loop);
     at += 6 + loop;
 
@@ -463,7 +489,7 @@ export function parseNit(section: Uint8Array): NetworkInfo | null {
       } else if (tag === DESC_SERVICE_LIST) {
         for (let i = 0; i + 3 <= descriptor.length; i += 3) {
           services.push({
-            serviceId: (descriptor[i]! << 8) | descriptor[i + 1]!,
+            serviceId: u16(descriptor, i),
             serviceType: descriptor[i + 2]!,
             name: "",
           });
@@ -474,7 +500,7 @@ export function parseNit(section: Uint8Array): NetworkInfo | null {
   }
 
   return {
-    networkId: (section[3]! << 8) | section[4]!,
+    networkId: u16(section, 3),
     remoteControlKeyId,
     transportStreams,
   };

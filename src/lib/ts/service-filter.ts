@@ -20,13 +20,16 @@
  * 落とすもの: 他局の PMT と ES、そして詰め物 (PID 0x1FFF)。
  */
 
+import { concatBytes, u16 } from "./bytes";
 import {
   DESC_DIGITAL_COPY_CONTROL,
   descriptors,
+  packetPid,
   isCopyNever,
   PACKET,
   PacketStream,
   PID_PAT,
+  parsePat,
   pmtProgramInfo,
   pmtStreams,
   SectionAssembler,
@@ -173,67 +176,38 @@ export class ServiceFilter {
    */
   filter(chunk: Uint8Array): Uint8Array {
     const out: Uint8Array[] = [];
-    let length = 0;
-
     for (const ts of this.packets.feed(chunk)) {
-      const pid = ((ts[1]! & 0x1f) << 8) | ts[2]!;
+      const pid = packetPid(ts);
       if (pid === PID_NULL) continue;
-
       if (pid === PID_PAT) {
         this.readPat(ts);
         // 元の PAT は捨てて、書き直したものを同じ回数だけ出す
-        if (this.rewritten !== null && (ts[1]! & 0x40) !== 0) {
+        if (this.rewritten !== null && (ts[1]! & 0x40) !== 0)
           out.push(packet(PID_PAT, this.rewritten, this.counter++));
-          length += PACKET;
-        }
         continue;
       }
-
       if (pid === this.pmtPid) {
         this.readPmt(ts);
         out.push(ts);
-        length += PACKET;
-        continue;
-      }
-
-      if (KEEP.has(pid) || this.own.has(pid)) {
-        out.push(ts);
-        length += PACKET;
-      }
+      } else if (KEEP.has(pid) || this.own.has(pid)) out.push(ts);
     }
-
-    const joined = new Uint8Array(length);
-    let at = 0;
-    for (const ts of out) {
-      joined.set(ts, at);
-      at += ts.length;
-    }
-    return joined;
+    return concatBytes(out);
   }
 
   private readPat(ts: Uint8Array): void {
     for (const section of this.pat.feed(ts)) {
       if (section[0] !== TABLE_PAT) continue;
-      const transportStreamId = (section[3]! << 8) | section[4]!;
-      this.tsid = transportStreamId;
+      this.tsid = u16(section, 3);
+      const pmtPid = parsePat(section).get(this.serviceId);
+      if (pmtPid === undefined) continue;
+      if (pmtPid === this.pmtPid) return;
+      // 選局し直した・PAT が入れ替わった。PMT も読み直す
+      this.pmtPid = pmtPid;
+      this.pmt = new SectionAssembler(pmtPid);
+      this.own.clear();
       const version = (section[5]! >> 1) & 0x1f;
-      for (let at = 8; at + 4 <= section.length - 4; at += 4) {
-        const programNumber = (section[at]! << 8) | section[at + 1]!;
-        if (programNumber !== this.serviceId) continue;
-        const pmtPid = ((section[at + 2]! & 0x1f) << 8) | section[at + 3]!;
-        if (pmtPid === this.pmtPid) return;
-        // 選局し直した・PAT が入れ替わった。PMT も読み直す
-        this.pmtPid = pmtPid;
-        this.pmt = new SectionAssembler(pmtPid);
-        this.own.clear();
-        this.rewritten = buildPat(
-          transportStreamId,
-          version,
-          this.serviceId,
-          pmtPid,
-        );
-        return;
-      }
+      this.rewritten = buildPat(this.tsid, version, this.serviceId, pmtPid);
+      return;
     }
   }
 
@@ -243,7 +217,7 @@ export class ServiceFilter {
       const pids = new Set<number>();
 
       // PCR。映像と同じ PID のことが多いが、別に振られていることもある
-      const pcrPid = ((section[8]! & 0x1f) << 8) | section[9]!;
+      const pcrPid = u16(section, 8) & 0x1fff;
       if (pcrPid !== PID_NULL) pids.add(pcrPid);
 
       const programInfo = pmtProgramInfo(section);
@@ -297,13 +271,6 @@ function hasCopyNever(body: Uint8Array): boolean {
 
 /** CA_descriptor から ECM の PID を読み取る。掛かったまま録れたものを後から復号するのに要る */
 function collectCa(body: Uint8Array, into: Set<number>): void {
-  let at = 0;
-  while (at + 2 <= body.length) {
-    const tag = body[at];
-    const length = body[at + 1]!;
-    if (tag === DESC_CA && length >= 4) {
-      into.add(((body[at + 4]! & 0x1f) << 8) | body[at + 5]!);
-    }
-    at += 2 + length;
-  }
+  for (const [tag, data] of descriptors(body))
+    if (tag === DESC_CA && data.length >= 4) into.add(u16(data, 2) & 0x1fff);
 }

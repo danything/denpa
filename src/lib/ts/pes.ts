@@ -9,14 +9,14 @@
  * DOM も WASM も触らないので、ここだけ単体で確かめられる (`pes.test.ts`)。
  */
 
-import { joinBytes } from "./bytes";
+import { concatBytes, joinBytes, u16 } from "./bytes";
 import {
   PACKET,
   PacketStream,
   PID_PAT,
-  parsePat,
+  PmtTracker,
+  packetPid,
   pmtStreams,
-  SectionAssembler,
 } from "./psi";
 
 /** PTS・PCR の刻み (90kHz)。取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
@@ -66,7 +66,7 @@ export function parsePes(
   const headerLength = data[8]!;
   const start = 9 + headerLength;
   if (start > data.length) return null;
-  const length = (data[4]! << 8) | data[5]!;
+  const length = u16(data, 4);
   // 長さが書いてあればそこまで (後ろに詰め物が付くことがある)。0 は「次の頭まで」
   const end = length === 0 ? data.length : Math.min(data.length, 6 + length);
   const pts = flags & 0x02 && data.length >= 14 ? readStamp(data, 9) : null;
@@ -89,9 +89,8 @@ interface Partial {
  */
 export class PesDemuxer {
   private readonly packets = new PacketStream();
-  private readonly pat = new SectionAssembler(PID_PAT);
-  private pmt: SectionAssembler | null = null;
-  private pmtPid: number | null = null;
+  /** 絞ってあるので局は1つだけのはず。万一複数あっても先頭を採る */
+  private readonly pmt = new PmtTracker();
   private readonly partial = new Map<number, Partial>();
   /** いま分かっている ES。**変わったら `feed` の返りで知らせる** */
   streams: Streams = { video: null, audio: [] };
@@ -106,13 +105,9 @@ export class PesDemuxer {
     for (const packet of this.packets.feed(chunk)) {
       // 誤りの印が立っているもの・スクランブルが残っているものは読まない
       if (packet[1]! & 0x80 || packet[3]! & 0xc0) continue;
-      const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-      if (pid === PID_PAT) {
-        for (const section of this.pat.feed(packet)) this.readPat(section);
-        continue;
-      }
-      if (pid === this.pmtPid && this.pmt !== null) {
-        for (const section of this.pmt.feed(packet))
+      const pid = packetPid(packet);
+      if (pid === PID_PAT || pid === this.pmt.pid) {
+        for (const section of this.pmt.feed(packet, pid))
           changed = this.readPmt(section) || changed;
         continue;
       }
@@ -129,14 +124,6 @@ export class PesDemuxer {
     if (next !== this.audioPid && this.audioPid !== null)
       this.partial.delete(this.audioPid);
     this.audioPid = next;
-  }
-
-  private readPat(section: Uint8Array): void {
-    // 絞ってあるので1つだけのはず。万一複数あっても先頭を採る
-    const first = [...parsePat(section).values()][0];
-    if (first === undefined || first === this.pmtPid) return;
-    this.pmtPid = first;
-    this.pmt = new SectionAssembler(first);
   }
 
   private readPmt(section: Uint8Array): boolean {
@@ -173,8 +160,7 @@ export class PesDemuxer {
     if (packet[1]! & 0x40) {
       // 次の頭が来た。**長さ 0 の PES (映像) はここで終わりが分かる**
       this.finish(pid, kind, out);
-      const expected =
-        payload.length >= 6 ? 6 + ((payload[4]! << 8) | payload[5]!) : 0;
+      const expected = payload.length >= 6 ? 6 + u16(payload, 4) : 0;
       // 溜めるものは写す。パケットは届いた塊の上の窓で、塊は使い回される (psi.ts の PacketStream)
       this.partial.set(pid, {
         parts: [payload.slice()],
@@ -202,13 +188,7 @@ export class PesDemuxer {
     const partial = this.partial.get(pid);
     if (partial === undefined) return;
     this.partial.delete(pid);
-    const joined = new Uint8Array(partial.size);
-    let at = 0;
-    for (const part of partial.parts) {
-      joined.set(part, at);
-      at += part.length;
-    }
-    const parsed = parsePes(joined);
+    const parsed = parsePes(concatBytes(partial.parts));
     if (parsed === null || parsed.data.length === 0) return;
     out.push({ pid, kind, ...parsed });
   }

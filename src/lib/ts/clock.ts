@@ -39,14 +39,9 @@
  * 永久には持たず、**30秒ごとに選び直します** (直前の区切りのぶんも残して比べる)
  */
 
+import { u16 } from "./bytes";
 import { CLOCK } from "./pes";
-import {
-  PacketStream,
-  PID_PAT,
-  parsePat,
-  SectionAssembler,
-  TABLE_PMT,
-} from "./psi";
+import { PacketStream, PmtTracker, packetPid, TABLE_PMT } from "./psi";
 
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = 2 ** 33 / CLOCK;
@@ -98,9 +93,8 @@ function lag(anchor: Anchor): number {
  */
 export class BroadcastClock {
   private readonly packets = new PacketStream();
-  private readonly pat = new SectionAssembler(PID_PAT);
-  private pmt: SectionAssembler | null = null;
-  private pmtPid: number | null = null;
+  /** 絞ったあとなので番組は1つだけ。最初のものを見る */
+  private readonly pmt = new PmtTracker();
   private pcrPid: number | null = null;
   private pcr = Number.NaN;
   /** いまの区切りで採っている組 */
@@ -134,15 +128,12 @@ export class BroadcastClock {
 
   /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket` と同じ事情) */
   feedPacket(packet: Uint8Array, receivedAt: number): void {
-    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
+    const pid = packetPid(packet);
     if (this.pcrPid === null || pid === this.pcrPid) {
       const at = readPcr(packet);
       if (Number.isFinite(at)) this.onPcr(at, receivedAt);
     }
-    if (pid === PID_PAT)
-      for (const section of this.pat.feed(packet)) this.onPat(section);
-    if (pid === this.pmtPid)
-      for (const section of this.pmt?.feed(packet) ?? []) this.onPmt(section);
+    for (const section of this.pmt.feed(packet, pid)) this.onPmt(section);
   }
 
   private onPcr(at: number, receivedAt: number): void {
@@ -166,17 +157,9 @@ export class BroadcastClock {
       this.current = anchor;
   }
 
-  private onPat(section: Uint8Array): void {
-    // 絞ったあとなので番組は1つだけ。最初のものを見る
-    const pid = [...parsePat(section).values()][0];
-    if (pid === undefined || this.pmtPid === pid) return;
-    this.pmtPid = pid;
-    this.pmt = new SectionAssembler(pid);
-  }
-
   private onPmt(section: Uint8Array): void {
     if (section[0] !== TABLE_PMT || section.length < 12) return;
-    const pid = ((section[8]! & 0x1f) << 8) | section[9]!;
+    const pid = u16(section, 8) & 0x1fff;
     // 0x1fff は「PCR を運ぶ ES は無い」の意味
     this.pcrPid = pid === 0x1fff ? null : pid;
   }
@@ -193,7 +176,5 @@ export class BroadcastClock {
  */
 export function parseStart(line: string): number {
   const match = /\bstart:\s*(-?\d+(?:\.\d+)?)/.exec(line);
-  if (match === null) return Number.NaN;
-  const at = Number(match[1]);
-  return Number.isFinite(at) ? at : Number.NaN;
+  return match === null ? Number.NaN : Number(match[1]);
 }
