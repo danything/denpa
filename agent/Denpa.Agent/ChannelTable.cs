@@ -39,7 +39,7 @@ public static class ChannelTable
     /// 名前もここを通る)。
     ///
     /// <para>
-    /// <c>T13</c>–<c>T62</c> / <c>BS01_0</c>–<c>BS23_7</c> / <c>CS02</c>–<c>CS24</c>。
+    /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01_0</c>–<c>BS23_7</c> / <c>CS02</c>–<c>CS24</c>。
     /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない** —
     /// あそこは 4K/8K (ISDB-S3) で、この構成のチューナーでは復調できない。
     /// </para>
@@ -51,6 +51,18 @@ public static class ChannelTable
             if (!Number(name[1..], out var channel) || channel is < 13 or > 62) return null;
             // UHF 13-62ch。1/7 MHz のずれは放送のとおりで、丸めない
             return new Tuning("GR", SysIsdbt, (uint)(473142857 + (channel - 13) * 6000000), -1, 0);
+        }
+
+        if (name.StartsWith("C", StringComparison.Ordinal) && !name.StartsWith("CS", StringComparison.Ordinal))
+        {
+            /*
+             * CATV の周波数変換パススルー。地デジの電波をそのまま CATV のチャンネルの周波数に移して送るので、
+             * 選局は地上波と同じで周波数だけが違う。ミッドバンド C13-C22 (108-168MHz) と
+             * スーパーハイバンド C23-C63 (222-468MHz)。真ん中から 1/7 MHz ずれるのも地上波と同じ
+             */
+            if (!Number(name[1..], out var channel) || channel is < 13 or > 63) return null;
+            var center = channel <= 22 ? 111000000 + (channel - 13) * 6000000 : 225000000 + (channel - 23) * 6000000;
+            return new Tuning("GR", SysIsdbt, (uint)(center + 142857), -1, 0);
         }
 
         if (name.StartsWith("BS", StringComparison.Ordinal))

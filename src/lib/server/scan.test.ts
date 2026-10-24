@@ -65,6 +65,12 @@ describe("選局するチャンネル", () => {
 
   test("CSは02chから", () => {
     expect(channelsFor("CS")[0]).toBe("CS02");
+    // CATV は地上波の UHF に続けて、周波数変換パススルーの C13〜C63
+    const catv = channelsFor("CATV");
+    expect(catv.slice(0, 50)).toEqual(channelsFor("GR"));
+    expect(catv.slice(50)).toEqual(
+      Array.from({ length: 51 }, (_, i) => `C${13 + i}`),
+    );
   });
 });
 

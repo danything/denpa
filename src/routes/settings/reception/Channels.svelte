@@ -56,6 +56,8 @@
    */
   const SCAN_CHOICES = [
     { value: "GR", label: SERVICE_TYPE_LABEL["GR"] },
+    // CATV の周波数変換パススルー。UHF に加えて C13〜C63 も回す (`scan.ts` の `SCAN_KINDS`)
+    { value: "CATV", label: `${SERVICE_TYPE_LABEL["GR"]} (CATV)` },
     { value: "BS", label: SERVICE_TYPE_LABEL["BS"] },
     { value: "CS", label: SERVICE_TYPE_LABEL["CS"] },
     { value: "GR,BS,CS", label: "すべて" },

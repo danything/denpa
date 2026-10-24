@@ -2,9 +2,15 @@ import { type Actions, fail } from "@sveltejs/kit";
 import { count, eq, sql } from "drizzle-orm";
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
-import { refresh, start, stop } from "#lib/server/scan.js";
+import {
+  refresh,
+  SCAN_KINDS,
+  type ScanKind,
+  start,
+  stop,
+} from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
-import { CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
+import type { ChannelType } from "#lib/types.js";
 
 /** 物理チャンネル1本と、そこに入っている局 */
 interface Coverage {
@@ -92,11 +98,9 @@ export const actions = {
     const form = await request.formData();
     const types = form
       .getAll("types")
-      // 画面の選ぶ欄は1つ。「すべて」は `GR,BS,CS` で来る
+      // 画面の選ぶ欄は1つ。「すべて」は `GR,BS,CS`、CATV は `CATV` で来る
       .flatMap((value) => String(value).split(","))
-      .filter((t): t is ChannelType =>
-        CHANNEL_TYPES.includes(t as ChannelType),
-      );
+      .filter((t): t is ScanKind => SCAN_KINDS.includes(t as ScanKind));
     if (types.length === 0)
       return fail(400, { message: "スキャンする種別を選んでください" });
 

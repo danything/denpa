@@ -8,7 +8,7 @@
  *
  * Mirakurun の走査に合わせてある。
  *
- * - 地上波は 13〜62ch を総当たり、BS は 01〜23 の各 4 スロット、CS は 02〜24ch
+ * - 地上波は 13〜62ch を総当たり (CATV を選ぶと C13〜C63 も)、BS は 01〜23 の各 4 スロット、CS は 02〜24ch
  * - 1チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
  * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
  *   映像の無いものは取り込みで落とす: `epg.DIGITAL_TV`)
@@ -62,12 +62,27 @@ const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
 const BS_SLOTS = 4;
 
 /**
+ * スキャンの種類。**`CATV` は地上波の局として、UHF に加えて CATV の周波数変換パススルー (C13〜C63) も回す。**
+ * CATV は地デジをそのまま CATV のチャンネルの周波数に移して送ることがあり、局によって移すものと移さないものが混ざるので両方回す
+ */
+export const SCAN_KINDS = ["GR", "BS", "CS", "CATV"] as const;
+export type ScanKind = (typeof SCAN_KINDS)[number];
+const CATV_RANGE = { min: 13, max: 63 };
+
+/**
  * 選局する物理チャンネルの一覧。エージェントが受け付ける書き方で返す。
  *
  * **範囲は決め打ち。** 放送で使う物理チャンネルは決まっていて、狭めても
  * 総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
  */
-export function channelsFor(type: ScannableType): string[] {
+export function channelsFor(type: ScanKind): string[] {
+  if (type === "CATV") {
+    const { min, max } = CATV_RANGE;
+    return [
+      ...channelsFor("GR"),
+      ...Array.from({ length: max - min + 1 }, (_, i) => `C${min + i}`),
+    ];
+  }
   const { min, max } = CHANNEL_RANGES[type];
   const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
 
@@ -456,7 +471,7 @@ class Scanner {
 }
 
 interface ScanOptions {
-  types: ChannelType[];
+  types: ScanKind[];
 }
 
 async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
@@ -538,16 +553,14 @@ export function start(options: ScanOptions): {
   started: boolean;
   message: string;
 } {
-  const types = options.types.filter(
-    (type): type is ScannableType => type in CHANNEL_RANGES,
-  );
+  const types = options.types.filter((type) => SCAN_KINDS.includes(type));
   if (types.length === 0)
     return { started: false, message: "チャンネル種別の指定が不正です" };
   if (current.state === "running")
     return { started: false, message: "すでに実行中です" };
 
   const targets: [ScannableType, string[]][] = types.map((type) => [
-    type,
+    type === "CATV" ? "GR" : type,
     channelsFor(type),
   ]);
 
