@@ -98,9 +98,9 @@
     const to = toGuide.to;
     if (to === null) return null;
     const type = to.searchParams.get("type") ?? "GR";
-    const start = to.searchParams.get("start");
-    if (type === data.type && (start === null || Number(start) === data.start))
-      return null;
+    // start の無いリンク (狭い画面の「今日」) は今日へ行く (`+page.server.ts`)
+    const start = Number(to.searchParams.get("start") ?? data.today);
+    if (type === data.type && start === data.start) return null;
     return { type };
   });
   /** マスを出すか (届いていて、ほかの日・放送波へ移る途中でもない) */

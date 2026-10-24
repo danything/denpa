@@ -236,3 +236,30 @@ test("日を変えると、押してすぐマスが骨組みになり、局名�
   await expect(page.getByTestId("guide-skeleton")).toHaveCount(0);
   expect(await layout(page)).toEqual(before);
 });
+
+/*
+ * 狭い画面の「今日」は start を付けないリンク。付いていないのを「同じ日」と見なしていた頃は、
+ * 押しても前の日のマスが残り、骨組みにならなかった
+ */
+test("狭い画面で「今日」を押しても、押してすぐマスが骨組みになる", async ({
+  page,
+  request,
+}) => {
+  await syncEpg(request);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await goto(page, "/guide?type=GR");
+  await page.getByTestId("next-day").click();
+  await expect(page).toHaveURL(/start=/);
+  await expect(page.getByTestId("program-button").first()).toBeVisible();
+  // 外枠を少し遅らせて、移る途中を見られるようにする
+  await page.route("**/guide/__data.json*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+
+  await page.getByTestId("guide-today").click();
+  await expect(page.getByTestId("guide-skeleton")).toBeVisible();
+  await expect(page.getByTestId("program-button")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/start=/);
+  await expect(page.getByTestId("program-button").first()).toBeVisible();
+});
