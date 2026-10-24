@@ -425,7 +425,7 @@ ATTACH_STREAM` (SPEC 6.3。px4-userland 0.1.6 から)。返すのはデバイス
   ソケットの置き場 (`<ランタイム>/asicen-userland/<instance>/`) だけ変えています。受信機の取得と返却・
   選局し直し・TS・内蔵カードは `Px4Tuner` / `Px4Card` をそのまま使い、違いは `Px4Wire` に閉じ込めました。
   同梱の `asicen-ts` (1回1チャンネルの CLI。チャンネルの書き方は px4-ts と同じ) は使いません
-  (px4-ts を使わないのと同じ理由)。上流の `asicend --mock` と話すテストがあります (`AsicenMockTests`。
+  (px4-ts を使わないのと同じ理由)。上流の `asicend --mock` と話すテストがあります (`AsicenTests.cs` の `AsicenMockTests`。
   CI では上流の決めたコミットを組んで回す `agent-asicen-mock`。必須にはしない)
 - **機材は sysfs で見つけます** (`AsicenUserland.Scan`)。上流の配布物 (`bin/` の asicend・asicenctl・asicen-ts) には
   機材を並べる道具が無く (`asicen-probe` はファームウェアの流し込みにだけ使う。`asicend --list` も実機ではまだ並べない)、asicend には

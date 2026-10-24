@@ -141,6 +141,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
 - [docs/writing.md](docs/writing.md) — 書き方 (画面・docs・コメントの言葉)
+- [docs/design.md](docs/design.md) — 見た目の決まり
 - [docs/licenses.md](docs/licenses.md) — 借りているもの
 
 動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。

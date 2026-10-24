@@ -18,8 +18,8 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px
 
 - **設定の `device` は `px4:<筐体の番号>:<受信機>`。** 刺さっていれば
   一覧から組み立てるので (`Px4Userland.Detect`)、普通は書きません。
-  `status=ready` 以外の筐体と、まとめられなかった USB デバイス (`ungrouped_usb_devices` /
-  `rejected` の行) は、理由と USB の場所を記録して使いません
+  `status=ready` 以外の筐体と、まとめられなかった USB デバイス (`--list-json` の
+  `ungrouped_usb_devices`) は、理由と USB の場所を記録して使いません
   (`open_failed` なら `/dev/bus/usb` を開く権限を疑う)。番号の桁数や受信機の上限は
   見ず、合わなければ `px4d` が理由を付けて断ります。
   古い `q3u4:<14桁>:<受信機>` は「知らないデバイス」として断るので、書いてあれば

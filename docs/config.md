@@ -4,7 +4,7 @@
 それ以外の値は `src/lib/server/config.ts` に直に書いてあり、画面から変えるものは設定にあります
 (`src/lib/server/settings.ts`。[app.md の画面](app.md#画面)の `/settings` の行)。
 ふつう書くのは、既定値では決められないもの (誰を通すか・前段・OIDC・PWA の名前) だけです。
-Helm では `charts/denpa/values.yaml` のキーで渡します。チューナーエージェントの変数は [agent.md](agent.md)。
+Helm では `charts/denpa/values.yaml` のキーで渡します。チューナーエージェントの変数は[下](#チューナーエージェント)。
 
 | 変数                                         | 既定値                                         | 説明                                                                                                                                                                                                                       |
 | -------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -55,6 +55,21 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 
 `ADDRESS_HEADER` と `PROTOCOL_HEADER` は読みません。`server.js` が adapter-bun 向けにそれぞれ `x-denpa-remote` と
 `x-forwarded-proto` に固定します (`ADDRESS_HEADER` が設定してあれば起動時に1行知らせる)。
+
+## チューナーエージェント
+
+エージェント (`agent/`) が読む変数です。ふつうは何も書きません。
+
+| 変数                                                                                                                                                               | 既定値                                          | 説明                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENT_PORT`                                                                                                                                                       | `25252`                                         | 待ち受けるポート                                                                                                                                                 |
+| `TUNERS_FILE` / `CHANNELS_FILE`                                                                                                                                    | `/config/tuners.json` / `/config/channels.json` | チューナーとチャンネルの設定 ([agent.md](agent.md#設定は2つのファイルに分ける))                                                                                  |
+| `MEDIA_DIR` / `RAW_DIR`                                                                                                                                            | denpa と同じ                                    | 元のTSの置き場                                                                                                                                                   |
+| `SHUTDOWN_WAIT`                                                                                                                                                    | denpa と同じ                                    | 止められたとき、録画が終わるまで待つ上限(ms)                                                                                                                     |
+| `CARD_URL`                                                                                                                                                         | (空)                                            | 手元にカードが無い拠点だけ。鍵を貰う先 (配る側の `CARD_SHARE_PORT`)                                                                                              |
+| `CARD_SHARE_PORT` / `CARD_SHARE_NETWORKS` / `CARD_TTL` / `CARD_SHARE_MAX_RTT`                                                                                      | 配らない                                        | 鍵を配る拠点の決まり。既定と書ける範囲は [agent.md](agent.md#鍵を配るのは-lan-の中だけ)                                                                          |
+| `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR`・`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE`・`ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` | イメージの既定                                  | 同梱のドライバの置き場。書き換えるのは Mac の `install.sh` と Windows の `install.ps1` (`PX4_*`・`SIANO_*`。Windows の `PX4_RUNTIME_DIR` は `C:\denpa-run`) だけ |
+| `FAKE_TUNE`                                                                                                                                                        | (空)                                            | 偽の選局。適合テストだけが使う                                                                                                                                   |
 
 ## 録画のダウンロードを無くした (前の版から上げるとき)
 

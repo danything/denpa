@@ -93,7 +93,7 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 
 ### イメージのタグ
 
-`latest` はリリースのたびに新しくなります。版を固定するなら `1.20.0` のように書きます
+`latest` はリリースのたびに新しくなります。版を固定するなら `2.7.0` のように書きます
 ([architecture.md](architecture.md#イメージのタグ))。
 
 ## 誰を通すか

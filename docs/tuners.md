@@ -15,7 +15,7 @@
   | PX-S1UD (smsusb を blacklist したとき。Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))              | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に) |
   | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))                             | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし                                  |
 
-- **B-CASカード** と PC/SC のカードリーダー (px4-userland の機材は内蔵リーダーでもよい。[下記](#カードリーダー))
+- **B-CASカード** と USB のカードリーダー (px4-userland・asicen-userland の機材は内蔵リーダーでもよい。[下記](#カードリーダー))
 - **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
 - **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
   Kubernetes なら Helm
