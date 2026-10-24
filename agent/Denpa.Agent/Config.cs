@@ -45,7 +45,7 @@ public sealed record TunerSpec(
         string[] types = item["types"] switch
         {
             null => [],
-            JsonArray list => [.. list.Select(entry => Text(entry, "types")).OfType<string>().Where(type => type.Length > 0)],
+            JsonArray list => [.. list.Select(entry => Text(entry, $"{name}: types の中身")).OfType<string>().Where(type => type.Length > 0)],
             _ => throw new FormatException($"{name}: types は文字列の配列にします"),
         };
         return new TunerSpec(
