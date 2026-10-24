@@ -277,11 +277,10 @@
 }
 /*
  * **録画中のいちばん上の行は、バーの先に「いま」の時刻** (`TimelineRow`。録画中は「いま」の線を別に引かない)。
- * 時刻は行の中に置く (はみ出さないよう、両端はバーの端から内に寄せる)。そのぶん行の下を空け、3 段目の字と重ねない
+ * **時刻は 3 段目 (「録画中・あと24分」) と同じ高さに置き、行の高さを増やさない。** 横はバーの先に付いていき、
+ * 3 段目の字より左へは来ない (CSS のアンカーで字の右端を読む)。両端はバーの端から内に寄せる。
+ * アンカーを知らないブラウザは、行の下を空けて 3 段目の下に置く (字と重ねない)
  */
-.board .t-row:has(> .row-bar-now) {
-  padding-bottom: 1.375rem;
-}
 .board .row-bar-now {
   position: absolute;
   bottom: calc(3px + 0.25rem);
@@ -293,6 +292,31 @@
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;
+}
+@supports (anchor-name: --a) {
+  .board .t-row:has(> .row-bar-now) {
+    anchor-scope: --row-act;
+  }
+  .board .t-row:has(> .row-bar-now) .row-activity:last-child .act-text {
+    anchor-name: --row-act;
+  }
+  .board .row-bar-now {
+    position-anchor: --row-act;
+    top: anchor(center);
+    bottom: auto;
+    /* 字の右端から 0.75rem 空けた所 (時刻の幅の半分 1.5rem を足して真ん中で比べる) より右 */
+    left: clamp(
+      calc(anchor(right) + 2.25rem),
+      calc(100% * var(--done)),
+      calc(100% - 1.5rem)
+    );
+    transform: translate(-50%, -50%);
+  }
+}
+@supports not (anchor-name: --a) {
+  .board .t-row:has(> .row-bar-now) {
+    padding-bottom: 1.375rem;
+  }
 }
 .board .row-bar.success {
   --pico-progress-color: var(--dp-ok);

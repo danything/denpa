@@ -238,6 +238,14 @@ test.describe("ホームの1本の一覧", () => {
         expect(
           Math.abs(barBox.y + barBox.height - (rowBox.y + rowBox.height)),
         ).toBeLessThan(1);
+        // 「いま」の時刻は 3 段目と同じ高さで、字の右に置く (行の高さを増やさない)
+        const now = (await row.getByTestId("recording-now").boundingBox())!;
+        const activity = (await status.boundingBox())!;
+        expect(
+          Math.abs(now.y + now.height / 2 - (activity.y + activity.height / 2)),
+        ).toBeLessThan(2);
+        const label = (await status.locator(".act-text").boundingBox())!;
+        expect(now.x).toBeGreaterThan(label.x + label.width);
 
         // 線のすぐ上 (線の手前の行がこの行)
         const before = await page.getByTestId("timeline").evaluate((list) => {
