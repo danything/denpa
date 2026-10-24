@@ -52,14 +52,14 @@ export interface RuleRow {
   next: { start_at: number; service_name: string } | null;
   /** このルールで録れた録画 (失敗と消したものは数えない) */
   recordings: number;
-  /** 最後に録れた放送の開始。無ければ null */
+  /** 最後に録れた放送の開始。無ければ null。**消したものも入れる** — 録れたかどうかの記録で、持っている数 (上) とは別 */
   last_recorded_at: number | null;
 }
 
 export interface RuleSummary {
   /** これから一週間の予約 (ルールも手動も) */
   weekReservations: number;
-  /** この一週間に録れた録画 */
+  /** この一週間に録れた録画。**消したものも入れる** (`RuleRow.last_recorded_at` と同じ) */
   lastWeekRecordings: number;
 }
 

@@ -95,6 +95,7 @@ function record(
   reservation: number,
   startsIn: number,
   state: "available" | "failed" = "available",
+  deleted = false,
 ) {
   const start = now() + startsIn;
   orm()
@@ -110,6 +111,7 @@ function record(
       ...(state === "failed"
         ? { error: "失敗" }
         : { finished_at: start + HOUR }),
+      deleted_at: deleted ? now() : null,
       created_at: now(),
       updated_at: now(),
     })
@@ -152,5 +154,18 @@ describe("ルールの一覧", () => {
       weekReservations: 2,
       lastWeekRecordings: 1,
     });
+  });
+
+  /*
+   * 録画の数は持っているもの (消したものは数えない)。最後に録れた日とこの7日の本数は
+   * 録れたかどうかの記録なので、観て消したものも入れる — 消したら「録れていない」ように見えては困る
+   */
+  test("消した録画は録画の数から外し、最後に録れた日とこの7日の本数には入れる", () => {
+    record(reserve(1, -3 * DAY), -3 * DAY);
+    record(reserve(1, -1 * DAY), -1 * DAY, "available", true);
+    const anime = listRules().find((r) => r.id === 1);
+    expect(anime?.recordings).toBe(1);
+    expect(anime?.last_recorded_at).toBeGreaterThan(now() - 2 * DAY);
+    expect(ruleSummary().lastWeekRecordings).toBe(2);
   });
 });
