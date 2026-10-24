@@ -1122,12 +1122,7 @@
                   >
                     <span class="clamp">
                       <span class="title">
-                        <!-- 時は左の時の列にあるので、目に見えるのは分だけ (読み上げには時まで渡す) -->
-                        <span class="num"
-                          ><span class="visually-hidden"
-                            >{time(program.start_at).slice(0, 3)}</span
-                          >{time(program.start_at).slice(3)}</span
-                        >
+                        <span class="num">{time(program.start_at)}</span>
                         <span class={program.name ? "broadcast" : "faint"}
                           >{program.name || "(番組情報なし)"}</span
                         >
