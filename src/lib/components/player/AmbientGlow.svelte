@@ -545,8 +545,8 @@
      * 色は明るさを抑えてある (`WASH_LUMINANCE`) ので、透かしても字は 4.5 以上で読める。透かしを減らす設定では透かさない
      */
   @media (min-width: 768px) and (prefers-reduced-transparency: no-preference) {
-    :global(html[data-ambient]) {
-      --dp-float: color-mix(in srgb, var(--dp-pop) 40%, transparent);
+    :global(html[data-ambient] .navbar) {
+      background: color-mix(in srgb, var(--dp-pop) 40%, transparent);
     }
   }
 </style>
