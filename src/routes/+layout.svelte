@@ -1034,7 +1034,16 @@
       min-height: 0;
       overflow: hidden;
     }
+    /*
+         * **自分で巻き取る画面は、浮いたヘッダーの下から始める。** ヘッダーの裏まで箱を伸ばすと、
+         * 巻き取る箱のスクロールバーだけがヘッダーの透かしの裏に見えていた。
+         * 中では頭の空き (`--dp-page-top`) を 0 にし、箱の頭はヘッダーの下の線にそろう
+         */
+    .shell.fill {
+      padding-top: var(--dp-header-space, 0px);
+    }
     .shell.fill main {
+      --dp-page-top: 0rem;
       min-height: 0;
       flex: 1 1 0%;
     }

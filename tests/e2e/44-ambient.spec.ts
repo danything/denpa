@@ -74,7 +74,8 @@ test.describe("アンビエントモード", () => {
       await expect
         .poll(updates(page), { timeout: 10_000 })
         .toBeGreaterThan(before + 5);
-      // 見出しと右の列は地の色を外し (区切りの線はもともと無い)、窓全体に敷いた色の上に載る
+      // 右の列は地の色を外し (区切りの線はもともと無い)、窓全体に敷いた色の上に載る。
+      // 見出しはほかの画面と同じ浮いた帯のまま (操作の層。色の有る無しで面を変えない)
       await expect(page.locator("html")).toHaveAttribute("data-ambient", "");
       const aside = await page
         .locator("[data-player-layout] > aside")
@@ -98,7 +99,7 @@ test.describe("アンビエントモード", () => {
       expect(surfaces).toEqual([
         "rgba(0, 0, 0, 0)",
         "0px",
-        "rgba(0, 0, 0, 0)",
+        expect.not.stringMatching(/^rgba\(0, 0, 0, 0\)$/),
         "0px",
       ]);
       // 色は見出しの所 (窓の上の端) まで敷く

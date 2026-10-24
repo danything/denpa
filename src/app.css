@@ -1846,9 +1846,7 @@ dialog[open] > article {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  /* 画面の上端から始まる列なので、頭に浮いたヘッダーのぶん (`--dp-header-space`。広い画面だけ) を空ける */
-  padding: calc(var(--dp-header-space, 0px) + 0.75rem) 0.625rem 1.5rem;
-  scroll-padding-top: var(--dp-header-space, 0px);
+  padding: 0.75rem 0.625rem 1.5rem;
   border: 0;
   background: transparent;
   box-shadow: none;

@@ -369,7 +369,7 @@
     padding-top: var(--dp-space-6);
   }
   .main-inner :global([data-part]) {
-    scroll-margin-top: calc(var(--dp-header-space, 0px) + var(--dp-gutter));
+    scroll-margin-top: var(--dp-gutter);
   }
   @media (max-width: 767px) {
     .main-inner :global([data-part]) {

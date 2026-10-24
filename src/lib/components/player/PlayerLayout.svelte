@@ -131,6 +131,10 @@
     :global(body:has([data-player-layout]) .navbar) {
       display: none;
     }
+    /* ヘッダーを隠すので、ヘッダーのぶんの頭の空き (`+layout.svelte` の `.shell.fill`) も外す */
+    :global(body:has([data-player-layout]) .shell.fill) {
+      padding-top: 0;
+    }
     .layout {
       flex-direction: column;
       gap: 1rem;
