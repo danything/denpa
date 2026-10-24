@@ -29,10 +29,7 @@ export async function goto(page: Page, url: string): Promise<void> {
       .locator('[data-testid="guide-grid"], [data-testid="empty-grid"]')
       .first()
       .waitFor();
-    // マスは数百個ずつ描く (`guide/+page.svelte` の `drawGradually`)。数える前に描き終わるのを待つ
-    await expect(
-      page.locator('[data-testid="guide-grid"][aria-busy="true"]'),
-    ).toHaveCount(0);
+    await guideDrawn(page);
   }
   /*
    * **ホームの一覧は少しずつしか描かない** (`#lib/paging.svelte`)。テストは行を
@@ -42,6 +39,13 @@ export async function goto(page: Page, url: string): Promise<void> {
   if (pathname === "/") {
     await revealAll(page, "timeline", "recording-more");
   }
+}
+
+/** マスは数百個ずつ描く (`guide/+page.svelte` の `drawGradually`)。数える前に描き終わるのを待つ */
+async function guideDrawn(page: Page): Promise<void> {
+  await expect(
+    page.locator('[data-testid="guide-grid"][aria-busy="true"]'),
+  ).toHaveCount(0);
 }
 
 /**
@@ -138,9 +142,7 @@ async function turnDay(
       { timeout: 30_000 },
     )
     .toBe(true);
-  await expect(
-    page.locator('[data-testid="guide-grid"][aria-busy="true"]'),
-  ).toHaveCount(0);
+  await guideDrawn(page);
 }
 
 /** 番組表に出ているうち、もう終わったもの。放送日の頭(4時台)では前日に送って探す */
@@ -1026,18 +1028,29 @@ export async function feedData(
   page: Page,
   messages: Record<string, unknown>[],
 ): Promise<void> {
-  await page.evaluate((messages) => {
+  await feedFrames(
+    page,
+    messages.map((message) => [0x30, JSON.stringify(message)]),
+  );
+}
+
+/** 最後に開いた WebSocket に、チャンネル番号 + 多重化の頭 8 バイト (時刻 0) + JSON の通知を流す */
+async function feedFrames(
+  page: Page,
+  frames: (readonly [number, string])[],
+): Promise<void> {
+  await page.evaluate((frames) => {
     const socket = (
       window as unknown as { __sockets: WebSocket[] }
     ).__sockets.at(-1);
-    for (const message of messages) {
-      const body = new TextEncoder().encode(JSON.stringify(message));
+    for (const [kind, json] of frames) {
+      const body = new TextEncoder().encode(json);
       const data = new Uint8Array(9 + body.length);
-      data[0] = 0x30;
+      data[0] = kind;
       data.set(body, 9);
       socket?.dispatchEvent(new MessageEvent("message", { data: data.buffer }));
     }
-  }, messages);
+  }, frames);
 }
 
 /** データ放送の描いたものから探す (エンジンは開いた影に描く)。見つからなければ null */
@@ -1099,26 +1112,10 @@ export async function feedCaption(
     tracks: [{ index: 0, lang: "jpn", label: "字幕" }],
     track: 0,
   };
-  await page.evaluate(
-    ([notice, caption]) => {
-      const socket = (
-        window as unknown as { __sockets: WebSocket[] }
-      ).__sockets.at(-1);
-      for (const [kind, json] of [
-        [0x40, notice],
-        [0x22, caption],
-      ] as const) {
-        const body = new TextEncoder().encode(json);
-        const data = new Uint8Array(9 + body.length);
-        data[0] = kind;
-        data.set(body, 9);
-        socket?.dispatchEvent(
-          new MessageEvent("message", { data: data.buffer }),
-        );
-      }
-    },
-    [JSON.stringify(captions), JSON.stringify(FAKE_CAPTION)] as const,
-  );
+  await feedFrames(page, [
+    [0x40, JSON.stringify(captions)],
+    [0x22, JSON.stringify(FAKE_CAPTION)],
+  ]);
   // 押すのは要素に直に (操作列が引っ込んでいても、データ放送の面が上に被っていても届く)
   const button = page.getByTestId(`${prefix}-caption`);
   await expect(button).toHaveAttribute("aria-pressed", "true");
@@ -1207,18 +1204,12 @@ export async function expectSideAligned(
     .first()
     .evaluate((el) => {
       const box = el.getBoundingClientRect();
-      const w =
+      const [w, h] =
         el instanceof HTMLVideoElement
-          ? el.videoWidth
+          ? [el.videoWidth, el.videoHeight]
           : el instanceof HTMLCanvasElement
-            ? el.width
-            : 0;
-      const h =
-        el instanceof HTMLVideoElement
-          ? el.videoHeight
-          : el instanceof HTMLCanvasElement
-            ? el.height
-            : 0;
+            ? [el.width, el.height]
+            : [0, 0];
       if (w === 0 || h === 0) return box.top;
       const scale = Math.min(box.width / w, box.height / h);
       return box.top + (box.height - h * scale) / 2;

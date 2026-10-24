@@ -92,33 +92,31 @@ async function post(
   path: string,
   body: Record<string, string | string[]> | null,
 ): Promise<void> {
-  const init: RequestInit = {
+  const form = new URLSearchParams();
+  for (const [key, value] of Object.entries(body ?? {}))
+    for (const v of [value].flat()) form.append(key, v);
+  const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     redirect: "manual",
-    headers: { Origin: BASE },
-  };
-  if (body !== null) {
-    const form = new URLSearchParams();
-    for (const [key, value] of Object.entries(body)) {
-      for (const v of Array.isArray(value) ? value : [value])
-        form.append(key, v);
-    }
-    init.body = form;
-  } else {
-    (init.headers as Record<string, string>)["Content-Type"] =
-      "application/json";
-  }
-  const res = await fetch(`${BASE}${path}`, init);
+    headers:
+      body === null
+        ? { Origin: BASE, "Content-Type": "application/json" }
+        : { Origin: BASE },
+    body: body === null ? null : form,
+  });
   if (res.status >= 400)
     throw new Error(
       `${path} が ${res.status}: ${(await res.text()).slice(0, 300)}`,
     );
 }
 
+/** 空白で区切った ffmpeg の引数 (値に空白を含まないものだけ) */
+const words = (args: string) => args.split(" ");
+
 function ffmpeg(args: string[]): void {
   const run = spawnSync(
     FFMPEG,
-    ["-hide_banner", "-loglevel", "error", "-y", ...args],
+    [...words("-hide_banner -loglevel error -y"), ...args],
     {
       stdio: "inherit",
     },
@@ -165,16 +163,11 @@ function poster(
   const title = series.match(/「(.+)」$/)?.[1] ?? series;
   const size = Math.min(56, Math.floor(440 / [...title].length));
   ffmpeg([
-    "-f",
-    "lavfi",
-    "-i",
+    ...words("-f lavfi -i"),
     `gradients=s=480x270:c0=${c0}:c1=${c1}:x0=0:y0=0:x1=480:y1=270:d=1`,
     "-vf",
     `drawtext=fontfile=${FONT}:textfile=${textFile(`${key}.txt`, title)}:fontsize=${size}:fontcolor=white:x=(w-tw)/2:y=(h-th)/2:shadowcolor=black@0.4:shadowx=2:shadowy=2`,
-    "-frames:v",
-    "1",
-    "-q:v",
-    "3",
+    ...words("-frames:v 1 -q:v 3"),
     path,
   ]);
 }
@@ -199,45 +192,22 @@ function clip(path: string): void {
   const text = textFile("clip.txt", "サンプル映像");
   const cm = textFile("cm.txt", "ＣＭ");
   ffmpeg([
-    "-f",
-    "lavfi",
-    "-i",
+    ...words("-f lavfi -i"),
     `gradients=s=1280x720:c0=${c0}:c1=${c1}:n=2:speed=0.003:r=10:d=${CLIP_SECONDS}`,
-    "-f",
-    "lavfi",
-    "-i",
+    ...words("-f lavfi -i"),
     `anullsrc=r=48000:cl=stereo:d=${CLIP_SECONDS}`,
     "-i",
     chapters,
-    "-map",
-    "0:v",
-    "-map",
-    "1:a",
-    "-map_chapters",
-    "2",
-    "-vf",
+    ...words("-map 0:v -map 1:a -map_chapters 2 -vf"),
     [
       `drawtext=fontfile=${FONT}:textfile=${text}:fontsize=28:fontcolor=white@0.7:x=40:y=32:enable='not(between(t,${CM.start},${CM.end}))'`,
       `drawtext=fontfile=${FONT}:textfile=${cm}:fontsize=120:fontcolor=white:x=(w-tw)/2:y=(h-th)/2:enable='between(t,${CM.start},${CM.end})'`,
     ].join(","),
     "-t",
     String(CLIP_SECONDS),
-    "-c:v",
-    "libvpx-vp9",
-    "-deadline",
-    "realtime",
-    "-cpu-used",
-    "8",
-    "-row-mt",
-    "1",
-    "-b:v",
-    "300k",
-    "-g",
-    "100",
-    "-c:a",
-    "libopus",
-    "-b:a",
-    "24k",
+    ...words(
+      "-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -row-mt 1 -b:v 300k -g 100 -c:a libopus -b:a 24k",
+    ),
     path,
   ]);
 }
@@ -300,24 +270,13 @@ async function seed(): Promise<void> {
   mkdirSync(stack.epgstationDir, { recursive: true });
 
   // ルール (検索の画面の「ルールとして保存」と同じものを投げる)。当てると予約が立つ
-  await post("/search?/createRule", {
-    keyword: "星屑ステーション",
-    dedupe: ["0", "1"],
-  });
-  await post("/search?/createRule", {
-    keyword: "鉄道でめぐる日本",
-    dedupe: ["0", "1"],
-  });
-  await post("/search?/createRule", {
-    keyword: "ひだまり荘",
-    dedupe: ["0", "1"],
-  });
-  await post("/search?/createRule", {
-    keyword: "",
-    genres: ["6"],
-    serviceTypes: ["BS"],
-    dedupe: ["0", "1"],
-  });
+  for (const rule of [
+    { keyword: "星屑ステーション" },
+    { keyword: "鉄道でめぐる日本" },
+    { keyword: "ひだまり荘" },
+    { keyword: "", genres: ["6"], serviceTypes: ["BS"] },
+  ])
+    await post("/search?/createRule", { ...rule, dedupe: ["0", "1"] });
 
   const db = new Database(join(stack.root, "denpa.db"));
   const now = Date.now();
@@ -434,21 +393,24 @@ async function seed(): Promise<void> {
   db.close();
 }
 
+/** 撮るための窓。スマホ (`mobile`) は2倍の細かさで、指で触る端末として開く */
 async function open(
   browser: Browser,
   width: number,
   height: number,
+  { mobile = false, theme = "dark" as "dark" | "light" } = {},
 ): Promise<Page> {
   const ctx = await browser.newContext({
     viewport: { width, height },
-    deviceScaleFactor: 1,
+    deviceScaleFactor: mobile ? 2 : 1,
+    isMobile: mobile,
+    hasTouch: mobile,
     locale: "ja-JP",
     timezoneId: "Asia/Tokyo",
-    colorScheme: "dark",
+    colorScheme: theme,
   });
-  const page = await ctx.newPage();
-  await page.addInitScript(() => localStorage.setItem("theme", "dark"));
-  return page;
+  await ctx.addInitScript((t) => localStorage.setItem("theme", t), theme);
+  return await ctx.newPage();
 }
 
 /** 字が届いてから撮る (Denpa Font は後から届く。届く前に撮ると放送の字だけ別の字になる) */
@@ -577,6 +539,11 @@ async function visibleRow(page: Page) {
   return rows.first();
 }
 
+/** 一覧の見えている行の「詳細」を開く */
+async function openDetail(page: Page): Promise<void> {
+  await (await visibleRow(page)).getByRole("button", { name: "詳細" }).click();
+}
+
 async function wake(page: Page, stage: string): Promise<void> {
   const box = await page.getByTestId(stage).boundingBox();
   if (box === null) return;
@@ -623,22 +590,15 @@ async function uiShots(
     ["settings", "/settings/recording"],
   ];
   const sizes = [
-    { name: "desktop", width: 1440, height: 900, scale: 1, mobile: false },
-    { name: "mobile", width: 390, height: 844, scale: 2, mobile: true },
+    { name: "desktop", width: 1440, height: 900, mobile: false },
+    { name: "mobile", width: 390, height: 844, mobile: true },
   ];
   for (const theme of ["dark", "light"] as const) {
     for (const size of sizes) {
-      const ctx = await browser.newContext({
-        viewport: { width: size.width, height: size.height },
-        deviceScaleFactor: size.scale,
-        isMobile: size.mobile,
-        hasTouch: size.mobile,
-        locale: "ja-JP",
-        timezoneId: "Asia/Tokyo",
-        colorScheme: theme,
+      const page = await open(browser, size.width, size.height, {
+        mobile: size.mobile,
+        theme,
       });
-      await ctx.addInitScript((t) => localStorage.setItem("theme", t), theme);
-      const page = await ctx.newPage();
       for (const [name, path] of screens) {
         await page.goto(`${BASE}${path}`);
         await settle(page, name === "live" || name === "watch" ? 4000 : 800);
@@ -691,11 +651,7 @@ async function uiShots(
           async () => {
             await page.goto(`${BASE}/`);
             await settle(page, 300);
-            await (
-              await visibleRow(page)
-            )
-              .getByRole("button", { name: "詳細" })
-              .click();
+            await openDetail(page);
             await page.getByTestId("detail-more").click();
           },
         ],
@@ -712,7 +668,7 @@ async function uiShots(
           console.warn("ui", name, theme, size.name, e);
         }
       }
-      await ctx.close();
+      await page.context().close();
     }
   }
   writeFileSync(join(dir, "contrast.json"), JSON.stringify(contrast, null, 2));
@@ -772,14 +728,7 @@ async function record(
   const made = spawnSync(
     FFMPEG,
     [
-      "-y",
-      "-loglevel",
-      "error",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
+      ...words("-y -loglevel error -f concat -safe 0 -i"),
       join(dir, "list.txt"),
       "-vf",
       `fps=20,scale=${width}:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
@@ -800,21 +749,7 @@ async function record(
 /** 見比べる動き (`motion`) と、数字の多い画面の静止画 */
 async function motionShots(browser: Browser): Promise<void> {
   mkdirSync(join(OUT, "motion"), { recursive: true });
-  const context = async (width: number, height: number, mobile = false) => {
-    const ctx = await browser.newContext({
-      viewport: { width, height },
-      deviceScaleFactor: mobile ? 2 : 1,
-      isMobile: mobile,
-      hasTouch: mobile,
-      locale: "ja-JP",
-      timezoneId: "Asia/Tokyo",
-      colorScheme: "dark",
-    });
-    await ctx.addInitScript(() => localStorage.setItem("theme", "dark"));
-    return await ctx.newPage();
-  };
-  const desktop = await context(1280, 800);
-  const page = desktop;
+  const page = await open(browser, 1280, 800);
   const shot = async (name: string, fn: () => Promise<void>) => {
     try {
       await fn();
@@ -883,11 +818,7 @@ async function motionShots(browser: Browser): Promise<void> {
   await shot("menu", async () => {
     await page.goto(`${BASE}/`);
     await settle(page, 800);
-    await (
-      await visibleRow(page)
-    )
-      .getByRole("button", { name: "詳細" })
-      .click();
+    await openDetail(page);
     await page.waitForTimeout(800);
     await record(page, "menu", async () => {
       await page.getByTestId("detail-more").click();
@@ -953,11 +884,11 @@ async function motionShots(browser: Browser): Promise<void> {
       await page.waitForTimeout(4000);
     });
   });
-  await desktop.context().close();
+  await page.context().close();
 
   // 9. スマホの下のタブ (印が滑る)
   await shot("tabbar", async () => {
-    const phone = await context(390, 844, true);
+    const phone = await open(browser, 390, 844, { mobile: true });
     await phone.goto(`${BASE}/`);
     await settle(phone, 800);
     await record(
@@ -1051,11 +982,7 @@ try {
       await settle(page);
       await anim(page, "detail-anim", async () => {
         await page.waitForTimeout(1000);
-        await (
-          await visibleRow(page)
-        )
-          .getByRole("button", { name: "詳細" })
-          .click();
+        await openDetail(page);
         await page.waitForTimeout(2500);
         const more = page
           .getByTestId("program-detail")
