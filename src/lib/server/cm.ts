@@ -17,7 +17,7 @@ import { TS_PROBE } from "./ts-probe";
  *
  * - **ロゴの消えている所を CM にする**。境目は近くの「無音 + 切れ目」に寄せる
  * - ロゴが使えない (覚えられない・当たらない・結果がおかしい) ときは、同じ材料から
- *   **CM の尺 (15秒の倍数) だけで**決め直す。もう一度復号はしない
+ *   **CM の尺 (15秒の倍数) だけで**決め直す。もう一度デコードはしない
  *
  * 誤爆したときの被害が大きい(本編が消える)ので、既定は実カットではなく
  * チャプター付与にしてある (`config.cmCutDefault`)。設定の CMの扱いを `cut` にしたときだけ実際に切る。
@@ -162,7 +162,7 @@ async function probe(input: string, args: string[]): Promise<string> {
 /**
  * 尺とフレームレートを先に取る (ffmpeg の stderr の `Duration:` は TS によっては出ない)。
  *
- * **頭出し (`probeLeadIn`) はここに含めない。** あちらは実際に復号してみる
+ * **頭出し (`probeLeadIn`) はここに含めない。** あちらは実際にデコードしてみる
  * ぶんだけ高くつくのに、要るのはエンコードする前の1回だけ
  */
 export async function probeVideo(input: string): Promise<{
@@ -218,7 +218,7 @@ export async function probeVideo(input: string): Promise<{
      * 頭出し (`probeLeadIn`) もこれを引いて測る
      */
     formatStart: finite(Number(format.get("start_time"))),
-    /** 映像の最初の**パケット**の時刻 (PTS)。復号できるコマを探せなかったときの代用 */
+    /** 映像の最初の**パケット**の時刻 (PTS)。デコードできるコマを探せなかったときの代用 */
     packetStart: Number(stream.get("start_time")),
     /**
      * 画素の横長さ。1440x1080 の地上波HDは 4:3 で、これを掛けると 1920 になる。
@@ -232,7 +232,7 @@ export async function probeVideo(input: string): Promise<{
  * ffprobe の JSON から、**中身のある音声**が音声の何本目かを読み取る (`0:a:<n>` の n)。
  *
  * 中身があるかは `channels` で見る。探り (`TS_PROBE`) の間に1パケットも来なかった
- * 音声は復号できておらず、0 のまま出てくる
+ * 音声はデコードできておらず、0 のまま出てくる
  */
 export function liveAudioIndexes(json: string): number[] {
   const parsed = JSON.parse(json) as { streams?: { channels?: number }[] };
@@ -279,7 +279,7 @@ export async function probeLiveAudio(input: string): Promise<number[]> {
  * 数えるプレイヤー**ではそのぶん字幕が早く出る。ずらす (`-output_ts_offset`) のでは
  * 直らないので捨てる (`encoder.buildArgs` の `-ss`)。
  *
- * **測るのは「実際に復号できた1コマ目」。** stream の `start_time` は最初の
+ * **測るのは「実際にデコードできた1コマ目」。** stream の `start_time` は最初の
  * **パケット**の時刻で、そこから何コマかは参照先が録れておらず捨てられる。
  * 実機ではその差が 0.567 秒 (17コマ = 半GOP) あった。
  *
@@ -327,7 +327,7 @@ export async function probeLeadIn(
 const MAX_LEAD_IN = 5;
 
 /**
- * `ffprobe -show_frames` の吐き出しから、**最初に復号できたコマの時刻**を読む。
+ * `ffprobe -show_frames` の吐き出しから、**最初にデコードできたコマの時刻**を読む。
  *
  * 頭のほうは参照先が録れていないコマが混ざるので、ffprobe も ffmpeg も
  * 最初の I フレームまで捨てる。ここで返るのは捨て終わったあとの1コマ目。
@@ -401,8 +401,8 @@ export function shiftDetection(
 /** 読み方 (`openCm`) と、読んだ材料からの決め方 */
 export interface CmReading {
   /**
-   * 1回の復号で何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
-   * **復号するたびに呼ぶ** — ロゴの点は読むたびに一から数える (再エンコードで途中までを持ち越さない)
+   * 1回のデコードで何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
+   * **デコードするたびに呼ぶ** — ロゴの点は読むたびに一から数える (再エンコードで途中までを持ち越さない)
    */
   want(): ScanWant;
   /** 入れ物の尺 (秒。ffprobe)。測れなければ NaN */

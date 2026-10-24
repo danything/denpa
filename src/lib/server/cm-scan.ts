@@ -8,7 +8,7 @@ import { config } from "./config";
 import { run } from "./stream";
 
 /**
- * **CM 検出の材料を、1回だけ復号して取る。**
+ * **CM 検出の材料を、1回だけデコードして取る。**
  *
  * 取るのは3つ。どれもコマの時刻 (ffmpeg の時刻) にそろえて返す。
  *
@@ -275,7 +275,7 @@ function scanArgs(
 
 const PROGRESS = /^out_time_us=(\d+)$/;
 
-/** 録画を1回だけ復号して、CM 検出の材料を取る (エンコードと一緒に行わないとき) */
+/** 録画を1回だけデコードして、CM 検出の材料を取る (エンコードと一緒に行わないとき) */
 export async function scan(
   input: string,
   options: ScanOptions & { onTime?: (seconds: number) => void },

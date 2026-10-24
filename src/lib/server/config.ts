@@ -60,7 +60,7 @@ export const config = {
    * **番号はこちらが全部決める。** 下限も、特別扱いされる値も無い
    * (エージェントは受け取った数の大小しか見ない)。
    *
-   * 録画がいちばん強い。放送は二度と来ないので、ここだけは譲らせない。
+   * 録画の優先度がいちばん高い。放送は二度と来ないので、ここだけは譲らせない。
    */
   priority: {
     recording: 10,
@@ -291,7 +291,7 @@ export const config = {
    * `address.resolveClient`) ので、ここには置かない
    */
   trustedNetworks: str("TRUSTED_NETWORKS", ""),
-  /** ログインしてからの有効期間。切れたらもう一度 Entra へ行く */
+  /** ログインしてからの有効期間。切れたらもう一度 OIDC でログインする */
   oidcSessionTtl: num("OIDC_SESSION_TTL", 30 * 24 * 60 * MIN),
 
   /**

@@ -9,7 +9,7 @@
  * 名前は小文字にそろえる。`bml:` などの前置きは落とす (C プロファイルの名残)。
  */
 
-export interface XmlText {
+interface XmlText {
   kind: "text";
   text: string;
   /** CDATA か (空白の扱いが違う) */

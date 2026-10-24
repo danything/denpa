@@ -75,7 +75,7 @@ public static class SianoUserland
     ///
     /// <para>
     /// **カーネルが使っているかだけは sysfs で見る** (インターフェースの <c>driver</c> のリンク)。
-    /// <c>--list</c> はそこを教えてくれず、並べると同じ機材が DVB と siano の2本になる。
+    /// <c>--list</c> はそこを教えてくれず、並べると同じ機材が DVB と siano の2台になる。
     /// 選局のときは siano-ts 自身が断るので (0.1.8。終了コード 4)、ここは並べ方のためだけ。
     /// </para>
     /// </summary>
@@ -537,8 +537,7 @@ public sealed class SianoTuner : ITuneDevice
         // 書く1本を降ろす。子がいなくなれば pipe が閉じて、書きかけのところからも抜ける
         child.Commands.Writer.TryComplete();
         child.Feeding.Wait(TimeSpan.FromSeconds(2));
-        var rest = ChildTs.ReaderDrain - stopped.Elapsed;
-        if (rest > TimeSpan.Zero) stream?.WaitReaders(rest);
+        stream?.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
         stream?.Dispose();
         // 同期読みにした標準出力は Process.Dispose が閉じない。閉じないと GC まで fd が残り、起こし直すたびに増える
         process.StandardOutput.Dispose();

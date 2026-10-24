@@ -23,8 +23,8 @@ internal static class ChildTs
     ///
     /// <para>
     /// 既定 (64KB) だと地上波の 18Mbit/秒 で **30ms** しか無い。読む側が GC で
-    /// 一瞬止まるだけで書き手が詰まり、向こうの溜め (px4d / siano-ts) も埋まれば
-    /// 切られる。DVB のリングバッファ (8MB = 3.5秒) に揃える。
+    /// 一瞬止まるだけで書き手が詰まり、siano-ts の中の溜めも埋まれば
+    /// 溢れたぶんが捨てられる。DVB のリングバッファ (8MB = 3.5秒) に揃える。
     /// 上限 (<c>/proc/sys/fs/pipe-max-size</c>、既定 1MB) を超えるには CAP_SYS_RESOURCE が要る。
     /// 無ければ 1MB で妥協する
     /// </para>
@@ -35,7 +35,7 @@ internal static class ChildTs
     /// 広げる要求は <c>EPERM</c> になり、新しい pipe は最小 (数 KB) のまま。Home Assistant OS の
     /// アドオンはホスト中の root (Supervisor やほかのアドオン) と uid 0 を分け合うので、ここに当たる
     /// (アドオンの作者が実機の記録で見つけた)。数 KB では読む側が数ミリ秒止まるだけで詰まり、
-    /// ライブが SLOW_CONSUMER で切れる。そういう環境では CAP_SYS_RESOURCE を渡してもらう
+    /// TS が欠ける。そういう環境では CAP_SYS_RESOURCE を渡してもらう
     /// </para>
     /// </summary>
     private const int PipeSize = 8 * 1024 * 1024;
@@ -72,7 +72,7 @@ internal static class ChildTs
     ///
     /// <para>
     /// **macOS では何もしない。** <c>F_SETPIPE_SZ</c> が無く、pipe の深さは OS 任せ
-    /// (書き手が詰まると 64KB まで自分で伸びる)。溜めは px4d / siano-ts の側にもあるので、
+    /// (書き手が詰まると 64KB まで自分で伸びる)。溜めは siano-ts の側にもあるので、
     /// 読む側が一瞬止まる程度なら持つ。ただし Linux の 8MB より浅いことは変わらない
     /// </para>
     /// </summary>

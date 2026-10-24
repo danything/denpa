@@ -39,11 +39,7 @@ export interface RenderHost {
   /** 画面の大きさ (resolution) */
   resolution(): { width: number; height: number };
   /** 文書の中の URL を、描ける URL (blob:) にする。まだ無ければ null (届いたら描き直す) */
-  image(
-    url: string,
-    kind: "background" | "object",
-    type: string,
-  ): ImageSource | null;
+  image(url: string, type: string): ImageSource | null;
   /** DRCS の画像 (mask に使う URL)。無ければ null */
   drcs(unit: number, fontSize: number, family: string): string | null;
   /**
@@ -157,7 +153,7 @@ export class Renderer {
   private drawn = -1;
   /** 最後に知らせた映像の場所 (初めの描画では必ず知らせる) */
   private lastVideo: string | null = null;
-  readonly root: HTMLDivElement;
+  private readonly root: HTMLDivElement;
 
   constructor(
     container: HTMLElement | ShadowRoot,
@@ -332,8 +328,7 @@ export class Renderer {
     let image: string | null = null;
     if (s.backgroundImage !== null) {
       const url = parseUrl(s.backgroundImage);
-      const source =
-        url === null ? null : this.host.image(url, "background", "image/jpeg");
+      const source = url === null ? null : this.host.image(url, "image/jpeg");
       if (source !== null) {
         image = `background-image:url("${source.url}");background-repeat:${element.tag === "body" ? "repeat" : "no-repeat"}`;
         // 960x540 の画面では静止画を半分の大きさで描く (960x540 の画像はそのまま)
@@ -420,7 +415,7 @@ export class Renderer {
     const source =
       status === "stop" || data === ""
         ? null
-        : this.host.image(data, "object", "image/x-arib-mng");
+        : this.host.image(data, "image/x-arib-mng");
     const animation = source?.animation;
     const looping = Math.max(
       1,
@@ -493,8 +488,7 @@ export class Renderer {
       type === "image/jpeg" ||
       type === "image/x-arib-png" ||
       type === "image/gif";
-    const source =
-      drawable && data !== "" ? this.host.image(data, "object", type) : null;
+    const source = drawable && data !== "" ? this.host.image(data, type) : null;
     const key = source === null ? "" : source.url;
     if (key === view.imageKey) return;
     view.imageKey = key;
@@ -541,9 +535,8 @@ export class Renderer {
   /** 字を描く。DRCS は 1 字ずつ mask の span に (色は字の色) */
   private text(node: BmlNode, view: TextView): void {
     if (node.kind !== "text") return;
-    const parent = node.parent;
-    const s = parent?.style();
-    const family = s === undefined ? "" : s.fontFamily;
+    const s = node.parent?.style();
+    const family = s?.fontFamily ?? "";
     const size = s?.fontSize ?? 24;
     const data = node.data;
     let drcs = false;

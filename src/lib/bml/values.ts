@@ -188,7 +188,7 @@ export const ABORT = new Abort();
 
 export type NativeImpl = (thisValue: Value, args: Value[]) => NativeResult;
 
-export type FunctionBody =
+type FunctionBody =
   | {
       kind: "native";
       impl: NativeImpl;

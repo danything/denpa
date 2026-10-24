@@ -70,13 +70,13 @@ describe("チャプターの時刻を頭出しに合わせる", () => {
 });
 
 /*
- * **頭出しは「実際に復号できた1コマ目」で測る。**
+ * **頭出しは「実際にデコードできた1コマ目」で測る。**
  *
  * stream の `start_time` は最初のパケットの時刻で、そこから何コマかは
  * 参照先が録れておらず捨てられる。実機ではその差が 0.567 秒 (17コマ = 半GOP) で、
  * そのぶんだけ字幕が早く出ていた。
  */
-describe("最初に復号できたコマ", () => {
+describe("最初にデコードできたコマ", () => {
   const output = [
     "best_effort_timestamp_time=6116.439489",
     "best_effort_timestamp_time=6116.472856",
@@ -93,7 +93,7 @@ describe("最初に復号できたコマ", () => {
   });
 
   test("他の行が混ざっていても読み取れる", () => {
-    // ffprobe は復号できないコマについて警告を吐くことがある
+    // ffprobe はデコードできないコマについて警告を吐くことがある
     expect(
       firstFrameTime(`[mpeg2video] Invalid frame dimensions 0x0.\n${output}`),
     ).toBeCloseTo(6116.439489, 6);

@@ -85,9 +85,11 @@
 </Menu>
 
 <style>
-  /* 箱と選択肢の地は `SettingsMenu` と同じなので app.css (`.overlay-menu`) に置く。ここは速さの並べ方だけ */
+  /*
+     * 箱と選択肢の地・項目の間は `SettingsMenu` と同じなので app.css (`.menu`・`.overlay-menu`) に置く。
+     * ここは速さの並べ方だけ
+     */
   :global(.overlay-menu.large) {
-    gap: 0.25rem;
     font-size: var(--dp-text-lg);
   }
   :global(.overlay-menu.large .option) {

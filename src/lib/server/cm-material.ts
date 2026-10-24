@@ -3,7 +3,7 @@ import type { Range } from "../ts/cm-decide";
 import type { Span } from "../ts/logo-detect";
 
 /**
- * **CM 検出の材料の控え** (`cm_materials`)。1回の復号で取った無音・場面の切れ目・ロゴの点を、数だけ縮めて DB に置く。
+ * **CM 検出の材料の控え** (`cm_materials`)。1回のデコードで取った無音・場面の切れ目・ロゴの点を、数だけ縮めて DB に置く。
  *
  * - CM 検出だけやり直すとき (`encoder.runCmJob`) に、版が合えば読み直さずにここから決める
  * - 決め方 (`cm-decide.ts`) を変えたときに、本番の録画で前と比べる材料にする

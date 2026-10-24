@@ -15,7 +15,7 @@
   interface Props {
     /** 前の映像を貼っているか (`live-player` の holding)。still の見せ方 */
     holding: boolean;
-    /** 字幕を出しているか。canvas の data-on に写す (見た目はページ側の paint) */
+    /** 字幕を出しているか。canvas の data-on に写す (描くのは `live-player` の `paint`) */
     captionsOn: boolean;
     onclick: (event: MouseEvent) => void;
     /** data-testid の接頭辞。`<prefix>-video` / `-still` / `-captions` になる */

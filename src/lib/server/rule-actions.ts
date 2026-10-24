@@ -1,7 +1,13 @@
 import { and, eq, isNotNull, isNull, not } from "drizzle-orm";
 
 import { now, orm } from "./db";
-import { conditionsOf, EMPTY_RULE, type Fields, ruleValues } from "./rule-form";
+import {
+  conditionsOf,
+  EMPTY_RULE,
+  type Fields,
+  newSwitches,
+  ruleValues,
+} from "./rule-form";
 import { applyRules } from "./rules";
 import { resolveConflicts } from "./scheduler";
 import { reservations, rules as ruleTable } from "./schema";
@@ -36,8 +42,7 @@ export interface Saved {
 }
 
 /**
- * 書く欄の値でルールを足す。新しいルールは有効で、「同じ回は最初の放送だけ」は入れて、
- * 「前の回は録らない」は切って始める (1話から数え直すシリーズを飛ばさないため)
+ * 書く欄の値でルールを足す。新しいルールは有効で、スイッチは送られてこなければ既定 (`rule-form.newSwitches`)
  */
 export async function createRule(
   form: Fields,
@@ -49,8 +54,7 @@ export async function createRule(
     .insert(ruleTable)
     .values({
       ...ruleValues(conditions, form),
-      dedupe: conditions.dedupe ?? true,
-      skip_earlier: conditions.skipEarlier ?? false,
+      ...newSwitches(conditions),
       enabled: true,
       created_at: now(),
     })

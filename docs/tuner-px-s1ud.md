@@ -1,6 +1,6 @@
 # PX-S1UD (siano-userland)
 
-**地上波だけ**の USB チューナーで、1本で1チャンネルを取ります。
+**地上波だけ**の USB チューナーで、1台で1チャンネルを取ります。
 denpa が使える内蔵のカードリーダーは無いので、USB のカードリーダーを別に挿します ([tuners.md](tuners.md#カードリーダー))。
 Linux (DVB でも siano-userland でも)・Mac (Apple Silicon)・Windows (x64) で使えます。
 
@@ -35,7 +35,7 @@ sudo reboot
 ## 設定
 
 - **設定の `device` は `siano:<USB のポート>`** (`siano:1-2`)。S1UD にはシリアルが
-  無いので、挿したポートで見分けます。刺さっていれば組み立てるので
+  無いので、挿したポートで見分けます。挿さっていれば組み立てるので
   (`SianoUserland.Detect`)、普通は書きません。ポートを変えたら組み直します
 - **siano-ts の標準出力の pipe を広げるには `CAP_SYS_RESOURCE` を渡します** (compose の `cap_add`、HA のアドオンの
   `privileged: [SYS_RESOURCE]`)。無いと上限 (`pipe-max-size`、既定 1MB) までしか広げられず、

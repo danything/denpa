@@ -65,7 +65,7 @@ export const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
 const ERRORS_MOST = 3;
 
 /** 音の1フレームを画面へ渡す関数 (WASM でデコードするのは worker.ts) */
-export interface AudioSink {
+interface AudioSink {
   /** 開き直す。`opus` のときは OpusHead を渡す。**開けなければ false** */
   open(codec: "aac" | "opus", config: Uint8Array | null): boolean;
   /** 1コマデコードして画面へ。時刻は 90kHz */
@@ -148,7 +148,7 @@ export class Fmp4Video {
     return this.decoder?.decodeQueueSize ?? 0;
   }
 
-  /** デコードできたフレームがあるか。**無いまま表示時刻を過ぎていれば遅れている** */
+  /** デコードできて待っているフレームの数。**0 のまま表示時刻を過ぎていれば遅れている** */
   get waiting(): number {
     return this.frames.length;
   }

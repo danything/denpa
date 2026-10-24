@@ -10,7 +10,7 @@
  * がそのまま重なる。
  *
  * **エンコードしたもの (fMP4) も同じ入口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
- * 端末 (テスラの車載ブラウザ) で、ライブの H.264 / AV1 を canvas に描く。違うのは worker の中だけ
+ * 端末 (テスラの車載ブラウザ) で、ライブ・追っかけの H.264 / AV1 を canvas に描く。違うのは worker の中だけ
  * (`fmp4.ts`) で、音・時計・小窓・切り抜きはここのまま。
  *
  * **録画の観る画面も同じ仕組みで描く** (`canvas-player.ts`。互換モード)。`/stream` を fetch で読んで `feed` し、
@@ -49,7 +49,7 @@ interface AudioChunk extends Chunk {
   planes: Float32Array[];
 }
 
-export interface RawEvents {
+interface RawEvents {
   /** 選局し直してから最初のフレームが出た */
   shown(): void;
   /** 貯めを使い切って止まった (エンコードする経路の `waiting` にあたる) */
@@ -170,8 +170,8 @@ export class RawEngine {
     target: number,
     private readonly events: RawEvents,
     background = false,
-    readonly input: RawInput = "ts-mpeg2",
-    readonly chase = false,
+    private readonly input: RawInput = "ts-mpeg2",
+    chase = false,
   ) {
     this.playout = new Playout(target);
     this.playout.follow = chase;

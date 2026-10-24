@@ -127,7 +127,7 @@ const BT601 = [1, 1, 1, 0, -0.344136, 1.772, 1.402, -0.714136, 0];
 const SD_SPACES = new Set([5, 6]);
 
 /** 1コマぶんの面。`data` は WASM のメモリの上の見え方 (写さずに上げる) */
-export interface Planes {
+interface Planes {
   width: number;
   height: number;
   /** 各面の1行のバイト数 (右に詰め物がある) */

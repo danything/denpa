@@ -39,10 +39,9 @@ export interface Who {
 
 const BLOCK = 64;
 
-const AREAS: Record<
-  string,
-  { first: number; last: number; scope: "network" | "common" | "service" }
-> = {
+type Scope = "network" | "common" | "service";
+
+const AREAS: Record<string, { first: number; last: number; scope: Scope }> = {
   local: { first: 0, last: 63, scope: "network" },
   local_web: { first: 0, last: 31, scope: "network" },
   tr_common: { first: 0, last: 31, scope: "common" },
@@ -51,8 +50,13 @@ const AREAS: Record<
   common: { first: 0, last: 15, scope: "common" },
 };
 
+/** 領域の決まり。放送の文字列で引くので、Object.prototype の名前 (constructor など) に当たらない */
+function areaOf(prefix: string): (typeof AREAS)[string] | undefined {
+  return Object.hasOwn(AREAS, prefix) ? AREAS[prefix] : undefined;
+}
+
 /** 局の領域を分ける頭 (置き場の名前の真ん中) */
-function scopeOf(kind: "network" | "common" | "service", who: Who): string {
+function scopeOf(kind: Scope, who: Who): string {
   // BS・CS (original_network_id 4・6・7) は局どうしで同じ番号なので、局の領域もサービスで分ける
   const network = who.originalNetworkId;
   const satellite = network === 4 || network === 6 || network === 7;
@@ -73,7 +77,7 @@ export function visibleFrom(key: string, who: Who): boolean {
   const [, prefix, scope, blockText] = match;
   const block = Number(blockText);
   if (prefix === "group") return /^[0-9a-f]{2}$/.test(scope!) && block <= 63;
-  const area = Object.hasOwn(AREAS, prefix!) ? AREAS[prefix!] : undefined;
+  const area = areaOf(prefix!);
   return (
     area !== undefined &&
     block >= area.first &&
@@ -103,8 +107,7 @@ export class Nvram {
       if (affiliation === undefined || block > 63) return null;
       return `group:${affiliation.toLowerCase()}:${block}`;
     }
-    // 放送の文字列で引くので、Object.prototype の名前 (constructor など) に当たらない
-    const area = Object.hasOwn(AREAS, prefix!) ? AREAS[prefix!] : undefined;
+    const area = areaOf(prefix!);
     if (area === undefined || affiliation !== undefined) return null;
     if (block < area.first || block > area.last) {
       this.log(

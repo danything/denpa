@@ -22,7 +22,7 @@ import type { CaptionLanguage } from "./caption-text";
  */
 export type LiveCodec = "h264" | "av1";
 
-/** 選べるエンコード方式。画面の切り替えに並べる順そのまま (説明は付けない — 選ぶのは端末の相性だけ) */
+/** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (説明は付けない — 選ぶのは端末の相性だけ) */
 export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
   { id: "h264", label: "H.264" },
   { id: "av1", label: "AV1" },
@@ -59,7 +59,7 @@ export const CHANNEL = {
    * 0x20 (字幕の画像) と 0x21 (字幕を消す) は以前の取り決めで、もう使わない (番号は空けておく)
    */
   captionText: 0x22,
-  /** データ放送。第3段階 */
+  /** データ放送 (JSON。`ts/bml-protocol.ts` の `ResponseMessage`)。押されてから送る (`Command` の `data`) */
   data: 0x30,
   /** 制御。**ここだけ双方向**で、中身は JSON */
   control: 0x40,
@@ -79,7 +79,7 @@ export type Notice =
       channel: string;
       /** MSE に渡す codecs 文字列。エンコード方式から決まる */
       codecs: string;
-      /** いまエンコードしているコーデック。画面の切り替えがどれを指すか */
+      /** いまエンコードしているコーデック。コーデックのメニューがどれを指すか */
       codec: LiveCodec;
       /** **エンコードせずに元の TS を送るか** (`CHANNEL.rawTs`) */
       raw: boolean;
@@ -289,7 +289,7 @@ type TuneCommand = {
   /**
    * **エンコードせずに元の TS で欲しい** ([stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
    *
-   * 画質の切り替えで MPEG-2 を選び (`player/settings.ts` の `liveCodecs` の `onraw`)、ブラウザがデコードできる (`raw/support.ts`) ときに画面がリクエストする。
+   * コーデックのメニューで MPEG-2 を選び (`player/settings.ts` の `liveCodecs` の `onraw`)、ブラウザがデコードできる (`raw/support.ts`) ときに画面がリクエストする。
    * 変換せずに送ると音声は画面が選ぶので、`audio` は選び直しても再エンコードにならない
    */
   raw?: boolean;

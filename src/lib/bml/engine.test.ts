@@ -130,7 +130,7 @@ const inside = (bml: Bml) =>
   bml as unknown as {
     ureg: string[];
     resources: { fetch: (...args: unknown[]) => Promise<unknown> };
-    image: (url: string, kind: string, type: string) => ImageSource | null;
+    image: (url: string, type: string) => ImageSource | null;
   };
 
 /**
@@ -852,14 +852,12 @@ describe("MNG", () => {
     );
     const { done } = await watch(() => inside(bml).ureg[1] === "ready");
     expect(done).toBe(true);
-    const source = inside(bml).image("a.mng", "object", "image/x-arib-mng");
+    const source = inside(bml).image("a.mng", "image/x-arib-mng");
     expect(source?.animation?.frames.length).toBe(2);
     expect(source?.animation?.iterations).toBe(1);
     expect(source?.url).toBe(source?.animation?.frames[0]?.url ?? "");
     // 同じ文書のうちは作り直さない
-    expect(inside(bml).image("a.mng", "object", "image/x-arib-mng")).toBe(
-      source,
-    );
+    expect(inside(bml).image("a.mng", "image/x-arib-mng")).toBe(source);
   });
 });
 

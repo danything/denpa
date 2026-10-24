@@ -85,7 +85,7 @@ export async function busyAnswer(response: Response): Promise<boolean> {
  * ---------------------------------------------------------------------------
  */
 
-/** 流しているものの様子。繋ぎ直している・諦めた・戻った・混んでいて断られた */
+/** 流しているものの様子。流れている・繋ぎ直している・諦めた・混んでいて断られた */
 export type StreamState = "flowing" | "retrying" | "failed" | "busy";
 
 /** 続けてリクエストし直す上限 */

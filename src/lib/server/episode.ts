@@ -320,7 +320,7 @@ export interface Airing extends Described {
   start_at: number;
   end_at: number;
   service_id: number;
-  /** チャンネル種別 (GR/BS/CS/SKY) */
+  /** 局の種別 (GR/BS/CS/SKY) */
   type: string;
 }
 

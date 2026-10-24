@@ -29,17 +29,21 @@ import { toHalfWidth } from "../fold";
 import type { Slot } from "../rule-time";
 import { now, orm } from "./db";
 import {
+  addHistory,
   counts,
-  historyImported,
+  insertRule,
   type MigrateOptions,
   record,
   recordCounts,
+  recordPlan,
   ruleImported,
   running,
+  serviceById,
+  SlotWindows,
   track,
 } from "./migrate";
 import { reserve } from "./reservations";
-import { programs, recordedHistory, rules, services } from "./schema";
+import { programs } from "./schema";
 import { programKey, serviceKey } from "./tuner";
 
 /** 読むファイル。Windows から写すと大文字小文字が変わることがあるので、探すときは区別しない ({@link settingFiles}) */
@@ -336,18 +340,10 @@ const DAY_MINUTES = 24 * 60;
  * 読めない1件は飛ばす (EDCB も読めない値は数に直して丸めるだけで、壊れた行は作らない)
  */
 export function parseDateList(dates: string[]): DateListResult {
-  const windows = new Map<
-    string,
-    { from: number | null; to: number | null; days: Set<number> }
-  >();
+  const windows = new SlotWindows();
+  const add = windows.add.bind(windows);
   const starts = new Set<number>();
   let crossing = false;
-  const add = (from: number | null, to: number | null, days: number[]) => {
-    const key = `${from}:${to}`;
-    const entry = windows.get(key) ?? { from, to, days: new Set<number>() };
-    for (const day of days) entry.days.add(day);
-    windows.set(key, entry);
-  };
   for (const date of dates) {
     const parts = date.split("-");
     if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part)))
@@ -382,23 +378,10 @@ export function parseDateList(dates: string[]): DateListResult {
       return { skip: "2日以上にわたる時間帯は取り込めません" };
     }
   }
-  const [only, ...rest] = windows.values();
-  if (only === undefined)
-    return {
-      slot: { time_from: null, time_to: null, weekdays: null },
-      widened: false,
-    };
-  if (rest.length > 0)
+  const slot = windows.slot();
+  if (slot === null)
     return { skip: "時刻の違う時間帯が2つ以上あるので取り込めません" };
-  return {
-    slot: {
-      time_from: only.from,
-      time_to: only.to,
-      weekdays:
-        only.days.size === 7 ? null : [...only.days].sort((a, b) => a - b),
-    },
-    widened: crossing && starts.size < 7,
-  };
+  return { slot, widened: crossing && starts.size < 7 };
 }
 
 /** andKey の頭の印を外す。印は `^!{999}` (無効)・`C!{999}` (大小を区別)・`D!{1MMMMNNNN}` (番組の長さ) の順に付く */
@@ -561,11 +544,7 @@ export function convertRule(
 
 /** 局の内部ID。denpa の局に無ければ undefined */
 function serviceOf(networkId: number, serviceId: number): number | undefined {
-  return orm()
-    .select({ id: services.id })
-    .from(services)
-    .where(eq(services.id, serviceKey(networkId, serviceId)))
-    .get()?.id;
+  return serviceById(serviceKey(networkId, serviceId))?.id;
 }
 
 /** 記録に出すルールの呼び名 */
@@ -604,21 +583,11 @@ export function importEdcbRules(
       continue;
     }
     const { values, notes } = converted;
-    record(`${options.apply ? "ルール" : "ルール(予定)"}: ${values.name}`);
+    recordPlan(options, "ルール", values.name);
     for (const note of notes) record(`  ${note}: ${ruleLabel(rule)}`);
     tally.imported++;
-    if (!options.apply) continue;
-    // 優先度は EPGStation の取り込みと同じく 1 (EDCB の 1〜5 は比べる相手が違う)。録画の設定は全体設定に任せる
-    orm()
-      .insert(rules)
-      .values({
-        ...values,
-        service_types: null,
-        priority: 1,
-        source,
-        created_at: now(),
-      })
-      .run();
+    // 優先度 (EDCB の 1〜5) と録画の設定は写さない (`insertRule`)
+    if (options.apply) insertRule({ ...values, service_types: null }, source);
   }
 }
 
@@ -680,7 +649,7 @@ export async function importEdcbReservations(
         continue;
       }
     }
-    record(`${options.apply ? "予約" : "予約(予定)"}: ${row.title}`);
+    recordPlan(options, "予約", row.title);
     tally.imported++;
   }
 }
@@ -705,7 +674,6 @@ export function importEdcbHistory(
   recInfo: EdcbRecInfo[],
   options: MigrateOptions,
 ): void {
-  const tally = counts().history;
   const keyOf = (
     row: { networkId: number; transportStreamId: number; serviceId: number },
     at: number,
@@ -718,15 +686,7 @@ export function importEdcbHistory(
     recorded.set(keyOf(row, at), row);
   }
 
-  const entries: {
-    source: string;
-    others: string[];
-    name: string;
-    networkId: number;
-    serviceId: number;
-    serviceName: string;
-    endAt: number;
-  }[] = [];
+  const entries: Parameters<typeof addHistory>[0][] = [];
   const covered = new Set<string>();
   for (const row of recInfo2) {
     if (row.startAt === null || row.name === "") continue;
@@ -734,11 +694,9 @@ export function importEdcbHistory(
     covered.add(key);
     const match = recorded.get(key);
     entries.push({
-      source: `edcb:recinfo2:${key}`,
-      others: [`edcb:recinfo:${key}`],
+      sources: [`edcb:recinfo2:${key}`, `edcb:recinfo:${key}`],
       name: row.name,
-      networkId: row.networkId,
-      serviceId: row.serviceId,
+      serviceId: serviceKey(row.networkId, row.serviceId),
       serviceName: match?.serviceName ?? "",
       // `recorded` に入れたものは startAt を持っている
       endAt:
@@ -750,39 +708,16 @@ export function importEdcbHistory(
   for (const [key, row] of recorded) {
     if (covered.has(key) || row.title === "" || row.startAt === null) continue;
     entries.push({
-      source: `edcb:recinfo:${key}`,
-      others: [`edcb:recinfo2:${key}`],
+      sources: [`edcb:recinfo:${key}`, `edcb:recinfo2:${key}`],
       name: row.title,
-      networkId: row.networkId,
-      serviceId: row.serviceId,
+      serviceId: serviceKey(row.networkId, row.serviceId),
       serviceName: row.serviceName,
       endAt: row.startAt + (row.duration ?? 0),
     });
   }
 
-  for (const entry of firstBy(entries, (item) => item.source)) {
-    if ([entry.source, ...entry.others].some(historyImported)) {
-      tally.skipped++;
-      continue;
-    }
-    tally.imported++;
-    if (!options.apply) continue;
-    const service = orm()
-      .select({ name: services.name })
-      .from(services)
-      .where(eq(services.id, serviceKey(entry.networkId, entry.serviceId)))
-      .get();
-    orm()
-      .insert(recordedHistory)
-      .values({
-        name: entry.name,
-        service_name: service?.name ?? entry.serviceName,
-        end_at: entry.endAt,
-        source: entry.source,
-      })
-      .onConflictDoNothing()
-      .run();
-  }
+  for (const entry of firstBy(entries, (item) => item.sources[0]))
+    addHistory(entry, options);
 }
 
 /** ファイルを読んで文字にする。無ければ記録に残して null */

@@ -2,13 +2,13 @@
  * TS のセクションを組み立てる。
  *
  * 実チューナーが無いので、解析のテストにも偽エージェントにも「それらしい TS」が要る。
- * 読む側 (psi.ts / logo.ts) と対になる書く側で、ここだけが仕様の写し。
+ * 読む側 (psi.ts・eit.ts・dsmcc.ts・logo.ts・ait.ts など) と対になる書く側で、ここだけが仕様の写し。
  */
 
 import { joinBytes } from "./bytes";
 import { PACKET, SYNC, withCrc } from "./psi";
 
-// 組み立てる側はここから取る人が多いので、そのまま出しておく
+// 組み立てる道具と一緒にここから取るテストがある (logo.test.ts) ので、そのまま出しておく
 export { withCrc };
 
 const be = (value: number) => [(value >> 8) & 0xff, value & 0xff];
@@ -255,7 +255,7 @@ function eventDescriptors(event: SynthEvent): number[] {
      * 名前は、種別も言語も同じ音声が2本あるとき**唯一の見分け**になる
      */
     const lang = [...(audio.lang ?? "jpn")].map((c) => c.charCodeAt(0));
-    const text = [...encodeSiText(audio.text ?? "")];
+    const text = encodeSiText(audio.text ?? "");
     const flags = ((audio.main ?? true) ? 0b0100_0000 : 0) | 0b0000_1110;
     const body = [
       0x02,

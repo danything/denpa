@@ -4,6 +4,8 @@
  * MSE は取ってこない。`appendBuffer()` に渡すバイト列をどこから持ってくるかは
  * こちら次第で、denpa は WebSocket から受ける ([stream.md](../../docs/stream.md#websocket-プロトコル))。
  * 同じ1本で字幕もデータ放送も一緒に送る作りなので、種別で振り分ける。
+ *
+ * 放送のまま (MPEG-2) と互換モードは、MSE の代わりに `raw/engine.ts` へ流して canvas に描く (下の「変換せずに送る経路」)。
  */
 
 import { resolve } from "$app/paths";
@@ -72,7 +74,7 @@ import {
 } from "#lib/ts/pacing.js";
 import { CLOCK } from "#lib/ts/pes.js";
 
-export type LiveState = "idle" | "connecting" | "playing" | "error";
+type LiveState = "idle" | "connecting" | "playing" | "error";
 
 /**
  * 遅れて見られる長さ (秒)。**止めている間も受け取り続けるので、上限が要る。**
@@ -225,7 +227,7 @@ function chooseSteering(): Steering {
   return navigator.vendor === "Apple Computer, Inc." ? STEADY : SMOOTH;
 }
 
-export interface LivePlayerOptions {
+interface LivePlayerOptions {
   /**
    * 運転中の注意を見せて、「わかりました」を待つ (互換モード。`canvas-video.ts`)。
    * **まだ見せていない端末で、canvas で描く前に1回だけ呼ぶ。** 押されるまで再生を始めない
@@ -408,17 +410,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let rawGaveUp = false;
   /** この端末でデコードできない理由 (`raw/support.ts`)。調べるまでは undefined */
   let rawProblem: string | null | undefined;
-  /** 映像の入れ物。MPEG-2 の canvas はここに差し込む (`attach`) */
+  /** 映像の入れ物。RawEngine の canvas はここに差し込む (`attach`) */
   let host: HTMLElement | null = null;
   /**
-   * MPEG-2 の音を「再生する音」として鳴らすか (`RawEngine.background`。Safari は Audio Session、
+   * canvas で描くときの音 (RawEngine が鳴らす) を「再生する音」として鳴らすか (`RawEngine.background`。Safari は Audio Session、
    * ほかは `<audio>` を通す)。**バックグラウンド再生をオンにしているか、押して小窓を開いている間**
    * (画面が決める。`background.svelte.ts`)
    */
   let playback = false;
-  /** 変換しない経路の刻み。貯まり・貯める量の決め直しを回す */
+  /** canvas で描く経路の刻み。貯まり・貯める量の決め直しを回す (`rawPace`) */
   let rawTimer: ReturnType<typeof setInterval> | null = null;
-  /** MPEG-2 で1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。**画面に出す** */
+  /** canvas で描くとき、1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。**画面に出す** */
   let decodeMs = $state(0);
   /** MPEG-2 のコマを間引いているか (間に合わないので B フレームを飛ばしている。`raw/worker.ts` の `thin`) */
   let thinned = $state(false);
@@ -556,7 +558,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function freeze(): void {
     if (canvas) {
-      // 変換しない経路では canvas が次のフレームまで前のフレームを持っている。写さずに「貼っている」ことにする
+      // canvas で描く経路では canvas が次のフレームまで前のフレームを持っている。写さずに「貼っている」ことにする
       // (でないと幕が前のフレームを塗り潰す)。剥がすのは新しい局の1枚目 (`shown`)
       if (engine === null) return;
       /*
@@ -973,11 +975,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function settle(): void {
     const now = Date.now();
     if (!stalled && now - lastSettled < SETTLE_EVERY) return;
-    // 捨てられたコマも同じ間隔で読む (互換モード。`<video>` のぶんは `pace` が足し上げる)。**選局からの通し**
+    // 捨てられたコマも同じ間隔で読む (canvas で描くとき。`<video>` のぶんは `pace` が足し上げる)。**選局からの通し**
     if (engine !== null) dropped = engine.dropped;
     /*
      * **途切れたら飛び直す** (`unslipAfter` の下の説明)。測れた遅れ (`slip`) を
-     * 待たない — あれは見えないことがある。変換しない経路には要らない (映像は音の時計を追うだけ)
+     * 待たない — あれは見えないことがある。canvas で描く経路には要らない (映像は音の時計を追うだけ)
      */
     if (stalled && element !== null && !canvas) unslip(element);
     const gap = gapNow();
@@ -1440,7 +1442,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * MPEG-2 で見る (画質の切り替えの末尾)。エンコード方式と同じく**この端末に覚える** (`LAST_COOKIE`)。
+   * MPEG-2 で見る (コーデックのメニューの末尾)。エンコード方式と同じく**この端末に覚える** (`LAST_COOKIE`)。
    * 前に諦めていても、選び直したなら試し直す
    */
   function setRaw(): void {
@@ -1982,7 +1984,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     codecs: string,
     baked: LiveCodec,
   ): void {
-    // MPEG-2 からエンコードしたものへ戻るとき (諦めた・LAN の外)。canvas を畳んで <video> を出す
+    // canvas で描いていたものからエンコードしたものへ戻るとき (諦めた・選び直した)。canvas を畳んで <video> を出す
     stopRaw();
     // iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある (`ts/media-source.ts`)
     const picked = pickMediaSource();
@@ -2074,7 +2076,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (engine !== null && (engineInput !== input || engineChase !== forChase))
       stopRaw();
     if (engine === null) {
-      // エンコードしたものを流していた RawEngine は止める。音が二重に鳴らないように
+      // エンコードしたものを流していた <video> は止める。音が二重に鳴らないように
       video.pause();
       video.removeAttribute("src");
       video.load();
@@ -2116,7 +2118,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       engineChase = forChase;
       // 押されたときの処理は <video> に付いている (`MediaStack`)。見えなくするだけで、そこに残す
       video.style.opacity = "0";
-      // 音を消していたなら、MPEG-2 でも消したまま始める
+      // 音を消していたなら、canvas で描くときも消したまま始める
       if (silenced) engine.mute();
     } else {
       engine.reset();
@@ -2189,7 +2191,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 変換しない経路の `pace`。**時計が音なので、`updateend` の代わりに刻みで回す。**
+   * canvas で描く経路の `pace`。**時計が音なので、`updateend` の代わりに刻みで回す。**
    * 貯まり・放送からの遅れ・字幕の貼り直し・貯める量の決め直しを、エンコードする経路と同じ形で出す
    */
   function rawPace(): void {
@@ -2232,7 +2234,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get state() {
       return state;
     },
-    /** MPEG-2 で見ているか (エンコードしていない)。画質の切り替えが MPEG-2 を指すか */
+    /** MPEG-2 で見ているか (エンコードしていない)。コーデックのメニューが MPEG-2 を指すか */
     get raw() {
       return raw;
     },
@@ -2247,13 +2249,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get compat() {
       return compat;
     },
-    /** この端末で描けない形式 (互換モードのとき)。画質の切り替えで選ばせない */
+    /** この端末で描けない形式 (互換モードのとき)。コーデックのメニューで選ばせない */
     get unavailable() {
       return unavailable();
     },
     /**
-     * MPEG-2 で見ているときの、いま出しているコマ (切り抜き)。**映像は worker の canvas に
-     * あって、`<video>` からは写せない** (`RawEngine.grab`)。MPEG-2 でなければ null。
+     * canvas で描いているときの、いま出しているコマ (切り抜き)。**映像は worker の canvas に
+     * あって、`<video>` からは写せない** (`RawEngine.grab`)。canvas で描いていなければ null。
      * `size` を付けると縮めたもの (アンビエントモード)
      */
     grab(size?: GrabSize): Promise<ImageBitmap | null> {
@@ -2262,9 +2264,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         : Promise.resolve(null);
     },
     /**
-     * MPEG-2 で見ているときの映像ストリーム (PiP)。**映像は worker の canvas にあって、`<video>` は
+     * canvas で描いているときの映像ストリーム (PiP)。**映像は worker の canvas にあって、`<video>` は
      * 空のまま**なので、そのストリームを別の `<video>` に映す (`pip.svelte.ts`)。
-     * 取り方は `RawEngine.pipStream`。MPEG-2 でない・取れない (Firefox) なら null
+     * 取り方は `RawEngine.pipStream`。canvas で描いていない・取れない (Firefox) なら null
      */
     capture(): MediaStream | null {
       return canvas && engine !== null ? engine.pipStream() : null;
@@ -2273,12 +2275,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     captureFlow(on: boolean): void {
       engine?.pipFlow(on);
     },
-    /** MPEG-2 の音を「再生する音」として鳴らすか (`playback`)。エンコードする経路は `<video>` が鳴らすので関係ない */
+    /** canvas で描くときの音を「再生する音」として鳴らすか (`playback`)。`<video>` で観ているなら `<video>` が鳴らすので関係ない */
     set playback(on: boolean) {
       playback = on;
       if (engine !== null) engine.background = on;
     },
-    /** MPEG-2 で1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。MPEG-2 でなければ 0 */
+    /** canvas で描くとき、1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。canvas で描いていなければ 0 */
     get decodeMs() {
       return decodeMs;
     },

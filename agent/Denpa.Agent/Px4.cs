@@ -1760,8 +1760,7 @@ internal sealed class Px4Stream
             pump.Join(TimeSpan.FromSeconds(1));
         }
         _socket.Dispose();
-        var rest = ChildTs.ReaderDrain - stopped.Elapsed;
-        if (rest > TimeSpan.Zero) Output.WaitReaders(rest);
+        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
         Output.Dispose();
         _ended = true;
     }

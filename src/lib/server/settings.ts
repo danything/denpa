@@ -31,7 +31,7 @@ export interface Settings {
    */
   codecs: HwCodec[];
   /**
-   * **GPU の方式ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
+   * **デバイス (GPU) と方式ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
    * 別 (`server/hwenc.ts`) で、エンコードするのは「使える かつ 許されている」もの。使えないものの
    * 印は画面で選べるエンコーダからは変わらず、保存しても残る (GPU を挿し替えればそのまま効く。`chooseHw`)。JSON で1つの鍵
    */
@@ -133,7 +133,7 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 }
 
 /**
- * `hwAllow` を読む。壊れていれば空 (= 全部よい)。方式ごとに `{ qsv: [...], vaapi: [...] }`
+ * `hwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ qsv: [...], vaapi: [...] }`
  */
 function parseHwAllow(value: string | undefined): HwAllow {
   if (value === undefined || value === "") return {};
@@ -211,7 +211,7 @@ export function saveSettings(
   orm().transaction((tx) => {
     for (const [key, value] of Object.entries(patch)) {
       if (value === undefined) continue;
-      // 方式ごとの GPU の設定だけ入れ子なので JSON。自動 (null) は空。ほかは文字列で足りる
+      // デバイスごとの GPU の設定だけ入れ子なので JSON。自動 (null) は空。ほかは文字列で足りる
       const text =
         value === null
           ? ""

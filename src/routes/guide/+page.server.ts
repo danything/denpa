@@ -15,7 +15,6 @@ import {
 import { cancel, reserve } from "#lib/server/reservations.js";
 import { reservations } from "#lib/server/schema.js";
 import { storedSubchannels, SUBCHANNELS_COOKIE } from "#lib/subchannels.js";
-import type { ChannelType } from "#lib/types.js";
 import { CHANNEL_TYPES } from "#lib/types.js";
 
 /**
@@ -27,8 +26,8 @@ import { CHANNEL_TYPES } from "#lib/types.js";
  * マスのところだけ骨組みにしておける — 届いたときに表の位置が動かない
  */
 export function load({ url, cookies }) {
-  const type = (CHANNEL_TYPES.find((t) => t === url.searchParams.get("type")) ??
-    "GR") as ChannelType;
+  const type =
+    CHANNEL_TYPES.find((t) => t === url.searchParams.get("type")) ?? "GR";
 
   // 既定は今日の放送日。めくるときだけ start が付く
   const start = requestedDay(url.searchParams.get("start"));

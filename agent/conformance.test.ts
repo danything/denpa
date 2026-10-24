@@ -58,7 +58,7 @@ const ROOT = resolve(import.meta.dir, "..");
  * 地上波のチューナーは**1台だけ**にしてある。
  *
  * 偽の放送にある地上波は T16 と T21 の2つしかないので、チューナーが2台あると
- * 「空きが無い」も「弱い相手に譲らせる」も作れない。総当たりが少し遅くなるだけで
+ * 「空きが無い」も「優先度の低い相手に譲らせる」も作れない。総当たりが少し遅くなるだけで
  * 済むほうを取る。
  *
  * 選局は `FAKE_TUNE` で偽物に差し替える (エージェントが `<種別> <チャンネル>` を足して起こす)。
@@ -330,7 +330,7 @@ describe("チューナー", () => {
    * 向こうから終わったなら、それは失敗である。読む側 (denpa) は EOF を
    * 「録り終えた」と読んではいけない。この約束なら .NET でも成り立つ
    */
-  test("空きが無ければ弱い相手に譲らせる。譲った側はそこで読めなくなる", async () => {
+  test("空きが無ければ優先度の低い相手に譲らせる。譲った側はそこで読めなくなる", async () => {
     const weak = await open("type=GR&channel=T16&use=logo&priority=1");
     await weak.reader?.read();
     const ended = drain(weak.reader as ReadableStreamDefaultReader);
@@ -368,7 +368,7 @@ describe("チューナー", () => {
     expect(body.error ?? "").toContain("no signal");
   });
 
-  test("自分より強い相手しかいなければ 409 で断る", async () => {
+  test("自分より優先度の高い相手しかいなければ 409 で断る", async () => {
     const strong = await open("type=GR&channel=T16&use=rec%201&priority=10");
     await strong.reader?.read();
 

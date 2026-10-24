@@ -521,7 +521,7 @@ describe("エージェントと同じ場面", () => {
   for (const scene of scenes) {
     test(scene.name, () => {
       const capacity = capacityOf(scene.tuners);
-      // 予約として割り振るのは録画だけ。弱い相手は録画に譲る (約束) ので数えない
+      // 予約として割り振るのは録画だけ。優先度の低い相手は録画に譲る (約束) ので数えない
       const opens = scene.steps.flatMap((step, at) =>
         "open" in step && step.priority >= RECORDING ? [{ step, at }] : [],
       );

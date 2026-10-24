@@ -12,7 +12,6 @@
 
 import { type Code, OP } from "./compiler";
 import {
-  ABORT,
   Abort,
   add,
   divide,
@@ -83,7 +82,7 @@ class Enumeration extends JSObject {
   }
 }
 
-export interface VmLimits {
+interface VmLimits {
   /** 呼び出しの深さ (規格は 16 段。余裕を持たせる) */
   depth: number;
   /** 1 回の実行の命令の数 */
@@ -458,7 +457,7 @@ export class Vm {
             this.waiting = true;
             return { kind: "suspend", promise: result.promise };
           }
-          if (result === ABORT || result instanceof Abort) {
+          if (result instanceof Abort) {
             this.reset();
             return { kind: "abort" };
           }
@@ -546,14 +545,12 @@ export class Vm {
         case OP.GE: {
           const b = stack.pop();
           const a = stack.pop();
-          let result: boolean | undefined;
-          if (op === OP.LT) result = lessThan(a, b);
-          else if (op === OP.GT) result = lessThan(b, a);
-          else if (op === OP.LE)
-            result = lessThan(b, a) === undefined ? undefined : !lessThan(b, a);
-          else
-            result = lessThan(a, b) === undefined ? undefined : !lessThan(a, b);
-          stack.push(result === true);
+          // `a <= b` は `b < a` が偽のとき (比べられない undefined なら偽)
+          const less =
+            op === OP.LT || op === OP.GE ? lessThan(a, b) : lessThan(b, a);
+          stack.push(
+            op === OP.LT || op === OP.GT ? less === true : less === false,
+          );
           break;
         }
         case OP.IN: {

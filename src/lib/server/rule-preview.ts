@@ -49,7 +49,7 @@ const stillHeld = () =>
   );
 
 /**
- * **録らない理由** (同じ回は最初の放送だけ。`episode.firstAirings`)。
+ * **録らない理由。**
  * `repeat` は同じ回を別の放送で録る (その放送の局と時刻)、`recorded` はもう録ってある。
  * `earlier` は前の回 (先の回 `number` 話を録った・予約した。`episode.earlierAirings`)。
  * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)。`declined` は人が取り消した放送
@@ -143,7 +143,7 @@ interface Pending {
   name: string;
   service_id: number;
   service_name: string;
-  /** チャンネル種別 (GR/BS/CS)。チューナーはこの単位で台数が決まる */
+  /** 局の種別 (GR/BS/CS)。受けられるかはチューナーごとに決まる (`conflict.Capacity`) */
   type: string;
   /** 物理チャンネル。同じチャンネルなら1台のチューナーで足りる */
   channel: string;
@@ -163,7 +163,7 @@ export interface PreviewOptions {
 /**
  * 条件に当たる番組の下見。**いちばん重い。**
  *
- * これから先の番組を**全部**引いて JS で絞るので、実データでは番組表の
+ * これから先の番組を引いて JS で絞る (SQL では候補を減らすだけ。`globPatterns`) ので、実データでは番組表の
  * 24時間ぶんより重い。画面は書く欄を打ち直すたびに、少し待ってから呼ぶ (`?/preview`)。
  * 同じタブからは1つずつしか送らない (送っている間に変わったぶんは、返ってから最後の条件で1回)。
  *

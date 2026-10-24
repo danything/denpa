@@ -91,7 +91,7 @@ const REMOTE_FILES = 64;
 const REMOTE_BYTES = 8 * 1024 * 1024;
 
 /** 中継が返したもの (`BmlIp.get`)。取れなければ null */
-export type RemoteGet = (
+type RemoteGet = (
   url: string,
 ) => Promise<{ contentType: string; body: Uint8Array } | null>;
 
@@ -289,7 +289,7 @@ export class Resources {
     }
     // 問い合わせ (`?tsid=…`)・断片 (`#…`) はファイルを引くのに使わない。resourceName に `?`・`#` は
     // 入らない (STD-B24 第二編 9.2.1.2)。文書からは getActiveDocument で読める (engine.ts の launch)
-    let path = url.trim().replace(/[?#][\s\S]*$/, "");
+    let path = raw.replace(/[?#][\s\S]*$/, "");
     const dc =
       /^arib-dc:\/\/(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)(?:;[0-9a-f]+)?(?:\.[0-9a-f]+)?(\/.*)?$/i.exec(
         path,

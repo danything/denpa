@@ -6,7 +6,7 @@
  * - `<!--` と行頭の `-->` は 1 行の注釈として読み飛ばす (古い書き方の名残)
  */
 
-export type TokenType = "name" | "number" | "string" | "punct" | "eof";
+type TokenType = "name" | "number" | "string" | "punct" | "eof";
 
 export interface Token {
   type: TokenType;

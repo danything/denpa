@@ -292,7 +292,7 @@ interface EncodeOptions {
   /** キーフレームを置く所 (CM を切るとき。`Keyframes`) */
   keyframes?: Keyframes;
   /**
-   * CM 検出の材料を取る出口 (`cm-scan.scanReader` の `outputs`)。エンコードする出口のあとに足して、**同じ復号から**
+   * CM 検出の材料を取る出口 (`cm-scan.scanReader` の `outputs`)。エンコードする出口のあとに足して、**同じデコードから**
    * 読ませる。ロゴの枠は標準出力に来るので、進み具合は fd 3 で受ける (`-progress pipe:3`)
    */
   analysis?: string[];
@@ -1023,13 +1023,13 @@ async function decide(
  * ジョブの元のTSから派生する中間ファイルを消す。
  *
  * `descramble` の `.decoded.m2ts` は、正常終了や失敗なら finally / cleanup で消えるが、
- * **プロセスごと落ちたときは取り残される**。しかも TS の拡張子で終わるので、掃除機は
+ * **プロセスごと落ちたときは取り残される**。しかも TS の拡張子で終わるので、保存先の片付け (`files.reconcile`) は
  * 動画と見なして消さない (`files.ts` の VIDEO)。元のTSと同じ大きさのものが丸ごと居座る。
  *
  * 走らせ直せば作り直すものなので、ジョブを(再)実行する直前と、諦めて failed にするときに
  * 消しておく。自分の入力に紐づくものだけ触るので、他の走っているエンコードには当たらない。
  * (エンコードしたものの隣に作る作業ファイル — `.encoding` とその切り貼り — は動画の拡張子ではないので、
- * 取り残されても掃除機が片付ける)
+ * 取り残されても片付けで消える)
  */
 function clearScratch(input: string): void {
   removeIfExists(`${input}.decoded.m2ts`);
@@ -1863,8 +1863,11 @@ async function runCmJob(jobId: number): Promise<void> {
    * なら、エンコードするときと同じく元のTSの頭の音声だけの区間から出す (再試行で足した頭捨ては分からない)
    */
   let skip = recording.encode_skip ?? 0;
+  /** 元のTSを測るのは1回だけ (頭捨ての見積もりと、切ってエンコードしたものかの見分けで使う) */
+  let tsProbe: ReturnType<typeof probeVideo> | undefined;
+  const probeTs = (path: string) => (tsProbe ??= probeVideo(path));
   if (recording.encode_skip === null && ts !== null) {
-    const probed = await probeVideo(ts);
+    const probed = await probeTs(ts);
     skip = headSkip(
       await probeLeadIn(ts, probed.formatStart, probed.packetStart),
     );
@@ -1875,7 +1878,7 @@ async function runCmJob(jobId: number): Promise<void> {
    */
   if (ts !== null && files[0] !== undefined) {
     const [whole, made] = await Promise.all([
-      probeVideo(ts),
+      probeTs(ts),
       probeVideo(files[0]),
     ]);
     if (whole.duration - skip - made.duration > CUT_SHORTER) {

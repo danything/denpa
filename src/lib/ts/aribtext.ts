@@ -282,8 +282,8 @@ function oneByte(code: number, kind: Charset["kind"], half: boolean): string {
       return char === undefined || char === "�" ? "" : char;
     }
     default:
-      // モザイクと DRCS。画像なので文字にはならないが、消えたことは見せる
-      return kind === "blank" ? "" : UNKNOWN;
+      // モザイクと DRCS (`blank`)。画像なので何も出さない (字数だけ数える)
+      return "";
   }
 }
 

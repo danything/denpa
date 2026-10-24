@@ -497,12 +497,9 @@ const TONE = {
 } as const;
 
 /**
- * **色を濃くする。** 写した1枚に、ぼかす前に掛ける (`ImageData` の並び。乗算していない)。
- *
- * - 彩度を上げる — 明るさ (BT.709 の輝度) から各色を `saturate` 倍に離し、明るさを `gain` 倍にする。
- *   ぼかすと色が混ざって鈍るので、先に濃くしておく
- * - **明るいテーマでは、色の薄い所ほど透明にする。** 灰色・黒・白のまま白い地に乗せると、灰色の汚れに
- *   見えた。色の付いた所だけが光になる (帯は `mix-blend-mode: multiply` で地に掛ける。`AmbientGlow.svelte`)
+ * **色を濃くする** (`washTone` が1色ずつ掛ける。`ImageData` の並び。乗算していない)。
+ * 明るさ (BT.709 の輝度) から各色を `saturate` 倍に離し、明るさを `gain` 倍にする。
+ * ぼかすと色が混ざって鈍るので、先に濃くしておく
  */
 export function vivid(data: Uint8ClampedArray, theme: "dark" | "light"): void {
   const { saturate, gain } = TONE[theme];
@@ -515,10 +512,6 @@ export function vivid(data: Uint8ClampedArray, theme: "dark" | "light"): void {
     data[i] = (y + (r - y) * saturate) * gain;
     data[i + 1] = (y + (g - y) * saturate) * gain;
     data[i + 2] = (y + (b - y) * saturate) * gain;
-    if (theme === "light") {
-      const chroma = (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
-      data[i + 3] = data[i + 3]! * Math.min(1, chroma * 2.5);
-    }
   }
 }
 
@@ -575,7 +568,8 @@ export function washTone(
 
 /**
  * 写した1枚 (RGBA) の色を、地に敷く色に直す (`washTone`)。**明るいテーマでは色の薄い所ほど透明にする** —
- * 灰色・黒・白のまま白い地に敷くと、灰色の汚れに見える
+ * 灰色・黒・白のまま白い地に敷くと、灰色の汚れに見える。色の付いた所だけが乗る
+ * (帯は `mix-blend-mode: multiply` で地に掛ける。`AmbientGlow.svelte`)
  */
 export function toneFrame(
   data: Uint8ClampedArray,

@@ -57,7 +57,17 @@ const CLUT = new Uint8Array([
     255, 255, 255, 128,
 ]);
 
-const COLORS = CLUT.length / 4;
+/** 入れる塊 (PLTE と tRNS)。どのロゴにも同じものを入れるので、一度だけ組む */
+const PALETTE = (() => {
+  const colors = CLUT.length / 4;
+  const rgb = new Uint8Array(colors * 3);
+  const alpha = new Uint8Array(colors);
+  for (let i = 0; i < colors; i++) {
+    rgb.set(CLUT.subarray(i * 4, i * 4 + 3), i * 3);
+    alpha[i] = CLUT[i * 4 + 3]!;
+  }
+  return concatBytes([pngChunk("PLTE", rgb), pngChunk("tRNS", alpha)]);
+})();
 
 /** 署名(8) + IHDR(25)。パレットはこの直後に入れる */
 const AFTER_IHDR = 33;
@@ -65,8 +75,8 @@ const AFTER_IHDR = 33;
 const COLOR_TYPE_PALETTE = 3;
 
 /**
- * 放送で決まっている色の表を入れた PNG を返す。
- * すでに入っているもの (IHDR の次の塊が PLTE)・形式が違うものはそのまま返す (取得し直す手間を増やさない)。
+ * 放送で決まっている色の表を入れた PNG を返す。すでに入っているもの (IHDR の次の塊が PLTE)・
+ * 形式が違うものはそのまま返す (取得し直す手間を増やさない)。
  */
 export function withPalette(png: Uint8Array): Uint8Array {
   if (
@@ -76,20 +86,9 @@ export function withPalette(png: Uint8Array): Uint8Array {
     ascii(png, AFTER_IHDR + 4, 4) === "PLTE"
   )
     return png;
-
-  const rgb = new Uint8Array(COLORS * 3);
-  const alpha = new Uint8Array(COLORS);
-  for (let i = 0; i < COLORS; i++) {
-    rgb[i * 3] = CLUT[i * 4]!;
-    rgb[i * 3 + 1] = CLUT[i * 4 + 1]!;
-    rgb[i * 3 + 2] = CLUT[i * 4 + 2]!;
-    alpha[i] = CLUT[i * 4 + 3]!;
-  }
-
   return concatBytes([
     png.subarray(0, AFTER_IHDR),
-    pngChunk("PLTE", rgb),
-    pngChunk("tRNS", alpha),
+    PALETTE,
     png.subarray(AFTER_IHDR),
   ]);
 }

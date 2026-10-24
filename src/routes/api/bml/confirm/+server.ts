@@ -5,7 +5,7 @@
  * **NHK は呼びに来ない** — あちらは送るエンドポイント (`post`) へ一度投げて決める
  * (`bml-network.ts` の `confirmReachable`)。
  *
- * 中継のエンドポイントと同じで**既定では動きません**
+ * 中継のエンドポイントと同じく、**設定で双方向を切ってあれば 403**
  * ([bml-network.ts](../../../../lib/server/bml-network.ts))。
  */
 

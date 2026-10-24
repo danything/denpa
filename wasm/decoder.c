@@ -6,7 +6,7 @@
  * 薄いラッパーで、JS (src/lib/raw/worker.ts) から呼ぶ。
  *
  * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
- * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
+ * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 より前には無いので、
  * それに頼ると LAN の http と古い iPhone で元のTSをそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
  * Opus も同じ API でデコードする (`opus_open`)。
  *
@@ -193,7 +193,7 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
  * - Opus (`opus_open`) … AV1 と組んで送られてくる fMP4 の Opus。設定 (OpusHead) を
  *   extradata として渡して開く (ts/fmp4.ts の `opusHead` が dOps から書き換える)
  *
- * どちらも同じ1つの入口 (`audio`) で開き、`audio_push` でデコードする
+ * どちらも同じ1つのデコーダの置き場 (`audio`) に開き直し、`audio_push` でデコードする
  * ------------------------------------------------------------------------- */
 
 /** 返せる面の数。AAC は 7.1 (8本) まで */

@@ -41,7 +41,7 @@ export function broadcastDayStart(at: number): number {
   return d.getTime();
 }
 
-/** 頼まれた時刻 (URL の `start`) の放送日。無い・読めないときは今日 */
+/** リクエストされた時刻 (URL の `start`) の放送日。無い・読めないときは今日 */
 export function requestedDay(raw: string | null): number {
   const requested = Number(raw);
   return broadcastDayStart(

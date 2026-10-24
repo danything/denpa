@@ -1,8 +1,8 @@
 import { type Actions, fail } from "@sveltejs/kit";
-import { sql } from "drizzle-orm";
 
 import { forgetMaterials } from "#lib/server/cm-material-store.js";
 import { orm } from "#lib/server/db.js";
+import { currentServices } from "#lib/server/epg.js";
 import {
   forgetLogoData,
   learnedAt,
@@ -38,10 +38,8 @@ function stationLogos() {
       service_type: services.service_type,
     })
     .from(services)
-    // いま選局できる局だけ (`epg.CURRENT_SERVICES` と同じ)
-    .where(
-      sql`${services.updated_at} >= (SELECT MAX(${services.updated_at}) FROM ${services})`,
-    )
+    // いま選局できる局だけ
+    .where(currentServices())
     .orderBy(services.service_id)
     .all();
   /*
@@ -116,9 +114,9 @@ export const actions = {
    * ロゴは放送波に数十秒〜数分に一度しか流れてこないので、押してもその場では
    * 出ない。どこまで進んだかを画面に流すので、押した人は待たなくていい。
    *
-   * 衛星も対象にする。ロゴを運ぶ中継は1つだけで、当たれば数十秒で全局ぶんが
-   * 揃い、外れは PAT を見た時点 (1秒ほど) で次へ行くので、待たせる時間は
-   * 地上波と変わらない。当たり外れは覚えるので、二度目からは当たりだけを開く
+   * 衛星も対象にする。ロゴを運ぶ中継は1つだけで、当たればカルーセルが来たところで
+   * BS と CS の全局ぶんが揃い (十数分待つことがある。`logo.SATELLITE_TIMEOUT`)、外れは
+   * PAT を見た時点 (1秒ほど) で次へ行く。当たり外れは覚えるので、二度目からは当たりだけを開く
    */
   logoSweep: async () => {
     const result = await sweepNow();

@@ -8,7 +8,7 @@
  *     bml.destroy();
  *
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼び手
- * - 文書は自前の XML パーサ → 中身の木 → 影の中の絶対配置の div ([render.ts](render.ts))
+ * - 文書は自前の XML パーサ → 中身の木 → Shadow DOM の中の絶対配置の div ([render.ts](render.ts))
  * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
  * - **ページを握るのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
  *   スクリプト・描き直し・約束の続きは全部その下で動かし、休みなく回り続ける文書は止める
@@ -88,7 +88,7 @@ export interface Service {
 }
 
 export interface BmlOptions {
-  /** 描く場所。中に影 (shadow root) を張る */
+  /** 描く場所。中に Shadow DOM を張る */
   root: HTMLElement;
   fonts: Fonts;
   ip: BmlIp;
@@ -174,13 +174,13 @@ function keyGroup(code: number): string | null {
 
 /** accesskey の字 (付属2 5.4.2.3) */
 const ACCESS_KEYS: Record<number, string> = {
-  19: "X",
-  21: "B",
-  22: "R",
-  23: "G",
-  24: "Y",
-  25: "E",
-  26: "F",
+  [KEY.back]: "X",
+  [KEY.blue]: "B",
+  [KEY.red]: "R",
+  [KEY.green]: "G",
+  [KEY.yellow]: "Y",
+  [KEY.data1]: "E",
+  [KEY.data2]: "F",
 };
 
 /*
@@ -1136,8 +1136,6 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       this.checkModule(element, true);
   }
 
-  keysChanged(): void {}
-
   focus(element: BmlElement): void {
     const previous = this.focusedElement;
     if (previous === element || !element.style().visible) return;
@@ -1438,11 +1436,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
           timer,
         });
       } else if (timer.program !== null) {
-        const source = timer.code;
         this.enqueue({
           kind: "program",
           token,
-          source,
+          source: timer.code,
           name: "setInterval",
           code: timer.program,
           timer,
@@ -1625,11 +1622,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.drawSoon();
   }
 
-  image(
-    url: string,
-    _kind: "background" | "object",
-    type: string,
-  ): ImageSource | null {
+  image(url: string, type: string): ImageSource | null {
     const ref = this.resources.resolve(url, this.current);
     if (ref === null || ref.module === null) {
       this.unknownName(url);
@@ -1742,11 +1735,12 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         let key = code;
         const front: (Job | null)[] = [];
         if (access !== undefined) {
-          const element = this.doc?.root
-            ? [...this.doc.root.descendants()].find(
-                (e) => e.attr("accesskey") === access,
-              )
-            : undefined;
+          const element =
+            this.doc === null
+              ? undefined
+              : [...this.doc.root.descendants()].find(
+                  (e) => e.attr("accesskey") === access,
+                );
           if (element?.style().visible) {
             this.focus(element);
             held.access = true;
@@ -1785,7 +1779,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
       }[code];
     };
     const next = nav(focused);
-    if (next !== undefined && next !== null) {
+    if (next != null) {
       const seen = new Set<number>();
       let index: number | null = next;
       while (index !== null && !seen.has(index)) {

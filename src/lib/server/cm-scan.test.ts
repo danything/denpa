@@ -11,7 +11,7 @@ import {
 } from "./cm-scan";
 
 /**
- * CM 検出の材料を1回の復号で取るところ (`cm-scan.ts`)。ffmpeg は動かさず、
+ * CM 検出の材料を1回のデコードで取るところ (`cm-scan.ts`)。ffmpeg は動かさず、
  * 渡す引数と、書き出しの読み方だけを見る
  */
 const files = { cuts: "/tmp/x.cuts", silences: "/tmp/x.silences" };

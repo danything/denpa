@@ -176,7 +176,7 @@ export type Miss =
  * ほどいたルールに番組が当てはまらない理由。当てはまれば null。
  *
  * 検索用テキストは**関数で受け取る**。文字を作るのが一番高くつくので、
- * チャンネルやジャンルで落ちる番組にはそもそも作らせない。
+ * 局やジャンルで落ちる番組にはそもそも作らせない。
  * 同じ番組に何本ものルールを当てるときは、呼ぶ側が作ったものを使い回せる。
  *
  * **当てるのはここ1つ。** 予約を立てる (`applyRules`)・下見 (`rule-preview.ts`)・検索の
@@ -194,7 +194,7 @@ export function missOf(
   const { services, types, genres, time, weekdays, keywords, ignores } =
     compiled;
 
-  // チャンネルの条件は「種別」と「個別チャンネル」のOR。
+  // 局の条件は「種別」と「個別の局」のOR。
   // 「地上波全部 + BS11だけ」のような指定ができるようにするため
   if (services !== null || types !== null) {
     const byService = services?.includes(program.service_id) ?? false;
@@ -659,7 +659,7 @@ export function previewSkips<T extends Candidate & { service_channel: string }>(
 }
 
 /**
- * 外れても引っ込めない予約か (`applyRules`)。手動のものと、もうすぐ始まる (猶予の内) もの。
+ * 外れても引っ込めない予約か (下見の行に出す。猶予は `applyRules` と同じ)。手動のものと、もうすぐ始まる (猶予の内) もの。
  * 録り始めたものは予約の候補 (`started_at` が空) に入らないので、ここには来ない
  */
 export function keepsReservation(
@@ -727,7 +727,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const at = now();
   // 録画のしかたは全体で1つ。ルールごとに持たせるとどこで決まったか分からなくなる
   const recording = settings();
-  // 種別(GR/BS/CS)でも絞り込めるよう、番組にチャンネル種別と物理チャンネルを添えて取る
+  // 種別(GR/BS/CS)でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る
   const programs = orm()
     .select({
       ...getTableColumns(programTable),

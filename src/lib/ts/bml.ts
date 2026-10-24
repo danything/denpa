@@ -244,7 +244,7 @@ interface Component {
   dataEventId: number;
   /** 組み立て中のモジュール (moduleId ごと) */
   building: Map<number, Building>;
-  /** 配り終えたモジュールの版。**同じものを配り直さない**ため */
+  /** 配り終えたモジュールの版 (`doneMark`)。**同じものを配り直さない**ため */
   done: Map<number, string>;
   /** 今の DII (諦めたモジュールを除いた一覧を配り直すのに使う) */
   dii: Dii | null;
@@ -252,6 +252,11 @@ interface Component {
   size: number;
   /** 今の DII で、来ないと諦めたモジュール */
   abandoned: Set<number>;
+}
+
+/** `Component.done` に置く印。モジュールの版とカルーセルの回 (dataEventId) の組 */
+function doneMark(component: Component, version: number): string {
+  return `${version}:${component.dataEventId}`;
 }
 
 /**
@@ -435,7 +440,7 @@ export class BmlDecoder {
       component.building.delete(moduleId);
       if (
         component.done.get(moduleId) ===
-        `${held.module.moduleVersion}:${component.dataEventId}`
+        doneMark(component, held.module.moduleVersion)
       )
         continue;
       component.abandoned.add(moduleId);
@@ -472,9 +477,9 @@ export class BmlDecoder {
      * 中身の変わらない画面を組み直し続ける
      */
     const version = held.builder.moduleVersion;
-    const stamp = `${version}:${component.dataEventId}`;
-    if (component.done.get(moduleId) === stamp) return;
-    component.done.set(moduleId, stamp);
+    const mark = doneMark(component, version);
+    if (component.done.get(moduleId) === mark) return;
+    component.done.set(moduleId, mark);
 
     // 大きさ 0 は伸ばしようが無い。ファイルの無いモジュールとして配り、待っている受け側を終わらせる
     const empty = held.module.moduleSize === 0;

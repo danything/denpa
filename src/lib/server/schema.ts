@@ -30,7 +30,7 @@ import { config } from "./config";
  * 実際に本番が 500 を返したこともある (列を SQL に書いただけで、動いている DB には
  * 足されていなかった)。
  *
- * 真偽を 0/1 で持つ列 (`enabled` / `manual` / `encode` / `has_logo` / `is_free`)
+ * 真偽を 0/1 で持つ列 (`enabled` / `manual` / `encode` / `has_logo` / `is_free` など)
  * は `{ mode: 'boolean' }` で読み書きする。DB の中は今までどおり 0/1 で、既定値も
  * `sql\`1\`` のまま書く — `default(true)` にすると drizzle-kit が `DEFAULT true` を
  * 出して、中身の変わらないマイグレーション (テーブルの作り直し) が出てしまう。
@@ -255,9 +255,9 @@ export const rules = sqliteTable("rules", {
    * `name,description` が入っている。新しく作るルールの初期値は番組名だけ (画面側)
    */
   search_fields: text("search_fields").notNull().default("name"),
-  /** JSON 配列。NULL は全チャンネル対象 */
+  /** JSON 配列。NULL は全局 */
   service_ids: json("service_ids", numbers),
-  /** JSON 配列 (GR/BS/CS/SKY)。個別チャンネルとのORで効く */
+  /** JSON 配列 (GR/BS/CS/SKY)。個別の局 (`service_ids`) とのORで効く */
   service_types: json("service_types", strings),
   /** JSON 配列。`"7"` (大分類) か `"7-0"` (中分類まで)。NULL は全ジャンル */
   genres: json("genres", strings),

@@ -16,7 +16,7 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px
 
 ## 設定
 
-- **設定の `device` は `px4:<筐体の番号>:<受信機>`。** 刺さっていれば
+- **設定の `device` は `px4:<筐体の番号>:<受信機>`。** 挿さっていれば
   一覧から組み立てるので (`Px4Userland.Detect`)、普通は書きません。
   `status=ready` 以外の筐体と、まとめられなかった USB デバイス (`--list-json` の
   `ungrouped_usb_devices`) は、理由と USB の場所を記録して使いません

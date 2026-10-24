@@ -83,7 +83,7 @@ spec:
               value: {{ . | quote }}
             {{- end }}
             {{- with .Values.denpa.trustedProxies }}
-            # 前段 (Gateway など) の住所。ここから来たときだけ X-Forwarded-For を読む
+            # 前段 (Gateway など) のアドレス。ここから来たときだけ X-Forwarded-For を読む
             - name: TRUSTED_PROXIES
               value: {{ . | quote }}
             {{- end }}

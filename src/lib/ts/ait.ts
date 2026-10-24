@@ -53,8 +53,9 @@ export const APPLICATION_TYPE_HTML5 = 0x0010;
  * 起動のしかた (application_control_code)。
  *
  * **`autostart` は「選局したら勝手に始めよ」**で、テレビは黙って動かします。
- * `present` は「用意はあるが、人が呼ぶまで始めるな」。denpa はどちらも
- * 動かさないので、**画面に出すときの言い方が変わるだけ**です
+ * `present` は「用意はあるが、人が呼ぶまで始めるな」。denpa は選局しただけでは
+ * どちらも動かさない (開くのはデータ放送が求めたとき) ので、**画面に出すときの言い方と、
+ * どれを開くかの手がかりが変わるだけ**です
  */
 export const CONTROL = {
   autostart: 0x01,

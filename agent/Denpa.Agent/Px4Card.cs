@@ -11,8 +11,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// ソケットは <c>&lt;ランタイムディレクトリ&gt;/px4-userland/&lt;筐体の番号&gt;/control.sock</c>。
-/// 1本の接続で送れる要求は同時に1つだけで、順番は <see cref="BCas"/> が守る。
+/// ソケットの置き場は <see cref="Px4Control"/> と同じ。1本の接続で送れる要求は同時に1つだけで、順番は <see cref="BCas"/> が守る。
 /// </para>
 /// </summary>
 public sealed class Px4Card : ICardLink

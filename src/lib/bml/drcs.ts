@@ -10,7 +10,7 @@
 
 import { PUA_ADDITIONAL } from "./euc";
 
-export interface Glyph {
+interface Glyph {
   /** 1 丸ゴシック・2 角ゴシック・3 太丸ゴシック */
   fontId: number;
   width: number;

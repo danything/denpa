@@ -300,7 +300,6 @@ export function steer(
   if (low > target * steering.catchUpRatio + steering.catchUpPad)
     return CATCH_UP;
   if (steering.slowDown && low < target) return SLOW_DOWN;
-  // 遅くしていたなら、狙いに戻ったところでやめる (遅延を足すのは足りない間だけ)
   if (rate < 1) return 1;
   return low <= target * steering.settleRatio ? 1 : null;
 }

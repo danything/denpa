@@ -23,7 +23,7 @@
  *
  * ## 追っかけは放送の今を追わない (`follow`)
  *
- * 互換モードの追っかけ (`RawEngine` の `follow`) は録画を観ているので、**溜まっても飛ばない** —
+ * 互換モードの追っかけ (`RawEngine` の `chase`) は録画を観ているので、**溜まっても飛ばない** —
  * サーバは倍速で送り込んでくる (`server/chase.ts`) ので、溜まりは伸び続けるのが普通。
  * **止めて再開は止めた所から** (止めている間も届いたぶんは捨てない。溢れないようにするのは worker の側)。
  *
@@ -67,7 +67,7 @@ export interface Scheduled<T extends Chunk> {
   offset: number;
 }
 
-export type Tick<T extends Chunk> =
+type Tick<T extends Chunk> =
   | { kind: "none" }
   /** 鳴らし始めた。**予約し直す** */
   | { kind: "start"; schedule: Scheduled<T>[] }

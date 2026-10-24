@@ -172,8 +172,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     ///
     /// <para>
     /// 自動で分かるのは「刺さっているデバイスと、それが受けられる方式」だけ。
-    /// LNB を足したい・1台だけ止めたい・別PCのぶんを混ぜたい、は人にしか
-    /// 決められないので、そのときは画面から書く。
+    /// LNB を足したい・1台だけ止めたい、は人にしか決められないので、そのときは画面から書く。
     /// </para>
     /// </summary>
     public (List<TunerSpec> Tuners, bool Detected) ResolveTuners()

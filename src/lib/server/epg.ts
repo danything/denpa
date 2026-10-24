@@ -54,6 +54,11 @@ const DIGITAL_TV = 1;
 export const CURRENT_SERVICES =
   "updated_at >= (SELECT MAX(updated_at) FROM services)";
 
+/** `CURRENT_SERVICES` の列を名指ししたもの。番組表など `updated_at` を持つ表と JOIN するときに使う */
+export function currentServices() {
+  return sql`${services.updated_at} >= (SELECT MAX(${services.updated_at}) FROM ${services})`;
+}
+
 /**
  * いま選局できる局の数を種別ごとに。局が無いときの案内に使う (`#lib/channel-notice.ts`)。
  * 局が1つも無い種別は入らない
@@ -710,7 +715,7 @@ interface SyncResult {
  * (`resolveConflicts`) は呼ぶ側がやる。**番組を読むところとは分けてある** — 1チャンネル集めるたびに全部やり直すと、
  * 52チャンネルぶん同じことを52回することになる。
  *
- * **ルールを当て直すのはここ。** 決まった時刻に見回るのではなく、
+ * **ルールを当て直すのはここ。** 決まった時刻の定期チェックではなく、
  * **番組表が動いたとき**にそろえる。書き換わって条件に入ったものは立ち、
  * 外れたものは引っ込む (`rules.applyRules`)。
  */
