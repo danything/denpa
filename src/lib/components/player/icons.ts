@@ -1,22 +1,6 @@
 /**
- * 映像の上に置くアイコン。**3画面 (ライブ・追っかけ・観る画面) で同じものを使う。**
- *
- * 別々に持っていた頃は、同じ「再生」でも画面によって形が違っていた
- * (両方に同じ `d` を書き写していて、片方だけ直したときにずれる)。
- *
- * **形は Lucide** (`~icons/lucide/*`。組むときに `<svg>` ごと埋め込まれる Svelte の部品)。
- * 絵文字にしていた頃は端末ごとに形も大きさも変わり、`d` を手で写していた頃は
- * 足すたびに出どころを探していた。名前は https://lucide.dev/icons で引ける。
- * 置き方は `Icon.svelte` (大きさと aria-hidden)。
- *
- * **チャプター送り (`PREV`/`NEXT`)・CM飛ばし (`CUT`)・削除 (`TRASH`/`CHECK`) は
- * 観る画面だけ。** 切り抜き (`CAMERA`)・情報 (`INFO`)・データ放送 (`DATA`) は
- * **ライブでも使う** (切り抜きとデータ放送は両方に置いた)。
- *
- * **10秒送り・戻しのアイコンは持たない。** PCは矢印キー、指は左右の端を素早く2回
- * (`ts/watch.ts` の `tap`) でできるので、映像の上に常に2つ置くだけの用が無かった。
- *
- * 並びは読み込み元の名前順
+ * 映像の上に置くアイコン (3画面で同じ)。形は Lucide (`~icons/lucide/*`。名前は https://lucide.dev/icons で引ける)。
+ * 置き方は `Icon.svelte`。並びは読み込み元の名前順
  */
 
 import type { Component } from "svelte";
@@ -25,12 +9,7 @@ import type { SvelteHTMLElements } from "svelte/elements";
 /** アイコン1つの型 (`~icons/*` が返す部品) */
 export type IconShape = Component<SvelteHTMLElements["svg"]>;
 
-/**
- * データ放送。**テレビのリモコンと同じ「d」**。
- *
- * 図柄では何のことか伝わらないので、字そのものを形にしてある (角丸の四角に d)。
- * Lucide に無いので自前 (`src/lib/icons/data.svg`)。線の太さと角は Lucide に揃える
- */
+/** データ放送。テレビのリモコンと同じ「d」(Lucide に無いので自前。`src/lib/icons/data.svg`) */
 export { default as DATA } from "~icons/denpa/data";
 /** 音声を選ぶ (主・副・二か国語) */
 export { default as AUDIO } from "~icons/lucide/audio-lines";
@@ -44,24 +23,13 @@ export { default as BACK } from "~icons/lucide/chevron-left";
 export { default as FORWARD } from "~icons/lucide/chevron-right";
 /** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる。丸に点 (録画の印) */
 export { default as RECORD } from "~icons/lucide/circle-dot";
-/**
- * Hybridcast。**別のタブへ出ていく**ので「四角から飛び出す矢印」。
- *
- * データ放送の `d` と並べるものなので、**同じ形にはしない** — あちらは
- * denpa の中で開くもの、こちらは外へ出ていくもので、押した結果がまるで違う
- */
+/** Hybridcast。別のタブへ出ていくので、denpa の中で開くデータ放送の `d` とは違う形にする */
 export { default as OPEN_OUT } from "~icons/lucide/external-link";
 /** コーデック (再生の設定の行) */
 export { default as CODEC } from "~icons/lucide/film";
-/**
- * 再生の速さ (`SpeedMenu`)。針の付いたメーター。**等速のときだけ出す** —
- * 速めている間はアイコンをやめて数字 (「1.25」) だけにする
- */
+/** 再生の速さ (`SpeedMenu`)。等速のときだけ出し、速めている間は数字だけにする */
 export { default as SPEED } from "~icons/lucide/gauge";
-/**
- * バックグラウンド再生 (裏に回しても止めない)。ヘッドホン — 裏で続けるのはたいてい
- * 聴くため。再生の設定 (⚙ `SettingsMenu`) の行のアイコン
- */
+/** バックグラウンド再生。ヘッドホン — 裏で続けるのはたいてい聴くため */
 export { default as BACKGROUND } from "~icons/lucide/headphones";
 /** 中身を読む。丸に i */
 export { default as INFO } from "~icons/lucide/info";
@@ -71,61 +39,35 @@ export { default as SHRINK } from "~icons/lucide/minimize";
 /** 互換モード (再生の設定の行。動画が止まる端末向けに canvas に描く。`canvas-video.ts`) */
 export { default as COMPAT } from "~icons/lucide/monitor-play";
 export { default as PAUSE } from "~icons/lucide/pause";
-/**
- * ピクチャーインピクチャー (小窓)。大きな枠の右下に小さな枠。
- * 出している間は押されている見た目 (`OVERLAY_ON`)
- */
+/** ピクチャーインピクチャー (小窓) */
 export { default as PIP } from "~icons/lucide/picture-in-picture-2";
 export { default as PLAY } from "~icons/lucide/play";
 /** CM飛ばし。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
 export { default as CUT } from "~icons/lucide/scissors";
-/** 再生の設定 (⚙ `SettingsMenu`)。端末ごとに決めるもの (CMスキップ・アンビエントモード・バックグラウンド再生・互換モード・字幕・音声・コーデック) をまとめたメニュー */
+/** 再生の設定 (⚙ `SettingsMenu`) */
 export { default as SETTINGS } from "~icons/lucide/settings";
 /** チャプター送り・戻し */
 export { default as PREV } from "~icons/lucide/skip-back";
 export { default as NEXT } from "~icons/lucide/skip-forward";
-/**
- * アンビエントモード (映像の色を周りにぼかして広げる。`AmbientGlow.svelte`)。弱い光を放つ太陽。
- * 再生の設定 (⚙ `SettingsMenu`) の行のアイコン
- */
+/** アンビエントモード (`AmbientGlow.svelte`)。弱い光を放つ太陽 */
 export { default as AMBIENT } from "~icons/lucide/sun-dim";
 export { default as TRASH } from "~icons/lucide/trash";
 export { default as SOUND_ON } from "~icons/lucide/volume-2";
 export { default as SOUND_OFF } from "~icons/lucide/volume-off";
 export { default as CLOSE } from "~icons/lucide/x";
 
-/**
- * 映像の上に置くボタンの見た目。**読めるように黒く敷く。**
- *
- * テーマの文字色に任せていた頃 (daisyUI の `btn-ghost`) は、暗い映像と
- * 下の黒いぼかしに**アイコンが沈んで見えなく**なっていた。
- *
- * **クラスの中身は `ControlButton.svelte` の `<style>` (`:global`)。** 3画面とも
- * ControlButton を読み込むので、そこに置けば必ず届く
- */
+/** 映像の上に置くボタンの字と影 (中身は `ControlButton.svelte` の `<style>` の `:global`。3画面とも読み込むので届く) */
 export const OVERLAY = "ov";
 
-/**
- * 映像の上に置くボタンの大きさ。**3画面で同じ。**
- *
- * `btn-sm` (32px) にしていた頃は、**タブレットでもPCでも小さすぎた** —
- * 映像の上に薄く敷くものなので、輪郭で狙うのではなく面で狙うことになる。
- *
- * メニュー (速さ・再生の設定) のボタンも同じ大きさで揃える (どちらも
- * ボタンは ControlButton)。ボタンでない `<a>` (閉じる) にはここの字を直に当てる
- */
+/** 映像の上に置くボタンの大きさ (48px。面で狙うもの)。ボタンでない `<a>` (閉じる) にも当てる */
 export const OVERLAY_BTN = "ov-btn";
 
 /** 丸いボタン (アイコンだけのとき)。`OVERLAY_BTN` と一緒に使う */
 export const OVERLAY_ROUND = "ov-round";
 
 /**
- * 聞き返しの2回目の見た目 (削除)。**大きさは変えない。**
- *
- * 「確定」の文字に差し替えていた頃は、そこだけ幅が変わって**隣のボタンが動いて**
- * いた。聞き返しは同じ場所をもう一度押すものなので、動くと押し直せない。
- * 変えるのは色とアイコンだけ — 鋏や送りと違い、**赤いレ点は「これでいいか」以外に
- * 読みようが無い**
+ * 聞き返しの2回目の見た目 (削除)。大きさは変えず色とアイコンだけ変える — 「確定」の文字にすると幅が変わって
+ * 隣のボタンが動き、同じ場所を押し直せなかった
  */
 export const OVERLAY_DANGER = "ov-danger";
 
