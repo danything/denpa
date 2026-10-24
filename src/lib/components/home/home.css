@@ -761,7 +761,7 @@
   justify-content: flex-start;
   gap: 0.5rem;
   min-height: 2.75rem;
-  padding: 0.4rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   font-size: var(--dp-text-base);
 }
 .board .t-row .row-actions .row-menu .menu-danger {
@@ -903,7 +903,7 @@
 }
 .board .view-menu .menu-head .side-item {
   min-height: 2rem;
-  padding: 0 0.6rem;
+  padding: 0 0.75rem;
   font-size: var(--dp-text-sm);
 }
 /*

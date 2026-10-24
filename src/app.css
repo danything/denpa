@@ -1543,9 +1543,13 @@ button.text-button:hover {
   min-width: max(10rem, anchor-size(width));
   max-height: 100%;
   overflow-y: auto;
-  /* 項目の角は面の角から内側の余白を引いた丸み (入れ子。下の `.menu-item`) */
-  --menu-pad: 0.25rem;
+  /*
+   * 項目の角は面の角から内側の余白を引いた丸み (入れ子。下の `.menu-item`)。
+   * **余白と項目の間は、映像の上のメニュー・プルダウンの一覧と同じ** (どのメニューも同じ形。色だけ層で変わる)
+   */
+  --menu-pad: 0.5rem;
   padding: var(--menu-pad);
+  gap: 0.125rem;
   border-radius: var(--dp-radius-lg);
   /* 選んでいる項目の地もメニューの面に合わせる (暗いほうは面より明るいので、ふつうの --dp-hover だと沈む) */
   --dp-hover: var(--dp-pop-hover);
@@ -1626,9 +1630,9 @@ button.text-button:hover {
   gap: 0.5rem;
   width: 100%;
   margin: 0;
-  padding: 0.4rem 0.6rem;
+  padding: 0.5rem 0.75rem;
   border: 0;
-  border-radius: calc(var(--dp-radius-lg) - var(--menu-pad, 0.25rem));
+  border-radius: calc(var(--dp-radius-lg) - var(--menu-pad, 0.5rem));
   box-shadow: none;
   background: transparent;
   color: inherit;
@@ -1666,13 +1670,14 @@ button.text-button:hover {
       appearance: base-select;
     }
     select {
+      /* 選択肢は欄 (`select`) から受け継ぐので、内側の余白はここに置く (一覧の `::picker` に置くと選択肢に届かない) */
+      --menu-pad: 0.5rem;
       align-items: center;
     }
     select::picker-icon {
       display: none;
     }
     select::picker(select) {
-      --menu-pad: 0.25rem;
       min-width: anchor-size(width);
       margin-block: 4px;
       padding: var(--menu-pad);
@@ -1706,12 +1711,15 @@ button.text-button:hover {
     /* 選択肢は `.menu-item` と同じ。選んでいるものは、ほかの選んでいるものと同じく塗らずに左の縦線と主の色の太字 */
     select option {
       position: relative;
-      padding: 0.4rem 0.6rem;
+      padding: 0.5rem 0.75rem;
       border-radius: calc(var(--dp-radius-lg) - var(--menu-pad));
       background: transparent;
       color: inherit;
       outline: none;
       cursor: pointer;
+    }
+    select option + option {
+      margin-top: 0.125rem;
     }
     select option::checkmark {
       display: none;
@@ -1726,7 +1734,7 @@ button.text-button:hover {
     select option:checked::before {
       content: "";
       position: absolute;
-      inset-block: 0.4rem;
+      inset-block: 0.5rem;
       left: 0;
       width: 2px;
       border-radius: 1px;
@@ -1754,12 +1762,8 @@ button.text-button:hover {
   --dp-line: rgb(255 255 255 / 0.14);
   --dp-muted: var(--dp-on-video-muted);
   --pico-color: var(--dp-on-video);
-  gap: 0.125rem;
   width: max-content;
   max-width: min(20rem, 90vw);
-  --menu-pad: 0.5rem;
-  padding: var(--menu-pad);
-  border: 0;
   background: var(--dp-video-menu);
   box-shadow:
     0 2px 6px rgb(0 0 0 / 0.35),
@@ -1776,7 +1780,6 @@ button.text-button:hover {
 }
 .overlay-menu .option {
   position: relative;
-  padding: 0.4rem 0.75rem;
 }
 .overlay-menu .option[data-active] {
   color: var(--dp-on-video-on);
