@@ -410,7 +410,7 @@
   background: var(--pico-primary);
 }
 /*
- * **日付の見出しは操作の層の小さなカプセル。** 巻くと行がその裏を流れるので、ヘッダーと同じ半透明の面と影で浮かせる
+ * **日付の見出しは、貼り付いたときだけ操作の層の小さなカプセル。** 巻くと行がその裏を流れるので、ヘッダーと同じ半透明の面と影で浮かせる
  * (docs/design.md の「浮かせ方」)。地の色の帯にすると、半透明のヘッダーの下に塗った帯だけが浮いて見えた
  */
 .board .t-day {
@@ -419,18 +419,40 @@
   position: sticky;
   top: var(--t-day-gap);
   z-index: 3;
+  width: fit-content;
+  margin: 0.5rem 0 0.25rem;
+  color: var(--dp-muted);
+  font-size: 0.75rem;
+  font-weight: var(--dp-weight-bold);
+  container-type: scroll-state;
+}
+.board .t-day-chip {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  width: fit-content;
-  margin: 0.5rem 0 0.25rem;
   padding: 0.25rem 0.75rem;
   border-radius: var(--dp-radius-full);
   background: var(--dp-float);
   box-shadow: var(--dp-shadow-pop);
-  color: var(--dp-muted);
-  font-size: 0.75rem;
-  font-weight: var(--dp-weight-bold);
+  transition:
+    background-color var(--dp-duration-enter) var(--dp-ease),
+    box-shadow var(--dp-duration-enter) var(--dp-ease);
+}
+/*
+ * **ふだんは平ら、貼り付いて行がその裏を流れるときだけ浮く** (ヘッダーと同じ。docs/design.md の「浮かせ方」)。
+ * 貼り付いたかは `scroll-state(stuck: top)` で見る。知らないブラウザは、いつもカプセル
+ */
+@supports (container-type: scroll-state) {
+  .board .t-day-chip {
+    background: transparent;
+    box-shadow: none;
+  }
+  @container scroll-state(stuck: top) {
+    .board .t-day-chip {
+      background: var(--dp-float);
+      box-shadow: var(--dp-shadow-pop);
+    }
+  }
 }
 .board .t-rows > .t-block:first-child > .t-day {
   margin-top: 0;

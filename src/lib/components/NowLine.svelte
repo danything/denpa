@@ -1,11 +1,12 @@
 <script lang="ts">
   /**
    * **「いま」の線。** ホームの一覧 (`home/TimelineHeading`) と番組表で同じ見た目にする:
-   * 赤い点と赤い太字の時刻を操作の層のカプセル (一覧の日付と同じ) に乗せる。ホームはその右に細い赤い線を引く。
+   * 赤い点と赤い太字の時刻。ホームはその右に細い赤い線を引き、番組表は時刻を操作の層のカプセルに乗せる。
    *
-   * - `inline` (ホーム) … 時刻のカプセル・残りの幅を埋める線・控えた字の一言 (`status`。右端) を1行に並べる。
+   * - `inline` (ホーム) … 時刻 (地に置く)・残りの幅を埋める線・控えた字の一言 (`status`。右端) を1行に並べる。
    *   字の下には線を引かない。幅が足りなければ一言を短い形 (`status.short`) に替え、それでも入らなければ「…」で切る (折り返さない)
-   * - `overlay` (番組表) … 時刻のカプセルだけを時の列のいまの位置に置き、左端に貼り付ける (`sticky`)。表を横切る線は引かない
+   * - `overlay` (番組表) … 時刻のカプセルだけを時の列のいまの位置に置き、左端に貼り付ける (`sticky`)。表を横切る線は引かない。
+   *   目に見えるのは分だけ (時は同じ時の列に出ている。読み上げには時まで渡す)
    *   (過ぎた所はマスを暗くして見せる)。時の数字の上に乗るので、カプセルの面で読ませる
    *
    * 読み上げは「いま 18:01、次の録画まで 3時間59分」。短い形は目に見えるだけで、読み上げはいつも長い形
@@ -47,8 +48,10 @@
   {...rest}
 >
   <span class="now-time num" style:width={labelWidth}
-    ><span class="visually-hidden">いま </span>{time}{#if shown}<span
-        class="visually-hidden">、</span
+    ><span class="visually-hidden">いま </span>{#if layout === "overlay"}<span
+        class="visually-hidden">{time.slice(0, 3)}</span
+      >{time.slice(3)}{:else}{time}{/if}{#if shown}<span class="visually-hidden"
+        >、</span
       >{/if}</span
   >
   {#if layout === "inline"}<span class="now-rule" aria-hidden="true"
@@ -70,17 +73,14 @@
     font-weight: var(--dp-weight);
   }
   /*
-     * **時刻は操作の層の小さなカプセル** (一覧の日付と同じ。docs/design.md の「浮かせ方」)。
-     * 半透明の面と影に、赤い点と赤い太字の時刻。字は面の上で読める濃さの側 (`--dp-rec-text`)
+     * 赤い点と赤い太字の時刻。字は淡い地の上で読める濃さの側 (`--dp-rec-text`)。
+     * ホームの一覧では地に置く (貼り付かないので浮かせない。左は日付の字にそろえる)。番組表では時の数字の上に重なるので、操作の層のカプセルに乗せる (下の `.overlay`)
      */
   .now-time {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.125rem 0.5rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
+    padding: 0.125rem 0.75rem;
     color: var(--dp-rec-text);
     font-weight: var(--dp-weight-bold);
     white-space: nowrap;
@@ -156,6 +156,9 @@
     justify-content: center;
     width: fit-content;
     padding: 0 0.25rem;
+    border-radius: var(--dp-radius-full);
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
     transform: translateY(-50%);
     font-size: 0.6875rem;
     line-height: 1rem;
