@@ -14,6 +14,13 @@
  */
 import { toHalfWidth } from "./fold";
 
+/** 鍵ごとの並びに足す */
+function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key);
+  if (list === undefined) map.set(key, [value]);
+  else list.push(value);
+}
+
 /** 局の見分けに使う列 (`services` の行) */
 export interface Station {
   id: number;
@@ -103,9 +110,7 @@ export function splitOf<P extends Omit<Airing, "id">>(
   const ofMain = new Map<number, P[]>();
   for (const program of programs) {
     if (main.get(program.service_id) !== program.service_id) continue;
-    const list = ofMain.get(program.service_id);
-    if (list === undefined) ofMain.set(program.service_id, [program]);
-    else list.push(program);
+    push(ofMain, program.service_id, program);
   }
   const split = new Map<number, P[]>();
   for (const program of programs) {
@@ -119,9 +124,7 @@ export function splitOf<P extends Omit<Airing, "id">>(
           (m.start_at < program.end_at && m.end_at > program.start_at)),
     );
     if (same) continue;
-    const list = split.get(program.service_id);
-    if (list === undefined) split.set(program.service_id, [program]);
-    else list.push(program);
+    push(split, program.service_id, program);
   }
   return split;
 }
@@ -146,15 +149,12 @@ export function columnsOf<S extends Station>(
   for (const service of services) {
     const of = main.get(service.id) ?? service.id;
     if (of === service.id || !split?.has(service.id)) continue;
-    const list = children.get(of);
-    if (list === undefined) children.set(of, [service]);
-    else list.push(service);
+    push(children, of, service);
   }
   const columns: S[] = [];
   for (const service of services) {
     if ((main.get(service.id) ?? service.id) !== service.id) continue;
-    columns.push(service);
-    columns.push(...(children.get(service.id) ?? []));
+    columns.push(service, ...(children.get(service.id) ?? []));
   }
   return columns;
 }
@@ -192,9 +192,7 @@ export function cellsOf<S extends Station, P extends Airing>(
   const byService = new Map<number, P[]>();
   for (const program of programs) {
     if (!index.has(program.service_id)) continue;
-    const list = byService.get(program.service_id);
-    if (list === undefined) byService.set(program.service_id, [program]);
-    else list.push(program);
+    push(byService, program.service_id, program);
   }
 
   const cells: Cell<P>[] = [];
