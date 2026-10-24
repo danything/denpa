@@ -220,6 +220,7 @@
     background: var(--dp-subtle);
     overflow: hidden;
   }
+  /* CMロゴは録画のコマから切り出したもの。映像と同じ黒の上に置く */
   .frame.dark {
     background: var(--dp-video);
   }
