@@ -24,6 +24,7 @@ import { config } from "./config";
 import { savePrograms, settle, sync } from "./epg";
 import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
+import { resolveConflicts } from "./scheduler";
 import {
   type AgentChannel,
   getTuners,
@@ -509,7 +510,11 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
     if (scanner.events.length > 0) {
       try {
         const saved = savePrograms(scanner.events);
-        if (saved > 0) settle(saved);
+        if (saved > 0) {
+          settle(saved);
+          // 立った予約の取り合いを裁き直す (`settle` は裁かない。ほかの呼び手と同じ)
+          await resolveConflicts();
+        }
       } catch (error) {
         console.warn(
           `[scan] スキャン中に拾った番組表を書けませんでした: ${error}`,
