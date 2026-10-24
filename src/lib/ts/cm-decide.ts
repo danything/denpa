@@ -296,7 +296,8 @@ const CREDITS = 10;
 const CREDIT_TOLERANCE = 0.4;
 /**
  * 提供を番組に残す点。番組の直後、または番組の終わりから CM の並びをたどった先の 10 秒と、
- * 並びの外にある番組が戻る直前の 10 秒。告知 (10 秒) を CM にしたときの点とロゴの無い 10 秒の減点の和より大きく
+ * 並びの外にある番組が戻る直前の 10 秒。告知 (10 秒) を CM にしたときの点とロゴの無い 10 秒の減点の和より大きく。
+ * 並びの外の提供には 10 秒のうちロゴの無い割合だけ付け (`creditBonus`)、提供のあとに続く CM が 15 秒の倍数か告知のときだけ付ける
  */
 const CREDIT = 14;
 /**
@@ -460,14 +461,19 @@ const isCredit = (s: State) => s >= State.CreditAfterProgram;
  * 提供として番組に残す点。次の区間 (`next` が CM か) で決まる。
  * 番組の直後・番組の終わりからの CM の並びの先の 10 秒は、次が CM なら提供。並びの外にある 10 秒は、次が番組なら提供。
  * 15 秒の倍数の CM に続いて番組に戻る 10 秒は局の番宣 (CM) なので点を付けない
+ *
+ * **並びの外の提供には、10 秒のうちロゴの無い割合 (`bare`) だけ付ける。** ロゴの出ている 10 秒は、点が無くても番組になる。
+ * 次が CM の提供の点は、呼ぶ側で続く CM が 15 秒の倍数か告知のときだけ足す。どちらも無いと、本編の中でロゴが数秒だけ
+ * 途切れた所が、前後 10 秒に無音と切れ目があるだけで「提供と尺の合わない CM」になっていた
+ * (実機のフジテレビのアニメで 2.5・4.3・10.8 秒の CM)
  */
-function creditBonus(state: State, nextIsCm: boolean): number {
+function creditBonus(state: State, nextIsCm: boolean, bare: number): number {
   if (nextIsCm)
     return state === State.CreditAfterProgram ||
       state === State.CreditAfterChain
       ? CREDIT
       : 0;
-  return state === State.CreditAfterOther ? CREDIT : 0;
+  return state === State.CreditAfterOther ? CREDIT * bare : 0;
 }
 
 /** ロゴの出ている区間から作る、出ている秒の数え方とロゴの出入り */
@@ -591,6 +597,12 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
       from[j]![s] = i * STATES + prev;
     }
   };
+  /** いま終わった提供 (候補 `i` で終わった状態 `s`) のうちロゴの無い割合。頭は戻り道から引く */
+  const creditBare = (i: number, s: State) => {
+    const start = nodes[Math.floor(from[i]![s]! / STATES)]!.at;
+    const end = nodes[i]!.at;
+    return end > start ? 1 - index.lit(start, end) / (end - start) : 0;
+  };
   /** 告知だけの CM のまま番組に戻るときの減点 (告知の点を取り消し、尺の合わない CM とみる) */
   const SOLO = SPOT_FIT * CREDITS + CM_MISFIT;
   value[0]![State.Program] = 0;
@@ -607,7 +619,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
         let v = here + program(a.at, nodes[i + 1]!.at);
         if (isCm(s))
           v -= boundaryCost(i, false) + (s === State.Spot ? SOLO : 0);
-        if (isCredit(s)) v += creditBonus(s, false);
+        if (isCredit(s)) v += creditBonus(s, false, creditBare(i, s));
         relax(i + 1, State.Program, v, i, s);
       }
 
@@ -632,7 +644,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
                 ? State.CreditAfterFit
                 : State.CreditAfterOther;
         }
-        if (isCredit(s)) v += creditBonus(s, false);
+        if (isCredit(s)) v += creditBonus(s, false, creditBare(i, s));
         relax(j, next, v, i, s);
       }
 
@@ -640,6 +652,8 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
       if (s === State.Bare || a.kind === "bare") continue;
       const entering = s === State.Program || isCredit(s);
       let base = here;
+      // 提供の点は、続く CM が 15 秒の倍数か告知 (か録画の尻まで) のときだけ足す。尺の合わない短い CM を提供の点で CM にさせない
+      let credit = 0;
       if (entering) {
         base -= boundaryCost(
           i,
@@ -650,7 +664,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
               ? a.at - CREDITS
               : undefined,
         );
-        if (isCredit(s)) base += creditBonus(s, true);
+        if (isCredit(s)) credit = creditBonus(s, true, creditBare(i, s));
       }
       const head = i === 0;
       for (let j = i + 1; j < n; j++) {
@@ -668,7 +682,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
           continue;
         if (head || tail) {
           if (b.kind === "bare") continue;
-          relax(j, State.Other, base - CM_LOGO * lit, i, s);
+          relax(j, State.Other, base + credit - CM_LOGO * lit, i, s);
           continue;
         }
         const spot = fitSpot(length);
@@ -693,14 +707,14 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
             : entering || s === State.Chain
               ? State.Chain
               : State.Fit;
-        relax(j, next, base + cm, i, s);
+        relax(j, next, base + cm + (fit > 0 ? credit : 0), i, s);
         if (spot > 0) {
           const short = SPOT_FIT * length * spot - CM_MISFIT * (1 - spot);
           // 番組のあとの告知は、そのあとに CM が続くときだけ (`State.Spot`)
           relax(
             j,
             entering || s === State.Spot ? State.Spot : State.Other,
-            base + short - logoCost,
+            base + short - logoCost + credit,
             i,
             s,
           );

@@ -247,6 +247,26 @@ describe("ロゴで決める", () => {
       end: 652,
     });
   });
+
+  test("本編の中でロゴが数秒だけ途切れても、前後 10 秒の境目を提供とみて CM にしない", () => {
+    // 実機のフジテレビのアニメの形: 本編の 300 でロゴが途切れ、無音と切れ目で戻る。
+    // 途切れの 10 秒前か、戻った所の 10 秒先にも無音と切れ目がある (ロゴは出ている)
+    for (const gap of [2.5, 4.3, 10.8]) {
+      const broken = [
+        { start: 10.2, end: 300 },
+        { start: 300 + gap, end: 599.8 },
+        logo[1]!,
+      ];
+      for (const credit of [300 - 10, 300 + gap + 10]) {
+        const marks = [...joints, 300, 300 + gap, credit];
+        expect(round(decideCm(recording(1800, marks, broken)))).toEqual([
+          { start: 0, end: 10 },
+          { start: 600, end: 660 },
+          { start: 1790, end: 1800 },
+        ]);
+      }
+    }
+  });
 });
 
 describe("実機の並び (フジテレビの 30 分番組。ロゴが戻る直前の番宣)", () => {
