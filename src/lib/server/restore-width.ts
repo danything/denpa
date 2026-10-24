@@ -25,7 +25,8 @@ import { foldForSearch, toHalfWidth } from "../fold";
 import { type EitEvent, EpgReader } from "../ts/eit";
 import { now, orm } from "./db";
 import { emit } from "./events";
-import { recordings, services, settings } from "./schema";
+import { recordings, services } from "./schema";
+import { store, stored } from "./settings";
 
 /** 済んだ録画ID を覚えておく鍵 */
 const MARK = "widthRestoredThrough";
@@ -47,11 +48,10 @@ export interface StoredText {
 }
 
 /** 放送 (か番組表) から読み直したもの */
-export interface BroadcastText {
-  name: string;
-  description: string;
-  extended: Record<string, string> | null;
-}
+export type BroadcastText = Pick<
+  StoredText,
+  "name" | "description" | "extended"
+>;
 
 /**
  * 比べる形式。幅と、外字の書き方だけを揃える — 外字を文字列に開いていた頃 (「[新]」) に録ったものは、
@@ -106,18 +106,19 @@ export function restoredText(
   original: BroadcastText,
 ): Partial<StoredText> | null {
   const patch: Partial<StoredText> = {};
+  const put = (
+    key: "name" | "series" | "subtitle" | "description",
+    value: string | null,
+  ) => {
+    if (value !== null && value !== stored[key]) patch[key] = value;
+  };
   const name = sameButWidth(stored.name, original.name);
   if (name !== null && name !== stored.name) {
-    patch.name = name;
-    const series = widthOf(stored.series, name);
-    if (series !== null && series !== stored.series) patch.series = series;
-    const subtitle = widthOf(stored.subtitle, name);
-    if (subtitle !== null && subtitle !== stored.subtitle)
-      patch.subtitle = subtitle;
+    put("name", name);
+    put("series", widthOf(stored.series, name));
+    put("subtitle", widthOf(stored.subtitle, name));
   }
-  const description = sameButWidth(stored.description, original.description);
-  if (description !== null && description !== stored.description)
-    patch.description = description;
+  put("description", sameButWidth(stored.description, original.description));
   const extended = extendedWidth(stored.extended, original.extended);
   if (
     extended !== null &&
@@ -187,26 +188,6 @@ export async function readBroadcastText(
   };
 }
 
-function mark(): number {
-  const row = orm()
-    .select({ value: settings.value })
-    .from(settings)
-    .where(eq(settings.key, MARK))
-    .get();
-  return row === undefined ? 0 : Number(row.value) || 0;
-}
-
-function saveMark(id: number): void {
-  orm()
-    .insert(settings)
-    .values({ key: MARK, value: String(id), updated_at: now() })
-    .onConflictDoUpdate({
-      target: settings.key,
-      set: { value: String(id), updated_at: now() },
-    })
-    .run();
-}
-
 /** 1回ぶんの結果。ログに出す */
 export interface RestoreResult {
   /** 見た録画 */
@@ -252,7 +233,7 @@ async function walk(): Promise<RestoreResult> {
       finished_at: recordings.finished_at,
     })
     .from(recordings)
-    .where(gt(recordings.id, mark()))
+    .where(gt(recordings.id, Number(stored(MARK) ?? 0) || 0))
     .orderBy(asc(recordings.id))
     .all();
 
@@ -262,7 +243,7 @@ async function walk(): Promise<RestoreResult> {
     if (alreadyWide(row)) result.already++;
     else if (await restoreOne(row)) result.restored++;
     else result.missed++;
-    saveMark(row.id);
+    store(MARK, String(row.id));
   }
 
   if (result.restored > 0) emit("recordings");

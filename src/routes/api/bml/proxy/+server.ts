@@ -19,6 +19,7 @@ import { error } from "@sveltejs/kit";
 import {
   fetchForBml,
   refusalMessage,
+  relayed,
   requireBmlNetwork,
 } from "#lib/server/bml-network.js";
 import type { RequestHandler } from "./$types";
@@ -30,21 +31,7 @@ export const GET: RequestHandler = async ({ url }) => {
   if (target === null || target === "") error(400, "url がありません");
 
   try {
-    const got = await fetchForBml(target);
-    /*
-     * **相手の返した符号をそのまま返す。** 放送のアプリは 404 や 503 を
-     * 見て出し分けることがあるので、こちらで 200 に均すと判断を奪う
-     */
-    return new Response(got.body as BodyInit, {
-      status: got.status,
-      headers: {
-        "content-type": got.contentType,
-        // **溜めさせない。** 放送の通信は「いまの値」を取りに来るもの
-        "cache-control": "no-store",
-        // 相手まで行けた印 (相手の 502 と、こちらで断った 502 を分ける。`/api/bml/post` と同じ)
-        "x-bml-relayed": "1",
-      },
-    });
+    return relayed(await fetchForBml(target));
   } catch (failure) {
     const why = refusalMessage(failure, "取得できませんでした");
     // **何に繋ごうとして断ったかを残す。** 切り分けのときにここがいちばん効く

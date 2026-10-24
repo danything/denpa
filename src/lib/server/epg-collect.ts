@@ -59,17 +59,7 @@ const collected = new Map<string, number>();
  * 局で引けば、どの枠から開いても同じ時刻が出る。
  */
 function lastCollected(channels: AgentChannel[]): Map<string, number> {
-  const perService = new Map(
-    orm()
-      .select({
-        service_id: programs.service_id,
-        at: max(programs.updated_at).mapWith(Number),
-      })
-      .from(programs)
-      .groupBy(programs.service_id)
-      .all()
-      .map((row) => [row.service_id, row.at]),
-  );
+  const perService = latestPerService(programs.updated_at);
 
   const map = new Map<string, number>();
   for (const channel of channels) {
@@ -93,12 +83,35 @@ export function lastOf(
   perService: Map<number, number>,
   channel: AgentChannel,
 ): number {
-  const times = channel.services
+  const times = perChannel(perService, channel);
+  return times.length === 0 ? 0 : Math.max(...times);
+}
+
+/** チャンネルに入っている局それぞれの値。番組表に出てこない局は入れない */
+function perChannel(
+  perService: Map<number, number>,
+  channel: AgentChannel,
+): number[] {
+  return channel.services
     .map((service) =>
       perService.get(serviceKey(channel.networkId, service.serviceId)),
     )
-    .filter((at) => at !== undefined);
-  return times.length === 0 ? 0 : Math.max(...times);
+    .filter((value) => value !== undefined);
+}
+
+/** 局ごとの、番組の列のいちばん大きい値 */
+function latestPerService(
+  column: typeof programs.updated_at | typeof programs.end_at,
+): Map<number, number> {
+  const rows = orm()
+    .select({
+      service_id: programs.service_id,
+      value: max(column).mapWith(Number),
+    })
+    .from(programs)
+    .groupBy(programs.service_id)
+    .all();
+  return new Map(rows.map((row) => [row.service_id, row.value]));
 }
 
 const key = (channel: AgentChannel) => `${channel.type}:${channel.channel}`;
@@ -149,15 +162,7 @@ function update(patch: Partial<CollectState>): void {
  * 記憶だけで持っていると、Pod が入れ替わるたびに全チャンネルを回し直すことになる。
  */
 function coverage(): Map<number, number> {
-  const rows = orm()
-    .select({
-      service_id: programs.service_id,
-      until: max(programs.end_at).mapWith(Number),
-    })
-    .from(programs)
-    .groupBy(programs.service_id)
-    .all();
-  return new Map(rows.map((row) => [row.service_id, row.until]));
+  return latestPerService(programs.end_at);
 }
 
 interface Work {
@@ -189,11 +194,7 @@ export function reachOf(
   reach: Map<number, number>,
   channel: AgentChannel,
 ): number {
-  const reaches = channel.services
-    .map((service) =>
-      reach.get(serviceKey(channel.networkId, service.serviceId)),
-    )
-    .filter((until) => until !== undefined);
+  const reaches = perChannel(reach, channel);
   return reaches.length === 0 ? 0 : Math.min(...reaches);
 }
 

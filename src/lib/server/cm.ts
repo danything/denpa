@@ -176,16 +176,11 @@ export async function probeVideo(input: string): Promise<{
 }> {
   const read = (args: string[]) => probe(input, args);
 
-  let duration = NaN;
-  let fps = NaN;
-  let width = NaN;
-  let height = NaN;
-  let formatStart = NaN;
-  let packetStart = NaN;
-  let sar = 1;
+  let format = new Map<string, string>();
+  let stream = new Map<string, string>();
   try {
     // `nk=1` (鍵を出さない) にはしない。鍵で引くために必ず `key=value` で受ける
-    const format = fields(
+    format = fields(
       await read([
         "-show_entries",
         "format=duration,start_time",
@@ -193,10 +188,7 @@ export async function probeVideo(input: string): Promise<{
         "default=nw=1",
       ]),
     );
-    duration = Number(format.get("duration"));
-    formatStart = Number(format.get("start_time"));
-
-    const stream = fields(
+    stream = fields(
       await read([
         "-select_streams",
         "v:0",
@@ -206,22 +198,17 @@ export async function probeVideo(input: string): Promise<{
         "default=nw=1",
       ]),
     );
-    fps = parseFrameRate(stream.get("avg_frame_rate"));
-    width = Number(stream.get("width"));
-    height = Number(stream.get("height"));
-    sar = parseRatio(stream.get("sample_aspect_ratio"));
-    packetStart = Number(stream.get("start_time"));
   } catch {
     // ffprobe が使えない環境。呼ぶ側が NaN を見て諦める
   }
-  const positive = (value: number) =>
-    Number.isFinite(value) && value > 0 ? value : NaN;
+  const finite = (value: number) => (Number.isFinite(value) ? value : NaN);
+  const positive = (value: number) => (value > 0 ? finite(value) : NaN);
   return {
-    duration: positive(duration),
-    fps: positive(fps),
+    duration: positive(Number(format.get("duration"))),
+    fps: positive(parseFrameRate(stream.get("avg_frame_rate"))),
     // 映像の大きさ (エンコード先の大きさ・映像が在るかの見分け・ロゴ探し)
-    width: positive(width),
-    height: positive(height),
+    width: positive(Number(stream.get("width"))),
+    height: positive(Number(stream.get("height"))),
     /**
      * **入れ物そのものの始まり (PTS)。** 頭からの秒数ではなく放送の時刻で、
      * この録画では 6115.51 だった。
@@ -230,14 +217,14 @@ export async function probeVideo(input: string): Promise<{
      * 別々に ffmpeg へ通すときは、双方が同じものを引いていないと噛み合わない**。
      * 頭出し (`probeLeadIn`) もこれを引いて測る
      */
-    formatStart: Number.isFinite(formatStart) ? formatStart : NaN,
+    formatStart: finite(Number(format.get("start_time"))),
     /** 映像の最初の**パケット**の時刻 (PTS)。復号できるコマを探せなかったときの代用 */
-    packetStart,
+    packetStart: Number(stream.get("start_time")),
     /**
      * 画素の横長さ。1440x1080 の地上波HDは 4:3 で、これを掛けると 1920 になる。
      * 読めなければ 1 (正方形) とみなす
      */
-    sar,
+    sar: parseRatio(stream.get("sample_aspect_ratio")),
   };
 }
 
@@ -249,11 +236,9 @@ export async function probeVideo(input: string): Promise<{
  */
 export function liveAudioIndexes(json: string): number[] {
   const parsed = JSON.parse(json) as { streams?: { channels?: number }[] };
-  const out: number[] = [];
-  (parsed.streams ?? []).forEach((stream, index) => {
-    if ((stream.channels ?? 0) > 0) out.push(index);
-  });
-  return out;
+  return (parsed.streams ?? []).flatMap((stream, index) =>
+    (stream.channels ?? 0) > 0 ? [index] : [],
+  );
 }
 
 /**

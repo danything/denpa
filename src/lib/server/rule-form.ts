@@ -97,6 +97,18 @@ export function rulePriority(fields: Fields): number {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 1;
 }
 
+/** 条件をルールの列にしたもの (`draftRule` と `ruleValues` で同じ) */
+function columns(conditions: Conditions) {
+  return {
+    keyword: conditions.keyword,
+    ignore_keyword: conditions.ignoreKeyword,
+    search_fields: conditions.searchFields,
+    service_ids: conditions.serviceIds,
+    service_types: conditions.serviceTypes,
+    genres: conditions.genres,
+  };
+}
+
 /**
  * 入力中の条件を、保存していないルールとして組み立てる (下見に渡す形)。
  * 条件が空なら null (全番組に当たるだけなので数えない)
@@ -108,12 +120,7 @@ export function draftRule(fields: Fields): Rule | null {
   return {
     id: 0,
     name: "",
-    keyword: conditions.keyword,
-    ignore_keyword: conditions.ignoreKeyword,
-    search_fields: conditions.searchFields,
-    service_ids: conditions.serviceIds,
-    service_types: conditions.serviceTypes,
-    genres: conditions.genres,
+    ...columns(conditions),
     // 無料放送の扱いは**全体設定** (ルールには持たない)
     enabled: true,
     /*
@@ -168,12 +175,7 @@ export const EMPTY_RULE =
 export function ruleValues(conditions: Conditions, form: Fields) {
   return {
     name: ruleName(conditions),
-    keyword: conditions.keyword,
-    ignore_keyword: conditions.ignoreKeyword,
-    search_fields: conditions.searchFields,
-    service_ids: conditions.serviceIds,
-    service_types: conditions.serviceTypes,
-    genres: conditions.genres,
+    ...columns(conditions),
     priority: rulePriority(form),
     // 送られてこなければ触らない (更新では今の値のまま。追加は呼ぶ側で入れる)
     ...(conditions.dedupe === null ? {} : { dedupe: conditions.dedupe }),

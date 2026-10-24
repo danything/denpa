@@ -367,24 +367,23 @@ export function firstAirings<T extends Airing>(
   taken: Taken = [],
 ): Map<number, Skip<T>> {
   const skips = new Map<number, Skip<T>>();
+  const read = airings.map((airing) => ({
+    airing,
+    episode: episodeOf(airing),
+  }));
   /** 話数が同じ放送。この中で `sameEpisode` で束ねる */
-  const numbered = new Map<string, { airing: T; episode: Episode }[]>();
+  const numbered = Map.groupBy(
+    read.filter(
+      (entry): entry is { airing: T; episode: Episode } =>
+        entry.episode !== null,
+    ),
+    ({ episode }) => String(episode.number),
+  );
   /** 回の分からない放送。タイトルごとに、同じ時刻のものだけ束ねる */
-  const loose = new Map<string, T[]>();
-  for (const airing of airings) {
-    const episode = episodeOf(airing);
-    if (episode === null) {
-      const at = squash(displayTitle(airing.name));
-      const list = loose.get(at);
-      if (list === undefined) loose.set(at, [airing]);
-      else list.push(airing);
-      continue;
-    }
-    const at = String(episode.number);
-    const list = numbered.get(at);
-    if (list === undefined) numbered.set(at, [{ airing, episode }]);
-    else list.push({ airing, episode });
-  }
+  const loose = Map.groupBy(
+    read.filter(({ episode }) => episode === null).map(({ airing }) => airing),
+    (airing) => squash(displayTitle(airing.name)),
+  );
   // 話数の違う回にも出てくる概要は、毎週同じ番組紹介。回の決め手にしない。
   // 数字は除いて比べる (「エピソード6」+ 番組紹介 のように話数だけ差し替えるものがある)
   const template = (summary: string) => summary.replace(/\d+/g, "#");
@@ -396,9 +395,7 @@ export function firstAirings<T extends Airing>(
   for (const { summary, number } of known) {
     if (summary === "") continue;
     const key = template(summary);
-    const seen = numbers.get(key);
-    if (seen === undefined) numbers.set(key, new Set([number]));
-    else seen.add(number);
+    numbers.set(key, (numbers.get(key) ?? new Set()).add(number));
   }
   const generic = (e: Episode) =>
     e.summary !== "" && numbers.get(template(e.summary))!.size > 1;
@@ -486,13 +483,7 @@ function episodes<T>(
   for (let i = 0; i < list.length; i++)
     for (let j = i + 1; j < list.length; j++)
       if (sure(list[i]!.episode, list[j]!.episode)) group[root(j)] = root(i);
-  const roots = new Map<number, { airing: T; episode: Episode }[]>();
-  list.forEach((entry, i) => {
-    const cluster = roots.get(root(i));
-    if (cluster === undefined) roots.set(root(i), [entry]);
-    else cluster.push(entry);
-  });
-  const clusters = [...roots.values()];
+  const clusters = [...Map.groupBy(list, (_, i) => root(i)).values()];
 
   /** 束どうしで、同じ回と読める組み合わせがあるもの。飾りの違う局は副題で束ねてあるので、どれか1つと読めればよい */
   const partners = clusters.map((one) =>

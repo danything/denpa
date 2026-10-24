@@ -290,14 +290,9 @@ export async function openLogo(
   // 覚えていれば使う。コマの大きさが違うもの (SD と HD) には当てない
   const loaded = load(repo, video.width, video.height);
   let learnedNow = loaded === null;
-  let model: LogoModel;
-  if (loaded === null) {
-    const learned = await learn(input, video, options);
-    if (typeof learned === "string") return learned;
-    model = learned;
-  } else {
-    model = loaded;
-  }
+  const initial = loaded ?? (await learn(input, video, options));
+  if (typeof initial === "string") return initial;
+  let model = initial;
   const opened = tracker(model, video);
   if (typeof opened === "string") return opened;
   let first: Tracker = opened;

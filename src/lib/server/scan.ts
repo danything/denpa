@@ -138,21 +138,17 @@ export async function readServices(
 
   const tail = message.trim().split("\n").at(-1)?.trim();
   const detail = tail === undefined || tail === "" ? "" : ` (${tail})`;
-  if (!signal)
-    return { services: null, error: `受信できませんでした${detail}`, signal };
-  if (reader.network === null && reader.transport === null) {
-    return {
-      services: null,
-      error: `受信はできましたが、局の情報を読み取れません${detail}`,
-      signal,
-    };
-  }
-  const missing = reader.network === null ? "NIT" : "SDT";
-  return {
+  const fail = (why: string) => ({
     services: null,
-    error: `${missing} を受信できませんでした${detail}`,
+    error: `${why}${detail}`,
     signal,
-  };
+  });
+  if (!signal) return fail("受信できませんでした");
+  if (reader.network === null && reader.transport === null)
+    return fail("受信はできましたが、局の情報を読み取れません");
+  return fail(
+    `${reader.network === null ? "NIT" : "SDT"} を受信できませんでした`,
+  );
 }
 
 /** スキャンで分かったことを1件にまとめる */
@@ -258,12 +254,7 @@ class Scanner {
 
   constructor(private readonly onProgress: (progress: Progress) => void) {}
 
-  /**
-   * 中断する。
-   *
-   * 地上波の総当たりは十数分かかる。始めてから「いま録りたい」に気づいたときに
-   * 待つしかないのは困るので、途中で降りられるようにしてある
-   */
+  /** 中断する (理由は外の `stop`) */
   stop(): void {
     this.aborter.abort();
   }
@@ -551,15 +542,11 @@ export function start(options: ScanOptions): {
   ]);
 
   current = {
+    ...IDLE,
     state: "running",
     phase: "準備中",
-    log: [],
-    scanned: 0,
     total: targets.reduce((sum, [, channels]) => sum + channels.length, 0),
-    channels: 0,
-    error: null,
     startedAt: Date.now(),
-    finishedAt: null,
   };
   emit("scan");
   void runScan(targets);

@@ -120,6 +120,16 @@ async function get<T>(
   return tolerate(shape, await res.json(), `エージェントの ${path}`);
 }
 
+/** 書き換えを預ける。控えを書くのを待つので、読むより長く待つ */
+function put(path: string, body: unknown): Promise<Response> {
+  return fetch(`${config.agentUrl}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
+  });
+}
+
 export function getChannels(): Promise<AgentChannel[]> {
   return get("/denpa/channels", array(AGENT_CHANNEL));
 }
@@ -138,12 +148,7 @@ export async function putChannels(
   found: AgentChannel[],
   scanned: ChannelType[],
 ): Promise<AgentChannel[]> {
-  const res = await fetch(`${config.agentUrl}/denpa/channels`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ channels: found, scanned }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const res = await put("/denpa/channels", { channels: found, scanned });
   if (!res.ok)
     throw new Error(
       `チャンネルを保存できません (${res.status}) ${await res.text()}`,
@@ -173,12 +178,7 @@ export async function getTuners(): Promise<AgentTuner[]> {
  * **空を渡すと定義そのものが消える** = 自動検出に戻す。
  */
 export async function putTuners(tuners: TunerConfig[]): Promise<void> {
-  const res = await fetch(`${config.agentUrl}/denpa/tuners`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tuners }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const res = await put("/denpa/tuners", { tuners });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const error =

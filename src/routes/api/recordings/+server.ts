@@ -71,25 +71,23 @@ export function GET({ url }) {
     query.all().map((row) => {
       const file = (source: string) =>
         `api/recordings/${row.id}/file?source=${source}`;
-      const files = [
-        ...(row.library === null
+      const files = (
+        [
+          ["encoded", row.library],
+          ["alt", row.alt],
+          ["ts", row.ts],
+        ] as const
+      ).flatMap(([source, path]) =>
+        path === null
           ? []
           : [
               {
-                source: "encoded",
-                codec: encodedCodec(row.library),
-                url: file("encoded"),
+                source,
+                codec: source === "ts" ? "mpeg2" : encodedCodec(path),
+                url: file(source),
               },
-            ]),
-        ...(row.alt === null
-          ? []
-          : [
-              { source: "alt", codec: encodedCodec(row.alt), url: file("alt") },
-            ]),
-        ...(row.ts === null
-          ? []
-          : [{ source: "ts", codec: "mpeg2", url: file("ts") }]),
-      ];
+            ],
+      );
       return {
         id: row.id,
         title: displayTitle(row.name),
