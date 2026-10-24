@@ -24,7 +24,7 @@ import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { pruneEmptyDirs, removeIfExists } from "./fsx";
 import { removeSidecars, SIDECAR_SUFFIXES } from "./metadata";
-import { encodeJobs, recordings, reservations } from "./schema";
+import { cmMaterials, encodeJobs, recordings, reservations } from "./schema";
 
 const SIDECAR_ORPHAN = new RegExp(
   `^(.+?)(?:${SIDECAR_SUFFIXES.map((suffix) => suffix.replace(/[.-]/g, "\\$&")).join("|")})$`,
@@ -346,6 +346,19 @@ export function pruneHistory(): {
     .where(
       notInArray(
         encodeJobs.recording_id,
+        orm().select({ id: recordings.id }).from(recordings),
+      ),
+    )
+    .run();
+  /*
+   * CM 検出の材料の控えも。スキーマの `onDelete: cascade` は外部キーを有効にしていないので効かない
+   * (`db.ts`)。行を消すところはここだけなので、ここで消す
+   */
+  orm()
+    .delete(cmMaterials)
+    .where(
+      notInArray(
+        cmMaterials.recording_id,
         orm().select({ id: recordings.id }).from(recordings),
       ),
     )

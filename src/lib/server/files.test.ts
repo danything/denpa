@@ -26,7 +26,8 @@ config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-files-")), "denpa.db");
 config.historyRetention = 14 * 24 * 60 * 60 * 1000;
 
 const { orm } = await import("./db");
-const { encodeJobs, recordings, reservations } = await import("./schema");
+const { cmMaterials, encodeJobs, recordings, reservations } =
+  await import("./schema");
 const { pruneHistory, reconcile } = await import("./files");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -36,6 +37,7 @@ function seed(): void {
   orm().delete(reservations).run();
   orm().delete(recordings).run();
   orm().delete(encodeJobs).run();
+  orm().delete(cmMaterials).run();
 
   /*
    * 「終わった予約」は取り消し・録り逃しか、録り始めたもの (started_at が入る)。
@@ -146,6 +148,30 @@ describe("古い履歴の片付け", () => {
     // 1 は録画ごと消えた。2 は古い失敗なので消える。
     // 3 はその録画の最新なので、古くても残す (一覧の状態表示がこれを見ている)
     expect(ids(encodeJobs)).toEqual([3]);
+  });
+
+  test("録画の行と一緒に CM 検出の材料の控えも消える", () => {
+    seed();
+    const row = (recording_id: number) => ({
+      recording_id,
+      version: 1,
+      data: Buffer.from("x"),
+      created_at: now,
+    });
+    orm()
+      .insert(cmMaterials)
+      .values([row(1), row(2), row(3)])
+      .run();
+    pruneHistory();
+    // 外部キーは効かせていないので、消えるのは片付けで消したから
+    expect(
+      orm()
+        .select({ id: cmMaterials.recording_id })
+        .from(cmMaterials)
+        .orderBy(cmMaterials.recording_id)
+        .all()
+        .map((r) => r.id),
+    ).toEqual([2, 3]);
   });
 
   test("何度やっても同じ", () => {
