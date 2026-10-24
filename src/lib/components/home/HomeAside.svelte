@@ -15,9 +15,9 @@
    * 中身はホームが読んだものから作る (問い合わせは足さない)。指を乗せたときだけ出るものは置かない
    */
   import Icon from "#lib/components/player/Icon.svelte";
-  import { ATTENTION_FILTERS, FILTERS, type Filter } from "#lib/timeline.js";
+  import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
   import TriangleAlert from "~icons/lucide/triangle-alert";
-  import type { Rec } from "./context";
+  import type { HomeControls } from "./context";
   import HomeCalendar from "./HomeCalendar.svelte";
   import HomeState from "./HomeState.svelte";
   import ViewList from "./ViewList.svelte";
@@ -26,27 +26,11 @@
     filter,
     setFilter,
     counts,
-    grouped,
-    setGrouped,
-    finishedHref,
-    deletedHref,
-    showFinished,
-    showDeleted,
-    encoding,
     capacity,
+    encoding,
     calendar,
-  }: {
-    filter: Filter;
-    setFilter: (next: Filter) => void;
-    counts: Record<Filter, number>;
-    grouped: boolean;
-    setGrouped: (on: boolean) => void;
-    finishedHref: string;
-    deletedHref: string;
-    showFinished: boolean;
-    showDeleted: boolean;
-    encoding: Rec[];
-    capacity: { free: string; hours: string | null } | null;
+    ...view
+  }: HomeControls & {
     /** カレンダーに渡すもの (`HomeCalendar`) */
     calendar: {
       marks: Map<number, DayMark>;
@@ -66,7 +50,7 @@
   aria-label="絞り込みと表示"
   data-testid="sidebar"
 >
-  {#if !grouped}
+  {#if !view.grouped}
     <HomeCalendar {...calendar} />
   {/if}
 
@@ -114,14 +98,6 @@
 
   <h2 class="side-label">表示</h2>
   <div class="side-list" role="group" aria-label="表示の切り替え">
-    <ViewList
-      {grouped}
-      {setGrouped}
-      {finishedHref}
-      {deletedHref}
-      {showFinished}
-      {showDeleted}
-      variant="list"
-    />
+    <ViewList {...view} variant="list" />
   </div>
 </aside>

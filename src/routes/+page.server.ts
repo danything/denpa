@@ -358,6 +358,12 @@ export function load({ url, cookies }) {
   };
 }
 
+/** フォームの `id`。数でなければ null */
+async function formId(request: Request): Promise<number | null> {
+  const id = Number((await request.formData()).get("id"));
+  return Number.isFinite(id) ? id : null;
+}
+
 export const actions = {
   delete: async ({ request }) => {
     const recording = recordingFromForm(await request.formData());
@@ -413,10 +419,8 @@ export const actions = {
   },
 
   cancelEncode: async ({ request }) => {
-    const form = await request.formData();
-    const id = Number(form.get("id"));
-    if (!Number.isFinite(id))
-      return fail(400, { message: "ジョブIDが不正です" });
+    const id = await formId(request);
+    if (id === null) return fail(400, { message: "ジョブIDが不正です" });
     // 畳み終わってから返る。ここで待たないと、この直後の読み直しが
     // まだ「エンコード中」を読んで、押しても何も変わらないように見える
     await cancelEncode(id);
@@ -464,9 +468,8 @@ export const actions = {
    * 失敗した録画と同じで、確かめ終わったら畳みたい
    */
   deleteMissed: async ({ request }) => {
-    const form = await request.formData();
-    const id = Number(form.get("id"));
-    if (!Number.isFinite(id)) return fail(400, { message: "IDが不正です" });
+    const id = await formId(request);
+    if (id === null) return fail(400, { message: "IDが不正です" });
     // 状態も見て消す。録り逃し以外 (これからの予約など) を同じアクションで消させない
     const gone = orm()
       .delete(reservationTable)
@@ -487,9 +490,8 @@ export const actions = {
 
   /** 取り消した予約を戻す。ルールは作り直さないので、ここからしか戻せない */
   restore: async ({ request }) => {
-    const form = await request.formData();
-    const id = Number(form.get("id"));
-    if (!Number.isFinite(id)) return fail(400, { message: "IDが不正です" });
+    const id = await formId(request);
+    if (id === null) return fail(400, { message: "IDが不正です" });
     try {
       await restore(id);
     } catch (error) {
@@ -501,9 +503,8 @@ export const actions = {
   },
 
   cancel: async ({ request }) => {
-    const form = await request.formData();
-    const id = Number(form.get("id"));
-    if (!Number.isFinite(id)) return fail(400, { message: "予約IDが不正です" });
+    const id = await formId(request);
+    if (id === null) return fail(400, { message: "予約IDが不正です" });
     await cancel(id);
     return { success: true };
   },

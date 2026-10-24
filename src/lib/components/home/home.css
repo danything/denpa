@@ -333,11 +333,6 @@
   position: relative;
   min-width: 0;
 }
-@media (min-width: 768px) {
-  .board .t-list {
-    padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
-  }
-}
 /*
  * 狭い画面の頭。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、表示の切り替えの一枚を開くアイコン。
  * ページごと動くので上に貼り付ける
@@ -394,6 +389,15 @@
   text-underline-offset: 0.3em;
   font-weight: var(--dp-weight-bold);
 }
+@media (min-width: 768px) {
+  .board .t-list {
+    padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
+  }
+  .board .t-toolbar {
+    gap: 0.75rem;
+    padding: 0.5rem var(--dp-gutter) 0.25rem;
+  }
+}
 /* 日付の見出し。小さく沈めた字で、一覧の頭に貼り付く */
 .board .t-day {
   position: sticky;
@@ -443,15 +447,23 @@
 /*
  * **スマホ (下のタブがある幅) では、頭の1行を下のタブのすぐ上に貼り付ける。** 押すものは下に置く (指の届く所)。
  * 並びの上では一覧の後ろに回し (`order`)、下端に貼り付ける (`sticky` + `bottom`)。メニューは上に開く (`TimelineBar`)。
+ * 頭の1行も操作の層なので、下のタブの上に同じ半透明のカプセルで浮かせる (縁の線は引かない)。
  * 日付の見出しは上の安全域 (ノッチ) のすぐ下に貼り付く
  */
 @media (max-width: 639.98px) {
   .board .t-toolbar {
     order: 2;
     top: auto;
-    bottom: var(--dp-tabbar, 0px);
-    margin-inline: calc(-1 * var(--dp-gutter, 1rem));
-    padding-inline: var(--dp-gutter, 1rem);
+    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
+    padding-inline: 0.5rem;
+    border-radius: 1.375rem;
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration) var(--dp-ease);
+  }
+  [data-retract] .board .t-toolbar:not(:focus-within) {
+    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
   .board .t-main {
     order: 1;
@@ -716,12 +728,6 @@
   top: 0.5rem;
   right: 0.5rem;
 }
-@media (min-width: 768px) {
-  .board .t-toolbar {
-    gap: 0.75rem;
-    padding: 0.5rem var(--dp-gutter) 0.25rem;
-  }
-}
 /* 「⋯」の中。切り替えは右にスイッチ、空きは押せない1行 */
 .board .view-menu {
   min-width: 15rem;
@@ -934,20 +940,4 @@
   border-radius: 1px;
   background: var(--pico-primary);
   transform: translateX(-50%);
-}
-
-/* 狭い画面: 頭の1行も操作の層。下のタブの上に、同じ半透明のカプセルで浮かせる (縁の線は引かない) */
-@media (max-width: 639.98px) {
-  .board .t-toolbar {
-    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
-    margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
-    padding-inline: 0.5rem;
-    border-radius: 1.375rem;
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration) var(--dp-ease);
-  }
-  [data-retract] .board .t-toolbar:not(:focus-within) {
-    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
-  }
 }

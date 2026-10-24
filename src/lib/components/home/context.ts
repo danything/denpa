@@ -7,7 +7,7 @@
 import { getContext, setContext } from "svelte";
 import type { Arming } from "#lib/arming.svelte.js";
 import type { NowStatus } from "#lib/format.js";
-import type { TimelineItem } from "#lib/timeline.js";
+import type { Filter, TimelineItem } from "#lib/timeline.js";
 import type { PageData } from "../../../routes/$types";
 
 export type Res = PageData["reservations"][number];
@@ -21,6 +21,29 @@ export type Item = TimelineItem &
     | { kind: "rec"; rec: Rec }
     | { kind: "missed"; res: Missed }
   );
+
+/** 表示の切り替え (`ViewList`) が受けるもの */
+export interface ViewControls {
+  grouped: boolean;
+  setGrouped: (on: boolean) => void;
+  /** 「完了した予約も表示」「削除済みも表示」の行き先 (入っていれば外した URL) */
+  finishedHref: string;
+  deletedHref: string;
+  showFinished: boolean;
+  showDeleted: boolean;
+}
+
+/** 絞り込み・状態・表示の切り替え。頭の1行 (`TimelineBar`) とサイドバー (`HomeAside`) が同じものを受ける */
+export interface HomeControls extends ViewControls {
+  filter: Filter;
+  /** 絞り込みを替える (見ていた行をその場に残す。`routes/+page.svelte`) */
+  setFilter: (next: Filter) => void;
+  counts: Record<Filter, number>;
+  /** 空きと、あと何時間録れるか (`disk.capacity`)。読めなければ null */
+  capacity: { free: string; hours: string | null } | null;
+  /** エンコードを待っている・している録画 (動いているものが先) */
+  encoding: Rec[];
+}
 
 export interface HomeContext {
   /** 描いた時刻。「いま」の線と予約の側分けの物差し */

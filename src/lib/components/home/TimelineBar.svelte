@@ -8,41 +8,15 @@
   import { MediaQuery } from "svelte/reactivity";
   import Menu from "#lib/components/Menu.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
-  import { ATTENTION_FILTERS, FILTERS, type Filter } from "#lib/timeline.js";
+  import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
   import Ellipsis from "~icons/lucide/ellipsis";
   import TriangleAlert from "~icons/lucide/triangle-alert";
-  import type { Rec } from "./context";
+  import type { HomeControls } from "./context";
   import HomeState from "./HomeState.svelte";
   import ViewList from "./ViewList.svelte";
 
-  let {
-    filter,
-    setFilter,
-    counts,
-    grouped,
-    setGrouped,
-    finishedHref,
-    deletedHref,
-    showFinished,
-    showDeleted,
-    capacity,
-    encoding,
-  }: {
-    filter: Filter;
-    /** 絞り込みを替える (見ていた行をその場に残す。`routes/+page.svelte`) */
-    setFilter: (next: Filter) => void;
-    counts: Record<Filter, number>;
-    grouped: boolean;
-    setGrouped: (on: boolean) => void;
-    finishedHref: string;
-    deletedHref: string;
-    showFinished: boolean;
-    showDeleted: boolean;
-    /** 空きと、あと何時間録れるか (`disk.capacity`)。読めなければ null */
-    capacity: { free: string; hours: string | null } | null;
-    /** エンコードを待っている・している録画 */
-    encoding: Rec[];
-  } = $props();
+  let { filter, setFilter, counts, capacity, encoding, ...view }: HomeControls =
+    $props();
 
   let viewOpen = $state(false);
   /** スマホ (下のタブがある幅) ではこの行は下に貼り付くので、メニューは上に開く */
@@ -105,7 +79,7 @@
         <Icon icon={Ellipsis} size="size-5" /><span class="visually-hidden"
           >状態と表示の切り替え</span
         >
-        {#if grouped || showDeleted || showFinished}<span
+        {#if view.grouped || view.showDeleted || view.showFinished}<span
             class="view-dot"
             aria-hidden="true"
           ></span>{/if}
@@ -117,14 +91,6 @@
         <HomeState {encoding} {capacity} where="menu" />
       </div>
     {/if}
-    <ViewList
-      {grouped}
-      {setGrouped}
-      {finishedHref}
-      {deletedHref}
-      {showFinished}
-      {showDeleted}
-      done={() => (viewOpen = false)}
-    />
+    <ViewList {...view} done={() => (viewOpen = false)} />
   </Menu>
 </div>

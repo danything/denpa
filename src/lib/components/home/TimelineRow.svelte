@@ -227,9 +227,7 @@
         state={quietState(res.state) ? stateLabel(res.state) : undefined}
         name={res.name}
         testid="reservation-state"
-        open={() => {
-          ctx.openReservation(res);
-        }}
+        open={() => ctx.openReservation(res)}
       />
       <RowMeta
         service={res.service_name}
@@ -318,9 +316,7 @@
         end={res.end_at}
         name={res.name}
         testid="missed-state"
-        open={() => {
-          ctx.openMissed(res);
-        }}
+        open={() => ctx.openMissed(res)}
       />
       <RowMeta
         service={res.service_name}
@@ -353,6 +349,10 @@
   </div>
 {/snippet}
 
+{#snippet encodeCancelLabel()}
+  <Icon icon={X} size="size-4" /><span class="btn-label">エンコード中断</span>
+{/snippet}
+
 <!--
     録画の行。押すと再生 (録っている最中は追っかけ)。中身を読みたいときは行の「詳細」から。
     置き場と尺と切ったCMの位置は属性にだけ持たせる (確かめる手段は残しておきたい)
@@ -363,9 +363,7 @@
   {@const shown = rowState(rec)}
   {@const held = offline.entries[rec.id]}
   {@const canDelete = rec.deleted_at === null && rec.job_id === null}
-  {@const openDetail = () => {
-    ctx.openRecording(rec);
-  }}
+  {@const openDetail = () => ctx.openRecording(rec)}
   <!--
         **途中まで観たものは残りを出す。** 観た位置は続きから始めるために持っていて、末尾まで観たものは
         消えるので、残っている = まだ途中。ポスターの下端に細いバー、2段目に「残り何分」
@@ -539,9 +537,7 @@
               aria-busy="true"
               data-testid="encode-cancel"
             >
-              <Icon icon={X} size="size-4" /><span class="btn-label"
-                >エンコード中断</span
-              >
+              {@render encodeCancelLabel()}
             </button>
           {:else}
             <ActionButton
@@ -550,9 +546,7 @@
               class="outline danger"
               testid="encode-cancel"
             >
-              <Icon icon={X} size="size-4" /><span class="btn-label"
-                >エンコード中断</span
-              >
+              {@render encodeCancelLabel()}
             </ActionButton>
           {/if}
         {:else}
