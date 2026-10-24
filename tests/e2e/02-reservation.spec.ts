@@ -173,7 +173,7 @@ test.describe("予約の細かい指定", () => {
       ""
     ).trim();
     const badges = (
-      await page.getByTestId("detail-badges").locator(".tag").allTextContents()
+      await page.getByTestId("detail-badges").locator("span").allTextContents()
     ).map((text) => text.trim());
     expect(badges.length).toBeGreaterThan(0);
     await page.getByTestId("detail-reserve").click();
@@ -193,7 +193,7 @@ test.describe("予約の細かい指定", () => {
       const shown = (
         await detail
           .getByTestId("detail-badges")
-          .locator(".tag")
+          .locator("span")
           .allTextContents()
       ).map((text) => text.trim());
       expect(shown).toEqual(badges);

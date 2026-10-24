@@ -159,7 +159,7 @@
     content: "";
     position: absolute;
     left: 50%;
-    bottom: 0.3rem;
+    bottom: 0.125rem;
     width: 1rem;
     height: 2px;
     border-radius: 1px;

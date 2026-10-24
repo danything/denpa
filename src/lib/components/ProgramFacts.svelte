@@ -102,21 +102,25 @@
   {/if}
 </p>
 
-<!-- EPG が持っている符号は、そのままでは読めないので言葉に直して出す -->
-<div class="badges" data-testid="detail-badges">
+<!--
+  EPG が持っている符号は、そのままでは読めないので言葉に直して出す。
+  **ジャンル・映像・音声は囲まず、控えた字を「・」でつなぐ** (一覧の行の補足と同じ)。
+  囲むのは状態 (有料・コピー禁止) だけ (`app.css` の `.tag`)
+-->
+<div class="badges small" data-testid="detail-badges">
   <!-- 目印は番号で (`genres` の注) -->
   {#each genres as label, i (i)}
-    <span class="tag" data-testid="detail-genre">{label}</span>
+    <span class="fact" data-testid="detail-genre">{label}</span>
   {/each}
   {#if video}
-    <span class="tag" data-testid="detail-video">{video}</span>
+    <span class="fact" data-testid="detail-video">{video}</span>
   {/if}
   {#if fps !== null}
     <!-- 実測 (fpsDetect) がどちらに転んだか。ログにしか出ていなかった -->
-    <span class="tag" data-testid="detail-fps">{fps}コマ/秒</span>
+    <span class="fact" data-testid="detail-fps">{fps}コマ/秒</span>
   {/if}
   {#each audios as label, i (i)}
-    <span class="tag" data-testid="detail-audio">{label}</span>
+    <span class="fact" data-testid="detail-audio">{label}</span>
   {/each}
   {#if !program.is_free}
     <span class="tag warning">有料</span>
@@ -188,8 +192,22 @@
   .badges {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
+    align-items: center;
+    gap: 0.25rem 0;
     margin-top: 0.5rem;
+  }
+  /* 区切りの「・」は前の事実の後ろに付け、折り返しても行の頭に来ないように */
+  .fact {
+    color: var(--dp-muted);
+  }
+  .fact:has(+ .fact)::after {
+    content: "・";
+  }
+  .badges .tag {
+    margin-left: 0.5rem;
+  }
+  .badges > .tag:first-child {
+    margin-left: 0;
   }
   .block {
     margin-top: 0.75rem;
