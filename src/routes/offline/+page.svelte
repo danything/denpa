@@ -137,7 +137,7 @@
         ontimeupdate={onTime}
       ></video>
       <div class="player-bar">
-        <span class="name small broadcast">{playing.name}</span>
+        <span class="name truncate small broadcast">{playing.name}</span>
         <button type="button" class="ghost xs" onclick={stop}>閉じる</button>
       </div>
     </div>
@@ -162,7 +162,7 @@
             <div class="thumb blank"></div>
           {/if}
           <div class="info">
-            <div class="name small broadcast">{item.name}</div>
+            <div class="name truncate small broadcast">{item.name}</div>
             <div class="tiny muted">
               <span class="broadcast">{item.serviceName}</span> ・ {dateTime(
                 item.startAt,
@@ -254,9 +254,6 @@
     margin-top: 0.25rem;
   }
   .name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-weight: var(--dp-weight);
   }
   /* 空のときも枠で囲まず、見出しの下に左揃えで (断られた画面と同じ置き方) */

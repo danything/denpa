@@ -238,19 +238,14 @@
 
   // ---- 保存 ----
   /** 足した・直したルール。書く欄の下にそのルールへの入口を出す */
-  let saved = $state<{ id: number; name: string; created: boolean } | null>(
-    null,
-  );
+  type Saved = { id: number; name: string; created: boolean };
+  let saved = $state<Saved | null>(null);
   const saving: SubmitFunction =
     () =>
     async ({ result, update }) => {
       await update({ reset: false });
       if (result.type === "success" && result.data?.["saved"]) {
-        saved = result.data["saved"] as {
-          id: number;
-          name: string;
-          created: boolean;
-        };
+        saved = result.data["saved"] as Saved;
       }
     };
   /**
@@ -564,26 +559,20 @@
           testid="rule-delete"
         />
       </div>
-      <button
-        type="submit"
-        form="rule-draft-form"
-        class="save"
-        disabled={empty}
-        data-testid="rule-update">更新</button
-      >
-    {:else}
-      <button
-        type="submit"
-        form="rule-draft-form"
-        class="save"
-        disabled={empty}
-        data-testid="rule-submit"
-      >
-        {recordable === null || recordable === 0
+    {/if}
+    <button
+      type="submit"
+      form="rule-draft-form"
+      class="save"
+      disabled={empty}
+      data-testid={draft.editing !== null ? "rule-update" : "rule-submit"}
+    >
+      {draft.editing !== null
+        ? "更新"
+        : recordable === null || recordable === 0
           ? "ルールを保存"
           : `${recordable} 件を録るルールを保存`}
-      </button>
-    {/if}
+    </button>
   </div>
 </aside>
 <!-- 狭い画面で下から出しているときの後ろの幕。押すと閉じる -->
@@ -687,12 +676,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--dp-space-3);
-    margin: 0;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-space-1);
     margin: 0;
   }
   .field-label {

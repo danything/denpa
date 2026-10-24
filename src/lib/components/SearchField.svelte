@@ -242,8 +242,40 @@
   <!--
         候補。押す・選ぶのは行そのもの (中にボタンは置かない。listbox の行は1つの操作)。焦点は欄に置いたまま
         (`aria-activedescendant`)、押した瞬間に欄から焦点が外れて閉じないよう、mousedown では焦点を動かさない。
-        結果の画面 (`live`) では出さない (欄の `aria-controls` が指す先として空のまま置く)
+        結果の画面 (`live`) では出さない (欄の `aria-controls` が指す先として空のまま置く)。
+        `item` が null の行は「すべての結果を見る」
     -->
+  {#snippet option(index: number, item: SuggestGroup["items"][number] | null)}
+    <div
+      id={optionId(index)}
+      role="option"
+      tabindex="-1"
+      aria-selected={active === index}
+      class="suggest-option"
+      class:suggest-all={item === null}
+      class:active={active === index}
+      data-testid={item === null ? `${testid}-all` : `${testid}-option`}
+      data-href={item?.href}
+      onmousedown={(event) => event.preventDefault()}
+      onclick={() => choose(index)}
+      onkeydown={(event) => event.key === "Enter" && choose(index)}
+      onmousemove={() => (active = index)}
+    >
+      {#if item === null}
+        <span class="small">「{answered}」のすべての結果を見る</span>
+      {:else}
+        <span class="suggest-text">
+          <span class="suggest-label truncate" class:broadcast={item.broadcast}
+            >{item.label}</span
+          >
+          {#if item.meta !== ""}
+            <span class="suggest-meta tiny muted truncate">{item.meta}</span>
+          {/if}
+        </span>
+        <span class="suggest-hint tiny muted">{item.hint}</span>
+      {/if}
+    </div>
+  {/snippet}
   <div class="suggest" hidden={live || !open} data-testid="{testid}-suggest">
     <div
       id={listId}
@@ -261,34 +293,7 @@
             {group.title}
           </div>
           {#each group.items as item (item.key)}
-            {@const index = options.indexOf(item)}
-            <div
-              id={optionId(index)}
-              role="option"
-              tabindex="-1"
-              aria-selected={active === index}
-              class="suggest-option"
-              class:active={active === index}
-              data-testid="{testid}-option"
-              data-href={item.href}
-              onmousedown={(event) => event.preventDefault()}
-              onclick={() => choose(index)}
-              onkeydown={(event) => event.key === "Enter" && choose(index)}
-              onmousemove={() => (active = index)}
-            >
-              <span class="suggest-text">
-                <span
-                  class="suggest-label truncate"
-                  class:broadcast={item.broadcast}>{item.label}</span
-                >
-                {#if item.meta !== ""}
-                  <span class="suggest-meta tiny muted truncate"
-                    >{item.meta}</span
-                  >
-                {/if}
-              </span>
-              <span class="suggest-hint tiny muted">{item.hint}</span>
-            </div>
+            {@render option(options.indexOf(item), item)}
           {/each}
         </div>
       {/each}
@@ -297,21 +302,7 @@
           「{answered}」に一致するものはありません
         </div>
       {/if}
-      <div
-        id={optionId(allIndex)}
-        role="option"
-        tabindex="-1"
-        aria-selected={active === allIndex}
-        class="suggest-option suggest-all"
-        class:active={active === allIndex}
-        data-testid="{testid}-all"
-        onmousedown={(event) => event.preventDefault()}
-        onclick={() => choose(allIndex)}
-        onkeydown={(event) => event.key === "Enter" && choose(allIndex)}
-        onmousemove={() => (active = allIndex)}
-      >
-        <span class="small">「{answered}」のすべての結果を見る</span>
-      </div>
+      {@render option(allIndex, null)}
     </div>
   </div>
   <!-- 読み上げに候補の数を伝える -->

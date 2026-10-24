@@ -7,7 +7,7 @@
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
-  import { programDetail } from "#lib/detail.svelte.js";
+  import { type DetailSeed, programDetail } from "#lib/detail.svelte.js";
   import {
     badgeClass,
     dateTime,
@@ -17,6 +17,7 @@
     time,
   } from "#lib/format.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
+  import type { SubmitFunction } from "$app/forms";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -116,40 +117,29 @@
   }
   const detail = programDetail();
   let opened = $state<Opened | null>(null);
+  /** 行から詳細を開く。`Opened` の欄は行に同じ名前であるので、違うものだけ書く */
+  function show(next: Opened, seed: DetailSeed): void {
+    opened = next;
+    void detail.open(next.program_id, seed);
+  }
   function showProgram(row: (typeof data.programs.rows)[number]): void {
-    opened = {
-      program_id: row.id,
-      service_id: row.service_id,
-      start_at: row.start_at,
-      end_at: row.end_at,
-      reservation_id: row.reservation_id,
-      copy_never: row.copy_never,
-    };
-    void detail.open(row.id, row);
+    show({ ...row, program_id: row.id }, row);
   }
   /** 下見の行 (言葉なしでルールを開いたとき) から詳細を開く */
   function showPreview(row: PreviewRow): void {
-    opened = {
-      program_id: row.id,
-      service_id: row.service_id,
-      start_at: row.start_at,
-      end_at: row.end_at,
-      reservation_id:
-        row.reservation_state === "skipped" ? null : row.reservation_id,
-      copy_never: row.skip?.kind === "copy-never",
-    };
-    void detail.open(row.id, row);
+    show(
+      {
+        ...row,
+        program_id: row.id,
+        reservation_id:
+          row.reservation_state === "skipped" ? null : row.reservation_id,
+        copy_never: row.skip?.kind === "copy-never",
+      },
+      row,
+    );
   }
   function showReservation(row: (typeof data.reservations.rows)[number]): void {
-    opened = {
-      program_id: row.program_id,
-      service_id: row.service_id,
-      start_at: row.start_at,
-      end_at: row.end_at,
-      reservation_id: row.id,
-      copy_never: false,
-    };
-    void detail.open(row.program_id, row);
+    show({ ...row, reservation_id: row.id, copy_never: false }, row);
   }
   function close(): void {
     opened = null;
@@ -161,6 +151,13 @@
       void goto(url, { replace: true, shallow: true, state: page.state });
     }
   }
+  /** 詳細の中の予約・取消。失敗したときは開いたままにして、中に理由を出す */
+  const closeOnSuccess: SubmitFunction =
+    () =>
+    async ({ result, update }) => {
+      await update();
+      if (result.type === "success") close();
+    };
 
   /**
    * **候補から選んだ番組は、開いたら詳細を出す** (`?program=`。ヘッダーの候補の番組・予約)。
@@ -170,16 +167,7 @@
   $effect(() => {
     if (focusId === null) return;
     const focus = untrack(() => data.focus);
-    if (focus === null) return;
-    opened = {
-      program_id: focus.id,
-      service_id: focus.service_id,
-      start_at: focus.start_at,
-      end_at: focus.end_at,
-      reservation_id: focus.reservation_id,
-      copy_never: focus.copy_never,
-    };
-    void detail.open(focus.id, focus);
+    if (focus !== null) show({ ...focus, program_id: focus.id }, focus);
   });
 
   /** 削除は2回押させる (ホームと同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
@@ -342,12 +330,10 @@
                   <span class="hit-title">
                     <!-- 立っている予約は本当のこととして先に出す。無ければ書く欄の条件で録るか -->
                     {#if program.reservation_state !== null}
-                      <span
-                        class="tag {badgeClass(program.reservation_state)}"
-                        data-testid="search-program-state"
-                      >
-                        {stateLabel(program.reservation_state)}
-                      </span>
+                      {@render stateTag(
+                        program.reservation_state,
+                        "search-program-state",
+                      )}
                     {:else if verdict?.kind === "record"}
                       <span class="tag success" data-testid="search-verdict"
                         >録る</span
@@ -360,12 +346,7 @@
                     <span class="truncate broadcast">{program.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">
-                    <ServiceLogo
-                      id={program.service_id}
-                      has={program.has_logo}
-                      style="height: 0.875rem; vertical-align: -0.125rem"
-                    />
-                    <span class="broadcast">{program.service_name}</span> ・
+                    {@render service(program)}
                     <span class="num"
                       >{dateTime(program.start_at)}〜{time(
                         program.end_at,
@@ -438,20 +419,13 @@
                   data-testid="search-play"
                 >
                   <span class="hit-title">
-                    {#if !quietState(rec.state)}
-                      <span class="tag {badgeClass(rec.state)}"
-                        >{stateLabel(rec.state)}</span
-                      >
-                    {/if}
+                    {#if !quietState(rec.state)}{@render stateTag(
+                        rec.state,
+                      )}{/if}
                     <span class="truncate broadcast">{rec.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">
-                    <ServiceLogo
-                      id={rec.service_id}
-                      has={rec.has_logo}
-                      style="height: 0.875rem; vertical-align: -0.125rem"
-                    />
-                    <span class="broadcast">{rec.service_name}</span> ・
+                    {@render service(rec)}
                     <span class="num"
                       >{dateTime(rec.start_at)} ・ {recordedDuration(rec)}</span
                     >
@@ -505,20 +479,13 @@
                   onclick={() => showReservation(res)}
                 >
                   <span class="hit-title">
-                    {#if !quietState(res.state)}
-                      <span class="tag {badgeClass(res.state)}"
-                        >{stateLabel(res.state)}</span
-                      >
-                    {/if}
+                    {#if !quietState(res.state)}{@render stateTag(
+                        res.state,
+                      )}{/if}
                     <span class="truncate broadcast">{res.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">
-                    <ServiceLogo
-                      id={res.service_id}
-                      has={res.has_logo}
-                      style="height: 0.875rem; vertical-align: -0.125rem"
-                    />
-                    <span class="broadcast">{res.service_name}</span> ・
+                    {@render service(res)}
                     <span class="num"
                       >{dateTime(res.start_at)}〜{time(res.end_at)}</span
                     >
@@ -653,9 +620,7 @@
                 {#if row.skip !== null || !row.matched}
                   <span class="tag">録らない</span>
                 {:else if row.reservation_state !== null}
-                  <span class="tag {badgeClass(row.reservation_state)}"
-                    >{stateLabel(row.reservation_state)}</span
-                  >
+                  {@render stateTag(row.reservation_state)}
                 {:else}
                   <span class="tag success">録る</span>
                 {/if}
@@ -713,6 +678,25 @@
   </section>
 {/snippet}
 
+<!-- 行の2段目の頭 (局のロゴと名前) と、状態のバッジ -->
+{#snippet service(row: {
+  service_id: number;
+  has_logo: boolean | null;
+  service_name: string;
+})}
+  <ServiceLogo
+    id={row.service_id}
+    has={row.has_logo}
+    style="height: 0.875rem; vertical-align: -0.125rem"
+  />
+  <span class="broadcast">{row.service_name}</span> ・
+{/snippet}
+{#snippet stateTag(state: string, testid?: string)}
+  <span class="tag {badgeClass(state)}" data-testid={testid}
+    >{stateLabel(state)}</span
+  >
+{/snippet}
+
 <!-- 「もっと見る」。受け取ったぶんを出し切っても残りがあれば、言葉を足してもらう -->
 {#snippet more(key: Key, received: number, all: number)}
   {#if !expanded[key] && received > FIRST}
@@ -752,15 +736,7 @@
         >
       {/if}
       {#if opened !== null && opened.reservation_id !== null}
-        <form
-          method="POST"
-          action="?/cancel"
-          use:submitting={() =>
-            async ({ result, update }) => {
-              await update();
-              if (result.type === "success") close();
-            }}
-        >
+        <form method="POST" action="?/cancel" use:submitting={closeOnSuccess}>
           <input
             type="hidden"
             name="reservationId"
@@ -773,15 +749,7 @@
           >
         </form>
       {:else if opened !== null && opened.end_at > clock && !opened.copy_never}
-        <form
-          method="POST"
-          action="?/reserve"
-          use:submitting={() =>
-            async ({ result, update }) => {
-              await update();
-              if (result.type === "success") close();
-            }}
-        >
+        <form method="POST" action="?/reserve" use:submitting={closeOnSuccess}>
           <input type="hidden" name="programId" value={opened.program_id} />
           <button type="submit" data-testid="search-detail-reserve">予約</button
           >
