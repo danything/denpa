@@ -13,7 +13,7 @@
  */
 
 import { PNG_SIGNATURE } from "#lib/ts/png.js";
-import { concat } from "./png";
+import { ascii, concatBytes } from "#lib/ts/bytes.js";
 
 export interface MngFrame {
   /** CLUT を入れる前の PNG */
@@ -58,7 +58,7 @@ export function parseMng(data: Uint8Array): Mng | null {
   let at = 8;
   while (at + 12 <= data.length) {
     const length = view.getUint32(at);
-    const name = String.fromCharCode(...data.subarray(at + 4, at + 8));
+    const name = ascii(data, at + 4, 4);
     const body = at + 8;
     const end = body + length + 4;
     if (end > data.length) break;
@@ -107,7 +107,7 @@ export function parseMng(data: Uint8Array): Mng | null {
           const tick = nextDelay ?? delay;
           nextDelay = null;
           frames.push({
-            png: concat(png),
+            png: concatBytes(png),
             delay: Math.max(
               MIN_DELAY,
               (tick * 1000) / (ticks > 0 ? ticks : 1000),

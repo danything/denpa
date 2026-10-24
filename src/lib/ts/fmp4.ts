@@ -16,7 +16,7 @@
  * 大きさは箱ぜんぶ (頭の8バイトを含む) を数えた値。
  */
 
-import { joinBytes } from "./bytes";
+import { ascii, concatBytes, joinBytes, u32 } from "./bytes";
 import { ADTS_RATES } from "./pes";
 
 /** 箱の頭。大きさと種別で8バイト */
@@ -39,34 +39,18 @@ export class Fmp4Splitter {
   private pending: Uint8Array[] = [];
 
   feed(chunk: Uint8Array): Segment[] {
-    const joined = new Uint8Array(this.buffer.length + chunk.length);
-    joined.set(this.buffer);
-    joined.set(chunk, this.buffer.length);
-    this.buffer = joined;
-
+    this.buffer = concatBytes([this.buffer, chunk]);
     const out: Segment[] = [];
     let at = 0;
-    for (;;) {
-      if (this.buffer.length - at < HEADER) break;
-      const view = new DataView(
-        this.buffer.buffer,
-        this.buffer.byteOffset + at,
-      );
-      const size = view.getUint32(0);
+    while (this.buffer.length - at >= HEADER) {
+      const size = u32(this.buffer, at);
       /*
        * 大きさ 0 は「ここから最後まで」、1 は「次の8バイトに本当の大きさ」。
        * ffmpeg の fMP4 では出てこないが、来たら読めないので諦める
        * (黙って詰めると、以降ずっとずれたまま流れ続ける)
        */
-      if (size < HEADER) break;
-      if (this.buffer.length - at < size) break;
-
-      const type = String.fromCharCode(
-        this.buffer[at + 4]!,
-        this.buffer[at + 5]!,
-        this.buffer[at + 6]!,
-        this.buffer[at + 7]!,
-      );
+      if (size < HEADER || this.buffer.length - at < size) break;
+      const type = ascii(this.buffer, at + 4, 4);
       const box = this.buffer.slice(at, at + size);
       at += size;
 
@@ -163,18 +147,12 @@ interface Box {
 /** `data` に並んでいる箱を読む。**壊れていたらそこで止める** (読めたぶんだけ返す) */
 function boxes(data: Uint8Array): Box[] {
   const out: Box[] = [];
-  const v = view(data);
   let at = 0;
   while (at + HEADER <= data.length) {
-    const size = v.getUint32(at);
+    const size = u32(data, at);
     if (size < HEADER || at + size > data.length) break;
-    const type = String.fromCharCode(
-      data[at + 4]!,
-      data[at + 5]!,
-      data[at + 6]!,
-      data[at + 7]!,
-    );
-    out.push({ type, body: data.subarray(at + HEADER, at + size), start: at });
+    const body = data.subarray(at + HEADER, at + size);
+    out.push({ type: ascii(data, at + 4, 4), body, start: at });
     at += size;
   }
   return out;

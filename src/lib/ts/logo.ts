@@ -109,7 +109,7 @@ export function parseCdt(section: Uint8Array): LogoData | null {
   if (at + 7 > end) return null;
 
   const logoType = section[at]!;
-  const logoId = ((section[at + 1]! & 0x01) << 8) | section[at + 2]!;
+  const logoId = u16(section, at + 1) & 0x1ff;
   const logoVersion = u16(section, at + 3) & 0x0fff;
   const size = u16(section, at + 5);
   at += 7;
@@ -138,7 +138,7 @@ export function parseLogoLinks(section: Uint8Array): Map<number, number> {
       if (tag !== DESC_LOGO_TRANSMISSION || descriptor.length < 3) continue;
       const type = descriptor[0];
       if (type === 0x01 || type === 0x02) {
-        links.set(serviceId, ((descriptor[1]! & 0x01) << 8) | descriptor[2]!);
+        links.set(serviceId, u16(descriptor, 1) & 0x1ff);
       }
     }
   }

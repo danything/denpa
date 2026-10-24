@@ -94,7 +94,7 @@ export function parseLogoModule(data: Uint8Array): ModuleLogo[] {
   const logos: ModuleLogo[] = [];
   for (let i = 0; i < count; i++) {
     if (at + 3 > data.length) break;
-    const logoId = ((data[at]! & 0x01) << 8) | data[at + 1]!;
+    const logoId = u16(data, at) & 0x1ff;
     const serviceCount = data[at + 2]!;
     at += 3;
 

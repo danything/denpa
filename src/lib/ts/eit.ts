@@ -16,7 +16,7 @@
 
 import type { Genre } from "../arib";
 import { decodeAribText } from "./aribtext";
-import { joinBytes, u16 } from "./bytes";
+import { ascii, joinBytes, u16 } from "./bytes";
 import {
   DESC_DIGITAL_COPY_CONTROL,
   descriptors,
@@ -155,12 +155,7 @@ export function parseTimeTable(section: Uint8Array): number | null {
  * 全ビットが1なら「未定」。開始時刻が未定の番組は番組表に置けないので null で返す。
  */
 export function parseMjdTime(data: Uint8Array, at: number): number | null {
-  let allOnes = true;
-  for (let i = 0; i < 5; i++) {
-    if (data[at + i] !== 0xff) allOnes = false;
-  }
-  if (allOnes) return null;
-
+  if ([0, 1, 2, 3, 4].every((i) => data[at + i] === 0xff)) return null;
   const mjd = u16(data, at);
   const seconds =
     (mjd - MJD_EPOCH) * 86400 +
@@ -216,8 +211,7 @@ const SAMPLING_RATE: Record<number, number> = {
   7: 48000,
 };
 
-const lang = (data: Uint8Array, at: number) =>
-  String.fromCharCode(data[at]!, data[at + 1]!, data[at + 2]!).toLowerCase();
+const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
 
 /**
  * 記述子を読んで番組の中身を埋める。
@@ -493,26 +487,28 @@ export class ScheduleProgress {
     // いちばん後ろの表は必ず流れてくる。来ていないなら、まだ途中
     if (!this.seen.has(this.lastTableId)) return false;
     for (const tableId of this.seen.keys()) {
-      if (!this.completeTable(tableId)) return false;
+      if (this.holes(tableId).length > 0) return false;
     }
     return true;
   }
 
-  private completeTable(tableId: number): boolean {
-    const numbers = this.seen.get(tableId);
-    const last = this.lastSection.get(tableId);
-    if (numbers === undefined || last === undefined) return false;
-
+  /** その表でまだ来ていない節。セグメントの先頭すら来ていなければ、先頭の番号を数える */
+  private holes(tableId: number): number[] {
+    const numbers = this.seen.get(tableId) ?? new Set<number>();
+    const last = this.lastSection.get(tableId) ?? 0;
+    const holes: number[] = [];
     for (let start = 0; start <= last; start += 8) {
+      // 待っていないものを「足りない」と言わない
       if (this.stale(tableId, start)) continue;
       const segmentLast = this.segmentLast.get(`${tableId}:${start}`);
-      // セグメントの先頭すら来ていない。まだ待つ
-      if (segmentLast === undefined) return false;
-      for (let n = start; n <= segmentLast; n++) {
-        if (!numbers.has(n)) return false;
+      if (segmentLast === undefined) {
+        holes.push(start);
+        continue;
       }
+      for (let n = start; n <= segmentLast; n++)
+        if (!numbers.has(n)) holes.push(n);
     }
-    return true;
+    return holes;
   }
 
   /**
@@ -558,20 +554,7 @@ export class ScheduleProgress {
 
     const missing: string[] = [];
     for (const tableId of this.seen.keys()) {
-      const numbers = this.seen.get(tableId) ?? new Set<number>();
-      const last = this.lastSection.get(tableId) ?? 0;
-      const holes: number[] = [];
-      for (let start = 0; start <= last; start += 8) {
-        // 待っていないものを「足りない」と言わない。数え方と揃える
-        if (this.stale(tableId, start)) continue;
-        const segmentLast = this.segmentLast.get(`${tableId}:${start}`);
-        if (segmentLast === undefined) {
-          holes.push(start);
-          continue;
-        }
-        for (let n = start; n <= segmentLast; n++)
-          if (!numbers.has(n)) holes.push(n);
-      }
+      const holes = this.holes(tableId);
       if (holes.length > 0) {
         const head = holes.slice(0, 8).join(",");
         missing.push(

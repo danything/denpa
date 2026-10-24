@@ -15,7 +15,9 @@
  * 各関数の頭に書いてある。
  */
 
+import { concatBytes } from "./bytes";
 import { PACKET, SYNC } from "./psi";
+import { putPcr } from "./synth";
 
 /** 29.97 コマ/秒の1コマ (90kHz)。放送と同じ */
 export const FRAME_TICKS = 3003;
@@ -326,24 +328,12 @@ export function packetizePes(
       const length = PACKET - 5 - take;
       packet[4] = length;
       if (length > 0) packet[5] = withPcr ? 0x10 : 0x00;
-      if (withPcr) {
-        const base = Math.round(pcr as number) % 2 ** 33;
-        packet[6] = Math.floor(base / 2 ** 25) & 0xff;
-        packet[7] = Math.floor(base / 2 ** 17) & 0xff;
-        packet[8] = Math.floor(base / 2 ** 9) & 0xff;
-        packet[9] = Math.floor(base / 2) & 0xff;
-        packet[10] = ((base & 1) << 7) | 0x7e;
-        packet[11] = 0;
-      }
+      if (withPcr) putPcr(packet, pcr);
     }
     packet.set(data.subarray(at, at + take), PACKET - take);
     at += take;
     counter = (counter + 1) & 0x0f;
     out.push(packet);
   }
-  const packets = new Uint8Array(out.length * PACKET);
-  out.forEach((packet, i) => {
-    packets.set(packet, i * PACKET);
-  });
-  return { packets, counter };
+  return { packets: concatBytes(out), counter };
 }

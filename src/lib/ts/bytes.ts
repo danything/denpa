@@ -32,6 +32,11 @@ export function u16(data: Uint8Array, at: number): number {
   return (data[at]! << 8) | data[at + 1]!;
 }
 
+/** 大きい桁が先の 24 ビット */
+export function u24(data: Uint8Array, at: number): number {
+  return (data[at]! << 16) | u16(data, at + 1);
+}
+
 /** 大きい桁が先の 32 ビット (符号なし) */
 export function u32(data: Uint8Array, at: number): number {
   return (
@@ -41,4 +46,9 @@ export function u32(data: Uint8Array, at: number): number {
       data[at + 3]!) >>>
     0
   );
+}
+
+/** `length` バイトをそのまま1字ずつの文字列に (MP4 の箱の種別・PNG の塊の名前・言語の符号) */
+export function ascii(data: Uint8Array, at: number, length: number): string {
+  return String.fromCharCode(...data.subarray(at, at + length));
 }

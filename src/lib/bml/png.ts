@@ -7,18 +7,9 @@
  *   PNG を組むので、canvas も圧縮の API も要らない
  */
 
+import { ascii, concatBytes } from "#lib/ts/bytes.js";
 import { PNG_SIGNATURE, pngChunk } from "#lib/ts/png.js";
 import type { Rgba } from "./clut";
-
-export function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  return out;
-}
 
 /** 放送の PNG に CLUT の PLTE・tRNS を入れる。大きさも返す。パレットの PNG でなければそのまま */
 export function applyClut(
@@ -42,12 +33,12 @@ export function applyClut(
   let at = 8;
   while (at + 12 <= png.length) {
     const length = view.getUint32(at);
-    const name = String.fromCharCode(...png.subarray(at + 4, at + 8));
+    const name = ascii(png, at + 4, 4);
     const end = at + 12 + length;
     if (end > png.length) return null;
     // パレット (色の型 3) 以外は運用されない。来たら手を入れない
     if (name === "IHDR" && png[at + 8 + 9] !== 3)
-      return { data: concat([png]), width, height };
+      return { data: concatBytes([png]), width, height };
     // PLTE・tRNS は最初の IDAT の前に (gAMA などの後ろでよい。PNG の塊の順)
     if (name === "IDAT" && !placed) {
       parts.push(pngChunk("PLTE", plte), pngChunk("tRNS", trns));
@@ -56,7 +47,7 @@ export function applyClut(
     if (name !== "PLTE" && name !== "tRNS") parts.push(png.subarray(at, end));
     at = end;
   }
-  return { data: concat(parts), width, height };
+  return { data: concatBytes(parts), width, height };
 }
 
 /** 濃さ (0〜255) の並びを、白の上の透明度の PNG にする (mask に使う) */
@@ -80,7 +71,7 @@ export function alphaPng(
   view.setUint32(4, height);
   ihdr[8] = 8; // 8 ビット
   ihdr[9] = 4; // 灰 + 透明度
-  return concat([
+  return concatBytes([
     PNG_SIGNATURE,
     pngChunk("IHDR", ihdr),
     pngChunk("IDAT", storedZlib(raw)),
@@ -113,5 +104,5 @@ function storedZlib(data: Uint8Array): Uint8Array {
   const adler = new Uint8Array(4);
   new DataView(adler.buffer).setUint32(0, ((b << 16) | a) >>> 0);
   blocks.push(adler);
-  return concat(blocks);
+  return concatBytes(blocks);
 }
