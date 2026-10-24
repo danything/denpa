@@ -121,10 +121,10 @@ test.describe("ホームの1本の一覧", () => {
   });
 
   /*
-   * **「いま」の線の時刻は行の時刻 (「22:00–22:30」) と同じ左端。** 塗った札は無く、赤い字と細い線だけ。
+   * **「いま」の時刻は日付と同じ操作の層のカプセルで、左端も日付のカプセルにそろう。** その右に細い赤い線。
    * 狭い画面でも1行のまま (一言は短い形に替わるか「…」で切れ、折り返さない)
    */
-  test("「いま」の線の時刻は行の時刻にそろい、狭い画面でも1行のまま", async ({
+  test("「いま」の時刻のカプセルは日付のカプセルと左端がそろい、狭い画面でも1行のまま", async ({
     page,
   }) => {
     for (const width of [1366, 390, 320]) {
@@ -133,11 +133,12 @@ test.describe("ホームの1本の一覧", () => {
       const line = page.getByTestId("timeline-now");
       await expect(line).toContainText(/次の録画まで|次まで/);
       const time = (await line.locator(".now-time").boundingBox())!;
-      const row = rows(page).filter({ hasText: "一覧試験の予約" });
-      await row.scrollIntoViewIfNeeded();
-      const rowTime = (await row.locator(".t-time").boundingBox())!;
-      expect(Math.abs(time.x - rowTime.x)).toBeLessThan(1);
-      expect((await line.boundingBox())!.height).toBeLessThan(24);
+      const day = (await page
+        .getByTestId("timeline-day")
+        .first()
+        .boundingBox())!;
+      expect(Math.abs(time.x - day.x)).toBeLessThan(1);
+      expect((await line.boundingBox())!.height).toBeLessThan(32);
     }
   });
 
