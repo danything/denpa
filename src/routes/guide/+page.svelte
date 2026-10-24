@@ -18,7 +18,6 @@
     time,
   } from "#lib/format.js";
   import { skeletonMask } from "#lib/guide-skeleton.js";
-  import { slide } from "#lib/motion.svelte.js";
   import { reload } from "#lib/reload.svelte.js";
   import {
     cellsOf,
@@ -678,11 +677,6 @@
           href={href({ type, start: String(data.start) })}
           data-testid="type-{type}"
         >
-          {#if data.type === type}<span
-              class="seg-pill"
-              aria-hidden="true"
-              use:slide={"guide-type"}
-            ></span>{/if}
           <span class="seg-label">{SERVICE_TYPE_LABEL[type]}</span>
         </a>
       {/each}
@@ -1553,7 +1547,7 @@
   }
   /*
      * **局名の行と時の列は操作の層。** 表を巻くとマスがその裏を流れるので、ヘッダーと同じ半透明の面 (`--dp-float`) と影で浮かせる
-     * (docs/design.md の「透かし方」)。線は引かない。影はマスの側にだけ落とす (行は下、列は右。隣の局名の上に重ねない)
+     * (docs/design.md の「浮かせ方」)。線は引かない。影はマスの側にだけ落とす (行は下、列は右。隣の局名の上に重ねない)
      */
   .corner,
   .service,

@@ -640,7 +640,7 @@
     .draft.open {
       transform: none;
       visibility: visible;
-      transition: transform var(--dp-duration) var(--dp-ease);
+      transition: transform var(--dp-duration-enter) var(--dp-ease-spring);
     }
     .sheet-backdrop {
       position: fixed;

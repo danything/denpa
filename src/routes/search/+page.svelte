@@ -802,7 +802,7 @@
       inset-inline: 0.75rem;
       bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
       z-index: 30;
-      transition: transform var(--dp-duration) var(--dp-ease);
+      transition: transform var(--dp-duration-move) var(--dp-ease-spring);
     }
     .sheet-bar button {
       width: 100%;

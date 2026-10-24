@@ -13,7 +13,6 @@
   import SearchField from "#lib/components/SearchField.svelte";
   import { denpaFontUrl } from "#lib/font.js";
   import { measure } from "#lib/measure.svelte.js";
-  import { slide } from "#lib/motion.svelte.js";
   import { startOffline } from "#lib/offline.svelte.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
   import { groupLabel } from "#lib/settings-sections.js";
@@ -448,11 +447,6 @@
               data-testid="nav-{slug(link.href)}"
             >
               {link.label}
-              {#if here === link.href}<span
-                  class="nav-underline"
-                  aria-hidden="true"
-                  use:slide={"nav-underline"}
-                ></span>{/if}
             </a>
           </li>
         {/each}
@@ -506,11 +500,6 @@
           aria-current={here === tab.href ? "page" : undefined}
           data-testid="tab-{slug(tab.href)}"
         >
-          {#if here === tab.href}<span
-              class="tab-indicator"
-              aria-hidden="true"
-              use:slide={"tab-indicator"}
-            ></span>{/if}
           <Icon icon={tab.icon} size="size-5" />
           <span>{tab.label}</span>
         </a>
@@ -531,11 +520,6 @@
               class="tab"
               aria-current={moreCurrent ? "page" : undefined}
             >
-              {#if moreCurrent}<span
-                  class="tab-indicator"
-                  aria-hidden="true"
-                  use:slide={"tab-indicator"}
-                ></span>{/if}
               <Icon icon={Ellipsis} size="size-5" />
               <span>その他</span>
             </button>
@@ -621,6 +605,17 @@
     }
     to {
       background-position: 140% 0;
+    }
+  }
+  /* 浮いたヘッダーの面と影 (広い画面の `.navbar`。巻いた量で進む) */
+  @keyframes header-float {
+    from {
+      background: transparent;
+      box-shadow: none;
+    }
+    to {
+      background: var(--dp-float);
+      box-shadow: var(--dp-shadow-pop);
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -711,8 +706,12 @@
   ul.links a.button.ghost[aria-current="page"]:hover {
     --pico-background-color: var(--dp-btn-tonal-hover);
   }
-  /* 下線は別の要素にして、画面を移ると前の画面の下線から横に滑らせる (`#lib/motion.svelte.js` の `slide`) */
-  .nav-underline {
+  /*
+     * 下線。画面を移ると前の画面の下線から横に滑る (`app.css` の「滑る印」と同じ作り。並びの疑似要素 1 本をアンカーで付ける)。
+     * アンカーを知らないブラウザは、いまの画面のリンクの中に線を引く (滑らない)
+     */
+  ul.links a.button[aria-current="page"]::after {
+    content: "";
     position: absolute;
     inset-inline: 0.65rem;
     bottom: 0.2rem;
@@ -720,6 +719,33 @@
     border-radius: 1px;
     background: var(--pico-primary);
     pointer-events: none;
+  }
+  @supports (anchor-name: --a) {
+    ul.links {
+      position: relative;
+      anchor-scope: --nav;
+    }
+    ul.links a.button[aria-current="page"] {
+      anchor-name: --nav;
+    }
+    ul.links a.button[aria-current="page"]::after {
+      content: none;
+    }
+    ul.links:has(a.button[aria-current="page"])::after {
+      content: "";
+      position: absolute;
+      position-anchor: --nav;
+      left: calc(anchor(left) + 0.65rem);
+      right: calc(anchor(right) + 0.65rem);
+      bottom: calc(anchor(bottom) + 0.2rem);
+      height: 2px;
+      border-radius: 1px;
+      background: var(--pico-primary);
+      pointer-events: none;
+      transition:
+        left var(--dp-duration-move) var(--dp-ease-spring),
+        right var(--dp-duration-move) var(--dp-ease-spring);
+    }
   }
   /*
      * ヘッダーの検索の欄 (中身は `SearchField`)。広い幅では「印と名前 ｜ 欄 ｜ ナビ」の3列にして、
@@ -763,7 +789,7 @@
     border-radius: 2rem;
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration) var(--dp-ease);
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   /* キーボードで中に触っている間は引っ込めない (見えないまま操作させない) */
   .shell[data-retract] .tabbar:not(:has(:focus-visible)) {
@@ -806,10 +832,12 @@
     display: flex;
   }
   /*
-     * いまの画面の印。タブの上端に短い線を置く。画面を移ると
-     * 前のタブから横に滑る (`#lib/motion.svelte.js` の `slide`)
+     * いまの画面の印。タブの上端に短い線を置く。画面を移ると前のタブから横に滑る
+     * (`app.css` の「滑る印」と同じ作り)。アンカーを知らないブラウザは、いまのタブの中に線を引く (滑らない)
      */
-  .tabbar :global(.tab-indicator) {
+  .tabbar .tab[aria-current="page"]::before,
+  .tab-more :global(.tab[aria-current="page"])::before {
+    content: "";
     position: absolute;
     top: 0.125rem;
     left: 50%;
@@ -819,6 +847,32 @@
     border-radius: 1px;
     background: var(--dp-primary-text);
     pointer-events: none;
+  }
+  @supports (anchor-name: --a) {
+    .tabbar {
+      anchor-scope: --tab;
+    }
+    .tabbar .tab[aria-current="page"],
+    .tab-more :global(.tab[aria-current="page"]) {
+      anchor-name: --tab;
+    }
+    .tabbar .tab[aria-current="page"]::before,
+    .tab-more :global(.tab[aria-current="page"])::before {
+      content: none;
+    }
+    .tabbar:has(:global(.tab[aria-current="page"]))::before {
+      content: "";
+      position: absolute;
+      position-anchor: --tab;
+      top: calc(anchor(top) + 0.125rem);
+      left: calc(anchor(center) - 1rem);
+      width: 2rem;
+      height: 2px;
+      border-radius: 1px;
+      background: var(--dp-primary-text);
+      pointer-events: none;
+      transition: left var(--dp-duration-move) var(--dp-ease-spring);
+    }
   }
   /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */
   :global(.tab-more-menu) {
@@ -948,6 +1002,21 @@
         minmax(max-content, 1fr);
       gap: var(--dp-space-4);
     }
+    /*
+         * **上端では平ら、巻くと浮く。** 裏に中身が無いうちは浮かせる理由が無いので、地に馴染ませる
+         * (docs/design.md の「浮かせ方」)。巻いた量に合わせて面と影が出る (`animation-timeline: scroll()`。JS は使わない)。
+         * 窓が巻けない画面 (番組表・観る画面) は時間の軸が止まったままなので、いつも平ら (アンビエントの色もそのまま届く)。
+         * 知らないブラウザと、動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも浮いた形
+         */
+    @supports (animation-timeline: scroll()) {
+      .navbar {
+        background: transparent;
+        box-shadow: none;
+        animation: header-float linear both;
+        animation-timeline: scroll(root block);
+        animation-range: 0 1.5rem;
+      }
+    }
     .header-search {
       display: block;
     }
@@ -972,7 +1041,7 @@
          * (一覧の中で隠れている行) の「リモコン」が窓の下に出て、映像の色が付くまで (右の列が
          * `position: relative` になるまで) の1秒ほど、窓にスクロールバーが出ていた。E2E 20 で毎コマ見る
          *
-         * **自分で巻き取る画面 (番組表・映像の画面) は、浮いたヘッダーの下から始める** (docs/design.md の「透かし方」)。
+         * **自分で巻き取る画面 (番組表・映像の画面) は、浮いたヘッダーの下から始める** (docs/design.md の「浮かせ方」)。
          * 箱のスクロールバーがヘッダーの透かしの裏に見えないように。中では頭の空き (`--dp-page-top`) を 0 にする
          */
     .shell.fill {

@@ -134,7 +134,7 @@
     background: var(--dp-backdrop);
     box-shadow: none;
     cursor: default;
-    transition: opacity var(--dp-duration) var(--dp-ease);
+    transition: opacity var(--dp-duration-enter) var(--dp-ease);
   }
   /*
      * **出るときは、幕は透明から、箱は少し縮んだ姿から** (メニュー・ダイアログと同じ。`app.css`)。
@@ -148,8 +148,8 @@
     overflow: hidden;
     padding: 0;
     transition:
-      opacity var(--dp-duration) var(--dp-ease),
-      transform var(--dp-duration) var(--dp-ease);
+      opacity var(--dp-duration-enter) var(--dp-ease),
+      transform var(--dp-duration-enter) var(--dp-ease-spring);
   }
   @starting-style {
     .detail-backdrop {
@@ -157,7 +157,7 @@
     }
     .detail-box {
       opacity: 0;
-      transform: scale(0.96);
+      transform: translateY(0.5rem) scale(0.95);
     }
   }
   /*
@@ -220,7 +220,7 @@
     }
     @starting-style {
       .detail-box {
-        transform: translateY(1rem);
+        transform: translateY(2rem);
       }
     }
   }

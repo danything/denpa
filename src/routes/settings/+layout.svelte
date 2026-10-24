@@ -436,7 +436,7 @@
       border-radius: 1.375rem;
       background: var(--dp-float);
       box-shadow: var(--dp-shadow-pop);
-      transition: transform var(--dp-duration) var(--dp-ease);
+      transition: transform var(--dp-duration-move) var(--dp-ease-spring);
     }
     :global([data-retract]) .jump:not(:has(:focus-visible)) {
       transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));

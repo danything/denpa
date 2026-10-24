@@ -411,7 +411,7 @@
 }
 /*
  * **日付の見出しは操作の層の小さなカプセル。** 巻くと行がその裏を流れるので、ヘッダーと同じ半透明の面と影で浮かせる
- * (docs/design.md の「透かし方」)。地の色の帯にすると、半透明のヘッダーの下に塗った帯だけが浮いて見えた
+ * (docs/design.md の「浮かせ方」)。地の色の帯にすると、半透明のヘッダーの下に塗った帯だけが浮いて見えた
  */
 .board .t-day {
   /* 貼り付く位置。いちばん上の見出しの置かれた位置 (main の頭の空き) と同じにし、巻き始めても動かない */
@@ -443,7 +443,7 @@
 }
 /*
  * **ヘッダーが浮いている幅 (640px 以上) では、ヘッダーの下端 (`--dp-header-bottom`) に貼り付ける。** 間を空けると、
- * 細い隙間に行が透けて見える。頭の1行は地の色で塗る (docs/design.md の「透かし方」)。
+ * 細い隙間に行が透けて見える。頭の1行は地の色で塗る (docs/design.md の「浮かせ方」)。
  * 頭の1行 (1000px まで) はヘッダーとの間 (0.5rem) も地で埋め、そのぶん上へ出す。置かれた位置のまま、巻いても動かずに貼り付く。
  * 日付の見出し (カプセル) はその下に少し離して浮かべる
  */
@@ -479,7 +479,7 @@
     border-radius: 1.375rem;
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration) var(--dp-ease);
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   [data-retract] .board .t-toolbar:not(:has(:focus-visible)) {
     transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
@@ -726,7 +726,7 @@
   height: 0.75rem;
   border-radius: var(--dp-radius-full);
   background: #fff;
-  transition: transform var(--dp-duration) var(--dp-ease);
+  transition: transform var(--dp-duration-move) var(--dp-ease-spring);
 }
 .board .s-switch.on {
   background: var(--pico-primary-background);

@@ -309,7 +309,7 @@
     border-radius: var(--dp-radius-full);
     background: var(--dp-on-video);
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
-    transition: transform var(--dp-duration) var(--dp-ease);
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   /*
      * 入っているときも主の色 (青) は使わない (青はリンクとフォーカスだけ)。白を濃く敷いた溝にし、

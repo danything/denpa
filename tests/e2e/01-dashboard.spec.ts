@@ -524,15 +524,16 @@ test.describe("ホームと画面遷移", () => {
   });
 
   /**
-   * **ページを移るときは画面の写しを取らず、選んでいる印だけを前の場所から滑らせる** (`#lib/motion.svelte.js` の `slide`)。
+   * **ページを移るときは画面の写しを取らず、選んでいる印だけを前の場所から滑らせる。**
+   * 印は並びの疑似要素 1 本で、CSS のアンカーと transition で滑る (JS では動かさない。`app.css` の「滑る印」)。
    *
    * 写しを取っていた頃 (View Transitions) は、押してから一拍遅れて切り替わっていた。
-   * 番組表の種別の面は、種別を選び直すときだけ滑る (ほかの画面から来たときはその場に出す)
+   * 番組表の種別の印は、種別を選び直すときだけ滑る (ほかの画面から来たときはその場に出る)
    */
   test.describe("動かしてよい端末", () => {
     test.use({ reducedMotion: "no-preference" });
 
-    test("写しは取らず、ナビの下線は滑り、種別の面は選び直すときだけ滑る", async ({
+    test("写しは取らず、ナビの下線は滑り、種別の印は選び直すときだけ滑る", async ({
       page,
       request,
     }) => {
@@ -542,14 +543,12 @@ test.describe("ホームと画面遷移", () => {
         const w = window as unknown as { slid: string[]; snapshots: number };
         w.slid = [];
         w.snapshots = 0;
-        const animate = Element.prototype.animate;
-        Element.prototype.animate = function (
-          this: Element,
-          ...args: Parameters<Element["animate"]>
-        ) {
-          w.slid.push(this.className);
-          return animate.apply(this, args);
-        };
+        // 疑似要素の transition は持ち主の要素で始まる (`pseudoElement` が付く)
+        document.addEventListener("transitionrun", (event) => {
+          const target = event.target as Element;
+          if (event.pseudoElement !== "" && event.propertyName === "left")
+            w.slid.push(`${target.className}${event.pseudoElement}`);
+        });
         if (typeof document.startViewTransition === "function") {
           const start = document.startViewTransition.bind(document);
           document.startViewTransition = ((
@@ -566,26 +565,24 @@ test.describe("ホームと画面遷移", () => {
           return { slid: [...w.slid], snapshots: w.snapshots };
         });
 
-      // ほかの画面から番組表へ: 下線は滑り、種別の面は滑らない。写しは取らない
+      // ほかの画面から番組表へ: 下線は滑り、種別の印は滑らない。写しは取らない
       await page.getByTestId("nav-guide").click();
       await expect(page.getByTestId("guide-grid")).toBeVisible();
       await expect
-        .poll(async () =>
-          (await seen()).slid.some((c) => c.includes("nav-underline")),
-        )
+        .poll(async () => (await seen()).slid.some((c) => c.includes("links")))
         .toBe(true);
-      expect((await seen()).slid.some((c) => c.includes("seg-pill"))).toBe(
+      expect((await seen()).slid.some((c) => c.includes("segmented"))).toBe(
         false,
       );
 
-      // 種別を選び直すとき: 面が前の場所から滑る
+      // 種別を選び直すとき: 印が前の場所から滑る
       await page.getByTestId("type-BS").click();
       await expect(
         page.locator('[aria-current="page"][data-testid="type-BS"]'),
       ).toBeVisible();
       await expect
         .poll(async () =>
-          (await seen()).slid.some((c) => c.includes("seg-pill")),
+          (await seen()).slid.some((c) => c.includes("segmented")),
         )
         .toBe(true);
       expect((await seen()).snapshots).toBe(0);
