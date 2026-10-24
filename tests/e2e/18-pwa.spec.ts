@@ -367,5 +367,14 @@ test.describe("PWA", () => {
       .toBeGreaterThanOrEqual(780);
     await page.mouse.wheel(0, -600);
     await expect.poll(bottom).toBeLessThanOrEqual(780);
+
+    // 自分で巻き取る画面 (番組表) は表を巻いても引っ込めない (表の高さは下のタブの上まで。下のタブだけ消えると操作の1行が宙に残る)
+    await goto(page, "/guide");
+    await expect(page.getByTestId("guide-grid")).toBeVisible();
+    await page.locator(".grid-box").evaluate((el) => {
+      el.scrollTop += 400;
+    });
+    await page.waitForTimeout(400);
+    expect(await bottom()).toBeLessThanOrEqual(780);
   });
 });

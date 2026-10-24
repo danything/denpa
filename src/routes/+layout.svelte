@@ -34,31 +34,23 @@
   onMount(() => startOffline());
 
   /*
-   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると狭い画面の下のタブ (とホームの頭の1行) を隠し、上へ戻すと出す。
+   * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると狭い画面の下のタブ (と頭の1行・帯) を隠し、上へ戻すと出す。
    * 広い画面のヘッダーは引っ込めない (検索の欄を見せたまま)。
-   * 中身の巻き取りは窓のこともあれば画面の中の箱 (ホームの一覧など) のこともあるので、
-   * 文書の `scroll` を捕まえ (`capture`)、窓の半分より低い箱 (チップの横の並びなど) は数えない
+   * **見るのは窓の巻き取りだけ** (ページごと巻く画面)。自分で巻き取る画面 (番組表) は表の高さが下のタブの上までで決まっていて、
+   * 引っ込めても表は広がらず、下のタブだけが消えて操作の1行が宙に残っていた
    */
   let retract = $state(false);
   onMount(() => {
-    const last = new WeakMap<Element, number>();
-    const onScroll = (e: Event) => {
-      const el = e.target === document ? document.scrollingElement : e.target;
-      if (!(el instanceof Element) || el.clientHeight < innerHeight / 2) return;
-      const y = el.scrollTop;
-      // 窓の巻き取りは 0 から始まる。画面の中の箱は最初の巻き (今の時刻へ飛ぶなど) を起点にする
-      const prev = last.get(el) ?? (el === document.scrollingElement ? 0 : y);
-      last.set(el, y);
+    let prev = scrollY;
+    const onScroll = () => {
+      const y = scrollY;
       if (y < 48) retract = false;
       else if (y - prev > 4) retract = true;
       else if (prev - y > 4) retract = false;
+      prev = y;
     };
-    document.addEventListener("scroll", onScroll, {
-      capture: true,
-      passive: true,
-    });
-    return () =>
-      document.removeEventListener("scroll", onScroll, { capture: true });
+    addEventListener("scroll", onScroll, { passive: true });
+    return () => removeEventListener("scroll", onScroll);
   });
 
   /*
