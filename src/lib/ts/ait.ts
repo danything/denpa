@@ -18,12 +18,12 @@
  */
 
 import { decodeAribText } from "./aribtext";
-import { u16, u32 } from "./dsmcc";
+import { u16, u32 } from "./bytes";
 import {
   descriptors,
   PacketStream,
-  PID_PAT,
-  parsePat,
+  PmtTracker,
+  packetPid,
   pmtStreams,
   SectionAssembler,
 } from "./psi";
@@ -141,11 +141,11 @@ function applicationName(body: Uint8Array): string {
 export function parseAit(section: Uint8Array): Ait | null {
   if (section[0] !== TABLE_AIT || section.length < 16) return null;
   const applicationType = u16(section, 3) & 0x7fff;
-  const commonLength = ((section[8]! & 0x0f) << 8) | section[9]!;
+  const commonLength = u16(section, 8) & 0x0fff;
   let at = 10 + commonLength;
   const end = section.length - 4;
   if (at + 2 > end) return null;
-  const loopLength = ((section[at]! & 0x0f) << 8) | section[at + 1]!;
+  const loopLength = u16(section, at) & 0x0fff;
   at += 2;
   const stop = Math.min(at + loopLength, end);
 
@@ -154,7 +154,7 @@ export function parseAit(section: Uint8Array): Ait | null {
     const organisationId = u32(section, at);
     const applicationId = u16(section, at + 4);
     const controlCode = section[at + 6]!;
-    const infoLength = ((section[at + 7]! & 0x0f) << 8) | section[at + 8]!;
+    const infoLength = u16(section, at + 7) & 0x0fff;
     const info = section.subarray(at + 9, at + 9 + infoLength);
     at += 9 + infoLength;
 
@@ -194,14 +194,13 @@ export function parseAit(section: Uint8Array): Ait | null {
  */
 export class AitReader {
   private readonly packets = new PacketStream();
-  private readonly pat = new SectionAssembler(PID_PAT);
-  /** PMT を組み立てるもの。**PID が決まってから作る** */
-  private pmt: SectionAssembler | null = null;
-  private pmtPid: number | null = null;
+  private readonly pmt: PmtTracker;
   /** AIT を組み立てるもの。PID ごとに1つ */
   private aits = new Map<number, SectionAssembler>();
 
-  constructor(private readonly serviceId: number) {}
+  constructor(serviceId: number) {
+    this.pmt = new PmtTracker(serviceId);
+  }
 
   /**
    * TS を食べて、見つかったものを返す。**見つからない間は空**。
@@ -218,23 +217,14 @@ export class AitReader {
 
   /** 切り分け済みのパケットを1つ。見つかったものは `found` に足す (`BmlDecoder.feedPacket` と同じ事情) */
   public feedPacket(packet: Uint8Array, found: Ait[]): void {
-    const pid = ((packet[1]! & 0x1f) << 8) | packet[2]!;
-    if (pid === PID_PAT) {
-      for (const section of this.pat.feed(packet)) {
-        const next = parsePat(section).get(this.serviceId);
-        if (next === undefined || next === this.pmtPid) continue;
-        // 局が変わった。PMT も AIT も読み直す
-        this.pmtPid = next;
-        this.pmt = new SectionAssembler(next);
-        this.aits = new Map();
-      }
-    }
-    if (pid === this.pmtPid) {
-      for (const section of this.pmt?.feed(packet) ?? []) {
-        for (const ait of aitPidsFromPmt(section)) {
-          if (!this.aits.has(ait))
-            this.aits.set(ait, new SectionAssembler(ait));
-        }
+    const pid = packetPid(packet);
+    const before = this.pmt.pid;
+    const sections = this.pmt.feed(packet, pid);
+    // 局が変わった。AIT も読み直す
+    if (this.pmt.pid !== before) this.aits = new Map();
+    for (const section of sections) {
+      for (const ait of aitPidsFromPmt(section)) {
+        if (!this.aits.has(ait)) this.aits.set(ait, new SectionAssembler(ait));
       }
     }
     for (const section of this.aits.get(pid)?.feed(packet) ?? []) {

@@ -15,6 +15,7 @@
  * そちらは別仕立て (`logo-dsmcc.ts`)。両方まとめてここで面倒を見る。
  */
 
+import { u16 } from "./bytes";
 import { DsmccLogoCollector } from "./logo-dsmcc";
 import { withPalette } from "./logo-palette";
 import {
@@ -102,15 +103,15 @@ export function parseCdt(section: Uint8Array): LogoData | null {
   if (section[0] !== TABLE_CDT) return null;
   if (section[10] !== DATA_TYPE_LOGO) return null;
 
-  const descriptorsLength = ((section[11]! & 0x0f) << 8) | section[12]!;
+  const descriptorsLength = u16(section, 11) & 0x0fff;
   let at = 13 + descriptorsLength;
   const end = section.length - 4;
   if (at + 7 > end) return null;
 
   const logoType = section[at]!;
-  const logoId = ((section[at + 1]! & 0x01) << 8) | section[at + 2]!;
-  const logoVersion = ((section[at + 3]! & 0x0f) << 8) | section[at + 4]!;
-  const size = (section[at + 5]! << 8) | section[at + 6]!;
+  const logoId = u16(section, at + 1) & 0x1ff;
+  const logoVersion = u16(section, at + 3) & 0x0fff;
+  const size = u16(section, at + 5);
   at += 7;
   if (at + size > end) return null;
 
@@ -137,7 +138,7 @@ export function parseLogoLinks(section: Uint8Array): Map<number, number> {
       if (tag !== DESC_LOGO_TRANSMISSION || descriptor.length < 3) continue;
       const type = descriptor[0];
       if (type === 0x01 || type === 0x02) {
-        links.set(serviceId, ((descriptor[1]! & 0x01) << 8) | descriptor[2]!);
+        links.set(serviceId, u16(descriptor, 1) & 0x1ff);
       }
     }
   }
@@ -219,44 +220,30 @@ export class LogoCollector {
 
   /** 紐付いたぶんだけ返す。ロゴだけ・対応だけでは局に配れない */
   collected(): CollectedLogo[] {
-    const byLogo = new Map<number, number[]>();
-    for (const [serviceId, logoId] of this.links) {
-      if (!this.logos.has(logoId)) continue;
-      byLogo.set(logoId, [...(byLogo.get(logoId) ?? []), serviceId]);
-    }
-    const found: CollectedLogo[] = [...byLogo.entries()].map(
-      ([logoId, serviceIds]) => ({
-        networkId: this.networkId,
-        serviceIds,
-        logo: this.logos.get(logoId)!,
-      }),
+    const linked = [...this.links].filter(([, logoId]) =>
+      this.logos.has(logoId),
     );
+    const found: CollectedLogo[] = [
+      ...Map.groupBy(linked, ([, logoId]) => logoId),
+    ].map(([logoId, links]) => ({
+      networkId: this.networkId,
+      serviceIds: links.map(([serviceId]) => serviceId),
+      logo: this.logos.get(logoId)!,
+    }));
 
     /*
      * 衛星ぶん。**ネットワークごとにまとめ直す。** 1つのロゴが他ネットワークの
      * 局にも紐付いていることがあるので、開いた中継のネットワークで一括りには
      * できない
      */
-    for (const logo of this.dsmcc.collected()) {
-      const byNetwork = new Map<number, number[]>();
-      for (const service of logo.services) {
-        byNetwork.set(service.networkId, [
-          ...(byNetwork.get(service.networkId) ?? []),
-          service.serviceId,
-        ]);
-      }
-      for (const [networkId, serviceIds] of byNetwork) {
+    for (const { logoId, logoType, services, data } of this.dsmcc.collected()) {
+      const logo = { logoId, logoType, logoVersion: 0, data };
+      for (const [networkId, list] of Map.groupBy(services, (s) => s.networkId))
         found.push({
           networkId,
-          serviceIds,
-          logo: {
-            logoId: logo.logoId,
-            logoType: logo.logoType,
-            logoVersion: 0,
-            data: logo.data,
-          },
+          serviceIds: list.map((s) => s.serviceId),
+          logo,
         });
-      }
     }
     return found;
   }

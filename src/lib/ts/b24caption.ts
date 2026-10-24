@@ -42,6 +42,7 @@ import {
   KANJI_SYMBOLS_HALF,
   KATAKANA,
 } from "./b24-tables";
+import { ascii, u16, u24 } from "./bytes";
 import { smoothDrcs } from "./drcs-smooth";
 
 /** 符号の集合。DRCS は 0〜15 の面 */
@@ -95,73 +96,33 @@ function drcsSet(final: number): Entry | undefined {
   return { set: { drcs: index }, bytes: index === 0 ? 2 : 1 };
 }
 
-/** 既定のマクロ (0x60〜0x6F)。符号の集合を組み替えるだけ */
-const MACROS: number[][] = [
-  [
-    0x1b, 0x24, 0x42, 0x1b, 0x29, 0x4a, 0x1b, 0x2a, 0x30, 0x1b, 0x2b, 0x20,
-    0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x24, 0x42, 0x1b, 0x29, 0x31, 0x1b, 0x2a, 0x30, 0x1b, 0x2b, 0x20,
-    0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x24, 0x42, 0x1b, 0x29, 0x20, 0x41, 0x1b, 0x2a, 0x30, 0x1b, 0x2b,
-    0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x32, 0x1b, 0x29, 0x34, 0x1b, 0x2a, 0x35, 0x1b, 0x2b, 0x20,
-    0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x32, 0x1b, 0x29, 0x33, 0x1b, 0x2a, 0x35, 0x1b, 0x2b, 0x20,
-    0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x32, 0x1b, 0x29, 0x20, 0x41, 0x1b, 0x2a, 0x35, 0x1b, 0x2b,
-    0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x20, 0x41, 0x1b, 0x29, 0x20, 0x42, 0x1b, 0x2a, 0x20, 0x43,
-    0x1b, 0x2b, 0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x20, 0x44, 0x1b, 0x29, 0x20, 0x45, 0x1b, 0x2a, 0x20, 0x46,
-    0x1b, 0x2b, 0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x20, 0x47, 0x1b, 0x29, 0x20, 0x48, 0x1b, 0x2a, 0x20, 0x49,
-    0x1b, 0x2b, 0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x20, 0x4a, 0x1b, 0x29, 0x20, 0x4b, 0x1b, 0x2a, 0x20, 0x4c,
-    0x1b, 0x2b, 0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x20, 0x4d, 0x1b, 0x29, 0x20, 0x4e, 0x1b, 0x2a, 0x20, 0x4f,
-    0x1b, 0x2b, 0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x24, 0x42, 0x1b, 0x29, 0x20, 0x42, 0x1b, 0x2a, 0x30, 0x1b, 0x2b,
-    0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x24, 0x42, 0x1b, 0x29, 0x20, 0x43, 0x1b, 0x2a, 0x30, 0x1b, 0x2b,
-    0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x24, 0x42, 0x1b, 0x29, 0x20, 0x44, 0x1b, 0x2a, 0x30, 0x1b, 0x2b,
-    0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x31, 0x1b, 0x29, 0x30, 0x1b, 0x2a, 0x4a, 0x1b, 0x2b, 0x20,
-    0x70, 0x0f, 0x1b, 0x7d,
-  ],
-  [
-    0x1b, 0x28, 0x4a, 0x1b, 0x29, 0x32, 0x1b, 0x2a, 0x20, 0x41, 0x1b, 0x2b,
-    0x20, 0x70, 0x0f, 0x1b, 0x7d,
-  ],
-];
+/** マクロの終わりはどれも同じ: G3 にマクロを載せて (ESC 0x2B 0x20 0x70)、LS0・LS2R */
+const MACRO_TAIL = [0x1b, 0x2b, 0x20, 0x70, 0x0f, 0x1b, 0x7d];
+
+/** 既定のマクロ (0x60〜0x6F)。符号の集合を組み替えるだけ。ここに書くのは G0〜G2 の指示 (ESC 列) */
+const MACROS = [
+  "1b2442 1b294a 1b2a30",
+  "1b2442 1b2931 1b2a30",
+  "1b2442 1b292041 1b2a30",
+  "1b2832 1b2934 1b2a35",
+  "1b2832 1b2933 1b2a35",
+  "1b2832 1b292041 1b2a35",
+  "1b282041 1b292042 1b2a2043",
+  "1b282044 1b292045 1b2a2046",
+  "1b282047 1b292048 1b2a2049",
+  "1b28204a 1b29204b 1b2a204c",
+  "1b28204d 1b29204e 1b2a204f",
+  "1b2442 1b292042 1b2a30",
+  "1b2442 1b292043 1b2a30",
+  "1b2442 1b292044 1b2a30",
+  "1b2831 1b2930 1b2a4a",
+  "1b284a 1b2932 1b2a2041",
+].map((head) => {
+  const bytes = [...head.matchAll(/[0-9a-f]{2}/g)].map(([b]) =>
+    Number.parseInt(b, 16),
+  );
+  return Uint8Array.from([...bytes, ...MACRO_TAIL]);
+});
 
 const eucjp = new TextDecoder("euc-jp");
 /** 漢字の表 (区×94+点 → 字)。EUC-JP で読み、libaribcaption と違うところだけ差し替える */
@@ -352,7 +313,7 @@ export class B24CaptionDecoder {
     const begin = 3 + (data[2]! & 0x0f);
     if (begin + 5 > data.length) return null;
     const groupId = data[begin]! >> 2;
-    const size = (data[begin + 3]! << 8) | data[begin + 4]!;
+    const size = u16(data, begin + 3);
     if (size === 0 || begin + 5 + size > data.length) return null;
     const body = data.subarray(begin + 5, begin + 5 + size);
 
@@ -432,7 +393,7 @@ export class B24CaptionDecoder {
       const dmf = data[at]! & 0x0f;
       at += 1;
       if (dmf === 0b1100 || dmf === 0b1101 || dmf === 0b1110) at += 1;
-      const code = String.fromCharCode(data[at]!, data[at + 1]!, data[at + 2]!);
+      const code = ascii(data, at, 3);
       at += 3; // ISO 639
       const format = data[at]! >> 4;
       at += 1;
@@ -446,7 +407,7 @@ export class B24CaptionDecoder {
     }
     this.languages = found;
     if (at + 3 > data.length) return;
-    const length = (data[at]! << 16) | (data[at + 1]! << 8) | data[at + 2]!;
+    const length = u24(data, at);
     at += 3;
     if (length > 0 && at + length <= data.length)
       this.dataUnits(data.subarray(at, at + length));
@@ -458,7 +419,7 @@ export class B24CaptionDecoder {
     const tmd = data[0]! >> 6;
     if (tmd === 0b01 || tmd === 0b10) at += 5; // STM
     if (at + 4 > data.length) return;
-    const length = (data[at]! << 16) | (data[at + 1]! << 8) | data[at + 2]!;
+    const length = u24(data, at);
     at += 3;
     if (length > 0 && at + length <= data.length)
       this.dataUnits(data.subarray(at, at + length));
@@ -469,7 +430,7 @@ export class B24CaptionDecoder {
     while (at + 5 <= data.length) {
       if (data[at] !== 0x1f) return;
       const parameter = data[at + 1]!;
-      const size = (data[at + 2]! << 16) | (data[at + 3]! << 8) | data[at + 4]!;
+      const size = u24(data, at + 2);
       if (size === 0 || at + 5 + size > data.length) return;
       const unit = data.subarray(at + 5, at + 5 + size);
       if (parameter === 0x20) this.body(unit);
@@ -505,7 +466,7 @@ export class B24CaptionDecoder {
     const codes = data[0]!;
     for (let i = 0; i < codes; i++) {
       if (at + 3 > data.length) return;
-      const code = (data[at]! << 8) | data[at + 1]!;
+      const code = u16(data, at);
       const fonts = data[at + 2]!;
       at += 3;
       for (let j = 0; j < fonts; j++) {
@@ -545,7 +506,7 @@ export class B24CaptionDecoder {
         } else {
           // 幾何図形。読み飛ばす
           if (at + 4 > data.length) return;
-          at += 4 + ((data[at + 2]! << 8) | data[at + 3]!);
+          at += 4 + u16(data, at + 2);
         }
       }
     }
@@ -878,8 +839,7 @@ export class B24CaptionDecoder {
       this.push((this.msz() ? T.alnumHalf : T.alnumFull)[index]!);
       this.moveRelative(1, 0);
     } else if (set === "macro") {
-      if (ch >= 0x60 && ch <= 0x6f)
-        this.body(Uint8Array.from(MACROS[ch & 0x0f]!));
+      if (ch >= 0x60 && ch <= 0x6f) this.body(MACROS[ch & 0x0f]!);
     } else if (typeof set === "object") {
       const key = entry.bytes === 2 ? (ch << 8) | ch2 : ch;
       const drcs = this.drcsMaps[set.drcs]!.get(key);

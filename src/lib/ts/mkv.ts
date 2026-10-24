@@ -19,6 +19,8 @@
  * 決めておけば、知らない要素は大きさぶん飛ばせる**ので、全部を知らなくてよい。
  */
 
+import { concatBytes, u16 } from "./bytes";
+
 /** 中に入る (入れ子の親として扱う) もの */
 export const SEGMENT = 0x18538067;
 export const INFO = 0x1549a966;
@@ -72,7 +74,7 @@ export interface EbmlHead {
  *
  * @returns 読めなければ null (まだ足りない)
  */
-export function vint(
+function vint(
   buffer: Uint8Array,
   at: number,
   keepMarker: boolean,
@@ -113,6 +115,28 @@ export function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
 }
 
 /**
+ * コマ1つ。`[トラック番号(可変長)][頭からの差(2バイト、符号あり)][旗][中身…]`
+ *
+ * **束ね (lacing) は来ない。** 1つの塊に複数のコマを詰める書き方だが、
+ * ffmpeg は映像・音声では使わない。万一来たら、その塊は捨てる — 変に読むより
+ * 1枚落とすほうが安い (字幕は次が来る)
+ */
+export function readBlock(
+  body: Uint8Array,
+): { track: number; offset: number; flags: number; data: Uint8Array } | null {
+  const track = vint(body, 0, false);
+  if (track === null || track.next + 3 > body.length) return null;
+  const flags = body[track.next + 2]!;
+  if ((flags & 0x06) !== 0) return null;
+  return {
+    track: track.value,
+    offset: (u16(body, track.next) << 16) >> 16,
+    flags,
+    data: body.slice(track.next + 3),
+  };
+}
+
+/**
  * 繋がったバイト列から、コマを1つずつ取り出す。
  *
  * **足りないところで止めて、続きを待つ。** 流れてくるものなので、要素の
@@ -128,11 +152,7 @@ export class MkvSplitter {
   readonly codecs: string[] = [];
 
   feed(chunk: Uint8Array): MkvFrame[] {
-    const joined = new Uint8Array(this.buffer.length + chunk.length);
-    joined.set(this.buffer);
-    joined.set(chunk, this.buffer.length);
-    this.buffer = joined;
-
+    this.buffer = concatBytes([this.buffer, chunk]);
     const out: MkvFrame[] = [];
     let at = 0;
     for (;;) {
@@ -151,32 +171,16 @@ export class MkvSplitter {
       else if (head.id === CODEC_ID)
         this.codecs.push(new TextDecoder().decode(body));
       else if (head.id === SIMPLE_BLOCK || head.id === BLOCK) {
-        const frame = this.block(body);
-        if (frame !== null) out.push(frame);
+        const block = readBlock(body);
+        if (block !== null)
+          out.push({
+            at: ((this.base + block.offset) * this.scale) / 1_000_000,
+            data: block.data,
+          });
       }
       at = end;
     }
     this.buffer = this.buffer.slice(at);
     return out;
-  }
-
-  /**
-   * コマ1つ。`[トラック番号(可変長)][頭からの差(2バイト、符号あり)][旗][中身…]`
-   *
-   * **束ね (lacing) は来ない。** 1つの塊に複数のコマを詰める書き方だが、
-   * ffmpeg は映像では使わない。万一来たら、その塊は捨てる — 変に読むより
-   * 1枚落とすほうが安い (字幕は次が来る)
-   */
-  private block(body: Uint8Array): MkvFrame | null {
-    const track = vint(body, 0, false);
-    if (track === null || track.next + 3 > body.length) return null;
-    const view = new DataView(body.buffer, body.byteOffset);
-    const offset = view.getInt16(track.next);
-    const flags = body[track.next + 2]!;
-    if ((flags & 0x06) !== 0) return null;
-    return {
-      at: ((this.base + offset) * this.scale) / 1_000_000,
-      data: body.slice(track.next + 3),
-    };
   }
 }

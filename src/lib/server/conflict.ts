@@ -189,14 +189,20 @@ class Tuners {
     const group = this.capacity.findIndex((g) => g.rank === busy.rank);
     if (group < 0) return null;
     const key = keyOf(busy.type, busy.channel);
+    this.hold(key, group);
+    return key;
+  }
+
+  /** `key` に入る。もう入っていればそれを共有し、無ければ組 `group` から1台取る。入った組の番号 */
+  private hold(key: string, group: number): number {
     const held = this.held.get(key);
     if (held !== undefined) {
       held.refs++;
-      return key;
+      return held.group;
     }
     this.free[group]!--;
     this.held.set(key, { group, refs: 1 });
-    return key;
+    return group;
   }
 
   /**
@@ -206,17 +212,11 @@ class Tuners {
   take(type: string, channel: string): number {
     const key = keyOf(type, channel);
     const held = this.held.get(key);
-    if (held !== undefined) {
-      held.refs++;
-      return held.group;
-    }
+    if (held !== undefined) return this.hold(key, held.group);
     const group = this.capacity.findIndex(
       (g, i) => this.free[i]! > 0 && g.types.has(type),
     );
-    if (group < 0) return -1;
-    this.free[group]!--;
-    this.held.set(key, { group, refs: 1 });
-    return group;
+    return group < 0 ? -1 : this.hold(key, group);
   }
 
   /** 離す。最後の1人が離れたらチューナーが空く (空いたら true) */
@@ -417,16 +417,21 @@ interface Mark {
 const byTime = (a: Mark, b: Mark) =>
   a.at - b.at || a.delta - b.delta || a.i - b.i;
 
-/** 並んだ印のうち、`at` 以降の最初の位置 */
-function firstAt(marks: readonly Mark[], at: number): number {
+/** `before(i)` が真である頭の並びの長さ (二分探索。`before` は頭から一度だけ偽に変わる) */
+function bound(length: number, before: (i: number) => boolean): number {
   let lo = 0;
-  let hi = marks.length;
+  let hi = length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (marks[mid]!.at < at) lo = mid + 1;
+    if (before(mid)) lo = mid + 1;
     else hi = mid;
   }
   return lo;
+}
+
+/** 並んだ印のうち、`at` 以降の最初の位置 */
+function firstAt(marks: readonly Mark[], at: number): number {
+  return bound(marks.length, (i) => marks[i]!.at < at);
 }
 
 /**
@@ -466,14 +471,7 @@ class Timeline {
 
   /** `at` 以上の最初の時刻の番号 */
   private index(at: number): number {
-    let lo = 0;
-    let hi = this.times.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (this.times[mid]! < at) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
+    return bound(this.times.length, (i) => this.times[i]! < at);
   }
 
   /** 足す前と違ってくる範囲 (始まりと、そこまで見れば足りる終わり) */
@@ -565,16 +563,12 @@ class Timeline {
     changed: ReadonlyMap<number, { from: number; to: number }>,
   ): void {
     const { start, end } = this.span(extra, changed);
-    const insert = (mark: Mark) => {
-      let lo = 0;
-      let hi = this.marks.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (byTime(this.marks[mid]!, mark) <= 0) lo = mid + 1;
-        else hi = mid;
-      }
-      this.marks.splice(lo, 0, mark);
-    };
+    const insert = (mark: Mark) =>
+      this.marks.splice(
+        bound(this.marks.length, (i) => byTime(this.marks[i]!, mark) <= 0),
+        0,
+        mark,
+      );
     if (changed.size > 0)
       this.marks = this.marks.filter((mark) => !changed.has(mark.i));
     for (const [i, w] of changed) {

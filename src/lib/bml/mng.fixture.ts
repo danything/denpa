@@ -1,17 +1,11 @@
 /** テスト用の小さな MNG を組む (放送のデータは使わない) */
 
-import { crc32 } from "#lib/ts/png.js";
+import { concatBytes } from "#lib/ts/bytes.js";
+import { pngChunk } from "#lib/ts/png.js";
 
 /** 塊 (長さ・名前・中身・CRC) */
 export function chunk(name: string, body: number[] | Uint8Array): Uint8Array {
-  const data = Uint8Array.from(body);
-  const out = new Uint8Array(12 + data.length);
-  const view = new DataView(out.buffer);
-  view.setUint32(0, data.length);
-  for (let i = 0; i < 4; i++) out[4 + i] = name.charCodeAt(i);
-  out.set(data, 8);
-  view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
-  return out;
+  return pngChunk(name, Uint8Array.from(body));
 }
 
 export const u32 = (n: number): number[] => [
@@ -54,15 +48,7 @@ export function frame(): Uint8Array[] {
 
 export function mng(parts: Uint8Array[]): Uint8Array {
   const signature = [0x8a, 0x4d, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  const total = parts.reduce((n, p) => n + p.length, signature.length);
-  const out = new Uint8Array(total);
-  out.set(signature);
-  let at = signature.length;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  return out;
+  return concatBytes([Uint8Array.from(signature), ...parts]);
 }
 
 export const MHDR = chunk("MHDR", [

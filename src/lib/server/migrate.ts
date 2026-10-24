@@ -166,9 +166,7 @@ export interface Row {
 function sourcePath(filePath: string): string | null {
   const candidates = [
     join(source.recordedDir, filePath),
-    filePath.startsWith("/")
-      ? filePath
-      : join(source.recordedDir, filePath.replace(/^\.?\//, "")),
+    ...(filePath.startsWith("/") ? [filePath] : []),
     join(source.recordedDir, filePath.split("/").pop() ?? ""),
   ];
   return candidates.find((path) => existsSync(path)) ?? null;

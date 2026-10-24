@@ -84,39 +84,31 @@ export function shim(init: ShimInit): void {
     const url = toOrigin(new URL(String(to), document.baseURI).href);
     if (/^https?:\/\//i.test(url)) post({ type: "navigate", url });
   };
-  w.__hcLocation = {
-    get href() {
-      return appUrl.href;
-    },
-    set href(to: string) {
-      go(to);
-    },
-    get hostname() {
-      return appUrl.hostname;
-    },
-    get host() {
-      return appUrl.host;
-    },
-    get origin() {
-      return appUrl.origin;
-    },
-    get protocol() {
-      return appUrl.protocol;
-    },
-    get port() {
-      return appUrl.port;
-    },
-    get pathname() {
-      return appUrl.pathname;
-    },
-    get search() {
-      return appUrl.search;
-    },
+  const where: Record<string, unknown> = {
     assign: go,
     replace: go,
     reload: () => go(appUrl.href),
     toString: () => appUrl.href,
   };
+  for (const key of [
+    "hostname",
+    "host",
+    "origin",
+    "protocol",
+    "port",
+    "pathname",
+    "search",
+  ] as const)
+    Object.defineProperty(where, key, {
+      enumerable: true,
+      get: () => appUrl[key],
+    });
+  Object.defineProperty(where, "href", {
+    enumerable: true,
+    get: () => appUrl.href,
+    set: go,
+  });
+  w.__hcLocation = where;
 
   // ---- アプリの中継 (`ShimInit.relay`) ----
   const relayRoot = init.relay.root;
@@ -319,6 +311,12 @@ export function shim(init: ShimInit): void {
     xhr["readyState"] = ready;
     fire(xhr, "readystatechange");
   };
+  /** 終わった (`type` は load・error・abort・timeout) */
+  const finish = (xhr: Record<string, unknown>, type: string): void => {
+    state4(xhr, 4);
+    fire(xhr, type);
+    fire(xhr, "loadend");
+  };
   proto["addEventListener"] = function (
     this: Record<string, unknown>,
     type: string,
@@ -374,11 +372,8 @@ export function shim(init: ShimInit): void {
   proto["abort"] = function (this: Record<string, unknown>) {
     // 返りが来ても捨てる (世代を進める)
     this["_sent"] = (this["_sent"] as number) + 1;
-    if (this["readyState"] !== 0 && this["readyState"] !== 4) {
-      state4(this, 4);
-      fire(this, "abort");
-      fire(this, "loadend");
-    }
+    if (this["readyState"] !== 0 && this["readyState"] !== 4)
+      finish(this, "abort");
     this["readyState"] = 0;
   };
   proto["send"] = function (this: Record<string, unknown>, body?: unknown) {
@@ -393,9 +388,7 @@ export function shim(init: ShimInit): void {
       timer = setTimeout(() => {
         if (xhr["_sent"] !== mine) return;
         xhr["_sent"] = (mine as number) + 1;
-        state4(xhr, 4);
-        fire(xhr, "timeout");
-        fire(xhr, "loadend");
+        finish(xhr, "timeout");
       }, xhr["timeout"] as number);
     }
     fire(xhr, "loadstart");
@@ -403,9 +396,7 @@ export function shim(init: ShimInit): void {
       if (timer !== null) clearTimeout(timer);
       if (xhr["_sent"] !== mine) return;
       xhr["status"] = 0;
-      state4(xhr, 4);
-      fire(xhr, "error");
-      fire(xhr, "loadend");
+      finish(xhr, "error");
     };
     w.fetch(xhr["_url"], {
       method,
@@ -456,9 +447,7 @@ export function shim(init: ShimInit): void {
             "application/xml",
           );
       }
-      state4(xhr, 4);
-      fire(xhr, "load");
-      fire(xhr, "loadend");
+      finish(xhr, "load");
     }, failed);
   };
   for (const [name, value] of [
@@ -474,14 +463,11 @@ export function shim(init: ShimInit): void {
   w.XMLHttpRequest = Xhr;
   // 直に繋ぐもの (WebSocket・EventSource・sendBeacon) は使えない (CSP でも止まる)
   // `new` で呼ばれるので、アロー関数ではなく function で (アローは `new` すると TypeError)
-  w.WebSocket = function () {
-    unsupported("WebSocket");
-    throw new DOMException("WebSocket は使えません", "SecurityError");
-  };
-  w.EventSource = function () {
-    unsupported("EventSource");
-    throw new DOMException("EventSource は使えません", "SecurityError");
-  };
+  for (const name of ["WebSocket", "EventSource"])
+    w[name] = function () {
+      unsupported(name);
+      throw new DOMException(`${name} は使えません`, "SecurityError");
+    };
   w.navigator.sendBeacon = () => {
     unsupported("sendBeacon");
     return false;
@@ -544,14 +530,11 @@ export function shim(init: ShimInit): void {
   );
   const session = makeStorage(new Map(), () => {});
   try {
-    Object.defineProperty(w, "localStorage", {
-      value: local,
-      configurable: true,
-    });
-    Object.defineProperty(w, "sessionStorage", {
-      value: session,
-      configurable: true,
-    });
+    for (const [name, value] of [
+      ["localStorage", local],
+      ["sessionStorage", session],
+    ] as const)
+      Object.defineProperty(w, name, { value, configurable: true });
   } catch {
     unsupported("localStorage");
   }
@@ -650,14 +633,11 @@ export function shim(init: ShimInit): void {
     watch();
     return channel();
   });
-  method("stop", (element) => {
-    stopped.add(element);
-    watch();
-  });
-  method("release", (element) => {
-    stopped.add(element);
-    watch();
-  });
+  for (const name of ["stop", "release"])
+    method(name, (element) => {
+      stopped.add(element);
+      watch();
+    });
   method("setFullScreen", (element, args) => {
     full = args[0] === true;
     stopped.delete(element);

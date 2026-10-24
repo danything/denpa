@@ -632,18 +632,12 @@ export class RawEngine {
 
   private tick(): void {
     const decided = this.playout.tick(this.now());
-    if (decided.kind === "start") {
+    const { kind } = decided;
+    if (kind === "stall" || kind === "jump" || kind === "end") this.stopAll();
+    if (decided.kind === "start" || decided.kind === "jump")
       for (const scheduled of decided.schedule) this.play(scheduled);
-    } else if (decided.kind === "stall") {
-      this.stopAll();
-      this.events.stalled();
-    } else if (decided.kind === "jump") {
-      this.stopAll();
-      for (const scheduled of decided.schedule) this.play(scheduled);
-    } else if (decided.kind === "end") {
-      this.stopAll();
-      this.events.ended?.();
-    }
+    if (kind === "stall") this.events.stalled();
+    else if (kind === "end") this.events.ended?.();
     this.tellClock();
     // 映像は出ているのに音が来ない。**音の出ない MPEG-2 より、エンコードしたもののほうがいい**
     if (

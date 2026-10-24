@@ -78,9 +78,12 @@ function base64Url(bytes: Uint8Array): string {
 function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+
+/** ID トークンの1節 (base64url の JSON) を開く */
+function decodePart(value: string): unknown {
+  return JSON.parse(new TextDecoder().decode(decodeBase64Url(value)));
 }
 
 /** 推測できない文字列。state・nonce・セッションIDに使う */
@@ -284,11 +287,7 @@ export async function verify(
     throw new Error("ID トークンの形式が違います");
   }
 
-  const header = read(
-    HEADER,
-    JSON.parse(new TextDecoder().decode(decodeBase64Url(rawHeader))),
-    "ID トークンのヘッダ",
-  );
+  const header = read(HEADER, decodePart(rawHeader), "ID トークンのヘッダ");
   // alg は相手が決めるものだが、こちらが受けるのは RS256 だけ。
   // none を受けると署名を見ない抜け道ができてしまう
   if (header.alg !== "RS256")
@@ -305,11 +304,7 @@ export async function verify(
   if (!ok) throw new Error("ID トークンの署名が合いません");
 
   // 署名を見てから開く。形式の違いを言うのは、本物だと分かったものにだけ
-  const claims = read(
-    CLAIMS,
-    JSON.parse(new TextDecoder().decode(decodeBase64Url(rawPayload))),
-    "ID トークン",
-  );
+  const claims = read(CLAIMS, decodePart(rawPayload), "ID トークン");
   const doc = await discover();
   if (claims.iss !== doc.issuer)
     throw new Error("ID トークンの発行元が違います");

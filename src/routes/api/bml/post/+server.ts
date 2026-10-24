@@ -17,6 +17,7 @@ import { error } from "@sveltejs/kit";
 import {
   postForBml,
   refusalMessage,
+  relayed,
   requireBmlNetwork,
 } from "#lib/server/bml-network.js";
 import type { RequestHandler } from "./$types";
@@ -41,20 +42,7 @@ export const POST: RequestHandler = async ({ url, request }) => {
       : undefined;
 
   try {
-    const got = await postForBml(target, body, contentType);
-    return new Response(got.body as BodyInit, {
-      status: got.status,
-      headers: {
-        "content-type": got.contentType,
-        "cache-control": "no-store",
-        /*
-         * **「相手まで行けた」と「こちらで断った」を分ける。**
-         * 相手の 502 をそのまま返すので、符号だけでは見分けが
-         * 付かない。画面側はこれを見て成否を決める
-         */
-        "x-bml-relayed": "1",
-      },
-    });
+    return relayed(await postForBml(target, body, contentType));
   } catch (failure) {
     const why = refusalMessage(failure, "送れませんでした");
     console.warn(`[bml] 送信を断りました: ${target} (${why})`);

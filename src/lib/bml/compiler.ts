@@ -131,6 +131,15 @@ const BINARY_OPS: Record<string, number> = {
   instanceof: OP.INSTANCEOF,
 };
 
+const UNARY_OPS: Record<string, number[]> = {
+  "!": [OP.NOT],
+  "-": [OP.NEG],
+  "+": [OP.NUM],
+  "~": [OP.BNOT],
+  typeof: [OP.TYPEOF],
+  void: [OP.POP, OP.UNDEF],
+};
+
 /** 文の中の var と関数宣言を集める (巻き上げ) */
 function collect(body: Stmt[], vars: string[], funcs: FunctionNode[]): void {
   const visit = (stmt: Stmt): void => {
@@ -327,11 +336,13 @@ class FunctionCompiler {
     collect(body, vars, funcs);
     if (this.scope !== null) {
       const names = this.scope.names;
-      for (const p of params) if (!names.has(p)) names.set(p, names.size);
+      const declare = (name: string) => {
+        if (!names.has(name)) names.set(name, names.size);
+      };
+      params.forEach(declare);
       this.code.params = params.map((p) => names.get(p)!);
-      for (const v of vars) if (!names.has(v)) names.set(v, names.size);
-      for (const f of funcs)
-        if (!names.has(f.name)) names.set(f.name, names.size);
+      vars.forEach(declare);
+      for (const f of funcs) declare(f.name);
       if (!names.has("arguments") && usesArguments(body)) {
         names.set("arguments", names.size);
         this.code.argumentsSlot = names.get("arguments")!;
@@ -686,26 +697,7 @@ class FunctionCompiler {
       return;
     }
     this.expression(arg);
-    switch (op) {
-      case "!":
-        this.emit(OP.NOT);
-        return;
-      case "-":
-        this.emit(OP.NEG);
-        return;
-      case "+":
-        this.emit(OP.NUM);
-        return;
-      case "~":
-        this.emit(OP.BNOT);
-        return;
-      case "typeof":
-        this.emit(OP.TYPEOF);
-        return;
-      case "void":
-        this.emit(OP.POP, OP.UNDEF);
-        return;
-    }
+    this.emit(...(UNARY_OPS[op] ?? []));
   }
 
   /** `++x` / `x--` など */
@@ -771,12 +763,7 @@ class FunctionCompiler {
   }
 }
 
-/** 大域のコード (`<script>` 1 つ) を組む。誤りは投げる */
-function compileProgram(body: Stmt[], name: string): Code {
-  return new FunctionCompiler(name, null).compileBody([], body);
-}
-
-/** スクリプトの文字列を組む。構文の誤りは `ScriptSyntaxError` で投げる */
+/** スクリプトの文字列 (大域のコード。`<script>` 1 つ) を組む。構文の誤りは `ScriptSyntaxError` で投げる */
 export function compileScript(source: string, name: string): Code {
-  return compileProgram(parseScript(source), name);
+  return new FunctionCompiler(name, null).compileBody([], parseScript(source));
 }

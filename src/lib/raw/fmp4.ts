@@ -31,6 +31,7 @@ import {
   readFragment,
   readInit,
 } from "#lib/ts/fmp4.js";
+import { ascii, concatBytes, u32 } from "#lib/ts/bytes.js";
 import { CLOCK } from "#lib/ts/pes.js";
 import { downscale } from "./downscale";
 import type { GrabSize } from "./messages";
@@ -189,11 +190,8 @@ export class Fmp4Video {
         this.host.audio.push(sample.data, pts);
       } else {
         const head = adtsHeader(track.config, sample.data.length);
-        if (head === null) continue;
-        const frame = new Uint8Array(head.length + sample.data.length);
-        frame.set(head);
-        frame.set(sample.data, head.length);
-        this.host.audio.push(frame, pts);
+        if (head !== null)
+          this.host.audio.push(concatBytes([head, sample.data]), pts);
       }
     }
   }
@@ -260,11 +258,7 @@ export class Fmp4Video {
      * 渡すと、また転ぶ (`ERRORS_MOST` を使い切って諦めてしまう)。キーフレームが無ければこれから来るぶんを待つ
      */
     const key = this.pending.findIndex((item) => item.key);
-    this.pending = key < 0 ? [] : this.pending.slice(key);
-    this.pendingBytes = this.pending.reduce(
-      (sum, item) => sum + item.data.length,
-      0,
-    );
+    this.keep(key < 0 ? [] : this.pending.slice(key));
     this.needKey = key < 0;
   }
 
@@ -303,15 +297,20 @@ export class Fmp4Video {
       if (this.pending[i]!.key) found = i;
     }
     if (found <= 0) return;
-    this.pending = this.pending.slice(found);
-    this.pendingBytes = this.pending.reduce(
-      (sum, item) => sum + item.data.length,
-      0,
-    );
+    this.keep(this.pending.slice(found));
     this.decoder?.reset();
     this.open();
     // 開き直しでキーフレームを待つ印が立つが、頭はキーフレームなのでそのまま渡せる
     this.needKey = false;
+  }
+
+  /** 圧縮の待ちを差し替える */
+  private keep(pending: Pending[]): void {
+    this.pending = pending;
+    this.pendingBytes = pending.reduce(
+      (sum, item) => sum + item.data.length,
+      0,
+    );
   }
 
   /** 圧縮の待ちの頭を1つ取り出す */
@@ -466,8 +465,7 @@ export class Fmp4Video {
    */
   reset(from: number | null = null): void {
     this.floor = from === null ? null : Math.round((from * 1_000_000) / CLOCK);
-    this.pending = [];
-    this.pendingBytes = 0;
+    this.keep([]);
     this.overflowed = false;
     this.dropFrames();
     this.started.clear();
@@ -500,19 +498,9 @@ export class Fmp4Video {
 
 /** 頭に並んだ箱の中に `type` があるか (中まで読まない) */
 function hasBox(bytes: Uint8Array, type: string): boolean {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let at = 0;
-  while (at + 8 <= bytes.length) {
-    const size = view.getUint32(at);
-    if (
-      String.fromCharCode(
-        bytes[at + 4]!,
-        bytes[at + 5]!,
-        bytes[at + 6]!,
-        bytes[at + 7]!,
-      ) === type
-    )
-      return true;
+  for (let at = 0; at + 8 <= bytes.length;) {
+    if (ascii(bytes, at + 4, 4) === type) return true;
+    const size = u32(bytes, at);
     if (size < 8) return false;
     at += size;
   }

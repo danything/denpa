@@ -435,25 +435,22 @@ test.describe("操作したときの反応", () => {
     await expect(menu).toBeVisible();
     await expect(menu.getByRole("menuitemradio")).toHaveCount(13);
 
-    // 表にあるジャンルを1つ選ぶ。見本の線の色はマスの線の色と同じ
+    // 表にあるジャンルを1つ選ぶ。見本の点の色はマスの時刻の前の点の色と同じ
     const genre = await page
       .locator('[data-testid="program-button"][data-genre]')
       .first()
       .getAttribute("data-genre");
-    const line = (selector: string) =>
-      page
-        .locator(selector)
-        .first()
-        .evaluate((el) => getComputedStyle(el).borderInlineStartColor);
-    expect(
-      await line(
+    const swatch = await page
+      .locator(
         `[data-testid="guide-genre-menu"] .swatch[data-genre="${genre}"]`,
-      ),
-    ).toBe(
-      await line(
-        `[data-testid="program-button"][data-genre="${genre}"]:not(.reserved)`,
-      ),
-    );
+      )
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    const dot = await page
+      .locator(`[data-testid="program-button"][data-genre="${genre}"] .num`)
+      .first()
+      .evaluate((el) => getComputedStyle(el, "::before").backgroundColor);
+    expect(dot).toBe(swatch);
 
     await menu.getByTestId(`genre-${genre}`).click();
     const opacity = (selector: string) =>

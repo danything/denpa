@@ -26,7 +26,8 @@
  * PNG は地上波と同じく色の表が抜けているので、入れ直してから返す。
  */
 
-import { ModuleBuilder, parseDdb, parseDii, TABLE_DII, u16 } from "./dsmcc";
+import { u16 } from "./bytes";
+import { ModuleBuilder, parseDdb, parseDii, TABLE_DII } from "./dsmcc";
 import { withPalette } from "./logo-palette";
 import {
   descriptors,
@@ -93,7 +94,7 @@ export function parseLogoModule(data: Uint8Array): ModuleLogo[] {
   const logos: ModuleLogo[] = [];
   for (let i = 0; i < count; i++) {
     if (at + 3 > data.length) break;
-    const logoId = ((data[at]! & 0x01) << 8) | data[at + 1]!;
+    const logoId = u16(data, at) & 0x1ff;
     const serviceCount = data[at + 2]!;
     at += 3;
 
@@ -190,11 +191,7 @@ export class DsmccLogoCollector {
     if (section[0] === TABLE_DII) {
       const dii = parseDii(section);
       if (dii === null) return;
-      /*
-       * **合致するモジュールは全部取得する。** 1つのカルーセルに `LOGO-05` と
-       * `CS_LOGO-05` が並んで流れてくる (実機の BS15_0)。最初の1つで
-       * 打ち切っていた頃は、CS のロゴが永久に揃わなかった
-       */
+      // 合致するモジュールは全部取得する (`downloadKey` の説明)
       for (const module of dii.modules) {
         if (module.name === null || !LOGO_MODULE_NAMES.has(module.name))
           continue;

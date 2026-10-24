@@ -1,5 +1,6 @@
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
+import { fileSize } from "./chase";
 
 /**
  * ファイルをそのまま返す。Range に対応する。
@@ -12,12 +13,8 @@ export function serveFile(
   contentType: string,
   request: Request,
 ): Response {
-  let size: number;
-  try {
-    size = statSync(path).size;
-  } catch {
-    return new Response("not found", { status: 404 });
-  }
+  const size = fileSize(path);
+  if (size === null) return new Response("not found", { status: 404 });
 
   const base: Record<string, string> = {
     "Content-Type": contentType,
@@ -36,6 +33,11 @@ export function serveFile(
         : createReadStream(path, { start: from, end: to }),
     ) as unknown as ReadableStream;
 
+  const unsatisfiable = () =>
+    new Response(null, {
+      status: 416,
+      headers: { "Content-Range": `bytes */${size}` },
+    });
   const range = request.headers.get("range");
   const match =
     range === null ? null : /^bytes=(\d*)-(\d*)$/.exec(range.trim());
@@ -51,24 +53,15 @@ export function serveFile(
   let to: number;
   if (fromRaw === "") {
     const suffix = Number(toRaw);
-    if (!Number.isFinite(suffix) || suffix <= 0) {
-      return new Response(null, {
-        status: 416,
-        headers: { "Content-Range": `bytes */${size}` },
-      });
-    }
+    if (!Number.isFinite(suffix) || suffix <= 0) return unsatisfiable();
     from = Math.max(0, size - suffix);
     to = size - 1;
   } else {
     from = Number(fromRaw);
     to = toRaw === "" ? size - 1 : Math.min(Number(toRaw), size - 1);
   }
-  if (!Number.isFinite(from) || from >= size || to < from) {
-    return new Response(null, {
-      status: 416,
-      headers: { "Content-Range": `bytes */${size}` },
-    });
-  }
+  if (!Number.isFinite(from) || from >= size || to < from)
+    return unsatisfiable();
 
   return new Response(stream(from, to), {
     status: 206,

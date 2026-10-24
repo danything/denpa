@@ -17,6 +17,7 @@ import { HW_KIND_LABEL, type HwCodec } from "../hw";
 import { encodeSource } from "../source";
 import type { EncodeJob, EncodeKind, EncodePhase, Recording } from "../types";
 import { programSpec } from "./captions";
+import { fileSize } from "./chase";
 import {
   type CmDetection,
   type CmReading,
@@ -236,17 +237,11 @@ function videoArgs(
       device: hw.device,
     };
   }
-  if (codec === "h264") {
-    return {
-      filter: [...steps, "format=yuv420p"].join(","),
-      device: [],
-      // crf 23 は AV1 の既定 (crf35) と同じ画質に揃えた値、medium は slow に
-      // しても時間が増えるだけ。実測の表は docs/encode.md「H.264 は crf 23」
-      encoder: ["libx264", "-preset", "medium", "-crf", "23", ...keys],
-    };
-  }
   /*
-   * **preset と crf は書いておく** — SVT-AV1 の既定は版で変わる (preset は
+   * H.264 の crf 23 は AV1 の既定 (crf35) と同じ画質に揃えた値、medium は slow に
+   * しても時間が増えるだけ。実測の表は docs/encode.md「H.264 は crf 23」
+   *
+   * AV1 は **preset と crf を書いておく** — SVT-AV1 の既定は版で変わる (preset は
    * 2.3.0 が 10、4.2.0 が 8)。エンコードする速さと大きさは denpa が決める。
    *
    * **10 に戻さない。** 4.x の M10 以上は「機械にかけるための段」で、エンコードするたびに
@@ -261,7 +256,12 @@ function videoArgs(
   return {
     filter: [...steps, "format=yuv420p"].join(","),
     device: [],
-    encoder: ["libsvtav1", "-preset", "9", "-crf", "35", ...keys],
+    encoder: [
+      ...(codec === "h264"
+        ? ["libx264", "-preset", "medium", "-crf", "23"]
+        : ["libsvtav1", "-preset", "9", "-crf", "35"]),
+      ...keys,
+    ],
   };
 }
 
@@ -1002,12 +1002,8 @@ async function decide(
   skip: number,
   video: boolean,
 ): Promise<CmDetection> {
-  if (found === null)
-    return {
-      cm: [],
-      duration: Number.NaN,
-      note: "CM検出の読み込みが失敗しました",
-    };
+  const none = (note: string) => ({ cm: [], duration: Number.NaN, note });
+  if (found === null) return none("CM検出の読み込みが失敗しました");
   try {
     // ロゴを覚え直して枠だけ読み直すときも、エンコードしたときと同じだけ頭を捨てる
     return shiftDetection(
@@ -1016,11 +1012,7 @@ async function decide(
     );
   } catch (error) {
     console.error(`[cm] 検出に失敗しました: ${error}`);
-    return {
-      cm: [],
-      duration: Number.NaN,
-      note: `CM検出に失敗しました: ${error}`,
-    };
+    return none(`CM検出に失敗しました: ${error}`);
   }
 }
 
@@ -1089,11 +1081,10 @@ function finishCanceled(jobId: number, working: string | null): void {
   emit("recordings");
 }
 
-async function runJob(jobId: number): Promise<void> {
+/** ジョブを走らせる支度。中止の合図 (`aborts`) を置いて、ジョブと録画の行を引く */
+function startJob(jobId: number) {
   const controller = new AbortController();
   aborts.set(jobId, controller);
-  const signal = controller.signal;
-
   const job = orm()
     .select()
     .from(encodeJobs)
@@ -1104,6 +1095,47 @@ async function runJob(jobId: number): Promise<void> {
     .from(recordings)
     .where(eq(recordings.id, job.recording_id))
     .get();
+  return { signal: controller.signal, job, recording };
+}
+
+/** 番組の長さと、録画の頭から番組が始まるまで (秒)。録画の頭と尻に入った前後の番組を見分ける (cm-decide.withinProgram) */
+function programSpan(recording: Recording): {
+  programLength: number;
+  programStart: number;
+} {
+  return {
+    programLength: (recording.end_at - recording.start_at) / 1000,
+    programStart:
+      (recording.start_at -
+        (recording.record_from ?? recording.start_at - config.startMargin)) /
+      1000,
+  };
+}
+
+/** ジョブを終わったことにする */
+function markDone(jobId: number): void {
+  orm()
+    .update(encodeJobs)
+    .set({ state: "done", percent: 1, finished_at: now() })
+    .where(eq(encodeJobs.id, jobId))
+    .run();
+}
+
+/** CM の境目と覚え書きを録画の行に書く */
+function saveCm(recordingId: number, detection: CmDetection): void {
+  orm()
+    .update(recordings)
+    .set({
+      cm_ranges: detection.cm,
+      cm_note: detection.note,
+      updated_at: now(),
+    })
+    .where(eq(recordings.id, recordingId))
+    .run();
+}
+
+async function runJob(jobId: number): Promise<void> {
+  const { signal, job, recording } = startJob(jobId);
   const input = recording === undefined ? null : encodeSource(recording);
 
   if (recording === undefined || input === null) {
@@ -1191,13 +1223,7 @@ async function runJob(jobId: number): Promise<void> {
       reading = await openCm(sourceTs, {
         signal,
         serviceId: recording.service_id,
-        // 録画の頭と尻に入った前後の番組を見分ける (cm-decide.withinProgram)
-        programLength: (recording.end_at - recording.start_at) / 1000,
-        programStart:
-          (recording.start_at -
-            (recording.record_from ??
-              recording.start_at - config.startMargin)) /
-          1000,
+        ...programSpan(recording),
         onStep: (label) => setStep(jobId, label),
       });
     } catch (error) {
@@ -1206,10 +1232,6 @@ async function runJob(jobId: number): Promise<void> {
       );
     }
   }
-  /** 途中でやめるときに、ここまでの作業ファイル (チャプター) を片付ける */
-  const discardWork = (): void => {
-    removeIfExists(encodeOptions.chaptersFile);
-  };
   if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
   /*
@@ -1225,10 +1247,7 @@ async function runJob(jobId: number): Promise<void> {
     );
   }
   // ここから先の下調べ (ffprobe) は合図を受け取らない。測っている間に押されていたら、その前で降りる
-  if (canceled.has(jobId)) {
-    discardWork();
-    return finishCanceled(jobId, decoded);
-  }
+  if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
   setPhase(jobId, "encode", "");
 
@@ -1266,10 +1285,7 @@ async function runJob(jobId: number): Promise<void> {
     .where(eq(services.id, recording.service_id))
     .get()?.program;
 
-  if (canceled.has(jobId)) {
-    discardWork();
-    return finishCanceled(jobId, decoded);
-  }
+  if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
   /*
    * **再エンコードする前に、いま置いてあるものを消す。**
@@ -1346,6 +1362,11 @@ async function runJob(jobId: number): Promise<void> {
     const cm = shiftRanges(found.cm, skip);
     return { cm, duration, keep: invertRanges(cm, duration) };
   };
+  /** 境目そのものにキーフレームを置く時刻 (CM を切るとき) */
+  const cutKeys = (skip: number) => {
+    const { keep, duration } = own(skip);
+    return cutPoints(keep, duration);
+  };
   /** チャプターを、エンコードするものの 0 秒に合わせて書く */
   const writeChapters = (skip: number): void => {
     if (encodeOptions.chaptersFile == null) return;
@@ -1359,8 +1380,18 @@ async function runJob(jobId: number): Promise<void> {
       for (const suffix of ["", ".post", ".ffconcat"])
         removeIfExists(`${working}${suffix}`);
     for (const p of placed) removeIfExists(p.path);
-    discardWork();
+    removeIfExists(encodeOptions.chaptersFile);
     removeIfExists(decoded);
+  };
+  /** 置きかけを片付けて中止で畳む */
+  const abandon = (working: string): void => {
+    cleanup(working);
+    finishCanceled(jobId, null);
+  };
+  /** 置きかけを片付けて失敗にする */
+  const failWorking = (working: string, reason: string): void => {
+    cleanup(working);
+    fail(jobId, recording, reason);
   };
 
   /**
@@ -1572,22 +1603,15 @@ async function runJob(jobId: number): Promise<void> {
       // 1本目は境目がまだ分からないので場面の切れ目ごとに。2本目からは境目そのものに
       ...(cutting
         ? {
-            keyframes: (skip: number) =>
-              first ? "scene" : cutPoints(own(skip).keep, own(skip).duration),
+            keyframes: (skip: number) => (first ? "scene" : cutKeys(skip)),
           }
         : {}),
     });
 
     // 出来かけを捨てるだけ。元のファイルには触らない
-    if (canceled.has(jobId)) {
-      cleanup(working);
-      return finishCanceled(jobId, null);
-    }
-    if (done.result.code !== 0) {
-      cleanup(working);
-      fail(jobId, recording, done.result.stderrTail);
-      return;
-    }
+    if (canceled.has(jobId)) return abandon(working);
+    if (done.result.code !== 0)
+      return failWorking(working, done.result.stderrTail);
     lastOutTimeUs = done.result.outTimeUs;
     /** この1本で頭から捨てた長さ (境目を指して再エンコードしたら変わる) */
     let skip = done.skip;
@@ -1603,24 +1627,13 @@ async function runJob(jobId: number): Promise<void> {
        */
       cuttable = done.video;
       firstFrame = (done.found?.times[0] ?? Number.NaN) + done.skip;
-      orm()
-        .update(recordings)
-        .set({
-          cm_ranges: detection.cm,
-          cm_note: detection.note,
-          updated_at: now(),
-        })
-        .where(eq(recordings.id, recording.id))
-        .run();
+      saveCm(recording.id, detection);
       setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
       // 切らないと決めたとき (音だけで決めた) もチャプターにする
       if (detection.cm.length > 0 && (mode === "chapter" || !cuttable)) {
         await addChapters(working, done.skip);
       }
-      if (canceled.has(jobId)) {
-        cleanup(working);
-        return finishCanceled(jobId, null);
-      }
+      if (canceled.has(jobId)) return abandon(working);
     }
 
     if (cutting && cuttable && detection !== null && detection.cm.length > 0) {
@@ -1638,18 +1651,12 @@ async function runJob(jobId: number): Promise<void> {
         );
         const again = await encodeWays(codec, working, {
           analysis: false,
-          keyframes: (skip) => cutPoints(own(skip).keep, own(skip).duration),
+          keyframes: cutKeys,
           software: true,
         });
-        if (canceled.has(jobId)) {
-          cleanup(working);
-          return finishCanceled(jobId, null);
-        }
-        if (again.result.code !== 0) {
-          cleanup(working);
-          fail(jobId, recording, again.result.stderrTail);
-          return;
-        }
+        if (canceled.has(jobId)) return abandon(working);
+        if (again.result.code !== 0)
+          return failWorking(working, again.result.stderrTail);
         lastOutTimeUs = again.result.outTimeUs;
         skip = again.skip;
         setPhase(jobId, "cut", "CMを切っています");
@@ -1667,10 +1674,7 @@ async function runJob(jobId: number): Promise<void> {
         cuttable = false;
         await addChapters(working, skip);
       } else if (first) kept = cut;
-      if (canceled.has(jobId)) {
-        cleanup(working);
-        return finishCanceled(jobId, null);
-      }
+      if (canceled.has(jobId)) return abandon(working);
     }
 
     /*
@@ -1757,12 +1761,8 @@ async function runJob(jobId: number): Promise<void> {
   // 復号したTSは作業用。元のTSは残したままなので、やり直せる
   removeIfExists(decoded);
 
-  let size = 0;
-  try {
-    size = statSync(output).size;
-  } catch {
-    // 取れなくても致命的ではない
-  }
+  // 取れなくても致命的ではない
+  const size = fileSize(output) ?? 0;
 
   /*
    * 出来上がりの長さで上書きする。CMを切っていれば元のTSより短い。
@@ -1778,11 +1778,7 @@ async function runJob(jobId: number): Promise<void> {
       .run();
   }
 
-  orm()
-    .update(encodeJobs)
-    .set({ state: "done", percent: 1, finished_at: now() })
-    .where(eq(encodeJobs.id, jobId))
-    .run();
+  markDone(jobId);
   emit("recordings");
   notify({
     event: "encode.finished",
@@ -1807,20 +1803,13 @@ async function runJob(jobId: number): Promise<void> {
     encode_skip: primary.skip,
     updated_at: now(),
   };
-  if (settings().keepOriginal) {
-    orm()
-      .update(recordings)
-      .set(finished)
-      .where(eq(recordings.id, recording.id))
-      .run();
-  } else {
-    removeIfExists(recording.ts_path);
-    orm()
-      .update(recordings)
-      .set({ ...finished, ts_path: null })
-      .where(eq(recordings.id, recording.id))
-      .run();
-  }
+  const keep = settings().keepOriginal;
+  if (!keep) removeIfExists(recording.ts_path);
+  orm()
+    .update(recordings)
+    .set(keep ? finished : { ...finished, ts_path: null })
+    .where(eq(recordings.id, recording.id))
+    .run();
 }
 
 /**
@@ -1837,21 +1826,8 @@ async function runJob(jobId: number): Promise<void> {
  * 待ち行列・中止・進み具合・失敗の通知はエンコードするジョブと同じ (`pump`)
  */
 async function runCmJob(jobId: number): Promise<void> {
-  const controller = new AbortController();
-  aborts.set(jobId, controller);
-  const signal = controller.signal;
+  const { signal, recording } = startJob(jobId);
   const what = "CM検出";
-
-  const job = orm()
-    .select()
-    .from(encodeJobs)
-    .where(eq(encodeJobs.id, jobId))
-    .get()!;
-  const recording = orm()
-    .select()
-    .from(recordings)
-    .where(eq(recordings.id, job.recording_id))
-    .get();
   if (recording === undefined) {
     markFailed(jobId, "録画が見つかりません");
     return;
@@ -1919,15 +1895,12 @@ async function runCmJob(jobId: number): Promise<void> {
       detection = shiftDetection(decideFromMaterial(stored), stored.offset);
     } else {
       setPhase(jobId, "cm", "局ロゴを確かめています");
-      const programStart =
-        (recording.start_at -
-          (recording.record_from ?? recording.start_at - config.startMargin)) /
-        1000;
+      const span = programSpan(recording);
       const reading = await openCm(input, {
         signal,
         serviceId: recording.service_id,
-        programLength: (recording.end_at - recording.start_at) / 1000,
-        programStart: programStart - shift,
+        programLength: span.programLength,
+        programStart: span.programStart - shift,
         onStep: (label) => setStep(jobId, label),
       });
       if (canceled.has(jobId)) return finishCanceled(jobId, null);
@@ -2003,21 +1976,8 @@ async function runCmJob(jobId: number): Promise<void> {
   } finally {
     removeIfExists(chapters);
   }
-  orm()
-    .update(recordings)
-    .set({
-      cm_ranges: detection.cm,
-      cm_note: detection.note,
-      updated_at: now(),
-    })
-    .where(eq(recordings.id, recording.id))
-    .run();
-
-  orm()
-    .update(encodeJobs)
-    .set({ state: "done", percent: 1, finished_at: now() })
-    .where(eq(encodeJobs.id, jobId))
-    .run();
+  saveCm(recording.id, detection);
+  markDone(jobId);
   emit("recordings");
   emit("chapters", { recordingId: recording.id } satisfies ChaptersChanged);
 }

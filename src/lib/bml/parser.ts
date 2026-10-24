@@ -185,17 +185,39 @@ class Parser {
     return body;
   }
 
+  /** `{` の後ろから `}` までの文 */
+  private block(): Stmt[] {
+    const body: Stmt[] = [];
+    while (!this.eat("}")) {
+      if (this.peek.type === "eof") this.fail("} がありません");
+      body.push(this.statement());
+    }
+    return body;
+  }
+
+  /** `(式)` */
+  private paren(): Expr {
+    this.expect("(");
+    const expr = this.expression();
+    this.expect(")");
+    return expr;
+  }
+
+  /** 括弧の中は `in` を二項演算として読む (for の頭の中でも) */
+  private inside<T>(read: () => T): T {
+    const noIn = this.noIn;
+    this.noIn = false;
+    const value = read();
+    this.noIn = noIn;
+    return value;
+  }
+
   private statement(): Stmt {
     const token = this.peek;
     if (token.type === "punct") {
       if (token.value === "{") {
         this.next();
-        const body: Stmt[] = [];
-        while (!this.eat("}")) {
-          if (this.peek.type === "eof") this.fail("} がありません");
-          body.push(this.statement());
-        }
-        return { kind: "block", body };
+        return { kind: "block", body: this.block() };
       }
       if (token.value === ";") {
         this.next();
@@ -214,27 +236,21 @@ class Parser {
           return { kind: "func", func: this.functionDecl() };
         case "if": {
           this.next();
-          this.expect("(");
-          const test = this.expression();
-          this.expect(")");
+          const test = this.paren();
           const then = this.statement();
           const otherwise = this.eat("else") ? this.statement() : null;
           return { kind: "if", test, then, else: otherwise };
         }
         case "while": {
           this.next();
-          this.expect("(");
-          const test = this.expression();
-          this.expect(")");
+          const test = this.paren();
           return { kind: "while", test, body: this.statement() };
         }
         case "do": {
           this.next();
           const body = this.statement();
           this.expect("while");
-          this.expect("(");
-          const test = this.expression();
-          this.expect(")");
+          const test = this.paren();
           this.eat(";");
           return { kind: "do", body, test };
         }
@@ -289,12 +305,7 @@ class Parser {
     }
     this.expect(")");
     this.expect("{");
-    const body: Stmt[] = [];
-    while (!this.eat("}")) {
-      if (this.peek.type === "eof") this.fail("} がありません");
-      body.push(this.statement());
-    }
-    return { name, params, body };
+    return { name, params, body: this.block() };
   }
 
   private forStatement(): Stmt {
@@ -326,13 +337,7 @@ class Parser {
       const expr = this.expression();
       if (this.eat("in")) {
         this.noIn = false;
-        if (
-          expr.kind !== "name" &&
-          expr.kind !== "member" &&
-          expr.kind !== "index"
-        ) {
-          this.fail("for-in の左が代入できません");
-        }
+        if (!assignable(expr)) this.fail("for-in の左が代入できません");
         const object = this.expression();
         this.expect(")");
         return {
@@ -356,9 +361,7 @@ class Parser {
 
   private switchStatement(): Stmt {
     this.expect("switch");
-    this.expect("(");
-    const disc = this.expression();
-    this.expect(")");
+    const disc = this.paren();
     this.expect("{");
     const cases: { test: Expr | null; body: Stmt[] }[] = [];
     while (!this.eat("}")) {
@@ -388,13 +391,7 @@ class Parser {
     const target = this.conditional();
     const token = this.peek;
     if (token.type === "punct" && ASSIGN_OPS.has(token.value)) {
-      if (
-        target.kind !== "name" &&
-        target.kind !== "member" &&
-        target.kind !== "index"
-      ) {
-        this.fail("代入できない左辺");
-      }
+      if (!assignable(target)) this.fail("代入できない左辺");
       this.next();
       return {
         kind: "assign",
@@ -409,10 +406,7 @@ class Parser {
   private conditional(): Expr {
     const test = this.logicalOr();
     if (!this.eat("?")) return test;
-    const noIn = this.noIn;
-    this.noIn = false;
-    const then = this.assignment();
-    this.noIn = noIn;
+    const then = this.inside(() => this.assignment());
     this.expect(":");
     return { kind: "cond", test, then, else: this.assignment() };
   }
@@ -509,21 +503,18 @@ class Parser {
   }
 
   private target(expr: Expr): Expr {
-    if (expr.kind !== "name" && expr.kind !== "member" && expr.kind !== "index")
-      this.fail("増減できない式");
+    if (!assignable(expr)) this.fail("増減できない式");
     return expr;
   }
 
   private args(): Expr[] {
     this.expect("(");
     const args: Expr[] = [];
-    if (!this.is(")")) {
-      const noIn = this.noIn;
-      this.noIn = false;
-      do args.push(this.assignment());
-      while (this.eat(","));
-      this.noIn = noIn;
-    }
+    if (!this.is(")"))
+      this.inside(() => {
+        do args.push(this.assignment());
+        while (this.eat(","));
+      });
     this.expect(")");
     return args;
   }
@@ -542,10 +533,7 @@ class Parser {
         if (token.type !== "name") this.fail(". の後に名前がありません");
         expr = { kind: "member", object: expr, name: token.value };
       } else if (this.eat("[")) {
-        const noIn = this.noIn;
-        this.noIn = false;
-        const index = this.expression();
-        this.noIn = noIn;
+        const index = this.inside(() => this.expression());
         this.expect("]");
         expr = { kind: "index", object: expr, index };
       } else if (this.is("(")) {
@@ -601,10 +589,7 @@ class Parser {
         return { kind: "name", name: token.value };
       case "punct":
         if (token.value === "(") {
-          const noIn = this.noIn;
-          this.noIn = false;
-          const expr = this.expression();
-          this.noIn = noIn;
+          const expr = this.inside(() => this.expression());
           this.expect(")");
           return expr;
         }
@@ -645,6 +630,13 @@ class Parser {
     this.at--;
     return this.fail("式がありません");
   }
+}
+
+/** 代入・増減できる左辺か */
+function assignable(expr: Expr): boolean {
+  return (
+    expr.kind === "name" || expr.kind === "member" || expr.kind === "index"
+  );
 }
 
 /** スクリプトを木にする。誤りは `ScriptSyntaxError` */

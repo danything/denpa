@@ -234,11 +234,8 @@ function textCache(program: Program): (fields: SearchField[]) => string {
   const cache = new Map<string, string>();
   return (fields) => {
     const key = fields.join(",");
-    let text = cache.get(key);
-    if (text === undefined) {
-      text = haystack(program, fields);
-      cache.set(key, text);
-    }
+    const text = cache.get(key) ?? haystack(program, fields);
+    cache.set(key, text);
     return text;
   };
 }
@@ -371,21 +368,15 @@ export function canceledBroadcasts(at: number): Declined {
       ),
     )
     .all();
-  /** 物理チャンネル + タイトル → 取り消した回の開始時刻 */
-  const starts = new Map<string, number[]>();
-  for (const row of rows) {
-    if (row.name === "") continue;
-    const key = `${row.channel} ${row.name}`;
-    const list = starts.get(key);
-    if (list === undefined) starts.set(key, [row.start_at]);
-    else list.push(row.start_at);
-  }
+  /** 物理チャンネル + タイトル → 取り消した回 */
+  const starts = Map.groupBy(
+    rows.filter((row) => row.name !== ""),
+    (row) => `${row.channel} ${row.name}`,
+  );
   return {
     has(program) {
-      const list = starts.get(`${program.channel} ${program.name}`);
-      if (list === undefined) return false;
-      return list.some(
-        (start) => Math.abs(start - program.start_at) <= DECLINE_WINDOW,
+      return (starts.get(`${program.channel} ${program.name}`) ?? []).some(
+        (row) => Math.abs(row.start_at - program.start_at) <= DECLINE_WINDOW,
       );
     },
   };

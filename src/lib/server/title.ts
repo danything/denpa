@@ -72,6 +72,13 @@ const FORBIDDEN = '/\\:*?"<>|';
 /** 標準の大きさの空白 (U+3000) */
 const WIDE_SPACE = String.fromCharCode(0x3000);
 
+/** 外した跡の空白は1つに。全角の空白だけが並んでいたなら全角のまま */
+function squeezeSpaces(text: string): string {
+  return text.replace(/\s+/g, (run) =>
+    [...run].every((c) => c === WIDE_SPACE) ? WIDE_SPACE : " ",
+  );
+}
+
 /**
  * 元の文字列と、半角に寄せた写し (`toHalfWidth`)。**探すのは写しで、切り出すのは元から。**
  *
@@ -154,13 +161,9 @@ const LEFTOVER_SEPARATOR = /[\s\-~〜:：|｜▼▽・･]+$/u;
 export function withoutSeason(series: string): string {
   const removed = new Twin(series).remove(SEASON_ANYWHERE).raw;
   if (removed === series) return series;
-  const out = removed
-    .replace(LEFTOVER_SEPARATOR, "")
-    .replace(LEADING_SEPARATOR, "")
-    .replace(/\s+/g, (run) =>
-      [...run].every((c) => c === WIDE_SPACE) ? WIDE_SPACE : " ",
-    )
-    .trim();
+  const out = squeezeSpaces(
+    removed.replace(LEFTOVER_SEPARATOR, "").replace(LEADING_SEPARATOR, ""),
+  ).trim();
   return out === "" ? series : out;
 }
 
@@ -174,13 +177,9 @@ export function searchable(input: string): string {
  * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。全角も放送のまま。エンコードの入れ物の title にも埋め込む
  */
 export function displayTitle(rawName: string): string {
-  const cleaned = new Twin(rawName ?? "")
-    .remove(DECORATION)
-    .trim()
-    // 記号を落とした跡の空白は1つに。全角の空白だけが並んでいたなら全角のまま
-    .raw.replace(/\s+/g, (run) =>
-      [...run].every((c) => c === WIDE_SPACE) ? WIDE_SPACE : " ",
-    );
+  const cleaned = squeezeSpaces(
+    new Twin(rawName ?? "").remove(DECORATION).trim().raw,
+  );
   return cleaned === "" ? (rawName ?? "").trim() : cleaned;
 }
 

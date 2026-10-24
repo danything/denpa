@@ -111,7 +111,8 @@ export function normalizePostalCode(value: string): string {
   return digits.length === 7 ? digits : "";
 }
 
-function stored(key: string): string | undefined {
+/** 設定の表の1つを読む。画面の設定でない控え (`restore-width` の済んだ所) もここ */
+export function stored(key: string): string | undefined {
   return orm()
     .select({ value: settingsTable.value })
     .from(settingsTable)
@@ -181,6 +182,26 @@ export function settings(): Settings {
   };
 }
 
+/** 設定の表の1つを書く (`stored` の対) */
+export function store(key: string, value: string): void {
+  saveRaw(orm(), key, value, now());
+}
+
+function saveRaw(
+  db: Pick<ReturnType<typeof orm>, "insert">,
+  key: string,
+  value: string,
+  at: number,
+): void {
+  db.insert(settingsTable)
+    .values({ key, value, updated_at: at })
+    .onConflictDoUpdate({
+      target: settingsTable.key,
+      set: { value: sql`excluded.value`, updated_at: sql`excluded.updated_at` },
+    })
+    .run();
+}
+
 /** `encode` はコーデックの選択から決まるだけなので書かない */
 export function saveSettings(
   patch: Partial<Omit<Settings, "encode">>,
@@ -196,16 +217,7 @@ export function saveSettings(
           : typeof value === "object" && !Array.isArray(value)
             ? JSON.stringify(value)
             : String(value);
-      tx.insert(settingsTable)
-        .values({ key, value: text, updated_at: at })
-        .onConflictDoUpdate({
-          target: settingsTable.key,
-          set: {
-            value: sql`excluded.value`,
-            updated_at: sql`excluded.updated_at`,
-          },
-        })
-        .run();
+      saveRaw(tx, key, text, at);
     }
   });
   return settings();

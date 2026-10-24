@@ -253,9 +253,7 @@ function toPrimitiveString(value: JSObject): string {
     return `function ${value.name}() { [native code] }`;
   const primitive = value.props.get("__primitive__");
   if (primitive !== undefined && !isObject(primitive)) return toStr(primitive);
-  return value.cls === "hostobject"
-    ? "[object hostobject]"
-    : `[object ${value.cls}]`;
+  return `[object ${value.cls}]`;
 }
 
 export function toStr(value: Value): string {
@@ -320,18 +318,9 @@ export function lessThan(a: Value, b: Value): boolean | undefined {
 }
 
 export function add(a: Value, b: Value): Value {
-  const x =
-    isObject(a) && !(a instanceof JSDate)
-      ? toStr(a)
-      : a instanceof JSDate
-        ? toStr(a)
-        : a;
-  const y =
-    isObject(b) && !(b instanceof JSDate)
-      ? toStr(b)
-      : b instanceof JSDate
-        ? toStr(b)
-        : b;
+  // 物は日付も文字列にする (日付どうしでもつなぐ)
+  const x = isObject(a) ? toStr(a) : a;
+  const y = isObject(b) ? toStr(b) : b;
   if (typeof x === "string" || typeof y === "string") {
     const text = toStr(x) + toStr(y);
     if (text.length > MAX_STRING) throw new ScriptError("文字列が長すぎます");

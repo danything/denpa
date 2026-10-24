@@ -203,6 +203,13 @@ function fail(reason: string): void {
   post({ type: "fail", reason });
 }
 
+/** 描く道具を用意できなかった */
+function failToShow(error: unknown): void {
+  fail(
+    `映像を表示できません (${error instanceof Error ? error.message : String(error)})`,
+  );
+}
+
 /** 伸ばした PTS にする (`pes.unwrap`)。映像と音声で同じ物差しを使う */
 function extend(pts: number): number {
   const value = near === null ? pts : unwrap(pts, near);
@@ -831,9 +838,7 @@ function startFmp4(canvas: OffscreenCanvas, follow: boolean): boolean {
       follow,
     );
   } catch (error) {
-    fail(
-      `映像を表示できません (${error instanceof Error ? error.message : String(error)})`,
-    );
+    failToShow(error);
     return false;
   }
   // 渡してから出てくるまでの時間は物差しにしない (GPU の経路は詰まっていなくても溜める。`budget.ts`)
@@ -859,9 +864,7 @@ async function init(
     try {
       renderer = new YuvRenderer(canvas);
     } catch (error) {
-      fail(
-        `映像を表示できません (${error instanceof Error ? error.message : String(error)})`,
-      );
+      failToShow(error);
       return;
     }
   }

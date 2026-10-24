@@ -99,12 +99,9 @@ export function tap(
   /*
    * **真ん中を素早く2回で再生/一時停止** (スマホの VLC と同じ癖)。
    * 指の1回目は操作列の出し入れなので、2回目で初めて再生に触る。
-   * マウスは1回目で既に切り替えているので、ここには来なくてよい
+   * マウスは押すたびに切り替える
    */
-  if (again && coarse) {
-    return { action: { kind: "play" }, next };
-  }
-  return { action: coarse ? { kind: "controls" } : { kind: "play" }, next };
+  return { action: { kind: coarse && !again ? "controls" : "play" }, next };
 }
 
 /** チャプター1つ。`start` / `end` は秒 */
@@ -148,9 +145,7 @@ export function prevChapterAt(chapters: Chapter[], at: number): number | null {
     before = head;
     head = chapter.start;
   }
-  if (head === null) return null;
-  if (at - head > REWIND_HEAD) return head;
-  return before;
+  return head !== null && at - head > REWIND_HEAD ? head : before;
 }
 
 /**
@@ -164,8 +159,7 @@ export function chapterAt(chapters: Chapter[], at: number): Chapter | null {
     if (chapter.start > at + 0.01) break;
     found = chapter;
   }
-  if (found === null) return null;
-  return at < found.end ? found : null;
+  return found !== null && at < found.end ? found : null;
 }
 
 /**
@@ -267,8 +261,7 @@ export function parseChapters(json: string): Chapter[] {
  * @returns 覚える位置。覚えないなら null
  */
 export function resumePoint(at: number, length: number): number | null {
-  if (!Number.isFinite(at) || at < RESUME_HEAD) return null;
-  if (Number.isFinite(length) && length > 0 && at > length - RESUME_EDGE)
+  if (!Number.isFinite(at) || at < RESUME_HEAD || watchedToEnd(at, length))
     return null;
   return at;
 }

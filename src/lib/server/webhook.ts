@@ -32,8 +32,14 @@ function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
   return webhook.events.length === 0 || webhook.events.includes(event);
 }
 
-/** 送って、結果を行に残す。戻り値も同じ結果 (`ok` か失敗の理由) */
-async function post(webhook: Webhook, payload: Payload): Promise<string> {
+/**
+ * 送って、結果を行に残す。戻り値も同じ結果 (`ok` か失敗の理由)。
+ * 設定画面の「テスト送信」はこれを待つ (結果を見たいので)
+ */
+export async function send(
+  webhook: Webhook,
+  payload: Payload,
+): Promise<string> {
   const at = now();
   let status = "ok";
   try {
@@ -68,11 +74,6 @@ export function notify(payload: Payload): void {
     .all();
   for (const webhook of enabled) {
     if (!subscribed(webhook, payload.event)) continue;
-    void post(webhook, payload);
+    void send(webhook, payload);
   }
-}
-
-/** 設定画面の「テスト送信」。こちらは結果を見たいので待つ */
-export function send(webhook: Webhook, payload: Payload): Promise<string> {
-  return post(webhook, payload);
 }

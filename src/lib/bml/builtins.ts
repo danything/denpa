@@ -57,12 +57,11 @@ export function createRealm(options: RealmOptions): Realm {
     functionProto,
     realm.arrayProto,
     realm.stringProto,
+    realm.numberProto,
+    realm.booleanProto,
     dateProto,
-  ]) {
+  ])
     proto.builtin = true;
-  }
-  realm.numberProto.builtin = true;
-  realm.booleanProto.builtin = true;
 
   const native = (
     name: string,
@@ -91,6 +90,12 @@ export function createRealm(options: RealmOptions): Realm {
   const array = (items: Value[]): JSArray => {
     if (items.length > MAX_ARRAY) throw new ScriptError("配列が大きすぎます");
     return new JSArray(realm.arrayProto, items);
+  };
+  /** `new String(…)` などの包み。中の値は `__primitive__` に持つ */
+  const wrapper = (proto: JSObject, value: Value): JSObject => {
+    const made = new JSObject(proto, proto.cls);
+    made.put("__primitive__", value);
+    return made;
   };
 
   // Object
@@ -220,11 +225,7 @@ export function createRealm(options: RealmOptions): Realm {
   const string = native(
     "String",
     (_, args) => makeString(args),
-    (args) => {
-      const wrapper = new JSObject(realm.stringProto, "String");
-      wrapper.put("__primitive__", makeString(args));
-      return wrapper;
-    },
+    (args) => wrapper(realm.stringProto, makeString(args)),
   );
   defineClass("String", string, realm.stringProto);
   string.put(
@@ -313,14 +314,12 @@ export function createRealm(options: RealmOptions): Realm {
   );
 
   // Number・Boolean
+  const makeNumber = (args: Value[]): number =>
+    args.length === 0 ? 0 : toNumber(args[0]);
   const number = native(
     "Number",
-    (_, args) => (args.length === 0 ? 0 : toNumber(args[0])),
-    (args) => {
-      const wrapper = new JSObject(realm.numberProto, "Number");
-      wrapper.put("__primitive__", args.length === 0 ? 0 : toNumber(args[0]));
-      return wrapper;
-    },
+    (_, args) => makeNumber(args),
+    (args) => wrapper(realm.numberProto, makeNumber(args)),
   );
   defineClass("Number", number, realm.numberProto);
   number.put("MAX_VALUE", MAX_VALUE);
@@ -338,11 +337,7 @@ export function createRealm(options: RealmOptions): Realm {
   const boolean = native(
     "Boolean",
     (_, args) => toBoolean(args[0]),
-    (args) => {
-      const wrapper = new JSObject(realm.booleanProto, "Boolean");
-      wrapper.put("__primitive__", toBoolean(args[0]));
-      return wrapper;
-    },
+    (args) => wrapper(realm.booleanProto, toBoolean(args[0])),
   );
   defineClass("Boolean", boolean, realm.booleanProto);
   method(realm.booleanProto, "toString", (self) =>
@@ -441,10 +436,8 @@ export function createRealm(options: RealmOptions): Realm {
       });
     }
   }
-  method(dateProto, "toString", (self) => formatDate(dateValue(self).time));
-  method(dateProto, "toLocaleString", (self) =>
-    formatDate(dateValue(self).time),
-  );
+  for (const name of ["toString", "toLocaleString"])
+    method(dateProto, name, (self) => formatDate(dateValue(self).time));
   method(dateProto, "toUTCString", (self) =>
     formatDate(dateValue(self).time, true),
   );

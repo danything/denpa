@@ -122,13 +122,17 @@ function stateOf(row: typeof deviceCodes.$inferSelect, at: number): CodeState {
   return "pending";
 }
 
-/** 許す画面 (`/device`) に出すもの。コードが無ければ null */
-export function viewCode(userCode: string, at = now()): CodeView | null {
-  const row = orm()
+function codeRow(userCode: string) {
+  return orm()
     .select()
     .from(deviceCodes)
     .where(eq(deviceCodes.user_code, userCode))
     .get();
+}
+
+/** 許す画面 (`/device`) に出すもの。コードが無ければ null */
+export function viewCode(userCode: string, at = now()): CodeView | null {
+  const row = codeRow(userCode);
   if (row === undefined) return null;
   return { userCode: row.user_code, name: row.name, state: stateOf(row, at) };
 }
@@ -147,11 +151,7 @@ export function approve(
   at = now(),
 ): CodeView | null {
   if (viaToken) throw new TokenCannotApprove();
-  const row = orm()
-    .select()
-    .from(deviceCodes)
-    .where(eq(deviceCodes.user_code, userCode))
-    .get();
+  const row = codeRow(userCode);
   if (row === undefined) return null;
   const state = stateOf(row, at);
   if (state === "pending") {

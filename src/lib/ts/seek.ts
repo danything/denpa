@@ -19,6 +19,7 @@
  * DOM もファイルも触らない (読む関数は受け取る) ので、合成した TS で確かめられる (`seek.test.ts`)
  */
 
+import { u16 } from "./bytes";
 import { CLOCK, readStamp, WRAP } from "./pes";
 import { findSync, PACKET, SYNC } from "./psi";
 
@@ -64,21 +65,19 @@ export function* pesMarks(bytes: Uint8Array): Generator<PesMark> {
     const offset = at + 4 + (control & 0x02 ? 1 + bytes[at + 4]! : 0);
     // 頭の 9 バイト + PTS の 5 バイトがパケットの中に収まっていること
     if (offset + 14 > at + PACKET) continue;
-    if (
-      bytes[offset] !== 0 ||
-      bytes[offset + 1] !== 0 ||
-      bytes[offset + 2] !== 1
-    )
-      continue;
-    const id = bytes[offset + 3]!;
+    // PES の頭 (00 00 01) で、PTS が付いているもの
+    if (u16(bytes, offset) !== 0 || bytes[offset + 2] !== 1) continue;
     if (!(bytes[offset + 7]! & 0x80)) continue;
-    yield { id, pts: readStamp(bytes, offset + 9), at };
+    yield { id: bytes[offset + 3]!, pts: readStamp(bytes, offset + 9), at };
   }
 }
 
+/** 0〜一周の手前に置き直す (90kHz) */
+const inWrap = (value: number) => ((value % WRAP) + WRAP) % WRAP;
+
 /** 一周の中の差 `a - b` を、-半周〜+半周に置き直す (90kHz) */
 function delta(a: number, b: number): number {
-  const d = (((a - b) % WRAP) + WRAP) % WRAP;
+  const d = inWrap(a - b);
   return d >= WRAP / 2 ? d - WRAP : d;
 }
 
@@ -104,12 +103,12 @@ export function tsHead(bytes: Uint8Array): number | null {
   }
   if (ref === null || av === null) return null;
   const first = text !== null && text < av && av - text < CLOCK ? text : av;
-  return (((ref + first) % WRAP) + WRAP) % WRAP;
+  return inWrap(ref + first);
 }
 
 /** 頭から数えた秒。一周をまたいでも増え続ける (録画は一周より短い)。頭の少し前は負 */
 export function sinceHead(pts: number, head: number): number {
-  const d = (((pts - head) % WRAP) + WRAP) % WRAP;
+  const d = inWrap(pts - head);
   return (d > WRAP - BEFORE_HEAD * CLOCK ? d - WRAP : d) / CLOCK;
 }
 

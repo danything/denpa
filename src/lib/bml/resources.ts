@@ -304,10 +304,10 @@ export class Resources {
       };
       if (
         !same(dc[1]!, program?.originalNetworkId) ||
-        !same(dc[2]!, program?.transportStreamId)
+        !same(dc[2]!, program?.transportStreamId) ||
+        !same(dc[3]!, program?.serviceId)
       )
         return null;
-      if (!same(dc[3]!, program?.serviceId)) return null;
       path = dc[4] ?? "/";
     } else if (/^[a-z][a-z0-9+.-]*:/i.test(path)) {
       return null;
@@ -411,12 +411,7 @@ export class Resources {
    */
   refetch(ref: Ref): Promise<CarouselFile | null> {
     if (ref.url === undefined) return this.fetch(ref);
-    const old = this.remote.get(ref.url);
-    if (old !== undefined && !this.remoteWaiting.has(ref.url)) {
-      this.remote.delete(ref.url);
-      this.remoteBytes -= old.data.length;
-      revoke(old);
-    }
+    if (!this.remoteWaiting.has(ref.url)) this.dropRemote(ref.url);
     return this.fetchRemote(ref.url);
   }
 
@@ -456,23 +451,24 @@ export class Resources {
    * 捨てない (描いている画像の blob: の URL を消さない。1 つの文書のぶんだけ上限を超えうる)
    */
   private keepRemote(url: string, file: CarouselFile): void {
-    const old = this.remote.get(url);
-    if (old !== undefined) {
-      this.remote.delete(url);
-      this.remoteBytes -= old.data.length;
-      revoke(old);
-    }
+    this.dropRemote(url);
     this.remote.set(url, file);
     this.remoteBytes += file.data.length;
     this.usedOn.set(file, this.page);
     for (const [k, kept] of this.remote) {
       if (this.remote.size <= REMOTE_FILES && this.remoteBytes <= REMOTE_BYTES)
         break;
-      if (this.usedOn.get(kept) === this.page) continue;
-      this.remote.delete(k);
-      this.remoteBytes -= kept.data.length;
-      revoke(kept);
+      if (this.usedOn.get(kept) !== this.page) this.dropRemote(k);
     }
+  }
+
+  /** 覚えた通信のものを捨てる */
+  private dropRemote(url: string): void {
+    const old = this.remote.get(url);
+    if (old === undefined) return;
+    this.remote.delete(url);
+    this.remoteBytes -= old.data.length;
+    revoke(old);
   }
 
   /** モジュールが届くのを待つ。来ないと決まれば null */

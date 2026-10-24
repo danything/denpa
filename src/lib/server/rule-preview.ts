@@ -119,6 +119,13 @@ export interface Preview {
   failed: string | null;
 }
 
+/** スケジューラが既にチューナー不足と判断した予約なら、その理由 */
+function conflictReason(held: Pending | null): string | null {
+  return held?.state === "conflict"
+    ? (held.conflict_reason ?? "チューナーが足りません")
+    : null;
+}
+
 interface Pending {
   id: number;
   rule_id: number | null;
@@ -348,10 +355,7 @@ async function countPreview(
       // 重なりは出す 100 件にだけ当てる (下)。スケジューラが既にチューナー
       // 不足と判断していれば、その理由も添える (何台足りないのかはあちらしか知らない)
       conflicts: [],
-      conflict_reason:
-        held?.state === "conflict"
-          ? (held.conflict_reason ?? "チューナーが足りません")
-          : null,
+      conflict_reason: conflictReason(held),
       // 引っ込めない予約 (手動・猶予の内) が立っているなら録る。「録らない」とは言わない
       skip:
         held !== null && keepsReservation(held, at) && !p.copy_never
@@ -379,10 +383,7 @@ async function countPreview(
         reservation_state: held.state,
         matched: false,
         conflicts: [],
-        conflict_reason:
-          held.state === "conflict"
-            ? (held.conflict_reason ?? "チューナーが足りません")
-            : null,
+        conflict_reason: conflictReason(held),
         skip: null,
       });
     }

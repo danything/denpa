@@ -16,7 +16,7 @@
 
 import type { Genre } from "../arib";
 import { decodeAribText } from "./aribtext";
-import { joinBytes } from "./bytes";
+import { ascii, joinBytes, u16 } from "./bytes";
 import {
   DESC_DIGITAL_COPY_CONTROL,
   descriptors,
@@ -155,13 +155,8 @@ export function parseTimeTable(section: Uint8Array): number | null {
  * 全ビットが1なら「未定」。開始時刻が未定の番組は番組表に置けないので null で返す。
  */
 export function parseMjdTime(data: Uint8Array, at: number): number | null {
-  let allOnes = true;
-  for (let i = 0; i < 5; i++) {
-    if (data[at + i] !== 0xff) allOnes = false;
-  }
-  if (allOnes) return null;
-
-  const mjd = (data[at]! << 8) | data[at + 1]!;
+  if ([0, 1, 2, 3, 4].every((i) => data[at + i] === 0xff)) return null;
+  const mjd = u16(data, at);
   const seconds =
     (mjd - MJD_EPOCH) * 86400 +
     bcd(data[at + 2]!) * 3600 +
@@ -216,8 +211,7 @@ const SAMPLING_RATE: Record<number, number> = {
   7: 48000,
 };
 
-const lang = (data: Uint8Array, at: number) =>
-  String.fromCharCode(data[at]!, data[at + 1]!, data[at + 2]!).toLowerCase();
+const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
 
 /**
  * 記述子を読んで番組の中身を埋める。
@@ -367,12 +361,12 @@ export function parseEit(
 
   const result: EitSection = {
     tableId,
-    serviceId: (section[3]! << 8) | section[4]!,
+    serviceId: u16(section, 3),
     version: (section[5]! >> 1) & 0x1f,
     sectionNumber: section[6]!,
     lastSectionNumber: section[7]!,
-    transportStreamId: (section[8]! << 8) | section[9]!,
-    originalNetworkId: (section[10]! << 8) | section[11]!,
+    transportStreamId: u16(section, 8),
+    originalNetworkId: u16(section, 10),
     segmentLastSectionNumber: section[12]!,
     lastTableId: section[13]! - shift,
     events: [],
@@ -381,14 +375,13 @@ export function parseEit(
   let at = 14;
   const end = section.length - 4;
   while (at + 12 <= end) {
-    const descriptorsLength =
-      ((section[at + 10]! & 0x0f) << 8) | section[at + 11]!;
+    const descriptorsLength = u16(section, at + 10) & 0x0fff;
     const body = section.subarray(at + 12, at + 12 + descriptorsLength);
     const event: EitEvent = {
       serviceId: result.serviceId,
       transportStreamId: result.transportStreamId,
       originalNetworkId: result.originalNetworkId,
-      eventId: (section[at]! << 8) | section[at + 1]!,
+      eventId: u16(section, at),
       startAt: parseMjdTime(section, at + 2),
       duration: parseBcdDuration(section, at + 7),
       runningStatus: (section[at + 10]! >> 5) & 0x07,
@@ -494,26 +487,28 @@ export class ScheduleProgress {
     // いちばん後ろの表は必ず流れてくる。来ていないなら、まだ途中
     if (!this.seen.has(this.lastTableId)) return false;
     for (const tableId of this.seen.keys()) {
-      if (!this.completeTable(tableId)) return false;
+      if (this.holes(tableId).length > 0) return false;
     }
     return true;
   }
 
-  private completeTable(tableId: number): boolean {
-    const numbers = this.seen.get(tableId);
-    const last = this.lastSection.get(tableId);
-    if (numbers === undefined || last === undefined) return false;
-
+  /** その表でまだ来ていない節。セグメントの先頭すら来ていなければ、先頭の番号を数える */
+  private holes(tableId: number): number[] {
+    const numbers = this.seen.get(tableId) ?? new Set<number>();
+    const last = this.lastSection.get(tableId) ?? 0;
+    const holes: number[] = [];
     for (let start = 0; start <= last; start += 8) {
+      // 待っていないものを「足りない」と言わない
       if (this.stale(tableId, start)) continue;
       const segmentLast = this.segmentLast.get(`${tableId}:${start}`);
-      // セグメントの先頭すら来ていない。まだ待つ
-      if (segmentLast === undefined) return false;
-      for (let n = start; n <= segmentLast; n++) {
-        if (!numbers.has(n)) return false;
+      if (segmentLast === undefined) {
+        holes.push(start);
+        continue;
       }
+      for (let n = start; n <= segmentLast; n++)
+        if (!numbers.has(n)) holes.push(n);
     }
-    return true;
+    return holes;
   }
 
   /**
@@ -522,13 +517,7 @@ export class ScheduleProgress {
    * セグメントは 0:00 から3時間ずつの枠で、`table_id` と節番号から
    * それがいつの枠なのかが決まる — 基本は `0x50` が当日 0:00 から4日ぶん、
    * `0x51` がその次の4日ぶん。詳細 (`0x58`〜) も同じ並びをもう一度たどる。
-   *
-   * **終わった枠は放送に乗らない。** 「空でも先頭の1本は来る」として
-   * 待っていた頃は、実機で 0:00〜いまの枠がまるごと欠けたまま埋まらず、
-   * **14チャンネル全部が上限の600秒を使い切って**いた。1つも早く離せず、
-   * チューナーが常に番組表で埋まる。
-   *
-   * 過ぎた枠のぶんの番組は、そこが未来だった数日前に取り込んである。
+   * 終わった枠は放送に乗らない (クラスの説明)。そのぶんの番組は、そこが未来だった数日前に取り込んである。
    */
   private stale(tableId: number, start: number): boolean {
     const base =
@@ -559,20 +548,7 @@ export class ScheduleProgress {
 
     const missing: string[] = [];
     for (const tableId of this.seen.keys()) {
-      const numbers = this.seen.get(tableId) ?? new Set<number>();
-      const last = this.lastSection.get(tableId) ?? 0;
-      const holes: number[] = [];
-      for (let start = 0; start <= last; start += 8) {
-        // 待っていないものを「足りない」と言わない。数え方と揃える
-        if (this.stale(tableId, start)) continue;
-        const segmentLast = this.segmentLast.get(`${tableId}:${start}`);
-        if (segmentLast === undefined) {
-          holes.push(start);
-          continue;
-        }
-        for (let n = start; n <= segmentLast; n++)
-          if (!numbers.has(n)) holes.push(n);
-      }
+      const holes = this.holes(tableId);
       if (holes.length > 0) {
         const head = holes.slice(0, 8).join(",");
         missing.push(
@@ -841,7 +817,7 @@ export class PresentFollowing {
     for (const raw of this.sections.feed(packet)) {
       // 番組表 (schedule) と他局の p/f は読まずに捨てる。同じ PID に流れてくる
       if (raw[0] !== TABLE_PF_ACTUAL || raw.length < 18) continue;
-      if (((raw[3]! << 8) | raw[4]!) !== this.serviceId) continue;
+      if (u16(raw, 3) !== this.serviceId) continue;
       const section = parseEit(raw);
       if (section === null || section.sectionNumber > 1) continue;
       const slot = section.sectionNumber as 0 | 1;

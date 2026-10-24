@@ -181,15 +181,9 @@ export function readCardStatus(raw: unknown): CardStatus {
   return normalize(tolerate(CARD_STATUS, raw, "エージェントの /denpa/card"));
 }
 
+/** 確かめられなかった。読めていない手元のカードとして、理由だけ出す */
 function failed(message: string): CardStatus {
-  return {
-    ok: false,
-    message,
-    source: "local",
-    ids: [],
-    tuners: [],
-    readers: [],
-  };
+  return normalize({ message });
 }
 
 /** `/denpa/decode` の答え。断られたときは `error` に理由 */

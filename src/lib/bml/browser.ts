@@ -242,12 +242,12 @@ export function defineBrowser(host: BrowserHost): HostObject {
   const str = (args: Value[], i: number): string => toStr(args[i]);
 
   // レジスタ (Ureg は局が変わると消える。Greg は消えない)
-  for (const [name, registers, first] of [
-    ["Ureg", host.ureg, 0],
-    ["Greg", host.greg, 0],
+  for (const [name, registers] of [
+    ["Ureg", host.ureg],
+    ["Greg", host.greg],
   ] as const) {
     const object = new HostObject(realm.objectProto);
-    for (let i = first; i < registers.length; i++) {
+    for (let i = 0; i < registers.length; i++) {
       object.define(
         String(i),
         () => registers[i],
@@ -306,15 +306,10 @@ export function defineBrowser(host: BrowserHost): HostObject {
   fn("setInterval", (args) =>
     host.setTimer(str(args, 0), toNumber(args[1]), toNumber(args[2])),
   );
-  fn("clearTimer", (args) =>
-    host.timer(toNumber(args[0]), "clear") ? 1 : Number.NaN,
-  );
-  fn("pauseTimer", (args) =>
-    host.timer(toNumber(args[0]), "pause") ? 1 : Number.NaN,
-  );
-  fn("resumeTimer", (args) =>
-    host.timer(toNumber(args[0]), "resume") ? 1 : Number.NaN,
-  );
+  for (const action of ["clear", "pause", "resume"] as const)
+    fn(`${action}Timer`, (args) =>
+      host.timer(toNumber(args[0]), action) ? 1 : Number.NaN,
+    );
   fn("sleep", (args) => host.sleep(Math.max(0, toNumber(args[0]) || 0)));
   fn("setCurrentDateMode", (args) => {
     const mode = toNumber(args[0]);
@@ -331,14 +326,17 @@ export function defineBrowser(host: BrowserHost): HostObject {
     );
     return result < -2147483648 || result > 2147483647 ? Number.NaN : result;
   });
+  /** 文書の `Date` を親にした日付 */
+  const date = (time: number): JSDate => {
+    const ctor = realm.global.get("Date");
+    const proto = isObject(ctor) ? ctor.get("prototype") : null;
+    return new JSDate(isObject(proto) ? proto : realm.objectProto, time);
+  };
   fn("addDate", (args) => {
     const base = args[0];
     if (!(base instanceof JSDate)) return Number.NaN;
     const time = toNumber(args[1]);
-    const dateProto = realm.global.get("Date");
-    const proto = isObject(dateProto) ? dateProto.get("prototype") : null;
-    return new JSDate(
-      isObject(proto) ? proto : realm.objectProto,
+    return date(
       Number.isNaN(time)
         ? base.time
         : base.time + time * unit(toNumber(args[2])),
@@ -433,10 +431,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
   };
   fn("epgGetEventStartTime", (args) => {
     const start = host.program()?.startTimeUnixMillis;
-    if (start == null || !isCurrentEvent(str(args, 0))) return null;
-    const date = realm.global.get("Date");
-    const proto = isObject(date) ? date.get("prototype") : null;
-    return new JSDate(isObject(proto) ? proto : realm.objectProto, start);
+    return start == null || !isCurrentEvent(str(args, 0)) ? null : date(start);
   });
   fn("epgGetEventDuration", (args) => {
     const duration = host.program()?.durationSeconds;
@@ -509,7 +504,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
       .transmit(str(args, 0), denbun(str(args, 1)))
       .then((r) => resolve(array([r.resultCode, r.status, decodeEuc(r.body)])))
       .catch(() => resolve(failed));
-    return suspend(promise);
+    return new Suspend(promise);
   });
   fn("confirmIPNetwork", (args) => {
     if (!host.ip.connected()) return null;
@@ -524,7 +519,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
         ),
       )
       .catch(() => resolve(null));
-    return suspend(promise);
+    return new Suspend(promise);
   });
   for (const name of [
     "setISPParams",
@@ -546,10 +541,13 @@ export function defineBrowser(host: BrowserHost): HostObject {
   /*
    * Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ。**電波に AIT があればそちらを使い、引数の URL は使わない。**
    * 電波に AIT が無い局 (NHK) では、引数の URL を XML の AIT として取り、そこにあるアプリを開く (`startAppFrom`)。
-   * どちらでも、アプリの行き先は AIT から決まる (文書が渡した URL のページをそのまま開くことはしない)
+   * どちらでも、アプリの行き先は AIT から決まる (文書が渡した URL のページをそのまま開くことはしない)。
+   * 呼ばれたら何を訊かれたかを残す (`logCall`)
    */
+  const logCall = (name: string, args: Value[]): void =>
+    host.log(`${name}(${args.map((a) => toStr(a)).join(", ")})`);
   fn("startAITControlledApp", (args) => {
-    host.log(`startAITControlledApp(${args.map((a) => toStr(a)).join(", ")})`);
+    logCall("startAITControlledApp", args);
     const hint = args.map((a) => toNumber(a)).filter((n) => Number.isFinite(n));
     if (canStartApp()) return host.startApp?.(hint) === true ? 1 : Number.NaN;
     const uri = aitUri(args);
@@ -561,12 +559,12 @@ export function defineBrowser(host: BrowserHost): HostObject {
   });
   // AIT は denpa のサーバが選局したときから読んでいる (XML の AIT は起動のときに取る)。開けないなら失敗
   fn("startReceivingAIT", (args) => {
-    host.log(`startReceivingAIT(${args.map((a) => toStr(a)).join(", ")})`);
+    logCall("startReceivingAIT", args);
     return canStartApp() || canFetchAit() ? 1 : Number.NaN;
   });
   // 受け取った AIT を文書へ渡す形は確かめられていない。何を訊かれたかだけ残して、無いと答える
   fn("getReceivedAIT", (args) => {
-    host.log(`getReceivedAIT(${args.map((a) => toStr(a)).join(", ")})`);
+    logCall("getReceivedAIT", args);
     return null;
   });
 
@@ -602,10 +600,6 @@ export function defineBrowser(host: BrowserHost): HostObject {
   fn("getTuningLinkageSource", () => "");
   fn("getTuningLinkageType", () => -1);
   return browser;
-}
-
-function suspend(promise: Promise<Value>): Suspend {
-  return new Suspend(promise);
 }
 
 /**
@@ -700,7 +694,7 @@ export function defineBinaryTable(host: BrowserHost): JSFunction {
         resolve(null);
       }
     });
-    return suspend(promise);
+    return new Suspend(promise);
   };
   const binaryTable = new JSFunction(
     realm.functionProto,

@@ -66,6 +66,26 @@ export function refusalMessage(failure: unknown, fallback: string): string {
   return failure instanceof Refused ? failure.message : fallback;
 }
 
+/**
+ * 中継した答えを返す (`/api/bml/proxy` と `/api/bml/post`)。
+ *
+ * - **相手の返した符号をそのまま返す。** 放送のアプリは 404 や 503 を見て出し分けることがあるので、
+ *   こちらで 200 に均すと判断を奪う
+ * - **溜めさせない。** 放送の通信は「いまの値」を取りに来るもの
+ * - `x-bml-relayed` は相手まで行けた印。相手の 502 をそのまま返すので、符号だけではこちらで断った
+ *   502 と見分けが付かない。画面側はこれを見て成否を決める
+ */
+export function relayed(got: Fetched): Response {
+  return new Response(got.body as BodyInit, {
+    status: got.status,
+    headers: {
+      "content-type": got.contentType,
+      "cache-control": "no-store",
+      "x-bml-relayed": "1",
+    },
+  });
+}
+
 /** 双方向を切ってあるなら 403。`/api/bml/*` のどのエンドポイントも入口で呼ぶ (Hybridcast の入れ物も) */
 export function requireBmlNetwork(): void {
   if (!settings().bmlNetwork)

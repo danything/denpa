@@ -82,7 +82,7 @@ import { type LiveHw, liveHw, liveHwArgs } from "./hwenc";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
-import { chunks, lines } from "./stream";
+import { chunks, endInput, lines } from "./stream";
 import { holdTranscode } from "./transcode";
 import { getTuners, openWhenFree, type StreamUse } from "./tuner";
 import type { Connection } from "./ws";
@@ -218,16 +218,8 @@ export function encodeArgs(
   caption: number | null = 0,
   hw: LiveHw | null = null,
 ): string[] {
-  const video = codec !== "audio";
   const picture = codec === "audio" ? null : videoArgs(codec, hw);
   const from = programSpec(program);
-  // デュアルモノは片側だけを両耳へ。そのままだと左右から別の言語が同時に鳴る
-  const pan =
-    audio.side === "main"
-      ? "pan=stereo|c0=c0|c1=c0"
-      : audio.side === "sub"
-        ? "pan=stereo|c0=c1|c1=c1"
-        : null;
   return [
     "-hide_banner",
     // 数字の進み具合だけ止める。`-loglevel` は下げられない (上の説明)
@@ -280,7 +272,7 @@ export function encodeArgs(
     // 何本目の音声か。複数入っている放送では 0 が主とは限らない
     "-map",
     `${from}:a:${audio.stream}`,
-    ...(pan === null ? [] : ["-af", pan]),
+    ...panArgs(audio),
     ...audioArgs(codec),
     "-f",
     "mp4",
@@ -293,8 +285,17 @@ export function encodeArgs(
     "1",
     "pipe:1",
     // **2つ目の出口。** 字幕をそのまま、映像と同じ物差しの時刻付きで出す
-    ...(caption === null || !video ? [] : captionOutput(from, caption)),
+    ...(caption === null || picture === null
+      ? []
+      : captionOutput(from, caption)),
   ];
+}
+
+/** デュアルモノは片側だけを両耳へ。そのままだと左右から別の言語が同時に鳴る */
+export function panArgs(audio: AudioTrack): string[] {
+  if (audio.side === "main") return ["-af", "pan=stereo|c0=c0|c1=c0"];
+  if (audio.side === "sub") return ["-af", "pan=stereo|c0=c1|c1=c1"];
+  return [];
 }
 
 /**
@@ -496,11 +497,10 @@ const RESTING = /休止|停波|放送終了/;
  */
 function resting(serviceId: number): number | null {
   if (!Number.isFinite(serviceId)) return null;
-  const at = Date.now();
   const program = orm()
     .select({ name: programs.name, end_at: programs.end_at })
     .from(programs)
-    .where(airingAt(serviceId, at))
+    .where(airingAt(serviceId))
     .get();
   if (program === undefined || !RESTING.test(program.name)) return null;
   return program.end_at;
@@ -558,13 +558,13 @@ interface Viewer {
  * **番組が変われば付くことがある**ので、しばらくしたら忘れる
  */
 const captionless = new Map<number, number>();
-/** 忘れるまで (ms)。番組の変わり目より短く採る */
-const FORGET_CAPTIONLESS = 15 * 60_000;
+/** `captionless`・`gpuFailed` を忘れるまで (ms)。番組の変わり目より短く採る */
+const FORGET = 15 * 60_000;
 
-/** 字幕が無いと覚えている局か (`captionless`) */
-function captionlessNow(serviceId: number): boolean {
-  const at = captionless.get(serviceId);
-  return at !== undefined && Date.now() - at < FORGET_CAPTIONLESS;
+/** 覚えてから `FORGET` が過ぎていないか */
+function remembered<K>(memo: Map<K, number>, key: K): boolean {
+  const at = memo.get(key);
+  return at !== undefined && Date.now() - at < FORGET;
 }
 
 /**
@@ -575,8 +575,6 @@ function captionlessNow(serviceId: number): boolean {
  * 通ることもあるので、字幕と同じくしばらくしたら忘れる
  */
 const gpuFailed = new Map<string, number>();
-/** 忘れるまで (ms) */
-const FORGET_GPU_FAILED = 15 * 60_000;
 /** GPU デバイスを使う順番。録画と同じく、セッションごとに先頭のデバイスを入れ替える (`hwenc.hwChain`) */
 let liveTurn = 0;
 
@@ -597,8 +595,7 @@ export function pickLiveHw(codec: LiveCodec, interlaced = true): LiveHw | null {
   const found = liveHw(codec, settings().hwAllow, liveTurn++);
   if (found === null) return null;
   const hw = interlaced ? found : { ...found, full: false };
-  const at = gpuFailed.get(hwKey(codec, hw));
-  return at !== undefined && Date.now() - at < FORGET_GPU_FAILED ? null : hw;
+  return remembered(gpuFailed, hwKey(codec, hw)) ? null : hw;
 }
 
 /** GPU でエンコードできなかった経路を覚える。しばらくは `pickLiveHw` がソフトウェアを返す */
@@ -621,6 +618,53 @@ const ON_AIR_EVERY = 60_000;
 /** 通知・データ放送は JSON にして運ぶ */
 function json(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
+}
+
+/**
+ * 出す字幕の言語。**選んだ言語が載っていなければ第1言語** — 前の番組で英語を選んだまま、英語の無い局へ
+ * 移ったときに何も出なくならないように (画面は通知を見て選び直す)
+ */
+function pickLanguage(languages: CaptionLanguage[], wanted: number): number {
+  return languages.length === 0 || languages.some((l) => l.index === wanted)
+    ? wanted
+    : 1;
+}
+
+/**
+ * 選べる字幕の通知。**言語は受け取る人に出しているもの**なので、全員に同じものは送れない。
+ * 言語がまだ分からない (字幕管理データが届いていない) ときは `languages` を省く
+ */
+function captionsNotice(
+  tracks: CaptionTrack[],
+  track: number,
+  languages: CaptionLanguage[],
+  language: number,
+): Notice {
+  return {
+    type: "captions",
+    tracks,
+    track,
+    ...(languages.length === 0 ? {} : { languages, language }),
+  };
+}
+
+/**
+ * 字幕だけを写す ffmpeg を起こす (`rawCaptionArgs`)。字幕は4本目のパイプに出る。
+ * 標準出力には何も出さないはずだが、**汲まずに放っておくと詰まったときに止まる**ので読み捨てる
+ */
+function spawnCaptioner(
+  program: number,
+  track: number,
+): ReturnType<typeof Bun.spawn> {
+  const proc = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(program, track)], {
+    stdio: ["pipe", "pipe", "pipe", "pipe"] as never,
+  });
+  void (async () => {
+    for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
+      // 読み捨てる
+    }
+  })().catch(() => undefined);
+  return proc;
 }
 
 class Session {
@@ -926,7 +970,7 @@ class Session {
        */
       // 音声だけなら字幕はエンコードしない
       let wanted =
-        this.codec === "audio" || captionlessNow(this.serviceId)
+        this.codec === "audio" || remembered(captionless, this.serviceId)
           ? null
           : this.track;
       // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)
@@ -1171,11 +1215,8 @@ class Session {
     // **188 バイトに切るのは1回だけ** (3つのパーサで使い回す。ライブの処理でいちばん重いところ)
     const receivedAt = Date.now();
     const data = this.data;
-    let ait: AitReader | null = null;
-    if (this.program > 0) {
-      this.ait ??= new AitReader(this.program);
-      ait = this.ait;
-    }
+    const ait =
+      this.program > 0 ? (this.ait ??= new AitReader(this.program)) : null;
     if (this.program > 0 && this.source === undefined)
       this.onAir ??= new PresentFollowing(this.program);
     const onAir = this.onAir;
@@ -1294,11 +1335,7 @@ class Session {
       }
     } finally {
       if (own) await stream.return(undefined);
-      try {
-        writer.end();
-      } catch {
-        // もう閉じている
-      }
+      endInput(proc);
     }
   }
 
@@ -1393,26 +1430,20 @@ class Session {
    * 言語がまだ分からない (字幕管理データが届いていない) ときは `languages` を省く
    */
   private tellCaptions(viewer: Viewer, tracks: CaptionTrack[]): void {
-    this.tellOne(viewer, {
-      type: "captions",
-      tracks,
-      track: this.track,
-      ...(this.languages.length === 0
-        ? {}
-        : { languages: this.languages, language: this.languageOf(viewer) }),
-    });
+    this.tellOne(
+      viewer,
+      captionsNotice(
+        tracks,
+        this.track,
+        this.languages,
+        this.languageOf(viewer),
+      ),
+    );
   }
 
-  /**
-   * その人に出す言語。**選んだ言語が載っていなければ第1言語** — 前の番組で英語を選んだまま、英語の無い局へ
-   * 移ったときに何も出なくならないように (画面は通知を見て選び直す)
-   */
+  /** その人に出す言語 (`pickLanguage`) */
   private languageOf(viewer: Viewer): number {
-    const wanted = viewer.language ?? 1;
-    return this.languages.length === 0 ||
-      this.languages.some((l) => l.index === wanted)
-      ? wanted
-      : 1;
+    return pickLanguage(this.languages, viewer.language ?? 1);
   }
 
   /**
@@ -1502,15 +1533,7 @@ class Session {
    * (`handData` の `toldTsid`)、押すのが早すぎても待っていれば揃います
    */
   private programInfo(): ResponseMessage | null {
-    const at = Date.now();
-    const service = orm()
-      .select({
-        service_id: services.service_id,
-        network_id: services.network_id,
-      })
-      .from(services)
-      .where(eq(services.id, this.serviceId))
-      .get();
+    const service = serviceOf(this.serviceId);
     if (service === undefined) return null;
     const program = orm()
       .select({
@@ -1520,7 +1543,7 @@ class Session {
         end_at: programs.end_at,
       })
       .from(programs)
-      .where(airingAt(this.serviceId, at))
+      .where(airingAt(this.serviceId))
       .get();
     return {
       type: "programInfo",
@@ -1675,7 +1698,7 @@ class Session {
     let captioner: RawCaptions | null = null;
     try {
       const tuned = await this.tune();
-      if (!captionlessNow(this.serviceId)) captioner = this.captions();
+      if (!remembered(captionless, this.serviceId)) captioner = this.captions();
       const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
       const streams = new StreamsWatch();
       try {
@@ -1734,19 +1757,7 @@ class Session {
   private captions(): RawCaptions {
     this.list = new TrackList(this.program);
     this.noSubtitle = false;
-    const proc: ReturnType<typeof Bun.spawn> = Bun.spawn(
-      [config.ffmpeg, ...rawCaptionArgs(this.program, this.track)],
-      {
-        stdio: ["pipe", "pipe", "pipe", "pipe"] as never,
-      },
-    );
-    const captioner = new RawCaptions(proc);
-    // 標準出力には何も出さないはずだが、**汲まずに放っておくと詰まったときに止まる**
-    void (async () => {
-      for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
-        // 読み捨てる
-      }
-    })().catch(() => undefined);
+    const proc = spawnCaptioner(this.program, this.track);
     const list = this.list;
     void this.watch(proc)
       .then(() => {
@@ -1756,7 +1767,7 @@ class Session {
       })
       .catch(() => undefined);
     void this.subtitles(proc).catch(() => undefined);
-    return captioner;
+    return new RawCaptions(proc);
   }
 }
 
@@ -1794,11 +1805,7 @@ class RawCaptions {
 
   stop(): void {
     this.dead = true;
-    try {
-      (this.proc.stdin as import("bun").FileSink).end();
-    } catch {
-      // もう閉じている
-    }
+    endInput(this.proc);
     this.proc.kill();
   }
 }
@@ -1912,11 +1919,7 @@ export function liveStream(
   codec: StreamCodec | "raw",
   audio?: string,
 ): ReadableStream<Uint8Array> | null {
-  const row = orm()
-    .select({ type: services.type, channel: services.channel })
-    .from(services)
-    .where(eq(services.id, serviceId))
-    .get();
+  const row = serviceOf(serviceId);
   if (row === undefined) return null;
   return sessionStream((viewer) => {
     const raw = codec === "raw";
@@ -1952,18 +1955,12 @@ export function chaseStream(
   at: number,
   audio?: string,
 ): ReadableStream<Uint8Array> | null | "busy" {
-  const rec = orm()
-    .select()
-    .from(recordings)
-    .where(eq(recordings.id, recordingId))
-    .get();
-  if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null)
-    return null;
-  const size = fileSize(rec.ts_path);
-  if (size === null || size === 0) return null;
+  const source = chaseSource(recordingId);
+  if (source === undefined || source.size === 0) return null;
   if (codec === "raw") {
+    const { rec, path, size } = source;
     const plan = chasePlan(size, recordedSec(rec), at);
-    return followFile(rec.ts_path, plan.offset, plan.paceBytesPerSec, () =>
+    return followFile(path, plan.offset, plan.paceBytesPerSec, () =>
       recordingDone(rec.id),
     );
   }
@@ -2000,11 +1997,7 @@ export function liveCaptions(
   serviceId: number,
   language = 1,
 ): ReadableStream<Uint8Array> | null {
-  const row = orm()
-    .select({ type: services.type, channel: services.channel })
-    .from(services)
-    .where(eq(services.id, serviceId))
-    .get();
+  const row = serviceOf(serviceId);
   if (row === undefined) return null;
   // 放送そのままの目印は音声で分けない (`key`)。何を渡しても同じ
   const session = sessions.get(
@@ -2070,21 +2063,14 @@ export function recordingCaptions(
   at: number,
   language = 1,
 ): ReadableStream<Uint8Array> | null {
-  const rec = orm()
-    .select()
-    .from(recordings)
-    .where(eq(recordings.id, recordingId))
-    .get();
-  if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null)
-    return null;
-  const size = fileSize(rec.ts_path);
-  if (size === null || size === 0) return null;
+  const source = chaseSource(recordingId);
+  if (source === undefined || source.size === 0) return null;
+  const { rec, path, size } = source;
   const recorded = recordedSec(rec);
   const plan = chasePlan(size, recorded, Math.max(0, at - CAPTION_LEAD));
   const burst = Math.round(
     (size / Math.max(1, recorded)) * (CAPTION_LEAD + CAPTION_AHEAD),
   );
-  const path = rec.ts_path;
   const program = aribServiceId(rec.service_id);
   const label = `rec ${rec.id}`;
 
@@ -2171,17 +2157,8 @@ export function recordingCaptions(
   });
 }
 
-/** ffmpeg の標準入力を閉じる。もう閉じていてもいい */
-function endInput(proc: ReturnType<typeof Bun.spawn>): void {
-  try {
-    (proc.stdin as import("bun").FileSink).end();
-  } catch {
-    // もう閉じている
-  }
-}
-
 /**
- * 録画の字幕を写す ffmpeg を1本起こし (`rawCaptionArgs`)、選べる字幕と文字の配置を `out` へ送らせる。
+ * 録画の字幕を写す ffmpeg を1本起こし (`spawnCaptioner`)、選べる字幕と文字の配置を `out` へ送らせる。
  * **読み切ったら閉じる** (字幕を持たない録画なら、ffmpeg が組み立てで降りる) — ただし起こし直された
  * あとの古いもの (`current` が自分でない) は閉じない
  */
@@ -2192,42 +2169,16 @@ function spawnRecordingCaptioner(
   out: CaptionOut,
   current: () => ReturnType<typeof Bun.spawn>,
 ): ReturnType<typeof Bun.spawn> {
-  const proc: ReturnType<typeof Bun.spawn> = Bun.spawn(
-    [config.ffmpeg, ...rawCaptionArgs(program, 0)],
-    {
-      stdio: ["pipe", "pipe", "pipe", "pipe"] as never,
-    },
-  );
-
-  // 標準出力には何も出さないはずだが、汲まずに放っておくと詰まったときに止まる
-  void (async () => {
-    for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
-      // 読み捨てる
-    }
-  })().catch(() => undefined);
-
+  const proc = spawnCaptioner(program, 0);
   // 選べる字幕は入口の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
   const list = new TrackList(program);
   const text = new CaptionText();
-  // 流す言語。**求められた言語が載っていなければ第1言語** (ライブの `languageOf` と同じ)
-  const effective = () =>
-    text.languages.length === 0 ||
-    text.languages.some((l) => l.index === language)
-      ? language
-      : 1;
-  // 選べる字幕。言語は字幕管理データが届いてから足す
+  const effective = () => pickLanguage(text.languages, language);
   const tell = () =>
     out.send(
       CHANNEL.control,
       0n,
-      json({
-        type: "captions",
-        tracks: list.tracks,
-        track: 0,
-        ...(text.languages.length === 0
-          ? {}
-          : { languages: text.languages, language: effective() }),
-      }),
+      json(captionsNotice(list.tracks, 0, text.languages, effective())),
     );
   void (async () => {
     for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
@@ -2667,26 +2618,18 @@ function openChase(
     tell({ type: "error", message: text });
     return null;
   };
-
   const refuseHeld = (text: string): null => {
     held?.();
     return refuse(text);
   };
 
   const { recordingId, at, audio: wanted, codec, caption } = asked;
-  if (!Number.isInteger(recordingId)) return refuseHeld("録画が見つかりません");
-
-  const rec = orm()
-    .select()
-    .from(recordings)
-    .where(eq(recordings.id, recordingId))
-    .get();
-  if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null) {
-    return refuseHeld("録画が見つかりません");
-  }
-  const size = fileSize(rec.ts_path);
-  if (size === null || size === 0)
-    return refuseHeld("まだ何も録画されていません");
+  const source = Number.isInteger(recordingId)
+    ? chaseSource(recordingId)
+    : undefined;
+  if (source === undefined) return refuseHeld("録画が見つかりません");
+  const { rec, path, size } = source;
+  if (size === 0) return refuseHeld("まだ何も録画されていません");
   const release = held ?? holdTranscode();
   if (release === null) return refuse(BUSY);
 
@@ -2725,7 +2668,6 @@ function openChase(
     finished,
   });
 
-  const path = rec.ts_path;
   let session: Session;
   try {
     session = new Session(
@@ -2758,14 +2700,27 @@ function openChase(
   return session;
 }
 
+/**
+ * 追っかけ・録画の字幕で読む録画と、その元のTS。消した・元のTSが無いものは undefined。
+ * `size` は元のTSのいまの大きさで、読めなければ 0 (まだ何も録画されていない)
+ */
+function chaseSource(
+  recordingId: number,
+):
+  | { rec: typeof recordings.$inferSelect; path: string; size: number }
+  | undefined {
+  const rec = orm()
+    .select()
+    .from(recordings)
+    .where(eq(recordings.id, recordingId))
+    .get();
+  if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null)
+    return undefined;
+  return { rec, path: rec.ts_path, size: fileSize(rec.ts_path) ?? 0 };
+}
+
 /** 録れている長さ (秒)。録り終えていれば実測、まだなら**録り始めてからの経過** */
-function recordedSec(rec: {
-  finished_at: number | null;
-  duration_ms: number | null;
-  start_at: number;
-  end_at: number;
-  created_at: number;
-}): number {
+function recordedSec(rec: typeof recordings.$inferSelect): number {
   return rec.finished_at !== null
     ? (rec.duration_ms ?? rec.end_at - rec.start_at) / 1000
     : (Date.now() - rec.created_at) / 1000;
@@ -2817,18 +2772,16 @@ function nowPlaying(serviceId: number, wanted: string | undefined): NowPlaying {
   };
 
   if (!Number.isFinite(serviceId)) return decide(0, []);
-  const at = Date.now();
   const program = orm()
     .select({ audio_type: programs.audio_type, audios: programs.audios })
     .from(programs)
-    .where(airingAt(serviceId, at))
+    .where(airingAt(serviceId))
     .get();
-
   return decide(aribServiceId(serviceId), parseAudios(program));
 }
 
 /** その局でいま流れている番組 (`programs` の絞り込み) */
-function airingAt(serviceId: number, at: number) {
+function airingAt(serviceId: number, at = Date.now()) {
   return and(
     eq(programs.service_id, serviceId),
     lte(programs.start_at, at),
@@ -2838,11 +2791,19 @@ function airingAt(serviceId: number, at: number) {
 
 /** ffmpeg に名指しさせる放送の番号 (ARIB のサービスID)。局が無ければ 0 = 探させない */
 export function aribServiceId(serviceId: number): number {
-  return (
-    orm()
-      .select({ service_id: services.service_id })
-      .from(services)
-      .where(eq(services.id, serviceId))
-      .get()?.service_id ?? 0
-  );
+  return serviceOf(serviceId)?.service_id ?? 0;
+}
+
+/** 局の行のうち、選局と放送の番号に要るぶん */
+function serviceOf(serviceId: number) {
+  return orm()
+    .select({
+      type: services.type,
+      channel: services.channel,
+      service_id: services.service_id,
+      network_id: services.network_id,
+    })
+    .from(services)
+    .where(eq(services.id, serviceId))
+    .get();
 }

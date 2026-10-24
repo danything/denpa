@@ -53,12 +53,7 @@ export function readClut(data: Uint8Array): Rgba[] {
   const start = data[at++] ?? 0;
   const end = data[at++] ?? 0;
   for (let i = start; i <= end && i < 256 && at + 3 < data.length + 1; i++) {
-    const [a0, a1, a2, alpha] = [
-      data[at],
-      data[at + 1],
-      data[at + 2],
-      data[at + 3],
-    ];
+    const [a0, a1, a2, alpha] = data.subarray(at, at + 4);
     if (alpha === undefined) break;
     at += 4;
     if (rgb) {

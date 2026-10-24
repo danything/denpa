@@ -12,6 +12,23 @@ import { PACKET, SYNC, withCrc } from "./psi";
 export { withCrc };
 
 const be = (value: number) => [(value >> 8) & 0xff, value & 0xff];
+const be32 = (value: number) => [...be(value >>> 16), ...be(value & 0xffff)];
+
+/** セクションの頭8バイト (長さは `withCrc` が埋める)。版 0・節 0/0 */
+function head(tableId: number, extension: number): number[] {
+  return [tableId, 0x00, 0x00, ...be(extension), 0xc1, 0x00, 0x00];
+}
+
+/** PCR の基準部 (90kHz) を適応フィールドに書く (旗は呼ぶ側)。拡張部 (27MHz の端数) は読む側が見ていないので 0 */
+export function putPcr(packet: Uint8Array, pcr: number): void {
+  const base = Math.round(pcr) % 2 ** 33;
+  packet[6] = Math.floor(base / 2 ** 25) & 0xff;
+  packet[7] = Math.floor(base / 2 ** 17) & 0xff;
+  packet[8] = Math.floor(base / 2 ** 9) & 0xff;
+  packet[9] = Math.floor(base / 2) & 0xff;
+  packet[10] = ((base & 1) << 7) | 0x7e;
+  packet[11] = 0x00;
+}
 
 /**
  * Unicode → JIS X 0208 の区点。**読む側の裏返し。**
@@ -74,6 +91,9 @@ function encodeSiText(text: string): number[] {
   return encodeAribText(text, true);
 }
 
+/** 言語の符号 "jpn" (ISO 639-2) */
+const JPN = [0x6a, 0x70, 0x6e];
+
 /** 長さ1バイトを頭に付けた文字列。SI の記述子はどこもこの形式 */
 const sized = (text: string) => {
   const body = encodeSiText(text);
@@ -86,13 +106,7 @@ export function sdtSection(
   services: [number, number, string?][],
 ): Uint8Array {
   const body = [
-    0x42,
-    0x00,
-    0x00,
-    ...be(transportStreamId),
-    0xc1,
-    0x00,
-    0x00,
+    ...head(0x42, transportStreamId),
     ...be(originalNetworkId),
     0xff,
   ];
@@ -203,13 +217,8 @@ export interface EitOptions {
 function eventDescriptors(event: SynthEvent): number[] {
   const out: number[] = [];
 
-  const short = [
-    0x6a,
-    0x70,
-    0x6e,
-    ...sized(event.name),
-    ...sized(event.description ?? ""),
-  ];
+  const short = [...JPN, ...sized(event.name)];
+  short.push(...sized(event.description ?? ""));
   out.push(0x4d, short.length, ...short);
 
   const extended = Object.entries(event.extended ?? {});
@@ -218,7 +227,7 @@ function eventDescriptors(event: SynthEvent): number[] {
       ...sized(heading),
       ...sized(text),
     ]);
-    const body = [0x00, 0x6a, 0x70, 0x6e, items.length, ...items, 0x00];
+    const body = [0x00, ...JPN, items.length, ...items, 0x00];
     out.push(0x4e, body.length, ...body);
   }
 
@@ -234,16 +243,7 @@ function eventDescriptors(event: SynthEvent): number[] {
 
   if (event.video !== undefined) {
     const [streamContent, componentType] = event.video;
-    out.push(
-      0x50,
-      0x06,
-      0xf0 | streamContent,
-      componentType,
-      0x00,
-      0x6a,
-      0x70,
-      0x6e,
-    );
+    out.push(0x50, 0x06, 0xf0 | streamContent, componentType, 0x00, ...JPN);
   }
 
   for (const [index, audio] of (event.audios ?? []).entries()) {
@@ -311,16 +311,7 @@ export function nitSection(
   remoteControlKeyId: number | null,
   streams: [number, number, [number, number][]][],
 ): Uint8Array {
-  const body = [
-    0x40,
-    0x00,
-    0x00,
-    ...be(networkId),
-    0xc1,
-    0x00,
-    0x00,
-    ...be(0xf000),
-  ];
+  const body = [...head(0x40, networkId), ...be(0xf000)];
 
   const loop: number[] = [];
   for (const [transportStreamId, originalNetworkId, services] of streams) {
@@ -373,16 +364,12 @@ export function stream(...parts: Uint8Array[]): Uint8Array {
   return joinBytes(parts);
 }
 
-/**
- * PCR を1つ運ぶだけのパケット。**適応フィールドに基準部だけ**入れる。
- * 拡張部 (27MHz の端数) は読む側が見ていないので 0 でよい
- */
+/** PCR を1つ運ぶだけのパケット */
 export function pcrPacket(
   pid: number,
   seconds: number,
   counter = 0,
 ): Uint8Array {
-  const base = Math.round(seconds * 90_000) % 2 ** 33;
   const packet = new Uint8Array(PACKET).fill(0xff);
   packet[0] = SYNC;
   packet[1] = pid >> 8;
@@ -391,12 +378,7 @@ export function pcrPacket(
   packet[3] = 0x20 | (counter & 0x0f);
   packet[4] = PACKET - 5;
   packet[5] = 0x10; // PCR_flag
-  packet[6] = Math.floor(base / 2 ** 25) & 0xff;
-  packet[7] = Math.floor(base / 2 ** 17) & 0xff;
-  packet[8] = Math.floor(base / 2 ** 9) & 0xff;
-  packet[9] = Math.floor(base / 2) & 0xff;
-  packet[10] = ((base & 1) << 7) | 0x7e;
-  packet[11] = 0x00;
+  putPcr(packet, seconds * 90_000);
   return packet;
 }
 
@@ -413,7 +395,7 @@ export function patSection(
   programs: [number, number][],
   transportStreamId = 1,
 ): Uint8Array {
-  const body = [0x00, 0x00, 0x00, ...be(transportStreamId), 0xc1, 0x00, 0x00];
+  const body = head(0x00, transportStreamId);
   for (const [serviceId, pmtPid] of programs) {
     body.push(...be(serviceId), 0xe0 | (pmtPid >> 8), pmtPid & 0xff);
   }
@@ -430,13 +412,7 @@ export function pmtSection(
   componentTag: number,
 ): Uint8Array {
   return withCrc([
-    0x02,
-    0x00,
-    0x00,
-    ...be(serviceId),
-    0xc1,
-    0x00,
-    0x00,
+    ...head(0x02, serviceId),
     0xe0,
     0x00, // PCR_PID
     0xf0,
@@ -474,13 +450,7 @@ export function programMap(
     ...extra,
   ];
   const body = [
-    0x02,
-    0x00,
-    0x00,
-    ...be(serviceId),
-    0xc1,
-    0x00,
-    0x00,
+    ...head(0x02, serviceId),
     0xe0 | (pcrPid >> 8),
     pcrPid & 0xff,
     ...be(0xf000 | programInfo.length),
@@ -520,7 +490,7 @@ export function bxmlDescriptor(
 
 /** DSM-CC のセクションで包む */
 function dsmccSection(tableId: number, message: number[]): Uint8Array {
-  return withCrc([tableId, 0x00, 0x00, ...be(0), 0xc1, 0x00, 0x00, ...message]);
+  return withCrc([...head(tableId, 0), ...message]);
 }
 
 export interface DiiModuleSpec {
@@ -562,37 +532,23 @@ export function diiSection(
     }
     if (module.compression !== undefined) {
       const { type, originalSize } = module.compression;
-      info.push(
-        0xc2,
-        5,
-        type & 0xff,
-        ...be(originalSize >> 16),
-        ...be(originalSize & 0xffff),
-      );
+      info.push(0xc2, 5, type & 0xff, ...be32(originalSize));
     }
     return [
       ...be(module.moduleId),
-      ...be(module.moduleSize >> 16),
-      ...be(module.moduleSize & 0xffff),
+      ...be32(module.moduleSize),
       module.moduleVersion,
       info.length,
       ...info,
     ];
   });
   const rest = [
-    ...be(downloadId >> 16),
-    ...be(downloadId & 0xffff),
+    ...be32(downloadId),
     ...be(blockSize),
     0x00, // windowSize
     0x00, // ackPeriod
-    0,
-    0,
-    0,
-    0, // tCDownloadWindow
-    0,
-    0,
-    0,
-    0, // tCDownloadScenario
+    ...be32(0), // tCDownloadWindow
+    ...be32(0), // tCDownloadScenario
     ...be(0), // compatibilityDescriptor: 長さ0
     ...be(list.length), // numberOfModules
     ...entries,
@@ -602,8 +558,7 @@ export function diiSection(
     0x11, // protocolDiscriminator
     0x03, // dsmccType
     ...be(0x1002), // messageId: DII
-    ...be(transactionId >> 16),
-    ...be(transactionId & 0xffff),
+    ...be32(transactionId),
     0xff,
     0x00, // reserved / adaptationLength
     ...be(rest.length),
@@ -623,8 +578,7 @@ export function ddbSection(
     0x11,
     0x03,
     ...be(0x1003), // messageId: DDB
-    ...be(downloadId >> 16),
-    ...be(downloadId & 0xffff),
+    ...be32(downloadId),
     0xff,
     0x00, // reserved / adaptationLength
     ...be(block.length + 6),
@@ -737,7 +691,7 @@ export function aitSection(
     if (app.name !== undefined) {
       const name = encodeSiText(app.name);
       // application_name_descriptor: 言語 + 長さ + 中身
-      info.push(0x01, 4 + name.length, 0x6a, 0x70, 0x6e, name.length, ...name);
+      info.push(0x01, 4 + name.length, ...JPN, name.length, ...name);
     }
     if (app.base !== undefined) {
       const base = [...new TextEncoder().encode(app.base)];
@@ -757,8 +711,7 @@ export function aitSection(
       info.push(0x15, path.length, ...path);
     }
     loop.push(
-      ...be(app.organisationId >> 16),
-      ...be(app.organisationId & 0xffff),
+      ...be32(app.organisationId),
       ...be(app.applicationId),
       app.controlCode ?? 0x01,
       ...be(0xf000 | info.length),
@@ -766,13 +719,7 @@ export function aitSection(
     );
   }
   return withCrc([
-    0x74,
-    0x00,
-    0x00,
-    ...be(0x8000 | applicationType),
-    0xc1,
-    0x00,
-    0x00,
+    ...head(0x74, 0x8000 | applicationType),
     ...be(0xf000), // common_descriptors_length = 0
     ...be(0xf000 | loop.length),
     ...loop,

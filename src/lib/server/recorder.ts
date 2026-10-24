@@ -1,10 +1,11 @@
 import { once } from "node:events";
-import { createWriteStream, mkdirSync, statSync } from "node:fs";
+import { createWriteStream, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { EpgReader } from "../ts/eit";
 import { ServiceFilter } from "../ts/service-filter";
 import type { Recording, Reservation } from "../types";
+import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { enqueue } from "./encoder";
@@ -308,8 +309,7 @@ async function pump(
    * 番組の途中までもう書いてあるものとして扱う (`recoverOrphanedRecordings`)
    */
   let wroteProgram =
-    Date.now() > recording.start_at &&
-    (statSync(path, { throwIfNoEntry: false })?.size ?? 0) > 0;
+    Date.now() > recording.start_at && (fileSize(path) ?? 0) > 0;
   /** 始めから禁止だったので録画をやめたか。前の番組のぶんを書いていても失敗にする */
   let stoppedForCopyNever = false;
   // 何を使っているのかが設定の「チューナー」に出る。番組名は載せず、IDだけ渡して向こうで引く
@@ -475,12 +475,8 @@ async function pump(
     return;
   }
 
-  let size = written;
-  try {
-    size = statSync(path).size;
-  } catch {
-    // 統計が取れなくても書き込み量で代用する
-  }
+  // 統計が取れなくても書き込み量で代用する
+  const size = fileSize(path) ?? written;
 
   if (size === 0) {
     fail(recording.id, "ストリームから1バイトも受信できませんでした");

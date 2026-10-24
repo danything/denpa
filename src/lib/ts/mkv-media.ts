@@ -18,6 +18,7 @@
  * DOM も worker も触らない (`mkv-media.test.ts`)
  */
 
+import { concatBytes } from "./bytes";
 import { aacCodec, av1Codec, avcCodec, type Fmp4Track } from "./fmp4";
 import {
   BLOCK,
@@ -34,8 +35,8 @@ import {
   TRACK_ENTRY,
   TRACKS,
   UNKNOWN,
+  readBlock,
   uint,
-  vint,
 } from "./mkv";
 
 const EBML = 0x1a45dfa3;
@@ -232,9 +233,7 @@ export class MkvDemuxer {
   } | null = null;
 
   feed(chunk: Uint8Array): { tracks: MkvTrack[] | null; blocks: MkvBlock[] } {
-    const buffer = new Uint8Array(this.buffer.length + chunk.length);
-    buffer.set(this.buffer);
-    buffer.set(chunk, this.buffer.length);
+    const buffer = concatBytes([this.buffer, chunk]);
     let tracks: MkvTrack[] | null = null;
     const blocks: MkvBlock[] = [];
     let at = 0;
@@ -263,11 +262,9 @@ export class MkvDemuxer {
       else if (h.id === TIMESTAMP) this.base = uint(body);
       else if (h.id === SIMPLE_BLOCK) {
         const block = this.block(body);
-        if (block !== null)
-          blocks.push({ ...block, key: (block.flags & 0x80) !== 0 });
+        if (block !== null) blocks.push(block);
       } else if (h.id === BLOCK && this.group !== null) {
-        const block = this.block(body);
-        if (block !== null) this.group.block = { ...block, key: true };
+        this.group.block = this.block(body) ?? this.group.block;
       } else if (h.id === REFERENCE_BLOCK && this.group !== null)
         this.group.referenced = true;
       at = end;
@@ -286,28 +283,12 @@ export class MkvDemuxer {
       blocks.push({ ...group.block, key: !group.referenced });
   }
 
-  /**
-   * コマ1つ。`[トラック番号][頭からの差 (2バイト、符号あり)][旗][中身]`。束ね (lacing) は ffmpeg が映像・音声で
-   * 使わないので読まない (来たら捨てる)
-   */
-  private block(
-    body: Uint8Array,
-  ): { track: number; at: number; flags: number; data: Uint8Array } | null {
-    const track = vint(body, 0, false);
-    if (track === null || track.next + 3 > body.length) return null;
-    const flags = body[track.next + 2]!;
-    if ((flags & 0x06) !== 0) return null;
-    const offset = new DataView(
-      body.buffer,
-      body.byteOffset,
-      body.byteLength,
-    ).getInt16(track.next);
-    return {
-      track: track.value,
-      at: this.base + offset,
-      flags,
-      data: body.slice(track.next + 3),
-    };
+  /** コマ1つ (`mkv.ts` の `readBlock`)。キーフレームの印は SimpleBlock の旗。Block のときは `closeGroup` が決める */
+  private block(body: Uint8Array): MkvBlock | null {
+    const block = readBlock(body);
+    if (block === null) return null;
+    const { track, offset, flags, data } = block;
+    return { track, at: this.base + offset, key: (flags & 0x80) !== 0, data };
   }
 }
 

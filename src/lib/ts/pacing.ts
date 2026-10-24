@@ -453,12 +453,7 @@ export class Extreme {
     const items = this.#items;
     const beaten = (old: number) =>
       this.highest ? old <= value : old >= value;
-    for (
-      let last = items.at(-1);
-      last !== undefined && beaten(last.value);
-      last = items.at(-1)
-    )
-      items.pop();
+    while (items.length > 0 && beaten(items.at(-1)!.value)) items.pop();
     items.push({ at, value });
     this.#drop(at);
   }
@@ -475,11 +470,6 @@ export class Extreme {
 
   #drop(at: number): void {
     const items = this.#items;
-    for (
-      let first = items[0];
-      first !== undefined && first.at < at - this.span;
-      first = items[0]
-    )
-      items.shift();
+    while (items.length > 0 && items[0]!.at < at - this.span) items.shift();
   }
 }

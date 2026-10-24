@@ -95,16 +95,19 @@ export function hwChain(
         (kind) =>
           device[kind].includes(codec) &&
           hwAllowed(allow, device.path, kind, codec),
-      ).map((kind): HwWay =>
-        kind === "vaapi" && device.cqp.includes(codec)
-          ? { device: device.path, kind, cqp: true }
-          : { device: device.path, kind },
-      ),
+      ).map((kind) => wayOf(device, kind, codec)),
     )
     .filter((ways) => ways.length > 0);
   if (perDevice.length === 0) return [];
   const start = turn % perDevice.length;
   return [...perDevice.slice(start), ...perDevice.slice(0, start)].flat();
+}
+
+/** そのデバイスでの方式。ICQ が通らなかった VA-API には CQP の印を付ける (`HwDevice.cqp`) */
+function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
+  return kind === "vaapi" && device.cqp.includes(codec)
+    ? { device: device.path, kind, cqp: true }
+    : { device: device.path, kind };
 }
 
 /**
@@ -226,8 +229,9 @@ export function liveHwArgs(
   codec: HwCodec,
 ): { input: string[]; filter: string[]; encoder: string[] } {
   const { way } = hw;
+  const base = hwArgs(way, codec);
+  const lowDelay = ["-bf", "0", "-async_depth", "1"];
   if (way.kind === "qsv") {
-    const base = hwArgs(way, codec);
     return {
       input: base.device,
       filter: base.filter,
@@ -237,25 +241,12 @@ export function liveHwArgs(
         "veryfast",
         "-global_quality",
         "24",
-        "-bf",
-        "0",
-        "-async_depth",
-        "1",
+        ...lowDelay,
       ],
     };
   }
-  const encoder = [
-    `${codec}_vaapi`,
-    ...vaapiQuality(way, codec),
-    "-bf",
-    "0",
-    "-async_depth",
-    "1",
-  ];
-  if (!hw.full) {
-    const base = hwArgs(way, codec);
-    return { input: base.device, filter: base.filter, encoder };
-  }
+  const encoder = [...base.encoder, ...lowDelay];
+  if (!hw.full) return { input: base.device, filter: base.filter, encoder };
   return {
     input: [
       "-init_hw_device",
@@ -440,9 +431,7 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
     }
     for (const device of devices) {
       for (const codec of device.vaapi) {
-        const way: HwWay = device.cqp.includes(codec)
-          ? { device: device.path, kind: "vaapi", cqp: true }
-          : { device: device.path, kind: "vaapi" };
+        const way = wayOf(device, "vaapi", codec);
         const hw = liveHwArgs({ way, full: true }, codec);
         const ok = await tryEncode([
           ...hw.input,

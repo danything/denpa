@@ -185,8 +185,7 @@ export function pickOffer(
   const order = [
     ...files.filter((offer) => playsFile(offer, can)),
     ...streams.filter(
-      (offer) =>
-        playsStream(offer, can) && files.some((f) => f.codec === offer.codec),
+      (offer) => playsStream(offer, can) && hasFile(info, offer.codec),
     ),
     ...streams.filter((offer) => playsStream(offer, can)),
     ...files,
@@ -278,14 +277,15 @@ export function pickCanvas(
     .filter((item) => item.drawable && !avoid.includes(item.codec))
     .map((item) => item.codec);
   if (choice !== "auto" && usable.includes(choice)) return choice;
-  const light = usable.filter(
-    (codec) =>
-      codec !== "mpeg2" &&
-      info.offers.some(
-        (offer) => offer.way === "file" && offer.codec === codec,
-      ),
-  );
+  const light = usable.filter((c) => c !== "mpeg2" && hasFile(info, c));
   return [...light, ...usable][0] ?? null;
+}
+
+/** その形式のエンコード済みのファイルがあるか (無ければ、流すときにサーバがその場でエンコードする) */
+function hasFile(info: PlaybackInfo, codec: PlayCodec): boolean {
+  return info.offers.some(
+    (offer) => offer.way === "file" && offer.codec === codec,
+  );
 }
 
 /** 互換モードで、その形式で観るとサーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
@@ -293,20 +293,12 @@ export function canvasTranscodes(
   info: PlaybackInfo,
   codec: CanvasCodec,
 ): boolean {
-  return (
-    codec !== "mpeg2" &&
-    !info.offers.some((offer) => offer.way === "file" && offer.codec === codec)
-  );
+  return codec !== "mpeg2" && !hasFile(info, codec);
 }
 
 /** 選んだもので観るとき、サーバがその場でエンコードするか (枠を使う。混んでいると断られる) */
 export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
-  return (
-    picked.way === "stream" &&
-    !info.offers.some(
-      (offer) => offer.way === "file" && offer.codec === picked.codec,
-    )
-  );
+  return picked.way === "stream" && !hasFile(info, picked.codec);
 }
 
 /** `TimeRanges` を配列にしたもの (`[始まり, 終わり]` 秒) */
