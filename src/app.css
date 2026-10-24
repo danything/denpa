@@ -670,10 +670,25 @@ progress.running[value]::-webkit-progress-value {
 .guide-bar > .segmented {
   flex: none;
 }
-/* 広い画面では上の余白を画面の頭の余白にし、最初の行 (種別のタブ) をほかの画面とそろえる */
+/*
+ * **広い画面では表がヘッダーの裏まで伸びる** (docs/design.md の「浮かせ方」。番組表の `.grid-box`)。
+ * 操作の1行はヘッダーの下端 (`--dp-header-bottom`) に付け、高さを決めておく (`--guide-bar-h`)。
+ * 表の頭 (局名の行が貼り付く所) はその下端 `--guide-head`。マスはヘッダーと操作の1行の裏を流れる。
+ * 1行の中身はどれも小さいボタンの高さなので、高さは字の大きさや押す的の大きさ (`--dp-btn-h-sm`) から決まる。
+ * 種別のタブはほかの画面の最初の行と同じ高さ (`--dp-header-space`) に来る
+ */
 @media (min-width: 768px) {
+  .guide-frame {
+    --guide-bar-h: calc(
+      var(--dp-header-space) - var(--dp-header-bottom) + var(--dp-btn-h-sm) +
+        var(--dp-space-2)
+    );
+    --guide-head: calc(var(--dp-header-bottom) + var(--guide-bar-h));
+  }
   .guide-bar {
-    padding-top: var(--dp-page-top);
+    height: var(--guide-bar-h);
+    margin-top: calc(var(--dp-header-bottom) - var(--dp-header-space));
+    padding-top: calc(var(--dp-header-space) - var(--dp-header-bottom));
     padding-bottom: var(--dp-space-2);
   }
 }

@@ -577,12 +577,20 @@
 
   /**
    * 「いま」を表の4分の1あたりに置く縦位置。上端ちょうどに置くと直前の番組が見えず、
-   * 放送中のものが頭から切れて分かりにくい
+   * 放送中のものが頭から切れて分かりにくい。
+   *
+   * 広い画面では箱の上がヘッダーと操作の1行の裏に隠れている (`--guide-head`)。その下の見えている所で
+   * 4分の1に置く。隠れている高さは `scroll-padding-top` (表の頭 + 局名の行) から局名の行を引いて出す
    */
   function nowTop(box: HTMLElement, mark: HTMLElement): number {
     const top =
       mark.getBoundingClientRect().top - box.getBoundingClientRect().top;
-    return box.scrollTop + top - box.clientHeight / 4;
+    const hidden = Math.max(
+      0,
+      (Number.parseFloat(getComputedStyle(box).scrollPaddingTop) || 0) -
+        headHeight,
+    );
+    return box.scrollTop + top - hidden - (box.clientHeight - hidden) / 4;
   }
 
   function jumpNow(): void {
@@ -973,7 +981,8 @@
         -->
     <div
       class="grid-box"
-      style="scroll-padding: {headHeight}px 0 0 {TIME_COLUMN};"
+      style="scroll-padding: calc(var(--guide-head, 0px) + {headHeight}px) 0 0
+        {TIME_COLUMN};"
       use:dragScroll
       bind:this={grid}
       data-testid="guide-grid"
@@ -1039,7 +1048,10 @@
             class="hour"
             style="grid-column: 1; grid-row: {mark.row} / span {mark.span};"
           >
-            <span class="hour-label num" style="top: {headHeight}px;">
+            <span
+              class="hour-label num"
+              style="top: calc(var(--guide-head, 0px) + {headHeight}px);"
+            >
               {new Date(mark.at).getHours()}
             </span>
           </div>
@@ -1544,6 +1556,53 @@
     overflow: auto;
     cursor: grab;
     background: var(--dp-bg);
+    /* 中の貼り付くもの (`z-index`) を箱の中に閉じ込め、上に重ねる操作の1行より下にする */
+    isolation: isolate;
+    /* 巻いた量をヘッダーへ渡す (`+layout.svelte` の `.navbar` と下の `.guide-bar` がこれで浮く) */
+    scroll-timeline: --guide block;
+  }
+  /*
+     * **広い画面では表をヘッダーの裏まで伸ばす** (docs/design.md の「浮かせ方」)。箱は画面の上端から始め、
+     * 中身は表の頭 (`--guide-head`。`app.css`) の下から並べる。巻くとマスが操作の1行とヘッダーの裏を流れ、
+     * ヘッダーは表の巻いた量で浮く。スクロールバーは出さない (ヘッダーの裏に透けて見える)。
+     * つかんで動かす・ホイール・キー・指では今までどおり動く
+     */
+  @media (min-width: 768px) {
+    .guide-bar {
+      position: relative;
+      z-index: 1;
+      background: var(--dp-float);
+    }
+    .grid-box {
+      margin-top: calc(-1 * var(--guide-head));
+      scrollbar-width: none;
+    }
+    .grid-box::-webkit-scrollbar {
+      display: none;
+    }
+    .rows {
+      margin-top: var(--guide-head);
+    }
+    /*
+         * 操作の1行もヘッダーと同じく、上端では平ら、マスが裏に入ると面が出る。影は付けない
+         * (すぐ下の局名の行と1枚の面に見せる。影は局名の行から落とす)
+         */
+    @supports (animation-timeline: scroll()) {
+      .guide-bar {
+        background: transparent;
+        animation: bar-float linear both;
+        animation-timeline: --guide;
+        animation-range: 0 1.5rem;
+      }
+    }
+  }
+  @keyframes bar-float {
+    from {
+      background: transparent;
+    }
+    to {
+      background: var(--dp-float);
+    }
   }
   /*
      * **Pico の回るもの (`[aria-busy]::before`) は出さない。** 表の頭に 1 行ぶん差し込まれ、
@@ -1586,13 +1645,13 @@
   }
   .corner {
     position: sticky;
-    top: 0;
+    top: var(--guide-head, 0px);
     left: 0;
     z-index: 30;
   }
   .service {
     position: sticky;
-    top: 0;
+    top: var(--guide-head, 0px);
     z-index: 20;
     display: flex;
     align-items: center;

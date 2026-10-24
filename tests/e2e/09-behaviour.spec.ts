@@ -154,7 +154,11 @@ test.describe("操作したときの反応", () => {
      * `grid-area` にまとめ直す。SSR の頃の字面を当てにすると1つも見つからない
      */
     const hours = grid.locator("div.hour > span.hour-label");
-    const frame = (await grid.boundingBox())!;
+    /*
+     * 見えている表の上端は左上の角 (局名の行の頭)。広い画面では箱がヘッダーの裏まで伸びていて、
+     * 箱の上端はヘッダーと操作の1行に隠れている (docs/design.md の「浮かせ方」)
+     */
+    const frame = (await grid.locator(".corner").boundingBox())!;
 
     for (const top of [0, 400, 900]) {
       await grid.evaluate((el, t) => {
