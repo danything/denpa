@@ -378,10 +378,10 @@
   /**
    * 時刻の列の幅。**数字と「いま」のラベルが入るぶんだけ。**
    *
-   * 出しているのは「13」のような時だけなので、3.5rem は要らなかった。
+   * 出しているのは「13」のような時と、「いま」の分 (「41」) の 2 桁だけ。
    * 狭くしたぶんは番組の列に回る (横に並ぶ局が増える)
    */
-  const TIME_COLUMN = "2.5rem";
+  const TIME_COLUMN = "1.75rem";
 
   /*
    * 開いたときに「いま」が見えている状態にする。24時間ぶん出るので、
@@ -1578,9 +1578,10 @@
     .rows {
       margin-top: var(--guide-head);
     }
-    /* 操作の1行の角丸の帯もヘッダーと同じく、上端では見せず、マスが裏に入ると出る */
+    /* 操作の1行の角丸の帯と局名の面もヘッダーと同じく、上端では見せず、マスが裏に入ると出る */
     @supports (animation-timeline: scroll()) {
-      .guide-bar::before {
+      .guide-bar::before,
+      .service::before {
         animation: bar-float linear both;
         animation-timeline: --guide;
         animation-range: 0 1.5rem;
@@ -1613,13 +1614,26 @@
      * (docs/design.md の「浮かせ方」)。線は引かない。影はマスの側にだけ落とす (行は下、列は右。隣の局名の上に重ねない)
      */
   .corner,
-  .service,
   .hour {
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
   }
+  /*
+     * 局名は局ごとの小さな角丸の面 (ヘッダー・操作の1行と同じ材質。局の列と一緒に横へ動くので、1 本の帯にはしない)。
+     * 広い画面では、表を縦に巻いてマスが裏に入ったときだけ出す (下の `@supports`)
+     */
   .service {
-    clip-path: inset(0 0 -1.5rem 0);
+    isolation: isolate;
+  }
+  .service::before {
+    content: "";
+    position: absolute;
+    inset: 0.125rem;
+    z-index: -1;
+    border-radius: 0.875rem;
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    pointer-events: none;
   }
   .hour {
     clip-path: inset(0 -1.5rem 0 0);
@@ -1629,8 +1643,8 @@
   }
   @media (prefers-reduced-transparency: reduce) {
     .corner,
-    .service,
-    .hour {
+    .hour,
+    .service::before {
       background: var(--dp-pop);
     }
   }
