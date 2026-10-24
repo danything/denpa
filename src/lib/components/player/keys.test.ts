@@ -95,6 +95,24 @@ describe("再生画面のキー", () => {
     expect(done).toEqual([]);
   });
 
+  /** 打っている途中の文字を横取りしない。`input` だけでなく、テキストエリア・選択・編集できる要素も */
+  test("テキストエリア・選択・編集できる要素の上でも取らない", () => {
+    const { done, press } = harness();
+    /** その要素の中にいる (`closest` が自分か祖先を返す) */
+    const inside = (tag: string) => ({
+      closest: (selector: string) =>
+        selector.split(",").some((s) => s.trim() === tag) ? {} : null,
+    });
+    expect(press("k", { target: inside("textarea") })).toBe(false);
+    expect(press("ArrowLeft", { target: inside("select") })).toBe(false);
+    expect(
+      press("f", {
+        target: { closest: () => null, isContentEditable: true },
+      }),
+    ).toBe(false);
+    expect(done).toEqual([]);
+  });
+
   /** 知らないキーと、その画面が持っていない操作は素通し */
   test("割り当ての無いキーは何もしない", () => {
     const done: string[] = [];

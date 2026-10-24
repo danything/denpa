@@ -12,7 +12,7 @@ import { SKIP } from "#lib/ts/watch.js";
  * Ctrl+S (保存) → 切り抜きも同じ。Shift だけは通す (`<` `>` は Shift 込みで
  * 打つ)。IME 変換中のキーも渡さない。
  *
- * 入力欄・ボタン・リンクの上では取らない — 空白でボタンを押せなくなる
+ * 入力欄 (テキストエリア・選択・編集できる要素も)・ボタン・リンクの上では取らない — 空白でボタンを押せなくなる
  */
 export interface PlayerKeys {
   /** 空白 / k */
@@ -37,10 +37,11 @@ export function playerKeys(
   return (event: KeyboardEvent) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing)
       return;
+    const target = event.target as HTMLElement;
     if (
-      (event.target as HTMLElement).closest(
-        'input, button, a, [role="menu"]',
-      ) !== null
+      target.isContentEditable ||
+      target.closest('input, textarea, select, button, a, [role="menu"]') !==
+        null
     )
       return;
 
