@@ -430,6 +430,24 @@ test.describe("操作したときの反応", () => {
     );
   });
 
+  test("選んでいる印は 1 本だけ (切り替えの短い下線と重ねない)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 900, height: 800 });
+    // ライブの種別のタブ (並びの印) と、ホームの頭の 1 行のチップ (自分の `::after`)
+    for (const [url, selector] of [
+      ["/live", '[data-testid^="live-type-"][aria-pressed="true"]'],
+      ["/", '.t-chip[aria-pressed="true"]'],
+    ] as const) {
+      await goto(page, url);
+      const pressed = page.locator(selector).first();
+      await expect(pressed).toBeVisible();
+      expect(
+        await pressed.evaluate((el) => getComputedStyle(el).backgroundImage),
+      ).toBe("none");
+    }
+  });
+
   test("ジャンルの見本はマスと同じ色で、押すとそのジャンルだけ目立つ", async ({
     page,
   }) => {

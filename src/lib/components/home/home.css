@@ -390,6 +390,8 @@
  */
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
   --pico-color: var(--dp-primary-text);
+  /* 入っている切り替えの短い下線 (app.css) は引かない。印は下の `::after` だけ */
+  background-image: none;
   position: relative;
   font-weight: var(--dp-weight-bold);
 }

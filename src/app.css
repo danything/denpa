@@ -1320,6 +1320,8 @@ a.button {
   --pico-background-color: transparent;
   --pico-border-color: transparent;
   --pico-color: var(--dp-primary-text);
+  /* 入っている切り替えの短い下線 (上の `aria-pressed`) は引かない。印は下の 1 本だけ */
+  background-image: none;
   font-weight: var(--dp-weight-bold);
 }
 /*
