@@ -432,6 +432,28 @@ body {
   font-variant-emoji: text;
 }
 /*
+ * **ステータスバーの裏まで描くとき** (ホーム画面から開いた iPhone で暗いテーマ。`app.html` が `data-status-bar` を付ける)。
+ * 巻いた中身が時刻の字の裏を流れるので、ステータスバーの高さだけ地の色を少し透かして敷く (ヘッダーと同じく、動く中身の上に重なるもの)。
+ * 開いたあとで明るいテーマに替えても iPhone は時刻の字を白のままにするので、そのときは暗い面を敷いて字を読ませる。
+ * 横に持ったときの切り欠きの側も避ける
+ */
+html[data-status-bar="translucent"] body {
+  padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+}
+html[data-status-bar="translucent"]:not([data-stage-fullscreen]) body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 60;
+  height: env(safe-area-inset-top);
+  background: color-mix(in srgb, var(--dp-bg) 85%, transparent);
+  pointer-events: none;
+}
+html[data-status-bar="translucent"][data-theme="light"] body::before {
+  background: #0b0c0f;
+}
+
+/*
  * **舞台を広げている間 (iPhone の全画面の代わり。`player/fullscreen.svelte.ts`) は
  * 後ろのページを止めて黒く。** 枠は画面いっぱいに被さるが、指でなぞると後ろが
  * 転がる。横持ちの切り欠きの帯は Safari がページの地の色で塗るので、黒にしておく

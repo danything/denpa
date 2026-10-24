@@ -35,6 +35,20 @@
         document
           .querySelector('meta[name="theme-color"]')
           ?.setAttribute("content", dark ? "#0b0c0f" : "#ffffff");
+        // ホーム画面から開いた iPhone (`navigator.standalone`) で暗いテーマのときだけ、ステータスバーの裏まで描く。
+        // 時刻の字はいつも白になるので、明るいテーマでは透かさない (iPhone が読むのは開いたときだけ。app.css の `data-status-bar`)
+        if (dark && navigator.standalone === true) {
+          document.documentElement.dataset.statusBar = "translucent";
+          const viewport = document.querySelector('meta[name="viewport"]');
+          viewport?.setAttribute(
+            "content",
+            `${viewport.getAttribute("content")}, viewport-fit=cover`,
+          );
+          const bar = document.createElement("meta");
+          bar.name = "apple-mobile-web-app-status-bar-style";
+          bar.content = "black-translucent";
+          document.head.append(bar);
+        }
       })();
     </script>
     %sveltekit.head%

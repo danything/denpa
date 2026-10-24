@@ -368,4 +368,40 @@ test.describe("PWA", () => {
     await page.mouse.wheel(0, -600);
     await expect.poll(bottom).toBeLessThanOrEqual(780);
   });
+
+  test("ホーム画面から開いた iPhone では、暗いテーマのときだけステータスバーの裏まで描く", async ({
+    page,
+  }) => {
+    /*
+     * 時刻の字は `black-translucent` でいつも白になるので、明るいテーマでは透かさない (iPhone が読むのは開いたときだけ)。
+     * ホーム画面から開いたことは `navigator.standalone` で分かる (iPhone だけが持つ)
+     */
+    await page.addInitScript(() =>
+      Object.defineProperty(navigator, "standalone", { value: true }),
+    );
+    const state = () =>
+      page.evaluate(() => ({
+        bar: document.documentElement.dataset["statusBar"] ?? null,
+        viewport: document
+          .querySelector('meta[name="viewport"]')
+          ?.getAttribute("content"),
+        style:
+          document
+            .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+            ?.getAttribute("content") ?? null,
+      }));
+    await goto(page, "/");
+    expect(await state()).toEqual({
+      bar: "translucent",
+      viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
+      style: "black-translucent",
+    });
+    await page.evaluate(() => localStorage.setItem("theme", "light"));
+    await goto(page, "/");
+    expect(await state()).toEqual({
+      bar: null,
+      viewport: "width=device-width, initial-scale=1",
+      style: null,
+    });
+  });
 });
