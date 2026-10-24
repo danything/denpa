@@ -43,6 +43,8 @@ const KNOWN = new Set([
 /** 字を持つ要素。中身が空でも文字を 1 つ持たせる (`build`) */
 const HOLDS_TEXT = new Set(["p", "span", "a"]);
 
+const STATES: readonly State[] = ["normal", "focus", "active"];
+
 /** 要素の数の上限 (規格は 512。余裕を持たせて、暴走だけ止める) */
 const MAX_ELEMENTS = 4096;
 
@@ -203,15 +205,14 @@ export class BmlDocument {
     );
     for (const element of this.root.descendants()) {
       const { tag, id, classes } = element;
-      for (const state of ["normal", "focus", "active"] as const)
-        element.rules[state] = [];
+      for (const state of STATES) element.rules[state] = [];
       for (const rule of sorted) {
         if (!matches(rule.selector, tag, id, classes)) continue;
         // :focus / :active の状態では、ふつうの規則と一緒に詳細度の順で重ねる
         const pseudo = rule.selector.pseudo;
         if (pseudo !== null) element.rules[pseudo].push(...rule.declarations);
         else
-          for (const state of ["normal", "focus", "active"] as const)
+          for (const state of STATES)
             element.rules[state].push(...rule.declarations);
       }
     }

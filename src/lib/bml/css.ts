@@ -6,7 +6,7 @@
  * `:active`) だけ。子孫セレクタ・@ 規則は運用されないので、来たら読み飛ばす。
  */
 
-export interface Selector {
+interface Selector {
   tag: string | null;
   id: string | null;
   classes: string[];

@@ -9,7 +9,7 @@
  * 何を受け取るか。**worker を作るときに決める** (描く先の canvas の使い方が違うので、途中で替えない)
  *
  * - `ts-mpeg2` … 元の TS (`CHANNEL.rawTs`)。MPEG-2 と AAC を WASM でデコードし、WebGL2 で描く
- * - `fmp4` … ライブ・追っかけのエンコードしたもの (`CHANNEL.videoInit` / `videoMedia`)。映像は WebCodecs の
+ * - `fmp4` … エンコードしたもの (ライブ・追っかけは `CHANNEL.videoInit` / `videoMedia`、観る画面は `/stream`)。映像は WebCodecs の
  *   VideoDecoder でデコードして 2D で描き、音 (AAC・Opus) は WASM でデコードする (`fmp4.ts`)。
  *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための経路
  * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面で、読んだコマを `fmp4` と

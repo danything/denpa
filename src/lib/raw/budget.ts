@@ -73,8 +73,8 @@ export class DecodeBudget {
    * @param frameMs 1コマの長さ (ms)。29.97 コマなら 33.4
    * @param late 映像が時計からどれだけ遅れているか (秒)。遅れていなければ 0
    * @param queued デコーダに渡したまま出てきていない枚数 (WebCodecs の `decodeQueueSize`)
-   * @param stretch 1 枚のデコードに使ってよい時間を何倍にするか。B フレームを飛ばしている間は 2 (デコードする枚数が減るぶん、1 枚に掛けてよい)
    * @param dropped 間に合わずに捨てたコマの数 (通し)。**割る数は窓の長さぶんのコマ数** (出した数は飛び越し走査ではフィールドごとに数えるので使わない)
+   * @param stretch 1 枚のデコードに使ってよい時間を何倍にするか。B フレームを飛ばしている間は 2 (デコードする枚数が減るぶん、1 枚に掛けてよい)
    */
   tick(
     now: number,

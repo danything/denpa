@@ -69,7 +69,6 @@ function setup(
       invisible = value;
     },
     subscribed: (element) => subscribed.push(element),
-    keysChanged: () => {},
     stream: () => {},
   };
   const dom = new Dom(host);

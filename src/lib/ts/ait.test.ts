@@ -20,7 +20,7 @@ import {
  *
  * データ放送と違って、アプリの中身は電波に乗っていない。乗っているのは
  * 「どこにあるか」だけなので、ここで確かめるのは**アドレス (URL) を正しく組み立てられるか**。
- * denpa はアプリを動かさない ([docs/stream.md](../../../docs/stream.md#hybridcast))。
+ * 開くのはデータ放送が求めたときで、ここでは読むだけ ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  */
 
 describe("AIT の在り処", () => {

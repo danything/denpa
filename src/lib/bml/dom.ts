@@ -7,7 +7,7 @@
  */
 
 import type { BmlDocument, BmlElement, BmlNode, BmlText } from "./document";
-import type { State } from "./style";
+import { SIDES, type State } from "./style";
 import {
   isObject,
   JSFunction,
@@ -33,9 +33,7 @@ export interface DomHost {
   setInvisible(invisible: boolean): void;
   /** beitem の subscribe が変わった */
   subscribed(element: BmlElement): void;
-  /** body の used-key-list が変わった */
-  keysChanged(): void;
-  /** object の streamstatus を変えた (音) */
+  /** object の streamStatus を書いた (音・MNG) */
   stream(element: BmlElement, status: string): void;
 }
 
@@ -132,6 +130,8 @@ const STYLE_PROPERTIES: Record<string, [string, boolean]> = {
   displayAspectRatio: ["display-aspect-ratio", false],
 };
 
+type Side = (typeof SIDES)[number];
+
 /** 特性の今の値を、スクリプトに返す形式で */
 function styleValue(
   element: BmlElement,
@@ -144,9 +144,11 @@ function styleValue(
     case "top":
     case "width":
     case "height":
+      return `${s[property]}px`;
     case "border-width":
+      return `${s.borderWidth}px`;
     case "letter-spacing":
-      return `${s[property === "border-width" ? "borderWidth" : property === "letter-spacing" ? "letterSpacing" : property]}px`;
+      return `${s.letterSpacing}px`;
     case "font-size":
       return `${s.fontSize}px`;
     case "line-height":
@@ -178,12 +180,10 @@ function styleValue(
   }
   const side = /^border-(top|right|bottom|left)-color-index$/.exec(property);
   if (side !== null)
-    return String(
-      s.borderColorIndex[["top", "right", "bottom", "left"].indexOf(side[1]!)],
-    );
+    return String(s.borderColorIndex[SIDES.indexOf(side[1] as Side)]);
   const padding = /^padding-(top|right|bottom|left)$/.exec(property);
   if (padding !== null)
-    return `${s.padding[["top", "right", "bottom", "left"].indexOf(padding[1]!)]}px`;
+    return `${s.padding[SIDES.indexOf(padding[1] as Side)]}px`;
   const nav = /^nav-(index|up|down|left|right)$/.exec(property);
   if (nav !== null) {
     const key =
@@ -292,8 +292,6 @@ export class Dom {
                 normalizeStyle(property, value),
               );
               element.document.touch();
-              if (property === "used-key-list" && element.tag === "body")
-                this.host.keysChanged();
             }
           : undefined,
       );

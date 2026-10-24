@@ -163,6 +163,11 @@ function clut(palette: number, index: number): string {
   return `#${CLUT[palette * 16 + index] ?? CLUT[index]}`;
 }
 
+/** 区画の幅か高さ。`floor((字の大きさ + 字間・行間) × 倍率)` */
+function section(size: number, spacing: number, scale: number): number {
+  return Math.floor((size + spacing) * scale);
+}
+
 /** 半角の字 (libaribcaption の IsHalfwidthCharacter)。中くらいでも縮めずに描く */
 function isHalfwidth(code: number): boolean {
   return (
@@ -308,11 +313,8 @@ export class B24CaptionDecoder {
    * @returns 出す1枚。出すものが無ければ (字幕管理データ・送り直し・待ちだけの字幕文) null
    */
   decode(data: Uint8Array): CaptionPage | null {
-    if (data.length < 3) return null;
-    // データ識別 (0x80 = 字幕) と私的ストリーム識別 (0xFF)
-    if (data[0] !== 0x80 || data[1] !== 0xff) return null;
-    const begin = 3 + (data[2]! & 0x0f);
-    if (begin + 5 > data.length) return null;
+    const begin = groupAt(data);
+    if (begin < 0 || begin + 5 > data.length) return null;
     const groupId = data[begin]! >> 2;
     const size = u16(data, begin + 3);
     if (size === 0 || begin + 5 + size > data.length) return null;
@@ -886,11 +888,11 @@ export class B24CaptionDecoder {
   }
 
   private sectionWidth(): number {
-    return Math.floor((this.charWidth + this.hSpacing) * this.hScale);
+    return section(this.charWidth, this.hSpacing, this.hScale);
   }
 
   private sectionHeight(): number {
-    return Math.floor((this.charHeight + this.vSpacing) * this.vScale);
+    return section(this.charHeight, this.vSpacing, this.vScale);
   }
 
   private setAbsolute(x: number, y: number): void {
@@ -954,8 +956,8 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
   const drcs: Record<string, CaptionDrcs> = {};
   let last: { run: CaptionRun; count: number; key: string } | null = null;
   for (const char of caption.chars) {
-    const w = Math.floor((char.charWidth + char.hSpacing) * char.hScale);
-    const h = Math.floor((char.charHeight + char.vSpacing) * char.vScale);
+    const w = section(char.charWidth, char.hSpacing, char.hScale);
+    const h = section(char.charHeight, char.vSpacing, char.vScale);
     const size = char.charHeight * char.vScale;
     const glyphWidth = char.charWidth * char.hScale;
     // 中くらいの半角の字は縮めない (もともと半分の幅。libaribcaption の DrawChar と同じ)
@@ -1017,9 +1019,19 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
   return page;
 }
 
+/**
+ * 字幕の PES の中身で、データグループの頭の位置。データ識別 (0x80 = 字幕) と私的ストリーム識別 (0xFF) が
+ * 合わなければ -1
+ */
+function groupAt(data: Uint8Array): number {
+  if (data.length < 3 || data[0] !== 0x80 || data[1] !== 0xff) return -1;
+  return 3 + (data[2]! & 0x0f);
+}
+
 /** 字幕の PES の中身が字幕管理データか (データグループの番号が 0)。読めないものは false */
 export function isManagement(data: Uint8Array): boolean {
-  if (data.length < 4 || data[0] !== 0x80 || data[1] !== 0xff) return false;
-  const begin = 3 + (data[2]! & 0x0f);
-  return begin < data.length && ((data[begin]! >> 2) & 0x0f) === 0;
+  const begin = groupAt(data);
+  return (
+    begin >= 0 && begin < data.length && ((data[begin]! >> 2) & 0x0f) === 0
+  );
 }

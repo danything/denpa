@@ -34,8 +34,7 @@ export function pickMediaSource(
 ): PickedMediaSource | null {
   if (typeof scope.MediaSource === "function")
     return { Source: scope.MediaSource, managed: false };
-  if (typeof scope.ManagedMediaSource === "function") {
+  if (typeof scope.ManagedMediaSource === "function")
     return { Source: scope.ManagedMediaSource, managed: true };
-  }
   return null;
 }

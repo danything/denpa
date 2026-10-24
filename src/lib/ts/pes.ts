@@ -9,7 +9,7 @@
  * DOM も WASM も触らないので、ここだけ単体で確かめられる (`pes.test.ts`)。
  */
 
-import { concatBytes, joinBytes, u16 } from "./bytes";
+import { concatBytes, u16 } from "./bytes";
 import {
   PACKET,
   packetPid,
@@ -224,7 +224,8 @@ export class AdtsSplitter {
   feed(data: Uint8Array, pts: number | null): AdtsFrame[] {
     // 余りが無いときだけ PES の時刻に合わせ直す (余りがあれば頭のコマはその続き)
     if (pts !== null && this.rest.length === 0) this.next = pts;
-    const buffer = this.rest.length === 0 ? data : joinBytes([this.rest, data]);
+    const buffer =
+      this.rest.length === 0 ? data : concatBytes([this.rest, data]);
     const out: AdtsFrame[] = [];
     let at = 0;
     while (at + 7 <= buffer.length) {

@@ -25,6 +25,7 @@
  * 速さは等速だけ (音を自前で鳴らしている)。DOM はエンジン (`RawEngine`) が触る canvas と `<audio>` だけ
  */
 
+import type { AudioSide } from "#lib/arib.js";
 import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
@@ -111,16 +112,22 @@ export interface CanvasPlayer {
 }
 
 /** 元の TS の音声の名指し (`0:main` / `1`) を、何本目かとどちら側かに */
-function tsTrack(id: string): {
-  stream: number;
-  side: "main" | "sub" | "both";
-} {
+function tsTrack(id: string): { stream: number; side: AudioSide } {
   const match = /^(\d+)(?::(main|sub|both))?$/.exec(id);
   if (match === null) return { stream: 0, side: "both" };
   return {
     stream: Number(match[1]),
-    side: (match[2] as "main" | "sub" | "both" | undefined) ?? "both",
+    side: (match[2] as AudioSide | undefined) ?? "both",
   };
+}
+
+/**
+ * 元の TS と保存した録画の音声を、エンジンの中で選ぶ (fMP4 は選んだ1本だけがリクエストで届くので要らない)。
+ * 保存した録画は何本目かだけ (デュアルモノの片側はない)
+ */
+function selectIn(engine: RawEngine, input: RawInput, id: string): void {
+  const track = tsTrack(id);
+  engine.selectAudio(track.stream, input === "mkv" ? "both" : track.side);
 }
 
 /** 写さずに worker へ渡せる形にする (塊が大きな ArrayBuffer の一部なら写す) */
@@ -185,6 +192,8 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     true,
   );
   if (paused) engine.pause();
+  // 選んでいる音声で始める (選び直して作り直したとき・デュアルモノの片側)。fMP4 はリクエストに載せる
+  if (input !== "fmp4") selectIn(engine, input, audio);
 
   /** 終わりまで観た。止めて、次の再生は頭から (`play`) */
   function finished(): void {
@@ -381,14 +390,9 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         void load(position());
         return;
       }
-      const track = tsTrack(id);
+      selectIn(engine, input, id);
       // 保存した録画はトラックを選び直して、いまの位置から読み直す (音のデコーダを開き直すため)
-      if (input === "mkv") {
-        engine.selectAudio(track.stream, "both");
-        void load(position());
-        return;
-      }
-      engine.selectAudio(track.stream, track.side);
+      if (input === "mkv") void load(position());
     },
     background(on: boolean): void {
       engine.background = on;

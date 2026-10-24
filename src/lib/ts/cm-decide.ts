@@ -340,14 +340,18 @@ interface Candidate {
 }
 
 /**
- * 境目の候補。**無音の中の切れ目を強いものも弱いものも全部** (継ぎ目の無音に切れ目が2つあると、強いほうが継ぎ目とは限らない)。
- * 切れ目が無ければ無音の真ん中。ほかに、
+ * 境目の候補。**無音の中の切れ目を強いものも弱いものも** (継ぎ目の無音に切れ目が2つあると、強いほうが継ぎ目とは限らない)。
+ * 無音1つにつき強いほうから `PER_SILENCE` 個まで。切れ目が無ければ無音の真ん中。ほかに、
  *
  * - 録画の頭と尻
  * - 無音の候補からちょうど 5・10 秒の、無音の外の強い切れ目 (`bare`)。CM に挟まれた短い所の頭の告知の終わりにだけ使う
  * - 最初のロゴの出始めと最後の消え際 (`logo`)。録画の頭と尻の CM の端にだけ使う (前後の番組との境目は無音を挟まないことがある)
  */
-function candidates(input: CmInput, logo: Range[]): Candidate[] {
+function candidates(
+  input: CmInput,
+  logo: Range[],
+  silences: Boundary[],
+): Candidate[] {
   const { duration, times, cuts } = input;
   const strength = (t: number) => {
     if (times === undefined || cuts === undefined) return 0;
@@ -355,7 +359,7 @@ function candidates(input: CmInput, logo: Range[]): Candidate[] {
     return i < times.length && Math.abs(times[i]! - t) < 1e-6 ? cuts[i]! : 0;
   };
   const out: Candidate[] = [];
-  for (const b of boundaries(input)) {
+  for (const b of silences) {
     const silence = b.silence.end - b.silence.start;
     const middle = (b.silence.start + b.silence.end) / 2;
     const found = [...b.cuts, ...b.weak]
@@ -530,13 +534,14 @@ function edgeCost(distance: number, flat: number): number {
  */
 function byLogo(input: CmInput, logo: Range[]): Range[] {
   const { duration } = input;
+  const silences = boundaries(input);
   const spans = withinProgram(
     [...logo].sort((a, b) => a.start - b.start),
     input,
-    boundaries(input),
+    silences,
   );
   const index = logoIndex(spans, duration);
-  const nodes = candidates(input, index.merged);
+  const nodes = candidates(input, index.merged, silences);
   const n = nodes.length;
   const fall = logoChange(input, -1);
   const rise = logoChange(input, 1);

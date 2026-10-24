@@ -19,7 +19,7 @@ const CANVAS_VIDEO = "canvas-video";
 /** 運転中の注意を見せたか (`1`) */
 const DRIVE_NOTICE = "canvas-drive-notice";
 
-export type CanvasChoice = "on" | "off" | null;
+type CanvasChoice = "on" | "off" | null;
 
 /** テスラの車載ブラウザの UA か (`Tesla/2026.32.1` のような印) */
 export function isTesla(ua: string): boolean {

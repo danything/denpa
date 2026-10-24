@@ -30,7 +30,7 @@ import {
 } from "./values";
 import type { Realm } from "./vm";
 
-export interface RealmOptions {
+interface RealmOptions {
   /** 放送の時刻 (UNIX ミリ秒)。`new Date()` が使う */
   now: () => number;
 }

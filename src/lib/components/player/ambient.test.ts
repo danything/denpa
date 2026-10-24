@@ -26,6 +26,7 @@ import {
   storedAmbient,
   strips,
   toHex,
+  toneFrame,
   vivid,
   WASH_LUMINANCE,
   washTone,
@@ -274,13 +275,13 @@ describe("色を濃くする", () => {
 
   test("明るいテーマでは、色の薄い所ほど透明にする", () => {
     const gray = pixel(90, 90, 90);
-    vivid(gray, "light");
+    toneFrame(gray, "light", WASH_LUMINANCE);
     expect(gray[3]).toBe(0);
     const red = pixel(200, 40, 40);
-    vivid(red, "light");
+    toneFrame(red, "light", WASH_LUMINANCE);
     expect(red[3]).toBe(255);
     const pale = pixel(140, 120, 120);
-    vivid(pale, "light");
+    toneFrame(pale, "light", WASH_LUMINANCE);
     expect(pale[3]).toBeGreaterThan(0);
     expect(pale[3]).toBeLessThan(255);
   });

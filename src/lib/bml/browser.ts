@@ -641,10 +641,8 @@ export function defineBinaryTable(host: BrowserHost): JSFunction {
     Number(table.rows[toNumber(args[0])]?.[toNumber(args[1])] ?? Number.NaN),
   );
   method("toString", (table, args) => {
-    const value = table.rows[toNumber(args[0])]?.[toNumber(args[1])];
-    return value === undefined || typeof value === "object"
-      ? null
-      : String(value);
+    const value = cell(table.rows[toNumber(args[0])]?.[toNumber(args[1])]);
+    return value === null ? null : String(value);
   });
   method("toArray", (table, args) => {
     const start = toNumber(args[0]);

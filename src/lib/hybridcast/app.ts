@@ -4,9 +4,9 @@
  *
  * ```
  * 画面 ─ 中継でアプリの HTML を取る (/api/bml/proxy)
- *      ─ 頭に <base href="アプリの URL"> と差し込み (shim.ts) を入れる (prepareApp)
+ *      ─ 頭に <base href="アプリの中継の URL"> と差し込み (shim.ts) を入れる (prepareApp)
  *      ─ sandbox="allow-scripts" の iframe (/api/bml/hybridcast。使い捨てのオリジン) へ postMessage で渡す
- * iframe ─ document.write で開く。画像・script・CSS は <base> から元のサーバへ直に取得する
+ * iframe ─ document.write で開く。配信元の画像・script・CSS は <base> から中継 (/api/bml/hc/…) を通して取る
  *        ─ fetch・XHR・受信機の記憶・受信機 API は postMessage で画面へ
  * ```
  *

@@ -5,7 +5,7 @@
   import ControlButton from "./ControlButton.svelte";
   import { stageMenu } from "./controls.svelte";
   import Icon from "./Icon.svelte";
-  import { BACK, CHECK, FORWARD, SETTINGS } from "./icons";
+  import { BACK, FORWARD, SETTINGS } from "./icons";
   import type {
     SettingAction,
     SettingChoice,
@@ -16,7 +16,7 @@
   /**
    * 再生の設定 (⚙。3画面で同じ)。何を並べるかは `StageTail`、振る舞いは docs/player.md。上の並びは切り替えが先で
    * その場で変わり (`menuitemcheckbox`)、選ぶものは押すと選択肢の並びに入る (先頭が「戻る」、選ぶと閉じる。
-   * `menuitemradio`。Esc か ← で戻る)。狭い枠では操作バーから畳んだもの (`head`) を頭に置き、線で分ける。
+   * `menuitemradio`。Esc か ← で戻る)。狭い枠では操作バーから畳んだもの (`head`) を頭に置き、余白で分ける。
    *
    * testid: ボタンは `{prefix}-settings`、枠は `{prefix}-settings-menu`、行は `{prefix}-{id}`、
    * 選択肢は `{prefix}-{id}-option` に `data-{id}={key}` (例: `data-codec="av1"`)
@@ -184,7 +184,8 @@
           {@render choice(row)}
         {/if}
       {/each}
-      {#if head.length > 0}<hr class="split" />{/if}
+      <!-- 畳んだものといつもの行の境目。線は引かず、上下を空ける (app.css の `.menu hr`) -->
+      {#if head.length > 0}<hr />{/if}
       {#each toggles as item (item.id)}
         {@render toggle(item)}
       {/each}
@@ -218,9 +219,6 @@
             if (option.disabled !== true) opened.pick(option.key);
           }}
         >
-          <span class="mark">
-            {#if option.active}<Icon icon={CHECK} />{/if}
-          </span>
           {option.label}
         </button>
       {/each}
@@ -240,11 +238,6 @@
   }
   .pane {
     display: contents;
-  }
-  /* 畳んだものといつもの行の境目。線は引かず、上下を空ける */
-  .split {
-    margin: 0.25rem 0;
-    border: 0;
   }
   .setting :global(svg) {
     flex-shrink: 0;
@@ -275,16 +268,6 @@
   }
   .back {
     margin-bottom: 0.375rem;
-  }
-  /* 選択肢の左に、選んでいる印の幅を取っておく (選んだものだけずれないように) */
-  .mark {
-    display: inline-flex;
-    width: 1.25rem;
-    flex-shrink: 0;
-  }
-  .mark :global(svg) {
-    width: 1rem;
-    height: 1rem;
   }
   /* オン/オフのスイッチ。状態は行の `aria-checked` で読ませ、これは見た目だけ */
   .switch {

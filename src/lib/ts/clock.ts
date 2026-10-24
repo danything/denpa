@@ -40,11 +40,11 @@
  */
 
 import { u16 } from "./bytes";
-import { CLOCK } from "./pes";
+import { CLOCK, WRAP as PTS_WRAP } from "./pes";
 import { packetPid, PacketStream, PmtTracker, TABLE_PMT } from "./psi";
 
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
-const WRAP = 2 ** 33 / CLOCK;
+const WRAP = PTS_WRAP / CLOCK;
 /** 組を選び直す区切り (ms)。水晶どうしのずれは 30秒で 1ms にも届かない */
 const WINDOW = 30_000;
 

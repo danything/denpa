@@ -231,9 +231,7 @@ const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
  * ので、部分だけを単独で復号すると、そこから先が崩れます。
  */
 function readDescriptors(event: EitEvent, body: Uint8Array): void {
-  /** 見出しの出てきた順。Map は挿入順を保つので、そのまま出せる */
-  const items = event.extended;
-  /** 見出しごとの生バイト。**全部揃ってから復号する** */
+  /** 見出しごとの生バイト。**全部揃ってから復号する** (Map なので見出しの出てきた順に並ぶ) */
   const pending = new Map<string, Uint8Array[]>();
   let lastHeading = "";
 
@@ -329,9 +327,8 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
   }
 
   // 全部揃ってから復号する (分割点が二バイト文字や文字集合の途中に来るため)
-  for (const [heading, parts] of pending) {
-    items[heading] = (items[heading] ?? "") + decodeAribText(joinBytes(parts));
-  }
+  for (const [heading, parts] of pending)
+    event.extended[heading] = decodeAribText(joinBytes(parts));
 }
 
 /**

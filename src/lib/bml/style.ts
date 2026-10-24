@@ -114,7 +114,7 @@ const ZERO_PADDING: [string, string][] = SIDES.map((side) => [
   "0",
 ]);
 
-/** span・a は見える見えないを必ず継ぐ (既定のスタイルの `visibility: inherit !important`) */
+/** span・a は見える見えないと字間を必ず継ぐ (既定のスタイルの `inherit !important`) */
 const INHERIT_INLINE: [string, string][] = [
   ["visibility", "inherit"],
   ["letter-spacing", "inherit"],

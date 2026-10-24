@@ -6,8 +6,8 @@
  * V (長さが前に付く)。放送は 6 つの型と 3 つの単位を全部使う。
  */
 
-export type FieldType = "B" | "U" | "I" | "S" | "Z" | "P";
-export interface Field {
+type FieldType = "B" | "U" | "I" | "S" | "Z" | "P";
+interface Field {
   type: FieldType;
   length: number;
   unit: "B" | "b" | "V";
@@ -21,7 +21,7 @@ export interface ZipRanges {
 
 export type Cell = boolean | number | string | ZipRanges;
 
-export class BinaryError extends Error {}
+class BinaryError extends Error {}
 
 export function parseStructure(text: string): Field[] | null {
   const fields: Field[] = [];
@@ -388,7 +388,7 @@ function test(
   if (cell === undefined || field === undefined) return false;
   if (typeof cell === "number") {
     const n = Number(compared);
-    const bits = field.unit === "b" ? field.length : field.length * 8;
+    const bits = lengthInBits(field);
     const mask = bits >= 32 ? 0xffffffff : 2 ** bits - 1;
     switch (operator) {
       case 0:

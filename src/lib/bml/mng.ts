@@ -15,7 +15,7 @@
 import { ascii, concatBytes } from "#lib/ts/bytes.js";
 import { PNG_SIGNATURE } from "#lib/ts/png.js";
 
-export interface MngFrame {
+interface MngFrame {
   /** CLUT を入れる前の PNG */
   png: Uint8Array<ArrayBuffer>;
   /** 次のコマまでの間 (ミリ秒) */
@@ -26,7 +26,7 @@ export interface MngFrame {
   keep: boolean;
 }
 
-export interface Mng {
+interface Mng {
   width: number;
   height: number;
   frames: MngFrame[];

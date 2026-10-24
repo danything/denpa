@@ -7,10 +7,11 @@ import type { IconShape } from "./icons";
 /**
  * 再生の設定 (⚙ `SettingsMenu`) に並べるもの。**3画面 (ライブ・追っかけ・観る画面) で同じ形。**
  *
- * - 選ぶもの (`SettingChoice`) … 行にいまの値を出し、押すと選択肢の並びに入る (コーデック・音声)
- * - 切り替え (`SettingToggle`) … 行を押すとその場でオン/オフ (CMスキップ・アンビエントモード・バックグラウンド再生)
+ * - 選ぶもの (`SettingChoice`) … 行にいまの値を出し、押すと選択肢の並びに入る (字幕・音声・コーデック)
+ * - 切り替え (`SettingToggle`) … 行を押すとその場でオン/オフ (CMスキップ・データ放送・アンビエントモード・
+ *   バックグラウンド再生・互換モード。並べるのは `StageTail`)
  *
- * 何を覚えるか (端末ごと) は今までどおり各画面と `ambient.svelte.ts`・`background.svelte.ts` が持つ。ここは並べ方だけ
+ * 何を覚えるか (端末ごと) は各画面と `ambient.svelte.ts`・`background.svelte.ts` が持つ。ここは並べ方だけ
  */
 export interface SettingOption {
   key: string | number;
@@ -235,7 +236,7 @@ export type SettingRow =
  * 速さ (`pace`)。操作バーの速さ (`SpeedMenu`) を畳んだときの行。選択肢も同じ (×1〜×2)。
  * `label` は画面の言葉 (ライブは「追っかけの速さ」、他は「再生の速さ」)
  */
-export function speeds(opts: {
+function speeds(opts: {
   icon: IconShape;
   label: string;
   speed: number;
