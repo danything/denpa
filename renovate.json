@@ -1,15 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "github>5ym/repo-config"
-  ],
+  "extends": ["github>5ym/repo-config"],
   "customManagers": [
     {
       "description": "Dockerfile の `# renovate:` 付き ARG/ENV。tarball で取ってくる外部のものは Renovate が自力で見つけられないので、注釈で教える",
       "customType": "regex",
-      "managerFilePatterns": [
-        "/(^|/)Dockerfile$/"
-      ],
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?(?: versioning=(?<versioning>\\S+?))?\\s+(?:ENV|ARG) \\w+=(?<currentValue>\\S+)"
       ]
@@ -17,9 +13,7 @@
     {
       "description": "入れ方 (install.sh は Mac で px4-userland / siano-userland を、install.ps1 は Windows で px4-userland / siano-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1つの PR で揃って上がる",
       "customType": "regex",
-      "managerFilePatterns": [
-        "/^install\\.(sh|ps1)$/"
-      ],
+      "managerFilePatterns": ["/^install\\.(sh|ps1)$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+(?:[A-Z0-9_]+=|\\$\\w+ = ')(?<currentValue>[^'\\s]+)"
       ]
@@ -28,9 +22,7 @@
   "packageRules": [
     {
       "description": "svelte-check が TypeScript 7 (tsgo) に未対応で、上げると型チェックが丸ごと落ちる。対応が入るまで5系に留める",
-      "matchPackageNames": [
-        "typescript"
-      ],
+      "matchPackageNames": ["typescript"],
       "allowedVersions": "<6"
     },
     {

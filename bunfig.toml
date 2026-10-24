@@ -8,7 +8,6 @@ ignorePatterns = [
   "charts/*/templates/",
   # drizzle-kit が出すマイグレーション (SQL と snapshot の JSON)。手では触らない
   "drizzle/",
-  "renovate.json",
   # 文書サイトの公開物 (Search Console の確認用の HTML。Google が決めた中身のまま置く)
   "site/public/",
   # 区点と突き合わせる表
