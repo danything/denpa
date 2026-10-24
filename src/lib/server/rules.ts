@@ -511,7 +511,8 @@ function seriesEpisodes(list: readonly Described[]): Taken {
 
 /**
  * **予約してある回** (「前の回は録らない」の相手。`episode.earlierAirings`)。録り始めたものは録画の行
- * ({@link seriesEpisodes}) にいるので入れない。録らないと決めた予約 (`skipped`) と取り消しも入れない
+ * ({@link seriesEpisodes}) にいるので入れない。録らない予約 (チューナー不足の `conflict`、コピー禁止の `skipped`) と
+ * 取り消しも入れない — 録らない6話のせいで、別の局の5話まで外さない
  */
 function reservedEpisodes(at: number): Known {
   const rows = orm()
@@ -523,7 +524,7 @@ function reservedEpisodes(at: number): Known {
     .from(reservations)
     .where(
       and(
-        inArray(reservations.state, ["scheduled", "conflict"]),
+        eq(reservations.state, "scheduled"),
         isNull(reservations.started_at),
         gt(reservations.end_at, at),
       ),
@@ -572,10 +573,10 @@ function episodeSkips<T extends Candidate>(
     list.map((program) => ({ ...program, type: program.service_type }));
   /*
    * **コピー禁止の放送も弾かれているのと同じ。** 録らないので、同じ回の次の放送 (禁止でない局) を録る
-   * (`format.COPY_NEVER_REASON`)
+   * (`format.COPY_NEVER_REASON`)。前の回の相手にもしない (録らない6話のせいで、別の局の5話まで外さない)
    */
   const blocked = blockedPrograms();
-  for (const program of lists.dedupe)
+  for (const program of [...lists.dedupe, ...lists.earlier])
     if (program.copy_never) blocked.add(program.id);
   return {
     dedupe:
@@ -588,11 +589,15 @@ function episodeSkips<T extends Candidate>(
     earlier:
       lists.earlier.length === 0
         ? new Map()
-        : earlierAirings(typed(lists.earlier), [
-            ...seriesEpisodes(lists.earlier),
-            ...history,
-            ...reservedEpisodes(at),
-          ]),
+        : earlierAirings(
+            typed(lists.earlier),
+            [
+              ...seriesEpisodes(lists.earlier),
+              ...history,
+              ...reservedEpisodes(at),
+            ],
+            blocked,
+          ),
   };
 }
 

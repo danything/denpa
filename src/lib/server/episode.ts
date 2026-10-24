@@ -478,17 +478,21 @@ export type Known = { episode: Episode; start_at: number }[];
  * 同じシリーズで、**その放送より前に流れた (流れる) 回のいちばん大きい話数より小さい**話数の放送は録らない。
  * 4話から追っているところへ1〜3話の一挙放送が来たときのためのもの。
  *
- * - 比べる相手は、録った回・予約した回 (`known`) と、渡された放送そのもの。**その放送より前に始まるものだけ** —
+ * - 比べる相手は、録った回・予約した回 (`known`) と、渡された放送のうち録るもの (`blocked` でないもの)。
+ *   **その放送より前に始まるものだけ** —
  *   番組表には来週の回も載っているので、時刻を見ないと今週の5話が来週の6話のせいで録れなくなる
  * - シリーズは名前がぴったり同じもの (`Episode.series`。編・期まで含む) だけ。二期や、編ごとに
  *   1話から数え直す番組 (`X 〇〇編 #1`) を前の回にしない。飾りの違う局どうしも比べない (録る側に倒す)
  * - 話数の読めない放送は録らないことにしない。話数の読めない回は相手にもならない
  *
  * 番組名が同じまま1話から数え直すシリーズは飛ばしてしまうので、ルールでは入れたときだけ当てる
+ *
+ * @param blocked 録らない放送 (チューナー不足・コピー禁止。`firstAirings` の `blocked` と同じ)
  */
 export function earlierAirings<T extends Airing>(
   airings: readonly T[],
   known: Known = [],
+  blocked: ReadonlySet<number> = new Set(),
 ): Map<number, Skip<T>> {
   const skips = new Map<number, Skip<T>>();
   const read = airings.flatMap((airing) => {
@@ -497,17 +501,19 @@ export function earlierAirings<T extends Airing>(
       ? []
       : [{ airing, episode, start_at: airing.start_at }];
   });
+  // 録らない放送 (`blocked`) は相手にしない。録らない6話のせいで、別の局の5話まで外さない
   const bySeries = Map.groupBy(
-    [...known.filter((k) => k.episode.number !== null), ...read],
+    [
+      ...known.filter((k) => k.episode.number !== null),
+      ...read.filter(({ airing }) => !blocked.has(airing.id)),
+    ],
     (k) => k.episode.series,
   );
   for (const { airing, episode } of read) {
-    const ahead = bySeries
-      .get(episode.series)!
-      .filter(
-        (k) =>
-          k.start_at < airing.start_at && k.episode.number! > episode.number!,
-      );
+    const ahead = (bySeries.get(episode.series) ?? []).filter(
+      (k) =>
+        k.start_at < airing.start_at && k.episode.number! > episode.number!,
+    );
     if (ahead.length === 0) continue;
     skips.set(airing.id, {
       kind: "earlier",

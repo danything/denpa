@@ -1004,6 +1004,22 @@ describe("前の回は録らない", () => {
     expect(reservations().map((r) => r.program_id)).toEqual([13, 21]);
   });
 
+  test("録らない放送は相手にしない: 6話がコピー禁止なら、そのあとの別の局の5話は外さない", () => {
+    reset();
+    sub(400211, "BS11", "BS09_0", "BS");
+    rule(1, "テストアニメ", true, 1, false, true);
+    program(6, "テストアニメ #6");
+    orm()
+      .update(programs)
+      .set({ copy_never: true })
+      .where(eq(programs.id, 6))
+      .run();
+    on(400211, 5, "テストアニメ #5", DAY);
+
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toContain(5);
+  });
+
   test("下見も同じところを通り、理由は「前の回」", () => {
     reset();
     rule(1, "テストアニメ", true, 1, false, true);
