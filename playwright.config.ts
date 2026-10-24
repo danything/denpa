@@ -36,7 +36,7 @@ export default defineConfig({
     /*
      * **動きを止めて流す** (`prefers-reduced-motion: reduce`)。画面の切り替え (View Transitions) の
      * 最中は写しが画面を覆って押せず、メニューは閉じる動きの間も見えている。止めておけば、
-     * 押した次の瞬間に次の姿になっている (動かさない設定の端末と同じ。`app.css`・`#lib/motion.svelte.ts`)
+     * 押した次の瞬間に次の姿になっている (動かさない設定の端末と同じ。`app.css` の最後)
      */
     reducedMotion: "reduce",
     trace: "retain-on-failure",

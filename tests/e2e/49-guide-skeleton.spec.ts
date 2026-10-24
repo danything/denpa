@@ -85,7 +85,7 @@ test("局名の行と時刻の列はマスより先に出て、届いても動�
   await page.goto("/guide?type=GR");
   await page.locator('[data-hydrated="true"]').waitFor();
 
-  // マスはまだ無く、そこだけ骨組み。局名の行・時刻の列・いまの線は本物
+  // マスはまだ無く、そこだけ骨組み。局名の行・時刻の列・「いま」の時刻は本物
   await expect(page.getByTestId("guide-skeleton")).toBeVisible();
   await expect(page.getByTestId("program-button")).toHaveCount(0);
   await expect(page.getByTestId("guide-service").first()).toBeVisible();
