@@ -137,12 +137,12 @@
   :global(.ov-btn) {
     --pico-background-color: transparent;
     --pico-border-color: transparent;
-    --pico-color: #fff;
+    --pico-color: var(--dp-on-video);
     --pico-box-shadow: none;
     filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.6));
   }
   :global(.ov-btn:is(:hover, :focus-visible)) {
-    --pico-background-color: rgb(255 255 255 / 0.14);
+    --pico-background-color: var(--dp-on-video-hover);
   }
   /*
      * **オン (字幕を出している・速めているなど) は空色のアイコンと、下の短い線。** 塗らない。
@@ -150,10 +150,10 @@
      * どちらも暗い影の上で 4.5:1 以上になる明るさにしてある
      */
   :global(.ov-btn.ov-on) {
-    --pico-color: #7dd3fc;
+    --pico-color: var(--dp-on-video-on);
   }
   :global(.ov-btn.ov-danger) {
-    --pico-color: #ff8a7a;
+    --pico-color: var(--dp-on-video-danger);
   }
   :global(.ov-btn:is(.ov-on, .ov-danger))::after {
     content: "";
@@ -169,7 +169,11 @@
   /* 透かしを減らす設定では、乗せたときの地も透かさない (並びの裏の影は `ControlBar` が透かさない地にする) */
   @media (prefers-reduced-transparency: reduce) {
     :global(.ov-btn:is(:hover, :focus-visible)) {
-      --pico-background-color: #26282e;
+      --pico-background-color: color-mix(
+        in srgb,
+        var(--dp-on-video) 14%,
+        var(--dp-video-panel)
+      );
     }
   }
 </style>

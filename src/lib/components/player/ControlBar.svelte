@@ -95,7 +95,7 @@
   .bar {
     position: absolute;
     z-index: 10;
-    color: #fff;
+    color: var(--dp-on-video);
     transition: opacity var(--dp-duration);
   }
   .bar.away {
@@ -128,7 +128,11 @@
     inset: 0 0 0 auto;
     z-index: -1;
     width: 7.5rem;
-    background: linear-gradient(to left, rgb(0 0 0 / 0.62), transparent);
+    background: linear-gradient(
+      to left,
+      color-mix(in srgb, var(--dp-video) 62%, transparent),
+      transparent
+    );
     pointer-events: none;
   }
 
@@ -139,8 +143,8 @@
     padding: 2.5rem 0.75rem 0.75rem;
     background: linear-gradient(
       to top,
-      rgb(0 0 0 / 0.82),
-      rgb(0 0 0 / 0.55) 55%,
+      color-mix(in srgb, var(--dp-video) 82%, transparent),
+      color-mix(in srgb, var(--dp-video) 55%, transparent) 55%,
       transparent
     );
   }
@@ -152,16 +156,16 @@
     .bottom {
       background: linear-gradient(
         to top,
-        rgb(20 21 25 / 0.95),
-        rgb(20 21 25 / 0.85) 60%,
+        color-mix(in srgb, var(--dp-video-panel) 95%, transparent),
+        color-mix(in srgb, var(--dp-video-panel) 85%, transparent) 60%,
         transparent
       );
     }
     .side::before {
       background: linear-gradient(
         to left,
-        rgb(20 21 25 / 0.95),
-        rgb(20 21 25 / 0.85) 50%,
+        color-mix(in srgb, var(--dp-video-panel) 95%, transparent),
+        color-mix(in srgb, var(--dp-video-panel) 85%, transparent) 50%,
         transparent
       );
     }

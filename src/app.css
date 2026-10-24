@@ -145,6 +145,22 @@
   --dp-info: #058686; /* cyan-500 */
   --dp-error: var(--dp-rec);
   /*
+     * **映像の上の色。** 舞台はテーマにかかわらず黒いので、ダーク・ライトで変えない。
+     * 字は白、控えた字は白 72% (暗い影の上で 4.5:1 以上)。オンは空色、戻せないものの 2 回目と「今」は赤。
+     * どちらも暗い影の上で 4.5:1 以上になる明るさ。面は暗い灰を透かし、影と覆いは黒を透かす
+     */
+  --dp-video: #000;
+  --dp-on-video: #fff;
+  --dp-on-video-soft: rgb(255 255 255 / 0.8);
+  --dp-on-video-muted: rgb(255 255 255 / 0.72);
+  --dp-on-video-hover: rgb(255 255 255 / 0.14);
+  --dp-on-video-on: #7dd3fc; /* sky-300 */
+  --dp-on-video-danger: #ff8a7a;
+  --dp-video-panel: #17191e;
+  --dp-video-menu: color-mix(in srgb, var(--dp-video-panel) 86%, transparent);
+  --dp-video-veil: rgb(0 0 0 / 0.6);
+  --dp-video-veil-strong: rgb(0 0 0 / 0.8);
+  /*
      * 指を乗せた項目・選んでいる項目の地 (メニュー・番組表のマス・ルールのプレビュー)。
      * 選んでいる行を `--dp-subtle` で塗る一覧 (サイドバーの `.side-item`) は、指を乗せた行を
      * それより淡い `--dp-hover-soft` にして、選んでいる行と見分ける
@@ -438,7 +454,7 @@ html[data-stage-fullscreen],
 html[data-stage-fullscreen] body {
   overflow: hidden;
   overscroll-behavior: none;
-  background: #000;
+  background: var(--dp-video);
 }
 /*
  * コード (<pre>)。Pico のコードの部品は読まないので、字は素の等幅。文章の決まり (typography) が
@@ -1465,24 +1481,24 @@ button.text-button:hover {
  * 選んでいる選択肢は、ほかの選んでいるものと同じく塗らずに左の縦線と太字。色は映像の上のボタンのオンと同じ空色
  */
 .overlay-menu {
-  --dp-hover: rgb(255 255 255 / 0.1);
+  --dp-hover: var(--dp-on-video-hover);
   --dp-line: rgb(255 255 255 / 0.14);
-  --dp-muted: rgb(255 255 255 / 0.72);
-  --pico-color: #fff;
+  --dp-muted: var(--dp-on-video-muted);
+  --pico-color: var(--dp-on-video);
   gap: 0.125rem;
   width: max-content;
   max-width: min(20rem, 90vw);
   padding: 0.5rem;
   border: 0;
-  background: rgb(23 25 30 / 0.86);
+  background: var(--dp-video-menu);
   box-shadow:
     0 2px 6px rgb(0 0 0 / 0.35),
     0 18px 40px rgb(0 0 0 / 0.45);
-  color: #fff;
+  color: var(--dp-on-video);
 }
 @media (prefers-reduced-transparency: reduce) {
   .overlay-menu {
-    background: #17191e;
+    background: var(--dp-video-panel);
   }
   :root {
     --dp-float: var(--dp-pop);
@@ -1493,7 +1509,7 @@ button.text-button:hover {
   padding: 0.4rem 0.75rem;
 }
 .overlay-menu .option[data-active] {
-  color: #7dd3fc;
+  color: var(--dp-on-video-on);
   font-weight: var(--dp-weight-bold);
 }
 .overlay-menu .option[data-active]::before {
@@ -1510,9 +1526,9 @@ button.text-button:hover {
   max-width: 100%;
   padding: 0.25rem 0.75rem;
   border-radius: var(--dp-radius-lg);
-  background: rgb(0 0 0 / 0.6);
+  background: var(--dp-video-veil);
   font-size: var(--dp-text-xs);
-  color: #fff;
+  color: var(--dp-on-video);
 }
 
 /*

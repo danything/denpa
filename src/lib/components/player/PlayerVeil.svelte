@@ -72,10 +72,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: var(--dp-on-video);
   }
   .dim {
-    background: rgb(0 0 0 / 0.6);
+    background: var(--dp-video-veil);
   }
   .error {
     pointer-events: auto;
@@ -97,7 +97,7 @@
   .boxed {
     padding: 0.75rem;
     border-radius: var(--dp-radius-lg);
-    background: rgb(0 0 0 / 0.45);
+    background: var(--dp-video-veil);
     opacity: 0;
     animation: appear 0s 1.5s forwards;
   }
@@ -110,12 +110,12 @@
   .spinner {
     font-size: 2.5rem;
     line-height: 1;
-    --pico-color: #fff;
+    --pico-color: var(--dp-on-video);
   }
   .note {
     font-size: var(--dp-text-sm);
   }
   .idle {
-    color: rgb(255 255 255 / 0.6);
+    color: var(--dp-on-video-muted);
   }
 </style>

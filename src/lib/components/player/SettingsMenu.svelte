@@ -326,7 +326,7 @@
     width: 1rem;
     height: 1rem;
     border-radius: var(--dp-radius-full);
-    background: #fff;
+    background: var(--dp-on-video);
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     transition: transform var(--dp-duration) var(--dp-ease);
   }
@@ -335,7 +335,7 @@
      * 入り切りは丸の位置でも分かる。メニューの面はいつも暗い (app.css の `.overlay-menu`)
      */
   .switch[data-on] {
-    background: rgb(255 255 255 / 0.6);
+    background: color-mix(in srgb, var(--dp-on-video) 60%, transparent);
   }
   .switch[data-on]::after {
     transform: translateX(1rem);

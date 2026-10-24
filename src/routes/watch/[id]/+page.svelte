@@ -1948,7 +1948,7 @@
           <video
             bind:this={video}
             {src}
-            style="width:100%; height:100%; background:#000;"
+            style="width:100%; height:100%; background:var(--dp-video);"
             playsinline
             onclick={press}
             onplay={() => {
@@ -2461,9 +2461,9 @@
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
     border-radius: var(--dp-radius-lg);
-    background: rgb(0 0 0 / 0.6);
-    color: #fff;
-    --pico-color: #fff;
+    background: var(--dp-video-veil);
+    color: var(--dp-on-video);
+    --pico-color: var(--dp-on-video);
   }
   .broken {
     position: absolute;
@@ -2474,9 +2474,9 @@
     justify-content: center;
     gap: 0.75rem;
     padding: 1rem;
-    background: rgb(0 0 0 / 0.8);
+    background: var(--dp-video-veil-strong);
     text-align: center;
-    color: #fff;
+    color: var(--dp-on-video);
   }
   .local {
     flex-shrink: 0;

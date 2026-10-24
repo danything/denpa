@@ -552,12 +552,12 @@
     pointer-events: auto;
   }
   .to-watch {
-    color: #fff;
+    color: var(--dp-on-video);
     text-decoration: underline;
-    text-decoration-color: rgb(255 255 255 / 0.5);
+    text-decoration-color: var(--dp-on-video-muted);
     text-underline-offset: 2px;
   }
   .to-watch:hover {
-    background: rgb(0 0 0 / 0.8);
+    background: var(--dp-video-veil-strong);
   }
 </style>

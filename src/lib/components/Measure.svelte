@@ -306,8 +306,8 @@
     max-width: 95vw;
     padding: 0.25rem 0.5rem;
     border-radius: var(--dp-radius-sm);
-    background: rgb(0 0 0 / 0.85);
-    color: #fff;
+    background: var(--dp-video-veil-strong);
+    color: var(--dp-on-video);
     font-family: ui-monospace, monospace;
     font-size: 10px;
     line-height: 1.25;

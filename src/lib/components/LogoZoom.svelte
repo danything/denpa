@@ -221,7 +221,7 @@
     overflow: hidden;
   }
   .frame.dark {
-    background: #000;
+    background: var(--dp-video);
   }
   .frame img {
     max-width: none;

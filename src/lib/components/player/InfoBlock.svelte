@@ -80,7 +80,7 @@
     flex: 1 1 0;
     padding: 0 0.5rem;
     line-height: 1.25;
-    color: rgb(255 255 255 / 0.8);
+    color: var(--dp-on-video-soft);
   }
   .top {
     display: flex;
@@ -133,6 +133,6 @@
   .status {
     font-size: var(--dp-text-xs);
     font-variant-numeric: tabular-nums;
-    color: rgb(255 255 255 / 0.6);
+    color: var(--dp-on-video-muted);
   }
 </style>

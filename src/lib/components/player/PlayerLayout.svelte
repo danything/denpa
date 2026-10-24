@@ -143,7 +143,7 @@
       flex: none;
       height: 100dvh;
       /* 映像の形の枠 (`PlayerStage`) の左右は黒。テーマの地を映像の横に出さない */
-      background: #000;
+      background: var(--dp-video);
     }
     .layout > :global(aside) {
       --dp-side-pad: initial;

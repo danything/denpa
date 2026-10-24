@@ -245,7 +245,7 @@
     display: block;
     width: 100%;
     border-radius: var(--dp-radius);
-    background: #000;
+    background: var(--dp-video);
   }
   .player-bar {
     display: flex;

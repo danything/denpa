@@ -26,7 +26,7 @@
     gap: 0.25rem;
     margin-top: 0.25rem;
     overflow-x: clip;
-    color: #fff;
+    color: var(--dp-on-video);
   }
   /* 狭い枠では間を少し詰める (押す的の大きさは `ControlButton` が 40px で保つ) */
   :global(.stage[data-compact]) .row {

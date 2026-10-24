@@ -1161,7 +1161,7 @@
     cursor: pointer;
   }
   .relearn:hover {
-    color: #fff;
+    color: var(--dp-on-video);
   }
   /* 録画に譲った通知。通知の列は押せない (`PlayerStage`) ので、この通知だけ押せるように戻す。見た目は StageNote と同じ (`.stage-note`) */
   .yielded {
@@ -1177,16 +1177,17 @@
     width: auto;
     margin: 0;
     padding: 0.125rem 0.75rem;
-    border: 1px solid rgb(255 255 255 / 0.6);
+    border: 0;
     background: transparent;
-    color: #fff;
+    color: var(--dp-on-video);
+    font-weight: var(--dp-weight-bold);
     font-size: var(--dp-text-xs);
   }
   .back-live:hover:not(:disabled) {
-    background: rgb(255 255 255 / 0.15);
+    background: var(--dp-on-video-hover);
   }
   .unmute {
-    --pico-background-color: rgb(0 0 0 / 0.6);
+    --pico-background-color: var(--dp-video-veil);
     position: absolute;
     top: 0.75rem;
     left: 0.75rem;

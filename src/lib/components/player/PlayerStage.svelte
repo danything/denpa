@@ -398,7 +398,7 @@
   .stage {
     position: relative;
     overflow: hidden;
-    background: #000;
+    background: var(--dp-video);
     aspect-ratio: 16 / 9;
     max-height: 100%;
     min-height: 14rem;

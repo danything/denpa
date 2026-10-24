@@ -248,7 +248,7 @@
      * `touch-action: none` — 横に動かしている間にページが動かないように
      */
   .seek {
-    --seek-track: rgb(255 255 255 / 0.22);
+    --seek-track: color-mix(in srgb, var(--dp-on-video) 22%, transparent);
     --seek-played: var(--pico-primary-background);
     --seek-cm: rgb(255 200 95 / 0.55);
     --seek-cm-played: rgb(255 179 0);
