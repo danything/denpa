@@ -524,7 +524,8 @@ public sealed class TunerPool(
                 JsonArray users = [];
                 if (lease is not null)
                 {
-                    lock (lease.Sinks) users = [.. lease.Sinks.Select(sink => new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority })];
+                    // JsonNode にしてから入れる (JsonObject のままだと総称の Add<T> になり、AOT で使えない)
+                    lock (lease.Sinks) users = [.. lease.Sinks.Select(sink => (JsonNode)new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority })];
                 }
 
                 list.Add((JsonNode)new JsonObject
