@@ -1,3 +1,4 @@
+import { joinBytes } from "../ts/bytes";
 import type { Range } from "../ts/cm-decide";
 import type { Span } from "../ts/logo-detect";
 
@@ -84,20 +85,14 @@ export function encodeMaterial(material: CmMaterial): Uint8Array {
         255,
         Math.max(0, Math.round((logo.scores[i] ?? 0) * SCORE_SCALE)),
       );
-  const parts = [
+  const raw = joinBytes([
     new Uint8Array(Uint32Array.of(head.length).buffer),
     head,
     new Uint8Array(deltas.buffer),
     new Uint8Array(at.buffer),
     new Uint8Array(strength.buffer),
     scores,
-  ];
-  const raw = new Uint8Array(parts.reduce((sum, p) => sum + p.length, 0));
-  let cursor = 0;
-  for (const part of parts) {
-    raw.set(part, cursor);
-    cursor += part.length;
-  }
+  ]);
   return Bun.zstdCompressSync(raw, { level: 19 });
 }
 
