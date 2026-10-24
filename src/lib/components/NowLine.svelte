@@ -1,10 +1,10 @@
 <script lang="ts">
   /**
-   * **「いま」の線。** ホームの一覧 (`home/TimelineHeading`) と番組表で同じ見た目にする:
-   * 赤い点と赤い太字の時刻。ホームはその右に細い赤い線を引き、番組表は時刻を操作の層のカプセルに乗せる。
+   * **「いま」の線** (いまの境目。名前だけで、目に見える線は引かない)。ホームの一覧 (`home/TimelineHeading`) と番組表で同じ見た目にする:
+   * 赤い点と赤い太字の時刻。ホームは地に置いてすぐ後ろに一言を続け、番組表は時刻を操作の層のカプセルに乗せる。
+   * 中身には線を引かない (docs/design.md)。
    *
-   * - `inline` (ホーム) … 時刻 (地に置く)・残りの幅を埋める線・控えた字の一言 (`status`。右端) を1行に並べる。
-   *   字の下には線を引かない。幅が足りなければ一言を短い形 (`status.short`) に替え、それでも入らなければ「…」で切る (折り返さない)
+   * - `inline` (ホーム) … 時刻 (地に置く) と控えた字の一言 (`status`) を左から1行に並べる。幅が足りなければ一言を短い形 (`status.short`) に替え、それでも入らなければ「…」で切る (折り返さない)
    * - `overlay` (番組表) … 時刻のカプセルだけを時の列のいまの位置に置き、左端に貼り付ける (`sticky`)。表を横切る線は引かない。
    *   目に見えるのは分だけ (時は同じ時の列に出ている。読み上げには時まで渡す)
    *   (過ぎた所はマスを暗くして見せる)。時の数字の上に乗るので、カプセルの面で読ませる
@@ -54,8 +54,6 @@
         >、</span
       >{/if}</span
   >
-  {#if layout === "inline"}<span class="now-rule" aria-hidden="true"
-    ></span>{/if}
   {#if shown}
     <span class="now-status">
       <span class="now-full">{shown.text}</span><span
@@ -102,11 +100,13 @@
     align-items: center;
     gap: 0.5rem;
   }
+  /* 左の余白は日付の字にそろえるため。右は空けず、一言をすぐ続ける */
   .inline .now-time {
     flex-shrink: 0;
+    padding-right: 0;
     font-size: var(--now-time-size, 0.875rem);
   }
-  /* 一言は控えた字で右端に (補足なので、時刻と線ほど目立たせない) */
+  /* 一言は時刻のすぐ後ろに控えた字で (補足なので、時刻ほど目立たせない) */
   .now-status {
     flex: 0 1 auto;
     min-width: 0;
@@ -118,12 +118,6 @@
   }
   .now-short {
     display: none;
-  }
-  .now-rule {
-    flex: 1 1 0%;
-    min-width: 1rem;
-    height: 1px;
-    background: var(--dp-rec);
   }
   /* 狭いと短い形 (「次まで 3:59」)。長い形は読み上げにだけ残す */
   @container (max-width: 19rem) {

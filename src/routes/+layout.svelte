@@ -965,12 +965,12 @@
       display: flex;
     }
     /*
-     * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / 0.75rem 離した角の丸い帯にして、巻くと中身の上に浮かせる (下の `@supports`)。
+     * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / `--dp-bar-inset` 離した角丸の面にして、巻くと中身の上に浮かせる (下の `@supports`)。
      * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、巻くと下を流れる。
-     * 角は入れ子でそろえる: 外 (0.875rem) = 中のボタン (`--dp-radius` 0.5rem) + 間の余白 (0.375rem)
+     * 角は入れ子でそろえる: 外 (`--dp-bar-radius` 0.875rem) = 中の欄 (`--dp-radius` 0.5rem) + 間の余白 (0.375rem)
      *
-     * `--dp-header-bottom` はヘッダーの下端。巻いても上に残す見出しや帯はここに貼り付け、ヘッダーとの間を空けない
-     * (間の細い隙間に行が透けて見えないように)
+     * `--dp-header-bottom` はヘッダーの下端。巻いても上に残す操作の1行は、ここから `--dp-bar-gap` 離した同じ形の面に乗せて貼り付ける
+     * (`app.css` の `dp-bar-float`)。その1行がある間はヘッダーも近い影 (`--navbar-shadow`) にそろえ、遠い影が下の1行に掛からないようにする
      */
     :global(:root) {
       --dp-header-space: 4.25rem;
@@ -982,10 +982,10 @@
     .navbar {
       position: fixed;
       top: 0.5rem;
-      inset-inline: 0.75rem;
+      inset-inline: var(--dp-bar-inset);
       min-height: 3.25rem;
       padding: 0.375rem 0.375rem 0.375rem 0.75rem;
-      border-radius: 0.875rem;
+      border-radius: var(--dp-bar-radius);
       background: var(--dp-float);
       box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
       display: grid;

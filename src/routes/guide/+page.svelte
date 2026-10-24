@@ -1563,11 +1563,6 @@
      * つかんで動かす・ホイール・キー・指では今までどおり動く
      */
   @media (min-width: 768px) {
-    /* 帯の面 (`app.css` の `.guide-bar::before`) を中に閉じ込め、マスより手前に置く */
-    .guide-bar {
-      z-index: 1;
-      isolation: isolate;
-    }
     .grid-box {
       margin-top: calc(-1 * var(--guide-head));
       scrollbar-width: none;
@@ -1578,22 +1573,13 @@
     .rows {
       margin-top: var(--guide-head);
     }
-    /* 操作の1行の角丸の帯と局名の面もヘッダーと同じく、上端では見せず、マスが裏に入ると出る */
+    /* 局名の面も操作の1行 (`app.css` の `.guide-bar::before`) と同じく、上端では見せず、マスが裏に入ると出る */
     @supports (animation-timeline: scroll()) {
-      .guide-bar::before,
       .service::before {
-        animation: bar-float linear both;
+        animation: dp-bar-float linear both;
         animation-timeline: --guide;
         animation-range: 0 1.5rem;
       }
-    }
-  }
-  @keyframes bar-float {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
     }
   }
   /*
@@ -1610,8 +1596,8 @@
     display: grid;
   }
   /*
-     * **局名の行と時の列は操作の層。** 表を巻くとマスがその裏を流れるので、ヘッダーと同じ半透明の面 (`--dp-float`) と影で浮かせる
-     * (docs/design.md の「浮かせ方」)。線は引かない。影はマスの側にだけ落とす (行は下、列は右。隣の局名の上に重ねない)
+     * **局名と時の列は操作の層。** 表を巻くとマスがその裏を流れるので、ヘッダーと同じ半透明の面 (`--dp-float`) で浮かせる
+     * (docs/design.md の「浮かせ方」)。線は引かない。時の列と角の影はマスの側にだけ落とす (列は右。局名は下の `.service::before`)
      */
   .corner,
   .hour {
@@ -1619,7 +1605,7 @@
     box-shadow: var(--dp-shadow-pop);
   }
   /*
-     * 局名は局ごとの小さな角丸の面 (ヘッダー・操作の1行と同じ材質。局の列と一緒に横へ動くので、1 本の帯にはしない)。
+     * 局名は局ごとの小さな角丸の面 (ヘッダー・操作の1行と同じ材質。局の列と一緒に横へ動くので、1 本につながった面にはしない)。
      * 広い画面では、表を縦に巻いてマスが裏に入ったときだけ出す (下の `@supports`)
      */
   .service {
@@ -1631,7 +1617,7 @@
     position: absolute;
     inset: 0 0.125rem 0.125rem;
     z-index: -1;
-    border-radius: 0.875rem;
+    border-radius: var(--dp-bar-radius);
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-tight);
     pointer-events: none;

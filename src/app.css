@@ -104,6 +104,14 @@
    * 透かしを減らす設定では透かさない (下)
    */
   --dp-float: color-mix(in srgb, var(--dp-pop) 92%, transparent);
+  /*
+   * **浮いた角丸の面の形** (広い画面のヘッダーと、その下に貼り付く操作の1行。docs/design.md の「浮かせ方」)。
+   * 窓の端からの離れ・角・ヘッダーとの隙間・中の余白をそろえる。操作の1行の面は、中身が裏に入ったときだけ出す (下の `dp-bar-float`)
+   */
+  --dp-bar-inset: 0.75rem;
+  --dp-bar-radius: 0.875rem;
+  --dp-bar-gap: 0.25rem;
+  --dp-bar-pad: 0.375rem;
   /* 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない) */
   --dp-text-xs: 0.75rem;
   --dp-text-sm: 0.875rem;
@@ -674,6 +682,24 @@ progress.running[value]::-webkit-progress-value {
   flex: none;
 }
 /*
+ * **ヘッダーの下に貼り付く操作の1行は、ヘッダーと同じ角丸の面** (番組表の `.guide-bar`・ホームの `.t-toolbar`・
+ * ルールの `.rules-bar`・設定の `.jump`。docs/design.md の「浮かせ方」)。上端では平らで、巻いて中身が裏に入ると
+ * 面と近い影 (`--dp-shadow-tight`) が出る。時間の軸は使う側で決める (窓なら `scroll(root block)`、番組表は表の箱の `--guide`)。
+ * 使う側は `@supports (animation-timeline: scroll())` の中で面と影を消してから動かす (ヘッダーと同じ)。
+ * 窓が巻けない短いページでは軸が止まり、平らなまま。知らないブラウザと動きを減らす設定の端末
+ * (Pico がアニメーションをすぐ終わらせる) は、いつも面が出ている
+ */
+@keyframes dp-bar-float {
+  from {
+    background: transparent;
+    box-shadow: none;
+  }
+  to {
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-tight);
+  }
+}
+/*
  * **広い画面では表がヘッダーの裏まで伸びる** (docs/design.md の「浮かせ方」。番組表の `.grid-box`)。
  * 操作の1行はヘッダーの下端 (`--dp-header-bottom`) に付け、高さを決めておく (`--guide-bar-h`)。
  * 表の頭 (局名の行が貼り付く所) はその下端 `--guide-head`。マスはヘッダーと操作の1行の裏を流れる。
@@ -683,34 +709,49 @@ progress.running[value]::-webkit-progress-value {
 @media (min-width: 768px) {
   .guide-frame {
     /*
-     * 操作の1行は、ヘッダーと同じ角丸の帯 (`--guide-bar-gap` 離して、中に `--guide-bar-pad` の余白)。
-     * 帯の下にも同じだけ空けて、局名の行はその下に付く
+     * 操作の1行は、ヘッダーと同じ角丸の面 (`--guide-bar-gap` 離して、中に `--guide-bar-pad` の余白)。
+     * 面の下にも同じだけ空けて、局名の行はその下に付く
      */
-    --guide-bar-gap: 0.25rem;
-    --guide-bar-pad: 0.375rem;
+    --guide-bar-gap: var(--dp-bar-gap);
+    --guide-bar-pad: var(--dp-bar-pad);
     --guide-bar-h: calc(
       var(--guide-bar-gap) * 2 + var(--guide-bar-pad) * 2 + var(--dp-btn-h-sm)
     );
     --guide-head: calc(var(--dp-header-bottom) + var(--guide-bar-h));
   }
+  /* 面 (下の `::before`) を中に閉じ込め、マスより手前に置く */
   .guide-bar {
     position: relative;
+    z-index: 1;
+    isolation: isolate;
     height: var(--guide-bar-h);
     margin-top: calc(var(--dp-header-bottom) - var(--dp-header-space));
     padding: calc(var(--guide-bar-gap) + var(--guide-bar-pad))
-      calc(0.75rem + var(--guide-bar-pad))
+      calc(var(--dp-bar-inset) + var(--guide-bar-pad))
       calc(var(--guide-bar-gap) + var(--guide-bar-pad));
   }
-  /* 帯の面。ヘッダーと同じ形 (端から 0.75rem・角 0.875rem)。出し方は番組表の <style> (表を巻いたときだけ) */
+  /*
+   * 1 行の面。ヘッダーと同じ形 (`--dp-bar-inset`・`--dp-bar-radius`)。表を巻いてマスが裏に入ったときだけ出す
+   * (表の箱の軸 `--guide`。`guide/+page.svelte`)。移る途中の姿 (`GuidePending`) には表が無く軸が止まるので、平らなまま
+   */
   .guide-bar::before {
     content: "";
     position: absolute;
-    inset: var(--guide-bar-gap) 0.75rem;
+    inset: var(--guide-bar-gap) var(--dp-bar-inset);
     z-index: -1;
-    border-radius: 0.875rem;
+    border-radius: var(--dp-bar-radius);
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-tight);
     pointer-events: none;
+  }
+  @supports (animation-timeline: scroll()) {
+    .guide-bar::before {
+      background: transparent;
+      box-shadow: none;
+      animation: dp-bar-float linear both;
+      animation-timeline: --guide;
+      animation-range: 0 1.5rem;
+    }
   }
 }
 /* 狭い画面では操作の1行は表の下 (下のタブのすぐ上。親指が届く) */

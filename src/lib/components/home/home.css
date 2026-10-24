@@ -308,6 +308,8 @@
  * 広い画面 (768px 以上) では左右と下を main の余白の外まで広げ、右のサイドバーを窓の右端と下端に付ける
  */
 .board {
+  /* 日付の見出しが貼り付く所の上の離れ (下の `.t-day`。頭の1行の下にも同じだけ空ける) */
+  --t-day-gap: 0.5rem;
   display: flex;
   flex-direction: column;
 }
@@ -397,7 +399,6 @@
   }
   .board .t-toolbar {
     gap: 0.75rem;
-    padding: 0.5rem var(--dp-gutter) 0.25rem;
   }
 }
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"]::after {
@@ -414,8 +415,7 @@
  * (docs/design.md の「浮かせ方」)。地の色の帯にすると、半透明のヘッダーの下に塗った帯だけが浮いて見えた
  */
 .board .t-day {
-  /* 貼り付く位置。いちばん上の見出しの置かれた位置 (main の頭の空き) と同じにし、巻き始めても動かない */
-  --t-day-gap: 0.5rem;
+  /* 貼り付く位置。いちばん上の見出しの置かれた位置 (main の頭の空き・頭の1行の下) と同じにし、巻き始めても動かない (上端ではカプセルにならない) */
   position: sticky;
   top: var(--t-day-gap);
   z-index: 3;
@@ -464,20 +464,54 @@
   font-weight: var(--dp-weight);
 }
 /*
- * **ヘッダーが浮いている幅 (640px 以上) では、ヘッダーの下端 (`--dp-header-bottom`) に貼り付ける。** 間を空けると、
- * 細い隙間に行が透けて見える。頭の1行は地の色で塗る (docs/design.md の「浮かせ方」)。
- * 頭の1行 (1000px まで) はヘッダーとの間 (0.5rem) も地で埋め、そのぶん上へ出す。置かれた位置のまま、巻いても動かずに貼り付く。
- * 日付の見出し (カプセル) はその下に少し離して浮かべる
+ * **ヘッダーが浮いている幅 (640px 以上) では、頭の1行 (1000px まで) をヘッダーと同じ角丸の面に乗せ、その下に貼り付ける**
+ * (docs/design.md の「浮かせ方」。番組表の操作の1行と同じ形。`app.css` の `--dp-bar-*`)。ヘッダーとの隙間は `--dp-bar-gap`。
+ * 置かれた位置 (main の頭の空き) から隙間のぶん上へ出し、巻き始めても動かない。
+ * 上端では平らで、巻いて行が裏に入ると面と近い影が出る (ヘッダーと同じく窓の巻いた量で。`dp-bar-float`)。
+ * 高さはヘッダーと同じ (`--t-bar-h`)。日付の見出しはその下に `--t-day-gap` 離して置き、貼り付く所もそこにそろえる
  */
 @media (min-width: 640px) {
+  .board {
+    --t-bar-h: 3.25rem;
+  }
   .board .t-toolbar {
-    top: var(--dp-header-bottom);
-    height: 3.25rem;
-    margin-top: -0.5rem;
-    border-top: 0.5rem solid var(--dp-bg);
+    top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
+    height: var(--t-bar-h);
+    margin: calc(
+        var(--dp-header-bottom) + var(--dp-bar-gap) - var(--dp-header-space)
+      )
+      calc(var(--dp-bar-inset) - var(--dp-gutter)) var(--t-day-gap);
+    padding: 0 var(--dp-bar-pad);
+    border-radius: var(--dp-bar-radius);
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-tight);
+  }
+  @supports (animation-timeline: scroll()) {
+    .board .t-toolbar {
+      background: transparent;
+      box-shadow: none;
+      animation: dp-bar-float linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 1.5rem;
+    }
   }
   .board .t-day {
-    top: calc(var(--dp-header-bottom) + 3.25rem + var(--t-day-gap));
+    top: calc(
+      var(--dp-header-bottom) + var(--dp-bar-gap) + var(--t-bar-h) +
+        var(--t-day-gap)
+    );
+  }
+}
+/* 768px からは一覧が main の余白の外まで広がっているので、面は窓の端からそのまま離す */
+@media (min-width: 768px) {
+  .board .t-toolbar {
+    margin-inline: var(--dp-bar-inset);
+  }
+}
+/* 頭の1行がある間 (1000px まで) はヘッダーも近い影にそろえる (番組表と同じ。遠い影が下の1行に掛かって段々に見えないように) */
+@media (min-width: 640px) and (max-width: 999.98px) {
+  html:has(.board .t-toolbar) {
+    --navbar-shadow: var(--dp-shadow-tight);
   }
 }
 @media (min-width: 1000px) {
@@ -523,7 +557,7 @@
 }
 
 /*
- * 「いま」の線 (`NowLine`)。上の見出しや行との間は詰める。時刻のカプセルは日付のカプセルと同じく一覧の左端から
+ * 「いま」の線 (`NowLine`。線は引かず、赤い点と時刻と一言)。上の見出しや行との間は詰める。時刻の字は日付のカプセルの字と同じく一覧の左端から
  * (狭い画面は下の 768px 未満で字を詰める)。`.t-rows` まで書くのは、部品の `margin: 0` より強くするため
  */
 .board .t-rows .t-now {

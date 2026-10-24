@@ -366,20 +366,43 @@
     }
   }
   /*
-     * 768〜999px は細い帯が一覧の上。ヘッダーの下端に貼り付け、行はその裏を流れる (地の色で塗る)。
-     * ヘッダーとの間 (0.5rem) も帯で埋め、そのぶん上へ出す。置かれた位置のまま、巻いても動かずに貼り付く
+     * 768〜999px は細い1行が一覧の上。**ヘッダーと同じ角丸の面に乗せ、その下に貼り付ける** (ホームの頭の1行・番組表の操作の1行と同じ。
+     * docs/design.md の「浮かせ方」。`app.css` の `--dp-bar-*`)。置かれた位置から隙間 (`--dp-bar-gap`) のぶん上へ出し、巻き始めても動かない。
+     * 上端では平らで、巻いて行が裏に入ると面と近い影が出る (窓の巻いた量で。`dp-bar-float`)。
+     * 浮いた面なので、中の「作る」は浮かせず太字だけ (`app.css` の「浮いたものの中」。スマホも同じ)
      */
   @media (min-width: 768px) and (max-width: 999.98px) {
     .rules-bar {
+      --dp-btn-solid: transparent;
+      --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+      --dp-btn-lift: none;
       position: sticky;
-      top: var(--dp-header-bottom);
+      top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
       z-index: 5;
-      margin-top: -0.5rem;
-      padding: 0.5rem var(--dp-gutter);
-      background: var(--dp-bg);
+      margin: calc(
+          var(--dp-header-bottom) + var(--dp-bar-gap) - var(--dp-header-space)
+        )
+        var(--dp-bar-inset) 0;
+      padding: var(--dp-bar-pad);
+      border-radius: var(--dp-bar-radius);
+      background: var(--dp-float);
+      box-shadow: var(--dp-shadow-tight);
+    }
+    @supports (animation-timeline: scroll()) {
+      .rules-bar {
+        background: transparent;
+        box-shadow: none;
+        animation: dp-bar-float linear both;
+        animation-timeline: scroll(root block);
+        animation-range: 0 1.5rem;
+      }
     }
     .rules-list {
-      padding-top: calc(var(--dp-space-3) - 0.5rem);
+      padding-top: var(--dp-space-2);
+    }
+    /* この1行がある間はヘッダーも近い影にそろえる (番組表と同じ。遠い影が下の1行に掛かって段々に見えないように) */
+    :global(html:has(.rules-bar)) {
+      --navbar-shadow: var(--dp-shadow-tight);
     }
   }
   @media (min-width: 1000px) {
@@ -560,6 +583,9 @@
   @media (max-width: 639.98px) {
     .rules-bar {
       position: fixed;
+      --dp-btn-solid: transparent;
+      --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+      --dp-btn-lift: none;
       inset-inline: 0.75rem;
       bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
       z-index: 30;

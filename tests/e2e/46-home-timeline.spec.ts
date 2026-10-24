@@ -121,10 +121,10 @@ test.describe("ホームの1本の一覧", () => {
   });
 
   /*
-   * **「いま」の時刻は日付と同じ操作の層のカプセルで、左端も日付のカプセルにそろう。** その右に細い赤い線。
+   * **「いま」の時刻は地に置き、左端は日付のカプセルの字にそろう。** 線は引かず、一言は時刻のすぐ後ろに続く。
    * 狭い画面でも1行のまま (一言は短い形に替わるか「…」で切れ、折り返さない)
    */
-  test("「いま」の時刻のカプセルは日付のカプセルと左端がそろい、狭い画面でも1行のまま", async ({
+  test("「いま」の時刻は日付のカプセルと左端がそろい、一言がすぐ後ろに続き、狭い画面でも1行のまま", async ({
     page,
   }) => {
     for (const width of [1366, 390, 320]) {
@@ -138,8 +138,39 @@ test.describe("ホームの1本の一覧", () => {
         .first()
         .boundingBox())!;
       expect(Math.abs(time.x - day.x)).toBeLessThan(1);
+      const status = (await line.locator(".now-status").boundingBox())!;
+      expect(status.x - (time.x + time.width)).toBeLessThan(12);
       expect((await line.boundingBox())!.height).toBeLessThan(32);
     }
+  });
+
+  /*
+   * **640〜999px の頭の1行は、ヘッダーと同じ角丸の面に乗せてヘッダーの下に貼り付ける** (番組表の操作の1行と同じ)。
+   * ヘッダーとの間は 0.25rem。巻いても動かず、日付の見出しはその下から始まる
+   */
+  test("広めの画面の頭の1行はヘッダーの下に隙間を空けて貼り付く角丸の面", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 900, height: 360 });
+    await goto(page, "/");
+    // 開くと観ていない録画まで送るので、頭に戻してから測る
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    const bar = page.getByTestId("timeline-toolbar");
+    const header = (await page.locator(".navbar").boundingBox())!;
+    const before = (await bar.boundingBox())!;
+    expect(before.y - (header.y + header.height)).toBeCloseTo(4, 0);
+    expect(
+      await bar.evaluate((el) => getComputedStyle(el).borderTopLeftRadius),
+    ).toBe("14px");
+    const day = (await page.getByTestId("timeline-day").first().boundingBox())!;
+    expect(day.y).toBeGreaterThanOrEqual(before.y + before.height);
+    await page.mouse.move(450, 300);
+    await page.mouse.wheel(0, 200);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0);
+    expect((await bar.boundingBox())!.y).toBeCloseTo(before.y, 0);
   });
 
   /*
