@@ -1175,8 +1175,6 @@
                   <button
                     type="button"
                     class="program"
-                    class:reserved={program.reservation_state &&
-                      program.reservation_state !== "skipped"}
                     data-state={program.reservation_state}
                     data-genre={program.genres?.[0]}
                     onclick={() => open(program)}
@@ -1639,10 +1637,6 @@
   :global(.guide-menu) .menu-item {
     white-space: nowrap;
   }
-  :global(.guide-menu) hr {
-    margin: 0.25rem 0;
-    border-color: var(--dp-line);
-  }
   :global(.guide-menu) .menu-item.selected {
     font-weight: var(--dp-weight-bold);
   }
@@ -1656,19 +1650,16 @@
     margin-inline-start: auto;
   }
   /*
-     * ジャンルの見本。**マスと同じ形** (左の太い線がジャンルの色、地はその色をごく淡く)。
-     * 色は下の `:is(.program, .swatch)[data-genre]` からマスと同じ値を受ける
+     * ジャンルの見本。**マスの時刻の前の点と同じ** (色は下の `:is(.program, .swatch)[data-genre]` からマスと同じ値を受ける)。
+     * 「すべて」は色の無い点
      */
   .swatch {
-    --tint: var(--dp-line);
-    --wash: 10%;
+    --tint: var(--dp-line-strong);
     flex: none;
-    width: 1.25rem;
-    height: 0.875rem;
-    border-inline-start: 4px solid var(--tint);
-    border-radius: var(--dp-radius-sm);
-    background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
-    box-shadow: inset 0 0 0 1px var(--dp-line);
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--tint);
   }
   .empty {
     margin: var(--dp-gutter);
@@ -1697,11 +1688,31 @@
   .rows {
     display: grid;
   }
-  /* 局名の行と時の列はページの地のまま。線は引かない (地の層。マスとは面の色で分かれる) */
+  /*
+     * **局名の行と時の列は操作の層。** 表を巻くとマスがその裏を流れるので、ヘッダーと同じ半透明の面 (`--dp-float`) と影で浮かせる
+     * (docs/design.md の「透かし方」)。線は引かない。影はマスの側にだけ落とす (行は下、列は右。隣の局名の上に重ねない)
+     */
   .corner,
   .service,
   .hour {
-    background: var(--dp-bg);
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+  }
+  .service {
+    clip-path: inset(0 0 -1.5rem 0);
+  }
+  .hour {
+    clip-path: inset(0 -1.5rem 0 0);
+  }
+  .corner {
+    clip-path: inset(0 -1.5rem -1.5rem 0);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .corner,
+    .service,
+    .hour {
+      background: var(--dp-pop);
+    }
   }
   .corner {
     position: sticky;
@@ -1794,14 +1805,15 @@
     contain-intrinsic-size: auto 11rem auto 0.75rem;
   }
   /*
-     * 色はジャンル(大分類)ごと。**色は左の太い線で見せ、下地はごく淡く敷くだけ** (WebTS と同じ形)。
+     * 色はジャンル(大分類)ごと。**色は時刻の前の小さな点で見せ、下地はごく淡く敷くだけ。**
+     * 左の太い線は使わない (左の縦線は「選んでいる」の印。docs/design.md の「印の意味」)。
      * 下地を 15% 塗っていた頃は、明るいテーマでマスが桃色や水色のブロックになり、
      * 上に乗る小さい字が地に溶けて読みにくかった。下地は地の色 (--dp-surface) に
      * ジャンルの色を少しだけ混ぜる。暗いテーマは混ぜても沈みやすいので少し多めにする。
      * 字は本文と同じ濃さのまま。
      *
-     * 予約したものは色より「予約済み」であることのほうが大事なので、主の色を優先し、
-     * 線に加えて細い枠も引く。録画中はさらに録画の赤にする (一覧のバッジと同じ考え)
+     * 予約の状態は枠や塗りではなく、説明の代わりに出す状態の言葉 (`.state`) と印で示す。
+     * 塗るのはいま動いている録画中だけ (録画の赤をごく淡く)
      */
   .program {
     --tint: var(--dp-line);
@@ -1815,7 +1827,6 @@
     margin: 0;
     padding: 0.125rem 0.25rem;
     border: 0;
-    border-inline-start: 4px solid var(--tint);
     border-radius: var(--dp-radius-sm);
     background: var(--dp-subtle);
     color: inherit;
@@ -1900,38 +1911,34 @@
   .rows[data-highlight="11"] .program:not([data-genre="11"]) {
     opacity: 0.3;
   }
-  .program.reserved {
-    --tint: var(--pico-primary);
-    background: color-mix(
-      in srgb,
-      var(--tint) calc(var(--wash) + 6%),
-      var(--dp-surface)
-    );
-    box-shadow: inset 0 0 0 1px var(--tint);
-  }
-  .program.reserved:hover {
-    background: color-mix(
-      in srgb,
-      var(--tint) calc(var(--wash) + 14%),
-      var(--dp-surface)
-    );
-  }
-  .program[data-state="recording"] {
-    --tint: var(--dp-rec);
-  }
   /*
-     * **競合は予約済みと同じ青にしない。** 青のままだと「録れる」に見え、
-     * チューナーが足りずに落ちる番組を表の上で見落とす。一覧のバッジ
-     * (`format.ts` の `badgeClass`。淡い赤の地に赤い字) と同じ赤にそろえる。
-     * 録画中 (赤く塗ったマス) と見分けるため、**地は塗らずに枠と字だけ**赤くする —
-     * 「いま動いているもの」だけを塗る決まり (`app.css`) のとおり
+     * **録画中だけ、地を録画の赤でごく淡く塗る** (いま動いているもの。`app.css` の色の決まり)。
+     * 予約済み・競合は塗らず枠も引かず、状態の言葉 (`.state`) とその前の印で示す
      */
-  .program[data-state="conflict"] {
-    --tint: var(--dp-rec);
-    background: var(--dp-surface);
+  .program[data-state="recording"] {
+    background: color-mix(
+      in srgb,
+      var(--dp-rec) calc(var(--wash) + 6%),
+      var(--dp-surface)
+    );
   }
-  .program[data-state="conflict"]:hover {
-    background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
+  .program[data-state="recording"]:hover {
+    background: color-mix(
+      in srgb,
+      var(--dp-rec) calc(var(--wash) + 14%),
+      var(--dp-surface)
+    );
+  }
+  /* ジャンルの点。時刻の前に置く (色は上の `[data-genre]` の `--tint`) */
+  .program[data-genre] .num::before {
+    content: "";
+    display: inline-block;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    margin-inline-end: 0.25rem;
+    border-radius: 50%;
+    background: var(--tint);
+    vertical-align: 0.0625rem;
   }
   /*
      * **字は行の切れ目で止める。** マスの高さで切ると、最後の行が上半分だけ見えていた。
@@ -1950,12 +1957,26 @@
     line-height: 1.25;
     font-weight: var(--dp-weight);
   }
+  /*
+     * 予約の状態。説明の代わりに太字で出し、前に印を添える (色だけに頼らない):
+     * 予約済みは主の色の ✓、録画中は録画の赤の点、競合は赤い ⚠ (一覧の競合と同じ印)。
+     * **競合は予約済みと同じ青にしない** — 青だと「録れる」に見え、チューナーが足りずに落ちる番組を見落とす
+     */
   .state {
     display: block;
     font-size: 0.75rem;
     line-height: 1.25;
-    font-weight: var(--dp-weight);
+    font-weight: var(--dp-weight-bold);
     color: var(--dp-primary-text);
+  }
+  .program[data-state="scheduled"] .state::before {
+    content: "✓ ";
+  }
+  .program[data-state="recording"] .state::before {
+    content: "● ";
+  }
+  .program[data-state="conflict"] .state::before {
+    content: "⚠ ";
   }
   .program:is([data-state="recording"], [data-state="conflict"]) .state {
     color: var(--dp-rec-text);
