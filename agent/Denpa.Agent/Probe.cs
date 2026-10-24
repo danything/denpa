@@ -214,6 +214,7 @@ public static class Probe
         Console.WriteLine(
             $"    最初の1バイト {first.TotalMilliseconds:F0} ms  "
             + $"{total / 1024} KiB  {mbps:F2} Mbps  同期バイト {ratio:F1}%");
+        if (total == 0) Console.Error.WriteLine($"    {name}: 1バイトも来ていません");
 
         var before = packets == 0 ? 0 : 100.0 * scrambledIn / packets;
         if (b25 is null)
@@ -225,7 +226,6 @@ public static class Probe
         var after = outPackets == 0 ? 0 : 100.0 * scrambledOut / outPackets;
         Console.WriteLine($"    掛かっているパケット {before:F1}% -> 復号したあと {after:F1}% ({outPackets} 個)"
             + (b25.LastError is { } why ? $"  {why}" : ""));
-        if (total == 0) Console.Error.WriteLine($"    {name}: 1バイトも来ていません");
     }
 
     /// <summary>

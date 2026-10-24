@@ -222,8 +222,11 @@ public static class Px4Userland
     public static string Label(string id)
     {
         var cut = id.IndexOf('_');
-        return cut < 0 ? id[^4..] : $"USB {id[(cut + 1)..].Replace('_', '/')}";
+        return cut < 0 ? Tail(id) : $"USB {id[(cut + 1)..].Replace('_', '/')}";
     }
+
+    /// <summary>番号の末尾4桁。桁数は見ていない (<see cref="Parse(string)"/>) ので、4桁に満たなければ全部</summary>
+    internal static string Tail(string id) => id.Length > 4 ? id[^4..] : id;
 
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string id, int receiver) => $"{model}-{Label(id)} #{receiver}";
@@ -1093,7 +1096,7 @@ public sealed class Px4Tuner : ITuneDevice
         _prepare = prepare;
         _wire = wire ?? Px4Wire.Px4;
         _device = device ?? Px4Userland.Device(id, receiver);
-        _name = name ?? $"px4-{id[^4..]} #{receiver}";
+        _name = name ?? $"px4-{Px4Userland.Tail(id)} #{receiver}";
     }
 
     /// <summary>読む側がいないまま溜めが空かなければ、この時間で TS のストリームを畳む</summary>

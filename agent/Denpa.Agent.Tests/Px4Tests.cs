@@ -125,6 +125,10 @@ public class Px4Tests
         await Assert.That(Px4Userland.Parse("px4:000000000000001_1/2:0")).IsNull();
         await Assert.That(Px4Userland.Name("PX-M1UR", "000000000000001_1-2.3", 0)).IsEqualTo("PX-M1UR-USB 1-2.3 #0");
         await Assert.That(Px4Userland.Name("PX-Q3U4", "00001205000960", 2)).IsEqualTo("PX-Q3U4-0960 #2");
+        // 4桁に満たない番号も通すので、名前でも落ちない
+        await Assert.That(Px4Userland.Parse("px4:12:0")).IsEqualTo(("12", 0));
+        await Assert.That(Px4Userland.Name("PX-Q3U4", "12", 0)).IsEqualTo("PX-Q3U4-12 #0");
+        using (new Px4Tuner("12", 0, null, Path.GetTempPath(), () => null)) { }
         await Assert.That(Px4Userland.Parse("px4:00001205000960")).IsNull();
         await Assert.That(Px4Userland.Parse("q3u4:00001205000960:3")).IsNull();
         await Assert.That(Px4Userland.Parse("/dev/dvb/adapter0/frontend0")).IsNull();

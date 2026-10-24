@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Denpa.Agent;
@@ -32,22 +33,42 @@ public sealed record TunerSpec(
         return node;
     }
 
+    /// <summary>
+    /// 1台ぶんを読む。名前が無ければ null。**型が違えば <see cref="FormatException"/>** (どの項目かを添える)
+    /// </summary>
     public static TunerSpec? FromJson(JsonNode? node)
     {
         if (node is not JsonObject item) return null;
-        var name = item["name"]?.GetValue<string>() ?? "";
+        var name = Text(item["name"], "name") ?? "";
         if (name.Length == 0) return null;
 
-        string[] types = item["types"] is JsonArray list
-            ? [.. list.Select(entry => entry?.GetValue<string>()).OfType<string>().Where(type => type.Length > 0)]
-            : [];
+        string[] types = item["types"] switch
+        {
+            null => [],
+            JsonArray list => [.. list.Select(entry => Text(entry, "types")).OfType<string>().Where(type => type.Length > 0)],
+            _ => throw new FormatException($"{name}: types は文字列の配列にします"),
+        };
         return new TunerSpec(
             name,
             types,
-            item["disabled"]?.GetValue<bool>() ?? false,
-            item["device"]?.GetValue<string>(),
-            item["lnb"]?.GetValue<string>());
+            Flag(item["disabled"], $"{name}: disabled") ?? false,
+            Text(item["device"], $"{name}: device"),
+            Text(item["lnb"], $"{name}: lnb"));
     }
+
+    private static string? Text(JsonNode? node, string what) => node switch
+    {
+        null => null,
+        JsonValue value when value.TryGetValue<string>(out var text) => text,
+        _ => throw new FormatException($"{what} は文字列にします"),
+    };
+
+    private static bool? Flag(JsonNode? node, string what) => node switch
+    {
+        null => null,
+        JsonValue value when value.TryGetValue<bool>(out var flag) => flag,
+        _ => throw new FormatException($"{what} は true か false にします"),
+    };
 }
 
 /// <summary>
@@ -79,14 +100,20 @@ public sealed class Config(string tunersFile, string channelsFile)
 
     private static JsonArray ReadArray(string path, string? key)
     {
+        // まだ無い。空でよい (画面が「まだありません」と出す)
+        if (!File.Exists(path)) return [];
         try
         {
             var parsed = JsonNode.Parse(File.ReadAllText(path));
-            return (key is null ? parsed : parsed?[key]) as JsonArray ?? [];
+            var found = key is null ? parsed : (parsed as JsonObject)?[key];
+            if (found is JsonArray list) return list;
+            Log.Write($"{path} の形が違うので読みませんでした ({(key is null ? "配列" : $"{key} の配列")}が必要です)");
+            return [];
         }
-        catch
+        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException)
         {
-            // まだ無い。空でよい (画面が「まだありません」と出す)
+            // 起動できないよりは空として続ける。ただ黙って自動検出に戻ると気づけないので残す
+            Log.Write($"{path} を読めませんでした。無いものとして続けます: {error.Message}");
             return [];
         }
     }
@@ -100,7 +127,23 @@ public sealed class Config(string tunersFile, string channelsFile)
         File.Move(working, path, overwrite: true);
     }
 
-    public List<TunerSpec> LoadTuners() => [.. ReadArray(TunersFile, "tuners").Select(TunerSpec.FromJson).OfType<TunerSpec>()];
+    public List<TunerSpec> LoadTuners()
+    {
+        var tuners = new List<TunerSpec>();
+        foreach (var item in ReadArray(TunersFile, "tuners"))
+        {
+            try
+            {
+                if (TunerSpec.FromJson(item) is { } tuner) tuners.Add(tuner);
+            }
+            catch (FormatException error)
+            {
+                // 1台の書き損じで全部を捨てない
+                Log.Write($"{TunersFile} の1台を飛ばしました: {error.Message}");
+            }
+        }
+        return tuners;
+    }
 
     /// <summary>
     /// 画面から預かった機材で置き換える。

@@ -66,6 +66,44 @@ public class TunerSpecTests
     {
         await Assert.That(TunerSpec.FromJson(new JsonObject { ["types"] = new JsonArray() })).IsNull();
     }
+
+    [Test]
+    public async Task 型の違う値はどの項目かを添えて断る()
+    {
+        // PUT /denpa/tuners はこれを 400 で返す
+        var wrong = JsonNode.Parse("""{ "name": "a", "types": ["GR"], "disabled": "yes" }""");
+        await Assert.That(Assert.Throws<FormatException>(() => TunerSpec.FromJson(wrong)).Message).Contains("disabled");
+        var types = JsonNode.Parse("""{ "name": "a", "types": "GR" }""");
+        await Assert.That(Assert.Throws<FormatException>(() => TunerSpec.FromJson(types)).Message).Contains("types");
+        var entry = JsonNode.Parse("""{ "name": "a", "types": [1] }""");
+        await Assert.That(Assert.Throws<FormatException>(() => TunerSpec.FromJson(entry)).Message).Contains("types");
+    }
+
+    [Test]
+    public async Task ファイルの中の書き損じは1台だけ飛ばす()
+    {
+        var config = Fresh();
+        File.WriteAllText(config.TunersFile, """
+            { "tuners": [
+              { "name": "a", "types": ["GR"], "disabled": "yes" },
+              { "name": "b", "types": ["GR"], "device": "/dev/null" }
+            ] }
+            """);
+
+        var read = config.LoadTuners();
+        await Assert.That(read.Count).IsEqualTo(1);
+        await Assert.That(read[0].Name).IsEqualTo("b");
+    }
+
+    [Test]
+    public async Task 形の違うファイルは空として扱う()
+    {
+        var config = Fresh();
+        File.WriteAllText(config.TunersFile, """[{ "name": "a" }]""");
+        await Assert.That(config.LoadTuners()).IsEmpty();
+        File.WriteAllText(config.ChannelsFile, """{ "channels": [] }""");
+        await Assert.That(config.LoadChannels()).IsEmpty();
+    }
 }
 
 public class ChannelStoreTests

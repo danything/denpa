@@ -278,7 +278,17 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
         return;
     }
 
-    var next = list.Select(TunerSpec.FromJson).ToList();
+    List<TunerSpec?> next;
+    try
+    {
+        next = [.. list.Select(TunerSpec.FromJson)];
+    }
+    catch (FormatException error)
+    {
+        await Respond.Error(http, error.Message, 400);
+        return;
+    }
+
     if (next.Contains(null))
     {
         await Respond.Error(http, "name の無いチューナーがあります", 400);
