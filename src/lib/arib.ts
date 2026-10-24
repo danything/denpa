@@ -270,15 +270,8 @@ export interface Audio {
 /**
  * 「主音声ステレオ (日本語)」「ステレオ (日本語)」「デュアルモノ (日本語/英語)」
  *
- * **放送が名乗っていれば、その名前を使う。**
- *
- * 符号 (`component_type` と言語) からだけでは、同じ構成の音声が2本ある番組を
- * 区別できない — 実機の日テレ「金曜ロードショー[解]」では、主音声も解説も
- * `component_type=3 lang=jpn` なので、**「ステレオ (日本語)」が2つ並んでいた**。
- * 放送のほうは `text_char` に「主音声ステレオ」「解説ステレオ」と書いている。
- *
- * その名前には構成 (「ステレオ」) まで入っていることが多いので、こちらの
- * 対応表と繋げず**差し替える**。言語は名前に入っていないので添える
+ * 放送が名乗っていれば (`text_char`) その名前に差し替え、言語を添える — 符号だけでは主音声と解説が
+ * どちらも「ステレオ (日本語)」になっていた
  */
 export function audioLabel(audio: Audio): string {
   const type =
@@ -338,13 +331,7 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
   const tracks: AudioTrack[] = [];
 
   audios.forEach((audio, stream) => {
-    /*
-     * **放送が名乗っていれば、何本目かは添えない。**
-     *
-     * 「主音声ステレオ」「解説ステレオ」と名前が付いているところへ
-     * 「音声1」「音声2」まで足すと、長いだけで何も増えない。名前が
-     * 無いときだけ、番号で呼ぶしかない
-     */
+    // 放送が名乗っていれば、何本目かは添えない (「主音声ステレオ」に「音声1」を足しても長いだけ)
     const named = audio.text !== undefined && audio.text !== "";
     const head = many && !named ? `音声${stream + 1} ` : "";
     const langs = langNames(audio);
@@ -356,29 +343,19 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
     if (audio.componentType === DUAL_MONO) {
       // 左右に分かれているので、名前ではなくどちら側かで呼ぶ
       const index = many ? `音声${stream + 1} ` : "";
-      tracks.push(
-        {
-          id: `${stream}:main`,
+      const sides: [AudioSide, string][] = [
+        ["main", `主音声${of(0)}`],
+        ["sub", `副音声${of(1)}`],
+        ["both", "主+副"],
+      ];
+      for (const [side, name] of sides)
+        tracks.push({
+          id: `${stream}:${side}`,
           stream,
-          side: "main",
-          label: `${index}主音声${of(0)}`,
+          side,
+          label: `${index}${name}`,
           ...main,
-        },
-        {
-          id: `${stream}:sub`,
-          stream,
-          side: "sub",
-          label: `${index}副音声${of(1)}`,
-          ...main,
-        },
-        {
-          id: `${stream}:both`,
-          stream,
-          side: "both",
-          label: `${index}主+副`,
-          ...main,
-        },
-      );
+        });
     } else {
       tracks.push({
         id: `${stream}:both`,
@@ -396,21 +373,9 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
 }
 
 /**
- * エンコードしたものに入れる音声の名前。**番組表と同じ言い方をする。**
- *
- * 入れていなかった頃は、プレイヤーの音声切り替えに「Audio 1」「Audio 2」しか
- * 出なかった — 二カ国語や解説放送で**どちらがどちらか分からない**。番組表では
- * 「主音声」「解説」と出ているのに、エンコードしたものには残っていなかった。
- *
- * **数と並びはエンコードしたものに合わせる。**
- *
- * - デュアルモノ … 1本を左右に割るので、出てくるのは**必ず2本**
- *   (`encoder.ts` の `channelsplit`)。名前は主音声・副音声
- * - それ以外 … 入っている音声をそのまま全部使うので、放送が名乗っている順
- *
- * 番組表が何も言っていなければ `audioTracks` の既定 (「音声」) に落ちる。
- * **多すぎても困らない** — ffmpeg は在りもしないトラックへの指定を黙って
- * 読み飛ばす (実機で確認)
+ * エンコードしたものに入れる音声の名前 (番組表と同じ言い方。入れないとプレイヤーに「Audio 1」としか出ない)。
+ * 数と並びはエンコードしたものに合わせる: デュアルモノは左右に割った2本 (`encoder.ts` の `channelsplit`)、
+ * それ以外は放送の順。多すぎても ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
  */
 export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
   const tracks = audioTracks(audios);

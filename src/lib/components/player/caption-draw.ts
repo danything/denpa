@@ -281,7 +281,7 @@ export class CaptionPainter {
   ) {
     this.resize =
       typeof ResizeObserver === "function"
-        ? new ResizeObserver(() => this.draw())
+        ? new ResizeObserver(this.rescale)
         : null;
     this.resize?.observe(canvas);
     // ブラウザのズーム (`devicePixelRatio` が変わる)
@@ -368,7 +368,7 @@ export class CaptionPainter {
     canvas.dataset["drawn"] = "";
     // 字の載っている縦の範囲 (canvas の高さに対する割合)。操作列と重なるときに舞台が字幕を持ち上げる (`PlayerStage`)
     const [top, bottom] = inkSpan(page);
-    const tall = canvas.clientHeight || 1;
+    const tall = cssHeight || 1;
     canvas.dataset["ink"] =
       `${((box.top + top * box.height) / tall).toFixed(4)},${((box.top + bottom * box.height) / tall).toFixed(4)}`;
     this.painted = true;

@@ -191,11 +191,15 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     ended = true;
     paused = true;
     engine.pause();
-    if (starving) {
-      starving = false;
-      options.waiting(false);
-    }
+    unstarve();
     options.ended();
+  }
+
+  /** 読み込み中の輪を引っ込める */
+  function unstarve(): void {
+    if (!starving) return;
+    starving = false;
+    options.waiting(false);
   }
 
   /** いまの位置 (秒)。鳴らしていなければ最後の位置 */
@@ -324,10 +328,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
      * 使い切ってから流れ出すまでがこの刻みの間に収まると (読み始めの、音がまとめてデコードされてくるとき)
      * 止まったところを見ないまま、読み込み中の輪が出たままになっていた。止めている間は立てない (`stalled`)
      */
-    if (playing && starving) {
-      starving = false;
-      options.waiting(false);
-    }
+    if (playing) unstarve();
     options.tick();
   }, TICK);
 
@@ -349,10 +350,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     seek(to: number): void {
       if (closed) return;
       ended = false;
-      if (starving) {
-        starving = false;
-        options.waiting(false);
-      }
+      unstarve();
       void load(Math.max(0, to));
     },
     play(): void {
@@ -370,10 +368,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
       position();
       paused = true;
       engine.pause();
-      if (starving) {
-        starving = false;
-        options.waiting(false);
-      }
+      unstarve();
     },
     mute(on: boolean): void {
       if (on) engine.mute();

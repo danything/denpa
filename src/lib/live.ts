@@ -16,21 +16,9 @@ import type { AudioTrack } from "./arib";
 import type { CaptionLanguage } from "./caption-text";
 
 /**
- * エンコード方式。**見ながら切り替えられる** (`live/+page.svelte`)。
- *
- * - `h264` … 量を捨てて速さを採る (`server/live.ts` の `videoArgs`)。
- *   **どの端末でも出る**ので既定
- * - `av1` … 量を採る。実機 (Xeon E5-2696 v4、HW エンコーダ無し) でも
- *   1080i をデコードして60コマ/秒で間に合うが、**放送の今から1秒ぶん離れる** —
- *   SVT-AV1 が溜め込むため (`server/live.ts` の `videoArgs` に実測)
- *
- * **どちらがどれだけ小さいかは場面で動く。** どちらも品質を指定してエンコードして
- * いる (ビットレートを決めていない) ので、実測も揃わなかった
- * ([stream.md](../../docs/stream.md#エンコード))
- *
- * **MPEG-2 (放送のまま) はここに並べない。** エンコード方式ではなく「エンコードしない」なので、
- * 画質の切り替えの末尾に別に並べる (`player/settings.ts` の `liveCodecs` の `onraw`)
- * (`TuneCommand.raw`。[stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))
+ * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`h264` は速さを採り、どの端末でも出るので既定。
+ * `av1` は量を採るが、SVT-AV1 が溜め込むぶん放送の今から1秒ほど離れる (`server/live.ts` の `videoArgs`)。
+ * MPEG-2 (放送のまま) は「エンコードしない」なのでここに並べない (`TuneCommand.raw`)
  */
 export type LiveCodec = "h264" | "av1";
 
@@ -64,10 +52,7 @@ export const CHANNEL = {
    * 映像・音声・PAT/PMT が入っていて、受け側が自分でデコードする (`raw/`)。init は無い
    */
   rawTs: 0x02,
-  /** 音声の init セグメント。**いまは使わない** (映像と同じコンテナに入れている) */
-  audioInit: 0x10,
-  /** 音声の中身。同上 */
-  audioMedia: 0x11,
+  // 0x10・0x11 (音声) は使わない (映像と同じコンテナに入れている)
   /**
    * **字幕の文字の配置** (JSON。`caption-text.ts` の `CaptionPage`)。サーバが置き場所まで決め、
    * 受け側が描く。前の1枚を丸ごと置き換える (`runs` が空なら消す)。
@@ -104,14 +89,7 @@ export type Notice =
       audios: AudioTrack[];
     }
   | {
-      /**
-       * 選べる字幕。**1枚も届いていなくても分かる。**
-       *
-       * 放送が字幕を持っているかどうかは、ffmpeg が入口で読んだ
-       * ストリーム一覧に出ている (`captions.ts` の `TrackList`)。届いてから
-       * 出していた頃は、**間隔の空く番組を開くと切り替えが出なかった**。
-       * 言語が複数ある放送はここが2本以上になる
-       */
+      /** 選べる字幕。ffmpeg が入口で読んだストリーム一覧から分かるので、1枚も届いていなくても来る (`captions.ts` の `TrackList`) */
       type: "captions";
       tracks: CaptionTrack[];
       /** いま出しているもの (`CaptionTrack.index`) */
@@ -152,43 +130,23 @@ export type Notice =
     }
   | {
       /**
-       * **Hybridcast が載っている番組。** AIT を読んで分かる
-       * ([ts/ait.ts](ts/ait.ts))。
-       *
-       * 画面は行き先を出し、データ放送が起動を求めたら denpa の中で開きます
-       * ([docs/stream.md](../../docs/stream.md#hybridcast))。
-       *
-       * 載っていない局では**一度も来ません** (PMT に印が無いので、
-       * AIT を待つこともしない)
+       * Hybridcast が載っている番組 (AIT を読んで分かる。[ts/ait.ts](ts/ait.ts))。載っていない局では一度も来ない
+       * ([docs/stream.md](../../docs/stream.md#hybridcast))
        */
       type: "hybridcast";
       apps: HybridcastLink[];
     }
   | {
       /**
-       * **サーバが受け取った時刻と、エンコードしたものの物差しの対応** ([ts/clock.ts](ts/clock.ts))。
-       *
-       * これが無いと、画面に出せる「遅延」は**手元の貯まりの差**
-       * (`buffered.end - currentTime`) だけになります。あれは「あと何秒ぶん
-       * 持っているか」であって、放送との差ではありません — 選局から
-       * ffmpeg のエンコードの完了、回線まで、**上流でかかった時間はどれも入って
-       * いない**。
-       *
-       * **PCR と ffmpeg の `start:` がそろってから来ます。** それまでは来ないので、
-       * 画面は届いてから出す
+       * サーバが受け取った時刻と、エンコードしたものの物差しの対応 ([ts/clock.ts](ts/clock.ts))。放送との差
+       * (上流も入る) を出すのに要る。PCR と ffmpeg の `start:` がそろってから来る
        */
       type: "clock";
       /** エンコードしたものの物差しの、この時刻が */
       at: number;
       /** サーバがこの時刻 (unix ms) に受け取ったものにあたる */
       unixMs: number;
-      /**
-       * これを送った時点のサーバの時計 (unix ms)。
-       *
-       * **端末の時計を当てにしない**ためです。合っていない端末は珍しくなく、
-       * ずれていればそのぶんそのまま遅延の数字に出ます。届いた時刻と
-       * 突き合わせれば、以降はサーバの時計の上で数えられる
-       */
+      /** これを送った時点のサーバの時計 (unix ms)。端末の時計を当てにせず、届いた時刻と突き合わせる */
       now: number;
     }
   | {
@@ -316,28 +274,13 @@ type TuneCommand = {
   channel: string;
   serviceId: number;
   /**
-   * どの音声を出すか (`AudioTrack.id`)。省くと先頭 = 主音声。
-   *
-   * **選ぶのはサーバ側。** 音声を全部まとめて送って画面で切り替える手もあるが、
-   * MSE は1つのコンテナに複数の音声を入れた fMP4 を、ブラウザによっては
-   * 切り替えられない (`audioTracks` の実装がまちまち)。エンコードするときに1本に
-   * 決めてしまえば、どのブラウザでも同じように鳴る
+   * どの音声を出すか (`AudioTrack.id`)。省くと先頭 = 主音声。選ぶのはサーバ — 複数の音声を入れた fMP4 は
+   * ブラウザによって切り替えられない (`audioTracks` の実装がまちまち)
    */
   audio?: string;
-  /**
-   * どのコーデックでエンコードするか。省くと `h264`。
-   *
-   * **音声と同じで、選び直すと再エンコードになる** (MediaSource から作り直し)。
-   * チャンネルは変わらないのでチューナーはそのまま
-   */
+  /** どのコーデックでエンコードするか。省くと `h264`。音声と同じで、選び直すと再エンコードになる */
   codec?: LiveCodec;
-  /**
-   * どの字幕を出すか (`CaptionTrack.index`)。省くと1本目。
-   *
-   * **言語が複数ある放送はたまにある。** 音声と同じで、選び直すと再エンコードに
-   * なる — 字幕は映像と同じ ffmpeg でエンコードしている (`server/live.ts` の
-   * `encodeArgs`)。そうしないと時刻が揃わない
-   */
+  /** どの字幕を出すか (`CaptionTrack.index`)。省くと1本目。字幕は映像と同じ ffmpeg なので、選び直すと再エンコード */
   caption?: number;
   /**
    * 字幕の第何言語を出すか (1〜8)。省くと第1言語。**選び直しは `{ type: 'language' }` で** (再エンコードしない)
@@ -370,17 +313,8 @@ export interface Tuned {
 }
 
 /**
- * 前回見ていた局を覚えておく cookie。中身は `Tuned` の JSON。
- *
- * **cookie にするのは、サーバにも読めるようにするため。** 画面を組む時点で
- * 「これからどの局を開くか」が分かっていないと、**繋いでくる前にエンコードし始め
- * られない** (`server/live.ts` の `warm`)。
- *
- * **どの局を開くかを決めるのはサーバ側1箇所** (`live/+page.server.ts`)。
- * 画面はそこで決まったものを開くだけなので、localStorage には持たない —
- * 二重に持つと、決め方がずれたときに**先にエンコードしたものが使われず、画面は
- * 別の局を開く**という形で静かに壊れる。
- *
- * `/live` にだけ付ける。他の画面の要求に毎回ぶら下げるものではない
+ * 前回見ていた局を覚えておく cookie (`/live` にだけ付ける。中身は `Tuned` の JSON)。サーバが読んで、繋いでくる前に
+ * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側1箇所で決める (`live/+page.server.ts`) —
+ * localStorage と二重に持つと、先にエンコードしたものが使われず別の局が開いていた
  */
 export const LAST_COOKIE = "denpa_live_last";

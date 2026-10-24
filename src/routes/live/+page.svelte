@@ -765,7 +765,7 @@
                 data-channel="{channel.type}/{channel.channel}"
                 data-service={channel.id}
               >
-                <!-- ロゴのまだ無い局は局名の頭の 1 字 (種別の札だとどの局も同じ箱になる) -->
+                <!-- ロゴのまだ無い局は局名の頭の 1 字 (種別のラベルだとどの局も同じ箱になる) -->
                 <ServiceLogo
                   id={channel.id}
                   has={channel.hasLogo}
