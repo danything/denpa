@@ -349,7 +349,7 @@ test.describe("PWA", () => {
     page,
   }) => {
     /*
-     * **読んでいる間は操作の層を引っ込める** (docs/design.md の「地・件の面・操作の層」)。
+     * **読んでいる間は操作の層を引っ込める** (docs/design.md の「3 つの層」)。
      * 窓ごと巻く画面 (受信の設定) で、下へ送るとタブは画面の外へ、上へ戻すと元の位置に戻る
      */
     await page.setViewportSize({ width: 390, height: 780 });

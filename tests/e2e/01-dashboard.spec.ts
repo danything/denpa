@@ -141,10 +141,11 @@ test.describe("ホームと画面遷移", () => {
     await page.waitForURL(/\/settings\/reception$/);
     await expect(page.getByTestId("settings-nav")).toBeHidden();
     await expect(page.getByTestId("tuner-section")).toBeVisible();
-    // 上の行から節へ飛ぶ。行は巻いてもヘッダーの下に残る
+    // 下の節の行から節へ飛ぶ。行は読んでいる間 (下へ送った間) は下のタブと一緒に引っ込み、上へ戻すと出る
     await page.getByTestId("settings-jump-broadcast").click();
     await page.waitForURL(/\/settings\/reception#broadcast$/);
     await expect(page.getByTestId("postal-code")).toBeInViewport();
+    await page.mouse.wheel(0, -80);
     await expect(page.getByTestId("settings-jump")).toBeInViewport();
     await page.getByTestId("settings-back").click();
     await page.waitForURL(/\/settings$/);

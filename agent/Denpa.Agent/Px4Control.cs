@@ -157,6 +157,14 @@ internal sealed class Px4Control : IDisposable
         }
     }
 
+    /// <summary>頭に u64 (lease や handle) を置いた中身。残りは 0</summary>
+    public static byte[] WithId(ulong id, int length = 8)
+    {
+        var payload = new byte[length];
+        BinaryPrimitives.WriteUInt64LittleEndian(payload, id);
+        return payload;
+    }
+
     /// <summary>1枚ぶんのバイト列 (20 バイトの頭 + 中身)</summary>
     public static byte[] Encode(ushort type, ushort flags, uint requestId, ReadOnlySpan<byte> payload, Px4Wire? wire = null)
     {

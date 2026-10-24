@@ -96,8 +96,7 @@ public static class Probe
     public static int Card()
     {
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
-        foreach (var found in Px4Card.Find()) Console.WriteLine($"内蔵 {found.Name}");
-        foreach (var found in AsicenUserland.Cards()) Console.WriteLine($"内蔵 {found.Name}");
+        foreach (var found in Px4Card.Find().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
         try
         {
             using var card = CardLinks.Open();

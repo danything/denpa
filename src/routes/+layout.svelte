@@ -766,7 +766,7 @@
     transition: transform var(--dp-duration) var(--dp-ease);
   }
   /* キーボードで中に触っている間は引っ込めない (見えないまま操作させない) */
-  .shell[data-retract] .tabbar:not(:focus-within) {
+  .shell[data-retract] .tabbar:not(:has(:focus-visible)) {
     transform: translateY(calc(100% + 0.5rem + env(safe-area-inset-bottom)));
   }
   .tabbar .tab,
@@ -972,7 +972,7 @@
          * (一覧の中で隠れている行) の「リモコン」が窓の下に出て、映像の色が付くまで (右の列が
          * `position: relative` になるまで) の1秒ほど、窓にスクロールバーが出ていた。E2E 20 で毎コマ見る
          *
-         * **自分で巻き取る画面 (番組表・映像の画面) は、浮いたヘッダーの下から始める** (docs/design.md の「地・件の面・操作の層」の 2 番)。
+         * **自分で巻き取る画面 (番組表・映像の画面) は、浮いたヘッダーの下から始める** (docs/design.md の「透かし方」)。
          * 箱のスクロールバーがヘッダーの透かしの裏に見えないように。中では頭の空き (`--dp-page-top`) を 0 にする
          */
     .shell.fill {

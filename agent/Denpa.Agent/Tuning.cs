@@ -360,14 +360,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private const int EIntr = 4;
 
     /// <summary>
-    /// **読むのが追いつかず、ドライバのリングバッファが溢れた。**
-    ///
-    /// <para>
-    /// 溢れたぶんは戻らないが、**選局はそのまま生きている** — 読み続ければ
-    /// 続きが来る。これを終わりとして畳んでいた頃は、番組表を4本まとめて
-    /// 開いた直後に1〜2本が落ち、呼んだ側には理由の分からない
-    /// 「socket connection was closed unexpectedly」だけが届いていた。
-    /// </para>
+    /// **読むのが追いつかず、ドライバのリングバッファが溢れた。** 選局はそのまま生きているので畳まない
+    /// (docs/agent.md「リングバッファが溢れても畳まない」)
     /// </summary>
     private static readonly int EOverflow = OperatingSystem.IsMacOS() ? 84 : 75;
 
@@ -387,13 +381,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private int _worstGap;
 
     /// <summary>
-    /// この選局で一度でも中身を受け取ったか (<see cref="Begin"/> で false に戻る)。
-    ///
-    /// <para>
-    /// **最初の1回の溢れは、この選局のせいではない。** デバイスは選局を跨いで
-    /// 開きっぱなしなので、局を変えている間にリングバッファが埋まり、その印が読み始めた
-    /// 最初の <c>read</c> で返る。数に入れると**選局のたびに1回**増える。
-    /// </para>
+    /// この選局で一度でも中身を受け取ったか (<see cref="Begin"/> で false に戻る)。**受け取る前の溢れは、
+    /// 局を変えている間に埋まった印**で、この選局のせいではない
     /// </summary>
     private bool _handed;
 
@@ -401,19 +390,9 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private int _stale;
 
     /// <summary>
-    /// 前に聞かれてからリングバッファが溢れた回数と、**そのとき読む側がどれだけ空いていたか**。
-    ///
-    /// <para>
-    /// 回数だけでは、溜めが浅いのか読む側が止まっているのかが分けられない。
-    /// リングバッファは 8MB = 地上波で 3.5 秒ぶん (<c>DvrBuffer</c>) なので、**空いた時間が
-    /// 3.5 秒に届いていなければ、広げたはずの溜めが効いていない** (カーネルの
-    /// 既定 1.8MB のままなら 0.9 秒で溢れる)。届いているなら、溜めの深さでは
-    /// なく**読む側が止まる理由**のほうが本題になる。
-    /// </para>
-    /// <para>
-    /// **聞いたら 0 に戻る。** デバイスは選局を跨いで開きっぱなしなので、
-    /// 溜めっぱなしにするとどの選局のときに溢れたのか分からなくなる。
-    /// </para>
+    /// 前に聞かれてからリングバッファが溢れた回数と、**そのとき読む側がどれだけ空いていたか** (溜めが浅いのか
+    /// 読む側が止まっているのかを分ける。docs/agent.md「リングバッファが溢れても畳まない」)。
+    /// **聞いたら 0 に戻る** (デバイスは選局を跨いで開きっぱなしなので、どの選局のぶんか分からなくなる)
     /// </summary>
     public (int Count, int WorstGapMs, int Stale) TakeOverflows()
     {
@@ -425,20 +404,12 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
-    /// **その選局のぶんだけ数えはじめる。**
-    ///
-    /// <para>
-    /// デバイスは選局を跨いで開きっぱなしなので、局を変えている間は誰も
-    /// 読んでいない。そのぶんを持ち越すと、**選局に掛かった時間が
-    /// 「読む側が空いていた時間」として出る** (実機で 4.1秒・4.3秒)。
-    /// 読み始めるところで測り直す (<c>Lease.StartNative</c>)。
-    /// </para>
+    /// **その選局のぶんだけ数えはじめる** (読み始めるところで。<c>Lease.StartNative</c>)。持ち越すと、
+    /// 局を変えている間の時間が「読む側が空いていた時間」として出る (実機で 4.1秒・4.3秒)
     /// </summary>
     public void Begin()
     {
-        _overflows = 0;
-        _worstGap = 0;
-        _stale = 0;
+        TakeOverflows();
         _handed = false;
         _handedAt = Stopwatch.GetTimestamp();
     }
@@ -471,28 +442,16 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
-    /// **理由の分かる終わり方をする。**
-    ///
-    /// <para>
-    /// どの失敗も 0 (= 終わり) にして返していた頃は、選局が落ちた記録に
-    /// 理由が1文字も残らなかった (<c>選局が終了しました</c> とだけ出る)。
-    /// 戻らない失敗は投げて、呼んだ側が何が起きたか言えるようにする。
-    /// </para>
+    /// **理由の分かる終わり方をする。** 戻らない失敗は 0 (= 終わり) にせず投げる — 0 にしていた頃は、
+    /// 選局が落ちた記録に理由が残らなかった
     /// </summary>
     public override int Read(byte[] buffer, int offset, int count) => Read(buffer, offset, count, null);
 
     /**
      * <param name="giveUp">
-     * **読むのをやめる合図。** デバイスは選局を跨いで開いたままなので、
-     * <see cref="Stop"/> は使えない (次の選局が同じものを読む)。読む側が
-     * 抜けたいときはこれを渡す。
-     *
-     * <para>
-     * 渡さないと、**電波が来ていない間は永久に戻らない** — 0.2秒ごとに起きて
-     * 掛け直すだけで、呼んだ側は抜けようがない。実機では、チューナーを取り上げられた読む側が
-     * ここで止まったまま次の選局が始まり、**同じ読み出し側を2本で取り合った**
-     * (デスクランブラを持ち回していた頃は、それでプロセスごと落ちた)。
-     * </para>
+     * **読むのをやめる合図。** デバイスは選局を跨いで開いたままなので <see cref="Stop"/> は使えない
+     * (次の選局が同じものを読む)。渡さないと、電波が来ていない間は永久に戻らず、取り上げられた読む側が
+     * 次の選局と同じ読み出し側を取り合う (docs/agent.md「前の利用者が抜けるまで、次の選局を始めない」)
      * </param>
      */
     public int Read(byte[] buffer, int offset, int count, Func<bool>? giveUp)
@@ -510,18 +469,13 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     private int ReadCore(byte[] buffer, int offset, int count, Func<bool>? giveUp)
     {
-        if (_piped is not null)
+        if (_piped is not null || _background is not null)
         {
-            // 降りる合図を渡されなければ、畳めと言われたかだけを見る (使い回す。読むたびに作ると確保が積もる)
-            var read = _piped.Read(buffer.AsSpan(offset, count), giveUp is null ? (_stopped ??= () => _closed) : () => _closed || giveUp());
-            if (read is null) return 0;
-            if (read > 0) return read.Value;
-            if (ended?.Invoke() is { } reason) throw new IOException(reason);
-            return 0;
-        }
-        if (_background is not null)
-        {
-            var read = _background.Read(buffer.AsSpan(offset, count), () => _closed || giveUp?.Invoke() == true);
+            var target = buffer.AsSpan(offset, count);
+            var read = _piped is not null
+                // 降りる合図を渡されなければ、畳めと言われたかだけを見る (使い回す。読むたびに作ると確保が積もる)
+                ? _piped.Read(target, giveUp is null ? (_stopped ??= () => _closed) : () => _closed || giveUp())
+                : _background!.Read(target, () => _closed || giveUp?.Invoke() == true);
             if (read is null) return 0;
             if (read > 0) return read.Value;
             if (ended?.Invoke() is { } reason) throw new IOException(reason);
@@ -620,7 +574,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 /// あちらが libdvbv5 越しにやっていることを、ここでは ioctl で直に言うだけ。
 /// </para>
 /// </summary>
-public sealed class DvbTuner : ITuneDevice
+public sealed unsafe class DvbTuner : ITuneDevice
 {
     // linux/dvb/frontend.h
     private const uint FeSetProperty = 0x40106f52;   // _IOW('o', 82, struct dtv_properties)
@@ -653,32 +607,14 @@ public sealed class DvbTuner : ITuneDevice
     private const ushort AllPids = 0x2000;
 
     /// <summary>
-    /// demux のフィルタの溜め。
-    ///
-    /// <para>
-    /// **いまの流し方では、ここには積まれない** — 全PIDを <c>DMX_OUT_TS_TAP</c> で
-    /// 出すので、中身は dvr のリングバッファへ行く (<c>DvrBuffer</c>)。出し方を変えたときに
-    /// 既定 (2KB) まで落ちないよう残してあるだけで、溢れの話とは別物
-    /// </para>
+    /// demux のフィルタの溜め。**いまの流し方 (全PIDを <c>DMX_OUT_TS_TAP</c>) では使われない** —
+    /// 出し方を変えたときに既定 (2KB) まで落ちないよう残してあるだけ
     /// </summary>
     private const int DemuxBuffer = 8 * 1024 * 1024;
 
     /// <summary>
-    /// **dvr のリングバッファの大きさ。溢れるのはこちら。**
-    ///
-    /// <para>
-    /// 全PIDを <c>DMX_OUT_TS_TAP</c> で流すと、中身は demux のフィルタではなく
-    /// **dvr のリングバッファ**に積まれる。`DMX_SET_BUFFER_SIZE` を demux にだけ言っていた
-    /// 頃は、**大きくしたつもりのものが使われていなかった** — 実際に使われる
-    /// のはカーネルの既定 (10 × 188 × 1024 ≒ 1.8MB) で、地上波の 18Mbit/秒 では
-    /// **0.9 秒ぶん**しかない。読む側が GC などで一瞬止まるだけで溢れる。
-    /// </para>
-    ///
-    /// <para>
-    /// 実機の記録では24時間で 249 回。アダプタ4本すべて・チャンネルもばらばら・
-    /// 時間帯も均等だったので、特定の相手ではなく**溜めが浅い**ことのほうが疑わしい。
-    /// 8MB あれば 3.5 秒ぶん。1本あたり 8MB なので、4本でも 32MB で済む。
-    /// </para>
+    /// **dvr のリングバッファの大きさ。溢れるのはこちら。** 既定 (≒1.8MB) は地上波で 0.9 秒ぶんしかなく、
+    /// 8MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても畳まない」)
     /// </summary>
     private const int DvrBuffer = 8 * 1024 * 1024;
 
@@ -768,26 +704,14 @@ public sealed class DvbTuner : ITuneDevice
             BitConverter.TryWriteBytes(payload.AsSpan(at + PropertyDataAt), properties[index].Value);
         }
 
-        var payloadHandle = GCHandle.Alloc(payload, GCHandleType.Pinned);
-        try
+        // struct dtv_properties { u32 num; struct dtv_property *props; }
+        var header = new byte[16];
+        BitConverter.TryWriteBytes(header.AsSpan(0), (uint)properties.Count);
+        fixed (byte* props = payload)
+        fixed (byte* headerAt = header)
         {
-            var header = new byte[16];
-            BitConverter.TryWriteBytes(header.AsSpan(0), (uint)properties.Count);
-            BitConverter.TryWriteBytes(header.AsSpan(8), payloadHandle.AddrOfPinnedObject().ToInt64());
-
-            var headerHandle = GCHandle.Alloc(header, GCHandleType.Pinned);
-            try
-            {
-                Sys.Call(_frontend, FeSetProperty, headerHandle.AddrOfPinnedObject(), "選局");
-            }
-            finally
-            {
-                headerHandle.Free();
-            }
-        }
-        finally
-        {
-            payloadHandle.Free();
+            BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
+            Sys.Call(_frontend, FeSetProperty, (nint)headerAt, "選局");
         }
     }
 
@@ -802,29 +726,16 @@ public sealed class DvbTuner : ITuneDevice
     /// </summary>
     private void WaitForLock()
     {
-        var status = new byte[4];
-        var handle = GCHandle.Alloc(status, GCHandleType.Pinned);
-        try
+        uint status = 0;
+        var deadline = DateTime.UtcNow + LockTimeout;
+        while (DateTime.UtcNow < deadline)
         {
-            var deadline = DateTime.UtcNow + LockTimeout;
-            while (DateTime.UtcNow < deadline)
-            {
-                // 細かく見る。同期は 200ms ほどで来るので、100ms 刻みだと
-                // その半分が待つだけの時間になる (カーネルは選局のたびに
-                // status を 0 に戻すので、前のチャンネルの同期を読み取ることはない)
-                Thread.Sleep(10);
-                if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeReadStatus, handle.AddrOfPinnedObject()) < 0)
-                {
-                    continue;
-                }
-                if ((BitConverter.ToUInt32(status) & FeHasLock) != 0) return;
-            }
+            // 細かく見る。同期は 200ms ほどで来るので、100ms 刻みだと
+            // その半分が待つだけの時間になる (カーネルは選局のたびに
+            // status を 0 に戻すので、前のチャンネルの同期を読み取ることはない)
+            Thread.Sleep(10);
+            if (Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeReadStatus, (nint)(&status)) >= 0 && (status & FeHasLock) != 0) return;
         }
-        finally
-        {
-            handle.Free();
-        }
-
         throw new IOException(ITuneDevice.SyncFailed);
     }
 
@@ -832,11 +743,8 @@ public sealed class DvbTuner : ITuneDevice
     {
         Sys.Call(_demux, DmxSetBufferSize, DemuxBuffer, "demux の溜めの指定");
         /*
-         * **本当に溜まるのは dvr のほう** (`DvrBuffer` の説明)。
-         *
-         * **断られても続ける。** 大きくできなくても選局そのものは通るので、
-         * ここで投げると「溢れにくくする」ために選局を落とすことになる。
-         * 古いカーネルや別のドライバが受け付けない目もある
+         * 本当に溜まるのは dvr のほう。**断られても続ける** — 大きくできなくても選局は通るので、
+         * 投げると「溢れにくくする」ために選局を落とすことになる (古いカーネルや別のドライバが断る目もある)
          */
         if (Sys.Ioctl((int)_dvr.Handle.DangerousGetHandle(), DmxSetBufferSize, DvrBuffer) < 0)
         {
@@ -851,16 +759,7 @@ public sealed class DvbTuner : ITuneDevice
         BitConverter.TryWriteBytes(filter.AsSpan(12), DmxPesOther);
         BitConverter.TryWriteBytes(filter.AsSpan(16), DmxImmediateStart);
 
-        var handle = GCHandle.Alloc(filter, GCHandleType.Pinned);
-        try
-        {
-            Sys.Call(_demux, DmxSetPesFilter, handle.AddrOfPinnedObject(), "demux の指定");
-        }
-        finally
-        {
-            handle.Free();
-        }
-
+        fixed (byte* filterAt = filter) Sys.Call(_demux, DmxSetPesFilter, (nint)filterAt, "demux の指定");
         Sys.Call(_demux, DmxStart, 0, "demux の開始");
     }
 

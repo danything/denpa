@@ -9,13 +9,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 鍵を配る API。**カードを1枚だけ置いて、LAN の中の他の拠点にも使わせる。**
-///
-/// <para>
-/// 拠点ごとにエージェントとチューナーがある構成だと、カードは1箇所にしか
-/// ありません。カードごと持っていく代わりに、ECM を投げて鍵を貰います
-/// (CardShare.cs)。重い MULTI2 は各拠点の手元に残ります。
-/// </para>
+/// 鍵を配る API。**カードを1枚だけ置いて、LAN の中の他の拠点にも使わせる** (受け取る側は CardShare.cs)。
 ///
 /// <para>
 /// **普通の API (<c>AGENT_PORT</c>) とは別のポートで受ける** (<see cref="CardLanPolicy.Port"/>)。
@@ -91,11 +85,7 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
     };
 
     /// <summary>このポートに来たものは、普通の API には回さない</summary>
-    public Task Serve(HttpContext http, RequestDelegate next)
-    {
-        if (http.Connection.LocalPort != port) return next(http);
-        return Answer(http);
-    }
+    public Task Serve(HttpContext http, RequestDelegate next) => http.Connection.LocalPort == port ? Answer(http) : next(http);
 
     private async Task Answer(HttpContext http)
     {
@@ -109,19 +99,13 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
             return;
         }
 
-        var path = http.Request.Path.Value;
-        if (path == "/denpa/card/init" && HttpMethods.IsGet(http.Request.Method))
+        var method = http.Request.Method;
+        await (http.Request.Path.Value switch
         {
-            await Init(http);
-        }
-        else if (path == "/denpa/card/ecm" && HttpMethods.IsPost(http.Request.Method))
-        {
-            await Ecm(http);
-        }
-        else
-        {
-            await Respond.Error(http, "not found", 404);
-        }
+            "/denpa/card/init" when HttpMethods.IsGet(method) => Init(http),
+            "/denpa/card/ecm" when HttpMethods.IsPost(method) => Ecm(http),
+            _ => Respond.Error(http, "not found", 404),
+        });
     }
 
     /// <summary>断ったことを短く残す。どこから・どの決まりで</summary>
@@ -136,19 +120,7 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
         Log.Write($"鍵を配るのを断りました: {(remote is null ? "?" : CardLanPolicy.Plain(remote))} ({refusal.Rule}) {refusal.Message}");
     }
 
-    private static async Task Init(HttpContext http)
-    {
-        try
-        {
-            var init = CardWire.Pack(await Task.Run(Keys.Local.Check));
-            http.Response.ContentType = "application/octet-stream";
-            await http.Response.Body.WriteAsync(init);
-        }
-        catch (Exception error)
-        {
-            await Respond.Error(http, error.Message, 503);
-        }
-    }
+    private static Task Init(HttpContext http) => Reply(http, () => CardWire.Pack(Keys.Local.Check()));
 
     private static async Task Ecm(HttpContext http)
     {
@@ -159,11 +131,16 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
             await Respond.Error(http, "ECM が入っていません", 400);
             return;
         }
+        var ecm = body.ToArray();
+        await Reply(http, () => CardWire.Pack(Keys.Local.Ecm(ecm)));
+    }
 
+    /// <summary>カードに聞いて (別のスレッドで) バイト列で返す。カードが駄目なら 503</summary>
+    private static async Task Reply(HttpContext http, Func<byte[]> ask)
+    {
         try
         {
-            var ecm = body.ToArray();
-            var answer = CardWire.Pack(await Task.Run(() => Keys.Local.Ecm(ecm)));
+            var answer = await Task.Run(ask);
             http.Response.ContentType = "application/octet-stream";
             await http.Response.Body.WriteAsync(answer);
         }

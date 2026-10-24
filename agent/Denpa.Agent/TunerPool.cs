@@ -140,11 +140,8 @@ public sealed class TunerPool(
     /// <para>同じ物理チャンネルが既に開いていればそこへ混ぜる。**チューナーは増えない。**</para>
     ///
     /// <para>
-    /// **<paramref name="after"/> の利用者は、もう離れたものとして選ぶ** (引き継ぎ)。denpa が
-    /// 録画を止めて、同じ定期チェックで次の録画を始めるときに渡す。止めたことがここに届くのは
-    /// 非同期なので、届く前に次の要求が来ると、前のチューナーがまだ塞がって見えて次の順位のチューナーに
-    /// 入っていた。選んだチューナーにその利用者がいれば、正常に終わらせてから同じチューナーで選局し直す。
-    /// 選ばなかったなら触らない (止めるのは denpa)。docs/agent.md「選ぶ順の約束」
+    /// **<paramref name="after"/> の利用者は、もう離れたものとして選ぶ** (引き継ぎ。docs/agent.md「選ぶ順の約束」の4)。
+    /// 選んだチューナーにその利用者がいれば、正常に終わらせてから同じチューナーで選局し直す。
     /// </para>
     /// </summary>
     public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null)
@@ -160,10 +157,8 @@ public sealed class TunerPool(
         {
             /*
              * **自分と同じか強い利用者がいれば、どのチューナーでもその選局を共有する** (約束3)。弱い利用者しか
-             * いない選局と、余韻で残っているだけの選局には、ここでは共有しない — そのチューナーが選ぶ順で
-             * 先頭の組のときだけ、`Pick` が選んで下で共有する。弱い相手 (番組表集めなど) が広いチューナーに
-             * いるからといって録画がそこを共有すると、録画の入るチューナーが録画以外に左右される (denpa は録画しか知らない)。
-             * 引き継ぐ利用者 (`after`) は、もう離れたものとして数えない
+             * いない選局と余韻だけの選局は、そのチューナーが選ぶ順で先頭の組のときだけ `Pick` が選んで下で共有する
+             * (わけは docs/agent.md「選ぶ順の約束」)
              */
             after ??= new HashSet<string>();
             foreach (var open in _leases.Values)
@@ -210,26 +205,11 @@ public sealed class TunerPool(
         }
 
         /*
-         * **選局は取り合いのロックを放してからやる。**
+         * **選局は取り合いのロックを放してからやる** (同期待ちの5秒、ほかの要求を止めない。
+         * docs/agent.md「選局は取り合いの錠の外でやる」)。ここから先で触るのは、上で押さえた自分のチューナーだけ。
          *
-         * 電波が来ていないチャンネルでは同期待ちに5秒かかる (Tuning.cs)。
-         * 確保したままにすると、その5秒のあいだ `/denpa/tuners` も、他のチューナーへの
-         * 要求も止まる。実際そうなっていて、
-         *
-         * - チューナーが2台あっても総当たりは1台ずつしか進まなかった
-         * - スキャンを始めてもチューナー画面が「空き」のまま動かなかった
-         *
-         * ここから先で触るのは、上で押さえた自分のチューナーだけ。
-         */
-
-        /*
-         * **譲らせた相手が読み終わるまで待つ。**
-         *
-         * デバイスはチューナー1台につき1つで、選局を跨いで開きっぱなし。
-         * 前の読み出しがまだ回っているうちに次を始めると、**同じ読み出し側を2本で
-         * 取り合い**、前の局のパケットが次の選局に混ざる。
-         *
-         * **ロックは放してから待つ。** 握ったまま待つと、その間どのチューナーも開けない。
+         * **譲らせた相手が読み終わるまで待つ。** 前の読み出しが回っているうちに次を始めると、同じ読み出し側を
+         * 2本で取り合い、前の局のパケットが混ざる (docs/agent.md「前の利用者が抜けるまで、次の選局を始めない」)
          */
         kicked?.Await();
         if (kicked is not null) lease.KickedMs = lease.Clock.ElapsedMilliseconds;
@@ -257,12 +237,12 @@ public sealed class TunerPool(
                         held.Channel = channel;
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                     }
-                    lease.StartNative(held.Device, () => OnExit(index, lease));
+                    lease.StartNative(held.Device, () => OnExit(lease));
                 }
             }
             else
             {
-                lease.Start(fake, () => OnExit(index, lease));
+                lease.Start(fake, () => OnExit(lease));
             }
         }
         catch (Exception error)
@@ -275,7 +255,7 @@ public sealed class TunerPool(
              */
             lock (_gate)
             {
-                if (_leases.TryGetValue(index, out var mine) && mine == lease) _leases.Remove(index);
+                Forget(lease);
                 lock (lease.Sinks) lease.Sinks.Clear();
             }
             sink.Fail($"{spec.Name}: {error.Message}");
@@ -346,12 +326,19 @@ public sealed class TunerPool(
         }
     }
 
-    private void OnExit(int index, Lease lease)
+    /// <summary>まだ自分のチューナーの選局なら外す。取り上げられたあとの古い選局なら何もしない (false)</summary>
+    private bool Forget(Lease lease)
+    {
+        if (!_leases.TryGetValue(lease.Tuner, out var held) || held != lease) return false;
+        _leases.Remove(lease.Tuner);
+        return true;
+    }
+
+    private void OnExit(Lease lease)
     {
         lock (_gate)
         {
-            if (!_leases.TryGetValue(index, out var held) || held != lease) return;
-            _leases.Remove(index);
+            if (!Forget(lease)) return;
             // 選局が落ちた。利用者には失敗として伝える (黙って終わると空ファイルになる)
             var reason = lease.Error is null ? "" : $" ({lease.Error})";
             lock (lease.Sinks)
@@ -413,7 +400,7 @@ public sealed class TunerPool(
     private void Release(Lease lease, string? reason)
     {
         lease.CancelLinger();
-        if (_leases.TryGetValue(lease.Tuner, out var held) && held == lease) _leases.Remove(lease.Tuner);
+        Forget(lease);
         lock (lease.Sinks)
         {
             foreach (var sink in lease.Sinks)
@@ -431,19 +418,10 @@ public sealed class TunerPool(
     /// **選ぶ順** (<c>GET /denpa/tuners</c> の <c>rank</c>)。小さいほど先に使う。無効なチューナーは null。
     ///
     /// <para>
-    /// **受けられる種別の少ないチューナーほど先。** PX-MLT のように地上波も衛星も受ける1台を
-    /// 地上波で塞ぐと、地上波専用が空いていても衛星が録れなくなる。種別の数が同じなら、
-    /// その種別の組が定義に先に出てくるほうが先。**受けられる種別がまったく同じチューナーには
-    /// 同じ順位を付ける** — どれを使っても後に響かないので、もう合っているチューナーや余韻のチューナーを
-    /// 使い回してよい (<see cref="Pick"/>)。
-    /// </para>
-    ///
-    /// <para>
-    /// **この決まりはエージェントの中にだけある。** denpa は順位を読んで、その順どおりに
-    /// 確保される前提で予約を割り振る (src/lib/server/conflict.ts)。両者の約束は
-    /// docs/agent.md「選ぶ順の約束」、同じ場面を両方のテストに通している
-    /// (tests/fake/tuner-scenes.ts)。決まりを変えるなら順位の付け方を変えるだけでよく、
-    /// denpa は直さなくてよい。
+    /// **受けられる種別の少ないチューナーほど先。** 数が同じなら、その種別の組が定義に先に出てくるほうが先。
+    /// **受けられる種別がまったく同じチューナーには同じ順位を付ける** — どれを使っても後に響かないので、
+    /// もう合っているチューナーや余韻のチューナーを使い回してよい (<see cref="Pick"/>)。
+    /// わけと denpa との約束は docs/agent.md「選ぶ順の約束」(同じ場面を両方のテストに通している。tests/fake/tuner-scenes.ts)
     /// </para>
     /// </summary>
     public static int?[] Ranks(IReadOnlyList<TunerSpec> specs)
@@ -461,43 +439,15 @@ public sealed class TunerPool(
     }
 
     /// <summary>
-    /// どのチューナーを使うか決める。**denpa との約束** (docs/agent.md「選ぶ順の約束」):
-    ///
-    /// <list type="number">
-    /// <item>
-    /// 使ってよいチューナー = 空いているチューナー (選局が無いか、利用者がいなくなって余韻で残っているだけ) と、
-    /// **自分より弱い利用者しかいないチューナー**。録画から見て、ライブや番組表集めのチューナーは空いているのと同じ。
-    /// 引き継ぐ利用者 (`after`) は、もう離れたものとして数える
-    /// </item>
-    /// <item>そのうち、受けられて**順位 (<see cref="Ranks"/>) がいちばん小さい組**から選ぶ</item>
-    /// </list>
+    /// どのチューナーを使うか決める。**denpa との約束** (docs/agent.md「選ぶ順の約束」の2):
+    /// 空いているチューナー (余韻だけのものも) と**自分より弱い利用者しかいないチューナー**のうち、
+    /// 受けられて**順位 (<see cref="Ranks"/>) がいちばん小さい組**から選ぶ。空いている兼用のチューナーへ逃げずに、
+    /// 弱い相手から取り上げる。
     ///
     /// <para>
-    /// **空いている兼用のチューナーへ逃げずに、弱い相手からチューナーを取り上げる。** 逃げると、そのあとの衛星の録画が
-    /// 兼用のチューナーを取れない。denpa は予約しか知らないので、ライブや番組表集めが前のチューナーに
-    /// いたかどうかで録画の入るチューナーが変わると、予約表で通した組が録れなくなる。
-    /// </para>
-    ///
-    /// <para>組の中 (受けられる種別がまったく同じチューナー) では、次の順に選ぶ。</para>
-    ///
-    /// <list type="number">
-    /// <item>**同じチャンネルの選局** (余韻か、弱い利用者しかいないもの)。選局し直さずにそのまま共有する</item>
-    /// <item>**もうそのチャンネルに合っているもの**。選局し直さずに済む</item>
-    /// <item>**ほかの余韻**。1人の視聴でチューナーを2台塞がない</item>
-    /// <item>空いているもの</item>
-    /// <item>弱い相手が使っているもの。いちばん弱いところから取る</item>
-    /// </list>
-    ///
-    /// <para>
-    /// **2番目が無いと、戻るたびに選局し直しになる。** 実機で測ると選局し直しは
-    /// 約 600ms、合っているものを使えば 10ms。合っているかどうかは
-    /// <see cref="Held.Channel"/> が覚えている (実体はアダプタごとに開いたまま)。
-    /// </para>
-    ///
-    /// <para>
-    /// **3番目を4番目より先にしてあるのは、1人の視聴でチューナーを2台塞がないため。**
-    /// 畳むのを待っているだけのチューナーを放っておいて空いているチューナーを取ると、余韻の
-    /// 5秒間だけ2台が埋まる。
+    /// 組の中では、同じチャンネルの選局 → もうそのチャンネルに合っているもの (<see cref="Held.Channel"/>。
+    /// 選局し直しの約 600ms が 10ms になる) → ほかの余韻 (1人の視聴で2台塞がない) → 空いているもの →
+    /// いちばん弱い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)
     /// </para>
     /// </summary>
     private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after)
@@ -571,16 +521,11 @@ public sealed class TunerPool(
                 var spec = Tuners[index];
                 _leases.TryGetValue(index, out var lease);
 
-                var users = new JsonArray();
+                JsonArray users = [];
                 if (lease is not null)
                 {
-                    lock (lease.Sinks)
-                    {
-                        foreach (var sink in lease.Sinks)
-                        {
-                            users.Add((JsonNode)new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority });
-                        }
-                    }
+                    // JsonNode にしてから入れる (JsonObject のままだと総称の Add<T> になり、AOT で使えない)
+                    lock (lease.Sinks) users = [.. lease.Sinks.Select(sink => (JsonNode)new JsonObject { ["use"] = sink.Use, ["priority"] = sink.Priority })];
                 }
 
                 list.Add((JsonNode)new JsonObject
@@ -624,12 +569,7 @@ public sealed class TunerPool(
     {
         get
         {
-            lock (_gate)
-            {
-                return _leases.Values.Any(lease =>
-                    lease.Sinks.Any(sink =>
-                        sink.Use == "rec" || sink.Use.StartsWith("rec ", StringComparison.Ordinal)));
-            }
+            lock (_gate) return _leases.Values.Any(lease => lease.Sinks.Any(sink => sink.Use == "rec" || sink.Use.StartsWith("rec ", StringComparison.Ordinal)));
         }
     }
 
@@ -640,10 +580,7 @@ public sealed class TunerPool(
     /// </summary>
     public IReadOnlyList<string> Descrambling()
     {
-        lock (_gate)
-        {
-            return [.. _leases.Where(pair => pair.Value.Descrambling).OrderBy(pair => pair.Key).Select(pair => Tuners[pair.Key].Name)];
-        }
+        lock (_gate) return [.. _leases.Where(pair => pair.Value.Descrambling).OrderBy(pair => pair.Key).Select(pair => Tuners[pair.Key].Name)];
     }
 
     /// <summary>全部畳む。止めるときに使う</summary>
@@ -691,25 +628,23 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// <summary>読み出した分だけ遅れを減らす</summary>
     public void Consumed(int bytes) => Interlocked.Add(ref _pending, -bytes);
 
-    public void End()
-    {
-        if (Interlocked.Exchange(ref _left, 1) != 0) return;
-        _queue.Writer.TryComplete();
-    }
+    public void End() => Close();
 
-    public void Fail(string reason)
-    {
-        if (Interlocked.Exchange(ref _left, 1) != 0) return;
-        FailedWith = reason;
-        _queue.Writer.TryComplete();
-    }
+    public void Fail(string reason) => Close(reason);
 
     /// <summary>読む側が去った。共有から抜ける</summary>
     public void Leave()
     {
-        if (Interlocked.Exchange(ref _left, 1) != 0) return;
+        if (Close()) onLeave(this);
+    }
+
+    /// <summary>読み出しを終わらせる。**最初の1回だけ効く** (2回目からは false)</summary>
+    private bool Close(string? reason = null)
+    {
+        if (Interlocked.Exchange(ref _left, 1) != 0) return false;
+        FailedWith = reason;
         _queue.Writer.TryComplete();
-        onLeave(this);
+        return true;
     }
 }
 
@@ -740,20 +675,9 @@ internal sealed class Lease(int tuner, string type, string channel)
     private long _firstReadMs = -1;
 
     /// <summary>
-    /// **前の報告からあとに、利用者としていたもの。**
-    ///
-    /// <para>
-    /// 溢れの報告に添える名前を、報告した瞬間の <see cref="Sinks"/> から採って
-    /// いた頃は、**溢れた本人が名乗らない**ことがあった — 報告は1分に1回で、
-    /// その間に利用者が抜けていれば「利用者なし」になる。実機の24時間で
-    /// **302回のうち128回 (42%) が「利用者なし」**で、その多くは直後の報告に
-    /// 同じ局・同じチューナーで `live` が付いていた。
-    /// </para>
-    /// <para>
-    /// 名前を添えるのは「番組表集めなのか観ている人なのかで次に見るところが
-    /// 変わる」ためなので、**当てにならない名前は無いのと同じ**。いた者を
-    /// 覚えておいて、報告のたびに吐き出す。
-    /// </para>
+    /// **前の報告からあとに、利用者としていたもの。** 溢れの報告は1分に1回なので、報告した瞬間の
+    /// <see cref="Sinks"/> だけだと溢れた本人が抜けたあとで「利用者なし」になる (実機の24時間で 42%)。
+    /// いた者を覚えておいて、報告のたびに吐き出す
     /// </summary>
     private readonly HashSet<string> _seen = [];
 
@@ -793,9 +717,8 @@ internal sealed class Lease(int tuner, string type, string channel)
     private long _queued;
 
     /// <summary>
-    /// 読み出しとデスクランブラの間に溜められる量。**64MB** — 地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほど。
-    /// デスクランブラが止まるのはカードや配り役を待つときで、それぞれ上限がある (CCID は 5 秒で諦め、
-    /// 繋ぎ直しに失敗したら 10 秒は探さずに断り、配り役は 10 秒で切る) ので、その間を丸ごと呑める。
+    /// 読み出しとデスクランブラの間に溜められる量。**64MB** — 地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほどで、
+    /// カードや配り役を待つ上限 (CCID 5 秒・配り役 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
     /// **数ではなくバイトで測る** — 読み出し側は溜まっているぶんだけ返すので、1回の読みは小さいこともある
     /// </summary>
     private const long QueueLimit = 64 * 1024 * 1024;
@@ -804,22 +727,14 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// **確保したままのデバイスから読んで、復号して配る。** 選局そのものはプールがやる。
     ///
     /// <para>
-    /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない。
-    /// 畳むときも読むのをやめるだけ (<see cref="Stop"/>)。
+    /// デバイスは**チューナーごとに開きっぱなし**で、ここでは閉じない (畳むときも読むのをやめるだけ。<see cref="Stop"/>)。
     /// **ストリームが途切れたら失敗として畳む** — 黙って終わると空のファイルが残る。
     /// </para>
     ///
     /// <para>
-    /// **読み出しとデスクランブラは別のスレッドで、間に 64MB のキューを置く** (<see cref="QueueLimit"/>)。
-    /// デスクランブラは ECM が変わるとその場で鍵を貰うので、カードや配り役が固まると何秒も止まる。
-    /// 読み出しがそこで待つとデバイスの溜め (3.5 秒ぶん) が溢れて**録画が欠ける** —
-    /// 欠けたものは後から復号しても戻らない。キューが埋まったときだけ読み出しも待つ。
-    /// </para>
-    ///
-    /// <para>
-    /// **デスクランブラは選局ごとに作る。** 中身は PAT・PMT・鍵だけで、作るのは安い。
-    /// 選局を跨いで持ち回さなければ、前の局の鍵が残ることも、2本から同時に
-    /// 呼ばれることも起きようがない。
+    /// **読み出しとデスクランブラは別のスレッドで、間にキューを置く** (<see cref="QueueLimit"/>)。カードが固まって
+    /// デスクランブラが止まっても、読み出しが待つとデバイスの溜めが溢れて録画が欠ける (docs/agent.md「B25 の復号もカードリーダーも自前」)。
+    /// **デスクランブラは選局ごとに作る** — 持ち回さなければ、前の局の鍵が残ることも2本から呼ばれることも起きようがない。
     /// </para>
     /// </summary>
     public void StartNative(ITuneDevice tuner, Action onExit)
@@ -901,12 +816,8 @@ internal sealed class Lease(int tuner, string type, string channel)
                     + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms"
                     + (b25.Undecodable > 0 ? $" (掛かったまま {b25.Undecodable} パケット)" : ""));
             }
-            var chunk = decoded.WrittenSpan.ToArray();
+            Broadcast(decoded.WrittenSpan.ToArray());
             decoded.ResetWrittenCount();
-            lock (Sinks)
-            {
-                foreach (var sink in Sinks.ToList()) sink.Push(chunk);
-            }
         }
 
         try
@@ -952,25 +863,15 @@ internal sealed class Lease(int tuner, string type, string channel)
         if (!_stopped) onExit();
     }
 
-    /**
-     * 溢れを報せる間隔。
-     *
-     * **終わりにだけ出していた頃は、長い選局が一度も報せなかった。** 番組表集めは
-     * 数分で終わるので出るが、**ライブ視聴と録画は終わるまで一度も出ない** —
-     * 実機で「観ている最中に一瞬止まる」と言われて記録を見ても、出ているのは
-     * 番組表のぶんだけで、観ている局が落としているのかどうかが分からなかった。
-     */
+    /// <summary>
+    /// 溢れを報せる間隔。**終わりにだけ出していた頃は、ライブ視聴と録画が終わるまで一度も報せず**、
+    /// 観ている最中に止まった局が落としていたのか分からなかった
+    /// </summary>
     private static readonly TimeSpan OverflowReport = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// 溢れたぶんを吐き出して記録する。**溢れても選局は生きている**ので畳まない。
-    ///
-    /// <para>
-    /// **誰が読んでいたかも添える。** 溢れっぱなしなら読む側が遅いということで、
-    /// 相手が番組表集めなのか観ている人なのかで、次に見るところが変わる。
-    /// 名前は**その間にいた者**を並べる (<see cref="Readers"/>) — いまいる者だけを
-    /// 見ていた頃は、抜けたあとに報告が回って「利用者なし」になっていた。
-    /// </para>
+    /// 誰が読んでいたか (<see cref="Readers"/>) と、いちばん空いた時間も添える (読み方は docs/agent.md「リングバッファが溢れても畳まない」)
     /// </summary>
     private void ReportOverflows(DeviceStream? ring)
     {
@@ -978,15 +879,10 @@ internal sealed class Lease(int tuner, string type, string channel)
         var (count, worstGap, stale) = ring.TakeOverflows();
         if (count == 0)
         {
-            /*
-             * **選局の前に埋まっていたぶんは、読む側のせいではない。**
-             * 数には入れないが、黙って捨てると「本当に落ちていないのか」が
-             * 分からなくなるので、そうと分かる言い方で残す
-             */
+            // 選局の前に埋まっていたぶんは読む側のせいではない。数には入れず、そうと分かる言い方で残す
             if (stale > 0) Log.Write($"[{Tuner}] {Channel}: 選局前にリングバッファが {stale} 回溢れていました");
             return;
         }
-        // **空いた時間も出す。** 溜めが効いていないのか読む側が止まっているのかを分ける (DeviceStream.TakeOverflows)
         Log.Write(
             $"[{Tuner}] {Channel}: リングバッファが {count} 回溢れました "
                 + $"(読むのが追いつきません: {Readers()}、いちばん空いたのは {worstGap / 1000.0:0.0}秒)");
@@ -1002,20 +898,12 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// </summary>
     public void Start(string command, Action onExit)
     {
-        var start = new ProcessStartInfo("setsid")
+        var child = Process.Start(new ProcessStartInfo("setsid", ["sh", "-c", $"{command} \"$1\" \"$2\"", "sh", Type, Channel])
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-        };
-        start.ArgumentList.Add("sh");
-        start.ArgumentList.Add("-c");
-        start.ArgumentList.Add($"{command} \"$1\" \"$2\"");
-        start.ArgumentList.Add("sh");
-        start.ArgumentList.Add(Type);
-        start.ArgumentList.Add(Channel);
-
-        var child = Process.Start(start)!;
+        })!;
         _child = child;
 
         _ = Task.Run(async () =>
@@ -1028,11 +916,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                 {
                     var read = await stream.ReadAsync(buffer);
                     if (read <= 0) break;
-                    var chunk = buffer[..read];
-                    lock (Sinks)
-                    {
-                        foreach (var sink in Sinks.ToList()) sink.Push(chunk);
-                    }
+                    Broadcast(buffer[..read]);
                 }
             }
             catch (Exception error)
@@ -1056,6 +940,15 @@ internal sealed class Lease(int tuner, string type, string channel)
             Error = _stderr.Trim().Split('\n').LastOrDefault()?.Trim() is { Length: > 0 } tail ? tail : null;
             onExit();
         });
+    }
+
+    /// <summary>利用者たちに配る。デスクランブラが別のスレッドで回すので、入れ物は Sinks のロックの下で</summary>
+    private void Broadcast(byte[] chunk)
+    {
+        lock (Sinks)
+        {
+            foreach (var sink in Sinks.ToList()) sink.Push(chunk);
+        }
     }
 
     public void StartLinger(Action release, TimeSpan after)
@@ -1097,29 +990,15 @@ internal sealed class Lease(int tuner, string type, string channel)
     }
 
     /**
-     * **止まりきるまで待つ。呼ぶのはロックの外で。**
-     *
-     * <para>
-     * 次の選局は、これが返ってから始める。待たずに始めると**同じ読み出し側を
-     * 2本で取り合い**、前の局のパケットが次の選局に混ざる。待つのは読み出しだけ —
-     * デスクランブラはデバイスに触らず、配り先も畳むときに空になっている (鍵を待っていれば
-     * 止まるのはその答えのあと)。
-     * </para>
-     *
-     * <para>
-     * それでも止まらないときは**記録に残す。** 黙って先へ進んでいた頃は、
-     * 窓が開いていたのかどうかを確かめようが無かった。
-     * </para>
+     * **止まりきるまで待つ。呼ぶのはロックの外で。** 次の選局はこれが返ってから始める (<see cref="TunerPool.Open"/>)。
+     * 待つのは読み出しだけ — デスクランブラはデバイスに触らず、配り先も畳むときに空になっている。
+     * それでも止まらないときは記録に残す (黙って進むと、取り合いの窓が開いていたのか確かめようが無い)
      */
     public void Await()
     {
         var pump = _pump;
         _pump = null;
-        if (pump is null) return;
-        if (!pump.Wait(StopWait))
-        {
-            Log.Write($"[{Tuner}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");
-        }
+        if (pump?.Wait(StopWait) == false) Log.Write($"[{Tuner}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");
     }
 
     /// <summary>止まるのを待つ上限。読み出し側は 200ms ごとに起きるので、十分に長い</summary>

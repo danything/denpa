@@ -3,19 +3,9 @@ using System.Globalization;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 選局表。**チャンネル名を周波数に直す。**
-///
-/// <para>
-/// 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
-/// <c>channels.rs</c> から取った。**いま実機で選局できているものと同じ数字**に
-/// することがいちばん大事で、自分で導き直す理由が無い。
-/// </para>
-///
-/// <para>
-/// 単位が2つあるのは DVB API の決まり。**地上波は Hz、衛星は kHz**で
-/// <c>DTV_FREQUENCY</c> に渡す。ここを取り違えても ioctl は通り、ただ
-/// 同期しないだけなので気付きにくい。
-/// </para>
+/// 選局表。**チャンネル名を周波数に直す。** 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
+/// <c>channels.rs</c> から取った。**地上波は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、
+/// 同期しないだけ)。docs/agent.md「選局表」
 /// </summary>
 public static class ChannelTable
 {
@@ -93,20 +83,9 @@ public static class ChannelTable
     }
 
     /// <summary>
-    /// DVB に渡す <c>DTV_STREAM_ID</c>。
-    ///
-    /// <para>
-    /// 衛星は1つの周波数に何本もの TS が入っていて、復調器は
-    /// **TSID を書いて選り分ける** (相対番号では選べない)。ところが denpa が
-    /// 呼んでくるのは <c>BS15_0</c> のような**相対番号**なので、ここで TSID に直す。
-    /// </para>
-    ///
-    /// <para>
-    /// <paramref name="known"/> には**自分の <c>channels.json</c>** を渡す。
-    /// スキャン結果には TSID が入っていて、そちらのほうが必ず新しい —
-    /// BS は再編があるので、埋め込んだ表は古くなる。下の表は
-    /// **まだ1度もスキャンしていないとき**だけのもの。
-    /// </para>
+    /// DVB に渡す <c>DTV_STREAM_ID</c>。衛星の復調器は **TSID で選り分ける**ので、denpa が言ってくる
+    /// 相対番号 (<c>BS15_0</c>) を TSID に直す。<paramref name="known"/> (自分の <c>channels.json</c>) が勝ち、
+    /// 埋め込んだ表はまだ1度もスキャンしていないときだけ
     /// </summary>
     public static uint StreamId(string name, Tuning tuning, Func<string, int?>? known = null)
     {
@@ -119,15 +98,7 @@ public static class ChannelTable
         return Fallback.TryGetValue(name, out var id) ? id : NoStreamId;
     }
 
-    /// <summary>
-    /// スキャン前に使う BS の TSID。
-    ///
-    /// <para>
-    /// recisdb が持っている表 (<c>dvbv5_channels_isdbs.conf</c>) と同じもの。
-    /// **1度スキャンすれば <c>channels.json</c> のほうが勝つ**ので、ここが
-    /// 古くなっても引きずらない。
-    /// </para>
-    /// </summary>
+    /// <summary>スキャン前に使う BS の TSID。recisdb の表 (<c>dvbv5_channels_isdbs.conf</c>) と同じ</summary>
     private static readonly Dictionary<string, uint> Fallback = new(StringComparer.Ordinal)
     {
         ["BS01_0"] = 16400, ["BS01_1"] = 16401, ["BS01_2"] = 16402,

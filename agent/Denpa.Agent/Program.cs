@@ -242,17 +242,9 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
         while (true)
         {
             pending ??= queue.Reader.ReadAsync(ct).AsTask();
-            var done = await Task.WhenAny(pending, Task.Delay(eventsKeepAlive, ct));
-            string block;
-            if (done == pending)
-            {
-                block = await pending;
-                pending = null;
-            }
-            else
-            {
-                block = ": keep-alive\n\n";
-            }
+            var heard = await Task.WhenAny(pending, Task.Delay(eventsKeepAlive, ct)) == pending;
+            var block = heard ? await pending : ": keep-alive\n\n";
+            if (heard) pending = null;
             await http.Response.WriteAsync(block, ct);
             await http.Response.Body.FlushAsync(ct);
         }
@@ -268,8 +260,8 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
 });
 
 // --- チューナーとチャンネル -----------------------------------------------
-app.MapGet("/denpa/tuners", (HttpContext http) =>
-    Respond.Write(http, new JsonObject { ["tuners"] = pool.Status(), ["detected"] = pool.Detected }));
+JsonObject TunerList() => new() { ["tuners"] = pool.Status(), ["detected"] = pool.Detected };
+app.MapGet("/denpa/tuners", (HttpContext http) => Respond.Write(http, TunerList()));
 
 /*
  * 機材の定義を書き換える。**画面から。**
@@ -286,24 +278,20 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
         return;
     }
 
-    var next = new List<TunerSpec>();
-    foreach (var node in list)
+    var next = list.Select(TunerSpec.FromJson).ToList();
+    if (next.Contains(null))
     {
-        if (TunerSpec.FromJson(node) is not { } spec)
-        {
-            await Respond.Error(http, "name の無いチューナーがあります", 400);
-            return;
-        }
-        next.Add(spec);
+        await Respond.Error(http, "name の無いチューナーがあります", 400);
+        return;
     }
 
-    config.SaveTuners(next);
+    config.SaveTuners([.. next.OfType<TunerSpec>()]);
     var (resolved, auto) = config.ResolveTuners();
     pool.Detected = auto;
     pool.Replace(resolved);
     // 新しく書かれた筐体があれば px4d を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PrepareDaemons);
-    await Respond.Write(http, new JsonObject { ["tuners"] = pool.Status(), ["detected"] = pool.Detected });
+    await Respond.Write(http, TunerList());
 });
 
 app.MapGet("/denpa/channels", (HttpContext http) => Respond.Write(http, config.LoadChannels()));

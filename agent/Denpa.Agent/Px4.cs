@@ -12,27 +12,11 @@ namespace Denpa.Agent;
 /// (PLEX PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系 …)。
 ///
 /// <para>
-/// **カーネルドライバを入れてもらわない。** px4_drv (DKMS) をホストに入れて
-/// chardev を出す方式は捨てた。px4-userland は libusb だけで USB を扱う
-/// ユーザー空間のドライバで、静的リンクの実行ファイル3つとファームウェアを
-/// イメージに同梱すれば、<c>/dev/bus/usb</c> が見えるだけで動く。
-/// カードリーダーも同じデーモンが持っていて、control socket 越しに APDU を
-/// 投げれば読める (Px4Card.cs)。
-/// </para>
-///
-/// <para>
-/// **使うのは2つ。** <c>px4d</c> が筐体 (USB 機能・受信機・カード) を所有する
-/// デーモンで、筐体1台につき1つ起こす。<c>px4ctl</c> は状態を聞く。受信機は
-/// px4d の制御ソケットで直に取って選局し、TS も px4d から直に受ける (<see cref="Px4Tuner"/>)。
-/// 同梱の <c>px4-ts</c> (1回1チャンネルの CLI) は使わない。どれも同じランタイム
-/// ディレクトリと筐体の番号で Unix ドメインソケットを見つける。
-/// </para>
-///
-/// <para>
-/// **機種のことは何も持たない。** 刺さっている筐体と、それぞれの受信機が何を
-/// 受けられるかは <c>px4d --list-json</c> に聞く (<see cref="Enclosures"/>)。USB ID や
-/// 筐体の番号の決まりは px4-userland の中にあり、対応機種が増えても
-/// px4-userland を上げるだけで追従する。
+/// **カーネルドライバを入れてもらわない。** px4-userland は libusb だけで USB を扱うユーザー空間のドライバで、
+/// 同梱すれば <c>/dev/bus/usb</c> が見えるだけで動く。<c>px4d</c> が筐体 (USB 機能・受信機・カード) を持ち、
+/// 受信機は px4d の制御ソケットで直に取って選局する (<see cref="Px4Tuner"/>)。**機種のことは何も持たない** —
+/// 刺さっている筐体と受けられる方式は <c>px4d --list-json</c> に聞く (<see cref="Enclosures"/>)。
+/// 作りは docs/agent.md「px4-userland の作り」。
 /// </para>
 ///
 /// <para>
@@ -249,13 +233,7 @@ public static class Px4Userland
     ///
     /// <para>
     /// 読むだけで筐体を開かないので、px4d が動いていても聞ける。px4-userland が
-    /// 入っていない環境 (手元の開発など) では空。
-    /// </para>
-    ///
-    /// <para>
-    /// <c>--list-json</c> は px4-userland 0.1.9 から (SPEC 4.6 v0.26)。テキストの <c>--list</c> は
-    /// いずれ廃止すると言われていて、読まない。同梱するのは 0.1.9 以上 (Dockerfile / install.sh) なので、
-    /// <c>PX4_USERLAND_DIR</c> で古い px4d を指したときだけ筐体が挙がらない (理由は記録に残る)。
+    /// 入っていない環境 (手元の開発など) では空。<c>--list-json</c> は 0.1.9 から (古い px4d では筐体が挙がらない)。
     /// </para>
     /// </summary>
     /// <param name="warn">使えない筐体の理由を残す先。省けば記録 (<see cref="Log"/>)</param>
@@ -461,31 +439,23 @@ public static class Px4Userland
             return null;
         }
 
-        public string? Text(JsonObject obj, string key, string where, bool optional = false)
-        {
-            var value = Value(obj, key, where, optional);
-            if (value is null) return null;
-            if (value.TryGetValue<string>(out var text)) return text;
-            Skew($"{where}.{key} が文字列ではない");
-            return null;
-        }
+        public string? Text(JsonObject obj, string key, string where, bool optional = false) =>
+            Read(obj, key, where, optional, "文字列", out string? text) ? text : null;
 
-        public int? Number(JsonObject obj, string key, string where, bool optional = false)
-        {
-            var value = Value(obj, key, where, optional);
-            if (value is null) return null;
-            if (value.TryGetValue<int>(out var number)) return number;
-            Skew($"{where}.{key} が整数ではない");
-            return null;
-        }
+        public int? Number(JsonObject obj, string key, string where, bool optional = false) =>
+            Read(obj, key, where, optional, "整数", out int number) ? number : null;
 
-        public bool? Flag(JsonObject obj, string key, string where, bool optional = false)
+        public bool? Flag(JsonObject obj, string key, string where, bool optional = false) =>
+            Read(obj, key, where, optional, "真偽値", out bool flag) ? flag : null;
+
+        /// <summary>鍵の値を <typeparamref name="T"/> で読む。型が違えば「<paramref name="kind"/>ではない」と残す</summary>
+        private bool Read<T>(JsonObject obj, string key, string where, bool optional, string kind, out T? result)
         {
-            var value = Value(obj, key, where, optional);
-            if (value is null) return null;
-            if (value.TryGetValue<bool>(out var flag)) return flag;
-            Skew($"{where}.{key} が真偽値ではない");
-            return null;
+            result = default;
+            if (Value(obj, key, where, optional) is not { } value) return false;
+            if (value.TryGetValue<T>(out result)) return true;
+            Skew($"{where}.{key} が{kind}ではない");
+            return false;
         }
 
         public IEnumerable<JsonNode?> Array(JsonObject obj, string key, string where)
@@ -503,15 +473,8 @@ public static class Px4Userland
     }
 
     /// <summary>
-    /// 筐体を使うか決める。使わないなら理由を残す。
-    ///
-    /// <para>
-    /// 番号が重なる筐体 (<c>serial_unique=false</c>) も使う。PX-M1UR と PX-S1UR はどれも USB の serial が
-    /// <c>000000000000001</c> で、番号のままだと同じ <c>px4:000000000000001:0</c> が2つでき、
-    /// <c>px4d --device</c> も番号だけでは1台に決められず断る (exit 2)。そこでUSB ポートを足した名前にする
-    /// (<see cref="ParseJson"/>)。前は使わずに理由だけ残していて、Home Assistant のアドオンが
-    /// px4d / px4ctl を差し替えるラッパーで補っていた。
-    /// </para>
+    /// 筐体を使うか決める。使わないなら理由を残す。番号が重なる筐体 (<c>serial_unique=false</c>) も
+    /// USB ポートを足した名前で使う (<see cref="AliasOf"/>。<see cref="ParseJson"/> が組み立てる)
     /// </summary>
     private static bool Usable(string id, string model, string status, string where, Action<string> warn)
     {
@@ -574,11 +537,17 @@ public static class Px4Userland
 
     /// <summary>筐体の一覧から、設定の形式に組み立てる</summary>
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
+        Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
+
+    /// <summary>筐体ごとの受信機を設定の形式に (受けられる方式の無い受信機は除く。asicen-userland も同じ)</summary>
+    internal static List<TunerSpec> Specs(
+        IEnumerable<(string Id, string Model, IReadOnlyList<Px4Receiver> Receivers)> enclosures,
+        Func<string, string, int, string> name, Func<string, int, string> device) =>
     [
         .. enclosures.SelectMany(enclosure => enclosure.Receivers
             .Where(receiver => receiver.Types.Length > 0)
             .Select(receiver => new TunerSpec(
-                Name(enclosure.Model, enclosure.Id, receiver.Index), receiver.Types, false, Device(enclosure.Id, receiver.Index)))),
+                name(enclosure.Model, enclosure.Id, receiver.Index), receiver.Types, false, device(enclosure.Id, receiver.Index)))),
     ];
 
     /// <summary>
@@ -680,18 +649,16 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
     /// <summary>方式の名前から組み立てる。知らない方式なら理由を残して null</summary>
     internal static Px4Receiver? From(int number, string system, bool? lnb15v, Action<string> warn)
     {
-        switch (system)
+        (bool Terrestrial, bool Satellite)? kind = system switch
         {
-            case "ISDB-T":
-                return new Px4Receiver(number, true, false, lnb15v);
-            case "ISDB-S":
-                return new Px4Receiver(number, false, true, lnb15v);
-            case "ISDB-T/S":
-                return new Px4Receiver(number, true, true, lnb15v);
-            default:
-                warn($"受信機 {number} の方式 {system} を知りません (px4-userland が新しい?)。この受信機は使いません");
-                return null;
-        }
+            "ISDB-T" => (true, false),
+            "ISDB-S" => (false, true),
+            "ISDB-T/S" => (true, true),
+            _ => null,
+        };
+        if (kind is { } known) return new Px4Receiver(number, known.Terrestrial, known.Satellite, lnb15v);
+        warn($"受信機 {number} の方式 {system} を知りません (px4-userland が新しい?)。この受信機は使いません");
+        return null;
     }
 }
 
@@ -1036,23 +1003,10 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 ///
 /// <para>
 /// 最初の選局で <c>ACQUIRE → TUNE → START_STREAM → ATTACH_STREAM</c>、2回目からは
-/// <c>STOP_STREAM → TUNE → START_STREAM → ATTACH_STREAM</c> (px4-userland SPEC 6.3、v0.1.6 から)。
-/// 返すのは <see cref="Dispose"/> (<c>RELEASE</c>) のときだけ。以前は選局ごとに <c>px4-ts</c> を
-/// 起こしていて、px4-ts が終わるたびに lease が返り、最後の受信機なら px4d がチューナーの
-/// 電源を落としていた。次の選局は電源を入れてチューナーを初期化し直すところからで、遅かった。
-/// </para>
-///
-/// <para>
-/// **TS は別のソケット (<c>stream.sock</c>) に来る。** 枠 (TS_DATA) をほどいて溜め (Pipelines) に書き、
-/// 読み出し側はその読む側を <see cref="DeviceStream"/> に載せる (<see cref="Px4Stream"/>)。
-/// 読む側の振る舞い (電波が来なくても畳める・チューナーを取り上げられたら 200ms で抜ける) は DVB と同じ。
-/// </para>
-///
-/// <para>
-/// **誰も読まなくなったら TS のストリームを畳む。** 溜めが埋まったまま空かなければ、こちらから
-/// stream.sock を閉じる (放っておくと px4d の溜めが溢れて <c>SLOW_CONSUMER</c> になる)。
-/// 受信機は取ったままなので、次の選局が来たら同じ lease で選局し直す (<see cref="Tuned"/> を
-/// TunerPool が見る)。
+/// <c>STOP_STREAM → TUNE → START_STREAM → ATTACH_STREAM</c> (px4-userland SPEC 6.3)。
+/// 返すのは <see cref="Dispose"/> (<c>RELEASE</c>) のときだけ (返すと px4d が電源を落とし、次の選局が遅くなる)。
+/// TS は <c>stream.sock</c> に来る (<see cref="Px4Stream"/>)。誰も読まなくなったら TS のストリームだけ畳み、
+/// 次の選局は同じ lease で選局し直す (<see cref="Tuned"/>)。docs/agent.md「px4-userland の作り」
 /// </para>
 /// </summary>
 public sealed class Px4Tuner : ITuneDevice
@@ -1161,10 +1115,7 @@ public sealed class Px4Tuner : ITuneDevice
     {
         get
         {
-            lock (_gate)
-            {
-                return _control is not null && _stream is { Ended: false };
-            }
+            lock (_gate) return _control is not null && _stream is { Ended: false };
         }
     }
 
@@ -1323,12 +1274,7 @@ public sealed class Px4Tuner : ITuneDevice
     }
 
     /// <summary>STOP_STREAM / START_STREAM / RELEASE の中身 (lease だけ)</summary>
-    private byte[] Lease()
-    {
-        var lease = new byte[8];
-        BinaryPrimitives.WriteUInt64LittleEndian(lease, _lease);
-        return lease;
-    }
+    private byte[] Lease() => Px4Control.WithId(_lease);
 
     /// <summary>(流していれば止めて) 合わせて、流し始めて、TS を受け取りにいく</summary>
     private void Run(ChannelTable.Tuning tuning, uint streamId, string? lnb)
@@ -1513,23 +1459,15 @@ internal sealed class Px4StreamError(string message, bool keepsLease) : IOExcept
 ///
 /// <para>
 /// <c>stream.sock</c> に繋いで ATTACH_STREAM (lease と nonce) を送ると、あとは px4d が
-/// TS_DATA の枠を送り続け、止めると STREAM_END が来る (SPEC 6.3 / 6.4)。枠をほどいた中身を
-/// <see cref="Pipe"/> (System.IO.Pipelines) に書き、読み出し側はその読む側 (<see cref="DeviceStream"/>)。
-/// **どの OS でも同じ作り。** 前は pipe(2) に write して poll で待っていたが、Windows には poll が無く、
-/// pipe の深さも OS ごとに違った (Linux は 8MB に広げ、macOS は OS 任せ)。いまは溜めの深さを
-/// <see cref="Depth"/> で決め打つ。
-/// </para>
-///
-/// <para>
-/// **受けるのは溜めのメモリに直に。** TS_DATA の中身はソケットから <see cref="PipeWriter.GetMemory"/>
-/// で取ったメモリ (プールのもの) へそのまま受け、枠ごとの byte[] は作らない。
+/// TS_DATA の枠を送り続け、止めると STREAM_END が来る (SPEC 6.3 / 6.4)。枠の中身はソケットから
+/// <see cref="Pipe"/> のメモリ (<see cref="PipeWriter.GetMemory"/>) へ直に受け、読み出し側はその読む側 (<see cref="DeviceStream"/>)。
+/// OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った) ので、溜めの深さは <see cref="Depth"/> で決め打つ。
 /// </para>
 ///
 /// <para>
 /// **読む側がいないと溜めが埋まる。** 書けないまま <see cref="DefaultStallLimit"/> 経ったら
-/// stream.sock を閉じて終わる。こちらが読まないままだと px4d の溜め (既定 65,536 パケット、
-/// 地上波で5秒ほど) が溢れて SLOW_CONSUMER になるが、その通知 (STREAM_END) も読まない
-/// ソケットの奥に詰まって届かない。こちらで見切る。
+/// stream.sock を閉じて終わる。放っておくと px4d の溜め (地上波で5秒ほど) が溢れて SLOW_CONSUMER になるが、
+/// その通知 (STREAM_END) も読まないソケットの奥に詰まって届かない。こちらで見切る。
 /// </para>
 /// </summary>
 internal sealed class Px4Stream
@@ -1613,8 +1551,7 @@ internal sealed class Px4Stream
         try
         {
             Px4Control.ConnectWithin(socket, socketPath, TimeSpan.FromSeconds(4), wire);
-            var payload = new byte[8 + nonce.Length];
-            BinaryPrimitives.WriteUInt64LittleEndian(payload, lease);
+            var payload = Px4Control.WithId(lease, 8 + nonce.Length);
             nonce.CopyTo(payload, 8);
             // px4-ts と同じく request_id 0。最初の枠は ATTACH_STREAM でなければならない (HELLO は無い)
             Px4Control.SendAll(socket, Px4Control.Encode(Px4Control.AttachStream, 0, 0, payload, wire));
@@ -1690,10 +1627,8 @@ internal sealed class Px4Stream
                         End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
                         return;
                     }
-                    End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
-                    return;
                 }
-                if (flags != 0 || length < TsHeaderSize)
+                if (type != Px4Control.TsData || flags != 0 || length < TsHeaderSize)
                 {
                     End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
                     return;
