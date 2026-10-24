@@ -40,10 +40,11 @@
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
   import {
-    audioTracks,
+    liveAudio,
     liveCodecs,
-    speeds,
-    subtitles,
+    liveSubtitle,
+    muteRow,
+    speedRow,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
   import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
@@ -60,12 +61,8 @@
   import { resolve } from "$app/paths";
 
   /**
-   * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
-   * **録画中の録画を頭から観る。** 元のTSはブラウザで読めないので、プレイヤーはライブと
-   * 同じ (fMP4 → WebSocket → MSE、互換モードでは canvas。`live-player.svelte.ts` の chase モード)。
-   *
-   * ライブとの違いは3つ — 頭から観られる・シークできる・右端が伸びる。
-   * シークバーは番組の全長で、右端 (いま録れているところ) は壁時計で伸ばす。
+   * 追っかけ再生 (録画中の録画を頭から観る)。プレイヤーはライブと同じ (`live-player.svelte.ts` の chase モード)。
+   * ライブとの違いは、頭から観られる・シークできる・右端 (いま録れているところ) が壁時計で伸びる
    */
   let { data } = $props();
 
@@ -85,12 +82,8 @@
   let clock = $state(Date.now());
 
   /**
-   * **エンコードが終わったら観る画面へ案内する。** 録り終えてからエンコードが終わるまでの間
-   * (CM検出・エンコード) もこの画面で観られるが、エンコードが終われば普通の観る画面の
-   * ほうがよい (CM飛ばし・チャプター・データ放送が揃い、サーバの ffmpeg も要らない)。
-   * 録画の通知 (SSE) が来るたびに状態の API を読み、エンコードできていれば案内を出す。
-   * **勝手には移らない** — 観ている最中に画面が切り替わると位置が飛ぶ。
-   * 押して移れば、途中の位置は続き再生 (keepResume) が覚えている
+   * エンコードが終わったら観る画面へ案内する (CM飛ばし・チャプター・データ放送が揃う)。録画の通知が来るたびに
+   * 状態を読む。勝手には移らない — 観ている最中に位置が飛ぶ。途中の位置は続き再生が覚えている
    */
   let encoded = $state(false);
   liveUpdates([], {
@@ -104,10 +97,7 @@
     },
   });
 
-  /**
-   * 右に出す番組の中身 (観る画面と同じ `recordingFacts`)。番組表から引ければ
-   * そちらで上書きする (`programDetail`)。追っかけは放送中なので、たいてい引ける。
-   */
+  /** 右に出す番組の中身 (観る画面と同じ)。追っかけは放送中なので、たいてい番組表から引ける */
   const detail = programDetail();
   const facts = $derived(recordingFacts(data.rec));
 
@@ -160,11 +150,8 @@
   }
 
   /**
-   * 選んでいる速さ。**端末ごとに覚え、プレイヤーを作り直しても当て直す。**
-   *
-   * 鍵は観る画面と同じ (`SpeedMenu` の `SPEED_KEY`)。持っておくのは、追っかけのシークが
-   * 読み直し (`openChase`) になることがあり、そこで**押した覚えの無いまま
-   * 等速へ戻る**ため (`live-player` の `clear`)
+   * 選んでいる速さ。端末ごとに覚え (観る画面と同じ `SPEED_KEY`)、プレイヤーを作り直しても当て直す —
+   * シークが読み直し (`openChase`) になると、押した覚えの無いまま等速へ戻る (`live-player` の `clear`)
    */
   let want = $state(1);
 
@@ -181,9 +168,8 @@
   });
 
   /**
-   * 視聴位置をサーバへ (15秒おき)。録り終えてエンコードが終わったら、観る画面の
-   * 続き再生がここから読む — 追っかけで観たぶんを二度観ずに済む。
-   * 送り方は観る画面と共通 (`#lib/resume.ts`。閉じ際は sendBeacon)
+   * 視聴位置をサーバへ (15秒おき)。エンコードが終わったら、観る画面の続き再生がここから読む
+   * (送り方は観る画面と共通。`#lib/resume.ts`)
    */
   function sendResume(leaving = false): void {
     if (line === null || pos <= 0) return;
@@ -246,9 +232,7 @@
     snapshot,
     toggleFull: fullscreen.toggle,
     stepSpeed: (by) => setSpeed(stepSpeed(want, by)),
-    // **消音は player 側の印で切り替える。** 映像の要素を直に触ると、繋ぎ直しの
-    // たびに `silenced` で上書きされて戻り、ボタンの見た目ともずれる
-    toggleMute: () => (player.silenced ? player.unmute() : player.mute()),
+    toggleMute: player.toggleMute,
   });
 
   /** いまの1コマを字幕ごと切り抜いて PNG に (ライブ・観る画面と同じ。`snapshot.ts`) */
@@ -269,9 +253,8 @@
 
 <svelte:window onkeydown={keys} />
 
-<!-- **ライブ・観る画面と同じレイアウト** (PlayerLayout)。映像が左、番組の中身が右 -->
+<!-- ライブ・観る画面と同じレイアウト (PlayerLayout / PlayerStage / MediaStack)。映像が左、番組の中身が右 -->
 <PlayerLayout>
-  <!-- 舞台の配線と映像の束はライブと共通 (PlayerStage / MediaStack) -->
   <PlayerStage
     {controls}
     {fullscreen}
@@ -310,7 +293,7 @@
           paused={player.paused}
         />
 
-        <!-- **並びはライブと同じ。** 再生・音・字幕、端 (最新)、読みもの、速さ、再生の設定 (⚙)、全画面 -->
+        <!-- 並びはライブと同じ (`ControlRow`) -->
         <ControlRow testid="chase-buttons">
           <ControlButton
             icon={player.paused ? PLAY : PAUSE}
@@ -318,17 +301,13 @@
             testid="chase-play"
             onclick={() => player.toggle()}
           />
-          <!--
-                    **畳むとき (狭い枠・一段に入らないとき) に残すのは、再生・最新・読みもの・再生の設定 (⚙)・全画面だけ。**
-                    音・字幕と速さ・小窓は再生の設定 (⚙) の頭に入れる (`Extras`・`StageTail` の `fold`。観る画面と同じ)
-                -->
+          <!-- 畳むときは音・字幕・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`) -->
           <Extras>
             <ControlButton
               icon={player.silenced ? SOUND_OFF : SOUND_ON}
               label={player.silenced ? "音を出す" : "音を消す"}
               testid="chase-sound"
-              onclick={() =>
-                player.silenced ? player.unmute() : player.mute()}
+              onclick={player.toggleMute}
             />
             {#if player.hasCaptions}
               <ControlButton
@@ -342,13 +321,8 @@
           </Extras>
 
           <!--
-                    いま録れているところへ。ライブの「ライブ」に相当し、場所も同じ。
-
-                    **録り終わっていたら出しません。** 「最新」は伸びていく端に
-                    張り付くためのもので、録画が終われば端は動かず、ただの
-                    「終わりへ飛ぶ」になります。エンコードが終わる前の追っかけでは
-                    録り終えたあともこの画面にいられる (録画済みと出る) ので、
-                    そのとき意味の無いボタンが残っていました
+                    いま録れているところへ (ライブの「ライブ」の場所)。録り終わっていたら端は動かず、
+                    ただの「終わりへ飛ぶ」になるので出さない
                 -->
           {#if line !== null && !line.finished}
             <EdgeButton
@@ -379,10 +353,7 @@
             {/snippet}
           </InfoBlock>
 
-          <!--
-                    追っかけは常に速さを選べる (録れている範囲の中を進むだけ)。
-                    **互換モード (canvas に描く) では出さない** — 音を自前で鳴らしていて、等速だけ
-                -->
+          <!-- 速さはいつでも選べる (録れている範囲の中を進むだけ)。互換モードは等速だけ -->
           {#if !player.canvas}
             <Extras>
               <SpeedMenu
@@ -394,33 +365,20 @@
             </Extras>
           {/if}
 
-          <!--
-                    コーデックと音声は再生の設定 (⚙)。コーデックは選び直すと再生していた位置から再エンコード (ライブと同じ)
-                -->
+          <!-- コーデックは選び直すと再生していた位置から再エンコード (ライブと同じ) -->
           <StageTail
             prefix="chase"
             fold={[
-              {
-                kind: "toggle" as const,
-                id: "mute",
-                label: "消音",
-                icon: SOUND_OFF,
-                on: player.silenced,
-                toggle: () =>
-                  player.silenced ? player.unmute() : player.mute(),
-              },
+              muteRow(SOUND_OFF, player.silenced, player.toggleMute),
               ...(player.canvas
                 ? []
                 : [
-                    {
-                      kind: "choice" as const,
-                      ...speeds({
-                        icon: SPEED,
-                        label: "再生の速さ",
-                        speed: want,
-                        onselect: setSpeed,
-                      }),
-                    },
+                    speedRow({
+                      icon: SPEED,
+                      label: "再生の速さ",
+                      speed: want,
+                      onselect: setSpeed,
+                    }),
                   ]),
             ]}
             {background}
@@ -434,30 +392,8 @@
               unavailable: player.unavailable,
               onselect: (key) => player.setCodec(key),
             })}
-            audio={player.audios.length > 1
-              ? audioTracks({
-                  icon: AUDIO,
-                  items: player.audios.map((a) => ({
-                    key: a.id,
-                    label: a.label,
-                    active: a.id === player.audio,
-                  })),
-                  onselect: (key) => player.setAudio(key),
-                })
-              : undefined}
-            subtitle={player.hasCaptions
-              ? subtitles({
-                  icon: CAPTION,
-                  on: player.captions,
-                  tracks: player.captionTracks,
-                  track: player.captionTrack,
-                  languages: player.captionLanguages,
-                  language: player.captionLanguage,
-                  onoff: (on) => player.setCaptions(on),
-                  ontrack: (index) => player.setCaptionTrack(index),
-                  onlanguage: (index) => player.setCaptionLanguage(index),
-                })
-              : undefined}
+            audio={liveAudio(AUDIO, player)}
+            subtitle={liveSubtitle(CAPTION, player)}
           />
         </ControlRow>
       </ControlBar>
@@ -490,10 +426,8 @@
     {#snippet notes()}
       {#if encoded}
         <!--
-                    エンコードが終わった。続きは観る画面で (位置は続き再生が覚えている)。
-                    この先はみな観る画面の話になるので、これだけを出す。
-                    StageNote は押せない表示 (`pointer-events: none`) なので、ここだけ押せるように置く。
-                    見た目の決まりは同じ (角丸で黒の半透明)
+                    エンコードが終わったら、この先はみな観る画面の話なのでこれだけを出す。
+                    StageNote は押せないので、ここだけ押せる形で置く (見た目は同じ)
                 -->
         <span class="encoded" data-testid="chase-encoded">
           <a

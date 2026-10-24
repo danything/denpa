@@ -66,8 +66,9 @@
   import StageTail from "#lib/components/player/StageTail.svelte";
   import {
     audioTracks,
+    muteRow,
     recordingCodecs,
-    speeds,
+    speedRow,
     subtitles,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
@@ -1962,26 +1963,16 @@
             <StageTail
               prefix="watch"
               fold={[
-                {
-                  kind: "toggle" as const,
-                  id: "mute",
-                  label: "消音",
-                  icon: SOUND_OFF,
-                  on: muted,
-                  toggle: toggleMute,
-                },
+                muteRow(SOUND_OFF, muted, toggleMute),
                 ...(compat
                   ? []
                   : [
-                      {
-                        kind: "choice" as const,
-                        ...speeds({
-                          icon: SPEED,
-                          label: "再生の速さ",
-                          speed,
-                          onselect: (value) => setSpeed(value),
-                        }),
-                      },
+                      speedRow({
+                        icon: SPEED,
+                        label: "再生の速さ",
+                        speed,
+                        onselect: (value) => setSpeed(value),
+                      }),
                     ]),
               ]}
               {background}

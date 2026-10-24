@@ -253,3 +253,67 @@ export function speeds(opts: {
     pick: (key) => opts.onselect(Number(key)),
   };
 }
+
+/** 畳んだときの消音の行 (3画面同じ。操作バーの音のボタン) */
+export function muteRow(
+  icon: IconShape,
+  on: boolean,
+  toggle: () => void,
+): SettingRow {
+  return { kind: "toggle", id: "mute", label: "消音", icon, on, toggle };
+}
+
+/** 畳んだときの速さの行 (`speeds`) */
+export function speedRow(opts: Parameters<typeof speeds>[0]): SettingRow {
+  return { kind: "choice", ...speeds(opts) };
+}
+
+/** ライブと追っかけ (`live-player`) の音声と字幕。持っている・選べるときだけ */
+interface LiveTracks {
+  audios: { id: string; label: string }[];
+  audio: string;
+  setAudio: (id: string) => void;
+  hasCaptions: boolean;
+  captions: boolean;
+  captionTracks: { index: number; label: string }[];
+  captionTrack: number;
+  captionLanguages: CaptionLanguage[];
+  captionLanguage: number;
+  setCaptions: (on: boolean) => void;
+  setCaptionTrack: (index: number) => void;
+  setCaptionLanguage: (index: number) => void;
+}
+
+export function liveAudio(
+  icon: IconShape,
+  player: LiveTracks,
+): SettingChoice | undefined {
+  if (player.audios.length < 2) return undefined;
+  return audioTracks({
+    icon,
+    items: player.audios.map((a) => ({
+      key: a.id,
+      label: a.label,
+      active: a.id === player.audio,
+    })),
+    onselect: (key) => player.setAudio(key),
+  });
+}
+
+export function liveSubtitle(
+  icon: IconShape,
+  player: LiveTracks,
+): SettingChoice | undefined {
+  if (!player.hasCaptions) return undefined;
+  return subtitles({
+    icon,
+    on: player.captions,
+    tracks: player.captionTracks,
+    track: player.captionTrack,
+    languages: player.captionLanguages,
+    language: player.captionLanguage,
+    onoff: (on) => player.setCaptions(on),
+    ontrack: (index) => player.setCaptionTrack(index),
+    onlanguage: (index) => player.setCaptionLanguage(index),
+  });
+}
