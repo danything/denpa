@@ -283,6 +283,7 @@ export function sanitizeFileName(input: string): string {
     // 末尾のドット・スペースは Windows が扱えない
     .replace(/[\s.]+$/, "");
   // ext4 のファイル名上限は255バイト。日本語(UTF-8で3バイト)でも収まる長さに切る
-  const limited = cleaned.slice(0, 60).trim();
+  // 文字 (コードポイント) で数える。`slice` だと絵文字などのサロゲートペアを割り、片割れが名前に残る
+  const limited = Array.from(cleaned).slice(0, 60).join("").trim();
   return limited === "" ? "untitled" : limited;
 }

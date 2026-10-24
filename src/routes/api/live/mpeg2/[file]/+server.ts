@@ -18,6 +18,7 @@ import { promisify } from "node:util";
 import { brotliCompress, constants, gzip } from "node:zlib";
 import { error } from "@sveltejs/kit";
 import { config } from "#lib/server/config.js";
+import { etagMatches } from "#lib/server/serve.js";
 import type { RequestHandler } from "./$types";
 
 const TYPES: Record<string, string> = {
@@ -88,7 +89,7 @@ export const GET: RequestHandler = ({ params, request }) => {
     etag: tag,
     vary: "Accept-Encoding",
   };
-  if (request.headers.get("if-none-match") === tag)
+  if (etagMatches(request, tag))
     return new Response(null, { status: 304, headers });
   const accept = request.headers.get("accept-encoding") ?? "";
   const encoding = /\bbr\b/.test(accept)

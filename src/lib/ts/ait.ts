@@ -112,7 +112,7 @@ export function aitPidsFromPmt(section: Uint8Array): number[] {
  * 運ぶアプリ (データ放送と同じ経路) で、Hybridcast の話ではありません
  */
 function transportUrl(body: Uint8Array): string | null {
-  if (body.length < 3) return null;
+  if (body.length < 4) return null;
   if (u16(body, 0) !== PROTOCOL_HTTP) return null;
   // [0..1] protocol_id, [2] transport_protocol_label, [3] URL_base_length
   const baseLength = body[3]!;

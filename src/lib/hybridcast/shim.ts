@@ -473,11 +473,12 @@ export function shim(init: ShimInit): void {
   }
   w.XMLHttpRequest = Xhr;
   // 直に繋ぐもの (WebSocket・EventSource・sendBeacon) は使えない (CSP でも止まる)
-  w.WebSocket = () => {
+  // `new` で呼ばれるので、アロー関数ではなく function で (アローは `new` すると TypeError)
+  w.WebSocket = function () {
     unsupported("WebSocket");
     throw new DOMException("WebSocket は使えません", "SecurityError");
   };
-  w.EventSource = () => {
+  w.EventSource = function () {
     unsupported("EventSource");
     throw new DOMException("EventSource は使えません", "SecurityError");
   };

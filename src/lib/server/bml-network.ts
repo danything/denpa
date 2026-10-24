@@ -97,7 +97,12 @@ if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
  * IPv4 は数で、IPv6 は綴りで見ます。`::ffff:` で始まるものは IPv4 を
  * 被せただけなので、剥がしてから見ないと素通りします
  */
-export function isPublicAddress(address: string): boolean {
+export function isPublicAddress(raw: string): boolean {
+  /*
+   * **IPv6 は先に URL の綴りへ直す** (`0:0:0:0:0:0:0:1` → `::1`、`::ffff:127.0.0.1` → `::ffff:7f00:1`)。
+   * 綴りで見るので、省かない書き方のループバックが素通りしていた
+   */
+  const address = raw.includes(":") ? canonicalV6(raw) : raw;
   /*
    * `::ffff:1.2.3.4` のほかに **16進の綴り (`::ffff:0102:0304`) も受ける** —
    * `new URL()` は括弧の中のドット形をこちらに直すので、ドット形だけ見ていると
@@ -141,6 +146,15 @@ export function isPublicAddress(address: string): boolean {
   if (a === 100 && b >= 64 && b <= 127) return false; // 事業者内 (CGNAT)
   if (a >= 224) return false; // マルチキャストと予約
   return true;
+}
+
+/** IPv6 を `new URL()` と同じ綴りに直す。アドレスとして読めないものはそのまま (繋ぐ所で失敗する) */
+function canonicalV6(address: string): string {
+  try {
+    return new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  } catch {
+    return address;
+  }
 }
 
 /**

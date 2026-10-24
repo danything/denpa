@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import { config } from "#lib/server/config.js";
 import { encodedPath, tsChapters } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
+import { etagMatches } from "#lib/server/serve.js";
 import { run } from "#lib/server/stream.js";
 import { parseChapters } from "#lib/ts/watch.js";
 
@@ -65,11 +66,7 @@ export async function GET({ params, request }) {
   };
   if (tag !== null) {
     headers["ETag"] = tag;
-    // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
-    const asked = (request.headers.get("if-none-match") ?? "")
-      .split(",")
-      .map((t) => t.trim().replace(/^W\//, ""));
-    if (asked.includes(tag))
+    if (etagMatches(request, tag))
       return new Response(null, { status: 304, headers });
   }
 

@@ -309,6 +309,11 @@ describe("sanitizeFileName", () => {
     expect(sanitizeFileName("///")).toBe("untitled");
   });
 
+  test("長い名前は文字で切る (絵文字を割って片割れを残さない)", () => {
+    const name = sanitizeFileName(`${"あ".repeat(59)}🎉🎉`);
+    expect(name).toBe(`${"あ".repeat(59)}🎉`);
+  });
+
   test("全角の英数は半角に寄せる。寄せて取り込んでいた頃のファイル名と同じになる", () => {
     expect(sanitizeFileName("Ｖｅｎｕｅ１０１　ＳＰ／後編")).toBe(
       "Venue101 SP 後編",

@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { error } from "@sveltejs/kit";
 import { fontCacheControl } from "#lib/server/font.js";
+import { etagMatches } from "#lib/server/serve.js";
 import type { RequestHandler } from "./$types";
 
 /** Dockerfile が置く場所 (リリースの woff2 そのまま) */
@@ -39,10 +40,7 @@ export const GET: RequestHandler = ({ request, url }) => {
     "cache-control": fontCacheControl(url.searchParams.get("v"), installed),
     etag: tag,
   };
-  // 前段の proxy が弱い形式 (`W/"…"`) にしたり、いくつも並べたりしても 304 にする
-  const asked = (request.headers.get("if-none-match") ?? "")
-    .split(",")
-    .map((t) => t.trim().replace(/^W\//, ""));
-  if (asked.includes(tag)) return new Response(null, { status: 304, headers });
+  if (etagMatches(request, tag))
+    return new Response(null, { status: 304, headers });
   return new Response(Bun.file(FONT).stream(), { headers });
 };

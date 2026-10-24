@@ -52,6 +52,10 @@ describe("繋いでよいアドレスか", () => {
     expect(isPublicAddress("::ffff:7f00:1")).toBe(false); // 127.0.0.1
     expect(isPublicAddress("::ffff:a01:203")).toBe(false); // 10.1.2.3
     expect(isPublicAddress("::ffff:101:101")).toBe(true); // 1.1.1.1
+    // 省かない書き方も同じ
+    expect(isPublicAddress("0:0:0:0:0:0:0:1")).toBe(false);
+    expect(isPublicAddress("0:0:0:0:0:ffff:7f00:1")).toBe(false);
+    expect(isPublicAddress("FE80:0:0:0:0:0:0:1")).toBe(false);
   });
 
   test("172 は 16〜31 だけが私設", () => {

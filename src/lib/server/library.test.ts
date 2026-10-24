@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 const { config } = await import("./config");
 config.encodedDir = mkdtempSync(join(tmpdir(), "denpa-lib-"));
 
-const { libraryPath, encodedPath, libraryFamily, seriesFolder } =
+const { libraryPath, encodedPath, encodedCodec, libraryFamily, seriesFolder } =
   await import("./library");
 
 /** 2026-08-03 22:30 開始の録画 */
@@ -130,5 +130,13 @@ describe("シリーズのフォルダ名 (一覧の「まとめて表示」も�
     expect(seriesFolder("", "テストアニメ 第3話「出会い」")).toBe(
       "テストアニメ",
     );
+  });
+});
+
+describe("encodedCodec", () => {
+  test("名前からコーデックを見分ける。エンコードしない録画 (元のTS) は mpeg2", () => {
+    expect(encodedCodec("/m/番組/番組 #1.mkv")).toBe("av1");
+    expect(encodedCodec("/m/番組/番組 #1 [H264].mkv")).toBe("h264");
+    expect(encodedCodec("/m/番組/番組 #1.m2ts")).toBe("mpeg2");
   });
 });

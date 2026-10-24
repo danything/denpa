@@ -79,3 +79,13 @@ export function serveFile(
     },
   });
 }
+
+/**
+ * `If-None-Match` がこの ETag に当たるか。前段の proxy が弱い形式 (`W/"…"`) にしたり、
+ * いくつも並べたりしても当たりにする
+ */
+export function etagMatches(request: Request, tag: string): boolean {
+  return (request.headers.get("if-none-match") ?? "")
+    .split(",")
+    .some((t) => t.trim().replace(/^W\//, "") === tag);
+}
