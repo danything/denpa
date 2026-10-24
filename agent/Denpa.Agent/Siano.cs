@@ -303,10 +303,7 @@ public sealed class SianoTuner : ITuneDevice
     {
         get
         {
-            lock (_gate)
-            {
-                return _stream is not null && _child is { Process.HasExited: false };
-            }
+            lock (_gate) return _stream is not null && _child is { Process.HasExited: false };
         }
     }
 

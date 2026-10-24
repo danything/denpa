@@ -1115,10 +1115,7 @@ public sealed class Px4Tuner : ITuneDevice
     {
         get
         {
-            lock (_gate)
-            {
-                return _control is not null && _stream is { Ended: false };
-            }
+            lock (_gate) return _control is not null && _stream is { Ended: false };
         }
     }
 
@@ -1277,12 +1274,7 @@ public sealed class Px4Tuner : ITuneDevice
     }
 
     /// <summary>STOP_STREAM / START_STREAM / RELEASE の中身 (lease だけ)</summary>
-    private byte[] Lease()
-    {
-        var lease = new byte[8];
-        BinaryPrimitives.WriteUInt64LittleEndian(lease, _lease);
-        return lease;
-    }
+    private byte[] Lease() => Px4Control.WithId(_lease);
 
     /// <summary>(流していれば止めて) 合わせて、流し始めて、TS を受け取りにいく</summary>
     private void Run(ChannelTable.Tuning tuning, uint streamId, string? lnb)
@@ -1559,8 +1551,7 @@ internal sealed class Px4Stream
         try
         {
             Px4Control.ConnectWithin(socket, socketPath, TimeSpan.FromSeconds(4), wire);
-            var payload = new byte[8 + nonce.Length];
-            BinaryPrimitives.WriteUInt64LittleEndian(payload, lease);
+            var payload = Px4Control.WithId(lease, 8 + nonce.Length);
             nonce.CopyTo(payload, 8);
             // px4-ts と同じく request_id 0。最初の枠は ATTACH_STREAM でなければならない (HELLO は無い)
             Px4Control.SendAll(socket, Px4Control.Encode(Px4Control.AttachStream, 0, 0, payload, wire));
@@ -1636,10 +1627,8 @@ internal sealed class Px4Stream
                         End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
                         return;
                     }
-                    End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
-                    return;
                 }
-                if (flags != 0 || length < TsHeaderSize)
+                if (type != Px4Control.TsData || flags != 0 || length < TsHeaderSize)
                 {
                     End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
                     return;

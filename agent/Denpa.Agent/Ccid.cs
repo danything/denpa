@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Globalization;
 using System.Text;
 
 namespace Denpa.Agent;
@@ -439,17 +440,14 @@ public static class Ccid
             var dot = name.IndexOf('.', colon + 1);
             if (colon <= 0 || dot < 0 || !int.TryParse(name.AsSpan(colon + 1, dot - colon - 1), out var config)) continue;
             if (UsbSysfs.Read(entry, "bInterfaceClass") != "0b") continue;
-            if (!int.TryParse(UsbSysfs.Read(entry, "bInterfaceNumber"), System.Globalization.NumberStyles.HexNumber, null, out var number))
-            {
-                continue;
-            }
+            if (!int.TryParse(UsbSysfs.Read(entry, "bInterfaceNumber"), NumberStyles.HexNumber, null, out var number)) continue;
 
             var port = name[..colon];
             var device = Path.Combine(sysfs, port);
             if (!int.TryParse(UsbSysfs.Read(device, "busnum"), out var bus)
                 || !int.TryParse(UsbSysfs.Read(device, "devnum"), out var address)
-                || !int.TryParse(UsbSysfs.Read(device, "idVendor"), System.Globalization.NumberStyles.HexNumber, null, out var vendor)
-                || !int.TryParse(UsbSysfs.Read(device, "idProduct"), System.Globalization.NumberStyles.HexNumber, null, out var product))
+                || !int.TryParse(UsbSysfs.Read(device, "idVendor"), NumberStyles.HexNumber, null, out var vendor)
+                || !int.TryParse(UsbSysfs.Read(device, "idProduct"), NumberStyles.HexNumber, null, out var product))
             {
                 continue;
             }

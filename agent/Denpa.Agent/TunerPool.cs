@@ -568,12 +568,7 @@ public sealed class TunerPool(
     {
         get
         {
-            lock (_gate)
-            {
-                return _leases.Values.Any(lease =>
-                    lease.Sinks.Any(sink =>
-                        sink.Use == "rec" || sink.Use.StartsWith("rec ", StringComparison.Ordinal)));
-            }
+            lock (_gate) return _leases.Values.Any(lease => lease.Sinks.Any(sink => sink.Use == "rec" || sink.Use.StartsWith("rec ", StringComparison.Ordinal)));
         }
     }
 
@@ -584,10 +579,7 @@ public sealed class TunerPool(
     /// </summary>
     public IReadOnlyList<string> Descrambling()
     {
-        lock (_gate)
-        {
-            return [.. _leases.Where(pair => pair.Value.Descrambling).OrderBy(pair => pair.Key).Select(pair => Tuners[pair.Key].Name)];
-        }
+        lock (_gate) return [.. _leases.Where(pair => pair.Value.Descrambling).OrderBy(pair => pair.Key).Select(pair => Tuners[pair.Key].Name)];
     }
 
     /// <summary>全部畳む。止めるときに使う</summary>

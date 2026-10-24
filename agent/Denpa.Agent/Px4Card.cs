@@ -113,9 +113,7 @@ public sealed class Px4Card : ICardLink
             return answer[9..];
         }
 
-        var payload = new byte[8];
-        BinaryPrimitives.WriteUInt64LittleEndian(payload, _handle);
-        var atr = _control.Request(Px4Control.CardReset, payload);
+        var atr = _control.Request(Px4Control.CardReset, Px4Control.WithId(_handle));
         if (atr.Length < 1 || atr.Length != 1 + atr[0])
         {
             throw new IOException($"{_daemon} の CARD_RESET の答えが崩れています ({atr.Length} バイト)");
@@ -131,8 +129,7 @@ public sealed class Px4Card : ICardLink
     {
         if (_handle == 0) throw new IOException("カードに繋いでいません (Reset を先に)");
 
-        var payload = new byte[12 + apdu.Length];
-        BinaryPrimitives.WriteUInt64LittleEndian(payload, _handle);
+        var payload = Px4Control.WithId(_handle, 12 + apdu.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8), (uint)apdu.Length);
         apdu.CopyTo(payload.AsSpan(12));
 
@@ -151,9 +148,8 @@ public sealed class Px4Card : ICardLink
         {
             try
             {
-                var payload = new byte[9];
-                BinaryPrimitives.WriteUInt64LittleEndian(payload, _handle);
-                _control.Request(Px4Control.CardDisconnect, payload);
+                // handle と disposition (0 = そのまま)
+                _control.Request(Px4Control.CardDisconnect, Px4Control.WithId(_handle, 9));
             }
             catch (IOException)
             {
