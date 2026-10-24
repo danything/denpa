@@ -791,9 +791,7 @@
 }
 /* 「⋯」の頭の状態。押せない (区切りの線で切り替えと分ける) */
 .board .view-menu .menu-head {
-  margin: 0 0 0.25rem;
-  padding: 0 0 0.25rem;
-  border-bottom: 1px solid var(--dp-line);
+  margin: 0 0 0.5rem;
 }
 .board .view-menu .menu-head .side-list {
   padding: 0;

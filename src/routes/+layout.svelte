@@ -898,9 +898,7 @@
     padding: 0;
   }
   .more-extra {
-    margin-top: 0.25rem;
-    padding-top: 0.25rem;
-    border-top: 1px solid var(--dp-line);
+    margin-top: 0.5rem;
   }
   ul.more-list a[aria-current="page"] {
     color: var(--dp-primary-text);

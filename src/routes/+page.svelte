@@ -1047,10 +1047,9 @@
   .menu-form {
     display: contents;
   }
-  /* 押せない項目のすぐ下に出す理由 (CM検出をやり直せないわけ)。項目と同じ字下げで、次の項目と線で分ける */
+  /* 押せない項目のすぐ下に出す理由 (CM検出をやり直せないわけ)。項目と同じ字下げで、次の項目とは余白で分ける */
   .menu-note {
-    padding: 0.4rem 0.6rem;
-    border-bottom: 1px solid var(--dp-line);
+    padding: 0.25rem 0.6rem 0.5rem;
     white-space: nowrap;
   }
 </style>

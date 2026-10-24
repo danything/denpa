@@ -1369,6 +1369,11 @@ button.text-button:hover {
     overlay var(--dp-duration) allow-discrete,
     display var(--dp-duration) allow-discrete;
 }
+/* メニューの中のまとまりは線ではなく余白で分ける (docs/design.md の「浮かぶもの」) */
+.menu hr {
+  margin: 0.25rem 0;
+  border: 0;
+}
 .menu[data-align="end"] {
   transform-origin: top right;
 }

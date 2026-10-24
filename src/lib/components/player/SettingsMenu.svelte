@@ -260,7 +260,6 @@
   .split {
     margin: 0.25rem 0;
     border: 0;
-    border-top: 1px solid var(--dp-line);
   }
   .setting {
     padding: 0.5rem 0.75rem;

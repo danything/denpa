@@ -428,8 +428,7 @@
   }
   .suggest-group + .suggest-group,
   .suggest-all {
-    margin-top: var(--dp-space-1);
-    border-top: 1px solid var(--dp-line);
+    margin-top: var(--dp-space-2);
   }
   .suggest-title {
     padding: var(--dp-space-2) var(--dp-space-3) var(--dp-space-1);
