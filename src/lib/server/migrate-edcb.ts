@@ -574,13 +574,24 @@ function ruleLabel(rule: EdcbRule): string {
   return keyword === "" ? `#${rule.id}` : `#${rule.id} ${keyword}`;
 }
 
-/** ルールを入れる。取り込み済みは `source` (`edcb:<ID>`) で見分けて飛ばす */
+/**
+ * 同じ鍵のものを1つにまとめる (先に出たほうを残す)。同じ `source` を2回数えると、下見では2件、
+ * 取り込みでは1件 (2件目は入らない) になって件数が食い違う
+ */
+function firstBy<T>(list: readonly T[], keyOf: (item: T) => string): T[] {
+  const seen = new Map<string, T>();
+  for (const item of list)
+    if (!seen.has(keyOf(item))) seen.set(keyOf(item), item);
+  return [...seen.values()];
+}
+
+/** ルールを入れる。取り込み済みは `source` (`edcb:<ID>`) で見分けて飛ばす。同じ ID の行は先のものだけ */
 export function importEdcbRules(
   list: EdcbRule[],
   options: MigrateOptions,
 ): void {
   const tally = counts().rules;
-  for (const rule of list) {
+  for (const rule of firstBy(list, (item) => String(item.id))) {
     const source = `edcb:${rule.id}`;
     if (ruleImported(source)) {
       tally.skipped++;
@@ -749,7 +760,7 @@ export function importEdcbHistory(
     });
   }
 
-  for (const entry of entries) {
+  for (const entry of firstBy(entries, (item) => item.source)) {
     if ([entry.source, ...entry.others].some(historyImported)) {
       tally.skipped++;
       continue;

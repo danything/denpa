@@ -826,6 +826,23 @@ describe("取り込み", () => {
     expect(orm().select().from(recordedHistory).all()).toHaveLength(3);
   });
 
+  test("同じ局・同じ開始の行が2つあっても、下見と取り込みで件数がそろう", async () => {
+    const start = Date.UTC(2026, 8, 1, 12, 0, 0);
+    const recInfo2 = parseRecInfo2(
+      [
+        recInfo2Line("テスト番組 #1", start),
+        recInfo2Line("テスト番組 #1", start),
+      ].join("\n"),
+    );
+    const previewed = await within(() =>
+      importEdcbHistory(recInfo2, [], preview),
+    );
+    const applied = await within(() => importEdcbHistory(recInfo2, [], apply));
+    expect(previewed.history).toEqual({ imported: 1, skipped: 0 });
+    expect(applied.history).toEqual(previewed.history);
+    expect(orm().select().from(recordedHistory).all()).toHaveLength(1);
+  });
+
   test("フォルダから通しで。Setting を中に持つフォルダを指しても、名前の大小が違っても読む", async () => {
     const edcb = join(root, "EDCB");
     const setting = join(edcb, "Setting");
