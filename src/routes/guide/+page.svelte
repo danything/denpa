@@ -239,7 +239,8 @@
       group.cells.push({
         key: cell.key,
         program: cell.program,
-        style: `grid-column: ${cell.column - group.first + 1} / span ${cell.span}; grid-row: ${from + 1} / span ${span}; --lines: ${lines(span)};`,
+        // `--s` / `--e` は番組の頭と尻のマスの位置 (端数つき)。過ぎた所を暗くするのに使う (`.program::before`)
+        style: `grid-column: ${cell.column - group.first + 1} / span ${cell.span}; grid-row: ${from + 1} / span ${span}; --lines: ${lines(span)}; --s: ${(cell.start_at - data.start) / SLOT}; --e: ${(cell.end_at - data.start) / SLOT};`,
       });
     }
     return groups;
@@ -356,6 +357,13 @@
     clock >= data.start && clock < data.start + data.hours * HOUR
       ? (clock - data.start) / SLOT
       : null,
+  );
+  /**
+   * **過ぎた所を暗くする位置** (表の頭から何マスぶん。マスの `--s` / `--e` と比べる。`.program::before`)。
+   * 前の日は全部、先の日は何も暗くしないよう、表の外は端の外へ寄せる。2,000 を超えるマスを毎分書き直さないよう、表に 1 つだけ持つ
+   */
+  const elapsedSlots = $derived(
+    Math.min(Math.max((clock - data.start) / SLOT, -1), slots + 1),
   );
 
   let grid = $state<HTMLElement | null>(null);
@@ -977,7 +985,7 @@
         -->
       <div
         class="rows"
-        style="grid-template-columns: {TIME_COLUMN} repeat({columns.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, {SLOT_HEIGHT}); width: calc({TIME_COLUMN} + {columns.length} * 11rem); min-width: 100%;"
+        style="grid-template-columns: {TIME_COLUMN} repeat({columns.length}, minmax(11rem, 1fr)); grid-template-rows: auto repeat({slots}, {SLOT_HEIGHT}); width: calc({TIME_COLUMN} + {columns.length} * 11rem); min-width: 100%; --now: {elapsedSlots};"
         data-testid="guide-rows"
         data-highlight={highlight}
       >
@@ -1114,7 +1122,12 @@
                   >
                     <span class="clamp">
                       <span class="title">
-                        <span class="num">{time(program.start_at)}</span>
+                        <!-- 時は左の時の列にあるので、目に見えるのは分だけ (読み上げには時まで渡す) -->
+                        <span class="num"
+                          ><span class="visually-hidden"
+                            >{time(program.start_at).slice(0, 3)}</span
+                          >{time(program.start_at).slice(3)}</span
+                        >
                         <span class={program.name ? "broadcast" : "faint"}
                           >{program.name || "(番組情報なし)"}</span
                         >
@@ -1609,7 +1622,7 @@
     position: sticky;
     display: block;
   }
-  /* 「いま」の線 (`NowLine`)。時の列 (`.hour`) より上に。1 分ごとの移りを飛ばさずに (上の `nowSlots`) */
+  /* 「いま」の時刻 (`NowLine`)。時の列 (`.hour`) より上に。1 分ごとの移りを飛ばさずに (上の `nowSlots`) */
   .rows :global(.now) {
     z-index: 10;
     transition: translate var(--dp-duration) var(--dp-ease);
@@ -1682,6 +1695,27 @@
     text-align: left;
     font-weight: var(--dp-weight);
     line-height: normal;
+  }
+  /*
+     * **放送が過ぎた所は、マスの上から暗くしていく** (赤い線を表に引く代わり)。終わった番組はマス全体、放送中の番組は頭からいまの位置まで。
+     * 割合は表の `--now` とマスの `--s` / `--e` から CSS だけで出す (毎分書き直すのは表の 1 つだけ)。
+     * 覆いは字の下に敷く (`isolation` の中で `z-index: -1`)。字は読めたまま、面だけが沈む
+     */
+  .program {
+    position: relative;
+    isolation: isolate;
+  }
+  .program::before {
+    --past: clamp(0, (var(--now) - var(--s)) / (var(--e) - var(--s)), 1);
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: -1;
+    height: calc(var(--past) * 100%);
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--dp-bg) 55%, transparent);
+    pointer-events: none;
+    transition: height var(--dp-duration-move) var(--dp-ease);
   }
   :global([data-theme="dark"]) :is(.program, .swatch) {
     --wash: 14%;
