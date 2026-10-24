@@ -256,7 +256,7 @@
   .pane {
     display: contents;
   }
-  /* 畳んだものといつもの行の境目。線は面の線の色で、上下を少し空ける */
+  /* 畳んだものといつもの行の境目。線は引かず、上下を空ける */
   .split {
     margin: 0.25rem 0;
     border: 0;
@@ -292,9 +292,7 @@
     color: var(--dp-muted);
   }
   .back {
-    border-bottom: 1px solid var(--dp-line);
-    border-radius: 0;
-    margin-bottom: 0.125rem;
+    margin-bottom: 0.375rem;
   }
   /* 選択肢の左に、選んでいる印の幅を取っておく (選んだものだけずれないように) */
   .mark {

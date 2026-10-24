@@ -1336,7 +1336,9 @@ button.text-button:hover {
   min-width: max(10rem, anchor-size(width));
   max-height: 100%;
   overflow-y: auto;
-  padding: 0.25rem;
+  /* 項目の角は面の角から内側の余白を引いた丸み (入れ子。下の `.menu-item`) */
+  --menu-pad: 0.25rem;
+  padding: var(--menu-pad);
   border-radius: var(--dp-radius-lg);
   /* 選んでいる項目の地もメニューの面に合わせる (暗いほうは面より明るいので、ふつうの --dp-hover だと沈む) */
   --dp-hover: var(--dp-pop-hover);
@@ -1424,7 +1426,7 @@ button.text-button:hover {
   margin: 0;
   padding: 0.4rem 0.6rem;
   border: 0;
-  border-radius: var(--dp-radius-sm);
+  border-radius: calc(var(--dp-radius-lg) - var(--menu-pad, 0.25rem));
   box-shadow: none;
   background: transparent;
   color: inherit;
@@ -1465,7 +1467,8 @@ button.text-button:hover {
   gap: 0.125rem;
   width: max-content;
   max-width: min(20rem, 90vw);
-  padding: 0.5rem;
+  --menu-pad: 0.5rem;
+  padding: var(--menu-pad);
   border: 0;
   background: var(--dp-video-menu);
   box-shadow:

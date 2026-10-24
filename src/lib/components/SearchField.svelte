@@ -442,7 +442,8 @@
     gap: var(--dp-space-3);
     min-height: 2.5rem;
     padding: var(--dp-space-1) var(--dp-space-3);
-    border-radius: var(--dp-radius-sm);
+    /* 箱の角から内側の余白を引いた丸み (入れ子) */
+    border-radius: calc(var(--dp-radius-lg) - var(--dp-space-1));
     cursor: pointer;
   }
   .suggest-option.active {
