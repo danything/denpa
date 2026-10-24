@@ -1844,6 +1844,19 @@ dialog[open] > article {
   background: transparent;
   box-shadow: none;
 }
+/*
+ * **広い画面では窓ごと巻く一覧の横で、ヘッダーの下に貼り付けて動かさない。** 高さはいつも窓の残りいっぱい (下端の `.side-foot` が窓の下に付く) で、あふれたらサイドバーの中で巻き取る
+ * (スクロールバーはヘッダーの下から始まる)。高さは小さく見積もった窓 (`svh`) で測る。`dvh` は実機で窓より高く出たことがあり (`+layout.svelte`)、
+ * 下の行が窓の外に出たまま届かなくなる。使う側は列を main の下の余白の外まで伸ばし、下端を窓の下端にそろえる
+ */
+@media (min-width: 768px) {
+  .side-panel {
+    position: sticky;
+    top: var(--dp-header-space, 0px);
+    align-self: start;
+    height: calc(100svh - var(--dp-header-space, 0px));
+  }
+}
 /* グループの見出し。リンクのときも見出しの顔のまま (設定) */
 .side-label {
   display: flex;

@@ -20,22 +20,12 @@
   let main = $state<HTMLElement>();
   let jumpRow = $state<HTMLElement>();
 
-  const WIDE = "(min-width: 768px)";
-
   /**
-   * **巻き取るのは広い画面では右の列、狭い画面では window。** 広い画面ではページごとは動かさない
-   * (`+layout.svelte` の `.shell.fill`)
+   * **グループを移ったら頭に戻す。** 巻き取るのはどの幅でも window (`+layout.svelte` の `FILLED` に入れない)。
+   * 頭へは SvelteKit も戻すが、節へ滑らかに巻く設定 (下の `scroll-behavior`) のせいで、前のグループの下から頭まで巻く途中が見える。
+   * 戻る・進むはブラウザが前の位置へ帰すので触らない。`#<節>` 付きで来たらその節へ (飛ぶ途中を見せても意味が無いので、ここも滑らかにしない)
    */
-  function scroller(): HTMLElement | null {
-    return matchMedia(WIDE).matches ? (main ?? null) : null;
-  }
-
-  /**
-   * **グループを移ったら右の列を頭に戻す。** 広い画面では window ではなく右の列が巻き取るので、
-   * ブラウザのスクロールの戻し方が効かず、前のグループで下まで巻いた位置のまま次の画面が出ていた。
-   * `#<節>` 付きで来たらその節へ (飛ぶ途中を見せても意味が無いので、ここは滑らかにしない)
-   */
-  afterNavigate(({ from, to }) => {
+  afterNavigate(({ from, to, type }) => {
     if (main === undefined) return;
     let hash = decodeURIComponent(to?.url.hash.slice(1) ?? "");
     // なくなった節 (`#logos`) で来たら、入った先の節へ。URL も書き換えて、そのまま共有されても迷わせない
@@ -45,12 +35,12 @@
     if (alias !== undefined) {
       hash = alias;
       replaceState(`#${alias}`, page.state);
-    } else if (from?.url.pathname === to?.url.pathname) {
+    } else if (from?.url.pathname === to?.url.pathname || type === "popstate") {
       return;
     }
     const target = hash === "" ? null : document.getElementById(hash);
     if (target === null) {
-      main.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: "instant" });
       active = group?.sections[0]?.slug ?? null;
     } else {
       pin(target);
@@ -104,12 +94,11 @@
     if (main === undefined) return;
     const parts = [...main.querySelectorAll<HTMLElement>("[data-part]")];
     if (parts.length === 0) return;
-    const root = scroller();
     const seen = new Set<string>();
 
     const pick = () => {
       if (jumping !== undefined) return;
-      const box = root ?? document.documentElement;
+      const box = document.documentElement;
       const bottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
       if (bottom && box.scrollTop > 0) {
         active = parts.at(-1)!.id;
@@ -119,6 +108,15 @@
       if (first !== undefined) active = first.id;
     };
 
+    /*
+     * 上に重なるものの下から数える。広い画面は浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ)、
+     * 狭い画面は節の行 (とヘッダー)。rootMargin は px か % だけ (rem は投げる)
+     */
+    const cover = matchMedia("(min-width: 768px)").matches
+      ? (Number.parseFloat(
+          getComputedStyle(document.documentElement).scrollPaddingTop,
+        ) || 0) + 16
+      : (jumpRow?.getBoundingClientRect().bottom ?? 0) + 8;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -127,21 +125,13 @@
         }
         pick();
       },
-      /*
-       * 狭い画面は上に節の行 (とヘッダー) が重なるので、その下から数える。
-       * rootMargin は px か % だけ (rem は投げる)
-       */
-      {
-        root,
-        rootMargin: `-${root === null ? Math.round(jumpRow?.getBoundingClientRect().bottom ?? 0) + 8 : 16}px 0px -55% 0px`,
-      },
+      { rootMargin: `-${Math.round(cover)}px 0px -55% 0px` },
     );
     for (const part of parts) observer.observe(part);
-    const target = root ?? window;
-    target.addEventListener("scroll", pick, { passive: true });
+    window.addEventListener("scroll", pick, { passive: true });
     return () => {
       observer.disconnect();
-      target.removeEventListener("scroll", pick);
+      window.removeEventListener("scroll", pick);
     };
   });
 </script>
@@ -152,7 +142,7 @@
     巻いていくと左の一覧で見えている節に印が付く。並びは `#lib/settings-sections.ts`。
 
     **横に並べはじめる幅は全画面で 768px** ([+layout.svelte](../+layout.svelte) の `FILLED`)。
-    並べたらページごとは動かさず、左右がそれぞれ自分で巻き取る。左の列は画面の左端とヘッダーの下に付け、
+    並べたらページごと巻き、左の一覧はヘッダーの下に貼り付けて動かさない (あふれたら一覧の中で巻き取る)。左の列は画面の左端に付け、
     右とは線で分けない (地は同じで、右の列を真ん中に寄せた余白で分かれる)。
 
     **狭い画面では一覧と中身を切り替える。** `/settings` はグループの一覧だけ、押すとその画面と「← 設定」、
@@ -240,16 +230,14 @@
 
 <style>
   /*
-     * **広い画面では main の余白の外まで広げる。** 左の列は画面の左端とヘッダーの下に付け、
-     * 高さは画面の残りいっぱい (`+layout.svelte` の `.shell.fill`)
+     * **広い画面では左右と下を main の余白の外まで広げる。** 左の列は画面の左端に付けてヘッダーの下に貼り付け、
+     * 高さは窓の残りまで (`app.css` の `.side-panel`)。右の中身は窓ごと巻き、浮いたヘッダーの裏を流れる
      */
   @media (min-width: 768px) {
     .page {
       display: grid;
       grid-template-columns: 14rem minmax(0, 1fr);
-      height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
-      margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
-        calc(-1 * var(--dp-gutter));
+      margin: 0 calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
     }
   }
   @media (min-width: 1280px) {
@@ -327,15 +315,8 @@
   .main {
     min-width: 0;
   }
-  @media (min-width: 768px) {
-    .main {
-      min-height: 0;
-      overflow-y: auto;
-    }
-  }
   /* 節を押したら滑らかに巻く。動かさない設定の端末ではそのまま飛ぶ */
   @media (prefers-reduced-motion: no-preference) {
-    .main,
     :global(html:has(.settings-page)) {
       scroll-behavior: smooth;
     }
@@ -356,13 +337,14 @@
   }
   @media (min-width: 768px) {
     .main-inner {
-      padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
+      padding: 0 var(--dp-gutter) var(--dp-gutter);
     }
   }
   /*
      * **節どうしは線を引かず、上下にたっぷりの余白で区切る** (左の一覧のグループの境目と同じ考え。カードにはしない)。
      * 節の中の行の間より目に見えて空ける。飛んだ先が見出しの上にぴったり付くよう、
-     * 巻き取りの余白を取る (広い画面は浮いたヘッダーの下、狭い画面はヘッダーと節の行の下)
+     * 巻き取りの余白を取る (広い画面は浮いたヘッダーの下。ヘッダーのぶんは `html` の `scroll-padding-top` が持つので、ここは間の余白だけ。
+     * 狭い画面はヘッダーと節の行の下)
      */
   .main-inner :global([data-part] + [data-part]) {
     margin-top: var(--dp-space-4);

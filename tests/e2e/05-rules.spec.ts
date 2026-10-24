@@ -126,11 +126,10 @@ test.describe("ルールの一覧", () => {
   });
 
   /**
-   * **広い画面では一覧だけが巻き取る** (ホームと同じ。`+layout.svelte` の `FILLED`)。窓はスクロールせず、
-   * サイドバーは右端に高さいっぱいで止まり、「ルールを作る」はその下端に残る。
-   * ページごと動かしていた頃は、窓とサイドバーにスクロールバーが2本出ていた
+   * **広い画面ではページごとスクロールする** (ホームと同じ。`+layout.svelte` の `FILLED` に入れない)。行は浮いたヘッダーの裏を流れ、
+   * サイドバーは右端でヘッダーの下に貼り付いて動かず、「ルールを作る」はその下端に残る
    */
-  test("広い画面では一覧だけがスクロールし、サイドバーは動かない", async ({
+  test("広い画面ではページごとスクロールし、サイドバーは動かない", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
@@ -138,35 +137,35 @@ test.describe("ルールの一覧", () => {
     await goto(page, "/rules");
     await expect(page.getByTestId("rule-row")).toHaveCount(14);
 
-    const list = page.getByTestId("rule-list");
     const doc = await page.evaluate(() => ({
       scrollH: document.documentElement.scrollHeight,
       innerH: innerHeight,
     }));
-    expect(doc.scrollH, "窓が縦に流れる").toBeLessThanOrEqual(doc.innerH);
-    expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(
-      true,
-    );
-    await list.evaluate((el) => (el.scrollTop = 200));
-    await expect
-      .poll(() => list.evaluate((el) => el.scrollTop))
-      .toBeGreaterThan(0);
-    expect(await page.evaluate(() => scrollY)).toBe(0);
+    expect(doc.scrollH, "窓が縦に流れる").toBeGreaterThan(doc.innerH);
+    await page.evaluate(() => window.scrollTo(0, 200));
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
 
-    // サイドバーは右端に付き、下端に「ルールを作る」。一覧を下ろしても見えたまま
+    // サイドバーは右端でヘッダーの下に付き、下端に「ルールを作る」。一覧を下ろしても見えたまま
     const side = await page.getByTestId("rule-sidebar").boundingBox();
-    expect(Math.round((side?.x ?? 0) + (side?.width ?? 0))).toBe(1366);
+    const edge = await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      header: Number.parseFloat(
+        getComputedStyle(document.documentElement).scrollPaddingTop,
+      ),
+    }));
+    expect(Math.round((side?.x ?? 0) + (side?.width ?? 0))).toBe(edge.width);
+    expect(Math.round(side?.y ?? 0)).toBe(Math.round(edge.header));
     expect(Math.round((side?.y ?? 0) + (side?.height ?? 0))).toBe(768);
     await expect(page.getByTestId("rule-new")).toBeInViewport({ ratio: 1 });
 
     // 絞り込みを替えても (当たる行が同じなら) 見ていた所から跳ばない
-    const before = await list.evaluate((el) => el.scrollTop);
+    const before = await page.evaluate(() => scrollY);
     await page.getByTestId("rule-filter-on").click();
     await expect(page.getByTestId("rule-filter-on")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(await list.evaluate((el) => el.scrollTop)).toBe(before);
+    expect(await page.evaluate(() => scrollY)).toBe(before);
 
     await clearRules(page);
   });

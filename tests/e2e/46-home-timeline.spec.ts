@@ -220,17 +220,17 @@ test.describe("ホームの1本の一覧", () => {
 
         // 開いたときに、録画中の行 (とバーの先の時刻) が見えている
         const seen = await page.getByTestId("timeline").evaluate((list) => {
-          const box =
-            getComputedStyle(list).overflowY === "auto"
-              ? list.getBoundingClientRect()
-              : {
-                  top: 0,
-                  bottom:
-                    window.innerHeight -
-                    (document.querySelector<HTMLElement>(
-                      '[data-testid="tabbar"]',
-                    )?.offsetHeight ?? 0),
-                };
+          // 窓の見えている所 (浮いたヘッダーの下から下のタブの上まで)
+          const box = {
+            top:
+              Number.parseFloat(
+                getComputedStyle(document.documentElement).scrollPaddingTop,
+              ) || 0,
+            bottom:
+              window.innerHeight -
+              (document.querySelector<HTMLElement>('[data-testid="tabbar"]')
+                ?.offsetHeight ?? 0),
+          };
           const inside = (node: Element | null) => {
             const rect = node?.getBoundingClientRect();
             return (
@@ -520,11 +520,15 @@ test.describe("ホームの1本の一覧", () => {
         const row = [...list.querySelectorAll<HTMLElement>("[data-key]")].find(
           (r) => (r.textContent ?? "").includes(name),
         );
+        // 浮いたヘッダーの下から 80px ほどの所に置く (ページごと巻く)
+        const header =
+          Number.parseFloat(
+            getComputedStyle(document.documentElement).scrollPaddingTop,
+          ) || 0;
         if (row)
-          list.scrollTop +=
-            row.getBoundingClientRect().top -
-            list.getBoundingClientRect().top -
-            80;
+          window.scrollTo({
+            top: window.scrollY + row.getBoundingClientRect().top - header - 80,
+          });
       }, "ずれ試験15");
       const before = (await target.boundingBox())!.y;
 
@@ -545,7 +549,7 @@ test.describe("ホームの1本の一覧", () => {
 
   /*
    * **古い録画は一覧の頭に足し、足しても読んでいる所は動かない。** 録れたものは線の側 (新しいほう) から
-   * 描き、頭の「残り N 件」が見えたら古いほうを上へ足す。一覧の枠は位置合わせを自分でするので
+   * 描き、頭の「残り N 件」が見えたら古いほうを上へ足す。広い画面ではページの位置合わせを自分でするので
    * (`overflow-anchor: none`)、何もしないと足したぶん中身が下へずれる
    */
   test("古い録画は上へ足し、足しても見ていた行は動かない", async ({
@@ -579,17 +583,14 @@ test.describe("ホームの1本の一覧", () => {
       await expect(more).toBeVisible();
       const list = page.getByTestId("timeline");
       // 開いたときは線のあたり (頭の印は画面の外)
-      await expect
-        .poll(() => list.evaluate((node) => node.scrollTop))
-        .toBeGreaterThan(0);
+      await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
       // 描いているうちでいちばん古い行を覚え、頭まで戻して印を画面に入れる。戻した直後の行の高さを覚えておく
       const first = list.locator("[data-key]").first();
       const key = await first.getAttribute("data-key");
       const count = await rows(page).count();
       const y = await first.evaluate((row) => {
-        const box = row.closest<HTMLElement>('[data-testid="timeline"]')!;
-        const at = row.getBoundingClientRect().top + box.scrollTop;
-        box.scrollTop = 0;
+        const at = row.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: 0 });
         return at;
       });
       await expect.poll(() => rows(page).count()).toBeGreaterThan(count);
@@ -748,14 +749,8 @@ test.describe("ホームの1本の一覧", () => {
           );
           return today.evaluate((node, key) => {
             const list = node.closest<HTMLElement>('[data-testid="timeline"]')!;
-            const box =
-              getComputedStyle(list).overflowY === "auto" ? list : null;
-            const top =
-              box === null
-                ? Number.parseFloat(getComputedStyle(node).top) || 0
-                : // 頭は箱の内側の余白の下 (浮いたヘッダーのぶん空けてある)
-                  box.getBoundingClientRect().top +
-                  Number.parseFloat(getComputedStyle(box).paddingTop);
+            // 見出しが貼り付く線 (広い画面は浮いたヘッダーの下端)
+            const top = Number.parseFloat(getComputedStyle(node).top) || 0;
             const head = node.getBoundingClientRect();
             const line = [
               ...list.querySelectorAll<HTMLElement>("[data-key]"),
@@ -867,14 +862,10 @@ test.describe("ホームの1本の一覧", () => {
         await expect(head).toBeInViewport();
         await expect(oldest).toBeInViewport();
         // 見出しは一覧の頭にあり、カレンダーはその日を頭の日として塗る
-        const top = await page
-          .getByTestId("timeline")
-          // 頭は一覧の内側の余白の下 (浮いたヘッダーのぶん空けてある)
-          .evaluate(
-            (list) =>
-              list.getBoundingClientRect().top +
-              Number.parseFloat(getComputedStyle(list).paddingTop),
-          );
+        // 頭は見出しが貼り付く線 (浮いたヘッダーの下端)
+        const top = await head.evaluate(
+          (node) => Number.parseFloat(getComputedStyle(node).top) || 0,
+        );
         expect(Math.abs((await head.boundingBox())!.y - top)).toBeLessThan(2);
         await expect(cell).toHaveClass(/pinned/);
         // 行の無い日 (いちばん古い日の前の日) は押せない

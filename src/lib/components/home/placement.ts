@@ -3,23 +3,9 @@
  *
  * **観終えていない録画があれば、いちばん古いものを映す** — 溜まったぶんを古い順に片付けられるように。
  * 無ければ「いま」の線。どれを映すかと、描いていない所 (60 件より先) を描かせるのは呼ぶ側
- * (`#lib/timeline.ts` の `catchUp`・`Paged.showUpTo`)。ここは描き終えた一覧を送るだけ
+ * (`#lib/timeline.ts` の `catchUp`・`Paged.showUpTo`)。ここは描き終えた一覧を送るだけ。
+ * どの幅でもページごとスクロールする (`home.css`) ので、送るのは window
  */
-
-/** 広い画面は一覧の枠が、狭い画面はページごとスクロールする */
-function scroller(list: HTMLElement): HTMLElement | null {
-  return getComputedStyle(list).overflowY === "auto" ? list : null;
-}
-
-/**
- * 枠の見えている所の上端。**枠の頭の内側の余白の下** (広い画面は浮いたヘッダーのぶん空けてあり、その裏は見えていない扱い)
- */
-function boxTop(box: HTMLElement): number {
-  return (
-    box.getBoundingClientRect().top +
-    (Number.parseFloat(getComputedStyle(box).paddingTop) || 0)
-  );
-}
 
 /**
  * 一覧の頭の1行。**上に貼り付いているときだけ**返す (スマホでは下のタブの上に貼り付くので、上には被さらない)
@@ -50,27 +36,6 @@ function bottomCover(): number {
   return tab + below;
 }
 
-/** 一覧の上に被さるもの (上に貼り付いた頭の1行・日付の見出し) の高さ */
-function coverOf(): number {
-  return (topBar()?.offsetHeight ?? 0) + 32;
-}
-
-/** 要素の上端が、見えている所の上から `offset` の位置に来るよう送る */
-function scrollToTop(
-  list: HTMLElement,
-  element: HTMLElement,
-  offset: number,
-): void {
-  const box = scroller(list);
-  if (box !== null) {
-    box.scrollTop += element.getBoundingClientRect().top - boxTop(box) - offset;
-  } else {
-    window.scrollTo({
-      top: window.scrollY + element.getBoundingClientRect().top - offset,
-    });
-  }
-}
-
 /**
  * 開いたときの位置に送る。線を見えている所の 7 割ほどの高さに置き (上に新しい録画、下に次の予約が入る)、
  * `target` (映したい録画の行の鍵) があって線のままでは見えなければ、その行が上の端 (貼り付いた日付の見出しの下)
@@ -79,26 +44,20 @@ function scrollToTop(
 export function placeTimeline(list: HTMLElement, target: string | null): void {
   const now = list.querySelector<HTMLElement>('[data-testid="timeline-now"]');
   if (now === null) return;
-  const box = scroller(list);
-  const height =
-    box !== null
-      ? box.getBoundingClientRect().bottom - boxTop(box)
-      : window.innerHeight;
-  const cover = coverOf();
-  // 見えている所の高さ (狭い画面は下のタブと頭の1行が下に被さる)
-  const view = height - cover - (box === null ? bottomCover() : 0);
-  /*
-   * **線がもう見えている (上から 4 割より下で、下に被さるものより上) なら動かさない。**
-   * 録れたものが少ないと線は頭の近くにあり、7 割まで下げる余地が無い
-   */
-  const lineTop =
-    now.getBoundingClientRect().top - (box !== null ? boxTop(box) : 0);
-  if (lineTop < cover + view * 0.4 || lineTop > cover + view - now.offsetHeight)
-    scrollToTop(list, now, cover + view * 0.7);
   // 貼り付いた日付の見出しの下端。行はその少し下に置く (`alignTop` が見出しの裏へ送らないように)
   const line =
     topEdge(list) +
     (list.querySelector<HTMLElement>(".t-day")?.offsetHeight ?? 32);
+  const bottom = window.innerHeight - bottomCover();
+  // 見えている所の高さ (上はヘッダー・頭の1行・見出し、狭い画面は下のタブと頭の1行が被さる)
+  const view = bottom - line;
+  /*
+   * **線がもう見えている (上から 4 割より下で、下に被さるものより上) なら動かさない。**
+   * 録れたものが少ないと線は頭の近くにあり、7 割まで下げる余地が無い
+   */
+  const lineTop = now.getBoundingClientRect().top - line;
+  if (lineTop < view * 0.4 || lineTop > view - now.offsetHeight)
+    scrollPage(lineTop - view * 0.7);
   /*
    * **録画中の行は線のすぐ上にいるので、線と一緒に映す。** 何本も録っていて頭が見出しの裏に入るなら、
    * 線が下の端に掛からない範囲で戻す
@@ -106,12 +65,8 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
   const live = list.querySelector<HTMLElement>(".t-row.live");
   if (live !== null) {
     const short = line + 8 - live.getBoundingClientRect().top;
-    const bottom =
-      box !== null
-        ? box.getBoundingClientRect().bottom
-        : window.innerHeight - bottomCover();
     const room = bottom - now.getBoundingClientRect().bottom;
-    if (short > 0 && room > 0) scrollBy(list, -Math.min(short, room));
+    if (short > 0 && room > 0) scrollPage(-Math.min(short, room));
   }
   const row =
     target === null
@@ -119,28 +74,29 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
       : (list.querySelector<HTMLElement>(`[data-key="${target}"]`) ??
         list.querySelector<HTMLElement>(`[data-group-rows~="${target}"]`));
   if (row !== null) {
-    if (row.getBoundingClientRect().top < line) {
-      scrollToTop(list, row, line + 8 - (box !== null ? boxTop(box) : 0));
-    }
+    const top = row.getBoundingClientRect().top;
+    if (top < line) scrollPage(top - line - 8);
   }
   alignTop(list);
 }
 
-/** 一覧の見えている所の上端 (広い画面は枠の上、狭い画面は貼り付いた頭の段の下) */
+/**
+ * 一覧の見えている所の上端。上に貼り付いた頭の段があればその下、無ければ日付の見出しが貼り付く線
+ * (広い画面は浮いたヘッダーの下端、スマホは上の安全域の下)。どちらも貼り付いたときの位置で数える
+ * (巻き始めは少し下にいるが、送り先はいつも貼り付いた位置で決める)
+ */
 function topEdge(list: HTMLElement): number {
-  const box = scroller(list);
-  if (box !== null) return boxTop(box);
   const bar = topBar();
-  if (bar !== null) return bar.getBoundingClientRect().bottom;
-  // 上に被さるものが無いときは、日付の見出しが貼り付く線 (上の安全域の下)
+  if (bar !== null)
+    return (
+      (Number.parseFloat(getComputedStyle(bar).top) || 0) + bar.offsetHeight
+    );
   const day = list.querySelector<HTMLElement>(".t-day");
   return day === null ? 0 : Number.parseFloat(getComputedStyle(day).top) || 0;
 }
 
-function scrollBy(list: HTMLElement, delta: number): void {
-  const box = scroller(list);
-  if (box !== null) box.scrollTop += delta;
-  else window.scrollTo({ top: window.scrollY + delta });
+function scrollPage(delta: number): void {
+  window.scrollTo({ top: window.scrollY + delta });
 }
 
 /**
@@ -155,7 +111,7 @@ export function alignTop(list: HTMLElement): void {
   for (const heading of list.querySelectorAll<HTMLElement>(".t-day")) {
     const box = heading.getBoundingClientRect();
     if (box.top < top - 0.5 && box.bottom > top + 0.5) {
-      scrollBy(list, box.bottom - top);
+      scrollPage(box.bottom - top);
       break;
     }
   }
@@ -171,7 +127,7 @@ export function alignTop(list: HTMLElement): void {
   )) {
     const box = row.getBoundingClientRect();
     if (box.top < line - 0.5 && box.bottom > line + 0.5) {
-      scrollBy(list, box.bottom - line);
+      scrollPage(box.bottom - line);
       return;
     }
   }
@@ -209,16 +165,14 @@ export function restoreRow(list: HTMLElement, anchor: Anchor | null): boolean {
     placeTimeline(list, null);
     return false;
   }
-  scrollBy(
-    list,
-    row.getBoundingClientRect().top - topEdge(list) - anchor.offset,
-  );
+  scrollPage(row.getBoundingClientRect().top - topEdge(list) - anchor.offset);
   return true;
 }
 
 /**
  * **上へ行を足しても、読んでいる所を動かさない。** 足す前に呼び、足して描き終えたら返り値を呼ぶ。
- * 一覧の枠は位置合わせを自分でする (`overflow-anchor: none`) ので、何もしないと足したぶん中身が下へずれる。
+ * 広い画面ではブラウザの位置合わせを切ってある (`home.css` の `overflow-anchor: none`) ので、何もしないと足したぶん中身が下へずれる。
+ * スマホではブラウザが先に合わせることもあるが、残ったずれを測って送るので二重には動かない。
  * 物差しは `key` の行 (無ければ「いま」の線)。足すのはいつもそれより上なので、ずれたぶんだけ送り直せばよい
  */
 export function holdPlace(
@@ -234,7 +188,7 @@ export function holdPlace(
   const before = mark?.getBoundingClientRect().top ?? 0;
   return () => {
     if (mark === null || !mark.isConnected) return;
-    scrollBy(list, mark.getBoundingClientRect().top - before);
+    scrollPage(mark.getBoundingClientRect().top - before);
   };
 }
 
@@ -265,6 +219,6 @@ export function showDay(list: HTMLElement, day: number): boolean {
     )
     ?.closest<HTMLElement>(".t-block");
   if (block === null || block === undefined) return false;
-  scrollBy(list, block.getBoundingClientRect().top - topEdge(list));
+  scrollPage(block.getBoundingClientRect().top - topEdge(list));
   return true;
 }

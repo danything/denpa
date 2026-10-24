@@ -801,8 +801,8 @@
     margin-inline: auto;
   }
   /*
-     * **広い画面では右に書く欄の列** (`RuleDraft`)。列は main の余白の外まで出して、画面の右端と
-     * ヘッダーの下に付ける。結果は残りの幅の真ん中 (48rem まで)
+     * **広い画面では右に書く欄の列** (`RuleDraft`)。列は右と下を main の余白の外まで出して画面の右端に付け、
+     * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごと巻いて浮いたヘッダーの裏を流れる
      */
   @media (min-width: 1024px) {
     .search-layout.drafting {
@@ -810,11 +810,11 @@
       grid-template-columns: minmax(0, 1fr) 25rem;
       align-items: start;
       gap: var(--dp-gutter);
-      margin-block: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter));
+      margin-block-end: calc(-1 * var(--dp-gutter));
       margin-inline-end: calc(-1 * var(--dp-gutter));
     }
     .drafting > .search-page {
-      padding-block: var(--dp-page-top) var(--dp-gutter);
+      padding-bottom: var(--dp-gutter);
     }
     .sheet-bar {
       display: none;

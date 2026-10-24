@@ -90,7 +90,8 @@ test.describe("PWA", () => {
   test("二段組の画面はページごとスクロールしない", async ({ page }) => {
     for (const width of [768, 915, 1280]) {
       await page.setViewportSize({ width, height: 700 });
-      for (const path of ["/", "/guide", "/rules"]) {
+      // 一覧の画面 (録画・ルール) はページごと巻く (`+layout.svelte` の `FILLED`)。自分で巻き取るのは番組表と映像の画面
+      for (const path of ["/guide"]) {
         await goto(page, path);
         const doc = await page.evaluate(() => {
           const root = document.querySelector("[data-root]") as HTMLElement;

@@ -614,11 +614,11 @@
     .draft {
       position: sticky;
       background: var(--dp-bg);
-      top: 3.5rem;
-      height: calc(100dvh - 3.5rem);
+      top: var(--dp-header-space, 0px);
+      height: calc(100svh - var(--dp-header-space, 0px));
       overflow-y: auto;
-      /* 上は画面の頭の余白 (`--dp-page-top`)。最初の行を左の結果やほかの画面とそろえる */
-      padding-top: var(--dp-page-top);
+      /* ほかのサイドバーと同じく、ヘッダーの下に貼り付けて高さは窓の残りまで (`app.css` の `.side-panel`)。上は空けず、最初の行を左の結果とそろえる */
+      padding-top: 0;
     }
     .close {
       display: none;

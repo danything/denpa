@@ -303,9 +303,9 @@
 /*
  * ---- 1本の時間軸 ----
  *
- * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧が自分で巻き取る**
- * (番組表・設定・観る画面と同じ。`+layout.svelte` の `FILLED`)。頭の1行 (絞り込みのチップ・まとめ・「⋯」) は一覧の上に置く。
- * 狭い画面はページごとスクロールし、頭の1行だけ上に貼り付く
+ * **どの幅でもページごとスクロールする** (`+layout.svelte` の `FILLED` に入れない)。広い画面では行が浮いたヘッダーの裏を流れ、
+ * スクロールバーは窓の右端に出る。頭の1行 (絞り込みのチップ・まとめ・「⋯」) と日付の見出しは上に貼り付く。
+ * 広い画面 (768px 以上) では左右と下を main の余白の外まで広げ、右のサイドバーを窓の右端と下端に付ける
  */
 .board {
   display: flex;
@@ -313,9 +313,14 @@
 }
 @media (min-width: 768px) {
   .board {
-    height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
-    margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
-      calc(-1 * var(--dp-gutter));
+    margin: 0 calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
+  }
+  /*
+   * 足した行で読んでいる所が動かないように、位置合わせは自分でする (開いたときの `place`・`holdPlace`)。
+   * ブラウザにも合わせさせると、字が届いて行の高さが変わったときに窓が先に動き、自分で巻いたと見なして合わせ直さなくなる
+   */
+  html:has(.board) {
+    overflow-anchor: none;
   }
 }
 .board .t-main {
@@ -330,9 +335,6 @@
 }
 @media (min-width: 768px) {
   .board .t-list {
-    overflow-y: auto;
-    /* 足した行で読んでいる所が動かないように、位置合わせは自分でする (開いたときの `place`) */
-    overflow-anchor: none;
     padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
   }
 }
@@ -401,7 +403,7 @@
   align-items: baseline;
   gap: 0.5rem;
   margin: 0;
-  /* 上の余白は画面の頭の余白 (`--dp-page-top`) と同じ。いちばん上の見出しがほかの画面の最初の行とそろう */
+  /* スマホでは上の余白を画面の頭の余白 (`--dp-page-top`) と同じにする。いちばん上の見出しがほかの画面の最初の行とそろう (ヘッダーが浮く幅は下) */
   padding: var(--dp-page-top, 0.875rem) 0.5rem 0.25rem;
   background: var(--dp-bg);
   color: var(--dp-muted);
@@ -414,10 +416,28 @@
 .board .t-day-date {
   font-weight: var(--dp-weight);
 }
-/* タブレットの縦 (640〜767px) は頭の1行が上にあるので、その下に貼り付く */
-@media (min-width: 640px) and (max-width: 767px) {
+/*
+ * **ヘッダーが浮いている幅 (640px 以上) では、ヘッダーの下端 (`--dp-header-bottom`) に貼り付ける。** 間を空けると、
+ * 細い隙間に行が透けて見える。見出しと頭の1行は地の色で塗るので、行が透けて見えるのはヘッダーの裏だけ
+ * (docs/design.md の「地・件の面・操作の層」の 2 番)。
+ * 頭の1行 (1000px まで) はヘッダーとの間 (0.5rem) も地で埋め、そのぶん上へ出す。置かれた位置のまま、巻いても動かずに貼り付く。
+ * 見出しはその下。頭の空きは main が持つので、見出しの上は詰める
+ */
+@media (min-width: 640px) {
+  .board .t-toolbar {
+    top: var(--dp-header-bottom);
+    height: 3.25rem;
+    margin-top: -0.5rem;
+    border-top: 0.5rem solid var(--dp-bg);
+  }
   .board .t-day {
-    top: 2.75rem;
+    top: calc(var(--dp-header-bottom) + 3.25rem);
+    padding-top: 0.25rem;
+  }
+}
+@media (min-width: 1000px) {
+  .board .t-day {
+    top: var(--dp-header-bottom);
   }
 }
 /*
@@ -698,7 +718,6 @@
 }
 @media (min-width: 768px) {
   .board .t-toolbar {
-    position: static;
     gap: 0.75rem;
     padding: 0.5rem var(--dp-gutter) 0.25rem;
   }
@@ -739,7 +758,7 @@
 
 /*
  * ---- 右のサイドバー (`HomeAside`) ----
- * 1000px 以上。右の端まで寄せ、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (件の面と余白で分かれる)。
+ * 1000px 以上。右の端まで寄せてヘッダーの下に貼り付き、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (件の面と余白で分かれる)。
  * 形は `app.css` のサイドバーの部品 (`.side-panel` など)。ここは幅と、出すかどうかだけ。この幅では頭の1行は出さず、一覧はいちばん上から始まる
  */
 .board .t-side {
@@ -917,15 +936,6 @@
   transform: translateX(-50%);
 }
 
-/*
- * 広い画面の一覧は浮いたヘッダーの下から始まる (`+layout.svelte` の `.shell.fill`)。
- * 日付の見出しは巻き取る箱の頭に貼り付く
- */
-@media (min-width: 768px) {
-  .board .t-day {
-    padding-top: 0.25rem;
-  }
-}
 /* 狭い画面: 頭の1行も操作の層。下のタブの上に、同じ半透明のカプセルで浮かせる (縁の線は引かない) */
 @media (max-width: 639.98px) {
   .board .t-toolbar {

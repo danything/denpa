@@ -552,15 +552,11 @@
     placeTimeline(list, target?.key ?? null);
     // 字 (放送の字は後から届く) とポスターで行の高さが変わると、映した行がずれ、見出しの下で行が半分に切れる。
     // 届いてから、映した行 (無ければ線) を元の高さに戻して合わせ直す。その間に自分で動かしていたら触らない (動かした所を奪わない)
-    const where = () =>
-      getComputedStyle(list).overflowY === "auto"
-        ? list.scrollTop
-        : window.scrollY;
-    const before = where();
+    const before = window.scrollY;
     const restore = holdPlace(list, target?.key ?? null);
     await document.fonts.ready;
     requestAnimationFrame(() => {
-      if (Math.abs(where() - before) < 1) {
+      if (Math.abs(window.scrollY - before) < 1) {
         restore();
         alignTop(list);
       }
@@ -572,7 +568,7 @@
   /**
    * **絞り込みを替えても、見ていた行をその場に残す。** 替える前に見えている所のいちばん上の行を覚え、
    * 替えたあともその行があれば同じ高さに戻す (無くなっていれば「いま」の線)。
-   * 絞り込みは画面の中だけで替える (URL も読み込みも動かさない)。一覧の枠は位置合わせを自分でする
+   * 絞り込みは画面の中だけで替える (URL も読み込みも動かさない)。広い画面はページの位置合わせを自分でする
    * (`overflow-anchor: none`) ので、何もしないと「すべて」に戻したとき頭まで跳んでいた
    */
   let filtering: Promise<void> = Promise.resolve();
@@ -691,8 +687,8 @@
   });
 </script>
 
-<!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
-<svelte:window onclick={deleting.stand} />
+<!-- 聞き返しは他所を触ったら取り下げる (`stand`)。巻いたらカレンダーの頭の日を読み直す (`trackPinned`) -->
+<svelte:window onclick={deleting.stand} onscroll={trackPinned} />
 
 <!--
     「その他…」の中の、送るだけの項目。**閉じるのは送り終わってから** (`done`) — 先に閉じると、
@@ -748,7 +744,6 @@
     <section
       class="t-list"
       bind:this={listBox}
-      onscroll={trackPinned}
       aria-label="予約と録画"
       data-testid="timeline"
     >

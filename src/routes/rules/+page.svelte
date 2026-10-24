@@ -343,10 +343,9 @@
 
 <style>
   /*
-     * **広い画面 (768px 以上) では main の余白の外まで広げ、一覧が自分で巻き取る** (ホームと同じ。
-     * `+layout.svelte` の `FILLED`)。窓はスクロールしない。1000px からは右にサイドバーを置き、画面の右端と
-     * ヘッダーの下に付けて高さいっぱいに伸ばす (中身があふれたときだけサイドバーの中で巻き取る)。
-     * 狭い画面はページごとスクロールする
+     * **どの幅でもページごとスクロールする** (ホームと同じ。`+layout.svelte` の `FILLED` に入れない)。広い画面では行が
+     * 浮いたヘッダーの裏を流れる。768px からは左右と下を main の余白の外まで広げ、1000px からは右にサイドバーを置いて
+     * 窓の右端に付け、ヘッダーの下に貼り付ける (中身があふれたときだけサイドバーの中で巻き取る。`app.css` の `.side-panel`)
      */
   .rules-board {
     display: flex;
@@ -361,32 +360,34 @@
   }
   @media (min-width: 768px) {
     .rules-board {
-      height: calc(100% + var(--dp-page-top) + var(--dp-gutter));
-      margin: calc(-1 * var(--dp-page-top)) calc(-1 * var(--dp-gutter))
-        calc(-1 * var(--dp-gutter));
+      margin: 0 calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
       gap: 0;
     }
     .rules-list {
-      flex: 1 1 0%;
-      min-height: 0;
-      overflow-y: auto;
-      padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
+      padding: 0 var(--dp-gutter) var(--dp-gutter);
     }
   }
-  /* 768〜999px は細い帯が一覧の上。帯は動かず、その下の一覧だけが巻き取る */
+  /*
+     * 768〜999px は細い帯が一覧の上。ヘッダーの下端に貼り付け、行はその裏を流れる (地の色で塗る)。
+     * ヘッダーとの間 (0.5rem) も帯で埋め、そのぶん上へ出す。置かれた位置のまま、巻いても動かずに貼り付く
+     */
   @media (min-width: 768px) and (max-width: 999.98px) {
     .rules-bar {
-      padding: var(--dp-page-top) var(--dp-gutter) 0;
+      position: sticky;
+      top: var(--dp-header-bottom);
+      z-index: 5;
+      margin-top: -0.5rem;
+      padding: 0.5rem var(--dp-gutter);
+      background: var(--dp-bg);
     }
     .rules-list {
-      padding-top: var(--dp-space-3);
+      padding-top: calc(var(--dp-space-3) - 0.5rem);
     }
   }
   @media (min-width: 1000px) {
     .rules-board {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 20rem;
-      grid-template-rows: minmax(0, 1fr);
     }
     .rules-side {
       display: flex;

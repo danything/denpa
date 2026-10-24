@@ -158,12 +158,21 @@ async function toggleGrouped(page: Page): Promise<void> {
   await (await homeTools(page)).getByTestId("recordings-group-toggle").click();
 }
 
-/** その要素が一覧の見えている所 (枠の中) に全部入っているか */
+/** その要素が窓の見えている所 (浮いたヘッダーの下から下のタブの上まで) に全部入っているか */
 async function inView(page: Page, selector: string): Promise<boolean> {
   return await page.getByTestId("timeline").evaluate((list, selector) => {
     const target = list.querySelector(selector);
     if (target === null) return false;
-    const box = list.getBoundingClientRect();
+    const box = {
+      top:
+        Number.parseFloat(
+          getComputedStyle(document.documentElement).scrollPaddingTop,
+        ) || 0,
+      bottom:
+        window.innerHeight -
+        (document.querySelector<HTMLElement>('[data-testid="tabbar"]')
+          ?.offsetHeight ?? 0),
+    };
     const rect = target.getBoundingClientRect();
     return rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1;
   }, selector);
