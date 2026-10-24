@@ -1563,10 +1563,10 @@
      * つかんで動かす・ホイール・キー・指では今までどおり動く
      */
   @media (min-width: 768px) {
+    /* 帯の面 (`app.css` の `.guide-bar::before`) を中に閉じ込め、マスより手前に置く */
     .guide-bar {
-      position: relative;
       z-index: 1;
-      background: var(--dp-float);
+      isolation: isolate;
     }
     .grid-box {
       margin-top: calc(-1 * var(--guide-head));
@@ -1578,13 +1578,9 @@
     .rows {
       margin-top: var(--guide-head);
     }
-    /*
-         * 操作の1行もヘッダーと同じく、上端では平ら、マスが裏に入ると面が出る。影は付けない
-         * (すぐ下の局名の行と1枚の面に見せる。影は局名の行から落とす)
-         */
+    /* 操作の1行の角丸の帯もヘッダーと同じく、上端では見せず、マスが裏に入ると出る */
     @supports (animation-timeline: scroll()) {
-      .guide-bar {
-        background: transparent;
+      .guide-bar::before {
         animation: bar-float linear both;
         animation-timeline: --guide;
         animation-range: 0 1.5rem;
@@ -1593,10 +1589,10 @@
   }
   @keyframes bar-float {
     from {
-      background: transparent;
+      opacity: 0;
     }
     to {
-      background: var(--dp-float);
+      opacity: 1;
     }
   }
   /*
