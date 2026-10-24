@@ -309,11 +309,14 @@ test.describe("ホームと画面遷移", () => {
     // ブラウザの枠の色 (theme-color) もテーマの地に合わせる
     const toolbar = page.locator('meta[name="theme-color"]');
     await expect(toolbar).toHaveAttribute("content", "#0b0c0f");
+    // ブラウザが描く部品 (プルダウンの一覧など) も暗くする
+    await expect(html).toHaveCSS("color-scheme", "dark");
 
     await toggle.click();
     await expect(html).toHaveAttribute("data-theme", "light");
     await expect(toggle).toHaveAttribute("data-mode", "light");
     await expect(toolbar).toHaveAttribute("content", "#ffffff");
+    await expect(html).toHaveCSS("color-scheme", "light");
 
     // 明示した設定は再読み込みしても残る(ちらつかないようハイドレーション前に当てている)
     await goto(page, "/guide");

@@ -214,6 +214,7 @@
  */
 :root:not([data-theme="dark"]),
 [data-theme="light"] {
+  color-scheme: light;
   --pico-background-color: #fff;
   --dp-bg: #fff;
   --dp-surface: #fff;
@@ -261,6 +262,8 @@
      * 青みはわずかに残す (真っ黒の灰色より、主の色の azure と馴染む)。
      * 段は地 → 面 → 淡い面 → 線 → 押せるものの縁の順に、ほぼ等しく明るくする
      */
+  /* ブラウザが描く部品 (プルダウンの開いた一覧・スクロールバー・日付の選び方) も暗くする。無いと白い一覧に淡い字が出て読めない */
+  color-scheme: dark;
   --pico-background-color: #0b0c0f; /* 地 (theme-color と同じ) */
   --dp-sweep: rgb(255 255 255 / 0.06);
   --dp-bg: #0b0c0f;
