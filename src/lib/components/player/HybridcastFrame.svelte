@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { resolve } from "$app/paths";
   /**
    * Hybridcast のアプリを映像の上に開く ([docs/stream.md](../../../../docs/stream.md#hybridcast))。
    * 開くのはデータ放送が起動を求めたとき (`DataBroadcast` の `hybridcast`)。
@@ -12,6 +11,8 @@
    * - 受信機の記憶はアプリごとに分けて覚える (`storageKey`)
    * - データ放送の Greg と NVRAM を写して渡し、書かれたら戻す (`broadcast`・`onwrite`。`#lib/hybridcast/compat.ts`)
    */
+
+  import { resolve } from "$app/paths";
   import { onDestroy } from "svelte";
 
   import type { Service } from "#lib/bml/engine.js";
