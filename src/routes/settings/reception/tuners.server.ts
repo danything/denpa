@@ -8,6 +8,7 @@ import { cardStatus } from "#lib/server/scramble.js";
 import {
   type AgentTuner,
   putTuners,
+  recordingOf,
   type TunerConfig,
   tunerList,
 } from "#lib/server/tuner.js";
@@ -28,12 +29,12 @@ interface TunerUser {
  * 番組名はここで引き直す。
  */
 function describe(use: string): string {
-  const recording = use.match(/^rec (\d+)$/);
+  const recording = recordingOf(use);
   if (recording !== null) {
     const row = orm()
       .select({ name: recordings.name })
       .from(recordings)
-      .where(eq(recordings.id, Number(recording[1])))
+      .where(eq(recordings.id, recording))
       .get();
     return row === undefined ? "録画" : `録画: ${row.name}`;
   }
@@ -188,7 +189,7 @@ export const actions = {
     return await save(tuners);
   },
 
-  /** 定義を消して自動検出に戻す。刺さっている機材をエージェントが自分で見つける */
+  /** 定義を消して自動検出に戻す。挿さっている機材をエージェントが自分で見つける */
   tunersAuto: () => save([]),
 } satisfies Actions;
 

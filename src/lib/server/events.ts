@@ -15,7 +15,7 @@ export type DenpaEvent =
   | "migrate"
   | "scan"
   | "services"
-  /** 番組表が増えた・書き換わった。1チャンネル集め終わるたびに飛ぶ */
+  /** 番組表が増えた・書き換わった。書くたびに飛ぶ (集めている間は読めたぶんを30秒ごとに書く。`epg-collect.collectChannel`) */
   | "programs"
   /** 局ロゴを取得している最中の進み具合。1チャンネルに数分かかる */
   | "logos"

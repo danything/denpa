@@ -1,12 +1,12 @@
 /**
  * 字幕 (ライブ・録画)。**映像と同じ ffmpeg から放送の字幕をそのまま受け取り、denpa がデコードして
- * 「字の配置」にして配る** ([caption-text.ts](../caption-text.ts))。描くのは受け側。
+ * 「文字の配置」にして配る** ([caption-text.ts](../caption-text.ts))。描くのは受け側。
  *
  *     エージェント (MPEG-TS) → ffmpeg ┬→ fMP4 (映像・音声)              → WebSocket → MSE
  *                                     └→ mkv  (字幕そのまま S_ARIBSUB)  → デコードする (ts/b24caption.ts)
  *                                                                        → WebSocket (0x22 JSON) → canvas
  *
- * 放送に画像は流れてこない — 乗っているのは文字と「どこに・どの大きさで・何色で」という
+ * 放送に画像は流れてこない — 入っているのは文字と「どこに・どの大きさで・何色で」という
  * 指定で、テレビはそれを見て毎回自分で描いている。**置き場所を決めるところまではサーバで、
  * 描くのは受け側で。** 画面の画素で描けるので全画面でも字が粗くならず、
  * 配る量は数百バイト/枚、サーバは画像を描かない (実測は docs/stream.md#字幕)。
@@ -40,7 +40,7 @@ import { B24CaptionDecoder, isManagement } from "#lib/ts/b24caption.js";
 import { type MkvFrame, MkvSplitter } from "#lib/ts/mkv.js";
 import { CLOCK } from "#lib/ts/pes.js";
 
-/** 失敗を言っている行。**それ以外は入り口の説明なので捨てる** */
+/** 失敗を言っている行。**それ以外は入口の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;
 
 /**
@@ -70,7 +70,7 @@ export function worthLogging(line: string): boolean {
  *
  * @param from ffmpeg に渡す局の指定 (`0:p:<局>` か `0`)
  * @param track その局の中で何本目の字幕を出すか。**言語が複数ある放送**では
- *   2本以上乗っている (`TrackList`)
+ *   2本以上入っている (`TrackList`)
  */
 export function captionOutput(from: string, track: number): string[] {
   return [

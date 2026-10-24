@@ -36,9 +36,9 @@ import { run } from "./stream";
  * 覚え方と当て方は [logo-detect.ts](../ts/logo-detect.ts)。ここはコマを抜いて渡すところと、
  * 覚えたものの置き場です。
  *
- * 1. **覚える** — キーフレームだけ散らして抜き (`-skip_frame nokey`。全部を復号しないので速い)、
+ * 1. **覚える** — キーフレームだけ散らして抜き (`-skip_frame nokey`。全部をデコードしないので速い)、
  *    上下の帯で線の向きを足し合わせて在り処を割り出す。局のぶんを覚えていれば飛ばす
- * 2. **当てる** — ロゴの枠を CM 検出の1回の復号 (`cm-scan.ts`) で全部のコマから切り出してもらい、
+ * 2. **当てる** — ロゴの枠を CM 検出の1回のデコード (`cm-scan.ts`) で全部のコマから切り出してもらい、
  *    点を付けて区間にする。ついでに散らしたコマを足して、覚えたものを育てる
  *
  * 覚えたものは局ごとの入れ物に、コマの大きさごとに置く (`logo-data.logoRepo`・`modelFile`)。
@@ -155,7 +155,7 @@ async function learn(
       config.ffmpeg,
       "-v",
       "error",
-      // キーフレームしか復号しない。散らして見るだけなので全部は要らない
+      // キーフレームしかデコードしない。散らして見るだけなので全部は要らない
       "-skip_frame",
       "nokey",
       "-i",
@@ -198,7 +198,7 @@ async function learn(
   return { frameWidth: width, frameHeight: height, rect, orientation };
 }
 
-/** 当てる段。CM 検出の復号に枠を渡し、届いたコマに点を付ける */
+/** 当てる段。CM 検出のデコードに枠を渡し、届いたコマに点を付ける */
 interface Tracker {
   scan: ScanLogo;
   /** 届いたコマから区間を出す (コマ番号) */
@@ -251,7 +251,7 @@ function tracker(model: LogoModel, video: Video): Tracker | string {
 export interface LogoResult {
   /** 0 で当たった。それ以外はロゴを使わずに決める */
   code: number;
-  /** ロゴの出ていた区間 (コマ番号。CM 検出の復号の `times` と同じ並び) */
+  /** ロゴの出ていた区間 (コマ番号。CM 検出のデコードの `times` と同じ並び) */
   spans: Span[];
   /** コマごとの点 (同じ並び)。境目でロゴが替わったかを見る (`cm-decide`) */
   scores: Float32Array;
@@ -266,7 +266,7 @@ export interface LogoResult {
 
 /**
  * ロゴの判定を始める。覚えていれば読み、無ければこの録画から覚える。
- * `scan()` を CM 検出の復号に渡し、読み終えたら `finish` を呼ぶ。復号をやり直すとき (エンコードの
+ * `scan()` を CM 検出のデコードに渡し、読み終えたら `finish` を呼ぶ。デコードをやり直すとき (エンコードの
  * 再エンコード) は `scan()` をもう一度呼ぶ — 点は読むたびに一から数える
  */
 export async function openLogo(

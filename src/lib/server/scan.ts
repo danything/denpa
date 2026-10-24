@@ -228,7 +228,7 @@ let running: Scanner | null = null;
 
 function push(
   line?: string,
-  counts: { scanned?: number; channels?: number; skipped?: number } = {},
+  counts: Omit<Progress, "line"> = {},
   fields: Partial<ScanState> = {},
 ): void {
   current = {
@@ -293,7 +293,7 @@ class Scanner {
     /*
      * **種別をまたいで1つの列にする。**
      *
-     * 種別ごとに順に回していた頃は、地上波を50ch 撃ち終わるまで衛星に
+     * 種別ごとに順に回していた頃は、地上波を50ch 回し終わるまで衛星に
      * 行かなかった。使うチューナーが別なので、待たせている間ずっと
      * 衛星のチューナーが遊んでいる。1つの列を全チューナーで引けば同時に進む
      */
@@ -532,7 +532,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
         }
       } catch (error) {
         console.warn(
-          `[scan] スキャン中に拾った番組表を書けませんでした: ${error}`,
+          `[scan] スキャン中に取得した番組表を書けませんでした: ${error}`,
         );
       }
     }

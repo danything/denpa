@@ -30,12 +30,12 @@ export function sidecarPaths(videoPath: string): {
   };
 }
 
-/** 付き添いの名前の土台 (動画の拡張子を落としたもの) */
+/** サイドカーの名前の土台 (動画の拡張子を落としたもの) */
 function sidecarBase(videoPath: string): string {
   return videoPath.slice(0, videoPath.length - extname(videoPath).length);
 }
 
-/** 付き添いの接尾辞。片付けと孤児探し (files.ts) はこの一覧で見る。増やすときはここだけ */
+/** サイドカーの接尾辞。片付けと孤児探し (files.ts) はこの一覧で見る。増やすときはここだけ */
 export const SIDECAR_SUFFIXES = ["-poster.jpg", ".bml.jsonl"] as const;
 
 /**
@@ -98,7 +98,7 @@ export function buildThumbnailArgs(
 /**
  * サムネをどこから取るか。**`cm` の時刻は全部、入れ物 (元のTS) の頭からの秒** (CM 検出と同じ物差し)。
  *
- * エンコードしたもの (AV1) を復号し直さず、元のTS (MPEG-2/H.264) から取る — AV1 のソフトウェア復号は
+ * エンコードしたもの (AV1) をデコードし直さず、元のTS (MPEG-2/H.264) から取る — AV1 のソフトウェアデコードは
  * 数百コマでも重い。選ぶコマはエンコードしたものから取っていた頃と同じ:
  *
  * - **CM を切った** (`kept`) … エンコードしたものの頭から `thumbnailPosition` 秒 (短ければ尺の1/3) の所。
@@ -170,7 +170,7 @@ export async function writeThumbnail(
   await run([config.ffmpeg, ...args]);
 }
 
-/** 動画と一緒に、隣の付き添いを全部消す。取り残すと片付かないゴミになる */
+/** 動画と一緒に、隣のサイドカーを全部消す。取り残すと片付かないゴミになる */
 export function removeSidecars(videoPath: string | null): void {
   if (videoPath === null || videoPath === "") return;
   const base = sidecarBase(videoPath);

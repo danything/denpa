@@ -213,7 +213,7 @@ export function recordingUse(id: number): StreamUse {
 
 /**
  * 録画の利用者 (`recordingUse`) なら、その録画ID。**どの録画がどのチューナーにいるか**を
- * エージェントの一覧から読むのに使う (`recordingHolds`)
+ * エージェントの一覧から読む (`recordingHolds`) のと、設定の「チューナー」に録画の名前を出すのに使う
  */
 export function recordingOf(use: string): number | null {
   const found = /^rec (\d+)$/.exec(use);

@@ -20,7 +20,7 @@ import { run } from "./stream";
  *
  * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
  * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** 方式 (QSV / VA-API) ×
- * コーデックの4通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は設定画面の
+ * コーデックの4通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は
  * 設定の「エンコード」に出て、使えるものは自動で使う (コーデックごとのエンコーダ。`settings().hwAllow` と
  * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は予備** — 同じ GPU なら速さは
  * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
@@ -452,7 +452,7 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 }
 
 /**
- * デバイスごとの一言。「QSV: H.264 / AV1、VA-API: H.264 (CQP)」か「エンコードできません」。
+ * デバイスごとの一言。「QSV: H.264 / AV1、VA-API: H.264 (CQP)」か「GPU でエンコードできません」。
  * ICQ を持たないドライバで CQP に落としたものには (CQP) を添え、デコードから GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */

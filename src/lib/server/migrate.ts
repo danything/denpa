@@ -1,6 +1,7 @@
 /**
- * EPGStation の録画を denpa に引き継ぐ。EDCB からの引き継ぎ (`migrate-edcb.ts`) も、進み具合と
- * 記録はここのもの ({@link status}・{@link record}・{@link track}) を使う。
+ * EPGStation の録画・録画の履歴・ルール・手動予約を denpa に引き継ぐ。EDCB からの引き継ぎ (`migrate-edcb.ts`) も、
+ * 進み具合と記録 ({@link status}・{@link record}・{@link track}) と、ルール・履歴の入れ方 ({@link insertRule}・
+ * {@link addHistory}・{@link SlotWindows}) はここのものを使う。
  *
  * 数百GBのコピーになるので、リクエストの中では終わらない。開始だけ受けて
  * 裏で進め、進捗は {@link status} から読む。入口は設定画面だけ
@@ -32,6 +33,7 @@ import { parseSearchFields, SEARCH_FIELDS } from "#lib/search.js";
 import { array, number, read } from "#lib/shape.js";
 
 import { toHalfWidth } from "../fold";
+import type { Slot } from "../rule-time";
 import type { Recording } from "../types";
 import { config } from "./config";
 import { now, orm } from "./db";
@@ -54,7 +56,7 @@ const env = (key: string, fallback: string) => process.env[key] ?? fallback;
  * EPGStation の MariaDB。**繋ぐのは bun 自身** (`Bun.SQL`)。
  *
  * `mysql2` を入れていたが、bun が MySQL を話せるので外した。使っているのは
- * **引数の無い SELECT を3本と、開いて閉じるだけ** — そのために依存を1つ
+ * **引数の無い SELECT (と `SHOW TABLES`) を数本と、開いて閉じるだけ** — そのために依存を1つ
  * 抱える理由が無い。
  *
  * 読むだけで、書き込みはしない ([migrate.md](../../../docs/migrate.md))。
@@ -167,6 +169,15 @@ export function record(message: string): void {
   status_.log.push(message);
   if (status_.log.length > LOG_LIMIT)
     status_.log.splice(0, status_.log.length - LOG_LIMIT);
+}
+
+/** 入れるもの1件を記録に残す。下見なら `(予定)` を付ける */
+export function recordPlan(
+  options: MigrateOptions,
+  label: string,
+  name: string,
+): void {
+  record(`${options.apply ? label : `${label}(予定)`}: ${name}`);
 }
 
 export interface Row {
@@ -363,8 +374,11 @@ export async function importOne(
 
   // 番組名は EPGStation が持っていたまま (半角に寄せない。保存先の名前は `sanitizeFileName` が寄せる)
   const name = row.name;
-  const verb = existing === undefined ? "取り込む" : "取り込み直す";
-  record(`${options.apply ? verb : `${verb}(予定)`}: ${name}`);
+  recordPlan(
+    options,
+    existing === undefined ? "取り込む" : "取り込み直す",
+    name,
+  );
   if (!options.apply) return "imported";
 
   const parsed = parseTitle(name);
@@ -508,7 +522,7 @@ export function ruleImported(source: string): boolean {
 }
 
 /** 同じく、もう取り込んだ録画の履歴か (`recorded_history.source`) */
-export function historyImported(source: string): boolean {
+function historyImported(source: string): boolean {
   return (
     orm()
       .select({ id: recordedHistory.id })
@@ -516,6 +530,69 @@ export function historyImported(source: string): boolean {
       .where(eq(recordedHistory.source, source))
       .get() !== undefined
   );
+}
+
+/**
+ * 局の内部ID (`tuner.serviceKey`) で denpa の局を引く。知らない局なら undefined。
+ * EPGStation のチャンネルIDは内部IDと作り方が同じなのでそのまま、EDCB は ONID・SID から作って渡す
+ */
+export function serviceById(
+  id: number,
+): { id: number; name: string } | undefined {
+  return orm()
+    .select({ id: services.id, name: services.name })
+    .from(services)
+    .where(eq(services.id, id))
+    .get();
+}
+
+/**
+ * 引き継いだルールを入れる。**優先度は 1** (引き継ぎ元の優先度は比べる相手が違う)。
+ * エンコードの設定は写さない — エンコードもCMも全体設定で、エンコードするときに読む
+ */
+export function insertRule(
+  values: Omit<typeof rules.$inferInsert, "priority" | "source" | "created_at">,
+  source: string,
+): void {
+  orm()
+    .insert(rules)
+    .values({ ...values, priority: 1, source, created_at: now() })
+    .run();
+}
+
+/**
+ * 録画の履歴を1件入れる。**`sources` のどれかで取り込み済みなら飛ばす** (入れるときの `source` は先頭)。
+ * 局の名前は denpa の局から引き、知らない局なら引き継ぎ元の名前 (`serviceName`) を写す。
+ * 下見なら件数だけ数える
+ */
+export function addHistory(
+  entry: {
+    sources: readonly [string, ...string[]];
+    name: string;
+    serviceId: number | null;
+    serviceName: string;
+    endAt: number;
+  },
+  options: MigrateOptions,
+): void {
+  if (entry.sources.some(historyImported)) {
+    status_.history.skipped++;
+    return;
+  }
+  status_.history.imported++;
+  if (!options.apply) return;
+  const service =
+    entry.serviceId === null ? undefined : serviceById(entry.serviceId);
+  orm()
+    .insert(recordedHistory)
+    .values({
+      name: entry.name,
+      service_name: service?.name ?? entry.serviceName,
+      end_at: entry.endAt,
+      source: entry.sources[0],
+    })
+    .onConflictDoNothing()
+    .run();
 }
 
 interface RuleRow {
@@ -547,18 +624,6 @@ interface ReserveRow {
   startAt: number;
   endAt: number;
   name: string | null;
-}
-
-/**
- * EPGStation のチャンネルIDは networkId * 100000 + serviceId — denpa の局の内部ID
- * (`tuner.serviceKey`) と作り方が同じなので、そのまま引ける。知らない局なら undefined
- */
-function serviceIdFor(channelId: number): number | undefined {
-  return orm()
-    .select({ id: services.id })
-    .from(services)
-    .where(eq(services.id, channelId))
-    .get()?.id;
 }
 
 /**
@@ -597,11 +662,40 @@ export function parseGenres(json: string | null): string[] {
   }
 }
 
-/** EPGStation の時間帯と曜日を denpa の列にしたもの ({@link parseTimes}) */
-export interface EpgTimes {
-  time_from: number | null;
-  time_to: number | null;
-  weekdays: number[] | null;
+/**
+ * **時間帯ごとに曜日を集めて、ルールの時間帯と曜日 (`rule-time.Slot`) 1つにまとめる。**
+ * EPGStation ({@link parseTimes}) と EDCB (`migrate-edcb.parseDateList`) の時間帯を写すのに使う。
+ *
+ * denpa のルールは時間帯を1つしか持てない。時刻の同じものは曜日を足してまとめ、
+ * 時刻の違うものが残れば写せない ({@link slot} が null)
+ */
+export class SlotWindows {
+  /** 鍵は始まりと終わりの分 (時刻で絞らないものは `null:null`) */
+  private readonly windows = new Map<
+    string,
+    { from: number | null; to: number | null; days: Set<number> }
+  >();
+
+  add(from: number | null, to: number | null, days: Iterable<number>): void {
+    const key = `${from}:${to}`;
+    const entry = this.windows.get(key) ?? { from, to, days: new Set() };
+    for (const day of days) entry.days.add(day);
+    this.windows.set(key, entry);
+  }
+
+  /** まとめた時間帯と曜日。何も無ければいつでも、時刻の違うものが2つ以上なら null。7日そろえば毎日 */
+  slot(): Slot | null {
+    const [only, ...rest] = this.windows.values();
+    if (only === undefined)
+      return { time_from: null, time_to: null, weekdays: null };
+    if (rest.length > 0) return null;
+    return {
+      time_from: only.from,
+      time_to: only.to,
+      weekdays:
+        only.days.size === 7 ? null : [...only.days].sort((a, b) => a - b),
+    };
+  }
 }
 
 /**
@@ -615,25 +709,18 @@ export interface EpgTimes {
  * - `week` は曜日のビット (0x01 が日曜〜0x40 が土曜)。番組の始まる日の曜日で見る (denpa と同じ)。
  *   0 の行は向こうも飛ばす
  *
- * denpa のルールは時間帯を1つしか持てない。時刻の同じ行は曜日を足してまとめ、時刻の違う行が
- * 残れば写せないので null を返す (飛ばして記録に残す)。時刻指定のルール (`isTimeSpecification`) の
- * `times` は秒で書かれた別物なので、ここには来ない
+ * 時刻の同じ行は曜日をまとめ、時刻の違う行が残れば写せないので null を返す (飛ばして記録に残す。{@link SlotWindows})。
+ * 時刻指定のルール (`isTimeSpecification`) の `times` は秒で書かれた別物なので、ここには来ない
  */
-export function parseTimes(json: string | null): EpgTimes | null {
-  const anytime = { time_from: null, time_to: null, weekdays: null };
-  if (json === null || json === "") return anytime;
-  let list: unknown;
+export function parseTimes(json: string | null): Slot | null {
+  const windows = new SlotWindows();
+  let list: unknown = null;
   try {
-    list = JSON.parse(json);
+    list = json === null || json === "" ? null : JSON.parse(json);
   } catch {
-    return anytime;
+    // 読めなければ時刻では絞らない
   }
-  if (!Array.isArray(list)) return anytime;
-  /** 時間帯ごとの曜日。鍵は始まりと終わりの分 (時刻で絞らないものは `null:null`) */
-  const windows = new Map<
-    string,
-    { from: number | null; to: number | null; days: Set<number> }
-  >();
+  if (!Array.isArray(list)) return windows.slot();
   for (const item of list as unknown[]) {
     if (item === null || typeof item !== "object") continue;
     const { start, range, week } = item as Record<string, unknown>;
@@ -647,23 +734,13 @@ export function parseTimes(json: string | null): EpgTimes | null {
       start < 24 &&
       range > 0 &&
       range < 24;
-    const from = timed ? start * 60 : null;
-    const to = timed ? ((start + range) % 24) * 60 : null;
-    const key = `${from}:${to}`;
-    const entry = windows.get(key) ?? { from, to, days: new Set<number>() };
-    for (let day = 0; day < 7; day++)
-      if (week & (1 << day)) entry.days.add(day);
-    windows.set(key, entry);
+    windows.add(
+      timed ? start * 60 : null,
+      timed ? ((start + range) % 24) * 60 : null,
+      [0, 1, 2, 3, 4, 5, 6].filter((day) => week & (1 << day)),
+    );
   }
-  const [slot, ...rest] = windows.values();
-  if (slot === undefined) return anytime;
-  if (rest.length > 0) return null;
-  return {
-    time_from: slot.from,
-    time_to: slot.to,
-    weekdays:
-      slot.days.size === 7 ? null : [...slot.days].sort((a, b) => a - b),
-  };
+  return windows.slot();
 }
 
 /**
@@ -672,7 +749,7 @@ export function parseTimes(json: string | null): EpgTimes | null {
  * EPGStation のルールには denpa に無い項目(正規表現、時刻指定、録画先の指定、
  * 重複を避ける期間、2つ以上の時間帯など)がある。落ちるものは落ちると分かるように記録に残す。
  * 重複を避ける (`avoidDuplicate`) は「同じ回は最初の放送だけ」に写す — 引き継いだ録画の履歴と合わせて、
- * EPGStation で録っていた回をそのまま避ける
+ * EPGStation で録っていた回をそのまま避ける。
  * 時間帯と曜日 (`times`) は denpa の時間帯と曜日に写す ({@link parseTimes})。
  * 時刻指定のルールは番組を探すのではなく時計で録るもので、denpa に対応がないので飛ばす。
  */
@@ -718,9 +795,7 @@ async function importRules(
           array(number),
           JSON.parse(row.channelIds),
           "EPGStation の channelIds",
-        )
-          .map(serviceIdFor)
-          .filter((id): id is number => id !== undefined);
+        ).flatMap((id) => serviceById(id)?.id ?? []);
       } catch {
         channels = [];
       }
@@ -740,16 +815,11 @@ async function importRules(
     }
 
     const name = keyword !== "" ? keyword : `EPGStation #${row.id}`;
-    record(`${options.apply ? "ルール" : "ルール(予定)"}: ${name}`);
-    if (!options.apply) {
-      status_.rules.imported++;
-      continue;
-    }
-
-    // エンコード方法は引き継がない。エンコードもCMも全体設定で、エンコードするときに読む
-    orm()
-      .insert(rules)
-      .values({
+    recordPlan(options, "ルール", name);
+    status_.rules.imported++;
+    if (!options.apply) continue;
+    insertRule(
+      {
         name,
         keyword,
         ignore_keyword: toHalfWidth(row.ignoreKeyword ?? "").trim(),
@@ -764,12 +834,9 @@ async function importRules(
         enabled: Boolean(row.enable),
         // 重複を避ける期間 (periodToAvoidDuplicate) は写さない。denpa は録画と引き継いだ履歴で見る
         dedupe: Boolean(row.avoidDuplicate),
-        priority: 1,
-        source,
-        created_at: now(),
-      })
-      .run();
-    status_.rules.imported++;
+      },
+      source,
+    );
   }
 }
 
@@ -808,7 +875,7 @@ async function importReservations(
       continue;
     }
 
-    record(`${options.apply ? "予約" : "予約(予定)"}: ${row.name ?? ""}`);
+    recordPlan(options, "予約", row.name ?? "");
     if (options.apply) await reserve(program.id);
     status_.reservations.imported++;
   }
@@ -856,42 +923,23 @@ async function importHistory(
 
 /**
  * 読んだ履歴を控えに入れる。**取り込み済みは EPGStation 側のIDで判別して飛ばす** (`source`。ルールと同じ)。
- * 局の名前は denpa の局から引き (`serviceIdFor` と同じく、チャンネルIDがそのまま局の内部ID)、
- * 知らない局なら EPGStation の名前を写す
+ * チャンネルIDがそのまま局の内部ID ({@link serviceById})
  */
 export function importHistoryRows(
   rows: HistoryRow[],
   options: MigrateOptions,
 ): void {
   for (const row of rows) {
-    const source = `epgstation:${row.id}`;
-    if (historyImported(source)) {
-      status_.history.skipped++;
-      continue;
-    }
-    if (!options.apply) {
-      status_.history.imported++;
-      continue;
-    }
-    const service =
-      row.channelId === null
-        ? undefined
-        : orm()
-            .select({ name: services.name })
-            .from(services)
-            .where(eq(services.id, Number(row.channelId)))
-            .get();
-    orm()
-      .insert(recordedHistory)
-      .values({
+    addHistory(
+      {
+        sources: [`epgstation:${row.id}`],
         name: row.name,
-        service_name: service?.name ?? row.channelName ?? "",
-        end_at: Number(row.endAt),
-        source,
-      })
-      .onConflictDoNothing()
-      .run();
-    status_.history.imported++;
+        serviceId: row.channelId === null ? null : Number(row.channelId),
+        serviceName: row.channelName ?? "",
+        endAt: Number(row.endAt),
+      },
+      options,
+    );
   }
 }
 

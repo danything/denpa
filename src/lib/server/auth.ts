@@ -3,7 +3,7 @@ import { config } from "./config";
 import { enabled as oidcEnabled } from "./oidc";
 
 /**
- * 誰を通すか。**どこでも通る方法が3つと、エンドポイントを限った方法が1つ。**
+ * 誰を通すか。**どこでも通る方法が3つと、エンドポイントを限った方法が2つ。**
  *
  * | 方法 | 何者か |
  * | --- | --- |
@@ -11,6 +11,7 @@ import { enabled as oidcEnabled } from "./oidc";
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・端末に保存もこの控え (Cookie) で通る |
  * | アクセストークン (`Bearer denpa_…`) | ペアリングしたアプリ (`device-auth.ts`) |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
+ * | Hybridcast の中継の合言葉 | http の Hybridcast のアプリの読み込みだけ (`hc-relay.ts`。下の `OPEN_PATHS`) |
  *
  * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
  * 起動時に自動で掛けていたが、廃止した — 残っていたのは「画面に出して

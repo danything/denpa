@@ -318,6 +318,7 @@ async function collectChannel(
           sdt = null;
         }
       }
+      // `feed` の返りは「番組が増えたか」。揃ったかは増えたときだけ見る
       if (reader.feed(chunk) && reader.complete) break;
       if (Date.now() - flushedAt >= FLUSH_EVERY) flush();
     }
@@ -398,7 +399,7 @@ export function collectOnce(): Promise<number> {
  * スキャンにもロゴにも譲るので、他が動いていると番組表がなかなか埋まらない。
  * 押されている間は**録画とライブ以外には全部譲らせて**取得する (`config.priority.epgNow`)。
  *
- * **既に回っている最中なら、その回を強くする。** 開くのは1チャンネルずつなので、
+ * **既に回っている最中なら、その回の優先度を上げる。** 開くのは1チャンネルずつなので、
  * 次に開くところから効く (待たせて仕切り直すより早い)。
  */
 export function collectNow(): Promise<number> {

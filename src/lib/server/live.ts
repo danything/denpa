@@ -11,7 +11,7 @@
  *
  * 2人が同じチャンネルを見ても、チューナーも ffmpeg も1つで足りる。
  * **数えているのは見ている人の数**で、0になったら畳む。エージェント側でも
- * 同じチャンネルは選局を共有するが、こちらで畳まないと ffmpeg が residual に残る。
+ * 同じチャンネルは選局を共有するが、こちらで畳まないと ffmpeg が残り続ける。
  *
  * ## 途中から入ってきた人
  *
@@ -1048,7 +1048,7 @@ class Session {
         /*
          * 追っかけが**録れているところまで読み切った** (ffmpeg が入力を
          * 食べ終えて 0 で終わる)。終わりであってエラーではない。
-         * 画面はこれでMediaSource を閉じる (`MediaSource.endOfStream`)
+         * 画面はこれで MediaSource を閉じる (`MediaSource.endOfStream`)
          */
         if (this.source !== undefined && (await proc.exited) === 0) {
           this.tell({ type: "ended" });
@@ -1392,7 +1392,7 @@ class Session {
   private async subtitles(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
     const fd = (proc.stdio as unknown as number[])[3];
     if (typeof fd !== "number") return;
-    // 割る道具もデコードする経路具も ffmpeg ごと (`drain` と同じ理由。デコードする側は書式を字幕文を跨いで持つ)
+    // 割る道具もデコードする側も ffmpeg ごと (`drain` と同じ理由。デコードする側は書式を字幕文を跨いで持つ)
     const frames = new MkvSplitter();
     const text = new CaptionText();
     for await (const chunk of chunks(Bun.file(fd).stream())) {
@@ -2294,7 +2294,7 @@ export function sessionStream(
  *
  * **画面はすぐ来る** — 実測で、ページを組みはじめてから WebSocket が繋がる
  * まで 160ms。それでも来ないなら開いたそばから離れた人なので、使ったままに
- * しない (ライブは録画の次に強いので、放っておくと番組表集めからチューナーを取り上げ続ける)。
+ * しない (ライブは録画の次に優先度が高いので、放っておくと番組表集めからチューナーを取り上げ続ける)。
  */
 const WARM_WAIT = 8_000;
 
@@ -2551,7 +2551,7 @@ export function attend(connection: Connection): void {
      * **再エンコードしなくても、リクエストされたら必ず答える。**
      *
      * 黙って返していた頃は、**いま映している局をもう一度押すと映像が止まった**。
-     * 画面側は `tune` のたびにMediaSource を捨てる作りで (`live-player.svelte.ts` の
+     * 画面側は `tune` のたびに MediaSource を捨てる作りで (`live-player.svelte.ts` の
      * `forget`)、`tuned` と init が来て初めて作り直す。何も変わらないからと
      * 黙ると、**捨てたきり二度と作られない** — 塊は届き続けるので、
      * エラーも出ないまま黒い画面で止まる (実機で踏んだ)。
@@ -2753,7 +2753,7 @@ interface NowPlaying {
 }
 
 /**
- * いま流れている番組から、エンコード方式を決める。**番組表を頼りにする。**
+ * いま流れている番組から、ffmpeg に渡す局の番号と音声を決める。**番組表を頼りにする。**
  *
  * - 局の番号 … ffmpeg に名指しさせる `program_number` (`NowPlaying.program`)
  * - 音声 … 番組表の `audios` から、選べるものを組み立てる (`arib.audioTracks`)。

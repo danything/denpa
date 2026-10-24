@@ -48,7 +48,7 @@ export function deleteRecordingFiles(
   for (const path of [recording.library_path, recording.alt_path]) {
     if (path === null) continue;
     removeIfExists(path);
-    // 付き添い (ポスター・データ放送) も一緒に。取り残すと片付かないゴミになる
+    // サイドカー (ポスター・データ放送) も一緒に。取り残すと片付かないゴミになる
     removeSidecars(path);
     pruneEmptyDirs(path);
   }
@@ -93,7 +93,7 @@ export function usedByOther(path: string, recordingId: number): boolean {
  *
  * - **行はあるが実体が無い。** ファイルマネージャなど外から録画を消すと、DBには
  *   実体の無い行だけが残る。削除済みに倒して一覧から外す
- * - **実体はあるが行が無い。** 動画の付き添い (作業ファイル・サムネイル・データ放送) は
+ * - **実体はあるが行が無い。** 動画のサイドカー (作業ファイル・サムネイル・データ放送) は
  *   動画と同じ名前で隣に置くので、動画が消えたあとに取り残されることがある
  *
  * **動画そのものには触らない。** 行の無い動画は、手で置いたものかもしれない。
@@ -158,14 +158,14 @@ export function reconcile(): {
   return { checked: placed.length, removed, ...left };
 }
 
-/** 動画そのもの。これに付き添うものが「付き添い」 */
+/** 動画そのもの。これの隣に置くものが「サイドカー」 */
 const VIDEO = /\.(m2ts|ts|mkv|mp4)$/i;
 
 /**
  * 触らずに置いておく、書きたてのもの。
  *
- * **これから連れ合いになるファイルを巻き添えにしないため。** 名前だけで
- * 「連れ合いがいない」と決めているので、*まだ出来ていない動画*の付き添いは
+ * **これから動画になるファイルを巻き添えにしないため。** 名前だけで
+ * 「元の動画が無い」と決めているので、*まだ出来ていない動画*のサイドカーは
  * 全部そう見える。エンコードは出来上がるまで `<最終の名前>.encoding` に書いていて、
  * その `.mkv` はまだどこにも無い (消すと置き換えるところで `ENOENT ... rename` になる)。
  *
@@ -185,14 +185,14 @@ function settling(path: string, at: number): boolean {
 }
 
 /**
- * 連れ合いを失った付き添いを片付ける。
+ * 元の動画を失ったサイドカーを片付ける。
  *
- * 付き添いは**動画と同じ名前で隣に置く**決まりなので、名前から連れ合いが分かる。
+ * サイドカーは**動画と同じ名前で隣に置く**決まりなので、名前から元の動画が分かる。
  *
  * - `<動画>.…` … 作業ファイル (`.chapters.txt` など)
  * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送
  *
- * 元のTSを残さない設定だと、TS が消えたあとも付き添いだけが居座り、録るたびに積もる。
+ * 元のTSを残さない設定だと、TS が消えたあともサイドカーだけが残り、録るたびに積もる。
  */
 function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
   const known = new Set(
@@ -257,12 +257,12 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
   }
 
   if (swept > 0)
-    console.log(`[files] 連れ合いの無い付き添いを片付けました: ${swept} 件`);
+    console.log(`[files] 元の動画の無いサイドカーを片付けました: ${swept} 件`);
   if (pruned > 0) console.log(`[files] 空のフォルダを畳みました: ${pruned} 件`);
   return { swept, strays, pruned };
 }
 
-/** 付き添いで、かつ連れ合いの動画が1つも無いか */
+/** サイドカーで、かつ元の動画が1つも無いか */
 function orphan(path: string, videos: Set<string>): boolean {
   // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`)
   const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);

@@ -149,6 +149,17 @@ export function rulePriority(fields: Fields): number {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 1;
 }
 
+/**
+ * 新しく作るルールのスイッチ。送られてこなければ、同じ回は入れて、前の回は切る
+ * (1話から数え直すシリーズを飛ばさないため)。下見 (`draftRule`) と追加 (`rule-actions.createRule`) で同じ
+ */
+export function newSwitches(conditions: Conditions) {
+  return {
+    dedupe: conditions.dedupe ?? true,
+    skip_earlier: conditions.skipEarlier ?? false,
+  };
+}
+
 /** 条件をルールの列にしたもの (`draftRule` と `ruleValues` で同じ) */
 function columns(conditions: Conditions) {
   return {
@@ -183,8 +194,7 @@ export function draftRule(fields: Fields): Rule | null {
      * 戻っていた (見るだけのつもりで押して、そのまま保存すると静かに書き換わる)
      */
     priority: rulePriority(fields),
-    dedupe: conditions.dedupe ?? true,
-    skip_earlier: conditions.skipEarlier ?? false,
+    ...newSwitches(conditions),
     source: null,
     created_at: 0,
   };
@@ -192,7 +202,7 @@ export function draftRule(fields: Fields): Rule | null {
 
 /**
  * ルール名はキーワードから決める。別で名前を付けさせても、結局キーワードと
- * 同じものを打ち込むだけになるため。キーワードが無いときは対象の局で表す。
+ * 同じものを打ち込むだけになるため。キーワードが無いときはジャンル・種別・局・時間帯と曜日で表す。
  */
 function ruleName(conditions: Conditions): string {
   if (conditions.keyword !== "") return conditions.keyword;

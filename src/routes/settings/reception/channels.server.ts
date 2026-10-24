@@ -3,6 +3,7 @@ import { count, eq, sql } from "drizzle-orm";
 
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
+import { currentServices } from "#lib/server/epg.js";
 import {
   refresh,
   SCAN_KINDS,
@@ -44,10 +45,8 @@ function coverage(): Coverage[] {
     })
     .from(services)
     .leftJoin(programs, eq(programs.service_id, services.id))
-    // 取り残しの局は出さない (CURRENT_SERVICES と同じ。番組表と JOIN するので列を名指しする)
-    .where(
-      sql`${services.updated_at} >= (SELECT MAX(${services.updated_at}) FROM ${services})`,
-    )
+    // 取り残しの局は出さない (番組表と JOIN するので列を名指しする)
+    .where(currentServices())
     .groupBy(services.id)
     .orderBy(services.service_id)
     .all();

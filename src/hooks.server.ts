@@ -57,7 +57,7 @@ export async function handle({ event, resolve }) {
       /*
        * **OIDC でのログイン。** 設定してあるときだけ効く (`auth.needsLogin`)。
        *
-       * ここで見るのは Cookie の控えだけ。Entra とのやり取りは `/login` と
+       * ここで見るのは Cookie の控えだけ。OIDC の発行元とのやり取りは `/login` と
        * `/login/callback` に閉じてあり、普段のリクエストで外へ出ることはない。
        * 録画のファイル (`/api/recordings/<id>/file`) もここで通す — ブラウザで観る
        * `<video>` も端末に保存も、同じ Cookie を付けてリクエストする
