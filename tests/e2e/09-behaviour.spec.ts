@@ -430,6 +430,29 @@ test.describe("操作したときの反応", () => {
     );
   });
 
+  test("放送中の番組は、過ぎた所を終わった番組より浅く沈める", async ({
+    page,
+  }) => {
+    await goto(page, "/guide?type=GR");
+    // マスの高さに対する覆いの高さで、終わった番組 (1) と放送中の番組 (0 と 1 の間) を見分ける
+    const shades = await page.getByTestId("program-button").evaluateAll((els) =>
+      els.map((el) => {
+        const before = getComputedStyle(el, "::before");
+        return {
+          past: parseFloat(before.height) / el.getBoundingClientRect().height,
+          color: before.backgroundColor,
+        };
+      }),
+    );
+    const done = shades.find((s) => s.past > 0.999);
+    const airing = shades.find((s) => s.past > 0.01 && s.past < 0.99);
+    expect(done).toBeDefined();
+    expect(airing).toBeDefined();
+    const alpha = (color: string) =>
+      Number(/[\d.]+(?=\)$)/.exec(color.replace(/ \/ /, ", "))?.[0] ?? 1);
+    expect(alpha(airing!.color)).toBeLessThan(alpha(done!.color));
+  });
+
   test("ジャンルの見本はマスと同じ色で、押すとそのジャンルだけ目立つ", async ({
     page,
   }) => {
