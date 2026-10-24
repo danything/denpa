@@ -73,7 +73,7 @@ public class ChannelTableTests
     [Test]
     public async Task 衛星のスロットは相対番号そのもの()
     {
-        // TSID が分からないときに px4-userland へ --slot で渡す (Px4.cs)。CS は1本しか入っていない
+        // TSID が分からないときに px4d の TUNE の slot で渡す (Px4.cs)。CS は1本しか入っていない
         await Assert.That(ChannelTable.Parse("BS01_2")!.Slot).IsEqualTo(2);
         await Assert.That(ChannelTable.Parse("BS23_0")!.Slot).IsEqualTo(0);
         await Assert.That(ChannelTable.Parse("BS15")!.Slot).IsEqualTo(0);

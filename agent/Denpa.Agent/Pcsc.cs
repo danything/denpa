@@ -229,17 +229,22 @@ public sealed partial class PcscLink : ICardLink
         Release(_context);
     }
 
+    /// <summary>失敗なら投げる。**カードが挿さっていないだけなら <see cref="CardAbsentException"/>** (画面では「カードなし」)</summary>
     private static void Check(int result, string name, string what)
     {
         if (result == 0) return;
-        throw new IOException($"{name}: {what} (PC/SC 0x{result:x8}{Explain(result)})");
+        var message = $"{name}: {what} (PC/SC 0x{result:x8}{Explain(result)})";
+        throw unchecked((uint)result) is NoSmartcard or RemovedCard ? new CardAbsentException(message) : new IOException(message);
     }
+
+    private const uint NoSmartcard = 0x8010000C;
+    private const uint RemovedCard = 0x80100069;
 
     /// <summary>よく出るものだけ言葉にする (pcsc-lite の pcsclite.h と同じ番号。Windows の winerror.h も同じ)</summary>
     private static string Explain(int result) => unchecked((uint)result) switch
     {
         0x8010000B => ": 他のアプリが使用中です",
-        0x8010000C or 0x80100069 => ": カードが挿さっていません",
+        NoSmartcard or RemovedCard => ": カードが挿さっていません",
         0x8010001D => ": PC/SC が動いていません",
         0x8010002E => ": リーダーが見つかりません",
         0x80100066 => ": カードが応答しません",

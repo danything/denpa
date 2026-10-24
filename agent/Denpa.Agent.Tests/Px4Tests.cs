@@ -345,7 +345,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 注意書きは出した本だけが消す()
+    public async Task 注意書きは出したチューナーだけが消す()
     {
         // 設定を変えて開き直すとき、古いチューナーの後始末 (Dispose) が新しいチューナーの出した注意書きを消さない
         const string device = "px4:000000000099999:0";

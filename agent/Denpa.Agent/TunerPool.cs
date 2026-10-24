@@ -30,7 +30,7 @@ public sealed record TuneOptions(Func<string, int?> StreamIds, string? FakeTune 
 /// <list type="bullet">
 /// <item>**優先度に下限が無い。** 負の値もそのまま並ぶ (丸めない)</item>
 /// <item>**番組表集めが特別扱いされない。** 録画もロゴも番組表も同じ「開きたい人」で、priority だけで並ぶ</item>
-/// <item>**同じ物理チャンネルなら1本で足りる。** 番組表・ロゴ・録画が同じ選局を共有する</item>
+/// <item>**同じ物理チャンネルなら1台で足りる。** 番組表・ロゴ・録画が同じ選局を共有する</item>
 /// </list>
 ///
 /// <para>
@@ -156,8 +156,8 @@ public sealed class TunerPool(
         lock (_gate)
         {
             /*
-             * **自分と同じか強い利用者がいれば、どのチューナーでもその選局を共有する** (約束3)。弱い利用者しか
-             * いない選局と余韻だけの選局は、そのチューナーが選ぶ順で先頭の組のときだけ `Pick` が選んで下で共有する
+             * **自分と同じか優先度の高い利用者がいれば、どのチューナーでもその選局を共有する** (約束3)。優先度の低い
+             * 利用者しかいない選局と余韻だけの選局は、そのチューナーが選ぶ順で先頭の組のときだけ `Pick` が選んで下で共有する
              * (わけは docs/agent.md「選ぶ順の約束」)
              */
             after ??= new HashSet<string>();
@@ -174,7 +174,7 @@ public sealed class TunerPool(
 
             if (_leases.TryGetValue(index, out var victim))
             {
-                // 引き継ぐ相手は正常に終わらせる (取り上げられたのではない)。残りの弱い利用者は下で切断する
+                // 引き継ぐ相手は正常に終わらせる (取り上げられたのではない)。残りの優先度の低い利用者は下で切断する
                 lock (victim.Sinks)
                 {
                     foreach (var leaving in victim.Sinks.Where(s => after.Contains(s.Use)).ToList())
@@ -183,7 +183,7 @@ public sealed class TunerPool(
                         victim.Sinks.Remove(leaving);
                     }
                 }
-                // 同じチャンネルなら、選局し直さずにそのまま共有する (余韻ならそのまま使い回し、弱い利用者も残す)
+                // 同じチャンネルなら、選局し直さずにそのまま共有する (余韻ならそのまま使い回し、優先度の低い利用者も残す)
                 if (victim.Type == type && victim.Channel == channel)
                 {
                     return Join(victim, priority, use);
@@ -440,14 +440,14 @@ public sealed class TunerPool(
 
     /// <summary>
     /// どのチューナーを使うか決める。**denpa との約束** (docs/agent.md「選ぶ順の約束」の2):
-    /// 空いているチューナー (余韻だけのものも) と**自分より弱い利用者しかいないチューナー**のうち、
+    /// 空いているチューナー (余韻だけのものも) と**自分より優先度の低い利用者しかいないチューナー**のうち、
     /// 受けられて**順位 (<see cref="Ranks"/>) がいちばん小さい組**から選ぶ。空いている兼用のチューナーへ逃げずに、
-    /// 弱い相手から取り上げる。
+    /// 優先度の低い相手から取り上げる。
     ///
     /// <para>
     /// 組の中では、同じチャンネルの選局 → もうそのチャンネルに合っているもの (<see cref="Held.Channel"/>。
     /// 選局し直しの約 600ms が 10ms になる) → ほかの余韻 (1人の視聴で2台塞がない) → 空いているもの →
-    /// いちばん弱い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)
+    /// いちばん優先度の低い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)
     /// </para>
     /// </summary>
     private int? Pick(string type, string channel, int priority, IReadOnlySet<string> after)
@@ -475,7 +475,7 @@ public sealed class TunerPool(
 
         foreach (var index in group)
         {
-            // 組の中に同じチャンネルの選局があれば共有する (余韻か、弱い利用者しかいないもの)
+            // 組の中に同じチャンネルの選局があれば共有する (余韻か、優先度の低い利用者しかいないもの)
             if (_leases.TryGetValue(index, out var same) && same.Type == type && same.Channel == channel) return index;
         }
         foreach (var index in group)

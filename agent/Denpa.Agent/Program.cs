@@ -299,7 +299,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     var (resolved, auto) = config.ResolveTuners();
     pool.Detected = auto;
     pool.Replace(resolved);
-    // 新しく書かれた筐体があれば px4d を起こす。数秒かかるので返事は待たせない
+    // 新しく書かれた筐体があれば px4d / asicend を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, TunerList());
 });
@@ -360,7 +360,7 @@ app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
 /*
- * **px4-userland の px4d は背景で起こす。** ready までファームウェアの流し込みで
+ * **px4d / asicend は背景で起こす。** ready までファームウェアの流し込みで
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の API (= PT3 など他の
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない
  */

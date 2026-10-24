@@ -1,6 +1,6 @@
 # PX-S1UD (siano-userland)
 
-**地上波だけ**の USB チューナーで、1本で1チャンネルを取ります。
+**地上波だけ**の USB チューナーで、1台で1チャンネルを取ります。
 denpa が使える内蔵のカードリーダーは無いので、USB のカードリーダーを別に挿します ([tuners.md](tuners.md#カードリーダー))。
 Linux (DVB でも siano-userland でも)・Mac (Apple Silicon)・Windows (x64) で使えます。
 
