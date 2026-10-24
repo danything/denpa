@@ -1,31 +1,14 @@
 /**
- * 操作列を出しておくか消すかの決め方。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
- *
- * 映像の上に居座るものなので、触っていない間は引っ込める。**止めていても引っ込めます** —
- * 一時停止するのは、たいてい**映像の中の文字をじっくり見る**ためで、そこに操作バーが
- * 残っていては止めた意味が無い。以前は止めている間だけ残していた
- * (「出すためにもう一度押すことになる」という理屈だった) が、**押せば出るものを
- * 残しておくより、押さないと消せないほうが邪魔**だった。
- *
- * 残すのは**キーボードで触っている間だけ**。あちらは映像を押して出し直す手が無い。
- *
- * ここを2箇所に持っていた頃は、ライブは「動かせば出る」まで作り込んであるのに、
- * 観る画面は**押したときにしか出なかった**。実機では隠れている操作バーの上を押すと
- * 下の映像が受け取って再生が止まり、送りを押したいだけなのに一度止めることに
- * なっていた。
- *
- * 出す・消すを決めるだけで、DOM も映像も触りません
+ * 操作列を出しておくか消すかの決め方 (3画面で同じ。DOM も映像も触らない)。触っていない間は引っ込める。
+ * 止めていても引っ込める — 一時停止はたいてい映像の中の文字を見るためで、押さないと消せないほうが邪魔だった。
+ * 残すのはキーボードで触っている間だけ (映像を押して出し直す手が無い)
  */
 
 import { getContext } from "svelte";
 
 /**
- * 触らなくなってから消えるまで (ms)。**指もマウスも同じ長さ。**
- *
- * 指だけは時計を持たせず、押すまで留めていた時期がある — 「出したのが意思なら、
- * 消すのも意思のはず」という理屈だった。**実機で使うと、消したいときに毎回
- * 映像を押すことになった。** 映像の上に居座るものを引っ込めるのに操作が要るのでは、
- * 引っ込む意味が薄い。**出し方は指とマウスで違ってよいが、消え方は同じでいい**
+ * 触らなくなってから消えるまで (ms)。指もマウスも同じ長さ (指だけ押すまで留めていた頃は、消すのに毎回
+ * 映像を押すことになった)
  */
 const LINGER = 2500;
 
@@ -73,11 +56,7 @@ export function playerControls(): PlayerControls {
   let lastX = Number.NaN;
   let lastY = Number.NaN;
 
-  /*
-   * **見るのは「触ったか」だけ** (キーボードと、開いているメニューを除く)。再生や
-   * 一時停止の状態を混ぜていた頃は、繋いでいる間ずっと出たままになり、消える経路を
-   * 確かめようが無かった
-   */
+  // 見るのは「触ったか」だけ (キーボードと開いているメニューを除く。再生の状態は混ぜない)
   const shown = $derived(keyboard || hold || now - touched < LINGER);
 
   $effect(() => {
@@ -85,6 +64,16 @@ export function playerControls(): PlayerControls {
     const timer = setInterval(() => (now = Date.now()), TICK);
     return () => clearInterval(timer);
   });
+
+  function stir(): void {
+    touched = Date.now();
+    now = touched;
+  }
+
+  function hide(): void {
+    touched = 0;
+    now = Date.now();
+  }
 
   return {
     get shown(): boolean {
@@ -103,16 +92,8 @@ export function playerControls(): PlayerControls {
       hold = value;
     },
     /**
-     * **指とマウスで別の出し方をする。**
-     *
-     * *指* … 押したときだけ出す。指を滑らせただけ (`pointermove`) では
-     * 何もしない — 出し入れは押したときの1回で決める。**消えるまでは
-     * マウスと同じ長さ** (`LINGER` の項)。
-     *
-     * *マウス* … 動かせば出て、しばらくで消える。**本当に動いたときだけ** —
-     * ブラウザは、止まっているカーソルの下で中身が動いただけでも
-     * `pointermove` を投げてくる。時計は毎秒書き換わるので、**全画面に
-     * したまま何もしなくても操作列が消えなくなって**いた (実機のPC)
+     * 指は押したときだけ出す (滑らせただけでは何もしない)。マウスは本当に動いたときだけ出す — 止まったカーソルの
+     * 下で中身が動いただけでも `pointermove` が来るので、全画面のまま操作列が消えなくなっていた
      */
     wake(event: PointerEvent): void {
       if (event.pointerType !== "mouse") {
@@ -120,44 +101,24 @@ export function playerControls(): PlayerControls {
         byTouch = true;
         // 巻き直す前に読む。`toggle` は「押す前に出ていたか」で決める
         wasShown = shown;
-        touched = Date.now();
-        now = touched;
+        stir();
         return;
       }
       if (event.clientX === lastX && event.clientY === lastY) return;
       lastX = event.clientX;
       lastY = event.clientY;
       byTouch = false;
-      touched = Date.now();
-      now = touched;
+      stir();
     },
-    /*
-     * 指を離すとブラウザはその場でポインタを取り下げるので、`pointerleave` が
-     * **触った直後に必ず飛ぶ**。マウスと同じに扱っていた頃は、タッチの端末で
-     * **触った瞬間に操作列が消えて**いた。マウスは映像の外へ出たなら本当に
-     * 離れているので、そちらは今までどおり消す
-     */
+    // 指を離すと `pointerleave` が必ず飛ぶので、消すのはマウスが外へ出たときだけ
     away(event: PointerEvent): void {
       if (event.pointerType === "mouse") touched = 0;
     },
-    stir(): void {
-      touched = Date.now();
-      now = touched;
-    },
-    hide(): void {
-      touched = 0;
-      now = Date.now();
-    },
-    /*
-     * **押す前に出ていたかで決める。** いまの状態で決めていた頃は、
-     * 押した瞬間に `wake` が出したものを見て「出ている→消す」と読み、
-     * **指では二度と出せなかった**
-     */
+    stir,
+    hide,
+    // 押す前に出ていたかで決める (いまの状態で決めると `wake` が出したものを見て消し、指では出せなかった)
     toggle(): void {
-      if (!byTouch) return;
-      if (!wasShown) return;
-      touched = 0;
-      now = Date.now();
+      if (byTouch && wasShown) hide();
     },
   };
 }
