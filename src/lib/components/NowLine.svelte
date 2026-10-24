@@ -1,12 +1,12 @@
 <script lang="ts">
   /**
    * **「いま」の線。** ホームの一覧 (`home/TimelineHeading`) と番組表で同じ見た目にする:
-   * 赤い太字の時刻と、細い赤い線。塗った丸い札は使わない。
+   * 赤い点と赤い太字の時刻を操作の層のカプセル (一覧の日付と同じ) に乗せ、細い赤い線を引く。
    *
-   * - `inline` (ホーム) … 赤い点・時刻・残りの幅を埋める線・控えた字の一言 (`status`。右端) を1行に並べる。
+   * - `inline` (ホーム) … 時刻のカプセル・残りの幅を埋める線・控えた字の一言 (`status`。右端) を1行に並べる。
    *   字の下には線を引かない。幅が足りなければ一言を短い形 (`status.short`) に替え、それでも入らなければ「…」で切る (折り返さない)
    * - `overlay` (番組表) … 線は枠の上端。時刻は左端に貼り付き (`sticky`)、線をまたいで乗る。
-   *   下のマスや時の数字の上に乗るので、時刻だけ地の色を敷く
+   *   下のマスや時の数字の上に乗るので、カプセルの面で読ませる
    *
    * 読み上げは「いま 18:01、次の録画まで 3時間59分」。短い形は目に見えるだけで、読み上げはいつも長い形
    */
@@ -69,10 +69,30 @@
     font-size: inherit;
     font-weight: var(--dp-weight);
   }
+  /*
+     * **時刻は操作の層の小さなカプセル** (一覧の日付と同じ。docs/design.md の「透かし方」)。
+     * 半透明の面と影に、赤い点と赤い太字の時刻。字は面の上で読める濃さの側 (`--dp-rec-text`)
+     */
   .now-time {
-    color: var(--dp-rec);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--dp-radius-full);
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    color: var(--dp-rec-text);
     font-weight: var(--dp-weight-bold);
     white-space: nowrap;
+  }
+  /* 「いま」の印の赤い点 (カレンダーの今日の点と同じ赤) */
+  .now-time::before {
+    content: "";
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--dp-rec);
   }
 
   /* ---- 1行に並べる (ホーム) ---- */
@@ -81,29 +101,10 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    height: 1.25rem;
-    /* 時刻の左端を行の時刻にそろえる (行の内側の余白。`home.css` が渡す) */
-    padding-inline-start: var(--now-inset, 0);
   }
   .inline .now-time {
     flex-shrink: 0;
     font-size: var(--now-time-size, 0.875rem);
-  }
-  /* 線の頭の赤い点 (「いま」の印。カレンダーの今日の点と同じ赤) */
-  /* 時刻の左の余白に置く (時刻の左端は行の時刻にそろえたまま) */
-  .inline {
-    position: relative;
-  }
-  .inline::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: max(0px, calc(var(--now-inset, 0px) - 0.625rem));
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--dp-rec);
-    transform: translateY(-50%);
   }
   /* 一言は控えた字で右端に (補足なので、時刻と線ほど目立たせない) */
   .now-status {
@@ -152,11 +153,16 @@
     position: sticky;
     left: 0;
     z-index: 1;
-    display: block;
+    display: flex;
+    justify-content: center;
+    width: fit-content;
+    padding: 0 0.25rem;
     transform: translateY(-50%);
-    background: var(--dp-bg);
-    text-align: center;
     font-size: 0.6875rem;
     line-height: 1rem;
+  }
+  /* 時の列の幅に収める。番組表では赤い線が「いま」の印なので、点は付けない */
+  .overlay .now-time::before {
+    display: none;
   }
 </style>
