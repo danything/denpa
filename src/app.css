@@ -1652,6 +1652,94 @@ button.text-button:hover {
 }
 
 /*
+ * ---- プルダウン (`<select>`) ----
+ * **マウスで使う画面では、開いた一覧をメニュー (上の `.menu`) と同じ姿にする** (`appearance: base-select`。CSS だけ)。
+ * ブラウザの一覧はテーマや字の大きさが合わず、暗いテーマで読みにくかった。
+ * **指で使う端末 (スマホ・タブレット) はブラウザ・OS の選び方のまま** (画面の下から大きく出て、指で選びやすい)。
+ * 知らないブラウザもそのまま (`color-scheme` でテーマの明るさだけ合う)。
+ * 閉じた欄の見た目は今までどおり (Pico の矢印を使い、ブラウザの矢印 `::picker-icon` は出さない)
+ */
+@supports (appearance: base-select) {
+  @media (pointer: fine) {
+    select,
+    select::picker(select) {
+      appearance: base-select;
+    }
+    select {
+      align-items: center;
+    }
+    select::picker-icon {
+      display: none;
+    }
+    select::picker(select) {
+      --menu-pad: 0.25rem;
+      min-width: anchor-size(width);
+      margin-block: 4px;
+      padding: var(--menu-pad);
+      border: 0;
+      border-radius: var(--dp-radius-lg);
+      background: var(--dp-pop);
+      color: var(--pico-color);
+      box-shadow: var(--dp-shadow-pop);
+      /* 開き方・閉じ方もメニューと同じ (引き金の側から、少し縮んだ透明な姿で開く) */
+      opacity: 0;
+      transform: translateY(-0.375rem) scale(0.94);
+      transform-origin: top;
+      transition:
+        opacity var(--dp-duration-exit) var(--dp-ease-exit),
+        transform var(--dp-duration-exit) var(--dp-ease-exit),
+        overlay var(--dp-duration-exit) allow-discrete,
+        display var(--dp-duration-exit) allow-discrete;
+    }
+    select:open::picker(select) {
+      opacity: 1;
+      transform: none;
+      transition-duration: var(--dp-duration-enter);
+      transition-timing-function: var(--dp-ease-spring);
+    }
+    @starting-style {
+      select:open::picker(select) {
+        opacity: 0;
+        transform: translateY(-0.375rem) scale(0.94);
+      }
+    }
+    /* 選択肢は `.menu-item` と同じ。選んでいるものは、ほかの選んでいるものと同じく塗らずに左の縦線と主の色の太字 */
+    select option {
+      position: relative;
+      padding: 0.4rem 0.6rem;
+      border-radius: calc(var(--dp-radius-lg) - var(--menu-pad));
+      background: transparent;
+      color: inherit;
+      outline: none;
+      cursor: pointer;
+    }
+    select option::checkmark {
+      display: none;
+    }
+    select option:is(:hover, :focus-visible) {
+      background: var(--dp-pop-hover);
+    }
+    select option:checked {
+      color: var(--dp-primary-text);
+      font-weight: var(--dp-weight-bold);
+    }
+    select option:checked::before {
+      content: "";
+      position: absolute;
+      inset-block: 0.4rem;
+      left: 0;
+      width: 2px;
+      border-radius: 1px;
+      background: var(--pico-primary);
+    }
+    select option:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+}
+
+/*
  * 映像の上のメニュー (速さの `OverlayMenu`・再生の設定の `SettingsMenu`)。
  * **幅は中身で決める。ボタンより狭くはしない** (ボタンの幅は `Menu` が下限に置く)。
  *

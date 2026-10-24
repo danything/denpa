@@ -572,3 +572,40 @@ test.describe("操作したときの反応", () => {
     await expect(page.getByTestId("reservation-row")).toHaveCount(0);
   });
 });
+
+test.describe("プルダウン", () => {
+  test("マウスの画面では開いた一覧を自前の姿にし、選んでいるものは主の色の太字", async ({
+    page,
+  }) => {
+    await goto(page, "/settings/reception");
+    const select = page.locator('select[name="types"]');
+    test.skip(
+      !(await page.evaluate(() => CSS.supports("appearance", "base-select"))),
+      "base-select を知らないブラウザはブラウザの一覧のまま",
+    );
+    expect(await select.evaluate((el) => getComputedStyle(el).appearance)).toBe(
+      "base-select",
+    );
+    await select.click();
+    expect(await select.evaluate((el) => el.matches(":open"))).toBe(true);
+    const checked = select.locator("option:checked");
+    expect(
+      await checked.evaluate((el) => getComputedStyle(el).fontWeight),
+    ).not.toBe("400");
+  });
+
+  test.describe("指の端末", () => {
+    test.use({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 800 },
+    });
+    test("ブラウザ・OS の選び方のまま", async ({ page }) => {
+      await goto(page, "/settings/reception");
+      const select = page.locator('select[name="types"]');
+      expect(
+        await select.evaluate((el) => getComputedStyle(el).appearance),
+      ).not.toBe("base-select");
+    });
+  });
+});
