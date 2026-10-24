@@ -462,28 +462,16 @@ async function anim(
   console.log("anim", name, frames.length, "frames");
 }
 
-async function slowScroll(
-  page: Page,
-  steps = 40,
-  selector: string | null = null,
-): Promise<void> {
-  // 設定は右の列だけが巻き取る (広い画面)。その列を指せば、そこを動かす
-  const total = await page.evaluate((sel) => {
-    const el =
-      (sel === null ? null : document.querySelector(sel)) ??
-      document.scrollingElement;
+async function slowScroll(page: Page, steps = 40): Promise<void> {
+  // 一覧の画面も設定も窓ごと巻く (番組表と映像の画面だけが自分で巻き取る)
+  const total = await page.evaluate(() => {
+    const el = document.scrollingElement;
     return el ? el.scrollHeight - el.clientHeight : 0;
-  }, selector);
+  });
   for (let i = 1; i <= steps; i++) {
     await page.evaluate(
-      ([y, sel]) =>
-        (
-          (sel === null ? null : document.querySelector(sel as string)) ??
-          document.scrollingElement
-        )?.scrollTo({
-          top: y as number,
-        }),
-      [(total * i) / steps, selector] as const,
+      (y) => document.scrollingElement?.scrollTo({ top: y }),
+      (total * i) / steps,
     );
     await page.waitForTimeout(120);
   }
@@ -1085,7 +1073,7 @@ try {
       await settle(page, 2000);
       await anim(page, "tuners-anim", async () => {
         await page.waitForTimeout(1000);
-        await slowScroll(page, 60, ".page > .main");
+        await slowScroll(page, 60);
       });
     }
     if (want("settings-anim")) {
@@ -1093,7 +1081,7 @@ try {
       await settle(page, 2000);
       await anim(page, "settings-anim", async () => {
         await page.waitForTimeout(1000);
-        await slowScroll(page, 50, ".page > .main");
+        await slowScroll(page, 50);
       });
     }
     await page.context().close();
