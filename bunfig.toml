@@ -3,7 +3,6 @@
 # import を並べ替える (副作用だけの import は順を変えない)
 sortImports = true
 ignorePatterns = [
-  "deploy/",
   # Helm のテンプレートは Go のテンプレートで、YAML として読めない
   "charts/*/templates/",
   # drizzle-kit が出すマイグレーション (SQL と snapshot の JSON)。手では触らない
