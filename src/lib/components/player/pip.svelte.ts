@@ -5,68 +5,18 @@ import { type Composed, canCompose, compose } from "./compose";
 /**
  * ピクチャーインピクチャー (PiP)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
  *
- * 映像だけを小窓にして、他の画面・他のアプリを触りながら観る。操作列は小窓に付いていかない。
+ * どこでボタンを出さないか・MPEG-2 と字幕の出し方は docs/player.md (`pip.svelte.ts` の行)。
  *
- * ## ボタンを出さないところ
- *
- * - **iPhone / iPad のホーム画面から開いたもの (PWA)。** Safari が許していない。
- *   API は有るように見える (`pictureInPictureEnabled` が立つ) のに押しても出ないので、
- *   `navigator.standalone` (Apple の端末にしか無い) で見分けて、ボタンごと出さない
- * - **ページから小窓を開かせる API (`requestPictureInPicture`) が無いブラウザ。** 押しても
- *   何も起きないボタンを並べない。ブラウザ自身の小窓の切り替えは、ページと関係なく使える
- * - **MPEG-2 の映像ストリームを取れないブラウザ (Firefox)**。MPEG-2 の間だけ出さない (下)
- *
- * Safari は標準の APIのほかに `webkitSetPresentationMode` を持っていて、古い iOS の
- * Safari にはそちらしか無い。標準が無ければそちらで出す。
- *
- * ## MPEG-2 で見ているとき
- *
- * **映像は worker の canvas にあって、`<video>` は空** (`raw/engine.ts`)。そのまま出すと
- * 黒い小窓になる。worker が描いた映像のストリームを別の `<video>` に映し、それを小窓にする
- * (ストリームの取り方は `RawEngine.pipStream`。Chrome は worker が直に書き込み、Safari は
- * canvas から取る。Firefox はどちらもできない)。音はページ (`AudioContext`) が組み、小窓を出している
- * 間は `<audio>` を通して鳴らす (`RawEngine.route`。Safari は Audio Session)。
- *
- * **代わりの `<video>` はMPEG-2 に切り替えた時点で用意しておく** (`prepare`)。押されてから
- * ストリームを繋いで1枚目を待っていた頃は、iPhone の Safari で必ず断られていた
- * (`NotAllowedError: The request is not triggered by a user activation.`) — 待っている
- * 間に「押された直後」が切れる。小窓をリクエストするのは押されたその場でなければならず、
- * そのためには1枚目が既に届いている (`HAVE_METADATA`) 必要がある。
- * 1枚目が届いたらストリームを切っておき (`enabled = false`)、押されたら戻す。
- * 小窓に出していない間まで映像を写し続けない
- *
- * ## 字幕も小窓に出す
- *
- * 字幕は `<video>` の上に重ねた canvas なので、`<video>` をそのまま小窓にすると付いていかない。
- * **コマごとに字幕の canvas を重ねたストリームを作り** (`compose.ts`)、代わりの `<video>` を小窓にする。
- * 重ねられるのは Chrome・Edge だけ (`MediaStreamTrackProcessor`)。Safari・Firefox は今までどおり
- * 字幕無しで出す。
- *
- * - **MPEG-2 のとき**: MPEG-2 のストリームに重ねたものを、代わりの `<video>` に用意しておく。字幕が出ていない
- *   コマは素通し
- * - **変換した映像 (ライブ・追っかけ・観る画面)**: 押した時点で字幕を出して再生しているときだけ、
- *   `<video>` からストリームを取って (`captureStream`) 重ね、代わりの `<video>` を小窓にする。
- *   字幕が無い・消しているときは `<video>` をそのまま出す (重ねるぶん重い)。**用意するのは
- *   小窓に出している間だけ**で、閉じたら畳む。音は今までどおり元の `<video>` から鳴る。
- *   ストリームには時刻が無いので、小窓の中で位置を動かすことはできない
- *
- * 小窓を出したあとで字幕を出し消しすると、重ねたものはそれに付いてくる。字幕を消した
- * まま出した (重ねていない) 小窓は、あとで字幕を出しても付いてこない — 開き直す
- *
- * ## 止める・再開する
- *
- * 小窓にもブラウザの再生ボタンがあり、押すと `<video>` を直に止める。**ライブと
- * 追っかけは「止めているか」を player 側で持っている** (`live-player` の `paused`) ので、
- * 渡された `paused` / `toggle` で合わせる。観る画面は `<video>` の `play`/`pause` を
- * そのまま見ているので要らない。**字幕を重ねた小窓 (代わりの `<video>`) は、押されたら
- * 元の `<video>` を止める・再開する** (代わりのほうはストリームを映しているだけで、止めても音は止まらない)
- *
- * ## OS・ブラウザが自分で小窓にするのを止める
- *
- * バックグラウンド再生を切っている間 (`auto` が false。`background.svelte.ts`) は
- * `disablePictureInPicture` を立てておく。全画面からホームへ戻る (iPhone)・タブを移る
- * (Chrome) だけで勝手に小窓が出て、裏で鳴り続けていた。**押して開く小窓には効かせない** —
- * リクエストする直前に下ろし (`enter`)、出している間は下ろしたまま (立てると小窓が閉じる)
+ * - iPhone / iPad のホーム画面から開いたもの (PWA) は、API が有るように見えて押しても出ないので
+ *   `navigator.standalone` で見分ける。標準の API が無い古い Safari は `webkitSetPresentationMode` で出す
+ * - MPEG-2 は `<video>` が空なので、worker が描いた映像のストリームを代わりの `<video>` に映して出す
+ *   (`RawEngine.pipStream`)。代わりの `<video>` は MPEG-2 に切り替えた時点で1枚目まで用意しておく
+ *   (`prepare`) — 押されてから待つと iPhone の Safari では「押された直後」が切れて断られる
+ * - 字幕はコマごとに重ねたストリームを作って出す (`compose.ts`。Chrome・Edge だけ)。変換した映像は押した時点で
+ *   字幕を出して再生しているときだけ、小窓に出している間だけ重ねる
+ * - 小窓の再生ボタンは `<video>` を直に止めるので、ライブと追っかけは `paused` / `toggle` で player に合わせる
+ * - バックグラウンド再生を切っている間 (`auto` が false) は `disablePictureInPicture` を立て、OS・ブラウザが
+ *   勝手に小窓にするのを止める。押して開く小窓には効かせない (リクエストの直前に下ろす)
  */
 
 interface Options {
@@ -152,6 +102,24 @@ function shown(video: WebkitVideo): boolean {
   );
 }
 
+/** `types` のどれかが来たら `listener` を呼ぶ。外す関数を返す */
+function listenAll(
+  target: EventTarget,
+  types: string[],
+  listener: () => void,
+): () => void {
+  for (const type of types) target.addEventListener(type, listener);
+  return () => {
+    for (const type of types) target.removeEventListener(type, listener);
+  };
+}
+
+/** 止める・再開する (再開を断られても気にしない) */
+function playOrPause(video: HTMLVideoElement, paused: boolean): void {
+  if (paused) video.pause();
+  else void video.play().catch(() => undefined);
+}
+
 export function pictureInPicture(options: Options): Pip {
   /** 開いた端末で決まる。サーバで組むときは無いので、開いてから測る */
   let able = $state(false);
@@ -186,36 +154,32 @@ export function pictureInPicture(options: Options): Pip {
 
   /** 出た・引っ込んだを受け取る。**閉じるのは小窓の × からも来る** ので、こちらで押したかに頼らない */
   function listen(video: WebkitVideo): () => void {
-    const update = () => {
-      if (shown(video)) on = video;
-      else if (on === video) on = null;
-      if (video === proxy && on !== proxy) {
-        flowing(false);
-        // 変換した映像に重ねていたなら畳む。小窓に出していない間まで重ねない
-        dropBaked();
-      }
-    };
-    video.addEventListener("enterpictureinpicture", update);
-    video.addEventListener("leavepictureinpicture", update);
-    video.addEventListener("webkitpresentationmodechanged", update);
-    return () => {
-      video.removeEventListener("enterpictureinpicture", update);
-      video.removeEventListener("leavepictureinpicture", update);
-      video.removeEventListener("webkitpresentationmodechanged", update);
-    };
+    return listenAll(
+      video,
+      [
+        "enterpictureinpicture",
+        "leavepictureinpicture",
+        "webkitpresentationmodechanged",
+      ],
+      () => {
+        if (shown(video)) on = video;
+        else if (on === video) on = null;
+        if (video === proxy && on !== proxy) {
+          flowing(false);
+          // 変換した映像に重ねていたなら畳む。小窓に出していない間まで重ねない
+          dropBaked();
+        }
+      },
+    );
   }
 
   /**
-   * **小窓で押された止める・再開を player に伝える。**
-   *
-   * 小窓に出している間だけ。それ以外の `pause` にまで反応すると、押していないのに止まった
-   * ことになる。**MPEG-2 へ移るときも反応しない** — player は変換したほうの `<video>` を止めるが
-   * (`startRaw`)、`pause` が届くのは小窓が閉じきる前で、まだ `on` のまま。
-   * player が自分で止めた・再開したときは、その時点で `paused` が既に合っているので何もしない
+   * 小窓で押された止める・再開を player に伝える。小窓に出している間だけ (MPEG-2 へ移るときの `pause` は
+   * まだ `on` のまま届くので、`proxied` で見分ける)。player が自分で止めたときは `paused` が既に合っている
    */
   function follow(video: HTMLVideoElement): () => void {
     const { paused, toggle } = options;
-    const sync = () => {
+    return listenAll(video, ["pause", "play"], () => {
       if (on !== video || (video === proxy) !== proxied()) return;
       if (paused !== undefined && toggle !== undefined) {
         if (video.paused !== paused()) toggle();
@@ -223,17 +187,9 @@ export function pictureInPicture(options: Options): Pip {
       }
       // 観る画面で、字幕を重ねた小窓 (代わりの video) で押された。元の video を合わせる
       const main = options.video();
-      if (video !== proxy || main === null || main.paused === video.paused)
-        return;
-      if (video.paused) main.pause();
-      else void main.play().catch(() => undefined);
-    };
-    video.addEventListener("pause", sync);
-    video.addEventListener("play", sync);
-    return () => {
-      video.removeEventListener("pause", sync);
-      video.removeEventListener("play", sync);
-    };
+      if (video === proxy && main !== null && main.paused !== video.paused)
+        playOrPause(main, video.paused);
+    });
   }
 
   $effect(() => {
@@ -245,24 +201,19 @@ export function pictureInPicture(options: Options): Pip {
      * 観る画面で、字幕を重ねた小窓を出している間に操作バーで止めた・再開した。小窓の
      * 再生ボタンの見た目を合わせる (ライブと追っかけは下の `paused` の $effect が合わせる)
      */
-    const mirror = () => {
+    const unmirror = listenAll(video, ["pause", "play"], () => {
       if (
-        options.paused !== undefined ||
-        baked === null ||
-        proxy === null ||
-        on !== proxy
+        options.paused === undefined &&
+        baked !== null &&
+        proxy !== null &&
+        on === proxy
       )
-        return;
-      if (video.paused) proxy.pause();
-      else void proxy.play().catch(() => undefined);
-    };
-    video.addEventListener("pause", mirror);
-    video.addEventListener("play", mirror);
+        playOrPause(proxy, video.paused);
+    });
     return () => {
       unlisten();
       unfollow();
-      video.removeEventListener("pause", mirror);
-      video.removeEventListener("play", mirror);
+      unmirror();
     };
   });
 
@@ -297,9 +248,7 @@ export function pictureInPicture(options: Options): Pip {
   /** MPEG-2 のとき、代わりの video も止める・再開を合わせる (押されたのが操作バーのボタンのとき) */
   $effect(() => {
     const paused = options.paused?.() ?? false;
-    if (proxy === null || on !== proxy) return;
-    if (paused) proxy.pause();
-    else void proxy.play().catch(() => undefined);
+    if (proxy !== null && on === proxy) playOrPause(proxy, paused);
   });
 
   /*
@@ -476,8 +425,7 @@ export function pictureInPicture(options: Options): Pip {
         );
       video = proxy;
       flowing(true);
-      if (options.paused?.() === true) video.pause();
-      else void video.play().catch(() => undefined);
+      playOrPause(video, options.paused?.() === true);
     } else if (video !== null && composable(video))
       video = (await composeBaked(video)) ?? video;
     if (video === null) return;

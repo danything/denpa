@@ -33,43 +33,16 @@
   import { PHONE_LANDSCAPE } from "./PlayerLayout.svelte";
 
   /**
-   * アンビエントモード。**いまのコマの色を、映像の周りの地に薄く敷く** (YouTube と同じ見え方)。
-   * 舞台 (`PlayerStage`) が枠のすぐ前 (兄弟) に置く。オン/オフと写し方は `ambient.svelte.ts`。
+   * アンビエントモード。いまのコマの色を、映像の周りの地に薄く敷く (YouTube と同じ見え方。docs/player.md)。
+   * 舞台 (`PlayerStage`) が枠のすぐ前 (兄弟) に置く。オン/オフと写し方は `ambient.svelte.ts`、計算は `ambient.ts`。
    *
-   * ## 見え方
-   *
-   * - **縦に積むとき (768px より狭い)** … 映像の下の番組の中身に色を敷く。映像のすぐ下がいちばん濃く、
-   *   下へ向かって地に溶ける (`reach` の 90%)。中身の字は色の上に直に載る
-   * - **二段組** … 色を窓全体に敷く。映像の周りがいちばん濃く、窓の端へ向かって薄くなる (届く幅は枠から
-   *   いちばん遠い窓の端まで。`farthest`)。見出しは地の色を外し (右の列はもともと地も線も無い)、同じ色の上に載る
-   * - 光の輪ではなく地の色に見えるよう、色は**明るさを抑えてから敷く** (`toneFrame`)。暗いテーマは深い色、
-   *   明るいテーマは淡い色になり、上に載る字はどちらも 4.5 以上で読める (`WASH_LUMINANCE`)。
-   *   明るいテーマでは色の薄い所を透明にし、`mix-blend-mode: multiply` で地に掛ける
-   * - 見出しだけを別の色で塗ることはしない。二段組で見出しが色づくのは、窓全体に敷いた色の上に透けて載るから
-   *
-   * ## 作り
-   *
-   * - **写すのは `EVERY` (200ms) ごと、1秒に5回。** 縮めるのは写す側 (`<video>` は worker、canvas に
-   *   描いているときはその worker) で、画面の側で元の大きさの画素を読むことは無い
-   * - 色は、枠の幅を 96 画素とした小さな canvas の中で作り (`ambient.ts` の `glowLayout`・`glowPixels`)、
-   *   CSS で引き伸ばして見せる。色は**縁の色を外へ延ばしたもの** (`edgeExtend`)。辺に沿っては細かく (上下 32 点・左右 18 点)、辺から内へは外側 15% の帯で平均する。濃さは枠からの距離で決める。
-   *   **CSS の `filter: blur` は使わない** — ぼかしが画面の大きさになり、GPU の無い端末では重かった
-   * - **前の色から次の色へ `FADE` (200ms) かけて 4 段で入れ替える** (`ease`)。色は時定数 250ms でならし (`follow`)、場面が変わったときだけすぐ切り替える。
-   *   CSS で透明度を動かすと毎フレーム合成し直すので、段は canvas に描く
-   * - **色は枠に重ならない4本の帯 (`.band`) にだけ描く** (`strips`)。帯はどれも同じ1枚を切り出す。
-   *   枠の後ろに1枚で敷くと、映像が1コマ進むたびに後ろまで合成し直すことになる
-   * - 範囲は、二段組では窓全体、縦に積むときは `<main>` の縦の範囲と窓の横幅で切る (`region`)。
-   *   ページの巻き取れる長さを増やさない
-   * - **ブラウザの枠の色 (`theme-color`) も、ページの上の端に見える色にする** (`washTop`)。色を入れ替えたときだけ
-   *   変える (動かさない設定の端末では1枚目のまま)
-   *
-   * ## 写さないとき (`ambient.ts` の `plan`)
-   *
-   * 止めている間・裏に回った間・全画面の間は写さない (色は最後の1枚のまま)。**動かさない設定の端末では
-   * 1枚だけ写して止める** (入れ替えの段も付けない)。横にしたスマホでは映像の周りに地が残らないので出さない。
-   *
-   * **映像の上には何も重ねない** — 色は枠の外だけで、字幕・データ放送・操作バー・CM 飛ばしの通知は
-   * 枠の中にある
+   * - 縦に積むときは映像の下の中身に、二段組は窓全体に敷き、枠から離れるほど薄くする (`reach`・`farthest`)。
+   *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5 以上で読める (`toneFrame`・`WASH_LUMINANCE`)
+   * - 色は小さな canvas で作って CSS で引き伸ばす。`filter: blur` は使わない (GPU の無い端末で重かった)
+   * - 前の色から `FADE` かけて段で入れ替える (`ease`)。CSS で透明度を動かすと毎フレーム合成し直すので canvas に描く
+   * - 色は枠に重ならない4本の帯 (`.band`) にだけ描く (`strips`)。枠の後ろに敷くと映像のコマごとに合成し直す
+   * - ブラウザの枠の色 (`theme-color`) もページの上の端の色にする (`washTop`)
+   * - 写さないときは `ambient.ts` の `plan`。映像の上には何も重ねない
    */
   let {
     ambient,
@@ -195,13 +168,8 @@
   }
 
   /**
-   * 帯の canvas に、前の1枚から次の1枚へ `mix` だけ進んだ色を描く。**2枚を足し合わせて混ぜる** —
-   * 前の1枚を `1 - mix`、次の1枚を `mix` の濃さで描き、2枚目は重ねずに足す (`lighter`)。canvas は透明度を
-   * 掛けた色で持つので、足すとちょうど 2 枚の間の色になる。
-   *
-   * 前の1枚を濃さ 1 のまま描き、その上に次の1枚を重ねていた頃は、光の薄い所 (縁へ向かって透ける所) で
-   * 2 枚の透明度が重なって入れ替えの間だけ濃くなり、入れ替え終わると元の薄さへ落ちていた。1 秒に 5 回
-   * 入れ替えるので、光が 5 回明滅して見えた (画面に出たコマで、明るさが 31.6 → 37.3 と上がっては落ちていた)
+   * 帯の canvas に、前の1枚から次の1枚へ `mix` だけ進んだ色を描く。2枚目は重ねずに足す (`lighter`) —
+   * 重ねると光の薄い所で透明度が重なり、1秒に5回の入れ替えのたびに明滅して見えた
    */
   function paint(mix: number): void {
     for (const canvas of canvases) {
@@ -224,9 +192,19 @@
     }
   }
 
-  /**
-   * 写した1枚を次の色にして、`FADE` の長さで前の色から入れ替える (動かさない設定ではすぐ)
-   */
+  /** 入れ替えをやめて、いまの色を最後の1枚から作り直して描く (置き場・テーマが変わったとき) */
+  function repaint(): void {
+    clearInterval(fading);
+    coming = null;
+    shown = null;
+    if (colors !== null) {
+      shown = scratch();
+      if (layout !== null) compose(shown, colors, layout);
+    }
+    paint(0);
+  }
+
+  /** 写した1枚を次の色にして、`FADE` の長さで前の色から入れ替える (動かさない設定ではすぐ) */
   function show(bitmap: ImageBitmap): void {
     const pixels = framePixels(bitmap);
     bitmap.close();
@@ -332,12 +310,7 @@
   $effect(() => {
     void dark;
     untrack(() => {
-      if (colors === null || layout === null) return;
-      clearInterval(fading);
-      coming = null;
-      shown = scratch();
-      compose(shown, colors, layout);
-      paint(0);
+      if (colors !== null && layout !== null) repaint();
     });
   });
 
@@ -354,8 +327,7 @@
     const main = target.closest("main") ?? document.documentElement;
     const frame = target.closest<HTMLElement>("[data-player-layout]");
     const measure = () => {
-      const rect = target.getBoundingClientRect();
-      const s = rect;
+      const s = target.getBoundingClientRect();
       const m = main.getBoundingClientRect();
       /*
        * 二段組は**窓全体** (見出しと右の列の下にも敷き、窓の端へ向かって薄くする)。
@@ -426,16 +398,7 @@
         }
       });
       // 置き場が変わったら、最後の1枚からぼかし直す (入れ替えの途中なら、そこで済ませる)
-      if (moved) {
-        clearInterval(fading);
-        coming = null;
-        shown = null;
-        if (colors !== null) {
-          shown = scratch();
-          compose(shown, colors, next);
-        }
-        paint(0);
-      }
+      if (moved) repaint();
     };
     measure();
     const sizes = new ResizeObserver(measure);
