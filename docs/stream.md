@@ -600,7 +600,7 @@ WebSocket に流し、ブラウザが WebAssembly の MPEG-2 デコーダでデ�
 ### デコーダ
 
 FFmpeg の **mpeg2video のデコーダとフレームの区切りを探す parser、AAC のデコーダだけ**を emscripten で組んだもの
-（`wasm/mpeg2/`。互換モードの音のために Opus のデコーダと、それが当てにする swresample も入っている）。AAC の parser は組まない —
+（`wasm/decoder.c`。互換モードの音のために Opus のデコーダと、それが当てにする swresample も入っている）。AAC の parser は組まない —
 ADTS の区切りと時刻は JS（`ts/pes.ts` の `AdtsSplitter`）が付け、デコーダは ADTS の頭を自分で読む。音も映像と同じ worker でデコードする
 （1秒ぶんで数 ms）。**Dockerfile の `mpeg2wasm` 段で毎回組み**、git には入れません（生成物を抱えると FFmpeg を上げるたびに差し替えが要り、
 組んだ手順と中身が食い違っても気づけない）。FFmpeg はサーバの ffmpeg と同じ版に揃え、emsdk は版で固定しています。置き場はアプリの外

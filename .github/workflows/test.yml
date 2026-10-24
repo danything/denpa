@@ -546,7 +546,7 @@ jobs:
       # イメージを使わずランナーで回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
       #
       # **組んだものは actions/cache に置いて使い回す。** 中身が変わるのは段の書き方
-      # (emsdk・FFmpeg の版) か wasm/mpeg2 を変えたときだけなので、その2つを鍵にする。
+      # (emsdk・FFmpeg の版) か wasm/decoder.c を変えたときだけなので、その2つを鍵にする。
       # 当たれば 1〜2 秒で戻る (前は buildx を立てて層のキャッシュから組み直すのに 15 秒ほど)。
       # **どの組でも戻す** — 要るスペック (28-live-raw・38-live-compat…) がどの組にあっても、
       # 組分けを気にせず足せるように。外れたときだけ、その組で組んで置く (外れるのは
@@ -564,7 +564,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/mpeg2
-          key: mpeg2wasm-${{ steps.mpeg2.outputs.stage }}-${{ hashFiles('wasm/mpeg2/**') }}
+          key: mpeg2wasm-${{ steps.mpeg2.outputs.stage }}-${{ hashFiles('wasm/**') }}
 
       - name: Build the MPEG-2 decoder (WASM)
         if: steps.mpeg2-cache.outputs.cache-hit != 'true'

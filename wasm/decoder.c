@@ -19,7 +19,7 @@
  *   (B フレームの並べ替えはデコーダが済ませている)
  *
  * スレッドは使わない。スレッド版は COOP/COEP (crossOriginIsolated) が要る (docs/stream.md#放送そのままmpeg-2を送る)。
- * SIMD はコンパイラに任せて使う (build.sh)
+ * SIMD はコンパイラに任せて使う (Dockerfile の `mpeg2wasm` 段)
  */
 #include <emscripten/emscripten.h>
 #include <libavcodec/avcodec.h>

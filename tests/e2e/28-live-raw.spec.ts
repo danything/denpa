@@ -17,7 +17,7 @@ import {
  *
  * エンコードする経路の E2E (20-live) と違って、**ここは映像が出るところまで見る。** 偽エージェントは
  * 本当にデコードできる MPEG-2 と AAC を流していて (`src/lib/ts/synth-av.ts`)、ブラウザの中の
- * WASM のデコーダ (`wasm/mpeg2`、Dockerfile の `mpeg2wasm` 段で組む) がそれをデコードする。
+ * WASM のデコーダ (`wasm/decoder.c`、Dockerfile の `mpeg2wasm` 段で組む) がそれをデコードする。
  * デコーダの置き場は `MPEG2_DIR` (CI は組んだものをランナーへ出して渡す)。
  *
  * 映像は worker の canvas にあって画面から画素を読めないので、**描いたコマ数とデコードできた音の

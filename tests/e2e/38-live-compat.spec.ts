@@ -19,7 +19,7 @@ import {
  * テスラの車載ブラウザは停車中でも `<video>` を止める。互換モードではエンコードしたもの (fMP4) を MSE に
  * 渡さず、放送のままの MPEG-2 と同じ worker でデコードして canvas に描く。ここは**描くところまで**見る —
  * 偽 ffmpeg に目印 (`stack.liveFmp4File`) を置くと、本物の H.264 + AAC・AV1 + Opus の fMP4 を流す
- * (`tests/fake/fmp4-loop.ts`)。映像は VideoDecoder が、音は WASM (`wasm/mpeg2`、28-live-raw と同じ
+ * (`tests/fake/fmp4-loop.ts`)。映像は VideoDecoder が、音は WASM (`wasm/decoder.c`、28-live-raw と同じ
  * デコーダ。AAC は ADTS の頭を付けて、Opus は OpusHead で) がデコードする。
  *
  * H.264 は、走らせている Chromium の VideoDecoder がデコードできるときだけ描いて確かめる (デコードできなければ

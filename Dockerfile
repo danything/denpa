@@ -19,16 +19,57 @@ RUN bun install
 #
 # FFmpeg は下の `ffmpeg` 段と同じ版に揃える (Renovate が同じ PR で2か所とも上げる)。
 # 組むのはデコーダ1つだけなので、1〜2分で終わる
+#
+# **組むのは mpeg2video のデコーダと、フレームの区切りを探す parser と、AAC・Opus のデコーダだけ。**
+# 他は全部切る (`--disable-everything`)。AAC はブラウザの AudioDecoder に任せていたが、
+# https でしか出てこず iPhone の Safari には iOS 26 まで無いので、こちらでデコードする。
+# AAC の parser は組まない — ADTS の区切りと時刻は JS (ts/pes.ts の AdtsSplitter) が付ける。
+# **Opus のデコーダも組む** (AV1 と組んで送られてくる fMP4 の音。ライブ・追っかけを canvas で
+# 描く経路 — 車載ブラウザなど <video> が止まる端末向け)。Opus のデコーダは swresample を当てにする
+# (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
+#
+# - `--disable-asm` … x86 の手書きアセンブリは wasm では使えない
+# - スレッドは使わない。スレッド版は SharedArrayBuffer のために COOP/COEP
+#   (crossOriginIsolated) を全ページに要求することになり、denpa の画面 (データ放送の
+#   中継・ロゴ・別オリジンの Hybridcast) と噛み合わない
+# - **SIMD は使う** (`-msimd128`。コンパイラが自動でベクトルにする)。1 本なら 1080i を実時間の 3 倍で
+#   デコードできるが、同じ端末で 2 本見ると間に合わなくなった。1 割でも縮める (今のブラウザはどれも対応している)
+# - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
+#   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む
 # ---------------------------------------------------------------------------
 FROM docker.io/emscripten/emsdk:6.0.13 AS mpeg2wasm
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ARG FFMPEG_VERSION=9.0.2
-COPY wasm/mpeg2/ /src/mpeg2/
-RUN mkdir /tmp/ffmpeg && \
-    curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20 \
-      https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 -C /tmp/ffmpeg && \
-    bash /src/mpeg2/build.sh /tmp/ffmpeg /opt/denpa/mpeg2 && \
-    rm -rf /tmp/ffmpeg
+COPY wasm/decoder.c /src/decoder.c
+RUN <<'EOF'
+#!/bin/bash
+set -euo pipefail
+mkdir /tmp/ffmpeg /tmp/build
+curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20 \
+  "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2" | tar -xj --strip-components=1 -C /tmp/ffmpeg
+cd /tmp/build
+emconfigure /tmp/ffmpeg/configure \
+  --prefix=/tmp/build/prefix --target-os=none --arch=x86_32 --enable-cross-compile \
+  --disable-asm --disable-inline-asm --disable-x86asm --disable-stripping \
+  --disable-programs --disable-doc --disable-debug --disable-runtime-cpudetect \
+  --disable-autodetect --disable-network --disable-pthreads \
+  --disable-avdevice --disable-avformat --disable-avfilter --disable-swscale \
+  --disable-everything --enable-decoder=mpeg2video,aac,opus --enable-parser=mpegvideo \
+  --nm=emnm --ar=emar --ranlib=emranlib --cc=emcc --cxx=em++ --objcc=emcc --dep-cc=emcc \
+  --extra-cflags="-O3 -msimd128" >configure.log
+emmake make -j"$(nproc)" >make.log 2>&1 || { tail -50 make.log; exit 1; }
+emmake make install >/dev/null
+mkdir -p /opt/denpa/mpeg2
+emcc -O3 -msimd128 /src/decoder.c -I/tmp/build/prefix/include -L/tmp/build/prefix/lib -lavcodec -lswresample -lavutil \
+  -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB \
+  -sENVIRONMENT=worker -sFILESYSTEM=0 \
+  -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDecoder \
+  -sEXPORTED_FUNCTIONS=_malloc,_free \
+  -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAP32 \
+  -o /opt/denpa/mpeg2/decoder.mjs
+ls -l /opt/denpa/mpeg2
+rm -rf /tmp/ffmpeg /tmp/build
+EOF
 
 # 組んだ2つだけを取り出す段。**CI の E2E はイメージを使わずランナーで回す**ので、
 # `docker buildx build --target mpeg2wasm-out --output type=local,dest=…` でここだけ手元へ出す

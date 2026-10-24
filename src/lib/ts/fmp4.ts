@@ -467,7 +467,7 @@ function readTraf(
 }
 
 /**
- * **MP4 の AAC の1コマに付ける ADTS の頭。** デコーダ (`wasm/mpeg2` の `aac_push`) は
+ * **MP4 の AAC の1コマに付ける ADTS の頭。** デコーダ (`wasm/decoder.c` の `aac_push`) は
  * 放送の ADTS を食う作りなので、MP4 の1コマ (頭無し) はそのままでは渡せない。
  * 頭の中身は AudioSpecificConfig (esds) から起こす: 種類 (LC なら 2)・標本化周波数の番号・チャンネル数。
  *

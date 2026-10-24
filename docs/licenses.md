@@ -128,7 +128,7 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
 [Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて
 `/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#放送そのままmpeg-2を送る))。
 **`--enable-gpl` を付けずに組んでいる**ので、中の FFmpeg は LGPL のまま (denpa 自身は AGPL で、
-どちらでも問題は無い)。ソースは Dockerfile が取ってくる FFmpeg の tarball と `wasm/mpeg2/decoder.c`。
+どちらでも問題は無い)。ソースは Dockerfile が取ってくる FFmpeg の tarball と `wasm/decoder.c`。
 
 | 名前                                                                               | 何に                                          | 出どころ                                        | ライセンス                        |
 | ---------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------- | --------------------------------- |
