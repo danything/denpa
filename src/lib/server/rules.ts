@@ -12,6 +12,7 @@ import {
 import { type Genre, genreMatches } from "#lib/arib.js";
 
 import { globTerms, toHalfWidth } from "../fold";
+import { hasTime, inTime, jstOf } from "../rule-time";
 import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";
 import { config } from "./config";
@@ -67,7 +68,7 @@ export function haystack(
  */
 export type Matchable = Pick<
   Program,
-  "service_id" | "is_free" | "genres" | "genre_detail"
+  "service_id" | "is_free" | "genres" | "genre_detail" | "start_at"
 >;
 
 /**
@@ -94,6 +95,10 @@ export interface CompiledRule {
   services: number[] | null;
   types: string[] | null;
   genres: string[] | null;
+  /** 時間帯 (0:00 からの分)。無ければ null (`rule-time.ts`) */
+  time: { from: number; to: number } | null;
+  /** 曜日 (0 が日曜)。毎日なら null */
+  weekdays: number[] | null;
   fields: SearchField[];
   keywords: string[];
   ignores: string[];
@@ -105,6 +110,12 @@ export function compile(rule: Rule): CompiledRule {
     services: nonEmpty(rule.service_ids),
     types: nonEmpty(rule.service_types),
     genres: nonEmpty(rule.genres),
+    time: hasTime(rule) ? { from: rule.time_from, to: rule.time_to } : null,
+    // 7日とも選んだものは毎日と同じ
+    weekdays:
+      rule.weekdays !== null && rule.weekdays.length < 7
+        ? nonEmpty(rule.weekdays)
+        : null,
     fields: parseSearchFields(rule.search_fields),
     // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ当たる
     keywords: searchable(rule.keyword).split(/\s+/).filter(Boolean),
@@ -145,12 +156,21 @@ export function globPatterns(compiled: CompiledRule): string[] | null {
  * - `paid` 有料放送 (全体設定で無料放送だけにしているとき)
  * - `service` 局の条件から外れる
  * - `genre` ジャンルの条件から外れる
+ * - `time` 始まる時刻が時間帯の外
+ * - `weekday` 始まる時刻の曜日が条件の外
  * - `empty` 条件が何も無い (全番組に当たってしまうので当てない)
  * - `keyword` キーワードを含まない
  * - `ignore` 除外する言葉を含む
  */
 export type Miss =
-  "paid" | "service" | "genre" | "empty" | "keyword" | "ignore";
+  | "paid"
+  | "service"
+  | "genre"
+  | "time"
+  | "weekday"
+  | "empty"
+  | "keyword"
+  | "ignore";
 
 /**
  * ほどいたルールに番組が当てはまらない理由。当てはまれば null。
@@ -171,7 +191,8 @@ export function missOf(
 ): Miss | null {
   if (freeOnly && !program.is_free) return "paid";
 
-  const { services, types, genres, keywords, ignores } = compiled;
+  const { services, types, genres, time, weekdays, keywords, ignores } =
+    compiled;
 
   // チャンネルの条件は「種別」と「個別チャンネル」のOR。
   // 「地上波全部 + BS11だけ」のような指定ができるようにするため
@@ -190,12 +211,23 @@ export function missOf(
     if (!genreMatches(genres, detail)) return "genre";
   }
 
+  // 時間帯と曜日は番組の始まる時刻を日本時間で見る。日をまたぐ時間帯も、曜日は始まる日の暦 (`rule-time.ts`)
+  if (time !== null || weekdays !== null) {
+    const start = jstOf(program.start_at);
+    if (time !== null && !inTime(time.from, time.to, start.minutes))
+      return "time";
+    if (weekdays !== null && !weekdays.includes(start.weekday))
+      return "weekday";
+  }
+
   // 全条件が空のルールは全番組にマッチしてしまうので無効扱いにする
   if (
     keywords.length === 0 &&
     services === null &&
     types === null &&
-    genres === null
+    genres === null &&
+    time === null &&
+    weekdays === null
   )
     return "empty";
 
@@ -262,6 +294,8 @@ export interface RuleSource {
   name: string;
   service_id: number;
   genre_detail: Genre[] | null;
+  /** 始まる時刻。ルールの時間帯と曜日に当てる (この放送をそのルールが録るか) */
+  start_at: number;
 }
 
 /**
@@ -312,6 +346,7 @@ export function coveringRule(
     is_free: true,
     genres: null,
     genre_detail: source.genre_detail,
+    start_at: source.start_at,
   };
   return [...rules]
     .sort((a, b) => Number(b.enabled) - Number(a.enabled))

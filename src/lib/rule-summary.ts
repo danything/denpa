@@ -1,13 +1,14 @@
 import { genreName } from "./arib";
 import { SERVICE_TYPE_LABEL } from "./format";
+import { type Slot, slotSummary } from "./rule-time";
 import { parseSearchFields, SEARCH_FIELD_LABEL } from "./search";
 
 /**
  * **ルールの条件を1行で** (ルールの一覧の「条件」の列)。
- * 探す所 ・ 局 ・ ジャンル ・ 同じ回は1度 ・ 前の回は録らない ・ 除外、の順。キーワードは名前の列に出ているので書かない
+ * 探す所 ・ 局 ・ ジャンル ・ 時間帯と曜日 ・ 同じ回は1度 ・ 前の回は録らない ・ 除外、の順。キーワードは名前の列に出ているので書かない
  */
 
-export interface Summarized {
+export interface Summarized extends Slot {
   search_fields: string;
   service_ids: number[] | null;
   service_types: string[] | null;
@@ -42,6 +43,8 @@ export function conditionSummary(
   );
   if (rule.genres !== null && rule.genres.length > 0)
     parts.push(rule.genres.map(genreName).join("・"));
+  const slot = slotSummary(rule);
+  if (slot !== null) parts.push(slot);
   if (rule.dedupe) parts.push("同じ回は1度");
   if (rule.skip_earlier) parts.push("前の回は録らない");
   if (rule.ignore_keyword.trim() !== "")

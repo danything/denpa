@@ -28,6 +28,9 @@ function rule(fields: Partial<Rule>): Rule {
     service_ids: null,
     service_types: null,
     genres: null,
+    time_from: null,
+    time_to: null,
+    weekdays: null,
     enabled: true,
     priority: 2,
     dedupe: false,
@@ -244,6 +247,7 @@ describe("録画からルールを作る", () => {
     name: "[新]テストアニメ #1「はじまり」[字]",
     service_id: 211,
     genre_detail: [{ lv1: 7, lv2: 0 }],
+    start_at: 0,
   };
 
   test("キーワードはシリーズ名だけ。ジャンルは入れない (全ジャンル)", () => {
@@ -327,6 +331,32 @@ describe("録画からルールを作る", () => {
         recording,
       ),
     ).toBeUndefined();
+    // 時間帯と曜日は録画の始まる時刻で見る (start_at 0 は日本時間の木曜 9:00)
+    expect(
+      coveringRule(
+        [
+          rule({
+            keyword: "テストアニメ",
+            time_from: 19 * 60,
+            time_to: 20 * 60,
+          }),
+        ],
+        recording,
+      ),
+    ).toBeUndefined();
+    expect(
+      coveringRule(
+        [
+          rule({
+            keyword: "テストアニメ",
+            time_from: 9 * 60,
+            time_to: 10 * 60,
+            weekdays: [4],
+          }),
+        ],
+        recording,
+      )?.keyword,
+    ).toBe("テストアニメ");
   });
 });
 
@@ -336,6 +366,7 @@ describe("番組からルールを作る", () => {
     name: "[新]テストアニメ #1「はじまり」[字]",
     service_id: 211,
     genre_detail: [{ lv1: 7, lv2: 0 }],
+    start_at: 0,
   };
 
   test("キーワードはタイトルから切り出したシリーズ名だけ。ジャンルは入れない (全ジャンル)", () => {
@@ -412,5 +443,82 @@ describe("当たらない理由", () => {
     expect(
       miss({ keyword: "テストアニメ", ignore_keyword: "再放送 #1" }, anime),
     ).toBe("ignore");
+  });
+});
+
+describe("時間帯と曜日", () => {
+  /** 日本時間の 2026-10-23 (金) の hh:mm。テストの TZ によらない */
+  const friday = (hours: number, minutes = 0) =>
+    Date.UTC(2026, 9, 23, hours - 9, minutes);
+  const at = (start_at: number) =>
+    program({ name: "テストニュース", start_at });
+  const miss = (fields: Partial<Rule>, p: Program) =>
+    missOf(
+      compile(rule({ keyword: "テストニュース", ...fields })),
+      p,
+      "GR",
+      true,
+      (f) => (f.includes("name") ? p.name : ""),
+    );
+  const evening = { time_from: 19 * 60, time_to: 20 * 60 };
+
+  test("始まる時刻が from 以上 to 未満なら当たる", () => {
+    expect(miss(evening, at(friday(19)))).toBeNull();
+    expect(miss(evening, at(friday(19, 59)))).toBeNull();
+    // 端: to ちょうどは外、from の 1 分前も外
+    expect(miss(evening, at(friday(20)))).toBe("time");
+    expect(miss(evening, at(friday(18, 59)))).toBe("time");
+  });
+
+  test("from > to は日をまたぐ", () => {
+    const night = { time_from: 23 * 60, time_to: 2 * 60 };
+    expect(miss(night, at(friday(23)))).toBeNull();
+    expect(miss(night, at(friday(0)))).toBeNull();
+    expect(miss(night, at(friday(1, 59)))).toBeNull();
+    expect(miss(night, at(friday(2)))).toBe("time");
+    expect(miss(night, at(friday(22, 59)))).toBe("time");
+  });
+
+  test("0:00 で終わる時間帯は 23:59 まで", () => {
+    const late = { time_from: 23 * 60, time_to: 0 };
+    expect(miss(late, at(friday(23, 59)))).toBeNull();
+    expect(miss(late, at(friday(0)))).toBe("time");
+  });
+
+  test("曜日は始まる時刻の暦の曜日 (日本時間)", () => {
+    // 金曜 (5) の 0:30 は日本時間では金曜。UTC では木曜
+    expect(miss({ weekdays: [5] }, at(friday(0, 30)))).toBeNull();
+    expect(miss({ weekdays: [4] }, at(friday(0, 30)))).toBe("weekday");
+    // 日曜は 0
+    expect(
+      miss({ weekdays: [0] }, at(Date.UTC(2026, 9, 25, 12 - 9))),
+    ).toBeNull();
+  });
+
+  test("日をまたぐ時間帯でも曜日は始まる日で見る", () => {
+    const fridayNight = { time_from: 23 * 60, time_to: 2 * 60, weekdays: [5] };
+    expect(miss(fridayNight, at(friday(23, 30)))).toBeNull();
+    // 金曜 23 時からの続きの土曜 1 時は土曜なので外
+    expect(miss(fridayNight, at(friday(25)))).toBe("weekday");
+    // 金曜の 1 時は入る
+    expect(miss(fridayNight, at(friday(1)))).toBeNull();
+  });
+
+  test("両方空ならいつでも。片方だけ・同じ値の行は時間帯なし", () => {
+    expect(miss({}, at(friday(3)))).toBeNull();
+    expect(miss({ time_from: 19 * 60 }, at(friday(3)))).toBeNull();
+    expect(
+      miss({ time_from: 19 * 60, time_to: 19 * 60 }, at(friday(3))),
+    ).toBeNull();
+    // 7日とも選んだものは毎日
+    expect(miss({ weekdays: [0, 1, 2, 3, 4, 5, 6] }, at(friday(3)))).toBeNull();
+  });
+
+  test("時間帯や曜日だけでも条件になる", () => {
+    const bare = (fields: Partial<Rule>, p: Program) =>
+      missOf(compile(rule(fields)), p, "GR", true, () => p.name);
+    expect(bare({ weekdays: [5] }, at(friday(12)))).toBeNull();
+    expect(bare(evening, at(friday(12)))).toBe("time");
+    expect(bare({}, at(friday(12)))).toBe("empty");
   });
 });

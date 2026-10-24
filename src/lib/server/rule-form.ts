@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { genreName } from "../arib";
 import { SERVICE_TYPE_LABEL } from "../format";
+import { minutesOf, slotSummary } from "../rule-time";
 import { parseSearchFields } from "../search";
 import type { Rule } from "../types";
 import { orm } from "./db";
@@ -34,12 +35,51 @@ export interface Conditions {
   serviceIds: number[] | null;
   serviceTypes: string[] | null;
   genres: string[] | null;
+  /** 時間帯 (0:00 からの分)。両方そろっているときだけ入り、無ければどちらも null (`rule-time.ts`) */
+  timeFrom: number | null;
+  timeTo: number | null;
+  /** 曜日 (0 が日曜)。7日とも選んだものは毎日と同じなので null */
+  weekdays: number[] | null;
   /** 同じ回は最初の放送だけ録る (`rules.dedupe`)。送られてこなければ null (`switchOf`) */
   dedupe: boolean | null;
   /** 前の回は録らない (`rules.skip_earlier`)。送られてこなければ null (`switchOf`) */
   skipEarlier: boolean | null;
   /** 何も入っていない。全番組に当たってディスクを埋めるので、保存はさせない */
   empty: boolean;
+  /** 保存できない理由 (時間帯の片方だけ・始まりと終わりが同じ)。無ければ null */
+  invalid: string | null;
+}
+
+/** 時間帯の始まりと終わりが同じ。0 分の時間帯とも 24 時間とも読めるので断る */
+export const SAME_TIME = "時間帯の始まりと終わりが同じです";
+/** 時間帯の片方だけ */
+export const HALF_TIME = "時間帯は始まりと終わりの両方を入れてください";
+
+/** 時間帯と曜日を読む。時刻は `HH:MM` (`<input type="time">`)、曜日は 0〜6 */
+function slotOf(fields: Fields) {
+  const clock = (key: string) => minutesOf(String(fields.get(key) ?? ""));
+  const from = clock("timeFrom");
+  const to = clock("timeTo");
+  const days = [
+    ...new Set(
+      fields
+        .getAll("weekdays")
+        .map(Number)
+        .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6),
+    ),
+  ].sort((a, b) => a - b);
+  const invalid =
+    (from === null) !== (to === null)
+      ? HALF_TIME
+      : from !== null && from === to
+        ? SAME_TIME
+        : null;
+  return {
+    timeFrom: invalid === null ? from : null,
+    timeTo: invalid === null ? to : null,
+    weekdays: days.length === 0 || days.length === 7 ? null : days,
+    invalid,
+  };
 }
 
 /** 入力を条件として読む */
@@ -52,6 +92,7 @@ export function conditionsOf(fields: Fields): Conditions {
   const ids = list("serviceIds").map(Number).filter(Number.isFinite);
   const types = list("serviceTypes");
   const genres = list("genres");
+  const slot = slotOf(fields);
   return {
     keyword,
     ignoreKeyword: text("ignoreKeyword"),
@@ -60,13 +101,21 @@ export function conditionsOf(fields: Fields): Conditions {
     serviceIds: some(ids),
     serviceTypes: some(types),
     genres: some(genres),
+    timeFrom: slot.timeFrom,
+    timeTo: slot.timeTo,
+    weekdays: slot.weekdays,
     dedupe: switchOf(fields, "dedupe"),
     skipEarlier: switchOf(fields, "skipEarlier"),
+    // 時間帯と曜日も条件になる (EPGStation の時間帯だけのルールも入れられるように)
     empty:
       keyword === "" &&
       ids.length === 0 &&
       types.length === 0 &&
-      genres.length === 0,
+      genres.length === 0 &&
+      slot.timeFrom === null &&
+      slot.weekdays === null &&
+      slot.invalid === null,
+    invalid: slot.invalid,
   };
 }
 
@@ -110,16 +159,19 @@ function columns(conditions: Conditions) {
     service_ids: conditions.serviceIds,
     service_types: conditions.serviceTypes,
     genres: conditions.genres,
+    time_from: conditions.timeFrom,
+    time_to: conditions.timeTo,
+    weekdays: conditions.weekdays,
   };
 }
 
 /**
  * 入力中の条件を、保存していないルールとして組み立てる (下見に渡す形)。
- * 条件が空なら null (全番組に当たるだけなので数えない)
+ * 条件が空か保存できない (`invalid`) なら null (全番組に当たるだけ・保存できないものは数えない)
  */
 export function draftRule(fields: Fields): Rule | null {
   const conditions = conditionsOf(fields);
-  if (conditions.empty) return null;
+  if (conditions.empty || conditions.invalid !== null) return null;
 
   return {
     id: 0,
@@ -164,6 +216,12 @@ function ruleName(conditions: Conditions): string {
       ),
     );
   }
+  const slot = slotSummary({
+    time_from: conditions.timeFrom,
+    time_to: conditions.timeTo,
+    weekdays: conditions.weekdays,
+  });
+  if (slot !== null) parts.push(slot);
   return parts.length === 0
     ? "名前の無いルール"
     : `${parts.slice(0, 3).join("・")}${parts.length > 3 ? " ほか" : ""}`;
@@ -171,7 +229,7 @@ function ruleName(conditions: Conditions): string {
 
 /** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
 export const EMPTY_RULE =
-  "キーワード・局・ジャンルのいずれかを指定してください";
+  "キーワード・局・ジャンル・時間帯・曜日のいずれかを指定してください";
 
 /**
  * create と update で同じもの。**エンコード方式は書かない** — エンコードもCMも全体設定で、
@@ -239,6 +297,7 @@ function recordingSource(id: number) {
       name: recordings.name,
       service_id: recordings.service_id,
       genre_detail: recordings.genre_detail,
+      start_at: recordings.start_at,
       type: serviceTable.type,
     })
     .from(recordings)
@@ -258,6 +317,7 @@ function programSource(id: number) {
       name: programs.name,
       service_id: programs.service_id,
       genre_detail: programs.genre_detail,
+      start_at: programs.start_at,
       type: serviceTable.type,
     })
     .from(programs)
@@ -269,6 +329,7 @@ function programSource(id: number) {
     .select({
       name: reservations.name,
       service_id: reservations.service_id,
+      start_at: reservations.start_at,
       type: serviceTable.type,
     })
     .from(reservations)

@@ -261,6 +261,14 @@ export const rules = sqliteTable("rules", {
   service_types: json("service_types", strings),
   /** JSON 配列。`"7"` (大分類) か `"7-0"` (中分類まで)。NULL は全ジャンル */
   genres: json("genres", strings),
+  /**
+   * **番組の始まる時刻**の時間帯。日本時間の 0:00 からの分 (0〜1439)。`time_from` 以上 `time_to` 未満で、
+   * `time_from > time_to` は日をまたぐ (23:00〜02:00)。両方 NULL はいつでも (`rule-time.ts`)
+   */
+  time_from: integer("time_from"),
+  time_to: integer("time_to"),
+  /** JSON 配列。始まる時刻の曜日 (0 が日曜〜6 が土曜)。日をまたぐ時間帯も始まる日の暦で見る。NULL は毎日 */
+  weekdays: json("weekdays", numbers),
   enabled: flag("enabled")
     .notNull()
     .default(sql`1`),

@@ -168,6 +168,66 @@ test.describe("検索からルールを作る", () => {
     await cancelAllReservations(page);
   });
 
+  /**
+   * **時間帯と曜日** (`rules.time_from` / `time_to` / `weekdays`)。条件の行 (局・ジャンル・時間帯と曜日) は
+   * スイッチと優先度の上にまとまり、時間帯を入れると行の「録る」が変わる。判定の端は rules.test.ts が見る
+   */
+  test("時間帯を入れると行の「録る」が変わる", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await goto(page, `/search?q=${encodeURIComponent("テストアニメ")}`);
+    await page.getByTestId("rule-dedupe").uncheck();
+
+    // 条件の行は局・ジャンル・時間帯と曜日の順で、スイッチより上
+    const top = async (id: string) =>
+      (await page.getByTestId(id).boundingBox())!.y;
+    const order = [
+      await top("channel-summary"),
+      await top("genre-summary"),
+      await top("slot-summary"),
+      await top("rule-dedupe"),
+    ];
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    await expect(page.getByTestId("slot-summary")).toContainText("いつでも");
+
+    // 「録る」の行を1つ選び、その始まりの1分だけを外す時間帯にする (日をまたぐ書き方)
+    const row = page
+      .locator('[data-testid="search-program"][data-verdict="record"]')
+      .first();
+    await expect(row).toBeVisible();
+    const id = await row.getAttribute("data-program-id");
+    const text = await row.textContent();
+    const [, hh, mm] = text!.match(/(\d{2}):(\d{2})〜/)!;
+    const start = Number(hh) * 60 + Number(mm);
+    const clock = (minutes: number) =>
+      `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+    const same = page.locator(
+      `[data-testid="search-program"][data-program-id="${id}"]`,
+    );
+
+    await page.getByTestId("slot-summary").click();
+    await page.getByTestId("rule-time-from").fill(clock(start + 1));
+    await page.getByTestId("rule-time-to").fill(clock(start));
+    await expect(same).toHaveAttribute("data-verdict", "skip");
+    await expect(same.getByTestId("search-verdict-reason")).toHaveText(
+      "時間帯の外",
+    );
+    await expect(page.getByTestId("slot-summary")).toContainText(
+      `${clock(start + 1)}〜${clock(start)}`,
+    );
+
+    // 始まりから1分だけにすると、また「録る」
+    await page.getByTestId("rule-time-from").fill(clock(start));
+    await page.getByTestId("rule-time-to").fill(clock(start + 1));
+    await expect(same).toHaveAttribute("data-verdict", "record");
+
+    // 始まりと終わりが同じなら保存できない
+    await page.getByTestId("rule-time-to").fill(clock(start));
+    await expect(page.getByTestId("rule-slot-error")).toHaveText(
+      "始まりと終わりが同じです",
+    );
+    await expect(page.getByTestId("rule-submit")).toBeDisabled();
+  });
+
   test("条件が空のルールは作れない", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await goto(page, `/search?q=${encodeURIComponent("どこにも無い番組")}`);

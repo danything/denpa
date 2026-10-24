@@ -503,6 +503,8 @@ interface RuleRow {
   extended: number;
   /** 録画済みの重複番組を除く。denpa の「同じ回は最初の放送だけ」に写す */
   avoidDuplicate: number;
+  /** 時間帯と曜日 (`[{ start, range, week }]` の JSON)。{@link parseTimes} */
+  times: string | null;
 }
 
 interface ReserveRow {
@@ -561,13 +563,83 @@ export function parseGenres(json: string | null): string[] {
   }
 }
 
+/** EPGStation の時間帯と曜日を denpa の列にしたもの ({@link parseTimes}) */
+export interface EpgTimes {
+  time_from: number | null;
+  time_to: number | null;
+  weekdays: number[] | null;
+}
+
+/**
+ * EPGStation の時間帯と曜日 (`rule.times`) を denpa の書き方に直す。
+ *
+ * 向こうは `[{ "start": 19, "range": 2, "week": 32 }]` の並びで、どれかに当たれば当たる (OR)。
+ *
+ * - `start` は始まる時刻 (時、0〜23)、`range` はそこからの長さ (時)。番組の始まる時刻の「時」が
+ *   `start` 〜 `start + range - 1` (24 で回る) なら当たる。denpa の `start:00` 以上 `(start + range):00` 未満と同じ。
+ *   どちらか無ければ時刻では絞らない。24 時間以上も絞らないのと同じ
+ * - `week` は曜日のビット (0x01 が日曜〜0x40 が土曜)。番組の始まる日の曜日で見る (denpa と同じ)。
+ *   0 の行は向こうも飛ばす
+ *
+ * denpa のルールは時間帯を1つしか持てない。時刻の同じ行は曜日を足してまとめ、時刻の違う行が
+ * 残れば写せないので null を返す (飛ばして記録に残す)。時刻指定のルール (`isTimeSpecification`) の
+ * `times` は秒で書かれた別物なので、ここには来ない
+ */
+export function parseTimes(json: string | null): EpgTimes | null {
+  const anytime = { time_from: null, time_to: null, weekdays: null };
+  if (json === null || json === "") return anytime;
+  let list: unknown;
+  try {
+    list = JSON.parse(json);
+  } catch {
+    return anytime;
+  }
+  if (!Array.isArray(list)) return anytime;
+  /** 時間帯ごとの曜日。鍵は始まりと終わりの分 (時刻で絞らないものは `null:null`) */
+  const windows = new Map<
+    string,
+    { from: number | null; to: number | null; days: Set<number> }
+  >();
+  for (const item of list as unknown[]) {
+    if (item === null || typeof item !== "object") continue;
+    const { start, range, week } = item as Record<string, unknown>;
+    if (typeof week !== "number" || (week & 0x7f) === 0) continue;
+    const timed =
+      typeof start === "number" &&
+      typeof range === "number" &&
+      Number.isInteger(start) &&
+      Number.isInteger(range) &&
+      start >= 0 &&
+      start < 24 &&
+      range > 0 &&
+      range < 24;
+    const from = timed ? start * 60 : null;
+    const to = timed ? ((start + range) % 24) * 60 : null;
+    const key = `${from}:${to}`;
+    const entry = windows.get(key) ?? { from, to, days: new Set<number>() };
+    for (let day = 0; day < 7; day++)
+      if (week & (1 << day)) entry.days.add(day);
+    windows.set(key, entry);
+  }
+  const [slot, ...rest] = windows.values();
+  if (slot === undefined) return anytime;
+  if (rest.length > 0) return null;
+  return {
+    time_from: slot.from,
+    time_to: slot.to,
+    weekdays:
+      slot.days.size === 7 ? null : [...slot.days].sort((a, b) => a - b),
+  };
+}
+
 /**
  * 自動予約ルールを引き継ぐ。
  *
  * EPGStation のルールには denpa に無い項目(正規表現、時刻指定、録画先の指定、
- * 重複を避ける期間など)がある。落ちるものは落ちると分かるように記録に残す。
+ * 重複を避ける期間、2つ以上の時間帯など)がある。落ちるものは落ちると分かるように記録に残す。
  * 重複を避ける (`avoidDuplicate`) は「同じ回は最初の放送だけ」に写す — 引き継いだ録画の履歴と合わせて、
  * EPGStation で録っていた回をそのまま避ける
+ * 時間帯と曜日 (`times`) は denpa の時間帯と曜日に写す ({@link parseTimes})。
  * 時刻指定のルールは番組を探すのではなく時計で録るもので、denpa に対応がないので飛ばす。
  */
 async function importRules(
@@ -577,7 +649,7 @@ async function importRules(
   const rows = (await connection.unsafe(
     `SELECT id, keyword, ignoreKeyword, GR, BS, CS, SKY, channelIds, genres,
                 isFree, enable, isTimeSpecification, name, description, extended,
-                avoidDuplicate
+                avoidDuplicate, times
          FROM rule ORDER BY id`,
   )) as RuleRow[];
 
@@ -604,6 +676,12 @@ async function importRules(
       (t) => row[t] === 1,
     );
     const genreIds = parseGenres(row.genres);
+    const times = parseTimes(row.times);
+    if (times === null) {
+      record(`時間帯が2つ以上あるので取り込めません: #${row.id}`);
+      status_.rules.skipped++;
+      continue;
+    }
 
     let channels: number[] = [];
     if (row.channelIds !== null) {
@@ -624,10 +702,12 @@ async function importRules(
       keyword === "" &&
       types.length === 0 &&
       genreIds.length === 0 &&
-      channels.length === 0
+      channels.length === 0 &&
+      times.time_from === null &&
+      times.weekdays === null
     ) {
       // 条件が空だと全番組にマッチしてしまう。EPGStation 側で他の条件
-      // (正規表現や時間帯)だけで絞っていたものがここに来る
+      // (正規表現など)だけで絞っていたものがここに来る
       record(`条件が空になるので取り込めません: #${row.id}`);
       status_.rules.skipped++;
       continue;
@@ -654,6 +734,7 @@ async function importRules(
         service_ids: channels.length === 0 ? null : channels,
         service_types: types.length === 0 ? null : types,
         genres: genreIds.length === 0 ? null : genreIds,
+        ...times,
         enabled: Boolean(row.enable),
         // 重複を避ける期間 (periodToAvoidDuplicate) は写さない。denpa は録画と引き継いだ履歴で見る
         dedupe: Boolean(row.avoidDuplicate),

@@ -19,9 +19,16 @@ const realAgent = config.agentUrl;
 config.agentUrl = "http://127.0.0.1:9";
 
 const { now, orm } = await import("./db");
+const { clockOf, jstOf } = await import("../rule-time");
 const { previewFor } = await import("./rule-preview");
-const { conditionsOf, draftRule, originOf, rulePriority } =
-  await import("./rule-form");
+const {
+  conditionsOf,
+  draftRule,
+  HALF_TIME,
+  originOf,
+  rulePriority,
+  SAME_TIME,
+} = await import("./rule-form");
 const {
   programs,
   recordings,
@@ -148,6 +155,58 @@ describe("書く欄を読む", () => {
     expect(rulePriority(form({ priority: "3" }))).toBe(3);
     expect(rulePriority(form({ priority: "-1" }))).toBe(1);
   });
+
+  test("時間帯は HH:MM を分に、曜日は 0〜6 を並べ直す", () => {
+    const read = conditionsOf(
+      form({
+        keyword: "a",
+        timeFrom: "23:00",
+        timeTo: "02:30",
+        weekdays: ["5", "1", "5", "9"],
+      }),
+    );
+    expect([read.timeFrom, read.timeTo]).toEqual([23 * 60, 2 * 60 + 30]);
+    expect(read.weekdays).toEqual([1, 5]);
+    expect(read.invalid).toBeNull();
+    // 空ならいつでも。7日とも選んだものも毎日
+    const none = conditionsOf(
+      form({
+        keyword: "a",
+        timeFrom: "",
+        timeTo: "",
+        weekdays: ["0", "1", "2", "3", "4", "5", "6"],
+      }),
+    );
+    expect([none.timeFrom, none.timeTo, none.weekdays]).toEqual([
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  test("始まりと終わりが同じ時間帯・片方だけの時間帯は断る", () => {
+    const same = conditionsOf(
+      form({ keyword: "a", timeFrom: "19:00", timeTo: "19:00" }),
+    );
+    expect(same.invalid).toBe(SAME_TIME);
+    expect(same.timeFrom).toBeNull();
+    expect(
+      draftRule(form({ keyword: "a", timeFrom: "19:00", timeTo: "19:00" })),
+    ).toBeNull();
+    expect(
+      conditionsOf(form({ keyword: "a", timeFrom: "19:00" })).invalid,
+    ).toBe(HALF_TIME);
+  });
+
+  test("時間帯や曜日だけでも条件になる", () => {
+    expect(conditionsOf(form({ weekdays: "6" })).empty).toBe(false);
+    const rule = draftRule(form({ timeFrom: "19:00", timeTo: "20:00" }));
+    expect([rule?.time_from, rule?.time_to, rule?.weekdays]).toEqual([
+      19 * 60,
+      20 * 60,
+      null,
+    ]);
+  });
 });
 
 describe("検索の行ごとの「録るか」", () => {
@@ -214,6 +273,29 @@ describe("検索の行ごとの「録るか」", () => {
       2: { kind: "record" },
       4: { kind: "skip", reason: "service" },
     });
+  });
+
+  test("時間帯と曜日から外れる行は「時間帯の外」「曜日の外」", async () => {
+    program(1, "テスト魔法 #1", 2 * HOUR);
+    program(2, "テスト魔法 #2", 5 * HOUR);
+    const first = jstOf(base + 2 * HOUR);
+    // 1 の始まりから 1 時間だけ。5 時間後の 2 は外
+    const slot = {
+      keyword: "テスト魔法",
+      timeFrom: clockOf(first.minutes),
+      timeTo: clockOf((first.minutes + 60) % (24 * 60)),
+    };
+    const timed = await previewFor(draftRule(form(slot))!, { ids: [1, 2] });
+    expect(timed.verdicts).toEqual({
+      1: { kind: "record" },
+      2: { kind: "skip", reason: "time" },
+    });
+    // 1 の曜日の次の日だけにすると、1 は曜日で外れる
+    const other = await previewFor(
+      draftRule(form({ ...slot, weekdays: String((first.weekday + 1) % 7) }))!,
+      { ids: [1] },
+    );
+    expect(other.verdicts).toEqual({ 1: { kind: "skip", reason: "weekday" } });
   });
 
   test("編集中のルールが立てた予約は、条件から外れると「録らない」になる", async () => {

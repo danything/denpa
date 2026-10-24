@@ -81,6 +81,7 @@ describe("ルールのジャンルの条件を外す (0013_clear-rule-genres)", 
       is_free: true,
       genres: [5],
       genre_detail: [{ lv1: 5, lv2: 0 }],
+      start_at: 0,
     };
     const read = () =>
       drizzle({ client: db, schema }).select().from(schema.rules).get()!;

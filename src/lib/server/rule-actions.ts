@@ -44,6 +44,7 @@ export async function createRule(
 ): Promise<Saved | { error: string }> {
   const conditions = conditionsOf(form);
   if (conditions.empty) return { error: EMPTY_RULE };
+  if (conditions.invalid !== null) return { error: conditions.invalid };
   const created = orm()
     .insert(ruleTable)
     .values({
@@ -70,6 +71,7 @@ export async function updateRule(
 ): Promise<Saved | { error: string }> {
   const conditions = conditionsOf(form);
   if (conditions.empty) return { error: EMPTY_RULE };
+  if (conditions.invalid !== null) return { error: conditions.invalid };
   const saved = orm()
     .update(ruleTable)
     .set(ruleValues(conditions, form))

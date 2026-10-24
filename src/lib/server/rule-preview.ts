@@ -275,7 +275,7 @@ async function countPreview(
     .where(and(gt(programs.start_at, at), ...narrowed))
     .orderBy(programs.start_at)
     .all();
-  // 判定が読むのは局・ジャンル・無料かどうか・検索範囲の文字だけ (`Matchable`。読まない列は上で外した)
+  // 判定が読むのは局・ジャンル・無料かどうか・始まる時刻・検索範囲の文字だけ (`Matchable`。読まない列は上で外した)
   const missFor = (program: (typeof all)[number]) =>
     missOf(
       compiled,

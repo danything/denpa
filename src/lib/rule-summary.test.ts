@@ -8,6 +8,9 @@ describe("ルールの条件を1行で", () => {
     service_ids: null,
     service_types: null,
     genres: null,
+    time_from: null,
+    time_to: null,
+    weekdays: null,
     dedupe: false,
     skip_earlier: false,
     ignore_keyword: "",
@@ -52,6 +55,28 @@ describe("ルールの条件を1行で", () => {
   test("ジャンルを選んでいれば名前", () => {
     expect(conditionSummary({ ...base, genres: ["7"] }, name)).toContain(
       "アニメ／特撮",
+    );
+  });
+  test("時間帯と曜日はジャンルの後ろ。続く曜日はまとめる", () => {
+    expect(
+      conditionSummary(
+        { ...base, time_from: 19 * 60, time_to: 20 * 60, weekdays: [5] },
+        name,
+      ),
+    ).toBe("番組名 ・ 全局 ・ 金 19:00〜20:00");
+    expect(
+      conditionSummary(
+        {
+          ...base,
+          time_from: 23 * 60,
+          time_to: 2 * 60,
+          weekdays: [1, 2, 3, 4, 5],
+        },
+        name,
+      ),
+    ).toBe("番組名 ・ 全局 ・ 月〜金 23:00〜02:00");
+    expect(conditionSummary({ ...base, weekdays: [6, 0] }, name)).toBe(
+      "番組名 ・ 全局 ・ 土・日",
     );
   });
 });

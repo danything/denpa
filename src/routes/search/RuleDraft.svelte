@@ -15,6 +15,8 @@
     ignore: "除外",
     service: "局",
     genre: "ジャンル",
+    time: "時間帯の外",
+    weekday: "曜日の外",
     keyword: "キーワード",
     paid: "有料放送",
     empty: "条件なし",
@@ -36,7 +38,13 @@
   import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
-  import { SERVICE_TYPE_LABEL } from "#lib/format.js";
+  import { SERVICE_TYPE_LABEL, WEEKDAYS } from "#lib/format.js";
+  import {
+    clockOf,
+    minutesOf,
+    slotSummary,
+    WEEK_ORDER,
+  } from "#lib/rule-time.js";
   import {
     parseSearchFields,
     SEARCH_FIELD_LABEL,
@@ -86,6 +94,10 @@
   let serviceTypes = $state<string[]>([]);
   let serviceIds = $state<number[]>([]);
   let genres = $state<string[]>([]);
+  /** 時間帯 (`HH:MM`。空ならいつでも) と曜日 (0 が日曜) */
+  let timeFrom = $state("");
+  let timeTo = $state("");
+  let weekdays = $state<number[]>([]);
   let dedupe = $state(true);
   let skipEarlier = $state(false);
   let priority = $state(1);
@@ -109,6 +121,15 @@
       serviceTypes = seed?.service_types ?? [];
       serviceIds = seed?.service_ids ?? [];
       genres = seed?.genres ?? [];
+      timeFrom =
+        seed?.time_from === null || seed?.time_from === undefined
+          ? ""
+          : clockOf(seed.time_from);
+      timeTo =
+        seed?.time_to === null || seed?.time_to === undefined
+          ? ""
+          : clockOf(seed.time_to);
+      weekdays = seed?.weekdays ?? [];
       dedupe = seed?.dedupe ?? true;
       skipEarlier = seed?.skip_earlier ?? false;
       priority = seed?.priority ?? 1;
@@ -130,11 +151,34 @@
     });
   });
 
+  /**
+   * 時間帯の読めない入り方 (片方だけ・始まりと終わりが同じ)。保存はサーバも断る (`rule-form.conditionsOf`)。
+   * ここでは送る前に止めて、時間帯の行の中に理由を出す
+   */
+  const slotError = $derived.by(() => {
+    const from = minutesOf(timeFrom);
+    const to = minutesOf(timeTo);
+    if ((from === null) !== (to === null))
+      return "始まりと終わりの両方を入れてください";
+    return from !== null && from === to ? "始まりと終わりが同じです" : null;
+  });
+  /** 閉じた行の右に出す要約 (「いつでも」「金 19:00〜20:00」) */
+  const slotText = $derived(
+    slotSummary({
+      time_from: slotError === null ? minutesOf(timeFrom) : null,
+      time_to: slotError === null ? minutesOf(timeTo) : null,
+      weekdays,
+    }) ?? "いつでも",
+  );
+
   const empty = $derived(
     keyword.trim() === "" &&
       serviceTypes.length === 0 &&
       serviceIds.length === 0 &&
-      genres.length === 0,
+      genres.length === 0 &&
+      timeFrom === "" &&
+      timeTo === "" &&
+      weekdays.length === 0,
   );
 
   // ---- 下見 ----
@@ -154,6 +198,9 @@
     for (const type of serviceTypes) out.append("serviceTypes", type);
     for (const id of serviceIds) out.append("serviceIds", String(id));
     for (const genre of genres) out.append("genres", genre);
+    out.set("timeFrom", timeFrom);
+    out.set("timeTo", timeTo);
+    for (const day of weekdays) out.append("weekdays", String(day));
     out.append("dedupe", "0");
     if (dedupe) out.append("dedupe", "1");
     out.append("skipEarlier", "0");
@@ -178,7 +225,7 @@
       return;
     }
     shownKey = key;
-    if (empty) {
+    if (empty || slotError !== null) {
       preview = null;
       counting = false;
       return;
@@ -395,7 +442,10 @@
       />
     </label>
 
-    <!-- 局・同じ回・優先度・ジャンルは枠の無い行に (サイドバーの行と同じ形)。名前は左、いまの値は右 -->
+    <!--
+      局・ジャンル・時間帯と曜日 (条件) と、その下の同じ回・前の回・優先度は枠の無い行に (サイドバーの行と同じ形)。
+      名前は左、いまの値は右。条件は畳んでおき、閉じていても右の要約で中身が分かる
+    -->
     <div class="rows side-list">
       <details class="row picker">
         <summary class="side-item" data-testid="channel-summary">
@@ -448,6 +498,115 @@
           </div>
         </div>
       </details>
+      <!-- ジャンルは畳んでおく (シリーズ名で足りる)。データとしては残している -->
+      <details class="row picker">
+        <summary class="side-item" data-testid="genre-summary">
+          <span>ジャンル</span>
+          <span class="value"
+            >{genres.length === 0 ? "すべて" : `${genres.length} 件`}</span
+          >
+        </summary>
+        <div class="picker-body pick-list" data-testid="rule-genres">
+          {#each GENRE_TREE as group (group.value)}
+            <div>
+              <label class="check">
+                <input
+                  type="checkbox"
+                  name="genres"
+                  value={group.value}
+                  bind:group={genres}
+                />
+                <span class="small bold">{group.label}</span>
+                <span class="tiny muted">(すべて)</span>
+              </label>
+              {#if group.children.length > 0}
+                <div class="children">
+                  {#each group.children as child (child.value)}
+                    <label class="check">
+                      <input
+                        type="checkbox"
+                        name="genres"
+                        value={child.value}
+                        bind:group={genres}
+                      />
+                      <span class="truncate tiny">{child.label}</span>
+                    </label>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </details>
+      <!-- 時間帯と曜日も畳んでおく。見るのは番組の始まる時刻 (日本時間)。決め方は `rule-time.ts` -->
+      <details class="row picker">
+        <summary class="side-item" data-testid="slot-summary">
+          <span>時間帯と曜日</span>
+          <span class="value" class:text-error={slotError !== null}
+            >{slotError === null ? slotText : "時刻を直してください"}</span
+          >
+        </summary>
+        <div class="picker-body" data-testid="rule-slot">
+          <div class="group-title">始まる時刻</div>
+          <div class="times">
+            <label class="time">
+              <input
+                type="time"
+                name="timeFrom"
+                bind:value={timeFrom}
+                data-testid="rule-time-from"
+              />
+              <span class="small">から</span>
+            </label>
+            <label class="time">
+              <input
+                type="time"
+                name="timeTo"
+                bind:value={timeTo}
+                data-testid="rule-time-to"
+              />
+              <span class="small">まで</span>
+            </label>
+          </div>
+          {#if slotError !== null}
+            <p class="tiny text-error" data-testid="rule-slot-error">
+              {slotError}
+            </p>
+          {/if}
+          <div class="group-title">曜日</div>
+          <div class="chips" data-testid="rule-weekdays">
+            {#each WEEK_ORDER as day (day)}
+              <label class="chip">
+                <input
+                  type="checkbox"
+                  name="weekdays"
+                  value={day}
+                  bind:group={weekdays}
+                />
+                {WEEKDAYS[day]}
+              </label>
+            {/each}
+          </div>
+          <p class="tiny muted">
+            終わりが始まりより前なら日をまたぎます (23:00〜02:00
+            など)。曜日は始まる日で見ます
+          </p>
+          {#if timeFrom !== "" || timeTo !== "" || weekdays.length > 0}
+            <button
+              type="button"
+              class="ghost xs clear"
+              onclick={() => {
+                timeFrom = "";
+                timeTo = "";
+                weekdays = [];
+              }}
+              data-testid="rule-slot-clear">いつでもに戻す</button
+            >
+          {/if}
+        </div>
+      </details>
+    </div>
+    <div class="rows side-list">
       <label class="row side-item">
         <span>同じ回は最初の放送だけ</span>
         <!-- 外したスイッチは何も送らない。「外した」と「指定なし」を分けるための隠し (`rule-form.dedupeOf`) -->
@@ -493,46 +652,6 @@
           {/each}
         </select>
       </label>
-      <!-- ジャンルは畳んでおく (シリーズ名で足りる)。データとしては残している -->
-      <details class="row picker">
-        <summary class="side-item" data-testid="genre-summary">
-          <span>ジャンル</span>
-          <span class="value"
-            >{genres.length === 0 ? "すべて" : `${genres.length} 件`}</span
-          >
-        </summary>
-        <div class="picker-body pick-list" data-testid="rule-genres">
-          {#each GENRE_TREE as group (group.value)}
-            <div>
-              <label class="check">
-                <input
-                  type="checkbox"
-                  name="genres"
-                  value={group.value}
-                  bind:group={genres}
-                />
-                <span class="small bold">{group.label}</span>
-                <span class="tiny muted">(すべて)</span>
-              </label>
-              {#if group.children.length > 0}
-                <div class="children">
-                  {#each group.children as child (child.value)}
-                    <label class="check">
-                      <input
-                        type="checkbox"
-                        name="genres"
-                        value={child.value}
-                        bind:group={genres}
-                      />
-                      <span class="truncate tiny">{child.label}</span>
-                    </label>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      </details>
     </div>
     <p class="tiny muted">
       録画のしかた{draft.freeOnly ? "と、無料放送だけ録ること" : ""}は<a
@@ -545,6 +664,8 @@
     <p class="small muted" role="status" data-testid="rule-draft-status">
       {#if empty}
         キーワードか局を入れると、一覧の番組を録るかどうかが出ます
+      {:else if slotError !== null}
+        時間帯の{slotError}
       {:else if preview?.failed}
         数えられませんでした ({preview.failed})
       {:else if recordable === 0}
@@ -588,7 +709,7 @@
       type="submit"
       form="rule-draft-form"
       class="save"
-      disabled={empty}
+      disabled={empty || slotError !== null}
       data-testid={draft.editing !== null ? "rule-update" : "rule-submit"}
     >
       {draft.editing !== null
@@ -710,7 +831,7 @@
     margin: 0;
   }
   /*
-     * 局・同じ回・前の回・優先度・ジャンル。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
+     * 局・ジャンル・時間帯と曜日・同じ回・前の回・優先度。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
      * 行の塗りは左右に字の余白ぶんはみ出し、字の頭は上の欄の頭にそろえる
      */
   .rows {
@@ -770,6 +891,30 @@
   }
   .children {
     margin-inline-start: 1.5rem;
+  }
+  /* 時刻の欄は「19:00 から 20:00 まで」と1行に。狭い幅では「から」の後ろで折り返す */
+  .times {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dp-space-2) var(--dp-space-3);
+  }
+  .time {
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-2);
+    margin: 0;
+  }
+  .time input {
+    width: auto;
+    margin: 0;
+  }
+  .picker-body p {
+    margin: 0;
+  }
+  .clear {
+    align-self: flex-start;
+    width: auto;
+    margin: 0;
   }
   /* 保存は列の下に貼り付ける。条件が長くても探して降りずに済む */
   .draft-foot {

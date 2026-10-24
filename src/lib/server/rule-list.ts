@@ -42,6 +42,9 @@ export interface RuleRow {
   service_ids: number[] | null;
   service_types: string[] | null;
   genres: string[] | null;
+  time_from: number | null;
+  time_to: number | null;
+  weekdays: number[] | null;
   enabled: boolean;
   priority: number;
   dedupe: boolean;
