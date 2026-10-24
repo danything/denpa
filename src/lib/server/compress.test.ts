@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { brotliDecompressSync, constants, gunzipSync } from "node:zlib";
+
 import { compress, encodingFor, MIN_SIZE } from "./compress";
 
 const json = (body: string, headers: Record<string, string> = {}) =>

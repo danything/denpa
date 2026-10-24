@@ -22,6 +22,7 @@ import {
   isSpace,
   STROKE_WIDTH,
 } from "#lib/caption-text.js";
+
 import { fitRect } from "./paint";
 
 /** データ放送と同じ Denpa Font。手元の開発ではイメージに無いので、端末の丸ゴシックへ落ちる */

@@ -20,6 +20,7 @@
 
 import { Buffer } from "node:buffer";
 import { inflateSync } from "node:zlib";
+
 import type {
   AdditionalAribBXMLInfo,
   ComponentPMT,
@@ -37,14 +38,14 @@ import {
   TABLE_DII,
   TABLE_STREAM_DESCRIPTOR,
 } from "./dsmcc";
-import { PID_TIME, parseTimeTable } from "./eit";
+import { parseTimeTable, PID_TIME } from "./eit";
 import { parseMediaType, readEntity } from "./multipart";
 import {
   descriptors,
-  PacketStream,
-  PmtTracker,
   packetPid,
+  PacketStream,
   pmtStreams,
+  PmtTracker,
   SectionAssembler,
 } from "./psi";
 

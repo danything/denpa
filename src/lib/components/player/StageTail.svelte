@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
+
   import {
     canvasVideo,
     chooseCanvas,
     seeDriveNotice,
   } from "#lib/canvas-video.js";
+
   import DriveNotice from "../DriveNotice.svelte";
   import type { Ambient } from "./ambient.svelte.js";
   import type { Background } from "./background.svelte.js";
@@ -22,8 +24,8 @@
     SHRINK,
   } from "./icons";
   import type { Pip } from "./pip.svelte.js";
-  import SettingsMenu from "./SettingsMenu.svelte";
   import type { SettingChoice, SettingRow, SettingToggle } from "./settings";
+  import SettingsMenu from "./SettingsMenu.svelte";
 
   /**
    * 操作バーの右端 (3画面で同じ)。再生の設定 (⚙ `SettingsMenu`。並びと中身は docs/player.md)・小窓 (出せる端末だけ)・

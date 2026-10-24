@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+
 import { config } from "./config";
 import { checkForUpdate, newer, parseVersion, updateAvailable } from "./update";
 

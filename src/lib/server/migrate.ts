@@ -23,10 +23,13 @@ import {
   unlinkSync,
 } from "node:fs";
 import { dirname, extname, join } from "node:path";
+
 import { SQL } from "bun";
 import { and, eq, isNull } from "drizzle-orm";
+
 import { parseSearchFields, SEARCH_FIELDS } from "#lib/search.js";
 import { array, number, read } from "#lib/shape.js";
+
 import { toHalfWidth } from "../fold";
 import type { Recording } from "../types";
 import { config } from "./config";

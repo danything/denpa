@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { parseXmlAit } from "./xml-ait";
 
 /** ETSI TS 102 809 の形。値は作りもの */

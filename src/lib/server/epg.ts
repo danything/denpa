@@ -11,8 +11,9 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+
 import { toHalfWidth } from "../fold";
-import { type Airing, mainOf, type Station, splitOf } from "../subchannels";
+import { type Airing, mainOf, splitOf, type Station } from "../subchannels";
 import type { EitEvent } from "../ts/eit";
 import { config } from "./config";
 import { affected, now, orm } from "./db";

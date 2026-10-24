@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { MOVED_SECTIONS, SETTINGS_GROUPS } from "./settings-sections";
 
 describe("設定の節", () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { cmRedo, encodeSource } from "./source";
 
 describe("エンコードの元", () => {

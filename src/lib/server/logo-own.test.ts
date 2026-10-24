@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { emptyOrientation, type LogoModel } from "../ts/logo-detect";
 import { load, modelFile, save } from "./logo-own";
 

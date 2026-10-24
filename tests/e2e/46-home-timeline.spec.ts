@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
+
 import type { Page } from "@playwright/test";
+
 import { expect, goto, homeFilter, syncEpg, test } from "./helpers";
 
 /**

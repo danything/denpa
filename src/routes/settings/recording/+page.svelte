@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { SubmitFunction } from "$app/forms";
+
   import { submitting } from "#lib/actions.js";
   import { autosave, SaveState } from "#lib/autosave.svelte.js";
   import CheckRow from "#lib/components/CheckRow.svelte";
@@ -15,7 +17,6 @@
     hwChoice,
     hwUsable,
   } from "#lib/hw.js";
-  import type { SubmitFunction } from "$app/forms";
 
   let { data, form } = $props();
 

@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
+
 import { type Fmp4Host, Fmp4Video } from "./fmp4";
 
 /**

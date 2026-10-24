@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
 import { forgetGrants, grant, originOf, TOKEN } from "./hc-relay";
 
 afterEach(() => forgetGrants());

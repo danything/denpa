@@ -12,12 +12,12 @@ import { compareEuc, eucCode, fromEucCode } from "./euc";
 import {
   formatDate,
   isObject,
+  joinItems,
   JSArray,
   JSDate,
   JSFunction,
   JSObject,
   JST,
-  joinItems,
   MAX_ARRAY,
   MAX_STRING,
   type NativeImpl,

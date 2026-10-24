@@ -1,6 +1,8 @@
 import { untrack } from "svelte";
+
 import type { Notice } from "#lib/components/Toasts.svelte";
-import { type Composed, canCompose, compose } from "./compose";
+
+import { canCompose, compose, type Composed } from "./compose";
 
 /**
  * ピクチャーインピクチャー (PiP)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+
 import { captionLanguage } from "#lib/caption-text.js";
+
 import { pickLanguage, storedCaptionsOn } from "./caption-pref";
 
 const JPN = captionLanguage(1, "jpn");

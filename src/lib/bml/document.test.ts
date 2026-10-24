@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { DEFAULT_CLUT, readClut } from "./clut";
 import { parseStylesheet, parseUrl } from "./css";
 import { BmlDocument } from "./document";

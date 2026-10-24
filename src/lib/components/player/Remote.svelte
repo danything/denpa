@@ -4,6 +4,7 @@
   import ArrowLeft from "~icons/lucide/arrow-left";
   import ArrowRight from "~icons/lucide/arrow-right";
   import ArrowUp from "~icons/lucide/arrow-up";
+
   import Icon from "./Icon.svelte";
 
   /**

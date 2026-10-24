@@ -6,6 +6,14 @@
    * (競合・失敗・欠ける・ロゴでCMを判定できなかった)
    */
   import "@anyblades/blades/layered/components/progress";
+  import type { SubmitFunction } from "$app/forms";
+  import { resolve } from "$app/paths";
+  import Ellipsis from "~icons/lucide/ellipsis";
+  import Info from "~icons/lucide/info";
+  import Play from "~icons/lucide/play";
+  import Trash from "~icons/lucide/trash-2";
+  import X from "~icons/lucide/x";
+
   import { submitting } from "#lib/actions.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
@@ -31,13 +39,7 @@
   } from "#lib/format.js";
   import { offline, removeLocal } from "#lib/offline.svelte.js";
   import { type RowStatus, statusLines, toneOf } from "#lib/row-status.js";
-  import type { SubmitFunction } from "$app/forms";
-  import { resolve } from "$app/paths";
-  import Ellipsis from "~icons/lucide/ellipsis";
-  import Info from "~icons/lucide/info";
-  import Play from "~icons/lucide/play";
-  import Trash from "~icons/lucide/trash-2";
-  import X from "~icons/lucide/x";
+
   import { home, type Item, type Rec, type Res } from "./context";
   import Poster from "./Poster.svelte";
   import RowActivity from "./RowActivity.svelte";

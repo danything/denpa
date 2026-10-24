@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { createRealm } from "./builtins";
 import { compileScript } from "./compiler";
 import { BmlDocument, type BmlElement } from "./document";

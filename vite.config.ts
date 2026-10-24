@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+
 import adapter from "@sveltejs/adapter-bun";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";

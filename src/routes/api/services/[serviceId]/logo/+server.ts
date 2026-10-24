@@ -1,4 +1,5 @@
 import { error } from "@sveltejs/kit";
+
 import { readLogo } from "#lib/server/logo.js";
 
 /**

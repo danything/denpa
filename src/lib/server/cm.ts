@@ -2,7 +2,7 @@ import { LOGO_OK, LOGO_UNUSABLE } from "../format";
 import { decideCm, type Range } from "../ts/cm-decide";
 import type { CmMode } from "../types";
 import type { CmMaterial } from "./cm-material";
-import { type Scan, type ScanWant, scan } from "./cm-scan";
+import { type Scan, scan, type ScanWant } from "./cm-scan";
 import { config } from "./config";
 import { logoRepo, share } from "./logo-data";
 import { openLogo } from "./logo-own";

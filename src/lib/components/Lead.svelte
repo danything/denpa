@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import Info from "~icons/lucide/info";
+
   import Icon from "./player/Icon.svelte";
 
   /**

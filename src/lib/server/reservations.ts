@@ -1,11 +1,12 @@
 import { and, desc, eq, gt, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+
 import { COPY_NEVER_REASON } from "../format";
 import type { Reservation, ReservationState } from "../types";
 import { now, orm } from "./db";
 import { stopRecording } from "./recorder";
 import { resolveConflicts } from "./scheduler";
-import { programs, recordings, reservationState, reservations } from "./schema";
+import { programs, recordings, reservations, reservationState } from "./schema";
 import { settings } from "./settings";
 
 /** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */

@@ -1,5 +1,7 @@
 <script lang="ts">
   import "@anyblades/blades/layered/content/table";
+  import Ellipsis from "~icons/lucide/ellipsis";
+
   import { arming } from "#lib/arming.svelte.js";
   import { autosave, SaveState } from "#lib/autosave.svelte.js";
   import Lead from "#lib/components/Lead.svelte";
@@ -9,7 +11,7 @@
   import { held } from "#lib/live-updates.svelte.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
   import { CHANNEL_TYPES } from "#lib/types.js";
-  import Ellipsis from "~icons/lucide/ellipsis";
+
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   CATCH_UP,
   CEILING,
@@ -13,8 +14,8 @@ import {
   pacing,
   SETTLED,
   SLOW_DOWN,
-  STEADY,
   speedLabel,
+  STEADY,
   steer,
   stepSpeed,
 } from "./pacing";

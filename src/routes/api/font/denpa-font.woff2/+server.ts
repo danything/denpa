@@ -13,9 +13,12 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+
 import { error } from "@sveltejs/kit";
+
 import { fontCacheControl } from "#lib/server/font.js";
 import { etagMatches } from "#lib/server/serve.js";
+
 import type { RequestHandler } from "./$types";
 
 /** Dockerfile が置く場所 (リリースの woff2 そのまま) */

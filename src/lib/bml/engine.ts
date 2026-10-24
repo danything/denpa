@@ -21,6 +21,7 @@ import type {
   ResponseMessage,
 } from "#lib/ts/bml-protocol.js";
 import { ascii, u16 } from "#lib/ts/bytes.js";
+
 import {
   type BmlIp,
   type BrowserHost,
@@ -29,7 +30,7 @@ import {
 } from "./browser";
 import { Budget, type BudgetLimits } from "./budget";
 import { createRealm } from "./builtins";
-import { DEFAULT_CLUT, type Rgba, readClut } from "./clut";
+import { DEFAULT_CLUT, readClut, type Rgba } from "./clut";
 import { type Code, compileScript } from "./compiler";
 import { parseStylesheet, parseUrl, type Rule } from "./css";
 import { BmlDocument, type BmlElement } from "./document";
@@ -54,9 +55,9 @@ import {
   hex,
   type LockKind,
   type Ref,
+  refToPath,
   type ResourceEvent,
   Resources,
-  refToPath,
   STARTUP_COMPONENT,
   STARTUP_MODULE,
   unknownScheme,

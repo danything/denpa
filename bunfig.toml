@@ -1,5 +1,7 @@
 # 整形 (`bun fmt`。`package.json` の format・lint から呼ぶ)。書き方は既定のまま、外すものだけ
 [fmt]
+# import を並べ替える (副作用だけの import は順を変えない)
+sortImports = true
 ignorePatterns = [
   "static/",
   "deploy/",
@@ -8,20 +10,9 @@ ignorePatterns = [
   # drizzle-kit が出すマイグレーション (SQL と snapshot の JSON)。手では触らない
   "drizzle/",
   "renovate.json",
-  "agent/Denpa.Agent/",
-  "agent/Denpa.Agent.Tests/",
-  "agent/publish/",
-  # 文書サイト。ビルドの成果物と、scripts/import-docs.ts が docs から書き出すもの
-  # アイコンは static/ の写し (static/ と同じく外す)
+  # 文書サイトの公開物。アイコンは static/ の写し (static/ と同じく外す)
   "site/public/",
   "site/src/assets/logo.svg",
-  "site/dist/",
-  "site/.astro/",
-  "site/src/content/docs/",
-  "site/src/assets/docs/",
-  "site/src/generated/",
-  "site/test-results/",
-  "site/playwright-report/",
   # 区点と突き合わせる表
   "src/lib/ts/b24-tables.ts",
 ]

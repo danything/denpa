@@ -47,7 +47,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+
 import { type Browser, chromium, type Page } from "@playwright/test";
+
 import { docsCaptions } from "../tests/fake/docs";
 import { boot } from "../tests/stack";
 

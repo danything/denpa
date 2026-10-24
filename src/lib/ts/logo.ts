@@ -22,8 +22,8 @@ import {
   descriptors,
   PacketStream,
   PID_SDT,
-  SectionAssembler,
   sdtServices,
+  SectionAssembler,
   TABLE_SDT_ACTUAL,
 } from "./psi";
 

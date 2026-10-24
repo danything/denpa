@@ -5,6 +5,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { overrides, sidebarGroups } from "./pages.ts";
 
 export const siteDir = fileURLToPath(new URL("../..", import.meta.url));

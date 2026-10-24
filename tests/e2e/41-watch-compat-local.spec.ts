@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
+
 import type { Page } from "@playwright/test";
+
 import { mkvFromClip } from "../fake/mkv-clip";
 import {
   expect,

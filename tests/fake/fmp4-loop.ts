@@ -22,6 +22,7 @@
  */
 
 import { readFileSync } from "node:fs";
+
 import { readClip, shiftFragment } from "./fmp4-clip";
 
 const clip = readClip(new Uint8Array(readFileSync(process.argv[2] ?? "")));

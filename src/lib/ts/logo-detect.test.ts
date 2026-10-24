@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import type { Rect } from "./logo-area";
 import {
   addFrame,
@@ -9,8 +10,8 @@ import {
   encodeModel,
   findArea,
   framer,
-  type LogoModel,
   level,
+  type LogoModel,
   logoSpans,
   makeTemplate,
   mergeModel,

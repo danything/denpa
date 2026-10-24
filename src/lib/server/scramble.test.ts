@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { isScrambled, readCardStatus, scrambledRatio } from "./scramble";
 
 // カードの番号は必ず架空のものにする (本物のカードの番号を載せない)

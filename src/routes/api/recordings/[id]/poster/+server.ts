@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
+
 import { error } from "@sveltejs/kit";
+
 import { sidecarPaths } from "#lib/server/metadata.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { remuxPlayer } from "./remux-player";
 import type { MediaSourceClass } from "./ts/media-source";
 

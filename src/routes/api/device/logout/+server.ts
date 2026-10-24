@@ -1,4 +1,5 @@
 import { json } from "@sveltejs/kit";
+
 import { revokeToken } from "#lib/server/device-auth.js";
 
 /**

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { configured, isOpenPath, trusted } from "./auth";
 import { config } from "./config";
 

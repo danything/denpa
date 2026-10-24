@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   aheadOf,
   canvasChoices,
@@ -6,9 +7,9 @@ import {
   codecChoices,
   covers,
   type MediaAbility,
-  type PlaybackInfo,
   pickCanvas,
   pickOffer,
+  type PlaybackInfo,
   streamForAudio,
   transcodes,
 } from "./playback";

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { FONT_IMMUTABLE, fontCacheControl } from "./font.js";
 
 describe("fontCacheControl", () => {

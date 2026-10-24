@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   normalizePrefecture,
+  parsePrefectureField,
   PREFECTURE_UNSET,
   PREFECTURES,
-  parsePrefectureField,
 } from "./prefecture";
 
 /*

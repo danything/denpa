@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   EpgReader,
-  PresentFollowing,
   parseBcdDuration,
   parseEit,
   parseMjdTime,
+  PresentFollowing,
   ScheduleProgress,
 } from "./eit";
 import { eitSection, packetize, type SynthEvent } from "./synth";

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { FOLD, foldForSearch, likePieces, toHalfWidth } from "./fold";
 
 const VS15 = String.fromCodePoint(0xfe0e);

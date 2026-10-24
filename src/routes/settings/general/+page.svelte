@@ -1,4 +1,7 @@
 <script lang="ts">
+  import type { SubmitFunction } from "$app/forms";
+  import { resolve } from "$app/paths";
+
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import Lead from "#lib/components/Lead.svelte";
@@ -7,8 +10,6 @@
     type Notice,
   } from "#lib/components/Toasts.svelte";
   import { measure } from "#lib/measure.svelte.js";
-  import type { SubmitFunction } from "$app/forms";
-  import { resolve } from "$app/paths";
 
   let { data, form } = $props();
 

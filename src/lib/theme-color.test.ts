@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+
 import { normalizeHex } from "./theme-color";
 
 test("テーマの地は #rrggbb にそろえる", () => {

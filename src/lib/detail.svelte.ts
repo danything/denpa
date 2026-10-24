@@ -1,4 +1,5 @@
 import { resolve } from "$app/paths";
+
 import type { Program, ProgramDetail } from "./types";
 
 /** 行が自分で持っている分。EPG から引けなくても、これだけは必ず出せる */

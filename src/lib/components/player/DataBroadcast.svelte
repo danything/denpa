@@ -1,6 +1,7 @@
 <script module lang="ts">
-  import { denpaFontUrl } from "#lib/font.js";
   import { resolve } from "$app/paths";
+
+  import { denpaFontUrl } from "#lib/font.js";
   /**
    * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を聞いていれば
    * (`pressD` が true) 渡して終わり — 局の待機ページはこれでメニューを開く。
@@ -29,6 +30,7 @@
    * 960x540 を枠に合わせて伸ばす (`fit`)・「データ取得中」を出す (`receiving`)・郵便番号を渡す (`receiver`)
    */
   import { onDestroy } from "svelte";
+
   import type { Bml, BmlIp, Rect, Service } from "#lib/bml/engine.js";
   import { type Plane, planeArea } from "#lib/bml/plane.js";
   import {
@@ -41,6 +43,7 @@
   import { read, readAll, write } from "#lib/keep.js";
   import type { HybridcastLink } from "#lib/live.js";
   import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
+
   import HybridcastFrame from "./HybridcastFrame.svelte";
   import StageNote from "./StageNote.svelte";
 

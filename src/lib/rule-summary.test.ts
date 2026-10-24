@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { conditionSummary, upcomingLabel } from "./rule-summary";
 
 describe("ルールの条件を1行で", () => {

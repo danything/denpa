@@ -22,7 +22,13 @@
 
 <script lang="ts">
   import "@anyblades/blades/layered/components/accordion";
+  import { applyAction, deserialize, type SubmitFunction } from "$app/forms";
+  import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import { untrack } from "svelte";
+  import X from "~icons/lucide/x";
+
   import { submitting } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import type { Arming } from "#lib/arming.svelte.js";
@@ -35,13 +41,9 @@
     SEARCH_FIELD_LABEL,
     SEARCH_FIELDS,
   } from "#lib/search.js";
-  import { applyAction, deserialize, type SubmitFunction } from "$app/forms";
-  import { goto } from "$app/navigation";
-  import { resolve } from "$app/paths";
-  import { page } from "$app/state";
-  import X from "~icons/lucide/x";
-  import type { Preview } from "./+page.server";
+
   import type { PageData } from "./$types";
+  import type { Preview } from "./+page.server";
 
   /**
    * **ルールとして保存** (検索の画面の右の列。狭い画面では下から出す)。

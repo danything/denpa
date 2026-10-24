@@ -10,7 +10,8 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { type AnySQLiteColumn, alias } from "drizzle-orm/sqlite-core";
+import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+
 import { globTerms, likePieces } from "../fold";
 import type { ReservationState, Rule } from "../types";
 import { now, orm } from "./db";
@@ -18,8 +19,8 @@ import { compile, haystack, matchesCompiled } from "./rules";
 import {
   programs,
   recordings,
-  reservationState,
   reservations,
+  reservationState,
   rules as ruleTable,
   services,
 } from "./schema";

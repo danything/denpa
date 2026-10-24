@@ -1,9 +1,10 @@
 <script lang="ts">
+  import type { SubmitFunction } from "$app/forms";
+  import Trash from "~icons/lucide/trash-2";
+
   import { submitting } from "#lib/actions.js";
   import type { Arming } from "#lib/arming.svelte.js";
   import Icon from "#lib/components/player/Icon.svelte";
-  import type { SubmitFunction } from "$app/forms";
-  import Trash from "~icons/lucide/trash-2";
 
   /**
    * 消すボタン。**1回目で聞き返し、2回目で送る** (`arming`。録画・予約・ルール・通知先で同じ)。

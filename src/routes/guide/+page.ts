@@ -1,5 +1,6 @@
-import type { GuideSheet } from "#lib/types.js";
 import { resolve } from "$app/paths";
+
+import type { GuideSheet } from "#lib/types.js";
 
 /**
  * 番組表のマスを取る。**外枠 (`+page.server.ts`) とは別の取得にして、promise のまま渡す。**

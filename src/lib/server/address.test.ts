@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { inNetwork, normalize, resolveClient, unreadable } from "./address";
 
 describe("アドレスがネットワークの中か", () => {

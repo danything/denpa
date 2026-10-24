@@ -1,8 +1,9 @@
 import { json } from "@sveltejs/kit";
 import { count } from "drizzle-orm";
+
 import { orm } from "#lib/server/db.js";
-import { sync } from "#lib/server/epg.js";
 import { collectOnce } from "#lib/server/epg-collect.js";
+import { sync } from "#lib/server/epg.js";
 import { programs } from "#lib/server/schema.js";
 
 /**

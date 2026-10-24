@@ -33,7 +33,9 @@
  */
 
 import { existsSync, statSync } from "node:fs";
+
 import { error } from "@sveltejs/kit";
+
 import {
   type AudioTrack,
   audioTracks,
@@ -61,6 +63,7 @@ import {
 } from "#lib/ts/seek.js";
 import { fromTsTime, type Ruler } from "#lib/ts/watch.js";
 import type { Recording } from "#lib/types.js";
+
 import { programSpec } from "./captions";
 import { chapterList } from "./cm";
 import { config } from "./config";

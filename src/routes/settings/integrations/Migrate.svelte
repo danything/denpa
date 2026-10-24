@@ -5,6 +5,7 @@
   import JobProgress from "#lib/components/JobProgress.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import { stateLabel } from "#lib/format.js";
+
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

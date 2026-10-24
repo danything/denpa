@@ -6,6 +6,7 @@
  * 作り物に差し替える。並べ方 (中継・サービス種別・カルーセルの載り方) はテストと同じ経路を通る
  */
 import { deflateSync } from "node:zlib";
+
 import { joinBytes } from "../../src/lib/ts/bytes";
 import { PNG_SIGNATURE, pngChunk } from "../../src/lib/ts/png";
 import {

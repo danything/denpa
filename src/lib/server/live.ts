@@ -20,6 +20,7 @@
  */
 
 import { and, eq, gt, lte } from "drizzle-orm";
+
 import {
   type Audio,
   type AudioTrack,
@@ -51,22 +52,23 @@ import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
 import { PacketStream } from "#lib/ts/psi.js";
 import { ServiceFilter, StreamsWatch } from "#lib/ts/service-filter.js";
+
 import {
+  captionFeed,
   type CaptionOut,
+  captionOutput,
   type CaptionShown,
   CaptionText,
-  captionFeed,
-  captionOutput,
   NO_SUBTITLE,
   programSpec,
   rawCaptionArgs,
-  TrackList,
   textFrame,
+  TrackList,
   worthLogging,
 } from "./captions";
 import {
-  type ChaseResume,
   chasePlan,
+  type ChaseResume,
   fileSize,
   followFile,
   resumeFrom,

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+
   import Menu from "../Menu.svelte";
   import ControlButton from "./ControlButton.svelte";
   import { stageMenu } from "./controls.svelte";

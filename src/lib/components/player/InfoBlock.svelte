@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+
   import { time } from "#lib/format.js";
 
   /**

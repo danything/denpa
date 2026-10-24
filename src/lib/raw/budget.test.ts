@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { DecodeBudget, QUEUE_STUCK, STRIKES, WINDOW } from "./budget";
 
 /** 1秒ぶん、決まった重さでデコードしたことにする */

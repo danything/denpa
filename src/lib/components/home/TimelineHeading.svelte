@@ -6,6 +6,7 @@
   import NowLine from "#lib/components/NowLine.svelte";
   import { date, time } from "#lib/format.js";
   import { dayName, type TimelineLine } from "#lib/timeline.js";
+
   import { home, type Item } from "./context";
 
   let {

@@ -1,4 +1,5 @@
 import { resolve } from "$app/paths";
+
 import { reload } from "./reload.svelte";
 
 /**

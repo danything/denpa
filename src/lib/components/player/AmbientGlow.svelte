@@ -1,12 +1,14 @@
 <script lang="ts">
   import { untrack } from "svelte";
+
   import { setAmbientThemeColor, themeBackground } from "#lib/theme-color.js";
+
   import {
     changed,
     colorStep,
-    EVERY,
     ease,
     edgeExtend,
+    EVERY,
     FADE,
     FADE_STEPS,
     farthest,
@@ -18,14 +20,14 @@
     glowLayout,
     glowPixels,
     plan,
-    type Rect,
-    type Rgb,
     reach,
+    type Rect,
     region,
+    type Rgb,
     strips,
-    TOOLBAR_STEP,
     toHex,
     toneFrame,
+    TOOLBAR_STEP,
     WASH_LUMINANCE,
     washTop,
   } from "./ambient";

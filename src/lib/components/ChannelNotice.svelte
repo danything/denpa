@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
+
   import {
     CHANNEL_NOTICE_TEXT,
     type ChannelNotice,
   } from "#lib/channel-notice.js";
-  import { resolve } from "$app/paths";
 
   /**
    * 局が無いときの案内と、スキャンへのリンク (`#lib/channel-notice.ts`)。

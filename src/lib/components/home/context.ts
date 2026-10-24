@@ -5,9 +5,11 @@
  */
 
 import { getContext, setContext } from "svelte";
+
 import type { Arming } from "#lib/arming.svelte.js";
 import type { NowStatus } from "#lib/format.js";
 import type { Filter, TimelineItem } from "#lib/timeline.js";
+
 import type { PageData } from "../../../routes/$types";
 
 export type Res = PageData["reservations"][number];

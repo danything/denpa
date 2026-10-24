@@ -1,16 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
+
   import { submitting } from "#lib/actions.js";
   import type { Service } from "#lib/bml/engine.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import { ambientMode } from "#lib/components/player/ambient.svelte.js";
   import { screenAwake } from "#lib/components/player/awake.svelte.js";
   import { backgroundPlayback } from "#lib/components/player/background.svelte.js";
+  import { centerTap } from "#lib/components/player/center-tap.js";
   import ControlBar from "#lib/components/player/ControlBar.svelte";
   import ControlButton from "#lib/components/player/ControlButton.svelte";
   import ControlRow from "#lib/components/player/ControlRow.svelte";
-  import { centerTap } from "#lib/components/player/center-tap.js";
   import { playerControls } from "#lib/components/player/controls.svelte.js";
   import DataBroadcast, {
     pressD,
@@ -20,7 +20,6 @@
   import FactsAside from "#lib/components/player/FactsAside.svelte";
   import { stageFullscreen } from "#lib/components/player/fullscreen.svelte.js";
   import Icon from "#lib/components/player/Icon.svelte";
-  import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import {
     AUDIO,
     CAMERA,
@@ -37,18 +36,16 @@
     SOUND_ON,
     SPEED,
   } from "#lib/components/player/icons.js";
+  import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
+  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout, {
     PHONE_LANDSCAPE,
   } from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
-  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import Remote from "#lib/components/player/Remote.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
-  import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
-  import StageNote from "#lib/components/player/StageNote.svelte";
-  import StageTail from "#lib/components/player/StageTail.svelte";
   import {
     liveAudio,
     liveCodecs,
@@ -58,6 +55,10 @@
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
   import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
+  import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
+  import StageNote from "#lib/components/player/StageNote.svelte";
+  import StageTail from "#lib/components/player/StageTail.svelte";
+  import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, {
     errorNotice,
@@ -66,12 +67,13 @@
   import { programDetail } from "#lib/detail.svelte.js";
   import { driveGate } from "#lib/drive-gate.svelte.js";
   import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
-  import type { HybridcastLink } from "#lib/live.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+  import type { HybridcastLink } from "#lib/live.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR } from "#lib/ts/pacing.js";
   import { CHANNEL_TYPES } from "#lib/types.js";
+
   import type { LiveChannel } from "./+page.server";
 
   /** 番組の終わりから読み直すまで置く間 (下の「番組が替わったら読み直す」) */

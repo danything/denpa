@@ -1,4 +1,5 @@
 import { error } from "@sveltejs/kit";
+
 import { parseCaptionLanguage } from "#lib/caption-text.js";
 import { recordingCaptions } from "#lib/server/live.js";
 

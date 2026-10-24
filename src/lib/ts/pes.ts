@@ -12,11 +12,11 @@
 import { concatBytes, joinBytes, u16 } from "./bytes";
 import {
   PACKET,
+  packetPid,
   PacketStream,
   PID_PAT,
-  PmtTracker,
-  packetPid,
   pmtStreams,
+  PmtTracker,
 } from "./psi";
 
 /** PTS・PCR の刻み (90kHz)。取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */

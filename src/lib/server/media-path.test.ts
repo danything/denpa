@@ -1,8 +1,10 @@
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+
 import { config } from "./config";
 import { bootstrap, MIGRATIONS } from "./db";
 import * as schema from "./schema";

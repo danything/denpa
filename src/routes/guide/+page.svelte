@@ -1,14 +1,21 @@
 <script lang="ts">
+  import type { SubmitFunction } from "$app/forms";
+  import { preloadData } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import Ellipsis from "~icons/lucide/ellipsis";
+  import Layers from "~icons/lucide/layers";
+  import Palette from "~icons/lucide/palette";
+
   import { dragScroll, submitting } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
   import { guideNavigation } from "#lib/components/GuidePending.svelte";
   import Menu from "#lib/components/Menu.svelte";
   import NowLine from "#lib/components/NowLine.svelte";
-  import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
+  import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import {
     channelNumber,
@@ -23,21 +30,15 @@
     cellsOf,
     columnsOf,
     mainOf,
-    SUBCHANNELS_COOKIE,
     splitOf,
+    SUBCHANNELS_COOKIE,
   } from "#lib/subchannels.js";
   import {
     CHANNEL_TYPES,
-    type ProgramDetail as Facts,
     type GridProgram,
     type GuideSheet,
+    type ProgramDetail as Facts,
   } from "#lib/types.js";
-  import type { SubmitFunction } from "$app/forms";
-  import { preloadData } from "$app/navigation";
-  import { resolve } from "$app/paths";
-  import Ellipsis from "~icons/lucide/ellipsis";
-  import Layers from "~icons/lucide/layers";
-  import Palette from "~icons/lucide/palette";
 
   let { data, form } = $props();
 

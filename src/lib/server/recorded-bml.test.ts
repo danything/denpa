@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import {
   BML_TS,
   bmlHead,
@@ -14,6 +15,7 @@ import {
   stream,
   tdtPacket as tdt,
 } from "#lib/ts/synth.js";
+
 import type { Recording } from "../types";
 
 // DB は一時ファイルへ (番組の名乗りを組むのに services を引く。files.test.ts と同じ手)

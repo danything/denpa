@@ -10,16 +10,17 @@
  * 預けたダウンロードが終わったら IndexedDB へ移す。配信のキャッシュはしない。
  */
 
+import { version } from "$app/env";
+import { assets, immutable } from "$app/manifest";
+import { asset, resolve } from "$app/paths";
+import { self as worker } from "$app/service-worker";
+
 import {
   type OfflineVideo,
   parseFetchId,
   storeResponse,
   videos,
 } from "#lib/offline-db.js";
-import { version } from "$app/env";
-import { assets, immutable } from "$app/manifest";
-import { asset, resolve } from "$app/paths";
-import { self as worker } from "$app/service-worker";
 
 /*
  * **頭 (前段の接頭辞込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**

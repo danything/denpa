@@ -2,8 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { ServiceFilter, StreamsWatch } from "#lib/ts/service-filter.js";
 import { packetize, patSection, programMap, stream } from "#lib/ts/synth.js";
+
 import {
   chasePlan,
   fileSize,

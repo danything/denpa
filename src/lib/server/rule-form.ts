@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+
 import { genreName } from "../arib";
 import { SERVICE_TYPE_LABEL } from "../format";
 import { parseSearchFields } from "../search";

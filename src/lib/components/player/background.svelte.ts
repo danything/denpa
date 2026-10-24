@@ -1,5 +1,7 @@
 import { untrack } from "svelte";
+
 import { read, write } from "#lib/keep.js";
+
 import { BACKGROUND_KEY, step, storedBackground } from "./background";
 
 /**

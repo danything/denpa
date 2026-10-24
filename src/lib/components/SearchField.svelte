@@ -1,16 +1,17 @@
 <script lang="ts">
+  import { afterNavigate, goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import { untrack } from "svelte";
+  import SearchIcon from "~icons/lucide/search";
+
   import Icon from "#lib/components/player/Icon.svelte";
   import {
     resultsHref,
     type SuggestGroup,
-    type SuggestResponse,
     suggestGroups,
+    type SuggestResponse,
   } from "#lib/search-suggest.js";
-  import { afterNavigate, goto } from "$app/navigation";
-  import { resolve } from "$app/paths";
-  import { page } from "$app/state";
-  import SearchIcon from "~icons/lucide/search";
 
   /**
    * **サイト全体の検索の欄** (`/search?q=`)。広い画面はヘッダーの真ん中、狭い画面は検索の画面の上の帯に

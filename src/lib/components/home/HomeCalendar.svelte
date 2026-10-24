@@ -11,9 +11,12 @@
    */
   import "@anyblades/blades/layered/content/table";
   import { tick } from "svelte";
+  import ChevronLeft from "~icons/lucide/chevron-left";
+  import ChevronRight from "~icons/lucide/chevron-right";
+
   import {
-    type DayMark,
     dayAriaLabel,
+    type DayMark,
     monthGrid,
     monthLabel,
     monthOf,
@@ -23,8 +26,6 @@
   } from "#lib/calendar.js";
   import Icon from "#lib/components/player/Icon.svelte";
   import { WEEKDAYS } from "#lib/format.js";
-  import ChevronLeft from "~icons/lucide/chevron-left";
-  import ChevronRight from "~icons/lucide/chevron-right";
 
   let {
     marks,

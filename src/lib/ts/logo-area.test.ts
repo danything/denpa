@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import type { Rect } from "./logo-area";
 import { addFrame, emptyOrientation, findArea } from "./logo-detect";
 

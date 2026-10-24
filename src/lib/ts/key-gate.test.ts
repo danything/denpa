@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import { Fmp4Splitter, readFragment, readInit } from "./fmp4";
 import { KeyGate } from "./key-gate";
 

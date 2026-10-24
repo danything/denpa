@@ -10,6 +10,7 @@
 
 <script lang="ts">
   import { tick, untrack } from "svelte";
+
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import {
@@ -27,6 +28,8 @@
     type Notice,
   } from "#lib/components/Toasts.svelte";
   import "#lib/components/home/home.css";
+  import { resolve } from "$app/paths";
+
   import { markDays } from "#lib/calendar.js";
   import HomeAside from "#lib/components/home/HomeAside.svelte";
   import {
@@ -70,11 +73,10 @@
     pageStart,
     passes,
     sections,
-    type Traits,
     timelineLines,
+    type Traits,
     type Zone,
   } from "#lib/timeline.js";
-  import { resolve } from "$app/paths";
 
   let { data, form } = $props();
 

@@ -1,6 +1,7 @@
-import { redirect } from "@sveltejs/kit";
-import { FIRST_GROUP } from "#lib/settings-sections.js";
 import { resolve } from "$app/paths";
+import { redirect } from "@sveltejs/kit";
+
+import { FIRST_GROUP } from "#lib/settings-sections.js";
 
 /**
  * **広い画面では先頭のグループへ移る。** 狭い画面の `/settings` はグループの一覧だけを出す画面

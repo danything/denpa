@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+
 import { DRCS_REPLACE } from "./b24-tables";
 import { B24CaptionDecoder } from "./b24caption";
 import { decodeGrey } from "./drcs-smooth";

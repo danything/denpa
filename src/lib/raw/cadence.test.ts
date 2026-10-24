@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { fieldAt, SmoothClock, Vsync, VsyncClock } from "./cadence";
 
 /** 決まった並びの乱数 (mulberry32) */

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { blocks, parseBlock } from "./agent-events";
 
 describe("エージェントの通知", () => {

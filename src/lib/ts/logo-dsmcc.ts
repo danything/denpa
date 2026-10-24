@@ -31,8 +31,8 @@ import { ModuleBuilder, parseDdb, parseDii, TABLE_DII } from "./dsmcc";
 import { withPalette } from "./logo-palette";
 import {
   descriptors,
-  PID_PAT,
   parsePat,
+  PID_PAT,
   pmtStreams,
   SectionAssembler,
   TABLE_PMT,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import type { CaptionPage, CaptionRun } from "../../caption-text";
 import { inkSpan, textStyle } from "./caption-draw";
 

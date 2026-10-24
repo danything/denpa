@@ -12,6 +12,7 @@
    * 読み上げは「いま 18:01、次の録画まで 3時間59分」。短い形は目に見えるだけで、読み上げはいつも長い形
    */
   import type { HTMLAttributes } from "svelte/elements";
+
   import type { NowStatus } from "#lib/format.js";
 
   let {

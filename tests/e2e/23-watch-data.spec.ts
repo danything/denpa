@@ -1,6 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { extname } from "node:path";
+
 import type { APIRequestContext, Page } from "@playwright/test";
+
 import {
   captionsSeenInDataWindow,
   expect,

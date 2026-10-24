@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+
 import type { Fmp4Sample } from "#lib/ts/fmp4.js";
 import { MkvDemuxer } from "#lib/ts/mkv-media.js";
+
 import { mkvFromClip } from "../../../tests/fake/mkv-clip";
 import type { Fmp4Video } from "./fmp4";
 import { MkvInput } from "./mkv";

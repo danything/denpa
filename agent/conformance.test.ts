@@ -35,6 +35,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
 import { SYNC } from "../src/lib/ts/psi";
 import { channels } from "../tests/fake/broadcast";
 import { scenes } from "../tests/fake/tuner-scenes";

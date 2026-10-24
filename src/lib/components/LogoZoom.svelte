@@ -1,10 +1,11 @@
 <script lang="ts">
   import "@anyblades/blades/layered/components/modal";
+  import { resolve } from "$app/paths";
   import { untrack } from "svelte";
+  import X from "~icons/lucide/x";
+
   import { submitting } from "#lib/actions.js";
   import { dateTime } from "#lib/format.js";
-  import { resolve } from "$app/paths";
-  import X from "~icons/lucide/x";
 
   /**
    * **ロゴを大きく見る窓** (設定の「受信できるチャンネル」の表で、局ロゴ・CMロゴを押したとき)。

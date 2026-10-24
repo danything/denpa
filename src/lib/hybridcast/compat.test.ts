@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { visibleFrom } from "../bml/nvram";
 import { bmlCompat, type CompatInit } from "./compat";
 

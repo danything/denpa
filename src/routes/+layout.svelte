@@ -1,7 +1,18 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import "../app.css";
+  import { goto } from "$app/navigation";
+  import { navigating, page } from "$app/state";
   import { onMount } from "svelte";
+  import CalendarDays from "~icons/lucide/calendar-days";
+  import Contrast from "~icons/lucide/contrast";
+  import Ellipsis from "~icons/lucide/ellipsis";
+  import ListVideo from "~icons/lucide/list-video";
+  import Moon from "~icons/lucide/moon";
+  import Search from "~icons/lucide/search";
+  import Sun from "~icons/lucide/sun";
+  import Tv from "~icons/lucide/tv";
+
   import type { ChannelNotice as NoticeKind } from "#lib/channel-notice.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
   import GuidePending, {
@@ -16,17 +27,7 @@
   import { startOffline } from "#lib/offline.svelte.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
   import { groupLabel } from "#lib/settings-sections.js";
-  import { THEME_LABEL, theme } from "#lib/theme.svelte.js";
-  import { goto } from "$app/navigation";
-  import { navigating, page } from "$app/state";
-  import CalendarDays from "~icons/lucide/calendar-days";
-  import Contrast from "~icons/lucide/contrast";
-  import Ellipsis from "~icons/lucide/ellipsis";
-  import ListVideo from "~icons/lucide/list-video";
-  import Moon from "~icons/lucide/moon";
-  import Search from "~icons/lucide/search";
-  import Sun from "~icons/lucide/sun";
-  import Tv from "~icons/lucide/tv";
+  import { theme, THEME_LABEL } from "#lib/theme.svelte.js";
 
   let { children, data } = $props();
 

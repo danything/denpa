@@ -3,6 +3,7 @@
   import Lead from "#lib/components/Lead.svelte";
   import SaveNote from "#lib/components/SaveNote.svelte";
   import { PREFECTURE_UNSET, PREFECTURES } from "#lib/prefecture.js";
+
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

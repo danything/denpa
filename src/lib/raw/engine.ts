@@ -17,9 +17,11 @@
  * 飛ぶたびに `reset(from)`、尻まで読んだら `finish`
  */
 
+import { resolve } from "$app/paths";
+
 import type { AudioSide } from "#lib/arib.js";
 import { CLOCK, unwrap } from "#lib/ts/pes.js";
-import { resolve } from "$app/paths";
+
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
 import { type Chunk, Playout, type Scheduled } from "./playout";
 

@@ -25,8 +25,8 @@ import {
   patSection,
   pmtSection,
   programMap,
-  type SynthEvent,
   sdtSection,
+  type SynthEvent,
   withCrc,
 } from "../../src/lib/ts/synth";
 import {

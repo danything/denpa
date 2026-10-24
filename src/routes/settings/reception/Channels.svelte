@@ -2,6 +2,8 @@
   import "@anyblades/blades/layered/content/table";
   import "@anyblades/blades/layered/components/accordion";
   import "@anyblades/blades/layered/components/progress";
+  import { resolve } from "$app/paths";
+
   import { submitting } from "#lib/actions.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
   import JobProgress from "#lib/components/JobProgress.svelte";
@@ -12,7 +14,7 @@
     SERVICE_TYPE_LABEL,
     STATE_LABEL as SHARED_STATE_LABEL,
   } from "#lib/format.js";
-  import { resolve } from "$app/paths";
+
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

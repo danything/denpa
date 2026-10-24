@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { revealed, shownUpTo } from "./paging";
 
 describe("少しずつ出す一覧の行数", () => {

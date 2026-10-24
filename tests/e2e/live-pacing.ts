@@ -1,5 +1,7 @@
 import { writeFileSync } from "node:fs";
+
 import type { Page } from "@playwright/test";
+
 import { expect, goto, pickCodec, wakeControls } from "./helpers";
 
 /**

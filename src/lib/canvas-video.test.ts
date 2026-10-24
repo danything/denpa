@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { decide, isTesla } from "./canvas-video";
 
 const TESLA =

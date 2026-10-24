@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { type Snippet, setContext } from "svelte";
-  import AmbientGlow from "./AmbientGlow.svelte";
+  import { setContext, type Snippet } from "svelte";
+
   import type { Ambient } from "./ambient.svelte.js";
+  import AmbientGlow from "./AmbientGlow.svelte";
   import {
     PLAYER_CONTROLS,
     PLAYER_STAGE,

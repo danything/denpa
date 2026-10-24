@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
+
   /**
    * 局名・尺・サイズ。1行にまとめて、空のものは出さない。
    * 局ロゴは**まだ取得できていない局では何も出さない** (ServiceLogo)。
@@ -8,7 +10,6 @@
    * ルール名をそのままルールの編集への入口にする。手動予約は、録れたもの (後から見返すもの) にだけ書く
    */
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
-  import { resolve } from "$app/paths";
 
   let {
     service,

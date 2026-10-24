@@ -1,6 +1,7 @@
-import { untrack } from "svelte";
 import { beforeNavigate, goto } from "$app/navigation";
 import { page } from "$app/state";
+import { untrack } from "svelte";
+
 import {
   exitNative,
   fullscreenMode,

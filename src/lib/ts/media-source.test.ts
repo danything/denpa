@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { type MediaSourceClass, pickMediaSource } from "./media-source";
 
 // 中身は見ない。どれが選ばれたかだけ (同じものかどうか) を見る

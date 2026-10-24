@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { EpgReader } from "../ts/eit";
 import { eitSection, nitSection, packetize, sdtSection } from "../ts/synth";
 import { channelEntry, channelsFor, readServices } from "./scan";

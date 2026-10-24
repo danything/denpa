@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { AdtsSplitter, PesDemuxer, parsePes, unwrap, WRAP } from "./pes";
+
+import { AdtsSplitter, parsePes, PesDemuxer, unwrap, WRAP } from "./pes";
 import { packetize, patSection, programMap } from "./synth";
 import {
   AUDIO_TICKS,

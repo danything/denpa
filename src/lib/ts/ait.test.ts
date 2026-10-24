@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+
 import {
+  aitPidsFromPmt,
   AitReader,
   APPLICATION_TYPE_HTML5,
-  aitPidsFromPmt,
   CONTROL,
   parseAit,
 } from "./ait";

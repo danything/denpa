@@ -15,7 +15,9 @@
  */
 
 import { randomBytes } from "node:crypto";
+
 import { error } from "@sveltejs/kit";
+
 import { rewriteLocationBytes, scriptable } from "../hybridcast/location";
 import { type Fetched, fetchForBml, refusalMessage } from "./bml-network";
 

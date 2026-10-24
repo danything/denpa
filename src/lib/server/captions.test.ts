@@ -1,24 +1,26 @@
 import { describe, expect, test } from "bun:test";
+
 import { CHANNEL } from "#lib/live.js";
 import {
+  captionMkv as mkv,
   encodeAribText,
   management,
-  captionMkv as mkv,
   text,
 } from "#lib/ts/synth-caption.js";
+
 import {
   appFrame,
   CAPTION_FEED_BACKLOG,
   CAPTION_FEED_HOLD,
-  type CaptionOut,
-  CaptionText,
   captionFeed,
+  type CaptionOut,
   captionOutput,
+  CaptionText,
   NO_SUBTITLE,
   pagesFromMkv,
   rawCaptionArgs,
-  TrackList,
   textFrame,
+  TrackList,
   worthLogging,
 } from "./captions";
 

@@ -9,6 +9,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+
 import type { Program, Rule } from "../types";
 import { config } from "./config";
 import { contentions, type Occupant, settled } from "./conflict";

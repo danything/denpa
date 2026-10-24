@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   chooseHw,
   HW_EVERY,
   HW_SOFTWARE,
   type HwAllow,
-  type HwUsable,
   hwAllowed,
   hwChoice,
+  type HwUsable,
 } from "./hw";
 
 /*

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { rewriteLocation, rewriteLocationBytes, scriptable } from "./location";
 
 describe("rewriteLocation", () => {

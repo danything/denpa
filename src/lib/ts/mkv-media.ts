@@ -28,15 +28,15 @@ import {
   DEFAULT_SCALE,
   ebmlHead,
   INFO,
+  readBlock,
   SEGMENT,
   SIMPLE_BLOCK,
   TIMESTAMP,
   TIMESTAMP_SCALE,
   TRACK_ENTRY,
   TRACKS,
-  UNKNOWN,
-  readBlock,
   uint,
+  UNKNOWN,
 } from "./mkv";
 
 const EBML = 0x1a45dfa3;

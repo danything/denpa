@@ -14,6 +14,7 @@
  * 選局は別プロセスなので、テストからは書き換えるしかない。
  */
 import { readFileSync } from "node:fs";
+
 import { broadcast, DEFAULT_KNOBS, type Knobs, on } from "./broadcast";
 
 const [type, channel] = process.argv.slice(2);

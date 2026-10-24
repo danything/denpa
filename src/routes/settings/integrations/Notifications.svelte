@@ -6,6 +6,7 @@
   import Lead from "#lib/components/Lead.svelte";
   import { dateTime } from "#lib/format.js";
   import { EVENT_LABEL } from "#lib/webhook-events.js";
+
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

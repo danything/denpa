@@ -8,7 +8,9 @@ import {
   ne,
   or,
 } from "drizzle-orm";
+
 import { type Genre, genreMatches } from "#lib/arib.js";
+
 import { globTerms } from "../fold";
 import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";

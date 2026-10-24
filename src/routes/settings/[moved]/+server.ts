@@ -1,4 +1,5 @@
 import { error, redirect } from "@sveltejs/kit";
+
 import { relative } from "#lib/server/paths.js";
 import { MOVED_SECTIONS } from "#lib/settings-sections.js";
 

@@ -33,8 +33,8 @@
 
 import {
   type Groupable,
-  type GroupEntry,
   groupBySeries,
+  type GroupEntry,
   groupLines,
   type SeriesGroup,
 } from "./grouping";

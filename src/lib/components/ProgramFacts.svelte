@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+
   import { audioLabel, genreLabel, videoLabel } from "#lib/arib.js";
   import {
     COPY_NEVER_REASON,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { decodeAribText } from "./aribtext";
 import { EPG_ONLY, GAIJI } from "./aribtext-gaiji";
 import { ADDITIONAL } from "./b24-tables";

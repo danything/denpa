@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { Carousel, KEEP_MODULES } from "./carousel";
 
 type Message = Parameters<Carousel["take"]>[0];

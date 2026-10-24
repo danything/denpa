@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
+
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import { ambientMode } from "#lib/components/player/ambient.svelte.js";
   import { screenAwake } from "#lib/components/player/awake.svelte.js";
   import { backgroundPlayback } from "#lib/components/player/background.svelte.js";
@@ -14,7 +15,6 @@
   import Extras from "#lib/components/player/Extras.svelte";
   import FactsAside from "#lib/components/player/FactsAside.svelte";
   import { stageFullscreen } from "#lib/components/player/fullscreen.svelte.js";
-  import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import {
     AUDIO,
     CAMERA,
@@ -26,19 +26,14 @@
     SOUND_ON,
     SPEED,
   } from "#lib/components/player/icons.js";
+  import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
+  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
-  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
-  import SpeedMenu, {
-    SPEED_KEY,
-    storedSpeed,
-  } from "#lib/components/player/SpeedMenu.svelte";
-  import StageNote from "#lib/components/player/StageNote.svelte";
-  import StageTail from "#lib/components/player/StageTail.svelte";
   import {
     liveAudio,
     liveCodecs,
@@ -48,7 +43,14 @@
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
   import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
+  import SpeedMenu, {
+    SPEED_KEY,
+    storedSpeed,
+  } from "#lib/components/player/SpeedMenu.svelte";
   import { stageTap } from "#lib/components/player/stage-tap.js";
+  import StageNote from "#lib/components/player/StageNote.svelte";
+  import StageTail from "#lib/components/player/StageTail.svelte";
+  import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
   import { programDetail, recordingFacts } from "#lib/detail.svelte.js";
   import { driveGate } from "#lib/drive-gate.svelte.js";
@@ -58,7 +60,6 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { keepResume } from "#lib/resume.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
-  import { resolve } from "$app/paths";
 
   /**
    * 追っかけ再生 (録画中の録画を頭から観る)。プレイヤーはライブと同じ (`live-player.svelte.ts` の chase モード)。

@@ -9,8 +9,9 @@
  * 別の端末や別の人に付いて回るものではない
  */
 
-import { forget, read, write } from "#lib/keep.js";
 import type { ReadonlyURL } from "$app/state";
+
+import { forget, read, write } from "#lib/keep.js";
 
 const KEY = "denpa_measure";
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ChevronRight from "~icons/lucide/chevron-right";
+
   /**
    * **番組の見出し** (まとめて表示)。押すと開く・閉じる。本物の button なので、Tab で辿れて Enter / Space で開く。
    * 同じ番組でも線の上 (録画) と下 (予約) で別の見出し (`#lib/timeline.ts`)
@@ -6,7 +8,7 @@
   import Icon from "#lib/components/player/Icon.svelte";
   import { dateTime } from "#lib/format.js";
   import type { SeriesGroup } from "#lib/grouping.js";
-  import ChevronRight from "~icons/lucide/chevron-right";
+
   import { home, type Item } from "./context";
   import Poster from "./Poster.svelte";
 

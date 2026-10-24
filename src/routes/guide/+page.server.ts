@@ -1,5 +1,6 @@
 import { fail } from "@sveltejs/kit";
 import { and, eq, ne } from "drizzle-orm";
+
 import { channelNotice } from "#lib/channel-notice.js";
 import { orm } from "#lib/server/db.js";
 import { serviceCounts, watchableServices } from "#lib/server/epg.js";
@@ -13,7 +14,7 @@ import {
 } from "#lib/server/guide.js";
 import { cancel, reserve } from "#lib/server/reservations.js";
 import { reservations } from "#lib/server/schema.js";
-import { SUBCHANNELS_COOKIE, storedSubchannels } from "#lib/subchannels.js";
+import { storedSubchannels, SUBCHANNELS_COOKIE } from "#lib/subchannels.js";
 import type { ChannelType } from "#lib/types.js";
 import { CHANNEL_TYPES } from "#lib/types.js";
 

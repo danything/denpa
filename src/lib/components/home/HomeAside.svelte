@@ -1,4 +1,6 @@
 <script lang="ts">
+  import TriangleAlert from "~icons/lucide/triangle-alert";
+
   import type { DayMark } from "#lib/calendar.js";
   /**
    * **右のサイドバー** (1000px 以上)。ウィンドウの端まで寄せ、一覧とは別に巻き取る (線では分けない。地も一覧と同じ)。
@@ -16,7 +18,7 @@
    */
   import Icon from "#lib/components/player/Icon.svelte";
   import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
-  import TriangleAlert from "~icons/lucide/triangle-alert";
+
   import type { HomeControls } from "./context";
   import HomeCalendar from "./HomeCalendar.svelte";
   import HomeState from "./HomeState.svelte";

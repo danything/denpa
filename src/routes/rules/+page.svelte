@@ -1,4 +1,7 @@
 <script lang="ts">
+  import type { SubmitFunction } from "$app/forms";
+  import { resolve } from "$app/paths";
+
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
@@ -9,8 +12,6 @@
   import { date } from "#lib/format.js";
   import { Paged, sentinel } from "#lib/paging.svelte.js";
   import { conditionSummary, upcomingLabel } from "#lib/rule-summary.js";
-  import type { SubmitFunction } from "$app/forms";
-  import { resolve } from "$app/paths";
 
   let { data, form } = $props();
 

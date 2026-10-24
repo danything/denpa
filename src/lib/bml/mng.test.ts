@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { DEFAULT_CLUT } from "./clut";
 import { parseMng, visibleFrames } from "./mng";
 import { chunk, defi, fram, frame, MHDR, mng, u32 } from "./mng.fixture";

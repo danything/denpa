@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   /**
    * Hybridcast のアプリを映像の上に開く ([docs/stream.md](../../../../docs/stream.md#hybridcast))。
    * 開くのはデータ放送が起動を求めたとき (`DataBroadcast` の `hybridcast`)。
@@ -12,6 +13,7 @@
    * - データ放送の Greg と NVRAM を写して渡し、書かれたら戻す (`broadcast`・`onwrite`。`#lib/hybridcast/compat.ts`)
    */
   import { onDestroy } from "svelte";
+
   import type { Service } from "#lib/bml/engine.js";
   import {
     decodeHtml,
@@ -32,7 +34,7 @@
   } from "#lib/hybridcast/location.js";
   import { read, write } from "#lib/keep.js";
   import type { HybridcastLink } from "#lib/live.js";
-  import { resolve } from "$app/paths";
+
   import StageNote from "./StageNote.svelte";
 
   type Place = Extract<FrameMessage, { type: "video" }>["place"];

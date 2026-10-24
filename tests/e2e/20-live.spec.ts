@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+
 import type { Locator } from "@playwright/test";
-import { BS_NO_LOGO, BS11, MX, SERVICES } from "../fake/services";
+
+import { BS11, BS_NO_LOGO, MX, SERVICES } from "../fake/services";
 import {
   airing,
   CAPTION_SCREENS,

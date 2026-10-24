@@ -8,6 +8,7 @@
 
 import { requireBmlNetwork } from "#lib/server/bml-network.js";
 import { relayAsset } from "#lib/server/hc-relay.js";
+
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = ({ params, url }) => {

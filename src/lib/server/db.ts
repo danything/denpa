@@ -1,9 +1,11 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+
 import { getTableColumns, getTableName, is, Table } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+
 import { config } from "./config";
 import * as schema from "./schema";
 

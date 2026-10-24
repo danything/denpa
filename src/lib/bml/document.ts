@@ -10,8 +10,8 @@
 import { type Declaration, matches, parseDeclarations, type Rule } from "./css";
 import {
   type Cascade,
-  type Computed,
   compute,
+  type Computed,
   type Declarations,
   expand,
   type State,

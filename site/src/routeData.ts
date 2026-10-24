@@ -3,6 +3,7 @@
  * 文書のページの <head> にパンくずの構造化データを足す (src/data/structured-data.ts)
  */
 import { defineRouteMiddleware } from "@astrojs/starlight/route-data";
+
 import { breadcrumb } from "./data/structured-data.ts";
 
 export const onRequest = defineRouteMiddleware((context) => {

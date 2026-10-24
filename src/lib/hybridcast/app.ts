@@ -16,7 +16,7 @@
  */
 
 import { rewriteLocation } from "./location";
-import { type ShimInit, shim } from "./shim";
+import { shim, type ShimInit } from "./shim";
 
 export type { HcState, ShimInit } from "./shim";
 

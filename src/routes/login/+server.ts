@@ -1,4 +1,5 @@
 import { redirect } from "@sveltejs/kit";
+
 import { enabled, redirectUri, safeReturn, start } from "#lib/server/oidc.js";
 import { publicBase } from "#lib/server/paths.js";
 import { PENDING_COOKIE, PENDING_TTL } from "#lib/server/session.js";

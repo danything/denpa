@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+
 import { RECORDING, scenes } from "../../../tests/fake/tuner-scenes";
 import {
-  type Assignable,
   assign,
+  type Assignable,
   type Capacity,
   capacityOf,
   contentions,

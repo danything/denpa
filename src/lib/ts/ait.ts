@@ -21,10 +21,10 @@ import { decodeAribText } from "./aribtext";
 import { u16, u32 } from "./bytes";
 import {
   descriptors,
-  PacketStream,
-  PmtTracker,
   packetPid,
+  PacketStream,
   pmtStreams,
+  PmtTracker,
   SectionAssembler,
 } from "./psi";
 

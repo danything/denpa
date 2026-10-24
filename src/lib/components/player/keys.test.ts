@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+
 import { playerKeys } from "./keys";
 
 /** 押す。`preventDefault` を呼んだか (= 取ったか) を返す */

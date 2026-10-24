@@ -7,6 +7,7 @@
  */
 
 import { dirname, join } from "node:path";
+
 import type { CmMode, VideoCodec } from "../types";
 
 function str(key: string, fallback: string): string {

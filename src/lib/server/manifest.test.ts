@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { config } from "./config";
 import { appName, manifest } from "./manifest";
 

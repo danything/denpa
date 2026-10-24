@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { fitRect } from "./paint";
 
 describe("映像が枠のどこに出るか", () => {

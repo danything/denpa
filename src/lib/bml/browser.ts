@@ -14,6 +14,7 @@
  */
 
 import type { ProgramInfoMessage } from "#lib/ts/bml-protocol.js";
+
 import { type Cell, Table } from "./binary";
 import { HostObject } from "./dom";
 import { clipEuc, decodeEuc, encodeEuc } from "./euc";

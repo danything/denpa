@@ -1,5 +1,10 @@
 <script lang="ts">
+  import type { SubmitFunction } from "$app/forms";
+  import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import { onMount, tick, untrack } from "svelte";
+
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
@@ -17,10 +22,7 @@
     time,
   } from "#lib/format.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
-  import type { SubmitFunction } from "$app/forms";
-  import { goto } from "$app/navigation";
-  import { resolve } from "$app/paths";
-  import { page } from "$app/state";
+
   import type { Preview, PreviewRow } from "./+page.server";
   import RuleDraft, { SKIP_LABEL } from "./RuleDraft.svelte";
 

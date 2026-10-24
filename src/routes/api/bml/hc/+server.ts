@@ -4,8 +4,10 @@
  */
 
 import { error, json } from "@sveltejs/kit";
+
 import { requireBmlNetwork } from "#lib/server/bml-network.js";
 import { grant } from "#lib/server/hc-relay.js";
+
 import type { RequestHandler } from "./$types";
 
 export const POST: RequestHandler = async ({ request }) => {

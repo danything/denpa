@@ -1,4 +1,5 @@
 import { json } from "@sveltejs/kit";
+
 import { poll } from "#lib/server/device-auth.js";
 
 /**

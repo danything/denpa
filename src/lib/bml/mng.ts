@@ -12,8 +12,8 @@
  * - TERM: くり返しの回数 (0x7fffffff は限り無し)
  */
 
-import { PNG_SIGNATURE } from "#lib/ts/png.js";
 import { ascii, concatBytes } from "#lib/ts/bytes.js";
+import { PNG_SIGNATURE } from "#lib/ts/png.js";
 
 export interface MngFrame {
   /** CLUT を入れる前の PNG */

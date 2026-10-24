@@ -6,6 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+
 import type { Rect } from "../ts/logo-area";
 import {
   addFrame,
@@ -15,14 +16,14 @@ import {
   encodeModel,
   findArea,
   framer,
-  type LogoModel,
   level,
+  type LogoModel,
   logoSpans,
   makeTemplate,
   mergeModel,
   type Orientation,
-  type Span,
   score,
+  type Span,
   texture,
 } from "../ts/logo-detect";
 import type { ScanLogo } from "./cm-scan";

@@ -14,6 +14,7 @@
 
 <script lang="ts">
   import { speedLabel } from "#lib/ts/pacing.js";
+
   import ControlButton from "./ControlButton.svelte";
   import { SPEED } from "./icons";
   import OverlayMenu from "./OverlayMenu.svelte";

@@ -6,6 +6,8 @@
  * 同じ1本で字幕もデータ放送も一緒に送る作りなので、種別で振り分ける。
  */
 
+import { resolve } from "$app/paths";
+
 import type { AudioTrack } from "#lib/arib.js";
 import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
 import {
@@ -69,7 +71,6 @@ import {
   type Steering,
 } from "#lib/ts/pacing.js";
 import { CLOCK } from "#lib/ts/pes.js";
-import { resolve } from "$app/paths";
 
 export type LiveState = "idle" | "connecting" | "playing" | "error";
 

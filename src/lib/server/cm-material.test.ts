@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { type CmMaterial, decodeMaterial, encodeMaterial } from "./cm-material";
 
 /** CM 検出の材料の控え (`cm-material.ts`) の書き出しと読み戻し */

@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import { SECTION_ALIASES, SETTINGS_GROUPS } from "#lib/settings-sections.js";
   import { afterNavigate, replaceState } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { onDestroy } from "svelte";
   import ArrowLeft from "~icons/lucide/arrow-left";
+
+  import { SECTION_ALIASES, SETTINGS_GROUPS } from "#lib/settings-sections.js";
 
   let { children } = $props();
 

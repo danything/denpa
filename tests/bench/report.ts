@@ -6,6 +6,7 @@
  */
 
 import { readFileSync } from "node:fs";
+
 import {
   analyse,
   type Measured,

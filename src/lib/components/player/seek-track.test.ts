@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { playedIn, trackParts } from "./seek-track";
 
 describe("シークバーの溝の区切り", () => {

@@ -4,6 +4,7 @@
     type Notice,
   } from "#lib/components/Toasts.svelte";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+
   import Migrate from "./Migrate.svelte";
   import Notifications from "./Notifications.svelte";
   import Tv from "./Tv.svelte";

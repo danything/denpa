@@ -1,4 +1,5 @@
 import { error } from "@sveltejs/kit";
+
 import { readLearnedLogo } from "#lib/server/logo-data.js";
 
 /**

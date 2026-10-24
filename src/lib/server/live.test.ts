@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
+
 import {
-  type AudioSide,
   askedTrack,
+  type AudioSide,
   audioTracks,
   pickTrack,
 } from "#lib/arib.js";
 import { CHANNEL } from "#lib/live.js";
+
 import {
   CHASE_STREAM_HOLD,
   codecsFor,

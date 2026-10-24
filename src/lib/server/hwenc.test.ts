@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import {
   findDevices,
-  type HwDevice,
   hwArgs,
   hwChain,
+  type HwDevice,
   liveHw,
   liveHwArgs,
 } from "./hwenc";

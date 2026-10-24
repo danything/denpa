@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+
 import { emptyOrientation, encodeModel } from "../../src/lib/ts/logo-detect";
-import { BS_NO_LOGO, BS11, FUJI, MX } from "../fake/services";
+import { BS11, BS_NO_LOGO, FUJI, MX } from "../fake/services";
 import { expect, goto, syncEpg, test } from "./helpers";
 
 /**

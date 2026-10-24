@@ -1,5 +1,7 @@
 import { writeFileSync } from "node:fs";
+
 import type { Page, TestInfo, Worker } from "@playwright/test";
+
 import {
   expect,
   goto,

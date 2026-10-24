@@ -11,17 +11,20 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname } from "node:path";
+
 import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+
 import { audioTitles, DUAL_MONO } from "#lib/arib.js";
+
 import { HW_KIND_LABEL, type HwCodec } from "../hw";
 import { encodeSource } from "../source";
 import type { EncodeJob, EncodeKind, EncodePhase, Recording } from "../types";
 import { programSpec } from "./captions";
 import { fileSize } from "./chase";
 import {
+  chapterMetadata,
   type CmDetection,
   type CmReading,
-  chapterMetadata,
   decideFromMaterial,
   invertRanges,
   openCm,
@@ -42,23 +45,23 @@ import {
   planCut,
 } from "./cm-cut";
 import { loadMaterial, saveMaterial } from "./cm-material-store";
-import { type Scan, type ScanReader, scan, scanReader } from "./cm-scan";
+import { type Scan, scan, type ScanReader, scanReader } from "./cm-scan";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
-import { type ChaptersChanged, type EncodeProgress, emit } from "./events";
+import { type ChaptersChanged, emit, type EncodeProgress } from "./events";
 import { usedByOther } from "./files";
 import {
   FPS_POINTS,
   FPS_WINDOW,
-  type FpsWindow,
   fpsArgs,
+  type FpsWindow,
   judgeWindow,
   pickSmooth,
   UNMEASURED,
   windowLabel,
 } from "./fps";
 import { removeIfExists } from "./fsx";
-import { type HwWay, hwArgs, hwChain } from "./hwenc";
+import { hwArgs, hwChain, type HwWay } from "./hwenc";
 import { encodedPath, libraryFamily, libraryPath } from "./library";
 import {
   removeSidecars,

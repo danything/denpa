@@ -1,5 +1,6 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+
 import { sidebar } from "./src/data/docs.ts";
 import { base, ogImage, repoUrl } from "./src/data/pages.ts";
 

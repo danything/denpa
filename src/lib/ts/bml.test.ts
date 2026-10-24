@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { deflateSync } from "node:zlib";
+
 import { BmlDecoder, inflate, moduleFiles, parseBxmlInfo } from "./bml";
 import type { ResponseMessage } from "./bml-protocol";
 import { ModuleBuilder } from "./dsmcc";

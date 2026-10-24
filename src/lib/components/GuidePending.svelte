@@ -34,10 +34,11 @@
 </script>
 
 <script lang="ts">
+  import { resolve } from "$app/paths";
+
   import GuideSkeleton from "#lib/components/GuideSkeleton.svelte";
   import { SERVICE_TYPE_LABEL } from "#lib/format.js";
   import { CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
-  import { resolve } from "$app/paths";
 
   /**
    * **ほかの画面から番組表へ移る途中の姿** (`+layout.svelte` の `pending`)。

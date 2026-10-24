@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { parseRecent, pushRecent, RECENT_MAX } from "./recent-searches";
 
 describe("最近の検索", () => {

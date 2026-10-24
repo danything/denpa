@@ -1,11 +1,13 @@
 <script lang="ts">
+  import ArrowRight from "~icons/lucide/arrow-right";
+
   /**
    * 表示の切り替え (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合)。
    * オン・オフの印 (`aria-checked`) 付き。頭の1行の「⋯」(`TimelineBar`) とサイドバーの「表示」(`HomeAside`) の中身
    */
   import { submitting } from "#lib/actions.js";
   import Icon from "#lib/components/player/Icon.svelte";
-  import ArrowRight from "~icons/lucide/arrow-right";
+
   import type { ViewControls } from "./context";
 
   let {

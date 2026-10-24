@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { type RowStatus, statusLines, toneOf } from "./row-status";
 
 const line = (

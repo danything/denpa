@@ -16,9 +16,12 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { brotliCompress, constants, gzip } from "node:zlib";
+
 import { error } from "@sveltejs/kit";
+
 import { config } from "#lib/server/config.js";
 import { etagMatches } from "#lib/server/serve.js";
+
 import type { RequestHandler } from "./$types";
 
 const TYPES: Record<string, string> = {

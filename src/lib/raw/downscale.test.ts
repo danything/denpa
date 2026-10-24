@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { boxAverage, halvingSteps } from "./downscale";
 
 describe("コマを小さく縮める", () => {

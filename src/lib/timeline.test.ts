@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   blocks,
   catchUp,
@@ -12,8 +13,8 @@ import {
   sections,
   type TimelineItem,
   type TimelineLine,
-  type Traits,
   timelineLines,
+  type Traits,
   type Zone,
 } from "./timeline";
 

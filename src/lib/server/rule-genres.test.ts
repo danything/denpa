@@ -9,8 +9,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+
 import type { Rule } from "../types";
 import { bootstrap, MIGRATIONS } from "./db";
 import { compile, haystack, matchesCompiled } from "./rules";

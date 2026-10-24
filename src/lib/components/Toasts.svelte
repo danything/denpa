@@ -24,6 +24,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import X from "~icons/lucide/x";
+
   import Icon from "./player/Icon.svelte";
 
   /**

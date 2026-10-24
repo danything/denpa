@@ -1,4 +1,5 @@
 import { redirect } from "@sveltejs/kit";
+
 import { relative } from "#lib/server/paths.js";
 
 /**

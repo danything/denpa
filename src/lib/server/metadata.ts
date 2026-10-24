@@ -1,4 +1,5 @@
 import { extname } from "node:path";
+
 import type { Range } from "../ts/cm-decide";
 import { config } from "./config";
 import { removeIfExists } from "./fsx";

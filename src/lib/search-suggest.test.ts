@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   resultsHref,
-  type SuggestResponse,
   suggestGroups,
+  type SuggestResponse,
 } from "./search-suggest";
 
 const empty = { more: false, rows: [] };

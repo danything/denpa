@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { onMount, untrack } from "svelte";
+
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
@@ -7,19 +9,14 @@
   import {
     CAPTION_TEXT_VERSION,
     type CaptionLanguage,
+    captionLanguage as languageOf,
     type CaptionPage,
     type CaptionPages,
-    captionLanguage as languageOf,
   } from "#lib/caption-text.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import { ambientMode } from "#lib/components/player/ambient.svelte.js";
   import { screenAwake } from "#lib/components/player/awake.svelte.js";
   import { backgroundPlayback } from "#lib/components/player/background.svelte.js";
-  import CloseLink from "#lib/components/player/CloseLink.svelte";
-  import ControlBar from "#lib/components/player/ControlBar.svelte";
-  import ControlButton from "#lib/components/player/ControlButton.svelte";
-  import ControlRow from "#lib/components/player/ControlRow.svelte";
   import { CaptionPainter } from "#lib/components/player/caption-draw.js";
   import {
     CAPTION_LANGUAGE_KEY,
@@ -27,6 +24,10 @@
     pickLanguage,
     storedCaptionsOn,
   } from "#lib/components/player/caption-pref.js";
+  import CloseLink from "#lib/components/player/CloseLink.svelte";
+  import ControlBar from "#lib/components/player/ControlBar.svelte";
+  import ControlButton from "#lib/components/player/ControlButton.svelte";
+  import ControlRow from "#lib/components/player/ControlRow.svelte";
   import { playerControls } from "#lib/components/player/controls.svelte.js";
   import DataBroadcast, {
     pressD,
@@ -35,7 +36,6 @@
   import FactsAside from "#lib/components/player/FactsAside.svelte";
   import { eachFrame } from "#lib/components/player/frames.js";
   import { stageFullscreen } from "#lib/components/player/fullscreen.svelte.js";
-  import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import {
     AUDIO,
     CAMERA,
@@ -51,19 +51,14 @@
     SPEED,
     TRASH,
   } from "#lib/components/player/icons.js";
+  import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
-  import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
-  import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import { fitRect } from "#lib/components/player/paint.js";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
+  import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
+  import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import Remote from "#lib/components/player/Remote.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
-  import SpeedMenu, {
-    SPEED_KEY,
-    storedSpeed,
-  } from "#lib/components/player/SpeedMenu.svelte";
-  import StageNote from "#lib/components/player/StageNote.svelte";
-  import StageTail from "#lib/components/player/StageTail.svelte";
   import {
     audioTracks,
     muteRow,
@@ -73,7 +68,14 @@
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
   import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
+  import SpeedMenu, {
+    SPEED_KEY,
+    storedSpeed,
+  } from "#lib/components/player/SpeedMenu.svelte";
   import { stageTap } from "#lib/components/player/stage-tap.js";
+  import StageNote from "#lib/components/player/StageNote.svelte";
+  import StageTail from "#lib/components/player/StageTail.svelte";
+  import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, {
     errorNotice,
     type Notice,
@@ -88,19 +90,19 @@
     size,
   } from "#lib/format.js";
   import { CODEC_LABEL } from "#lib/hw.js";
-  import { write as remind, read as stored } from "#lib/keep.js";
+  import { read as stored, write as remind } from "#lib/keep.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
-  import { loadOffline } from "#lib/offline.svelte.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
+  import { loadOffline } from "#lib/offline.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import { type RemuxPlayer, remuxPlayer } from "#lib/remux-player.js";
   import { keepResume } from "#lib/resume.js";
   import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
   import {
     type Cue,
-    showing as captionShowing,
     currentCue,
+    showing as captionShowing,
   } from "#lib/ts/captions.js";
   import {
     feedFor,
@@ -111,16 +113,16 @@
   import { stepSpeed } from "#lib/ts/pacing.js";
   import {
     type CanvasAbility,
-    type CanvasCodec,
-    type CodecChoice,
     canvasChoices,
+    type CanvasCodec,
     canvasTranscodes,
+    type CodecChoice,
     codecChoices,
     type MediaAbility,
-    type Picked,
-    type PlaybackInfo,
     pickCanvas,
+    type Picked,
     pickOffer,
+    type PlaybackInfo,
     retryWait,
     STREAM_RETRIES,
     streamForAudio,
@@ -138,7 +140,6 @@
     skipCmAtStart,
     skipTarget,
   } from "#lib/ts/watch.js";
-  import { resolve } from "$app/paths";
 
   let { data, form } = $props();
   const rec = $derived(data.recording);

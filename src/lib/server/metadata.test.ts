@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { config } from "./config";
 import { buildThumbnailArgs, sidecarPaths, thumbnailPlace } from "./metadata";
 

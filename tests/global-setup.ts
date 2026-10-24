@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
+
 import { TEST_ROOT } from "./stack";
 
 /**

@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+
 import type { CDPSession, Page } from "@playwright/test";
+
 import { test } from "../stack";
 
 /**

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   parseStructure,
   readFields,
   Table,
   writeFields,
-  type ZipRanges,
   zipIncludes,
+  type ZipRanges,
 } from "./binary";
 import { decodeEuc, encodeEuc } from "./euc";
 import { Nvram } from "./nvram";

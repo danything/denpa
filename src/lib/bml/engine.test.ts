@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
 import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
+
 import {
   type Bml,
   type BmlOptions,

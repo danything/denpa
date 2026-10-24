@@ -1,5 +1,6 @@
 import { read, write } from "#lib/keep.js";
 import { type GrabSize, shrink } from "#lib/raw/messages.js";
+
 import { AMBIENT_KEY, storedAmbient } from "./ambient";
 import type { GlanceReply, GlanceRequest } from "./glance-worker";
 

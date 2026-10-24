@@ -6,11 +6,13 @@
    * 広い画面では同じものをサイドバー (`HomeAside`) に置き、この行は出さない
    */
   import { MediaQuery } from "svelte/reactivity";
+  import Ellipsis from "~icons/lucide/ellipsis";
+  import TriangleAlert from "~icons/lucide/triangle-alert";
+
   import Menu from "#lib/components/Menu.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
-  import Ellipsis from "~icons/lucide/ellipsis";
-  import TriangleAlert from "~icons/lucide/triangle-alert";
+
   import type { HomeControls } from "./context";
   import HomeState from "./HomeState.svelte";
   import ViewList from "./ViewList.svelte";

@@ -20,13 +20,14 @@
  */
 
 import { createHash } from "node:crypto";
+
 import {
   CAPTION_TEXT_VERSION,
   type CaptionDrcs,
   type CaptionLanguage,
+  captionLanguage,
   type CaptionPage,
   type CaptionRun,
-  captionLanguage,
 } from "../caption-text";
 import {
   ADDITIONAL,

@@ -16,6 +16,7 @@
 
 import { statSync } from "node:fs";
 import { open } from "node:fs/promises";
+
 import { PACKET } from "../ts/psi";
 
 /** 1回に読む量。露骨に小さいと read の回数だけ損する */

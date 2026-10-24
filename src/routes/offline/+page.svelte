@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
+
   import { arming } from "#lib/arming.svelte.js";
   import { dateTime, durationMs, percent, size } from "#lib/format.js";
+  import { type OfflineVideo, resumeQueue, videos } from "#lib/offline-db.js";
   import {
     offline,
     rememberResume,
@@ -9,7 +11,6 @@
     removeLocal,
     startOffline,
   } from "#lib/offline.svelte.js";
-  import { type OfflineVideo, resumeQueue, videos } from "#lib/offline-db.js";
 
   /**
    * 端末に保存した録画。**電波が無くてもここだけは開く** — サービスワーカーが

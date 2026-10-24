@@ -1,4 +1,7 @@
 <script lang="ts">
+  import CircleX from "~icons/lucide/circle-x";
+  import TriangleAlert from "~icons/lucide/triangle-alert";
+
   /**
    * 行の3段目: いま動いていること・止まっている問題を1段で (`#lib/row-status.ts`)。
    * 頭に点か印、ラベル、「・」の後ろに中身。
@@ -8,8 +11,6 @@
    */
   import Icon from "#lib/components/player/Icon.svelte";
   import type { RowStatus } from "#lib/row-status.js";
-  import CircleX from "~icons/lucide/circle-x";
-  import TriangleAlert from "~icons/lucide/triangle-alert";
 
   let { status }: { status: RowStatus } = $props();
   const detail = $derived(status.detail ?? "");

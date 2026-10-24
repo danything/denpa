@@ -1,5 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+
   import Icon from "./Icon.svelte";
   import { CLOSE, OVERLAY, OVERLAY_BTN, OVERLAY_ROUND } from "./icons.js";
 

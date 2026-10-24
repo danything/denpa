@@ -41,7 +41,7 @@
 
 import { u16 } from "./bytes";
 import { CLOCK } from "./pes";
-import { PacketStream, PmtTracker, packetPid, TABLE_PMT } from "./psi";
+import { packetPid, PacketStream, PmtTracker, TABLE_PMT } from "./psi";
 
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = 2 ** 33 / CLOCK;

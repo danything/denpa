@@ -1,4 +1,5 @@
 import { type Actions, fail } from "@sveltejs/kit";
+
 import { liveTokens, revokeToken } from "#lib/server/device-auth.js";
 
 export function load() {

@@ -1,5 +1,6 @@
 import { and, eq, gt, gte, lt, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+
 import { mainOf, splitOf } from "../subchannels";
 import type {
   ChannelType,
@@ -12,8 +13,8 @@ import { airing, CURRENT_SERVICES, SERVICE_ORDER } from "./epg";
 import {
   programs as programTable,
   recordings,
-  reservationState,
   reservations,
+  reservationState,
   services as serviceTable,
 } from "./schema";
 

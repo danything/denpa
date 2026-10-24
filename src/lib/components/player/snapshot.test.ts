@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { shotName } from "./snapshot";
 
 describe("切り抜きのファイル名", () => {

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   type Airing,
   cellsOf,
   columnsOf,
   mainOf,
-  type Station,
   splitOf,
+  type Station,
   storedSubchannels,
 } from "./subchannels";
 

@@ -1,4 +1,5 @@
 import { error, json } from "@sveltejs/kit";
+
 import { emit } from "#lib/server/events.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
 import { encodedPath } from "#lib/server/playback.js";

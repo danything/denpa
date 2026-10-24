@@ -1,5 +1,5 @@
 import { bootOidc, type OidcStack } from "../stack";
-import { test as base, expect } from "./helpers";
+import { expect, test as base } from "./helpers";
 
 /**
  * OIDC でのログインと、ネットワークで素通しにする仕組み。

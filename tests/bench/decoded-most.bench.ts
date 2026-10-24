@@ -8,7 +8,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { cpus } from "node:os";
+
 import type { Page } from "@playwright/test";
+
 import { tsHead } from "../../src/lib/ts/seek";
 import { expect, goto, recordOne, setRecording, test } from "../e2e/helpers";
 import {

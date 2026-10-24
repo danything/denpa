@@ -1,5 +1,6 @@
 <script lang="ts" generics="T extends string | number">
   import type { Snippet } from "svelte";
+
   import Menu, { type MenuTrigger } from "../Menu.svelte";
   import { stageMenu } from "./controls.svelte";
 

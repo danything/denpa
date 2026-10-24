@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+
 import type { YieldedRecording } from "#lib/live.js";
+
 import { recordingOn, tunerOf, yieldedTo } from "./live-yield";
 
 /** 一覧の1本。読むところ (`index` `channel` `users`) だけ */

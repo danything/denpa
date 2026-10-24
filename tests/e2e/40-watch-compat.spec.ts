@@ -1,5 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
+
 import type { Page } from "@playwright/test";
+
 import { clipFrom, readClip } from "../fake/fmp4-clip";
 import {
   expect,

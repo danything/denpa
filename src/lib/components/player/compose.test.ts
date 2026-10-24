@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { canCompose, captionDrawn, compose } from "./compose";
 
 /** 字幕の canvas の代わり。見るのは印と大きさだけ */

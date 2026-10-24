@@ -20,7 +20,9 @@
  *   寄せた字を写すので、起動時だけでなく定期的に回して取りこぼさない。もう全角が入っている録画は読まずに済ませる
  */
 import { open } from "node:fs/promises";
+
 import { asc, eq, gt } from "drizzle-orm";
+
 import { foldForSearch, toHalfWidth } from "../fold";
 import { type EitEvent, EpgReader } from "../ts/eit";
 import { now, orm } from "./db";
