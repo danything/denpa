@@ -99,9 +99,10 @@ export const actions = {
     if (!Number.isFinite(serviceId))
       return fail(400, { message: "局IDが不正です" });
     // 同じ映像を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
-    for (const id of [serviceId, ...siblings(serviceId)]) forgetLogoData(id);
+    const ids = [serviceId, ...siblings(serviceId)];
+    for (const id of ids) forgetLogoData(id);
     // 控えておいた CM 検出の材料も捨てる。ロゴの区間は捨てた型で当てたもの (`cm-material-store.forgetMaterials`)
-    forgetMaterials([serviceId, ...siblings(serviceId)]);
+    forgetMaterials(ids);
     return {
       success: true,
       done: "覚えたロゴを消しました。次にこの局を録画したときに覚え直します",

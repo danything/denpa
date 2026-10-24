@@ -37,20 +37,20 @@ function describe(use: string): string {
     return row === undefined ? "録画" : `録画: ${row.name}`;
   }
 
-  const logo = use.match(/^logo \S+\/(\S+)$/);
-  if (logo !== null) return `局ロゴ収集 (${logo[1]})`;
-
-  const epg = use.match(/^epg (\S+)$/);
-  if (epg !== null) return `番組表 (${epg[1]})`;
-
-  const scan = use.match(/^scan (\S+)$/);
-  if (scan !== null) return `チャンネルスキャン (${scan[1]})`;
-
-  const live = use.match(/^live (\S+)$/);
-  if (live !== null) return `ライブ視聴 (${live[1]})`;
-
+  for (const [pattern, label] of USE_WORDS) {
+    const found = use.match(pattern);
+    if (found !== null) return `${label} (${found[1]})`;
+  }
   return use;
 }
+
+/** 録画のほかの用途の印と、画面の言葉。括弧の中に印のチャンネルを添える */
+const USE_WORDS: [RegExp, string][] = [
+  [/^logo \S+\/(\S+)$/, "局ロゴ収集"],
+  [/^epg (\S+)$/, "番組表"],
+  [/^scan (\S+)$/, "チャンネルスキャン"],
+  [/^live (\S+)$/, "ライブ視聴"],
+];
 
 /**
  * チューナーが足りないときに残る順 (`config.priority` の大きい順) を、画面の言葉で。
@@ -184,22 +184,19 @@ export const actions = {
       });
     }
 
-    try {
-      await putTuners(tuners);
-    } catch (error) {
-      return fail(502, { message: String(error) });
-    }
-    // 画面はその場で保存して、見出しの横に「保存しました」を出す (`autosave`)。通知は出さない
-    return { success: true };
+    return await save(tuners);
   },
 
   /** 定義を消して自動検出に戻す。刺さっている機材をエージェントが自分で見つける */
-  tunersAuto: async () => {
-    try {
-      await putTuners([]);
-    } catch (error) {
-      return fail(502, { message: String(error) });
-    }
-    return { success: true };
-  },
+  tunersAuto: () => save([]),
 } satisfies Actions;
+
+/** 定義をエージェントへ送る。画面はその場で保存して、見出しの横に「保存しました」を出す (`autosave`)。通知は出さない */
+async function save(tuners: TunerConfig[]) {
+  try {
+    await putTuners(tuners);
+  } catch (error) {
+    return fail(502, { message: String(error) });
+  }
+  return { success: true };
+}
