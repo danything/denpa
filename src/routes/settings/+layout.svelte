@@ -109,14 +109,17 @@
     };
 
     /*
-     * 上に重なるものの下から数える。広い画面は浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ)、
-     * 狭い画面は節の行 (とヘッダー)。rootMargin は px か % だけ (rem は投げる)
+     * 上に重なるものの下から数える。浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ。スマホは 0) と、
+     * 640〜767px はヘッダーの下に貼り付く節の行 (スマホの節の行は下にある)。rootMargin は px か % だけ (rem は投げる)
      */
-    const cover = matchMedia("(min-width: 768px)").matches
-      ? (Number.parseFloat(
-          getComputedStyle(document.documentElement).scrollPaddingTop,
-        ) || 0) + 16
-      : (jumpRow?.getBoundingClientRect().bottom ?? 0) + 8;
+    const header =
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).scrollPaddingTop,
+      ) || 0;
+    const cover =
+      (matchMedia("(min-width: 640px) and (max-width: 767px)").matches
+        ? (jumpRow?.getBoundingClientRect().bottom ?? header)
+        : header) + 16;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -360,7 +363,7 @@
   }
   @media (max-width: 639.98px) {
     .main-inner :global([data-part]) {
-      scroll-margin-top: calc(3.5rem + env(safe-area-inset-top));
+      scroll-margin-top: calc(var(--dp-gutter) + env(safe-area-inset-top));
     }
   }
   /* 狭い画面は一覧か中身のどちらか。どちらを出すかは URL */
@@ -372,7 +375,7 @@
   }
 
   /*
-     * **狭い画面の上の行。** 「← 設定」と節の名前を横に並べ、巻いてもヘッダーの下に残す (ヘッダーと同じく下の線は引かない)。
+     * **狭い画面の節の行。** 「← 設定」と節の名前を横に並べ、巻いても残す (スマホは下、640〜767px はヘッダーの下)。
      * はみ出す分は横に巻く (行を折り返すと高さが変わり、飛んだ先の余白が合わなくなる)
      */
   .jump {
@@ -421,10 +424,32 @@
     width: 1.125rem;
     height: 1.125rem;
   }
-  /* 640px より狭いとヘッダーは隠れている (下のタブに替わる)。いちばん上に付ける */
+  /* 640〜767px はヘッダーが浮いている。その下端に付ける */
+  @media (min-width: 640px) {
+    .jump {
+      top: var(--dp-header-bottom);
+    }
+  }
+  /*
+     * **スマホ (下のタブがある幅) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの頭の1行と同じ半透明のカプセル)。
+     * 読んでいる間は下のタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。中身の最後が隠れないよう、そのぶん下を空ける
+     */
   @media (max-width: 639.98px) {
     .jump {
-      top: env(safe-area-inset-top);
+      position: fixed;
+      inset: auto 0.75rem calc(var(--dp-tabbar, 0px) + 0.375rem);
+      margin: 0;
+      padding: 0.25rem 0.5rem;
+      border-radius: 1.375rem;
+      background: var(--dp-float);
+      box-shadow: var(--dp-shadow-pop);
+      transition: transform var(--dp-duration) var(--dp-ease);
+    }
+    :global([data-retract]) .jump:not(:has(:focus-visible)) {
+      transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
+    }
+    .main-inner {
+      padding-bottom: 3.5rem;
     }
   }
   @media (min-width: 768px) {

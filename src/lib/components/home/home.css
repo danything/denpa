@@ -387,19 +387,31 @@
 .board .t-toolbar .t-chips > .t-chip:hover {
   --pico-background-color: var(--dp-btn-tonal-hover);
 }
-/* 選んでいるチップは塗らず囲まず、主の色の太字と字の幅いっぱいの下線 (`app.css` の `.chip` と同じ) */
+/*
+ * 選んでいるチップは塗らず囲まず、主の色の太字と字の幅いっぱいの下線 (`app.css` の `.chip` と同じ)。
+ * 線は疑似要素で 1 本引く。`text-decoration` だと名前と数 (`.num`) に別々の線が付き、2 本に切れて見えた
+ */
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
   --pico-color: var(--dp-primary-text);
-  text-decoration: underline 2px var(--pico-primary);
-  text-underline-offset: 0.3em;
+  position: relative;
   font-weight: var(--dp-weight-bold);
+}
+.board .t-toolbar .t-chips > .t-chip[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0.75rem;
+  bottom: 0.3rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--pico-primary);
 }
 /*
  * **日付の見出しは操作の層の小さなカプセル。** 巻くと行がその裏を流れるので、ヘッダーと同じ半透明の面と影で浮かせる
  * (docs/design.md の「透かし方」)。地の色の帯にすると、半透明のヘッダーの下に塗った帯だけが浮いて見えた
  */
 .board .t-day {
-  --t-day-gap: 0.375rem;
+  /* 貼り付く位置。いちばん上の見出しの置かれた位置 (main の頭の空き) と同じにし、巻き始めても動かない */
+  --t-day-gap: 0.5rem;
   position: sticky;
   top: var(--t-day-gap);
   z-index: 3;
@@ -415,6 +427,9 @@
   color: var(--dp-muted);
   font-size: 0.75rem;
   font-weight: var(--dp-weight-bold);
+}
+.board .t-rows > .t-block:first-child > .t-day {
+  margin-top: 0;
 }
 .board .t-day-name {
   color: var(--pico-color);
@@ -772,8 +787,10 @@
   .board .t-main {
     grid-template-columns: minmax(0, 1fr) 20rem;
   }
+  /* 右の列の頭 (カレンダーの見出し) は、貼り付いた日付のカプセルの字と高さをそろえる */
   .board .t-side {
     display: flex;
+    padding-top: 0.25rem;
   }
   .board .t-toolbar {
     display: none;
@@ -951,7 +968,7 @@
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration) var(--dp-ease);
   }
-  [data-retract] .board .t-toolbar:not(:focus-within) {
+  [data-retract] .board .t-toolbar:not(:has(:focus-visible)) {
     transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
 }

@@ -572,7 +572,7 @@
       box-shadow: var(--dp-shadow-pop);
       transition: transform var(--dp-duration) var(--dp-ease);
     }
-    :global([data-retract]) .rules-bar:not(:focus-within) {
+    :global([data-retract]) .rules-bar:not(:has(:focus-visible)) {
       transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
     }
     .rules-list {

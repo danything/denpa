@@ -810,7 +810,7 @@
     transition: transform var(--dp-duration) var(--dp-ease);
   }
   /* キーボードで中に触っている間は引っ込めない (見えないまま操作させない) */
-  .shell[data-retract] .tabbar:not(:focus-within) {
+  .shell[data-retract] .tabbar:not(:has(:focus-visible)) {
     transform: translateY(calc(100% + 0.5rem + env(safe-area-inset-bottom)));
   }
   .tabbar .tab,
