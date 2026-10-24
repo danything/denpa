@@ -6,6 +6,7 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
 
   import Migrate from "./Migrate.svelte";
+  import MigrateEdcb from "./MigrateEdcb.svelte";
   import Notifications from "./Notifications.svelte";
   import Tv from "./Tv.svelte";
 
@@ -47,3 +48,4 @@
 <div class="part" id="notifications" data-part><Notifications {data} /></div>
 <div class="part" id="tv" data-part><Tv {data} /></div>
 <div class="part" id="migrate" data-part><Migrate {data} /></div>
+<div class="part" id="migrate-edcb" data-part><MigrateEdcb {data} /></div>

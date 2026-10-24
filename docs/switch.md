@@ -1,7 +1,7 @@
 # ほかの録画ソフトから乗り換える
 
 Mirakurun・EPGStation・KonomiTV・EDCB を使っている人向けに、それぞれの役目が denpa のどこに当たるかと、
-移せるもの・移せないものをまとめます。EPGStation からの引き継ぎの手順は [migrate.md](migrate.md)。
+移せるもの・移せないものをまとめます。EPGStation・EDCB からの引き継ぎの手順は [migrate.md](migrate.md)。
 
 ## 役目の対応
 
@@ -37,7 +37,9 @@ denpa だけで録って観るなら、次のものは要りません。
 時刻指定のルール・エンコードの設定・重複を避ける設定は移りません
 ([何が入って、何が入らないか](migrate.md#何が入って何が入らないか))。
 
-Mirakurun・KonomiTV・EDCB から取り込む仕組みはありません。チャンネルはスキャンし直し、ルールと予約は denpa で作り直します。
+**EDCB (EpgTimer) からは、ルール・手動予約・録画の履歴を移せます** (録画のファイルは移りません。[migrate.md](migrate.md#edcb-からの引き継ぎ))。
+
+Mirakurun・KonomiTV から取り込む仕組みはありません。チャンネルはスキャンし直し、ルールと予約は denpa で作り直します。
 
 ## 観かたで変わること
 

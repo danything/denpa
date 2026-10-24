@@ -485,7 +485,7 @@ function takenOf(
 }
 
 /**
- * **よそから引き継いだ録画の履歴** (`schema.recordedHistory`)。EPGStation で録った回を denpa が
+ * **よそから引き継いだ録画の履歴** (`schema.recordedHistory`)。EPGStation や EDCB で録った回を denpa が
  * また録らないように、録ってある回に足す。引き継いだときから増えないので、期間で切らずに全部読む
  * (引き継ぎのあとに来る一挙放送は、前の回を録ってから何か月も先のことがある)
  */

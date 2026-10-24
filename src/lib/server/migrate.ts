@@ -1,5 +1,6 @@
 /**
- * EPGStation の録画を denpa に引き継ぐ。
+ * EPGStation の録画を denpa に引き継ぐ。EDCB からの引き継ぎ (`migrate-edcb.ts`) も、進み具合と
+ * 記録はここのもの ({@link status}・{@link record}・{@link track}) を使う。
  *
  * 数百GBのコピーになるので、リクエストの中では終わらない。開始だけ受けて
  * 裏で進め、進捗は {@link status} から読む。入口は設定画面だけ
@@ -96,6 +97,8 @@ export interface MigrateOptions {
 
 export interface MigrateStatus extends MigrateOptions {
   state: "idle" | "running" | "done" | "failed";
+  /** どこから引き継いでいるか。画面はその節にだけ進み具合を出す */
+  from: "epgstation" | "edcb";
   /** 録画の対象の総数。走り出すまでは 0 */
   total: number;
   imported: number;
@@ -121,6 +124,7 @@ const LOG_LIMIT = 200;
 function freshStatus(over: Partial<MigrateStatus> = {}): MigrateStatus {
   return {
     state: "idle",
+    from: "epgstation",
     apply: false,
     move: false,
     total: 0,
@@ -141,6 +145,14 @@ function freshStatus(over: Partial<MigrateStatus> = {}): MigrateStatus {
 
 let status_: MigrateStatus = freshStatus();
 
+/** 件数を数える側 (`migrate-edcb.ts`) が書き込む、いまの進み具合そのもの */
+export function counts(): Pick<
+  MigrateStatus,
+  "rules" | "reservations" | "history"
+> {
+  return status_;
+}
+
 export function status(): MigrateStatus {
   return {
     ...status_,
@@ -151,7 +163,7 @@ export function status(): MigrateStatus {
   };
 }
 
-function record(message: string): void {
+export function record(message: string): void {
   status_.log.push(message);
   if (status_.log.length > LOG_LIMIT)
     status_.log.splice(0, status_.log.length - LOG_LIMIT);
@@ -484,6 +496,28 @@ export async function importOne(
   return "imported";
 }
 
+/** 引き継ぎ元での識別子 (`rules.source`) で、もう取り込んだルールか。EDCB の取り込みも使う */
+export function ruleImported(source: string): boolean {
+  return (
+    orm()
+      .select({ id: rules.id })
+      .from(rules)
+      .where(eq(rules.source, source))
+      .get() !== undefined
+  );
+}
+
+/** 同じく、もう取り込んだ録画の履歴か (`recorded_history.source`) */
+export function historyImported(source: string): boolean {
+  return (
+    orm()
+      .select({ id: recordedHistory.id })
+      .from(recordedHistory)
+      .where(eq(recordedHistory.source, source))
+      .get() !== undefined
+  );
+}
+
 interface RuleRow {
   id: number;
   keyword: string | null;
@@ -655,13 +689,7 @@ async function importRules(
 
   for (const row of rows) {
     const source = `epgstation:${row.id}`;
-    if (
-      orm()
-        .select({ id: rules.id })
-        .from(rules)
-        .where(eq(rules.source, source))
-        .get() !== undefined
-    ) {
+    if (ruleImported(source)) {
       status_.rules.skipped++;
       continue;
     }
@@ -837,13 +865,7 @@ export function importHistoryRows(
 ): void {
   for (const row of rows) {
     const source = `epgstation:${row.id}`;
-    if (
-      orm()
-        .select({ id: recordedHistory.id })
-        .from(recordedHistory)
-        .where(eq(recordedHistory.source, source))
-        .get() !== undefined
-    ) {
+    if (historyImported(source)) {
       status_.history.skipped++;
       continue;
     }
@@ -873,20 +895,57 @@ export function importHistoryRows(
   }
 }
 
+/** 走っているか。走っている間は、どちらの引き継ぎも始めさせない (同じ進み具合を使うため) */
+export function running(): boolean {
+  return status_.state === "running";
+}
+
 /**
- * 取り込みを走らせる。進捗は {@link status} に入る。
- * 画面からは待たずに呼ぶ (`start`)
+ * 引き継ぎを1回走らせる。進み具合をまっさらに戻して `body` を回し、終わりと失敗を進み具合に書く。
+ * 失敗は投げずに `failed` と理由で残す (画面からは待たずに呼ぶので、受け取る相手がいない)
  */
-async function run(options: MigrateOptions): Promise<void> {
+export async function track(
+  from: MigrateStatus["from"],
+  options: MigrateOptions,
+  body: () => Promise<void>,
+): Promise<void> {
   status_ = freshStatus({
     state: "running",
+    from,
     apply: options.apply,
     move: options.move,
     startedAt: Date.now(),
   });
   emit("migrate");
-
   try {
+    await body();
+    status_.current = null;
+    status_.state = "done";
+  } catch (error) {
+    status_.state = "failed";
+    status_.error = String(error);
+    record(`失敗: ${status_.error}`);
+  }
+  status_.finishedAt = Date.now();
+  emit("migrate");
+}
+
+/** 録画の履歴・ルール・予約の件数を1行で記録に残す */
+export function recordCounts(): void {
+  record(
+    `録画の履歴 取り込み ${status_.history.imported} 件 / 取り込み済み ${status_.history.skipped} 件、` +
+      `ルール 取り込み ${status_.rules.imported} 件 / 対象外 ${status_.rules.skipped} 件、` +
+      `予約 取り込み ${status_.reservations.imported} 件 / 対象外 ${status_.reservations.skipped} 件`,
+  );
+  emit("migrate");
+}
+
+/**
+ * 取り込みを走らせる。進捗は {@link status} に入る。
+ * 画面からは待たずに呼ぶ (`start`)
+ */
+function run(options: MigrateOptions): Promise<void> {
+  return track("epgstation", options, async () => {
     // ルールと手動予約を先に入れる。録画のコピーは時間がかかるので、
     // 先にこちらを済ませておけば途中で止めても予約は動き出す。
     // 録画の履歴はルールより前に入れる — ルールが当たり出したときに、もう録った回を予約しないように
@@ -898,12 +957,7 @@ async function run(options: MigrateOptions): Promise<void> {
     } finally {
       await connection.close();
     }
-    record(
-      `録画の履歴 取り込み ${status_.history.imported} 件 / 取り込み済み ${status_.history.skipped} 件、` +
-        `ルール 取り込み ${status_.rules.imported} 件 / 対象外 ${status_.rules.skipped} 件、` +
-        `予約 取り込み ${status_.reservations.imported} 件 / 対象外 ${status_.reservations.skipped} 件`,
-    );
-    emit("migrate");
+    recordCounts();
 
     if (options.apply) {
       const swept = sweepTemporaries();
@@ -921,15 +975,7 @@ async function run(options: MigrateOptions): Promise<void> {
       status_[result]++;
       emit("migrate");
     }
-    status_.current = null;
-    status_.state = "done";
-  } catch (error) {
-    status_.state = "failed";
-    status_.error = String(error);
-    record(`失敗: ${status_.error}`);
-  }
-  status_.finishedAt = Date.now();
-  emit("migrate");
+  });
 }
 
 /**
@@ -940,7 +986,7 @@ export function start(options: MigrateOptions): {
   started: boolean;
   message: string;
 } {
-  if (status_.state === "running") {
+  if (running()) {
     return { started: false, message: "すでに実行中です" };
   }
   if (!available()) {

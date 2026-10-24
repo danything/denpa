@@ -35,6 +35,7 @@ export const SETTINGS_GROUPS = [
       { slug: "notifications", label: "通知" },
       { slug: "tv", label: "テレビのアプリ" },
       { slug: "migrate", label: "EPGStation からの引き継ぎ" },
+      { slug: "migrate-edcb", label: "EDCB からの引き継ぎ" },
     ],
   },
   {
