@@ -541,9 +541,9 @@ export function defineBrowser(host: BrowserHost): HostObject {
   /*
    * Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ。**電波に AIT があればそちらを使い、引数の URL は使わない。**
    * 電波に AIT が無い局 (NHK) では、引数の URL を XML の AIT として取り、そこにあるアプリを開く (`startAppFrom`)。
-   * どちらでも、アプリの行き先は AIT から決まる (文書が渡した URL のページをそのまま開くことはしない)
+   * どちらでも、アプリの行き先は AIT から決まる (文書が渡した URL のページをそのまま開くことはしない)。
+   * 呼ばれたら何を訊かれたかを残す (`logCall`)
    */
-  /** 何を訊かれたかを残す (Hybridcast の呼び出し) */
   const logCall = (name: string, args: Value[]): void =>
     host.log(`${name}(${args.map((a) => toStr(a)).join(", ")})`);
   fn("startAITControlledApp", (args) => {

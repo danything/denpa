@@ -191,11 +191,7 @@ export class DsmccLogoCollector {
     if (section[0] === TABLE_DII) {
       const dii = parseDii(section);
       if (dii === null) return;
-      /*
-       * **合致するモジュールは全部取得する。** 1つのカルーセルに `LOGO-05` と
-       * `CS_LOGO-05` が並んで流れてくる (実機の BS15_0)。最初の1つで
-       * 打ち切っていた頃は、CS のロゴが永久に揃わなかった
-       */
+      // 合致するモジュールは全部取得する (`downloadKey` の説明)
       for (const module of dii.modules) {
         if (module.name === null || !LOGO_MODULE_NAMES.has(module.name))
           continue;

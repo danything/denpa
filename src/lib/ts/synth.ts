@@ -91,6 +91,9 @@ function encodeSiText(text: string): number[] {
   return encodeAribText(text, true);
 }
 
+/** 言語の符号 "jpn" (ISO 639-2) */
+const JPN = [0x6a, 0x70, 0x6e];
+
 /** 長さ1バイトを頭に付けた文字列。SI の記述子はどこもこの形式 */
 const sized = (text: string) => {
   const body = encodeSiText(text);
@@ -214,13 +217,8 @@ export interface EitOptions {
 function eventDescriptors(event: SynthEvent): number[] {
   const out: number[] = [];
 
-  const short = [
-    0x6a,
-    0x70,
-    0x6e,
-    ...sized(event.name),
-    ...sized(event.description ?? ""),
-  ];
+  const short = [...JPN, ...sized(event.name)];
+  short.push(...sized(event.description ?? ""));
   out.push(0x4d, short.length, ...short);
 
   const extended = Object.entries(event.extended ?? {});
@@ -229,7 +227,7 @@ function eventDescriptors(event: SynthEvent): number[] {
       ...sized(heading),
       ...sized(text),
     ]);
-    const body = [0x00, 0x6a, 0x70, 0x6e, items.length, ...items, 0x00];
+    const body = [0x00, ...JPN, items.length, ...items, 0x00];
     out.push(0x4e, body.length, ...body);
   }
 
@@ -245,16 +243,7 @@ function eventDescriptors(event: SynthEvent): number[] {
 
   if (event.video !== undefined) {
     const [streamContent, componentType] = event.video;
-    out.push(
-      0x50,
-      0x06,
-      0xf0 | streamContent,
-      componentType,
-      0x00,
-      0x6a,
-      0x70,
-      0x6e,
-    );
+    out.push(0x50, 0x06, 0xf0 | streamContent, componentType, 0x00, ...JPN);
   }
 
   for (const [index, audio] of (event.audios ?? []).entries()) {
@@ -702,7 +691,7 @@ export function aitSection(
     if (app.name !== undefined) {
       const name = encodeSiText(app.name);
       // application_name_descriptor: 言語 + 長さ + 中身
-      info.push(0x01, 4 + name.length, 0x6a, 0x70, 0x6e, name.length, ...name);
+      info.push(0x01, 4 + name.length, ...JPN, name.length, ...name);
     }
     if (app.base !== undefined) {
       const base = [...new TextEncoder().encode(app.base)];

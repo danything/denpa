@@ -220,44 +220,30 @@ export class LogoCollector {
 
   /** 紐付いたぶんだけ返す。ロゴだけ・対応だけでは局に配れない */
   collected(): CollectedLogo[] {
-    const byLogo = new Map<number, number[]>();
-    for (const [serviceId, logoId] of this.links) {
-      if (!this.logos.has(logoId)) continue;
-      byLogo.set(logoId, [...(byLogo.get(logoId) ?? []), serviceId]);
-    }
-    const found: CollectedLogo[] = [...byLogo.entries()].map(
-      ([logoId, serviceIds]) => ({
-        networkId: this.networkId,
-        serviceIds,
-        logo: this.logos.get(logoId)!,
-      }),
+    const linked = [...this.links].filter(([, logoId]) =>
+      this.logos.has(logoId),
     );
+    const found: CollectedLogo[] = [
+      ...Map.groupBy(linked, ([, logoId]) => logoId),
+    ].map(([logoId, links]) => ({
+      networkId: this.networkId,
+      serviceIds: links.map(([serviceId]) => serviceId),
+      logo: this.logos.get(logoId)!,
+    }));
 
     /*
      * 衛星ぶん。**ネットワークごとにまとめ直す。** 1つのロゴが他ネットワークの
      * 局にも紐付いていることがあるので、開いた中継のネットワークで一括りには
      * できない
      */
-    for (const logo of this.dsmcc.collected()) {
-      const byNetwork = new Map<number, number[]>();
-      for (const service of logo.services) {
-        byNetwork.set(service.networkId, [
-          ...(byNetwork.get(service.networkId) ?? []),
-          service.serviceId,
-        ]);
-      }
-      for (const [networkId, serviceIds] of byNetwork) {
+    for (const { logoId, logoType, services, data } of this.dsmcc.collected()) {
+      const logo = { logoId, logoType, logoVersion: 0, data };
+      for (const [networkId, list] of Map.groupBy(services, (s) => s.networkId))
         found.push({
           networkId,
-          serviceIds,
-          logo: {
-            logoId: logo.logoId,
-            logoType: logo.logoType,
-            logoVersion: 0,
-            data: logo.data,
-          },
+          serviceIds: list.map((s) => s.serviceId),
+          logo,
         });
-      }
     }
     return found;
   }

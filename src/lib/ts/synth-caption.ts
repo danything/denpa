@@ -120,18 +120,7 @@ export function drcsUnit(code: number, rows: string[]): number[] {
 /** EBML の要素1つ。大きさは8バイトで書く (読む側はどの長さでも読める) */
 function element(id: number[], body: number[]): number[] {
   const size = body.length;
-  return [
-    ...id,
-    0x01,
-    0,
-    0,
-    0,
-    (size >>> 24) & 0xff,
-    (size >>> 16) & 0xff,
-    (size >>> 8) & 0xff,
-    size & 0xff,
-    ...body,
-  ];
+  return [...id, 0x01, 0, 0, 0, (size >>> 24) & 0xff, ...u24(size), ...body];
 }
 
 /**
