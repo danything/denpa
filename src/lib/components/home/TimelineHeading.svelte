@@ -18,17 +18,21 @@
 {#if entry.kind === "day"}
   <!-- 日付の見出し。見出しなので読み上げの見出し移動で辿れる。1日に1つで、今日は線をまたいで1つ (予約か録画かは線の上下で分かる) -->
   <h2 class="t-day" data-testid="timeline-day" data-day={entry.at}>
-    <span class="t-day-name">{ctx.dayLabel(entry.at)}</span>
-    {#if dayName(entry.at, ctx.clock) !== null}<span class="t-day-date num"
-        >{date(entry.at)}</span
-      >{/if}
+    <span class="t-day-chip">
+      <span class="t-day-name">{ctx.dayLabel(entry.at)}</span>
+      {#if dayName(entry.at, ctx.clock) !== null}<span class="t-day-date num"
+          >{date(entry.at)}</span
+        >{/if}
+    </span>
   </h2>
 {:else if entry.kind === "side"}
   <!-- まとめて表示の側の見出し。番組の見出しには日付が無いので、線から離れたときにどちらの側かを貼り付けて見せる -->
   <h2 class="t-day">
-    <span class="t-day-name"
-      >{entry.zone === "future" ? "これからの予約" : "録画"}</span
-    >
+    <span class="t-day-chip">
+      <span class="t-day-name"
+        >{entry.zone === "future" ? "これからの予約" : "録画"}</span
+      >
+    </span>
   </h2>
 {:else}
   <!--
