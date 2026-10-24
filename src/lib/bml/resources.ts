@@ -28,7 +28,7 @@ export interface CarouselFile {
   urls: Map<string, ImageSource>;
 }
 
-/** スキームの付いた名前のうち、データカルーセルを指すもの (arib-dc) のほかで規格にあるもの (STD-B24 第二編 9.2) */
+/** スキームの付いた名前のうち、規格にあるもの (STD-B24 第二編 9.2。データカルーセルを指すのは arib-dc) */
 const KNOWN_SCHEMES = new Set([
   "arib-dc",
   "arib",

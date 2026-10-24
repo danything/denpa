@@ -1,17 +1,11 @@
 import { genreName } from "./arib";
 import { SERVICE_TYPE_LABEL } from "./format";
-import { parseSearchFields, type SearchField } from "./search";
+import { parseSearchFields, SEARCH_FIELD_LABEL } from "./search";
 
 /**
  * **ルールの条件を1行で** (ルールの一覧の「条件」の列)。
  * 探す所 ・ 局 ・ ジャンル ・ 同じ回は1度 ・ 除外、の順。キーワードは名前の列に出ているので書かない
  */
-
-const FIELD: Record<SearchField, string> = {
-  name: "番組名",
-  description: "概要",
-  extended: "詳細",
-};
 
 export interface Summarized {
   search_fields: string;
@@ -29,7 +23,7 @@ export function conditionSummary(
 ): string {
   const parts = [
     parseSearchFields(rule.search_fields)
-      .map((field) => FIELD[field])
+      .map((field) => SEARCH_FIELD_LABEL[field])
       .join("・"),
   ];
   const stations = [

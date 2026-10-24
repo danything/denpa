@@ -8,7 +8,7 @@
 export const SEARCH_FIELDS = ["name", "description", "extended"] as const;
 export type SearchField = (typeof SEARCH_FIELDS)[number];
 
-/** 当てる範囲のチップの字 (ルールとして保存) */
+/** 当てる範囲の字 (ルールとして保存のチップ・ルールの一覧の「条件」) */
 export const SEARCH_FIELD_LABEL: Record<SearchField, string> = {
   name: "番組名",
   description: "概要",

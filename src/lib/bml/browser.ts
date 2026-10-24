@@ -172,7 +172,6 @@ function browserSupport(
       return major < 3 || (major === 3 && minor === 0) ? 1 : 0;
     }
     case "APIGroup":
-      if (a === "Com.IP.confirmIP" || a === "Com.IP.Transmit") return 1;
       if (a === "AITControlledApp.Start") return app || xml ? 1 : 0;
       return a !== undefined && API_GROUPS.has(a) ? 1 : 0;
     case "Storage":

@@ -3,7 +3,7 @@
  *
  * - 数は整数だけ (10 進と 16 進)。小数は運用されないが、来たら整数に切り捨てる
  * - 正規表現のリテラルは無い (`/` はいつも割り算)
- * - 行頭の `<!--` と `-->` は 1 行の注釈として読み飛ばす (古い書き方の名残)
+ * - `<!--` と行頭の `-->` は 1 行の注釈として読み飛ばす (古い書き方の名残)
  */
 
 export type TokenType = "name" | "number" | "string" | "punct" | "eof";
@@ -126,7 +126,7 @@ export function tokenize(source: string): Token[] {
       at++;
       continue;
     }
-    // 1 行の注釈 (// と、行頭の <!-- / -->)
+    // 1 行の注釈 (// と <!-- と、行頭の -->)
     if (
       source.startsWith("//", at) ||
       source.startsWith("<!--", at) ||

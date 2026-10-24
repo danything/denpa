@@ -98,7 +98,7 @@ export function prepareApp(
   );
   // 中の script がアプリの元の場所を読むように (`location.ts`)。差し込みが `__hcLocation` を置く
   html = rewriteLocation(html);
-  // </script> で差し込みが切れないように (JSON の中の < は < に)
+  // </script> で差し込みが切れないように (JSON の中の `<` は `<` に)
   const data = JSON.stringify(init).replace(/</g, "\\u003c");
   const inject = `<base href="${attribute(base)}"><script>(${shim.toString()})(${data});</script><script>${compat}</script>`;
   for (const pattern of [

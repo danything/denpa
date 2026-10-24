@@ -119,6 +119,5 @@ export const SERVICES: FakeService[] =
 
 export const MX = TEST_SERVICES[0]!;
 export const FUJI = TEST_SERVICES[1]!;
-export const DATA = TEST_SERVICES[2]!;
 export const BS11 = TEST_SERVICES[3]!;
 export const BS_NO_LOGO = TEST_SERVICES[4]!;

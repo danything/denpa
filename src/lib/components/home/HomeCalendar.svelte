@@ -22,6 +22,7 @@
     stepMonth,
   } from "#lib/calendar.js";
   import Icon from "#lib/components/player/Icon.svelte";
+  import { WEEKDAYS } from "#lib/format.js";
   import ChevronLeft from "~icons/lucide/chevron-left";
   import ChevronRight from "~icons/lucide/chevron-right";
 
@@ -40,8 +41,6 @@
     /** 日を押した */
     onpick: (day: number) => void;
   } = $props();
-
-  const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
   // svelte-ignore state_referenced_locally
   let month = $state(monthOf(pinned ?? today));

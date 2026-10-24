@@ -442,7 +442,7 @@ export class ScheduleProgress {
    * `table_id` + 局 + TS で決まり、`version_number` はその単位で動く。
    * 局に1つだけ持っていた頃は、**基本 (0x50〜) と詳細 (0x58〜) を行き来する
    * たびに版が違って数えたものを全部捨てて**いた。揃ったと分かることが
-   * 二度と無いので、どのチャンネルも上限の5分まで開きっぱなしになる。
+   * 二度と無いので、どのチャンネルも上限の10分 (`epgChannelTimeout`) まで開きっぱなしになる。
    */
   private readonly version = new Map<number, number>();
 
@@ -484,7 +484,7 @@ export class ScheduleProgress {
    * **`0x52`〜`0x57` は永久に来ません**。
    *
    * `0x50` から `last_table_id` まで全部を待っていた頃は、詳細を積んでいる局が
-   * **一度も「揃った」にならず**、どのチャンネルも上限の5分まで開きっぱなしに
+   * **一度も「揃った」にならず**、どのチャンネルも上限の10分 (`epgChannelTimeout`) まで開きっぱなしに
    * なっていました (実機で、詳細の無い BS11 だけが早く閉じていた)。
    *
    * 見かけた表と、`last_table_id` が指す表だけを見ます。
@@ -856,7 +856,7 @@ export class PresentFollowing {
   }
 }
 
-/** 変わったかどうかを見る中身。**時刻とタイトルだけ** — 番組表に写して画面に出るもの */
+/** 変わったかどうかを見る中身。**番号・時刻・尺・タイトルだけ** — 番組表に写して画面に出るもの */
 function markOf(event: EitEvent): string {
   return `${event.eventId}:${event.startAt}:${event.duration}:${event.name}`;
 }

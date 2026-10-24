@@ -5,6 +5,8 @@
  * 読めない・書けない (プライベートブラウズなど) ときは、覚えないだけで検索は使える
  */
 
+import { forget, read, write } from "./keep";
+
 const KEY = "denpa.recent-searches";
 /** 覚えておく数。新しいものが先頭 */
 export const RECENT_MAX = 8;
@@ -34,18 +36,10 @@ export function parseRecent(raw: string | null): string[] {
 }
 
 export function loadRecent(): string[] {
-  try {
-    return parseRecent(localStorage.getItem(KEY));
-  } catch {
-    return [];
-  }
+  return parseRecent(read(KEY));
 }
 
 export function saveRecent(list: string[]): void {
-  try {
-    if (list.length === 0) localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, JSON.stringify(list));
-  } catch {
-    // 覚えられないだけ
-  }
+  if (list.length === 0) forget(KEY);
+  else write(KEY, JSON.stringify(list));
 }

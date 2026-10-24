@@ -69,7 +69,7 @@
 
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身のDBから来る。**
-   * エージェントにも控えはあるが、聞きに行かない (+page.server.ts)
+   * エージェントにも控えはあるが、聞きに行かない (`channels.server.ts`)
    */
   const coverage = $derived(data.channels);
   /** 入っている局をすべて並べたもの */

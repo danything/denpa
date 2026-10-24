@@ -316,13 +316,6 @@ export class YuvRenderer {
     }
     return new ImageData(pixels, width, height);
   }
-
-  /** 黒で塗る。**出せなくなったときに前の局の映像を残さない** */
-  clear(): void {
-    const gl = this.gl;
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-  }
 }
 
 function link(gl: WebGL2RenderingContext): WebGLProgram {

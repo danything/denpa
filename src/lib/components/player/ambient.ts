@@ -55,7 +55,7 @@ export const STILL = 2;
  *
  * 4x3 の格子に平均していた頃 (#1064) より、辺の色の細かさが残る。真ん中の動きは光に入らない
  */
-export const EDGE = { depth: 0.15, taps: [1, 2, 3, 2, 1] } as const;
+const EDGE = { depth: 0.15, taps: [1, 2, 3, 2, 1] } as const;
 
 /**
  * 写した 32x18 (`GLANCE`) から、**縁を延ばした 32x18** を作る。各マスは、近い辺の帯の平均 (`EDGE`) を、
@@ -136,10 +136,10 @@ export function edgeExtend(
  * 色を時間でならす時定数 (ms)。**250ms — 写す間隔 (200ms) と同じくらい。** 入れ替えの 200ms と合わせても、
  * 新しい色の 9 割まで 0.6 秒ほどで追いつく
  */
-export const SETTLE = 250;
+const SETTLE = 250;
 
 /** **場面が変わった** と見なす違い (`frameDelta`、0〜255)。これを超えたらならさずに、すぐ新しい色にする */
-export const CUT = 40;
+const CUT = 40;
 
 /**
  * **色を時間でならす。** 前の色 (`prev`) を、写した色 (`next`) へ、経った時間 (`dt` ms) に応じて寄せる
@@ -167,7 +167,7 @@ export function follow(
  * **ただし、どこか1画素でもこれ以上変わったら入れ替える** (0〜255)。字幕が出たなど一部だけが大きく変わると、
  * 平均では `STILL` に届かないことがある
  */
-export const STILL_PEAK = 24;
+const STILL_PEAK = 24;
 
 /** 入れ替えるほど変わったか (`STILL`・`STILL_PEAK`) */
 export function changed(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
@@ -309,7 +309,7 @@ export function strips(area: Rect, stage: Rect): Rect[] {
  * 光は canvas の中で作るので、引き伸ばすだけで済む (CSS の `filter: blur` は使わない —
  * GPU の無い端末では、入れ替えのたびに画面の大きさでぼかし直すことになる)
  */
-export const GLOW_UNITS = 96;
+const GLOW_UNITS = 96;
 
 /** 光の canvas の中での置き場 (画素)。`width`・`height` は canvas の大きさ */
 export interface GlowLayout {
@@ -491,7 +491,7 @@ function boxLine(
 }
 
 /** テーマごとの色の濃くし方 (`vivid`)。彩度は何倍にするか、明るさは何倍にするか */
-export const TONE = {
+const TONE = {
   dark: { saturate: 1.8, gain: 1.25 },
   light: { saturate: 3, gain: 0.95 },
 } as const;

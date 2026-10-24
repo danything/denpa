@@ -279,7 +279,7 @@
 
   /**
    * 開いた番組の中身 (出演者・あらすじ・音声…)。**表は持っていない**
-   * (`+page.server.ts` の `GridProgram`) ので、開くときに 1 件だけ取る。
+   * (`GridProgram`) ので、開くときに 1 件だけ取る。
    */
   let facts = $state<Facts | null>(null);
   /** 続けて別のマスを押したとき、遅れて届いた前の結果で上書きしない */
@@ -451,7 +451,7 @@
     return resolve(`guide?${query}`);
   }
 
-  /** 表の日付 (`10/18(日)`)。狭い画面では月を隠す (`.month`) */
+  /** 表の日付 (`10/18(日)`) を月と日に分ける */
   const shownDate = $derived(date(data.start));
   const month = $derived(shownDate.slice(0, shownDate.indexOf("/") + 1));
   const day = $derived(shownDate.slice(month.length));
@@ -1360,7 +1360,7 @@
       {/if}
 
       {#if canPlay}
-        <!-- エンコードする前の元のTSは観る画面が追っかけ (`/chase`) へ送る -->
+        <!-- 録っている最中なら観る画面が追っかけ (`/chase`) へ送る -->
         <a
           class="button"
           class:secondary={primary !== "play"}

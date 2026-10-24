@@ -146,7 +146,6 @@ export function load({ url }) {
     rules: searchRules(q, options),
     /** 詳細を開いておく番組 (`?program=`)。無ければ null */
     focus: focusOf(url),
-    limit: LIMIT,
     // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)
     watchable: watchableServices(now()),
     /** 右の書く欄 */

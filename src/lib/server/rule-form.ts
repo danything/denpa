@@ -131,7 +131,7 @@ export function draftRule(fields: Fields): Rule | null {
  * ルール名はキーワードから決める。別で名前を付けさせても、結局キーワードと
  * 同じものを打ち込むだけになるため。キーワードが無いときは対象の局で表す。
  */
-export function ruleName(conditions: Conditions): string {
+function ruleName(conditions: Conditions): string {
   if (conditions.keyword !== "") return conditions.keyword;
 
   const services = orm().select().from(serviceTable).all();

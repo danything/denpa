@@ -21,7 +21,7 @@ import { type Fmp4Track, readFragment, readInit } from "./fmp4";
  * キーフレームの間隔は 2 秒 (`-g 60`。`server/live.ts`)。印 (`sample_is_non_sync_sample`) が
  * 読めない流れだったときに、映像が出ないまま止まるよりは、前のとおり全部渡すほうがいい
  */
-export const KEY_WAIT = 4;
+const KEY_WAIT = 4;
 
 export class KeyGate {
   #tracks: Fmp4Track[] = [];

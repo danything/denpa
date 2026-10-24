@@ -386,7 +386,7 @@
     };
   }
 
-  /** 絞り込みのボタン (すべて・予約・録画中・未視聴・失敗)。その場かぎり */
+  /** 絞り込みのボタン (`Filter`)。その場かぎり */
   let filter = $state<Filter>("all");
   /** 件数はボタンごとに数える (押す前に、押すと何件になるかが分かる) */
   const counts = $derived(countFilters(items, traitsOf));
@@ -754,7 +754,7 @@
     >
       <!--
                 **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
-                上限に当たっていたら、いちばん古い録画の上 (一覧の頭) に検索へ誘う一行を出す (`+page.server.ts` の LIMIT 300)
+                上限に当たっていたら、いちばん古い録画の上 (一覧の頭) に検索へ誘う一行を出す (`+page.server.ts` の `.limit(300)`)
             -->
       {#if data.recordings.length >= 300 && pastStart === 0}
         <div class="row-empty muted small">

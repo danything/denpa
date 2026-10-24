@@ -30,10 +30,10 @@ export interface XmlElement {
 
 export type XmlNode = XmlElement | XmlText;
 
-/** 中身を持たない要素 */
 /** 入れ子の深さの上限。放送の文書は 10 段にも満たない */
 const MAX_DEPTH = 64;
 
+/** 中身を持たない要素 */
 const VOID = new Set(["br", "meta", "link", "img", "input"]);
 
 const ENTITIES: Record<string, string> = {

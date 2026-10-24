@@ -361,7 +361,7 @@ export async function bootOidc(
 
 /**
  * **認証の手段を何も設定していない denpa。** OIDC も TRUSTED_NETWORKS も無ければ
- * **全部のアクセスを断る**ことを確かめるためのインスタンス (`14-serve` だけが使う)。
+ * **全部のアクセスを断る**ことを確かめるためのインスタンス (`14-serve`・`31-device` が使う)。
  * 普段の `stack` はローカルを信頼したネットワークにしてあるので、これは別に立てる。
  */
 export async function bootClosed(

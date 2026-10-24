@@ -288,7 +288,7 @@
     };
     check();
     document.addEventListener("visibilitychange", check);
-    // テーマは設定と端末の設定で変わる (`+layout.svelte` が `<html data-theme>` を書き換える)
+    // テーマは設定と端末の設定で変わる (`theme.svelte.ts` が `<html data-theme>` を書き換える)
     const theme = new MutationObserver(check);
     theme.observe(document.documentElement, {
       attributes: true,

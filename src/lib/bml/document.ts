@@ -2,8 +2,8 @@
  * BML の文書の中身 (要素の木)。XML の木 ([xml.ts](xml.ts)) から作り、スクリプト
  * ([dom.ts](dom.ts)) と描く側 ([render.ts](render.ts)) が同じものを見る。
  *
- * **放送が使う 16 の要素だけを持つ** (bml・head・title・meta・script・style・link・body・
- * div・p・span・a・br・object・bevent・beitem)。知らない要素は中身ごと無視する。
+ * **放送が使う 18 の要素だけを持つ** (bml・head・title・meta・script・style・link・body・
+ * div・p・span・a・br・object・bevent・beitem・input・img)。知らない要素は中身ごと無視する。
  * 属性は持つが、ページの DOM には写さない (on* はここで読むだけ)。
  */
 

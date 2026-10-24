@@ -666,7 +666,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    *
    * 選局した直後と、飛んだ直後は必ず `waiting` が上がる。数えていた頃は
    * それだけで貯める量が増え、遅延が伸びたまま戻らなかった — 詰まりは
-   * **一度に 0.6 秒**伸ばし、しかも**伸ばした先が下限として残る**ので
+   * **一度に 0.3 秒**伸ばし、しかも**伸ばした先が下限として残る**ので
    * (`pacing.ts` の `PROBE`)、自分で起こした1回がずっと効いてしまう。
    */
   let quiet = 0;
@@ -1398,13 +1398,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 字幕を選び直す。**言語が複数ある放送はたまにある。**
-   *
-   * **音声と同じで再エンコードになる** — 字幕は映像と同じ ffmpeg でエンコードしている
-   * (そうしないと時刻が揃わない。`server/captions.ts`)。MediaSource から作り直すので、
-   * 待たせているぶんも映像も捨てる
-   */
-  /**
    * 字幕の言語を選ぶ。**再エンコードしない** — サーバは載っている言語を全部デコードしていて、
    * 出す言語を視聴者ごとに替えるだけ (`server/live.ts` の `setLanguage`)。待たせている字幕は前の言語なので捨てる
    *
@@ -1432,6 +1425,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (element !== null) paint(element.currentTime);
   }
 
+  /**
+   * 字幕を選び直す。**言語が複数ある放送はたまにある。**
+   *
+   * **音声と同じで再エンコードになる** — 字幕は映像と同じ ffmpeg でエンコードしている
+   * (そうしないと時刻が揃わない。`server/captions.ts`)。MediaSource から作り直すので、
+   * 待たせているぶんも映像も捨てる
+   */
   function setCaptionTrack(index: number): void {
     if (index === captionTrack) return;
     // 追っかけも同じ理屈で再エンコード。**再生していた位置から**開き直す

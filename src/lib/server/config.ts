@@ -107,7 +107,7 @@ export const config = {
    *
    * プロセスごと落とすジョブ (メモリ超過など) は、再起動のたびに running→queued
    * へ戻され、同時実行1・id順だと毎回先頭に来て永久にキューを塞ぐ。取り出すたびに
-   * attempts を数えていて、ここを超えたら諦めて failed にし、後ろを進める
+   * attempts を数えていて (頭を捨てる再試行も1回と数える)、ここを超えたら諦めて failed にし、後ろを進める
    */
   encodeMaxAttempts: num("ENCODE_MAX_ATTEMPTS", 5),
   ffprobe: str("FFPROBE", "/usr/local/bin/ffprobe"),
@@ -129,7 +129,7 @@ export const config = {
   cmLogoDir: `${dataDir}/logos/cm`,
   /** CM検出でロゴの区間をならすときの fps。ffprobe で取れなければこれを使う (地上波・BS は 30000/1001) */
   cmFallbackFps: 30000 / 1001,
-  /** CM検出のために別に回す ffmpeg (ロゴを覚える・枠だけ読み直す) 1回の上限時間(ms)。エンコードする ffmpeg で一緒に行う読み込みには掛けない */
+  /** CM検出のために別に回す ffmpeg (ロゴを覚える・読み直す・CM検出だけやり直す) 1回の上限時間(ms)。エンコードする ffmpeg で一緒に行う読み込みには掛けない */
   cmDetectTimeout: 30 * MIN,
   /**
    * CMを実際に切るとき、境目にキーフレームが無ければ CM 側へ寄せてよい長さ(秒) (`cm-cut.planCut`)。

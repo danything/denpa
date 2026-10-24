@@ -30,7 +30,7 @@
    */
   const q = $derived(data.q);
 
-  /** 節ごとに最初に出す数。「もっと見る」で受け取ったぶん (上限 `data.limit`) まで広げる */
+  /** 節ごとに最初に出す数。「もっと見る」で受け取ったぶん (上限は `+page.server.ts` の `LIMIT`) まで広げる */
   const FIRST = 5;
   type Key = "programs" | "recordings" | "reservations" | "rules";
   /** 開いた節。言葉が変わったら畳み直す */

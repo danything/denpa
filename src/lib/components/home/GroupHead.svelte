@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * **番組の見出し** (まとめて表示)。押すと開く・閉じる。本物の button なので、Tab で辿れて Enter / Space で開く。
-   * 同じ番組でも線の上 (予約) と下 (録画) で別の見出し (`#lib/timeline.ts`)
+   * 同じ番組でも線の上 (録画) と下 (予約) で別の見出し (`#lib/timeline.ts`)
    */
   import Icon from "#lib/components/player/Icon.svelte";
   import { dateTime } from "#lib/format.js";

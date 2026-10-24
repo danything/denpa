@@ -108,7 +108,7 @@ async function turnDay(
 ): Promise<void> {
   const before = page.url();
   /*
-   * **広い画面は日付を並べて直接押す** (← → は入りきらないときと、前日に番組があるときだけ)。
+   * **広い画面は日付を並べて直接押す** (← → は入りきらないときだけ)。
    * 矢印が隠れていれば、選んでいる日の隣を押す
    */
   const arrow = page.getByTestId(which);
@@ -156,12 +156,6 @@ export async function past(page: Page): Promise<Cell[]> {
   return found;
 }
 
-/**
- * 番組表に出ているうち、**いま流れているもの。** 局ごとに1つ。
- *
- * 偽の放送は隙間なく並べてある (`tests/fake/broadcast.ts`) ので、始まったものの
- * うちいちばん新しいものがそれにあたる。終わりの時刻はマスに出ていない
- */
 /** 1つは要る。型でも「先頭がある」と言う (`const [target] = await upcoming(page)` がそのまま使える) */
 function atLeastOne(cells: Cell[], what: string): [Cell, ...Cell[]] {
   const [head, ...rest] = cells;
@@ -169,6 +163,12 @@ function atLeastOne(cells: Cell[], what: string): [Cell, ...Cell[]] {
   return [head, ...rest];
 }
 
+/**
+ * 番組表に出ているうち、**いま流れているもの。** 局ごとに1つ。
+ *
+ * 偽の放送は隙間なく並べてある (`tests/fake/broadcast.ts`) ので、始まったものの
+ * うちいちばん新しいものがそれにあたる。終わりの時刻はマスに出ていない
+ */
 export async function airing(page: Page): Promise<[Cell, ...Cell[]]> {
   const at = Date.now();
   const latest = new Map<string, Cell>();
@@ -433,7 +433,7 @@ export async function clearRules(page: Page): Promise<void> {
 /**
  * 少しずつ出す一覧を**全部出させる** (`#lib/paging.svelte`)。
  *
- * ホームの予約・録画とルールの一覧は、最初は 1 画面と少しだけ描き、末尾の印
+ * ホームの予約・録画の一覧は、最初は 1 画面と少しだけ描き、末尾の印
  * (`<一覧>-more`。`use:sentinel`) が画面に入るたびに続きを足す。件数を数える・
  * 行を番号で名指しするテストは、その前にこれを呼ぶ (ホームは `goto` が呼ぶ)。
  *

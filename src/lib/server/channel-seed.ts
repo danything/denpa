@@ -12,7 +12,7 @@
  * 上書きしない)。入れるのは、受けられるチューナーがある種別だけ。局の入れ替え
  * (BS の再編など) で表が古くなったら、画面のスキャンで上書きできる。
  *
- * エージェントに繋がったときと、チューナーの通知 (選局のたびに来る) で見る (runtime.ts)。
+ * 局の一覧を取り込むときに見る (runtime.ts の `syncChannels`)。
  * 表は Khronos31/hassio-addons の denpa アドオンが初回起動で入れていたもの (MIT)
  */
 import type { ChannelType } from "../types";

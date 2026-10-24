@@ -816,7 +816,7 @@ describe("同じ回は最初の放送だけ録る", () => {
     ]);
   });
 
-  /** 下見に渡す形式 (ルール画面の `readPreview` と同じ列) */
+  /** 下見に渡す形式 (`countPreview` が引くのと同じ列) */
   function hit(id: number, serviceId: number, type: string, channel: string) {
     const row = orm().select().from(programs).where(eq(programs.id, id)).get()!;
     return {

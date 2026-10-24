@@ -287,7 +287,7 @@ async function sweepLogos(): Promise<void> {
 }
 
 async function seed(): Promise<void> {
-  // 番組表。偽エージェントから集める (画面の「今すぐ集める」と同じ API)
+  // 番組表。偽エージェントから集め終わるまで待つ (`/api/sync`)
   await post("/api/sync", null);
   await sweepLogos();
   // 1回目で取りこぼした局 (チューナーの取り合いで待ちきれなかったもの) を集め直す
@@ -857,7 +857,7 @@ async function motionShots(browser: Browser): Promise<void> {
       }
     });
   });
-  // 3. 番組表のマス → 詳細 (マスから広がり、閉じるとマスへ縮む)
+  // 3. 番組表のマス → 詳細を開いて閉じる
   await shot("guide-detail", async () => {
     await page.goto(`${BASE}/guide?type=GR`);
     await settle(page, 1500);
@@ -868,7 +868,7 @@ async function motionShots(browser: Browser): Promise<void> {
       await page.waitForTimeout(1000);
     });
   });
-  // 4. 録画の一覧 → 観る画面 (番組名がタイトルへ広がる)、戻る
+  // 4. 録画の一覧 → 観る画面、戻る
   await shot("home-watch", async () => {
     await page.goto(`${BASE}/`);
     await settle(page, 800);

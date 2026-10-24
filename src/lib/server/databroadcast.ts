@@ -47,22 +47,12 @@ export class DataBroadcast {
   }
 
   /**
-   * 1局に絞った TS を食わせる。**転んでも投げ返さない。**
+   * 1局に絞った TS の、切り分け済みのパケットを1つ (`BmlDecoder.feedPacket`)。**転んでも投げ返さない。**
    *
    * データ放送は映像の付け足しなので、デコードする側が転んだらそこで諦めて、映像は
    * 流し続ける。**投げ返すと TS を送り込んでいるところ (`Session.pump`) ごと
    * 落ちて、映像まで出なくなる** — 実際に落としたことがある。
    */
-  feed(chunk: Uint8Array): void {
-    if (this.closed) return;
-    try {
-      this.decoder.feed(chunk);
-    } catch (error) {
-      this.fell(error);
-    }
-  }
-
-  /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket`)。転び方は `feed` と同じ */
   feedPacket(packet: Uint8Array): void {
     if (this.closed) return;
     try {

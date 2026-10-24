@@ -17,6 +17,7 @@
  */
 
 import { joinBytes } from "./bytes";
+import { ADTS_RATES } from "./pes";
 
 /** 箱の頭。大きさと種別で8バイト */
 const HEADER = 8;
@@ -486,12 +487,6 @@ function readTraf(
   }
   return true;
 }
-
-/** ADTS の標本化周波数の番号 (ISO/IEC 14496-3 の表) */
-const ADTS_RATES = [
-  96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,
-  8000, 7350,
-];
 
 /**
  * **MP4 の AAC の1コマに付ける ADTS の頭。** デコーダ (`wasm/mpeg2` の `aac_push`) は

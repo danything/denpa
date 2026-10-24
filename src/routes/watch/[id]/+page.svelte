@@ -837,7 +837,7 @@
   let audios = $state<{ label: string }[]>([]);
   let audioIndex = $state(0);
   /**
-   * 字幕を出しているか。**持っている録画でだけ意味を持つ** (`data.subtitle`)。
+   * 字幕を出しているか。**持っている録画でだけ意味を持つ** (`hasCaptions`)。
    * **既定は出す** — ライブと同じ (`live-player` の `captions`)。端末ごとに覚える (`caption-pref.ts`)
    */
   let captions = $state(true);
@@ -1347,7 +1347,7 @@
   }
 
   /**
-   * チャプターの位置。**エンコードしたものから読む** (`api/recordings/<id>/chapters`)。
+   * チャプターの位置 (`api/recordings/<id>/chapters`。エンコードしたものから、まだなら検出した CM の位置から)。
    *
    * CM はチャプターとして入っているので、そのまま**CM飛ばし**になる。
    * 無い録画もある (CMを切ってエンコードしたもの・検出が当たらなかったもの) ので、

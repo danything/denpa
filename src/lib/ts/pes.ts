@@ -215,7 +215,7 @@ export class PesDemuxer {
 }
 
 /** ADTS の標本化周波数の表 (ISO/IEC 14496-3 表 1.18) */
-const RATES = [
+export const ADTS_RATES = [
   96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,
   8000, 7350,
 ];
@@ -261,7 +261,7 @@ export class AdtsSplitter {
         continue;
       }
       if (at + length > buffer.length) break;
-      const rate = RATES[(buffer[at + 2]! >> 2) & 0x0f] ?? 48000;
+      const rate = ADTS_RATES[(buffer[at + 2]! >> 2) & 0x0f] ?? 48000;
       const channels = ((buffer[at + 2]! & 0x01) << 2) | (buffer[at + 3]! >> 6);
       const duration = Math.round((1024 * CLOCK) / rate);
       if (this.next !== null) {
