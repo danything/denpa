@@ -1773,6 +1773,19 @@
     pointer-events: none;
     transition: height var(--dp-duration-move) var(--dp-ease);
   }
+  /*
+   * **放送中の番組は、過ぎた所を浅く沈める** (終わった番組と同じ濃さだと、いま見られる番組まで終わって見えた)。
+   * `--past` が 1 に届いていないマスだけ 45% にする。`round()` を知らないブラウザはどちらも 78%
+   */
+  @supports (width: round(down, 1px, 1px)) {
+    .program::before {
+      background: color-mix(
+        in srgb,
+        var(--dp-bg) calc(45% + 33% * round(down, var(--past), 1)),
+        transparent
+      );
+    }
+  }
   :global([data-theme="dark"]) :is(.program, .swatch) {
     --wash: 14%;
   }
