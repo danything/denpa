@@ -335,11 +335,6 @@
     gap: var(--dp-space-3);
     container-type: inline-size;
   }
-  @media (min-width: 768px) {
-    .main-inner {
-      padding: 0 var(--dp-gutter) var(--dp-gutter);
-    }
-  }
   /*
      * **節どうしは線を引かず、上下にたっぷりの余白で区切る** (左の一覧のグループの境目と同じ考え。カードにはしない)。
      * 節の中の行の間より目に見えて空ける。飛んだ先が見出しの上にぴったり付くよう、
@@ -357,14 +352,7 @@
     .main-inner :global([data-part]) {
       scroll-margin-top: 7rem;
     }
-  }
-  @media (max-width: 639.98px) {
-    .main-inner :global([data-part]) {
-      scroll-margin-top: calc(3.5rem + env(safe-area-inset-top));
-    }
-  }
-  /* 狭い画面は一覧か中身のどちらか。どちらを出すかは URL */
-  @media (max-width: 767px) {
+    /* 狭い画面は一覧か中身のどちらか。どちらを出すかは URL */
     .page.list-view .main,
     .page:not(.list-view) .side {
       display: none;
@@ -426,10 +414,16 @@
     .jump {
       top: env(safe-area-inset-top);
     }
+    .main-inner :global([data-part]) {
+      scroll-margin-top: calc(3.5rem + env(safe-area-inset-top));
+    }
   }
   @media (min-width: 768px) {
     .jump {
       display: none;
+    }
+    .main-inner {
+      padding: 0 var(--dp-gutter) var(--dp-gutter);
     }
   }
 </style>

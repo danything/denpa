@@ -80,6 +80,38 @@
 <svelte:window onclick={deleting.stand} />
 
 <!--
+  **選ばせる。打たせない。** エージェントが読むのは小文字の `15v` / `11v` だけで (`Tuning.cs`)、
+  `15V` と打つと黙って給電されない。見せる字は大文字 (電圧の書き方)
+-->
+{#snippet lnbField(name: string, lnb: string)}
+  <label class="field">
+    <span>LNB</span>
+    <select class="w-lnb" {name}>
+      {#each lnbChoices(lnb) as choice (choice.value)}
+        <option value={choice.value} selected={choice.value === lnb}>
+          {choice.label}
+        </option>
+      {/each}
+    </select>
+  </label>
+{/snippet}
+
+{#snippet typeChips(prefix: string, types: readonly string[])}
+  <div class="chips types">
+    {#each CHANNEL_TYPES as type (type)}
+      <label class="chip">
+        <input
+          type="checkbox"
+          name={`type.${prefix}.${type}`}
+          checked={types.includes(type)}
+        />
+        {SERVICE_TYPE_LABEL[type]}
+      </label>
+    {/each}
+  </div>
+{/snippet}
+
+<!--
     **チューナーは1つの表。** いまの様子 (空き・使っているもの) と設定 (種別・使うか) を同じ行に並べる。
     空きの表と設定の表を分けていた頃は、名前と種別と無効が2つの表に2度ずつ出ていた。
     名前・デバイス・LNB・削除は入れたときしか触らないので、行の「⋯」の中。
@@ -115,18 +147,14 @@
       {/if}
     {/await}
 
-    {#if shownTuners.value === undefined}
-      <!--
-            エージェントの答え待ち。**本物の表と同じ形・同じ高さの枠を先に置く** (番組表・ルールの
-            下見と同じ骨組み)。字だけ出していた頃は、届いた拍子に表が出て下の節が押し下げられた
-        -->
-      <div
-        class="skeleton"
-        role="status"
-        aria-label="チューナーを確認しています"
-      >
+    <!--
+      エージェントの答え待ち。**本物の表と同じ形・同じ高さの枠を先に置く** (番組表・ルールの
+      下見と同じ骨組み)。字だけ出していた頃は、届いた拍子に表が出て下の節が押し下げられた
+    -->
+    {#snippet skeleton(label: string, rows: number[])}
+      <div class="skeleton" role="status" aria-label={label}>
         <div class="skeleton-head" aria-hidden="true"></div>
-        {#each TUNER_SKELETON as height, row (row)}
+        {#each rows as height, row (row)}
           <div
             class="skeleton-block"
             style="height: {height}rem"
@@ -134,6 +162,9 @@
           ></div>
         {/each}
       </div>
+    {/snippet}
+    {#if shownTuners.value === undefined}
+      {@render skeleton("チューナーを確認しています", TUNER_SKELETON)}
     {:else if shownTuners.value.error !== null}
       <!--
             繋がらなかったときに空の一覧だけ出すと「1台も無い」と
@@ -188,18 +219,7 @@
                       {/if}
                     </td>
                     <td class="types-cell" data-label="受信できる種別">
-                      <div class="chips types">
-                        {#each CHANNEL_TYPES as type (type)}
-                          <label class="chip">
-                            <input
-                              type="checkbox"
-                              name={`type.${index}.${type}`}
-                              checked={tuner.types.includes(type)}
-                            />
-                            {SERVICE_TYPE_LABEL[type]}
-                          </label>
-                        {/each}
-                      </div>
+                      {@render typeChips(String(index), tuner.types)}
                     </td>
                     <td class="state-cell small">
                       <!--
@@ -289,24 +309,7 @@
                             placeholder="/dev/dvb/adapter0/frontend0"
                           />
                         </label>
-                        <!--
-                                                **選ばせる。打たせない。** エージェントが読むのは小文字の
-                                                `15v` / `11v` だけで (`Tuning.cs`)、`15V` と打つと黙って
-                                                給電されない。見せる字は大文字 (電圧の書き方)
-                                            -->
-                        <label class="field">
-                          <span>LNB</span>
-                          <select class="w-lnb" name={`lnb.${index}`}>
-                            {#each lnbChoices(tuner.lnb ?? "") as choice (choice.value)}
-                              <option
-                                value={choice.value}
-                                selected={choice.value === (tuner.lnb ?? "")}
-                              >
-                                {choice.label}
-                              </option>
-                            {/each}
-                          </select>
-                        </label>
+                        {@render lnbField(`lnb.${index}`, tuner.lnb ?? "")}
                         <div class="delete-slot">
                           {#if deleting.armed === index}
                             <!--
@@ -364,23 +367,9 @@
             </label>
             <div class="field">
               <span>受信できる種別</span>
-              <div class="chips types">
-                {#each CHANNEL_TYPES as type (type)}
-                  <label class="chip">
-                    <input type="checkbox" name={`type.add.${type}`} />
-                    {SERVICE_TYPE_LABEL[type]}
-                  </label>
-                {/each}
-              </div>
+              {@render typeChips("add", [])}
             </div>
-            <label class="field">
-              <span>LNB</span>
-              <select class="w-lnb" name="lnb.add">
-                {#each LNB_CHOICES as choice (choice.value)}
-                  <option value={choice.value}>{choice.label}</option>
-                {/each}
-              </select>
-            </label>
+            {@render lnbField("lnb.add", "")}
           </div>
         {/if}
         <div class="cluster actions">
@@ -456,19 +445,8 @@
         {/if}
       </div>
       {#if shownCard.value === undefined}
-        <!-- リーダーの表も同じ形の枠を先に置く (リーダーは1つのことが多い。名前と場所の2行) -->
-        <div
-          class="skeleton"
-          role="status"
-          aria-label="カードリーダーを確認しています"
-        >
-          <div class="skeleton-head" aria-hidden="true"></div>
-          <div
-            class="skeleton-block"
-            style="height: 2.35rem"
-            aria-hidden="true"
-          ></div>
-        </div>
+        <!-- リーダーは1つのことが多い。名前と場所の2行 -->
+        {@render skeleton("カードリーダーを確認しています", [2.35])}
       {:else}
         {@const card = shownCard.value}
         <!-- 困っているときだけ。名前と番号は表に出る -->
@@ -561,11 +539,14 @@
     border-collapse: separate;
     border-spacing: 0;
   }
-  .tuners th {
+  /* 見出しは小さく淡く (リーダーの表も) */
+  :is(.tuners, .reader) th {
     border: 0;
     font-size: var(--dp-text-xs);
     font-weight: var(--dp-weight);
     color: var(--dp-muted);
+  }
+  .tuners th {
     white-space: nowrap;
   }
   .tuners td {
@@ -842,14 +823,9 @@
   .reader h3 {
     font-size: var(--dp-text-base);
   }
-  /* リーダーの表もチューナーの表と同じく、線で区切らない行。見出しは小さく淡く */
-  .reader :is(th, td) {
+  /* リーダーの表もチューナーの表と同じく、線で区切らない行 */
+  .reader td {
     border: 0;
-  }
-  .reader th {
-    font-size: var(--dp-text-xs);
-    font-weight: var(--dp-weight);
-    color: var(--dp-muted);
   }
   .break {
     word-break: break-all;
