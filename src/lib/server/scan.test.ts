@@ -250,4 +250,23 @@ describe("1チャンネルの読み取り", () => {
     expect(error).toBeNull();
     expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(10);
   });
+
+  test("読み終えたら、走査の打ち切りの見張りを外す", async () => {
+    // 合図は走査全体で1つ。局ごとに足したまま残すと、総当たりで100を超えて積もる
+    const { signal } = new AbortController();
+    const listening = new Set<unknown>();
+    const add = signal.addEventListener.bind(signal);
+    const remove = signal.removeEventListener.bind(signal);
+    signal.addEventListener = ((...args: Parameters<typeof add>) => {
+      listening.add(args[1]);
+      add(...args);
+    }) as typeof add;
+    signal.removeEventListener = ((...args: Parameters<typeof remove>) => {
+      listening.delete(args[1]);
+      remove(...args);
+    }) as typeof remove;
+    for (let i = 0; i < 3; i++)
+      await readServices(fromBytes(stream([[1024, 0x01]])), 5000, signal);
+    expect(listening.size).toBe(0);
+  });
 });
