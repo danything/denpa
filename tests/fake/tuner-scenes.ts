@@ -47,6 +47,21 @@ export interface Scene {
 /** 録画の優先度 (`config.priority.recording`)。denpa が割り振るのはこれだけ */
 export const RECORDING = 10;
 
+/** 録画として開く */
+const rec = (
+  open: string,
+  type: string,
+  channel: string,
+  rank: number | null,
+  more: { after?: string[]; ended?: string[]; kept?: string[] } = {},
+): SceneStep => ({ open, type, channel, priority: RECORDING, rank, ...more });
+
+/** いちばんよく使う組。兼用 (順位 1) と地上波専用 (順位 0) */
+const MLT9_GR9: SceneTuner[] = [
+  { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
+  { name: "gr9", types: ["GR"], rank: 0 },
+];
+
 export const scenes: Scene[] = [
   {
     /*
@@ -55,22 +70,13 @@ export const scenes: Scene[] = [
      * (denpa は、そうしないことを前提に予約を割り振る)
      */
     name: "空いていて受けられるチューナーのうち、順位のいちばん前を使う。先の予定は見ない",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
-      { open: "a", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      { open: "b", type: "GR", channel: "T21", priority: RECORDING, rank: 1 },
+      rec("a", "GR", "T16", 0),
+      rec("b", "GR", "T21", 1),
       // gr9 が空いても、T21 は mlt9 から移らない (1回の選局の途中でチューナーを替えない)
       { close: "a" },
-      {
-        open: "c",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: null,
-      },
+      rec("c", "BS", "BS11_0", null),
     ],
   },
   {
@@ -82,22 +88,10 @@ export const scenes: Scene[] = [
       { name: "gr7", types: ["GR"], rank: 0 },
     ],
     steps: [
-      { open: "a", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      {
-        open: "b",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: 1,
-      },
-      {
-        open: "c",
-        type: "BS",
-        channel: "BS03_0",
-        priority: RECORDING,
-        rank: 2,
-      },
-      { open: "d", type: "GR", channel: "T21", priority: RECORDING, rank: 0 },
+      rec("a", "GR", "T16", 0),
+      rec("b", "BS", "BS11_0", 1),
+      rec("c", "BS", "BS03_0", 2),
+      rec("d", "GR", "T21", 0),
     ],
   },
   {
@@ -106,20 +100,11 @@ export const scenes: Scene[] = [
      * 逃げると、あとの衛星の録画が兼用のチューナーを取れない (denpa は予約しか見ていない)
      */
     name: "弱い相手しかいないチューナーも空いているとみなす",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
       { open: "epg", type: "GR", channel: "T16", priority: 3, rank: 0 },
-      { open: "a", type: "GR", channel: "T21", priority: RECORDING, rank: 0 },
-      {
-        open: "b",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: 1,
-      },
+      rec("a", "GR", "T21", 0),
+      rec("b", "BS", "BS11_0", 1),
     ],
   },
   {
@@ -128,41 +113,23 @@ export const scenes: Scene[] = [
      * 余韻で残っていても、地上波は前のチューナーを使う
      */
     name: "余韻で残っているだけのチューナーは空いている。それでも順位のいちばん前を使う",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
-      {
-        open: "a",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: 1,
-      },
+      rec("a", "BS", "BS11_0", 1),
       { close: "a" },
-      { open: "b", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      {
-        open: "c",
-        type: "BS",
-        channel: "BS03_0",
-        priority: RECORDING,
-        rank: 1,
-      },
+      rec("b", "GR", "T16", 0),
+      rec("c", "BS", "BS03_0", 1),
     ],
   },
   {
     name: "同じチャンネルを読んでいる選局があれば、どのチューナーでもそれを共有する",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
-      { open: "a", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      { open: "b", type: "GR", channel: "T21", priority: RECORDING, rank: 1 },
+      rec("a", "GR", "T16", 0),
+      rec("b", "GR", "T21", 1),
       { close: "a" },
       // gr9 が空いていても、T21 を読んでいる mlt9 を共有する
-      { open: "c", type: "GR", channel: "T21", priority: RECORDING, rank: 1 },
+      rec("c", "GR", "T21", 1),
     ],
   },
   {
@@ -171,45 +138,23 @@ export const scenes: Scene[] = [
      * `after` で渡せば前のチューナーがまだ塞がって見えない。選局を共有していた番組表集めはチューナーを取り上げられる
      */
     name: "引き継ぐ利用者はもう離れたものとして選び、そのチューナーを選んだら終わらせて選局し直す",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
-      { open: "a", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      { open: "b", type: "GR", channel: "T21", priority: RECORDING, rank: 1 },
+      rec("a", "GR", "T16", 0),
+      rec("b", "GR", "T21", 1),
       { open: "epg", type: "GR", channel: "T21", priority: 3, rank: 1 },
-      {
-        open: "c",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: 1,
-        after: ["b"],
-        ended: ["b"],
-      },
+      rec("c", "BS", "BS11_0", 1, { after: ["b"], ended: ["b"] }),
       { close: "b" },
     ],
   },
   {
     name: "引き継ぐときも、順位のより前のチューナーが空いていればそちらを使い、前の利用者には触らない",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
-      { open: "a", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      { open: "b", type: "GR", channel: "T21", priority: RECORDING, rank: 1 },
+      rec("a", "GR", "T16", 0),
+      rec("b", "GR", "T21", 1),
       { close: "a" },
-      {
-        open: "c",
-        type: "GR",
-        channel: "T16",
-        priority: RECORDING,
-        rank: 0,
-        after: ["b"],
-        kept: ["b"],
-      },
+      rec("c", "GR", "T16", 0, { after: ["b"], kept: ["b"] }),
       { close: "b" },
     ],
   },
@@ -220,21 +165,8 @@ export const scenes: Scene[] = [
       { name: "bs9", types: ["BS", "CS"], rank: 1 },
     ],
     steps: [
-      {
-        open: "a",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: 1,
-      },
-      {
-        open: "b",
-        type: "GR",
-        channel: "T16",
-        priority: RECORDING,
-        rank: 0,
-        after: ["a", "nobody"],
-      },
+      rec("a", "BS", "BS11_0", 1),
+      rec("b", "GR", "T16", 0, { after: ["a", "nobody"] }),
       { close: "a" },
     ],
   },
@@ -244,25 +176,16 @@ export const scenes: Scene[] = [
      * ことも無い。前が離れても後ろはそのチューナーにい続ける
      */
     name: "同じチャンネルで続くなら共有するだけ。前が離れても後ろは同じチューナーに残る",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
-      { open: "a", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      { open: "b", type: "GR", channel: "T21", priority: RECORDING, rank: 1 },
+      rec("a", "GR", "T16", 0),
+      rec("b", "GR", "T21", 1),
       // b がまだ読んでいるうちに来るので、b の選局を共有する (マージンで前後が重なる)
-      { open: "c", type: "GR", channel: "T21", priority: RECORDING, rank: 1 },
+      rec("c", "GR", "T21", 1),
       { close: "b" },
       { close: "a" },
       // gr9 が空いても c は mlt9 にいるので、衛星は入れない
-      {
-        open: "d",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: null,
-      },
+      rec("d", "BS", "BS11_0", null),
     ],
   },
   {
@@ -271,22 +194,13 @@ export const scenes: Scene[] = [
      * 順位のいちばん前のチューナーへ入る。共有すると、録画の入るチューナーが録画以外に左右される
      */
     name: "弱い利用者しかいない同じチャンネルは、そのチューナーが順位で先頭の組のときだけ共有する",
-    tuners: [
-      { name: "mlt9", types: ["GR", "BS", "CS"], rank: 1 },
-      { name: "gr9", types: ["GR"], rank: 0 },
-    ],
+    tuners: MLT9_GR9,
     steps: [
-      { open: "a", type: "GR", channel: "T21", priority: RECORDING, rank: 0 },
+      rec("a", "GR", "T21", 0),
       { open: "epg", type: "GR", channel: "T16", priority: 3, rank: 1 },
       { close: "a" },
-      { open: "b", type: "GR", channel: "T16", priority: RECORDING, rank: 0 },
-      {
-        open: "c",
-        type: "BS",
-        channel: "BS11_0",
-        priority: RECORDING,
-        rank: 1,
-      },
+      rec("b", "GR", "T16", 0),
+      rec("c", "BS", "BS11_0", 1),
     ],
   },
 ];
