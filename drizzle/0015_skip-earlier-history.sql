@@ -7,4 +7,5 @@ CREATE TABLE `recorded_history` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `recorded_history_source_unique` ON `recorded_history` (`source`);--> statement-breakpoint
-ALTER TABLE `rules` ADD `skip_earlier` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `rules` ADD `skip_earlier` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+CREATE INDEX `recordings_series` ON `recordings` (`series`);

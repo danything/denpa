@@ -973,6 +973,37 @@ describe("前の回は録らない", () => {
     expect(reservations().map((r) => r.program_id)).toEqual([2, 3]);
   });
 
+  test("録った回は期間で切らない: 90日前に1期を録り終えていれば、別の局の1期は外し、続きは録る", () => {
+    reset();
+    sub(400211, "BS11", "BS09_0", "BS");
+    rule(1, "テストアニメ", true, 1, false, true);
+    for (let n = 1; n <= 12; n++) {
+      const at = base - 90 * DAY + n * HOUR;
+      orm()
+        .insert(recordings)
+        .values({
+          service_id: SERVICE,
+          service_name: "TOKYO MX1",
+          name: `テストアニメ #${n}`,
+          series: "テストアニメ",
+          start_at: at,
+          end_at: at + HOUR,
+          finished_at: at + HOUR,
+          // 観て消したものも、行が残っている間は数える
+          deleted_at: n === 12 ? base - DAY : null,
+          created_at: now(),
+          updated_at: now(),
+        })
+        .run();
+    }
+    on(400211, 5, "テストアニメ #5");
+    program(13, "テストアニメ #13", DAY);
+    program(21, "テストアニメ 第2期 #1", 2 * DAY);
+
+    applyRules();
+    expect(reservations().map((r) => r.program_id)).toEqual([13, 21]);
+  });
+
   test("下見も同じところを通り、理由は「前の回」", () => {
     reset();
     rule(1, "テストアニメ", true, 1, false, true);

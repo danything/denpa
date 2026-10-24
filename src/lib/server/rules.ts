@@ -11,13 +11,14 @@ import {
 
 import { type Genre, genreMatches } from "#lib/arib.js";
 
-import { globTerms } from "../fold";
+import { globTerms, toHalfWidth } from "../fold";
 import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";
 import { config } from "./config";
 import { now, orm } from "./db";
 import {
   type Airing,
+  type Described,
   earlierAirings,
   episodeOf,
   firstAirings,
@@ -400,43 +401,62 @@ export function canceledBroadcasts(at: number): Declined {
 const TAKEN_WINDOW = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * **もう録ってある回** (`episode.firstAirings` の `taken`。「前の回は録らない」も見る)。
+ * **もう録ってある回** (`episode.firstAirings` の `taken`)。
  *
  * これが無いと、いちばん早い放送を録り終えた途端 (番組表の「これから」から
  * 抜けた途端)、次の再放送が「いちばん早い放送」に繰り上がって録れてしまう。
  *
  * **失敗した録画は数えない** — 再放送は録り直す好機。消したものは数える
- * (観て消したものをまた録っても困る)。
- *
- * **よそから引き継いだ履歴** (`schema.recordedHistory`) も入れる。EPGStation で録った回を
- * denpa がまた録らないように。こちらは引き継いだときで増えなくなるので、期間で切らずに全部読む
- * (引き継ぎのあとに来る一挙放送は、前の回を録ってから何か月も先のことがある)
+ * (観て消したものをまた録っても困る)
  */
 function recordedEpisodes(at: number): Taken {
-  const rows = orm()
-    .select({
-      name: recordings.name,
-      description: recordings.description,
-      extended: recordings.extended,
-      start_at: recordings.start_at,
-      service_name: recordings.service_name,
-    })
-    .from(recordings)
-    .where(
-      and(
-        gt(recordings.start_at, at - TAKEN_WINDOW),
-        ne(recordings.state, "failed"),
-      ),
-    )
-    .orderBy(recordings.start_at)
-    .all();
-  const taken: Taken = [];
-  for (const { start_at, service_name, ...described } of rows) {
-    // 番組表の番組と同じ読み方をする。録画は録ったときのタイトル・概要・詳細を持っている
+  return takenOf(
+    orm()
+      .select(TAKEN_COLUMNS)
+      .from(recordings)
+      .where(
+        and(
+          gt(recordings.start_at, at - TAKEN_WINDOW),
+          ne(recordings.state, "failed"),
+        ),
+      )
+      .orderBy(recordings.start_at)
+      .all(),
+  );
+}
+
+/** 「録ってある回」として録画から読む列 */
+const TAKEN_COLUMNS = {
+  name: recordings.name,
+  description: recordings.description,
+  extended: recordings.extended,
+  start_at: recordings.start_at,
+  service_name: recordings.service_name,
+};
+
+/** 録画の行を回に。番組表の番組と同じ読み方をする (録画は録ったときのタイトル・概要・詳細を持っている) */
+function takenOf(
+  rows: {
+    name: string;
+    description: string;
+    extended: Record<string, string> | null;
+    start_at: number;
+    service_name: string;
+  }[],
+): Taken {
+  return rows.flatMap(({ start_at, service_name, ...described }) => {
     const episode = episodeOf(described);
-    if (episode !== null) taken.push({ episode, start_at, service_name });
-  }
-  const history = orm()
+    return episode === null ? [] : [{ episode, start_at, service_name }];
+  });
+}
+
+/**
+ * **よそから引き継いだ録画の履歴** (`schema.recordedHistory`)。EPGStation で録った回を denpa が
+ * また録らないように、録ってある回に足す。引き継いだときから増えないので、期間で切らずに全部読む
+ * (引き継ぎのあとに来る一挙放送は、前の回を録ってから何か月も先のことがある)
+ */
+function historyEpisodes(): Taken {
+  const rows = orm()
     .select({
       name: recordedHistory.name,
       end_at: recordedHistory.end_at,
@@ -444,18 +464,54 @@ function recordedEpisodes(at: number): Taken {
     })
     .from(recordedHistory)
     .all();
-  for (const { name, end_at, service_name } of history) {
+  return rows.flatMap(({ name, end_at, service_name }) => {
     // 履歴はタイトルしか持たない。始まりの時刻も無いので、終わりの時刻を入れる
     const episode = episodeOf({ name, description: "", extended: null });
-    if (episode !== null)
-      taken.push({ episode, start_at: end_at, service_name });
+    return episode === null
+      ? []
+      : [{ episode, start_at: end_at, service_name }];
+  });
+}
+
+/**
+ * **当たった放送と同じシリーズの録画** (「前の回は録らない」の相手。`episode.earlierAirings`)。
+ * **期間で切らない** — 1期を数か月前に録り終え、2期の頃に別の局で1期が流れる、を外したい。
+ * 全部の録画を読むと録画の数だけ重くなるので、当たった放送のシリーズ名 (`recordings.series`。
+ * 録るときに `parseTitle` で入れたもの) で引く (索引 `recordings_series`)。全角・半角のどちらで
+ * 入っていても当たるよう両方で引き、同じシリーズかは `earlierAirings` が回の読み方で決める。
+ * 失敗した録画は数えない。消したもの (行が残っている間) は数える
+ */
+function seriesEpisodes(list: readonly Described[]): Taken {
+  const names = new Set<string>();
+  for (const { name } of list) {
+    names.add(parseTitle(name).series);
+    names.add(parseTitle(toHalfWidth(name)).series);
+  }
+  const taken: Taken = [];
+  // SQLite の引数の数には上限がある。シリーズ名は多くても数百なので、刻んで引く
+  const all = [...names];
+  for (let i = 0; i < all.length; i += 500) {
+    taken.push(
+      ...takenOf(
+        orm()
+          .select(TAKEN_COLUMNS)
+          .from(recordings)
+          .where(
+            and(
+              inArray(recordings.series, all.slice(i, i + 500)),
+              ne(recordings.state, "failed"),
+            ),
+          )
+          .all(),
+      ),
+    );
   }
   return taken;
 }
 
 /**
  * **予約してある回** (「前の回は録らない」の相手。`episode.earlierAirings`)。録り始めたものは録画の行
- * ({@link recordedEpisodes}) にいるので入れない。録らないと決めた予約 (`skipped`) と取り消しも入れない
+ * ({@link seriesEpisodes}) にいるので入れない。録らないと決めた予約 (`skipped`) と取り消しも入れない
  */
 function reservedEpisodes(at: number): Known {
   const rows = orm()
@@ -510,7 +566,8 @@ function episodeSkips<T extends Candidate>(
 } {
   if (lists.dedupe.length === 0 && lists.earlier.length === 0)
     return { dedupe: new Map(), earlier: new Map() };
-  const taken = recordedEpisodes(at);
+  // 録画は、同じ回は直近だけ (`recordedEpisodes`)、前の回は同じシリーズを期間で切らずに (`seriesEpisodes`)
+  const history = historyEpisodes();
   const typed = (list: T[]) =>
     list.map((program) => ({ ...program, type: program.service_type }));
   /*
@@ -524,12 +581,16 @@ function episodeSkips<T extends Candidate>(
     dedupe:
       lists.dedupe.length === 0
         ? new Map()
-        : firstAirings(typed(lists.dedupe), blocked, taken),
+        : firstAirings(typed(lists.dedupe), blocked, [
+            ...recordedEpisodes(at),
+            ...history,
+          ]),
     earlier:
       lists.earlier.length === 0
         ? new Map()
         : earlierAirings(typed(lists.earlier), [
-            ...taken,
+            ...seriesEpisodes(lists.earlier),
+            ...history,
             ...reservedEpisodes(at),
           ]),
   };

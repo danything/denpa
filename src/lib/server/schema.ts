@@ -503,6 +503,8 @@ export const recordings = sqliteTable(
     // 番組表は1マスごとに「この番組で録れたものはあるか」を引く。
     // 無いと24時間ぶんのマスの数だけ録画一覧を舐めることになる
     index("recordings_program").on(t.program_id),
+    // ルールの「前の回は録らない」は、当たった放送のシリーズ名で期間を切らずに引く (`rules.seriesEpisodes`)
+    index("recordings_series").on(t.series),
   ],
 );
 

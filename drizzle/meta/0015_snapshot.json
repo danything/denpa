@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dd8f41a9-7b38-45b2-b5aa-15c44c1cafef",
+  "id": "505258d4-7592-4fc0-a426-4761a236af12",
   "prevId": "6a465e9d-9c1b-475f-b236-5e327733c8f5",
   "tables": {
     "api_tokens": {
@@ -865,6 +865,13 @@
           "name": "recordings_program",
           "columns": [
             "program_id"
+          ],
+          "isUnique": false
+        },
+        "recordings_series": {
+          "name": "recordings_series",
+          "columns": [
+            "series"
           ],
           "isUnique": false
         }

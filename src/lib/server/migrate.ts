@@ -501,6 +501,8 @@ interface RuleRow {
   name: number;
   description: number;
   extended: number;
+  /** 録画済みの重複番組を除く。denpa の「同じ回は最初の放送だけ」に写す */
+  avoidDuplicate: number;
 }
 
 interface ReserveRow {
@@ -563,7 +565,9 @@ export function parseGenres(json: string | null): string[] {
  * 自動予約ルールを引き継ぐ。
  *
  * EPGStation のルールには denpa に無い項目(正規表現、時刻指定、録画先の指定、
- * 重複回避など)がある。落ちるものは落ちると分かるように記録に残す。
+ * 重複を避ける期間など)がある。落ちるものは落ちると分かるように記録に残す。
+ * 重複を避ける (`avoidDuplicate`) は「同じ回は最初の放送だけ」に写す — 引き継いだ録画の履歴と合わせて、
+ * EPGStation で録っていた回をそのまま避ける
  * 時刻指定のルールは番組を探すのではなく時計で録るもので、denpa に対応がないので飛ばす。
  */
 async function importRules(
@@ -572,7 +576,8 @@ async function importRules(
 ): Promise<void> {
   const rows = (await connection.unsafe(
     `SELECT id, keyword, ignoreKeyword, GR, BS, CS, SKY, channelIds, genres,
-                isFree, enable, isTimeSpecification, name, description, extended
+                isFree, enable, isTimeSpecification, name, description, extended,
+                avoidDuplicate
          FROM rule ORDER BY id`,
   )) as RuleRow[];
 
@@ -650,6 +655,8 @@ async function importRules(
         service_types: types.length === 0 ? null : types,
         genres: genreIds.length === 0 ? null : genreIds,
         enabled: Boolean(row.enable),
+        // 重複を避ける期間 (periodToAvoidDuplicate) は写さない。denpa は録画と引き継いだ履歴で見る
+        dedupe: Boolean(row.avoidDuplicate),
         priority: 1,
         source,
         created_at: now(),
