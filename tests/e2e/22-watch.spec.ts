@@ -447,6 +447,8 @@ test.describe("録画を観る", () => {
     // **既定で出す。** ライブと同じ (テレビの字幕ボタンとは違い、観る画面は出す側)
     const button = page.getByTestId("watch-captions");
     await expect(button).toHaveAttribute("aria-pressed", "true");
+    // オンの線は 1 本 (切り替えの共通の短い下線を重ねない)
+    await expect(button).toHaveCSS("background-image", "none");
     await wakeControls(page, "watch-stage");
     await button.click();
     await expect(button).toHaveAttribute("aria-pressed", "false");

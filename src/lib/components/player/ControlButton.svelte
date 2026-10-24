@@ -124,6 +124,8 @@
   /* オンは空色のアイコンと下の短い線、戻せないものの2回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない) */
   :global(.ov-btn.ov-on) {
     --pico-color: var(--dp-on-video-on);
+    /* 入っている切り替えの共通の短い下線 (app.css の `aria-pressed`) は引かない。線は下の `::after` 1 本 */
+    background-image: none;
   }
   :global(.ov-btn.ov-danger) {
     --pico-color: var(--dp-on-video-danger);
