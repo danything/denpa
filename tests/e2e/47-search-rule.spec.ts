@@ -169,22 +169,24 @@ test.describe("検索からルールを作る", () => {
   });
 
   /**
-   * **時間帯と曜日** (`rules.time_from` / `time_to` / `weekdays`)。条件の行 (局・ジャンル・時間帯と曜日) は
-   * スイッチと優先度の上にまとまり、時間帯を入れると行の「録る」が変わる。判定の端は rules.test.ts が見る
+   * **時間帯と曜日** (`rules.time_from` / `time_to` / `weekdays`)。スイッチ (同じ回・前の回) が条件の行
+   * (局・ジャンル・時間帯と曜日) の上にあり、優先度はその下、時間帯を入れると行の「録る」が変わる。判定の端は rules.test.ts が見る
    */
   test("時間帯を入れると行の「録る」が変わる", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await goto(page, `/search?q=${encodeURIComponent("テストアニメ")}`);
     await page.getByTestId("rule-dedupe").uncheck();
 
-    // 条件の行は局・ジャンル・時間帯と曜日の順で、スイッチより上
+    // スイッチ (同じ回・前の回) が上、その下に局・ジャンル・時間帯と曜日、最後に優先度
     const top = async (id: string) =>
       (await page.getByTestId(id).boundingBox())!.y;
     const order = [
+      await top("rule-dedupe"),
+      await top("rule-skip-earlier"),
       await top("channel-summary"),
       await top("genre-summary"),
       await top("slot-summary"),
-      await top("rule-dedupe"),
+      await top("rule-priority"),
     ];
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     await expect(page.getByTestId("slot-summary")).toContainText("いつでも");

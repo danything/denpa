@@ -436,9 +436,43 @@
     </label>
 
     <!--
-      局・ジャンル・時間帯と曜日 (条件) と、その下の同じ回・前の回・優先度は枠の無い行に (サイドバーの行と同じ形)。
-      名前は左、いまの値は右。条件は畳んでおき、閉じていても右の要約で中身が分かる
+      同じ回・前の回のスイッチ、局・ジャンル・時間帯と曜日 (条件)、優先度は枠の無い行に (サイドバーの行と同じ形)。
+      名前は左、いまの値は右。**スイッチを条件より上に置く** — 同じ回を最初の放送だけにすれば局を絞らずに済むので、
+      先に目に入るように。条件は畳んでおき、閉じていても右の要約で中身が分かる
     -->
+    <div class="rows side-list">
+      <label class="row side-item">
+        <span>同じ回は最初の放送だけ</span>
+        <!-- 外したスイッチは何も送らない。「外した」と「指定なし」を分けるための隠し (`rule-form.dedupeOf`) -->
+        <input type="hidden" name="dedupe" value="0" />
+        <input
+          type="checkbox"
+          role="switch"
+          aria-checked={dedupe}
+          name="dedupe"
+          value="1"
+          bind:checked={dedupe}
+          data-testid="rule-dedupe"
+        />
+      </label>
+      <label class="row side-item">
+        <span
+          >前の回は録らない <span class="tiny muted"
+            >(4話まで録ったあとの1〜3話など)</span
+          ></span
+        >
+        <input type="hidden" name="skipEarlier" value="0" />
+        <input
+          type="checkbox"
+          role="switch"
+          aria-checked={skipEarlier}
+          name="skipEarlier"
+          value="1"
+          bind:checked={skipEarlier}
+          data-testid="rule-skip-earlier"
+        />
+      </label>
+    </div>
     <div class="rows side-list">
       <details class="row picker">
         <summary class="side-item" data-testid="channel-summary">
@@ -600,37 +634,6 @@
       </details>
     </div>
     <div class="rows side-list">
-      <label class="row side-item">
-        <span>同じ回は最初の放送だけ</span>
-        <!-- 外したスイッチは何も送らない。「外した」と「指定なし」を分けるための隠し (`rule-form.dedupeOf`) -->
-        <input type="hidden" name="dedupe" value="0" />
-        <input
-          type="checkbox"
-          role="switch"
-          aria-checked={dedupe}
-          name="dedupe"
-          value="1"
-          bind:checked={dedupe}
-          data-testid="rule-dedupe"
-        />
-      </label>
-      <label class="row side-item">
-        <span
-          >前の回は録らない <span class="tiny muted"
-            >(4話まで録ったあとの1〜3話など)</span
-          ></span
-        >
-        <input type="hidden" name="skipEarlier" value="0" />
-        <input
-          type="checkbox"
-          role="switch"
-          aria-checked={skipEarlier}
-          name="skipEarlier"
-          value="1"
-          bind:checked={skipEarlier}
-          data-testid="rule-skip-earlier"
-        />
-      </label>
       <label class="row side-item">
         <span
           >優先度 <span class="tiny muted">(大きいほうを先に録る)</span></span
@@ -824,7 +827,7 @@
     margin: 0;
   }
   /*
-     * 局・ジャンル・時間帯と曜日・同じ回・前の回・優先度。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
+     * 同じ回・前の回・局・ジャンル・時間帯と曜日・優先度。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
      * 行の塗りは左右に字の余白ぶんはみ出し、字の頭は上の欄の頭にそろえる
      */
   .rows {
