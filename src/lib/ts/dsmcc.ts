@@ -218,12 +218,17 @@ export class ModuleBuilder {
     return this.received.size;
   }
 
+  /** 揃ったか。**大きさ 0 のモジュールは初めから揃っている** (運ぶブロックが無いので DDB を待たない) */
+  get complete(): boolean {
+    return this.received.size >= this.total;
+  }
+
   /** ブロックを1つ置く。**揃ったら true** */
   add(blockNumber: number, block: Uint8Array): boolean {
     const at = this.blockSize * blockNumber;
     if (at + block.length > this.data.length) return false;
     this.data.set(block, at);
     this.received.add(blockNumber);
-    return this.received.size >= this.total;
+    return this.complete;
   }
 }

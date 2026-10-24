@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { deflateSync } from "node:zlib";
 import { BmlDecoder, inflate, moduleFiles, parseBxmlInfo } from "./bml";
 import type { ResponseMessage } from "./bml-protocol";
+import { ModuleBuilder } from "./dsmcc";
 import type { DiiModuleSpec } from "./synth";
 import {
   BML_TS,
@@ -202,6 +203,23 @@ describe("BmlDecoder", () => {
     ).toContain("データ放送");
   });
 
+  /*
+   * **大きさ 0 のモジュールは DDB が来ない。** 揃うのを待っていた頃は、諦めるまで
+   * (DII 数周ぶん) 受け側を待たせた末に「無いもの」として外していた
+   */
+  test("大きさ 0 のモジュールは DII だけで、ファイルの無いモジュールとして配る", () => {
+    const out = decode(...head, ...carousel(new Uint8Array(0)));
+    const done = out.find((message) => message.type === "moduleDownloaded");
+    if (done?.type !== "moduleDownloaded")
+      throw new Error("moduleDownloaded が出ていない");
+    expect(done.moduleId).toBe(1);
+    expect(done.files).toEqual([]);
+    // 一覧より先に配ると、受け側はどの回のものか分からず捨てる
+    expect(out.findIndex((m) => m.type === "moduleListUpdated")).toBeLessThan(
+      out.indexOf(done),
+    );
+  });
+
   /** 大きいモジュールは何ブロックにも割れる。順番は保証されない */
   test("ブロックが揃うまで配らない", () => {
     const module = multipart([
@@ -398,5 +416,15 @@ describe("BmlDecoder", () => {
       withCrc([0x3b, 0x00, 0x00, 0xff, 0xff, 0xc1, 0x00, 0x00, 1, 2, 3]),
     );
     expect(() => decode(...head, junk)).not.toThrow();
+  });
+});
+
+describe("ModuleBuilder", () => {
+  test("大きさ 0 のモジュールは初めから揃っている", () => {
+    expect(new ModuleBuilder(1, 0, 4066).complete).toBe(true);
+    const some = new ModuleBuilder(1, 5, 4066);
+    expect(some.complete).toBe(false);
+    expect(some.add(0, Uint8Array.from([1, 2, 3, 4, 5]))).toBe(true);
+    expect(some.complete).toBe(true);
   });
 });

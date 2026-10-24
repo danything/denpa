@@ -393,6 +393,10 @@ export class BmlDecoder {
       });
     }
     this.sendList(component);
+    // 大きさ 0 のものは DDB が来ない。待たせずに配る (来ないまま諦めると、受け側は無いものと見なす)
+    for (const [moduleId, held] of component.building) {
+      if (held.builder.complete) this.finish(component, moduleId, held);
+    }
   }
 
   /** 今の DII の一覧を配る。**諦めたモジュールは載せない** */
@@ -454,30 +458,38 @@ export class BmlDecoder {
       held.quietDiis = 0;
       held.quietBytes = 0;
     }
-    if (!complete) return;
+    if (complete) this.finish(component, ddb.moduleId, held);
+  }
 
-    // 揃った。次の DII が来るまで組み立て直さない
-    component.building.delete(ddb.moduleId);
+  /** 揃ったモジュールを配る */
+  private finish(component: Component, moduleId: number, held: Building): void {
+    // 次の DII が来るまで組み立て直さない
+    component.building.delete(moduleId);
     /*
      * **同じものを配り直さない。** カルーセルは回り続けるので、版が上がって
      * いなくても同じモジュールが何度も揃う。そのたびに配ると、受け側は
      * 中身の変わらない画面を組み直し続ける
      */
-    const stamp = `${ddb.moduleVersion}:${component.dataEventId}`;
-    if (component.done.get(ddb.moduleId) === stamp) return;
-    component.done.set(ddb.moduleId, stamp);
+    const version = held.builder.moduleVersion;
+    const stamp = `${version}:${component.dataEventId}`;
+    if (component.done.get(moduleId) === stamp) return;
+    component.done.set(moduleId, stamp);
 
-    const data = inflate(held.builder.data, held.module.compression);
+    // 大きさ 0 は伸ばしようが無い。ファイルの無いモジュールとして配り、待っている受け側を終わらせる
+    const empty = held.module.moduleSize === 0;
+    const data = empty
+      ? held.builder.data
+      : inflate(held.builder.data, held.module.compression);
     if (data === null) return;
     const files = moduleFiles(data, held.module.contentType);
-    if (files.length === 0) return;
+    if (files.length === 0 && !empty) return;
 
     this.send({
       type: "moduleDownloaded",
       componentId: component.componentId,
-      moduleId: ddb.moduleId,
+      moduleId,
       files,
-      version: ddb.moduleVersion,
+      version,
       dataEventId: component.dataEventId,
     });
   }
