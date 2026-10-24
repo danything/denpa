@@ -6,9 +6,9 @@
     **局の並びもまだ分からないときの、番組表の骨組み** (ほかの画面から番組表へ移る途中。`GuidePending`)。
 
     局の並びが届いたあとは、番組表そのものが局名の行と時刻の列を本物で出し、マスのところだけ
-    骨組みにする (`guide/+page.svelte`)。ここはその形に合わせる — 左に時刻の列 (2.5rem)、上に局名の行、
+    骨組みにする (`guide/+page.svelte`)。ここはその形に合わせる — 左に時刻の列 (1.75rem)、上に局名の行、
     列は 11rem から。届いたときに表の位置が飛ばない。
-    桝は列ごとに 1 枚の板を切り抜いて作る (`skeletonMask`)。下の端まで埋まる
+    桝は列ごとに 1 枚の面を切り抜いて作る (`skeletonMask`)。下の端まで埋まる
 -->
 <div
   class="skeleton guide-skeleton"
@@ -33,10 +33,10 @@
     min-height: 0;
     background: var(--dp-bg);
   }
-  /* 時刻の列 (表の `.corner`・`.hour` と同じ幅。線は引かない) */
+  /* 時刻の列 (表の `.corner`・`.hour` と同じ幅 `TIME_COLUMN`。線は引かない) */
   .time {
     flex: none;
-    width: 2.5rem;
+    width: 1.75rem;
   }
   .column {
     display: flex;

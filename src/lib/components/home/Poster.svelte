@@ -6,7 +6,7 @@
    * (ポスターの無い録画もある)。ハイドレーションの前に失敗していたらイベントはもう来ないので、付けた時点の様子も見る。
    *
    * **`use:` や `onerror` にしない。** `<img>` にそれを書くと、Svelte はサーバの HTML に
-   * `onerror="this.__e=event"` を足す (ハイドレーション前のイベントを拾うため)。インラインのハンドラなので
+   * `onerror="this.__e=event"` を足す (ハイドレーション前のイベントを受け取るため)。インラインのハンドラなので
    * CSP に止められる (`script-src-attr`)。`{@attach}` には足さない
    */
   function poster(img: HTMLImageElement): () => void {

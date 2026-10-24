@@ -295,7 +295,7 @@
     border-radius: var(--dp-radius-sm);
     background: var(--dp-video-veil-strong);
     color: var(--dp-on-video);
-    font-family: ui-monospace, monospace;
+    font-family: var(--dp-font-mono);
     font-size: 10px;
     line-height: 1.25;
   }

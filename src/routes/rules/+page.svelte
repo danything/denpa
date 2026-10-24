@@ -131,7 +131,7 @@
 
 <!--
     **ホームと同じ作り。** 左に1本の一覧 (2段の淡い塊を 6px 空けて並べる)、1000px からは右にサイドバー
-    (絞り込み・並び・集計。ドキュメントの目次と同じ行)。それより狭いと、絞り込みと並びは細い1本の帯にまとめ、
+    (絞り込み・並び・集計。ドキュメントの目次と同じ行)。それより狭いと、絞り込みと並びは細い1行にまとめ、
     スマホ (下のタブがある幅) では画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
 <div class="rules-board">
@@ -309,7 +309,7 @@
   </aside>
 
   <!--
-        1000px より狭いときの細い帯。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
+        1000px より狭いときの細い1行。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
         スマホでは画面の下 (タブの上) に貼り付ける
     -->
   <div class="rules-bar" data-testid="rule-bar">
@@ -318,7 +318,6 @@
         <button
           type="button"
           class="chip-button"
-          class:on={filter === f.key}
           aria-pressed={filter === f.key}
           onclick={() => (filter = f.key)}
           data-testid="rule-bar-filter-{f.key}"
@@ -527,7 +526,7 @@
     margin-bottom: var(--dp-space-2);
   }
 
-  /* ---- 1000px より狭いときの細い帯 ---- */
+  /* ---- 1000px より狭いときの細い1行 ---- */
   @media (max-width: 999.98px) {
     .rules-bar {
       display: flex;
@@ -552,11 +551,15 @@
     border: 0;
     border-radius: var(--dp-radius-full);
     background: transparent;
-    color: var(--dp-muted);
+    /* 選んでいないものも本文並みの字 (押せると分かるように。ホームのチップと同じ) */
+    color: var(--dp-btn-text);
     font-size: var(--dp-text-sm);
   }
+  .chip-button:hover {
+    background: var(--dp-hover-soft);
+  }
   /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (囲まず、主の色の太字と字の幅いっぱいの下線) */
-  .chip-button.on {
+  .chip-button[aria-pressed="true"] {
     text-decoration: underline 2px var(--pico-primary);
     text-underline-offset: 0.3em;
     color: var(--dp-primary-text);
@@ -577,9 +580,9 @@
     margin: 0;
   }
   /*
-     * **スマホでは帯を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に)。下のタブと同じ操作の層なので、
+     * **スマホではこの1行を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に)。下のタブと同じ操作の層なので、
      * 同じ半透明のカプセル (`--dp-float`) にして、読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
-     * 一覧の最後の行が帯に隠れないよう、帯の高さぶん下を空ける
+     * 一覧の最後の行が隠れないよう、この1行の高さぶん下を空ける
      */
   @media (max-width: 639.98px) {
     .rules-bar {

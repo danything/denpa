@@ -1,4 +1,5 @@
 <script lang="ts">
+  import "@anyblades/blades/layered/components/accordion";
   import JobProgress from "#lib/components/JobProgress.svelte";
   import { stateLabel } from "#lib/format.js";
   import type { MigrateStatus } from "#lib/server/migrate.js";

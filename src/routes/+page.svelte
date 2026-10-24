@@ -1015,15 +1015,12 @@
 <style>
   /*
      * 一覧・行・頭の1行の見た目は部品と分け合うので `#lib/components/home/home.css` (`.board` の下だけに効く)。
-     * ここに残すのは、一覧の外 (番組の詳細) に出るものだけ
+     * ここに残すのは、一覧の外 (番組の詳細) に出るものだけ。送るだけの項目を包むフォーム (`.menu-form`) は `app.css`
      */
   /* 「その他…」の中身 (枠は `Menu` の中なので :global)。項目は左寄せで縦に積む (`app.css` の `.menu`) */
   :global(.more-menu) {
     width: 16rem;
     max-width: calc(100vw - 2rem);
-  }
-  .menu-form {
-    display: contents;
   }
   /* 押せない項目のすぐ下に出す理由 (CM検出をやり直せないわけ)。項目と同じ字下げで、次の項目とは余白で分ける */
   .menu-note {

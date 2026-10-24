@@ -340,7 +340,7 @@
     return Math.max(1, Math.floor((span * 0.75 - 0.5) / 0.9375));
   }
 
-  /** いま何時か。番組表に現在位置の線を出すため、1分ごとに進める */
+  /** いま何時か。時の列の「いま」の時刻と、過ぎた所を暗くする位置に使う。1分ごとに進める */
   let clock = $state(Date.now());
   $effect(() => {
     const timer = setInterval(() => (clock = Date.now()), 60_000);
@@ -350,7 +350,7 @@
   /**
    * 表示中の日にいまが含まれていれば、表の頭 (4:00) から何マスぶん下か (端数つき)。
    *
-   * **線は 1 マス (5 分) ごとに飛ばさず、分の位置へ `translate` で送る。** 行 (`grid-row`) で
+   * **時刻は 1 マス (5 分) ごとに飛ばさず、分の位置へ `translate` で送る。** 行 (`grid-row`) で
    * 置いていた頃は 5 分ごとに 1 マスずつ飛んでいた。1 分ごとの移りは短い transition でなめらかに
    * (`.now`。動かさない設定ではすぐ移る)
    */
@@ -676,7 +676,7 @@
   <!--
         **どこを見るかは表の外の細い1行にまとめる** (種別・日付・時刻・サブch・ジャンル)。縦は表に回す。
 
-        表の中 (左上の角・局名の行) には入れない。角は時刻の列の幅 (2.5rem) しか無く、
+        表の中 (左上の角・局名の行) には入れない。角は時刻の列の幅 (1.75rem) しか無く、
         入れるならメニューに畳むことになり、種別や日を変えるたびに1回多く押す。
         局名の行に入れると、操作の幅のぶん局名が隠れる。表の外の1行なら、
         隠れるものも押す回数も増えない。
@@ -760,7 +760,6 @@
           {#if day.has || selected}
             <a
               class="menu-item {day.weekday}"
-              class:selected
               class:past={day.past}
               role="menuitem"
               href={href({ start: String(day.start) })}
@@ -844,7 +843,7 @@
       <!--
                 **サブチャンネルを出すか** (issue #509)。テレビの番組表の「サブチャンネル表示」と同じ。
                 見え方の好みなので設定画面ではなくここに置き、端末ごとに覚える。
-                入っているかは aria-pressed と地の色で (録画一覧の「まとめて表示」と同じ形)。
+                入っているかは aria-pressed とオンの短い下線で (`app.css` の「入っている切り替え」)。
                 その日に分割放送が無ければ出さない (押しても列が増えない)
             -->
       {#if canSplit}
@@ -999,7 +998,7 @@
         data-testid="guide-rows"
         data-highlight={highlight}
       >
-        <!-- 左上の角。時刻列とチャンネル行の交点で、どちらにも追従させる -->
+        <!-- 左上の角。時刻の列と局名の行の交点で、どちらにも追従させる -->
         <div
           class="corner"
           style="grid-column: 1; grid-row: 1;"
@@ -1062,7 +1061,7 @@
           <!--
                         「いま」の時刻 (ホームと同じ `NowLine` の `overlay`)。ホームのような一言は添えない。
                         **時刻は時刻の列の中に置く** — 列の外へ出すと番組名に被る。同じ時の数字とは重なるが、
-                        時刻に地の色を敷いて隠す。`sticky` (`left: 0`) で横に流しても左端に残る
+                        時刻のカプセルの面で隠す。`sticky` (`left: 0`) で横に流しても左端に残る
                         (`absolute` だと枠 `grid-column: 1 / -1` の左端に付いて流れていく)
                     -->
           <NowLine
@@ -1085,7 +1084,7 @@
           <!--
                         **マスのところだけ骨組み。** 局名の行と時刻の列は本物で、骨組みは同じ列 (`subgrid`) に
                         24 時間ぶん敷く — 画面の下の端まで埋まり、どこまで送っても切れない。
-                        桝は 1 つずつ置かず、列ごとに 1 枚の板を `mask` で切り抜く (局が多いと数千個になる)
+                        桝は 1 つずつ置かず、列ごとに 1 枚の面を `mask` で切り抜く (局が多いと数千個になる)
                     -->
           <div
             class="skeleton cells-skeleton"
@@ -1249,7 +1248,7 @@
 
       <!--
                 **並びは控えから主へ。** 主 (クラスの無いボタン) はいちばん右 (狭い画面ではいちばん上)。
-                閉じるは右上の × (`ProgramDetail`)
+                閉じるは左下 (`ProgramDetail`)
             -->
 
       <!--
@@ -1369,7 +1368,7 @@
     white-space: nowrap;
   }
   a.day-chip:hover {
-    background: var(--dp-btn-tonal);
+    background: var(--dp-btn-tonal-hover);
     color: var(--pico-secondary-hover);
   }
   .day-chip.selected {
@@ -1515,14 +1514,22 @@
   :global(.guide-menu) .menu-item {
     white-space: nowrap;
   }
-  :global(.guide-menu) .menu-item.selected {
-    font-weight: var(--dp-weight-bold);
-  }
-  /* 入っている項目は塗らず、ほかのメニューの選んでいる項目と同じく左の縦線と主の色の太字 */
+  /*
+   * 入っている項目は塗らず、ほかのメニューの選んでいる項目 (`app.css` の `.menu-item`。日付のメニューの選んでいる日も) と
+   * 同じく左の縦線と主の色の太字
+   */
   :global(.guide-menu) .menu-item[aria-checked="true"] {
-    box-shadow: inset 2px 0 0 var(--pico-primary);
     color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
+  }
+  :global(.guide-menu) .menu-item[aria-checked="true"]::before {
+    content: "";
+    position: absolute;
+    inset-block: 0.5rem;
+    left: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--pico-primary);
   }
   .menu-item .muted {
     margin-inline-start: auto;

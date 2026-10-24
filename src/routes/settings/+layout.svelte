@@ -86,9 +86,9 @@
   }
 
   /**
-   * **見えている節を追う** (Vercel のドキュメントの目次と同じ)。上の帯 (ヘッダーの下から画面の 45%) に
-   * かかっている節のうち、いちばん上のもの。長い節 (チューナー) が帯にかかっている間は次の節に移らない。
-   * 下まで巻いたら最後の節 (短い節は帯まで上がってこない)
+   * **見えている節を追う** (Vercel のドキュメントの目次と同じ)。上の範囲 (ヘッダーの下から画面の 45%) に
+   * かかっている節のうち、いちばん上のもの。長い節 (チューナー) がその範囲にかかっている間は次の節に移らない。
+   * 下まで巻いたら最後の節 (短い節はその範囲まで上がってこない)
    */
   $effect(() => {
     void page.url.pathname;
@@ -170,7 +170,6 @@
           <a
             {href}
             class="group-link side-label"
-            class:here
             aria-current={here ? "page" : undefined}
             data-testid="settings-nav-{g.slug}"
           >
@@ -369,11 +368,6 @@
       display: none;
     }
   }
-  @media (max-width: 639.98px) {
-    .main-inner :global([data-part]) {
-      scroll-margin-top: calc(var(--dp-gutter) + env(safe-area-inset-top));
-    }
-  }
 
   /*
      * **狭い画面の節の行。** 「← 設定」と節の名前を横に並べ、巻いても残す (スマホは下、640〜767px はヘッダーの下)。
@@ -381,15 +375,11 @@
      */
   .jump {
     position: sticky;
-    top: 3.5rem;
     z-index: 30;
     display: flex;
     align-items: center;
     gap: var(--dp-space-1);
-    margin-inline: calc(-1 * var(--dp-gutter));
-    padding: 0.5rem var(--dp-gutter);
     overflow-x: auto;
-    background: var(--dp-bg);
     scrollbar-width: none;
     white-space: nowrap;
   }

@@ -193,7 +193,7 @@
     seekBy,
   });
 
-  /** バックグラウンド再生 (`background.svelte.ts`)。既定は切で、裏に回ったら止め、戻ったら止めた所から */
+  /** バックグラウンド再生 (`background.svelte.ts`)。既定はオフで、裏に回ったら止め、戻ったら止めた所から */
   const background = backgroundPlayback({
     pip: () => pip.active,
     paused: () => player.paused,
@@ -220,7 +220,7 @@
     overlay: () => overlay,
     captions: () => player.captions && player.hasCaptions,
   });
-  // 生の音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+  // MPEG-2 をデコードした音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     player.playback = background.on || pip.active;
   });
@@ -346,7 +346,7 @@
                 >{clockLabel(pos)} / {clockLabel(recorded)}</span
               >
               {#if line !== null && !line.finished}
-                <!-- 赤はライブの赤丸と同じ出し方。黒帯の上の text-error は沈む -->
+                <!-- 赤はライブの赤丸と同じ出し方。黒い操作バーの上の text-error は沈む -->
                 ・ <span class="rec"><span class="rec-dot"></span>録画中</span>
               {:else if line !== null}
                 ・ 録画済み

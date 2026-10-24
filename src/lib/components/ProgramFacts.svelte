@@ -213,7 +213,7 @@
     padding: 0.5rem;
     border-radius: var(--dp-radius-sm);
     background: var(--dp-subtle);
-    font-family: ui-monospace, monospace;
+    font-family: var(--dp-font-mono);
     font-size: var(--dp-text-xs);
     white-space: pre-wrap;
   }

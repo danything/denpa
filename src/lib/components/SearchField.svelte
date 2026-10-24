@@ -14,7 +14,7 @@
   } from "#lib/search-suggest.js";
 
   /**
-   * **サイト全体の検索の欄** (`/search?q=`)。広い画面はヘッダーの真ん中、狭い画面は検索の画面の上の帯に
+   * **サイト全体の検索の欄** (`/search?q=`)。広い画面はヘッダーの真ん中、狭い画面は検索の画面の上の1行に
    * 同じものを置く (`+layout.svelte`)。`/` と Ctrl/⌘+K で入る (`data-search-field`。見えている欄を
    * `+layout.svelte` が探す)。
    *
@@ -35,7 +35,7 @@
     live?: boolean;
   } = $props();
 
-  /** 打ってから聞くまでの間。打つ手を止めるたびに聞くと、1字ごとにサーバを叩く */
+  /** 打ってから聞くまでの間。打つ手を止めるたびに聞くと、1字ごとにサーバに聞くことになる */
   const DELAY = 180;
 
   let typed = $state(untrack(() => value));
@@ -320,7 +320,7 @@
   }
   /*
      * **欄の形は虫眼鏡と字と `/` の印だけ。** 中の input は素のままにし、包んだ `form` を欄の面にする (虫眼鏡も欄の中に見せる)。
-     * ほかの入力欄と同じく**線も凹みも無い平らな面** (`app.css` の「入力欄」)。ヘッダーの帯 (操作の層) の上でも同じ面。
+     * ほかの入力欄と同じく**線も凹みも無い平らな面** (`app.css` の「入力欄」)。ヘッダー (操作の層) の上でも同じ面。
      * 字を打っている間は外側の 2px の主の色の線
      */
   .search-field {
@@ -381,8 +381,8 @@
 
   /*
      * 候補。欄の真下に浮かせ、欄より少し広く取る (ヘッダーの欄が縮んでも読める幅)。
-     * 節は小さな見出しと行だけ (カードにしない)。選んでいる行は淡い地。
-     * 箱はメニューと同じ面 (`--dp-pop`) に影だけ (縁もぼかしも付けない。docs/design.md)
+     * 節は小さな見出しと行だけ (カードにしない)。指している行はメニューと同じ地 (`--dp-pop-hover`)。
+     * 箱はメニューと同じ面 (`--dp-pop`)・内側の余白 (8px) に影だけ (縁もぼかしも付けない。docs/design.md)
      */
   .suggest {
     position: absolute;
@@ -392,7 +392,7 @@
     width: max(100%, min(36rem, calc(100vw - 2rem)));
     max-height: min(70vh, 36rem);
     overflow-y: auto;
-    padding: var(--dp-space-1);
+    padding: var(--dp-space-2);
     border: 0;
     border-radius: var(--dp-radius-lg);
     background: var(--dp-pop);
@@ -435,11 +435,11 @@
     min-height: 2.5rem;
     padding: var(--dp-space-1) var(--dp-space-3);
     /* 箱の角から内側の余白を引いた丸み (入れ子) */
-    border-radius: calc(var(--dp-radius-lg) - var(--dp-space-1));
+    border-radius: calc(var(--dp-radius-lg) - var(--dp-space-2));
     cursor: pointer;
   }
   .suggest-option.active {
-    background: var(--dp-hover);
+    background: var(--dp-pop-hover);
   }
   .suggest-text {
     display: flex;

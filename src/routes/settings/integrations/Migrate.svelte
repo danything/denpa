@@ -1,5 +1,4 @@
 <script lang="ts">
-  import "@anyblades/blades/layered/components/accordion";
   import { submitting } from "#lib/actions.js";
   import CheckRow from "#lib/components/CheckRow.svelte";
   import Lead from "#lib/components/Lead.svelte";

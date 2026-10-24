@@ -21,7 +21,7 @@
  * (`import "@anyblades/blades/layered/components/modal";`)。その画面の CSS にだけ入る。
  * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`
  * - forms/input-range … `player/SeekBar`
- * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `Migrate`・`Channels`
+ * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
  * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`
  * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`
  *
@@ -83,7 +83,7 @@
      * 4 通りの影が散っていた頃は、同じ「カード」が画面を移ると違う顔で出ていた。
      * 段を増やすときは、まず今ある段で足りないかを見る
      */
-  /* 角丸。小 (タグの中・メニューの項目・番組表のマス)・中 (ボタン・入力欄・通知)・大 (一覧の枠・メニュー・ダイアログ) */
+  /* 角丸。小 (番組表のマス・ロゴ・ポスター)・中 (入力欄・行・通知)・大 (メニュー・ダイアログ)。ボタンはカプセル (`--dp-radius-full`) */
   --dp-radius-sm: 0.375rem;
   --dp-radius: 0.5rem;
   --dp-radius-lg: 0.75rem;
@@ -643,7 +643,6 @@ progress.running[value]::-webkit-progress-value {
   margin: clamp(2rem, 16vh, 9rem) auto 2rem;
 }
 .solo h1 {
-  font-size: var(--dp-text-xl);
   line-height: 1.35;
 }
 .solo p {
@@ -880,15 +879,12 @@ input[type="checkbox"]:not([role="switch"]) {
 }
 /*
  * チェック + 見出しの行と、その下の要点 (`CheckRow`。要点に太字を混ぜたいときは同じ形を直に書く)。
- * 要点 (`Lead`) と「詳しく」の続きは、チェックの横の文に揃える (箱の幅 1.25rem + 間 0.5rem)
+ * 要点 (`Lead`) と「詳しく」の続きは、チェックの横の文に揃える (下の「設定の並べ方」の `.lead.indent`)
  */
 .check-item {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-}
-.check-item .more-body {
-  margin-inline-start: 1.75rem;
 }
 .check-row {
   display: flex;
@@ -899,40 +895,6 @@ input[type="checkbox"]:not([role="switch"]) {
 .check-row input {
   margin: 0.15rem 0 0;
   flex-shrink: 0;
-}
-/*
- * 説明の続き。`<details class="more"><summary>詳しく</summary><p>…</p></details>`
- *
- * **見出しや欄の下には要点を1行だけ置き、残りはここに畳む。** 小さく薄い字の段落が
- * 欄ごとに続いていた頃は、画面が重く、どれが肝心なのかが読めなかった。
- *
- * Pico の開け閉め (`details summary`) は幅いっぱいの段で、矢印を右端に浮かせる。
- * 文の下に添える小さな開け閉めなので、**矢印を字のすぐ後ろに寄せて、押せる幅も字のぶんだけ**にする
- */
-details.more > summary {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  color: var(--dp-muted);
-  font-size: var(--dp-text-xs);
-  line-height: 1.5;
-}
-details.more > summary::after {
-  width: 0.8rem;
-  height: 0.8rem;
-  margin-inline-start: 0.2rem;
-  float: none;
-  background-size: 0.8rem auto;
-}
-details.more[open] > summary {
-  margin-bottom: 0.25rem;
-}
-details.more > :not(summary) {
-  font-size: var(--dp-text-sm);
-  color: var(--dp-muted);
-}
-details.more > :not(summary) + :not(summary) {
-  margin-top: 0.35rem;
 }
 
 /* ---- ボタン ---- */
@@ -983,10 +945,6 @@ details.more > :not(summary) + :not(summary) {
   --pico-color: var(--dp-btn-solid-text);
   --pico-box-shadow: none;
   border-radius: var(--dp-btn-radius);
-  transition:
-    background-color var(--dp-duration),
-    box-shadow var(--dp-duration),
-    transform var(--dp-duration);
 }
 /*
  * **操作の層に乗せるのは主のボタンだけ** (クラスが無いか、大きさ・危ない操作・保存などのクラスだけのもの、`a.button`)。
@@ -1020,7 +978,7 @@ details.more > :not(summary) + :not(summary) {
   /* 押したらすぐ縮み、離すとばねで戻る (戻りは下の `:where(button, a.button)` の transition) */
   transition: scale var(--dp-duration) var(--dp-ease);
 }
-/* 押して縮んだボタンの戻り。色と影は短く、大きさはばねで (Pico の transition に縮みを足す) */
+/* 押して縮んだボタンの戻り。色と影は短く、大きさはばねで (リンクのボタンも同じ) */
 :where(button, a.button) {
   transition:
     background-color var(--dp-duration) var(--dp-ease),
@@ -1060,8 +1018,8 @@ details.more > :not(summary) + :not(summary) {
   background: var(--dp-item-hover);
 }
 /*
- * **入っている切り替え (`aria-pressed="true"`) は、ほかの選んでいるものと同じく主の色の短い下線と字** (番組表の「サブch」)。
- * 塗らない。浮かせもしない (押すと何かが起きるボタンとは見分ける)
+ * **入っている切り替え (`aria-pressed="true"`) は、オンの印の主の色の短い下線と字** (番組表の「サブch」)。
+ * 選んでいるもの (字の幅いっぱいの下線) とは線の長さで分ける。塗らない。浮かせもしない (押すと何かが起きるボタンとは見分ける)
  */
 :where(button, a.button)[aria-pressed="true"]:where(
     :not(.secondary, .outline, .ghost)
@@ -1089,9 +1047,6 @@ a.button {
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition:
-    background-color var(--pico-transition),
-    color var(--pico-transition);
 }
 :where(
   button,
@@ -1133,7 +1088,6 @@ a.button {
   ) {
   --pico-background-color: var(--dp-btn-tonal-hover);
   --pico-box-shadow: none;
-  transform: none;
 }
 /* 危ない操作。確定のボタンは主と同じ層に乗せて赤い字 (塗らない) */
 :where(button, a.button).danger {
@@ -1232,7 +1186,7 @@ a.button {
  * **控えのボタンも字だけにする。** 一覧では行ごとに同じボタンが並ぶので、地の付いたボタンの列が
  * 縦に立つと番組名より目立つ。押せることは字の色・指を乗せたときの地・カーソルで分かる。
  * 押す的は 40px (観る画面の操作列と同じ物差し。`player/ControlButton.svelte`)。行の右に寄せる。
- * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする。主のボタン (追っかけ・削除の「確定」) は件の面の上なので太字だけ (`home.css`)
+ * 削除・取消は控えた字の色にして、指を乗せたときだけ赤くする。主のボタン (追っかけ・削除の「確定」) は件の面の上なので太字だけ (上の「浮いたものの中」)
  */
 .row-actions {
   --dp-btn-h: 2.5rem;
@@ -1496,7 +1450,7 @@ button[aria-busy="true"]::after {
 }
 
 /*
- * 文の続きとして読める、地も枠も無い小さなボタン (`Lead` の「詳しく」・エンコーダの「確かめ直す」)。
+ * 文の続きとして読める、地も枠も無い小さなボタン (エンコーダの「確かめ直す」)。
  * 押せることは下線で示す。上の `aria-busy` より後に置き、送信中も字は控えた色のまま。
  *
  * **ボタンのトークンをここで字のものに戻す。** ボタンの規則 (上の「ボタン」) は `--pico-color` を
@@ -1644,9 +1598,14 @@ button.text-button:hover {
   text-decoration: none;
   cursor: pointer;
   outline: none;
+  position: relative;
 }
-/* いま選んでいるもの (↑↓・マウスを乗せたもの)。フォーカスで示す */
-.menu-item:is(:hover, :active, :focus, :focus-visible) {
+/* 送るだけの項目を包むフォーム。並びは項目のまま */
+.menu-form {
+  display: contents;
+}
+/* いま指している項目 (↑↓・マウスを乗せたもの)。フォーカスで示す */
+.menu-item:where(:hover, :active, :focus, :focus-visible) {
   box-shadow: none;
   color: inherit;
 }
@@ -1656,6 +1615,23 @@ button.text-button:hover {
 .menu-item[data-disabled] {
   cursor: not-allowed;
   opacity: 0.5;
+}
+/*
+ * **選んでいる項目** (いまの画面・選んでいる日)。ほかの選んでいるものと同じく塗らずに左の縦線と主の色の太字
+ * (プルダウンの一覧・映像の上のメニューと同じ)。詳細度は上の指している項目と同じにして、字の色を決めている項目 (番組表の土日) はそちらを残す
+ */
+.menu-item:where([aria-current]:not([aria-current="false"])) {
+  color: var(--dp-primary-text);
+  font-weight: var(--dp-weight-bold);
+}
+.menu-item:where([aria-current]:not([aria-current="false"]))::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.5rem;
+  left: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--pico-primary);
 }
 
 /*
@@ -1797,7 +1773,7 @@ button.text-button:hover {
   border-radius: 1px;
   background: currentColor;
 }
-/* 映像の上に出す短い通知 (`StageNote`・追っかけの「エンコード済みを観る」・ライブの「録画のため局を切り替えました」) */
+/* 映像の上に出す短い通知 (`StageNote`・追っかけの「続きは観る画面で」・ライブの「録画のため局を切り替えました」) */
 .stage-note {
   max-width: 100%;
   padding: 0.25rem 0.75rem;

@@ -154,8 +154,5 @@
   }
   .close {
     flex: none;
-    display: inline-flex;
-    align-items: center;
-    border-radius: var(--dp-radius-full);
   }
 </style>

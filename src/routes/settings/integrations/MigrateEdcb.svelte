@@ -1,5 +1,4 @@
 <script lang="ts">
-  import "@anyblades/blades/layered/components/accordion";
   import { submitting } from "#lib/actions.js";
   import CheckRow from "#lib/components/CheckRow.svelte";
   import Lead from "#lib/components/Lead.svelte";
@@ -26,7 +25,7 @@
           EDCB の設定フォルダ (<code>Setting</code>) にある
           <code>EpgAutoAdd.txt</code>・<code>Reserve.txt</code>・<code
             >RecInfo2.txt</code
-          >・<code>RecInfo.txt</code> を読みます。フォルダは denpa のサーバから見える場所に写してください。録画のファイルは取り込みません。
+          >・<code>RecInfo.txt</code> を読みます。フォルダは denpa のサーバから見える場所にコピーしてください。録画のファイルは取り込みません。
         </p>
         <p>
           何度実行しても、取り込み済みのものは飛ばします。ルールによる予約は、取り込んだルールから

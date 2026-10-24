@@ -1664,13 +1664,10 @@
       bind:element={stage}
     >
       {#snippet children(layout)}
-        <!--
-                    映像の箱。データ放送はこれを小窓へ寄せる (`DataBroadcast` の `placeVideo`)。
-                    押すのは映像そのもので、ボタンはその上に重ねる (z-index 10)
-                -->
         <!-- svelte-ignore a11y_media_has_caption -->
         <!--
-                    **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ
+                    **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ。
+                    押すのは映像そのもので、ボタンはその上に重ねる (z-index 10)
                 -->
         <div
           bind:this={mediaBox}

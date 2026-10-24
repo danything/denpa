@@ -167,7 +167,7 @@
   cursor: pointer;
 }
 .board .group-head:focus-visible {
-  outline: 2px solid var(--pico-primary-background);
+  outline: 2px solid var(--pico-primary);
   outline-offset: -2px;
 }
 .board .group-head .row-body,
@@ -229,7 +229,7 @@
 }
 .board .act-label {
   flex: 0 1 auto;
-  font-weight: 600;
+  font-weight: var(--dp-weight-bold);
 }
 .board .act-detail {
   flex: 0 1000 auto;
@@ -256,7 +256,7 @@
 }
 .board .row-activity.wait .act-label,
 .board .row-activity.neutral .act-label {
-  font-weight: 400;
+  font-weight: var(--dp-weight);
 }
 /*
  * **進み具合は行の面の下端いっぱいに敷く。** 面の角丸で切り落とすので、行は中身を角の外へ出さない
@@ -323,9 +323,6 @@
 }
 .board .row-bar.rec {
   --pico-progress-color: var(--dp-rec);
-}
-.board .menu-form {
-  display: contents;
 }
 /*
  * ---- 1本の時間軸 ----
@@ -441,7 +438,7 @@
 }
 /*
  * **日付の見出しは、貼り付いたときだけ操作の層の小さなカプセル。** 巻くと行がその裏を流れるので、ヘッダーと同じ半透明の面と影で浮かせる
- * (docs/design.md の「浮かせ方」)。地の色の帯にすると、半透明のヘッダーの下に塗った帯だけが浮いて見えた
+ * (docs/design.md の「浮かせ方」)。地の色で塗ると、半透明のヘッダーの下で塗った所だけが浮いて見えた
  */
 .board .t-day {
   /* 貼り付く位置。いちばん上の見出しの置かれた位置 (main の頭の空き・頭の1行の下) と同じにし、巻き始めても動かない (上端ではカプセルにならない) */

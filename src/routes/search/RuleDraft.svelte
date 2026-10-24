@@ -772,8 +772,8 @@
       transform: translateY(100%);
       visibility: hidden;
       transition:
-        transform var(--dp-duration) var(--dp-ease),
-        visibility 0s linear var(--dp-duration);
+        transform var(--dp-duration-exit) var(--dp-ease-exit),
+        visibility 0s linear var(--dp-duration-exit);
     }
     .draft.open {
       transform: none;
@@ -948,6 +948,5 @@
   .save {
     width: 100%;
     margin: 0;
-    border-radius: var(--dp-radius-full);
   }
 </style>

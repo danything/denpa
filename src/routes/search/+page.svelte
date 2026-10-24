@@ -78,7 +78,7 @@
 
   /**
    * **言葉なしで開いたら欄に入る** (下のタブの「検索」から来たとき)。結果を見に来たときは入らない —
-   * 狭い画面でキーボードが出て結果を隠す。欄は画面の外 (`SearchField`。広い幅はヘッダー、狭い幅は上の帯)
+   * 狭い画面でキーボードが出て結果を隠す。欄は画面の外 (`SearchField`。広い幅はヘッダー、狭い幅は上の1行)
    * にあるので、見えているほうに入る
    */
   onMount(() => {
@@ -253,7 +253,7 @@
 -->
 <div class="search-layout" class:drafting>
   <div class="search-page">
-    <!-- 検索の欄はこの画面には置かない。ヘッダー (狭い幅では上の帯) の欄がそのまま言葉を持っている -->
+    <!-- 検索の欄はこの画面には置かない。ヘッダー (狭い幅では上の1行) の欄がそのまま言葉を持っている -->
     {#if q === ""}
       {#if drafting}
         <!--
@@ -500,8 +500,7 @@
                   {#if res.recording_id !== null}
                     <a
                       class="button small ghost"
-                      href={resolve(`chase/${res.recording_id}`)}
-                      >追っかけ再生</a
+                      href={resolve(`chase/${res.recording_id}`)}>追っかけ</a
                     >
                   {:else}
                     <ActionButton
@@ -723,7 +722,7 @@
       {#if form?.message}
         <div class="notice error detail-error">{form.message}</div>
       {/if}
-      <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは右上の × (`ProgramDetail`) -->
+      <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは左下 (`ProgramDetail`) -->
       {#if opened !== null}
         <a
           class="button secondary"
@@ -791,7 +790,7 @@
     }
   }
   /*
-     * 狭い画面では書く欄を下から出すボタンを、下のタブの上に浮かせる。帯の地も線も敷かず、ボタン (主のボタン) だけが浮く
+     * 狭い画面では書く欄を下から出すボタンを、下のタブの上に浮かせる。地も線も敷かず、ボタン (主のボタン) だけが浮く
      * (浮きの上に浮きを重ねない。docs/design.md)。読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
      * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
      */
@@ -850,7 +849,7 @@
   .count {
     margin-inline-start: var(--dp-space-1);
     color: var(--dp-muted);
-    font-weight: normal;
+    font-weight: var(--dp-weight);
     font-variant-numeric: tabular-nums;
   }
   .hits {

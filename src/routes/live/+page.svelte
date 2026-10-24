@@ -263,7 +263,7 @@
     overlay: () => overlay,
     captions: () => player.captions && player.hasCaptions,
   });
-  // 生の音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+  // MPEG-2 をデコードした音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     player.playback = background.on || pip.active;
   });
@@ -756,12 +756,11 @@
           {#each listed as channel (channel.id)}
             <!-- いま映しているものかどうかは、この行の中で何度も使う -->
             {@const tuned = current?.id === channel.id}
-            <li class="channel-item side-item" class:tuned>
+            <li class="channel-item side-item">
               <button
                 type="button"
                 bind:this={rows[channel.id]}
                 class="channel"
-                class:tuned
                 onclick={() => {
                   select(channel);
                   backToPicture();
@@ -780,7 +779,7 @@
                   fallback={Array.from(channel.name.trim())[0] ?? channel.type}
                 />
                 <!--
-                                いま映しているものは行の地だけで示す (印やバッジは狭い列で局名を潰した)。
+                                いま映しているものはほかの選んでいる行と同じく左の縦線と主の色の太字 (`app.css` の `.side-item`。バッジは狭い列で局名を潰した)。
                                 読み上げには `aria-current` と隠した「視聴中」で渡す
                             -->
                 <span class="channel-text">
