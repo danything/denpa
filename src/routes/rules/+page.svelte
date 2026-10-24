@@ -19,11 +19,12 @@
    * 作る・直すのは検索の画面の「ルールとして保存」(行を押すと `/search?rule=<ID>`)
    */
 
+  type Rule = (typeof data.rules)[number];
   type Filter = "all" | "on" | "off" | "idle" | "conflict";
   const FILTERS: {
     key: Filter;
     label: string;
-    test: (rule: (typeof data.rules)[number]) => boolean;
+    test: (rule: Rule) => boolean;
   }[] = [
     { key: "all", label: "すべて", test: () => true },
     { key: "on", label: "有効", test: (rule) => rule.enabled },
@@ -44,10 +45,7 @@
   let sort = $state<Sort>("next");
 
   /** 並べ替え。決まらないものは新しいルールを上に (読み込んだ順) */
-  function compare(
-    a: (typeof data.rules)[number],
-    b: (typeof data.rules)[number],
-  ): number {
+  function compare(a: Rule, b: Rule): number {
     switch (sort) {
       case "next":
         return (a.next?.start_at ?? Infinity) - (b.next?.start_at ?? Infinity);
