@@ -15,6 +15,7 @@ import {
 
 import { toHalfWidth } from "../fold";
 import { type Airing, mainOf, splitOf, type Station } from "../subchannels";
+import { CHANNEL_TYPES } from "../types";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
@@ -51,10 +52,6 @@ const DIGITAL_TV = 1;
  * 実機では、スキャンをやり直した結果 知っているのは32局なのに denpa 側には
  * 120局が残っていて、番組表に空の列が並んでいた。
  */
-export const CURRENT_SERVICES =
-  "updated_at >= (SELECT MAX(updated_at) FROM services)";
-
-/** `CURRENT_SERVICES` の列を名指ししたもの。番組表など `updated_at` を持つ表と JOIN するときに使う */
 export function currentServices() {
   return sql`${services.updated_at} >= (SELECT MAX(${services.updated_at}) FROM ${services})`;
 }
@@ -67,7 +64,7 @@ export function serviceCounts(): Record<string, number> {
   const rows = orm()
     .select({ type: services.type, n: count() })
     .from(services)
-    .where(sql.raw(CURRENT_SERVICES))
+    .where(currentServices())
     .groupBy(services.type)
     .all();
   return Object.fromEntries(rows.map((row) => [row.type, row.n]));
@@ -87,6 +84,11 @@ export const SERVICE_ORDER =
   "remote_control_key IS NULL, remote_control_key, service_id";
 /** 種別ごとの順。地上波 → BS → CS。テレビの切り替えもこの順 */
 export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 ELSE 2 END`;
+/** 地上波 → BS → CS を JS で並べるときの鍵。知らない種別は後ろ */
+export function typeRank(type: string): number {
+  const at = (CHANNEL_TYPES as readonly string[]).indexOf(type);
+  return at === -1 ? CHANNEL_TYPES.length : at;
+}
 
 /**
  * 番組表とライブに出す局。**名前の付いた番組が1つも無い局は出さない。**
@@ -152,7 +154,7 @@ export function watchableServices(at: number): number[] {
         type: services.type,
       })
       .from(services)
-      .where(sql.raw(CURRENT_SERVICES))
+      .where(currentServices())
       .all(),
     orm()
       .select({
@@ -405,11 +407,8 @@ function forgetMissing(at: number, seen: Set<number>): number {
  */
 export function syncServicesOnly(channels: AgentChannel[]): number {
   const current = () =>
-    orm()
-      .select({ n: count() })
-      .from(services)
-      .where(sql.raw(CURRENT_SERVICES))
-      .get()?.n ?? 0;
+    orm().select({ n: count() }).from(services).where(currentServices()).get()
+      ?.n ?? 0;
   const before = current();
   const synced = syncServices(channels);
   /*

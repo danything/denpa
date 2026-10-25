@@ -22,7 +22,7 @@ import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
 import type { ChannelType } from "../types";
 import { config } from "./config";
-import { savePrograms, settle, sync } from "./epg";
+import { savePrograms, settle, sync, typeRank } from "./epg";
 import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
 import { resolveConflicts } from "./scheduler";
@@ -353,14 +353,12 @@ class Scanner {
       });
     }
 
-    const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
     return [...this.found.entries()]
       .sort(([a], [b]) => {
         const [typeA = "", channelA = ""] = a.split(":");
         const [typeB = "", channelB = ""] = b.split(":");
         return (
-          (order[typeA] ?? 9) - (order[typeB] ?? 9) ||
-          channelA.localeCompare(channelB)
+          typeRank(typeA) - typeRank(typeB) || channelA.localeCompare(channelB)
         );
       })
       .map(([, entry]) => entry);

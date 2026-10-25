@@ -9,7 +9,7 @@ import type {
   Service,
 } from "../types";
 import { orm } from "./db";
-import { airing, CURRENT_SERVICES, SERVICE_ORDER } from "./epg";
+import { airing, currentServices, SERVICE_ORDER } from "./epg";
 import {
   programs as programTable,
   recordings,
@@ -65,11 +65,11 @@ export function stationsOf(
   end: number,
 ): { services: Service[]; split: number[] } {
   // テレビと同じ並びにする (SERVICE_ORDER)。
-  // 取り残しの局は出さない (CURRENT_SERVICES)。出すと番組表に空の列が並ぶ
+  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ
   const services: Service[] = orm()
     .select()
     .from(serviceTable)
-    .where(and(eq(serviceTable.type, type), sql.raw(CURRENT_SERVICES)))
+    .where(and(eq(serviceTable.type, type), currentServices()))
     .orderBy(sql.raw(SERVICE_ORDER))
     .all();
   const slots = orm()

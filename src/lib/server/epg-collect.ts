@@ -14,12 +14,12 @@
 
 import { EpgReader } from "@danything/arib/eit";
 import { ServiceReader } from "@danything/arib/psi";
-import { max, sql } from "drizzle-orm";
+import { max } from "drizzle-orm";
 
 import { config } from "./config";
 import { orm } from "./db";
 import {
-  CURRENT_SERVICES,
+  currentServices,
   savePrograms,
   settle,
   syncServices,
@@ -542,7 +542,7 @@ async function run(): Promise<number> {
     orm()
       .select({ id: services.id })
       .from(services)
-      .where(sql.raw(CURRENT_SERVICES))
+      .where(currentServices())
       .all()
       .map((row) => row.id),
   );

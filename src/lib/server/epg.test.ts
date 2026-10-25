@@ -236,7 +236,7 @@ describe("消えた局の片付け", () => {
     });
     /*
      * 局の行そのものは残す。消すと、その局で録った録画や過去の予約が
-     * 辿れなくなる。画面に出さない仕組みは別にある (CURRENT_SERVICES)
+     * 辿れなくなる。画面に出さない仕組みは別にある (currentServices)
      */
     expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 2 });
   });

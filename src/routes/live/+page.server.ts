@@ -7,7 +7,7 @@ import { LAST_COOKIE, type LiveCodec } from "#lib/live.js";
 import { orm } from "#lib/server/db.js";
 import {
   airing,
-  CURRENT_SERVICES,
+  currentServices,
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
   serviceCounts,
@@ -26,7 +26,7 @@ import type { Actions } from "./$types";
  * **番組表と同じ並びにする** (`SERVICE_ORDER`)。番組表で見つけた局を、ここでも
  * 同じ位置で探せるようにするため。
  *
- * 取り残しの局は出さない (`CURRENT_SERVICES` と `airing`)。出すと、選んでも
+ * 取り残しの局は出さない (`currentServices` と `airing`)。出すと、選んでも
  * 映らない行が並ぶ — 終わったチャンネルの枠が SDT に残っていることがある。
  */
 export interface LiveChannel {
@@ -103,7 +103,7 @@ export function load(event) {
   const services: Service[] = orm()
     .select()
     .from(stations)
-    .where(sql.raw(CURRENT_SERVICES))
+    .where(currentServices())
     .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
     .all();
 

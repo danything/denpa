@@ -158,8 +158,14 @@ export function reconcile(): {
   return { checked: placed.length, removed, ...left };
 }
 
-/** 動画そのもの。これの隣に置くものが「サイドカー」 */
-const VIDEO = /\.(m2ts|ts|mkv|mp4)$/i;
+/** 動画そのものの拡張子。これの隣に置くものが「サイドカー」 */
+const VIDEO_EXTENSIONS = ["m2ts", "ts", "mkv", "mp4"];
+const VIDEO = new RegExp(`\\.(?:${VIDEO_EXTENSIONS.join("|")})$`, "i");
+/** 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`) */
+const TRAILING = new RegExp(
+  `^(.+\\.(?:${VIDEO_EXTENSIONS.join("|")}))\\.[^/]+$`,
+  "i",
+);
 
 /**
  * 触らずに置いておく、書きたてのもの。
@@ -264,14 +270,13 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
 
 /** サイドカーで、かつ元の動画が1つも無いか */
 function orphan(path: string, videos: Set<string>): boolean {
-  // 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`)
-  const trailing = /^(.+\.(?:m2ts|ts|mkv|mp4))\.[^/]+$/i.exec(path);
+  const trailing = TRAILING.exec(path);
   if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
   // ポスター・データ放送。動画の拡張子を取り替えた名前 (metadata.ts の SIDECAR_SUFFIXES)
   const base = SIDECAR_ORPHAN.exec(path);
   if (base === null) return false;
   // どの入れ物で置いたかまでは名前から分からないので、当てはまるものを全部見る
-  return !["m2ts", "ts", "mkv", "mp4"].some((extension) =>
+  return !VIDEO_EXTENSIONS.some((extension) =>
     videos.has(`${base[1]}.${extension}`),
   );
 }

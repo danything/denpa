@@ -43,7 +43,7 @@ function audioOnly(path: string, request: Request): Response {
 
 /**
  * 録画ファイルをそのまま配る。
- * プレイヤーに URL を渡して直接再生させるためのエンドポイント。
+ * 観る側 (ブラウザ・テレビのアプリ) が URL を直に開いて再生するためのエンドポイント。
  */
 function respond(
   id: string,

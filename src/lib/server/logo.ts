@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import {
   LogoCollector,
@@ -20,7 +20,7 @@ import { withPalette } from "../ts/logo-palette";
 import type { ChannelType } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
-import { CURRENT_SERVICES } from "./epg";
+import { currentServices as isCurrent } from "./epg";
 import { emit } from "./events";
 import { services } from "./schema";
 import { chunks } from "./stream";
@@ -270,7 +270,7 @@ function store(
       writeWhole(logoPath(id), data);
       /*
        * **`updated_at` は触らない。** あれは「最後に取り込んだ時刻」で、番組表は
-       * *いちばん新しいものと同じ時刻の局だけ* を出す (`CURRENT_SERVICES`)。
+       * *いちばん新しいものと同じ時刻の局だけ* を出す (`currentServices`)。
        * 進めると、その局だけが「いまの局」になって番組表から他が消える
        */
       orm()
@@ -463,7 +463,7 @@ function currentServices(): {
       network_id: services.network_id,
     })
     .from(services)
-    .where(sql.raw(CURRENT_SERVICES))
+    .where(isCurrent())
     .orderBy(services.type, services.channel)
     .all();
 }

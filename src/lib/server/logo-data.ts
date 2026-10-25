@@ -12,14 +12,14 @@ import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 
 import { joinBytes } from "@danything/arib/bytes";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 import { toHalfWidth } from "../fold";
 import { coherence, decodeModel } from "../ts/logo-detect";
 import { PNG_SIGNATURE, pngChunk } from "../ts/png";
 import { config } from "./config";
 import { orm } from "./db";
-import { CURRENT_SERVICES } from "./epg";
+import { currentServices } from "./epg";
 import { services } from "./schema";
 
 /**
@@ -278,7 +278,7 @@ export function stats(): { have: number; total: number } {
         name: services.name,
       })
       .from(services)
-      .where(and(sql.raw(CURRENT_SERVICES), eq(services.service_type, 1)))
+      .where(and(currentServices(), eq(services.service_type, 1)))
       .all(),
   );
   return {

@@ -2,7 +2,7 @@ import { type Actions, fail } from "@sveltejs/kit";
 
 import { forgetMaterials } from "#lib/server/cm-material-store.js";
 import { orm } from "#lib/server/db.js";
-import { currentServices } from "#lib/server/epg.js";
+import { currentServices, typeRank } from "#lib/server/epg.js";
 import {
   forgetLogoData,
   learnedAt,
@@ -49,7 +49,6 @@ function stationLogos() {
   const cmShown = new Set(
     stations(rows.filter((row) => row.service_type === 1)).map((row) => row.id),
   );
-  const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
   return rows
     .map(({ id, name, type }) => ({
       id,
@@ -58,7 +57,7 @@ function stationLogos() {
       logo: logoState(id),
       cm: cmShown.has(id) ? learnedAt(id) : null,
     }))
-    .sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9));
+    .sort((a, b) => typeRank(a.type) - typeRank(b.type));
 }
 
 export function load() {

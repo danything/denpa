@@ -443,7 +443,7 @@
     <div class="rows side-list">
       <label class="row side-item">
         <span>同じ回は最初の放送だけ</span>
-        <!-- 外したスイッチは何も送らない。「外した」と「指定なし」を分けるための隠し (`rule-form.dedupeOf`) -->
+        <!-- 外したスイッチは何も送らない。「外した」と「指定なし」を分けるための隠し (`rule-form.switchOf`) -->
         <input type="hidden" name="dedupe" value="0" />
         <input
           type="checkbox"

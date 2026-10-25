@@ -4,7 +4,7 @@ import { and, gt, inArray, lte, sql } from "drizzle-orm";
 import { audioTracks, parseAudios } from "#lib/arib.js";
 import { orm } from "#lib/server/db.js";
 import {
-  CURRENT_SERVICES,
+  currentServices,
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
 } from "#lib/server/epg.js";
@@ -29,7 +29,7 @@ export function GET() {
       hasLogo: services.has_logo,
     })
     .from(services)
-    .where(sql.raw(CURRENT_SERVICES))
+    .where(currentServices())
     .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
     .all();
   const at = Date.now();

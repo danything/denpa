@@ -1,8 +1,8 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { now, orm } from "#lib/server/db.js";
-import { CURRENT_SERVICES, watchableServices } from "#lib/server/epg.js";
+import { currentServices, watchableServices } from "#lib/server/epg.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
 import { relative } from "#lib/server/paths.js";
 import { recordingFromForm } from "#lib/server/recording.js";
@@ -126,7 +126,7 @@ export function load({ url }) {
     fields.set("keyword", origin?.prefill?.keyword ?? q);
   const seed = editing ?? draftRule(fields);
 
-  // 取り残しの局は選ばせない (CURRENT_SERVICES)。もう録れない局が並ぶだけ
+  // 取り残しの局は選ばせない (currentServices)。もう録れない局が並ぶだけ
   const services = orm()
     .select({
       id: serviceTable.id,
@@ -134,7 +134,7 @@ export function load({ url }) {
       type: serviceTable.type,
     })
     .from(serviceTable)
-    .where(sql.raw(CURRENT_SERVICES))
+    .where(currentServices())
     .orderBy(serviceTable.type, serviceTable.channel)
     .all();
 

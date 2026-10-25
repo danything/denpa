@@ -3,7 +3,7 @@ import { count, eq, sql } from "drizzle-orm";
 
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
-import { currentServices } from "#lib/server/epg.js";
+import { currentServices, typeRank } from "#lib/server/epg.js";
 import {
   refresh,
   SCAN_KINDS,
@@ -45,13 +45,12 @@ function coverage(): Coverage[] {
     })
     .from(services)
     .leftJoin(programs, eq(programs.service_id, services.id))
-    // 取り残しの局は出さない (番組表と JOIN するので列を名指しする)
+    // 取り残しの局は出さない
     .where(currentServices())
     .groupBy(services.id)
     .orderBy(services.service_id)
     .all();
 
-  const order: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
   const channels = new Map<string, Coverage>();
   for (const { id, name, type, channel, programs, until } of rows) {
     const key = `${type}:${channel}`;
@@ -61,8 +60,7 @@ function coverage(): Coverage[] {
   }
   return [...channels.values()].sort(
     (a, b) =>
-      (order[a.type] ?? 9) - (order[b.type] ?? 9) ||
-      a.channel.localeCompare(b.channel),
+      typeRank(a.type) - typeRank(b.type) || a.channel.localeCompare(b.channel),
   );
 }
 
