@@ -22,12 +22,14 @@ import {
   refusalMessage,
   relayed,
   requireBmlNetwork,
+  requireFetch,
 } from "#lib/server/bml-network.js";
 
 import type { RequestHandler } from "./$types";
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, request }) => {
   requireBmlNetwork();
+  requireFetch(request);
 
   const target = url.searchParams.get("url");
   if (target === null || target === "") error(400, "url がありません");

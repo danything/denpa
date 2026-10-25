@@ -32,6 +32,7 @@ import { u16, u32 } from "./bytes.js";
 import type { Dii, DiiModule } from "./dsmcc.js";
 import {
   dataEventIdOf,
+  MAX_MODULE_SIZE,
   ModuleBuilder,
   parseDdb,
   parseDii,
@@ -235,6 +236,13 @@ interface Building {
  */
 const GIVE_UP_ROUNDS = 4;
 
+/**
+ * 1つの `BmlDecoder` で同時に組み立てるモジュールの大きさの合計の上限 (64MiB)。
+ * 1つずつは `MAX_MODULE_SIZE` に収まっても、たくさん並べた DII や ES でメモリを使い切らせられる。
+ * 実際のカルーセルは全部で数 MB に収まる
+ */
+const MAX_CAROUSEL_SIZE = 64 * 1024 * 1024;
+
 /** カルーセルが流れている ES 1本ぶんの覚え書き */
 interface Component {
   componentId: number;
@@ -385,7 +393,22 @@ export class BmlDecoder {
     component.abandoned.clear();
     component.dii = dii;
     component.size = 0;
+    // ほかの ES で組み立て中のものと合わせて `MAX_CAROUSEL_SIZE` に収める
+    let budget = MAX_CAROUSEL_SIZE;
+    for (const other of this.components.values())
+      if (other !== component) budget -= other.size;
     for (const module of dii.modules) {
+      /*
+       * **大きすぎるモジュールは組み立てない。** 来ないものとして一覧から外す
+       * (受け側が待ち続けないように)
+       */
+      if (
+        module.moduleSize > MAX_MODULE_SIZE ||
+        component.size + module.moduleSize > budget
+      ) {
+        component.abandoned.add(module.moduleId);
+        continue;
+      }
       component.size += module.moduleSize;
       component.building.set(module.moduleId, {
         module,
@@ -558,7 +581,8 @@ export function inflate(
   if (compression === null) return data;
   if (compression.type !== COMPRESSION_ZLIB) return null;
   try {
-    return inflateSync(data);
+    // 伸ばした大きさにも上限を置く。小さな DDB から何 GB にも伸びるものを作れる
+    return inflateSync(data, { maxOutputLength: MAX_MODULE_SIZE });
   } catch {
     return null;
   }

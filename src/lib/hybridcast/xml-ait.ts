@@ -14,7 +14,7 @@ import type { HybridcastLink } from "#lib/live.js";
  * ```
  *
  * **名前空間の接頭辞は見ない** (`mhp:` のことも、無いこともある)。DOMParser はサーバとテストに無いので、要素の名前で拾う。
- * 開けるのは AUTOSTART と PRESENT だけで、URL の頭が http(s) でないものは出さない (電波の AIT と同じ。`server/live.ts` の `findHybridcast`)
+ * 開けるのは AUTOSTART と PRESENT だけで、URL の頭が http(s) でないものは出さない (電波の AIT と同じ。`@danything/arib/ait` の `parseAit`)
  */
 export function parseXmlAit(text: string): HybridcastLink[] {
   const apps: HybridcastLink[] = [];

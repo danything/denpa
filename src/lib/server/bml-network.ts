@@ -22,9 +22,11 @@
  * | 既定 | **オン** (設定画面で切れる)。オフの間は 403 で、`isIPConnected` は 0 を返す |
  * | 手 | GET と POST (`transmitTextDataOverIP`)。**中身は放送のアプリが組んだものをそのまま通すだけ** |
  * | 相手 | **公開アドレスのみ** (http も可 — 放送がそう作られている)。私設・ループバック・リンクローカル・マルチキャストは断る |
+ * | ポート | 80・443 と 8080・8443 だけ。公開アドレスでも、Web 以外のサービスへ繋ぐ道具にしない |
  * | 追いかけ | 3回まで。**行き先ごとに確かめ直す** — 1回目が公開でも、飛ばされた先が内側のことがある |
  * | 大きさ | 4MB まで |
- * | 待ち | 10秒 |
+ * | 待ち | 10秒。**追いかけるぶんと本文を読み終えるまでを含めた全体で** |
+ * | 同時 | 32 本まで。あふれたら待たせずに断る |
  * | 持ち物 | **何も渡さない** (cookie も認証も)。denpa の資格情報が外へ出ない |
  *
  * **全部記録に残します。** 何に繋いだか分からないまま外へ出ていく経路を
@@ -38,6 +40,7 @@ import { connect } from "node:net";
 
 import { error } from "@sveltejs/kit";
 
+import { normalize } from "./address";
 import { config } from "./config";
 import { settings } from "./settings";
 
@@ -45,8 +48,19 @@ import { settings } from "./settings";
 const HOPS = 3;
 /** 受け取る上限 */
 const LIMIT = 4 * 1024 * 1024;
-/** 待つ上限 */
+/** 待つ上限。追いかけるぶんと本文を読み終えるまでを含めた全体 */
 const TIMEOUT = 10_000;
+/**
+ * 同時に中継する上限。データ放送や Hybridcast のアプリは文書を開くと画像や script をまとめて
+ * 取りに来る (HTTP/2 の前段ならブラウザは一度に何十本も投げる) ので、ゆとりを持たせて 32。
+ * 待たせると溜まるだけなので、あふれたら断る
+ */
+const CONCURRENCY = 32;
+/**
+ * 繋いでよいポート (空は既定の 80・443)。放送の通信は Web の 80・443 で、ほかに使われうるのは
+ * 8080・8443 くらい。公開アドレスでも、メールや DB のような別のサービスへ繋ぐ道具にはしない
+ */
+const PORTS = new Set(["", "80", "443", "8080", "8443"]);
 
 /** 送るものの既定の形式 (データ放送の `Denbun=…`) */
 const FORM = "application/x-www-form-urlencoded";
@@ -76,16 +90,35 @@ export function refusalMessage(failure: unknown, fallback: string): string {
  * - **溜めさせない。** 放送の通信は「いまの値」を取りに来るもの
  * - `x-bml-relayed` は相手まで行けた印。相手の 502 をそのまま返すので、符号だけではこちらで断った
  *   502 と見分けが付かない。画面側はこれを見て成否を決める
+ * - **返したものを denpa の権限で動かさない。** 中身も形式も相手の言うままなので、`text/html` や SVG が
+ *   来ることがある。`sandbox` の CSP と `nosniff` を付け、直に開かれても denpa のオリジンの文書には
+ *   ならないようにする (`hc-relay.ts` と同じ考え)。形式は変えない — 画面側は fetch で読み、`content-type`
+ *   を見て文字コードや BML の文書かどうかを決める。CSP は fetch で読む分には効かない
  */
 export function relayed(got: Fetched): Response {
   return new Response(got.body as BodyInit, {
     status: got.status,
     headers: {
       "content-type": got.contentType,
+      "content-security-policy": "sandbox; default-src 'none'",
+      "x-content-type-options": "nosniff",
       "cache-control": "no-store",
       "x-bml-relayed": "1",
     },
   });
+}
+
+/**
+ * fetch・XHR からの読み込みでなければ 403 (`/api/bml/proxy` と `/api/bml/post` の入口)。
+ *
+ * 中継を読むのは画面の fetch だけ (`DataBroadcast`・`HybridcastFrame`)。ページとして開かれたり、
+ * `<img>` や `<script>` から読まれたりする筋合いは無いので、相手に繋ぐ前に断る。
+ * `sec-fetch-dest` を送らない古いブラウザは通す (その分は `relayed` の CSP で守る)
+ */
+export function requireFetch(request: Request): void {
+  const dest = request.headers.get("sec-fetch-dest");
+  if (dest !== null && dest !== "empty")
+    error(403, "画面の通信からのみ使えます");
 }
 
 /** 双方向を切ってあるなら 403。`/api/bml/*` のどのエンドポイントも入口で呼ぶ (Hybridcast の入れ物も) */
@@ -116,67 +149,49 @@ if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
 /**
  * そのアドレスへ繋いでよいか。**内側を向いていたら断る。**
  *
- * IPv4 は数で、IPv6 は綴りで見ます。`::ffff:` で始まるものは IPv4 を
- * 被せただけなので、剥がしてから見ないと素通りします
+ * 綴りは `normalize` (address.ts) でそろえてから数で見ます。省かない書き方も、
+ * `::ffff:` で IPv4 を被せただけのもの (16進の綴りも) も、同じ数になる。
+ * IPv6 は**公開のユニキャスト (2000::/3) だけを通す** — 断る範囲を並べるやり方では、
+ * 並べ忘れた範囲 (サイトローカルや IPv4 互換) が素通りしていた
  */
 export function isPublicAddress(raw: string): boolean {
-  /*
-   * **IPv6 は先に URL の綴りへ直す** (`0:0:0:0:0:0:0:1` → `::1`、`::ffff:127.0.0.1` → `::ffff:7f00:1`)。
-   * 綴りで見るので、省かない書き方のループバックが素通りしていた
-   */
-  const address = raw.includes(":") ? canonicalV6(raw) : raw;
-  /*
-   * `::ffff:1.2.3.4` のほかに **16進の綴り (`::ffff:0102:0304`) も受ける** —
-   * `new URL()` は括弧の中のドット形をこちらに直すので、ドット形だけ見ていると
-   * `http://[::ffff:127.0.0.1]/` が素通りする
-   */
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
-  const hexMapped = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/i.exec(address);
-  const target =
-    mapped !== null
-      ? mapped[1]!
-      : hexMapped !== null
-        ? [
-            Number.parseInt(hexMapped[1]!, 16) >> 8,
-            Number.parseInt(hexMapped[1]!, 16) & 255,
-            Number.parseInt(hexMapped[2]!, 16) >> 8,
-            Number.parseInt(hexMapped[2]!, 16) & 255,
-          ].join(".")
-        : address;
+  const address = normalize(raw);
+  if (address === null) return false;
+  if (!address.includes(":")) return isPublicV4(address);
 
-  if (target.includes(":")) {
-    const lower = target.toLowerCase();
-    // ループバック / 未指定 / リンクローカル (fe80::/10) / ユニークローカル (fc00::/7)
-    if (lower === "::1" || lower === "::") return false;
-    if (/^fe[89ab]/.test(lower)) return false;
-    if (/^f[cd]/.test(lower)) return false;
-    return true;
-  }
+  const g = address.split(":").map((group) => Number.parseInt(group, 16));
+  const v4 = (high: number, low: number) =>
+    [high >> 8, high & 255, low >> 8, low & 255].join(".");
+  /*
+   * **IPv4 を埋め込んだ形式は、埋め込まれた IPv4 で見る。** NAT64 (64:ff9b::/96) と
+   * 6to4 (2002::/16) は、着く先が中の IPv4 そのもの
+   */
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((n) => n === 0))
+    return isPublicV4(v4(g[6]!, g[7]!));
+  if (g[0] === 0x2002) return isPublicV4(v4(g[1]!, g[2]!));
+  /*
+   * ここから先は公開のユニキャストだけ。::/96 (未指定・ループバック・IPv4 互換)・
+   * ユニークローカル・リンクローカル・サイトローカル・マルチキャストはここで外れる
+   */
+  if ((g[0]! & 0xe000) !== 0x2000) return false;
+  // Teredo (2001::/32) は中の IPv4 が伏せてあって確かめられない。文書用 (2001:db8::/32) はどこにも着かない
+  if (g[0] === 0x2001 && (g[1] === 0 || g[1] === 0xdb8)) return false;
+  return true;
+}
 
-  const parts = target.split(".").map(Number);
-  if (
-    parts.length !== 4 ||
-    parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)
-  )
-    return false;
-  const [a, b] = parts;
-  if (a === undefined || b === undefined) return false;
+/** IPv4 (`normalize` した形式) へ繋いでよいか */
+function isPublicV4(address: string): boolean {
+  const [a, b, c] = address.split(".").map(Number);
+  if (a === undefined || b === undefined || c === undefined) return false;
   if (a === 0 || a === 10 || a === 127) return false;
   if (a === 169 && b === 254) return false; // リンクローカル (雲のメタデータもここ)
   if (a === 172 && b >= 16 && b <= 31) return false;
   if (a === 192 && b === 168) return false;
+  if (a === 192 && b === 0 && c === 0) return false; // プロトコル用 (NAT64 や DS-Lite の機器)
+  if (a === 198 && (b === 18 || b === 19)) return false; // 機器の性能試験用
   if (a === 100 && b >= 64 && b <= 127) return false; // 事業者内 (CGNAT)
   if (a >= 224) return false; // マルチキャストと予約
   return true;
-}
-
-/** IPv6 を `new URL()` と同じ綴りに直す。アドレスとして読めないものはそのまま (繋ぐ所で失敗する) */
-function canonicalV6(address: string): string {
-  try {
-    return new URL(`http://[${address}]/`).hostname.slice(1, -1);
-  } catch {
-    return address;
-  }
 }
 
 /**
@@ -253,6 +268,8 @@ export async function allowed(
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Refused(`http か https のみ使えます (${url.protocol})`);
   }
+  if (!PORTS.has(url.port))
+    throw new Refused(`このポートには繋ぎません (${url.port})`);
   return { url, address: await resolvable(url.hostname) };
 }
 
@@ -274,6 +291,7 @@ function doRequest(
   address: string,
   method: "GET" | "POST",
   body: Uint8Array | undefined,
+  deadline: number,
   contentType = FORM,
 ): Promise<{
   status: number;
@@ -303,7 +321,6 @@ function doRequest(
         ...(https
           ? { servername: url.hostname, rejectUnauthorized: false }
           : {}),
-        timeout: TIMEOUT,
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -312,6 +329,7 @@ function doRequest(
           size += chunk.length;
           // **受け取りながら測る。** 上限を超えたぶんは渡さずに断る
           if (size > LIMIT) {
+            clearTimeout(timer);
             req.destroy();
             reject(new Refused(`大きすぎます (${size} バイト)`));
             return;
@@ -319,6 +337,7 @@ function doRequest(
           chunks.push(chunk);
         });
         res.on("end", () => {
+          clearTimeout(timer);
           resolve({
             status: res.statusCode ?? 0,
             location: res.headers.location ?? null,
@@ -327,11 +346,24 @@ function doRequest(
             body: new Uint8Array(Buffer.concat(chunks)),
           });
         });
-        res.on("error", reject);
+        res.on("error", (failure) => {
+          clearTimeout(timer);
+          reject(failure);
+        });
       },
     );
-    req.on("timeout", () => req.destroy(new Error("時間切れ")));
-    req.on("error", reject);
+    /*
+     * **締め切りは本文を読み終えるまで。** 通信の途切れだけを見る `timeout` では、少しずつ
+     * 送り続ける相手にいつまでも付き合わされる
+     */
+    const timer = setTimeout(
+      () => req.destroy(new Refused("時間切れです")),
+      Math.max(0, deadline - Date.now()),
+    );
+    req.on("error", (failure) => {
+      clearTimeout(timer);
+      reject(failure);
+    });
     req.end(body);
   });
 }
@@ -372,13 +404,44 @@ export function postForBml(
   return follow(raw, "POST", body, contentType);
 }
 
+/** いま中継している数 (`CONCURRENCY` まで) */
+let running = 0;
+
+/**
+ * 同時の数を数えながら走らせる。**あふれたら待たせずに断る** — 待ち行列を持つと、
+ * 呼び続けられたときにそこへ溜まるだけになる
+ */
+export async function limited<T>(task: () => Promise<T>): Promise<T> {
+  if (running >= CONCURRENCY)
+    throw new Refused(
+      "中継が混み合っています (しばらくしてからやり直してください)",
+    );
+  running++;
+  try {
+    return await task();
+  } finally {
+    running--;
+  }
+}
+
 /** 飛ばされるのを1つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
-async function follow(
+function follow(
   raw: string,
   first: "GET" | "POST",
   body: Uint8Array | undefined,
   contentType = FORM,
 ): Promise<Fetched> {
+  return limited(() => hops(raw, first, body, contentType));
+}
+
+async function hops(
+  raw: string,
+  first: "GET" | "POST",
+  body: Uint8Array | undefined,
+  contentType: string,
+): Promise<Fetched> {
+  // 名前を引くのも含めて、全体で `TIMEOUT` まで
+  const deadline = Date.now() + TIMEOUT;
   let { url, address } = await allowed(raw);
   let method = first;
   for (let hop = 0; ; hop++) {
@@ -387,6 +450,7 @@ async function follow(
       address,
       method,
       method === "POST" ? body : undefined,
+      deadline,
       contentType,
     );
 
@@ -427,25 +491,27 @@ export async function confirmReachable(
     : (destination.replace(/^\/+/, "").split("/")[0] ?? "");
   if (host === "") throw new Refused("宛先がありません");
 
-  const started = Date.now();
-  // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
-  const address = await resolvable(host);
-  return await new Promise((resolve) => {
-    const socket = connect({
-      host: address,
-      port: 443,
-      timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)),
-    });
-    const done = (success: boolean) => {
-      socket.destroy();
-      resolve({
-        success,
-        ipAddress: address,
-        responseTimeMillis: success ? Date.now() - started : null,
+  return limited(async () => {
+    const started = Date.now();
+    // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
+    const address = await resolvable(host);
+    return await new Promise((resolve) => {
+      const socket = connect({
+        host: address,
+        port: 443,
+        timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)),
       });
-    };
-    socket.once("connect", () => done(true));
-    socket.once("timeout", () => done(false));
-    socket.once("error", () => done(false));
+      const done = (success: boolean) => {
+        socket.destroy();
+        resolve({
+          success,
+          ipAddress: address,
+          responseTimeMillis: success ? Date.now() - started : null,
+        });
+      };
+      socket.once("connect", () => done(true));
+      socket.once("timeout", () => done(false));
+      socket.once("error", () => done(false));
+    });
   });
 }

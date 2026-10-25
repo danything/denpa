@@ -173,6 +173,8 @@ export function parseAit(section: Uint8Array): Ait | null {
     }
     // **URL の無いものは出さない。** 在ることだけ言われても行き先が無い
     if (base === null) continue;
+    // **http(s) でないものも出さない。** この URL は画面で `window.open` に渡る (`javascript:` などを開かせない。XML の AIT と同じ)
+    if (!/^https?:\/\//i.test(base)) continue;
     applications.push({
       organisationId,
       applicationId,

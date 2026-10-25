@@ -1,0 +1,1 @@
+ALTER TABLE `device_codes` ADD `source` text DEFAULT '' NOT NULL;

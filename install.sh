@@ -116,17 +116,17 @@ ensure_genkan() {
     return 1
   fi
   if port_used 80 || port_used 443; then
-    say "80 か 443 が使われているので genkan は入れません (http://localhost:3000 で開きます)"
+    say "80 か 443 が使われているので genkan は入れません (ポート 3000 で開きます)"
     return 1
   fi
   # Mac の /usr/bin/git は開発者ツールが無いと入れるダイアログを出すだけの代役なので、そちらも見る
   if ! command -v git >/dev/null 2>&1 || { [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; }; then
-    say "git が無いので genkan は入れません (http://localhost:3000 で開きます)"
+    say "git が無いので genkan は入れません (ポート 3000 で開きます)"
     return 1
   fi
   say "genkan を $HOME/genkan に入れます (http://denpa.localhost で開けるように)"
   (cd "$HOME" && curl -fsSL https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s) \
-    || { say "genkan を入れられませんでした (http://localhost:3000 で開きます)"; return 1; }
+    || { say "genkan を入れられませんでした (ポート 3000 で開きます)"; return 1; }
   genkan_running
 }
 
@@ -136,18 +136,33 @@ ensure_genkan() {
 # **私設網の外から来たものは genkan で断る。** denpa から見た送り主は genkan のコンテナ (私設網) に
 # なるので、TRUSTED_NETWORKS では外と内を見分けられない。ほかのアプリのために 80 番を外へ開けて
 # いると、Host を偽るだけでインターネットから素通りになる
-GENKAN_OVERRIDE='services:
-  denpa:
-    labels:
-      caddy: http://denpa.localhost
-      caddy.@outside: not remote_ip private_ranges
-      caddy.respond: "@outside 403"
-      caddy.reverse_proxy: "{{upstreams 3000}}"
-    networks: [default, genkan]
+genkan_override() {
+  printf '%s\n' 'services:' '  denpa:' '    labels:' \
+    '      caddy: http://denpa.localhost' \
+    '      caddy.@outside: not remote_ip private_ranges' \
+    '      caddy.respond: "@outside 403"' \
+    '      caddy.reverse_proxy: "{{upstreams 3000}}"'
+  genkan_env
+  printf '%s\n' '    networks: [default, genkan]' '' 'networks:' '  genkan:' '    external: true'
+}
 
-networks:
-  genkan:
-    external: true'
+# **genkan を前段として認める** (denpa の environment の断片)。genkan のネットワークを TRUSTED_PROXIES に書き、
+# genkan が付ける X-Forwarded-For から本当の接続元を読ませる。このマシンのブラウザ (http://denpa.localhost) は
+# そのネットワークのゲートウェイ (このマシン自身) から来たように見えるので、TRUSTED_NETWORKS にはそこだけ足す。
+# genkan のネットワークごと信頼すると、genkan 越しの人が全員当たってしまう (docs/auth.md)。
+# ネットワークの範囲は Docker が決めるので、ここで調べて書く。読めなければ何も書かず、画面にそう出す
+genkan_env() {
+  net=$(docker network inspect genkan -f '{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}}{{println}}{{end}}' 2>/dev/null \
+    | grep -m1 '^[0-9.]*/[0-9]* [0-9.]*$' || true)
+  if [ -z "$net" ]; then
+    say "genkan のネットワークの範囲が読めず、TRUSTED_PROXIES を書けませんでした。genkan 越しに入れなければ docs/auth.md を見て compose.override.yml に足してください" >&2
+    return 0
+  fi
+  printf '%s\n' '    environment:' \
+    '      # genkan を前段として認める。このマシンのブラウザは genkan のゲートウェイから来たように見える (docs/auth.md)' \
+    "      TRUSTED_PROXIES: ${net% *}" \
+    "      TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,${net#* }"
+}
 
 # ~/denpa で docker compose。-f を付けないので compose.yml と compose.override.yml を Compose が自分で重ねる
 compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
@@ -187,14 +202,19 @@ start_denpa() {
       if [ "$genkan" = yes ]; then
         echo "#"
         echo "# genkan (http://denpa.localhost) への登録は install.sh が書いた"
-        echo "$GENKAN_OVERRIDE"
+        genkan_override
       else
         echo "services: {}"
       fi
     } > "$override"
   elif ! grep -q 'denpa.localhost' "$override" && genkan_running; then
     say "compose.override.yml には触りません。genkan の http://denpa.localhost で開くなら、次を足して流し直してください:"
-    printf '%s\n' "$GENKAN_OVERRIDE"
+    genkan_override
+  elif grep -q 'denpa.localhost' "$override" && ! grep -q 'TRUSTED_PROXIES' "$override" && genkan_running; then
+    # 前のバージョンが書いた登録。既定の TRUSTED_NETWORKS から Docker のネットワーク (172.16.0.0/12) を外したので、
+    # このままでは genkan 越しに入れない
+    say "compose.override.yml には触りません。genkan の http://denpa.localhost で開くには、denpa: の下に次を足して流し直してください:"
+    genkan_env
   fi
   compose pull
   # 録画中に上げ直すと、録画が終わるまで待ってから入れ替わる (stop_grace_period)
@@ -220,6 +240,9 @@ wait_and_open() {
   for _ in $(seq 90); do
     if curl -fsS -o /dev/null "$URL/api/health" 2>/dev/null; then
       url=$URL
+      # Linux の Docker は localhost への接続を中継し、送信元が Docker のゲートウェイに見える (既定の
+      # TRUSTED_NETWORKS に入らない)。このマシンのブラウザでも LAN の IP で開く
+      if [ "$(uname -s)" = Linux ] && printf '%s' "$1" | grep -Eq '^[0-9.]+$'; then url="http://$1:3000"; fi
       # genkan 越しにも答えれば、そちらを開く (Caddy がラベルを読むまで少し掛かる)
       if [ "$2" = yes ]; then
         for _ in $(seq 15); do
@@ -230,7 +253,7 @@ wait_and_open() {
           sleep 2
         done
       fi
-      say "起動しました: $url (このマシンからは $URL でも開けます。LAN のほかの機器からは http://$1:3000)"
+      say "起動しました: $url (LAN のほかの機器からは http://$1:3000)"
       [ "$open_browser" = yes ] || return 0
       if [ "$(uname -s)" = Darwin ]; then
         open "$url"
@@ -260,7 +283,9 @@ linux_main() {
   docker_ready "https://get.docker.com の手順で入れてから、もう一度流してください" \
     "sudo systemctl start docker で起こしてから、もう一度流してください" || exit 1
 
-  ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+  # LAN の IP は外へ出る経路の送信元から取る (hostname -I の先頭は docker0 の 172.17.0.1 のこともある)
+  ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' || true)
+  [ -n "$ip" ] || ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   ref=$(version)
   start_denpa compose.prod.yml "$ref" "${ip:-$(hostname)}"
 }

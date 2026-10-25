@@ -26,11 +26,12 @@ services:
       TZ: Asia/Tokyo
       TUNER_AGENT_URL: http://host.docker.internal:25252
       ENCODE_CONCURRENCY: "2"
-      # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じプライベートネットワーク。
-      # ブラウザから localhost で入ると、コンテナに見える送信元は Docker の
-      # ネットワークの出口 (172.16.0.0/12 か 192.168.0.0/16 の中) なので、これで通る。
+      # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じ家の中のネットワーク。
+      # Mac のブラウザから localhost で入ったときの送信元は Docker の作りで変わる (Docker Desktop なら 192.168.65.x で、これで通る)。
+      # 172.16.0.0/12 (Docker のネットワーク) は入れない (前段を同じネットワークに置くと、前段越しの人が全員当たる)。
+      # localhost で断られたら、画面に出る接続元を compose.override.yml の TRUSTED_NETWORKS に足す。
       # LAN のほかの機器からも通る (家の外に出すなら OIDC を使う。docs/auth.md)
-      TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+      TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8
     volumes:
       # DB は名前付きボリュームに置く (SQLite のロックが、OS から見せたフォルダ越しだと当てにならない)
       - denpa-data:/data

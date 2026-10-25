@@ -30,7 +30,9 @@ services:
       EPG_COLLECT_INTERVAL: "60000"
       SCHEDULER_TICK: "2000"
       ENCODE_CONCURRENCY: "2"
-      # 開発では誰でも通す。来るのは genkan (genkan ネットワークの中) からだけ
+      # 開発では誰でも通す。来るのは genkan (genkan ネットワークの中) からだけ。
+      # 前段 (genkan) と同じネットワークを信頼するので起動時に警告が出るが、開発ではそのままでよい
+      # (開発のサーバは server.js を通らず、TRUSTED_PROXIES を読まない)
       TRUSTED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     volumes:
       - .:/app

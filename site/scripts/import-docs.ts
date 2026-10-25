@@ -525,6 +525,8 @@ function describe(body: string): string {
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/<[^>]+>/g, "")
+    // 閉じていないタグの切れ端も残さない
+    .replace(/[<>]/g, "")
     .replace(/\*\*|__|`/g, "")
     .replace(/\s+/g, " ")
     .trim();

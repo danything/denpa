@@ -251,7 +251,7 @@ function Start-Denpa([string]$Ref, [switch]$NoOpen) {
                 'ENCODE_CONCURRENCY=2',
                 '# 誰を通すか (docs/auth.md)。169.254.0.0/16 はこの PC のブラウザ (wslc はポートを中継するので、',
                 '# localhost から入るとこう見える)。LAN のほかの機器は本当の IP のまま届く',
-                'TRUSTED_NETWORKS=169.254.0.0/16,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12'
+                'TRUSTED_NETWORKS=169.254.0.0/16,192.168.0.0/16,10.0.0.0/8'
             ) -join "`n") + "`n")
     }
 

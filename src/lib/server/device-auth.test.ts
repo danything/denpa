@@ -13,6 +13,7 @@ const {
   issueCode,
   liveTokens,
   MAX_PENDING,
+  MAX_PENDING_PER_SOURCE,
   newUserCode,
   normalizeUserCode,
   poll,
@@ -20,6 +21,7 @@ const {
   pruneCodes,
   revokeToken,
   sha256,
+  sourceKey,
   TOKEN_PREFIX,
   verifyToken,
   viewCode,
@@ -27,9 +29,16 @@ const {
 const { orm } = await import("./db");
 const { apiTokens, deviceCodes } = await import("./schema");
 
+/** 接続元をテストごとに変える (同じ接続元の上限に掛からないように) */
+let sources = 0;
+function nextSource(): string {
+  sources++;
+  return `10.1.${sources >> 8}.${sources & 255}`;
+}
+
 /** コードを出して、テストの間だけ時計を進めて扱う */
 function pair(name = "居間のテレビ", at = 1_000_000) {
-  const issued = issueCode(name, at);
+  const issued = issueCode(name, nextSource(), at);
   if (issued === null) throw new Error("コードが出ない");
   return issued;
 }
@@ -134,13 +143,70 @@ describe("ペアリングの流れ", () => {
     expect(poll("nope", 7_000_000)).toEqual({ error: "invalid_grant" });
   });
 
-  test("有効なコードが上限に達したら、もう出さない (誰でも呼べるので)", () => {
+  /*
+   * **呼び続ける1台がいても、ほかの人はペアリングできる。** 前は全体の上限を全員で
+   * 分け合っていて、埋められると10分のあいだ誰もコードを貰えなかった
+   */
+  test("1つの接続元が呼び続けても、持てるのは上限まで (古いものから切れる)", () => {
     const at = 8_000_000_000;
-    for (let i = 0; i < MAX_PENDING; i++)
-      expect(issueCode(`満員${i}`, at)).not.toBeNull();
-    expect(issueCode("あふれ", at)).toBeNull();
+    const flood = Array.from({ length: 10 }, (_, i) =>
+      issueCode(`連打${i}`, "203.0.113.7", at + i),
+    );
+    expect(flood.every((issued) => issued !== null)).toBe(true);
+    const states = flood.map(
+      (issued) => viewCode(issued!.userCode, at + 10)?.state,
+    );
+    expect(states.filter((state) => state === "pending")).toHaveLength(
+      MAX_PENDING_PER_SOURCE,
+    );
+    // 残るのは新しいほう
+    expect(states.slice(-MAX_PENDING_PER_SOURCE)).toEqual(
+      Array(MAX_PENDING_PER_SOURCE).fill("pending"),
+    );
+    // 切れたコードの端末には expired_token (コードを貰い直す)
+    expect(poll(flood[0]!.deviceCode, at + 10)).toEqual({
+      error: "expired_token",
+    });
+
+    // ほかの接続元のコードには触らない
+    const mine = issueCode("居間", "198.51.100.2", at + 20);
+    for (let i = 0; i < 10; i++)
+      issueCode(`連打${i}`, "203.0.113.7", at + 30 + i);
+    expect(viewCode(mine!.userCode, at + 40)?.state).toBe("pending");
+  });
+
+  test("IPv6 は /64 で1つの接続元として数える", () => {
+    expect(sourceKey("2001:db8:1:2::a")).toBe(sourceKey("2001:db8:1:2::b"));
+    expect(sourceKey("2001:db8:1:2::a")).not.toBe(sourceKey("2001:db8:1:3::a"));
+    expect(sourceKey("::ffff:192.0.2.1")).toBe("192.0.2.1");
+    expect(sourceKey("")).toBe("");
+  });
+
+  test("全体が埋まったら、許されていないコードを古いものから切らせて出す", () => {
+    const at = 8_500_000_000;
+    const approved = issueCode("許し済み", "192.0.2.200", at);
+    approve(approved!.userCode, "trusted-network", at);
+    const issued = Array.from({ length: MAX_PENDING }, (_, i) =>
+      issueCode(`満員${i}`, `192.0.2.${i}`, at + 1 + i),
+    );
+    expect(issued.every((code) => code !== null)).toBe(true);
+    // 押し出されたのは許されていないうちの古いもの。許したものは受け取りに来る途中なので残す
+    expect(viewCode(issued[0]!.userCode, at + 100)?.state).toBe("expired");
+    expect(viewCode(issued.at(-1)!.userCode, at + 100)?.state).toBe("pending");
+    expect(viewCode(approved!.userCode, at + 100)?.state).toBe("approved");
+  });
+
+  test("有効なコードが全部許し済みで空けられなければ出さない", () => {
+    const at = 8_800_000_000;
+    for (let i = 0; i < MAX_PENDING; i++) {
+      const issued = issueCode(`許し済み${i}`, `192.0.2.${i}`, at);
+      approve(issued!.userCode, "trusted-network", at);
+    }
+    expect(issueCode("あふれ", "198.51.100.9", at)).toBeNull();
     // 切れれば、また出せる
-    expect(issueCode("あふれ", at + CODE_TTL_MS)).not.toBeNull();
+    expect(
+      issueCode("あふれ", "198.51.100.9", at + CODE_TTL_MS),
+    ).not.toBeNull();
   });
 });
 

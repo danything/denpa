@@ -1,4 +1,6 @@
-import { inAny, networks, unreadable } from "./address";
+import { type NetworkInterfaceInfo, networkInterfaces } from "node:os";
+
+import { inAny, networks, normalize, overlaps, unreadable } from "./address";
 import { config } from "./config";
 import { enabled as oidcEnabled } from "./oidc";
 
@@ -80,14 +82,28 @@ export function warnIfClosed(): void {
   );
 }
 
-/** ログイン方法が無い相手への返事。理由が分からない 403 にしない */
-export function denied(): Response {
-  const text = configured()
-    ? "このページは、信頼したネットワーク (TRUSTED_NETWORKS) の中からでないと開けません"
-    : "ログイン方法が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)";
+/**
+ * ログイン方法が無い相手への返事。理由が分からない 403 にしない。
+ *
+ * 接続元のアドレスも書く。localhost で入ると Docker の中継を通って思わぬアドレスに見えることがあり、
+ * 本人が見れば何を `TRUSTED_NETWORKS` に足せばよいか分かる (相手のアドレスを相手に返すだけ)。
+ * 信頼するネットワークの中から知らない名前で来たときは (`foreignHost`)、そう書く
+ */
+export function denied(address = "", host: string | null = null): Response {
+  const text = !configured()
+    ? "ログイン方法が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)"
+    : host !== null
+      ? `信頼したネットワークの中からでも、「${host || "(名前なし)"}」という名前ではログインなしで開けません。` +
+        "この名前で開くなら ALLOWED_HOSTS に足してください (docs/auth.md)"
+      : "このページは、信頼したネットワーク (TRUSTED_NETWORKS) の中からでないと開けません" +
+        ` (接続元: ${address || "不明"})`;
   return new Response(text, {
     status: 403,
-    headers: { "content-type": "text/plain; charset=utf-8" },
+    // 本文に相手が送ってきた名前が入るので、HTML として読ませない
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "x-content-type-options": "nosniff",
+    },
   });
 }
 
@@ -105,18 +121,153 @@ export function needsPairing(): Response {
 }
 
 /**
- * **何も聞かずに通す相手か。** 見るのはアドレスだけ (`TRUSTED_NETWORKS`、CIDR の
- * カンマ区切り)。
+ * **何も聞かずに通す相手か。** 見るのはアドレス (`TRUSTED_NETWORKS`、CIDR の
+ * カンマ区切り)。名前は `foreignHost` で別に確かめる (hooks が両方を見る)。
  *
  * **ここに当たると OIDC も掛かりません。** LAN のテレビのアプリ (denpa-tv)
  * に資格情報を入れずに使わせるのが狙いです。
- *
- * **どの名前で来たかは問いません。** 前段 (リバースプロキシ) は名前を届けるだけで、
- * 名前ごとに何かを分けてはいない。ここで名前まで見ると条件が二か所に散り、
- * 片方だけ直して食い違うほうが危ない。
  */
 export function trusted(address: string): boolean {
   return inAny(address, networks(config.trustedNetworks));
+}
+
+/** 名前の後ろがこれなら、外の DNS では引けない (家の中だけの名前。`.localhost` はブラウザが自分に向ける) */
+const LOCAL_SUFFIXES = [
+  ".localhost",
+  ".local",
+  ".lan",
+  ".home.arpa",
+  ".internal",
+];
+
+/**
+ * **信頼したネットワークから、ログインなしで開いてよい名前か。**
+ *
+ * アドレスだけで通すと、DNS リバインディングで抜けられる。悪いサイトが自分の名前を LAN の
+ * denpa の IP に向け直すと、そのサイトを開いた LAN の人のブラウザは、denpa を「そのサイトと
+ * 同じオリジン」として読み書きできる (接続元は LAN の人なので `TRUSTED_NETWORKS` に当たり、
+ * CSRF の判定も `Host` から組んだ origin と `Origin` が同じ名前なので通る)。
+ * そこで、攻める側が自分の名前として用意できないものだけを通す:
+ *
+ * - IP の直書き (IPv4・IPv6)、`localhost`、ドットの無い名前
+ * - 家の中だけの名前 (`LOCAL_SUFFIXES`)
+ * - 自分の名前として設定にあるもの (`ALLOWED_HOSTS`、`PWA_NAMES`)
+ *
+ * `host` は `Host` ヘッダの値 (ポート付きでよい)。読めない形なら通さない
+ */
+export function knownHost(host: string): boolean {
+  const name = bareName(host);
+  if (name === null) return false;
+  if (normalize(name) !== null) return true;
+  if (!/^[a-z0-9_.-]+$/.test(name)) return false;
+  if (name === "localhost" || !name.includes(".")) return true;
+  if (LOCAL_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
+  return ownNames().some((entry) =>
+    entry.startsWith(".")
+      ? name === entry.slice(1) || name.endsWith(entry)
+      : name === entry,
+  );
+}
+
+/** ポートと `[]` を外し、小文字にして、最後のドットを落とす。空なら null */
+function bareName(host: string): string | null {
+  let name = host.trim().toLowerCase();
+  if (name.startsWith("[")) {
+    const end = name.indexOf("]");
+    return end > 1 ? name.slice(1, end) : null;
+  }
+  const colon = name.indexOf(":");
+  if (colon >= 0) name = name.slice(0, colon);
+  name = name.replace(/\.$/, "");
+  return name === "" ? null : name;
+}
+
+/** 設定にある自分の名前 (`ALLOWED_HOSTS` と、`PWA_NAMES` の `ホスト名=表示名` のホスト名) */
+function ownNames(): string[] {
+  const pwa = networks(config.pwaNames).map((raw) => raw.split("=")[0]!);
+  return [...networks(config.allowedHosts), ...pwa]
+    .map((raw) => raw.trim().toLowerCase().replace(/\.$/, ""))
+    .filter((raw) => raw !== "" && raw !== ".");
+}
+
+/** 知らせた名前。同じ名前で何度来ても1度だけ出す (ログを埋めないよう、覚えるのは上限まで) */
+const reported = new Set<string>();
+const MAX_REPORTED = 64;
+
+/**
+ * **知らない名前で来ていれば、その名前を返す** (`knownHost` に当たらないもの)。どれも知っていれば null。
+ * 名前が無ければ空文字 (通さない)。
+ *
+ * 見るのは `Host` と、`HOST_HEADER` を設定していればそのヘッダも (adapter が名前に使うほう)。
+ * `Host` はブラウザのスクリプトから変えられないが、`X-Forwarded-Host` のようなヘッダは
+ * 同じオリジンからなら付けられるので、どちらか片方だけでは足りない。
+ *
+ * 信頼したネットワークの中から知らない名前で来たときに呼ぶ。ログに理由を1度だけ出す
+ */
+export function foreignHost(headers: Headers, address: string): string | null {
+  const names = [headers.get("host")];
+  if (config.hostHeader !== "" && config.hostHeader !== "host") {
+    const forwarded = headers.get(config.hostHeader);
+    if (forwarded !== null) names.push(forwarded);
+  }
+  const foreign = names.find((name) => name === null || !knownHost(name));
+  if (foreign === undefined) return null;
+  const host = foreign ?? "";
+  if (!reported.has(host) && reported.size < MAX_REPORTED) {
+    reported.add(host);
+    console.warn(
+      `[auth] 信頼したネットワーク (${address}) から、知らない名前「${host || "(名前なし)"}」で来たので、ログインなしでは通しません。` +
+        "この名前で開くなら ALLOWED_HOSTS に足してください (docs/auth.md)",
+    );
+  }
+  return host;
+}
+
+/**
+ * **前段と同じネットワークを信頼していないか。** 当たれば、重なっているネットワークを返す。
+ *
+ * `TRUSTED_PROXIES` が空だと、前段 (Caddy・cloudflared など) 越しの接続元は前段のアドレスになる。
+ * 前段は denpa と同じ Docker のネットワークにいることが多く、そこが `TRUSTED_NETWORKS` に入っていると、
+ * インターネットから来た人も前段のアドレスで当たり、OIDC が掛からない。docker-proxy が IPv6 の
+ * 接続を Docker のゲートウェイから繋ぎ直すときも同じ。
+ *
+ * 自分のインターフェースのネットワークと `TRUSTED_NETWORKS` が重なっていて、`TRUSTED_PROXIES` が
+ * 空のときに当たる。ループバックとリンクローカル (`169.254.0.0/16`・`fe80::/10`) は見ない —
+ * ループバックは外から来ない。リンクローカルは IPv6 ならどのインターフェースにもあり、
+ * wslc はこの PC からの接続を `169.254.x.x` に見せる (install.ps1 が信頼している)
+ */
+export function sharedNetworks(
+  trustedList: string,
+  proxies: string,
+  interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>,
+): string[] {
+  if (networks(proxies).length > 0) return [];
+  const entries = networks(trustedList);
+  const shared: string[] = [];
+  for (const list of Object.values(interfaces)) {
+    for (const { internal, cidr } of list ?? []) {
+      if (internal || cidr === null) continue;
+      if (overlaps(cidr, "169.254.0.0/16") || overlaps(cidr, "fe80::/10"))
+        continue;
+      if (entries.some((entry) => overlaps(cidr, entry))) shared.push(cidr);
+    }
+  }
+  return shared;
+}
+
+/** 前段と同じネットワークを信頼していそうなら (`sharedNetworks`)、起動ログに出す */
+export function warnIfProxyHidden(): void {
+  const shared = sharedNetworks(
+    config.trustedNetworks,
+    config.trustedProxies,
+    networkInterfaces(),
+  );
+  if (shared.length === 0) return;
+  console.warn(
+    `[boot] TRUSTED_NETWORKS が、このコンテナのネットワーク (${shared.join("・")}) と重なっていて、TRUSTED_PROXIES が空です。\n` +
+      "       同じネットワークに前段 (リバースプロキシ・cloudflared など) を置いているなら、TRUSTED_PROXIES に前段のアドレスを書いてください。\n" +
+      "       書かないと、前段越しの人が全員信頼したネットワークから来たことになり、OIDC が掛かりません (docs/auth.md)",
+  );
 }
 
 /**

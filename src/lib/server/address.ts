@@ -36,6 +36,21 @@ export function inNetwork(address: string, entry: string): boolean {
 }
 
 /**
+ * 2つのネットワークに重なりがあるか (片方がもう片方を含む)。書き方は `inNetwork` と同じで、
+ * `172.18.0.3/16` のように中のアドレスで書いてもよい (OS が返すインターフェースの形)。
+ * IPv4 と IPv6 は互いに重ならない。読めなければ重ならない
+ */
+export function overlaps(a: string, b: string): boolean {
+  const left = parseEntry(a);
+  const right = parseEntry(b);
+  if (left === null || right === null || left.v4 !== right.v4) return false;
+  const shift = BigInt(
+    (left.v4 ? 32 : 128) - Math.min(left.length, right.length),
+  );
+  return left.value >> shift === right.value >> shift;
+}
+
+/**
  * 読めない項目 (書き損じ)。**黙って当たらないだけ**だと気づけないので、起動時に知らせるのに使う
  * (`TRUSTED_PROXIES` は server.js、`TRUSTED_NETWORKS` は auth.ts)
  */

@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { SOCKET_PATH } from "#lib/live.js";
 
 import { listen } from "./agent-events";
-import { warnIfClosed } from "./auth";
+import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { seedChannels } from "./channel-seed";
 import { config } from "./config";
 import { pruneCodes } from "./device-auth";
@@ -90,6 +90,8 @@ export function start(): void {
    * バックグラウンド処理より先にやる — `DENPA_AUTOSTART=0` でも出すべき
    */
   warnIfClosed();
+  // 前段と同じネットワークを信頼していそうなら知らせる (auth.sharedNetworks)
+  warnIfProxyHidden();
 
   /*
    * **GPU でエンコードできるか、ffmpeg に確かめさせておく** (hwenc.ts)。数秒かかるので

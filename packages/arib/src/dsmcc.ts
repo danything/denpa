@@ -193,42 +193,85 @@ export function parseDdb(section: Uint8Array): Ddb | null {
 }
 
 /**
- * 組み立て中のモジュール。**DII が言った大きさぶんの入れ物を先に用意して**、
- * DDB が来るたびに然るべき位置へ置く。
+ * 組み立てるモジュールの大きさの上限 (16MiB)。**これより大きいと言う DII は信じない。**
+ *
+ * `moduleSize` は32ビットで、そのまま信じると DII 1つで 4GB を確保させられる。
+ * 実際のデータ放送のモジュールは数 KB〜数百 KB、衛星のロゴも全局ぶんで数百 KB なので、
+ * 十分に余裕を見た値。zlib で伸ばしたあとの大きさにも同じ上限を使う ([bml.ts](bml.ts) の `inflate`)
+ */
+export const MAX_MODULE_SIZE = 16 * 1024 * 1024;
+
+/**
+ * 組み立て中のモジュール。DDB が来るたびに然るべき位置へ置く。
+ *
+ * **入れ物は届いたところまでしか確保しない。** DII の言う大きさを先に確保すると、
+ * 大きいと言うだけの DII でメモリを使い切らせられる。`MAX_MODULE_SIZE` を超える
+ * モジュールはブロックを受け取らない (いつまでも揃わない)。
  *
  * 順番は保証されない (途中から見れば真ん中から始まる) ので、
  * **受け取ったブロック番号を数えて**揃ったかを見る。
  */
 export class ModuleBuilder {
-  readonly data: Uint8Array;
-  private readonly received = new Set<number>();
+  private buffer = new Uint8Array(0);
+  /** 受け取ったブロック番号 (1ブロック1ビット)。最初のブロックが来てから確保する */
+  private received: Uint8Array | null = null;
+  private count = 0;
   private readonly total: number;
 
   constructor(
     readonly moduleVersion: number,
-    moduleSize: number,
+    private readonly moduleSize: number,
     private readonly blockSize: number,
   ) {
-    this.data = new Uint8Array(moduleSize);
     this.total = Math.ceil(moduleSize / blockSize);
+  }
+
+  /** 組み立てた中身。まだ届いていないところは 0。**揃ってから読むこと** (読むとモジュールの大きさぶんを確保する) */
+  get data(): Uint8Array {
+    if (
+      this.buffer.length < this.moduleSize &&
+      this.moduleSize <= MAX_MODULE_SIZE
+    )
+      this.grow(this.moduleSize);
+    return this.buffer;
   }
 
   /** 受け取ったブロックの数 (同じブロックを2度受けても1つ) */
   get blocks(): number {
-    return this.received.size;
+    return this.count;
   }
 
   /** 揃ったか。**大きさ 0 のモジュールは初めから揃っている** (運ぶブロックが無いので DDB を待たない) */
   get complete(): boolean {
-    return this.received.size >= this.total;
+    return this.count >= this.total;
   }
 
   /** ブロックを1つ置く。**揃ったら true** */
   add(blockNumber: number, block: Uint8Array): boolean {
+    if (this.moduleSize > MAX_MODULE_SIZE) return false;
+    // blockSize を超えるブロックは受けない。重なったブロックで受け取る量が膨らむ
+    if (blockNumber >= this.total || block.length > this.blockSize)
+      return false;
     const at = this.blockSize * blockNumber;
-    if (at + block.length > this.data.length) return false;
-    this.data.set(block, at);
-    this.received.add(blockNumber);
+    if (at + block.length > this.moduleSize) return false;
+    if (at + block.length > this.buffer.length) this.grow(at + block.length);
+    this.buffer.set(block, at);
+    this.received ??= new Uint8Array(Math.ceil(this.total / 8));
+    const index = blockNumber >> 3;
+    const bit = 1 << (blockNumber & 7);
+    if ((this.received[index]! & bit) === 0) {
+      this.received[index] = this.received[index]! | bit;
+      this.count++;
+    }
     return this.complete;
+  }
+
+  /** 入れ物を広げる。何度も写し直さないよう倍々で、モジュールの大きさまで */
+  private grow(length: number): void {
+    const next = new Uint8Array(
+      Math.min(this.moduleSize, Math.max(length, this.buffer.length * 2)),
+    );
+    next.set(this.buffer);
+    this.buffer = next;
   }
 }

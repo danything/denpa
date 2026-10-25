@@ -41,9 +41,14 @@ denpa:
   # 決める (docs/auth.md)。前段のアドレスはクラスタの作りで決まるので既定は空 — 前段が
   # Pod か hostNetwork で動くなら、たいていクラスタの Pod の網 (k3s の既定は
   # 10.42.0.0/16) を入れればよい。空のまま前段の後ろに置くと接続元が前段のアドレスになり、
-  # trustedNetworks が誰にも当たらない (安全側に倒れるだけで、開きはしない)。
+  # trustedNetworks が誰にも当たらない。ただし前段のアドレスが trustedNetworks に入っていると、前段越しの
+  # 全員が当たって開いてしまう (起動時に警告を出す)。
   # (以前の addressHeader は廃止。設定していても読まない)
   trustedProxies: ""
+  # trustedNetworks からログインなしで開いてよい名前 (カンマ区切り。DNS リバインディングを防ぐ。docs/auth.md)。
+  # httpRoute.hostnames・ingress.hosts・pwaNames の名前と、IP の直書き・ドットの無い名前・.local や .lan などは
+  # 書かなくても通る。ほかの名前 (Tailscale の .tail1234.ts.net など) で開くなら書く。頭にドットでその下の名前全部
+  allowedHosts: ""
   # ホーム画面に置いたときの名前。`ホスト=名前` のカンマ区切り (docs/watch.md#ホーム画面に置く)
   pwaNames: ""
   # OIDC でのログイン (docs/auth.md)。**Secret の名前だけを渡し**、中身

@@ -3,7 +3,7 @@ import { eq, not } from "drizzle-orm";
 
 import { now, orm } from "#lib/server/db.js";
 import { webhooks } from "#lib/server/schema.js";
-import { send } from "#lib/server/webhook.js";
+import { send, webhookUrl } from "#lib/server/webhook.js";
 import { EVENTS } from "#lib/webhook-events.js";
 
 export function load() {
@@ -17,7 +17,8 @@ export const actions = {
   addWebhook: async ({ request }) => {
     const form = await request.formData();
     const url = String(form.get("url") ?? "").trim();
-    if (!/^https?:\/\//.test(url)) {
+    // 頭の綴りだけでなく URL として読めるかまで見る (`http://` だけ、のようなものを残さない)
+    if (!webhookUrl(url)) {
       return fail(400, { message: "http(s) で始まるURLを入れてください" });
     }
     // 何も選ばなければ全部の通知を受け取る

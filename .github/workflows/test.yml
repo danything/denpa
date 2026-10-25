@@ -22,6 +22,10 @@ concurrency:
 env:
   TZ: Asia/Tokyo
 
+# 読むだけ。書き込むジョブは無い
+permissions:
+  contents: read
+
 # **ジョブに割って同時に流します。**
 #
 # 1本に並べていた頃は 4分37秒 で、そのうち 181秒 が E2E でした。他は全部
@@ -189,8 +193,11 @@ jobs:
           curl -fsS http://localhost:3000/api/health; echo
           curl -fsS http://127.0.0.1:25252/denpa/tuners; echo
           # ランナーの 80 / 443 は空いているので genkan が入り、http://denpa.localhost で開ける
-          # (genkan のコンテナから来る要求が TRUSTED_NETWORKS の既定で通ることも含めて)
           curl -fsS --resolve denpa.localhost:80:127.0.0.1 http://denpa.localhost/api/health; echo
+          # 画面はログインなしで開ける: genkan 越しは、install.sh が書いた TRUSTED_PROXIES と genkan のゲートウェイで。
+          # 直には LAN の IP で (localhost は Docker のゲートウェイから来たように見えて、既定では信頼しない)
+          curl -fsS -o /dev/null --resolve denpa.localhost:80:127.0.0.1 http://denpa.localhost/
+          curl -fsS -o /dev/null "http://$(ip route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}'):3000/"
           # 上げ直し。手を入れた compose.override.yml には触らないこと
           echo '# 手で足した行' >> ~/denpa/compose.override.yml
           cp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
