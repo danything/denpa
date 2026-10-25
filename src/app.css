@@ -315,7 +315,7 @@
   --dp-warn-text: #fecc63; /* amber-150 */
   --dp-info-text: #0ccece; /* cyan-250 */
 }
-/* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ ---- */
+/* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ (動かすのはファイルの最後) ---- */
 .rec-dot {
   display: inline-block;
   flex-shrink: 0;
@@ -323,7 +323,6 @@
   height: 0.375rem;
   border-radius: var(--dp-radius-full);
   background: var(--dp-rec);
-  animation: rec-pulse var(--dp-pulse) ease-in-out infinite;
 }
 @keyframes rec-pulse {
   50% {
@@ -342,11 +341,8 @@ img[data-fade="pending"] {
 /*
  * ---- 一言だけ出して消える通知 (`.flash`。「保存しました」) ----
  * ふわっと出て (0.2 秒)、読めるだけ置き、ふわっと消える (0.3 秒)。
- * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)
+ * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)。動かすのはファイルの最後
  */
-.flash {
-  animation: flash var(--flash-for, 2.5s) linear both;
-}
 @keyframes flash {
   0% {
     opacity: 0;
@@ -594,22 +590,11 @@ thead th {
 /*
  * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表集め)。値が変わったら
  * なめらかに伸ばす (Pico の 0.15 秒より少し長く)。**動いているあいだ** (`.running`。付けるのは
- * 呼ぶ側 — `JobProgress` など) は、伸びたところの上に光の筋を流す。
+ * 呼ぶ側 — `JobProgress` など) は、伸びたところの上に光の筋を流す (流すのはファイルの最後)。
  * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
  */
 progress[value]::-webkit-progress-value {
   transition: inline-size var(--dp-duration) var(--dp-ease);
-}
-progress.running[value]::-webkit-progress-value {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(255 255 255 / 0.35) 50%,
-    transparent 100%
-  );
-  background-repeat: no-repeat;
-  background-size: 40% 100%;
-  animation: progress-shine var(--dp-shine) ease-in-out infinite;
 }
 @keyframes progress-shine {
   from {
@@ -2317,7 +2302,6 @@ dialog[open] > article {
     transparent 100%
   );
   transform: translateX(-100%);
-  animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
   pointer-events: none;
 }
 @keyframes skeleton-sweep {
@@ -2327,9 +2311,37 @@ dialog[open] > article {
 }
 
 /*
- * **動かさない設定の端末では、全部止めて終わった姿を見せる。** 移り変わりは時間のトークンを 0 に、
- * 繰り返すもの (録画中の点・光の筋・「保存しました」・骨組みの光) は動きそのものを外す。
- * 見せる画面の、巻いた量で組み上がる飾り (docs/design.md の「見せる画面」) を足すときも、ここで `animation: none`
+ * **動き続けるもの (録画中の点・光の筋・「保存しました」・骨組みの光) は、動かしてよい端末でだけ動かす。**
+ * 動きを減らす設定と、ソフトウェアで描いている端末 (`<html data-lite>`。`#lib/lite.ts`) では動きを足さず、
+ * 上の止まった姿のまま見せる (docs/design.md の「動き」)。遷移中のバー (`+layout.svelte` の `.nav-progress`) も同じ決まり
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-lite]) .rec-dot {
+    animation: rec-pulse var(--dp-pulse) ease-in-out infinite;
+  }
+  :root:not([data-lite]) .flash {
+    animation: flash var(--flash-for, 2.5s) linear both;
+  }
+  :root:not([data-lite]) progress.running[value]::-webkit-progress-value {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(255 255 255 / 0.35) 50%,
+      transparent 100%
+    );
+    background-repeat: no-repeat;
+    background-size: 40% 100%;
+    animation: progress-shine var(--dp-shine) ease-in-out infinite;
+  }
+  :root:not([data-lite]) .skeleton::after {
+    animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
+  }
+}
+
+/*
+ * **動かさない設定の端末では、全部止めて終わった姿を見せる。** 移り変わりは時間のトークンを 0 に
+ * (動き続けるものは、上でもう足していない)。
+ * 見せる画面の、巻いた量で組み上がる飾り (docs/design.md の「見せる画面」) を足すときは、ここで `animation: none`
  * にして組み上がった後の素の姿で見せる — 時間のトークンは巻いた量の動きには効かない。
  * 浮くもの (ヘッダーと操作の 1 行) は外さない。Pico がすぐ終わらせて、いつも浮いた形になる (「浮かせ方」)。
  * 上の決まりに勝つよう、ファイルの最後に置く
@@ -2340,14 +2352,5 @@ dialog[open] > article {
     --dp-duration-enter: 0s;
     --dp-duration-move: 0s;
     --dp-duration-exit: 0s;
-  }
-  .rec-dot,
-  .flash,
-  .skeleton::after {
-    animation: none;
-  }
-  progress.running[value]::-webkit-progress-value {
-    animation: none;
-    background-image: none;
   }
 }

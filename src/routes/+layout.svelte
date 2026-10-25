@@ -23,6 +23,7 @@
   import Icon from "#lib/components/player/Icon.svelte";
   import SearchField from "#lib/components/SearchField.svelte";
   import { denpaFontUrl } from "#lib/font.js";
+  import { markLite } from "#lib/lite.js";
   import { measure } from "#lib/measure.svelte.js";
   import { startOffline } from "#lib/offline.svelte.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
@@ -33,6 +34,9 @@
 
   // オフライン視聴の控えを読み、オンラインに戻ったら outbox を流す (docs/offline.md)
   onMount(() => startOffline());
+
+  // ソフトウェアで描いている端末では、動き続けるものを止める (`<html data-lite>`。開いた直後の一瞬だけは回る)
+  onMount(markLite);
 
   /*
    * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると狭い画面の下のタブ (とその上の操作の1行) を隠し、上へ戻すと出す。
@@ -565,24 +569,30 @@
   }
   /*
      * 遷移中のバー。**ヘッダーより上に重ねる** (z-index)。色は主の色で、
-     * 光の筋を左から右へ流す。動かせない設定の端末では筋を止めて色だけ出す
+     * 光の筋を左から右へ流す。筋を流すのは動かしてよい端末だけで、動きを減らす設定と
+     * ソフトウェアで描いている端末 (`data-lite`) では色だけ出す (`app.css` の最後と同じ決まり)
      */
   .nav-progress {
     position: fixed;
     inset: 0 0 auto 0;
     z-index: 60;
     height: 3px;
-    background:
-      linear-gradient(
-          90deg,
-          transparent 0%,
-          var(--pico-primary-background) 40%,
-          var(--pico-primary-background) 60%,
-          transparent 100%
-        )
-        0 0 / 40% 100% no-repeat,
-      color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
-    animation: nav-progress var(--dp-shine) ease-in-out infinite;
+    background: var(--pico-primary-background);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :global(:root:not([data-lite])) .nav-progress {
+      background:
+        linear-gradient(
+            90deg,
+            transparent 0%,
+            var(--pico-primary-background) 40%,
+            var(--pico-primary-background) 60%,
+            transparent 100%
+          )
+          0 0 / 40% 100% no-repeat,
+        color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
+      animation: nav-progress var(--dp-shine) ease-in-out infinite;
+    }
   }
   @keyframes nav-progress {
     from {
@@ -601,12 +611,6 @@
     to {
       background: var(--dp-float);
       box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .nav-progress {
-      animation: none;
-      background: var(--pico-primary-background);
     }
   }
   /*
