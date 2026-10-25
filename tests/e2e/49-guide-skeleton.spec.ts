@@ -253,7 +253,12 @@ test("狭い画面で「今日」を押しても、押してすぐマスが骨�
   await goto(page, "/guide?type=GR");
   await page.getByTestId("next-day").click();
   await expect(page).toHaveURL(/start=/);
-  await expect(page.getByTestId("program-button").first()).toBeVisible();
+  // 翌日は開いた時刻によっては番組が無い (作り物の番組はいまの前後にしか無い)。マスではなく、描き終えたことを待つ
+  await expect(page.getByTestId("guide-skeleton")).toHaveCount(0);
+  await expect(page.getByTestId("guide-grid")).not.toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
   // 外枠を少し遅らせて、移る途中を見られるようにする
   await page.route("**/guide/__data.json*", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
