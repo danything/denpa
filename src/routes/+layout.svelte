@@ -867,8 +867,14 @@
     .tabbar {
       anchor-scope: --tab;
     }
-    .tabbar .tab[aria-current="page"],
-    .tab-more :global(.tab[aria-current="page"]) {
+    .tabbar .tab[aria-current="page"] {
+      anchor-name: --tab;
+    }
+    /*
+     * 「その他」のボタンには、`Menu` がメニューを置くためのアンカー名を style で付けている (こちらの `--tab` より強い)。
+     * ボタンに付けると印が基準を見失って左端に出ていたので、ボタンを包む枠 (同じ大きさ) に付ける
+     */
+    .tab-more:has(:global(.tab[aria-current="page"])) {
       anchor-name: --tab;
     }
     .tabbar .tab[aria-current="page"]::before,

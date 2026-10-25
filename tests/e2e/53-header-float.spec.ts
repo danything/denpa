@@ -97,3 +97,49 @@ test.describe("動きを減らす設定", () => {
     await expect.poll(() => guideFloat(page)).toEqual({ corner: 1, hour: 1 });
   });
 });
+
+/*
+ * **スマホでは、番組表の操作の1行もほかの画面と同じく下のタブのすぐ上に浮く** (docs/design.md の「浮かせ方」)。
+ * 平らなまま表の下に置かれていたので、面 (`--dp-float`) と角丸を見る
+ */
+test("スマホの番組表の操作の1行は、角丸の面で浮く", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await goto(page, "/guide?type=GR");
+  const bar = page.getByTestId("guide-toolbar");
+  await expect(bar).toBeVisible();
+  const style = await bar.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { background: s.backgroundColor, radius: s.borderTopLeftRadius };
+  });
+  expect(style.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(style.radius).toBe("22px");
+});
+
+/** 下のタブの印 (並びの疑似要素) の中心と、`aria-current` の付いたタブの中心の横の差 */
+function tabMarkOffset(page: Page) {
+  return page.evaluate(() => {
+    const bar = document.querySelector(".tabbar")!;
+    const current = bar.querySelector('.tab[aria-current="page"]')!;
+    const mark = getComputedStyle(bar, "::before");
+    const box = bar.getBoundingClientRect();
+    const tab = current.getBoundingClientRect();
+    const center =
+      box.left + parseFloat(mark.left) + parseFloat(mark.width) / 2;
+    return Math.abs(center - (tab.left + tab.width / 2));
+  });
+}
+
+/*
+ * **下のタブの印は、選んでいるタブの上に付く** (docs/design.md の「選んでいる印は、前の場所から滑る」)。
+ * 「その他」はメニューのボタンで、`Menu` が自分のアンカー名を付けるため、ルールや設定では印が左端に出ていた
+ */
+for (const url of ["/", "/guide?type=GR", "/rules", "/settings", "/search"]) {
+  test(`下のタブの印は選んでいるタブの上に付く (${url})`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goto(page, url);
+    await expect(
+      page.locator('.tabbar .tab[aria-current="page"]'),
+    ).toBeVisible();
+    await expect.poll(() => tabMarkOffset(page)).toBeLessThan(2);
+  });
+}
