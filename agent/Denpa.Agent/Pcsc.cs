@@ -39,11 +39,13 @@ public sealed partial class PcscLink : ICardLink
 {
     private const uint ScopeSystem = 2;
     private const uint ShareExclusive = 1;
+    private const uint ProtocolT0 = 1;
     private const uint ProtocolT1 = 2;
     private const uint LeaveCard = 0;
 
-    /// <summary><c>SCARD_IO_REQUEST</c> (dwProtocol, cbPciLength)。<c>g_rgSCardT1Pci</c> と同じ中身 (どちらも DWORD 2つ)</summary>
+    /// <summary><c>SCARD_IO_REQUEST</c> (dwProtocol, cbPciLength)。<c>g_rgSCardT1Pci</c> / <c>g_rgSCardT0Pci</c> と同じ中身 (どちらも DWORD 2つ)</summary>
     private static readonly uint[] T1Pci = [ProtocolT1, 8];
+    private static readonly uint[] T0Pci = [ProtocolT0, 8];
 
     /// <summary>macOS。ハンドルは int32、文字列は UTF-8</summary>
     private static partial class Mac
@@ -136,10 +138,10 @@ public sealed partial class PcscLink : ICardLink
         return [.. encoding.GetString(buffer, 0, (int)length * width).Split('\0', StringSplitOptions.RemoveEmptyEntries)];
     }
 
-    private static int Connect(nint context, string reader, out nint card)
+    private static int Connect(nint context, string reader, uint protocols, out nint card, out uint active)
     {
-        if (OperatingSystem.IsWindows()) return Win.SCardConnect(context, reader, ShareExclusive, ProtocolT1, out card, out _);
-        var result = Mac.SCardConnect((int)context, reader, ShareExclusive, ProtocolT1, out var mac, out _);
+        if (OperatingSystem.IsWindows()) return Win.SCardConnect(context, reader, ShareExclusive, protocols, out card, out active);
+        var result = Mac.SCardConnect((int)context, reader, ShareExclusive, protocols, out var mac, out active);
         card = mac;
         return result;
     }
@@ -152,10 +154,10 @@ public sealed partial class PcscLink : ICardLink
             : Mac.SCardStatus((int)card, 0, ref namesLength, out _, out _, atr, ref atrLength);
     }
 
-    private static int Send(nint card, ReadOnlySpan<byte> apdu, byte[] receive, ref uint length) =>
+    private static int Send(nint card, uint[] pci, ReadOnlySpan<byte> apdu, byte[] receive, ref uint length) =>
         OperatingSystem.IsWindows()
-            ? Win.SCardTransmit(card, T1Pci, apdu, (uint)apdu.Length, 0, receive, ref length)
-            : Mac.SCardTransmit((int)card, T1Pci, apdu, (uint)apdu.Length, 0, receive, ref length);
+            ? Win.SCardTransmit(card, pci, apdu, (uint)apdu.Length, 0, receive, ref length)
+            : Mac.SCardTransmit((int)card, pci, apdu, (uint)apdu.Length, 0, receive, ref length);
 
     private static void Disconnect(nint card)
     {
@@ -165,6 +167,8 @@ public sealed partial class PcscLink : ICardLink
 
     private readonly nint _context;
     private nint _card;
+    /// <summary>繋いだときにドライバが選んだ方式 (ふつうは T=1)</summary>
+    private uint[] _pci = T1Pci;
 
     public string Name { get; }
 
@@ -204,8 +208,23 @@ public sealed partial class PcscLink : ICardLink
 
     public byte[] Reset()
     {
-        // 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の1回だけ** — BCas は失敗したら閉じて開き直す
-        Check(Connect(_context, Name, out _card), Name, "カードリーダーに接続できません");
+        /*
+         * 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の1回だけ** — BCas は失敗したら閉じて開き直す。
+         *
+         * **T=1 で断られたら、方式をドライバに任せて繋ぎ直す。** B-CAS カードは T=1 だが、macOS の標準の
+         * CCID ドライバ (Apple のもの) では T=1 を名指しすると繋がらないリーダーがある、という報告がある
+         * (IDBridge CT30。従来のドライバ `useIFDCCID` に切り替えると読める)。実機で原因を確かめられていないので、
+         * 取れる手は「方式を任せる」だけ。カードが無い・他が使っている、は方式と関係ないので試し直さない
+         */
+        var result = Connect(_context, Name, ProtocolT1, out _card, out var active);
+        if (result != 0 && !IsAbsentOrBusy(result))
+        {
+            var retry = Connect(_context, Name, ProtocolT0 | ProtocolT1, out _card, out active);
+            Log.Write($"{Name}: T=1 で繋げなかったので方式を任せて繋ぎ直しました (PC/SC 0x{result:x8} → 0x{retry:x8}、方式 {active})");
+            result = retry;
+        }
+        Check(result, Name, "カードリーダーに接続できません");
+        _pci = active == ProtocolT0 ? T0Pci : T1Pci;
 
         var atr = new byte[36];
         var atrLength = (uint)atr.Length;
@@ -218,7 +237,7 @@ public sealed partial class PcscLink : ICardLink
         if (_card == 0) throw new IOException($"{Name}: カードに繋いでいません (Reset を先に)");
         var receive = new byte[258];
         var length = (uint)receive.Length;
-        Check(Send(_card, apdu, receive, ref length), Name, "APDU を送れません");
+        Check(Send(_card, _pci, apdu, receive, ref length), Name, "APDU を送れません");
         return receive[..(int)length];
     }
 
@@ -229,34 +248,61 @@ public sealed partial class PcscLink : ICardLink
         Release(_context);
     }
 
-    /// <summary>失敗なら投げる。**カードが挿さっていないだけなら <see cref="CardAbsentException"/>** (画面では「カードなし」)</summary>
+    /// <summary>
+    /// 失敗なら投げる。**カードが挿さっていないだけなら <see cref="CardAbsentException"/>** (画面では「カードなし」)。
+    /// macOS でカードと話せなかったときは、ドライバを切り替える案内を足す (docs/install-mac.md「カードが読めないとき」)
+    /// </summary>
     private static void Check(int result, string name, string what)
     {
         if (result == 0) return;
-        var message = $"{name}: {what} (PC/SC 0x{result:x8}{Explain(result)})";
+        var hint = OperatingSystem.IsMacOS() && !IsAbsentOrBusy(result)
+            ? "。macOS の標準の CCID ドライバで読めないリーダーがあります。docs/install-mac.md の「カードが読めないとき」を見てください"
+            : "";
+        var message = $"{name}: {what} (PC/SC 0x{result:x8}{Explain(result)}){hint}";
         throw unchecked((uint)result) is NoSmartcard or RemovedCard ? new CardAbsentException(message) : new IOException(message);
     }
 
+    private const uint SharingViolation = 0x8010000B;
     private const uint NoSmartcard = 0x8010000C;
     private const uint RemovedCard = 0x80100069;
+
+    /// <summary>カードが無い・他が使っている。どちらもドライバや方式のせいではない</summary>
+    private static bool IsAbsentOrBusy(int result) => unchecked((uint)result) is NoSmartcard or RemovedCard or SharingViolation;
 
     /// <summary>よく出るものだけ言葉にする (pcsc-lite の pcsclite.h と同じ番号。Windows の winerror.h も同じ)</summary>
     private static string Explain(int result) => unchecked((uint)result) switch
     {
-        0x8010000B => ": 他のアプリが使用中です",
+        SharingViolation => ": 他のアプリが使用中です",
         NoSmartcard or RemovedCard => ": カードが挿さっていません",
+        0x8010000F => ": カードと方式が合いません",
+        0x80100013 => ": カードリーダーとの通信に失敗しました",
         0x8010001D => ": PC/SC が動いていません",
         0x8010002E => ": リーダーが見つかりません",
         0x80100066 => ": カードが応答しません",
+        0x80100067 => ": カードに電源が入りません",
         _ => "",
     };
 
-    /// <summary>診断用 (<c>denpa-agent --card</c>)。見えているリーダーを並べる</summary>
+    /// <summary>診断用 (<c>denpa-agent --card</c>)。見えているリーダーと、macOS ならどちらの CCID ドライバか</summary>
     public static string Describe()
     {
         var readers = Readers();
-        return readers.Count == 0
+        var list = readers.Count == 0
             ? "PC/SC のカードリーダーが見つかりません (USB のカードリーダーが挿さっていないか、OS が認識していません)"
             : string.Join('\n', readers.Select(name => $"PC/SC {name}"));
+        return OperatingSystem.IsMacOS() ? $"{list}\n{MacDriver()}" : list;
+    }
+
+    /// <summary>
+    /// macOS の CCID ドライバ。`useIFDCCID` が 1 なら従来の ifd-ccid、無いか 0 なら Apple の標準のもの
+    /// (docs/install-mac.md「カードが読めないとき」)
+    /// </summary>
+    private static string MacDriver()
+    {
+        var (code, output) = Shell.Run(
+            "defaults", ["read", "/Library/Preferences/com.apple.security.smartcard", "useIFDCCID"], TimeSpan.FromSeconds(5));
+        return code == 0 && output.Trim() == "1"
+            ? "CCID ドライバ: 従来のもの (useIFDCCID)"
+            : "CCID ドライバ: macOS の標準のもの";
     }
 }

@@ -59,7 +59,7 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
   PT2/PT3 のような PCI の機材は使えません
 - **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。USB のリーダーは
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
-  (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます。動いている間はリーダーを
+  (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます ([読めないとき](#カードが読めないとき))。動いている間はリーダーを
   排他で使うので、他のアプリはカードを使えません
 - pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、siano-ts から受ける溜めは Linux より浅い
   (px4d から受ける溜めは pipe を使わないので、Linux と同じ 8MB)
@@ -67,3 +67,23 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
 - **Mac の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI でビルドして起こし、
   入れ方を最後まで流すところまで (`.github/workflows/test.yml` の `agent-macos`。
   Mac のランナーには Docker が無いので、compose.mac.yml は Linux のジョブ (`install-linux`) で書き方だけ見る)
+
+## カードが読めないとき
+
+**macOS の標準の CCID ドライバ (Apple のもの) では、B-CAS カードに繋がらないリーダーがあります。**
+IDBridge CT30 で、従来のドライバ (ifd-ccid) に切り替えたら読めるようになった、という報告があります
+(こちらの実機では確かめていません)。切り替えはシステムの設定なので、エージェントもインストーラも勝手には変えません。
+
+```sh
+# 従来のドライバに切り替える。リーダーを挿し直すか、Mac を再起動すると効く
+sudo defaults write /Library/Preferences/com.apple.security.smartcard useIFDCCID -bool yes
+# 標準のドライバに戻す
+sudo defaults write /Library/Preferences/com.apple.security.smartcard useIFDCCID -bool no
+```
+
+ほかのスマートカード (仕事の IC カードなど) の動きも変わりうるので、読めなかったときだけ切り替えてください。
+今どちらのドライバかは `denpa-agent --card` の最後の行に出ます。
+
+エージェントは、T=1 を名指しして繋がらなければ、方式をドライバに任せて繋ぎ直します (`Pcsc.cs`)。
+それでも繋がらないときは、ログの PC/SC のエラー番号 (`0x8010…`) と `denpa-agent --card` の出力を
+[Issue](https://github.com/danything/denpa/issues) に貼ってもらえると、ドライバを切り替えずに読めるようにできるかを調べられます。
