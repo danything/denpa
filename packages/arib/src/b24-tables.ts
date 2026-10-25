@@ -101,8 +101,8 @@ const ADDITIONAL_ROWS: string[] = [
 export const ADDITIONAL = ADDITIONAL_ROWS.join('');
 /**
  * 色の表 (CLUT)。8つの組 × 16色、RGBA の16進。後ろの4組 (65〜127) は 1〜63 番を半分透かしたもの。
- * libaribcaption の表は 101 番と 119 番の青が `09` になっていたが、規格 (ARIB STD-B24 第一編 第2部 表 7-24) では
- * `00` (`55ff00`・`ff5500` の半透明)
+ * libaribcaption の表は 101 番と 119 番の青が `09` になっていたが、
+ * 元の 37 番・55 番 (`55ff00`・`ff5500`) を透かしたものなので `00`
  */
 export const CLUT = [
     "000000ff", "ff0000ff", "00ff00ff", "ffff00ff", "0000ffff", "ff00ffff", "00ffffff", "ffffffff", "00000000", "aa0000ff", "00aa00ff", "aaaa00ff", "0000aaff", "aa00aaff", "00aaaaff", "aaaaaaff", // 0
