@@ -1005,9 +1005,9 @@
                 style="display: block; width: 2rem; height: 1.25rem"
                 fallback=""
               />
-              <!-- テレビに出ている番号。ラベルの形はライブの一覧と同じ (format.ts の channelNumber) -->
+              <!-- テレビに出ている番号。ライブの一覧と同じく、バッジにせず小さな控えた字 (format.ts の channelNumber) -->
               {#if channelNumber(service) !== null}
-                <span class="tag ch-number">{channelNumber(service)}</span>
+                <span class="ch-number">{channelNumber(service)}</span>
               {/if}
               <span class="truncate broadcast">{service.name}</span>
             {/if}
@@ -1690,9 +1690,12 @@
     line-height: 1.25rem;
     font-weight: var(--dp-weight);
   }
+  /* 番号は事実なのでバッジにしない (docs/design.md の「印の意味」)。ライブの一覧の `.channel-number` と同じ字 */
   .ch-number {
     flex-shrink: 0;
+    font-size: var(--dp-text-xs);
     font-variant-numeric: tabular-nums;
+    color: var(--dp-muted);
   }
   .hour {
     position: sticky;
