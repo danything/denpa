@@ -251,7 +251,7 @@
     - 例: 浮くものの面と影 (上の「浮くもの」)・8 章の見本・画面の紹介・数字・縁の光
   - 動きを減らす設定では止める (下)
   - 測った値 (GPU を切った Chrome、止まって 5 秒、`data-lite` を付けない素のページに 1 つだけ): 小さい箱の透明度・transform 3%、同じ動きの `steps(8)` 1.6%、色・背景の位置 (描き直し) 5〜8%、
-    600×600 の回転 15%、画面の外 1.6%、画面の外 + `content-visibility: auto` 0%、巻いた量で動かす 0% ([danything/corp#22](https://github.com/danything/corp/pull/22))
+    600×600 の回転 15%、画面の外 1.6%、画面の外 + `content-visibility: auto` 0%。corp のトップの見本と縁の光は、時間で回すと 6〜19%、巻いた量に変えて 0% ([danything/corp#22](https://github.com/danything/corp/pull/22))
 - **動きを減らす設定 (`prefers-reduced-motion`) では、動きを止めて終わった姿を見せる** (`app.css` の最後)
   - 移り変わりは時間のトークンを 0 に、繰り返すもの (録画中の点など) は `animation: none` にする。`data-lite` で止めるときも同じ姿にする
   - 巻いた量の動き (8 章の見本など) も `animation: none` にし、組み上がった後の素の姿で見せる。時間のトークンは巻いた量の動きには効かないので、0 にしても止まらない
@@ -285,7 +285,7 @@
   - 時間で回すなら、ボタンの幅ちょうどの正方形の `rotate` がいちばん軽い
     (GPU を切った Chrome で 5%。`offset-path` で縁を走る粒は 9%、`@property` の角度は描き直しで 13%)
 - 確かめ方: GPU を切った Chrome (`--disable-gpu --disable-gpu-compositing`) で、巻いている間のフレームの間隔と、止まって 5 秒の CPU を測る。巻いている間はフレームを落とさない。
-  止まっている間は、巻いた量で動くものは 0%、時間で回すものは 7 章の測った値に近い軽さに収める (GPU を切ると `data-lite` で止まるので、回したときの重さの測り方は [danything/corp#22](https://github.com/danything/corp/pull/22))
+  止まっている間は、巻いた量で動くものは 0%、時間で回すものは 7 章の測った値の軽さ (小さい箱の transform・透明度 1 つで 3% 前後) に収める (GPU を切ると `data-lite` で止まるので、回したときの重さの測り方は [danything/corp#22](https://github.com/danything/corp/pull/22))
 
 ## 9. 作り方
 
