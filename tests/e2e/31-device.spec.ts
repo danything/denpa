@@ -4,12 +4,12 @@ import { expect, goto, test } from "./helpers";
 /**
  * **テレビのアプリのペアリング** (docs/auth.md「アプリのペアリング」、device-auth.ts)。
  *
- * テレビがペアリングコードを貰い、スマホで QR (`device?code=…`) を開くとそのまま済み、テレビはアクセストークンを受け取って
+ * テレビがペアリングコードを貰い、スマホで QR (`device?code=…`) を開き、コードを見比べてボタンを押すと済み、テレビはアクセストークンを受け取って
  * `Authorization: Bearer` で API に入る。普段のスタックはローカルを信頼しているので、
  * スマホ役のブラウザはログインなしで `/device` に入れる (家の LAN と同じ)
  */
 test.describe("テレビのペアリング", () => {
-  test("QR を開くと済み、アクセストークンで API に入れる。取り消すと 401", async ({
+  test("QR を開いてボタンを押すと済み、アクセストークンで API に入れる。取り消すと 401", async ({
     page,
     request,
   }) => {
@@ -34,8 +34,24 @@ test.describe("テレビのペアリング", () => {
     expect(early.status()).toBe(400);
     expect(await early.json()).toEqual({ error: "authorization_pending" });
 
-    // スマホで QR を開く。開いたら自分で送って済む (許す / 断るは聞かない)
+    /*
+     * スマホで QR を開く。**開いただけでは済まない** (人の作ったコードのリンクを開かされても渡らないように)。
+     * 端末の名前とコードが出て、ボタンを押すまでテレビは待たされたまま
+     */
     await goto(page, `/${code.verificationUriComplete}`);
+    await expect(page.getByTestId("device-page")).toContainText(
+      "E2E のテレビ とペアリングしますか",
+    );
+    await expect(page.getByTestId("device-code")).toHaveText(code.userCode);
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    const unapproved = await request.post("/api/device/token", {
+      data: { deviceCode: code.deviceCode },
+    });
+    expect(await unapproved.json()).toEqual({
+      error: "authorization_pending",
+    });
+
+    await page.getByTestId("device-approve").click();
     await expect(page.getByTestId("device-done")).toContainText(
       "E2E のテレビ とペアリングしました",
     );
@@ -95,6 +111,18 @@ test.describe("テレビのペアリング", () => {
     const revoked = await request.get("/api/recordings", { headers: auth });
     expect(revoked.status()).toBe(401);
     expect(await revoked.json()).toEqual({ error: "invalid_token" });
+  });
+
+  /*
+   * **外のサイトの枠 (iframe) に入れさせない。** 信頼するネットワークの人は接続元で通るので、
+   * 枠に入れられると外のサイトに隠した画面でボタンを押させられる
+   */
+  test("画面は外のサイトの枠に入れられない", async ({ request }) => {
+    const res = await request.get("/device?code=ZZZZ-ZZZZ");
+    expect(res.headers()["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(res.headers()["content-security-policy"]).toContain(
+      "frame-ancestors 'self'",
+    );
   });
 
   test("知らないペアリングコードの画面は、そうと言う", async ({ page }) => {

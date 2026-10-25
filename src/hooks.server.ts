@@ -145,6 +145,13 @@ function finish(response: Response): Response {
   ) {
     response.headers.set("cache-control", "no-cache");
   }
+  /*
+   * **画面を外のサイトの枠に入れさせない。** 今のブラウザは CSP の `frame-ancestors 'self'`
+   * (vite.config.ts) を見るが、それを知らない古いブラウザ向けに同じことを言っておく
+   */
+  if (response.headers.get("x-sveltekit-page") === "true") {
+    response.headers.set("x-frame-options", "SAMEORIGIN");
+  }
 
   return response;
 }
