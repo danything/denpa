@@ -74,8 +74,15 @@ export function parsePes(
   return { pts, dts, data: data.subarray(start, end) };
 }
 
+/** 長さの分からない PES (映像) の入れ物の最初の大きさ。1 コマの多くはこれに収まる */
+const PES_START = 64 * 1024;
+
+/**
+ * 組み立てかけの PES。**1 本の入れ物に写し足す** (パケットごとに写して最後に繋ぐと、1 コマで 2 回写すうえ、
+ * 184 バイトの切れ端を何百も作る)。足りなくなったら倍に広げる
+ */
 interface Partial {
-  parts: Uint8Array[];
+  buffer: Uint8Array;
   size: number;
   /** 書いてある長さ (頭の6バイトを含む)。0 なら次の頭まで */
   expected: number;
@@ -162,17 +169,25 @@ export class PesDemuxer {
       this.finish(pid, kind, out);
       const expected = payload.length >= 6 ? 6 + u16(payload, 4) : 0;
       // 溜めるものは写す。パケットは届いた塊の上の窓で、塊は使い回される (psi.ts の PacketStream)
-      this.partial.set(pid, {
-        parts: [payload.slice()],
-        size: payload.length,
-        expected: expected === 6 ? 0 : expected,
-      });
+      const known = expected === 6 ? 0 : expected;
+      // 長さが書いてあればちょうどの大きさ (音声はほぼこれ)、無ければ映像向けに大きめ
+      const buffer = new Uint8Array(
+        Math.max(known > 0 ? known : PES_START, payload.length),
+      );
+      buffer.set(payload);
+      this.partial.set(pid, { buffer, size: payload.length, expected: known });
     } else {
       const partial = this.partial.get(pid);
       // 頭を見ていない続きは捨てる (途中から受け取った)
       if (partial === undefined) return;
-      partial.parts.push(payload.slice());
-      partial.size += payload.length;
+      const end = partial.size + payload.length;
+      if (end > partial.buffer.length) {
+        const wider = new Uint8Array(Math.max(end, partial.buffer.length * 2));
+        wider.set(partial.buffer.subarray(0, partial.size));
+        partial.buffer = wider;
+      }
+      partial.buffer.set(payload, partial.size);
+      partial.size = end;
     }
     const partial = this.partial.get(pid);
     if (
@@ -188,7 +203,7 @@ export class PesDemuxer {
     const partial = this.partial.get(pid);
     if (partial === undefined) return;
     this.partial.delete(pid);
-    const parsed = parsePes(concatBytes(partial.parts));
+    const parsed = parsePes(partial.buffer.subarray(0, partial.size));
     if (parsed === null || parsed.data.length === 0) return;
     out.push({ pid, kind, ...parsed });
   }

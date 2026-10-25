@@ -34,8 +34,9 @@ RUN bun install
 # - スレッドは使わない。スレッドを使うビルドは SharedArrayBuffer のために COOP/COEP
 #   (crossOriginIsolated) を全ページに要求することになり、denpa の画面 (データ放送の
 #   中継・ロゴ・別オリジンの Hybridcast) と噛み合わない
-# - **SIMD は使う** (`-msimd128`。コンパイラが自動でベクトルにする)。1 本なら 1080i を実時間の 3 倍で
-#   デコードできるが、同じ端末で 2 本見ると間に合わなくなった。1 割でも縮める (今のブラウザはどれも対応している)
+# - **SIMD は付けておく** (`-msimd128`。コンパイラが自動でベクトルにする)。MPEG-2 では測っても差が揺れの中だった
+#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream.md「どこに時間が掛かっているか」)。今のブラウザはどれも対応している
+# - **LTO を掛ける** (`-flto`)。デコードが 2〜8% 速くなり、brotli 後の大きさは変わらない (同じ節)
 # - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
 #   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む
 # ---------------------------------------------------------------------------
@@ -58,11 +59,11 @@ emconfigure /tmp/ffmpeg/configure \
   --disable-avdevice --disable-avformat --disable-avfilter --disable-swscale \
   --disable-everything --enable-decoder=mpeg2video,aac,opus --enable-parser=mpegvideo \
   --nm=emnm --ar=emar --ranlib=emranlib --cc=emcc --cxx=em++ --objcc=emcc --dep-cc=emcc \
-  --extra-cflags="-O3 -msimd128" >configure.log
+  --extra-cflags="-O3 -msimd128 -flto" >configure.log
 emmake make -j"$(nproc)" >make.log 2>&1 || { tail -50 make.log; exit 1; }
 emmake make install >/dev/null
 mkdir -p /opt/denpa/mpeg2
-emcc -O3 -msimd128 /src/decoder.c -I/tmp/build/prefix/include -L/tmp/build/prefix/lib -lavcodec -lswresample -lavutil \
+emcc -O3 -msimd128 -flto /src/decoder.c -I/tmp/build/prefix/include -L/tmp/build/prefix/lib -lavcodec -lswresample -lavutil \
   -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=1GB \
   -sENVIRONMENT=worker -sFILESYSTEM=0 \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDecoder \
