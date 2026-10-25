@@ -2145,7 +2145,9 @@ dialog[open] > article {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.75rem 0.625rem 0.75rem;
+  /* 下の余白は名前で持つ。下端に貼り付ける行 (ルールの「ルールを作る」) が同じ値で打ち消す */
+  --dp-side-pad-end: 0.75rem;
+  padding: 0.75rem 0.625rem var(--dp-side-pad-end);
   border: 0;
   background: transparent;
   box-shadow: none;
