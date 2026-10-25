@@ -59,6 +59,38 @@ describe("PesDemuxer", () => {
     expect(found[1]!.kind).toBe("video");
   });
 
+  test("64KB を超える1枚も欠けずに戻り、返した中身は次の PES を組み立てても変わらない", () => {
+    const demuxer = new PesDemuxer();
+    // 中身は読まないので、決まった並びのバイトで足りる。1枚目は入れ物を何度か広げる大きさ
+    const big = Uint8Array.from({ length: 200_000 }, (_, i) => (i * 7) & 0xff);
+    const small = Uint8Array.from({ length: 1000 }, (_, i) => i & 0xff);
+    let counter = 0;
+    const feed = (frames: Uint8Array[], from: number) => {
+      const parts: number[] = [];
+      frames.forEach((frame, n) => {
+        const out = packetizePes(
+          VIDEO,
+          pes(0xe0, 90_000 + (from + n) * FRAME_TICKS, frame),
+          counter,
+          80_000,
+        );
+        counter = out.counter;
+        parts.push(...out.packets);
+      });
+      return demuxer.feed(Uint8Array.from(parts)).pes;
+    };
+    demuxer.feed(head());
+    const first = feed([big, small], 0);
+    expect(first.map((p) => p.data.length)).toEqual([big.length]);
+    const kept = first[0]!.data;
+    expect(kept).toEqual(big);
+    // 広げた入れ物の余りは詰めてある (キューや worker へ余りごと渡さない)
+    expect(kept.buffer.byteLength).toBeLessThanOrEqual(big.length * 1.25);
+    const next = feed([big, small], 2);
+    expect(next.map((p) => p.data.length)).toEqual([small.length, big.length]);
+    expect(kept).toEqual(big);
+  });
+
   test("音声は選んだ1本だけ組み立てる。長さが書いてあるので揃った時点で出る", () => {
     const demuxer = new PesDemuxer();
     demuxer.feed(head());
