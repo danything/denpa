@@ -994,6 +994,22 @@
         animation-range: 0 1.5rem;
       }
     }
+    /*
+         * **巻けない画面に移ったら平らに戻す。** 巻けなくなると時間の軸が止まり、Chrome は止まる前の値を残す。
+         * 長いページで巻いてから短いページへ移ると、裏に何も無いのに浮いたままになっていた。
+         * 上へ戻せる量が無いとき (上端・巻けない画面) はアニメーションごと外す (`scroll-state(scrollable: top)`)。
+         * 番組表は窓ではなく表の巻いた量で浮くので外さない。この問い合わせを知らないブラウザは今までどおり
+         */
+    @supports (animation-timeline: scroll()) and (container-type: scroll-state) {
+      :global(html) {
+        container-type: scroll-state;
+      }
+      @container not scroll-state(scrollable: top) {
+        .shell:not(.fill) .navbar {
+          animation: none;
+        }
+      }
+    }
     .header-search {
       display: block;
     }
