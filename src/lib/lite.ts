@@ -39,6 +39,12 @@ function rendererName(): string | null {
 
 /** 見分けて `<html>` に印を付ける。土台のレイアウトの `onMount` から 1 回だけ呼ぶ */
 export function markLite(): void {
-  if (isSoftwareRenderer(rendererName()))
-    document.documentElement.dataset["lite"] = "";
+  let name: string | null;
+  try {
+    name = rendererName();
+  } catch {
+    // 箱を作るところで投げる端末は、見分けられない側 (回り続ける) に倒す
+    return;
+  }
+  if (isSoftwareRenderer(name)) document.documentElement.dataset["lite"] = "";
 }

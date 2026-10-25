@@ -81,6 +81,7 @@ test("GPU の描き手なら data-lite を付けず、回し続ける", async ({
     "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)",
   );
   await goto(page, "/settings");
+  // 見分けは、goto が待つハイドレーションの印 (`data-hydrated`) を付ける `onMount` より先に済んでいる
   expect(await lite(page)).toBeNull();
   expect(await animations(page)).toEqual({
     dot: "rec-pulse",
