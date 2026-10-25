@@ -19,7 +19,7 @@ export function load({ url }) {
   const known = knownValues(url.hostname);
   return {
     environment: serverEnvironment(),
-    hosts: known.hosts ?? [],
+    hosts: known.hosts,
     serverLogs: serverLogLines(known),
     // エージェント待ちのものは promise のまま返して後から流し込む (待つと画面が出ない)
     agentLogs: agentLogs(known),

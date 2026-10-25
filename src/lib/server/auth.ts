@@ -32,7 +32,7 @@ import { enabled as oidcEnabled } from "./oidc";
  *   ので (`<link rel="manifest">` に `crossorigin` を書かない限り)、守ると
  *   ホーム画面に置けなくなる。static に置いてあった頃は adapter-node が
  *   hooks より手前で返していて、そもそも掛かっていなかった。出しているのは
- *   アプリの名前とアイコンの場所だけ
+ *   アプリの名前・色・アイコンの場所だけ
  * - **ペアリングコードとアクセストークンの受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
  *   まだ何の資格も持っていない。コードを出すだけでは入れず、許すのは `/device` (ここは守る)。
  *   誰でも呼べるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
@@ -89,6 +89,19 @@ export function denied(): Response {
     status: 403,
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
+}
+
+/**
+ * 資格の無い API の呼び出しへの答え。**いつも同じ形式の 401 JSON** (docs/api.md)。
+ * テレビのアプリはアクセストークンを持たずにまず API を呼び、これが返ればペアリングに進む
+ * (信頼するネットワークの中なら通るので、ペアリングは要らない)。HTML のログイン画面へ
+ * 回すと、アプリは JSON として読もうとして意味の分からない失敗になる
+ */
+export function needsPairing(): Response {
+  return Response.json(
+    { error: "unauthorized" },
+    { status: 401, headers: { "www-authenticate": 'Bearer realm="denpa"' } },
+  );
 }
 
 /**

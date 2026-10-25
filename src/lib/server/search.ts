@@ -13,7 +13,7 @@ import {
 import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import { globTerms, likePieces } from "../fold";
-import type { ReservationState, Rule } from "../types";
+import type { Rule } from "../types";
 import { now, orm } from "./db";
 import { compile, haystack, matchesCompiled } from "./rules";
 import {
@@ -372,7 +372,7 @@ export function searchReservations(q: string, options: SearchOptions) {
           .limit(size)
           .offset(offset)
           .all();
-  const result = section(
+  return section(
     words,
     options,
     page,
@@ -388,13 +388,6 @@ export function searchReservations(q: string, options: SearchOptions) {
           .get(),
       ),
   );
-  return {
-    ...result,
-    rows: result.rows.map((row) => ({
-      ...row,
-      state: row.state as ReservationState,
-    })),
-  };
 }
 
 /**

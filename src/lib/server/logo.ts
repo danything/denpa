@@ -20,7 +20,7 @@ import { withPalette } from "../ts/logo-palette";
 import type { ChannelType } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
-import { currentServices as isCurrent } from "./epg";
+import { currentServices } from "./epg";
 import { emit } from "./events";
 import { services } from "./schema";
 import { chunks } from "./stream";
@@ -211,7 +211,7 @@ function markRelay(channel: string, hasLogo: boolean): void {
 function markAbsent(): void {
   const known = notes();
   const absent = { ...known.absent };
-  for (const service of currentServices()) {
+  for (const service of tunableServices()) {
     if (service.type !== "GR" && needsLogo(service))
       absent[service.id] = Date.now();
   }
@@ -435,7 +435,7 @@ function markGaveUp(channel: string): void {
   const known = notes();
   const gaveUp = { ...known.gaveUp };
   let changed = false;
-  for (const service of currentServices()) {
+  for (const service of tunableServices()) {
     if (
       service.channel !== channel ||
       !existsSync(logoPath(service.id)) ||
@@ -449,7 +449,7 @@ function markGaveUp(channel: string): void {
 }
 
 /** いま選局できる局。取り残しは見に行かない */
-function currentServices(): {
+function tunableServices(): {
   id: number;
   type: string;
   channel: string;
@@ -463,7 +463,7 @@ function currentServices(): {
       network_id: services.network_id,
     })
     .from(services)
-    .where(isCurrent())
+    .where(currentServices())
     .orderBy(services.type, services.channel)
     .all();
 }
@@ -476,7 +476,7 @@ function currentServices(): {
  * 本当に要る局まで順番が回ってこない。
  */
 function missing(): Target[] {
-  const services = currentServices();
+  const services = tunableServices();
   const targets = new Map<string, Target>();
   const add = (service: {
     type: string;
@@ -523,7 +523,7 @@ function missing(): Target[] {
 
 /** その物理チャンネルに入っている局のうち、ロゴを取り直したい数 */
 function missingOn(channel: string): number {
-  return currentServices().filter((s) => s.channel === channel && needsLogo(s))
+  return tunableServices().filter((s) => s.channel === channel && needsLogo(s))
     .length;
 }
 
@@ -535,7 +535,7 @@ function missingOn(channel: string): number {
  * **BS と CS の全局ぶん**が入っている。開いた中継の局だけで数えると、先に来る BS で閉じて CS を取りこぼす。
  */
 function missingSatellites(): number {
-  return currentServices().filter(
+  return tunableServices().filter(
     (s) => s.type !== "GR" && needsLogo(s) && !absentFromCarousel(s.id),
   ).length;
 }
@@ -924,7 +924,7 @@ async function settled(): Promise<boolean> {
  * 入らなかった。**この取得の間にロゴが書き込まれた局**を数えれば、どこから来ても数が合う
  */
 export function logoStamps(
-  ids: Iterable<number> = currentServices().map((s) => s.id),
+  ids: Iterable<number> = tunableServices().map((s) => s.id),
 ): Map<number, number> {
   const stamps = new Map<number, number>();
   for (const id of ids) stamps.set(id, writtenAt(id));
@@ -949,7 +949,7 @@ function writtenAt(serviceId: number): number {
  */
 export function writtenSince(
   stamps: Map<number, number>,
-  ids: Iterable<number> = currentServices().map((s) => s.id),
+  ids: Iterable<number> = tunableServices().map((s) => s.id),
 ): number {
   let count = 0;
   for (const id of ids) {
@@ -1018,7 +1018,7 @@ export function stats(): {
   pending: number;
   unavailable: number;
 } {
-  const states = currentServices().map((service) => logoState(service.id));
+  const states = tunableServices().map((service) => logoState(service.id));
   return {
     have: states.filter((state) => state === "have").length,
     total: states.length,

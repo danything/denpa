@@ -11,6 +11,7 @@ import type {
 import { orm } from "./db";
 import { airing, currentServices, SERVICE_ORDER } from "./epg";
 import {
+  latestRecordingId,
   programs as programTable,
   recordings,
   reservations,
@@ -135,13 +136,7 @@ export function programsOf(
       .innerJoin(serviceTable, eq(serviceTable.id, p.service_id))
       .leftJoin(r, and(eq(r.program_id, p.id), ne(r.state, "canceled")))
       // 録り直すと同じ番組に複数ぶら下がる。いちばん新しい現存分だけ見る
-      .leftJoin(
-        rec,
-        eq(
-          rec.id,
-          sql`(SELECT id FROM recordings WHERE program_id = ${p.id} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`,
-        ),
-      )
+      .leftJoin(rec, eq(rec.id, latestRecordingId(p.id)))
       .where(
         and(
           eq(serviceTable.type, type),

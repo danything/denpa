@@ -2,7 +2,7 @@ import { fail, redirect } from "@sveltejs/kit";
 
 import { orm } from "#lib/server/db.js";
 import { relative } from "#lib/server/paths.js";
-import { deleteRule, toggleRule } from "#lib/server/rule-actions.js";
+import { deleteRule, idOf, toggleRule } from "#lib/server/rule-actions.js";
 import { listRules, ruleSummary } from "#lib/server/rule-list.js";
 import { services as serviceTable } from "#lib/server/schema.js";
 
@@ -67,12 +67,6 @@ export function load({ url }) {
     .from(serviceTable)
     .all();
   return { rules: listRules(), summary: ruleSummary(), services };
-}
-
-/** フォームの `id` (ルール) */
-function idOf(form: FormData): number | null {
-  const id = Number(form.get("id"));
-  return Number.isInteger(id) ? id : null;
 }
 
 export const actions = {

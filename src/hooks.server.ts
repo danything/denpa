@@ -1,4 +1,4 @@
-// いちばん先に読む。起動のログからサーバのログの写しを取る (設定の「診断」)
+// いちばん先に読む。アプリの起動のログからサーバのログの写しを取る (設定の「診断」。`server.js` 自身の行は写らない)
 import "#lib/server/log-buffer.js";
 
 import { redirect } from "@sveltejs/kit";
@@ -9,6 +9,7 @@ import {
   denied,
   isOpenPath,
   needsLogin,
+  needsPairing,
   trusted,
 } from "#lib/server/auth.js";
 import { bearerToken, verifyToken } from "#lib/server/device-auth.js";
@@ -110,19 +111,6 @@ export async function handle({ event, resolve }) {
   }
 
   return finish(await resolve(event));
-}
-
-/**
- * 資格の無い API の呼び出しへの答え。**いつも同じ形式の 401 JSON** (docs/api.md)。
- * テレビのアプリはアクセストークンを持たずにまず API を呼び、これが返ればペアリングに進む
- * (信頼するネットワークの中なら通るので、ペアリングは要らない)。HTML のログイン画面へ
- * 回すと、アプリは JSON として読もうとして意味の分からない失敗になる
- */
-function needsPairing(): Response {
-  return Response.json(
-    { error: "unauthorized" },
-    { status: 401, headers: { "www-authenticate": 'Bearer realm="denpa"' } },
-  );
 }
 
 function finish(response: Response): Response {

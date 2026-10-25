@@ -47,7 +47,7 @@ import { programs } from "./schema";
 import { programKey, serviceKey } from "./tuner";
 
 /** 読むファイル。Windows から写すと大文字小文字が変わることがあるので、探すときは区別しない ({@link settingFiles}) */
-export const EDCB_FILES = {
+const EDCB_FILES = {
   autoAdd: "EpgAutoAdd.txt",
   reserve: "Reserve.txt",
   recInfo: "RecInfo.txt",

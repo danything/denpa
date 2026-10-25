@@ -14,7 +14,8 @@ import {
  * 許すと、ブラウザの先読みやリンクの下見で黙って済んでしまう。画面は開いたら
  * すぐ自分で送るフォーム (POST。CSRF の守りが効く) にし、許すのはそちらでやる。
  *
- * **アクセストークン (`Authorization: Bearer`) で来た相手には済ませない** (device-auth.ts の `approve`)
+ * **アクセストークン (`Authorization: Bearer`) で来た相手には済ませない** (403)。盗まれたアクセストークンで
+ * 別のものを作れると、元のものを取り消しても作ったものが生き残る。許すのはブラウザ (信頼するネットワークか OIDC) だけ
  */
 export function load({ url, locals }) {
   const raw = url.searchParams.get("code") ?? "";
@@ -36,7 +37,7 @@ export const actions = {
     const view =
       code === null
         ? null
-        : approve(code, locals.user?.subject ?? "trusted-network", false);
+        : approve(code, locals.user?.subject ?? "trusted-network");
     return { view };
   },
 };

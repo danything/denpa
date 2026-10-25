@@ -40,7 +40,7 @@ export interface IssueFields {
 }
 
 export const ISSUE_NEW = "https://github.com/danything/denpa/issues/new";
-export const ISSUE_TEMPLATE = "bug_report.yml";
+const ISSUE_TEMPLATE = "bug_report.yml";
 /** URL 全体の上限。GitHub は 8KB を超える URL を断る */
 export const URL_LIMIT = 8000;
 /** 1 行の上限。長い 1 行 (例外の中身を詰めたものなど) が枠を全部使わないように */
@@ -83,7 +83,7 @@ export function stamp(at: number): string {
 }
 
 /** 報告に書く 1 行。重さが本物のときだけ `[warn]` `[error]` を付ける */
-export function formatLine(line: LogLine, tagged: boolean): string {
+function formatLine(line: LogLine, tagged: boolean): string {
   const tag = tagged && line.level !== "info" ? ` [${line.level}]` : "";
   return `${stamp(line.at)}${tag} ${line.text}`;
 }

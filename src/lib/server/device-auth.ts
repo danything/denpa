@@ -143,16 +143,13 @@ export function viewCode(userCode: string, at = now()): CodeView | null {
  * 許す。**何度呼んでも同じ** (画面を読み直してもアクセストークンは2本にならない — 作るのは
  * 端末が受け取るときで、ここは印を付けるだけ)。コードの今の様子を返す (無ければ null)。
  *
- * **アクセストークンで入った相手は許せない** (`viaToken`)。盗まれたアクセストークンで別のものを作れると、
- * 元のものを取り消しても作ったものが生き残る。許すのはブラウザ (信頼するネットワークか OIDC) だけ
+ * アクセストークンで入った相手を断るのは呼ぶ側 (`/device` のアクション)
  */
 export function approve(
   userCode: string,
   by: string,
-  viaToken: boolean,
   at = now(),
 ): CodeView | null {
-  if (viaToken) throw new TokenCannotApprove();
   const row = codeRow(userCode);
   if (row === undefined) return null;
   const state = stateOf(row, at);
@@ -168,13 +165,6 @@ export function approve(
     name: row.name,
     state: state === "pending" ? "approved" : state,
   };
-}
-
-/** アクセストークンで許そうとした (`approve`) */
-export class TokenCannotApprove extends Error {
-  constructor() {
-    super("アクセストークンではペアリングできません");
-  }
 }
 
 /** 端末への答え (RFC 8628 の名前)。断る手順が無いので `access_denied` は返さない */

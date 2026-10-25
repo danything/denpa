@@ -20,7 +20,7 @@ import { brotliCompress, constants, gzip } from "node:zlib";
 import { error } from "@sveltejs/kit";
 
 import { config } from "#lib/server/config.js";
-import { etagMatches } from "#lib/server/serve.js";
+import { etagMatches, fileEtag } from "#lib/server/serve.js";
 
 import type { RequestHandler } from "./$types";
 
@@ -85,7 +85,7 @@ export const GET: RequestHandler = ({ params, request }) => {
    * 中身が変わるのに URL は同じなので、長く持たせると mjs と wasm のバージョンが食い違いうる
    */
   const stat = statSync(path);
-  const tag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;
+  const tag = fileEtag(stat);
   const headers: Record<string, string> = {
     "content-type": type,
     "cache-control": "no-cache",

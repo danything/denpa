@@ -35,6 +35,12 @@ async function reapply(rule?: number): Promise<number> {
   return dropped;
 }
 
+/** フォームの `id` (直す・消すルール)。整数でなければ null */
+export function idOf(form: FormData): number | null {
+  const id = Number(form.get("id"));
+  return Number.isInteger(id) ? id : null;
+}
+
 /** 足したルール・直したルール */
 export interface Saved {
   id: number;

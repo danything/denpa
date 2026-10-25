@@ -998,7 +998,7 @@ class Session {
             config.ffmpeg,
             ...encodeArgs(this.program, this.audio, this.codec, wanted, hw),
           ],
-          // 字幕は3本目のパイプへ出させる。**stdio の配列でしか増やせない**
+          // 字幕は4本目のパイプ (pipe:3) へ出させる。**stdio の配列でしか増やせない**
           {
             stdio: [
               "pipe",

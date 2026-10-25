@@ -358,8 +358,8 @@ export function pruneHistory(): {
     )
     .run();
   /*
-   * CM 検出の材料の控えも。スキーマの `onDelete: cascade` は外部キーを有効にしていないので効かない
-   * (`db.ts`)。行を消すところはここだけなので、ここで消す
+   * CM 検出の材料の控えも。スキーマの `onDelete: cascade` は外部キーを有効にしていない (`PRAGMA foreign_keys`) ので効かない。
+   * 行を消すところはここだけなので、ここで消す
    */
   orm()
     .delete(cmMaterials)

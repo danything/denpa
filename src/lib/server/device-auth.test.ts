@@ -21,7 +21,6 @@ const {
   revokeToken,
   sha256,
   TOKEN_PREFIX,
-  TokenCannotApprove,
   verifyToken,
   viewCode,
 } = await import("./device-auth");
@@ -69,7 +68,7 @@ describe("ペアリングの流れ", () => {
     const { deviceCode, userCode } = pair("居間", at);
     expect(poll(deviceCode, at)).toEqual({ error: "authorization_pending" });
 
-    expect(approve(userCode, "trusted-network", false, at + 1)?.state).toBe(
+    expect(approve(userCode, "trusted-network", at + 1)?.state).toBe(
       "approved",
     );
     const got = poll(deviceCode, at + POLL_INTERVAL_MS);
@@ -95,12 +94,11 @@ describe("ペアリングの流れ", () => {
   test("許すのは何度呼んでも同じ (読み直しでアクセストークンが2つにならない)", () => {
     const at = 4_000_000;
     const { deviceCode, userCode } = pair("二度押し", at);
-    approve(userCode, "trusted-network", false, at);
-    approve(userCode, "trusted-network", false, at + 1);
+    approve(userCode, "trusted-network", at);
+    approve(userCode, "trusted-network", at + 1);
     expect("token" in poll(deviceCode, at + POLL_INTERVAL_MS)).toBe(true);
     expect(
-      approve(userCode, "trusted-network", false, at + 2 * POLL_INTERVAL_MS)
-        ?.state,
+      approve(userCode, "trusted-network", at + 2 * POLL_INTERVAL_MS)?.state,
     ).toBe("consumed");
     expect(
       orm()
@@ -109,20 +107,6 @@ describe("ペアリングの流れ", () => {
         .all()
         .filter((r) => r.name === "二度押し"),
     ).toHaveLength(1);
-  });
-
-  /*
-   * 盗まれたアクセストークンで別のトークンを作れると、元を取り消しても作ったほうが生き残る。
-   * 許すのはブラウザ (信頼するネットワークか OIDC) だけ
-   */
-  test("アクセストークンで入った相手は許せない", () => {
-    const at = 4_500_000;
-    const { deviceCode, userCode } = pair("アクセストークンから", at);
-    expect(() => approve(userCode, "token:1", true, at)).toThrow(
-      TokenCannotApprove,
-    );
-    expect(viewCode(userCode, at)?.state).toBe("pending");
-    expect(poll(deviceCode, at)).toEqual({ error: "authorization_pending" });
   });
 
   test("急いで聞きに来たら slow_down", () => {
@@ -140,9 +124,7 @@ describe("ペアリングの流れ", () => {
     const at = 6_000_000;
     const { deviceCode, userCode } = pair("遅刻", at);
     const later = at + CODE_TTL_MS;
-    expect(approve(userCode, "trusted-network", false, later)?.state).toBe(
-      "expired",
-    );
+    expect(approve(userCode, "trusted-network", later)?.state).toBe("expired");
     expect(poll(deviceCode, later)).toEqual({ error: "expired_token" });
     expect(pruneCodes(later)).toBeGreaterThan(0);
     expect(viewCode(userCode, later)).toBeNull();
@@ -165,7 +147,7 @@ describe("ペアリングの流れ", () => {
 describe("アクセストークン", () => {
   function mint(name: string, at: number): string {
     const { deviceCode, userCode } = pair(name, at);
-    approve(userCode, "trusted-network", false, at);
+    approve(userCode, "trusted-network", at);
     const got = poll(deviceCode, at);
     if (!("token" in got)) throw new Error("アクセストークンが出ない");
     return got.token;

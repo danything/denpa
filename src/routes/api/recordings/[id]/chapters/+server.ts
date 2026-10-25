@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { config } from "#lib/server/config.js";
 import { encodedPath, tsChapters } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
-import { etagMatches } from "#lib/server/serve.js";
+import { etagMatches, fileEtag } from "#lib/server/serve.js";
 import { run } from "#lib/server/stream.js";
 import { parseChapters } from "#lib/ts/watch.js";
 
@@ -58,10 +58,7 @@ export async function GET({ params, request }) {
   }
 
   const stat = statSync(path, { throwIfNoEntry: false });
-  const tag =
-    stat === undefined
-      ? null
-      : `"${stat.size.toString(36)}-${Math.trunc(stat.mtimeMs).toString(36)}"`;
+  const tag = stat === undefined ? null : fileEtag(stat);
   const headers: Record<string, string> = {
     "Cache-Control": "private, no-cache",
   };

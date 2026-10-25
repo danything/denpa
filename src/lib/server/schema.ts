@@ -158,6 +158,11 @@ export function activeEncodeJobId(recordingId: AnySQLiteColumn) {
         AND state IN ('queued','running') ORDER BY id DESC LIMIT 1)`;
 }
 
+/** 番組のいちばん新しい録画 (消したものは除く)。番組表と予約の一覧が状態を出すのに使う */
+export function latestRecordingId(programId: AnySQLiteColumn) {
+  return sql<number>`(SELECT id FROM recordings WHERE program_id = ${programId} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`;
+}
+
 /** 画面から変えられる設定 (settings.ts)。初期値は config.ts が持ち、ここに行があればそちらが勝つ */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),

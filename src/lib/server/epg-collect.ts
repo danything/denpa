@@ -522,12 +522,12 @@ async function run(): Promise<number> {
     ? [...channels].sort((a, b) => thinnest(a) - thinnest(b))
     : pickChannels(channels, thinnest, networkLast, at);
 
-  // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
   // 行ったばかりなら休ませる (局が来なかったネットワークで毎周回6分ずつ塞がない)
   const first = firstSweeps(channels, reach, lastOf).filter(
     (channel) => at - lastOf(channel) >= config.epgChannelRetry,
   );
   const sweeps = [...first, ...networkSweeps(targets, channels, lastOf)];
+  // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
   const rest = targets.filter(
     (channel) => !sweeps.includes(channel) && !WHOLE_ONLY.has(channel.type),
   );

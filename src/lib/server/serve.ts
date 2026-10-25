@@ -74,6 +74,11 @@ export function serveFile(
   });
 }
 
+/** ファイルの ETag (大きさと更新時刻)。中身を読まずに「変わったか」だけを見る */
+export function fileEtag(stat: { size: number; mtimeMs: number }): string {
+  return `"${stat.size.toString(36)}-${Math.trunc(stat.mtimeMs).toString(36)}"`;
+}
+
 /**
  * `If-None-Match` がこの ETag に当たるか。前段の proxy が弱い形式 (`W/"…"`) にしたり、
  * いくつも並べたりしても当たりにする

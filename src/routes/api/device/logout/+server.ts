@@ -1,5 +1,4 @@
-import { json } from "@sveltejs/kit";
-
+import { needsPairing } from "#lib/server/auth.js";
 import { revokeToken } from "#lib/server/device-auth.js";
 
 /**
@@ -8,12 +7,7 @@ import { revokeToken } from "#lib/server/device-auth.js";
  */
 export function POST({ locals }) {
   // アクセストークンが無い (信頼するネットワークから素で来た) ときも、ほかのエンドポイントと同じ 401 (docs/api.md)
-  if (locals.token === undefined) {
-    return json(
-      { error: "unauthorized" },
-      { status: 401, headers: { "www-authenticate": 'Bearer realm="denpa"' } },
-    );
-  }
+  if (locals.token === undefined) return needsPairing();
   revokeToken(locals.token);
   return new Response(null, { status: 204 });
 }

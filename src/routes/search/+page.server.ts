@@ -10,6 +10,7 @@ import { cancel, reserve } from "#lib/server/reservations.js";
 import {
   createRule,
   deleteRule,
+  idOf,
   toggleRule,
   updateRule,
 } from "#lib/server/rule-actions.js";
@@ -176,12 +177,6 @@ export function load({ url }) {
       freeOnly: settings().freeOnly,
     },
   };
-}
-
-/** 書く欄の `id` (直すルール) */
-function idOf(form: FormData): number | null {
-  const id = Number(form.get("id"));
-  return Number.isInteger(id) ? id : null;
 }
 
 export const actions = {

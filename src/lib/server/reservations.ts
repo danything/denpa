@@ -6,7 +6,13 @@ import type { Reservation, ReservationState } from "../types";
 import { now, orm } from "./db";
 import { stopRecording } from "./recorder";
 import { resolveConflicts } from "./scheduler";
-import { programs, recordings, reservations, reservationState } from "./schema";
+import {
+  latestRecordingId,
+  programs,
+  recordings,
+  reservations,
+  reservationState,
+} from "./schema";
 import { settings } from "./settings";
 
 /** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
@@ -208,13 +214,7 @@ export function reservationStates(
     .select({ programId: r.program_id, state: reservationState(r, rec) })
     .from(r)
     // 録り直すと同じ番組に複数ぶら下がる。いちばん新しい現存分だけ見る (番組表と同じ)
-    .leftJoin(
-      rec,
-      eq(
-        rec.id,
-        sql`(SELECT id FROM recordings WHERE program_id = ${r.program_id} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`,
-      ),
-    )
+    .leftJoin(rec, eq(rec.id, latestRecordingId(r.program_id)))
     .where(and(inArray(r.program_id, programIds), ne(r.state, "canceled")))
     .all();
   return new Map(rows.map((row) => [row.programId, row.state]));

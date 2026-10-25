@@ -12,7 +12,8 @@ import { cut, type LogLevel, type LogLine } from "../issue-report";
  * - **メモリだけ。** ファイルにも DB にも書かない。再起動すれば消える
  * - 1 行は `util.format` で `console` と同じ字にする (`%s` や物の中身も同じに出る)
  *
- * 包むのは 1 回だけ。`hooks.server.ts` のいちばん頭で読む (起動のログから写す)。開発中にもう一度
+ * 包むのは 1 回だけ。`hooks.server.ts` のいちばん頭で読む (起動のログから写す。`server.js` がアプリを読む前に
+ * 出す行 (環境変数の警告など) は写らない)。開発中にもう一度
  * 読まれても、置き場は `globalThis` の 1 つを共有する
  */
 
@@ -65,7 +66,7 @@ const LEVELS = {
 } as const satisfies Record<string, LogLevel>;
 
 /** 写しを取り始める。2 回目からは何もしない */
-export function installLogBuffer(): void {
+function installLogBuffer(): void {
   const holder = globalThis as Holder;
   if (holder[KEY] !== undefined) return;
   const ring = new LogRing();

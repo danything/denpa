@@ -7,7 +7,8 @@
  * ホームフォルダのユーザー名。
  *
  * **番組名・局名・ファイル名は伏せない。** 再現に要る (どの局のどの番組で起きたか)。
- * そのため、ホスト名はファイル名と見分けられる形 (URL の中・`名前:ポート`・よくあるドメインの末尾) だけを伏せる。
+ * そのため、ホスト名はファイル名と見分けられる形 (URL の中・`名前:ポート`・よくあるドメインの末尾) だけを伏せる
+ * (サーバが知っているホスト名 `known.hosts` は、形によらずどこでも伏せる)。
  * `video.mp4` や `agent.ts` は残る。
  *
  * どれも置き換えた先の印 (`[IP]` など) が分かるようにして、何かが伏せられたことは読み手に伝える
@@ -99,7 +100,6 @@ const HOST_PORT =
   /(?<![\w.:/[\\-])([a-z][a-z0-9-]*[a-z][a-z0-9-]*)(?=:\d{2,5}(?![\d:]))/gi;
 /** `名前:数字` の形になりやすい、ホストではない言葉 */
 const NOT_HOSTS = new Set([
-  "localhost",
   "line",
   "lines",
   "col",
@@ -225,13 +225,14 @@ export function redact(text: string, known: Known = {}): string {
       /\d/.test(found) ? MASK.ip : found,
     )
     .replace(IPV4, MASK.ip)
-    .replace(URL_HOST, (_, scheme: string, host: string) => {
-      return `${scheme}${maskHost(host)}`;
-    })
+    .replace(
+      URL_HOST,
+      (_, scheme: string, host: string) => `${scheme}${maskHost(host)}`,
+    )
     .replace(HOST_PORT, (host: string) =>
       NOT_HOSTS.has(host.toLowerCase()) ? host : maskHost(host),
     )
-    .replace(BARE_HOST, (host: string) => maskHost(host))
+    .replace(BARE_HOST, maskHost)
     .replace(HOME, `$1${MASK.user}`);
   return out;
 }

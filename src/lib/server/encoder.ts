@@ -385,7 +385,7 @@ function captionArgs(program: number | undefined): string[] {
     /*
      * 言語も付ける。default の印だけだと、プレイヤーの字幕自動選択
      * (「端末の言語に合う字幕を出す」設定) が言語不明のトラックを飛ばすことがある。
-     * 放送の字幕 (ARIB) は日本語しか来ない
+     * 写すのは最初の字幕 (s:0) だけで、国内の放送ではそれが日本語
      */
     "-metadata:s:s:0",
     "language=jpn",

@@ -71,8 +71,8 @@ Android TV と Fire TV は、専用のアプリ [denpa-tv](https://github.com/da
 
 Linux ではコンテナの `/media` の下 (Compose ではボリューム) で、元のTSは `raw`、エンコードしたものは `encoded` に分けて置きます。
 Mac は `~/Movies/denpa/library`、Windows は `~/Videos/denpa/library` に出来上がった録画が並びます。
-別のディスクに分けるときは `RAW_DIR`・`ENCODED_DIR` を変えます。
-[config.md](config.md)・[library.md](library.md)。
+別のディスクに移すときは、コンテナの中の場所は変えずにマウントを付け替えます。
+[config.md](config.md)・[library.md](library.md#置き場を別のディスクに移す)。
 
 ### コピー禁止の番組は録れますか
 
