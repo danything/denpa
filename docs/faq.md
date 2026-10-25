@@ -28,9 +28,11 @@ arm64 には Intel の QSV が無く、VA-API のドライバも入れていな�
 AV1 は時間がかかるので、設定の「録画」で H.264 も選べます。観るときにその場で変換する本数は、GPU が無ければ 2 本までです (同じ「録画」の「同時に変換する本数」で変えられます)。
 [encode.md](encode.md)。
 
-### Mirakurun や EPGStation から乗り換えられますか
+### Mirakurun・EPGStation・EDCB から乗り換えられますか
 
-Mirakurun や EPGStation の役目は denpa が受け持ちます。EPGStation (v2・v3) からは、ルール・手動予約・録画を API で移せます。
+Mirakurun や EPGStation・EDCB の役目は denpa が受け持ちます。EPGStation (v2・v3) からは、ルール・手動予約・録画を API で移せます。
+EDCB (EpgTimer) からは、ルール・手動予約・録画の履歴を EpgTimerSrv から TCP で移せます。繋がらないときは、EpgTimerSrv のアクセス制御と
+Windows ファイアウォールを確かめます ([EDCB からの引き継ぎ](migrate.md#edcb-からの引き継ぎ))。
 [switch.md](switch.md)・[migrate.md](migrate.md)。
 
 ## チューナーとカード

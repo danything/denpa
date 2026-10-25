@@ -1,13 +1,13 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { MX, startFakeEdcb } from "../../../tests/fake/edcb";
+
 /**
- * EDCB からの引き継ぎ (`migrate-edcb.ts`)。
- *
- * EDCB の実物のファイルは使わない。形式 (EDCB の `ParseTextInstances.cpp` の書き出し方) どおりに
- * ここで作る。番組名と局名は作り物
+ * EDCB からの引き継ぎ (`migrate-edcb.ts`)。読み方 (CtrlCmd) は `edcb-ctrlcmd.test.ts`、ここは写し方と通しの取り込み。
+ * 通しは偽の EpgTimerSrv (`tests/fake/edcb.ts`) に繋ぐ。番組名と局名は作り物
  */
 const root = mkdtempSync(join(tmpdir(), "denpa-edcb-"));
 const { config } = await import("./config");
@@ -18,24 +18,24 @@ const { programs, recordedHistory, rules, services } = await import("./schema");
 const { status, track } = await import("./migrate");
 const {
   convertRule,
-  decodeText,
+  edcbTarget,
   genreOf,
   importEdcbHistory,
   importEdcbReservations,
   importEdcbRules,
-  jstAt,
-  parseAutoAdd,
   parseDateList,
-  parseRecInfo,
-  parseRecInfo2,
-  parseReserve,
-  rowsOf,
-  runEdcb,
-  settingFiles,
   splitAndKey,
+  startEdcb,
   stripNote,
 } = await import("./migrate-edcb");
-type EdcbRule = import("./migrate-edcb").EdcbRule;
+type EdcbRule = import("./edcb-ctrlcmd").EdcbRule;
+type EdcbDate = import("./edcb-ctrlcmd").EdcbDate;
+type EdcbReserve = import("./edcb-ctrlcmd").EdcbReserve;
+type EdcbRecInfo = import("./edcb-ctrlcmd").EdcbRecInfo;
+
+const fake = await startFakeEdcb();
+/** 偽サーバのルールの局 (TOKYO MX) の内部ID */
+const MX_ID = MX.networkId * 100000 + MX.serviceId;
 
 const preview = { apply: false };
 const apply = { apply: true };
@@ -43,99 +43,22 @@ const apply = { apply: true };
 /** でんぱ総合 (ONID 0x7FE0・TSID 0x7FE0・SID 0x0400) と BSでんぱ (ONID 4・TSID 0x4010・SID 101)。どちらも作り物 */
 const GR = {
   networkId: 0x7fe0,
+  transportStreamId: 0x7fe0,
   serviceId: 0x0400,
   id: 0x7fe0 * 100000 + 0x0400,
 };
-const BS = { networkId: 4, serviceId: 101, id: 4 * 100000 + 101 };
-const GR_HEX = "7FE07FE00400";
-const BS_HEX = "000440100065";
-
-/** UTF-8 の BOM */
-const BOM = "\ufeff";
-
-/**
- * CP932 で書く。`TextDecoder("shift_jis")` の表を逆に引いて作る (試すのは読み取りのほうなので、
- * 表そのものが正しいかは下の「テスト」のバイト列で別に確かめる)
- */
-const SJIS = (() => {
-  const decoder = new TextDecoder("shift_jis");
-  const table = new Map<string, number[]>();
-  for (let lead = 0x81; lead <= 0xfc; lead++) {
-    if (lead > 0x9f && lead < 0xe0) continue;
-    for (let trail = 0x40; trail <= 0xfc; trail++) {
-      if (trail === 0x7f) continue;
-      const char = decoder.decode(new Uint8Array([lead, trail]));
-      if (char.length === 1 && char !== "\ufffd" && !table.has(char))
-        table.set(char, [lead, trail]);
-    }
-  }
-  return (text: string) =>
-    new Uint8Array(
-      [...text].flatMap((char) => {
-        const code = char.charCodeAt(0);
-        if (code < 0x80) return [code];
-        const bytes = table.get(char);
-        if (bytes === undefined) throw new Error(`CP932 に無い字: ${char}`);
-        return bytes;
-      }),
-    );
-})();
-
-/** `EpgAutoAdd.txt` の1行。録画フォルダ1つ・部分受信用フォルダ無しで、最後に空の列が付く (EDCB の書き方) */
-function autoAddLine(over: Partial<Record<string, string | number>> = {}) {
-  const r = {
-    id: 1,
-    andKey: "",
-    notKey: "",
-    regExp: 0,
-    titleOnly: 1,
-    contents: "",
-    dates: "",
-    services: GR_HEX,
-    recMode: 1,
-    aimai: 0,
-    notContent: 0,
-    notDate: 0,
-    freeCA: 0,
-    chkRecEnd: 0,
-    chkRecDay: 6,
-    ...over,
-  };
-  return [
-    r.id,
-    r.andKey,
-    r.notKey,
-    r.regExp,
-    r.titleOnly,
-    r.contents,
-    r.dates,
-    r.services,
-    r.recMode,
-    2, // priority
-    1, // tuijyuuFlag
-    0, // serviceMode
-    0, // pittariFlag
-    "", // batFilePath
-    0, // suspendMode
-    0, // rebootFlag
-    0, // useMargineFlag
-    5, // startMargine
-    2, // endMargine
-    1, // 録画フォルダの数
-    "D:\\rec*Write_Default.dll*RecName_Macro.dll?$Title$.ts",
-    0, // continueRecFlag
-    0, // partialRecFlag
-    0, // tunerID
-    r.aimai,
-    r.notContent,
-    r.notDate,
-    r.freeCA,
-    0, // 部分受信用フォルダの数
-    r.chkRecEnd,
-    r.chkRecDay,
-    "",
-  ].join("\t");
-}
+const BS = {
+  networkId: 4,
+  transportStreamId: 0x4010,
+  serviceId: 101,
+  id: 4 * 100000 + 101,
+};
+/** denpa に無い局 */
+const UNKNOWN = {
+  networkId: 0x7fe8,
+  transportStreamId: 0x7fe8,
+  serviceId: 0x0408,
+};
 
 function rule(over: Partial<EdcbRule> = {}): EdcbRule {
   return {
@@ -146,7 +69,7 @@ function rule(over: Partial<EdcbRule> = {}): EdcbRule {
     titleOnly: true,
     contents: [],
     dates: [],
-    services: [GR_HEX],
+    services: [GR],
     recMode: 1,
     aimai: false,
     notContent: false,
@@ -162,102 +85,46 @@ const known = (networkId: number, serviceId: number) =>
   [GR, BS].find((s) => s.networkId === networkId && s.serviceId === serviceId)
     ?.id;
 
-/** 時分 `(時 << 16) | 分` */
-const hm = (hour: number, minute: number) => (hour << 16) | minute;
-
-/** 日本時間の `YYYY/MM/DD` と `HH:MM:SS` */
-function jstColumns(at: number): [string, string] {
-  const d = new Date(at + 9 * 3600_000);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return [
-    `${d.getUTCFullYear()}/${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}`,
-    `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`,
-  ];
+/** 時間帯と曜日の1件 (曜・時・分 〜 曜・時・分) */
+function span(
+  startDay: number,
+  startHour: number,
+  startMinute: number,
+  endDay: number,
+  endHour: number,
+  endMinute: number,
+): EdcbDate {
+  return { startDay, startHour, startMinute, endDay, endHour, endMinute };
 }
 
-/** `Reserve.txt` の1行 */
-function reserveLine(over: {
-  at: number;
-  title: string;
-  eventId: number;
-  recMode?: number;
-  comment?: string;
-  id?: number;
-}) {
-  const [date, time] = jstColumns(over.at);
-  return [
-    date,
-    time,
-    "00:30:00",
-    over.title,
-    "でんぱ総合",
-    GR.networkId,
-    0x7fe0,
-    GR.serviceId,
-    over.eventId,
-    2,
-    1,
-    over.id ?? 100,
-    over.recMode ?? 1,
-    0,
-    "0",
-    "0",
-    over.comment ?? "",
-    "D:\\rec*Write_Default.dll*RecName_Macro.dll?$Title$.ts",
-    0,
-    0,
-    "",
-    0,
-    0,
-    0,
-    0,
-    date,
-    time,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    "",
-  ].join("\t");
+function reserveRow(
+  over: Partial<EdcbReserve> & { title: string },
+): EdcbReserve {
+  return {
+    startAt: now() + 3600_000,
+    duration: 1800_000,
+    networkId: GR.networkId,
+    serviceId: GR.serviceId,
+    eventId: 10,
+    recMode: 1,
+    comment: "",
+    ...over,
+  };
 }
 
-/** `RecInfo.txt` の1行。id の列 (最後) は `;;NextID=` の無い古いファイルだと空 */
-function recInfoLine(over: {
-  title: string;
-  at: number;
-  epgAt?: number;
-  status?: number;
-  id?: string;
-}) {
-  const [date, time] = jstColumns(over.at);
-  const [epgDate, epgTime] = jstColumns(over.epgAt ?? over.at);
-  return [
-    `D:\\rec\\${over.title}.ts`,
-    over.title,
-    date,
-    time,
-    "00:30:00",
-    "でんぱ総合",
-    GR.networkId,
-    0x7fe0,
-    GR.serviceId,
-    1234,
-    0,
-    0,
-    over.status ?? 1,
-    epgDate,
-    epgTime,
-    "録画終了",
-    0,
-    over.id ?? "",
-  ].join("\t");
-}
-
-function recInfo2Line(name: string, at: number) {
-  const [date, time] = jstColumns(at);
-  return [GR.networkId, 0x7fe0, GR.serviceId, date, time, name].join("\t");
+function recInfoRow(
+  over: Partial<EdcbRecInfo> & { title: string; startAt: number },
+): EdcbRecInfo {
+  return {
+    duration: 1800_000,
+    serviceName: "でんぱ総合",
+    networkId: GR.networkId,
+    transportStreamId: GR.transportStreamId,
+    serviceId: GR.serviceId,
+    recStatus: 1,
+    epgStartAt: over.startAt,
+    ...over,
+  };
 }
 
 function clear(): void {
@@ -302,114 +169,6 @@ async function within(body: () => void | Promise<void>) {
   return status();
 }
 
-describe("文字コード", () => {
-  test("BOM 付きは UTF-8、BOM 無しは CP932", () => {
-    const text = "1\tテスト番組\n";
-    expect(decodeText(new TextEncoder().encode(BOM + text))).toBe(text);
-    expect(decodeText(SJIS(text))).toBe(text);
-  });
-
-  test("CP932 は Windows の表で読む (NEC 特殊文字・波ダッシュ)", () => {
-    // テ ス ト ～ ①
-    const bytes = new Uint8Array([
-      0x83, 0x65, 0x83, 0x58, 0x83, 0x67, 0x81, 0x60, 0x87, 0x40,
-    ]);
-    expect(decodeText(bytes)).toBe("テスト～①");
-  });
-
-  test("BOM の無い UTF-8 (Unix 用) も読める", () => {
-    const text = "1\tテスト番組\n";
-    expect(decodeText(new TextEncoder().encode(text))).toBe(text);
-  });
-});
-
-describe("行と列", () => {
-  test("コメントとフッタ、タブの無い行は飛ばす。改行は CRLF でも LF でも", () => {
-    const text = [
-      "; コメント",
-      "a\tb",
-      "",
-      "タブの無い行",
-      "c\td\r",
-      ";;NextID=12",
-    ].join("\n");
-    expect(rowsOf(text)).toEqual([
-      ["a", "b"],
-      ["c", "d"],
-    ]);
-  });
-
-  test("時刻は日本時間の壁時計", () => {
-    expect(jstAt("2026/10/25", "21:00:00")).toBe(
-      Date.UTC(2026, 9, 25, 12, 0, 0),
-    );
-    // ゼロ埋めでなくても読む
-    expect(jstAt("2026/1/2", "3:04:05")).toBe(Date.UTC(2026, 0, 1, 18, 4, 5));
-    expect(jstAt("", "")).toBeNull();
-  });
-});
-
-describe("EpgAutoAdd.txt を読む", () => {
-  test("列を拾う。ID が 0 の行は捨てる", () => {
-    const text = [
-      autoAddLine({
-        id: 12,
-        andKey: "テスト番組",
-        notKey: "再放送",
-        contents: "117440512,-65536",
-        dates: "1-1310720-1-1376286",
-        services: `${GR_HEX},${BS_HEX}`,
-        aimai: 1,
-        chkRecEnd: 1,
-      }),
-      autoAddLine({ id: 0 }),
-      ";;NextID=13",
-    ].join("\r\n");
-    const [parsed, ...rest] = parseAutoAdd(BOM + text);
-    expect(rest).toEqual([]);
-    expect(parsed).toMatchObject({
-      id: 12,
-      andKey: "テスト番組",
-      notKey: "再放送",
-      contents: [117440512, -65536],
-      dates: ["1-1310720-1-1376286"],
-      services: [GR_HEX, BS_HEX],
-      aimai: true,
-      chkRecEnd: true,
-    });
-  });
-
-  test("録画フォルダと部分受信用フォルダの数だけ、後ろの列がずれる", () => {
-    const columns = autoAddLine({ id: 3, aimai: 1, chkRecEnd: 1 }).split("\t");
-    // 録画フォルダを2つに、部分受信用フォルダを1つにする
-    columns[19] = "2";
-    columns.splice(21, 0, "E:\\rec*Write_Default.dll*");
-    const m = 21 + 2 + 6;
-    columns[m] = "1";
-    columns.splice(m + 1, 0, "F:\\one*Write_Default.dll*");
-    const [parsed] = parseAutoAdd(columns.join("\t"));
-    expect(parsed?.aimai).toBe(true);
-    expect(parsed?.chkRecEnd).toBe(true);
-  });
-
-  test("後ろの列が無い古い行は、足りない列を 0 として読む", () => {
-    const old = autoAddLine({ id: 5, andKey: "テスト" })
-      .split("\t")
-      .slice(0, 22)
-      .join("\t");
-    expect(parseAutoAdd(old)).toMatchObject([
-      { id: 5, andKey: "テスト", aimai: false, freeCA: 0, chkRecEnd: false },
-    ]);
-  });
-
-  test("CP932 のファイルも読める", () => {
-    const text = `${autoAddLine({ id: 7, andKey: "テスト番組～" })}\r\n`;
-    expect(parseAutoAdd(decodeText(SJIS(text)))[0]?.andKey).toBe(
-      "テスト番組～",
-    );
-  });
-});
-
 describe("andKey と notKey の印", () => {
   test("無効・大小の区別・番組の長さの印を順に外す", () => {
     expect(splitAndKey("^!{999}C!{999}D!{100300060}ドラマ")).toEqual({
@@ -450,19 +209,19 @@ describe("ジャンル", () => {
 describe("時間帯と曜日", () => {
   test("終わりを含むので、1分後ろにする", () => {
     // 月曜 20:00〜21:30
-    expect(parseDateList([`1-${hm(20, 0)}-1-${hm(21, 30)}`])).toEqual({
+    expect(parseDateList([span(1, 20, 0, 1, 21, 30)])).toEqual({
       slot: { time_from: 20 * 60, time_to: 21 * 60 + 31, weekdays: [1] },
       widened: false,
     });
   });
 
   test("23:59 まではその日の終わりまで、0:00〜23:59 は丸一日", () => {
-    expect(parseDateList([`5-${hm(22, 0)}-5-${hm(23, 59)}`])).toEqual({
+    expect(parseDateList([span(5, 22, 0, 5, 23, 59)])).toEqual({
       slot: { time_from: 22 * 60, time_to: 0, weekdays: [5] },
       widened: false,
     });
     expect(
-      parseDateList([`0-${hm(0, 0)}-0-${hm(23, 59)}`, `6-0-6-${hm(23, 59)}`]),
+      parseDateList([span(0, 0, 0, 0, 23, 59), span(6, 0, 0, 6, 23, 59)]),
     ).toEqual({
       slot: { time_from: null, time_to: null, weekdays: [0, 6] },
       widened: false,
@@ -470,9 +229,7 @@ describe("時間帯と曜日", () => {
   });
 
   test("時刻の同じものは曜日をまとめる", () => {
-    const days = [1, 2, 3, 4, 5].map(
-      (day) => `${day}-${hm(19, 0)}-${day}-${hm(19, 59)}`,
-    );
+    const days = [1, 2, 3, 4, 5].map((day) => span(day, 19, 0, day, 19, 59));
     expect(parseDateList(days)).toEqual({
       slot: { time_from: 19 * 60, time_to: 20 * 60, weekdays: [1, 2, 3, 4, 5] },
       widened: false,
@@ -482,17 +239,14 @@ describe("時間帯と曜日", () => {
   test("日をまたぐものは次の日の曜日も足し、そう記す", () => {
     // 月・火の 23:00〜翌 1:00 (EpgTimer の「曜日ごと」の書き方)
     expect(
-      parseDateList([
-        `1-${hm(23, 0)}-2-${hm(1, 0)}`,
-        `2-${hm(23, 0)}-3-${hm(1, 0)}`,
-      ]),
+      parseDateList([span(1, 23, 0, 2, 1, 0), span(2, 23, 0, 3, 1, 0)]),
     ).toEqual({
       slot: { time_from: 23 * 60, time_to: 61, weekdays: [1, 2, 3] },
       widened: true,
     });
     // 7日そろえば EDCB と同じ
-    const all = [0, 1, 2, 3, 4, 5, 6].map(
-      (day) => `${day}-${hm(23, 0)}-${(day + 1) % 7}-${hm(1, 0)}`,
+    const all = [0, 1, 2, 3, 4, 5, 6].map((day) =>
+      span(day, 23, 0, (day + 1) % 7, 1, 0),
     );
     expect(parseDateList(all)).toEqual({
       slot: { time_from: 23 * 60, time_to: 61, weekdays: null },
@@ -502,16 +256,11 @@ describe("時間帯と曜日", () => {
 
   test("時刻の違う時間帯が2つ、2日以上にわたる途中からの時間帯は写せない", () => {
     expect(
-      parseDateList([
-        `1-${hm(19, 0)}-1-${hm(20, 0)}`,
-        `2-${hm(21, 0)}-2-${hm(22, 0)}`,
-      ]),
+      parseDateList([span(1, 19, 0, 1, 20, 0), span(2, 21, 0, 2, 22, 0)]),
     ).toEqual({ skip: "時刻の違う時間帯が2つ以上あるので取り込めません" });
-    expect(parseDateList([`1-${hm(20, 0)}-3-${hm(21, 0)}`])).toHaveProperty(
-      "skip",
-    );
+    expect(parseDateList([span(1, 20, 0, 3, 21, 0)])).toHaveProperty("skip");
     // 日 0:00〜土 23:59 は毎日
-    expect(parseDateList([`0-0-6-${hm(23, 59)}`])).toEqual({
+    expect(parseDateList([span(0, 0, 0, 6, 23, 59)])).toEqual({
       slot: { time_from: null, time_to: null, weekdays: null },
       widened: false,
     });
@@ -532,9 +281,9 @@ describe("ルールに写す", () => {
         andKey: "テスト　番組",
         notKey: ":note:メモ 再放送 総集編",
         titleOnly: false,
-        services: [GR_HEX, BS_HEX.toLowerCase()],
+        services: [GR, BS],
         contents: [134152192, 117440512],
-        dates: [`6-${hm(9, 0)}-6-${hm(9, 29)}`],
+        dates: [span(6, 9, 0, 6, 9, 29)],
         chkRecEnd: true,
       }),
       known,
@@ -604,9 +353,9 @@ describe("ルールに写す", () => {
     expect(skip({ contents: [117440512], notContent: true })).toContain(
       "ジャンルの NOT",
     );
-    expect(
-      skip({ dates: [`1-${hm(1, 0)}-1-${hm(2, 0)}`], notDate: true }),
-    ).toContain("時間帯の NOT");
+    expect(skip({ dates: [span(1, 1, 0, 1, 2, 0)], notDate: true })).toContain(
+      "時間帯の NOT",
+    );
     expect(skip({ freeCA: 2 })).toContain("有料放送だけ");
     expect(skip({ contents: [-65536] })).toContain("ジャンル");
     // NOT の印があっても、条件が空なら EDCB も絞らない
@@ -623,32 +372,24 @@ describe("ルールに写す", () => {
 
   test("見つからない局は外し、1つも残らなければ飛ばす", () => {
     expect(
-      convertRule(
-        rule({ andKey: "テスト", services: [GR_HEX, "7FE87FE80408"] }),
-        known,
-      ),
+      convertRule(rule({ andKey: "テスト", services: [GR, UNKNOWN] }), known),
     ).toMatchObject({
       values: { service_ids: [GR.id] },
       notes: ["見つからない局を外しました (32744-1032)"],
     });
     expect(
-      convertRule(
-        rule({ andKey: "テスト", services: ["7FE87FE80408"] }),
-        known,
-      ),
+      convertRule(rule({ andKey: "テスト", services: [UNKNOWN] }), known),
     ).toEqual({ skip: "局が1つも見つからないので取り込めません" });
   });
 });
 
 describe("取り込み", () => {
   test("ルールは下見で数え、取り込みで入れる。もう一度回しても重ならない", async () => {
-    const list = parseAutoAdd(
-      [
-        autoAddLine({ id: 1, andKey: "テスト番組" }),
-        autoAddLine({ id: 2, andKey: "テスト", regExp: 1 }),
-        autoAddLine({ id: 3, andKey: "テスト", services: "" }),
-      ].join("\n"),
-    );
+    const list = [
+      rule({ id: 1, andKey: "テスト番組" }),
+      rule({ id: 2, andKey: "テスト", regExp: true }),
+      rule({ id: 3, andKey: "テスト", services: [] }),
+    ];
     const first = await within(() => importEdcbRules(list, preview));
     expect(first.rules).toEqual({ imported: 1, skipped: 2 });
     expect(first.log).toContain("ルール(予定): テスト番組");
@@ -700,28 +441,29 @@ describe("取り込み", () => {
         },
       ])
       .run();
-    const list = parseReserve(
-      [
-        reserveLine({ at: soon, title: "テスト番組", eventId: 10 }),
-        reserveLine({
-          at: soon,
-          title: "ルールの番組",
-          eventId: 12,
-          comment: "EPG自動予約(テスト)",
-        }),
-        reserveLine({
-          at: now() - 7200_000,
-          title: "終わった番組",
-          eventId: 13,
-        }),
-        reserveLine({ at: soon, title: "無効の番組", eventId: 14, recMode: 5 }),
-        reserveLine({ at: soon, title: "時刻だけ", eventId: 0xffff }),
-        reserveLine({ at: soon, title: "番組表に無い番組", eventId: 15 }),
-        reserveLine({ at: soon, title: "コピー禁止の番組", eventId: 11 }),
-        reserveLine({ at: soon, title: "ID が 0", eventId: 16, id: 0 }),
-      ].join("\r\n"),
-    );
-    expect(list).toHaveLength(7);
+    const list = [
+      reserveRow({ startAt: soon, title: "テスト番組", eventId: 10 }),
+      reserveRow({
+        startAt: soon,
+        title: "ルールの番組",
+        eventId: 12,
+        comment: "EPG自動予約(テスト)",
+      }),
+      reserveRow({
+        startAt: now() - 7200_000,
+        title: "終わった番組",
+        eventId: 13,
+      }),
+      reserveRow({
+        startAt: soon,
+        title: "無効の番組",
+        eventId: 14,
+        recMode: 5,
+      }),
+      reserveRow({ startAt: soon, title: "時刻だけ", eventId: 0xffff }),
+      reserveRow({ startAt: soon, title: "番組表に無い番組", eventId: 15 }),
+      reserveRow({ startAt: soon, title: "コピー禁止の番組", eventId: 11 }),
+    ];
     const result = await within(() => importEdcbReservations(list, preview));
     expect(result.reservations).toEqual({ imported: 2, skipped: 4 });
     expect(result.log).toEqual(
@@ -748,37 +490,30 @@ describe("取り込み", () => {
     );
   });
 
-  test("録画の履歴は RecInfo2 を主にし、終わりの時刻を RecInfo で補う。もう一度回しても重ならない", async () => {
+  test("録画の履歴は正しく録れたものだけ。鍵は局と EPG の開始で、もう一度回しても重ならない", async () => {
     const start = Date.UTC(2026, 8, 1, 12, 0, 0);
-    const recInfo2 = parseRecInfo2(
-      [
-        recInfo2Line("テスト番組 #1", start),
-        recInfo2Line("テスト番組 #2", start + 7 * 86400_000),
-      ].join("\n"),
-    );
-    const recInfo = parseRecInfo(
-      [
-        // #1 は録画が 1 分前から (マージン)。予約したときの番組の開始で RecInfo2 と照らす
-        recInfoLine({
-          title: "テスト番組 #1",
-          at: start - 60_000,
-          epgAt: start,
-          id: "1",
-        }),
-        // RecInfo2 に無いもの (古くて消えたなど) は RecInfo から入れる
-        recInfoLine({ title: "テスト番組 #0", at: start - 7 * 86400_000 }),
-        // 録れなかったものは入れない
-        recInfoLine({
-          title: "失敗した番組",
-          at: start + 86400_000,
-          status: 2,
-        }),
-      ].join("\n"),
-    );
-    const first = await within(() =>
-      importEdcbHistory(recInfo2, recInfo, apply),
-    );
-    expect(first.history).toEqual({ imported: 3, skipped: 0 });
+    const list = [
+      // 録画が 1 分前から (マージン)。鍵は予約したときの番組の開始
+      recInfoRow({
+        title: "テスト番組 #1",
+        startAt: start - 60_000,
+        epgStartAt: start,
+      }),
+      // EPG の開始が無ければ録画の開始で
+      recInfoRow({
+        title: "テスト番組 #0",
+        startAt: start - 7 * 86400_000,
+        epgStartAt: null,
+      }),
+      // 録れなかったものは入れない
+      recInfoRow({
+        title: "失敗した番組",
+        startAt: start + 86400_000,
+        recStatus: 2,
+      }),
+    ];
+    const first = await within(() => importEdcbHistory(list, apply));
+    expect(first.history).toEqual({ imported: 2, skipped: 0 });
     const rows = orm()
       .select()
       .from(recordedHistory)
@@ -803,72 +538,140 @@ describe("取り込み", () => {
         service_name: "でんぱ総合",
         // 録画の開始 + 長さ
         end_at: start - 60_000 + 1800_000,
-        source: `edcb:recinfo2:32736-32736-1024-${start}`,
-      },
-      {
-        // RecInfo に無いので開始の時刻で代える
-        name: "テスト番組 #2",
-        service_name: "でんぱ総合",
-        end_at: start + 7 * 86400_000,
-        source: `edcb:recinfo2:32736-32736-1024-${start + 7 * 86400_000}`,
+        source: `edcb:recinfo:32736-32736-1024-${start}`,
       },
     ]);
 
-    const again = await within(() =>
-      importEdcbHistory(recInfo2, recInfo, apply),
-    );
-    expect(again.history).toEqual({ imported: 0, skipped: 3 });
-    // RecInfo2 から古いものが消えても、RecInfo の側から同じ回を入れ直さない
-    const later = await within(() =>
-      importEdcbHistory(recInfo2.slice(1), recInfo, apply),
-    );
-    expect(later.history).toEqual({ imported: 0, skipped: 3 });
-    expect(orm().select().from(recordedHistory).all()).toHaveLength(3);
+    const again = await within(() => importEdcbHistory(list, apply));
+    expect(again.history).toEqual({ imported: 0, skipped: 2 });
+    expect(orm().select().from(recordedHistory).all()).toHaveLength(2);
   });
 
   test("同じ局・同じ開始の行が2つあっても、下見と取り込みで件数がそろう", async () => {
     const start = Date.UTC(2026, 8, 1, 12, 0, 0);
-    const recInfo2 = parseRecInfo2(
-      [
-        recInfo2Line("テスト番組 #1", start),
-        recInfo2Line("テスト番組 #1", start),
-      ].join("\n"),
-    );
-    const previewed = await within(() =>
-      importEdcbHistory(recInfo2, [], preview),
-    );
-    const applied = await within(() => importEdcbHistory(recInfo2, [], apply));
+    const list = [
+      recInfoRow({ title: "テスト番組 #1", startAt: start }),
+      recInfoRow({ title: "テスト番組 #1", startAt: start }),
+    ];
+    const previewed = await within(() => importEdcbHistory(list, preview));
+    const applied = await within(() => importEdcbHistory(list, apply));
     expect(previewed.history).toEqual({ imported: 1, skipped: 0 });
     expect(applied.history).toEqual(previewed.history);
     expect(orm().select().from(recordedHistory).all()).toHaveLength(1);
   });
+});
 
-  test("フォルダから通しで。Setting を中に持つフォルダを指しても、名前の大小が違っても読む", async () => {
-    const edcb = join(root, "EDCB");
-    const setting = join(edcb, "Setting");
-    mkdirSync(setting, { recursive: true });
-    writeFileSync(
-      join(setting, "EPGAUTOADD.TXT"),
-      SJIS(
-        `${autoAddLine({ id: 9, andKey: "テスト番組" })}\r\n;;NextID=10\r\n`,
-      ),
-    );
-    writeFileSync(
-      join(setting, "RecInfo2.txt"),
-      BOM + recInfo2Line("テスト番組 #1", Date.UTC(2026, 8, 1, 12)),
-    );
-    const files = settingFiles(edcb);
-    expect(files?.autoAdd).toBe(join(setting, "EPGAUTOADD.TXT"));
-    expect(files?.reserve).toBeUndefined();
-    expect(settingFiles(join(root, "どこにも無い"))).toBeNull();
+describe("EpgTimerSrv から通しで", () => {
+  afterAll(() => fake.stop());
 
-    await runEdcb(files!, apply);
-    const result = status();
+  /** 走り出した引き継ぎが終わるまで待つ */
+  async function settled() {
+    const until = Date.now() + 10_000;
+    while (status().state === "running" && Date.now() < until)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    return status();
+  }
+
+  beforeEach(() => {
+    fake.setMode({});
+    // 偽サーバのルールの局 (TOKYO MX) を denpa の局に足す
+    orm()
+      .insert(services)
+      .values({
+        id: MX_ID,
+        service_id: MX.serviceId,
+        network_id: MX.networkId,
+        name: "ＴＯＫＹＯ　ＭＸ１",
+        type: "GR",
+        channel: "16",
+        updated_at: now(),
+      })
+      .run();
+  });
+
+  test("下見 → 取り込み。もう一度回しても増えない", async () => {
+    const previewed = await startEdcb(` ${fake.target} `, preview);
+    expect(previewed).toEqual({ started: true, message: "下見を開始しました" });
+    expect(edcbTarget()).toBe(fake.target);
+    const first = await settled();
+    expect(first.state).toBe("done");
+    expect(first.from).toBe("edcb");
+    expect(first.rules).toEqual({ imported: 1, skipped: 1 });
+    expect(first.history).toEqual({ imported: 1, skipped: 0 });
+    expect(first.reservations).toEqual({ imported: 0, skipped: 0 });
+    expect(first.log).toContain(
+      `EpgTimerSrv (${fake.target}): 録画済み 1 件・ルール 2 件・予約 1 件`,
+    );
+    expect(orm().select().from(rules).all()).toEqual([]);
+
+    await startEdcb(fake.target, apply);
+    const applied = await settled();
+    expect(applied.rules).toEqual({ imported: 1, skipped: 1 });
+    expect(orm().select().from(rules).get()).toMatchObject({
+      name: "引き継ぎテスト",
+      enabled: false,
+      source: "edcb:1",
+    });
+
+    await startEdcb(fake.target, apply);
+    const again = await settled();
+    expect(again.rules).toEqual({ imported: 0, skipped: 2 });
+    expect(again.history).toEqual({ imported: 0, skipped: 1 });
+    expect(orm().select().from(rules).all()).toHaveLength(1);
+    expect(orm().select().from(recordedHistory).all()).toHaveLength(1);
+  });
+
+  test("前に設定フォルダのファイルから取り込んだルールと履歴 (同じ source) は飛ぶ", async () => {
+    const start = Date.UTC(2026, 8, 1, 12, 0, 0);
+    orm()
+      .insert(rules)
+      .values({
+        name: "前に取り込んだルール",
+        keyword: "引き継ぎテスト",
+        service_ids: [MX_ID],
+        priority: 1,
+        source: "edcb:1",
+        created_at: now(),
+      })
+      .run();
+    orm()
+      .insert(recordedHistory)
+      .values({
+        name: "引き継ぎテスト #1",
+        service_name: "ＴＯＫＹＯ　ＭＸ１",
+        end_at: start,
+        source: `edcb:recinfo2:${MX.networkId}-${MX.transportStreamId}-${MX.serviceId}-${start}`,
+      })
+      .run();
+    await startEdcb(fake.target, apply);
+    const result = await settled();
+    expect(result.rules).toEqual({ imported: 0, skipped: 2 });
+    expect(result.history).toEqual({ imported: 0, skipped: 1 });
+    expect(orm().select().from(rules).all()).toHaveLength(1);
+    expect(orm().select().from(recordedHistory).all()).toHaveLength(1);
+  });
+
+  test("ver が違えば記録に1回だけ残して続ける", async () => {
+    fake.setMode({ ver: 4 });
+    await startEdcb(fake.target, preview);
+    const result = await settled();
     expect(result.state).toBe("done");
-    expect(result.from).toBe("edcb");
-    expect(result.rules).toEqual({ imported: 1, skipped: 0 });
-    expect(result.history).toEqual({ imported: 1, skipped: 0 });
-    expect(result.log).toContain("Reserve.txt が無いので飛ばします");
-    expect(orm().select().from(rules).get()?.name).toBe("テスト番組");
+    expect(
+      result.log.filter((line) => line.includes("バージョンが 4 です")),
+    ).toHaveLength(1);
+  });
+
+  test("繋がらなければ始めず、その場で理由を返す", async () => {
+    fake.setMode({ deny: true });
+    const result = await startEdcb(fake.target, preview);
+    expect(result.started).toBe(false);
+    expect(result.message).toContain("アクセス制御");
+    expect(await startEdcb("  ", preview)).toEqual({
+      started: false,
+      message: "EpgTimerSrv の宛先を入れてください (例: 192.168.1.10:4510)",
+    });
+    expect((await startEdcb("tcp://edcb:4510", preview)).message).toContain(
+      "host:port",
+    );
   });
 });

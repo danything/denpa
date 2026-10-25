@@ -1,6 +1,6 @@
 import { type Actions, fail } from "@sveltejs/kit";
 
-import { edcbDir, startEdcb } from "#lib/server/migrate-edcb.js";
+import { edcbTarget, startEdcb } from "#lib/server/migrate-edcb.js";
 import { cancel, epgstationUrl, start, status } from "#lib/server/migrate.js";
 
 export function load() {
@@ -9,8 +9,8 @@ export function load() {
       status: status(),
       /** EPGStation の URL。最後に入れられたものを入力欄に戻す (メモリにだけ持つ) */
       epgstationUrl: epgstationUrl() ?? "",
-      /** EDCB の設定フォルダ。最後に指定されたものを入力欄に戻す */
-      edcbDir: edcbDir() ?? "",
+      /** EpgTimerSrv の宛先。最後に入れられたものを入力欄に戻す (メモリにだけ持つ) */
+      edcbTarget: edcbTarget() ?? "",
     },
   };
 }
@@ -35,11 +35,11 @@ export const actions = {
     return { success: true, migrate: "中断しました" };
   },
   /**
-   * EDCB からの引き継ぎ。サーバから見える設定フォルダのパスを受ける。進み具合は EPGStation と同じく SSE で降ってくる
+   * EDCB からの引き継ぎ。先に EpgTimerSrv から一覧を読み、繋がらなければその場で理由を返す。進み具合は EPGStation と同じく SSE で降ってくる
    */
   migrateEdcb: async ({ request }) => {
     const form = await request.formData();
-    const result = startEdcb(String(form.get("dir") ?? ""), {
+    const result = await startEdcb(String(form.get("target") ?? ""), {
       apply: form.get("apply") === "on",
     });
     if (!result.started) return fail(409, { message: result.message });

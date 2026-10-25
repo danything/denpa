@@ -1,5 +1,3 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-
 import { clearRules, expect, goto, syncEpg, test } from "./helpers";
 
 /**
@@ -106,76 +104,41 @@ test.describe("EPGStation からの引き継ぎ", () => {
 });
 
 /**
- * EDCB からの引き継ぎ。EDCB の設定フォルダを形式どおりに作り (番組名は作り物)、
- * 下見で件数と記録が出ること、取り込むとルールが入ることを見る。
- * 細かい写し方は単体テスト (`migrate-edcb.test.ts`)
+ * EDCB からの引き継ぎ。偽の EpgTimerSrv (`tests/fake/edcb.ts`。番組名は作り物) に TCP で繋いで、
+ * 下見で件数と記録が出ること、取り込むとルールが入ること、アクセス制御で切られたらその場で理由が出ることを見る。
+ * 細かい読み方と写し方は単体テスト (`edcb-ctrlcmd.test.ts`・`migrate-edcb.test.ts`)
  */
 test.describe("EDCB からの引き継ぎ", () => {
-  /** TOKYO MX (ONID 32391 = 0x7E87、SID 23608 = 0x5C38)。TSID は denpa では使わない */
-  const MX = "7E877FF05C38";
+  test.beforeEach(async ({ request, stack }) => {
+    await request.post(`${stack.edcbControlUrl}/__control/mode`, { data: {} });
+  });
 
-  /** `EpgAutoAdd.txt` の1行。録画フォルダ1つ・部分受信用フォルダ無し */
-  function autoAdd(id: number, andKey: string, regExp = 0): string {
-    return [
-      id,
-      andKey,
-      "",
-      regExp,
-      1,
-      "",
-      "",
-      MX,
-      1,
-      2,
-      1,
-      0,
-      0,
-      "",
-      0,
-      0,
-      0,
-      0,
-      0,
-      1,
-      "D:\rec*Write_Default.dll*RecName_Macro.dll?$Title$.ts",
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      1,
-      6,
-      "",
-    ].join("\t");
-  }
+  test("受けてすぐ切られたら始めず、アクセス制御を見るよう出る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await request.post(`${stack.edcbControlUrl}/__control/mode`, {
+      data: { deny: true },
+    });
+    await goto(page, "/settings/integrations");
+    await page.getByTestId("edcb-target").fill(stack.edcbTarget);
+    await page.getByTestId("edcb-run").click();
+    await expect(page.getByTestId("settings-error")).toContainText(
+      "アクセス制御 (TCPAccessControlList)",
+    );
+    // 入れた宛先は欄に残る
+    await expect(page.getByTestId("edcb-target")).toHaveValue(stack.edcbTarget);
+  });
 
-  test("設定フォルダから下見をして、取り込める", async ({
+  test("EpgTimerSrv から下見をして、取り込める", async ({
     page,
     request,
     stack,
   }) => {
     await syncEpg(request);
-    const edcb = `${stack.root}/edcb`;
-    const setting = `${edcb}/Setting`;
-    rmSync(edcb, { recursive: true, force: true });
-    mkdirSync(setting, { recursive: true });
-    const bom = "\ufeff";
-    // 1つ目は無効の印付き (予約を立てて他のテストを乱さない)。2つ目は正規表現なので飛ぶ
-    writeFileSync(
-      `${setting}/EpgAutoAdd.txt`,
-      `${bom}${autoAdd(1, "^!{999}引き継ぎテスト")}\r\n${autoAdd(2, "テスト.*", 1)}\r\n;;NextID=3\r\n`,
-    );
-    writeFileSync(
-      `${setting}/RecInfo2.txt`,
-      `${bom}32391\t32753\t23608\t2026/09/01\t21:00:00\t引き継ぎテスト #1\r\n`,
-    );
-
     await goto(page, "/settings/integrations");
-    // EDCB のフォルダの上を指しても、中の Setting を読む
-    await page.getByTestId("edcb-dir").fill(edcb);
+    await page.getByTestId("edcb-target").fill(stack.edcbTarget);
     await expect(page.getByTestId("edcb-apply")).not.toBeChecked();
     await page.getByTestId("edcb-run").click();
     await expect(page.getByTestId("migrate-started")).toBeVisible();
@@ -189,11 +152,11 @@ test.describe("EDCB からの引き継ぎ", () => {
       "録画の履歴 1 件",
     );
     const log = page.getByTestId("migrate-log");
+    await expect(log).toContainText("録画済み 1 件・ルール 2 件・予約 1 件");
     await expect(log).toContainText("ルール(予定): 引き継ぎテスト");
     await expect(log).toContainText("正規表現のルールは取り込めません");
-    await expect(log).toContainText("Reserve.txt が無いので飛ばします");
-    // 指したフォルダは欄に残る
-    await expect(page.getByTestId("edcb-dir")).toHaveValue(edcb);
+    await expect(log).toContainText("ルールが作った予約 1 件は");
+    await expect(page.getByTestId("edcb-target")).toHaveValue(stack.edcbTarget);
 
     await page.getByTestId("edcb-apply").check();
     await page.getByTestId("edcb-run").click();

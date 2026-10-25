@@ -307,7 +307,7 @@ export const rules = sqliteTable("rules", {
 });
 
 /**
- * **よそで録った番組の控え** (EPGStation の `recorded_history` と、EDCB の `RecInfo2.txt`・`RecInfo.txt` から引き継いだもの。
+ * **よそで録った番組の控え** (EPGStation の `recorded_history` と、EDCB の録画済みの一覧から引き継いだもの。
  * `migrate.ts`・`migrate-edcb.ts`)。
  *
  * 録画の行にはしない — ファイルが無いので、録画の一覧や番組表に出ても開けない。読むのは
@@ -315,7 +315,7 @@ export const rules = sqliteTable("rules", {
  * 「前の回は録らない」がそれを見る。denpa が自分で録ったものは `recordings` の行が同じ役をする。
  *
  * EPGStation が残すのは番組名 (半角に寄せ、`[新]` などを外したもの)・局・終わりの時刻だけ。
- * EDCB も番組名・局・時刻だけ (終わりの時刻が無ければ番組の開始で代える)。
+ * EDCB も番組名・局・終わりの時刻 (録画の開始 + 長さ) だけ。
  * 概要が無いので、回はタイトルだけから読む (`episode.episodeOf`)
  */
 export const recordedHistory = sqliteTable("recorded_history", {
@@ -323,7 +323,7 @@ export const recordedHistory = sqliteTable("recorded_history", {
   name: text("name").notNull(),
   service_name: text("service_name").notNull().default(""),
   end_at: integer("end_at").notNull(),
-  /** 引き継ぎ元での識別子 (例: epgstation:12・edcb:recinfo2:…)。取り込み直しても重ねない */
+  /** 引き継ぎ元での識別子 (例: epgstation:12・edcb:recinfo:…)。取り込み直しても重ねない */
   source: text("source").notNull().unique(),
 });
 

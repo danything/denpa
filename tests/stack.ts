@@ -42,6 +42,10 @@ export interface Stack {
   encodedDir: string;
   /** 偽の EPGStation (`tests/fake/epgstation.ts`)。引き継ぎの画面から繋ぐ先 */
   epgstationUrl: string;
+  /** 偽の EpgTimerSrv (`tests/fake/edcb.ts`) の宛先 `127.0.0.1:<port>`。EDCB からの引き継ぎで繋ぐ先 */
+  edcbTarget: string;
+  /** 偽の EpgTimerSrv の振る舞いを変える HTTP (`/__control/mode`) */
+  edcbControlUrl: string;
   /** これを置くと偽 ffmpeg がエンコードに失敗する */
   failFile: string;
   /**
@@ -155,6 +159,8 @@ export async function boot(
   const agentPort = AGENT_PORT + index * STRIDE;
   const webhookPort = WEBHOOK_PORT + index * STRIDE;
   const epgstationPort = WEBHOOK_PORT + index * STRIDE + 1;
+  const edcbPort = WEBHOOK_PORT + index * STRIDE + 2;
+  const edcbControlPort = WEBHOOK_PORT + index * STRIDE + 3;
 
   const root = `${TEST_ROOT}/w${index}`;
   const stack: Stack = {
@@ -163,6 +169,8 @@ export async function boot(
     agentUrl: `http://127.0.0.1:${agentPort}`,
     webhookUrl: `http://127.0.0.1:${webhookPort}`,
     epgstationUrl: `http://127.0.0.1:${epgstationPort}`,
+    edcbTarget: `127.0.0.1:${edcbPort}`,
+    edcbControlUrl: `http://127.0.0.1:${edcbControlPort}`,
     rawDir: `${root}/raw`,
     encodedDir: `${root}/encoded`,
     failFile: `${root}/fail-encode`,
@@ -205,6 +213,12 @@ export async function boot(
       FAKE_EPGSTATION_PORT: String(epgstationPort),
     });
     started.push(epgstation);
+
+    const edcb = start(["bun", "tests/fake/edcb.ts"], {
+      FAKE_EDCB_PORT: String(edcbPort),
+      FAKE_EDCB_CONTROL_PORT: String(edcbControlPort),
+    });
+    started.push(edcb);
 
     const app = start(["bun", "./server.js"], {
       TZ: "Asia/Tokyo",
@@ -269,6 +283,11 @@ export async function boot(
         `${stack.epgstationUrl}/__control/state`,
         epgstation,
         "偽 EPGStation",
+      ),
+      waitFor(
+        `${stack.edcbControlUrl}/__control/state`,
+        edcb,
+        "偽 EpgTimerSrv",
       ),
     ]);
     await waitFor(`${stack.appUrl}/api/health`, app, "denpa");

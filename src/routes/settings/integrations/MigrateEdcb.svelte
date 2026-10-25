@@ -22,10 +22,10 @@
       >を取り込みます
       {#snippet more()}
         <p>
-          EDCB の設定フォルダ (<code>Setting</code>) にある
-          <code>EpgAutoAdd.txt</code>・<code>Reserve.txt</code>・<code
-            >RecInfo2.txt</code
-          >・<code>RecInfo.txt</code> を読みます。フォルダは denpa のサーバから見える場所にコピーしてください。録画のファイルは取り込みません。
+          EpgTimerSrv に TCP で繋いで読みます (EpgTimerNW と同じ方法)。先に
+          EpgTimer の設定で「ネットワーク接続を許可する」を入れ、アクセス制御に
+          denpa の IP
+          を足してください。録画のファイルと、録画済みの一覧から消した回は取り込みません。
         </p>
         <p>
           何度実行しても、取り込み済みのものは飛ばします。ルールによる予約は、取り込んだルールから
@@ -34,22 +34,26 @@
       {/snippet}
     </Lead>
 
-    <!-- 実行の条件なので、変えても保存しない。「実行」で送る -->
+    <!--
+      実行の条件なので、変えても保存しない。「実行」で送る。送ったあとも宛先は入れたものに戻す
+      (`defaultValue`。EPGStation の URL と同じ)
+    -->
     <form method="POST" action="?/migrateEdcb" use:submitting class="fields">
       <label class="field">
-        <span class="field-label">設定フォルダ</span>
+        <span class="field-label">EpgTimerSrv の宛先</span>
         <input
-          name="dir"
-          value={data.migrate.edcbDir}
+          name="target"
+          value={data.migrate.edcbTarget}
+          defaultValue={data.migrate.edcbTarget}
           class="mono"
-          placeholder="/edcb/Setting"
+          placeholder="192.168.1.10:4510"
           autocomplete="off"
           spellcheck="false"
-          data-testid="edcb-dir"
+          data-testid="edcb-target"
         />
         <span class="hint">
-          サーバから見えるパス。EDCB で保存先 (<code>Common.ini</code> の
-          <code>DataSavePath</code>) を変えていれば、そのフォルダ
+          IP とポート (既定 4510)。denpa を wslc で動かしているなら、Windows
+          の「vEthernet (Default Switch)」の IP。保存はしません
         </span>
       </label>
       <CheckRow
