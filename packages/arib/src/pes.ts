@@ -203,7 +203,14 @@ export class PesDemuxer {
     const partial = this.partial.get(pid);
     if (partial === undefined) return;
     this.partial.delete(pid);
-    const parsed = parsePes(partial.buffer.subarray(0, partial.size));
+    // 余りが大きければ詰めて返す。返したものはキューに積まれたり worker へ送られたりするので、
+    // 広げた入れ物の余り (最大で倍近く) まで抱えさせない
+    const { buffer, size } = partial;
+    const parsed = parsePes(
+      size * 1.25 < buffer.length
+        ? buffer.slice(0, size)
+        : buffer.subarray(0, size),
+    );
     if (parsed === null || parsed.data.length === 0) return;
     out.push({ pid, kind, ...parsed });
   }
