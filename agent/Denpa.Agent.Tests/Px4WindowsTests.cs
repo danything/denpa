@@ -11,7 +11,7 @@ namespace Denpa.Agent.Tests;
  *
  * 大半は OS を見ない部分 (ランタイムルートの決まり・px4d が使っている筐体の扱い・終了コードの手当て) で、
  * どこでも流す。Windows でしか意味の無いもの (実際のフォルダの ACL・標準入力で止める) は Windows だけ。
- * 本物の px4d.exe は install.ps1 の通し (CI の agent-windows) で引数を受けるところまで見る
+ * 本物の px4d.exe は install.ps1 の通し (CI の agent-windows-install) で引数を受けるところまで見る
  */
 [NotInParallel]
 [Timeout(120_000)]

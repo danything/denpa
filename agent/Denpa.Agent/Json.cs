@@ -54,7 +54,7 @@ public sealed class LogRing(int capacity)
         }
     }
 
-    /// <summary><c>GET /denpa/logs</c> の形: <c>{"lines":[{"at":ミリ秒,"text":"…"}]}</c></summary>
+    /// <summary><c>GET /denpa/logs</c> の形式: <c>{"lines":[{"at":ミリ秒,"text":"…"}]}</c></summary>
     public JsonObject ToJson() => new()
     {
         ["lines"] = new JsonArray([.. Snapshot().Select(line =>

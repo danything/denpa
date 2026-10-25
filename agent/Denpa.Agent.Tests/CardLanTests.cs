@@ -61,7 +61,7 @@ public class CardLanTests
         await Assert.That(refusal).IsNotNull();
         await Assert.That(refusal!.Rule).IsEqualTo("CARD_SHARE_NETWORKS");
         await Assert.That(refusal.Message).Contains("LAN の中にだけ");
-        // 射影アドレスは IPv4 の形で出す (ログと画面で読めるように)
+        // 射影アドレスは IPv4 の形式で出す (ログと画面で読めるように)
         await Assert.That(refusal.Message).DoesNotContain("::ffff:");
     }
 

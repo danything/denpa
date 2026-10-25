@@ -145,7 +145,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         return (a[bits / 8] & mask) == (b[bits / 8] & mask);
     }
 
-    /// <summary><c>10.0.0.0/8</c> の形か、アドレス1つ (<c>192.168.1.20</c>)</summary>
+    /// <summary><c>10.0.0.0/8</c> の形式か、アドレス1つ (<c>192.168.1.20</c>)</summary>
     private static IPNetwork Network(string text)
     {
         if (text.Contains('/'))

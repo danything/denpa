@@ -116,7 +116,7 @@ public class AsicenTests
     [Arguments("asicen:../x:0")]
     [Arguments("asicen:1-:0")]
     [Arguments("px4:1-2:0")]
-    public async Task 形の違う_device_は断る(string device)
+    public async Task 形式の違う_device_は断る(string device)
     {
         await Assert.That(AsicenUserland.Parse(device)).IsNull();
     }

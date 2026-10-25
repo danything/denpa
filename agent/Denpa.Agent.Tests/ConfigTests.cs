@@ -96,7 +96,7 @@ public class TunerSpecTests
     }
 
     [Test]
-    public async Task 形の違うファイルは空として扱う()
+    public async Task 形式の違うファイルは空として扱う()
     {
         var config = Fresh();
         File.WriteAllText(config.TunersFile, """[{ "name": "a" }]""");

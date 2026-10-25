@@ -357,7 +357,7 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
 });
 
 // --- 診断 -----------------------------------------------------------------
-// 直近のログ (古い順・最大 2000 行)。設定の「診断」画面が読む。メモリだけなので再起動で消える
+// 直近のログ。設定の「診断」画面が読む (Json.cs の Log)
 app.MapGet("/denpa/logs", (HttpContext http) => Respond.Write(http, Log.Recent.ToJson()));
 
 app.MapFallback((HttpContext http) =>

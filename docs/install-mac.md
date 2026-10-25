@@ -82,7 +82,7 @@ sudo defaults write /Library/Preferences/com.apple.security.smartcard useIFDCCID
 ```
 
 ほかのスマートカード (仕事の IC カードなど) の動きも変わりうるので、読めなかったときだけ切り替えてください。
-今どちらのドライバかは `denpa-agent --card` の最後の行に出ます。
+今どちらのドライバかは `denpa-agent --card` のリーダーの一覧のあと (「CCID ドライバ: …」の行) に出ます。
 
 **なぜ読めないか (推測)。** B-CAS カードは specific mode で、ATR の直後から TA1 の速さで話します。
 Gemalto PC Twin の系統のリーダー (IDBridge CT30 もこの系統) はそれを自分では読まず、ドライバが速さを

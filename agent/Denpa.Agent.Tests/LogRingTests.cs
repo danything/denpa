@@ -59,7 +59,7 @@ public class LogRingTests
     }
 
     [Test]
-    public async Task JSONの形()
+    public async Task JSONの形式()
     {
         var ring = new LogRing(2);
         ring.Add("起動しました");

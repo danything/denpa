@@ -93,7 +93,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 筐体と受信機から設定の形に組み立てる()
+    public async Task 筐体と受信機から設定の形式に組み立てる()
     {
         var found = Px4Userland.Specs(Px4Userland.ParseJson(JsonList, _ => { }));
         // MLT5PE 2つ + Q3U4 2つ + 番号の重なる M1UR / S1UR 1つずつ
@@ -269,7 +269,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task px4d_list_json_は形が違っても読めたところを使う()
+    public async Task px4d_list_json_は形式が違っても読めたところを使う()
     {
         var warned = new List<string>();
         var found = Px4Userland.ParseJson(

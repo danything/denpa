@@ -76,7 +76,7 @@ ASICEN 系 (PLEX PX-W3U3) のユーザー空間ドライバです。**まだリ�
 
 ## カードリーダー
 
-**USB のリーダーは usbfs を直接扱います。** `/dev/bus/usb` が見えていれば動きます。
+**USB のリーダーは usbfs を直接扱います** (Linux。Mac と Windows は OS の PC/SC 越し。[install-mac.md](install-mac.md#カードが読めないとき))。`/dev/bus/usb` が見えていれば動きます。
 ホストや別のコンテナで pcscd が動いていると使えません (「別のプロセスがカードリーダーを
 使用中です」と出る)。TPDU 単位のリーダー (Gemalto PC Twin など) には T=1 の枠組みを
 こちらで組み、APDU 単位のリーダーにはそのまま送ります。カードの無いリーダーや INT に

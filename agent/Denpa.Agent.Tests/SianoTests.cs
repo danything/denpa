@@ -123,7 +123,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task device_の形()
+    public async Task device_の形式()
     {
         await Assert.That(SianoUserland.Parse("siano:1-2")).IsEqualTo("1-2");
         await Assert.That(SianoUserland.Parse("siano:3-1.4.2")).IsEqualTo("3-1.4.2");

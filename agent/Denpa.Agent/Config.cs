@@ -107,7 +107,7 @@ public sealed class Config(string tunersFile, string channelsFile)
             var parsed = JsonNode.Parse(File.ReadAllText(path));
             var found = key is null ? parsed : (parsed as JsonObject)?[key];
             if (found is JsonArray list) return list;
-            Log.Write($"{path} の形が違うので読みませんでした ({(key is null ? "配列" : $"{key} の配列")}が必要です)");
+            Log.Write($"{path} の形式が違うので読みませんでした ({(key is null ? "配列" : $"{key} の配列")}が必要です)");
             return [];
         }
         catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException)
@@ -121,7 +121,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     private static void WriteAtomic(string path, JsonNode body)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        // 書きかけを読ませない。読む側 (denpa) は起動中にも取りに来る
+        // 書きかけを読ませない。読む側 (denpa) は起動中にも読みに来る
         var working = $"{path}.writing";
         File.WriteAllText(working, body.ToJsonString(Json.Pretty));
         File.Move(working, path, overwrite: true);
