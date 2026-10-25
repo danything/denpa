@@ -16,9 +16,14 @@
   import { redact } from "#lib/redact.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
 
+  import type { PageData } from "./$types";
   import IssueDialog from "./IssueDialog.svelte";
 
-  let { data } = $props();
+  /**
+   * 設定の「その他」の「バージョンと環境」(`#version`) と「ログ」(`#logs`) の節。前の「診断」の画面。
+   * 環境の中身は Issue の報告にも入れるので、2つの節を1つの部品に置く
+   */
+  let { data }: { data: PageData } = $props();
 
   /** 読み直しの間も前の中身を出したままにする (`held`。設定の「チューナー」と同じ) */
   const tuners = held(() => data.tuners);
@@ -200,26 +205,30 @@
 </script>
 
 <!-- 節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先 -->
-<div class="part" id="environment" data-part>
+<div class="part" id="version" data-part>
   <div class="sections readable">
     <!--
-        **バグを報告するときに聞かれるもの。** denpa とエージェントのバージョン・OS・チューナー・カードリーダー・ブラウザ。
-        エージェントのことは `GET /denpa/about` から。macOS のエージェントなら CCID ドライバも
+        **動いているバージョンと、バグを報告するときに聞かれるもの。** denpa とエージェントのバージョン・OS・
+        チューナー・カードリーダー・ブラウザ。エージェントのことは `GET /denpa/about` から。macOS のエージェントなら CCID ドライバも。
+        新しいバージョンのリンクはヘッダー (狭い画面は「その他」) にだけ出す (`server/update.ts`)。
+        ここにも並べると同じリンクが2か所になる。main のイメージと手元は `dev` で、リリースと見比べない
     -->
     <section class="section" data-testid="diagnostics-environment">
       <div class="section-head">
-        <h2>環境</h2>
+        <h2>バージョンと環境</h2>
       </div>
+      {#if data.environment.version === "dev"}
+        <Lead>開発ビルドなので、新しいリリースとは見比べません</Lead>
+      {:else}
+        <Lead
+          >新しいバージョンが出たら、ヘッダー (狭い画面は下の「その他」)
+          に出ます</Lead
+        >
+      {/if}
       <div class="setting-rows">
         <div class="field">
           <span class="field-label">denpa のバージョン</span>
           <span class="small" data-testid="diag-version">{versionText}</span>
-        </div>
-        <div class="field">
-          <span class="field-label">サーバ</span>
-          <span class="small" data-testid="diag-server">
-            {data.environment.os}・{data.environment.runtime}
-          </span>
         </div>
         <div class="field">
           <span class="field-label">エージェントのバージョン</span>
@@ -231,6 +240,12 @@
                 とバージョンが違います。同じバージョンに揃えてください
               </span>
             {/if}
+          </span>
+        </div>
+        <div class="field">
+          <span class="field-label">サーバ</span>
+          <span class="small" data-testid="diag-server">
+            {data.environment.os}・{data.environment.runtime}
           </span>
         </div>
         {#if about.value?.about}

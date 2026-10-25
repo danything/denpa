@@ -8,6 +8,8 @@
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { measure } from "#lib/measure.svelte.js";
 
+  import Diagnostics from "./Diagnostics.svelte";
+
   let { data, form } = $props();
 
   const notices = $derived.by(() => {
@@ -158,30 +160,8 @@
   </div>
 </div>
 
-<div class="part" id="version" data-part>
-  <div class="sections readable">
-    <!--
-            **動いているバージョン。** 新しいバージョンのリンクはヘッダー (狭い画面は「その他」) にだけ出す (`server/update.ts`)。
-            ここにも並べると同じリンクが2か所になる。main のイメージと手元は `dev` で、リリースと見比べない
-        -->
-    <section class="section">
-      <div class="section-head">
-        <h2>バージョン</h2>
-      </div>
-      <p class="small" data-testid="version">
-        {data.version === "dev" ? "開発ビルド (dev)" : data.version}
-      </p>
-      {#if data.version === "dev"}
-        <Lead>開発ビルドなので、新しいリリースとは見比べません</Lead>
-      {:else}
-        <Lead
-          >新しいバージョンが出たら、ヘッダー (狭い画面は下の「その他」)
-          に出ます</Lead
-        >
-      {/if}
-    </section>
-  </div>
-</div>
+<!-- バージョンと環境 (`#version`)・ログ (`#logs`)。前の「診断」 -->
+<Diagnostics {data} />
 
 <style>
   .section form {

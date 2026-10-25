@@ -180,5 +180,5 @@ docker compose run --rm tuner-agent --tune /dev/dvb/adapter1/frontend0 T27 --dec
 docker compose start tuner-agent
 ```
 
-それでも直らなければ、設定の「診断」→「Issue にする」で報告してください。サーバとエージェントのログと環境を、
-カードの番号や IP アドレスを伏せて Issue のフォームに入れます ([screens.md](screens.md#診断))。
+それでも直らなければ、設定の「その他」→「ログ」の「Issue にする」で報告してください。サーバとエージェントのログと環境を、
+カードの番号や IP アドレスを伏せて Issue のフォームに入れます ([screens.md](screens.md#バグの報告))。

@@ -8,7 +8,7 @@ import { serverLogs } from "./log-buffer";
 import { webhooks } from "./schema";
 
 /**
- * **設定の「診断」に出すもの。** サーバとエージェントのログ、動いている環境。
+ * **設定の「その他」の「バージョンと環境」と「ログ」に出すもの。** サーバとエージェントのログ、動いている環境。
  *
  * エージェントのログは `GET /denpa/logs` (`{"lines":[{"at":<epoch ms>,"text":"…"}]}`。新しいほうから 2000 行まで、古い順)。
  * エージェント自身のことは `GET /denpa/about` (`{"version","os","arch","runtime","ccidDriver"}`。agent/Denpa.Agent/About.cs)。

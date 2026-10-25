@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// distroless のイメージにはシェルが無く、標準出力を読めない人もいる。残した分は
-/// <c>GET /denpa/logs</c> で返し、設定の「診断」画面に出す。メモリだけなので再起動で消える。
+/// <c>GET /denpa/logs</c> で返し、設定の「その他」の「ログ」に出す。メモリだけなので再起動で消える。
 /// </para>
 /// </summary>
 public static class Log

@@ -3,12 +3,12 @@ import { readFileSync } from "node:fs";
 import { expect, goto, syncEpg, test } from "./helpers";
 
 /**
- * 設定の「診断」。サーバとエージェントのログを読み、伏せた報告から GitHub の Issue を開く。
+ * 設定の「その他」の「バージョンと環境」と「ログ」(前の「診断」)。サーバとエージェントのログを読み、伏せた報告から GitHub の Issue を開く。
  *
  * 偽のエージェントのログ (`tests/fake/agent.ts` の `/denpa/logs`) には、カードの番号・IP アドレス・
  * ホスト名と、伏せない番組名 (でんぱニュース) を混ぜてある
  */
-test.describe("設定の診断", () => {
+test.describe("設定のバージョンと環境・ログ", () => {
   test.afterEach(async ({ request, stack }) => {
     await request.post(`${stack.agentUrl}/__control/logs?mode=normal`);
     await request.post(`${stack.agentUrl}/__control/about?mode=normal`);
@@ -20,8 +20,8 @@ test.describe("設定の診断", () => {
   }) => {
     // 番組表を集めるとサーバがログを出す
     await syncEpg(request);
-    await goto(page, "/settings/diagnostics");
-    await expect(page).toHaveTitle("診断 - 設定 - denpa");
+    await goto(page, "/settings/general");
+    await expect(page).toHaveTitle("その他 - 設定 - denpa");
 
     await expect(page.getByTestId("diag-version")).not.toBeEmpty();
     await expect(page.getByTestId("diag-tuners")).toContainText("(GR");
@@ -66,7 +66,7 @@ test.describe("設定の診断", () => {
   test("Issue にする前に伏せた報告を見せ、入力済みのフォームを開く", async ({
     page,
   }) => {
-    await goto(page, "/settings/diagnostics");
+    await goto(page, "/settings/general");
     await expect(
       page.getByTestId("log-line").filter({ hasText: "でんぱニュース" }),
     ).toBeVisible();
@@ -135,7 +135,7 @@ test.describe("設定の診断", () => {
     stack,
   }) => {
     await request.post(`${stack.agentUrl}/__control/logs?mode=many`);
-    await goto(page, "/settings/diagnostics");
+    await goto(page, "/settings/general");
     await page.getByTestId("issue-start").click();
     const dialog = page.getByTestId("issue-dialog");
     await expect(dialog.getByTestId("issue-length")).toContainText(
@@ -169,7 +169,7 @@ test.describe("設定の診断", () => {
     stack,
   }) => {
     await request.post(`${stack.agentUrl}/__control/about?mode=mac`);
-    await goto(page, "/settings/diagnostics");
+    await goto(page, "/settings/general");
     await expect(page.getByTestId("diag-agent-version")).toContainText(
       "v0.9.0",
     );
@@ -200,7 +200,7 @@ test.describe("設定の診断", () => {
   }) => {
     await request.post(`${stack.agentUrl}/__control/logs?mode=off`);
     await request.post(`${stack.agentUrl}/__control/about?mode=off`);
-    await goto(page, "/settings/diagnostics");
+    await goto(page, "/settings/general");
     await expect(page.getByTestId("agent-logs-error")).toContainText(
       "前のバージョン",
     );

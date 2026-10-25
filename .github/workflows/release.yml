@@ -101,7 +101,7 @@ jobs:
       # denpa もエージェントも**バージョンを 1 層足して**から名前を付ける (.github/release.Dockerfile)。
       # main で組んだイメージを土台にするので中身は同じで、増えるのは ENV の 1 枚。
       # 動いている denpa はこれで自分のバージョンを知り、新しいバージョンの通知を出す。
-      # エージェントは `GET /denpa/about` で返し (agent/Denpa.Agent/About.cs)、設定の「診断」が
+      # エージェントは `GET /denpa/about` で返し (agent/Denpa.Agent/About.cs)、設定の「バージョンと環境」が
       # denpa とずれていないかを見る。元のイメージが無ければここで落ちる (黙って古い latest が
       # 残るより、そのほうがいい)。
       #

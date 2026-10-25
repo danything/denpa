@@ -116,6 +116,18 @@ test.describe("ホームと画面遷移", () => {
     await page.waitForURL(/\/settings\/reception#channels$/);
     await expect(page.getByTestId("channel-section")).toBeInViewport();
     await expect(nav.getByTestId("settings-nav-logos")).toHaveCount(0);
+    // 前の「診断」はその他に入った。前の URL はその他の「バージョンと環境」へ送る
+    const diagnostics = await page.request.get("/settings/diagnostics", {
+      maxRedirects: 0,
+    });
+    expect(diagnostics.status()).toBe(308);
+    expect(diagnostics.headers()["location"]).toBe(
+      "../settings/general#version",
+    );
+    await expect(nav.getByTestId("settings-nav-diagnostics")).toHaveCount(0);
+    await nav.getByTestId("settings-nav-logs").click();
+    await page.waitForURL(/\/settings\/general#logs$/);
+    await expect(page.getByTestId("diagnostics-logs")).toBeInViewport();
     const old = await page.request.get("/tuners", { maxRedirects: 0 });
     expect(old.status()).toBe(308);
     await goto(page, "/tuners");

@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 namespace Denpa.Agent;
 
 /// <summary>
-/// エージェント自身のこと (<c>GET /denpa/about</c>)。設定の「診断」がバージョン・OS・arch と、macOS なら CCID ドライバを出す。
+/// エージェント自身のこと (<c>GET /denpa/about</c>)。設定の「その他」の「バージョンと環境」がバージョン・OS・arch と、macOS なら CCID ドライバを出す。
 ///
 /// <para>
 /// **バージョンは2か所から知る。** macOS と Windows の実行ファイルはリリースのときに

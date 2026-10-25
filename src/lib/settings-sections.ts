@@ -3,7 +3,8 @@
  * 節はその画面に上から積む。節へは `#<節>` で飛ぶ。左の一覧 (`routes/settings/+layout.svelte`) はこの順に
  * グループと、その下に節を出す。フォームと保存 (actions) はグループの画面が持つ。
  *
- * 並びは 録画 → 受信 (入れたときと困ったとき) → 連携 → 診断 (バグを報告するとき) → その他 (この端末・ログイン・バージョン。めったに開かないので下に置く。URL は前のまま `general`)。
+ * 並びは 録画 → 受信 (入れたときと困ったとき) → 連携 → その他 (この端末・ログイン・バージョンと環境・ログ。めったに開かないので下に置く。URL は前のまま `general`)。
+ * バージョンと環境・ログはバグを報告するときに開く (前の「診断」のグループ。その他の「バージョン」と診断の「環境」が重なっていたのでまとめた)。
  * 広い画面で `/settings` を開くと先頭のグループへ移る (`FIRST_GROUP`)。
  *
  * **節の名前 (`slug`) は前の画面の URL と同じにしてある** (`/settings/tuners` → `/settings/reception#tuners`)。
@@ -39,20 +40,13 @@ export const SETTINGS_GROUPS = [
     ],
   },
   {
-    slug: "diagnostics",
-    label: "診断",
-    sections: [
-      { slug: "environment", label: "環境" },
-      { slug: "logs", label: "ログ" },
-    ],
-  },
-  {
     slug: "general",
     label: "その他",
     sections: [
       { slug: "browser", label: "この端末" },
       { slug: "login", label: "ログイン" },
-      { slug: "version", label: "バージョン" },
+      { slug: "version", label: "バージョンと環境" },
+      { slug: "logs", label: "ログ" },
     ],
   },
 ] as const satisfies readonly {
@@ -70,6 +64,8 @@ export const FIRST_GROUP = "recording";
  */
 export const MOVED_SECTIONS: Readonly<Record<string, string>> = {
   browser: "general#browser",
+  // 前の「診断」のグループ。環境とログはその他に入った。送り先の `#version` が勝つので、前の `#logs` もここへ着く
+  diagnostics: "general#version",
   tuners: "reception#tuners",
   channels: "reception#channels",
   // ロゴの節は受信できるチャンネルの表に入った (局ロゴ・CMロゴの列)

@@ -7,7 +7,7 @@
 # (`dev`)、通知も出さない — main を追いかけている限りリリースより常に先
 #
 # エージェントは同じ変数で自分のバージョンを知り、`GET /denpa/about` で返す (agent/Denpa.Agent/About.cs)。
-# 設定の「診断」が denpa とずれていないかを見る
+# 設定の「その他」の「バージョンと環境」が denpa とずれていないかを見る
 ARG BASE
 FROM ${BASE}
 ARG DENPA_VERSION

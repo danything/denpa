@@ -9,14 +9,14 @@ import { cardStatus } from "#lib/server/scramble.js";
 import { tunerList } from "#lib/server/tuner.js";
 
 /**
- * 診断。動いている環境 (denpa とエージェントのバージョン・OS・チューナー・カードリーダー) と、サーバとエージェントのログ。
+ * 「バージョンと環境」と「ログ」の節 (前の「診断」)。動いている環境 (denpa とエージェントのバージョン・OS・チューナー・カードリーダー) と、サーバとエージェントのログ。
  * バグを報告するとき、ここから伏せた報告を作って GitHub の Issue を開く (`#lib/issue-report.ts`)。
  *
  * **秘密の値 (OIDC のクライアントシークレット・Webhook の URL) は、画面に送る前にログから消す。**
  * ホスト名は画面にはそのまま出し (自分の家の作りを見るのは本人)、Issue に貼るときに伏せる。
  * そのために伏せるホスト名 (`hosts`) を渡す
  */
-export function load({ url }) {
+export function load(url: URL) {
   const known = knownValues(url.hostname);
   return {
     environment: serverEnvironment(),

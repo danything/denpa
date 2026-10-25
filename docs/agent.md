@@ -680,12 +680,12 @@ protocol の選び方ではありません。なので、いちばん退屈な�
 | TS                                      | HTTP の chunked (`/denpa/stream`) | 素のTSだけ。何も包まない。届いた塊ごとに flush する |
 
 **直近のログも HTTP で返します** (`GET /denpa/logs`)。distroless のイメージにはシェルが無く、
-標準出力を読めない人もいるためです。読むのは denpa の設定の「診断」画面で、
+標準出力を読めない人もいるためです。読むのは denpa の設定の「その他」の「ログ」で、
 `{"lines":[{"at":エポックからのミリ秒,"text":"頭の [agent] を除いた本文"}]}` を古い順に最大 2000 行返します。
 持つのはメモリだけなので、再起動すると消えます。
 
 **自分のことも返します** (`GET /denpa/about`)。`{"version":"v1.2.3","os":"linux|macos|windows","arch":"x64|arm64","runtime":"OS の説明","ccidDriver":"apple|ifd-ccid"|null}`。
-「診断」画面がエージェントのバージョン・OS を出し、denpa とバージョンが違えば知らせます (2 つは揃えて使うもの)。
+設定の「その他」の「バージョンと環境」がエージェントのバージョン・OS を出し、denpa とバージョンが違えば知らせます (2 つは揃えて使うもの)。
 バージョンは、macOS と Windows の実行ファイルならリリースのときに組み込んだもの、Linux のイメージなら
 リリースのときに足す `DENPA_VERSION` (イメージは組み直さないため。`About.cs`)。どちらも無ければ `dev` です。
 `ccidDriver` は macOS だけで、どちらの CCID ドライバか (`denpa-agent --card` と同じ見分け方。`defaults` を1回起こす)。

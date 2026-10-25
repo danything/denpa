@@ -1,4 +1,4 @@
-// いちばん先に読む。アプリの起動のログからサーバのログの写しを取る (設定の「診断」。`server.js` 自身の行は写らない)
+// いちばん先に読む。アプリの起動のログからサーバのログの写しを取る (設定の「その他」の「ログ」。`server.js` 自身の行は写らない)
 import "#lib/server/log-buffer.js";
 
 import { redirect } from "@sveltejs/kit";

@@ -3,7 +3,7 @@ import { format } from "node:util";
 import { cut, type LogLevel, type LogLine } from "../issue-report";
 
 /**
- * **サーバのログの最後の 2000 行を、メモリに持っておく** (設定の「診断」に出し、Issue に貼る)。
+ * **サーバのログの最後の 2000 行を、メモリに持っておく** (設定の「その他」の「ログ」に出し、Issue に貼る)。
  *
  * 本番のイメージにはシェルが無く (distroless)、Mac と Windows ではログがファイルに出るので、
  * 「ログを貼ってください」と言われても集めにくかった。画面から読めるように、`console` を包んで写しを取る。

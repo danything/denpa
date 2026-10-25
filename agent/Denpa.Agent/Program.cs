@@ -357,7 +357,7 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
 });
 
 // --- 診断 -----------------------------------------------------------------
-// 直近のログ。設定の「診断」画面が読む (Json.cs の Log)
+// 直近のログ。設定の「その他」の「ログ」が読む (Json.cs の Log)
 app.MapGet("/denpa/logs", (HttpContext http) => Respond.Write(http, Log.Recent.ToJson()));
 // エージェント自身のバージョン・OS・arch と、macOS なら CCID ドライバ (About.cs)。macOS では `defaults` を起こすので背景で
 app.MapGet("/denpa/about", async (HttpContext http) => await Respond.Write(http, await Task.Run(About.ToJson)));
