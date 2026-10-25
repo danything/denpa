@@ -1660,7 +1660,21 @@
     clip-path: inset(0 -1.5rem 0 0);
   }
   .corner {
-    clip-path: inset(0 -1.5rem -1.5rem 0);
+    clip-path: inset(calc(-1 * var(--guide-head, 0px)) -1.5rem -1.5rem 0);
+  }
+  /*
+     * **局名の行より上の時の列は、地の色で覆う。** 広い画面では表がヘッダーと操作の1行の裏まで伸びていて、
+     * 浮いた面の左の隙間から、裏へ巻かれた時の数字と「いま」の時刻のカプセルがはみ出して見えていた
+     * (時の列は操作の層。別の操作の層の裏から覗かせない)。角と一緒に出し入れする (上を巻いていなければ、覆うものも無い)
+     */
+  .corner::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 100%;
+    height: var(--guide-head, 0px);
+    background: var(--dp-bg);
+    pointer-events: none;
   }
   @media (prefers-reduced-transparency: reduce) {
     .corner,
