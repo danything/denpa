@@ -358,6 +358,9 @@ export type DownloadResult = "done" | "missing";
 /** 取り直してよい失敗 (切れた・止まった・5xx) */
 class Retriable extends Error {}
 
+/** 長さが合わない。取り直しても変わらないので、失敗にして次の録画へ */
+class LengthMismatch extends Error {}
+
 /** こちらのディスクの失敗。取り直しても変わらない */
 const LOCAL_FAILURES = new Set([
   "ENOSPC",
@@ -375,7 +378,8 @@ const LOCAL_FAILURES = new Set([
  */
 function retriable(reason: unknown): boolean {
   if (reason instanceof Retriable) return true;
-  if (reason instanceof HttpError) return false;
+  if (reason instanceof HttpError || reason instanceof LengthMismatch)
+    return false;
   const code = (reason as { code?: unknown } | null)?.code;
   return !(typeof code === "string" && LOCAL_FAILURES.has(code));
 }
@@ -505,6 +509,14 @@ export async function downloadVideo(
         // Range を落とされた (か、頭から頼んだ)。書きかけは捨てて書き直す
         const length = res.headers.get("content-length");
         announced = length === null ? null : Number(length);
+        if (announced !== null && announced !== size) {
+          // 全部取ってから確かめるまでもない。数百GBを無駄に取らない
+          await res.body?.cancel();
+          await restart();
+          throw new LengthMismatch(
+            `長さが合いません (一覧 ${size} / 応答 ${announced} バイト)`,
+          );
+        }
         if (have > 0) {
           onBytes(-have);
           have = 0;
@@ -573,7 +585,7 @@ export async function downloadVideo(
   if (final !== size || (announced !== null && announced !== size)) {
     await unlink(temporary).catch(() => {});
     onBytes(-have);
-    throw new Error(
+    throw new LengthMismatch(
       `長さが合いません (一覧 ${size} / 応答 ${announced ?? "-"} / 書いた ${final} バイト)`,
     );
   }

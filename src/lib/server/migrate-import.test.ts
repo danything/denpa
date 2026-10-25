@@ -405,6 +405,8 @@ describe("ファイルの取り方", () => {
     expect(s.log.some((line) => line.includes("長さが合いません"))).toBe(true);
     expect(orm().select().from(recordings).all()).toEqual([]);
     expect(temporaries()).toEqual([]);
+    // 取り直さない (長さが違うのは取り直しても変わらない)
+    expect(fake.videoRequests.filter((item) => item.id === 11)).toHaveLength(1);
   });
 
   test("応答が止まったら取り直す", async () => {
