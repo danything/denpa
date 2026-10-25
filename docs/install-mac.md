@@ -90,8 +90,8 @@ Gemalto PC Twin の系統のリーダー (IDBridge CT30 もこの系統) はそ�
 Apple のドライバはソースが公開されておらず、ここが違うのかは確かめられていません。Sequoia で
 「Gemplus USB SmartCard Reader」が Apple のドライバだと `Card is unresponsive` になり、従来のドライバで直った、
 という報告もあります ([Ludovic Rousseau's blog](https://blog.apdu.fr/posts/2024/10/macos-sequoia-and-smart-cards-status/))。
-Apple のドライバには速さを変える設定 (`AllowAlternativeFiDi`。`man SmartCardServices`) もありますが、
-B-CAS で効くかは分かっていません。
+Apple のドライバには速さの設定 (`AllowAlternativeFiDi`。`man SmartCardServices`) もありますが、これは速さを
+カードと決め直すカード (negotiable mode) 向けで、B-CAS のような specific mode のカードには効かない見込みです。
 
 繋がらないときは、ログの PC/SC のエラー番号 (`0x8010…`) と `denpa-agent --card` の出力を
 [Issue](https://github.com/danything/denpa/issues) に貼ってもらえると、ドライバを切り替えずに読めるようにできるかを調べられます。
