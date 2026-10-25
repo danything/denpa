@@ -678,7 +678,8 @@ progress.running[value]::-webkit-progress-value {
 /*
  * **見せる画面の地に敷く、主の色の淡い光** (1 つだけ言う画面 `.solo` と空の状態。docs/design.md の「見せる画面」)。
  * 中身の裏に `radial-gradient` を 1 枚敷くだけで、ぼかさず、動かさない。光は箱の内側で消える (`closest-side`) ので、
- * 縁は見えず、横にはみ出してページが横に巻けることもない。上下だけ少し広げて、見出しの上まで届かせる
+ * 縁は見えず、横にはみ出してページが横に巻けることもない。上にだけ少し広げて見出しの上まで届かせる
+ * (下へ広げると、画面の最後に置いたときにページが縦に余分に巻ける)
  */
 .glow {
   position: relative;
@@ -687,7 +688,7 @@ progress.running[value]::-webkit-progress-value {
 .glow::before {
   content: "";
   position: absolute;
-  inset: -3rem 0;
+  inset: -3rem 0 0;
   z-index: -1;
   background: radial-gradient(closest-side, var(--dp-glow), transparent);
   pointer-events: none;
