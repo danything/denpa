@@ -12,7 +12,7 @@ import { syncThemeColor } from "#lib/theme-color.js";
 export type ThemeMode = "system" | "light" | "dark";
 
 /** 並びはヘッダーのボタンで巡る順 */
-export const THEME_MODES: readonly ThemeMode[] = ["dark", "light", "system"];
+const THEME_MODES: readonly ThemeMode[] = ["dark", "light", "system"];
 
 export const THEME_LABEL: Record<ThemeMode, string> = {
   system: "端末に合わせる",

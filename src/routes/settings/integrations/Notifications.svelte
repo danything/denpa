@@ -85,7 +85,7 @@
               <span class="muted">送る通知:</span>
               {webhook.events.length === 0
                 ? "すべて"
-                : webhook.events.map((e) => EVENT_LABEL[e] ?? e).join(", ")}
+                : webhook.events.map((e) => EVENT_LABEL[e] ?? e).join("・")}
             </div>
             <div class="small">
               <span class="muted">直近の結果:</span>

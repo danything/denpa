@@ -149,7 +149,7 @@
   }
 
   /**
-   * XML の AIT から開く (電波に AIT が無い局。`bml/browser.ts` の `startAppFrom`)。**取りに行き始めたら true** —
+   * XML の AIT から開く (電波に AIT が無い局。`bml/browser.ts` の `startAppFrom`)。**取得を始めたら true** —
    * 文書には待たずに答え、届いたら開く。取れない・開けるアプリが無いときは、何を読もうとしたかをコンソールに残してデータ放送のまま
    */
   function startAppFrom(uri: string, hint: number[]): boolean {
