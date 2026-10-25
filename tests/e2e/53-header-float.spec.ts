@@ -30,7 +30,8 @@ test("巻くと浮き、巻けない画面へ移ると平らに戻る", async ({
       document.scrollingElement!.scrollHeight -
       document.scrollingElement!.clientHeight,
   );
-  test.skip(scrollable < 24, "設定の画面が巻けるほど長くない");
+  // 浮くのを見るには、設定の画面がヘッダーの浮く量 (1.5rem) より長く巻ける必要がある
+  expect(scrollable).toBeGreaterThan(24);
   await expect.poll(() => flat(page)).toBe(true);
 
   await page.mouse.wheel(0, 2000);
