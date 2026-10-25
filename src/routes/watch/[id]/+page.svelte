@@ -1956,7 +1956,7 @@
 
             <!--
                             ⚙ の行は使えるときだけ出す: CM スキップは CM の入った録画、コーデックは観られる方式が
-                            2つ以上 (`ts/playback.ts` の `pickOffer`)、音声は2本以上 (`syncAudio`)
+                            2つ以上 (`codecMenu`)、音声は2本以上 (`syncAudio`)
                         -->
             <StageTail
               prefix="watch"

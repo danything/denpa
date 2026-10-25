@@ -382,7 +382,7 @@
   /*
      * 候補。欄の真下に浮かせ、欄より少し広く取る (ヘッダーの欄が縮んでも読める幅)。
      * 節は小さな見出しと行だけ (カードにしない)。指している行はメニューと同じ地 (`--dp-pop-hover`)。
-     * 箱はメニューと同じ面 (`--dp-pop`)・内側の余白 (8px) に影だけ (縁もぼかしも付けない。docs/design.md)
+     * 箱はメニューと同じ面 (`--dp-pop`)・内側の余白 (8px)・項目の余白 (8px × 12px) と間 (2px) に影だけ (縁もぼかしも付けない。docs/design.md)
      */
   .suggest {
     position: absolute;
@@ -433,10 +433,13 @@
     align-items: center;
     gap: var(--dp-space-3);
     min-height: 2.5rem;
-    padding: var(--dp-space-1) var(--dp-space-3);
+    padding: var(--dp-space-2) var(--dp-space-3);
     /* 箱の角から内側の余白を引いた丸み (入れ子) */
     border-radius: calc(var(--dp-radius-lg) - var(--dp-space-2));
     cursor: pointer;
+  }
+  .suggest-option + .suggest-option {
+    margin-top: 0.125rem;
   }
   .suggest-option.active {
     background: var(--dp-pop-hover);

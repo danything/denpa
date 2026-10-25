@@ -512,21 +512,6 @@
       padding-inline: 0.3rem;
     }
   }
-  .log summary {
-    color: var(--dp-muted);
-    cursor: pointer;
-  }
-  .log pre {
-    max-height: 16rem;
-    overflow: auto;
-    margin: 0.25rem 0 0;
-    padding: 0.5rem;
-    border-radius: var(--dp-radius);
-    background: var(--dp-subtle);
-    font-family: var(--pico-font-family-monospace);
-    font-size: var(--dp-text-xs);
-    white-space: pre-wrap;
-  }
   /* ロゴの数は、チャンネル → 局 → 番組表の数のあとに少し離して並べる */
   .logo-counts {
     display: inline-flex;

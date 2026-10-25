@@ -478,7 +478,7 @@
     gap: 0.25rem;
   }
   /* 録画中の点 (`app.css` の `.rec-dot`。ゆっくり脈打つ) を字の真ん中に */
-  .rec :global(.rec-dot) {
+  .rec .rec-dot {
     align-self: center;
   }
   /* 通知の列は押せない (`PlayerStage`)。この通知だけ押せるように戻す */

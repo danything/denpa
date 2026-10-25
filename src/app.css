@@ -22,7 +22,7 @@
  * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`
  * - forms/input-range … `player/SeekBar`
  * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
- * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`
+ * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`
  * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`
  *
  * 部品を足すとき: 当てる要素がどの画面にも出るならここに (並びを守って)、そうでなければ描くコンポーネントの
@@ -327,7 +327,7 @@
   }
 }
 
-/* ---- 読み込めたらふわっと出る画像 (`use:fadeIn`。`#lib/motion.svelte.ts`) ---- */
+/* ---- 読み込めたらふわっと出る画像 (`#lib/motion.svelte.ts` の `fadeIn`。録画のポスターは `Poster.svelte` の `{@attach}` から) ---- */
 img[data-fade] {
   transition: opacity var(--dp-duration-enter) var(--dp-ease);
 }
@@ -621,6 +621,22 @@ progress.running[value]::-webkit-progress-value {
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+/* その記録 (`<details class="log">`)。字だけの見出しの下に、開いたら淡い面 (枠は付けない) */
+.progress-block .log summary {
+  color: var(--dp-muted);
+  cursor: pointer;
+}
+.progress-block .log pre {
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0.25rem 0 0;
+  padding: 0.5rem;
+  border-radius: var(--dp-radius);
+  background: var(--dp-subtle);
+  font-family: var(--pico-font-family-monospace);
+  font-size: var(--dp-text-xs);
+  white-space: pre-wrap;
 }
 
 /* ---- 面 ---- */
@@ -1356,7 +1372,7 @@ a.button {
   color: inherit;
   border: 1px solid transparent;
 }
-/* 淡い地は、状態の色を地の色 (--dp-surface) に 14% 混ぜる (通知は 10%)。バッジと通知で同じ考え */
+/* 淡い地は、状態の色を面の色 (--dp-surface) に 14% 混ぜる (通知は 10%)。バッジと通知で同じ考え */
 .tag.success {
   background: color-mix(in srgb, var(--dp-ok) 14%, var(--dp-surface));
   color: var(--dp-ok-text);
@@ -1808,6 +1824,41 @@ dialog {
 /* 開いたときは箱にフォーカスを置く (`DriveNotice`)。箱そのものに枠は出さない */
 .modal-box:focus {
   outline: none;
+}
+/*
+ * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)。
+ * 右上の ✕ は箱の角に置き、見出しはその分だけ右を空ける
+ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  cursor: default;
+}
+.modal-close {
+  position: absolute;
+  top: var(--dp-space-3);
+  right: var(--dp-space-3);
+  z-index: 1;
+  color: var(--dp-muted);
+}
+.modal-close:hover {
+  color: inherit;
+}
+.modal-close svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.modal-close ~ h2 {
+  margin: 0 2.5rem 0 0;
+  font-size: var(--dp-text-lg);
 }
 .modal-actions {
   display: flex;

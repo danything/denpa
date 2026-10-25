@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invalidateAll } from "$app/navigation";
+  import { refreshAll } from "$app/navigation";
   import { onMount } from "svelte";
 
   import Lead from "#lib/components/Lead.svelte";
@@ -61,7 +61,7 @@
 
   const versionText = $derived(
     data.environment.version === "dev"
-      ? "開発中のビルド (dev)"
+      ? "開発ビルド (dev)"
       : data.environment.version,
   );
 
@@ -113,7 +113,7 @@
   async function reload(): Promise<void> {
     reloading = true;
     try {
-      await invalidateAll();
+      await refreshAll();
     } finally {
       reloading = false;
     }
@@ -173,7 +173,7 @@
 <div class="part" id="environment" data-part>
   <div class="sections readable">
     <!--
-        **バグを報告するときに聞かれるもの。** バージョン・OS・チューナー・カードリーダー。
+        **バグを報告するときに聞かれるもの。** バージョン・OS・チューナー・カードリーダー・ブラウザ。
         エージェントのバージョンと OS はエージェントが返さないので出さない
     -->
     <section class="section" data-testid="diagnostics-environment">
@@ -386,7 +386,6 @@
     gap: 0 var(--dp-space-2);
     margin: 0;
     padding: 0.125rem 0;
-    list-style: none;
   }
   .at,
   .from {

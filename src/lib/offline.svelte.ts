@@ -34,7 +34,7 @@ export interface OfflineEntry {
 }
 
 let entries = $state<Record<number, OfflineEntry>>({});
-/** サーバからも消すと決めたもの (outbox)。一覧で「消える予定」と出す */
+/** サーバからも消すと決めたもの (outbox)。一覧の下に、次にオンラインに戻ったときサーバからも削除する件数を出す */
 let pendingDelete = $state<Record<number, boolean>>({});
 /** 保存に失敗した録画。画面が読んだら消す (`clearFailed`) — 黙って消えると分からない */
 let failed = $state<number | null>(null);

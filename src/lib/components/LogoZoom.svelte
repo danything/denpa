@@ -107,10 +107,10 @@
   aria-labelledby="logo-zoom-title"
   data-testid="logo-zoom"
 >
-  <!-- 幕を押したら閉じる (番組の詳細と同じく、箱の後ろに全面のボタンを敷く)。Tab では止まらない -->
+  <!-- 幕を押したら閉じる (`app.css` の `.modal-backdrop`) -->
   <button
     type="button"
-    class="backdrop"
+    class="modal-backdrop"
     tabindex="-1"
     aria-label="閉じる"
     onclick={() => dialog?.close()}
@@ -118,7 +118,7 @@
   <article class="modal-box" bind:this={box} tabindex="-1">
     <button
       type="button"
-      class="ghost icon small close"
+      class="ghost icon small modal-close"
       onclick={() => dialog?.close()}
       aria-label="閉じる"
       data-testid="logo-zoom-close"
@@ -176,37 +176,6 @@
 </dialog>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    cursor: default;
-  }
-  .close {
-    position: absolute;
-    top: var(--dp-space-3);
-    right: var(--dp-space-3);
-    z-index: 1;
-    color: var(--dp-muted);
-  }
-  .close:hover {
-    color: inherit;
-  }
-  .close :global(svg) {
-    width: 1.125rem;
-    height: 1.125rem;
-  }
-  h2 {
-    margin: 0 2.5rem 0 0;
-    font-size: var(--dp-text-lg);
-  }
   .kind {
     margin: var(--dp-space-1) 0 var(--dp-space-4);
   }

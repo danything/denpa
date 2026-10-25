@@ -60,7 +60,7 @@
 
   const enabled = (day: number) => marks.has(day) || day === today;
 
-  /** 矢印の鍵で動かしている日。Tab で入る升はこれ、無ければ頭の日・今日・その月の最初の押せる日 */
+  /** 矢印キーで動かしている日。Tab で入る升はこれ、無ければ頭の日・今日・その月の最初の押せる日 */
   let focused = $state<number | null>(null);
   const entry = $derived.by(() => {
     const days = weeks.flat().filter((day) => day !== null);

@@ -67,24 +67,3 @@
     </details>
   {/if}
 </div>
-
-<style>
-  /*
-     * ログはスキャンのログ (`reception/Channels.svelte`) と同じ形。字だけの見出しの下に、開いたら淡い面 (枠は付けない)
-     */
-  .log summary {
-    color: var(--dp-muted);
-    cursor: pointer;
-  }
-  .log pre {
-    max-height: 16rem;
-    overflow: auto;
-    margin: 0.25rem 0 0;
-    padding: 0.5rem;
-    border-radius: var(--dp-radius);
-    background: var(--dp-subtle);
-    font-family: var(--pico-font-family-monospace);
-    font-size: var(--dp-text-xs);
-    white-space: pre-wrap;
-  }
-</style>

@@ -201,7 +201,7 @@
     return statusLines(activities, problems);
   }
 
-  /** 「45.0%・あと3分04秒」。SSE の生放送 (encode-live) があればそちら。読み直しを待たずに動く */
+  /** 「45.0%・あと3分04秒」。SSE で届く進み (`encode-live`) があればそちら。読み直しを待たずに動く */
   function encodeDetail(rec: Rec): string {
     const live = encodeLive.entries[rec.id];
     const left = eta(live !== undefined ? live.etaMs : rec.job_eta_ms);

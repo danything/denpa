@@ -208,7 +208,7 @@
               type="button"
               class="small keep {deleting.armed === item.id
                 ? 'danger'
-                : 'ghost'}"
+                : 'outline danger'}"
               onclick={() => remove(item)}
               data-testid="offline-delete"
             >
