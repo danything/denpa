@@ -9,7 +9,6 @@
 import type { BmlDocument, BmlElement, BmlNode, BmlText } from "./document";
 import { SIDES, type State } from "./style";
 import {
-  isObject,
   JSFunction,
   JSObject,
   type Lookup,
@@ -207,7 +206,6 @@ function normalizeStyle(property: string, value: Value): string {
 
 export class Dom {
   private readonly wrappers = new WeakMap<BmlNode, HostObject>();
-  private readonly nodes = new WeakMap<JSObject, BmlNode>();
   private readonly realm: Realm;
   readonly document: HostObject;
 
@@ -230,16 +228,8 @@ export class Dom {
     if (wrapper === undefined) {
       wrapper = node.kind === "text" ? this.text(node) : this.element(node);
       this.wrappers.set(node, wrapper);
-      this.nodes.set(wrapper, node);
     }
     return wrapper;
-  }
-
-  /** 包みから中身へ (イベントの target など) */
-  unwrap(value: Value): BmlElement | null {
-    if (!isObject(value)) return null;
-    const node = this.nodes.get(value);
-    return node?.kind === "element" ? node : null;
   }
 
   private node(object: HostObject, node: BmlNode): void {

@@ -29,7 +29,7 @@ export interface CompatInit {
   who: Who;
 }
 
-/** 親へ知らせるもの (`FrameMessage` の `greg`・`nvram`・`close`) */
+/** 親へ知らせるもの (`FrameMessage` の `greg`・`nvram`・`log`・`close`) */
 export type CompatPost = (message: Record<string, unknown>) => void;
 
 export function bmlCompat(

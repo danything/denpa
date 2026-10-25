@@ -45,7 +45,7 @@ const PID_NULL = 0x1fff;
  * 局に関係なく残す PID。**どれも数十バイト/秒**で、落として得るものが無い。
  *
  * CDT (ロゴ) はここに入れない。録画に要らないうえ、衛星では数百KBのカルーセルが
- * 流れてくる。ロゴを取得するのは録画の外でやる (logo.ts)
+ * 流れてくる。ロゴを取得するのは録画の外でやる (denpa の logo.ts)
  */
 const KEEP = new Set([
   0x0001, // CAT
@@ -137,7 +137,7 @@ export class ServiceFilter {
    * 番組全体 (1つめのループ) と ES ごと (2つめのループ) のどちらかが禁止なら禁止。
    * PMT を読むまでは false。
    *
-   * 録画はこれを見て、禁止のあいだは保存しない (`recorder.ts`)。番組表が古い・無いときの備え。
+   * 録画はこれを見て、禁止のあいだは保存しない (denpa の `recorder.ts`)。番組表が古い・無いときの備え。
    * 絞り方には効かせない — ライブは保存しないので、禁止の番組もそのまま観られる
    */
   get copyNever(): boolean {
@@ -245,7 +245,7 @@ export class ServiceFilter {
  * 1回だけ true を返して新しい並びを覚え直す。
  *
  * 並びを決め打ちで起こした ffmpeg (`-map`) は、番組が替わって音声の本数や字幕の PID が変わっても追従しない。
- * 変わったら起こし直す — ライブと追っかけのエンコード (`server/live.ts` の `Session.pump`)、MPEG-2 をそのまま
+ * 変わったら起こし直す — ライブと追っかけのエンコード (denpa の `server/live.ts` の `Session.pump`)、MPEG-2 をそのまま
  * 流す経路の字幕 (`Session.runRaw`・`recordingCaptions`)
  */
 export class StreamsWatch {

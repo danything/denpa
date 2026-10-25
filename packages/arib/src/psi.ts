@@ -38,7 +38,7 @@ const DESC_TS_INFORMATION = 0xcd;
 /**
  * スキャンで残すサービス種別。Mirakurun のスキャンが通しているものと同じで、
  * ラジオ (0x02) とデータ (0xc0) も入る。映像の無いものを番組表に並べないのは
- * 取り込むほう (epg.ts の DIGITAL_TV)
+ * 取り込むほう (denpa の epg.ts の DIGITAL_TV)
  */
 const SERVICE_TYPES = new Set([0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0]);
 
@@ -201,7 +201,7 @@ export class SectionAssembler {
  */
 const CONFIRM = 3;
 
-/** `from` 以降 `until` の手前までで、188 間隔に 0x47 が続くところを探す。無ければ -1 (`seek.ts` も使う) */
+/** `from` 以降 `until` の手前までで、188 間隔に 0x47 が続くところを探す。無ければ -1 (denpa の `seek.ts` も使う) */
 export function findSync(
   data: Uint8Array,
   from = 0,
@@ -228,7 +228,7 @@ export function findSync(
  *
  * **出すパケットは渡された塊の上の窓** (写しではない。写すと録画の処理の 1/3 を食う)。
  * 塊の入れ物を使い回す呼び出し側がある
- * (`server/recorded-bml.ts`) ので、**次の `feed` より後まで持つなら写すこと**。
+ * (denpa の `server/recorded-bml.ts`) ので、**次の `feed` より後まで持つなら写すこと**。
  * いまのパーサ (`SectionAssembler`・`PesDemuxer`) は溜めるときに写している
  */
 export class PacketStream {
@@ -408,7 +408,7 @@ export function parsePat(section: Uint8Array): Map<number, number> {
 /**
  * SDT のサービスの並びを (service_id, 記述子の並び) に切り分ける。
  *
- * **読む側が2つある。** 局名 (`parseSdt`) とロゴの対応 (`ts/logo.ts`) で、
+ * **読む側が2つある。** 局名 (`parseSdt`) とロゴの対応 (denpa の `ts/logo.ts`) で、
  * 欲しい記述子が違うだけで歩き方は同じ。並びの読み方をここ1箇所に置く。
  */
 export function* sdtServices(

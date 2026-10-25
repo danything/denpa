@@ -1,8 +1,8 @@
 /**
- * **1局に絞った TS から、映像と音声の PES を取り出す** (ライブを変換せずに送る経路。docs/stream.md#放送そのままmpeg-2を送る)。
+ * **1局に絞った TS から、映像と音声の PES を取り出す** (denpa のライブを変換せずに送る経路。docs/stream.md#放送そのままmpeg-2を送る)。
  *
  * エンコードする経路ではここを ffmpeg がやっていた。変換せずに送ると TS がそのままブラウザへ来るので、
- * 映像も音声も WASM のデコーダ (`wasm/decoder.c`) に渡す前に、
+ * 映像も音声も WASM のデコーダ (denpa の `wasm/decoder.c`) に渡す前に、
  * こちらで PES に戻す。サーバが1局に絞ってある (`ServiceFilter`) ので、PAT に
  * 載っている局は1つだけ — その PMT を読んで、映像1本と音声 (並んだ順) を取り出す。
  *
@@ -19,7 +19,7 @@ import {
   PmtTracker,
 } from "./psi.js";
 
-/** PTS・PCR の刻み (90kHz)。取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
+/** PTS・PCR の刻み (90kHz)。denpa の取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
 export const CLOCK = 90_000;
 /** PTS の一周 (33ビット)。26.5 時間 */
 export const WRAP = 2 ** 33;

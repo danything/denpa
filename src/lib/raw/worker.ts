@@ -3,7 +3,7 @@
  * **変換せずに送られてきた TS をデコードして描く** worker (docs/stream.md#放送そのままmpeg-2を送る)。
  *
  *     TS ─→ PES (packages/arib/src/pes.ts) ┬→ 映像: WASM の MPEG-2 デコーダ (wasm/decoder.c) → WebGL2 (render.ts)
- *                           └→ 音声: ADTS → 同じ WASM の AAC デコーダ → 画面へ (鳴らすのは画面)
+ *                                          └→ 音声: ADTS → 同じ WASM の AAC デコーダ → 画面へ (鳴らすのは画面)
  *
  * 音をデコードするのも同じ worker。AAC は1秒ぶんで数 ms (stream.md#放送そのままmpeg-2を送る) と、映像をデコードする手間の
  * 1% にも届かないので、worker を分けて受け渡しを増やすほどではない。

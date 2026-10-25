@@ -2,13 +2,13 @@
  * TS のセクションを組み立てる。
  *
  * 実チューナーが無いので、解析のテストにも偽エージェントにも「それらしい TS」が要る。
- * 読む側 (psi.ts・eit.ts・dsmcc.ts・logo.ts・ait.ts など) と対になる書く側で、ここだけが仕様の写し。
+ * 読む側 (psi.ts・eit.ts・dsmcc.ts・ait.ts、denpa の logo.ts など) と対になる書く側で、ここだけが仕様の写し。
  */
 
 import { joinBytes } from "./bytes.js";
 import { PACKET, SYNC, withCrc } from "./psi.js";
 
-// 組み立てる道具と一緒にここから取るテストがある (logo.test.ts) ので、そのまま出しておく
+// 組み立てる道具と一緒にここから取るテストがある (denpa の logo.test.ts) ので、そのまま出しておく
 export { withCrc };
 
 const be = (value: number) => [(value >> 8) & 0xff, value & 0xff];
@@ -432,7 +432,7 @@ export function pmtSection(
  * ふつうの PMT。映像・音声のような ES を並べる。
  *
  * ロゴ用の `pmtSection` と違って中身を選べる。局を選り分ける
- * [service-filter.ts](../../../packages/arib/src/service-filter.ts) を試すのに要る
+ * [service-filter.ts](service-filter.ts) を試すのに要る
  */
 export function programMap(
   serviceId: number,
@@ -608,7 +608,7 @@ export function logoModule(
 
 /*
  * --- データ放送のテストで使う定番の割り振り ---
- * bml / data-timeline / recorded-bml の3つのテストが、同じ表と同じ組み立てを
+ * denpa の bml / data-timeline / recorded-bml の3つのテストが、同じ表と同じ組み立てを
  * それぞれに書いていた。番号そのものに意味は無く、揃っていることに意味がある。
  */
 export const BML_TS = {

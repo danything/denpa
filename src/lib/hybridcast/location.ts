@@ -9,7 +9,6 @@
  * `location.hostname` などを、差し込みが置く `self.__hcLocation` から読ませる — 読むとアプリの元の場所を返し、
  * `href` に入れる・`assign`・`replace`・`reload` は、iframe ごと移らずに親に開き直してもらう (使い捨てのオリジンの
  * iframe の中では、Navigation API で移動を止められなかった)。
- * 置き換えるのは ASCII だけなので、バイトのまま (latin1 で) 扱えば文字の符号に関係なく壊さない。
  *
  * **扱えないもの:** `location = …`・`window.location = …` と location そのものに入れる書き方と、`<a href>` を押して移るもの。
  * これらは今までどおり iframe ごと移ろうとして止められる (NHK のアプリは `location.href = …` で移る)。

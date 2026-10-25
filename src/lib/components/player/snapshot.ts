@@ -1,7 +1,7 @@
 import type { Notice } from "#lib/components/Toasts.svelte";
 import { pad } from "#lib/format.js";
 
-/** 写す1コマ。`<video>` か、MPEG-2 で見ているときに worker から貰ったフレーム (`raw/engine.ts` の `grab`) */
+/** 写す1コマ。`<video>` か、canvas で描いているときに worker から貰ったフレーム (`raw/engine.ts` の `grab`) */
 export interface Frame {
   image: CanvasImageSource;
   width: number;
@@ -15,7 +15,7 @@ export function videoFrame(video: HTMLVideoElement | null): Frame | null {
 }
 
 /**
- * **MPEG-2 で見ているときは worker に1枚貰う。** 映像は worker の canvas にあって、
+ * **canvas で描いているとき (MPEG-2・互換モード) は worker に1枚貰う。** 映像は worker の canvas にあって、
  * `<video>` は空のまま (`raw/engine.ts`)
  */
 export async function grabbedFrame(

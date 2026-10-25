@@ -5,7 +5,7 @@
  * 元は libaribcaption v1.1.2 の表 (b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp /
  * b24_drcs_conv.cpp) に denpa の外字の直しを当てたもの。ここが元で、上流は追わない。
  *
- * libaribcaption: Copyright (C) 2021 magicxqq <xqq@xqq.im> (MIT。docs/licenses.md)
+ * libaribcaption: Copyright (C) 2021 magicxqq <xqq@xqq.im> (MIT。著作権表示は [LICENSE](../LICENSE))
  *
  * **表の名前と `export const` の形は変えない。** danything/denpa-font の道具がこのファイルを
  * 名前で読んでフォントに入れる字を決める (`ADDITIONAL_ROWS` も。`aribtext-gaiji.ts`・`fold.ts` も同じ)。

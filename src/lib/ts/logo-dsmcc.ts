@@ -182,7 +182,7 @@ export class DsmccLogoCollector {
       const found = parseLogoEsPids(section);
       if (found === null || found.serviceId !== ESS_SERVICE_ID) continue;
       for (const pid of found.pids) {
-        // DSM-CC は section_syntax_indicator が立たないことがある (psi.ts)
+        // DSM-CC は section_syntax_indicator が立たないことがある (`SectionAssembler` の `crc`)
         if (!this.carousels.has(pid))
           this.carousels.set(pid, new SectionAssembler(pid, "syntax"));
       }

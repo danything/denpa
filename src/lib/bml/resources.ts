@@ -288,7 +288,7 @@ export class Resources {
       base = null;
     }
     // 問い合わせ (`?tsid=…`)・断片 (`#…`) はファイルを引くのに使わない。resourceName に `?`・`#` は
-    // 入らない (STD-B24 第二編 9.2.1.2)。文書からは getActiveDocument で読める (engine.ts の launch)
+    // 入らない (STD-B24 第二編 9.2.1.2)。文書からは getActiveDocument で読める (engine.ts の load)
     let path = raw.replace(/[?#][\s\S]*$/, "");
     const dc =
       /^arib-dc:\/\/(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)(?:;[0-9a-f]+)?(?:\.[0-9a-f]+)?(\/.*)?$/i.exec(

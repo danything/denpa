@@ -186,7 +186,7 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
  * 音 (AAC と Opus)。**1コマずつ渡して、その場で1コマ受け取る** — 区切りと時刻は JS が
  * 付けているので parser は組まない。
  *
- * - AAC (`aac_open`) … 放送の ADTS をそのまま渡す (ts/pes.ts の AdtsSplitter が切る)。
+ * - AAC (`aac_open`) … 放送の ADTS をそのまま渡す (packages/arib/src/pes.ts の AdtsSplitter が切る)。
  *   ADTS の頭はデコーダが自分で読む (extradata 無しで開くと ADTS として読む決まり)。
  *   画面の canvas で描く経路の fMP4 の AAC は、JS が頭を組んで付けてから渡す
  *   (ts/fmp4.ts の `adtsHeader`)

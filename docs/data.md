@@ -7,7 +7,7 @@
 「電波から読んだもの」と「後から要るもの」は denpa が自分のDBに持つ。**
 
 エージェントは中身を読まない (NIT も SDT も EIT も読まない。[agent.md](agent.md))。
-読むのは全部こちら側で、足場は `src/lib/ts/` にある。
+読むのは全部こちら側で、足場は `packages/arib/` (`@danything/arib`) と `src/lib/ts/` にある。
 
 以下の設定の「チューナー」「チャンネル」は、設定の「受信」の節 (`/settings/reception#tuners`・`#channels`)。
 

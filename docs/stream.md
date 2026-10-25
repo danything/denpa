@@ -757,7 +757,9 @@ ADTS の区切りと時刻は JS（`packages/arib/src/pes.ts` の `AdtsSplitter`
 捨てるコマを数えるのは、同じ端末で 2 本見ていたときに、上の 2 つにぎりぎり掛からないまま紙芝居になっていたため
 （飛び越し走査のフィールドの順番が崩れて、テロップの細い線が上下に震えて見えた）。
 1回の重さ（タブを戻したとき・GC・選局の直後）では戻さない — 戻すと再エンコードで 1 秒近く
-映像が止まるので、一瞬の詰まりより高くつく。デコードする時間は操作列に「デコード N ms」と出ます。
+映像が止まるので、一瞬の詰まりより高くつく。その手前で、1秒にコマを3枚以上捨てるか映像が 0.1 秒遅れたら、
+まず B フレームのデコードを省きます（`raw/worker.ts` の `dec_skip`。動きは1秒 10〜15 コマに落ちるが、デコードの時間は半分ほどになる）。
+デコードする時間は操作列に「デコード N ms」と出ます。
 
 **見えていないタブでは映像をデコードしない**（`visible`。小窓に出しているときは別）。音は流し続け、見えるようになったら
 いちばん新しいキーフレームからデコードし直します。裏に回したタブも 1 コマ 10ms 前後デコードし続けて、見ているタブが
@@ -1112,10 +1114,10 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 データ放送 ─ getBrowserSupport("ARIB", "AITControlledAppEngineFunction", …) → 1 (開けるときだけ)
           ─ startAITControlledApp(…) → 画面が AIT のアプリを開く
 画面 ─ アプリの HTML を中継で取得 (/api/bml/proxy)
-     ─ 頭に <base href="アプリの URL"> と差し込み (src/lib/hybridcast/shim.ts) を入れる
+     ─ 頭に <base href="アプリの中継の URL"> と差し込み (src/lib/hybridcast/shim.ts) を入れる
        (後ろに、データ放送の Greg・NVRAM を使わせる compat.ts を束ねて入れる。vite.config.ts の ?inject)
      ─ sandbox="allow-scripts" の iframe (/api/bml/hybridcast) へ postMessage で渡し、document.write で開く
-アプリ ─ 画像・script・CSS は <base> から元のサーバへ直に取得 (CORS は要らない)
+アプリ ─ 配信元の画像・script・CSS は <base> から中継 (/api/bml/hc/…) を通して取得
        ─ fetch・XMLHttpRequest・受信機の記憶・受信機 API は postMessage で画面へ
 ```
 

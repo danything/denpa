@@ -7,14 +7,14 @@ import { canCompose, compose, type Composed } from "./compose";
 /**
  * ピクチャーインピクチャー (PiP)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
  *
- * どこでボタンを出さないか・MPEG-2 と字幕の出し方は docs/player.md (`pip.svelte.ts` の行)。
+ * どこでボタンを出さないか・canvas で描いているときと字幕の出し方は docs/player.md (`pip.svelte.ts` の行)。
  *
  * - iPhone / iPad のホーム画面から開いたもの (PWA) は、API が有るように見えて押しても出ないので
  *   `navigator.standalone` で見分ける。標準の API が無い古い Safari は `webkitSetPresentationMode` で出す
- * - MPEG-2 は `<video>` が空なので、worker が描いた映像のストリームを代わりの `<video>` に映して出す
- *   (`RawEngine.pipStream`)。代わりの `<video>` は MPEG-2 に切り替えた時点で1枚目まで用意しておく
- *   (`prepare`) — 押されてから待つと iPhone の Safari では「押された直後」が切れて断られる
- * - 字幕はコマごとに重ねたストリームを作って出す (`compose.ts`。Chrome・Edge だけ)。変換した映像は押した時点で
+ * - canvas で描いているとき (放送のままの MPEG-2・互換モード) は `<video>` が空なので、worker が描いた映像の
+ *   ストリームを代わりの `<video>` に映して出す (`RawEngine.pipStream`)。代わりの `<video>` は canvas に切り替えた時点で
+ *   1枚目まで用意しておく (`prepare`) — 押されてから待つと iPhone の Safari では「押された直後」が切れて断られる
+ * - 字幕はコマごとに重ねたストリームを作って出す (`compose.ts`。Chrome・Edge だけ)。`<video>` の映像は押した時点で
  *   字幕を出して再生しているときだけ、小窓に出している間だけ重ねる
  * - 小窓の再生ボタンは `<video>` を直に止めるので、ライブと追っかけは `paused` / `toggle` で player に合わせる
  * - バックグラウンド再生を切っている間 (`auto` が false) は `disablePictureInPicture` を立て、OS・ブラウザが
@@ -24,11 +24,11 @@ import { canCompose, compose, type Composed } from "./compose";
 interface Options {
   /** 映像の `<video>` */
   video: () => HTMLVideoElement | null;
-  /** MPEG-2 で見ているか。立っている間は `capture` のストリームを出す */
+  /** canvas で描いているか。立っている間は `capture` のストリームを出す */
   raw?: () => boolean;
-  /** MPEG-2 の映像ストリーム (`live-player` の `capture`) */
+  /** canvas の映像ストリーム (`live-player` の `capture`) */
   capture?: () => MediaStream | null;
-  /** MPEG-2 の映像を流すか (`live-player` の `captureFlow`)。小窓に出していない間は止める */
+  /** canvas の映像を流すか (`live-player` の `captureFlow`)。小窓に出していない間は止める */
   flow?: (on: boolean) => void;
   /** 止めているか (ライブ・追っかけ)。**小窓で押された止める・再開を合わせる先** */
   paused?: () => boolean;
@@ -125,11 +125,11 @@ function playOrPause(video: HTMLVideoElement, paused: boolean): void {
 export function pictureInPicture(options: Options): Pip {
   /** 開いた端末で決まる。サーバで組むときは無いので、開いてから測る */
   let able = $state(false);
-  /** 小窓に出している video (本体か、MPEG-2 のときの代わり)。出していなければ null */
+  /** 小窓に出している video (本体か、canvas のときの代わり)。出していなければ null */
   let on = $state<HTMLVideoElement | null>(null);
-  /** MPEG-2 のとき・字幕を重ねるときに小窓へ出す代わりの video。要るときに作る */
+  /** canvas のとき・字幕を重ねるときに小窓へ出す代わりの video。要るときに作る */
   let proxy: HTMLVideoElement | null = null;
-  /** MPEG-2 のストリームに字幕を重ねたもの (`prepare`)。重ねられない端末では null (MPEG-2 のストリームをそのまま出す) */
+  /** canvas のストリームに字幕を重ねたもの (`prepare`)。重ねられない端末では null (canvas のストリームをそのまま出す) */
   let rawComposed: Composed | null = null;
   /** 小窓をリクエストしている最中か (`toggle`) */
   let entering = false;
@@ -147,7 +147,7 @@ export function pictureInPicture(options: Options): Pip {
     typeof HTMLCanvasElement !== "undefined" &&
     "captureStream" in HTMLCanvasElement.prototype;
   const raw = (): boolean => options.raw?.() ?? false;
-  /** いま小窓に出すのは代わりの video か (MPEG-2 をそのまま描くもの、または字幕を重ねた変換映像) */
+  /** いま小窓に出すのは代わりの video か (canvas で描いているもの、または字幕を重ねた変換映像) */
   const proxied = (): boolean => raw() || baked !== null;
 
   $effect(() => {
@@ -176,7 +176,7 @@ export function pictureInPicture(options: Options): Pip {
   }
 
   /**
-   * 小窓で押された止める・再開を player に伝える。小窓に出している間だけ (MPEG-2 へ移るときの `pause` は
+   * 小窓で押された止める・再開を player に伝える。小窓に出している間だけ (canvas へ移るときの `pause` は
    * まだ `on` のまま届くので、`proxied` で見分ける)。player が自分で止めたときは `paused` が既に合っている
    */
   function follow(video: HTMLVideoElement): () => void {
@@ -220,18 +220,18 @@ export function pictureInPicture(options: Options): Pip {
   });
 
   /**
-   * **MPEG-2 に移った・変換した映像に戻ったら小窓を閉じる。** 出しているほうにはもう映像が
-   * 流れてこない (MPEG-2 では `<video>` は空、戻れば canvas は畳まれる)。黙って残すと、
+   * **canvas に移った・`<video>` に戻ったら小窓を閉じる。** 出しているほうにはもう映像が
+   * 流れてこない (canvas では `<video>` は空、戻れば canvas は畳まれる)。黙って残すと、
    * 止まった映像の小窓が居座る
    */
   $effect(() => {
     const isRaw = raw();
     if (on === null) return;
-    // 字幕を重ねた小窓は変換したほうの映像なので、MPEG-2 のものではない
+    // 字幕を重ねた小窓は `<video>` の映像なので、canvas のものではない
     if ((on === proxy && baked === null) !== isRaw) leave();
   });
 
-  /** MPEG-2 に入ったら代わりの video を用意しておく。出たら畳む (canvas ごと無くなる) */
+  /** canvas に移ったら代わりの video を用意しておく。出たら畳む (canvas ごと無くなる) */
   $effect(() => {
     if (!able || !raw() || !canCapture || options.capture === undefined) return;
     untrack(prepare);
@@ -247,7 +247,7 @@ export function pictureInPicture(options: Options): Pip {
   }
   $effect(guard);
 
-  /** MPEG-2 のとき、代わりの video も止める・再開を合わせる (押されたのが操作バーのボタンのとき) */
+  /** canvas のとき、代わりの video も止める・再開を合わせる (押されたのが操作バーのボタンのとき) */
   $effect(() => {
     const paused = options.paused?.() ?? false;
     if (proxy !== null && on === proxy) playOrPause(proxy, paused);
@@ -255,7 +255,7 @@ export function pictureInPicture(options: Options): Pip {
 
   /*
    * 画面を離れたら閉じる。player は止まるので、小窓に残しても映像は来ない。
-   * **ストリームもここで止める** — MPEG-2 の `$effect` の後始末が先に走るとは限らない
+   * **ストリームもここで止める** — canvas のときの `$effect` の後始末が先に走るとは限らない
    */
   $effect(() => () => {
     leave();
@@ -326,7 +326,7 @@ export function pictureInPicture(options: Options): Pip {
     options.flow?.(flow);
   }
 
-  /** 代わりの video を畳む。MPEG-2 をやめたとき (canvas ごと無くなる) */
+  /** 代わりの video を畳む。canvas で描くのをやめたとき (canvas ごと無くなる) */
   function release(): void {
     rawComposed?.stop();
     rawComposed = null;

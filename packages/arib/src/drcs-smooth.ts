@@ -19,6 +19,8 @@
  * **置き換え表の MD5 は元の画像から取る** (b24caption.ts)。ここで作った画像は送るためだけのもの。
  */
 
+import { Buffer } from "node:buffer";
+
 import type { CaptionDrcs } from "./caption-text.js";
 
 /** 濃さ 0〜255 の画像 (左上から1画素1バイト) */

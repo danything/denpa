@@ -1,5 +1,5 @@
 /**
- * **放送の字幕 (ARIB STD-B24) を組み立てる** (試験用)。読む側は [b24caption.ts](../../../packages/arib/src/b24caption.ts)。
+ * **放送の字幕 (ARIB STD-B24) を組み立てる** (試験用)。読む側は [b24caption.ts](b24caption.ts)。
  *
  * 出来るのは字幕の PES の中身 (データ識別 0x80 から) で、ffmpeg が `-c:s copy` で
  * Matroska に入れたコマと同じ形式。TS に載せるなら `synth-av.ts` の `pes(0xbd, …)` で包む。

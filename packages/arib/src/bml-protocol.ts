@@ -139,7 +139,7 @@ export interface ESEventUpdatedMessage {
   dataEventId: number;
 }
 
-/** 番組の名乗り。TS からではなく DB から組む (`server/live.ts`・`server/recorded-bml.ts`) */
+/** 番組の名乗り。TS からではなく DB から組む (denpa の `server/live.ts`・`server/recorded-bml.ts`) */
 export interface ProgramInfoMessage {
   type: "programInfo";
   originalNetworkId: number | null;

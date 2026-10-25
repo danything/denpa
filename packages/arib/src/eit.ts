@@ -56,7 +56,7 @@ function isEitActual(tableId: number): boolean {
  * 並びは自局のもの (0x50〜0x5F) と同じで、`OTHER_SHIFT` だけずれている。
  *
  * BS・CS はどの中継にもネットワーク全局ぶんが流れているが、**詳細はほぼ付かない**
- * (実測で BS 45 局のうち2局ぶん。docs/data.md)。いま/次 (0x4F) は読まない
+ * (実測で BS 45 局のうち2局ぶん。denpa の docs/data.md)。いま/次 (0x4F) は読まない
  */
 const SCHEDULE_OTHER_MIN = 0x60;
 const SCHEDULE_OTHER_MAX = 0x6f;
@@ -106,7 +106,7 @@ export interface EitEvent {
   audios: EventAudio[];
   video: { type: string | null; resolution: string | null } | null;
   /**
-   * **コピー禁止か** (デジタルコピー制御記述子)。禁止の番組は録らない (docs/data.md)。
+   * **コピー禁止か** (デジタルコピー制御記述子)。禁止の番組は録らない (denpa の docs/data.md)。
    *
    * `null` は「この表は言っていない」。記述子は基本の表 (と p/f) に載り、詳細の表
    * (0x58〜) には載らないので、詳細だけ届いた回で「禁止ではない」と上書きしないため
@@ -438,7 +438,7 @@ export class ScheduleProgress {
    * `table_id` + 局 + TS で決まり、`version_number` はその単位で動く。
    * 局に1つだけ持っていた頃は、**基本 (0x50〜) と詳細 (0x58〜) を行き来する
    * たびに版が違って数えたものを全部捨てて**いた。揃ったと分かることが
-   * 二度と無いので、どのチャンネルも上限の10分 (`epgChannelTimeout`) まで開きっぱなしになる。
+   * 二度と無いので、どのチャンネルも上限の10分 (denpa の `epgChannelTimeout`) まで開きっぱなしになる。
    */
   private readonly version = new Map<number, number>();
 
@@ -480,7 +480,7 @@ export class ScheduleProgress {
    * **`0x52`〜`0x57` は永久に来ません**。
    *
    * `0x50` から `last_table_id` まで全部を待っていた頃は、詳細を積んでいる局が
-   * **一度も「揃った」にならず**、どのチャンネルも上限の10分 (`epgChannelTimeout`) まで開きっぱなしに
+   * **一度も「揃った」にならず**、どのチャンネルも上限の10分 (denpa の `epgChannelTimeout`) まで開きっぱなしに
    * なっていました (実機で、詳細の無い BS11 だけが早く閉じていた)。
    *
    * 見かけた表と、`last_table_id` が指す表だけを見ます。
@@ -593,7 +593,7 @@ export class EpgReader {
   /**
    * @param now いまの時刻。局ごとの `ScheduleProgress` にそのまま渡す
    * @param options.other ほかの TS の局の番組表も読む。ネットワーク全局ぶんを
-   *   1つの中継から先に入れるときに使う (`epg-collect.ts` の初回)
+   *   1つの中継から先に入れるときに使う (denpa の `epg-collect.ts` の初回)
    * @param options.settle `other` のとき、新しい局が出てこなくなってから閉じるまで (ms)
    * @param options.expect `other` のとき、来るはずの局 (service_id)。全部見えて揃えば
    *   `settle` を待たずに閉じる。受信できない局が混ざっていれば `settle` で閉じる
@@ -686,7 +686,7 @@ export class EpgReader {
    * **`running_status` を当てにしきれない。** 4 (放送中) を入れてくる局も
    * あれば、**0 (未定義) しか入れてこない局もある** — 実機の NHK は 74 節
    * ぜんぶ 0 だった。4 だけを見ていると、そういう局では延長追従が丸ごと
-   * 効かなくなる (docs/agent.md)。
+   * 効かなくなる (denpa の docs/agent.md)。
    *
    * そこで 0 のときは**節の番号で決める**。p/f は仕様で
    * **section 0 が現在・section 1 が次**と決まっていて、こちらは局の都合で
@@ -699,7 +699,7 @@ export class EpgReader {
 
   /**
    * 前に呼んでから増えた・変わった番組。**読みながら少しずつ保存する**ため
-   * (`epg-collect.ts`)。揃うまで待ってからまとめて書くと、全局読みの数分のあいだ
+   * (denpa の `epg-collect.ts`)。揃うまで待ってからまとめて書くと、全局読みの数分のあいだ
    * 画面に何も出ない
    */
   takeChanged(): EitEvent[] {

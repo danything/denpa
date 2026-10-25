@@ -1,5 +1,3 @@
-import { CORNERS, pickArea, type Rect, regionOf } from "./logo-area";
-
 /**
  * **局ロゴを自分で覚えて、どのコマに出ているかを当てる。** 以前は logoframe に任せていた。
  *
@@ -21,6 +19,8 @@ import { CORNERS, pickArea, type Rect, regionOf } from "./logo-area";
  *
  * DOM もファイルも触らない純粋な計算。コマを抜くのは `server/logo-own.ts`。
  */
+
+import { CORNERS, pickArea, type Rect, regionOf } from "./logo-area";
 
 /**
  * 画素ごとの「線の向き」の和。**角を倍にした単位ベクトル**を足したもの。

@@ -255,7 +255,7 @@ interface Caption {
  * ストリームごとに1つ作って、届いた順に食わせる。
  *
  * **読むのは1つの言語だけ** (`language`。1〜8)。言語ごとに書式も位置も別に続くので、2つの言語を出し分けるなら
- * 言語ごとに1つ作って、同じコマを両方に食わせる (`server/captions.ts` の `CaptionText`)
+ * 言語ごとに1つ作って、同じコマを両方に食わせる (denpa の `server/captions.ts` の `CaptionText`)
  */
 export class B24CaptionDecoder {
   /** 字幕管理データに書いてある言語。まだ届いていなければ空 */

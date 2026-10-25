@@ -496,12 +496,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let slipMost = $state(0);
   /** 次に飛び直してよい時刻 */
   let unslipAfter = 0;
-  /** 貯まりが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
-  let enoughAt = 0;
   /*
    * 映像の遅れは JS から見えないことがある (Windows の Chrome / Edge は映像を DOM と別の面に出す)。
    * なので起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `UNSLIP_EVERY` の下
    */
+  /** 貯まりが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
+  let enoughAt = 0;
   /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
   let retry: ReturnType<typeof setTimeout> | null = null;
   /** 続けて何回繋ぎ直しに失敗したか。0 でなければ繋ぎ直しの最中で、繋げなくても失敗にしない */
@@ -2244,10 +2244,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     get canvas() {
       return canvas;
-    },
-    /** 互換モード (`canvas-video.ts`) で観ているか */
-    get compat() {
-      return compat;
     },
     /** この端末で描けない形式 (互換モードのとき)。コーデックのメニューで選ばせない */
     get unavailable() {

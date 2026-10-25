@@ -10,6 +10,7 @@
 - **字幕** — STD-B24 の字幕文を、字の置き場所まで決めた JSON にする (`b24caption`、形式は `caption-text`)
 - **データ放送** — DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`)
 - **Hybridcast の AIT** (`ait`)、**1つの局だけを抜き出す** (`service-filter`)
+- **試験用の TS を組み立てる** — PSI・EIT・字幕・カルーセル・映像と音声 (`synth`、`synth-caption`、`synth-av`)
 
 依存するパッケージはありません。
 
@@ -19,7 +20,7 @@
 npm install @danything/arib
 ```
 
-ES モジュールだけです。`bml` と `b24caption` は `node:zlib` / `node:crypto` を使うので、
+ES モジュールだけです。`bml`・`b24caption`・`drcs-smooth` は `node:zlib`・`node:crypto`・`node:buffer` を使うので、
 Node.js・Bun・Deno で動きます。ほかのモジュールはブラウザでも動きます。型は TypeScript 5.7 以降で読めます。
 
 ## 使い方
@@ -33,8 +34,9 @@ const epg = new EpgReader();
 for await (const chunk of stream) {
   // 長さはそろっていなくてよい
   if (epg.feed(chunk)) {
+    // 返るのは開始時刻の決まった番組だけ
     for (const event of epg.takeChanged()) {
-      console.log(event.serviceId, new Date(event.startAt), event.name);
+      console.log(event.serviceId, new Date(event.startAt!), event.name);
     }
   }
 }

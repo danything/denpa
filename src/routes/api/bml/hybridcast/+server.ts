@@ -6,7 +6,7 @@
  *
  * - `sandbox allow-scripts` (CSP)。iframe の sandbox 属性に加えて、ここでも使い捨てのオリジンにする
  *   (この URL を直に開いても denpa のオリジンにならない)。denpa の cookie・localStorage・API の返りには触れない
- * - 放送局の script・画像・CSS は元のサーバから直に読む (`*`)。**繋ぐ (`connect-src`) のは止める** —
+ * - script・画像・CSS は、アプリの配信元のものは中継 (`/api/bml/hc/…`) を通し、ほかのサーバのものは直に読む (`*`)。**繋ぐ (`connect-src`) のは止める** —
  *   fetch・XHR は差し込みが画面へ渡し、画面が中継で取る。中継の決まり (公開アドレスだけ・10 秒・4MB・
  *   何も持たせない) をそのまま通すため
  * - フォームの送信・入れ子の iframe・worker は無し
