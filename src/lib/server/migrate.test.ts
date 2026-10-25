@@ -291,6 +291,12 @@ describe("EPGStation の URL", () => {
     expect(JSON.stringify(source.base)).not.toContain("p:ss");
   });
 
+  test("壊れた % の資格情報は書かれたまま使う", () => {
+    expect(parseSource("http://user:p%zz@epgstation:8888").headers).toEqual({
+      Authorization: `Basic ${Buffer.from("user:p%zz").toString("base64")}`,
+    });
+  });
+
   test("資格情報が無ければヘッダも無い", () => {
     expect(parseSource("http://epgstation:8888")).toEqual({
       base: "http://epgstation:8888",

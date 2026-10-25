@@ -263,6 +263,16 @@ describe("取り込み (v3)", () => {
     expect(s.log.some((line) => line.includes("空き"))).toBe(true);
   });
 
+  test("offset を無視する相手でも、同じページを積み続けない", async () => {
+    fake.setMode({ extraRules: 150, ignoreOffset: true });
+    await run(preview);
+    // 頭のページ (100 件) だけ。2ページ目は全部受けたものなので止める
+    expect(status().rules.imported + status().rules.skipped).toBe(100);
+    expect(
+      fake.listRequests.filter((path) => path.startsWith("/api/rules")),
+    ).toHaveLength(2);
+  });
+
   test("一覧はページ送りで全部取る", async () => {
     fake.setMode({ extraRules: 150 });
     await run(preview);

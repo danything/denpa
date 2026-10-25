@@ -46,6 +46,15 @@ export interface EpgstationSource {
   headers: Record<string, string>;
 }
 
+/** URL の資格情報を戻す。壊れた `%` (`p%zz`) は戻せないので、書かれたまま使う */
+function decodePart(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /**
  * 入力欄の URL を読む。`http://user:pass@host:8888/sub` の資格情報は `Authorization` に移す。
  * 読めなければ理由を投げる (資格情報は言わない)
@@ -65,8 +74,8 @@ export function parseSource(input: string): EpgstationSource {
     );
   const headers: Record<string, string> = {};
   if (url.username !== "" || url.password !== "") {
-    const user = decodeURIComponent(url.username);
-    const pass = decodeURIComponent(url.password);
+    const user = decodePart(url.username);
+    const pass = decodePart(url.password);
     headers["Authorization"] =
       `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`;
     url.username = "";
@@ -285,6 +294,8 @@ export class EpgstationClient {
     signal?: AbortSignal,
   ): Promise<unknown[]> {
     const all: unknown[] = [];
+    /** もう受けた id。`offset` を無視して同じページを返す相手で、同じものを積み続けない */
+    const seen = new Set<unknown>();
     for (;;) {
       const body = await this.json(
         path,
@@ -298,9 +309,13 @@ export class EpgstationClient {
         this.warn,
       ) as Record<string, unknown>;
       const items = isObject(page) && Array.isArray(page[key]) ? page[key] : [];
-      all.push(...items);
+      const fresh = items.filter(
+        (item) => !isObject(item) || !isId(item["id"]) || !seen.has(item["id"]),
+      );
+      for (const item of fresh) if (isObject(item)) seen.add(item["id"]);
+      all.push(...fresh);
       const total = isObject(page) ? page["total"] : undefined;
-      if (items.length === 0) break;
+      if (items.length === 0 || fresh.length === 0) break;
       if (typeof total === "number" ? all.length >= total : items.length < PAGE)
         break;
     }

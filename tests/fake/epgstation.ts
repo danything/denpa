@@ -32,6 +32,8 @@ export interface FakeMode {
   drift: boolean;
   /** ルールを足して、ページ送りが要る数にする */
   extraRules: number;
+  /** ルールの一覧で offset を無視して、いつも頭のページを返す */
+  ignoreOffset: boolean;
 }
 
 export const DEFAULT_MODE: FakeMode = {
@@ -45,6 +47,7 @@ export const DEFAULT_MODE: FakeMode = {
   basic: null,
   drift: false,
   extraRules: 0,
+  ignoreOffset: false,
 };
 
 /** denpa の偽の放送にある局 (TOKYO MX。`tests/fake/services.ts`) */
@@ -306,8 +309,12 @@ const json = (body: unknown, status = 200) =>
   });
 
 /** `offset`・`limit` で切る。省略時の limit は本物と同じ 24 */
-function page<T>(list: T[], url: URL): { items: T[]; total: number } {
-  const offset = Number(url.searchParams.get("offset") ?? 0);
+function page<T>(
+  list: T[],
+  url: URL,
+  ignoreOffset = false,
+): { items: T[]; total: number } {
+  const offset = ignoreOffset ? 0 : Number(url.searchParams.get("offset") ?? 0);
   const limit = Number(url.searchParams.get("limit") ?? 24);
   return { items: list.slice(offset, offset + limit), total: list.length };
 }
@@ -457,7 +464,11 @@ export function startFakeEpgstation(
       }
       if (path === "/api/rules") {
         state.listRequests.push(`${path}${url.search}`);
-        const { items, total } = page(rules(state.mode), url);
+        const { items, total } = page(
+          rules(state.mode),
+          url,
+          state.mode.ignoreOffset,
+        );
         return json({ rules: items, total });
       }
       if (path === "/api/reserves") {
