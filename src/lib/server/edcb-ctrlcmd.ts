@@ -30,18 +30,18 @@ export const timing = {
 export const RESPONSE_LIMIT = 128 * 1024 * 1024;
 
 /** 頼む ver (`CMD_VER`) */
-export const CMD_VER = 5;
+const CMD_VER = 5;
 
 /** 使うコマンド (`CtrlCmdDef.h`) */
-export const COMMANDS = {
+const COMMANDS = {
   ENUM_RESERVE2: 2011,
   ENUM_RECINFO_BASIC2: 2020,
   ENUM_AUTO_ADD2: 2131,
 } as const;
-export type CommandName = keyof typeof COMMANDS;
+type CommandName = keyof typeof COMMANDS;
 
 /** 結果 (`ErrDef.h`) */
-export const RESULT = {
+const RESULT = {
   SUCCESS: 1,
   ERR: 0,
   NON_SUPPORT: 203,
@@ -58,7 +58,7 @@ export interface EdcbTarget {
 }
 
 /** EpgTimerSrv の既定のポート */
-export const DEFAULT_PORT = 4510;
+const DEFAULT_PORT = 4510;
 
 /**
  * 入力欄の `host:port` を読む。ポートを省けば 4510、IPv6 は `[::1]:4510`。
@@ -253,7 +253,7 @@ export interface EdcbRule {
   notKey: string;
   regExp: boolean;
   titleOnly: boolean;
-  /** ジャンル `(大分類 << 24) | (中分類 << 16) | (ユーザー1 << 8) | ユーザー2`。符号付き (ファイルと同じ値) */
+  /** ジャンル `(大分類 << 24) | (中分類 << 16) | (ユーザー1 << 8) | ユーザー2`。符号付き (`migrate-edcb.genreOf`) */
   contents: number[];
   dates: EdcbDate[];
   services: EdcbService[];
@@ -446,7 +446,7 @@ export function readRecInfo(reader: Reader): EdcbRecInfo {
 }
 
 /** 繋がらない・切られた・壊れた・断られた。画面にそのまま出す */
-export class EdcbError extends Error {}
+class EdcbError extends Error {}
 
 const seconds = (ms: number) => `${Math.round(ms / 1000)} 秒`;
 
@@ -460,7 +460,7 @@ interface Reply {
  * 1 回繋いで 1 コマンド送り、応答を待つ。サーバは返したら切る。
  * 失敗の理由は、どこで止まったかで分ける (断られた・繋がらない・受けてすぐ切られた・途中で切れた・黙った・大きすぎる)
  */
-export function send(
+function send(
   target: EdcbTarget,
   command: number,
   body: Uint8Array,

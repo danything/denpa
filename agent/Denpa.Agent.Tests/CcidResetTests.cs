@@ -15,7 +15,7 @@ public class CcidResetTests
     private static readonly CcidInterface Plain = new(
         0, 0x82, 0x02, 64,
         CcidInterface.ExtendedApduLevel | CcidInterface.AutoParameters | CcidInterface.AutoVoltage,
-        271, 254, 0x07, 0x03, 4000);
+        271, 254, 0x07, 4000);
 
     /// <summary>リセットされるまで黙り (読むと時間切れ)、リセットされたら普通に答える</summary>
     private sealed class Frozen : IBulkPipe

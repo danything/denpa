@@ -170,10 +170,14 @@ echo 4-11 | sudo tee /sys/bus/usb/drivers/usb/bind
 エージェントは起こし直さなくて構いません。次の ECM で探し直します。
 
 実際に復号できているかは `--tune ... --decode` で見ます (復号したあとが 0% 近くなら正常)。
-衛星で LNB に電源を送るなら `--lnb 15v` を足します。
+衛星で LNB に電源を送るなら `--lnb 15v` を足します。動いているエージェントは一度使ったチューナーと
+カードリーダーを開いたままにしていて、横から開くと断られるので、録画の無いときに止めてから同じイメージで流します
+(compose の例。Kubernetes なら `tuner-agent` を 0 台にしてから、同じイメージを同じデバイスで1回だけ起こす)。
 
 ```sh
-kubectl -n denpa exec deploy/tuner-agent -- denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode
+docker compose stop tuner-agent
+docker compose run --rm tuner-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode
+docker compose start tuner-agent
 ```
 
 それでも直らなければ、設定の「診断」→「Issue にする」で報告してください。サーバとエージェントのログと環境を、

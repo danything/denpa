@@ -15,8 +15,8 @@ using Microsoft.AspNetCore.Http.Features;
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland /
  *   siano-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs)
  *
- * **中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す。
- * 読むのは denpa (`src/lib/ts`) で、局を選り分けるのも番組表を組み立てるのも、
+ * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
+ * 復号に要る PAT・PMT・ECM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
  * チャンネルスキャンで見つかった局を判断するのもあちらの仕事 (docs/agent.md)。
  */
 
@@ -266,7 +266,7 @@ app.MapGet("/denpa/tuners", (HttpContext http) => Respond.Write(http, TunerList(
 /*
  * 機材の定義を書き換える。**画面から。**
  *
- * 受け取るのはデバイスと種別だけで、選局コマンドは受け取らない (TunerSpec)。
+ * 受け取るのはデバイスと種別と LNB だけで、選局コマンドは受け取らない (TunerSpec)。
  * 空を渡すと定義そのものを消す = **自動検出に戻す**。
  */
 app.MapPut("/denpa/tuners", async (HttpContext http) =>

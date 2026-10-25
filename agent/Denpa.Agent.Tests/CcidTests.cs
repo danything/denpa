@@ -82,7 +82,7 @@ public class CcidTests
         var blob = TwinDescriptors();
         await Assert.That(UsbDescriptors.Ids(blob)).IsEqualTo((0x08e6, 0x3437));
         var twin = UsbDescriptors.FindCcid(blob, 1, 0);
-        await Assert.That(twin).IsEqualTo(new CcidInterface(0, 0x82, 0x01, 64, 0x00010230, 271, 254, 0x07, 0x03, 4000));
+        await Assert.That(twin).IsEqualTo(new CcidInterface(0, 0x82, 0x01, 64, 0x00010230, 271, 254, 0x07, 4000));
         await Assert.That(twin!.Tpdu).IsTrue();
         await Assert.That(twin.Level).IsEqualTo("TPDU");
         // 構成もインターフェースも番号で選ぶ
