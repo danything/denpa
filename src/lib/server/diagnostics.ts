@@ -100,7 +100,10 @@ export function knownValues(requestHost: string): Known {
 
 /** 秘密の値だけを消す (ホスト名は画面では残す) */
 function scrub(lines: LogLine[], known: Known): LogLine[] {
-  const secrets = (known.secrets ?? []).filter((value) => value.length >= 6);
+  // 長いものから消す。短い秘密が長い秘密の一部だと、先に消したときに長いほうが半端に残る
+  const secrets = (known.secrets ?? [])
+    .filter((value) => value.length >= 6)
+    .sort((a, b) => b.length - a.length);
   if (secrets.length === 0) return lines;
   return lines.map((line) =>
     secrets.some((value) => line.text.includes(value))

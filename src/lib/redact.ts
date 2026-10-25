@@ -49,7 +49,7 @@ const DENPA_TOKEN = /\bdenpa_[A-Za-z0-9_-]{8,}/g;
  * 名前に secret・token・password などを含む鍵を、値だけ伏せる
  */
 const SECRET_PAIR =
-  /\b([\w.-]*(?:secret|token|passw(?:or)?d|passwd|pwd|api[_-]?key|private[_-]?key|credential|session[_-]?id)[\w.-]*)(["']?\s*[:=]\s*["']?)([^\s"',;&]+)/gi;
+  /\b([\w.-]*(?:secret|token|passw(?:or)?d|passwd|pwd|api[_-]?key|private[_-]?key|credential|session[_-]?id)[\w.-]*)(["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s"',;&]+)/gi;
 
 /** URL の問い合わせのうち、それ自体が鍵になるもの (OIDC の `code`・`state` など) */
 const SECRET_QUERY =
@@ -211,7 +211,10 @@ export function redact(text: string, known: Known = {}): string {
     .replace(BEARER, `$1 ${MASK.secret}`)
     .replace(DENPA_TOKEN, MASK.secret)
     .replace(SECRET_PAIR, (whole, key: string, sep: string, value: string) =>
-      isMask(value) ? whole : `${key}${sep}${MASK.secret}`,
+      isMask(value.replace(/^["']|["']$/g, ""))
+        ? whole
+        : // 引用符で囲んだ値は、空白を含んでも閉じ引用符まで伏せる
+          `${key}${sep}${/^["']/.test(value) ? `${value[0]}${MASK.secret}${value[0]}` : MASK.secret}`,
     )
     .replace(SECRET_QUERY, `$1${MASK.secret}`)
     .replace(EMAIL, MASK.email)

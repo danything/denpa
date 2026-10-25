@@ -24,6 +24,14 @@ describe("伏せる (Issue に貼る前)", () => {
   });
 
   describe("秘密", () => {
+    test("引用符で囲んだ値は、空白を含んでも閉じ引用符まで伏せる", () => {
+      expect(redact('"client_secret": "abc def ghi"')).toBe(
+        `"client_secret": "${MASK.secret}"`,
+      );
+      expect(redact("password='p a s s'")).toBe(`password='${MASK.secret}'`);
+      expect(redact("token=abc123 次")).toBe(`token=${MASK.secret} 次`);
+    });
+
     test("Authorization・Cookie は行の終わりまで", () => {
       expect(redact("Authorization: Bearer abc.def")).toBe(
         `Authorization: ${MASK.secret}`,
