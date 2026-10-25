@@ -413,7 +413,7 @@ app.Lifetime.ApplicationStopped.Register(() =>
     UserlandDaemon.StopAll();
 });
 
-Log.Write($"listening on {host}:{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
+Log.Write($"listening on {(host is null ? $"*:{port}" : new IPEndPoint(host, port).ToString())} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
 if (sharing is not null)
 {
     var limit = cardLan.MaxRoundTrip is { } max ? $"{max.TotalMilliseconds}ms まで" : "見ない";
