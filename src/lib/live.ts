@@ -210,7 +210,7 @@ export interface HybridcastLink {
   /** 放送が付けた名前。入っていなければ空 */
   name: string;
   url: string;
-  /** 放送局 (organisation_id) とアプリ (application_id)。受信機の記憶をアプリごとに分けるのと、起動の手がかりに使う */
+  /** 放送局 (organisation_id) とアプリ (application_id)。起動を求められたときに、どのアプリかの手がかりに使う (受信機の記憶は配信元のオリジンで分ける) */
   organisationId: number;
   applicationId: number;
   /** `true` なら「選局したら勝手に始めよ」(テレビはそうする) */

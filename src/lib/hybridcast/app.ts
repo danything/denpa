@@ -41,7 +41,7 @@ export function storageKey(url: string): string {
   return `denpa_hybridcast_${origin}`;
 }
 
-/** 受信機の記憶の上限 (1 アプリ。JSON の文字数)。超える書き込みは覚えない */
+/** 受信機の記憶の上限 (配信元 1 つ。JSON の文字数)。超える書き込みは覚えない */
 export const STORAGE_LIMIT = 256 * 1024;
 
 /** 中継の返りを文字にする。charset は content-type、無ければ頭の meta、それも無ければ UTF-8 */

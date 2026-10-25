@@ -3,7 +3,7 @@
  *
  * 要るのは5つ: WebAssembly (MPEG-2 と AAC のデコーダ)、worker、worker へ渡す OffscreenCanvas と、その中の WebGL2 (描く)、
  * AudioContext (鳴らす)。AAC も WASM でデコードするので、WebCodecs (AudioDecoder) は要らない —
- * http で開いた LAN や、AudioDecoder の無い iPhone の Safari (iOS 26 より前) でも変換せずに送れる。
+ * http で開いた LAN や、AudioDecoder の無い iPhone の Safari (iOS 26 まで) でも変換せずに送れる。
  *
  * 1つでも欠けていれば、MPEG-2 を選んでも画面はエンコードしたものをリクエストする。
  *

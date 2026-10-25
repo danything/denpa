@@ -31,9 +31,9 @@ RUN bun install
 # (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
 #
 # - `--disable-asm` … x86 の手書きアセンブリは wasm では使えない
-# - スレッドは使わない。スレッドを使うビルドは SharedArrayBuffer のために COOP/COEP
-#   (crossOriginIsolated) を全ページに要求することになり、denpa の画面 (データ放送の
-#   中継・ロゴ・別オリジンの Hybridcast) と噛み合わない
+# - スレッドは使わない。SharedArrayBuffer のために COOP/COEP (crossOriginIsolated) が要り、効くのは
+#   https の Chrome・Edge・Firefox だけで、重くて困るはずの iPhone・iPad には効かない
+#   (docs/stream.md「スライスのスレッドを見送った理由」)
 # - **SIMD は付けておく** (`-msimd128`。コンパイラが自動でベクトルにする)。MPEG-2 では測っても差が揺れの中だった
 #   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream.md「どこに時間が掛かっているか」)。今のブラウザはどれも対応している
 # - **LTO を掛ける** (`-flto`)。デコードが 2〜8% 速くなり、brotli 後はかえって 2 KB ほど縮む (同じ節)

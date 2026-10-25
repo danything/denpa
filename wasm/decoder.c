@@ -6,7 +6,7 @@
  * 薄いラッパーで、JS (src/lib/raw/worker.ts) から呼ぶ。
  *
  * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
- * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 より前には無いので、
+ * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
  * それに頼ると LAN の http と古い iPhone で元のTSをそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
  * Opus も同じ API でデコードする (`opus_open`)。
  *
@@ -18,7 +18,8 @@
  * - `dec_peek` / `dec_pop` … いちばん古い1枚を覗く・捨てる。表示順で並んでいる
  *   (B フレームの並べ替えはデコーダが済ませている)
  *
- * スレッドは使わない。スレッドを使うビルドは COOP/COEP (crossOriginIsolated) が要る (docs/stream.md#放送そのままmpeg-2を送る)。
+ * スレッドは使わない。スレッドを使うビルドは COOP/COEP (crossOriginIsolated) が要り、効く端末が限られる
+ * (docs/stream.md#スライスのスレッドを見送った理由)。
  * SIMD と LTO は組むときに掛ける (Dockerfile の `mpeg2wasm` 段)
  */
 #include <emscripten/emscripten.h>

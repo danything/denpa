@@ -6,7 +6,7 @@
  * `connect-src 'none'`)。ここが代わりに:
  *
  * - `fetch` と `XMLHttpRequest` を親 (denpa の画面) へ渡す。親が中継 (`/api/bml/proxy`・`/api/bml/post`) で取る
- * - 受信機の記憶 (`localStorage`) をアプリごとの置き場として用意する (親が覚える)
+ * - 受信機の記憶 (`localStorage`) をアプリの配信元ごとの置き場として用意する (親が覚える)
  * - 受信機 API (放送の映像の object・`navigator.receiverDevice`) を、用意できる範囲で用意する。
  *   無いものは「使えない」(null) を返し、何を呼ばれたかを親に知らせる (本物の放送で、どの API が
  *   要るかを見るため)
@@ -473,7 +473,7 @@ export function shim(init: ShimInit): void {
     return false;
   };
 
-  // ---- 受信機の記憶 (アプリごと。親が覚える) ----
+  // ---- 受信機の記憶 (配信元ごと。親が覚える) ----
   const makeStorage = (
     items: Map<string, string>,
     save: () => void,
