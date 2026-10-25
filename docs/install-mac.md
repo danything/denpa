@@ -75,7 +75,7 @@ IDBridge CT30 で、従来のドライバ (ifd-ccid) に切り替えたら読め
 (こちらの実機では確かめていません)。切り替えはシステムの設定なので、エージェントもインストーラも勝手には変えません。
 
 ```sh
-# 従来のドライバに切り替える。リーダーを挿し直すか、Mac を再起動すると効く
+# 従来のドライバに切り替える。カードを挿したままリーダーを抜き差しすると効く (サービスの再起動だけでは効かない)
 sudo defaults write /Library/Preferences/com.apple.security.smartcard useIFDCCID -bool yes
 # 標準のドライバに戻す
 sudo defaults write /Library/Preferences/com.apple.security.smartcard useIFDCCID -bool no
