@@ -436,13 +436,13 @@
   }
   /*
      * 「ルールを作る」はサイドバーの下端。低い画面でサイドバーの中身があふれても、下に貼り付けて見えたままにする
-     * (下の余白はサイドバーの余白 (1.5rem) を打ち消して自分で持つ。貼り付く位置もその余白の内側から測られるので同じだけ下げる)
+     * (下の余白はサイドバーの余白 (`--dp-side-pad-end`) を打ち消して自分で持つ。貼り付く位置もその余白の内側から測られるので同じだけ下げる)
      */
   .side-foot {
     position: sticky;
-    bottom: -1.5rem;
-    margin-bottom: -1.5rem;
-    padding: 1rem 0.75rem 1.5rem;
+    bottom: calc(-1 * var(--dp-side-pad-end));
+    margin-bottom: calc(-1 * var(--dp-side-pad-end));
+    padding: 1rem 0.75rem var(--dp-side-pad-end);
     background: var(--dp-bg);
   }
   .side-foot .button {

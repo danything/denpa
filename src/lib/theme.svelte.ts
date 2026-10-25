@@ -44,7 +44,7 @@ function apply(): void {
  * 地・件の面・ヘッダーはそれぞれ自分の色を持つので、どれか 1 つに transition を付けると、ほかが先に替わって段違いに見える。
  * 画面の写しを 1 枚撮って重ねるだけなので、移っている間も色を描き直さない。
  *
- * 移さずにすぐ替えるのは、動きを減らす設定の端末・種類を渡せないブラウザ・映像を流している間
+ * 移さずにすぐ替えるのは、動きを減らす設定の端末・種類を渡せないブラウザ・ソフトウェアで描いている端末 (`<html data-lite>`。重ねるのも CPU がやる)・映像を流している間
  * (移っている間は写しが映像を止めて見せる)。開いたときと端末の設定に従うときは `apply` を直に呼ぶので、移らない
  */
 function crossfade(change: () => void): void {
@@ -55,6 +55,7 @@ function crossfade(change: () => void): void {
     typeof ViewTransition === "undefined" ||
     !("types" in ViewTransition.prototype) ||
     matchMedia("(prefers-reduced-motion: reduce)").matches ||
+    document.documentElement.hasAttribute("data-lite") ||
     playing
   ) {
     change();

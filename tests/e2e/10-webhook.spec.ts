@@ -33,6 +33,34 @@ test.describe("通知", () => {
     await expect(page.getByTestId("webhook-tested")).toContainText(
       "届きました",
     );
+    /*
+     * 通知の種類は頭のアイコンで示す (docs/design.md の「通知」)。左の縦線は「選んでいる」の印なので引かない。
+     * アイコンだけが状態の色 (`--dp-ok-text`) で、地は操作の層の面 (`--dp-pop`)
+     */
+    const look = await page.getByTestId("webhook-tested").evaluate((el) => {
+      const own = getComputedStyle(el);
+      const mark = getComputedStyle(el, "::before");
+      const probe = (value: string) => {
+        const span = document.createElement("span");
+        span.style.color = value;
+        document.body.append(span);
+        const color = getComputedStyle(span).color;
+        span.remove();
+        return color;
+      };
+      return {
+        border: own.borderLeftWidth,
+        background: own.backgroundColor,
+        pop: probe("var(--dp-pop)"),
+        mask: mark.maskImage,
+        mark: mark.backgroundColor,
+        ok: probe("var(--dp-ok-text)"),
+      };
+    });
+    expect(look.border).toBe("0px");
+    expect(look.background).toBe(look.pop);
+    expect(look.mask).toContain("data:image/svg+xml");
+    expect(look.mark).toBe(look.ok);
 
     const state = await (
       await request.get(`${stack.webhookUrl}/__control/state`)

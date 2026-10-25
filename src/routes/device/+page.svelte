@@ -1,28 +1,19 @@
 <!--
     テレビのペアリングを済ませる画面 (+page.server.ts)。
 
-    開いたらすぐ自分でフォームを送る (許すのは POST の側。先読みで黙って済まないように)。
-    JavaScript が動かない端末には、同じフォームのボタンを出す。
-    コードは出さない (QR の URL に入って自動で渡り、見比べる相手がいない)。済んだら端末の名前を出す。
+    **開いただけでは済ませない。ボタンを押したときだけ許す。** 以前は開いたらすぐ自分で
+    フォームを送っていたが、それだと人から送られたリンクを開いただけで、相手の端末に
+    アクセストークンが渡ってしまう (コードを出す API は誰でも呼べる)。端末の名前とコードを出し、
+    テレビに出ているコードと同じか見比べてから押してもらう (RFC 8628 の 5.4)。
+    JavaScript が動かない端末でも、同じボタンで送れる。
     **画面では「ペアリングコード」と呼ぶ** — 以前は内部の呼び名のまま
     「見つかりません」と出していて、何のことか読めなかった
 -->
 
 <script lang="ts">
-  import { onMount } from "svelte";
-
   let { data, form } = $props();
 
   const view = $derived(form?.view ?? data.view);
-  // 送る前の `form` は SvelteKit では null のことも undefined のこともある。どちらも「まだ送っていない」
-  const pending = $derived(
-    !form && !data.viaToken && data.view?.state === "pending",
-  );
-
-  let auto: HTMLFormElement | undefined = $state();
-  onMount(() => {
-    if (pending) auto?.requestSubmit();
-  });
 </script>
 
 <svelte:head><title>テレビのペアリング - denpa</title></svelte:head>
@@ -40,11 +31,15 @@
       QR
       を読み直すか、テレビでペアリングをやり直してください。コードの期限は10分です。
     </p>
-  {:else if pending}
-    <h1>{view.name} とペアリングしています…</h1>
-    <form method="POST" bind:this={auto}>
+  {:else if view.state === "pending"}
+    <h1>{view.name} とペアリングしますか</h1>
+    <p class="code" data-testid="device-code">{view.userCode}</p>
+    <p>
+      テレビに出ているコードと同じなら「ペアリング」を押してください。違うときや、人から送られてきたリンクのときは押さずに閉じてください。
+    </p>
+    <form method="POST" class="actions">
       <input type="hidden" name="code" value={view.userCode} />
-      <noscript><button type="submit">ペアリング</button></noscript>
+      <button type="submit" data-testid="device-approve">ペアリング</button>
     </form>
   {:else if view.state === "approved" || view.state === "consumed"}
     <h1 data-testid="device-done">{view.name} とペアリングしました</h1>
@@ -54,3 +49,15 @@
     <p>テレビでペアリングをやり直してください。コードの期限は10分です。</p>
   {/if}
 </div>
+
+<style>
+  /* 見比べるもの。字の幅を揃え、少し離して読み違えないように */
+  .code {
+    color: var(--dp-fg);
+    font-family: var(--dp-font-mono);
+    font-size: var(--dp-text-xl);
+    font-weight: var(--dp-weight-bold);
+    letter-spacing: 0.12em;
+    font-variant-numeric: tabular-nums;
+  }
+</style>

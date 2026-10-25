@@ -121,6 +121,13 @@ export default defineConfig({
           "frame-src": ["self"],
           "base-uri": ["self"],
           "form-action": ["self"],
+          /*
+           * denpa の画面を枠に入れてよいのは自分だけ。外のサイトが隠した iframe で画面を開き、
+           * 信頼するネットワークの人の権限でボタンを押させる (ペアリングを許させるなど) のを止める。
+           * Home Assistant の Ingress は同じオリジンの枠なので通る。古いブラウザ向けに
+           * `X-Frame-Options` も付ける (hooks.server.ts の `finish`)
+           */
+          "frame-ancestors": ["self"],
         },
       },
     }),

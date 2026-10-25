@@ -81,6 +81,13 @@ test("Tab で「本文へ移動」が出て、Enter で本文へ焦点が移る"
 test("明暗を選び直したときだけ画面全体が移り、開いたときは移らない", async ({
   page,
 }) => {
+  // E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`)。GPU で描ける端末として見るため外し続ける
+  await page.addInitScript(() => {
+    new MutationObserver(() => {
+      if (document.documentElement.dataset["keepLite"] === undefined)
+        delete document.documentElement.dataset["lite"];
+    }).observe(document.documentElement, { attributeFilter: ["data-lite"] });
+  });
   await page.addInitScript(() => {
     const w = window as unknown as { kinds: string[][] };
     w.kinds = [];
@@ -112,9 +119,83 @@ test("明暗を選び直したときだけ画面全体が移り、開いたと�
   await expect(html).toHaveAttribute("data-theme", "light");
   expect(await kinds()).toEqual([]);
 
+  // ソフトウェアで描いている端末でも、すぐ替える
+  await page.evaluate(() => {
+    document.documentElement.dataset["keepLite"] = "";
+    document.documentElement.dataset["lite"] = "";
+  });
+  await page.getByTestId("theme-toggle").click();
+  await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
+    "data-mode",
+    "system",
+  );
+  expect(await kinds()).toEqual([]);
+  await page.evaluate(() => {
+    delete document.documentElement.dataset["keepLite"];
+    delete document.documentElement.dataset["lite"];
+  });
+
   // 動きを減らす設定では写しを取らず、すぐ替える
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByTestId("theme-toggle").click();
-  await expect(html).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
+    "data-mode",
+    "dark",
+  );
   expect(await kinds()).toEqual([]);
+});
+
+/** 番組表の時の列と左上の角の面の濃さ (透明度で出し入れする。`guide/+page.svelte`) */
+function guideFloat(page: Page) {
+  return page.evaluate(() => ({
+    corner: Number(
+      getComputedStyle(document.querySelector(".corner")!).opacity,
+    ),
+    hour: Number(
+      getComputedStyle(document.querySelector(".hour")!, "::before").opacity,
+    ),
+  }));
+}
+
+/*
+ * **番組表の時の列は、横に送ってマスが裏に入ったときだけ浮く** (docs/design.md の「浮かせ方」)。
+ * 左上の角は、横に送ると局名が、縦に巻くと時の数字が裏に来るので、どちらを巻いても浮く
+ */
+test("番組表の時の列は横に送ると浮き、角は横か縦に巻くと浮く", async ({
+  page,
+}) => {
+  // 合成のデータは局が少ないので、横に送れる狭い幅にする (面の出し方は幅によらず同じ)
+  await page.setViewportSize({ width: 320, height: 700 });
+  await goto(page, "/guide?type=GR");
+  const grid = page.getByTestId("guide-grid");
+  await expect(page.getByTestId("guide-service").first()).toBeVisible();
+  const scroll = (left: number, top: number) =>
+    grid.evaluate(
+      (el, [l, t]) => el.scrollTo({ left: l!, top: t!, behavior: "instant" }),
+      [left, top],
+    );
+
+  await scroll(0, 0);
+  await expect.poll(() => guideFloat(page)).toEqual({ corner: 0, hour: 0 });
+
+  await scroll(60, 0);
+  await expect.poll(() => guideFloat(page)).toEqual({ corner: 1, hour: 1 });
+
+  // 縦だけ巻くと、時の列の裏にマスは来ない。角の裏には時の数字が来る
+  await scroll(0, 400);
+  await expect.poll(() => guideFloat(page)).toEqual({ corner: 1, hour: 0 });
+});
+
+test.describe("動きを減らす設定", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  test("番組表の時の列と角は、上端でも浮いた形のまま", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await goto(page, "/guide?type=GR");
+    await expect(page.getByTestId("guide-service").first()).toBeVisible();
+    await page
+      .getByTestId("guide-grid")
+      .evaluate((el) => el.scrollTo({ left: 0, top: 0, behavior: "instant" }));
+    await expect.poll(() => guideFloat(page)).toEqual({ corner: 1, hour: 1 });
+  });
 });

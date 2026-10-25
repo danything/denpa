@@ -315,7 +315,7 @@
   --dp-warn-text: #fecc63; /* amber-150 */
   --dp-info-text: #0ccece; /* cyan-250 */
 }
-/* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ ---- */
+/* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ (動かすのはファイルの最後) ---- */
 .rec-dot {
   display: inline-block;
   flex-shrink: 0;
@@ -323,7 +323,6 @@
   height: 0.375rem;
   border-radius: var(--dp-radius-full);
   background: var(--dp-rec);
-  animation: rec-pulse var(--dp-pulse) ease-in-out infinite;
 }
 @keyframes rec-pulse {
   50% {
@@ -351,11 +350,8 @@ html:active-view-transition-type(theme)::view-transition-group(*) {
 /*
  * ---- 一言だけ出して消える通知 (`.flash`。「保存しました」) ----
  * ふわっと出て (0.2 秒)、読めるだけ置き、ふわっと消える (0.3 秒)。
- * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)
+ * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)。動かすのはファイルの最後
  */
-.flash {
-  animation: flash var(--flash-for, 2.5s) linear both;
-}
 @keyframes flash {
   0% {
     opacity: 0;
@@ -628,22 +624,11 @@ thead th {
 /*
  * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表集め)。値が変わったら
  * なめらかに伸ばす (Pico の 0.15 秒より少し長く)。**動いているあいだ** (`.running`。付けるのは
- * 呼ぶ側 — `JobProgress` など) は、伸びたところの上に光の筋を流す。
+ * 呼ぶ側 — `JobProgress` など) は、伸びたところの上に光の筋を流す (流すのはファイルの最後)。
  * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
  */
 progress[value]::-webkit-progress-value {
   transition: inline-size var(--dp-duration) var(--dp-ease);
-}
-progress.running[value]::-webkit-progress-value {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(255 255 255 / 0.35) 50%,
-    transparent 100%
-  );
-  background-repeat: no-repeat;
-  background-size: 40% 100%;
-  animation: progress-shine var(--dp-shine) ease-in-out infinite;
 }
 @keyframes progress-shine {
   from {
@@ -1429,7 +1414,7 @@ a.button {
   color: inherit;
   border: 1px solid transparent;
 }
-/* 淡い地は、状態の色を面の色 (--dp-surface) に 14% 混ぜる (通知は 10%)。バッジと通知で同じ考え */
+/* 淡い地は、状態の色を面の色 (--dp-surface) に 14% 混ぜる */
 .tag.success {
   background: color-mix(in srgb, var(--dp-ok) 14%, var(--dp-surface));
   color: var(--dp-ok-text);
@@ -1449,31 +1434,46 @@ a.button {
 
 /* ---- 通知 ---- */
 /*
- * 一言の通知。**地は状態の色を淡く混ぜるだけにし、種類は左の線で示す。**
- * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった。
- * 左の縦線は「選んでいる」の印と重なる (docs/design.md の「今とのずれ」)
+ * 一言の通知。**種類は頭のアイコンと言葉で示し、地は状態の色で塗らない** (docs/design.md の「印の意味」)。
+ * 状態の色は `-text` の側をアイコンにだけ使う。前は地に状態の色を混ぜ、左に色の線を引いていたが、
+ * 左の縦線は「選んでいる」の印と重なっていた。
+ * アイコンは lucide の形 (circle-x・triangle-alert・circle-check・info) を `mask` で切り抜いて塗る。
+ * 中身が字だけでも、リンク入りでも、閉じるボタン付きのトーストでも同じに出るよう、左の余白に絶対位置で置く
  */
 .notice {
+  --notice-mark: none;
+  --notice-mark-color: transparent;
+  position: relative;
   border-radius: var(--dp-radius);
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 1rem 0.75rem calc(1.5rem + 1.125em);
   background: var(--dp-subtle);
-  border-left: 3px solid transparent;
 }
-.notice.warning {
-  background: color-mix(in srgb, var(--dp-warn) 10%, var(--dp-surface));
-  border-left-color: var(--dp-warn);
+/* 1 行目の真ん中にそろえる (`1lh` は 1 行の高さ)。大きさは字に合わせる (`.small` の通知では小さく) */
+.notice::before {
+  content: "";
+  position: absolute;
+  top: calc(0.75rem + (1lh - 1.125em) / 2);
+  left: 1rem;
+  width: 1.125em;
+  height: 1.125em;
+  background: var(--notice-mark-color);
+  mask: var(--notice-mark) center / contain no-repeat;
 }
 .notice.error {
-  background: color-mix(in srgb, var(--dp-rec) 10%, var(--dp-surface));
-  border-left-color: var(--dp-rec);
+  --notice-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m15 9-6 6M9 9l6 6'/%3E%3C/svg%3E");
+  --notice-mark-color: var(--dp-rec-text);
+}
+.notice.warning {
+  --notice-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4M12 17h.01'/%3E%3C/svg%3E");
+  --notice-mark-color: var(--dp-warn-text);
 }
 .notice.success {
-  background: color-mix(in srgb, var(--dp-ok) 10%, var(--dp-surface));
-  border-left-color: var(--dp-ok);
+  --notice-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E");
+  --notice-mark-color: var(--dp-ok-text);
 }
 .notice.info {
-  background: color-mix(in srgb, var(--dp-info) 10%, var(--dp-surface));
-  border-left-color: var(--dp-info);
+  --notice-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4M12 8h.01'/%3E%3C/svg%3E");
+  --notice-mark-color: var(--dp-info-text);
 }
 
 /* ---- 読み込み中 (送信中のボタン。`actions.ts` の `submitting` が付ける) ---- */
@@ -2183,7 +2183,8 @@ dialog[open] > article {
  * 幅と左右どちらに置くか (グリッドの列) は使う側で。
  *
  * - 窓の端とヘッダーに付ける。地・枠・影は付けない
- * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 28px 空ける (最初のグループは 0)。
+ * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 20px 空ける (最初のグループは 0)。
+ *   **縦は詰める** (行は 48px のまま、見出しと余白で稼ぐ)。ホームはエンコードの行が出ると 1 行伸びるので、ふつうの窓の高さで巻かずに収まるように
  *   行は見出しより 12px 深く始め、塗りも一緒に動く
  * - **行はどの端末でも 48px** (車の中のタブレットでも押せる高さ。マウスとタブレットで詰め具合を変えない)
  * - 選んでいる行 (`aria-current` か `aria-pressed="true"`) は左の縦線と主の色の太字 (下)。指を乗せた行だけ薄い地
@@ -2193,7 +2194,9 @@ dialog[open] > article {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.75rem 0.625rem 1.5rem;
+  /* 下の余白は名前で持つ。下端に貼り付ける行 (ルールの「ルールを作る」) が同じ値で打ち消す */
+  --dp-side-pad-end: 0.75rem;
+  padding: 0.75rem 0.625rem var(--dp-side-pad-end);
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -2215,8 +2218,8 @@ dialog[open] > article {
 .side-label {
   display: flex;
   align-items: center;
-  min-height: 1.5rem;
-  margin: 1.75rem 0 0.125rem;
+  min-height: 1.25rem;
+  margin: 1.25rem 0 0.125rem;
   padding: 0 0.75rem;
   color: var(--dp-fg);
   font-size: 0.8125rem;
@@ -2351,7 +2354,6 @@ dialog[open] > article {
     transparent 100%
   );
   transform: translateX(-100%);
-  animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
   pointer-events: none;
 }
 @keyframes skeleton-sweep {
@@ -2361,9 +2363,37 @@ dialog[open] > article {
 }
 
 /*
- * **動かさない設定の端末では、全部止めて終わった姿を見せる。** 移り変わりは時間のトークンを 0 に、
- * 繰り返すもの (録画中の点・光の筋・「保存しました」・骨組みの光) は動きそのものを外す。
- * 見せる画面の、巻いた量で組み上がる飾り (docs/design.md の「見せる画面」) を足すときも、ここで `animation: none`
+ * **動き続けるもの (録画中の点・光の筋・「保存しました」・骨組みの光) は、動かしてよい端末でだけ動かす。**
+ * 動きを減らす設定と、ソフトウェアで描いている端末 (`<html data-lite>`。`#lib/lite.ts`) では動きを足さず、
+ * 上の止まった姿のまま見せる (docs/design.md の「動き」)。遷移中のバー (`+layout.svelte` の `.nav-progress`) も同じ決まり
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-lite]) .rec-dot {
+    animation: rec-pulse var(--dp-pulse) ease-in-out infinite;
+  }
+  :root:not([data-lite]) .flash {
+    animation: flash var(--flash-for, 2.5s) linear both;
+  }
+  :root:not([data-lite]) progress.running[value]::-webkit-progress-value {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(255 255 255 / 0.35) 50%,
+      transparent 100%
+    );
+    background-repeat: no-repeat;
+    background-size: 40% 100%;
+    animation: progress-shine var(--dp-shine) ease-in-out infinite;
+  }
+  :root:not([data-lite]) .skeleton::after {
+    animation: skeleton-sweep var(--dp-shine) ease-in-out infinite;
+  }
+}
+
+/*
+ * **動かさない設定の端末では、全部止めて終わった姿を見せる。** 移り変わりは時間のトークンを 0 に
+ * (動き続けるものは、上でもう足していない)。
+ * 見せる画面の、巻いた量で組み上がる飾り (docs/design.md の「見せる画面」) を足すときは、ここで `animation: none`
  * にして組み上がった後の素の姿で見せる — 時間のトークンは巻いた量の動きには効かない。
  * 浮くもの (ヘッダーと操作の 1 行) は外さない。Pico がすぐ終わらせて、いつも浮いた形になる (「浮かせ方」)。
  * 上の決まりに勝つよう、ファイルの最後に置く
@@ -2374,14 +2404,5 @@ dialog[open] > article {
     --dp-duration-enter: 0s;
     --dp-duration-move: 0s;
     --dp-duration-exit: 0s;
-  }
-  .rec-dot,
-  .flash,
-  .skeleton::after {
-    animation: none;
-  }
-  progress.running[value]::-webkit-progress-value {
-    animation: none;
-    background-image: none;
   }
 }

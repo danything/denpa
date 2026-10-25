@@ -167,6 +167,16 @@ test.describe("ルールの一覧", () => {
     );
     expect(await page.evaluate(() => scrollY)).toBe(before);
 
+    // 中身が収まる高さなら、サイドバーは巻けない (下端の「ルールを作る」の打ち消しがサイドバーの余白とずれると、そのぶん巻けてしまう)
+    await page.setViewportSize({ width: 1366, height: 1000 });
+    await expect
+      .poll(() =>
+        page
+          .getByTestId("rule-sidebar")
+          .evaluate((el) => el.scrollHeight - el.clientHeight),
+      )
+      .toBeLessThanOrEqual(0);
+
     await clearRules(page);
   });
 

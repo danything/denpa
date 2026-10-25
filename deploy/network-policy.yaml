@@ -1,0 +1,24 @@
+# **denpa に届いてよいのは Gateway だけ。** application.yaml の trustedProxies は Pod の網全体
+# (10.42.0.0/16) にしてある。Gateway (Cilium の Envoy) の送信元は cilium_host のアドレスで、
+# ノードや起動ごとに変わりうるので、アドレスでは絞れないため。そのままだと、クラスタの中の
+# どの Pod も X-Forwarded-For に宅内のアドレスを書けば、ログインなしで通れてしまう。
+# そこで「届く相手」の側を Gateway (ingress) とノード (host。kubelet の生存確認) に絞る。
+# 同じ Pod の中から自分を呼ぶもの (SSR) はこの規則に掛からない。出ていく方は絞らない
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: denpa
+  namespace: denpa
+spec:
+  endpointSelector:
+    matchLabels:
+      app: denpa
+  ingress:
+    - fromEntities:
+        - ingress
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP

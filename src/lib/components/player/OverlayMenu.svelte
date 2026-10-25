@@ -87,27 +87,14 @@
 <style>
   /*
      * 箱と選択肢の地・項目の間は `SettingsMenu` と同じなので app.css (`.menu`・`.overlay-menu`) に置く。
-     * ここは速さの並べ方だけ
+     * ここは速さの字だけ。項目の余白はほかのメニューと同じ (docs/design.md の「メニュー・ダイアログ・検索の候補」)。
+     * 狭い枠では速さのボタンごと ⚙ の頭に畳むので (`Extras`)、このメニューは広い枠で縦に並べるときだけ出る
      */
   :global(.overlay-menu.large) {
     font-size: var(--dp-text-lg);
   }
   :global(.overlay-menu.large .option) {
     justify-content: center;
-    padding: 0.5rem;
     font-variant-numeric: tabular-nums;
-  }
-  /*
-     * **狭い枠では速さを4列に並べる。** 縦に7つ積むと 300px あり、スマホの縦で
-     * 全画面をやめた枠 (224px) には入らない — 巻き取らせると2つしか見えず、
-     * 押したい速さを探してメニューの中を動かすことになる。
-     * grid にするのは開いているときだけ (`:popover-open`)。閉じているときの `display: none` を消さない。
-     * 列の数は閉じる動きの間も持たせる (外すと、閉じる間だけ縦 1 列に戻って見える)
-     */
-  :global(.stage[data-compact] .overlay-menu.large) {
-    grid-template-columns: repeat(4, auto);
-  }
-  :global(.stage[data-compact] .overlay-menu.large:popover-open) {
-    display: grid;
   }
 </style>

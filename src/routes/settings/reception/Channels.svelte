@@ -114,7 +114,7 @@
 {/snippet}
 
 <!--
-    **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・番組表)、
+    **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・番組表。スマホでは下のタブの上)、
     回っている間の進み具合は見出しのすぐ下。チャンネルが1つも無いときは、空の表の場所の真ん中に
     スキャンの欄を出す (局が無いときの案内 `ChannelNotice` の行き先がここ)
 -->
@@ -123,7 +123,7 @@
     <div class="section-head spread">
       <h2>受信できるチャンネル</h2>
       {#if coverage.length > 0}
-        <div class="cluster">
+        <div class="cluster section-bar" data-testid="channel-actions">
           {@render scanControl()}
           <!--
                         入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
@@ -179,24 +179,18 @@
         <span class="muted">番組表のある局</span>
         <strong>{withEpg}</strong>
         <!--
-                    ロゴの数も同じ行に。取れないぶんを除いて揃っていれば「揃った」の色。
-                    CMロゴはCM検出のために覚えたもので、局ロゴとは別物 (logo-data.ts)
+                    ロゴの数も同じ行に、ほかの数と同じ形で (事実はバッジにしない。docs/design.md の「印の意味」)。
+                    取れないぶんは下の行で断る。CMロゴはCM検出のために覚えたもので、局ロゴとは別物 (logo-data.ts)
                 -->
         <span class="logo-counts">
           <span class="muted">局ロゴ</span>
-          <span
-            class="tag num {data.logos.have + data.logos.unavailable >=
-            data.logos.total
-              ? 'success'
-              : ''}"
-            data-testid="status-logos"
-          >
+          <strong class="num" data-testid="status-logos">
             {data.logos.have} / {data.logos.total} 局
-          </span>
+          </strong>
           <span class="muted">CMロゴ</span>
-          <span class="tag num" data-testid="status-cm-logos">
+          <strong class="num" data-testid="status-cm-logos">
             {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
-          </span>
+          </strong>
         </span>
       </div>
       {#if data.logos.unavailable > 0}
@@ -241,7 +235,7 @@
             >{STATE_LABEL[scan.state]}</span
           >
           {#if scan.phase}
-            <span class="tag">{scan.phase}</span>
+            <span class="muted">{scan.phase}</span>
           {/if}
           <span class="num" data-testid="scan-found"
             >見つかったチャンネル {scan.channels}</span

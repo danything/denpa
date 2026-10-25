@@ -1005,9 +1005,9 @@
                 style="display: block; width: 2rem; height: 1.25rem"
                 fallback=""
               />
-              <!-- テレビに出ている番号。ラベルの形はライブの一覧と同じ (format.ts の channelNumber) -->
+              <!-- テレビに出ている番号。ライブの一覧と同じく、バッジにせず小さな控えた字 (format.ts の channelNumber) -->
               {#if channelNumber(service) !== null}
-                <span class="tag ch-number">{channelNumber(service)}</span>
+                <span class="ch-number">{channelNumber(service)}</span>
               {/if}
               <span class="truncate broadcast">{service.name}</span>
             {/if}
@@ -1536,8 +1536,13 @@
     background: var(--dp-bg);
     /* 中の貼り付くもの (`z-index`) を箱の中に閉じ込め、上に重ねる操作の1行より下にする */
     isolation: isolate;
-    /* 巻いた量をヘッダーへ渡す (`+layout.svelte` の `.navbar` と下の `.guide-bar` がこれで浮く) */
-    scroll-timeline: --guide block;
+    /*
+     * 巻いた量をヘッダーへ渡す (`+layout.svelte` の `.navbar` と下の `.guide-bar` がこれで浮く)。
+     * 横の巻いた量 `--guide-x` は、時の列と左上の角が浮くのに使う (下の `.corner`・`.hour::before`)
+     */
+    scroll-timeline:
+      --guide block,
+      --guide-x inline;
     /* 時刻へ送るボタン (`scrollGrid`) の動き。つかんで動かす・開いたときの位置合わせは `instant` で止める */
     scroll-behavior: smooth;
   }
@@ -1587,12 +1592,51 @@
   }
   /*
      * **局名と時の列は操作の層。** 表を巻くとマスがその裏を流れるので、ヘッダーと同じ半透明の面 (`--dp-float`) で浮かせる
-     * (docs/design.md の「浮かせ方」)。線は引かない。時の列と角の影はマスの側にだけ落とす (列は右。局名は下の `.service::before`)
+     * (docs/design.md の「浮かせ方」)。線は引かない。時の列と角の影はマスの側にだけ落とす (列は右。局名は下の `.service::before`)。
+     * **面は、裏に何か来たときだけ出す。** 時の列の裏にマスが来るのは横に送ったときだけ (`--guide-x`)。
+     * 角の裏には、横に送ると局名が、縦に巻くと時の数字と「いま」の時刻が来るので、どちらを巻いても出す。
+     * 面は透明度だけで出し入れする。角は 2 つの軸の透明度を足す (`animation-composition: add`。1 を超えた分は切れる)。
+     * 知らないブラウザと動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも面が出ている
      */
   .corner,
-  .hour {
+  .hour::before {
     background: var(--dp-float);
+  }
+  /* 時の列は 1 本につながった面。マスの上に浮くので遠い影 (右だけ。下の `clip-path`) */
+  .hour::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
     box-shadow: var(--dp-shadow-pop);
+    pointer-events: none;
+  }
+  /* 角は局名の行に詰めて並ぶので、局名と同じ近い影 */
+  .corner {
+    box-shadow: var(--dp-shadow-tight);
+  }
+  @keyframes guide-float {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @supports (animation-timeline: scroll()) {
+    .hour::before {
+      animation: guide-float linear both;
+      animation-timeline: --guide-x;
+      animation-range: 0 1.5rem;
+    }
+    .corner {
+      animation:
+        guide-float linear both,
+        guide-float linear both;
+      animation-timeline: --guide, --guide-x;
+      animation-range: 0 1.5rem;
+      animation-composition: replace, add;
+    }
   }
   /*
      * 局名は局ごとの小さな角丸の面 (ヘッダー・操作の1行と同じ材質。局の列と一緒に横へ動くので、1 本につながった面にはしない)。
@@ -1620,7 +1664,7 @@
   }
   @media (prefers-reduced-transparency: reduce) {
     .corner,
-    .hour,
+    .hour::before,
     .service::before {
       background: var(--dp-pop);
     }
@@ -1646,9 +1690,12 @@
     line-height: 1.25rem;
     font-weight: var(--dp-weight);
   }
+  /* 番号は事実なのでバッジにしない (docs/design.md の「印の意味」)。ライブの一覧の `.channel-number` と同じ字 */
   .ch-number {
     flex-shrink: 0;
+    font-size: var(--dp-text-xs);
     font-variant-numeric: tabular-nums;
+    color: var(--dp-muted);
   }
   .hour {
     position: sticky;
