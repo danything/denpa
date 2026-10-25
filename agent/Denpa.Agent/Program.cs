@@ -37,7 +37,8 @@ var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out va
     : 25252;
 /*
  * 待ち受けるアドレス (AGENT_HOST)。既定は全部のインターフェース。**エージェントは認証を持たない**ので、
- * 同じ機械の denpa からしか繋がない構成ではループバック (127.0.0.1) に絞る (Mac の install.sh)
+ * 同じ機械の denpa からしか繋がない構成ではループバック (127.0.0.1) に絞る (Mac の install.sh)。
+ * 鍵を配るポート (CARD_SHARE_PORT) はこれに従わない (LAN の別の拠点に配るので。CardShareServer.cs)
  */
 IPAddress? host = null;
 if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText

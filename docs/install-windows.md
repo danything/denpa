@@ -1,7 +1,7 @@
 # Windows に入れる
 
 **x64 の Windows なら、PowerShell の1行で denpa ごと立ち上がってブラウザが開きます**
-(`install.ps1`)。Windows 用は 1.23.1 からで、
+(`install.ps1`)。Windows 用は v1.23.1 からで、
 それより前のバージョンは入れられません (install.ps1 がそう言って止まる)。
 
 ```powershell

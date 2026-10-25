@@ -445,7 +445,7 @@ function Install-Agent([string]$Ref) {
             try {
                 Get-Url "https://github.com/$Repo/releases/download/$Ref/$name" $agent
             } catch {
-                throw "$Ref には Windows 用のエージェントがありません。Windows 用は 1.23.1 からなので、それより前のバージョンは Windows に入れられません"
+                throw "$Ref には Windows 用のエージェントがありません。Windows 用は v1.23.1 からなので、それより前のバージョンは Windows に入れられません"
             }
             Get-Url "https://github.com/$Repo/releases/download/$Ref/$name.sha256" "$agent.sha256"
             Assert-Hash $agent ((Get-Content -LiteralPath "$agent.sha256" -Raw) -split '\s+')[0]
@@ -565,7 +565,7 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
     Show-Tuner
     if ($AgentOnly) {
         Say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に http://$($env:COMPUTERNAME):$Port を書いてください"
-        Say '(LAN から繋ぐなら、Windows ファイアウォールでポート 25252 への受信を許してください)'
+        Say "(LAN から繋ぐなら、Windows ファイアウォールでポート $Port への受信を許してください)"
         return
     }
     if (-not (Test-Wslc)) {

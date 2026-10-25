@@ -21,16 +21,14 @@ namespace Denpa.Agent;
 /// <item><c>AGENT_ALLOWED_HOSTS</c> に書いた名前。頭にドットでその名前とその下の名前全部</item>
 /// </list>
 /// </summary>
+/// <param name="allowed">設定にある名前 (小文字、最後のドット無し)</param>
 public sealed partial class AgentHosts(IReadOnlyList<string> allowed)
 {
     /// <summary>
     /// 名前の後ろがこれなら、外の DNS では引けない。<c>.localhost</c> はブラウザが自分に向ける。
     /// <c>.svc</c> は Kubernetes の <c>xxx.ns.svc</c> (<c>.svc.cluster.local</c> は <c>.local</c> に当たる)
     /// </summary>
-    public static readonly string[] LocalSuffixes = [".localhost", ".local", ".lan", ".home.arpa", ".internal", ".svc"];
-
-    /// <summary>設定にある名前 (小文字、最後のドット無し)</summary>
-    public IReadOnlyList<string> Allowed { get; } = allowed;
+    private static readonly string[] LocalSuffixes = [".localhost", ".local", ".lan", ".home.arpa", ".internal", ".svc"];
 
     /// <summary>知らせた名前。同じ名前で何度来ても1度だけ出す (ログを埋めないよう、覚えるのは上限まで)</summary>
     private readonly HashSet<string> reported = [];
@@ -62,7 +60,7 @@ public sealed partial class AgentHosts(IReadOnlyList<string> allowed)
         if (IPAddress.TryParse(name, out _)) return true;
         if (name == "localhost" || !name.Contains('.')) return true;
         if (LocalSuffixes.Any(name.EndsWith)) return true;
-        return Allowed.Any(entry => entry.StartsWith('.')
+        return allowed.Any(entry => entry.StartsWith('.')
             ? name == entry[1..] || name.EndsWith(entry)
             : name == entry);
     }
