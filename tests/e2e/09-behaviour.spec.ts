@@ -310,7 +310,8 @@ test.describe("操作したときの反応", () => {
       ).toBeLessThan(4);
     }
 
-    // ページごとは動かず、表だけが動く。表の下に操作の1行、その下端が下のタブの上端
+    // ページごとは動かず、表だけが動く。表の下に操作の1行。ほかの画面の操作の1行と同じく、
+    // 下のタブのすぐ上に浮いた面で、表と下のタブとの間を 0.375rem (6px) ずつ空ける
     const fit = await page.evaluate(() => {
       const rect = (id: string) =>
         document
@@ -331,8 +332,8 @@ test.describe("操作したときの反応", () => {
       };
     });
     expect(fit.scroll).toBe(0);
-    expect(Math.abs(fit.above)).toBeLessThanOrEqual(1);
-    expect(Math.abs(fit.gap)).toBeLessThanOrEqual(1);
+    expect(Math.abs(fit.above - 6)).toBeLessThanOrEqual(1);
+    expect(Math.abs(fit.gap - 6)).toBeLessThanOrEqual(1);
     expect(fit.right, "操作が画面の右からはみ出している").toBeLessThanOrEqual(
       390,
     );

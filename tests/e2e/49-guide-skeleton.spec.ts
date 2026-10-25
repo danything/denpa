@@ -69,9 +69,11 @@ function bottoms(page: Page, toolbar: string) {
     if (grid !== null)
       bottom = Math.min(bottom, grid.getBoundingClientRect().bottom);
     const narrow = matchMedia("(max-width: 767px)").matches;
+    // スマホでは操作の1行が浮いた面で、表との間に隙間 (上の余白) を空ける
+    const bar = document.querySelector(toolbar) as HTMLElement;
     const limit = narrow
-      ? (document.querySelector(toolbar) as HTMLElement).getBoundingClientRect()
-          .top
+      ? bar.getBoundingClientRect().top -
+        parseFloat(getComputedStyle(bar).marginTop)
       : window.innerHeight;
     return { bottom: Math.round(bottom), limit: Math.round(limit) };
   }, toolbar);
