@@ -77,7 +77,12 @@ export function parseDeclarations(text: string): Declaration[] {
 const MAX_VALUE = 4096;
 
 function stripComments(text: string): string {
-  return replaceBlocks(text, "/*", "*/", " ").replace(/<!--|-->/g, " ");
+  // `<!--`・`-->` は古いブラウザから style の中身を隠す印 (CSS では読み飛ばすだけ)
+  return replaceBlocks(text, "/*", "*/", " ")
+    .split("<!--")
+    .join(" ")
+    .split("-->")
+    .join(" ");
 }
 
 /**

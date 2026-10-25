@@ -243,4 +243,8 @@ test("記憶の置き場はアプリの配信元 (オリジン) ごと。AIT が
   expect(storageKey("https://evil.example/app/index.html")).not.toBe(
     storageKey("https://hc.example.jp/app/index.html"),
   );
+  // オリジンが "null" になるものどうしを混ぜない
+  expect(storageKey("data:text/html,a")).not.toBe(
+    storageKey("data:text/html,b"),
+  );
 });

@@ -26,14 +26,17 @@ export const VIEWPORT = { width: 1920, height: 1080 } as const;
 /**
  * 受信機の記憶の置き場 (アプリの配信元のオリジンごと。denpa のほかの記憶とは混ぜない)。テレビのブラウザの
  * localStorage と同じくオリジンで分ける — AIT が名乗る organisation_id・application_id で分けると、
- * 別の配信元のアプリが同じ番号を名乗って、ほかのアプリの記憶を読める。URL として読めないものは URL のまま
+ * 別の配信元のアプリが同じ番号を名乗って、ほかのアプリの記憶を読める。http(s) の URL でないものは
+ * (オリジンが "null" になって混ざらないよう) URL のまま。AIT は http(s) の URL しか出さないので、ふだんは来ない
  */
 export function storageKey(url: string): string {
   let origin = url;
   try {
-    origin = new URL(url).origin;
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:")
+      origin = parsed.origin;
   } catch {
-    // AIT は http(s) の URL しか出さないので、ここには来ない
+    // URL として読めない
   }
   return `denpa_hybridcast_${origin}`;
 }
