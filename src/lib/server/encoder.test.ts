@@ -35,7 +35,7 @@ describe("録画エンコードの引数", () => {
     expect(args.at(-1)).toBe("/out.mkv");
   });
 
-  // 上流の既定 preset は版で変わる (encoder.videoArgs の実測)。書いてあることを守る。
+  // 上流の既定 preset はバージョンで変わる (encoder.videoArgs の実測)。書いてあることを守る。
   // **10 に戻さない** — M10 以上はシーンの変わり目でブロックノイズが出る
   // (docs/encode.md「preset は 9・crf 35 (値は書いておく)」)
   test("AV1 の preset と crf は書いてある", () => {

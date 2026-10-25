@@ -214,7 +214,7 @@ describe("ARIB 8単位符号", () => {
     expect(decodeAribText(bytes(0x79, 0x21))).toBe("□");
   });
 
-  test("のちの版で足された外字も読む", () => {
+  test("規格ののちのバージョンで足された外字も読む", () => {
     // 85区47点・86区1点 (漢字)、93区26点 (亀甲括弧の S)、93区39点 (リットル)
     expect(
       decodeAribText(bytes(0x75, 0x4f, 0x76, 0x21, 0x7d, 0x3a, 0x7d, 0x47)),

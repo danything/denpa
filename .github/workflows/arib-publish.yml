@@ -1,7 +1,7 @@
 name: Publish @danything/arib
 
 # **`packages/arib` を npm に出す** (docs/development.md「`@danything/arib` を出す」)。main のコミットに
-# タグ `arib-v<版>` を押すと出る。版は packages/arib/package.json の `version` と同じにする (違えば止まる)。
+# タグ `arib-v<バージョン>` を押すと出る。バージョンは packages/arib/package.json の `version` と同じにする (違えば止まる)。
 # `[skip ci]` のコミット (main の先頭に積まれる bump image marks) に付けたタグでは、この workflow は動かない
 #
 # npm へはふだん Trusted Publishing (OIDC) で出す。トークンは持たず、provenance も付く。
@@ -39,11 +39,11 @@ jobs:
           }
           version=$(jq -r .version packages/arib/package.json)
           test "${GITHUB_REF_NAME}" = "arib-v${version}" || {
-            echo "タグ ${GITHUB_REF_NAME} と packages/arib/package.json の版 ${version} が違う"
+            echo "タグ ${GITHUB_REF_NAME} と packages/arib/package.json のバージョン ${version} が違う"
             exit 1
           }
 
-      # bun の版は Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
+      # bun のバージョンは Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
       - name: Read bun version from Dockerfile
         id: bun
         run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"

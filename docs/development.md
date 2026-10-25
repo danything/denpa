@@ -43,7 +43,7 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 撮った画像が artifact に上がります。
 
 撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています — 画面の BIZ UDPゴシック
-(OFL 版) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
+(OFL で配られているもの) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
 ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、貼るときに 1120×630 へ縮める) は `scripts/capture-docs.ts` の頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
@@ -130,7 +130,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 導く (`Infer<typeof AGENT_CHANNEL>`) ので、形式と型を別々に書かない。
 
 読み方は 2 つ。`tolerate` は形式が違っても止めず、警告を 1 回出して来たものをそのまま使う
-(エージェントの答え。版がずれただけで録画が止まっては困る)。`read` は止める
+(エージェントの答え。バージョンがずれただけで録画が止まっては困る)。`read` は止める
 (ID トークン。違う形式のまま進むと危ない)。迷ったら `tolerate`。自分のサーバから自分の画面へ
 渡すもの (同じリポジトリの中) はキャストのままでよい。
 
@@ -149,12 +149,12 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
    artifact の `shots` を `docs/images/` に写して PR にします
 3. main のイメージのビルドが通ったのを確かめて、リリースを作る:
    `gh release create vX.Y.Z --target main --generate-notes --title vX.Y.Z`。
-   イメージは組み直さず、そのコミットのものに版を貼り足します ([下](#イメージ))
+   イメージは組み直さず、そのコミットのものにバージョンを貼り足します ([下](#イメージ))
 
 ### `@danything/arib` を出す
 
 `packages/arib/` は denpa のリリースとは別に npm へ出します。`packages/arib/package.json` の `version` を上げる PR を
-マージしてから、main のそのコミットにタグ `arib-v<版>` を押します (`git tag arib-v0.2.0 <そのコミット> && git push origin arib-v0.2.0`)。
+マージしてから、main のそのコミットにタグ `arib-v<バージョン>` を押します (`git tag arib-v0.2.0 <そのコミット> && git push origin arib-v0.2.0`)。
 **main の先頭には付けないこと。** マージのあとに `chore: bump image marks [skip ci]` が積まれることが多く、`[skip ci]` のコミットに付けたタグでは Actions が動きません。
 `.github/workflows/arib-publish.yml` がテストとビルドをして、Trusted Publishing で出します (トークンは持たない)。
 リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `scripts/manifest.ts` が
@@ -167,7 +167,7 @@ CI が両方をビルドして `deploy/` の印を書き戻します。**main �
 (ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(5)` / `claude-review`) ので、
 書き戻しは bot が PR を出し、必須チェックの status を自分で付けてマージします
 (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
-release は組み直さず、main で組んだイメージに版を 1 層足します
+release は組み直さず、main で組んだイメージにバージョンを 1 層足します
 (`.github/release.Dockerfile`。タグの決め方と理由は [architecture.md](architecture.md#イメージのタグ)、
 出し方は `.github/image-tags.sh`)。
 
@@ -197,10 +197,10 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 (エージェントは `--target=tuner-agent`。Docker なら `docker run --rm -it --pid=container:<名前> --network=container:<名前> busybox` で、
 中のファイルは `/proc/1/root/` の下) のようにシェルのあるコンテナを横に付けます。
 
-### 外から持ってくるものは版で固定する
+### 外から持ってくるものはバージョンで固定する
 
 ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / siano-userland / asicen-userland は、どれも
-`ARG` / `ENV` に版 (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
+`ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 
 上げるのは Renovate 任せで、`# renovate:` の注釈と `renovate.json` の `customManagers` で
 場所を教えてあります。タグのあるものはタグで、無いものはブランチの先頭のコミット (`git-refs`) で追います。

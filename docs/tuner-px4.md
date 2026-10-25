@@ -51,7 +51,7 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px
 ## ファームウェア
 
 **ファームウェアは同梱しています。** IT930x は挿すたびにホストから RAM へ
-ファームウェアを流し込み、px4-userland は受理する版を SHA-256 で1つに固定して
+ファームウェアを流し込み、px4-userland は受理するバージョンを SHA-256 で1つに固定して
 います。イメージをビルドするとき (Mac と Windows は install.sh / install.ps1 が入れるとき) に、PLEX 公式の Windows ドライバ
 (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から
 切り出します (0x287d0 から 2,169 バイト)。配布 zip・`.sys`・切り出したものの3つを

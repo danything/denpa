@@ -106,7 +106,7 @@ jobs:
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed
 
       # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
-      # コマンドで流す (bun 版があった頃は、同じものを2つの実装に通していた)。
+      # コマンドで流す (bun で書いたものがあった頃は、同じものを2つの実装に通していた)。
       # ビルドするところまで含めて1つの script にしてある — 手元で走らせるときに
       # ビルドし忘れると、消えた既定の置き場を読みに行って ENOENT で落ちるだけになる
       - name: Conformance
@@ -295,10 +295,10 @@ jobs:
   # 中身はテスト (agent-windows) と、ビルドして起こす・入れ方を通す (agent-windows-install) の
   # 関係ない2つだった。install.ps1 のリントは Windows でなくてよいので install-linux へ移した。
   #
-  # **SDK と NuGet は D: に置き、actions/cache で戻す。** SDK の版 (10.0.402) はランナーの
+  # **SDK と NuGet は D: に置き、actions/cache で戻す。** SDK のバージョン (10.0.402) はランナーの
   # イメージに入っていないので毎回 300MB を落として展開していて、C: への展開だけで20秒かかっていた
   # (D: なら8秒。ビルドと restore も C: より速い)。キャッシュに当たれば SDK の用意は10秒ほどで済む。
-  # 鍵は SDK の版と csproj。版は下の setup-dotnet の行から読む (Renovate が書き換えるのはそこ)
+  # 鍵は SDK のバージョンと csproj。バージョンは下の setup-dotnet の行から読む (Renovate が書き換えるのはそこ)
   agent-windows:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -546,7 +546,7 @@ jobs:
       # イメージを使わずランナーで回すので、その段だけ組んで取り出し、`MPEG2_DIR` で denpa に渡す。
       #
       # **組んだものは actions/cache に置いて使い回す。** 中身が変わるのは段の書き方
-      # (emsdk・FFmpeg の版) か wasm/decoder.c を変えたときだけなので、その2つを鍵にする。
+      # (emsdk・FFmpeg のバージョン) か wasm/decoder.c を変えたときだけなので、その2つを鍵にする。
       # 当たれば 1〜2 秒で戻る (前は buildx を立てて層のキャッシュから組み直すのに 15 秒ほど)。
       # **どの組でも戻す** — 要るスペック (28-live-raw・38-live-compat…) がどの組にあっても、
       # 組分けを気にせず足せるように。外れたときだけ、その組で組んで置く (外れるのは

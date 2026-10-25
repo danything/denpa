@@ -4,10 +4,62 @@ using System.Text.Json.Nodes;
 
 namespace Denpa.Agent;
 
-/// <summary>ログ。出す先は標準出力だけ (`kubectl logs` で読む)</summary>
+/// <summary>
+/// ログ。標準出力 (`kubectl logs` で読む) に出し、**直近の分をメモリにも残す。**
+///
+/// <para>
+/// distroless のイメージにはシェルが無く、標準出力を読めない人もいる。残した分は
+/// <c>GET /denpa/logs</c> で返し、設定の「診断」画面に出す。メモリだけなので再起動で消える。
+/// </para>
+/// </summary>
 public static class Log
 {
-    public static void Write(string message) => Console.WriteLine($"[agent] {message}");
+    public static readonly LogRing Recent = new(2000);
+
+    public static void Write(string message)
+    {
+        Recent.Add(message);
+        Console.WriteLine($"[agent] {message}");
+    }
+}
+
+/// <summary>直近の行を決まった数だけ持つリングバッファ。いろいろなスレッドから書かれるので、ロックを取って触る</summary>
+public sealed class LogRing(int capacity)
+{
+    private readonly (long At, string Text)[] lines = new (long, string)[capacity];
+    private readonly Lock gate = new();
+    private int next;
+    private int count;
+
+    public void Add(string text)
+    {
+        // 時刻はロックの中で取る。外で取ると、同時に書かれたときに古い順が崩れる
+        lock (gate)
+        {
+            lines[next] = (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), text);
+            next = (next + 1) % lines.Length;
+            if (count < lines.Length) count++;
+        }
+    }
+
+    /// <summary>古い順に写して返す</summary>
+    public (long At, string Text)[] Snapshot()
+    {
+        lock (gate)
+        {
+            var copy = new (long, string)[count];
+            var start = (next - count + lines.Length) % lines.Length;
+            for (var i = 0; i < count; i++) copy[i] = lines[(start + i) % lines.Length];
+            return copy;
+        }
+    }
+
+    /// <summary><c>GET /denpa/logs</c> の形: <c>{"lines":[{"at":ミリ秒,"text":"…"}]}</c></summary>
+    public JsonObject ToJson() => new()
+    {
+        ["lines"] = new JsonArray([.. Snapshot().Select(line =>
+            (JsonNode)new JsonObject { ["at"] = line.At, ["text"] = line.Text })]),
+    };
 }
 
 /// <summary>

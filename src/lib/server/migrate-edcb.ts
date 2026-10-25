@@ -12,7 +12,7 @@
  * - `;` で始まる行はコメント (`;;NextID=` のフッタも)。タブを含まない行は飛ばす
  * - 改行は `\r\n` か `\n`
  * - 数の列は `wcstol` で読むので、空や数でない値は 0。**後ろの列が無い古い行も、足りない列は 0 か空**として読む
- * - 文字コードは、頭に BOM があれば UTF-8、無ければ CP932 (Windows 版)。Unix 版は BOM が無くても UTF-8 なので、
+ * - 文字コードは、頭に BOM があれば UTF-8、無ければ CP932 (Windows 用)。Unix 用は BOM が無くても UTF-8 なので、
  *   UTF-8 として正しく読めればそちらを取る ({@link decodeText})
  * - 時刻は日本時間の壁時計 (`YYYY/MM/DD` と `HH:MM:SS` を別の列に)
  *
@@ -90,7 +90,7 @@ export function settingFiles(dir: string): EdcbFiles | null {
  *
  * CP932 は `TextDecoder("shift_jis")` で読む。WHATWG の Shift_JIS は Windows の CP932 と同じ表
  * (NEC 特殊文字の `①`、`～` が U+FF5E になるところまで) なので、別の表は要らない。
- * BOM の無い UTF-8 (Unix 版の EDCB) は、UTF-8 として壊れずに読めるかで見分ける —
+ * BOM の無い UTF-8 (Unix 用の EDCB) は、UTF-8 として壊れずに読めるかで見分ける —
  * CP932 の日本語は UTF-8 としてはまず読めない (かなと漢字の1バイト目が UTF-8 の続きのバイトに当たる)
  */
 export function decodeText(bytes: Uint8Array): string {

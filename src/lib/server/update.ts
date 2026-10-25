@@ -1,14 +1,14 @@
 /**
- * 新しい版が出ているか。**動いている版と GitHub の最新のリリースを数で比べる。**
+ * 新しいバージョンが出ているか。**動いているバージョンと GitHub の最新のリリースを数で比べる。**
  *
- * 動いている版 (`config.version`) はリリースのイメージにだけ入っている — リリースの
+ * 動いているバージョン (`config.version`) はリリースのイメージにだけ入っている — リリースの
  * とき、main で組んだイメージに 1 層足す (.github/release.Dockerfile)。GitHub の
  * 「最新のリリース」のタグを 1 時間に 1 度取り、向こうが新しければヘッダーに出す
  * (`+layout.svelte`)。
  *
- * **リリースを消せば通知も消える** — 「最新」は消したあとの版になるので、次に
+ * **リリースを消せば通知も消える** — 「最新」は消したあとのバージョンになるので、次に
  * 見比べたときに引っ込む。main (develop) のイメージと手元・試験は `dev` で、何も
- * 出さない — main を追いかけている限りリリースより常に先。読めないタグ (試し版の
+ * 出さない — main を追いかけている限りリリースより常に先。読めないタグ (プレリリースの
  * `v2.0.0-rc1` など) も同じ。繋がらないときは**前に分かっていたことをそのまま持つ**
  * (消すと点滅する)
  */
@@ -43,7 +43,7 @@ export function updateAvailable(): Available | null {
   return available;
 }
 
-/** `v1.7.1` → `[1, 7, 1]`。読めなければ null (`dev`、試し版) */
+/** `v1.7.1` → `[1, 7, 1]`。読めなければ null (`dev`、プレリリース) */
 export function parseVersion(tag: string): [number, number, number] | null {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(tag.trim());
   if (match === null) return null;
@@ -105,7 +105,7 @@ export async function checkForUpdate(
     if (!warned) {
       warned = true;
       console.warn(
-        `[update] 新しい版が出ているか確かめられません (${config.githubApi}): ${error}`,
+        `[update] 新しいバージョンが出ているか確かめられません (${config.githubApi}): ${error}`,
       );
     }
   }

@@ -244,7 +244,7 @@ function videoArgs(
    * H.264 の crf 23 は AV1 の既定 (crf35) と同じ画質に揃えた値、medium は slow に
    * しても時間が増えるだけ。実測の表は docs/encode.md「H.264 は crf 23」
    *
-   * AV1 は **preset と crf を書いておく** — SVT-AV1 の既定は版で変わる (preset は
+   * AV1 は **preset と crf を書いておく** — SVT-AV1 の既定はバージョンで変わる (preset は
    * 2.3.0 が 10、4.2.0 が 8)。エンコードする速さと大きさは denpa が決める。
    *
    * **10 に戻さない。** 4.x の M10 以上は「機械にかけるための段」で、エンコードするたびに
@@ -1890,7 +1890,7 @@ async function runCmJob(jobId: number): Promise<void> {
   const shift = ts === null ? skip : 0;
 
   /*
-   * **控えておいた材料があれば読み直さない** (`cm-material-store.ts`)。版が合い、ロゴまで当たっていたものだけ。
+   * **控えておいた材料があれば読み直さない** (`cm-material-store.ts`)。バージョンが合い、ロゴまで当たっていたものだけ。
    * ロゴが使えなかった回は、そのあと覚えたロゴで当たるかもしれないので読み直す
    */
   const stored = loadMaterial(recording.id);

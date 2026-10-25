@@ -21,7 +21,7 @@ using Microsoft.AspNetCore.Http.Features;
  */
 
 /*
- * **Windows は出力を UTF-8 に。** 既定はコンソールの文字コード (英語版なら 437) で、ログの日本語が
+ * **Windows は出力を UTF-8 に。** 既定はコンソールの文字コード (英語の Windows なら 437) で、ログの日本語が
  * `?` になる (install.ps1 はログをファイルへ足していく)
  */
 if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
@@ -194,7 +194,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
          *
          * 送っている途中の本文をきれいに閉じると、読む側には「録り終えた」
          * ように届く。実際それで、チューナーを取り上げられた録画が尻切れのまま成功扱いに
-         * なっていた (bun 版は接続を壊せなかった)。Kestrel は壊せるので壊す
+         * なっていた (bun で書いていた頃は接続を壊せなかった)。Kestrel は壊せるので壊す
          */
         if (sink.FailedWith is not null)
         {
@@ -355,6 +355,10 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
     var result = Scramble.Decode(recorded, body?["input"]?.GetValue<string>(), body?["output"]?.GetValue<string>());
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
 });
+
+// --- 診断 -----------------------------------------------------------------
+// 直近のログ (古い順・最大 2000 行)。設定の「診断」画面が読む。メモリだけなので再起動で消える
+app.MapGet("/denpa/logs", (HttpContext http) => Respond.Write(http, Log.Recent.ToJson()));
 
 app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));

@@ -12,14 +12,14 @@ import { updateAvailable } from "#lib/server/update.js";
  *
  * 録画の本数も返す。入れ替えていいかどうかを外から見たいことがあるため
  * (待つこと自体はアプリ側でやっている。runtime.ts の drain)。
- * 版も返す (`DENPA_VERSION`。リリースのイメージだけが持つ。手元と develop は `dev`) — 何が動いているかを外から確かめるため
+ * バージョンも返す (`DENPA_VERSION`。リリースのイメージだけが持つ。手元と develop は `dev`) — 何が動いているかを外から確かめるため
  */
 export function GET() {
   const row = orm().select({ n: count() }).from(services).get();
   return json({
     ok: true,
     version: config.version,
-    // 新しい版が出ていれば、そのタグと場所 (update.ts)。無ければ null
+    // 新しいバージョンが出ていれば、そのタグと場所 (update.ts)。無ければ null
     update: updateAvailable(),
     services: row?.n ?? 0,
     recording: activeRecordingIds().length,

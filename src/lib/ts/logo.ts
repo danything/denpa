@@ -208,7 +208,7 @@ export class LogoCollector {
 
   private remember(logo: LogoData): void {
     const known = this.logos.get(logo.logoId);
-    // 大きいものを優先する。同じ大きさなら新しい版に入れ替える
+    // 大きいものを優先する。同じ大きさなら新しいバージョンに入れ替える
     if (
       known === undefined ||
       (known.logoType === logo.logoType

@@ -9,7 +9,7 @@ import { updateAvailable } from "#lib/server/update.js";
  * **名前は画面に出しません** (出しても、できることは変わらないため)。
  * 控えには残してあるので、DB を見れば誰の分か分かります。
  *
- * `update` は新しい版が出ているか (`server/update.ts`)。ヘッダーに出す
+ * `update` は新しいバージョンが出ているか (`server/update.ts`)。ヘッダーに出す
  */
 export function load({ locals }) {
   return { user: locals.user ?? null, update: updateAvailable() };

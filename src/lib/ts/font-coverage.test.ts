@@ -2,10 +2,10 @@
  * **字の表の字が、取ってくるフォント (Denpa Font) に全部入っているか。**
  *
  * 字幕 (`b24-tables.ts`)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
- * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めている版のリリースの ttf の cmap と突き合わせる。
+ * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めているバージョンのリリースの ttf の cmap と突き合わせる。
  * 表に字を足したのにフォントに無いと、その字だけ端末の字で出て見た目が揃わない。
  *
- * 落ちたら: danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) 版を出し、
+ * 落ちたら: danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) リリースを出し、
  * ここの Dockerfile の `DENPA_FONT_VERSION` を上げる (docs/licenses.md)。
  *
  * ttf はイメージに入れず、ここで取ってくる (同じリリースの SHA256SUMS で照らす)。
@@ -156,7 +156,7 @@ async function fetchTtf(): Promise<Uint8Array | null> {
 }
 
 describe("字の表とフォント", () => {
-  test("Dockerfile がフォントの版 (タグ) を留めている", () => {
+  test("Dockerfile がフォントのバージョン (タグ) を留めている", () => {
     expect(VERSION).toMatch(/^v\d+\.\d+$/);
   });
 

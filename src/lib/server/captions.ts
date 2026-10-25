@@ -433,7 +433,7 @@ export function pagesFromMkv(data: Uint8Array): CaptionPages | null {
       list.push({ at: shown.at / 1000, page: shown.page });
     }
   }
-  // 第1言語は今までどおり `pages`。第2言語から後ろは載っているときだけ `others` に (版は上げない)
+  // 第1言語は今までどおり `pages`。第2言語から後ろは載っているときだけ `others` に (バージョンは上げない)
   const first = seen.get(1);
   const others: CaptionLanguagePages[] = [...seen.values()]
     .sort((a, b) => a.index - b.index)

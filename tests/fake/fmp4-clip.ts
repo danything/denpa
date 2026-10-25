@@ -14,7 +14,7 @@ interface Box {
 
 export interface Fmp4Fragment {
   data: Uint8Array;
-  /** トラックごとの tfdt の在りか (data の中の位置) と、版 (1 なら 64 ビット) */
+  /** トラックごとの tfdt の在りか (data の中の位置) と、バージョン (1 なら 64 ビット) */
   stamps: { track: number; at: number; wide: boolean }[];
   /** 先頭のコマの時刻 (秒)。流す頃合いを決める */
   seconds: number;

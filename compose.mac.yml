@@ -8,7 +8,7 @@
 # **このファイルには手を入れない** (更新のたびに上書きする)。足したいものは
 # 同じ場所の compose.override.yml に書く (Compose が自分で読む)。
 #
-# Windows (install.ps1) は wslc で起こすので、このファイルは使わない (前の版の install.ps1 は使っていた)。
+# Windows (install.ps1) は wslc で起こすので、このファイルは使わない (前のバージョンの install.ps1 は使っていた)。
 # main の install.sh はリリースのタグからこの名前で取るので、名前は変えない。
 name: denpa
 

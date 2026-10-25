@@ -945,13 +945,13 @@ describe("ライブのように流し続けても、持つものと握る時間�
       resources: { cache: Map<string, unknown>; pending: unknown[] };
     };
 
-  test("版上げ・イベントメッセージ・TOT を何千回流しても、増え続けない", async () => {
+  test("バージョンの更新・イベントメッセージ・TOT を何千回流しても、増え続けない", async () => {
     const urls = countUrls();
     try {
       // 見張りで止めずに、持つものだけを見る (流す速さはライブの何百倍)。時計はライブと同じ TOT
       const { bml, logs } = open({ clock: () => null, budget: { ratio: 1 } });
       // 本番の局の書き方に寄せる: 1 回きりのタイマーを受け手のたびに作り直す (chkRen)、
-      // 版が上がったら押さえ直して字を書き換える、イベントのたびに消さないタイマーを足す (後始末し忘れ)
+      // バージョンが上がったら押さえ直して字を書き換える、イベントのたびに消さないタイマーを足す (後始末し忘れ)
       const script = `var n = 0, m = 0;
                 function start() { browser.setInterval("chk();", 1, 1); browser.Ureg[1] = "ready"; }
                 function chk() { browser.setInterval("chk();", 1, 1); }
@@ -1022,7 +1022,7 @@ describe("ライブのように流し続けても、持つものと握る時間�
       expect(inner.resources.pending.length).toBeLessThanOrEqual(1);
       expect(inner.missingImages.size).toBeLessThanOrEqual(1);
       expect(inner.reported.size).toBeLessThan(10);
-      // 画像の URL は今の版のぶんだけ (版が上がるたびに返す)
+      // 画像の URL は今のバージョンのぶんだけ (バージョンが上がるたびに返す)
       expect(urls.live()).toBeLessThanOrEqual(2);
       expect(logs.some((line) => line.includes("タイマーが"))).toBe(true);
       // 手が空かなかった間は短いまま (流し込む側の 10 回ぶんを含めて)

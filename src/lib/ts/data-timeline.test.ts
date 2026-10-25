@@ -34,7 +34,7 @@ const { bmlPid: BML_PID, downloadId: DOWNLOAD_ID } = BML_TS;
 const multipart = (body: string) =>
   multipartModule([["/startup.bml", "text/X-arib-bml", body]]);
 
-/** DII と DDB を並べて、1つのモジュールを配りきる。版ごとに回 (transaction) を変える */
+/** DII と DDB を並べて、1つのモジュールを配りきる。バージョンごとに回 (transaction) を変える */
 function carousel(module: Uint8Array, version: number): Uint8Array[] {
   const spec = {
     moduleId: 1,
@@ -82,7 +82,7 @@ describe("captureDataBroadcast", () => {
     expect(done?.at).toBeNull();
   });
 
-  test("同じ版は配り直さない = ログにも1つだけ", () => {
+  test("同じバージョンは配り直さない = ログにも1つだけ", () => {
     const module = multipart("<bml/>");
     const timeline = captureDataBroadcast([
       stream(...head, tdt(T1), ...carousel(module, 1), ...carousel(module, 1)),
@@ -94,7 +94,7 @@ describe("captureDataBroadcast", () => {
 });
 
 describe("replayAt", () => {
-  // 版1を T1 に、版2を T2 に配る。**途中で中身が差し替わる録画**
+  // バージョン 1 を T1 に、バージョン 2 を T2 に配る。**途中で中身が差し替わる録画**
   const timeline = captureDataBroadcast([
     stream(
       ...head,
@@ -218,7 +218,7 @@ describe("feedFor", () => {
   test("戻ったら作り直して積み直す", () => {
     const feed = feedFor(tl, 70_000, 5_000);
     expect(feed.reset).toBe(true);
-    // 5秒の時点では版1 (10秒) はまだ来ていない。pmt だけ
+    // 5秒の時点ではバージョン 1 (10秒) はまだ来ていない。pmt だけ
     expect(feed.messages.some((m) => m.type === "moduleDownloaded")).toBe(
       false,
     );

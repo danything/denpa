@@ -432,12 +432,12 @@ export class ScheduleProgress {
   private readonly lastSection = new Map<number, number>();
   private lastTableId = SCHEDULE_ACTUAL_MIN;
   /**
-   * `table_id` → 版。変わったらその表だけ数え直す。
+   * `table_id` → バージョン。変わったらその表だけ数え直す。
    *
-   * **版は `table_id` ごとに別々に振られる。** 番組表の1つの表 (sub_table) は
+   * **バージョンは `table_id` ごとに別々に振られる。** 番組表の1つの表 (sub_table) は
    * `table_id` + 局 + TS で決まり、`version_number` はその単位で動く。
    * 局に1つだけ持っていた頃は、**基本 (0x50〜) と詳細 (0x58〜) を行き来する
-   * たびに版が違って数えたものを全部捨てて**いた。揃ったと分かることが
+   * たびにバージョンが違って数えたものを全部捨てて**いた。揃ったと分かることが
    * 二度と無いので、どのチャンネルも上限の10分 (denpa の `epgChannelTimeout`) まで開きっぱなしになる。
    */
   private readonly version = new Map<number, number>();

@@ -93,15 +93,15 @@ RUN set -eu && cd /tmp && \
 
 # PLEX PX-W3U3 などの ASICEN 系は asicen-userland で動かす (Asicen.cs)。**試験的。**
 #
-# **上流がまだリリースを出していないので、いまは何も入らない。** 版の 0.0.0 は
+# **上流がまだリリースを出していないので、いまは何も入らない。** バージョンの 0.0.0 は
 # 「まだ無い」の印で、この段は空の /opt/asicen-userland を作るだけ (エージェントは
-# 配布物が無ければ機材を挙げない)。0.1.0 が出れば Renovate が版を上げる PR を出し、
+# 配布物が無ければ機材を挙げない)。0.1.0 が出れば Renovate がバージョンを上げる PR を出し、
 # そこで初めて取ってくる (自動では入れない。renovate.json)。
 #
 # 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
 # scripts/package-linux-variant.py の形式: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
 # 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
-# コマンドはどちらも同じ musl の静的 ELF。名前や形式が違えば、版を上げる PR の CI (イメージをビルドする) で落ちて分かる
+# コマンドはどちらも同じ musl の静的 ELF。名前や形式が違えば、バージョンを上げる PR の CI (イメージをビルドする) で落ちて分かる
 # (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
 # 受信機もカードも asicend の制御ソケットで直に話すので、asicen-ts と IFD ハンドラは使わない。
 # 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。
@@ -138,7 +138,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
     rm -rf /tmp/*
 
 # ---------------------------------------------------------------------------
-# **土台は distroless (Debian 13 = trixie。組む段の sdk:10.0 と同じ版なので glibc も合う)。**
+# **土台は distroless (Debian 13 = trixie。組む段の sdk:10.0 と同じバージョンなので glibc も合う)。**
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部: 実行ファイルが直に繋ぐのは libc と libm だけ、
 # CARD_URL を https で指したときは .NET の HttpClient が libssl を読み、証明書は ca-certificates で確かめる。

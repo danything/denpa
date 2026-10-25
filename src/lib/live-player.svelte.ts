@@ -1968,7 +1968,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         } catch {
           return; // 壊れた1枚。次が来る
         }
-        // 知らない版は描かない (置き場所の読み方が違うかもしれない)
+        // 知らないバージョンは描かない (置き場所の読み方が違うかもしれない)
         if (page.v !== CAPTION_TEXT_VERSION) return;
         cues = insertCue(cues, { at, page });
       }

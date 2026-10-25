@@ -184,7 +184,7 @@ const ACCESS_KEYS: Record<number, string> = {
 };
 
 /*
- * 長く流し続けても増え続けない歯止め。ライブはモジュールの版上げ・イベントメッセージ・TOT が
+ * 長く流し続けても増え続けない歯止め。ライブはモジュールのバージョンの更新・イベントメッセージ・TOT が
  * 止まらずに来る (NHK は 10 分で DII の更新 48 回・イベントメッセージ 4234 件)。文書が
  * 後始末を忘れても、エンジンが持つものは一定に収める
  */
@@ -501,7 +501,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
   }
 
-  /** 文書が無いときに、入口のモジュールが揃っていれば始める (同じ版が送り直されても始める) */
+  /** 文書が無いときに、入口のモジュールが揃っていれば始める (同じバージョンが送り直されても始める) */
   private maybeStart(): void {
     if (this.doc !== null || this.loading || this.destroyed || this.halted)
       return;
@@ -1258,7 +1258,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
     const token = this.token;
     return new Suspend(
-      // 前に取った版を使わず取り直す (投票の結果などを開き直したときに古いものを出さない)
+      // 前に取ったバージョンを使わず取り直す (投票の結果などを開き直したときに古いものを出さない)
       this.resources.refetch(ref).then((file) => {
         if (token !== this.token || this.destroyed) return Number.NaN;
         if (file === null || !looksLikeBml(file)) {
@@ -1635,7 +1635,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         this.waitingImages.add(key);
         void this.resources.fetch(ref).then(() => {
           this.waitingImages.delete(key);
-          // 描けるようにならなかった (来ないと決まった・押さえた古い版に無い) なら描き直さない。
+          // 描けるようにならなかった (来ないと決まった・押さえた古いバージョンに無い) なら描き直さない。
           // 描き直すとまたここへ来て、すぐ「無い」と返るのをくり返す (2026-10-12 本番で
           // タブが固まった)。モジュールが届き直したら探し直す
           if (this.resources.file(ref) === null) {

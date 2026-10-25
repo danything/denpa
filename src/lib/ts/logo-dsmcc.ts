@@ -226,14 +226,14 @@ export class DsmccLogoCollector {
     const key = downloadKey(ddb.downloadId, ddb.moduleId);
     const download = this.downloads.get(key);
     if (download === undefined) return;
-    // 版が変わったら組み立て直し。混ぜると壊れた PNG ができる
+    // バージョンが変わったら組み立て直し。混ぜると壊れた PNG ができる
     if (download.moduleVersion !== ddb.moduleVersion) {
       this.downloads.delete(key);
       return;
     }
     if (!download.add(ddb.blockNumber, ddb.block)) return;
 
-    // 揃った。次の DII でまた組み立て始める (同じ版なら同じロゴで上書きするだけ)
+    // 揃った。次の DII でまた組み立て始める (同じバージョンなら同じロゴで上書きするだけ)
     this.downloads.delete(key);
     for (const logo of parseLogoModule(download.data)) {
       if (logo.data.length > 0) this.logos.set(logoKey(logo), logo);

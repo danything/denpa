@@ -10,7 +10,7 @@ import "unplugin-icons/types/svelte";
 
 declare global {
   interface ImportMetaEnv {
-    /** 組んだときの Denpa Font の版 (`vite.config.ts` が Dockerfile から埋める。`#lib/font.ts`) */
+    /** 組んだときの Denpa Font のバージョン (`vite.config.ts` が Dockerfile から埋める。`#lib/font.ts`) */
     readonly DENPA_FONT_VERSION?: string;
   }
   namespace App {

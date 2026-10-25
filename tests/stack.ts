@@ -228,8 +228,8 @@ export async function boot(
       HW_DEVICES: `${stack.hwDir}/renderD*`,
       FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
       /*
-       * 新しい版の通知。GitHub の代わりに偽通知先が「最新のリリース」を返す
-       * (既定は無し)。動いている版は古めにして、置いたリリースが必ず新しく見えるように
+       * 新しいバージョンの通知。GitHub の代わりに偽通知先が「最新のリリース」を返す
+       * (既定は無し)。動いているバージョンは古めにして、置いたリリースが必ず新しく見えるように
        */
       DENPA_VERSION: "v1.0.0",
       DENPA_GITHUB_API: stack.webhookUrl,

@@ -291,7 +291,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
   let source: "encoded" | "alt" = "encoded";
   if (!(await canPlayAv1())) {
     if (rec.alt_path === null)
-      throw new Error("AV1 を再生できず、H.264 版もありません");
+      throw new Error("AV1 を再生できず、H.264 のものもありません");
     source = "alt";
   }
 

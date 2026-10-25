@@ -6,7 +6,7 @@
 # イメージの中の ffmpeg やエージェントが実際に動くかはここでしか見ていない。
 # ライブラリの欠け (共有ライブラリの置き場・土台の入れ替え) は、組むのは通っても起こすと落ちる。
 #
-# 使い方: image-smoke.sh <denpa|denpa-agent|denpa-aio> <イメージ> [denpa-aio のときの版]
+# 使い方: image-smoke.sh <denpa|denpa-agent|denpa-aio> <イメージ> [denpa-aio のときのバージョン]
 set -euo pipefail
 name=$1
 image=$2
@@ -107,8 +107,8 @@ denpa-agent)
     ;;
 denpa-aio)
     # 入口 (aio-entrypoint.ts) が本体とエージェントの両方を起こすか。中身の ffmpeg などは
-    # 本体のイメージそのままなので、ここでは起動だけを見る。版を渡されたら、
-    # release.Dockerfile で足した版を本体が読めているかも見る
+    # 本体のイメージそのままなので、ここでは起動だけを見る。バージョンを渡されたら、
+    # release.Dockerfile で足したバージョンを本体が読めているかも見る
     want_version=${3:-}
     docker run -d --name aio-smoke -p 3000:3000 -p 25252:25252 "$image" > /dev/null
     trap 'docker logs aio-smoke; docker rm -f aio-smoke > /dev/null' EXIT
@@ -116,7 +116,7 @@ denpa-aio)
     health=$(wait_for localhost:3000/api/health 60) || { echo "denpa が答えません" >&2; exit 1; }
     echo "$health"
     if [ -n "$want_version" ] && ! grep -qF "\"version\":\"$want_version\"" <<< "$health"; then
-        echo "版が $want_version になっていません" >&2
+        echo "バージョンが $want_version になっていません" >&2
         exit 1
     fi
     exit 0

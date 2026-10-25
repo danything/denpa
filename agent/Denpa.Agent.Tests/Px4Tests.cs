@@ -264,8 +264,8 @@ public class Px4Tests
         await Assert.That(warned[1]).Contains("open_failed");
         // Windows では「WinUSB になっていない・別のソフトが使っている」
         await Assert.That(warned[1]).Contains(OperatingSystem.IsWindows() ? "WinUSB" : "権限");
-        // 形式は思っていたとおりなので、版ずれの話はしない
-        await Assert.That(warned.Any(w => w.Contains("版"))).IsFalse();
+        // 形式は思っていたとおりなので、バージョンのずれの話はしない
+        await Assert.That(warned.Any(w => w.Contains("バージョン"))).IsFalse();
     }
 
     [Test]
@@ -283,10 +283,10 @@ public class Px4Tests
         await Assert.That(found[0].Receivers.Select(r => (r.Index, r.Lnb15v))).IsEquivalentTo(
             [(0, (bool?)null), (2, (bool?)null)], CollectionOrdering.Matching);
 
-        // 止めるのは番号が読めないものだけ (受信機 "1"・番号の無い筐体)。版ずれは1度だけまとめて言う
+        // 止めるのは番号が読めないものだけ (受信機 "1"・番号の無い筐体)。バージョンのずれは1度だけまとめて言う
         await Assert.That(warned.Count(w => w.Contains("受信機が読めません"))).IsEqualTo(1);
         await Assert.That(warned.Count(w => w.Contains("PX-Q3U4 の番号"))).IsEqualTo(1);
-        var skew = warned.Single(w => w.Contains("版がずれている"));
+        var skew = warned.Single(w => w.Contains("バージョンがずれている"));
         await Assert.That(skew).Contains("enclosures[].serial_unique が無い");
         await Assert.That(skew).Contains("receivers[].lnb_15v_supported が真偽値ではない");
         await Assert.That(skew).Contains("ungrouped_usb_devices が無い");

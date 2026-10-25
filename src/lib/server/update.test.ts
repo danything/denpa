@@ -26,8 +26,8 @@ const release = (tag: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-describe("版のタグ", () => {
-  test("v 付きでも無しでも読む。試し版と dev は読めない", () => {
+describe("バージョンのタグ", () => {
+  test("v 付きでも無しでも読む。プレリリースと dev は読めない", () => {
     expect(parseVersion("v1.7.1")).toEqual([1, 7, 1]);
     expect(parseVersion("1.10.0")).toEqual([1, 10, 0]);
     expect(parseVersion("v2.0.0-rc1")).toBeNull();
@@ -41,7 +41,7 @@ describe("版のタグ", () => {
   });
 });
 
-describe("新しい版の通知", () => {
+describe("新しいバージョンの通知", () => {
   test("向こうが新しければ出る。同じ・古ければ出ない", async () => {
     config.version = "v1.7.1";
     const gh = github(release("v1.8.0"));
@@ -66,7 +66,7 @@ describe("新しい版の通知", () => {
     expect(await checkForUpdate(github(null))).toBeNull();
   });
 
-  test("dev では見に行かない。試し版・下書きは数えない", async () => {
+  test("dev では見に行かない。プレリリース・下書きは数えない", async () => {
     config.version = "dev";
     const gh = github(release("v9.9.9"));
     expect(await checkForUpdate(gh)).toBeNull();

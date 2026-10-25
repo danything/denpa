@@ -1,7 +1,7 @@
 import { LANGUAGE } from "./language.js";
 
 /**
- * **字幕の文字の配置** (第1版)。サーバが放送の字幕 (ARIB STD-B24) をデコードして置き場所まで
+ * **字幕の文字の配置** (バージョン 1)。サーバが放送の字幕 (ARIB STD-B24) をデコードして置き場所まで
  * 決め、受け側 (ブラウザ・テレビのアプリ) はこれを**描くだけ**にする。形式の取り決めは
  * [api.md](https://github.com/danything/denpa/blob/main/docs/api.md#字幕の文字の配置) に書いてある (ここと同じものを、Kotlin でも読む)。
  *
@@ -9,7 +9,7 @@ import { LANGUAGE } from "./language.js";
  * 合わせて縦横それぞれ伸ばす。色は `#rrggbbaa`。
  */
 
-/** 形式の版。**互換の無い変え方をしたら上げる** (受け側は知らない版を描かない) */
+/** 形式のバージョン。**互換の無い変え方をしたら上げる** (受け側は知らないバージョンを描かない) */
 export const CAPTION_TEXT_VERSION = 1;
 
 /** 縁取り (ORN) の太さ。面の単位で、字の輪郭の外側へ。libaribcaption の既定 (ffmpeg の `outline_width`) と同じ */
@@ -128,7 +128,7 @@ export interface CaptionLanguage {
 
 /**
  * 録画の字幕のうち、第2言語から後ろ (`CaptionPages.others`)。**第1言語は今までどおり `pages`** —
- * 版 (`v`) を上げずに足したので、知らない受け側は第1言語だけを描く
+ * バージョン (`v`) を上げずに足したので、知らない受け側は第1言語だけを描く
  */
 export interface CaptionLanguagePages extends CaptionLanguage {
   pages: { at: number; page: CaptionPage }[];

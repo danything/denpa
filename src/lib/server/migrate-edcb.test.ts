@@ -317,7 +317,7 @@ describe("文字コード", () => {
     expect(decodeText(bytes)).toBe("テスト～①");
   });
 
-  test("BOM の無い UTF-8 (Unix 版) も読める", () => {
+  test("BOM の無い UTF-8 (Unix 用) も読める", () => {
     const text = "1\tテスト番組\n";
     expect(decodeText(new TextEncoder().encode(text))).toBe(text);
   });

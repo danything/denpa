@@ -4,7 +4,7 @@
  * denpa の E2E は偽エージェント (`tests/fake/agent.ts`) を相手にしているので、
  * 本物の取り合いも総当たりも1行も通らない。ここがその穴を塞ぐ。
  *
- * **API に当てているので、中身が何語で書かれていても走る。** bun 版から .NET に
+ * **API に当てているので、中身が何語で書かれていても走る。** bun の実装から .NET に
  * 書き直したときも、`AGENT_CMD` を差し替えて同じものを通した — それが
  * 「今までと同じように動く」の定義 ([agent.md](../docs/agent.md))。
  *
@@ -480,6 +480,30 @@ describe("チャンネル", () => {
     });
     expect(put.status).toBe(400);
     expect(readFileSync(paths().channels, "utf8")).toBe(before);
+  });
+});
+
+/** `/denpa/logs` の形式 (agent/Denpa.Agent/Json.cs の LogRing) */
+type LogLines = { lines: { at: number; text: string }[] };
+
+describe("診断", () => {
+  test("直近のログを古い順に返す。頭の [agent] は付けない", async () => {
+    const res = await get("/denpa/logs");
+    expect(res.status).toBe(200);
+    const { lines } = (await res.json()) as LogLines;
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.length).toBeLessThanOrEqual(2000);
+    for (const line of lines) {
+      expect(typeof line.at).toBe("number");
+      expect(typeof line.text).toBe("string");
+      expect(line.text.startsWith("[agent]")).toBe(false);
+    }
+    const at = lines.map((line) => line.at);
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+    // すぐ前のチャンネルの差し替えが残っている
+    expect(
+      lines.some((line) => line.text.includes("チャンネルを保存しました")),
+    ).toBe(true);
   });
 });
 

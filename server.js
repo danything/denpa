@@ -16,7 +16,7 @@
  * そこで **`Bun.serve` を1回だけ包んでから `build/index.js` を読む。** adapter が渡す
  * 設定 (PORT・HOST・BODY_SIZE_LIMIT などの環境変数を読んだもの) はそのまま使い、
  * `websocket` を足して、`fetch` の前に WebSocket の握手と接続元の決定を挟む。
- * Bun の版の確認も環境変数の読み方も adapter のものがそのまま効く。
+ * Bun のバージョンの確認も環境変数の読み方も adapter のものがそのまま効く。
  * 頼っているのは「adapter の入口が `Bun.serve` を1回呼ぶ」ことだけ — 呼ばれなければ起動を止める。
  *
  * 以前は adapter-node を内側に置いて HTTP を中継していた (bun の `node:http` は WebSocket の

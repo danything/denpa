@@ -8,8 +8,8 @@ import Icons from "unplugin-icons/vite";
 import { defineConfig, type Plugin } from "vite";
 
 /**
- * イメージに入れる Denpa Font の版 (Dockerfile の `ARG DENPA_FONT_VERSION`)。
- * 字の URL に付けて、版ごとに1年持たせる (`src/lib/font.ts`)。読めなければ空にして言う
+ * イメージに入れる Denpa Font のバージョン (Dockerfile の `ARG DENPA_FONT_VERSION`)。
+ * 字の URL に付けて、バージョンごとに1年持たせる (`src/lib/font.ts`)。読めなければ空にして言う
  * (動きは毎回確かめる側に落ちるだけなので、黙っていると1年持たないことに気付けない)
  */
 const denpaFontVersion = (() => {
@@ -22,7 +22,7 @@ const denpaFontVersion = (() => {
   } catch {}
   if (found === "")
     console.warn(
-      "Dockerfile から DENPA_FONT_VERSION を読めません。字の URL に版が付きません",
+      "Dockerfile から DENPA_FONT_VERSION を読めません。字の URL にバージョンが付きません",
     );
   return found;
 })();

@@ -31,7 +31,7 @@ export function saveMaterial(recordingId: number, material: CmMaterial): void {
   }
 }
 
-/** 控えを読む。無い・版が違う・壊れているなら null */
+/** 控えを読む。無い・バージョンが違う・壊れているなら null */
 export function loadMaterial(recordingId: number): CmMaterial | null {
   const row = orm()
     .select({ version: cmMaterials.version, data: cmMaterials.data })

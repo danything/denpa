@@ -14,7 +14,7 @@ export { withCrc };
 const be = (value: number) => [(value >> 8) & 0xff, value & 0xff];
 const be32 = (value: number) => [...be(value >>> 16), ...be(value & 0xffff)];
 
-/** セクションの頭8バイト (長さは `withCrc` が埋める)。版 0・節 0/0 */
+/** セクションの頭8バイト (長さは `withCrc` が埋める)。バージョン 0・節 0/0 */
 function head(tableId: number, extension: number): number[] {
   return [tableId, 0x00, 0x00, ...be(extension), 0xc1, 0x00, 0x00];
 }
@@ -516,7 +516,7 @@ export function diiSection(
   downloadId: number,
   blockSize: number,
   modules: DiiModuleSpec | DiiModuleSpec[],
-  /** カルーセルの版。**同じ番号で送り直しても組み立て直されない** */
+  /** カルーセルのバージョン。**同じ番号で送り直しても組み立て直されない** */
   transactionId = 1,
 ): Uint8Array {
   const list = Array.isArray(modules) ? modules : [modules];

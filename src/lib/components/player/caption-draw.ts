@@ -277,7 +277,7 @@ export class CaptionPainter {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    /** 字の置き場 (`denpaFontUrl()`。版付き) */
+    /** 字の置き場 (`denpaFontUrl()`。バージョン付き) */
     font: string,
   ) {
     this.resize =

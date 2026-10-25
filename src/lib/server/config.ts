@@ -157,17 +157,17 @@ export const config = {
   bmlDns: str("BML_DNS", "1.1.1.1,8.8.8.8"),
 
   /**
-   * 動いている版 (`v1.8.1` の形式)。**リリースのイメージにだけ入る** — リリースのとき、
+   * 動いているバージョン (`v1.8.1` の形式)。**リリースのイメージにだけ入る** — リリースのとき、
    * main で組んだイメージに 1 層足す (.github/release.Dockerfile)。main (develop) の
-   * イメージと手元・試験は `dev` で、そのときは新しい版の通知を出さない (update.ts)
+   * イメージと手元・試験は `dev` で、そのときは新しいバージョンの通知を出さない (update.ts)
    */
   version: str("DENPA_VERSION", "dev"),
-  /** 新しい版を見に行く先。GitHub の API (`releases/latest`)。試験では偽物を指す */
+  /** 新しいバージョンを見に行く先。GitHub の API (`releases/latest`)。試験では偽物を指す */
   githubApi: str(
     "DENPA_GITHUB_API",
     "https://api.github.com/repos/danything/denpa",
   ).replace(/\/+$/, ""),
-  /** 新しい版を見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
+  /** 新しいバージョンを見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
   updateCheckInterval: num("UPDATE_CHECK_INTERVAL", 60 * MIN),
 
   /** 録画の前後マージン(ms)。放送時刻のズレを吸収する */

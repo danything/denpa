@@ -79,7 +79,7 @@ public static class Px4Userland
     ///
     /// <para>
     /// 本体には入っておらず、挿すたびにホストから RAM へ流し込むもの。
-    /// px4-userland は受理する版を SHA-256 で1つに固定していて、
+    /// px4-userland は受理するバージョンを SHA-256 で1つに固定していて、
     /// 違うものを渡すと <c>FIRMWARE_REJECTED</c> で起動しない。
     /// </para>
     /// </summary>
@@ -271,7 +271,7 @@ public static class Px4Userland
     /// <c>{"enclosures":[{serial, model, usb, status, serial_unique, devices, candidates, receivers}],
     /// "ungrouped_usb_devices":[…]}</c> の1行。<c>schema_version</c> は無く、消費側は知らない鍵を
     /// 無視する決まり。**形式が違っても止まらない** — 無い鍵・型の違う値は既定で埋めて読み進め、
-    /// 版ずれを疑う旨を1度だけ <paramref name="warn"/> で残す。止めるのは筐体の番号と受信機の番号
+    /// バージョンのずれを疑う旨を1度だけ <paramref name="warn"/> で残す。止めるのは筐体の番号と受信機の番号
     /// (それが無いと <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> が作れない) が読めないときだけで、それも
     /// その筐体・受信機だけを飛ばす。
     /// </para>
@@ -313,7 +313,7 @@ public static class Px4Userland
             var id = shape.Text(enclosure, "serial", "enclosures[]") ?? "";
             var model = shape.Text(enclosure, "model", "enclosures[]") ?? "px4";
             var status = shape.Text(enclosure, "status", "enclosures[]") ?? "";
-            // 無ければ一意とみなす (版ずれとしては残る)。番号が重なれば px4d が起動を断る (exit 2) だけ
+            // 無ければ一意とみなす (バージョンのずれとしては残る)。番号が重なれば px4d が起動を断る (exit 2) だけ
             var unique = shape.Flag(enclosure, "serial_unique", "enclosures[]") ?? true;
             var devices = shape.Array(enclosure, "devices", "enclosures[]").OfType<JsonObject>()
                 .Select(device => (
@@ -406,7 +406,7 @@ public static class Px4Userland
 
         if (shape.Notes.Count > 0)
         {
-            warn($"px4d --list-json の形式が思っていたのと違います (px4-userland の版がずれている?)。読めたところだけ使います: {string.Join(", ", shape.Notes)}");
+            warn($"px4d --list-json の形式が思っていたのと違います (px4-userland のバージョンがずれている?)。読めたところだけ使います: {string.Join(", ", shape.Notes)}");
         }
         return found;
     }
@@ -422,7 +422,7 @@ public static class Px4Userland
         public void Skew(string note) => Notes.Add(note);
 
         /// <summary>
-        /// 鍵の値。無い・型が違う・(<paramref name="optional"/> でなければ) null は版ずれとして残す。
+        /// 鍵の値。無い・型が違う・(<paramref name="optional"/> でなければ) null はバージョンのずれとして残す。
         /// 位置 (bus など) は「取れなかった」を null で言う決まりなので optional
         /// </summary>
         private JsonValue? Value(JsonObject obj, string key, string where, bool optional)

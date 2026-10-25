@@ -121,7 +121,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **運用**
 
-- [docs/config.md](docs/config.md) — **環境変数** (一覧と、前の版から上げるとき)
+- [docs/config.md](docs/config.md) — **環境変数** (一覧と、前のバージョンから上げるとき)
 - [docs/auth.md](docs/auth.md) — **誰を通すか** (OIDC・信頼したネットワーク・ペアリング)
 
 **外から使う**

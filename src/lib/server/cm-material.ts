@@ -6,13 +6,13 @@ import type { Span } from "../ts/logo-detect";
 /**
  * **CM 検出の材料の控え** (`cm_materials`)。1回のデコードで取った無音・場面の切れ目・ロゴの点を、数だけ縮めて DB に置く。
  *
- * - CM 検出だけやり直すとき (`encoder.runCmJob`) に、版が合えば読み直さずにここから決める
+ * - CM 検出だけやり直すとき (`encoder.runCmJob`) に、バージョンが合えば読み直さずにここから決める
  * - 決め方 (`cm-decide.ts`) を変えたときに、本番の録画で前と比べる材料にする
  *
  * 形式は docs/cm.md の「材料の控え」
  */
 
-/** 中身の形式の版。形式を変えたら上げる (古い版の行は使わずに読み直す) */
+/** 中身の形式のバージョン。形式を変えたら上げる (古いバージョンの行は使わずに読み直す) */
 export const MATERIAL_VERSION = 1;
 
 /** 切れ目はこの強さ以上だけ持つ (`cm-decide` の弱い切れ目の下限) */
@@ -97,7 +97,7 @@ export function encodeMaterial(material: CmMaterial): Uint8Array {
   return Bun.zstdCompressSync(raw, { level: 19 });
 }
 
-/** 戻す。壊れている・版が違うものは null */
+/** 戻す。壊れている・バージョンが違うものは null */
 export function decodeMaterial(bytes: Uint8Array): CmMaterial | null {
   try {
     // 写して頭から並べる (Buffer は大きな置き場の一部を指していることがある)

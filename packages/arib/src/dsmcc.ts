@@ -58,7 +58,7 @@ export interface DiiModule {
 
 export interface Dii {
   downloadId: number;
-  /** カルーセルの版。**変わっていなければ組み立て直さない** */
+  /** カルーセルのバージョン。**変わっていなければ組み立て直さない** */
   transactionId: number;
   blockSize: number;
   modules: DiiModule[];

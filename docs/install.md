@@ -67,7 +67,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 ```
 
 - エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、録画は `/media` の下
-  (元のTS は `raw`、エンコードしたものは `encoded`)。前の版から上げるときは [config.md](config.md#置き場を変えた-前の版から上げるとき)
+  (元のTS は `raw`、エンコードしたものは `encoded`)。前のバージョンから上げるときは [config.md](config.md#置き場を変えた-前のバージョンから上げるとき)
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
   `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは録画の終わりを待つので、`--stop-timeout` を長くしておきます (compose の `stop_grace_period` と同じ)。
@@ -93,7 +93,7 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 
 ### イメージのタグ
 
-`latest` はリリースのたびに新しくなります。版を固定するなら `2.7.0` のように書きます
+`latest` はリリースのたびに新しくなります。バージョンを固定するなら `2.7.0` のように書きます
 ([architecture.md](architecture.md#イメージのタグ))。
 
 ## 誰を通すか
