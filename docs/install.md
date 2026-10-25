@@ -96,6 +96,24 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 `latest` はリリースのたびに新しくなります。バージョンを固定するなら `2.7.0` のように書きます
 ([architecture.md](architecture.md#イメージのタグ))。
 
+### 配布物を確かめる
+
+リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェント
+(リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`) には、
+**出所の証明 (attestation)** を付けています (2.12.0 より後のリリースから)。このリポジトリのリリースの
+workflow が作ったものかを、[GitHub CLI](https://cli.github.com/) で確かめられます。
+
+```sh
+# イメージ
+gh attestation verify oci://ghcr.io/danything/denpa:2.13.0 -R danything/denpa
+# エージェント (リリースから取ったファイル)
+gh attestation verify denpa-agent-2.13.0-darwin-arm64.tar.gz -R danything/denpa
+```
+
+install.sh / install.ps1 が確かめるのは、同じリリースに置いた `.sha256` だけです。取り損ねて壊れたファイルは
+見分けられますが、すり替えまでは防げません。気になるなら、入れる前に上のように確かめてください。
+インストーラ自身では確かめません (gh が入っていてログインしていないと確かめられず、そこで入れられなくなるため)。
+
 ## 誰を通すか
 
 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、ここからはログインなしで通ります。
