@@ -31,6 +31,11 @@ spec:
             privileged: {{ .Values.privileged }}
           ports:
             - containerPort: 25252
+          {{- with .Values.allowedHosts }}
+          env:
+            - name: AGENT_ALLOWED_HOSTS
+              value: {{ . | quote }}
+          {{- end }}
           volumeMounts:
             - name: agent-config
               mountPath: /config

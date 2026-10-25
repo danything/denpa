@@ -139,6 +139,27 @@ var app = builder.Build();
 if (sharing is not null) app.Use(sharing.Serve);
 
 /*
+ * **知らない名前で呼ばれたら答えない** (403。AgentHosts.cs)。アドレスで届く範囲を絞っても、
+ * 悪いサイトが自分の名前を 127.0.0.1 に向け直せば、そのサイトを開いたブラウザから読み出しの GET が届く
+ */
+var hosts = AgentHosts.FromEnvironment();
+app.Use(async (HttpContext http, RequestDelegate next) =>
+{
+    var named = http.Request.Headers.Host.ToString();
+    if (hosts.Allows(named))
+    {
+        await next(http);
+        return;
+    }
+    var shown = named.Length > 0 ? named : "(名前なし)";
+    if (hosts.FirstRefusal(shown))
+    {
+        Log.Write($"知らない名前「{shown}」で呼ばれたので断りました (403)。この名前で繋ぐなら AGENT_ALLOWED_HOSTS に足してください (docs/agent.md)");
+    }
+    await Respond.Error(http, $"「{shown}」という名前では答えません。この名前で繋ぐなら AGENT_ALLOWED_HOSTS に足してください", 403);
+});
+
+/*
  * **本文を読む API (PUT / POST) は application/json しか受けない** (415)。ブラウザは text/plain などの
  * POST を下調べ (preflight) なしに送るので、受けていると、開いた外のサイトから LAN の中の
  * エージェントへ書き込めてしまう。JSON と名乗れば下調べが入り、エージェントは CORS に答えないので止まる

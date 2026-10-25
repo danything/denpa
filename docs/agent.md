@@ -740,7 +740,29 @@ protocol の選び方ではありません。なので、いちばん退屈な�
 | Windows (`install.ps1`)                      | 全部のインターフェース。WSL のコンテナは vEthernet のアドレスで繋いでくるので、ループバックに絞れない。LAN からは Windows ファイアウォールで守る ([install-windows.md](install-windows.md))                                          |
 | Helm (`charts/denpa` / `charts/denpa-agent`) | Service は ClusterIP。NetworkPolicy も出せる (既定はオフ。CNI が対応していれば効く): `charts/denpa` は `agent.networkPolicy.enabled` で denpa の Pod からだけ、`charts/denpa-agent` は `networkPolicy.from` に書いた相手からだけ通す |
 
-ほかに、受け取る側で2つ守ります。
+ほかに、受け取る側で3つ守ります。
+
+- **知らない名前で呼ばれたら答えません** (403)。アドレスで届く範囲を絞っても、DNS リバインディングが残るためです。
+  悪いサイトが自分の名前を `127.0.0.1` などに向け直すと、そのサイトを開いたブラウザから、エージェントを
+  そのサイトの一部として読めてしまいます (カード ID・ログ・復号済みの TS)。そこで `Host` を見て、
+  攻める側が自分の名前として用意できないものだけを通します。決まりは denpa の
+  [`ALLOWED_HOSTS`](auth.md#ログインなしで開ける名前-allowed_hosts) と同じです
+  (`agent/Denpa.Agent/AgentHosts.cs`)。
+  - IP の直書き (`192.168.1.5:25252`・`[fd00::5]:25252`)、`localhost`、ドットの無い名前 (`tuner-agent:25252`)
+  - 家の中だけの名前: `.localhost`・`.local`・`.lan`・`.home.arpa`・`.internal`・`.svc` で終わるもの
+    (`host.docker.internal`・`tuner-agent.denpa.svc.cluster.local` もここ)
+  - `AGENT_ALLOWED_HOSTS` に書いた名前 (カンマ区切り)。頭にドットを付けると、その名前とその下の名前全部
+  - `Host` の無い呼び出し (HTTP/1.0) は通しません
+
+  denpa の既定の繋ぎ方 (compose・Helm の `tuner-agent`、Mac の `host.docker.internal`、Windows の vEthernet の IP、
+  `denpa-aio` の `127.0.0.1`) と、エージェントだけ入れたときに案内する名前 (Mac の `<名前>.local`、Windows の
+  コンピューター名) はどれも当たるので、何も書かなくて済みます。それ以外の名前 (持っているドメインの名前・
+  Tailscale の名前・Service の `tuner-agent.denpa` のような書き方) で `TUNER_AGENT_URL` を書くときだけ足します。
+  断ったときは、ログに名前ごとに1度だけ理由が出ます
+
+  ```text
+  知らない名前「agent.example.com:25252」で呼ばれたので断りました (403)。この名前で繋ぐなら AGENT_ALLOWED_HOSTS に足してください (docs/agent.md)
+  ```
 
 - **本文を読む API (PUT・POST) は `application/json` しか受けません** (ほかは 415)。ブラウザは
   `text/plain` などの POST なら下調べ (preflight) なしに送れるので、開いた外のサイトから LAN の中の
@@ -748,5 +770,6 @@ protocol の選び方ではありません。なので、いちばん退屈な�
 - **後から復号するとき (`/denpa/decode`)、書き出す先がもうあれば断ります。** 置き場の中の録画を上書きさせません
   (denpa は書き出す先を先に消してから頼みます)。復号できなかったときは、自分で作った書きかけを消します
 
-どちらも書き込みを止めるだけで、読み出し (`GET /denpa/stream` など) はブラウザ越しでも届く余地が残ります
-(DNS リバインディングなど。`Host` は見ていません)。守りの本体は、上の表のとおり届く範囲を絞ることです。
+どれもブラウザ越しに外のサイトから使われるのを止めるもので、届く人を見分けるものではありません。
+守りの本体は、上の表のとおり届く範囲を絞ることです。鍵を配るポート (`CARD_SHARE_PORT`) は名前を見ず、
+[相手のアドレスと TTL で絞ります](#鍵を配るのは-lan-の中だけ)。

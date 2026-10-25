@@ -60,6 +60,12 @@ service:
   # 下の networkPolicy で繋げる相手も絞れる
   nodePort: null
 
+# **エージェントが答えてよい名前** (AGENT_ALLOWED_HOSTS。カンマ区切り、頭にドットでその下の名前全部)。
+# 知らない名前で呼ばれると 403 で断る (DNS リバインディングを防ぐ。docs/agent.md「エージェントは認証を持たない」)。
+# IP の直書き・tuner-agent・tuner-agent.<名前空間>.svc(.cluster.local)・.local などは書かなくても通るので、
+# denpa の TUNER_AGENT_URL をそれ以外の名前 (持っているドメインの名前など) で書くときだけ足す
+allowedHosts: ""
+
 # **エージェントに繋げる相手を絞る** NetworkPolicy を出す。CNI が NetworkPolicy に対応していないと、
 # 出しても効かない。オンにしたら from に denpa の居場所を書く (NetworkPolicyPeer の並び。
 # そのまま ingress の from に入る)。同じクラスタの別の名前空間なら namespaceSelector と podSelector、

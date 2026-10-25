@@ -33,6 +33,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -829,6 +830,95 @@ describe("カードとスクランブルの復号", () => {
       expect(body.error.length).toBeGreaterThan(0);
     }
   });
+});
+
+/**
+ * `Host` を指定して当てる。fetch は `Host` を URL から作るので、ソケットに手で書く。
+ * `host` が null なら `Host` を付けない HTTP/1.0。状態コードと本文を返す
+ */
+function rawGet(
+  path: string,
+  host: string | null,
+  port = PORT,
+): Promise<{ status: number; body: string }> {
+  return new Promise((done, fail) => {
+    const socket = connect(port, "127.0.0.1", () => {
+      socket.write(
+        host === null
+          ? `GET ${path} HTTP/1.0\r\n\r\n`
+          : `GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    let text = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk: string) => {
+      text += chunk;
+    });
+    socket.on("error", fail);
+    socket.on("end", () => {
+      const status = Number(/^HTTP\/1\.\d (\d{3})/.exec(text)?.[1] ?? 0);
+      done({ status, body: text.slice(text.indexOf("\r\n\r\n") + 4) });
+    });
+  });
+}
+
+/*
+ * **知らない名前で呼ばれたら答えない** (docs/agent.md「エージェントは認証を持たない」)。
+ * 悪いサイトが自分の名前を 127.0.0.1 に向け直しても、ブラウザが付ける `Host` はそのサイトの名前のまま
+ */
+describe("呼ばれる名前", () => {
+  test("denpa が繋いでくる名前なら答える", async () => {
+    for (const host of [
+      `tuner-agent:${PORT}`,
+      `tuner-agent.denpa.svc.cluster.local:${PORT}`,
+      `host.docker.internal:${PORT}`,
+      `127.0.0.1:${PORT}`,
+      `[::1]:${PORT}`,
+      `172.29.80.1:${PORT}`,
+      `my-mac.local:${PORT}`,
+    ]) {
+      expect({
+        host,
+        status: (await rawGet("/denpa/tuners", host)).status,
+      }).toEqual({ host, status: 200 });
+    }
+  });
+
+  test("知らない名前・名前の無い呼び出しには 403 で断り、足す先をログに出す", async () => {
+    for (const path of [
+      "/denpa/card",
+      "/denpa/logs",
+      "/denpa/tuners",
+      "/denpa/stream?type=GR&channel=T16",
+    ]) {
+      const res = await rawGet(path, `evil.example:${PORT}`);
+      expect({ path, status: res.status }).toEqual({ path, status: 403 });
+      expect(res.body).toContain("AGENT_ALLOWED_HOSTS");
+    }
+    expect((await rawGet("/denpa/tuners", null)).status).toBe(403);
+    expect(log).toContain("evil.example");
+    expect(log).toContain("AGENT_ALLOWED_HOSTS");
+  });
+
+  test("AGENT_ALLOWED_HOSTS に書いた名前なら答える", async () => {
+    const port = PORT + 2;
+    const { stop } = await spawnAgent(port, {
+      AGENT_ALLOWED_HOSTS: "tuner.example.com,.tail1234.ts.net",
+    });
+    try {
+      expect(
+        (await rawGet("/denpa/tuners", "tuner.example.com", port)).status,
+      ).toBe(200);
+      expect(
+        (await rawGet("/denpa/tuners", "agent.tail1234.ts.net", port)).status,
+      ).toBe(200);
+      expect((await rawGet("/denpa/tuners", "evil.example", port)).status).toBe(
+        403,
+      );
+    } finally {
+      await stop();
+    }
+  }, 30_000);
 });
 
 test("知らないエンドポイントは 404", async () => {
