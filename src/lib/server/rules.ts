@@ -1,3 +1,4 @@
+import type { Genre } from "@doany/arib/eit";
 import {
   and,
   eq,
@@ -9,7 +10,7 @@ import {
   or,
 } from "drizzle-orm";
 
-import { type Genre, genreMatches } from "#lib/arib.js";
+import { genreMatches } from "#lib/arib.js";
 
 import { globTerms, toHalfWidth } from "../fold";
 import { hasTime, inTime, jstOf } from "../rule-time";

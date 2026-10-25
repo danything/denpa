@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { GAIJI } from "./aribtext-gaiji";
+import { GAIJI } from "@doany/arib/aribtext-gaiji";
 import {
   ADDITIONAL,
   ALNUM_FULL,
@@ -30,7 +30,7 @@ import {
   KANJI_DIFF,
   KANJI_SYMBOLS_HALF,
   KATAKANA,
-} from "./b24-tables";
+} from "@doany/arib/b24-tables";
 
 /** フォントに入れないと決めた字 (denpa-font の missing.txt と同じ)。いまは無い */
 const ALLOWED_MISSING = new Set<number>([]);

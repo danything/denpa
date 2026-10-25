@@ -7,11 +7,11 @@
  * - `tests/fake/agent.ts` … 偽エージェント。denpa の E2E で使う
  *
  * 番組も局名もJSONでは配らない。EIT と SDT を組み立てて電波に乗せる
- * (`src/lib/ts/synth.ts`)。こうしておかないと、denpa 側の解析が通っているか
+ * (`packages/arib/src/synth.ts`)。こうしておかないと、denpa 側の解析が通っているか
  * どうかをテストで確かめられない。
  */
 
-import { CLOCK } from "../../src/lib/ts/pes";
+import { CLOCK } from "@doany/arib/pes";
 import {
   aitSection,
   aitSignallingDescriptor,
@@ -28,7 +28,7 @@ import {
   sdtSection,
   type SynthEvent,
   withCrc,
-} from "../../src/lib/ts/synth";
+} from "@doany/arib/synth";
 import {
   AUDIO_TICKS,
   FRAME_TICKS,
@@ -36,7 +36,8 @@ import {
   packetizePes,
   pes,
   silentAac,
-} from "../../src/lib/ts/synth-av";
+} from "@doany/arib/synth-av";
+
 import { docsColor, docsLogo, docsProgram } from "./docs";
 import { type FakeService, SERVICES } from "./services";
 
@@ -423,7 +424,7 @@ function logoPackets(service: FakeService): Uint8Array {
  * 物理チャンネル1つぶんの表 (PAT / PMT / SDT / NIT)。選局したら真っ先に流れてくる。
  *
  * **NIT も出す。** チャンネルスキャンは NIT と SDT が**両方**揃って初めて
- * 「受信できた」とみなす (`ts/psi.ts` の `ServiceReader`)。偽エージェントは
+ * 「受信できた」とみなす (`packages/arib/src/psi.ts` の `ServiceReader`)。偽エージェントは
  * スキャンの結果を作り物で返していたので要らなかったが、本物のエージェントに
  * 食わせるならこれが無いとどのチャンネルも見つからない。
  */
@@ -454,7 +455,7 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
     const streams: ([number, number] | [number, number, number[]])[] = [
       [0x02, pids.video],
       [0x0f, pids.audio],
-      // **印が付いた ES があって初めて AIT を読みに行く** (`ts/ait.ts`)
+      // **印が付いた ES があって初めて AIT を読みに行く** (`packages/arib/src/ait.ts`)
       ...(service.hybridcast === undefined
         ? []
         : ([[0x0d, pids.ait, aitSignallingDescriptor()]] as [
@@ -616,7 +617,7 @@ function motionColor(
 }
 
 /**
- * 映像と音声。**本当にデコードできる MPEG-2 と AAC を流す** (`src/lib/ts/synth-av.ts`)。
+ * 映像と音声。**本当にデコードできる MPEG-2 と AAC を流す** (`packages/arib/src/synth-av.ts`)。
  *
  * エンコードする経路の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを変換せずに送る経路は
  * **ブラウザが自分でデコードして映像を出す** (docs/stream.md#放送そのままmpeg-2を送る)。そこを試すにはデコードできるものが要る。

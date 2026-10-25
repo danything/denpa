@@ -18,6 +18,7 @@
 </script>
 
 <script lang="ts">
+  import type { ResponseMessage } from "@doany/arib/bml-protocol";
   /**
    * データ放送を映像の上に重ねる。**描くのはエンジン** (`src/lib/bml/`)。
    *
@@ -42,7 +43,6 @@
   import { parseXmlAit } from "#lib/hybridcast/xml-ait.js";
   import { read, readAll, write } from "#lib/keep.js";
   import type { HybridcastLink } from "#lib/live.js";
-  import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
 
   import HybridcastFrame from "./HybridcastFrame.svelte";
   import StageNote from "./StageNote.svelte";

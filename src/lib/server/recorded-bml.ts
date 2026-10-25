@@ -10,16 +10,16 @@
  * JSONL で、サムネイルと同じ**録画の隣**に置く (`metadata.sidecarPaths`)。
  *
  * **録画のTSは1局に絞ってある** (実機の録画で PAT のプログラムは1つ) ので、
- * ライブのような `ServiceFilter` は要らない — [ts/bml.ts](../ts/bml.ts) の
+ * ライブのような `ServiceFilter` は要らない — [packages/arib/src/bml.ts](../../../packages/arib/src/bml.ts) の
  * `BmlDecoder` にそのまま流せる。
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
 import { eq } from "drizzle-orm";
 
-import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
 import { DataBroadcastCapture } from "#lib/ts/data-capture.js";
 import {
   type KeptRange,

@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { LogoCollector } from "./logo";
-import { DsmccLogoCollector, parseLogoModule } from "./logo-dsmcc";
 import {
   ddbSection,
   diiSection,
@@ -10,7 +8,10 @@ import {
   patSection,
   pmtSection,
   stream,
-} from "./synth";
+} from "@doany/arib/synth";
+
+import { LogoCollector } from "./logo";
+import { DsmccLogoCollector, parseLogoModule } from "./logo-dsmcc";
 
 /**
  * 衛星 (BS/CS) のロゴ。

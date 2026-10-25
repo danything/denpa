@@ -15,7 +15,7 @@ import {
 /**
  * **元の TS (60i の MPEG-2) を出す間合い** (docs/stream.md#コマを出す間合い--画面の切り替わりに合わせる。`raw/cadence.ts`)。
  *
- * 偽の放送の映像は上下のフィールドで別の時刻の映像にしてある (`ts/synth-av.ts`)。worker の WebGL の
+ * 偽の放送の映像は上下のフィールドで別の時刻の映像にしてある (`packages/arib/src/synth-av.ts`)。worker の WebGL の
  * 呼び出しを横から数え (どのコマを上げたか・どちらのフィールドを描いたか・いつ描いたか)、画面の
  * requestAnimationFrame の時刻と突き合わせて、**画面の切り替わりごとにどのフィールドが出ていたか**を並べる。
  * 同じフィールドが続けば重なり、2つ以上進めば飛び。数字は test-results に残す。

@@ -12,7 +12,8 @@
  * - TERM: くり返しの回数 (0x7fffffff は限り無し)
  */
 
-import { ascii, concatBytes } from "#lib/ts/bytes.js";
+import { ascii, concatBytes } from "@doany/arib/bytes";
+
 import { PNG_SIGNATURE } from "#lib/ts/png.js";
 
 interface MngFrame {

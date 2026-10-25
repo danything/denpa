@@ -13,7 +13,7 @@
  * `local_web` は名前のとおり通信の文書と分け合う領域)。
  */
 
-import type { ProgramInfoMessage } from "#lib/ts/bml-protocol.js";
+import type { ProgramInfoMessage } from "@doany/arib/bml-protocol";
 
 import { type Cell, Table } from "./binary";
 import { HostObject } from "./dom";

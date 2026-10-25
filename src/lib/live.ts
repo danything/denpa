@@ -12,8 +12,9 @@
  * 字幕は時刻ではなく「待たせる量」で合わせていた。
  */
 
+import type { CaptionLanguage } from "@doany/arib/caption-text";
+
 import type { AudioTrack } from "./arib";
-import type { CaptionLanguage } from "./caption-text";
 
 /**
  * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`h264` は速さを採り、どの端末でも出るので既定。
@@ -59,7 +60,7 @@ export const CHANNEL = {
    * 0x20 (字幕の画像) と 0x21 (字幕を消す) は以前の取り決めで、もう使わない (番号は空けておく)
    */
   captionText: 0x22,
-  /** データ放送 (JSON。`ts/bml-protocol.ts` の `ResponseMessage`)。押されてから送る (`Command` の `data`) */
+  /** データ放送 (JSON。`packages/arib/src/bml-protocol.ts` の `ResponseMessage`)。押されてから送る (`Command` の `data`) */
   data: 0x30,
   /** 制御。**ここだけ双方向**で、中身は JSON */
   control: 0x40,
@@ -130,7 +131,7 @@ export type Notice =
     }
   | {
       /**
-       * Hybridcast が載っている番組 (AIT を読んで分かる。[ts/ait.ts](ts/ait.ts))。載っていない局では一度も来ない
+       * Hybridcast が載っている番組 (AIT を読んで分かる。[packages/arib/src/ait.ts](../../packages/arib/src/ait.ts))。載っていない局では一度も来ない
        * ([docs/stream.md](../../docs/stream.md#hybridcast))
        */
       type: "hybridcast";

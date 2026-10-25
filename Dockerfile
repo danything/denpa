@@ -6,6 +6,8 @@
 FROM docker.io/oven/bun:1.4.4-slim AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
+# ワークスペース (packages/) の package.json も、依存を解くのに要る
+COPY packages/arib/package.json packages/arib/
 RUN bun install
 
 # ---------------------------------------------------------------------------

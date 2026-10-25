@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { type Ait, AitReader } from "./ait";
-import { BmlDecoder } from "./bml";
-import type { ResponseMessage } from "./bml-protocol";
-import { BroadcastClock } from "./clock";
-import { DataBroadcastCapture } from "./data-capture";
-import { EpgReader } from "./eit";
-import { type Pes, PesDemuxer } from "./pes";
-import { PacketStream } from "./psi";
-import { ServiceFilter } from "./service-filter";
+import { type Ait, AitReader } from "@doany/arib/ait";
+import { BmlDecoder } from "@doany/arib/bml";
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import { EpgReader } from "@doany/arib/eit";
+import { type Pes, PesDemuxer } from "@doany/arib/pes";
+import { PacketStream } from "@doany/arib/psi";
+import { ServiceFilter } from "@doany/arib/service-filter";
 import {
   aitSection,
   aitSignallingDescriptor,
@@ -25,7 +23,10 @@ import {
   sdtSection,
   stream,
   tdtPacket,
-} from "./synth";
+} from "@doany/arib/synth";
+
+import { BroadcastClock } from "./clock";
+import { DataBroadcastCapture } from "./data-capture";
 
 /**
  * **塊の切れ目と入れ物の使い回しで、読めるものが変わらないこと。**

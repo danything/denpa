@@ -6,7 +6,7 @@
  * 30分の番組の途中で天気が差し替わったなら、10分の位置では古いほう、20分の位置では
  * 新しいほうを出したい。
  *
- * そこで、エンコードのついでに元TSをもう一度 [bml.ts](bml.ts) に通し、**配る価値の
+ * そこで、エンコードのついでに元TSをもう一度 [bml.ts](../../../packages/arib/src/bml.ts) に通し、**配る価値の
  * あった変化だけ**を放送の実時刻 (TDT/TOT) つきで並べておく
  * ([data-capture.ts](data-capture.ts) の `captureDataBroadcast`。**TS をデコードする側は
  * サーバ専用**なので別ファイル — ここは観る画面 (ブラウザ) も読み込む)。
@@ -15,7 +15,7 @@
  *
  * ## なぜ「変化ログ」で足りるのか
  *
- * カルーセルは同じものを何度も回すが、[bml.ts](bml.ts) は**版が上がったときだけ**
+ * カルーセルは同じものを何度も回すが、[bml.ts](../../../packages/arib/src/bml.ts) は**版が上がったときだけ**
  * `moduleDownloaded` を出し、`Carousel.take` は変わらない `pmt`/`programInfo` を
  * 落とす。だから `take` が通したものを順に集めれば、それがそのまま
  * 「いつ何が変わったか」の記録になる。再生は「そこまでの変化を積む」だけ。
@@ -23,7 +23,8 @@
  * DOM も時計も触らないので、ここだけ単体で確かめられる。
  */
 
-import type { ResponseMessage } from "./bml-protocol";
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
+
 import { Carousel } from "./carousel";
 
 export interface TimedMessage {

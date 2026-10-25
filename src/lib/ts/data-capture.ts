@@ -2,11 +2,12 @@
  * 録画のデータ放送を**TS から取り出す側** (サーバ専用)。
  *
  * [data-timeline.ts](data-timeline.ts) の並べ方・再生の側と分けてある —
- * あちらは観る画面 (ブラウザ) も読み込むが、TS をデコードする [bml.ts](bml.ts) は
+ * あちらは観る画面 (ブラウザ) も読み込むが、TS をデコードする [bml.ts](../../../packages/arib/src/bml.ts) は
  * `node:zlib` / `node:buffer` を使うのでブラウザには持ち込めない。
  */
 
-import { BmlDecoder } from "./bml";
+import { BmlDecoder } from "@doany/arib/bml";
+
 import { Carousel } from "./carousel";
 import type { TimedMessage } from "./data-timeline";
 

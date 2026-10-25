@@ -19,6 +19,19 @@
  * 最後に流した init を持っておいて、繋いできた人に真っ先に渡す。
  */
 
+import {
+  type Ait,
+  AitReader,
+  APPLICATION_TYPE_HTML5,
+  CONTROL,
+} from "@doany/arib/ait";
+import {
+  CAPTION_TEXT_VERSION,
+  type CaptionLanguage,
+} from "@doany/arib/caption-text";
+import { PresentFollowing } from "@doany/arib/eit";
+import { PacketStream } from "@doany/arib/psi";
+import { ServiceFilter, StreamsWatch } from "@doany/arib/service-filter";
 import { and, eq, gt, lte } from "drizzle-orm";
 
 import {
@@ -29,29 +42,16 @@ import {
   pickTrack,
 } from "#lib/arib.js";
 import {
-  CAPTION_TEXT_VERSION,
-  type CaptionLanguage,
-} from "#lib/caption-text.js";
-import {
   type CaptionTrack,
   CHANNEL,
   type HybridcastLink,
   type LiveCodec,
   type Notice,
 } from "#lib/live.js";
-import {
-  type Ait,
-  AitReader,
-  APPLICATION_TYPE_HTML5,
-  CONTROL,
-} from "#lib/ts/ait.js";
 import { BroadcastClock, parseStart } from "#lib/ts/clock.js";
-import { PresentFollowing } from "#lib/ts/eit.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
-import { PacketStream } from "#lib/ts/psi.js";
-import { ServiceFilter, StreamsWatch } from "#lib/ts/service-filter.js";
 
 import {
   captionFeed,
@@ -722,7 +722,7 @@ class Session {
    */
   private data: DataBroadcast | null = null;
   /**
-   * Hybridcast を見つける側 (`ts/ait.ts`)。**押されなくても読む。**
+   * Hybridcast を見つける側 (`packages/arib/src/ait.ts`)。**押されなくても読む。**
    *
    * データ放送と違ってデコードする量がほとんど無い — PMT に印が無ければ AIT を
    * 待つこともしないので、載っていない局では**表を1枚も組み立てません**。
@@ -731,7 +731,7 @@ class Session {
    */
   private ait: AitReader | null = null;
   /**
-   * 放送が言う「いま」と「次」(EIT[p/f]) を読む側 (`ts/eit.ts`)。**ライブのときだけ。**
+   * 放送が言う「いま」と「次」(EIT[p/f]) を読む側 (`packages/arib/src/eit.ts`)。**ライブのときだけ。**
    *
    * 番組が切り替わった・延びたのを番組表に写し、画面に読み直させる (`epg.followOnAir`)。
    * 予定の時刻だけで追うと、延長・繰り下げで取り違える。追っかけ (`source`) は録画の
@@ -1263,7 +1263,7 @@ class Session {
   /**
    * エージェントから来た TS を ffmpeg へ。**その局のぶんだけ渡す。**
    *
-   * 録画と同じ絞り方 (`ts/service-filter.ts`)。丸ごと渡すと、局が3つ入っている TS で
+   * 録画と同じ絞り方 (`packages/arib/src/service-filter.ts`)。丸ごと渡すと、局が3つ入っている TS で
    * ffmpeg が局を見つけられずに降りる (`encodeArgs` の説明)。
    *
    * **量はほとんど減らない。** 実測は tvk で 17.6 → 16.8 Mbit/s、日テレで
@@ -1710,7 +1710,7 @@ class Session {
           const out = this.tap(filter, chunk);
           /*
            * **番組が替わって並びが変わったら、字幕の ffmpeg だけ起こし直す** (`StreamsWatch`)。
-           * 映像と音声は受け側が PMT を読んで自分で追う (`ts/pes.ts` の `PesDemuxer`)。字幕は放送の
+           * 映像と音声は受け側が PMT を読んで自分で追う (`packages/arib/src/pes.ts` の `PesDemuxer`)。字幕は放送の
            * PTS のまま写すので (`-copyts`)、起こし直しても時刻は続く。字幕が無かった局にも増えて
            * いるかもしれないので、覚えていた「字幕が無い」は忘れて起こす
            */

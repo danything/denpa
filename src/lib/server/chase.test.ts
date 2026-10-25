@@ -3,8 +3,8 @@ import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ServiceFilter, StreamsWatch } from "#lib/ts/service-filter.js";
-import { packetize, patSection, programMap, stream } from "#lib/ts/synth.js";
+import { ServiceFilter, StreamsWatch } from "@doany/arib/service-filter";
+import { packetize, patSection, programMap, stream } from "@doany/arib/synth";
 
 import {
   chasePlan,

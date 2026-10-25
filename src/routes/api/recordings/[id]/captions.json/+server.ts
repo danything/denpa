@@ -1,3 +1,4 @@
+import { joinBytes } from "@doany/arib/bytes";
 import { error, json } from "@sveltejs/kit";
 
 import { pagesFromMkv } from "#lib/server/captions.js";
@@ -5,7 +6,6 @@ import { config } from "#lib/server/config.js";
 import { captionArgs } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { run } from "#lib/server/stream.js";
-import { joinBytes } from "#lib/ts/bytes.js";
 
 /**
  * 録画の字幕を**文字の配置**で渡す (docs/api.md)。観る画面がライブと同じやり方で描く

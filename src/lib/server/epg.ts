@@ -1,3 +1,4 @@
+import type { EitEvent } from "@doany/arib/eit";
 import {
   and,
   count,
@@ -14,7 +15,6 @@ import {
 
 import { toHalfWidth } from "../fold";
 import { type Airing, mainOf, splitOf, type Station } from "../subchannels";
-import type { EitEvent } from "../ts/eit";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
@@ -450,7 +450,7 @@ export function savePrograms(events: EitEvent[]): number {
    *
    * **タイトルと概要は空で塗り潰さない。** 番組表は「基本」(タイトル) と「詳細」(番組内容) の
    * 2つの表に分かれて流れてきて、片方しか読めなかった回がある
-   * (ts/eit.ts の EpgReader.merge)。読めたところだけ書く
+   * (packages/arib/src/eit.ts の EpgReader.merge)。読めたところだけ書く
    */
   const refresh = {
     service_id: sql`excluded.service_id`,

@@ -1,5 +1,5 @@
 /**
- * **字幕の文字の配置を canvas に描く** ([caption-text.ts](../../caption-text.ts))。ライブ・追っかけ・観る画面で同じもの。
+ * **字幕の文字の配置を canvas に描く** ([caption-text.ts](../../../../packages/arib/src/caption-text.ts))。ライブ・追っかけ・観る画面で同じもの。
  *
  * サーバが置き場所まで決めて送ってくるので、ここは言われたとおりに塗るだけ。描き方は
  * libaribcaption の描き手 (region_renderer / text_renderer_freetype) に揃えてある:
@@ -21,7 +21,7 @@ import {
   FLASH_MS,
   isSpace,
   STROKE_WIDTH,
-} from "#lib/caption-text.js";
+} from "@doany/arib/caption-text";
 
 import { fitRect } from "./paint";
 

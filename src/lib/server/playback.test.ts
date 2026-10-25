@@ -9,18 +9,18 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { eq } from "drizzle-orm";
-
-import { CLOCK, WRAP } from "#lib/ts/pes.js";
-import { ORIGIN_HEADER } from "#lib/ts/playback.js";
-import { PACKET, SYNC } from "#lib/ts/psi.js";
-import { sinceHead } from "#lib/ts/seek.js";
+import { CLOCK, WRAP } from "@doany/arib/pes";
+import { PACKET, SYNC } from "@doany/arib/psi";
 import {
   AUDIO_TICKS,
   FRAME_TICKS,
   packetizePes,
   pes,
-} from "#lib/ts/synth-av.js";
+} from "@doany/arib/synth-av";
+import { eq } from "drizzle-orm";
+
+import { ORIGIN_HEADER } from "#lib/ts/playback.js";
+import { sinceHead } from "#lib/ts/seek.js";
 
 /**
  * **録画の観方を決めて流す** (`server/playback.ts`)。ffprobe は偽物 (ファイル名で中身を答える)、

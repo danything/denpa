@@ -1,7 +1,7 @@
 /**
  * **録画の番組名・概要を放送のとおりの幅に戻す。** 番組名を半角に寄せて取り込んでいた頃の録画の後始末。
  *
- * 番組表はいま放送のとおり持つ (「Ｖｅｎｕｅ１０１」。`ts/aribtext.ts`) が、それより前は
+ * 番組表はいま放送のとおり持つ (「Ｖｅｎｕｅ１０１」。`packages/arib/src/aribtext.ts`) が、それより前は
  * 取り込むときに半角へ寄せていた (「Venue101」)。録画は録り始めたときの番組表を写すので、
  * 寄せた字のまま残っている。**元のTSが残っていれば、そこに流れていた EIT を読み直せば元の字が分かる。**
  * 元のTSしか元は無い — 番組表の行は放送が終われば取り込み直されず (24時間で消える)、録画の横に置く
@@ -21,10 +21,10 @@
  */
 import { open } from "node:fs/promises";
 
+import { type EitEvent, EpgReader } from "@doany/arib/eit";
 import { asc, eq, gt } from "drizzle-orm";
 
 import { foldForSearch, toHalfWidth } from "../fold";
-import { type EitEvent, EpgReader } from "../ts/eit";
 import { now, orm } from "./db";
 import { emit } from "./events";
 import { recordings, services } from "./schema";

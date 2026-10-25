@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { EpgReader } from "../ts/eit";
-import { eitSection, nitSection, packetize, sdtSection } from "../ts/synth";
+import { EpgReader } from "@doany/arib/eit";
+import {
+  eitSection,
+  nitSection,
+  packetize,
+  sdtSection,
+} from "@doany/arib/synth";
+
 import { channelEntry, channelsFor, readServices } from "./scan";
 import { type AgentChannel, twinOf, withoutTwins } from "./tuner";
 

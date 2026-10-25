@@ -9,14 +9,16 @@
  */
 
 import { resolve } from "$app/paths";
-
-import type { AudioTrack } from "#lib/arib.js";
-import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
 import {
   CAPTION_TEXT_VERSION,
   type CaptionLanguage,
   type CaptionPage,
-} from "#lib/caption-text.js";
+} from "@doany/arib/caption-text";
+import { CLOCK } from "@doany/arib/pes";
+
+import type { AudioTrack } from "#lib/arib.js";
+import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
 import { CaptionPainter } from "#lib/components/player/caption-draw.js";
 import {
   CAPTION_LANGUAGE_KEY,
@@ -48,7 +50,6 @@ import {
   canvasSupport,
   rawUnsupported,
 } from "#lib/raw/support.js";
-import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
 import {
   type Cue,
   currentCue,
@@ -72,7 +73,6 @@ import {
   STEADY,
   type Steering,
 } from "#lib/ts/pacing.js";
-import { CLOCK } from "#lib/ts/pes.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
 
@@ -1471,7 +1471,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /**
    * データ放送の通知を受け取る先を預かる。**描く側がいるときだけ渡す。**
    *
-   * 渡す形式はデコードする側と描く側の取り決め (`ResponseMessage`。`ts/bml-protocol.ts`) なので、
+   * 渡す形式はデコードする側と描く側の取り決め (`ResponseMessage`。`packages/arib/src/bml-protocol.ts`) なので、
    * ここは素通しでいい。
    *
    * **預かった時点で、待たせてあるぶんを先に流す** (`heldData`)

@@ -1,6 +1,8 @@
 import { closeSync, openSync, readSync } from "node:fs";
 import { relative } from "node:path";
 
+import { PACKET, SYNC } from "@doany/arib/psi";
+
 import {
   array,
   boolean,
@@ -11,7 +13,6 @@ import {
   string,
   tolerate,
 } from "../shape";
-import { PACKET, SYNC } from "../ts/psi";
 import { config } from "./config";
 
 /**

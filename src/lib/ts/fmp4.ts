@@ -16,8 +16,8 @@
  * 大きさは箱ぜんぶ (頭の8バイトを含む) を数えた値。
  */
 
-import { ascii, concatBytes, joinBytes, u32 } from "./bytes";
-import { ADTS_RATES } from "./pes";
+import { ascii, concatBytes, joinBytes, u32 } from "@doany/arib/bytes";
+import { ADTS_RATES } from "@doany/arib/pes";
 
 /** 箱の頭。大きさと種別で8バイト */
 const HEADER = 8;

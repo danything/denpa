@@ -3,13 +3,14 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CHANNEL } from "#lib/live.js";
 import {
   captionMkv,
   encodeAribText,
   management,
   text,
-} from "#lib/ts/synth-caption.js";
+} from "@doany/arib/synth-caption";
+
+import { CHANNEL } from "#lib/live.js";
 
 /**
  * アプリ向けの字幕 API (`liveCaptions` / `recordingCaptions`)。

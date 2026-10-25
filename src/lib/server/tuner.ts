@@ -5,7 +5,7 @@
  * 返ってこない。読むのは denpa の仕事 ([agent.md](../../../docs/agent.md))。
  *
  * **使い方は1つだけ。** 物理チャンネルを丸ごと開く。局を選り分けるのは
- * `ts/service-filter.ts`、番組の切れ目を見るのは `ts/eit.ts`。
+ * `packages/arib/src/service-filter.ts`、番組の切れ目を見るのは `packages/arib/src/eit.ts`。
  */
 
 import {

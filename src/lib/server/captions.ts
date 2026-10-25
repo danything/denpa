@@ -1,9 +1,9 @@
 /**
  * 字幕 (ライブ・録画)。**映像と同じ ffmpeg から放送の字幕をそのまま受け取り、denpa がデコードして
- * 「文字の配置」にして配る** ([caption-text.ts](../caption-text.ts))。描くのは受け側。
+ * 「文字の配置」にして配る** ([caption-text.ts](../../../packages/arib/src/caption-text.ts))。描くのは受け側。
  *
  *     エージェント (MPEG-TS) → ffmpeg ┬→ fMP4 (映像・音声)              → WebSocket → MSE
- *                                     └→ mkv  (字幕そのまま S_ARIBSUB)  → デコードする (ts/b24caption.ts)
+ *                                     └→ mkv  (字幕そのまま S_ARIBSUB)  → デコードする (packages/arib/src/b24caption.ts)
  *                                                                        → WebSocket (0x22 JSON) → canvas
  *
  * 放送に画像は流れてこない — 入っているのは文字と「どこに・どの大きさで・何色で」という
@@ -27,18 +27,19 @@
  * ffmpeg の Matroska は ARIB の字幕を `S_ARIBSUB` としてそのまま入れられる。
  */
 
-import { LANGUAGE } from "#lib/arib.js";
+import { B24CaptionDecoder, isManagement } from "@doany/arib/b24caption";
 import {
   CAPTION_TEXT_VERSION,
   type CaptionLanguage,
   type CaptionLanguagePages,
   type CaptionPage,
   type CaptionPages,
-} from "#lib/caption-text.js";
+} from "@doany/arib/caption-text";
+import { LANGUAGE } from "@doany/arib/language";
+import { CLOCK } from "@doany/arib/pes";
+
 import { type CaptionTrack, CHANNEL, type Notice } from "#lib/live.js";
-import { B24CaptionDecoder, isManagement } from "#lib/ts/b24caption.js";
 import { type MkvFrame, MkvSplitter } from "#lib/ts/mkv.js";
-import { CLOCK } from "#lib/ts/pes.js";
 
 /** 失敗を言っている行。**それ以外は入口の説明なので捨てる** */
 const TROUBLE = /error|Error|failed|Failed|Cannot|Unable|No such|Invalid data/;

@@ -1,6 +1,7 @@
 /** テスト用の小さな MNG を組む (放送のデータは使わない) */
 
-import { concatBytes } from "#lib/ts/bytes.js";
+import { concatBytes } from "@doany/arib/bytes";
+
 import { pngChunk } from "#lib/ts/png.js";
 
 /** 塊 (長さ・名前・中身・CRC) */

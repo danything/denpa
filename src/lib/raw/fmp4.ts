@@ -23,7 +23,9 @@
  * 出すか転ぶ。転んだら (`error`) 開き直してキーフレームから入り直し、続けて転ぶなら諦める。
  */
 
-import { ascii, concatBytes, u32 } from "#lib/ts/bytes.js";
+import { ascii, concatBytes, u32 } from "@doany/arib/bytes";
+import { CLOCK } from "@doany/arib/pes";
+
 import {
   adtsHeader,
   type Fmp4Sample,
@@ -32,7 +34,6 @@ import {
   readFragment,
   readInit,
 } from "#lib/ts/fmp4.js";
-import { CLOCK } from "#lib/ts/pes.js";
 
 import { downscale } from "./downscale";
 import type { GrabSize } from "./messages";

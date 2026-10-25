@@ -151,6 +151,14 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
    `gh release create vX.Y.Z --target main --generate-notes --title vX.Y.Z`。
    イメージは組み直さず、そのコミットのものに版を貼り足します ([下](#イメージ))
 
+### `@doany/arib` を出す
+
+`packages/arib/` は denpa のリリースとは別に npm へ出します。`packages/arib/package.json` の `version` を上げる PR を
+マージしてから、タグ `arib-v<版>` を押します (`git tag arib-v0.2.0 && git push origin arib-v0.2.0`)。
+`.github/workflows/arib-publish.yml` がテストとビルドをして、Trusted Publishing で出します (トークンは持たない)。
+リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `scripts/manifest.ts` が
+組んだ `dist/` に向け直します
+
 ## イメージ
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。

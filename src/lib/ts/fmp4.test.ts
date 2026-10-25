@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
+import { AdtsSplitter } from "@doany/arib/pes";
+
 import {
   adtsHeader,
   Fmp4Splitter,
@@ -8,7 +10,6 @@ import {
   readFragment,
   readInit,
 } from "./fmp4";
-import { AdtsSplitter } from "./pes";
 
 /** 箱を1つ組み立てる。中身は大きさが分かればよいので詰め物 */
 function box(type: string, fill = 0, size = 4): Uint8Array {

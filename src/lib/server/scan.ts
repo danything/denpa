@@ -4,7 +4,7 @@
  * **選局はエージェントに任せ、読むのはこちら。** エージェントは中身を読まないので
  * ([agent.md](../../../docs/agent.md))、NIT と SDT を読み取って局名を取るのは
  * denpa の仕事になる。局名は ARIB の文字符号で入っていて、そのデコーダは
- * `ts/aribtext.ts` にしかない。
+ * `packages/arib/src/aribtext.ts` にしかない。
  *
  * Mirakurun の走査に合わせてある。
  *
@@ -17,8 +17,9 @@
  * 使っているチューナーは取られないだけ (空きが無ければ待ち、飛ばさない)。
  */
 
-import { type EitEvent, EpgReader } from "../ts/eit";
-import { type FoundService, ServiceReader } from "../ts/psi";
+import { type EitEvent, EpgReader } from "@doany/arib/eit";
+import { type FoundService, ServiceReader } from "@doany/arib/psi";
+
 import type { ChannelType } from "../types";
 import { config } from "./config";
 import { savePrograms, settle, sync } from "./epg";

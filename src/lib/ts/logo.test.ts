@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { packetize, withCrc } from "@doany/arib/synth";
+
 import {
   LogoCollector,
   logoTypeOfPng,
@@ -7,7 +9,6 @@ import {
   parseLogoLinks,
   replacesLogo,
 } from "./logo";
-import { packetize, withCrc } from "./synth";
 
 /** 1x1 の PNG。中身は問わないので、ロゴとして扱えるかだけ見る */
 const PNG = Uint8Array.from([

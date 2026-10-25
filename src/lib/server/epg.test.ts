@@ -297,7 +297,7 @@ describe("消えた局の片付け", () => {
  * 番組の取り込み。
  *
  * 番組表は「基本」(タイトル) と「詳細」(番組内容) の2つの表に分かれて放送されていて、
- * 読むほうも分けて届く ([ts/eit.ts](../ts/eit.ts) の EpgReader.merge)。
+ * 読むほうも分けて届く ([packages/arib/src/eit.ts](../../../packages/arib/src/eit.ts) の EpgReader.merge)。
  * 片方しか読めなかった回に、もう片方を消させない。
  */
 describe("savePrograms", () => {

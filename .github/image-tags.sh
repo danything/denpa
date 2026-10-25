@@ -15,7 +15,7 @@ set -eu
 # **イメージに入るものは全部並べる** (build-and-deploy.yml の paths と揃える)。漏れると、
 # そこだけの修正がイメージに入らないまま release まで素通りする (server.js で実際に起きた)。
 # wasm はライブを変換せずに見るためのデコーダ、drizzle はマイグレーション、.dockerignore はイメージに入れるものの選別
-denpa_paths="Dockerfile .dockerignore src static package.json bun.lock vite.config.ts server.js patches wasm drizzle"
+denpa_paths="Dockerfile .dockerignore src packages static package.json bun.lock vite.config.ts server.js patches wasm drizzle"
 
 AGENT_TAG="sha-$(git log -1 --format=%H -- agent | cut -c1-12)"
 DENPA_TAG="sha-$(git log -1 --format=%H -- $denpa_paths | cut -c1-12)"

@@ -70,14 +70,14 @@ fMP4 / WebM には規格上入れられず、ffmpeg も GStreamer も扱えな�
 「どの字を・どこに・どの大きさで・何色で」まで決めた**文字の配置** (JSON。[api.md](api.md#字幕の文字の配置))。
 
 libaribcaption は「デコードする (decoder)」と「描く (renderer)」が分かれていて、置き場所・大きさ・色・外字の
-置き換えはデコードする側で決まる。**デコードする側を TypeScript に写して** (`src/lib/ts/b24caption.ts`) サーバで回し、
+置き換えはデコードする側で決まる。**デコードする側を TypeScript に写して** (`packages/arib/src/b24caption.ts`) サーバで回し、
 描く側だけを受け側に持つ。全画面でも画面の画素で描け、1枚は数百バイト〜1KB で済む。テレビのアプリは描く側を
 Kotlin で持つ (denpa-tv 0.16.0 から)。画像 (PNG) を配っていた頃との比較は
 [stream-history.md](stream-history.md#字幕を画像で配っていた頃)。
 
 外字 (DRCS) は置き換え表で字にできるものは字に、できないものは画像で送り (1字 3.5KB ほど)、受け側が字の枠いっぱいに引き伸ばす。
 放送の外字は 16〜36 画素の白黒の画像で、そのまま伸ばすと1点が 4x4 の階段になる。
-**サーバで斜めを丸めた濃淡の画像にしてから送る** (`src/lib/ts/drcs-smooth.ts`。水増しされた行・列を畳み、Scale2x で斜めを
+**サーバで斜めを丸めた濃淡の画像にしてから送る** (`packages/arib/src/drcs-smooth.ts`。水増しされた行・列を畳み、Scale2x で斜めを
 細かくし、4x4 ずつ平均して縁に中間の濃さを付ける。16 階調・一辺 64〜256)。
 録画には放送の字幕がそのまま入る (`S_ARIBSUB`) ので同じ描き方で観られる。PGS の画像が入った古いエンコード済みの録画の字幕は読まない。
 
@@ -89,8 +89,8 @@ Kotlin で持つ (denpa-tv 0.16.0 から)。画像 (PNG) を配っていた頃�
 | 役割       | 採用                                                                                                                                                            | 備考                                                                                                             |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | エンコード | FFmpeg (設定でコーデックのエンコーダに GPU を選んであれば、ライブも録画も GPU でエンコードする — [encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api)) | CLI パイプラインで差し替え可能                                                                                   |
-| 字幕       | 自前 (`ts/b24caption.ts`。libaribcaption のデコーダを写したもの)                                                                                                | ffmpeg は `-c:s copy` で写すだけ                                                                                 |
-| データ放送 | 自前 (`src/lib/bml/`。デコードする側は `ts/bml.ts`)                                                                                                             | [データ放送の統合](#データ放送の統合)                                                                            |
+| 字幕       | 自前 (`packages/arib/src/b24caption.ts`。libaribcaption のデコーダを写したもの)                                                                                 | ffmpeg は `-c:s copy` で写すだけ                                                                                 |
+| データ放送 | 自前 (`src/lib/bml/`。デコードする側は `packages/arib/src/bml.ts`)                                                                                              | [データ放送の統合](#データ放送の統合)                                                                            |
 | 再生       | MSE 直接                                                                                                                                                        | H.264+AAC (既定) / AV1+Opus の fMP4。互換モードは WebCodecs で、箱は自前で読む (`ts/fmp4.ts`・`ts/mkv-media.ts`) |
 
 tsreadex・mpegts.js・aribb24.js・GStreamer を使わない理由は [採用しなかったもの](stream-history.md#採用しなかったもの)。
@@ -344,12 +344,12 @@ ffmpeg は起きたときの映像・音声・字幕の並び (PMT) のまま `-
 字幕の PID が変わると追従しない。並びは局に絞るところ (`ServiceFilter.streams`) で読み、変わったかは
 `StreamsWatch` で見る (データ放送などの増減では変わったことにしない)。
 
-| 経路                          | 変わったら                                                                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ライブ (エンコード)           | セッションを畳んで `restart` を送る。画面はすぐ同じ局をリクエストし直す                                                                                        |
-| 追っかけ (エンコード)         | セッションを畳んで `restart` を送る。画面は届いたぶんを観終えてから、観ていた位置をリクエストし直す                                                            |
-| 放送のまま (MPEG-2) のライブ  | 畳まない。受け側が PMT を読んで PID を選び直し (`ts/pes.ts` の `PesDemuxer`)、字幕の ffmpeg だけ起こし直す ([放送のままのときの字幕](#放送のままのときの字幕)) |
-| 元のTSの字幕 (録画・追っかけ) | 閉じない。字幕の ffmpeg だけ起こし直す                                                                                                                         |
+| 経路                          | 変わったら                                                                                                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ライブ (エンコード)           | セッションを畳んで `restart` を送る。画面はすぐ同じ局をリクエストし直す                                                                                                       |
+| 追っかけ (エンコード)         | セッションを畳んで `restart` を送る。画面は届いたぶんを観終えてから、観ていた位置をリクエストし直す                                                                           |
+| 放送のまま (MPEG-2) のライブ  | 畳まない。受け側が PMT を読んで PID を選び直し (`packages/arib/src/pes.ts` の `PesDemuxer`)、字幕の ffmpeg だけ起こし直す ([放送のままのときの字幕](#放送のままのときの字幕)) |
+| 元のTSの字幕 (録画・追っかけ) | 閉じない。字幕の ffmpeg だけ起こし直す                                                                                                                                        |
 
 **エンコードする経路はその場で起こし直さない。** 時刻が 0 から数え直しになり、受け側が続きとして読めないため (`lost` と同じ理由)。
 30 秒以内に続いたらいつもの繋ぎ直し (待ちが倍々) に乗せ、切り替わりの前後で並びが行き来する局で作り直しを繰り返さない。
@@ -441,7 +441,7 @@ MPEG-2 を GPU でデコードできる環境ではデコードとインタレ�
 ## 字幕
 
 **映像と同じ ffmpeg から、字幕をデコードせずに写して受け取る。出口を2つ持つ**（`src/lib/server/captions.ts`）。
-デコードして置き場所を決めるのは denpa（`src/lib/ts/b24caption.ts`）、描くのはブラウザ（`components/player/caption-draw.ts`）。
+デコードして置き場所を決めるのは denpa（`packages/arib/src/b24caption.ts`）、描くのはブラウザ（`components/player/caption-draw.ts`）。
 
 ```bash
 ffmpeg <上の映像の引数と同じ> -i pipe:0 \
@@ -527,7 +527,7 @@ channel:
   0x20  (空き)       以前の字幕の画像 (PNG)。もう使わない
   0x21  (空き)       以前の「字幕を消す」。もう使わない
   0x22  字幕の文字の配置  JSON (api.md「字幕の文字の配置」)。前の1枚を丸ごと置き換える
-  0x30  データ放送   ResponseMessage (JSON。`ts/bml-protocol.ts`)。時刻は 0
+  0x30  データ放送   ResponseMessage (JSON。`packages/arib/src/bml-protocol.ts`)。時刻は 0
   0x40  制御         ここだけ双方向の JSON (選局・追っかけ・データ放送の指示 / tuned・字幕一覧・時計 等の通知)。時刻は 0
 ```
 
@@ -601,7 +601,7 @@ WebSocket に流し、ブラウザが WebAssembly の MPEG-2 デコーダでデ�
 
 FFmpeg の **mpeg2video のデコーダとフレームの区切りを探す parser、AAC のデコーダだけ**を emscripten で組んだもの
 （`wasm/decoder.c`。互換モードの音のために Opus のデコーダと、それが当てにする swresample も入っている）。AAC の parser は組まない —
-ADTS の区切りと時刻は JS（`ts/pes.ts` の `AdtsSplitter`）が付け、デコーダは ADTS の頭を自分で読む。音も映像と同じ worker でデコードする
+ADTS の区切りと時刻は JS（`packages/arib/src/pes.ts` の `AdtsSplitter`）が付け、デコーダは ADTS の頭を自分で読む。音も映像と同じ worker でデコードする
 （1秒ぶんで数 ms）。**Dockerfile の `mpeg2wasm` 段で毎回組み**、git には入れません（生成物を抱えると FFmpeg を上げるたびに差し替えが要り、
 組んだ手順と中身が食い違っても気づけない）。FFmpeg はサーバの ffmpeg と同じ版に揃え、emsdk は版で固定しています。置き場はアプリの外
 （`/opt/denpa/mpeg2`、`MPEG2_DIR`）で、`/api/live/mpeg2/<名前>` から配ります — 開発と E2E の compose はソースを `/app` に被せるので、
@@ -632,7 +632,7 @@ ADTS の区切りと時刻は JS（`ts/pes.ts` の `AdtsSplitter`）が付け、
   流し（20ms ごと）、worker は組から外挿してコマを選ぶ
 - **PCR は受け側では使いません。** 貯めは「届いた音の端 − 鳴っている位置」で見る（`clock` の通知は「放送から N 秒」を出すのにだけ使う。
   放送のままの経路では ffmpeg の `start:` を引かず PCR をそのまま渡す）
-- **PTS は 26.5 時間で一周する**ので、受け側は増え続ける数に伸ばして持つ（`ts/pes.ts` の
+- **PTS は 26.5 時間で一周する**ので、受け側は増え続ける数に伸ばして持つ（`packages/arib/src/pes.ts` の
   `unwrap`）。字幕と時計の通知も、同じ物差しの近くへ伸ばしてから比べる
 - 自動再生で音を断られたら、**壁時計を時計にして映像だけ進め**、「音を出す」を押された時点で
   鳴っている位置のまま音の時計へ移る（`RawEngine.follow`）。逆に音が止められたら（出口が
@@ -710,7 +710,7 @@ ADTS の区切りと時刻は JS（`ts/pes.ts` の `AdtsSplitter`）が付け、
 裏に回って画面の rAF が止まっている間は、刻んだ時刻で選びます。エンコードしたもの（fMP4）も同じ時計で番を見ます。
 
 単体テスト（`cadence.test.ts`）は刻みとデコードと時計の揺れを模してフィールドが飛ばないことを、E2E（`43-raw-cadence`）は
-偽の放送（上下のフィールドで別の時刻の映像。`ts/synth-av.ts`）を互換モードの観る画面で流し、worker の WebGL の呼び出しを数えて
+偽の放送（上下のフィールドで別の時刻の映像。`packages/arib/src/synth-av.ts`）を互換モードの観る画面で流し、worker の WebGL の呼び出しを数えて
 画面の切り替わりごとにどのフィールドが出ていたかを確かめる（直す前は 150 回のうち重なり 9・飛び 8、直した後は 0・0）。
 画面の rAF が来なかった回（CI は混んで 20〜70 回来ないことがある）はそのぶんフィールドが進んでいて正しいので飛びに数えない。
 **実機の画面（120Hz・可変リフレッシュ）でどう見えるかは実機で見ないと分からない。**
@@ -799,7 +799,7 @@ docker compose --profile docs run --rm -p 4180:4180 -e BENCH_SERVE=1 docs bunx p
 
 ### 実機で確かめること
 
-ヘッドレスの Chromium（GPU 無し・SwiftShader）と偽の放送（`src/lib/ts/synth-av.ts` の小さい
+ヘッドレスの Chromium（GPU 無し・SwiftShader）と偽の放送（`packages/arib/src/synth-av.ts` の小さい
 MPEG-2 と無音の AAC）でしか通していません（AAC のデコーダだけは ffmpeg で作ったステレオ・5.1ch・
 壊したコマ・途中で形式の変わる ADTS でも確かめた）。本物の GPU・本物の放送で見るべきところ:
 
@@ -914,10 +914,10 @@ E2E（`tests/e2e/40-watch-compat`）は、偽 ffmpeg が作り置きの fMP4 を
 **デコードする側も描く側も自前です。映像は denpa が持つ。** 2026-10 まで otya128/web-bml を使っていた経緯は
 [stream-history.md](stream-history.md#web-bml-を使っていた頃)。
 
-運び方は衛星のロゴと同じ DSM-CC で、共通のところは `ts/dsmcc.ts`（ロゴは `ts/logo-dsmcc.ts`）、データ放送の読み方は `ts/bml.ts`。
-モジュールの中身 (multipart) を切るのも自前 (`ts/multipart.ts`)。TS を直に読むので psisiarc も要らない。
+運び方は衛星のロゴと同じ DSM-CC で、共通のところは `packages/arib/src/dsmcc.ts`（ロゴは `ts/logo-dsmcc.ts`）、データ放送の読み方は `packages/arib/src/bml.ts`。
+モジュールの中身 (multipart) を切るのも自前 (`packages/arib/src/multipart.ts`)。TS を直に読むので psisiarc も要らない。
 
-渡す形式 (`ResponseMessage`) は web-bml の取り決めを写して `ts/bml-protocol.ts` に置いた。
+渡す形式 (`ResponseMessage`) は web-bml の取り決めを写して `packages/arib/src/bml-protocol.ts` に置いた。
 録画の隣の `.bml.jsonl` がこの形式で残るので、**名前と意味は変えない** (足すのはよい)。
 
 | 型                               | 中身                                                   |
@@ -974,7 +974,7 @@ const bml = createBml({
   clock,
   onVideoRect /* ほかは bml/engine.ts の型 */,
 });
-bml.feed(message); // ← ts/bml.ts が吐くものをそのまま
+bml.feed(message); // ← packages/arib/src/bml.ts が吐くものをそのまま
 bml.key(code, down); // AribKeyCode (20 が d)
 bml.listens("DataButtonPressed");
 bml.destroy();
@@ -1100,7 +1100,7 @@ AIT ─ transport_protocol_descriptor        (URL の頭)
     └ simple_application_location_descriptor (その先の経路)  →  アプリのURL
 ```
 
-[ts/ait.ts](../src/lib/ts/ait.ts) は表を読むだけです。**押されなくても読みます**（デコードする量が無いうえ、押すまで在ることが
+[packages/arib/src/ait.ts](../packages/arib/src/ait.ts) は表を読むだけです。**押されなくても読みます**（デコードする量が無いうえ、押すまで在ることが
 分からないのでは出したいものが出せない）。載っていない局では PMT に印が無いので、AIT を待つこともしません。
 
 見つけたら、操作バーの下の段に**別のタブで開くボタン**を出します (受信機の API が無いので、多くはそのままでは動きません)。

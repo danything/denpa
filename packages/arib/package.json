@@ -1,0 +1,29 @@
+{
+  "name": "@doany/arib",
+  "version": "0.1.0",
+  "description": "日本のデジタル放送 (ARIB) の TS を読む: PSI・PES・EIT・ARIB の文字・字幕・データ放送",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danything/denpa.git",
+    "directory": "packages/arib"
+  },
+  "keywords": [
+    "arib",
+    "isdb",
+    "mpeg-ts",
+    "eit",
+    "epg",
+    "b24",
+    "caption",
+    "bml"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  }
+}

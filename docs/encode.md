@@ -118,7 +118,7 @@ ffmpeg -i <録画.m2ts> ... -map 0:p:<局>:s:0? -c:s copy <出力.mkv>   # 字�
 
 **ffmpeg は ARIB 字幕をデコードしません。** `-c:s copy` は中身をそのままコンテナに移すだけなので、字幕のデコーダ
 (`--enable-libaribcaption`) は要らない (ffprobe もデコーダなしで `Subtitle: arib_caption` と名乗る)。
-デコードするのはライブも録画も denpa ([`ts/b24caption.ts`](../src/lib/ts/b24caption.ts))。
+デコードするのはライブも録画も denpa ([`packages/arib/src/b24caption.ts`](../packages/arib/src/b24caption.ts))。
 
 ## トラックの名前は放送のものを入れる
 

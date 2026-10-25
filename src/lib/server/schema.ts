@@ -1,5 +1,6 @@
 import { isAbsolute, join, relative, sep } from "node:path";
 
+import type { Genre } from "@doany/arib/eit";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -12,7 +13,7 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-import type { Audio, Genre } from "../arib";
+import type { Audio } from "../arib";
 import type { ChannelType, ReservationState } from "../types";
 import type { Range } from "./cm";
 import { config } from "./config";

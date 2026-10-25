@@ -8,6 +8,9 @@
  * 出典は ARIB STD-B10 第2部 (content_nibble / component_type)。
  */
 
+import type { Genre } from "@doany/arib/eit";
+import { LANGUAGE } from "@doany/arib/language";
+
 /** ジャンル大分類。content_nibble_level_1 */
 const GENRE_LV1: Record<number, string> = {
   0: "ニュース／報道",
@@ -142,11 +145,6 @@ const GENRE_LV2: Record<number, Record<number, string>> = {
   },
 };
 
-export interface Genre {
-  lv1: number;
-  lv2: number;
-}
-
 /**
  * ルールの条件に出すジャンルの一覧。予備(0xC/0xD)は放送に出てこないので載せない。
  *
@@ -226,27 +224,6 @@ const AUDIO_TYPE: Record<number, string> = {
   15: "0/2/0-3/0/2-0.1",
   16: "2/0/0-3/2/3-0.2",
   17: "3/3/3-5/2/3-3/0/0.2",
-};
-
-/**
- * ISO 639-2 のうち日本の放送で出てくるもの。
- *
- * **音声も字幕も同じ表を使う** — 字幕側 (`server/captions.ts`) で別に持っていた頃は
- * 4つ足りず、同じ放送の音声が「イタリア語」、字幕が「ita」と出る形になっていた
- */
-export const LANGUAGE: Record<string, string> = {
-  jpn: "日本語",
-  eng: "英語",
-  deu: "ドイツ語",
-  fra: "フランス語",
-  ita: "イタリア語",
-  rus: "ロシア語",
-  zho: "中国語",
-  kor: "韓国語",
-  spa: "スペイン語",
-  por: "ポルトガル語",
-  tha: "タイ語",
-  etc: "その他",
 };
 
 /** 音声の言語を読める名前に */

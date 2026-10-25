@@ -14,3 +14,5 @@ deploy
 docs
 # 文書サイト (GitHub Pages)。イメージには入れない
 site
+# npm に出すときに組むもの (packages/arib)
+packages/*/dist

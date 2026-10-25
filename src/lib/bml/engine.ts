@@ -19,8 +19,8 @@
 import type {
   ProgramInfoMessage,
   ResponseMessage,
-} from "#lib/ts/bml-protocol.js";
-import { ascii, u16 } from "#lib/ts/bytes.js";
+} from "@doany/arib/bml-protocol";
+import { ascii, u16 } from "@doany/arib/bytes";
 
 import {
   type BmlIp,

@@ -1,18 +1,19 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { onMount, untrack } from "svelte";
-
-  import { submitting } from "#lib/actions.js";
-  import { arming } from "#lib/arming.svelte.js";
-  import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
-  import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
+  import type { ResponseMessage } from "@doany/arib/bml-protocol";
   import {
     CAPTION_TEXT_VERSION,
     type CaptionLanguage,
     captionLanguage as languageOf,
     type CaptionPage,
     type CaptionPages,
-  } from "#lib/caption-text.js";
+  } from "@doany/arib/caption-text";
+  import { onMount, untrack } from "svelte";
+
+  import { submitting } from "#lib/actions.js";
+  import { arming } from "#lib/arming.svelte.js";
+  import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
+  import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import { ambientMode } from "#lib/components/player/ambient.svelte.js";
   import { screenAwake } from "#lib/components/player/awake.svelte.js";
@@ -98,7 +99,6 @@
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import { type RemuxPlayer, remuxPlayer } from "#lib/remux-player.js";
   import { keepResume } from "#lib/resume.js";
-  import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
   import {
     type Cue,
     currentCue,

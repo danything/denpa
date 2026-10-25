@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
+import { PID_PAT } from "@doany/arib/psi";
+import {
+  packetize,
+  patSection,
+  pcrPacket,
+  programMap,
+  stream,
+} from "@doany/arib/synth";
+
 import { BroadcastClock, parseStart, readPcr } from "./clock";
-import { PID_PAT } from "./psi";
-import { packetize, patSection, pcrPacket, programMap, stream } from "./synth";
 
 const PID_PMT = 0x1000;
 const PID_PCR = 0x0100;

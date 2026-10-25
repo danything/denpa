@@ -1,14 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ResponseMessage } from "./bml-protocol";
-import { captureDataBroadcast } from "./data-capture";
-import {
-  feedFor,
-  type PlacedMessage,
-  playbackMsAt,
-  replayAt,
-  toPlaybackTimeline,
-} from "./data-timeline";
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
 import {
   BML_TS,
   bmlHead,
@@ -18,7 +10,16 @@ import {
   packetize,
   stream,
   tdtPacket as tdt,
-} from "./synth";
+} from "@doany/arib/synth";
+
+import { captureDataBroadcast } from "./data-capture";
+import {
+  feedFor,
+  type PlacedMessage,
+  playbackMsAt,
+  replayAt,
+  toPlaybackTimeline,
+} from "./data-timeline";
 
 /*
  * 録画のデータ放送。**ライブ (carousel.ts) と違って時間変化を持つ。**

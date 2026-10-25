@@ -1,5 +1,5 @@
 /**
- * カルーセルで届いたファイルを持つ。**デコードするのはサーバ** ([ts/bml.ts](../ts/bml.ts)) で、ここには
+ * カルーセルで届いたファイルを持つ。**デコードするのはサーバ** ([packages/arib/src/bml.ts](../../../packages/arib/src/bml.ts)) で、ここには
  * 組み上がったモジュールが `ResponseMessage` で届く。
  *
  * - 文書の中の名前 (`/40/0000/startup.bml`・`~/0001/a.png`・`a.png`・`arib-dc://-1.-1.-1/40/0000`)
@@ -16,7 +16,7 @@ import type {
   ModuleListEntry,
   ProgramInfoMessage,
   ResponseMessage,
-} from "#lib/ts/bml-protocol.js";
+} from "@doany/arib/bml-protocol";
 
 import type { ImageSource } from "./render";
 

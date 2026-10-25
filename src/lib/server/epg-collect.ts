@@ -9,13 +9,13 @@
  *   選局を共有させるのでチューナーは増えない。番組表はただで手に入る
  *
  * 集め終わりは時間ではなく**EIT自身が言っている**ところで決める
- * (`ts/eit.ts` の ScheduleProgress)。揃えばすぐ離すので、次のチャンネルへ回せる。
+ * (`packages/arib/src/eit.ts` の ScheduleProgress)。揃えばすぐ離すので、次のチャンネルへ回せる。
  */
 
+import { EpgReader } from "@doany/arib/eit";
+import { ServiceReader } from "@doany/arib/psi";
 import { max, sql } from "drizzle-orm";
 
-import { EpgReader } from "../ts/eit";
-import { ServiceReader } from "../ts/psi";
 import { config } from "./config";
 import { orm } from "./db";
 import {

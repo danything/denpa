@@ -34,6 +34,7 @@
 
 import { existsSync, statSync } from "node:fs";
 
+import { CLOCK, WRAP } from "@doany/arib/pes";
 import { error } from "@sveltejs/kit";
 
 import {
@@ -44,7 +45,6 @@ import {
 } from "#lib/arib.js";
 import type { LiveCodec } from "#lib/live.js";
 import type { FileSource } from "#lib/source.js";
-import { CLOCK, WRAP } from "#lib/ts/pes.js";
 import {
   BUSY,
   type EncodedSource,

@@ -15,9 +15,7 @@
  * そちらは別仕立て (`logo-dsmcc.ts`)。両方まとめてここで面倒を見る。
  */
 
-import { u16 } from "./bytes";
-import { DsmccLogoCollector } from "./logo-dsmcc";
-import { withPalette } from "./logo-palette";
+import { u16 } from "@doany/arib/bytes";
 import {
   descriptors,
   PacketStream,
@@ -25,7 +23,10 @@ import {
   sdtServices,
   SectionAssembler,
   TABLE_SDT_ACTUAL,
-} from "./psi";
+} from "@doany/arib/psi";
+
+import { DsmccLogoCollector } from "./logo-dsmcc";
+import { withPalette } from "./logo-palette";
 
 const PID_CDT = 0x0029;
 

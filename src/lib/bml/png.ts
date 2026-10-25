@@ -7,7 +7,8 @@
  *   PNG を組むので、canvas も圧縮の API も要らない
  */
 
-import { ascii, concatBytes } from "#lib/ts/bytes.js";
+import { ascii, concatBytes } from "@doany/arib/bytes";
+
 import { PNG_SIGNATURE, pngChunk } from "#lib/ts/png.js";
 
 import type { Rgba } from "./clut";

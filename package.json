@@ -1,7 +1,11 @@
 {
   "name": "denpa",
   "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "packages/*"
+  ],
   "devDependencies": {
+    "@doany/arib": "workspace:*",
     "@anyblades/blades": "3.1.0-beta.6",
     "@iconify-json/lucide": "^1.2.147",
     "@playwright/test": "^1.64.1",
@@ -23,10 +27,10 @@
     "dev": "bunx --bun vite dev",
     "build": "bunx --bun vite build",
     "start": "bun ./server.js",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p src/service-worker/tsconfig.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit -p src/service-worker/tsconfig.json && tsc --noEmit -p packages/arib",
     "db:generate": "drizzle-kit generate",
     "test": "bun run lint && bun run check && bun run test:unit && playwright test",
-    "test:unit": "bun test src",
+    "test:unit": "bun test src packages",
     "test:conformance": "dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r linux-x64 -o agent/publish && AGENT_CMD=\"$PWD/agent/publish/denpa-agent\" bun test agent/conformance.test.ts",
     "test:e2e": "playwright test",
     "lint": "oxlint && bun fmt --check",

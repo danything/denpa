@@ -20,15 +20,19 @@
  *    ロゴデータモジュールになる
  * 5. モジュールの中に「どの局のロゴか」と PNG が入っている
  *
- * 3〜4 は [dsmcc.ts](dsmcc.ts) が持っている。**データ放送も同じ運び方**なので、
+ * 3〜4 は [dsmcc.ts](../../../packages/arib/src/dsmcc.ts) が持っている。**データ放送も同じ運び方**なので、
  * ここに残っているのはロゴの読み方 (どの ES を見るか、モジュールの中身) だけ。
  *
  * PNG は地上波と同じく色の表が抜けているので、入れ直してから返す。
  */
 
-import { u16 } from "./bytes";
-import { ModuleBuilder, parseDdb, parseDii, TABLE_DII } from "./dsmcc";
-import { withPalette } from "./logo-palette";
+import { u16 } from "@doany/arib/bytes";
+import {
+  ModuleBuilder,
+  parseDdb,
+  parseDii,
+  TABLE_DII,
+} from "@doany/arib/dsmcc";
 import {
   descriptors,
   parsePat,
@@ -36,7 +40,9 @@ import {
   pmtStreams,
   SectionAssembler,
   TABLE_PMT,
-} from "./psi";
+} from "@doany/arib/psi";
+
+import { withPalette } from "./logo-palette";
 
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
 const ESS_SERVICE_ID = 929;

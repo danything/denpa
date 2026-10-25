@@ -10,5 +10,5 @@ ignorePatterns = [
   # 文書サイトの公開物 (Search Console の確認用の HTML。Google が決めた中身のまま置く)
   "site/public/",
   # 区点と突き合わせる表
-  "src/lib/ts/b24-tables.ts",
+  "packages/arib/src/b24-tables.ts",
 ]

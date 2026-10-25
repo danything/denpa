@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import { CLOCK, WRAP } from "./pes";
-import { PACKET, SYNC } from "./psi";
+import { CLOCK, WRAP } from "@doany/arib/pes";
+import { PACKET, SYNC } from "@doany/arib/psi";
+import {
+  AUDIO_TICKS,
+  FRAME_TICKS,
+  packetizePes,
+  pes,
+} from "@doany/arib/synth-av";
+
 import { lastVideoPts, type ReadAt, seekTs, sinceHead, tsHead } from "./seek";
-import { AUDIO_TICKS, FRAME_TICKS, packetizePes, pes } from "./synth-av";
 
 /** 空のパケット (PID 0x1FFF)。放送の量 (1 秒に数 MB) に近づけて、二分探索に幅を持たせる */
 function nullPacket(): Uint8Array {

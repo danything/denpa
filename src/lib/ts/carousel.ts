@@ -1,7 +1,7 @@
 /**
  * データ放送で配ったものを覚えておく。**遅れて繋いだ人に配り直すため。**
  *
- * デコードするのは [bml.ts](bml.ts) で、
+ * デコードするのは [bml.ts](../../../packages/arib/src/bml.ts) で、
  * ここはその出力を受けて「いま出すのに要るもの」だけを持つ。**入力も
  * 出力も持たない** — 繋ぐのは [server/databroadcast.ts](../server/databroadcast.ts)。
  *
@@ -49,7 +49,7 @@
  * 映像が出ないより先に、こういう形で出る
  */
 
-import type { ResponseMessage } from "./bml-protocol";
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
 
 /**
  * 覚えておくモジュールの上限。**溜め込みすぎない歯止め。**

@@ -6,7 +6,7 @@
  *
  * [stream.md](../../../docs/stream.md#データ放送の統合) にあたる第3段階。
  *
- * デコードするのは [ts/bml.ts](../ts/bml.ts)、覚えておくのは [ts/carousel.ts](../ts/carousel.ts)。
+ * デコードするのは [packages/arib/src/bml.ts](../../../packages/arib/src/bml.ts)、覚えておくのは [ts/carousel.ts](../ts/carousel.ts)。
  * **ここは入出力の付け替えと、転んだときの畳み方だけ。**
  *
  * ## リクエストされてからデコードする
@@ -20,8 +20,9 @@
  * 間隔が空く)。
  */
 
-import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
-import { BmlDecoder } from "#lib/ts/bml.js";
+import { BmlDecoder } from "@doany/arib/bml";
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
+
 import { Carousel } from "#lib/ts/carousel.js";
 
 export type { ResponseMessage };

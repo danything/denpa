@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { CHANNEL } from "#lib/live.js";
 import {
   captionMkv as mkv,
   encodeAribText,
   management,
   text,
-} from "#lib/ts/synth-caption.js";
+} from "@doany/arib/synth-caption";
+
+import { CHANNEL } from "#lib/live.js";
 
 import {
   appFrame,

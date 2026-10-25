@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { inflateSync } from "node:zlib";
 
-import type { ResponseMessage } from "#lib/ts/bml-protocol.js";
+import type { ResponseMessage } from "@doany/arib/bml-protocol";
+
 import { crc32 } from "#lib/ts/png.js";
 
 import { parseDrcs } from "./drcs";

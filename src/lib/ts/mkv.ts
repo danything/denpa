@@ -19,7 +19,7 @@
  * 決めておけば、知らない要素は大きさぶん飛ばせる**ので、全部を知らなくてよい。
  */
 
-import { concatBytes, u16 } from "./bytes";
+import { concatBytes, u16 } from "@doany/arib/bytes";
 
 /** 中に入る (入れ子の親として扱う) もの */
 export const SEGMENT = 0x18538067;

@@ -7,14 +7,15 @@
  */
 import { deflateSync } from "node:zlib";
 
-import { joinBytes } from "../../src/lib/ts/bytes";
-import { PNG_SIGNATURE, pngChunk } from "../../src/lib/ts/png";
+import { joinBytes } from "@doany/arib/bytes";
 import {
   captionMkv,
   encodeAribText,
   management,
   text,
-} from "../../src/lib/ts/synth-caption";
+} from "@doany/arib/synth-caption";
+
+import { PNG_SIGNATURE, pngChunk } from "../../src/lib/ts/png";
 import type { FakeService } from "./services";
 
 /** 地上波の局。ID の作り方は本物と同じ (network_id × 100000 + service_id) */

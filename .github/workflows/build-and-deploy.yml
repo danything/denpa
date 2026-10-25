@@ -8,6 +8,7 @@ on:
       - "Dockerfile"
       - ".dockerignore"
       - "src/**"
+      - "packages/**"
       - "static/**"
       - "package.json"
       - "bun.lock"

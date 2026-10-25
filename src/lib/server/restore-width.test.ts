@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { eitSection, packetize, stream } from "../ts/synth";
+import { eitSection, packetize, stream } from "@doany/arib/synth";
 
 /**
  * 半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す。

@@ -10,7 +10,8 @@
  * Mirakurun も同じことをしている (aribts の TsLogo.decode)。
  */
 
-import { ascii, concatBytes } from "./bytes";
+import { ascii, concatBytes } from "@doany/arib/bytes";
+
 import { pngChunk } from "./png";
 
 /**

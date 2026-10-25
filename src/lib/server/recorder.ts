@@ -2,10 +2,10 @@ import { once } from "node:events";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { EpgReader } from "@doany/arib/eit";
+import { ServiceFilter } from "@doany/arib/service-filter";
 import { eq, sql } from "drizzle-orm";
 
-import { EpgReader } from "../ts/eit";
-import { ServiceFilter } from "../ts/service-filter";
 import type { Recording, Reservation } from "../types";
 import { fileSize } from "./chase";
 import { config } from "./config";
