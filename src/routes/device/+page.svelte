@@ -27,7 +27,7 @@
 
 <svelte:head><title>テレビのペアリング - denpa</title></svelte:head>
 
-<div class="solo" data-testid="device-page">
+<div class="solo glow" data-testid="device-page">
   {#if data.viaToken || form?.viaToken}
     <h1>アクセストークンではペアリングできません</h1>
     <p>

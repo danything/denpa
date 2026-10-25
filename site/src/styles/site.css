@@ -17,6 +17,11 @@
   --sl-color-accent-low: #092a3d; /* --pico-text-selection-color (#01aaff の 19%) を地 (#0b0c0f) に重ねた色 */
   --sl-color-accent: #01aaff; /* --pico-primary */
   --sl-color-accent-high: #79c0ff; /* --pico-primary-hover */
+  --dp-glow: color-mix(
+    in srgb,
+    var(--sl-color-accent) 16%,
+    transparent
+  ); /* トップの見出しの地の光。app.css の --dp-glow と同じ */
 
   --sl-color-white: #fff;
   --sl-color-gray-1: #dfe3eb; /* slate-100 */
@@ -47,6 +52,7 @@
   --sl-color-accent-low: #c0e6f9; /* --pico-text-selection-color (#029ae8 の 25%) を白に重ねた色 */
   --sl-color-accent: #0172ad; /* --pico-primary */
   --sl-color-accent-high: #015887; /* --pico-primary-hover */
+  --dp-glow: color-mix(in srgb, var(--sl-color-accent) 12%, transparent);
 
   --sl-color-white: #181c25; /* slate-900 */
   --sl-color-gray-1: #2a3140; /* slate-800 */

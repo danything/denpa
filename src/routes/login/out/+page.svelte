@@ -9,7 +9,7 @@
   import { resolve } from "$app/paths";
 </script>
 
-<div class="solo">
+<div class="solo glow">
   <h1>ログアウトしました</h1>
   <p>
     この端末のログイン情報を消しました。ログイン先 (IdP)

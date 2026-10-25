@@ -144,7 +144,7 @@
     </p>
 
     {#if data.rules.length === 0}
-      <div class="empty" data-testid="rule-empty">
+      <div class="empty glow" data-testid="rule-empty">
         <p class="bold">ルールはまだありません</p>
         <p class="small muted">
           <a href={resolve("search")}>検索</a

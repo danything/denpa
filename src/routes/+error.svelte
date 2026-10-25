@@ -40,7 +40,7 @@
 
 <svelte:head><title>{message} - denpa</title></svelte:head>
 
-<div class="solo" data-testid="error-page">
+<div class="solo glow" data-testid="error-page">
   <h1>{message}</h1>
   <p>{hint} <span class="num">({page.status})</span></p>
   <div class="actions">

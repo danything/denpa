@@ -121,6 +121,20 @@ const head = [
         margin-inline: auto;
         padding-block: 1rem 0;
         gap: 1.5rem;
+        position: relative;
+        isolation: isolate;
+    }
+    /*
+     * 見出しの段の地に、主の色の淡い光を敷く (docs/design.md の「見せる画面」。画面の `.glow` と同じ)。
+     * ぼかさず、動かさない。光は段の内側で消える (closest-side) ので、縁は見えず横にもはみ出さない
+     */
+    .hero::before {
+        content: '';
+        position: absolute;
+        inset: -2rem 0 0;
+        z-index: -1;
+        background: radial-gradient(closest-side, var(--dp-glow), transparent);
+        pointer-events: none;
     }
     .hero > .hero-html {
         width: 100%;

@@ -147,7 +147,7 @@
   {#if loading}
     <p class="muted">読み込んでいます…</p>
   {:else if list.length === 0}
-    <div class="empty">
+    <div class="empty glow">
       <p>まだ何も保存していません。</p>
       <p class="small muted">
         録画の詳細の「端末に保存」を押すと、オフラインでも観られるようになります。

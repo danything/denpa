@@ -785,7 +785,7 @@
       {#if shownItems.length === 0}
         {#if items.length === 0}
           <!-- 空のときは次に何をすればよいかまで言う -->
-          <div class="empty">
+          <div class="empty glow">
             <p class="empty-title">予約も録画もありません</p>
             <p class="empty-hint">
               番組表から予約するか、ルールを作ると自動で入ります

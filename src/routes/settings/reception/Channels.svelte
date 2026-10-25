@@ -336,7 +336,7 @@
 
     {#if coverage.length === 0}
       <!-- まだ1つも無い。表の場所の真ん中に、スキャンの欄と1行の案内 -->
-      <div class="empty">
+      <div class="empty glow">
         <p class="small muted">
           チャンネルがまだありません。種別を選んでスキャンしてください
         </p>
