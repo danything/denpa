@@ -1,8 +1,7 @@
 # ---------------------------------------------------------------------------
 # チューナーエージェント (.NET)。
 #
-# **Native AOT で実行ファイル1個。** 別のPCへ置くときに「まず何かを入れて
-# ください」が要らないことが条件なので、ここは外せない。
+# **Native AOT で実行ファイル1個** (外せないわけは Denpa.Agent.csproj)。
 #
 # denpa から見える API は agent/conformance.test.ts が押さえている
 # (本物を起こして HTTP で当てる)。入れ替えはイメージのタグを変えるだけ。
@@ -156,12 +155,11 @@ FROM gcr.io/distroless/cc-debian13:latest
 
 COPY --from=fetch /opt/ /opt/
 
-# 設定は PVC (/config) に置く。**どちらも denpa の画面が書く。**
+# 設定は PVC (/config) に置く (/config/tuners.json と /config/channels.json はエージェントの既定。Config.cs)。
+# **どちらも denpa の画面が書く。**
 #
 # **どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
-ENV TUNERS_FILE=/config/tuners.json \
-    CHANNELS_FILE=/config/channels.json
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
 
 EXPOSE 25252

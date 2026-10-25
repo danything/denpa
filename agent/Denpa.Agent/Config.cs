@@ -181,12 +181,9 @@ public sealed class Config(string tunersFile, string channelsFile)
         if (written.Count > 0) return (written, false);
 
         var found = DeviceProbe.Detect();
-        if (found.Count == 0)
-        {
-            Log.Write($"チューナーが見つかりません ({TunersFile} に書けば、そちらを使います)");
-            return (found, true);
-        }
-        Log.Write($"{TunersFile} に定義が無いので、刺さっている機材を使います:");
+        Log.Write(found.Count == 0
+            ? $"チューナーが見つかりません ({TunersFile} に書けば、そちらを使います)"
+            : $"{TunersFile} に定義が無いので、刺さっている機材を使います:");
         foreach (var tuner in found) Log.Write($"  {tuner.Name} [{string.Join(", ", tuner.Types)}] {tuner.Device}");
         return (found, true);
     }

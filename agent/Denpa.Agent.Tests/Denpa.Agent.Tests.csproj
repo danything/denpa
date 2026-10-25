@@ -45,10 +45,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- MTP (global.json の test.runner) で回すので、旧 VSTest 系
-             (Microsoft.NET.Test.Sdk / xunit.runner.visualstudio) は持たない。
-             TUnit だけで MTP のテストアプリとして完結する。TUnit はソース
-             ジェネレータで動くので、本体と同じく Native AOT でも通る -->
+        <!-- MTP (global.json の test.runner) で回す (旧 VSTest 系を持たないわけは上)。
+             TUnit はソースジェネレータで動くので、本体と同じく Native AOT でも通る -->
         <PackageReference Include="TUnit" Version="1.76.0" />
     </ItemGroup>
 
