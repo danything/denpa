@@ -77,7 +77,7 @@ test.describe("接続元のアドレス", () => {
   }) => {
     const closed = await bootClosed(test.info().workerIndex, stack.root, {
       TRUSTED_NETWORKS: "10.10.0.0/16",
-      // 前の版の設定が残っていても読まない (起動時に知らせるだけ)
+      // 前のバージョンの設定が残っていても読まない (起動時に知らせるだけ)
       ADDRESS_HEADER: "x-forwarded-for",
     });
     try {

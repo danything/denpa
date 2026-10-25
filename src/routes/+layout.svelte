@@ -305,7 +305,7 @@
 
   /**
    * **放送の字 (Denpa Font) をここで名乗らせる** (使うのは `app.css` の `.broadcast`)。
-   * 版付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
+   * バージョン付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
    * 使う字が画面に出たときだけ落ちてくる。届くまでは画面の字で出しておく (`swap`)
    */
   const fontFace = `<style>@font-face{font-family:"Denpa Font";src:url("${denpaFontUrl()}") format("woff2");font-display:swap}</style>`;
@@ -381,7 +381,7 @@
         <span class="visually-hidden">denpa</span>
       </a>
       <!--
-                **新しい版が出ている** (server/update.ts が GitHub のリリースを見比べる)。
+                **新しいバージョンが出ている** (server/update.ts が GitHub のリリースを見比べる)。
                 押せばリリースのページ。閉じるボタンは無い — 上げるか、リリースが消えれば引っ込む
             -->
       {#if data.update !== null}
@@ -523,7 +523,7 @@
             {/each}
           </ul>
           <!--
-                        狭い幅ではヘッダーを隠すので、ヘッダーにあったもの (新しい版・テーマ) をここに置く
+                        狭い幅ではヘッダーを隠すので、ヘッダーにあったもの (新しいバージョン・テーマ) をここに置く
                     -->
           <ul class="more-list more-extra">
             {#if data.update !== null}

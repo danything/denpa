@@ -25,7 +25,7 @@ test.describe("PWA", () => {
     expect(manifest.name).toBe("denpa");
     // ホーム画面から開いたときにブラウザのUIを出さない
     expect(manifest.display).toBe("standalone");
-    // 丸く切り抜かれる端末があるので、そのための版も要る
+    // 丸く切り抜かれる端末があるので、そのためのアイコンも要る
     expect(
       manifest.icons.some(
         (i: { purpose?: string }) => i.purpose === "maskable",

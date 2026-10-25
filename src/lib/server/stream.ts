@@ -170,7 +170,7 @@ export async function run(
              * 型検査では気付けず、`String(out.length)` が "undefined" になって
              * `Content-Length: undefined` を送り、**本文が丸ごと落ちていた**
              * (6.4MB の字幕を持つ録画で字幕が出ない)。
-             * `arrayBuffer()` は版によらず ArrayBuffer なので、自分で包む
+             * `arrayBuffer()` はバージョンによらず ArrayBuffer なので、自分で包む
              */
             new Response(proc.stdout as ReadableStream<Uint8Array>)
               .arrayBuffer()

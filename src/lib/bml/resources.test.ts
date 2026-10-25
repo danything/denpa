@@ -216,7 +216,7 @@ describe("カルーセルのファイル", () => {
     ).toBeNull();
   });
 
-  test("押さえたモジュールは版が上がっても持ち続ける。外すと新しい版", async () => {
+  test("押さえたモジュールはバージョンが上がっても持ち続ける。外すと新しいバージョン", async () => {
     const r = new Resources();
     r.feed(pmt(0x40));
     r.feed(dii(0x40, [[1, 1]]));
@@ -290,7 +290,7 @@ describe("DRCS・PNG", () => {
 });
 
 describe("押さえ直し", () => {
-  test("同じ種類で押さえ直すと今の版になり、通知は 1 回ずつ", async () => {
+  test("同じ種類で押さえ直すと今のバージョンになり、通知は 1 回ずつ", async () => {
     const r = new Resources();
     r.feed(pmt(0x40));
     r.feed(dii(0x40, [[1, 1]]));
@@ -446,7 +446,7 @@ describe("長く流し続けても持つものが増えない", () => {
     };
   }
 
-  test("版上げを何千回くり返しても、持つのは今の版だけで、作った URL は全部返す", () => {
+  test("バージョンの更新を何千回くり返しても、持つのは今のバージョンだけで、作った URL は全部返す", () => {
     const { revoked, restore } = countRevokes();
     try {
       const r = new Resources();
@@ -465,7 +465,7 @@ describe("長く流し続けても持つものが増えない", () => {
         made++;
       }
       expect(r.has(0x40, 1)).toBe(true);
-      // 今の版の 1 つだけが残る
+      // 今のバージョンの 1 つだけが残る
       expect(made - revoked.length).toBe(1);
       expect((r as unknown as { cache: Map<string, unknown> }).cache.size).toBe(
         1,

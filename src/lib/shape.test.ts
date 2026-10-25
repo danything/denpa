@@ -137,7 +137,7 @@ describe("外から来た JSON の形式", () => {
       types: ["SAT"],
       channel: null,
     };
-    // 型は付くが中身はそのまま (版がずれた相手を止めない)
+    // 型は付くが中身はそのまま (バージョンがずれた相手を止めない)
     const first: unknown = tolerate(
       TUNER,
       odd,
@@ -154,7 +154,7 @@ describe("外から来た JSON の形式", () => {
     expect(second).toBe(odd);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(
-      /^\[shape\] エージェントの \/denpa\/tunersの形式が違います \(相手の版がずれている\?\)。そのまま使います: /,
+      /^\[shape\] エージェントの \/denpa\/tunersの形式が違います \(相手のバージョンがずれている\?\)。そのまま使います: /,
     );
     expect(warnings[0]).toContain("types[0] は決まった値");
     // 同じ相手なら、違いの中身 (値) が変わっても繰り返さない

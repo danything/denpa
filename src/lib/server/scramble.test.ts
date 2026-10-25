@@ -100,7 +100,7 @@ describe("カードリーダーの状態", () => {
     expect(card.readers[3]?.error).toBe("使えません");
   });
 
-  test("前の版のエージェント (名前だけの並び) でも落ちずに名前を出す", () => {
+  test("前のバージョンのエージェント (名前だけの並び) でも落ちずに名前を出す", () => {
     const warn = console.warn;
     console.warn = () => {};
     try {

@@ -189,7 +189,7 @@ public class CardLanTests
         await Assert.That(refused).StartsWith("鍵を配る拠点に断られました: ");
         await Assert.That(refused).Contains("203.0.113.5");
 
-        // 前の版の CARD_URL (普通の API のポート) のまま
+        // 前のバージョンの CARD_URL (普通の API のポート) のまま
         var old = RemoteCard.Refused("http://card:25252", 404, Encoding.UTF8.GetBytes("""{"ok":false,"error":"not found"}"""), "鍵");
         await Assert.That(old).Contains("CARD_SHARE_PORT");
 

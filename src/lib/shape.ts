@@ -10,7 +10,7 @@
  * 型と読み取り関数を別々に書くと、片方だけ直したときに TS は何も言わない。
  *
  * 読めなければ `ShapeError` を投げる。どこが違うかを道筋 (`tuners[0].name`) で言う —
- * 「形式が違う」だけでは、相手のどの版と噛み合っていないのか分からない
+ * 「形式が違う」だけでは、相手のどのバージョンと噛み合っていないのか分からない
  */
 
 export class ShapeError extends Error {}
@@ -152,7 +152,7 @@ export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
  * (`ID トークンの形式が違います: exp は数のはずが 無し`)。
  *
  * 止めてよいのは、違う形式のまま進むと危ないところ (ID トークン) だけ。相手が
- * 別の版で動いているだけなら止めずに通す (`tolerate`)
+ * 別のバージョンで動いているだけなら止めずに通す (`tolerate`)
  */
 export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
   try {
@@ -175,7 +175,7 @@ const warned = new Set<string>();
  * 読む。**形式が違っても止めない。** 警告を1回だけ出して、来たものをそのまま型にする
  * (前の `as X` と同じ振る舞い)。
  *
- * 相手 (チューナーエージェント) は別のリポジトリで、版がずれると鍵が増えたり
+ * 相手 (チューナーエージェント) は別のリポジトリで、バージョンがずれると鍵が増えたり
  * 名前が変わったりする。そのたびに録画が止まるのでは困る — 動いているものは
  * 動かしたまま、**どこが違うかを言う**。直すのは人
  */
@@ -192,7 +192,7 @@ export function tolerate<T>(
     if (!warned.has(what)) {
       warned.add(what);
       warn(
-        `[shape] ${what}の形式が違います (相手の版がずれている?)。そのまま使います: ${error.message}`,
+        `[shape] ${what}の形式が違います (相手のバージョンがずれている?)。そのまま使います: ${error.message}`,
       );
     }
     return value as T;

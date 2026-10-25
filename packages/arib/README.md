@@ -57,9 +57,9 @@ const page = captions.decode(pesPayload);
 if (page !== null) draw(page); // 形式は caption-text.ts の CaptionPage
 ```
 
-## 版
+## バージョン
 
-0.x の間は、小さい版 (0.1 → 0.2) で互換のない変更をすることがあります。
+0.x の間は、マイナーバージョン (0.1 → 0.2) で互換のない変更をすることがあります。
 
 ## ライセンス
 

@@ -524,7 +524,7 @@ export const cmMaterials = sqliteTable("cm_materials", {
   recording_id: integer("recording_id")
     .primaryKey()
     .references(() => recordings.id, { onDelete: "cascade" }),
-  /** 中身の形式の版 (`cm-material.MATERIAL_VERSION`) */
+  /** 中身の形式のバージョン (`cm-material.MATERIAL_VERSION`) */
   version: integer("version").notNull(),
   /** zstd で縮めたもの */
   data: blob("data", { mode: "buffer" }).notNull(),

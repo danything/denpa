@@ -1,6 +1,6 @@
 name: Publish release tags
 
-# **版番号と `latest` は、リリースを作ったときだけ動きます。**
+# **バージョン番号と `latest` は、リリースを作ったときだけ動きます。**
 #
 # main へ入れたぶんは `develop` に積み上がるだけです
 # (compose.prod.yml が指しているのが `latest` なので、入れて使っている人の
@@ -14,14 +14,14 @@ name: Publish release tags
 #
 # | 名前 | 例 | 動くか |
 # | --- | --- | --- |
-# | 版そのもの | `0.1.0` | **二度と動かない**。固定して使うのはこれ |
-# | 版の系列 | `0.1` | その系列の最新に動く (0.1.1 を出せばそちらへ) |
+# | バージョンそのもの | `0.1.0` | **二度と動かない**。固定して使うのはこれ |
+# | バージョンの系列 | `0.1` | その系列の最新に動く (0.1.1 を出せばそちらへ) |
 # | `latest` | | リリースのたびに動く |
 #
 # **`v` は落とします** (`v0.1.0` → `0.1.0`)。git のタグには付けるのが習わしで、
 # イメージのタグには付けないのが習わしなので、そのまま写さない。
 #
-# 版の名前を貼らずに `latest` だけ動かしていた頃は、**入れた人が版を固定できません
+# バージョンの名前を貼らずに `latest` だけ動かしていた頃は、**入れた人がバージョンを固定できません
 # でした** — 「いま動いているもの」を指す名前しか無く、戻したいときの戻し先が
 # `sha-…` (中身を最後に変えたコミット) しか無かった。
 on:
@@ -35,7 +35,7 @@ on:
         required: true
 
 permissions:
-  # write は charts ジョブが Chart.yaml の版を main に書き戻すため
+  # write は charts ジョブが Chart.yaml のバージョンを main に書き戻すため
   contents: write
   packages: write
   # 書き戻しは main へ直接 push せず、PR を出して自分でマージする (charts の最後の段)
@@ -67,10 +67,10 @@ jobs:
           echo "agent=$AGENT_TAG" >> "$GITHUB_OUTPUT"
           echo "denpa=$DENPA_TAG" >> "$GITHUB_OUTPUT"
 
-      # 貼る名前を決める。**x.y.z の形式でないタグには版の名前を貼らない** —
-      # `nightly` のような名前をそのままイメージに貼ると、版だと思って固定されてしまう。
+      # 貼る名前を決める。**x.y.z の形式でないタグにはバージョンの名前を貼らない** —
+      # `nightly` のような名前をそのままイメージに貼ると、バージョンだと思って固定されてしまう。
       #
-      # **試し版 (prerelease) には `latest` を貼りません。** compose.prod.yml が
+      # **プレリリース (prerelease) には `latest` を貼りません。** compose.prod.yml が
       # 指しているのがそれなので、貼ると入れて使っている人のところへ降ってしまう。
       - name: Decide names
         id: names
@@ -102,9 +102,9 @@ jobs:
       # 足すだけ。元のイメージが無ければここで落ちる (黙って古い latest が残るより、
       # そのほうがいい)。
       #
-      # denpa は**版を 1 層足して**から名前を付ける (.github/release.Dockerfile)。
+      # denpa は**バージョンを 1 層足して**から名前を付ける (.github/release.Dockerfile)。
       # main で組んだイメージを土台にするので中身は同じで、増えるのは ENV の 1 枚。
-      # 動いている denpa はこれで自分の版を知り、新しい版の通知を出す
+      # 動いている denpa はこれで自分のバージョンを知り、新しいバージョンの通知を出す
       #
       # **どちらも multi-arch のまま名前を付ける** (main は amd64 と arm64 を束ねた索引を
       # 出している)。エージェントの `imagetools create` は索引ごと写すので何もしなくていい。
@@ -119,7 +119,7 @@ jobs:
           base="${{ env.REGISTRY }}/${{ github.repository_owner }}"
           names="${{ steps.names.outputs.list }}"
           if [ -z "$names" ]; then
-            echo "貼る名前がありません (x.y.z ではなく、試し版でもない)" >&2
+            echo "貼る名前がありません (x.y.z ではなく、プレリリースでもない)" >&2
             exit 1
           fi
           agent_args=""
@@ -146,7 +146,7 @@ jobs:
             $denpa_args .
           echo "denpa: ${{ steps.tag.outputs.denpa }} ($platforms) + DENPA_VERSION → $names"
 
-          # 本体とエージェントを1つにしたもの (.github/aio.Dockerfile)。本体は、いま版を
+          # 本体とエージェントを1つにしたもの (.github/aio.Dockerfile)。本体は、いまバージョンを
           # 足したほう (DENPA_VERSION 入り) から写す。これも写すだけなので数秒で終わる
           aio_args=""
           for alias in $names; do aio_args="$aio_args --tag ${base}/denpa-aio:${alias}"; done
@@ -177,7 +177,7 @@ jobs:
         with:
           dotnet-version: "10.0.402"
 
-      # 名前はタグから `v` を落とした版で (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
+      # 名前はタグから `v` を落としたバージョンで (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
       # 中身は実行ファイル1個。.sha256 は install.sh が確かめる
       - name: Build and attach to the release
         env:
@@ -221,13 +221,13 @@ jobs:
           gh release upload "$tag" "$asset" "$asset.sha256" --clobber
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
-  # chart の版 (Chart.yaml の version) とアプリの版 (appVersion) をリリースの
-  # 版で揃えてパッケージにし、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の
-  # 既定の image.tag は `latest` なので、chart の版を上げなくても中身は動く —
-  # 版で固定したい人は values で `image.denpa.tag` を書く。
+  # chart のバージョン (Chart.yaml の version) とアプリのバージョン (appVersion) をリリースの
+  # バージョンで揃えてパッケージにし、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の
+  # 既定の image.tag は `latest` なので、chart のバージョンを上げなくても中身は動く —
+  # バージョンで固定したい人は values で `image.denpa.tag` を書く。
   #
-  # **Chart.yaml の版も main に書き戻す** (最後の段)。パッケージにするときは `--version` で
-  # 上書きするので動きには関係ないが、リポジトリの Chart.yaml が古い版のままだと
+  # **Chart.yaml のバージョンも main に書き戻す** (最後の段)。パッケージにするときは `--version` で
+  # 上書きするので動きには関係ないが、リポジトリの Chart.yaml が古いバージョンのままだと
   # 「どれが出ているのか」が読めない。build-and-deploy がイメージの印を書き戻すのと
   # 同じ手 (PR を出して自分でマージする。理由もそちらに書いてある)
   charts:
@@ -272,13 +272,13 @@ jobs:
             helm push "$tgz" "oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts"
           done
 
-      # main の先頭に版を書く。タグを付けたコミットではなく **いまの main** から枝を
-      # 切る (その間に進んでいても、版はリリースしたものが最新なので同じ)。
-      # 手で回した (workflow_dispatch) ときも同じ — 貼り直しなら版も同じ。
+      # main の先頭にバージョンを書く。タグを付けたコミットではなく **いまの main** から枝を
+      # 切る (その間に進んでいても、バージョンはリリースしたものが最新なので同じ)。
+      # 手で回した (workflow_dispatch) ときも同じ — 貼り直しならバージョンも同じ。
       #
       # **main へは直接 push しない** (必須チェックで守ってあり、bot のトークンも
       # 素通しにならない)。PR を出し、必須チェックの status を自分で付けて、自分でマージする。
-      # 中身は Chart.yaml の版だけで、確かめるものは無い。手順と理由は
+      # 中身は Chart.yaml のバージョンだけで、確かめるものは無い。手順と理由は
       # .github/bump-pr.sh (build-and-deploy と共通)
       - name: Open and self-merge a PR that writes the version back to Chart.yaml
         if: steps.ver.outputs.skip != 'true'
@@ -294,7 +294,7 @@ jobs:
             sed -i -E "s#^version: .*#version: ${v}#; s#^appVersion: .*#appVersion: \"${v}\"#" "$chart/Chart.yaml"
           done
           bump_finish bump-chart-version \
-            "chore: chart の版を ${v} に合わせる [skip ci]" \
-            "リリース ${v} の版を Chart.yaml に書き戻すだけ。必須チェックが付いたら自分でマージする" \
-            "Chart.yaml の版だけ。chart はこの run が出した" \
+            "chore: chart のバージョンを ${v} に合わせる [skip ci]" \
+            "リリース ${v} のバージョンを Chart.yaml に書き戻すだけ。必須チェックが付いたら自分でマージする" \
+            "Chart.yaml のバージョンだけ。chart はこの run が出した" \
             charts/*/Chart.yaml

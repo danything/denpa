@@ -244,7 +244,7 @@ interface Component {
   dataEventId: number;
   /** 組み立て中のモジュール (moduleId ごと) */
   building: Map<number, Building>;
-  /** 配り終えたモジュールの版 (`doneMark`)。**同じものを配り直さない**ため */
+  /** 配り終えたモジュールのバージョン (`doneMark`)。**同じものを配り直さない**ため */
   done: Map<number, string>;
   /** 今の DII (諦めたモジュールを除いた一覧を配り直すのに使う) */
   dii: Dii | null;
@@ -254,7 +254,7 @@ interface Component {
   abandoned: Set<number>;
 }
 
-/** `Component.done` に置く印。モジュールの版とカルーセルの回 (dataEventId) の組 */
+/** `Component.done` に置く印。モジュールのバージョンとカルーセルの回 (dataEventId) の組 */
 function doneMark(component: Component, version: number): string {
   return `${version}:${component.dataEventId}`;
 }
@@ -429,8 +429,8 @@ export class BmlDecoder {
   /**
    * **来ないモジュールを諦める** (`GIVE_UP_ROUNDS`)。待っている受け側 (`Resources` の `wait`) は、
    * DII に無いモジュールを「もう来ない」と決める (`gone`) ので、諦めたものを除いた一覧を配り直して
-   * 待ちを終わらせる。前の DII で配り終えた版のままのもの (受け側が持っている) は一覧から外さず、
-   * 組み立てるのをやめるだけ。次に DII の版が変われば、また待つ
+   * 待ちを終わらせる。前の DII で配り終えたバージョンのままのもの (受け側が持っている) は一覧から外さず、
+   * 組み立てるのをやめるだけ。次に DII のバージョンが変われば、また待つ
    */
   private giveUp(component: Component): void {
     const limit = component.size * GIVE_UP_ROUNDS;
@@ -455,7 +455,7 @@ export class BmlDecoder {
     for (const waiting of component.building.values())
       waiting.quietBytes += ddb.block.length;
     const held = component.building.get(ddb.moduleId);
-    // 版が食い違うブロックを混ぜると壊れたファイルができる
+    // バージョンが食い違うブロックを混ぜると壊れたファイルができる
     if (held === undefined || held.builder.moduleVersion !== ddb.moduleVersion)
       return;
     const before = held.builder.blocks;
@@ -472,7 +472,7 @@ export class BmlDecoder {
     // 次の DII が来るまで組み立て直さない
     component.building.delete(moduleId);
     /*
-     * **同じものを配り直さない。** カルーセルは回り続けるので、版が上がって
+     * **同じものを配り直さない。** カルーセルは回り続けるので、バージョンが上がって
      * いなくても同じモジュールが何度も揃う。そのたびに配ると、受け側は
      * 中身の変わらない画面を組み直し続ける
      */

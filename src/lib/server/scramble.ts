@@ -107,7 +107,7 @@ const CARD_STATUS = object({
   readers: array(CARD_READER),
 });
 
-/** 画面での呼び分け。`unknown` は前の版のエージェント (名前しか返さない) */
+/** 画面での呼び分け。`unknown` は前のバージョンのエージェント (名前しか返さない) */
 export type CardReaderState =
   "active" | "standby" | "empty" | "error" | "unknown";
 
@@ -146,7 +146,7 @@ function stateOf(row: Loose<Infer<typeof CARD_READER>>): CardReaderState {
 
 /**
  * 画面に渡す形式に揃える。**形式が違っても止めない** (`tolerate`) ので、ここは来たものを
- * 疑って読む。前の版のエージェントは `readers` がリーダーの名前の並びで、
+ * 疑って読む。前のバージョンのエージェントは `readers` がリーダーの名前の並びで、
  * 名前と番号は `message` に書いてある — 行は名前だけ出し、状態は「—」にする
  */
 function normalize(raw: unknown): CardStatus {

@@ -18,7 +18,7 @@
  * - `dec_peek` / `dec_pop` … いちばん古い1枚を覗く・捨てる。表示順で並んでいる
  *   (B フレームの並べ替えはデコーダが済ませている)
  *
- * スレッドは使わない。スレッド版は COOP/COEP (crossOriginIsolated) が要る (docs/stream.md#放送そのままmpeg-2を送る)。
+ * スレッドは使わない。スレッドを使うビルドは COOP/COEP (crossOriginIsolated) が要る (docs/stream.md#放送そのままmpeg-2を送る)。
  * SIMD はコンパイラに任せて使う (Dockerfile の `mpeg2wasm` 段)
  */
 #include <emscripten/emscripten.h>
@@ -69,7 +69,7 @@ EMSCRIPTEN_KEEPALIVE int dec_open(void) {
     ctx->pkt_timebase = (AVRational){1, 90000};
     /*
      * **規格どおりでなくてよい速さの工夫を許す** (`AV_CODEC_FLAG2_FAST`)。MPEG-2 では、ブロックを読むときの
-     * 不一致の補正 (mismatch control) を省く版を使う。見た目の差は出ない
+     * 不一致の補正 (mismatch control) を省くやり方を使う。見た目の差は出ない
      */
     ctx->flags2 |= AV_CODEC_FLAG2_FAST;
     ctx->skip_frame = skip_nonref ? AVDISCARD_NONREF : AVDISCARD_DEFAULT;

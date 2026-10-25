@@ -328,7 +328,7 @@ describe("集まり具合", () => {
     expect(progress.complete).toBe(true);
   });
 
-  test("版が変わったら数え直す。古い版で揃ったことにしない", () => {
+  test("バージョンが変わったら数え直す。古いバージョンで揃ったことにしない", () => {
     const progress = progressAt();
     progress.add(at(0x50, 0, 0));
     expect(progress.complete).toBe(true);
@@ -337,29 +337,29 @@ describe("集まり具合", () => {
   });
 
   /*
-   * **版は table_id ごとに別々に振られる。** 番組表の1つの表は
+   * **バージョンは table_id ごとに別々に振られる。** 番組表の1つの表は
    * table_id + 局 + TS で決まり、`version_number` はその単位で動く。
    * 局に1つだけ持っていた頃は、基本 (0x50〜) と詳細 (0x58〜) を行き来する
    * たびに数えたものを全部捨てていて、**揃ったと分かることが二度と無かった**。
    * どのチャンネルも上限 (`epgChannelTimeout`) まで開きっぱなしになる
    */
-  test("別の表の版が違っても、こちらの数えたものは捨てない", () => {
+  test("別の表のバージョンが違っても、こちらの数えたものは捨てない", () => {
     const progress = progressAt();
     progress.add({ ...at(0x50, 0, 0), lastTableId: 0x58 });
-    // 詳細の表は別の版で流れてくる。ここで基本のぶんを捨ててはいけない
+    // 詳細の表は別のバージョンで流れてくる。ここで基本のぶんを捨ててはいけない
     progress.add({ ...at(0x58, 0, 0), lastTableId: 0x58, version: 9 });
 
     // 0x51〜0x57 は使われていないので、この2つで揃っている
     expect(progress.complete).toBe(true);
   });
 
-  test("同じ表の版が変わったときだけ、その表を数え直す", () => {
+  test("同じ表のバージョンが変わったときだけ、その表を数え直す", () => {
     const progress = progressAt();
     progress.add({ ...at(0x50, 0, 0), lastTableId: 0x58 });
     progress.add({ ...at(0x58, 0, 0), lastTableId: 0x58, version: 9 });
     expect(progress.complete).toBe(true);
 
-    // 詳細だけ版が上がった。基本はそのまま、詳細だけ待ち直す
+    // 詳細だけバージョンが上がった。基本はそのまま、詳細だけ待ち直す
     progress.add({ ...at(0x58, 0, 1, 1), lastTableId: 0x58, version: 10 });
     expect(progress.complete).toBe(false);
     progress.add({ ...at(0x58, 1, 1, 1), lastTableId: 0x58, version: 10 });
@@ -715,7 +715,7 @@ describe("PresentFollowing", () => {
    * 延長は version を上げて送り直してくるはずだが、**中身で比べる**。
    * 上げない送り手でも取りこぼさない
    */
-  test("延びたら (尺が変わったら) 変わったと言う。版が同じでも", () => {
+  test("延びたら (尺が変わったら) 変わったと言う。バージョンが同じでも", () => {
     const reader = new PresentFollowing(SERVICE);
     feed(reader, [event()]);
     expect(feed(reader, [event({ duration: 40 * 60_000 })])).toBe(true);

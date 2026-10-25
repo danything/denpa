@@ -69,7 +69,7 @@ export function start(): void {
   started = true;
 
   /*
-   * 前の版の置き場の変数は読まない (docs/config.md「置き場を変えた」)。黙って既定に変わると
+   * 前のバージョンの置き場の変数は読まない (docs/config.md「置き場を変えた」)。黙って既定に変わると
    * 空の置き場を見て「録画が全部消えた」ように見えるので、残っていたら言う
    */
   for (const old of ["RECORDED_DIR", "LIBRARY_DIR"]) {
@@ -123,7 +123,7 @@ export function start(): void {
   installShutdownHooks();
 
   /*
-   * **新しい版が出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
+   * **新しいバージョンが出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
    * 1 時間おき。`DENPA_AUTOSTART=0` でも回す — チューナーには行かない
    */
   nowAndEvery(config.updateCheckInterval, "update", checkForUpdate);

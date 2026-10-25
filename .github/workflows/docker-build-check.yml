@@ -154,7 +154,7 @@ jobs:
           echo "展開後: $(docker image inspect -f '{{.Size}}' "$image" | numfmt --to=si)B"
           echo "gzip: $(docker save "$image" | gzip | wc -c | numfmt --to=si)B"
 
-  # 配布用の2つを、リリースのときと同じ順で重ねる (release.yml): denpa に版を足して
+  # 配布用の2つを、リリースのときと同じ順で重ねる (release.yml): denpa にバージョンを足して
   # (release.Dockerfile)、それにエージェントを写す (aio.Dockerfile)。土台は main で組んだ
   # 公開の `develop` — どちらも RUN の無い写すだけのものなので、引いて重ねるのに数十秒。
   # Dockerfile も一緒に変えた PR でも土台は develop のまま (組み合わせは main の aio ジョブで見る)。
@@ -178,7 +178,7 @@ jobs:
     name: dist (${{ matrix.arch.name }})
     env:
       BASE: ghcr.io/${{ github.repository_owner }}
-      # health が返す版で、release.Dockerfile の ENV が効いているかを見る
+      # health が返すバージョンで、release.Dockerfile の ENV が効いているかを見る
       VERSION: v0.0.0-ci
     steps:
       - name: Checkout

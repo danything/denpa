@@ -2,7 +2,7 @@
 
 **x64 の Windows なら、PowerShell の1行で denpa ごと立ち上がってブラウザが開きます**
 (`install.ps1`)。Windows 用は 1.23.1 からで、
-それより前の版は入れられません (install.ps1 がそう言って止まる)。
+それより前のバージョンは入れられません (install.ps1 がそう言って止まる)。
 
 ```powershell
 irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
@@ -19,14 +19,14 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
    タスク (`denpa-agent`) を載せます。自分のアカウントのタスクなので管理者は要りません。窓は出さず
    (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` の輪。
    タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
-2. **denpa 本体** — エージェントと同じ版のイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
+2. **denpa 本体** — エージェントと同じバージョンのイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
    載せて、いま1度流します。起こすのは `denpa-start.ps1` (install.ps1 が書く)
 
 `denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
 
 - **コンテナから Windows のエージェントへは、Hyper-V の Default Switch の IP で届きます。**
   `host.docker.internal` のような名前はありません。その IP は Windows を起こし直すと変わりうるので、
-  起こすたびに調べ、`TUNER_AGENT_URL` か版か `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
+  起こすたびに調べ、`TUNER_AGENT_URL` かバージョンか `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
   作り直します (環境変数は作るときに埋め込まれる。DB はボリューム、録画は Windows のフォルダなので消えない)。
   変わっていなければ `wslc start` だけ。`denpa.env` を直したら、install.ps1 を流し直すかログオンし直せば効く
 - **自動で起こし直す指定 (`--restart`) がありません。** ログオン時のタスクが代わりに起こします
@@ -37,7 +37,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - **compose はまだありません** (Microsoft は次の優先課題と言っている)。Windows で動かすコンテナは本体の1つだけなので、`wslc run` で足ります
 - 録画中に上げ直すと、`wslc stop` が録画の終わりを待ってから入れ替えます (`--stop-timeout 21900`)
 
-**前の版 (Docker Desktop の compose) から上げるとき**は、install.ps1 が `docker compose down` で止め
+**前のバージョン (Docker Desktop の compose) から上げるとき**は、install.ps1 が `docker compose down` で止め
 (録画中なら待つ)、DB を Docker のボリューム `denpa_denpa-data` から wslc のボリュームへ移し、
 `compose.yml` を `compose.yml.docker` に退けます。`compose.override.yml` に足していた環境変数は引き継がないので、
 `denpa.env` に書き移します (退けたときにそう言う)。このときだけ Docker Desktop を起こしておく必要があります
@@ -60,13 +60,13 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 **使えるもの。**
 
-- **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 版 (0.2.0 から。
+- **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 用 (0.2.0 から。
   入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
   受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
   `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
   置きません — エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらを引いてしまう。
   ファームウェアは Mac と同じく PLEX 公式ドライバから切り出します ([tuner-px4.md](tuner-px4.md#ファームウェア))
-- **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 版 (`siano-ts.exe` と libusb) も、
+- **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 用 (`siano-ts.exe` と libusb) も、
   ドライバを WinUSB にすれば動きます
 - WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
   **PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
@@ -101,7 +101,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 **使えないもの。**
 
 - **PT2/PT3 などの DVB の機材** — Windows に DVB はありません
-- **PX-W3U3 (asicen-userland)** — Windows 版がありません
+- **PX-W3U3 (asicen-userland)** — Windows 用がありません
 - **止めるときに録画を待てません。** Windows には「止まれ」を伝える手 (SIGTERM) が無く、
   止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが、
   ログオフ・再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)。

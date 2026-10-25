@@ -6,8 +6,8 @@ denpa 自身は **AGPL-3.0-or-later** ([LICENSE](../LICENSE)) です。ここに
 
 書き方の約束: 「根拠」はリポジトリの中で確かめられるもの (LICENSE ファイル・
 Dockerfile の行・`package.json`) を優先し、上流の表示に拠るものは (上流) と添えます。
-**版はここに書きません。** Renovate が Dockerfile の `ARG` / `ENV` を上げるたびに食い違うので、
-いま入っている版は Dockerfile を見てください。
+**バージョンはここに書きません。** Renovate が Dockerfile の `ARG` / `ENV` を上げるたびに食い違うので、
+いま入っているバージョンは Dockerfile を見てください。
 
 ## コンテナイメージ `denpa` に入るもの
 
@@ -40,9 +40,9 @@ Debian のパッケージ (libva・ドライバなど) は要るファイルだ�
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | Denpa Font | データ放送・字幕と、画面の放送の字 (番組名・説明など) の web フォント (`/api/font/denpa-font.woff2` で配る) | <https://github.com/danything/denpa-font> のリリースの woff2 (タグで留め、同じリリースの SHA256SUMS で照らす)。BIZ UDゴシック (モリサワ) の角を丸め、BIZ UDゴシックに無い ARIB の記号・字を BIZ UDゴシックの部品で組んで足したもの | SIL OFL 1.1 (元の BIZ UDゴシックと同じ。原文は denpa-font の README) |
 
-フォントに入る字は denpa の字の表 (`b24-tables.ts`・`aribtext-gaiji.ts` など) から作られる (denpa-font の fetch.sh が版を留めて読む)。
+フォントに入る字は denpa の字の表 (`b24-tables.ts`・`aribtext-gaiji.ts` など) から作られる (denpa-font の fetch.sh がバージョンを留めて読む)。
 **表に字を足したら**: `src/lib/ts/font-coverage.test.ts` が取ってくるフォントに無い字を出して落ちる →
-denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) 版を出す → ここの Dockerfile の
+denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) リリースを出す → ここの Dockerfile の
 `DENPA_FONT_VERSION` (タグ) を上げる (Renovate の github-releases)。
 
 ### ランタイム
@@ -71,8 +71,8 @@ denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足し
 
 ### Mac に入れるもの (`install.sh`)
 
-リリースに添えた `denpa-agent-<版>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリ1個) と、
-上と同じ px4-userland / siano-userland の **Mac 版** (`darwin-arm64`)・同じファームウェア (IT930x のものは install.sh が手元で切り出す。asicen-userland は Mac 版が出ていないので入れません)。
+リリースに添えた `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリ1個) と、
+上と同じ px4-userland / siano-userland の **Mac 用** (`darwin-arm64`)・同じファームウェア (IT930x のものは install.sh が手元で切り出す。asicen-userland は Mac 用が出ていないので入れません)。
 libusb 1.0.30 (LGPL-2.1+) が実行ファイルに静的リンクなのも上と同じで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
@@ -80,12 +80,12 @@ denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker
 
 ### Windows に入れるもの (`install.ps1`)
 
-リリースに添えた `denpa-agent-<版>-windows-x64.zip` (`denpa-agent.exe` 1個) と、px4-userland / siano-userland の
-**Windows 版** (`windows-x86_64` / `windows-x64`)・同じファームウェア (IT930x のものは Mac と同じく手元で切り出す)。
+リリースに添えた `denpa-agent-<バージョン>-windows-x64.zip` (`denpa-agent.exe` 1個) と、px4-userland / siano-userland の
+**Windows 用** (`windows-x86_64` / `windows-x64`)・同じファームウェア (IT930x のものは Mac と同じく手元で切り出す)。
 px4-userland の配布 zip から置くのは `px4d.exe`・`px4ctl.exe` と、ライセンスの文書 (`LICENSE`・`DEPENDENCY-NOTICE.txt`・
 `THIRD_PARTY_NOTICES.md`・`libusb/COPYING`・`toolchain/` の下の MinGW-w64 などのもの) だけで、`px4-ts.exe` と
 `WinSCard.dll` は置きません。libusb 1.0.30 (LGPL-2.1+) が `px4d.exe` に静的リンクなのは上と同じです。
-asicen-userland は入れません (Windows 版が無い)。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
+asicen-userland は入れません (Windows 用が無い)。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
 
 ### `denpa-aio`
 

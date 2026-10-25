@@ -84,7 +84,7 @@ internal sealed class Px4Control : IDisposable
         {
             ConnectWithin(socket, socketPath, timeout, wire);
 
-            // v1.0 だけを言う。**px4d は版を厳密に比べる** (SPEC 6.4) ので幅は持たせない
+            // v1.0 だけを言う。**px4d はバージョンを厳密に比べる** (SPEC 6.4) ので幅は持たせない
             var hello = new byte[12];
             BinaryPrimitives.WriteUInt16LittleEndian(hello, 1);
             BinaryPrimitives.WriteUInt16LittleEndian(hello.AsSpan(2), 0);
@@ -188,7 +188,7 @@ internal sealed class Px4Control : IDisposable
 
     /// <summary>
     /// 1枚読む。**長さは受ける前に見る** (崩れた長さのまま確保しない)。
-    /// 頭が崩れている・版が違う・途中で切れた、は IOException
+    /// 頭が崩れている・バージョンが違う・途中で切れた、は IOException
     /// </summary>
     public static (ushort Type, ushort Flags, uint RequestId, byte[] Payload) ReadFrame(
         Socket socket, int maxPayload, Px4Wire? wire = null)
@@ -216,7 +216,7 @@ internal sealed class Px4Control : IDisposable
         }
         var major = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
         var minor = BinaryPrimitives.ReadUInt16LittleEndian(header[6..]);
-        if (major != 1 || minor != 0) throw new IOException($"{wire.Daemon} の IPC の版が {major}.{minor} です (1.0 のはず)");
+        if (major != 1 || minor != 0) throw new IOException($"{wire.Daemon} の IPC のバージョンが {major}.{minor} です (1.0 のはず)");
         var length = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
         if (length > maxPayload) throw new IOException($"{wire.Daemon} の答えが長すぎます ({length} バイト)");
         return (
@@ -271,7 +271,7 @@ internal sealed class Px4Control : IDisposable
     public static string Reason(uint code) => code switch
     {
         1 => "要求の内容が合っていません (INVALID_ARGUMENT)",
-        2 => "IPC の版が合いません (VERSION_MISMATCH)",
+        2 => "IPC のバージョンが合いません (VERSION_MISMATCH)",
         3 => "見つかりません (NOT_FOUND)",
         4 => "他が使っています (BUSY)",
         5 => "まだ用意ができていません (NOT_READY)",
@@ -342,7 +342,7 @@ internal readonly record struct Px4Counters(
     /// <summary>中身の長さ (u64 × 8)</summary>
     public const int Size = 64;
 
-    /// <summary>読む。短ければ null (版の違うデーモン。止めずに見送る)</summary>
+    /// <summary>読む。短ければ null (バージョンの違うデーモン。止めずに見送る)</summary>
     public static Px4Counters? Parse(ReadOnlySpan<byte> body)
     {
         if (body.Length < Size) return null;

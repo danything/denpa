@@ -21,8 +21,8 @@ export function load({ cookies }) {
     /** この端末の控えのほかに生きているログインの数。控えで入っていなければ null */
     others: session === null ? null : countOthers(session.id),
     /**
-     * 動いている版 (`DENPA_VERSION`)。リリースのイメージにだけ入っていて、main のイメージと手元は `dev`。
-     * 新しい版が出ているかはヘッダーと同じもの (レイアウトの `update`) を見る
+     * 動いているバージョン (`DENPA_VERSION`)。リリースのイメージにだけ入っていて、main のイメージと手元は `dev`。
+     * 新しいバージョンが出ているかはヘッダーと同じもの (レイアウトの `update`) を見る
      */
     version: config.version,
   };

@@ -13,7 +13,7 @@
 # (DVB は無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/install-windows.md)。
 #
 # **WSL は勝手に入れない。** wslc が無いときはエージェントだけ入れて、入れ方を言って終わる。
-# もう一度流せば上げ直し。イメージは**エージェントと同じリリースの版**に揃える。
+# もう一度流せば上げ直し。イメージは**エージェントと同じリリースのバージョン**に揃える。
 #
 # 置き場:
 #   ~/denpa (DENPA_HOME)                  denpa.env (コンテナの環境変数。無いときだけ雛形を作り、あれば触らない)・
@@ -32,12 +32,12 @@
 # ---------------------------------------------------------------------------
 param([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly)
 
-# siano-userland の版。**agent/Dockerfile・install.sh と揃える** (Renovate が一緒に上げる)。
-# 中身は配布元の SHA256SUMS で確かめるので、版を上げてもここのハッシュは要らない
+# siano-userland のバージョン。**agent/Dockerfile・install.sh と揃える** (Renovate が一緒に上げる)。
+# 中身は配布元の SHA256SUMS で確かめるので、バージョンを上げてもここのハッシュは要らない
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
 $SianoUserlandVersion = '0.1.10'
 $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818'
-# px4-userland の版も同じ。**0.2.1 より下げない** (Windows 対応は 0.2.0 から、--runtime-dir を明示したときの
+# px4-userland のバージョンも同じ。**0.2.1 より下げない** (Windows 対応は 0.2.0 から、--runtime-dir を明示したときの
 # 起動の不具合が直ったのが 0.2.1)
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 $Px4UserlandVersion = '0.2.1'
@@ -79,7 +79,7 @@ function Assert-Hash([string]$Path, [string]$Expected) {
     }
 }
 
-# 入れる版。API を使わず、latest の転送先からタグを読む (install.sh と同じ)
+# 入れるバージョン。API を使わず、latest の転送先からタグを読む (install.sh と同じ)
 function Get-Version {
     if ($env:DENPA_VERSION) { return $env:DENPA_VERSION }
     $tag = & curl.exe -fsLI -o NUL -w '%{url_effective}' "https://github.com/$Repo/releases/latest"
@@ -151,17 +151,17 @@ function Test-Health {
     return $LASTEXITCODE -eq 0
 }
 
-# **前の版は Docker Desktop の compose で動いていた。** DB (Docker のボリューム) を wslc のボリュームへ移して、
+# **前のバージョンは Docker Desktop の compose で動いていた。** DB (Docker のボリューム) を wslc のボリュームへ移して、
 # compose.yml を退ける。1度だけ (退けたあとはここに来ない)。録画中なら compose down が終わるまで待つ
 function Move-FromDocker {
     Use-Continue
     $compose = Join-Path $DenpaDir 'compose.yml'
     if (-not (Test-Path -LiteralPath $compose)) { return }
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        throw "前の版は Docker Desktop で動いていました。DB を移すので、一度 Docker Desktop を起こしてから流し直してください (移したあとは Docker Desktop は要りません)"
+        throw "前のバージョンは Docker Desktop で動いていました。DB を移すので、一度 Docker Desktop を起こしてから流し直してください (移したあとは Docker Desktop は要りません)"
     }
     & docker info *> $null
-    if ($LASTEXITCODE -ne 0) { throw '前の版の DB を移すので、Docker Desktop を起こしてから流し直してください' }
+    if ($LASTEXITCODE -ne 0) { throw '前のバージョンの DB を移すので、Docker Desktop を起こしてから流し直してください' }
     Say 'Docker Desktop の denpa を止めて、DB を wslc へ移します (録画中なら終わるまで待ちます)'
     Push-Location $DenpaDir
     try {
@@ -193,7 +193,7 @@ function Move-FromDocker {
 
 # 起こすスクリプト。**起こすたびに作り直すかを決める**: コンテナから Windows のエージェントへは
 # Hyper-V の Default Switch の IP で届くが (host.docker.internal は無い)、その IP は再起動で変わりうる。
-# 宛先か版か denpa.env が変わっていればコンテナを作り直す (環境変数は作るときに埋め込まれる。
+# 宛先かバージョンか denpa.env が変わっていればコンテナを作り直す (環境変数は作るときに埋め込まれる。
 # DB はボリューム、録画は Windows のフォルダなので消えない)。
 # wslc には restart の指定が無いので、ログオン時のタスクがこれを流す。
 # **ポートは 0.0.0.0 に出す** (既定は 127.0.0.1 だけで、LAN のほかの機器から開けない)
@@ -234,7 +234,7 @@ exit $LASTEXITCODE
     return $start
 }
 
-# denpa 本体を wslc で起こす。エージェントと同じ版のイメージ (x.y.z のときだけ。コミットなら latest)
+# denpa 本体を wslc で起こす。エージェントと同じバージョンのイメージ (x.y.z のときだけ。コミットなら latest)
 function Start-Denpa([string]$Ref, [switch]$NoOpen) {
     $version = $Ref -replace '^v', ''
     $tag = if ($version -match '^\d+\.\d+\.\d+$') { $version } else { 'latest' }
@@ -445,7 +445,7 @@ function Install-Agent([string]$Ref) {
             try {
                 Get-Url "https://github.com/$Repo/releases/download/$Ref/$name" $agent
             } catch {
-                throw "$Ref には Windows 用のエージェントがありません。Windows 用は 1.23.1 からなので、それより前の版は Windows に入れられません"
+                throw "$Ref には Windows 用のエージェントがありません。Windows 用は 1.23.1 からなので、それより前のバージョンは Windows に入れられません"
             }
             Get-Url "https://github.com/$Repo/releases/download/$Ref/$name.sha256" "$agent.sha256"
             Assert-Hash $agent ((Get-Content -LiteralPath "$agent.sha256" -Raw) -split '\s+')[0]
@@ -572,7 +572,7 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
         Say "エージェントは入っています (http://127.0.0.1:$Port)"
         return
     }
-    # --- denpa 本体 (wslc)。エージェントと同じ版に。手元の zip を入れたときは latest ---
+    # --- denpa 本体 (wslc)。エージェントと同じバージョンに。手元の zip を入れたときは latest ---
     Start-Denpa $(if ($ref) { $ref } else { 'main' }) -NoOpen:$NoOpen
 }
 

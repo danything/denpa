@@ -15,9 +15,9 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 | `ENCODED_DIR`                                | `$MEDIA_DIR/encoded`                           | エンコード済みの置き場。ここから配る。録画を入れたあとに別のディスクへ移すなら、これは変えずにマウントを付け替える ([library.md](library.md#置き場を別のディスクに移す))                                                   |
 | `FFMPEG` / `FFPROBE`                         | `/usr/local/bin/...`                           | 開発時は偽物に差し替える                                                                                                                                                                                                   |
 | `MPEG2_DIR`                                  | `/opt/denpa/mpeg2`                             | ライブを変換せずに見るときにブラウザへ配る MPEG-2 と AAC のデコーダ (WASM) の置き場。イメージの `mpeg2wasm` 段が置く。無ければこの方式は使えず、エンコードしたものに戻る ([stream.md](stream.md#放送そのままmpeg-2を送る)) |
-| `DENPA_VERSION`                              | `dev`                                          | 動いている版。リリースのイメージにだけ入る (`.github/release.Dockerfile`)。`dev` なら新しい版の通知を出さない                                                                                                              |
-| `DENPA_GITHUB_API`                           | `https://api.github.com/repos/danything/denpa` | 新しい版を確かめる先 (`releases/latest`)。試験では偽物を指す                                                                                                                                                               |
-| `UPDATE_CHECK_INTERVAL`                      | `3600000`                                      | 新しい版を確かめる間隔(ms)                                                                                                                                                                                                 |
+| `DENPA_VERSION`                              | `dev`                                          | 動いているバージョン。リリースのイメージにだけ入る (`.github/release.Dockerfile`)。`dev` なら新しいバージョンの通知を出さない                                                                                              |
+| `DENPA_GITHUB_API`                           | `https://api.github.com/repos/danything/denpa` | 新しいバージョンを確かめる先 (`releases/latest`)。試験では偽物を指す                                                                                                                                                       |
+| `UPDATE_CHECK_INTERVAL`                      | `3600000`                                      | 新しいバージョンを確かめる間隔(ms)                                                                                                                                                                                         |
 | `ENCODE_CONCURRENCY`                         | `2`                                            | 録画エンコードの同時実行数                                                                                                                                                                                                 |
 | `ENCODE_MAX_ATTEMPTS`                        | `5`                                            | 1つのエンコードを試す上限。超えたら failed にして後ろを進める (プロセスごと落とすジョブでキューを塞がないため)                                                                                                             |
 | `HW_DEVICES`                                 | `/dev/dri/renderD*`                            | GPU のデバイスを探すパターン。当たったデバイスを全部試し、QSV / VA-API が初期化できたものでエンコードする ([encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api))                                                  |
@@ -71,13 +71,13 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 | `PX4_USERLAND_DIR` / `PX4_FIRMWARE` / `PX4_RUNTIME_DIR`・`SIANO_USERLAND_DIR` / `SIANO_FIRMWARE`・`ASICEN_USERLAND_DIR` / `ASICEN_FIRMWARE` / `ASICEN_RUNTIME_DIR` | イメージの既定                                  | 同梱のドライバの置き場。書き換えるのは Mac の `install.sh` と Windows の `install.ps1` (`PX4_*`・`SIANO_*`。Windows の `PX4_RUNTIME_DIR` は `C:\denpa-run`) だけ |
 | `FAKE_TUNE`                                                                                                                                                        | (空)                                            | 偽の選局。適合テストだけが使う                                                                                                                                   |
 
-## 録画のダウンロードを無くした (前の版から上げるとき)
+## 録画のダウンロードを無くした (前のバージョンから上げるとき)
 
 **録画をファイルとして外へ持ち出す機能はやめました** (理由は [library.md](library.md#観るのはブラウザで))。
 録画の詳細と番組表の詳細からダウンロードのボタンが無くなり、`/api/recordings/<id>/file` は `?download=1` を読まず、
 添付 (`Content-Disposition`) も付けません。ブラウザ・テレビのアプリでの再生と、端末に保存はこれまでどおりです。
 
-## 再生リンクをやめた (前の版から上げるとき)
+## 再生リンクをやめた (前のバージョンから上げるとき)
 
 **「再生リンクをコピー」と、それが作っていた期限付きの URL (`/api/recordings/<id>/file?token=…`) をやめました。**
 外部のプレイヤーには対応しないので、ログインせずに録画を開ける URL を出す理由が無くなりました。
@@ -89,7 +89,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
   なった (ログイン方法を何も設定していない denpa は、これまでどおり 403)
 - テレビのアプリ (denpa-tv) はアクセストークンで開くので、何もしなくてよい
 
-## 接続元の読み方を変えた (前の版から上げるとき)
+## 接続元の読み方を変えた (前のバージョンから上げるとき)
 
 **`ADDRESS_HEADER` を読まなくなりました。** 前段 (リバースプロキシ) の後ろに置いているなら、前段の
 アドレスを `TRUSTED_PROXIES` に書きます (chart は `denpa.trustedProxies`)。古い名前を読み替える仕組みは持ちません。
@@ -104,7 +104,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
   Linux・Mac のインストーラは前に genkan (Caddy) を立てるが、genkan のアドレスは既定の
   `TRUSTED_NETWORKS` に入り、私設網の外は genkan が断るので、こちらも何もしなくてよい
 
-## 置き場を変えた (前の版から上げるとき)
+## 置き場を変えた (前のバージョンから上げるとき)
 
 既定の置き場を、中身ごとに1つの名前にそろえました。**古い名前を読み替える仕組みは持たない**ので、
 既定のまま使っていた環境は、上げるときにマウント先を書き換えます。ボリュームや PVC の中身はそのまま使えます。

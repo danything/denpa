@@ -68,7 +68,7 @@
     lastCount = count;
   });
 
-  /** カードリーダーの行の呼び名。`unknown` は前の版のエージェント (名前しか返さない) */
+  /** カードリーダーの行の呼び名。`unknown` は前のバージョンのエージェント (名前しか返さない) */
   const READER_STATE: Record<CardReaderState, { label: string; tone: string }> =
     {
       active: { label: "使用中", tone: "success" },

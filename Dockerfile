@@ -19,7 +19,7 @@ RUN bun install
 # 開発と E2E の compose はソースを /app に被せるので、/app の中に置くと隠れる。
 # 配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
 #
-# FFmpeg は下の `ffmpeg` 段と同じ版に揃える (Renovate が同じ PR で2か所とも上げる)。
+# FFmpeg は下の `ffmpeg` 段と同じバージョンに揃える (Renovate が同じ PR で2か所とも上げる)。
 # 組むのはデコーダ1つだけなので、1〜2分で終わる
 #
 # **組むのは mpeg2video のデコーダと、フレームの区切りを探す parser と、AAC・Opus のデコーダだけ。**
@@ -31,7 +31,7 @@ RUN bun install
 # (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
 #
 # - `--disable-asm` … x86 の手書きアセンブリは wasm では使えない
-# - スレッドは使わない。スレッド版は SharedArrayBuffer のために COOP/COEP
+# - スレッドは使わない。スレッドを使うビルドは SharedArrayBuffer のために COOP/COEP
 #   (crossOriginIsolated) を全ページに要求することになり、denpa の画面 (データ放送の
 #   中継・ロゴ・別オリジンの Hybridcast) と噛み合わない
 # - **SIMD は使う** (`-msimd128`。コンパイラが自動でベクトルにする)。1 本なら 1080i を実時間の 3 倍で
@@ -192,7 +192,7 @@ COPY patches/ /patches/
 # ffprobe がそれぞれ libav* と SVT-AV1 を丸ごと抱え、同じ中身 (37MB ずつ) がイメージに2つ入る。
 # ライブラリは /usr/local/lib に置き、`--enable-rpath` で ffmpeg / ffprobe にその場所を書き込む
 # (ld.so の既定の検索先ではないので、ldconfig や LD_LIBRARY_PATH に頼らない)。
-# 実行イメージへ運ぶものは /out にまとめる。.so の版の symlink は運ばず、実行時に読まれる
+# 実行イメージへ運ぶものは /out にまとめる。.so のバージョン付きの symlink は運ばず、実行時に読まれる
 # SONAME の名前 (libavcodec.so.63 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため
 RUN case "${TARGETARCH}" in \
       amd64) qsv_dev=libvpl-dev qsv_flag=--enable-libvpl ;; \
@@ -248,7 +248,7 @@ FROM gcr.io/distroless/cc-debian13:latest AS distroless
 # ---------------------------------------------------------------------------
 # 本番イメージへ写すライブラリを集める段。**本番イメージにはシェルも apt も無い**ので、
 # ここで Debian のパッケージを入れて ffmpeg を置き、要るファイルだけを /rootfs にまとめる。
-# 土台は ffmpeg 段と同じ digest (どちらも trixie なので、glibc の版は distroless と揃う)
+# 土台は ffmpeg 段と同じ digest (どちらも trixie なので、glibc のバージョンは distroless と揃う)
 #
 # libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
@@ -378,8 +378,8 @@ COPY --from=build /app/src/lib/server/address.ts ./src/lib/server/address.ts
 COPY --from=build /app/src/lib/server/compress.ts ./src/lib/server/compress.ts
 
 EXPOSE 3000
-# 動いている版。ここでは `dev` のまま — リリースのときに、このイメージを土台に
-# 版を 1 層足す (.github/release.Dockerfile)。新しい版の通知はそれと GitHub の
+# 動いているバージョン。ここでは `dev` のまま — リリースのときに、このイメージを土台に
+# バージョンを 1 層足す (.github/release.Dockerfile)。新しいバージョンの通知はそれと GitHub の
 # 最新のリリースを数で比べて出す (src/lib/server/update.ts)。dev では出さない
 ENV DENPA_VERSION=dev
 

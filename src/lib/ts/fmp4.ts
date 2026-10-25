@@ -436,7 +436,7 @@ function readTraf(
     const each =
       [0x100, 0x200, 0x400, 0x800].filter((bit) => tflags & bit).length * 4;
     if (p + each * count > body.length) return false;
-    /** 1コマぶんの並びから次の4バイトを読む。版 1 の合成時刻のずれは符号あり (B フレームで負になる) */
+    /** 1コマぶんの並びから次の4バイトを読む。バージョン 1 の合成時刻のずれは符号あり (B フレームで負になる) */
     const next = (signed = false): number => {
       const value = signed ? r.getInt32(p) : r.getUint32(p);
       p += 4;
@@ -502,7 +502,7 @@ export function adtsHeader(
 /**
  * dOps (MP4 の Opus の設定) を、FFmpeg の Opus デコーダが受け取る OpusHead (Ogg の形式) に
  * 書き換える。並びは同じで、**数の並べ方だけが違う** (dOps は大きい桁が先、OpusHead は
- * 小さい桁が先)。頭に `OpusHead`、版は 1。並べ方が読めなければ null
+ * 小さい桁が先)。頭に `OpusHead`、バージョンは 1。並べ方が読めなければ null
  */
 export function opusHead(dOps: Uint8Array): Uint8Array | null {
   if (dOps.length < 11) return null;

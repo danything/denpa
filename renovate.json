@@ -26,13 +26,13 @@
       "allowedVersions": "<6"
     },
     {
-      "description": "dotnet/sdk の動く major タグ (`11.0`) は正式版より前からあり、11月の GA まではプレビューを指す (2026-09 時点で中身は 11.0.100-preview.1)。プレビューでもビルドできてしまうので CI は緑のまま通る。正式版が出たら上限を上げて、TargetFramework も一緒に上げる",
+      "description": "dotnet/sdk の動く major タグ (`11.0`) は正式リリースより前からあり、11月の GA まではプレビューを指す (2026-09 時点で中身は 11.0.100-preview.1)。プレビューでもビルドできてしまうので CI は緑のまま通る。正式リリースが出たら上限を上げて、TargetFramework も一緒に上げる",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["mcr.microsoft.com/dotnet/sdk"],
       "allowedVersions": "<11"
     },
     {
-      "description": "asicen-userland (PX-W3U3、試験的) は agent/Dockerfile で 0.0.0 (= まだリリースが無い) にしてあり、版が上がると初めてイメージに入る。最初の版は配布物の名前・形式・ファームウェアの同梱を人が確かめてから入れたいので、自動ではマージしない (docs/tuners.md)。共有の設定は非 major を全部「all dependencies」の1つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
+      "description": "asicen-userland (PX-W3U3、試験的) は agent/Dockerfile で 0.0.0 (= まだリリースが無い) にしてあり、バージョンが上がると初めてイメージに入る。最初のバージョンは配布物の名前・形式・ファームウェアの同梱を人が確かめてから入れたいので、自動ではマージしない (docs/tuners.md)。共有の設定は非 major を全部「all dependencies」の1つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["Khronos31/asicen-userland"],
       "groupName": "asicen-userland",
@@ -41,7 +41,7 @@
       "addLabels": ["needs-review"]
     },
     {
-      "description": "danything/denpa-font の版は vX.Y のタグだけ (元フォントを置いた source-… のリリースは版ではない)",
+      "description": "danything/denpa-font のバージョンは vX.Y のタグだけ (元フォントを置いた source-… のリリースはバージョンではない)",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["danything/denpa-font"],
       "allowedVersions": "/^v\\d+\\.\\d+$/"

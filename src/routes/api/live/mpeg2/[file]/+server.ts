@@ -82,7 +82,7 @@ export const GET: RequestHandler = ({ params, request }) => {
     error(404, "MPEG-2 の再生に必要なファイルが入っていません");
   /*
    * **持たせてよいが、毎回確かめさせる** (`no-cache` + ETag)。イメージを入れ替えると
-   * 中身が変わるのに URL は同じなので、長く持たせると mjs と wasm の版が食い違いうる
+   * 中身が変わるのに URL は同じなので、長く持たせると mjs と wasm のバージョンが食い違いうる
    */
   const stat = statSync(path);
   const tag = `"${stat.size.toString(36)}-${Math.floor(stat.mtimeMs).toString(36)}"`;

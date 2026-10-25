@@ -259,10 +259,10 @@ describe("BmlDecoder", () => {
   });
 
   /*
-   * **カルーセルは回り続ける。** 版が上がっていなくても同じモジュールが
+   * **カルーセルは回り続ける。** バージョンが上がっていなくても同じモジュールが
    * 何度も揃うので、そのたびに配ると受け側が画面を組み直し続ける
    */
-  test("同じ版のモジュールは配り直さない", () => {
+  test("同じバージョンのモジュールは配り直さない", () => {
     const module = multipart([["/startup.bml", "text/X-arib-bml", "<bml/>"]]);
     const out = decode(...head, ...carousel(module), ...carousel(module));
     expect(
@@ -332,8 +332,8 @@ describe("BmlDecoder", () => {
     expect(lists(out)).toEqual([[1, 2]]);
   });
 
-  /** 版が上がれば中身が変わっている。**配り直さないと古い画面のまま** */
-  test("版が上がれば配り直す", () => {
+  /** バージョンが上がれば中身が変わっている。**配り直さないと古い画面のまま** */
+  test("バージョンが上がれば配り直す", () => {
     const first = multipart([
       ["/startup.bml", "text/X-arib-bml", "<bml>1</bml>"],
     ]);
@@ -344,7 +344,7 @@ describe("BmlDecoder", () => {
       ...head,
       ...carousel(first),
       ...carousel(second, { moduleVersion: 2 }).map((packet, at) =>
-        // 版を上げるときは DII も新しい回として送られてくる
+        // バージョンを上げるときは DII も新しい回として送られてくる
         at === 0
           ? packetize(
               BML_PID,

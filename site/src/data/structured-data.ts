@@ -17,8 +17,8 @@ export function jsonLd(data: Record<string, unknown>) {
 }
 
 /**
- * 最新のリリースの版 (v を外したもの)。ビルドのときに GitHub から 1 回だけ取る。
- * 取れなければ (オフライン・API の回数制限) undefined で、構造化データから版を省く
+ * 最新のリリースのバージョン (v を外したもの)。ビルドのときに GitHub から 1 回だけ取る。
+ * 取れなければ (オフライン・API の回数制限) undefined で、構造化データからバージョンを省く
  */
 let latest: Promise<string | undefined> | undefined;
 export function latestVersion(): Promise<string | undefined> {
@@ -43,7 +43,7 @@ export function latestVersion(): Promise<string | undefined> {
       return tag.replace(/^v/, "");
     } catch (e) {
       console.warn(
-        `structured-data: 最新のリリースの版を取れないので、版は省きます (${e})`,
+        `structured-data: 最新のリリースのバージョンを取れないので、バージョンは省きます (${e})`,
       );
       return undefined;
     }

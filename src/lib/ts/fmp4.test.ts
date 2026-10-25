@@ -133,13 +133,13 @@ function be(...fields: [number, number][]): Uint8Array<ArrayBuffer> {
 }
 
 function trak(id: number, timescale: number, entry: Uint8Array): Uint8Array {
-  // tkhd 版0: version+flags(4) 作った時刻(4) 変えた時刻(4) track_ID(4) ...
+  // tkhd バージョン 0: version+flags(4) 作った時刻(4) 変えた時刻(4) track_ID(4) ...
   const tkhd = boxOf(
     "tkhd",
     be([0, 4], [0, 4], [0, 4], [id, 4]),
     new Uint8Array(68),
   );
-  // mdhd 版0: version+flags(4) 作った時刻(4) 変えた時刻(4) timescale(4) duration(4) 言語(4)
+  // mdhd バージョン 0: version+flags(4) 作った時刻(4) 変えた時刻(4) timescale(4) duration(4) 言語(4)
   const mdhd = boxOf(
     "mdhd",
     be([0, 4], [0, 4], [0, 4], [timescale, 4], [0, 4], [0, 4]),
@@ -208,7 +208,7 @@ function trex(
 const AVCC = Uint8Array.of(1, 0x64, 0x00, 0x29, 0xff, 0xe0);
 /** AAC LC 48kHz 2ch */
 const ASC = Uint8Array.of(0x11, 0x90);
-/** dOps: 版0 / 2ch / 頭で捨てる 312 / 48000 / 補正 0 / 並べ方 0 */
+/** dOps: バージョン 0 / 2ch / 頭で捨てる 312 / 48000 / 補正 0 / 並べ方 0 */
 const DOPS = be([0, 1], [2, 1], [312, 2], [48000, 4], [0, 2], [0, 1]);
 
 function init(): Uint8Array {
@@ -245,7 +245,7 @@ describe("fMP4 の中身を読む", () => {
   });
 
   test("AV1 は av1C から codec を起こし、Opus は dOps を持つ", () => {
-    // av1C: 印+版 / profile 0・level 8 / tier M・8bit・4:2:0 / ...
+    // av1C: 印+バージョン / profile 0・level 8 / tier M・8bit・4:2:0 / ...
     const av1C = Uint8Array.of(0x81, 0x08, 0x0c, 0x00);
     const tracks = readInit(
       boxOf(
@@ -264,7 +264,7 @@ describe("fMP4 の中身を読む", () => {
     const video = [Uint8Array.of(1, 1, 1), Uint8Array.of(2, 2)];
     const audio = [Uint8Array.of(9, 9, 9, 9)];
     /*
-     * 映像の trun: data_offset + first_sample_flags + 1コマごとの大きさと合成時刻のずれ (版1、符号あり)。
+     * 映像の trun: data_offset + first_sample_flags + 1コマごとの大きさと合成時刻のずれ (バージョン 1、符号あり)。
      * 長さは trex の既定 (1500)、2コマ目の印も trex の既定 (sync でない)
      */
     const vtrun = (offset: number) =>

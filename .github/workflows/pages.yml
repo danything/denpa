@@ -61,7 +61,7 @@ jobs:
 
       # prebuild で docs と README を取り込んでから組む。
       # GOOGLE_SITE_VERIFICATION は Search Console の確認用 (Actions の変数。無ければ出さない)。
-      # GITHUB_TOKEN はトップの構造化データに最新の版を入れるのに使う (取れなければ版を省く)
+      # GITHUB_TOKEN はトップの構造化データに最新のバージョンを入れるのに使う (取れなければバージョンを省く)
       - name: Build
         run: bun run build
         env:

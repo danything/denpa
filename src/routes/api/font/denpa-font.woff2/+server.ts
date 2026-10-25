@@ -23,10 +23,10 @@ import type { RequestHandler } from "./$types";
 
 /** Dockerfile が置く場所 (リリースの woff2 そのまま) */
 const FONT = "/usr/share/denpa-font/denpa-font.woff2";
-/** 入っている版 (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
+/** 入っているバージョン (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
 const VERSION = "/usr/share/denpa-font/VERSION";
 
-/** 中身の指紋と版。字はイメージに組み込んであり、動いている間は変わらないので1度だけ読む */
+/** 中身の指紋とバージョン。字はイメージに組み込んであり、動いている間は変わらないので1度だけ読む */
 let tag: string | null = null;
 let installed: string | null = null;
 
@@ -35,7 +35,7 @@ export const GET: RequestHandler = ({ request, url }) => {
   tag ??= `"${createHash("sha256").update(readFileSync(FONT)).digest("base64url")}"`;
   installed ??= existsSync(VERSION) ? readFileSync(VERSION, "utf8").trim() : "";
   /*
-   * 版付きの URL で版が合えば1年持たせる。それ以外は**持たせてよいが、毎回確かめさせる**
+   * バージョン付きの URL でバージョンが合えば1年持たせる。それ以外は**持たせてよいが、毎回確かめさせる**
    * (`no-cache` + ETag)。理由は `#lib/server/font.ts`
    */
   const headers = {

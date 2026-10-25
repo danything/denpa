@@ -39,7 +39,7 @@ const SHELL = [
 ];
 /**
  * オフラインの入口。電波の無いところで開いたとき、どの画面への行き先も
- * これで受ける (下の fetch)。**殻と違って HTML なので、版が変わる**。
+ * これで受ける (下の fetch)。**殻と違って HTML なので、バージョンが変わる**。
  * install のたびに取り直す
  */
 const OFFLINE_PAGE = resolve("offline");
@@ -56,7 +56,7 @@ worker.addEventListener("install", (event) => {
 });
 
 worker.addEventListener("activate", (event) => {
-  // 版が変われば古い殻は用済み
+  // バージョンが変われば古い殻は用済み
   event.waitUntil(
     caches
       .keys()

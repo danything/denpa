@@ -16,7 +16,7 @@
 #
 # **Docker は勝手に入れない。** 無い・起きていない・触る権限が無いときは、入れ方を案内して止まる
 # (Mac はエージェントだけ入れてから)。もう一度流せば、そのまま上げ直しになる (pull して up -d)。
-# compose ファイルもイメージも**最新のリリースの版**に揃える (取ってきた compose.yml のタグを書き換える)。
+# compose ファイルもイメージも**最新のリリースのバージョン**に揃える (取ってきた compose.yml のタグを書き換える)。
 #
 # **入口は genkan** (https://github.com/danything/genkan。ホスト名でコンテナに振り分けるリバースプロキシ)。
 # 動いていればそれを使い、無ければ 80 と 443 が空いているときだけ ~/genkan に入れて、
@@ -38,8 +38,8 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-# px4-userland / siano-userland の版 (Mac)。**agent/Dockerfile と揃える** (Renovate が両方いっしょに上げる)。
-# 中身は配布元の SHA256SUMS で確かめるので、版を上げてもここのハッシュは要らない
+# px4-userland / siano-userland のバージョン (Mac)。**agent/Dockerfile と揃える** (Renovate が両方いっしょに上げる)。
+# 中身は配布元の SHA256SUMS で確かめるので、バージョンを上げてもここのハッシュは要らない
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 PX4_USERLAND_VERSION=0.2.1
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
@@ -72,7 +72,7 @@ say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31mエラー:\033[0m %s\n' "$*" >&2; exit 1; }
 fetch() { curl -fsSL --retry 3 -o "$2" "$1" || die "ダウンロードできません: $1"; }
 
-# 入れる版。compose ファイルはこの版 (git の ref) から取り、イメージは x.y.z の形式のときだけその版に
+# 入れるバージョン。compose ファイルはこのバージョン (git の ref) から取り、イメージは x.y.z の形式のときだけそのバージョンに
 # 揃える (コミットやブランチなら latest)。API を使わず、latest の転送先からタグを読む (API は回数制限がある)
 version() {
   if [ -n "${DENPA_VERSION:-}" ]; then echo "$DENPA_VERSION"; return; fi
@@ -153,12 +153,12 @@ networks:
 compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 
 # 取ってきた compose ($1。compose.prod.yml か compose.mac.yml) を ~/denpa/compose.yml に置いて起こす。
-# **版はタグで揃える** — 取ってきたものの latest をこの版に書き換える (.env は使わない)
+# **バージョンはタグで揃える** — 取ってきたものの latest をこのバージョンに書き換える (.env は使わない)
 start_denpa() {
   say "denpa $2 を $DENPA_DIR に置きます"
   mkdir -p "$DENPA_DIR/config"
   curl -fsSL --retry 3 -o "$DENPA_DIR/compose.yml.new" "https://raw.githubusercontent.com/$REPO/$2/$1" \
-    || die "$2 に $1 がありません。compose.mac.yml は v1.23.0 からなので、それより前の版は Mac に入れられません"
+    || die "$2 に $1 がありません。compose.mac.yml は v1.23.0 からなので、それより前のバージョンは Mac に入れられません"
   # 手で置いたもの・手を入れたものは黙って上書きせず、compose.yml.bak に退けてそう言う。
   # install.sh が書いたものは1行目が印で、残りは前に書いた控え (.compose.yml.orig) と同じはず
   if [ -f "$DENPA_DIR/compose.yml" ] && ! { head -1 "$DENPA_DIR/compose.yml" | grep -q "^$MARK" \
@@ -329,7 +329,7 @@ mac_main() {
     agent="denpa-agent-${ref#v}-darwin-arm64.tar.gz"
     say "denpa-agent $ref"
     curl -fsSL --retry 3 -o "$agent" "https://github.com/$REPO/releases/download/$ref/$agent" \
-      || die "$ref には Mac 用のエージェントがありません。Mac 用は v1.23.0 からなので、それより前の版は Mac に入れられません"
+      || die "$ref には Mac 用のエージェントがありません。Mac 用は v1.23.0 からなので、それより前のバージョンは Mac に入れられません"
     fetch "https://github.com/$REPO/releases/download/$ref/$agent.sha256" "$agent.sha256"
     check "$agent" "$(awk '{print $1}' "$agent.sha256")"
   fi
@@ -426,7 +426,7 @@ EOF
   docker_ready "$MAC_DOCKER" "Docker Desktop か OrbStack を起こしてから、もう一度流してください" \
     || { say "エージェントは入っています (http://$host:$PORT)"; return 0; }
 
-  # --- denpa 本体 (Docker)。エージェントと同じ版に。手元の tar.gz を入れたときは main と latest ---
+  # --- denpa 本体 (Docker)。エージェントと同じバージョンに。手元の tar.gz を入れたときは main と latest ---
   start_denpa compose.mac.yml "${ref:-main}" "$host"
 }
 

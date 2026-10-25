@@ -709,12 +709,12 @@ test.describe("ホームと画面遷移", () => {
   });
 
   /*
-   * **新しい版が出ていたら、ヘッダーで知らせる。** サーバが GitHub の最新の
+   * **新しいバージョンが出ていたら、ヘッダーで知らせる。** サーバが GitHub の最新の
    * リリースを見比べる (`server/update.ts`。ここでは偽通知先が GitHub の代わり)。
    * 出ること・押せばリリースのページなこと・**リリースが消えれば引っ込むこと**を見る。
-   * 動いている版は v1.0.0 (tests/stack.ts)、見比べは 1 秒おき
+   * 動いているバージョンは v1.0.0 (tests/stack.ts)、見比べは 1 秒おき
    */
-  test("新しい版が出ていればヘッダーに出て、リリースが消えれば引っ込む", async ({
+  test("新しいバージョンが出ていればヘッダーに出て、リリースが消えれば引っ込む", async ({
     page,
     request,
     stack,
@@ -726,7 +726,7 @@ test.describe("ホームと画面遷移", () => {
         body: JSON.stringify(body),
       });
     const badge = page.getByTestId("update-available");
-    // 動いている版は環境変数から (tests/stack.ts)。外からも読める
+    // 動いているバージョンは環境変数から (tests/stack.ts)。外からも読める
     expect((await (await request.get("/api/health")).json()).version).toBe(
       "v1.0.0",
     );
@@ -749,7 +749,7 @@ test.describe("ホームと画面遷移", () => {
       await expect(badge).toContainText("v9.9.9");
       await expect(badge).toHaveAttribute("href", /releases\/tag\/v9\.9\.9$/);
 
-      // 最新が古い版になった (新しいほうのリリースを消した) → 引っ込む
+      // 最新が古いバージョンになった (新しいほうのリリースを消した) → 引っ込む
       await release({
         tag_name: "v0.9.0",
         html_url: "https://github.com/danything/denpa/releases/tag/v0.9.0",

@@ -2,7 +2,7 @@
 
 **Apple Silicon の Mac なら、Linux と同じ1行で denpa ごと立ち上がってブラウザが開きます**
 (入口の `install.sh` は1つで、OS を見て振り分ける)。Mac 用は v1.23.0 からで、
-それより前の版は入れられません (install.sh がそう言って止まる)。
+それより前のバージョンは入れられません (install.sh がそう言って止まる)。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
@@ -18,11 +18,11 @@ compose.prod.yml から tuner-agent を外したもの)。
    (`~/Library/LaunchAgents/io.github.danything.denpa-agent.plist`) に載せます。
    ログインで起き、落ちたら起き直し、止めるときは録画の終わりを待ちます
    (launchd に殺されないよう、待ちの上限を 6 時間より長くしてある)
-2. **denpa 本体** — エージェントと同じ版の compose.mac.yml を `~/denpa/compose.yml` に置いて
+2. **denpa 本体** — エージェントと同じバージョンの compose.mac.yml を `~/denpa/compose.yml` に置いて
    `docker compose up -d`。答えたらブラウザで開きます (`--no-open` で開かない)。genkan が動いているか
    80・443 が空いていれば、Linux と同じく `http://denpa.localhost` で開けるようにします ([install.md](install.md#1行で入れる))
 
-- **要るのは Docker だけ。** px4-userland / siano-userland の Mac 版は libusb を中に抱えている
+- **要るのは Docker だけ。** px4-userland / siano-userland の Mac 用は libusb を中に抱えている
   (px4-userland 0.1.7・siano-userland 0.1.9 から) ので、Homebrew は要りません。
   Docker は勝手に入れません。無い・起きていないときはエージェントだけ入れ、
   Docker Desktop か OrbStack を入れる (起こす) よう言って終わります。入れたらもう一度流す

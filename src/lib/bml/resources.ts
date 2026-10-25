@@ -5,8 +5,8 @@
  * - 文書の中の名前 (`/40/0000/startup.bml`・`~/0001/a.png`・`a.png`・`arib-dc://-1.-1.-1/40/0000`)
  *   を「部品・モジュール・ファイル」に分解する。**大文字小文字は区別しない** (放送は 16 進の大小を混ぜる)
  * - まだ届いていないものは待つ (`fetch`)。待っている間は「データ取得中」
- * - `lockModuleOnMemory(Ex)` で押さえたモジュールは、版が上がっても押さえた版を持ち続ける
- * - DII でモジュールが消えた・版が上がったら古いものを捨てる。データイベントが変わったら部品ごと捨てる
+ * - `lockModuleOnMemory(Ex)` で押さえたモジュールは、バージョンが上がっても押さえたバージョンを持ち続ける
+ * - DII でモジュールが消えた・バージョンが上がったら古いものを捨てる。データイベントが変わったら部品ごと捨てる
  */
 
 import type {
@@ -197,7 +197,7 @@ export class Resources {
         for (const [k, module] of this.cache) {
           if (module.component !== message.componentId) continue;
           const entry = dii.modules.get(module.id);
-          // 版が上がった・消えた・データイベントが変わったものは捨てる
+          // バージョンが上がった・消えた・データイベントが変わったものは捨てる
           if (
             entry === undefined ||
             entry.version !== module.version ||
@@ -370,7 +370,7 @@ export class Resources {
     return module?.files.get(ref.file ?? "") ?? null;
   }
 
-  /** 今の版がもう届いているか */
+  /** 今のバージョンがもう届いているか */
   has(component: number, module: number): boolean {
     return (
       this.locks.get(key(component, module))?.module != null ||
@@ -408,7 +408,7 @@ export class Resources {
 
   /**
    * 覚えたものを使わずに取り直す (通信の文書へ移るとき。投票の結果のような「いまの中身」を、前に取った
-   * 版で出さない)。カルーセルのものは `fetch` と同じ
+   * バージョンで出さない)。カルーセルのものは `fetch` と同じ
    */
   refetch(ref: Ref): Promise<CarouselFile | null> {
     if (ref.url === undefined) return this.fetch(ref);
@@ -534,7 +534,7 @@ export class Resources {
     if (held !== undefined) {
       // 同じ種類で押さえ直す。待っている途中ならその待ちに任せる (通知は 1 回)
       if (held.module === null) return 1;
-      // 届いている今の版で押さえ直し、前の版を返す (web-bml の lockCachedModule と同じ)
+      // 届いている今のバージョンで押さえ直し、前のバージョンを返す (web-bml の lockCachedModule と同じ)
       const now = this.cache.get(k);
       if (now !== undefined && now !== held.module) {
         const old = held.module;

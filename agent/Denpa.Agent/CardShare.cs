@@ -153,7 +153,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         return status switch
         {
             403 => $"鍵を配る拠点に断られました: {reason ?? "理由は返っていません"}",
-            // 前の版の CARD_URL (普通の API のポート) のまま。鍵を配る API は専用のポートに移った
+            // 前のバージョンの CARD_URL (普通の API のポート) のまま。鍵を配る API は専用のポートに移った
             404 => $"{url} では鍵を配っていません (404)。CARD_URL には配る側の CARD_SHARE_PORT のポートを書きます",
             _ => $"鍵を配る拠点から{what}を受け取れません ({status}{(reason is null ? "" : $": {reason}")})",
         };
@@ -187,7 +187,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 }
 
 /// <summary>
-/// 拠点のあいだで鍵をやり取りする形式。**前の版のエージェントとも話せる**ように、
+/// 拠点のあいだで鍵をやり取りする形式。**前のバージョンのエージェントとも話せる**ように、
 /// libaribb25 を使っていた頃と同じバイト列にしてある。
 /// </summary>
 public static class CardWire
