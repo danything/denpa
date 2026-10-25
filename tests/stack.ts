@@ -220,6 +220,12 @@ export async function boot(
       FFMPEG: "./tests/fake/ffmpeg.sh",
       // 選局もスクランブル解除もスキャンも、窓口はここ1つ
       TUNER_AGENT_URL: stack.agentUrl,
+      /*
+       * ディスクの残す量 (既定 20GB) を 0 にする。CI の作業機は空きが 10GB を切ることがあり、
+       * EPGStation の引き継ぎが「空きが足りません」で録画の前に止まる (13-migrate)。
+       * 残量の見張りは e2e では見ていない
+       */
+      DISK_LOW_THRESHOLD: "0",
       FAKE_FFMPEG_FAIL_FILE: stack.failFile,
       FAKE_FFMPEG_SLOW_FILE: stack.slowFile,
       FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
