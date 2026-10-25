@@ -340,6 +340,15 @@ img[data-fade="pending"] {
 }
 
 /*
+ * ---- 明暗の切り替え (`theme.svelte.ts` の `crossfade`。View Transitions の種類 `theme`) ----
+ * 前の色の写しと次の色の画面を、透明度だけで入れ替える (場所は動かさない)
+ */
+html:active-view-transition-type(theme)::view-transition-group(*) {
+  animation-duration: var(--dp-duration-move);
+  animation-timing-function: var(--dp-ease);
+}
+
+/*
  * ---- 一言だけ出して消える通知 (`.flash`。「保存しました」) ----
  * ふわっと出て (0.2 秒)、読めるだけ置き、ふわっと消える (0.3 秒)。
  * 全体の長さは出しておく長さと同じにする (`--flash-for`。消すのは JS で、中身ごと外す)
@@ -452,6 +461,11 @@ html {
 *:hover {
   scrollbar-color: var(--dp-muted) transparent;
 }
+/*
+ * **日本語は文節で折り返す** (`word-break: auto-phrase`。行頭に小さい「ゃ」や「ー」を置かない `line-break: strict`)。
+ * 文の段落は最後の行に 1〜2 字だけ残さず (`text-wrap: pretty`)、見出しは行の長さをそろえる (`balance`)。
+ * 狭い升 (番組表のマス・表の升・行数で切る一覧の字) は下の `.char-wrap` で字ごとに折る (docs/design.md の「作り方」)
+ */
 body {
   word-break: auto-phrase;
   line-break: strict;
@@ -463,6 +477,26 @@ body {
      * CSS が効かないので、描くときに VS15 を足す (`player/caption-draw.ts`)
      */
   font-variant-emoji: text;
+}
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+/*
+ * **狭い升は文節で折らず、字ごとに折る。** 文節は切れないひとかたまりなので、幅の狭い所では行の右に大きく空き、
+ * 行が増えて高さが変わる (行数で切る所は読める字が減る)。表の升は、文節の長さで列の幅まで広がる
+ */
+.char-wrap,
+td,
+th {
+  word-break: normal;
+  text-wrap-style: auto;
 }
 /*
  * **ステータスバーの裏まで描くとき** (ホーム画面から開いた iPhone で暗いテーマ。`app.html` が `data-status-bar` を付ける)。

@@ -1108,7 +1108,7 @@
                     onclick={() => open(program)}
                     data-testid="program-button"
                   >
-                    <span class="clamp">
+                    <span class="clamp char-wrap">
                       <span class="title">
                         <span class="num">{time(program.start_at)}</span>
                         <span class={program.name ? "broadcast" : "faint"}

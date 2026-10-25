@@ -39,6 +39,30 @@ function apply(): void {
     link.setAttribute("href", dark ? href : `${href}?theme=light`);
 }
 
+/**
+ * **選び直したときは、画面全体を前の色から次の色へなめらかに移す** (View Transitions の種類 `theme`。動きは `app.css` の「明暗の切り替え」)。
+ * 地・件の面・ヘッダーはそれぞれ自分の色を持つので、どれか 1 つに transition を付けると、ほかが先に替わって段違いに見える。
+ * 画面の写しを 1 枚撮って重ねるだけなので、移っている間も色を描き直さない。
+ *
+ * 移さずにすぐ替えるのは、動きを減らす設定の端末・種類を渡せないブラウザ・映像を流している間
+ * (移っている間は写しが映像を止めて見せる)。開いたときと端末の設定に従うときは `apply` を直に呼ぶので、移らない
+ */
+function crossfade(change: () => void): void {
+  const playing = [...document.querySelectorAll("video")].some(
+    (video) => !video.paused,
+  );
+  if (
+    typeof ViewTransition === "undefined" ||
+    !("types" in ViewTransition.prototype) ||
+    matchMedia("(prefers-reduced-motion: reduce)").matches ||
+    playing
+  ) {
+    change();
+    return;
+  }
+  document.startViewTransition({ update: change, types: ["theme"] });
+}
+
 export const theme = {
   get mode(): ThemeMode {
     return mode;
@@ -63,7 +87,7 @@ export const theme = {
     mode = next;
     // 既定がダークなので「端末に合わせる」も選んだ印として残す (残さないと次に開いたときダークに戻る)
     write("theme", next);
-    apply();
+    crossfade(apply);
   },
 
   /** ヘッダーのボタン。ダーク → ライト → 端末に合わせる の順に巡る */

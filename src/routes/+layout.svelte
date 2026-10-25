@@ -178,6 +178,16 @@
   const slug = (href: string) => (href === "/" ? "home" : href.slice(1));
 
   /**
+   * **本文へ移動** (キーボードで Tab を押したときだけ左上に出る)。押したら本文 (`main`) に焦点を移し、次の Tab が本文の最初から始まる。
+   * 行き先を URL の `#` で渡さないのは、設定の画面が `#` を節の名前として読むため
+   */
+  let main = $state<HTMLElement>();
+  function skipToMain(event: MouseEvent): void {
+    event.preventDefault();
+    main?.focus();
+  }
+
+  /**
    * いま開いている画面のナビの行き先。**設定はグループごとに経路が分かれている** (`/settings/reception` など) ので、
    * その下も「設定」に数える。録画 (`/`) は頭が全部に合うので、ぴったりのときだけ
    */
@@ -338,6 +348,9 @@
         遷移の進み具合 (上の `slow`)。長さの分からない読み込みなので、
         光が左から右へ走るだけの不確定のバー。ヘッダーの上端に貼る
     -->
+  <a class="skip" href="#main" onclick={skipToMain} data-testid="skip-to-main"
+    >本文へ移動</a
+  >
   {#if slow}
     <div
       class="nav-progress"
@@ -465,7 +478,7 @@
     </div>
   {/if}
 
-  <main>
+  <main id="main" tabindex="-1" bind:this={main}>
     {#if pending !== null}
       <GuidePending url={pending} />
     {/if}
@@ -921,6 +934,31 @@
   /* ライブの全画面のあいだは隠す (映像だけにする) */
   :global(html[data-stage-fullscreen]) :is(.tabbar, .notice-slot) {
     display: none;
+  }
+  /*
+   * 本文へ移動のリンク。ふだんは画面の上の外に置き、焦点が来たときだけ左上に操作の層のカプセルで出す。
+   * ヘッダー・遷移中のバーより上に重ねる
+   */
+  .skip {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + var(--dp-space-2));
+    left: calc(env(safe-area-inset-left) + var(--dp-space-3));
+    z-index: 70;
+    padding: var(--dp-space-2) var(--dp-space-4);
+    border-radius: var(--dp-radius-full);
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    color: var(--dp-fg);
+    font-weight: var(--dp-weight-bold);
+    text-decoration: none;
+    translate: 0 calc(-100% - 2rem);
+  }
+  .skip:focus {
+    translate: none;
+  }
+  /* 本文そのものは押すものではないので、焦点を移しても枠を描かない (次の Tab から本文の中を回る) */
+  main:focus {
+    outline: none;
   }
   /* 画面の中身を包むだけ (箱を作らない)。番組表へ移る途中だけ隠す (`pending`) */
   .route {

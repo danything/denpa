@@ -192,3 +192,55 @@
   font-size: var(--sl-text-base);
   color: var(--sl-color-white);
 }
+
+/*
+ * 日本語の折り返しは画面と同じ (src/app.css の「日本語は文節で折り返す」)。本文は文節で折り、
+ * 段落は最後の行に 1〜2 字だけ残さず、見出しは行の長さをそろえる。表の升は字ごとに折る (文節の長さで列が広がらないように)
+ */
+body {
+  word-break: auto-phrase;
+  line-break: strict;
+}
+.sl-markdown-content :is(p, li, dd) {
+  text-wrap: pretty;
+}
+:is(h1, h2, h3) {
+  text-wrap: balance;
+}
+.sl-markdown-content :is(td, th) {
+  word-break: normal;
+  text-wrap-style: auto;
+}
+
+/*
+ * 先へ進むリンクの矢印 (トップの主のボタン「入れる」・前後のページへのカード)。乗せると矢印だけが向きへ少しずれる。
+ * 長さと曲線は src/app.css の --dp-duration-move と --dp-ease-spring と同じ
+ */
+:is(.hero .sl-link-button.primary, .pagination-links a) svg {
+  transition: translate 300ms
+    linear(
+      0,
+      0.06 4%,
+      0.24 9%,
+      0.5 15%,
+      0.74 22%,
+      0.9 30%,
+      1.02 40%,
+      1.04 48%,
+      1.02 60%,
+      1 75%,
+      1
+    );
+}
+.hero .sl-link-button.primary:hover svg,
+.pagination-links a[rel="next"]:hover svg {
+  translate: 0.2rem 0;
+}
+.pagination-links a[rel="prev"]:hover svg {
+  translate: -0.2rem 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.hero .sl-link-button.primary, .pagination-links a) svg {
+    transition: none;
+  }
+}

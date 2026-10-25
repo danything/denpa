@@ -35,6 +35,13 @@ const speculationRules = {
   prefetch: [speculationTargets],
   prerender: [speculationTargets],
 };
+const rethemeOnShow = `if (document.prerendering)
+  document.addEventListener("prerenderingchange", () => {
+    const stored = localStorage.getItem("starlight-theme");
+    const theme = stored || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
+    window.StarlightThemeProvider?.updatePickers(stored || "auto");
+  }, { once: true });`;
 
 export default defineConfig({
   site: "https://danything.github.io",
@@ -60,6 +67,9 @@ export default defineConfig({
           attrs: { type: "speculationrules" },
           content: JSON.stringify(speculationRules),
         },
+        // 裏で描いた (prerender) ページは、描いてから開かれるまでに別のページで明暗を変えていることがある。
+        // 開かれたときに、Starlight と同じ決め方 (ThemeProvider) でもう一度当てる
+        { tag: "script", content: rethemeOnShow },
         // 全ページ共通の画像 (ページごとには作らない)。twitter:card (summary_large_image) は Starlight が付ける
         { tag: "meta", attrs: { property: "og:image", content: ogImage.url } },
         {

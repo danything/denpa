@@ -35,7 +35,7 @@
       ></span></span
     >
   {/if}
-  <span class="act-text"
+  <span class="act-text char-wrap"
     ><span class="act-label" data-testid={status.testid}>{status.label}</span
     >{#if detail !== ""}<span
         class="act-detail"
