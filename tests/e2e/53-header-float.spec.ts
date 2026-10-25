@@ -81,12 +81,13 @@ test("Tab で「本文へ移動」が出て、Enter で本文へ焦点が移る"
 test("明暗を選び直したときだけ画面全体が移り、開いたときは移らない", async ({
   page,
 }) => {
-  // E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`)。GPU で描ける端末として見るため外し続ける
+  // E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`)。WebGL の描き手の名前を差し替えて、GPU で描ける端末として見る
   await page.addInitScript(() => {
-    new MutationObserver(() => {
-      if (document.documentElement.dataset["keepLite"] === undefined)
-        delete document.documentElement.dataset["lite"];
-    }).observe(document.documentElement, { attributeFilter: ["data-lite"] });
+    const read = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function (name: number) {
+      const value: unknown = read.call(this, name);
+      return typeof value === "string" ? "Test GPU" : value;
+    };
   });
   await page.addInitScript(() => {
     const w = window as unknown as { kinds: string[][] };
@@ -121,7 +122,6 @@ test("明暗を選び直したときだけ画面全体が移り、開いたと�
 
   // ソフトウェアで描いている端末でも、すぐ替える
   await page.evaluate(() => {
-    document.documentElement.dataset["keepLite"] = "";
     document.documentElement.dataset["lite"] = "";
   });
   await page.getByTestId("theme-toggle").click();
@@ -131,7 +131,6 @@ test("明暗を選び直したときだけ画面全体が移り、開いたと�
   );
   expect(await kinds()).toEqual([]);
   await page.evaluate(() => {
-    delete document.documentElement.dataset["keepLite"];
     delete document.documentElement.dataset["lite"];
   });
 
