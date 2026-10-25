@@ -55,6 +55,18 @@ const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 const LOGO_MODULE_NAMES = new Set(["LOGO-05", "CS_LOGO-05"]);
 
 /**
+ * ロゴのモジュールの大きさの上限 (2MiB)。これより大きいと言うものは組み立てない。
+ * 全局ぶんのロゴを詰めても数百 KB なので、十分に余裕がある
+ */
+const MAX_LOGO_MODULE_SIZE = 2 * 1024 * 1024;
+
+/**
+ * 同時に組み立てるロゴのモジュールの数。ふつうは `LOGO-05` と `CS_LOGO-05` の2つ
+ * (`downloadKey` の説明)
+ */
+const MAX_LOGO_DOWNLOADS = 4;
+
+/**
  * PMT から、ロゴのカルーセルが流れている ES の PID を読み取る。
  * 見るのは `stream_identifier_descriptor` の component_tag だけ。
  */
@@ -209,6 +221,13 @@ export class DsmccLogoCollector {
           building.moduleVersion === module.moduleVersion
         )
           continue;
+        if (module.moduleSize > MAX_LOGO_MODULE_SIZE) continue;
+        // 数に上限を置き、超えたら一番古いものを捨てる (downloadId を変えて送られても溜まらない)
+        this.downloads.delete(key);
+        if (this.downloads.size >= MAX_LOGO_DOWNLOADS) {
+          const oldest = this.downloads.keys().next().value;
+          if (oldest !== undefined) this.downloads.delete(oldest);
+        }
         this.downloads.set(
           key,
           new ModuleBuilder(

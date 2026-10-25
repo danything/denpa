@@ -3,7 +3,7 @@ import { deflateSync } from "node:zlib";
 
 import type { ResponseMessage } from "./bml-protocol.js";
 import { BmlDecoder, inflate, moduleFiles, parseBxmlInfo } from "./bml.js";
-import { ModuleBuilder } from "./dsmcc.js";
+import { MAX_MODULE_SIZE, ModuleBuilder } from "./dsmcc.js";
 import type { DiiModuleSpec } from "./synth.js";
 import {
   BML_TS,
@@ -148,6 +148,18 @@ describe("inflate", () => {
 
   test("伸ばせなければ null。転んでも投げない", () => {
     expect(inflate(Uint8Array.from([1, 2, 3, 4]), { type: 0 })).toBeNull();
+  });
+
+  /** 縮めると数十 KB でも、伸ばすと上限 (`MAX_MODULE_SIZE`) を超えるもの */
+  test("伸ばすと大きすぎるものは null", () => {
+    const bomb = new Uint8Array(
+      deflateSync(new Uint8Array(MAX_MODULE_SIZE + 1)),
+    );
+    expect(bomb.length).toBeLessThan(64 * 1024);
+    expect(inflate(bomb, { type: 0 })).toBeNull();
+    // 上限ちょうどは伸ばす
+    const fits = new Uint8Array(deflateSync(new Uint8Array(MAX_MODULE_SIZE)));
+    expect(inflate(fits, { type: 0 })?.length).toBe(MAX_MODULE_SIZE);
   });
 });
 
@@ -418,6 +430,59 @@ describe("BmlDecoder", () => {
     );
     expect(() => decode(...head, junk)).not.toThrow();
   });
+
+  /**
+   * **放送の中身は外から作れる。** moduleSize は32ビットで、言われるままに確保すると
+   * DII 1つで 4GB になる。大きすぎるモジュールは組み立てず、来ないものとして一覧から外す
+   */
+  test("大きすぎると言うモジュールは組み立てず、一覧から外す", () => {
+    const here = multipart([["/startup.bml", "text/X-arib-bml", "<bml/>"]]);
+    const dii = packetize(
+      BML_PID,
+      diiSection(DOWNLOAD_ID, 4066, [
+        {
+          moduleId: 1,
+          moduleSize: here.length,
+          moduleVersion: 1,
+          contentType: "multipart/mixed",
+        },
+        {
+          moduleId: 2,
+          moduleSize: 0xffffffff,
+          moduleVersion: 1,
+          contentType: "multipart/mixed",
+        },
+      ]),
+    );
+    const out = decode(
+      ...head,
+      dii,
+      ...carousel(here).slice(1),
+      packetize(
+        BML_PID,
+        ddbSection(DOWNLOAD_ID, 2, 1, 0, new Uint8Array(4066)),
+      ),
+    );
+    expect(lists(out)).toEqual([[1]]);
+    expect(
+      out.filter((message) => message.type === "moduleDownloaded"),
+    ).toHaveLength(1);
+  });
+
+  test("同時に組み立てるモジュールは合計の大きさを限る", () => {
+    // 1つずつは上限に収まるが、5つ並べると合計の上限 (64MiB) を超える
+    const modules = Array.from({ length: 5 }, (_, i) => ({
+      moduleId: i + 1,
+      moduleSize: MAX_MODULE_SIZE,
+      moduleVersion: 1,
+      contentType: "multipart/mixed",
+    }));
+    const out = decode(
+      ...head,
+      packetize(BML_PID, diiSection(DOWNLOAD_ID, 4066, modules)),
+    );
+    expect(lists(out)).toEqual([[1, 2, 3, 4]]);
+  });
 });
 
 describe("ModuleBuilder", () => {
@@ -427,5 +492,36 @@ describe("ModuleBuilder", () => {
     expect(some.complete).toBe(false);
     expect(some.add(0, Uint8Array.from([1, 2, 3, 4, 5]))).toBe(true);
     expect(some.complete).toBe(true);
+  });
+
+  test("大きすぎるモジュールはブロックを受け取らない", () => {
+    const huge = new ModuleBuilder(1, 0xffffffff, 4066);
+    expect(huge.add(0, new Uint8Array(4066))).toBe(false);
+    expect(huge.blocks).toBe(0);
+    expect(huge.complete).toBe(false);
+  });
+
+  /** DII の言う大きさを先に確保しない。来たブロックの終わりまでで足りる */
+  test("入れ物は届いたブロックのぶんだけ広げる", () => {
+    const builder = new ModuleBuilder(1, MAX_MODULE_SIZE, 4066);
+    expect(builder.add(0, new Uint8Array(4066).fill(7))).toBe(false);
+    // 確保した大きさは外から見えないので、private の入れ物を覗いて確かめる
+    expect((builder as unknown as { buffer: Uint8Array }).buffer.length).toBe(
+      4066,
+    );
+    // 揃ったら DII の言う大きさの中身を返す (届いていないところは 0)
+    expect(builder.data.length).toBe(MAX_MODULE_SIZE);
+    expect(builder.data[0]).toBe(7);
+  });
+
+  test("blockSize を超えるブロックや、モジュールをはみ出すブロックは受けない", () => {
+    const builder = new ModuleBuilder(1, 10, 4);
+    expect(builder.add(0, new Uint8Array(5))).toBe(false);
+    expect(builder.add(3, new Uint8Array(2))).toBe(false);
+    expect(builder.add(2, new Uint8Array(3))).toBe(false);
+    expect(builder.blocks).toBe(0);
+    expect(builder.add(2, new Uint8Array(2))).toBe(false);
+    expect(builder.add(2, new Uint8Array(2))).toBe(false);
+    expect(builder.blocks).toBe(1);
   });
 });

@@ -210,6 +210,66 @@ describe("DsmccLogoCollector", () => {
       { networkId: 7, serviceId: 330 },
     ]);
   });
+
+  /**
+   * **放送の中身は外から作れる。** downloadId を変えた DII を次々に送られても、
+   * 組み立て中のものは一定の数までしか溜めない (古いものから捨てる)
+   */
+  const flooded = (others: number) => {
+    const collector = new DsmccLogoCollector();
+    const module = logoModule(0x05, [
+      { logoId: 1, services: [[4, 211]], data: PNG },
+    ]);
+    const dii = (downloadId: number) =>
+      packetize(
+        ES_PID,
+        diiSection(downloadId, 4066, {
+          moduleId: MODULE_ID,
+          moduleSize: module.length,
+          moduleVersion: 1,
+          name: "LOGO-05",
+        }),
+      );
+    const data = stream(
+      packetize(0x0000, patSection([[ESS, PMT_PID]])),
+      packetize(PMT_PID, pmtSection(ESS, ES_PID, 0x79)),
+      dii(DOWNLOAD_ID),
+      ...Array.from({ length: others }, (_, i) => dii(DOWNLOAD_ID + 1 + i)),
+      packetize(ES_PID, ddbSection(DOWNLOAD_ID, MODULE_ID, 1, 0, module)),
+    );
+    for (const packet of packets(data)) collector.feed(packet);
+    return collector.collected();
+  };
+
+  test("組み立て中のモジュールは数を限り、古いものから捨てる", () => {
+    expect(flooded(3)).toHaveLength(1);
+    expect(flooded(4)).toEqual([]);
+  });
+
+  test("大きすぎると言うモジュールは組み立てない", () => {
+    const collector = new DsmccLogoCollector();
+    const module = logoModule(0x05, [
+      { logoId: 1, services: [[4, 211]], data: PNG },
+    ]);
+    const data = stream(
+      packetize(0x0000, patSection([[ESS, PMT_PID]])),
+      packetize(PMT_PID, pmtSection(ESS, ES_PID, 0x79)),
+      packetize(
+        ES_PID,
+        diiSection(DOWNLOAD_ID, 4066, {
+          moduleId: MODULE_ID,
+          moduleSize: 0xffffffff,
+          moduleVersion: 1,
+          name: "LOGO-05",
+        }),
+      ),
+      packetize(ES_PID, ddbSection(DOWNLOAD_ID, MODULE_ID, 1, 0, module)),
+    );
+    expect(() => {
+      for (const packet of packets(data)) collector.feed(packet);
+    }).not.toThrow();
+    expect(collector.collected()).toEqual([]);
+  });
 });
 
 describe("LogoCollector (衛星)", () => {
