@@ -227,6 +227,15 @@ test.describe("ホームの1本の一覧", () => {
           ),
           "「録画中・あと21分」が縮んでいる",
         ).toBe(true);
+        // 点とバーは画面の外では描かない (動き続けない)。行ではなく、それぞれの小さな箱に付ける
+        await expect(status.locator(".act-mark")).toHaveCSS(
+          "content-visibility",
+          "auto",
+        );
+        await expect(row.getByTestId("recording-progress")).toHaveCSS(
+          "content-visibility",
+          "auto",
+        );
         await expect(row.getByTestId("recording-progress")).toBeVisible();
         // 進み具合のバーは面の下端いっぱいに付く
         const rowBox = (await row.boundingBox())!;

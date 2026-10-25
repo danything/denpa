@@ -211,6 +211,11 @@
   justify-content: center;
   width: 0.875rem;
 }
+/* 録画中の点は画面の外では描かない (脈打ち続けない)。点の入れ物にだけ付け、アンカーの基準の字 (`.act-text`) は外に置く */
+.board .act-mark:has(> .rec-dot) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 0.875rem auto 0.375rem;
+}
 .board .act-dot {
   display: block;
   width: 0.375rem;
@@ -274,6 +279,8 @@
   height: 3px;
   margin: 0;
   border-radius: 0;
+  /* 画面の外では描かない (バーの光が回り続けない)。大きさは上で決めてあるので contain-intrinsic-size は要らない */
+  content-visibility: auto;
 }
 /*
  * **録画中のいちばん上の行は、バーの先に「いま」の時刻** (`TimelineRow`。録画中は「いま」の線を別に引かない)。
