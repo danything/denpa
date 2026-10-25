@@ -330,20 +330,12 @@
                   data-testid="search-open"
                 >
                   <span class="hit-title">
-                    <!-- 立っている予約は本当のこととして先に出す。無ければ書く欄の条件で録るか -->
+                    <!-- 立っている予約は本当のこととして状態のバッジで先に出す -->
                     {#if program.reservation_state !== null}
                       {@render stateTag(
                         program.reservation_state,
                         "search-program-state",
                       )}
-                    {:else if verdict?.kind === "record"}
-                      <span class="tag success" data-testid="search-verdict"
-                        >録る</span
-                      >
-                    {:else if verdict?.kind === "skip"}
-                      <span class="tag" data-testid="search-verdict"
-                        >録らない</span
-                      >
                     {/if}
                     <span class="truncate broadcast">{program.name}</span>
                   </span>
@@ -354,10 +346,16 @@
                         program.end_at,
                       )}</span
                     >
-                    {#if verdict?.kind === "skip" && program.reservation_state === null}
-                      ・ <span data-testid="search-verdict-reason"
-                        >{SKIP_LABEL[verdict.reason]}</span
+                    <!-- 予約が無ければ、書く欄の条件で録るか。事実なので補足の字で (docs/design.md の「印の意味」) -->
+                    {#if program.reservation_state === null && verdict !== null}
+                      ・ <span data-testid="search-verdict"
+                        >{verdict.kind === "record" ? "録る" : "録らない"}</span
                       >
+                      {#if verdict.kind === "skip"}
+                        (<span data-testid="search-verdict-reason"
+                          >{SKIP_LABEL[verdict.reason]}</span
+                        >)
+                      {/if}
                     {/if}
                   </span>
                 </button>
@@ -618,24 +616,23 @@
               data-testid="preview-open"
             >
               <span class="hit-title">
-                {#if row.skip !== null || !row.matched}
-                  <span class="tag">録らない</span>
-                {:else if row.reservation_state !== null}
+                {#if row.skip === null && row.matched && row.reservation_state !== null}
                   {@render stateTag(row.reservation_state)}
-                {:else}
-                  <span class="tag success">録る</span>
                 {/if}
                 <span class="truncate broadcast">{row.name}</span>
               </span>
+              <!-- 録るかどうかは事実なので補足の字で (docs/design.md の「印の意味」)。録らない行は薄くもなる (`.dim`) -->
               <span class="hit-meta tiny muted">
                 <span class="broadcast">{row.service_name}</span> ・
                 <span class="num"
                   >{dateTime(row.start_at)}〜{time(row.end_at)}</span
                 >
                 {#if !row.matched}
-                  ・ 条件から外れました
+                  ・ 録らない (条件から外れました)
                 {:else if row.skip !== null}
-                  ・ {SKIP_LABEL[row.skip.kind]}
+                  ・ 録らない ({SKIP_LABEL[row.skip.kind]})
+                {:else if row.reservation_state === null}
+                  ・ 録る
                 {/if}
                 {#if row.conflicts.length > 0 || row.conflict_reason !== null}
                   ・ <span class="text-error"

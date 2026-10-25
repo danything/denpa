@@ -1923,10 +1923,12 @@
               title={rec.name}
               titleTestid="watch-name"
             >
-              {#snippet badge()}
+              {#snippet prefix()}
                 {#if localSrc !== null || drawingLocal}
-                  <!-- サーバではなく端末のコピーで観ている印 -->
-                  <span class="tag success local"> 端末 </span>
+                  <!-- サーバではなく端末のコピーで観ている。事実なのでバッジにせず控えた字 (docs/design.md の「印の意味」) -->
+                  <span class="local"
+                    >端末<span class="local-sep">・</span></span
+                  >
                 {/if}
               {/snippet}
               {#snippet status()}
@@ -2114,11 +2116,13 @@
     text-align: center;
     color: var(--dp-on-video);
   }
+  /* 時間帯・局と同じ並びに、控えた字で「・」でつなぐ (「・」の両側は InfoBlock の `.sep` と同じ空き) */
   .local {
     flex-shrink: 0;
-    align-self: center;
-    font-size: 0.625rem;
-    padding: 0 0.35rem;
+    color: var(--dp-on-video-muted);
+  }
+  .local-sep {
+    margin-inline-start: 0.375rem;
   }
   .meta {
     margin-top: 0.75rem;

@@ -7,6 +7,7 @@
   import CalendarDays from "~icons/lucide/calendar-days";
   import Contrast from "~icons/lucide/contrast";
   import Ellipsis from "~icons/lucide/ellipsis";
+  import ExternalLink from "~icons/lucide/external-link";
   import ListVideo from "~icons/lucide/list-video";
   import Moon from "~icons/lucide/moon";
   import Search from "~icons/lucide/search";
@@ -382,11 +383,12 @@
       </a>
       <!--
                 **新しいバージョンが出ている** (server/update.ts が GitHub のリリースを見比べる)。
-                押せばリリースのページ。閉じるボタンは無い — 上げるか、リリースが消えれば引っ込む
+                押せばリリースのページ。閉じるボタンは無い — 上げるか、リリースが消えれば引っ込む。
+                事実なのでバッジにせず控えた字 (docs/design.md の「印の意味」)。外へ出るリンクの印を添えて、押せることを示す
             -->
       {#if data.update !== null}
         <a
-          class="tag info"
+          class="update"
           href={data.update.url}
           target="_blank"
           rel="noopener noreferrer"
@@ -394,6 +396,7 @@
           data-testid="update-available"
         >
           {data.update.version} が公開されています
+          <Icon icon={ExternalLink} size="size-3.5" />
         </a>
       {/if}
     </div>
@@ -646,6 +649,19 @@
     height: 1.3rem;
     flex-shrink: 0;
     fill: currentColor;
+  }
+  /* 新しいバージョンのお知らせ。控えた小さな字で、指を乗せたら本文の色 */
+  .update {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--dp-muted);
+    font-size: var(--dp-text-xs);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .update:hover {
+    color: var(--dp-fg);
   }
   .actions {
     display: flex;

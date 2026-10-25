@@ -144,15 +144,20 @@
   }
   .toast {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.75rem;
-    /* 浮かぶものなので縁は付けず影だけ。左は種類の色の線 (app.css の .notice) */
+    /* 操作の層に浮かぶので、面はメニューと同じ (`--dp-pop`)。縁は付けず影だけ。種類は頭のアイコン (app.css の .notice) */
+    background: var(--dp-pop);
     box-shadow: var(--dp-shadow-pop);
   }
   .text {
     white-space: pre-wrap;
   }
+  /* 1 行目の真ん中にそろえる (頭のアイコンと同じ高さ)。指の端末でボタンが高くなっても字はずれない */
   .close {
     flex: none;
+    margin-block: calc(
+      (var(--pico-line-height) * 1rem - var(--dp-btn-h-xs)) / 2
+    );
   }
 </style>
