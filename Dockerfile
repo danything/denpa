@@ -20,13 +20,13 @@ RUN bun install
 # 配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
 #
 # FFmpeg は下の `ffmpeg` 段と同じバージョンに揃える (Renovate が同じ PR で2か所とも上げる)。
-# 組むのはデコーダ1つだけなので、1〜2分で終わる
+# 組むのは要るデコーダだけなので、2分ほどで終わる
 #
 # **組むのは mpeg2video のデコーダと、フレームの区切りを探す parser と、AAC・Opus のデコーダだけ。**
 # 他は全部切る (`--disable-everything`)。AAC はブラウザの AudioDecoder に任せていたが、
 # https でしか出てこず iPhone の Safari には iOS 26 まで無いので、こちらでデコードする。
-# AAC の parser は組まない — ADTS の区切りと時刻は JS (ts/pes.ts の AdtsSplitter) が付ける。
-# **Opus のデコーダも組む** (AV1 と組んで送られてくる fMP4 の音。ライブ・追っかけを canvas で
+# AAC の parser は組まない — ADTS の区切りと時刻は JS (packages/arib/src/pes.ts の AdtsSplitter) が付ける。
+# **Opus のデコーダも組む** (AV1 と組んで送られてくる fMP4 の音。ライブ・追っかけ・録画を canvas で
 # 描く経路 — 車載ブラウザなど <video> が止まる端末向け)。Opus のデコーダは swresample を当てにする
 # (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
 #
