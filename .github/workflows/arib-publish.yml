@@ -1,16 +1,15 @@
 name: Publish @doany/arib
 
-# **`packages/arib` を npm に出す** (README の「版」)。タグ `arib-v<版>` を押すと出る。
-# 版は packages/arib/package.json の `version` と同じにする (違えば止まる)。
+# **`packages/arib` を npm に出す** (docs/development.md「`@doany/arib` を出す」)。main のコミットに
+# タグ `arib-v<版>` を押すと出る。版は packages/arib/package.json の `version` と同じにする (違えば止まる)。
 #
-# npm へは Trusted Publishing (OIDC) で出すので、トークンは持たない。provenance も付く。
+# npm へはふだん Trusted Publishing (OIDC) で出す。トークンは持たず、provenance も付く。
 # npm 側で、このリポジトリのこの workflow (arib-publish.yml) を信頼する設定が要る。
 # Trusted Publishing はパッケージが npm にあってからしか設定できないので、**最初の1回だけ**は
-# 手で回して (workflow_dispatch) できた tgz を artifact から取り、手元で `npm publish <tgz> --access public` する
+# リポジトリの secret `NPM_TOKEN` (npm の granular access token) で出す。出したら secret は消す
 on:
   push:
     tags: ["arib-v*"]
-  workflow_dispatch: {}
 
 concurrency:
   group: arib-publish-${{ github.ref }}
@@ -28,6 +27,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Tag is on main and matches package version
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "タグ ${GITHUB_REF_NAME} が main のコミットに付いていない"
+            exit 1
+          }
+          version=$(jq -r .version packages/arib/package.json)
+          test "${GITHUB_REF_NAME}" = "arib-v${version}" || {
+            echo "タグ ${GITHUB_REF_NAME} と packages/arib/package.json の版 ${version} が違う"
+            exit 1
+          }
 
       # bun の版は Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
       - name: Read bun version from Dockerfile
@@ -41,15 +54,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Tag matches package version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          version=$(jq -r .version packages/arib/package.json)
-          test "${GITHUB_REF_NAME}" = "arib-v${version}" || {
-            echo "タグ ${GITHUB_REF_NAME} と packages/arib/package.json の版 ${version} が違う"
-            exit 1
-          }
 
       - name: Test
         run: bun test packages/arib
@@ -68,19 +72,9 @@ jobs:
           check-latest: true
           registry-url: https://registry.npmjs.org
 
+      # npm は OIDC を先に試し、信頼する設定が無ければトークンに戻る (最初の1回)
       - name: Publish
-        if: startsWith(github.ref, 'refs/tags/')
         working-directory: packages/arib
-        run: npm publish --access public
-
-      - name: Pack (first publish by hand)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        working-directory: packages/arib
-        run: npm pack
-
-      - name: Upload package
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: arib-package
-          path: packages/arib/*.tgz
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

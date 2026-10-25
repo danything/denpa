@@ -20,7 +20,7 @@ npm install @doany/arib
 ```
 
 ES モジュールだけです。`bml` と `b24caption` は `node:zlib` / `node:crypto` を使うので、
-Node.js・Bun・Deno で動きます。ほかのモジュールはブラウザでも動きます。
+Node.js・Bun・Deno で動きます。ほかのモジュールはブラウザでも動きます。型は TypeScript 5.7 以降で読めます。
 
 ## 使い方
 
