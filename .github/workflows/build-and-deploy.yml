@@ -74,7 +74,12 @@ jobs:
   # ここでは**名前を付けずに digest だけで push する** (push-by-digest)。同じタグへ
   # arch ごとに push すると後に着いたほうが上書きするので、名前は下の merge で
   # 両方を束ねた索引 (multi-arch manifest) に1回だけ付ける
+  #
+  # **そのタグのイメージがもう GHCR にあれば組まない。** タグは中身を最後に変えたコミットなので、
+  # 同じタグなら中身も同じ。denpa だけを直した push でエージェントまで組み直すと、arm64 の AOT に
+  # 数分掛かるうえ、キャッシュ (`buildcache-<arch>`) を読むたびにダウンロード数が増えていた
   build:
+    needs: tags
     strategy:
       fail-fast: true
       matrix:
@@ -104,9 +109,6 @@ jobs:
     runs-on: ${{ matrix.arch.runner }}
     name: build (${{ matrix.image.name }}, ${{ matrix.arch.name }})
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -114,7 +116,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Already built?
+        id: built
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.name }}
+          TAG: ${{ matrix.image.scope == 'agent' && needs.tags.outputs.agent || needs.tags.outputs.denpa }}
+        run: |
+          if docker buildx imagetools inspect "${IMAGE}:${TAG}" > /dev/null 2>&1; then
+            echo "${IMAGE}:${TAG} はもうあるので組みません"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.built.outputs.skip != 'true'
+        uses: actions/checkout@v7
+
       - name: Set up Docker Buildx
+        if: steps.built.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v4
 
       # **push する前に起こしてみる。** 組めても起きないイメージ (ライブラリの欠け・
@@ -132,6 +150,7 @@ jobs:
       # arm64 で ffmpeg を一から組み直して 10 分を超えていた。レジストリには上限が無く、取り合わない。
       # イメージは公開なので、PR の docker-build-check もログインせずに読める
       - name: Build
+        if: steps.built.outputs.skip != 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -146,9 +165,11 @@ jobs:
 
       # 機材は要らない。denpa の /api/health は DB しか見ず、エージェントは自動検出で空のまま答える
       - name: Smoke test
+        if: steps.built.outputs.skip != 'true'
         run: bash .github/image-smoke.sh "${{ matrix.image.name }}" "smoke/${{ matrix.image.name }}"
 
       - name: Push by digest
+        if: steps.built.outputs.skip != 'true'
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -163,6 +184,7 @@ jobs:
       # `denpa` で前方一致するので、merge の `digests-denpa-*` がエージェントの digest まで
       # 拾ってしまう (レビュー指摘)
       - name: Export digest
+        if: steps.built.outputs.skip != 'true'
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
@@ -170,6 +192,7 @@ jobs:
           touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
 
       - name: Upload digest
+        if: steps.built.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.image.scope }}-${{ matrix.arch.name }}
@@ -198,8 +221,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 組まなかったイメージには digest が無い。見つからなくても止めず、下で「もうあるか」を見て決める
       - name: Download digests
         uses: actions/download-artifact@v8
+        continue-on-error: true
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-${{ matrix.tag }}-*
@@ -229,6 +254,12 @@ jobs:
           if [ "$newest" != "$TAG" ]; then
             echo "main の先頭は ${newest}。${TAG} は古いので develop は付けません"
             develop=""
+          fi
+          # **組まなかった (そのタグがもうある) ときは束ねない。** develop だけそのタグへ向け直す
+          if [ -z "$(ls -A "$DIGESTS" 2>/dev/null)" ] && docker buildx imagetools inspect "${IMAGE}:${TAG}" > /dev/null 2>&1; then
+            echo "${IMAGE}:${TAG} はもうあるので束ねません"
+            [ -n "$develop" ] && docker buildx imagetools create --tag "${IMAGE}:develop" "${IMAGE}:${TAG}"
+            exit 0
           fi
           cd "$DIGESTS"
           # arch が欠けたまま束ねない (artifact の取りこぼしで amd64 だけの索引になるのを防ぐ)
