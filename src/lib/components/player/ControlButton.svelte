@@ -141,7 +141,7 @@
     background: currentColor;
     transform: translateX(-50%);
   }
-  /* 透かしを減らす設定では、乗せたときの地も透かさない (並びの裏の影は `ControlBar` が透かさない地にする) */
+  /* 透かしを減らす設定では、乗せたときの地も透かさない (並びの裏の影は `ControlBar` が濃くする) */
   @media (prefers-reduced-transparency: reduce) {
     :global(.ov-btn:is(:hover, :focus-visible)) {
       --pico-background-color: color-mix(

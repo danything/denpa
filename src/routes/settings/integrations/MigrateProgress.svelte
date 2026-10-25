@@ -62,28 +62,29 @@
 
   {#if migrate.log.length > 0}
     <details class="log">
-      <summary class="small bold">
-        ログ ({migrate.log.length} 行)
-      </summary>
+      <summary class="small">ログ ({migrate.log.length} 行)</summary>
       <pre data-testid="migrate-log">{migrate.log.join("\n")}</pre>
     </details>
   {/if}
 </div>
 
 <style>
-  /* 記録はコードと同じ淡い面 (枠は付けない) */
-  .log {
-    border-radius: var(--dp-radius);
-    background: var(--dp-subtle);
-  }
+  /*
+     * ログはスキャンのログ (`reception/Channels.svelte`) と同じ形。字だけの見出しの下に、開いたら淡い面 (枠は付けない)
+     */
   .log summary {
-    padding: 0.5rem 1rem;
+    color: var(--dp-muted);
+    cursor: pointer;
   }
   .log pre {
     max-height: 16rem;
     overflow: auto;
-    margin: 0;
-    padding: 0 1rem 0.75rem;
+    margin: 0.25rem 0 0;
+    padding: 0.5rem;
+    border-radius: var(--dp-radius);
+    background: var(--dp-subtle);
+    font-family: var(--pico-font-family-monospace);
     font-size: var(--dp-text-xs);
+    white-space: pre-wrap;
   }
 </style>

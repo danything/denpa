@@ -1878,7 +1878,7 @@
               testid="watch-play"
               onclick={togglePlay}
             />
-            <!-- 畳むときは音・字幕・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`) -->
+            <!-- 畳むときは音と速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
               <ControlButton
                 icon={muted ? SOUND_OFF : SOUND_ON}

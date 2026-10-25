@@ -192,20 +192,23 @@
     );
   });
 
+  /** 検索の欄に入れておく言葉。結果の画面 (`/search?q=`) ではその言葉のまま直して送れる */
+  const query = $derived(
+    here === "/search" ? (page.url.searchParams.get("q") ?? "").trim() : "",
+  );
+
   /**
    * ページ名はナビと同じものを使う。タブに出す。設定はグループの名前を前に付ける。
    * 検索は言葉を前に付ける (履歴に並んだときに、どの検索だったか分かる)
    */
   const title = $derived.by(() => {
     const label = pages.find((l) => l.href === here)?.label ?? "denpa";
-    const q =
-      here === "/search" ? (page.url.searchParams.get("q") ?? "").trim() : "";
     const section =
       here === "/settings"
         ? groupLabel(page.route.id?.split("/")[2] ?? "")
-        : q === ""
+        : query === ""
           ? null
-          : q;
+          : query;
     return `${section === null ? "" : `${section} - `}${label} - denpa`;
   });
 
@@ -251,10 +254,6 @@
     (link) => !tabs.some((tab) => tab.href === link.href),
   );
   const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
-  /** 検索の欄に入れておく言葉。結果の画面 (`/search?q=`) ではその言葉のまま直して送れる */
-  const query = $derived(
-    here === "/search" ? (page.url.searchParams.get("q") ?? "").trim() : "",
-  );
   /** タブを出すのはナビの 5 画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
   const showTabbar = $derived(here !== null);
   /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
@@ -476,14 +475,7 @@
     </div>
   </main>
 
-  <!--
-        **狭い幅では、主な画面へのタブを画面の下に並べる** (録画・番組表・ライブ・検索)。
-        指が届くのは画面の下のほうで、上のハンバーガーから開いていた頃は、画面を移るたびに
-        2回押していた。ルールと設定はたまにしか開かないので「その他」の中。
-        出すのはナビの 5 画面と検索だけ — 観る画面・追っかけ (映像が主役)、ログインやペアリングには出さない。
-        ライブの全画面 (`html[data-stage-fullscreen]`) のときも隠す (`app.css`)。
-        下の安全域 (ホームバー) のぶんは内側の余白で避ける
-    -->
+  <!-- 狭い幅の下のタブ (上の `tabs`・`showTabbar`)。ライブの全画面のときは隠す (下の style) -->
   {#if showTabbar}
     <nav class="tabbar" aria-label="主な画面" data-testid="tabbar">
       {#each tabs as tab (tab.href)}
@@ -679,13 +671,10 @@
     min-height: 2.5rem;
   }
   /*
-     * **いまの画面は主の色の太い字と下線で示す** (選んでいるものはどこも線と字。塗らない)。 ほかの画面へのリンクは本文の字のまま (薄くしない)。
-     * 薄い灰色の地を敷くだけだった頃は、
-     * ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
-     * 地は塗らない (指を乗せたときの灰色と混ざらないように)。下線は押す場所の
-     * 内側に引くので、ヘッダーの高さは変わらない。
-     * `.button.ghost` まで書くのは、`app.css` の ghost の `[aria-current]` (灰色の地と
-     * 継いだ字の色) より強くするため。短く書くとあちらが勝って色が付かない
+     * **いまの画面は主の色の太字と下線で示す** (選んでいるものはどこも線と字。塗らない)。ほかの画面へのリンクは本文の字のまま (薄くしない)。
+     * 薄い灰色の地を敷くだけだった頃は、ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
+     * `app.css` の ghost は `aria-current` にも指を乗せたときの地を敷くので、ここで透明に戻す (地は指を乗せたときだけ)。
+     * 下線は押す場所の内側に引くので、ヘッダーの高さは変わらない
      */
   ul.links a.button {
     position: relative;

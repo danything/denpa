@@ -5,17 +5,13 @@
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import Lead from "#lib/components/Lead.svelte";
-  import Toasts, {
-    errorNotice,
-    type Notice,
-  } from "#lib/components/Toasts.svelte";
+  import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { measure } from "#lib/measure.svelte.js";
 
   let { data, form } = $props();
 
   const notices = $derived.by(() => {
-    const list: Notice[] = [];
-    list.push(...errorNotice(form, "settings-error"));
+    const list = errorNotice(form, "settings-error");
     if (form?.loggedOut !== undefined) {
       list.push({
         key: "logged-out-others",

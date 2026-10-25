@@ -27,7 +27,7 @@
   overflow-wrap: anywhere;
 }
 /*
- * 行の入口 (上の `title`)。**見た目は番組名の字のまま** — リンクの色も下線も、
+ * 行の入口 (`RowTitle`)。**見た目は番組名の字のまま** — リンクの色も下線も、
  * Pico のボタンの地・枠・余白も付けない。押せる範囲は `::after` で行
  * (`.row` は `position: relative`) いっぱいに広げる
  */
@@ -328,7 +328,7 @@
  * ---- 1本の時間軸 ----
  *
  * **どの幅でもページごとスクロールする** (`+layout.svelte` の `FILLED` に入れない)。広い画面では行が浮いたヘッダーの裏を流れ、
- * スクロールバーは窓の右端に出る。頭の1行 (絞り込みのチップ・まとめ・「⋯」) と日付の見出しは上に貼り付く。
+ * スクロールバーは窓の右端に出る。頭の1行 (絞り込みのチップ・「⋯」) と日付の見出しは上に貼り付く。
  * 広い画面 (768px 以上) では左右と下を main の余白の外まで広げ、右のサイドバーを窓の右端と下端に付ける
  */
 .board {
@@ -360,7 +360,7 @@
   min-width: 0;
 }
 /*
- * 狭い画面の頭。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、表示の切り替えの一枚を開くアイコン。
+ * 狭い画面の頭。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、状態と表示の切り替えのメニューを開く「⋯」。
  * ページごと動くので上に貼り付ける
  */
 .board .t-toolbar {
@@ -419,14 +419,6 @@
   position: relative;
   font-weight: var(--dp-weight-bold);
 }
-@media (min-width: 768px) {
-  .board .t-list {
-    padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
-  }
-  .board .t-toolbar {
-    gap: 0.75rem;
-  }
-}
 .board .t-toolbar .t-chips > .t-chip[aria-pressed="true"]::after {
   content: "";
   position: absolute;
@@ -435,6 +427,14 @@
   height: 2px;
   border-radius: 1px;
   background: var(--pico-primary);
+}
+@media (min-width: 768px) {
+  .board .t-list {
+    padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
+  }
+  .board .t-toolbar {
+    gap: 0.75rem;
+  }
 }
 /*
  * **日付の見出しは、貼り付いたときだけ操作の層の小さなカプセル。** 巻くと行がその裏を流れるので、ヘッダーと同じ半透明の面と影で浮かせる

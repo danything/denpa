@@ -20,11 +20,6 @@
     testid?: string;
     children: import("svelte").Snippet;
   } = $props();
-
-  /*
-   * 影は下端と右端の両方に敷く (ボタンは塗らない。docs/design.md)。右は舞台の高さいっぱいに縁から流す —
-   * ボタンの所だけに敷くと四角い影が貼り付いて見えた。影の帯は押せず、押せるのは中のボタンだけ
-   */
 </script>
 
 <div
@@ -70,6 +65,10 @@
   .side.away > :global(*) {
     pointer-events: none;
   }
+  /*
+   * 影は下端と右端の両方に敷く (ボタンは塗らない。docs/design.md)。右は舞台の高さいっぱいに縁から流す —
+   * ボタンの所だけに敷くと四角い影が貼り付いて見えた。影の帯は押せず、押せるのは中のボタンだけ
+   */
   .side::before {
     content: "";
     position: absolute;

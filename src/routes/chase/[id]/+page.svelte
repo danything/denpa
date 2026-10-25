@@ -302,7 +302,7 @@
             testid="chase-play"
             onclick={() => player.toggle()}
           />
-          <!-- 畳むときは音・字幕・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`) -->
+          <!-- 畳むときは音と速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
           <Extras>
             <ControlButton
               icon={player.silenced ? SOUND_OFF : SOUND_ON}
@@ -346,7 +346,7 @@
                 >{clockLabel(pos)} / {clockLabel(recorded)}</span
               >
               {#if line !== null && !line.finished}
-                <!-- 赤はライブの赤丸と同じ出し方。黒い操作バーの上の text-error は沈む -->
+                <!-- 赤いのは点だけ (`.rec-dot`)。字まで赤くすると黒い操作バーの上で沈む -->
                 ・ <span class="rec"><span class="rec-dot"></span>録画中</span>
               {:else if line !== null}
                 ・ 録画済み

@@ -6,10 +6,7 @@
   import CheckRow from "#lib/components/CheckRow.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import SaveNote from "#lib/components/SaveNote.svelte";
-  import Toasts, {
-    errorNotice,
-    type Notice,
-  } from "#lib/components/Toasts.svelte";
+  import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import {
     CODEC_LABEL,
     HW_EVERY,
@@ -24,8 +21,7 @@
    * 押した結果。**その場で保存した結果はここに出さない** — 変えた欄の近く (節の見出しの横。`SaveNote`) に出す
    */
   const notices = $derived.by(() => {
-    const list: Notice[] = [];
-    list.push(...errorNotice(form, "settings-error"));
+    const list = errorNotice(form, "settings-error");
     if (form?.probed)
       list.push({
         key: "hw-probed",
@@ -66,8 +62,7 @@
 
 <!--
     **節ごとにフォームを分け、変えたらその場で保存する** (`autosave`)。保存のボタンは置かない。
-    結果は変えた節の見出しの横に出る。値は bind せず `checked` / `selected` で渡す
-    (別の節を保存して読み直しても、同じ値なら DOM に書かない)。
+    結果は変えた節の見出しの横に出る。値の渡し方は上の `recording`。
     どの節もすべての録画に効く。ルールや予約ごとには変えられない
 -->
 <div class="part" id="encoding" data-part>

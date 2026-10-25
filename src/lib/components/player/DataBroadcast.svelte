@@ -490,7 +490,7 @@
 
   /** 押して離したことにする。**BML は押しっぱなしを嫌う** (離すまで次が来ない) */
   function tap(code: number): void {
-    // Hybridcast のアプリを開いている間はアプリへ (戻ると d は閉じる)
+    // Hybridcast のアプリを開いている間はアプリへ (戻る・d は閉じる)
     if (running !== null) {
       appPress?.(code, true);
       appPress?.(code, false);

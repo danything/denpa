@@ -30,7 +30,7 @@
   let poster = $state<string | null>(null);
   let video = $state<HTMLVideoElement | null>(null);
   /**
-   * 消すのは2回押し。挙動は3画面共通 ([arming.svelte.ts](../../lib/arming.svelte.ts))。
+   * 消すのは2回押し。挙動はほかの画面と共通 ([arming.svelte.ts](../../lib/arming.svelte.ts))。
    * サーバからも消えることが分かる言葉で聞き返す
    */
   const deleting = arming('[data-testid="offline-delete"]');
@@ -156,7 +156,7 @@
   {:else}
     <ul class="list">
       {#each list as item (item.id)}
-        <li class="row">
+        <li class="row item">
           {#if posterUrl(item) !== null}
             <img src={posterUrl(item)} alt="" class="thumb" />
           {:else}
@@ -264,21 +264,28 @@
   .empty p:first-child {
     margin-bottom: 0.25rem;
   }
+  /* 1 件ずつ件の面 (`app.css` の `.item`) に乗せ、件の間は余白 (docs/design.md の「何行かある一覧」。ホームの行と同じ) */
   .list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-list-gap);
+    margin: 0;
     padding: 0;
   }
   .row {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    min-height: 4rem;
     /* Pico は `li` に下の余白と四角の印を付ける */
     margin: 0;
-    padding: 0.75rem;
+    padding: 0.5rem 0.75rem;
     list-style: none;
   }
-  /* 地に置く並び。件の間は線を引かず余白で分ける (面に乗せた一覧より広く) */
-  .row + .row {
-    margin-top: var(--dp-space-4);
+  @media (pointer: coarse) {
+    .row {
+      min-height: 4.5rem;
+    }
   }
   .thumb {
     width: 5rem;

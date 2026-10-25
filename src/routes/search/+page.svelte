@@ -868,6 +868,15 @@
     padding-inline-end: var(--dp-space-2);
     list-style: none;
   }
+  /* 2段の件は 64px、指で押す端末では 72px (docs/design.md の「何行かある一覧」。ホームの行と同じ)。1段の最近の検索は除く */
+  .hit:has(.hit-meta) {
+    min-height: 4rem;
+  }
+  @media (pointer: coarse) {
+    .hit:has(.hit-meta) {
+      min-height: 4.5rem;
+    }
+  }
   .hit-main {
     display: flex;
     flex: 1 1 0%;

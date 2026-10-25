@@ -18,11 +18,11 @@ const PATTERNS = [
 /** 広い画面を埋めるのに足りる列の数 (局の数が分からないとき。`GuideSkeleton`) */
 export const SKELETON_COLUMNS = 16;
 
-/** 桝と桝の間 (本物のマスの上下の余白 `.cell` の 0.125rem × 2) */
+/** マスとマスの間 (本物のマスの上下の余白 `.cell` の 0.125rem × 2) */
 const GAP = 0.25;
 
 /**
- * その列の桝の形。**桝を 1 つずつ置かず、列 1 枚を切り抜く** (`mask-image`)。
+ * その列のマスの形。**マスを 1 つずつ置かず、列 1 枚を切り抜く** (`mask-image`)。
  * 決め打ちの並びを縦に繰り返すので、どれだけ高くても下の端まで埋まる
  */
 export function skeletonMask(column: number): string {

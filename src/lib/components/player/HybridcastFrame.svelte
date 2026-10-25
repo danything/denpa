@@ -58,7 +58,7 @@
     oncaptions: (on: boolean) => void;
     /** 放送の映像をどこに出すか (アプリの画面 1920x1080 の座標) */
     onvideo: (place: Place) => void;
-    /** リモコン (AribKeyCode) を渡す関数 (bind で受け取る)。戻ると d は閉じる */
+    /** リモコン (AribKeyCode) を渡す関数 (bind で受け取る)。戻る・d は閉じる */
     press?: ((code: number, down: boolean) => void) | null;
   }
 

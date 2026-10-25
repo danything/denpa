@@ -57,7 +57,7 @@
   </span>
   <span class="row-body">
     <span class="cluster title-line">
-      <span class="tag num" data-testid="recording-group-count"
+      <span class="tiny muted num nowrap" data-testid="recording-group-count"
         >{group.items.length}本</span
       >
       {#if fresh > 0}

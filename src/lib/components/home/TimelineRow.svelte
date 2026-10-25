@@ -51,7 +51,7 @@
   const ctx = home();
 
   /**
-   * 置き場の使用量。**主 (AV1) を先に出し、在るものだけ括弧に添える。**
+   * 置き場の使用量。**主 (AV1) を先に出し、あるものだけ括弧に添える。**
    *
    * `ts_size` が持っているのは主のぶんだけなので、両方エンコードした録画では画面の
    * 数字と実際に使っている量が食い違っていた (H.264 のほうが大きいことも
@@ -370,8 +370,7 @@
         **途中まで観たものは残りを出す。** 観た位置は続きから始めるために持っていて、末尾まで観たものは
         消えるので、残っている = まだ途中。ポスターの下端に細いバー、2段目に「残り何分」
     -->
-  {@const progress =
-    link !== null && rec.deleted_at === null ? rec.progress : null}
+  {@const progress = link === null ? null : rec.progress}
   <div
     data-testid="recording-row"
     data-recording-id={rec.id}

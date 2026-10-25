@@ -65,7 +65,7 @@
   --broadcast-font: "Denpa Font", var(--pico-font-family-sans-serif);
   /*
      * **本文の字の色。** ここ (`<html>`) で決まった値をそのまま受け継ぐ。`--pico-color` は要素ごとに
-     * 書き換わる (ボタンの中では主のボタンの字 = 地の色) ので、ボタンの中から本文の色を指すときはこちら
+     * 書き換わる (控えのボタン・危ない操作・タブの中ではボタンの字の色) ので、ボタンの中から本文の色を指すときはこちら
      */
   --dp-fg: var(--pico-color);
   /* 等幅 (デバイスのパス・カードの番号・URL)。端末にある等幅の字を使い、Pico の等幅もこれに揃える */
@@ -188,7 +188,7 @@
      */
   --dp-hover: var(--dp-subtle);
   --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
-  /* 件の面の角。中のポスターの角 (`--dp-radius`) と件の余白 (0.5rem) の入れ子 */
+  /* 件の面の角。行の角 (`--dp-radius`) より件の余白 (0.5rem) ぶん丸く */
   --dp-item-radius: calc(var(--dp-radius) + 0.5rem);
 }
 /*
@@ -204,10 +204,10 @@
  * - `--dp-subtle` … 淡い面 (骨組み・バッジと通知の既定の地・番組表のマス)
  * - `--dp-item` … 件の面 (1 件が 2〜3 行の一覧。地より一段上の層)・`--dp-item-hover` … 指を乗せた件・`--dp-item-shadow` … 件の影 (明るいほうだけ)
  * - `--dp-field` … 入力欄の面。**下を透かす薄い色** で、地・件の面・浮いたヘッダーのどれの上でも、その一段濃い (暗いほうは明るい) 面になる
- * - `--dp-line` … 細い線と、それほどの濃さの面 (メニューの中の区切り・ロゴの無い局の印・骨組みの見出し)
+ * - `--dp-line` … 細い線と、それほどの濃さの面 (`/` のキーの印の枠・ロゴの無い局の印・骨組みの見出し)
  * - `--dp-line-strong` … 線より一段濃い色 (スクロールバーのつまみ・切り替えのオフ・ポスターの無い枠)
  * - `--dp-pop` … メニューの面・`--dp-pop-hover` … メニューで選んでいる項目の地。明るいほうは面と同じ。暗いほうは影が見えないので面より明るくする
- * - `--dp-fg` … 本文の字。ボタンの中でも本文の色のまま (`--pico-color` はボタンの中では地の色になる)
+ * - `--dp-fg` … 本文の字。ボタンの中でも本文の色のまま (`--pico-color` はボタンの中ではボタンの字の色になる)
  * - `--dp-muted` … 控えた字 (`.muted`)・`--dp-primary-text` … 主の色を淡い地の上で字にするとき (予約済みのマス・選んでいる局)
  * - `--dp-shadow-pop` … 浮かぶもの (操作の層・メニュー・ダイアログ・通知)
  * - `--dp-backdrop` … ダイアログ・番組の詳細の後ろの幕。ぼかさず、薄く暗くするだけ (後ろが読めるくらい)
@@ -1208,27 +1208,22 @@ a.button {
 }
 
 /*
- * **入力欄とつなげたボタン (`role="search"` / `role="group"`) は、つなぐ側の角を落とす。** Pico も
+ * **入力欄とつなげたボタン (`role="group"`) は、つなぐ側の角を落とす。** Pico も
  * 落とすが、層の外のこちらのボタンの角 (`--dp-btn-radius`) が必ず勝つので、ここで落とし直す。
- * 外側の角は入力欄と同じ丸み (ボタンだけ丸いと、つないだ形が崩れる。Pico の検索欄は丸い端)。
+ * 外側の角は入力欄と同じ丸み (ボタンだけ丸いと、つないだ形が崩れる)。
  * タブ (`.segmented`) は下で別に決める。サイドバーの行 (`.side-list`) はつないだ形ではないので外す
  * (外さないと、まん中の行の塗りが角の無い四角になっていた)
  */
-:is([role="group"], [role="search"]):not(.segmented, .side-list)
-  > :is(button, a.button) {
+[role="group"]:not(.segmented, .side-list) > :is(button, a.button) {
   margin: 0;
   border-radius: var(--pico-border-radius);
 }
-/* 検索欄の入力欄は Pico が `[role="search"]` で 5rem の丸い端にする。ボタンの外側の角もそれに揃える */
-[role="search"]:not(.segmented) > :is(button, a.button) {
-  border-radius: var(--dp-radius-full);
-}
-:is([role="group"], [role="search"]):not(.segmented, .side-list)
+[role="group"]:not(.segmented, .side-list)
   > :is(button, a.button):not(:first-child) {
   border-start-start-radius: 0;
   border-end-start-radius: 0;
 }
-:is([role="group"], [role="search"]):not(.segmented, .side-list)
+[role="group"]:not(.segmented, .side-list)
   > :is(button, a.button):not(:last-child) {
   border-start-end-radius: 0;
   border-end-end-radius: 0;
@@ -1381,8 +1376,9 @@ a.button {
 
 /* ---- 通知 ---- */
 /*
- * 一言の通知。**地を塗るのではなく、左の線で種類を示す。**
- * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった
+ * 一言の通知。**地は状態の色を淡く混ぜるだけにし、種類は左の線で示す。**
+ * 色で塗りつぶすと、暗いほうでは濁った帯になって字が読みにくかった。
+ * 左の縦線は「選んでいる」の印と重なる (docs/design.md の「今とのずれ」)
  */
 .notice {
   border-radius: var(--dp-radius);
@@ -1453,9 +1449,9 @@ button[aria-busy="true"]::after {
  * 文の続きとして読める、地も枠も無い小さなボタン (エンコーダの「確かめ直す」)。
  * 押せることは下線で示す。上の `aria-busy` より後に置き、送信中も字は控えた色のまま。
  *
- * **ボタンのトークンをここで字のものに戻す。** ボタンの規則 (上の「ボタン」) は `--pico-color` を
- * 主のボタンの字 (= 地の色) にするので、乗せたときに `var(--pico-color)` を指すと字が地に溶けて消えていた。
- * 字の色は `--dp-fg`、地は透明
+ * **ボタンのトークンをここで字のものに戻す。** ボタンの規則 (上の「ボタン」) は地と字を `--pico-background-color`・
+ * `--pico-color` で決めるので、そのままだと主のボタンの面 (`--dp-btn-solid`) が付く。
+ * 字は控えた色 (乗せたら本文の色 `--dp-fg`)、地は透明
  */
 button.text-button {
   --pico-background-color: transparent;
@@ -1738,7 +1734,6 @@ button.text-button:hover {
  */
 .overlay-menu {
   --dp-hover: var(--dp-on-video-hover);
-  --dp-line: rgb(255 255 255 / 0.14);
   --dp-muted: var(--dp-on-video-muted);
   --pico-color: var(--dp-on-video);
   width: max-content;
@@ -2219,7 +2214,7 @@ dialog[open] > article {
 /*
  * ---- 骨組み (`.skeleton`・`.skeleton-block`・`.skeleton-head`) ----
  * 読み込み中の形 (番組表・チューナー)。並べ方は使う側で、色と光の筋だけここで決める。
- * 光が流れるのは骨組みそのものではなく**上に重ねた一枚**。桝ごとに動かすと数十個ぶんのアニメーションが
+ * 光が流れるのは骨組みそのものではなく**上に重ねた一枚**。マスごとに動かすと数十個ぶんのアニメーションが
  * 同時に走り、届いた瞬間の描き直しと重なってもたついた。光の色はテーマごと (`--dp-sweep`)。
  * 白の 6% だけだった頃は、明るいテーマでは光が見えなかった
  */

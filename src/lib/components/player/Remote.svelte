@@ -150,7 +150,6 @@
     display: flex;
     gap: 0.25rem;
   }
-  /* 放送の言う色をじかに塗る (テーマの色に寄せない) */
   .color {
     --pico-background-color: var(--paint);
     --pico-border-color: var(--paint);

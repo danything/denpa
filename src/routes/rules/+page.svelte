@@ -470,6 +470,12 @@
     padding: 0.5rem 0.75rem;
     list-style: none;
   }
+  /* 指で押す端末では 72px (docs/design.md の「何行かある一覧」。ホームの行と同じ) */
+  @media (pointer: coarse) {
+    .row {
+      min-height: 4.5rem;
+    }
+  }
   .row-body {
     display: flex;
     flex: 1 1 0%;
@@ -605,9 +611,6 @@
     }
     .rules-list {
       padding-bottom: 4rem;
-    }
-    .row {
-      min-height: 3.75rem;
     }
     /* 狭い幅の2段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る) */
     .wide-part {

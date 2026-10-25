@@ -362,15 +362,13 @@
 
   /**
    * **観終えていない録画** (未視聴の点か、続きのバーが出ているもの)。「未視聴」の絞り込みと、
-   * 開いたときに映す録画 (`catchUp`) に使う。観られないもの・消したものは入れない
+   * 開いたときに映す録画 (`catchUp`) に使う。観られないもの (消したものも) は入れない (`watchLink`)
    */
   function unfinished(item: Item): boolean {
-    if (item.kind !== "rec") return false;
-    const rec = item.rec;
     return (
-      rec.deleted_at === null &&
-      rec.watched_at === null &&
-      watchLink(rec) !== null
+      item.kind === "rec" &&
+      item.rec.watched_at === null &&
+      watchLink(item.rec) !== null
     );
   }
 
@@ -837,7 +835,7 @@
     ルールが立てた予約でも作り直されない (戻すのは行の「戻す」から)。
 
     行にしか無かった頃は、詳細を開いて中身を確かめてから要らないと分かっても、
-    一度閉じて行のボタンを探し直すことになっていた (番組表の詳細には前から在る)。
+    一度閉じて行のボタンを探し直すことになっていた (番組表の詳細には前からある)。
     **取り消せたら閉じる** — 番組表の詳細で予約・取消したときと同じ。
     取り消した行は一覧から消える (完了した予約も出しているときは「戻す」に変わる)
 -->

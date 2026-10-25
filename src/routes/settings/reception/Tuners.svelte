@@ -144,7 +144,7 @@
       {#if detected}
         <Lead>
           いまは<strong>挿さっているチューナーを自動で見つけて</strong
-          >使っています。 どれかを変えると、この内容に固定します
+          >使っています。どれかを変えると、この内容に固定します
         </Lead>
       {/if}
     {/await}
@@ -714,7 +714,7 @@
       border-end-end-radius: 0;
       background: var(--dp-hover-soft);
     }
-    /* 開いた行の中身。行 (.main) の td より先に置く (別の行なので並びで効き方は変わらない) */
+    /* 開いた行の中身。行 (`.main`) と同じ左右の余白 */
     .detail td {
       padding: 0 var(--dp-space-2) var(--dp-space-2);
     }

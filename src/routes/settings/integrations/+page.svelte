@@ -1,8 +1,5 @@
 <script lang="ts">
-  import Toasts, {
-    errorNotice,
-    type Notice,
-  } from "#lib/components/Toasts.svelte";
+  import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
 
   import Migrate from "./Migrate.svelte";
@@ -17,8 +14,7 @@
 
   /** 押した結果は画面で1か所に出す。引き継ぎの進み具合そのものは、その節の中に出したまま */
   const notices = $derived.by(() => {
-    const list: Notice[] = [];
-    list.push(...errorNotice(form, "settings-error"));
+    const list = errorNotice(form, "settings-error");
     if (form?.webhookAdded)
       list.push({
         key: "webhook-added",

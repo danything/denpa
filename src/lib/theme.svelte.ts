@@ -31,7 +31,7 @@ function apply(): void {
   document.documentElement.dataset["themeMode"] = mode;
   // ブラウザの枠の色も地に合わせる (`theme-color.ts`)
   syncThemeColor();
-  // ホーム画面から開いた Android の下の帯 (マニフェストの background_color。`server/manifest.ts`)。
+  // ホーム画面から開いた Android の下のジェスチャーバー (マニフェストの background_color。`server/manifest.ts`)。
   // Chrome が次にマニフェストを読み直したときに効く
   const link = document.querySelector('link[rel="manifest"]');
   const href = link?.getAttribute("href")?.split("?")[0];

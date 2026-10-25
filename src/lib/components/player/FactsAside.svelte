@@ -10,8 +10,7 @@
    * 番組名の上に置いて、いつでも見えるようにする。
    *
    * 幅と高さ・広い画面でのサイドバーの形 (窓の右端に付け、線も面の色も付けない) は3画面共通で、
-   * [PlayerLayout.svelte](PlayerLayout.svelte) が持つ。高さは画面の残りぜんぶ (映像の高さに
-   * 揃えない理由は [watch/[id]/+page.svelte](../../../routes/watch/%5Bid%5D/+page.svelte))。
+   * [PlayerLayout.svelte](PlayerLayout.svelte) が持つ。高さは画面の残りぜんぶで、映像の高さには揃えない。
    * 中の余白はサイドバーのとき `--dp-side-pad` (巻き取る箱は列の幅いっぱい)。
    */
   let {

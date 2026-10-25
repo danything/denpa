@@ -424,7 +424,7 @@
               testid="live-play"
               onclick={() => player.toggle()}
             />
-            <!-- 畳むときは音・字幕・Hybridcast・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`) -->
+            <!-- 畳むときは音・Hybridcast・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
               <ControlButton
                 icon={player.silenced ? SOUND_OFF : SOUND_ON}
@@ -970,10 +970,9 @@
   }
   .channel-name {
     font-size: var(--dp-text-sm);
-    font-weight: var(--dp-weight);
   }
+  /* 字の色は行の決まり (`app.css` の `.side-item`) が付ける。太字にするのは局名だけ */
   .channel[aria-current] .channel-name {
-    color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }
   .channel-now {

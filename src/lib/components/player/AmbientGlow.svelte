@@ -487,8 +487,10 @@
     position: absolute;
     overflow: hidden;
   }
-  /* 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`toneFrame` が色の薄い所を透明にしてある) */
-  /* 窓全体に敷くので、明るいテーマは控えめに (白へ寄るだけなので、字の読みやすさは変わらない) */
+  /*
+   * 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`toneFrame` が色の薄い所を透明にしてある)。
+   * 窓全体に敷くので控えめに (白へ寄るだけなので、字の読みやすさは変わらない)
+   */
   :global(html:not([data-theme="dark"])) .band {
     mix-blend-mode: multiply;
     /* `ambient.ts` の `LIGHT_OPACITY` と同じ (枠の色を同じ描き方で作る) */
