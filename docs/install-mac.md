@@ -93,6 +93,5 @@ Apple のドライバはソースが公開されておらず、ここが違う�
 Apple のドライバには速さを変える設定 (`AllowAlternativeFiDi`。`man SmartCardServices`) もありますが、
 B-CAS で効くかは分かっていません。
 
-エージェントは、T=1 を名指しして繋がらなければ、方式をドライバに任せて繋ぎ直します (`Pcsc.cs`)。
-それでも繋がらないときは、ログの PC/SC のエラー番号 (`0x8010…`) と `denpa-agent --card` の出力を
+繋がらないときは、ログの PC/SC のエラー番号 (`0x8010…`) と `denpa-agent --card` の出力を
 [Issue](https://github.com/danything/denpa/issues) に貼ってもらえると、ドライバを切り替えずに読めるようにできるかを調べられます。
