@@ -22,6 +22,10 @@ concurrency:
 env:
   TZ: Asia/Tokyo
 
+# 読むだけ。書き込むジョブは無い
+permissions:
+  contents: read
+
 # **ジョブに割って同時に流します。**
 #
 # 1本に並べていた頃は 4分37秒 で、そのうち 181秒 が E2E でした。他は全部

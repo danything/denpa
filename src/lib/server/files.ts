@@ -29,7 +29,7 @@ import { removeSidecars, SIDECAR_SUFFIXES } from "./metadata";
 import { cmMaterials, encodeJobs, recordings, reservations } from "./schema";
 
 const SIDECAR_ORPHAN = new RegExp(
-  `^(.+?)(?:${SIDECAR_SUFFIXES.map((suffix) => suffix.replace(/[.-]/g, "\\$&")).join("|")})$`,
+  `^(.+?)(?:${SIDECAR_SUFFIXES.map((suffix) => suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`,
   "i",
 );
 
