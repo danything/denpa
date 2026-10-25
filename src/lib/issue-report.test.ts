@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  cut,
   fitLogs,
   fullReport,
   guessLevel,
@@ -50,6 +51,25 @@ describe("Issue の URL", () => {
     // 新しいほうは残る
     expect(got.at(-1)).toBe("ログの行 399");
     expect(got[1]).toBe(`ログの行 ${dropped}`);
+  });
+
+  test("絵文字の途中で切れても、URL を作れる (片割れのサロゲートを残さない)", () => {
+    // 「🎬」は UTF-16 で 2 単位。上限がちょうどその間に当たるように並べる
+    const title = `${"a".repeat(254)}🎬🎬`;
+    const { url } = issueUrl({
+      ...fields,
+      title,
+      logs: "壊れた字 \ud83c まで",
+    });
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get("title")).toBe(`${"a".repeat(254)}…`);
+    expect(parsed.searchParams.get("logs")).toBe("壊れた字 � まで");
+  });
+
+  test("切るときはサロゲートの間で切らない", () => {
+    expect(cut("ab🎬", 3)).toBe("ab");
+    expect(cut("ab🎬", 4)).toBe("ab🎬");
+    expect(cut("abc", 2)).toBe("ab");
   });
 
   test("タイトルと環境は上限で切る", () => {

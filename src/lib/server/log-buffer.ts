@@ -1,6 +1,6 @@
 import { format } from "node:util";
 
-import type { LogLevel, LogLine } from "../issue-report";
+import { cut, type LogLevel, type LogLine } from "../issue-report";
 
 /**
  * **サーバのログの最後の 2000 行を、メモリに持っておく** (設定の「診断」に出し、Issue に貼る)。
@@ -35,7 +35,7 @@ export class LogRing {
     this.#lines[this.#next] = {
       at,
       level,
-      text: text.length > TEXT_LIMIT ? `${text.slice(0, TEXT_LIMIT)}…` : text,
+      text: text.length > TEXT_LIMIT ? `${cut(text, TEXT_LIMIT)}…` : text,
     };
     this.#next = (this.#next + 1) % this.limit;
     this.#count = Math.min(this.#count + 1, this.limit);

@@ -51,7 +51,11 @@ const TITLE_ENCODED_LIMIT = 1500;
 const ENVIRONMENT_LIMIT = 1500;
 const ENVIRONMENT_ENCODED_LIMIT = 3000;
 
-const enc = encodeURIComponent;
+/**
+ * URL に入れる形にする。**片割れのサロゲート (切り詰めた絵文字など) があると `encodeURIComponent` は投げる**ので、
+ * 先に置き換え文字 (U+FFFD) に直す
+ */
+const enc = (text: string) => encodeURIComponent(text.toWellFormed());
 /** ログの欄の中で 1 行が使う長さ (改行込み) */
 const cost = (line: string) => enc(`${line}\n`).length;
 
@@ -85,7 +89,13 @@ export function formatLine(line: LogLine, tagged: boolean): string {
 }
 
 function clip(text: string, limit: number): string {
-  return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
+  return text.length <= limit ? text : `${cut(text, limit - 1)}…`;
+}
+
+/** 先頭から `length` 字 (UTF-16) で切る。絵文字などのサロゲートの間に当たったら、その字の前で切る */
+export function cut(text: string, length: number): string {
+  const code = text.charCodeAt(length - 1);
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? length - 1 : length);
 }
 
 /** 字数と、URL に入れたときの長さの両方で切る (日本語は 1 字が 9 字になる) */
