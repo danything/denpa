@@ -506,6 +506,8 @@
 @media (min-width: 640px) {
   .board {
     --t-bar-h: 3.25rem;
+    /* 浮いたヘッダー・頭の1行とのあいだは、操作の1行どうしと同じ隙間 (`--dp-bar-gap`) */
+    --t-day-gap: var(--dp-bar-gap);
   }
   .board .t-toolbar {
     top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
@@ -550,6 +552,12 @@
 @media (min-width: 1000px) {
   .board .t-day {
     top: calc(var(--dp-header-bottom) + var(--t-day-gap));
+  }
+  /* いちばん上の見出しも貼り付く所に置き、巻き始めても動かない (main の頭の空きはヘッダーの下端より広い) */
+  .board .t-rows > .t-block:first-child > .t-day {
+    margin-top: calc(
+      var(--dp-header-bottom) + var(--t-day-gap) - var(--dp-header-space)
+    );
   }
 }
 /*
