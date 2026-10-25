@@ -483,6 +483,30 @@ describe("チャンネル", () => {
   });
 });
 
+/** `/denpa/logs` の形式 (agent/Denpa.Agent/Json.cs の LogRing) */
+type LogLines = { lines: { at: number; text: string }[] };
+
+describe("診断", () => {
+  test("直近のログを古い順に返す。頭の [agent] は付けない", async () => {
+    const res = await get("/denpa/logs");
+    expect(res.status).toBe(200);
+    const { lines } = (await res.json()) as LogLines;
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.length).toBeLessThanOrEqual(2000);
+    for (const line of lines) {
+      expect(typeof line.at).toBe("number");
+      expect(typeof line.text).toBe("string");
+      expect(line.text.startsWith("[agent]")).toBe(false);
+    }
+    const at = lines.map((line) => line.at);
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+    // すぐ前のチャンネルの差し替えが残っている
+    expect(
+      lines.some((line) => line.text.includes("チャンネルを保存しました")),
+    ).toBe(true);
+  });
+});
+
 /** `/denpa/card` の形式 (agent/Denpa.Agent/Card.cs、読むのは src/lib/server/scramble.ts) */
 type CardReader = {
   name: string;

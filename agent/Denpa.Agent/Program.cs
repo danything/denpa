@@ -356,6 +356,10 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
 });
 
+// --- 診断 -----------------------------------------------------------------
+// 直近のログ (古い順・最大 2000 行)。設定の「診断」画面が読む。メモリだけなので再起動で消える
+app.MapGet("/denpa/logs", (HttpContext http) => Respond.Write(http, Log.Recent.ToJson()));
+
 app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
