@@ -15,8 +15,8 @@
  *   WHATWG の EUC-JP はこの区を IBM の拡張漢字として読むので任せられない。追加記号には
  *   U+1F000 台の字もあり、そのまま持つと 1 字が 2 単位になって `length` や `substring` が
  *   ずれる。描くときに `toDisplay` で本当の字 (または DRCS の画像) に開く
- * - 1〜84 区で `TextDecoder` が字を返さない点も私用領域 (U+E400〜) に置いて、符号が
- *   往復で失われないようにする
+ * - 1〜84 区で `TextDecoder` が字を返さない点 (と 1 単位に収まらない字) も私用領域 (U+E400〜) に
+ *   置いて、符号が往復で失われないようにする
  */
 
 import { ADDITIONAL } from "@danything/arib/b24-tables";

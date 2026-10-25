@@ -51,7 +51,7 @@ export class DecodeBudget {
   private worstLate = 0;
   private leastQueued = Number.POSITIVE_INFINITY;
   private strikes = 0;
-  /** 窓の頭での、捨てたコマと出したコマの数 (通しの数。窓ごとの差を見る) */
+  /** 窓の頭での、捨てたコマの数 (通しの数。窓ごとの差を見る) */
   private droppedFrom = Number.NaN;
   /** 直近の窓の 95 パーセンタイル (ms)。画面に出す */
   p95 = 0;

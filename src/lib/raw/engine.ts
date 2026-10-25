@@ -158,6 +158,7 @@ export class RawEngine {
   /**
    * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
    * @param before この前に差し込む (字幕の canvas より下に来るように)
+   * @param target どれだけ貯めるか (秒)。あとから変えるときは `target`
    * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
    * @param input 何を受け取るか (`messages.ts` の `RawInput`)。元の TS か、エンコードしたもの (fMP4。互換モード)
    * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても飛ばず、止めて再開は止めた所から

@@ -145,14 +145,15 @@ export function findArea(
   return null;
 }
 
+/** 覚えておくコマの数。これを超えたら古いぶんを比で縮める (`mergeModel`) */
+const MAX_COUNT = 6000;
+
 /**
  * 覚えたものに、この録画のぶんを足す。
  *
  * **古いぶんは薄めていく** (`MAX_COUNT` を超えたら比で縮める)。局がロゴを替えたとき
  * (特番の飾りつき・周年のロゴ) に、いつまでも前のロゴが残らないように
  */
-const MAX_COUNT = 6000;
-
 export function mergeModel(base: LogoModel, add: Orientation): LogoModel {
   const o = base.orientation;
   if (add.width !== o.width || add.height !== o.height) return base;

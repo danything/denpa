@@ -274,7 +274,7 @@ function stamp(pts: number): number[] {
 /**
  * PES にする。映像は長さ 0 (「次の頭まで」。放送もそう書く)、音声は長さを書く
  *
- * @param streamId 0xE0 (映像) / 0xC0 (音声)
+ * @param streamId 0xE0 (映像) / 0xC0 (音声) / 0xBD (字幕。`synth-caption.ts`)
  */
 export function pes(
   streamId: number,

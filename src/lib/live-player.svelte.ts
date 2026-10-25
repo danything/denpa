@@ -2448,7 +2448,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     toggle,
     goLive,
     relearn,
-    mute,
     tune: choose,
     unmute,
     /** 消音の切り替え。映像の要素を直に触ると、繋ぎ直しのたびに `silenced` で上書きされて戻る */

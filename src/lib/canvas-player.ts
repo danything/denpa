@@ -101,7 +101,10 @@ export interface CanvasPlayer {
   play(): void;
   pause(): void;
   mute(on: boolean): void;
-  /** 音声を選び直す。fMP4 は選んだ1本だけ流れているのでリクエストし直す、元の TS はエンジンの中で選び直す */
+  /**
+   * 音声を選び直す。fMP4 は選んだ1本だけ流れているのでリクエストし直す、元の TS はエンジンの中で選び直す。
+   * 保存した録画はトラックを選び直してから読み直す
+   */
   setAudio(id: string): void;
   /** 「再生する音」として鳴らすか */
   background(on: boolean): void;

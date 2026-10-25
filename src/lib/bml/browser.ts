@@ -569,7 +569,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
     return null;
   });
 
-  // 動かさないもの (選局・予約・外のアプリ・ブックマーク)
+  // 選局 (epgTune) は画面に任せる。動かさないもの (部品を指す選局・予約・外のアプリ・ブックマーク) は失敗を返す
   fn("epgTune", (args) => host.tune(str(args, 0)));
   for (const name of [
     "epgTuneToComponent",
