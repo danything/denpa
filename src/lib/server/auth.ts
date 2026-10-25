@@ -99,7 +99,11 @@ export function denied(address = "", host: string | null = null): Response {
         ` (接続元: ${address || "不明"})`;
   return new Response(text, {
     status: 403,
-    headers: { "content-type": "text/plain; charset=utf-8" },
+    // 本文に相手が送ってきた名前が入るので、HTML として読ませない
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "x-content-type-options": "nosniff",
+    },
   });
 }
 

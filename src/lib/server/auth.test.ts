@@ -212,6 +212,10 @@ describe("知っている名前か", () => {
       );
       // ネットワークの外なら、接続元を書く (何を足せばよいか分かるように)
       expect(await denied("172.18.0.1").text()).toContain("172.18.0.1");
+      // 相手の送ってきた名前が入るので、ブラウザに HTML と読ませない
+      expect(
+        denied("10.10.5.9", "<b>x</b>").headers.get("x-content-type-options"),
+      ).toBe("nosniff");
     } finally {
       config.trustedNetworks = original;
     }

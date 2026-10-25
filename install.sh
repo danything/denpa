@@ -150,11 +150,14 @@ genkan_override() {
 # genkan が付ける X-Forwarded-For から本当の接続元を読ませる。このマシンのブラウザ (http://denpa.localhost) は
 # そのネットワークのゲートウェイ (このマシン自身) から来たように見えるので、TRUSTED_NETWORKS にはそこだけ足す。
 # genkan のネットワークごと信頼すると、genkan 越しの人が全員当たってしまう (docs/auth.md)。
-# ネットワークの範囲は Docker が決めるので、ここで調べて書く。読めなければ何も書かない
+# ネットワークの範囲は Docker が決めるので、ここで調べて書く。読めなければ何も書かず、画面にそう出す
 genkan_env() {
   net=$(docker network inspect genkan -f '{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}}{{println}}{{end}}' 2>/dev/null \
     | grep -m1 '^[0-9.]*/[0-9]* [0-9.]*$' || true)
-  [ -n "$net" ] || return 0
+  if [ -z "$net" ]; then
+    say "genkan のネットワークの範囲が読めず、TRUSTED_PROXIES を書けませんでした。genkan 越しに入れなければ docs/auth.md を見て compose.override.yml に足してください" >&2
+    return 0
+  fi
   printf '%s\n' '    environment:' \
     '      # genkan を前段として認める。このマシンのブラウザは genkan のゲートウェイから来たように見える (docs/auth.md)' \
     "      TRUSTED_PROXIES: ${net% *}" \
@@ -280,7 +283,9 @@ linux_main() {
   docker_ready "https://get.docker.com の手順で入れてから、もう一度流してください" \
     "sudo systemctl start docker で起こしてから、もう一度流してください" || exit 1
 
-  ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+  # LAN の IP は外へ出る経路の送信元から取る (hostname -I の先頭は docker0 の 172.17.0.1 のこともある)
+  ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' || true)
+  [ -n "$ip" ] || ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   ref=$(version)
   start_denpa compose.prod.yml "$ref" "${ip:-$(hostname)}"
 }

@@ -92,9 +92,10 @@ spec:
             {{- $names = concat $names (splitList "," .) }}
             {{- end }}
             {{- with $names | uniq }}
-            # 信頼したネットワークからログインなしで開いてよい名前。httpRoute と ingress の名前は自分の名前なので足す
+            # 信頼したネットワークからログインなしで開いてよい名前。httpRoute と ingress の名前は自分の名前なので足す。
+            # Gateway API のワイルドカード (*.example.com) は ALLOWED_HOSTS の書き方 (.example.com) に直す
             - name: ALLOWED_HOSTS
-              value: {{ join "," . | quote }}
+              value: {{ join "," . | replace "*." "." | quote }}
             {{- end }}
             {{- with .Values.denpa.pwaNames }}
             - name: PWA_NAMES

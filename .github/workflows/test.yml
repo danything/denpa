@@ -193,7 +193,7 @@ jobs:
           # 画面はログインなしで開ける: genkan 越しは、install.sh が書いた TRUSTED_PROXIES と genkan のゲートウェイで。
           # 直には LAN の IP で (localhost は Docker のゲートウェイから来たように見えて、既定では信頼しない)
           curl -fsS -o /dev/null --resolve denpa.localhost:80:127.0.0.1 http://denpa.localhost/
-          curl -fsS -o /dev/null "http://$(hostname -I | awk '{print $1}'):3000/"
+          curl -fsS -o /dev/null "http://$(ip route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}'):3000/"
           # 上げ直し。手を入れた compose.override.yml には触らないこと
           echo '# 手で足した行' >> ~/denpa/compose.override.yml
           cp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
