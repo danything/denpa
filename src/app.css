@@ -730,7 +730,7 @@ progress[value]::-webkit-progress-value {
  * 操作の1行はヘッダーの下端 (`--dp-header-bottom`) に付け、高さを決めておく (`--guide-bar-h`)。
  * 表の頭 (局名の行が貼り付く所) はその下端 `--guide-head`。マスはヘッダーと操作の1行の裏を流れる。
  * 1行の中身はどれも小さいボタンの高さなので、高さは字の大きさや押す的の大きさ (`--dp-btn-h-sm`) から決まる。
- * 種別のタブはほかの画面の最初の行と同じ高さ (`--dp-header-space`) に来る
+ * 1 行の面は、ほかの画面の操作の1行と同じくヘッダーの下 `--dp-bar-gap` に来る (箱の頭は `--dp-fill-top`)
  */
 @media (min-width: 768px) {
   .guide-frame {

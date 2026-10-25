@@ -363,7 +363,7 @@
   @media (max-width: 767px) {
     /*
      * 640〜767px は節の行 (下の `.jump`) がヘッダーの下に貼り付く。ヘッダーのぶん (`scroll-padding-top`) より下へ
-     * はみ出す高さ (ヘッダーとの隙間と節の行の高さから、ヘッダーの下の空き 0.5rem を引いた分) を足す。スマホは下で決め直す
+     * はみ出す高さ (ヘッダーとの隙間と節の行の高さから、ヘッダーの下の空き (`--dp-header-space` − `--dp-header-bottom`) を引いた分) を足す。スマホは下で決め直す
      */
     .main-inner :global([data-part]) {
       scroll-margin-top: calc(
