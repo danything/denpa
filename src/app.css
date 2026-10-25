@@ -2149,7 +2149,8 @@ dialog[open] > article {
  * 幅と左右どちらに置くか (グリッドの列) は使う側で。
  *
  * - 窓の端とヘッダーに付ける。地・枠・影は付けない
- * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 28px 空ける (最初のグループは 0)。
+ * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 20px 空ける (最初のグループは 0)。
+ *   **縦は詰める** (行は 48px のまま、見出しと余白で稼ぐ)。ホームはエンコードの行が出ると 1 行伸びるので、ふつうの窓の高さで巻かずに収まるように
  *   行は見出しより 12px 深く始め、塗りも一緒に動く
  * - **行はどの端末でも 48px** (車の中のタブレットでも押せる高さ。マウスとタブレットで詰め具合を変えない)
  * - 選んでいる行 (`aria-current` か `aria-pressed="true"`) は左の縦線と主の色の太字 (下)。指を乗せた行だけ薄い地
@@ -2159,7 +2160,7 @@ dialog[open] > article {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.75rem 0.625rem 1.5rem;
+  padding: 0.75rem 0.625rem 0.75rem;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -2181,8 +2182,8 @@ dialog[open] > article {
 .side-label {
   display: flex;
   align-items: center;
-  min-height: 1.5rem;
-  margin: 1.75rem 0 0.125rem;
+  min-height: 1.25rem;
+  margin: 1.25rem 0 0.125rem;
   padding: 0 0.75rem;
   color: var(--dp-fg);
   font-size: 0.8125rem;
