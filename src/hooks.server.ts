@@ -1,3 +1,6 @@
+// いちばん先に読む。起動のログからサーバのログの写しを取る (設定の「診断」)
+import "#lib/server/log-buffer.js";
+
 import { redirect } from "@sveltejs/kit";
 
 import {

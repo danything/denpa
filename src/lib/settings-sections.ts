@@ -3,7 +3,7 @@
  * 節はその画面に上から積む。節へは `#<節>` で飛ぶ。左の一覧 (`routes/settings/+layout.svelte`) はこの順に
  * グループと、その下に節を出す。フォームと保存 (actions) はグループの画面が持つ。
  *
- * 並びは 録画 → 受信 (入れたときと困ったとき) → 連携 → その他 (この端末・ログイン・バージョン。めったに開かないので下に置く。URL は前のまま `general`)。
+ * 並びは 録画 → 受信 (入れたときと困ったとき) → 連携 → 診断 (バグを報告するとき) → その他 (この端末・ログイン・バージョン。めったに開かないので下に置く。URL は前のまま `general`)。
  * 広い画面で `/settings` を開くと先頭のグループへ移る (`FIRST_GROUP`)。
  *
  * **節の名前 (`slug`) は前の画面の URL と同じにしてある** (`/settings/tuners` → `/settings/reception#tuners`)。
@@ -36,6 +36,14 @@ export const SETTINGS_GROUPS = [
       { slug: "tv", label: "テレビのアプリ" },
       { slug: "migrate", label: "EPGStation からの引き継ぎ" },
       { slug: "migrate-edcb", label: "EDCB からの引き継ぎ" },
+    ],
+  },
+  {
+    slug: "diagnostics",
+    label: "診断",
+    sections: [
+      { slug: "environment", label: "環境" },
+      { slug: "logs", label: "ログ" },
     ],
   },
   {

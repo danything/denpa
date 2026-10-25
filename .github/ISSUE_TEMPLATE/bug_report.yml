@@ -24,7 +24,7 @@ body:
     id: logs
     attributes:
       label: ログ
-      description: サーバのログ (kubectl logs / docker logs) や、ブラウザのコンソール。長ければ関係しそうなところだけ
+      description: 設定の「診断」→「Issue にする」から開くと、伏せたサーバとエージェントのログが入ります。ほかにブラウザのコンソールなど。長ければ関係しそうなところだけ
       render: text
   - type: input
     id: version

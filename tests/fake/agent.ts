@@ -33,6 +33,44 @@ const knobs: Knobs = {
 let busyTuners = false;
 
 /**
+ * エージェントのログ (`GET /denpa/logs`)。本物と同じ形 (`{"lines":[{"at","text"}]}`。新しいほうから 2000 行まで、古い順)。
+ * 中身は伏せる処理を確かめるための作り物で、カードの番号・IP アドレス・ホスト名と、伏せない番組名を混ぜてある。
+ * `off` は前のバージョンのエージェント (404)、`many` は URL の上限を確かめる長いログ
+ */
+let logsMode: "normal" | "off" | "many" = "normal";
+const STARTED_AT = Date.now();
+
+function agentLogLines(): { at: number; text: string }[] {
+  if (logsMode === "many") {
+    return Array.from({ length: 2000 }, (_, i) => ({
+      at: STARTED_AT + i * 1000,
+      text:
+        i % 50 === 0
+          ? `[agent] 偽チューナー${i}: 選局できません (信号がありません) 長い説明の行 ${"あ".repeat(60)}`
+          : `[agent] 偽チューナー${i}: 受信中 ${"い".repeat(60)}`,
+    }));
+  }
+  return [
+    {
+      at: STARTED_AT,
+      text: "[agent] listening on :25252 (tuners: /config/tuners.json / channels: /config/channels.json)",
+    },
+    {
+      at: STARTED_AT + 1,
+      text: "[agent] Fake Card Reader (usb 1-1): カード 0123456789012345 を読みました",
+    },
+    {
+      at: STARTED_AT + 2,
+      text: "[agent] 鍵を http://card-host.lan:40773 から受け取ります (相手: 192.168.10.20)",
+    },
+    {
+      at: STARTED_AT + 3,
+      text: "[agent] GR T16 (rec 1 でんぱニュース): 選局できません (信号がありません)",
+    },
+  ];
+}
+
+/**
  * 偽のスクランブル解除。本物の復号はせず、4バイト目の
  * transport_scrambling_control を落とすだけ。
  *
@@ -376,6 +414,11 @@ const options: Bun.ServeOptions = {
     const url = new URL(request.url);
 
     // --- テスト用のエンドポイント -------------------------------------------------
+    if (url.pathname === "/__control/logs" && request.method === "POST") {
+      const mode = url.searchParams.get("mode");
+      logsMode = mode === "off" || mode === "many" ? mode : "normal";
+      return json({ mode: logsMode });
+    }
     if (url.pathname === "/__control/tuners" && request.method === "POST") {
       busyTuners = url.searchParams.get("busy") === "1";
       emit("tuners");
@@ -530,6 +573,10 @@ const options: Bun.ServeOptions = {
               ],
             },
       );
+    }
+    if (url.pathname === "/denpa/logs" && request.method === "GET") {
+      if (logsMode === "off") return new Response("not found", { status: 404 });
+      return json({ lines: agentLogLines() });
     }
     if (url.pathname === "/denpa/decode" && request.method === "POST") {
       return request

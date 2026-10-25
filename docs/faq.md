@@ -92,6 +92,11 @@ Mac は `~/Movies/denpa/library`、Windows は `~/Videos/denpa/library` に出�
 イメージにはシェルが無いので、中を見るときはシェルのあるコンテナを横に付けます。
 [install.md](install.md#うまくいかないとき)。
 
+### バグを報告したい
+
+設定の「診断」→「Issue にする」から開きます。サーバとエージェントのログ・バージョン・環境を、カードの番号・IP アドレス・ホスト名・トークンなどを伏せて
+Issue のフォームに入れます。開く前に中身を確かめて直せます。「何が起きたか」「再現手順」は GitHub で書きます。[screens.md](screens.md#診断)。
+
 ### 画面が 403 で開きません
 
 OIDC も `TRUSTED_NETWORKS` も無いと、全部断ります。OIDC が無いときは、`TRUSTED_NETWORKS` に当たらない接続元も断ります。

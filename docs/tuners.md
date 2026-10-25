@@ -175,3 +175,6 @@ echo 4-11 | sudo tee /sys/bus/usb/drivers/usb/bind
 ```sh
 kubectl -n denpa exec deploy/tuner-agent -- denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode
 ```
+
+それでも直らなければ、設定の「診断」→「Issue にする」で報告してください。サーバとエージェントのログと環境を、
+カードの番号や IP アドレスを伏せて Issue のフォームに入れます ([screens.md](screens.md#診断))。

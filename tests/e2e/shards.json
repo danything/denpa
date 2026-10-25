@@ -45,7 +45,8 @@
     "11-rule-edit",
     "15-scramble",
     "17-logo",
-    "39-watch-stream"
+    "39-watch-stream",
+    "52-diagnostics"
   ],
   "5": [
     "04-external-delete",
