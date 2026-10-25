@@ -367,7 +367,7 @@
   }
   /*
      * 768〜999px は細い1行が一覧の上。**ヘッダーと同じ角丸の面に乗せ、その下に貼り付ける** (ホームの頭の1行・番組表の操作の1行と同じ。
-     * docs/design.md の「浮かせ方」。`app.css` の `--dp-bar-*`)。置かれた位置から隙間 (`--dp-bar-gap`) のぶん上へ出し、巻き始めても動かない。
+     * docs/design.md の「浮かせ方」。`app.css` の `--dp-bar-*`)。置かれた位置 (main の頭の空き `--dp-header-space`) が貼り付く所と同じなので、巻き始めても動かない。
      * 上端では平らで、巻いて行が裏に入ると面と近い影が出る (窓の巻いた量で。`dp-bar-float`)。
      * 浮いた面なので、中の「作る」は浮かせず太字だけ (`app.css` の「浮いたものの中」。スマホも同じ)
      */
@@ -379,10 +379,7 @@
       position: sticky;
       top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
       z-index: 5;
-      margin: calc(
-          var(--dp-header-bottom) + var(--dp-bar-gap) - var(--dp-header-space)
-        )
-        var(--dp-bar-inset) 0;
+      margin: 0 var(--dp-bar-inset) 0;
       padding: var(--dp-bar-pad);
       border-radius: var(--dp-bar-radius);
       background: var(--dp-float);

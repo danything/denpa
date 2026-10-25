@@ -499,7 +499,7 @@
 /*
  * **ヘッダーが浮いている幅 (640px 以上) では、頭の1行 (1000px まで) をヘッダーと同じ角丸の面に乗せ、その下に貼り付ける**
  * (docs/design.md の「浮かせ方」。番組表の操作の1行と同じ形。`app.css` の `--dp-bar-*`)。ヘッダーとの隙間は `--dp-bar-gap`。
- * 置かれた位置 (main の頭の空き) から隙間のぶん上へ出し、巻き始めても動かない。
+ * 置かれた位置 (main の頭の空き `--dp-header-space`) が貼り付く所と同じなので、巻き始めても動かない。
  * 上端では平らで、巻いて行が裏に入ると面と近い影が出る (ヘッダーと同じく窓の巻いた量で。`dp-bar-float`)。
  * 高さはヘッダーと同じ (`--t-bar-h`)。日付の見出しはその下に `--t-day-gap` 離して置き、貼り付く所もそこにそろえる
  */
@@ -512,10 +512,7 @@
   .board .t-toolbar {
     top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
     height: var(--t-bar-h);
-    margin: calc(
-        var(--dp-header-bottom) + var(--dp-bar-gap) - var(--dp-header-space)
-      )
-      calc(var(--dp-bar-inset) - var(--dp-gutter)) var(--t-day-gap);
+    margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter)) var(--t-day-gap);
     padding: 0 var(--dp-bar-pad);
     border-radius: var(--dp-bar-radius);
     background: var(--dp-float);

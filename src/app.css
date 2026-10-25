@@ -814,7 +814,7 @@ progress[value]::-webkit-progress-value {
     }
   }
 }
-/* 狭い画面では操作の1行は表の下 (下のタブのすぐ上。親指が届く) */
+/* 狭い画面では操作の1行は表の下 (親指が届く。スマホは下のタブのすぐ上に浮かせる。下) */
 @media (max-width: 767px) {
   .guide-frame {
     --page-h: calc(100svh - 3.5rem - env(safe-area-inset-bottom));

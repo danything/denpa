@@ -362,13 +362,12 @@
   }
   @media (max-width: 767px) {
     /*
-     * 640〜767px は節の行 (下の `.jump`) がヘッダーの下に貼り付く。ヘッダーのぶん (`scroll-padding-top`) より下へ
-     * はみ出す高さ (ヘッダーとの隙間と節の行の高さから、ヘッダーの下の空き (`--dp-header-space` − `--dp-header-bottom`) を引いた分) を足す。スマホは下で決め直す
+     * 640〜767px は節の行 (下の `.jump`) がヘッダーの下に貼り付く。ヘッダーのぶん (`scroll-padding-top`。
+     * ヘッダーとの隙間も入っている) に、節の行の高さを足す。スマホは下で決め直す
      */
     .main-inner :global([data-part]) {
       scroll-margin-top: calc(
-        var(--dp-bar-gap) + var(--dp-bar-pad) * 2 + var(--dp-btn-h-sm) -
-          (var(--dp-header-space) - var(--dp-header-bottom)) + var(--dp-gutter)
+        var(--dp-bar-pad) * 2 + var(--dp-btn-h-sm) + var(--dp-gutter)
       );
     }
     /* 狭い画面は一覧か中身のどちらか。どちらを出すかは URL */
@@ -426,17 +425,14 @@
   }
   /*
      * 640〜767px はヘッダーが浮いている。**節の行はヘッダーと同じ角丸の面に乗せ、その下に貼り付ける** (ホームの頭の1行・
-     * 番組表の操作の1行と同じ。docs/design.md の「浮かせ方」。`app.css` の `--dp-bar-*`)。置かれた位置から隙間 (`--dp-bar-gap`)
-     * のぶん上へ出し、巻き始めても動かない。上端では平らで、巻いて中身が裏に入ると面と近い影が出る (窓の巻いた量で。`dp-bar-float`)。
+     * 番組表の操作の1行と同じ。docs/design.md の「浮かせ方」。`app.css` の `--dp-bar-*`)。置かれた位置 (main の頭の空き
+     * `--dp-header-space`) が貼り付く所と同じなので、巻き始めても動かない。上端では平らで、巻いて中身が裏に入ると面と近い影が出る (窓の巻いた量で。`dp-bar-float`)。
      * 面は節の行そのものの地なので、横に巻いても動かない
      */
   @media (min-width: 640px) {
     .jump {
       top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
-      margin: calc(
-          var(--dp-header-bottom) + var(--dp-bar-gap) - var(--dp-header-space)
-        )
-        calc(var(--dp-bar-inset) - var(--dp-gutter)) 0;
+      margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter)) 0;
       padding: var(--dp-bar-pad);
       border-radius: var(--dp-bar-radius);
       background: var(--dp-float);
