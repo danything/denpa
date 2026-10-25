@@ -624,8 +624,9 @@ export const apiTokens = sqliteTable("api_tokens", {
  * **ペアリングの途中** (device-auth.ts。OAuth のデバイス認可 (RFC 8628) と同じ方式)。
  *
  * 端末が持つ `device_code` は推測できない秘密で、持つのは SHA-256 だけ。QR に載る
- * `user_code` (ABCD-EFGH) は短いので、10分で切れる。開いた人が入れる人なら許したことにし、
- * 端末が次に聞きに来たときにアクセストークンを作って1度だけ渡し、`consumed_at` を付ける。
+ * `user_code` (ABCD-EFGH) は短いので、10分で切れる。開いた人が入れる人で、コードを見比べて
+ * 「ペアリング」を押したら許し、端末が次に聞きに来たときにアクセストークンを作って1度だけ渡し、
+ * `consumed_at` を付ける。
  * 断る手順は持たない (家で使う前提。コードは10分で切れ、1度しか使えない)
  */
 export const deviceCodes = sqliteTable(

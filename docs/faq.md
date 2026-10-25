@@ -104,6 +104,7 @@ Issue のフォームに入れます。開く前に中身を確かめて直せ�
 OIDC も `TRUSTED_NETWORKS` も無いと、全部断ります。OIDC が無いときは、`TRUSTED_NETWORKS` に当たらない接続元も断ります。
 家の中のネットワークを `TRUSTED_NETWORKS` に書くか、OIDC を設定します。
 前段 (リバースプロキシ) の後ろなら、`TRUSTED_PROXIES` も要ります。
+`TRUSTED_NETWORKS` の中からでも、自分のドメインなどの名前で開くなら `ALLOWED_HOSTS` に書きます。断られた画面に、接続元か名前が出ます。
 [install.md](install.md#誰を通すか)・[auth.md](auth.md#ログイン方法が無ければ全部断る)。
 
 動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。

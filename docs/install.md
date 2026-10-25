@@ -118,7 +118,7 @@ install.sh / install.ps1 が確かめるのは、同じリリースに置いた 
 ## 誰を通すか
 
 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (`192.168.0.0/16,10.0.0.0/8`) で、ここからはログインなしで通ります。
-IP の直書きや `.local` などの名前で開くときだけで、自分のドメインなどの名前で開くなら `ALLOWED_HOSTS` に書きます ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
+通るのは IP の直書きや `.local` などの名前で開いたときで、自分のドメインなどの名前で開くなら `ALLOWED_HOSTS` に書きます ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
 画面をログインで守るなら OIDC の3つを渡します (リダイレクト URI は `https://<denpa>/login/callback`)。
 
 ```yaml

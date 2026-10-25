@@ -80,7 +80,7 @@ export interface AgentAboutResult {
 }
 
 /** 来たものを疑って読む。項目ごとに、形が違えば null にして続ける */
-export function readAgentAbout(raw: unknown): AgentAbout {
+function readAgentAbout(raw: unknown): AgentAbout {
   const body =
     typeof raw === "object" && raw !== null
       ? (raw as Record<string, unknown>)

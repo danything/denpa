@@ -166,7 +166,7 @@ OIDC_GROUP=6f1b2c3d-4e5f-6789-abcd-ef0123456789
 
 ## ネットワークの中なら、何も聞かない
 
-**`TRUSTED_NETWORKS` に当たると、OIDC も掛かりません。**
+**`TRUSTED_NETWORKS` に当たり、知っている名前で来れば ([下記](#ログインなしで開ける名前-allowed_hosts))、OIDC も掛かりません。**
 LAN のテレビのアプリ (denpa-tv) に、ログインもペアリングもなしで使わせるためのものです。
 
 ```sh

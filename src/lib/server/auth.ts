@@ -9,7 +9,7 @@ import { enabled as oidcEnabled } from "./oidc";
  *
  * | 方法 | 何者か |
  * | --- | --- |
- * | `TRUSTED_NETWORKS` | 信頼したネットワークから来た人。何も聞かずに通す |
+ * | `TRUSTED_NETWORKS` | 信頼したネットワークから、知っている名前 (`knownHost`) で来た人。何も聞かずに通す |
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・端末に保存もこの控え (Cookie) で通る |
  * | アクセストークン (`Bearer denpa_…`) | ペアリングしたアプリ (`device-auth.ts`) |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
@@ -124,8 +124,8 @@ export function needsPairing(): Response {
  * **何も聞かずに通す相手か。** 見るのはアドレス (`TRUSTED_NETWORKS`、CIDR の
  * カンマ区切り)。名前は `foreignHost` で別に確かめる (hooks が両方を見る)。
  *
- * **ここに当たると OIDC も掛かりません。** LAN のテレビのアプリ (denpa-tv)
- * に資格情報を入れずに使わせるのが狙いです。
+ * **ここに当たり、名前も知っていれば OIDC も掛からない。** LAN のテレビのアプリ (denpa-tv)
+ * に資格情報を入れずに使わせるのが狙い。
  */
 export function trusted(address: string): boolean {
   return inAny(address, networks(config.trustedNetworks));

@@ -282,8 +282,8 @@ export const config = {
   oidcGroup: str("OIDC_GROUP", ""),
   /**
    * **何も聞かずに通すネットワーク。** CIDR (IPv4・IPv6。アドレスそのままでも) のカンマ区切り
-   * (`10.10.0.0/16`)。当たると OIDC も掛からない
-   * (どう効くかは `auth.trusted`)。
+   * (`10.10.0.0/16`)。当たり、知っている名前 (下の `allowedHosts`) で来れば OIDC も掛からない
+   * (どう効くかは `auth.trusted` と `auth.knownHost`)。
    *
    * **前段 (リバースプロキシ) があるなら `TRUSTED_PROXIES` に前段のアドレスを書く。**
    * 書かないと接続元が前段のアドレスになり、ここが誰にも当たらない (前段が同じネットワークに

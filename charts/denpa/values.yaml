@@ -32,7 +32,7 @@ denpa:
   # 同時にエンコードする本数。ffmpeg は 1 本で ~4GB 使う
   encodeConcurrency: 2
   timezone: Asia/Tokyo
-  # ログインなしで通すネットワーク (CIDR のカンマ区切り)。docs/auth.md。
+  # ログインなしで通すネットワーク (CIDR のカンマ区切り。知っている名前で来たときだけ。下の allowedHosts)。docs/auth.md。
   # 空だと (OIDC も無ければ) 全部 403 で断る。0.0.0.0/0 で全部開くが、
   # それはインターネットに向けて開くのと同じ
   trustedNetworks: ""

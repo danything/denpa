@@ -100,7 +100,7 @@ export async function handle({ event, resolve }) {
         );
       }
     } else if (configured() && pathname.startsWith("/api/")) {
-      // 信頼するネットワークの外から、アクセストークンを持たずに来た。アプリはこれで「ペアリングが要る」と分かる
+      // 信頼するネットワークの外か知らない名前で、アクセストークンを持たずに来た。アプリはこれで「ペアリングが要る」と分かる
       return needsPairing();
     } else {
       // 入る手段が無い (設定していないか、信頼するネットワークの外の画面か、知らない名前)。言葉で返す (auth.denied)
