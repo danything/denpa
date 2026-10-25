@@ -1,6 +1,6 @@
 import { isAbsolute, join, relative, sep } from "node:path";
 
-import type { Genre } from "@doany/arib/eit";
+import type { Genre } from "@danything/arib/eit";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,

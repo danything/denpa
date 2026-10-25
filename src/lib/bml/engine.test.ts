@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 
 import {
   type Bml,

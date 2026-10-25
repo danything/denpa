@@ -27,16 +27,16 @@
  * ffmpeg の Matroska は ARIB の字幕を `S_ARIBSUB` としてそのまま入れられる。
  */
 
-import { B24CaptionDecoder, isManagement } from "@doany/arib/b24caption";
+import { B24CaptionDecoder, isManagement } from "@danything/arib/b24caption";
 import {
   CAPTION_TEXT_VERSION,
   type CaptionLanguage,
   type CaptionLanguagePages,
   type CaptionPage,
   type CaptionPages,
-} from "@doany/arib/caption-text";
-import { LANGUAGE } from "@doany/arib/language";
-import { CLOCK } from "@doany/arib/pes";
+} from "@danything/arib/caption-text";
+import { LANGUAGE } from "@danything/arib/language";
+import { CLOCK } from "@danything/arib/pes";
 
 import { type CaptionTrack, CHANNEL, type Notice } from "#lib/live.js";
 import { type MkvFrame, MkvSplitter } from "#lib/ts/mkv.js";

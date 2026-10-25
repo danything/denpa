@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { CaptionPage, CaptionRun } from "@doany/arib/caption-text";
+import type { CaptionPage, CaptionRun } from "@danything/arib/caption-text";
 
 import { inkSpan, textStyle } from "./caption-draw";
 

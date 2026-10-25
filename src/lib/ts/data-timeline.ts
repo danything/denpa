@@ -23,7 +23,7 @@
  * DOM も時計も触らないので、ここだけ単体で確かめられる。
  */
 
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 
 import { Carousel } from "./carousel";
 

@@ -21,7 +21,7 @@ import {
   FLASH_MS,
   isSpace,
   STROKE_WIDTH,
-} from "@doany/arib/caption-text";
+} from "@danything/arib/caption-text";
 
 import { fitRect } from "./paint";
 

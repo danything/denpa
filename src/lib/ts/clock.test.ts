@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { PID_PAT } from "@doany/arib/psi";
+import { PID_PAT } from "@danything/arib/psi";
 import {
   packetize,
   patSection,
   pcrPacket,
   programMap,
   stream,
-} from "@doany/arib/synth";
+} from "@danything/arib/synth";
 
 import { BroadcastClock, parseStart, readPcr } from "./clock";
 

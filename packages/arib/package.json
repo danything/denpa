@@ -1,5 +1,5 @@
 {
-  "name": "@doany/arib",
+  "name": "@danything/arib",
   "version": "0.1.0",
   "description": "日本のデジタル放送 (ARIB) の TS を読む: PSI・PES・EIT・ARIB の文字・字幕・データ放送",
   "license": "MIT",

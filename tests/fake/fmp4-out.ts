@@ -11,7 +11,7 @@
  *
  * 時刻の刻みは 90kHz (映像)
  */
-import { CLOCK, WRAP } from "@doany/arib/pes";
+import { CLOCK, WRAP } from "@danything/arib/pes";
 
 import { pesMarks } from "../../src/lib/ts/seek";
 import { clipFrom, readClip } from "./fmp4-clip";

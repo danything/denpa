@@ -1,4 +1,4 @@
-import type { CaptionLanguage } from "@doany/arib/caption-text";
+import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 /**
  * 字幕の出し入れと言語の覚え方 (`caption-pref.test.ts`)。**3画面 (ライブ・追っかけ・観る画面) で同じ。端末ごとに覚える** (`keep.ts`)。

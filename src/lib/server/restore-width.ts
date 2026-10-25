@@ -21,7 +21,7 @@
  */
 import { open } from "node:fs/promises";
 
-import { type EitEvent, EpgReader } from "@doany/arib/eit";
+import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { asc, eq, gt } from "drizzle-orm";
 
 import { foldForSearch, toHalfWidth } from "../fold";

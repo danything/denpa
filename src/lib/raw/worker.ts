@@ -41,7 +41,7 @@ import {
   type Pes,
   PesDemuxer,
   unwrap,
-} from "@doany/arib/pes";
+} from "@danything/arib/pes";
 
 import { DecodeBudget } from "./budget";
 import { fieldAt, type Shown, SmoothClock, Vsync, VsyncClock } from "./cadence";

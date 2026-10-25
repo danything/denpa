@@ -12,8 +12,8 @@
  * (`packages/arib/src/eit.ts` の ScheduleProgress)。揃えばすぐ離すので、次のチャンネルへ回せる。
  */
 
-import { EpgReader } from "@doany/arib/eit";
-import { ServiceReader } from "@doany/arib/psi";
+import { EpgReader } from "@danything/arib/eit";
+import { ServiceReader } from "@danything/arib/psi";
 import { max, sql } from "drizzle-orm";
 
 import { config } from "./config";

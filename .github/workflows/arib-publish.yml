@@ -1,6 +1,6 @@
-name: Publish @doany/arib
+name: Publish @danything/arib
 
-# **`packages/arib` を npm に出す** (docs/development.md「`@doany/arib` を出す」)。main のコミットに
+# **`packages/arib` を npm に出す** (docs/development.md「`@danything/arib` を出す」)。main のコミットに
 # タグ `arib-v<版>` を押すと出る。版は packages/arib/package.json の `version` と同じにする (違えば止まる)。
 #
 # npm へはふだん Trusted Publishing (OIDC) で出す。トークンは持たず、provenance も付く。

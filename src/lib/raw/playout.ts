@@ -40,7 +40,7 @@
  * DOM も Web Audio も触らないので、ここだけ単体で確かめられる (`playout.test.ts`)。
  */
 
-import { CLOCK } from "@doany/arib/pes";
+import { CLOCK } from "@danything/arib/pes";
 
 /** 鳴らし始めを予約するときの先回り (秒)。今すぐにすると頭が欠ける */
 export const LEAD = 0.05;

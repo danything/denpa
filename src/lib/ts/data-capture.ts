@@ -6,7 +6,7 @@
  * `node:zlib` / `node:buffer` を使うのでブラウザには持ち込めない。
  */
 
-import { BmlDecoder } from "@doany/arib/bml";
+import { BmlDecoder } from "@danything/arib/bml";
 
 import { Carousel } from "./carousel";
 import type { TimedMessage } from "./data-timeline";

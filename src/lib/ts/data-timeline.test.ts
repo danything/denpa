@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 import {
   BML_TS,
   bmlHead,
@@ -10,7 +10,7 @@ import {
   packetize,
   stream,
   tdtPacket as tdt,
-} from "@doany/arib/synth";
+} from "@danything/arib/synth";
 
 import { captureDataBroadcast } from "./data-capture";
 import {

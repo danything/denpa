@@ -15,7 +15,7 @@
  * そちらは別仕立て (`logo-dsmcc.ts`)。両方まとめてここで面倒を見る。
  */
 
-import { u16 } from "@doany/arib/bytes";
+import { u16 } from "@danything/arib/bytes";
 import {
   descriptors,
   PacketStream,
@@ -23,7 +23,7 @@ import {
   sdtServices,
   SectionAssembler,
   TABLE_SDT_ACTUAL,
-} from "@doany/arib/psi";
+} from "@danything/arib/psi";
 
 import { DsmccLogoCollector } from "./logo-dsmcc";
 import { withPalette } from "./logo-palette";

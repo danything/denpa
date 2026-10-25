@@ -19,9 +19,9 @@
  * DOM もファイルも触らない (読む関数は受け取る) ので、合成した TS で確かめられる (`seek.test.ts`)
  */
 
-import { u16 } from "@doany/arib/bytes";
-import { CLOCK, readStamp, WRAP } from "@doany/arib/pes";
-import { findSync, PACKET, SYNC } from "@doany/arib/psi";
+import { u16 } from "@danything/arib/bytes";
+import { CLOCK, readStamp, WRAP } from "@danything/arib/pes";
+import { findSync, PACKET, SYNC } from "@danything/arib/psi";
 
 /** PES の頭の印 (stream_id)。映像 0xE0〜0xEF、音声 0xC0〜0xDF、字幕などは private_stream_1 (0xBD) */
 const isVideo = (id: number) => id >= 0xe0 && id <= 0xef;

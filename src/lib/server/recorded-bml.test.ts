@@ -14,7 +14,7 @@ import {
   programMap,
   stream,
   tdtPacket as tdt,
-} from "@doany/arib/synth";
+} from "@danything/arib/synth";
 
 import type { Recording } from "../types";
 

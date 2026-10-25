@@ -49,7 +49,7 @@
  * 映像が出ないより先に、こういう形で出る
  */
 
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 
 /**
  * 覚えておくモジュールの上限。**溜め込みすぎない歯止め。**

@@ -18,7 +18,7 @@
  */
 
 import { resolve } from "$app/paths";
-import { CLOCK, unwrap } from "@doany/arib/pes";
+import { CLOCK, unwrap } from "@danything/arib/pes";
 
 import type { AudioSide } from "#lib/arib.js";
 

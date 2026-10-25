@@ -11,7 +11,7 @@ import {
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 
-import { joinBytes } from "@doany/arib/bytes";
+import { joinBytes } from "@danything/arib/bytes";
 import { and, eq, ne, sql } from "drizzle-orm";
 
 import { toHalfWidth } from "../fold";

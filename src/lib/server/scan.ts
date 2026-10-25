@@ -17,8 +17,8 @@
  * 使っているチューナーは取られないだけ (空きが無ければ待ち、飛ばさない)。
  */
 
-import { type EitEvent, EpgReader } from "@doany/arib/eit";
-import { type FoundService, ServiceReader } from "@doany/arib/psi";
+import { type EitEvent, EpgReader } from "@danything/arib/eit";
+import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
 import type { ChannelType } from "../types";
 import { config } from "./config";

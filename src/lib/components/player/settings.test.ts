@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { captionLanguage } from "@doany/arib/caption-text";
+import { captionLanguage } from "@danything/arib/caption-text";
 
 import { subtitles } from "./settings";
 

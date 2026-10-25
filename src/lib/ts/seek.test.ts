@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { CLOCK, WRAP } from "@doany/arib/pes";
-import { PACKET, SYNC } from "@doany/arib/psi";
+import { CLOCK, WRAP } from "@danything/arib/pes";
+import { PACKET, SYNC } from "@danything/arib/psi";
 import {
   AUDIO_TICKS,
   FRAME_TICKS,
   packetizePes,
   pes,
-} from "@doany/arib/synth-av";
+} from "@danything/arib/synth-av";
 
 import { lastVideoPts, type ReadAt, seekTs, sinceHead, tsHead } from "./seek";
 

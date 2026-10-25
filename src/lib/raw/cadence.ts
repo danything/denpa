@@ -14,7 +14,7 @@
  *   貯め直した) ときだけ合わせ直す
  */
 
-import { CLOCK } from "@doany/arib/pes";
+import { CLOCK } from "@danything/arib/pes";
 
 /** 画面の切り替わりの間隔として受け取る幅 (ms)。240Hz〜20Hz */
 const PERIOD_MIN = 4;

@@ -1,4 +1,4 @@
-import { joinBytes } from "@doany/arib/bytes";
+import { joinBytes } from "@danything/arib/bytes";
 
 import type { Range } from "../ts/cm-decide";
 import type { Span } from "../ts/logo-detect";

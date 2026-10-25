@@ -25,7 +25,7 @@
  * 速さは等速だけ (音を自前で鳴らしている)。DOM はエンジン (`RawEngine`) が触る canvas と `<audio>` だけ
  */
 
-import { CLOCK, WRAP } from "@doany/arib/pes";
+import { CLOCK, WRAP } from "@danything/arib/pes";
 
 import type { AudioSide } from "#lib/arib.js";
 import { RawEngine } from "#lib/raw/engine.js";

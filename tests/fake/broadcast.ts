@@ -11,7 +11,7 @@
  * どうかをテストで確かめられない。
  */
 
-import { CLOCK } from "@doany/arib/pes";
+import { CLOCK } from "@danything/arib/pes";
 import {
   aitSection,
   aitSignallingDescriptor,
@@ -28,7 +28,7 @@ import {
   sdtSection,
   type SynthEvent,
   withCrc,
-} from "@doany/arib/synth";
+} from "@danything/arib/synth";
 import {
   AUDIO_TICKS,
   FRAME_TICKS,
@@ -36,7 +36,7 @@ import {
   packetizePes,
   pes,
   silentAac,
-} from "@doany/arib/synth-av";
+} from "@danything/arib/synth-av";
 
 import { docsColor, docsLogo, docsProgram } from "./docs";
 import { type FakeService, SERVICES } from "./services";

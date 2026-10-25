@@ -36,7 +36,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { SYNC } from "@doany/arib/psi";
+import { SYNC } from "@danything/arib/psi";
 
 import { channels } from "../tests/fake/broadcast";
 import { scenes } from "../tests/fake/tuner-scenes";

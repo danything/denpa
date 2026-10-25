@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { packetize, withCrc } from "@doany/arib/synth";
+import { packetize, withCrc } from "@danything/arib/synth";
 
 import {
   LogoCollector,

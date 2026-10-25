@@ -5,7 +5,7 @@ import {
   encodeAribText,
   management,
   text,
-} from "@doany/arib/synth-caption";
+} from "@danything/arib/synth-caption";
 
 import { CHANNEL } from "#lib/live.js";
 

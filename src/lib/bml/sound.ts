@@ -7,7 +7,7 @@
  * - 文書の音 (`object type="audio/X-arib-aiff"`): AIFF-C の非圧縮 PCM (12 kHz・1 ch・16 ビット) を読む
  */
 
-import { ascii } from "@doany/arib/bytes";
+import { ascii } from "@danything/arib/bytes";
 
 /** [周波数 Hz, 長さ 秒] の並び */
 type Tune = [number, number][];

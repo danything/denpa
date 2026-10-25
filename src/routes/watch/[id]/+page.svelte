@@ -1,13 +1,13 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import type { ResponseMessage } from "@doany/arib/bml-protocol";
+  import type { ResponseMessage } from "@danything/arib/bml-protocol";
   import {
     CAPTION_TEXT_VERSION,
     type CaptionLanguage,
     captionLanguage as languageOf,
     type CaptionPage,
     type CaptionPages,
-  } from "@doany/arib/caption-text";
+  } from "@danything/arib/caption-text";
   import { onMount, untrack } from "svelte";
 
   import { submitting } from "#lib/actions.js";

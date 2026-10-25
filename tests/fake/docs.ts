@@ -7,13 +7,13 @@
  */
 import { deflateSync } from "node:zlib";
 
-import { joinBytes } from "@doany/arib/bytes";
+import { joinBytes } from "@danything/arib/bytes";
 import {
   captionMkv,
   encodeAribText,
   management,
   text,
-} from "@doany/arib/synth-caption";
+} from "@danything/arib/synth-caption";
 
 import { PNG_SIGNATURE, pngChunk } from "../../src/lib/ts/png";
 import type { FakeService } from "./services";

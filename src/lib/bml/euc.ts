@@ -19,7 +19,7 @@
  *   往復で失われないようにする
  */
 
-import { ADDITIONAL } from "@doany/arib/b24-tables";
+import { ADDITIONAL } from "@danything/arib/b24-tables";
 
 /** 85 区 1 点の置き場所 */
 export const PUA_ADDITIONAL = 0xe000;

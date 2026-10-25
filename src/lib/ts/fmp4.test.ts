@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import { AdtsSplitter } from "@doany/arib/pes";
+import { AdtsSplitter } from "@danything/arib/pes";
 
 import {
   adtsHeader,

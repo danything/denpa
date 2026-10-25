@@ -9,13 +9,13 @@
  */
 
 import { resolve } from "$app/paths";
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 import {
   CAPTION_TEXT_VERSION,
   type CaptionLanguage,
   type CaptionPage,
-} from "@doany/arib/caption-text";
-import { CLOCK } from "@doany/arib/pes";
+} from "@danything/arib/caption-text";
+import { CLOCK } from "@danything/arib/pes";
 
 import type { AudioTrack } from "#lib/arib.js";
 import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";

@@ -24,14 +24,14 @@ import {
   AitReader,
   APPLICATION_TYPE_HTML5,
   CONTROL,
-} from "@doany/arib/ait";
+} from "@danything/arib/ait";
 import {
   CAPTION_TEXT_VERSION,
   type CaptionLanguage,
-} from "@doany/arib/caption-text";
-import { PresentFollowing } from "@doany/arib/eit";
-import { PacketStream } from "@doany/arib/psi";
-import { ServiceFilter, StreamsWatch } from "@doany/arib/service-filter";
+} from "@danything/arib/caption-text";
+import { PresentFollowing } from "@danything/arib/eit";
+import { PacketStream } from "@danything/arib/psi";
+import { ServiceFilter, StreamsWatch } from "@danything/arib/service-filter";
 import { and, eq, gt, lte } from "drizzle-orm";
 
 import {

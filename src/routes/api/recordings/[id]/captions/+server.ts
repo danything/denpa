@@ -1,4 +1,4 @@
-import { parseCaptionLanguage } from "@doany/arib/caption-text";
+import { parseCaptionLanguage } from "@danything/arib/caption-text";
 import { error } from "@sveltejs/kit";
 
 import { recordingCaptions } from "#lib/server/live.js";

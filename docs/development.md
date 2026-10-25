@@ -151,7 +151,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
    `gh release create vX.Y.Z --target main --generate-notes --title vX.Y.Z`。
    イメージは組み直さず、そのコミットのものに版を貼り足します ([下](#イメージ))
 
-### `@doany/arib` を出す
+### `@danything/arib` を出す
 
 `packages/arib/` は denpa のリリースとは別に npm へ出します。`packages/arib/package.json` の `version` を上げる PR を
 マージしてから、main のそのコミットにタグ `arib-v<版>` を押します (`git tag arib-v0.2.0 && git push origin arib-v0.2.0`)。

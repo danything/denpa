@@ -1,6 +1,6 @@
 /** テスト用の小さな MNG を組む (放送のデータは使わない) */
 
-import { concatBytes } from "@doany/arib/bytes";
+import { concatBytes } from "@danything/arib/bytes";
 
 import { pngChunk } from "#lib/ts/png.js";
 

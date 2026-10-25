@@ -1,4 +1,4 @@
-import type { EitEvent } from "@doany/arib/eit";
+import type { EitEvent } from "@danything/arib/eit";
 import {
   and,
   count,

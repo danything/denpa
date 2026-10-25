@@ -26,13 +26,13 @@
  * PNG は地上波と同じく色の表が抜けているので、入れ直してから返す。
  */
 
-import { u16 } from "@doany/arib/bytes";
+import { u16 } from "@danything/arib/bytes";
 import {
   ModuleBuilder,
   parseDdb,
   parseDii,
   TABLE_DII,
-} from "@doany/arib/dsmcc";
+} from "@danything/arib/dsmcc";
 import {
   descriptors,
   parsePat,
@@ -40,7 +40,7 @@ import {
   pmtStreams,
   SectionAssembler,
   TABLE_PMT,
-} from "@doany/arib/psi";
+} from "@danything/arib/psi";
 
 import { withPalette } from "./logo-palette";
 

@@ -18,7 +18,7 @@
 </script>
 
 <script lang="ts">
-  import type { ResponseMessage } from "@doany/arib/bml-protocol";
+  import type { ResponseMessage } from "@danything/arib/bml-protocol";
   /**
    * データ放送を映像の上に重ねる。**描くのはエンジン** (`src/lib/bml/`)。
    *

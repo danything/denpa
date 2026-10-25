@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { type Ait, AitReader } from "@doany/arib/ait";
-import { BmlDecoder } from "@doany/arib/bml";
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
-import { EpgReader } from "@doany/arib/eit";
-import { type Pes, PesDemuxer } from "@doany/arib/pes";
-import { PacketStream } from "@doany/arib/psi";
-import { ServiceFilter } from "@doany/arib/service-filter";
+import { type Ait, AitReader } from "@danything/arib/ait";
+import { BmlDecoder } from "@danything/arib/bml";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
+import { EpgReader } from "@danything/arib/eit";
+import { type Pes, PesDemuxer } from "@danything/arib/pes";
+import { PacketStream } from "@danything/arib/psi";
+import { ServiceFilter } from "@danything/arib/service-filter";
 import {
   aitSection,
   aitSignallingDescriptor,
@@ -23,7 +23,7 @@ import {
   sdtSection,
   stream,
   tdtPacket,
-} from "@doany/arib/synth";
+} from "@danything/arib/synth";
 
 import { BroadcastClock } from "./clock";
 import { DataBroadcastCapture } from "./data-capture";

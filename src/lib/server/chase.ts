@@ -17,7 +17,7 @@
 import { statSync } from "node:fs";
 import { open } from "node:fs/promises";
 
-import { PACKET } from "@doany/arib/psi";
+import { PACKET } from "@danything/arib/psi";
 
 /** 1回に読む量。露骨に小さいと read の回数だけ損する */
 const READ_SIZE = 256 * 1024;

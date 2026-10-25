@@ -7,7 +7,7 @@
  * **届いた時刻からずれを測って足し引きはしない** (測れない。docs/stream.md#時刻同期)。
  */
 
-import type { CaptionPage } from "@doany/arib/caption-text";
+import type { CaptionPage } from "@danything/arib/caption-text";
 
 /** 出す時刻と、その1枚 (文字の配置)。`page` が null か `runs` が空なら「消す」 */
 export interface Cue {

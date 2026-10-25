@@ -1,4 +1,4 @@
-# @doany/arib
+# @danything/arib
 
 日本のデジタル放送 (ISDB-T / ISDB-S、ARIB 規格) の MPEG-TS を TypeScript で読むライブラリです。
 録画サーバー [denpa](https://github.com/danything/denpa) の中で使っているものを切り出しました。
@@ -16,7 +16,7 @@
 ## 入れ方
 
 ```sh
-npm install @doany/arib
+npm install @danything/arib
 ```
 
 ES モジュールだけです。`bml` と `b24caption` は `node:zlib` / `node:crypto` を使うので、
@@ -24,10 +24,10 @@ Node.js・Bun・Deno で動きます。ほかのモジュールはブラウザ�
 
 ## 使い方
 
-モジュールごとに読み込みます (`@doany/arib/<名前>`)。
+モジュールごとに読み込みます (`@danything/arib/<名前>`)。
 
 ```ts
-import { EpgReader } from "@doany/arib/eit";
+import { EpgReader } from "@danything/arib/eit";
 
 const epg = new EpgReader();
 for await (const chunk of stream) {
@@ -41,13 +41,13 @@ for await (const chunk of stream) {
 ```
 
 ```ts
-import { decodeAribText } from "@doany/arib/aribtext";
+import { decodeAribText } from "@danything/arib/aribtext";
 
 decodeAribText(bytes); // "🈟ニュース"
 ```
 
 ```ts
-import { B24CaptionDecoder } from "@doany/arib/b24caption";
+import { B24CaptionDecoder } from "@danything/arib/b24caption";
 
 const captions = new B24CaptionDecoder();
 // 字幕の PES の中身 (データ識別 0x80 から) を1つずつ渡す

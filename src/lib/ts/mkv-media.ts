@@ -18,7 +18,7 @@
  * DOM も worker も触らない (`mkv-media.test.ts`)
  */
 
-import { concatBytes } from "@doany/arib/bytes";
+import { concatBytes } from "@danything/arib/bytes";
 
 import { aacCodec, av1Codec, avcCodec, type Fmp4Track } from "./fmp4";
 import {

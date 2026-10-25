@@ -8,7 +8,7 @@ import {
   patSection,
   pmtSection,
   stream,
-} from "@doany/arib/synth";
+} from "@danything/arib/synth";
 
 import { LogoCollector } from "./logo";
 import { DsmccLogoCollector, parseLogoModule } from "./logo-dsmcc";

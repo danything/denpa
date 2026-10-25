@@ -34,7 +34,7 @@
 
 import { existsSync, statSync } from "node:fs";
 
-import { CLOCK, WRAP } from "@doany/arib/pes";
+import { CLOCK, WRAP } from "@danything/arib/pes";
 import { error } from "@sveltejs/kit";
 
 import {

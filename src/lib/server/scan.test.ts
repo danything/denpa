@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { EpgReader } from "@doany/arib/eit";
+import { EpgReader } from "@danything/arib/eit";
 import {
   eitSection,
   nitSection,
   packetize,
   sdtSection,
-} from "@doany/arib/synth";
+} from "@danything/arib/synth";
 
 import { channelEntry, channelsFor, readServices } from "./scan";
 import { type AgentChannel, twinOf, withoutTwins } from "./tuner";

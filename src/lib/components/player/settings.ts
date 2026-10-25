@@ -1,4 +1,4 @@
-import type { CaptionLanguage } from "@doany/arib/caption-text";
+import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 import { LIVE_CODECS, type LiveCodec } from "#lib/live.js";
 import { SPEEDS } from "#lib/ts/pacing.js";

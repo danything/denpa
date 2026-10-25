@@ -1,4 +1,4 @@
-import { joinBytes } from "@doany/arib/bytes";
+import { joinBytes } from "@danything/arib/bytes";
 import { error, json } from "@sveltejs/kit";
 
 import { pagesFromMkv } from "#lib/server/captions.js";

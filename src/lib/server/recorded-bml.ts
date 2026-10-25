@@ -17,7 +17,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 import { eq } from "drizzle-orm";
 
 import { DataBroadcastCapture } from "#lib/ts/data-capture.js";

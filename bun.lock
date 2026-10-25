@@ -6,7 +6,7 @@
       "name": "denpa",
       "devDependencies": {
         "@anyblades/blades": "3.1.0-beta.6",
-        "@doany/arib": "workspace:*",
+        "@danything/arib": "workspace:*",
         "@iconify-json/lucide": "^1.2.147",
         "@playwright/test": "^1.64.1",
         "@sveltejs/adapter-bun": "^1.0.0",
@@ -24,7 +24,7 @@
       },
     },
     "packages/arib": {
-      "name": "@doany/arib",
+      "name": "@danything/arib",
       "version": "0.1.0",
     },
   },
@@ -33,7 +33,7 @@
 
     "@anyblades/blades": ["@anyblades/blades@3.1.0-beta.6", "", {}, "sha512-nWKtT6ULFW7k6fUKYfpP7MdEbyjdJV/TARSeL3qISVtVkSglLeWuRKjf3sLkbEioPrzjDbdGpWimCSugQ6bxrg=="],
 
-    "@doany/arib": ["@doany/arib@workspace:packages/arib"],
+    "@danything/arib": ["@danything/arib@workspace:packages/arib"],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
 

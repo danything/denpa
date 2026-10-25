@@ -23,8 +23,8 @@
  * 出すか転ぶ。転んだら (`error`) 開き直してキーフレームから入り直し、続けて転ぶなら諦める。
  */
 
-import { ascii, concatBytes, u32 } from "@doany/arib/bytes";
-import { CLOCK } from "@doany/arib/pes";
+import { ascii, concatBytes, u32 } from "@danything/arib/bytes";
+import { CLOCK } from "@danything/arib/pes";
 
 import {
   adtsHeader,

@@ -39,14 +39,14 @@
  * 永久には持たず、**30秒ごとに選び直します** (直前の区切りのぶんも残して比べる)
  */
 
-import { u16 } from "@doany/arib/bytes";
-import { CLOCK, WRAP as PTS_WRAP } from "@doany/arib/pes";
+import { u16 } from "@danything/arib/bytes";
+import { CLOCK, WRAP as PTS_WRAP } from "@danything/arib/pes";
 import {
   packetPid,
   PacketStream,
   PmtTracker,
   TABLE_PMT,
-} from "@doany/arib/psi";
+} from "@danything/arib/psi";
 
 /** 33ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = PTS_WRAP / CLOCK;

@@ -20,8 +20,8 @@
  * 間隔が空く)。
  */
 
-import { BmlDecoder } from "@doany/arib/bml";
-import type { ResponseMessage } from "@doany/arib/bml-protocol";
+import { BmlDecoder } from "@danything/arib/bml";
+import type { ResponseMessage } from "@danything/arib/bml-protocol";
 
 import { Carousel } from "#lib/ts/carousel.js";
 

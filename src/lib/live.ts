@@ -12,7 +12,7 @@
  * 字幕は時刻ではなく「待たせる量」で合わせていた。
  */
 
-import type { CaptionLanguage } from "@doany/arib/caption-text";
+import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 import type { AudioTrack } from "./arib";
 

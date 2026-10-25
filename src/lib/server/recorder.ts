@@ -2,8 +2,8 @@ import { once } from "node:events";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { EpgReader } from "@doany/arib/eit";
-import { ServiceFilter } from "@doany/arib/service-filter";
+import { EpgReader } from "@danything/arib/eit";
+import { ServiceFilter } from "@danything/arib/service-filter";
 import { eq, sql } from "drizzle-orm";
 
 import type { Recording, Reservation } from "../types";

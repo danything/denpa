@@ -8,8 +8,8 @@
  * 出典は ARIB STD-B10 第2部 (content_nibble / component_type)。
  */
 
-import type { Genre } from "@doany/arib/eit";
-import { LANGUAGE } from "@doany/arib/language";
+import type { Genre } from "@danything/arib/eit";
+import { LANGUAGE } from "@danything/arib/language";
 
 /** ジャンル大分類。content_nibble_level_1 */
 const GENRE_LV1: Record<number, string> = {

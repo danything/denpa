@@ -1,7 +1,7 @@
 import { closeSync, openSync, readSync } from "node:fs";
 import { relative } from "node:path";
 
-import { PACKET, SYNC } from "@doany/arib/psi";
+import { PACKET, SYNC } from "@danything/arib/psi";
 
 import {
   array,

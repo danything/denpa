@@ -16,7 +16,7 @@ import type {
   ModuleListEntry,
   ProgramInfoMessage,
   ResponseMessage,
-} from "@doany/arib/bml-protocol";
+} from "@danything/arib/bml-protocol";
 
 import type { ImageSource } from "./render";
 

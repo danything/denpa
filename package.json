@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "devDependencies": {
-    "@doany/arib": "workspace:*",
+    "@danything/arib": "workspace:*",
     "@anyblades/blades": "3.1.0-beta.6",
     "@iconify-json/lucide": "^1.2.147",
     "@playwright/test": "^1.64.1",

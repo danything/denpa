@@ -1,4 +1,4 @@
-import type { Genre } from "@doany/arib/eit";
+import type { Genre } from "@danything/arib/eit";
 import {
   and,
   eq,
