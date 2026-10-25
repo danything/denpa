@@ -46,9 +46,24 @@ permissions:
 env:
   REGISTRY: ghcr.io
 
+# **出したものには出所の証明 (attestation) を付けます** (actions/attest)。イメージ3つと、
+# リリースに添えるエージェントの tar.gz / zip。.sha256 は同じリリースに置くので、壊れた
+# ファイルは見分けられても、すり替えまでは防げない — 証明はこのリポジトリのこの workflow が
+# 作ったことを Sigstore の署名で示すので、`gh attestation verify <ファイル> -R danything/denpa`
+# で確かめられる (docs/install.md の「配布物を確かめる」)。
+# 証明を作るジョブには `id-token` (署名の証明書を取る) と `attestations` (証明を置く) を足す。
+# ジョブに permissions を書くと上の既定は丸ごと置き換わるので、要るものを全部書いてある
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      # 証明をレジストリにも置く (push-to-registry) ときに、置き場の記録を作るため
+      artifact-metadata: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -113,6 +128,7 @@ jobs:
       # 読むのは、arm64 を出す前の `sha-…` を手で貼り直すとき (workflow_dispatch) に
       # 無い arch を求めて落ちないため
       - name: Point the names at this release
+        id: push
         run: |
           set -eu
           base="${{ env.REGISTRY }}/${{ github.repository_owner }}"
@@ -133,7 +149,9 @@ jobs:
               | jq -r '[.manifests[]? | .platform | select(.os == "linux") | "linux/\(.architecture)"] | unique | join(",")')
             echo "${found:-linux/amd64}"
           }
-          # 土台 ($1) にバージョンを 1 層足して、名前 ($2 の --tag の並び) を付ける
+          # push したものの digest (multi-arch の索引)。出所の証明はこれに付ける
+          digest() { jq -r '."containerimage.digest"' "$1"; }
+          # 土台 ($1) にバージョンを 1 層足して、名前 ($2 の --tag の並び) を付ける。結果は $3 に書く
           with_version() {
             # 単語に割りたいので引用しない (中身は上で作った名前だけ)
             # shellcheck disable=SC2086
@@ -142,13 +160,16 @@ jobs:
               --file .github/release.Dockerfile \
               --build-arg BASE="$1" \
               --build-arg DENPA_VERSION="${{ github.event.release.tag_name || github.event.inputs.ref }}" \
+              --metadata-file "$3" \
               $2 .
           }
-          with_version "${base}/denpa-agent:${{ steps.tag.outputs.agent }}" "$agent_args"
+          with_version "${base}/denpa-agent:${{ steps.tag.outputs.agent }}" "$agent_args" agent.json
+          echo "agent=$(digest agent.json)" >> "$GITHUB_OUTPUT"
           echo "denpa-agent: ${{ steps.tag.outputs.agent }} + DENPA_VERSION → $names"
           denpa_base="${base}/denpa:${{ steps.tag.outputs.denpa }}"
           platforms=$(arches "$denpa_base")
-          with_version "$denpa_base" "$denpa_args"
+          with_version "$denpa_base" "$denpa_args" denpa.json
+          echo "denpa=$(digest denpa.json)" >> "$GITHUB_OUTPUT"
           echo "denpa: ${{ steps.tag.outputs.denpa }} ($platforms) + DENPA_VERSION → $names"
 
           # 本体とエージェントを1つにしたもの (.github/aio.Dockerfile)。本体は、いまバージョンを
@@ -158,19 +179,50 @@ jobs:
           # shellcheck disable=SC2086
           set -- $names
           first="$1"
+          # shellcheck disable=SC2086
           docker buildx build --push \
             --platform "$platforms" \
             --file .github/aio.Dockerfile \
             --build-arg DENPA="${base}/denpa:${first}" \
             --build-arg AGENT="${base}/denpa-agent:${{ steps.tag.outputs.agent }}" \
+            --metadata-file aio.json \
             $aio_args .
+          echo "aio=$(digest aio.json)" >> "$GITHUB_OUTPUT"
           echo "denpa-aio: denpa:${first} + denpa-agent:${{ steps.tag.outputs.agent }} → $names"
+
+      # 名前ではなく digest に付ける (名前は動くので)。レジストリにも置くので、
+      # `gh attestation verify oci://ghcr.io/danything/denpa:<バージョン> -R danything/denpa` で確かめられる
+      - name: Attest denpa-agent
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa-agent
+          subject-digest: ${{ steps.push.outputs.agent }}
+          push-to-registry: true
+
+      - name: Attest denpa
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa
+          subject-digest: ${{ steps.push.outputs.denpa }}
+          push-to-registry: true
+
+      - name: Attest denpa-aio
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/denpa-aio
+          subject-digest: ${{ steps.push.outputs.aio }}
+          push-to-registry: true
 
   # **Mac (Apple Silicon) 用のエージェントをリリースに添える** (install.sh が取りに来る)。
   # Native AOT は Linux から macOS 向けにビルドできないので、ここだけは Mac のランナーで**ビルドする**
   # (イメージのように main でビルドしたものを使い回す先が無い)。中身はタグのコミットそのもの
   agent-macos:
     runs-on: macos-26
+    permissions:
+      # write はリリースに添えるため
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -184,9 +236,8 @@ jobs:
 
       # 名前はタグから `v` を落としたバージョンで (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
       # 中身は実行ファイル1個。.sha256 は install.sh が確かめる
-      - name: Build and attach to the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
+        id: build
         run: |
           set -eu
           tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
@@ -195,12 +246,30 @@ jobs:
           asset="denpa-agent-${tag#v}-darwin-arm64.tar.gz"
           tar -czf "$asset" -C out denpa-agent
           shasum -a 256 "$asset" > "$asset.sha256"
-          gh release upload "$tag" "$asset" "$asset.sha256" --clobber
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+
+      # 添える前に付ける (証明の無いものがリリースに並ばないように)
+      - name: Attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.build.outputs.asset }}
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.build.outputs.tag }}
+          ASSET: ${{ steps.build.outputs.asset }}
+        run: gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber
 
   # **Windows (x64) 用のエージェントも添える** (install.ps1 が取りに来る)。Mac と同じく、
   # Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドする
   agent-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -213,10 +282,9 @@ jobs:
           dotnet-version: "10.0.402"
 
       # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1個) と .sha256 (shasum と同じ形式)
-      - name: Build and attach to the release
+      - name: Build
+        id: build
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
@@ -224,7 +292,21 @@ jobs:
           asset="denpa-agent-${tag#v}-windows-x64.zip"
           pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe -DestinationPath '$asset'"
           sha256sum "$asset" > "$asset.sha256"
-          gh release upload "$tag" "$asset" "$asset.sha256" --clobber
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+
+      - name: Attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.build.outputs.asset }}
+
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.build.outputs.tag }}
+          ASSET: ${{ steps.build.outputs.asset }}
+        run: gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart のバージョン (Chart.yaml の version) とアプリのバージョン (appVersion) をリリースの

@@ -177,6 +177,24 @@ test.describe("データ放送の双方向", () => {
   });
 
   /*
+   * **中継はページとして開かせない。** 返すのは相手の言うままの中身 (HTML や SVG もある) なので、
+   * 直に開かれると denpa のオリジンで動いてしまう。画面の fetch からは今までどおり使える
+   */
+  test("中継を直に開くと断り、画面の fetch からは使える", async ({ page }) => {
+    const proxy = `/api/bml/proxy?url=${encodeURIComponent("https://127.0.0.1/")}`;
+    const opened = await page.goto(proxy);
+    expect(opened?.status()).toBe(403);
+
+    await goto(page, "/");
+    // 内側なので中継の断り (502)。入口では止まらずに中継まで届いた印
+    const status = await page.evaluate(
+      async (url) => (await fetch(url)).status,
+      proxy,
+    );
+    expect(status).toBe(502);
+  });
+
+  /*
    * **Hybridcast のアプリの中継** (`server/hc-relay.ts`)。合言葉は http・https のアプリに出し、
    * 中継は合言葉の配信元へだけ、`/api/bml/proxy` と同じ枠で繋ぐ (内側は断る)
    */
