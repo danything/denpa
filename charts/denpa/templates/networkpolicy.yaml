@@ -1,0 +1,25 @@
+{{- if .Values.agent.networkPolicy.enabled }}
+# エージェントへは denpa の Pod からだけ繋がせる (values.yaml の agent.networkPolicy)。
+# エージェントは認証を持たず、/denpa/stream は復号済みの TS を返す (docs/agent.md「エージェントは認証を持たない」)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tuner-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: tuner-agent
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: denpa
+      ports:
+        - protocol: TCP
+          port: 25252
+{{- end }}

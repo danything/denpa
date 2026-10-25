@@ -44,9 +44,13 @@ services:
       - /dev/bus/usb:/dev/bus/usb
       - /dev/dvb:/dev/dvb
     ports:
-      - "25252:25252"
+      # denpa は compose のネットワークの中で tuner-agent:25252 に繋ぐので、ホストに出すのは手元から確かめる
+      # (docs/tuners.md の curl) ためだけ。**エージェントは認証を持たないので LAN には出さない**。
+      # 別の機械の denpa から繋ぐなら、compose.override.yml で ports: !override ["25252:25252"] と書き直し、
+      # 世帯の外からは届かないようにしておく (docs/agent.md「エージェントは認証を持たない」)
+      - "127.0.0.1:25252:25252"
       # 鍵を同じ世帯の別の機器 (LAN の中) へ配るなら (docs/agent.md「鍵を配るのは LAN の中だけ」)、
-      # compose.override.yml でこのポートを IPv4 だけで出し、environment に
+      # compose.override.yml で鍵を配るポートを IPv4 だけで出し、environment に
       # CARD_SHARE_PORT: '25253' と CARD_TTL: '2' (ブリッジの出入りで1つ減る) を書く。既定では配らない
       # - '0.0.0.0:25253:25253'
 

@@ -187,7 +187,7 @@ jobs:
           set -euo pipefail
           bash install.sh --no-open
           curl -fsS http://localhost:3000/api/health; echo
-          curl -fsS http://localhost:25252/denpa/tuners; echo
+          curl -fsS http://127.0.0.1:25252/denpa/tuners; echo
           # ランナーの 80 / 443 は空いているので genkan が入り、http://denpa.localhost で開ける
           # (genkan のコンテナから来る要求が TRUSTED_NETWORKS の既定で通ることも含めて)
           curl -fsS --resolve denpa.localhost:80:127.0.0.1 http://denpa.localhost/api/health; echo
@@ -244,13 +244,16 @@ jobs:
         run: |
           set -euo pipefail
           ./out/denpa-agent --card || true
-          AGENT_PORT=25300 ./out/denpa-agent > agent.log 2>&1 &
+          # 同じ Mac の Docker の denpa と組むときと同じく、ループバックでだけ待ち受ける (install.sh)
+          AGENT_PORT=25300 AGENT_HOST=127.0.0.1 ./out/denpa-agent > agent.log 2>&1 &
           pid=$!
           for _ in $(seq 30); do curl -fsS http://127.0.0.1:25300/denpa/tuners > tuners.json 2>/dev/null && break; sleep 1; done
           echo "tuners: $(cat tuners.json)"
           curl -fsS http://127.0.0.1:25300/denpa/card | tee card.json; echo
           jq -e '.tuners | type == "array"' tuners.json
           jq -e '.ok == false and (.readers | type == "array")' card.json
+          # 本文を読む API は JSON と名乗ったものしか受けない (docs/agent.md「エージェントは認証を持たない」)
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: text/plain' -d '{}' http://127.0.0.1:25300/denpa/decode)" = 415
           # 自分のこと (About.cs)。macOS では CCID ドライバも (`defaults` をここで実際に起こす)
           curl -fsS http://127.0.0.1:25300/denpa/about | tee about.json; echo
           jq -e '.version == "dev" and .os == "macos" and .arch == "arm64" and (.ccidDriver == "apple" or .ccidDriver == "ifd-ccid")' about.json

@@ -92,4 +92,12 @@ public static class Json
 
     /// <summary>文字列の並びを JSON の配列に</summary>
     public static JsonArray Strings(IEnumerable<string> values) => [.. values.Select(value => (JsonNode)value)];
+
+    /// <summary>
+    /// 本文が JSON だと名乗っているか (<c>application/json</c>。<c>charset</c> などの引数は見ない)。
+    /// 本文を読む API はこれ以外を 415 で断る (Program.cs)
+    /// </summary>
+    public static bool IsJsonContentType(string? contentType) =>
+        System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(contentType, out var type)
+        && string.Equals(type.MediaType, "application/json", StringComparison.OrdinalIgnoreCase);
 }

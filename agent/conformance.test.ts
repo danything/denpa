@@ -752,6 +752,42 @@ describe("カードとスクランブルの復号", () => {
     30_000,
   );
 
+  /*
+   * **本文を読む API は JSON と名乗ったものしか受けない** (docs/agent.md「エージェントは認証を持たない」)。
+   * text/plain はブラウザが下調べなしに送れるので、外のサイトから書き込めてしまう
+   */
+  test("JSON と名乗らない本文は 415 で断る", async () => {
+    for (const [method, path] of [
+      ["POST", "/denpa/decode"],
+      ["PUT", "/denpa/tuners"],
+      ["PUT", "/denpa/channels"],
+    ]) {
+      const res = await fetch(`${BASE}${path}`, {
+        method,
+        headers: { "Content-Type": "text/plain" },
+        // 通ってしまっても何も書き換えない本文 (受けていれば 400 か 500)
+        body: "{}",
+      });
+      expect(res.status).toBe(415);
+    }
+  });
+
+  test("復号の書き出し先がもうあれば上書きしない", async () => {
+    writeFileSync(join(paths().recorded, "keep-in.ts"), new Uint8Array(188));
+    writeFileSync(join(paths().recorded, "keep-out.ts"), "録画");
+    const res = await post("/denpa/decode", {
+      input: "keep-in.ts",
+      output: "keep-out.ts",
+    });
+    expect(res.status).toBe(500);
+    expect(((await res.json()) as { error: string }).error).toContain(
+      "もうあります",
+    );
+    expect(readFileSync(join(paths().recorded, "keep-out.ts"), "utf8")).toBe(
+      "録画",
+    );
+  });
+
   test("置き場の外は復号に回さない", async () => {
     const res = await post("/denpa/decode", {
       input: "../../etc/passwd",

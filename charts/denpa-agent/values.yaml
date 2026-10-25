@@ -54,5 +54,25 @@ service:
   # 選局・スクランブルの復号の API。denpa の TUNER_AGENT_URL がここを指す
   port: 25252
   type: ClusterIP
-  # 別のクラスタ/機械の denpa から届かせるなら NodePort か LoadBalancer にする
+  # 別のクラスタ/機械の denpa から届かせるなら NodePort か LoadBalancer にする。
+  # **エージェントは認証を持たない** (/denpa/stream は復号済みの TS を返す)。開くのは世帯の中の
+  # LAN までにして、インターネットや世帯の外へは出さない (docs/agent.md「エージェントは認証を持たない」)。
+  # 下の networkPolicy で繋げる相手も絞れる
   nodePort: null
+
+# **エージェントに繋げる相手を絞る** NetworkPolicy を出す。CNI が NetworkPolicy に対応していないと、
+# 出しても効かない。オンにしたら from に denpa の居場所を書く (NetworkPolicyPeer の並び。
+# そのまま ingress の from に入る)。同じクラスタの別の名前空間なら namespaceSelector と podSelector、
+# クラスタの外の denpa なら ipBlock。NodePort・LoadBalancer 越しだと送り元のアドレスがノードのものに
+# 書き換わる (externalTrafficPolicy が既定の Cluster のとき) ので、ipBlock にはそれも入れる
+networkPolicy:
+  enabled: false
+  from: []
+  # - namespaceSelector:
+  #     matchLabels:
+  #       kubernetes.io/metadata.name: denpa
+  #   podSelector:
+  #     matchLabels:
+  #       app: denpa
+  # - ipBlock:
+  #     cidr: 192.168.1.10/32

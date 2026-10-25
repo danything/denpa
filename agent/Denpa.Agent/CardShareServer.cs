@@ -13,7 +13,8 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **普通の API (<c>AGENT_PORT</c>) とは別のポートで受ける** (<see cref="CardLanPolicy.Port"/>)。
-/// 選局の API を外に出す構成でも、鍵まで一緒に出ないようにするため。このポートで答えるのは
+/// 鍵を配るために普通の API まで開かずに済むように (普通の API も /denpa/stream が復号済みの TS を返すので、
+/// 世帯の外へは出さない。docs/agent.md「エージェントは認証を持たない」)。このポートで答えるのは
 /// <c>/denpa/card/init</c> と <c>/denpa/card/ecm</c> だけで、どちらも相手のアドレスと
 /// (決めてあれば) 往復時間を確かめてから答える。接続には TTL を付ける (<see cref="CardLan"/>)。
 /// </para>

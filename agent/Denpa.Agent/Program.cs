@@ -1,3 +1,4 @@
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -34,6 +35,17 @@ if (args.ElementAtOrDefault(0) == "--card") return Probe.Card();
 var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
     ? configured
     : 25252;
+/*
+ * 待ち受けるアドレス (AGENT_HOST)。既定は全部のインターフェース。**エージェントは認証を持たない**ので、
+ * 同じ機械の denpa からしか繋がない構成ではループバック (127.0.0.1) に絞る (Mac の install.sh)
+ */
+IPAddress? host = null;
+if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
+    && !IPAddress.TryParse(hostText, out host))
+{
+    Log.Write($"AGENT_HOST は IP アドレスで書きます (いまは「{hostText}」)");
+    return 2;
+}
 /*
  * 元のTSの置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
  * `/media/raw`)。掛かったまま録れたTSを後から復号する (/denpa/decode) ときに読むので、denpa と
@@ -96,7 +108,8 @@ var builder = WebApplication.CreateSlimBuilder(args);
 if (sharing is { } server) builder.WebHost.UseSockets(sockets => sockets.CreateBoundListenSocket = server.Bind);
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(port);
+    if (host is null) options.ListenAnyIP(port);
+    else options.Listen(host, port);
     sharing?.Listen(options);
     // 選局は何時間も開きっぱなしになる。既定のまま切られると録画が落ちる
     options.Limits.KeepAliveTimeout = TimeSpan.FromDays(365);
@@ -124,6 +137,22 @@ var app = builder.Build();
 
 // 鍵を配るポートに来たものは、鍵を配る API だけが受ける (普通の API には回さない)
 if (sharing is not null) app.Use(sharing.Serve);
+
+/*
+ * **本文を読む API (PUT / POST) は application/json しか受けない** (415)。ブラウザは text/plain などの
+ * POST を下調べ (preflight) なしに送るので、受けていると、開いた外のサイトから LAN の中の
+ * エージェントへ書き込めてしまう。JSON と名乗れば下調べが入り、エージェントは CORS に答えないので止まる
+ */
+app.Use(async (HttpContext http, RequestDelegate next) =>
+{
+    var method = http.Request.Method;
+    if ((HttpMethods.IsPost(method) || HttpMethods.IsPut(method)) && !Json.IsJsonContentType(http.Request.ContentType))
+    {
+        await Respond.Error(http, "本文は application/json で送ります", 415);
+        return;
+    }
+    await next(http);
+});
 
 // --- 選局。**エージェントの表看板** ---------------------------------------
 app.MapGet("/denpa/stream", async (HttpContext http) =>
@@ -384,7 +413,7 @@ app.Lifetime.ApplicationStopped.Register(() =>
     UserlandDaemon.StopAll();
 });
 
-Log.Write($"listening on :{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
+Log.Write($"listening on {host}:{port} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
 if (sharing is not null)
 {
     var limit = cardLan.MaxRoundTrip is { } max ? $"{max.TotalMilliseconds}ms まで" : "見ない";

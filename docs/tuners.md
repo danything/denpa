@@ -149,7 +149,7 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
 鍵を配る範囲と、断られたときの文は [鍵を配るのは LAN の中だけ](agent.md#鍵を配るのは-lan-の中だけ) にあります。
 
 ```sh
-# ホストから呼ぶ (イメージには curl もシェルも無い)。compose は 25252 を出してある。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む
+# ホストから呼ぶ (イメージには curl もシェルも無い)。compose は 25252 をホストのループバックにだけ出してある (同じ機械からだけ届く)。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む
 curl -s localhost:25252/denpa/card
 ```
 

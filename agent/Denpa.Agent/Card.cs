@@ -307,12 +307,14 @@ public static class Scramble
         var target = Inside(recorded, output);
         if (source is null || target is null) return Failed("元のTSの保存先の外にあるファイルは復号できません");
         if (!File.Exists(source)) return Failed($"{source} が見つかりません。denpa と同じ保存先をこのコンテナにもマウントしてください");
+        // 書き出す先は新しく作る。もうあるファイルは上書きしない (置き場の中の録画を潰させない)
+        if (File.Exists(target)) return Failed($"{target} はもうあります。上書きはしません");
 
         try
         {
             var b25 = new Descrambler(Keys.Source);
             using var reading = File.OpenRead(source);
-            using var writing = File.Create(target);
+            using var writing = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
             b25.DecodeAll(reading, writing);
 
             /*

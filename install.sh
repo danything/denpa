@@ -374,6 +374,14 @@ mac_main() {
   # ExitTimeOut はエージェントが録画を待つ上限 (SHUTDOWN_WAIT の既定 6 時間) より長く。
   # 短いと、止めたときに録画の途中で SIGKILL される (既定は 20 秒)。
   # ProcessType Interactive は、裏のジョブとして CPU や I/O を絞られないように (TS を流し続けるので)
+  #
+  # **エージェントは認証を持たない**ので、denpa を同じ Mac の Docker で動かすならループバックでだけ待ち受ける
+  # (Docker Desktop / OrbStack は host.docker.internal を Mac のループバックへ届ける)。
+  # エージェントだけ入れるとき (--no-docker) は別の機械の denpa から繋ぐので、全部のインターフェースのまま
+  agent_host=""
+  if [ "$docker_mode" = yes ]; then
+    agent_host="    <key>AGENT_HOST</key><string>127.0.0.1</string>"
+  fi
   cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -390,6 +398,7 @@ mac_main() {
   <key>EnvironmentVariables</key>
   <dict>
     <key>AGENT_PORT</key><string>$PORT</string>
+$agent_host
     <key>TUNERS_FILE</key><string>$DENPA_DIR/config/tuners.json</string>
     <key>CHANNELS_FILE</key><string>$DENPA_DIR/config/channels.json</string>
     <key>PX4_USERLAND_DIR</key><string>$PREFIX/px4-userland</string>
@@ -424,7 +433,7 @@ EOF
     return 0
   fi
   docker_ready "$MAC_DOCKER" "Docker Desktop か OrbStack を起こしてから、もう一度流してください" \
-    || { say "エージェントは入っています (http://$host:$PORT)"; return 0; }
+    || { say "エージェントは入っています (http://127.0.0.1:$PORT)"; return 0; }
 
   # --- denpa 本体 (Docker)。エージェントと同じバージョンに。手元の tar.gz を入れたときは main と latest ---
   start_denpa compose.mac.yml "${ref:-main}" "$host"
