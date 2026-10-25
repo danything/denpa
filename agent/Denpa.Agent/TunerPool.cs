@@ -502,14 +502,7 @@ public sealed class TunerPool(
         return group.MinBy(index => Strongest(index) ?? int.MinValue);
     }
 
-    /// <summary>
-    /// チューナー画面に出るもの。
-    ///
-    /// <para>
-    /// 組み立てを <see cref="JsonNode"/> でやっているのは AOT のため。
-    /// 匿名型をリフレクションで書き出す方式は、単一実行ファイルにすると使えない。
-    /// </para>
-    /// </summary>
+    /// <summary>チューナー画面に出るもの (<see cref="JsonNode"/> で組むわけは <see cref="Json"/>)</summary>
     public JsonArray Status()
     {
         lock (_gate)

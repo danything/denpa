@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// **選局コマンドそのものは持たない。** 画面から書き換えられるようにした以上、
 /// 自由な文字列を受けると「denpa に入れた人がチューナー側で好きなコマンドを
 /// 走らせられる」ことになる (しかもあちらは機材に触れる。Helm では privileged)。持つのは
-/// **デバイスと種別**だけ。選局は自分でやる (Tuning.cs)。
+/// **デバイスと種別と LNB**だけ。選局は自分でやる (Tuning.cs)。
 /// </para>
 /// </summary>
 public sealed record TunerSpec(

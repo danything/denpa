@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// <param name="Voltages">bVoltageSupport。bit0 = 5V、bit1 = 3V、bit2 = 1.8V</param>
 public sealed record CcidInterface(
     int Number, byte BulkIn, byte BulkOut, int MaxPacketIn,
-    uint Features, int MaxMessage, int MaxIfsd, byte Voltages, uint Protocols, int ClockKhz)
+    uint Features, int MaxMessage, int MaxIfsd, byte Voltages, int ClockKhz)
 {
     public const uint AutoParameters = 0x02;
     public const uint AutoVoltage = 0x08;
@@ -69,7 +69,7 @@ public static class UsbDescriptors
         var at = 0;
         var inConfig = false;
         var inTarget = false;
-        uint features = 0, protocols = 0;
+        uint features = 0;
         int maxMessage = 0, maxIfsd = 0, clock = 0, maxPacketIn = 64;
         byte voltages = 0, bulkIn = 0, bulkOut = 0;
         var foundClass = false;
@@ -92,7 +92,6 @@ public static class UsbDescriptors
                 // 0x21 は HID と同じ番号。CCID のインターフェースの中でだけ読む
                 case TypeCcid when inTarget && length >= 0x36:
                     voltages = d[5];
-                    protocols = BinaryPrimitives.ReadUInt32LittleEndian(d[6..]);
                     clock = (int)BinaryPrimitives.ReadUInt32LittleEndian(d[10..]);
                     maxIfsd = (int)BinaryPrimitives.ReadUInt32LittleEndian(d[28..]);
                     features = BinaryPrimitives.ReadUInt32LittleEndian(d[40..]);
@@ -116,7 +115,7 @@ public static class UsbDescriptors
 
         if (!foundClass || bulkIn == 0 || bulkOut == 0) return null;
         return new CcidInterface(interfaceNumber, bulkIn, bulkOut, Math.Max(maxPacketIn, 8),
-            features, maxMessage, maxIfsd, voltages, protocols, clock);
+            features, maxMessage, maxIfsd, voltages, clock);
     }
 }
 
