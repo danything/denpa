@@ -59,3 +59,33 @@ describe("ホーム画面に置いたときの名前", () => {
     expect(lan.id).not.toBe(outside.id);
   });
 });
+
+/**
+ * **Android でホーム画面から開くと、下のジェスチャーバーの帯は `background_color` で塗られる。**
+ * ダークの色のままだと、ライトで開いても帯だけ黒い
+ */
+describe("テーマの地の色", () => {
+  test("既定はダークの地", () => {
+    const out = manifest("dp.doany.io") as {
+      background_color: string;
+      theme_color: string;
+    };
+    expect(out.background_color).toBe("#0b0c0f");
+    expect(out.theme_color).toBe("#0b0c0f");
+  });
+
+  test("ライトなら白", () => {
+    const out = manifest("dp.doany.io", "light") as {
+      background_color: string;
+      theme_color: string;
+    };
+    expect(out.background_color).toBe("#ffffff");
+    expect(out.theme_color).toBe("#ffffff");
+  });
+
+  test("テーマで id は変わらない (ライトで入れ直しても別のアプリにならない)", () => {
+    const dark = manifest("dp.doany.io") as { id: string };
+    const light = manifest("dp.doany.io", "light") as { id: string };
+    expect(light.id).toBe(dark.id);
+  });
+});

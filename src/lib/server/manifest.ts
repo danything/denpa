@@ -33,7 +33,22 @@ export function appName(hostname: string): string {
   return DEFAULT_NAME;
 }
 
-export function manifest(hostname: string): unknown {
+/**
+ * テーマの地の色 (app.css の `--dp-bg`)。`background_color` と `theme_color` に入れる。
+ *
+ * **Android でホーム画面から開くと、下のジェスチャーバーの帯は `background_color` で塗られる**
+ * (ページはその帯の裏まで描けない。Chrome 155 で確かめた)。ダークの色のままだと、ライトで開いても
+ * 帯だけ黒くなるので、ページの今のテーマで返す (`app.html` と `theme.svelte.ts` が `?theme=light` を付ける)。
+ * Chrome は入れたあとのマニフェストを日を置いて読み直すので、テーマを替えても帯が追いつくのは後になる
+ */
+const BACKGROUND = { dark: "#0b0c0f", light: "#ffffff" } as const;
+
+export type ManifestTheme = keyof typeof BACKGROUND;
+
+export function manifest(
+  hostname: string,
+  theme: ManifestTheme = "dark",
+): unknown {
   const name = appName(hostname);
   return {
     name,
@@ -51,8 +66,8 @@ export function manifest(hostname: string): unknown {
     start_url: "./",
     scope: "./",
     display: "standalone",
-    background_color: "#0b0c0f",
-    theme_color: "#0b0c0f",
+    background_color: BACKGROUND[theme],
+    theme_color: BACKGROUND[theme],
     icons: [
       { src: "./icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "./icon-512.png", sizes: "512x512", type: "image/png" },

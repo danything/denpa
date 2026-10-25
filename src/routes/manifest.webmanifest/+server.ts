@@ -13,7 +13,9 @@ export function GET({ url, setHeaders }) {
    * 避ける。1回きりの小さな JSON なので、毎回聞かせても困らない
    */
   setHeaders({ "cache-control": "no-cache" });
-  return new Response(JSON.stringify(manifest(url.hostname)), {
+  // ライトのときだけページが `?theme=light` を付けてくる (下のジェスチャーバーの色。`manifest.ts` の BACKGROUND)
+  const theme = url.searchParams.get("theme") === "light" ? "light" : "dark";
+  return new Response(JSON.stringify(manifest(url.hostname, theme)), {
     headers: { "content-type": "application/manifest+json" },
   });
 }

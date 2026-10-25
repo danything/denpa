@@ -309,6 +309,9 @@ test.describe("ホームと画面遷移", () => {
     // ブラウザの枠の色 (theme-color) もテーマの地に合わせる
     const toolbar = page.locator('meta[name="theme-color"]');
     await expect(toolbar).toHaveAttribute("content", "#0b0c0f");
+    // ホーム画面から開いた Android の下の帯 (マニフェストの background_color) も。ライトのときだけ印を付けて読ませる
+    const manifest = page.locator('link[rel="manifest"]');
+    await expect(manifest).toHaveAttribute("href", "./manifest.webmanifest");
     // ブラウザが描く部品 (プルダウンの一覧など) も暗くする
     await expect(html).toHaveCSS("color-scheme", "dark");
 
@@ -317,12 +320,22 @@ test.describe("ホームと画面遷移", () => {
     await expect(toggle).toHaveAttribute("data-mode", "light");
     await expect(toolbar).toHaveAttribute("content", "#ffffff");
     await expect(html).toHaveCSS("color-scheme", "light");
+    await expect(manifest).toHaveAttribute(
+      "href",
+      "./manifest.webmanifest?theme=light",
+    );
 
     // 明示した設定は再読み込みしても残る(ちらつかないようハイドレーション前に当てている)
     await goto(page, "/guide");
     await expect(html).toHaveAttribute("data-theme", "light");
     // 開き直しても (ハイドレーションの前から) 明るい地の色
     await expect(toolbar).toHaveAttribute("content", "#ffffff");
+    await expect(manifest).toHaveAttribute(
+      "href",
+      "./manifest.webmanifest?theme=light",
+    );
+    const light = await page.request.get("/manifest.webmanifest?theme=light");
+    expect((await light.json()).background_color).toBe("#ffffff");
     await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
       "data-mode",
       "light",
@@ -336,6 +349,7 @@ test.describe("ホームと画面遷移", () => {
     );
     await expect(html).toHaveAttribute("data-theme", "dark");
     await expect(toolbar).toHaveAttribute("content", "#0b0c0f");
+    await expect(manifest).toHaveAttribute("href", "./manifest.webmanifest");
     await goto(page, "/");
     await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
       "data-mode",

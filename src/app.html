@@ -35,6 +35,13 @@
         document
           .querySelector('meta[name="theme-color"]')
           ?.setAttribute("content", dark ? "#0b0c0f" : "#ffffff");
+        // ホーム画面から開いた Android の、下のジェスチャーバーの色 (マニフェストの background_color。server/manifest.ts)
+        const manifest = document.querySelector('link[rel="manifest"]');
+        if (manifest && !dark)
+          manifest.setAttribute(
+            "href",
+            `${manifest.getAttribute("href")}?theme=light`,
+          );
         // ホーム画面から開いた iPhone (`navigator.standalone`) で暗いテーマのときだけ、ステータスバーの裏まで描く。
         // 時刻の字はいつも白になるので、明るいテーマでは透かさない (iPhone が読むのは開いたときだけ。app.css の `data-status-bar`)
         if (dark && navigator.standalone === true) {
