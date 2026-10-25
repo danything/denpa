@@ -191,6 +191,16 @@ test.describe("OIDC でのログイン", () => {
     expect((await get("/")).res.status).toBe(302);
   });
 
+  // よそのページの `<img src=".../logout">` でログアウトさせられないように、GET は受けない
+  test("GET の /logout ではログアウトしない", async ({ oidc }) => {
+    const get = client(oidc);
+    await login(get);
+    const { res, jar } = await get("/logout");
+    expect(res.status).toBe(405);
+    expect(jar.has("denpa_session")).toBe(true);
+    expect((await get("/")).res.status).toBe(200);
+  });
+
   /*
    * **設定の「その他」の「ほかの端末からもログアウト」。** いまの控えだけ残して、ほかは消す。
    * 一式はワーカーで共有しているので、ほかのテストの控えも一緒に消える (数は決め打ちしない)

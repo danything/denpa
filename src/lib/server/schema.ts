@@ -635,6 +635,8 @@ export const deviceCodes = sqliteTable(
     device_code_hash: text("device_code_hash").notNull().unique(),
     user_code: text("user_code").notNull().unique(),
     name: text("name").notNull(),
+    /** コードを求めた接続元 (IPv6 は /64 にまとめる)。接続元ごとの上限に使う (`device-auth.ts`) */
+    source: text("source").notNull().default(""),
     created_at: integer("created_at").notNull(),
     expires_at: integer("expires_at").notNull(),
     last_polled_at: integer("last_polled_at"),

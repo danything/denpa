@@ -1,5 +1,6 @@
 import { error, json } from "@sveltejs/kit";
 
+import { clientAddress } from "#lib/server/auth.js";
 import {
   CODE_TTL_MS,
   issueCode,
@@ -10,14 +11,19 @@ import {
  * **ペアリングコードを出す** (device-auth.ts。資格は要らない — テレビはまだ何も持っていない)。
  * URL は denpa の根からの相対。テレビは `verificationUriComplete` を QR にして出す
  */
-export async function POST({ request }) {
+export async function POST(event) {
+  const { request } = event;
   let name: unknown;
   try {
     ({ name } = await request.json());
   } catch {
     error(400, "リクエストの本文を読めませんでした");
   }
-  const issued = issueCode(typeof name === "string" ? name : "");
+  // 接続元ごとに数える (1台が呼び続けても、ほかの人のコードは押し出されない)
+  const issued = issueCode(
+    typeof name === "string" ? name : "",
+    clientAddress(event),
+  );
   if (issued === null) {
     return json({ error: "too_many_pending" }, { status: 429 });
   }

@@ -626,7 +626,8 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 - **QR にするのは `verificationUriComplete`** (denpa の根からの相対) です。`userCode`・`verificationUri` は
   RFC の形式に合わせて返すだけで、コードを打ち込む画面はありません (コードは画面に出さなくてよい)。スマホで開くと、
   いつものログイン方法 (信頼するネットワークか OIDC のログイン) を通ったうえでそのまま済みます
-- 有効なコードが多すぎるときは `429 {"error":"too_many_pending"}` (しばらくして出し直す)
+- 有効なコードが多すぎるときは、許されていないコードを古いものから切らせて出します (切れたコードの端末には `expired_token`)。
+  有効なコードが全部許し済みで空けられないときだけ `429 {"error":"too_many_pending"}` (しばらくして出し直す)
 
 `POST /api/device/token` (本文 `{ "deviceCode": "…" }`) を `interval` 秒おきに:
 

@@ -18,8 +18,9 @@
 
 import { createHash } from "node:crypto";
 
-import { and, count, eq, gt, isNull, lte } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte, type SQL } from "drizzle-orm";
 
+import { normalize } from "./address";
 import { affected, now, orm } from "./db";
 import { randomToken } from "./oidc";
 import { apiTokens, deviceCodes } from "./schema";
@@ -30,9 +31,15 @@ export const CODE_TTL_MS = 10 * 60 * 1000;
 export const POLL_INTERVAL_MS = 5 * 1000;
 /**
  * 有効なコードの上限。`/api/device/code` は誰でも呼べるので、溜め込ませない。
- * 埋めても10分で切れる (そのあいだペアリングできなくなるだけで、入れるようにはならない)
+ *
+ * **埋まったら断るのではなく、古いものから捨てる。** 断ると、呼び続ける1台のせいで
+ * 誰もペアリングできなくなる。1つの接続元が持てるのは `MAX_PENDING_PER_SOURCE` まで
+ * (それを超えたら、その接続元の古いものを捨てる) なので、全体を埋めて他の人のコードを
+ * 押し出すには接続元をいくつも用意しなければならない
  */
 export const MAX_PENDING = 20;
+/** 1つの接続元が同時に持てるコード。ペアリングの画面を開き直す程度なら足りる */
+export const MAX_PENDING_PER_SOURCE = 3;
 /** 名前の長さ。画面で見分けるためだけのもの */
 const NAME_MAX = 40;
 /** アクセストークンの頭。ほかの Bearer (前段の SSO など) と取り違えないための印 */
@@ -74,17 +81,68 @@ export interface IssuedCode {
   userCode: string;
 }
 
-/** コードを出す。有効なコードが上限に達していれば null (呼ぶ側が 429 で返す) */
-export function issueCode(name: string, at = now()): IssuedCode | null {
-  const alive =
+/**
+ * 接続元をまとめる単位。IPv4 はアドレスそのもの、IPv6 は /64 (家1軒に /64 以上が配られるので、
+ * アドレスごとに数えると1台でいくらでも名乗り替えられる)。読めなければ空 (読めないものどうしで分け合う)
+ */
+export function sourceKey(address: string): string {
+  const normalized = normalize(address);
+  if (normalized === null) return "";
+  if (!normalized.includes(":")) return normalized;
+  return `${normalized.split(":").slice(0, 4).join(":")}::/64`;
+}
+
+/**
+ * `where` に当たる有効なコードを `keep` 件まで減らす。**許されていないものを古いものから**切らす
+ * (許したものは端末が受け取りに来る途中なので残す)。減らしきれたか
+ */
+function makeRoom(where: SQL | undefined, keep: number, at: number): boolean {
+  const rows = orm()
+    .select({ id: deviceCodes.id, approved_at: deviceCodes.approved_at })
+    .from(deviceCodes)
+    .where(where)
+    .orderBy(deviceCodes.created_at, deviceCodes.id)
+    .all();
+  const over = rows.length - keep;
+  if (over <= 0) return true;
+  const victims = rows
+    .filter((row) => row.approved_at === null)
+    .slice(0, over)
+    .map((row) => row.id);
+  if (victims.length > 0) {
+    // 切れたことにする。端末は次に聞きに来たとき `expired_token` を受け取り、コードを貰い直す
     orm()
-      .select({ n: count() })
-      .from(deviceCodes)
-      .where(
-        and(gt(deviceCodes.expires_at, at), isNull(deviceCodes.consumed_at)),
-      )
-      .get()?.n ?? 0;
-  if (alive >= MAX_PENDING) return null;
+      .update(deviceCodes)
+      .set({ expires_at: at })
+      .where(inArray(deviceCodes.id, victims))
+      .run();
+  }
+  return victims.length === over;
+}
+
+/**
+ * コードを出す。接続元ごと・全体の上限に達していたら、古いものを切らせて空ける。
+ * 空けられない (有効なコードが全部許し済み) ときだけ null (呼ぶ側が 429 で返す)
+ */
+export function issueCode(
+  name: string,
+  address: string,
+  at = now(),
+): IssuedCode | null {
+  const source = sourceKey(address);
+  const alive = and(
+    gt(deviceCodes.expires_at, at),
+    isNull(deviceCodes.consumed_at),
+  );
+  if (
+    !makeRoom(
+      and(alive, eq(deviceCodes.source, source)),
+      MAX_PENDING_PER_SOURCE - 1,
+      at,
+    ) ||
+    !makeRoom(alive, MAX_PENDING - 1, at)
+  )
+    return null;
 
   const deviceCode = randomToken(32);
   // コードは短いので、まれに重なる。重なったら引き直す (unique で弾かれる)
@@ -97,6 +155,7 @@ export function issueCode(name: string, at = now()): IssuedCode | null {
           device_code_hash: sha256(deviceCode),
           user_code: userCode,
           name: name.trim().slice(0, NAME_MAX) || "テレビ",
+          source,
           created_at: at,
           expires_at: at + CODE_TTL_MS,
         })
