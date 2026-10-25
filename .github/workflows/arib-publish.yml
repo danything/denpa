@@ -2,6 +2,7 @@ name: Publish @danything/arib
 
 # **`packages/arib` を npm に出す** (docs/development.md「`@danything/arib` を出す」)。main のコミットに
 # タグ `arib-v<版>` を押すと出る。版は packages/arib/package.json の `version` と同じにする (違えば止まる)。
+# `[skip ci]` のコミット (main の先頭に積まれる bump image marks) に付けたタグでは、この workflow は動かない
 #
 # npm へはふだん Trusted Publishing (OIDC) で出す。トークンは持たず、provenance も付く。
 # npm 側で、このリポジトリのこの workflow (arib-publish.yml) を信頼する設定が要る。

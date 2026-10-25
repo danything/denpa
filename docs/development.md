@@ -154,7 +154,8 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 ### `@danything/arib` を出す
 
 `packages/arib/` は denpa のリリースとは別に npm へ出します。`packages/arib/package.json` の `version` を上げる PR を
-マージしてから、main のそのコミットにタグ `arib-v<版>` を押します (`git tag arib-v0.2.0 && git push origin arib-v0.2.0`)。
+マージしてから、main のそのコミットにタグ `arib-v<版>` を押します (`git tag arib-v0.2.0 <そのコミット> && git push origin arib-v0.2.0`)。
+**main の先頭には付けないこと。** マージのあとに `chore: bump image marks [skip ci]` が積まれることが多く、`[skip ci]` のコミットに付けたタグでは Actions が動きません。
 `.github/workflows/arib-publish.yml` がテストとビルドをして、Trusted Publishing で出します (トークンは持たない)。
 リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `scripts/manifest.ts` が
 組んだ `dist/` に向け直します
