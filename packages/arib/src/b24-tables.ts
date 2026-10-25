@@ -99,7 +99,11 @@ const ADDITIONAL_ROWS: string[] = [
 ];
 /** 追加記号・追加漢字を1つの文字列にしたもの。(区 − 85) × 94 + (点 − 1) 番目のコードポイント */
 export const ADDITIONAL = ADDITIONAL_ROWS.join('');
-/** 色の表 (CLUT)。8つの組 × 16色、RGBA の16進 */
+/**
+ * 色の表 (CLUT)。8つの組 × 16色、RGBA の16進。後ろの4組 (65〜127) は 1〜63 番を半分透かしたもの。
+ * libaribcaption の表は 101 番と 119 番の青が `09` になっていたが、規格 (ARIB STD-B24 第一編 第2部 表 7-24) では
+ * `00` (`55ff00`・`ff5500` の半透明)
+ */
 export const CLUT = [
     "000000ff", "ff0000ff", "00ff00ff", "ffff00ff", "0000ffff", "ff00ffff", "00ffffff", "ffffffff", "00000000", "aa0000ff", "00aa00ff", "aaaa00ff", "0000aaff", "aa00aaff", "00aaaaff", "aaaaaaff", // 0
     "000055ff", "005500ff", "005555ff", "0055aaff", "0055ffff", "00aa55ff", "00aaffff", "00ff55ff", "00ffaaff", "550000ff", "550055ff", "5500aaff", "5500ffff", "555500ff", "555555ff", "5555aaff", // 1
@@ -107,8 +111,8 @@ export const CLUT = [
     "aaaaffff", "aaff00ff", "aaff55ff", "aaffaaff", "aaffffff", "ff0055ff", "ff00aaff", "ff5500ff", "ff5555ff", "ff55aaff", "ff55ffff", "ffaa00ff", "ffaa55ff", "ffaaaaff", "ffaaffff", "ffff55ff", // 3
     "ffffaaff", "00000080", "ff000080", "00ff0080", "ffff0080", "0000ff80", "ff00ff80", "00ffff80", "ffffff80", "aa000080", "00aa0080", "aaaa0080", "0000aa80", "aa00aa80", "00aaaa80", "aaaaaa80", // 4
     "00005580", "00550080", "00555580", "0055aa80", "0055ff80", "00aa5580", "00aaff80", "00ff5580", "00ffaa80", "55000080", "55005580", "5500aa80", "5500ff80", "55550080", "55555580", "5555aa80", // 5
-    "5555ff80", "55aa0080", "55aa5580", "55aaaa80", "55aaff80", "55ff0980", "55ff5580", "55ffaa80", "55ffff80", "aa005580", "aa00ff80", "aa550080", "aa555580", "aa55aa80", "aa55ff80", "aaaa5580", // 6
-    "aaaaff80", "aaff0080", "aaff5580", "aaffaa80", "aaffff80", "ff005580", "ff00aa80", "ff550980", "ff555580", "ff55aa80", "ff55ff80", "ffaa0080", "ffaa5580", "ffaaaa80", "ffaaff80", "ffff5580", // 7
+    "5555ff80", "55aa0080", "55aa5580", "55aaaa80", "55aaff80", "55ff0080", "55ff5580", "55ffaa80", "55ffff80", "aa005580", "aa00ff80", "aa550080", "aa555580", "aa55aa80", "aa55ff80", "aaaa5580", // 6
+    "aaaaff80", "aaff0080", "aaff5580", "aaffaa80", "aaffff80", "ff005580", "ff00aa80", "ff550080", "ff555580", "ff55aa80", "ff55ff80", "ffaa0080", "ffaa5580", "ffaaaa80", "ffaaff80", "ffff5580", // 7
 ];
 /** 外字 (DRCS) の画像の MD5 → 置き換える字。足し方は上の説明 */
 export const DRCS_REPLACE = new Map<string, number>([
