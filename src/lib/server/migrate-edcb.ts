@@ -423,7 +423,7 @@ export function importEdcbHistory(
 }
 
 /** EpgTimerSrv から読んだもの ({@link fetchEdcb}) */
-export interface EdcbLists {
+interface EdcbLists {
   /** 記録に出す宛先 */
   label: string;
   recInfo: EdcbRecInfo[];
@@ -434,7 +434,7 @@ export interface EdcbLists {
 }
 
 /** 3 つの一覧を読む。どれも数秒で返る。繋がらない・切られた・断られたら理由を投げる (`EdcbError`) */
-export async function fetchEdcb(input: string): Promise<EdcbLists> {
+async function fetchEdcb(input: string): Promise<EdcbLists> {
   const target = parseTarget(input);
   const notes: string[] = [];
   const client = new EdcbClient(target, (message) => {
@@ -462,12 +462,9 @@ export function edcbTarget(): string | null {
 
 /**
  * 引き継ぎを走らせる。順番は EPGStation と同じく録画の履歴 → ルール → 予約
- * (ルールが当たり出したときに、もう録った回を予約しないように)。テストからは終わるまで待てる
+ * (ルールが当たり出したときに、もう録った回を予約しないように)
  */
-export function runEdcb(
-  lists: EdcbLists,
-  options: MigrateOptions,
-): Promise<void> {
+function runEdcb(lists: EdcbLists, options: MigrateOptions): Promise<void> {
   return track("edcb", options, async () => {
     record(
       `EpgTimerSrv (${lists.label}): 録画済み ${lists.recInfo.length} 件・ルール ${lists.autoAdd.length} 件・予約 ${lists.reserve.length} 件`,

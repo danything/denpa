@@ -43,6 +43,8 @@ import {
   type EpgstationReserve,
   type EpgstationRule,
   type EpgstationVersion,
+  isId,
+  isObject,
   parseSource,
 } from "./epgstation-api";
 import { emit } from "./events";
@@ -169,10 +171,6 @@ function emitThrottled(): void {
   emit("migrate");
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const isId = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value);
 /** 真偽。形がずれて 0/1 で来ても読む (`tolerate` は来たものをそのまま通す) */
 const flag = (value: unknown): boolean => value === true || value === 1;
 const text = (value: unknown): string =>
@@ -339,10 +337,10 @@ function fileSize(path: string): number {
 }
 
 /** EPGStation の局の名前 (`/channels`)。知らない局の名前を写すのに使う */
-export type ChannelNames = ReadonlyMap<number, string>;
+type ChannelNames = ReadonlyMap<number, string>;
 
 /** {@link importOne} が要るもの。取るのに使う相手と、止めるための signal */
-export interface ImportContext {
+interface ImportContext {
   client: EpgstationClient;
   channels: ChannelNames;
   signal: AbortSignal;
@@ -361,7 +359,7 @@ export interface ImportContext {
  *
  * **行はあるのにファイルが無いものは、取り込み済みと見なさない** ({@link alreadyImported})
  */
-export async function importOne(
+async function importOne(
   recorded: EpgstationRecorded,
   options: MigrateOptions,
   context: ImportContext,
@@ -523,14 +521,17 @@ export function serviceById(
     .get();
 }
 
+/** 引き継いだルールの値。優先度・`source`・作った時刻は {@link insertRule} が足す */
+type RuleValues = Omit<
+  typeof rules.$inferInsert,
+  "priority" | "source" | "created_at"
+>;
+
 /**
  * 引き継いだルールを入れる。**優先度は 1** (引き継ぎ元の優先度は比べる相手が違う)。
  * エンコードの設定は写さない — エンコードもCMも全体設定で、エンコードするときに読む
  */
-export function insertRule(
-  values: Omit<typeof rules.$inferInsert, "priority" | "source" | "created_at">,
-  source: string,
-): void {
+export function insertRule(values: RuleValues, source: string): void {
   orm()
     .insert(rules)
     .values({ ...values, priority: 1, source, created_at: now() })
@@ -668,11 +669,6 @@ export function parseTimes(value: unknown): Slot | null {
   return windows.slot();
 }
 
-type RuleValues = Omit<
-  typeof rules.$inferInsert,
-  "priority" | "source" | "created_at"
->;
-
 /**
  * ルール1つを denpa のルールに写す。写せなければ `skip` に理由。写したが変わったところは `notes`。
  *
@@ -775,10 +771,7 @@ export function convertRule(
 }
 
 /** 自動予約ルールを入れる。取り込み済みは `source` (`epgstation:<ruleId>`) で見分けて飛ばす */
-export function importRules(
-  list_: EpgstationRule[],
-  options: MigrateOptions,
-): void {
+function importRules(list_: EpgstationRule[], options: MigrateOptions): void {
   for (const rule of list_) {
     const source = `epgstation:${rule.id}`;
     if (ruleImported(source)) {
@@ -806,7 +799,7 @@ export function importRules(
  * 除外の印 (`isSkip`) のものも数えない。時刻だけの予約 (`isTimeSpecified`) は番組に結び付かないので飛ばす。
  * EPGStation の programId は denpa の番組ID (`programKey`) と作り方が同じなので、直に照合できる。
  */
-export async function importReservations(
+async function importReservations(
   list_: EpgstationReserve[],
   options: MigrateOptions,
 ): Promise<void> {
@@ -852,7 +845,7 @@ export async function importReservations(
  * 取り込み済みは `source` (`epgstation:recorded:<録画ID>`) で見分けて飛ばす。前のバージョン (DB から読んでいた頃)
  * が入れた `epgstation:<履歴ID>` はそのまま残る
  */
-export function importRecordedHistory(
+function importRecordedHistory(
   list_: EpgstationRecorded[],
   channels: ChannelNames,
   options: MigrateOptions,
@@ -1141,7 +1134,7 @@ function warn(message: string): void {
 /**
  * 設定画面から呼ぶ入口。**先に `/version` を訊いて、繋がらなければその場で理由を返す**
  * (裏で走らせてから失敗にしない)。繋がれば走り出したことだけ返し、終わるのは待たない。
- * どちらかの引き継ぎが走っている間は断る (同じファイルを2つが触る・進み具合を1つしか持たない)
+ * どちらかの引き継ぎが走っている間は断る (進み具合を1つしか持たないため)
  */
 export async function start(
   input: string,

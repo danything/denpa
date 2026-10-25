@@ -174,12 +174,12 @@ const RECORDED = object({
 export type EpgstationRule = ReturnType<typeof RULE>;
 export type EpgstationReserve = ReturnType<typeof RESERVE>;
 export type EpgstationRecorded = ReturnType<typeof RECORDED>;
-export type EpgstationVideoFile = ReturnType<typeof VIDEO_FILE>;
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
+/** 形のずれた値を見分ける。写す側 (`migrate.ts`) も使う */
+export const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isId = (value: unknown): value is number =>
+export const isId = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value);
 
 /**
@@ -213,7 +213,7 @@ export function validItems<T>(
 }
 
 /** 応答が ok でなかった。`status` で 404 などを見分ける */
-export class HttpError extends Error {
+class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
@@ -368,7 +368,7 @@ export class EpgstationClient {
 }
 
 /** ファイルの取り方の結果。`missing` は向こうに無い (404) */
-export type DownloadResult = "done" | "missing";
+type DownloadResult = "done" | "missing";
 
 /** 取り直してよい失敗 (切れた・止まった・5xx) */
 class Retriable extends Error {}
