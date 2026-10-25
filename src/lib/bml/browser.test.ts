@@ -282,6 +282,45 @@ describe("browser.*", () => {
     expect(opened).toHaveLength(1);
   });
 
+  test("通信の文書からは XML の AIT でアプリを開けない (開いたアプリは局の NVRAM を使える)", async () => {
+    const opened: string[] = [];
+    const s = setup("https://www.example.com/a.bml", {
+      canStartApp: () => false,
+      canFetchAit: () => true,
+      startAppFrom: (uri) => {
+        opened.push(uri);
+        return true;
+      },
+    });
+    const result = await s.run(`
+            var result = [
+                browser.getBrowserSupport("ARIB", "APIGroup", "AITControlledApp.Start"),
+                browser.getBrowserSupport("ARIB", "AITControlledAppEngineFunction", "IPTV-F", "HTML5_ph0"),
+                browser.getBrowserSupport("ARIB", "AITTransportMethod", "XML", "HTTP"),
+                browser.startReceivingAIT(),
+                browser.startAITControlledApp(16, 1, "https://evil.example/ait.xml")
+            ];
+        `);
+    expect(items(result)).toEqual([0, 0, 0, Number.NaN, Number.NaN]);
+    expect(opened).toEqual([]);
+  });
+
+  test("通信の文書からも、電波の AIT にあるアプリは開ける (行き先は局が決めたもの)", async () => {
+    const hints: number[][] = [];
+    const s = setup("https://www.example.com/a.bml", {
+      canStartApp: () => true,
+      startApp: (hint) => {
+        hints.push(hint);
+        return true;
+      },
+    });
+    const result = await s.run(`
+            var result = browser.startAITControlledApp(16, 1, "https://evil.example/ait.xml");
+        `);
+    expect(result).toBe(1);
+    expect(hints).toEqual([[16, 1]]);
+  });
+
   test("getBrowserStatus の IRDState は、出している文書が放送か通信かで Broadcast と Link が分かれる", async () => {
     const query = `
             var dir = (browser.getBrowserStatus("TerrP", "IRDState", "Link") == 1

@@ -8,7 +8,7 @@
    *   **送り元が自分の iframe かを必ず見る**
    * - 通信は中継 (`/api/bml/proxy`・`/api/bml/post`) を通す。決まり (公開アドレスだけ・10 秒・4MB・
    *   cookie も UA も受信機を見分けるものも送らない) はデータ放送と同じ
-   * - 受信機の記憶はアプリごとに分けて覚える (`storageKey`)
+   * - 受信機の記憶はアプリの配信元 (オリジン) ごとに分けて覚える (`storageKey`)
    * - データ放送の Greg と NVRAM を写して渡し、書かれたら戻す (`broadcast`・`onwrite`。`#lib/hybridcast/compat.ts`)
    */
 
@@ -93,7 +93,7 @@
   /** いまのページを開いた局 (アプリの NVRAM はこの局の領域) */
   let opened: CompatInit["who"] = { originalNetworkId: null, serviceId: null };
   // svelte-ignore state_referenced_locally
-  const key = storageKey(app.organisationId, app.applicationId);
+  const key = storageKey(app.url);
 
   function remembered(): Record<string, string> {
     try {

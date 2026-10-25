@@ -265,8 +265,17 @@ function blobUrl(data: Uint8Array, type: string): string {
   );
 }
 
-/** 受け手の `f();` の形。関数を呼ぶだけのもの */
-const CALL = /^\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*;?\s*$/;
+/**
+ * 受け手の `f();` の形 (関数を呼ぶだけのもの) なら、その名前。無ければ null。
+ * 前後の空白は先に落として、量指定子が隣り合わない形で見る (`\s*;?\s*$` は空白が並ぶと 2 乗かかり、
+ * ネイティブの正規表現なので VM の上限でも止まらない)。長いものは呼ぶだけの形ではないので見ない
+ */
+function callee(code: string): string | null {
+  if (code.length > 1024) return null;
+  return (
+    /^([A-Za-z_$][\w$]*)\s*\(\s*\)(?:\s*;)?$/.exec(code.trim())?.[1] ?? null
+  );
+}
 
 /** 入口のモジュール */
 const ENTRY = `/${hex(STARTUP_COMPONENT, 2)}/${hex(STARTUP_MODULE, 4)}`;
@@ -726,7 +735,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
     // 入口の文書が読めない文書へ移ろうとしたなら、入口のまま止める (出直すと同じ遷移を
     // 繰り返して回り続ける)。そうでなければ入口から出直す
-    if (this.current?.replace(/[?#].*$/, "") === `${ENTRY}/startup.bml`) return;
+    if (this.current?.replace(/[?#][\s\S]*$/, "") === `${ENTRY}/startup.bml`)
+      return;
     setTimeout(() => {
       if (token === this.token && !this.destroyed) this.restart();
     }, 0);
@@ -971,8 +981,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
             vm.startProgram(job.code ?? compileScript(job.source, job.name));
             this.currentEvent = dom.event({});
           } else {
-            const name = CALL.exec(job.handler)?.[1];
-            if (name === undefined)
+            const name = callee(job.handler);
+            if (name === null)
               throw new ScriptError(`受け手の形が読めません: ${job.handler}`);
             this.currentEvent = dom.event({
               ...job.event,
@@ -1391,7 +1401,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
     // `f();` は関数を呼ぶだけ。引数つきの呼び出し (`f(3);`) などは式として読んで、刻みごとに動かす
     // (STD-B24 第二編 7.6.10: 第 1 引数は動かすスクリプトの文字列)。自前の VM で動かすので eval は使わない
-    const call = CALL.exec(code)?.[1] ?? null;
+    const call = callee(code);
     let program: Code | null = null;
     if (call === null) {
       try {
@@ -1652,7 +1662,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const mng = type === "image/x-arib-mng";
     // PNG・MNG の色は文書の CLUT で決まるので、文書ごとに作る
     // 問い合わせ (`?tsid=…`) は文書の名前の一部だが、CLUT は同じなので作り直さない
-    const page = this.current?.replace(/[?#].*$/, "");
+    const page = this.current?.replace(/[?#][\s\S]*$/, "");
     const variant = png ? `png:${page}` : mng ? `mng:${page}` : "raw";
     const made = file.urls.get(variant);
     if (made !== undefined) return made;

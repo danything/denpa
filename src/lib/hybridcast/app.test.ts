@@ -229,7 +229,18 @@ test("receiverKey:色ボタンは 403〜406、戻ると d は閉じる", () => {
   expect(receiverKey(20)).toBeNull();
 });
 
-test("記憶の置き場はアプリごと", () => {
-  expect(storageKey(0x10, 1)).toBe("denpa_hybridcast_10_1");
-  expect(storageKey(0x10, 2)).not.toBe(storageKey(0x10, 1));
+test("記憶の置き場はアプリの配信元 (オリジン) ごと。AIT が名乗る番号では分けない", () => {
+  expect(storageKey("https://hc.example.jp/app/index.html")).toBe(
+    "denpa_hybridcast_https://hc.example.jp",
+  );
+  // 同じ配信元のページは同じ置き場、別の配信元は別の置き場
+  expect(storageKey("https://hc.example.jp/other.html")).toBe(
+    storageKey("https://hc.example.jp/app/index.html"),
+  );
+  expect(storageKey("http://hc.example.jp/app/index.html")).not.toBe(
+    storageKey("https://hc.example.jp/app/index.html"),
+  );
+  expect(storageKey("https://evil.example/app/index.html")).not.toBe(
+    storageKey("https://hc.example.jp/app/index.html"),
+  );
 });

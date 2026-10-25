@@ -253,6 +253,16 @@ export class BmlDocument {
   }
 }
 
+/**
+ * 尻の空白 (` \t\n\r`) を `by` に替える。無ければそのまま。`/[ \t\n\r]+$/` は空白の後ろに字が続くと
+ * 2 乗かかるので、後ろから数える
+ */
+function replaceTail(text: string, by: string): string {
+  let end = text.length;
+  while (end > 0 && " \t\n\r".includes(text[end - 1]!)) end--;
+  return end === text.length ? text : text.slice(0, end) + by;
+}
+
 /** 文字のあいだの空白をどう扱うか (STD-B24 第二分冊 付属2 5.3.2) */
 function collapse(text: string, parent: XmlElement, index: number): string {
   const name = (node: XmlNode | undefined): string =>
@@ -266,15 +276,17 @@ function collapse(text: string, parent: XmlElement, index: number): string {
     // span・a の後ろは空白 1 つに詰める
     out = out.replace(/^[ \t\n\r]+/, " ");
     if (inline(next) || next === "br")
-      out = out.replace(/[ \t\n\r]+$/, " ").replace(between, "$1");
+      out = replaceTail(out, " ").replace(between, "$1");
   } else if (parent.name === "p" && (inline(next) || next === "br")) {
-    out = out
-      .replace(/[ \t\n\r]+$/, " ")
+    out = replaceTail(out, " ")
       .replace(/^[ \t\n\r]+/, "")
       .replace(between, "$1");
   } else {
     // 頭と尻の空白、2 バイト文字どうしのあいだの空白は消す
-    out = out.replace(/^[ \t\n\r]+|[ \t\n\r]+$/g, "").replace(between, "$1");
+    out = replaceTail(out.replace(/^[ \t\n\r]+/, ""), "").replace(
+      between,
+      "$1",
+    );
   }
   // 空白だけのものは文字にしない
   return /^[ \t\n\r]$/.test(out) ? "" : out;

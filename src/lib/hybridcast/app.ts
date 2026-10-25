@@ -23,12 +23,19 @@ export type { HcState, ShimInit } from "./shim";
 /** アプリの画面の大きさ (CSS px)。テレビのブラウザと同じ 1920x1080 で組ませ、枠に合わせて伸ばす */
 export const VIEWPORT = { width: 1920, height: 1080 } as const;
 
-/** 受信機の記憶の置き場 (アプリごと。denpa のほかの記憶とは混ぜない) */
-export function storageKey(
-  organisationId: number,
-  applicationId: number,
-): string {
-  return `denpa_hybridcast_${organisationId.toString(16)}_${applicationId.toString(16)}`;
+/**
+ * 受信機の記憶の置き場 (アプリの配信元のオリジンごと。denpa のほかの記憶とは混ぜない)。テレビのブラウザの
+ * localStorage と同じくオリジンで分ける — AIT が名乗る organisation_id・application_id で分けると、
+ * 別の配信元のアプリが同じ番号を名乗って、ほかのアプリの記憶を読める。URL として読めないものは URL のまま
+ */
+export function storageKey(url: string): string {
+  let origin = url;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    // AIT は http(s) の URL しか出さないので、ここには来ない
+  }
+  return `denpa_hybridcast_${origin}`;
 }
 
 /** 受信機の記憶の上限 (1 アプリ。JSON の文字数)。超える書き込みは覚えない */

@@ -403,6 +403,35 @@ describe("setInterval", () => {
       logs.some((line) => line.includes("setInterval の式が読めません")),
     ).toBe(true);
   });
+
+  test("前後や中に空白のある呼ぶだけの形 ( f ( ) ; ) も呼ぶ", async () => {
+    const { bml, logs } = open();
+    const script = `var n = 0;
+            function start() { browser.setInterval("  tick ( ) ;  ", 5, 2); }
+            function tick() { n++; browser.Ureg[1] = "" + n; }`;
+    feedAll(bml, carousel([startup("", script)]));
+    const { done } = await watch(() => inside(bml).ureg[1] === "2");
+    expect(done).toBe(true);
+    expect(logs).toEqual([]);
+  });
+
+  test("空白を長く並べた式でも固まらない (正規表現が空白で行きつ戻りつしない)", async () => {
+    const { bml, logs } = open();
+    const script = `function start() {
+              var s = " ";
+              for (var i = 0; i < 17; i++) s = s + s;
+              browser.Ureg[1] = "" + browser.setInterval("f()" + s + "x", 5, 1);
+            }`;
+    const started = performance.now();
+    feedAll(bml, carousel([startup("", script)]));
+    const { done } = await watch(() => inside(bml).ureg[1] !== "");
+    expect(done).toBe(true);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(inside(bml).ureg[1]).toBe("NaN");
+    expect(
+      logs.some((line) => line.includes("setInterval の式が読めません")),
+    ).toBe(true);
+  });
 });
 
 describe("文書の名前", () => {

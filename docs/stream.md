@@ -1210,7 +1210,10 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
   双方向がオンならこれと `AITControlledAppEngineFunction`・`AITControlledApp.Start` に 1 と答え
   (電波の表で運ぶ `AITTransferMethod` は 0)、`startAITControlledApp` に渡された http(s) の URL を XML の AIT として
   中継で取り、そこにあるアプリを開く (`hybridcast/xml-ait.ts`。ETSI TS 102 809 の形)。文書には取りに行き始めた時点で 1 を返す (上の「開けないのに 1 と答えない」とは矛盾しない — 開く手立てがあるから 1 と答えていて、URL を渡されなければ失敗を返す)。
-  取れなかったときは `[bml] XML の AIT を読めませんでした` をコンソールに出して、データ放送のまま
+  取れなかったときは `[bml] XML の AIT を読めませんでした` をコンソールに出して、データ放送のまま。
+  **XML の AIT を渡せるのは放送の文書だけ**です。通信の文書 (http・https から取った文書) には、XML の AIT の問い合わせに 0 と答え、
+  `startAITControlledApp` に URL を渡されても失敗を返す — 開いたアプリは局の NVRAM を読み書きできるので、
+  外から来た文書が選んだアプリにそれを渡さない (通信の文書に局の NVRAM を使わせないのと同じ決め)。電波の AIT にあるアプリは通信の文書からも開ける
 - **開くのは AIT にある行き先だけ。** 電波に AIT があれば、文書が渡した引数に URL があっても使いません
   (XML の AIT の URL として使うのは、電波に AIT が無いときだけ。その場合も開くのは XML の AIT にある行き先)。数の引数は
   どのアプリかの手がかり (organisation_id と application_id が合うもの → application_id が合うもの →
@@ -1246,7 +1249,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 | いまの局と番組                           | ○     | 放送の programInfo と局の一覧から。`navigator.receiverDevice.getCurrentChannel()`・`getCurrentProgram()`                                                                      |
 | 選局                                     | △     | データ放送の `epgTune` と同じ範囲 (局の一覧にある局だけ)。局が変わるとアプリは閉じる                                                                                          |
 | 字幕の表示の切り替え                     | ○     | `getCCStatus`・`setCCStatus`                                                                                                                                                  |
-| 受信機の記憶 (`localStorage`)            | ○     | アプリごとに分けて覚える (`denpa_hybridcast_<organisation_id>_<application_id>`。256KB まで)。denpa のほかの記憶とは混ぜない                                                  |
+| 受信機の記憶 (`localStorage`)            | ○     | 配信元のオリジンごとに覚える (`denpa_hybridcast_<オリジン>`。256KB まで。テレビと同じ)。denpa のほかの記憶とは混ぜない                                                        |
 | データ放送の Greg と NVRAM               | ○     | `navigator.bmlCompat.browserPseudo` (`Greg`・`readPersistentArray`・`writePersistentArray`)。データ放送と同じもの。NVRAM は放送の文書と同じ領域で、起動した局から見える分だけ |
 | データ放送へ戻る                         | ○     | `navigator.applicationManager.launchDataBroadcastingBrowser`。アプリを閉じる (戻る先の部品は選べない)                                                                         |
 | 番組の変わり目                           | △     | `receiverDevice.streamEvent` の番組が変わったことだけ知らせる。放送のイベントメッセージは届けない                                                                             |

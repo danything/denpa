@@ -427,10 +427,10 @@ test.describe("データ放送の双方向", () => {
         ),
       )
       .toBe("0");
-    // 受信機の記憶はアプリごとの置き場に
+    // 受信機の記憶はアプリの配信元 (オリジン) ごとの置き場に
     expect(
       await page.evaluate(() =>
-        localStorage.getItem("denpa_hybridcast_7e87_1"),
+        localStorage.getItem("denpa_hybridcast_https://hybridcast.example.jp"),
       ),
     ).toBe('{"n":"1"}');
     // NVRAM はデータ放送と同じ置き場に

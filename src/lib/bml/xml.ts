@@ -64,6 +64,21 @@ export function decodeEntities(text: string): string {
   );
 }
 
+/** 注釈 (`<!-- -->`) を落とす。閉じないものは残す */
+function dropComments(text: string): string {
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const start = text.indexOf("<!--", at);
+    if (start === -1) break;
+    const end = text.indexOf("-->", start + 4);
+    if (end === -1) break;
+    out += text.slice(at, start);
+    at = end + 3;
+  }
+  return out + text.slice(at);
+}
+
 function localName(name: string): string {
   const colon = name.indexOf(":");
   return (colon >= 0 ? name.slice(colon + 1) : name).toLowerCase();
@@ -205,14 +220,20 @@ export function parseXml(source: string): XmlElement | null {
       const body = source.slice(at, end);
       if (body.includes("<![CDATA[")) {
         // CDATA が幾つあってもつなぐ。外の注釈 (<!-- -->) は捨て、外の字は実体参照を開く
-        const text = body
-          .split(/(<!\[CDATA\[[\s\S]*?\]\]>)/)
-          .map((part) =>
-            part.startsWith("<![CDATA[")
-              ? part.slice(9, -3)
-              : decodeEntities(part.replace(/<!--[\s\S]*?-->/g, "")),
-          )
-          .join("");
+        // 正規表現の `[\s\S]*?` は閉じない `<![CDATA[`・`<!--` が並ぶと 2 乗かかるので、位置で探す
+        const outside = (part: string): string =>
+          decodeEntities(dropComments(part));
+        let text = "";
+        let from = 0;
+        for (;;) {
+          const start = body.indexOf("<![CDATA[", from);
+          const close = start === -1 ? -1 : body.indexOf("]]>", start + 9);
+          if (close === -1) break;
+          text +=
+            outside(body.slice(from, start)) + body.slice(start + 9, close);
+          from = close + 3;
+        }
+        text += outside(body.slice(from));
         element.children.push({ kind: "text", text, cdata: true });
       } else if (body !== "") {
         element.children.push({

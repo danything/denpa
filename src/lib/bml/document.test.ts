@@ -165,6 +165,32 @@ describe("CSS", () => {
     expect(parseUrl('url("/40/0001/a.clt")')).toBe("/40/0001/a.clt");
     expect(parseUrl("url( b.png )")).toBe("b.png");
     expect(parseUrl("none")).toBeNull();
+    expect(parseUrl("URL( 'c\\).png' )")).toBe("c).png");
+    // 閉じない引用符は中身の一部
+    expect(parseUrl('url("d.png)')).toBe('"d.png');
+    expect(parseUrl("url(e.png")).toBeNull();
+    expect(parseUrl("url(a\nb)")).toBeNull();
+  });
+
+  /** 悪い入力 (空白や開きだけを長く並べたもの) でも、すぐ返る。前は正規表現が 2 乗・3 乗かかって固まった */
+  test("長い空白や閉じない開きを並べても固まらない", () => {
+    const spaces = " ".repeat(100_000);
+    const started = performance.now();
+    expect(parseUrl(`url(${spaces}x`)).toBeNull();
+    expect(parseUrl(`url(${" ".repeat(1000)}a.png${" ".repeat(1000)})`)).toBe(
+      "a.png",
+    );
+    // 長すぎる値は読まない
+    expect(parseUrl(`url(${"a".repeat(5000)})`)).toBeNull();
+    expect(parseStylesheet("/*".repeat(50_000))).toEqual([]);
+    expect(parseStylesheet(`${"@".repeat(100_000)} p { left: 1px }`)).toEqual(
+      [],
+    );
+    load(
+      `<bml><head><script><![CDATA[a]]>${"<![CDATA[".repeat(50_000)}${"<!--".repeat(50_000)}</script></head></bml>`,
+    );
+    load(`<bml><body><p>${spaces}x</p><div>${spaces}x</div></body></bml>`);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("重ね合わせ: 詳細度・順番・style 属性・継承・inherit・!important", () => {

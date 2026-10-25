@@ -57,6 +57,7 @@ export function parseDeclarations(text: string): Declaration[] {
     if (colon <= 0) continue;
     const property = part.slice(0, colon).trim().toLowerCase();
     let value = part.slice(colon + 1).trim();
+    if (value.length > MAX_VALUE) continue;
     let important = false;
     const bang = /!\s*important\s*$/i.exec(value);
     if (bang !== null) {
@@ -69,8 +70,37 @@ export function parseDeclarations(text: string): Declaration[] {
   return out;
 }
 
+/**
+ * 値の長さの上限。放送の値は短い (色・数・ファイルの名前)。これより長い値は読まない
+ * (読むのは線形だが、描くたびに全要素で読むので重さを抑える)
+ */
+const MAX_VALUE = 4096;
+
 function stripComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/<!--|-->/g, " ");
+  return replaceBlocks(text, "/*", "*/", " ").replace(/<!--|-->/g, " ");
+}
+
+/**
+ * `open` から次の `close` までを `by` に置き換える (閉じないものは残す)。正規表現の `[\s\S]*?` は
+ * 閉じない `open` が並ぶと 2 乗かかるので、位置で探す
+ */
+function replaceBlocks(
+  text: string,
+  open: string,
+  close: string,
+  by: string,
+): string {
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const start = text.indexOf(open, at);
+    if (start === -1) break;
+    const end = text.indexOf(close, start + open.length);
+    if (end === -1) break;
+    out += text.slice(at, start) + by;
+    at = end + close.length;
+  }
+  return out + text.slice(at);
 }
 
 /** スタイルシートを読む。`order` は `start` から振る (文書の中の複数の style の通し番号) */
@@ -86,7 +116,7 @@ export function parseStylesheet(text: string, start = 0): Rule[] {
     const raw = source.slice(at, open);
     const head = raw.slice(raw.lastIndexOf("}") + 1).trim();
     // @ 規則 (@media など) は運用されない。`;` で終わる @ 規則は head に混ざるので落とす
-    const selectorText = head.replace(/@[^;{]*;/g, "").trim();
+    const selectorText = replaceBlocks(head, "@", ";", "").trim();
     if (selectorText.startsWith("@")) {
       // 括弧の対応を見て終わりを探す (@ 規則の入れ子を読み飛ばす)
       let depth = 1;
@@ -140,8 +170,23 @@ export function matches(
   return true;
 }
 
-/** `url(...)` の中身。無ければ null */
+/**
+ * `url(...)` の中身。無ければ null。正規表現で一度に読まず、位置で切り出して trim する
+ * (`\s*` と `.*?` が隣り合う形は、空白が並ぶと 3 乗かかる)
+ */
 export function parseUrl(value: string): string | null {
-  const match = /^url\(\s*(["']?)(.*?)\1\s*\)$/i.exec(value.trim());
-  return match === null ? null : match[2]!.replace(/\\(.)/g, "$1");
+  const text = value.trim();
+  if (text.length > MAX_VALUE || !/^url\(/i.test(text) || !text.endsWith(")"))
+    return null;
+  let inner = text.slice(4, -1).trim();
+  const quote = inner[0];
+  if (
+    (quote === '"' || quote === "'") &&
+    inner.length >= 2 &&
+    inner.endsWith(quote)
+  )
+    inner = inner.slice(1, -1);
+  // 改行を挟んだものは URL と見ない
+  if (/[\n\r]/.test(inner)) return null;
+  return inner.replace(/\\(.)/g, "$1");
 }

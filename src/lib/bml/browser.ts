@@ -11,6 +11,9 @@
  * 通信の文書向けの `nvram://local_web/` と、受信機の設定 (`nvram://receiverinfo/`) を読むことだけ
  * (denpa の決め。放送の文書が覚えたもの — 同意・地域など — を、外から来た文書に渡さない。
  * `local_web` は名前のとおり通信の文書と分け合う領域)。
+ * 同じ理由で、通信の文書からは XML の AIT を渡して Hybridcast のアプリを開かせない — 開いたアプリは
+ * 局の NVRAM を読み書きできるので、外から来た文書が選んだアプリにそれを渡すことになる。
+ * 電波の AIT にあるアプリ (行き先を局が決めたもの) は、通信の文書からも開ける。
  */
 
 import type { ProgramInfoMessage } from "@danything/arib/bml-protocol";
@@ -442,7 +445,8 @@ export function defineBrowser(host: BrowserHost): HostObject {
   });
   fn("isBeingBroadcast", () => false);
   const canStartApp = (): boolean => host.canStartApp?.() === true;
-  const canFetchAit = (): boolean => host.canFetchAit?.() === true;
+  // 通信の文書には XML の AIT を渡させない (冒頭の説明。開いたアプリは局の NVRAM を使える)
+  const canFetchAit = (): boolean => !remote() && host.canFetchAit?.() === true;
   fn("getBrowserSupport", (args) => {
     const name = str(args, 1);
     const info = args.slice(2).map((a) => toStr(a));
@@ -543,7 +547,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
    * Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ。**電波に AIT があればそちらを使い、引数の URL は使わない。**
    * 電波に AIT が無い局 (NHK) では、引数の URL を XML の AIT として取り、そこにあるアプリを開く (`startAppFrom`)。
    * どちらでも、アプリの行き先は AIT から決まる (文書が渡した URL のページをそのまま開くことはしない)。
-   * 呼ばれたら何を訊かれたかを残す (`logCall`)
+   * 通信の文書からは XML の AIT の経路を使わせない (`canFetchAit`。冒頭の説明)。呼ばれたら何を訊かれたかを残す (`logCall`)
    */
   const logCall = (name: string, args: Value[]): void =>
     host.log(`${name}(${args.map((a) => toStr(a)).join(", ")})`);
@@ -552,6 +556,10 @@ export function defineBrowser(host: BrowserHost): HostObject {
     const hint = args.map((a) => toNumber(a)).filter((n) => Number.isFinite(n));
     if (canStartApp()) return host.startApp?.(hint) === true ? 1 : Number.NaN;
     const uri = aitUri(args);
+    if (uri !== null && remote()) {
+      host.log(`通信の文書からは XML の AIT でアプリを開けません: ${uri}`);
+      return Number.NaN;
+    }
     return uri !== null &&
       canFetchAit() &&
       host.startAppFrom?.(uri, hint) === true
