@@ -45,10 +45,8 @@
   let retract = $state(false);
   let jumped = false;
   afterNavigate(({ to }) => {
-    if (to?.url.hash) {
-      jumped = true;
-      retract = false;
-    }
+    jumped = Boolean(to?.url.hash);
+    if (jumped) retract = false;
   });
   onMount(() => {
     let prev = scrollY;
