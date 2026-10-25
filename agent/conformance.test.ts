@@ -197,6 +197,8 @@ beforeAll(async () => {
       FAKE_SLOTS: "4",
       // 鍵も配る。カードは無いので、配る API は理由を付けて 503 を返す
       CARD_SHARE_PORT: String(SHARE_PORT),
+      // リリースのイメージが足す 1 層と同じ (`/denpa/about` のバージョン。About.cs)
+      DENPA_VERSION: "v9.8.7",
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -504,6 +506,27 @@ describe("診断", () => {
     expect(
       lines.some((line) => line.text.includes("チャンネルを保存しました")),
     ).toBe(true);
+  });
+
+  test("自分のバージョン・OS・arch を返す。CCID ドライバは macOS だけ", async () => {
+    const res = await get("/denpa/about");
+    expect(res.status).toBe(200);
+    const about = (await res.json()) as Record<string, unknown>;
+    // 組むときにバージョンを入れていない実行ファイルは DENPA_VERSION で知る
+    expect(about["version"]).toBe("v9.8.7");
+    expect(about["os"]).toBe(
+      process.platform === "darwin"
+        ? "macos"
+        : process.platform === "win32"
+          ? "windows"
+          : "linux",
+    );
+    expect(about["arch"]).toBe(process.arch === "arm64" ? "arm64" : "x64");
+    expect(typeof about["runtime"]).toBe("string");
+    expect((about["runtime"] as string).length).toBeGreaterThan(0);
+    if (process.platform === "darwin")
+      expect(["apple", "ifd-ccid"]).toContain(about["ccidDriver"] as string);
+    else expect(about["ccidDriver"]).toBeNull();
   });
 });
 

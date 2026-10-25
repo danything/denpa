@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  type AgentAbout,
+  agentSystem,
   cut,
+  environmentText,
   fitLogs,
   fullReport,
   guessLevel,
@@ -10,6 +13,7 @@ import {
   issueUrl,
   type LogLine,
   type LogSource,
+  sameVersion,
   URL_LIMIT,
 } from "./issue-report";
 
@@ -193,5 +197,85 @@ describe("エージェントの行の重さ", () => {
     ["[agent] チャンネルを保存しました: 12 件", "info"],
   ] as const)("%s", (text, level) => {
     expect(guessLevel(text)).toBe(level);
+  });
+});
+
+describe("環境の欄", () => {
+  const linux: AgentAbout = {
+    version: "v1.2.3",
+    os: "linux",
+    arch: "x64",
+    runtime: "Linux 6.12.0 #1 SMP",
+    ccidDriver: null,
+  };
+  const parts = {
+    denpaVersion: "v1.2.3",
+    server: "Linux 6.12.0 (x64)・Bun 1.4.4",
+    tuners: "PX-Q3U4 (GR)",
+    card: "Reader (使用中)",
+    browser: "Firefox",
+  };
+
+  test("頭の v は見ずにバージョンを比べる", () => {
+    expect(sameVersion("v1.2.3", "1.2.3")).toBe(true);
+    expect(sameVersion("dev", "dev")).toBe(true);
+    expect(sameVersion("v1.2.3", "v1.2.4")).toBe(false);
+    expect(sameVersion("dev", "v1.2.3")).toBe(false);
+  });
+
+  test("エージェントの OS はサーバと同じく <説明> (<arch>)。説明が無ければ OS の名前", () => {
+    expect(agentSystem(linux)).toBe("Linux 6.12.0 #1 SMP (x64)");
+    expect(agentSystem({ ...linux, runtime: null, os: "macos" })).toBe(
+      "macOS (x64)",
+    );
+    expect(agentSystem({ ...linux, runtime: null, os: null, arch: null })).toBe(
+      "—",
+    );
+  });
+
+  test("サーバ・エージェント・チューナー・カードリーダー・ブラウザの順に 1 行で", () => {
+    expect(
+      environmentText({ ...parts, agent: { about: linux, error: null } }),
+    ).toBe(
+      "サーバ: Linux 6.12.0 (x64)・Bun 1.4.4 / エージェント: v1.2.3・Linux 6.12.0 #1 SMP (x64) / チューナー: PX-Q3U4 (GR) / カードリーダー: Reader (使用中) / ブラウザ: Firefox",
+    );
+  });
+
+  test("macOS なら CCID ドライバも。denpa とバージョンが違えば書き添える", () => {
+    const text = environmentText({
+      ...parts,
+      agent: {
+        about: {
+          version: "v1.2.0",
+          os: "macos",
+          arch: "arm64",
+          runtime: "Darwin 25.0.0",
+          ccidDriver: "ifd-ccid",
+        },
+        error: null,
+      },
+    });
+    expect(text).toContain(
+      "エージェント: v1.2.0 (denpa とバージョンが違います)・Darwin 25.0.0 (arm64)",
+    );
+    expect(text).toContain(" / CCID ドライバ: 従来のもの (useIFDCCID) / ");
+  });
+
+  test("前のバージョンのエージェントなら理由を、バージョンが読めなければ「不明」と書く", () => {
+    expect(
+      environmentText({
+        ...parts,
+        agent: { about: null, error: "前のバージョンです" },
+      }),
+    ).toContain("エージェント: — (前のバージョンです)");
+    expect(environmentText({ ...parts, agent: undefined })).toContain(
+      "エージェント: — / ",
+    );
+    expect(
+      environmentText({
+        ...parts,
+        agent: { about: { ...linux, version: null }, error: null },
+      }),
+    ).toContain("エージェント: 不明・");
   });
 });

@@ -252,3 +252,77 @@ export function fullReport(
   }
   return `${out.join("\n")}\n`;
 }
+
+// ---- 環境 ----
+
+/** エージェント自身のこと (`GET /denpa/about`。agent/Denpa.Agent/About.cs)。読めなかった項目は null */
+export interface AgentAbout {
+  version: string | null;
+  /** `linux` `macos` `windows` */
+  os: string | null;
+  /** `x64` `arm64` */
+  arch: string | null;
+  /** OS の説明 (.NET の `RuntimeInformation.OSDescription`) */
+  runtime: string | null;
+  /** macOS の CCID ドライバ。macOS 以外は null */
+  ccidDriver: "apple" | "ifd-ccid" | null;
+}
+
+export const CCID_DRIVER: Record<"apple" | "ifd-ccid", string> = {
+  apple: "macOS の標準のもの",
+  "ifd-ccid": "従来のもの (useIFDCCID)",
+};
+
+const OS_NAME: Record<string, string> = {
+  linux: "Linux",
+  macos: "macOS",
+  windows: "Windows",
+};
+
+/**
+ * denpa とエージェントのバージョンが同じか。**2 つは揃えて使うもの**。
+ * 頭の `v` は見ない (`v1.2.3` と `1.2.3` は同じ)。どちらも `dev` (main で組んだもの) なら同じとみる
+ */
+export function sameVersion(a: string, b: string): boolean {
+  const bare = (version: string) => version.trim().replace(/^v/, "");
+  return bare(a) === bare(b);
+}
+
+/** エージェントの動いている OS。サーバの行と同じく `<OS の説明> (<arch>)` */
+export function agentSystem(about: AgentAbout): string {
+  const os =
+    about.runtime ??
+    (about.os === null ? null : (OS_NAME[about.os] ?? about.os));
+  return `${os ?? "—"}${about.arch === null ? "" : ` (${about.arch})`}`;
+}
+
+/** 報告の「環境」の欄。画面の「環境」の節と同じ中身を 1 行に */
+export function environmentText(parts: {
+  denpaVersion: string;
+  server: string;
+  agent: { about: AgentAbout | null; error: string | null } | undefined;
+  tuners: string;
+  card: string;
+  browser: string;
+}): string {
+  const about = parts.agent?.about ?? null;
+  let agent = "—";
+  if (about !== null) {
+    const version = about.version ?? "不明";
+    const differs =
+      about.version !== null && !sameVersion(parts.denpaVersion, about.version);
+    agent = `${version}${differs ? " (denpa とバージョンが違います)" : ""}・${agentSystem(about)}`;
+  } else if (parts.agent?.error) {
+    agent = `— (${parts.agent.error})`;
+  }
+  return [
+    `サーバ: ${parts.server}`,
+    `エージェント: ${agent}`,
+    ...(about?.ccidDriver
+      ? [`CCID ドライバ: ${CCID_DRIVER[about.ccidDriver]}`]
+      : []),
+    `チューナー: ${parts.tuners}`,
+    `カードリーダー: ${parts.card}`,
+    `ブラウザ: ${parts.browser}`,
+  ].join(" / ");
+}

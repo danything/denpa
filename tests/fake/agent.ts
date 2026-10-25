@@ -71,6 +71,32 @@ function agentLogLines(): { at: number; text: string }[] {
 }
 
 /**
+ * エージェント自身のこと (`GET /denpa/about`)。本物と同じ形 (agent/Denpa.Agent/About.cs)。
+ * バージョンは本物のイメージと同じく `DENPA_VERSION` から (tests/stack.ts が denpa と同じものを渡す)。
+ * `off` は前のバージョンのエージェント (404)、`mac` は macOS のエージェントで、バージョンが denpa と違う
+ */
+let aboutMode: "normal" | "off" | "mac" = "normal";
+
+function agentAbout() {
+  if (aboutMode === "mac") {
+    return {
+      version: "v0.9.0",
+      os: "macos",
+      arch: "arm64",
+      runtime: "Darwin 25.0.0 Darwin Kernel Version 25.0.0",
+      ccidDriver: "apple",
+    };
+  }
+  return {
+    version: process.env["DENPA_VERSION"] ?? "dev",
+    os: "linux",
+    arch: "x64",
+    runtime: "Linux 6.12.0-fake #1 SMP",
+    ccidDriver: null,
+  };
+}
+
+/**
  * 偽のスクランブル解除。本物の復号はせず、4バイト目の
  * transport_scrambling_control を落とすだけ。
  *
@@ -419,6 +445,11 @@ const options: Bun.ServeOptions = {
       logsMode = mode === "off" || mode === "many" ? mode : "normal";
       return json({ mode: logsMode });
     }
+    if (url.pathname === "/__control/about" && request.method === "POST") {
+      const mode = url.searchParams.get("mode");
+      aboutMode = mode === "off" || mode === "mac" ? mode : "normal";
+      return json({ mode: aboutMode });
+    }
     if (url.pathname === "/__control/tuners" && request.method === "POST") {
       busyTuners = url.searchParams.get("busy") === "1";
       emit("tuners");
@@ -577,6 +608,11 @@ const options: Bun.ServeOptions = {
     if (url.pathname === "/denpa/logs" && request.method === "GET") {
       if (logsMode === "off") return new Response("not found", { status: 404 });
       return json({ lines: agentLogLines() });
+    }
+    if (url.pathname === "/denpa/about" && request.method === "GET") {
+      if (aboutMode === "off")
+        return new Response("not found", { status: 404 });
+      return json(agentAbout());
     }
     if (url.pathname === "/denpa/decode" && request.method === "POST") {
       return request

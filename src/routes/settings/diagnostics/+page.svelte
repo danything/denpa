@@ -3,7 +3,15 @@
   import { onMount } from "svelte";
 
   import Lead from "#lib/components/Lead.svelte";
-  import { type LogLine, type LogSource, stamp } from "#lib/issue-report.js";
+  import {
+    agentSystem,
+    CCID_DRIVER,
+    environmentText,
+    type LogLine,
+    type LogSource,
+    sameVersion,
+    stamp,
+  } from "#lib/issue-report.js";
   import { held } from "#lib/live-updates.svelte.js";
   import { redact } from "#lib/redact.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
@@ -16,6 +24,7 @@
   const tuners = held(() => data.tuners);
   const card = held(() => data.card);
   const agent = held(() => data.agentLogs);
+  const about = held(() => data.agentAbout);
 
   /** ブラウザ。サーバでは分からないので、開いてから入れる */
   let browser = $state("");
@@ -59,11 +68,25 @@
             .join("、"),
   );
 
-  const versionText = $derived(
-    data.environment.version === "dev"
-      ? "開発ビルド (dev)"
-      : data.environment.version,
+  const showVersion = (version: string) =>
+    version === "dev" ? "開発ビルド (dev)" : version;
+  const versionText = $derived(showVersion(data.environment.version));
+
+  /** エージェントのバージョン。前のバージョンのエージェントは返さないので、そのときは理由を出す */
+  const agentVersionText = $derived(
+    about.value === undefined
+      ? null
+      : about.value.about === null
+        ? (about.value.error ?? "—")
+        : about.value.about.version === null
+          ? "不明"
+          : showVersion(about.value.about.version),
   );
+  /** denpa とエージェントは同じバージョンで使うもの。違えば知らせる */
+  const versionMismatch = $derived.by(() => {
+    const version = about.value?.about?.version ?? null;
+    return version !== null && !sameVersion(data.environment.version, version);
+  });
 
   // ---- ログ ----
 
@@ -134,14 +157,21 @@
     try {
       const known = { hosts: data.hosts };
       // エージェント待ちのものが届くまで待つ (`held` が先に受け取るので、待ったあとは中身が入っている)
-      await Promise.allSettled([data.agentLogs, data.tuners, data.card]);
+      await Promise.allSettled([
+        data.agentLogs,
+        data.agentAbout,
+        data.tuners,
+        data.card,
+      ]);
       const agentLogs = agent.value;
-      const environment = [
-        `サーバ: ${data.environment.os}・${data.environment.runtime}`,
-        `チューナー: ${tunerText ?? "—"}`,
-        `カードリーダー: ${cardText ?? "—"}`,
-        `ブラウザ: ${browser || "—"}`,
-      ].join(" / ");
+      const environment = environmentText({
+        denpaVersion: data.environment.version,
+        server: `${data.environment.os}・${data.environment.runtime}`,
+        agent: about.value,
+        tuners: tunerText ?? "—",
+        card: cardText ?? "—",
+        browser: browser || "—",
+      });
       const scrub = (lines: LogLine[]): LogLine[] =>
         lines.map((line) => ({ ...line, text: redact(line.text, known) }));
       const agentSource: LogSource = {
@@ -173,8 +203,8 @@
 <div class="part" id="environment" data-part>
   <div class="sections readable">
     <!--
-        **バグを報告するときに聞かれるもの。** バージョン・OS・チューナー・カードリーダー・ブラウザ。
-        エージェントのバージョンと OS はエージェントが返さないので出さない
+        **バグを報告するときに聞かれるもの。** denpa とエージェントのバージョン・OS・チューナー・カードリーダー・ブラウザ。
+        エージェントのことは `GET /denpa/about` から。macOS のエージェントなら CCID ドライバも
     -->
     <section class="section" data-testid="diagnostics-environment">
       <div class="section-head">
@@ -191,6 +221,34 @@
             {data.environment.os}・{data.environment.runtime}
           </span>
         </div>
+        <div class="field">
+          <span class="field-label">エージェントのバージョン</span>
+          <span class="small" data-testid="diag-agent-version">
+            {agentVersionText ?? "エージェントに聞いています…"}
+            {#if versionMismatch}
+              <span class="mismatch" data-testid="diag-version-mismatch">
+                ⚠ denpa ({data.environment.version})
+                とバージョンが違います。同じバージョンに揃えてください
+              </span>
+            {/if}
+          </span>
+        </div>
+        {#if about.value?.about}
+          <div class="field">
+            <span class="field-label">エージェントの OS</span>
+            <span class="small" data-testid="diag-agent-system">
+              {agentSystem(about.value.about)}
+            </span>
+          </div>
+          {#if about.value.about.ccidDriver}
+            <div class="field">
+              <span class="field-label">CCID ドライバ</span>
+              <span class="small" data-testid="diag-ccid-driver">
+                {CCID_DRIVER[about.value.about.ccidDriver]}
+              </span>
+            </div>
+          {/if}
+        {/if}
         <div class="field">
           <span class="field-label">チューナー</span>
           <span class="small" data-testid="diag-tuners">
@@ -354,6 +412,11 @@
   }
   .ua {
     overflow-wrap: anywhere;
+  }
+  /* 印と言葉を添えて状態の色で (色だけに頼らない。ログの警告と同じ) */
+  .mismatch {
+    display: block;
+    color: var(--dp-warn-text);
   }
   .filters {
     display: flex;

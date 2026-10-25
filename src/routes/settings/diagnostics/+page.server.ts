@@ -1,4 +1,5 @@
 import {
+  agentAbout,
   agentLogs,
   knownValues,
   serverEnvironment,
@@ -8,7 +9,7 @@ import { cardStatus } from "#lib/server/scramble.js";
 import { tunerList } from "#lib/server/tuner.js";
 
 /**
- * 診断。動いている環境 (バージョン・OS・チューナー・カードリーダー) と、サーバとエージェントのログ。
+ * 診断。動いている環境 (denpa とエージェントのバージョン・OS・チューナー・カードリーダー) と、サーバとエージェントのログ。
  * バグを報告するとき、ここから伏せた報告を作って GitHub の Issue を開く (`#lib/issue-report.ts`)。
  *
  * **秘密の値 (OIDC のクライアントシークレット・Webhook の URL) は、画面に送る前にログから消す。**
@@ -23,6 +24,7 @@ export function load({ url }) {
     serverLogs: serverLogLines(known),
     // エージェント待ちのものは promise のまま返して後から流し込む (待つと画面が出ない)
     agentLogs: agentLogs(known),
+    agentAbout: agentAbout(known),
     tuners: tunerList()
       .then((got) => ({
         list: got.tuners.map((tuner) => ({

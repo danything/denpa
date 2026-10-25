@@ -251,6 +251,9 @@ jobs:
           curl -fsS http://127.0.0.1:25300/denpa/card | tee card.json; echo
           jq -e '.tuners | type == "array"' tuners.json
           jq -e '.ok == false and (.readers | type == "array")' card.json
+          # 自分のこと (About.cs)。macOS では CCID ドライバも (`defaults` をここで実際に起こす)
+          curl -fsS http://127.0.0.1:25300/denpa/about | tee about.json; echo
+          jq -e '.version == "dev" and .os == "macos" and .arch == "arm64" and (.ccidDriver == "apple" or .ccidDriver == "ifd-ccid")' about.json
           # SIGTERM で畳めること (録画していなければすぐ終わる)
           kill -TERM "$pid"
           for _ in $(seq 20); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
@@ -387,6 +390,9 @@ jobs:
           "card: $($card | ConvertTo-Json -Compress -Depth 5)"
           if ($null -eq $tuners.tuners) { throw 'no tuners in /denpa/tuners' }
           if ($card.ok -ne $false -or $null -eq $card.readers) { throw 'unexpected /denpa/card' }
+          $about = Invoke-RestMethod http://127.0.0.1:25300/denpa/about
+          "about: $($about | ConvertTo-Json -Compress)"
+          if ($about.os -ne 'windows' -or $about.arch -ne 'x64' -or $null -ne $about.ccidDriver) { throw 'unexpected /denpa/about' }
           Stop-Process -Id $agent.Id
           if (-not $agent.WaitForExit(10000)) { throw 'agent did not stop' }
           Get-Content agent.log, agent.err

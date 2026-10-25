@@ -11,6 +11,7 @@ import { expect, goto, syncEpg, test } from "./helpers";
 test.describe("設定の診断", () => {
   test.afterEach(async ({ request, stack }) => {
     await request.post(`${stack.agentUrl}/__control/logs?mode=normal`);
+    await request.post(`${stack.agentUrl}/__control/about?mode=normal`);
   });
 
   test("サーバとエージェントのログを並べ、絞り込める", async ({
@@ -27,6 +28,14 @@ test.describe("設定の診断", () => {
     await expect(page.getByTestId("diag-card")).toContainText(
       "Fake Card Reader (usb 1-1) (使用中)",
     );
+    // エージェントのバージョンと OS (`/denpa/about`)。denpa と同じバージョンなら何も言わない
+    await expect(page.getByTestId("diag-agent-version")).toHaveText("v1.0.0");
+    await expect(page.getByTestId("diag-version-mismatch")).toHaveCount(0);
+    await expect(page.getByTestId("diag-agent-system")).toHaveText(
+      "Linux 6.12.0-fake #1 SMP (x64)",
+    );
+    // CCID ドライバは macOS のエージェントだけ
+    await expect(page.getByTestId("diag-ccid-driver")).toHaveCount(0);
 
     const lines = page.getByTestId("log-line");
     await expect(
@@ -79,6 +88,9 @@ test.describe("設定の診断", () => {
     const environment = dialog.getByTestId("issue-field-environment");
     await expect(environment).toHaveValue(/チューナー: /);
     await expect(environment).toHaveValue(/ブラウザ: /);
+    await expect(environment).toHaveValue(
+      /エージェント: v1\.0\.0・Linux 6\.12\.0-fake #1 SMP \(x64\)/,
+    );
 
     // 欄を直したものがそのまま URL に入る
     await dialog.getByTestId("issue-field-title").fill("録画が止まる");
@@ -151,16 +163,52 @@ test.describe("設定の診断", () => {
     );
   });
 
+  test("macOS のエージェントなら CCID ドライバを出し、バージョンが違えば知らせる", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await request.post(`${stack.agentUrl}/__control/about?mode=mac`);
+    await goto(page, "/settings/diagnostics");
+    await expect(page.getByTestId("diag-agent-version")).toContainText(
+      "v0.9.0",
+    );
+    await expect(page.getByTestId("diag-version-mismatch")).toContainText(
+      "denpa (v1.0.0) とバージョンが違います",
+    );
+    await expect(page.getByTestId("diag-agent-system")).toContainText(
+      "Darwin 25.0.0",
+    );
+    await expect(page.getByTestId("diag-ccid-driver")).toHaveText(
+      "macOS の標準のもの",
+    );
+
+    await page.getByTestId("issue-start").click();
+    const environment = page
+      .getByTestId("issue-dialog")
+      .getByTestId("issue-field-environment");
+    await expect(environment).toHaveValue(
+      /エージェント: v0\.9\.0 \(denpa とバージョンが違います\)・Darwin 25\.0\.0 .*\(arm64\)/,
+    );
+    await expect(environment).toHaveValue(/CCID ドライバ: macOS の標準のもの/);
+  });
+
   test("ログを返さないエージェントでも、一言出して画面は止めない", async ({
     page,
     request,
     stack,
   }) => {
     await request.post(`${stack.agentUrl}/__control/logs?mode=off`);
+    await request.post(`${stack.agentUrl}/__control/about?mode=off`);
     await goto(page, "/settings/diagnostics");
     await expect(page.getByTestId("agent-logs-error")).toContainText(
       "前のバージョン",
     );
+    // バージョンと OS を返さないエージェントでも、理由を1行出す
+    await expect(page.getByTestId("diag-agent-version")).toContainText(
+      "前のバージョン",
+    );
+    await expect(page.getByTestId("diag-agent-system")).toHaveCount(0);
     await expect(
       page.getByTestId("log-line").and(page.locator('[data-source="agent"]')),
     ).toHaveCount(0);

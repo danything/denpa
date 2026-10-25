@@ -277,19 +277,26 @@ public sealed partial class PcscLink : ICardLink
         var list = readers.Count == 0
             ? "PC/SC のカードリーダーが見つかりません (USB のカードリーダーが挿さっていないか、OS が認識していません)"
             : string.Join('\n', readers.Select(name => $"PC/SC {name}"));
-        return OperatingSystem.IsMacOS() ? $"{list}\n{MacDriver()}" : list;
+        return CcidDriver() is { } driver ? $"{list}\nCCID ドライバ: {DriverLabel(driver)}" : list;
     }
 
     /// <summary>
-    /// macOS の CCID ドライバ。`useIFDCCID` が 1 なら従来の ifd-ccid、無いか 0 なら Apple の標準のもの
+    /// macOS の CCID ドライバ。<c>"ifd-ccid"</c> (従来のもの) か <c>"apple"</c> (macOS の標準のもの)。macOS 以外は null。
+    /// 呼ぶたびに `defaults` を1回起こす (上限 5 秒)。<c>--card</c> と <c>GET /denpa/about</c> (About.cs) が使う
     /// (docs/install-mac.md「カードが読めないとき」)
     /// </summary>
-    private static string MacDriver()
+    public static string? CcidDriver()
     {
+        if (!OperatingSystem.IsMacOS()) return null;
         var (code, output) = Shell.Run(
             "defaults", ["read", "/Library/Preferences/com.apple.security.smartcard", "useIFDCCID"], TimeSpan.FromSeconds(5));
-        return code == 0 && output.Trim() == "1"
-            ? "CCID ドライバ: 従来のもの (useIFDCCID)"
-            : "CCID ドライバ: macOS の標準のもの";
+        return CcidDriverFrom(code, output);
     }
+
+    /// <summary>`defaults read … useIFDCCID` の結果から。1 なら従来の ifd-ccid、無い (読めない) か 0 なら Apple の標準のもの</summary>
+    public static string CcidDriverFrom(int code, string output) =>
+        code == 0 && output.Trim() == "1" ? "ifd-ccid" : "apple";
+
+    private static string DriverLabel(string driver) =>
+        driver == "ifd-ccid" ? "従来のもの (useIFDCCID)" : "macOS の標準のもの";
 }

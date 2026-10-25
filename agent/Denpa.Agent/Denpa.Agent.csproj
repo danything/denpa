@@ -21,6 +21,12 @@
         <InvariantGlobalization>true</InvariantGlobalization>
         <AssemblyName>denpa-agent</AssemblyName>
         <RootNamespace>Denpa.Agent</RootNamespace>
+        <!--
+            バージョン。リリースでは `-p:InformationalVersion=<タグ>` で上書きして組む (macOS と Windows。
+            Linux のイメージは組み直さないので DENPA_VERSION で知る。About.cs)。`+コミット` は足さない
+        -->
+        <InformationalVersion>dev</InformationalVersion>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     </PropertyGroup>
 
 </Project>

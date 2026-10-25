@@ -196,6 +196,8 @@ export async function boot(
   try {
     const agent = start(["bun", "tests/fake/agent.ts"], {
       FAKE_AGENT_PORT: String(agentPort),
+      // `/denpa/about` のバージョン。本物と同じく denpa と揃える (下の denpa の DENPA_VERSION)
+      DENPA_VERSION: "v1.0.0",
       // 尺は tests/fake/services.ts で局ごとに決めている
       FAKE_SLOTS: "30",
       // スクランブル解除はパスだけ受け取って直接ファイルを触る。

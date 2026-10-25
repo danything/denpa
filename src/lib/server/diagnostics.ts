@@ -1,6 +1,6 @@
 import { arch, release, type } from "node:os";
 
-import { guessLevel, type LogLine } from "../issue-report";
+import { type AgentAbout, guessLevel, type LogLine } from "../issue-report";
 import { type Known, MASK, redact } from "../redact";
 import { config } from "./config";
 import { orm } from "./db";
@@ -11,7 +11,8 @@ import { webhooks } from "./schema";
  * **設定の「診断」に出すもの。** サーバとエージェントのログ、動いている環境。
  *
  * エージェントのログは `GET /denpa/logs` (`{"lines":[{"at":<epoch ms>,"text":"…"}]}`。新しいほうから 2000 行まで、古い順)。
- * 前のバージョンのエージェントには無いので、取れなければ理由を返して画面は止めない
+ * エージェント自身のことは `GET /denpa/about` (`{"version","os","arch","runtime","ccidDriver"}`。agent/Denpa.Agent/About.cs)。
+ * どちらも前のバージョンのエージェントには無いので、取れなければ理由を返して画面は止めない
  */
 
 export interface AgentLogs {
@@ -67,6 +68,65 @@ export async function agentLogs(known: Known): Promise<AgentLogs> {
   } catch (error) {
     return {
       lines: [],
+      error: `エージェントに繋がりません: ${redact(String(error), known)}`,
+    };
+  }
+}
+
+export interface AgentAboutResult {
+  about: AgentAbout | null;
+  /** 取れなかった理由。取れたら null */
+  error: string | null;
+}
+
+/** 来たものを疑って読む。項目ごとに、形が違えば null にして続ける */
+export function readAgentAbout(raw: unknown): AgentAbout {
+  const body =
+    typeof raw === "object" && raw !== null
+      ? (raw as Record<string, unknown>)
+      : {};
+  const text = (key: string) =>
+    typeof body[key] === "string" && body[key] !== "" ? body[key] : null;
+  const about: AgentAbout = {
+    version: text("version"),
+    os: text("os"),
+    arch: text("arch"),
+    runtime: text("runtime"),
+    ccidDriver:
+      body["ccidDriver"] === "apple" || body["ccidDriver"] === "ifd-ccid"
+        ? body["ccidDriver"]
+        : null,
+  };
+  if (about.version === null)
+    console.warn(
+      "エージェントの /denpa/about の形式が違います (version がありません)。エージェントとバージョンがずれているかもしれません",
+    );
+  return about;
+}
+
+/** エージェントのバージョン・OS・arch と、macOS なら CCID ドライバ (`GET /denpa/about`) */
+export async function agentAbout(known: Known): Promise<AgentAboutResult> {
+  try {
+    const res = await fetch(`${config.agentUrl}/denpa/about`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) {
+      return {
+        about: null,
+        error:
+          "このエージェントはバージョンと OS を返しません (前のバージョンです)。エージェントを新しくすると出ます",
+      };
+    }
+    if (!res.ok)
+      return {
+        about: null,
+        error: `エージェントからバージョンを取得できません (${res.status})`,
+      };
+    return { about: readAgentAbout(await res.json()), error: null };
+  } catch (error) {
+    return {
+      about: null,
       error: `エージェントに繋がりません: ${redact(String(error), known)}`,
     };
   }
