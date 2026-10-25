@@ -379,7 +379,7 @@
       position: sticky;
       top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
       z-index: 5;
-      margin: 0 var(--dp-bar-inset) 0;
+      margin: 0 var(--dp-bar-inset);
       padding: var(--dp-bar-pad);
       border-radius: var(--dp-bar-radius);
       background: var(--dp-float);

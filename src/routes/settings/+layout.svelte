@@ -432,7 +432,7 @@
   @media (min-width: 640px) {
     .jump {
       top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
-      margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter)) 0;
+      margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter));
       padding: var(--dp-bar-pad);
       border-radius: var(--dp-bar-radius);
       background: var(--dp-float);
