@@ -104,6 +104,24 @@ describe("AIT の中身", () => {
     expect(ait?.applications).toEqual([]);
   });
 
+  // 行き先は画面で開く (`window.open`)。`javascript:` や `data:` を開かせない
+  test("http(s) でない行き先は出さない", () => {
+    for (const base of [
+      "javascript:alert(1)//",
+      "data:text/html,x",
+      "file:///etc/",
+    ]) {
+      const ait = parseAit(
+        aitSection([{ organisationId: 1, applicationId: 2, base }]),
+      );
+      expect(ait?.applications, base).toEqual([]);
+    }
+    const ait = parseAit(
+      aitSection([{ organisationId: 1, applicationId: 2, base: "HTTP://a/" }]),
+    );
+    expect(ait?.applications[0]?.url).toBe("HTTP://a/");
+  });
+
   test("AIT でないセクションは null", () => {
     expect(parseAit(patSection([[1024, 0x1fc8]]))).toBeNull();
   });

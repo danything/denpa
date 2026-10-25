@@ -76,16 +76,35 @@ export function refusalMessage(failure: unknown, fallback: string): string {
  * - **溜めさせない。** 放送の通信は「いまの値」を取りに来るもの
  * - `x-bml-relayed` は相手まで行けた印。相手の 502 をそのまま返すので、符号だけではこちらで断った
  *   502 と見分けが付かない。画面側はこれを見て成否を決める
+ * - **返したものを denpa の権限で動かさない。** 中身も形式も相手の言うままなので、`text/html` や SVG が
+ *   来ることがある。`sandbox` の CSP と `nosniff` を付け、直に開かれても denpa のオリジンの文書には
+ *   ならないようにする (`hc-relay.ts` と同じ考え)。形式は変えない — 画面側は fetch で読み、`content-type`
+ *   を見て文字コードや BML の文書かどうかを決める。CSP は fetch で読む分には効かない
  */
 export function relayed(got: Fetched): Response {
   return new Response(got.body as BodyInit, {
     status: got.status,
     headers: {
       "content-type": got.contentType,
+      "content-security-policy": "sandbox; default-src 'none'",
+      "x-content-type-options": "nosniff",
       "cache-control": "no-store",
       "x-bml-relayed": "1",
     },
   });
+}
+
+/**
+ * fetch・XHR からの読み込みでなければ 403 (`/api/bml/proxy` と `/api/bml/post` の入口)。
+ *
+ * 中継を読むのは画面の fetch だけ (`DataBroadcast`・`HybridcastFrame`)。ページとして開かれたり、
+ * `<img>` や `<script>` から読まれたりする筋合いは無いので、相手に繋ぐ前に断る。
+ * `sec-fetch-dest` を送らない古いブラウザは通す (その分は `relayed` の CSP で守る)
+ */
+export function requireFetch(request: Request): void {
+  const dest = request.headers.get("sec-fetch-dest");
+  if (dest !== null && dest !== "empty")
+    error(403, "画面の通信からのみ使えます");
 }
 
 /** 双方向を切ってあるなら 403。`/api/bml/*` のどのエンドポイントも入口で呼ぶ (Hybridcast の入れ物も) */

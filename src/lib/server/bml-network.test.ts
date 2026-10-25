@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { allowed, isPublicAddress, Refused } from "./bml-network";
+import {
+  allowed,
+  isPublicAddress,
+  Refused,
+  relayed,
+  requireFetch,
+} from "./bml-network";
 
 /*
  * **危ないのは繋ぎ先ではなく、繋ぐ範囲。**
@@ -104,5 +110,67 @@ describe("取得してよい URL か", () => {
     expect(allowed("http://[::1]:8080/x")).rejects.toThrow(Refused);
     expect(allowed("http://[::ffff:127.0.0.1]/x")).rejects.toThrow(Refused);
     expect(allowed("http://[fd00::1]/x")).rejects.toThrow(Refused);
+  });
+});
+
+/*
+ * **中継した中身を denpa のオリジンで動かさない。**
+ *
+ * 中身も形式も相手の言うまま (`text/html` や SVG も来る)。画面は fetch で読むので形式はそのまま渡し、
+ * 直に開かれたときだけ効く守りを付ける
+ */
+describe("中継した答えの返し方", () => {
+  test("形式はそのまま、sandbox の CSP と nosniff を付ける", async () => {
+    const svg = "<svg><script>alert(1)</script></svg>";
+    const response = relayed({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: new TextEncoder().encode(svg),
+    });
+    expect(response.headers.get("content-type")).toBe("image/svg+xml");
+    expect(response.headers.get("content-security-policy")).toBe(
+      "sandbox; default-src 'none'",
+    );
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-bml-relayed")).toBe("1");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    // 中身には手を入れない
+    expect(await response.text()).toBe(svg);
+  });
+
+  test("相手の符号と BML の形式はそのまま", () => {
+    const response = relayed({
+      status: 404,
+      contentType: "text/X-arib-bml; charset=EUC-JP",
+      body: new Uint8Array(),
+    });
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe(
+      "text/X-arib-bml; charset=EUC-JP",
+    );
+  });
+});
+
+describe("画面の通信からだけ受ける", () => {
+  const request = (dest?: string) =>
+    new Request("http://denpa.test/api/bml/proxy?url=https://example.jp/", {
+      headers: dest === undefined ? {} : { "sec-fetch-dest": dest },
+    });
+
+  test("fetch・XHR (sec-fetch-dest: empty) と、送ってこない古いブラウザは通す", () => {
+    expect(() => requireFetch(request("empty"))).not.toThrow();
+    expect(() => requireFetch(request())).not.toThrow();
+  });
+
+  test("ページとして開く・iframe・img・script からは断る", () => {
+    for (const dest of ["document", "iframe", "image", "script", "object"]) {
+      let status: number | undefined;
+      try {
+        requireFetch(request(dest));
+      } catch (failure) {
+        status = (failure as { status?: number }).status;
+      }
+      expect(status, dest).toBe(403);
+    }
   });
 });
