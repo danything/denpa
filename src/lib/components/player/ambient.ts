@@ -133,7 +133,7 @@ export function edgeExtend(
 }
 
 /**
- * 色を時間でならす時定数 (ms)。**250ms — 写す間隔 (200ms) と同じくらい。** 入れ替えの 200ms と合わせても、
+ * 色を時間でならす時定数 (ms)。**250ms — 写す間隔 (200ms) と同じくらい。** 入れ替えの動き (`AmbientGlow.svelte`。120ms) と合わせても、
  * 新しい色の 9 割まで 0.6 秒ほどで追いつく
  */
 const SETTLE = 250;
@@ -176,18 +176,6 @@ export function changed(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
     if (i % 4 !== 3 && Math.abs(a[i]! - b[i]!) >= STILL_PEAK) return true;
   }
   return false;
-}
-
-/** 前の色から次の色へ入れ替える長さ (ms)。写す間隔と同じ */
-export const FADE = 200;
-
-/** 入れ替えを何段で描くか。1段 50ms */
-export const FADE_STEPS = 4;
-
-/** 入れ替えの進み方。始めと終わりをゆっくりにする (0〜1 → 0〜1) */
-export function ease(t: number): number {
-  const x = Math.min(1, Math.max(0, t));
-  return x * x * (3 - 2 * x);
 }
 
 export interface Situation {

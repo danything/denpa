@@ -401,8 +401,12 @@
 
     const target = grid;
     const mark = nowMark;
+    // 開いたときは滑らせず、その場に置く (箱は `scroll-behavior: smooth`。`scrollGrid`)
     const place = () => {
-      target.scrollTop = Math.max(0, nowTop(target, mark));
+      target.scrollTo({
+        top: Math.max(0, nowTop(target, mark)),
+        behavior: "instant",
+      });
     };
 
     place();
@@ -531,41 +535,13 @@
     { key: "23", label: "深夜", hour: 23, title: "23:00 へ" },
   ] as const;
 
-  let scrollFrame = 0;
-
   /**
-   * 表を縦に送る。**動きは `--dp-duration` (120ms)**。動かさない設定ではその値が 0 になり、すぐ移る。
-   * ブラウザの `behavior: 'smooth'` は長さを決められず、数百ms かかる
+   * 表を縦に送る。**動きは CSS** (`.grid-box` の `scroll-behavior: smooth`)。ここは行き先を渡すだけ
+   * (長さはブラウザが決める)。動かさない設定では `auto` になり、すぐ移る
    */
   function scrollGrid(top: number): void {
-    const box = grid;
-    if (box === null) return;
-    cancelAnimationFrame(scrollFrame);
-    const target = Math.max(
-      0,
-      Math.min(top, box.scrollHeight - box.clientHeight),
-    );
-    const raw = getComputedStyle(document.documentElement)
-      .getPropertyValue("--dp-duration")
-      .trim();
-    const duration = raw.endsWith("ms")
-      ? Number.parseFloat(raw)
-      : Number.parseFloat(raw) * 1000;
-    const from = box.scrollTop;
-    if (!(duration > 0) || from === target) {
-      box.scrollTop = target;
-      return;
-    }
-    const begin = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - begin) / duration);
-      box.scrollTop = from + (target - from) * (1 - (1 - t) ** 3);
-      if (t < 1) scrollFrame = requestAnimationFrame(step);
-    };
-    scrollFrame = requestAnimationFrame(step);
+    grid?.scrollTo({ top: Math.max(0, top) });
   }
-
-  $effect(() => () => cancelAnimationFrame(scrollFrame));
 
   function jumpTo(hour: number): void {
     const rem = Number.parseFloat(
@@ -626,7 +602,7 @@
    */
   $effect(() => {
     data.type;
-    if (grid !== null) grid.scrollLeft = 0;
+    grid?.scrollTo({ left: 0, behavior: "instant" });
   });
 
   /*
@@ -1562,6 +1538,13 @@
     isolation: isolate;
     /* 巻いた量をヘッダーへ渡す (`+layout.svelte` の `.navbar` と下の `.guide-bar` がこれで浮く) */
     scroll-timeline: --guide block;
+    /* 時刻へ送るボタン (`scrollGrid`) の動き。つかんで動かす・開いたときの位置合わせは `instant` で止める */
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .grid-box {
+      scroll-behavior: auto;
+    }
   }
   /*
      * **広い画面では表をヘッダーの裏まで伸ばす** (docs/design.md の「浮かせ方」)。箱は画面の上端から始め、

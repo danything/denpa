@@ -2312,6 +2312,20 @@ test.describe("スマホの横でライブ", () => {
     await second.tap();
     await expect(second).toHaveAttribute("data-current", "true");
     await expect(stage).toBeInViewport({ ratio: 0.9 });
+
+    // 戻る動きは CSS (巻く外枠の `scroll-behavior`)。動かさない設定 (E2E の既定) ではすぐ、動かしてよい端末では滑って戻る
+    const layout = page.locator("[data-player-layout]");
+    await expect(layout).toHaveCSS("scroll-behavior", "auto");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await expect(layout).toHaveCSS("scroll-behavior", "smooth");
+    const first = channels.first();
+    await first.scrollIntoViewIfNeeded();
+    await expect(stage).not.toBeInViewport({ ratio: 0.9 });
+    await first.tap();
+    await expect(first).toHaveAttribute("data-current", "true");
+    await expect(stage).toBeInViewport({ ratio: 0.9 });
+    // 着く位置は前と同じ (映像の上の端)
+    await expect.poll(() => layout.evaluate((el) => el.scrollTop)).toBe(0);
   });
 });
 

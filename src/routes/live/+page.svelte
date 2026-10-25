@@ -174,10 +174,13 @@
     return found !== undefined && select(found);
   }
 
-  /** 横にしたスマホでは、一覧から選んだら映像へ戻す (映像が高さいっぱいを取り、一覧はその下にある) */
+  /**
+   * 横にしたスマホでは、一覧から選んだら映像へ戻す (映像が高さいっぱいを取り、一覧はその下にある)。
+   * 滑らせるのは CSS (下の style の `scroll-behavior`)
+   */
   function backToPicture(): void {
     if (stageEl === null || !window.matchMedia(PHONE_LANDSCAPE).matches) return;
-    stageEl.scrollIntoView({ block: "start", behavior: "smooth" });
+    stageEl.scrollIntoView({ block: "start" });
   }
 
   /** 一覧の各行。開いたときに、いま映している局まで送る (局が100を超えると画面の外のほうが普通) */
@@ -852,6 +855,15 @@
     flex-direction: column;
     /* 上は映像の上と同じ値 (`--dp-side-top`。FactsAside と同じ) */
     padding: var(--dp-side-top, var(--dp-side-pad, 0)) var(--dp-side-pad, 0) 0;
+  }
+  /*
+     * 横にしたスマホでは、一覧から選ぶと映像へ滑って戻る (`backToPicture`)。巻くのは外枠 (`PlayerLayout` の `.layout`)。
+     * 局の一覧を出しているこの画面のこの形だけにする (条件は `PHONE_LANDSCAPE` と同じ)
+     */
+  @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
+    :global([data-player-layout]:has(> .live-side)) {
+      scroll-behavior: smooth;
+    }
   }
   /* 測り直す操作。読みものの行に置くので、ボタンの形にはしない */
   .relearn {

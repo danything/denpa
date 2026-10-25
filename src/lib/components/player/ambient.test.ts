@@ -6,7 +6,6 @@ import {
   boxRadius,
   changed,
   colorStep,
-  ease,
   edgeExtend,
   falloff,
   farthest,
@@ -374,14 +373,6 @@ describe("入れ替え", () => {
     for (let p = 0; p < 10; p++) caption.set([180, 180, 180], p * 4);
     expect(frameDelta(before, caption)).toBeLessThan(STILL);
     expect(changed(before, caption)).toBe(true);
-  });
-
-  test("入れ替えは始めと終わりがゆっくり", () => {
-    expect(ease(0)).toBe(0);
-    expect(ease(1)).toBe(1);
-    expect(ease(0.5)).toBe(0.5);
-    expect(ease(0.1)).toBeLessThan(0.1);
-    expect(ease(0.9)).toBeGreaterThan(0.9);
   });
 });
 

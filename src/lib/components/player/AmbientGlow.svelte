@@ -6,11 +6,8 @@
   import {
     changed,
     colorStep,
-    ease,
     edgeExtend,
     EVERY,
-    FADE,
-    FADE_STEPS,
     farthest,
     follow,
     frameDelta,
@@ -41,7 +38,8 @@
    * - 縦に積むときは映像の下の中身に、二段組は窓全体に敷き、枠から離れるほど薄くする (`reach`・`farthest`)。
    *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5 以上で読める (`toneFrame`・`WASH_LUMINANCE`)
    * - 色は小さな canvas で作って CSS で引き伸ばす。`filter: blur` は使わない (GPU の無い端末で重かった)
-   * - 前の色から `FADE` かけて段で入れ替える (`ease`)。CSS で透明度を動かすと毎フレーム合成し直すので canvas に描く
+   * - 前の色からの入れ替えは CSS の `opacity` の transition (下の style)。帯ごとに canvas を2枚重ね、新しい色を裏の1枚に
+   *   描いてから表と裏を入れ替える (`face`)。ここで動かすのは「どちらが表か」の印だけ
    * - 色は枠に重ならない4本の帯 (`.band`) にだけ描く (`strips`)。枠の後ろに敷くと映像のコマごとに合成し直す
    * - ブラウザの枠の色 (`theme-color`) もページの上の端の色にする (`washTop`)
    * - 写さないときは `ambient.ts` の `plan`。映像の上には何も重ねない
@@ -60,18 +58,15 @@
     testid: string;
   } = $props();
 
-  /** 入れ替えの1段の長さ (ms) */
-  const FADE_STEP = FADE / FADE_STEPS;
-
   const BANDS = [0, 1, 2, 3];
+  /** 帯ごとの2枚 (表と裏)。どちらが表かは `front` */
+  const SIDES = [0, 1];
   let box = $state<HTMLDivElement | null>(null);
   const bands = $state<(HTMLDivElement | null)[]>([null, null, null, null]);
-  const canvases = $state<(HTMLCanvasElement | null)[]>([
-    null,
-    null,
-    null,
-    null,
-  ]);
+  /** 帯の canvas。帯 `i` の `side` の側は `i * 2 + side` */
+  const canvases = $state<(HTMLCanvasElement | null)[]>(
+    Array.from({ length: BANDS.length * SIDES.length }, () => null),
+  );
 
   let hidden = $state(false);
   let reduced = $state(false);
@@ -102,16 +97,18 @@
 
   /** いまの置き場。枠の大きさが変わると変わる */
   let layout: GlowLayout | null = null;
-  /** ぼかし終えた前の1枚と次の1枚 (画面に出さない canvas)。入れ替えの間は2枚を重ねて描く */
-  let shown: HTMLCanvasElement | null = null;
-  let coming: HTMLCanvasElement | null = null;
+  /** 表と裏それぞれに描いた1枚 (画面に出さない canvas)。帯の canvas はここから切り出して描く */
+  let layers: (HTMLCanvasElement | null)[] = [null, null];
+  /** 入れ替えの途中で次の色が来たとき、見えている色を作る下書き (`settle`) */
+  let spare: HTMLCanvasElement | null = null;
+  /** いま表の側 (0 か 1) */
+  let front = 0;
   /** いまの色 (縁を延ばした 32x18 の RGBA。時間でならしたもの)。置き場やテーマが変わったら、これから作り直す */
   let colors: Float32Array | null = null;
   /** 時間でならした色 (`follow`)。写すたびに進め、違いが大きくなったら `colors` に移す */
   let smoothed: Float32Array | null = null;
   /** 最後に写した時刻 (`performance.now`)。ならす重みを、経った時間で決める */
   let lastAt: number | null = null;
-  let fading: ReturnType<typeof setInterval> | undefined;
 
   function scratch(): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
@@ -169,44 +166,83 @@
     return context.getImageData(0, 0, GLANCE.width, GLANCE.height).data;
   }
 
-  /**
-   * 帯の canvas に、前の1枚から次の1枚へ `mix` だけ進んだ色を描く。2枚目は重ねずに足す (`lighter`) —
-   * 重ねると光の薄い所で透明度が重なり、1秒に5回の入れ替えのたびに明滅して見えた
-   */
-  function paint(mix: number): void {
-    for (const canvas of canvases) {
-      const context = canvas?.getContext("2d");
-      if (!canvas || !context) continue;
+  /** 帯の canvas の `side` の側に、その側の1枚 (`layers`) を描く。1枚も無ければ空にする */
+  function paint(side: number): void {
+    const layer = layers[side];
+    canvases.forEach((canvas, k) => {
+      const context = k % 2 === side ? canvas?.getContext("2d") : null;
+      if (!canvas || !context) return;
       context.clearRect(0, 0, canvas.width, canvas.height);
-      const blending = coming !== null && mix > 0;
-      context.globalCompositeOperation = "source-over";
-      if (shown !== null) {
-        context.globalAlpha = blending ? 1 - mix : 1;
-        context.drawImage(shown, 0, 0);
-      }
-      if (blending && coming !== null) {
-        context.globalCompositeOperation = "lighter";
-        context.globalAlpha = mix;
-        context.drawImage(coming, 0, 0);
-      }
-      context.globalCompositeOperation = "source-over";
-      context.globalAlpha = 1;
-    }
+      if (layer) context.drawImage(layer, 0, 0);
+    });
   }
 
-  /** 入れ替えをやめて、いまの色を最後の1枚から作り直して描く (置き場・テーマが変わったとき) */
+  /**
+   * `side` の側を表にする。入れ替えの動きは CSS (下の style の `[data-front]`)。
+   * `instant` ならその場で入れ替える (transition を外して当て、計算させてから戻す)
+   */
+  function face(side: number, instant: boolean): void {
+    front = side;
+    box?.toggleAttribute("data-instant", instant);
+    canvases.forEach((canvas, k) =>
+      canvas?.toggleAttribute("data-front", k % 2 === side),
+    );
+    if (!instant || box === null) return;
+    void getComputedStyle(canvases[side] ?? box).opacity;
+    box.removeAttribute("data-instant");
+  }
+
+  /**
+   * **入れ替えの途中で次の色が来たら、いま見えている色を表にしてから次へ進む** (色が跳ねない)。
+   * 2枚は同じ曲線で逆に動き、足して重ねている (`plus-lighter`) ので、見えている色は
+   * 「表 × 表の透明度 + 裏 × (1 − 表の透明度)」。それを裏に描いて、その場で表にする
+   */
+  function settle(): void {
+    // 隠した帯の中では transition が進まないので、出ている帯の1枚で見る
+    const shown = canvases.find(
+      (canvas, k) => k % 2 === front && canvas?.parentElement?.hidden === false,
+    );
+    if (!shown || layout === null) return;
+    const mix = Number.parseFloat(getComputedStyle(shown).opacity);
+    if (!(mix < 1)) return;
+    const back = 1 - front;
+    spare ??= scratch();
+    const context = spare.getContext("2d");
+    if (context === null) return;
+    context.clearRect(0, 0, spare.width, spare.height);
+    const old = layers[back];
+    const next = layers[front];
+    if (old) {
+      context.globalAlpha = 1 - mix;
+      context.drawImage(old, 0, 0);
+    }
+    if (next) {
+      context.globalCompositeOperation = "lighter";
+      context.globalAlpha = mix;
+      context.drawImage(next, 0, 0);
+    }
+    context.globalCompositeOperation = "source-over";
+    context.globalAlpha = 1;
+    [layers[back], spare] = [spare, old ?? null];
+    paint(back);
+    face(back, true);
+  }
+
+  /** いまの色を最後の1枚から作り直し、動かさずに表へ出す (置き場・テーマが変わったとき) */
   function repaint(): void {
-    clearInterval(fading);
-    coming = null;
-    shown = null;
+    layers = [null, null];
+    spare = null;
     if (colors !== null) {
-      shown = scratch();
-      if (layout !== null) compose(shown, colors, layout);
+      const layer = scratch();
+      if (layout !== null) compose(layer, colors, layout);
+      layers[front] = layer;
     }
     paint(0);
+    paint(1);
+    face(front, true);
   }
 
-  /** 写した1枚を次の色にして、`FADE` の長さで前の色から入れ替える (動かさない設定ではすぐ) */
+  /** 写した1枚を次の色にして、裏に描いてから表と裏を入れ替える (動きは CSS。動かさない設定ではすぐ) */
   function show(bitmap: ImageBitmap): void {
     const pixels = framePixels(bitmap);
     bitmap.close();
@@ -225,34 +261,12 @@
     if (colors !== null && !changed(colors, smoothed)) return;
     colors = Float32Array.from(smoothed);
     if (layout === null) return;
-    clearInterval(fading);
-    coming ??= scratch();
-    shown ??= scratch();
-    // 入れ替えの途中で次が来たら、途中まで出ていたものを前の1枚にする (色が跳ねない)
-    const painted = canvases.find((c) => c !== null);
-    if (painted) {
-      const context = shown.getContext("2d");
-      context?.clearRect(0, 0, layout.width, layout.height);
-      context?.drawImage(painted, 0, 0);
-    }
-    compose(coming, colors, layout);
-    const swap = () => {
-      [shown, coming] = [coming, shown];
-      paint(0);
-    };
-    if (reduced) {
-      swap();
-      return;
-    }
-    let step = 1;
-    paint(ease(step / FADE_STEPS));
-    fading = setInterval(() => {
-      step++;
-      if (step >= FADE_STEPS) {
-        clearInterval(fading);
-        swap();
-      } else paint(ease(step / FADE_STEPS));
-    }, FADE_STEP);
+    settle();
+    const back = 1 - front;
+    const layer = (layers[back] ??= scratch());
+    compose(layer, colors, layout);
+    paint(back);
+    face(back, false);
   }
 
   $effect(() => {
@@ -298,14 +312,14 @@
   $effect(() => {
     if (now !== "off") return;
     lit = false;
-    clearInterval(fading);
     colors = null;
     smoothed = null;
     lastAt = null;
     top = null;
-    shown = null;
-    coming = null;
+    layers = [null, null];
+    spare = null;
     paint(0);
+    paint(1);
   });
 
   /** テーマが変わったら、最後の1枚から塗り直す (色の濃くし方が違う) */
@@ -315,8 +329,6 @@
       if (colors !== null && layout !== null) repaint();
     });
   });
-
-  $effect(() => () => clearInterval(fading));
 
   /**
    * **範囲と帯の置き場を、枠に合わせて決める。** 枠・`<main>`・右の列の大きさが変わったとき、
@@ -380,8 +392,7 @@
       const parts = strips(area, s);
       BANDS.forEach((i) => {
         const band = bands[i];
-        const canvas = canvases[i];
-        if (!band || !canvas) return;
+        if (!band) return;
         const part = parts[i];
         band.hidden = part === undefined;
         if (part === undefined) return;
@@ -389,14 +400,18 @@
         band.style.top = `${part.top - area.top}px`;
         band.style.width = `${part.right - part.left}px`;
         band.style.height = `${part.bottom - part.top}px`;
-        // canvas は範囲全体を覆い、帯はその一部を切り出す
-        canvas.style.left = `${area.left - part.left}px`;
-        canvas.style.top = `${area.top - part.top}px`;
-        canvas.style.width = `${areaWidth}px`;
-        canvas.style.height = `${areaHeight}px`;
-        if (resized) {
-          canvas.width = next.width;
-          canvas.height = next.height;
+        for (const side of SIDES) {
+          const canvas = canvases[i * 2 + side];
+          if (!canvas) continue;
+          // canvas は範囲全体を覆い、帯はその一部を切り出す
+          canvas.style.left = `${area.left - part.left}px`;
+          canvas.style.top = `${area.top - part.top}px`;
+          canvas.style.width = `${areaWidth}px`;
+          canvas.style.height = `${areaHeight}px`;
+          if (resized) {
+            canvas.width = next.width;
+            canvas.height = next.height;
+          }
         }
       });
       // 置き場が変わったら、最後の1枚からぼかし直す (入れ替えの途中なら、そこで済ませる)
@@ -466,7 +481,9 @@
 >
   {#each BANDS as i (i)}
     <div bind:this={bands[i]} class="band">
-      <canvas bind:this={canvases[i]}></canvas>
+      {#each SIDES as side (side)}
+        <canvas bind:this={canvases[i * 2 + side]}></canvas>
+      {/each}
     </div>
   {/each}
 </div>
@@ -486,6 +503,8 @@
   .band {
     position: absolute;
     overflow: hidden;
+    /* 2枚の足し合わせ (下の `plus-lighter`) を帯の中で済ませ、ページの地には足さない */
+    isolation: isolate;
   }
   /*
    * 明るいテーマでは地に掛ける (色の付いた所だけが乗る。`toneFrame` が色の薄い所を透明にしてある)。
@@ -496,8 +515,24 @@
     /* `ambient.ts` の `LIGHT_OPACITY` と同じ (枠の色を同じ描き方で作る) */
     opacity: 0.6;
   }
+  /*
+   * **色の入れ替え。** 表 (`data-front`) へ回った1枚が透明から出て、裏へ回った1枚が同じ長さ・同じ曲線で消える。
+   * 2枚は重ねずに足す (`plus-lighter`) — 重ねると光の薄い所で透明度が足りなくなり、1秒に5回の入れ替えのたびに
+   * 明滅して見えた。足せば途中も「前の色 × (1 − t) + 次の色 × t」になる。
+   * 写す間隔 (`EVERY`。200ms) のうちに終わる長さにする。動かさない設定ではトークンが 0 になり、すぐ入れ替わる
+   */
   canvas {
     position: absolute;
+    opacity: 0;
+    mix-blend-mode: plus-lighter;
+    transition: opacity var(--dp-duration) var(--dp-ease);
+  }
+  canvas:global([data-front]) {
+    opacity: 1;
+  }
+  /* 表の印と、置き場・テーマが変わったとき・入れ替えの途中で次が来たときに動かさない印は JS が付ける (`face`) */
+  .ambient:global([data-instant]) canvas {
+    transition: none;
   }
   /*
      * **右の列 (と、縦に積んだときの番組の中身) は色の上に描く。** 位置を持たせて、文書の順で色より後ろに

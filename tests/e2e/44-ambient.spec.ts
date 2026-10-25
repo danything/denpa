@@ -48,6 +48,32 @@ function updates(page: Page): () => Promise<number> {
     );
 }
 
+/**
+ * 出ている帯の1つにある2枚の canvas (表と裏)。入れ替えの動きは CSS の `opacity` の transition で、
+ * JS が動かすのは表の印 (`data-front`) だけ
+ */
+function faces(page: Page) {
+  return page
+    .getByTestId("live-frame-ambient")
+    .locator(".band:not([hidden])")
+    .first()
+    .evaluate((band) =>
+      [...band.querySelectorAll("canvas")].map((canvas) => {
+        const style = getComputedStyle(canvas);
+        const pixels = canvas
+          .getContext("2d")!
+          .getImageData(0, 0, canvas.width, canvas.height).data;
+        return {
+          front: canvas.hasAttribute("data-front"),
+          opacity: style.opacity,
+          transition: `${style.transitionProperty} ${style.transitionDuration}`,
+          blend: style.mixBlendMode,
+          painted: pixels.some((v, i) => i % 4 === 3 && v > 0),
+        };
+      }),
+    );
+}
+
 /** 操作バーのボタンを押す (畳まれないもの) */
 async function press(page: Page, testid: string): Promise<void> {
   await wakeControls(page, "live-frame");
@@ -117,6 +143,16 @@ test.describe("アンビエントモード", () => {
         expect(overlaps, JSON.stringify({ box, stage })).toBe(false);
       }
 
+      // 入れ替えの途中も、2枚の透明度を足すといつも 1 (前の色から次の色へ、抜けも跳ねも無くつながる)
+      for (let i = 0; i < 10; i++) {
+        const sum = (await faces(page)).reduce(
+          (total, face) => total + Number(face.opacity),
+          0,
+        );
+        expect(sum).toBeCloseTo(1, 1);
+        await page.waitForTimeout(37);
+      }
+
       // 止めている間は写さない (光は残す)
       await press(page, "live-play");
       await expect(glow).toHaveAttribute("data-plan", "hold");
@@ -124,6 +160,20 @@ test.describe("アンビエントモード", () => {
       await page.waitForTimeout(1500);
       expect(await updates(page)()).toBe(paused);
       await expect(glow).toBeVisible();
+      // 入れ替えは CSS の transition (120ms) で、2枚は足して重ねる。止まったら表の1枚だけが出ていて、色が描いてある
+      const settled = await faces(page);
+      expect(settled.map((face) => face.transition)).toEqual([
+        "opacity 0.12s",
+        "opacity 0.12s",
+      ]);
+      expect(settled.map((face) => face.blend)).toEqual([
+        "plus-lighter",
+        "plus-lighter",
+      ]);
+      expect(settled.filter((face) => face.front)).toHaveLength(1);
+      for (const face of settled)
+        expect(face.opacity).toBe(face.front ? "1" : "0");
+      expect(settled.find((face) => face.front)!.painted).toBe(true);
       await press(page, "live-play");
       await expect(glow).toHaveAttribute("data-plan", "watch");
 
@@ -190,6 +240,15 @@ test.describe("アンビエントモード", () => {
     await expect(glow).toHaveAttribute("data-updates", "1");
     await page.waitForTimeout(1500);
     await expect(glow).toHaveAttribute("data-updates", "1");
+    // 入れ替えの長さは 0 (トークンが 0 になる)。写した1枚がその場で表に出ている
+    const shown = await faces(page);
+    expect(shown.map((face) => face.transition)).toEqual([
+      "opacity 0s",
+      "opacity 0s",
+    ]);
+    const front = shown.find((face) => face.front)!;
+    expect(front.opacity).toBe("1");
+    expect(front.painted).toBe(true);
   });
 
   /*

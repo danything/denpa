@@ -430,6 +430,75 @@ test.describe("操作したときの反応", () => {
     );
   });
 
+  /*
+   * **送る動きは CSS (`scroll-behavior`)。** 動かしてよい端末では、押すと途中を通って前と同じ位置に着く。
+   * 動かさない設定 (E2E の既定) では押したその場で着く
+   */
+  test("時刻のボタンの送りは CSS の動きで、動かさない設定ではすぐ着く", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    const grid = page.getByTestId("guide-grid");
+    // 表の頭は 4:00、5分で 0.75rem
+    const at = (hour: number) =>
+      grid.evaluate(
+        (el, hour) =>
+          Math.min(
+            el.scrollHeight - el.clientHeight,
+            (hour - 4) *
+              12 *
+              0.75 *
+              Number.parseFloat(
+                getComputedStyle(document.documentElement).fontSize,
+              ),
+          ),
+        hour,
+      );
+
+    await goto(page, "/guide?type=GR");
+    await expect(grid).toHaveCSS("scroll-behavior", "auto");
+    const at19 = await at(19);
+    await page.getByTestId("guide-jump-19").click();
+    expect(await grid.evaluate((el) => el.scrollTop)).toBeCloseTo(at19, 0);
+
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await goto(page, "/guide?type=GR");
+    await expect(grid).toHaveCSS("scroll-behavior", "smooth");
+    const at6 = await at(6);
+    await page.getByTestId("guide-jump-6").click();
+    await expect
+      .poll(() => grid.evaluate((el) => el.scrollTop))
+      .toBeCloseTo(at6, 0);
+    // 6時から 19時へ。巻いた位置をコマごとに集め、途中を通ったこと・同じ位置に着くことを見る
+    const path = await grid.evaluate(
+      (el, end) =>
+        new Promise<number[]>((resolve) => {
+          const seen: number[] = [];
+          const started = performance.now();
+          const step = () => {
+            seen.push(el.scrollTop);
+            if (
+              Math.abs(el.scrollTop - end) < 1 ||
+              performance.now() - started > 3000
+            )
+              resolve(seen);
+            else requestAnimationFrame(step);
+          };
+          (
+            document.querySelector(
+              '[data-testid="guide-jump-19"]',
+            ) as HTMLElement
+          ).click();
+          requestAnimationFrame(step);
+        }),
+      at19,
+    );
+    expect(path.at(-1)!).toBeCloseTo(at19, 0);
+    expect(
+      path.filter((top) => top > at6 + 1 && top < at19 - 1).length,
+    ).toBeGreaterThan(0);
+  });
+
   test("選んでいる印は 1 本だけ (切り替えの短い下線と重ねない)", async ({
     page,
   }) => {

@@ -120,8 +120,12 @@ export function dragScroll(node: HTMLElement) {
     const dy = event.clientY - startY;
     if (!dragged && Math.hypot(dx, dy) < THRESHOLD) return;
     dragged = true;
-    node.scrollLeft = fromLeft - dx;
-    node.scrollTop = fromTop - dy;
+    // 箱が `scroll-behavior: smooth` でも滑らせず、つかんだマウスにそのまま付いてくるように
+    node.scrollTo({
+      left: fromLeft - dx,
+      top: fromTop - dy,
+      behavior: "instant",
+    });
     // ドラッグ中に文字が選択されると使い心地が悪い
     event.preventDefault();
   };
