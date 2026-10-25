@@ -992,8 +992,11 @@
      * (`app.css` の `dp-bar-float`)。その1行がある間はヘッダーも近い影 (`--navbar-shadow`) にそろえ、遠い影が下の1行に掛からないようにする
      */
     :global(:root) {
-      --dp-header-space: 4.25rem;
       --dp-header-bottom: 3.75rem;
+      /* 中身の頭はヘッダーの下端から、操作の1行どうしと同じ隙間 (`--dp-bar-gap`) だけ離す */
+      --dp-header-space: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
+      /* 自分で巻き取る画面 (映像・番組表) の箱の頭。番組表は表をヘッダーの裏まで伸ばし、操作の1行の面をヘッダーの下 `--dp-bar-gap` に置く (`app.css` の `.guide-bar`) */
+      --dp-fill-top: 4.25rem;
     }
     main {
       --dp-page-top: var(--dp-header-space);
@@ -1079,7 +1082,7 @@
       height: 100%;
       min-height: 0;
       overflow: hidden;
-      padding-top: var(--dp-header-space, 0px);
+      padding-top: var(--dp-fill-top, 0px);
     }
     .shell.fill main {
       --dp-page-top: 0rem;

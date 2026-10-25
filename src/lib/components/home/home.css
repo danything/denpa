@@ -553,12 +553,6 @@
   .board .t-day {
     top: calc(var(--dp-header-bottom) + var(--t-day-gap));
   }
-  /* いちばん上の見出しも貼り付く所に置き、巻き始めても動かない (main の頭の空きはヘッダーの下端より広い) */
-  .board .t-rows > .t-block:first-child > .t-day {
-    margin-top: calc(
-      var(--dp-header-bottom) + var(--t-day-gap) - var(--dp-header-space)
-    );
-  }
 }
 /*
  * **スマホ (下のタブがある幅) では、頭の1行を下のタブのすぐ上に貼り付ける。** 押すものは下に置く (指の届く所)。

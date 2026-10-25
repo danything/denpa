@@ -751,7 +751,7 @@ progress[value]::-webkit-progress-value {
     z-index: 1;
     isolation: isolate;
     height: var(--guide-bar-h);
-    margin-top: calc(var(--dp-header-bottom) - var(--dp-header-space));
+    margin-top: calc(var(--dp-header-bottom) - var(--dp-fill-top));
     padding: calc(var(--guide-bar-gap) + var(--guide-bar-pad))
       calc(var(--dp-bar-inset) + var(--guide-bar-pad))
       calc(var(--guide-bar-gap) + var(--guide-bar-pad));
