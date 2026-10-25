@@ -94,6 +94,38 @@ test.describe("設定のチューナーとチャンネル", () => {
     expect(await res.text()).toContain("種別を選んでください");
   });
 
+  /**
+   * **スマホでは、見えている節の操作を下のタブの上に浮かべる** (押すものは下に。docs/design.md の「浮かせ方」)。
+   * 節へ飛ぶ行のすぐ上の1行で、節を移ると入れ替わり、操作の無い節では出さない
+   */
+  test("スマホではチャンネルの操作が節へ飛ぶ行のすぐ上に出る", async ({
+    page,
+    request,
+  }) => {
+    await syncEpg(request);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goto(page, "/settings/reception#channels");
+
+    const bar = page.getByTestId("channel-actions");
+    await expect(bar).toBeInViewport();
+    await expect(bar.getByTestId("scan-start")).toBeVisible();
+    await expect(bar.getByTestId("epg-collect-now")).toBeVisible();
+    const gap = async () => {
+      const own = (await bar.boundingBox())!;
+      const jump = (await page.getByTestId("settings-jump").boundingBox())!;
+      return jump.y - (own.y + own.height);
+    };
+    await expect.poll(gap).toBeGreaterThan(0);
+    expect(await gap()).toBeLessThan(12);
+
+    // データ放送には見出しの行の操作が無い
+    await page.getByTestId("settings-jump-broadcast").click();
+    await page.waitForURL(/#broadcast$/);
+    await expect(bar).toBeHidden();
+    await page.getByTestId("settings-jump-channels").click();
+    await expect(bar).toBeInViewport();
+  });
+
   test("チューナーの空きと取れているチャンネルが出る", async ({
     page,
     request,

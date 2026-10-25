@@ -1,6 +1,7 @@
 <script lang="ts">
   import { refreshAll } from "$app/navigation";
   import { onMount } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
 
   import Lead from "#lib/components/Lead.svelte";
   import {
@@ -24,6 +25,12 @@
    * 環境の中身は Issue の報告にも入れるので、2つの節を1つの部品に置く
    */
   let { data }: { data: PageData } = $props();
+
+  /**
+   * スマホ (下のタブがある幅) では、ログの押すもの (読み直す・Issue にする) を絞り込みと同じ1行に入れる。
+   * その1行は下のタブの上に浮く (`settings/+layout.svelte` の `.section-bar`)
+   */
+  const phone = new MediaQuery("max-width: 639.98px");
 
   /** 読み直しの間も前の中身を出したままにする (`held`。設定の「チューナー」と同じ) */
   const tuners = held(() => data.tuners);
@@ -287,31 +294,36 @@
   </div>
 </div>
 
+<!-- ログの押すもの。広い画面では見出しの行の右、スマホでは絞り込みの1行の頭 (上の `phone`) -->
+{#snippet logActions()}
+  <button
+    type="button"
+    class="small secondary"
+    onclick={reload}
+    disabled={reloading}
+    data-testid="logs-reload"
+  >
+    {reloading ? "読み直しています…" : "読み直す"}
+  </button>
+  <button
+    type="button"
+    class="small"
+    onclick={openIssue}
+    disabled={preparing}
+    data-testid="issue-start"
+  >
+    Issue にする
+  </button>
+{/snippet}
+
 <div class="part" id="logs" data-part>
   <div class="sections">
     <section class="section" data-testid="diagnostics-logs">
       <div class="section-head">
         <h2>ログ</h2>
-        <div class="head-actions">
-          <button
-            type="button"
-            class="small secondary"
-            onclick={reload}
-            disabled={reloading}
-            data-testid="logs-reload"
-          >
-            {reloading ? "読み直しています…" : "読み直す"}
-          </button>
-          <button
-            type="button"
-            class="small"
-            onclick={openIssue}
-            disabled={preparing}
-            data-testid="issue-start"
-          >
-            Issue にする
-          </button>
-        </div>
+        {#if !phone.current}
+          <div class="head-actions">{@render logActions()}</div>
+        {/if}
       </div>
       <Lead>
         新しい順。サーバとエージェントのそれぞれ最後の 2000 行です
@@ -329,7 +341,8 @@
         {/snippet}
       </Lead>
 
-      <div class="filters">
+      <div class="filters section-bar" data-testid="logs-filters">
+        {#if phone.current}{@render logActions()}{/if}
         <div class="chips">
           <label class="chip">
             <input
@@ -446,6 +459,12 @@
     flex: 1 1 12rem;
     max-width: 20rem;
     margin: 0;
+  }
+  /* スマホでは横に巻く1行の中なので、検索の欄は決まった幅 */
+  @media (max-width: 639.98px) {
+    .search {
+      flex: 0 0 10rem;
+    }
   }
   /*
    * **1 行ずつ地の上に並べる** (1 行の並びは地。docs/design.md「3 つの層」)。線で区切らず、詰めて読む。

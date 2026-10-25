@@ -41,7 +41,7 @@
       <!-- 「中断」で止めたもの。予約の「取り消し済み」と同じ言葉にはしない -->
       {migrate.state === "canceled" ? "中断" : stateLabel(migrate.state)}
     </span>
-    <span class="tag">{migrate.apply ? "取り込み" : "下見 (変更なし)"}</span>
+    <span class="muted">{migrate.apply ? "取り込み" : "下見 (変更なし)"}</span>
     {#if recordings}
       <span data-testid="migrate-recordings">
         新規 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し

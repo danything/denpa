@@ -74,7 +74,7 @@
             -->
       <div class="rows">
         {#each data.webhooks as webhook (webhook.id)}
-          <div class="row webhook" data-testid="webhook-row">
+          <div class="row webhook item" data-testid="webhook-row">
             <div class="url-line">
               <span class="tag {webhook.enabled ? 'success' : ''}">
                 {webhook.enabled ? "有効" : "無効"}
@@ -135,9 +135,11 @@
 </div>
 
 <style>
-  /* 地に置く並び。件の間は線を引かず余白で分ける (面に乗せた一覧より広く) */
-  .rows > .row + .row {
-    margin-top: var(--dp-space-4);
+  /* 1 件が 3〜4 行あるので件の面 (`app.css` の `.item`) に乗せ、件の間は余白 (docs/design.md の「何行かある一覧」) */
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-list-gap);
   }
   .events {
     display: flex;
@@ -149,7 +151,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding-block: 0.75rem;
+    padding: 0.75rem;
   }
   .url-line {
     display: flex;

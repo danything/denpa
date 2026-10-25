@@ -14,7 +14,7 @@
     title = null,
     titleTestid,
     rangeTestid,
-    badge,
+    prefix,
     status,
   }: {
     /** 番組の時間帯。無ければ出さない (ライブで番組表が引けていないとき) */
@@ -26,8 +26,8 @@
     titleTestid?: string;
     /** 時間帯の目印 (試験が終わりの時刻を読む) */
     rangeTestid?: string;
-    /** タイトルの前に置くラベル (観る画面の「端末」など) */
-    badge?: Snippet;
+    /** 上の段の頭に置く一言 (観る画面の「端末」など。控えた字で、後ろの「・」も渡す側が置く) */
+    prefix?: Snippet;
     /** 下の段。位置・遅延など、画面ごとの読みもの */
     status?: Snippet;
   } = $props();
@@ -35,7 +35,7 @@
 
 <div class="info">
   <div class="top">
-    {#if badge}{@render badge()}{/if}
+    {#if prefix}{@render prefix()}{/if}
     <!-- 中黒の両側は同じ空き (`.sep`。文字の空白だと Svelte が `{/if}` の前を詰めた) -->
     <span class="keep">
       {#if range !== null}<span data-testid={rangeTestid}

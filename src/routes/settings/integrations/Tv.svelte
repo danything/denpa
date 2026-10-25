@@ -31,7 +31,7 @@
     {:else}
       <div class="rows">
         {#each data.devices as device (device.id)}
-          <div class="row device" data-testid="device-row">
+          <div class="row device item" data-testid="device-row">
             <div class="grow">
               <div class="small"><strong>{device.name}</strong></div>
               <div class="tiny muted">
@@ -58,14 +58,23 @@
 </div>
 
 <style>
-  /* 地に置く並び。件の間は線を引かず余白で分ける (面に乗せた一覧より広く) */
-  .rows > .row + .row {
-    margin-top: var(--dp-space-4);
+  /* 1 件が 2 行あるので件の面 (`app.css` の `.item`) に乗せ、件の間は余白 (docs/design.md の「何行かある一覧」) */
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-list-gap);
   }
   .device {
     display: flex;
     align-items: center;
     gap: var(--dp-space-3);
-    padding-block: 0.5rem;
+    min-height: 4rem;
+    padding: 0.5rem 0.75rem;
+  }
+  /* 指で押す端末では 72px (ルール・ホームの行と同じ) */
+  @media (pointer: coarse) {
+    .device {
+      min-height: 4.5rem;
+    }
   }
 </style>
