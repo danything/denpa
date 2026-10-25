@@ -26,7 +26,7 @@ import { notify } from "./webhook";
 const warned = new Set<string>();
 
 /** その置き場の空きバイト数。読めなければ null (統計が取れない環境もある) */
-function freeBytes(dir: string): number | null {
+export function freeBytes(dir: string): number | null {
   try {
     const stat = statfsSync(dir);
     return stat.bsize * stat.bavail;

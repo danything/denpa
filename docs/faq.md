@@ -30,7 +30,7 @@ AV1 は時間がかかるので、設定の「録画」で H.264 も選べます
 
 ### Mirakurun や EPGStation から乗り換えられますか
 
-Mirakurun や EPGStation の役目は denpa が受け持ちます。EPGStation v2 からは、ルール・手動予約・録画を移せます。
+Mirakurun や EPGStation の役目は denpa が受け持ちます。EPGStation (v2・v3) からは、ルール・手動予約・録画を API で移せます。
 [switch.md](switch.md)・[migrate.md](migrate.md)。
 
 ## チューナーとカード

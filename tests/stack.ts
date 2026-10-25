@@ -40,8 +40,8 @@ export interface Stack {
   webhookUrl: string;
   rawDir: string;
   encodedDir: string;
-  /** 引き継ぎ元。あえて作らずに始めて、マウント前後の見え方を試す */
-  epgstationDir: string;
+  /** 偽の EPGStation (`tests/fake/epgstation.ts`)。引き継ぎの画面から繋ぐ先 */
+  epgstationUrl: string;
   /** これを置くと偽 ffmpeg がエンコードに失敗する */
   failFile: string;
   /**
@@ -154,6 +154,7 @@ export async function boot(
   const appPort = APP_PORT + index * STRIDE;
   const agentPort = AGENT_PORT + index * STRIDE;
   const webhookPort = WEBHOOK_PORT + index * STRIDE;
+  const epgstationPort = WEBHOOK_PORT + index * STRIDE + 1;
 
   const root = `${TEST_ROOT}/w${index}`;
   const stack: Stack = {
@@ -161,9 +162,9 @@ export async function boot(
     appUrl: `http://127.0.0.1:${appPort}`,
     agentUrl: `http://127.0.0.1:${agentPort}`,
     webhookUrl: `http://127.0.0.1:${webhookPort}`,
+    epgstationUrl: `http://127.0.0.1:${epgstationPort}`,
     rawDir: `${root}/raw`,
     encodedDir: `${root}/encoded`,
-    epgstationDir: `${root}/epgstation-recorded`,
     failFile: `${root}/fail-encode`,
     slowFile: `${root}/slow-encode`,
     liveArgsFile: `${root}/live-ffmpeg-args`,
@@ -200,6 +201,11 @@ export async function boot(
     });
     started.push(webhook);
 
+    const epgstation = start(["bun", "tests/fake/epgstation.ts"], {
+      FAKE_EPGSTATION_PORT: String(epgstationPort),
+    });
+    started.push(epgstation);
+
     const app = start(["bun", "./server.js"], {
       TZ: "Asia/Tokyo",
       HOST: "127.0.0.1",
@@ -214,10 +220,6 @@ export async function boot(
       FFMPEG: "./tests/fake/ffmpeg.sh",
       // 選局もスクランブル解除もスキャンも、窓口はここ1つ
       TUNER_AGENT_URL: stack.agentUrl,
-      // 引き継ぎ画面。何も待ち受けていない先を指して、失敗したときの見え方も試す
-      EPGSTATION_RECORDED_DIR: stack.epgstationDir,
-      EPGSTATION_DB_HOST: "127.0.0.1",
-      EPGSTATION_DB_PORT: "1",
       FAKE_FFMPEG_FAIL_FILE: stack.failFile,
       FAKE_FFMPEG_SLOW_FILE: stack.slowFile,
       FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
@@ -257,6 +259,11 @@ export async function boot(
     await Promise.all([
       waitFor(`${stack.agentUrl}/denpa/tuners`, agent, "偽エージェント"),
       waitFor(`${stack.webhookUrl}/__control/state`, webhook, "偽通知先"),
+      waitFor(
+        `${stack.epgstationUrl}/__control/state`,
+        epgstation,
+        "偽 EPGStation",
+      ),
     ]);
     await waitFor(`${stack.appUrl}/api/health`, app, "denpa");
   } catch (error) {

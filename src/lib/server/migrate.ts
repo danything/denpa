@@ -1,42 +1,50 @@
 /**
- * EPGStation の録画・録画の履歴・ルール・手動予約を denpa に引き継ぐ。EDCB からの引き継ぎ (`migrate-edcb.ts`) も、
- * 進み具合と記録 ({@link status}・{@link record}・{@link track}) と、ルール・履歴の入れ方 ({@link insertRule}・
- * {@link addHistory}・{@link SlotWindows}) はここのものを使う。
+ * EPGStation (v2・v3) の録画・ルール・手動予約を、**HTTP API だけで** denpa に引き継ぐ (読み方は
+ * `epgstation-api.ts`)。EDCB からの引き継ぎ (`migrate-edcb.ts`) も、進み具合と記録 ({@link status}・
+ * {@link record}・{@link track}) と、ルール・履歴の入れ方 ({@link insertRule}・{@link addHistory}・
+ * {@link SlotWindows}) はここのものを使う。
  *
- * 数百GBのコピーになるので、リクエストの中では終わらない。開始だけ受けて
- * 裏で進め、進捗は {@link status} から読む。入口は設定画面だけ
- * (`/settings/integrations#migrate` の「EPGStation からの引き継ぎ」)。使い方は docs/migrate.md。
+ * 数百GBを取ってくるので、リクエストの中では終わらない。開始だけ受けて裏で進め、進み具合は
+ * {@link status} から読む。入口は設定画面だけ (`/settings/integrations#migrate` の「EPGStation からの引き継ぎ」)。
+ * 使い方は docs/migrate.md。
  *
- * ファイルは既定でコピーする。元のPVCを消すまで EPGStation 側もそのまま動くので、
- * 取り込みが済んで中身を確認してから消せる。容量が無いときは move を使う。
+ * EPGStation 側のファイルは消さない (取ってくるだけ)。元を消すのは、denpa 側で中身を確かめてから
+ * EPGStation 側でしてもらう。
  *
  * 何度実行しても同じ結果になる。取り込み済みのものは EPGStation 側のIDで判別して飛ばす。
  * ファイルを置き終えてから行を入れるので、途中で止まっても「ファイルの無い行」は残らない ({@link importOne})。
+ * 止まった取り込みの書きかけは次の実行で続きから取る (`downloadVideo`)。
  */
 import {
-  copyFileSync,
   existsSync,
-  linkSync,
   mkdirSync,
   readdirSync,
   renameSync,
   rmSync,
   statSync,
-  unlinkSync,
 } from "node:fs";
 import { dirname, extname, join } from "node:path";
 
-import { SQL } from "bun";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { parseSearchFields, SEARCH_FIELDS } from "#lib/search.js";
-import { array, number, read } from "#lib/shape.js";
 
 import { toHalfWidth } from "../fold";
+import { size as formatSize } from "../format";
 import type { Slot } from "../rule-time";
 import type { Recording } from "../types";
 import { config } from "./config";
 import { now, orm } from "./db";
+import { freeBytes } from "./disk";
+import {
+  downloadVideo,
+  EpgstationClient,
+  type EpgstationRecorded,
+  type EpgstationReserve,
+  type EpgstationRule,
+  type EpgstationVersion,
+  parseSource,
+} from "./epgstation-api";
 import { emit } from "./events";
 import { type LibraryNameInput, libraryPath, recordedPath } from "./library";
 import { writeThumbnail } from "./metadata";
@@ -50,55 +58,14 @@ import {
 } from "./schema";
 import { parseTitle } from "./title";
 
-const env = (key: string, fallback: string) => process.env[key] ?? fallback;
-
-/**
- * EPGStation の MariaDB。**繋ぐのは bun 自身** (`Bun.SQL`)。
- *
- * `mysql2` を入れていたが、bun が MySQL を話せるので外した。使っているのは
- * **引数の無い SELECT (と `SHOW TABLES`) を数本と、開いて閉じるだけ** — そのために依存を1つ
- * 抱える理由が無い。
- *
- * 読むだけで、書き込みはしない ([migrate.md](../../../docs/migrate.md))。
- */
-const connectionConfig = {
-  adapter: "mysql" as const,
-  hostname: env("EPGSTATION_DB_HOST", "db"),
-  port: Number(env("EPGSTATION_DB_PORT", "3306")),
-  username: env("EPGSTATION_DB_USER", "root"),
-  password: env("EPGSTATION_DB_PASSWORD", "epgstation"),
-  database: env("EPGSTATION_DB_NAME", "epgstation"),
-  /*
-   * **繋がらないときに待たせない。**
-   *
-   * `Bun.SQL` は**断られても繋ぎ直しに行く**ので、宛先がいないと既定の30秒を
-   * 使い切ってから諦める (`mysql2` は ECONNREFUSED をその場で返していた)。
-   * 引き継ぎ元は同じクラスタの中にいるものなので、5秒あれば足りる。
-   * 待たせたぶんだけ「押したのに何も起きない」時間が延びるだけ
-   */
-  connectionTimeout: 5,
-};
-
-export const source = {
-  host: connectionConfig.hostname,
-  /** EPGStation のPVCを denpa 側にマウントした場所 */
-  recordedDir: env("EPGSTATION_RECORDED_DIR", "/epgstation-recorded"),
-};
-
-/** 引き継ぎ元が見えているか。マウントしていなければ設定画面から実行させない */
-export function available(): boolean {
-  return existsSync(source.recordedDir);
-}
-
 export interface MigrateOptions {
   /** false なら何が起きるかを出すだけでファイルもDBも触らない */
   apply: boolean;
-  /** コピーではなく移動する。元のPVCに空きが無いとき用 */
-  move: boolean;
 }
 
 export interface MigrateStatus extends MigrateOptions {
-  state: "idle" | "running" | "done" | "failed";
+  /** `canceled` は「中断」で止めたとき。書きかけは残っていて、次の実行で続きから取る */
+  state: "idle" | "running" | "done" | "failed" | "canceled";
   /** どこから引き継いでいるか。画面はその節にだけ進み具合を出す */
   from: "epgstation" | "edcb";
   /** 録画の対象の総数。走り出すまでは 0 */
@@ -106,10 +73,18 @@ export interface MigrateStatus extends MigrateOptions {
   imported: number;
   skipped: number;
   missing: number;
+  /** 取れなかった・長さが合わなかった録画。ほかの録画は続ける */
+  failed: number;
+  /** 取ってくる合計と、取ったぶん (書きかけにあったぶんも含む) */
+  bytesDone: number;
+  bytesTotal: number;
+  /** いま取っているファイルの、取ったぶんと大きさ */
+  currentDone: number;
+  currentTotal: number;
   /** ルールと手動予約。録画と違ってファイルを触らないので、下見でも件数だけ数える */
   rules: { imported: number; skipped: number };
   reservations: { imported: number; skipped: number };
-  /** 録画の履歴 (`importHistory`)。ルールと同じく、下見でも件数だけ数える */
+  /** 録画の履歴 (`addHistory`)。ルールと同じく、下見でも件数だけ数える */
   history: { imported: number; skipped: number };
   /** いま扱っている録画の名前 */
   current: string | null;
@@ -122,17 +97,21 @@ export interface MigrateStatus extends MigrateOptions {
 
 const LOG_LIMIT = 200;
 
-/** まっさらな進み具合。起動時と、走らせ直すたびに (`run`) この形に戻す */
+/** まっさらな進み具合。起動時と、走らせ直すたびに (`track`) この形に戻す */
 function freshStatus(over: Partial<MigrateStatus> = {}): MigrateStatus {
   return {
     state: "idle",
     from: "epgstation",
     apply: false,
-    move: false,
     total: 0,
     imported: 0,
     skipped: 0,
     missing: 0,
+    failed: 0,
+    bytesDone: 0,
+    bytesTotal: 0,
+    currentDone: 0,
+    currentTotal: 0,
     rules: { imported: 0, skipped: 0 },
     reservations: { imported: 0, skipped: 0 },
     history: { imported: 0, skipped: 0 },
@@ -180,72 +159,33 @@ export function recordPlan(
   record(`${options.apply ? label : `${label}(予定)`}: ${name}`);
 }
 
-export interface Row {
-  id: number;
-  name: string;
-  description: string | null;
-  startAt: number;
-  endAt: number;
-  channelId: number | null;
-  channelName: string | null;
-  serviceId: number | null;
-  networkId: number | null;
-  filePath: string | null;
-  fileType: string | null;
-  fileSize: number | null;
+/** 最後に知らせた時刻。バイトの進み具合は細かく動くので、知らせるのは1秒に1回まで */
+let lastEmit = 0;
+
+function emitThrottled(): void {
+  const at = Date.now();
+  if (at - lastEmit < 1000) return;
+  lastEmit = at;
+  emit("migrate");
 }
 
-/**
- * EPGStation が持つパスを、こちらから見えるパスに直す。
- * 相対パスで持っていることも絶対パスのこともあるので両方を見る。
- */
-function sourcePath(filePath: string): string | null {
-  const candidates = [
-    join(source.recordedDir, filePath),
-    ...(filePath.startsWith("/") ? [filePath] : []),
-    join(source.recordedDir, filePath.split("/").pop() ?? ""),
-  ];
-  return candidates.find((path) => existsSync(path)) ?? null;
-}
-
-async function fetchRows(): Promise<Row[]> {
-  const db = new SQL(connectionConfig);
-  try {
-    // EPGStation v2 のテーブル構成。エンコード済みがあればそちらを優先して取る
-    const rows = (await db.unsafe(
-      `SELECT r.id, r.name, r.description, r.startAt, r.endAt,
-                    r.channelId, c.name AS channelName, c.serviceId, c.networkId,
-                    v.filePath, v.type AS fileType, v.size AS fileSize
-             FROM recorded r
-             LEFT JOIN channel c ON c.id = r.channelId
-             LEFT JOIN video_file v ON v.recordedId = r.id
-             WHERE r.isRecording = 0
-             ORDER BY r.startAt`,
-    )) as Row[];
-    // 1つの録画に元のTSとエンコード済みが両方あることがある。エンコード済みを優先
-    const best = new Map<number, Row>();
-    for (const row of rows) {
-      const current = best.get(row.id);
-      if (
-        current === undefined ||
-        (current.fileType !== "encoded" && row.fileType === "encoded")
-      ) {
-        best.set(row.id, row);
-      }
-    }
-    return [...best.values()];
-  } finally {
-    await db.close();
-  }
-}
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const isId = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value);
+/** 真偽。形がずれて 0/1 で来ても読む (`tolerate` は来たものをそのまま通す) */
+const flag = (value: unknown): boolean => value === true || value === 1;
+const text = (value: unknown): string =>
+  typeof value === "string" ? value : "";
+const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
 /**
  * 取り込みの途中のファイル (`.epgstation-<EPGStationのID><拡張子>.migrating`)。
  *
- * **置き場と同じフォルダに書き、写し終えてから最終の名前へ rename する。**
+ * **置き場と同じフォルダに書き、取り終えて確かめてから最終の名前へ rename する。**
  * 同じファイルシステムの中なので rename は一瞬で済み、最終の名前に
  * 書きかけのものが並ぶことは無い。頭の `.` は、フォルダを辿るプレイヤーに見せないため。
- * 落ちて取り残されたものは次の実行の頭で片付ける ({@link sweepTemporaries})
+ * 止まって残ったものは次の実行で続きから取る。もう対象に無いものだけ片付ける ({@link sweepTemporaries})
  */
 const TEMPORARY = /^\.epgstation-\d+\..+\.migrating$/;
 
@@ -258,12 +198,14 @@ function temporaryPath(
 }
 
 /**
- * 前の実行が取り残した書きかけを消す。
+ * 書きかけのうち、`keep` に無いもの (もう対象に無い・取り込み済みになった) を消す。
  *
  * 置き場は元のTSの置き場の直下と、保存先のシリーズのフォルダ (`libraryPath` の形式)。
  * 走るのは一度に1つだけ (`start`) なので、ここで見つかるものは誰も書いていない
  */
-export function sweepTemporaries(): number {
+export function sweepTemporaries(
+  keep: ReadonlySet<string> = new Set(),
+): number {
   const dirs = [config.rawDir, config.encodedDir];
   try {
     for (const entry of readdirSync(config.encodedDir, {
@@ -283,35 +225,13 @@ export function sweepTemporaries(): number {
       continue;
     }
     for (const name of names) {
-      if (!TEMPORARY.test(name)) continue;
-      rmSync(join(dir, name), { force: true });
+      const path = join(dir, name);
+      if (!TEMPORARY.test(name) || keep.has(path)) continue;
+      rmSync(path, { force: true });
       removed++;
     }
   }
   return removed;
-}
-
-/**
- * 元のファイルを書きかけの名前へ置く。
- *
- * **移動でも元はまだ消さない。** 消すのは DB に入れ終えてから (`importOne`)。
- * 先に消すと、途中で落ちたときに元も行も無くなる。同じファイルシステムなら
- * ハードリンクで済ませる (容量を食わない)。PVC をまたぐと張れないので写す。
- *
- * ハードリンクの書きかけは mtime が元のまま (古い) なので、`reconcile` の掃除
- * (書きたてかを mtime で見る) から守られない。ただしリンクを張ってから rename するまでは
- * 同期処理だけで await を挟まないので、同じプロセスの `reconcile` が割り込む余地は無い
- */
-function stage(from: string, temporary: string, move: boolean): void {
-  if (move) {
-    try {
-      linkSync(from, temporary);
-      return;
-    } catch {
-      // EXDEV (PVCをまたぐ) など。写せば済む
-    }
-  }
-  copyFileSync(from, temporary);
 }
 
 /** 取り込み済みの行。EPGStation 側のIDの符号を反転して program_id に入れてある */
@@ -336,44 +256,127 @@ function hasFile(recording: Recording): boolean {
 }
 
 /**
- * 1件を取り込む。結果は imported / skipped (取り込み済み) / missing (ファイルが無い)。
- *
- * **ファイルを置き終えてから行を入れる。** 写す → 最終の名前へ rename → DB、の順で、
- * rename と DB への書き込みを1つのトランザクションに入れる。途中で落ちても、
- * 失敗しても「ファイルの無い行」は残らない:
- *
- * - 写している途中で落ちた・失敗した … 行は無い。書きかけは消す (落ちたなら次の実行の頭で)
- * - rename したあとに DB が失敗した … 置いたファイルを消す。元はまだ残っているので、
- *   次の実行で最初からやり直せる
- *
- * **行はあるのにファイルが無いものは、取り込み済みと見なさない。** 先に行を入れていた
- * 頃のバージョンが途中で止まると、そういう行が残っている。同じ行 (同じ録画ID) のまま置き直す。
- * ただし denpa 側で消したもの (`deleted_at`。外から消えて `reconcile` が倒したものも含む)
- * は戻さない — 消したという判断のほうを尊重する
+ * 取り込み済みと見なすか。**行はあるのにファイルが無いものは見なさない** (先に行を入れていた頃の
+ * バージョンが途中で止まった跡。同じ行のまま置き直す)。denpa 側で消したもの (`deleted_at`) は戻さない
  */
-export async function importOne(
-  row: Row,
-  options: MigrateOptions,
-): Promise<"imported" | "skipped" | "missing"> {
-  const existing = importedRow(row.id);
-  if (
+function alreadyImported(existing: Recording | undefined): boolean {
+  return (
     existing !== undefined &&
     (existing.deleted_at !== null || hasFile(existing))
-  )
-    return "skipped";
+  );
+}
 
-  if (row.filePath === null) {
-    record(`ファイルが無い: ${row.name}`);
-    return "missing";
+/** 取ってくるファイル。エンコード済みがあればそちら、複数あれば最初のもの */
+export interface VideoChoice {
+  id: number;
+  size: number;
+  /** 元のTSか (`type` がエンコード済みでない)。元のTSは作業領域へ置く */
+  raw: boolean;
+  extension: string;
+}
+
+export function chooseFile(recorded: EpgstationRecorded): VideoChoice | null {
+  const files = list(recorded.videoFiles).filter(
+    (file): file is Record<string, unknown> & { id: number; size: number } =>
+      isObject(file) && isId(file["id"]) && isId(file["size"]),
+  );
+  const file =
+    files.find((item) => item["type"] === "encoded") ?? files[0] ?? null;
+  if (file === null) return null;
+  const raw = file["type"] !== "encoded";
+  return {
+    id: file.id,
+    size: file.size,
+    raw,
+    // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の1文字を拡張子と読んでしまう
+    extension: extname(text(file["filename"])) || (raw ? ".m2ts" : ".mkv"),
+  };
+}
+
+/** 置き場所。最終の名前は録画IDから決まる (行を入れるまで分からない) が、置くフォルダは決まっている */
+function placement(
+  recorded: EpgstationRecorded,
+  file: VideoChoice,
+  existing: Recording | undefined,
+) {
+  const parsed = parseTitle(recorded.name);
+  /*
+   * 元のTSは保存先ではなく作業領域へ置く。
+   *
+   * EPGStation のファイルの type は 'ts'(未エンコード) か 'encoded'。
+   * 元のTSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
+   * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
+   * 同じ形式 (元のTSは raw、完成品は encoded) に揃える
+   */
+  const destination = (recording: LibraryNameInput) =>
+    file.raw
+      ? recordedPath(recording, file.extension)
+      : libraryPath(recording, file.extension);
+  const dir = dirname(
+    destination(
+      existing ?? {
+        id: 0,
+        series: parsed.series,
+        subtitle: parsed.subtitle,
+        start_at: recorded.startAt,
+      },
+    ),
+  );
+  return {
+    parsed,
+    destination,
+    dir,
+    temporary: temporaryPath(dir, recorded.id, file.extension),
+  };
+}
+
+function fileSize(path: string): number {
+  try {
+    return statSync(path).size;
+  } catch {
+    return 0;
   }
-  const from = sourcePath(row.filePath);
-  if (from === null) {
-    record(`見つからない: ${row.filePath} (${row.name})`);
+}
+
+/** EPGStation の局の名前 (`/channels`)。知らない局の名前を写すのに使う */
+export type ChannelNames = ReadonlyMap<number, string>;
+
+/** {@link importOne} が要るもの。取るのに使う相手と、止めるための signal */
+export interface ImportContext {
+  client: EpgstationClient;
+  channels: ChannelNames;
+  signal: AbortSignal;
+}
+
+/**
+ * 1件を取り込む。結果は imported / skipped (取り込み済み) / missing (ファイルが無い)。取れなければ投げる。
+ *
+ * **ファイルを置き終えてから行を入れる。** 取る (`downloadVideo`。続きから・長さを確かめる) →
+ * 最終の名前へ rename → DB、の順で、rename と DB への書き込みを1つのトランザクションに入れる。
+ * 途中で止まっても、失敗しても「ファイルの無い行」は残らない:
+ *
+ * - 取っている途中で止まった・中断した … 行は無い。書きかけは残し、次の実行で続きから取る
+ * - 長さが合わない … 行は無い。書きかけも消す (`downloadVideo`)
+ * - rename したあとに DB が失敗した … 置いたファイルを書きかけの名前へ戻す。次の実行は取り直さずに入れる
+ *
+ * **行はあるのにファイルが無いものは、取り込み済みと見なさない** ({@link alreadyImported})
+ */
+export async function importOne(
+  recorded: EpgstationRecorded,
+  options: MigrateOptions,
+  context: ImportContext,
+): Promise<"imported" | "skipped" | "missing"> {
+  const existing = importedRow(recorded.id);
+  if (alreadyImported(existing)) return "skipped";
+
+  const file = chooseFile(recorded);
+  if (file === null) {
+    record(`ファイルが無い: ${recorded.name}`);
     return "missing";
   }
 
   // 番組名は EPGStation が持っていたまま (半角に寄せない。保存先の名前は `sanitizeFileName` が寄せる)
-  const name = row.name;
+  const name = recorded.name;
   recordPlan(
     options,
     existing === undefined ? "取り込む" : "取り込み直す",
@@ -381,65 +384,50 @@ export async function importOne(
   );
   if (!options.apply) return "imported";
 
-  const parsed = parseTitle(name);
-
-  /*
-   * 元のTSは保存先ではなく作業領域へ置く。
-   *
-   * EPGStation の video_file.type は 'ts'(未エンコード) か 'encoded'。
-   * 元のTSを保存先に置くと denpa からは「エンコード済み」に見えてしまい、
-   * 録り直せず、プレイヤーにも巨大な MPEG-2 が並ぶ。denpa 自身が録ったときと
-   * 同じ形式 (元のTSは raw、完成品は encoded) に揃える
-   */
-  const raw = row.fileType !== "encoded";
-  // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の1文字を拡張子と読んでしまう
-  const extension = extname(from) || (raw ? ".m2ts" : ".mkv");
-  const destination = (recording: LibraryNameInput) =>
-    raw
-      ? recordedPath(recording, extension)
-      : libraryPath(recording, extension);
-
-  /*
-   * 最終の名前は録画IDから決まる (行を入れるまで分からない) が、置くフォルダは
-   * 決まっている (元のTSの置き場の直下か、保存先のシリーズのフォルダ)。
-   * そこに書きかけを作るので、あとの rename は同じファイルシステムの中で済む
-   */
-  const dir = dirname(
-    destination(
-      existing ?? {
-        id: 0,
-        series: parsed.series,
-        subtitle: parsed.subtitle,
-        start_at: Number(row.startAt),
-      },
-    ),
+  const { parsed, destination, dir, temporary } = placement(
+    recorded,
+    file,
+    existing,
   );
   mkdirSync(dir, { recursive: true });
-  const temporary = temporaryPath(dir, row.id, extension);
-  rmSync(temporary, { force: true });
 
-  // rename まで済んだら、その置き場所。DB が失敗したときに消すもの
+  status_.currentDone = 0;
+  status_.currentTotal = file.size;
+  const result = await downloadVideo(
+    context.client,
+    file.id,
+    file.size,
+    temporary,
+    context.signal,
+    (bytes) => {
+      status_.currentDone += bytes;
+      status_.bytesDone += bytes;
+      emitThrottled();
+    },
+  );
+  if (result === "missing") {
+    rmSync(temporary, { force: true });
+    // 取るはずだった大きさから外す (進み具合が合計に届かないまま終わらないように)
+    status_.bytesTotal -= file.size;
+    record(`EPGStation にファイルが無い (404): ${name}`);
+    return "missing";
+  }
+
+  // 局は denpa の局から引く (EPGStation のチャンネルIDは denpa の局IDと作り方が同じ)。知らない局なら名前だけ写す
+  const channelId = isId(recorded.channelId) ? recorded.channelId : null;
+  const service = channelId === null ? undefined : serviceById(channelId);
+  const extended = isObject(recorded.rawExtended)
+    ? Object.fromEntries(
+        Object.entries(recorded.rawExtended).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      )
+    : {};
+
+  // rename まで済んだら、その置き場所。DB が失敗したときに書きかけの名前へ戻す
   let placed: string | null = null;
   let to: string;
   try {
-    stage(from, temporary, options.move);
-    const size = statSync(temporary).size;
-
-    // 局が分からない行 (networkId / serviceId が NULL) は照合しない。局名だけ写す
-    const service =
-      row.networkId === null || row.serviceId === null
-        ? undefined
-        : orm()
-            .select({ id: services.id, name: services.name })
-            .from(services)
-            .where(
-              and(
-                eq(services.network_id, row.networkId),
-                eq(services.service_id, row.serviceId),
-              ),
-            )
-            .get();
-
     to = orm().transaction((tx) => {
       const at = now();
       // program_id は EPGStation のIDの符号を反転して入れる。
@@ -450,15 +438,20 @@ export async function importOne(
           .insert(recordings)
           .values({
             reservation_id: null,
-            program_id: -row.id,
+            program_id: -recorded.id,
             service_id: service?.id ?? 0,
-            service_name: service?.name ?? row.channelName ?? "",
+            service_name:
+              service?.name ??
+              (channelId === null
+                ? ""
+                : (context.channels.get(channelId) ?? "")),
             name,
             series: parsed.series,
             subtitle: parsed.subtitle,
-            description: row.description ?? "",
-            start_at: Number(row.startAt),
-            end_at: Number(row.endAt),
+            description: text(recorded.description),
+            extended: Object.keys(extended).length === 0 ? null : extended,
+            start_at: recorded.startAt,
+            end_at: recorded.endAt,
             finished_at: at,
             created_at: at,
             updated_at: at,
@@ -471,10 +464,10 @@ export async function importOne(
       // 置き直すときは、行に残っている実体の無いパスも外す
       tx.update(recordings)
         .set({
-          ts_path: raw ? target : null,
-          library_path: raw ? null : target,
+          ts_path: file.raw ? target : null,
+          library_path: file.raw ? null : target,
           alt_path: null,
-          ts_size: size,
+          ts_size: file.size,
           updated_at: at,
         })
         .where(eq(recordings.id, recording.id))
@@ -482,30 +475,14 @@ export async function importOne(
       return target;
     });
   } catch (error) {
-    // 行は入っていない (トランザクションごと戻る)。置いたものも書きかけも片付けて、
-    // 失敗はこれまでどおり上 (run) へ投げる。元は残っているので次の実行でやり直せる
-    rmSync(temporary, { force: true });
-    if (placed !== null) rmSync(placed, { force: true });
+    // 行は入っていない (トランザクションごと戻る)。置いたものは書きかけの名前へ戻し、次の実行で取り直さずに入れる
+    if (placed !== null) renameSync(placed, temporary);
     throw error;
-  }
-  /*
-   * 移動なら、行が入ってはじめて元を消す。
-   *
-   * **消せなくても取り込みは失敗にしない。** 行もファイルも揃っていて、次の実行は
-   * 取り込み済みとして飛ばす。元の置き場が読み取り専用などで消せないときは、
-   * 元が残ったことだけ記録に出す
-   */
-  if (options.move) {
-    try {
-      unlinkSync(from);
-    } catch (error) {
-      record(`取り込んだが元を消せなかった: ${from} (${String(error)})`);
-    }
   }
 
   // サムネイルは保存先に置いたものにだけ付ける。作業領域は画面に出ない
-  if (!raw) {
-    await writeThumbnail(to, (Number(row.endAt) - Number(row.startAt)) / 1000);
+  if (!file.raw) {
+    await writeThumbnail(to, (recorded.endAt - recorded.startAt) / 1000);
   }
   return "imported";
 }
@@ -595,71 +572,28 @@ export function addHistory(
     .run();
 }
 
-interface RuleRow {
-  id: number;
-  keyword: string | null;
-  ignoreKeyword: string | null;
-  GR: number;
-  BS: number;
-  CS: number;
-  SKY: number;
-  channelIds: string | null;
-  genres: string | null;
-  isFree: number;
-  enable: number;
-  isTimeSpecification: number;
-  /** キーワードを当てる範囲。EPGStation も同じ3つを持っている */
-  name: number;
-  description: number;
-  extended: number;
-  /** 録画済みの重複番組を除く。denpa の「同じ回は最初の放送だけ」に写す */
-  avoidDuplicate: number;
-  /** 時間帯と曜日 (`[{ start, range, week }]` の JSON)。{@link parseTimes} */
-  times: string | null;
-}
-
-interface ReserveRow {
-  programId: number | null;
-  ruleId: number | null;
-  startAt: number;
-  endAt: number;
-  name: string | null;
-}
-
 /**
- * EPGStation のジャンル指定を denpa の書き方に直す。
+ * EPGStation のジャンル指定 (`searchOption.genres`) を denpa の書き方に直す。
  *
  * 向こうは `[{ "genre": 7, "subGenre": 0 }]`。subGenre は**あったり無かったり**で、
  * 「アニメ全部」なら大分類だけになる。denpa は文字列で `"7"`(大分類だけ)と
  * `"7-0"`(中分類まで)を持つので、そこへ写す。
  *
  * 数字でないものは捨てる。ここで素通しすると、画面のジャンル欄に
- * 引ける名前の無い値が並ぶことになる。
+ * 引ける名前の無い値が並ぶことになる。配列でなければ空 (形がずれていても止めない)
  */
-export function parseGenres(json: string | null): string[] {
-  if (json === null || json === "") return [];
-  try {
-    const list = JSON.parse(json) as unknown;
-    if (!Array.isArray(list)) return [];
-    return list
-      .map((item) => {
-        // 昔の形式で数値の配列になっていることもある
-        if (typeof item === "number")
-          return Number.isInteger(item) ? String(item) : null;
-        if (item === null || typeof item !== "object") return null;
-        const { genre, subGenre } = item as {
-          genre?: unknown;
-          subGenre?: unknown;
-        };
-        if (typeof genre !== "number" || !Number.isInteger(genre)) return null;
-        return typeof subGenre === "number" && Number.isInteger(subGenre)
-          ? `${genre}-${subGenre}`
-          : String(genre);
-      })
-      .filter((value): value is string => value !== null);
-  } catch {
-    return [];
-  }
+export function parseGenres(value: unknown): string[] {
+  return list(value)
+    .map((item) => {
+      // 昔の形式で数値の配列になっていることもある
+      if (typeof item === "number")
+        return Number.isInteger(item) ? String(item) : null;
+      if (!isObject(item)) return null;
+      const { genre, subGenre } = item;
+      if (!isId(genre)) return null;
+      return isId(subGenre) ? `${genre}-${subGenre}` : String(genre);
+    })
+    .filter((item): item is string => item !== null);
 }
 
 /**
@@ -699,7 +633,7 @@ export class SlotWindows {
 }
 
 /**
- * EPGStation の時間帯と曜日 (`rule.times`) を denpa の書き方に直す。
+ * EPGStation の時間帯と曜日 (`searchOption.times`) を denpa の書き方に直す。
  *
  * 向こうは `[{ "start": 19, "range": 2, "week": 32 }]` の並びで、どれかに当たれば当たる (OR)。
  *
@@ -712,24 +646,15 @@ export class SlotWindows {
  * 時刻の同じ行は曜日をまとめ、時刻の違う行が残れば写せないので null を返す (飛ばして記録に残す。{@link SlotWindows})。
  * 時刻指定のルール (`isTimeSpecification`) の `times` は秒で書かれた別物なので、ここには来ない
  */
-export function parseTimes(json: string | null): Slot | null {
+export function parseTimes(value: unknown): Slot | null {
   const windows = new SlotWindows();
-  let list: unknown = null;
-  try {
-    list = json === null || json === "" ? null : JSON.parse(json);
-  } catch {
-    // 読めなければ時刻では絞らない
-  }
-  if (!Array.isArray(list)) return windows.slot();
-  for (const item of list as unknown[]) {
-    if (item === null || typeof item !== "object") continue;
-    const { start, range, week } = item as Record<string, unknown>;
+  for (const item of list(value)) {
+    if (!isObject(item)) continue;
+    const { start, range, week } = item;
     if (typeof week !== "number" || (week & 0x7f) === 0) continue;
     const timed =
-      typeof start === "number" &&
-      typeof range === "number" &&
-      Number.isInteger(start) &&
-      Number.isInteger(range) &&
+      isId(start) &&
+      isId(range) &&
       start >= 0 &&
       start < 24 &&
       range > 0 &&
@@ -743,204 +668,361 @@ export function parseTimes(json: string | null): Slot | null {
   return windows.slot();
 }
 
-/**
- * 自動予約ルールを引き継ぐ。
- *
- * EPGStation のルールには denpa に無い項目(正規表現、時刻指定、録画先の指定、
- * 重複を避ける期間、2つ以上の時間帯など)がある。落ちるものは落ちると分かるように記録に残す。
- * 重複を避ける (`avoidDuplicate`) は「同じ回は最初の放送だけ」に写す — 引き継いだ録画の履歴と合わせて、
- * EPGStation で録っていた回をそのまま避ける。
- * 時間帯と曜日 (`times`) は denpa の時間帯と曜日に写す ({@link parseTimes})。
- * 時刻指定のルールは番組を探すのではなく時計で録るもので、denpa に対応がないので飛ばす。
- */
-async function importRules(
-  connection: SQL,
-  options: MigrateOptions,
-): Promise<void> {
-  const rows = (await connection.unsafe(
-    `SELECT id, keyword, ignoreKeyword, GR, BS, CS, SKY, channelIds, genres,
-                isFree, enable, isTimeSpecification, name, description, extended,
-                avoidDuplicate, times
-         FROM rule ORDER BY id`,
-  )) as RuleRow[];
+type RuleValues = Omit<
+  typeof rules.$inferInsert,
+  "priority" | "source" | "created_at"
+>;
 
-  for (const row of rows) {
-    const source = `epgstation:${row.id}`;
+/**
+ * ルール1つを denpa のルールに写す。写せなければ `skip` に理由。写したが変わったところは `notes`。
+ *
+ * EPGStation のルールには denpa に無い条件がある。**写すと当たる番組が変わるものは飛ばす** (EDCB と同じ):
+ * 時刻指定・正規表現・番組の長さ・検索期間・2つ以上の時間帯・denpa に無い局だけのもの・BS4K だけのもの。
+ * 大文字と小文字の区別・無料放送だけは普通に取り込んでログに残す。v3 の BS4K は denpa に無いので種別から外す。
+ *
+ * 重複を避ける (`avoidDuplicate`) は「同じ回は最初の放送だけ」に写す — 引き継いだ録画の履歴と合わせて、
+ * EPGStation で録っていた回をそのまま避ける。時間帯と曜日 (`times`) は {@link parseTimes}
+ */
+export function convertRule(
+  rule: EpgstationRule,
+  serviceOf: (id: number) => number | undefined,
+): { skip: string } | { values: RuleValues; notes: string[] } {
+  const search: Record<string, unknown> = isObject(rule.searchOption)
+    ? rule.searchOption
+    : {};
+  const reserveOption: Record<string, unknown> = isObject(rule.reserveOption)
+    ? rule.reserveOption
+    : {};
+  const notes: string[] = [];
+
+  if (flag(rule.isTimeSpecification))
+    return { skip: "時刻指定のルールは取り込めません" };
+  if (
+    flag(search["keyRegExp"]) ||
+    (flag(search["ignoreKeyRegExp"]) && text(search["ignoreKeyword"]) !== "")
+  )
+    return { skip: "正規表現のルールは取り込めません" };
+  if (
+    typeof search["durationMin"] === "number" ||
+    typeof search["durationMax"] === "number"
+  )
+    return { skip: "番組の長さで絞るルールは取り込めません" };
+  if (list(search["searchPeriods"]).length > 0)
+    return { skip: "検索期間のあるルールは取り込めません" };
+  const times = parseTimes(search["times"]);
+  if (times === null) return { skip: "時間帯が2つ以上あるので取り込めません" };
+
+  const types = (["GR", "BS", "CS", "SKY"] as const).filter((type) =>
+    flag(search[type]),
+  );
+  if (flag(search["BS4K"])) {
+    // 種別を空にすると全種別に当たる。BS4K だけで絞っていたルールは写せない
+    if (types.length === 0)
+      return {
+        skip: "BS4K だけのルールは取り込めません (denpa に BS4K はありません)",
+      };
+    notes.push("BS4K は denpa に無いので種別から外しました");
+  }
+
+  const channelIds = list(search["channelIds"]).filter(isId);
+  const channels = channelIds.flatMap((id) => serviceOf(id) ?? []);
+  // 局を全部外すと全局に当たってしまう
+  if (channelIds.length > 0 && channels.length === 0)
+    return { skip: "局が1つも denpa に無いので取り込めません" };
+  if (channels.length < channelIds.length)
+    notes.push(
+      `denpa に無い局を ${channelIds.length - channels.length} 件外しました`,
+    );
+
+  const keyword = toHalfWidth(text(search["keyword"])).trim();
+  const genres = parseGenres(search["genres"]);
+  if (
+    keyword === "" &&
+    types.length === 0 &&
+    genres.length === 0 &&
+    channels.length === 0
+  ) {
+    // 条件が空だと全番組にマッチしてしまう。時間帯と曜日は絞り込みなので、それだけのルールもここに来る
+    return { skip: "条件が空になるので取り込めません" };
+  }
+
+  if (flag(search["keyCS"]))
+    notes.push("大文字と小文字の区別は普通の検索として取り込みました");
+  if (flag(search["isFree"]))
+    notes.push(
+      "無料放送だけの条件は外して取り込みました (有料放送にも当たります)",
+    );
+
+  return {
+    values: {
+      name: keyword !== "" ? keyword : `EPGStation #${rule.id}`,
+      keyword,
+      ignore_keyword: toHalfWidth(text(search["ignoreKeyword"])).trim(),
+      // 当てる範囲も向こうから引き継ぐ。既定に寄せると黙って当たらなくなる
+      search_fields: parseSearchFields(
+        SEARCH_FIELDS.filter((field) => flag(search[field])).join(","),
+      ).join(","),
+      service_ids: channels.length === 0 ? null : channels,
+      service_types: types.length === 0 ? null : types,
+      genres: genres.length === 0 ? null : genres,
+      ...times,
+      enabled: flag(reserveOption["enable"]),
+      // 重複を避ける期間 (periodToAvoidDuplicate) は写さない。denpa は録画と引き継いだ履歴で見る
+      dedupe: flag(reserveOption["avoidDuplicate"]),
+    },
+    notes,
+  };
+}
+
+/** 自動予約ルールを入れる。取り込み済みは `source` (`epgstation:<ruleId>`) で見分けて飛ばす */
+export function importRules(
+  list_: EpgstationRule[],
+  options: MigrateOptions,
+): void {
+  for (const rule of list_) {
+    const source = `epgstation:${rule.id}`;
     if (ruleImported(source)) {
       status_.rules.skipped++;
       continue;
     }
-    if (row.isTimeSpecification) {
-      record(`時刻指定のルールは取り込めません: #${row.id}`);
+    const converted = convertRule(rule, (id) => serviceById(id)?.id);
+    if ("skip" in converted) {
+      record(`${converted.skip}: #${rule.id}`);
       status_.rules.skipped++;
       continue;
     }
-
-    const keyword = toHalfWidth(row.keyword ?? "").trim();
-    const types = (["GR", "BS", "CS", "SKY"] as const).filter(
-      (t) => row[t] === 1,
-    );
-    const genreIds = parseGenres(row.genres);
-    const times = parseTimes(row.times);
-    if (times === null) {
-      record(`時間帯が2つ以上あるので取り込めません: #${row.id}`);
-      status_.rules.skipped++;
-      continue;
-    }
-
-    let channels: number[] = [];
-    if (row.channelIds !== null) {
-      try {
-        channels = read(
-          array(number),
-          JSON.parse(row.channelIds),
-          "EPGStation の channelIds",
-        ).flatMap((id) => serviceById(id)?.id ?? []);
-      } catch {
-        channels = [];
-      }
-    }
-
-    if (
-      keyword === "" &&
-      types.length === 0 &&
-      genreIds.length === 0 &&
-      channels.length === 0
-    ) {
-      // 条件が空だと全番組にマッチしてしまう。EPGStation 側で他の条件 (正規表現など) だけで
-      // 絞っていたものがここに来る。時間帯と曜日は絞り込みなので、それだけのルールもここに来る
-      record(`条件が空になるので取り込めません: #${row.id}`);
-      status_.rules.skipped++;
-      continue;
-    }
-
-    const name = keyword !== "" ? keyword : `EPGStation #${row.id}`;
-    recordPlan(options, "ルール", name);
+    const { values, notes } = converted;
+    recordPlan(options, "ルール", values.name);
+    for (const note of notes) record(`  ${note}: #${rule.id}`);
     status_.rules.imported++;
-    if (!options.apply) continue;
-    insertRule(
-      {
-        name,
-        keyword,
-        ignore_keyword: toHalfWidth(row.ignoreKeyword ?? "").trim(),
-        // 当てる範囲も向こうから引き継ぐ。既定に寄せると黙って当たらなくなる
-        search_fields: parseSearchFields(
-          SEARCH_FIELDS.filter((field) => row[field] === 1).join(","),
-        ).join(","),
-        service_ids: channels.length === 0 ? null : channels,
-        service_types: types.length === 0 ? null : types,
-        genres: genreIds.length === 0 ? null : genreIds,
-        ...times,
-        enabled: Boolean(row.enable),
-        // 重複を避ける期間 (periodToAvoidDuplicate) は写さない。denpa は録画と引き継いだ履歴で見る
-        dedupe: Boolean(row.avoidDuplicate),
-      },
-      source,
-    );
+    if (options.apply) insertRule(values, source);
   }
 }
 
 /**
  * 手で入れた予約だけ引き継ぐ。
  *
- * ルール由来の予約は、ルールを取り込んだあとに denpa が自分で立て直すので触らない。
+ * ルール由来の予約 (`ruleId` のあるもの) は、ルールを取り込んだあとに denpa が自分で立て直すので触らない。
+ * 除外の印 (`isSkip`) のものも数えない。時刻だけの予約 (`isTimeSpecified`) は番組に結び付かないので飛ばす。
  * EPGStation の programId は denpa の番組ID (`programKey`) と作り方が同じなので、直に照合できる。
  */
-async function importReservations(
-  connection: SQL,
+export async function importReservations(
+  list_: EpgstationReserve[],
   options: MigrateOptions,
 ): Promise<void> {
-  const rows = (await connection.unsafe(
-    `SELECT programId, ruleId, startAt, endAt, name
-         FROM reserve WHERE ruleId IS NULL AND isSkip = 0 ORDER BY startAt`,
-  )) as ReserveRow[];
-
   const at = now();
-  for (const row of rows) {
-    if (row.programId === null || row.endAt <= at) {
+  for (const item of list_) {
+    if (isId(item.ruleId) || flag(item.isSkip)) continue;
+    const name = text(item.name);
+    if (flag(item.isTimeSpecified)) {
+      record(`時刻だけの予約は取り込めません: ${name}`);
+      status_.reservations.skipped++;
+      continue;
+    }
+    if (!isId(item.programId) || item.endAt <= at) {
       status_.reservations.skipped++;
       continue;
     }
     const program = orm()
       .select({ id: programs.id })
       .from(programs)
-      .where(eq(programs.id, row.programId))
+      .where(eq(programs.id, item.programId))
       .get();
     if (program === undefined) {
       // 番組表を取り込む前だと出る。EPG を取り直してからもう一度実行すれば入る
       record(
-        `番組表に無いので取り込めません: ${row.name ?? String(row.programId)}`,
+        `番組表に無いので取り込めません: ${name || String(item.programId)}`,
       );
       status_.reservations.skipped++;
       continue;
     }
 
-    recordPlan(options, "予約", row.name ?? "");
+    recordPlan(options, "予約", name);
     if (options.apply) await reserve(program.id);
     status_.reservations.imported++;
   }
 }
 
-/** EPGStation の `recorded_history` の1行。`channelId` と `endAt` は bigint なので、文字で来ることがある */
-export interface HistoryRow {
-  id: number;
-  name: string;
-  channelId: number | string | null;
-  channelName: string | null;
-  endAt: number | string;
-}
-
 /**
- * **録画の履歴を引き継ぐ** (EPGStation の `recorded_history`)。
+ * **録画の履歴を入れる。** API には消した録画の履歴 (`recorded_history`) を返すエンドポイントが無いので、
+ * いま残っている録画のうち**ルールで録ったもの** (`ruleId` のあるもの) を、ファイルを取れたかに関係なく
+ * 「録ったことのある回」の控え (`schema.recordedHistory`) に入れる。ルールの「同じ回は最初の放送だけ」と
+ * 「前の回は録らない」が見て、EPGStation で録った回を録り直さない。
  *
- * EPGStation は録画を消しても、ルールで録った番組の名前・局・終わりの時刻をここに残している
- * (既定で 90 日。向こうの設定の `recordedHistoryRetentionPeriodDays`)。これを「録ったことのある回」の
- * 控え (`schema.recordedHistory`) に入れると、ルールの「同じ回は最初の放送だけ」と「前の回は録らない」が見て、
- * EPGStation で録った回を録り直さない。録画の行にはしない (ファイルが無い)。
- *
- * 表が無ければ (古いバージョンなど) 記録に残して先へ進む。録画とルールの引き継ぎは止めない。
- * 繋がらないときはここで投げる (ルールと同じく、走らせ直してもらう)
+ * 取り込み済みは `source` (`epgstation:recorded:<録画ID>`) で見分けて飛ばす。前のバージョン (DB から読んでいた頃)
+ * が入れた `epgstation:<履歴ID>` はそのまま残る
  */
-async function importHistory(
-  connection: SQL,
-  options: MigrateOptions,
-): Promise<void> {
-  const tables = (await connection.unsafe(
-    `SHOW TABLES LIKE 'recorded_history'`,
-  )) as unknown[];
-  if (tables.length === 0) {
-    record("録画の履歴 (recorded_history) が無いので飛ばします");
-    return;
-  }
-  const rows = (await connection.unsafe(
-    `SELECT h.id, h.name, h.channelId, c.name AS channelName, h.endAt
-         FROM recorded_history h
-         LEFT JOIN channel c ON c.id = h.channelId
-         ORDER BY h.id`,
-  )) as HistoryRow[];
-  importHistoryRows(rows, options);
-}
-
-/**
- * 読んだ履歴を控えに入れる。**取り込み済みは EPGStation 側のIDで判別して飛ばす** (`source`。ルールと同じ)。
- * チャンネルIDがそのまま局の内部ID ({@link serviceById})
- */
-export function importHistoryRows(
-  rows: HistoryRow[],
+export function importRecordedHistory(
+  list_: EpgstationRecorded[],
+  channels: ChannelNames,
   options: MigrateOptions,
 ): void {
-  for (const row of rows) {
+  for (const item of list_) {
+    if (!isId(item.ruleId)) continue;
+    const channelId = isId(item.channelId) ? item.channelId : null;
     addHistory(
       {
-        sources: [`epgstation:${row.id}`],
-        name: row.name,
-        serviceId: row.channelId === null ? null : Number(row.channelId),
-        serviceName: row.channelName ?? "",
-        endAt: Number(row.endAt),
+        sources: [`epgstation:recorded:${item.id}`],
+        name: text(item.name),
+        serviceId: channelId,
+        serviceName: channelId === null ? "" : (channels.get(channelId) ?? ""),
+        endAt: item.endAt,
       },
       options,
     );
   }
+}
+
+/** 置き場ごとの要る量。同じファイルシステムなら1つにまとめる (`dev`) */
+interface Need {
+  /** 載っている置き場 (同じファイルシステムなら2つ) */
+  dirs: string[];
+  /** 空きを訊く先。置き場がまだ無ければ (下見)、在るところまで上ったフォルダ */
+  probe: string;
+  bytes: number;
+}
+
+/** 在るところまで上る。下見ではフォルダを作らないので、まだ無い置き場はその上の空きで見る */
+function existingAncestor(dir: string): string {
+  let current = dir;
+  while (!existsSync(current) && dirname(current) !== current)
+    current = dirname(current);
+  return current;
+}
+
+function needsByFilesystem(pending: { raw: boolean; bytes: number }[]): Need[] {
+  const byDevice = new Map<string, Need>();
+  for (const [dir, raw] of [
+    [config.rawDir, true],
+    [config.encodedDir, false],
+  ] as const) {
+    const bytes = pending
+      .filter((item) => item.raw === raw)
+      .reduce((sum, item) => sum + item.bytes, 0);
+    const probe = existingAncestor(dir);
+    let key = probe;
+    try {
+      key = String(statSync(probe).dev);
+    } catch {
+      // 読めない。置き場ごとに分けて見る
+    }
+    const entry = byDevice.get(key) ?? { dirs: [], probe, bytes: 0 };
+    entry.dirs.push(dir);
+    entry.bytes += bytes;
+    byDevice.set(key, entry);
+  }
+  return [...byDevice.values()].filter((entry) => entry.bytes > 0);
+}
+
+/**
+ * **空きを先に確かめる。** まだ入っていないファイルの合計 (書きかけのぶんを引く) と、置き場の空きを比べる。
+ * ディスクの見張り (`disk.ts`) の残す量 (`DISK_LOW_THRESHOLD`) も足す — 取り込みで埋めて録画が書けなく
+ * なるのを防ぐ。足りなければ取り込みでは投げ (録画には入らない。ルール・予約は入ったまま)、下見では記録に残す
+ */
+function checkSpace(
+  pending: { raw: boolean; bytes: number }[],
+  options: MigrateOptions,
+): void {
+  for (const need of needsByFilesystem(pending)) {
+    const where = need.dirs.join("・");
+    const free = freeBytes(need.probe);
+    if (free === null) {
+      record(`空きを読めません: ${where} (取り込む ${formatSize(need.bytes)})`);
+      continue;
+    }
+    const keep = Math.max(0, config.diskLowThreshold);
+    record(
+      `置き場 ${where}: 取り込む ${formatSize(need.bytes)} / 空き ${formatSize(free)} (残す量 ${formatSize(keep)})`,
+    );
+    if (need.bytes + keep <= free) continue;
+    const message = `空きが足りません: ${where} (取り込む ${formatSize(need.bytes)} + 残す量 ${formatSize(keep)} / 空き ${formatSize(free)})`;
+    if (options.apply) throw new Error(message);
+    record(`${message}。このまま取り込むと、録画の前で止まります`);
+  }
+}
+
+/**
+ * 録画を取り込む。**先に全部の一覧を集めてから** 1件ずつ取る (同時に1本。EPGStation のディスクと
+ * denpa の書き込みを取り合わないため)。1件の失敗では止めず、次の録画へ進む
+ */
+async function importRecordings(
+  list_: EpgstationRecorded[],
+  options: MigrateOptions,
+  context: ImportContext,
+): Promise<void> {
+  const entries = list_.filter((item) => {
+    if (!flag(item.isRecording) && !flag(item.isEncoding)) return true;
+    record(
+      `録画中かエンコード中なので飛ばします (次の実行で入ります): ${item.name}`,
+    );
+    return false;
+  });
+  status_.total = entries.length;
+
+  // まだ入っていないもの。書きかけがあれば、そのぶんは取らなくてよい
+  const pending: {
+    raw: boolean;
+    size: number;
+    bytes: number;
+    temporary: string;
+  }[] = [];
+  for (const item of entries) {
+    const existing = importedRow(item.id);
+    if (alreadyImported(existing)) continue;
+    const file = chooseFile(item);
+    if (file === null) continue;
+    const { temporary } = placement(item, file, existing);
+    const partial = Math.min(fileSize(temporary), file.size);
+    pending.push({
+      raw: file.raw,
+      size: file.size,
+      bytes: file.size - partial,
+      temporary,
+    });
+  }
+  status_.bytesTotal = pending.reduce((sum, item) => sum + item.size, 0);
+  const partial = pending.reduce(
+    (sum, item) => sum + item.size - item.bytes,
+    0,
+  );
+  record(
+    `対象 ${entries.length} 件 (取り込む ${pending.length} 件・${formatSize(status_.bytesTotal)}${partial > 0 ? `。うち書きかけ ${formatSize(partial)}` : ""})`,
+  );
+  emit("migrate");
+
+  if (options.apply) {
+    mkdirSync(config.rawDir, { recursive: true });
+    mkdirSync(config.encodedDir, { recursive: true });
+  }
+  checkSpace(pending, options);
+
+  if (options.apply) {
+    const swept = sweepTemporaries(
+      new Set(pending.map((item) => item.temporary)),
+    );
+    if (swept > 0) record(`もう対象に無い書きかけを片付けました: ${swept} 件`);
+  }
+
+  for (const item of entries) {
+    status_.current = item.name;
+    emit("migrate");
+    try {
+      const result = await importOne(item, options, context);
+      status_[result]++;
+    } catch (error) {
+      if (context.signal.aborted) throw error;
+      status_.failed++;
+      record(
+        `取り込めませんでした: ${item.name} (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+    status_.currentDone = 0;
+    status_.currentTotal = 0;
+    emit("migrate");
+  }
+  record(
+    `録画 新規 ${status_.imported} 件 / 取り込み済み ${status_.skipped} 件 / ファイル無し ${status_.missing} 件 / 失敗 ${status_.failed} 件`,
+  );
 }
 
 /** 走っているか。走っている間は、どちらの引き継ぎも始めさせない (同じ進み具合を使うため) */
@@ -950,18 +1032,19 @@ export function running(): boolean {
 
 /**
  * 引き継ぎを1回走らせる。進み具合をまっさらに戻して `body` を回し、終わりと失敗を進み具合に書く。
- * 失敗は投げずに `failed` と理由で残す (画面からは待たずに呼ぶので、受け取る相手がいない)
+ * 失敗は投げずに `failed` と理由で残す (画面からは待たずに呼ぶので、受け取る相手がいない)。
+ * `signal` で止めたものは `canceled`
  */
 export async function track(
   from: MigrateStatus["from"],
   options: MigrateOptions,
   body: () => Promise<void>,
+  signal?: AbortSignal,
 ): Promise<void> {
   status_ = freshStatus({
     state: "running",
     from,
     apply: options.apply,
-    move: options.move,
     startedAt: Date.now(),
   });
   emit("migrate");
@@ -970,9 +1053,14 @@ export async function track(
     status_.current = null;
     status_.state = "done";
   } catch (error) {
-    status_.state = "failed";
-    status_.error = String(error);
-    record(`失敗: ${status_.error}`);
+    if (signal?.aborted) {
+      status_.state = "canceled";
+      record("中断しました。書きかけは残してあり、次の実行で続きから取ります");
+    } else {
+      status_.state = "failed";
+      status_.error = error instanceof Error ? error.message : String(error);
+      record(`失敗: ${status_.error}`);
+    }
   }
   status_.finishedAt = Date.now();
   emit("migrate");
@@ -989,63 +1077,121 @@ export function recordCounts(): void {
 }
 
 /**
- * 取り込みを走らせる。進捗は {@link status} に入る。
- * 画面からは待たずに呼ぶ (`start`)
+ * 取り込みを走らせる。進み具合は {@link status} に入る。画面からは待たずに呼ぶ ({@link start})。
+ * テストからは終わるまで待てる
  */
-function run(options: MigrateOptions): Promise<void> {
-  return track("epgstation", options, async () => {
-    // ルールと手動予約を先に入れる。録画のコピーは時間がかかるので、
-    // 先にこちらを済ませておけば途中で止めても予約は動き出す。
-    // 録画の履歴はルールより前に入れる — ルールが当たり出したときに、もう録った回を予約しないように
-    const connection = new SQL(connectionConfig);
-    try {
-      await importHistory(connection, options);
-      await importRules(connection, options);
-      await importReservations(connection, options);
-    } finally {
-      await connection.close();
-    }
-    recordCounts();
+export function runEpgstation(
+  client: EpgstationClient,
+  version: EpgstationVersion,
+  options: MigrateOptions,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<void> {
+  return track(
+    "epgstation",
+    options,
+    async () => {
+      record(`EPGStation ${version.text} (${client.source.base})`);
+      if (version.major === null)
+        record(
+          `EPGStation のバージョン (${version.text || "読めません"}) が v2・v3 のどちらでもありません。v3 として続けます`,
+        );
+      // 先に全部の一覧を集める。録画は古い順
+      const channels = new Map(
+        (await client.channels(signal)).map((channel) => [
+          channel.id,
+          channel.name,
+        ]),
+      );
+      const recorded = await client.recorded(signal);
+      const ruleList = await client.rules(signal);
+      const reserveList = await client.reserves(signal);
 
-    if (options.apply) {
-      const swept = sweepTemporaries();
-      if (swept > 0) record(`前の実行の書きかけを片付けました: ${swept} 件`);
-    }
+      // ルールと手動予約を先に入れる。録画を取ってくるのは時間がかかるので、
+      // 先にこちらを済ませておけば途中で止めても予約は動き出す。
+      // 録画の履歴はルールより前に入れる — ルールが当たり出したときに、もう録った回を予約しないように
+      importRecordedHistory(recorded, channels, options);
+      importRules(ruleList, options);
+      await importReservations(reserveList, options);
+      recordCounts();
 
-    const rows = await fetchRows();
-    status_.total = rows.length;
-    record(`対象 ${rows.length} 件`);
-    emit("migrate");
+      await importRecordings(recorded, options, { client, channels, signal });
+    },
+    signal,
+  );
+}
 
-    for (const row of rows) {
-      status_.current = row.name;
-      const result = await importOne(row, options);
-      status_[result]++;
-      emit("migrate");
-    }
-  });
+/** 最後に入れられた URL。画面の入力欄に戻す (メモリにだけ持つ。設定には書かない) */
+let lastUrl: string | null = null;
+
+export function epgstationUrl(): string | null {
+  return lastUrl;
+}
+
+/** 走っている取り込みを止めるもの ({@link cancel}) */
+let controller: AbortController | null = null;
+/** `/version` を訊いている間。二重に押されても1つしか走らせない */
+let starting = false;
+
+/** 形が違ったとき・欠けた1件を飛ばしたときの出し先。サーバのログと引き継ぎの記録の両方 */
+function warn(message: string): void {
+  console.warn(message);
+  record(message);
 }
 
 /**
- * 設定画面から呼ぶ入口。走り出したことだけ返し、終わるのは待たない。
- * 二重に走ると同じファイルを2つのコピーが触るので、走っている間は断る。
+ * 設定画面から呼ぶ入口。**先に `/version` を訊いて、繋がらなければその場で理由を返す**
+ * (裏で走らせてから失敗にしない)。繋がれば走り出したことだけ返し、終わるのは待たない。
+ * どちらかの引き継ぎが走っている間は断る (同じファイルを2つが触る・進み具合を1つしか持たない)
  */
-export function start(options: MigrateOptions): {
-  started: boolean;
-  message: string;
-} {
-  if (running()) {
+export async function start(
+  input: string,
+  options: MigrateOptions,
+): Promise<{ started: boolean; message: string }> {
+  if (running() || starting)
     return { started: false, message: "すでに実行中です" };
+  const trimmed = input.trim();
+  if (trimmed === "")
+    return { started: false, message: "EPGStation の URL を入れてください" };
+  lastUrl = trimmed;
+  let source;
+  try {
+    source = parseSource(trimmed);
+  } catch (error) {
+    return { started: false, message: (error as Error).message };
   }
-  if (!available()) {
+  starting = true;
+  try {
+    const client = new EpgstationClient(source, warn, warn);
+    let version;
+    try {
+      version = await client.version();
+    } catch (error) {
+      return {
+        started: false,
+        message: `EPGStation (${source.base}) に繋がりません: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+    if (version === "v1")
+      return {
+        started: false,
+        message:
+          "EPGStation v1 には対応していません。v2 か v3 にしてから実行してください",
+      };
+    controller = new AbortController();
+    void runEpgstation(client, version, options, controller.signal);
     return {
-      started: false,
-      message: `引き継ぎ元 ${source.recordedDir} が見つかりません。EPGStation のPVCをマウントしてください`,
+      started: true,
+      message: options.apply ? "取り込みを開始しました" : "下見を開始しました",
     };
+  } finally {
+    starting = false;
   }
-  void run(options);
-  return {
-    started: true,
-    message: options.apply ? "取り込みを開始しました" : "下見を開始しました",
-  };
+}
+
+/** 「中断」。走っている EPGStation の取り込みを止める。書きかけは残し、次の実行で続きから取る */
+export function cancel(): boolean {
+  if (!running() || status_.from !== "epgstation" || controller === null)
+    return false;
+  controller.abort(new Error("中断しました"));
+  return true;
 }

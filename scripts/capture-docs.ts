@@ -265,11 +265,9 @@ async function seed(): Promise<void> {
   // 1回目で取りこぼした局 (チューナーの取り合いで待ちきれなかったもの) を集め直す
   await post("/api/sync", null);
 
-  // GPU (偽物。置いたファイルを偽 ffmpeg が「ある」と答える) と、EPGStation の引き継ぎ元。
-  // 無いと設定画面に作業場の住所入りの「見つかりません」が出る
+  // GPU (偽物。置いたファイルを偽 ffmpeg が「ある」と答える)
   writeFileSync(join(stack.hwDir, "renderD128"), "");
   await post("/settings/recording?/probeHw", {});
-  mkdirSync(stack.epgstationDir, { recursive: true });
 
   // ルール (検索の画面の「ルールとして保存」と同じものを投げる)。当てると予約が立つ
   for (const rule of [

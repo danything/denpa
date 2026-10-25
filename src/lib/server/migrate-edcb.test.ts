@@ -37,8 +37,8 @@ const {
 } = await import("./migrate-edcb");
 type EdcbRule = import("./migrate-edcb").EdcbRule;
 
-const preview = { apply: false, move: false };
-const apply = { apply: true, move: false };
+const preview = { apply: false };
+const apply = { apply: true };
 
 /** でんぱ総合 (ONID 0x7FE0・TSID 0x7FE0・SID 0x0400) と BSでんぱ (ONID 4・TSID 0x4010・SID 101)。どちらも作り物 */
 const GR = {

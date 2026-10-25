@@ -7,12 +7,28 @@
   /**
    * 引き継ぎの進み具合と記録。EPGStation と EDCB の節が同じものを出す
    * (進み具合はサーバに1つだけ。`from` の合う節にだけ出す)。
-   * EDCB は録画を持ってこないので、録画の件数は出さない (`recordings`)
+   * EDCB は録画を持ってこないので、録画の件数と取ってきた大きさは出さない (`recordings`)
    */
   let { migrate, recordings }: { migrate: MigrateStatus; recordings: boolean } =
     $props();
 
-  const done = $derived(migrate.imported + migrate.skipped + migrate.missing);
+  const done = $derived(
+    migrate.imported + migrate.skipped + migrate.missing + migrate.failed,
+  );
+  /**
+   * 取ってきた大きさの単位。数百GBをバイトで並べても読めないので、合計が 1GB 以上なら GB (小数1桁)、
+   * それより小さければ MB で出す
+   */
+  const unit = $derived(migrate.bytesTotal >= 1024 ** 3 ? "GB" : "MB");
+  const scaled = (bytes: number) =>
+    unit === "GB"
+      ? Math.round(bytes / 1024 ** 3 / 0.1) / 10
+      : Math.round(bytes / 1024 ** 2);
+  const currentPercent = $derived(
+    migrate.currentTotal > 0
+      ? Math.floor((migrate.currentDone / migrate.currentTotal) * 100)
+      : null,
+  );
 </script>
 
 <div
@@ -22,17 +38,14 @@
 >
   <div class="cluster small">
     <span class="tag" data-testid="migrate-state">
-      {stateLabel(migrate.state)}
+      <!-- 「中断」で止めたもの。予約の「取り消し済み」と同じ言葉にはしない -->
+      {migrate.state === "canceled" ? "中断" : stateLabel(migrate.state)}
     </span>
     <span class="tag">{migrate.apply ? "取り込み" : "下見 (変更なし)"}</span>
-    {#if migrate.move}
-      <span class="tag">移動</span>
-    {/if}
     {#if recordings}
-      <span>
+      <span data-testid="migrate-recordings">
         新規 {migrate.imported} 件 / 取り込み済み {migrate.skipped} 件 / ファイル無し
-        {migrate.missing}
-        件
+        {migrate.missing} 件 / 失敗 {migrate.failed} 件
       </span>
     {/if}
     <span data-testid="migrate-rules">
@@ -51,6 +64,16 @@
   {#if recordings && migrate.total > 0}
     <JobProgress {done} total={migrate.total}>
       {#if migrate.current}— {migrate.current}{/if}
+    </JobProgress>
+  {/if}
+  {#if recordings && migrate.apply && migrate.bytesTotal > 0}
+    <JobProgress
+      done={scaled(migrate.bytesDone)}
+      total={scaled(migrate.bytesTotal)}
+      {unit}
+      testid="migrate-bytes"
+    >
+      {#if currentPercent !== null}— いまのファイル {currentPercent}%{/if}
     </JobProgress>
   {/if}
 
