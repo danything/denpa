@@ -114,7 +114,7 @@
 {/snippet}
 
 <!--
-    **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・番組表)、
+    **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・番組表。スマホでは下のタブの上)、
     回っている間の進み具合は見出しのすぐ下。チャンネルが1つも無いときは、空の表の場所の真ん中に
     スキャンの欄を出す (局が無いときの案内 `ChannelNotice` の行き先がここ)
 -->
@@ -123,7 +123,7 @@
     <div class="section-head spread">
       <h2>受信できるチャンネル</h2>
       {#if coverage.length > 0}
-        <div class="cluster">
+        <div class="cluster section-bar" data-testid="channel-actions">
           {@render scanControl()}
           <!--
                         入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも

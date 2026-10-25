@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import "../app.css";
-  import { goto } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
   import { navigating, page } from "$app/state";
   import { onMount } from "svelte";
   import CalendarDays from "~icons/lucide/calendar-days";
@@ -38,20 +38,36 @@
    * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると狭い画面の下のタブ (とその上の操作の1行) を隠し、上へ戻すと出す。
    * 広い画面のヘッダーは引っ込めない (検索の欄を見せたまま)。
    * **見るのは窓の巻き取りだけ** (ページごと巻く画面)。自分で巻き取る画面 (番組表) は表の高さが下のタブの上までで決まっていて、
-   * 引っ込めても表は広がらず、下のタブだけが消えて操作の1行が宙に残っていた
+   * 引っ込めても表は広がらず、下のタブだけが消えて操作の1行が宙に残っていた。
+   * **`#` で飛んだ巻き取り (設定の節へ飛ぶ) は読んでいるのではないので引っ込めない。** 飛んだ先の節の操作の1行を見せたままにする。
+   * 自分で巻き始めたら (ホイール・指・キー) いつもどおり
    */
   let retract = $state(false);
+  let jumped = false;
+  afterNavigate(({ to }) => {
+    if (to?.url.hash) {
+      jumped = true;
+      retract = false;
+    }
+  });
   onMount(() => {
     let prev = scrollY;
     const onScroll = () => {
       const y = scrollY;
-      if (y < 48) retract = false;
+      if (jumped) retract = false;
+      else if (y < 48) retract = false;
       else if (y - prev > 4) retract = true;
       else if (prev - y > 4) retract = false;
       prev = y;
     };
+    const own = () => (jumped = false);
+    const OWN = ["wheel", "touchstart", "keydown"] as const;
     addEventListener("scroll", onScroll, { passive: true });
-    return () => removeEventListener("scroll", onScroll);
+    for (const type of OWN) addEventListener(type, own, { passive: true });
+    return () => {
+      removeEventListener("scroll", onScroll);
+      for (const type of OWN) removeEventListener(type, own);
+    };
   });
 
   /*
