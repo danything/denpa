@@ -211,10 +211,12 @@ public sealed partial class PcscLink : ICardLink
         /*
          * 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の1回だけ** — BCas は失敗したら閉じて開き直す。
          *
-         * **T=1 で断られたら、方式をドライバに任せて繋ぎ直す。** B-CAS カードは T=1 だが、macOS の標準の
-         * CCID ドライバ (Apple のもの) では T=1 を名指しすると繋がらないリーダーがある、という報告がある
-         * (IDBridge CT30。従来のドライバ `useIFDCCID` に切り替えると読める)。実機で原因を確かめられていないので、
-         * 取れる手は「方式を任せる」だけ。カードが無い・他が使っている、は方式と関係ないので試し直さない
+         * **T=1 で断られたら、方式をドライバに任せて繋ぎ直す。** macOS の標準の CCID ドライバ (Apple のもの) で
+         * B-CAS に繋がらないリーダーがある、という報告がある (IDBridge CT30。従来のドライバ `useIFDCCID` に切り替えると読める)。
+         * いちばん怪しいのは方式ではなく速さ — B-CAS は specific mode で ATR の直後から TA1 の速さで話し、
+         * PC Twin の系統のリーダーはそれをドライバに設定してもらう必要がある (Ccid.cs の Reset と SetT1Parameters)。
+         * 速さは PC/SC からは変えられない (SCardControl も Apple のドライバは受けない) ので、ここで取れる手は
+         * 「方式を任せる」だけ。カードが無い・他が使っている、は方式と関係ないので試し直さない
          */
         var result = Connect(_context, Name, ProtocolT1, out _card, out var active);
         if (result != 0 && !IsAbsentOrBusy(result))

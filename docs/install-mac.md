@@ -84,6 +84,15 @@ sudo defaults write /Library/Preferences/com.apple.security.smartcard useIFDCCID
 ほかのスマートカード (仕事の IC カードなど) の動きも変わりうるので、読めなかったときだけ切り替えてください。
 今どちらのドライバかは `denpa-agent --card` の最後の行に出ます。
 
+**なぜ読めないか (推測)。** B-CAS カードは specific mode で、ATR の直後から TA1 の速さで話します。
+Gemalto PC Twin の系統のリーダー (IDBridge CT30 もこの系統) はそれを自分では読まず、ドライバが速さを
+設定する必要があります (Linux のエージェントはそうしている。`Ccid.cs`)。従来のドライバはこれをしますが、
+Apple のドライバはソースが公開されておらず、ここが違うのかは確かめられていません。Sequoia で
+「Gemplus USB SmartCard Reader」が Apple のドライバだと `Card is unresponsive` になり、従来のドライバで直った、
+という報告もあります ([Ludovic Rousseau's blog](https://blog.apdu.fr/posts/2024/10/macos-sequoia-and-smart-cards-status/))。
+Apple のドライバには速さを変える設定 (`AllowAlternativeFiDi`。`man SmartCardServices`) もありますが、
+B-CAS で効くかは分かっていません。
+
 エージェントは、T=1 を名指しして繋がらなければ、方式をドライバに任せて繋ぎ直します (`Pcsc.cs`)。
 それでも繋がらないときは、ログの PC/SC のエラー番号 (`0x8010…`) と `denpa-agent --card` の出力を
 [Issue](https://github.com/danything/denpa/issues) に貼ってもらえると、ドライバを切り替えずに読めるようにできるかを調べられます。
