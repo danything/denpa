@@ -1004,9 +1004,12 @@
       :global(html) {
         container-type: scroll-state;
       }
-      @container not scroll-state(scrollable: top) {
+      .shell:not(.fill) .navbar {
+        animation-name: none;
+      }
+      @container scroll-state(scrollable: top) {
         .shell:not(.fill) .navbar {
-          animation: none;
+          animation-name: header-float;
         }
       }
     }
