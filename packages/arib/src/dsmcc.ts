@@ -226,7 +226,7 @@ export class ModuleBuilder {
     this.total = Math.ceil(moduleSize / blockSize);
   }
 
-  /** 組み立てた中身。まだ届いていないところは 0 */
+  /** 組み立てた中身。まだ届いていないところは 0。**揃ってから読むこと** (読むとモジュールの大きさぶんを確保する) */
   get data(): Uint8Array {
     if (
       this.buffer.length < this.moduleSize &&
