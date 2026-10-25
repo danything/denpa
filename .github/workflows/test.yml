@@ -392,7 +392,7 @@ jobs:
           if ($card.ok -ne $false -or $null -eq $card.readers) { throw 'unexpected /denpa/card' }
           $about = Invoke-RestMethod http://127.0.0.1:25300/denpa/about
           "about: $($about | ConvertTo-Json -Compress)"
-          if ($about.os -ne 'windows' -or $about.arch -ne 'x64' -or $null -ne $about.ccidDriver) { throw 'unexpected /denpa/about' }
+          if ($about.version -ne 'dev' -or $about.os -ne 'windows' -or $about.arch -ne 'x64' -or $null -ne $about.ccidDriver) { throw 'unexpected /denpa/about' }
           Stop-Process -Id $agent.Id
           if (-not $agent.WaitForExit(10000)) { throw 'agent did not stop' }
           Get-Content agent.log, agent.err
