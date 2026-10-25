@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { inNetwork, normalize, resolveClient, unreadable } from "./address";
+import {
+  inNetwork,
+  normalize,
+  overlaps,
+  resolveClient,
+  unreadable,
+} from "./address";
 
 describe("アドレスがネットワークの中か", () => {
   test("CIDR の中と外", () => {
@@ -177,5 +183,25 @@ describe("読めない項目を見つける", () => {
         "localhost",
       ]),
     ).toEqual(["10.42.0/16", "10.0.0.0/33", "fd42::/129", "localhost"]);
+  });
+});
+
+describe("ネットワークが重なるか", () => {
+  test("片方がもう片方を含めば重なる", () => {
+    expect(overlaps("172.16.0.0/12", "172.18.0.3/16")).toBe(true);
+    expect(overlaps("172.18.0.3/16", "172.16.0.0/12")).toBe(true);
+    // アドレス1つでも
+    expect(overlaps("10.0.0.0/8", "10.42.0.7")).toBe(true);
+  });
+
+  test("隣どうしは重ならない", () => {
+    expect(overlaps("192.168.0.0/16", "172.18.0.3/16")).toBe(false);
+    expect(overlaps("10.10.0.0/16", "10.11.0.0/16")).toBe(false);
+  });
+
+  test("IPv4 と IPv6、読めないものは重ならない", () => {
+    expect(overlaps("0.0.0.0/0", "fd00::1/64")).toBe(false);
+    expect(overlaps("fd00::/8", "fd00:1::5/64")).toBe(true);
+    expect(overlaps("10.0.0.0/33", "10.0.0.1")).toBe(false);
   });
 });

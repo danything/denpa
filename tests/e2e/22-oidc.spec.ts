@@ -321,10 +321,25 @@ test.describe("ネットワークで素通し", () => {
     expect((await get("/api/recordings/1/file")).res.status).toBe(401);
   });
 
-  test("どの名前で来たかは問わない", async ({ oidc }) => {
-    // 名前で分けるのは前段 (Traefik) の仕事。ここではアドレスだけ見る
-    const get = client(oidc, { host: "lan.denpa.test", xff: INSIDE });
-    expect((await get("/")).res.status).toBe(200);
+  /*
+   * **知らない名前なら、ネットワークの中でもログインを求める** (DNS リバインディング)。
+   * 悪いサイトが自分の名前を denpa の IP に向け直すと、LAN の人のブラウザがその名前で来る
+   */
+  test("知らない名前で来たら、ネットワークの中でもログインを求める", async ({
+    oidc,
+  }) => {
+    const get = client(oidc, { host: "evil.example", xff: INSIDE });
+    expect((await get("/")).res.status).toBe(302);
+    expect((await get("/api/recordings/1/file")).res.status).toBe(401);
+  });
+
+  test("IP の直書き・家の中だけの名前・ALLOWED_HOSTS の名前は通す", async ({
+    oidc,
+  }) => {
+    for (const host of ["10.10.0.2:3000", "denpa.lan", "denpa.test"]) {
+      const get = client(oidc, { host, xff: INSIDE });
+      expect((await get("/")).res.status, host).toBe(200);
+    }
   });
 
   test("死活確認はどこからでも通る", async ({ oidc }) => {

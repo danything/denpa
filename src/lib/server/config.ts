@@ -286,11 +286,27 @@ export const config = {
    * (どう効くかは `auth.trusted`)。
    *
    * **前段 (リバースプロキシ) があるなら `TRUSTED_PROXIES` に前段のアドレスを書く。**
-   * 書かないと接続元が前段のアドレスになり、ここが誰にも当たらない。`TRUSTED_PROXIES` は
-   * アプリではなく入口の server.js が読む (接続元を決めて `x-denpa-remote` で渡す。
-   * `address.resolveClient`) ので、ここには置かない
+   * 書かないと接続元が前段のアドレスになり、ここが誰にも当たらない (前段が同じネットワークに
+   * いてここに当たると、前段越しの全員が通る)
    */
   trustedNetworks: str("TRUSTED_NETWORKS", ""),
+  /**
+   * 前段のアドレス。接続元を決めるのは入口の server.js で、そちらは自分で読む
+   * (`address.resolveClient`)。アプリは起動時の警告 (`auth.warnIfProxyHidden`) にだけ使う
+   */
+  trustedProxies: str("TRUSTED_PROXIES", ""),
+  /**
+   * **信頼するネットワークから、ログインなしで開いてよい名前** (カンマ区切り)。
+   * `.example.com` と書くと、その名前とその下の名前全部。IP の直書き・`localhost`・
+   * ドットの無い名前・家の中だけの名前 (`.local` など) と `PWA_NAMES` の名前は書かなくても通る
+   * (`auth.knownHost`)。外で引ける名前を LAN の IP に向けて使っているなら、ここに書く
+   */
+  allowedHosts: str("ALLOWED_HOSTS", ""),
+  /**
+   * adapter-bun が名前を読むヘッダ (既定は `Host`)。アプリは名前を確かめるときに、
+   * `Host` に加えてこちらも見るのに使うだけ
+   */
+  hostHeader: str("HOST_HEADER", "").toLowerCase(),
   /** ログインしてからの有効期間。切れたらもう一度 OIDC でログインする */
   oidcSessionTtl: num("OIDC_SESSION_TTL", 30 * 24 * 60 * MIN),
 

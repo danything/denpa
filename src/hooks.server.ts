@@ -7,6 +7,7 @@ import {
   clientAddress,
   configured,
   denied,
+  foreignHost,
   isOpenPath,
   needsLogin,
   needsPairing,
@@ -50,11 +51,17 @@ export async function handle({ event, resolve }) {
   }
 
   /*
-   * **何も聞かずに通す相手。** アドレスが `TRUSTED_NETWORKS` に当たったときだけ。
-   * LAN のプレイヤーに資格情報を入れずに使わせるためで、ここに当たると
-   * OIDC も掛からない
+   * **何も聞かずに通す相手。** アドレスが `TRUSTED_NETWORKS` に当たり、名前も知っているものの
+   * ときだけ。LAN のプレイヤーに資格情報を入れずに使わせるためで、ここに当たると
+   * OIDC も掛からない。
+   *
+   * **名前も見るのは DNS リバインディングを防ぐため** (`auth.knownHost`)。知らない名前なら
+   * 信頼したネットワークの外と同じに扱う (OIDC があればログインを求め、無ければ断る)
    */
-  const open = trusted(clientAddress(event));
+  const address = clientAddress(event);
+  const inside = trusted(address);
+  const foreign = inside ? foreignHost(event.request.headers, address) : null;
+  const open = inside && foreign === null;
 
   if (!open && !isOpenPath(pathname)) {
     if (needsLogin()) {
@@ -96,8 +103,8 @@ export async function handle({ event, resolve }) {
       // 信頼するネットワークの外から、アクセストークンを持たずに来た。アプリはこれで「ペアリングが要る」と分かる
       return needsPairing();
     } else {
-      // 入る手段が無い (設定していないか、信頼するネットワークの外の画面)。言葉で返す (auth.denied)
-      return denied();
+      // 入る手段が無い (設定していないか、信頼するネットワークの外の画面か、知らない名前)。言葉で返す (auth.denied)
+      return denied(address, foreign);
     }
   }
 

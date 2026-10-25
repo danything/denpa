@@ -67,8 +67,15 @@ services:
       # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断る。**
       # このネットワークからのアクセスはログインなしで通す。自分の LAN に合わせて書き換える。
       # 0.0.0.0/0 で全部開くが、インターネットに向けて開くのと同じなので、
-      # 家の外に出す構成では OIDC を使う (docs/auth.md の注意も読むこと)
-      TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+      # 家の外に出す構成では OIDC を使う (docs/auth.md の注意も読むこと)。
+      # Docker のネットワーク (172.16.0.0/12) は入れない。同じネットワークに前段 (Caddy・cloudflared など) を
+      # 置くと、前段越しの人が全員ここに当たってしまう。前段を置くなら TRUSTED_PROXIES に前段のアドレスを書く。
+      # そのため、このマシンのブラウザからは localhost ではなく http://<このマシンの IP>:3000 で開く
+      # (localhost は Docker の中継を通り、送信元が Docker のゲートウェイに見える)
+      TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8
+      # ログインなしで開いてよい名前 (DNS リバインディングを防ぐ。docs/auth.md)。IP の直書き・localhost・
+      # ドットの無い名前・.local や .lan などは書かなくても通る。自分のドメインや Tailscale の名前で開くなら書く
+      # ALLOWED_HOSTS: denpa.example.com,.tail1234.ts.net
     volumes:
       # 置き場は既定のまま (DB は /data、元のTS は /media/raw、エンコードしたものは /media/encoded)。
       # ボリュームの名前は前のまま (中身はそのまま使える)

@@ -10,7 +10,7 @@
 | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `/api/live/socket`                                                                                                        | 使い捨てのチケット (下記)。ここだけ SvelteKit に届きません                                                    |
 | それ以外 (画面・録画のファイル・[外から使う API](api.md))                                                                 | OIDC (設定してあれば)                                                                                         |
-| `/api/live/socket` のほか全部                                                                                             | `TRUSTED_NETWORKS` に当たれば素通し (下記)                                                                    |
+| `/api/live/socket` のほか全部                                                                                             | `TRUSTED_NETWORKS` に当たり、知っている名前で来れば素通し (下記)                                              |
 | `/api/live/socket` のほか全部                                                                                             | アクセストークン (`Authorization: Bearer denpa_…`) があれば、どこから来ても通す ([下記](#アプリのペアリング)) |
 | `/login*` `/logout` `/api/health` `/manifest.webmanifest` `/api/device/code` `/api/device/token` `/api/bml/hc/<合言葉>/…` | 素通し (`auth.ts` の `OPEN_PATHS`。最後のものは Hybridcast の中継で、推測できない合言葉が許可証)              |
 
@@ -176,15 +176,53 @@ TRUSTED_NETWORKS=0.0.0.0/0
 **`0.0.0.0/0` はインターネットに向けて開くのと同じです。** 録画も設定も誰でも触れます。
 家の外に出す構成では使わず、OIDC にします。
 
-**見るのはアドレスだけで、どの名前で来たかは問いません。** 外向きと LAN 用の2つの名前で出していても、
-LAN から外向きの名前を開けば通ります ([install.md](install.md#lan-でも-https-で開く))。
+**Docker のネットワーク (`172.16.0.0/12`) は入れないでください。** 前段 (Caddy・cloudflared など) を
+denpa と同じネットワークに置くと、前段越しの人が全員そこから来たことになります ([下記](#前段の後ろに置くとき-trusted_proxies))。
+docker-proxy が IPv6 の接続を Docker のゲートウェイのアドレスから繋ぎ直すときも同じです。
+そのため、denpa を動かしているマシンのブラウザから `localhost` で入ると (送信元が Docker のゲートウェイに見える)、
+既定では通りません。`http://<そのマシンの IP>:3000` で開くか、断られた画面に出る接続元を足します。
+Windows (wslc) はこの PC からの接続が `169.254.x.x` に見えるので、install.ps1 がそこを信頼します。
+
+### ログインなしで開ける名前 (`ALLOWED_HOSTS`)
+
+**信頼したネットワークから来ても、知らない名前ではログインなしで通しません** (DNS リバインディングを防ぐため)。
+悪いサイトが自分の名前を LAN の denpa の IP に向け直すと、そのサイトを開いた LAN の人のブラウザから、
+denpa をそのサイトの一部として読み書きできてしまいます。攻める側が自分の名前として用意できないものだけを通します。
+
+- IP の直書き (`192.168.1.5:3000`・`[fd00::5]:3000`)、`localhost`、ドットの無い名前 (`nas:3000`)
+- 家の中だけの名前: `.localhost`・`.local`・`.lan`・`.home.arpa`・`.internal` で終わるもの
+- `PWA_NAMES` に書いた名前。Helm では `httpRoute.hostnames` と `ingress.hosts` の名前も (chart が足す)
+- `ALLOWED_HOSTS` に書いた名前 (カンマ区切り)。頭にドットを付けると、その名前とその下の名前全部
+
+```sh
+# 持っているドメインの名前を LAN の IP に向けている
+ALLOWED_HOSTS=denpa.example.com
+# Tailscale の名前 (MagicDNS) は .ts.net なので書く。自分の tailnet の名前だけにする (.ts.net 全部は書かない)
+ALLOWED_HOSTS=denpa.example.com,.tail1234.ts.net
+```
+
+それ以外の名前で来たときは、信頼したネットワークの外と同じに扱います。OIDC があればログインを求め、
+無ければ 403 で断ります。ログには1度だけ理由が出ます。
+
+```text
+[auth] 信頼したネットワーク (192.168.1.20) から、知らない名前「denpa.example.com」で来たので、ログインなしでは通しません。この名前で開くなら ALLOWED_HOSTS に足してください (docs/auth.md)
+```
+
+見るのは `Host` で、`HOST_HEADER` (adapter-bun の設定) を書いていればそのヘッダも見ます。
+前段の後ろに置くなら、前段は `Host` を書き換えずに渡します ([install.md](install.md#前段-リバースプロキシ-の後ろに置く))。
+アクセストークン・OIDC のログインで入る人は、名前を問いません。
 
 ### 前段の後ろに置くとき (`TRUSTED_PROXIES`)
 
 **前段 (Gateway やリバースプロキシ) があるなら、前段のアドレスを `TRUSTED_PROXIES` に書くこと。**
 書かないと接続元が前段のアドレスになり、`TRUSTED_NETWORKS` が誰にも当たりません (=全員が認証を
-求められます。開いてしまう向きには倒れません)。前段が無い (ブラウザが直に denpa へ来る) なら
-何も要りません。
+求められます)。**ただし、前段のアドレスが `TRUSTED_NETWORKS` に入っていると、前段越しの全員が当たって
+開いてしまいます。** `TRUSTED_PROXIES` が空で、`TRUSTED_NETWORKS` が denpa 自身のネットワークと重なっていると、
+起動ログに警告を出します。前段が無い (ブラウザが直に denpa へ来る) なら何も要りません。
+
+```text
+[boot] TRUSTED_NETWORKS が、このコンテナのネットワーク (172.18.0.3/16) と重なっていて、TRUSTED_PROXIES が空です。
+```
 
 ```sh
 # Kubernetes の Gateway (Cilium の Envoy など hostNetwork で動くもの) は Pod のネットワークから繋いでくる

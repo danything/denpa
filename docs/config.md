@@ -45,6 +45,7 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 | `OIDC_SESSION_TTL`                      | `2592000000`                                   | ログインの有効期間(ms)。既定30日                                                                                                                                                                                           |
 | `TRUSTED_NETWORKS`                      | (空)                                           | CIDR (IPv4・IPv6) のカンマ区切り。ここから来たら認証を掛けない ([auth.md](auth.md#ネットワークの中なら何も聞かない))                                                                                                       |
 | `TRUSTED_PROXIES`                       | (空)                                           | 前段 (リバースプロキシ) のアドレス。CIDR のカンマ区切り。入口の `server.js` が読む。前段があるのに空だと `TRUSTED_NETWORKS` が誰にも当たらない ([auth.md](auth.md#前段の後ろに置くとき-trusted_proxies))                   |
+| `ALLOWED_HOSTS`                         | (空)                                           | 信頼したネットワークからログインなしで開いてよい名前のカンマ区切り。頭にドットでその下の名前全部。IP の直書き・`.local` などは書かなくても通る ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))                 |
 | `PORT` / `HOST`                         | `3000` / `0.0.0.0`                             | 待ち受けるポートとアドレス (adapter-bun が読む)                                                                                                                                                                            |
 | `BODY_SIZE_LIMIT`                       | `512K`                                         | 受け取るリクエストの本文の上限 (adapter-bun が読む。超えると 413)                                                                                                                                                          |
 | `PWA_NAMES`                             | (空)                                           | `ホスト名=表示名` のカンマ区切り。ホーム画面に置いたときの名前を、来た名前ごとに変える ([watch.md](watch.md#ホーム画面に置く))                                                                                             |
@@ -95,11 +96,31 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 - 前は `ADDRESS_HEADER=x-forwarded-for` を渡すと、**誰から来た** `X-Forwarded-For` でも右端を信じていた。
   denpa のポートへ前段を通らずに届く経路があると、ヘッダを付けるだけで `TRUSTED_NETWORKS` を名乗れた。
   いまは段数 (前の `XFF_DEPTH`) も数えなくてよい
-- **置き換えないまま上げると、安全側に倒れる。** 前段越しの接続元が前段のアドレスになり、
-  `TRUSTED_NETWORKS` から来ていた人にもログインを求める (OIDC が無ければ断る)。開きはしない
+- **置き換えないまま上げると**、前段越しの接続元が前段のアドレスになる。前段のアドレスが `TRUSTED_NETWORKS` に
+  入っていなければ、`TRUSTED_NETWORKS` から来ていた人にもログインを求める (OIDC が無ければ断る)。
+  入っていると前段越しの全員が通るので、起動時に警告を出す ([下記](#信頼するネットワークを絞った-前のバージョンから上げるとき))
 - 前段が無い構成 (compose の既定・Windows のインストーラ・`denpa-aio`) は何もしなくてよい。
-  Linux・Mac のインストーラは前に genkan (Caddy) を立てるが、genkan のアドレスは既定の
-  `TRUSTED_NETWORKS` に入り、私設網の外は genkan が断るので、こちらも何もしなくてよい
+  Linux・Mac のインストーラが前に立てる genkan (Caddy) は、下の「信頼するネットワークを絞った」を見る
+
+## 信頼するネットワークを絞った (前のバージョンから上げるとき)
+
+**既定の `TRUSTED_NETWORKS` から Docker のネットワーク (`172.16.0.0/12`) を外し、信頼したネットワークから
+ログインなしで通すのを、知っている名前で来たときだけにしました** ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
+前段を同じネットワークに置いて `TRUSTED_PROXIES` を書き忘れると全員が通ってしまうことと、DNS リバインディングで
+LAN の人のブラウザから読み書きされることを防ぐためです。
+
+- **外で引ける名前 (自分のドメイン・Tailscale の `.ts.net` など) を LAN の IP に向けて、ログインなしで開いているなら、
+  `ALLOWED_HOSTS` に足す。** 足さないと、OIDC があればログインを求められ、無ければ 403 になる。`PWA_NAMES` に
+  書いた名前と、Helm の `httpRoute.hostnames`・`ingress.hosts` の名前はそのまま通る。IP の直書き・
+  `.local`・`.lan` などの名前も何もしなくてよい
+- compose の既定は `192.168.0.0/16,10.0.0.0/8` になった。前の compose を写して使っているなら、`172.16.0.0/12` を
+  消すのを勧める (残したままで前段がいなければ開きはしないが、起動時に警告が出る)。
+  Docker を動かしているマシンのブラウザから `localhost:3000` で入っていたなら、`http://<そのマシンの IP>:3000` で開く
+- **Linux・Mac のインストーラで genkan (`http://denpa.localhost`) を使っているなら、install.sh を流し直す。**
+  compose.override.yml には触らないので、足す行 (`TRUSTED_PROXIES` と genkan のゲートウェイ) を画面に出す。
+  新しく入れるときは install.sh が書く
+- Windows のインストーラは、`denpa.env` が無いときだけ作る。前に作った `denpa.env` の `172.16.0.0/12` は消してよい
+  (この PC から `169.254.x.x`、LAN の機器は本当の IP で届くので要らない)
 
 ## 置き場を変えた (前のバージョンから上げるとき)
 

@@ -32,8 +32,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
   Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。
   動いていればそれを使い、無ければ 80 と 443 が空いているときだけ `~/genkan` に入れて <http://denpa.localhost> で開きます。
-  入れられなければ <http://localhost:3000>。`denpa.localhost` はそのマシンでしか引けないので、LAN のほかの機器
-  (テレビ・スマホ) からは `http://<IP>:3000` で開きます。Windows はいつも <http://localhost:3000>
+  入れられなければ `http://<IP>:3000` (localhost は Docker の中継を通って送信元が Docker のゲートウェイに見え、
+  既定では信頼しないため。[auth.md](auth.md#ネットワークの中なら何も聞かない))。`denpa.localhost` はそのマシンでしか
+  引けないので、LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000` で開きます。Windows はいつも <http://localhost:3000>
 - 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は更新のたびに上書きするので、
   **変えたいことは同じ場所の `compose.override.yml` に書きます** (Compose が重ねて読み、install.sh は触らない)。
   Windows は `~/denpa/denpa.env`
@@ -61,7 +62,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
   --cap-add SYS_RESOURCE \
   --device-cgroup-rule 'c 189:* rmw' --device-cgroup-rule 'c 212:* rmw' \
   -v /dev/bus/usb:/dev/bus/usb -v /dev/dvb:/dev/dvb \
-  -e TRUSTED_NETWORKS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12 \
+  -e TRUSTED_NETWORKS=192.168.0.0/16,10.0.0.0/8 \
   -v ./config:/config -v denpa-data:/data -v denpa-media:/media \
   -p 3000:3000 ghcr.io/danything/denpa-aio:latest
 ```
@@ -98,7 +99,8 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 
 ## 誰を通すか
 
-設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、ここからはログインなしで通ります。
+設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (`192.168.0.0/16,10.0.0.0/8`) で、ここからはログインなしで通ります。
+IP の直書きや `.local` などの名前で開くときだけで、自分のドメインなどの名前で開くなら `ALLOWED_HOSTS` に書きます ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
 画面をログインで守るなら OIDC の3つを渡します (リダイレクト URI は `https://<denpa>/login/callback`)。
 
 ```yaml
@@ -123,6 +125,8 @@ Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `den
 使えます** (DNS-01 なら外から繋がる必要が無い。`.arpa` のような内側だけの名前は ACME で
 取れない)。ホーム画面に置けるのも全画面にできるのも https のページだけなので、PWA にも要ります。
 外向きと LAN 用の2つの名前で出すなら、ホーム画面の名前を分けられます ([watch.md](watch.md#ホーム画面に置く))。
+その名前で信頼したネットワークからログインなしで開くなら、名前を `ALLOWED_HOSTS` (か `PWA_NAMES`) に書きます
+([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
 
 ## うまくいかないとき
 

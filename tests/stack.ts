@@ -378,8 +378,9 @@ export async function bootOidc(
       OIDC_CLIENT_ID: oidc.clientId,
       OIDC_CLIENT_SECRET: "e2e-secret",
       OIDC_GROUP: oidc.group,
-      // このネットワークから来たら何も聞かない
+      // このネットワークから来たら何も聞かない (名前はテストが使う denpa.test のときだけ。auth.knownHost)
       TRUSTED_NETWORKS: oidc.trustedNetwork,
+      ALLOWED_HOSTS: "denpa.test",
       // テストは 127.0.0.1 から前段のふりをして x-forwarded-for を付ける
       TRUSTED_PROXIES: "127.0.0.1",
     });

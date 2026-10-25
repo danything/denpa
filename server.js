@@ -31,6 +31,8 @@
  * denpa は名前を2つ持っていて自分の origin を1つに固定できない (SvelteKit の `paths.origin`。
  * 組むときに決まる) ので、`Host` と `x-forwarded-proto` から毎回組み立てさせる
  * (名前は charts/denpa/values.yaml の httpRoute.hostnames。無ければ ingress.hosts)。
+ * そのため名前を偽ると (DNS リバインディング) CSRF の判定は通ってしまう。信頼したネットワークから
+ * ログインなしで通すのを、知っている名前のときだけにしてある (`auth.knownHost`)。
  */
 
 import {

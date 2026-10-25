@@ -43,8 +43,9 @@ compose.prod.yml から tuner-agent を外したもの)。
 - denpa 本体は別の Linux で動かし、Mac にはエージェントだけ置くなら `… | bash -s -- --no-docker`。
   denpa の `TUNER_AGENT_URL` に `http://<Mac の名前>.local:25252` を書きます
   ([別の所に置く](agent.md#エージェントは別イメージ別プロセス)のと同じ構成)
-- **誰を通すか** (`TRUSTED_NETWORKS`) は compose.prod.yml と同じ私設網です。Mac のブラウザから
-  localhost で入ると、送り元は Docker のネットワークの出口 (私設網の中) に見えるので通ります
+- **誰を通すか** (`TRUSTED_NETWORKS`) は compose.prod.yml と同じ `192.168.0.0/16,10.0.0.0/8` です。Mac のブラウザから
+  localhost で入ったときの送信元は Docker の作りで変わり、Docker Desktop なら `192.168.65.x` なので通ります。
+  断られたら、画面に出る接続元を compose.override.yml の `TRUSTED_NETWORKS` に足します
 
 LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き場に向け直すものだけです
 (`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
