@@ -261,6 +261,7 @@ jobs:
             [ -n "$develop" ] && docker buildx imagetools create --tag "${IMAGE}:develop" "${IMAGE}:${TAG}"
             exit 0
           fi
+          [ -d "$DIGESTS" ] || { echo "digest を受け取れませんでした (build の artifact が無い)" >&2; exit 1; }
           cd "$DIGESTS"
           # arch が欠けたまま束ねない (artifact の取りこぼしで amd64 だけの索引になるのを防ぐ)
           set -- *
