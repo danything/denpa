@@ -63,6 +63,32 @@ test.describe("設定のバージョンと環境・ログ", () => {
     );
   });
 
+  /** スマホでは、ログの押すものと絞り込みを1行にまとめ、節へ飛ぶ行のすぐ上に浮かべる (docs/design.md の「浮かせ方」) */
+  test("スマホではログの操作と絞り込みが下の1行に出る", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goto(page, "/settings/general#logs");
+
+    const bar = page.getByTestId("logs-filters");
+    await expect(bar).toBeInViewport();
+    await expect(bar.getByTestId("issue-start")).toBeVisible();
+    await expect(bar.getByTestId("logs-reload")).toBeVisible();
+    const gap = async () => {
+      const own = (await bar.boundingBox())!;
+      const jump = (await page.getByTestId("settings-jump").boundingBox())!;
+      return jump.y - (own.y + own.height);
+    };
+    await expect.poll(gap).toBeGreaterThan(0);
+    expect(await gap()).toBeLessThan(12);
+    // 横に巻いた先の検索も使える
+    await bar.getByTestId("logs-search").fill("でんぱニュース");
+    await expect(page.getByTestId("log-line")).toHaveCount(1);
+
+    // 「この端末」には操作が無い
+    await page.getByTestId("settings-jump-browser").click();
+    await page.waitForURL(/#browser$/);
+    await expect(bar).toBeHidden();
+  });
+
   test("Issue にする前に伏せた報告を見せ、入力済みのフォームを開く", async ({
     page,
   }) => {

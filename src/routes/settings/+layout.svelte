@@ -19,7 +19,6 @@
   let active = $state<string | null>(null);
 
   let main = $state<HTMLElement>();
-  let jumpRow = $state<HTMLElement>();
 
   /**
    * **グループを移ったら頭に戻す。** 巻き取るのはどの幅でも window (`+layout.svelte` の `FILLED` に入れない)。
@@ -77,6 +76,17 @@
   }
   onDestroy(() => unpin());
 
+  /**
+   * **見えている節に印 (`data-current`) を付ける。** スマホでは、その節の操作の1行 (`.section-bar`) だけを
+   * 下のタブの上に出す (下の style)。ここは印を付け外しするだけで、出し方は CSS
+   */
+  $effect(() => {
+    void page.url.pathname;
+    if (main === undefined) return;
+    for (const part of main.querySelectorAll<HTMLElement>("[data-part]"))
+      part.toggleAttribute("data-current", part.id === active);
+  });
+
   /** 押した節へ飛んでいる間は、見えている節を数え直さない (途中の節に次々と印が付く) */
   let jumping: ReturnType<typeof setTimeout> | undefined;
   function jump(slug: string): void {
@@ -110,17 +120,14 @@
     };
 
     /*
-     * 上に重なるものの下から数える。浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ。スマホは 0) と、
-     * 640〜767px はヘッダーの下に貼り付く節の行 (スマホの節の行は下にある)。rootMargin は px か % だけ (rem は投げる)
+     * 飛んだ節の頭が止まる所から下を数える。浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ。スマホは 0) と、
+     * 節の巻き取りの余白 (640〜767px はヘッダーの下に貼り付く節の行のぶん、スマホは上の安全域のぶんも入っている。下の style)。
+     * ここより上に残る前の節の終わりは数えない (スマホで節へ飛んだあと、前の節に印が戻っていた)。rootMargin は px か % だけ (rem は投げる)
      */
-    const header =
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).scrollPaddingTop,
-      ) || 0;
+    const px = (value: string) => Number.parseFloat(value) || 0;
     const cover =
-      (matchMedia("(min-width: 640px) and (max-width: 767px)").matches
-        ? (jumpRow?.getBoundingClientRect().bottom ?? header)
-        : header) + 16;
+      px(getComputedStyle(document.documentElement).scrollPaddingTop) +
+      px(getComputedStyle(parts[0]!).scrollMarginTop);
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -149,7 +156,10 @@
     並べたときの形は下の style。左の列と右とは線で分けない (地は同じで、右の列を真ん中に寄せた余白で分かれる)。
 
     **狭い画面では一覧と中身を切り替える。** `/settings` はグループの一覧だけ、押すとその画面と「← 設定」、
-    節へ飛ぶ行 (巻いても残る。スマホは下のタブの上、640〜767px はヘッダーの下)
+    節へ飛ぶ行 (巻いても残る。スマホは下のタブの上、640〜767px はヘッダーの下)。
+
+    **節の操作 (見出しの行の押すもの・絞り込み) は、節の中の `.section-bar` に入れる。** スマホでは見えている節の
+    その1行だけを節へ飛ぶ行のすぐ上に浮かべ、節を移ると入れ替わる。操作の無い節では出さない。640px からは節の中のまま
 -->
 <div class="page settings-page" class:list-view={current === null}>
   <!--
@@ -203,7 +213,7 @@
     <div class="main-inner">
       {#if group !== null}
         <!-- 狭い画面だけ。一覧へ戻る (ブラウザの戻ると同じ行き先) と、節へ飛ぶ行 -->
-        <div class="jump small" bind:this={jumpRow} data-testid="settings-jump">
+        <div class="jump small" data-testid="settings-jump">
           <a
             class="back"
             href={resolve("settings")}
@@ -453,9 +463,16 @@
      * 読んでいる間は下のタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。中身の最後が隠れないよう、そのぶん下を空ける
      */
   @media (max-width: 639.98px) {
+    .page {
+      /* 下のタブとの隙間と、節へ飛ぶ行の高さ。節の操作の1行はこの上に積む */
+      --jump-gap: 0.375rem;
+      --jump-h: calc(var(--dp-btn-h-sm) + 0.5rem);
+    }
     .jump {
       position: fixed;
-      inset: auto 0.75rem calc(var(--dp-tabbar, 0px) + 0.375rem);
+      inset: auto 0.75rem calc(var(--dp-tabbar, 0px) + var(--jump-gap));
+      box-sizing: border-box;
+      height: var(--jump-h);
       margin: 0;
       padding: 0.25rem 0.5rem;
       border-radius: 1.375rem;
@@ -464,10 +481,56 @@
       transition: transform var(--dp-duration-move) var(--dp-ease-spring);
     }
     :global([data-retract]) .jump:not(:has(:focus-visible)) {
-      transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
+      transform: translateY(
+        calc(var(--dp-tabbar, 0px) + var(--jump-gap) + 100%)
+      );
     }
     .main-inner {
       padding-bottom: 3.5rem;
+    }
+    /*
+     * **節の操作の1行 (`.section-bar`) は、見えている節のものだけを節へ飛ぶ行のすぐ上に浮かべる** (押すものは下に。
+     * ルールの細い1行と同じ半透明のカプセル)。ほかの節のものは隠す。はみ出す分は横に巻く (節へ飛ぶ行と同じ)。
+     * 浮いた面なので、中の主のボタンは浮かせず太字だけ (`app.css` の「浮いたものの中」)。読んでいる間は節へ飛ぶ行と一緒に引っ込む
+     */
+    .main-inner :global([data-part]:not([data-current]) .section-bar) {
+      display: none;
+    }
+    .main-inner :global([data-current] .section-bar) {
+      --dp-btn-solid: transparent;
+      --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+      --dp-btn-lift: none;
+      position: fixed;
+      inset: auto 0.75rem
+        calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h));
+      z-index: 30;
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: var(--dp-space-2);
+      margin: 0;
+      padding: 0.25rem 0.5rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+      white-space: nowrap;
+      border-radius: 1.375rem;
+      background: var(--dp-float);
+      box-shadow: var(--dp-shadow-pop);
+      transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+    }
+    .main-inner :global([data-current] .section-bar > *) {
+      flex-shrink: 0;
+    }
+    :global([data-retract])
+      .main-inner
+      :global([data-current] .section-bar:not(:has(:focus-visible))) {
+      transform: translateY(
+        calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h) + 100%)
+      );
+    }
+    /* 操作の1行が出ている間は、そのぶんも下を空ける (中身の最後が隠れないように) */
+    .main-inner:has(:global([data-current] .section-bar)) {
+      padding-bottom: 7rem;
     }
     .main-inner :global([data-part]) {
       scroll-margin-top: calc(3.5rem + env(safe-area-inset-top));

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import "../app.css";
-  import { goto } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
   import { navigating, page } from "$app/state";
   import { onMount } from "svelte";
   import CalendarDays from "~icons/lucide/calendar-days";
@@ -24,6 +24,7 @@
   import Icon from "#lib/components/player/Icon.svelte";
   import SearchField from "#lib/components/SearchField.svelte";
   import { denpaFontUrl } from "#lib/font.js";
+  import { markLite } from "#lib/lite.js";
   import { measure } from "#lib/measure.svelte.js";
   import { startOffline } from "#lib/offline.svelte.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
@@ -35,24 +36,41 @@
   // オフライン視聴の控えを読み、オンラインに戻ったら outbox を流す (docs/offline.md)
   onMount(() => startOffline());
 
+  // ソフトウェアで描いている端末では、動き続けるものを止める (`<html data-lite>`。開いた直後の一瞬だけは回る)
+  onMount(markLite);
+
   /*
    * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると狭い画面の下のタブ (とその上の操作の1行) を隠し、上へ戻すと出す。
    * 広い画面のヘッダーは引っ込めない (検索の欄を見せたまま)。
    * **見るのは窓の巻き取りだけ** (ページごと巻く画面)。自分で巻き取る画面 (番組表) は表の高さが下のタブの上までで決まっていて、
-   * 引っ込めても表は広がらず、下のタブだけが消えて操作の1行が宙に残っていた
+   * 引っ込めても表は広がらず、下のタブだけが消えて操作の1行が宙に残っていた。
+   * **`#` で飛んだ巻き取り (設定の節へ飛ぶ) は読んでいるのではないので引っ込めない。** 飛んだ先の節の操作の1行を見せたままにする。
+   * 自分で巻き始めたら (ホイール・指・キー) いつもどおり
    */
   let retract = $state(false);
+  let jumped = false;
+  afterNavigate(({ to }) => {
+    jumped = Boolean(to?.url.hash);
+    if (jumped) retract = false;
+  });
   onMount(() => {
     let prev = scrollY;
     const onScroll = () => {
       const y = scrollY;
-      if (y < 48) retract = false;
+      if (jumped) retract = false;
+      else if (y < 48) retract = false;
       else if (y - prev > 4) retract = true;
       else if (prev - y > 4) retract = false;
       prev = y;
     };
+    const own = () => (jumped = false);
+    const OWN = ["wheel", "touchstart", "keydown"] as const;
     addEventListener("scroll", onScroll, { passive: true });
-    return () => removeEventListener("scroll", onScroll);
+    for (const type of OWN) addEventListener(type, own, { passive: true });
+    return () => {
+      removeEventListener("scroll", onScroll);
+      for (const type of OWN) removeEventListener(type, own);
+    };
   });
 
   /*
@@ -568,24 +586,30 @@
   }
   /*
      * 遷移中のバー。**ヘッダーより上に重ねる** (z-index)。色は主の色で、
-     * 光の筋を左から右へ流す。動かせない設定の端末では筋を止めて色だけ出す
+     * 光の筋を左から右へ流す。筋を流すのは動かしてよい端末だけで、動きを減らす設定と
+     * ソフトウェアで描いている端末 (`data-lite`) では色だけ出す (`app.css` の最後と同じ決まり)
      */
   .nav-progress {
     position: fixed;
     inset: 0 0 auto 0;
     z-index: 60;
     height: 3px;
-    background:
-      linear-gradient(
-          90deg,
-          transparent 0%,
-          var(--pico-primary-background) 40%,
-          var(--pico-primary-background) 60%,
-          transparent 100%
-        )
-        0 0 / 40% 100% no-repeat,
-      color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
-    animation: nav-progress var(--dp-shine) ease-in-out infinite;
+    background: var(--pico-primary-background);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :global(:root:not([data-lite])) .nav-progress {
+      background:
+        linear-gradient(
+            90deg,
+            transparent 0%,
+            var(--pico-primary-background) 40%,
+            var(--pico-primary-background) 60%,
+            transparent 100%
+          )
+          0 0 / 40% 100% no-repeat,
+        color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
+      animation: nav-progress var(--dp-shine) ease-in-out infinite;
+    }
   }
   @keyframes nav-progress {
     from {
@@ -604,12 +628,6 @@
     to {
       background: var(--dp-float);
       box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .nav-progress {
-      animation: none;
-      background: var(--pico-primary-background);
     }
   }
   /*
