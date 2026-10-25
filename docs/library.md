@@ -41,6 +41,44 @@
 元のTSを返す)。DB を空けずに残すと、実体との照合が「保存先から消えた」と読んで
 録画ごと削除済みに倒し、元のTSまで消します。
 
+## 置き場を別のディスクに移す
+
+**移せるのは、家の中のディスクか NAS だけです。** クラウドのストレージ (Google ドライブ・S3・rclone で
+つないだものなど) に置くのは想定していません。置き場の mkv は暗号の掛かっていない普通のファイルなので、
+クラウドに置くとそこから落としたり共有したりでき、録画をファイルとして世帯の外へ持ち出せる状態になります
+(持ち出す機能を持たない理由は [Discussion #760](https://github.com/danything/denpa/discussions/760))。
+
+**コンテナの中の場所 (`/media/encoded`) は変えず、外側だけを付け替えます。** DB はファイルの場所を
+コンテナの中のパスで持っているので、録画があるのに `ENCODED_DIR` を書き換えると、置いてある録画を全部見失います。
+
+Docker Compose なら、録画もエンコードもしていないときに:
+
+1. **denpa を止める** (`docker compose stop denpa`)。動かしたまま付け替えると、突き合わせ (`files.reconcile`) が
+   「保存先から消えた」と読んで、録画を削除済みにします
+2. 今のボリュームの中身を新しいディスクへ写す。ボリュームの名前は `docker volume ls` で確かめる
+   (`install.sh` で入れたなら `denpa_denpa-library`。Mac はボリュームではなく `~/Movies/denpa/library` なので、そのフォルダを写す)
+
+   ```sh
+   docker run --rm -v denpa_denpa-library:/from -v /mnt/disk2/denpa:/to alpine cp -a /from/. /to/
+   ```
+
+3. `compose.override.yml` に新しい場所を書く (`compose.yml` は `install.sh` が上げ直すたびに上書きするので触らない)。
+   Compose はコンテナの中の場所が同じものを上書きとして重ねるので、これだけで付け替わる。
+   NAS なら、先にホストで NFS か SMB をマウントしておき、その場所を書く
+
+   ```yaml
+   services:
+     denpa:
+       volumes:
+         - /mnt/disk2/denpa:/media/encoded
+   ```
+
+4. 起動して、一覧のサムネイルと再生を確かめてから、古いボリュームを消す (`docker volume rm denpa_denpa-library`)
+
+元のTS (`/media/raw`) も同じ手順で移せます。**エージェントも同じ場所を見る**ので、denpa と `tuner-agent` の
+両方を書き換えます。Kubernetes なら、新しいストレージに PVC を作り、chart の `persistence.encoded.existingClaim`
+(元のTSは `persistence.raw.existingClaim`) に名前を入れます。こちらもコンテナの中の場所は変わりません。
+
 ## 観るのはブラウザで
 
 **録画一覧の行を押すと `/watch/<id>` が開き、その場で再生が始まります**
