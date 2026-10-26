@@ -68,7 +68,7 @@ NIT も SDT も EIT も読まず、TS を読む `@danything/arib` (`packages/ari
 スキャンも同じチューナーを使うので、denpa が「このチューナーで」と決めると食い違います。
 
 代わりに denpa は、**エージェントがこの約束どおりに使う前提で**予約を割り振ります
-(`src/lib/server/conflict.ts` の `assign`。ルールの下見 (`rule-preview.ts`) の `contentions` も同じ)。
+(`src/lib/server/conflict.ts` の `assign`。ルールの下見 (`rule-preview.ts`) が使う `contentions` も同じ)。
 約束が崩れると、予約表では通っているのに実行時にチューナーが使えなくなります (#668)。
 
 **エージェントが守ること** (`agent/conformance.test.ts` が押さえる):

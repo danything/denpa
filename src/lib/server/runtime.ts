@@ -22,6 +22,7 @@ import { tick } from "./scheduler";
 import { prune as pruneSessions } from "./session";
 import { beginDraining } from "./shutdown";
 import { redeem } from "./tickets";
+import { pruneTransfer, swapAtBoot } from "./transfer";
 import { getChannels } from "./tuner";
 import { checkForUpdate } from "./update";
 import { notify } from "./webhook";
@@ -67,6 +68,21 @@ function nowAndEvery(
 export function start(): void {
   if (started) return;
   started = true;
+
+  /*
+   * **取り込んだ DB に入れ替える** (設定の「連携」の「denpa を別の機械へ移す」。transfer.ts)。
+   * DB とロゴに触る前にやる。取り込みはプロセスを終えて、ここで入れ替わる。
+   * **入れ替えられなければ起動を止める** — 入れ替えかけのまま動くより、起き直してやり直すほうがよい
+   * (何度やっても同じ結果になる作り)
+   */
+  try {
+    swapAtBoot();
+  } catch (error) {
+    console.error(
+      `[transfer] 取り込んだ DB に入れ替えられませんでした: ${error}`,
+    );
+    throw error;
+  }
 
   /*
    * 前のバージョンの置き場の変数は読まない (docs/config.md「置き場を変えた」)。黙って既定に変わると
@@ -178,6 +194,8 @@ export function start(): void {
    * 実体はもう無いので、消えて困るものはない。照合と同じ周期でよい
    */
   nowAndEvery(config.reconcileInterval, "prune", pruneHistory);
+  // 送りかけのまま放っておかれた取り込みも、同じ周期で片付ける (transfer.ts)
+  nowAndEvery(config.reconcileInterval, "transfer", pruneTransfer);
 
   /*
    * 番組名を半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す

@@ -194,7 +194,7 @@
     if (scrolled || row === undefined || list === null) return;
     scrolled = true;
     /*
-     * `scrollIntoView` は使わない — 動かせるものは何でも動かすので、畳まれた幅では窓ごと動いて、
+     * `scrollIntoView` は使わない — 動かせるものは何でも動かすので、縦に積む幅では窓ごと動いて、
      * 読み込み直したときに映像が画面から出ていた。動かすのは一覧の中身だけ (中で動けない幅では何もしない)
      */
     const room = list.scrollHeight - list.clientHeight;
@@ -312,7 +312,7 @@
 
 <!--
     映像を左、局を右 (YouTube の再生画面と同じ形)。広い画面ではページごとスクロールさせず、動くのは右の一覧だけ
-    (`+layout.svelte` の `fill`)。畳まれる幅では縦に積む
+    (`+layout.svelte` の `fill`)。1000px 未満では縦に積む
 -->
 <PlayerLayout testid="live">
   <!-- 舞台と映像の束は追っかけと共通 (PlayerStage / MediaStack) -->

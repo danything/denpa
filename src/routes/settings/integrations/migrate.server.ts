@@ -2,6 +2,7 @@ import { type Actions, fail } from "@sveltejs/kit";
 
 import { edcbTarget, startEdcb } from "#lib/server/migrate-edcb.js";
 import { cancel, epgstationUrl, start, status } from "#lib/server/migrate.js";
+import { busy as transferBusy, BUSY_MESSAGE } from "#lib/server/transfer.js";
 
 export function load() {
   return {
@@ -21,6 +22,8 @@ export const actions = {
    * 進み具合は SSE で降ってくる。
    */
   migrate: async ({ request }) => {
+    // denpa の書き出し・取り込みと同時には走らせない (1 回に 1 つだけ。transfer.ts)
+    if (transferBusy()) return fail(409, { message: BUSY_MESSAGE });
     const form = await request.formData();
     const result = await start(String(form.get("url") ?? ""), {
       apply: form.get("apply") === "on",
@@ -38,6 +41,7 @@ export const actions = {
    * EDCB からの引き継ぎ。先に EpgTimerSrv から一覧を読み、繋がらなければその場で理由を返す。進み具合は EPGStation と同じく SSE で降ってくる
    */
   migrateEdcb: async ({ request }) => {
+    if (transferBusy()) return fail(409, { message: BUSY_MESSAGE });
     const form = await request.formData();
     const result = await startEdcb(String(form.get("target") ?? ""), {
       apply: form.get("apply") === "on",

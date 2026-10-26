@@ -438,6 +438,74 @@ export async function bootClosed(
   return { appUrl, shutdown };
 }
 
+export interface Spare {
+  appUrl: string;
+  /** この denpa の録画の置き場 (古い denpa の置き場を写す先) */
+  encodedDir: string;
+  rawDir: string;
+  /** 降りるのを待ってから (取り込むと自分で降りる)、同じ DB と置き場でもう一度起こす */
+  restart: () => Promise<void>;
+  shutdown: () => Promise<void>;
+}
+
+/**
+ * **もう 1 台の、まだ使っていない denpa** (`56-transfer` が「新しい機械」として使う)。
+ * DB も録画の置き場も別に持ち、チューナーは普段の偽エージェントを指す。常駐処理は回さない
+ * (取り込んだ予約で録り始めないように)。範囲の +6 (bad port に当たらないことは確かめてある)
+ */
+export async function bootSpare(
+  index: number,
+  root: string,
+  agentUrl: string,
+): Promise<Spare> {
+  const port = APP_PORT + index * STRIDE + 6;
+  const dir = `${root}/spare`;
+  const spare = {
+    appUrl: `http://127.0.0.1:${port}`,
+    encodedDir: `${dir}/encoded`,
+    rawDir: `${dir}/raw`,
+  };
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(spare.encodedDir, { recursive: true });
+  mkdirSync(spare.rawDir, { recursive: true });
+  const launch = async (): Promise<Started> => {
+    const app = start(["bun", "./server.js"], {
+      TZ: "Asia/Tokyo",
+      HOST: "127.0.0.1",
+      PORT: String(port),
+      DENPA_DB: `${dir}/data/denpa.db`,
+      RAW_DIR: spare.rawDir,
+      ENCODED_DIR: spare.encodedDir,
+      FFMPEG: "./tests/fake/ffmpeg.sh",
+      TUNER_AGENT_URL: agentUrl,
+      DENPA_AUTOSTART: "0",
+      DENPA_VERSION: "v1.0.0",
+      SHUTDOWN_WAIT: "0",
+      TRUSTED_NETWORKS: "127.0.0.1",
+    });
+    try {
+      await waitFor(`${spare.appUrl}/api/health`, app, "denpa (もう 1 台)");
+    } catch (error) {
+      await stop(app);
+      throw error;
+    }
+    return app;
+  };
+  let app = await launch();
+  return {
+    ...spare,
+    restart: async () => {
+      const until = Date.now() + 15_000;
+      while (app.proc.exitCode === null && Date.now() < until) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      await stop(app);
+      app = await launch();
+    },
+    shutdown: async () => stop(app),
+  };
+}
+
 /**
  * `stack` はワーカーに1つ。`auto` にしてあるので、明示的に受け取らないテストでも
  * 立ち上がった状態で始まる (`baseURL` がこれに乗っているため)。

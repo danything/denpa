@@ -334,8 +334,8 @@
 /*
  * ---- 1本の時間軸 ----
  *
- * **どの幅でもページごとスクロールする** (`+layout.svelte` の `FILLED` に入れない)。広い画面では行が浮いたヘッダーの裏を流れ、
- * スクロールバーは窓の右端に出る。頭の1行 (絞り込みのチップ・「⋯」) と日付の見出しは上に貼り付く。
+ * **どの幅でもページごとスクロールする** (`+layout.svelte` の `FILLED` に入れない)。広い形では行が浮いたヘッダーの裏を流れ、
+ * スクロールバーは窓の右端に出る。日付の見出しは上に、頭の1行 (絞り込みのチップ・「⋯」) は下のタブのすぐ上に貼り付く。
  * 広い画面 (768px 以上) では左右と下を main の余白の外まで広げ、右のサイドバーを窓の右端と下端に付ける
  */
 .board {
@@ -367,18 +367,16 @@
   min-width: 0;
 }
 /*
- * 狭い画面の頭。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、状態と表示の切り替えのメニューを開く「⋯」。
- * ページごと動くので上に貼り付ける
+ * 1000px より狭い画面の頭の1行。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、状態と表示の切り替えのメニューを開く「⋯」。
+ * 出すのはスマホの形だけで、下のタブのすぐ上に貼り付ける (下の「スマホの形」)
  */
 .board .t-toolbar {
   position: sticky;
-  top: 0;
   z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.25rem;
   height: 2.75rem;
-  background: var(--dp-bg);
 }
 .board .t-chips {
   display: flex;
@@ -515,7 +513,6 @@
 /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
 :where(html[data-phone]) .board .t-toolbar {
   order: 2;
-  top: auto;
   bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
   margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
   padding-inline: 0.5rem;

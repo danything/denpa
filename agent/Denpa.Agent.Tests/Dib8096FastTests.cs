@@ -10,12 +10,12 @@ public class Dib8096FastTests
     private const uint Uhf27 = 557_142_857;
     private const uint Uhf13 = 473_142_857;
 
-    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make()
+    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make(Action<string>? trace = null)
     {
         var model = new DibModel();
         var i2c = new FakeI2c(model);
         var time = new FakeTime();
-        var dib = new Dib8096(i2c, time);
+        var dib = new Dib8096(i2c, time, trace);
         dib.Initialize();
         return (dib, i2c, model, time);
     }
@@ -80,6 +80,26 @@ public class Dib8096FastTests
         i2c.Log.Clear();
         dib.Tune(Uhf27);
         await Assert.That(i2c.Log.Any(line => line.StartsWith("T13=", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task 内訳に使い回しと較正の様子を出す()
+    {
+        var lines = new List<string>();
+        var (dib, _, model, time) = Make(lines.Add);
+        dib.Tune(Uhf27);
+        await Assert.That(lines[^1]).Contains("キャパシタ: 較正した (覚えた値なし)");
+        await Assert.That(lines[^1]).Contains("温度: 測った");
+        await Assert.That(lines[^1]).Contains($"{Dib8096.FastPollMs}ms で見た歩数: ");
+        dib.Tune(Uhf13);
+        dib.Tune(Uhf27);
+        await Assert.That(lines[^1]).Contains("キャパシタ: 使い回し");
+        await Assert.That(lines[^1]).Contains("温度: 使い回し (前に測ってから");
+        model.Tuner[0x1D] = 2000;
+        time.Sleep(61_000);
+        dib.Tune(Uhf13);
+        await Assert.That(lines[^1]).Contains("を超えた");
+        await Assert.That(lines[^1]).Contains("秒ぶり)");
     }
 
     [Test]

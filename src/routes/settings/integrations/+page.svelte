@@ -5,6 +5,7 @@
   import Migrate from "./Migrate.svelte";
   import MigrateEdcb from "./MigrateEdcb.svelte";
   import Notifications from "./Notifications.svelte";
+  import Transfer from "./Transfer.svelte";
   import Tv from "./Tv.svelte";
 
   let { data, form } = $props();
@@ -45,3 +46,4 @@
 <div class="part" id="tv" data-part><Tv {data} /></div>
 <div class="part" id="migrate" data-part><Migrate {data} /></div>
 <div class="part" id="migrate-edcb" data-part><MigrateEdcb {data} /></div>
+<div class="part" id="transfer" data-part><Transfer {data} /></div>

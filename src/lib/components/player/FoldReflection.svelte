@@ -10,7 +10,7 @@
   } from "./reflection";
 
   /**
-   * **テーブルトップの反射。** 折り畳み端末を半分に折って机に置いたとき (`PlayerLayout` の `TABLETOP`)、
+   * **テーブルトップの反射。** 折り畳み端末を半分に折って机に置いたとき (`#lib/phone-form.ts` の `TABLETOP`)、
    * 下の段の地に、上の段の映像の光が机に映り込んだ色を敷く (`reflection.ts`)。舞台 (`PlayerStage`) が、
    * この形の間だけアンビエントの光 (`AmbientGlow`) の代わりに置く。オン/オフはアンビエントモードと同じ設定。
    *
@@ -110,7 +110,7 @@
     const measure = () => {
       const segment = outer.getBoundingClientRect();
       const frame = target.getBoundingClientRect();
-      // 枠が映像の形でないとき (狭い画面で上下に黒帯が出る) は、映像の幅だけ
+      // 枠はふつう映像の形 (`PlayerStage` がテーブルトップでは `--dp-aspect` にする)。形がずれていても映像の幅だけを取る
       const [w = 16, h = 9] = ratio.split("/").map(Number);
       const width = Math.min(frame.width, (frame.height * w) / h);
       const next = reflectionLayout(segment, {

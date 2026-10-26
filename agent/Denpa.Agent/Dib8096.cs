@@ -85,8 +85,19 @@ public sealed class Dib8096
 
     private double _temperatureAt = double.NegativeInfinity;
 
-    /// <summary>最後の選局で使い回したもの (内訳に出す)</summary>
-    private readonly List<string> _reused = [];
+    /// <summary>
+    /// 最後の選局の、使い回しと較正の様子 (<c>--tune</c> の内訳に出す)。上の 3 つの数字を実機の値から決めるための記録:
+    /// キャパシタの ADC の差、温度の変化と経過秒、3ms で見た段ごとの歩数
+    /// </summary>
+    private readonly List<string> _notes = [];
+
+    /// <summary>キャパシタの較正をやり直した理由 (なければ「覚えた値なし」)</summary>
+    private string _capReason = "";
+
+    /// <summary>3ms で見た段ごとの歩数 (最後の選局)</summary>
+    private readonly Dictionary<Step, int> _fastSteps = [];
+
+    private int? _temperatureLast;
 
     /// <summary>最後の選局の経路 (探索した / 覚えた値で合わせた / 既定で合わせた)</summary>
     public string LastPath => _path;
@@ -530,7 +541,9 @@ public sealed class Dib8096
         _khz = hz / 1000;
         _band = BandOf(_khz);
         _breakdown.Clear();
-        _reused.Clear();
+        _notes.Clear();
+        _fastSteps.Clear();
+        _capReason = "覚えた値なし";
         var started = _time.NowMs;
         var slept = _slept;
         Measure("準備 (起こす・ダイバーシティ両方・出力止め)", () =>
@@ -541,7 +554,7 @@ public sealed class Dib8096
         });
         // 温度は直前に測ってから TemperatureReuseMs 以内なら測り直さない (仕様書に無い)
         if (_time.NowMs - _temperatureAt >= TemperatureReuseMs) _tempPending = true;
-        else if (!_tempPending) _reused.Add("温度");
+        else if (!_tempPending) _notes.Add($"温度: 使い回し (前に測ってから {(_time.NowMs - _temperatureAt) / 1000:F0} 秒)");
         TunerAndPeripherals();
         Measure("ダイバーシティ内部だけ", () => Diversity(DiversityMode.Internal));
         Measure("AGC の立ち上げ (7.4)", StartAgc);
@@ -552,11 +565,15 @@ public sealed class Dib8096
         }
         catch
         {
-            _capacitors.Remove(_tunerKhz);
+            if (_capacitors.Remove(_tunerKhz)) _notes.Add("キャパシタ: 探索が投げたので覚えた値を捨てた");
             throw;
         }
         // 合わなかったら、使い回したキャパシタも次は較正し直す
-        if (result == DibLock.Failed) _capacitors.Remove(_tunerKhz);
+        if (result == DibLock.Failed && _capacitors.Remove(_tunerKhz)) _notes.Add("キャパシタ: ロックしなかったので覚えた値を捨てた");
+        if (_fastSteps.Count > 0)
+        {
+            _notes.Add($"{FastPollMs}ms で見た歩数: {string.Join(" / ", _fastSteps.Select(pair => $"{pair.Key} {pair.Value}"))}");
+        }
         Measure("出力をパラレルに", () =>
         {
             Output(true);
@@ -566,7 +583,7 @@ public sealed class Dib8096
         {
             var parts = string.Join(" / ", _breakdown.Select(part =>
                 $"{part.Name} {part.Ms:F0}ms (待ち {part.SleptMs:F0}ms{(part.Steps > 1 ? $"、{part.Steps} 歩" : "")})"));
-            _trace($"選局 {hz} Hz → {result} ({_path}{(_reused.Count > 0 ? $"、使い回し: {string.Join("・", _reused)}" : "")}): 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
+            _trace($"選局 {hz} Hz → {result} ({_path}){(_notes.Count > 0 ? $" [{string.Join("。", _notes)}]" : "")}: 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
         }
         return result;
     }
@@ -887,6 +904,10 @@ public sealed class Dib8096
             case 2:
                 var v = T(0x1D);
                 _temperature = (((short)((v - _tempA) * 180)) >> 8) + 55;
+                _notes.Add(_temperatureLast is { } last
+                    ? $"温度: 測った {_temperature} (前回 {last} から {_temperature - last:+0;-0;0}、{(_time.NowMs - _temperatureAt) / 1000:F0} 秒ぶり)"
+                    : $"温度: 測った {_temperature} (初めて)");
+                _temperatureLast = _temperature;
                 _tunerState = 3;
                 return 15;
             default:
@@ -1134,20 +1155,23 @@ public sealed class Dib8096
             case 14:
                 T(0x18, 0xE900 | (_capBest & 0xFF));
                 _capacitors[_tunerKhz] = (_capBest, _capDmin);
+                _notes.Add($"キャパシタ: 較正した ({_capReason}) キャパシタ {_capBest}、ADC の差 {_capDmin}");
                 _tunerState = 13;
                 return 0;
             case 15:
             {
                 var seen = T(0x1D);
                 var goal = _rest == 0 ? 200 : 400;
-                if (Math.Abs(seen - goal) <= _capKnown.Dmin + CapacitorTolerance)
+                var gap = Math.Abs(seen - goal);
+                if (gap <= _capKnown.Dmin + CapacitorTolerance)
                 {
-                    _reused.Add("キャパシタ");
+                    _notes.Add($"キャパシタ: 使い回し {_capKnown.Cap} (ADC の差 {gap}、覚えたとき {_capKnown.Dmin}、ずれ {gap - _capKnown.Dmin})");
                     _capPending = false;
                     _tunerState = 1;
                     return 0;
                 }
                 // 合わない。忘れて二分探索から
+                _capReason = $"覚えた値 {_capKnown.Cap} で ADC の差 {gap} が覚えたとき {_capKnown.Dmin} + {CapacitorTolerance} を超えた";
                 _capacitors.Remove(_tunerKhz);
                 _capStep = 64;
                 _cap = _capBest = 64;
@@ -1701,7 +1725,9 @@ public sealed class Dib8096
             if (step == Step.Stop && _demodState is DemodState.Failed or DemodState.Locked or DemodState.DataLocked) break;
             if (step == Step.Stop) throw new IOException("DiB8000 の探索が途中で止まりました");
             if (_time.NowMs - started > SearchLimitMs) throw new IOException("DiB8000 の探索が 5 秒で終わりませんでした");
-            Wait(Math.Max(Floor(step), (int)Math.Ceiling(wait * Symbol)));
+            var floor = Floor(step);
+            if (floor == FastPollMs) _fastSteps[step] = _fastSteps.GetValueOrDefault(step) + 1;
+            Wait(Math.Max(floor, (int)Math.Ceiling(wait * Symbol)));
             Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
         }
         // ロックしたら、段 3 で書いた値を覚えておく (次からは探索せずに同じ値で合わせる)。7.5.6 の読み戻しは TMCC の同期が

@@ -8,6 +8,8 @@
 - **書き込み (POST・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも)。
   付けないと、SvelteKit の CSRF の守りが「よそのサイトからのフォーム送信」とみなして 403 を返します
   (アプリは Origin を付けないため)
+- 設定の画面からだけ使うもの (denpa を別の機械へ移す `/settings/integrations/transfer/…` など) はここに載せません。
+  形式は保たず、アクセストークンでは断ります (403。[auth.md](auth.md#アプリのペアリング))
 - **URL は denpa の根からの相対で返します** (`api/services/…`)。denpa を開いている URL に足して使います。
   前段の接頭辞 (`/denpa/` など) の下で動かしていても、そのまま解決できます
 
