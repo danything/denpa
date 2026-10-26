@@ -17,7 +17,7 @@
 
   /**
    * 映像を出す領域。3つの視聴画面で同じ配線を1本に: 操作列の出し入れとカーソル (`controls`)・キーボードで触っている
-   * 間は残す・全画面は枠ごと (iPhone は広げる。`data-pseudo`)・枠の大きさから操作列の詰め方を決める (`compact`)。
+   * 間は残す・全画面は枠ごと (iPhone は広げる。`data-pseudo`。テーブルトップはページごと)・枠の大きさから操作列の詰め方を決める (`compact`)。
    * 中身は画面ごとに違うので snippet で受ける
    */
   interface Props {
@@ -59,7 +59,7 @@
 
   // 中のメニュー (`OverlayMenu`・`SettingsMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
   setContext(PLAYER_CONTROLS, () => controls);
-  /** テーブルトップか (`PlayerLayout` の `TABLETOP`)。並べ方は CSS、ここは光と反射のどちらを置くかだけ */
+  /** テーブルトップか (`#lib/phone-form.ts` の `TABLETOP`)。並べ方は CSS、ここは光と反射のどちらを置くかだけ */
   const tabletop = new MediaQuery(TABLETOP);
 
   // メニューを枠の中に収める先 (`OverlayMenu`・`SettingsMenu`)。bind で入るので取り手で渡す
