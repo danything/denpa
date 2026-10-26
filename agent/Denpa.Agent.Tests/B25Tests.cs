@@ -661,6 +661,93 @@ public class B25Tests
     }
 
     /// <summary>
+    /// **PAT より先に来た PMT・ECM を取っておく。** PAT が来た時点で鍵が揃っているので、PMT や ECM の
+    /// 次の周を待たずに流し始める (前は PAT → PMT → ECM の順に来るまで溜めていた)
+    /// </summary>
+    [Test]
+    public async Task PATより先に来たPMTとECMで早く流し始める()
+    {
+        var ts = new Ts()
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, []))
+            .Ecm(EcmPid, 1).Videos(3, 1)
+            .Pat((0x0400, PmtPid))
+            .Videos(3, 1);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards);
+
+        // 終わりの吐き出し (Flush) をしなくても、全部が復号されて出てくる
+        var output = Run(descrambler, ts.Wire.ToArray(), flush: false);
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Decoded).IsEqualTo(6);
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+    }
+
+    /// <summary>PAT が挙げない PID から来ていた PMT は使わない。PAT の PID から来る PMT を待つ</summary>
+    [Test]
+    public async Task PATが挙げないPIDのPMTは使わない()
+    {
+        var ts = new Ts()
+            .Pmt(0x0105, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Ecm(EcmPid, 1)
+            .Pat((0x0400, PmtPid))
+            .Videos(3, 1);
+
+        var output = Run(new Descrambler(new Cards()), ts.Wire.ToArray(), flush: false);
+
+        // 確かめた PMT がまだ無いので溜めたまま
+        await Assert.That(output.Length).IsEqualTo(0);
+    }
+
+    /// <summary>
+    /// **PMT が挙げない PID の ECM の鍵は使わない。** 先回りしてカードに聞いてはいる (問い合わせが1回増えるだけ)
+    /// </summary>
+    [Test]
+    public async Task PMTが挙げないPIDのECMは使わない()
+    {
+        const int stray = 0x0903;
+        var ts = new Ts()
+            .Ecm(stray, 7)
+            .Pat((0x0400, PmtPid))
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Ecm(EcmPid, 1).Videos(3, 1)
+            .Ecm(stray, 8).Videos(3, 1);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        // 流し始めたあとは、知らない PID を覗かない (8 は聞かない)
+        await Assert.That(Generations(cards)).IsEqualTo("7,1");
+    }
+
+    /// <summary>
+    /// **ES の PES の頭を ECM と取り違えない。** PES は <c>00 00 01</c> で始まるので、セクションとして読むと
+    /// pointer_field 0・table_id 0x00 になる。後ろに 0x82 が並んでいても拾わない
+    /// </summary>
+    [Test]
+    public async Task 掛かっていないPESの頭をECMと読まない()
+    {
+        var ts = new Ts();
+        byte[] pes = [0x47, 0x40 | (0x0113 >> 8), 0x0113 & 0xFF, 0x10, 0x00, 0x00, 0x01, 0xE0, .. Enumerable.Repeat((byte)0x82, 180)];
+        byte[] shifted = [0x47, 0x40 | (0x0114 >> 8), 0x0114 & 0xFF, 0x10, 0x00, 0x00, 0x00, 0x01, .. Enumerable.Repeat((byte)0x82, 180)];
+        foreach (var packet in new[] { pes, shifted })
+        {
+            ts.Wire.AddRange(packet);
+            ts.Plain.AddRange(packet);
+        }
+        ts.Pat((0x0400, PmtPid)).Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, [])).Ecm(EcmPid, 1).Videos(3, 1);
+        var cards = new Cards();
+
+        var output = Run(new Descrambler(cards), ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+    }
+
+    /// <summary>
     /// **溜めていた間の内訳を1行に出せる** (選局して最初に送り出したときの記録。docs/stream.md「本番の記録で割る」)。
     /// そろった順と、鍵の相手に聞いた回数・覚えた答え・未契約・錠の待ち
     /// </summary>

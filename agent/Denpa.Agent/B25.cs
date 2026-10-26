@@ -78,6 +78,20 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
     /// </summary>
     private Ecm? _only;
 
+    /// <summary>
+    /// **PAT・PMT より先に来た ECM** (PID → ECM)。溜めている間だけ、まだ知らない PID のセクションも頭の
+    /// table_id を覗き、ECM ならその場で鍵を聞いておく。PMT がその PID を挙げたら <see cref="Rebuild"/> が
+    /// 鍵ごと引き取る。挙げなければ使わずに捨てる — 読み違えてもカードへの問い合わせが1回増えるだけ
+    /// </summary>
+    private readonly Dictionary<int, Ecm> _earlyEcms = [];
+    /// <summary>PAT より先に来た PMT を組み立てる場所 (PID → セクション)</summary>
+    private readonly Dictionary<int, Section> _earlyPmtSections = [];
+    /// <summary>PAT より先に揃った PMT (program_number → PID と中身)。PAT が来たら、その PID でよかったかを確かめてから使う</summary>
+    private readonly Dictionary<int, (int Pid, byte[] Section)> _earlyPmts = [];
+
+    /// <summary>先回りして覗く PID の数の上限。壊れた TS で表が膨らまないように</summary>
+    private const int EarlyLimit = 32;
+
     private CardInit? _init;
     private int _caSystemId = BcasSystemId;
     private string? _logged;
@@ -288,6 +302,10 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
     private void Settle()
     {
         _holding = false;
+        // 先回りして取っておいたもので、PAT・PMT が挙げなかったものは使わない
+        _earlyEcms.Clear();
+        _earlyPmtSections.Clear();
+        _earlyPmts.Clear();
         for (var at = _held - 1; at >= 0; at--)
         {
             var packet = _hold.AsSpan(at * PacketSize, PacketSize);
@@ -327,10 +345,47 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
         var start = PayloadStart(packet);
         if (start is < 0 or PacketSize) return;
         var pid = ((packet[1] & 0x1F) << 8) | packet[2];
+        var unitStart = (packet[1] & 0x40) != 0;
         var section = pid == 0 ? _pat
             : _pmtSections.TryGetValue(pid, out var pmt) ? pmt
-            : _ecms.TryGetValue(pid, out var ecm) ? ecm.Section : null;
-        if (section is not null) Feed(section, pid, packet[start..], (packet[1] & 0x40) != 0);
+            : _ecms.TryGetValue(pid, out var ecm) ? ecm.Section
+            : Early(pid, packet[start..], unitStart);
+        if (section is not null) Feed(section, pid, packet[start..], unitStart);
+    }
+
+    /// <summary>
+    /// **まだ知らない PID を覗く。** 溜めている間だけ、セクションの頭 (payload_unit_start が立ったもの) の
+    /// table_id が ECM (0x82) か、PAT より前なら PMT (0x02) のときに組み立て始める。
+    ///
+    /// <para>
+    /// PAT → PMT → ECM → カードと順に待つと、それぞれの間隔 (どれも 0.1 秒ほど) が積み上がる。先に来たものを
+    /// 取っておけば、PAT・PMT が来た時点で鍵がもう揃っていることがある。**経路と溜めの条件は確かめた PMT だけで
+    /// 決める** (<see cref="Rebuild"/> / <see cref="Ready"/>) ので、ここで読み違えても余計な問い合わせが増えるだけ。
+    /// </para>
+    ///
+    /// <para>
+    /// ES の PES は頭が <c>00 00 01</c> なので、pointer_field 0・table_id 0x00 と読めて、ここでは拾わない
+    /// (掛かっている PES はそもそも読まない。<see cref="Take"/>)。
+    /// </para>
+    /// </summary>
+    private Section? Early(int pid, ReadOnlySpan<byte> payload, bool unitStart)
+    {
+        if (!_holding) return null;
+        if (_earlyEcms.TryGetValue(pid, out var known)) return known.Section;
+        if (_earlyPmtSections.TryGetValue(pid, out var pmt)) return pmt;
+        if (!unitStart || _earlyEcms.Count + _earlyPmtSections.Count >= EarlyLimit) return null;
+        var table = 1 + payload[0];
+        if (table >= payload.Length) return null;
+        if (payload[table] == 0x82)
+        {
+            var ecm = new Ecm(pid);
+            _earlyEcms[pid] = ecm;
+            return ecm.Section;
+        }
+        if (payload[table] != 0x02 || _patLast is not null) return null;
+        var section = new Section(null);
+        _earlyPmtSections[pid] = section;
+        return section;
     }
 
     /// <summary>
@@ -396,12 +451,28 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
         // 番組が変わった。来ていない PMT をもう一度待つ
         _pmtRepeated = false;
         Rebuild();
+        /*
+         * PAT より先に揃っていた PMT を、PAT が挙げた PID と突き合わせてから使う (Early)。
+         * 違う PID から来ていたものは捨てる。組み立てかけのものは、これからは PAT の PID で組み立てる
+         */
+        _earlyPmtSections.Clear();
+        foreach (var (number, (pid, early)) in _earlyPmts.ToList())
+        {
+            if (_programs.TryGetValue(number, out var expected) && expected == pid) OnPmt(pid, early);
+        }
+        _earlyPmts.Clear();
     }
 
     private void OnPmt(int pid, ReadOnlySpan<byte> section)
     {
         if (section[0] != 0x02) return;
         var number = BinaryPrimitives.ReadUInt16BigEndian(section[3..]);
+        // PAT より先に来た。PAT が来るまで取っておく (Early)
+        if (_patLast is null)
+        {
+            _earlyPmts[number] = (pid, section.ToArray());
+            return;
+        }
         if (!_programs.TryGetValue(number, out var expected) || expected != pid) return;
         if (_pmts.TryGetValue(number, out var last) && section.SequenceEqual(last))
         {
@@ -422,7 +493,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
         var wanted = new HashSet<int>();
         foreach (var pmt in _pmts.Values) Streams(pmt, _caSystemId, streams, wanted);
         foreach (var pid in _ecms.Keys.Except(wanted).ToList()) _ecms.Remove(pid);
-        foreach (var pid in wanted) _ecms.TryAdd(pid, new Ecm(pid));
+        // PMT より先に来ていた ECM なら、もう聞いてある鍵ごと引き取る (Early)
+        foreach (var pid in wanted) _ecms.TryAdd(pid, _earlyEcms.Remove(pid, out var early) ? early : new Ecm(pid));
         Array.Clear(_route);
         foreach (var (es, ecm) in streams) _route[es] = _ecms[ecm];
         _allPmts = _patLast is not null && _programs.Keys.All(_pmts.ContainsKey);
@@ -476,7 +548,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
         if (section[0] != 0x82) return;
-        if (_holding && ecm.Last is not null) Settle();
+        // 溜めをやめる合図にするのは PMT が挙げた ECM だけ。先回りして聞いただけのもの (Early) は PAT・PMT を待たせない
+        if (_holding && ecm.Last is not null && _ecms.GetValueOrDefault(ecm.Pid) == ecm) Settle();
         if (ecm.Last is { } last && section.SequenceEqual(last))
         {
             if (_packets >= ecm.RetryAt) Ask(ecm);
