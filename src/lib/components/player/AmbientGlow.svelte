@@ -16,7 +16,6 @@
     type GlowLayout,
     glowLayout,
     glowPixels,
-    plan,
     reach,
     type Rect,
     region,
@@ -29,6 +28,7 @@
     washTop,
   } from "./ambient";
   import type { Ambient } from "./ambient.svelte.js";
+  import { Crossfade, GlowLoop } from "./glow-loop.svelte.js";
   import { PHONE_LANDSCAPE } from "./PlayerLayout.svelte";
 
   /**
@@ -38,8 +38,9 @@
    * - 縦に積むときは映像の下の中身に、二段組は窓全体に敷き、枠から離れるほど薄くする (`reach`・`farthest`)。
    *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5 以上で読める (`toneFrame`・`WASH_LUMINANCE`)
    * - 色は小さな canvas で作って CSS で引き伸ばす。`filter: blur` は使わない (GPU の無い端末で重かった)
-   * - 前の色からの入れ替えは CSS の `opacity` の transition (下の style)。帯ごとに canvas を2枚重ね、新しい色を裏の1枚に
-   *   描いてから表と裏を入れ替える (`face`)。ここで動かすのは「どちらが表か」の印だけ
+   * - 写す繰り返しと前の色からの入れ替えは、テーブルトップの反射 (`FoldReflection`) と同じ部品 (`glow-loop.svelte.ts`)。
+   *   入れ替えは CSS の `opacity` の transition (下の style)。帯ごとに canvas を2枚重ね、新しい色を裏の1枚に
+   *   描いてから表と裏を入れ替える。ここで動かすのは「どちらが表か」の印だけ
    * - 色は枠に重ならない4本の帯 (`.band`) にだけ描く (`strips`)。枠の後ろに敷くと映像のコマごとに合成し直す
    * - ブラウザの枠の色 (`theme-color`) もページの上の端の色にする (`washTop`)
    * - 写さないときは `ambient.ts` の `plan`。映像の上には何も重ねない
@@ -59,7 +60,7 @@
   } = $props();
 
   const BANDS = [0, 1, 2, 3];
-  /** 帯ごとの2枚 (表と裏)。どちらが表かは `front` */
+  /** 帯ごとの2枚 (表と裏) */
   const SIDES = [0, 1];
   let box = $state<HTMLDivElement | null>(null);
   const bands = $state<(HTMLDivElement | null)[]>([null, null, null, null]);
@@ -68,54 +69,32 @@
     Array.from({ length: BANDS.length * SIDES.length }, () => null),
   );
 
-  let hidden = $state(false);
-  let reduced = $state(false);
   let room = $state(false);
   /** 縦に積んでいるか (768px より狭い)。色は映像の下へだけ敷く */
   let stacked = $state(false);
   let dark = $state(false);
-  /** もう1枚写して光を出しているか */
-  let lit = $state(false);
-  /** 写した回数。E2E が「動いている・止まっている」を見る */
-  let updates = $state(0);
   /** 最後に写した1枚と、最後に入れ替えた1枚の違い (`frameDelta`)。E2E が「止まった映像では 0 に近い」を見る */
   let delta = $state<number | null>(null);
 
-  const now = $derived(
-    plan({
-      on: ambient.on,
-      room,
-      fullscreen,
-      hidden,
-      reduced,
-      playing: ambient.playing,
-      lit,
-    }),
-  );
+  const loop = new GlowLoop(() => ({ ambient, room, fullscreen }), show);
+  const now = $derived(loop.now);
   /** 光を出しているか。置き場はこれが変わったときだけ測り直す (写す・止めるの切り替えでは測らない) */
   const visible = $derived(now !== "off");
 
   /** いまの置き場。枠の大きさが変わると変わる */
   let layout: GlowLayout | null = null;
-  /** 表と裏それぞれに描いた1枚 (画面に出さない canvas)。帯の canvas はここから切り出して描く */
-  let layers: (HTMLCanvasElement | null)[] = [null, null];
-  /** 入れ替えの途中で次の色が来たとき、見えている色を作る下書き (`settle`) */
-  let spare: HTMLCanvasElement | null = null;
-  /** いま表の側 (0 か 1) */
-  let front = 0;
+  /** 帯の canvas の入れ替え。描く1枚は範囲全体で、どの帯にも同じに描き、帯がその一部を切り出す */
+  const fade = new Crossfade({
+    box: () => box,
+    canvases: (side) => canvases.filter((_, k) => k % 2 === side),
+    size: () => layout,
+  });
   /** いまの色 (縁を延ばした 32x18 の RGBA。時間でならしたもの)。置き場やテーマが変わったら、これから作り直す */
   let colors: Float32Array | null = null;
   /** 時間でならした色 (`follow`)。写すたびに進め、違いが大きくなったら `colors` に移す */
   let smoothed: Float32Array | null = null;
   /** 最後に写した時刻 (`performance.now`)。ならす重みを、経った時間で決める */
   let lastAt: number | null = null;
-
-  function scratch(): HTMLCanvasElement {
-    const canvas = document.createElement("canvas");
-    canvas.width = layout?.width ?? 1;
-    canvas.height = layout?.height ?? 1;
-    return canvas;
-  }
 
   /** ならした色から、敷く色を作って描く (`toneFrame`・`glowPixels`) */
   function compose(
@@ -143,110 +122,26 @@
    * 画面を離れたときはテーマの地に戻す。変わるのは色を入れ替えたときだけ (多くて 1 秒に 5 回)
    */
   const toolbar = $derived(
-    now !== "off" && lit && !fullscreen && top !== null ? toHex(top) : null,
+    now !== "off" && loop.lit && !fullscreen && top !== null
+      ? toHex(top)
+      : null,
   );
   $effect(() => {
     setAmbientThemeColor(toolbar);
   });
   $effect(() => () => setAmbientThemeColor(null));
 
-  let edge: HTMLCanvasElement | null = null;
-
-  /** 写した1枚の画素 (32x18 の RGBA) */
-  function framePixels(bitmap: ImageBitmap): Uint8ClampedArray | null {
-    if (edge === null) {
-      edge = document.createElement("canvas");
-      edge.width = GLANCE.width;
-      edge.height = GLANCE.height;
-    }
-    const context = edge.getContext("2d", { willReadFrequently: true });
-    if (context === null) return null;
-    context.clearRect(0, 0, GLANCE.width, GLANCE.height);
-    context.drawImage(bitmap, 0, 0, GLANCE.width, GLANCE.height);
-    return context.getImageData(0, 0, GLANCE.width, GLANCE.height).data;
-  }
-
-  /** 帯の canvas の `side` の側に、その側の1枚 (`layers`) を描く。1枚も無ければ空にする */
-  function paint(side: number): void {
-    const layer = layers[side];
-    canvases.forEach((canvas, k) => {
-      const context = k % 2 === side ? canvas?.getContext("2d") : null;
-      if (!canvas || !context) return;
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      if (layer) context.drawImage(layer, 0, 0);
-    });
-  }
-
-  /**
-   * `side` の側を表にする。入れ替えの動きは CSS (下の style の `[data-front]`)。
-   * `instant` ならその場で入れ替える (transition を外して当て、計算させてから戻す)
-   */
-  function face(side: number, instant: boolean): void {
-    front = side;
-    box?.toggleAttribute("data-instant", instant);
-    canvases.forEach((canvas, k) =>
-      canvas?.toggleAttribute("data-front", k % 2 === side),
-    );
-    if (!instant || box === null) return;
-    void getComputedStyle(canvases[side] ?? box).opacity;
-    box.removeAttribute("data-instant");
-  }
-
-  /**
-   * **入れ替えの途中で次の色が来たら、いま見えている色を表にしてから次へ進む** (色が跳ねない)。
-   * 2枚は同じ曲線で逆に動き、足して重ねている (`plus-lighter`) ので、見えている色は
-   * 「表 × 表の透明度 + 裏 × (1 − 表の透明度)」。それを裏に描いて、その場で表にする
-   */
-  function settle(): void {
-    // 隠した帯の中では transition が進まないので、出ている帯の1枚で見る
-    const shown = canvases.find(
-      (canvas, k) => k % 2 === front && canvas?.parentElement?.hidden === false,
-    );
-    if (!shown || layout === null) return;
-    const mix = Number.parseFloat(getComputedStyle(shown).opacity);
-    if (!(mix < 1)) return;
-    const back = 1 - front;
-    spare ??= scratch();
-    const context = spare.getContext("2d");
-    if (context === null) return;
-    context.clearRect(0, 0, spare.width, spare.height);
-    const old = layers[back];
-    const next = layers[front];
-    if (old) {
-      context.globalAlpha = 1 - mix;
-      context.drawImage(old, 0, 0);
-    }
-    if (next) {
-      context.globalCompositeOperation = "lighter";
-      context.globalAlpha = mix;
-      context.drawImage(next, 0, 0);
-    }
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = 1;
-    [layers[back], spare] = [spare, old ?? null];
-    paint(back);
-    face(back, true);
-  }
-
   /** いまの色を最後の1枚から作り直し、動かさずに表へ出す (置き場・テーマが変わったとき) */
   function repaint(): void {
-    layers = [null, null];
-    spare = null;
-    if (colors !== null) {
-      const layer = scratch();
-      if (layout !== null) compose(layer, colors, layout);
-      layers[front] = layer;
-    }
-    paint(0);
-    paint(1);
-    face(front, true);
+    const at = layout;
+    const last = colors;
+    fade.repaint(
+      at !== null && last !== null ? (layer) => compose(layer, last, at) : null,
+    );
   }
 
   /** 写した1枚を次の色にして、裏に描いてから表と裏を入れ替える (動きは CSS。動かさない設定ではすぐ) */
-  function show(bitmap: ImageBitmap): void {
-    const pixels = framePixels(bitmap);
-    bitmap.close();
-    if (pixels === null) return;
+  function show(pixels: Uint8ClampedArray): void {
     // 縁の色を延ばし (`edgeExtend`)、時間でならす (`follow`。場面が変わったらすぐ)
     const now = performance.now();
     // ならした色は、入れ替えるかどうかに関わらず毎回進める (入れ替えを見送っても、ゆっくりした変化を捨てない)
@@ -259,48 +154,40 @@
     // 最後に入れ替えた色との違い。小さければ入れ替えない (`ambient.ts` の `changed`)
     delta = colors === null ? null : frameDelta(colors, smoothed);
     if (colors !== null && !changed(colors, smoothed)) return;
-    colors = Float32Array.from(smoothed);
-    if (layout === null) return;
-    settle();
-    const back = 1 - front;
-    const layer = (layers[back] ??= scratch());
-    compose(layer, colors, layout);
-    paint(back);
-    face(back, false);
+    const next = Float32Array.from(smoothed);
+    colors = next;
+    const at = layout;
+    if (at === null) return;
+    fade.next((layer) => compose(layer, next, at));
   }
 
   $effect(() => {
-    const motion = matchMedia("(prefers-reduced-motion: reduce)");
     const twoColumns = matchMedia("(min-width: 768px)");
     const phone = matchMedia(PHONE_LANDSCAPE);
     const check = () => {
-      hidden = document.visibilityState === "hidden";
-      reduced = motion.matches;
       room = !phone.matches;
       stacked = !twoColumns.matches;
       dark = document.documentElement.dataset["theme"] === "dark";
     };
     check();
-    document.addEventListener("visibilitychange", check);
     // テーマはヘッダーのボタンと端末の設定で変わる (`theme.svelte.ts` が `<html data-theme>` を書き換える)
     const theme = new MutationObserver(check);
     theme.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],
     });
-    for (const media of [motion, twoColumns, phone])
+    for (const media of [twoColumns, phone])
       media.addEventListener("change", check);
     return () => {
-      document.removeEventListener("visibilitychange", check);
       theme.disconnect();
-      for (const media of [motion, twoColumns, phone])
+      for (const media of [twoColumns, phone])
         media.removeEventListener("change", check);
     };
   });
 
   /** 色を敷いている間、右の列を色の上に描かせる (`<html data-ambient>`。下の style) */
   $effect(() => {
-    if (now === "off" || !lit) return;
+    if (now === "off" || !loop.lit) return;
     const root = document.documentElement;
     root.dataset["ambient"] = "";
     return () => {
@@ -311,15 +198,11 @@
   /** 消したら光も捨てる。次にオンにしたときに古い色が出ないように */
   $effect(() => {
     if (now !== "off") return;
-    lit = false;
     colors = null;
     smoothed = null;
     lastAt = null;
     top = null;
-    layers = [null, null];
-    spare = null;
-    paint(0);
-    paint(1);
+    fade.repaint(null);
   });
 
   /** テーマが変わったら、最後の1枚から塗り直す (色の濃くし方が違う) */
@@ -423,7 +306,7 @@
       sizes.disconnect();
       sizes.observe(target);
       sizes.observe(main);
-      const aside = frame?.querySelector(":scope > aside");
+      const aside = frame?.querySelector(":scope > [data-player-side] > aside");
       if (aside) sizes.observe(aside);
       measure();
     };
@@ -437,36 +320,6 @@
       window.removeEventListener("resize", measure);
     };
   });
-
-  /** 写す。`watch` の間だけ、`EVERY` ごとに */
-  $effect(() => {
-    if (now !== "watch") return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const run = async () => {
-      let bitmap: ImageBitmap | null = null;
-      try {
-        bitmap = (await ambient.glance(GLANCE)) ?? null;
-      } catch {
-        // 写せなかった (切り替えの途中など)。次の回にまた写す
-      }
-      if (stopped) {
-        bitmap?.close();
-        return;
-      }
-      if (bitmap !== null) {
-        show(bitmap);
-        updates++;
-        lit = true;
-      }
-      timer = setTimeout(run, EVERY);
-    };
-    void run();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  });
 </script>
 
 <div
@@ -474,7 +327,7 @@
   class="ambient"
   data-off={now === "off" ? "" : undefined}
   data-plan={now}
-  data-updates={updates}
+  data-updates={loop.updates}
   data-delta={delta === null ? undefined : delta.toFixed(2)}
   data-testid={testid}
   aria-hidden="true"
@@ -538,7 +391,7 @@
      * **右の列 (と、縦に積んだときの番組の中身) は色の上に描く。** 位置を持たせて、文書の順で色より後ろに
      * 描かせる (位置を持たない箱は、位置を持つ色より先に描かれて隠れる)
      */
-  :global(html[data-ambient] [data-player-layout] > aside) {
+  :global(html[data-ambient] [data-player-side] > aside) {
     position: relative;
   }
 </style>

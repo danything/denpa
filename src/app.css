@@ -99,12 +99,6 @@
   /* 何行かある一覧の件と件の間。件は面に乗っていて面の切れ目が境目になるので、詰めておく */
   --dp-list-gap: 0.375rem;
   /*
-   * **操作の層の面** (ヘッダー・下のタブ・主のボタン。docs/design.md の「3 つの層」)。メニューと同じ面 (`--dp-pop`) を
-   * 92% 残して、下を流れる中身をうっすら見せる。ぼかさない。暗いほうは面が地より明るいので、影が見えなくても縁が分かる。
-   * 透かしを減らす設定では透かさない (下)
-   */
-  --dp-float: color-mix(in srgb, var(--dp-pop) 92%, transparent);
-  /*
    * **浮いた角丸の面の形** (広い画面のヘッダーと、その下に貼り付く操作の1行。docs/design.md の「浮かせ方」)。
    * 窓の端からの離れ・角・ヘッダーとの隙間・中の余白をそろえる。操作の1行の面は、中身が裏に入ったときだけ出す (下の `dp-bar-float`)
    */
@@ -182,12 +176,6 @@
   --dp-video-menu: color-mix(in srgb, var(--dp-video-panel) 86%, transparent);
   --dp-video-veil: rgb(0 0 0 / 0.6);
   --dp-video-veil-strong: rgb(0 0 0 / 0.8);
-  /*
-     * 指を乗せた地。`--dp-hover` はメニューで ↑↓ が指す項目・番組表のマス、
-     * `--dp-hover-soft` は地の上の 1 行の並び (サイドバー・控えのボタン・チップ)。選んでいる印には使わない
-     */
-  --dp-hover: var(--dp-subtle);
-  --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
   /* 件の面の角。行の角 (`--dp-radius`) より件の余白 (0.5rem) ぶん丸く */
   --dp-item-radius: calc(var(--dp-radius) + 0.5rem);
 }
@@ -314,6 +302,26 @@
   --dp-ok-text: #00cc88; /* jade-250 */
   --dp-warn-text: #fecc63; /* amber-150 */
   --dp-info-text: #0ccece; /* cyan-250 */
+}
+/*
+ * **テーマの色から作る色。** `:root` で作ると `<html>` のテーマの値のまま下へ受け継がれるので、テーマを途中で
+ * 切り替える箱 (`[data-theme]`。テーブルトップの右の列。`PlayerLayout`) でも、その箱のテーマの色から作り直す。
+ * 主のボタンの色 (下の「ボタン」) も同じ
+ */
+:root,
+[data-theme] {
+  /*
+   * **操作の層の面** (ヘッダー・下のタブ・主のボタン。docs/design.md の「3 つの層」)。メニューと同じ面 (`--dp-pop`) を
+   * 92% 残して、下を流れる中身をうっすら見せる。ぼかさない。暗いほうは面が地より明るいので、影が見えなくても縁が分かる。
+   * 透かしを減らす設定では透かさない (下)
+   */
+  --dp-float: color-mix(in srgb, var(--dp-pop) 92%, transparent);
+  /*
+     * 指を乗せた地。`--dp-hover` はメニューで ↑↓ が指す項目・番組表のマス、
+     * `--dp-hover-soft` は地の上の 1 行の並び (サイドバー・控えのボタン・チップ)。選んでいる印には使わない
+     */
+  --dp-hover: var(--dp-subtle);
+  --dp-hover-soft: color-mix(in srgb, var(--dp-subtle) 55%, transparent);
 }
 /* ---- 録画中の点 (`.rec-dot`)。ゆっくり脈打つ (動かすのはファイルの最後) ---- */
 .rec-dot {
@@ -993,9 +1001,8 @@ input[type="checkbox"]:not([role="switch"]) {
  * Pico は層の中なので、Pico の :hover / :focus の色はここで全部上書きされる (フォーカスは
  * 上の `:focus-visible` の線だけで示す。押したあとに地の色が残らない)
  */
-:root {
-  /* 角。ボタンはカプセル (操作の層の形)。アイコンだけのボタンは円 */
-  --dp-btn-radius: var(--dp-radius-full);
+:root,
+[data-theme] {
   /* 主のボタンの面・影・字。面と影は操作の層と同じ。浮いたものの中では消す */
   --dp-btn-solid: var(--dp-float);
   --dp-btn-solid-hover: var(--dp-pop);
@@ -1005,6 +1012,10 @@ input[type="checkbox"]:not([role="switch"]) {
   --dp-btn-tonal: transparent;
   --dp-btn-tonal-hover: var(--dp-hover-soft);
   --dp-btn-text: var(--pico-secondary-hover);
+}
+:root {
+  /* 角。ボタンはカプセル (操作の層の形)。アイコンだけのボタンは円 */
+  --dp-btn-radius: var(--dp-radius-full);
   /* 高さ。アイコンのボタンの幅にも使う */
   --dp-btn-h: 2.625rem;
   --dp-btn-h-sm: 2.125rem;
@@ -1847,7 +1858,8 @@ button.text-button:hover {
   .overlay-menu {
     background: var(--dp-video-panel);
   }
-  :root {
+  :root,
+  [data-theme] {
     --dp-float: var(--dp-pop);
   }
 }

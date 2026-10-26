@@ -519,6 +519,20 @@ export async function cancelAllReservations(page: Page): Promise<void> {
  * 同じ場所への `pointermove` は捨てられるので (止まっているカーソルの下で
  * 中身が動いただけでもブラウザは投げてくる)、**2回、違う場所へ動かします**
  */
+/**
+ * GPU で描ける端末として開く。E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`) ので、
+ * WebGL の描き手の名前を差し替える。時間で動き続けるもの (アンビエントの光など) を回したまま見るテストで使う
+ */
+export async function pretendGpu(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const read = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function (name: number) {
+      const value: unknown = read.call(this, name);
+      return typeof value === "string" ? "Test GPU" : value;
+    };
+  });
+}
+
 export async function wakeControls(page: Page, stage: string): Promise<void> {
   const box = await page.getByTestId(stage).boundingBox();
   if (box === null) return;

@@ -5,6 +5,7 @@ import {
   flipSetting,
   goto,
   pickCodec,
+  pretendGpu,
   syncEpg,
   test,
   wakeControls,
@@ -87,6 +88,9 @@ test.describe("アンビエントモード", () => {
 
   test.describe("動かしてよい端末", () => {
     test.use({ reducedMotion: "no-preference" });
+    test.beforeEach(async ({ page }) => {
+      await pretendGpu(page);
+    });
 
     test("既定はオンで、映像の色を写し続ける。止めたら写さず、オフにしたら消えて覚えている", async ({
       page,
@@ -105,7 +109,7 @@ test.describe("アンビエントモード", () => {
       // 見出しは平らなまま (観る画面は窓が巻けないので、裏に中身が来ず浮かない)。色は見出しの裏までそのまま届く
       await expect(page.locator("html")).toHaveAttribute("data-ambient", "");
       const aside = await page
-        .locator("[data-player-layout] > aside")
+        .locator("[data-player-side] > aside")
         .evaluate((el) => ({
           position: getComputedStyle(el).position,
           image: getComputedStyle(el).backgroundImage,
@@ -114,7 +118,7 @@ test.describe("アンビエントモード", () => {
       const surfaces = await page.evaluate(() => {
         const style = (selector: string) =>
           getComputedStyle(document.querySelector(selector)!);
-        const aside = style("[data-player-layout] > aside");
+        const aside = style("[data-player-side] > aside");
         const header = style(".navbar");
         return [
           aside.backgroundColor,
@@ -249,6 +253,21 @@ test.describe("アンビエントモード", () => {
     const front = shown.find((face) => face.front)!;
     expect(front.opacity).toBe("1");
     expect(front.painted).toBe(true);
+  });
+
+  test.describe("ソフトウェアで描いている端末", () => {
+    test.use({ reducedMotion: "no-preference" });
+
+    // E2E のブラウザは GPU を切っていて `<html data-lite>` が付く。動かさない設定と同じに、1 秒に 5 回は描き直さない
+    test("動かしてよい設定でも、1枚だけ写して止める", async ({ page }) => {
+      await watchRaw(page);
+      await expect(page.locator("html")).toHaveAttribute("data-lite", "");
+      const glow = page.getByTestId("live-frame-ambient");
+      await expect(glow).toHaveAttribute("data-plan", "hold");
+      await expect(glow).toHaveAttribute("data-updates", "1");
+      await page.waitForTimeout(1500);
+      await expect(glow).toHaveAttribute("data-updates", "1");
+    });
   });
 
   /*

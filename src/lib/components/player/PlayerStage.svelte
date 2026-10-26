@@ -1,5 +1,6 @@
 <script lang="ts">
   import { setContext, type Snippet } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
 
   import type { Ambient } from "./ambient.svelte.js";
   import AmbientGlow from "./AmbientGlow.svelte";
@@ -8,8 +9,9 @@
     PLAYER_STAGE,
     type PlayerControls,
   } from "./controls.svelte";
+  import FoldReflection from "./FoldReflection.svelte";
   import type { StageFullscreen } from "./fullscreen.svelte.js";
-  import { PHONE_LANDSCAPE } from "./PlayerLayout.svelte";
+  import { PHONE_LANDSCAPE, TABLETOP } from "./PlayerLayout.svelte";
 
   /**
    * 映像を出す領域。3つの視聴画面で同じ配線を1本に: 操作列の出し入れとカーソル (`controls`)・キーボードで触っている
@@ -33,6 +35,7 @@
     /**
      * アンビエントモード (`ambient.svelte.ts`)。渡すと、映像の周りの地に映像の色を敷く (`AmbientGlow`)。
      * 色は枠の外に出るだけで、枠の中 (映像・字幕・データ放送・操作列・通知) には重ならない
+     * テーブルトップ (`TABLETOP`) の間は、光の代わりに下の段へ映像の色の反射 (`FoldReflection`) を敷く
      */
     ambient?: Ambient;
   }
@@ -54,6 +57,9 @@
 
   // 中のメニュー (`OverlayMenu`・`SettingsMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
   setContext(PLAYER_CONTROLS, () => controls);
+  /** テーブルトップか (`PlayerLayout` の `TABLETOP`)。並べ方は CSS、ここは光と反射のどちらを置くかだけ */
+  const tabletop = new MediaQuery(TABLETOP);
+
   // メニューを枠の中に収める先 (`OverlayMenu`・`SettingsMenu`)。bind で入るので取り手で渡す
   setContext(PLAYER_STAGE, () => element);
 
@@ -274,7 +280,16 @@
   });
 </script>
 
-{#if ambient}
+{#if ambient && tabletop.current}
+  <!-- 反射は下の段に固定して置く (`FoldReflection`)。右の列はその上に重なる -->
+  <FoldReflection
+    {ambient}
+    stage={element}
+    {aspect}
+    fullscreen={fullscreen.active}
+    testid="{testid}-reflection"
+  />
+{:else if ambient}
   <!-- 光は枠より前 (兄弟) に置く。位置を持つ枠のほうが後ろなので、光の上に描かれる -->
   <AmbientGlow
     {ambient}

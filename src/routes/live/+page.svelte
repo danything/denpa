@@ -861,7 +861,7 @@
      * 局の一覧を出しているこの画面のこの形だけにする (条件は `PHONE_LANDSCAPE` と同じ)
      */
   @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
-    :global([data-player-layout]:has(> .live-side)) {
+    :global([data-player-layout]:has(> [data-player-side] > .live-side)) {
       scroll-behavior: smooth;
     }
   }
@@ -924,7 +924,9 @@
     padding: 0 var(--dp-side-pad, 0px) var(--dp-side-pad, 0);
     overflow-y: auto;
   }
-  @media (min-width: 768px) {
+  /* 高さの決まった列の中で巻く (二段組と、テーブルトップの下の段。`PlayerLayout`) */
+  @media (min-width: 768px),
+    (device-posture: folded) and (vertical-viewport-segments: 2) {
     .channels {
       min-height: 0;
     }
