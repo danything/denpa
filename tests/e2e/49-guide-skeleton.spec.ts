@@ -166,6 +166,43 @@ for (const [width, height] of [
   });
 }
 
+/*
+ * スマホの形は表の最後の下を空けてある (下のタブと操作の1行が浮くぶん)。夜遅くに開くと「いま」へ送った位置が
+ * 表の最後に近く、その空きに骨組みを敷いていなかった頃は、下の端の手前で骨組みが切れていた。
+ * 時刻で結果が変わらないよう、ブラウザの時計を今日の表の最後の 30 分 (翌 3:30) に止めて開く
+ */
+for (const [width, height] of [
+  [820, 1180],
+  [390, 844],
+] as const) {
+  test(`夜遅くに開いても、骨組みは画面の下の端まで届く ${width}×${height}`, async ({
+    page,
+    request,
+  }) => {
+    await syncEpg(request);
+    await page.setViewportSize({ width, height });
+    // 表の頭は日本時間の 4:00。4:00 前はまだ前の日の表
+    const HOUR = 3_600_000;
+    const jst = new Date(Date.now() + 9 * HOUR);
+    if (jst.getUTCHours() < 4) jst.setUTCDate(jst.getUTCDate() - 1);
+    const head =
+      Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate(), 4) -
+      9 * HOUR;
+    await page.clock.setFixedTime(head + 23.5 * HOUR);
+    await holdSheets(page);
+
+    await page.goto("/guide?type=GR");
+    await page.locator('[data-hydrated="true"]').waitFor();
+    await expect(page.getByTestId("guide-skeleton")).toBeVisible();
+    await expect(page.getByTestId("now-line")).toBeVisible();
+    const opened = await bottoms(page, '[data-testid="guide-toolbar"]');
+    expect(
+      Math.abs(opened.bottom - opened.limit),
+      JSON.stringify(opened),
+    ).toBeLessThanOrEqual(1);
+  });
+}
+
 test("放送波を選び直すと、押してすぐマスが骨組みになり、局名は届いたら出る", async ({
   page,
   request,

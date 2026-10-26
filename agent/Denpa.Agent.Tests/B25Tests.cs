@@ -700,7 +700,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **PMT が挙げない PID の ECM の鍵は使わない。** 先回りしてカードに聞いてはいる (問い合わせが1回増えるだけ)
+    /// **PMT が挙げない PID の ECM は、鍵を使わないうえにカードに聞きもしない。** B-CAS のカードが断る ECM を聞くと、
+    /// 断られるまで次のパケットへ進めない
     /// </summary>
     [Test]
     public async Task PMTが挙げないPIDのECMは使わない()
@@ -719,8 +720,91 @@ public class B25Tests
 
         await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
-        // 流し始めたあとは、知らない PID を覗かない (8 は聞かない)
-        await Assert.That(Generations(cards)).IsEqualTo("7,1");
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+    }
+
+    /// <summary>
+    /// **PMT より先に来た ECM は、PMT が挙げたその場で聞く。** 次の ECM を待たないので、PMT のすぐあとの
+    /// ES のパケットで流し始める (前は PMT のあとに来る ECM を待ってから聞いていた)
+    /// </summary>
+    [Test]
+    public async Task PMTより先に来たECMはPMTが挙げたその場で聞く()
+    {
+        var head = new Ts()
+            .Pat((0x0400, PmtPid))
+            .Ecm(EcmPid, 1).Videos(3, 1)
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Videos(1, 1);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards);
+
+        var output = Run(descrambler, head.Wire.ToArray(), flush: false);
+
+        await Assert.That(Diff(output, Expected(head))).IsEqualTo(-1);
+        await Assert.That(descrambler.Decoded).IsEqualTo(4);
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+    }
+
+    /// <summary>
+    /// **地上波の並びで、カードが断る ECM が流れていても、聞かずに鍵の揃った時点で流し始める。** PAT・PMT・ECM が
+    /// 0.1 秒 (地上波の 1,120 パケットほど) おきに来て、番組は3つ (PMT が来ない臨時の番組と、掛かっていない
+    /// ワンセグを含む)。番組の PMT は B-CAS と別の方式の CA 記述子も持ち、その方式の ECM はカードが断る。
+    ///
+    /// <para>
+    /// 本番 (2026-10-26) では、先回りで拾ったその ECM をカードに聞き、断られるまでの 0.4 秒ほど止まっていた
+    /// (選局から送り出しまで毎回 1 秒ほど)。止まっている時間はパケットの数では見えないので、断る ECM を
+    /// 聞かないことと、流し始める位置が前の決め方 (PAT → PMT → その後の ECM を聞く) より後ろにならないことを確かめる
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task 地上波の並びでカードが断るECMを聞かずに流し始める()
+    {
+        const int period = 1120, onesegPmt = 0x1FC8, foreignEcm = 0x0904, refused = 0x99;
+        byte[] foreignCa = [0x09, 4, 0x00, 0x06, (byte)(0xE0 | (foreignEcm >> 8)), foreignEcm & 0xFF];
+        var ts = new Ts();
+        // 周の中の位置
+        const int atPat = 0, atPmt = 40, atOneseg = 80, atForeign = 120, atEcm = 160;
+        for (var cycle = 0; cycle < 6; cycle++)
+        {
+            for (var i = 0; i < period; i++)
+            {
+                if (i == atPat) ts.Pat((0x0400, PmtPid), (0x0401, PmtPid + 1), (0x05A8, onesegPmt));
+                else if (i == atPmt) ts.Pmt(PmtPid, 0x0400, [.. Ca(EcmPid), .. foreignCa], (VideoPid, []), (AudioPid, []));
+                else if (i == atOneseg) ts.Pmt(onesegPmt, 0x05A8, [], (0x0181, []));
+                else if (i == atForeign) ts.Section(foreignEcm, Psi(0x82, 0, EcmBody(refused)));
+                else if (i == atEcm) ts.Ecm(EcmPid, 1);
+                else if (i % 50 == 0) ts.Payload(0x0181, null);
+                else ts.Payload(i % 10 == 0 ? AudioPid : VideoPid, 1);
+            }
+        }
+        var wire = ts.Wire.ToArray();
+
+        // 選局はどの位置からでも始まる
+        foreach (var start in new[] { 0, 100, 150, 300, 700, 1100 })
+        {
+            var cards = new Cards { Fail = ecm => ecm[0] == refused ? new CardRefusedException("断った") : null };
+            var descrambler = new Descrambler(cards);
+            var output = new ArrayBufferWriter<byte>();
+            var fed = 0;
+            while (output.WrittenCount == 0)
+            {
+                descrambler.Decode(wire.AsSpan((start + fed) * 188, 188), output);
+                fed++;
+            }
+
+            await Assert.That(Generations(cards)).IsEqualTo("1");
+            await Assert.That(descrambler.LastError).IsNull();
+            // 前の決め方: PAT のあとの PMT、そのあとの ECM を聞き、PMT がもう一度来たか ECM がもう一度来たところで流す
+            var pat = Next(start, atPat);
+            var pmt = Next(pat, atPmt);
+            var ecm = Next(pmt, atEcm);
+            var before = Math.Min(Next(ecm, atPmt), Next(ecm + 1, atEcm)) + 1;
+            await Assert.That(start + fed).IsLessThanOrEqualTo(before);
+        }
+
+        // at より後ろ (at を含む) で、周の中の位置が offset のパケット
+        static int Next(int at, int offset) => at + ((offset - at % period) % period + period) % period;
     }
 
     /// <summary>

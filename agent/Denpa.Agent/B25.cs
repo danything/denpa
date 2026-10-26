@@ -93,8 +93,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// **PAT・PMT より先に来た ECM** (PID → ECM)。溜めている間だけ、まだ知らない PID のセクションも頭の
-    /// table_id を覗き、ECM ならその場で鍵を聞いておく。PMT がその PID を挙げたら <see cref="Rebuild"/> が
-    /// 鍵ごと引き取る。挙げなければ使わずに捨てる — 読み違えてもカードへの問い合わせが1回増えるだけ
+    /// table_id を覗き、ECM なら中身を取っておく。**カードに聞くのは PMT がその PID を挙げてから** (<see cref="Rebuild"/>)。
+    /// 挙げなければ聞かずに捨てる
     /// </summary>
     private readonly Dictionary<int, Ecm> _earlyEcms = [];
     /// <summary>PAT より先に来た PMT を組み立てる場所 (PID → セクション)</summary>
@@ -369,6 +369,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private static void Forget(Ecm ecm)
     {
         ecm.Last = null;
+        ecm.Pending = false;
         ecm.Cipher?.Clear();
         ecm.Unentitled = false;
         ecm.RetryAt = long.MaxValue;
@@ -415,8 +416,14 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     ///
     /// <para>
     /// PAT → PMT → ECM → カードと順に待つと、それぞれの間隔 (どれも 0.1 秒ほど) が積み上がる。先に来たものを
-    /// 取っておけば、PAT・PMT が来た時点で鍵がもう揃っていることがある。**経路と溜めの条件は確かめた PMT だけで
-    /// 決める** (<see cref="Rebuild"/> / <see cref="Ready"/>) ので、ここで読み違えても余計な問い合わせが増えるだけ。
+    /// 取っておけば、PMT が来たその場でカードに聞ける (次の ECM を待たない)。**経路と溜めの条件、カードに聞くかは
+    /// 確かめた PMT だけで決める** (<see cref="Rebuild"/> / <see cref="Ready"/>)。
+    /// </para>
+    ///
+    /// <para>
+    /// **拾った ECM をその場でカードに聞かない。** 地上波には B-CAS のカードが断る ECM も流れていて、断られるまでに
+    /// 短い応答の送り直し (<see cref="BCas"/>) ごと 0.4 秒ほどかかる。その間は次のパケットへ進まないので、PAT・PMT が
+    /// そろうのも送り出しもそのぶん遅れていた (本番の地上波で、選局から送り出しまで毎回 1 秒ほど)。
     /// </para>
     ///
     /// <para>
@@ -549,12 +556,19 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var wanted = new HashSet<int>();
         foreach (var pmt in _pmts.Values) Streams(pmt, _caSystemId, streams, wanted);
         foreach (var pid in _ecms.Keys.Except(wanted).ToList()) _ecms.Remove(pid);
-        // PMT より先に来ていた ECM なら、もう聞いてある鍵ごと引き取る (Early)
+        // PMT より先に来ていた ECM なら、取っておいた中身ごと引き取る (Early)
         foreach (var pid in wanted) _ecms.TryAdd(pid, _earlyEcms.Remove(pid, out var early) ? early : new Ecm(pid));
         Array.Clear(_route);
         foreach (var (es, ecm) in streams) _route[es] = _ecms[ecm];
         _allPmts = _patLast is not null && _programs.Keys.All(_pmts.ContainsKey);
         _only = _allPmts && _ecms.Count == 1 ? _ecms.Values.First() : null;
+        // 取っておいた中身を、PMT が挙げたいま聞く。Ask の中で作り直すこともあるので、引き取ったままのものだけ
+        foreach (var ecm in _ecms.Values.ToList())
+        {
+            if (!ecm.Pending || _ecms.GetValueOrDefault(ecm.Pid) != ecm) continue;
+            ecm.Pending = false;
+            Ask(ecm);
+        }
     }
 
     /// <summary>PMT から、掛かっている ES とその ECM の PID を読み取る。**ES ごとの CA 記述子が番組全体のものより優先する**</summary>
@@ -605,8 +619,9 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     {
         // 鍵の要らない利用者だけならカードに聞かない (Rehold で聞き直す)
         if (section[0] != 0x82 || !_keys) return;
-        // 溜めをやめる合図にするのは PMT が挙げた ECM だけ。先回りして聞いただけのもの (Early) は PAT・PMT を待たせない
-        if (_holding && ecm.Last is not null && _ecms.GetValueOrDefault(ecm.Pid) == ecm) Settle();
+        var listed = _ecms.GetValueOrDefault(ecm.Pid) == ecm;
+        // 溜めをやめる合図にするのは PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
+        if (_holding && ecm.Last is not null && listed) Settle();
         if (ecm.Last is { } last && section.SequenceEqual(last))
         {
             if (_packets >= ecm.RetryAt) Ask(ecm);
@@ -614,7 +629,9 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         }
         ecm.Last = section.ToArray();
         if (_holding) ecm.Seen = _held;
-        Ask(ecm);
+        // PMT がまだ挙げていないものは取っておくだけ。挙げたら Rebuild が聞く
+        if (listed) Ask(ecm);
+        else ecm.Pending = true;
     }
 
     /// <summary>
@@ -712,6 +729,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         public Section Section { get; }
         /// <summary>最後に受けた中身 (その鍵を貰った・貰おうとした中身)</summary>
         public byte[]? Last;
+        /// <summary><see cref="Last"/> をまだカードに聞いていない (PMT が挙げる前に来た。<see cref="Early"/>)</summary>
+        public bool Pending;
         /// <summary>鍵。貰えなかったら空 (<see cref="Multi2.HasKeys"/>)</summary>
         public Multi2? Cipher;
         /// <summary>カードが「契約が無い」と答えた</summary>
