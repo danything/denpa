@@ -46,7 +46,7 @@ export class KeyGate {
     this.at = null;
   }
 
-  /** この塊を MSE に渡してよいか。**キーフレームを含む塊から先は全部渡す** */
+  /** この塊を MSE に渡してよいか。**キーフレームを含む塊から先と、映像の入らない塊は渡す** */
   pass(bytes: Uint8Array): boolean {
     const video = this.#video;
     if (!this.#waiting || video === undefined) return true;
@@ -57,6 +57,13 @@ export class KeyGate {
       this.#waiting = false;
       return true;
     }
+    /*
+     * **映像の入らない塊は渡す。** 選局したての ffmpeg は、放送の音声が映像のキーフレームより先に来ると、
+     * 最初の塊が音声だけになる。捨てると音声の頭が欠けて、映像より後から始まる。Chromium はそこで始めた
+     * 直後に速さを変える (`pacing`) と再生の時計が止まり、1枚目のまま 0.3〜0.6 秒 (ときに 7.9 秒) 動かなかった。
+     * 映像より前の音声は MSE の範囲 (`buffered`) に入らないので、渡しても始める位置は変わらない
+     */
+    if (!samples.some((sample) => sample.track === video.id)) return true;
     for (const sample of samples) {
       if (sample.track !== video.id) continue;
       if (sample.key) {

@@ -208,3 +208,95 @@ test.describe("途中から入る", () => {
     }
   });
 });
+
+/** 局を押して、新しい局の再生が始まって (`playing`) から、1枚目の次のコマが映るまで (ms) */
+async function switchTo(page: Page, index: number): Promise<number> {
+  await page.getByTestId("live-video").evaluate((v) => {
+    const video = v as HTMLVideoElement & {
+      requestVideoFrameCallback(
+        cb: (now: number, meta: { mediaTime: number }) => void,
+      ): number;
+    };
+    const scope = window as unknown as { __moved: number | null };
+    scope.__moved = null;
+    // 前の局の `playing` を拾わないよう、作り直した (`emptied`) あとから見る
+    video.addEventListener(
+      "emptied",
+      () => {
+        video.addEventListener(
+          "playing",
+          () => {
+            const from = performance.now();
+            const first = video.currentTime;
+            const next = (_: number, meta: { mediaTime: number }) => {
+              if (meta.mediaTime > first + 0.001)
+                scope.__moved = performance.now() - from;
+              else video.requestVideoFrameCallback(next);
+            };
+            video.requestVideoFrameCallback(next);
+          },
+          { once: true },
+        );
+      },
+      { once: true },
+    );
+  });
+  await page.getByTestId("live-channel").nth(index).click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => (window as unknown as { __moved: number | null }).__moved,
+        ),
+      { timeout: 30_000 },
+    )
+    .not.toBeNull();
+  return (await page.evaluate(
+    () => (window as unknown as { __moved: number }).__moved,
+  )) as number;
+}
+
+/*
+ * **選局したての音声だけの塊を捨てず、再生の時計を止めない** (`src/lib/ts/key-gate.ts`)。
+ *
+ * 選局したての ffmpeg は、最初の塊が音声だけのことがあり、立ち上がりで読み込んだぶんをまとめて出すので貯まりも
+ * 狙いより多い (画面はすぐ速めにかかる)。キーフレームを待つ係がその塊を捨てていた頃は、音声が映像より後から始まり、
+ * Chromium は再生の時計が止まって1枚目のまま動かなかった (本番で 0.3〜0.6 秒。手元ではこの組の 24 回のうち 4 回、0.53〜7.9 秒)。
+ * 直したあとは、作り置きの1枚目の尺 (0.155 秒) のぶんを足した 0.23〜0.25 秒に揃う
+ */
+test.describe("選局の直後", () => {
+  test.beforeEach(async ({ request }) => {
+    await syncEpg(request);
+  });
+  test.afterEach(async ({ stack }) => {
+    rmSync(stack.liveFmp4File, { force: true });
+  });
+
+  test("最初の塊が音声だけでも、再生の時計が止まらず次のコマが映る", async ({
+    page,
+    stack,
+  }) => {
+    writeFileSync(
+      stack.liveFmp4File,
+      JSON.stringify({ audioFirst: true, headStartMs: 400 }),
+    );
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect
+      .poll(
+        () =>
+          page
+            .getByTestId("live-video")
+            .evaluate((v) => (v as HTMLVideoElement).currentTime),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThan(0.3);
+    const moved: number[] = [];
+    for (const index of [1, 0, 1, 0, 1, 0, 1, 0]) {
+      await page.waitForTimeout(1_000);
+      moved.push(await switchTo(page, index));
+    }
+    writeFileSync("test-results/live-switch.json", JSON.stringify(moved));
+    for (const one of moved) expect(one).toBeLessThan(400);
+  });
+});

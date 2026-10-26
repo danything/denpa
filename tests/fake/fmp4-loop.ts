@@ -25,8 +25,6 @@ import { readFileSync } from "node:fs";
 
 import { readClip, shiftFragment } from "./fmp4-clip";
 
-const clip = readClip(new Uint8Array(readFileSync(process.argv[2] ?? "")));
-
 // 入口の TS は読んで捨てる (上の説明)
 void (async () => {
   for await (const _ of Bun.stdin.stream()) {
@@ -34,21 +32,24 @@ void (async () => {
   }
 })();
 
-const out = Bun.stdout.writer();
-out.write(clip.head);
-await out.flush();
-
 /**
  * **届き方を荒らす** (ライブの貯め方の E2E。`50-live-pacing.spec.ts`)。目印のファイルに JSON で書く。空なら一定に流す:
  *
  * - `gapEvery` [最短, 最長] (秒) と `gapMs` [最短, 最長] (ms) … ときどき長く空ける (空いた間のぶんは後でまとめて出す)。
  *   回線や中継がたまに詰まる経路のまね (#1210)
  * - `burstMs` [最短, 最長] (ms) … いつも束にして出す。届き方が荒い経路のまね
+ * - `audioFirst` … 音声が映像より先に始まる作り置き (`live-h264-audio-first.mp4`。H.264 だけ) を流す。本物の ffmpeg が
+ *   途中から読んだ放送で作るときのように、最初の塊が音声だけで、映像のキーフレームは次の塊に入る (`ts/key-gate.ts`)。
+ *   作り方は上の H.264 に `-itsoffset 0.1` (映像の入力の前) を足したもの
+ * - `headStartMs` (ms) … 頭のこの尺ぶんを、待たずにまとめて出す。本物の ffmpeg は立ち上がりで読み込んだぶんを
+ *   一度に出すので、選局の直後は貯まりが狙いより多く、画面はすぐ速めにかかる (`pacing`)
  */
 interface Rough {
   gapEvery?: [number, number];
   gapMs?: [number, number];
   burstMs?: [number, number];
+  audioFirst?: boolean;
+  headStartMs?: number;
 }
 const rough: Rough = (() => {
   try {
@@ -72,7 +73,23 @@ let nextGap =
 let holdUntil = 0;
 const held: Uint8Array[] = [];
 
-const started = performance.now();
+const source = process.argv[2] ?? "";
+const clip = readClip(
+  new Uint8Array(
+    readFileSync(
+      rough.audioFirst === true
+        ? source.replace(/\.mp4$/, "-audio-first.mp4")
+        : source,
+    ),
+  ),
+);
+
+const out = Bun.stdout.writer();
+out.write(clip.head);
+await out.flush();
+
+// 頭のぶんは、その尺だけ前に始めていたことにして待たずに出す
+const started = performance.now() - (rough.headStartMs ?? 0);
 for (let round = 0; ; round++) {
   for (const fragment of clip.fragments) {
     const data = shiftFragment(clip, fragment, clip.period * round);

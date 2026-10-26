@@ -76,4 +76,38 @@ describe("途中から入った流れ", () => {
     gate.init(new Uint8Array(16));
     expect(gate.pass(fragments[3]!)).toBe(true);
   });
+
+  /*
+   * 選局したての ffmpeg は、最初の塊が音声だけのことがある (`tests/fake/live-h264-audio-first.mp4`)。
+   * 捨てると音声が映像より後から始まり、Chromium で始めた直後に止まっていた
+   */
+  test("映像の入らない塊は、待っている間も渡す", () => {
+    const first = new Fmp4Splitter().feed(
+      new Uint8Array(
+        readFileSync(
+          new URL(
+            "../../../tests/fake/live-h264-audio-first.mp4",
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    const init = first.find((s) => s.kind === "init")!.data;
+    const [audioOnly, withKey] = first
+      .filter((s) => s.kind === "media")
+      .map((s) => s.data);
+    const kinds = readInit(init);
+    expect(
+      readFragment(audioOnly!, kinds).every(
+        (s) => kinds.find((t) => t.id === s.track)?.kind === "audio",
+      ),
+    ).toBe(true);
+    const gate = new KeyGate();
+    gate.init(init);
+    expect(gate.pass(audioOnly!)).toBe(true);
+    // まだキーフレームを待っている
+    expect(gate.at).toBeNull();
+    expect(gate.pass(withKey!)).toBe(true);
+    expect(gate.at).toBe(0);
+  });
 });
