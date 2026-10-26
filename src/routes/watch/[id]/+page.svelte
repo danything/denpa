@@ -1375,6 +1375,10 @@
     captions = on;
     remind(CAPTION_ON_KEY, on ? "1" : "0");
     if (on) {
+      if (captionsFailed) {
+        captionsFailed = false;
+        captionsAsked = false;
+      }
       askCaptions();
       paint();
     } else {
@@ -1393,6 +1397,8 @@
 
   /** 字幕を取りに行ったか。取るのは1回だけ */
   let captionsAsked = false;
+  /** 取りに行って繋がらなかったか。字幕を入れ直したときだけ取り直す */
+  let captionsFailed = false;
   /** 映像が出ないまま待つ上限の時計 (`CAPTION_WAIT`) */
   let captionWait: ReturnType<typeof setTimeout> | null = null;
   /** 映像が出るのを待つ上限 (ms)。自動再生を断られて止まっている・読めない、でも字幕のボタンは出したい */
@@ -1441,8 +1447,8 @@
     } catch (error) {
       // 出せないだけ。観るのに支障は無い
       console.warn("[captions] 取れませんでした", error);
-      // 繋がらなかった。字幕を入れ直したときに取り直せるように
-      captionsAsked = false;
+      // 繋がらなかった。字幕を入れ直したときに取り直す (`setCaptions`。コマごとには取り直さない)
+      captionsFailed = true;
     }
   }
 
