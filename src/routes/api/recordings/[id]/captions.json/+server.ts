@@ -38,21 +38,27 @@ const MISSING = "字幕がありません";
 
 /**
  * 字幕を抜いてデコードし、JSON にする。字幕を持たない (抜けたものが空・画像の字幕) ならその理由。
- * **ffmpeg が降りたときは覚えない** (404 を投げる) — 時間切れや起こせなかったのかもしれない
+ * **ffmpeg が降りた・上限で切れたときは覚えない** (404 を投げる) — 時間切れや起こせなかったのかもしれない
  */
 async function build(argv: string[], ts: boolean): Promise<Made> {
   const parts: Uint8Array[] = [];
   let size = 0;
+  let over = false;
   const { code } = await run([config.ffmpeg, ...argv], {
     timeoutMs: ts ? TIMEOUT_TS : TIMEOUT,
     onStdout: (chunk) => {
-      if (size + chunk.length > LIMIT) return;
+      if (size + chunk.length > LIMIT) {
+        over = true;
+        return;
+      }
       parts.push(chunk);
       size += chunk.length;
     },
   });
   // 字幕を持たない番組のほうが多い (ffmpeg は「その筋は無い」で、動画を読む前に降りる)
   if (code !== 0) error(404, MISSING);
+  // 上限で切れた。壊れたファイルの途中までを覚えて返し続けない
+  if (over) error(404, MISSING);
   const out = joinBytes(parts);
   if (out.length === 0) return { missing: MISSING };
   const pages = pagesFromMkv(out);

@@ -1441,6 +1441,8 @@
     } catch (error) {
       // 出せないだけ。観るのに支障は無い
       console.warn("[captions] 取れませんでした", error);
+      // 繋がらなかった。字幕を入れ直したときに取り直せるように
+      captionsAsked = false;
     }
   }
 
