@@ -241,7 +241,7 @@
       group.cells.push({
         key: cell.key,
         program: cell.program,
-        // `--s` / `--e` は番組の頭と尻のマスの位置 (端数つき)。過ぎた所を暗くするのに使う (`.program::before`)
+        // `--s` / `--e` は番組の頭と尻のマスの位置 (端数つき)。過ぎた所を暗くするのに使う (`.program` の背景の覆い)
         style: `grid-column: ${cell.column - group.first + 1} / span ${cell.span}; grid-row: ${from + 1} / span ${span}; --lines: ${lines(span)}; --s: ${(cell.start_at - data.start) / SLOT}; --e: ${(cell.end_at - data.start) / SLOT};`,
       });
     }
@@ -361,7 +361,7 @@
       : null,
   );
   /**
-   * **過ぎた所を暗くする位置** (表の頭から何マスぶん。マスの `--s` / `--e` と比べる。`.program::before`)。
+   * **過ぎた所を暗くする位置** (表の頭から何マスぶん。マスの `--s` / `--e` と比べる。`.program` の背景の覆い)。
    * 前の日は全部、先の日は何も暗くしないよう、表の外は端の外へ寄せる。2,000 を超えるマスを毎分書き直さないよう、表に 1 つだけ持つ
    */
   const elapsedSlots = $derived(
@@ -1812,43 +1812,50 @@
     padding: 0.125rem 0.25rem;
     border: 0;
     border-radius: var(--dp-radius-sm);
-    background: var(--dp-subtle);
+    background-color: var(--dp-subtle);
     color: inherit;
     text-align: left;
     font-weight: var(--dp-weight);
     line-height: normal;
-    position: relative;
-    isolation: isolate;
   }
   /*
      * **放送が過ぎた所は、マスの上から暗くしていく** (赤い線を表に引く代わり)。終わった番組はマス全体、放送中の番組は頭からいまの位置まで。
      * 割合は表の `--now` とマスの `--s` / `--e` から CSS だけで出す (毎分書き直すのは表の 1 つだけ)。
-     * 覆いは字の下に敷く (`isolation` の中で `z-index: -1`)。字は読めたまま、面だけが沈む
+     * 覆いは地の色の上に重ねる背景の 1 枚目 (`background-image`)。字は読めたまま、面だけが沈む。
+     *
+     * **マスに描く層を作らない** (`position`・`isolation`・`opacity` を持たせない。覆いを `::before` にしない)。
+     * 層はマスの数だけ増え、ブラウザがその画面の上の一点を調べるたび (指の下の要素探し、
+     * Chrome が描くついでに画面の真ん中を見る処理) に全部をたどる。番組表から別の画面へのリンクを押すと、
+     * SvelteKit は 1 回描いてから移り始めるので、その 1 回が重いぶん移り始めが遅れていた
+     * (作り物の 7,000 マスで、画面の一点を調べるのに 23ms → 1.5ms)。
+     * 色・ボタンの transition は `app.css` の `:where(button, a.button)` と同じものに、覆いの伸びを足す
      */
-  .program::before {
+  .program {
     /* 長さ 0 の番組で 0 で割らないよう、分母に下限を置く */
     --past: clamp(
       0,
       (var(--now) - var(--s)) / max(var(--e) - var(--s), 0.001),
       1
     );
-    content: "";
-    position: absolute;
-    inset: 0 0 auto;
-    z-index: -1;
-    height: calc(var(--past) * 100%);
-    border-radius: inherit;
-    background: color-mix(in srgb, var(--dp-bg) 78%, transparent);
-    pointer-events: none;
-    transition: height var(--dp-duration-move) var(--dp-ease);
+    --shade: color-mix(in srgb, var(--dp-bg) 78%, transparent);
+    background-image: linear-gradient(var(--shade), var(--shade));
+    background-repeat: no-repeat;
+    background-size: 100% calc(var(--past) * 100%);
+    transition:
+      background-color var(--dp-duration) var(--dp-ease),
+      border-color var(--dp-duration) var(--dp-ease),
+      color var(--dp-duration) var(--dp-ease),
+      box-shadow var(--dp-duration) var(--dp-ease),
+      scale var(--dp-duration-move) var(--dp-ease-spring),
+      background-size var(--dp-duration-move) var(--dp-ease);
   }
   /*
    * **放送中の番組は、過ぎた所を浅く沈める** (終わった番組と同じ濃さだと、いま見られる番組まで終わって見えた)。
    * `--past` が 1 に届いていないマスだけ 45% にする。`round()` を知らないブラウザはどちらも 78%
    */
   @supports (width: round(down, 1px, 1px)) {
-    .program::before {
-      background: color-mix(
+    .program {
+      --shade: color-mix(
         in srgb,
         var(--dp-bg) calc(45% + 33% * round(down, var(--past), 1)),
         transparent
@@ -1859,13 +1866,17 @@
     --wash: 14%;
   }
   .program:hover {
-    background: var(--dp-hover);
+    background-color: var(--dp-hover);
   }
   .program[data-genre] {
-    background: color-mix(in srgb, var(--tint) var(--wash), var(--dp-surface));
+    background-color: color-mix(
+      in srgb,
+      var(--tint) var(--wash),
+      var(--dp-surface)
+    );
   }
   .program[data-genre]:hover {
-    background: color-mix(
+    background-color: color-mix(
       in srgb,
       var(--tint) calc(var(--wash) + 10%),
       var(--dp-surface)
@@ -1937,14 +1948,14 @@
      * 予約済み・競合は塗らず枠も引かず、状態の言葉 (`.state`) とその前の印で示す
      */
   .program[data-state="recording"] {
-    background: color-mix(
+    background-color: color-mix(
       in srgb,
       var(--dp-rec) calc(var(--wash) + 6%),
       var(--dp-surface)
     );
   }
   .program[data-state="recording"]:hover {
-    background: color-mix(
+    background-color: color-mix(
       in srgb,
       var(--dp-rec) calc(var(--wash) + 14%),
       var(--dp-surface)
@@ -2012,21 +2023,23 @@
   }
   /*
      * **録らないと決めた予約 (コピー禁止) は予約済みの青にしない** — 青だと「録れる」に見える。
-     * 待っているだけで手を止めてほしいものでもないので、字を控えるだけにする
+     * 待っているだけで手を止めてほしいものでもないので、字を控えるだけにする (継いだ字の色を 80% に透かす)
      */
   .program[data-state="skipped"] .state {
-    color: inherit;
-    opacity: 0.8;
+    color: color-mix(in srgb, currentColor 80%, transparent);
   }
   .copy-never {
     font-size: 0.625rem;
     font-weight: var(--dp-weight);
-    opacity: 0.7;
+    color: color-mix(in srgb, currentColor 70%, transparent);
     white-space: nowrap;
   }
-  /* 説明は番組名より一段だけ控える。0.6 まで落とすと淡い下地の上で字が溶けた */
+  /*
+     * 説明は番組名より一段だけ控える。0.6 まで落とすと淡い下地の上で字が溶けた。
+     * 控えるのは字の色の透けで (`opacity` はマスごとに描く層を作る。上の `.program`)
+     */
   .desc {
-    opacity: 0.8;
+    color: color-mix(in srgb, currentColor 80%, transparent);
   }
   /* 押すものの並び (`.modal-actions`) の中で、1行まるごと使う */
   .guide-error {

@@ -359,3 +359,85 @@ test("マスを少しずつ描いている間、表の箱に aria-busy を付け
     ),
   ).toEqual({ busyWithCells: false, drawingWithCells: true });
 });
+
+/*
+ * **番組表からほかの画面へのリンクを押すと、すぐに次の画面のデータを取りに行く。**
+ * SvelteKit はリンクを押すと 1 回描いてから移り始める (`requestAnimationFrame` の後)。その 1 回で
+ * Chrome は画面の真ん中の一点を調べることがあり、マスに描く層 (`position`・`isolation`・`opacity`) があると
+ * 層を全部たどって、移り始めが遅れていた (作り物の 7,000 マスで、一点を調べるのに 23ms → 1.5ms)。
+ *
+ * マスを 1 分ずつに割って数千個にし、指を乗せたときの先読みが効かないよう `click()` を直に起こす。
+ * 押してから `/__data.json` を取りに行くまでを測り、テストの記録に残す。かかる時間は CI の混み具合で揺れるので、
+ * 本番で見えた遅れ (約 100ms) に届かないことだけを見る。落ちないように守るのは、層を作らないことのほう
+ */
+test("番組表から移るとき、押してすぐ次の画面のデータを取りに行く", async ({
+  page,
+  request,
+}) => {
+  await syncEpg(request);
+  await page.route("**/api/guide?*", async (route) => {
+    const res = await route.fetch();
+    const sheet = (await res.json()) as {
+      programs: { id: number; start_at: number; end_at: number }[];
+    };
+    const MINUTE = 60_000;
+    sheet.programs = sheet.programs.flatMap((program) =>
+      Array.from(
+        { length: Math.ceil((program.end_at - program.start_at) / MINUTE) },
+        (_, i) => ({
+          ...program,
+          id: program.id * 1000 + i,
+          start_at: program.start_at + i * MINUTE,
+          end_at: Math.min(program.end_at, program.start_at + (i + 1) * MINUTE),
+        }),
+      ),
+    );
+    await route.fulfill({ response: res, json: sheet });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await goto(page, "/guide?type=GR");
+  expect(await page.getByTestId("grid-program").count()).toBeGreaterThan(600);
+
+  // マスとその中に、描く層を作る指定が無い
+  const layered = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('[data-testid="grid-program"]')]
+        .slice(0, 50)
+        .flatMap((cell) => [cell, ...cell.querySelectorAll("*")])
+        .flatMap((el) => [
+          getComputedStyle(el),
+          getComputedStyle(el, "::before"),
+          getComputedStyle(el, "::after"),
+        ])
+        .filter(
+          (style) =>
+            style.position !== "static" ||
+            style.isolation !== "auto" ||
+            style.opacity !== "1",
+        ).length,
+  );
+  expect(layered).toBe(0);
+
+  // 前の画面のデータを取ってから少し置く (Chrome が真ん中を調べるのは 1 秒に 1 回まで)
+  await page.waitForTimeout(1500);
+  const elapsed = await page.evaluate(async () => {
+    const link = document.querySelector('[data-testid="nav-home"]');
+    if (!(link instanceof HTMLElement)) throw new Error("nav-home が無い");
+    const pressed = performance.now();
+    link.click();
+    for (;;) {
+      const entry = performance
+        .getEntriesByType("resource")
+        .find((e) => e.name.includes("/__data.json") && e.startTime >= pressed);
+      if (entry !== undefined) return entry.startTime - pressed;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  });
+  test.info().annotations.push({
+    type: "番組表から移り始めるまで",
+    description: `${elapsed.toFixed(1)}ms`,
+  });
+  console.log(`番組表から移り始めるまで: ${elapsed.toFixed(1)}ms`);
+  expect(elapsed).toBeLessThan(100);
+  await expect(page).toHaveURL(/\/$/);
+});

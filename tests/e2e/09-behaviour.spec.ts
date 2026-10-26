@@ -537,10 +537,11 @@ test.describe("操作したときの反応", () => {
           );
           el.style.setProperty("--s", String(now + s));
           el.style.setProperty("--e", String(now + e));
-          return getComputedStyle(el, "::before").backgroundColor;
+          // 覆いはマスの背景の 1 枚目 (`linear-gradient` の色)
+          return getComputedStyle(el).backgroundImage;
         }, offset);
-    const alpha = (color: string) =>
-      Number(/[\d.]+(?=\)$)/.exec(color.replace(/ \/ /, ", "))?.[0] ?? 1);
+    const alpha = (image: string) =>
+      Number(/\/ ([\d.]+)\)/.exec(image)?.[1] ?? 1);
     const airing = await shade({ s: -1, e: 1 });
     const done = await shade({ s: -2, e: -1 });
     expect(alpha(airing)).toBeLessThan(alpha(done));
