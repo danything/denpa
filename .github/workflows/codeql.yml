@@ -30,7 +30,7 @@ jobs:
     uses: 5ym/repo-config/.github/workflows/codeql.yml@main
     with:
       languages: '["actions", "c-cpp", "csharp", "javascript-typescript", "python"]'
-      # エージェントは agent/ の下。テストのプロジェクトをビルドすれば本体もビルドされる (Native AOT の publish は要らない)
+      # エージェントは agent/ の下。テストのプロジェクトをビルドすれば本体もビルドされる (Native AOT の publish は要らない)。
+      # .NET は共有の側で 10.x の最新を入れる (global.json に sdk.version が無いので)。ここにバージョンを書くと、
+      # Renovate が拾わずに test.yml とずれていく
       csharp-build: dotnet build agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
-      # test.yml の agent ジョブと揃える (global.json には sdk.version が無い)
-      dotnet-version: "10.0.403"
