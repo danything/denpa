@@ -450,7 +450,7 @@ Descrambler (B25.cs)   PAT → PMT → CA 記述子で ES と ECM を結び、�
    │ ECM
 IKeySource             手元のカード (LocalCard → BCas) か、別の拠点 (RemoteCard)
    │ APDU
-ICardLink              USB のリーダーを usbfs で直に (Ccid。Linux) か OS の PC/SC 越し (PcscLink。Mac・Windows) / px4d・asicend の内蔵リーダー (Px4Card・asicen)
+ICardLink              USB のリーダーを usbfs で直に (Ccid。Linux) か OS の PC/SC 越し (PcscLink。Mac・Windows) / px4d・asicend の内蔵リーダー (どちらも Px4Card)
 ```
 
 libaribb25 はスレッドセーフでなく、カードに繋ぎ直さず、配布物も OS と arch ごとだったのでやめました。

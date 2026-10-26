@@ -124,9 +124,9 @@ internal static unsafe partial class Sys
 /// </para>
 ///
 /// <para>
-/// **Windows には poll が無い** (子の標準出力の pipe しか読まない。Siano.cs)。そちらは
-/// .NET の <see cref="Stream"/> を裏のスレッドに読ませ、こちらは同じく 200ms ごとに起きて印を見る
-/// (<see cref="Background"/>)。
+/// **Windows には poll が無い。** 子 (siano-ts) の標準出力の pipe は .NET の <see cref="Stream"/> を
+/// 裏のスレッドに読ませ、こちらは同じく 200ms ごとに起きて印を見る (<see cref="Background"/>)。
+/// px4d から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
 /// </para>
 /// </summary>
 /// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>

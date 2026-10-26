@@ -12,8 +12,9 @@ namespace Denpa.Agent;
 /// (Px4Stream。Px4.cs。pipe ではなく Pipelines) も、閉じ方 (<see cref="ReaderDrain"/>) はここに揃える。
 ///
 /// <para>
-/// **読み出し側は <see cref="DeviceStream"/> に載せる。** pipe をそのまま fd として poll で待つので、
-/// 電波が来なくても畳めるし、チューナーを取り上げられた読む側は 200ms で抜ける (DVB と同じ振る舞い)。
+/// **読み出し側は <see cref="DeviceStream"/> に載せる。** Unix は pipe をそのまま fd として poll で待ち、
+/// Windows は裏のスレッドに読ませる。どちらでも、電波が来なくても畳めるし、チューナーを取り上げられた
+/// 読む側は 200ms で抜ける (DVB と同じ振る舞い)。
 /// </para>
 /// </summary>
 internal static class ChildTs
