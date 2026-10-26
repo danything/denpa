@@ -57,6 +57,11 @@
      * 全画面のタブレットで使う閉じる・切り抜き・削除のために空けておく (`ControlBar`)
      */
     data?: { on: boolean; toggle: () => void } | undefined;
+    /**
+     * データ放送を常に受信するか (ライブだけ。端末ごと。`data-receive.ts`)。開くのは右端の列の d で、
+     * これは開いていなくても受信しておくかの切り替え
+     */
+    receive?: { on: boolean; toggle: () => void } | undefined;
     /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
     subtitle?: SettingChoice | undefined;
   }
@@ -71,6 +76,7 @@
     audio,
     cm,
     data,
+    receive,
     subtitle,
     fold = [],
   }: Props = $props();
@@ -144,6 +150,17 @@
             on: data.on,
             toggle: data.toggle,
             closes: true,
+          },
+        ]),
+    ...(receive === undefined
+      ? []
+      : [
+          {
+            id: "data-receive",
+            label: "データ放送を常に受信",
+            icon: DATA,
+            on: receive.on,
+            toggle: receive.toggle,
           },
         ]),
     {

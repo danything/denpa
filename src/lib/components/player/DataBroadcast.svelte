@@ -30,7 +30,7 @@
    * エンジンの外でやるのは、d を聞いている文書へ届ける (`knock`)・映像の入れ物を小窓へ寄せる (`placeVideo`)・
    * 960x540 を枠に合わせて伸ばす (`fit`)・「データ取得中」を出す (`receiving`)・郵便番号を渡す (`receiver`)
    */
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
 
   import type { Bml, BmlIp, Rect, Service } from "#lib/bml/engine.js";
   import { type Plane, planeArea } from "#lib/bml/plane.js";
@@ -50,8 +50,14 @@
   type Place = Extract<FrameMessage, { type: "video" }>["place"];
 
   interface Props {
-    /** 出すか。**押されたら読み込みが始まる** */
+    /** 開いているか (d を押したか)。**押されたら読み込みが始まる** (`receive` なら読み込んである) */
     on: boolean;
+    /**
+     * 常に受信しているか (ライブの再生の設定。`data-receive.ts`)。**開いていなくてもエンジンを動かし**、
+     * 文書が自分で出したもの (番組からの誘導・自動で出る画面) はテレビと同じく映像に重ねる。
+     * 開くまではリモコンを出さず、キー・d を渡さず、選局と Hybridcast の起動は断る
+     */
+    receive?: boolean;
     /** いま映している局。変わったら作り直す (エンジンは一度に一つの放送しか持たない) */
     channel: string | null;
     /** 映像がある入れ物。**小窓へ寄せるのはこちら** (`placeVideo`) */
@@ -95,6 +101,7 @@
 
   let {
     on,
+    receive = false,
     channel,
     media,
     listen,
@@ -142,6 +149,8 @@
   }
 
   function startApp(hint: number[]): boolean {
+    // 開くまでは外のアプリを開かない (受信しているだけ。`receive`)
+    if (!on) return false;
     const app = pickApp(hint);
     if (app === null) return false;
     openApp(app);
@@ -153,7 +162,7 @@
    * 文書には待たずに答え、届いたら開く。取れない・開けるアプリが無いときは、何を読もうとしたかをコンソールに残してデータ放送のまま
    */
   function startAppFrom(uri: string, hint: number[]): boolean {
-    if (!network) return false;
+    if (!network || !on) return false;
     void (async () => {
       try {
         const response = await fetch(
@@ -398,7 +407,8 @@
     const want = showing && (settled || !receiving);
     if (want) settled = true;
     if (settled || !showing) stopWaiting();
-    else startWaiting();
+    // 見切って出すのは開いているときだけ。受信しているだけなら、揃うまで映像のまま
+    else if (on) startWaiting();
     visible = want;
     // Hybridcast のアプリを開いている間は BML を隠す (閉じたら戻す)
     if (mount !== null)
@@ -578,8 +588,8 @@
     // 待っている間に離されていたら、作らない
     if (mine !== generation || host === null || media === null) return;
     const into = makeMount(host);
-    // 出す操作は文書にとっての d の1押し。聞く文書が出てきたら届ける (`knock`)
-    dueD = true;
+    // 出す操作は文書にとっての d の1押し。聞く文書が出てきたら届ける (`knock`)。受信しているだけなら届けない
+    dueD = on;
     taps = 0;
     roundFont = new FontFace(
       "denpa-bml-round",
@@ -621,8 +631,10 @@
         // 映像の場所は画面の大きさが分かってから寄せる
         place();
       },
-      // 選局は画面に任せる (エンジンは「この局へ」と言うだけ)
-      onTune: (service) => tune?.(service) ?? false,
+      // 選局は画面に任せる (エンジンは「この局へ」と言うだけ)。開くまでは断る (勝手に局を替えない)
+      onTune: (service) => on && (tune?.(service) ?? false),
+      // 開くまでは、自動起動の指定がある入口だけ動かす (`receive`)
+      opened: () => on,
       // Hybridcast。双方向がオフなら開かない (エンジンも問い合わせに「無い」と答える)
       hybridcast: {
         ready: () => network && apps.length > 0,
@@ -654,9 +666,49 @@
               };
       }
     });
-    // 指のリモコンにも同じ関数を渡す
+    // 指のリモコンにも同じ関数を渡す。受信しているだけなら、開くまで渡さない (`opened`)
+    if (on) {
+      press = tap;
+      pressD = pressData;
+    }
+  }
+
+  /**
+   * 受信しているところで開いた。エンジンは作り直さず (カルーセルを待たない)、出す操作を d の1押しとして届けに行き、
+   * リモコンを渡す。自動起動でない入口はここで始まる (`Bml.open`)
+   */
+  function opened(): void {
+    if (engine === null) return;
+    dueD = true;
+    taps = 0;
     press = tap;
     pressD = pressData;
+    engine.open();
+    // 文書はもう組み上がっていることがある。次の文書 (`loaded`) を待たずに届けに行く
+    stopKnocking();
+    knocks = KNOCK_TRIES;
+    knocking = setTimeout(knock, KNOCK_WAIT);
+    place();
+  }
+
+  /**
+   * 受信したまま閉じた。エンジンは捨てず、入口から出直させる (待機の状態へ戻す。`Bml.reset`)。
+   * Hybridcast のアプリは閉じ、リモコンは引っ込める
+   */
+  function closed(): void {
+    if (engine === null) return;
+    running = null;
+    appVideo = "full";
+    press = null;
+    pressD = null;
+    dueD = false;
+    taps = 0;
+    stopKnocking();
+    stopWaiting();
+    settled = false;
+    engine.releaseKeys();
+    engine.reset();
+    place();
   }
 
   function close(): void {
@@ -692,11 +744,23 @@
   }
 
   $effect(() => {
-    const want = on && media !== null && host !== null ? (channel ?? "") : null;
+    const want =
+      (on || receive) && media !== null && host !== null
+        ? (channel ?? "")
+        : null;
     if (want === shown) return;
     close();
     shown = want;
     if (want !== null) void open();
+  });
+
+  // 受信したまま開いた・閉じた。エンジンが無ければ (読み込み中・受信していない) 作るとき・畳むときに済む
+  $effect(() => {
+    const now = on;
+    untrack(() => {
+      if (now) opened();
+      else closed();
+    });
   });
 
   /**
@@ -705,7 +769,8 @@
    * 画面の d ボタンの側 (`pressD`)
    */
   function key(event: KeyboardEvent, down: boolean): void {
-    if (engine === null || toAribKey === null) return;
+    // 開くまではキーを渡さない (プレイヤーの操作のキーを奪わない。`receive`)
+    if (engine === null || toAribKey === null || !on) return;
     // 入力欄で打っている字は文書へ渡さない
     const target = event.target;
     if (
@@ -741,8 +806,9 @@
 <div
   bind:this={host}
   class="data"
-  hidden={!on}
+  hidden={!on && !receive}
   data-testid="live-data"
+  data-open={on}
   data-state={engine !== null ? "ready" : loading ? "loading" : "off"}
   data-showing={visible}
   data-receiving={receiving}

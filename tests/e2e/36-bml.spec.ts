@@ -240,3 +240,165 @@ test.describe("データ放送のエンジン", () => {
     );
   });
 });
+
+/**
+ * **データ放送を常に受信する端末** (ライブの再生の設定。`data-receive.ts`)。
+ *
+ * 受信するのと開くのは別のこと。受信していると、開く前から入口の文書を裏で動かし、文書が自分で出したものは
+ * テレビと同じく映像に重ねる (番組からの誘導・自動で出る画面)。**リモコンを出すのは開いたときだけ**で、
+ * d (開く操作) を届けるのも開いたときだけ
+ */
+test.describe("データ放送を常に受信する端末", () => {
+  /** 常に受信をオンにした端末で開き、サーバへ送ったデータ放送の指示を控える */
+  async function prepareReceiving(page: Page): Promise<void> {
+    await prepare(page);
+    await page.addInitScript(() => {
+      localStorage.setItem("live-data-always", "1");
+      const seen = window as unknown as { __data: unknown[] };
+      seen.__data = [];
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (payload) {
+        if (typeof payload === "string" && payload.includes('"data"'))
+          seen.__data.push(JSON.parse(payload));
+        send.call(this, payload);
+      };
+    });
+  }
+  const asked = (page: Page) =>
+    page.evaluate(() => (window as unknown as { __data: unknown[] }).__data);
+
+  /** 局を選ぶだけ (d は押さない)。エンジンが立つまで */
+  async function tuneOnly(page: Page): Promise<void> {
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    await expect(page.getByTestId("live-data")).toHaveAttribute(
+      "data-state",
+      "ready",
+      { timeout: 15_000 },
+    );
+  }
+
+  test("開く前から受信して、文書が出したものを重ねる。リモコンと d は開いてから", async ({
+    page,
+  }) => {
+    await prepareReceiving(page);
+    await tuneOnly(page);
+    const overlay = page.getByTestId("live-data");
+    await expect(overlay).toHaveAttribute("data-open", "false");
+    expect(await asked(page)).toEqual([{ type: "data", on: true }]);
+
+    await feed(page, SCRIPTED);
+    // 自動起動の入口は開く前から動き、出てきた文書は重ねる (映像は文書の小窓へ寄る)
+    await expect(overlay).toHaveAttribute("data-showing", "true", {
+      timeout: 10_000,
+    });
+    await expect(
+      page.locator('[data-testid="live-video"]').locator(".."),
+    ).toHaveAttribute("data-bml-window", "");
+    const text = async () => (await dataElement(page, "span"))?.text;
+    await expect.poll(text).toBe("init");
+    // **開くまではリモコンを出さない。** キーも文書へ渡さない
+    await expect(page.getByTestId("live-remote")).toBeHidden();
+    await page.keyboard.press("b");
+    await page.waitForTimeout(500);
+    expect(await text()).toBe("init");
+
+    // 開く (d の 1 押し)。エンジンは作り直さずに d を届け、リモコンを出す
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
+    await expect(overlay).toHaveAttribute("data-open", "true");
+    await expect.poll(text, { timeout: 10_000 }).toBe("d1|");
+    await expect(page.getByTestId("live-remote")).toBeVisible();
+    await page.getByTestId("live-remote-22").click();
+    await expect.poll(text).toBe("d1|k22,u22,");
+    // 受信は続けているので、開いても頼み直さない
+    expect(await asked(page)).toEqual([{ type: "data", on: true }]);
+  });
+
+  test("閉じてもエンジンは残して入口へ戻る。設定を切ると受信をやめる", async ({
+    page,
+  }) => {
+    await prepareReceiving(page);
+    await tuneOnly(page);
+    const overlay = page.getByTestId("live-data");
+    // d を聞かない文書。画面の d はデータ放送を閉じる
+    await feed(page, "");
+    await expect(overlay).toHaveAttribute("data-showing", "true", {
+      timeout: 10_000,
+    });
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
+    await expect(page.getByTestId("live-remote")).toBeVisible();
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
+    await expect(overlay).toHaveAttribute("data-open", "false");
+    await expect(page.getByTestId("live-remote")).toBeHidden();
+    // 受信したまま (サーバに off を送らない)。入口から出直して、また出てくる
+    await expect(overlay).toHaveAttribute("data-state", "ready");
+    await expect(overlay).toHaveAttribute("data-showing", "true", {
+      timeout: 10_000,
+    });
+    expect(await asked(page)).toEqual([{ type: "data", on: true }]);
+
+    // 読み直しても覚えている (端末ごと)
+    await page.reload();
+    await expect(overlay).toHaveAttribute("data-state", "ready", {
+      timeout: 15_000,
+    });
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-settings").click();
+    const row = page.getByTestId("live-data-receive");
+    await expect(row).toHaveAttribute("aria-checked", "true");
+    // 切ると畳んで、サーバにも伝える
+    await row.click();
+    await expect(row).toHaveAttribute("aria-checked", "false");
+    await expect(overlay).toHaveAttribute("data-state", "off");
+    expect(await asked(page)).toEqual([
+      { type: "data", on: true },
+      { type: "data", on: false },
+    ]);
+    expect(
+      await page.evaluate(() => localStorage.getItem("live-data-always")),
+    ).toBe("0");
+  });
+
+  test("自動起動の指定が無い入口は、開くまで始めない", async ({ page }) => {
+    await prepareReceiving(page);
+    await tuneOnly(page);
+    const overlay = page.getByTestId("live-data");
+    await feedData(
+      page,
+      fakeDataBroadcast(SCRIPTED).map((message) => {
+        if (message["type"] !== "pmt") return message;
+        const [component] = message["components"] as Record<
+          string,
+          Record<string, Record<string, unknown>>
+        >[];
+        return {
+          ...message,
+          components: [
+            {
+              ...component,
+              bxmlInfo: {
+                ...component!["bxmlInfo"],
+                entryPointInfo: {
+                  ...component!["bxmlInfo"]!["entryPointInfo"],
+                  autoStartFlag: false,
+                },
+              },
+            },
+          ],
+        };
+      }),
+    );
+    await page.waitForTimeout(1_000);
+    await expect(overlay).toHaveAttribute("data-showing", "false");
+    expect(await dataElement(page, "span")).toBeNull();
+    // 開いたら始まり、d も届く
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-data-button").click();
+    const text = async () => (await dataElement(page, "span"))?.text;
+    await expect.poll(text, { timeout: 10_000 }).toBe("d1|");
+  });
+});

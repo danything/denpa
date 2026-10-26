@@ -722,6 +722,106 @@ describe("lockModuleOnMemoryEx", () => {
   });
 });
 
+/**
+ * 常に受信している端末 (`DataBroadcast` の `receive`)。**開く前から入口を裏で動かすのは、自動起動の
+ * 指定 (`auto_start_flag`) がある入口だけ**。開いたら (`open`) 始め、閉じたら (`reset`) 入口へ戻す
+ */
+describe("開く前の入口", () => {
+  /** 入口の部品に自動起動の指定を付けた PMT に差し替える (`undefined` は記述子の無いもの) */
+  function entry(auto: boolean | undefined): ResponseMessage[] {
+    const [, ...rest] = carousel([startup("")]);
+    return [
+      {
+        type: "pmt",
+        components: [
+          {
+            pid: 0x140,
+            componentId: 0x40,
+            streamType: 0x0d,
+            ...(auto === undefined
+              ? {}
+              : {
+                  bxmlInfo: {
+                    transmissionFormat: 0,
+                    entryPointFlag: true,
+                    entryPointInfo: {
+                      autoStartFlag: auto,
+                      documentResolution: 3,
+                      useXML: false,
+                      defaultVersionFlag: true,
+                      independentFlag: true,
+                      styleForTVFlag: false,
+                      bmlMajorVersion: 1,
+                      bmlMinorVersion: 0,
+                    },
+                  },
+                }),
+          },
+        ],
+      },
+      ...rest,
+    ];
+  }
+  const ENTRY_PATH = "/40/0000/startup.bml";
+
+  test("自動起動の指定がある入口は、開く前から始める", async () => {
+    const { bml } = open({ opened: () => false });
+    feedAll(bml, [PROGRAM, ...entry(true)]);
+    const { done } = await watch(() => bml.path === ENTRY_PATH);
+    expect(done).toBe(true);
+  });
+
+  test("指定が無い入口は、開くまで始めない。開いたら始める", async () => {
+    for (const auto of [false, undefined]) {
+      let opened = false;
+      const { bml } = open({ opened: () => opened });
+      feedAll(bml, [PROGRAM, ...entry(auto)]);
+      await watch(() => false, 50);
+      expect(bml.path).toBeNull();
+      opened = true;
+      bml.open();
+      const { done } = await watch(() => bml.path === ENTRY_PATH);
+      expect(done).toBe(true);
+    }
+  });
+
+  test("開いているものとして作ったエンジン (`opened` が無い) は、指定が無くても始める", async () => {
+    const { bml } = open();
+    feedAll(bml, [PROGRAM, ...entry(false)]);
+    const { done } = await watch(() => bml.path === ENTRY_PATH);
+    expect(done).toBe(true);
+  });
+
+  test("閉じたら入口から出直す。指定が無い入口は、閉じたら止めたまま", async () => {
+    // 入口を読むたびに Ureg に1字足す (Ureg は局が替わらなければ残る)
+    const counted = startup(
+      "",
+      'function start() { browser.Ureg[3] = browser.Ureg[3] + "s"; }',
+    );
+    let opened = true;
+    const first = open({ opened: () => opened }).bml;
+    feedAll(first, [
+      PROGRAM,
+      ...entry(true).slice(0, 1),
+      ...carousel([counted]).slice(1),
+    ]);
+    expect((await watch(() => inside(first).ureg[3] === "s")).done).toBe(true);
+    opened = false;
+    first.reset();
+    expect((await watch(() => inside(first).ureg[3] === "ss")).done).toBe(true);
+    expect(first.path).toBe(ENTRY_PATH);
+
+    let shown = true;
+    const second = open({ opened: () => shown }).bml;
+    feedAll(second, [PROGRAM, ...entry(false)]);
+    expect((await watch(() => second.path === ENTRY_PATH)).done).toBe(true);
+    shown = false;
+    second.reset();
+    await watch(() => false, 50);
+    expect(second.path).toBeNull();
+  });
+});
+
 describe("epgTune", () => {
   const script = `function start() {
         var r = browser.epgTune(target);

@@ -122,6 +122,12 @@ export interface BmlOptions {
     start(hint: number[]): boolean;
     startFrom?(uri: string, hint: number[]): boolean;
   };
+  /**
+   * 見ている人が開いているか (d を押したか)。**開いていなければ、自動起動の指定がある入口だけ始める**
+   * (データ符号化方式記述子の `auto_start_flag`。TR-B14 第二分冊 2.1.4・TR-B15 第一分冊 5.1.5)。
+   * 無ければ開いているものとして扱う。開いたら `open` で知らせる
+   */
+  opened?: () => boolean;
   log?: (message: string) => void;
   /** ページを握る長さの決まり (既定は [budget.ts](budget.ts) の DEFAULT_BUDGET。テストで縮める) */
   budget?: Partial<BudgetLimits>;
@@ -142,6 +148,13 @@ export interface Bml {
   readonly plane: Plane;
   /** 切り分け用 (今の文書の名前) */
   readonly path: string | null;
+  /** 開いた (`opened` が真になった)。自動起動でない入口を待たせていれば、ここで始める */
+  open(): void;
+  /**
+   * 入口から出直す (開いていたものを閉じたとき)。覚えているモジュールはそのまま使う。
+   * 開いていなければ、自動起動でない入口は始めない
+   */
+  reset(): void;
   destroy(): void;
 }
 
@@ -389,6 +402,17 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     return this.beitems(type).length > 0;
   }
 
+  open(): void {
+    if (this.destroyed) return;
+    this.maybeStart();
+  }
+
+  reset(): void {
+    if (this.destroyed) return;
+    this.exit();
+    this.maybeStart();
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.token++;
@@ -517,7 +541,20 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     if (this.resources.pmtSeen && !this.resources.pmt.has(STARTUP_COMPONENT))
       return;
     if (!this.resources.has(STARTUP_COMPONENT, STARTUP_MODULE)) return;
+    if (!this.mayStart()) return;
     void this.startup();
+  }
+
+  /**
+   * 入口を始めてよいか。開いていれば始める。開いていなければ、入口の部品に自動起動の指定
+   * (`auto_start_flag`) があるときだけ — テレビは選局したら入口を裏で動かす (`opened` の説明)
+   */
+  private mayStart(): boolean {
+    if (this.options.opened?.() !== false) return true;
+    return (
+      this.resources.pmt.get(STARTUP_COMPONENT)?.bxmlInfo?.entryPointInfo
+        ?.autoStartFlag === true
+    );
   }
 
   /** 今の文書の残り (待っているイベント・タイマー・続き) を捨てる。文書を替える前に同期で */

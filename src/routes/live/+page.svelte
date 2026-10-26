@@ -336,8 +336,10 @@
       />
 
       <!-- データ放送。映像はここ (`media`) とだけ伝えて描くのはエンジンに任せる。局が変わったら作り直す -->
+      <!-- 常に受信する端末は、開く前から動かす (局を映している間だけ。`data-receive.ts`) -->
       <DataBroadcast
         on={player.showData}
+        receive={player.receiveData && player.tuned !== null}
         channel={player.tuned === null
           ? null
           : `${player.tuned.channelType}/${player.tuned.channel}/${player.tuned.serviceId}`}
@@ -610,6 +612,10 @@
               {pip}
               {fullscreen}
               {stage}
+              receive={{
+                on: player.receiveData,
+                toggle: () => player.toggleReceiveData(),
+              }}
               codec={liveCodecs({
                 icon: CODEC,
                 codec: player.codec,
@@ -724,7 +730,8 @@
       <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
       <aside class="live-side">
         <!--
-                データ放送を出している間だけ、リモコンを一覧の上に出す (入れ替えない — 押しながら局も変えたい)
+                データ放送を開いている間だけ、リモコンを一覧の上に出す (入れ替えない — 押しながら局も変えたい)。
+                常に受信していても、開くまでは出さない
             -->
         {#if dataPress !== null}
           <Remote press={dataPress} />

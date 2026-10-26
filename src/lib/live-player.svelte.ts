@@ -16,6 +16,7 @@ import {
   type CaptionPage,
 } from "@danything/arib/caption-text";
 import { CLOCK } from "@danything/arib/pes";
+import { untrack } from "svelte";
 
 import type { AudioTrack } from "#lib/arib.js";
 import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
@@ -26,6 +27,11 @@ import {
   pickLanguage,
   storedCaptionsOn,
 } from "#lib/components/player/caption-pref.js";
+import {
+  DATA_RECEIVE_KEY,
+  storedDataReceive,
+  wantsData,
+} from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
 import { denpaFontUrl } from "#lib/font.js";
 import { forget, read, write } from "#lib/keep.js";
@@ -290,6 +296,18 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 局を変えても押したままにする
    */
   let showData = $state(false);
+  /**
+   * データ放送を常に受信するか (再生の設定の行)。**端末ごとに覚える** (`data-receive.ts`)。開いていなくても
+   * サーバに頼み、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
+   */
+  let receiveData = $state(false);
+  $effect(() => {
+    receiveData = storedDataReceive(read(DATA_RECEIVE_KEY));
+    // 選局の指示より先に送らない (`syncData`)。読んだ値に合わせるだけ
+    untrack(syncData);
+  });
+  /** サーバに受信を頼んでいるか (最後に送ったもの)。繋ぎ直したら頼んでいないところから */
+  let askedData = false;
   /** データ放送の通知を渡す先。**描いているものがあるときだけ** */
   let onData: ((message: ResponseMessage) => void) | null = null;
   /**
@@ -1463,9 +1481,31 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function setData(on: boolean): void {
     if (showData === on) return;
     showData = on;
-    // 畳んだら、待たせてあるぶんも捨てる
-    if (!on) heldData = [];
-    socket?.send(JSON.stringify({ type: "data", on } satisfies Command));
+    syncData();
+  }
+
+  /** データ放送を常に受信するかを切り替える。端末ごとに覚える (`data-receive.ts`) */
+  function toggleReceiveData(): void {
+    receiveData = !receiveData;
+    write(DATA_RECEIVE_KEY, receiveData ? "1" : "0");
+    syncData();
+  }
+
+  /**
+   * サーバに頼むかを、開いているか・常に受信するか・局を映しているかから決め直す (`wantsData`)。
+   * 変わったときだけ送る。**選局の指示のあとに送る** — 前の局のセッションに頼むと、前の局のものが届く
+   */
+  function syncData(): void {
+    const want = wantsData({
+      open: showData,
+      always: receiveData,
+      tuned: tuned !== null,
+    });
+    // 受け取らないなら、待たせてあるぶんも捨てる
+    if (!want) heldData = [];
+    if (want === askedData || socket?.readyState !== WebSocket.OPEN) return;
+    askedData = want;
+    send({ type: "data", on: want });
   }
 
   /**
@@ -1729,6 +1769,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (open) {
       const command = wantedCommand();
       if (command !== null) send(command);
+      // 局を映すか (追っかけ・録画に譲るか) で、常に受信のときの頼み方が変わる
+      syncData();
       return;
     }
 
@@ -1762,9 +1804,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       attempts = 0;
       const command = wantedCommand();
       if (command !== null) ws.send(JSON.stringify(command));
-      // データ放送を出すかどうかはサーバでは繋ぎ (Viewer) に紐づいていて、切れると忘れられる
-      if (showData)
-        ws.send(JSON.stringify({ type: "data", on: true } satisfies Command));
+      // データ放送を受け取るかどうかはサーバでは繋ぎ (Viewer) に紐づいていて、切れると忘れられる
+      askedData = false;
+      syncData();
     };
 
     ws.onerror = () => {
@@ -1925,8 +1967,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           new TextDecoder().decode(body),
         ) as ResponseMessage;
         if (onData !== null) onData(message);
-        // 出すつもりが無いなら取っておく意味も無い
-        else if (showData && heldData.length < HOLD_DATA)
+        // 受け取るつもりが無いなら取っておく意味も無い
+        else if (askedData && heldData.length < HOLD_DATA)
           heldData.push(message);
         return;
       }
@@ -2407,6 +2449,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return showData;
     },
     setData,
+    /** データ放送を常に受信するか (端末ごと) */
+    get receiveData() {
+      return receiveData;
+    },
+    toggleReceiveData,
     listenData,
     /** 字幕を出しているか */
     get captions() {

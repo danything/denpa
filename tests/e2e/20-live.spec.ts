@@ -1853,13 +1853,14 @@ test.describe("ライブ視聴", () => {
     await expect(menu).toBeVisible();
     await expect(menu).toHaveAttribute("role", "menu");
 
-    // 先頭はアンビエントモード (ライブに CMスキップは無い)。Enter で切り替わり、閉じない
-    const ambient = page.getByTestId("live-ambient");
-    await expect(ambient).toBeFocused();
-    await expect(ambient).toHaveAttribute("role", "menuitemcheckbox");
-    const before = await ambient.getAttribute("aria-checked");
+    // 先頭はデータ放送を常に受信 (ライブに CMスキップは無い。データ放送を開くのは右端の列の d)。
+    // Enter で切り替わり、閉じない
+    const first = page.getByTestId("live-data-receive");
+    await expect(first).toBeFocused();
+    await expect(first).toHaveAttribute("role", "menuitemcheckbox");
+    const before = await first.getAttribute("aria-checked");
     await page.keyboard.press("Enter");
-    await expect(ambient).not.toHaveAttribute("aria-checked", before ?? "");
+    await expect(first).not.toHaveAttribute("aria-checked", before ?? "");
     await expect(menu).toBeVisible();
 
     // コーデックは行にいまの値を出し、→ で選択肢の並びに入る (選んでいるものにフォーカス)

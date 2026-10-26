@@ -60,7 +60,7 @@ export const CHANNEL = {
    * 0x20 (字幕の画像) と 0x21 (字幕を消す) は以前の取り決めで、もう使わない (番号は空けておく)
    */
   captionText: 0x22,
-  /** データ放送 (JSON。`packages/arib/src/bml-protocol.ts` の `ResponseMessage`)。押されてから送る (`Command` の `data`) */
+  /** データ放送 (JSON。`packages/arib/src/bml-protocol.ts` の `ResponseMessage`)。頼まれてから送る (`Command` の `data`。押されたか、常に受信する端末) */
   data: 0x30,
   /** 制御。**ここだけ双方向**で、中身は JSON */
   control: 0x40,
