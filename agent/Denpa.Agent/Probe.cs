@@ -154,6 +154,8 @@ public static class Probe
             : Read;
         if (Zd1j.Parse(device) is { } zd1j)
         {
+            // 覚えたロックの値は常駐のときと同じファイルを読み書きする (再起動をまたいで確かめられるように)
+            Zd1jBoard.Locks = new Zd1jLocks(Config.FromEnvironment().Zd1jLocksFile);
             // 鍵はそのボードの内蔵の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
             IKeySource keys = cardAt >= 0 ? Keys.Source : new LocalCard(() => [Zd1j.Card(zd1j)]);
             return RunZd1j(zd1j, channels, decode ? keys : null, seconds);

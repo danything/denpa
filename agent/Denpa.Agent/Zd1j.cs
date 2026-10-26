@@ -127,8 +127,11 @@ public sealed class Zd1jBoard : IDibTime
     internal static TimeSpan? LingerFrom(string? text) =>
         int.TryParse(text, out var seconds) && seconds >= 0 ? TimeSpan.FromSeconds(seconds) : null;
 
-    /// <summary>チャンネルごとに覚えたロックの値。**ボードを閉じても残す** (ポートごと)</summary>
-    private static readonly Dictionary<string, DibMemory> Memories = [];
+    /// <summary>
+    /// チャンネルごとに覚えたロックの値。**ボードを閉じても、エージェントを起こし直しても残す** (ファイル。ポートごと)。
+    /// 起動するときに設定の置き場で決める (Program.cs・Probe.cs)。決めていなければ覚えるのはメモリの上だけ
+    /// </summary>
+    public static Zd1jLocks Locks { get; set; } = new(null);
 
     private static readonly Lock Registry = new();
     private static readonly Dictionary<string, Zd1jBoard> Boards = [];
@@ -272,12 +275,7 @@ public sealed class Zd1jBoard : IDibTime
                 if (_demod is not null) return _demod;
                 var started = Stopwatch.StartNew();
                 Bridge.ResetDemodulator(Sleep);
-                DibMemory memory;
-                lock (Memories)
-                {
-                    if (!Memories.TryGetValue(Port, out memory!)) Memories[Port] = memory = new DibMemory();
-                }
-                var demod = new Dib8096(Bridge, this, _trace, memory)
+                var demod = new Dib8096(Bridge, this, _trace, Locks.For(Port))
                 {
                     AlwaysSearch = Environment.GetEnvironmentVariable("DENPA_ZD1J_SEARCH") == "always",
                 };
@@ -805,5 +803,88 @@ public sealed class Zd1jCard : ICardLink
         var board = _board;
         _board = null;
         board?.Release();
+    }
+}
+
+/// <summary>
+/// CECH-ZD1 J がチャンネルごとに覚えたロックの値のファイル (<c>zd1j-locks.json</c>。tuners.json の隣)。
+/// 中身は選局で段 3 に渡した値だけで、**消してよい** (次の選局で探索からやり直して、また覚える)。
+///
+/// <para>
+/// 形は <c>{ "version": 1, "boards": { "&lt;USB のポート&gt;": { "&lt;kHz&gt;": { … } } } }</c> (<see cref="DibMemory.ToJson"/>)。
+/// 読めない・壊れている・バージョンが違うときは、警告を1行残して全部捨てる。書くのは値が変わったときだけ
+/// (ロックして新しい値になった・合わなかった値を捨てた)。
+/// </para>
+/// </summary>
+public sealed class Zd1jLocks
+{
+    private const int Version = 1;
+
+    private readonly string? _path;
+    private readonly Lock _gate = new();
+    private readonly Dictionary<string, DibMemory> _boards = [];
+
+    /// <param name="path">ファイル。null なら書かない (メモリの上だけ)</param>
+    public Zd1jLocks(string? path)
+    {
+        _path = path;
+        if (path is null || !File.Exists(path)) return;
+        try
+        {
+            var root = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path)) as System.Text.Json.Nodes.JsonObject
+                ?? throw new FormatException("オブジェクトではありません");
+            var version = root["version"]?.GetValue<int>();
+            if (version != Version) throw new FormatException($"バージョンが {version?.ToString(CultureInfo.InvariantCulture) ?? "無し"} です ({Version} を読みます)");
+            if (root["boards"] is not System.Text.Json.Nodes.JsonObject boards) throw new FormatException("boards がありません");
+            var loaded = new Dictionary<string, DibMemory>();
+            foreach (var (port, node) in boards)
+            {
+                if (!SianoUserland.IsPort(port) || node is not System.Text.Json.Nodes.JsonObject channels) throw new FormatException($"ポート「{port}」が読めません");
+                loaded[port] = DibMemory.FromJson(channels);
+            }
+            foreach (var (port, memory) in loaded) Watch(port, memory);
+        }
+        catch (Exception error) when (error is System.Text.Json.JsonException or FormatException or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            Log.Write($"{path} を読めないので捨てて、探索からやり直します: {error.Message}");
+            _boards.Clear();
+        }
+    }
+
+    /// <summary>そのポートの覚えた値。無ければ空のものを作る</summary>
+    public DibMemory For(string port)
+    {
+        lock (_gate)
+        {
+            if (_boards.TryGetValue(port, out var memory)) return memory;
+            return Watch(port, new DibMemory());
+        }
+    }
+
+    private DibMemory Watch(string port, DibMemory memory)
+    {
+        _boards[port] = memory;
+        memory.Changed += Save;
+        return memory;
+    }
+
+    /// <summary>全部書く (置き換えは tuners.json と同じく、書きかけを読ませない形で)</summary>
+    private void Save()
+    {
+        if (_path is null) return;
+        lock (_gate)
+        {
+            var boards = new System.Text.Json.Nodes.JsonObject();
+            foreach (var (port, memory) in _boards.OrderBy(pair => pair.Key, StringComparer.Ordinal)) boards[port] = memory.ToJson();
+            try
+            {
+                Config.WriteAtomic(_path, new System.Text.Json.Nodes.JsonObject { ["version"] = Version, ["boards"] = boards });
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // 書けなくても選局は続ける。次に変わったときにまた書く
+                Log.Write($"{_path} に書けません: {error.Message}");
+            }
+        }
     }
 }

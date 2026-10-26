@@ -70,6 +70,8 @@ var recorded = Path.GetFullPath(
     ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") ?? "/media", "raw"));
 
 var config = Config.FromEnvironment();
+// CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。Zd1j.cs)
+Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
 var events = new Events();
 var (tuners, detected) = config.ResolveTuners();
 

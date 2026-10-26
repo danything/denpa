@@ -1606,7 +1606,7 @@ public sealed class Dib8096
             if (step == Step.Stop && _demodState == DemodState.Failed && _entry != Entry.Full)
             {
                 // 覚えた値・既定で合わなかった。探索からやり直す
-                if (_entry == Entry.Known) _memory?.Channels.Remove(_khz);
+                if (_entry == Entry.Known) _memory?.Forget(_khz);
                 _path = _entry == Entry.Known ? "覚えた値で合わず探索した" : "既定 (8K) で合わず探索した";
                 _entry = Entry.Full;
                 _fft = Fft.Auto;
@@ -1629,7 +1629,7 @@ public sealed class Dib8096
         // 揃っていないと何も読まず、実機ではロックしたあとでも揃わないことがあったので、読み戻しに頼らない
         if (_memory is not null && _entry != Entry.Known && _programmed is not null && _demodState is DemodState.Locked or DemodState.DataLocked)
         {
-            _memory.Channels[_khz] = _programmed;
+            _memory.Remember(_khz, _programmed);
         }
         return _demodState switch
         {
@@ -2254,4 +2254,81 @@ public sealed class Dib8096
 public sealed class DibMemory
 {
     internal readonly Dictionary<uint, Dib8096.Snapshot> Channels = [];
+
+    /// <summary>覚えた値が変わった (増えた・変わった・捨てた)。ファイルに書くのはこれを受けたときだけ</summary>
+    public event Action? Changed;
+
+    internal void Remember(uint khz, Dib8096.Snapshot snapshot)
+    {
+        lock (Channels)
+        {
+            if (Channels.TryGetValue(khz, out var held) && Same(held, snapshot)) return;
+            Channels[khz] = snapshot;
+        }
+        Changed?.Invoke();
+    }
+
+    internal void Forget(uint khz)
+    {
+        lock (Channels)
+        {
+            if (!Channels.Remove(khz)) return;
+        }
+        Changed?.Invoke();
+    }
+
+    private static bool Same(Dib8096.Snapshot a, Dib8096.Snapshot b) =>
+        a.Fft == b.Fft && a.Guard == b.Guard && a.Inversion == b.Inversion && a.Partial == b.Partial && a.Diff == b.Diff
+        && a.Layers.SequenceEqual(b.Layers);
+
+    /// <summary>ファイルに書く形: <c>{ "&lt;kHz&gt;": { fft, guard, inversion, partial, diff, layers: [[変調, 符号化率, インターリーブ, セグメント数] × 3] } }</c></summary>
+    public System.Text.Json.Nodes.JsonObject ToJson()
+    {
+        var json = new System.Text.Json.Nodes.JsonObject();
+        lock (Channels)
+        {
+            foreach (var (khz, s) in Channels.OrderBy(pair => pair.Key))
+            {
+                var layers = new System.Text.Json.Nodes.JsonArray();
+                foreach (var (modulation, fec, interleave, segments) in s.Layers)
+                {
+                    layers.Add((System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonArray(modulation, fec, interleave, segments));
+                }
+                json[khz.ToString(System.Globalization.CultureInfo.InvariantCulture)] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["fft"] = s.Fft, ["guard"] = s.Guard, ["inversion"] = s.Inversion, ["partial"] = s.Partial, ["diff"] = s.Diff, ["layers"] = layers,
+                };
+            }
+        }
+        return json;
+    }
+
+    /// <summary>ファイルの中身から。**どれか1つでも形が違えば投げる** (呼ぶ側が全部捨てて探索から)</summary>
+    public static DibMemory FromJson(System.Text.Json.Nodes.JsonObject json)
+    {
+        var memory = new DibMemory();
+        foreach (var (key, node) in json)
+        {
+            if (!uint.TryParse(key, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var khz) || node is not System.Text.Json.Nodes.JsonObject value)
+            {
+                throw new FormatException($"周波数「{key}」が読めません");
+            }
+            int Int(string name, int min, int max)
+            {
+                var number = value[name]?.GetValue<int>() ?? throw new FormatException($"{key} の {name} がありません");
+                return number >= min && number <= max ? number : throw new FormatException($"{key} の {name} ({number}) が範囲の外です");
+            }
+            if (value["layers"] is not System.Text.Json.Nodes.JsonArray { Count: 3 } layers) throw new FormatException($"{key} の layers が 3 つではありません");
+            var parsed = layers.Select(layer => layer is System.Text.Json.Nodes.JsonArray { Count: 4 } item
+                ? (item[0]!.GetValue<int>(), item[1]!.GetValue<int>(), item[2]!.GetValue<int>(), item[3]!.GetValue<int>())
+                : throw new FormatException($"{key} の階層が 4 つの数ではありません")).ToArray();
+            if (parsed.Any(layer => layer.Item1 is < 0 or > 4 || layer.Item2 is < 0 or > 7 || layer.Item3 is < 0 or > 4 || layer.Item4 is < 0 or > 13))
+            {
+                throw new FormatException($"{key} の階層の値が範囲の外です");
+            }
+            memory.Channels[khz] = new Dib8096.Snapshot(
+                Int("fft", 0, 3), Int("guard", -1, 3), Int("inversion", 0, 1), Int("partial", 0, 1), Int("diff", 0, 0x1FFF), parsed);
+        }
+        return memory;
+    }
 }
