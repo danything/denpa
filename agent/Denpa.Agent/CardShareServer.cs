@@ -20,7 +20,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **自分にカードが刺さっていなければ、503 を返すだけ**です。
+/// **自分にカードが刺さっていなければ、503 を返すだけ。**
 /// </para>
 /// </summary>
 internal sealed class CardShareServer(CardLanPolicy policy, int port)

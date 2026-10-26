@@ -146,8 +146,8 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
 #
-# **`recisdb` も libaribb25 も pcscd も入れません。** 選局は自分でやり (ioctl)、
-# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で話します (Ccid.cs / Px4Card.cs)。
+# **`recisdb` も libaribb25 も pcscd も入れない。** 選局は自分でやり (ioctl)、
+# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で話す (Ccid.cs / Px4Card.cs)。
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
 # px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす

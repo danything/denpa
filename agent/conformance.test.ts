@@ -10,9 +10,9 @@
  *
  *     bun run test:conformance
  *
- * **`bun run test:unit` には入っていません。** あちらはビルドした実行ファイルが
- * 要らないもの (`src` の下) だけで、こちらは先に `dotnet publish` が要ります。
- * 混ぜていた頃は、ビルドする前の CI がここで ENOENT を出して落ちていました。
+ * **`bun run test:unit` には入れていない。** あちらはビルドした実行ファイルが
+ * 要らないもの (`src` の下) だけで、こちらは先に `dotnet publish` が要る。
+ * 混ぜていた頃は、ビルドする前の CI がここで ENOENT を出して落ちていた。
  *
  * チューナーの代わりは `tests/fake/tune.ts` (`FAKE_TUNE`)。エージェントから見れば
  * 「起こすと TS を流し続ける子プロセス」で、取り合いと配り方はそのまま通る。
