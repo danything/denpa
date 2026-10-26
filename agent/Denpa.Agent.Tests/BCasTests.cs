@@ -343,7 +343,7 @@ public class BCasTests
     {
         var link = new FakeLink("reader");
         var opened = 0;
-        var local = new LocalCard(() =>
+        var local = new LocalCard(open: () =>
         {
             opened++;
             return BCas.Open(() => [Candidate(link)]);
@@ -370,7 +370,7 @@ public class BCasTests
         var link = new FakeLink("reader");
         var ready = false;
         var opened = 0;
-        var local = new LocalCard(() =>
+        var local = new LocalCard(open: () =>
         {
             opened++;
             return ready ? BCas.Open(() => [Candidate(link)]) : throw new IOException("カードリーダーが見つかりません");
