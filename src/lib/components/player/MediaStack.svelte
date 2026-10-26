@@ -37,7 +37,7 @@
   }: Props = $props();
 </script>
 
-<div bind:this={box} class="box">
+<div bind:this={box} class="box" data-stage-media>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_media_has_caption -->
   <video
     bind:this={video}
@@ -68,7 +68,7 @@
     position: absolute;
     inset: 0;
     width: 100%;
-    height: 100%;
+    height: var(--dp-media-height, 100%);
   }
   .video {
     width: 100%;

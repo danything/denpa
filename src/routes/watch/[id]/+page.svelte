@@ -1671,7 +1671,8 @@
                 -->
         <div
           bind:this={mediaBox}
-          style="position:absolute; inset:0; width:100%; height:100%;"
+          style="position:absolute; inset:0; width:100%; height:var(--dp-media-height, 100%);"
+          data-stage-media
         >
           <video
             bind:this={video}

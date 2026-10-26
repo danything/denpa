@@ -8,8 +8,10 @@
     PLAYER_STAGE,
     type PlayerControls,
   } from "./controls.svelte";
+  import FoldReflection from "./FoldReflection.svelte";
   import type { StageFullscreen } from "./fullscreen.svelte.js";
   import { PHONE_LANDSCAPE } from "./PlayerLayout.svelte";
+  import { TABLETOP } from "./reflection";
 
   /**
    * 映像を出す領域。3つの視聴画面で同じ配線を1本に: 操作列の出し入れとカーソル (`controls`)・キーボードで触っている
@@ -139,6 +141,20 @@
    * 広い枠でも、押すものが一段に収まらなければ畳む (`crowded`)。並ぶものは番組しだいで幅の線では決められないので、
    * 測るときだけ畳んだものを並べ (`data-measuring`)、いちばん右が行の右端を越えるかを読む (同じ処理の中なので画面には出ない)
    */
+  /**
+   * **テーブルトップの形** (折り畳み端末を半分に折って机に置いた。`reflection.ts` の `TABLETOP`)。
+   * 枠を画面いっぱいにし、映像は上の段、下の段には反射 (`FoldReflection`) と操作を置く (下の style の `[data-tabletop]`)。
+   * 知らないブラウザでは当たらず、今のまま
+   */
+  let tabletop = $state(false);
+  $effect(() => {
+    const media = window.matchMedia(TABLETOP);
+    const check = () => (tabletop = media.matches);
+    check();
+    media.addEventListener("change", check);
+    return () => media.removeEventListener("change", check);
+  });
+
   let crowded = $state(false);
   const fold = $derived(compact || crowded);
   $effect(() => {
@@ -274,7 +290,7 @@
   });
 </script>
 
-{#if ambient}
+{#if ambient && !tabletop}
   <!-- 光は枠より前 (兄弟) に置く。位置を持つ枠のほうが後ろなので、光の上に描かれる -->
   <AmbientGlow
     {ambient}
@@ -298,6 +314,7 @@
     data-fold={fold ? "" : undefined}
     data-narrow={slim ? "" : undefined}
     data-pseudo={fullscreen.pseudo ? "" : undefined}
+    data-tabletop={tabletop ? "" : undefined}
     onpointermove={controls.wake}
     onpointerdown={controls.wake}
     onpointerleave={controls.away}
@@ -310,6 +327,15 @@
     onfocusout={() => (controls.keyboard = false)}
     data-testid={testid}
   >
+    {#if ambient && tabletop}
+      <!-- 反射は枠の中のいちばん前 (映像と操作の下)。下の段にだけ描く -->
+      <FoldReflection
+        {ambient}
+        stage={element}
+        {aspect}
+        testid="{testid}-reflection"
+      />
+    {/if}
     {@render children({
       compact,
       fold,
@@ -418,6 +444,28 @@
     aspect-ratio: auto;
     max-height: none;
     min-height: 0;
+  }
+  /*
+   * **テーブルトップ** (上の `tabletop`)。枠を画面いっぱいに広げ (広げた全画面と同じ)、映像の束
+   * (`[data-stage-media]`) を上の段の高さに収める。下端の操作バーは枠の下の端にあるので下の段に来る。
+   * 右端の縦の列も下の段へ下ろす (机に置いた端末で指が届くのは手前の段)。周りはいつも黒 (テーマで変えない)
+   */
+  .stage[data-tabletop] {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    width: auto;
+    margin: 0;
+    aspect-ratio: auto;
+    max-height: none;
+    min-height: 0;
+    --dp-media-height: env(viewport-segment-bottom 0 0, 50%);
+  }
+  .stage[data-tabletop] > :global(.bar:not([data-stage-bar])) {
+    top: env(viewport-segment-top 0 1, 50%);
+  }
+  .room:has(> [data-tabletop]) {
+    display: contents;
   }
   /* 置き場の箱 (測る箱) は外す。中の `position: fixed` の基準が窓でなくなる */
   .room:has(> [data-pseudo]) {
