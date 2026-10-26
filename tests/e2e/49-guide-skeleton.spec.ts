@@ -153,7 +153,7 @@ for (const [width, height] of [
       await new Promise((resolve) => setTimeout(resolve, 3000));
       await route.continue();
     });
-    await page.getByTestId(width < 640 ? "tab-guide" : "nav-guide").click();
+    await page.getByTestId(width < 1000 ? "tab-guide" : "nav-guide").click();
     await expect(page.getByTestId("guide-pending")).toBeVisible();
     const pending = await bottoms(
       page,

@@ -1202,7 +1202,7 @@
       --dp-gutter: 1.5rem;
     }
   }
-  /* 試作: 画面ぴったりにするのは二段組の幅 (1000px) から。横にしたスマホは今までどおり */
+  /* 画面ぴったりにするのは二段組の幅 (1000px) から。横にしたスマホは 768px から (映像を画面の高さいっぱいにする。`PlayerLayout`) */
   @media (min-width: 1000px),
     (min-width: 768px) and (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
     /*
