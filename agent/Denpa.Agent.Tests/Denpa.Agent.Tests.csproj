@@ -44,6 +44,15 @@
         <Compile Include="../Denpa.Agent/Pcsc.cs" />
         <Compile Include="../Denpa.Agent/Multi2.cs" />
         <Compile Include="../Denpa.Agent/B25.cs" />
+        <Compile Include="../Denpa.Agent/UsbDevice.cs" />
+        <Compile Include="../Denpa.Agent/Mb86h47.cs" />
+        <Compile Include="../Denpa.Agent/Mb86h47Programs.cs" />
+        <Compile Include="../Denpa.Agent/Fr30.cs" />
+        <Compile Include="../Denpa.Agent/UsbFsDevice.cs" />
+        <Compile Include="../Denpa.Agent/WinUsbDevice.cs" />
+        <Compile Include="../Denpa.Agent/IoKitDevice.cs" />
+        <Compile Include="../Denpa.Agent/Dib8096.cs" />
+        <Compile Include="../Denpa.Agent/Zd1j.cs" />
     </ItemGroup>
 
     <ItemGroup>

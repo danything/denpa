@@ -94,6 +94,9 @@ public sealed class Config(string tunersFile, string channelsFile)
     public string TunersFile { get; } = tunersFile;
     public string ChannelsFile { get; } = channelsFile;
 
+    /// <summary>CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。消してよい。Zd1j.cs の <see cref="Zd1jLocks"/>)</summary>
+    public string Zd1jLocksFile => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(TunersFile))!, "zd1j-locks.json");
+
     public static Config FromEnvironment() => new(
         Environment.GetEnvironmentVariable("TUNERS_FILE") ?? "/config/tuners.json",
         Environment.GetEnvironmentVariable("CHANNELS_FILE") ?? "/config/channels.json");
@@ -118,7 +121,7 @@ public sealed class Config(string tunersFile, string channelsFile)
         }
     }
 
-    private static void WriteAtomic(string path, JsonNode body)
+    internal static void WriteAtomic(string path, JsonNode body)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         // 書きかけを読ませない。GET /denpa/channels や選局 (TSID を引く) は、書いている最中にもこのファイルを読みに来る

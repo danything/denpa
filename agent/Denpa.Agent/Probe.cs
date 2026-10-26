@@ -18,9 +18,11 @@ namespace Denpa.Agent;
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
+/// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS・2 回目の選局の時間と C/N を出す
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
+/// denpa-agent --card zd1j:4-12.1                          # CECH-ZD1 J の内蔵の差し込み口だけ (ほかのリーダーに触らない)
 /// </code>
 ///
 /// <para>
@@ -94,10 +96,20 @@ public static class Probe
     /// カードリーダーを並べて、カードを開いてみる。**pcscd を通さなくなったので、
     /// 実機でリーダーと話せているかはここで確かめる。**
     /// </summary>
-    public static int Card()
+    public static int Card(string[] args)
     {
+        if (args.ElementAtOrDefault(1) is { } device)
+        {
+            if (Zd1j.Parse(device) is not { } port)
+            {
+                Console.Error.WriteLine($"usage: denpa-agent --card [{Zd1j.Scheme}<USB のポート>]");
+                return 2;
+            }
+            return Zd1jCard(port);
+        }
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
         foreach (var found in Px4Card.Find().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
+        DescribeZd1jCards();
         try
         {
             using var card = CardLinks.Open();
@@ -110,6 +122,10 @@ public static class Probe
         {
             Console.Error.WriteLine(error.Message);
             return 1;
+        }
+        finally
+        {
+            Zd1jBoard.CloseAll();
         }
     }
 
@@ -131,6 +147,19 @@ public static class Probe
         // 貰いに行く接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
         if (CardHops() is not { } hops) return 2;
         Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : null, hops);
+
+        var secondsAt = Array.IndexOf(args, "--seconds");
+        var seconds = secondsAt >= 0 && int.TryParse(args.ElementAtOrDefault(secondsAt + 1), out var given) && given > 0
+            ? TimeSpan.FromSeconds(given)
+            : Read;
+        if (Zd1j.Parse(device) is { } zd1j)
+        {
+            // 覚えたロックの値は常駐のときと同じファイルを読み書きする (再起動をまたいで確かめられるように)
+            Zd1jBoard.Locks = new Zd1jLocks(Config.FromEnvironment().Zd1jLocksFile);
+            // 鍵はそのボードの内蔵の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
+            IKeySource keys = cardAt >= 0 ? Keys.Source : new LocalCard(() => [Zd1j.Card(zd1j)]);
+            return RunZd1j(zd1j, channels, decode ? keys : null, seconds);
+        }
 
         var known = Config.FromEnvironment().StreamIds();
 
@@ -164,19 +193,129 @@ public static class Probe
             }
             Console.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
 
-            Measure(tuner.Output, name, decode ? new Descrambler(Keys.Source) : null);
+            Measure(tuner.Output, name, decode ? new Descrambler(Keys.Source) : null, seconds);
         }
 
         return 0;
     }
 
+    /// <summary>
+    /// CECH-ZD1 J の速さを測る。**冷えた状態から開く・選局からロック・ロックから最初の TS・2 回目の選局 (温かい状態)**
+    /// の時間と、I2C の回数、C/N と電波の強さを出す。チャンネルは <c>T27</c> でも <c>27</c> (地上波) でもよい。
+    /// 選局のたびに、ロックまでの内訳 (段ごとの時間と待ち) も出す (常駐のときは出さない)
+    /// </summary>
+    private static int RunZd1j(string port, string[] channels, IKeySource? keys, TimeSpan seconds)
+    {
+        var names = channels.Select(name => name.All(char.IsAsciiDigit) ? $"T{name}" : name).ToList();
+        // 最後にもう一度、最初のチャンネルを選び直す (温かい状態の選局)
+        names.Add(names[0]);
+        Zd1jBoard.Trace = message => Console.WriteLine($"    {message}");
+        var failed = false;
+        var tuner = new Zd1jTuner(port);
+        try
+        {
+            for (var index = 0; index < names.Count; index++)
+            {
+                var name = names[index];
+                if (ChannelTable.Parse(name) is not { } tuning)
+                {
+                    Console.Error.WriteLine($"{name}: 選局表にありません");
+                    return 1;
+                }
+                var warm = index == names.Count - 1;
+                Console.WriteLine($"--- {name}  {tuning.Frequency} Hz{(warm ? "  (2 回目の選局。温かい状態)" : "")}");
+                var i2c = tuner.Board?.Bridge.I2cTransfers ?? 0;
+                var requests = tuner.Board?.Bridge.Requests ?? 0;
+                try
+                {
+                    tuner.Tune(tuning, ChannelTable.NoStreamId);
+                }
+                catch (IOException error)
+                {
+                    Console.Error.WriteLine($"{name}: {error.Message}");
+                    failed = true;
+                    continue;
+                }
+                var board = tuner.Board!;
+                var timings = tuner.Timings;
+                if (index == 0)
+                {
+                    Console.WriteLine($"    開く (冷えた状態から) {timings.OpenMs} ms  (ブリッジの起動 {board.OpenMs} ms / DiB8096 の初期化 {board.DemodMs} ms)");
+                    i2c = 0;
+                    requests = 0;
+                }
+                Console.WriteLine($"    選局からロック {timings.LockMs} ms");
+                Measure(tuner.Output, name, keys is null ? null : new Descrambler(keys), seconds);
+                Console.WriteLine($"    ロックから最初の TS {tuner.Timings.FirstTsMs} ms");
+                Console.WriteLine($"    I2C のやり取り {board.Bridge.I2cTransfers - i2c} 回 / メモリ要求 {board.Bridge.Requests - requests} 回 ({(index == 0 ? "開くところからこの選局まで" : "この選局で")})");
+                if (tuner.Signal() is { } signal)
+                {
+                    Console.WriteLine($"    C/N {(signal.CnDb is { } cn ? $"{cn:F1} dB" : "-")}  電波の強さ {signal.StrengthDbm:F1} dBm (目安)  D[568] 0x{signal.Status:X4}");
+                }
+            }
+            return failed ? 1 : 0;
+        }
+        finally
+        {
+            tuner.Dispose();
+            Zd1jBoard.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// <c>--card zd1j:&lt;ポート&gt;</c>: **そのボードの内蔵の差し込み口だけ**を開いて、ATR とかかった時間、カードの番号を出す。
+    /// ほかのリーダー (本番が使っている USB のリーダーなど) には触らない
+    /// </summary>
+    private static int Zd1jCard(string port)
+    {
+        var found = Zd1j.Card(port);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            using var link = found.Open();
+            var atr = link.Reset();
+            Console.WriteLine($"{found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。冷えた状態から開いて IFSD を決めるまで)");
+            var init = BCas.Read(link);
+            Console.WriteLine($"{found.Name}: カード {string.Join(" / ", init.Ids.Select(id => id.ToString("D16")))}  CA_system_id 0x{init.CaSystemId:X4} ({started.ElapsedMilliseconds} ms)");
+            return 0;
+        }
+        catch (IOException error)
+        {
+            Console.Error.WriteLine($"{found.Name}: {error.Message} ({started.ElapsedMilliseconds} ms)");
+            return 1;
+        }
+        finally
+        {
+            Zd1jBoard.CloseAll();
+        }
+    }
+
+    /// <summary>CECH-ZD1 J の内蔵の差し込み口: ATR と、開いてから ATR までの時間</summary>
+    private static void DescribeZd1jCards()
+    {
+        foreach (var found in Zd1j.Cards())
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using var link = found.Open();
+                var atr = link.Reset();
+                Console.WriteLine($"内蔵 {found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。冷えた状態から開いて IFSD を決めるまで)");
+            }
+            catch (IOException error)
+            {
+                Console.WriteLine($"内蔵 {found.Name}: {error.Message} ({started.ElapsedMilliseconds} ms)");
+            }
+        }
+    }
+
     /// <summary>読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか</summary>
-    private static void Measure(Stream stream, string name, Descrambler? b25)
+    private static void Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration)
     {
         var buffer = new byte[188 * 1024];
         var decoded = new ArrayBufferWriter<byte>();
         var started = DateTime.UtcNow;
-        var deadline = started + Read;
+        var deadline = started + duration;
         var first = TimeSpan.Zero;
         long total = 0;
         long sync = 0;
@@ -210,7 +349,7 @@ public static class Probe
             }
         }
 
-        var mbps = total * 8.0 / Read.TotalSeconds / 1_000_000;
+        var mbps = total * 8.0 / duration.TotalSeconds / 1_000_000;
         var ratio = packets == 0 ? 0 : 100.0 * sync / packets;
         Console.WriteLine(
             $"    最初の1バイト {first.TotalMilliseconds:F0} ms  "
