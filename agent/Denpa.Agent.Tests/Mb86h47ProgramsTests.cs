@@ -180,7 +180,6 @@ public class Mb86h47ProgramsTests
         public readonly List<uint[]> Sent = [];
         public readonly Fr30Machine Cpu;
 
-
         public Core1Rig()
         {
             I2c = new I2cMaster(Dib);
