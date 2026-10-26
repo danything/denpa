@@ -447,7 +447,7 @@ ATTACH_STREAM` (SPEC 6.3。px4-userland 0.1.6 から)。返すのはデバイス
 
 ### CECH-ZD1 J の作り
 
-いまの様子・設定は [tuners.md](tuners.md#sony-cech-zd1-j-試験的)。**外のデーモンを置かず、エージェントが USB を直に持つ初めてのチューナーです。**
+いまの様子・設定は [tuners.md](tuners.md#sony-cech-zd1-j)。**外のデーモンを置かず、エージェントが USB を直に持つ初めてのチューナーです。**
 
 ```
 TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は T1Protocol)

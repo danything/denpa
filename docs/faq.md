@@ -6,7 +6,7 @@
 
 ### どのチューナーが使えますか
 
-PT2・PT3・PX-BCUD (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD、Sony CECH-ZD1 J (試験的) です。
+PT2・PT3・PX-BCUD (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD、Sony CECH-ZD1 J です。
 挿してあれば自動で見つけ、地上波か衛星かも見分けます。
 一覧は [tuners.md](tuners.md#要るもの)。
 
