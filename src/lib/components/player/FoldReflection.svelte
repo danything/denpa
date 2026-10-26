@@ -121,6 +121,8 @@
         layout === null ||
         next.width !== layout.width ||
         next.height !== layout.height;
+      // 置き場が変わらなければ描き直さない (入れ替えの途中を捨てない)
+      const moved = resized || next.x !== layout?.x || next.w !== layout?.w;
       layout = next;
       if (resized)
         for (const canvas of canvases) {
@@ -128,7 +130,7 @@
           canvas.width = next.width;
           canvas.height = next.height;
         }
-      repaint();
+      if (moved) repaint();
     };
     measure();
     const sizes = new ResizeObserver(measure);

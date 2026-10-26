@@ -52,6 +52,11 @@ async function fold(cdp: CDPSession, posture: Posture): Promise<void> {
   });
 }
 
+/** 折り目を変えた直後の見た目がそろうまで、確かめ直す */
+async function settled(check: () => Promise<void>): Promise<void> {
+  await expect(check).toPass({ timeout: 5_000, intervals: [100] });
+}
+
 interface Box {
   top: number;
   bottom: number;
@@ -87,43 +92,52 @@ function boxes(page: Page, stage: string) {
   }, stage);
 }
 
-/** 今の二段組 (映像が左、右の列が右)。反射は無い */
+/**
+ * 今の二段組 (映像が左、右の列が右)。反射は無い。
+ * 折り目が変わった直後は CSS がすぐ替わり、反射の出し入れは `change` を受けた次の描画になるので、そろうまで待つ (`settled`)
+ */
 async function expectSideBySide(page: Page, stage: string): Promise<void> {
-  const now = await boxes(page, stage);
-  expect(now.tabletop).toBe(false);
-  expect(now.reflection).toBeNull();
-  expect(now.theme).toBeNull();
-  expect(now.aside.left).toBeGreaterThanOrEqual(now.stage.right - 1);
-  expect(now.aside.right).toBeCloseTo(SIZE.width, 0);
+  await settled(async () => {
+    const now = await boxes(page, stage);
+    expect(now.tabletop).toBe(false);
+    expect(now.reflection).toBeNull();
+    expect(now.theme).toBeNull();
+    expect(now.aside.left).toBeGreaterThanOrEqual(now.stage.right - 1);
+    expect(now.aside.right).toBeCloseTo(SIZE.width, 0);
+  });
 }
 
 /** テーブルトップ: 映像の枠は上の段、右の列は下の段。どちらも折り目をまたがない */
 async function expectTabletop(page: Page, stage: string): Promise<void> {
-  const now = await boxes(page, stage);
-  expect(now.tabletop).toBe(true);
-  // 映像はヘッダーの下から折り目まで
-  expect(now.stage.top).toBeGreaterThanOrEqual(now.header?.bottom ?? 0);
-  expect(now.stage.bottom).toBeLessThanOrEqual(FOLD);
-  // 上の段で映像を小さくしすぎない (段の高さの 3 分の 2 以上)
-  expect(now.stage.bottom - now.stage.top).toBeGreaterThan((FOLD * 2) / 3);
-  // 右の列は折り目の下から画面の下の端まで、幅いっぱい
-  expect(now.aside.top).toBeGreaterThanOrEqual(FOLD);
-  expect(now.aside.bottom).toBeLessThanOrEqual(SIZE.height);
-  expect(now.aside.left).toBeCloseTo(0, 0);
-  expect(now.aside.right).toBeCloseTo(SIZE.width, 0);
-  // 下の段は舞台の中なので、右の列はテーマにかかわらず暗いテーマの色。窓は巻かない
-  expect(now.theme).toBe("dark");
-  expect(now.scrolls).toBe(false);
+  await settled(async () => {
+    const now = await boxes(page, stage);
+    expect(now.tabletop).toBe(true);
+    // 映像はヘッダーの下から折り目まで
+    expect(now.stage.top).toBeGreaterThanOrEqual(now.header?.bottom ?? 0);
+    expect(now.stage.bottom).toBeLessThanOrEqual(FOLD);
+    // 上の段で映像を小さくしすぎない (段の高さの 3 分の 2 以上)
+    expect(now.stage.bottom - now.stage.top).toBeGreaterThan((FOLD * 2) / 3);
+    // 右の列は折り目の下から画面の下の端まで、幅いっぱい
+    expect(now.aside.top).toBeGreaterThanOrEqual(FOLD);
+    expect(now.aside.bottom).toBeLessThanOrEqual(SIZE.height);
+    expect(now.aside.left).toBeCloseTo(0, 0);
+    expect(now.aside.right).toBeCloseTo(SIZE.width, 0);
+    // 下の段は舞台の中なので、右の列はテーマにかかわらず暗いテーマの色。窓は巻かない
+    expect(now.theme).toBe("dark");
+    expect(now.scrolls).toBe(false);
+  });
 }
 
 /** 反射の箱は下の段いっぱい */
 async function expectReflection(page: Page, stage: string): Promise<void> {
-  const now = await boxes(page, stage);
-  expect(now.reflection).not.toBeNull();
-  expect(now.reflection!.top).toBeCloseTo(FOLD, 0);
-  expect(now.reflection!.bottom).toBeCloseTo(SIZE.height, 0);
-  expect(now.reflection!.left).toBeCloseTo(0, 0);
-  expect(now.reflection!.right).toBeCloseTo(SIZE.width, 0);
+  await settled(async () => {
+    const now = await boxes(page, stage);
+    expect(now.reflection).not.toBeNull();
+    expect(now.reflection!.top).toBeCloseTo(FOLD, 0);
+    expect(now.reflection!.bottom).toBeCloseTo(SIZE.height, 0);
+    expect(now.reflection!.left).toBeCloseTo(0, 0);
+    expect(now.reflection!.right).toBeCloseTo(SIZE.width, 0);
+  });
 }
 
 /** 写した回数 */
