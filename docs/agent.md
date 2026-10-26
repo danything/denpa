@@ -449,17 +449,18 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
                      Zd1jBoard (1台ぶん。借りる・返す・温めておく)
                        ├ Mb86h47 (ブリッジ: メモリ要求・番地を広げる・I2C・TS・カードの UART)
                        ├ Dib8096 (DiB8000 + DiB0090。II2c と待ちだけを受け取る)
-                       └ IUsbDevice → UsbFsDevice (usbfs の ioctl。libusb なし)
+                       └ IUsbDevice → UsbFsDevice (Linux の usbfs) / WinUsbDevice (Windows の WinUSB) / IoKitDevice (macOS の IOKit)
 ```
 
 - **中身は富士通 MB86H47A の USB ブリッジと DiB8096。** ファームウェアは要らず、ホストがベンダー要求 `0xBC`
   (ブリッジのメモリの読み書き) でレジスタを1つずつ叩きます。ただしブリッジの中で動かす小さな FR30 の機械語が3つ要ります
   (メモリ要求の番地を 32 ビットに広げるルーチン・SDRAM のリングから EP 0x81 へ送るコア 0・I2C を代わりにするコア 1)。
-  ブリッジ側 (`Mb86h47.cs`・`Mb86h47Code.cs`・`UsbDevice.cs` の出しっぱなしの読み) は
-  [coax](https://github.com/Till0196/coax) の `Apache-2.0 OR GPL-2.0-or-later` のファイルを Apache-2.0 で取り込んだもの
-  (FR30 の語は coax の DSL が組み立てたものを語の並びのまま写した。[licenses.md](licenses.md))
-- **DiB8096 (`Dib8096.cs`) は機材の事実を書き出した仕様書だけから書きました。** Linux のドライバ (と、それを移した coax の
-  `dib8096`) は GPL-2.0-only で AGPL の denpa には取り込めないので、見ていません。仕様書に無くて決めた所はコードに
+  **ブリッジ (`Mb86h47.cs`)・FR30 のプログラム (`Mb86h47Programs.cs`)・USB の層 (`UsbDevice.cs` など) も、仕様書だけから書きました**
+  (参考にした実装のソースは見ていません)。FR30 の機械語は自前の小さなアセンブラ (`Fr30.cs`) で組み、命令ごとに binutils の
+  `fr30-elf-as` の出力と突き合わせてあります (`Fr30Tests.cs`)。プログラムの振る舞いはテストの中の小さな FR30 の真似で動かして確かめます
+  (`Mb86h47ProgramsTests.cs`)。コア 1 への指示の形 (溜め・箱・bulk の塊) は仕様書が「こちらで決めてよい」とした所で、`Mb86h47Programs.cs` に書いてあります
+- **DiB8096 (`Dib8096.cs`) も同じ仕様書だけから書きました。** Linux のドライバ (と、それを移した実装) は
+  GPL-2.0-only で AGPL の denpa には取り込めないので、見ていません。仕様書に無くて決めた所はコードに
   「仕様書に無い」と書いてあります
 - **USB のハンドルは1台に1つ** (`Zd1jBoard`)。チューナーとカードが借り、ブリッジへのメモリ要求は `Mb86h47` の錠で1つずつ通します
   (I2C もカードの UART もメモリ要求)。TS の EP 0x81 の読みはその外で並べます
@@ -493,9 +494,12 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
 - **カードは CCID ではありません。** ブリッジのスマートカードの UART を叩き、T=1 の枠組みはこちらで組みます (`T1Protocol` を
   そのまま使う)。リセットと IFSD の取り決めは1回だけで、あとはつないだまま。抜き差しの知らせは無いので、APDU の前ごとに見ます
 - **前面の LED は流している間ずっと赤** (DiB8000 の GPIO 1)。選局しなおしでは触らず、止めたら緑に戻します
-- **Linux だけ。** Windows (WinUSB) と macOS (IOKit) は `IUsbDevice` を足せば載る形にしてありますが、まだ書いていません
+- **USB は OS ごとに P/Invoke だけで持ちます** (外のライブラリなし)。Linux は usbfs の ioctl (TS は URB を 16 本出しっぱなし)、
+  Windows は WinUSB (利用者が Zadig で WinUSB を当てる。`OVERLAPPED` の読みを 16 本)、macOS は IOKit の IOUSBLib (カーネルの拡張なし。
+  `ReadPipeAsync` を 16 本、CFRunLoop を回す専用のスレッドで受ける)。device の名前は Windows ならホストコントローラーの並び + ハブのポート、
+  macOS なら `locationID` から、Linux の sysfs と同じ形 (`2-3.2`) に作ります。Windows と macOS は実機ではまだ確かめていません
 - 実機での確かめは `denpa-agent --tune zd1j:<ポート> <ch>` (開く・ロック・最初の TS・2 回目の選局の時間、I2C の回数、C/N) と
-  `denpa-agent --card zd1j:<ポート>` (どちらもそのボードのカードだけを使い、ほかの機材に触らない)。テストは偽の USB (`Zd1jFakes.cs`) の上で、書く順番と値を仕様書と照らします (`Dib8096Tests.cs`・`Zd1jTests.cs`)
+  `denpa-agent --card zd1j:<ポート>` (どちらもそのボードのカードだけを使い、ほかの機材に触らない)。テストは偽の USB (`Zd1jFakes.cs`) の上で、書く順番と値を仕様書と照らします (`Dib8096Tests.cs`・`Zd1jTests.cs`・`Mb86h47ProgramsTests.cs`)
 
 ### B25 の復号もカードリーダーも自前
 

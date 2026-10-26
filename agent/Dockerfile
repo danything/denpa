@@ -161,8 +161,6 @@ COPY --from=fetch /opt/ /opt/
 # **どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
-# Apache-2.0 で取り込んだもの (CECH-ZD1 J のブリッジ) の表示と全文。実行ファイルと一緒に配る
-COPY agent/NOTICE agent/LICENSE-APACHE /usr/share/doc/denpa-agent/
 
 EXPOSE 25252
 ENTRYPOINT ["/usr/local/bin/denpa-agent"]

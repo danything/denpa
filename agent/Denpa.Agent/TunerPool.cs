@@ -301,19 +301,15 @@ public sealed class TunerPool(
     public static ITuneDevice OpenDevice(string path, string? lnb)
     {
         /*
-         * **Windows は siano-userland と px4-userland の機材だけ。** DVB は無く、asicen-userland は Windows を出していない。
+         * **Windows は siano-userland と px4-userland の機材と CECH-ZD1 J だけ。** DVB は無く、asicen-userland は Windows を出していない。
          * 書いてあっても開かない (開けば libc を呼びにいって落ちる)
          */
         if (OperatingSystem.IsWindows() && !SianoUserland.Is(path) && !Zd1j.Is(path) && Px4Userland.Parse(path) is null)
         {
             throw new IOException(
-                $"{path} は Windows では使えません (Windows で使えるのは {Px4Userland.Scheme}<筐体の番号>:<受信機> と {SianoUserland.Scheme}<USB のポート> だけ)");
+                $"{path} は Windows では使えません (Windows で使えるのは {Px4Userland.Scheme}<筐体の番号>:<受信機> と {SianoUserland.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> だけ)");
         }
-        if (Zd1j.Parse(path) is { } zd1j)
-        {
-            if (!OperatingSystem.IsLinux()) throw new IOException($"{Zd1j.Model} はこの OS ではまだ対応していません (Linux だけ)");
-            return new Zd1jTuner(zd1j);
-        }
+        if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j);
         if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (SianoUserland.Parse(path) is { } port) return new SianoTuner(port);
         if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb);

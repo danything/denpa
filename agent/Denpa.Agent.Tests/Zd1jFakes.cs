@@ -10,7 +10,8 @@ namespace Denpa.Agent.Tests;
  *   D[897] = 0x8002、T[0x1A] = 0x0223) と、探索の割り込み (D[1284])・ロックのビット (D[568]) を返す
  * - FakeI2c … DibModel の前に置く II2c。やり取りを1行ずつ控える (D1287=0003、D896? など)
  * - FakeBridgeUsb … MB86H47A のメモリを辞書で持ち、メモリ要求を控える。I2C マスター (0xFD8FE0〜) は
- *   仕様書 5.2 の手順で DibModel に繋がる。TS の EP 0x81 は与えた 192 バイトの単位を返す
+ *   仕様書 5.2 の手順で DibModel に繋がる。コア 1 の溜め・箱・bulk の塊は、コア 1 のプログラムの代わりに
+ *   Mb86h47Programs.cs に書いた形どおりに読んで DibModel に届ける。TS の EP 0x81 は与えた 192 バイトの単位を返す
  */
 
 /// <summary>DiB8000 と DiB0090 のレジスタ</summary>
@@ -117,14 +118,33 @@ internal sealed class FakeTime : IDibTime
     }
 }
 
-/// <summary>MB86H47A の偽物 (メモリ・I2C マスター・TS の端点)</summary>
+/// <summary>
+/// MB86H47A の偽物 (メモリ・I2C マスター・TS の端点)。コア 1 のプログラムの代わりに、溜め・箱・bulk の塊を
+/// Mb86h47Programs.cs に書いた形どおりに読んで DibModel に届ける
+/// </summary>
 internal sealed class FakeBridgeUsb : IUsbDevice
 {
+    private const uint Core1Base = 0x1700000;
+    private const uint Ring = Core1Base + Mb86h47Programs.Core1Ring;
+    private const uint RingDone = Core1Base + Mb86h47Programs.Core1RingDone;
+    private const uint Box = Core1Base + Mb86h47Programs.Core1Box;
+
     public readonly Dictionary<uint, uint> Memory = [];
     public List<string> Log { get; } = [];
     public DibModel Dib { get; } = new();
     public Queue<byte[]> Ts { get; } = new();
     public bool Disposed { get; private set; }
+
+    /// <summary>コア 1 が動いているふりをする (生きている印・溜め・箱)</summary>
+    public bool Core1 { get; set; } = true;
+
+    /// <summary>コア 1 が bulk の塊に答えるふりをする</summary>
+    public bool Core1Bulk { get; set; } = true;
+
+    /// <summary>溜めで済ませた書き込み (D1287=0003 など)</summary>
+    public List<string> RingWrites { get; } = [];
+
+    public List<byte[]> Packets { get; } = [];
 
     public string Name => "usb 1-2";
 
@@ -169,19 +189,32 @@ internal sealed class FakeBridgeUsb : IUsbDevice
     private readonly Queue<byte> _answer = new();
     private bool _nack;
     private uint _alive;
+    private uint _ringDone;
+    private int _answered;
 
-    private uint Read(uint address) => address switch
+    private uint Read(uint address)
     {
-        I2cControl => 0x41,
-        I2cStatus => _nack ? 0x10u : 0,
-        // コア 1 の生きている印 (箱の +0x7C)。読むたびに進む
-        0x17A3F7C => ++_alive,
-        _ => Memory.GetValueOrDefault(address),
-    };
+        switch (address)
+        {
+            case I2cControl:
+                return 0x41;
+            case I2cStatus:
+                return _nack ? 0x10u : 0;
+            // コア 1 の生きている印。読むたびに進む
+            case Box + Mb86h47Programs.BoxAlive when Core1:
+                return ++_alive;
+            case RingDone when Core1:
+                RunRing();
+                return _ringDone;
+            default:
+                return Memory.GetValueOrDefault(address);
+        }
+    }
 
     private void Write(uint address, uint value)
     {
         Memory[address] = value;
+        if (address == Box + Mb86h47Programs.BoxCommand && Core1) RunBox(value);
         if (address != I2cControl) return;
         var data = (byte)Memory.GetValueOrDefault(I2cData);
         switch (value)
@@ -192,7 +225,6 @@ internal sealed class FakeBridgeUsb : IUsbDevice
                 _reading = false;
                 break;
             case 0x70:
-                Deliver();
                 Start(data);
                 break;
             case 0x50 when _target is null:
@@ -214,8 +246,7 @@ internal sealed class FakeBridgeUsb : IUsbDevice
         _reading = (address & 1) != 0;
         if (!_reading) return;
         // 書いた番号のレジスタを読む (繰り返しスタート)
-        var register = _target == Dib8096.DemodAddress ? (_written[0] << 8) | _written[1] : _written[0];
-        var value = Dib.Read(_target.Value, register);
+        var value = Fetch(_target.Value, [.. _written]);
         _answer.Clear();
         _answer.Enqueue((byte)(value >> 8));
         _answer.Enqueue((byte)value);
@@ -226,16 +257,55 @@ internal sealed class FakeBridgeUsb : IUsbDevice
     private void Deliver()
     {
         if (_target is not { } target || _reading || _written.Count == 0) return;
-        if (target == Dib8096.DemodAddress && _written.Count == 4)
+        Apply(target, [.. _written]);
+        _written.Clear();
+    }
+
+    private void Apply(byte address, byte[] data)
+    {
+        if (address == Dib8096.DemodAddress && data.Length == 4) Dib.Write(address, (data[0] << 8) | data[1], (ushort)((data[2] << 8) | data[3]));
+        else if (address == Dib8096.TunerAddress && data.Length == 3) Dib.Write(address, data[0], (ushort)((data[1] << 8) | data[2]));
+    }
+
+    private ushort Fetch(byte address, byte[] number) =>
+        Dib.Read(address, address == Dib8096.DemodAddress ? (number[0] << 8) | number[1] : number[0]);
+
+    // --- コア 1 のふり ---
+
+    /// <summary>溜めの語を、周回の印が合う間だけ順に済ませる</summary>
+    private void RunRing()
+    {
+        while (true)
         {
-            Dib.Write(target, (_written[0] << 8) | _written[1], (ushort)((_written[2] << 8) | _written[3]));
-            _written.Clear();
+            var word = Memory.GetValueOrDefault(Ring + (_ringDone % 16) * 4);
+            var mark = ((_ringDone / 16) & 1) == 0 ? 1u : 0u;
+            if (word >> 31 != mark) return;
+            var tuner = (word & 0x40000000) != 0;
+            var register = (int)((word >> 16) & 0x3FFF);
+            var value = (ushort)word;
+            Dib.Write(tuner ? Dib8096.TunerAddress : Dib8096.DemodAddress, register, value);
+            RingWrites.Add($"{(tuner ? "T" : "D")}{register}={value:X4}");
+            _ringDone++;
         }
-        else if (target == Dib8096.TunerAddress && _written.Count == 3)
+    }
+
+    private void RunBox(uint command)
+    {
+        RunRing();
+        var sequence = command >> 24;
+        var address = (byte)(command >> 16);
+        var write = (int)((command >> 8) & 0xFF);
+        var read = (int)(command & 0xFF);
+        var bytes = new byte[write];
+        for (var i = 0; i < write; i++) bytes[i] = (byte)(Memory.GetValueOrDefault(Box + (uint)(i / 4 * 4)) >> (24 - 8 * (i % 4)));
+        var error = address is Dib8096.DemodAddress or Dib8096.TunerAddress ? 0u : 2u;
+        if (error == 0 && read == 0) Apply(address, bytes);
+        if (error == 0 && read > 0)
         {
-            Dib.Write(target, _written[0], (ushort)((_written[1] << 8) | _written[2]));
-            _written.Clear();
+            var value = Fetch(address, bytes);
+            Memory[Box + Mb86h47Programs.BoxRead] = (uint)value << 16;
         }
+        Memory[Box + Mb86h47Programs.BoxReply] = (sequence << 24) | error;
     }
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs)
@@ -244,18 +314,54 @@ internal sealed class FakeBridgeUsb : IUsbDevice
         Packets.Add(data.ToArray());
     }
 
-    public List<byte[]> Packets { get; } = [];
+    public int BulkRead(byte endpoint, Span<byte> buffer, int timeoutMs) => 0;
 
-    /// <summary>EP 0x83 の答えを作る (送った塊を見て)。無ければ時間切れ</summary>
-    public Func<byte[], byte[]?>? Answer { get; set; }
-
+    /// <summary>EP 0x83: 答えていない塊があれば、命令を DibModel に届けて答えを作る</summary>
     public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
-        if (Answer is null || Packets.Count == 0) return 0;
-        var answer = Answer(Packets[^1]);
-        if (answer is null) return 0;
-        answer.CopyTo(buffer);
-        return answer.Length;
+        if (!Core1Bulk || _answered >= Packets.Count) return 0;
+        var chunk = Packets[_answered++];
+        var sequence = BinaryPrimitives.ReadUInt32BigEndian(chunk);
+        var count = BinaryPrimitives.ReadUInt32BigEndian(chunk.AsSpan(4));
+        var at = 8;
+        var output = new List<byte>();
+        uint done = 0, error = 0;
+        for (; done < count; done++)
+        {
+            var command = BinaryPrimitives.ReadUInt32BigEndian(chunk.AsSpan(at));
+            var address = (byte)(command >> 16);
+            if (address is not (Dib8096.DemodAddress or Dib8096.TunerAddress))
+            {
+                error = 2;
+                break;
+            }
+            if (command >> 24 == 1)
+            {
+                var write = (int)((command >> 8) & 0xFF);
+                var read = (int)(command & 0xFF);
+                var bytes = chunk.AsSpan(at + 4, write).ToArray();
+                if (read == 0) Apply(address, bytes);
+                else
+                {
+                    var value = Fetch(address, bytes);
+                    output.AddRange(new[] { (byte)(value >> 8), (byte)value }.Take(read));
+                }
+                at += 4 + (write + 3) / 4 * 4;
+            }
+            else
+            {
+                var register = (int)(command & 0xFFFF);
+                var keepSet = BinaryPrimitives.ReadUInt32BigEndian(chunk.AsSpan(at + 4));
+                Dib.Write(address, register, (ushort)((Dib.Read(address, register) & (keepSet >> 16)) | (keepSet & 0xFFFF)));
+                at += 8;
+            }
+        }
+        var reply = new byte[8 + (output.Count + 3) / 4 * 4];
+        BinaryPrimitives.WriteUInt32BigEndian(reply, 0xA5000000u | ((sequence & 0xFFFF) << 8) | error);
+        BinaryPrimitives.WriteUInt32BigEndian(reply.AsSpan(4), (done << 16) | (uint)output.Count);
+        output.CopyTo(reply, 8);
+        reply.CopyTo(buffer);
+        return reply.Length;
     }
 
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)

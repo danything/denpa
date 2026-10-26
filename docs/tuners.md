@@ -14,7 +14,7 @@
   | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も。[tuner-px4.md](tuner-px4.md)) | px4-userland (同梱)                                              | なし (Windows はドライバを WinUSB に) |
   | PX-S1UD (smsusb を blacklist したとき。Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))              | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に) |
   | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))                             | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし                                  |
-  | Sony CECH-ZD1 J (PS3 の torne。Linux だけ。[下記](#sony-cech-zd1-j-試験的))                           | エージェントが USB を直に (**試験的**)                           | なし                                  |
+  | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j-試験的))                      | エージェントが USB を直に (**試験的**)                           | なし                                  |
 
 - **B-CASカード** と USB のカードリーダー (px4-userland・asicen-userland の機材と CECH-ZD1 J は内蔵リーダーでもよい。[下記](#カードリーダー))
 - **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
@@ -78,7 +78,8 @@ ASICEN 系 (PLEX PX-W3U3) のユーザー空間ドライバです。**まだリ�
 ## Sony CECH-ZD1 J (試験的)
 
 PS3 の torne の地デジチューナー (USB `054c:04b2`)。**外のデーモンもファームウェアも要らず、エージェントが USB を直に持ちます**
-(Linux の usbfs。Windows・Mac はまだで、自動検出にも出ず、書いても「まだ対応していません」になります)。
+(Linux は usbfs、Windows は WinUSB、Mac は IOKit。Windows はドライバを Zadig で WinUSB にします。[install-windows.md](install-windows.md)。
+Windows と Mac は実機ではまだ確かめていません)。
 
 - **設定の `device` は `zd1j:<USB のポート>`** (`zd1j:4-12.1`)。シリアルが無いので、**挿すポートを変えると別のチューナーになります**。
   挿してあれば自動で見つけます (種別は地上波だけ)

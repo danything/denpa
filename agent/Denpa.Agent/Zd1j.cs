@@ -10,11 +10,12 @@ namespace Denpa.Agent;
 /// <para>
 /// 中身は富士通 MB86H47A の USB ブリッジ (Mb86h47.cs) と DiB8096 (Dib8096.cs)。ファームウェアは要らず、
 /// ホストがメモリ要求でレジスタを叩く。B-CAS の差し込み口もブリッジの UART で、CCID ではない (<see cref="Zd1jCard"/>)。
-/// 作りは docs/agent.md「CECH-ZD1 J の作り」。**Linux (usbfs) だけ。**
+/// 作りは docs/agent.md「CECH-ZD1 J の作り」。USB は Linux の usbfs・Windows の WinUSB (Zadig で当てる)・macOS の IOKit。
 /// </para>
 ///
 /// <para>
-/// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。
+/// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形の
+/// 名前を作る (<see cref="UsbDevices.WindowsPort"/>・<see cref="UsbDevices.MacPort"/>)。
 /// 刺さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。挿すポートを変えると別のチューナーになる。
 /// </para>
 /// </summary>
@@ -84,15 +85,26 @@ public static class Zd1j
         return found;
     }
 
+    /// <summary>刺さっているポート (OS ごと)。Windows・macOS は OS の並べたもの</summary>
+    private static List<string> Ports(Action<string>? warn = null)
+    {
+        try
+        {
+            return OperatingSystem.IsLinux() ? Ports(UsbSysfs.Devices, warn) : [.. UsbDevices.List(Vendor, Product).Select(found => found.Port)];
+        }
+        catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            warn?.Invoke($"{Model} を探せません ({error.Message})");
+            return [];
+        }
+    }
+
     /// <summary>設定に書いたのと同じ形式で。種別は地上波だけ</summary>
     public static List<TunerSpec> Detect() =>
-        OperatingSystem.IsLinux() ? [.. Ports(UsbSysfs.Devices, Log.Write).Select(port => new TunerSpec($"{Model} {port}", ["GR"], false, Device(port)))] : [];
+        [.. Ports(Log.Write).Select(port => new TunerSpec($"{Model} {port}", ["GR"], false, Device(port)))];
 
     /// <summary>内蔵の差し込み口 (カードリーダー)。**開くまでは何も開かない**</summary>
-    public static IReadOnlyList<CardLinkCandidate> Cards() =>
-        OperatingSystem.IsLinux()
-            ? [.. Ports(UsbSysfs.Devices).Select(Card)]
-            : [];
+    public static IReadOnlyList<CardLinkCandidate> Cards() => [.. Ports().Select(Card)];
 
     /// <summary>そのポートの内蔵の差し込み口。**開くまでは何も開かない**</summary>
     public static CardLinkCandidate Card(string port)
@@ -101,12 +113,11 @@ public static class Zd1j
         return new CardLinkCandidate(name, () => new Zd1jCard(name, () => Zd1jBoard.Acquire(port)));
     }
 
-    /// <summary>開く。Linux だけ (Windows・macOS は後で)</summary>
-    internal static IUsbDevice OpenUsb(string port)
-    {
-        if (!OperatingSystem.IsLinux()) throw new IOException($"{Model} はこの OS ではまだ対応していません (Linux だけ)");
-        return UsbFsDevice.Open(UsbSysfs.Devices, DevUsb, port, Vendor, Product);
-    }
+    /// <summary>開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)</summary>
+    internal static IUsbDevice OpenUsb(string port) =>
+        OperatingSystem.IsLinux()
+            ? UsbFsDevice.Open(UsbSysfs.Devices, DevUsb, port, Vendor, Product)
+            : UsbDevices.Open(port, Vendor, Product);
 }
 
 /// <summary>

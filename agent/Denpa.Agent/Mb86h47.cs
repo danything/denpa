@@ -1,89 +1,140 @@
-// Copyright 2026 Till0196
-// SPDX-License-Identifier: Apache-2.0
-//
-// coax (https://github.com/Till0196/coax) 2d9f2c2 の internal/coaxd/usb/bridge/mb86h47
-// (mb86h47.go・addressing.go・i2c.go・command.go・stream.go・card.go) を C# に移したもの。
-// 元は Apache-2.0 OR GPL-2.0-or-later で、ここでは Apache-2.0 を選んでいる (agent/NOTICE)。
-// ホストが直に I2C を叩く形 (HostTransfer) は denpa で足した。
-
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 
 namespace Denpa.Agent;
 
-/// <summary>
-/// I2C の相手に話す口。DiB8000・DiB0090 (Dib8096.cs) はこれと「待つ」だけを受け取る。
-/// **書き込みは溜められることがある** (コア 1 の形)。読む・<see cref="Flush"/> の前に溜めたものが先に出る
-/// </summary>
-public interface II2c
-{
-    /// <summary>書く (8 ビット表記のアドレス)</summary>
-    void Write(byte address, ReadOnlySpan<byte> data);
+/*
+ * 富士通 MB86H47A (CECH-ZD1 J の USB ブリッジ)。**機材の事実を書き出した仕様書だけから書いた** (参考の実装のソースは見ていない)。
+ * 節の番号 (「4.2」など) はその仕様書のもの。仕様書が「こちらで決めてよい」とした所 (コア 1 への指示の形など) は
+ * Mb86h47Programs.cs に書いた形で決めた。
+ *
+ * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを叩く。メモリ要求は全部この錠で1つずつ通す
+ * (I2C もカードの UART もメモリ要求なので、チューナーとカードが別のスレッドから呼んでも混ざらない)。
+ * TS の EP 0x81 の読みはこの外 (IUsbInStream) で並べる。
+ */
 
-    /// <summary>書いて、繰り返しスタートで読む</summary>
-    void WriteRead(byte address, ReadOnlySpan<byte> write, Span<byte> read);
-
-    /// <summary>2 バイトの番号の 16 ビットのレジスタを読みかえ書き: <c>(値 &amp; keep) | set</c></summary>
-    void Modify16(byte address, ushort register, ushort keep, ushort set);
-
-    /// <summary>溜めた書き込みを機材まで届ける</summary>
-    void Flush();
-}
-
-/// <summary>I2C の流し方 (環境変数 <c>DENPA_ZD1J_I2C</c>)。速さを比べるために切り替えられる</summary>
+/// <summary>I2C の流し方 (<c>DENPA_ZD1J_I2C</c>)</summary>
 public enum Zd1jI2cMode
 {
-    /// <summary>ホストがメモリ要求で I2C マスターを1バイトずつ叩く</summary>
+    /// <summary>ホストが I2C マスターを1バイトずつ叩く (仕様書 5.3)</summary>
     Host,
 
-    /// <summary>コア 1 にやらせる。bulk の命令の経路が答えればそれ、答えなければメモリ要求のリング (既定)</summary>
+    /// <summary>コア 1 に任せる。指示は bulk の塊で送り、答えなければメモリ要求のリングに戻る (仕様書 5.4・5.5)</summary>
     Core1,
 
-    /// <summary>コア 1 にやらせるが、bulk の命令の経路は使わない (メモリ要求のリングだけ)</summary>
+    /// <summary>コア 1 に任せ、指示はメモリ要求のリングと箱だけで渡す</summary>
     Core1Ring,
 }
 
-/// <summary>
-/// 富士通 MB86H47A (CECH-ZD1 J の USB ブリッジ)。**全部のメモリ要求をここで1つずつ通す** (I2C もカードの UART も
-/// メモリ要求なので)。TS の EP 0x81 の読みは別の経路で、ここを通らない。
-///
-/// <para>
-/// 失敗は <see cref="IOException"/>。抜かれたら <see cref="UsbGoneException"/>。
-/// </para>
-/// </summary>
+/// <summary>I2C の相手と話す口。DiB8096 はこれと待ちだけを受け取る</summary>
+public interface II2c
+{
+    void Write(byte address, ReadOnlySpan<byte> data);
+
+    /// <summary>書いてから繰り返しスタートで読む (<paramref name="write"/> が空なら読むだけ)</summary>
+    void WriteRead(byte address, ReadOnlySpan<byte> write, Span<byte> read);
+
+    /// <summary>2 バイトの番号のレジスタを読んで <c>&amp; keep | set</c> して書く</summary>
+    void Modify16(byte address, ushort register, ushort keep, ushort set);
+
+    /// <summary>溜めた書き込みを機材に届ける (戻ったときには届いている)</summary>
+    void Flush();
+}
+
+/// <summary>MB86H47A。<b>メモリ要求・番地を広げる・クロック・I2C・TS・カードの UART</b></summary>
 public sealed class Mb86h47 : II2c
 {
-    private const byte RequestMemory = 0xBC;
-    private const byte VendorOut = 0x40;
-    private const byte VendorIn = 0xC0;
-    private const int ControlTimeoutMs = 1000;
+    private const byte RequestIn = 0xC0;
+    private const byte RequestOut = 0x40;
+    private const byte MemoryRequest = 0xBC;
+    private const int TimeoutMs = 1000;
 
-    private const uint GpioDirection = 0x90014;
-    private const uint GpioValue = 0x90018;
+    /// <summary>1回のメモリ要求の上限 (4.2 で広げたあと)</summary>
+    private const int MaxWords = 16;
 
-    /// <summary>電源投入のままなら 0 (spec 4.1)</summary>
-    private const uint AddressState = 0x82008;
+    private const uint Core0 = 0x1600000;
+    private const uint Core1 = 0x1700000;
+    private const uint CoreHalt = 0xFFFFFFFF;
+    private const uint CoreRun = 0xFFFCFFFF;
+    private const uint CoreEntry = 0xFFFFC;
 
-    private const int ReadLimit = 64;
-    private const int WriteLimit = 64;
+    // I2C マスター (4.5)
+    private const uint I2cStatus = 0xFD8FE0;
+    private const uint I2cControl = 0xFD8FE4;
+    private const uint I2cData = 0xFD8FF0;
+
+    /// <summary>ホストから直に叩くとき、1バイトや使用中を待つ読みの上限</summary>
+    private const int HostSpin = 100;
+
+    // bulk の命令の経路 (5.5)
+    private const byte CommandOut = 0x02;
+    private const byte CommandIn = 0x83;
+    private const int CommandWords = Mb86h47Programs.BulkChunk / 4 - 3;
+
+    // カードの UART (13.1)
+    private const uint CardEnable = 0xFEA000;
+    private const uint CardLines = 0xFEA004;
+    private const uint CardBaud = 0xFEA008;
+    private const uint CardSend = 0xFEA00C;
+    private const uint CardControl = 0xFEA010;
+    private const uint CardCount = 0xFEA014;
+    private const uint CardMask = 0xFEA018;
+    private const uint CardStatus = 0xFEA01C;
+    private const uint CardCwt = 0xFEA020;
+    private const uint CardBwt = 0xFEA024;
+    private const uint CardTx = 0xFEA028;
+    private const uint CardRx = 0xFEA02C;
+    private const uint CardPower = 0xFEA034;
+    private const uint CardTxLrc = 0xFEA038;
+    private const uint CardRxLrc = 0xFEA03C;
+
+    /// <summary>主 CPU の処理の書き換える5語と、電源投入時の値 (4.2)</summary>
+    private static readonly uint[] PatchAt = [0xE9AC0, 0xE9AC4, 0xE9E0C, 0xE9E10, 0xE9D94];
+
+    private static readonly uint[] PowerOn = [0x9B800000, 0xAA04E40F, 0x9B800000, 0xAA04E40D, 0xB4279F8D];
+
+    /// <summary>データ段の溜め方の語の上位 16 ビットを NOP にしたもの</summary>
+    private const uint Stage = 0x9FA09F8D;
+
+    private const uint JumpSecond = 0x970C9FA0;
+
+    private static readonly Lazy<Mb86h47Programs.Routine[]> Routines = new(() => [Mb86h47Programs.Addressing(0), Mb86h47Programs.Addressing(1)]);
+    private static readonly Lazy<uint[]> Core0Program = new(() => Mb86h47Programs.Core0().Words);
+    private static readonly Lazy<uint[]> Core1Program = new(() => Mb86h47Programs.Core1().Words);
 
     private readonly IUsbDevice _usb;
-    private readonly Lock _gate = new();
     private readonly Action<string>? _trace;
+    private readonly Lock _gate = new();
+    private readonly byte[] _buffer = new byte[MaxWords * 4];
+    private bool _widened;
 
-    /// <summary>メモリ要求の回数 (制御転送と、bulk の命令の塊)</summary>
-    public long Requests => Interlocked.Read(ref _requests);
-    private long _requests;
+    // コア 1 の溜めと箱
+    private readonly List<(bool Tuner, int Register, ushort Value)> _ring = [];
+    private uint _ringPlaced;
+    private uint _ringDone;
+    private uint _ringError;
+    private byte _boxSequence;
 
-    /// <summary>I2C のやり取りの回数 (書く・読む・読みかえ書き 1回ずつ)</summary>
-    public long I2cTransfers => Interlocked.Read(ref _i2cTransfers);
-    private long _i2cTransfers;
+    // bulk の塊
+    private readonly List<uint> _commands = [];
+    private uint _chunkSequence;
+    private int _chunkSlot;
+
+    // 流し始めの準備 (9.2)。待ちの間に1つずつ回す
+    private readonly Queue<Action> _prepare = new();
+    private bool _prepared;
 
     public Zd1jI2cMode Mode { get; }
 
-    /// <summary>bulk の命令の経路が使えている (<see cref="Zd1jI2cMode.Core1"/> でコア 1 が答えた)</summary>
-    public bool CommandChannel => _command;
+    /// <summary>コア 1 への指示を bulk の塊で送っている (5.5)</summary>
+    public bool CommandChannel { get; private set; }
+
+    /// <summary>メモリ要求の数 (速さを測るため)</summary>
+    public long Requests { get; private set; }
+
+    /// <summary>I2C のやり取りの数 (書き込み・読み・読みかえ書きを1つずつ)</summary>
+    public long I2cTransfers { get; private set; }
 
     public Mb86h47(IUsbDevice usb, Zd1jI2cMode mode, Action<string>? trace = null)
     {
@@ -93,1093 +144,796 @@ public sealed class Mb86h47 : II2c
     }
 
     // ---------------------------------------------------------------------
-    // メモリ要求 (spec 3)
+    // メモリ要求 (3)
     // ---------------------------------------------------------------------
 
-    /// <summary>wValue の上位バイト = 番地のビット 16〜23、下位バイト = ビット 24〜31。wIndex = 下位 16 ビット</summary>
-    internal static (ushort Value, ushort Index) Setup(uint address) =>
-        ((ushort)(((address >> 8) & 0xFF00) | (address >> 24)), (ushort)address);
+    /// <summary>番地 → (wValue, wIndex)。wValue の上位バイト = ビット 16〜23、下位バイト = ビット 24〜31</summary>
+    public static (ushort Value, ushort Index) Setup(uint address) =>
+        ((ushort)((((address >> 16) & 0xFF) << 8) | (address >> 24)), (ushort)address);
+
+    private void Check(uint address)
+    {
+        if (address >= 0x1000000 && !_widened) throw new InvalidOperationException($"番地 0x{address:X} は 4.2 で広げる前には届きません");
+    }
 
     private uint Read32(uint address)
     {
-        Span<byte> buffer = stackalloc byte[4];
-        ReadBlock(address, buffer);
-        return BinaryPrimitives.ReadUInt32BigEndian(buffer);
+        Span<uint> one = stackalloc uint[1];
+        Read(address, one);
+        return one[0];
     }
 
-    private void Write32(uint address, uint value)
+    private void Read(uint address, Span<uint> words)
     {
-        Span<byte> buffer = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32BigEndian(buffer, value);
-        WriteBlock(address, buffer);
+        Check(address);
+        for (var at = 0; at < words.Length; at += MaxWords)
+        {
+            var count = Math.Min(MaxWords, words.Length - at);
+            var (value, index) = Setup(address + (uint)(at * 4));
+            var data = _buffer.AsSpan(0, count * 4);
+            Requests++;
+            var got = _usb.ControlIn(RequestIn, MemoryRequest, value, index, data, TimeoutMs);
+            if (got != data.Length) throw new IOException($"ブリッジのメモリを読めません (0x{address:X}: {got}/{data.Length} バイト)");
+            for (var i = 0; i < count; i++) words[at + i] = BinaryPrimitives.ReadUInt32BigEndian(data[(i * 4)..]);
+        }
     }
 
-    private void ReadBlock(uint address, Span<byte> buffer)
+    private void Write32(uint address, uint value) => Write(address, [value]);
+
+    /// <summary>書く。4.2 で広げる前は1語ずつ (複数語だと最初の語しか正しく入らない。3.1)</summary>
+    private void Write(uint address, ReadOnlySpan<uint> words)
     {
-        var (value, index) = Setup(address);
-        Interlocked.Increment(ref _requests);
-        var got = _usb.ControlIn(VendorIn, RequestMemory, value, index, buffer, ControlTimeoutMs);
-        if (got != buffer.Length) throw new IOException($"MB86H47A の 0x{address:X8} を読めません ({got}/{buffer.Length} バイト)");
+        Check(address);
+        var step = _widened ? MaxWords : 1;
+        for (var at = 0; at < words.Length; at += step)
+        {
+            var count = Math.Min(step, words.Length - at);
+            var (value, index) = Setup(address + (uint)(at * 4));
+            var data = _buffer.AsSpan(0, count * 4);
+            for (var i = 0; i < count; i++) BinaryPrimitives.WriteUInt32BigEndian(data[(i * 4)..], words[at + i]);
+            Requests++;
+            _usb.ControlOut(RequestOut, MemoryRequest, value, index, data, TimeoutMs);
+        }
     }
 
-    private void WriteBlock(uint address, ReadOnlySpan<byte> data)
-    {
-        var (value, index) = Setup(address);
-        Interlocked.Increment(ref _requests);
-        _usb.ControlOut(VendorOut, RequestMemory, value, index, data, ControlTimeoutMs);
-    }
+    /// <summary><c>M[a] = (M[a] &amp; ~clear) | set</c></summary>
+    private void Modify(uint address, uint clear, uint set) => Write32(address, (Read32(address) & ~clear) | set);
 
-    /// <summary>16 ビットのレジスタは語の上位半分。下位はそのまま残す</summary>
+    /// <summary><c>M16[a] ← v</c> (16 ビットのレジスタは語の上位半分。下半分は読んだまま)</summary>
     private void Write16(uint address, ushort value) => Write32(address, ((uint)value << 16) | (Read32(address) & 0xFFFF));
 
-    private ushort Read16(uint address) => (ushort)(Read32(address) >> 16);
-
-    private void Set32(uint address, uint bits) => Write32(address, Read32(address) | bits);
-
-    private void Clear32(uint address, uint bits) => Write32(address, Read32(address) & ~bits);
-
     // ---------------------------------------------------------------------
-    // 起動 (spec 4)
+    // 起動 (4)
     // ---------------------------------------------------------------------
 
-    /// <summary>
-    /// 番地を広げ、クロックと I2C マスターを入れ、(コア 1 の形なら) コア 1 を走らせる。
-    /// **電源投入のままでなければ断る** (別のドライバが動かしたブリッジは扱えない)
-    /// </summary>
+    /// <summary>4.1〜4.5 と、コア 1 の形ならコア 1 を走らせる。どこかで失敗したら投げる (開くのを止める)</summary>
     public void Start()
     {
         lock (_gate)
         {
-            if (Read16(AddressState) != 0)
+            // 4.1 電源投入のままか
+            var used = Read32(0x82008) >> 16;
+            if (used != 0)
             {
-                throw new IOException("CECH-ZD1 J のブリッジが電源投入のままではありません (別のドライバが一度動かしています)。CECH-ZD1 J を抜いて挿し直してください");
+                throw new IOException($"{Zd1j.Model} はほかのドライバが一度動かしています。{Zd1j.Model} を抜いて挿し直してください (0x82008 = 0x{used:X4})");
             }
             Widen();
             Clocks();
-            TrapInterrupts();
-            I2cInit();
-            if (Mode != Zd1jI2cMode.Host)
-            {
-                Core1Start();
-                if (Mode == Zd1jI2cMode.Core1) CommandSetup();
-            }
+            MaskInterrupts();
+            StartI2c();
+            if (Mode == Zd1jI2cMode.Host) return;
+            StartCore1();
+            if (Mode == Zd1jI2cMode.Core1) CommandChannel = TryCommandChannel();
         }
     }
 
-    /// <summary>メモリ要求の処理のうち書き換える語 (spec 4.2)</summary>
-    internal readonly record struct HandlerWord(uint Address, uint Original, uint Widened);
-
-    private const uint HandlerReadCheck = 0xE9AC0;
-    private const uint HandlerWriteCheck = 0xE9E0C;
-    private const uint HandlerWriteShift = 0xE9D94;
-    private const uint NopCode = 0x9FA0;
-    private const int AddressingBankSize = 0x800;
-    private static readonly uint[] AddressingBanks = [0xE1000, 0xE1800];
-    private static readonly uint[][] AddressingCode = [Mb86h47Code.Addressing0, Mb86h47Code.Addressing1];
-
-    /// <summary><c>LDI:20 #飛び先, R12</c> と <c>JMP @R12; NOP</c> (spec 4.2)</summary>
-    internal static (uint First, uint Second) Jump(uint target) =>
-        (((0x9B0Cu | (((target >> 16) & 0xF) << 4)) << 16) | (target & 0xFFFF), 0x970C0000 | NopCode);
-
-    /// <summary>その置き場のルーチンに跳ぶ5語。書き換える順 (ルーチンを置いてから、読む側・書く側・データ段)</summary>
-    internal static HandlerWord[] HandlerWords(int bank)
+    /// <summary>跳ぶ2語: <c>LDI:20 #target, R12</c> と <c>JMP @R12</c> + <c>NOP</c></summary>
+    public static (uint First, uint Second) Jump(uint target)
     {
-        var read = Jump(AddressingBanks[bank]);
-        var write = Jump(AddressingBanks[bank] + Mb86h47Code.AddressingWriteEntry);
-        return
-        [
-            new(HandlerReadCheck, 0x9B800000, read.First),
-            new(HandlerReadCheck + 4, 0xAA04E40F, read.Second),
-            new(HandlerWriteCheck, 0x9B800000, write.First),
-            new(HandlerWriteCheck + 4, 0xAA04E40D, write.Second),
-            new(HandlerWriteShift, 0xB4279F8D, (NopCode << 16) | 0x9F8D),
-        ];
+        if (target >= 0x100000) throw new ArgumentOutOfRangeException(nameof(target));
+        return ((0x9B0Cu | (((target >> 16) & 0xF) << 4)) << 16 | (target & 0xFFFF), JumpSecond);
     }
 
-    /// <summary>跳ぶ語なら飛び先</summary>
-    private static uint? JumpTarget(uint word) =>
-        ((word >> 16) & 0xFF0F) == 0x9B0C ? (((word >> 20) & 0xF) << 16) | (word & 0xFFFF) : null;
+    /// <summary>跳ぶ2語の飛び先。跳ぶ語の形でなければ null</summary>
+    private static uint? JumpTarget(uint first, uint second) =>
+        (first & 0xFF0F0000) == 0x9B0C0000 && second == JumpSecond ? ((first >> 4) & 0xF0000) | (first & 0xFFFF) : null;
 
-    private static int BankOf(uint address)
+    /// <summary>そのバンクに置いたこちらのルーチンの語の並び (書き換える5語に書く値)</summary>
+    internal static uint[] Patch(int bank)
     {
-        for (var bank = 0; bank < AddressingBanks.Length; bank++)
-        {
-            if (address >= AddressingBanks[bank] && address < AddressingBanks[bank] + AddressingBankSize) return bank;
-        }
-        return -1;
+        var routine = Routines.Value[bank];
+        var (r0, r1) = Jump(routine.Read);
+        var (w0, w1) = Jump(routine.Write);
+        return [r0, r1, w0, w1, Stage];
     }
 
     /// <summary>
-    /// 番地を 32 ビットに広げる (spec 4.2)。前の起動の残りが自分のものならそのまま、別の中身なら
-    /// **使われていないほうの置き場**に置いてから跳ぶ語を1語ずつ切り替える (どの瞬間も完全なルーチンに跳ぶ)
+    /// 4.2 メモリ要求の番地を 32 ビットに広げる。すでに自分のルーチンを指していれば何もしない。別の中身のルーチンを指していれば、
+    /// 使われていないほうのバンクに置いてから跳ぶ語を書き換える (途中で要求が来ても、いつもどちらかの完全なルーチンに跳ぶように)
     /// </summary>
     private void Widen()
     {
-        var fresh = HandlerWords(0);
-        var held = new uint[fresh.Length];
-        int bank = -1, jumps = 0, widened = 0;
-        for (var i = 0; i < fresh.Length; i++)
+        var now = new uint[PatchAt.Length];
+        for (var i = 0; i < PatchAt.Length; i++) now[i] = Read32(PatchAt[i]);
+
+        uint? Side(int at)
         {
-            held[i] = Read32(fresh[i].Address);
-            var target = JumpTarget(held[i]);
-            if (held[i] == fresh[i].Original) continue;
-            if (held[i] == fresh[i].Widened && target is null)
+            if (now[at] == PowerOn[at] && now[at + 1] == PowerOn[at + 1]) return null;
+            if (JumpTarget(now[at], now[at + 1]) is { } target && Mb86h47Programs.Banks.Any(bank => target >= bank && target < bank + Mb86h47Programs.BankSize))
             {
-                widened++;
+                return target;
             }
-            else if (target is { } at && BankOf(at) >= 0 && (bank < 0 || bank == BankOf(at)))
-            {
-                bank = BankOf(at);
-                jumps++;
-            }
-            else
-            {
-                throw new IOException($"MB86H47A のメモリ要求の処理 (0x{fresh[i].Address:X}) が知らない中身です。CECH-ZD1 J を抜いて挿し直してください");
-            }
+            throw Unknown();
+        }
+        var read = Side(0);
+        var write = Side(2);
+        if (now[4] != PowerOn[4] && now[4] != Stage) throw Unknown();
+
+        var used = new List<int>();
+        foreach (var target in new[] { read, write })
+        {
+            if (target is not { } t) continue;
+            var bank = t >= Mb86h47Programs.Banks[1] ? 1 : 0;
+            if (!used.Contains(bank)) used.Add(bank);
         }
 
-        if (jumps + widened < fresh.Length)
+        // すでに自分のルーチンなら、データ段の語だけ確かめて終わり
+        if (used.Count == 1)
         {
-            // 書き換えていない (か途中まで)。跳ぶ先はまだ無いので、置き場 0 に置いてよい
-            LoadAddressing(0);
-            foreach (var word in HandlerWords(0)) Write32(word.Address, word.Widened);
-            return;
-        }
-
-        var mine = HandlerWords(bank);
-        var same = true;
-        for (var i = 0; i < mine.Length; i++) same &= held[i] == mine[i].Widened;
-        if (same)
-        {
-            var code = AddressingCode[bank];
-            var loaded = new byte[code.Length * 4];
-            for (var offset = 0; offset < loaded.Length; offset += ReadLimit)
+            var bank = used[0];
+            var routine = Routines.Value[bank];
+            if (read == routine.Read && write == routine.Write && Holds(Mb86h47Programs.Banks[bank], routine.Words))
             {
-                ReadBlock(AddressingBanks[bank] + (uint)offset, loaded.AsSpan(offset, Math.Min(ReadLimit, loaded.Length - offset)));
+                if (now[4] != Stage) Write32(PatchAt[4], Stage);
+                _widened = true;
+                _trace?.Invoke($"主 CPU の処理はもう広げてあります (バンク {bank})");
+                return;
             }
-            for (var i = 0; i < code.Length; i++) same &= BinaryPrimitives.ReadUInt32BigEndian(loaded.AsSpan(i * 4)) == code[i];
-            if (same) return;
         }
+        var free = Enumerable.Range(0, Mb86h47Programs.Banks.Length).FirstOrDefault(bank => !used.Contains(bank), -1);
+        if (free < 0) throw Unknown();
 
-        bank = 1 - bank;
-        LoadAddressing(bank);
-        var words = HandlerWords(bank);
-        for (var i = 0; i < words.Length; i++)
+        // ルーチンを1語ずつ置いて、1語ずつ読み返す。それから跳ぶ語を1語ずつ
+        var place = Routines.Value[free];
+        var origin = Mb86h47Programs.Banks[free];
+        for (var i = 0; i < place.Words.Length; i++) Write32(origin + (uint)(i * 4), place.Words[i]);
+        for (var i = 0; i < place.Words.Length; i++)
         {
-            if (held[i] != words[i].Widened) Write32(words[i].Address, words[i].Widened);
+            var back = Read32(origin + (uint)(i * 4));
+            if (back != place.Words[i]) throw new IOException($"ブリッジの SRAM に書いたルーチンが読み返せません (0x{origin + i * 4:X}: 0x{back:X8})");
         }
+        var patch = Patch(free);
+        for (var i = 0; i < PatchAt.Length; i++) Write32(PatchAt[i], patch[i]);
+        _widened = true;
+        _trace?.Invoke($"主 CPU の処理を広げました (バンク {free})");
     }
 
-    /// <summary>ルーチンを1語ずつ置いて読み返す (書き換える前なので1語ずつしか書けない)</summary>
-    private void LoadAddressing(int bank)
+    private bool Holds(uint address, uint[] words)
     {
-        var code = AddressingCode[bank];
-        var at = AddressingBanks[bank];
-        for (var i = 0; i < code.Length; i++) Write32(at + (uint)i * 4, code[i]);
-        for (var i = 0; i < code.Length; i++)
-        {
-            var got = Read32(at + (uint)i * 4);
-            if (got != code[i]) throw new IOException($"MB86H47A の SRAM 0x{at + i * 4:X} が {got:X8} (置いたのは {code[i]:X8})");
-        }
+        var back = new uint[words.Length];
+        Read(address, back);
+        return back.AsSpan().SequenceEqual(words);
     }
 
-    /// <summary>エンジンのブロックの待機のレジスタ (spec 4.3 の 4)</summary>
-    private static readonly uint[] StandbyBlocks =
-        [0x14D0000, 0x10D0000, 0x12D0000, 0x13D0000, 0xE70000, 0xC70000, 0xD00000, 0x1600000, 0x1700000];
+    private static IOException Unknown() =>
+        new($"{Zd1j.Model} のブリッジの処理が知らない中身です (仕様書 4.2 の5語が電源投入時の値でもこちらの書いた値でもありません)。抜いて挿し直してください");
 
-    /// <summary>クロックと SDRAM (spec 4.3)。意味の多くは分かっていない。そのまま行えば動く</summary>
+    /// <summary>4.3 クロックと SDRAM</summary>
     private void Clocks()
     {
         Write16(0xF1010C, 0x8201);
         Write16(0xF10114, 0x8008);
         Write16(0xF10118, 0xFFFF);
-        foreach (var block in StandbyBlocks) Set32(block + 0x404, 0x00040000);
+        foreach (var engine in new uint[] { 0x14D0000, 0x10D0000, 0x12D0000, 0x13D0000, 0xE70000, 0xC70000, 0xD00000, 0x1600000, 0x1700000 })
+        {
+            Modify(engine + 0x404, 0, 0x00040000);
+        }
         Write16(0xF1011C, 0x0006);
         Write16(0xF10128, 0x6000);
         Write16(0xF1012C, 0x4007);
         Write16(0xF12144, 0x0003);
-        foreach (var address in new uint[] { 0xF12178, 0xF1217C, 0xF12198, 0xF1219C }) Write16(address, 0x0880);
+        foreach (var memory in new uint[] { 0xF12178, 0xF1217C, 0xF12198, 0xF1219C }) Write16(memory, 0x0880);
     }
 
-    private const uint VectorTable = 0xFFC00;
-    private const uint TrapStubs = 0xE3000;
-    private const uint TrapCommon = 0xE3800;
-    private const uint TrapStubStride = 8;
-
-    /// <summary>TrapRecorder が例外を残す所: 印 0x7EA9・ベクター・PC・PS・RP・R15・回数</summary>
-    public const uint TrapRecord = 0x41FF0000;
-
-    /// <summary>
-    /// 主 CPU の割り込みを塞ぐ (spec 4.4)。例外と使っていないベクターは記録のルーチンに向ける
-    /// (参考の実装の形。USB は生きたままなので、止まったときに <see cref="TrapRecord"/> を後から読める)
-    /// </summary>
-    private void TrapInterrupts()
+    /// <summary>4.4 割り込みのレベルを全部 31 (塞ぐ) に</summary>
+    private void MaskInterrupts()
     {
-        for (uint offset = 0; offset < 0x40; offset += 4)
+        Span<uint> levels = stackalloc uint[16];
+        Read(0x440, levels);
+        for (var i = 0; i < levels.Length; i++)
         {
-            var word = Read32(0x440 + offset);
-            if ((word | 0x1F1F1F1F) != word) Write32(0x440 + offset, word | 0x1F1F1F1F);
-        }
-        WriteWords(TrapCommon, Mb86h47Code.TrapRecorder);
-        WriteWords(TrapStubs, Mb86h47Code.TrapStubs);
-        for (uint vector = 1; vector < 256; vector++)
-        {
-            if (vector is >= 16 and < 20) continue;
-            Write32(VectorTable + 0x3FC - 4 * vector, TrapStubs + vector * TrapStubStride);
+            var masked = levels[i] | 0x1F1F1F1F;
+            if (masked != levels[i]) Write32(0x440 + (uint)(i * 4), masked);
         }
     }
 
-    /// <summary>語の並びを 64 バイトずつ書く (番地を広げたあと)</summary>
-    private void WriteWords(uint address, uint[] words)
+    /// <summary>4.5 I2C マスター</summary>
+    private void StartI2c()
     {
-        var data = new byte[words.Length * 4];
-        for (var i = 0; i < words.Length; i++) BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(i * 4), words[i]);
-        for (var offset = 0; offset < data.Length; offset += WriteLimit)
-        {
-            WriteBlock(address + (uint)offset, data.AsSpan(offset, Math.Min(WriteLimit, data.Length - offset)));
-        }
-    }
-
-    // I2C マスター (spec 4.5)
-    private const uint I2cStatus = 0xFD8FE0;   // bit7 使用中、bit4 ACK 無し
-    private const uint I2cControl = 0xFD8FE4;  // bit0 1バイト終わり、bit7 バスエラー
-    private const uint I2cClock = 0xFD8FE8;
-    private const uint I2cData = 0xFD8FF0;
-    private const uint I2cDivider = 0xFD8FF4;
-    private const uint I2cUnknown = 0xFD8FF8;
-
-    private void I2cInit()
-    {
-        Set32(0xFD8010, 0x10);
-        Clear32(0xFD8014, 0x10);
+        Modify(0xFD8010, 0, 0x10);
+        Modify(0xFD8014, 0x10, 0);
         Write32(0xFD80C0, 1);
         Write32(0xFD80C0, 0);
         Write32(0xFD80C4, 0);
         Write16(0x90114, 0x8008);
-        Write32(I2cUnknown, 0x06);
-        // 0x10 で約 100kHz、0x08 でその倍。0x05 にすると DiB8000 の初期化中に読みを落とす
-        Write32(I2cDivider, 0x08);
-        Write32(I2cClock, 0x3C);
+        Write32(0xFD8FF8, 0x06);
+        // 分周 0x08 (0x10 の倍の速さ。0x05 だと DiB8000 の初期化中に読みを落とす)
+        Write32(0xFD8FF4, 0x08);
+        Write32(0xFD8FE8, 0x3C);
         Write32(I2cControl, 0x40);
     }
 
-    /// <summary>DiB8096 の電源 (GPIO 6) を入れ、リセット (GPIO 0) を外す (spec 4.6)</summary>
+    /// <summary>4.6 DiB8096 の電源とリセット (ブリッジの GPIO 6 = 電源、GPIO 0 = リセット)</summary>
     public void ResetDemodulator(Action<int> sleep)
     {
+        uint value;
         lock (_gate)
         {
-            Drain();
-            var value = Read16(GpioValue);
-            var direction = Read16(GpioDirection);
-            Write16(GpioValue, (ushort)((value & ~1) | 0x40));
-            Write16(GpioDirection, (ushort)(direction | 0x41));
-            sleep(50);
-            Write16(GpioValue, (ushort)(value | 0x41));
-            sleep(10);
+            value = Read32(0x90018) >> 16;
+            var direction = Read32(0x90014) >> 16;
+            Write16(0x90018, (ushort)((value & ~0x01u) | 0x40));
+            Write16(0x90014, (ushort)(direction | 0x41));
         }
+        sleep(50);
+        lock (_gate) Write16(0x90018, (ushort)(value | 0x41));
+        sleep(10);
     }
 
-    /// <summary>
-    /// コアを止めて、入口を書き、プログラムを 16 語ずつ置く (spec 11.1)。**読み返して同じなら書かない**
-    /// (前の起動や流し始めが置いたものがそのまま残っていることが多い)
-    /// </summary>
-    private void Load(uint core, uint origin, uint[] program)
+    /// <summary>コアにプログラムを置く: 止めて、入口を書き、16 語ずつ (読み返して同じなら書かない)</summary>
+    private void LoadCore(uint core, uint[] program)
     {
-        Write32(core, 0xFFFFFFFF);
-        Write32(core + 0xFFFFC, origin);
-        var loaded = new byte[64];
-        for (var first = 0; first < program.Length; first += 16)
+        Write32(core, CoreHalt);
+        Write32(core + CoreEntry, Mb86h47Programs.CoreOrigin);
+        var at = core + Mb86h47Programs.CoreOrigin;
+        Span<uint> back = stackalloc uint[MaxWords];
+        for (var i = 0; i < program.Length; i += MaxWords)
         {
-            var count = Math.Min(16, program.Length - first);
-            var address = core + origin + (uint)first * 4;
-            ReadBlock(address, loaded.AsSpan(0, count * 4));
-            for (var i = 0; i < count; i++)
-            {
-                if (BinaryPrimitives.ReadUInt32BigEndian(loaded.AsSpan(i * 4)) == program[first + i]) continue;
-                WriteWords(address, program[first..(first + count)]);
-                break;
-            }
+            var block = program.AsSpan(i, Math.Min(MaxWords, program.Length - i));
+            Read(at + (uint)(i * 4), back[..block.Length]);
+            if (!back[..block.Length].SequenceEqual(block)) Write(at + (uint)(i * 4), block);
         }
     }
 
     // ---------------------------------------------------------------------
-    // コア 1 の I2C (spec 5.4。箱とリング)
-    //
-    // リングは 1 語のスロット 16 個: レジスタの書き込み (1 か 2 バイトの番号のあとに 2 バイト) か読み (2 バイト)。
-    //   bit 31 周回 (スロットの番号 / 16 の偶奇)、bit 30 読む、bit 29 1 バイトの番号、
-    //   bit 28 読みかえ書き (次のスロットの bit 15-0 がマスク)、bit 27 (28 と一緒に) マスクのスロット、
-    //   bit 26-16 レジスタの番号、bit 15-0 書く値
-    // 2 バイトの番号は ringAddresses の 1 バイト目のアドレスへ、1 バイトの番号は 2 バイト目へ。
-    // 読みは1回のメモリ要求でも済む (wValue の下位バイト 0xFE。番地を広げるルーチンがリングに入れて答えを返す)
+    // コア 1 (5.4・5.5)
     // ---------------------------------------------------------------------
 
-    private const uint Core1Base = 0x1700000;
-    private const uint CoreOrigin = 0xA0000;
-    private const uint Mailbox = 0xA3F00;
-    private const uint MailboxWrite = 0x04;
-    private const uint MailboxAlive = 0x7C;
-    private const uint MailboxAnswer = 0x80;
-    private const int MaxTransfer = 32;
+    private static uint Box(int offset) => Core1 + Mb86h47Programs.Core1Box + (uint)offset;
 
-    private const uint RingScratch = 0xA3D00;
-    private const uint RingAddresses = 0xA3D40;
-    private const uint Ring = 0xA3E00;
-    private const uint RingSlots = 16;
-    private const uint RingAnswer = 0xA3E40;
-    private const uint RingFailure = 0xA3E44;
-    private const uint RingLap = 1u << 31;
-    private const uint RingRead = 1 << 30;
-    private const uint RingShort = 1 << 29;
-    private const uint RingModify = 1 << 28;
-    private const uint RingMask = 1 << 27;
-    private const uint RingRegister = 0x7FF;
-    private const uint RingExecute = 0xFE;
-
-    private static readonly TimeSpan I2cTimeout = TimeSpan.FromMilliseconds(500);
-
-    private byte _sequence;
-    private uint _ringNext;
-    private uint _ringDone;
-    private readonly byte[] _ringAddresses = new byte[2];
-    private readonly byte[] _ringSent = new byte[256];
-    private readonly List<uint> _ringHeld = [];
-
-    private void Core1Start()
+    /// <summary>コア 1 を置いて走らせ、生きている印が進むのを見る</summary>
+    private void StartCore1()
     {
-        Load(Core1Base, CoreOrigin, Mb86h47Code.Core1);
-        // データ RAM は電源投入時の中身が不定。使う前に消す
-        foreach (var address in new[] { Mailbox, Mailbox + MailboxAnswer, Mailbox + MailboxAlive, RingScratch, RingAddresses, RingFailure })
-        {
-            Write32(Core1Base + address, 0);
-        }
-        WriteBlock(Core1Base + Ring, new byte[RingSlots * 4]);
-        // bulk の命令は毎回新しい通し番号から (前の起動の塊と取り違えない)
-        _commandSequence = (uint)(Stopwatch.GetTimestamp() & 0x7FFFFFFF) | 1;
-        _commandSlot = 0;
-        _command = false;
-        Write32(Core1Base + CommandVars + CommandSlotVar, CommandBase);
-        Write32(Core1Base + CommandVars + CommandErrorVar, 0);
-        Write32(Core1Base + CommandVars + CommandExpectVar, _commandSequence);
-        // リングはスロット 16 (周回 1) から。答えは1つ前のスロットを指しておく
-        Write32(Core1Base + RingAnswer, (RingSlots - 1) << 24);
-        Write32(Core1Base, 0xFFFCFFFF);
-        _sequence = 0;
-        _ringNext = RingSlots;
-        _ringDone = RingSlots - 1;
-        Array.Clear(_ringAddresses);
-        _ringHeld.Clear();
-        var before = Read32(Core1Base + Mailbox + MailboxAlive);
+        LoadCore(Core1, Core1Program.Value);
+        // データ RAM は電源投入時の中身が不定。コア 1 が見る所を消してから走らせる
+        Write(Core1 + Mb86h47Programs.Core1Ring, new uint[Mb86h47Programs.RingSlots]);
+        Write(Core1 + Mb86h47Programs.Core1RingDone, [0, 0]);
+        Write32(Box(Mb86h47Programs.BoxCommand), 0);
+        Write32(Box(Mb86h47Programs.BoxReply), 0);
+        Write32(Box(Mb86h47Programs.BoxBulkEnable), 0);
+        _ringPlaced = 0;
+        _ringDone = 0;
+        _ringError = 0;
+        _boxSequence = 0;
+        Write32(Core1, CoreRun);
+        var first = Read32(Box(Mb86h47Programs.BoxAlive));
         Thread.Sleep(1);
-        var after = Read32(Core1Base + Mailbox + MailboxAlive);
-        if (before == after) throw new IOException("MB86H47A のコア 1 が動きません");
+        var second = Read32(Box(Mb86h47Programs.BoxAlive));
+        if (first == second) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が動いていません");
     }
 
-    private static IOException I2cError(byte address, int code) => new(code switch
+    /// <summary>5.5 の bulk の経路を用意して、空の塊を1つ送ってみる。答えが来れば使う</summary>
+    private bool TryCommandChannel()
     {
-        1 => $"I2C のバスエラー (0x{address:X2})",
-        2 => $"I2C のアドレス 0x{address:X2} に ACK がありません",
-        3 => $"I2C のデータに 0x{address:X2} が ACK しません",
-        4 => $"I2C が固まりました (0x{address:X2})",
-        _ => $"I2C のやり取りに失敗しました (0x{address:X2}、{code})",
-    });
-
-    /// <summary>リングの答えと誤りを読み、コア 1 がどこまで進んだかを知る</summary>
-    private uint RingPoll()
-    {
-        Span<byte> status = stackalloc byte[8];
-        ReadBlock(Core1Base + RingAnswer, status);
-        var answer = BinaryPrimitives.ReadUInt32BigEndian(status);
-        var last = _ringNext - 1;
-        _ringDone = last - (byte)((byte)last - (byte)(answer >> 24));
-        var failure = BinaryPrimitives.ReadUInt32BigEndian(status[4..]);
-        if (failure != 0)
+        Write32(0xFD8300, 1);
+        Write32(0xFD8304, 0x00008004);
+        Modify(0xFDBC14, 0, 0x00040000);
+        Modify(0xFD80B4, 0, 4);
+        Write32(0xFD8510, Mb86h47Programs.BulkChunk);
+        // 置き場の塊の頭を消す (電源投入時の SDRAM は不定。頭が 0 の塊は見ない)
+        for (var slot = 0; slot < Mb86h47Programs.BulkSlots; slot++) Write32(Mb86h47Programs.BulkBuffer + (uint)(slot * Mb86h47Programs.BulkChunk), 0);
+        ArmCommandDma();
+        Write32(Box(Mb86h47Programs.BoxBulkEnable), Mb86h47Programs.BulkEnable);
+        // 前の会話の答えが残っていれば捨てる
+        Span<byte> stale = stackalloc byte[64];
+        for (var i = 0; i < 16 && _usb.InterruptRead(CommandIn, stale, 10) > 0; i++)
         {
-            Write32(Core1Base + RingFailure, 0);
-            throw I2cError(_ringSent[(byte)(failure >> 24)], (byte)(failure >> 16));
         }
-        return answer;
-    }
-
-    /// <summary>番号 <paramref name="done"/> のやり取りが済むまで待つ</summary>
-    private uint RingWait(uint done)
-    {
-        if ((int)(_ringDone - done) >= 0) return 0;
-        var deadline = Stopwatch.GetTimestamp() + (long)(I2cTimeout.TotalSeconds * Stopwatch.Frequency);
-        for (; ; )
-        {
-            var answer = RingPoll();
-            if ((int)(_ringDone - done) >= 0) return answer;
-            if (Stopwatch.GetTimestamp() > deadline) throw new IOException("MB86H47A のコア 1 が I2C に答えません");
-        }
-    }
-
-    /// <summary>リングにやり取りを1つ溜める。16 個溜まったら送る</summary>
-    private void RingPush(byte address, bool isShort, uint access)
-    {
-        if (isShort) access |= RingShort;
-        RingAddress(address, isShort);
-        if (_command)
-        {
-            CommandPush(access);
-            return;
-        }
-        var next = _ringNext;
-        if (next / RingSlots % 2 == 1) access |= RingLap;
-        _ringHeld.Add(access);
-        _ringSent[(byte)next] = address;
-        _ringNext++;
-        if (_ringHeld.Count == RingSlots) RingFlush();
-    }
-
-    /// <summary>その種類のやり取りの相手を <paramref name="address"/> にする (前の相手のぶんが済んでから)</summary>
-    private void RingAddress(byte address, bool isShort)
-    {
-        var kind = isShort ? 1 : 0;
-        if (_ringAddresses[kind] == address) return;
-        Drain();
-        _ringAddresses[kind] = address;
-        Write32(Core1Base + RingAddresses, ((uint)_ringAddresses[0] << 24) | ((uint)_ringAddresses[1] << 16));
-    }
-
-    /// <summary>溜めたスロットを送る (置き換えるスロットをコア 1 が済ませてから)。リングの終わりまでと頭からの2回</summary>
-    private void RingFlush()
-    {
-        if (_command)
-        {
-            CommandSend(false);
-            return;
-        }
-        if (_ringHeld.Count == 0) return;
-        var last = _ringNext - 1;
-        if (last - _ringDone > RingSlots) RingWait(last - RingSlots);
-        var first = _ringNext - (uint)_ringHeld.Count;
-        var at = 0;
-        while (at < _ringHeld.Count)
-        {
-            var slot = first % RingSlots;
-            var count = Math.Min(_ringHeld.Count - at, (int)(RingSlots - slot));
-            var data = new byte[count * 4];
-            for (var i = 0; i < count; i++) BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(i * 4), _ringHeld[at + i]);
-            WriteBlock(Core1Base + Ring + slot * 4, data);
-            at += count;
-            first += (uint)count;
-        }
-        _ringHeld.Clear();
-    }
-
-    /// <summary>溜めたものを送って、コア 1 が済ませるまで待つ。ホストの形では何もしない</summary>
-    private void Drain()
-    {
-        if (Mode == Zd1jI2cMode.Host) return;
-        if (_command)
-        {
-            CommandSend(true);
-            return;
-        }
-        RingFlush();
-        RingWait(_ringNext - 1);
-    }
-
-    /// <summary>リングで1つ読む: 溜めたものを先に送り、読みそのものは答えを返す1回のメモリ要求で</summary>
-    private ushort RingReadRegister(byte address, bool isShort, uint number)
-    {
-        RingAddress(address, isShort);
-        if (_command)
-        {
-            var access = RingRead | (number << 16) | (isShort ? RingShort : 0);
-            CommandPush(access);
-            var values = CommandSend(true);
-            if (values.Count == 0) throw new IOException("MB86H47A のコア 1 が bulk の命令に答えません");
-            return (ushort)values[^1];
-        }
-        RingFlush();
-        var next = _ringNext;
-        if (next - _ringDone > RingSlots) RingWait(next - RingSlots);
-        var slot = (next % RingSlots) | ((next / RingSlots % 2) << 4) | (isShort ? 1u << 5 : 0);
-        _ringSent[(byte)next] = address;
-        _ringNext++;
-        Span<byte> status = stackalloc byte[8];
-        ReadBlock((RingExecute << 24) | (slot << 16) | number, status);
-        var answer = BinaryPrimitives.ReadUInt32BigEndian(status);
-        if ((byte)(answer >> 24) == (byte)next)
-        {
-            _ringDone = next;
-            var failure = BinaryPrimitives.ReadUInt32BigEndian(status[4..]);
-            if (failure != 0)
-            {
-                Write32(Core1Base + RingFailure, 0);
-                throw I2cError(_ringSent[(byte)(failure >> 24)], (byte)(failure >> 16));
-            }
-        }
-        else
-        {
-            // 処理のほうが待ちきれなかった。リングには入っているので答えを待つ
-            answer = RingWait(next);
-        }
-        if (((answer >> 16) & 0xFF) != 0) throw I2cError(address, (int)((answer >> 16) & 0xFF));
-        return (ushort)answer;
-    }
-
-    /// <summary>箱で1回のやり取り (リングに入らない形)。リングの残りが先</summary>
-    private byte[] MailboxTransfer(byte address, ReadOnlySpan<byte> write, int readLength)
-    {
-        if (write.Length > MaxTransfer || readLength > MaxTransfer)
-        {
-            throw new IOException($"I2C の1回のやり取りは {MaxTransfer} バイトまでです");
-        }
-        if (_command)
-        {
-            // 箱はメモリ要求で叩くので、bulk の経路の残りを済ませてから
-            CommandSend(true);
-        }
-        else
-        {
-            Drain();
-        }
-        _sequence++;
-        if (_sequence == 0) _sequence = 1;
-        for (var offset = 0; offset < write.Length; offset += 4)
-        {
-            Write32(Core1Base + Mailbox + MailboxWrite + (uint)offset, Pack(write, offset));
-        }
-        Write32(Core1Base + Mailbox, ((uint)_sequence << 24) | ((uint)address << 16) | ((uint)write.Length << 8) | (uint)readLength);
-        var answer = new byte[4 + ((readLength + 3) & ~3)];
-        var deadline = Stopwatch.GetTimestamp() + (long)(I2cTimeout.TotalSeconds * Stopwatch.Frequency);
-        for (; ; )
-        {
-            ReadBlock(Core1Base + Mailbox + MailboxAnswer, answer);
-            if (answer[0] == _sequence) break;
-            if (Stopwatch.GetTimestamp() > deadline) throw new IOException($"MB86H47A のコア 1 が I2C (0x{address:X2}) に答えません");
-        }
-        if (answer[3] != 0) throw I2cError(address, answer[3]);
-        return answer[4..(4 + readLength)];
-    }
-
-    // ---------------------------------------------------------------------
-    // bulk の命令の経路 (spec 5.5)
-    //
-    // 1 つの塊は EP 0x02 に 512 バイト。DMA が 0x82100000 からのスロットに順に書く。
-    //   語 0 通し番号、語 1 bit 31 答えが要る / bit 7-0 語の数、語 2- やり取り (リングのスロットの形。
-    //   読みかえ書きはマスクを次の語に)、最後の語 通し番号をもう一度
-    // メモリのやり取りは bit 27 だけ: bit 30 読む、bit 29 FIFO (bit 7-0 のバイト数を1つのレジスタへ / から)、
-    // 次の語が番地。書くならそのあとに値か、4 バイトずつのバイト。
-    // コア 1 は答えを EP 0x83 (interrupt) に: 通し番号、前の答えからの最初の誤り (bit 23-16) と読んだ値の数 (bit 7-0)、値
-    // ---------------------------------------------------------------------
-
-    private const uint CommandBase = 0x82100000;
-    private const uint CommandSlots = 16;
-    private const int CommandSize = 512;
-    private const int CommandWords = CommandSize / 4 - 3;
-    private const uint CommandAnswer = 1u << 31;
-    private const int CommandReads = 14;
-    private const uint MemoryAccess = RingMask;
-    private const uint MemoryRead = RingRead;
-    private const uint MemoryFifo = 1 << 29;
-    private const byte EndpointCommand = 0x02;
-    private const byte EndpointAnswer = 0x83;
-    private const uint CommandVars = 0xA3C00;
-    private const uint CommandExpectVar = 0x00;
-    private const uint CommandSlotVar = 0x04;
-    private const uint CommandErrorVar = 0x14;
-    private const int CommandTimeoutMs = 500;
-
-    private bool _command;
-    private uint _commandSequence;
-    private uint _commandSlot;
-    private readonly List<uint> _commandHeld = [];
-
-    /// <summary>EP 0x02 の DMA をスロットに向け、コア 1 が塊に答えるかを確かめる。答えなければリングのまま</summary>
-    private void CommandSetup()
-    {
-        _command = false;
         try
         {
-            Write32(0xFD8300, 1);
-            Write32(0xFD8304, 0x00008004);
-            Write32(0xFDBC14, Read32(0xFDBC14) | 0x00040000);
-            Write32(0xFD80B4, Read32(0xFD80B4) | 4);
-            Write32(0xFD8510, CommandSize);
-            Write32(0xFD8508, CommandBase);
-            Write32(0xFD8504, 1);
-            // 前の起動が答えの端点に残したものを捨てる
-            var stale = new byte[64];
-            for (var i = 0; i < 8 && _usb.InterruptRead(EndpointAnswer, stale, 5) > 0; i++)
-            {
-            }
-            _commandHeld.Clear();
-            _command = true;
-            CommandSend(true);
+            _commands.Clear();
+            SendChunk(probeTimeoutMs: 200);
+            return true;
         }
         catch (IOException error) when (error is not UsbGoneException)
         {
-            _command = false;
-            _trace?.Invoke($"bulk の命令の経路が使えないので、メモリ要求のリングで I2C を流します ({error.Message})");
+            _trace?.Invoke($"コア 1 が bulk の塊に答えないので、メモリ要求のリングで続けます ({error.Message})");
+            Write32(Box(Mb86h47Programs.BoxBulkEnable), 0);
+            _commands.Clear();
+            return false;
         }
     }
 
-    private void CommandPush(params ReadOnlySpan<uint> words)
+    private void ArmCommandDma()
     {
-        if (_commandHeld.Count + words.Length > CommandWords) CommandSend(false);
-        foreach (var word in words) _commandHeld.Add(word);
-    }
-
-    /// <summary>溜めたやり取りを1つの塊で送る。答えが要るか、最後のスロットなら答えを待って読んだ値を返す</summary>
-    private List<uint> CommandSend(bool answer)
-    {
-        if (_commandHeld.Count == 0 && !answer) return [];
-        if (_commandSlot == CommandSlots - 1) answer = true;
-        var sequence = _commandSequence;
-        var packet = new byte[CommandSize];
-        BinaryPrimitives.WriteUInt32BigEndian(packet, sequence);
-        BinaryPrimitives.WriteUInt32BigEndian(packet.AsSpan(4), (uint)_commandHeld.Count | (answer ? CommandAnswer : 0));
-        for (var i = 0; i < _commandHeld.Count; i++) BinaryPrimitives.WriteUInt32BigEndian(packet.AsSpan(8 + i * 4), _commandHeld[i]);
-        BinaryPrimitives.WriteUInt32BigEndian(packet.AsSpan(CommandSize - 4), sequence);
-        _commandHeld.Clear();
-        try
-        {
-            Interlocked.Increment(ref _requests);
-            _usb.BulkWrite(EndpointCommand, packet, CommandTimeoutMs);
-        }
-        catch (IOException)
-        {
-            _command = false;
-            throw;
-        }
-        _commandSequence++;
-        _commandSlot++;
-        if (!answer) return [];
-
-        var message = new byte[64];
-        int got;
-        var deadline = Environment.TickCount64 + CommandTimeoutMs;
-        for (; ; )
-        {
-            got = _usb.InterruptRead(EndpointAnswer, message, CommandTimeoutMs);
-            if (got >= 8 && BinaryPrimitives.ReadUInt32BigEndian(message) == sequence) break;
-            if (Environment.TickCount64 > deadline)
-            {
-                _command = false;
-                throw new IOException("MB86H47A のコア 1 が bulk の命令に答えません");
-            }
-        }
-        if (_commandSlot == CommandSlots)
-        {
-            // コア 1 が全部のスロットを済ませた。DMA を頭に戻す
-            _commandSlot = 0;
-            Write32(0xFD8508, CommandBase);
-            Write32(0xFD8504, 1);
-        }
-        var status = BinaryPrimitives.ReadUInt32BigEndian(message.AsSpan(4));
-        var count = (int)(status & 0xFF);
-        if (8 + count * 4 > got) throw new IOException("MB86H47A のコア 1 の答えが崩れています");
-        var values = new List<uint>(count);
-        for (var i = 0; i < count; i++) values.Add(BinaryPrimitives.ReadUInt32BigEndian(message.AsSpan(8 + i * 4)));
-        var failure = (byte)(status >> 16);
-        if (failure != 0) throw I2cError(_ringAddresses[0], failure);
-        return values;
-    }
-
-    /// <summary><paramref name="data"/> の <paramref name="offset"/> から 4 バイトをビッグエンディアンの語に (足りなければ 0 で埋める)</summary>
-    private static uint Pack(ReadOnlySpan<byte> data, int offset)
-    {
-        uint word = 0;
-        for (var i = 0; i < 4; i++) word = (word << 8) | (offset + i < data.Length ? data[offset + i] : 0u);
-        return word;
-    }
-
-    /// <summary>チップのレジスタを書く。bulk の経路があれば次の塊に溜める</summary>
-    private void RegisterWrite(uint address, uint value)
-    {
-        if (!_command)
-        {
-            RingFlushIfAny();
-            Write32(address, value);
-            return;
-        }
-        CommandPush(MemoryAccess, address, value);
-    }
-
-    /// <summary>チップのレジスタを読む (溜めたものが先)</summary>
-    private uint RegisterRead(uint address)
-    {
-        if (!_command)
-        {
-            RingFlushIfAny();
-            return Read32(address);
-        }
-        CommandPush(MemoryAccess | MemoryRead, address);
-        var values = CommandSend(true);
-        return values.Count > 0 ? values[^1] : throw new IOException("MB86H47A のコア 1 が bulk の命令に答えません");
-    }
-
-    /// <summary>FIFO のレジスタにバイトを順に書く</summary>
-    private void FifoWrite(uint address, ReadOnlySpan<byte> data)
-    {
-        if (!_command)
-        {
-            RingFlushIfAny();
-            foreach (var value in data) Write32(address, value);
-            return;
-        }
-        while (data.Length > 0)
-        {
-            var chunk = data[..Math.Min(data.Length, 0xFF)];
-            data = data[chunk.Length..];
-            var words = new List<uint> { MemoryAccess | MemoryFifo | (uint)chunk.Length, address };
-            for (var offset = 0; offset < chunk.Length; offset += 4)
-            {
-                words.Add(Pack(chunk, offset));
-            }
-            CommandPush([.. words]);
-        }
-    }
-
-    /// <summary>FIFO のレジスタから <paramref name="length"/> バイトを順に読む (溜めたものが先)</summary>
-    private byte[] FifoRead(uint address, int length)
-    {
-        var data = new List<byte>(length);
-        if (!_command)
-        {
-            RingFlushIfAny();
-            while (data.Count < length) data.Add((byte)Read32(address));
-            return [.. data];
-        }
-        while (data.Count < length)
-        {
-            var chunk = Math.Min(length - data.Count, CommandReads * 4);
-            CommandPush(MemoryAccess | MemoryRead | MemoryFifo | (uint)chunk, address);
-            foreach (var value in CommandSend(true))
-            {
-                for (var shift = 24; shift >= 0 && data.Count < length; shift -= 8) data.Add((byte)(value >> shift));
-            }
-        }
-        return [.. data];
-    }
-
-    /// <summary>リングに溜めた I2C の書き込みを先に出す (メモリ要求の順番を崩さない)</summary>
-    private void RingFlushIfAny()
-    {
-        if (Mode != Zd1jI2cMode.Host) RingFlush();
+        Write32(0xFD8508, Mb86h47Programs.BulkBuffer);
+        Write32(0xFD8504, 1);
+        _chunkSlot = 0;
     }
 
     // ---------------------------------------------------------------------
-    // ホストが直に I2C を叩く (spec 5.2 / 5.3)
+    // I2C (5)
     // ---------------------------------------------------------------------
 
-    /// <summary>バイトを1つ待つ上限。ホストから見ると数ミリ秒で済む</summary>
-    private static readonly TimeSpan HostByteTimeout = TimeSpan.FromMilliseconds(100);
-
-    private void HostWaitByte(byte address)
+    public void Write(byte address, ReadOnlySpan<byte> data)
     {
-        var deadline = Stopwatch.GetTimestamp() + (long)(HostByteTimeout.TotalSeconds * Stopwatch.Frequency);
-        for (; ; )
+        lock (_gate)
         {
-            var control = Read32(I2cControl);
-            if ((control & 0x80) != 0) throw I2cError(address, 1);
-            if ((control & 0x01) != 0) return;
-            if (Stopwatch.GetTimestamp() > deadline) throw I2cError(address, 4);
+            I2cTransfers++;
+            var started = Stopwatch.GetTimestamp();
+            switch (Mode)
+            {
+                case Zd1jI2cMode.Host:
+                    HostTransfer(address, data, []);
+                    break;
+                case Zd1jI2cMode.Core1 when CommandChannel:
+                    QueueTransfer(address, data, 0);
+                    break;
+                default:
+                    if (RingSlot(address, data) is { } slot) QueueRing(slot);
+                    else
+                    {
+                        PushRing();
+                        Mailbox(address, data, []);
+                    }
+                    break;
+            }
+            Trace("書く", address, started);
         }
     }
 
-    private void HostIdle()
+    public void WriteRead(byte address, ReadOnlySpan<byte> write, Span<byte> read)
     {
-        var deadline = Stopwatch.GetTimestamp() + (long)(HostByteTimeout.TotalSeconds * Stopwatch.Frequency);
-        while ((Read32(I2cStatus) & 0x80) != 0 && Stopwatch.GetTimestamp() < deadline)
+        lock (_gate)
         {
+            I2cTransfers++;
+            var started = Stopwatch.GetTimestamp();
+            switch (Mode)
+            {
+                case Zd1jI2cMode.Host:
+                    HostTransfer(address, write, read);
+                    break;
+                case Zd1jI2cMode.Core1 when CommandChannel:
+                    if (read.Length > 32) throw new ArgumentOutOfRangeException(nameof(read));
+                    QueueTransfer(address, write, read.Length);
+                    SendChunk().AsSpan(0, read.Length).CopyTo(read);
+                    break;
+                default:
+                    // 溜めはコア 1 が箱より先に済ませるので、流しておけば書き込みが先に届く
+                    PushRing();
+                    Mailbox(address, write, read);
+                    break;
+            }
+            Trace("読む", address, started);
         }
     }
 
-    private void HostSend(byte address, byte value, uint control, int noAck)
+    public void Modify16(byte address, ushort register, ushort keep, ushort set)
     {
-        Write32(I2cData, value);
-        Write32(I2cControl, control);
-        HostWaitByte(address);
-        if ((Read32(I2cStatus) & 0x10) != 0) throw I2cError(address, noAck);
+        lock (_gate)
+        {
+            I2cTransfers++;
+            var started = Stopwatch.GetTimestamp();
+            if (Mode == Zd1jI2cMode.Core1 && CommandChannel)
+            {
+                // 読みかえ書きはコア 1 の上で済ませる (答えを待たない)
+                if (_commands.Count + 2 > CommandWords) SendChunk();
+                _commands.Add(0x02000000u | ((uint)address << 16) | register);
+                _commands.Add(((uint)keep << 16) | set);
+            }
+            else
+            {
+                Span<byte> number = [(byte)(register >> 8), (byte)register];
+                Span<byte> value = stackalloc byte[2];
+                if (Mode == Zd1jI2cMode.Host) HostTransfer(address, number, value);
+                else
+                {
+                    PushRing();
+                    Mailbox(address, number, value);
+                }
+                var next = (ushort)((BinaryPrimitives.ReadUInt16BigEndian(value) & keep) | set);
+                Span<byte> data = [(byte)(register >> 8), (byte)register, (byte)(next >> 8), (byte)next];
+                if (Mode == Zd1jI2cMode.Host) HostTransfer(address, data, []);
+                else QueueRing(RingSlot(address, data) ?? throw new ArgumentException($"アドレス 0x{address:X2} は溜めに入りません"));
+            }
+            Trace("読みかえ書き", address, started);
+        }
     }
 
-    /// <summary>1回のやり取り (spec 5.2)。失敗したらバスを止めてから投げる</summary>
+    public void Flush()
+    {
+        lock (_gate)
+        {
+            if (Mode == Zd1jI2cMode.Host) return;
+            if (CommandChannel)
+            {
+                if (_commands.Count > 0) SendChunk();
+                return;
+            }
+            PushRing();
+            WaitRing();
+        }
+    }
+
+    private void Trace(string what, byte address, long started)
+    {
+        if (_trace is null) return;
+        _trace($"I2C {what} 0x{address:X2} {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F2}ms");
+    }
+
+    private static IOException I2cError(int code, byte address) => new(code switch
+    {
+        1 => $"I2C のバスエラーです (0x{address:X2})",
+        2 => $"I2C のアドレス 0x{address:X2} に ACK がありません",
+        3 => $"I2C のデータに ACK がありません (0x{address:X2})",
+        4 => $"I2C が固まりました (0x{address:X2})",
+        _ => $"I2C で知らない誤り {code} です (0x{address:X2})",
+    });
+
+    // --- ホストから直に (5.2・5.3) ---
+
     private void HostTransfer(byte address, ReadOnlySpan<byte> write, Span<byte> read)
     {
         try
         {
             if (write.Length > 0)
             {
-                HostIdle();
-                HostSend(address, (byte)(address & 0xFE), 0x50, 2);
-                foreach (var value in write) HostSend(address, value, 0x50, 3);
+                HostIdle(address);
+                HostSend((byte)(address & 0xFE), 0x50, 2, address);
+                foreach (var b in write) HostSend(b, 0x50, 3, address);
                 if (read.Length == 0)
                 {
-                    Write32(I2cControl, 0x40);
-                    HostIdle();
+                    HostStop(address);
                     return;
                 }
-                HostSend(address, (byte)(address | 1), 0x70, 2);
+                HostSend((byte)(address | 1), 0x70, 2, address);
             }
             else
             {
                 if (read.Length == 0) return;
-                HostIdle();
-                HostSend(address, (byte)(address | 1), 0x50, 2);
+                HostIdle(address);
+                HostSend((byte)(address | 1), 0x50, 2, address);
             }
             for (var i = 0; i < read.Length; i++)
             {
+                // 最後の1バイトだけ ACK を返さない
                 Write32(I2cControl, i == read.Length - 1 ? 0x50u : 0x58u);
                 HostWaitByte(address);
                 read[i] = (byte)Read32(I2cData);
             }
-            Write32(I2cControl, 0x40);
-            HostIdle();
+            HostStop(address);
         }
         catch (IOException error) when (error is not UsbGoneException)
         {
-            try
-            {
-                Write32(I2cControl, 0x40);
-            }
-            catch (IOException)
-            {
-                // 止めにも失敗した。元の理由を返す
-            }
+            // バスを止めてから失敗を返す
+            Write32(I2cControl, 0x40);
             throw;
         }
     }
 
-    // ---------------------------------------------------------------------
-    // II2c
-    // ---------------------------------------------------------------------
-
-    /// <summary>2 バイト (か 1 バイト) の番号を読む。リングに載らない番号なら null</summary>
-    private static uint? RingNumber(ReadOnlySpan<byte> data, bool isShort)
+    private void HostIdle(byte address)
     {
-        if (isShort) return data[0];
-        var number = (uint)BinaryPrimitives.ReadUInt16BigEndian(data);
-        return number <= RingRegister ? number : null;
+        for (var i = 0; i < HostSpin; i++)
+        {
+            if ((Read32(I2cStatus) & 0x80) == 0) return;
+        }
+        throw I2cError(4, address);
     }
+
+    private void HostWaitByte(byte address)
+    {
+        for (var i = 0; i < HostSpin; i++)
+        {
+            var control = Read32(I2cControl);
+            if ((control & 0x80) != 0) throw I2cError(1, address);
+            if ((control & 0x01) != 0) return;
+        }
+        throw I2cError(4, address);
+    }
+
+    private void HostSend(byte value, uint control, int nack, byte address)
+    {
+        Write32(I2cData, value);
+        Write32(I2cControl, control);
+        HostWaitByte(address);
+        if ((Read32(I2cStatus) & 0x10) != 0) throw I2cError(nack, address);
+    }
+
+    private void HostStop(byte address)
+    {
+        Write32(I2cControl, 0x40);
+        HostIdle(address);
+    }
+
+    // --- コア 1 の溜めと箱 ---
+
+    /// <summary>溜めに入る書き込みか (DiB8000 の 4 バイト・DiB0090 の 3 バイト)</summary>
+    private static (bool Tuner, int Register, ushort Value)? RingSlot(byte address, ReadOnlySpan<byte> data) => address switch
+    {
+        Dib8096.DemodAddress when data.Length == 4 => (false, (data[0] << 8) | data[1], BinaryPrimitives.ReadUInt16BigEndian(data[2..])),
+        Dib8096.TunerAddress when data.Length == 3 => (true, data[0], BinaryPrimitives.ReadUInt16BigEndian(data[1..])),
+        _ => null,
+    };
+
+    private void QueueRing((bool Tuner, int Register, ushort Value) slot)
+    {
+        _ring.Add(slot);
+        if (_ring.Count >= Mb86h47Programs.RingSlots) PushRing();
+    }
+
+    /// <summary>溜めた書き込みを輪に書く (答えは待たない。空きが無ければコア 1 が済ませるのを待つ)</summary>
+    private void PushRing()
+    {
+        var at = 0;
+        while (at < _ring.Count)
+        {
+            var free = Mb86h47Programs.RingSlots - (int)(_ringPlaced - _ringDone);
+            if (free == 0)
+            {
+                ReadRing(waitFor: _ringPlaced - Mb86h47Programs.RingSlots + 1);
+                continue;
+            }
+            var slot = (int)(_ringPlaced % Mb86h47Programs.RingSlots);
+            var count = Math.Min(Math.Min(free, _ring.Count - at), Mb86h47Programs.RingSlots - slot);
+            var words = new uint[count];
+            for (var i = 0; i < count; i++)
+            {
+                var (tuner, register, value) = _ring[at + i];
+                words[i] = Mb86h47Programs.Slot(_ringPlaced + i, tuner, register, value);
+            }
+            Write(Core1 + Mb86h47Programs.Core1Ring + (uint)(slot * 4), words);
+            _ringPlaced += (uint)count;
+            at += count;
+        }
+        _ring.Clear();
+    }
+
+    /// <summary>コア 1 が溜めを全部済ませるまで待つ</summary>
+    private void WaitRing() => ReadRing(waitFor: _ringPlaced);
+
+    private void ReadRing(uint waitFor)
+    {
+        var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
+        Span<uint> state = stackalloc uint[2];
+        while (true)
+        {
+            Read(Core1 + Mb86h47Programs.Core1RingDone, state);
+            _ringDone = state[0];
+            if (state[1] != _ringError)
+            {
+                _ringError = state[1];
+                throw I2cError((int)(state[1] & 0xFF), 0x12);
+            }
+            if ((int)(_ringDone - waitFor) >= 0) return;
+            if (Stopwatch.GetTimestamp() > deadline) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が溜めた I2C を済ませません");
+        }
+    }
+
+    /// <summary>箱で1回のやり取り (書き 32・読み 32 バイトまで)</summary>
+    private void Mailbox(byte address, ReadOnlySpan<byte> write, Span<byte> read)
+    {
+        if (write.Length > 32 || read.Length > 32) throw new ArgumentOutOfRangeException(nameof(write), "コア 1 の箱は書き 32・読み 32 バイトまで");
+        _boxSequence = (byte)(_boxSequence == 0xFF ? 1 : _boxSequence + 1);
+        if (write.Length > 0) Write(Box(0), Pack(write));
+        Write32(Box(Mb86h47Programs.BoxCommand), ((uint)_boxSequence << 24) | ((uint)address << 16) | ((uint)write.Length << 8) | (uint)read.Length);
+        var reply = new uint[1 + (read.Length + 3) / 4];
+        var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
+        while (true)
+        {
+            Read(Box(Mb86h47Programs.BoxReply), reply);
+            if (reply[0] >> 24 == _boxSequence) break;
+            if (Stopwatch.GetTimestamp() > deadline) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が答えません");
+        }
+        if ((reply[0] & 0xFF) != 0) throw I2cError((int)(reply[0] & 0xFF), address);
+        for (var i = 0; i < read.Length; i++) read[i] = (byte)(reply[1 + i / 4] >> (24 - 8 * (i % 4)));
+    }
+
+    /// <summary>バイトをビッグエンディアンの語に詰める</summary>
+    private static uint[] Pack(ReadOnlySpan<byte> bytes)
+    {
+        var words = new uint[(bytes.Length + 3) / 4];
+        for (var i = 0; i < bytes.Length; i++) words[i / 4] |= (uint)bytes[i] << (24 - 8 * (i % 4));
+        return words;
+    }
+
+    // --- bulk の塊 (5.5) ---
+
+    private void QueueTransfer(byte address, ReadOnlySpan<byte> write, int read)
+    {
+        if (write.Length > 255) throw new ArgumentOutOfRangeException(nameof(write));
+        var words = Pack(write);
+        if (_commands.Count + 1 + words.Length > CommandWords) SendChunk();
+        _commands.Add(0x01000000u | ((uint)address << 16) | ((uint)write.Length << 8) | (uint)read);
+        _commands.AddRange(words);
+    }
+
+    /// <summary>溜めた命令を1つの塊で送り、答えを待つ。読んだバイトを返す</summary>
+    private byte[] SendChunk(int probeTimeoutMs = TimeoutMs)
+    {
+        _chunkSequence = _chunkSequence == uint.MaxValue ? 1 : _chunkSequence + 1;
+        var sequence = _chunkSequence;
+        var chunk = new byte[Mb86h47Programs.BulkChunk];
+        BinaryPrimitives.WriteUInt32BigEndian(chunk, sequence);
+        var count = 0;
+        var at = 8;
+        for (var i = 0; i < _commands.Count; i++)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(at), _commands[i]);
+            at += 4;
+        }
+        // 命令の数 (書くバイトの語は数えない)
+        for (var i = 0; i < _commands.Count;)
+        {
+            var command = _commands[i];
+            count++;
+            i += command >> 24 == 0x02 ? 2 : 1 + (int)((((command >> 8) & 0xFF) + 3) / 4);
+        }
+        BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(4), (uint)count);
+        BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(Mb86h47Programs.BulkChunk - 4), sequence);
+        _commands.Clear();
+
+        _usb.BulkWrite(CommandOut, chunk, TimeoutMs);
+        var reply = new byte[64];
+        var deadline = Stopwatch.GetTimestamp() + probeTimeoutMs * Stopwatch.Frequency / 1000;
+        while (true)
+        {
+            var left = (int)((deadline - Stopwatch.GetTimestamp()) * 1000 / Stopwatch.Frequency);
+            if (left <= 0) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に答えません");
+            var got = _usb.InterruptRead(CommandIn, reply, left);
+            if (got < 8) continue;
+            // 答えの語の並びは、印 (0xA5) が頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
+            if (reply[0] != Mb86h47Programs.BulkReplyMark && reply[3] == Mb86h47Programs.BulkReplyMark)
+            {
+                for (var i = 0; i + 4 <= got; i += 4) reply.AsSpan(i, 4).Reverse();
+            }
+            if (reply[0] != Mb86h47Programs.BulkReplyMark) continue;
+            var head = BinaryPrimitives.ReadUInt32BigEndian(reply);
+            if (((head >> 8) & 0xFFFF) != (sequence & 0xFFFF)) continue;    // 古い答え
+            var info = BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(4));
+            var error = (int)(head & 0xFF);
+            _chunkSlot++;
+            if (_chunkSlot == Mb86h47Programs.BulkSlots) ArmCommandDma();
+            if (error != 0)
+            {
+                throw error == 6
+                    ? new IOException($"{Zd1j.Model} のブリッジのコア 1 が知らない命令を受けました (命令 {info >> 16})")
+                    : I2cError(error, 0);
+            }
+            var length = (int)Math.Min(info & 0xFFFF, (uint)Mb86h47Programs.BulkReplyData);
+            return reply.AsSpan(8, Math.Min(length, got - 8)).ToArray();
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // TS (9)
+    // ---------------------------------------------------------------------
 
     /// <summary>
-    /// 書く。**コア 1 の形では、レジスタの書き込み (3 か 4 バイト) は溜めて答えを待たない** —
-    /// 次の読み・<see cref="Flush"/>・流し始めか流し終わりで出る。その失敗はあとの呼び出しが投げる
+    /// 9.2 流し始めの準備を積む。実際に回すのは待ちの間 (<see cref="Idle"/>) と <see cref="StartStream"/>
     /// </summary>
-    public void Write(byte address, ReadOnlySpan<byte> data)
+    public void PrepareStream()
     {
-        Interlocked.Increment(ref _i2cTransfers);
         lock (_gate)
         {
-            if (Mode == Zd1jI2cMode.Host)
-            {
-                var started = _trace is null ? 0 : Stopwatch.GetTimestamp();
-                HostTransfer(address, data, []);
-                if (_trace is not null) _trace($"I2C 0x{address:X2} 書く {Convert.ToHexString(data)} {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F2}ms");
-                return;
-            }
-            if (data.Length is 3 or 4 && RingNumber(data, data.Length == 3) is { } number)
-            {
-                RingPush(address, data.Length == 3, (number << 16) | BinaryPrimitives.ReadUInt16BigEndian(data[^2..]));
-                return;
-            }
-            MailboxTransfer(address, data, 0);
+            _prepare.Clear();
+            foreach (var step in PrepareSteps()) _prepare.Enqueue(step);
+            _prepared = true;
         }
     }
 
-    public void WriteRead(byte address, ReadOnlySpan<byte> write, Span<byte> read)
+    private IEnumerable<Action> PrepareSteps()
     {
-        Interlocked.Increment(ref _i2cTransfers);
-        lock (_gate)
+        // TS エンジン (この順に)
+        (uint, uint)[] engine =
+        [
+            (0xD000C4, 0), (0xD00000, 0xFFFFFFFF), (0xD00004, 0x001F33FF), (0xD00000, 0x30030FFF), (0xD00000, 0x00030000),
+            (0xD00004, 0x00003305), (0xD01040, 0), (0xD01064, 0), (0xD010A0, 0), (0xD010A4, 0), (0xD010A8, 0),
+            (0xD01020, 0x02000000), (0xD01004, 0), (0xD01044, 0x00BC0000), (0xD01048, 0x47000000), (0xD0104C, 0x00FFFFFF),
+            (0xD01050, 0), (0xD01060, 0), (0xD01000, 0x06070000), (0xD01080, 0x01000000), (0xD01088, 0), (0xD0108C, 0xFF),
+            (0xD01084, 0), (0xD01090, 0x01000000), (0xD02028, 0), (0xD0202C, 0), (0xD02030, 0), (0xD02038, 0),
+            (0xD02000, 0x03020300), (0xD02020, 0x00AE4000), (0xD02024, 0x00600000), (0xD00004, 0x00043305),
+        ];
+        foreach (var (address, value) in engine) yield return () => Write32(address, value);
+
+        // コア 0: 置いて (中身が残っていれば書かない) 走らせる
+        yield return () => LoadCore(Core0, Core0Program.Value);
+        yield return () => Write32(Core0, CoreRun);
+
+        // USB の DMA と端点 (0xFDBC00 からの USB コアのレジスタは語ごと書く。0xFDBC0C には書かない)
+        yield return () => Modify(0xFD8010, 0, 0x000F0000);
+        yield return () =>
         {
-            var started = _trace is null ? 0 : Stopwatch.GetTimestamp();
-            if (Mode == Zd1jI2cMode.Host)
+            Write32(0xFD8200, 1);
+            Write32(0xFD8220, 1);
+        };
+        yield return () => Modify(0xFD8014, 0x000F0000, 0);
+        yield return () =>
+        {
+            Write32(0xFD8240, 0);
+            Write32(0xFD82A0, 0);
+        };
+        yield return () =>
+        {
+            Write32(0xFD8200, 0);
+            Write32(0xFD8204, 0xB09F0000);
+            Write32(0xFD8200, 2);
+        };
+        yield return () =>
+        {
+            Write32(0xFD8220, 0);
+            Write32(0xFD8224, 0xB09F2000);
+            Write32(0xFD8220, 2);
+        };
+        // DMA 8 (EP 0x02 の受け) は、bulk の命令の経路を使っているなら触らない (止めると経路が切れる)
+        if (!CommandChannel)
+        {
+            yield return () =>
             {
-                HostTransfer(address, write, read);
-            }
-            else if (write.Length is 1 or 2 && read.Length == 2 && RingNumber(write, write.Length == 1) is { } number)
-            {
-                BinaryPrimitives.WriteUInt16BigEndian(read, RingReadRegister(address, write.Length == 1, number));
-            }
-            else
-            {
-                MailboxTransfer(address, write, read.Length).CopyTo(read);
-            }
-            if (_trace is not null)
-            {
-                _trace($"I2C 0x{address:X2} 読む {Convert.ToHexString(write)} → {Convert.ToHexString(read)} {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F2}ms");
-            }
+                Write32(0xFD8300, 1);
+                Write32(0xFD8304, 0x00008004);
+            };
         }
-    }
-
-    /// <summary>読みかえ書き。コア 1 の形ではコア 1 の上で済ませ、書き込みと同じく溜める</summary>
-    public void Modify16(byte address, ushort register, ushort keep, ushort set)
-    {
-        if (Mode == Zd1jI2cMode.Host || register > RingRegister)
-        {
-            Span<byte> number = [(byte)(register >> 8), (byte)register];
-            Span<byte> value = stackalloc byte[2];
-            WriteRead(address, number, value);
-            var next = (ushort)((BinaryPrimitives.ReadUInt16BigEndian(value) & keep) | set);
-            Write(address, [(byte)(register >> 8), (byte)register, (byte)(next >> 8), (byte)next]);
-            return;
-        }
-        Interlocked.Increment(ref _i2cTransfers);
-        lock (_gate)
-        {
-            RingAddress(address, false);
-            if (_command)
-            {
-                CommandPush(RingModify | ((uint)register << 16) | set, RingModify | RingMask | keep);
-                return;
-            }
-            // 2 つのスロットは一緒に出す (コア 1 はマスクを待つ)
-            if (_ringHeld.Count > RingSlots - 2) RingFlush();
-            RingPush(address, false, RingModify | ((uint)register << 16) | set);
-            RingPush(address, false, RingModify | RingMask | keep);
-        }
-    }
-
-    public void Flush()
-    {
-        if (Mode == Zd1jI2cMode.Host) return;
-        lock (_gate)
-        {
-            var started = _trace is null ? 0 : Stopwatch.GetTimestamp();
-            RingFlush();
-            if (_trace is not null) _trace($"I2C 溜めた書き込みを送りました {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F2}ms");
-        }
-    }
-
-    // ---------------------------------------------------------------------
-    // TS (spec 9)
-    // ---------------------------------------------------------------------
-
-    private const uint RingBase = 0x00AE4000;
-    private const uint RingSize = 0x00600000;
-    private const uint Core0Base = 0x1600000;
-
-    private List<Action>? _steps;
-    private bool _core0Loaded;
-
-    /// <summary>流し始めの準備 (spec 9.2) を1歩ずつ。選局の待ちの間に回せる (<see cref="Idle"/>)</summary>
-    private List<Action> StreamSteps()
-    {
-        var steps = new List<Action>();
-        void Put(uint address, uint value) => steps.Add(() => Write32(address, value));
-
-        Put(0xD000C4, 0);
-        Put(0xD00000, 0xFFFFFFFF);
-        Put(0xD00004, 0x001F33FF);
-        Put(0xD00000, 0x30030FFF);
-        Put(0xD00000, 0x00030000);
-        Put(0xD00004, 0x00003305);
-        foreach (var address in new uint[] { 0xD01040, 0xD01064, 0xD010A0, 0xD010A4, 0xD010A8 }) Put(address, 0);
-        Put(0xD01020, 0x02000000);
-        Put(0xD01004, 0);
-        Put(0xD01044, 0x00BC0000);
-        Put(0xD01048, 0x47000000);
-        Put(0xD0104C, 0x00FFFFFF);
-        Put(0xD01050, 0);
-        Put(0xD01060, 0);
-        Put(0xD01000, 0x06070000);
-        Put(0xD01080, 0x01000000);
-        Put(0xD01088, 0);
-        Put(0xD0108C, 0xFF);
-        Put(0xD01084, 0);
-        Put(0xD01090, 0x01000000);
-        foreach (var address in new uint[] { 0xD02028, 0xD0202C, 0xD02030, 0xD02038 }) Put(address, 0);
-        Put(0xD02000, 0x03020300);
-        Put(0xD02020, RingBase);
-        Put(0xD02024, RingSize);
-        Put(0xD00004, 0x00043305);
-
-        // コア 0。一度置いたら次からは止めるだけ
-        steps.Add(() =>
-        {
-            if (!_core0Loaded)
-            {
-                Load(Core0Base, CoreOrigin, Mb86h47Code.Core0);
-                _core0Loaded = true;
-            }
-            else
-            {
-                Write32(Core0Base, 0xFFFFFFFF);
-            }
-        });
-        Put(Core0Base, 0xFFFCFFFF);
-
-        steps.Add(() => Set32(0xFD8010, 0x000F0000));
-        Put(0xFD8200, 1);
-        Put(0xFD8220, 1);
-        steps.Add(() => Clear32(0xFD8014, 0x000F0000));
-        Put(0xFD8240, 0);
-        Put(0xFD82A0, 0);
-        Put(0xFD8200, 0);
-        Put(0xFD8204, 0xB09F0000);
-        Put(0xFD8200, 2);
-        Put(0xFD8220, 0);
-        Put(0xFD8224, 0xB09F2000);
-        Put(0xFD8220, 2);
-        // DMA 8 (EP 0x02 の受け) は bulk の命令の経路のもの。止めたままにしておく
-        Put(0xFD8300, 1);
-        Put(0xFD8304, 0x00008004);
-        // USB コアのレジスタは語ごとに書く。0xFDBC0C には書かない (spec 9.2)
-        steps.Add(() =>
+        yield return () =>
         {
             Write32(0xFDBD08, 0x00FF6001);
             for (var i = 0; i < 100 && (Read32(0xFDBD08) & 1) != 0; i++)
             {
             }
             Write32(0xFDBD08, 0x00FF6000);
-        });
-        Put(0xFDBC14, 0x00060030);
-        return steps;
+        };
+        yield return () => Write32(0xFDBC14, 0x00060030);
     }
 
-    /// <summary>流し始めの準備を溜める。選局の待ちの間に <see cref="Idle"/> が回し、<see cref="StartStream"/> が仕上げる</summary>
-    public void PrepareStream()
-    {
-        lock (_gate) _steps = StreamSteps();
-    }
-
-    /// <summary>溜めた準備を <paramref name="until"/> (Stopwatch の時刻) の少し前まで回す</summary>
+    /// <summary>
+    /// 待ちの間に、積んである流し始めの準備を1つずつ回す。<paramref name="until"/> (Stopwatch の時刻) を過ぎたら戻る。
+    /// 1つ回すごとに錠を外すので、カードの読み書きも挟まる
+    /// </summary>
     public void Idle(long until)
     {
-        var margin = Stopwatch.Frequency / 200;  // 5ms
-        lock (_gate)
+        while (Stopwatch.GetTimestamp() < until)
         {
-            while (_steps is { Count: > 0 } steps && until - Stopwatch.GetTimestamp() > margin)
+            lock (_gate)
             {
-                var step = steps[0];
-                steps.RemoveAt(0);
+                if (!_prepare.TryDequeue(out var step)) return;
                 step();
             }
         }
     }
 
-    /// <summary>
-    /// 準備を仕上げて (溜めていなければ全部)、受け口と書き手を入れる (spec 9.3)。
-    /// **復調器がパラレルで出力していることが先**
-    /// </summary>
+    /// <summary>9.3 流し始め。準備の残りを済ませ、受け口と書き手を動かす。復調器はもう出力していること</summary>
     public void StartStream()
     {
         lock (_gate)
         {
-            RingFlushIfAny();
-            foreach (var step in _steps ?? StreamSteps()) step();
-            _steps = null;
+            if (!_prepared) PrepareStream();
+            while (_prepare.TryDequeue(out var step)) step();
             Write32(0xD01020, 0);
             Write32(0xD01040, 0x03000000);
             Write32(0xD010A4, 0x13170400);
             Write32(0xD00484, 0x01000000);
             Write32(0xD00488, 0x206C0000);
             Write32(0xD02010, 0x02000000);
+            _prepared = false;
         }
     }
 
-    /// <summary>コア 0 と受け口・書き手を止める (spec 9.5 の 1〜3)</summary>
+    /// <summary>9.5 流し終わりの 1〜3 (コア 0・受け口・書き手を止める)。出力のハイインピーダンスと読みの取り消しは呼ぶ側</summary>
     public void StopStream()
     {
         lock (_gate)
         {
-            _steps = null;
-            RingFlushIfAny();
-            Write32(Core0Base, 0xFFFFFFFF);
+            _prepare.Clear();
+            _prepared = false;
+            Write32(Core0, CoreHalt);
             Write32(0xD01040, 0);
             Write32(0xD01020, 0x02000000);
             Write32(0xD02010, 0x04000000);
@@ -1187,180 +941,154 @@ public sealed class Mb86h47 : II2c
     }
 
     // ---------------------------------------------------------------------
-    // カードの UART (spec 13)
+    // カードの UART (13)
     // ---------------------------------------------------------------------
 
-    private const uint CardEnable = 0xFEA000;
-    private const uint CardLines = 0xFEA004;
-    private const uint CardBaud = 0xFEA008;
-    private const uint CardSend = 0xFEA00C;
-    private const uint CardControl = 0xFEA010;
-    private const uint CardFifo = 0xFEA014;
-    private const uint CardIrqMask = 0xFEA018;
-    private const uint CardIrq = 0xFEA01C;
-    private const uint CardCwt = 0xFEA020;
-    private const uint CardBwt = 0xFEA024;
-    private const uint CardTx = 0xFEA028;
-    private const uint CardRx = 0xFEA02C;
-    private const uint CardPower = 0xFEA034;
-    private const uint CardSentLrc = 0xFEA038;
-    private const uint CardReceivedLrc = 0xFEA03C;
-    private const uint CardNoCard = 1 << 10;
+    /// <summary>13.3 カードが挿さっているか (割り込みの状態のビット 10 が 0)</summary>
+    public bool CardPresent()
+    {
+        lock (_gate) return (Read32(CardStatus) & (1u << 10)) == 0;
+    }
 
-    /// <summary>UART のレジスタを触る1まとまり。最後に溜めたものを出す</summary>
-    private T Card<T>(Func<T> body)
+    /// <summary>13.4 カードの電源を切る</summary>
+    private void CardOff()
+    {
+        Modify(CardLines, 0x4, 0);
+        Write32(CardCount, 0);
+        Modify(CardEnable, 0x4, 0);
+        Modify(CardLines, 0xA, 0);
+        Write32(CardMask, 1);
+        Write32(CardPower, 0);
+    }
+
+    /// <summary>13.5 リセット。戻ったらカードが ATR を送ってくる (速さは 9600)</summary>
+    public void CardReset()
+    {
+        lock (_gate) CardOff();
+        Thread.Sleep(10);
+        lock (_gate)
+        {
+            Write32(CardStatus, 0x3FF);
+            Write32(CardPower, 1);
+            Modify(CardLines, 0x4, 0);
+            Write32(CardCount, 0);
+            Write32(CardEnable, 0);
+            Write32(CardEnable, 7);
+            Modify(CardLines, 0, 0x8);
+            Write32(CardBaud, 0xBA7F);
+        }
+        Thread.Sleep(2);
+        lock (_gate)
+        {
+            Modify(CardLines, 0, 0x2);
+            Write32(CardRxLrc, 0x3B);
+            Write32(CardCwt, 9600);
+            Write32(CardBwt, 0);
+            Write32(CardMask, 0x1FF);
+        }
+        Thread.Sleep(1);
+        lock (_gate) Modify(CardLines, 0, 0x4);
+    }
+
+    /// <summary>13.2 速さを変える (速さ・制御・CWT・BWT の順に)</summary>
+    public void CardSpeed(uint baud, uint control, uint cwt, uint bwt)
     {
         lock (_gate)
         {
-            var result = body();
-            if (_command) CommandSend(false);
-            return result;
+            Write32(CardBaud, baud);
+            Write32(CardControl, control);
+            Write32(CardCwt, cwt);
+            Write32(CardBwt, bwt);
         }
     }
 
-    private void CardSet(uint address, uint bits) => RegisterWrite(address, RegisterRead(address) | bits);
-
-    private void CardClear(uint address, uint bits) => RegisterWrite(address, RegisterRead(address) & ~bits);
-
-    /// <summary>溜めたものが届いてから待つ</summary>
-    private void CardPause(int ms)
+    /// <summary>13.6 受けて読まれていないバイトを、<paramref name="max"/> まで読む。無ければ空</summary>
+    public byte[] CardRead(int max)
     {
-        if (_command) CommandSend(false);
-        Thread.Sleep(ms);
+        lock (_gate)
+        {
+            var waiting = (int)(Read32(CardCount) >> 16);
+            var count = Math.Min(waiting, Math.Max(0, max));
+            var received = new byte[count];
+            for (var i = 0; i < count; i++) received[i] = (byte)Read32(CardRx);
+            return received;
+        }
     }
 
-    /// <summary>カードが挿さっているか (spec 13.3。割り込みの状態のビット 10 が 0)</summary>
-    public bool CardPresent() => Card(() => (RegisterRead(CardIrq) & CardNoCard) == 0);
-
-    /// <summary>電源を入れ直して、9600 ボーで ATR を受ける用意 (spec 13.5)</summary>
-    public void CardReset() => Card(() =>
-    {
-        CardPowerDown();
-        CardPause(10);
-        RegisterWrite(CardIrq, 0x3FF);
-        RegisterWrite(CardPower, 1);
-        CardClear(CardLines, 4);
-        RegisterWrite(CardFifo, 0);
-        RegisterWrite(CardEnable, 0);
-        RegisterWrite(CardEnable, 7);
-        CardSet(CardLines, 8);
-        RegisterWrite(CardBaud, 0xBA7F);
-        CardPause(2);
-        CardSet(CardLines, 2);
-        RegisterWrite(CardReceivedLrc, 0x3B);
-        RegisterWrite(CardCwt, 9600);
-        RegisterWrite(CardBwt, 0);
-        RegisterWrite(CardIrqMask, 0x1FF);
-        CardPause(1);
-        CardSet(CardLines, 4);
-        return true;
-    });
-
-    /// <summary>電源を切る (spec 13.4)</summary>
-    private void CardPowerDown()
-    {
-        CardClear(CardLines, 4);
-        RegisterWrite(CardFifo, 0);
-        CardClear(CardEnable, 4);
-        CardClear(CardLines, 0xA);
-        RegisterWrite(CardIrqMask, 1);
-        RegisterWrite(CardPower, 0);
-    }
-
-    /// <summary>速さを変える (spec 13.2 の 4 つのレジスタ)</summary>
-    public void CardSpeed(uint baud, uint control, uint cwt, uint bwt) => Card(() =>
-    {
-        RegisterWrite(CardBaud, baud);
-        RegisterWrite(CardControl, control);
-        RegisterWrite(CardCwt, cwt);
-        RegisterWrite(CardBwt, bwt);
-        return true;
-    });
-
-    /// <summary>受けて読まれていないぶんを、<paramref name="most"/> バイトまで読む。無ければ空</summary>
-    public byte[] CardRead(int most) => Card(() =>
-    {
-        var waiting = (int)(RegisterRead(CardFifo) >> 16);
-        return waiting == 0 ? [] : FifoRead(CardRx, Math.Min(waiting, most));
-    });
-
-    /// <summary>T=1 のブロックを LRC まで丸ごと送る (spec 13.6)</summary>
+    /// <summary>13.6 T=1 のブロックを LRC まで含めて丸ごと送る</summary>
     public void CardWrite(ReadOnlySpan<byte> block)
     {
-        var data = block.ToArray();
-        Card(() =>
+        lock (_gate)
         {
-            RegisterWrite(CardReceivedLrc, 0);
-            RegisterWrite(CardSentLrc, 0);
-            FifoWrite(CardTx, data);
-            RegisterWrite(CardIrq, 0x3FF);
-            RegisterWrite(CardControl, data.Length >= 0x100 ? 0x280u : 0x200u);
-            RegisterWrite(CardSend, 1);
-            return true;
-        });
+            Write32(CardRxLrc, 0);
+            Write32(CardTxLrc, 0);
+            foreach (var b in block) Write32(CardTx, b);
+            Write32(CardStatus, 0x3FF);
+            Write32(CardControl, block.Length >= 256 ? 0x280u : 0x200u);
+            Write32(CardSend, 1);
+        }
     }
 }
 
 /// <summary>
-/// EP 0x81 の「4 バイトの到着時刻 + 188 バイトの TS」をほどいて 188 バイトにする (spec 9.4)。
-/// **読みの区切りは単位の区切りと揃わない**ので、TS の頭の 0x47 と、192 バイト先の 0x47 の2つで揃える
+/// 9.4 EP 0x81 から来る「4 バイトの到着時刻 + 188 バイトの TS」の 192 バイトの単位をほどいて、188 バイトのパケットにする。
+/// 読みの区切りは単位と揃わないので、TS の頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の2つで揃える
+/// (TS の中の 0x47 は珍しくないので1つでは信じない)。揃えたあと頭が 0x47 でなくなったら揃え直す
 /// </summary>
 public sealed class Mb86h47Framer
 {
-    public const int Unit = 192;
-    public const int Packet = 188;
-    private const int Stamp = Unit - Packet;
+    private const int Unit = 192;
+    private const int Stamp = 4;
+    private const int Packet = 188;
 
-    private byte[] _work = new byte[Unit * 2];
+    private byte[] _work = new byte[Unit * 64];
     private int _carry;
+    private bool _locked;
 
-    /// <summary>単位の頭に揃っている。流し始めと、頭が 0x47 でなくなったときは揃え直す</summary>
-    private bool _aligned;
-
-    /// <summary><paramref name="raw"/> を足し、まとまった TS を <paramref name="output"/> に書く。書いたバイト数</summary>
-    public int Feed(ReadOnlySpan<byte> raw, IBufferWriter<byte> output)
+    /// <summary>ほどいたパケットを書き、書いたバイト数を返す。半端は次の呼び出しにつなぐ</summary>
+    public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output)
     {
-        var length = _carry + raw.Length;
-        if (_work.Length < length) Array.Resize(ref _work, Math.Max(length, _work.Length * 2));
-        raw.CopyTo(_work.AsSpan(_carry));
-        var data = _work.AsSpan(0, length);
-        var offset = 0;
+        if (_work.Length < _carry + data.Length) Array.Resize(ref _work, Math.Max(_work.Length * 2, _carry + data.Length));
+        data.CopyTo(_work.AsSpan(_carry));
+        var length = _carry + data.Length;
+        var at = 0;
         var written = 0;
-        while (offset + Unit <= data.Length)
+        while (true)
         {
-            if (!_aligned)
+            if (!_locked)
             {
-                offset = Resync(data, offset, out _aligned);
-                if (!_aligned) break;
+                // 頭の候補: そこと 192 バイト先の両方の TS の頭が 0x47。192 バイト先がまだ来ていなければ次を待つ
+                var found = -1;
+                for (var i = at; i + Unit + Stamp < length; i++)
+                {
+                    if (_work[i + Stamp] == 0x47 && _work[i + Unit + Stamp] == 0x47)
+                    {
+                        found = i;
+                        break;
+                    }
+                }
+                if (found < 0)
+                {
+                    at = Math.Max(at, length - Unit - Stamp);
+                    break;
+                }
+                at = found;
+                _locked = true;
+            }
+            if (length - at < Unit) break;
+            if (_work[at + Stamp] != 0x47)
+            {
+                _locked = false;
+                at++;
                 continue;
             }
-            if (data[offset + Stamp] != 0x47)
-            {
-                _aligned = false;
-                offset++;
-                continue;
-            }
-            data.Slice(offset + Stamp, Packet).CopyTo(output.GetSpan(Packet));
-            output.Advance(Packet);
+            output.Write(_work.AsSpan(at + Stamp, Packet));
             written += Packet;
-            offset += Unit;
+            at += Unit;
         }
-        _carry = data.Length - offset;
-        data[offset..].CopyTo(_work);
+        at = Math.Clamp(at, 0, length);
+        _carry = length - at;
+        _work.AsSpan(at, _carry).CopyTo(_work);
         return written;
-    }
-
-    /// <summary>次に単位が始まる位置。192 バイト先にも 0x47 があるところ (データがそこまであれば)</summary>
-    private static int Resync(ReadOnlySpan<byte> data, int from, out bool found)
-    {
-        found = true;
-        for (var offset = from; offset + Unit <= data.Length; offset++)
-        {
-            if (data[offset + Stamp] != 0x47) continue;
-            var next = offset + Unit + Stamp;
-            if (next >= data.Length || data[next] == 0x47) return offset;
-        }
-        found = false;
-        return Math.Max(from, data.Length - Unit + 1);
     }
 }

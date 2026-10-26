@@ -30,10 +30,14 @@ public class Zd1jTests
     {
         // LDI:20 #0xE1000, R12 = 0x9B0C | (0xE << 4) の上位、0x1000 の下位。JMP @R12 と NOP
         await Assert.That(Mb86h47.Jump(0xE1000)).IsEqualTo((0x9BEC1000u, 0x970C9FA0u));
-        var words = Mb86h47.HandlerWords(1);
-        await Assert.That(words[2].Widened).IsEqualTo(0x9BEC1876u);
+        var patch = Mb86h47.Patch(1);
+        var routine = Mb86h47Programs.Addressing(1);
+        await Assert.That(routine.Read).IsEqualTo(0xE1800u);
+        await Assert.That(patch[0]).IsEqualTo(0x9BEC1800u);
+        await Assert.That(patch[2]).IsEqualTo(0x9BEC0000u | (routine.Write & 0xFFFF));
+        await Assert.That(patch[3]).IsEqualTo(0x970C9FA0u);
         // データ段の溜め方: 上位 16 ビットを NOP に
-        await Assert.That(words[4].Widened).IsEqualTo(0x9FA09F8Du);
+        await Assert.That(patch[4]).IsEqualTo(0x9FA09F8Du);
     }
 
     [Test]
@@ -50,16 +54,43 @@ public class Zd1jTests
     {
         var usb = new FakeBridgeUsb();
         Started(usb);
-        var routine = usb.Log.IndexOf($"W 000E1000={Mb86h47Code.Addressing0[0]:X8}");
-        var readBack = usb.Log.IndexOf($"R 000E1{(Mb86h47Code.Addressing0.Length - 1) * 4:X3}");
-        string[] jumps = ["W 000E9AC0=9BEC1000", "W 000E9AC4=970C9FA0", "W 000E9E0C=9BEC1076", "W 000E9E10=970C9FA0", "W 000E9D94=9FA09F8D"];
+        var words = Mb86h47Programs.Addressing(0).Words;
+        var routine = usb.Log.IndexOf($"W 000E1000={words[0]:X8}");
+        var readBack = usb.Log.IndexOf($"R 000E1{(words.Length - 1) * 4:X3}");
+        var patch = Mb86h47.Patch(0);
+        string[] jumps = [.. new uint[] { 0xE9AC0, 0xE9AC4, 0xE9E0C, 0xE9E10, 0xE9D94 }.Select((address, i) => $"W {address:X8}={patch[i]:X8}")];
         var at = jumps.Select(line => usb.Log.IndexOf(line)).ToArray();
         await Assert.That(routine).IsGreaterThan(0);
         await Assert.That(readBack).IsGreaterThan(routine);
         await Assert.That(at[0]).IsGreaterThan(readBack);
         for (var i = 1; i < at.Length; i++) await Assert.That(at[i]).IsGreaterThan(at[i - 1]);
         // 書き換える前は1語ずつ (ルーチンを置くところに 64 バイトの書き込みが無い)
-        await Assert.That(usb.Log.Count(line => line.StartsWith("W 000E1", StringComparison.Ordinal))).IsEqualTo(Mb86h47Code.Addressing0.Length);
+        await Assert.That(usb.Log.Count(line => line.StartsWith("W 000E1", StringComparison.Ordinal))).IsEqualTo(words.Length);
+        // 1語ずつ読み返す
+        await Assert.That(usb.Log.Count(line => line.StartsWith("R 000E1", StringComparison.Ordinal))).IsEqualTo(words.Length);
+    }
+
+    [Test]
+    public async Task 別の中身のルーチンを指していれば使われていないほうのバンクに置く()
+    {
+        var usb = new FakeBridgeUsb();
+        // 前の起動の残り: バンク 0 の別のルーチンに跳ぶ (データ段の語はもう NOP)
+        var (first, second) = Mb86h47.Jump(0xE1000);
+        var (writeFirst, _) = Mb86h47.Jump(0xE1040);
+        usb.Memory[0xE9AC0] = first;
+        usb.Memory[0xE9AC4] = second;
+        usb.Memory[0xE9E0C] = writeFirst;
+        usb.Memory[0xE9E10] = second;
+        usb.Memory[0xE9D94] = 0x9FA09F8D;
+        usb.Memory[0xE1000] = 0x12345678;
+        Started(usb);
+        var patch = Mb86h47.Patch(1);
+        await Assert.That(usb.Memory[0xE9AC0]).IsEqualTo(patch[0]);
+        await Assert.That(usb.Memory[0xE9E0C]).IsEqualTo(patch[2]);
+        await Assert.That(usb.Memory[0xE1800]).IsEqualTo(Mb86h47Programs.Addressing(1).Words[0]);
+        // 使われているバンク 0 には触らない
+        await Assert.That(usb.Log.Any(line => line.StartsWith("W 000E10", StringComparison.Ordinal))).IsFalse();
+        await Assert.That(usb.Memory[0xE1000]).IsEqualTo(0x12345678u);
     }
 
     [Test]
@@ -142,43 +173,103 @@ public class Zd1jTests
     public async Task コア_1_の形では書き込みを溜めて_bulk_の塊で送る()
     {
         var usb = new FakeBridgeUsb();
-        // コア 1 の答え: 通し番号、誤り 0・値 0 個
-        usb.Answer = packet => (BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(4)) & 0x80000000) != 0 ? packet[..4].Concat(new byte[4]).ToArray() : null;
         var bridge = Started(usb, Zd1jI2cMode.Core1);
         await Assert.That(bridge.CommandChannel).IsTrue();
-        // コア 1 を置いて走らせ、生きている印を2回読んだ
+        // コア 1 を置いて走らせ、生きている印を2回読んだ。bulk の経路は空の塊で確かめた
         await Assert.That(usb.Log).Contains("W 01700000=FFFCFFFF");
-        await Assert.That(usb.Log.Count(line => line == "R 017A3F7C")).IsEqualTo(2);
+        await Assert.That(usb.Log.Count(line => line == "R 017A3C7C")).IsEqualTo(2);
+        await Assert.That(usb.Log).Contains($"W 017A3C78={Mb86h47Programs.BulkEnable:X8}");
+        await Assert.That(usb.Packets.Count).IsEqualTo(1);
 
-        usb.Packets.Clear();
+        usb.Dib.Demod[285] = 0x0021;
         bridge.Write(Dib8096.DemodAddress, [0x05, 0x07, 0x00, 0x03]);
-        bridge.Write(Dib8096.DemodAddress, [0x04, 0x01, 0xC0, 0x00]);
-        // 相手のアドレス (2 バイトの番号は 0x12) はメモリ要求で
-        await Assert.That(usb.Log).Contains("W 017A3D40=12000000");
-        var before = usb.Packets.Count;
+        bridge.Write(Dib8096.TunerAddress, [0x24, 0x00, 0x22]);
+        bridge.Modify16(Dib8096.DemodAddress, 285, 0xFF9F, 0x0060);
+        // 答えを待たずに溜める (まだ送らない)
+        await Assert.That(usb.Packets.Count).IsEqualTo(1);
         bridge.Flush();
-        await Assert.That(usb.Packets.Count).IsEqualTo(before + 1);
+        await Assert.That(usb.Packets.Count).IsEqualTo(2);
         var packet = usb.Packets[^1];
-        var sequence = BinaryPrimitives.ReadUInt32BigEndian(packet);
+        uint Word(int at) => BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(at));
         await Assert.That(packet.Length).IsEqualTo(512);
-        await Assert.That(BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(4))).IsEqualTo(2u);
-        await Assert.That(BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(8))).IsEqualTo((1287u << 16) | 3);
-        await Assert.That(BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(12))).IsEqualTo((1025u << 16) | 0xC000);
-        await Assert.That(BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(508))).IsEqualTo(sequence);
+        await Assert.That(Word(4)).IsEqualTo(3u);
+        await Assert.That(Word(8)).IsEqualTo(0x01120400u);
+        await Assert.That(Word(12)).IsEqualTo(0x05070003u);
+        await Assert.That(Word(16)).IsEqualTo(0x01C00300u);
+        await Assert.That(Word(20)).IsEqualTo(0x24002200u);
+        await Assert.That(Word(24)).IsEqualTo(0x0212011Du);
+        await Assert.That(Word(28)).IsEqualTo(0xFF9F0060u);
+        await Assert.That(Word(508)).IsEqualTo(Word(0));
+        await Assert.That(usb.Dib.Demod[1287]).IsEqualTo((ushort)3);
+        await Assert.That(usb.Dib.Tuner[0x24]).IsEqualTo((ushort)0x22);
+        await Assert.That(usb.Dib.Demod[285]).IsEqualTo((ushort)0x0061);
+
+        // 読みは塊をすぐ送り、答えに載った値を返す
+        Span<byte> value = stackalloc byte[2];
+        bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value);
+        await Assert.That(BinaryPrimitives.ReadUInt16BigEndian(value)).IsEqualTo((ushort)0x01B3);
     }
 
     [Test]
-    public async Task コア_1_が答えなければメモリ要求のリングに戻る()
+    public async Task bulk_の塊を_16_個使ったら置き場を戻す()
     {
         var usb = new FakeBridgeUsb();
         var bridge = Started(usb, Zd1jI2cMode.Core1);
+        usb.Log.Clear();
+        Span<byte> value = stackalloc byte[2];
+        // 確かめの塊が 1 個目なので、あと 15 個で 16 個
+        for (var i = 0; i < 15; i++) bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value);
+        await Assert.That(usb.Log).Contains("W 00FD8508=82100000");
+        await Assert.That(usb.Log.IndexOf("W 00FD8504=00000001")).IsGreaterThan(usb.Log.IndexOf("W 00FD8508=82100000"));
+    }
+
+    [Test]
+    public async Task コア_1_が答えなければメモリ要求の溜めに戻る()
+    {
+        var usb = new FakeBridgeUsb { Core1Bulk = false };
+        var bridge = Started(usb, Zd1jI2cMode.Core1);
         await Assert.That(bridge.CommandChannel).IsFalse();
-        // リングに溜めて、16 個に満たなければ Flush で1回の書き込み
+        await Assert.That(usb.Memory[0x17A3C78]).IsEqualTo(0u);
+        // 溜めて、Flush で輪に書いてコア 1 が済ませるのを待つ
         bridge.Write(Dib8096.DemodAddress, [0x05, 0x07, 0x00, 0x03]);
+        bridge.Write(Dib8096.TunerAddress, [0x24, 0x00, 0x22]);
+        await Assert.That(usb.RingWrites.Count).IsEqualTo(0);
         usb.Log.Clear();
         bridge.Flush();
-        // スロット 16 (周回 1) から
-        await Assert.That(usb.Log).Contains($"W 017A3E00={(1u << 31) | (1287u << 16) | 3:X8}");
+        await Assert.That(usb.Log[0]).IsEqualTo($"W 017A3B00={(1u << 31) | (1287u << 16) | 3:X8}");
+        await Assert.That(usb.Log[1]).IsEqualTo($"W 017A3B04={(1u << 31) | (1u << 30) | (0x24u << 16) | 0x22:X8}");
+        await Assert.That(string.Join(" ", usb.RingWrites)).IsEqualTo("D1287=0003 T36=0022");
+
+        // 読みは箱で (溜めを先に流す)
+        bridge.Write(Dib8096.DemodAddress, [0x04, 0x01, 0xC0, 0x00]);
+        Span<byte> value = stackalloc byte[2];
+        bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value);
+        await Assert.That(BinaryPrimitives.ReadUInt16BigEndian(value)).IsEqualTo((ushort)0x01B3);
+        await Assert.That(usb.RingWrites[^1]).IsEqualTo("D1025=C000");
+    }
+
+    [Test]
+    public async Task 溜めの周回の印は輪を回るたびに入れ替わる()
+    {
+        await Assert.That(Mb86h47Programs.Slot(0, false, 1, 2) >> 31).IsEqualTo(1u);
+        await Assert.That(Mb86h47Programs.Slot(15, false, 1, 2) >> 31).IsEqualTo(1u);
+        await Assert.That(Mb86h47Programs.Slot(16, false, 1, 2) >> 31).IsEqualTo(0u);
+        await Assert.That(Mb86h47Programs.Slot(32, false, 1, 2) >> 31).IsEqualTo(1u);
+
+        var usb = new FakeBridgeUsb { Core1Bulk = false };
+        var bridge = Started(usb, Zd1jI2cMode.Core1Ring);
+        for (var i = 0; i < 40; i++) bridge.Write(Dib8096.DemodAddress, [0x00, (byte)i, 0x00, (byte)i]);
+        bridge.Flush();
+        await Assert.That(usb.RingWrites.Count).IsEqualTo(40);
+        await Assert.That(usb.RingWrites[39]).IsEqualTo("D39=0027");
+    }
+
+    [Test]
+    public async Task コア_1_が動いていなければ開かない()
+    {
+        var usb = new FakeBridgeUsb { Core1 = false };
+        var error = Assert.Throws<IOException>(() => Started(usb, Zd1jI2cMode.Core1));
+        await Assert.That(error.Message).Contains("コア 1 が動いていません");
     }
 
     [Test]
