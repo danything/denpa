@@ -771,6 +771,17 @@ describe("開く前の入口", () => {
     expect(done).toBe(true);
   });
 
+  test("入口のモジュールが PMT より先に揃っても、PMT が来て指定が分かったら始める", async () => {
+    const { bml } = open({ opened: () => false });
+    const [pmt, ...rest] = entry(true);
+    feedAll(bml, [PROGRAM, ...rest]);
+    await watch(() => false, 50);
+    expect(bml.path).toBeNull();
+    feedAll(bml, [pmt!]);
+    const { done } = await watch(() => bml.path === ENTRY_PATH);
+    expect(done).toBe(true);
+  });
+
   test("指定が無い入口は、開くまで始めない。開いたら始める", async () => {
     for (const auto of [false, undefined]) {
       let opened = false;
