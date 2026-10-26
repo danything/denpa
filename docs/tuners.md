@@ -14,8 +14,9 @@
   | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も。[tuner-px4.md](tuner-px4.md)) | px4-userland (同梱)                                              | なし (Windows はドライバを WinUSB に) |
   | PX-S1UD (smsusb を blacklist したとき。Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))              | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に) |
   | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))                             | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし                                  |
+  | Sony CECH-ZD1 J (PS3 の torne。Linux だけ。[下記](#sony-cech-zd1-j-試験的))                           | エージェントが USB を直に (**試験的**)                           | なし                                  |
 
-- **B-CASカード** と USB のカードリーダー (px4-userland・asicen-userland の機材は内蔵リーダーでもよい。[下記](#カードリーダー))
+- **B-CASカード** と USB のカードリーダー (px4-userland・asicen-userland の機材と CECH-ZD1 J は内蔵リーダーでもよい。[下記](#カードリーダー))
 - **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
 - **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
   Kubernetes なら Helm
@@ -73,6 +74,35 @@ ASICEN 系 (PLEX PX-W3U3) のユーザー空間ドライバです。**まだリ�
 - **実機には当てていません** (手元に PX-W3U3 が無い)。当てるなら `denpa-agent --tune asicen:1-2:1 T27`
 
 エージェントの中でどう扱っているかは [agent.md](agent.md#asicen-userland-の作り)。
+
+## Sony CECH-ZD1 J (試験的)
+
+PS3 の torne の地デジチューナー (USB `054c:04b2`)。**外のデーモンもファームウェアも要らず、エージェントが USB を直に持ちます**
+(Linux の usbfs。Windows・Mac はまだで、自動検出にも出ず、書いても「まだ対応していません」になります)。
+
+- **設定の `device` は `zd1j:<USB のポート>`** (`zd1j:4-12.1`)。シリアルが無いので、**挿すポートを変えると別のチューナーになります**。
+  挿してあれば自動で見つけます (種別は地上波だけ)
+- **地上波と CATV の C13〜C63** を受けます。C のうち ISDB-C (64QAM) の局はロックしません ([上記](#catv-で受ける))
+- **内蔵の差し込み口の B-CAS も使えます** (CCID ではなく、ブリッジの UART をエージェントが叩く)。ほかのリーダーと同じく
+  1枚を全部のチューナーで使い回すので、CECH-ZD1 J のカードで PT3 の録画を復号することもあります。
+  試す順は USB のリーダー → px4d → asicend → CECH-ZD1 J
+- **前面の LED は使っている間ずっと赤**で、使い終わると緑に戻ります (点滅はしません)
+- **一度ほかのドライバ (PS3 など) が動かした CECH-ZD1 J は扱えません。** 「CECH-ZD1 J を抜いて挿し直してください」と出たら、そのとおりに
+- 開いたあとは温めておきます。最後の利用者が返してから 30 秒は開いたままで、その間の選局は速く済みます
+
+実機で確かめるときは、エージェントを止めて `denpa-agent --tune zd1j:4-12.1 27` (開く・ロック・最初の TS・2 回目の選局に
+かかったミリ秒と、I2C の回数・C/N・電波の強さを出す。`--decode` で復号も、`--seconds N` で読む長さも) と
+`denpa-agent --card` (内蔵の差し込み口の ATR と、かかったミリ秒)。
+
+速さを比べるための環境変数 (ふだんは要りません):
+
+| 変数               | 中身                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `DENPA_ZD1J_I2C`   | I2C の流し方。`core1` (既定。ブリッジのコア 1 に任せる) / `host` (ホストから直に) / `core1-ring` (bulk の経路を使わない) |
+| `DENPA_ZD1J_DEBUG` | `1` で I2C の1回ずつの往復の時間を記録に出す                                                                             |
+| `DENPA_ZD1J_WAITS` | `short` で選局の待ちを仕様の値そのままに縮める (既定は余裕を持たせた長めの待ち)                                          |
+
+エージェントの中でどう扱っているかは [agent.md](agent.md#cech-zd1-j-の作り)。
 
 ## カードリーダー
 
