@@ -17,8 +17,8 @@ image:
 # 入れ替えの合図 (charts/denpa の imageMarks と同じ)。固定タグなら空でよい
 imageMark: ""
 
-# チューナーとカードリーダーに触るために特権が要る。PX-Q3U4 などはホストにドライバを
-# 入れず、/dev/bus (USB) が見えればイメージ同梱の px4-userland が扱う (docs/tuner-px4.md)
+# チューナーとカードリーダーに触るために特権が要る。PX-Q3U4・PX-S1UD・CECH-ZD1 J などの
+# USB の機材はホストにドライバを入れず、/dev/bus (USB) が見えればエージェントが扱う (docs/tuners.md「要るもの」)
 privileged: true
 hostDevices:
   - name: dev-bus

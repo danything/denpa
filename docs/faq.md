@@ -6,14 +6,14 @@
 
 ### どのチューナーが使えますか
 
-PT2・PT3・PX-BCUD (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD です。
+PT2・PT3・PX-BCUD (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD、Sony CECH-ZD1 J (試験的) です。
 挿してあれば自動で見つけ、地上波か衛星かも見分けます。
 一覧は [tuners.md](tuners.md#要るもの)。
 
 ### Mac や Windows でも動きますか
 
 Apple Silicon の Mac と x64 の Windows で動きます。エージェントはその OS の上で直接、denpa 本体はコンテナで動きます。
-使えるチューナーは px4-userland と siano-userland の機材です (DVB は Linux だけ)。
+使えるチューナーは px4-userland と siano-userland の機材と Sony CECH-ZD1 J です (DVB は Linux だけ)。
 [install-mac.md](install-mac.md)・[install-windows.md](install-windows.md)。
 
 ### arm64 でも動きますか
