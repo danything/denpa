@@ -289,6 +289,8 @@ public sealed class Zd1jBoard : IDibTime
                 var demod = new Dib8096(Bridge, this, _trace, Locks.For(Port))
                 {
                     AlwaysSearch = Environment.GetEnvironmentVariable("DENPA_ZD1J_SEARCH") == "always",
+                    // 仕様書の外の速くする工夫。DENPA_ZD1J_FAST=0 で全部切る (比べるため)
+                    Fast = Environment.GetEnvironmentVariable("DENPA_ZD1J_FAST") != "0",
                 };
                 demod.Initialize();
                 Bridge.Flush();
@@ -404,6 +406,9 @@ public sealed class Zd1jTuner : ITuneDevice
             lock (_gate) return _stream is { Ended: false };
         }
     }
+
+    /// <summary>最後にロックした時刻 (Stopwatch)。<c>--tune</c> が最初の復号できたパケットまでを測る</summary>
+    public long LockedAt => _lockedAt;
 
     /// <summary>いまのボード (<c>--tune</c> が数を出す)。流していなければ null</summary>
     public Zd1jBoard? Board => _board;

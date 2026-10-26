@@ -56,6 +56,35 @@ public sealed class Dib8096
     /// <summary>覚えた値や既定を使わず、いつも探索する (<c>DENPA_ZD1J_SEARCH=always</c>。比べるため)</summary>
     public bool AlwaysSearch { get; set; }
 
+    /// <summary>
+    /// 仕様書の外の速くする工夫 (<c>DENPA_ZD1J_FAST</c>。ボードの既定は入り、ここでの既定は切り)。入っていると:
+    /// キャパシタの較正の結果を周波数ごとに覚えて使い回す・温度の較正は <see cref="TemperatureReuseMs"/> 以内なら飛ばす・
+    /// 復調器の探索でシンボルの数の時間切れを数えていない段は <see cref="FastPollMs"/> ごとに見る
+    /// </summary>
+    public bool Fast { get; set; }
+
+    /// <summary>温度の較正を使い回す長さ (ms)。DiB0090 の温度は 1 分ではほとんど変わらないとみた</summary>
+    public const double TemperatureReuseMs = 60_000;
+
+    /// <summary>探索で、シンボルの数の時間切れに関わらない段を見る間隔 (ms)</summary>
+    public const int FastPollMs = 3;
+
+    /// <summary>
+    /// 覚えたキャパシタで ADC を1回読んだとき、覚えたときの差 (dmin) からここまでのずれなら合っているとみる。
+    /// 二分探索の最後の1段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値として決めた (仕様書に無い)
+    /// </summary>
+    private const int CapacitorTolerance = 50;
+
+    /// <summary>周波数 (DiB0090 に頼んだ kHz) ごとの、較正で決まったキャパシタと、そのときの差</summary>
+    private readonly Dictionary<uint, (int Cap, int Dmin)> _capacitors = [];
+
+    private (int Cap, int Dmin) _capKnown;
+
+    private double _temperatureAt = double.NegativeInfinity;
+
+    /// <summary>最後の選局で使い回したもの (内訳に出す)</summary>
+    private readonly List<string> _reused = [];
+
     /// <summary>最後の選局の経路 (探索した / 覚えた値で合わせた / 既定で合わせた)</summary>
     public string LastPath => _path;
 
@@ -498,6 +527,7 @@ public sealed class Dib8096
         _khz = hz / 1000;
         _band = BandOf(_khz);
         _breakdown.Clear();
+        _reused.Clear();
         var started = _time.NowMs;
         var slept = _slept;
         Measure("準備 (起こす・ダイバーシティ両方・出力止め)", () =>
@@ -506,10 +536,18 @@ public sealed class Dib8096
             Diversity(DiversityMode.Both);
             Output(false);
         });
+        // 温度は直前に測ってから TemperatureReuseMs 以内なら測り直さない (仕様書に無い)
+        if (Fast)
+        {
+            if (_time.NowMs - _temperatureAt >= TemperatureReuseMs) _tempPending = true;
+            else if (!_tempPending) _reused.Add("温度");
+        }
         TunerAndPeripherals();
         Measure("ダイバーシティ内部だけ", () => Diversity(DiversityMode.Internal));
         Measure("AGC の立ち上げ (7.4)", StartAgc);
         var result = Search();
+        // 合わなかったら、使い回したキャパシタも次は較正し直す
+        if (result == DibLock.Failed) _capacitors.Remove(_tunerKhz);
         Measure("出力をパラレルに", () =>
         {
             Output(true);
@@ -519,7 +557,7 @@ public sealed class Dib8096
         {
             var parts = string.Join(" / ", _breakdown.Select(part =>
                 $"{part.Name} {part.Ms:F0}ms (待ち {part.SleptMs:F0}ms{(part.Steps > 1 ? $"、{part.Steps} 歩" : "")})"));
-            _trace($"選局 {hz} Hz → {result} ({_path}): 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
+            _trace($"選局 {hz} Hz → {result} ({_path}{(_reused.Count > 0 ? $"、使い回し: {string.Join("・", _reused)}" : "")}): 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
         }
         return result;
     }
@@ -846,6 +884,7 @@ public sealed class Dib8096
                 T(0x13, _tempB);
                 T(0x10, _tempW);
                 _tempPending = false;
+                _temperatureAt = _time.NowMs;
                 _tunerState = TunerStart;
                 return 15;
         }
@@ -1034,6 +1073,14 @@ public sealed class Dib8096
             case TunerStart:
                 T(0x10, 0x02B1);
                 T(0x1E, 0x0032);
+                if (Fast && _capacitors.TryGetValue(_tunerKhz, out _capKnown))
+                {
+                    // 覚えた値を置いて ADC を1回だけ見る (仕様書に無い。合わなければ下の二分探索から)
+                    _cap = _capBest = _capKnown.Cap;
+                    T(0x18, 0xE900 | (_cap & 0xFF));
+                    _tunerState = 15;
+                    return 25;
+                }
                 if (!_tunerTuned)
                 {
                     _capStep = 64;
@@ -1077,8 +1124,28 @@ public sealed class Dib8096
                 return 25;
             case 14:
                 T(0x18, 0xE900 | (_capBest & 0xFF));
+                if (Fast) _capacitors[_tunerKhz] = (_capBest, _capDmin);
                 _tunerState = 13;
                 return 0;
+            case 15:
+            {
+                var seen = T(0x1D);
+                var goal = _rest == 0 ? 200 : 400;
+                if (Math.Abs(seen - goal) <= _capKnown.Dmin + CapacitorTolerance)
+                {
+                    _reused.Add("キャパシタ");
+                    _capPending = false;
+                    _tunerState = 1;
+                    return 0;
+                }
+                // 合わない。忘れて二分探索から
+                _capacitors.Remove(_tunerKhz);
+                _capStep = 64;
+                _cap = _capBest = 64;
+                _capDmin = 3000;
+                _tunerState = 11;
+                return 0;
+            }
             default:
                 _capPending = false;
                 _tunerState = 1;
@@ -1124,7 +1191,9 @@ public sealed class Dib8096
         T(0x02, 0x2A16);
         T(0x05, 0xABCD);
         _tunerTuned = true;
-        _wbdPending = _tempPending = true;
+        _wbdPending = true;
+        // 速くするときは、温度を測り直すかを次の選局の始めに決める (Tune)
+        _tempPending = !Fast;
         _tunerState = TunerEnd;
         return 10;
     }
@@ -1551,7 +1620,7 @@ public sealed class Dib8096
 
     /// <summary>
     /// 7.5 の状態の機械を回す。**1歩の間は最低 10ms 空ける** (参考の実装の振る舞い。シンボル数の時間切れは
-    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)
+    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。<see cref="Fast"/> なら一部の段を詰める (<see cref="Floor"/>)
     /// </summary>
     private DibLock Search()
     {
@@ -1622,7 +1691,7 @@ public sealed class Dib8096
             if (step == Step.Stop && _demodState is DemodState.Failed or DemodState.Locked or DemodState.DataLocked) break;
             if (step == Step.Stop) throw new IOException("DiB8000 の探索が途中で止まりました");
             if (_time.NowMs - started > SearchLimitMs) throw new IOException("DiB8000 の探索が 5 秒で終わりませんでした");
-            Wait(Math.Max(10, (int)Math.Ceiling(wait * Symbol)));
+            Wait(Math.Max(Floor(step), (int)Math.Ceiling(wait * Symbol)));
             Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
         }
         // ロックしたら、段 3 で書いた値を覚えておく (次からは探索せずに同じ値で合わせる)。7.5.6 の読み戻しは TMCC の同期が
@@ -1638,6 +1707,20 @@ public sealed class Dib8096
             _ => DibLock.Failed,
         };
     }
+
+    /// <summary>
+    /// 次の段を回すまでの最低の間 (ms)。仕様書 (参考の実装) はどの段も最低 10ms。<see cref="Fast"/> のときだけ、
+    /// シンボルの数の時間切れに関わらない段を <see cref="FastPollMs"/> に詰める (仕様書に無い)。段ごとの根拠:
+    /// <list type="bullet">
+    /// <item>開始・探索の始め・段 2・段 3・段 9: 書いて次へ進むだけで、待って見るものが無い。間を空けても機材の進みは変わらない</item>
+    /// <item>段 1: 探索の終わりの割り込み (D[1284]) を見るだけ。時間切れは外側の 5 秒だけで、早く見ても読みが増えるだけ</item>
+    /// <item>段 10: 時間切れは実時間 (200ms × 数) なので、見る間隔を詰めても時間切れの長さは変わらない</item>
+    /// <item>段 5・段 7 (と、そこから入る段 6・段 8) は 10ms のまま: 時間切れがシンボルの数 (2 × L・20 × n シンボル、6MHz で数 ms) で、
+    /// 10ms ごとに見る前提の長さになっている。詰めると機材が同期を判定する前に時間切れになる。段 8 の前の 14 シンボルの待ちも同じ</item>
+    /// </list>
+    /// </summary>
+    private int Floor(Step next) =>
+        Fast && next is not (Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
 
     /// <summary>1歩。次の段と待ち (0.1ms)</summary>
     private (Step Next, int Wait) DemodStep(Step step)
