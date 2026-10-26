@@ -2,7 +2,7 @@
  * **テーブルトップ** (折り畳み端末を半分に折って机に置いた形)。折っていて (`device-posture: folded`)、
  * 画面が上下 2 段に分かれている (`vertical-viewport-segments: 2`。折り目が横)。どちらも Android の Chrome 系だけが知っていて、
  * 知らないブラウザ・平らに開いた端末・本の形 (左右 2 段) では当たらない。
- * 映像の画面の並べ方 (`PlayerLayout` の `@media`) も同じ条件 — CSS には変数で渡せないので、変えるときは両方
+ * 映像の画面の並べ方 (`PlayerLayout` などの `@media`) も同じ条件 — CSS には変数で渡せないので、変えるときは両方 (`phone-form.test.ts` が見る)
  */
 export const TABLETOP =
   "(device-posture: folded) and (vertical-viewport-segments: 2)";
