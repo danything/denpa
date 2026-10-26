@@ -5,7 +5,7 @@
    * いま動いているもの (録画中・エンコード中・端末に保存中) と、黙っていると「録れたつもり」になるもの
    * (競合・失敗・欠ける・ロゴでCMを判定できなかった)
    */
-  import "@anyblades/blades/layered/components/progress";
+  import "@anyblades/blades/components/progress";
   import type { SubmitFunction } from "$app/forms";
   import { resolve } from "$app/paths";
   import Ellipsis from "~icons/lucide/ellipsis";

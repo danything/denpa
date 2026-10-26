@@ -24,7 +24,7 @@
 </script>
 
 <script lang="ts">
-  import "@anyblades/blades/layered/components/accordion";
+  import "@anyblades/blades/components/accordion";
   import { applyAction, deserialize, type SubmitFunction } from "$app/forms";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";

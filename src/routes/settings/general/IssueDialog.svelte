@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/layered/components/modal";
+  import "@anyblades/blades/components/modal";
   import { untrack } from "svelte";
   import X from "~icons/lucide/x";
 

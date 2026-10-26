@@ -9,7 +9,7 @@
    *
    * 日の数え方と升目は `#lib/calendar.ts`。どの日を頭に送るか (まだ描いていない古い日を描かせるのも) はホームが持つ
    */
-  import "@anyblades/blades/layered/content/table";
+  import "@anyblades/blades/content/table";
   import { tick } from "svelte";
   import ChevronLeft from "~icons/lucide/chevron-left";
   import ChevronRight from "~icons/lucide/chevron-right";

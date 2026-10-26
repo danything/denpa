@@ -1,7 +1,7 @@
 <script lang="ts">
-  import "@anyblades/blades/layered/content/table";
-  import "@anyblades/blades/layered/components/accordion";
-  import "@anyblades/blades/layered/components/progress";
+  import "@anyblades/blades/content/table";
+  import "@anyblades/blades/components/accordion";
+  import "@anyblades/blades/components/progress";
   import { resolve } from "$app/paths";
 
   import { submitting } from "#lib/actions.js";

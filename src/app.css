@@ -4,7 +4,7 @@
  * 画面ごとの並べ方は各コンポーネントの <style> に書く。
  * 開いたり閉じたりするメニューは `Menu.svelte` (ブラウザの popover)。見た目はここ (`.menu`)。
  *
- * **Pico は `blades` の層 (@layer) に入っている** (`layered/*` は部品ごとに `@layer blades { … }` で包んである)。
+ * **Pico は `blades` の層 (@layer) に入っている** (`@anyblades/blades/<部品>` は部品ごとに `@layer blades { … }` で包んである)。
  * 層に入らないこちらの規則は、詳細度に関係なく必ず Pico に勝つ。Pico の強い selector に合わせて
  * 同じ詳細度で書き直す、という張り合いが要らない。各画面の <style> も同じく層の外なので、Pico より必ず勝つ。
  *
@@ -18,7 +18,7 @@
  * 指の形 (`cursor`) が utilities の `[disabled]` と同じ詳細度でぶつかり、後ろに読むと Pico の並びと勝ち負けが逆になるので、ここに置く。
  *
  * **限られた画面にしか出ない部品は、それを描くコンポーネントが <script> で読む**
- * (`import "@anyblades/blades/layered/components/modal";`)。その画面の CSS にだけ入る。
+ * (`import "@anyblades/blades/components/modal";`)。その画面の CSS にだけ入る。
  * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`
  * - forms/input-range … `player/SeekBar`
  * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
@@ -34,20 +34,20 @@
  * body と main の初期化は document にある)・並べ方のクラス (container・grid・overflow-auto)・figure・色/日付/ファイルの入力欄・
  * dropdown・tooltip (どれも当てる要素が無い)、コード・検索欄の虫眼鏡・ナビ (当てたくない。前は読んでから打ち消していた)
  */
-@import "@anyblades/blades/layered/variables";
-@import "@anyblades/blades/layered/layout/document";
-@import "@anyblades/blades/layered/layout/section";
-@import "@anyblades/blades/layered/content/typography";
-@import "@anyblades/blades/layered/content/link";
-@import "@anyblades/blades/layered/content/button";
-@import "@anyblades/blades/layered/content/embedded-content";
-@import "@anyblades/blades/layered/content/misc";
-@import "@anyblades/blades/layered/forms/basics";
-@import "@anyblades/blades/layered/forms/checkbox-radio-switch";
-@import "@anyblades/blades/layered/components/card";
-@import "@anyblades/blades/layered/components/group";
-@import "@anyblades/blades/layered/components/loading";
-@import "@anyblades/blades/layered/utilities";
+@import "@anyblades/blades/variables";
+@import "@anyblades/blades/layout/document";
+@import "@anyblades/blades/layout/section";
+@import "@anyblades/blades/content/typography";
+@import "@anyblades/blades/content/link";
+@import "@anyblades/blades/content/button";
+@import "@anyblades/blades/content/embedded-content";
+@import "@anyblades/blades/content/misc";
+@import "@anyblades/blades/forms/basics";
+@import "@anyblades/blades/forms/checkbox-radio-switch";
+@import "@anyblades/blades/components/card";
+@import "@anyblades/blades/components/group";
+@import "@anyblades/blades/components/loading";
+@import "@anyblades/blades/utilities";
 
 :root {
   --pico-font-family-sans-serif:

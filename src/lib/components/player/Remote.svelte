@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/layered/components/accordion";
+  import "@anyblades/blades/components/accordion";
   import ArrowDown from "~icons/lucide/arrow-down";
   import ArrowLeft from "~icons/lucide/arrow-left";
   import ArrowRight from "~icons/lucide/arrow-right";

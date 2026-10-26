@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/layered/content/table";
+  import "@anyblades/blades/content/table";
   import Ellipsis from "~icons/lucide/ellipsis";
 
   import { arming } from "#lib/arming.svelte.js";

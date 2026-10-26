@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "@anyblades/blades/layered/components/progress";
+  import "@anyblades/blades/components/progress";
   import type { Snippet } from "svelte";
 
   /**

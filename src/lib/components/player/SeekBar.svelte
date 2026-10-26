@@ -10,7 +10,7 @@
    * `preview` を渡した画面は動かしている間もその位置の映像を出す (1度に1つまで、飛び終わってから最新の位置へ)。
    * 動かしている間に届く `value` はつまみに使わず、離したあとも `value` が動くまでは離した位置に置く
    */
-  import "@anyblades/blades/layered/forms/input-range";
+  import "@anyblades/blades/forms/input-range";
   import { playedIn, trackParts } from "./seek-track";
 
   /** 下見の間を少なくともこれだけ空ける (ms)。飛ぶのが速い端末でも映像の読み込みを詰めすぎない */
