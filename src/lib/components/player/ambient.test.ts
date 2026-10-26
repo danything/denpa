@@ -37,7 +37,7 @@ const base: Situation = {
   room: true,
   fullscreen: false,
   hidden: false,
-  reduced: false,
+  still: false,
   playing: true,
   lit: true,
 };
@@ -70,9 +70,9 @@ describe("アンビエントモード", () => {
     expect(plan({ ...base, hidden: true, lit: false })).toBe("hold");
   });
 
-  test("動かさない設定では1枚写したら止める", () => {
-    expect(plan({ ...base, reduced: true, lit: false })).toBe("watch");
-    expect(plan({ ...base, reduced: true })).toBe("hold");
+  test("動きを減らす設定・data-lite では1枚写したら止める", () => {
+    expect(plan({ ...base, still: true, lit: false })).toBe("watch");
+    expect(plan({ ...base, still: true })).toBe("hold");
   });
 
   test("届く幅は、二段組で枠の幅の 20%、縦に積むと 90% (240px から)", () => {

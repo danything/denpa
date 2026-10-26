@@ -1,5 +1,6 @@
 /**
- * アンビエントモードの決め方 (`ambient.svelte.ts`・`AmbientGlow.svelte` のうち、画面に触らない所)。
+ * アンビエントモードの決め方 (`ambient.svelte.ts`・`AmbientGlow.svelte`・`glow-loop.svelte.ts` のうち、画面に触らない所)。
+ * テーブルトップの反射 (`FoldReflection.svelte`・`reflection.ts`) も、写す大きさ・ならし方・明るさの上限はここのものを使う。
  *
  * 単体テストで見るために分けてある (`ambient.test.ts`)
  */
@@ -133,7 +134,7 @@ export function edgeExtend(
 }
 
 /**
- * 色を時間でならす時定数 (ms)。**250ms — 写す間隔 (200ms) と同じくらい。** 入れ替えの動き (`AmbientGlow.svelte`。120ms) と合わせても、
+ * 色を時間でならす時定数 (ms)。**250ms — 写す間隔 (200ms) と同じくらい。** 入れ替えの動き (`--dp-duration`。120ms) と合わせても、
  * 新しい色の 9 割まで 0.6 秒ほどで追いつく
  */
 const SETTLE = 250;
@@ -187,8 +188,8 @@ export interface Situation {
   fullscreen: boolean;
   /** ページが裏に回っているか */
   hidden: boolean;
-  /** 動かさない設定 (`prefers-reduced-motion: reduce`) か */
-  reduced: boolean;
+  /** 1枚写したら止めるか (動きを減らす設定・ソフトウェアで描いている端末 `data-lite`。`GlowLoop` の `still`) */
+  still: boolean;
   /** 再生しているか */
   playing: boolean;
   /** もう1枚写して光を出しているか */
@@ -199,16 +200,16 @@ export interface Situation {
  * いま何をするか。
  *
  * - `off` … 光を消す (オフにした・光が見えない置き方)
- * - `hold` … 写さない。出している光はそのまま (止めている・裏に回った・全画面・動かさない設定で1枚写したあと)
+ * - `hold` … 写さない。出している光はそのまま (止めている・裏に回った・全画面・`still` で1枚写したあと)
  * - `watch` … 間隔ごとに写す
  *
- * **止めている間・動かさない設定では、まだ光が無ければ1枚だけ写す** (`lit` が立つと `hold` になる)。
+ * **止めている間・`still` では、まだ光が無ければ1枚だけ写す** (`lit` が立つと `hold` になる)。
  * 止めた映像から開いた録画にも光は出る
  */
 export function plan(now: Situation): "off" | "hold" | "watch" {
   if (!now.on || !now.room) return "off";
   if (now.fullscreen || now.hidden) return "hold";
-  if (now.reduced || !now.playing) return now.lit ? "hold" : "watch";
+  if (now.still || !now.playing) return now.lit ? "hold" : "watch";
   return "watch";
 }
 

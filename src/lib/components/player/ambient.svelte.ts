@@ -7,7 +7,8 @@ import type { GlanceReply, GlanceRequest } from "./glance-worker";
 /**
  * アンビエントモード。**映像の色を、枠の周りにぼかして広げる。3画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオン。**
  *
- * 光を描くのは `AmbientGlow.svelte` (舞台 `PlayerStage` が枠の周りに置く)。ここが持つのは
+ * 光を描くのは `AmbientGlow.svelte` (舞台 `PlayerStage` が枠の周りに置く。テーブルトップの間は代わりに
+ * 反射の `FoldReflection.svelte`)。ここが持つのは
  * オン/オフと、いまのコマを小さく写す手立て:
  *
  * - `<video>` で観ているとき … コマ (`VideoFrame`) を worker に渡して縮めてもらう (`glance-worker.ts`)。

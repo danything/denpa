@@ -41,7 +41,7 @@ export class GlowLoop {
       room: where.room,
       fullscreen: where.fullscreen,
       hidden: this.hidden,
-      reduced: this.still,
+      still: this.still,
       playing: where.ambient.playing,
       lit: this.lit,
     });
