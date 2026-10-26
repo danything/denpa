@@ -30,6 +30,10 @@
   import ControlButton from "#lib/components/player/ControlButton.svelte";
   import ControlRow from "#lib/components/player/ControlRow.svelte";
   import { playerControls } from "#lib/components/player/controls.svelte.js";
+  import {
+    DATA_RECEIVE_KEY,
+    storedDataReceive,
+  } from "#lib/components/player/data-receive.js";
   import DataBroadcast, {
     pressD,
   } from "#lib/components/player/DataBroadcast.svelte";
@@ -717,6 +721,13 @@
    */
   /** d ボタンで出しているか */
   let showData = $state(false);
+  /**
+   * データ放送を常に受信するか (再生の設定の行。ライブと同じ1つを端末ごとに覚える。`data-receive.ts`)。
+   * 開く前から変化ログを取得して流し、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
+   */
+  let receiveData = $state(false);
+  /** 常に受信していて、この録画にデータ放送があるか */
+  const receiving = $derived(receiveData && data.hasData);
   /** 映像を入れる箱。BML はこれを動かす (`DataBroadcast` の place) */
   let mediaBox = $state<HTMLElement | null>(null);
   /** リモコンのキーを渡す関数と、d を文書へ渡す関数 (`DataBroadcast` の press / pressD) */
@@ -738,10 +749,33 @@
   /** データ放送を出す/消す。d ボタンの振る舞いは `pressD` (DataBroadcast) */
   async function setData(on: boolean): Promise<void> {
     showData = on;
-    if (!showData) {
-      dataChannel = null;
-      return;
-    }
+    // 常に受信しているなら、閉じてもエンジンは残す (入口から出直すのは `DataBroadcast`)
+    if (showData || receiving) await startData();
+    else dataChannel = null;
+  }
+
+  /** 常に受信するかを切り替える。ライブと同じ1つを端末ごとに覚える (`data-receive.ts`) */
+  function toggleReceiveData(): void {
+    receiveData = !receiveData;
+    remind(DATA_RECEIVE_KEY, receiveData ? "1" : "0");
+    if (receiving) void startData();
+    else if (!showData) dataChannel = null;
+  }
+
+  // 開いた端末で決まる。常に受信する端末は、開く前から流し始める
+  $effect(() => {
+    receiveData = storedDataReceive(stored(DATA_RECEIVE_KEY));
+    untrack(() => {
+      if (receiving) void startData();
+    });
+  });
+
+  /**
+   * 変化ログを取得して、エンジンを作らせる。**もう流していれば何もしない** — 常に受信しているところで開いたときは、
+   * 作り直さずに開く操作だけを届ける (`DataBroadcast` の `opened`)
+   */
+  async function startData(): Promise<void> {
+    if (dataChannel !== null) return;
     if (dataTimeline.length === 0) {
       if (Array.isArray(localCopy?.databroadcast)) {
         // 端末に保存したものから。オフラインでも d が効く
@@ -753,6 +787,8 @@
         dataTimeline = response?.ok ? await response.json() : [];
       }
     }
+    // 取得している間に、閉じて常に受信もやめていたら作らない
+    if (!showData && !receiving) return;
     dataFed = -1;
     // エンジンを作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
     dataChannel = `${rec.id}`;
@@ -770,9 +806,12 @@
     dataFed = to;
   }
 
-  /** 再生が進んだぶんのデータ放送を流す。**戻っていたらエンジンを作り直す** */
+  /**
+   * 再生が進んだぶんのデータ放送を流す。**戻っていたらエンジンを作り直す** (開いているかは持ち越し、入口から出直す)。
+   * 先へ飛んだ (シーク・CM 飛ばし) ときは、その間の変化を足す
+   */
   function feedData(): void {
-    if (!showData || dataEmit === null) return;
+    if (dataEmit === null) return;
     const to = nowMs();
     const feed = feedFor(dataTimeline, dataFed, to);
     if (feed.reset) {
@@ -1794,6 +1833,7 @@
                 -->
         <DataBroadcast
           on={showData}
+          receive={receiving}
           channel={dataChannel}
           media={mediaBox}
           listen={listenData}
@@ -2030,6 +2070,9 @@
                     toggle: () =>
                       pressD(showData, dataButton, (on) => void setData(on)),
                   }
+                : undefined}
+              receive={data.hasData
+                ? { on: receiveData, toggle: toggleReceiveData }
                 : undefined}
               subtitle={hasCaptions
                 ? subtitles({

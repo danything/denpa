@@ -58,8 +58,8 @@
      */
     data?: { on: boolean; toggle: () => void } | undefined;
     /**
-     * データ放送を常に受信するか (ライブだけ。端末ごと。`data-receive.ts`)。開くのは右端の列の d で、
-     * これは開いていなくても受信しておくかの切り替え
+     * データ放送を常に受信するか (ライブと観る画面で同じ1つ。端末ごと。`data-receive.ts`)。開くのは d (ライブは右端の列、
+     * 観る画面はこのメニュー) で、これは開いていなくても受信しておくかの切り替え。観る画面はデータ放送のある録画だけ
      */
     receive?: { on: boolean; toggle: () => void } | undefined;
     /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */

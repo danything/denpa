@@ -253,7 +253,7 @@ test.describe("データ放送を常に受信する端末", () => {
   async function prepareReceiving(page: Page): Promise<void> {
     await prepare(page);
     await page.addInitScript(() => {
-      localStorage.setItem("live-data-always", "1");
+      localStorage.setItem("player-data-always", "1");
       const seen = window as unknown as { __data: unknown[] };
       seen.__data = [];
       const send = WebSocket.prototype.send;
@@ -359,7 +359,7 @@ test.describe("データ放送を常に受信する端末", () => {
       { type: "data", on: false },
     ]);
     expect(
-      await page.evaluate(() => localStorage.getItem("live-data-always")),
+      await page.evaluate(() => localStorage.getItem("player-data-always")),
     ).toBe("0");
   });
 
