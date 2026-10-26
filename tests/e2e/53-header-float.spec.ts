@@ -148,7 +148,7 @@ test("明暗を選び直したときだけ画面全体が移り、開いたと�
 function guideFloat(page: Page) {
   return page.evaluate(() => ({
     corner: Number(
-      getComputedStyle(document.querySelector(".corner")!).opacity,
+      getComputedStyle(document.querySelector(".corner")!, "::after").opacity,
     ),
     hour: Number(
       getComputedStyle(document.querySelector(".hour")!, "::before").opacity,
@@ -158,9 +158,9 @@ function guideFloat(page: Page) {
 
 /*
  * **番組表の時の列は、横に送ってマスが裏に入ったときだけ浮く** (docs/design.md の「浮かせ方」)。
- * 左上の角は、横に送ると局名が、縦に巻くと時の数字が裏に来るので、どちらを巻いても浮く
+ * 左上の角も同じく横に送ったときだけ浮く。縦に巻いたときは地の色で平らに、裏に来る時の数字を隠すだけ
  */
-test("番組表の時の列は横に送ると浮き、角は横か縦に巻くと浮く", async ({
+test("番組表の時の列と角は横に送ると浮き、縦に巻いても角は平ら", async ({
   page,
 }) => {
   // 合成のデータは局が少ないので、横に送れる狭い幅にする (面の出し方は幅によらず同じ)
@@ -180,9 +180,23 @@ test("番組表の時の列は横に送ると浮き、角は横か縦に巻く�
   await scroll(60, 0);
   await expect.poll(() => guideFloat(page)).toEqual({ corner: 1, hour: 1 });
 
-  // 縦だけ巻くと、時の列の裏にマスは来ない。角の裏には時の数字が来る
+  // 縦だけ巻くと、時の列の裏にマスは来ない。角は地の色のまま (面にすると局名の左に色の塊が見えた)
   await scroll(0, 400);
-  await expect.poll(() => guideFloat(page)).toEqual({ corner: 1, hour: 0 });
+  await expect.poll(() => guideFloat(page)).toEqual({ corner: 0, hour: 0 });
+  expect(
+    await page.evaluate(() => {
+      // 地の色 (`--dp-bg`) を同じ書き方で解いて比べる
+      const probe = document.createElement("div");
+      probe.style.background = "var(--dp-bg)";
+      document.body.append(probe);
+      const bg = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return (
+        getComputedStyle(document.querySelector(".corner")!).backgroundColor ===
+        bg
+      );
+    }),
+  ).toBe(true);
 });
 
 test.describe("動きを減らす設定", () => {

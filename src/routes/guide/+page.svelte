@@ -1606,13 +1606,16 @@
      * **局名と時の列は操作の層。** 表を巻くとマスがその裏を流れるので、ヘッダーと同じ半透明の面 (`--dp-float`) で浮かせる
      * (docs/design.md の「浮かせ方」)。線は引かない。時の列と角の影はマスの側にだけ落とす (列は右。局名は下の `.service::before`)。
      * **面は、裏に何か来たときだけ出す。** 時の列の裏にマスが来るのは横に送ったときだけ (`--guide-x`)。
-     * 角の裏には、横に送ると局名が、縦に巻くと時の数字と「いま」の時刻が来るので、どちらを巻いても出す。
-     * 面は透明度だけで出し入れする。角は 2 つの軸の透明度を足す (`animation-composition: add`。1 を超えた分は切れる)。
+     * 角は地の色で平らに塗り (縦に巻くと裏に来る時の数字と「いま」の時刻を隠すだけ。面にすると局名の左に色の塊が見えた)、
+     * 面は時の列と同じく横に送ったときだけ、上に重ねた一枚 (`::after`) で出す。面は透明度だけで出し入れする。
      * 知らないブラウザと動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも面が出ている
      */
-  .corner,
+  .corner::after,
   .hour::before {
     background: var(--dp-float);
+  }
+  .corner {
+    background: var(--dp-bg);
   }
   /* 時の列は 1 本につながった面。マスの上に浮くので遠い影 (右だけ。下の `clip-path`) */
   .hour::before {
@@ -1623,9 +1626,13 @@
     box-shadow: var(--dp-shadow-pop);
     pointer-events: none;
   }
-  /* 角は局名の行に詰めて並ぶので、局名と同じ近い影 */
-  .corner {
+  /* 角の面は局名の行に詰めて並ぶので、局名と同じ近い影 */
+  .corner::after {
+    content: "";
+    position: absolute;
+    inset: 0;
     box-shadow: var(--dp-shadow-tight);
+    pointer-events: none;
   }
   @keyframes guide-float {
     from {
@@ -1641,13 +1648,10 @@
       animation-timeline: --guide-x;
       animation-range: 0 1.5rem;
     }
-    .corner {
-      animation:
-        guide-float linear both,
-        guide-float linear both;
-      animation-timeline: --guide, --guide-x;
+    .corner::after {
+      animation: guide-float linear both;
+      animation-timeline: --guide-x;
       animation-range: 0 1.5rem;
-      animation-composition: replace, add;
     }
   }
   /*
@@ -1677,7 +1681,7 @@
   /*
      * **局名の行より上の時の列は、地の色で覆う。** 広い画面では表がヘッダーと操作の1行の裏まで伸びていて、
      * 浮いた面の左の隙間から、裏へ巻かれた時の数字と「いま」の時刻のカプセルがはみ出して見えていた
-     * (時の列は操作の層。別の操作の層の裏から覗かせない)。角と一緒に出し入れする (上を巻いていなければ、覆うものも無い)
+     * (時の列は操作の層。別の操作の層の裏から覗かせない)
      */
   .corner::before {
     content: "";
@@ -1689,7 +1693,7 @@
     pointer-events: none;
   }
   @media (prefers-reduced-transparency: reduce) {
-    .corner,
+    .corner::after,
     .hour::before,
     .service::before {
       background: var(--dp-pop);
