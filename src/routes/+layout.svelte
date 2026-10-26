@@ -89,6 +89,15 @@
       jumped = false;
       touched = event.target;
     };
+    /*
+     * ページの中の `#` へのリンクは afterNavigate が来ない (SvelteKit はブラウザの既定の動きに任せる) ので、押した所で見る。
+     * 押す前の pointerdown・keydown で外れた印を、巻き始める前 (click の既定の動きの前) に付け直す
+     */
+    const onClick = ({ target }: MouseEvent) => {
+      if (!(target instanceof Element)) return;
+      const link = target.closest("a[href]");
+      if (link instanceof HTMLAnchorElement && link.hash !== "") jumped = true;
+    };
     const OWN = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
     addEventListener("scroll", onScroll, { passive: true });
     // 箱の巻き取りは上へ伝わらないので、捕まえる側で受ける
@@ -97,10 +106,12 @@
       passive: true,
     });
     for (const type of OWN) addEventListener(type, own, { passive: true });
+    addEventListener("click", onClick, { capture: true });
     return () => {
       removeEventListener("scroll", onScroll);
       document.removeEventListener("scroll", onBoxScroll, { capture: true });
       for (const type of OWN) removeEventListener(type, own);
+      removeEventListener("click", onClick, { capture: true });
     };
   });
 

@@ -122,6 +122,8 @@ test.describe("設定のチューナーとチャンネル", () => {
     await page.getByTestId("settings-jump-broadcast").click();
     await page.waitForURL(/#broadcast$/);
     await expect(bar).toBeHidden();
+    // 節へ飛ぶ巻き取りは読んでいるのではないので、節へ飛ぶ行は引っ込めない (引っ込むと次の節を押せない)
+    await expect(page.getByTestId("settings-jump")).toBeInViewport();
     await page.getByTestId("settings-jump-channels").click();
     await expect(bar).toBeInViewport();
   });
