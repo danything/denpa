@@ -18,7 +18,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
-/// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS・2 回目の選局の時間と C/N を出す
+/// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
@@ -158,7 +158,9 @@ public static class Probe
             Zd1jBoard.Locks = new Zd1jLocks(Config.FromEnvironment().Zd1jLocksFile);
             // 鍵はそのボードの内蔵の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
             IKeySource keys = cardAt >= 0 ? Keys.Source : new LocalCard(() => [Zd1j.Card(zd1j)]);
-            return RunZd1j(zd1j, channels, decode ? keys : null, seconds);
+            var repeatAt = Array.IndexOf(args, "--repeat");
+            var repeat = repeatAt >= 0 && int.TryParse(args.ElementAtOrDefault(repeatAt + 1), out var times) && times > 0 ? times : 1;
+            return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
         }
 
         var known = Config.FromEnvironment().StreamIds();
@@ -202,11 +204,16 @@ public static class Probe
     /// <summary>
     /// CECH-ZD1 J の速さを測る。**冷えた状態から開く・選局からロック・ロックから最初の TS・2 回目の選局 (温かい状態)**
     /// の時間と、I2C の回数、C/N と電波の強さを出す。チャンネルは <c>T27</c> でも <c>27</c> (地上波) でもよい。
-    /// 選局のたびに、ロックまでの内訳 (段ごとの時間と待ち) も出す (常駐のときは出さない)
+    /// 選局のたびに、ロックまでの内訳 (段ごとの時間と待ち) も出す (常駐のときは出さない)。<c>--repeat N</c> はチャンネルの並びを N 回回し、
+    /// 最後にロックの成否と時間の最小・中央・最大を出す (選局を縮める工夫で確かさが落ちていないかを見るため)
     /// </summary>
-    private static int RunZd1j(string port, string[] channels, IKeySource? keys, TimeSpan seconds)
+    private static int RunZd1j(string port, string[] channels, IKeySource? keys, TimeSpan seconds, int repeat)
     {
-        var names = channels.Select(name => name.All(char.IsAsciiDigit) ? $"T{name}" : name).ToList();
+        var once = channels.Select(name => name.All(char.IsAsciiDigit) ? $"T{name}" : name).ToList();
+        var names = Enumerable.Repeat(once, repeat).SelectMany(list => list).ToList();
+        var locks = new List<long>();
+        var decodedAfter = new List<double>();
+        var tries = 0;
         // 最後にもう一度、最初のチャンネルを選び直す (温かい状態の選局)
         names.Add(names[0]);
         Zd1jBoard.Trace = message => Console.WriteLine($"    {message}");
@@ -224,6 +231,7 @@ public static class Probe
                 }
                 var warm = index == names.Count - 1;
                 Console.WriteLine($"--- {name}  {tuning.Frequency} Hz{(warm ? "  (2 回目の選局。温かい状態)" : "")}");
+                tries++;
                 var i2c = tuner.Board?.Bridge.I2cTransfers ?? 0;
                 var requests = tuner.Board?.Bridge.Requests ?? 0;
                 try
@@ -245,13 +253,20 @@ public static class Probe
                     requests = 0;
                 }
                 Console.WriteLine($"    選局からロック {timings.LockMs} ms");
-                Measure(tuner.Output, name, keys is null ? null : new Descrambler(keys), seconds);
+                locks.Add(timings.LockMs);
+                if (Measure(tuner.Output, name, keys is null ? null : new Descrambler(keys), seconds, tuner.LockedAt) is { } decodedMs) decodedAfter.Add(decodedMs);
                 Console.WriteLine($"    ロックから最初の TS {tuner.Timings.FirstTsMs} ms");
                 Console.WriteLine($"    I2C のやり取り {board.Bridge.I2cTransfers - i2c} 回 / メモリ要求 {board.Bridge.Requests - requests} 回 ({(index == 0 ? "開くところからこの選局まで" : "この選局で")})");
                 if (tuner.Signal() is { } signal)
                 {
                     Console.WriteLine($"    C/N {(signal.CnDb is { } cn ? $"{cn:F1} dB" : "-")}  電波の強さ {signal.StrengthDbm:F1} dBm (目安)  D[568] 0x{signal.Status:X4}");
                 }
+            }
+            if (repeat > 1)
+            {
+                Console.WriteLine($"=== {tries} 回のうちロック {locks.Count} 回");
+                if (locks.Count > 0) Console.WriteLine($"    選局からロック {Spread(locks.Select(ms => (double)ms))}");
+                if (decodedAfter.Count > 0) Console.WriteLine($"    ロックから最初の復号できたパケット {Spread(decodedAfter)}");
             }
             return failed ? 1 : 0;
         }
@@ -309,9 +324,22 @@ public static class Probe
         }
     }
 
-    /// <summary>読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか</summary>
-    private static void Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration)
+    /// <summary>最小・中央・最大 (ms)</summary>
+    private static string Spread(IEnumerable<double> values)
     {
+        var sorted = values.Order().ToList();
+        var middle = sorted.Count % 2 == 1 ? sorted[sorted.Count / 2] : (sorted[sorted.Count / 2 - 1] + sorted[sorted.Count / 2]) / 2;
+        return $"最小 {sorted[0]:F0} / 中央 {middle:F0} / 最大 {sorted[^1]:F0} ms";
+    }
+
+    /// <summary>
+    /// 読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか。<paramref name="lockedAt"/> (Stopwatch の時刻) を渡せば、
+    /// そこから最初の復号できたパケット (掛かっていた PID の、掛かっていないペイロード) までの ms を出して返す (最初の ECM を待つ時間)
+    /// </summary>
+    private static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0)
+    {
+        var scrambledPids = new HashSet<int>();
+        long decodedAt = 0;
         var buffer = new byte[188 * 1024];
         var decoded = new ArrayBufferWriter<byte>();
         var started = DateTime.UtcNow;
@@ -335,7 +363,9 @@ public static class Probe
             {
                 packets++;
                 if (buffer[at] == 0x47) sync++;
-                if (Scrambled(buffer.AsSpan(at))) scrambledIn++;
+                if (!Scrambled(buffer.AsSpan(at))) continue;
+                scrambledIn++;
+                scrambledPids.Add(Pid(buffer.AsSpan(at)));
             }
 
             if (b25 is null) continue;
@@ -345,7 +375,9 @@ public static class Probe
             for (var at = 0; at + 188 <= decoded.WrittenCount; at += 188)
             {
                 outPackets++;
-                if (Scrambled(decoded.WrittenSpan[at..])) scrambledOut++;
+                var packet = decoded.WrittenSpan[at..];
+                if (Scrambled(packet)) scrambledOut++;
+                else if (decodedAt == 0 && (packet[3] & 0x10) != 0 && scrambledPids.Contains(Pid(packet))) decodedAt = System.Diagnostics.Stopwatch.GetTimestamp();
             }
         }
 
@@ -360,12 +392,21 @@ public static class Probe
         if (b25 is null)
         {
             Console.WriteLine($"    掛かっているパケット {before:F1}%");
-            return;
+            return null;
         }
 
         var after = outPackets == 0 ? 0 : 100.0 * scrambledOut / outPackets;
         Console.WriteLine($"    掛かっているパケット {before:F1}% -> 復号したあと {after:F1}% ({outPackets} 個)"
             + (b25.LastError is { } why ? $"  {why}" : ""));
+        if (lockedAt == 0) return null;
+        if (decodedAt == 0)
+        {
+            Console.WriteLine("    ロックから最初の復号できたパケット - (まだ)");
+            return null;
+        }
+        var ms = System.Diagnostics.Stopwatch.GetElapsedTime(lockedAt, decodedAt).TotalMilliseconds;
+        Console.WriteLine($"    ロックから最初の復号できたパケット {ms:F0} ms");
+        return ms;
     }
 
     /// <summary>
@@ -373,4 +414,6 @@ public static class Probe
     /// 復号できていれば 0 になる
     /// </summary>
     private static bool Scrambled(ReadOnlySpan<byte> packet) => (packet[3] & 0xC0) != 0;
+
+    private static int Pid(ReadOnlySpan<byte> packet) => ((packet[1] & 0x1F) << 8) | packet[2];
 }

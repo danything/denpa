@@ -39,7 +39,7 @@ if (args.Length > 0)
 {
     Console.Error.WriteLine($"知らない引数です: {string.Join(" ", args)}");
     Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
-    Console.Error.WriteLine("       denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N]");
+    Console.Error.WriteLine("       denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]");
     Console.Error.WriteLine("       denpa-agent --decode-file <in.ts> <out.ts>");
     Console.Error.WriteLine("       denpa-agent --card [zd1j:<USB のポート>]");
     return 2;

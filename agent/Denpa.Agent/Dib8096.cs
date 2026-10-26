@@ -53,6 +53,54 @@ public sealed class Dib8096
     private readonly Action<string>? _trace;
     private readonly DibMemory? _memory;
 
+    /*
+     * 仕様書の外の、選局を縮める工夫 (どれも仕様書に無い。数字の根拠は各定数に):
+     * - DiB0090 のキャパシタの較正 (7.3.5。二分探索で約 17 歩・約 165ms) の結果を周波数ごとに覚えて使い回す
+     * - 温度の較正 (7.3.3。約 44ms) は直前に測ってから TemperatureReuseMs 以内なら飛ばす
+     * - 復調器の探索で、シンボルの数の時間切れに関わらない段は FastPollMs ごとに見る (Floor)
+     *
+     * 3 つの数字 (60 秒・3ms・許容値 50) は、実機 (CECH-ZD1 J、T27・T21、2026-10-26) で 13 回選局して1回も同期を落とさず、
+     * 覚えた値での選局が中央 800ms → 617ms になった値。本番の記録 (選局ごとの1行。LastSummary) で見直す
+     */
+
+    /// <summary>
+    /// 温度の較正を使い回す長さ (ms)。測った温度は WBD の目標に使うだけで、選局の合間 (数秒〜数分) にチューナーの温度は
+    /// ほとんど変わらないとみて 1 分にした (根拠は上)
+    /// </summary>
+    public const double TemperatureReuseMs = 60_000;
+
+    /// <summary>
+    /// 探索で、シンボルの数の時間切れに関わらない段を見る間隔 (ms)。1 回の I2C の読み (bulk の塊の往復) より少し長い間隔 (根拠は上)
+    /// </summary>
+    public const int FastPollMs = 3;
+
+    /// <summary>
+    /// 覚えたキャパシタで ADC を1回読んだとき、覚えたときの差 (dmin) からここまでのずれなら合っているとみる。
+    /// 二分探索の最後の1段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値 (根拠は上)
+    /// </summary>
+    private const int CapacitorTolerance = 50;
+
+    /// <summary>周波数 (DiB0090 に頼んだ kHz) ごとの、較正で決まったキャパシタと、そのときの差 (メモリの上だけ。ボードは開いたまま)</summary>
+    private readonly Dictionary<uint, (int Cap, int Dmin)> _capacitors = [];
+
+    private (int Cap, int Dmin) _capKnown;
+
+    private double _temperatureAt = double.NegativeInfinity;
+
+    /// <summary>
+    /// 最後の選局の、使い回しと較正の様子 (<c>--tune</c> の内訳に出す)。上の 3 つの数字を実機の値から決めるための記録:
+    /// キャパシタの ADC の差、温度の変化と経過秒、3ms で見た段ごとの歩数
+    /// </summary>
+    private readonly List<string> _notes = [];
+
+    /// <summary>キャパシタの較正をやり直した理由 (なければ「覚えた値なし」)</summary>
+    private string _capReason = "";
+
+    /// <summary>3ms で見た段ごとの歩数 (最後の選局)</summary>
+    private readonly Dictionary<Step, int> _fastSteps = [];
+
+    private int? _temperatureLast;
+
     /// <summary>最後の選局の経路 (探索した / 覚えた値で合わせた / 既定で合わせた)</summary>
     public string LastPath => _path;
 
@@ -495,6 +543,9 @@ public sealed class Dib8096
         _khz = hz / 1000;
         _band = BandOf(_khz);
         _breakdown.Clear();
+        _notes.Clear();
+        _fastSteps.Clear();
+        _capReason = "覚えた値なし";
         var started = _time.NowMs;
         var slept = _slept;
         Measure("準備 (起こす・ダイバーシティ両方・出力止め)", () =>
@@ -503,10 +554,29 @@ public sealed class Dib8096
             Diversity(DiversityMode.Both);
             Output(false);
         });
+        // 温度は直前に測ってから TemperatureReuseMs 以内なら測り直さない (仕様書に無い)
+        if (_time.NowMs - _temperatureAt >= TemperatureReuseMs) _tempPending = true;
+        else if (!_tempPending) _notes.Add($"温度: 使い回し (前に測ってから {(_time.NowMs - _temperatureAt) / 1000:F0} 秒)");
         TunerAndPeripherals();
         Measure("ダイバーシティ内部だけ", () => Diversity(DiversityMode.Internal));
         Measure("AGC の立ち上げ (7.4)", StartAgc);
-        var result = Search();
+        DibLock result;
+        try
+        {
+            result = Search();
+        }
+        catch
+        {
+            if (_capacitors.Remove(_tunerKhz)) _notes.Add("キャパシタ: 探索が投げたので覚えた値を捨てた");
+            throw;
+        }
+        // 合わなかったら、使い回したキャパシタも次は較正し直す
+        if (result == DibLock.Failed && _capacitors.Remove(_tunerKhz)) _notes.Add("キャパシタ: ロックしなかったので覚えた値を捨てた");
+        LastSummary = Summary(hz, _time.NowMs - started, result);
+        if (_fastSteps.Count > 0)
+        {
+            _notes.Add($"{FastPollMs}ms で見た歩数: {string.Join(" / ", _fastSteps.Select(pair => $"{pair.Key} {pair.Value}"))}");
+        }
         Measure("出力をパラレルに", () =>
         {
             Output(true);
@@ -516,9 +586,27 @@ public sealed class Dib8096
         {
             var parts = string.Join(" / ", _breakdown.Select(part =>
                 $"{part.Name} {part.Ms:F0}ms (待ち {part.SleptMs:F0}ms{(part.Steps > 1 ? $"、{part.Steps} 歩" : "")})"));
-            _trace($"選局 {hz} Hz → {result} ({_path}): 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
+            _trace($"選局 {hz} Hz → {result} ({_path}){(_notes.Count > 0 ? $" [{string.Join("。", _notes)}]" : "")}: 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
         }
         return result;
+    }
+
+    /// <summary>
+    /// 最後の選局の要約の1行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3ms・許容値 50) を本番の記録で見直すのに使う。
+    /// 形: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / 同期しなかった&gt;</c>
+    /// </summary>
+    public string LastSummary { get; private set; } = "";
+
+    private string Summary(uint hz, double lockMs, DibLock result)
+    {
+        string Pick(string prefix, string none) => _notes.LastOrDefault(note => note.StartsWith(prefix, StringComparison.Ordinal)) ?? prefix + none;
+        var sync = result switch
+        {
+            DibLock.DataLocked => "同期した",
+            DibLock.Locked => "ロックしたがデータはまだ",
+            _ => "同期しなかった",
+        };
+        return $"選局 {hz} Hz: {_path}、ロックまで {lockMs:F0}ms、{Pick("キャパシタ: ", "-")}、{Pick("温度: ", "-")}、{sync}";
     }
 
     /// <summary>ロックまでの内訳の1つ (段の名前・かかった時間・そのうち眠った時間・歩数)</summary>
@@ -837,12 +925,17 @@ public sealed class Dib8096
             case 2:
                 var v = T(0x1D);
                 _temperature = (((short)((v - _tempA) * 180)) >> 8) + 55;
+                _notes.Add(_temperatureLast is { } last
+                    ? $"温度: 測った {_temperature} (前回 {last} から {_temperature - last:+0;-0;0}、{(_time.NowMs - _temperatureAt) / 1000:F0} 秒ぶり)"
+                    : $"温度: 測った {_temperature} (初めて)");
+                _temperatureLast = _temperature;
                 _tunerState = 3;
                 return 15;
             default:
                 T(0x13, _tempB);
                 T(0x10, _tempW);
                 _tempPending = false;
+                _temperatureAt = _time.NowMs;
                 _tunerState = TunerStart;
                 return 15;
         }
@@ -1031,6 +1124,14 @@ public sealed class Dib8096
             case TunerStart:
                 T(0x10, 0x02B1);
                 T(0x1E, 0x0032);
+                if (_capacitors.TryGetValue(_tunerKhz, out _capKnown))
+                {
+                    // 覚えた値を置いて ADC を1回だけ見る (仕様書に無い。合わなければ下の二分探索から)
+                    _cap = _capBest = _capKnown.Cap;
+                    T(0x18, 0xE900 | (_cap & 0xFF));
+                    _tunerState = 15;
+                    return 25;
+                }
                 if (!_tunerTuned)
                 {
                     _capStep = 64;
@@ -1074,8 +1175,31 @@ public sealed class Dib8096
                 return 25;
             case 14:
                 T(0x18, 0xE900 | (_capBest & 0xFF));
+                _capacitors[_tunerKhz] = (_capBest, _capDmin);
+                _notes.Add($"キャパシタ: 較正した ({_capReason}) キャパシタ {_capBest}、ADC の差 {_capDmin}");
                 _tunerState = 13;
                 return 0;
+            case 15:
+            {
+                var seen = T(0x1D);
+                var goal = _rest == 0 ? 200 : 400;
+                var gap = Math.Abs(seen - goal);
+                if (gap <= _capKnown.Dmin + CapacitorTolerance)
+                {
+                    _notes.Add($"キャパシタ: 使い回し {_capKnown.Cap} (ADC の差 {gap}、覚えたとき {_capKnown.Dmin}、ずれ {gap - _capKnown.Dmin})");
+                    _capPending = false;
+                    _tunerState = 1;
+                    return 0;
+                }
+                // 合わない。忘れて二分探索から
+                _capReason = $"覚えた値 {_capKnown.Cap} で ADC の差 {gap} が覚えたとき {_capKnown.Dmin} + {CapacitorTolerance} を超えた";
+                _capacitors.Remove(_tunerKhz);
+                _capStep = 64;
+                _cap = _capBest = 64;
+                _capDmin = 3000;
+                _tunerState = 11;
+                return 0;
+            }
             default:
                 _capPending = false;
                 _tunerState = 1;
@@ -1121,7 +1245,9 @@ public sealed class Dib8096
         T(0x02, 0x2A16);
         T(0x05, 0xABCD);
         _tunerTuned = true;
-        _wbdPending = _tempPending = true;
+        _wbdPending = true;
+        // 温度を測り直すかは次の選局の始めに決める (Tune)
+        _tempPending = false;
         _tunerState = TunerEnd;
         return 10;
     }
@@ -1620,7 +1746,9 @@ public sealed class Dib8096
             if (step == Step.Stop && _demodState is DemodState.Failed or DemodState.Locked or DemodState.DataLocked) break;
             if (step == Step.Stop) throw new IOException("DiB8000 の探索が途中で止まりました");
             if (_time.NowMs - started > SearchLimitMs) throw new IOException("DiB8000 の探索が 5 秒で終わりませんでした");
-            Wait(Math.Max(10, (int)Math.Ceiling(wait * Symbol)));
+            var floor = Floor(step);
+            if (floor == FastPollMs) _fastSteps[step] = _fastSteps.GetValueOrDefault(step) + 1;
+            Wait(Math.Max(floor, (int)Math.Ceiling(wait * Symbol)));
             Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
         }
         // ロックしたら、段 3 で書いた値を覚えておく (次からは探索せずに同じ値で合わせる)。7.5.6 の読み戻しは TMCC の同期が
@@ -1636,6 +1764,23 @@ public sealed class Dib8096
             _ => DibLock.Failed,
         };
     }
+
+    /// <summary>
+    /// 次の段を回すまでの最低の間 (ms)。仕様書 (参考の実装) はどの段も最低 10ms。
+    /// シンボルの数の時間切れに関わらない段は <see cref="FastPollMs"/> に詰める (仕様書に無い)。段ごとの根拠:
+    /// <list type="bullet">
+    /// <item>開始・探索の始め・段 2・段 3・段 9: 書いて次へ進むだけで、待って見るものが無い。間を空けても機材の進みは変わらない
+    /// (段 3 のあとの間は、段 4 を下の 10ms 側に入れたので詰めない)</item>
+    /// <item>段 1: 探索の終わりの割り込み (D[1284]) を見るだけ。時間切れは外側の 5 秒だけで、早く見ても読みが増えるだけ</item>
+    /// <item>段 10: 時間切れは実時間 (200ms × 数) なので、見る間隔を詰めても時間切れの長さは変わらない</item>
+    /// <item>段 5・段 7 (と、そこから入る段 6・段 8) は 10ms のまま: 時間切れがシンボルの数 (2 × L・20 × n シンボル、6MHz で数 ms) で、
+    /// 10ms ごとに見る前提の長さになっている。詰めると機材が同期を判定する前に時間切れになる。段 8 の前の 14 シンボルの待ちも同じ</item>
+    /// <item>段 4 も 10ms のまま: 段 3 でチャンネルの共通設定を書いてから復調器をやり直すまでの間で、機材がその設定を取り込むのに
+    /// 要る時間が仕様書から分からない。段 4 は段 5 の時間切れ (シンボルの数) を立てる所でもある</item>
+    /// </list>
+    /// </summary>
+    private int Floor(Step next) =>
+        next is not (Step.Step4 or Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
 
     /// <summary>1歩。次の段と待ち (0.1ms)</summary>
     private (Step Next, int Wait) DemodStep(Step step)

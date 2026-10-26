@@ -353,6 +353,9 @@ public sealed class Zd1jTuner : ITuneDevice
         }
     }
 
+    /// <summary>最後にロックした時刻 (Stopwatch)。<c>--tune</c> が最初の復号できたパケットまでを測る</summary>
+    public long LockedAt => _lockedAt;
+
     /// <summary>いまのボード (<c>--tune</c> が数を出す)。流していなければ null</summary>
     public Zd1jBoard? Board => _board;
 
@@ -390,6 +393,8 @@ public sealed class Zd1jTuner : ITuneDevice
                 var result = demod.Tune(tuning.Frequency);
                 _lockedAt = Stopwatch.GetTimestamp();
                 _lockMs = (long)Stopwatch.GetElapsedTime(tuneStarted, _lockedAt).TotalMilliseconds;
+                // 選局ごとに1行 (常駐のときも)。仕様書の外の工夫の数字を本番の記録で見直すため
+                Log.Write($"[{_name}] {demod.LastSummary}");
                 if (result == DibLock.Failed) throw new IOException(ITuneDevice.SyncFailed);
 
                 if (!_red)
