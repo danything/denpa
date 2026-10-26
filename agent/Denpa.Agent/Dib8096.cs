@@ -545,7 +545,16 @@ public sealed class Dib8096
         TunerAndPeripherals();
         Measure("ダイバーシティ内部だけ", () => Diversity(DiversityMode.Internal));
         Measure("AGC の立ち上げ (7.4)", StartAgc);
-        var result = Search();
+        DibLock result;
+        try
+        {
+            result = Search();
+        }
+        catch
+        {
+            _capacitors.Remove(_tunerKhz);
+            throw;
+        }
         // 合わなかったら、使い回したキャパシタも次は較正し直す
         if (result == DibLock.Failed) _capacitors.Remove(_tunerKhz);
         Measure("出力をパラレルに", () =>
@@ -1712,15 +1721,18 @@ public sealed class Dib8096
     /// 次の段を回すまでの最低の間 (ms)。仕様書 (参考の実装) はどの段も最低 10ms。<see cref="Fast"/> のときだけ、
     /// シンボルの数の時間切れに関わらない段を <see cref="FastPollMs"/> に詰める (仕様書に無い)。段ごとの根拠:
     /// <list type="bullet">
-    /// <item>開始・探索の始め・段 2・段 3・段 9: 書いて次へ進むだけで、待って見るものが無い。間を空けても機材の進みは変わらない</item>
+    /// <item>開始・探索の始め・段 2・段 3・段 9: 書いて次へ進むだけで、待って見るものが無い。間を空けても機材の進みは変わらない
+    /// (段 3 のあとの間は、段 4 を下の 10ms 側に入れたので詰めない)</item>
     /// <item>段 1: 探索の終わりの割り込み (D[1284]) を見るだけ。時間切れは外側の 5 秒だけで、早く見ても読みが増えるだけ</item>
     /// <item>段 10: 時間切れは実時間 (200ms × 数) なので、見る間隔を詰めても時間切れの長さは変わらない</item>
     /// <item>段 5・段 7 (と、そこから入る段 6・段 8) は 10ms のまま: 時間切れがシンボルの数 (2 × L・20 × n シンボル、6MHz で数 ms) で、
     /// 10ms ごとに見る前提の長さになっている。詰めると機材が同期を判定する前に時間切れになる。段 8 の前の 14 シンボルの待ちも同じ</item>
+    /// <item>段 4 も 10ms のまま: 段 3 でチャンネルの共通設定を書いてから復調器をやり直すまでの間で、機材がその設定を取り込むのに
+    /// 要る時間が仕様書から分からない。段 4 は段 5 の時間切れ (シンボルの数) を立てる所でもある</item>
     /// </list>
     /// </summary>
     private int Floor(Step next) =>
-        Fast && next is not (Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
+        Fast && next is not (Step.Step4 or Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
 
     /// <summary>1歩。次の段と待ち (0.1ms)</summary>
     private (Step Next, int Wait) DemodStep(Step step)
