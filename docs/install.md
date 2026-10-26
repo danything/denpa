@@ -101,7 +101,7 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 
 リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェント
 (リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`) には、
-**出所の証明 (attestation)** を付けています (2.12.0 より後のリリースから)。このリポジトリのリリースの
+**出所の証明 (attestation)** を付けています (2.13.0 から)。このリポジトリのリリースの
 workflow が作ったものかを、[GitHub CLI](https://cli.github.com/) で確かめられます。
 
 ```sh

@@ -308,7 +308,7 @@ jobs:
   # 中身はテスト (agent-windows) と、ビルドして起こす・入れ方を通す (agent-windows-install) の
   # 関係ない2つだった。install.ps1 のリントは Windows でなくてよいので install-linux へ移した。
   #
-  # **SDK と NuGet は D: に置き、actions/cache で戻す。** SDK のバージョン (10.0.402) はランナーの
+  # **SDK と NuGet は D: に置き、actions/cache で戻す。** setup-dotnet で入れる SDK はランナーの
   # イメージに入っていないので毎回 300MB を落として展開していて、C: への展開だけで20秒かかっていた
   # (D: なら8秒。ビルドと restore も C: より速い)。キャッシュに当たれば SDK の用意は10秒ほどで済む。
   # 鍵は SDK のバージョンと csproj。バージョンは下の setup-dotnet の行から読む (Renovate が書き換えるのはそこ)
