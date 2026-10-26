@@ -80,7 +80,8 @@
       if (!(target instanceof Element)) return;
       if (!target.hasAttribute("data-retract-scroll")) return;
       const y = target.scrollTop;
-      const before = boxes.get(target) ?? y;
+      // 初めて巻いた箱は頭 (0) から動いた。今の位置と比べると、頭から一度に大きく送った分を見落とす
+      const before = boxes.get(target) ?? 0;
       boxes.set(target, y);
       if (touched instanceof Node && target.contains(touched))
         follow(y, before);

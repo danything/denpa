@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, goto, syncEpg, test } from "./helpers";
+import { expect, goto, stopGuideClock, syncEpg, test } from "./helpers";
 
 /**
  * **番組表は局名の行と時刻の列を先に出し、マスのところだけ骨組みにする**
@@ -181,14 +181,7 @@ for (const [width, height] of [
   }) => {
     await syncEpg(request);
     await page.setViewportSize({ width, height });
-    // 表の頭は日本時間の 4:00。4:00 前はまだ前の日の表
-    const HOUR = 3_600_000;
-    const jst = new Date(Date.now() + 9 * HOUR);
-    if (jst.getUTCHours() < 4) jst.setUTCDate(jst.getUTCDate() - 1);
-    const head =
-      Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate(), 4) -
-      9 * HOUR;
-    await page.clock.setFixedTime(head + 23.5 * HOUR);
+    await stopGuideClock(page, 23.5);
     await holdSheets(page);
 
     await page.goto("/guide?type=GR");
