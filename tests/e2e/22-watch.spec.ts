@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import type { APIRequestContext, Page } from "@playwright/test";
 
 import {
@@ -522,6 +524,68 @@ test.describe("録画を観る", () => {
     await expect(page.getByTestId("watch-captions")).toHaveAttribute(
       "aria-pressed",
       "false",
+    );
+  });
+
+  /*
+   * **字幕を待たずに観はじめる。** サーバは字幕を作るのに動画を丸ごと読む (初回は1時間の録画で1秒ほど)。
+   * 開いた時点で取っていた頃は観はじめの読み込みと取り合い、最初のコマが字幕の応答のすぐ後まで出なかった。
+   * 字幕は映像が出てから取る (`askCaptions`)。ここでは本物の映像 (`tests/fake/live-av1.mp4`) を渡し、
+   * 字幕の応答を止めたままでも映像が出ることを見る
+   */
+  test("字幕の応答が遅くても、映像は字幕を待たずに出る", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const id = await watchable(page, request);
+    await page.route(`**/api/recordings/${id}/playback`, (route) =>
+      route.fulfill({
+        json: {
+          duration: 60,
+          axis: "encoded",
+          audios: [{ id: "0", label: "" }],
+          offers: [
+            {
+              codec: "av1",
+              way: "file",
+              source: "encoded",
+              codecs: "av01.0.08M.08,opus",
+            },
+          ],
+        },
+      }),
+    );
+    const clip = readFileSync(new URL("../fake/live-av1.mp4", import.meta.url));
+    await page.route(`**/api/recordings/${id}/file?**`, (route) =>
+      route.fulfill({ status: 200, contentType: "video/mp4", body: clip }),
+    );
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let asked = false;
+    await page.route(`**/api/recordings/${id}/captions.json`, async (route) => {
+      asked = true;
+      await held;
+      await route.fulfill({
+        json: { v: 1, pages: [{ at: 0, page: FAKE_CAPTION }] },
+      });
+    });
+
+    await goto(page, `/watch/${id}`);
+    const video = page.getByTestId("watch-video");
+    // 最初のコマが出る (字幕の応答はまだ返していない)
+    await expect
+      .poll(() => video.evaluate((v) => (v as HTMLVideoElement).readyState))
+      .toBeGreaterThanOrEqual(2);
+    // 字幕は映像が出てから取りに来る
+    await expect.poll(() => asked).toBe(true);
+    await expect(page.getByTestId("watch-captions")).toHaveCount(0);
+
+    // 届いたら出す
+    release();
+    await expect(page.getByTestId("watch-captions")).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
   });
 

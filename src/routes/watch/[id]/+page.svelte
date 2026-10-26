@@ -383,6 +383,7 @@
     if (waiting && canvas.flowing && now >= hopTo) {
       if (++settled >= SETTLED) open();
     }
+    if (canvas.flowing && !hopping) askCaptions();
     paint();
     hopCm();
     feedData();
@@ -983,11 +984,18 @@
       settle();
     });
     void detail.open(rec.program_id, facts);
-    // 字幕は消していても取ってくる (持っているかどうかで ⚙ の字幕の行と字幕ボタンを出す)
+    // 字幕は消していても取ってくる (持っているかどうかで ⚙ の字幕の行と字幕ボタンを出す)。観はじめてから (`askCaptions`)
     captions = storedCaptionsOn(stored(CAPTION_ON_KEY));
-    void loadCaptions();
     if (video !== null) follow(video);
-    if (!ready) return;
+    if (!ready) {
+      askCaptions();
+      return;
+    }
+    captionWait = setTimeout(askCaptions, CAPTION_WAIT);
+    // 端末に保存したものはサーバを読まないので、待たずに取る
+    void localLookup.then((copy) => {
+      if (copy !== null) askCaptions();
+    });
     video?.play().catch(() => undefined);
     // 指のときは最初から全画面 (観るために置いてある画面)。画面の幅では決めない — 狭い窓の PC まで全画面になる
     if (window.matchMedia("(pointer: coarse)").matches) fullscreen.enter();
@@ -1011,6 +1019,7 @@
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
       if (bufferTimer !== null) clearTimeout(bufferTimer);
       if (retryTimer !== null) clearTimeout(retryTimer);
+      if (captionWait !== null) clearTimeout(captionWait);
     };
   });
 
@@ -1218,6 +1227,8 @@
    */
   function recover(): void {
     if (video === null) return;
+    // 映像は出せていない。字幕のボタンは出せるように取る
+    askCaptions();
     const code = video.error?.code ?? 0;
     // その場で流しているときの切れ目は `remux-player.ts` が繋ぎ直す。ここに来るのは読めない中身
     if (
@@ -1364,7 +1375,7 @@
     captions = on;
     remind(CAPTION_ON_KEY, on ? "1" : "0");
     if (on) {
-      void loadCaptions();
+      askCaptions();
       paint();
     } else {
       clearCaptions();
@@ -1380,8 +1391,31 @@
     paint();
   }
 
+  /** 字幕を取りに行ったか。取るのは1回だけ */
+  let captionsAsked = false;
+  /** 映像が出ないまま待つ上限の時計 (`CAPTION_WAIT`) */
+  let captionWait: ReturnType<typeof setTimeout> | null = null;
+  /** 映像が出るのを待つ上限 (ms)。自動再生を断られて止まっている・読めない、でも字幕のボタンは出したい */
+  const CAPTION_WAIT = 3_000;
+
   /**
-   * 字幕を取ってくる。既定で出すので開いた時点で取得し、一度読めていれば読み直さない。
+   * **字幕は映像が出てから取る** (最初のコマ・読めなかった・互換モードで流れ出した・待ちくたびれた、の早いほう)。
+   * サーバは字幕を抜くのに動画を丸ごと読む (`captions.json`。初回は1時間の録画で1秒ほど)。
+   * 開いた時点で取っていた頃は、観はじめの読み込み (続きの位置・CM の先へ飛んだ先) とディスクを
+   * 取り合い、最初のコマが字幕の応答を待つように遅れていた (実機で canplay から 0.8 秒)
+   */
+  function askCaptions(): void {
+    if (captionWait !== null) {
+      clearTimeout(captionWait);
+      captionWait = null;
+    }
+    if (captionsAsked) return;
+    captionsAsked = true;
+    void loadCaptions();
+  }
+
+  /**
+   * 字幕を取ってくる (`askCaptions` から1回)。既定で出すので、消していても取る。
    * 端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
    */
   async function loadCaptions(): Promise<void> {
@@ -1454,6 +1488,9 @@
         if (!there) settled = 0;
         else if (++settled >= SETTLED) open();
       }
+      // 最初のコマが出た (開いた直後に CM の先へ飛ぶなら、飛んだ先が出てから)
+      if (!hopping && target.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA)
+        askCaptions();
       paint();
       hopCm();
       return true;

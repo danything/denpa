@@ -1041,15 +1041,19 @@ export async function tsChapters(
  * エンコード済みがあればそこから。無ければ元の TS から抜き、時刻を物差し (TS の頭を 0) に揃える
  * (`-copyts` で放送の PTS を運び、頭のぶん引く。`presented`)。どちらも無ければ null
  */
-export async function captionArgs(
-  recording: Recording,
-): Promise<{ argv: string[]; ts: boolean } | null> {
+export async function captionArgs(recording: Recording): Promise<{
+  argv: string[];
+  ts: boolean;
+  /** 抜くファイル (エンコード済み)。元の TS から抜くときは null */
+  path: string | null;
+} | null> {
   const encoded = encodedPath(recording);
   const out = ["-c:s", "copy", "-f", "matroska", "pipe:1"];
   if (encoded !== null) {
     return {
       argv: ["-v", "error", "-i", encoded, "-map", "0:s:0", ...out],
       ts: false,
+      path: encoded,
     };
   }
   const path = tsPathOf(recording);
@@ -1069,5 +1073,6 @@ export async function captionArgs(
       ...out,
     ],
     ts: true,
+    path: null,
   };
 }

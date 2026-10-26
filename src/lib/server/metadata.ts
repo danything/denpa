@@ -16,7 +16,7 @@ import { TS_PROBE } from "./ts-probe";
  * サムネ (`-poster.jpg`) は denpa の画面 (`/api/recordings/<id>/poster`) が配る画像。
  *
  * **字幕は置きません。** 入れ物の中に入っていて、抜くのは実測で0.1〜1秒
- * (`api/recordings/<id>/captions.json`)。
+ * (`api/recordings/<id>/captions.json`。一度抜いたものはメモリに覚えておく)。
  */
 export function sidecarPaths(videoPath: string): {
   thumbnail: string;
