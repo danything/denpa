@@ -292,7 +292,7 @@ test.describe("操作したときの反応", () => {
     await expect(detail).toBeHidden();
   });
 
-  test("スマホの幅でも番組表の操作は1行で、表の下・下のタブのすぐ上にある", async ({
+  test("スマホの幅でも番組表の操作は1行で、表の上・下のタブのすぐ上に浮く", async ({
     page,
   }) => {
     // 操作を2段に積んだり表の下を空けたりすると、1画面に入る時間が減る。親指が届くよう下に置く
@@ -310,8 +310,8 @@ test.describe("操作したときの反応", () => {
       ).toBeLessThan(4);
     }
 
-    // ページごとは動かず、表だけが動く。表の下に操作の1行。ほかの画面の操作の1行と同じく、
-    // 下のタブのすぐ上に浮いた面で、表と下のタブとの間を 0.375rem (6px) ずつ空ける
+    // ページごとは動かず、表だけが動く。表は画面の下の端まで伸び、操作の1行はその上に浮く。ほかの画面の操作の1行と同じく、
+    // 下のタブのすぐ上に浮いた面で、下のタブとの間を 0.375rem (6px) 空ける (読んでいる間は一緒に引っ込む。E2E 18)
     const fit = await page.evaluate(() => {
       const rect = (id: string) =>
         document
@@ -322,7 +322,7 @@ test.describe("操作したときの反応", () => {
       const tabbar = rect("tabbar");
       return {
         scroll: document.documentElement.scrollHeight - innerHeight,
-        above: bar.top - grid.bottom,
+        below: innerHeight - grid.bottom,
         gap: tabbar.top - bar.bottom,
         right: Math.max(
           ...[
@@ -332,7 +332,7 @@ test.describe("操作したときの反応", () => {
       };
     });
     expect(fit.scroll).toBe(0);
-    expect(Math.abs(fit.above - 6)).toBeLessThanOrEqual(1);
+    expect(Math.abs(fit.below)).toBeLessThanOrEqual(1);
     expect(Math.abs(fit.gap - 6)).toBeLessThanOrEqual(1);
     expect(fit.right, "操作が画面の右からはみ出している").toBeLessThanOrEqual(
       390,

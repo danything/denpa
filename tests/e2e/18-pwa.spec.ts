@@ -369,14 +369,74 @@ test.describe("PWA", () => {
     await page.mouse.wheel(0, -600);
     await expect.poll(bottom).toBeLessThanOrEqual(780);
 
-    // 自分で巻き取る画面 (番組表) は表を巻いても引っ込めない (表の高さは下のタブの上まで。下のタブだけ消えると操作の1行が宙に残る)
-    await goto(page, "/guide");
-    await expect(page.getByTestId("guide-grid")).toBeVisible();
-    await page.locator(".grid-box").evaluate((el) => {
-      el.scrollTop += 400;
+    // 画面を移ると出す
+    await page.mouse.wheel(0, 600);
+    await expect
+      .poll(async () => (await tabbar.boundingBox())!.y)
+      .toBeGreaterThanOrEqual(780);
+    await goto(page, "/settings/general");
+    await expect.poll(bottom).toBeLessThanOrEqual(780);
+  });
+
+  test("スマホの番組表は、表の箱を下へ送ると下のタブと操作の1行が引っ込み、上へ戻すと出る", async ({
+    page,
+  }) => {
+    /*
+     * 番組表は窓ではなく表の箱 (`.grid-box`) の中で巻くので、箱の縦の巻き取りで出し入れする (`+layout.svelte`)。
+     * 表は画面の下の端まで伸びていて、出し入れで箱の大きさも巻いた位置も変わらない (中身が跳ねない)
+     */
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goto(page, "/guide?type=GR");
+    const grid = page.getByTestId("guide-grid");
+    await expect(page.getByTestId("program-button").first()).toBeVisible();
+    const tabbar = page.getByTestId("tabbar");
+    const bar = page.getByTestId("guide-toolbar");
+    const top = async (locator: typeof bar) => (await locator.boundingBox())!.y;
+    const shown = async () => {
+      await expect.poll(() => top(tabbar)).toBeLessThan(844);
+      await expect.poll(() => top(bar)).toBeLessThan(await top(tabbar));
+    };
+    const size = () =>
+      grid.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom, height: el.clientHeight };
+      });
+
+    // 開いた直後 (「いま」への位置合わせで箱は巻かれている) は出ている。表は画面の下の端まで
+    await shown();
+    const opened = await size();
+    expect(Math.abs(opened.bottom - 844)).toBeLessThanOrEqual(1);
+
+    // 横に送っても出し入れしない
+    await grid.evaluate((el) => {
+      el.scrollLeft += 300;
     });
     await page.waitForTimeout(400);
-    expect(await bottom()).toBeLessThanOrEqual(780);
+    await shown();
+
+    // 下へ送ると隠れる。箱の大きさと巻いた位置は、隠れる前後で変わらない
+    await page.mouse.move(200, 400);
+    await page.mouse.wheel(0, 400);
+    await expect
+      .poll(() => grid.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    await expect.poll(() => top(tabbar)).toBeGreaterThanOrEqual(844);
+    await expect.poll(() => top(bar)).toBeGreaterThanOrEqual(844);
+    const scrolled = await grid.evaluate((el) => el.scrollTop);
+    await page.waitForTimeout(400);
+    expect(await grid.evaluate((el) => el.scrollTop)).toBe(scrolled);
+    expect(await size()).toEqual(opened);
+
+    // 上へ戻すと出る
+    await page.mouse.wheel(0, -200);
+    await shown();
+    expect(await size()).toEqual(opened);
+
+    // 時刻へ送るボタン (狭い画面は日付のメニューの中) で動いたぶんでは隠さない (押した1行ごと消さない)
+    await page.getByTestId("guide-date").click();
+    await page.getByRole("menuitem", { name: /^夜/ }).click();
+    await page.waitForTimeout(400);
+    await shown();
   });
 
   test("ホーム画面から開いた iPhone では、暗いテーマのときだけステータスバーの裏まで描く", async ({

@@ -57,7 +57,7 @@ function layout(page: Page) {
   });
 }
 
-/** 骨組み (の見えているところ) の下の端と、届くべき位置 (広い画面は画面の下、狭い画面は下の操作の行の上) */
+/** 骨組み (の見えているところ) の下の端と、届くべき位置 (広い画面は画面の下、640〜767px は下の操作の行の上) */
 function bottoms(page: Page, toolbar: string) {
   return page.evaluate((toolbar) => {
     const skeleton = [
@@ -68,8 +68,10 @@ function bottoms(page: Page, toolbar: string) {
     const grid = skeleton.closest('[data-testid="guide-grid"]');
     if (grid !== null)
       bottom = Math.min(bottom, grid.getBoundingClientRect().bottom);
-    const narrow = matchMedia("(max-width: 767px)").matches;
-    // スマホでは操作の1行が浮いた面で、表との間に隙間 (上の余白) を空ける
+    const narrow = matchMedia(
+      "(min-width: 640px) and (max-width: 767px)",
+    ).matches;
+    // 640〜767px は操作の1行が表の下に並ぶ (上の余白ぶん空ける)。スマホは表が画面の下の端まで伸び、1行はその上に浮く
     const bar = document.querySelector(toolbar) as HTMLElement;
     const limit = narrow
       ? bar.getBoundingClientRect().top -
@@ -126,7 +128,7 @@ for (const [width, height] of [
   [820, 1180],
   [390, 844],
 ] as const) {
-  test(`骨組みは画面の下の端 (狭い画面は下の操作の行) まで届く ${width}×${height}`, async ({
+  test(`骨組みは画面の下の端まで届く ${width}×${height}`, async ({
     page,
     request,
   }) => {

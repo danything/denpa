@@ -657,7 +657,7 @@
         局名の行に入れると、操作の幅のぶん局名が隠れる。表の外の1行なら、
         隠れるものも押す回数も増えない。
 
-        **狭い画面では表の下に置く** (親指が届く。`.guide-bar` の `order`。スマホは下のタブのすぐ上に浮かせる)。
+        **狭い画面では表の下に置く** (親指が届く。`.guide-bar` の `order`。スマホは下のタブのすぐ上に浮かせ、表を読んでいる間は下のタブと一緒に引っ込む)。
         DOM の順 (種別 → 日付 → 時刻 → …) は読み上げの順なので変えない。
         入りきらない幅では、時刻のボタンを「⋯」に、さらに狭いと日付のメニューに移す
     -->
@@ -954,12 +954,15 @@
             キーボードでマスへ移ったとき (`focus`) や `scrollIntoView` のスクロールが、
             見出しの裏に半分隠れたマスを見えているとみなして動かない (e2e では 3時台に
             翌日の 4:00 のマスを押すと、真ん中が見出しに当たって詳細が開かなかった)
+
+            **表の箱の縦の巻き取りで、スマホの下のタブと操作の1行を出し入れする** (`data-retract-scroll`。`+layout.svelte`)
         -->
     <div
       class="grid-box"
       style="scroll-padding: calc(var(--guide-head, 0px) + {headHeight}px) 0 0
         {TIME_COLUMN};"
       use:dragScroll
+      data-retract-scroll
       bind:this={grid}
       data-testid="guide-grid"
       aria-busy={!showCells || drawing ? "true" : undefined}
@@ -1587,8 +1590,10 @@
   .grid-box:active {
     cursor: grabbing;
   }
+  /* スマホでは下のタブと操作の1行が表の上に浮くので、表の最後がその裏に隠れないよう下を空ける (`app.css` の `--guide-float-h`) */
   .rows {
     display: grid;
+    padding-bottom: var(--guide-float-h, 0px);
   }
   /*
      * **局名と時の列は操作の層。** 表を巻くとマスがその裏を流れるので、ヘッダーと同じ半透明の面 (`--dp-float`) で浮かせる
