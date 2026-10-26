@@ -210,6 +210,24 @@ export async function shownDay(page: Page): Promise<string> {
   return href;
 }
 
+/**
+ * ブラウザの時計を、今日の番組表の頭 (日本時間の 4:00) から `hours` 時間あとに止める。
+ *
+ * 番組表は開くと「いま」を表の4分の1あたりへ送るので、表のどこが映るかは時刻で変わる。
+ * 夜遅くは表の最後に近く、下へ送れる量が足りない (390×844 では 0:30 から表の最後に着いている)。
+ * 位置で結果が変わるテストは、これで時刻を決めてから開く。止めるのはブラウザの時計だけで、番組はサーバの今のまま
+ */
+export async function stopGuideClock(page: Page, hours: number): Promise<void> {
+  const HOUR = 3_600_000;
+  // 4:00 前はまだ前の日の表
+  const jst = new Date(Date.now() + 9 * HOUR);
+  if (jst.getUTCHours() < 4) jst.setUTCDate(jst.getUTCDate() - 1);
+  const head =
+    Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate(), 4) -
+    9 * HOUR;
+  await page.clock.setFixedTime(head + hours * HOUR);
+}
+
 /** 番組表のマスをIDで探す。番組が終わると並びがずれるので位置では追わない */
 export function cellOf(page: Page, programId: string) {
   return page.locator(
