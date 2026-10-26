@@ -295,7 +295,7 @@ public class Zd1jTests
         try
         {
             var usb = new FakeBridgeUsb();
-            var board = new Zd1jBoard("1-2", usb, Zd1jI2cMode.Host, shortWaits: true, trace: false);
+            var board = new Zd1jBoard("1-2", usb, Zd1jI2cMode.Host, trace: false);
             board.Bridge.Start();
             var tuner = new Zd1jTuner("test", () => board);
             tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
@@ -344,7 +344,7 @@ public class Zd1jTests
     {
         var usb = new FakeBridgeUsb();
         usb.Dib.Signal = false;
-        var board = new Zd1jBoard("1-2", usb, Zd1jI2cMode.Host, shortWaits: true, trace: false);
+        var board = new Zd1jBoard("1-2", usb, Zd1jI2cMode.Host, trace: false);
         board.Bridge.Start();
         var tuner = new Zd1jTuner("test", () => board);
         var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId));

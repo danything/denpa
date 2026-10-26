@@ -30,7 +30,20 @@ if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
 // 実機で選局と復号だけ試す入口。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
-if (args.ElementAtOrDefault(0) == "--card") return Probe.Card();
+if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
+/*
+ * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ刺さっている機材を自分で拾って使い始めるので、
+ * 打ち間違い (`--version` など) で本番と同じ機材を取り合うことになる
+ */
+if (args.Length > 0)
+{
+    Console.Error.WriteLine($"知らない引数です: {string.Join(" ", args)}");
+    Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
+    Console.Error.WriteLine("       denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N]");
+    Console.Error.WriteLine("       denpa-agent --decode-file <in.ts> <out.ts>");
+    Console.Error.WriteLine("       denpa-agent --card [zd1j:<USB のポート>]");
+    return 2;
+}
 
 var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
     ? configured

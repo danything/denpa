@@ -91,12 +91,15 @@ public static class Zd1j
     /// <summary>内蔵の差し込み口 (カードリーダー)。**開くまでは何も開かない**</summary>
     public static IReadOnlyList<CardLinkCandidate> Cards() =>
         OperatingSystem.IsLinux()
-            ? [.. Ports(UsbSysfs.Devices).Select(port =>
-            {
-                var name = $"{Model} {port} Internal Card Reader";
-                return new CardLinkCandidate(name, () => new Zd1jCard(name, () => Zd1jBoard.Acquire(port)));
-            })]
+            ? [.. Ports(UsbSysfs.Devices).Select(Card)]
             : [];
+
+    /// <summary>そのポートの内蔵の差し込み口。**開くまでは何も開かない**</summary>
+    public static CardLinkCandidate Card(string port)
+    {
+        var name = $"{Model} {port} Internal Card Reader";
+        return new CardLinkCandidate(name, () => new Zd1jCard(name, () => Zd1jBoard.Acquire(port)));
+    }
 
     /// <summary>開く。Linux だけ (Windows・macOS は後で)</summary>
     internal static IUsbDevice OpenUsb(string port)
@@ -127,7 +130,7 @@ public sealed class Zd1jBoard : IDibTime
     private int _users;
     private int _generation;
     private bool _closed;
-    private readonly bool _shortWaits;
+    private readonly Action<string>? _trace;
 
     public string Port { get; }
     public IUsbDevice Usb { get; }
@@ -142,12 +145,12 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>USB が抜けたなどで使えなくなった。借り手が返したらすぐ閉じる</summary>
     public bool Faulted { get; private set; }
 
-    internal Zd1jBoard(string port, IUsbDevice usb, Zd1jI2cMode mode, bool shortWaits, bool trace)
+    internal Zd1jBoard(string port, IUsbDevice usb, Zd1jI2cMode mode, bool trace)
     {
         Port = port;
         Usb = usb;
-        _shortWaits = shortWaits;
-        Bridge = new Mb86h47(usb, mode, trace ? message => Log.Write($"[zd1j {port}] {message}") : null);
+        _trace = trace ? message => Log.Write($"[zd1j {port}] {message}") : null;
+        Bridge = new Mb86h47(usb, mode, _trace);
     }
 
     /// <summary>
@@ -174,7 +177,6 @@ public sealed class Zd1jBoard : IDibTime
             var usb = open();
             board = new Zd1jBoard(
                 port, usb, Zd1j.I2cMode(Environment.GetEnvironmentVariable("DENPA_ZD1J_I2C")),
-                Environment.GetEnvironmentVariable("DENPA_ZD1J_WAITS") == "short",
                 Environment.GetEnvironmentVariable("DENPA_ZD1J_DEBUG") is { Length: > 0 } debug && debug != "0");
             try
             {
@@ -243,7 +245,7 @@ public sealed class Zd1jBoard : IDibTime
                 if (_demod is not null) return _demod;
                 var started = Stopwatch.StartNew();
                 Bridge.ResetDemodulator(Sleep);
-                var demod = new Dib8096(Bridge, this, _shortWaits);
+                var demod = new Dib8096(Bridge, this, _trace);
                 demod.Initialize();
                 Bridge.Flush();
                 DemodMs = started.ElapsedMilliseconds;

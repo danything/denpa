@@ -50,7 +50,7 @@ public sealed class Dib8096
 
     private readonly II2c _i2c;
     private readonly IDibTime _time;
-    private readonly bool _shortWaits;
+    private readonly Action<string>? _trace;
 
     /// <summary>DiB8000 の版 (D[897]: 0x8000〜0x8002)</summary>
     public ushort Version { get; private set; }
@@ -63,16 +63,12 @@ public sealed class Dib8096
 
     private bool _sleeping;
 
-    /// <param name="shortWaits">
-    /// DiB0090 と AGC の待ちを仕様書の値そのまま (0.1ms 単位を切り上げ) にする。既定は参考の実装と同じ丸め上げ
-    /// (<c>floor(10 × (t + 99) / 100)</c> ms)。仕様書に「10ms 未満の待ちは同期しないことがある」とあるので、
-    /// 短くするのは実機で確かめるときだけ (環境変数 <c>DENPA_ZD1J_WAITS=short</c>)
-    /// </param>
-    public Dib8096(II2c i2c, IDibTime time, bool shortWaits = false)
+    /// <param name="trace">あれば、選局のたびにロックまでの内訳 (段ごとの時間と待ち) を渡す (<c>DENPA_ZD1J_DEBUG=1</c>)</param>
+    public Dib8096(II2c i2c, IDibTime time, Action<string>? trace = null)
     {
         _i2c = i2c;
         _time = time;
-        _shortWaits = shortWaits;
+        _trace = trace;
     }
 
     // ---------------------------------------------------------------------
@@ -112,12 +108,21 @@ public sealed class Dib8096
     private void T(int register, int value) =>
         _i2c.Write(TunerAddress, [(byte)register, (byte)(value >> 8), (byte)value]);
 
-    /// <summary>0.1ms 単位の待ちをミリ秒に直す</summary>
-    private int Ms(int tenths) => _shortWaits ? (tenths + 9) / 10 : 10 * (tenths + 99) / 100;
+    /// <summary>
+    /// 0.1ms 単位の待ちをミリ秒に直す。参考の実装と同じく <c>floor(10 × (t + 99) / 100)</c> ms に丸め上げる (t = 0 でも 9ms)。
+    /// **仕様書の値そのまま (切り上げただけ) では同期しない** (仕様書に「10ms 未満の待ちは同期しないことがある」とあり、実機でも
+    /// 1 回目・2 回目とも同期しなかった)
+    /// </summary>
+    private static int Ms(int tenths) => 10 * (tenths + 99) / 100;
+
+    /// <summary>眠った合計 (ms)。内訳を出すときに使う</summary>
+    private double _slept;
 
     private void Wait(int ms)
     {
-        if (ms > 0) _time.Sleep(ms);
+        if (ms <= 0) return;
+        _time.Sleep(ms);
+        _slept += ms;
     }
 
     // ---------------------------------------------------------------------
@@ -465,16 +470,60 @@ public sealed class Dib8096
         if (hz is < 45_000_000 or > 860_000_000) throw new IOException($"{hz} Hz は受けられません (45〜860MHz)");
         _khz = hz / 1000;
         _band = BandOf(_khz);
-        if (_sleeping) WakeUp();
-        Diversity(DiversityMode.Both);
-        Output(false);
+        _breakdown.Clear();
+        var started = _time.NowMs;
+        var slept = _slept;
+        Measure("準備 (起こす・ダイバーシティ両方・出力止め)", () =>
+        {
+            if (_sleeping) WakeUp();
+            Diversity(DiversityMode.Both);
+            Output(false);
+        });
         TunerAndPeripherals();
-        Diversity(DiversityMode.Internal);
-        StartAgc();
+        Measure("ダイバーシティ内部だけ", () => Diversity(DiversityMode.Internal));
+        Measure("AGC の立ち上げ (7.4)", StartAgc);
         var result = Search();
-        Output(true);
-        _i2c.Flush();
+        Measure("出力をパラレルに", () =>
+        {
+            Output(true);
+            _i2c.Flush();
+        });
+        if (_trace is not null)
+        {
+            var parts = string.Join(" / ", _breakdown.Select(part =>
+                $"{part.Name} {part.Ms:F0}ms (待ち {part.SleptMs:F0}ms{(part.Steps > 1 ? $"、{part.Steps} 歩" : "")})"));
+            _trace($"選局 {hz} Hz → {result}: 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
+        }
         return result;
+    }
+
+    /// <summary>ロックまでの内訳の1つ (段の名前・かかった時間・そのうち眠った時間・歩数)</summary>
+    private sealed class Part(string name)
+    {
+        public string Name { get; } = name;
+        public double Ms;
+        public double SleptMs;
+        public int Steps;
+    }
+
+    private readonly List<Part> _breakdown = [];
+
+    /// <summary>内訳に足す。同じ名前なら合わせる</summary>
+    private void Account(string name, double ms, double slept)
+    {
+        var part = _breakdown.Find(item => item.Name == name);
+        if (part is null) _breakdown.Add(part = new Part(name));
+        part.Ms += ms;
+        part.SleptMs += slept;
+        part.Steps++;
+    }
+
+    private void Measure(string name, Action body)
+    {
+        var started = _time.NowMs;
+        var slept = _slept;
+        body();
+        Account(name, _time.NowMs - started, _slept - slept);
     }
 
     /// <summary>7.2 チューナーと周辺の設定</summary>
@@ -482,6 +531,8 @@ public sealed class Dib8096
     {
         Gpio(3, _band != Band.Uhf);
         RunTuner();
+        var rest = _time.NowMs;
+        var restSlept = _slept;
 
         // 4 PLL の倍率を選び直す (ADC のクロックの高調波をチャンネルから遠ざける)
         var r = D(1856);
@@ -513,6 +564,7 @@ public sealed class Dib8096
             Adc(AdcMode.On);
             AgcSettings();
         }
+        Account(_band == Band.Cband ? "PLL の倍率・ソフトの AGC・PWM に渡す" : "PLL の倍率・WBD の目標・PWM に渡す", _time.NowMs - rest, _slept - restSlept);
     }
 
     /// <summary>7.2 の 4 の倍率 <c>k</c> (17〜20)</summary>
@@ -556,8 +608,13 @@ public sealed class Dib8096
         for (var guard = 0; ; guard++)
         {
             if (guard > 1000) throw new IOException("DiB0090 の選局が終わりません");
+            var kind = _dcPending ? "DiB0090 DC の較正" : _wbdPending ? "DiB0090 WBD の較正" : _tempPending ? "DiB0090 温度"
+                : _capPending ? "DiB0090 キャパシタ" : "DiB0090 PLL と段 0・段 1";
+            var started = _time.NowMs;
+            var slept = _slept;
             var wait = TunerStep();
             Wait(Ms(wait));
+            Account(kind, _time.NowMs - started, _slept - slept);
             if (_tunerState == TunerEnd) return;
         }
     }
@@ -1444,6 +1501,9 @@ public sealed class Dib8096
         var readBack = false;
         for (; ; )
         {
+            var stepStarted = _time.NowMs;
+            var stepSlept = _slept;
+            var name = $"探索 {step}";
             var (next, wait) = DemodStep(step);
             step = next;
             if (_demodState == DemodState.FftSuccess && !readBack)
@@ -1451,10 +1511,12 @@ public sealed class Dib8096
                 ReadBack();
                 readBack = true;
             }
+            if (step == Step.Stop) Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
             if (step == Step.Stop && _demodState is DemodState.Failed or DemodState.Locked or DemodState.DataLocked) break;
             if (step == Step.Stop) throw new IOException("DiB8000 の探索が途中で止まりました");
             if (_time.NowMs - started > SearchLimitMs) throw new IOException("DiB8000 の探索が 5 秒で終わりませんでした");
             Wait(Math.Max(10, (int)Math.Ceiling(wait * Symbol)));
+            Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
         }
         return _demodState switch
         {

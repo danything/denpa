@@ -8,12 +8,12 @@ namespace Denpa.Agent.Tests;
  */
 public class Dib8096Tests
 {
-    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make(bool shortWaits = false)
+    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make(Action<string>? trace = null)
     {
         var model = new DibModel();
         var i2c = new FakeI2c(model);
         var time = new FakeTime();
-        return (new Dib8096(i2c, time, shortWaits), i2c, model, time);
+        return (new Dib8096(i2c, time, trace), i2c, model, time);
     }
 
     /// <summary><paramref name="expected"/> が <paramref name="log"/> にこの順で出てくるか (間に別の行があってよい)</summary>
@@ -235,7 +235,7 @@ public class Dib8096Tests
     [Test]
     public async Task 探索の1歩は最低_10ms_空ける()
     {
-        var (dib, _, _, time) = Make(shortWaits: true);
+        var (dib, _, _, time) = Make();
         dib.Initialize();
         time.Sleeps.Clear();
         dib.Tune(557_142_857);
@@ -253,13 +253,22 @@ public class Dib8096Tests
         time.Sleeps.Clear();
         dib.Tune(557_142_857);
         await Assert.That(time.Sleeps).Contains(9);
-        var reference = time.Sleeps.Sum();
-        // 短くすると仕様書の値そのまま (0.1ms 単位を切り上げ)。t = 0 なら待たない
-        (dib, _, _, time) = Make(shortWaits: true);
+        await Assert.That(time.Sleeps.Min()).IsGreaterThanOrEqualTo(1);
+    }
+
+    [Test]
+    public async Task ロックまでの内訳を出せる()
+    {
+        var lines = new List<string>();
+        var (dib, _, _, _) = Make(lines.Add);
         dib.Initialize();
-        time.Sleeps.Clear();
         dib.Tune(557_142_857);
-        await Assert.That(time.Sleeps.Sum()).IsLessThan(reference);
+        var line = lines.Single();
+        await Assert.That(line).Contains("DataLocked");
+        await Assert.That(line).Contains("DiB0090 DC の較正");
+        await Assert.That(line).Contains("AGC の立ち上げ (7.4)");
+        await Assert.That(line).Contains("探索 Step1");
+        await Assert.That(line).Contains("探索 Step10");
     }
 
     [Test]

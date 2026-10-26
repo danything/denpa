@@ -22,6 +22,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
+/// denpa-agent --card zd1j:4-12.1                          # CECH-ZD1 J の内蔵の差し込み口だけ (ほかのリーダーに触らない)
 /// </code>
 ///
 /// <para>
@@ -95,8 +96,17 @@ public static class Probe
     /// カードリーダーを並べて、カードを開いてみる。**pcscd を通さなくなったので、
     /// 実機でリーダーと話せているかはここで確かめる。**
     /// </summary>
-    public static int Card()
+    public static int Card(string[] args)
     {
+        if (args.ElementAtOrDefault(1) is { } device)
+        {
+            if (Zd1j.Parse(device) is not { } port)
+            {
+                Console.Error.WriteLine($"usage: denpa-agent --card [{Zd1j.Scheme}<USB のポート>]");
+                return 2;
+            }
+            return Zd1jCard(port);
+        }
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
         foreach (var found in Px4Card.Find().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
         DescribeZd1jCards();
@@ -142,7 +152,12 @@ public static class Probe
         var seconds = secondsAt >= 0 && int.TryParse(args.ElementAtOrDefault(secondsAt + 1), out var given) && given > 0
             ? TimeSpan.FromSeconds(given)
             : Read;
-        if (Zd1j.Parse(device) is { } zd1j) return RunZd1j(zd1j, channels, decode, seconds);
+        if (Zd1j.Parse(device) is { } zd1j)
+        {
+            // 鍵はそのボードの内蔵の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
+            IKeySource keys = cardAt >= 0 ? Keys.Source : new LocalCard(() => [Zd1j.Card(zd1j)]);
+            return RunZd1j(zd1j, channels, decode ? keys : null, seconds);
+        }
 
         var known = Config.FromEnvironment().StreamIds();
 
@@ -187,7 +202,7 @@ public static class Probe
     /// の時間と、I2C の回数、C/N と電波の強さを出す。チャンネルは <c>T27</c> でも <c>27</c> (地上波) でもよい。
     /// I2C の1回ずつの往復の時間は <c>DENPA_ZD1J_DEBUG=1</c> で記録に出る
     /// </summary>
-    private static int RunZd1j(string port, string[] channels, bool decode, TimeSpan seconds)
+    private static int RunZd1j(string port, string[] channels, IKeySource? keys, TimeSpan seconds)
     {
         var names = channels.Select(name => name.All(char.IsAsciiDigit) ? $"T{name}" : name).ToList();
         // 最後にもう一度、最初のチャンネルを選び直す (温かい状態の選局)
@@ -228,7 +243,7 @@ public static class Probe
                     requests = 0;
                 }
                 Console.WriteLine($"    選局からロック {timings.LockMs} ms");
-                Measure(tuner.Output, name, decode ? new Descrambler(Keys.Source) : null, seconds);
+                Measure(tuner.Output, name, keys is null ? null : new Descrambler(keys), seconds);
                 Console.WriteLine($"    ロックから最初の TS {tuner.Timings.FirstTsMs} ms");
                 Console.WriteLine($"    I2C のやり取り {board.Bridge.I2cTransfers - i2c} 回 / メモリ要求 {board.Bridge.Requests - requests} 回 ({(index == 0 ? "開くところからこの選局まで" : "この選局で")})");
                 if (tuner.Signal() is { } signal)
@@ -241,6 +256,34 @@ public static class Probe
         finally
         {
             tuner.Dispose();
+            Zd1jBoard.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// <c>--card zd1j:&lt;ポート&gt;</c>: **そのボードの内蔵の差し込み口だけ**を開いて、ATR とかかった時間、カードの番号を出す。
+    /// ほかのリーダー (本番が使っている USB のリーダーなど) には触らない
+    /// </summary>
+    private static int Zd1jCard(string port)
+    {
+        var found = Zd1j.Card(port);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            using var link = found.Open();
+            var atr = link.Reset();
+            Console.WriteLine($"{found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。冷えた状態から開いて IFSD を決めるまで)");
+            var init = BCas.Read(link);
+            Console.WriteLine($"{found.Name}: カード {string.Join(" / ", init.Ids.Select(id => id.ToString("D16")))}  CA_system_id 0x{init.CaSystemId:X4} ({started.ElapsedMilliseconds} ms)");
+            return 0;
+        }
+        catch (IOException error)
+        {
+            Console.Error.WriteLine($"{found.Name}: {error.Message} ({started.ElapsedMilliseconds} ms)");
+            return 1;
+        }
+        finally
+        {
             Zd1jBoard.CloseAll();
         }
     }
