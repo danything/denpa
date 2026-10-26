@@ -295,7 +295,6 @@ public class Dib8096Tests
         await Assert.That(i2c.Log.Any(line => line.StartsWith("D355=", StringComparison.Ordinal))).IsFalse();
         // 段 3 の共通設定 (探索ではない): 8K = モード 3 → D[0] の上 3 ビットが 3 (下は差動のセグメントのマスク)
         await Assert.That(i2c.Log.Any(line => line.StartsWith("D0=6", StringComparison.Ordinal) || line.StartsWith("D0=7", StringComparison.Ordinal))).IsTrue();
-
     }
 
     [Test]
