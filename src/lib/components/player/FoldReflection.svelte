@@ -110,7 +110,7 @@
     const measure = () => {
       const segment = outer.getBoundingClientRect();
       const frame = target.getBoundingClientRect();
-      // 枠が映像の形でないとき (狭い画面で上下に黒帯が出る) は、絵の幅だけ
+      // 枠が映像の形でないとき (狭い画面で上下に黒帯が出る) は、映像の幅だけ
       const [w = 16, h = 9] = ratio.split("/").map(Number);
       const width = Math.min(frame.width, (frame.height * w) / h);
       const next = reflectionLayout(segment, {
