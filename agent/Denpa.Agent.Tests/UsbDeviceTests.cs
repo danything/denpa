@@ -22,6 +22,7 @@ public class UsbDeviceTests
         await Assert.That(UsbFsDevice.SubmitUrb).IsEqualTo(0x8038550Au);
         await Assert.That(UsbFsDevice.DiscardUrb).IsEqualTo(0x0000550Bu);
         await Assert.That(UsbFsDevice.ReapUrbNoDelay).IsEqualTo(0x4008550Du);
+        await Assert.That(UsbFsDevice.ClearHalt).IsEqualTo(0x80045515u);
     }
 
     [Test]

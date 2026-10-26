@@ -71,10 +71,14 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     internal static readonly uint SubmitUrb = Ioc(2, 10, sizeof(Urb));
     internal static readonly uint DiscardUrb = Ioc(0, 11, 0);
     internal static readonly uint ReapUrbNoDelay = Ioc(1, 13, sizeof(void*));
+    internal static readonly uint ClearHalt = Ioc(2, 21, sizeof(uint));
 
     private const byte UrbTypeBulk = 3;
     private const short PollOut = 0x004;
     private const int CloseOnExec = 0x80000;
+
+    /// <summary>EP の止まりや化けで続けて捨ててよい読みの数。超えたら読みを失敗で終える</summary>
+    private const int MaxStalls = 8;
 
     private const int Eperm = 1;
     private const int Enoent = 2;
@@ -157,6 +161,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
 
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
     {
+        CheckLength(data.Length);
         fixed (byte* start = data)
         {
             var transfer = new ControlTransfer
@@ -172,6 +177,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
 
     public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs)
     {
+        CheckLength(data.Length);
         fixed (byte* start = data)
         {
             var transfer = new ControlTransfer
@@ -183,6 +189,12 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             if (sent < 0) throw Failure("制御転送 (OUT)");
             if (sent != data.Length) throw new IOException($"{Name}: 制御転送で送りきれません ({sent}/{data.Length} バイト)");
         }
+    }
+
+    /// <summary>制御転送の長さは wLength (16 ビット) に収まるだけ</summary>
+    private static void CheckLength(int length)
+    {
+        if (length > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(length), $"制御転送は {ushort.MaxValue} バイトまでです ({length} バイト)");
     }
 
     public int BulkRead(byte endpoint, Span<byte> buffer, int timeoutMs) => Transfer(endpoint, buffer, timeoutMs);
@@ -248,6 +260,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
         private readonly bool[] _pending;
         private int _head;
         private int _offset;
+        private int _stalls;
         private bool _closed;
 
         public InStream(UsbFsDevice owner, byte endpoint, int transferSize, int depth)
@@ -318,7 +331,8 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                 while (copied < buffer.Length && _done[_head])
                 {
                     var urb = _urbs[_head];
-                    if (urb->Status != 0) Fail(urb->Status);
+                    if (urb->Status != 0) Fail(urb);
+                    else _stalls = 0;
                     var left = urb->ActualLength - _offset;
                     var take = Math.Min(left, buffer.Length - copied);
                     new ReadOnlySpan<byte>((byte*)urb->Buffer + _offset, take).CopyTo(buffer[copied..]);
@@ -340,16 +354,21 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             }
         }
 
-        private void Fail(int status)
+        /// <summary>
+        /// 済んだ URB の失敗。端点の止まり (EPIPE) は止まりを解いて (USBDEVFS_CLEAR_HALT)、化け (EPROTO) はそのまま、その URB の中身だけ捨てて
+        /// 出し直す。続けて <see cref="MaxStalls"/> 回を超えたら読みを失敗で終える
+        /// </summary>
+        private void Fail(Urb* urb)
         {
-            var errno = -status;
-            // 端点の止まり (EPIPE) や化け (EPROTO) も、読みを出し直すと続けられることがあるので、そのURB だけ捨てる
-            if (errno is Epipe or Eproto)
+            var errno = -urb->Status;
+            if (errno is not (Epipe or Eproto)) throw Failure(_owner.Name, "TS の読みが失敗しました", errno);
+            if (++_stalls > MaxStalls) throw Failure(_owner.Name, $"TS の読みが続けて {_stalls} 回失敗しました", errno);
+            if (errno == Epipe)
             {
-                _urbs[_head]->ActualLength = 0;
-                return;
+                var endpoint = (uint)urb->Endpoint;
+                if (Sys.Ioctl(_owner.Fd, ClearHalt, (nint)(&endpoint)) < 0) throw _owner.Failure($"EP 0x{endpoint:X2} の止まりを解けません");
             }
-            throw Failure(_owner.Name, "TS の読みが失敗しました", errno);
+            urb->ActualLength = 0;
         }
 
         /// <summary>出していた URB を取り消して、全部回収してから受け口を返す</summary>
@@ -377,7 +396,11 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                     }
                 }
                 // 回収できなかった URB の受け口は、カーネルがまだ持っているかもしれないので返さない
-                if (_pending.Any(pending => pending)) return;
+                if (_pending.Count(pending => pending) is var left and > 0)
+                {
+                    Log.Write($"[{_owner.Name}] TS の読みを {left} 本回収できなかったので、受け口を返さずに残します");
+                    return;
+                }
             }
             foreach (var urb in _urbs)
             {
