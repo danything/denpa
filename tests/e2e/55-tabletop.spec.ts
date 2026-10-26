@@ -368,4 +368,59 @@ test.describe("テーブルトップ", () => {
     await fold(cdp, "flat");
     await expectSideBySide(page, "watch-stage");
   });
+
+  /*
+   * **録画・ルール・検索も、テーブルトップではスマホの形** (1000px 以上でも)。下のタブのすぐ上に操作の 1 行を浮かせ、
+   * 広い形の右のサイドバー・右の列は出さない。前は出し分けを幅で書いていて、下のタブだけが出て操作の 1 行が消えていた
+   */
+  for (const { url, bar, side } of [
+    { url: "/", bar: "timeline-toolbar", side: ".t-side" },
+    { url: "/rules", bar: "rule-bar", side: ".rules-side" },
+    { url: "/search?q=テスト", bar: "rule-draft-open", side: ".draft" },
+  ]) {
+    test(`操作の1行を下のタブのすぐ上に出す (${url})`, async ({ page }) => {
+      await goto(page, url);
+      const cdp = await page.context().newCDPSession(page);
+      const place = () =>
+        page.evaluate(
+          ({ bar, side }) => {
+            const rect = (el: Element | null) => {
+              if (el === null || el.getClientRects().length === 0) return null;
+              if (getComputedStyle(el).visibility === "hidden") return null;
+              const { top, bottom } = el.getBoundingClientRect();
+              return { top, bottom };
+            };
+            return {
+              phone: document.documentElement.hasAttribute("data-phone"),
+              bar: rect(document.querySelector(`[data-testid="${bar}"]`)),
+              side: rect(document.querySelector(side)),
+              tabbar: rect(document.querySelector('[data-testid="tabbar"]')),
+            };
+          },
+          { bar, side },
+        );
+
+      // 平らに開いた広い画面は広い形 (右のサイドバー・右の列。操作の 1 行は出さない)
+      await fold(cdp, "flat");
+      await settled(async () => {
+        const now = await place();
+        expect(now.phone).toBe(false);
+        expect(now.tabbar).toBeNull();
+        expect(now.bar).toBeNull();
+        expect(now.side).not.toBeNull();
+      });
+
+      await fold(cdp, "tabletop");
+      await settled(async () => {
+        const now = await place();
+        expect(now.phone).toBe(true);
+        expect(now.side).toBeNull();
+        expect(now.tabbar).not.toBeNull();
+        expect(now.bar).not.toBeNull();
+        // 下のタブのすぐ上 (間は 0.375rem)
+        expect(now.bar!.bottom).toBeLessThanOrEqual(now.tabbar!.top);
+        expect(now.tabbar!.top - now.bar!.bottom).toBeLessThan(12);
+      });
+    });
+  }
 });

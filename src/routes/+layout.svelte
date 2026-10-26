@@ -946,52 +946,54 @@
     display: flex;
   }
   /*
-     * いまの画面の印。タブの上端に短い線を置く。画面を移ると前のタブから横に滑る
-     * (`app.css` の「滑る印」と同じ作り)。アンカーを知らないブラウザは、いまのタブの中に線を引く (滑らない)
+     * いまの画面の印。**ほかの横の並び (タブ・ヘッダーのナビ) と同じく、字の幅いっぱいの下線** (主の色、2px)。字 (タブの名前) のすぐ下に引く。
+     * 画面を移ると前のタブの下線から横に滑る (`app.css` の「滑る印」と同じ作り)。アンカーを知らないブラウザは、いまのタブの字の下に線を引く (滑らない)
      */
-  .tabbar .tab[aria-current="page"]::before,
-  .tab-more :global(.tab[aria-current="page"])::before {
+  .tabbar .tab > span,
+  .tab-more :global(.tab > span) {
+    position: relative;
+  }
+  .tabbar .tab[aria-current="page"] > span::after,
+  .tab-more :global(.tab[aria-current="page"] > span)::after {
     content: "";
     position: absolute;
-    top: 0.125rem;
-    left: 50%;
-    width: 2rem;
+    inset-inline: 0;
+    top: calc(100% + 0.125rem);
     height: 2px;
-    margin-left: -1rem;
     border-radius: 1px;
-    background: var(--dp-primary-text);
+    background: var(--pico-primary);
     pointer-events: none;
   }
   @supports (anchor-name: --a) {
     .tabbar {
       anchor-scope: --tab;
     }
-    .tabbar .tab[aria-current="page"] {
-      anchor-name: --tab;
-    }
     /*
-     * 「その他」のボタンには、`Menu` がメニューを置くためのアンカー名を style で付けている (こちらの `--tab` より強い)。
-     * ボタンに付けると印が基準を見失って左端に出ていたので、ボタンを包む枠 (同じ大きさ) に付ける
+     * アンカーはタブの字に付ける。「その他」のボタンには `Menu` がメニューを置くためのアンカー名を style で付けているが、
+     * 中の字はそれと別なので、ほかのタブと同じに書ける
      */
-    .tab-more:has(:global(.tab[aria-current="page"])) {
+    .tabbar .tab[aria-current="page"] > span,
+    .tab-more :global(.tab[aria-current="page"] > span) {
       anchor-name: --tab;
     }
-    .tabbar .tab[aria-current="page"]::before,
-    .tab-more :global(.tab[aria-current="page"])::before {
+    .tabbar .tab[aria-current="page"] > span::after,
+    .tab-more :global(.tab[aria-current="page"] > span)::after {
       content: none;
     }
     .tabbar:has(:global(.tab[aria-current="page"]))::before {
       content: "";
       position: absolute;
       position-anchor: --tab;
-      top: calc(anchor(top) + 0.125rem);
-      left: calc(anchor(center) - 1rem);
-      width: 2rem;
+      left: anchor(left);
+      right: anchor(right);
+      top: calc(anchor(bottom) + 0.125rem);
       height: 2px;
       border-radius: 1px;
-      background: var(--dp-primary-text);
+      background: var(--pico-primary);
       pointer-events: none;
-      transition: left var(--dp-duration-move) var(--dp-ease-spring);
+      transition:
+        left var(--dp-duration-move) var(--dp-ease-spring),
+        right var(--dp-duration-move) var(--dp-ease-spring);
     }
   }
   /* 「その他」の中身 (枠は `Menu` の中なので :global)。見た目は `app.css` の `.menu` */

@@ -50,7 +50,7 @@
   import type { Preview } from "./+page.server";
 
   /**
-   * **ルールとして保存** (検索の画面の右の列。狭い画面では下から出す)。
+   * **ルールとして保存** (検索の画面の右の列。スマホの形では下から出す)。
    *
    * 探した言葉から始めて条件を詰め、その場でルールにする。条件を変えるたびに少し待ってから
    * `?/preview` に送り、結果の一覧の行ごとに「録る / 録らない (理由) / 予約済み」を返してもらう
@@ -78,7 +78,7 @@
     /** ルールの削除の2回押し (画面の `arming`) */
     deleting: Arming;
     preview?: Preview | null;
-    /** 狭い画面で下から出しているか */
+    /** スマホの形で下から出しているか */
     open?: boolean;
   } = $props();
 
@@ -351,7 +351,7 @@
         <h2>ルールとして保存</h2>
       {/if}
     </div>
-    <!-- 狭い画面だけ。下から出した欄を閉じる -->
+    <!-- スマホの形だけ。下から出した欄を閉じる -->
     <button
       type="button"
       class="ghost close"
@@ -716,7 +716,7 @@
     </button>
   </div>
 </aside>
-<!-- 狭い画面で下から出しているときの後ろの幕。押すと閉じる -->
+<!-- スマホの形で下から出しているときの後ろの幕。押すと閉じる -->
 {#if open}
   <button
     type="button"
@@ -729,8 +729,8 @@
 
 <style>
   /*
-     * **広い画面 (1000px から) では右の列。** 画面の右端に付け、ヘッダーの下に貼り付けて、
-     * 結果の一覧を下ろしても書く欄と保存のボタンは見えたまま。一覧とは線でも地の色でも分けず、余白だけで分ける (ほかの画面のサイドバーと同じ)。狭い画面で下から出すときだけ `--dp-surface` で塗る
+     * **広い形では右の列** (広い形とスマホの形は `#lib/phone-form.ts`。`<html data-phone>`)。画面の右端に付け、ヘッダーの下に貼り付けて、
+     * 結果の一覧を下ろしても書く欄と保存のボタンは見えたまま。一覧とは線でも地の色でも分けず、余白だけで分ける (ほかの画面のサイドバーと同じ)。スマホの形で下から出すときだけ `--dp-surface` で塗る
      */
   .draft {
     display: flex;
@@ -740,59 +740,55 @@
     padding: var(--dp-space-5) var(--dp-space-5) 0;
     background: var(--dp-surface);
   }
-  @media (min-width: 1000px) {
-    .draft {
-      position: sticky;
-      background: var(--dp-bg);
-      top: var(--dp-header-space, 0px);
-      height: calc(100svh - var(--dp-header-space, 0px));
-      overflow-y: auto;
-      /* ほかのサイドバーと同じく、ヘッダーの下に貼り付けて高さは窓の残りまで (`app.css` の `.side-panel`)。上は空けず、最初の行を左の結果とそろえる */
-      padding-top: 0;
-    }
-    .close {
-      display: none;
-    }
+  :global(:where(html:not([data-phone]))) .draft {
+    position: sticky;
+    background: var(--dp-bg);
+    top: var(--dp-header-space, 0px);
+    height: calc(100svh - var(--dp-header-space, 0px));
+    overflow-y: auto;
+    /* ほかのサイドバーと同じく、ヘッダーの下に貼り付けて高さは窓の残りまで (`app.css` の `.side-panel`)。上は空けず、最初の行を左の結果とそろえる */
+    padding-top: 0;
+  }
+  :global(:where(html:not([data-phone]))) .close {
+    display: none;
   }
   /*
-     * **狭い画面では下から出す** (`open`)。結果の一覧の上半分は見えたままなので、条件を変えると
+     * **スマホの形では下から出す** (`open`)。結果の一覧の上半分は見えたままなので、条件を変えると
      * 行の「録る / 録らない」が変わるのも見える。下のタブより上に重ねる。
      * 浮いている一枚なので、中の主のボタン (保存) は浮かせず太字だけ (`app.css` の「ボタン」。浮きの上に浮きを重ねない)
      */
-  @media (max-width: 999.98px) {
-    .draft {
-      --dp-btn-solid: transparent;
-      --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-      --dp-btn-lift: none;
-      position: fixed;
-      inset: auto 0 0;
-      z-index: 60;
-      max-height: 80dvh;
-      overflow-y: auto;
-      border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
-      box-shadow: var(--dp-shadow-pop);
-      padding-bottom: env(safe-area-inset-bottom);
-      transform: translateY(100%);
-      visibility: hidden;
-      transition:
-        transform var(--dp-duration-exit) var(--dp-ease-exit),
-        visibility 0s linear var(--dp-duration-exit);
-    }
-    .draft.open {
-      transform: none;
-      visibility: visible;
-      transition: transform var(--dp-duration-enter) var(--dp-ease-spring);
-    }
-    .sheet-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 59;
-      margin: 0;
-      padding: 0;
-      border: 0;
-      border-radius: 0;
-      background: var(--dp-backdrop);
-    }
+  :global(:where(html[data-phone])) .draft {
+    --dp-btn-solid: transparent;
+    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+    --dp-btn-lift: none;
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 60;
+    max-height: 80dvh;
+    overflow-y: auto;
+    border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
+    box-shadow: var(--dp-shadow-pop);
+    padding-bottom: env(safe-area-inset-bottom);
+    transform: translateY(100%);
+    visibility: hidden;
+    transition:
+      transform var(--dp-duration-exit) var(--dp-ease-exit),
+      visibility 0s linear var(--dp-duration-exit);
+  }
+  :global(:where(html[data-phone])) .draft.open {
+    transform: none;
+    visibility: visible;
+    transition: transform var(--dp-duration-enter) var(--dp-ease-spring);
+  }
+  :global(:where(html[data-phone])) .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--dp-backdrop);
   }
   .draft-head {
     display: flex;
@@ -923,10 +919,8 @@
     padding-block: var(--dp-space-3) var(--dp-space-5);
     background: var(--dp-surface);
   }
-  @media (min-width: 1000px) {
-    .draft-foot {
-      background: var(--dp-bg);
-    }
+  :global(:where(html:not([data-phone]))) .draft-foot {
+    background: var(--dp-bg);
   }
   /*
      * **数えている間 (`aria-busy`) も形を変えない。** Pico の `aria-busy` は1行の字に回るものを付ける前提で、

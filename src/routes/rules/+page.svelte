@@ -130,13 +130,13 @@
 <Toasts {notices} source={form} />
 
 <!--
-    **ホームと同じ作り。** 左に1本の一覧 (2段の淡い塊を 6px 空けて並べる)、1000px からは右にサイドバー
-    (絞り込み・並び・集計。ドキュメントの目次と同じ行)。それより狭いと、絞り込みと並びは細い1行にまとめ、
-    スマホの形 (下のタブがある形) では画面の下、タブのすぐ上に置く (押すものは指の届く下に)
+    **ホームと同じ作り。** 左に1本の一覧 (2段の淡い塊を 6px 空けて並べる)、広い形では右にサイドバー
+    (絞り込み・並び・集計。ドキュメントの目次と同じ行)。スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、
+    絞り込みと並びを細い1行にまとめ、画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
 <div class="rules-board">
   <div class="rules-list" data-testid="rule-list">
-    <!-- 狭い画面の集計。広い画面ではサイドバーの「集計」 -->
+    <!-- スマホの形の集計。広い形ではサイドバーの「集計」 -->
     <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
       これから7日の予約 <span class="num">{data.summary.weekReservations}</span>
       件 ・ この7日で録れた
@@ -249,7 +249,7 @@
     {/if}
   </div>
 
-  <!-- 1000px から。絞り込み・並び・集計 (ホームのサイドバーと同じ行) -->
+  <!-- 広い形だけ。絞り込み・並び・集計 (ホームのサイドバーと同じ行) -->
   <aside
     class="rules-side side-panel"
     aria-label="絞り込みと並び"
@@ -309,8 +309,8 @@
   </aside>
 
   <!--
-        1000px より狭いときの細い1行。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
-        スマホの形では画面の下 (タブの上) に貼り付ける
+        スマホの形の細い1行。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
+        画面の下 (タブの上) に貼り付ける
     -->
   <div class="rules-bar" data-testid="rule-bar">
     <div class="bar-chips" role="group" aria-label="絞り込み">
@@ -342,7 +342,7 @@
 <style>
   /*
      * **どの幅でもページごとスクロールする** (ホームと同じ。`+layout.svelte` の `FILLED` に入れない)。広い画面では行が
-     * 浮いたヘッダーの裏を流れる。768px からは左右と下を main の余白の外まで広げ、1000px からは右にサイドバーを置いて
+     * 浮いたヘッダーの裏を流れる。768px からは左右と下を main の余白の外まで広げ、広い形では右にサイドバーを置いて
      * 窓の右端に付け、ヘッダーの下に貼り付ける (中身があふれたときだけサイドバーの中で巻き取る。`app.css` の `.side-panel`)
      */
   .rules-board {
@@ -365,21 +365,20 @@
       padding: 0 var(--dp-gutter) var(--dp-gutter);
     }
   }
-  @media (min-width: 1000px) {
-    .rules-board {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 20rem;
-    }
-    .rules-side {
-      display: flex;
-    }
-    .rules-bar,
-    .narrow-summary {
-      display: none;
-    }
+  /* 広い形 (スマホの形でないとき。`#lib/phone-form.ts`)。テーブルトップは 1000px 以上でもスマホの形なので、幅では分けない */
+  :global(:where(html:not([data-phone]))) .rules-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+  }
+  :global(:where(html:not([data-phone]))) .rules-side {
+    display: flex;
+  }
+  :global(:where(html:not([data-phone]))) .rules-bar,
+  :global(:where(html:not([data-phone]))) .narrow-summary {
+    display: none;
   }
   @media (min-width: 1600px) {
-    .rules-board {
+    :global(:where(html:not([data-phone]))) .rules-board {
       grid-template-columns: minmax(0, 1fr) 22rem;
     }
   }
@@ -492,14 +491,12 @@
     margin-bottom: var(--dp-space-2);
   }
 
-  /* ---- 1000px より狭いときの細い1行 ---- */
-  @media (max-width: 999.98px) {
-    .rules-bar {
-      display: flex;
-      align-items: center;
-      gap: var(--dp-space-2);
-      order: -1;
-    }
+  /* ---- スマホの形の細い1行 (`#lib/phone-form.ts`。`<html data-phone>`) ---- */
+  :global(:where(html[data-phone])) .rules-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-2);
+    order: -1;
   }
   .bar-chips {
     display: flex;

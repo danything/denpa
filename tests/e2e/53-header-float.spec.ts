@@ -230,31 +230,47 @@ test("スマホの番組表の操作の1行は、角丸の面で浮く", async (
   expect(style.radius).toBe("22px");
 });
 
-/** 下のタブの印 (並びの疑似要素) の中心と、`aria-current` の付いたタブの中心の横の差 */
-function tabMarkOffset(page: Page) {
+/**
+ * 下のタブの印 (並びの疑似要素) と、`aria-current` の付いたタブの字の箱。
+ * 印の箱は並びの左上からの `left`・`top`・`width` で読む (疑似要素は `getBoundingClientRect` で測れない)
+ */
+function tabMark(page: Page) {
   return page.evaluate(() => {
     const bar = document.querySelector(".tabbar")!;
-    const current = bar.querySelector('.tab[aria-current="page"]')!;
+    const label = bar
+      .querySelector('.tab[aria-current="page"] > span')!
+      .getBoundingClientRect();
     const mark = getComputedStyle(bar, "::before");
     const box = bar.getBoundingClientRect();
-    const tab = current.getBoundingClientRect();
-    const center =
-      box.left + parseFloat(mark.left) + parseFloat(mark.width) / 2;
-    return Math.abs(center - (tab.left + tab.width / 2));
+    const left = box.left + parseFloat(mark.left);
+    const top = box.top + parseFloat(mark.top);
+    return {
+      left: left - label.left,
+      right: left + parseFloat(mark.width) - label.right,
+      gap: top - label.bottom,
+      height: mark.height,
+    };
   });
 }
 
 /*
- * **下のタブの印は、選んでいるタブの上に付く** (docs/design.md の「選んでいる印は、前の場所から滑る」)。
- * 「その他」はメニューのボタンで、`Menu` が自分のアンカー名を付けるため、ルールや設定では印が左端に出ていた
+ * **下のタブの印は、ほかの横の並びと同じく、選んでいるタブの字の幅いっぱいの下線** (docs/design.md の「選んでいるもの」・「選んでいる印は、前の場所から滑る」)。
+ * 字のすぐ下に引く。「その他」はメニューのボタンで、`Menu` が自分のアンカー名を付けるため、前はルールや設定で印が左端に出ていた
  */
 for (const url of ["/", "/guide?type=GR", "/rules", "/settings", "/search"]) {
-  test(`下のタブの印は選んでいるタブの上に付く (${url})`, async ({ page }) => {
+  test(`下のタブの印は選んでいるタブの字の下線 (${url})`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await goto(page, url);
     await expect(
       page.locator('.tabbar .tab[aria-current="page"]'),
     ).toBeVisible();
-    await expect.poll(() => tabMarkOffset(page)).toBeLessThan(2);
+    await expect(async () => {
+      const mark = await tabMark(page);
+      expect(Math.abs(mark.left)).toBeLessThan(1);
+      expect(Math.abs(mark.right)).toBeLessThan(1);
+      expect(mark.gap).toBeGreaterThanOrEqual(0);
+      expect(mark.gap).toBeLessThan(4);
+      expect(mark.height).toBe("2px");
+    }).toPass({ timeout: 5_000 });
   });
 }

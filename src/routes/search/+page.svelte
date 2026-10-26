@@ -199,7 +199,7 @@
   );
   /** 書く欄のいまの条件での下見 (`RuleDraft`)。行ごとの「録るか」もここ */
   let preview = $state<Preview | null>(null);
-  /** 狭い画面で書く欄を下から出しているか */
+  /** スマホの形で書く欄を下から出しているか */
   let sheetOpen = $state(false);
   /** 「録るか」を聞く番組。結果の一覧に出しうる行 (「もっと見る」で広げるぶんまで) */
   const programIds = $derived(data.programs.rows.map((row) => row.id));
@@ -248,7 +248,7 @@
 <Toasts {notices} source={form} />
 
 <!--
-    **結果と、右の「ルールとして保存」** (`RuleDraft`)。広い画面 (1000px から) では右の列、狭い画面では
+    **結果と、右の「ルールとして保存」** (`RuleDraft`)。広い形では右の列、スマホの形では
     下のボタンで下から出す。書く欄の条件を変えると、結果の「これからの放送」の行ごとに録るかが出る
 -->
 <div class="search-layout" class:drafting>
@@ -566,7 +566,7 @@
       bind:preview
       bind:open={sheetOpen}
     />
-    <!-- 狭い画面だけ。書く欄を下から出す (下のタブの上に貼り付ける) -->
+    <!-- スマホの形だけ。書く欄を下から出す (下のタブの上に貼り付ける) -->
     <div class="sheet-bar">
       <button
         type="button"
@@ -767,49 +767,44 @@
     margin-inline: auto;
   }
   /*
-     * **広い画面では右に書く欄の列** (`RuleDraft`)。列は右と下を main の余白の外まで出して画面の右端に付け、
-     * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごと巻いて浮いたヘッダーの裏を流れる
+     * **広い形では右に書く欄の列** (`RuleDraft`)。列は右と下を main の余白の外まで出して画面の右端に付け、
+     * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごと巻いて浮いたヘッダーの裏を流れる。
+     * 広い形とスマホの形は `#lib/phone-form.ts` (`<html data-phone>`) で分ける。テーブルトップは 1000px 以上でもスマホの形
      */
-  @media (min-width: 1000px) {
-    .search-layout.drafting {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 25rem;
-      align-items: start;
-      gap: var(--dp-gutter);
-      margin-block-end: calc(-1 * var(--dp-gutter));
-      margin-inline-end: calc(-1 * var(--dp-gutter));
-    }
-    .drafting > .search-page {
-      padding-bottom: var(--dp-gutter);
-    }
-    .sheet-bar {
-      display: none;
-    }
+  :global(:where(html:not([data-phone]))) .search-layout.drafting {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 25rem;
+    align-items: start;
+    gap: var(--dp-gutter);
+    margin-block-end: calc(-1 * var(--dp-gutter));
+    margin-inline-end: calc(-1 * var(--dp-gutter));
+  }
+  :global(:where(html:not([data-phone]))) .drafting > .search-page {
+    padding-bottom: var(--dp-gutter);
+  }
+  :global(:where(html:not([data-phone]))) .sheet-bar {
+    display: none;
   }
   /*
-     * 狭い画面では書く欄を下から出すボタンを、下のタブの上に浮かせる。地も線も敷かず、ボタン (主のボタン) だけが浮く
+     * スマホの形では書く欄を下から出すボタンを、下のタブの上に浮かせる。地も線も敷かず、ボタン (主のボタン) だけが浮く
      * (浮きの上に浮きを重ねない。docs/design.md)。読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
      * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
      */
-  @media (max-width: 999.98px) {
-    .drafting > .search-page {
-      padding-bottom: 4rem;
-    }
-    .sheet-bar {
-      position: fixed;
-      inset-inline: 0.75rem;
-      bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
-      z-index: 30;
-      transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-    }
-    .sheet-bar button {
-      width: 100%;
-      margin: 0;
-      border-radius: var(--dp-radius-full);
-    }
+  :global(:where(html[data-phone])) .drafting > .search-page {
+    padding-bottom: 4rem;
   }
-  /* 引っ込むのはスマホの形 (下のタブがある形) だけ */
-  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
+  :global(:where(html[data-phone])) .sheet-bar {
+    position: fixed;
+    inset-inline: 0.75rem;
+    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    z-index: 30;
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+  }
+  :global(:where(html[data-phone])) .sheet-bar button {
+    width: 100%;
+    margin: 0;
+    border-radius: var(--dp-radius-full);
+  }
   :global(:where(html[data-phone]))
     :global([data-retract])
     .sheet-bar:not(:has(:focus-visible)) {

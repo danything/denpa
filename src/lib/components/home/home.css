@@ -367,7 +367,7 @@
   min-width: 0;
 }
 /*
- * 1000px より狭い画面の頭の1行。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、状態と表示の切り替えのメニューを開く「⋯」。
+ * スマホの形の頭の1行。**細い1行 (44px)** に絞り込みのチップ (横に流せる) と、状態と表示の切り替えのメニューを開く「⋯」。
  * 出すのはスマホの形だけで、下のタブのすぐ上に貼り付ける (下の「スマホの形」)
  */
 .board .t-toolbar {
@@ -495,7 +495,7 @@
   font-weight: var(--dp-weight);
 }
 /*
- * **広い形 (スマホの形でないとき。1000px 以上。`#lib/phone-form.ts`) では頭の1行を出さない** (絞り込みは右のサイドバー。下の「右のサイドバー」)。
+ * **広い形 (スマホの形でないとき。`#lib/phone-form.ts`) では頭の1行を出さない** (絞り込みは右のサイドバー。下の「右のサイドバー」)。
  * 日付の見出しは浮いたヘッダーの下に、操作の1行どうしと同じ隙間 (`--dp-bar-gap`) 離して貼り付ける
  */
 :where(html:not([data-phone])) .board {
@@ -829,27 +829,26 @@
 
 /*
  * ---- 右のサイドバー (`HomeAside`) ----
- * 1000px 以上。右の端まで寄せてヘッダーの下に貼り付き、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (件の面と余白で分かれる)。
- * 形は `app.css` のサイドバーの部品 (`.side-panel` など)。ここは幅と、出すかどうかだけ。この幅では頭の1行は出さず、一覧はいちばん上から始まる
+ * 広い形 (スマホの形でないとき。`#lib/phone-form.ts`) だけ。右の端まで寄せてヘッダーの下に貼り付き、一覧とは別に巻き取る。一覧とは線で分けず、地も同じ (件の面と余白で分かれる)。
+ * 形は `app.css` のサイドバーの部品 (`.side-panel` など)。ここは幅と、出すかどうかだけ。この形では頭の1行は出さず、一覧はいちばん上から始まる。
+ * テーブルトップは 1000px 以上でもスマホの形なので、幅ではなく `<html data-phone>` で分ける (下のタブの上に頭の1行を出す)
  */
 .board .t-side {
   display: none;
 }
-@media (min-width: 1000px) {
-  .board .t-main {
-    grid-template-columns: minmax(0, 1fr) 20rem;
-  }
-  /* 右の列の頭 (カレンダーの見出し) は、貼り付いた日付のカプセルの字と高さをそろえる */
-  .board .t-side {
-    display: flex;
-    padding-top: 0.25rem;
-  }
-  .board .t-toolbar {
-    display: none;
-  }
+:where(html:not([data-phone])) .board .t-main {
+  grid-template-columns: minmax(0, 1fr) 20rem;
+}
+/* 右の列の頭 (カレンダーの見出し) は、貼り付いた日付のカプセルの字と高さをそろえる */
+:where(html:not([data-phone])) .board .t-side {
+  display: flex;
+  padding-top: 0.25rem;
+}
+:where(html:not([data-phone])) .board .t-toolbar {
+  display: none;
 }
 @media (min-width: 1600px) {
-  .board .t-main {
+  :where(html:not([data-phone])) .board .t-main {
     grid-template-columns: minmax(0, 1fr) 22rem;
   }
 }
