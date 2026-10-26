@@ -6,7 +6,7 @@
    * 枠はいつも置いておき (読み上げに知らせる `role="status"`)、中身だけ替える。
    *
    * 「保存しました」は**ふわっと出て、出しておく長さ (`SAVED_FOR`) の終わりにふわっと消える**
-   * (`app.css` の `.flash`)。外すのは `autosave` で、ここは見え方だけ。動かさない設定とソフトウェアで描いている端末 (`data-lite`) ではそのまま出て消える
+   * (`app.css` の `.flash`)。外すのは `autosave` で、ここは見え方だけ。動きを減らす設定とソフトウェアで描いている端末 (`data-lite`) ではそのまま出て消える
    */
   let { status }: { status: SaveState } = $props();
 </script>

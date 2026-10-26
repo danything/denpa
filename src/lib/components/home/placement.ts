@@ -8,18 +8,9 @@
  */
 
 /**
- * 一覧の頭の1行。**上に貼り付いているときだけ**返す (スマホでは下のタブの上に貼り付くので、上には被さらない)
+ * 一覧の下に被さるもの (下のタブと、そのすぐ上に貼り付いた頭の1行) の高さ。
+ * 頭の1行を出すのはスマホの形だけで、いつも下に貼り付く (`home.css`)。上に被さるものは日付の見出しだけ
  */
-function topBar(): HTMLElement | null {
-  const bar = document.querySelector<HTMLElement>(
-    '[data-testid="timeline-toolbar"]',
-  );
-  if (bar === null) return null;
-  const style = getComputedStyle(bar);
-  return style.display !== "none" && style.top !== "auto" ? bar : null;
-}
-
-/** 一覧の下に被さるもの (下のタブと、スマホではその上に貼り付いた頭の1行) の高さ */
 function bottomCover(): number {
   const tab =
     document.querySelector<HTMLElement>('[data-testid="tabbar"]')
@@ -28,9 +19,7 @@ function bottomCover(): number {
     '[data-testid="timeline-toolbar"]',
   );
   const below =
-    bar !== null &&
-    getComputedStyle(bar).display !== "none" &&
-    topBar() === null
+    bar !== null && getComputedStyle(bar).display !== "none"
       ? bar.offsetHeight
       : 0;
   return tab + below;
@@ -49,7 +38,7 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
     topEdge(list) +
     (list.querySelector<HTMLElement>(".t-day")?.offsetHeight ?? 32);
   const bottom = window.innerHeight - bottomCover();
-  // 見えている所の高さ (上はヘッダー・頭の1行・見出し、狭い画面は下のタブと頭の1行が被さる)
+  // 見えている所の高さ (上はヘッダーと見出し、スマホの形は下のタブと頭の1行が被さる)
   const view = bottom - line;
   /*
    * **線がもう見えている (上から 4 割より下で、下に被さるものより上) なら動かさない。**
@@ -81,16 +70,10 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
 }
 
 /**
- * 一覧の見えている所の上端。上に貼り付いた頭の段があればその下、無ければ日付の見出しが貼り付く線
- * (広い画面は浮いたヘッダーの下端、スマホは上の安全域の下)。どちらも貼り付いたときの位置で数える
- * (巻き始めは少し下にいるが、送り先はいつも貼り付いた位置で決める)
+ * 一覧の見えている所の上端。日付の見出しが貼り付く線 (広い形は浮いたヘッダーの下端、スマホの形は上の安全域の下)。
+ * 貼り付いたときの位置で数える (巻き始めは少し下にいるが、送り先はいつも貼り付いた位置で決める)
  */
 function topEdge(list: HTMLElement): number {
-  const bar = topBar();
-  if (bar !== null)
-    return (
-      (Number.parseFloat(getComputedStyle(bar).top) || 0) + bar.offsetHeight
-    );
   const day = list.querySelector<HTMLElement>(".t-day");
   return day === null ? 0 : Number.parseFloat(getComputedStyle(day).top) || 0;
 }
@@ -171,8 +154,8 @@ export function restoreRow(list: HTMLElement, anchor: Anchor | null): boolean {
 
 /**
  * **上へ行を足しても、読んでいる所を動かさない。** 足す前に呼び、足して描き終えたら返り値を呼ぶ。
- * 広い画面ではブラウザの位置合わせを切ってある (`home.css` の `overflow-anchor: none`) ので、何もしないと足したぶん中身が下へずれる。
- * スマホではブラウザが先に合わせることもあるが、残ったずれを測って送るので二重には動かない。
+ * 768px からはブラウザの位置合わせを切ってある (`home.css` の `overflow-anchor: none`) ので、何もしないと足したぶん中身が下へずれる。
+ * それより狭い画面ではブラウザが先に合わせることもあるが、残ったずれを測って送るので二重には動かない。
  * 物差しは `key` の行 (無ければ「いま」の線)。足すのはいつもそれより上なので、ずれたぶんだけ送り直せばよい
  */
 export function holdPlace(

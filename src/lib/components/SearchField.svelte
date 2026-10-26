@@ -14,7 +14,7 @@
   } from "#lib/search-suggest.js";
 
   /**
-   * **サイト全体の検索の欄** (`/search?q=`)。広い画面はヘッダーの真ん中、狭い画面は検索の画面の上の1行に
+   * **サイト全体の検索の欄** (`/search?q=`)。広い形はヘッダーの真ん中、スマホの形は検索の画面の上の1行に
    * 同じものを置く (`+layout.svelte`)。`/` と Ctrl/⌘+K で入る (`data-search-field`。見えている欄を
    * `+layout.svelte` が探す)。
    *
