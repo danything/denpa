@@ -27,9 +27,22 @@ namespace Denpa.Agent;
 /// 何台あっても壊し合わない (libaribb25 の頃は1つの実体に2本入ってプロセスごと落ちた)。
 /// 数え (<see cref="Decoded"/> など) だけは他のスレッドから覗いてよい。
 /// </para>
+///
+/// <para>
+/// **鍵の要らない読み手しかいなければ、カードに聞かない** (<paramref name="keysWanted"/>)。番組表・ロゴ・スキャンが
+/// 読むのは掛かっていない SI だけなので、復号もせず溜めもせずに流す。ライブ視聴や録画とカードの錠
+/// (<see cref="BCas"/>) を取り合わない。途中で鍵の要る読み手が来たら、溜め直して最初の鍵から復号する (<see cref="Rehold"/>)。
+/// </para>
 /// </summary>
-public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
+/// <param name="keysWanted">
+/// いま鍵が要るか。塊を受けるたびに聞く。null は「どちらとも言えない」(読み手がいない) で、今のままにする。
+/// 渡さなければいつも要る (録れたものの復号・実機の試し)
+/// </param>
+public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null)
 {
+    /// <summary>いま鍵を聞いて復号しているか (<c>keysWanted</c>)</summary>
+    private bool _keys = true;
+
     private const int PacketSize = 188;
     private const byte SyncByte = 0x47;
 
@@ -128,8 +141,9 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
     }
 
     /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (錠の待ちを含む)。<see cref="HeldAt"/> と同じ1行に足す</summary>
-    public string CardUse() =>
-        $"カード {_asks}回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached}回・未契約 {_unentitledAnswers}回・準備 {At(_initMs)})";
+    public string CardUse() => !_keys
+        ? "カード 聞かない"
+        : $"カード {_asks}回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached}回・未契約 {_unentitledAnswers}回・準備 {At(_initMs)})";
 
     private static string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
 
@@ -139,6 +153,11 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
     /// </summary>
     public void Decode(ReadOnlySpan<byte> input, IBufferWriter<byte> output)
     {
+        if (keysWanted?.Invoke() is { } wanted && wanted != _keys)
+        {
+            if (wanted) Rehold();
+            else StopKeys(output);
+        }
         if (_carryLength > 0)
         {
             // 前の尻尾 (188 バイト以下) に続けて読む
@@ -244,7 +263,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
     /// <summary>掛かっていたら復号する。誤りの印が立っているものは触らない</summary>
     private void Unscramble(Span<byte> packet, Ecm? ecm, bool usable)
     {
-        if ((packet[1] & 0x80) != 0 || packet[3] >> 6 == 0) return;
+        // 鍵の要らない読み手だけなら触らない (掛かったままにも数えない)
+        if (!_keys || (packet[1] & 0x80) != 0 || packet[3] >> 6 == 0) return;
         var start = PayloadStart(packet);
         if (start == PacketSize)
         {
@@ -320,6 +340,42 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
             }
             Unscramble(packet, ecm, ecm is { Seen: >= 0 } && (at > ecm.Seen || ecm.Change > ecm.After));
         }
+    }
+
+    /// <summary>
+    /// **鍵の要らない読み手だけになった。** 溜めていたら掛かったまま吐き出し、鍵を捨てて、ECM を聞くのをやめる。
+    /// PAT・PMT は読み続ける (鍵の要る読み手が来たら、すぐ溜め直せるように)
+    /// </summary>
+    private void StopKeys(IBufferWriter<byte> output)
+    {
+        _keys = false;
+        if (_holding) Settle();
+        Release(output);
+        foreach (var ecm in _ecms.Values) Forget(ecm);
+    }
+
+    /// <summary>
+    /// **鍵の要る読み手が来た。** 頭と同じように、どの ECM も答えを貰うまで溜め直す (<see cref="Ready"/>)。
+    /// 溜めたぶんは最初の鍵で復号する (<see cref="Settle"/>) ので、来た読み手には頭から復号したものが届く
+    /// </summary>
+    private void Rehold()
+    {
+        _keys = true;
+        _holding = true;
+        foreach (var ecm in _ecms.Values) Forget(ecm);
+    }
+
+    /// <summary>ECM を受ける前の姿に戻す。次に来た ECM で聞き直す</summary>
+    private static void Forget(Ecm ecm)
+    {
+        ecm.Last = null;
+        ecm.Cipher?.Clear();
+        ecm.Unentitled = false;
+        ecm.RetryAt = long.MaxValue;
+        ecm.Seen = -1;
+        ecm.After = int.MaxValue;
+        ecm.Parity = 0;
+        ecm.Next = ecm.Change = int.MaxValue;
     }
 
     private void Release(IBufferWriter<byte> output)
@@ -547,7 +603,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
-        if (section[0] != 0x82) return;
+        // 鍵の要らない読み手だけならカードに聞かない (Rehold で聞き直す)
+        if (section[0] != 0x82 || !_keys) return;
         // 溜めをやめる合図にするのは PMT が挙げた ECM だけ。先回りして聞いただけのもの (Early) は PAT・PMT を待たせない
         if (_holding && ecm.Last is not null && _ecms.GetValueOrDefault(ecm.Pid) == ecm) Settle();
         if (ecm.Last is { } last && section.SequenceEqual(last))

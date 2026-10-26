@@ -748,6 +748,63 @@ public class B25Tests
     }
 
     /// <summary>
+    /// **鍵の要らない読み手だけなら、カードに聞かず、溜めずにそのまま流す。** 番組表・ロゴ・スキャンが
+    /// ライブ視聴や録画とカードの錠を取り合わない
+    /// </summary>
+    [Test]
+    public async Task 鍵の要らない読み手だけならカードに聞かない()
+    {
+        var ts = Channel().Ecm(EcmPid, 1).Videos(5, 1).Ecm(EcmPid, 2).Videos(5, 2, even: false);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards, keysWanted: () => false);
+
+        var output = Run(descrambler, ts.Wire.ToArray(), flush: false);
+
+        await Assert.That(Diff(output, ts.Wire.ToArray())).IsEqualTo(-1);
+        await Assert.That(cards.Asked.Count).IsEqualTo(0);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(descrambler.CardUse()).IsEqualTo("カード 聞かない");
+    }
+
+    /// <summary>
+    /// **途中で鍵の要る読み手が来たら、溜め直して最初の鍵から復号する。** 来た読み手には頭から復号したものが届く
+    /// (ECM の手前でも、ECM を挟んで続いている偶奇の並びは復号する)
+    /// </summary>
+    [Test]
+    public async Task 鍵の要る読み手が来たら溜め直して復号する()
+    {
+        var wanted = false;
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards, keysWanted: () => wanted);
+        var before = Channel().Ecm(EcmPid, 1).Videos(5, 1);
+        var after = new Ts().Videos(2, 2).Ecm(EcmPid, 2).Videos(3, 2).Pat((0x0400, PmtPid));
+
+        var first = Run(descrambler, before.Wire.ToArray(), flush: false);
+        wanted = true;
+        var second = Run(descrambler, after.Wire.ToArray());
+
+        await Assert.That(Diff(first, before.Wire.ToArray())).IsEqualTo(-1);
+        await Assert.That(Diff(second, Expected(after))).IsEqualTo(-1);
+        await Assert.That(Generations(cards)).IsEqualTo("2");
+    }
+
+    [Test]
+    public async Task 番組表とロゴとスキャンは鍵が要らない()
+    {
+        static bool Wants(string use) => new Sink(use, 1, _ => { }).WantsKeys;
+
+        await Assert.That(Wants("epg T21")).IsFalse();
+        await Assert.That(Wants("logo GR/T16")).IsFalse();
+        await Assert.That(Wants("scan T21")).IsFalse();
+        await Assert.That(Wants("epg")).IsFalse();
+        await Assert.That(Wants("rec 12")).IsTrue();
+        await Assert.That(Wants("live GR/T27")).IsTrue();
+        // 知らない名乗りは要るとみなす
+        await Assert.That(Wants("不明")).IsTrue();
+        await Assert.That(Wants("epgx T21")).IsTrue();
+    }
+
+    /// <summary>
     /// **溜めていた間の内訳を1行に出せる** (選局して最初に送り出したときの記録。docs/stream.md「本番の記録で割る」)。
     /// そろった順と、鍵の相手に聞いた回数・覚えた答え・未契約・錠の待ち
     /// </summary>

@@ -598,6 +598,16 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     public string Use { get; } = use;
     public int Priority { get; } = priority;
 
+    /// <summary>
+    /// **鍵が要るか。名乗り (<c>use</c>) の頭の語で決める。** 番組表 (<c>epg</c>)・ロゴ (<c>logo</c>)・
+    /// スキャン (<c>scan</c>) が読むのは掛かっていない SI (EIT・CDT・全受信機共通データ・NIT・SDT) だけなので要らない。
+    /// 知らない名乗りは要るとみなす (録れないよりまし)。放送の中身ではなく、denpa が名乗る利用者の種類だけを見る
+    /// </summary>
+    public bool WantsKeys { get; } = !KeylessUses.Contains(use.Split(' ', 2)[0]);
+
+    /// <summary>鍵の要らない利用者の名乗り (denpa の <c>StreamUse</c>)</summary>
+    private static readonly HashSet<string> KeylessUses = ["epg", "logo", "scan"];
+
     /// <summary>利用者がいなくなったか、チューナーを取り上げられたか。どちらでも読み出しは終わる</summary>
     public ChannelReader<byte[]> Reader => _queue.Reader;
 
@@ -743,6 +753,16 @@ internal sealed class Lease(int tuner, string type, string channel)
             () => Descramble(queue.Reader, onExit), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
 
+    /// <summary>
+    /// 鍵の要る利用者がいるか (<see cref="Sink.WantsKeys"/>)。番組表・ロゴ・スキャンだけならカードに聞かない
+    /// (<see cref="Descrambler"/>)。利用者がいない間 (畳むのを待っている間) は null — 今のままにして、
+    /// 戻ってきたライブを溜め直させない
+    /// </summary>
+    private bool? WantsKeys()
+    {
+        lock (Sinks) return Sinks.Count == 0 ? null : Sinks.Any(sink => sink.WantsKeys);
+    }
+
     /// <summary>読み出し。読んだぶんを写してキューへ入れる。終わったらキューを閉じる</summary>
     private void Read(ITuneDevice tuner, ChannelWriter<(byte[] Rented, int Length)> queue)
     {
@@ -795,7 +815,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
     {
         // 選局の時計を渡す。溜めの内訳 (PAT・PMT・ECM) が選局の内訳と同じ物差しで並ぶ
-        var b25 = new Descrambler(Keys.Source, Clock);
+        var b25 = new Descrambler(Keys.Source, Clock, WantsKeys);
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;
