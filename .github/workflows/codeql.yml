@@ -1,0 +1,82 @@
+name: CodeQL
+
+# CodeQL の advanced setup。解析する言語・クエリ (default)・脅威モデル (remote)・週 1 の実行は、
+# 前に使っていた default setup と同じにしてある。
+#
+# **advanced にしたのは C# をビルドして解析するため。** default setup は C# を build-mode: none
+# (ビルドせずにソースだけ読む) で解析していて、呼び出し先を解決できた割合が 83% と
+# しきい値 (85%) を下回り、「Low C# analysis quality」の警告が出ていた (none では依存の型や
+# ビルドで生まれるコードが見えず、呼び出し先を決めきれない)。C# だけ manual にしてエージェントを
+# 実際にビルドし、ほかの言語は default setup と同じ none のまま。
+#
+# default setup と同時には使えない (オンだと advanced の結果が受け付けられない)。
+# danything/denpa では default setup を切ってあり、5ym/repo-config の毎日の設定の当て直しも、
+# このファイルがあるリポジトリでは default setup をオンにしない。
+# category は default setup と同じ /language:<言語> にして、既存のアラートをそのまま引き継ぐ。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # 結果を Code scanning に上げる
+      security-events: write
+      contents: read
+      # 実行の情報を読む (codeql-action が使う)
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          # wasm/decoder.c。ビルドは Emscripten が要るので、default setup と同じく none で読む
+          - language: c-cpp
+            build-mode: none
+          - language: csharp
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # クエリと脅威モデルは指定しない (既定の default と remote。default setup と同じ)
+
+      # C# だけ。.NET のバージョンは test.yml の agent ジョブと揃える。
+      # テストのプロジェクトをビルドすれば本体もビルドされる (Native AOT の publish は要らない)
+      - name: Set up .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.403"
+
+      - name: Build (.NET agent)
+        if: matrix.language == 'csharp'
+        run: dotnet build agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}
