@@ -776,22 +776,35 @@
    */
   async function startData(): Promise<void> {
     if (dataChannel !== null) return;
-    if (dataTimeline.length === 0) {
-      if (Array.isArray(localCopy?.databroadcast)) {
-        // 端末に保存したものから。オフラインでも d が効く
-        dataTimeline = localCopy.databroadcast as PlacedMessage[];
-      } else {
-        const response = await fetch(
-          resolve(`api/recordings/${rec.id}/databroadcast`),
-        ).catch(() => null);
-        dataTimeline = response?.ok ? await response.json() : [];
-      }
-    }
+    // 取得は1回だけ。開いた直後 (常に受信) と押したのが重なっても二重に取らない
+    dataLoading ??= loadTimeline();
+    await dataLoading;
     // 取得している間に、閉じて常に受信もやめていたら作らない
     if (!showData && !receiving) return;
     dataFed = -1;
     // エンジンを作らせる。open のあと listenData が呼ばれて、いまの位置まで積み直す
     dataChannel = `${rec.id}`;
+  }
+
+  /** 変化ログを取得している最中の約束 (`startData`) */
+  let dataLoading: Promise<void> | null = null;
+
+  /**
+   * 変化ログを取得する。**端末に保存したものを探し終えてから** — 常に受信する端末は開いた直後に呼ぶので、
+   * 探し終える前に見るとオフラインでもサーバへ取りに行って空になる。取れなければ空 (次に押したら取り直す)
+   */
+  async function loadTimeline(): Promise<void> {
+    const copy = await localLookup;
+    if (Array.isArray(copy?.databroadcast)) {
+      // 端末に保存したものから。オフラインでも d が効く
+      dataTimeline = copy.databroadcast as PlacedMessage[];
+    } else {
+      const response = await fetch(
+        resolve(`api/recordings/${rec.id}/databroadcast`),
+      ).catch(() => null);
+      dataTimeline = response?.ok ? await response.json() : [];
+    }
+    if (dataTimeline.length === 0) dataLoading = null;
   }
 
   /**
