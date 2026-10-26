@@ -41,10 +41,12 @@ public static class Keys
 /// 開いたあとの繋ぎ直しは <see cref="BCas"/> がやる。
 /// </para>
 /// </summary>
-/// <param name="open">カードを探して開く。既定は <see cref="CardLinks.Open"/> (テストは偽のリーダーを渡す)</param>
-public sealed class LocalCard(Func<BCas>? open = null) : IKeySource
+/// <param name="find">探すリーダー。既定は見えているもの全部 (<see cref="CardLinks.Find"/>)。<c>--tune zd1j:… --decode</c> は
+/// そのボードの内蔵の差し込み口だけを渡す (試験でほかの機材に触らない)</param>
+/// <param name="open">カードを開く。既定は <paramref name="find"/> から探して開く (テストは偽のリーダーを開く関数を渡す)</param>
+public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = null, Func<BCas>? open = null) : IKeySource
 {
-    private readonly Func<BCas> _open = open ?? CardLinks.Open;
+    private readonly Func<BCas> _open = open ?? (find is null ? CardLinks.Open : () => BCas.Open(find));
     private readonly Lock _gate = new();
     private BCas? _card;
     private (DateTime At, IOException Error)? _failed;

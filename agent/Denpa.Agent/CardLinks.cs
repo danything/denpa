@@ -16,12 +16,13 @@ public static class CardLinks
     /// <para>
     /// USB のリーダーは、Linux なら usbfs を直に (Ccid.cs)、macOS と Windows なら OS の PC/SC 越しに
     /// (Pcsc.cs)。**macOS と Windows には usbfs が無い。** px4d の内蔵リーダーは Windows でも同じ IPC (AF_UNIX) で話す。
-    /// asicen-userland の asicend も内蔵カードを px4d と同じ IPC で出す (Asicen.cs。Windows 用は無い)
+    /// asicen-userland の asicend も内蔵カードを px4d と同じ IPC で出す (Asicen.cs。Windows 用は無い)。
+    /// CECH-ZD1 J の内蔵の差し込み口はいちばん後ろ (Zd1j.cs。ほかのチューナーの復号にも使う)
     /// </para>
     /// </summary>
     public static IReadOnlyList<CardLinkCandidate> Find() =>
-        OperatingSystem.IsWindows() ? [.. PcscLink.Find(), .. Px4Card.Find()]
-        : [.. OperatingSystem.IsLinux() ? Ccid.Find() : PcscLink.Find(), .. Px4Card.Find(), .. AsicenUserland.Cards()];
+        OperatingSystem.IsWindows() ? [.. PcscLink.Find(), .. Px4Card.Find(), .. Zd1j.Cards()]
+        : [.. OperatingSystem.IsLinux() ? Ccid.Find() : PcscLink.Find(), .. Px4Card.Find(), .. AsicenUserland.Cards(), .. Zd1j.Cards()];
 
     /// <summary>
     /// カードが刺さっていて INT に答えた最初のリーダーで B-CAS を開く。どれも駄目なら投げる。

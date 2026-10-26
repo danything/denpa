@@ -73,13 +73,18 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   ファームウェアは Mac と同じく PLEX 公式ドライバから切り出します ([tuner-px4.md](tuner-px4.md#ファームウェア))
 - **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 用 (`siano-ts.exe` と libusb) も、
   ドライバを WinUSB にすれば動きます
+- **Sony CECH-ZD1 J** (PS3 の torne。地上波。**試験的**)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません。
+  内蔵の差し込み口の B-CAS も読みます)。機材にドライバが無いので、Zadig で `054c:04b2` に WinUSB を当てます。
+  当てていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
+  device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (ポートを変えると別のチューナー)。
+  Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#sony-cech-zd1-j-試験的))
 - WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
   **PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
   機材は、WinUSB にするとそちらからは見えなくなります (戻すときはデバイス マネージャーでドライバを戻す)。
   installer はドライバを入れ替えません (ほかのソフトで使っていた機材を黙って奪わない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
   (Windows の libusb は WinUSB の機材しか開けず、開けるのも1つのプロセスだけ)
-- px4 と Siano の機材は同時に挿して使えます (別の USB の機材を別のプロセスが開く)
+- px4・Siano・CECH-ZD1 J の機材は同時に挿して使えます (別の USB の機材を別のプロセスが開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
   `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーも
