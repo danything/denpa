@@ -8,12 +8,12 @@ namespace Denpa.Agent.Tests;
  */
 public class Dib8096Tests
 {
-    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make(Action<string>? trace = null)
+    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make(Action<string>? trace = null, DibMemory? memory = null)
     {
         var model = new DibModel();
         var i2c = new FakeI2c(model);
         var time = new FakeTime();
-        return (new Dib8096(i2c, time, trace), i2c, model, time);
+        return (new Dib8096(i2c, time, trace, memory), i2c, model, time);
     }
 
     /// <summary><paramref name="expected"/> が <paramref name="log"/> にこの順で出てくるか (間に別の行があってよい)</summary>
@@ -265,10 +265,53 @@ public class Dib8096Tests
         dib.Tune(557_142_857);
         var line = lines.Single();
         await Assert.That(line).Contains("DataLocked");
-        await Assert.That(line).Contains("DiB0090 DC の較正");
+        await Assert.That(line).Contains("DiB0090 温度");
+        // DC の較正は開くときに済ませてある
+        await Assert.That(line).DoesNotContain("DC の較正");
         await Assert.That(line).Contains("AGC の立ち上げ (7.4)");
         await Assert.That(line).Contains("探索 Step1");
         await Assert.That(line).Contains("探索 Step10");
+    }
+
+    [Test]
+    public async Task 前にロックした値を覚えて次は探索せずに合わせる()
+    {
+        var (dib, i2c, _, _) = Make(memory: new DibMemory());
+        dib.Initialize();
+        // DC の較正は開くときに済む
+        await Assert.That(i2c.Log).Contains("T1F=0004");
+
+        i2c.Log.Clear();
+        await Assert.That(dib.Tune(557_142_857)).IsEqualTo(DibLock.DataLocked);
+        // 初めてのチャンネルは FFT を 8K と決めて、ガードだけ探す (D[355] = 3)。FFT の探索 (D[355] = 2) はしない
+        await Assert.That(dib.LastPath).IsEqualTo("既定 (8K) でガードだけ探した");
+        await Assert.That(i2c.Log).Contains("D355=0003");
+        await Assert.That(i2c.Log).DoesNotContain("D355=0002");
+        await Assert.That(i2c.Log).DoesNotContain("T1F=0004");
+
+        i2c.Log.Clear();
+        await Assert.That(dib.Tune(557_142_857)).IsEqualTo(DibLock.DataLocked);
+        await Assert.That(dib.LastPath).IsEqualTo("覚えた値で合わせた");
+        await Assert.That(i2c.Log.Any(line => line.StartsWith("D355=", StringComparison.Ordinal))).IsFalse();
+        // 段 3 の共通設定 (探索ではない): 8K = モード 3 → D[0] の上 3 ビットが 3 (下は差動のセグメントのマスク)
+        await Assert.That(i2c.Log.Any(line => line.StartsWith("D0=6", StringComparison.Ordinal) || line.StartsWith("D0=7", StringComparison.Ordinal))).IsTrue();
+
+        dib.AlwaysSearch = true;
+        dib.Tune(557_142_857);
+        await Assert.That(dib.LastPath).IsEqualTo("探索した");
+    }
+
+    [Test]
+    public async Task 覚えた値で合わなければ探索に戻る()
+    {
+        var memory = new DibMemory();
+        var (dib, _, model, _) = Make(memory: memory);
+        dib.Initialize();
+        dib.Tune(557_142_857);
+        model.Signal = false;
+        await Assert.That(dib.Tune(557_142_857)).IsEqualTo(DibLock.Failed);
+        await Assert.That(dib.LastPath).IsEqualTo("覚えた値で合わず探索した");
+        await Assert.That(memory.Channels.Count).IsEqualTo(0);
     }
 
     [Test]

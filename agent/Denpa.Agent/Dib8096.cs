@@ -51,6 +51,15 @@ public sealed class Dib8096
     private readonly II2c _i2c;
     private readonly IDibTime _time;
     private readonly Action<string>? _trace;
+    private readonly DibMemory? _memory;
+
+    /// <summary>覚えた値や既定を使わず、いつも探索する (<c>DENPA_ZD1J_SEARCH=always</c>。比べるため)</summary>
+    public bool AlwaysSearch { get; set; }
+
+    /// <summary>最後の選局の経路 (探索した / 覚えた値で合わせた / 既定で合わせた)</summary>
+    public string LastPath => _path;
+
+    private string _path = "";
 
     /// <summary>DiB8000 の版 (D[897]: 0x8000〜0x8002)</summary>
     public ushort Version { get; private set; }
@@ -64,11 +73,12 @@ public sealed class Dib8096
     private bool _sleeping;
 
     /// <param name="trace">あれば、選局のたびにロックまでの内訳 (段ごとの時間と待ち) を渡す (<c>DENPA_ZD1J_DEBUG=1</c>)</param>
-    public Dib8096(II2c i2c, IDibTime time, Action<string>? trace = null)
+    public Dib8096(II2c i2c, IDibTime time, Action<string>? trace = null, DibMemory? memory = null)
     {
         _i2c = i2c;
         _time = time;
         _trace = trace;
+        _memory = memory;
     }
 
     // ---------------------------------------------------------------------
@@ -143,7 +153,24 @@ public sealed class Dib8096
         D(1025, 0xC000);
         InitializeTuner();
         WakeUp();
+        CalibrateDc();
         Output(true);
+    }
+
+    /// <summary>
+    /// DiB0090 の DC オフセットの較正 (7.3.1) を、開くときに済ませる。仕様書では「宿題」として最初の選局の頭で走る
+    /// (6.8 の 5) が、周波数に依らない較正で、再び立つことも無いので、選局の経路から外した (選局の始めの条件と同じく、
+    /// チューナーを初期化して起こしたあと)。WBD と温度は周波数や選局ごとに立つので、今までどおり選局で走る
+    /// </summary>
+    private void CalibrateDc()
+    {
+        _tunerState = TunerStart;
+        for (var guard = 0; _dcPending; guard++)
+        {
+            if (guard > 1000) throw new IOException("DiB0090 の DC の較正が終わりません");
+            if (_tunerState == TunerStart) T(0x23, T(0x23) & ~0x4000);
+            Wait(Ms(DcStep()));
+        }
     }
 
     /// <summary>D[896] と D[897] を確かめる。D[896] は電源投入直後の1回目が化けることがあるので2回読む</summary>
@@ -492,7 +519,7 @@ public sealed class Dib8096
         {
             var parts = string.Join(" / ", _breakdown.Select(part =>
                 $"{part.Name} {part.Ms:F0}ms (待ち {part.SleptMs:F0}ms{(part.Steps > 1 ? $"、{part.Steps} 歩" : "")})"));
-            _trace($"選局 {hz} Hz → {result}: 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
+            _trace($"選局 {hz} Hz → {result} ({_path}): 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
         }
         return result;
     }
@@ -1439,6 +1466,41 @@ public sealed class Dib8096
     private bool _differential;
     private Fft _foundFft;
 
+    /// <summary>探索の入り方</summary>
+    private enum Entry
+    {
+        /// <summary>FFT から探す (仕様書の形)</summary>
+        Full,
+
+        /// <summary>FFT は 8K と決めて、ガードだけ探す (仕様書の「ガードを探す」から入る)</summary>
+        Guard,
+
+        /// <summary>前にロックしたときの値で、探索せずに段 3 から合わせる (仕様書に無い経路)</summary>
+        Known,
+    }
+
+    private Entry _entry;
+
+    /// <summary>ロックしたときのチャンネルの値</summary>
+    internal sealed record Snapshot(int Fft, int Guard, int Inversion, int Partial, (int Modulation, int Fec, int Interleave, int Segments)[] Layers);
+
+    private Snapshot Capture() => new(
+        (int)_fft, _guard, _inversion, _partial,
+        [.. _layers.Select(layer => ((int)layer.Modulation, layer.Fec, layer.Interleave, layer.Segments))]);
+
+    private void Restore(Snapshot snapshot)
+    {
+        _fft = (Fft)snapshot.Fft;
+        _guard = snapshot.Guard;
+        _inversion = snapshot.Inversion;
+        _partial = snapshot.Partial;
+        for (var i = 0; i < 3; i++)
+        {
+            var (modulation, fec, interleave, segments) = snapshot.Layers[i];
+            _layers[i] = new Layer { Modulation = (Modulation)modulation, Fec = fec, Interleave = interleave, Segments = segments };
+        }
+    }
+
     private enum SearchKind
     {
         FindFft,
@@ -1495,6 +1557,25 @@ public sealed class Dib8096
         _partial = 0;
         for (var i = 0; i < 3; i++) _layers[i] = new Layer { Modulation = Modulation.Auto, Fec = 0, Interleave = 0, Segments = 0 };
         _demodState = DemodState.Tuning;
+        Snapshot? known = null;
+        if (!AlwaysSearch && _memory is not null) _memory.Channels.TryGetValue(_khz, out known);
+        if (known is not null)
+        {
+            Restore(known);
+            _entry = Entry.Known;
+            _path = "覚えた値で合わせた";
+        }
+        else if (!AlwaysSearch && Version >= 0x8002)
+        {
+            _foundFft = Fft.K8;
+            _entry = Entry.Guard;
+            _path = "既定 (8K) でガードだけ探した";
+        }
+        else
+        {
+            _entry = Entry.Full;
+            _path = "探索した";
+        }
 
         var started = _time.NowMs;
         var step = Step.Start;
@@ -1503,7 +1584,7 @@ public sealed class Dib8096
         {
             var stepStarted = _time.NowMs;
             var stepSlept = _slept;
-            var name = $"探索 {step}";
+            var name = step == Step.Step10 ? "探索 Step10 (いずれかの階層の MPEG のロック待ち)" : $"探索 {step}";
             var (next, wait) = DemodStep(step);
             step = next;
             if (_demodState == DemodState.FftSuccess && !readBack)
@@ -1512,11 +1593,32 @@ public sealed class Dib8096
                 readBack = true;
             }
             if (step == Step.Stop) Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
+            if (step == Step.Stop && _demodState == DemodState.Failed && _entry != Entry.Full)
+            {
+                // 覚えた値・既定で合わなかった。探索からやり直す
+                if (_entry == Entry.Known) _memory?.Channels.Remove(_khz);
+                _path = _entry == Entry.Known ? "覚えた値で合わず探索した" : "既定 (8K) で合わず探索した";
+                _entry = Entry.Full;
+                _fft = Fft.Auto;
+                _guard = -1;
+                _partial = 0;
+                for (var i = 0; i < 3; i++) _layers[i] = default;
+                _demodState = DemodState.Tuning;
+                readBack = false;
+                started = _time.NowMs;
+                step = Step.Start;
+                continue;
+            }
             if (step == Step.Stop && _demodState is DemodState.Failed or DemodState.Locked or DemodState.DataLocked) break;
             if (step == Step.Stop) throw new IOException("DiB8000 の探索が途中で止まりました");
             if (_time.NowMs - started > SearchLimitMs) throw new IOException("DiB8000 の探索が 5 秒で終わりませんでした");
             Wait(Math.Max(10, (int)Math.Ceiling(wait * Symbol)));
             Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
+        }
+        // ロックしたら、次からは探索せずに合わせられるよう覚えておく (7.5.6 と同じ読み方。ロックしたあとなので妨げない)
+        if (_memory is not null && _entry != Entry.Known && _demodState is DemodState.Locked or DemodState.DataLocked && ReadParameters())
+        {
+            _memory.Channels[_khz] = Capture();
         }
         return _demodState switch
         {
@@ -1537,8 +1639,18 @@ public sealed class Dib8096
                 Modify(285, 0x0060, 0);
                 DdsOffset();
                 D32(29, _timing);
-                _search = SearchKind.FindFft;
-                return (Step.SearchStart, 0);
+                switch (_entry)
+                {
+                    case Entry.Known:
+                        _search = SearchKind.Done;
+                        return (Step.Step3, 0);
+                    case Entry.Guard:
+                        _search = SearchKind.FindGuard;
+                        return (Step.SearchStart, 0);
+                    default:
+                        _search = SearchKind.FindFft;
+                        return (Step.SearchStart, 0);
+                }
 
             case Step.SearchStart:
                 StartSearch();
@@ -1664,7 +1776,10 @@ public sealed class Dib8096
             case Step.Step10:
             {
                 var k = D(568);
-                if ((k & (1 << (7 - _longest))) != 0)
+                // 仕様書の段 10 は「最長の階層」のビットだけを待ち、時間切れのときに 0x00E0 (どれかの階層) で判定する。
+                // 最長の階層は参考の実装の振る舞いで 1 セグメントの階層 A になりがちで、そのインターリーブが深いぶん待つ
+                // (実機で 600ms)。時間切れのときの判定 (と 8.1 の「データが出る」) と同じく、どれかの階層が揃えば先へ進む
+                if ((k & (1 << (7 - _longest))) != 0 || (k & 0x00E0) != 0)
                 {
                     _demodState = DemodState.DataLocked;
                     return (Step.Stop, 0);
@@ -1967,9 +2082,12 @@ public sealed class Dib8096
     }
 
     /// <summary>7.5.6 見つけた値を読み戻す。TMCC の同期が無ければ何もしない (早すぎる読みはロックを妨げる)</summary>
-    private void ReadBack()
+    private void ReadBack() => ReadParameters();
+
+    /// <summary>7.5.6 の読み戻し。TMCC の同期があって読めたら true</summary>
+    private bool ReadParameters()
     {
-        if ((D(568) & 0x001E) != 0x001E) return;
+        if ((D(568) & 0x001E) != 0x001E) return false;
         D(508);
         var v = D(570);
         _inversion = (v >> 6) & 1;
@@ -2005,6 +2123,7 @@ public sealed class Dib8096
                 },
             };
         }
+        return true;
     }
 
     private enum DiversityMode
@@ -2114,4 +2233,13 @@ public sealed class Dib8096
         var whole = snr >> 16;
         return whole == 0 ? 0 : 10 * Math.Log10(whole);
     }
+}
+
+/// <summary>
+/// チャンネル (周波数) ごとに、前にロックしたときの値 (FFT・ガード・階層)。**ボードを閉じても残す** (エージェントが動いている間)。
+/// 日本の地上波はモードとガードがほぼ決まっていて、次からは探索せずに合わせられる
+/// </summary>
+public sealed class DibMemory
+{
+    internal readonly Dictionary<uint, Dib8096.Snapshot> Channels = [];
 }

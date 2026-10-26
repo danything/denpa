@@ -114,13 +114,21 @@ public static class Zd1j
 ///
 /// <para>
 /// **温めておく。** ブリッジの起動と DiB8096 の初期化は開くときの1回だけ (DiB8096 はチューナーが初めて使うとき)。
-/// 最後の借り手が返しても <see cref="Linger"/> は開いたままにして、その間の選局は温かいまま。過ぎたら眠らせて閉じる。
+/// **既定ではエージェントが動いている間ずっと開いたまま** (PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ)。
+/// 閉じるのは、定義が変わってチューナーが捨てられたとき (<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・
+/// USB が抜けたとき。<c>DENPA_ZD1J_LINGER=&lt;秒&gt;</c> なら、最後の借り手が返してからその秒数で眠らせて閉じる (前の形)。
 /// </para>
 /// </summary>
 public sealed class Zd1jBoard : IDibTime
 {
-    /// <summary>最後の借り手が返してから閉じるまで</summary>
-    public static TimeSpan Linger { get; set; } = TimeSpan.FromSeconds(30);
+    /// <summary>最後の借り手が返してから閉じるまで。null なら閉じない (既定。<c>DENPA_ZD1J_LINGER</c>)</summary>
+    public static TimeSpan? Linger { get; set; } = LingerFrom(Environment.GetEnvironmentVariable("DENPA_ZD1J_LINGER"));
+
+    internal static TimeSpan? LingerFrom(string? text) =>
+        int.TryParse(text, out var seconds) && seconds >= 0 ? TimeSpan.FromSeconds(seconds) : null;
+
+    /// <summary>チャンネルごとに覚えたロックの値。**ボードを閉じても残す** (ポートごと)</summary>
+    private static readonly Dictionary<string, DibMemory> Memories = [];
 
     private static readonly Lock Registry = new();
     private static readonly Dictionary<string, Zd1jBoard> Boards = [];
@@ -201,7 +209,7 @@ public sealed class Zd1jBoard : IDibTime
         }
     }
 
-    /// <summary>返す。最後の借り手なら <see cref="Linger"/> のあと眠らせて閉じる (その間に借りられたら閉じない)</summary>
+    /// <summary>返す。<see cref="Linger"/> があれば、最後の借り手が返してからその時間で眠らせて閉じる (その間に借りられたら閉じない)</summary>
     public void Release()
     {
         int generation;
@@ -215,7 +223,8 @@ public sealed class Zd1jBoard : IDibTime
             Close();
             return;
         }
-        _ = Task.Delay(Linger).ContinueWith(_ =>
+        if (Linger is not { } linger) return;
+        _ = Task.Delay(linger).ContinueWith(_ =>
         {
             lock (Registry)
             {
@@ -227,6 +236,24 @@ public sealed class Zd1jBoard : IDibTime
             }
             Close();
         }, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// 誰も借りていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。カードが借りていれば開いたまま
+    /// </summary>
+    public static void CloseIfIdle(string port)
+    {
+        Zd1jBoard? board;
+        lock (Registry)
+        {
+            if (!Boards.TryGetValue(port, out board)) return;
+            lock (board._gate)
+            {
+                if (board._users > 0) return;
+            }
+            Boards.Remove(port);
+        }
+        board.Close();
     }
 
     /// <summary>失敗が USB の抜けなら印を付ける (次に借りる人は開き直す)</summary>
@@ -245,7 +272,15 @@ public sealed class Zd1jBoard : IDibTime
                 if (_demod is not null) return _demod;
                 var started = Stopwatch.StartNew();
                 Bridge.ResetDemodulator(Sleep);
-                var demod = new Dib8096(Bridge, this, _trace);
+                DibMemory memory;
+                lock (Memories)
+                {
+                    if (!Memories.TryGetValue(Port, out memory!)) Memories[Port] = memory = new DibMemory();
+                }
+                var demod = new Dib8096(Bridge, this, _trace, memory)
+                {
+                    AlwaysSearch = Environment.GetEnvironmentVariable("DENPA_ZD1J_SEARCH") == "always",
+                };
                 demod.Initialize();
                 Bridge.Flush();
                 DemodMs = started.ElapsedMilliseconds;
@@ -337,15 +372,19 @@ public sealed class Zd1jTuner : ITuneDevice
     private long _openMs;
     private long _lockMs;
 
-    public Zd1jTuner(string port) : this($"{Zd1j.Model} {port}", () => Zd1jBoard.Acquire(port))
+    public Zd1jTuner(string port) : this($"{Zd1j.Model} {port}", () => Zd1jBoard.Acquire(port), () => Zd1jBoard.CloseIfIdle(port))
     {
     }
 
-    internal Zd1jTuner(string name, Func<Zd1jBoard> acquire)
+    internal Zd1jTuner(string name, Func<Zd1jBoard> acquire, Action? closeIdle = null)
     {
         _name = name;
         _acquire = acquire;
+        _closeIdle = closeIdle;
     }
+
+    /// <summary>捨てられたとき、ボードを誰も借りていなければ閉じる</summary>
+    private readonly Action? _closeIdle;
 
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
@@ -413,7 +452,7 @@ public sealed class Zd1jTuner : ITuneDevice
         }
     }
 
-    /// <summary>読む側がいなくなった。流すのをやめてボードを返す (次の選局で借り直す。30 秒以内なら温かい)</summary>
+    /// <summary>読む側がいなくなった。流すのをやめてボードを返す (ボードは開いたままなので、次の選局も温かい)</summary>
     private void Stall()
     {
         lock (_gate)
@@ -455,9 +494,11 @@ public sealed class Zd1jTuner : ITuneDevice
         board.Release();
     }
 
+    /// <summary>捨てる (定義が変わった・止める)。ボードはカードが借りていなければ閉じる</summary>
     public void Dispose()
     {
         lock (_gate) Stop(keepLed: false);
+        _closeIdle?.Invoke();
     }
 }
 
