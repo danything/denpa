@@ -23,6 +23,13 @@
       // ハイドレーションを待つと一瞬ちがう色で表示されてしまうので、ここで当てる。
       // 保存が無ければダーク (映像を観るものはダークが基本。端末に合わせるのは選んだときだけ)
       (() => {
+        // スマホの形 (上のヘッダーを出さず下のタブ) の印。条件は `#lib/phone-form.ts` (`hooks.server.ts` が差し込む)。
+        // 描く前に付け、当たり外れが変わるたびに付け直す (向きを変えた・折った・窓の幅を変えた)
+        const phone = matchMedia("%denpa.phone-form%");
+        const markPhone = () =>
+          document.documentElement.toggleAttribute("data-phone", phone.matches);
+        markPhone();
+        phone.addEventListener("change", markPhone);
         const saved = localStorage.getItem("theme");
         const mode = saved === "light" || saved === "system" ? saved : "dark";
         const dark =

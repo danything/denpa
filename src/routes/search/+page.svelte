@@ -808,11 +808,12 @@
       border-radius: var(--dp-radius-full);
     }
   }
-  /* 引っ込むのは下のタブがある幅だけ */
-  @media (max-width: 639.98px) {
-    :global([data-retract]) .sheet-bar:not(:has(:focus-visible)) {
-      transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
-    }
+  /* 引っ込むのはスマホの形 (下のタブがある形) だけ */
+  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
+  :global(:where(html[data-phone]))
+    :global([data-retract])
+    .sheet-bar:not(:has(:focus-visible)) {
+    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
   /* 書く欄の条件では録らない行。消さずに出すが、録るものより沈める */
   .hit.dim > * {

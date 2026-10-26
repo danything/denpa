@@ -3,6 +3,7 @@ import "#lib/server/log-buffer.js";
 
 import { redirect } from "@sveltejs/kit";
 
+import { PHONE_FORM } from "#lib/phone-form.js";
 import {
   clientAddress,
   configured,
@@ -20,6 +21,14 @@ import { COOKIE, find } from "#lib/server/session.js";
 
 // SvelteKit のサーバ起動時に一度だけ走る。EPG取得・スケジューラ・エンコーダを立ち上げる
 start();
+
+/**
+ * 画面の HTML の頭に、スマホの形の条件を差し込む (`#lib/phone-form.ts`。`app.html` の頭のスクリプトが使う)
+ */
+const PAGE = {
+  transformPageChunk: ({ html }: { html: string }) =>
+    html.replace("%denpa.phone-form%", PHONE_FORM),
+};
 
 export async function handle({ event, resolve }) {
   const { pathname, search } = event.url;
@@ -47,7 +56,7 @@ export async function handle({ event, resolve }) {
     }
     event.locals.user = { subject: `token:${owner.id}`, name: owner.name };
     event.locals.token = owner.id;
-    return finish(await resolve(event));
+    return finish(await resolve(event, PAGE));
   }
 
   /*
@@ -117,7 +126,7 @@ export async function handle({ event, resolve }) {
     redirect(302, relative(event.url, `/search?q=${encodeURIComponent(q)}`));
   }
 
-  return finish(await resolve(event));
+  return finish(await resolve(event, PAGE));
 }
 
 function finish(response: Response): Response {

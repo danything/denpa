@@ -4,6 +4,7 @@
   import { afterNavigate, goto } from "$app/navigation";
   import { navigating, page } from "$app/state";
   import { onMount } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import CalendarDays from "~icons/lucide/calendar-days";
   import Contrast from "~icons/lucide/contrast";
   import Ellipsis from "~icons/lucide/ellipsis";
@@ -27,6 +28,7 @@
   import { markLite } from "#lib/lite.js";
   import { measure } from "#lib/measure.svelte.js";
   import { startOffline } from "#lib/offline.svelte.js";
+  import { TABLETOP } from "#lib/phone-form.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
   import { groupLabel } from "#lib/settings-sections.js";
   import { theme, THEME_LABEL } from "#lib/theme.svelte.js";
@@ -299,7 +301,7 @@
   const guide = $derived(pending !== null || page.route.id === "/guide");
 
   /**
-   * **狭い画面では、ナビを画面の下のタブにする** (下の `.tabbar`)。
+   * **スマホの形 (狭い画面とテーブルトップ。`#lib/phone-form.ts`) では、ナビを画面の下のタブにする** (下の `.tabbar`)。
    *
    * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
    * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
@@ -319,6 +321,12 @@
   const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
   /** タブを出すのはナビの 5 画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
   const showTabbar = $derived(here !== null);
+  /**
+   * テーブルトップ (`#lib/phone-form.ts`) のライブでは、下のタブは下の段 (舞台の中。黒い地) の下端に浮く。
+   * 右の列と同じく、テーマにかかわらず暗いテーマの色で描く (`PlayerLayout` の `data-theme`)
+   */
+  const tabletop = new MediaQuery(TABLETOP);
+  const stageTabbar = $derived(tabletop.current && here === "/live");
   /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
   const notice = $derived(
     (page.data["channelNotice"] ?? null) as NoticeKind | null,
@@ -546,7 +554,12 @@
 
   <!-- 狭い幅の下のタブ (上の `tabs`・`showTabbar`)。ライブの全画面のときは隠す (下の style) -->
   {#if showTabbar}
-    <nav class="tabbar" aria-label="主な画面" data-testid="tabbar">
+    <nav
+      class="tabbar"
+      aria-label="主な画面"
+      data-testid="tabbar"
+      data-theme={stageTabbar ? "dark" : undefined}
+    >
       {#each tabs as tab (tab.href)}
         <a
           href={resolve(tab.href)}
@@ -680,7 +693,7 @@
   }
   /*
      * ヘッダー。下のタブの無い狭い画面では地の上の1行 (高さちょうど 3.5rem)。
-     * 広い画面では操作の層として中身の上に浮かせる (下の 640px からの所)
+     * 広い画面では操作の層として中身の上に浮かせる (下の「広い形」)
      */
   .navbar {
     position: sticky;
@@ -855,6 +868,13 @@
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
+  /*
+   * テーマを切り替えた下のタブ (テーブルトップのライブ。上の `stageTabbar`) は、字の色もそのテーマから取り直す。
+   * `--dp-fg` は `<html>` で決まった値を受け継ぐので、箱のテーマで書き換わる Pico の `--pico-color` を使う
+   */
+  .tabbar[data-theme] {
+    color: var(--pico-color);
+  }
   /* キーボードで中に触っている間は引っ込めない (見えないまま操作させない) */
   .shell[data-retract] .tabbar:not(:has(:focus-visible)) {
     transform: translateY(calc(100% + 0.5rem + env(safe-area-inset-bottom)));
@@ -968,43 +988,44 @@
   .more-extra {
     margin-top: 0.5rem;
   }
-  @media (max-width: 639.98px) {
-    :global(:root:has(.tabbar)) {
-      --dp-tabbar: calc(4rem + 0.5rem + env(safe-area-inset-bottom));
-    }
-    /*
-         * 下のタブがある画面ではヘッダーを隠す。リンクはタブと重なり、残りは「その他」に移したので、
-         * 上の 3.5rem はまるごと中身に回す。上の安全域 (ノッチ) のぶんは本文の余白で避ける
-         */
-    .shell:has(.tabbar) .navbar {
-      display: none;
-    }
-    /*
-         * **スマホでは頭に 0.5rem 空ける。** ヘッダーが無いので、上の安全域のすぐ下から中身を始める。
-         * 1rem では、録画の画面で日付の見出しの余白まで重なって、上に大きな空きが出ていた
-         */
-    .shell:has(.tabbar) main {
-      --dp-page-top: 0.5rem;
-    }
-    /*
-         * **映像の画面 (`PlayerLayout`) は空けない。** 映像を上の安全域のすぐ下から始める。0.5rem 空けると、
-         * 縦のスマホで映像の上に暗い隙間が見えた (映像は左右も端まで出している。`PlayerStage`)
-         */
-    .shell:has(.tabbar) main:has(:global([data-player-layout])) {
-      --dp-page-top: 0rem;
-    }
-    .shell:has(.tabbar) main {
-      padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
-      padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
-    }
-    /* 局が無いときの案内がいちばん上に来る。安全域はそちらで避け、本文は普通の余白に戻す */
-    .shell:has(.tabbar) .notice-slot {
-      padding-top: env(safe-area-inset-top);
-    }
-    .shell:has(.tabbar):has(.notice-slot) main,
-    .shell:has(.tabbar):has(.search-bar) main {
-      padding-top: var(--dp-page-top);
-    }
+  /* スマホの形 (`#lib/phone-form.ts`。640px 未満とテーブルトップ。`<html data-phone>`) */
+  :global(:where(html[data-phone]:has(.tabbar))) {
+    --dp-tabbar: calc(4rem + 0.5rem + env(safe-area-inset-bottom));
+  }
+  /*
+     * 下のタブがある画面ではヘッダーを隠す。リンクはタブと重なり、残りは「その他」に移したので、
+     * 上の 3.5rem はまるごと中身に回す。上の安全域 (ノッチ) のぶんは本文の余白で避ける
+     */
+  :global(:where(html[data-phone])) .shell:has(.tabbar) .navbar {
+    display: none;
+  }
+  /*
+     * **スマホでは頭に 0.5rem 空ける。** ヘッダーが無いので、上の安全域のすぐ下から中身を始める。
+     * 1rem では、録画の画面で日付の見出しの余白まで重なって、上に大きな空きが出ていた
+     */
+  :global(:where(html[data-phone])) .shell:has(.tabbar) main {
+    --dp-page-top: 0.5rem;
+  }
+  /*
+     * **映像の画面 (`PlayerLayout`) は空けない。** 映像を上の安全域のすぐ下から始める。0.5rem 空けると、
+     * 縦のスマホで映像の上に暗い隙間が見えた (映像は左右も端まで出している。`PlayerStage`)
+     */
+  :global(:where(html[data-phone]))
+    .shell:has(.tabbar)
+    main:has(:global([data-player-layout])) {
+    --dp-page-top: 0rem;
+  }
+  :global(:where(html[data-phone])) .shell:has(.tabbar) main {
+    padding-top: calc(var(--dp-page-top) + env(safe-area-inset-top));
+    padding-bottom: calc(var(--dp-gutter) + var(--dp-tabbar));
+  }
+  /* 局が無いときの案内がいちばん上に来る。安全域はそちらで避け、本文は普通の余白に戻す */
+  :global(:where(html[data-phone])) .shell:has(.tabbar) .notice-slot {
+    padding-top: env(safe-area-inset-top);
+  }
+  :global(:where(html[data-phone])) .shell:has(.tabbar):has(.notice-slot) main,
+  :global(:where(html[data-phone])) .shell:has(.tabbar):has(.search-bar) main {
+    padding-top: var(--dp-page-top);
   }
   /* ライブの全画面のあいだは隠す (映像だけにする) */
   :global(html[data-stage-fullscreen]) :is(.tabbar, .notice-slot) {
@@ -1051,96 +1072,95 @@
     --dp-gutter: 1rem;
     /*
          * **ヘッダーから最初の中身までは `--dp-page-top`。** 地の上のヘッダーなら 0 (すぐ下から始める)、
-         * 浮いたヘッダーの画面はそのぶん (`--dp-header-space`。下の 640px から)。左右と下の余白 (`--dp-gutter`) は
+         * 浮いたヘッダーの画面はそのぶん (`--dp-header-space`。下の「広い形」)。左右と下の余白 (`--dp-gutter`) は
          * 広い画面で 1.5rem に広がるが、上は広げない。余白の外まで広げる画面 (番組表・観る画面の右の列など) も、
          * 上はこの値だけ打ち消す
          */
     --dp-page-top: 0rem;
     padding: var(--dp-page-top) var(--dp-gutter) var(--dp-gutter);
   }
-  @media (min-width: 640px) {
-    ul.links {
-      display: flex;
+  /* 広い形 (スマホの形でないとき。`#lib/phone-form.ts`) */
+  :global(:where(html:not([data-phone]))) ul.links {
+    display: flex;
+  }
+  /*
+   * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / `--dp-bar-inset` 離した角丸の面にして、巻くと中身の上に浮かせる (下の `@supports`)。
+   * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、巻くと下を流れる。
+   * 角は入れ子でそろえる: 外 (`--dp-bar-radius` 0.875rem) = 中の欄 (`--dp-radius` 0.5rem) + 間の余白 (0.375rem)
+   *
+   * `--dp-header-bottom` はヘッダーの下端。巻いても上に残す操作の1行は、ここから `--dp-bar-gap` 離した同じ形の面に乗せて貼り付ける
+   * (`app.css` の `dp-bar-float`)。その1行がある間はヘッダーも近い影 (`--navbar-shadow`) にそろえ、遠い影が下の1行に掛からないようにする
+   */
+  :global(:where(html:not([data-phone]))) {
+    --dp-header-bottom: 3.75rem;
+    /* 中身の頭はヘッダーの下端から、操作の1行どうしと同じ隙間 (`--dp-bar-gap`) だけ離す */
+    --dp-header-space: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
+    /* 自分で巻き取る画面 (映像・番組表) の箱の頭。番組表は表をヘッダーの裏まで伸ばし、操作の1行の面をヘッダーの下 `--dp-bar-gap` に置く (`app.css` の `.guide-bar`) */
+    --dp-fill-top: 4.25rem;
+  }
+  :global(:where(html:not([data-phone]))) main {
+    --dp-page-top: var(--dp-header-space);
+  }
+  :global(:where(html:not([data-phone]))) .navbar {
+    position: fixed;
+    top: 0.5rem;
+    inset-inline: var(--dp-bar-inset);
+    min-height: 3.25rem;
+    padding: 0.375rem 0.375rem 0.375rem 0.75rem;
+    border-radius: var(--dp-bar-radius);
+    background: var(--dp-float);
+    box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
+    display: grid;
+    grid-template-columns:
+      minmax(max-content, 1fr) minmax(8rem, 36rem)
+      minmax(max-content, 1fr);
+    gap: var(--dp-space-4);
+  }
+  /*
+       * **上端では平ら、巻くと浮く。** 裏に中身が無いうちは浮かせる理由が無いので、地に馴染ませる
+       * (docs/design.md の「浮かせ方」)。巻いた量に合わせて面と影が出る (`animation-timeline: scroll()`。JS は使わない)。
+       * 窓が巻けない画面のうち、観る画面は時間の軸が止まったままなので、いつも平ら (アンビエントの色もそのまま届く)。番組表は表の巻いた量で浮く (下の 768px から)。
+       * 知らないブラウザと、動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも浮いた形
+       */
+  @supports (animation-timeline: scroll()) {
+    :global(:where(html:not([data-phone]))) .navbar {
+      background: transparent;
+      box-shadow: none;
+      animation: header-float linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 1.5rem;
     }
-    /*
-     * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / `--dp-bar-inset` 離した角丸の面にして、巻くと中身の上に浮かせる (下の `@supports`)。
-     * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、巻くと下を流れる。
-     * 角は入れ子でそろえる: 外 (`--dp-bar-radius` 0.875rem) = 中の欄 (`--dp-radius` 0.5rem) + 間の余白 (0.375rem)
-     *
-     * `--dp-header-bottom` はヘッダーの下端。巻いても上に残す操作の1行は、ここから `--dp-bar-gap` 離した同じ形の面に乗せて貼り付ける
-     * (`app.css` の `dp-bar-float`)。その1行がある間はヘッダーも近い影 (`--navbar-shadow`) にそろえ、遠い影が下の1行に掛からないようにする
-     */
-    :global(:root) {
-      --dp-header-bottom: 3.75rem;
-      /* 中身の頭はヘッダーの下端から、操作の1行どうしと同じ隙間 (`--dp-bar-gap`) だけ離す */
-      --dp-header-space: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
-      /* 自分で巻き取る画面 (映像・番組表) の箱の頭。番組表は表をヘッダーの裏まで伸ばし、操作の1行の面をヘッダーの下 `--dp-bar-gap` に置く (`app.css` の `.guide-bar`) */
-      --dp-fill-top: 4.25rem;
+  }
+  /*
+       * **巻けない画面に移ったら平らに戻す。** 巻けなくなると時間の軸が止まり、Chrome は止まる前の値を残す。
+       * 長いページで巻いてから短いページへ移ると、裏に何も無いのに浮いたままになっていた。
+       * 上へ戻せる量が無いとき (上端・巻けない画面) はアニメーションごと外す (`scroll-state(scrollable: top)`)。
+       * 番組表は窓ではなく表の巻いた量で浮くので外さない。この問い合わせを知らないブラウザは今までどおり
+       */
+  @supports (animation-timeline: scroll()) and (container-type: scroll-state) {
+    :global(:where(html:not([data-phone]))) {
+      container-type: scroll-state;
     }
-    main {
-      --dp-page-top: var(--dp-header-space);
+    :global(:where(html:not([data-phone]))) .shell:not(.fill) .navbar {
+      animation-name: none;
     }
-    .navbar {
-      position: fixed;
-      top: 0.5rem;
-      inset-inline: var(--dp-bar-inset);
-      min-height: 3.25rem;
-      padding: 0.375rem 0.375rem 0.375rem 0.75rem;
-      border-radius: var(--dp-bar-radius);
-      background: var(--dp-float);
-      box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));
-      display: grid;
-      grid-template-columns:
-        minmax(max-content, 1fr) minmax(8rem, 36rem)
-        minmax(max-content, 1fr);
-      gap: var(--dp-space-4);
-    }
-    /*
-         * **上端では平ら、巻くと浮く。** 裏に中身が無いうちは浮かせる理由が無いので、地に馴染ませる
-         * (docs/design.md の「浮かせ方」)。巻いた量に合わせて面と影が出る (`animation-timeline: scroll()`。JS は使わない)。
-         * 窓が巻けない画面のうち、観る画面は時間の軸が止まったままなので、いつも平ら (アンビエントの色もそのまま届く)。番組表は表の巻いた量で浮く (下の 768px から)。
-         * 知らないブラウザと、動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも浮いた形
-         */
-    @supports (animation-timeline: scroll()) {
-      .navbar {
-        background: transparent;
-        box-shadow: none;
-        animation: header-float linear both;
-        animation-timeline: scroll(root block);
-        animation-range: 0 1.5rem;
+    @container scroll-state(scrollable: top) {
+      :global(:where(html:not([data-phone]))) .shell:not(.fill) .navbar {
+        animation-name: header-float;
       }
     }
-    /*
-         * **巻けない画面に移ったら平らに戻す。** 巻けなくなると時間の軸が止まり、Chrome は止まる前の値を残す。
-         * 長いページで巻いてから短いページへ移ると、裏に何も無いのに浮いたままになっていた。
-         * 上へ戻せる量が無いとき (上端・巻けない画面) はアニメーションごと外す (`scroll-state(scrollable: top)`)。
-         * 番組表は窓ではなく表の巻いた量で浮くので外さない。この問い合わせを知らないブラウザは今までどおり
-         */
-    @supports (animation-timeline: scroll()) and (container-type: scroll-state) {
-      :global(html) {
-        container-type: scroll-state;
-      }
-      .shell:not(.fill) .navbar {
-        animation-name: none;
-      }
-      @container scroll-state(scrollable: top) {
-        .shell:not(.fill) .navbar {
-          animation-name: header-float;
-        }
-      }
-    }
-    .header-search {
-      display: block;
-    }
-    .actions {
-      justify-self: end;
-    }
-    .search-bar {
-      display: none;
-    }
-    .tabbar {
-      display: none;
-    }
+  }
+  :global(:where(html:not([data-phone]))) .header-search {
+    display: block;
+  }
+  :global(:where(html:not([data-phone]))) .actions {
+    justify-self: end;
+  }
+  :global(:where(html:not([data-phone]))) .search-bar {
+    display: none;
+  }
+  :global(:where(html:not([data-phone]))) .tabbar {
+    display: none;
   }
   @media (min-width: 768px) {
     main {

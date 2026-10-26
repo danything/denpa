@@ -31,7 +31,7 @@
     stage: HTMLElement | null;
     /** 映像の縦横比 (`"16 / 9"`) */
     aspect: string;
-    /** 全画面か (`StageFullscreen.active`)。全画面の間は下の段が見えない */
+    /** 枠が全画面か (`StageFullscreen.active`。ページごとの全画面 `whole` は除く)。枠の全画面の間は下の段が見えない */
     fullscreen: boolean;
     testid: string;
   } = $props();

@@ -2,6 +2,8 @@ import { beforeNavigate, goto } from "$app/navigation";
 import { page } from "$app/state";
 import { untrack } from "svelte";
 
+import { TABLETOP } from "#lib/phone-form.js";
+
 import {
   exitNative,
   fullscreenMode,
@@ -29,12 +31,20 @@ import {
  *   部品が作り直されないので、黙っていると広げたまま残る
  * - 向きは固定しない — iPhone の Safari は `screen.orientation.lock` を持たない。
  *   横に持てば横いっぱいになる
+ *
+ * ## テーブルトップ
+ *
+ * 折り畳み端末を半分に折って机に置いたとき (`#lib/phone-form.ts` の `TABLETOP`) は、**枠ではなくページごと**全画面にする。
+ * 枠だけを全画面にすると映像が折り目をまたいで画面いっぱいに広がり、上の段に映像・下の段に右の列の並べ方が崩れる。
+ * ページごとなら並べ方はそのままで、ブラウザのタブと URL の欄のぶん上の段が高くなり、映像が大きくなる
  */
 export interface StageFullscreen {
   /** 全画面か (本物でも広げたのでも) */
   readonly active: boolean;
   /** 広げているか (iPhone) */
   readonly pseudo: boolean;
+  /** 全画面にしているのがページごとか (テーブルトップ)。枠の周りもそのまま見えている */
+  readonly whole: boolean;
   enter: () => void;
   exit: () => void;
   toggle: () => void;
@@ -44,10 +54,15 @@ export function stageFullscreen(
   target: () => HTMLElement | null,
 ): StageFullscreen {
   let native = $state(false);
+  let whole = $state(false);
   let pseudo = $state(false);
 
   $effect(() => {
-    const update = () => (native = nativeFullscreenElement(document) !== null);
+    const update = () => {
+      const element = nativeFullscreenElement(document);
+      native = element !== null;
+      whole = element === document.documentElement;
+    };
     update();
     document.addEventListener("fullscreenchange", update);
     document.addEventListener("webkitfullscreenchange", update);
@@ -136,7 +151,9 @@ export function stageFullscreen(
   });
 
   function enter(): void {
-    const element = target();
+    const element = matchMedia(TABLETOP).matches
+      ? document.documentElement
+      : target();
     if (element === null) return;
     const mode = fullscreenMode(element, document);
     if (mode !== "pseudo") {
@@ -168,6 +185,9 @@ export function stageFullscreen(
     },
     get pseudo() {
       return pseudo;
+    },
+    get whole() {
+      return whole;
     },
     enter,
     exit,

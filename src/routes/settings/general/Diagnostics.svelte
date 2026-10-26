@@ -14,6 +14,7 @@
     stamp,
   } from "#lib/issue-report.js";
   import { held } from "#lib/live-updates.svelte.js";
+  import { PHONE_FORM } from "#lib/phone-form.js";
   import { redact } from "#lib/redact.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
 
@@ -27,10 +28,10 @@
   let { data }: { data: PageData } = $props();
 
   /**
-   * スマホ (下のタブがある幅) では、ログの押すもの (読み直す・Issue にする) を絞り込みと同じ1行に入れる。
+   * スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、ログの押すもの (読み直す・Issue にする) を絞り込みと同じ1行に入れる。
    * その1行は下のタブの上に浮く (`settings/+layout.svelte` の `.section-bar`)
    */
-  const phone = new MediaQuery("max-width: 639.98px");
+  const phone = new MediaQuery(PHONE_FORM);
 
   /** 読み直しの間も前の中身を出したままにする (`held`。設定の「チューナー」と同じ) */
   const tuners = held(() => data.tuners);
@@ -460,11 +461,9 @@
     max-width: 20rem;
     margin: 0;
   }
-  /* スマホでは横に巻く1行の中なので、検索の欄は決まった幅 */
-  @media (max-width: 639.98px) {
-    .search {
-      flex: 0 0 10rem;
-    }
+  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では横に巻く1行の中なので、検索の欄は決まった幅 */
+  :global(:where(html[data-phone])) .search {
+    flex: 0 0 10rem;
   }
   /*
    * **1 行ずつ地の上に並べる** (1 行の並びは地。docs/design.md「3 つの層」)。線で区切らず、詰めて読む。

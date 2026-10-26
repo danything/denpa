@@ -2,6 +2,8 @@
   import { setContext, type Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
 
+  import { TABLETOP } from "#lib/phone-form.js";
+
   import type { Ambient } from "./ambient.svelte.js";
   import AmbientGlow from "./AmbientGlow.svelte";
   import {
@@ -11,7 +13,7 @@
   } from "./controls.svelte";
   import FoldReflection from "./FoldReflection.svelte";
   import type { StageFullscreen } from "./fullscreen.svelte.js";
-  import { PHONE_LANDSCAPE, TABLETOP } from "./PlayerLayout.svelte";
+  import { PHONE_LANDSCAPE } from "./PlayerLayout.svelte";
 
   /**
    * 映像を出す領域。3つの視聴画面で同じ配線を1本に: 操作列の出し入れとカーソル (`controls`)・キーボードで触っている
@@ -286,7 +288,7 @@
     {ambient}
     stage={element}
     {aspect}
-    fullscreen={fullscreen.active}
+    fullscreen={fullscreen.active && !fullscreen.whole}
     testid="{testid}-reflection"
   />
 {:else if ambient}
@@ -366,6 +368,27 @@
     .stage {
       aspect-ratio: var(--dp-aspect, 16 / 9);
       width: min(100cqw, max(100cqh, 14rem) * var(--dp-aspect, 16 / 9));
+    }
+  }
+  /*
+     * テーブルトップ (`#lib/phone-form.ts` の `TABLETOP`) では、上の段の幅と高さいっぱいに収める (縦横比は保つ。object-fit: contain と同じ)。
+     * 段が低いので高さの下限は外し、真ん中に置く。上下か左右の余りは上の段の黒い地 (`PlayerLayout`)。幅を問わず当てる
+     */
+  @media (device-posture: folded) and (vertical-viewport-segments: 2) {
+    .room {
+      display: flex;
+      flex: 1 1 0%;
+      min-height: 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      container-type: size;
+    }
+    .stage {
+      aspect-ratio: var(--dp-aspect, 16 / 9);
+      width: min(100cqw, 100cqh * var(--dp-aspect, 16 / 9));
+      min-height: 0;
+      margin-inline: 0;
     }
   }
   .quiet {

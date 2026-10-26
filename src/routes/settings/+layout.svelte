@@ -429,108 +429,114 @@
      * `--dp-header-space`) が貼り付く所と同じなので、巻き始めても動かない。上端では平らで、巻いて中身が裏に入ると面と近い影が出る (窓の巻いた量で。`dp-bar-float`)。
      * 面は節の行そのものの地なので、横に巻いても動かない
      */
-  @media (min-width: 640px) {
-    .jump {
-      top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
-      margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter));
-      padding: var(--dp-bar-pad);
-      border-radius: var(--dp-bar-radius);
-      background: var(--dp-float);
-      box-shadow: var(--dp-shadow-tight);
-    }
-    @supports (animation-timeline: scroll()) {
-      .jump {
-        background: transparent;
-        box-shadow: none;
-        animation: dp-bar-float linear both;
-        animation-timeline: scroll(root block);
-        animation-range: 0 1.5rem;
-      }
+  /* 広い形 (スマホの形でないとき。`#lib/phone-form.ts`) */
+  :global(:where(html:not([data-phone]))) .jump {
+    top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
+    margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter));
+    padding: var(--dp-bar-pad);
+    border-radius: var(--dp-bar-radius);
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-tight);
+  }
+  @supports (animation-timeline: scroll()) {
+    :global(:where(html:not([data-phone]))) .jump {
+      background: transparent;
+      box-shadow: none;
+      animation: dp-bar-float linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 1.5rem;
     }
   }
   /* 節の行がある間 (767px まで) はヘッダーも近い影にそろえる (番組表と同じ。遠い影が下の1行に掛かって段々に見えないように) */
-  @media (min-width: 640px) and (max-width: 767.98px) {
-    :global(html:has(.settings-page .jump)) {
+  @media (max-width: 767.98px) {
+    :global(html:not([data-phone]):has(.settings-page .jump)) {
       --navbar-shadow: var(--dp-shadow-tight);
     }
   }
   /*
-     * **スマホ (下のタブがある幅) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの頭の1行と同じ半透明のカプセル)。
+     * **スマホの形 (下のタブがある形) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの頭の1行と同じ半透明のカプセル)。
      * 読んでいる間は下のタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。中身の最後が隠れないよう、そのぶん下を空ける
      */
-  @media (max-width: 639.98px) {
-    .page {
-      /* 下のタブとの隙間と、節へ飛ぶ行の高さ。節の操作の1行はこの上に積む */
-      --jump-gap: 0.375rem;
-      --jump-h: calc(var(--dp-btn-h-sm) + 0.5rem);
-    }
-    .jump {
-      position: fixed;
-      inset: auto 0.75rem calc(var(--dp-tabbar, 0px) + var(--jump-gap));
-      box-sizing: border-box;
-      height: var(--jump-h);
-      margin: 0;
-      padding: 0.25rem 0.5rem;
-      border-radius: 1.375rem;
-      background: var(--dp-float);
-      box-shadow: var(--dp-shadow-pop);
-      transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-    }
-    :global([data-retract]) .jump:not(:has(:focus-visible)) {
-      transform: translateY(
-        calc(var(--dp-tabbar, 0px) + var(--jump-gap) + 100%)
-      );
-    }
-    .main-inner {
-      padding-bottom: 3.5rem;
-    }
-    /*
-     * **節の操作の1行 (`.section-bar`) は、見えている節のものだけを節へ飛ぶ行のすぐ上に浮かべる** (押すものは下に。
-     * ルールの細い1行と同じ半透明のカプセル)。ほかの節のものは隠す。はみ出す分は横に巻く (節へ飛ぶ行と同じ)。
-     * 浮いた面なので、中の主のボタンは浮かせず太字だけ (`app.css` の「浮いたものの中」)。読んでいる間は節へ飛ぶ行と一緒に引っ込む
-     */
-    .main-inner :global([data-part]:not([data-current]) .section-bar) {
-      display: none;
-    }
-    .main-inner :global([data-current] .section-bar) {
-      --dp-btn-solid: transparent;
-      --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-      --dp-btn-lift: none;
-      position: fixed;
-      inset: auto 0.75rem
-        calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h));
-      z-index: 30;
-      display: flex;
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: var(--dp-space-2);
-      margin: 0;
-      padding: 0.25rem 0.5rem;
-      overflow-x: auto;
-      scrollbar-width: none;
-      white-space: nowrap;
-      border-radius: 1.375rem;
-      background: var(--dp-float);
-      box-shadow: var(--dp-shadow-pop);
-      transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-    }
-    .main-inner :global([data-current] .section-bar > *) {
-      flex-shrink: 0;
-    }
+  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
+  :global(:where(html[data-phone])) .page {
+    /* 下のタブとの隙間と、節へ飛ぶ行の高さ。節の操作の1行はこの上に積む */
+    --jump-gap: 0.375rem;
+    --jump-h: calc(var(--dp-btn-h-sm) + 0.5rem);
+  }
+  :global(:where(html[data-phone])) .jump {
+    position: fixed;
+    inset: auto 0.75rem calc(var(--dp-tabbar, 0px) + var(--jump-gap));
+    box-sizing: border-box;
+    height: var(--jump-h);
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    border-radius: 1.375rem;
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+  }
+  :global(:where(html[data-phone]))
     :global([data-retract])
-      .main-inner
-      :global([data-current] .section-bar:not(:has(:focus-visible))) {
-      transform: translateY(
-        calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h) + 100%)
-      );
-    }
-    /* 操作の1行が出ている間は、そのぶんも下を空ける (中身の最後が隠れないように) */
+    .jump:not(:has(:focus-visible)) {
+    transform: translateY(calc(var(--dp-tabbar, 0px) + var(--jump-gap) + 100%));
+  }
+  :global(:where(html[data-phone])) .main-inner {
+    padding-bottom: 3.5rem;
+  }
+  /*
+   * **節の操作の1行 (`.section-bar`) は、見えている節のものだけを節へ飛ぶ行のすぐ上に浮かべる** (押すものは下に。
+   * ルールの細い1行と同じ半透明のカプセル)。ほかの節のものは隠す。はみ出す分は横に巻く (節へ飛ぶ行と同じ)。
+   * 浮いた面なので、中の主のボタンは浮かせず太字だけ (`app.css` の「浮いたものの中」)。読んでいる間は節へ飛ぶ行と一緒に引っ込む
+   */
+  :global(:where(html[data-phone]))
+    .main-inner
+    :global([data-part]:not([data-current]) .section-bar) {
+    display: none;
+  }
+  :global(:where(html[data-phone]))
+    .main-inner
+    :global([data-current] .section-bar) {
+    --dp-btn-solid: transparent;
+    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+    --dp-btn-lift: none;
+    position: fixed;
+    inset: auto 0.75rem
+      calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h));
+    z-index: 30;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--dp-space-2);
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+    border-radius: 1.375rem;
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+  }
+  :global(:where(html[data-phone]))
+    .main-inner
+    :global([data-current] .section-bar > *) {
+    flex-shrink: 0;
+  }
+  :global(:where(html[data-phone]))
+    :global([data-retract])
+    .main-inner
+    :global([data-current] .section-bar:not(:has(:focus-visible))) {
+    transform: translateY(
+      calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h) + 100%)
+    );
+  }
+  /* 操作の1行が出ている間は、そのぶんも下を空ける (中身の最後が隠れないように) */
+  :global(:where(html[data-phone]))
     .main-inner:has(:global([data-current] .section-bar)) {
-      padding-bottom: 7rem;
-    }
-    .main-inner :global([data-part]) {
-      scroll-margin-top: calc(3.5rem + env(safe-area-inset-top));
-    }
+    padding-bottom: 7rem;
+  }
+  :global(:where(html[data-phone])) .main-inner :global([data-part]) {
+    scroll-margin-top: calc(3.5rem + env(safe-area-inset-top));
   }
   @media (min-width: 768px) {
     .jump {

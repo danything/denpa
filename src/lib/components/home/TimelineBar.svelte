@@ -11,6 +11,7 @@
 
   import Menu from "#lib/components/Menu.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
+  import { PHONE_FORM } from "#lib/phone-form.js";
   import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
 
   import type { HomeControls } from "./context";
@@ -21,8 +22,8 @@
     $props();
 
   let viewOpen = $state(false);
-  /** スマホ (下のタブがある幅) ではこの行は下に貼り付くので、メニューは上に開く */
-  const phone = new MediaQuery("max-width: 639.98px");
+  /** スマホの形 (下のタブがある形) ではこの行は下に貼り付くので、メニューは上に開く */
+  const phone = new MediaQuery(PHONE_FORM);
   /** 見てほしいことのチップ。件数のあるものだけ (選んでいるものは 0 件でも残す。外せるように) */
   const attention = $derived(
     ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id),

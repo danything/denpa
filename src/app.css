@@ -769,14 +769,14 @@ progress[value]::-webkit-progress-value {
   }
 }
 /*
- * **広い画面では表がヘッダーの裏まで伸びる** (docs/design.md の「浮かせ方」。番組表の `.grid-box`)。
+ * **広い画面 (スマホの形でないとき) では表がヘッダーの裏まで伸びる** (docs/design.md の「浮かせ方」。番組表の `.grid-box`)。
  * 操作の1行はヘッダーの下端 (`--dp-header-bottom`) に付け、高さを決めておく (`--guide-bar-h`)。
  * 表の頭 (局名の行が貼り付く所) はその下端 `--guide-head`。マスはヘッダーと操作の1行の裏を流れる。
  * 1行の中身はどれも小さいボタンの高さなので、高さは字の大きさや押す的の大きさ (`--dp-btn-h-sm`) から決まる。
  * 1 行の面は、ほかの画面の操作の1行と同じくヘッダーの下 `--dp-bar-gap` に来る (箱の頭は `--dp-fill-top`)
  */
 @media (min-width: 768px) {
-  .guide-frame {
+  :where(html:not([data-phone])) .guide-frame {
     /*
      * 操作の1行は、ヘッダーと同じ角丸の面 (`--guide-bar-gap` 離して、中に `--guide-bar-pad` の余白)。
      * 面の下にも同じだけ空けて、局名の行はその下に付く
@@ -789,7 +789,7 @@ progress[value]::-webkit-progress-value {
     --guide-head: calc(var(--dp-header-bottom) + var(--guide-bar-h));
   }
   /* 面 (下の `::before`) を中に閉じ込め、マスより手前に置く */
-  .guide-bar {
+  :where(html:not([data-phone])) .guide-bar {
     position: relative;
     z-index: 1;
     isolation: isolate;
@@ -803,7 +803,7 @@ progress[value]::-webkit-progress-value {
    * 1 行の面。ヘッダーと同じ形 (`--dp-bar-inset`・`--dp-bar-radius`)。表を巻いてマスが裏に入ったときだけ出す
    * (表の箱の軸 `--guide`。`guide/+page.svelte`)。移る途中の姿 (`GuidePending`) には表が無く軸が止まるので、平らなまま
    */
-  .guide-bar::before {
+  :where(html:not([data-phone])) .guide-bar::before {
     content: "";
     position: absolute;
     inset: var(--guide-bar-gap) var(--dp-bar-inset);
@@ -814,7 +814,7 @@ progress[value]::-webkit-progress-value {
     pointer-events: none;
   }
   @supports (animation-timeline: scroll()) {
-    .guide-bar::before {
+    :where(html:not([data-phone])) .guide-bar::before {
       background: transparent;
       box-shadow: none;
       animation: dp-bar-float linear both;
@@ -837,35 +837,34 @@ progress[value]::-webkit-progress-value {
   }
 }
 /*
- * **スマホ (下のタブがある幅) では、ほかの画面の操作の1行と同じく、下のタブのすぐ上にカプセルで浮かせる**
+ * **スマホの形 (下のタブがある形) では、ほかの画面の操作の1行と同じく、下のタブのすぐ上にカプセルで浮かせる**
  * (docs/design.md の「浮かせ方」。ホームの `.t-toolbar`・ルールの `.rules-bar`・設定の `.jump` と同じ形)。
  * **表は画面の下の端まで伸ばし、この1行と下のタブは表の上に浮かせる。** 表を読んでいる間は下のタブと一緒に引っ込む
  * (`+layout.svelte` の `data-retract`。表の箱の縦の巻き取りで出し入れする)。表の箱の大きさは出し入れで変わらないので、
  * 巻いた位置も中身も動かない。浮いているものに隠れるぶん (`--guide-float-h`) は表の最後の下に空ける (`guide/+page.svelte` の `.rows`)
  */
-@media (max-width: 639.98px) {
-  .guide-frame {
-    --page-h: calc(100svh - env(safe-area-inset-top));
-    /* 下のタブ + 1行の下の隙間 + 1行の上下の余白 + ボタンの高さ + 1行の上の隙間 (下の `.guide-bar` の寸法と対) */
-    --guide-float-h: calc(
-      var(--dp-tabbar, 0px) + 0.375rem + 0.5rem + var(--dp-btn-h-sm) + 0.375rem
-    );
-    margin-bottom: calc(-1 * (var(--dp-gutter) + var(--dp-tabbar, 0px)));
-  }
-  .guide-bar {
-    position: fixed;
-    inset-inline: 0.75rem;
-    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
-    z-index: 30;
-    padding: 0.25rem 0.5rem;
-    border-radius: 1.375rem;
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-  }
-  [data-retract] .guide-bar:not(:has(:focus-visible)) {
-    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
-  }
+/* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
+:where(html[data-phone]) .guide-frame {
+  --page-h: calc(100svh - env(safe-area-inset-top));
+  /* 下のタブ + 1行の下の隙間 + 1行の上下の余白 + ボタンの高さ + 1行の上の隙間 (下の `.guide-bar` の寸法と対) */
+  --guide-float-h: calc(
+    var(--dp-tabbar, 0px) + 0.375rem + 0.5rem + var(--dp-btn-h-sm) + 0.375rem
+  );
+  margin-bottom: calc(-1 * (var(--dp-gutter) + var(--dp-tabbar, 0px)));
+}
+:where(html[data-phone]) .guide-bar {
+  position: fixed;
+  inset-inline: 0.75rem;
+  bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+  z-index: 30;
+  padding: 0.25rem 0.5rem;
+  border-radius: 1.375rem;
+  background: var(--dp-float);
+  box-shadow: var(--dp-shadow-pop);
+  transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+}
+:where(html[data-phone]) [data-retract] .guide-bar:not(:has(:focus-visible)) {
+  transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
 }
 
 /* ---- 文字 ---- */

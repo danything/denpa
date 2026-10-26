@@ -132,7 +132,7 @@
 <!--
     **ホームと同じ作り。** 左に1本の一覧 (2段の淡い塊を 6px 空けて並べる)、1000px からは右にサイドバー
     (絞り込み・並び・集計。ドキュメントの目次と同じ行)。それより狭いと、絞り込みと並びは細い1行にまとめ、
-    スマホ (下のタブがある幅) では画面の下、タブのすぐ上に置く (押すものは指の届く下に)
+    スマホの形 (下のタブがある形) では画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
 <div class="rules-board">
   <div class="rules-list" data-testid="rule-list">
@@ -372,7 +372,7 @@
      * 浮いた面なので、中の「作る」は浮かせず太字だけ (`app.css` の「浮いたものの中」。スマホも同じ)
      */
   @media (min-width: 768px) and (max-width: 999.98px) {
-    .rules-bar {
+    :global(:where(html:not([data-phone]))) .rules-bar {
       --dp-btn-solid: transparent;
       --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
       --dp-btn-lift: none;
@@ -386,7 +386,7 @@
       box-shadow: var(--dp-shadow-tight);
     }
     @supports (animation-timeline: scroll()) {
-      .rules-bar {
+      :global(:where(html:not([data-phone]))) .rules-bar {
         background: transparent;
         box-shadow: none;
         animation: dp-bar-float linear both;
@@ -394,11 +394,11 @@
         animation-range: 0 1.5rem;
       }
     }
-    .rules-list {
+    :global(:where(html:not([data-phone]))) .rules-list {
       padding-top: var(--dp-space-2);
     }
     /* この1行がある間はヘッダーも近い影にそろえる (番組表と同じ。遠い影が下の1行に掛かって段々に見えないように) */
-    :global(html:has(.rules-bar)) {
+    :global(html:not([data-phone]):has(.rules-bar)) {
       --navbar-shadow: var(--dp-shadow-tight);
     }
   }
@@ -587,29 +587,32 @@
      * 同じ半透明のカプセル (`--dp-float`) にして、読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
      * 一覧の最後の行が隠れないよう、この1行の高さぶん下を空ける
      */
+  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
+  :global(:where(html[data-phone])) .rules-bar {
+    position: fixed;
+    --dp-btn-solid: transparent;
+    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+    --dp-btn-lift: none;
+    inset-inline: 0.75rem;
+    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    z-index: 30;
+    padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
+      var(--dp-space-3);
+    border-radius: 1.375rem;
+    background: var(--dp-float);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+  }
+  :global(:where(html[data-phone]))
+    :global([data-retract])
+    .rules-bar:not(:has(:focus-visible)) {
+    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
+  }
+  :global(:where(html[data-phone])) .rules-list {
+    padding-bottom: 4rem;
+  }
+  /* 狭い幅の2段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る。幅で決める) */
   @media (max-width: 639.98px) {
-    .rules-bar {
-      position: fixed;
-      --dp-btn-solid: transparent;
-      --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-      --dp-btn-lift: none;
-      inset-inline: 0.75rem;
-      bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
-      z-index: 30;
-      padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
-        var(--dp-space-3);
-      border-radius: 1.375rem;
-      background: var(--dp-float);
-      box-shadow: var(--dp-shadow-pop);
-      transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-    }
-    :global([data-retract]) .rules-bar:not(:has(:focus-visible)) {
-      transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
-    }
-    .rules-list {
-      padding-bottom: 4rem;
-    }
-    /* 狭い幅の2段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る) */
     .wide-part {
       display: none;
     }

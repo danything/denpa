@@ -13,7 +13,8 @@ import {
 
 /**
  * **折り畳み端末のテーブルトップ** (半分に折って机に置いた形。`PlayerLayout` の `TABLETOP`)。
- * 映像を上の段、右の列 (局の一覧・番組の中身) を下の段に置き、下の段の黒い地に映像の色の反射 (`FoldReflection`) を敷く。
+ * 上の段は映像だけ (段の幅か高さいっぱい)、下の段に右の列 (局の一覧・番組の中身) を置き、下の段の黒い地に映像の色の反射 (`FoldReflection`) を敷く。
+ * 操作はスマホの形 (`#lib/phone-form.ts`): 上のヘッダーは出さず、ライブは下のタブを下の段の下端に出す。
  *
  * 折り畳み端末は CDP で真似る: 折った形は `Emulation.setDevicePostureOverride`、折り目は
  * `Emulation.setDeviceMetricsOverride` の `displayFeature` (`setDisplayFeaturesOverride` だけでは段が分かれない)。
@@ -21,13 +22,21 @@ import {
  * 位置はページの中で `getBoundingClientRect` で読む
  */
 
-/** Galaxy Z Fold 系を開いて横に持った大きさ (CSS px)。折り目は真ん中で、蝶番の隙間は無い */
+/** Galaxy Z Fold 系を開いて横に持った大きさ (CSS px)。折り目はふだん真ん中で、蝶番の隙間は無い */
 const SIZE = { width: 1104, height: 882 };
 const FOLD = SIZE.height / 2;
+/**
+ * 上の段を低くした折り目。実機ではブラウザのタブと URL の欄が上の段の頭を取る (CDP では真似られないので、折り目を上げて代わりにする)
+ */
+const LOW_FOLD = 330;
 
 type Posture = "flat" | "tabletop" | "book";
 
-async function fold(cdp: CDPSession, posture: Posture): Promise<void> {
+async function fold(
+  cdp: CDPSession,
+  posture: Posture,
+  offset = FOLD,
+): Promise<void> {
   const metrics = { ...SIZE, deviceScaleFactor: 1, mobile: false };
   if (posture === "flat") {
     await cdp.send("Emulation.clearDevicePostureOverride");
@@ -40,7 +49,7 @@ async function fold(cdp: CDPSession, posture: Posture): Promise<void> {
   // 本の形は縦の折り目 (左右 2 段)。テーブルトップの形には当てない
   const displayFeature =
     posture === "tabletop"
-      ? { orientation: "horizontal" as const, offset: FOLD, maskLength: 0 }
+      ? { orientation: "horizontal" as const, offset, maskLength: 0 }
       : {
           orientation: "vertical" as const,
           offset: SIZE.width / 2,
@@ -64,7 +73,7 @@ interface Box {
   right: number;
 }
 
-/** 映像の枠・右の列・反射の箱 (無ければ null) */
+/** 映像の枠・右の列・反射・下のタブの箱 (無ければ null) */
 function boxes(page: Page, stage: string) {
   return page.evaluate((stage) => {
     const rect = (selector: string): Box | null => {
@@ -77,7 +86,14 @@ function boxes(page: Page, stage: string) {
       stage: rect(`[data-testid="${stage}"]`)!,
       aside: rect("[data-player-side] > aside")!,
       reflection: rect(`[data-testid="${stage}-reflection"]`),
-      header: rect(".navbar"),
+      header: document.querySelector(".navbar")!.getClientRects().length > 0,
+      tabbar: rect('[data-testid="tabbar"]'),
+      tabbarTheme:
+        document
+          .querySelector('[data-testid="tabbar"]')
+          ?.getAttribute("data-theme") ?? null,
+      phone: document.documentElement.hasAttribute("data-phone"),
+      fullscreen: document.fullscreenElement?.tagName ?? null,
       tabletop: matchMedia(
         "(device-posture: folded) and (vertical-viewport-segments: 2)",
       ).matches,
@@ -100,6 +116,9 @@ async function expectSideBySide(page: Page, stage: string): Promise<void> {
   await settled(async () => {
     const now = await boxes(page, stage);
     expect(now.tabletop).toBe(false);
+    // 広い形 (上のヘッダー) に戻る
+    expect(now.phone).toBe(false);
+    expect(now.header).toBe(true);
     expect(now.reflection).toBeNull();
     expect(now.theme).toBeNull();
     expect(now.aside.left).toBeGreaterThanOrEqual(now.stage.right - 1);
@@ -107,21 +126,47 @@ async function expectSideBySide(page: Page, stage: string): Promise<void> {
   });
 }
 
-/** テーブルトップ: 映像の枠は上の段、右の列は下の段。どちらも折り目をまたがない */
-async function expectTabletop(page: Page, stage: string): Promise<void> {
+/**
+ * テーブルトップ: 上の段は映像だけで、映像の枠は段の幅か高さのどちらかいっぱい (余白なし。縦横比は保つ)。
+ * 右の列は下の段。どちらも折り目をまたがない。上のヘッダーは出さず、下のタブ (ライブだけ) は下の段の下端
+ */
+async function expectTabletop(
+  page: Page,
+  stage: string,
+  { fold = FOLD, tabbar }: { fold?: number; tabbar: boolean },
+): Promise<void> {
   await settled(async () => {
     const now = await boxes(page, stage);
     expect(now.tabletop).toBe(true);
-    // 映像はヘッダーの下から折り目まで
-    expect(now.stage.top).toBeGreaterThanOrEqual(now.header?.bottom ?? 0);
-    expect(now.stage.bottom).toBeLessThanOrEqual(FOLD);
-    // 上の段で映像を小さくしすぎない (段の高さの 3 分の 2 以上)
-    expect(now.stage.bottom - now.stage.top).toBeGreaterThan((FOLD * 2) / 3);
-    // 右の列は折り目の下から画面の下の端まで、幅いっぱい
-    expect(now.aside.top).toBeGreaterThanOrEqual(FOLD);
+    expect(now.phone).toBe(true);
+    expect(now.header).toBe(false);
+    // 映像は上の段の中。幅か高さのどちらかが段いっぱい
+    expect(now.stage.top).toBeGreaterThanOrEqual(-0.5);
+    expect(now.stage.bottom).toBeLessThanOrEqual(fold + 0.5);
+    expect(now.stage.left).toBeGreaterThanOrEqual(-0.5);
+    expect(now.stage.right).toBeLessThanOrEqual(SIZE.width + 0.5);
+    const width = now.stage.right - now.stage.left;
+    const height = now.stage.bottom - now.stage.top;
+    expect(
+      Math.abs(width - SIZE.width) < 1 || Math.abs(height - fold) < 1,
+      `映像 ${width}x${height} / 上の段 ${SIZE.width}x${fold}`,
+    ).toBe(true);
+    // 右の列は折り目の下から、幅いっぱい
+    expect(now.aside.top).toBeGreaterThanOrEqual(fold);
     expect(now.aside.bottom).toBeLessThanOrEqual(SIZE.height);
     expect(now.aside.left).toBeCloseTo(0, 0);
     expect(now.aside.right).toBeCloseTo(SIZE.width, 0);
+    if (tabbar) {
+      // 下のタブは下の段の下端に浮き、右の列の終わりを隠さない。下の段と同じく暗いテーマの色
+      expect(now.tabbar).not.toBeNull();
+      expect(now.tabbar!.top).toBeGreaterThanOrEqual(fold);
+      expect(now.tabbar!.bottom).toBeLessThanOrEqual(SIZE.height);
+      expect(now.tabbar!.bottom - now.tabbar!.top).toBeGreaterThan(0);
+      expect(now.aside.bottom).toBeLessThanOrEqual(now.tabbar!.top + 0.5);
+      expect(now.tabbarTheme).toBe("dark");
+    } else {
+      expect(now.tabbar).toBeNull();
+    }
     // 下の段は舞台の中なので、右の列はテーマにかかわらず暗いテーマの色。窓は巻かない
     expect(now.theme).toBe("dark");
     expect(now.scrolls).toBe(false);
@@ -129,11 +174,15 @@ async function expectTabletop(page: Page, stage: string): Promise<void> {
 }
 
 /** 反射の箱は下の段いっぱい */
-async function expectReflection(page: Page, stage: string): Promise<void> {
+async function expectReflection(
+  page: Page,
+  stage: string,
+  fold = FOLD,
+): Promise<void> {
   await settled(async () => {
     const now = await boxes(page, stage);
     expect(now.reflection).not.toBeNull();
-    expect(now.reflection!.top).toBeCloseTo(FOLD, 0);
+    expect(now.reflection!.top).toBeCloseTo(fold, 0);
     expect(now.reflection!.bottom).toBeCloseTo(SIZE.height, 0);
     expect(now.reflection!.left).toBeCloseTo(0, 0);
     expect(now.reflection!.right).toBeCloseTo(SIZE.width, 0);
@@ -185,7 +234,7 @@ test.describe("テーブルトップ", () => {
     await syncEpg(request);
   });
 
-  test("ライブ: 映像を上の段、局の一覧を下の段に置き、下の段に反射を敷く。開くと元に戻る", async ({
+  test("ライブ: 映像を上の段いっぱい、局の一覧と下のタブを下の段に置き、下の段に反射を敷く。開くと元に戻る", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -199,7 +248,7 @@ test.describe("テーブルトップ", () => {
 
     await fold(cdp, "tabletop");
     await expect(page.getByTestId("live-frame-reflection")).toBeAttached();
-    await expectTabletop(page, "live-frame");
+    await expectTabletop(page, "live-frame", { tabbar: true });
     await expectReflection(page, "live-frame");
     // 光の代わりに反射。光は置かない
     await expect(page.getByTestId("live-frame-ambient")).not.toBeAttached();
@@ -216,14 +265,41 @@ test.describe("テーブルトップ", () => {
     await expect(reflection).toHaveAttribute("data-plan", "hold");
     await expect(reflection).toHaveAttribute("data-updates", "1");
     expect(await painted(page)).toBe(true);
-    // 選局しても配置は変わらない (操作バーは上の段の映像の上)
-    await expectTabletop(page, "live-frame");
+    // 選局しても配置は変わらない (操作バーは上の段の映像の上。段の端からはみ出さない)
+    await expectTabletop(page, "live-frame", { tabbar: true });
     await wakeControls(page, "live-frame");
     const bar = (await page
       .getByTestId("live-frame")
       .locator("[data-stage-bar]")
       .evaluate((el) => el.getBoundingClientRect().bottom))!;
     expect(bar).toBeLessThanOrEqual(FOLD);
+
+    // 上の段が低くても (実機ではブラウザの欄が頭を取る)、映像は段の高さいっぱいに縮むだけで、折り目をまたがない
+    await fold(cdp, "tabletop", LOW_FOLD);
+    await expectTabletop(page, "live-frame", { fold: LOW_FOLD, tabbar: true });
+    await expectReflection(page, "live-frame", LOW_FOLD);
+    await wakeControls(page, "live-frame");
+    const low = await page
+      .getByTestId("live-frame")
+      .locator("[data-stage-bar]")
+      .evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(low).toBeLessThanOrEqual(LOW_FOLD + 0.5);
+    await fold(cdp, "tabletop");
+
+    // 全画面のボタンはページごと全画面にする (枠だけだと映像が折り目をまたいで広がる)。並べ方はそのまま
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-full").click();
+    await settled(async () => {
+      expect((await boxes(page, "live-frame")).fullscreen).toBe("HTML");
+    });
+    await expectTabletop(page, "live-frame", { tabbar: true });
+    await expectReflection(page, "live-frame");
+    await wakeControls(page, "live-frame");
+    await page.getByTestId("live-full").click();
+    await settled(async () => {
+      expect((await boxes(page, "live-frame")).fullscreen).toBeNull();
+    });
+    await expectTabletop(page, "live-frame", { tabbar: true });
 
     // オフにすると反射は消え、黒い地に一覧だけ
     await page.evaluate(() => localStorage.setItem("player-ambient", "0"));
@@ -233,7 +309,7 @@ test.describe("テーブルトップ", () => {
       "off",
     );
     await expect(page.getByTestId("live-frame-reflection")).toBeHidden();
-    await expectTabletop(page, "live-frame");
+    await expectTabletop(page, "live-frame", { tabbar: true });
     await page.evaluate(() => localStorage.removeItem("player-ambient"));
 
     // 本の形 (左右 2 段) では当てない
@@ -281,7 +357,7 @@ test.describe("テーブルトップ", () => {
     await expectSideBySide(page, "watch-stage");
     await fold(cdp, "tabletop");
     await expect(page.getByTestId("watch-stage-reflection")).toBeAttached();
-    await expectTabletop(page, "watch-stage");
+    await expectTabletop(page, "watch-stage", { tabbar: false });
     await expectReflection(page, "watch-stage");
     // 番組の中身は列の中で巻く
     const body = await page.getByTestId("watch-facts").evaluate((el) => ({

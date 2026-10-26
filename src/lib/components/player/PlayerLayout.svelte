@@ -5,19 +5,13 @@
    */
   export const PHONE_LANDSCAPE =
     "(orientation: landscape) and (max-height: 500px) and (pointer: coarse)";
-
-  /**
-   * **テーブルトップ** (折り畳み端末を半分に折って机に置いた形)。折っていて (`device-posture: folded`)、
-   * 画面が上下 2 段に分かれている (`vertical-viewport-segments: 2`。折り目が横)。どちらも Android の Chrome 系だけが知っていて、
-   * 知らないブラウザ・平らに開いた端末・本の形 (左右 2 段) では当たらない。**下の `@media` と同じ条件** (変えるときは両方)
-   */
-  export const TABLETOP =
-    "(device-posture: folded) and (vertical-viewport-segments: 2)";
 </script>
 
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+
+  import { TABLETOP } from "#lib/phone-form.js";
 
   /**
    * 3画面の外枠。映像が左、読むものが右 (タブレット `md` = 768px から二段組。狭い画面は縦に積む)。
@@ -139,14 +133,21 @@
     }
   }
   /*
-     * **テーブルトップ** (上の `TABLETOP`。条件は同じ)。映像を上の段、右の列を下の段に置く。どちらも今の作りのまま、
-     * 折り目 (と蝶番の隙間) には何も置かない。段の境目は `env(viewport-segment-*)` (知らないブラウザは当たらないので逃げ道は形だけ)。
-     * `<main>` を窓いっぱいに固定し、上の段は浮いたヘッダーの下 (`--dp-fill-top`。狭い画面ではヘッダーの高さ) から折り目まで、
+     * **テーブルトップ** (`#lib/phone-form.ts` の `TABLETOP`。条件は同じ)。上の段は映像だけ、下の段は右の列。折り目 (と蝶番の隙間) には何も置かない。
+     * 段の境目は `env(viewport-segment-*)` (知らないブラウザは当たらないので逃げ道は形だけ)。
+     * 上下の段はどちらも低いので、操作はスマホの形 (`<html data-phone>`) で下に寄せる: 上のヘッダーは出さず、ライブは下のタブを下の段の下端に浮かべる
+     * (`+layout.svelte`)。観る画面と追っかけは下のタブも出さない (戻るのは映像の上の閉じるボタン)。
+     * `<main>` を窓いっぱいに固定し、上の段は黒い地 (映像の形の枠 `PlayerStage` は段の幅と高さに収める。左右か上下の黒はこの地)、
      * 下の段は黒い地 (舞台の中。テーマで変えない) に映像の色の反射 (`FoldReflection`) を敷き、その上に右の列を重ねる。
      * 窓は巻かない。右の列は中で巻く。E2E 55 で見る
      */
   @media (device-posture: folded) and (vertical-viewport-segments: 2) {
-    :global(body main:has([data-player-layout])) {
+    /* 下のタブの無い画面 (観る画面・追っかけ) では、スマホの形でもヘッダーが出る。上の段は映像だけにするので隠す */
+    :global(body:has([data-player-layout]) .navbar) {
+      display: none;
+    }
+    /* スマホの形の本文の余白 (`+layout.svelte`。下のタブのぶん) より強く当てる (`#main`)。下のタブのぶんは下の `.layout` が空ける */
+    :global(main#main:has([data-player-layout])) {
       position: fixed;
       inset: 0;
       padding: 0;
@@ -163,7 +164,7 @@
       height: 100%;
       margin: 0;
       overflow: visible;
-      /* 下のタブ (狭い画面のライブ) の裏に列の終わりを隠さない */
+      /* 下のタブ (ライブ) の裏に列の終わりを隠さない */
       padding-bottom: var(--dp-tabbar, 0px);
     }
     /* 下の段の黒い地。位置を持たせ、文書の順で反射と右の列より前に描く */
@@ -176,12 +177,12 @@
       left: 0;
       background: var(--dp-video);
     }
+    /* 上の段は余白を持たない。上の安全域 (全画面・ホーム画面から開いたときのステータスバー) だけ避ける */
     .main {
       min-height: 0;
       height: auto;
-      padding: var(--dp-fill-top, 3.5rem) var(--dp-gutter, 1rem)
-        var(--dp-gutter, 1rem);
-      background: none;
+      padding: env(safe-area-inset-top, 0px) 0 0;
+      background: var(--dp-video);
     }
     .side > :global(aside) {
       --dp-side-pad: var(--dp-gutter, 1rem);
@@ -192,12 +193,6 @@
       min-height: 0;
       margin: 0;
       color: var(--dp-fg);
-    }
-  }
-  /* 下のタブのある狭い画面ではヘッダーを隠している (`+layout.svelte`)。上の安全域のすぐ下から */
-  @media (device-posture: folded) and (vertical-viewport-segments: 2) and (max-width: 639.98px) {
-    :global(.shell:has(.tabbar)) .main {
-      padding-top: env(safe-area-inset-top, 0px);
     }
   }
 </style>
