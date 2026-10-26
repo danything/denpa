@@ -8,11 +8,12 @@ import {
   diiSection,
   multipartModule,
   packetize,
+  pcrPacket,
   stream,
   tdtPacket as tdt,
 } from "@danything/arib/synth";
 
-import { captureDataBroadcast } from "./data-capture";
+import { captureDataBroadcast, DataBroadcastCapture } from "./data-capture";
 import {
   feedFor,
   type PlacedMessage,
@@ -133,31 +134,81 @@ describe("replayAt", () => {
   });
 });
 
-describe("playbackMsAt", () => {
-  test("切っていない録画は、基準からの経過そのまま", () => {
-    expect(playbackMsAt(60_000, 0, null)).toBe(60_000);
+describe("DataBroadcastCapture.head", () => {
+  const { videoPid } = BML_TS;
+
+  test("最初の TDT から、ファイルの頭からそこまでに PCR が進んだぶんを引く", () => {
+    // 頭の PCR は 1000秒。12秒進んだところで初めて TDT (T1) が来る → 頭は T1 の 12秒前
+    const capture = new DataBroadcastCapture();
+    capture.feed(
+      stream(
+        pcrPacket(videoPid, 1000),
+        ...head,
+        pcrPacket(videoPid, 1006),
+        pcrPacket(videoPid, 1012),
+        tdt(T1),
+        pcrPacket(videoPid, 1017),
+        tdt(T1 + 5_000),
+      ),
+    );
+    expect(capture.head).toBe(T1 - 12_000);
   });
 
-  test("基準より前は 0 に寄せる", () => {
-    expect(playbackMsAt(-5_000, 0, null)).toBe(0);
+  test("頭と最初の TDT の間で PCR が一周しても、進んだぶんで数える", () => {
+    const wrap = 2 ** 33 / 90_000;
+    const capture = new DataBroadcastCapture();
+    capture.feed(
+      stream(
+        pcrPacket(videoPid, wrap - 4),
+        ...head,
+        pcrPacket(videoPid, 3),
+        tdt(T1),
+      ),
+    );
+    expect(capture.head).toBe(T1 - 7_000);
+  });
+
+  test("TDT が来なければ null", () => {
+    const capture = new DataBroadcastCapture();
+    capture.feed(stream(pcrPacket(videoPid, 1000), ...head));
+    expect(capture.head).toBeNull();
+  });
+});
+
+describe("playbackMsAt", () => {
+  const plain = { kept: null, skip: 0 };
+
+  test("切っていない録画は、頭からの経過そのまま", () => {
+    expect(playbackMsAt(60_000, 0, plain)).toBe(60_000);
+  });
+
+  test("頭より前は 0 に寄せる", () => {
+    expect(playbackMsAt(-5_000, 0, plain)).toBe(0);
+  });
+
+  test("エンコードで頭から捨てたぶんを引く (`encode_skip`)", () => {
+    expect(playbackMsAt(60_000, 0, { kept: null, skip: 1.5 })).toBe(58_500);
   });
 
   // 0〜60秒 と 120〜180秒 を残す (60〜120秒の CM を切った録画)
-  const keep = [
-    { start: 0, end: 60 },
-    { start: 120, end: 180 },
-  ];
+  const kept = {
+    kept: [
+      { start: 0, end: 60 },
+      { start: 120, end: 180 },
+    ],
+    skip: 0,
+  };
 
   test("CM を切った録画は、残した尺だけ積む", () => {
     // ts 150秒 = 2つ目の残り区間の途中。残ったのは 60 + (150-120) = 90秒
-    expect(playbackMsAt(150_000, 0, keep)).toBe(90_000);
+    expect(playbackMsAt(150_000, 0, kept)).toBe(90_000);
     // 両区間とも通り過ぎた ts 200秒 = 60 + 60 = 120秒
-    expect(playbackMsAt(200_000, 0, keep)).toBe(120_000);
+    expect(playbackMsAt(200_000, 0, kept)).toBe(120_000);
   });
 
-  test("CM の穴に落ちた時刻は、その手前の残り終わりに寄る", () => {
-    // ts 90秒 = 切った 60〜120秒の中。手前に残ったのは 60秒ぶんだけ
-    expect(playbackMsAt(90_000, 0, keep)).toBe(60_000);
+  test("CM の穴に落ちた時刻は、その後の本編の頭に寄る", () => {
+    // ts 90秒 = 切った 60〜120秒の中。残した尺では 60秒 (= 2つ目の残り区間の頭)
+    expect(playbackMsAt(90_000, 0, kept)).toBe(60_000);
   });
 });
 
@@ -175,7 +226,7 @@ describe("toPlaybackTimeline", () => {
         },
       ],
       0,
-      null,
+      { kept: null, skip: 0 },
     );
     expect(placed.map((p) => p.at)).toEqual([0, 30_000]);
   });

@@ -22,11 +22,11 @@ import { eq } from "drizzle-orm";
 
 import { DataBroadcastCapture } from "#lib/ts/data-capture.js";
 import {
-  type KeptRange,
   type PlacedMessage,
   type TimedMessage,
   toPlaybackTimeline,
 } from "#lib/ts/data-timeline.js";
+import type { Ruler } from "#lib/ts/watch.js";
 
 import type { Recording } from "../types";
 import { orm } from "./db";
@@ -108,7 +108,9 @@ const CHUNK = 1 << 20;
  * を **1周 2時間で 5回** 繰り返した (2026-08-17 実機)。エンコードそのものは
  * 終わっていて、最後のこの一手で全部を捨てていた
  */
-async function capture(path: string): Promise<TimedMessage[]> {
+async function capture(
+  path: string,
+): Promise<{ timeline: TimedMessage[]; head: number | null }> {
   const found = new DataBroadcastCapture();
   const file = await open(path, "r");
   try {
@@ -121,25 +123,28 @@ async function capture(path: string): Promise<TimedMessage[]> {
   } finally {
     await file.close();
   }
-  return found.result();
+  return { timeline: found.result(), head: found.head };
 }
 
 /**
  * 録画のデータ放送を取り出して、サイドカーに書く。
  *
+ * 時刻は**エンコードしたものの再生位置**で書く (観る画面の物差し。`playbackPlan` の `axis`)。
+ * 基準は元の TS の頭 (`DataBroadcastCapture.head`) で、番組の始まり (`start_at`) ではない
+ *
  * @param tsPath 元のTS (**CMを切る前のほう**。放送の実時刻 (TDT) が続いている)
  * @param sidecarPath 書き先 (`metadata.sidecarPaths` の `dataBroadcast`)
- * @param recording 録画の行。`start_at` を再生位置 0 の放送実時刻に、番組の名乗りにも使う
- * @param keep CM を実カットした録画で残した区間 (秒)。off/chapter なら null
+ * @param recording 録画の行。番組の名乗りに使う
+ * @param ruler 元の TS からエンコードしたものへの直し方 (録画の行に書く `cm_kept`・`encode_skip` と同じもの)
  * @returns 書いた変化の数。**0 なら書かない** (データ放送を持たない録画)
  */
 export async function saveRecordedBml(
   tsPath: string,
   sidecarPath: string,
   recording: Recording,
-  keep: readonly KeptRange[] | null,
+  ruler: Ruler,
 ): Promise<number> {
-  const timeline = await capture(tsPath);
+  const { timeline, head } = await capture(tsPath);
   /*
    * **描けるモジュールが1つも無ければ書かない。** データ放送の載っていない局でも
    * `pmt` は必ず1つ出る (timeline は空にならない) ので、それだけでは持たせない —
@@ -147,8 +152,9 @@ export async function saveRecordedBml(
    */
   if (!timeline.some((item) => item.message.type === "moduleDownloaded"))
     return 0;
+  // TDT を一度も見ていなければ、どの変化も時刻を持たない (頭の 0 に並ぶ) ので基準は使われない
   const placed = withProgramInfo(
-    toPlaybackTimeline(timeline, recording.start_at, keep),
+    toPlaybackTimeline(timeline, head ?? 0, ruler),
     recording,
   );
   writeFileSync(

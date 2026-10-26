@@ -26,6 +26,7 @@
 import type { ResponseMessage } from "@danything/arib/bml-protocol";
 
 import { Carousel } from "./carousel";
+import { fromTsTime, type Ruler } from "./watch";
 
 export interface TimedMessage {
   /**
@@ -38,39 +39,25 @@ export interface TimedMessage {
   message: ResponseMessage;
 }
 
-/** CM を実カットした録画で残した区間 (秒)。off/chapter のときは切らないので、渡すのは null (`keep`) */
-export interface KeptRange {
-  start: number;
-  end: number;
-}
-
 /**
- * 放送の実時刻 (unix ms) を、録画の**再生位置** (ms) に写す。
+ * 放送の実時刻 (unix ms) を、エンコードしたものの**再生位置** (ms) に写す。
  *
  * タイムラインは放送の実時刻 (TDT) で並ぶが、再生時に突き合わせたいのは
- * 動画の再生位置。基準 `anchorUnixMs` は「再生位置 0 のときの放送実時刻」で、
- * 録画の `start_at` か、最初に見た TDT を渡す (データ放送は秒単位で動くので、
- * 数秒の基準ずれは効かない)。
+ * 動画の再生位置。2段で直す:
  *
- * **CM を実カットした録画 (`keep`) は時間軸が縮む。** 合わせないと番組連動が
- * 数分ずれるので、残した区間だけを積んでカット後の位置に直す。残した区間の途中なら
- * そこまでに残した尺を、CM の穴に落ちた時刻はその手前の残り終わりに寄せる。
- * off/chapter (切っていない) なら `keep` は null で、そのまま比例する。
+ * 1. **元の TS の物差しへ。** `headUnixMs` は「元の TS の頭の放送実時刻」
+ *    (`DataBroadcastCapture.head`)。番組の始まり (`start_at`) ではない — 録画は
+ *    前のマージンのぶん早く始まるので、そちらを基準にすると番組連動がマージン (既定 10秒) ぶん早く出る
+ * 2. **エンコードしたものの物差しへ** (`ruler`。観る画面の `Ruler` と同じもの)。
+ *    頭から捨てた長さ (`encode_skip`) を引き、CM を切ったものは残した区間 (`cm_kept`) だけを積む。
+ *    CM の穴に落ちた時刻は、その後の本編の頭に寄せる (`fromTsTime`)
  */
 export function playbackMsAt(
   atUnixMs: number,
-  anchorUnixMs: number,
-  keep: readonly KeptRange[] | null,
+  headUnixMs: number,
+  ruler: Ruler,
 ): number {
-  const tsSeconds = (atUnixMs - anchorUnixMs) / 1000;
-  if (tsSeconds <= 0) return 0;
-  if (keep === null) return Math.round(tsSeconds * 1000);
-  let kept = 0;
-  for (const range of keep) {
-    if (tsSeconds <= range.start) break;
-    kept += Math.min(tsSeconds, range.end) - range.start;
-  }
-  return Math.round(kept * 1000);
+  return Math.round(fromTsTime((atUnixMs - headUnixMs) / 1000, ruler) * 1000);
 }
 
 /** 再生位置 (ms) を負ったメッセージ。サイドカーに書くのはこの形式 */
@@ -88,11 +75,11 @@ export interface PlacedMessage {
  */
 export function toPlaybackTimeline(
   timeline: readonly TimedMessage[],
-  anchorUnixMs: number,
-  keep: readonly KeptRange[] | null,
+  headUnixMs: number,
+  ruler: Ruler,
 ): PlacedMessage[] {
   return timeline.map((item) => ({
-    at: item.at === null ? 0 : playbackMsAt(item.at, anchorUnixMs, keep),
+    at: item.at === null ? 0 : playbackMsAt(item.at, headUnixMs, ruler),
     message: item.message,
   }));
 }

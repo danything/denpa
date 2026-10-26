@@ -1710,8 +1710,11 @@ async function runJob(jobId: number): Promise<void> {
       sourceTs,
       sidecarPaths(output).dataBroadcast,
       recording,
-      // 時刻を詰めるのは CM を実際に切れたときだけ。切れずに CM ごとエンコードしたなら映像の時刻のまま
-      kept,
+      /*
+       * 録画の行に書くもの (`cm_kept`・`encode_skip`) と同じ直し方。詰めるのは CM を実際に切れたときだけで、
+       * 切れずに CM ごとエンコードしたなら頭から捨てたぶんを引くだけ
+       */
+      { kept, skip: primary.skip },
     );
     if (changes > 0) {
       console.log(
