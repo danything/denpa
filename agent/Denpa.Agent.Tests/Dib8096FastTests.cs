@@ -103,6 +103,24 @@ public class Dib8096FastTests
     }
 
     [Test]
+    public async Task 選局ごとの要約の1行()
+    {
+        var (dib, _, model, _) = Make();
+        dib.Tune(Uhf27);
+        await Assert.That(dib.LastSummary).StartsWith($"選局 {Uhf27} Hz: ");
+        await Assert.That(dib.LastSummary).Contains("キャパシタ: 較正した (覚えた値なし)");
+        await Assert.That(dib.LastSummary).Contains("温度: 測った");
+        await Assert.That(dib.LastSummary).EndsWith("、同期した");
+        dib.Tune(Uhf13);
+        dib.Tune(Uhf27);
+        await Assert.That(dib.LastSummary).Contains("キャパシタ: 使い回し");
+        await Assert.That(dib.LastSummary).Contains("温度: 使い回し");
+        model.Signal = false;
+        dib.Tune(Uhf27);
+        await Assert.That(dib.LastSummary).EndsWith("、同期しなかった");
+    }
+
+    [Test]
     public async Task 探索はシンボルの時間切れに関わらない段だけ詰める()
     {
         var (dib, _, _, time) = Make();

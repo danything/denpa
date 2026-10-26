@@ -58,23 +58,25 @@ public sealed class Dib8096
      * - DiB0090 のキャパシタの較正 (7.3.5。二分探索で約 17 歩・約 165ms) の結果を周波数ごとに覚えて使い回す
      * - 温度の較正 (7.3.3。約 44ms) は直前に測ってから TemperatureReuseMs 以内なら飛ばす
      * - 復調器の探索で、シンボルの数の時間切れに関わらない段は FastPollMs ごとに見る (Floor)
+     *
+     * 3 つの数字 (60 秒・3ms・許容値 50) は、実機 (CECH-ZD1 J、T27・T21、2026-10-26) で 13 回選局して1回も同期を落とさず、
+     * 覚えた値での選局が中央 800ms → 617ms になった値。本番の記録 (選局ごとの1行。LastSummary) で見直す
      */
 
     /// <summary>
     /// 温度の較正を使い回す長さ (ms)。測った温度は WBD の目標に使うだけで、選局の合間 (数秒〜数分) にチューナーの温度は
-    /// ほとんど変わらないとみて 1 分にした。**実機で、使い回したときにロックの確かさが落ちないかを --repeat で確かめる値**
+    /// ほとんど変わらないとみて 1 分にした (根拠は上)
     /// </summary>
     public const double TemperatureReuseMs = 60_000;
 
     /// <summary>
-    /// 探索で、シンボルの数の時間切れに関わらない段を見る間隔 (ms)。1 回の I2C の読み (bulk の塊の往復) より少し長い間隔として決めた。
-    /// **実機で確かめる値**
+    /// 探索で、シンボルの数の時間切れに関わらない段を見る間隔 (ms)。1 回の I2C の読み (bulk の塊の往復) より少し長い間隔 (根拠は上)
     /// </summary>
     public const int FastPollMs = 3;
 
     /// <summary>
     /// 覚えたキャパシタで ADC を1回読んだとき、覚えたときの差 (dmin) からここまでのずれなら合っているとみる。
-    /// 二分探索の最後の1段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値として決めた。**実機で ADC のばらつきを見て確かめる値**
+    /// 二分探索の最後の1段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値 (根拠は上)
     /// </summary>
     private const int CapacitorTolerance = 50;
 
@@ -570,6 +572,7 @@ public sealed class Dib8096
         }
         // 合わなかったら、使い回したキャパシタも次は較正し直す
         if (result == DibLock.Failed && _capacitors.Remove(_tunerKhz)) _notes.Add("キャパシタ: ロックしなかったので覚えた値を捨てた");
+        LastSummary = Summary(hz, _time.NowMs - started, result);
         if (_fastSteps.Count > 0)
         {
             _notes.Add($"{FastPollMs}ms で見た歩数: {string.Join(" / ", _fastSteps.Select(pair => $"{pair.Key} {pair.Value}"))}");
@@ -586,6 +589,24 @@ public sealed class Dib8096
             _trace($"選局 {hz} Hz → {result} ({_path}){(_notes.Count > 0 ? $" [{string.Join("。", _notes)}]" : "")}: 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
         }
         return result;
+    }
+
+    /// <summary>
+    /// 最後の選局の要約の1行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3ms・許容値 50) を本番の記録で見直すのに使う。
+    /// 形: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / 同期しなかった&gt;</c>
+    /// </summary>
+    public string LastSummary { get; private set; } = "";
+
+    private string Summary(uint hz, double lockMs, DibLock result)
+    {
+        string Pick(string prefix, string none) => _notes.LastOrDefault(note => note.StartsWith(prefix, StringComparison.Ordinal)) ?? prefix + none;
+        var sync = result switch
+        {
+            DibLock.DataLocked => "同期した",
+            DibLock.Locked => "ロックしたがデータはまだ",
+            _ => "同期しなかった",
+        };
+        return $"選局 {hz} Hz: {_path}、ロックまで {lockMs:F0}ms、{Pick("キャパシタ: ", "-")}、{Pick("温度: ", "-")}、{sync}";
     }
 
     /// <summary>ロックまでの内訳の1つ (段の名前・かかった時間・そのうち眠った時間・歩数)</summary>
