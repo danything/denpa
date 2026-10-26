@@ -84,10 +84,10 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   installer はドライバを入れ替えません (ほかのソフトで使っていた機材を黙って奪わない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
   (Windows の libusb は WinUSB の機材しか開けず、開けるのも1つのプロセスだけ)
-- px4・Siano・CECH-ZD1 J の機材は同時に挿して使えます (別の USB の機材を別のプロセスが開く)
+- px4・Siano・CECH-ZD1 J の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
-  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーも
+  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーと CECH-ZD1 J の差し込み口も
   並びます (USB のリーダーが先)
 
 **px4-userland の機材で Windows だけ違うところ。**

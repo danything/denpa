@@ -1748,11 +1748,14 @@
   }
   /*
      * マスのところの骨組み。列は表と同じ (`subgrid`)。光の筋は `app.css` の `.skeleton`。
-     * 時刻の列・局名の行・「いま」の時刻は `z-index` を持つので、この上に重なる
+     * 時刻の列・局名の行・「いま」の時刻は `z-index` を持つので、この上に重なる。
+     * **表の最後の下の空き (`.rows` の `padding-bottom`) にも敷く。** スマホの形で夜遅くに開くと、
+     * 「いま」へ送った位置が表の最後に近く、その空きが画面の下に見えて骨組みが途中で切れていた
      */
   .cells-skeleton {
     display: grid;
     grid-template-columns: subgrid;
+    margin-bottom: calc(-1 * var(--guide-float-h, 0px));
   }
   .cells-skeleton-column {
     margin-inline: 0.125rem;

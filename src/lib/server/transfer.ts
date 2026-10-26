@@ -28,8 +28,8 @@ import { readTar, type TarSource, writeTar } from "./tar";
 /**
  * **denpa を別の機械へ移す** (設定の「連携」の「denpa を別の機械へ移す」。docs/migrate.md「別の機械へ移す」)。
  *
- * 書き出すのは DB の写しと局ロゴ (`logos/`) だけ。**録画のファイルは入れない** — 録画はユーザーが
- * フォルダごと写す (denpa は録画をファイルとして持ち出す機能を持たない)。
+ * 書き出すのは DB の写しとロゴの置き場 (`logos/`。局ロゴと CM 検出のために覚えたロゴ) だけ。
+ * **録画のファイルは入れない** — 録画はユーザーがフォルダごと写す (denpa は録画をファイルとして持ち出す機能を持たない)。
  *
  * 取り込めるのは、まだ使っていない denpa だけ。送られたファイルを検証し、写しに drizzle の migrate を当て、
  * 録画のファイルが置き場にあるかを数えてから、次の起動の最初で入れ替える (`swapAtBoot`)。
@@ -237,7 +237,7 @@ copy.exec("VACUUM");
 copy.close();
 `;
 
-export async function snapshot(from: string, to: string): Promise<void> {
+async function snapshot(from: string, to: string): Promise<void> {
   const child = Bun.spawn([process.execPath, "-e", SNAPSHOT], {
     env: { ...process.env, DENPA_SNAPSHOT_FROM: from, DENPA_SNAPSHOT_TO: to },
     stdout: "ignore",
@@ -251,7 +251,7 @@ export async function snapshot(from: string, to: string): Promise<void> {
     throw new Error(`DB の写しを取れませんでした: ${stderr.trim()}`);
 }
 
-/** 局ロゴの置き場の中で、書き出すもの (と、取り込むときに受け入れるもの) */
+/** ロゴの置き場の中で、書き出すもの (と、取り込むときに受け入れるもの) */
 const LOGO_NAMES = [
   /^logos\/\d+\.png$/,
   /^logos\/satellite-relays\.json$/,

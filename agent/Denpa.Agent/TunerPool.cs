@@ -293,7 +293,7 @@ public sealed class TunerPool(
     /// <item><c>px4:&lt;筐体の番号&gt;:&lt;受信機&gt;</c> … px4-userland の機材 (Px4.cs)</item>
     /// <item><c>siano:&lt;USB のポート&gt;</c> … siano-userland の機材 (Siano.cs)。カーネルが使っていれば開かない</item>
     /// <item><c>asicen:&lt;USB ポート&gt;:&lt;受信機&gt;</c> … asicen-userland の機材 (Asicen.cs。試験的)</item>
-    /// <item><c>zd1j:&lt;USB のポート&gt;</c> … Sony CECH-ZD1 J (Zd1j.cs)。エージェントが USB を直に持つ。Linux だけ</item>
+    /// <item><c>zd1j:&lt;USB のポート&gt;</c> … Sony CECH-ZD1 J (Zd1j.cs)。エージェントが USB を直に持つ (Linux・Windows・macOS)</item>
     /// </list>
     ///
     /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>

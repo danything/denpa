@@ -9,7 +9,7 @@
 # **エージェントは Windows の上でそのまま動かし** (タスク スケジューラでログオン時に起こす)、**denpa 本体は
 # WSL のコンテナ (wslc) で動かす。** Docker Desktop は要らない (WSL に入っているので `wsl --update` だけで使える)。
 # コンテナには USB を渡せないので、チューナーとカードに触るエージェントはコンテナに入れられない。
-# **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など)**
+# **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J**
 # (DVB は無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/install-windows.md)。
 #
 # **WSL は勝手に入れない。** wslc が無いときはエージェントだけ入れて、入れ方を言って終わる。

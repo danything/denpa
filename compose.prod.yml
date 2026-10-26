@@ -23,8 +23,8 @@ services:
     restart: unless-stopped
     # denpa と同じ (下の説明)。TS を流しているのはこちらなので、先に消えると録画ごと切れる
     stop_grace_period: 6h5m
-    # チューナーとカードリーダーに触るため。PX-Q3U4 などはホストにドライバを入れず、
-    # /dev/bus/usb が見えればイメージ同梱の px4-userland が扱う (docs/tuner-px4.md)。
+    # チューナーとカードリーダーに触るため。PX-Q3U4・PX-S1UD・CECH-ZD1 J などの USB の機材は
+    # ホストにドライバを入れず、/dev/bus/usb が見えればエージェントが扱う (docs/tuners.md「要るもの」)。
     # **privileged にはしない。** 要るのは USB と DVB のデバイスと、pipe を広げる権限だけ
     cap_add:
       # siano-ts の標準出力の pipe を 8MB まで広げる (無くても 1MB で動く。agent/Denpa.Agent/ChildTs.cs)

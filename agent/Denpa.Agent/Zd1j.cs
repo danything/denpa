@@ -42,7 +42,7 @@ public static class Zd1j
 
     /// <summary>
     /// 刺さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
-    /// カーネルのドライバが掴んでいるものは並べない (usbfs はこちらが開いている印なので並べる)
+    /// カーネルのドライバが使っているものは並べない (usbfs はこちらが開いている印なので並べる)
     /// </summary>
     internal static List<string> Ports(string sysfs, Action<string>? warn = null)
     {
@@ -102,7 +102,7 @@ public static class Zd1j
 }
 
 /// <summary>
-/// CECH-ZD1 J 1台ぶんの持ち主。**USB のハンドルは1台に1つだけ**で、チューナーとカードが借りる。
+/// CECH-ZD1 J 1台ぶんの持ち主。**USB のハンドルは1台に1つだけ**で、チューナーとカードが取って使う。
 ///
 /// <para>
 /// **温めておく。** ブリッジの起動と DiB8096 の初期化は開くときの1回だけ (DiB8096 はチューナーが初めて使うとき)。
@@ -142,7 +142,7 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>DiB8096 の初期化にかかった時間 (まだなら -1)</summary>
     public long DemodMs { get; private set; } = -1;
 
-    /// <summary>USB が抜けたなどで使えなくなった。借り手が返したらすぐ閉じる</summary>
+    /// <summary>USB が抜けたなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
     public bool Faulted { get; private set; }
 
     internal Zd1jBoard(string port, IUsbDevice usb)
@@ -153,7 +153,7 @@ public sealed class Zd1jBoard : IDibTime
     }
 
     /// <summary>
-    /// 借りる。開いていなければ、そのとき開いてブリッジを起動する。**返すのは <see cref="Release"/>**
+    /// 取る。開いていなければ、そのとき開いてブリッジを起動する。**返すのは <see cref="Release"/>**
     /// </summary>
     public static Zd1jBoard Acquire(string port) => Acquire(port, () => Zd1j.OpenUsb(port));
 
@@ -199,7 +199,7 @@ public sealed class Zd1jBoard : IDibTime
     }
 
     /// <summary>
-    /// 誰も借りていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。カードが借りていれば開いたまま
+    /// 誰も使っていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。カードが使っていれば開いたまま
     /// </summary>
     public static void CloseIfIdle(string port)
     {
@@ -216,7 +216,7 @@ public sealed class Zd1jBoard : IDibTime
         board.Close();
     }
 
-    /// <summary>失敗が USB の抜けなら印を付ける (次に借りる人は開き直す)</summary>
+    /// <summary>失敗が USB の抜けなら印を付ける (次に取る側は開き直す)</summary>
     public void Fail(Exception error)
     {
         if (error is UsbGoneException) Faulted = true;
@@ -284,7 +284,7 @@ public sealed class Zd1jBoard : IDibTime
         }
     }
 
-    /// <summary>全部閉じる (エージェントを止めるとき。<c>--tune</c> の終わり)。借り手がいても閉じる</summary>
+    /// <summary>全部閉じる (エージェントを止めるとき。<c>--tune</c> の終わり)。使っている側がいても閉じる</summary>
     public static void CloseAll()
     {
         List<Zd1jBoard> boards;
@@ -298,13 +298,13 @@ public sealed class Zd1jBoard : IDibTime
 }
 
 /// <summary>1回の選局でかかった時間 (ms)。<c>--tune</c> が出す</summary>
-/// <param name="OpenMs">ボードを借りて DiB8096 を使えるようにするまで (冷えていればブリッジの起動と DiB8096 の初期化。温かければほぼ 0)</param>
+/// <param name="OpenMs">ボードを取って DiB8096 を使えるようにするまで (冷えていればブリッジの起動と DiB8096 の初期化。温かければほぼ 0)</param>
 /// <param name="LockMs">選局からロックまで</param>
 /// <param name="FirstTsMs">ロックから最初の TS まで (まだ来ていなければ -1)</param>
 public sealed record Zd1jTimings(long OpenMs, long LockMs, long FirstTsMs);
 
 /// <summary>
-/// CECH-ZD1 J のチューナー (地上波だけ)。**選局しなおしは周波数まわりだけ。** ボードは流している間だけ借りる。
+/// CECH-ZD1 J のチューナー (地上波だけ)。**選局しなおしは周波数まわりだけ。** ボードは流している間だけ取る。
 ///
 /// <para>
 /// 前面の LED は流している間ずっと赤、止めたら緑 (点滅なし)。読む側がいないまま <see cref="StallLimit"/> 経ったら
@@ -315,7 +315,7 @@ public sealed class Zd1jTuner : ITuneDevice
 {
     /// <summary>
     /// 読む側がいないまま、溜めが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
-    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く見切ると、TunerPool が畳む前に流れが切れる)
+    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く見切ると、TunerPool が畳む前に TS が途切れる)
     /// </summary>
     internal static TimeSpan StallLimit { get; set; } = TunerPool.Linger;
 
@@ -340,7 +340,7 @@ public sealed class Zd1jTuner : ITuneDevice
         _closeIdle = closeIdle;
     }
 
-    /// <summary>捨てられたとき、ボードを誰も借りていなければ閉じる</summary>
+    /// <summary>捨てられたとき、ボードを誰も使っていなければ閉じる</summary>
     private readonly Action? _closeIdle;
 
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -456,7 +456,7 @@ public sealed class Zd1jTuner : ITuneDevice
         board.Release();
     }
 
-    /// <summary>捨てる (定義が変わった・止める)。ボードはカードが借りていなければ閉じる</summary>
+    /// <summary>捨てる (定義が変わった・止める)。ボードはカードが使っていなければ閉じる</summary>
     public void Dispose()
     {
         lock (_gate) Stop(keepLed: false);
@@ -503,7 +503,7 @@ internal sealed class Zd1jStream
 
     public DeviceStream Output { get; }
 
-    /// <summary>流れが終わった (抜けた・読む側がいない・止めた)</summary>
+    /// <summary>流し終わった (抜けた・読む側がいない・止めた)</summary>
     public bool Ended => _ended;
 
     /// <summary>最初の TS を詰めた時刻 (Stopwatch)。まだなら 0</summary>

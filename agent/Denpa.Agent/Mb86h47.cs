@@ -204,14 +204,14 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    /// <summary>跳ぶ2語: <c>LDI:20 #target, R12</c> と <c>JMP @R12</c> + <c>NOP</c></summary>
+    /// <summary>飛ぶ2語: <c>LDI:20 #target, R12</c> と <c>JMP @R12</c> + <c>NOP</c></summary>
     public static (uint First, uint Second) Jump(uint target)
     {
         if (target >= 0x100000) throw new ArgumentOutOfRangeException(nameof(target));
         return ((0x9B0Cu | (((target >> 16) & 0xF) << 4)) << 16 | (target & 0xFFFF), JumpSecond);
     }
 
-    /// <summary>跳ぶ2語の飛び先。跳ぶ語の形でなければ null</summary>
+    /// <summary>飛ぶ2語の飛び先。飛ぶ語の形でなければ null</summary>
     private static uint? JumpTarget(uint first, uint second) =>
         (first & 0xFF0F0000) == 0x9B0C0000 && second == JumpSecond ? ((first >> 4) & 0xF0000) | (first & 0xFFFF) : null;
 
@@ -226,7 +226,7 @@ public sealed class Mb86h47 : II2c
 
     /// <summary>
     /// 4.2 メモリ要求の番地を 32 ビットに広げる。すでに自分のルーチンを指していれば何もしない。別の中身のルーチンを指していれば、
-    /// 使われていないほうのバンクに置いてから跳ぶ語を書き換える (途中で要求が来ても、いつもどちらかの完全なルーチンに跳ぶように)
+    /// 使われていないほうのバンクに置いてから飛ぶ語を書き換える (途中で要求が来ても、いつもどちらかの完全なルーチンに飛ぶように)
     /// </summary>
     private void Widen()
     {
@@ -270,7 +270,7 @@ public sealed class Mb86h47 : II2c
         var free = Enumerable.Range(0, Mb86h47Programs.Banks.Length).FirstOrDefault(bank => !used.Contains(bank), -1);
         if (free < 0) throw Unknown();
 
-        // ルーチンを1語ずつ置いて、1語ずつ読み返す。それから跳ぶ語を1語ずつ
+        // ルーチンを1語ずつ置いて、1語ずつ読み返す。それから飛ぶ語を1語ずつ
         var place = Routines.Value[free];
         var origin = Mb86h47Programs.Banks[free];
         for (var i = 0; i < place.Words.Length; i++) Write32(origin + (uint)(i * 4), place.Words[i]);
