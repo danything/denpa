@@ -35,12 +35,12 @@ public static class Mb86h47Programs
 
     /// <summary>
     /// 番地を広げるルーチン。入ったとき R4 = 要求の 24 ビットの番地、要求の状態の塊を指すのは読む側 R8・書く側 R10。
-    /// 使ってよいのは R0・R1・R4 だけ (と、跳んでくるのに使った R12)。
+    /// 使ってよいのは R0・R1・R4 だけ (と、飛んでくるのに使った R12)。
     ///
     /// <list type="number">
     /// <item>wValue の下位バイト h (<c>[状態+0x40]</c>) が 0 でなければ、番地 = <c>R4 | (h &lt;&lt; 24)</c> を <c>[状態+0x44]</c> へ。書く側だけ h を 0 に戻す</item>
     /// <item>h が 0 で <c>0x80000 ≤ R4 &lt; 0xA0000</c> なら、<c>(R4 &amp; 0x3FFFF) + 0xF00000</c> を <c>[状態+0x44]</c> へ (元の付け替えと同じ)</item>
-    /// <item>どちらでもなければ何もしない。最後に元の処理の続きへ跳ぶ</item>
+    /// <item>どちらでもなければ何もしない。最後に元の処理の続きへ飛ぶ</item>
     /// </list>
     /// </summary>
     public static Routine Addressing(int bank)

@@ -22,7 +22,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
-/// denpa-agent --card zd1j:4-12.1                          # CECH-ZD1 J の内蔵の差し込み口だけ (ほかのリーダーに触らない)
+/// denpa-agent --card zd1j:4-12.1                            # CECH-ZD1 J の内蔵の差し込み口だけ (ほかのリーダーに触らない)
 /// </code>
 ///
 /// <para>
@@ -135,7 +135,7 @@ public static class Probe
         var channels = args.ElementAtOrDefault(2)?.Split(',') ?? [];
         if (device is null || channels.Length == 0)
         {
-            Console.Error.WriteLine("usage: denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v]");
+            Console.Error.WriteLine("usage: denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]");
             return 2;
         }
 

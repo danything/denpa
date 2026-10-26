@@ -26,7 +26,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 跳ぶ語は仕様書_4_2_の形()
+    public async Task 飛ぶ語は仕様書_4_2_の形()
     {
         // LDI:20 #0xE1000, R12 = 0x9B0C | (0xE << 4) の上位、0x1000 の下位。JMP @R12 と NOP
         await Assert.That(Mb86h47.Jump(0xE1000)).IsEqualTo((0x9BEC1000u, 0x970C9FA0u));
@@ -74,7 +74,7 @@ public class Zd1jTests
     public async Task 別の中身のルーチンを指していれば使われていないほうのバンクに置く()
     {
         var usb = new FakeBridgeUsb();
-        // 前の起動の残り: バンク 0 の別のルーチンに跳ぶ (データ段の語はもう NOP)
+        // 前の起動の残り: バンク 0 の別のルーチンに飛ぶ (データ段の語はもう NOP)
         var (first, second) = Mb86h47.Jump(0xE1000);
         var (writeFirst, _) = Mb86h47.Jump(0xE1040);
         usb.Memory[0xE9AC0] = first;

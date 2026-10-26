@@ -67,7 +67,7 @@ service:
 allowedHosts: ""
 
 # **エージェントに繋げる相手を絞る** NetworkPolicy を出す。CNI が NetworkPolicy に対応していないと、
-# 出しても効かない。オンにしたら from に denpa の居場所を書く (NetworkPolicyPeer の並び。
+# 出しても効かない。オンにしたら from に denpa のいる所を書く (NetworkPolicyPeer の並び。
 # そのまま ingress の from に入る)。同じクラスタの別の名前空間なら namespaceSelector と podSelector、
 # クラスタの外の denpa なら ipBlock。NodePort・LoadBalancer 越しだと送り元のアドレスがノードのものに
 # 書き換わる (externalTrafficPolicy が既定の Cluster のとき) ので、ipBlock にはそれも入れる

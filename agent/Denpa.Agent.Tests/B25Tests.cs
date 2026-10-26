@@ -748,11 +748,11 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **鍵の要らない読み手だけなら、カードに聞かず、溜めずにそのまま流す。** 番組表・ロゴ・スキャンが
+    /// **鍵の要らない利用者だけなら、カードに聞かず、溜めずにそのまま流す。** 番組表・ロゴ・スキャンが
     /// ライブ視聴や録画とカードの錠を取り合わない
     /// </summary>
     [Test]
-    public async Task 鍵の要らない読み手だけならカードに聞かない()
+    public async Task 鍵の要らない利用者だけならカードに聞かない()
     {
         var ts = Channel().Ecm(EcmPid, 1).Videos(5, 1).Ecm(EcmPid, 2).Videos(5, 2, even: false);
         var cards = new Cards();
@@ -767,11 +767,11 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **途中で鍵の要る読み手が来たら、溜め直して最初の鍵から復号する。** 来た読み手には頭から復号したものが届く
+    /// **途中で鍵の要る利用者が来たら、溜め直して最初の鍵から復号する。** 来た利用者には頭から復号したものが届く
     /// (ECM の手前でも、ECM を挟んで続いている偶奇の並びは復号する)
     /// </summary>
     [Test]
-    public async Task 鍵の要る読み手が来たら溜め直して復号する()
+    public async Task 鍵の要る利用者が来たら溜め直して復号する()
     {
         var wanted = false;
         var cards = new Cards();

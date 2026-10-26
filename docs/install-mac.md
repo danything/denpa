@@ -65,7 +65,7 @@ denpa も Docker で動かすときは、もう1つ `AGENT_HOST=127.0.0.1` を�
 - **チューナーは px4-userland と siano-userland の機材と Sony CECH-ZD1 J だけ。** macOS には DVB が無いので、
   PT2/PT3 のような PCI の機材は使えません。CECH-ZD1 J はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
   実機ではまだ確かめていません)
-- **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。USB のリーダーは
+- **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。CECH-ZD1 J の差し込み口もエージェントが直に読みます。USB のリーダーは
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます ([読めないとき](#カードが読めないとき))。動いている間はリーダーを
   排他で使うので、他のアプリはカードを使えません

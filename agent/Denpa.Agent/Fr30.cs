@@ -26,7 +26,7 @@ public enum Fr30Cond
 }
 
 /// <summary>
-/// 命令を順に並べて 16 ビットの語にする。ラベルは前にも後ろにも跳べる (最後の <see cref="Words"/> で埋める)。
+/// 命令を順に並べて 16 ビットの語にする。ラベルは前にも後ろにも飛べる (最後の <see cref="Words"/> で埋める)。
 /// 番地は <see cref="Origin"/> (プログラムを置く所) から数える
 /// </summary>
 public sealed class Fr30Assembler(uint origin)
@@ -187,7 +187,7 @@ public sealed class Fr30Assembler(uint origin)
 
     private static uint U4(uint value) => value <= 15 ? value : throw new ArgumentOutOfRangeException(nameof(value));
 
-    // --- 跳ぶ ---
+    // --- 飛ぶ ---
 
     /// <summary>Bcc label (非遅延)。届くのは -256〜+254 バイト</summary>
     public void B(Fr30Cond cond, string label)

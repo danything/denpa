@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// ARIB STD-B25 を復号する。**TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する** (Cas.cs)。
 ///
 /// <para>
-/// 道筋は PAT → PMT → CA 記述子。CA 記述子 (番組全体、または ES ごと) が「この ES の鍵は
+/// 経路は PAT → PMT → CA 記述子。CA 記述子 (番組全体、または ES ごと) が「この ES の鍵は
 /// この PID の ECM から」を教えてくれるので、ES の PID から ECM を引く表を作る。
 /// **libaribb25 と同じく、ストリームの順に1パケットずつ読み、ECM の中身が変わったらその場で鍵を貰う**
 /// (<see cref="IKeySource.Ecm"/>)。後ろのパケットはその鍵で復号する。答えを待つあいだ次のパケットへ
@@ -29,13 +29,13 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **鍵の要らない読み手しかいなければ、カードに聞かない** (<paramref name="keysWanted"/>)。番組表・ロゴ・スキャンが
+/// **鍵の要らない利用者しかいなければ、カードに聞かない** (<paramref name="keysWanted"/>)。番組表・ロゴ・スキャンが
 /// 読むのは掛かっていない SI だけなので、復号もせず溜めもせずに流す。ライブ視聴や録画とカードの錠
-/// (<see cref="BCas"/>) を取り合わない。途中で鍵の要る読み手が来たら、溜め直して最初の鍵から復号する (<see cref="Rehold"/>)。
+/// (<see cref="BCas"/>) を取り合わない。途中で鍵の要る利用者が来たら、溜め直して最初の鍵から復号する (<see cref="Rehold"/>)。
 /// </para>
 /// </summary>
 /// <param name="keysWanted">
-/// いま鍵が要るか。塊を受けるたびに聞く。null は「どちらとも言えない」(読み手がいない) で、今のままにする。
+/// いま鍵が要るか。塊を受けるたびに聞く。null は「どちらとも言えない」(利用者がいない) で、今のままにする。
 /// 渡さなければいつも要る (録れたものの復号・実機の試し)
 /// </param>
 public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null)
@@ -263,7 +263,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>掛かっていたら復号する。誤りの印が立っているものは触らない</summary>
     private void Unscramble(Span<byte> packet, Ecm? ecm, bool usable)
     {
-        // 鍵の要らない読み手だけなら触らない (掛かったままにも数えない)
+        // 鍵の要らない利用者だけなら触らない (掛かったままにも数えない)
         if (!_keys || (packet[1] & 0x80) != 0 || packet[3] >> 6 == 0) return;
         var start = PayloadStart(packet);
         if (start == PacketSize)
@@ -343,8 +343,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **鍵の要らない読み手だけになった。** 溜めていたら掛かったまま吐き出し、鍵を捨てて、ECM を聞くのをやめる。
-    /// PAT・PMT は読み続ける (鍵の要る読み手が来たら、すぐ溜め直せるように)
+    /// **鍵の要らない利用者だけになった。** 溜めていたら掛かったまま吐き出し、鍵を捨てて、ECM を聞くのをやめる。
+    /// PAT・PMT は読み続ける (鍵の要る利用者が来たら、すぐ溜め直せるように)
     /// </summary>
     private void StopKeys(IBufferWriter<byte> output)
     {
@@ -355,8 +355,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **鍵の要る読み手が来た。** 頭と同じように、どの ECM も答えを貰うまで溜め直す (<see cref="Ready"/>)。
-    /// 溜めたぶんは最初の鍵で復号する (<see cref="Settle"/>) ので、来た読み手には頭から復号したものが届く
+    /// **鍵の要る利用者が来た。** 頭と同じように、どの ECM も答えを貰うまで溜め直す (<see cref="Ready"/>)。
+    /// 溜めたぶんは最初の鍵で復号する (<see cref="Settle"/>) ので、来た利用者には頭から復号したものが届く
     /// </summary>
     private void Rehold()
     {
@@ -603,7 +603,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
-        // 鍵の要らない読み手だけならカードに聞かない (Rehold で聞き直す)
+        // 鍵の要らない利用者だけならカードに聞かない (Rehold で聞き直す)
         if (section[0] != 0x82 || !_keys) return;
         // 溜めをやめる合図にするのは PMT が挙げた ECM だけ。先回りして聞いただけのもの (Early) は PAT・PMT を待たせない
         if (_holding && ecm.Last is not null && _ecms.GetValueOrDefault(ecm.Pid) == ecm) Settle();

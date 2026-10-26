@@ -239,7 +239,7 @@ public class Dib8096Tests
         dib.Initialize();
         time.Sleeps.Clear();
         dib.Tune(557_142_857);
-        // 30ms はダイバーシティの切り替え (版 0x8002)。選局ごとに3回
+        // 30ms はダイバーシティの切り替え (バージョン 0x8002)。選局ごとに3回
         await Assert.That(time.Sleeps.Count(ms => ms == 30)).IsEqualTo(3);
         await Assert.That(time.Sleeps.Count(ms => ms >= 10)).IsGreaterThan(5);
     }

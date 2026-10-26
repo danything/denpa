@@ -14,7 +14,7 @@
 - **選局そのもの** — DVB はデバイスを ioctl で直接操作します
   ([下記](#net-で書き直すまで-経緯と実測))。PX-Q3U4 などは同梱の px4-userland、
   PX-S1UD は (カーネルが使っていなければ) 同梱の siano-userland に USB を扱わせます
-  ([下記](#px4-userland-の作り))
+  ([下記](#px4-userland-の作り))。CECH-ZD1 J はエージェントが USB を直に持ちます ([下記](#cech-zd1-j-の作り))
 
 持っている仕事は3つ。
 
@@ -263,6 +263,7 @@ CM検出用のロゴはチューナーを使いません。録れたものから
 | px4-userland    | `px4d --list-json` (0.1.9 以上が要る。[下記](#px4-userland-の作り))                                                                                         |
 | siano-userland  | `siano-ts --list` ([下記](#siano-userland-の作り))                                                                                                          |
 | asicen-userland | `/sys/bus/usb/devices` の USB ID を読む (試験的。配布物が無ければ挙げない。[下記](#asicen-userland-の作り))                                                 |
+| CECH-ZD1 J      | Linux は `/sys/bus/usb/devices` の USB ID、Windows・macOS は OS に聞く。並べるだけで開かない ([下記](#cech-zd1-j-の作り))                                   |
 
 書いてあれば書いたほうが勝ちます (LNB や1台だけ止めるのは人にしか決められない)。
 
@@ -451,7 +452,7 @@ ATTACH_STREAM` (SPEC 6.3。px4-userland 0.1.6 から)。返すのはデバイス
 ```
 TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は T1Protocol)
                   └──────────┬─────────────────────┘
-                     Zd1jBoard (1台ぶん。借りる・返す・温めておく)
+                     Zd1jBoard (1台ぶん。取る・返す・温めておく)
                        ├ Mb86h47 (ブリッジ: メモリ要求・番地を広げる・I2C・TS・カードの UART)
                        ├ Dib8096 (DiB8000 + DiB0090。II2c と待ちだけを受け取る)
                        └ IUsbDevice → UsbFsDevice (Linux の usbfs) / WinUsbDevice (Windows の WinUSB) / IoKitDevice (macOS の IOKit)
@@ -467,12 +468,12 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
 - **DiB8096 (`Dib8096.cs`) も同じ仕様書だけから書きました。** Linux のドライバ (と、それを移した実装) は
   GPL-2.0-only で AGPL の denpa には取り込めないので、見ていません。仕様書に無くて決めた所はコードに
   「仕様書に無い」と書いてあります
-- **USB のハンドルは1台に1つ** (`Zd1jBoard`)。チューナーとカードが借り、ブリッジへのメモリ要求は `Mb86h47` の錠で1つずつ通します
+- **USB のハンドルは1台に1つ** (`Zd1jBoard`)。チューナーとカードが取って使い、ブリッジへのメモリ要求は `Mb86h47` の錠で1つずつ通します
   (カードの UART もメモリ要求。I2C の bulk の塊もこの錠の中)。TS の EP 0x81 の読みはその外で並べます
 - **温めておく。** ブリッジの起動は開くときに1回、DiB8096 の初期化 (DiB0090 の DC の較正も) はチューナーが初めて使うときに1回。
   選局しなおしは周波数まわりだけを書き換えます。**ボードはエージェントが動いている間ずっと開いたまま**で
   (PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ)、閉じるのは定義が変わってチューナーが捨てられたとき
-  (カードが借りていなければ)・止めるとき・USB が抜けたときだけ。チューナーは流している間だけボードを借り、読む側がいないまま
+  (カードが使っていなければ)・止めるとき・USB が抜けたときだけ。チューナーは流している間だけボードを取り、読む側がいないまま
   5 秒経ったら流すのをやめて LED を緑にします (TunerPool はデバイスを開きっぱなしにするので、使い終わりはこちらで見切る)。
   開いたままの間は DiB8096 も起きたままなので、そのぶん電気を使います (開き直すとブリッジの起動と DiB8096 の初期化で 1 秒ほどかかり、
   選局が冷えた状態からになるので、閉じる選択肢は置いていません)
@@ -492,7 +493,7 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
   実機でホストから直に叩く形・コア 1 にメモリ要求で渡す形と比べて (開く 385 / 167 / 182ms、ロック 3439 / 2730 / 2570ms、
   メモリ要求 24664 / 2360 / 1083 回。bulk の塊がいちばん右)、いちばん速く要求も少なかったので、この形だけにしました。
   コア 1 が起きない・答えないときは開くのを止めます (仕様書の扱い)。待つ間 (`Zd1jBoard.Sleep`) は溜めた I2C を流してから、流し始めの準備を回します
-- **ロックは決まった時間を待たずに読みに行きます。** 復調器の探索は 10ms ごとに1歩進め、ロックしたらすぐ流し始めます
+- **ロックは決まった時間を待たずに読みに行きます。** 復調器の探索は 10ms ごとに1歩進め (一部の段は 3ms。下の工夫)、ロックしたらすぐ流し始めます
   (仕様書にある必須の待ち (PLL・AGC・ダイバーシティの切り替えの 30ms ×3) は守る)。DiB0090 の待ちは参考の実装と同じく丸め上げます
   (仕様書の値そのままに縮めると、実機で同期しなかった)。ロックまでの内訳 (段ごとの時間と待ち) は `--tune` が出します (常駐のときは出さない)
 - **仕様書の外の、選局を縮める工夫**: DiB0090 のキャパシタの較正 (二分探索で約 17 歩) の結果を周波数ごとに覚えておき (メモリの上だけ)、
@@ -524,14 +525,14 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
 
 **libaribb25 も pcscd も使いません** (Linux。Mac と Windows は OS の PC/SC を使う)。ECM を取り出して MULTI2 で復号する (`B25.cs` /
 `Multi2.cs`)、B-CAS へのコマンド (`BCas.cs`)、カードリーダーとのやり取り
-(`Ccid.cs` / `T1.cs` / `UsbFs.cs` / `Pcsc.cs` / `Px4Card.cs`) を全部エージェントが持ちます。
+(`Ccid.cs` / `T1.cs` / `UsbFs.cs` / `Pcsc.cs` / `Px4Card.cs` / `Zd1j.cs` の `Zd1jCard`) を全部エージェントが持ちます。
 
 ```text
 Descrambler (B25.cs)   PAT → PMT → CA 記述子で ES と ECM を結び、鍵で MULTI2 を復号する
    │ ECM
 IKeySource             手元のカード (LocalCard → BCas) か、別の拠点 (RemoteCard)
    │ APDU
-ICardLink              USB のリーダーを usbfs で直に (Ccid。Linux) か OS の PC/SC 越し (PcscLink。Mac・Windows) / px4d・asicend の内蔵リーダー (どちらも Px4Card)
+ICardLink              USB のリーダーを usbfs で直に (Ccid。Linux) か OS の PC/SC 越し (PcscLink。Mac・Windows) / px4d・asicend の内蔵リーダー (どちらも Px4Card) / CECH-ZD1 J の内蔵の差し込み口 (Zd1jCard)
 ```
 
 libaribb25 はスレッドセーフでなく、カードに繋ぎ直さず、配布物も OS と arch ごとだったのでやめました。
@@ -574,7 +575,7 @@ table_id を覗き、ECM ならその場でカードに聞き、PAT より前の
 
 復号するのは選局ごとに1回です ([共有の決まり](#共有の決まり))。**番組表とロゴには
 カードは要りません。** PSI/SI (EIT・SDT・NIT・CDT・DSM-CC) はスクランブルされて
-いないので、カードが死んでいても番組表は埋まります。
+いないので、カードが死んでいても番組表は埋まります (番組表・ロゴ・スキャンだけの選局はカードに聞きもしない。[上記](#選局コマンドは画面から渡させない))。
 
 #### カードは1枚でいい。**鍵を配る API を入れました**
 

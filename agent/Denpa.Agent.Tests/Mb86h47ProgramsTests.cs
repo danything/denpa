@@ -54,7 +54,7 @@ public class Mb86h47ProgramsTests
         cpu.R[write ? 10 : 8] = State;
         cpu.Pc = write ? routine.Write : routine.Read;
         var end = write ? Mb86h47Programs.WriteContinue : Mb86h47Programs.ReadContinue;
-        if (!cpu.RunUntil(pc => pc == end, 1000)) throw new InvalidOperationException("ルーチンが元の処理の続きへ跳びません");
+        if (!cpu.RunUntil(pc => pc == end, 1000)) throw new InvalidOperationException("ルーチンが元の処理の続きへ飛びません");
         return (memory, cpu);
     }
 
