@@ -381,7 +381,7 @@ ffmpeg が映像と音声を1つの pipe へ多重化し、`Fmp4Splitter` が `m
 割って WebSocket へ流します。
 
 ```bash
-ffmpeg -nostats -fflags nobuffer -probesize <小さく> [<GPU の入口>] -i pipe:0 \
+ffmpeg -nostats -probesize <小さく> [<GPU の入口>] -i pipe:0 \
     -vf <インタレ解除> \
     -map 0:p:<局>:v:0 -fpsmax <上限> <映像のエンコード方式> \
     -map 0:p:<局>:a:<何本目> [-af pan=...] <音声のエンコード方式> \
@@ -392,6 +392,7 @@ ffmpeg -nostats -fflags nobuffer -probesize <小さく> [<GPU の入口>] -i pip
 
 **値は書かない。引数の並びだけ。** 実測した値と理由は `encodeArgs` / `videoArgs` の説明にあり、写すと片方が古くなる。
 
+- **`-fflags nobuffer` は付けない。** 入口の解析の間に読んだ I フレームを捨てて次の GOP（約 0.5 秒先）を待つことがある。外しても遅れは増えず、開くのが早まるだけ（`encodeArgs` の「入口の解析で読んだぶんを捨てさせない」）。遅れを詰めるのは[放送そのまま（MPEG-2）を送る](#放送そのままmpeg-2を送る)経路
 - **`-copyts` は付けない**（[1本にしたのは、時刻を揃えるため](#1本にしたのは時刻を揃えるため)）
 - **`-loglevel` は下げない。** 選べる字幕は入口の見出し（info で出る）から読む（[字幕](#字幕)）。進み具合の数字だけ `-nostats` で止める
 - クライアント側の SourceBuffer は `segments`（既定）で使う。`sequence` は届いた順に詰めるので、1つ取りこぼすと以降ずっとずれる。
