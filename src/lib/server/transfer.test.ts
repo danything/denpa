@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -303,6 +304,53 @@ describe("取り込む", () => {
     expect(existsSync(join(fresh.data, "transfer", "ready"))).toBe(false);
     // 2 度目の起動では何もしない
     expect(transfer.swapAtBoot()).toBe(false);
+  });
+
+  test("入れ替えの途中で落ちても、次の起動で続きから入れ替わる", async () => {
+    const fresh = machine(`fresh-${counter}`);
+    mkdirSync(join(fresh.encoded, "シリーズ"), { recursive: true });
+    writeFileSync(join(fresh.encoded, "シリーズ", "第1話.mkv"), "video");
+    use(fresh);
+    mkdirSync(join(fresh.data, "logos"), { recursive: true });
+    writeFileSync(join(fresh.data, "logos", "9.png"), "own");
+    await upload(exported);
+    await transfer.check();
+    transfer.apply(false);
+
+    // ロゴを退けて新しいロゴを置いたところで落ちた (DB はまだ前のまま)
+    const at = readFileSync(
+      join(fresh.data, "transfer", "ready", "stamp"),
+      "utf8",
+    );
+    renameSync(
+      join(fresh.data, "logos"),
+      join(fresh.data, `logos.before-import-${at}`),
+    );
+    renameSync(
+      join(fresh.data, "transfer", "ready", "logos"),
+      join(fresh.data, "logos"),
+    );
+
+    expect(transfer.swapAtBoot()).toBe(true);
+    expect(orm().select().from(schema.rules).all()[0]?.name).toBe("移すルール");
+    // 新しいロゴを退け直さない。前のロゴは退けた先に残る
+    expect(readFileSync(join(fresh.data, "logos", "1024.png"), "utf8")).toBe(
+      "png",
+    );
+    expect(
+      readFileSync(
+        join(fresh.data, `logos.before-import-${at}`, "9.png"),
+        "utf8",
+      ),
+    ).toBe("own");
+    expect(existsSync(join(fresh.data, "transfer", "ready"))).toBe(false);
+  });
+
+  test("更新時刻が読めないファイルは送り始めない", () => {
+    use(machine(`fresh-${counter}`));
+    expect(() =>
+      transfer.beginUpload({ name: "a", size: 10, lastModified: Number.NaN }),
+    ).toThrow("更新時刻が読めません");
   });
 
   test("途中で切れても、送った位置から続けられる", async () => {

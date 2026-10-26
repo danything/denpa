@@ -71,7 +71,9 @@ export function start(): void {
 
   /*
    * **取り込んだ DB に入れ替える** (設定の「連携」の「denpa を別の機械へ移す」。transfer.ts)。
-   * DB とロゴに触る前にやる。取り込みはプロセスを終えて、ここで入れ替わる
+   * DB とロゴに触る前にやる。取り込みはプロセスを終えて、ここで入れ替わる。
+   * **入れ替えられなければ起動を止める** — 入れ替えかけのまま動くより、起き直してやり直すほうがよい
+   * (何度やっても同じ結果になる作り)
    */
   try {
     swapAtBoot();
@@ -79,6 +81,7 @@ export function start(): void {
     console.error(
       `[transfer] 取り込んだ DB に入れ替えられませんでした: ${error}`,
     );
+    throw error;
   }
 
   /*

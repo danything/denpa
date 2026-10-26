@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import {
   appendFileSync,
   closeSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -269,7 +270,14 @@ function logoFiles(dir: string, prefix = LOGOS): string[] {
   return names.flatMap((name) => {
     const path = join(dir, name);
     const entry = `${prefix}/${name}`;
-    if (statSync(path).isDirectory()) return logoFiles(path, entry);
+    let folder: boolean;
+    try {
+      folder = statSync(path).isDirectory();
+    } catch {
+      // 読んでいる間に消えた (ロゴの書き直しと重なった)
+      return [];
+    }
+    if (folder) return logoFiles(path, entry);
     return LOGO_NAMES.some((re) => re.test(entry)) ? [entry] : [];
   });
 }
@@ -287,10 +295,14 @@ function countRows(db: Database): Omit<Counts, "logos"> {
   };
 }
 
-function stamp(at: number): string {
+/**
+ * `YYYYMMDD-HHmm` (書き出しのファイル名)。`seconds` なら秒まで付ける
+ * (入れ替えで退けた先の名前。同じ分に 2 回取り込んでも重ねない)
+ */
+function stamp(at: number, seconds = false): string {
   const d = new Date(at);
   const two = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}`;
+  return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${seconds ? two(d.getSeconds()) : ""}`;
 }
 
 /**
@@ -318,7 +330,19 @@ export async function exportArchive(): Promise<{
     const db = join(work, DB_ENTRY);
     await snapshot(config.dbPath, db);
 
-    const logos = logoFiles(join(config.dataDir, LOGOS));
+    /*
+     * ロゴも写しを取ってから流す。動いている denpa は書き出しの間にもロゴを書き直すので
+     * (別名に書いて置き換える)、流している途中で大きさが変わらないように
+     */
+    const logos = logoFiles(join(config.dataDir, LOGOS)).filter((name) => {
+      try {
+        mkdirSync(dirname(join(work, name)), { recursive: true });
+        copyFileSync(join(config.dataDir, name), join(work, name));
+        return true;
+      } catch {
+        return false;
+      }
+    });
     const copy = new Database(db, { readonly: true });
     let counts: Counts;
     try {
@@ -349,7 +373,7 @@ export async function exportArchive(): Promise<{
         body: () => new Blob([manifestBytes]).stream(),
       },
       file(DB_ENTRY, db),
-      ...logos.map((name) => file(name, join(config.dataDir, name))),
+      ...logos.map((name) => file(name, join(work, name))),
     ];
 
     const reader = writeTar(entries, at)
@@ -414,6 +438,8 @@ export function beginUpload(meta: UploadMeta): {
       "取り込みはもう決まっていて、再起動を待っています",
     );
   assertEmpty();
+  if (!Number.isFinite(meta.lastModified))
+    throw new TransferError(400, "ファイルの更新時刻が読めません");
   if (
     !Number.isSafeInteger(meta.size) ||
     meta.size <= 0 ||
@@ -567,13 +593,16 @@ async function prepare(): Promise<void> {
         const fd = openSync(path, "wx");
         return {
           write: (chunk) => {
-            writeSync(fd, chunk);
+            for (let at = 0; at < chunk.length;)
+              at += writeSync(fd, chunk, at, chunk.length - at);
           },
           close: () => closeSync(fd),
         };
       },
     );
   } catch (error) {
+    // 空きが無いなど、ファイルのせいでない失敗はそのまま (送ったものは消さない)
+    if ((error as NodeJS.ErrnoException).code !== undefined) throw error;
     throw new TransferError(
       400,
       `denpa の書き出したファイルとして読めません: ${(error as Error).message}`,
@@ -784,7 +813,15 @@ export async function check(): Promise<CheckResult> {
       try {
         await prepare();
       } catch (error) {
-        clearImport();
+        /*
+         * 検証で断ったものは送ったものごと消す。空きが無いなどのそのほかの失敗は、開きかけだけ消して
+         * 送ったものは残す (空けてから確かめ直せば、送り直さずに済む)
+         */
+        if (error instanceof TransferError) clearImport();
+        else {
+          rmSync(staging(), { recursive: true, force: true });
+          rmSync(prepared(), { force: true });
+        }
         throw error;
       }
     }
@@ -813,7 +850,7 @@ export function apply(force: boolean): CheckResult {
 
   rmSync(ready(), { recursive: true, force: true });
   mkdirSync(ready(), { recursive: true });
-  writeFileSync(join(ready(), "stamp"), stamp(Date.now()));
+  writeFileSync(join(ready(), "stamp"), stamp(Date.now(), true));
   if (existsSync(join(staging(), LOGOS)))
     renameSync(join(staging(), LOGOS), join(ready(), LOGOS));
   // DB を最後に置く。`ready/denpa.db` があることが「入れ替えを待っている」印
