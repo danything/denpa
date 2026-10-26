@@ -204,8 +204,8 @@ public static class Probe
     /// <summary>
     /// CECH-ZD1 J の速さを測る。**冷えた状態から開く・選局からロック・ロックから最初の TS・2 回目の選局 (温かい状態)**
     /// の時間と、I2C の回数、C/N と電波の強さを出す。チャンネルは <c>T27</c> でも <c>27</c> (地上波) でもよい。
-    /// I2C の1回ずつの往復の時間は <c>DENPA_ZD1J_DEBUG=1</c> で記録に出る。<c>--repeat N</c> はチャンネルの並びを N 回回し、
-    /// 最後にロックの成否と時間の最小・中央・最大を出す (速くする工夫で確かさが落ちていないかを見るため)
+    /// 選局のたびに、ロックまでの内訳 (段ごとの時間と待ち) も出す (常駐のときは出さない)。<c>--repeat N</c> はチャンネルの並びを N 回回し、
+    /// 最後にロックの成否と時間の最小・中央・最大を出す (選局を縮める工夫で確かさが落ちていないかを見るため)
     /// </summary>
     private static int RunZd1j(string port, string[] channels, IKeySource? keys, TimeSpan seconds, int repeat)
     {
@@ -216,6 +216,7 @@ public static class Probe
         var tries = 0;
         // 最後にもう一度、最初のチャンネルを選び直す (温かい状態の選局)
         names.Add(names[0]);
+        Zd1jBoard.Trace = message => Console.WriteLine($"    {message}");
         var failed = false;
         var tuner = new Zd1jTuner(port);
         try
@@ -247,8 +248,7 @@ public static class Probe
                 var timings = tuner.Timings;
                 if (index == 0)
                 {
-                    Console.WriteLine($"    開く (冷えた状態から) {timings.OpenMs} ms  (ブリッジの起動 {board.OpenMs} ms / DiB8096 の初期化 {board.DemodMs} ms、"
-                        + $"I2C は {board.Bridge.Mode}{(board.Bridge.CommandChannel ? " + bulk の命令" : "")})");
+                    Console.WriteLine($"    開く (冷えた状態から) {timings.OpenMs} ms  (ブリッジの起動 {board.OpenMs} ms / DiB8096 の初期化 {board.DemodMs} ms)");
                     i2c = 0;
                     requests = 0;
                 }

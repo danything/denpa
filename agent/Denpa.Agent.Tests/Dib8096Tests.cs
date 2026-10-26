@@ -296,9 +296,6 @@ public class Dib8096Tests
         // 段 3 の共通設定 (探索ではない): 8K = モード 3 → D[0] の上 3 ビットが 3 (下は差動のセグメントのマスク)
         await Assert.That(i2c.Log.Any(line => line.StartsWith("D0=6", StringComparison.Ordinal) || line.StartsWith("D0=7", StringComparison.Ordinal))).IsTrue();
 
-        dib.AlwaysSearch = true;
-        dib.Tune(557_142_857);
-        await Assert.That(dib.LastPath).IsEqualTo("探索した");
     }
 
     [Test]

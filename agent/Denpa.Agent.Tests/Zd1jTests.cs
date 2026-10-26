@@ -10,9 +10,9 @@ namespace Denpa.Agent.Tests;
  */
 public class Zd1jTests
 {
-    private static Mb86h47 Started(FakeBridgeUsb usb, Zd1jI2cMode mode = Zd1jI2cMode.Host)
+    private static Mb86h47 Started(FakeBridgeUsb usb)
     {
-        var bridge = new Mb86h47(usb, mode);
+        var bridge = new Mb86h47(usb);
         bridge.Start();
         return bridge;
     }
@@ -131,50 +131,10 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task ホストから直に叩く_I2C_は仕様書_5_2_の手順()
+    public async Task 書き込みを溜めて_bulk_の塊で送る()
     {
         var usb = new FakeBridgeUsb();
         var bridge = Started(usb);
-        usb.Log.Clear();
-        bridge.Write(Dib8096.DemodAddress, [0x05, 0x07, 0x00, 0x03]);
-        await Assert.That(usb.Dib.Demod[1287]).IsEqualTo((ushort)3);
-        var expected = new List<string> { "R 00FD8FE0" };
-        foreach (var value in new byte[] { 0x12, 0x05, 0x07, 0x00, 0x03 })
-        {
-            expected.AddRange([$"W 00FD8FF0={value:X8}", "W 00FD8FE4=00000050", "R 00FD8FE4", "R 00FD8FE0"]);
-        }
-        expected.AddRange(["W 00FD8FE4=00000040", "R 00FD8FE0"]);
-        await Assert.That(string.Join(" ", usb.Log)).IsEqualTo(string.Join(" ", expected));
-
-        // 読み: 番号を書き、繰り返しスタート (0x70) で 2 バイト。最後のバイトだけ ACK を返さない (0x50)
-        usb.Log.Clear();
-        Span<byte> value16 = stackalloc byte[2];
-        bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value16);
-        await Assert.That(BinaryPrimitives.ReadUInt16BigEndian(value16)).IsEqualTo((ushort)0x01B3);
-        await Assert.That(usb.Log).Contains("W 00FD8FF0=00000013");
-        var restart = usb.Log.IndexOf("W 00FD8FF0=00000013");
-        await Assert.That(usb.Log[restart + 1]).IsEqualTo("W 00FD8FE4=00000070");
-        await Assert.That(string.Join(" ", usb.Log.Skip(restart + 4))).IsEqualTo(
-            "W 00FD8FE4=00000058 R 00FD8FE4 R 00FD8FF0 W 00FD8FE4=00000050 R 00FD8FE4 R 00FD8FF0 W 00FD8FE4=00000040 R 00FD8FE0");
-    }
-
-    [Test]
-    public async Task ACK_が無ければバスを止めてから投げる()
-    {
-        var usb = new FakeBridgeUsb();
-        var bridge = Started(usb);
-        usb.Log.Clear();
-        var error = Assert.Throws<IOException>(() => bridge.Write(0x50, [0x00, 0x00, 0x00]));
-        await Assert.That(error.Message).Contains("ACK");
-        await Assert.That(usb.Log[^1]).IsEqualTo("W 00FD8FE4=00000040");
-    }
-
-    [Test]
-    public async Task コア_1_の形では書き込みを溜めて_bulk_の塊で送る()
-    {
-        var usb = new FakeBridgeUsb();
-        var bridge = Started(usb, Zd1jI2cMode.Core1);
-        await Assert.That(bridge.CommandChannel).IsTrue();
         // コア 1 を置いて走らせ、生きている印を2回読んだ。bulk の経路は空の塊で確かめた
         await Assert.That(usb.Log).Contains("W 01700000=FFFCFFFF");
         await Assert.That(usb.Log.Count(line => line == "R 017A3C7C")).IsEqualTo(2);
@@ -211,10 +171,20 @@ public class Zd1jTests
     }
 
     [Test]
+    public async Task ACK_が無ければ投げる()
+    {
+        var usb = new FakeBridgeUsb();
+        var bridge = Started(usb);
+        bridge.Write(0x50, [0x00, 0x00, 0x00]);
+        var error = Assert.Throws<IOException>(bridge.Flush);
+        await Assert.That(error.Message).Contains("ACK");
+    }
+
+    [Test]
     public async Task bulk_の塊を_16_個使ったら置き場を戻す()
     {
         var usb = new FakeBridgeUsb();
-        var bridge = Started(usb, Zd1jI2cMode.Core1);
+        var bridge = Started(usb);
         usb.Log.Clear();
         Span<byte> value = stackalloc byte[2];
         // 確かめの塊が 1 個目なので、あと 15 個で 16 個
@@ -224,51 +194,18 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task コア_1_が答えなければメモリ要求の溜めに戻る()
+    public async Task コア_1_が_bulk_の塊に答えなければ開かない()
     {
         var usb = new FakeBridgeUsb { Core1Bulk = false };
-        var bridge = Started(usb, Zd1jI2cMode.Core1);
-        await Assert.That(bridge.CommandChannel).IsFalse();
-        await Assert.That(usb.Memory[0x17A3C78]).IsEqualTo(0u);
-        // 溜めて、Flush で輪に書いてコア 1 が済ませるのを待つ
-        bridge.Write(Dib8096.DemodAddress, [0x05, 0x07, 0x00, 0x03]);
-        bridge.Write(Dib8096.TunerAddress, [0x24, 0x00, 0x22]);
-        await Assert.That(usb.RingWrites.Count).IsEqualTo(0);
-        usb.Log.Clear();
-        bridge.Flush();
-        await Assert.That(usb.Log[0]).IsEqualTo($"W 017A3B00={(1u << 31) | (1287u << 16) | 3:X8}");
-        await Assert.That(usb.Log[1]).IsEqualTo($"W 017A3B04={(1u << 31) | (1u << 30) | (0x24u << 16) | 0x22:X8}");
-        await Assert.That(string.Join(" ", usb.RingWrites)).IsEqualTo("D1287=0003 T36=0022");
-
-        // 読みは箱で (溜めを先に流す)
-        bridge.Write(Dib8096.DemodAddress, [0x04, 0x01, 0xC0, 0x00]);
-        Span<byte> value = stackalloc byte[2];
-        bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value);
-        await Assert.That(BinaryPrimitives.ReadUInt16BigEndian(value)).IsEqualTo((ushort)0x01B3);
-        await Assert.That(usb.RingWrites[^1]).IsEqualTo("D1025=C000");
-    }
-
-    [Test]
-    public async Task 溜めの周回の印は輪を回るたびに入れ替わる()
-    {
-        await Assert.That(Mb86h47Programs.Slot(0, false, 1, 2) >> 31).IsEqualTo(1u);
-        await Assert.That(Mb86h47Programs.Slot(15, false, 1, 2) >> 31).IsEqualTo(1u);
-        await Assert.That(Mb86h47Programs.Slot(16, false, 1, 2) >> 31).IsEqualTo(0u);
-        await Assert.That(Mb86h47Programs.Slot(32, false, 1, 2) >> 31).IsEqualTo(1u);
-
-        var usb = new FakeBridgeUsb { Core1Bulk = false };
-        var bridge = Started(usb, Zd1jI2cMode.Core1Ring);
-        for (var i = 0; i < 40; i++) bridge.Write(Dib8096.DemodAddress, [0x00, (byte)i, 0x00, (byte)i]);
-        bridge.Flush();
-        await Assert.That(usb.RingWrites.Count).IsEqualTo(40);
-        await Assert.That(usb.RingWrites[39]).IsEqualTo("D39=0027");
+        var error = Assert.Throws<IOException>(() => Started(usb));
+        await Assert.That(error.Message).Contains("bulk の塊に答えません");
     }
 
     [Test]
     public async Task コア_1_が動いていなければ開かない()
     {
         var usb = new FakeBridgeUsb { Core1 = false };
-        var error = Assert.Throws<IOException>(() => Started(usb, Zd1jI2cMode.Core1));
+        var error = Assert.Throws<IOException>(() => Started(usb));
         await Assert.That(error.Message).Contains("コア 1 が動いていません");
     }
 
@@ -347,9 +284,6 @@ public class Zd1jTests
         await Assert.That(Zd1j.Parse("zd1j:4-12.1")).IsEqualTo("4-12.1");
         await Assert.That(Zd1j.Parse("zd1j:4-12:1.0")).IsNull();
         await Assert.That(Zd1j.Parse("siano:4-12")).IsNull();
-        await Assert.That(Zd1j.I2cMode("host")).IsEqualTo(Zd1jI2cMode.Host);
-        await Assert.That(Zd1j.I2cMode(null)).IsEqualTo(Zd1jI2cMode.Core1);
-        await Assert.That(Zd1j.I2cMode("core1-ring")).IsEqualTo(Zd1jI2cMode.Core1Ring);
     }
 
     [Test]
@@ -379,16 +313,13 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 選局して_TS_を流し_返したら_LED_を緑に戻して閉じる()
+    public async Task 選局して_TS_を流し_捨てたら_LED_を緑に戻して閉じる()
     {
-        var linger = Zd1jBoard.Linger;
-        Zd1jBoard.Linger = TimeSpan.FromMilliseconds(50);
+        const string port = "9-9";
         try
         {
             var usb = new FakeBridgeUsb();
-            var board = new Zd1jBoard("1-2", usb, Zd1jI2cMode.Host, trace: false);
-            board.Bridge.Start();
-            var tuner = new Zd1jTuner("test", () => board);
+            var tuner = new Zd1jTuner("test", () => Zd1jBoard.Acquire(port, () => usb), () => Zd1jBoard.CloseIfIdle(port));
             tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
             await Assert.That(tuner.Tuned).IsTrue();
             // 流している間は赤 (GPIO 1 = 出力・High)
@@ -419,14 +350,36 @@ public class Zd1jTests
             await Assert.That(usb.Log).Contains("W 00D02010=04000000");
             await Assert.That(usb.Dib.Demod[1286]).IsEqualTo((ushort)0);
             await Assert.That(usb.Dib.Demod[1029] & 2).IsEqualTo(2);
-            for (var i = 0; i < 100 && !usb.Disposed; i++) await Task.Delay(20);
+            // チューナーが捨てられたので、誰も借りていないボードは閉じる
             await Assert.That(usb.Disposed).IsTrue();
             // 閉じる前に眠らせた (DiB0090 のスリープ = GPIO 0 を High)
             await Assert.That(usb.Dib.Demod[1030] & 1).IsEqualTo(1);
         }
         finally
         {
-            Zd1jBoard.Linger = linger;
+            Zd1jBoard.CloseIfIdle(port);
+        }
+    }
+
+    [Test]
+    public async Task 返してもボードは開いたまま()
+    {
+        const string port = "9-8";
+        try
+        {
+            var usb = new FakeBridgeUsb();
+            var board = Zd1jBoard.Acquire(port, () => usb);
+            board.Release();
+            // PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。次に借りる人は同じボード (起動し直さない)
+            await Assert.That(usb.Disposed).IsFalse();
+            var again = Zd1jBoard.Acquire(port, () => throw new InvalidOperationException());
+            again.Release();
+            await Assert.That(again).IsSameReferenceAs(board);
+        }
+        finally
+        {
+            // CloseAll はほかのテストのボードも閉じるので使わない (テストは並んで走る)
+            Zd1jBoard.CloseIfIdle(port);
         }
     }
 
@@ -435,7 +388,7 @@ public class Zd1jTests
     {
         var usb = new FakeBridgeUsb();
         usb.Dib.Signal = false;
-        var board = new Zd1jBoard("1-2", usb, Zd1jI2cMode.Host, trace: false);
+        var board = new Zd1jBoard("1-2", usb);
         board.Bridge.Start();
         var tuner = new Zd1jTuner("test", () => board);
         var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId));

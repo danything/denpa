@@ -44,10 +44,8 @@ public class Zd1jLocksTests
         // FFT の探索で 8K が見つかるように (c2 = D[594]:D[595] がいちばん大きい)
         model.Demod[595] = 1;
         dib.Tune(557_142_857);
-        dib.AlwaysSearch = true;
-        // 探索しなおしても、段 3 に渡す値が同じなら書かない
+        // 覚えた値で合わせた選局では書かない
         dib.Tune(557_142_857);
-        dib.AlwaysSearch = false;
         dib.Tune(557_142_857);
         await Assert.That(changes).IsEqualTo(1);
     }

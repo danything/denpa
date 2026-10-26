@@ -53,29 +53,32 @@ public sealed class Dib8096
     private readonly Action<string>? _trace;
     private readonly DibMemory? _memory;
 
-    /// <summary>覚えた値や既定を使わず、いつも探索する (<c>DENPA_ZD1J_SEARCH=always</c>。比べるため)</summary>
-    public bool AlwaysSearch { get; set; }
+    /*
+     * 仕様書の外の、選局を縮める工夫 (どれも仕様書に無い。数字の根拠は各定数に):
+     * - DiB0090 のキャパシタの較正 (7.3.5。二分探索で約 17 歩・約 165ms) の結果を周波数ごとに覚えて使い回す
+     * - 温度の較正 (7.3.3。約 44ms) は直前に測ってから TemperatureReuseMs 以内なら飛ばす
+     * - 復調器の探索で、シンボルの数の時間切れに関わらない段は FastPollMs ごとに見る (Floor)
+     */
 
     /// <summary>
-    /// 仕様書の外の速くする工夫 (<c>DENPA_ZD1J_FAST</c>。ボードの既定は入り、ここでの既定は切り)。入っていると:
-    /// キャパシタの較正の結果を周波数ごとに覚えて使い回す・温度の較正は <see cref="TemperatureReuseMs"/> 以内なら飛ばす・
-    /// 復調器の探索でシンボルの数の時間切れを数えていない段は <see cref="FastPollMs"/> ごとに見る
+    /// 温度の較正を使い回す長さ (ms)。測った温度は WBD の目標に使うだけで、選局の合間 (数秒〜数分) にチューナーの温度は
+    /// ほとんど変わらないとみて 1 分にした。**実機で、使い回したときにロックの確かさが落ちないかを --repeat で確かめる値**
     /// </summary>
-    public bool Fast { get; set; }
-
-    /// <summary>温度の較正を使い回す長さ (ms)。DiB0090 の温度は 1 分ではほとんど変わらないとみた</summary>
     public const double TemperatureReuseMs = 60_000;
 
-    /// <summary>探索で、シンボルの数の時間切れに関わらない段を見る間隔 (ms)</summary>
+    /// <summary>
+    /// 探索で、シンボルの数の時間切れに関わらない段を見る間隔 (ms)。1 回の I2C の読み (bulk の塊の往復) より少し長い間隔として決めた。
+    /// **実機で確かめる値**
+    /// </summary>
     public const int FastPollMs = 3;
 
     /// <summary>
     /// 覚えたキャパシタで ADC を1回読んだとき、覚えたときの差 (dmin) からここまでのずれなら合っているとみる。
-    /// 二分探索の最後の1段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値として決めた (仕様書に無い)
+    /// 二分探索の最後の1段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値として決めた。**実機で ADC のばらつきを見て確かめる値**
     /// </summary>
     private const int CapacitorTolerance = 50;
 
-    /// <summary>周波数 (DiB0090 に頼んだ kHz) ごとの、較正で決まったキャパシタと、そのときの差</summary>
+    /// <summary>周波数 (DiB0090 に頼んだ kHz) ごとの、較正で決まったキャパシタと、そのときの差 (メモリの上だけ。ボードは開いたまま)</summary>
     private readonly Dictionary<uint, (int Cap, int Dmin)> _capacitors = [];
 
     private (int Cap, int Dmin) _capKnown;
@@ -101,7 +104,7 @@ public sealed class Dib8096
 
     private bool _sleeping;
 
-    /// <param name="trace">あれば、選局のたびにロックまでの内訳 (段ごとの時間と待ち) を渡す (<c>DENPA_ZD1J_DEBUG=1</c>)</param>
+    /// <param name="trace">あれば、選局のたびにロックまでの内訳 (段ごとの時間と待ち) を渡す (<c>--tune</c> のとき)</param>
     public Dib8096(II2c i2c, IDibTime time, Action<string>? trace = null, DibMemory? memory = null)
     {
         _i2c = i2c;
@@ -537,11 +540,8 @@ public sealed class Dib8096
             Output(false);
         });
         // 温度は直前に測ってから TemperatureReuseMs 以内なら測り直さない (仕様書に無い)
-        if (Fast)
-        {
-            if (_time.NowMs - _temperatureAt >= TemperatureReuseMs) _tempPending = true;
-            else if (!_tempPending) _reused.Add("温度");
-        }
+        if (_time.NowMs - _temperatureAt >= TemperatureReuseMs) _tempPending = true;
+        else if (!_tempPending) _reused.Add("温度");
         TunerAndPeripherals();
         Measure("ダイバーシティ内部だけ", () => Diversity(DiversityMode.Internal));
         Measure("AGC の立ち上げ (7.4)", StartAgc);
@@ -1082,7 +1082,7 @@ public sealed class Dib8096
             case TunerStart:
                 T(0x10, 0x02B1);
                 T(0x1E, 0x0032);
-                if (Fast && _capacitors.TryGetValue(_tunerKhz, out _capKnown))
+                if (_capacitors.TryGetValue(_tunerKhz, out _capKnown))
                 {
                     // 覚えた値を置いて ADC を1回だけ見る (仕様書に無い。合わなければ下の二分探索から)
                     _cap = _capBest = _capKnown.Cap;
@@ -1133,7 +1133,7 @@ public sealed class Dib8096
                 return 25;
             case 14:
                 T(0x18, 0xE900 | (_capBest & 0xFF));
-                if (Fast) _capacitors[_tunerKhz] = (_capBest, _capDmin);
+                _capacitors[_tunerKhz] = (_capBest, _capDmin);
                 _tunerState = 13;
                 return 0;
             case 15:
@@ -1201,8 +1201,8 @@ public sealed class Dib8096
         T(0x05, 0xABCD);
         _tunerTuned = true;
         _wbdPending = true;
-        // 速くするときは、温度を測り直すかを次の選局の始めに決める (Tune)
-        _tempPending = !Fast;
+        // 温度を測り直すかは次の選局の始めに決める (Tune)
+        _tempPending = false;
         _tunerState = TunerEnd;
         return 10;
     }
@@ -1628,8 +1628,8 @@ public sealed class Dib8096
     private const double SearchLimitMs = 5000;
 
     /// <summary>
-    /// 7.5 の状態の機械を回す。**1歩の間は最低 10ms 空ける** (参考の実装の振る舞い。シンボル数の時間切れは
-    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。<see cref="Fast"/> なら一部の段を詰める (<see cref="Floor"/>)
+    /// 7.5 の状態の機械を回す。**1歩の間は最低 10ms 空ける** (仕様書 7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
+    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)
     /// </summary>
     private DibLock Search()
     {
@@ -1641,14 +1641,15 @@ public sealed class Dib8096
         _demodState = DemodState.Tuning;
         _programmed = null;
         Snapshot? known = null;
-        if (!AlwaysSearch && _memory is not null) _memory.Channels.TryGetValue(_khz, out known);
+        if (_memory is not null) _memory.Channels.TryGetValue(_khz, out known);
+        // 入り方は 覚えた値 → 既定 (8K) でガードだけ探す → FFT から探す の順で固定 (合わなければ次へ)
         if (known is not null)
         {
             Restore(known);
             _entry = Entry.Known;
             _path = "覚えた値で合わせた";
         }
-        else if (!AlwaysSearch && Version >= 0x8002)
+        else if (Version >= 0x8002)
         {
             _foundFft = Fft.K8;
             _entry = Entry.Guard;
@@ -1718,8 +1719,8 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// 次の段を回すまでの最低の間 (ms)。仕様書 (参考の実装) はどの段も最低 10ms。<see cref="Fast"/> のときだけ、
-    /// シンボルの数の時間切れに関わらない段を <see cref="FastPollMs"/> に詰める (仕様書に無い)。段ごとの根拠:
+    /// 次の段を回すまでの最低の間 (ms)。仕様書 (参考の実装) はどの段も最低 10ms。
+    /// シンボルの数の時間切れに関わらない段は <see cref="FastPollMs"/> に詰める (仕様書に無い)。段ごとの根拠:
     /// <list type="bullet">
     /// <item>開始・探索の始め・段 2・段 3・段 9: 書いて次へ進むだけで、待って見るものが無い。間を空けても機材の進みは変わらない
     /// (段 3 のあとの間は、段 4 を下の 10ms 側に入れたので詰めない)</item>
@@ -1732,7 +1733,7 @@ public sealed class Dib8096
     /// </list>
     /// </summary>
     private int Floor(Step next) =>
-        Fast && next is not (Step.Step4 or Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
+        next is not (Step.Step4 or Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
 
     /// <summary>1歩。次の段と待ち (0.1ms)</summary>
     private (Step Next, int Wait) DemodStep(Step step)

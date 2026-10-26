@@ -3,19 +3,19 @@ using Denpa.Agent;
 namespace Denpa.Agent.Tests;
 
 /*
- * DiB8096 の仕様書の外の速くする工夫 (Dib8096.Fast。DENPA_ZD1J_FAST)。切ったときは仕様書どおり (Dib8096Tests.cs) のまま。
+ * DiB8096 の仕様書の外の、選局を縮める工夫 (キャパシタの較正の使い回し・温度の較正を飛ばす・探索の一部の段を詰める)。
  */
 public class Dib8096FastTests
 {
     private const uint Uhf27 = 557_142_857;
     private const uint Uhf13 = 473_142_857;
 
-    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make(bool fast)
+    private static (Dib8096 Dib, FakeI2c I2c, DibModel Model, FakeTime Time) Make()
     {
         var model = new DibModel();
         var i2c = new FakeI2c(model);
         var time = new FakeTime();
-        var dib = new Dib8096(i2c, time) { Fast = fast };
+        var dib = new Dib8096(i2c, time);
         dib.Initialize();
         return (dib, i2c, model, time);
     }
@@ -26,7 +26,7 @@ public class Dib8096FastTests
     [Test]
     public async Task キャパシタの較正は周波数ごとに覚えて使い回す()
     {
-        var (dib, i2c, _, _) = Make(fast: true);
+        var (dib, i2c, _, _) = Make();
         dib.Tune(Uhf27);
         dib.Tune(Uhf13);
         i2c.Log.Clear();
@@ -34,19 +34,16 @@ public class Dib8096FastTests
         // 二分探索 (7 回置いて最後にもう1回) ではなく、覚えた値を1回置いて ADC を1回見るだけ
         await Assert.That(Capacitor(i2c)).IsEqualTo(1);
 
-        // 切っていれば毎回二分探索
-        var (slow, slowI2c, _, _) = Make(fast: false);
-        slow.Tune(Uhf27);
-        slow.Tune(Uhf13);
-        slowI2c.Log.Clear();
-        slow.Tune(Uhf27);
-        await Assert.That(Capacitor(slowI2c)).IsEqualTo(8);
+        // 初めての周波数は二分探索 (7 回置いて最後にもう1回)
+        i2c.Log.Clear();
+        dib.Tune(ChannelTable.Parse("T40")!.Frequency);
+        await Assert.That(Capacitor(i2c)).IsEqualTo(8);
     }
 
     [Test]
     public async Task 覚えたキャパシタで合わなければ較正し直す()
     {
-        var (dib, i2c, model, _) = Make(fast: true);
+        var (dib, i2c, model, _) = Make();
         dib.Tune(Uhf27);
         dib.Tune(Uhf13);
         // ADC がずれた (温度が変わったなど)
@@ -59,7 +56,7 @@ public class Dib8096FastTests
     [Test]
     public async Task ロックしなければ覚えたキャパシタを捨てる()
     {
-        var (dib, i2c, model, _) = Make(fast: true);
+        var (dib, i2c, model, _) = Make();
         dib.Tune(Uhf27);
         model.Signal = false;
         await Assert.That(dib.Tune(Uhf27)).IsEqualTo(DibLock.Failed);
@@ -73,7 +70,7 @@ public class Dib8096FastTests
     [Test]
     public async Task 温度の較正は_60_秒以内なら飛ばす()
     {
-        var (dib, i2c, _, time) = Make(fast: true);
+        var (dib, i2c, _, time) = Make();
         dib.Tune(Uhf27);
         i2c.Log.Clear();
         dib.Tune(Uhf13);
@@ -88,18 +85,12 @@ public class Dib8096FastTests
     [Test]
     public async Task 探索はシンボルの時間切れに関わらない段だけ詰める()
     {
-        var (dib, _, _, time) = Make(fast: true);
+        var (dib, _, _, time) = Make();
         dib.Tune(Uhf27);
         time.Sleeps.Clear();
         dib.Tune(Uhf27);
         await Assert.That(time.Sleeps).Contains(Dib8096.FastPollMs);
-        var fast = time.Sleeps.Sum();
-
-        var (slow, _, _, slowTime) = Make(fast: false);
-        slow.Tune(Uhf27);
-        slowTime.Sleeps.Clear();
-        slow.Tune(Uhf27);
-        await Assert.That(slowTime.Sleeps).DoesNotContain(Dib8096.FastPollMs);
-        await Assert.That(fast).IsLessThan(slowTime.Sleeps.Sum());
+        // 段 5・7 の時間切れに関わる間は 10ms のまま (偽物ではロックがすぐ立つので、段 4 の前の 10ms が残る)
+        await Assert.That(time.Sleeps).Contains(10);
     }
 }
