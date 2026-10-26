@@ -788,9 +788,23 @@ test.describe("録画を観る", () => {
     test.setTimeout(180_000);
     const id = await watchable(page, request);
 
+    // 縦のタブレット (1000px 未満) では映像を端から端まで出し、番組の中身はその下に積む
     await page.setViewportSize({ width: 820, height: 1180 });
     await goto(page, `/watch/${id}`);
-    // 映像の上端と右の列の最初のもの (番組名) の上端がそろう
+    await expect
+      .poll(async () => {
+        const video = (await page.getByTestId("watch-stage").boundingBox())!;
+        const facts = (await page.getByTestId("watch-facts").boundingBox())!;
+        return {
+          left: Math.round(video.x),
+          width: Math.round(video.width),
+          below: facts.y >= video.y + video.height - 1,
+        };
+      })
+      .toEqual({ left: 0, width: 820, below: true });
+
+    // 二段組 (1000px から) では、映像の上端と右の列の最初のもの (番組名) の上端がそろう
+    await page.setViewportSize({ width: 1024, height: 768 });
     await expectSideAligned(
       page,
       '[data-testid="watch-video"]',

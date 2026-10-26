@@ -497,58 +497,14 @@
   font-weight: var(--dp-weight);
 }
 /*
- * **ヘッダーが浮いている形 (スマホの形でないとき) では、頭の1行 (1000px まで) をヘッダーと同じ角丸の面に乗せ、その下に貼り付ける**
- * (docs/design.md の「浮かせ方」。番組表の操作の1行と同じ形。`app.css` の `--dp-bar-*`)。ヘッダーとの隙間は `--dp-bar-gap`。
- * 置かれた位置 (main の頭の空き `--dp-header-space`) が貼り付く所と同じなので、巻き始めても動かない。
- * 上端では平らで、巻いて行が裏に入ると面と近い影が出る (ヘッダーと同じく窓の巻いた量で。`dp-bar-float`)。
- * 高さはヘッダーと同じ (`--t-bar-h`)。日付の見出しはその下に `--t-day-gap` 離して置き、貼り付く所もそこにそろえる
+ * **広い形 (スマホの形でないとき。1000px 以上。`#lib/phone-form.ts`) では頭の1行を出さない** (絞り込みは右のサイドバー。下の「右のサイドバー」)。
+ * 日付の見出しは浮いたヘッダーの下に、操作の1行どうしと同じ隙間 (`--dp-bar-gap`) 離して貼り付ける
  */
-/* 広い形 (スマホの形でないとき。`#lib/phone-form.ts`) */
 :where(html:not([data-phone])) .board {
-  --t-bar-h: 3.25rem;
-  /* 浮いたヘッダー・頭の1行とのあいだは、操作の1行どうしと同じ隙間 (`--dp-bar-gap`) */
   --t-day-gap: var(--dp-bar-gap);
 }
-:where(html:not([data-phone])) .board .t-toolbar {
-  top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
-  height: var(--t-bar-h);
-  margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter)) var(--t-day-gap);
-  padding: 0 var(--dp-bar-pad);
-  border-radius: var(--dp-bar-radius);
-  background: var(--dp-float);
-  box-shadow: var(--dp-shadow-tight);
-}
-@supports (animation-timeline: scroll()) {
-  :where(html:not([data-phone])) .board .t-toolbar {
-    background: transparent;
-    box-shadow: none;
-    animation: dp-bar-float linear both;
-    animation-timeline: scroll(root block);
-    animation-range: 0 1.5rem;
-  }
-}
 :where(html:not([data-phone])) .board .t-day {
-  top: calc(
-    var(--dp-header-bottom) + var(--dp-bar-gap) + var(--t-bar-h) +
-      var(--t-day-gap)
-  );
-}
-/* 768px からは一覧が main の余白の外まで広がっているので、面は窓の端からそのまま離す */
-@media (min-width: 768px) {
-  :where(html:not([data-phone])) .board .t-toolbar {
-    margin-inline: var(--dp-bar-inset);
-  }
-}
-/* 頭の1行がある間 (1000px まで) はヘッダーも近い影にそろえる (番組表と同じ。遠い影が下の1行に掛かって段々に見えないように) */
-@media (max-width: 999.98px) {
-  html:not([data-phone]):has(.board .t-toolbar) {
-    --navbar-shadow: var(--dp-shadow-tight);
-  }
-}
-@media (min-width: 1000px) {
-  :where(html:not([data-phone])) .board .t-day {
-    top: calc(var(--dp-header-bottom) + var(--t-day-gap));
-  }
+  top: calc(var(--dp-header-bottom) + var(--t-day-gap));
 }
 /*
  * **スマホの形 (下のタブがある形) では、頭の1行を下のタブのすぐ上に貼り付ける。** 押すものは下に置く (指の届く所)。
@@ -567,6 +523,12 @@
   background: var(--dp-float);
   box-shadow: var(--dp-shadow-pop);
   transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+}
+/* 768px からは一覧が main の余白の外まで広がっているので、窓の端から下のタブと同じだけ離す */
+@media (min-width: 768px) {
+  :where(html[data-phone]) .board .t-toolbar {
+    margin-inline: 0.75rem;
+  }
 }
 :where(html[data-phone])
   [data-retract]

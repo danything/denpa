@@ -346,6 +346,119 @@ test.describe("PWA", () => {
     await expect(page.getByTestId("header-search")).toBeVisible();
   });
 
+  /*
+   * **1000px 未満は下のタブにまとめる** (`#lib/phone-form.ts`)。タブレットや狭めた窓でもヘッダーを出さない。
+   * 640px からはルール・設定もタブに並べて 7 つ (アイコンの下に字)。タブに出した画面は「その他」に入れず、
+   * いまの画面の印 (タブの上端の短い線) はそのタブの真ん中に 1 つだけ付く
+   */
+  test("1000px 未満は下のタブ。640px からはルール・設定も並ぶ", async ({
+    browser,
+  }) => {
+    const SEVEN = [
+      "tab-home",
+      "tab-guide",
+      "tab-live",
+      "tab-rules",
+      "tab-search",
+      "tab-settings",
+    ];
+    const sizes = [
+      { width: 700, height: 600, touch: false },
+      { width: 900, height: 640, touch: false },
+      { width: 999, height: 700, touch: false },
+      // 縦のタブレット (指の端末)
+      { width: 820, height: 1180, touch: true },
+      // 横にしたスマホ。一覧の画面では下のタブが出る (映像の画面では隠す。20-live)
+      { width: 844, height: 390, touch: true },
+    ];
+    for (const size of sizes) {
+      const label = `${size.width}x${size.height}`;
+      const context = await browser.newContext({
+        viewport: { width: size.width, height: size.height },
+        hasTouch: size.touch,
+        isMobile: size.touch,
+      });
+      const page = await context.newPage();
+      await goto(page, "/rules");
+      const tabbar = page.getByTestId("tabbar");
+      await expect(tabbar, label).toBeVisible();
+      await expect(page.getByTestId("header-search"), label).toBeHidden();
+      await expect(page.getByTestId("nav-rules"), label).toBeHidden();
+
+      // 左から 録画・番組表・ライブ・ルール・検索・設定・その他。的の幅はそろう
+      const more = page.getByTestId("nav-menu").getByRole("button");
+      const boxes = [];
+      for (const id of SEVEN) {
+        await expect(page.getByTestId(id), `${label} ${id}`).toBeVisible();
+        boxes.push((await page.getByTestId(id).boundingBox())!);
+      }
+      boxes.push((await more.boundingBox())!);
+      for (let i = 1; i < boxes.length; i++) {
+        expect(boxes[i]!.x, `${label} の並び`).toBeGreaterThan(boxes[i - 1]!.x);
+        expect(
+          Math.abs(boxes[i]!.width - boxes[0]!.width),
+          `${label} の的の幅`,
+        ).toBeLessThan(1);
+      }
+
+      // 印はルールのタブだけ。「その他」には付けない
+      await expect(page.getByTestId("tab-rules")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await expect(more).not.toHaveAttribute("aria-current", "page");
+      const bar = (await tabbar.boundingBox())!;
+      const mark = await tabbar.evaluate((el) => {
+        const style = getComputedStyle(el, "::before");
+        return {
+          left: Number.parseFloat(style.left),
+          width: Number.parseFloat(style.width),
+        };
+      });
+      const rules = boxes[3]!;
+      expect(
+        Math.abs(
+          bar.x + mark.left + mark.width / 2 - (rules.x + rules.width / 2),
+        ),
+        `${label} の印の位置`,
+      ).toBeLessThan(2);
+
+      // 「その他」にはルール・設定を入れない (テーマは残る)
+      await more.click();
+      const menu = page.getByTestId("nav-menu");
+      await expect(menu.getByRole("link", { name: "ルール" })).toHaveCount(0);
+      await expect(menu.getByRole("link", { name: "設定" })).toHaveCount(0);
+      await expect(menu.getByRole("button", { name: /^テーマ/ })).toBeVisible();
+      await page.keyboard.press("Escape");
+
+      // 設定へ移ると印も設定のタブへ
+      await page.getByTestId("tab-settings").click();
+      await page.waitForURL(/settings/);
+      await expect(page.getByTestId("tab-settings")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await context.close();
+    }
+
+    // 1000px からは今までどおり上のヘッダー (リンクと検索の欄)。下のタブは出さない
+    const context = await browser.newContext({
+      viewport: { width: 1000, height: 700 },
+    });
+    const page = await context.newPage();
+    await goto(page, "/rules");
+    await expect(page.getByTestId("tabbar")).toBeHidden();
+    await expect(page.getByTestId("header-search")).toBeVisible();
+    await expect(page.getByTestId("nav-rules")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await page.setViewportSize({ width: 999, height: 700 });
+    await expect(page.getByTestId("tabbar")).toBeVisible();
+    await expect(page.getByTestId("header-search")).toBeHidden();
+    await context.close();
+  });
+
   test("狭い画面の下のタブは、下へ読むと引っ込み、上へ戻すと出る", async ({
     page,
   }) => {

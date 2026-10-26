@@ -70,7 +70,7 @@
   );
 
   let room = $state(false);
-  /** 縦に積んでいるか (768px より狭い)。色は映像の下へだけ敷く */
+  /** 縦に積んでいるか (1000px より狭い)。色は映像の下へだけ敷く */
   let stacked = $state(false);
   let dark = $state(false);
   /** 最後に写した1枚と、最後に入れ替えた1枚の違い (`frameDelta`)。E2E が「止まった映像では 0 に近い」を見る */
@@ -162,7 +162,7 @@
   }
 
   $effect(() => {
-    const twoColumns = matchMedia("(min-width: 768px)");
+    const twoColumns = matchMedia("(min-width: 1000px)");
     const phone = matchMedia(PHONE_LANDSCAPE);
     const check = () => {
       room = !phone.matches;

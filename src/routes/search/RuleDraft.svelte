@@ -729,7 +729,7 @@
 
 <style>
   /*
-     * **広い画面 (1024px から) では右の列。** 画面の右端に付け、ヘッダーの下に貼り付けて、
+     * **広い画面 (1000px から) では右の列。** 画面の右端に付け、ヘッダーの下に貼り付けて、
      * 結果の一覧を下ろしても書く欄と保存のボタンは見えたまま。一覧とは線でも地の色でも分けず、余白だけで分ける (ほかの画面のサイドバーと同じ)。狭い画面で下から出すときだけ `--dp-surface` で塗る
      */
   .draft {
@@ -740,7 +740,7 @@
     padding: var(--dp-space-5) var(--dp-space-5) 0;
     background: var(--dp-surface);
   }
-  @media (min-width: 1024px) {
+  @media (min-width: 1000px) {
     .draft {
       position: sticky;
       background: var(--dp-bg);
@@ -759,7 +759,7 @@
      * 行の「録る / 録らない」が変わるのも見える。下のタブより上に重ねる。
      * 浮いている一枚なので、中の主のボタン (保存) は浮かせず太字だけ (`app.css` の「ボタン」。浮きの上に浮きを重ねない)
      */
-  @media (max-width: 1023.98px) {
+  @media (max-width: 999.98px) {
     .draft {
       --dp-btn-solid: transparent;
       --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
@@ -923,7 +923,7 @@
     padding-block: var(--dp-space-3) var(--dp-space-5);
     background: var(--dp-surface);
   }
-  @media (min-width: 1024px) {
+  @media (min-width: 1000px) {
     .draft-foot {
       background: var(--dp-bg);
     }

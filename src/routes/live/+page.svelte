@@ -925,7 +925,7 @@
     overflow-y: auto;
   }
   /* 高さの決まった列の中で巻く (二段組と、テーブルトップの下の段。`PlayerLayout`) */
-  @media (min-width: 768px),
+  @media (min-width: 1000px),
     (device-posture: folded) and (vertical-viewport-segments: 2) {
     .channels {
       min-height: 0;

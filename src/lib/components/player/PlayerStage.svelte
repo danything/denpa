@@ -355,8 +355,8 @@
      * 「高さ × 縦横比」(`100cqh`) の小さいほう。上に寄せて横は真ん中 (E2E の `expectSideFrame`)。
      * 測る箱は `.room` — `<main>` の列にすると `position: absolute` の基準になり、`AmbientGlow` の位置がずれる
      */
-  /* 横にしたスマホ (下) は 768px を超えても二段組にしないので、ここから外す (`PlayerLayout` の `PHONE_LANDSCAPE`) */
-  @media (min-width: 768px) and (not ((orientation: landscape) and (max-height: 500px) and (pointer: coarse))) {
+  /* 横にしたスマホ (下) は 1000px を超えても二段組にしないので、ここから外す (`PlayerLayout` の `PHONE_LANDSCAPE`) */
+  @media (min-width: 1000px) and (not ((orientation: landscape) and (max-height: 500px) and (pointer: coarse))) {
     .room {
       display: flex;
       flex: 1 1 0%;
@@ -417,10 +417,10 @@
     display: none;
   }
   /*
-     * スマホの縦では映像を画面の端から端まで (余白 `--dp-gutter` のぶんはみ出させる。358px の枠では小さく、
-     * 周りが黒く縁取られて見えた)。高さの下限も外して枠をちょうど 16:9 にする。全画面では UA が margin を消す
+     * 縦に積む幅 (1000px 未満。横にしたスマホは下) では映像を画面の端から端まで (余白 `--dp-gutter` のぶんはみ出させる。
+     * スマホの 358px の枠では小さく、周りが黒く縁取られて見えた)。高さの下限も外して枠をちょうど 16:9 にする。全画面では UA が margin を消す
      */
-  @media (max-width: 639px) and (orientation: portrait) {
+  @media (max-width: 999.98px) and (not ((orientation: landscape) and (max-height: 500px) and (pointer: coarse))) {
     .stage {
       margin-inline: calc(-1 * var(--dp-gutter, 1rem));
       min-height: 0;

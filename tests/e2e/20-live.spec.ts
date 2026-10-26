@@ -353,33 +353,54 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
-   * **二段組にする幅は観る画面 (`/watch/<id>`) と同じ 768px。** 映像を左、
-   * 一覧を右に置く形は同じなのに、こちらだけ 1024px からにしていた頃は、
-   * **同じ幅で映像の大きさが変わって**いた (縦のiPad 820px で、ライブ 772px に
-   * 対して観る画面 436px)
+   * **二段組にする幅は観る画面 (`/watch/<id>`) と同じ 1000px** (ヘッダーを出す幅と同じ線。`+layout.svelte` の `FILLED`)。
+   * それより狭いと、縦のタブレットでも横長の窓でも映像を端から端まで出し、局の一覧をその下に積んでページごと巻く。
+   * 1000px からは今までどおり横に並べ、ページごとは動かさない
    */
-  test("縦のタブレットでも横に並べる (観る画面と同じ 768px から)", async ({
+  test("1000px 未満は映像を幅いっぱいにし、一覧をその下に積む", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 820, height: 1180 });
+    const shape = () =>
+      page.evaluate(() => {
+        const video = document
+          .querySelector('[data-testid="live-frame"]')
+          ?.getBoundingClientRect();
+        const aside = document.querySelector("aside")?.getBoundingClientRect();
+        const root = document.documentElement;
+        return {
+          left: Math.round(video?.left ?? -1),
+          width: Math.round(video?.width ?? -1),
+          below:
+            video !== undefined && aside !== undefined
+              ? aside.top >= video.bottom - 1
+              : false,
+          beside:
+            video !== undefined && aside !== undefined
+              ? video.right <= aside.left + 1
+              : false,
+          scrolls: root.scrollHeight > root.clientHeight + 1,
+        };
+      });
+    for (const size of [
+      { width: 820, height: 1180 },
+      { width: 900, height: 640 },
+      { width: 999, height: 700 },
+    ]) {
+      await page.setViewportSize(size);
+      await goto(page, "/live");
+      await expect(page.getByTestId("live-channel").first()).toBeVisible();
+      const at = `${size.width}x${size.height}`;
+      await expect
+        .poll(shape, at)
+        .toMatchObject({ left: 0, width: size.width, below: true });
+      // 横長の窓では一覧が画面の下にはみ出すので、ページごと巻いて見る
+      if (size.height < 1000) expect((await shape()).scrolls, at).toBe(true);
+    }
+
+    await page.setViewportSize({ width: 1000, height: 700 });
     await goto(page, "/live");
     await expect(page.getByTestId("live-channel").first()).toBeVisible();
-
-    const shape = await page.evaluate(() => {
-      const video = document.querySelector("video")?.getBoundingClientRect();
-      const aside = document.querySelector("aside")?.getBoundingClientRect();
-      const root = document.documentElement;
-      return {
-        横に並ぶ:
-          video !== undefined && aside !== undefined
-            ? video.right <= aside.left + 1
-            : false,
-        縦に動く: root.scrollHeight > root.clientHeight + 1,
-      };
-    });
-    expect(shape.横に並ぶ).toBe(true);
-    // 横に並べたら、ページごとは動かさない (広い画面と同じ扱いにする)
-    expect(shape.縦に動く).toBe(false);
+    await expect.poll(shape).toMatchObject({ beside: true, scrolls: false });
   });
 
   /**
@@ -1483,6 +1504,9 @@ test.describe("ライブ視聴", () => {
   }) => {
     const context = await browser.newContext({
       viewport: { width: 844, height: 390 },
+      // iPhone の横持ち (指の端末。下のタブは映像の画面では隠れる)
+      hasTouch: true,
+      isMobile: true,
     });
     const page = await context.newPage();
     await page.addInitScript(() => {
@@ -1514,8 +1538,8 @@ test.describe("ライブ視聴", () => {
     const restored = async () => {
       await expect(stage).not.toHaveAttribute("data-pseudo", "");
       await expect
-        .poll(async () => (await stage.boundingBox())?.height)
-        .toBeLessThan(390);
+        .poll(async () => (await stage.boundingBox())?.width)
+        .toBeLessThan(844);
       await expect(page.locator("html")).not.toHaveAttribute(
         "data-stage-fullscreen",
         "",
@@ -2272,6 +2296,8 @@ test.describe("スマホの横でライブ", () => {
 
     const stage = page.getByTestId("live-frame");
     await expect(page.locator(".navbar")).toBeHidden();
+    // 横にしたスマホもスマホの形 (1000px 未満) だが、下のタブは映像の下端に重なるので出さない
+    await expect(page.getByTestId("tabbar")).toBeHidden();
     // 枠は映像の形 (16:9) で、高さいっぱい・真ん中。左右の黒帯にボタンを出さない
     await expect
       .poll(async () => {

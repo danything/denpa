@@ -38,7 +38,7 @@
    * 土台の実際の姿。
    *
    * **塞いであるはずのものが塞がっていないことがある。** 二段組の画面では
-   * 土台 (`.shell.fill`、+layout.svelte) に 768px 以上で `height: 100%; overflow: hidden`
+   * 土台 (`.shell.fill`、+layout.svelte) に 1000px 以上で `height: 100%; overflow: hidden`
    * が当たっていて、当たっていればページごと動きようがない。**はみ出しが出ているのに当たっている**なら、
    * はみ出させているのは土台の外にいるもの (`position: fixed` は塞ぎを
    * すり抜ける)
@@ -107,7 +107,7 @@
           if (rule.selectorText.includes(".shell.fill")) found = true;
         }
         /*
-         * **入れ子はぜんぶ潜る。** 決まりは `@media (min-width: 768px)` の中にあり、
+         * **入れ子はぜんぶ潜る。** 決まりは `@media (min-width: 1000px)` の中にあり、
          * CSS の組み方によっては `@layer` や入れ子の規則にも入るので、そこで止めない
          */
         const inner = (rule as CSSRule & { cssRules?: CSSRuleList }).cssRules;
@@ -191,7 +191,7 @@
         (m) => matchMedia(`(display-mode: ${m})`).matches,
       ) ?? "?";
     // 二段組にする線。ここを越えているかで、土台に当たる決まりが変わる
-    wide = matchMedia("(min-width: 768px)").matches;
+    wide = matchMedia("(min-width: 1000px)").matches;
 
     // 土台は印 (`data-root`) で探す。形で採っていた頃は、別のものの数を土台として報せていた
     const root = document.querySelector("[data-root]");
@@ -269,7 +269,7 @@
     窓 {width}x{inner} / 枠 {client} / 中身 {scroll} =
     <b class={over > 1 ? "bad" : "good"}>はみ出し {over}</b>
   </div>
-  <div>{base} / {wide ? "二段組 (md)" : "一段 (md 未満)"}</div>
+  <div>{base} / {wide ? "二段組 (1000px 以上)" : "一段 (1000px 未満)"}</div>
   <div class="wrap">class: {rootClass}</div>
   {#if units !== null}
     <div>

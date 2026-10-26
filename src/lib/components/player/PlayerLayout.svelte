@@ -14,7 +14,7 @@
   import { TABLETOP } from "#lib/phone-form.js";
 
   /**
-   * 3画面の外枠。映像が左、読むものが右 (タブレット `md` = 768px から二段組。狭い画面は縦に積む)。
+   * 3画面の外枠。映像が左、読むものが右 (1000px から二段組。狭い画面は映像を端から端まで出し、読むものをその下に積む)。
    * 周りの余白と横幅の頭打ちは外の `<main>` が持つ。横にしたスマホ (`PHONE_LANDSCAPE`) は高さが足りないので、
    * 見出しを隠して映像を画面の高さいっぱいにし、右の列は映像の下で巻き取る (マウスの PC は窓を低くしてもそのまま)。
    * テーブルトップ (`TABLETOP`) では映像を上の段、右の列を下の段に置く (下の style)
@@ -62,7 +62,7 @@
     flex: 1;
     flex-direction: column;
   }
-  @media (min-width: 768px) {
+  @media (min-width: 1000px) {
     /* 映像の周りの余白は詰める (ほかの画面の 1.5rem → 1rem) */
     :global(body main:has([data-player-layout])) {
       --dp-gutter: 1rem;
@@ -107,6 +107,16 @@
   @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
     :global(body:has([data-player-layout]) .navbar) {
       display: none;
+    }
+    /*
+     * 横にしたスマホはスマホの形 (`#lib/phone-form.ts`) なので、ライブには下のタブが出る。映像の下端に重なるので隠し、
+     * 下の余白 (`--dp-tabbar`) も外す。ほかの画面へは縦に戻して移る (ヘッダーを隠していた頃と同じ)
+     */
+    :global(body:has([data-player-layout]) .tabbar) {
+      display: none;
+    }
+    :global(html:has([data-player-layout])) {
+      --dp-tabbar: 0px;
     }
     /* ヘッダーを隠すので、ヘッダーのぶんの頭の空き (`+layout.svelte` の `.shell.fill`) も外す */
     :global(body:has([data-player-layout]) .shell.fill) {

@@ -25,6 +25,7 @@
     time,
   } from "#lib/format.js";
   import { skeletonMask } from "#lib/guide-skeleton.js";
+  import { PHONE_FORM } from "#lib/phone-form.js";
   import { reload } from "#lib/reload.svelte.js";
   import {
     cellsOf,
@@ -587,10 +588,12 @@
   /** 目立たせているジャンル。ほかのマスを淡くする。端末をまたいで覚えるほどのものではない */
   let highlight = $state<number | null>(null);
 
-  /** 狭い画面では操作の1行が下にあるので、メニューは上へ開く */
+  /** 狭い画面ではサブch をジャンルのメニューに入れる (下の style の 767px と同じ線) */
   const narrowQuery = new MediaQuery("max-width: 767px");
   const narrow = $derived(narrowQuery.current);
-  const menuSide = $derived(narrow ? "top" : "bottom");
+  /** スマホの形 (`#lib/phone-form.ts`) では操作の1行が下にあるので、メニューは上へ開く */
+  const phoneForm = new MediaQuery(PHONE_FORM);
+  const menuSide = $derived(phoneForm.current ? "top" : "bottom");
 
   /*
    * 放送波を切り替えたら横位置を先頭へ戻す。
@@ -1562,29 +1565,27 @@
     }
   }
   /*
-     * **広い画面では表をヘッダーの裏まで伸ばす** (docs/design.md の「浮かせ方」)。箱は画面の上端から始め、
+     * **広い形 (スマホの形でないとき。`#lib/phone-form.ts`) では表をヘッダーの裏まで伸ばす** (docs/design.md の「浮かせ方」)。箱は画面の上端から始め、
      * 中身は表の頭 (`--guide-head`。`app.css`) の下から並べる。巻くとマスが操作の1行とヘッダーの裏を流れ、
      * ヘッダーは表の巻いた量で浮く。スクロールバーは出さない (ヘッダーの裏に透けて見える)。
      * つかんで動かす・ホイール・キー・指では今までどおり動く
      */
-  @media (min-width: 768px) {
-    .grid-box {
-      margin-top: calc(-1 * var(--guide-head));
-      scrollbar-width: none;
-    }
-    .grid-box::-webkit-scrollbar {
-      display: none;
-    }
-    .rows {
-      margin-top: var(--guide-head);
-    }
-    /* 局名の面も操作の1行 (`app.css` の `.guide-bar::before`) と同じく、上端では見せず、マスが裏に入ると出る */
-    @supports (animation-timeline: scroll()) {
-      .service::before {
-        animation: dp-bar-float linear both;
-        animation-timeline: --guide;
-        animation-range: 0 1.5rem;
-      }
+  :global(:where(html:not([data-phone]))) .grid-box {
+    margin-top: calc(-1 * var(--guide-head));
+    scrollbar-width: none;
+  }
+  :global(:where(html:not([data-phone]))) .grid-box::-webkit-scrollbar {
+    display: none;
+  }
+  :global(:where(html:not([data-phone]))) .rows {
+    margin-top: var(--guide-head);
+  }
+  /* 局名の面も操作の1行 (`app.css` の `.guide-bar::before`) と同じく、上端では見せず、マスが裏に入ると出る */
+  @supports (animation-timeline: scroll()) {
+    :global(:where(html:not([data-phone]))) .service::before {
+      animation: dp-bar-float linear both;
+      animation-timeline: --guide;
+      animation-range: 0 1.5rem;
     }
   }
   /*

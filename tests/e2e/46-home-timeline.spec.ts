@@ -147,32 +147,38 @@ test.describe("ホームの1本の一覧", () => {
   });
 
   /*
-   * **640〜999px の頭の1行は、ヘッダーと同じ角丸の面に乗せてヘッダーの下に貼り付ける** (番組表の操作の1行と同じ)。
-   * ヘッダーとの間は 0.25rem。巻いても動かず、日付の見出しはその下から始まる
+   * **1000px 未満の頭の1行は、スマホと同じく下のタブのすぐ上に浮かぶ** (上のヘッダーは出さない)。
+   * 768px からは一覧が余白の外まで広がるので、窓の端から下のタブと同じだけ離す。日付の見出しは上に貼り付く
    */
-  test("広めの画面の頭の1行はヘッダーの下に隙間を空けて貼り付く角丸の面", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 900, height: 360 });
-    await goto(page, "/");
-    // 開くと観ていない録画まで送るので、頭に戻してから測る
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-    const bar = page.getByTestId("timeline-toolbar");
-    const header = (await page.locator(".navbar").boundingBox())!;
-    const before = (await bar.boundingBox())!;
-    expect(before.y - (header.y + header.height)).toBeCloseTo(4, 0);
-    expect(
-      await bar.evaluate((el) => getComputedStyle(el).borderTopLeftRadius),
-    ).toBe("14px");
-    const day = (await page.getByTestId("timeline-day").first().boundingBox())!;
-    expect(day.y).toBeGreaterThanOrEqual(before.y + before.height);
-    await page.mouse.move(450, 300);
-    await page.mouse.wheel(0, 200);
-    await expect
-      .poll(() => page.evaluate(() => window.scrollY))
-      .toBeGreaterThan(0);
-    expect((await bar.boundingBox())!.y).toBeCloseTo(before.y, 0);
+  test("広めの画面でも頭の1行は下のタブのすぐ上に浮かぶ", async ({ page }) => {
+    for (const size of [
+      { width: 700, height: 600 },
+      { width: 900, height: 360 },
+    ]) {
+      await page.setViewportSize(size);
+      await goto(page, "/");
+      // 開くと観ていない録画まで送り、下のタブが引っ込んでいることがあるので、頭に戻してから測る
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+      const at = `${size.width}px`;
+      await expect(page.locator(".navbar"), at).toBeHidden();
+      const tabbar = page.getByTestId("tabbar");
+      const bar = page.getByTestId("timeline-toolbar");
+      await expect
+        .poll(async () => {
+          const tabs = (await tabbar.boundingBox())!;
+          const box = (await bar.boundingBox())!;
+          return Math.round(tabs.y - (box.y + box.height));
+        }, at)
+        .toBe(6);
+      const tabs = (await tabbar.boundingBox())!;
+      const box = (await bar.boundingBox())!;
+      expect(Math.abs(box.x - tabs.x), `${at} の左`).toBeLessThan(1);
+      expect(
+        Math.abs(box.x + box.width - (tabs.x + tabs.width)),
+        `${at} の右`,
+      ).toBeLessThan(1);
+    }
   });
 
   /*

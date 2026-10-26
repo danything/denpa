@@ -9,7 +9,8 @@ export const TABLETOP =
 
 /**
  * **スマホの形** (上のヘッダーを出さず、画面の下にタブを出す。操作の 1 行もタブのすぐ上に浮かべる)。**条件はここだけで決める。**
- * 幅がスマホのもの (640px 未満) と、テーブルトップ (横幅は広いが上下の段がどちらも低いので、操作を下へ寄せる)。
+ * 1000px 未満 (スマホ・タブレット・狭めた窓。ヘッダーに画面のリンクと検索の欄を並べきれない) と、テーブルトップ (横幅は広いが上下の段がどちらも低いので、操作を下へ寄せる)。
+ * 横にしたスマホ (844px など) も幅で入る。開いた Fold の横持ち (1104px) は幅では入らないので、テーブルトップは残す。
  * 条件を足すときはこの並びに足す (どれか 1 つに当たればスマホの形)。
  *
  * CSS の `@media` には名前を付けて引けないので、`<html data-phone>` の印にして配る。`app.html` の頭のスクリプトが
@@ -17,4 +18,4 @@ export const TABLETOP =
  * CSS は `html[data-phone]` と `html:not([data-phone])` で書き分け、JS は `new MediaQuery(PHONE_FORM)` で見る。
  * ダイアログを下から出す・行を折り返すなど、幅だけで決まるものは今までどおり幅の `@media` で書く
  */
-export const PHONE_FORM = ["(max-width: 639.98px)", TABLETOP].join(", ");
+export const PHONE_FORM = ["(max-width: 999.98px)", TABLETOP].join(", ");

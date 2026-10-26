@@ -248,7 +248,7 @@
 <Toasts {notices} source={form} />
 
 <!--
-    **結果と、右の「ルールとして保存」** (`RuleDraft`)。広い画面 (1024px から) では右の列、狭い画面では
+    **結果と、右の「ルールとして保存」** (`RuleDraft`)。広い画面 (1000px から) では右の列、狭い画面では
     下のボタンで下から出す。書く欄の条件を変えると、結果の「これからの放送」の行ごとに録るかが出る
 -->
 <div class="search-layout" class:drafting>
@@ -770,7 +770,7 @@
      * **広い画面では右に書く欄の列** (`RuleDraft`)。列は右と下を main の余白の外まで出して画面の右端に付け、
      * ヘッダーの下に貼り付ける。結果は残りの幅の真ん中 (48rem まで) で、ページごと巻いて浮いたヘッダーの裏を流れる
      */
-  @media (min-width: 1024px) {
+  @media (min-width: 1000px) {
     .search-layout.drafting {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 25rem;
@@ -791,7 +791,7 @@
      * (浮きの上に浮きを重ねない。docs/design.md)。読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
      * 結果の一覧の最後の行が隠れないよう、ボタンの高さぶんの余白を下に足す
      */
-  @media (max-width: 1023.98px) {
+  @media (max-width: 999.98px) {
     .drafting > .search-page {
       padding-bottom: 4rem;
     }

@@ -9,9 +9,11 @@
   import Contrast from "~icons/lucide/contrast";
   import Ellipsis from "~icons/lucide/ellipsis";
   import ExternalLink from "~icons/lucide/external-link";
+  import ListChecks from "~icons/lucide/list-checks";
   import ListVideo from "~icons/lucide/list-video";
   import Moon from "~icons/lucide/moon";
   import Search from "~icons/lucide/search";
+  import Settings from "~icons/lucide/settings";
   import Sun from "~icons/lucide/sun";
   import Tv from "~icons/lucide/tv";
 
@@ -282,10 +284,10 @@
    * **一覧の画面 (録画・ルール・設定・検索) は入れない** (ページごと巻く。docs/design.md の「浮かせ方」)。
    * 窓ごと巻けば、戻ったときに見ていた位置へも帰る。畳まれる幅ではどの画面もページごとスクロールさせる。
    *
-   * **二段組にする幅は全画面で `md` (768px)。** 画面ごとに違えていた頃は、
+   * **二段組にする幅は全画面で 1000px** (ヘッダーを出す幅と同じ。`#lib/phone-form.ts`)。画面ごとに違えていた頃は、
    * **同じ幅なのに画面によって形が変わって**いた (縦のiPad 820px で、
    * ライブは1段・観る画面は2段。映像の大きさが 772px と 436px)。ここと、
-   * 各画面の 768px の `@media` がその1本の線で、**片方だけ動かさない**
+   * 各画面の 1000px の `@media` がその1本の線で、**片方だけ動かさない**。横にしたスマホは 768px から画面ぴったりにする (下の style)
    */
   const FILLED = ["/live", "/watch/[id]", "/chase/[id]", "/guide"];
   // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと頭が付く (server/paths.ts)
@@ -301,22 +303,35 @@
   const guide = $derived(pending !== null || page.route.id === "/guide");
 
   /**
-   * **スマホの形 (狭い画面とテーブルトップ。`#lib/phone-form.ts`) では、ナビを画面の下のタブにする** (下の `.tabbar`)。
+   * **スマホの形 (1000px 未満とテーブルトップ。`#lib/phone-form.ts`) では、ナビを画面の下のタブにする** (下の `.tabbar`)。
    *
    * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
    * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
    * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
-   * よく開く 3 画面と検索をタブに、残り (ルール・設定) は「その他」の `Menu` (popover) に。
-   * 狭い画面ではヘッダー (検索の欄) を隠すので、検索はタブから入る
+   * 640px 未満はよく開く 3 画面と検索をタブに、残り (ルール・設定) は「その他」の `Menu` (popover) に。
+   * 640px からはルール・設定もタブに出し (`wide`。7 つ並ぶ)、「その他」にはテーマと新しいバージョンのお知らせだけが残る。
+   * ヘッダー (検索の欄) を隠すので、検索はタブから入る
    */
   const tabs = [
-    { href: "/", label: "録画", icon: ListVideo },
-    { href: "/guide", label: "番組表", icon: CalendarDays },
-    { href: "/live", label: "ライブ", icon: Tv },
-    { href: SEARCH.href, label: SEARCH.label, icon: Search },
+    { href: "/", label: "録画", icon: ListVideo, wide: false },
+    { href: "/guide", label: "番組表", icon: CalendarDays, wide: false },
+    { href: "/live", label: "ライブ", icon: Tv, wide: false },
+    { href: "/rules", label: "ルール", icon: ListChecks, wide: true },
+    { href: SEARCH.href, label: SEARCH.label, icon: Search, wide: false },
+    { href: "/settings", label: "設定", icon: Settings, wide: true },
   ] as const;
-  const moreLinks = links.filter(
-    (link) => !tabs.some((tab) => tab.href === link.href),
+  /**
+   * ルール・設定もタブに出している幅か。**下の style の `@media (min-width: 640px)` と同じ線**。
+   * タブに出したものは「その他」から外す (同じ画面がタブと「その他」の 2 か所で選ばれた印にならないように)
+   */
+  const wideTabbar = new MediaQuery("(min-width: 640px)", false);
+  const moreLinks = $derived(
+    links.filter(
+      (link) =>
+        !tabs.some(
+          (tab) => tab.href === link.href && (!tab.wide || wideTabbar.current),
+        ),
+    ),
   );
   const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
   /** タブを出すのはナビの 5 画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
@@ -395,8 +410,8 @@
     画面の高さと一致しないことがあった** (PWA で 763.765px 対 708px。差の
     56px は Chrome for Android のアドレスバーの高さそのもの)。
 
-    `%` なら JS も要らず、**描く前から正しい**。**二段組の線 (768px) は横に
-    倒した携帯も越える** (915x412 など) ので、768px 以上の `.fill` のほうも同じ採り方
+    `%` なら JS も要らず、**描く前から正しい**。**横に倒した携帯** (915x412 など) **も
+    `.fill` にする** (下の style の 768px) ので、`.fill` のほうも同じ採り方
 -->
 <div
   class="shell"
@@ -564,7 +579,10 @@
         <a
           href={resolve(tab.href)}
           class="tab"
-          aria-current={here === tab.href ? "page" : undefined}
+          class:wide={tab.wide}
+          aria-current={here === tab.href && (!tab.wide || wideTabbar.current)
+            ? "page"
+            : undefined}
           data-testid="tab-{slug(tab.href)}"
         >
           <Icon icon={tab.icon} size="size-5" />
@@ -860,7 +878,8 @@
     inset: auto 0.75rem calc(0.5rem + env(safe-area-inset-bottom)) 0.75rem;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
     padding: 0.25rem;
     border: 0;
     border-radius: 2rem;
@@ -988,7 +1007,7 @@
   .more-extra {
     margin-top: 0.5rem;
   }
-  /* スマホの形 (`#lib/phone-form.ts`。640px 未満とテーブルトップ。`<html data-phone>`) */
+  /* スマホの形 (`#lib/phone-form.ts`。1000px 未満とテーブルトップ。`<html data-phone>`) */
   :global(:where(html[data-phone]:has(.tabbar))) {
     --dp-tabbar: calc(4rem + 0.5rem + env(safe-area-inset-bottom));
   }
@@ -1026,6 +1045,22 @@
   :global(:where(html[data-phone])) .shell:has(.tabbar):has(.notice-slot) main,
   :global(:where(html[data-phone])) .shell:has(.tabbar):has(.search-bar) main {
     padding-top: var(--dp-page-top);
+  }
+  /*
+   * **640px からはルール・設定もタブに出す** (7 つ。上の `wideTabbar` と同じ線)。字はアイコンの下のまま一段大きく。
+   * 640px 未満は 5 つ (録画・番組表・ライブ・検索・その他)。的の幅はどれも等分 (`.tabbar` の `grid-auto-flow`)
+   */
+  .tabbar .tab.wide {
+    display: none;
+  }
+  @media (min-width: 640px) {
+    .tabbar .tab.wide {
+      display: flex;
+    }
+    .tabbar .tab,
+    .tab-more :global(.tab) {
+      font-size: 0.75rem;
+    }
   }
   /* ライブの全画面のあいだは隠す (映像だけにする) */
   :global(html[data-stage-fullscreen]) :is(.tabbar, .notice-slot) {
@@ -1119,7 +1154,7 @@
   /*
        * **上端では平ら、巻くと浮く。** 裏に中身が無いうちは浮かせる理由が無いので、地に馴染ませる
        * (docs/design.md の「浮かせ方」)。巻いた量に合わせて面と影が出る (`animation-timeline: scroll()`。JS は使わない)。
-       * 窓が巻けない画面のうち、観る画面は時間の軸が止まったままなので、いつも平ら (アンビエントの色もそのまま届く)。番組表は表の巻いた量で浮く (下の 768px から)。
+       * 窓が巻けない画面のうち、観る画面は時間の軸が止まったままなので、いつも平ら (アンビエントの色もそのまま届く)。番組表は表の巻いた量で浮く (下の 1000px から)。
        * 知らないブラウザと、動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも浮いた形
        */
   @supports (animation-timeline: scroll()) {
@@ -1166,6 +1201,10 @@
     main {
       --dp-gutter: 1.5rem;
     }
+  }
+  /* 試作: 画面ぴったりにするのは二段組の幅 (1000px) から。横にしたスマホは今までどおり */
+  @media (min-width: 1000px),
+    (min-width: 768px) and (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
     /*
          * **位置の基準もここにする** (`position: relative`)。`overflow: hidden` だけでは、中の
          * `position: absolute` のうち位置を持つ祖先の無いもの (読み上げ用の `.visually-hidden` など) が

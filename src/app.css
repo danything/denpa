@@ -724,11 +724,10 @@ progress[value]::-webkit-progress-value {
 /*
  * ---- 番組表の外枠 (`.guide-frame`) と操作の1行 (`.guide-bar`) ----
  * 番組表 (`guide/+page.svelte`) と、ほかの画面から移る途中の姿 (`GuidePending`) で同じにする — 着いたときに表の位置が飛ばない。
- * 本文の余白 (`--dp-gutter`) を打ち消して端から端まで使い、高さも同じぶん足す。広い幅は `+layout.svelte` の `FILLED` から `%` で降ろす。
- * **狭い幅だけ `%` で降ろせない** (途中の入れ物に高さが決まっておらず、`%` が解決しない)。そこは `svh` で採る —
+ * 本文の余白 (`--dp-gutter`) を打ち消して端から端まで使い、高さも同じぶん足す。広い形は `+layout.svelte` の `FILLED` から `%` で降ろす。
+ * **スマホの形だけ `%` で降ろせない** (途中の入れ物に高さが決まっておらず、`%` が解決しない)。そこは `svh` で採る —
  * `svh` だけが見えている範囲を超えない (`vh` と `dvh` は実機の PWA でアドレスバーの高さぶん超えた)。
- * 狭い幅は画面の高さから上下の固定のもの (ナビ 3.5rem・ノッチ) を引き、ページごとではなく表だけを動かす
- * (スマホにはナビが無く、下のタブは表の上に浮くので引かない。この先の `--guide-float-h` の所)
+ * 画面の高さから上のノッチを引き、ページごとではなく表だけを動かす (下のタブは表の上に浮くので引かない。この先の `--guide-float-h` の所)
  */
 .guide-frame {
   --page-h: calc(100% + var(--dp-page-top) + var(--dp-gutter));
@@ -823,13 +822,9 @@ progress[value]::-webkit-progress-value {
     }
   }
 }
-/* 狭い画面では操作の1行は表の下 (親指が届く。スマホは下のタブのすぐ上に浮かせる。下) */
+/* 狭い画面では操作の1行の中を詰める (下のタブのすぐ上に浮かせるのは下のスマホの形) */
 @media (max-width: 767px) {
-  .guide-frame {
-    --page-h: calc(100svh - 3.5rem - env(safe-area-inset-bottom));
-  }
   .guide-bar {
-    order: 1;
     padding-inline: var(--dp-space-2);
   }
   .guide-bar > .segmented > a.button {
@@ -2251,6 +2246,10 @@ dialog[open] > article {
     align-self: start;
     height: calc(100svh - var(--dp-header-space, 0px));
   }
+}
+/* スマホの形 (設定の 768〜999px、テーブルトップ) では下のタブが下端に重なるので、そのぶん下を空ける */
+:where(html[data-phone]) .side-panel {
+  --dp-side-pad-end: calc(0.75rem + var(--dp-tabbar, 0px));
 }
 /* グループの見出し。リンクのときも見出しの顔のまま (設定) */
 .side-label {

@@ -121,7 +121,7 @@
 
     /*
      * 飛んだ節の頭が止まる所から下を数える。浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ。スマホは 0) と、
-     * 節の巻き取りの余白 (640〜767px はヘッダーの下に貼り付く節の行のぶん、スマホは上の安全域のぶんも入っている。下の style)。
+     * 節の巻き取りの余白 (スマホの形は上の安全域のぶんも入っている。下の style)。
      * ここより上に残る前の節の終わりは数えない (スマホで節へ飛んだあと、前の節に印が戻っていた)。rootMargin は px か % だけ (rem は投げる)
      */
     const px = (value: string) => Number.parseFloat(value) || 0;
@@ -152,14 +152,15 @@
     **グループごとに1つの画面** (`/settings/<グループ>`) で、節は上から積む。節を押すとそこへ滑らかに巻き、
     巻いていくと左の一覧で見えている節に印が付く。並びは `#lib/settings-sections.ts`。
 
-    **横に並べはじめる幅は全画面で 768px** ([+layout.svelte](../+layout.svelte) の `FILLED` の上の説明)。
+    **横に並べはじめる幅は 768px** (映像の画面の二段組 (1000px。[+layout.svelte](../+layout.svelte) の `FILLED` の上の説明) より手前から。768〜999px は下のタブの形のまま左の一覧を残す)。
     並べたときの形は下の style。左の列と右とは線で分けない (地は同じで、右の列を真ん中に寄せた余白で分かれる)。
 
     **狭い画面では一覧と中身を切り替える。** `/settings` はグループの一覧だけ、押すとその画面と「← 設定」、
-    節へ飛ぶ行 (巻いても残る。スマホは下のタブの上、640〜767px はヘッダーの下)。
+    節へ飛ぶ行 (巻いても残る。下のタブの上)。
 
     **節の操作 (見出しの行の押すもの・絞り込み) は、節の中の `.section-bar` に入れる。** スマホでは見えている節の
-    その1行だけを節へ飛ぶ行のすぐ上に浮かべ、節を移ると入れ替わる。操作の無い節では出さない。640px からは節の中のまま
+    その1行だけを下のタブの上 (768px 未満は節へ飛ぶ行のすぐ上) に浮かべ、節を移ると入れ替わる。操作の無い節では出さない。
+    1000px から (ヘッダーのある形) は節の中のまま
 -->
 <div class="page settings-page" class:list-view={current === null}>
   <!--
@@ -351,7 +352,7 @@
      * **節どうしは線を引かず、上下にたっぷりの余白で区切る** (左の一覧のグループの境目と同じ考え。カードにはしない)。
      * 節の中の行の間より目に見えて空ける。飛んだ先が見出しの上にぴったり付くよう、
      * 巻き取りの余白を取る (広い画面は浮いたヘッダーの下。ヘッダーのぶんは `html` の `scroll-padding-top` が持つので、ここは間の余白だけ。
-     * 640〜767px はヘッダーと節の行の下、スマホは上の安全域の下)
+     * スマホの形は上の安全域の下。下で決め直す)
      */
   .main-inner :global([data-part] + [data-part]) {
     margin-top: var(--dp-space-4);
@@ -361,15 +362,6 @@
     scroll-margin-top: var(--dp-gutter);
   }
   @media (max-width: 767px) {
-    /*
-     * 640〜767px は節の行 (下の `.jump`) がヘッダーの下に貼り付く。ヘッダーのぶん (`scroll-padding-top`。
-     * ヘッダーとの隙間も入っている) に、節の行の高さを足す。スマホは下で決め直す
-     */
-    .main-inner :global([data-part]) {
-      scroll-margin-top: calc(
-        var(--dp-bar-pad) * 2 + var(--dp-btn-h-sm) + var(--dp-gutter)
-      );
-    }
     /* 狭い画面は一覧か中身のどちらか。どちらを出すかは URL */
     .page.list-view .main,
     .page:not(.list-view) .side {
@@ -378,11 +370,10 @@
   }
 
   /*
-     * **狭い画面の節の行。** 「← 設定」と節の名前を横に並べ、巻いても残す (スマホは下、640〜767px はヘッダーの下)。
+     * **狭い画面の節の行。** 「← 設定」と節の名前を横に並べ、巻いても残す (下のタブのすぐ上)。
      * はみ出す分は横に巻く (行を折り返すと高さが変わり、飛んだ先の余白が合わなくなる)
      */
   .jump {
-    position: sticky;
     z-index: 30;
     display: flex;
     align-items: center;
@@ -424,44 +415,15 @@
     height: 1.125rem;
   }
   /*
-     * 640〜767px はヘッダーが浮いている。**節の行はヘッダーと同じ角丸の面に乗せ、その下に貼り付ける** (ホームの頭の1行・
-     * 番組表の操作の1行と同じ。docs/design.md の「浮かせ方」。`app.css` の `--dp-bar-*`)。置かれた位置 (main の頭の空き
-     * `--dp-header-space`) が貼り付く所と同じなので、巻き始めても動かない。上端では平らで、巻いて中身が裏に入ると面と近い影が出る (窓の巻いた量で。`dp-bar-float`)。
-     * 面は節の行そのものの地なので、横に巻いても動かない
-     */
-  /* 広い形 (スマホの形でないとき。`#lib/phone-form.ts`) */
-  :global(:where(html:not([data-phone]))) .jump {
-    top: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
-    margin: 0 calc(var(--dp-bar-inset) - var(--dp-gutter));
-    padding: var(--dp-bar-pad);
-    border-radius: var(--dp-bar-radius);
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-tight);
-  }
-  @supports (animation-timeline: scroll()) {
-    :global(:where(html:not([data-phone]))) .jump {
-      background: transparent;
-      box-shadow: none;
-      animation: dp-bar-float linear both;
-      animation-timeline: scroll(root block);
-      animation-range: 0 1.5rem;
-    }
-  }
-  /* 節の行がある間 (767px まで) はヘッダーも近い影にそろえる (番組表と同じ。遠い影が下の1行に掛かって段々に見えないように) */
-  @media (max-width: 767.98px) {
-    :global(html:not([data-phone]):has(.settings-page .jump)) {
-      --navbar-shadow: var(--dp-shadow-tight);
-    }
-  }
-  /*
      * **スマホの形 (下のタブがある形) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの頭の1行と同じ半透明のカプセル)。
      * 読んでいる間は下のタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。中身の最後が隠れないよう、そのぶん下を空ける
      */
   /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
   :global(:where(html[data-phone])) .page {
-    /* 下のタブとの隙間と、節へ飛ぶ行の高さ。節の操作の1行はこの上に積む */
+    /* 下のタブとの隙間と、節へ飛ぶ行の高さ。節の操作の1行はこの上に積む (`--jump-room`。節へ飛ぶ行の無い 768px からは 0) */
     --jump-gap: 0.375rem;
     --jump-h: calc(var(--dp-btn-h-sm) + 0.5rem);
+    --jump-room: calc(var(--jump-h) + var(--jump-gap));
   }
   :global(:where(html[data-phone])) .jump {
     position: fixed;
@@ -501,7 +463,7 @@
     --dp-btn-lift: none;
     position: fixed;
     inset: auto 0.75rem
-      calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h));
+      calc(var(--dp-tabbar, 0px) + var(--jump-gap) + var(--jump-room));
     z-index: 30;
     display: flex;
     flex-wrap: nowrap;
@@ -527,7 +489,7 @@
     .main-inner
     :global([data-current] .section-bar:not(:has(:focus-visible))) {
     transform: translateY(
-      calc(var(--dp-tabbar, 0px) + var(--jump-gap) * 2 + var(--jump-h) + 100%)
+      calc(var(--dp-tabbar, 0px) + var(--jump-gap) + var(--jump-room) + 100%)
     );
   }
   /* 操作の1行が出ている間は、そのぶんも下を空ける (中身の最後が隠れないように) */
@@ -544,6 +506,14 @@
     }
     .main-inner {
       padding: 0 var(--dp-gutter) var(--dp-gutter);
+    }
+    /* 768〜999px のスマホの形は左の一覧を残すので、節へ飛ぶ行は出さず、節の操作の1行を下のタブのすぐ上に浮かべる */
+    :global(:where(html[data-phone])) .page {
+      --jump-room: 0px;
+    }
+    :global(:where(html[data-phone]))
+      .main-inner:has(:global([data-current] .section-bar)) {
+      padding-bottom: 3.5rem;
     }
   }
 </style>
