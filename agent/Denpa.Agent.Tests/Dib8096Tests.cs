@@ -302,6 +302,18 @@ public class Dib8096Tests
     }
 
     [Test]
+    public async Task TMCC_の同期が揃わなくても段_3_で書いた値を覚える()
+    {
+        var (dib, _, model, _) = Make(memory: new DibMemory());
+        model.Tmcc = false;
+        dib.Initialize();
+        dib.Tune(557_142_857);
+        await Assert.That(dib.LastPath).IsEqualTo("既定 (8K) でガードだけ探した");
+        await Assert.That(dib.Tune(557_142_857)).IsEqualTo(DibLock.DataLocked);
+        await Assert.That(dib.LastPath).IsEqualTo("覚えた値で合わせた");
+    }
+
+    [Test]
     public async Task 覚えた値で合わなければ探索に戻る()
     {
         var memory = new DibMemory();

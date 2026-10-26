@@ -24,6 +24,9 @@ internal sealed class DibModel
     public ushort Version { get; set; } = 0x8002;
     public ushort TunerId { get; set; } = 0x0223;
 
+    /// <summary>D[568] の TMCC の同期 (ビット 1〜4) を立てるか。実機ではロックしたあとも揃わないことがあった</summary>
+    public bool Tmcc { get; set; } = true;
+
     /// <summary>ロックさせるか (D[568] と探索の割り込み)</summary>
     public bool Signal { get; set; } = true;
 
@@ -39,7 +42,7 @@ internal sealed class DibModel
                 // 電波があれば「成功」(ビット 1)、無ければ「失敗」(ビット 0)
                 1284 => Demod.GetValueOrDefault(355) == 2 || !Signal ? (ushort)1 : (ushort)2,
                 // 信号・搬送波・TMCC・ロック・階層 A の MPEG のロック
-                568 => Signal ? (ushort)0x3FFE : (ushort)0,
+                568 => !Signal ? (ushort)0 : Tmcc ? (ushort)0x3FFE : (ushort)0x3FE0,
                 570 => 0x0032,  // 8K・1/8
                 493 => 13,
                 _ => Demod.GetValueOrDefault(register),

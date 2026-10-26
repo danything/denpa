@@ -1481,11 +1481,14 @@ public sealed class Dib8096
 
     private Entry _entry;
 
+    /// <summary>段 3 で共通設定に渡した値 (ロックしたら覚える)</summary>
+    private Snapshot? _programmed;
+
     /// <summary>ロックしたときのチャンネルの値</summary>
-    internal sealed record Snapshot(int Fft, int Guard, int Inversion, int Partial, (int Modulation, int Fec, int Interleave, int Segments)[] Layers);
+    internal sealed record Snapshot(int Fft, int Guard, int Inversion, int Partial, int Diff, (int Modulation, int Fec, int Interleave, int Segments)[] Layers);
 
     private Snapshot Capture() => new(
-        (int)_fft, _guard, _inversion, _partial,
+        (int)_fft, _guard, _inversion, _partial, _diff,
         [.. _layers.Select(layer => ((int)layer.Modulation, layer.Fec, layer.Interleave, layer.Segments))]);
 
     private void Restore(Snapshot snapshot)
@@ -1494,6 +1497,7 @@ public sealed class Dib8096
         _guard = snapshot.Guard;
         _inversion = snapshot.Inversion;
         _partial = snapshot.Partial;
+        _diff = snapshot.Diff;
         for (var i = 0; i < 3; i++)
         {
             var (modulation, fec, interleave, segments) = snapshot.Layers[i];
@@ -1557,6 +1561,7 @@ public sealed class Dib8096
         _partial = 0;
         for (var i = 0; i < 3; i++) _layers[i] = new Layer { Modulation = Modulation.Auto, Fec = 0, Interleave = 0, Segments = 0 };
         _demodState = DemodState.Tuning;
+        _programmed = null;
         Snapshot? known = null;
         if (!AlwaysSearch && _memory is not null) _memory.Channels.TryGetValue(_khz, out known);
         if (known is not null)
@@ -1584,7 +1589,12 @@ public sealed class Dib8096
         {
             var stepStarted = _time.NowMs;
             var stepSlept = _slept;
-            var name = step == Step.Step10 ? "探索 Step10 (いずれかの階層の MPEG のロック待ち)" : $"探索 {step}";
+            var name = step switch
+            {
+                Step.Step1 => $"探索 Step1 ({(_search == SearchKind.FindFft ? "FFT" : "ガード")} の探索の終わり (D[1284]) 待ち)",
+                Step.Step10 => "探索 Step10 (いずれかの階層の MPEG のロック待ち)",
+                _ => $"探索 {step}",
+            };
             var (next, wait) = DemodStep(step);
             step = next;
             if (_demodState == DemodState.FftSuccess && !readBack)
@@ -1615,10 +1625,11 @@ public sealed class Dib8096
             Wait(Math.Max(10, (int)Math.Ceiling(wait * Symbol)));
             Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
         }
-        // ロックしたら、次からは探索せずに合わせられるよう覚えておく (7.5.6 と同じ読み方。ロックしたあとなので妨げない)
-        if (_memory is not null && _entry != Entry.Known && _demodState is DemodState.Locked or DemodState.DataLocked && ReadParameters())
+        // ロックしたら、段 3 で書いた値を覚えておく (次からは探索せずに同じ値で合わせる)。7.5.6 の読み戻しは TMCC の同期が
+        // 揃っていないと何も読まず、実機ではロックしたあとでも揃わないことがあったので、読み戻しに頼らない
+        if (_memory is not null && _entry != Entry.Known && _programmed is not null && _demodState is DemodState.Locked or DemodState.DataLocked)
         {
-            _memory.Channels[_khz] = Capture();
+            _memory.Channels[_khz] = _programmed;
         }
         return _demodState switch
         {
@@ -1697,6 +1708,7 @@ public sealed class Dib8096
                 return (Step.Stop, 0);
 
             case Step.Step3:
+                _programmed = Capture();
                 LoopValues(first: true);
                 // 「探索ではない」ときの順番は仕様書に無い。チャンネルの値が全部分かっているときの順番 (0) にした
                 ChannelSetup(0, searching: false);
