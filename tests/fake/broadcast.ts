@@ -108,6 +108,11 @@ export interface Knobs {
    * (番組表が古い・無いときの備えを確かめる。録り始めてから保存を止める)
    */
   pmtCopyNever: boolean;
+  /**
+   * **選局した直後に表 (PAT・PMT) を流さない。** 次に流れてくる 1 秒後まで、どの PID が局のものか分からない。
+   * 本物の電波は PAT・PMT を 100ms ごとに流すので、選局したては映像と音声が先に届く (`ServiceFilter` が取っておく)
+   */
+  tablesLate: boolean;
 }
 
 export const DEFAULT_KNOBS: Knobs = {
@@ -116,6 +121,7 @@ export const DEFAULT_KNOBS: Knobs = {
   noPresentFollowing: false,
   eitCopyNever: [],
   pmtCopyNever: false,
+  tablesLate: false,
 };
 
 /** その局の番組。つまみ (`eitCopyNever`) に入っている局なら、コピー禁止の印を付ける */
@@ -711,7 +717,7 @@ export function broadcast(
   ]);
 
   // 選局した直後に表と番組表を流す。本物も数百 ms で PAT が来る
-  send(tables(services, knobs()));
+  if (!knobs().tablesLate) send(tables(services, knobs()));
   send(schedule(services, knobs()));
   send(nowOnAir(services, knobs()));
 

@@ -134,6 +134,122 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
   });
 
   /*
+   * **選局したての頭を捨てない** (`packages/arib/src/service-filter.ts`)。本物の電波は PAT・PMT を 100ms ごとに流すので、
+   * 選局したては映像と音声が先に届く。捨てていた頃は、PMT を読んでから音を貯め始めていた — 鳴り出すのは
+   * 貯める量 (0.2 秒) が貯まってから。取っておけば、PMT と一緒に貯まったぶんが届いてすぐ鳴り出す
+   * (手元で、新しい局の PAT が届いてから鳴り出すまで 直す前 197ms → 直したあと 16〜20ms)。
+   * 偽の電波は表を1秒おきに流すので (`Knobs.tablesLate`)、その間に届いたものを取っておけているかを見る
+   */
+  test("局を変えて PMT が遅れても、届いていた音からすぐ鳴り出す", async ({
+    page,
+    stack,
+    request,
+  }) => {
+    await page.addInitScript(() => {
+      const scope = window as unknown as {
+        __tuned: number | null;
+        __firstTs: number | null;
+        __started: number | null;
+      };
+      scope.__tuned = null;
+      scope.__firstTs = null;
+      scope.__started = null;
+      /*
+       * 新しい局の PAT が届いた時刻 (`tuned` の後ろの 0x02 で、PID 0 のパケットを含む最初の塊)。
+       * 番組表 (EIT) は局に関係なく通るので、PAT より先に届く
+       */
+      const hasPat = (data: ArrayBuffer): boolean => {
+        const bytes = new Uint8Array(data, 9);
+        for (let at = 0; at + 188 <= bytes.length; at += 188)
+          if (((bytes[at + 1]! & 0x1f) << 8) + bytes[at + 2]! === 0)
+            return true;
+        return false;
+      };
+      const Native = WebSocket;
+      class Spy extends Native {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          this.addEventListener("message", (event) => {
+            if (!(event.data instanceof ArrayBuffer)) return;
+            const kind = new DataView(event.data).getUint8(0);
+            if (kind === 0x40) {
+              const text = new TextDecoder().decode(
+                new Uint8Array(event.data, 9),
+              );
+              if ((JSON.parse(text) as { type: string }).type === "tuned")
+                scope.__tuned = performance.now();
+            } else if (
+              kind === 0x02 &&
+              scope.__tuned !== null &&
+              scope.__firstTs === null &&
+              hasPat(event.data)
+            )
+              scope.__firstTs = performance.now();
+          });
+        }
+      }
+      window.WebSocket = Spy;
+      // 鳴らし始め (`raw/engine.ts` の `play`)。新しい局の塊が届いてからの最初のもの
+      const start = AudioBufferSourceNode.prototype.start;
+      AudioBufferSourceNode.prototype.start = function (...args) {
+        if (scope.__firstTs !== null && scope.__started === null)
+          scope.__started = performance.now();
+        return start.apply(this, args);
+      };
+    });
+    await goto(page, "/live");
+    const channels = page.getByTestId("live-channel");
+    await channels.first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    await chooseRaw(page);
+    const canvas = page.getByTestId("live-raw");
+    await expect
+      .poll(
+        async () => Number((await canvas.getAttribute("data-audio")) ?? 0),
+        {
+          timeout: 30_000,
+        },
+      )
+      .toBeGreaterThan(10);
+
+    await request.post(`${stack.agentUrl}/__control/tables-late?on=1`);
+    try {
+      await page.evaluate(() => {
+        const scope = window as unknown as {
+          __tuned: number | null;
+          __firstTs: number | null;
+          __started: number | null;
+        };
+        scope.__tuned = null;
+        scope.__firstTs = null;
+        scope.__started = null;
+      });
+      await channels.nth(1).click();
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              () =>
+                (window as unknown as { __started: number | null }).__started,
+            ),
+          { timeout: 30_000 },
+        )
+        .not.toBeNull();
+      const { firstTs, started } = await page.evaluate(() => {
+        const scope = window as unknown as {
+          __firstTs: number;
+          __started: number;
+        };
+        return { firstTs: scope.__firstTs, started: scope.__started };
+      });
+      // 貯める量 (0.2 秒) を待っていない
+      expect(started - firstTs).toBeLessThan(150);
+    } finally {
+      await request.post(`${stack.agentUrl}/__control/tables-late?on=0`);
+    }
+  });
+
+  /*
    * **MPEG-2 のまま見ている間も切り抜ける。** 映像は worker の canvas にあって `<video>` は空なので、
    * worker に1枚貰う (`raw/engine.ts` の `grab`)。描いたものは残さない作り
    * (`preserveDrawingBuffer` 無し) なので、**描き直さずに読むと真っ黒**になる — 黒くないことまで見る

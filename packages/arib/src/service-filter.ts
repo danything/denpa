@@ -57,6 +57,14 @@ const KEEP = new Set([
 
 const DESC_CA = 0x09;
 
+/**
+ * PMT を読むまで取っておくパケットの数の上限。**選局したての頭を捨てない** (`ServiceFilter.filter`)。
+ *
+ * PAT と PMT はそれぞれ 100ms ごとに来るので、待つのはふつう 0.2 秒まで。地上波 (17Mbit/s) なら 2,300 個、
+ * BS の中継丸ごと (52Mbit/s) でも 7,000 個ほど。来ない (局を読み違えた) ときに抱え込み続けないよう、超えたら古いほうから捨てる
+ */
+const HOLD_MOST = 8192;
+
 /** 1つの局に絞った PAT を組み立てる */
 function buildPat(
   transportStreamId: number,
@@ -107,8 +115,9 @@ const MEDIA_STREAMS = new Set([0x02, 0x1b, 0x24, 0x03, 0x04, 0x0f, 0x11, 0x06]);
 /**
  * 局1つぶんに絞る。
  *
- * PAT が来るまでは**何も出さない**。どの PID がその局のものか決まらないためで、
- * PAT は 100ms ごとに流れてくるので待つのは一瞬。
+ * PAT と PMT を読むまでは**何も出さない**。どの PID がその局のものか決まらないためで、
+ * どちらも 100ms ごとに流れてくるので待つのは一瞬。**待つ間に届いたものは取っておき**、PMT を読んだら
+ * その局のぶんを PMT の後ろに出す (`HOLD_MOST`)。
  */
 export class ServiceFilter {
   private readonly packets = new PacketStream();
@@ -124,10 +133,12 @@ export class ServiceFilter {
   private tsid: number | null = null;
   private copyNeverNow = false;
   private streamsNow: string | null = null;
+  /** PMT を読む前に届いた、局の分からないパケット (写したもの)。届いた順 */
+  private held: Uint8Array[] = [];
 
   constructor(private readonly serviceId: number) {}
 
-  /** その局の PMT を読めたか。読めるまで映像は1バイトも出ない */
+  /** その局の PMT を読めたか。読めるまで映像は1バイトも出ない (届いたものは取っておく) */
   get ready(): boolean {
     return this.own.size > 0;
   }
@@ -173,6 +184,10 @@ export class ServiceFilter {
    *
    * 落とした PID の連続性カウンタは飛ぶが、**残す PID は元のまま**なので
    * 読む側から見て抜けは無い。自分で作るのは PAT だけで、そこは自前で数える。
+   *
+   * **PMT を読む前に届いたものも捨てない。** 選局したてで捨てると、PMT の前に始まった I フレームを失って
+   * 次の GOP (0.5 秒) まで映像が出ず、音も PMT のあとから貯め始めることになる。取っておいて、読めたら
+   * その局のぶんだけを PMT の後ろに足す (並びは届いた順のまま。読む側は PAT・PMT を先に知る)
    */
   filter(chunk: Uint8Array): Uint8Array {
     const out: Uint8Array[] = [];
@@ -189,9 +204,25 @@ export class ServiceFilter {
       if (pid === this.pmtPid) {
         this.readPmt(ts);
         out.push(ts);
+        if (this.own.size > 0) this.release(out);
       } else if (KEEP.has(pid) || this.own.has(pid)) out.push(ts);
+      else if (this.own.size === 0) this.hold(ts);
     }
     return concatBytes(out);
+  }
+
+  /** PMT を読む前のパケットを取っておく。**写す** (パケットは届いた塊の上の窓。`PacketStream`) */
+  private hold(ts: Uint8Array): void {
+    this.held.push(ts.slice());
+    // 溢れたら古い半分を捨てる (1つずつ捨てると、来ないあいだずっと詰め直すことになる)
+    if (this.held.length > HOLD_MOST)
+      this.held = this.held.slice(this.held.length - HOLD_MOST / 2);
+  }
+
+  /** 取っておいたもののうち、その局のぶんを出す */
+  private release(out: Uint8Array[]): void {
+    for (const ts of this.held) if (this.own.has(packetPid(ts))) out.push(ts);
+    this.held = [];
   }
 
   private readPat(ts: Uint8Array): void {

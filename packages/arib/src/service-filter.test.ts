@@ -164,6 +164,52 @@ describe("局の選り分け", () => {
     expect(pids(out)).toContain(PMT1);
     expect(pids(out)).not.toContain(PMT2);
   });
+
+  /*
+   * **選局したての頭を捨てない。** 捨てると PMT より前に始まった I フレームを失い、次の GOP (0.5 秒) まで
+   * 映像が出ない。音も PMT のあとから貯め始めることになる (MPEG-2 のまま観る経路の、押してから映るまで)
+   */
+  test("PMT を読む前に届いた自局の ES は取っておき、PMT の後ろに届いた順で出す", () => {
+    const filter = new ServiceFilter(MX1);
+    const before = filter.filter(
+      Uint8Array.from([
+        ...payload(0x100, 1), // MX1 映像
+        ...payload(0x200, 1), // MX2 映像 → 落とす
+        ...payload(0x110, 1), // MX1 音声
+      ]),
+    );
+    expect(before).toHaveLength(0);
+    const between = filter.filter(
+      Uint8Array.from([...pat(), ...payload(0x100, 2)]),
+    );
+    // PAT だけでは、まだどれが自局のものか分からない
+    expect(pids(between)).toEqual([0x0000]);
+    const out = filter.filter(
+      Uint8Array.from([...pmt1(), ...payload(0x110, 2)]),
+    );
+    expect(pids(out)).toEqual([PMT1, 0x100, 0x110, 0x100, 0x110]);
+    // 取っておいたものは届いた順 (連続性カウンタで見る)
+    const counters = [];
+    for (let at = PACKET; at + PACKET <= out.length; at += PACKET)
+      counters.push(out[at + 3]! & 0x0f);
+    expect(counters).toEqual([1, 1, 2, 2]);
+    // 出したあとは取っておかない
+    expect(pids(filter.filter(payload(0x100, 3)))).toEqual([0x100]);
+  });
+
+  test("PMT が来ないまま溢れたら、古いほうから捨てる", () => {
+    const filter = new ServiceFilter(MX1);
+    const many = 10_000;
+    const chunk = new Uint8Array(many * PACKET);
+    for (let i = 0; i < many; i++) chunk.set(payload(0x100, i), i * PACKET);
+    filter.filter(chunk);
+    const out = filter.filter(Uint8Array.from([...pat(), ...pmt1()]));
+    const released = pids(out).filter((pid) => pid === 0x100).length;
+    expect(released).toBeGreaterThan(0);
+    expect(released).toBeLessThan(many);
+    // 残っているのは新しいほう (いちばん最後に届いたもので終わる)
+    expect(out[out.length - PACKET + 3]! & 0x0f).toBe((many - 1) & 0x0f);
+  });
 });
 
 /*

@@ -497,6 +497,14 @@ const options: Bun.ServeOptions = {
       knobs.scrambled = url.searchParams.get("on") === "1";
       return json({ scrambled: knobs.scrambled });
     }
+    // 選局した直後に表を流さない (`Knobs.tablesLate`)
+    if (
+      url.pathname === "/__control/tables-late" &&
+      request.method === "POST"
+    ) {
+      knobs.tablesLate = url.searchParams.get("on") === "1";
+      return json({ tablesLate: knobs.tablesLate });
+    }
     /*
      * コピー禁止。番組表で禁止と言う局 (`eit` に service_id をカンマ区切り。空なら無し) と、
      * 流れているもの (`pmt=1`) を別々に切り替える
