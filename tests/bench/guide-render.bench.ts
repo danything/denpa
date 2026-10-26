@@ -85,7 +85,7 @@ async function arm(page: Page): Promise<void> {
       if (
         out.firstCell >= 0 &&
         grid !== null &&
-        !grid.hasAttribute("aria-busy")
+        !grid.hasAttribute("data-drawing")
       ) {
         out.done = performance.now() - out.t0;
         observer.disconnect();

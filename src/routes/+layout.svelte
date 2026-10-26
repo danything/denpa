@@ -263,6 +263,13 @@
   const fill = $derived(
     pending !== null || FILLED.includes(page.route.id ?? ""),
   );
+  /**
+   * 番組表 (と、番組表へ移る途中の骨組み) を出しているか。ヘッダーの影を番組表に合わせるのに使う (下の `.shell.guide`)。
+   * **`:has(.guide-frame)` で CSS に探させない。** 土台に `:has()` があると、中に `<button>` を足すたびに
+   * ブラウザが土台から下のボタンや入力欄をまとめて計算し直す (Pico の `[role="group"]:has(button:focus)` などと重なるため)。
+   * 番組表はマスを数百個ずつ足すので、そのたびに全部のマスのボタンが計算し直しになっていた
+   */
+  const guide = $derived(pending !== null || page.route.id === "/guide");
 
   /**
    * **狭い画面では、ナビを画面の下のタブにする** (下の `.tabbar`)。
@@ -359,6 +366,7 @@
 <div
   class="shell"
   class:fill
+  class:guide
   data-root
   data-retract={retract ? "" : undefined}
   data-hydrated={hydrated ? "true" : undefined}
@@ -1150,7 +1158,7 @@
          * 番組表ではヘッダー・操作の1行・局名の面が隙間を詰めて重なるように並ぶ。遠い影を落とすと上の影が下の面に掛かって
          * 段々に見えるので、3 つとも近い影だけにして同じ高さに並べる (`--dp-shadow-tight`)
          */
-    .shell.fill:has(.guide-frame) .navbar {
+    .shell.fill.guide .navbar {
       --navbar-shadow: var(--dp-shadow-tight);
     }
   }

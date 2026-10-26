@@ -187,7 +187,7 @@
 
   $effect(() => () => cancelAnimationFrame(drawFrame));
 
-  /** まだ描き終えていない。`aria-busy` で外から分かるようにする */
+  /** まだ描き終えていない。`data-drawing` で外から分かるようにする (表の箱。下のマークアップ) */
   const drawing = $derived(shownCells < cells.length);
   const visibleCells = $derived(drawing ? cells.slice(0, shownCells) : cells);
 
@@ -954,6 +954,13 @@
             キーボードでマスへ移ったとき (`focus`) や `scrollIntoView` のスクロールが、
             見出しの裏に半分隠れたマスを見えているとみなして動かない (e2e では 3時台に
             翌日の 4:00 のマスを押すと、真ん中が見出しに当たって詳細が開かなかった)
+
+            **`aria-busy` は骨組みの間だけ。描いている途中は `data-drawing` で示す。**
+            Pico と `app.css` には `[aria-busy="true"] > *` の規則があり、`aria-busy` を付け外しすると
+            その中の要素がぜんぶスタイルの計算し直しになる (`white-space: nowrap` も付くので、字の並べ直しまで起きる)。
+            描き終わりで外していた頃は、マスを描いた直後にもう一度ほぼ全部の要素を計算し直していて、
+            リロードすると骨組みのあと 0.2〜0.3 秒ほど画面が止まっていた。
+            骨組みから表に変わるときは中身がほぼ入れ替わるので、そこで外すぶんには余計な計算が出ない
         -->
     <div
       class="grid-box"
@@ -962,7 +969,8 @@
       use:dragScroll
       bind:this={grid}
       data-testid="guide-grid"
-      aria-busy={!showCells || drawing ? "true" : undefined}
+      aria-busy={showCells ? undefined : "true"}
+      data-drawing={!showCells || drawing ? "" : undefined}
     >
       <!--
             **横幅を列の合計にしておく。** 外側の枠が画面の幅のままだと、`sticky` の時刻の列は枠から出られず、
@@ -1052,7 +1060,7 @@
         {/if}
 
         <!--
-                    少しずつ足していく (`drawGradually`)。全部出るまで `aria-busy` が付いている。
+                    少しずつ足していく (`drawGradually`)。全部出るまで `data-drawing` が付いている。
                     本チャンネルと同じ番組を流しているサブチャンネルの列へは本チャンネルのマスを横に伸ばす (`span`)。
                     分割放送の前後で幅が変わると、同じ番組が上下2つのマスになる (`cell.key`)
                 -->
@@ -1108,19 +1116,18 @@
                     onclick={() => open(program)}
                     data-testid="program-button"
                   >
+                    <!-- 時刻と番組名は包まずに並べる (マスごとの要素を 1 つ減らす。`.clamp` が字の大きさを持つ) -->
                     <span class="clamp char-wrap">
-                      <span class="title">
-                        <span class="num">{time(program.start_at)}</span>
-                        <span class={program.name ? "broadcast" : "faint"}
-                          >{program.name || "(番組情報なし)"}</span
+                      <span class="num">{time(program.start_at)}</span>
+                      <span class={program.name ? "broadcast" : "faint"}
+                        >{program.name || "(番組情報なし)"}</span
+                      >
+                      {#if program.copy_never}
+                        <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
+                        <span class="copy-never" data-testid="grid-copy-never"
+                          >コピー禁止</span
                         >
-                        {#if program.copy_never}
-                          <!-- 録らない番組。控えめに添えるだけ (理由は詳細で) -->
-                          <span class="copy-never" data-testid="grid-copy-never"
-                            >コピー禁止</span
-                          >
-                        {/if}
-                      </span>
+                      {/if}
                       <!-- 予約してあれば説明の代わりに状態。`{#if}` にしないのは、マスごとの描く手間を増やさないため (名前の有無も同じ) -->
                       <span
                         class={program.reservation_state
@@ -1951,14 +1958,14 @@
     -webkit-line-clamp: var(--lines);
     line-clamp: var(--lines);
     overflow: hidden;
-  }
-  .title,
-  .state,
-  .desc {
-    display: block;
     font-size: 0.75rem;
     line-height: 1.25;
     font-weight: var(--dp-weight);
+  }
+  /* 説明 (または予約の状態) は番組名の次の行から */
+  .state,
+  .desc {
+    display: block;
   }
   /*
      * 予約の状態。説明の代わりに太字で出す。印は時刻のすぐ後ろに添える (色だけに頼らない。説明の行が切れる短いマスでも見える):

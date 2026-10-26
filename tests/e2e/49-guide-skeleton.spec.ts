@@ -114,8 +114,7 @@ test("局名の行と時刻の列はマスより先に出て、届いても動�
   await expect(page.getByTestId("program-button").first()).toBeVisible();
   await expect(page.getByTestId("guide-skeleton")).toHaveCount(0);
   await expect(page.getByTestId("guide-grid")).not.toHaveAttribute(
-    "aria-busy",
-    "true",
+    "data-drawing",
   );
   expect(await layout(page)).toEqual(before);
 });
@@ -199,8 +198,7 @@ test("放送波を選び直すと、押してすぐマスが骨組みになり�
   await expect(page.getByTestId("program-button").first()).toBeVisible();
   await expect(page.getByTestId("guide-skeleton")).toHaveCount(0);
   await expect(page.getByTestId("guide-grid")).not.toHaveAttribute(
-    "aria-busy",
-    "true",
+    "data-drawing",
   );
   expect(await layout(page)).toEqual(before);
 });
@@ -215,8 +213,7 @@ test("日を変えると、押してすぐマスが骨組みになり、局名�
   sheets.release();
   await expect(page.getByTestId("program-button").first()).toBeVisible();
   await expect(page.getByTestId("guide-grid")).not.toHaveAttribute(
-    "aria-busy",
-    "true",
+    "data-drawing",
   );
   // 前日・翌日の先読み (描き終えて少し置いてから) より先に、また止める
   sheets.rearm();
@@ -256,8 +253,7 @@ test("狭い画面で「今日」を押しても、押してすぐマスが骨�
   // 翌日は開いた時刻によっては番組が無い (作り物の番組はいまの前後にしか無い)。マスではなく、描き終えたことを待つ
   await expect(page.getByTestId("guide-skeleton")).toHaveCount(0);
   await expect(page.getByTestId("guide-grid")).not.toHaveAttribute(
-    "aria-busy",
-    "true",
+    "data-drawing",
   );
   // 外枠を少し遅らせて、移る途中を見られるようにする
   await page.route("**/guide/__data.json*", async (route) => {
@@ -270,4 +266,57 @@ test("狭い画面で「今日」を押しても、押してすぐマスが骨�
   await expect(page.getByTestId("program-button")).toHaveCount(0);
   await expect(page).not.toHaveURL(/start=/);
   await expect(page.getByTestId("program-button").first()).toBeVisible();
+});
+
+/*
+ * **`aria-busy` は骨組みの間だけ付け、マスを少しずつ描いている間は `data-drawing` で示す** (`guide/+page.svelte`)。
+ * Pico の `[aria-busy="true"] > *` の規則があるので、マスが入った表の箱から `aria-busy` を外すと、
+ * 中の要素がぜんぶスタイルの計算し直しになる (描き終わった直後に画面が一瞬止まっていた)。
+ * 作り物の番組は少ないので、届いたマスを 1 分ずつに割って数千個にし、少しずつ描く回を通す
+ */
+test("マスを少しずつ描いている間、表の箱に aria-busy を付けない", async ({
+  page,
+  request,
+}) => {
+  await syncEpg(request);
+  await page.route("**/api/guide?*", async (route) => {
+    const res = await route.fetch();
+    const sheet = (await res.json()) as {
+      programs: { id: number; start_at: number; end_at: number }[];
+    };
+    const MINUTE = 60_000;
+    sheet.programs = sheet.programs.flatMap((program) =>
+      Array.from(
+        { length: Math.ceil((program.end_at - program.start_at) / MINUTE) },
+        (_, i) => ({
+          ...program,
+          id: program.id * 1000 + i,
+          start_at: program.start_at + i * MINUTE,
+          end_at: Math.min(program.end_at, program.start_at + (i + 1) * MINUTE),
+        }),
+      ),
+    );
+    await route.fulfill({ response: res, json: sheet });
+  });
+  await page.addInitScript(() => {
+    const seen = { busyWithCells: false, drawingWithCells: false };
+    (window as unknown as { __seen: typeof seen }).__seen = seen;
+    new MutationObserver(() => {
+      const grid = document.querySelector('[data-testid="guide-grid"]');
+      if (grid?.querySelector('[data-testid="grid-program"]') == null) return;
+      if (grid.getAttribute("aria-busy") === "true") seen.busyWithCells = true;
+      if (grid.hasAttribute("data-drawing")) seen.drawingWithCells = true;
+    }).observe(document, { childList: true, subtree: true, attributes: true });
+  });
+  await page.goto("/guide?type=GR");
+  await expect(page.getByTestId("program-button").first()).toBeVisible();
+  await expect(page.getByTestId("guide-grid")).not.toHaveAttribute(
+    "data-drawing",
+  );
+  expect(await page.getByTestId("grid-program").count()).toBeGreaterThan(600);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __seen: unknown }).__seen,
+    ),
+  ).toEqual({ busyWithCells: false, drawingWithCells: true });
 });

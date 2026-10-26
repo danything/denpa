@@ -45,7 +45,7 @@ export async function goto(page: Page, url: string): Promise<void> {
 /** マスは数百個ずつ描く (`guide/+page.svelte` の `drawGradually`)。数える前に描き終わるのを待つ */
 async function guideDrawn(page: Page): Promise<void> {
   await expect(
-    page.locator('[data-testid="guide-grid"][aria-busy="true"]'),
+    page.locator('[data-testid="guide-grid"][data-drawing]'),
   ).toHaveCount(0);
 }
 
