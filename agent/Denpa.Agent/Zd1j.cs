@@ -41,25 +41,6 @@ public static class Zd1j
     }
 
     /// <summary>
-    /// I2C の流し方 (<c>DENPA_ZD1J_I2C=host|core1|core1-ring</c>)。既定はコア 1。読めない値は既定に戻して記録に残す
-    /// </summary>
-    public static Zd1jI2cMode I2cMode(string? text)
-    {
-        switch (text)
-        {
-            case null or "" or "core1":
-                return Zd1jI2cMode.Core1;
-            case "host":
-                return Zd1jI2cMode.Host;
-            case "core1-ring":
-                return Zd1jI2cMode.Core1Ring;
-            default:
-                Log.Write($"DENPA_ZD1J_I2C は host / core1 / core1-ring のどれかです (いまは「{text}」)。core1 で動かします");
-                return Zd1jI2cMode.Core1;
-        }
-    }
-
-    /// <summary>
     /// 刺さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
     /// カーネルのドライバが掴んでいるものは並べない (usbfs はこちらが開いている印なので並べる)
     /// </summary>
@@ -125,18 +106,18 @@ public static class Zd1j
 ///
 /// <para>
 /// **温めておく。** ブリッジの起動と DiB8096 の初期化は開くときの1回だけ (DiB8096 はチューナーが初めて使うとき)。
-/// **既定ではエージェントが動いている間ずっと開いたまま** (PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ)。
-/// 閉じるのは、定義が変わってチューナーが捨てられたとき (<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・
-/// USB が抜けたとき。<c>DENPA_ZD1J_LINGER=&lt;秒&gt;</c> なら、最後の借り手が返してからその秒数で眠らせて閉じる (前の形)。
+/// **エージェントが動いている間ずっと開いたまま** (PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。
+/// 開き直すとブリッジの起動と DiB8096 の初期化で 1 秒ほどかかり、選局が冷えた状態からになる)。
+/// 閉じるのは、定義が変わってチューナーが捨てられたとき (<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・USB が抜けたとき。
 /// </para>
 /// </summary>
 public sealed class Zd1jBoard : IDibTime
 {
-    /// <summary>最後の借り手が返してから閉じるまで。null なら閉じない (既定。<c>DENPA_ZD1J_LINGER</c>)</summary>
-    public static TimeSpan? Linger { get; set; } = LingerFrom(Environment.GetEnvironmentVariable("DENPA_ZD1J_LINGER"));
-
-    internal static TimeSpan? LingerFrom(string? text) =>
-        int.TryParse(text, out var seconds) && seconds >= 0 ? TimeSpan.FromSeconds(seconds) : null;
+    /// <summary>
+    /// 起動の様子と、選局のたびのロックまでの内訳 (段ごとの時間と待ち) を渡す先。<c>--tune</c> (試験用のコマンド) だけが決め、
+    /// 常駐のときは出さない
+    /// </summary>
+    public static Action<string>? Trace { get; set; }
 
     /// <summary>
     /// チャンネルごとに覚えたロックの値。**ボードを閉じても、エージェントを起こし直しても残す** (ファイル。ポートごと)。
@@ -150,10 +131,7 @@ public sealed class Zd1jBoard : IDibTime
     private readonly Lock _gate = new();
     private Dib8096? _demod;
     private int _users;
-    private int _generation;
     private bool _closed;
-    private readonly Action<string>? _trace;
-
     public string Port { get; }
     public IUsbDevice Usb { get; }
     public Mb86h47 Bridge { get; }
@@ -167,12 +145,11 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>USB が抜けたなどで使えなくなった。借り手が返したらすぐ閉じる</summary>
     public bool Faulted { get; private set; }
 
-    internal Zd1jBoard(string port, IUsbDevice usb, Zd1jI2cMode mode, bool trace)
+    internal Zd1jBoard(string port, IUsbDevice usb)
     {
         Port = port;
         Usb = usb;
-        _trace = trace ? message => Log.Write($"[zd1j {port}] {message}") : null;
-        Bridge = new Mb86h47(usb, mode, _trace);
+        Bridge = new Mb86h47(usb, Trace);
     }
 
     /// <summary>
@@ -186,20 +163,14 @@ public sealed class Zd1jBoard : IDibTime
         {
             if (Boards.TryGetValue(port, out var board) && !board.Faulted)
             {
-                lock (board._gate)
-                {
-                    board._users++;
-                    board._generation++;
-                }
+                lock (board._gate) board._users++;
                 return board;
             }
             Boards.Remove(port);
 
             var started = Stopwatch.StartNew();
             var usb = open();
-            board = new Zd1jBoard(
-                port, usb, Zd1j.I2cMode(Environment.GetEnvironmentVariable("DENPA_ZD1J_I2C")),
-                Environment.GetEnvironmentVariable("DENPA_ZD1J_DEBUG") is { Length: > 0 } debug && debug != "0");
+            board = new Zd1jBoard(port, usb);
             try
             {
                 board.Bridge.Start();
@@ -212,44 +183,19 @@ public sealed class Zd1jBoard : IDibTime
             board.OpenMs = started.ElapsedMilliseconds;
             board._users = 1;
             Boards[port] = board;
-            var how = board.Bridge.Mode switch
-            {
-                Zd1jI2cMode.Host => "ホストから直に",
-                _ when board.Bridge.CommandChannel => "コア 1 (bulk の命令)",
-                _ => "コア 1 (メモリ要求のリング)",
-            };
-            Log.Write($"[{Zd1j.Model} {port}] 開きました ({board.OpenMs}ms、I2C は{how})");
+            Log.Write($"[{Zd1j.Model} {port}] 開きました ({board.OpenMs}ms)");
             return board;
         }
     }
 
-    /// <summary>返す。<see cref="Linger"/> があれば、最後の借り手が返してからその時間で眠らせて閉じる (その間に借りられたら閉じない)</summary>
+    /// <summary>返す。開いたままにする (USB が抜けていれば閉じる)</summary>
     public void Release()
     {
-        int generation;
         lock (_gate)
         {
             if (--_users > 0) return;
-            generation = ++_generation;
         }
-        if (Faulted)
-        {
-            Close();
-            return;
-        }
-        if (Linger is not { } linger) return;
-        _ = Task.Delay(linger).ContinueWith(_ =>
-        {
-            lock (Registry)
-            {
-                lock (_gate)
-                {
-                    if (_users > 0 || _generation != generation) return;
-                }
-                if (Boards.TryGetValue(Port, out var held) && held == this) Boards.Remove(Port);
-            }
-            Close();
-        }, TaskScheduler.Default);
+        if (Faulted) Close();
     }
 
     /// <summary>
@@ -286,10 +232,7 @@ public sealed class Zd1jBoard : IDibTime
                 if (_demod is not null) return _demod;
                 var started = Stopwatch.StartNew();
                 Bridge.ResetDemodulator(Sleep);
-                var demod = new Dib8096(Bridge, this, _trace, Locks.For(Port))
-                {
-                    AlwaysSearch = Environment.GetEnvironmentVariable("DENPA_ZD1J_SEARCH") == "always",
-                };
+                var demod = new Dib8096(Bridge, this, Trace, Locks.For(Port));
                 demod.Initialize();
                 Bridge.Flush();
                 DemodMs = started.ElapsedMilliseconds;
@@ -328,6 +271,8 @@ public sealed class Zd1jBoard : IDibTime
                 {
                     demod.Sleep();
                     demod.Led(false);
+                    // 書き込みは溜めてあるので、閉じる前に届ける
+                    Bridge.Flush();
                 }
             }
             catch (IOException error)
@@ -368,8 +313,11 @@ public sealed record Zd1jTimings(long OpenMs, long LockMs, long FirstTsMs);
 /// </summary>
 public sealed class Zd1jTuner : ITuneDevice
 {
-    /// <summary>読む側がいないまま、溜めが空かずに待つ上限</summary>
-    internal static TimeSpan StallLimit { get; set; } = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// 読む側がいないまま、溜めが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
+    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く見切ると、TunerPool が畳む前に流れが切れる)
+    /// </summary>
+    internal static TimeSpan StallLimit { get; set; } = TunerPool.Linger;
 
     private readonly string _name;
     private readonly Func<Zd1jBoard> _acquire;
@@ -519,12 +467,17 @@ internal sealed class Zd1jStream
 {
     private const byte Endpoint = 0x81;
 
-    /// <summary>1本の読みの大きさ。192 と 512 の公倍数 (1536) の倍数</summary>
+    /// <summary>
+    /// 1本の読みの大きさ。仕様書 9.4 の「1536 バイト (192 と 512 の公倍数) の倍数」で、64KB に収まるいちばん大きいもの (64,512 バイト)
+    /// </summary>
     private const int TransferSize = 42 * 1536;
 
+    /// <summary>
+    /// 出しっぱなしにする読みの数。仕様書 9.3 の例 (64KB を 16 本)。地上波 (約 17Mbps) で約 0.5 秒ぶんで、読む側が少し遅れても抜けない
+    /// </summary>
     private const int Depth = 16;
 
-    /// <summary>1回の読みの待ち。出力はばらばらに来るので短すぎないように (読みは裏で出したまま)</summary>
+    /// <summary>1回の読みの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。読みは裏で出したまま)</summary>
     private const int ReadTimeoutMs = 300;
 
     private readonly Pipe _pipe = new(new PipeOptions(
@@ -651,7 +604,7 @@ internal sealed class Zd1jStream
 /// </summary>
 public sealed class Zd1jCard : ICardLink
 {
-    /// <summary>ATR を待つ上限</summary>
+    /// <summary>ATR を待つ上限 (仕様書 13.7 の「1 秒まで」)</summary>
     private static readonly TimeSpan AtrTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>ATR を受けるときの速さのクロック数 (9600 ボー)。カードのクロックは 9600 × 372 Hz</summary>
@@ -660,6 +613,7 @@ public sealed class Zd1jCard : ICardLink
     private readonly Func<Zd1jBoard> _acquire;
     private Zd1jBoard? _board;
     private T1Protocol? _t1;
+    /// <summary>1 ブロックの待ち (仕様書 13.7 の「500ms から。ATR の BWI で変わる」)</summary>
     private int _blockWaitMs = 500;
 
     public string Name { get; }

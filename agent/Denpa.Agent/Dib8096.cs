@@ -53,9 +53,6 @@ public sealed class Dib8096
     private readonly Action<string>? _trace;
     private readonly DibMemory? _memory;
 
-    /// <summary>覚えた値や既定を使わず、いつも探索する (<c>DENPA_ZD1J_SEARCH=always</c>。比べるため)</summary>
-    public bool AlwaysSearch { get; set; }
-
     /// <summary>最後の選局の経路 (探索した / 覚えた値で合わせた / 既定で合わせた)</summary>
     public string LastPath => _path;
 
@@ -72,7 +69,7 @@ public sealed class Dib8096
 
     private bool _sleeping;
 
-    /// <param name="trace">あれば、選局のたびにロックまでの内訳 (段ごとの時間と待ち) を渡す (<c>DENPA_ZD1J_DEBUG=1</c>)</param>
+    /// <param name="trace">あれば、選局のたびにロックまでの内訳 (段ごとの時間と待ち) を渡す (<c>--tune</c> のとき)</param>
     public Dib8096(II2c i2c, IDibTime time, Action<string>? trace = null, DibMemory? memory = null)
     {
         _i2c = i2c;
@@ -1550,7 +1547,7 @@ public sealed class Dib8096
     private const double SearchLimitMs = 5000;
 
     /// <summary>
-    /// 7.5 の状態の機械を回す。**1歩の間は最低 10ms 空ける** (参考の実装の振る舞い。シンボル数の時間切れは
+    /// 7.5 の状態の機械を回す。**1歩の間は最低 10ms 空ける** (仕様書 7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
     /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)
     /// </summary>
     private DibLock Search()
@@ -1563,14 +1560,15 @@ public sealed class Dib8096
         _demodState = DemodState.Tuning;
         _programmed = null;
         Snapshot? known = null;
-        if (!AlwaysSearch && _memory is not null) _memory.Channels.TryGetValue(_khz, out known);
+        if (_memory is not null) _memory.Channels.TryGetValue(_khz, out known);
+        // 入り方は 覚えた値 → 既定 (8K) でガードだけ探す → FFT から探す の順で固定 (合わなければ次へ)
         if (known is not null)
         {
             Restore(known);
             _entry = Entry.Known;
             _path = "覚えた値で合わせた";
         }
-        else if (!AlwaysSearch && Version >= 0x8002)
+        else if (Version >= 0x8002)
         {
             _foundFft = Fft.K8;
             _entry = Entry.Guard;

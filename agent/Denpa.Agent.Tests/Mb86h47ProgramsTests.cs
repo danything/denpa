@@ -180,7 +180,6 @@ public class Mb86h47ProgramsTests
         public readonly List<uint[]> Sent = [];
         public readonly Fr30Machine Cpu;
 
-        private const uint Box = Mb86h47Programs.Core1Box;
 
         public Core1Rig()
         {
@@ -212,15 +211,23 @@ public class Mb86h47ProgramsTests
             for (var i = 0; i < steps; i++) Cpu.Step();
         }
 
-        /// <summary>箱で1回 (ホストの Mailbox と同じ書き方)</summary>
-        public (uint Reply, byte[] Read) Mailbox(byte sequence, byte address, byte[] write, int read)
+        private int _slot;
+        private uint _sequence;
+
+        /// <summary>bulk の塊を1つ置いて (ホストの SendChunk と同じ形)、答えを待つ。答えの語を返す</summary>
+        public uint[] Chunk(int count, params uint[] commands)
         {
-            for (var i = 0; i < write.Length; i++) Ram.Write(Box + (uint)i, 1, write[i]);
-            Ram.Write(Box + Mb86h47Programs.BoxCommand, 4, ((uint)sequence << 24) | ((uint)address << 16) | ((uint)write.Length << 8) | (uint)read);
-            for (var i = 0; i < 200 && Ram.Read(Box + Mb86h47Programs.BoxReply, 1) != sequence; i++) Run(100);
-            var bytes = new byte[read];
-            for (var i = 0; i < read; i++) bytes[i] = (byte)Ram.Read(Box + Mb86h47Programs.BoxRead + (uint)i, 1);
-            return (Ram.Read(Box + Mb86h47Programs.BoxReply, 4), bytes);
+            Ram.Write(Mb86h47Programs.Core1Box + Mb86h47Programs.BoxBulkEnable, 4, Mb86h47Programs.BulkEnable);
+            var words = new uint[128];
+            words[0] = ++_sequence;
+            words[1] = (uint)count;
+            commands.CopyTo(words, 2);
+            words[127] = _sequence;
+            Ram.Put(Mb86h47Programs.BulkBuffer + (uint)(_slot * 512), words);
+            _slot = (_slot + 1) % Mb86h47Programs.BulkSlots;
+            var before = Sent.Count;
+            for (var i = 0; i < 400 && Sent.Count == before; i++) Run(100);
+            return Sent.Count > before ? Sent[^1] : throw new InvalidOperationException("コア 1 が答えません");
         }
     }
 
@@ -234,55 +241,33 @@ public class Mb86h47ProgramsTests
     }
 
     [Test]
-    public async Task コア_1_の箱で書いて読む()
+    public async Task コア_1_の_I2C_は仕様書_5_2_の手順()
     {
         var rig = new Core1Rig();
-        var (reply, _) = rig.Mailbox(1, Dib8096.DemodAddress, [0x05, 0x07, 0x00, 0x03], 0);
-        await Assert.That(reply).IsEqualTo(0x01000000u);
+        var reply = rig.Chunk(1, 0x01120400, 0x05070003);
+        await Assert.That(reply[0] & 0xFF).IsEqualTo(0u);
         await Assert.That(rig.Dib.Demod[1287]).IsEqualTo((ushort)3);
         // 5.2: スタート、(書く)、ストップ
         await Assert.That(string.Join(" ", rig.I2c.Log)).IsEqualTo("S P");
 
         rig.I2c.Log.Clear();
-        (reply, var read) = rig.Mailbox(2, Dib8096.DemodAddress, [0x03, 0x80], 2);
-        await Assert.That(reply).IsEqualTo(0x02000000u);
-        await Assert.That(Convert.ToHexString(read)).IsEqualTo("01B3");
+        reply = rig.Chunk(1, 0x01120202, 0x03800000);
+        await Assert.That(reply[2] >> 16).IsEqualTo(0x01B3u);
         // 繰り返しスタートで 2 バイト。最後の1バイトだけ ACK を返さない
         await Assert.That(string.Join(" ", rig.I2c.Log)).IsEqualTo("S Sr rA rN P");
 
         // DiB0090 は番号 1 バイト
-        rig.I2c.Log.Clear();
-        (_, read) = rig.Mailbox(3, Dib8096.TunerAddress, [0x1A], 2);
-        await Assert.That(Convert.ToHexString(read)).IsEqualTo("0223");
+        reply = rig.Chunk(1, 0x01C00102, 0x1A000000);
+        await Assert.That(reply[2] >> 16).IsEqualTo(0x0223u);
     }
 
     [Test]
     public async Task コア_1_は_ACK_が無ければ誤り_2_を返してバスを止める()
     {
         var rig = new Core1Rig();
-        var (reply, _) = rig.Mailbox(1, 0x50, [0x00], 0);
-        await Assert.That(reply).IsEqualTo(0x01000002u);
+        var reply = rig.Chunk(1, 0x01500100, 0);
+        await Assert.That(reply[0] & 0xFF).IsEqualTo(2u);
         await Assert.That(rig.I2c.Log[^1]).IsEqualTo("P");
-    }
-
-    [Test]
-    public async Task コア_1_は溜めを順に済ませ周回の印で古い語を見分ける()
-    {
-        var rig = new Core1Rig();
-        for (var i = 0; i < 20; i++)
-        {
-            var slot = Mb86h47Programs.Slot(i, tuner: i % 2 == 1, register: 100 + i, value: (ushort)(0x1000 + i));
-            rig.Ram.Write(Mb86h47Programs.Core1Ring + (uint)(i % 16 * 4), 4, slot);
-            if (i == 15) rig.Run(20000);
-        }
-        rig.Run(20000);
-        await Assert.That(rig.Ram.Read(Mb86h47Programs.Core1RingDone, 4)).IsEqualTo(20u);
-        await Assert.That(rig.Dib.Demod[118]).IsEqualTo((ushort)0x1012);
-        await Assert.That(rig.Dib.Tuner[119]).IsEqualTo((ushort)0x1013);
-        // 次の語 (通し 20) はまだ前の周回の印のままなので済ませない
-        rig.Run(5000);
-        await Assert.That(rig.Ram.Read(Mb86h47Programs.Core1RingDone, 4)).IsEqualTo(20u);
-        await Assert.That(rig.Ram.Read(Mb86h47Programs.Core1RingError, 4)).IsEqualTo(0u);
     }
 
     [Test]

@@ -8,7 +8,7 @@ namespace Denpa.Agent;
  *
  * - 主 CPU の SRAM のルーチン (4.2): メモリ要求の番地を 32 ビットに広げる
  * - コア 0 (11.2): SDRAM のリングから EP 0x81 へ 192 バイトの単位を送り出す
- * - コア 1 (5.2・5.4・5.5): I2C のやり取りを代わりに行う。指示の受け取り方は3つ (下の Core1 の説明)
+ * - コア 1 (5.2・5.4・5.5): I2C のやり取りを代わりに行う。指示は bulk の塊で受ける (下の Core1 の説明)
  *
  * 指示の箱や溜めの形は機材の決まりではなく、こちらで決めたもの (仕様書 5.4・5.5 に「こちらで決めてよい」とある)。
  */
@@ -265,47 +265,29 @@ public static class Mb86h47Programs
      *
      *   0xA0000〜        プログラム
      *   〜0xA37FC        スタック (下へ)
-     *   0xA3B00          溜め: 16 語の輪。1語 = 2 バイトの番号のレジスタへの書き込み1つ (下の Slot)
-     *   0xA3B40          溜めのうちコア 1 が済ませた数 (通しの数)
-     *   0xA3B44          溜めで最後に起きた誤り (済ませた数 << 8 | 誤りの番号)。無ければ 0 のまま
-     *   0xA3C00 (箱)     +0x00〜+0x1F 書くバイト、+0x20 指示、+0x40 答え、+0x44〜+0x63 読んだバイト、
-     *                    +0x78 bulk の経路を見るか (BulkEnable のときだけ見る)、+0x7C 生きている印
+     *   0xA3C00 (箱)     +0x78 bulk の塊を見るか (BulkEnable のときだけ見る)、+0x7C 生きている印 (仕様書 5.4)
      *   0xA3C80〜        コア 1 の作業用
      *   0xA3D00          bulk の答えを組む所 (+0 と +4 が頭、+8 から読んだバイト)
      *
-     * 指示の受け取り方は3つ。コア 1 は回りながら、溜め → 箱 → bulk の順に見る (溜めを先に済ませるので、
-     * ホストが溜めに書いてから箱で読むと、書き込みが先に機材に届く)。
-     *
-     * 1. 溜め (答えを待たずに流す): 1語で書き込み1つ。ビット 31 = 周回の印 (周回 0 で 1、周回 1 で 0、…と交互。
-     *    ホストは初めに 0 で埋める)、ビット 30 = 相手 (0 = DiB8000 0x12 で番号 2 バイト、1 = DiB0090 0xC0 で番号 1 バイト)、
-     *    ビット 16〜29 = 番号、ビット 0〜15 = 値。1語なので、ホストのメモリ要求がどの順に写しても半端な語は見えない
-     * 2. 箱 (1回のやり取り): 指示 = 通し番号 8・アドレス 8・書くバイト数 8・読むバイト数 8。通し番号が前と違えば動く。
-     *    書き 32・読み 32 バイトまで。答え = 通し番号 8・0・0・誤り 8 (読んだバイトを置いてから書く)
-     * 3. bulk の塊 (仕様書 5.5): EP 0x02 で 512 バイトの塊を送ると、ブリッジの DMA が 0x82100000 から順に 16 個置く。
-     *    塊 = +0 通し番号 (0 でない)、+4 命令の数、+8 から命令、+508 = 通し番号をもう一度 (最後まで届いた印)。
-     *    命令: 0x01 アドレス 書く数 読む数 (+ 書くバイトを語に詰めて) / 0x02 アドレス 番号の上位 番号の下位 + 残す 16・立てる 16
-     *    (2 バイトの番号のレジスタの読みかえ書き)。済ませたら塊の頭と終わりを 0 にし、答えを EP 0x83 で返す:
-     *    +0 = 0xA5・通し番号の下位 16・誤り、+4 = 済ませた命令の数 16・読んだバイト数 16、+8 から読んだバイト (56 バイトまで)
+     * 指示は bulk の塊だけで受ける (仕様書 5.5。ほかの形をやめた理由は Mb86h47.cs の頭)。EP 0x02 で 512 バイトの塊を送ると、
+     * ブリッジの DMA が 0x82100000 から順に 16 個置く。
+     * 塊 = +0 通し番号 (0 でない)、+4 命令の数、+8 から命令、+508 = 通し番号をもう一度 (最後まで届いた印)。
+     * 命令: 0x01 アドレス 書く数 読む数 (+ 書くバイトを語に詰めて) / 0x02 アドレス 番号の上位 番号の下位 + 残す 16・立てる 16
+     * (2 バイトの番号のレジスタの読みかえ書き)。済ませたら塊の頭と終わりを 0 にし、答えを EP 0x83 で返す:
+     * +0 = 0xA5・通し番号の下位 16・誤り、+4 = 済ませた命令の数 16・読んだバイト数 16、+8 から読んだバイト (56 バイトまで)
      *
      * 誤りの番号 (仕様書 5.4 と同じ): 0 = 成功、1 = バスエラー、2 = アドレスに ACK 無し、3 = データに ACK 無し、4 = 固まった。
-     * こちらで足したもの: 6 = 知らない命令 (bulk)
+     * こちらで足したもの: 6 = 知らない命令
      */
 
-    public const uint Core1Ring = 0xA3B00;
-    public const uint Core1RingDone = 0xA3B40;
-    public const uint Core1RingError = 0xA3B44;
     public const uint Core1Box = 0xA3C00;
-    public const int BoxCommand = 0x20;
-    public const int BoxReply = 0x40;
-    public const int BoxRead = 0x44;
     public const int BoxBulkEnable = 0x78;
     public const int BoxAlive = 0x7C;
-    public const int RingSlots = 16;
 
     /// <summary>箱の +0x78 にこの値があるときだけ bulk の塊を見る (DMA を用意して塊の頭を消してから書く)</summary>
     public const uint BulkEnable = 0xB01C0DE5;
 
-    /// <summary>bulk の塊を置く所 (512 バイト × 16)</summary>
+    /// <summary>bulk の塊を置く所 (512 バイト × 16。仕様書 5.5)</summary>
     public const uint BulkBuffer = 0x82100000;
 
     public const int BulkSlots = 16;
@@ -331,13 +313,6 @@ public static class Mb86h47Programs
     private const int VarIndex = 0x98;
     private const int VarSequence = 0x9C;
 
-    /// <summary>溜めの1語を作る (周回の印は <paramref name="index"/> = 溜めに入れた通しの数から)</summary>
-    public static uint Slot(long index, bool tuner, int register, ushort value)
-    {
-        var mark = ((index / RingSlots) & 1) == 0 ? 1u : 0u;
-        return (mark << 31) | ((tuner ? 1u : 0u) << 30) | ((uint)(register & 0x3FFF) << 16) | value;
-    }
-
     /// <summary>コア 1 の I2C の代行</summary>
     public static (uint[] Words, string Listing) Core1()
     {
@@ -345,9 +320,7 @@ public static class Mb86h47Programs
         asm.Label("start");
         asm.Ldi(Stack, R15);
         asm.Ldi(Core1Box, R14);
-        // R8 = 溜めの済ませた数、R9 = 箱の最後の通し番号、R10 = bulk の塊の番号、R11 = 生きている印
-        asm.Ldi8(0, R8);
-        asm.Ldi8(0, R9);
+        // R10 = bulk の塊の番号、R11 = 生きている印
         asm.Ldi8(0, R10);
         asm.Ldi8(0, R11);
 
@@ -355,92 +328,7 @@ public static class Mb86h47Programs
         asm.AddI(1, R11);
         asm.StFp(R11, BoxAlive);
 
-        // --- 溜め ---
-        asm.Mov(R8, R0);
-        asm.Ldi8(RingSlots - 1, R1);
-        asm.And(R1, R0);
-        asm.Lsl(2, R0);
-        asm.Ldi(Core1Ring, R1);
-        asm.Add(R1, R0);
-        asm.Ld(R0, R2);                    // R2 = 溜めの語
-        asm.Mov(R8, R1);
-        asm.Lsr(4, R1);
-        asm.AddI(1, R1);
-        asm.Ldi8(1, R0);
-        asm.And(R0, R1);                   // R1 = この周回の印
-        asm.Mov(R2, R0);
-        asm.Lsr(31, R0);
-        asm.Cmp(R1, R0);
-        asm.Far(Fr30Cond.Ne, "box", R12);
-        asm.Mov(R2, R0);
-        asm.Lsl(1, R0);
-        asm.Lsr(31, R0);                   // R0 = 相手
-        asm.Mov(R2, R1);
-        asm.Lsl(2, R1);
-        asm.Lsr(18, R1);                   // R1 = 番号
-        asm.Mov(R2, R3);
-        asm.Lsl(16, R3);
-        asm.Lsr(16, R3);                   // R3 = 値
-        asm.CmpI(0, R0);
-        asm.B(Fr30Cond.Ne, "slot_tuner");
-        // DiB8000: [番号上位, 番号下位, 値上位, 値下位] = 語 (番号 << 16 | 値)
-        asm.Lsl(16, R1);
-        asm.Or(R3, R1);
-        asm.StFp(R1, (int)(Scratch - Core1Box));
-        asm.Ldi8(0x12, R4);
-        asm.Ldi8(4, R6);
-        asm.Bra("slot_go");
-        asm.Label("slot_tuner");
-        // DiB0090: [番号, 値上位, 値下位] = 語 (番号 << 24 | 値 << 8) の頭 3 バイト
-        asm.Lsl(24, R1);
-        asm.Lsl(8, R3);
-        asm.Or(R3, R1);
-        asm.StFp(R1, (int)(Scratch - Core1Box));
-        asm.Ldi8(0xC0, R4);
-        asm.Ldi8(3, R6);
-        asm.Label("slot_go");
-        asm.Ldi(Scratch, R5);
-        asm.Ldi8(0, R3);
-        asm.Call("transfer");
-        asm.CmpI(0, R0);
-        asm.B(Fr30Cond.Eq, "slot_ok");
-        asm.Mov(R8, R1);
-        asm.Lsl(8, R1);
-        asm.Or(R0, R1);
-        asm.StFp(R1, (int)Core1RingError - (int)Core1Box);
-        asm.Label("slot_ok");
-        asm.AddI(1, R8);
-        asm.StFp(R8, (int)Core1RingDone - (int)Core1Box);
-        asm.Far(Fr30Cond.Ra, "main", R12);
-
-        // --- 箱 ---
-        asm.Label("box");
-        asm.LdFp(BoxCommand, R2);
-        asm.Mov(R2, R0);
-        asm.Lsr(24, R0);                   // 通し番号
-        asm.Cmp(R9, R0);
-        asm.Far(Fr30Cond.Eq, "bulk", R12);
-        asm.Mov(R0, R9);
-        asm.Mov(R2, R4);
-        asm.Lsl(8, R4);
-        asm.Lsr(24, R4);                   // アドレス
-        asm.Mov(R2, R6);
-        asm.Lsl(16, R6);
-        asm.Lsr(24, R6);                   // 書くバイト数
-        asm.Mov(R2, R3);
-        asm.Lsl(24, R3);
-        asm.Lsr(24, R3);                   // 読むバイト数
-        asm.Mov(R14, R5);
-        asm.Ldi(Core1Box + BoxRead, R7);
-        asm.Call("transfer");
-        asm.Mov(R9, R1);
-        asm.Lsl(24, R1);
-        asm.Or(R0, R1);
-        asm.StFp(R1, BoxReply);
-        asm.Far(Fr30Cond.Ra, "main", R12);
-
         // --- bulk の塊 ---
-        asm.Label("bulk");
         asm.LdFp(BoxBulkEnable, R0);
         asm.Ldi(BulkEnable, R1);
         asm.Cmp(R1, R0);

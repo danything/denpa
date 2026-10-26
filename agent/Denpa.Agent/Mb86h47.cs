@@ -10,22 +10,15 @@ namespace Denpa.Agent;
  * Mb86h47Programs.cs に書いた形で決めた。
  *
  * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを叩く。メモリ要求は全部この錠で1つずつ通す
- * (I2C もカードの UART もメモリ要求なので、チューナーとカードが別のスレッドから呼んでも混ざらない)。
+ * (カードの UART もメモリ要求なので、チューナーとカードが別のスレッドから呼んでも混ざらない)。
  * TS の EP 0x81 の読みはこの外 (IUsbInStream) で並べる。
+ *
+ * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 形だけ。** 実機で3つの形を比べた結果
+ * (開く・選局からロック・メモリ要求の回数。ホストから直 (5.3) / コア 1 のメモリ要求のリング / コア 1 の bulk の命令):
+ * 開く 385 / 167 / 182ms、ロック 3439 / 2730 / 2570ms、メモリ要求 24664 / 2360 / 1083 回。bulk の命令がいちばん速く、
+ * 要求もいちばん少ないので、ほかの2つはコードごと外した。コア 1 が起きない・bulk に答えないときは開くのを止める
+ * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起きていて、逃げ道に要る形が無い)。
  */
-
-/// <summary>I2C の流し方 (<c>DENPA_ZD1J_I2C</c>)</summary>
-public enum Zd1jI2cMode
-{
-    /// <summary>ホストが I2C マスターを1バイトずつ叩く (仕様書 5.3)</summary>
-    Host,
-
-    /// <summary>コア 1 に任せる。指示は bulk の塊で送り、答えなければメモリ要求のリングに戻る (仕様書 5.4・5.5)</summary>
-    Core1,
-
-    /// <summary>コア 1 に任せ、指示はメモリ要求のリングと箱だけで渡す</summary>
-    Core1Ring,
-}
 
 /// <summary>I2C の相手と話す口。DiB8096 はこれと待ちだけを受け取る</summary>
 public interface II2c
@@ -48,9 +41,11 @@ public sealed class Mb86h47 : II2c
     private const byte RequestIn = 0xC0;
     private const byte RequestOut = 0x40;
     private const byte MemoryRequest = 0xBC;
+
+    /// <summary>メモリ要求と bulk の命令の時間切れ (仕様書 3 章「タイムアウトは 1 秒で動いている」)</summary>
     private const int TimeoutMs = 1000;
 
-    /// <summary>1回のメモリ要求の上限 (4.2 で広げたあと)</summary>
+    /// <summary>1回のメモリ要求の上限 (4.2 で広げたあと。仕様書 3 章の「最大 64 バイト」)</summary>
     private const int MaxWords = 16;
 
     private const uint Core0 = 0x1600000;
@@ -60,12 +55,7 @@ public sealed class Mb86h47 : II2c
     private const uint CoreEntry = 0xFFFFC;
 
     // I2C マスター (4.5)
-    private const uint I2cStatus = 0xFD8FE0;
     private const uint I2cControl = 0xFD8FE4;
-    private const uint I2cData = 0xFD8FF0;
-
-    /// <summary>ホストから直に叩くとき、1バイトや使用中を待つ読みの上限</summary>
-    private const int HostSpin = 100;
 
     // bulk の命令の経路 (5.5)
     private const byte CommandOut = 0x02;
@@ -109,13 +99,6 @@ public sealed class Mb86h47 : II2c
     private readonly byte[] _buffer = new byte[MaxWords * 4];
     private bool _widened;
 
-    // コア 1 の溜めと箱
-    private readonly List<(bool Tuner, int Register, ushort Value)> _ring = [];
-    private uint _ringPlaced;
-    private uint _ringDone;
-    private uint _ringError;
-    private byte _boxSequence;
-
     // bulk の塊
     private readonly List<uint> _commands = [];
     private uint _chunkSequence;
@@ -125,21 +108,16 @@ public sealed class Mb86h47 : II2c
     private readonly Queue<Action> _prepare = new();
     private bool _prepared;
 
-    public Zd1jI2cMode Mode { get; }
-
-    /// <summary>コア 1 への指示を bulk の塊で送っている (5.5)</summary>
-    public bool CommandChannel { get; private set; }
-
     /// <summary>メモリ要求の数 (速さを測るため)</summary>
     public long Requests { get; private set; }
 
     /// <summary>I2C のやり取りの数 (書き込み・読み・読みかえ書きを1つずつ)</summary>
     public long I2cTransfers { get; private set; }
 
-    public Mb86h47(IUsbDevice usb, Zd1jI2cMode mode, Action<string>? trace = null)
+    /// <param name="trace">あれば、起動の様子 (番地を広げたか) を渡す (<c>--tune</c> のとき)</param>
+    public Mb86h47(IUsbDevice usb, Action<string>? trace = null)
     {
         _usb = usb;
-        Mode = mode;
         _trace = trace;
     }
 
@@ -206,7 +184,7 @@ public sealed class Mb86h47 : II2c
     // 起動 (4)
     // ---------------------------------------------------------------------
 
-    /// <summary>4.1〜4.5 と、コア 1 の形ならコア 1 を走らせる。どこかで失敗したら投げる (開くのを止める)</summary>
+    /// <summary>4.1〜4.5 と、コア 1 と bulk の命令の経路 (5.4・5.5)。どこかで失敗したら投げる (開くのを止める)</summary>
     public void Start()
     {
         lock (_gate)
@@ -221,9 +199,8 @@ public sealed class Mb86h47 : II2c
             Clocks();
             MaskInterrupts();
             StartI2c();
-            if (Mode == Zd1jI2cMode.Host) return;
             StartCore1();
-            if (Mode == Zd1jI2cMode.Core1) CommandChannel = TryCommandChannel();
+            StartCommandChannel();
         }
     }
 
@@ -400,29 +377,22 @@ public sealed class Mb86h47 : II2c
 
     private static uint Box(int offset) => Core1 + Mb86h47Programs.Core1Box + (uint)offset;
 
-    /// <summary>コア 1 を置いて走らせ、生きている印が進むのを見る</summary>
+    /// <summary>コア 1 を置いて走らせ、生きている印が進むのを見る。進まなければ開かない (仕様書 14 章)</summary>
     private void StartCore1()
     {
         LoadCore(Core1, Core1Program.Value);
         // データ RAM は電源投入時の中身が不定。コア 1 が見る所を消してから走らせる
-        Write(Core1 + Mb86h47Programs.Core1Ring, new uint[Mb86h47Programs.RingSlots]);
-        Write(Core1 + Mb86h47Programs.Core1RingDone, [0, 0]);
-        Write32(Box(Mb86h47Programs.BoxCommand), 0);
-        Write32(Box(Mb86h47Programs.BoxReply), 0);
         Write32(Box(Mb86h47Programs.BoxBulkEnable), 0);
-        _ringPlaced = 0;
-        _ringDone = 0;
-        _ringError = 0;
-        _boxSequence = 0;
         Write32(Core1, CoreRun);
         var first = Read32(Box(Mb86h47Programs.BoxAlive));
+        // 仕様書 5.4: 1ms 空けて2回読む
         Thread.Sleep(1);
         var second = Read32(Box(Mb86h47Programs.BoxAlive));
         if (first == second) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が動いていません");
     }
 
-    /// <summary>5.5 の bulk の経路を用意して、空の塊を1つ送ってみる。答えが来れば使う</summary>
-    private bool TryCommandChannel()
+    /// <summary>5.5 の bulk の経路を用意して、空の塊を1つ送って答えを確かめる。答えなければ開かない</summary>
+    private void StartCommandChannel()
     {
         Write32(0xFD8300, 1);
         Write32(0xFD8304, 0x00008004);
@@ -433,24 +403,13 @@ public sealed class Mb86h47 : II2c
         for (var slot = 0; slot < Mb86h47Programs.BulkSlots; slot++) Write32(Mb86h47Programs.BulkBuffer + (uint)(slot * Mb86h47Programs.BulkChunk), 0);
         ArmCommandDma();
         Write32(Box(Mb86h47Programs.BoxBulkEnable), Mb86h47Programs.BulkEnable);
-        // 前の会話の答えが残っていれば捨てる
+        // 前の会話の答えが残っていれば捨てる (EP 0x83 は 64 バイトずつ。残りは多くても置き場の数まで)
         Span<byte> stale = stackalloc byte[64];
-        for (var i = 0; i < 16 && _usb.InterruptRead(CommandIn, stale, 10) > 0; i++)
+        for (var i = 0; i < Mb86h47Programs.BulkSlots && _usb.InterruptRead(CommandIn, stale, 10) > 0; i++)
         {
         }
-        try
-        {
-            _commands.Clear();
-            SendChunk(probeTimeoutMs: 200);
-            return true;
-        }
-        catch (IOException error) when (error is not UsbGoneException)
-        {
-            _trace?.Invoke($"コア 1 が bulk の塊に答えないので、メモリ要求のリングで続けます ({error.Message})");
-            Write32(Box(Mb86h47Programs.BoxBulkEnable), 0);
-            _commands.Clear();
-            return false;
-        }
+        _commands.Clear();
+        SendChunk();
     }
 
     private void ArmCommandDma()
@@ -461,7 +420,7 @@ public sealed class Mb86h47 : II2c
     }
 
     // ---------------------------------------------------------------------
-    // I2C (5)
+    // I2C (5)。書き込みと読みかえ書きは塊に溜めて答えを待たずに流し、読み・待つ前 (Flush) に送る
     // ---------------------------------------------------------------------
 
     public void Write(byte address, ReadOnlySpan<byte> data)
@@ -469,25 +428,7 @@ public sealed class Mb86h47 : II2c
         lock (_gate)
         {
             I2cTransfers++;
-            var started = Stopwatch.GetTimestamp();
-            switch (Mode)
-            {
-                case Zd1jI2cMode.Host:
-                    HostTransfer(address, data, []);
-                    break;
-                case Zd1jI2cMode.Core1 when CommandChannel:
-                    QueueTransfer(address, data, 0);
-                    break;
-                default:
-                    if (RingSlot(address, data) is { } slot) QueueRing(slot);
-                    else
-                    {
-                        PushRing();
-                        Mailbox(address, data, []);
-                    }
-                    break;
-            }
-            Trace("書く", address, started);
+            QueueTransfer(address, data, 0);
         }
     }
 
@@ -496,24 +437,9 @@ public sealed class Mb86h47 : II2c
         lock (_gate)
         {
             I2cTransfers++;
-            var started = Stopwatch.GetTimestamp();
-            switch (Mode)
-            {
-                case Zd1jI2cMode.Host:
-                    HostTransfer(address, write, read);
-                    break;
-                case Zd1jI2cMode.Core1 when CommandChannel:
-                    if (read.Length > 32) throw new ArgumentOutOfRangeException(nameof(read));
-                    QueueTransfer(address, write, read.Length);
-                    SendChunk().AsSpan(0, read.Length).CopyTo(read);
-                    break;
-                default:
-                    // 溜めはコア 1 が箱より先に済ませるので、流しておけば書き込みが先に届く
-                    PushRing();
-                    Mailbox(address, write, read);
-                    break;
-            }
-            Trace("読む", address, started);
+            if (read.Length > 32) throw new ArgumentOutOfRangeException(nameof(read));
+            QueueTransfer(address, write, read.Length);
+            SendChunk().AsSpan(0, read.Length).CopyTo(read);
         }
     }
 
@@ -522,30 +448,10 @@ public sealed class Mb86h47 : II2c
         lock (_gate)
         {
             I2cTransfers++;
-            var started = Stopwatch.GetTimestamp();
-            if (Mode == Zd1jI2cMode.Core1 && CommandChannel)
-            {
-                // 読みかえ書きはコア 1 の上で済ませる (答えを待たない)
-                if (_commands.Count + 2 > CommandWords) SendChunk();
-                _commands.Add(0x02000000u | ((uint)address << 16) | register);
-                _commands.Add(((uint)keep << 16) | set);
-            }
-            else
-            {
-                Span<byte> number = [(byte)(register >> 8), (byte)register];
-                Span<byte> value = stackalloc byte[2];
-                if (Mode == Zd1jI2cMode.Host) HostTransfer(address, number, value);
-                else
-                {
-                    PushRing();
-                    Mailbox(address, number, value);
-                }
-                var next = (ushort)((BinaryPrimitives.ReadUInt16BigEndian(value) & keep) | set);
-                Span<byte> data = [(byte)(register >> 8), (byte)register, (byte)(next >> 8), (byte)next];
-                if (Mode == Zd1jI2cMode.Host) HostTransfer(address, data, []);
-                else QueueRing(RingSlot(address, data) ?? throw new ArgumentException($"アドレス 0x{address:X2} は溜めに入りません"));
-            }
-            Trace("読みかえ書き", address, started);
+            // 読みかえ書きはコア 1 の上で済ませる (答えを待たない)
+            if (_commands.Count + 2 > CommandWords) SendChunk();
+            _commands.Add(0x02000000u | ((uint)address << 16) | register);
+            _commands.Add(((uint)keep << 16) | set);
         }
     }
 
@@ -553,21 +459,8 @@ public sealed class Mb86h47 : II2c
     {
         lock (_gate)
         {
-            if (Mode == Zd1jI2cMode.Host) return;
-            if (CommandChannel)
-            {
-                if (_commands.Count > 0) SendChunk();
-                return;
-            }
-            PushRing();
-            WaitRing();
+            if (_commands.Count > 0) SendChunk();
         }
-    }
-
-    private void Trace(string what, byte address, long started)
-    {
-        if (_trace is null) return;
-        _trace($"I2C {what} 0x{address:X2} {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F2}ms");
     }
 
     private static IOException I2cError(int code, byte address) => new(code switch
@@ -578,164 +471,6 @@ public sealed class Mb86h47 : II2c
         4 => $"I2C が固まりました (0x{address:X2})",
         _ => $"I2C で知らない誤り {code} です (0x{address:X2})",
     });
-
-    // --- ホストから直に (5.2・5.3) ---
-
-    private void HostTransfer(byte address, ReadOnlySpan<byte> write, Span<byte> read)
-    {
-        try
-        {
-            if (write.Length > 0)
-            {
-                HostIdle(address);
-                HostSend((byte)(address & 0xFE), 0x50, 2, address);
-                foreach (var b in write) HostSend(b, 0x50, 3, address);
-                if (read.Length == 0)
-                {
-                    HostStop(address);
-                    return;
-                }
-                HostSend((byte)(address | 1), 0x70, 2, address);
-            }
-            else
-            {
-                if (read.Length == 0) return;
-                HostIdle(address);
-                HostSend((byte)(address | 1), 0x50, 2, address);
-            }
-            for (var i = 0; i < read.Length; i++)
-            {
-                // 最後の1バイトだけ ACK を返さない
-                Write32(I2cControl, i == read.Length - 1 ? 0x50u : 0x58u);
-                HostWaitByte(address);
-                read[i] = (byte)Read32(I2cData);
-            }
-            HostStop(address);
-        }
-        catch (IOException error) when (error is not UsbGoneException)
-        {
-            // バスを止めてから失敗を返す
-            Write32(I2cControl, 0x40);
-            throw;
-        }
-    }
-
-    private void HostIdle(byte address)
-    {
-        for (var i = 0; i < HostSpin; i++)
-        {
-            if ((Read32(I2cStatus) & 0x80) == 0) return;
-        }
-        throw I2cError(4, address);
-    }
-
-    private void HostWaitByte(byte address)
-    {
-        for (var i = 0; i < HostSpin; i++)
-        {
-            var control = Read32(I2cControl);
-            if ((control & 0x80) != 0) throw I2cError(1, address);
-            if ((control & 0x01) != 0) return;
-        }
-        throw I2cError(4, address);
-    }
-
-    private void HostSend(byte value, uint control, int nack, byte address)
-    {
-        Write32(I2cData, value);
-        Write32(I2cControl, control);
-        HostWaitByte(address);
-        if ((Read32(I2cStatus) & 0x10) != 0) throw I2cError(nack, address);
-    }
-
-    private void HostStop(byte address)
-    {
-        Write32(I2cControl, 0x40);
-        HostIdle(address);
-    }
-
-    // --- コア 1 の溜めと箱 ---
-
-    /// <summary>溜めに入る書き込みか (DiB8000 の 4 バイト・DiB0090 の 3 バイト)</summary>
-    private static (bool Tuner, int Register, ushort Value)? RingSlot(byte address, ReadOnlySpan<byte> data) => address switch
-    {
-        Dib8096.DemodAddress when data.Length == 4 => (false, (data[0] << 8) | data[1], BinaryPrimitives.ReadUInt16BigEndian(data[2..])),
-        Dib8096.TunerAddress when data.Length == 3 => (true, data[0], BinaryPrimitives.ReadUInt16BigEndian(data[1..])),
-        _ => null,
-    };
-
-    private void QueueRing((bool Tuner, int Register, ushort Value) slot)
-    {
-        _ring.Add(slot);
-        if (_ring.Count >= Mb86h47Programs.RingSlots) PushRing();
-    }
-
-    /// <summary>溜めた書き込みを輪に書く (答えは待たない。空きが無ければコア 1 が済ませるのを待つ)</summary>
-    private void PushRing()
-    {
-        var at = 0;
-        while (at < _ring.Count)
-        {
-            var free = Mb86h47Programs.RingSlots - (int)(_ringPlaced - _ringDone);
-            if (free == 0)
-            {
-                ReadRing(waitFor: _ringPlaced - Mb86h47Programs.RingSlots + 1);
-                continue;
-            }
-            var slot = (int)(_ringPlaced % Mb86h47Programs.RingSlots);
-            var count = Math.Min(Math.Min(free, _ring.Count - at), Mb86h47Programs.RingSlots - slot);
-            var words = new uint[count];
-            for (var i = 0; i < count; i++)
-            {
-                var (tuner, register, value) = _ring[at + i];
-                words[i] = Mb86h47Programs.Slot(_ringPlaced + i, tuner, register, value);
-            }
-            Write(Core1 + Mb86h47Programs.Core1Ring + (uint)(slot * 4), words);
-            _ringPlaced += (uint)count;
-            at += count;
-        }
-        _ring.Clear();
-    }
-
-    /// <summary>コア 1 が溜めを全部済ませるまで待つ</summary>
-    private void WaitRing() => ReadRing(waitFor: _ringPlaced);
-
-    private void ReadRing(uint waitFor)
-    {
-        var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
-        Span<uint> state = stackalloc uint[2];
-        while (true)
-        {
-            Read(Core1 + Mb86h47Programs.Core1RingDone, state);
-            _ringDone = state[0];
-            if (state[1] != _ringError)
-            {
-                _ringError = state[1];
-                throw I2cError((int)(state[1] & 0xFF), 0x12);
-            }
-            if ((int)(_ringDone - waitFor) >= 0) return;
-            if (Stopwatch.GetTimestamp() > deadline) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が溜めた I2C を済ませません");
-        }
-    }
-
-    /// <summary>箱で1回のやり取り (書き 32・読み 32 バイトまで)</summary>
-    private void Mailbox(byte address, ReadOnlySpan<byte> write, Span<byte> read)
-    {
-        if (write.Length > 32 || read.Length > 32) throw new ArgumentOutOfRangeException(nameof(write), "コア 1 の箱は書き 32・読み 32 バイトまで");
-        _boxSequence = (byte)(_boxSequence == 0xFF ? 1 : _boxSequence + 1);
-        if (write.Length > 0) Write(Box(0), Pack(write));
-        Write32(Box(Mb86h47Programs.BoxCommand), ((uint)_boxSequence << 24) | ((uint)address << 16) | ((uint)write.Length << 8) | (uint)read.Length);
-        var reply = new uint[1 + (read.Length + 3) / 4];
-        var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
-        while (true)
-        {
-            Read(Box(Mb86h47Programs.BoxReply), reply);
-            if (reply[0] >> 24 == _boxSequence) break;
-            if (Stopwatch.GetTimestamp() > deadline) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が答えません");
-        }
-        if ((reply[0] & 0xFF) != 0) throw I2cError((int)(reply[0] & 0xFF), address);
-        for (var i = 0; i < read.Length; i++) read[i] = (byte)(reply[1 + i / 4] >> (24 - 8 * (i % 4)));
-    }
 
     /// <summary>バイトをビッグエンディアンの語に詰める</summary>
     private static uint[] Pack(ReadOnlySpan<byte> bytes)
@@ -757,7 +492,7 @@ public sealed class Mb86h47 : II2c
     }
 
     /// <summary>溜めた命令を1つの塊で送り、答えを待つ。読んだバイトを返す</summary>
-    private byte[] SendChunk(int probeTimeoutMs = TimeoutMs)
+    private byte[] SendChunk()
     {
         _chunkSequence = _chunkSequence == uint.MaxValue ? 1 : _chunkSequence + 1;
         var sequence = _chunkSequence;
@@ -765,9 +500,9 @@ public sealed class Mb86h47 : II2c
         BinaryPrimitives.WriteUInt32BigEndian(chunk, sequence);
         var count = 0;
         var at = 8;
-        for (var i = 0; i < _commands.Count; i++)
+        foreach (var command in _commands)
         {
-            BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(at), _commands[i]);
+            BinaryPrimitives.WriteUInt32BigEndian(chunk.AsSpan(at), command);
             at += 4;
         }
         // 命令の数 (書くバイトの語は数えない)
@@ -783,7 +518,7 @@ public sealed class Mb86h47 : II2c
 
         _usb.BulkWrite(CommandOut, chunk, TimeoutMs);
         var reply = new byte[64];
-        var deadline = Stopwatch.GetTimestamp() + probeTimeoutMs * Stopwatch.Frequency / 1000;
+        var deadline = Stopwatch.GetTimestamp() + TimeoutMs * Stopwatch.Frequency / 1000;
         while (true)
         {
             var left = (int)((deadline - Stopwatch.GetTimestamp()) * 1000 / Stopwatch.Frequency);
@@ -873,15 +608,7 @@ public sealed class Mb86h47 : II2c
             Write32(0xFD8224, 0xB09F2000);
             Write32(0xFD8220, 2);
         };
-        // DMA 8 (EP 0x02 の受け) は、bulk の命令の経路を使っているなら触らない (止めると経路が切れる)
-        if (!CommandChannel)
-        {
-            yield return () =>
-            {
-                Write32(0xFD8300, 1);
-                Write32(0xFD8304, 0x00008004);
-            };
-        }
+        // 手順 7 (DMA 8 = EP 0x02 の受けを止める) は飛ばす。bulk の命令の経路が使っているので、止めると経路が切れる
         yield return () =>
         {
             Write32(0xFDBD08, 0x00FF6001);
