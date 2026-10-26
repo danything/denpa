@@ -27,7 +27,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 - **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
 - **Mac** (Apple Silicon) — エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([install-mac.md](install-mac.md))
 - **Windows** (x64) — エージェントは Windows の上で直接 (タスク スケジューラ)、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
-  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など)。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
+  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
 - **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。

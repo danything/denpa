@@ -162,6 +162,11 @@ public static class DeviceProbe
          */
         found.AddRange(AsicenUserland.Detect());
 
+        /*
+         * Sony CECH-ZD1 J は並べるだけで開かない (開くとブリッジの起動もしてしまう)。Linux は sysfs、Windows・macOS は OS に聞く (Zd1j.cs)
+         */
+        found.AddRange(Zd1j.Detect());
+
         return found;
     }
 
