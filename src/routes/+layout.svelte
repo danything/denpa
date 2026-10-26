@@ -41,34 +41,61 @@
 
   /*
    * **読んでいる間は操作の層を引っ込める。** 中身を下へ送ると狭い画面の下のタブ (とその上の操作の1行) を隠し、上へ戻すと出す。
-   * 広い画面のヘッダーは引っ込めない (検索の欄を見せたまま)。
-   * **見るのは窓の巻き取りだけ** (ページごと巻く画面)。自分で巻き取る画面 (番組表) は表の高さが下のタブの上までで決まっていて、
-   * 引っ込めても表は広がらず、下のタブだけが消えて操作の1行が宙に残っていた。
+   * 広い画面のヘッダーは引っ込めない (検索の欄を見せたまま)。JS は印 (`data-retract`) を付け外しするだけで、動きは CSS。
+   * **見るのは窓の巻き取りと、自分で巻き取る箱 (`data-retract-scroll`。番組表の表の箱) の縦の巻き取り。**
+   * 箱を横に送ったときは出し入れしない (縦の量が変わらない。局を探しているところで、読み進めているのではない)。
    * **`#` で飛んだ巻き取り (設定の節へ飛ぶ) は読んでいるのではないので引っ込めない。** 飛んだ先の節の操作の1行を見せたままにする。
-   * 自分で巻き始めたら (ホイール・指・キー) いつもどおり
+   * 自分で巻き始めたら (ホイール・指・キー) いつもどおり。
+   * **箱は、自分でその中を巻いたときだけ見る** (最後に触った所 `touched` が箱の中)。開いた直後の「いま」への位置合わせや、
+   * 操作の1行の時刻へ送るボタンで動いたぶんは読んでいるのではないので、押したボタンごと隠さない。
+   * 画面を移ったら出し、触った所も忘れる (番組表から移ると窓は巻かれないので、隠れたまま残っていた)
    */
   let retract = $state(false);
   let jumped = false;
+  let touched: EventTarget | null = null;
   afterNavigate(({ to }) => {
     jumped = Boolean(to?.url.hash);
-    if (jumped) retract = false;
+    retract = false;
+    touched = null;
   });
   onMount(() => {
     let prev = scrollY;
+    const follow = (y: number, before: number) => {
+      if (y < 48) retract = false;
+      else if (y - before > 4) retract = true;
+      else if (before - y > 4) retract = false;
+    };
     const onScroll = () => {
       const y = scrollY;
       if (jumped) retract = false;
-      else if (y < 48) retract = false;
-      else if (y - prev > 4) retract = true;
-      else if (prev - y > 4) retract = false;
+      else follow(y, prev);
       prev = y;
     };
-    const own = () => (jumped = false);
-    const OWN = ["wheel", "touchstart", "keydown"] as const;
+    const boxes = new WeakMap<Element, number>();
+    const onBoxScroll = ({ target }: Event) => {
+      if (!(target instanceof Element)) return;
+      if (!target.hasAttribute("data-retract-scroll")) return;
+      const y = target.scrollTop;
+      const before = boxes.get(target) ?? y;
+      boxes.set(target, y);
+      if (touched instanceof Node && target.contains(touched))
+        follow(y, before);
+    };
+    const own = (event: Event) => {
+      jumped = false;
+      touched = event.target;
+    };
+    const OWN = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
     addEventListener("scroll", onScroll, { passive: true });
+    // 箱の巻き取りは上へ伝わらないので、捕まえる側で受ける
+    document.addEventListener("scroll", onBoxScroll, {
+      capture: true,
+      passive: true,
+    });
     for (const type of OWN) addEventListener(type, own, { passive: true });
     return () => {
       removeEventListener("scroll", onScroll);
+      document.removeEventListener("scroll", onBoxScroll, { capture: true });
       for (const type of OWN) removeEventListener(type, own);
     };
   });

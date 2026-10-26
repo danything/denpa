@@ -830,18 +830,32 @@ progress[value]::-webkit-progress-value {
 /*
  * **スマホ (下のタブがある幅) では、ほかの画面の操作の1行と同じく、下のタブのすぐ上にカプセルで浮かせる**
  * (docs/design.md の「浮かせ方」。ホームの `.t-toolbar`・ルールの `.rules-bar`・設定の `.jump` と同じ形)。
- * 表は並びの中でこの1行の上で終わる。下のタブと違って引っ込めない (表の高さが決まっているため)
+ * **表は画面の下の端まで伸ばし、この1行と下のタブは表の上に浮かせる。** 表を読んでいる間は下のタブと一緒に引っ込む
+ * (`+layout.svelte` の `data-retract`。表の箱の縦の巻き取りで出し入れする)。表の箱の大きさは出し入れで変わらないので、
+ * 巻いた位置も中身も動かない。浮いているものに隠れるぶん (`--guide-float-h`) は表の最後の下に空ける (`guide/+page.svelte` の `.rows`)
  */
 @media (max-width: 639.98px) {
   .guide-frame {
-    --page-h: calc(100svh - env(safe-area-inset-top) - var(--dp-tabbar, 0px));
+    --page-h: calc(100svh - env(safe-area-inset-top));
+    /* 下のタブ + 1行の下の隙間 + 1行の上下の余白 + ボタンの高さ + 1行の上の隙間 (下の `.guide-bar` の寸法と対) */
+    --guide-float-h: calc(
+      var(--dp-tabbar, 0px) + 0.375rem + 0.5rem + var(--dp-btn-h-sm) + 0.375rem
+    );
+    margin-bottom: calc(-1 * (var(--dp-gutter) + var(--dp-tabbar, 0px)));
   }
   .guide-bar {
-    margin: 0.375rem 0.75rem;
+    position: fixed;
+    inset-inline: 0.75rem;
+    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    z-index: 30;
     padding: 0.25rem 0.5rem;
     border-radius: 1.375rem;
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
+  }
+  [data-retract] .guide-bar:not(:has(:focus-visible)) {
+    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
 }
 

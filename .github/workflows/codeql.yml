@@ -1,0 +1,36 @@
+name: CodeQL
+
+# CodeQL の解析 (advanced setup)。中身は 5ym/repo-config の共有の workflow で、.NET のほかのリポジトリと同じものを使う
+# (main を指すので、共有の workflow を直せば次の実行から揃って変わる)。
+#
+# default setup をやめたのは C# をビルドして解析するため。default setup は C# をビルドせずに解析していて、
+# 呼び出し先を解決できた割合が 83% (しきい値 85%) と足りず、「Low C# analysis quality」の警告が出ていた。
+# 言語は default setup で解析していたものと同じ。default setup は切ってある (同時には使えない)。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    uses: 5ym/repo-config/.github/workflows/codeql.yml@main
+    with:
+      languages: '["actions", "c-cpp", "csharp", "javascript-typescript", "python"]'
+      # エージェントは agent/ の下。テストのプロジェクトをビルドすれば本体もビルドされる (Native AOT の publish は要らない)。
+      # .NET は共有の側で 10.x の最新を入れる (global.json に sdk.version が無いので)。ここにバージョンを書くと、
+      # Renovate が拾わずに test.yml とずれていく
+      csharp-build: dotnet build agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj
