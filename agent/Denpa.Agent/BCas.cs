@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace Denpa.Agent;
 
@@ -149,7 +150,7 @@ public sealed class BCas : IKeySource, IDisposable
         if (ecm.Length is < 1 or > 255) throw new IOException($"ECM の長さがおかしいです ({ecm.Length} バイト)");
 
         var name = Convert.ToBase64String(ecm);
-        if (Cached(name) is { } hit) return hit;
+        if (Cached(name) is { } hit) return hit with { Cached = true };
 
         var apdu = new byte[ecm.Length + 6];
         apdu[0] = 0x90;
@@ -157,10 +158,13 @@ public sealed class BCas : IKeySource, IDisposable
         apdu[4] = (byte)ecm.Length;
         ecm.CopyTo(apdu.AsSpan(5));
 
+        var queued = Stopwatch.GetTimestamp();
         lock (_gate)
         {
+            // 別のストリームがカードと話し終えるのを待った時間 (選局の内訳の記録に出す)
+            var waited = (long)Stopwatch.GetElapsedTime(queued).TotalMilliseconds;
             // 待っている間に、同じ ECM を先に聞いたストリームがあるかもしれない
-            if (Cached(name) is { } again) return again;
+            if (Cached(name) is { } again) return again with { Cached = true, WaitedMs = waited };
 
             var answer = Run(link =>
             {
@@ -180,7 +184,7 @@ public sealed class BCas : IKeySource, IDisposable
 
             if (_cache.Count > 256) _cache.Clear();  // 溜め込まない。ECM は数秒で入れ替わる
             _cache[name] = (answer, _clock.GetUtcNow());
-            return answer;
+            return answer with { WaitedMs = waited };
         }
     }
 

@@ -310,6 +310,22 @@ public class BCasTests
         await Assert.That(EcmsSent(link)).IsEqualTo(ecms.Length);
     }
 
+    /// <summary>覚えていた答えを返したら、そうと言う (選局の内訳の記録。鍵は同じ)</summary>
+    [Test]
+    public async Task 覚えていた答えはそうと言う()
+    {
+        var link = new FakeLink("reader");
+        using var card = BCas.Open(() => [Candidate(link)], new FakeClock());
+
+        var first = card.Ecm(SampleEcm);
+        var again = card.Ecm(SampleEcm);
+
+        await Assert.That(first.Cached).IsFalse();
+        await Assert.That(again.Cached).IsTrue();
+        await Assert.That(again.Odd).IsEquivalentTo(first.Odd);
+        await Assert.That(EcmsSent(link)).IsEqualTo(1);
+    }
+
     [Test]
     public async Task 長すぎるECMは送らない()
     {

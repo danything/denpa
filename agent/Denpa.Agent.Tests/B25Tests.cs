@@ -26,6 +26,9 @@ public class B25Tests
         public List<byte[]> Asked { get; } = [];
         public Func<byte[], Exception?> Fail { get; set; } = _ => null;
         public int Code { get; set; } = 0x0200;
+        /// <summary>覚えていた答えを返した・錠を待った、と言う (選局の内訳の記録)</summary>
+        public bool Cached { get; set; }
+        public long WaitedMs { get; set; }
 
         public CardInit Init() => new(SystemKey, InitCbc, 0x0005, [1234567890123456]);
 
@@ -34,7 +37,7 @@ public class B25Tests
             var copy = ecm.ToArray();
             Asked.Add(copy);
             if (Fail(copy) is { } error) throw error;
-            return new EcmAnswer(Key(copy[0], even: false), Key(copy[0], even: true), Code);
+            return new EcmAnswer(Key(copy[0], even: false), Key(copy[0], even: true), Code, Cached, WaitedMs);
         }
     }
 
@@ -657,4 +660,47 @@ public class B25Tests
         await Assert.That(cards.Asked.Count).IsEqualTo(0);
     }
 
+    /// <summary>
+    /// **溜めていた間の内訳を1行に出せる** (選局して最初に送り出したときの記録。docs/stream.md「本番の記録で割る」)。
+    /// そろった順と、鍵の相手に聞いた回数・覚えた答え・未契約・錠の待ち
+    /// </summary>
+    [Test]
+    public async Task 溜めていた間の内訳を数える()
+    {
+        const int ecm2 = 0x0902;
+        var ts = new Ts().Pat((0x0400, PmtPid))
+            .Pmt(PmtPid, 0x0400, [], (VideoPid, Ca(EcmPid)), (AudioPid, Ca(ecm2)))
+            .Ecm(EcmPid, 1).Videos(2, 1)
+            .Ecm(ecm2, 2).Payload(AudioPid, 2)
+            .Videos(2, 1);
+        var cards = new Cards { Cached = true, WaitedMs = 7 };
+        var descrambler = new Descrambler(cards);
+
+        Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(descrambler.HeldAt()).Matches(@"^PAT \d+ms / PMT \d+ms / ECM \d+ms \(0x0902\)$");
+        await Assert.That(descrambler.CardUse()).Matches(@"^カード 2回 計 \d+ms \(待ち 14ms・覚えた答え 2回・未契約 0回・準備 \d+ms\)$");
+    }
+
+    [Test]
+    public async Task 未契約の答えも内訳に数える()
+    {
+        var cards = new Cards { Code = 0xa102 };
+        var descrambler = new Descrambler(cards);
+
+        Run(descrambler, Channel().Ecm(EcmPid, 1).Videos(2, 1).Wire.ToArray());
+
+        await Assert.That(descrambler.CardUse()).Contains("未契約 1回");
+    }
+
+    [Test]
+    public async Task 揃う前は内訳に印を出さない()
+    {
+        var descrambler = new Descrambler(new Cards());
+
+        Run(descrambler, new Ts().Videos(3, null).Wire.ToArray(), flush: false);
+
+        await Assert.That(descrambler.HeldAt()).IsEqualTo("PAT - / PMT - / ECM -");
+        await Assert.That(descrambler.CardUse()).IsEqualTo("カード 0回 計 0ms (待ち 0ms・覚えた答え 0回・未契約 0回・準備 -)");
+    }
 }

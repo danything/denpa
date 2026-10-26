@@ -19,7 +19,12 @@ public sealed record CardInit(byte[] SystemKey, byte[] InitCbc, int CaSystemId, 
 
 /// <summary>ECM の答え。鍵は奇数・偶数の順に 8 バイトずつ</summary>
 /// <param name="Code">カードの返り値 (0x0200 など。契約の有無が分かる)</param>
-public readonly record struct EcmAnswer(byte[] Odd, byte[] Even, int Code);
+/// <param name="Cached">
+/// カードに聞かず、覚えていた答えを返した (同じ ECM を別のストリームが先に聞いていた)。
+/// 選局の内訳の記録に出すだけで、鍵の扱いは変わらない。拠点を跨ぐ線では運ばない
+/// </param>
+/// <param name="WaitedMs">カードを順番に使う錠 (<see cref="BCas"/>) を待った時間 (ミリ秒)。記録に出すだけ</param>
+public readonly record struct EcmAnswer(byte[] Odd, byte[] Even, int Code, bool Cached = false, long WaitedMs = 0);
 
 /// <summary>
 /// ECM を渡すと鍵を返す相手。**何本のストリームから同時に呼ばれてもよい**こと

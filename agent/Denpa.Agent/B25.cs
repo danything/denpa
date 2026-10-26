@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics;
 
 namespace Denpa.Agent;
 
@@ -27,7 +28,7 @@ namespace Denpa.Agent;
 /// 数え (<see cref="Decoded"/> など) だけは他のスレッドから覗いてよい。
 /// </para>
 /// </summary>
-public sealed class Descrambler(IKeySource source)
+public sealed class Descrambler(IKeySource source, Stopwatch? clock = null)
 {
     private const int PacketSize = 188;
     private const byte SyncByte = 0x47;
@@ -90,6 +91,33 @@ public sealed class Descrambler(IKeySource source)
 
     /// <summary>最後に鍵を貰えなかった理由。**録画が掛かったままだったときに見せる**</summary>
     public string? LastError { get; private set; }
+
+    /// <summary>溜めの内訳を測る時計。選局の時計を渡せば、選局の内訳と同じ物差しで並ぶ (TunerPool.cs)</summary>
+    private readonly Stopwatch _clock = clock ?? Stopwatch.StartNew();
+
+    /// <summary>溜めている間に、PAT が来た・PMT がそろった・最後の ECM の答えが来た時刻 (ミリ秒。まだなら -1)</summary>
+    private long _patMs = -1, _pmtMs = -1, _ecmMs = -1;
+    /// <summary>最後に答えが来た ECM の PID</summary>
+    private int _lastEcm = -1;
+    /// <summary>溜めている間に鍵の相手へ聞いた回数と、その往復・錠の待ち・カードの素を貰うのにかかった時間の合計</summary>
+    private int _asks, _cached, _unentitledAnswers;
+    private long _askMs, _waitedMs, _initMs = -1;
+
+    /// <summary>
+    /// **頭で溜めていた間の内訳。** 選局して最初に送り出したときの1行に足す (docs/stream.md「本番の記録で割る」)。
+    /// 時刻は渡された時計から。数えるのは溜めている間だけ
+    /// </summary>
+    public string HeldAt()
+    {
+        var last = _lastEcm < 0 ? "" : $" (0x{_lastEcm:X4})";
+        return $"PAT {At(_patMs)} / PMT {At(_pmtMs)} / ECM {At(_ecmMs)}{last}";
+    }
+
+    /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (錠の待ちを含む)。<see cref="HeldAt"/> と同じ1行に足す</summary>
+    public string CardUse() =>
+        $"カード {_asks}回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached}回・未契約 {_unentitledAnswers}回・準備 {At(_initMs)})";
+
+    private static string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
 
     /// <summary>
     /// 読んだぶんを復号して <paramref name="output"/> に書く。入れた長さと出る長さは揃わない —
@@ -235,6 +263,7 @@ public sealed class Descrambler(IKeySource source)
             return true;
         }
         if (_patLast is null || !(_allPmts || _pmtRepeated)) return false;
+        if (_pmtMs < 0) _pmtMs = _clock.ElapsedMilliseconds;
         foreach (var ecm in _ecms.Values)
         {
             if (ecm.Last is null || (ecm.Seen >= 0 && ecm.After == int.MaxValue)) return false;
@@ -352,6 +381,7 @@ public sealed class Descrambler(IKeySource source)
     {
         if (section[0] != 0x00 || (_patLast is not null && section.SequenceEqual(_patLast))) return;
         _patLast = section.ToArray();
+        if (_holding && _patMs < 0) _patMs = _clock.ElapsedMilliseconds;
         _programs.Clear();
         var loop = section[8..^4];
         for (var at = 0; at + 4 <= loop.Length; at += 4)
@@ -392,7 +422,7 @@ public sealed class Descrambler(IKeySource source)
         var wanted = new HashSet<int>();
         foreach (var pmt in _pmts.Values) Streams(pmt, _caSystemId, streams, wanted);
         foreach (var pid in _ecms.Keys.Except(wanted).ToList()) _ecms.Remove(pid);
-        foreach (var pid in wanted) _ecms.TryAdd(pid, new Ecm());
+        foreach (var pid in wanted) _ecms.TryAdd(pid, new Ecm(pid));
         Array.Clear(_route);
         foreach (var (es, ecm) in streams) _route[es] = _ecms[ecm];
         _allPmts = _patLast is not null && _programs.Keys.All(_pmts.ContainsKey);
@@ -471,7 +501,9 @@ public sealed class Descrambler(IKeySource source)
         {
             if (_init is null)
             {
+                var opening = _clock.ElapsedMilliseconds;
                 _init = source.Init();
+                if (_holding) _initMs = _clock.ElapsedMilliseconds - opening;
                 // A-CAS など B-CAS 以外のカードなら、CA 記述子を選び直す (この ECM はもう要らないかもしれない)
                 if (_init.CaSystemId != _caSystemId)
                 {
@@ -482,9 +514,21 @@ public sealed class Descrambler(IKeySource source)
                 }
             }
             var section = ecm.Last!;
+            var asked = _clock.ElapsedMilliseconds;
             var answer = source.Ecm(section.AsSpan(8, section.Length - 12));
+            var entitled = answer.Code is 0x0200 or 0x0400 or 0x0800;
+            if (_holding)
+            {
+                _ecmMs = _clock.ElapsedMilliseconds;
+                _lastEcm = ecm.Pid;
+                _asks++;
+                _askMs += _ecmMs - asked;
+                _waitedMs += answer.WaitedMs;
+                if (answer.Cached) _cached++;
+                if (!entitled) _unentitledAnswers++;
+            }
             // 0x0200・0x0400・0x0800 が「見てよい」。それ以外は契約が無い
-            if (answer.Code is not (0x0200 or 0x0400 or 0x0800))
+            if (!entitled)
             {
                 ecm.Unentitled = true;
                 Report($"カードが鍵を返しません (未契約か、別の方式の局です: 0x{answer.Code:X4})");
@@ -527,7 +571,13 @@ public sealed class Descrambler(IKeySource source)
     /// <summary>1本の ECM と、その鍵</summary>
     private sealed class Ecm
     {
-        public Ecm() => Section = new Section(this);
+        public Ecm(int pid)
+        {
+            Pid = pid;
+            Section = new Section(this);
+        }
+
+        public int Pid { get; }
 
         public Section Section { get; }
         /// <summary>最後に受けた中身 (その鍵を貰った・貰おうとした中身)</summary>

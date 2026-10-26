@@ -14,6 +14,7 @@ import {
   encodeArgs,
   key,
   LIVE_STREAM_BACKLOG,
+  openingLine,
   sessionStream,
   whyNotTuned,
 } from "./live";
@@ -627,5 +628,31 @@ describe("HTTP で流すところ (sessionStream)", () => {
     );
     expect((await reader.read()).value).toEqual(new Uint8Array([1, 2, 3]));
     expect((await reader.read()).done).toBe(true);
+  });
+});
+
+/**
+ * **開くまでの内訳の1行** (docs/stream.md「開いてから映像が出るまでの内訳」)。本番の記録から
+ * 表を作るので、形を変えるなら docs も一緒に直す
+ */
+describe("開くまでの内訳", () => {
+  test("届いた順に並べ、ミリ秒は丸める", () => {
+    expect(
+      openingLine(
+        "GR:T27",
+        { tuned: 312.4, firstByte: 520.6, spawned: 521, init: 780, media: 790 },
+        "h264",
+      ),
+    ).toBe(
+      "[live] GR:T27: 開くまで 選局 312ms / 最初のバイト 521ms / ffmpeg 521ms / init 780ms / 最初の fMP4 790ms (h264)",
+    );
+  });
+
+  test("チューナーを使わない追っかけは選局を - にする", () => {
+    expect(
+      openingLine("GR:T27", { spawned: 3, init: 250, media: 260 }, "av1"),
+    ).toBe(
+      "[live] GR:T27: 開くまで 選局 - / 最初のバイト - / ffmpeg 3ms / init 250ms / 最初の fMP4 260ms (av1)",
+    );
   });
 });

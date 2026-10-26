@@ -685,6 +685,38 @@ function spawnCaptioner(
   return proc;
 }
 
+/**
+ * **開くまでの内訳** (セッションを作ってからのミリ秒)。最初の fMP4 が出たときに1行残す (`openingLine`)。
+ * エージェントの「送り出し」の行と合わせると、選局からブラウザに渡すまでを本番の記録で割れる
+ * (docs/stream.md「開いてから映像が出るまでの内訳」)
+ */
+export type Opening = {
+  /** エージェントが選局を受けて応答を返した (`openWhenFree` が返った) */
+  tuned?: number;
+  /** エージェントから最初のバイトが届いた */
+  firstByte?: number;
+  /** 最初の fMP4 を出した ffmpeg を起こした */
+  spawned?: number;
+  /** その ffmpeg が init を出した */
+  init?: number;
+  /** その ffmpeg が最初の moof+mdat を出した */
+  media?: number;
+};
+
+/** 開くまでの内訳の1行。`way` はエンコード方式 (`h264` / `av1` / `audio`、GPU ならその種類) */
+export function openingLine(
+  label: string,
+  marks: Opening,
+  way: string,
+): string {
+  const at = (ms: number | undefined) =>
+    ms === undefined ? "-" : `${Math.round(ms)}ms`;
+  return (
+    `[live] ${label}: 開くまで 選局 ${at(marks.tuned)} / 最初のバイト ${at(marks.firstByte)} / ` +
+    `ffmpeg ${at(marks.spawned)} / init ${at(marks.init)} / 最初の fMP4 ${at(marks.media)} (${way})`
+  );
+}
+
 class Session {
   private readonly viewers = new Set<Viewer>();
   /**
@@ -780,6 +812,16 @@ class Session {
   private fed = false;
   /** チューナーからのストリームが、こちらが畳む前に途切れた (取り上げられた・繋ぎが切れた) */
   private cut = false;
+  /** 開くまでの内訳の物差しの 0 (セッションを作った = 選局を求められた時刻。`Opening`) */
+  private readonly began = performance.now();
+  private readonly opening: Opening = {};
+  /** いまの ffmpeg のエンコード方式 (`openingLine` の `way`) */
+  private way = "";
+
+  /** セッションを作ってからのミリ秒 (`Opening`) */
+  private since(): number {
+    return performance.now() - this.began;
+  }
 
   constructor(
     readonly channelType: string,
@@ -978,6 +1020,7 @@ class Session {
     try {
       // 追っかけ (`source`) はチューナーを使わない — 電波は録画が受けている
       const tuned = this.source !== undefined ? null : await this.tune();
+      if (tuned !== null) this.opening.tuned = this.since();
 
       /*
        * **字幕なしで再エンコードできるようにしておく。**
@@ -1025,6 +1068,12 @@ class Session {
           },
         );
         this.proc = proc;
+        // 開くまでの内訳は、最初の fMP4 を出した ffmpeg のぶん (起こし直したら測り直す)
+        if (this.opening.media === undefined) {
+          this.opening.spawned = this.since();
+          delete this.opening.init;
+          this.way = `${this.codec}${hw === null ? "" : `・GPU ${hw.way.kind}`}`;
+        }
 
         /*
          * **流し込みと汲み出しを同時に回す。** 順にやると、ffmpeg の
@@ -1334,7 +1383,10 @@ class Session {
           if (!own) this.cut = true;
           break;
         }
-        if (!own) this.fed = true;
+        if (!own) {
+          this.fed = true;
+          this.opening.firstByte ??= this.since();
+        }
         /*
          * 起こし直したあとの古い流し込みは抜ける。その1塊は捨てるが、次の ffmpeg は
          * どのみちキーフレームから始めるので欠けは見えない
@@ -1383,6 +1435,7 @@ class Session {
       for (const segment of splitter.feed(chunk)) {
         if (segment.kind === "init") {
           this.init = segment.data;
+          if (this.proc === proc) this.opening.init ??= this.since();
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.videoInit, segment.data);
         } else {
@@ -1390,6 +1443,16 @@ class Session {
           if (this.proc === proc && !this.produced) {
             this.produced = true;
             this.blameGpu();
+            if (this.opening.media === undefined) {
+              this.opening.media = this.since();
+              console.log(
+                openingLine(
+                  `${this.channelType}:${this.channel}`,
+                  this.opening,
+                  this.way,
+                ),
+              );
+            }
           }
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.videoMedia, segment.data);

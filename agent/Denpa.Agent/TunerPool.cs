@@ -655,7 +655,7 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>
     /// **選局の内訳を測る時計** (取った時点から)。最初に送り出したときに1行残す —
-    /// 局替えの遅さがどこにあるか (前の読み出し待ち・同期・最初の TS・鍵) を実機で割るため
+    /// 局替えの遅さがどこにあるか (前の読み出し待ち・同期・最初の TS・鍵) を実機で割るため。行の形は docs/stream.md「本番の記録で割る」
     /// </summary>
     public Stopwatch Clock { get; } = Stopwatch.StartNew();
 
@@ -794,7 +794,8 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <summary>デスクランブラ。キューから取って復号し、利用者たちに配る。キューが閉じて空になったら終わる</summary>
     private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
     {
-        var b25 = new Descrambler(Keys.Source);
+        // 選局の時計を渡す。溜めの内訳 (PAT・PMT・ECM) が選局の内訳と同じ物差しで並ぶ
+        var b25 = new Descrambler(Keys.Source, Clock);
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;
@@ -806,7 +807,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                 pushed = true;
                 string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
                 Log.Write($"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
-                    + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms"
+                    + $"最初の TS {At(_firstReadMs)} / {b25.HeldAt()} / 送り出し {Clock.ElapsedMilliseconds}ms / {b25.CardUse()}"
                     + (b25.Undecodable > 0 ? $" (掛かったまま {b25.Undecodable} パケット)" : ""));
             }
             Broadcast(decoded.WrittenSpan.ToArray());
