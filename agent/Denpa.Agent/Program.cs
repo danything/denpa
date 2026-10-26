@@ -421,7 +421,19 @@ app.MapFallback((HttpContext http) =>
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の API (= PT3 など他の
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない
  */
-_ = Task.Run(PrepareDaemons);
+var warmCard = cardUrl is not { Length: > 0 } || sharing is not null;
+_ = Task.Run(() =>
+{
+    PrepareDaemons();
+    if (warmCard) Keys.Local.Warm();
+});
+
+/*
+ * **手元のカードは起動したときに開いておく** (LocalCard.Warm)。最初の選局がカードを開くのを待たない。
+ * px4d / asicend の内蔵リーダーは起きてからでないと見えないので、上で起こし終えたらもう一度試す
+ * (開けていれば何もしない)。鍵を貰いに行く拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
+ */
+if (warmCard) _ = Task.Run(Keys.Local.Warm);
 
 /*
  * **畳むのは、流し終えてから。** `ApplicationStopping` でやっていた頃は、止まれの合図の

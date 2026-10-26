@@ -381,7 +381,7 @@ ATTACH_STREAM` (SPEC 6.3。px4-userland 0.1.6 から)。返すのはデバイス
 - **内蔵カードリーダーも `px4d` が持っています。** control socket に APDU を
   投げて読みます (`Px4Card.cs`、px4-userland SPEC 6 節の portable IPC)。同梱の
   pcscd 用 IFD ハンドラは使いません (筐体が増えるたびに pcscd を入れ直すことになる。#195)。
-  px4d が起きたあと、次にカードが要ったときに見つけます
+  エージェントは起動したときにカードを開いておき (`LocalCard.Warm`)、px4d を起こし終えたらもう一度試します。開けなければ次にカードが要ったときに探します
 - 起動時に顔ぶれの筐体ぶん `px4d` を起こします (`UserlandDaemon.Prepare` に `Px4Daemon.For` を渡す)。
   ファームウェアを流し込むので ready まで数秒かかります。起こせなくても
   他のチューナー (PT3 など) は動き、選局のときにもう一度試します

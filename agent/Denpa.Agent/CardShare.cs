@@ -33,7 +33,7 @@ public static class Keys
 }
 
 /// <summary>
-/// **自分に刺さっているカード。** 初めて要ったときに探して開く。
+/// **自分に刺さっているカード。** 起動したときに開いておき (<see cref="Warm"/>)、開けなければ要ったときに探す。
 ///
 /// <para>
 /// 開けなければ投げて、次に要ったときにまた探す — カードを後から挿しても、
@@ -41,8 +41,10 @@ public static class Keys
 /// 開いたあとの繋ぎ直しは <see cref="BCas"/> がやる。
 /// </para>
 /// </summary>
-public sealed class LocalCard : IKeySource
+/// <param name="open">カードを探して開く。既定は <see cref="CardLinks.Open"/> (テストは偽のリーダーを渡す)</param>
+public sealed class LocalCard(Func<BCas>? open = null) : IKeySource
 {
+    private readonly Func<BCas> _open = open ?? CardLinks.Open;
     private readonly Lock _gate = new();
     private BCas? _card;
     private (DateTime At, IOException Error)? _failed;
@@ -62,7 +64,7 @@ public sealed class LocalCard : IKeySource
             if (_failed is { } failed && DateTime.UtcNow - failed.At < BCas.RetryAfter) throw failed.Error;
             try
             {
-                _card = CardLinks.Open();
+                _card = _open();
                 _failed = null;
                 return _card;
             }
@@ -70,6 +72,34 @@ public sealed class LocalCard : IKeySource
             {
                 _failed = (DateTime.UtcNow, error);
                 throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// **起動したときに開いておく。** 開くのはリーダーを探して電源を入れ、INT と IDI を読むことで、
+    /// 最初の選局でこれを待つと、起こし直した直後の1回目だけ送り出しが 0.25〜0.45 秒遅れていた。
+    ///
+    /// <para>
+    /// 開けなくても<b>断った印は残さない</b> — 起動の直後は px4d がまだ起きていないことがあり、
+    /// 印を残すと最初の選局が <see cref="BCas.RetryAfter"/> のあいだ探しもせずに断られる。
+    /// 開けなかったときは今までどおり、要ったときに探す
+    /// </para>
+    /// </summary>
+    public void Warm()
+    {
+        lock (_gate)
+        {
+            if (_card is not null) return;
+            try
+            {
+                _card = _open();
+                _failed = null;
+                Log.Write($"カードを開きました ({_card.Name})");
+            }
+            catch (IOException error)
+            {
+                Log.Write($"カードはまだ開けません。要ったときにまた探します ({error.Message})");
             }
         }
     }

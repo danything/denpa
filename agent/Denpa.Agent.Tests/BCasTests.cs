@@ -320,4 +320,51 @@ public class BCasTests
         Assert.Throws<IOException>(() => card.Ecm([]));
         await Assert.That(EcmsSent(link)).IsEqualTo(0);
     }
+
+    /// <summary>起動したときに開いておけば、最初の選局はカードを開かずに鍵の素を貰える (LocalCard.Warm)</summary>
+    [Test]
+    public async Task 起動したときに開いたカードを最初の選局で使う()
+    {
+        var link = new FakeLink("reader");
+        var opened = 0;
+        var local = new LocalCard(() =>
+        {
+            opened++;
+            return BCas.Open(() => [Candidate(link)]);
+        });
+
+        local.Warm();
+        await Assert.That(opened).IsEqualTo(1);
+        await Assert.That(local.Name).IsEqualTo("reader");
+
+        var sent = link.Sent.Count;
+        await Assert.That(local.Init().CaSystemId).IsEqualTo(5);
+        local.Warm();
+        await Assert.That(opened).IsEqualTo(1);
+        await Assert.That(link.Sent.Count).IsEqualTo(sent);
+    }
+
+    /// <summary>
+    /// **起動したときに開けなくても、最初の選局は探し直す。** px4d がまだ起きていないだけかもしれないので、
+    /// 断った印を残して <see cref="BCas.RetryAfter"/> のあいだ断り続けてはいけない
+    /// </summary>
+    [Test]
+    public async Task 起動したときに開けなくても最初の選局で探し直す()
+    {
+        var link = new FakeLink("reader");
+        var ready = false;
+        var opened = 0;
+        var local = new LocalCard(() =>
+        {
+            opened++;
+            return ready ? BCas.Open(() => [Candidate(link)]) : throw new IOException("カードリーダーが見つかりません");
+        });
+
+        local.Warm();
+        await Assert.That(local.Name).IsEqualTo("");
+
+        ready = true;
+        await Assert.That(local.Init().CaSystemId).IsEqualTo(5);
+        await Assert.That(opened).IsEqualTo(2);
+    }
 }
