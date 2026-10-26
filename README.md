@@ -44,6 +44,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 - **字幕と放送の字** — 字幕は放送どおりの位置に描き、番組名・局名も含めて Denpa Font で外字まで崩さない
 - **端末に保存して観る** — 電波の無いところでも ([docs/offline.md](docs/offline.md))
 - **EPGStation・EDCB から引き継ぐ** — ルール・予約・録画 (EDCB は録画の履歴) ([docs/migrate.md](docs/migrate.md))
+- **別の機械へ移す** — ルール・予約・録画の一覧・設定を書き出して、新しい機械の denpa に取り込む ([docs/migrate.md](docs/migrate.md#別の機械へ移す))
 
 部品はチューナーで選局して素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
 エンコード・配信) をやる **denpa** の2つだけです ([docs/architecture.md](docs/architecture.md))。
@@ -111,7 +112,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 **乗り換え**
 
 - [docs/switch.md](docs/switch.md) — **ほかの録画ソフトから乗り換える** (Mirakurun・EPGStation・KonomiTV・EDCB)
-- [docs/migrate.md](docs/migrate.md) — **EPGStation・EDCB からの引き継ぎ**
+- [docs/migrate.md](docs/migrate.md) — **EPGStation・EDCB からの引き継ぎ**と、**別の機械へ移す**
 
 **使う**
 

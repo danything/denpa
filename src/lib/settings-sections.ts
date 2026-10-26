@@ -37,6 +37,7 @@ export const SETTINGS_GROUPS = [
       { slug: "tv", label: "テレビのアプリ" },
       { slug: "migrate", label: "EPGStation からの引き継ぎ" },
       { slug: "migrate-edcb", label: "EDCB からの引き継ぎ" },
+      { slug: "transfer", label: "denpa を別の機械へ移す" },
     ],
   },
   {

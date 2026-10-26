@@ -59,6 +59,10 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 | `~/Videos/denpa/library`       | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える)                                                                                       |
 | wslc のボリューム `denpa-data` | DB                                                                                                                                                               |
 
+**別の機械 (Linux の Docker Compose や Kubernetes) へ移すとき**は、DB を wslc のボリュームから取り出す必要はありません。
+設定の「連携」の「denpa を別の機械へ移す」で書き出すと、ブラウザのダウンロードとして落ちてきます。
+録画のフォルダ (`~/Videos/denpa/library`・`~/Videos/denpa/recorded`) は自分で写します ([migrate.md](migrate.md#別の機械へ移す))。
+
 **使えるもの。**
 
 - **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 用 (0.2.0 から。
