@@ -99,6 +99,32 @@ public static class Zd1j
         OperatingSystem.IsLinux()
             ? UsbFsDevice.Open(UsbSysfs.Devices, DevUsb, port, Vendor, Product)
             : UsbDevices.Open(port, Vendor, Product);
+
+    /// <summary>
+    /// <c>--card</c> の内蔵の差し込み口の行: ATR と、開いてから ATR までの時間。**見つからなくても1行出す**
+    /// (macOS・Windows で OS に見えていないのか、開けないのかを分けるため)。どんな例外でも行にして次へ進む
+    /// </summary>
+    public static void DescribeCards(IReadOnlyList<CardLinkCandidate> cards, TextWriter output)
+    {
+        if (cards.Count == 0) output.WriteLine($"{Model}: 見つかりません");
+        foreach (var found in cards)
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using var link = found.Open();
+                var atr = link.Reset();
+                output.WriteLine($"内蔵 {found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。冷えた状態から開いて IFSD を決めるまで)");
+            }
+            catch (Exception error)
+            {
+                output.WriteLine($"内蔵 {found.Name}: {Reason(error)} ({started.ElapsedMilliseconds} ms)");
+            }
+        }
+    }
+
+    /// <summary>失敗の理由。IOException 以外 (読み込めないライブラリなど) は型の名前も付ける</summary>
+    public static string Reason(Exception error) => error is IOException ? error.Message : $"{error.GetType().Name}: {error.Message}";
 }
 
 /// <summary>
@@ -169,24 +195,49 @@ public sealed class Zd1jBoard : IDibTime
             Boards.Remove(port);
 
             var started = Stopwatch.StartNew();
-            var usb = open();
-            board = new Zd1jBoard(port, usb);
+            var stage = OpeningUsb;
+            IUsbDevice? usb = null;
             try
             {
-                board.Bridge.Start();
+                usb = open();
+                board = new Zd1jBoard(port, usb);
+                board.Bridge.Start(step => stage = step);
             }
-            catch
+            catch (Exception error)
             {
-                usb.Dispose();
+                usb?.Dispose();
+                Failed(port, stage, error);
                 throw;
             }
             board.OpenMs = started.ElapsedMilliseconds;
             board._users = 1;
             Boards[port] = board;
+            LastFailure.Remove(port);
             Log.Write($"[{Zd1j.Model} {port}] 開きました ({board.OpenMs}ms)");
             return board;
         }
     }
+
+    /// <summary>開く段の名前 (USB を開くところ)。そのあとの段は <see cref="Mb86h47.Start"/> が知らせる</summary>
+    internal const string OpeningUsb = "USB を開く";
+
+    /// <summary>ポートごとの、最後に記録した開けなかった理由。同じ理由は繰り返し記録しない (<see cref="Registry"/> の中で触る)</summary>
+    private static readonly Dictionary<string, string> LastFailure = [];
+
+    /// <summary>
+    /// 開けなかったことを、どの段で止まったか付きで1行記録する。カードの確かめや選局のたびに開き直すので、
+    /// 前と同じ理由なら書かない (開けたら忘れる)
+    /// </summary>
+    private static void Failed(string port, string stage, Exception error)
+    {
+        var line = OpenFailure(port, stage, error);
+        if (LastFailure.TryGetValue(port, out var last) && last == line) return;
+        LastFailure[port] = line;
+        Log.Write(line);
+    }
+
+    internal static string OpenFailure(string port, string stage, Exception error) =>
+        $"[{Zd1j.Model} {port}] 開けません ({stage}ところで): {error.Message}";
 
     /// <summary>返す。開いたままにする (USB が抜けていれば閉じる)</summary>
     public void Release()

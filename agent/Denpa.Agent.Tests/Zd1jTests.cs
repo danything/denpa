@@ -396,4 +396,53 @@ public class Zd1jTests
         await Assert.That(tuner.Tuned).IsFalse();
         await Assert.That(tuner.Board).IsNull();
     }
+
+    private static int Logged(string line) => Log.Recent.Snapshot().Count(entry => entry.Text == line);
+
+    [Test]
+    public async Task 開けなければ_どこで止まったかを1行記録する()
+    {
+        // ポートはテストごとに変える (記録はプロセスで1つ。テストは並んで走る)
+        var usbError = new IOException("usb 9-11 を開けません (見当たらないか、IOKit が開かせません)");
+        Assert.Throws<IOException>(() => Zd1jBoard.Acquire("9-11", () => throw usbError));
+        await Assert.That(Logged($"[Sony CECH-ZD1 J 9-11] 開けません (USB を開くところで): {usbError.Message}")).IsEqualTo(1);
+
+        var asleep = new FakeBridgeUsb { Core1 = false };
+        var core1 = Assert.Throws<IOException>(() => Zd1jBoard.Acquire("9-12", () => asleep));
+        await Assert.That(Logged($"[Sony CECH-ZD1 J 9-12] 開けません (ブリッジを起動するところで): {core1.Message}")).IsEqualTo(1);
+        await Assert.That(asleep.Disposed).IsTrue();
+
+        var silent = new FakeBridgeUsb { Core1Bulk = false };
+        var bulk = Assert.Throws<IOException>(() => Zd1jBoard.Acquire("9-13", () => silent));
+        await Assert.That(Logged($"[Sony CECH-ZD1 J 9-13] 開けません (コア 1 との bulk の経路を用意するところで): {bulk.Message}")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task 開けない理由が前と同じなら繰り返し記録しない()
+    {
+        var error = new IOException("usb 9-14 はほかのソフト (かドライバ) が使っています");
+        Assert.Throws<IOException>(() => Zd1jBoard.Acquire("9-14", () => throw error));
+        Assert.Throws<IOException>(() => Zd1jBoard.Acquire("9-14", () => throw error));
+        await Assert.That(Logged($"[Sony CECH-ZD1 J 9-14] 開けません (USB を開くところで): {error.Message}")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task card_は_CECH_ZD1_J_が無くても1行出し_どんな失敗も行にする()
+    {
+        var none = new StringWriter();
+        Zd1j.DescribeCards([], none);
+        await Assert.That(none.ToString().Trim()).IsEqualTo("Sony CECH-ZD1 J: 見つかりません");
+
+        var output = new StringWriter();
+        Zd1j.DescribeCards(
+        [
+            new CardLinkCandidate("Sony CECH-ZD1 J 9-15 Internal Card Reader", () => throw new DllNotFoundException("IOKit を読み込めません")),
+            new CardLinkCandidate("Sony CECH-ZD1 J 9-16 Internal Card Reader", () => throw new IOException("usb 9-16 を開けません")),
+        ], output);
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        await Assert.That(lines.Length).IsEqualTo(2);
+        // IOException でないものは型の名前も付けて、次のリーダーへ進む
+        await Assert.That(lines[0]).StartsWith("内蔵 Sony CECH-ZD1 J 9-15 Internal Card Reader: DllNotFoundException: IOKit を読み込めません (");
+        await Assert.That(lines[1]).StartsWith("内蔵 Sony CECH-ZD1 J 9-16 Internal Card Reader: usb 9-16 を開けません (");
+    }
 }
