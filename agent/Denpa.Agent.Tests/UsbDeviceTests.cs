@@ -182,11 +182,15 @@ public class UsbDeviceTests
     public async Task 取り消しても戻らない読みは_戻らなかったと知らせる()
     {
         var release = new ManualResetEventSlim();
+        var reading = new ManualResetEventSlim();
         var pump = new UsbReadPump("test", 64, _ =>
         {
+            reading.Set();
             release.Wait();
             return 0;
         }, () => { });
+        // 読みが出てから止める (スレッドが読みに入る前に止めると、読まずに戻るので true になる)
+        reading.Wait(TimeSpan.FromSeconds(5));
         // インターフェースを手放してよいかを、呼ぶ側 (IoKitDevice.Dispose) が決める
         await Assert.That(pump.Stop()).IsFalse();
         release.Set();
