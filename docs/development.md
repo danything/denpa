@@ -25,6 +25,9 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 依存を足したら `docker compose run --rm unit bun install` を一度回します
 (`node_modules` は名前付きボリュームなので、イメージを作り直す必要はありません)。
 
+ブラウザに配るデコーダ (`wasm/decoder.c`。Dockerfile の `mpeg2wasm` 段) はイメージの中で組むので、
+変わったら `docker compose build e2e` で組み直します。古いままだと E2E は始める前に止まります (`tests/global-setup.ts`)。
+
 手元だけの上書きは `compose.override.yml` に (Compose が自動で読む。コミットしない)。
 `.env` は使いません。
 

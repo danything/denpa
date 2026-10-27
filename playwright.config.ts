@@ -47,7 +47,15 @@ export default defineConfig({
      * GPU プロセスが `browser.newContext` の途中で SEGV (`SEGV_MAPERR 0000000001b0`、
      * 毎回同じ番地) して、テストが「ブラウザが閉じられた」で落ちていた。
      * CI の直近 6 回のうち 4 回で、揺れの大半がこれ
+     *
+     * **ブラウザは UTF-8 のロケールで起こす。** Linux の Chromium は、落とすファイルの名前を
+     * ロケールの文字コードで作る。ロケールが無い (`POSIX`。Debian の slim を土台にした
+     * E2E のイメージがそう) と日本語の番組名を表せず、`<a download>` の名前を捨てて
+     * 「download」にする (切り抜きのテストが落ちる)。CI のランナーは `C.UTF-8` なので通っていた
      */
-    launchOptions: { args: ["--disable-gpu"] },
+    launchOptions: {
+      args: ["--disable-gpu"],
+      env: { ...process.env, LC_ALL: "C.UTF-8" },
+    },
   },
 });

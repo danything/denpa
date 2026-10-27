@@ -337,6 +337,14 @@ test.describe("互換モードの追っかけ", () => {
       (document.activeElement as HTMLElement | null)?.blur(),
     );
     await page.keyboard.press("ArrowLeft");
+    /*
+     * **戻った先 (10秒前) の近くに来たのを見てから数える。** 新しいストリームが届くまでは、手元に残った前の
+     * ストリームを描き続け、再生位置もそれで進む (RawEngine を開き直すのは届いてから)。混んでいて届くのが
+     * 遅れると、そのぶんのコマを新しいストリームのものと取り違え、前のストリームの位置を「後」として読んでいた
+     */
+    await expect
+      .poll(where, { timeout: 15_000 })
+      .toBeLessThan(Math.max(0, before - 10) + 3);
     // リクエストした所へ戻り、そこから進む。3秒後も、前の再生位置より手前にある (前のストリームの秒を足していない)
     await expect
       .poll(shown, { timeout: 15_000 })
