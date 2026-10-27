@@ -441,27 +441,45 @@ test.describe("番組表のマスを押す", () => {
       width: 0,
       height: 0,
     };
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    /*
+     * **送った直後は、マスの中身がまだ無い。** 画面の外のマスは中身を組まず
+     * (`.cell` の `content-visibility: auto`)、画面に入ったと分かるのは次のコマ。
+     * それより先に当たりを取ると、ボタンではなくマスの箱に当たる。3〜4時台は
+     * `upcoming` が翌日へ送るので、表の最後の近くから頭のマスまで一気に送ることになり、
+     * そこで押せずに落ちていた。指で押すときは送ってから何コマも経っているので、
+     * 真ん中がそのマスのボタンになるのを待ってから触る
+     */
+    await expect
+      .poll(
+        () =>
+          cell.evaluate((el, { x, y }) => {
+            const button = el.querySelector("button");
+            return button?.contains(document.elementFromPoint(x, y)) ?? false;
+          }, center),
+        { message: "マスの真ん中がそのマスのボタンになっていない" },
+      )
+      .toBe(true);
 
-    await page.evaluate(
-      ({ x, y }) => {
-        const at = (cx: number, cy: number) => ({
-          pointerId: 1,
-          pointerType: "touch",
-          isPrimary: true,
-          bubbles: true,
-          cancelable: true,
-          clientX: cx,
-          clientY: cy,
-        });
-        const target = document.elementFromPoint(x, y);
-        if (target === null) throw new Error("マスがそこに無い");
-        target.dispatchEvent(new PointerEvent("pointerdown", at(x, y)));
-        target.dispatchEvent(new PointerEvent("pointermove", at(x + 6, y)));
-        target.dispatchEvent(new PointerEvent("pointerup", at(x + 6, y)));
-        (target as HTMLElement).closest("button")?.click();
-      },
-      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-    );
+    await page.evaluate(({ x, y }) => {
+      const at = (cx: number, cy: number) => ({
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+        bubbles: true,
+        cancelable: true,
+        clientX: cx,
+        clientY: cy,
+      });
+      const target = document.elementFromPoint(x, y);
+      const button = target?.closest("button");
+      if (target == null || button == null)
+        throw new Error("マスのボタンがそこに無い");
+      target.dispatchEvent(new PointerEvent("pointerdown", at(x, y)));
+      target.dispatchEvent(new PointerEvent("pointermove", at(x + 6, y)));
+      target.dispatchEvent(new PointerEvent("pointerup", at(x + 6, y)));
+      button.click();
+    }, center);
 
     await expect(page.getByTestId("program-detail")).toBeVisible();
   });

@@ -485,7 +485,16 @@ test.describe("ホームと画面遷移", () => {
    * **ほかの画面から番組表へ移るときは、押したらすぐ外枠と骨組みを出す** (`GuidePending`。`+layout.svelte` の `pending`)。
    *
    * 外枠もサーバから届くので、待っている間は前の画面が残り、着いた瞬間に番組表へ飛んでいた。
-   * 読み込みを 3 秒遅らせて、押してから 2 コマ以内に骨組み (か表) が見えることを見る。
+   * 読み込みを 3 秒遅らせて、SvelteKit が遷移を始めた時点で骨組み (か表) が見えていることを見る。
+   *
+   * SvelteKit はリンクを押すと、一度描かせてから遷移を始める (`requestAnimationFrame` の中で
+   * `setTimeout(0)`)。押してからのコマ数を数えていた頃は CI でときどき 3 コマになって落ちた。
+   * ヘッドレスの Chromium は同じ時刻のコマを続けて 2 回まわすことがあり、混んでいると
+   * SvelteKit の `setTimeout` より先に次のコマが来るため (画面の側は何も変わっていない)。
+   * そこで同じ順にタイマーを積んで、遷移を始めた直後に見る: 押したときに `requestAnimationFrame` →
+   * `setTimeout(0)` → `setTimeout(0)` と積むと、最後の 1 つは SvelteKit の `setTimeout` のすぐ後に回る
+   * (遅さが同じタイマーは積んだ順)。遷移を始めてから骨組みを描くまではマイクロタスクだけなので、
+   * そこで見えていれば、遷移を始めてから最初のコマに骨組みが出る。
    * サービスワーカーは止める (動いていると取得があちら経由になり、`page.route` で遅らせられない)
    */
   test.describe("番組表へ移る途中", () => {
@@ -502,24 +511,24 @@ test.describe("ホームと画面遷移", () => {
         await route.continue();
       });
       await page.evaluate(() => {
-        const w = window as unknown as { shownAfter: number | null };
-        w.shownAfter = null;
+        const w = window as unknown as { shownOnStart: boolean | null };
+        w.shownOnStart = null;
+        // capture で積むので、SvelteKit (バブリングで受ける) より先に並ぶ
         document.addEventListener(
           "click",
           () => {
-            let frames = 0;
-            const tick = (): void => {
-              frames++;
-              const shown = document.querySelector(
-                '[data-testid="guide-skeleton"], [data-testid="guide-grid"]',
-              );
-              if (shown?.checkVisibility()) {
-                w.shownAfter = frames;
-                return;
-              }
-              if (frames < 600) requestAnimationFrame(tick);
-            };
-            requestAnimationFrame(tick);
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                setTimeout(() => {
+                  w.shownOnStart =
+                    document
+                      .querySelector(
+                        '[data-testid="guide-skeleton"], [data-testid="guide-grid"]',
+                      )
+                      ?.checkVisibility() ?? false;
+                }, 0);
+              }, 0);
+            });
           },
           { capture: true, once: true },
         );
@@ -530,17 +539,19 @@ test.describe("ホームと画面遷移", () => {
         .poll(() =>
           page.evaluate(
             () =>
-              (window as unknown as { shownAfter: number | null }).shownAfter,
+              (window as unknown as { shownOnStart: boolean | null })
+                .shownOnStart,
           ),
         )
         .not.toBeNull();
-      const shownAfter = await page.evaluate(
-        () => (window as unknown as { shownAfter: number | null }).shownAfter,
-      );
       expect(
-        shownAfter,
-        "押してから骨組みが見えるまでのコマ数",
-      ).toBeLessThanOrEqual(2);
+        await page.evaluate(
+          () =>
+            (window as unknown as { shownOnStart: boolean | null })
+              .shownOnStart,
+        ),
+        "遷移を始めたときに骨組みが見えていない",
+      ).toBe(true);
       // 前の画面は隠れている (残っていると骨組みの上に重なって見える)
       await expect(page.getByTestId("guide-pending")).toBeVisible();
       await expect(page.getByTestId("timeline")).toBeHidden();
