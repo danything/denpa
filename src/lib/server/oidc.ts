@@ -21,6 +21,7 @@ import {
   read,
   record,
   string,
+  unknown,
 } from "../shape";
 import { config } from "./config";
 
@@ -216,17 +217,8 @@ async function exchange(
 /** kid ごとの公開鍵。相手が鍵を入れ替えたときのために、見つからなければ取り直す */
 const keys = new Map<string, CryptoKey>();
 
-/** 署名の鍵の一覧 (`jwks_uri`)。RSA の鍵を作るのに要る欄だけ読む */
-const JWKS = object({
-  keys: array(
-    object({
-      kid: optional(string),
-      kty: string,
-      n: optional(string),
-      e: optional(string),
-    }),
-  ),
-});
+/** 署名の鍵の一覧 (`jwks_uri`)。鍵ごとの欄は下で確かめ、読めない鍵は飛ばす (RSA 以外の鍵が混じっても止めない) */
+const JWKS = object({ keys: array(record(unknown)) });
 
 async function publicKey(kid: string): Promise<CryptoKey> {
   const cached = keys.get(kid);
@@ -238,10 +230,10 @@ async function publicKey(kid: string): Promise<CryptoKey> {
   const jwks = read(JWKS, await res.json(), "OIDC の署名の鍵");
   for (const { kid: name, kty, n, e } of jwks.keys) {
     if (
-      name === undefined ||
+      typeof name !== "string" ||
       kty !== "RSA" ||
-      n === undefined ||
-      e === undefined
+      typeof n !== "string" ||
+      typeof e !== "string"
     )
       continue;
     const key = await crypto.subtle.importKey(
