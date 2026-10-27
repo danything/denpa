@@ -135,6 +135,8 @@ let pip: WritableStreamDefaultWriter<VideoFrame> | null = null;
 let pipFlowing = true;
 /** 画面が見えていないか (`visible`)。見えていない間は、小窓へ書いていなければ映像をデコードしない */
 let hidden = false;
+/** 止めていたのを再開した (`resume`)。時計が動き出したら追いつくのを待つ (`catchUp`) */
+let resuming = false;
 /** 最後に描いたもの。**同じなら描き直さない** */
 let drawn = { pts: Number.NaN, field: Number.NaN };
 let frameTicks = FRAME;
@@ -616,7 +618,7 @@ const THIN_FIRST = 20_000;
 const THIN_LONGEST = 300_000;
 /** 戻してからこれだけのうちにまた遅れたら、次は長く飛ばす (ms) */
 const THIN_RELAPSE = 10_000;
-/** 裏から戻ってから、捨てたコマ・遅れを数えはじめるまで (ms)。追いつくのに掛かる時間 (I まで飛んでデコードし直す) */
+/** 裏から戻ってから・止めていたのを再開してから、捨てたコマ・遅れを数えはじめるまで (ms)。追いつくのに掛かる時間 (I まで飛んでデコードし直す) */
 const BACK_GRACE = 2_000;
 let thinning = false;
 let thinUntil = 0;
@@ -637,6 +639,16 @@ function resetThin(grace = 0): void {
   thinOffAt = Number.NEGATIVE_INFINITY;
   thinCheckAt = performance.now() + grace;
   thinDropped = dropped;
+}
+
+/**
+ * 映像が時計から大きく遅れたところから追いつく (裏から戻った・止めていたのを再開した)。追いつくまで
+ * (`BACK_GRACE`) は、捨てたコマも遅れも数えない — B を飛ばしはじめる (`thin`) のにも、エンコードしたものに
+ * 戻る (`budget.ts`) のにも
+ */
+function catchUp(): void {
+  resetThin(BACK_GRACE);
+  budget.reset(performance.now() + BACK_GRACE);
 }
 
 function thin(decoder: Decoder, late: number): void {
@@ -944,6 +956,11 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
     }
     case "clock":
       clock.set(message.pts, message.at);
+      // 再開して時計が動き出した。止めていた間に時計は放送の今へ進んでいる
+      if (resuming && message.pts !== null) {
+        resuming = false;
+        catchUp();
+      }
       break;
     case "vsync":
       vsync.feed(message.at);
@@ -991,8 +1008,11 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
     case "visible":
       hidden = !message.on;
       // 見えていない間に溜まった遅れは数えない (戻った直後に「間に合っていない」と見ない)
-      budget.reset();
-      if (message.on) resetThin(BACK_GRACE);
+      if (message.on) catchUp();
+      else budget.reset();
+      break;
+    case "resume":
+      resuming = true;
       break;
   }
 };

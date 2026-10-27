@@ -95,7 +95,12 @@ export type ToWorker =
    * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない** — 同じ端末で 2 本見ていると、
    * 裏に回したほうも 1 コマ 10ms 前後デコードし続けて、見ているほうが間に合わなくなっていた。音は流し続ける
    */
-  | { type: "visible"; on: boolean };
+  | { type: "visible"; on: boolean }
+  /**
+   * 止めていたのを再開した (`RawEngine.resume`)。ライブは放送の今から鳴らすので、映像は止めた所から大きく遅れて
+   * いる。**時計が動き出してから追いつくまでは、間に合っていないと数えない** (`worker.ts` の `catchUp`)
+   */
+  | { type: "resume" };
 
 /** worker → 画面 */
 export type FromWorker =

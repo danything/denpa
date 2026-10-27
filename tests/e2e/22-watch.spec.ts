@@ -1355,13 +1355,17 @@ test.describe("指で観る", () => {
     const id = await watchable(page, request);
     await goto(page, `/watch/${id}`);
 
-    // 指は映像を1回押して操作列を出す (マウスのように動かしただけでは出ない)
+    /*
+     * 指は映像を1回押して操作列を出す (マウスのように動かしただけでは出ない)。
+     * 開いた直後は出ていて、そこで押すと引っ込む (出し入れなので)。消えるまで待ってから押す
+     */
+    const bar = page.getByTestId("watch-controls");
+    await expect(bar).toHaveAttribute("data-shown", "false");
     const stage = (await page.getByTestId("watch-stage").boundingBox())!;
     await page.touchscreen.tap(
       stage.x + stage.width / 2,
       stage.y + stage.height / 2,
     );
-    const bar = page.getByTestId("watch-controls");
     await expect(bar).toHaveAttribute("data-shown", "true");
 
     await page.getByTestId("watch-speed").tap();
