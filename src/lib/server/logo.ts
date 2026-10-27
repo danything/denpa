@@ -819,6 +819,8 @@ export async function ride(): Promise<number> {
   if (riding) return 0;
   riding = true;
   try {
+    // 立っているだけでファイルが無い局を先に取得し直す。そうしないと
+    // 「もう持っている」とみなして永久に取得しない
     reconcile();
     const need = missing();
     if (need.length === 0) return 0;
@@ -850,9 +852,6 @@ export async function ride(): Promise<number> {
  * すぐ欲しいときは画面の「ロゴをいますぐ集める」(`sweepNow`) がある。
  */
 export async function sweep(): Promise<number> {
-  // 立っているだけでファイルが無い局を先に取得し直す。そうしないと
-  // 「もう持っている」とみなして永久に取得しない
-  reconcile();
   return ride();
 }
 

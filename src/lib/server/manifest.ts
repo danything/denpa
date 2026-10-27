@@ -1,3 +1,4 @@
+import { networks } from "./address";
 import { config } from "./config";
 
 /**
@@ -23,14 +24,24 @@ const DEFAULT_NAME = "denpa";
  */
 export function appName(hostname: string): string {
   const target = hostname.toLowerCase();
-  for (const raw of config.pwaNames.split(",")) {
+  return (
+    pwaNames().find((entry) => entry.host === target && entry.name !== "")
+      ?.name ?? DEFAULT_NAME
+  );
+}
+
+/** `PWA_NAMES` を読む。ホスト名は小文字にする。`=` の無いものは書き間違いとして飛ばす (表示名にも、知っている名前にもしない) */
+export function pwaNames(): { host: string; name: string }[] {
+  return networks(config.pwaNames).flatMap((raw) => {
     const at = raw.indexOf("=");
-    if (at < 0) continue;
-    const host = raw.slice(0, at).trim().toLowerCase();
-    const name = raw.slice(at + 1).trim();
-    if (host === target && name !== "") return name;
-  }
-  return DEFAULT_NAME;
+    if (at < 0) return [];
+    return [
+      {
+        host: raw.slice(0, at).trim().toLowerCase(),
+        name: raw.slice(at + 1).trim(),
+      },
+    ];
+  });
 }
 
 /**

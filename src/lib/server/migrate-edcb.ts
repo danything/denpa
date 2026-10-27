@@ -7,7 +7,7 @@
  * 録画のファイルは持ってこない (CtrlCmd にファイルを送るコマンドは無く、ファイルの形式も denpa と違う)。
  * EDCB が重複の確認に使う履歴 (`RecInfo2.txt`) を返すコマンドも無いので、録画済みの一覧から消した回は移らない。
  *
- * 何度実行しても二重にはならない。ルールと履歴は `source` (`edcb:<ID>`・`edcb:recinfo:<鍵>` など) で見分ける。
+ * 何度実行しても二重にはならない。ルールと履歴は `source` (`edcb:<ID>`・`edcb:recinfo:<キー>` など) で見分ける。
  * 値は設定フォルダのファイルを読んでいたころと同じなので、そのころ取り込んだものも飛ぶ
  */
 import { eq } from "drizzle-orm";
@@ -240,9 +240,6 @@ export function convertRule(
     );
 
   const text = toHalfWidth(words.join(" ")).trim();
-  // 局は必ず入っているのでここには来ないが、denpa の決まり (条件が空なら全番組に当たる) を崩さないように見ておく
-  if (text === "" && serviceIds.size === 0 && genres.size === 0)
-    return { skip: "条件が空になるので取り込めません" };
 
   if (rule.aimai) notes.push("あいまい検索は普通の検索として取り込みました");
   if (caseSensitive)
@@ -286,7 +283,7 @@ function ruleLabel(rule: EdcbRule): string {
 }
 
 /**
- * 同じ鍵のものを1つにまとめる (先に出たほうを残す)。同じ `source` を2回数えると、下見では2件、
+ * 同じキーのものを1つにまとめる (先に出たほうを残す)。同じ `source` を2回数えると、下見では2件、
  * 取り込みでは1件 (2件目は入らない) になって件数が食い違う
  */
 function firstBy<T>(list: readonly T[], keyOf: (item: T) => string): T[] {
@@ -392,8 +389,8 @@ const RECORDED = new Set([1, 4, 6, 11]);
  * 録画の履歴 (「録ったことのある回」`recorded_history`) を、録画済みの一覧のうち正しく録れたものから入れる。
  * 名前は予約の番組名、終わりは録画の開始 + 長さ (履歴は終わりの時刻を始まりの代わりに使う。`episode.Taken`)。
  *
- * 鍵は局 (ONID・TSID・SID) と EPG の開始。`source` は `edcb:recinfo:<鍵>` で、前に `RecInfo2.txt` から
- * `edcb:recinfo2:<鍵>` で取り込んだ回も飛ばす。局名は denpa の局から引き、無ければ EDCB の局名
+ * キーは局 (ONID・TSID・SID) と EPG の開始。`source` は `edcb:recinfo:<キー>` で、前に `RecInfo2.txt` から
+ * `edcb:recinfo2:<キー>` で取り込んだ回も飛ばす。局名は denpa の局から引き、無ければ EDCB の局名
  */
 export function importEdcbHistory(
   recInfo: EdcbRecInfo[],

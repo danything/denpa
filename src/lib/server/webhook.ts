@@ -44,7 +44,7 @@ function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
  * - **リダイレクトは追わない。** 外の通知先が内側の URL へ飛ばしても、そこへは送らない
  * - **相手の本文は残さない・返さない。** 結果は HTTP のステータスコードだけ (テスト送信で内側の
  *   サービスの中身を読み出す道具にしない)
- * - **ログには URL ではなくホストだけ。** Discord や Slack の URL はパスそのものが鍵
+ * - **ログには URL ではなくホストだけ。** Discord や Slack の URL はパスそのものが秘密
  */
 export async function send(
   webhook: Webhook,
@@ -104,7 +104,7 @@ export function webhookUrl(raw: string): boolean {
   }
 }
 
-/** ログに出す通知先。ホストだけ (パスとクエリは鍵を含みうる) */
+/** ログに出す通知先。ホストだけ (パスとクエリは秘密を含みうる) */
 export function hostOf(url: string): string {
   try {
     return new URL(url).host;

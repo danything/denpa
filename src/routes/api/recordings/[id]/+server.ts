@@ -2,7 +2,7 @@ import { error, json } from "@sveltejs/kit";
 
 import { emit } from "#lib/server/events.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
-import { encodedPath } from "#lib/server/playback.js";
+import { encodedFile } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
@@ -20,7 +20,7 @@ export function GET({ params }) {
   const recording = recordingOr404(params.id);
   return json({
     id: recording.id,
-    encoded: encodedPath(recording) !== null,
+    encoded: encodedFile(recording) !== null,
     state: recording.state,
     durationMs: recording.duration_ms,
   });

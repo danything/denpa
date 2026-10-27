@@ -33,7 +33,7 @@ interface Grant {
 
 const grants = new Map<string, Grant>();
 
-/** 合言葉の形 (`routes/api/bml/hc` と `auth.ts` の `OPEN_PATHS` が同じ形で受ける) */
+/** 合言葉の形。`auth.ts` の `OPEN_PATHS` も同じ形を別に書いている */
 export const TOKEN = /^[0-9a-f]{32}$/;
 
 /** `origin` (http://host[:port]) へ中継する合言葉を出す */
@@ -94,7 +94,7 @@ export async function relayAsset(
           "content-type": got.contentType,
           "content-security-policy": "sandbox",
           "x-content-type-options": "nosniff",
-          // アプリの部品は番組の間に変わらない。読み直しのたびに取りに行かない。**失敗の返りは溜めない** (一時的な 404・503)
+          // アプリの部品は番組の間に変わらない。読み直しのたびに取得し直さない。**失敗の返りは溜めない** (一時的な 404・503)
           "cache-control":
             got.status >= 200 && got.status < 300
               ? "private, max-age=300"

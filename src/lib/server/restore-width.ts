@@ -30,7 +30,7 @@ import { emit } from "./events";
 import { recordings, services } from "./schema";
 import { store, stored } from "./settings";
 
-/** 済んだ録画ID を覚えておく鍵 */
+/** 済んだ録画ID を覚えておくキー */
 const MARK = "widthRestoredThrough";
 
 /**

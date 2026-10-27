@@ -122,8 +122,8 @@ VA-API のドライバ) だけで、Debian では amd64 にしか無いので ar
 (`IfNotPresent` だと、古い `develop` がノードに残っているかぎり黙ってそれで上がる。
 引き替えに、GHCR に繋がらないと Pod が起動しません)。
 
-リリースを作ると、ビルドし直さずにそのコミットの `sha-` へバージョンと `latest` を貼り足します
-(`.github/workflows/release.yml`)。試したものとリリースしたものを別にしないためです。
+リリースを作ると、組み直さずにそのコミットの `sha-` のイメージへバージョンの 1 層 (`DENPA_VERSION`。`update.ts` が新しいバージョンの
+通知に使う) を足し、バージョンと `latest` を貼ります (`.github/workflows/release.yml`・`.github/release.Dockerfile`)。試したものとリリースしたものを別にしないためです。
 貼り足すときも両方の arch のままです。
 
 **プレリリース (prerelease) には `latest` を貼りません** (`compose.prod.yml` が指しているので、

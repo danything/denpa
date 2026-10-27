@@ -17,7 +17,7 @@ import { sessions } from "./schema";
 export const COOKIE = "denpa_session";
 /** ログインの途中 (state / nonce / verifier) を預ける先。callback で使って捨てる */
 export const PENDING_COOKIE = "denpa_login";
-/** 途中で放り出されたログインを片付けるまで */
+/** 途中で放り出されたログインを片付けるまで (秒。Cookie の maxAge) */
 export const PENDING_TTL = 10 * 60;
 
 /** 控えのうち、認証に要るぶん (作った時刻は要らない) */

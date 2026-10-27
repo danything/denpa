@@ -6,7 +6,7 @@ import { currentServices, watchableServices } from "#lib/server/epg.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
 import { relative } from "#lib/server/paths.js";
 import { recordingFromForm } from "#lib/server/recording.js";
-import { cancel, reserve } from "#lib/server/reservations.js";
+import { cancel, reserveFromForm } from "#lib/server/reservations.js";
 import {
   createRule,
   deleteRule,
@@ -182,15 +182,8 @@ export function load({ url }) {
 export const actions = {
   /** 番組を予約する。録画のしかたは設定画面の1箇所で決める (番組表の予約と同じ) */
   reserve: async ({ request }) => {
-    const form = await request.formData();
-    const programId = Number(form.get("programId"));
-    if (!Number.isFinite(programId))
-      return fail(400, { message: "番組IDが不正です" });
-    try {
-      await reserve(programId);
-    } catch (error) {
-      return fail(400, { message: String(error) });
-    }
+    const refused = await reserveFromForm(await request.formData());
+    if (refused !== null) return fail(400, { message: refused });
     return { success: true };
   },
 

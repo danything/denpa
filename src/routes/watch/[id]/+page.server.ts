@@ -7,7 +7,7 @@ import { orm } from "#lib/server/db.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
 import { sidecarPaths } from "#lib/server/metadata.js";
 import { relative } from "#lib/server/paths.js";
-import { encodedPath, rulerOf, tsPathOf } from "#lib/server/playback.js";
+import { encodedFile, rulerOf, tsPathOf } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";
 import { lastEncodeError, recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
@@ -39,7 +39,7 @@ export function load({ params, url }) {
     .get();
   if (recording === undefined) error(404, "録画が見つかりません");
   if (recording.deleted_at !== null) error(410, "この録画は削除されています");
-  const encoded = encodedPath(recording);
+  const encoded = encodedFile(recording);
   const ts = tsPathOf(recording);
   // 録っている最中は追っかけ再生へ (伸びている TS を追い読みする)
   if (encoded === null && ts !== null && recording.finished_at === null)

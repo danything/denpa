@@ -102,7 +102,7 @@ export function exact(words: string[]): boolean {
 
 /**
  * 1つの節の結果。`rows` は先頭から `limit` 件まで、`more` はその先にもあるか。
- * `total` は件数を頼んだとき (`count`) は当たった数、頼まなければ読んだぶんの数 (多くても `limit + 1`)
+ * `total` は件数を求めたとき (`count`) は当たった数、求めなければ読んだぶんの数 (多くても `limit + 1`)
  */
 export interface Section<T> {
   total: number;

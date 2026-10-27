@@ -103,7 +103,7 @@ interface RecordingRow extends Recording {
    * `resume_ms` は元の TS の物差しなので、エンコードしたものの尺と比べると CM を切ったものでは食い違う
    */
   progress: { at: number; length: number } | null;
-  /** 「まとめて表示」でまとめる鍵と見出し (`seriesGroup`) */
+  /** 「まとめて表示」でまとめるキーと見出し (`seriesGroup`) */
   group_key: string;
   group_name: string;
 }
@@ -142,7 +142,7 @@ interface MissedRow {
   rule_name: string | null;
   /** チューナー不足で落とされたものは理由を持っている。詳細で見せる */
   conflict_reason: string | null;
-  /** 「まとめて表示」でまとめる鍵と見出し。録画の行と同じ決め方 (`seriesGroup`) */
+  /** 「まとめて表示」でまとめるキーと見出し。録画の行と同じ決め方 (`seriesGroup`) */
   group_key: string;
   group_name: string;
 }
@@ -158,7 +158,7 @@ interface ReservationRow extends Omit<Reservation, "state"> {
   recording_id: number | null;
   /** 録画の行が1本でもあるか (消したものも含む)。終わった予約を録画の行にまとめる (`mergeRecorded`) */
   recorded: boolean;
-  /** 「まとめて表示」でまとめる鍵と見出し。録画の行と同じ決め方 (`seriesGroup`) */
+  /** 「まとめて表示」でまとめるキーと見出し。録画の行と同じ決め方 (`seriesGroup`) */
   group_key: string;
   group_name: string;
 }
@@ -225,7 +225,7 @@ export function load({ url, cookies }) {
     .orderBy(desc(sql`${rec.state} = 'recording'`), asc(r.start_at))
     .limit(300)
     .all()
-    // まとめて表示の鍵。予約はシリーズ名を持たないので、番組名から切り出す (録るときと同じ)
+    // まとめて表示のキー。予約はシリーズ名を持たないので、番組名から切り出す (録るときと同じ)
     .map((row) => ({ ...row, ...seriesGroup("", row.name) }));
 
   // エンコードは録画の行の状態として出す (別のカードにしていた頃は、増えるたびに一覧が下へずれた)

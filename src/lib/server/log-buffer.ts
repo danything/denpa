@@ -17,7 +17,8 @@ import { cut, type LogLevel, type LogLine } from "../issue-report";
  * 読まれても、置き場は `globalThis` の 1 つを共有する
  */
 
-export const LOG_LIMIT = 2000;
+/** 持つ行数 */
+const LOG_LIMIT = 2000;
 /** 1 行の上限。巨大な物を出した 1 行でメモリを食わないように */
 const TEXT_LIMIT = 4000;
 

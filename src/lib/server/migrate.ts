@@ -339,7 +339,7 @@ function fileSize(path: string): number {
 /** EPGStation の局の名前 (`/channels`)。知らない局の名前を写すのに使う */
 type ChannelNames = ReadonlyMap<number, string>;
 
-/** {@link importOne} が要るもの。取るのに使う相手と、止めるための signal */
+/** {@link importOne} が要るもの。取るのに使う相手・EPGStation の局の名前・止めるための signal */
 interface ImportContext {
   client: EpgstationClient;
   channels: ChannelNames;
@@ -605,7 +605,7 @@ export function parseGenres(value: unknown): string[] {
  * 時刻の違うものが残れば写せない ({@link slot} が null)
  */
 export class SlotWindows {
-  /** 鍵は始まりと終わりの分 (時刻で絞らないものは `null:null`) */
+  /** キーは始まりと終わりの分 (時刻で絞らないものは `null:null`) */
   private readonly windows = new Map<
     string,
     { from: number | null; to: number | null; days: Set<number> }
@@ -830,8 +830,18 @@ async function importReservations(
       continue;
     }
 
+    if (options.apply) {
+      try {
+        await reserve(program.id);
+      } catch (error) {
+        record(
+          `予約できません: ${name} (${error instanceof Error ? error.message : String(error)})`,
+        );
+        status_.reservations.skipped++;
+        continue;
+      }
+    }
     recordPlan(options, "予約", name);
-    if (options.apply) await reserve(program.id);
     status_.reservations.imported++;
   }
 }

@@ -238,7 +238,7 @@ export class EpgstationClient {
     return `${this.source.base}/api${path}${query === "" ? "" : `?${query}`}`;
   }
 
-  /** JSON を1つ取る。ヘッダまで {@link timing.header}、本文まで含めてその3倍で諦める */
+  /** JSON を1つ取る。本文まで含めて {@link timing.header} の3倍で諦める */
   async json(
     path: string,
     params: Record<string, string | number> = {},
@@ -439,8 +439,9 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * EPGStation のファイル (`/api/videos/<id>`) を `temporary` へ取る。**書きかけがあれば続きから。**
  *
  * - 書きかけの長さ `n` で `Range: bytes=n-` を送る。`206` で始まりが `n`、全体が `size` なら足す。
- *   `200` (プロキシが Range を落とした) なら頭から書き直す。全体が `size` と違えば頭から取り直す
- * - `n == size` なら取りに行かない
+ *   `200` (プロキシが Range を落とした) なら頭から書き直す。全体が `size` と違えば書きかけを消して投げる
+ *   (一覧の大きさが古いので、次の実行で取り直す)
+ * - `n == size` なら取得しない
  * - 止まったら (ヘッダまで {@link timing.header}、データが {@link timing.idle} 来ない)・切れたら・5xx なら、
  *   間隔を伸ばして {@link timing.retries} 回まで取り直す。続きから
  * - 終わったら長さを確かめる: 最後の長さ == `size` == 応答の全体の長さ。違えば書きかけを消して投げる
@@ -462,7 +463,7 @@ export async function downloadVideo(
     have = 0;
   }
   if (have > 0) onBytes(have);
-  /** 応答が言った全体の長さ。取りに行かなかったなら null */
+  /** 応答が言った全体の長さ。取得しなかったなら null */
   let announced: number | null = null;
   let failures = 0;
 
@@ -521,7 +522,7 @@ export async function downloadVideo(
         announced = range.total;
         append = true;
       } else {
-        // Range を落とされた (か、頭から頼んだ)。書きかけは捨てて書き直す
+        // Range を落とされた (か、頭からリクエストした)。書きかけは捨てて書き直す
         const length = res.headers.get("content-length");
         announced = length === null ? null : Number(length);
         if (announced !== null && announced !== size) {

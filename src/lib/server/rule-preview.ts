@@ -90,7 +90,7 @@ export interface PreviewRow {
 }
 
 /**
- * **頼まれた番組1つずつの「この条件で録るか」** (検索の結果の行に出す)。
+ * **指定した番組1つずつの「この条件で録るか」** (検索の結果の行に出す)。
  *
  * - `record` 録る
  * - `reserved` もう予約がある (手動・ほかのルール・この条件のどれでも)。保存しても変わらない
@@ -123,7 +123,7 @@ export interface Preview {
   skipped: number;
   programs: PreviewRow[];
   conflicts: number;
-  /** 頼まれた番組 (`options.ids`) の「録るか」。番組 ID → 結果 */
+  /** 指定した番組 (`options.ids`) の「録るか」。番組 ID → 結果 */
   verdicts: Record<number, Verdict>;
   failed: string | null;
 }
@@ -454,8 +454,8 @@ async function countPreview(
   };
 
   /**
-   * 頼まれた番組の「録るか」。**当たった番組の行 (`rows`) から読む** — 同じ回をまとめるのは
-   * 当たった番組すべてで比べるので、頼まれた番組だけで組み直すと答えが変わる。
+   * 指定した番組の「録るか」。**当たった番組の行 (`rows`) から読む** — 同じ回をまとめるのは
+   * 当たった番組すべてで比べるので、指定した番組だけで組み直すと答えが変わる。
    * 当たらなかった番組だけ読み直して、当たらない理由 (`missOf`) を添える
    */
   function verdictsOf(wanted: number[]): Record<number, Verdict> {

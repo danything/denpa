@@ -1,5 +1,5 @@
 /**
- * http の Hybridcast のアプリの script・画像・CSS を、合言葉の配信元の同じ経路から取って返す
+ * Hybridcast のアプリの script・画像・CSS を、合言葉の配信元の同じ経路から取って返す
  * ([hc-relay.ts](../../../../../../lib/server/hc-relay.ts) の `relayAsset`)。
  *
  * - **ログインは見ない** (使い捨てのオリジンの iframe からの読み込みには cookie が付かない)。合言葉が許可証

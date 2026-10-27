@@ -52,7 +52,7 @@ const collected = new Map<string, number>();
  * いた (実機で、入れ替えのたびに46チャンネルぶん)。番組の行の `updated_at` が
  * そのまま「最後に取り込んだ時刻」になる。
  *
- * **数える鍵は局**で、`services.channel` は見ない。あの列に入るのは
+ * **数えるキーは局**で、`services.channel` は見ない。あの列に入るのは
  * 「最後に取り込んだときの枠の名前」1つだけなので、**同じ TS を指す枠が
  * 2つあると片方が必ず「一度も集めていない」ことになる**。実機の BS が
  * まさにそれで、9枠が永久に「まっさら」に見えて周回のたびに開かれていた。
@@ -125,7 +125,7 @@ export interface CollectState {
   pending: number;
   /** この周回で回る数 (進み具合の分母) */
   total: number;
-  /** 初回の、衛星をネットワークごとに1中継で埋めている最中か (`firstSweeps`) */
+  /** 初回の、BS をネットワークごとに1中継で埋めている最中か (`firstSweeps`) */
   sweeping: boolean;
   startedAt: number | null;
   finishedAt: number | null;
@@ -494,13 +494,6 @@ async function run(): Promise<number> {
   const at = Date.now();
   const thinnest = (channel: AgentChannel) => reachOf(reach, channel);
 
-  /*
-   * 押されたときは**選り好みしない。**
-   *
-   * 普段は「薄い」か「しばらく行っていない」チャンネルだけ回るので、
-   * さっき集め終えたところで押すと1本も回らず、何も起きていないように見える。
-   * 押した人は「いま集め直したい」なので、全部回って薄いほうから行く
-   */
   const last = lastCollected(channels);
   const lastOf = (channel: AgentChannel) => last.get(key(channel)) ?? 0;
   /*
@@ -518,6 +511,13 @@ async function run(): Promise<number> {
         )
       : lastOf(channel);
 
+  /*
+   * 押されたときは**選り好みしない。**
+   *
+   * 普段は「薄い」か「しばらく行っていない」チャンネルだけ回るので、
+   * さっき集め終えたところで押すと1本も回らず、何も起きていないように見える。
+   * 押した人は「いま集め直したい」なので、全部回って薄いほうから行く
+   */
   const targets = boosted
     ? [...channels].sort((a, b) => thinnest(a) - thinnest(b))
     : pickChannels(channels, thinnest, networkLast, at);
@@ -627,10 +627,10 @@ async function run(): Promise<number> {
   }
 
   if (programs > 0) {
-    settle(programs);
+    settle();
     await resolveConflicts();
     console.log(
-      `[epg] ${targets.length} チャンネルから ${programs} 件の番組を取り込みました`,
+      `[epg] ${total} チャンネルから ${programs} 件の番組を取り込みました`,
     );
   }
   return programs;

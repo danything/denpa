@@ -5,9 +5,9 @@ import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
 import { currentServices, typeRank } from "#lib/server/epg.js";
 import {
-  refresh,
   SCAN_KINDS,
   type ScanKind,
+  scanState,
   start,
   stop,
 } from "#lib/server/scan.js";
@@ -66,8 +66,8 @@ function coverage(): Coverage[] {
 
 export function load() {
   return {
-    // スキャンの進み具合。回しているのは denpa 自身 (scan.refresh)
-    scan: refresh(),
+    // スキャンの進み具合。回しているのは denpa 自身 (scan.ts)
+    scan: scanState(),
     channels: coverage(),
     /** 番組表を集めている最中の様子。1チャンネルに数分かかる */
     collect: collectState(),

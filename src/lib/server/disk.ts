@@ -37,7 +37,7 @@ export function freeBytes(dir: string): number | null {
 
 /** 監視する置き場。元のTSの作業領域とエンコード済みの保存先 */
 function watched(): string[] {
-  // 同じパーティションに載っていることもあるので重複は畳む
+  // 同じパスを指していることもあるので重複は畳む
   return [...new Set([config.rawDir, config.encodedDir])];
 }
 

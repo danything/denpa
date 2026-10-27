@@ -12,7 +12,7 @@ import {
   stationsOf,
   WINDOW_HOURS,
 } from "#lib/server/guide.js";
-import { cancel, reserve } from "#lib/server/reservations.js";
+import { cancel, reserveFromForm } from "#lib/server/reservations.js";
 import { reservations } from "#lib/server/schema.js";
 import { storedSubchannels, SUBCHANNELS_COOKIE } from "#lib/subchannels.js";
 import { CHANNEL_TYPES } from "#lib/types.js";
@@ -98,15 +98,8 @@ export const actions = {
    * 「どれで決まったのか」が分からなくなる
    */
   reserve: async ({ request }) => {
-    const form = await request.formData();
-    const programId = Number(form.get("programId"));
-    if (!Number.isFinite(programId))
-      return fail(400, { message: "番組IDが不正です" });
-    try {
-      await reserve(programId);
-    } catch (error) {
-      return fail(400, { message: String(error) });
-    }
+    const refused = await reserveFromForm(await request.formData());
+    if (refused !== null) return fail(400, { message: refused });
     return { success: true };
   },
 };

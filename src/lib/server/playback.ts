@@ -167,8 +167,8 @@ export function mediaInfo(source: EncodedSource, json: string): MediaFile {
   };
 }
 
-/** 待ち時間の上限。壊れたファイルで居座らせない */
-const TIMEOUT = 15_000;
+/** ffprobe の待ち時間の上限。壊れたファイルで居座らせない */
+export const PROBE_TIMEOUT = 15_000;
 
 /** 読んだ中身の控え。開くたびに聞くので、同じファイル (パスと更新時刻) なら読み直さない */
 const probed = new Map<string, { mtime: number; file: MediaFile }>();
@@ -207,7 +207,7 @@ async function probeMedia(
       "json",
       path,
     ],
-    { timeoutMs: TIMEOUT, stdout: true },
+    { timeoutMs: PROBE_TIMEOUT, stdout: true },
   );
   const file = mediaInfo(
     source,
@@ -938,7 +938,7 @@ async function rawResponse(
 }
 
 /** エンコード済みのファイル (Matroska)。無ければ null。在るものが物差しになる (`PlayAxis`) */
-export function encodedPath(
+export function encodedFile(
   recording: Pick<Recording, "library_path">,
 ): string | null {
   return recording.library_path?.endsWith(".mkv") === true
@@ -956,7 +956,7 @@ export function rulerOf(
   source: FileSource | null,
 ): Ruler | null {
   const encoded =
-    source === null ? encodedPath(recording) !== null : source !== "ts";
+    source === null ? encodedFile(recording) !== null : source !== "ts";
   return encoded
     ? { kept: recording.cm_kept, skip: recording.encode_skip ?? 0 }
     : null;
@@ -1047,7 +1047,7 @@ export async function captionArgs(recording: Recording): Promise<{
   /** 抜くファイル (エンコード済み)。元の TS から抜くときは null */
   path: string | null;
 } | null> {
-  const encoded = encodedPath(recording);
+  const encoded = encodedFile(recording);
   const out = ["-c:s", "copy", "-f", "matroska", "pipe:1"];
   if (encoded !== null) {
     return {

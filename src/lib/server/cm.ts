@@ -53,23 +53,26 @@ export function tooMuchCm(cm: Range[], duration: number): boolean {
   return cmRatio(cm, duration) > MAX_CM_RATIO * 100;
 }
 
+/** これより短い区間は作らない (切っても意味が無く、チャプターだけが増える) */
+const MIN_RANGE = 0.5;
+
 /**
  * 区間の裏返し。CMを渡して残す区間をもらう (チャプター・実カット)。
  *
  * 渡された区間は並べ替えてから使う。
  *
- * 0.5秒より短い隙間は作らない (切っても意味が無く、チャプターだけが増える)。
+ * {@link MIN_RANGE} より短い隙間は作らない。
  */
 export function invertRanges(ranges: Range[], duration: number): Range[] {
   const sorted = [...ranges].sort((a, b) => a.start - b.start);
   const out: Range[] = [];
   let cursor = 0;
   for (const block of sorted) {
-    if (block.start - cursor > 0.5)
+    if (block.start - cursor > MIN_RANGE)
       out.push({ start: cursor, end: block.start });
     cursor = Math.max(cursor, block.end);
   }
-  if (duration - cursor > 0.5) out.push({ start: cursor, end: duration });
+  if (duration - cursor > MIN_RANGE) out.push({ start: cursor, end: duration });
   return out;
 }
 
@@ -82,13 +85,13 @@ export function invertRanges(ranges: Range[], duration: number): Range[] {
  * 毎回そのぶんCMを見せてから飛んで、着地も本編に食い込んでいた
  * (字幕はエンコードする ffmpeg が映像と一緒に詰める)。
  *
- * 詰めた結果ほとんど残らない区間は落とす (invertRanges の 0.5 秒と同じ判断)。
+ * 詰めた結果 {@link MIN_RANGE} も残らない区間は落とす。
  */
 export function shiftRanges(ranges: Range[], by: number): Range[] {
   if (by <= 0) return ranges;
   return ranges
     .map((r) => ({ start: Math.max(0, r.start - by), end: r.end - by }))
-    .filter((r) => r.end - r.start > 0.5);
+    .filter((r) => r.end - r.start > MIN_RANGE);
 }
 
 /**
@@ -131,7 +134,7 @@ export function chapterMetadata(cm: Range[], duration: number): string {
  *   **同じ行が番組の数だけ並ぶ**
  * - `-show_entries` に**書いた順では返らない** (`avg_frame_rate,width,height` が幅,高さ,fps の順で来る)
  *
- * 鍵で引き、**同じ鍵は最初のものを採る**。
+ * キーで引き、**同じキーは最初のものを採る**。
  */
 export function fields(out: string): Map<string, string> {
   const map = new Map<string, string>();
@@ -179,7 +182,7 @@ export async function probeVideo(input: string): Promise<{
   let format = new Map<string, string>();
   let stream = new Map<string, string>();
   try {
-    // `nk=1` (鍵を出さない) にはしない。鍵で引くために必ず `key=value` で受ける
+    // `nk=1` (キーを出さない) にはしない。キーで引くために必ず `key=value` で受ける
     format = fields(
       await read([
         "-show_entries",

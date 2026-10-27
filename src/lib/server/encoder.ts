@@ -171,7 +171,7 @@ function wayName(way: HwWay | undefined): string {
     ? "ソフトウェア"
     : `${basename(way.device)} の ${HW_KIND_LABEL[way.kind]}`;
 }
-/** GPU のデバイスを回す番。ジョブごとに先頭のデバイスを入れ替える (hwenc.hwChain) */
+/** GPU のデバイスを回す番。1本エンコードするごとに先頭のデバイスを入れ替える (hwenc.hwChain) */
 let hwTurn = 0;
 
 /**
@@ -937,9 +937,9 @@ async function runFfmpeg(
     let block: Record<string, string> = {};
     const fd = proc.stdio[3] as number;
     for await (const line of lines(Bun.file(fd).stream())) {
-      const eq = line.indexOf("=");
-      if (eq === -1) continue;
-      block[line.slice(0, eq)] = line.slice(eq + 1).trim();
+      const sep = line.indexOf("=");
+      if (sep === -1) continue;
+      block[line.slice(0, sep)] = line.slice(sep + 1).trim();
       if (block["progress"] === undefined) continue;
       onProgress(block);
       block = {};
