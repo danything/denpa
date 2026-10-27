@@ -1130,7 +1130,7 @@
   function resume(): void {
     length = video?.duration ?? 0;
     place();
-    // 繋ぎが切れて読み直したところ。観ていた位置へ戻して続ける (`recover`)
+    // 接続が切れて読み直したところ。観ていた位置へ戻して続ける (`recover`)
     if (retryAt > 0 && video !== null) {
       video.currentTime = retryAt;
       retryAt = 0;
