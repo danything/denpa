@@ -525,7 +525,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
       try {
         const saved = savePrograms(scanner.events);
         if (saved > 0) {
-          settle(saved);
+          settle();
           // 立った予約の取り合いを裁き直す (`settle` は裁かない。ほかの呼び手と同じ)
           await resolveConflicts();
         }
@@ -591,13 +591,7 @@ export function stop(): { stopped: boolean; message: string } {
   return { stopped: true, message: "チャンネルスキャンを中断しています" };
 }
 
-/**
- * いまの状況。
- *
- * **走らせているのは denpa 自身**なので、聞きに行く先は無い。denpa を入れ替えれば
- * スキャンも一緒に落ちるので、`idle` に戻るのが正しい (エージェントに持たせて
- * いた頃は、走っていないのに「スキャン中」が残ることがあった)。
- */
-export function refresh(): ScanState {
+/** いまの状況。走らせているのは denpa 自身なので、denpa を入れ替えれば `idle` に戻る */
+export function scanState(): ScanState {
   return current;
 }

@@ -119,12 +119,12 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 
 `noUncheckedIndexedAccess` の書き分け:
 
-- **バイト列の読み** (`data[i]`、`src/lib/ts/` の TS/PSI/EIT/字幕のパーサ) は、長さを確かめた
+- **バイト列の読み** (`data[i]`、`packages/arib/src/` の PSI/EIT/字幕と `src/lib/ts/` の TS・mkv のパーサ) は、長さを確かめた
   上で `data[i]!`。1 バイトごとに undefined を見てもパーサのコードが二倍の長さになるだけ。
   確認が無いところに `!` を足さない
 - **配列の先頭・regex の group・`split()` の結果** は undefined を見る (`?? ''`、
   `const [a = NaN] = ...`、`if (x === undefined) return`)。`[0]!` にしてよいのは、直前で
-  空でないことを確かめている (`atLeastOne` のような) 場合だけ
+  空でないことを確かめている (`tests/e2e/helpers.ts` の `atLeastOne` のような) 場合だけ
 - **試験** は `!` でよい。落ちれば試験が落ちる
 
 外から来る JSON (チューナーエージェントの答え、OIDC の相手、取り込み元の DB) は

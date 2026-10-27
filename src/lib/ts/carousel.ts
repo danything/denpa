@@ -122,9 +122,4 @@ export class Carousel {
     for (const held of this.modules.values()) out.push(held);
     return out;
   }
-
-  /** 覚えているモジュールの数。**画面には出さない** (切り分け用) */
-  get held(): number {
-    return this.modules.size;
-  }
 }

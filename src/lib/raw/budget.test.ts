@@ -102,6 +102,21 @@ describe("DecodeBudget", () => {
     for (let s = 1; s <= 10; s++)
       expect(budget.tick(s * WINDOW, 33.4, 1)).toBe(false);
   });
+
+  /*
+   * **止めていたのを再開した直後の遅れでは諦めない。** 再開すると時計は放送の今から動き、映像は次の I まで
+   * 飛んで追いつくまで 1 秒ほど遅れる。続けて止める・再開すると、それを 3 回続けて数えてエンコードしたものに戻っていた
+   */
+  test("再開してから追いつくまで (`reset` の `until`) は数えず、そのあとは数える", () => {
+    const budget = new DecodeBudget();
+    budget.reset(5 * WINDOW);
+    for (let s = 1; s <= 4; s++)
+      expect(second(budget, s * WINDOW, 5, 1)).toBe(false);
+    for (const s of [5, 6]) expect(second(budget, s * WINDOW, 5)).toBe(false);
+    // 追いついたあとも遅れ続けるなら、いつもどおり 3 秒で諦める
+    const results = [7, 8, 9].map((s) => second(budget, s * WINDOW, 5, 0.5));
+    expect(results).toEqual([false, false, true]);
+  });
 });
 
 describe("DecodeBudget (WebCodecs の経路)", () => {

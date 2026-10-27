@@ -135,7 +135,7 @@ function strings(value: unknown): string[] {
     : [];
 }
 
-/** 来たままの形式。**どの鍵も無いかもしれない**として読む */
+/** 来たままの形式。**どのキーも無いかもしれない**として読む */
 type Loose<T> = { [K in keyof T]?: unknown };
 
 function stateOf(row: Loose<Infer<typeof CARD_READER>>): CardReaderState {
@@ -195,8 +195,7 @@ const DECODED = object({ ok: optional(boolean), error: optional(string) });
  * カードリーダーの状態。設定画面に出す。
  *
  * リーダーが見えていてもカードを読めていないことがある(挿さっていない・USBが黙る)。
- * そうなると録画は成功したように見えて中身が全部スクランブルされたまま、という
- * 気づきにくい壊れ方をするので、画面から見えるようにしてある。
+ * そのまま録ると上に書いた壊れ方になるので、画面から見えるようにしてある。
  */
 export async function cardStatus(): Promise<CardStatus> {
   try {

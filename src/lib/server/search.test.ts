@@ -161,7 +161,7 @@ describe("これからの放送", () => {
     expect(found.rows).toHaveLength(2);
   });
 
-  test("件数を頼まなければ、上限に1つ足したぶんで読むのをやめる", () => {
+  test("件数を求めなければ、上限に1つ足したぶんで読むのをやめる", () => {
     for (let i = 1; i <= 5; i++) program(i, `テストアニメ 第${i}話`, i * HOUR);
     const found = searchPrograms("テストアニメ", { limit: 2 });
     expect(found.rows.map((row) => row.id)).toEqual([1, 2]);

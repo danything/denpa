@@ -2,6 +2,7 @@ import { type NetworkInterfaceInfo, networkInterfaces } from "node:os";
 
 import { inAny, networks, normalize, overlaps, unreadable } from "./address";
 import { config } from "./config";
+import { pwaNames } from "./manifest";
 import { enabled as oidcEnabled } from "./oidc";
 
 /**
@@ -13,7 +14,7 @@ import { enabled as oidcEnabled } from "./oidc";
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・端末に保存もこの控え (Cookie) で通る |
  * | アクセストークン (`Bearer denpa_…`) | ペアリングしたアプリ (`device-auth.ts`) |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
- * | Hybridcast の中継の合言葉 | http の Hybridcast のアプリの読み込みだけ (`hc-relay.ts`。下の `OPEN_PATHS`) |
+ * | Hybridcast の中継の合言葉 | Hybridcast のアプリの読み込みだけ (`hc-relay.ts`。下の `OPEN_PATHS`) |
  *
  * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
  * 起動時に自動で掛けていたが、廃止した — 残っていたのは「画面に出して
@@ -32,9 +33,7 @@ import { enabled as oidcEnabled } from "./oidc";
  *   「生きているか・動いているバージョンと新しいバージョン・局が何件か・録画が何本か」だけ
  * - **`/manifest.webmanifest`。** ブラウザは**資格情報を付けずに**取得する
  *   ので (`<link rel="manifest">` に `crossorigin` を書かない限り)、守ると
- *   ホーム画面に置けなくなる。static に置いてあった頃は adapter-node が
- *   hooks より手前で返していて、そもそも掛かっていなかった。出しているのは
- *   アプリの名前・色・アイコンの場所だけ
+ *   ホーム画面に置けなくなる。出しているのはアプリの名前・色・アイコンの場所だけ
  * - **ペアリングコードとアクセストークンの受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
  *   まだ何の資格も持っていない。コードを出すだけでは入れず、許すのは `/device` (ここは守る)。
  *   誰でも呼べるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
@@ -184,7 +183,7 @@ function bareName(host: string): string | null {
 
 /** 設定にある自分の名前 (`ALLOWED_HOSTS` と、`PWA_NAMES` の `ホスト名=表示名` のホスト名) */
 function ownNames(): string[] {
-  const pwa = networks(config.pwaNames).map((raw) => raw.split("=")[0]!);
+  const pwa = pwaNames().map((entry) => entry.host);
   return [...networks(config.allowedHosts), ...pwa]
     .map((raw) => raw.trim().toLowerCase().replace(/\.$/, ""))
     .filter((raw) => raw !== "" && raw !== ".");

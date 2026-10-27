@@ -16,7 +16,7 @@
  */
 import type { ChannelType } from "../types";
 import SEED from "./channel-seed.json";
-import { refresh as scanState } from "./scan";
+import { scanState } from "./scan";
 import { type AgentChannel, getTuners, putChannels } from "./tuner";
 
 const TYPES: ChannelType[] = ["BS", "CS"];
@@ -39,7 +39,7 @@ export async function seedChannels(
   /*
    * **スキャンの最中は入れない。** スキャンは結果を最後にまとめて預けるので、その間は
    * 局が空のまま。そこへ割り込むと、スキャンの途中で標準の表に切り替わり、
-   * 番組表集めがそちらへ走る (レビュー指摘)
+   * 番組表集めがそちらへ走る
    */
   if (scanState().state === "running") return [];
   const present = new Set(channels.map((c) => c.type));

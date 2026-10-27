@@ -122,8 +122,8 @@ VA-API のドライバ) だけで、Debian では amd64 にしか無いので ar
 (`IfNotPresent` だと、古い `develop` がノードに残っているかぎり黙ってそれで上がる。
 引き替えに、GHCR に繋がらないと Pod が起動しません)。
 
-リリースを作ると、ビルドし直さずにそのコミットの `sha-` へバージョンと `latest` を貼り足します
-(`.github/workflows/release.yml`)。試したものとリリースしたものを別にしないためです。
+リリースを作ると、組み直さずにそのコミットの `sha-` のイメージへバージョンの 1 層 (`DENPA_VERSION`。`update.ts` が新しいバージョンの
+通知に使う) を足し、バージョンと `latest` を貼ります (`.github/workflows/release.yml`・`.github/release.Dockerfile`)。試したものとリリースしたものを別にしないためです。
 貼り足すときも両方の arch のままです。
 
 **プレリリース (prerelease) には `latest` を貼りません** (`compose.prod.yml` が指しているので、
@@ -183,8 +183,8 @@ JS として動き**、ログインの控えで API を呼べることになる�
 | `script-src`               | `'self'` + nonce         | 自分の束 (`_app/`。データ放送のエンジンの遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない**                                                                                                                                                           |
 | `script-src-attr`          | `'none'`                 | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの)                                                                                                                                                                                                                                                                         |
 | `style-src`                | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」                                                                                                                                                                                                                                                                                                          |
-| `img-src`                  | `'self' data: blob:`     | 局ロゴ・ポスターは自分。データ放送の画像は作り直して blob:、DRCS (外字) は canvas から data:                                                                                                                                                                                                                                        |
-| `font-src`                 | `'self' data: blob:`     | Denpa Font は自分 (`/api/font/denpa-font.woff2`)。DRCS は FontFace にバイト列で渡すので URL ではない                                                                                                                                                                                                                                |
+| `img-src`                  | `'self' data: blob:`     | 局ロゴ・ポスターは自分。データ放送の画像と DRCS (外字) は作り直して blob:。data: は CSS に埋めたアイコン                                                                                                                                                                                                                            |
+| `font-src`                 | `'self' data: blob:`     | Denpa Font は自分 (`/api/font/denpa-font.woff2`)                                                                                                                                                                                                                                                                                    |
 | `media-src`                | `'self' blob:`           | 録画は自分。ライブの MSE と端末に保存した録画は blob:                                                                                                                                                                                                                                                                               |
 | `connect-src`              | `'self'`                 | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む                                                                                                                                                                                                              |
 | `worker-src`               | `'self'`                 | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker                                                                                                                                                                                                                                                       |

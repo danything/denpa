@@ -44,7 +44,7 @@ config.rawDir = join(root, "raw");
 config.encodedDir = join(root, "encoded");
 
 const { orm } = await import("./db");
-const { recordedHistory, recordings, rules, services } =
+const { programs, recordedHistory, recordings, rules, services } =
   await import("./schema");
 const api = await import("./epgstation-api");
 const migrate = await import("./migrate");
@@ -188,7 +188,7 @@ describe("取り込み (v3)", () => {
     expect(second.service_name).toBe("どこかのテレビ");
     expect(second.service_id).toBe(0);
 
-    // 元のTSしか取らない (エンコード済みがあるものは元のTSを取りに行かない)
+    // 元のTSしか取らない (エンコード済みがあるものは元のTSを取得しない)
     expect(fake.videoRequests.map((item) => item.id).sort()).toEqual([
       11, 21, 51,
     ]);
@@ -235,7 +235,37 @@ describe("取り込み (v3)", () => {
     );
   });
 
-  test("二度目は何も増えず、ファイルも取りに行かない", async () => {
+  test("予約できない手動予約 (コピー禁止) は記録に残して飛ばし、録画の取り込みへ進む", async () => {
+    const at = Date.now();
+    orm()
+      .insert(programs)
+      .values({
+        id: 323912360800001,
+        service_id: 23608,
+        network_id: 32391,
+        event_id: 1,
+        start_at: at + 3600_000,
+        end_at: at + 5400_000,
+        name: "手で入れた予約テスト",
+        copy_never: true,
+        updated_at: at,
+      })
+      .run();
+    try {
+      await run();
+      const s = status();
+      expect(s.state).toBe("done");
+      expect(s.reservations).toEqual({ imported: 0, skipped: 1 });
+      expect(s.log.join("\n")).toContain(
+        "予約できません: 手で入れた予約テスト",
+      );
+      expect(s.imported).toBe(2);
+    } finally {
+      orm().delete(programs).run();
+    }
+  });
+
+  test("二度目は何も増えず、ファイルも取得しない", async () => {
     await run();
     fake.videoRequests.length = 0;
     await run();
@@ -249,7 +279,7 @@ describe("取り込み (v3)", () => {
     expect(orm().select().from(rules).all()).toHaveLength(2);
   });
 
-  test("下見では何も書かず、ファイルも取りに行かない。取ってくる大きさと空きを出す", async () => {
+  test("下見では何も書かず、ファイルも取得しない。取ってくる大きさと空きを出す", async () => {
     await run(preview);
     const s = status();
     expect(s).toMatchObject({ state: "done", imported: 3, missing: 1 });
@@ -391,7 +421,7 @@ describe("ファイルの取り方", () => {
     expect(status().bytesDone).toBe(SIZE_1 + SIZE_2);
   });
 
-  test("書きかけが全部あれば取りに行かない", async () => {
+  test("書きかけが全部あれば取得しない", async () => {
     mkdirSync(config.rawDir, { recursive: true });
     writeFileSync(rawTemporary(), videoContent(21, SIZE_2));
     await run();

@@ -568,7 +568,7 @@ test("CM の尺は 15 秒の倍数 (15〜180 秒)", () => {
   expect(isCmLength(59.7)).toBe(true);
   expect(isCmLength(90)).toBe(true);
   expect(isCmLength(22)).toBe(false);
-  expect(isCmLength(14.6, 0.25)).toBe(false);
+  expect(isCmLength(14.3)).toBe(false);
   // 本編は 15 の倍数に乗っても長すぎるので弾く
   expect(isCmLength(600)).toBe(false);
 });

@@ -64,7 +64,7 @@ public static class AsicenUserland
     /// ポート (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形式で、asicend の <c>--instance</c> に
     /// そのまま通る (英数字と <c>- .</c>、80 文字まで、数字だけの 14・15 桁ではない)
     /// </summary>
-    internal static bool ValidId(string id) => id.Length <= 80 && SianoUserland.IsPort(id);
+    internal static bool ValidId(string id) => id.Length <= 80 && UsbSysfs.IsPort(id);
 
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string id, int receiver) => $"{model} {id} #{receiver}";

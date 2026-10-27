@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 方式は3つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
+/// 方式は4つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
 /// 違うのは誰がデバイスを持っているか。
 /// </para>
 ///
@@ -23,6 +23,7 @@ namespace Denpa.Agent;
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
 /// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など) と asicen-userland の機材 (PX-W3U3。同じ IPC)。<c>px4d</c> (asicen なら <c>asicend</c>) が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
 /// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
+/// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
 /// </list>
 ///
 /// <para>
@@ -304,7 +305,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     /// <summary>
     /// **読むのは裏のスレッド、待つのはこちら。** 読みかけの間に読む側が抜けても、読めたぶんは
-    /// 捨てずに次の <see cref="Read(byte[], int, int, Func{bool}?)"/> に渡す
+    /// 捨てずに次の <see cref="DeviceStream.Read(byte[], int, int, Func{bool}?)"/> に渡す
     /// (poll で待ってから読む Unix と同じく、抜けた側が中身を持ち去らない)
     /// </summary>
     private sealed class Background(Stream pipe)

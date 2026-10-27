@@ -84,7 +84,7 @@ export const SERVICE_ORDER =
   "remote_control_key IS NULL, remote_control_key, service_id";
 /** 種別ごとの順。地上波 → BS → CS。テレビの切り替えもこの順 */
 export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 ELSE 2 END`;
-/** 地上波 → BS → CS を JS で並べるときの鍵。知らない種別は後ろ */
+/** 地上波 → BS → CS を JS で並べるときのキー。知らない種別は後ろ */
 export function typeRank(type: string): number {
   const at = (CHANNEL_TYPES as readonly string[]).indexOf(type);
   return at === -1 ? CHANNEL_TYPES.length : at;
@@ -697,9 +697,7 @@ function pruneOldPrograms(): number {
   return affected(orm().delete(programs).where(lt(programs.end_at, cutoff)));
 }
 
-interface SyncResult {
-  services: number;
-  programs: number;
+interface SettleResult {
   retimed: number;
   pruned: number;
   reserved: number;
@@ -718,11 +716,9 @@ interface SyncResult {
  * **番組表が動いたとき**にそろえる。書き換わって条件に入ったものは立ち、
  * 外れたものは引っ込む (`rules.applyRules`)。
  */
-export function settle(programs = 0): SyncResult {
+export function settle(): SettleResult {
   const rules = applyRules();
-  const result: SyncResult = {
-    services: 0,
-    programs,
+  const result: SettleResult = {
     retimed: syncReservationTimes(),
     pruned: pruneOldPrograms(),
     reserved: rules.created,
@@ -738,10 +734,9 @@ export function settle(programs = 0): SyncResult {
  * 番組そのものを集めるのは `epg-collect.ts` で、こちらは**溜まっているものを
  * 使って予約を組み直すだけ**。
  */
-export async function sync(): Promise<SyncResult> {
+export async function sync(): Promise<SettleResult & { services: number }> {
   const services = syncServices(await getChannels());
-  const result = settle();
-  result.services = services;
+  const result = { services, ...settle() };
   await resolveConflicts();
   return result;
 }

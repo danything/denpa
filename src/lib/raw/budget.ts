@@ -51,6 +51,8 @@ export class DecodeBudget {
   private worstLate = 0;
   private leastQueued = Number.POSITIVE_INFINITY;
   private strikes = 0;
+  /** これより前 (ms) は数えない (`reset` の `until`) */
+  private quietUntil = Number.NEGATIVE_INFINITY;
   /** 窓の頭での、捨てたコマの数 (通しの数。窓ごとの差を見る) */
   private droppedFrom = Number.NaN;
   /** 直近の窓の 95 パーセンタイル (ms)。画面に出す */
@@ -84,6 +86,11 @@ export class DecodeBudget {
     dropped = 0,
     stretch = 1,
   ): boolean {
+    // 追いついている最中 (`reset` の `until`)。窓はそのあとから始める
+    if (now < this.quietUntil) {
+      this.samples = [];
+      return false;
+    }
     if (Number.isNaN(this.from)) this.from = now;
     if (Number.isNaN(this.droppedFrom)) this.droppedFrom = dropped;
     if (late > this.worstLate) this.worstLate = late;
@@ -113,8 +120,15 @@ export class DecodeBudget {
     return this.strikes >= STRIKES;
   }
 
-  /** 選局し直したとき。**前の局のぶんは持ち越さない** */
-  reset(): void {
+  /**
+   * 選局し直したとき・裏から戻ったとき・止めていたのを再開したとき。**前のぶんは持ち越さない。**
+   *
+   * @param until この時刻 (ms) までは数えない。戻った・再開した直後は、映像が時計から大きく遅れたまま
+   *   次の I まで飛んでデコードし直す (止めていた間に時計は放送の今へ進んでいる)。それを「間に合っていない」と
+   *   数えると、続けて止める・再開するだけで諦めていた
+   */
+  reset(until = Number.NEGATIVE_INFINITY): void {
+    this.quietUntil = until;
     this.samples = [];
     this.from = Number.NaN;
     this.worstLate = 0;

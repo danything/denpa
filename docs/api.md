@@ -263,7 +263,7 @@
   - `file` … エンコード済みのファイルそのまま (`api/recordings/<id>/file?source=<source>`)。`codecs` は入れ物の中身 (読めなければ無い)
   - `stream` … `stream?codec=<codec>` で fragmented MP4。`codecs` は MP4 の中身。エンコード済みと同じコーデックなら詰め替えるだけ
     (軽い)、違えばエンコード済み (無ければ元の TS) から変換します
-  - `raw` … `stream?codec=mpeg2` で元の TS をそのまま。元の TS が残っていて、CM を切らずにエンコードした録画 (か、エンコード済みが無い録画) だけ
+  - `raw` … `stream?codec=mpeg2` で元の TS をそのまま。元の TS が残っていて、CM を切らずにエンコードした録画 (か、エンコード済みが無い録画) だけ。エンコードで捨てた頭の長さを覚えていない古い録画には出さない
 - `audios` の `id` を `stream?audio=` に渡します
 - 録っている最中の録画、エンコード済みも元の TS も無い録画は 404
 

@@ -339,6 +339,7 @@ export class RawEngine {
   resume(): void {
     this.held = false;
     this.playout.resume();
+    this.send({ type: "resume" });
     this.route();
   }
 

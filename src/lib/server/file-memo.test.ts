@@ -28,7 +28,7 @@ describe("fileMemo", () => {
     expect(made).toBe(1);
   });
 
-  test("作っている最中に頼まれたら、同じ結果を待たせる", async () => {
+  test("作っている最中に求められたら、同じ結果を待たせる", async () => {
     const memo = fileMemo<number>(4);
     const path = file("busy.mkv");
     let made = 0;

@@ -117,6 +117,25 @@ describe("ID トークンを確かめる", () => {
     expect(displayName(claims)).toBe("Ruk Doe");
   });
 
+  test("RSA 以外の鍵や読めない鍵が混じっていても、名指しの鍵で確かめる", async () => {
+    const answer = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (!String(input).endsWith("/keys")) return answer(input);
+      const { keys } = (await (await answer(input)).json()) as {
+        keys: unknown[];
+      };
+      return Response.json({
+        keys: [
+          { kty: "EC", kid: "ec-1", crv: "P-256", x: "AA", y: "AA" },
+          { kty: "RSA", kid: 7 },
+          ...keys,
+        ],
+      });
+    }) as typeof fetch;
+    const claims = await verify(await idToken(base), "nonce-1", NOW);
+    expect(claims.sub).toBe("user-1");
+  });
+
   /*
    * **合言葉が「自分が始めたログイン」の証拠。** ここを見ないと、他所で発行された
    * 同じ相手のトークンを貼られたときに通してしまう

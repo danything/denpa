@@ -223,7 +223,7 @@ type StreamCodec = LiveCodec | "audio";
  * 見ている人にとってはどちらも「音声を選ぶ」1つの操作でしかない。
  *
  * @param program 放送が名乗っている番号 (`NowPlaying.program`)。0以下なら
- *   最初に見つけた映像 (従来どおり)
+ *   最初に見つけた映像
  * @param audio どの音声を、どちら側で出すか
  * @param caption 何本目の字幕を出すか。**null なら字幕の出口を付けない** —
  *   字幕を持たない放送で字幕を求めると ffmpeg は組み立ての時点で降りるので、
@@ -690,7 +690,7 @@ function spawnCaptioner(
  * エージェントの「送り出し」の行と合わせると、選局からブラウザに渡すまでを本番の記録で割れる
  * (docs/stream.md「開いてから映像が出るまでの内訳」)
  */
-export type Opening = {
+type Opening = {
   /** エージェントが選局を受けて応答を返した (`openWhenFree` が返った) */
   tuned?: number;
   /** エージェントから最初のバイトが届いた */
@@ -1466,7 +1466,7 @@ class Session {
    * ffmpeg が出した字幕を割って配る。**時刻はコマに付いてくる。**
    *
    * コンテナは Matroska ([ts/mkv.ts](../ts/mkv.ts))。並べただけでは
-   * 時刻が乗らず、別のパイプに出させると数が合わずにずれる (`captions.ts`)
+   * 時刻が乗らず、別の ffmpeg で出させると入口の寄せ幅が違ってずれる (`captions.ts`)
    */
   private async subtitles(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
     const fd = (proc.stdio as unknown as number[])[3];
@@ -1561,7 +1561,7 @@ class Session {
 
   /**
    * データ放送を配る。**中身は JSON** (組み立て終わったモジュールの中の画像や音は
-   * base64 で入っている — 借りている側がそう出す)。
+   * base64 で入っている — デコードする `packages/arib/src/bml.ts` がそう出す)。
    *
    * 映像と違って**捨てない**。落とすと、そのモジュールが次に回ってくるまで
    * 画面が欠けたままになる (カルーセルは数秒から数十秒で一周する)

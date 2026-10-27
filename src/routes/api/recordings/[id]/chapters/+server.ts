@@ -1,7 +1,11 @@
 import { statSync } from "node:fs";
 
 import { config } from "#lib/server/config.js";
-import { encodedPath, tsChapters } from "#lib/server/playback.js";
+import {
+  encodedFile,
+  PROBE_TIMEOUT,
+  tsChapters,
+} from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { etagMatches, fileEtag } from "#lib/server/serve.js";
 import { run } from "#lib/server/stream.js";
@@ -43,12 +47,9 @@ import { parseChapters } from "#lib/ts/watch.js";
  * `no-cache` + ETag (ファイルの大きさと更新時刻) にして、変わっていなければ ffprobe も走らせずに 304 で返す
  */
 
-/** 待ち時間の上限。壊れたファイルで居座らせない */
-const TIMEOUT = 15_000;
-
 export async function GET({ params, request }) {
   const recording = recordingOr404(params.id);
-  const path = encodedPath(recording);
+  const path = encodedFile(recording);
   // エンコードが終われば中身が変わるので控えさせない
   if (path === null) {
     return Response.json(
@@ -83,7 +84,7 @@ export async function GET({ params, request }) {
       "json",
       path,
     ],
-    { timeoutMs: TIMEOUT, stdout: true },
+    { timeoutMs: PROBE_TIMEOUT, stdout: true },
   );
   const out = new TextDecoder().decode(probed.stdout);
 

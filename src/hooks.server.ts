@@ -148,17 +148,13 @@ function finish(response: Response): Response {
    * 自分で `no-store` を付けているし、`_app/immutable/` は名前に指紋が
    * 入っていて**永く持たせたい**ので、そこへ口を出さない
    */
-  if (
-    response.headers.get("x-sveltekit-page") === "true" &&
-    !response.headers.has("cache-control")
-  ) {
-    response.headers.set("cache-control", "no-cache");
-  }
-  /*
-   * **画面を外のサイトの枠に入れさせない。** 今のブラウザは CSP の `frame-ancestors 'self'`
-   * (vite.config.ts) を見るが、それを知らない古いブラウザ向けに同じことを言っておく
-   */
   if (response.headers.get("x-sveltekit-page") === "true") {
+    if (!response.headers.has("cache-control"))
+      response.headers.set("cache-control", "no-cache");
+    /*
+     * **画面を外のサイトの枠に入れさせない。** 今のブラウザは CSP の `frame-ancestors 'self'`
+     * (vite.config.ts) を見るが、それを知らない古いブラウザ向けに同じことを言っておく
+     */
     response.headers.set("x-frame-options", "SAMEORIGIN");
   }
 

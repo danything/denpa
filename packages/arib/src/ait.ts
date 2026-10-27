@@ -190,7 +190,7 @@ export function parseAit(section: Uint8Array): Ait | null {
  * TS から Hybridcast のアプリを見つける。
  *
  * **PMT を見てから AIT を読む** という2段なので、繋いだ直後は何も返しません。
- * 局を変えたら作り直します (`reset`)。
+ * 局を変えたら作り直します。
  *
  * 局に Hybridcast が無ければ、**PMT に印が無い**ので AIT を待つこともしません
  * — その局では永久に何も返さないのが正しい振る舞いです。

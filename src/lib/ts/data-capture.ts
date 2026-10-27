@@ -20,9 +20,7 @@ const PCR_WRAP = WRAP / CLOCK;
 /**
  * TS を少しずつ食べて、データ放送の変化を実時刻つきで並べる。
  *
- * **食べさせ方は呼ぶ側が決める** — 一気に (`captureDataBroadcast`) でも、
- * 読みながら合間に息をつく (`recorded-bml.ts` の `saveRecordedBml`) でも。
- * 中のデコード方法は同じ
+ * **食べさせ方は呼ぶ側が決める** (`recorded-bml.ts` の `saveRecordedBml` は、読みながら合間に息をつく)
  */
 export class DataBroadcastCapture {
   private readonly timeline: TimedMessage[] = [];
@@ -86,17 +84,4 @@ export class DataBroadcastCapture {
   result(): TimedMessage[] {
     return this.timeline;
   }
-}
-
-/**
- * TS をデコードして、データ放送の変化を実時刻つきで並べる (一気に読む方式)。
- *
- * @param chunks 1局に絞った TS のチャンク列
- */
-export function captureDataBroadcast(
-  chunks: Iterable<Uint8Array>,
-): TimedMessage[] {
-  const capture = new DataBroadcastCapture();
-  for (const chunk of chunks) capture.feed(chunk);
-  return capture.result();
 }

@@ -21,6 +21,7 @@ import {
   read,
   record,
   string,
+  unknown,
 } from "../shape";
 import { config } from "./config";
 
@@ -169,6 +170,12 @@ export async function start(
   return { url: `${doc.authorization_endpoint}?${params}`, pending };
 }
 
+/** トークンエンドポイントの答え。断られたときは `error_description` だけが来る */
+const TOKEN = object({
+  id_token: optional(string),
+  error_description: optional(string),
+});
+
 /**
  * 受け取ったコードを ID トークンに換える。
  *
@@ -194,11 +201,12 @@ async function exchange(
       code_verifier: verifier,
     }),
   });
-  const body = (await res.json().catch(() => ({}))) as {
-    id_token?: string;
-    error_description?: string;
-  };
-  if (!res.ok || typeof body.id_token !== "string") {
+  const body = read(
+    TOKEN,
+    await res.json().catch(() => ({})),
+    "OIDC のトークンの応答",
+  );
+  if (!res.ok || body.id_token === undefined) {
     throw new Error(
       `トークンを取得できませんでした (${res.status}) ${body.error_description ?? ""}`.trim(),
     );
@@ -209,6 +217,9 @@ async function exchange(
 /** kid ごとの公開鍵。相手が鍵を入れ替えたときのために、見つからなければ取り直す */
 const keys = new Map<string, CryptoKey>();
 
+/** 署名の鍵の一覧 (`jwks_uri`)。鍵ごとの欄は下で確かめ、読めない鍵は飛ばす (RSA 以外の鍵が混じっても止めない) */
+const JWKS = object({ keys: array(record(unknown)) });
+
 async function publicKey(kid: string): Promise<CryptoKey> {
   const cached = keys.get(kid);
   if (cached !== undefined) return cached;
@@ -216,19 +227,23 @@ async function publicKey(kid: string): Promise<CryptoKey> {
   const doc = await discover();
   const res = await fetch(doc.jwks_uri);
   if (!res.ok) throw new Error(`署名の鍵を取得できません (${res.status})`);
-  const { keys: jwks } = (await res.json()) as {
-    keys?: (JsonWebKey & { kid?: string })[];
-  };
-  for (const jwk of jwks ?? []) {
-    if (jwk.kid === undefined || jwk.kty !== "RSA") continue;
+  const jwks = read(JWKS, await res.json(), "OIDC の署名の鍵");
+  for (const { kid: name, kty, n, e } of jwks.keys) {
+    if (
+      typeof name !== "string" ||
+      kty !== "RSA" ||
+      typeof n !== "string" ||
+      typeof e !== "string"
+    )
+      continue;
     const key = await crypto.subtle.importKey(
       "jwk",
-      { ...jwk, key_ops: ["verify"], ext: true },
+      { kty, n, e, key_ops: ["verify"], ext: true },
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
       true,
       ["verify"],
     );
-    keys.set(jwk.kid, key);
+    keys.set(name, key);
   }
   const found = keys.get(kid);
   if (found === undefined)

@@ -21,9 +21,7 @@ export async function* chunks(
 }
 
 /** ストリームを最後まで読んで文字列にする */
-export async function text(
-  stream: ReadableStream<Uint8Array>,
-): Promise<string> {
+async function text(stream: ReadableStream<Uint8Array>): Promise<string> {
   const decoder = new TextDecoder();
   let out = "";
   for await (const chunk of chunks(stream))

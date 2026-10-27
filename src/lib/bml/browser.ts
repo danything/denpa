@@ -111,9 +111,9 @@ export interface BrowserHost {
 /**
  * getBrowserSupport の APIGroup で「ある」と答えるもの。組の中身は STD-B24 第二編 付属1 表11-2 で、
  * **ここで動く関数の組だけ**を挙げる。無いと答えるもの: Com.IP.Connect・Com.IP.Params (PPP)・
- * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・
- * EPG.Basic2 (epgTuneToComponent)。AITControlledApp.Start は Hybridcast を開けるときだけ「ある」。EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の
- * 再生中は epgTune も失敗)
+ * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・EPG.Basic2 (epgTuneToComponent)。
+ * EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の再生中は epgTune も失敗)。
+ * AITControlledApp.Start は Hybridcast を開けるときだけ「ある」(`browserSupport`)
  */
 const API_GROUPS = new Set([
   "Class.BinaryTable",
@@ -544,10 +544,9 @@ export function defineBrowser(host: BrowserHost): HostObject {
   fail("setCacheResourceOverIP", 1);
 
   /*
-   * Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ。**電波に AIT があればそちらを使い、引数の URL は使わない。**
-   * 電波に AIT が無い局 (NHK) では、引数の URL を XML の AIT として取り、そこにあるアプリを開く (`startAppFrom`)。
-   * どちらでも、アプリの行き先は AIT から決まる (文書が渡した URL のページをそのまま開くことはしない)。
-   * 通信の文書からは XML の AIT の経路を使わせない (`canFetchAit`。冒頭の説明)。呼ばれたら何を訊かれたかを残す (`logCall`)
+   * Hybridcast。開くのは画面で、開くのは AIT にある行き先だけ (文書が渡した URL のページをそのまま開くことはしない)。
+   * **電波に AIT があればそちらを使い、引数の URL は使わない。** 電波に AIT が無い局 (NHK) では、引数の URL を
+   * XML の AIT として取り、そこにあるアプリを開く (`startAppFrom`)。呼ばれたら何を訊かれたかを残す (`logCall`)
    */
   const logCall = (name: string, args: Value[]): void =>
     host.log(`${name}(${args.map((a) => toStr(a)).join(", ")})`);

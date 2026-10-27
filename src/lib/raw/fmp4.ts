@@ -55,7 +55,7 @@ const BEHIND_MOST = 0.5 * CLOCK;
 /** 1コマの長さの目安 (90kHz)。59.94 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 1501;
 /**
- * 追っかけ (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう** —
+ * 追っかけ・録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう** —
  * サーバは倍速で送り込んでくるので、観ている先が伸び続ける。超えたら受け取るのをやめて
  * `full` を返し、画面が手元の尽きる前に再生している位置からリクエストし直す (エンコードする経路の MSE の `BUDGET` と同じ量)
  */
@@ -131,7 +131,7 @@ export class Fmp4Video {
   dropped = 0;
 
   /**
-   * @param follow 放送の今を追わない (互換モードの追っかけ)。溜まっても先へ飛ばず、溢れそうなら
+   * @param follow 放送の今を追わない (追っかけ・録画)。溜まっても先へ飛ばず、溢れそうなら
    *   受け取るのをやめる (`messages.ts` の `follow`)
    */
   constructor(
@@ -483,13 +483,6 @@ export class Fmp4Video {
     // 次の init で開き直す。開いたままのデコーダの中身は捨てる
     if (this.decoder !== null && this.decoder.state === "configured")
       this.decoder.reset();
-  }
-
-  close(): void {
-    this.dropFrames();
-    if (this.decoder !== null && this.decoder.state !== "closed")
-      this.decoder.close();
-    this.decoder = null;
   }
 
   private dropFrames(): void {

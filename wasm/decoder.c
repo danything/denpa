@@ -6,7 +6,7 @@
  * 薄いラッパーで、JS (src/lib/raw/worker.ts) から呼ぶ。
  *
  * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
- * 安全な繋ぎ (https) でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
+ * https でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
  * それに頼ると LAN の http と古い iPhone で元のTSをそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
  * Opus も同じ API でデコードする (`opus_open`)。
  *
@@ -139,8 +139,8 @@ EMSCRIPTEN_KEEPALIVE double dec_last_ms(void) { return last_ms; }
 /**
  * いちばん古い1枚を覗く。**無ければ NULL。**
  *
- *     [0] 幅 [1] 高さ [2..4] 各面の行の幅 (linesize) [5..7] 各面の番地
- *     [8] 印 (1: インタレ, 2: 上が先) [9,10] 画素の縦横比 [11] 色の決まり (AVColorSpace)
+ *     [0] 幅 [1] 高さ [2..4] 各面の行の幅 (linesize) [5..7] 各面のアドレス
+ *     [8] フラグ (1: インタレ, 2: 上が先) [9,10] 画素の縦横比 [11] 色空間 (AVColorSpace)
  *
  * 時刻は `dec_peek_pts` (90kHz。無ければ負)
  */
@@ -237,7 +237,7 @@ EMSCRIPTEN_KEEPALIVE int opus_open(const uint8_t *extra, int len) {
  * 1コマデコードする。**返すのはデコードできた標本数** (0 は出てこなかった、負は壊れたコマ)。
  * デコードできたものは `audio_peek` で読む:
  *
- *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3..] 各面の番地 (float -1〜1、標本数ぶん)
+ *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3..] 各面のアドレス (float -1〜1、標本数ぶん)
  *
  * 面の並びは FFmpeg の決まり (5.1ch なら 前左・前右・中央・LFE・後左・後右)。
  * **次の audio_push までしか持たない** (同じ AVFrame を使い回す)

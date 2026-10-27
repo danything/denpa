@@ -177,12 +177,8 @@ function declared(node: Cascade, state: State = node.state): Declarations {
 }
 
 /** 生の値を決めた値に (継ぐものは親から。`node.parent` をたどって引く) */
-function resolved(
-  node: Cascade,
-  property: string,
-  state: State = node.state,
-): string | null {
-  const value = declared(node, state).get(property);
+function resolved(node: Cascade, property: string): string | null {
+  const value = declared(node).get(property);
   if (value !== undefined && value.toLowerCase() !== "inherit")
     return value.trim();
   if (

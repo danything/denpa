@@ -150,7 +150,7 @@ public sealed class TunerPool(
         TunerSpec spec;
         Lease lease;
         Sink sink;
-        /** 譲らせた相手。**止まりきるのをロックの外で待つ** (下の説明) */
+        // 譲らせた相手。**止まりきるのをロックの外で待つ** (下の説明)
         Lease? kicked = null;
 
         lock (_gate)

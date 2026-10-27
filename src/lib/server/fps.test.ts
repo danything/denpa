@@ -31,7 +31,7 @@ describe("コマ数の決め方 (フィールドを比べる)", () => {
   /** 静止画: どの差も動いているとみなす値に届かない */
   const still = (perSec: number) => series(30, perSec, () => 0.1);
 
-  test("ffmpeg の出力から、名前ごとに差の列を拾う (先頭は前が無いので捨てる)", () => {
+  test("ffmpeg の出力から、名前ごとに差の列を読み取る (先頭は前が無いので捨てる)", () => {
     const lines = [
       "[metadata@top @ 0x55] frame:0    pts:0   pts_time:0",
       "[metadata@top @ 0x55] lavfi.signalstats.YDIF=0",

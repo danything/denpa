@@ -6,7 +6,7 @@ import { programs, services } from "#lib/server/schema.js";
 import type { ProgramDetail } from "#lib/types.js";
 
 /**
- * 番組の詳細。予約一覧・録画一覧の行から開くときに使う。
+ * 番組の詳細。番組表のマス・一覧の行・テレビのアプリのライブの詳細から、開いた1件だけ取る。
  *
  * 一覧に最初から詰めて返すと、出演者やあらすじが 300 件ぶん載って重くなる。
  * 開いた1件だけ取りに来てもらう。

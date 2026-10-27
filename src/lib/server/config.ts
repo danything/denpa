@@ -201,7 +201,7 @@ export const config = {
    */
   epgChannelTimeout: num("EPG_CHANNEL_TIMEOUT", 10 * MIN),
   /**
-   * 初回に衛星の全局ぶんを1中継で読むとき (`epg-collect.firstSweeps`)、
+   * 衛星の全局ぶんを1中継で読むとき (BS の初回と CS。`epg-collect.firstSweeps`・`networkSweeps`)、
    * **新しい局が出てこなくなってからこれだけ待って**閉じる。局ごとに
    * 流れてくる順はばらばらで、見かけた局が揃っただけでは来ていない局を置いていく
    */

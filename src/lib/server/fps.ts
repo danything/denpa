@@ -83,7 +83,7 @@ export interface FieldDiffs {
   fields: number[];
 }
 
-/** ffmpeg の標準エラーから、`metadata@top` / `metadata@fields` の YDIF を拾う */
+/** ffmpeg の標準エラーから、`metadata@top` / `metadata@fields` の YDIF を読み取る */
 export function parseFieldDiffs(lines: Iterable<string>): FieldDiffs {
   const out: FieldDiffs = { top: [], fields: [] };
   for (const line of lines) {

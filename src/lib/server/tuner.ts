@@ -103,14 +103,10 @@ export function programKey(
   return serviceKey(networkId, serviceId) * 100000 + eventId;
 }
 
-async function get<T>(
-  path: string,
-  shape: Shape<T>,
-  timeout = 10_000,
-): Promise<T> {
+async function get<T>(path: string, shape: Shape<T>): Promise<T> {
   const res = await fetch(`${config.agentUrl}${path}`, {
     headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(timeout),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     throw new Error(
@@ -366,7 +362,7 @@ export async function retryWhileBusy<T>(
  *
  * 衛星は1つの周波数に何本もの TS が入っていて、`BS01_0` のような
  * **相対番号**で選ぶ。ところが実際に何本入っているかは中継ごとに違い、
- * 無い番号を指すと**復調器は先頭の TS を返す** (断ってはくれない)。
+ * 無い番号を指すと**チューナーは先頭の TS を返す** (断ってはくれない)。
  *
  * その結果、実機では 35 枠のうち **9 枠が既に知っている TS の写し**だった
  * (`BS01_3` = `BS01_0`、`BS05_2` と `BS05_3` = `BS05_0` …)。

@@ -18,10 +18,9 @@ export async function watch(
   page: Page,
   rough: string,
   stack: { liveFmp4File: string },
-  path = "/live",
 ): Promise<void> {
   writeFileSync(stack.liveFmp4File, rough);
-  await goto(page, path);
+  await goto(page, "/live");
   await page.getByTestId("live-channel").first().click();
   await expect(page.getByTestId("live-title")).toBeVisible();
   await wakeControls(page, "live-frame");

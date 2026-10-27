@@ -171,6 +171,9 @@ describe("知っている名前か", () => {
     expect(knownHost("dp.l.example.com")).toBe(true);
     expect(knownHost("dp.example.com")).toBe(true);
     expect(knownHost("x.example.com")).toBe(false);
+    // `=` の無いものは書き間違い。表示名と同じく読まない (manifest.appName)
+    config.pwaNames = "typo.example.com";
+    expect(knownHost("typo.example.com")).toBe(false);
   });
 
   test("読めない名前は通さない", () => {

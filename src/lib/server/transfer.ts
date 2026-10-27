@@ -414,11 +414,16 @@ function received(): number {
   }
 }
 
-/** 取り込みのために置いたものを全部消す (書き出しの写しには触らない) */
-function clearImport(): void {
+/** 送られたものと、確かめるために開いたものを消す (入れ替えを待っている `ready` は残す) */
+function clearUpload(): void {
   for (const path of [uploadMeta(), uploadPart(), prepared()])
     rmSync(path, { force: true });
   rmSync(staging(), { recursive: true, force: true });
+}
+
+/** 取り込みのために置いたものを全部消す (書き出しの写しには触らない) */
+function clearImport(): void {
+  clearUpload();
   rmSync(ready(), { recursive: true, force: true });
 }
 
@@ -855,9 +860,7 @@ export function apply(force: boolean): CheckResult {
     renameSync(join(staging(), LOGOS), join(ready(), LOGOS));
   // DB を最後に置く。`ready/denpa.db` があることが「入れ替えを待っている」印
   renameSync(join(staging(), DB_ENTRY), join(ready(), DB_ENTRY));
-  for (const path of [uploadMeta(), uploadPart(), prepared()])
-    rmSync(path, { force: true });
-  rmSync(staging(), { recursive: true, force: true });
+  clearUpload();
   console.log(
     "[transfer] 取り込む DB を置きました。再起動の最初で入れ替えます",
   );

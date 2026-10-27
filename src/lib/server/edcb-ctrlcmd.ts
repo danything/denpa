@@ -4,13 +4,13 @@
  *
  * - **1 接続 1 コマンド。** 送るのは `DWORD コマンド` + `DWORD 長さ` + 本文、返るのは `DWORD 結果` + `DWORD 長さ` + 本文
  *   (どれもリトルエンディアン)。サーバは返したら切る
- * - 「2」の付くコマンドは本文の頭に `WORD ver` を送り、応答の頭にも `WORD ver` が付く。サーバは頼んだ ver で書く
+ * - 「2」の付くコマンドは本文の頭に `WORD ver` を送り、応答の頭にも `WORD ver` が付く。サーバはリクエストした ver で書く
  * - 構造体は頭に `DWORD 全体の長さ` (長さの欄を含む)、配列は `DWORD 全体の長さ` + `DWORD 件数`。**長さで飛ばせるので、
  *   後ろに知らない欄が増えても読める** ({@link Reader})
  * - 文字列は `DWORD 長さ` + UTF-16LE + NUL、時刻は `SYSTEMTIME` (WORD ×8) で日本時間の壁時計
  * - 認証は無い。EpgTimerSrv のアクセス制御 (`TCPAccessControlList`) から外れた IP は、受けてすぐ何も返さずに切られる
  *
- * ver は 5 (いまの `CMD_VER`) で頼む。違う ver が返ったら 1 回だけ警告して読めるところまで読む
+ * ver は 5 (いまの `CMD_VER`) でリクエストする。違う ver が返ったら 1 回だけ警告して読めるところまで読む
  * (後ろの欄は長さで飛ばせる)。長さが合わない応答は壊れているので止める
  */
 import { connect } from "node:net";
@@ -29,7 +29,7 @@ export const timing = {
 /** 応答の本文の上限。録画済みが 7 万件でおよそ 30 MB */
 export const RESPONSE_LIMIT = 128 * 1024 * 1024;
 
-/** 頼む ver (`CMD_VER`) */
+/** リクエストする ver (`CMD_VER`) */
 const CMD_VER = 5;
 
 /** 使うコマンド (`CtrlCmdDef.h`) */
@@ -43,9 +43,7 @@ type CommandName = keyof typeof COMMANDS;
 /** 結果 (`ErrDef.h`) */
 const RESULT = {
   SUCCESS: 1,
-  ERR: 0,
   NON_SUPPORT: 203,
-  INVALID_ARG: 204,
   BUSY: 208,
 } as const;
 
@@ -179,7 +177,7 @@ export class Reader {
 
   /**
    * `SYSTEMTIME` (年・月・曜日・日・時・分・秒・ミリ秒) を日本時間の壁時計として時刻に。年 0 (未設定) は null。
-   * ミリ秒は捨てる (ファイルの時刻は秒までなので、前にファイルから取り込んだ回と鍵をそろえる)
+   * ミリ秒は捨てる (ファイルの時刻は秒までなので、前にファイルから取り込んだ回とキーをそろえる)
    */
   time(): number | null {
     const [year, month, , day, hour, minute, second] = Array.from(

@@ -69,7 +69,6 @@ import {
   CEILING,
   cover,
   Extreme,
-  FIXED,
   FLOOR,
   GAP_MOST,
   GAP_WINDOW,
@@ -115,8 +114,7 @@ const LOW_SPAN = 2;
 /**
  * 映した1枚ごとに貯まりを見るときの、`pace` を回す間隔 (ms)。**塊が届かない間も止まる前に手を打つ。**
  *
- * `pace` は塊が届いたとき (`updateend`) にしか回っていなかったので、空いている間は
- * 何もできなかった。そこで遅くし始めれば、空きの終わりまで持つことがある
+ * 塊が届いたとき (`updateend`) だけでは、空いている間に何もできない。空きの途中で遅くし始めれば、終わりまで持つことがある
  */
 const PACE_EVERY = 250;
 /**
@@ -189,7 +187,7 @@ const HOLD_DATA = 300;
 
 /**
  * 見ている局を覚える。置き場は cookie 1つで、読むのはサーバ (`LAST_COOKIE` の説明)。
- * 音声も覚える — 番組が変わって無くなっても、サーバは先頭に落とす (`arib.pickTrack`)
+ * 音声も覚える — 番組が変わって無くなっても、サーバは主音声に落とす (`arib.pickTrack`)
  */
 function remember(target: Tuned): void {
   const value = encodeURIComponent(JSON.stringify(target));
@@ -222,14 +220,10 @@ function clearFloor(): void {
 
 /**
  * 速さの寄せ方 (`ts/pacing.ts` の `Steering`)。**Safari (Apple の WebKit) だけ、速さを触る回数を減らす** (`STEADY`)。
- * iPad と iPhone はどのブラウザも中身が WebKit なので、ここに入る。
- *
- * **URL に `?steer=off` を付けると、ライブで速さを変えない** (`FIXED`)。速さを変えるのが乱れの元かを
- * 確かめるためだけのもので、⚙ には出さない (#1210)
+ * iPad と iPhone はどのブラウザも中身が WebKit なので、ここに入る
  */
 function chooseSteering(): Steering {
-  if (typeof location === "undefined") return SMOOTH;
-  if (new URLSearchParams(location.search).get("steer") === "off") return FIXED;
+  if (typeof navigator === "undefined") return SMOOTH;
   return navigator.vendor === "Apple Computer, Inc." ? STEADY : SMOOTH;
 }
 
@@ -2087,7 +2081,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * RawEngine を用意する (`tuned` で raw: true と答えられた)。**2度目からは作り直さず開き直すだけ** —
-   * worker とデコーダの読み込み (500KB) を選局のたびにやり直さない
+   * worker とデコーダの読み込み (1MB ほど) を選局のたびにやり直さない
    */
   function startRaw(video: HTMLVideoElement): void {
     if (!openEngine(video, "ts-mpeg2")) return;

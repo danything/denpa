@@ -45,7 +45,8 @@ config.agentUrl = `http://127.0.0.1:${agent.port}`;
 const { orm } = await import("./db");
 const { programs, recordings, reservations, services } =
   await import("./schema");
-const { recordAiring, reservationStates } = await import("./reservations");
+const { recordAiring, reservationStates, reserveFromForm } =
+  await import("./reservations");
 const { resolveConflicts, tick } = await import("./scheduler");
 const { COPY_NEVER_REASON } = await import("../format");
 
@@ -154,6 +155,23 @@ describe("いま流れている番組を録る", () => {
       status: 400,
       message: "この番組は放送が終わっています",
     });
+  });
+
+  test("画面の「予約」(番組表・検索) は断った理由をそのまま返す", async () => {
+    reset();
+    program(5, NOW + 20 * MINUTE, NOW + 60 * MINUTE);
+    program(6, NOW - 60 * MINUTE, NOW - 30 * MINUTE);
+    const form = (programId: string) => {
+      const out = new FormData();
+      out.set("programId", programId);
+      return out;
+    };
+    expect(await reserveFromForm(form("5"))).toBeNull();
+    // `Error: ` を付けずに画面へ出せる文
+    expect(await reserveFromForm(form("6"))).toBe(
+      "この番組は放送が終わっています",
+    );
+    expect(await reserveFromForm(form("x"))).toBe("番組IDが不正です");
   });
 
   test("チューナーが足りなければ競合として返す (予約は残る)", async () => {

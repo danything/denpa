@@ -25,11 +25,9 @@ export function moveFile(from: string, to: string): void {
   }
 }
 
-export function removeIfExists(path: string | null | undefined): boolean {
-  if (path == null || path === "") return false;
-  if (!existsSync(path)) return false;
+export function removeIfExists(path: string | null | undefined): void {
+  if (path == null || path === "" || !existsSync(path)) return;
   unlinkSync(path);
-  return true;
 }
 
 /**
