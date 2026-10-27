@@ -69,6 +69,33 @@ export async function syncEpg(request: APIRequestContext): Promise<void> {
   expect(body.programs).toBeGreaterThan(0);
 }
 
+/**
+ * 検索の結果の行の、放送の始まり (`10/22(木) 21:30〜22:00` の頭)。年は出ないので、いまに近いほうの年にする
+ * (画面もテストも TZ=Asia/Tokyo)。
+ *
+ * **行は放送中のものから並ぶ。** 頭の行を予約するとその場で録り始め、「録る」かどうかも「放送中」に変わる。
+ * BS11 は 5 秒の番組なので、すぐ始まる行も同じ。先の放送を選ぶのに使う
+ */
+export function searchRowStart(text: string): number {
+  const [, month, day, hour, minute] = text.match(
+    /(\d{1,2})\/(\d{1,2})\([^)]+\) (\d{2}):(\d{2})〜/,
+  )!;
+  const year = new Date().getFullYear();
+  return [year - 1, year, year + 1]
+    .map((y) =>
+      new Date(
+        y,
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+      ).getTime(),
+    )
+    .reduce((a, b) =>
+      Math.abs(a - Date.now()) < Math.abs(b - Date.now()) ? a : b,
+    );
+}
+
 interface Cell {
   programId: string;
   serviceId: string;

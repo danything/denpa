@@ -1,4 +1,11 @@
-import { cancelAllReservations, expect, goto, syncEpg, test } from "./helpers";
+import {
+  cancelAllReservations,
+  expect,
+  goto,
+  searchRowStart,
+  syncEpg,
+  test,
+} from "./helpers";
 
 /**
  * **サイト全体の検索** (`/search?q=`)。番組表・録画・予約・ルールを1つの言葉で探す。
@@ -66,11 +73,23 @@ test.describe("検索", () => {
       expect(await programs.count()).toBeGreaterThan(5);
     }
 
-    // 予約すると、行は予約済みになり「予約」の節にも出る
-    const first = programs.first();
-    const programId = await first.getAttribute("data-program-id");
-    await first.getByTestId("search-reserve").click();
-    await expect(first.getByTestId("search-program-state")).toHaveText(
+    // 予約すると、行は予約済みになり「予約」の節にも出る。予約するのは、まだ予約の無い先の放送 (`searchRowStart`)
+    let programId: string | null = null;
+    for (const row of await programs.all()) {
+      const later =
+        searchRowStart((await row.textContent()) ?? "") >
+        Date.now() + 2 * 60_000;
+      if (later && (await row.getByTestId("search-reserve").count()) === 1) {
+        programId = await row.getAttribute("data-program-id");
+        break;
+      }
+    }
+    expect(programId).not.toBeNull();
+    const picked = page.locator(
+      `[data-testid="search-program"][data-program-id="${programId}"]`,
+    );
+    await picked.getByTestId("search-reserve").click();
+    await expect(picked.getByTestId("search-program-state")).toHaveText(
       "予約済み",
     );
     await expect(
@@ -80,11 +99,11 @@ test.describe("検索", () => {
     ).toHaveCount(1);
 
     // 行を押すと番組の詳細
-    await first.getByTestId("search-open").click();
+    await picked.getByTestId("search-open").click();
     await expect(page.getByTestId("program-detail")).toBeVisible();
     await page.getByTestId("search-detail-cancel").click();
     await expect(page.getByTestId("program-detail")).toBeHidden();
-    await expect(first.getByTestId("search-program-state")).toHaveCount(0);
+    await expect(picked.getByTestId("search-program-state")).toHaveCount(0);
 
     await cancelAllReservations(page);
   });

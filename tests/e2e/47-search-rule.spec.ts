@@ -4,6 +4,7 @@ import {
   clearRules,
   expect,
   goto,
+  searchRowStart,
   syncEpg,
   test,
 } from "./helpers";
@@ -191,13 +192,27 @@ test.describe("検索からルールを作る", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     await expect(page.getByTestId("slot-summary")).toContainText("いつでも");
 
-    // 「録る」の行を1つ選び、その始まりの1分だけを外す時間帯にする (日をまたぐ書き方)
-    const row = page
-      .locator('[data-testid="search-program"][data-verdict="record"]')
-      .first();
-    await expect(row).toBeVisible();
-    const id = await row.getAttribute("data-program-id");
-    const text = await row.textContent();
+    /*
+     * 「録る」の行を1つ選び、その始まりの1分だけを外す時間帯にする (日をまたぐ書き方)。
+     * 選ぶのは先の放送 (`searchRowStart`)。近い放送は前のテストが取り消して「取り消し済み」か、
+     * 確かめている間に始まって「放送中」に変わるので、先まで並べてから選ぶ
+     */
+    await page.getByTestId("search-more-programs").click();
+    const records = page.locator(
+      '[data-testid="search-program"][data-verdict="record"]',
+    );
+    await expect(records.first()).toBeVisible();
+    let id: string | null = null;
+    let text: string | null = null;
+    for (const candidate of await records.all()) {
+      const got = await candidate.textContent();
+      if (searchRowStart(got ?? "") > Date.now() + 2 * 60_000) {
+        id = await candidate.getAttribute("data-program-id");
+        text = got;
+        break;
+      }
+    }
+    expect(id).not.toBeNull();
     const [, hh, mm] = text!.match(/(\d{2}):(\d{2})〜/)!;
     const start = Number(hh) * 60 + Number(mm);
     const clock = (minutes: number) =>

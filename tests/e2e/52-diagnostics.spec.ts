@@ -101,7 +101,10 @@ test.describe("設定のバージョンと環境・ログ", () => {
     await expect(dialog).toBeVisible();
 
     const logs = dialog.getByTestId("issue-field-logs");
-    // カードの番号・IP・ホスト名は伏せ、番組名は残す
+    /*
+     * カードの番号・IP・ホスト名は伏せ、番組名は残す。それらを含むエージェントの行は出たばかりのエラーなので、
+     * 先に流れたテストがサーバのログに警告を積んでいても、URL に入るぶんから外れない (`tests/fake/agent.ts`)
+     */
     await expect(logs).toHaveValue(/\[カード番号\]/);
     await expect(logs).toHaveValue(/\[IP\]/);
     await expect(logs).toHaveValue(/\[ホスト名\]:40773/);
@@ -118,10 +121,19 @@ test.describe("設定のバージョンと環境・ログ", () => {
       /エージェント: v1\.0\.0・Linux 6\.12\.0-fake #1 SMP \(x64\)/,
     );
 
+    const issueUrl = async () =>
+      new URL((await dialog.getByTestId("issue-open").getAttribute("href"))!);
+    /*
+     * 開いたときのログの欄は、URL に入るぶんだけ選んであるので、そのまま入る。
+     * タイトルを書き足したあとは、サーバのログが多ければ頭の行が削られる (下の「ログが長くても」が見る)
+     */
+    expect((await issueUrl()).searchParams.get("logs")).toBe(
+      await logs.inputValue(),
+    );
+
     // 欄を直したものがそのまま URL に入る
     await dialog.getByTestId("issue-field-title").fill("録画が止まる");
-    const href = await dialog.getByTestId("issue-open").getAttribute("href");
-    const url = new URL(href!);
+    const url = await issueUrl();
     expect(`${url.origin}${url.pathname}`).toBe(
       "https://github.com/danything/denpa/issues/new",
     );
@@ -133,7 +145,12 @@ test.describe("設定のバージョンと環境・ログ", () => {
     expect(url.searchParams.get("environment")).toBe(
       await environment.inputValue(),
     );
-    expect(url.searchParams.get("logs")).toBe(await logs.inputValue());
+    // 削られても、残りは欄の終わりのほうそのまま
+    const [head, ...rest] = url.searchParams.get("logs")!.split("\n");
+    const kept = /^\(長いので頭の \d+ 行を省きました\)$/.test(head!)
+      ? rest
+      : [head, ...rest];
+    expect((await logs.inputValue()).endsWith(kept.join("\n"))).toBe(true);
     await expect(dialog.getByTestId("issue-open")).toHaveAttribute(
       "target",
       "_blank",

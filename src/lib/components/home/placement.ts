@@ -41,20 +41,35 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
   // 見えている所の高さ (上はヘッダーと見出し、スマホの形は下のタブと頭の1行が被さる)
   const view = bottom - line;
   /*
+   * **録画中は線を見せない** (`TimelineHeading`。読み上げの見出しだけ残す)。見せていない線は流れの外に置かれ、
+   * 包みの頭に来るので、位置は当てにならない。線のある所 (録画中の行のいちばん下の下端) で数える。
+   * 線の位置で数えていた頃は、録画中の行が下のタブの裏に入ったままになることがあった
+   */
+  const lives = list.querySelectorAll<HTMLElement>(".t-row.live");
+  const lastLive = now.classList.contains("visually-hidden")
+    ? (lives[lives.length - 1] ?? null)
+    : null;
+  const lineAt = () =>
+    lastLive === null
+      ? now.getBoundingClientRect()
+      : { top: lastLive.getBoundingClientRect().bottom, height: 0 };
+  /*
    * **線がもう見えている (上から 4 割より下で、下に被さるものより上) なら動かさない。**
    * 録れたものが少ないと線は頭の近くにあり、7 割まで下げる余地が無い
    */
-  const lineTop = now.getBoundingClientRect().top - line;
-  if (lineTop < view * 0.4 || lineTop > view - now.offsetHeight)
+  const { top: lineY, height: lineHeight } = lineAt();
+  const lineTop = lineY - line;
+  if (lineTop < view * 0.4 || lineTop > view - lineHeight)
     scrollPage(lineTop - view * 0.7);
   /*
    * **録画中の行は線のすぐ上にいるので、線と一緒に映す。** 何本も録っていて頭が見出しの裏に入るなら、
    * 線が下の端に掛からない範囲で戻す
    */
-  const live = list.querySelector<HTMLElement>(".t-row.live");
+  const live = lives[0] ?? null;
   if (live !== null) {
     const short = line + 8 - live.getBoundingClientRect().top;
-    const room = bottom - now.getBoundingClientRect().bottom;
+    const { top, height } = lineAt();
+    const room = bottom - (top + height);
     if (short > 0 && room > 0) scrollPage(-Math.min(short, room));
   }
   const row =
@@ -193,15 +208,18 @@ export function topDay(list: HTMLElement): number | null {
 
 /**
  * その日の見出しを頭に送る (カレンダーで日を押したとき)。包みの頭を見えている所の上端に合わせる —
- * 見出しは貼り付くので、見出しの位置では送り先が決まらない。見出しが無ければ (まだ描いていない) 送らずに false
+ * 見出しは貼り付くので、見出しの位置では送り先が決まらない。見出しが無ければ (まだ描いていない) 送らずに false。
+ *
+ * **見出しの上の離れ (`margin-top`。いちばん上の包みだけ 0) のぶんも送る。** 包みの頭だけを合わせていた頃は、
+ * 上に別の日がある日を押すと、見出しが貼り付く所より離れのぶん (8px) 下に止まっていた
  */
 export function showDay(list: HTMLElement, day: number): boolean {
-  const block = list
-    .querySelector<HTMLElement>(
-      `[data-testid="timeline-day"][data-day="${day}"]`,
-    )
-    ?.closest<HTMLElement>(".t-block");
-  if (block === null || block === undefined) return false;
-  scrollPage(block.getBoundingClientRect().top - topEdge(list));
+  const head = list.querySelector<HTMLElement>(
+    `[data-testid="timeline-day"][data-day="${day}"]`,
+  );
+  const block = head?.closest<HTMLElement>(".t-block");
+  if (head === null || block === null || block === undefined) return false;
+  const gap = Number.parseFloat(getComputedStyle(head).marginTop) || 0;
+  scrollPage(block.getBoundingClientRect().top + gap - topEdge(list));
   return true;
 }

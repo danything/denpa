@@ -193,6 +193,22 @@ test.describe("ホームの1本の一覧", () => {
   }) => {
     const now = Date.now();
     const MIN = 60_000;
+    /*
+     * **同じワーカーの他のスペックが残した観ていない録画は、いったん観終えたことにする** (足し試験と同じ。終わったら戻す)。
+     * ホームは観ていない録画のいちばん古いものを映すので、それが残っていると頭まで戻り、録画中の行が窓の外に出る。
+     * ここで映るのは、このファイルが入れた観ていない録画 (録画中の行のすぐ上) か「いま」の線
+     */
+    const unwatched = spawnSync(
+      "bun",
+      [
+        "-e",
+        `import { Database } from 'bun:sqlite'; const db = new Database(process.env.SEED_DB); const ids = db.query("SELECT id FROM recordings WHERE watched_at IS NULL AND name NOT LIKE '一覧試験%'").all().map((r) => r.id); const s = db.prepare('UPDATE recordings SET watched_at = ? WHERE id = ?'); for (const id of ids) s.run(Date.now(), id); console.log(JSON.stringify(ids));`,
+      ],
+      {
+        env: { ...process.env, SEED_DB: `${stack.root}/denpa.db` },
+        encoding: "utf8",
+      },
+    ).stdout.trim();
     // 録画中の録画は DB に直に置く (終わった時刻が無ければ録画中)。終わりの時刻まで片付け (`failStrayRecordings`) は触らない
     sqlite(
       `${stack.root}/denpa.db`,
@@ -336,7 +352,7 @@ test.describe("ホームの1本の一覧", () => {
     } finally {
       sqlite(
         `${stack.root}/denpa.db`,
-        `db.run("DELETE FROM recordings WHERE name = '録画中試験'"); db.run("DELETE FROM reservations WHERE program_id = 980200");`,
+        `db.run("DELETE FROM recordings WHERE name = '録画中試験'"); db.run("DELETE FROM reservations WHERE program_id = 980200"); const s = db.prepare('UPDATE recordings SET watched_at = NULL WHERE id = ?'); for (const id of ${unwatched || "[]"}) s.run(id);`,
       );
     }
   });

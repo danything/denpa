@@ -35,7 +35,12 @@ let busyTuners = false;
 /**
  * エージェントのログ (`GET /denpa/logs`)。本物と同じ形 (`{"lines":[{"at","text"}]}`。新しいほうから 2000 行まで、古い順)。
  * 中身は伏せる処理を確かめるための作り物で、カードの番号・IP アドレス・ホスト名と、伏せない番組名を混ぜてある。
- * `off` は前のバージョンのエージェント (404)、`many` は URL の上限を確かめる長いログ
+ * `off` は前のバージョンのエージェント (404)、`many` は URL の上限を確かめる長いログ。
+ *
+ * **伏せるものを含む行は、読まれた時点で出たばかりのエラーにしておく。** Issue の URL に入るログは
+ * 警告とエラーを先に、それぞれ新しいほうから選ぶ (`#lib/issue-report.ts`)。同じワーカーで先に流れたテストが
+ * サーバのログに警告を積んでいく (CS の番組表を集められない、など) ので、起動したときのふつうの行だと
+ * URL から押し出され、伏せたかどうかを確かめられなかった
  */
 let logsMode: "normal" | "off" | "many" = "normal";
 const STARTED_AT = Date.now();
@@ -50,21 +55,22 @@ function agentLogLines(): { at: number; text: string }[] {
           : `[agent] 偽チューナー${i}: 受信中 ${"い".repeat(60)}`,
     }));
   }
+  const now = Date.now();
   return [
     {
       at: STARTED_AT,
       text: "[agent] listening on :25252 (tuners: /config/tuners.json / channels: /config/channels.json)",
     },
     {
-      at: STARTED_AT + 1,
-      text: "[agent] Fake Card Reader (usb 1-1): カード 0123456789012345 を読みました",
+      at: now - 3,
+      text: "[agent] カードとのやり取りに失敗しました。繋ぎ直します (Fake Card Reader (usb 1-1): カード 0123456789012345 が応えません)",
     },
     {
-      at: STARTED_AT + 2,
-      text: "[agent] 鍵を http://card-host.lan:40773 から受け取ります (相手: 192.168.10.20)",
+      at: now - 2,
+      text: "[agent] 鍵を http://card-host.lan:40773 から受け取れません (相手: 192.168.10.20 に繋がりません)",
     },
     {
-      at: STARTED_AT + 3,
+      at: now - 1,
       text: "[agent] GR T16 (rec 1 でんぱニュース): 選局できません (信号がありません)",
     },
   ];
