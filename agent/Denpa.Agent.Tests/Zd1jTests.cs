@@ -396,4 +396,18 @@ public class Zd1jTests
         await Assert.That(tuner.Tuned).IsFalse();
         await Assert.That(tuner.Board).IsNull();
     }
+
+    [Test]
+    public async Task 一台だけなら挿し替えたポートに付いていく()
+    {
+        // 設定のポートにあればそのまま
+        await Assert.That(Zd1j.Follow("2-1", ["2-1"])).IsEqualTo("2-1");
+        // 抜いてほかのポートに挿した。1台だけなのでそちらを使う
+        await Assert.That(Zd1j.Follow("2-1", ["2-2"])).IsEqualTo("2-2");
+        // 1台も無ければ設定のまま (開くときに「見当たりません」と言う)
+        await Assert.That(Zd1j.Follow("2-1", [])).IsEqualTo("2-1");
+        // 2台以上はポートでしか見分けられないので、設定のまま
+        await Assert.That(Zd1j.Follow("2-1", ["2-2", "2-3"])).IsEqualTo("2-1");
+        await Assert.That(Zd1j.Follow("2-1", ["2-1", "2-3"])).IsEqualTo("2-1");
+    }
 }

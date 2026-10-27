@@ -16,7 +16,8 @@ namespace Denpa.Agent;
 /// <para>
 /// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形の
 /// 名前を作る (<see cref="UsbDevices.WindowsPort"/>・<see cref="UsbDevices.MacPort"/>)。
-/// 刺さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。挿すポートを変えると別のチューナーになる。
+/// 刺さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に1台だけなら、挿すポートを変えても付いていく
+/// (<see cref="Follow(string)"/>)。2台以上はポートで見分けるので、挿すポートを変えると別のチューナーになる。
 /// </para>
 /// </summary>
 public static class Zd1j
@@ -99,6 +100,34 @@ public static class Zd1j
         OperatingSystem.IsLinux()
             ? UsbFsDevice.Open(UsbSysfs.Devices, DevUsb, port, Vendor, Product)
             : UsbDevices.Open(port, Vendor, Product);
+
+    /// <summary>付いていったことを記録したもの (設定のポート → 使ったポート)。同じ組は1回だけ記録する</summary>
+    private static readonly HashSet<(string From, string To)> Followed = [];
+
+    /// <summary>
+    /// **1台だけなら、挿し替えたポートに付いていく。** 設定のポートに見当たらず、ほかにちょうど1台挿さっていればそのポート。
+    /// それ以外 (設定のポートにある・1台も無い・2台以上ある) は設定のまま (2台以上はポートでしか見分けられない)
+    /// </summary>
+    internal static string Follow(string port, IReadOnlyList<string> present) =>
+        present.Count == 1 && present[0] != port ? present[0] : port;
+
+    /// <summary>
+    /// 挿さっているものを見て <see cref="Follow(string, IReadOnlyList{string})"/>。付いていったら、組ごとに1回記録する。
+    /// 設定に CECH-ZD1 J が1台だけのときに呼ぶ (2台書いてあれば、抜けている1台がもう1台に付いていってしまう)
+    /// </summary>
+    public static string Follow(string port)
+    {
+        var to = Follow(port, Ports());
+        if (to == port) return port;
+        lock (Followed)
+        {
+            if (Followed.Add((port, to)))
+            {
+                Log.Write($"[{Model} {port}] {port} に見当たらないので、挿さっている {to} を使います (設定の device を {Device(to)} にすると、この記録は出ません)");
+            }
+        }
+        return to;
+    }
 }
 
 /// <summary>
@@ -329,9 +358,22 @@ public sealed class Zd1jTuner : ITuneDevice
     private long _openMs;
     private long _lockMs;
 
-    public Zd1jTuner(string port) : this($"{Zd1j.Model} {port}", () => Zd1jBoard.Acquire(port), () => Zd1jBoard.CloseIfIdle(port))
+    /// <param name="port">設定のポート</param>
+    /// <param name="follow">
+    /// 設定のポートに見当たらなければ、ほかに1台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)。
+    /// 設定に CECH-ZD1 J が1台だけのとき (<see cref="TunerPool"/> が決める)
+    /// </param>
+    public Zd1jTuner(string port, bool follow = false)
     {
+        _name = $"{Zd1j.Model} {port}";
+        _port = port;
+        // 開くたびに見直す (動いている間に挿し替えても付いていく)。閉じるのは最後に開いたポート
+        _acquire = () => Zd1jBoard.Acquire(_port = follow ? Zd1j.Follow(port) : port);
+        _closeIdle = () => Zd1jBoard.CloseIfIdle(_port);
     }
+
+    /// <summary>最後に開いたポート (付いていったら設定と違う)</summary>
+    private string _port = "";
 
     internal Zd1jTuner(string name, Func<Zd1jBoard> acquire, Action? closeIdle = null)
     {

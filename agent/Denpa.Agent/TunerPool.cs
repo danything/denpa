@@ -276,7 +276,8 @@ public sealed class TunerPool(
             }
 
             var path = spec.Device ?? throw new IOException($"{spec.Name} のデバイスが指定されていません");
-            var device = OpenDevice(path, spec.Lnb);
+            // CECH-ZD1 J は、設定に1台だけなら挿し替えたポートに付いていく (2台以上はポートで見分ける。Zd1j.Follow)
+            var device = OpenDevice(path, spec.Lnb, followZd1j: _specs.Count(other => Zd1j.Is(other.Device)) == 1);
 
             var held = new Held(device);
             _held[index] = held;
@@ -298,7 +299,8 @@ public sealed class TunerPool(
     ///
     /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
     /// </summary>
-    public static ITuneDevice OpenDevice(string path, string? lnb)
+    /// <param name="followZd1j">CECH-ZD1 J が設定のポートに見当たらなければ、ほかに1台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)</param>
+    public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false)
     {
         /*
          * **Windows は siano-userland と px4-userland の機材と CECH-ZD1 J だけ。** DVB は無く、asicen-userland は Windows を出していない。
@@ -309,7 +311,7 @@ public sealed class TunerPool(
             throw new IOException(
                 $"{path} は Windows では使えません (Windows で使えるのは {Px4Userland.Scheme}<筐体の番号>:<受信機> と {SianoUserland.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> だけ)");
         }
-        if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j);
+        if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j, followZd1j);
         if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (SianoUserland.Parse(path) is { } port) return new SianoTuner(port);
         if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb);
