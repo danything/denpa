@@ -502,10 +502,11 @@ function measure(ranges: Range[]): (t: number) => number {
 /**
  * ロゴの出ている区間から作る、出ている秒の数え方とロゴの出入り。
  *
- * `tails` はロゴの区間の尻の、ロゴが見えないまま持ち越された所 (`unseenTails`)。見えた秒 (`lit`) にもロゴの無い秒 (`bare`) にも
+ * ロゴの区間の尻の、ロゴが見えないまま持ち越された所 (`unseenTails`) は、見えた秒 (`lit`) にもロゴの無い秒 (`bare`) にも
  * 入れず、別に数える (`unseen`)。その頭もロゴの消え際に足す
  */
-function logoIndex(spans: Range[], duration: number, tails: Range[] = []) {
+function logoIndex(input: CmInput, spans: Range[]) {
+  const { duration } = input;
   const sorted = [...spans].sort((a, b) => a.start - b.start);
   const merged: Range[] = [];
   for (const s of sorted) {
@@ -514,6 +515,8 @@ function logoIndex(spans: Range[], duration: number, tails: Range[] = []) {
       last.end = Math.max(last.end, s.end);
     else merged.push({ ...s });
   }
+  // 重なりをまとめた区間から見る (`measure` は重ならない区間を数える)
+  const tails = unseenTails(input, merged);
   /** 0 から `t` までのロゴの区間の秒 / そのうち見えないまま持ち越された秒 */
   const coveredTo = measure(merged);
   const unseenTo = measure(tails);
@@ -609,14 +612,13 @@ function edgeCost(distance: number, flat: number): number {
  * 点数は上の定数 (docs/cm.md の「境目の決め方」)。隣り合う CM の区間は1つにまとめて返す
  */
 function byLogo(input: CmInput, logo: Range[]): Range[] {
-  const { duration } = input;
   const silences = boundaries(input);
   const spans = withinProgram(
     [...logo].sort((a, b) => a.start - b.start),
     input,
     silences,
   );
-  const index = logoIndex(spans, duration, unseenTails(input, spans));
+  const index = logoIndex(input, spans);
   const nodes = candidates(input, index.merged, silences);
   const n = nodes.length;
   const fall = logoChange(input, -1);
