@@ -326,9 +326,9 @@ public static class Px4Userland
             var where = Where(
                 devices.Select(device => (device.Port, device.Bus, device.Address)).Concat(
                     shape.Array(enclosure, "candidates", "enclosures[]").OfType<JsonObject>()
-                        .Select(device => (shape.Text(device, "port", "devices[]", optional: true),
-                            shape.Number(device, "bus", "devices[]", optional: true),
-                            shape.Number(device, "address", "devices[]", optional: true)))));
+                        .Select(device => (shape.Text(device, "port", "candidates[]", optional: true),
+                            shape.Number(device, "bus", "candidates[]", optional: true),
+                            shape.Number(device, "address", "candidates[]", optional: true)))));
 
             /*
              * **番号が重なる筐体は、USB ポートで見分ける。** px4d にはUSB ポート (`--usb-path`) と、ソケットの
@@ -1499,11 +1499,13 @@ internal sealed class Px4Stream
     private readonly Px4Wire _wire;
     private readonly ManualResetEventSlim _first = new();
 
+    private readonly Pipe _pipe = NewBuffer();
+
     /// <summary>
-    /// 溜め。待ちは Inline で起こす (スレッドプールに回さない。pump は専用のスレッドで、
-    /// 読む側も 200ms ごとに自分で起きる)
+    /// 溜め (<see cref="Depth"/>)。待ちは Inline で起こす (スレッドプールに回さない。pump は専用のスレッドで、
+    /// 読む側も 200ms ごとに自分で起きる)。CECH-ZD1 J の TS も同じ溜めに詰める (Zd1jStream)
     /// </summary>
-    private readonly Pipe _pipe = new(new PipeOptions(
+    internal static Pipe NewBuffer() => new(new PipeOptions(
         pauseWriterThreshold: Depth,
         resumeWriterThreshold: Depth * 3 / 4,
         minimumSegmentSize: 64 * 1024,

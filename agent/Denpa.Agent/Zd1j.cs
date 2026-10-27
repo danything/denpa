@@ -37,7 +37,7 @@ public static class Zd1j
     {
         if (!Is(device)) return null;
         var port = device[Scheme.Length..];
-        return SianoUserland.IsPort(port) ? port : null;
+        return UsbSysfs.IsPort(port) ? port : null;
     }
 
     /// <summary>
@@ -53,9 +53,9 @@ public static class Zd1j
         foreach (var dir in Directory.EnumerateFileSystemEntries(sysfs).Order(StringComparer.Ordinal))
         {
             var port = Path.GetFileName(dir);
-            if (!SianoUserland.IsPort(port)) continue;
+            if (!UsbSysfs.IsPort(port)) continue;
             if (UsbSysfs.Read(dir, "idVendor") != vendor || UsbSysfs.Read(dir, "idProduct") != product) continue;
-            var driver = SianoUserland.Driver(sysfs, port);
+            var driver = UsbSysfs.Driver(sysfs, port);
             if (driver is not (null or "usbfs"))
             {
                 warn?.Invoke($"{Model} {port} はカーネルのドライバ ({driver}) が使っているので使いません");
@@ -485,13 +485,7 @@ internal sealed class Zd1jStream
     /// <summary>1回の読みの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。読みは裏で出したまま)</summary>
     private const int ReadTimeoutMs = 300;
 
-    private readonly Pipe _pipe = new(new PipeOptions(
-        pauseWriterThreshold: Px4Stream.Depth,
-        resumeWriterThreshold: Px4Stream.Depth * 3 / 4,
-        minimumSegmentSize: 64 * 1024,
-        readerScheduler: PipeScheduler.Inline,
-        writerScheduler: PipeScheduler.Inline,
-        useSynchronizationContext: false));
+    private readonly Pipe _pipe = Px4Stream.NewBuffer();
 
     private readonly IUsbInStream _in;
     private readonly string _name;
@@ -809,7 +803,7 @@ public sealed class Zd1jLocks
             var loaded = new Dictionary<string, DibMemory>();
             foreach (var (port, node) in boards)
             {
-                if (!SianoUserland.IsPort(port) || node is not System.Text.Json.Nodes.JsonObject channels) throw new FormatException($"ポート「{port}」が読めません");
+                if (!UsbSysfs.IsPort(port) || node is not System.Text.Json.Nodes.JsonObject channels) throw new FormatException($"ポート「{port}」が読めません");
                 loaded[port] = DibMemory.FromJson(channels);
             }
             foreach (var (port, memory) in loaded) Watch(port, memory);

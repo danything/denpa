@@ -8,7 +8,8 @@ namespace Denpa.Agent;
  * - Descrambler … TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (BCas.cs) か、別の拠点 (CardShare.cs)
  * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直接扱う (Ccid.cs。
- *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d・asicend の内蔵リーダー (Px4Card.cs)
+ *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d・asicend の内蔵リーダー (Px4Card.cs) か、
+ *                 CECH-ZD1 J の内蔵の差し込み口 (Zd1j.cs の Zd1jCard)
  */
 
 /// <summary>カードの素。**鍵を作るのに要る定数**で、初めに1回だけ貰う</summary>

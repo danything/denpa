@@ -49,16 +49,7 @@ public static class SianoUserland
     {
         if (!Is(device)) return null;
         var port = device[Scheme.Length..];
-        return IsPort(port) ? port : null;
-    }
-
-    /// <summary>sysfs の USB デバイスの名前 (<c>1-2</c>、<c>1-2.3.1</c>)。インターフェース (<c>1-2:1.0</c>) やルートハブは違う</summary>
-    internal static bool IsPort(string name)
-    {
-        var dash = name.IndexOf('-');
-        if (dash <= 0 || dash == name.Length - 1) return false;
-        return name[..dash].All(char.IsAsciiDigit)
-            && name[(dash + 1)..].Split('.').All(part => part.Length > 0 && part.All(char.IsAsciiDigit));
+        return UsbSysfs.IsPort(port) ? port : null;
     }
 
     /// <summary>画面に出す名前</summary>
@@ -89,7 +80,7 @@ public static class SianoUserland
             Log.Write($"siano-userland の機材を挙げられません (siano-ts --list exit {code}: {output})");
             return [];
         }
-        return ParseList(output, port => Driver(UsbSysfs.Devices, port), Log.Write);
+        return ParseList(output, port => UsbSysfs.Driver(UsbSysfs.Devices, port), Log.Write);
     }
 
     /// <summary>
@@ -117,7 +108,7 @@ public static class SianoUserland
             {
                 warn($"{model} {port} は使えません (siano-ts --list: status={current.GetValueOrDefault("status")})");
             }
-            else if (!IsPort(port))
+            else if (!UsbSysfs.IsPort(port))
             {
                 warn($"{model} の USB のポートが分からないので使いません (port={port})");
             }
@@ -154,21 +145,6 @@ public static class SianoUserland
         }
         Flush();
         return found;
-    }
-
-    /// <summary>どれかのインターフェースを使っているドライバの名前。誰も使っていなければ null</summary>
-    internal static string? Driver(string sysfs, string port)
-    {
-        // sysfs が無い (Linux でない) ならカーネルのドライバも無い
-        if (!Directory.Exists(sysfs)) return null;
-        foreach (var entry in Directory.EnumerateFileSystemEntries(sysfs, $"{port}:*").Order(StringComparer.Ordinal))
-        {
-            var driver = Path.Combine(entry, "driver");
-            if (!Directory.Exists(driver)) continue;
-            var target = new DirectoryInfo(driver).LinkTarget;
-            return Path.GetFileName((target ?? driver).TrimEnd('/'));
-        }
-        return null;
     }
 
     /// <summary>

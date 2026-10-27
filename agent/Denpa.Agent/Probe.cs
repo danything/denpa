@@ -32,6 +32,11 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Probe
 {
+    // 使い方の1行 (引数が合わないときにここと Program.cs が出す)
+    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]";
+    public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
+    public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート>]";
+
     /// <summary>1チャンネルあたり読む時間</summary>
     private static readonly TimeSpan Read = TimeSpan.FromSeconds(3);
 
@@ -66,7 +71,7 @@ public static class Probe
         var destination = args.ElementAtOrDefault(2);
         if (source is null || destination is null)
         {
-            Console.Error.WriteLine("usage: denpa-agent --decode-file <in.ts> <out.ts>");
+            Console.Error.WriteLine($"usage: {DecodeUsage}");
             return 2;
         }
 
@@ -102,7 +107,7 @@ public static class Probe
         {
             if (Zd1j.Parse(device) is not { } port)
             {
-                Console.Error.WriteLine($"usage: denpa-agent --card [{Zd1j.Scheme}<USB のポート>]");
+                Console.Error.WriteLine($"usage: {CardUsage}");
                 return 2;
             }
             return Zd1jCard(port);
@@ -135,7 +140,7 @@ public static class Probe
         var channels = args.ElementAtOrDefault(2)?.Split(',') ?? [];
         if (device is null || channels.Length == 0)
         {
-            Console.Error.WriteLine("usage: denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]");
+            Console.Error.WriteLine($"usage: {TuneUsage}");
             return 2;
         }
 

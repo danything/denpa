@@ -52,8 +52,8 @@ public sealed record UsbLocation(string Port, string Path);
 public static class UsbDevices
 {
     /// <summary>
-    /// 刺さっている機材を並べる。**開かない。** Linux は sysfs (カーネルのドライバの有無は呼ぶ側が見る)、
-    /// Windows は WinUSB の当たっているものだけ、macOS は IOKit
+    /// 刺さっている機材を並べる (Windows・macOS)。**開かない。** Windows は WinUSB でないものも並ぶ (開けるかは開くまで分からない)。
+    /// Linux は呼ぶ側が sysfs で探すので空 (<see cref="Zd1j.Detect"/>)
     /// </summary>
     public static IReadOnlyList<UsbLocation> List(int vendor, int product)
     {
