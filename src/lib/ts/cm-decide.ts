@@ -503,7 +503,7 @@ function measure(ranges: Range[]): (t: number) => number {
  * ロゴの出ている区間から作る、出ている秒の数え方とロゴの出入り。
  *
  * `tails` はロゴの区間の尻の、ロゴが見えないまま持ち越された所 (`unseenTails`)。見えた秒 (`lit`) にもロゴの無い秒 (`bare`) にも
- * 数えずに別に数え (`unseen`)、その頭もロゴの消え際に足す
+ * 入れず、別に数える (`unseen`)。その頭もロゴの消え際に足す
  */
 function logoIndex(spans: Range[], duration: number, tails: Range[] = []) {
   const sorted = [...spans].sort((a, b) => a.start - b.start);
