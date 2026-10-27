@@ -137,4 +137,9 @@ export type FromWorker =
    * 抱えきれなくなったので、届いたものを捨て始めた (`follow` のときだけ)。**画面は手元が尽きる前に
    * 再生している位置からリクエストし直す** (`live-player.svelte.ts` の `starved`)
    */
-  | { type: "full" };
+  | { type: "full" }
+  /**
+   * `reset` を済ませた。**これより前に出した音・`shown`・`full` は前の局 (録画なら飛ぶ前) のもの** — 画面はこれが届くまで捨てる
+   * (`engine.ts` の `resetting`)。worker は届いた順にデコードするので、`reset` を受け取る前のぶんがまだ画面へ向かっていることがある
+   */
+  | { type: "reset" };

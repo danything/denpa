@@ -132,6 +132,12 @@ export class RawEngine {
   private side: AudioSide = "both";
   /** 最後に知った PTS。字幕や時計の通知を伸ばすのに使う (`unwrap`) */
   private near: number | null = null;
+  /**
+   * 返事 (`reset`) をまだ受け取っていない `reset` の数。**0 になるまで届いた音・`shown`・`full` は前の局 (録画なら飛ぶ前) のもの**で、捨てる。
+   * worker は渡したものを順にデコードしていて、`reset` を送った時点で前の局の音がこちらへ向かっていることがある。
+   * それを `Playout` に入れると、新しい局の音の時刻が前の局より小さいとき、追い越すまで全部捨てられて鳴り出さない
+   */
+  private resetting = 0;
   /** 鳴らし始める所 (`reset` の `from`。一周の中)。最初の音のコマで伸ばして `Playout` に渡す */
   private aim: number | null = null;
   /** 切り抜きの返事待ち (`grab`)。id ごと */
@@ -292,6 +298,7 @@ export class RawEngine {
     this.heardAt = 0;
     this.shownAt = 0;
     this.finishing = false;
+    if (!this.gone) this.resetting++;
     this.send({ type: "reset", from });
   }
 
@@ -530,7 +537,18 @@ export class RawEngine {
   }
 
   private receive(message: FromWorker): void {
+    // 前の局・飛ぶ前の知らせ (`resetting`)
+    if (
+      this.resetting > 0 &&
+      (message.type === "audio" ||
+        message.type === "shown" ||
+        message.type === "full")
+    )
+      return;
     switch (message.type) {
+      case "reset":
+        this.resetting--;
+        break;
       case "audio": {
         if (this.heardAt === 0) this.heardAt = Date.now();
         this.heard++;

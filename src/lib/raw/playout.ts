@@ -142,7 +142,7 @@ export class Playout<T extends Chunk> {
    * 番を過ぎたものは捨てる — 遅れて鳴らすと、そこから先が全部ずれる
    */
   push(chunk: T, now: number): Scheduled<T> | null {
-    // 前より古い時刻 (選局し直しの取り残し) は捨てる
+    // 前より古い時刻は捨てる (選局し直す前の音は、`RawEngine` が `reset` の返事を待って先に捨てている)
     const last = this.chunks.at(-1);
     if (last !== undefined && chunk.pts < last.pts) return null;
     this.chunks.push(chunk);

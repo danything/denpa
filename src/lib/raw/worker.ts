@@ -950,6 +950,8 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
       break;
     case "reset":
       reset(message.from ?? null);
+      // ここより前に出した音は前の局のもの。画面はこの返事まで捨てる (`engine.ts` の `resetting`)
+      post({ type: "reset" });
       break;
     case "end":
       // 尻まで読んだ。デコーダを読み終えるまでは溜めたぶんの後ろで (`early`)
