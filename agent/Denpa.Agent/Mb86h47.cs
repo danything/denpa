@@ -42,6 +42,12 @@ public sealed class Mb86h47 : II2c
     private const byte RequestOut = 0x40;
     private const byte MemoryRequest = 0xBC;
 
+    /// <summary>起動の段の名前 (<see cref="Start"/>。失敗の記録に「…ところで」と続けて出す)</summary>
+    public const string StageStart = "ブリッジを起動する";
+
+    /// <summary>コア 1 との bulk の経路 (5.5) を用意する段</summary>
+    public const string StageCommands = "コア 1 との bulk の経路を用意する";
+
     /// <summary>メモリ要求と bulk の命令の時間切れ (仕様書 3 章「タイムアウトは 1 秒で動いている」)</summary>
     private const int TimeoutMs = 1000;
 
@@ -185,10 +191,12 @@ public sealed class Mb86h47 : II2c
     // ---------------------------------------------------------------------
 
     /// <summary>4.1〜4.5 と、コア 1 と bulk の命令の経路 (5.4・5.5)。どこかで失敗したら投げる (開くのを止める)</summary>
-    public void Start()
+    /// <param name="stage">いまどこまで進んだか (<see cref="Zd1jBoard.Acquire(string, Func{IUsbDevice})"/> が失敗の記録に出す)</param>
+    public void Start(Action<string>? stage = null)
     {
         lock (_gate)
         {
+            stage?.Invoke(StageStart);
             // 4.1 電源投入のままか
             var used = Read32(0x82008) >> 16;
             if (used != 0)
@@ -200,6 +208,7 @@ public sealed class Mb86h47 : II2c
             MaskInterrupts();
             StartI2c();
             StartCore1();
+            stage?.Invoke(StageCommands);
             StartCommandChannel();
         }
     }

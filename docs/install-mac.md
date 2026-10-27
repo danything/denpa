@@ -103,3 +103,30 @@ Apple のドライバには速さの設定 (`AllowAlternativeFiDi`。`man SmartC
 
 繋がらないときは、ログの PC/SC のエラー番号 (`0x8010…`) と `denpa-agent --card` の出力を
 [Issue](https://github.com/danything/denpa/issues) に貼ってもらえると、ドライバを切り替えずに読めるようにできるかを調べられます。
+
+### CECH-ZD1 J の差し込み口が読めないとき
+
+**CECH-ZD1 J の差し込み口は PC/SC も CCID ドライバも通りません。** エージェントが IOKit で CECH-ZD1 J を開き、
+中の USB ブリッジを通してカードと話します ([tuners.md](tuners.md#sony-cech-zd1-j))。上のドライバの切り替えは関係ありません。
+カードを読む前にチューナーと同じく CECH-ZD1 J を開くので、**映像も映らないなら、カードより先に開くところで止まっています。**
+Mac の実機ではまだ確かめていません。
+
+切り分けは `denpa-agent --card` で。動いているエージェントが CECH-ZD1 J を開いたままにしているので、先に止め、終わったら戻します。
+
+```sh
+# エージェントを止める。録画中は録画の終わりを待ってから止まる (止まるまでは --card が CECH-ZD1 J を開けない)
+launchctl bootout "gui/$(id -u)/io.github.danything.denpa-agent"
+# リーダーを全部並べる。CECH-ZD1 J は「内蔵 Sony CECH-ZD1 J <ポート> Internal Card Reader: …」の行
+# (OS に見えていなければ「Sony CECH-ZD1 J: 見つかりません」)
+~/Library/Application\ Support/denpa-agent/bin/denpa-agent --card
+# その CECH-ZD1 J の差し込み口だけを開いて、ATR とカードの番号と、かかったミリ秒を出す (ほかのリーダーには触らない)
+~/Library/Application\ Support/denpa-agent/bin/denpa-agent --card zd1j:<ポート>
+# エージェントを戻す
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/io.github.danything.denpa-agent.plist
+```
+
+開けないときは、エージェントのログ (`~/Library/Logs/denpa-agent.log`。設定の「その他」→「ログ」でも見られる) に
+`[Sony CECH-ZD1 J <ポート>] 開けません (…ところで): …` の行が、どこで止まったか (USB を開く・ブリッジを起動する・コア 1 との
+bulk の経路を用意する) 付きで出ます。開けたときは `開きました` の行と、初めて開いたときに端点の一覧
+(`usb <ポート>: EP 0x81 bulk …`) が出ます。これらの行と `--card` の出力を、設定の「その他」→「ログ」の「Issue にする」で
+送ってもらえると調べられます。

@@ -114,7 +114,7 @@ public static class Probe
         }
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
         foreach (var found in Px4Card.Find().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
-        DescribeZd1jCards();
+        Zd1j.DescribeCards(Zd1j.Cards(), Console.Out);
         try
         {
             using var card = CardLinks.Open();
@@ -299,33 +299,14 @@ public static class Probe
             Console.WriteLine($"{found.Name}: カード {string.Join(" / ", init.Ids.Select(id => id.ToString("D16")))}  CA_system_id 0x{init.CaSystemId:X4} ({started.ElapsedMilliseconds} ms)");
             return 0;
         }
-        catch (IOException error)
+        catch (Exception error)
         {
-            Console.Error.WriteLine($"{found.Name}: {error.Message} ({started.ElapsedMilliseconds} ms)");
+            Console.Error.WriteLine($"{found.Name}: {Zd1j.Reason(error)} ({started.ElapsedMilliseconds} ms)");
             return 1;
         }
         finally
         {
             Zd1jBoard.CloseAll();
-        }
-    }
-
-    /// <summary>CECH-ZD1 J の内蔵の差し込み口: ATR と、開いてから ATR までの時間</summary>
-    private static void DescribeZd1jCards()
-    {
-        foreach (var found in Zd1j.Cards())
-        {
-            var started = System.Diagnostics.Stopwatch.StartNew();
-            try
-            {
-                using var link = found.Open();
-                var atr = link.Reset();
-                Console.WriteLine($"内蔵 {found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。冷えた状態から開いて IFSD を決めるまで)");
-            }
-            catch (IOException error)
-            {
-                Console.WriteLine($"内蔵 {found.Name}: {error.Message} ({started.ElapsedMilliseconds} ms)");
-            }
         }
     }
 

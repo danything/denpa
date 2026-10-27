@@ -517,7 +517,7 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
 - **前面の LED は流している間ずっと赤** (DiB8000 の GPIO 1)。選局しなおしでは触らず、止めたら緑に戻します
 - **USB は OS ごとに P/Invoke だけで持ちます** (外のライブラリなし)。Linux は usbfs の ioctl (TS は URB を 16 本出しっぱなし)、
   Windows は WinUSB (利用者が Zadig で WinUSB を当てる。`OVERLAPPED` の読みを 16 本)、macOS は IOKit の IOUSBLib (カーネルの拡張なし。
-  `ReadPipeAsync` を 16 本、CFRunLoop を回す専用のスレッドで受ける)。device の名前は Windows ならホストコントローラーの並び + ハブのポート、
+  `ReadPipeAsync` を 16 本、CFRunLoop を回す専用のスレッドで受ける。コア 1 の答えの EP 0x83 は interrupt で、IOUSBLib では時間切れが効かないので、時間切れの無い `ReadPipe` を専用のスレッドで出し続け、届いた答えを自前の時間で待つ)。device の名前は Windows ならホストコントローラーの並び + ハブのポート、
   macOS なら `locationID` から、Linux の sysfs と同じ形 (`2-3.2`) に作ります。Windows と macOS は実機ではまだ確かめていません
 - 実機での確かめは `denpa-agent --tune zd1j:<ポート> <ch>` (開く・ロック・最初の TS・2 回目の選局の時間、I2C の回数、C/N) と
   `denpa-agent --card zd1j:<ポート>` (どちらもそのボードのカードだけを使い、ほかの機材に触らない)。テストは偽の USB (`Zd1jFakes.cs`) の上で、書く順番と値を仕様書と照らします (`Dib8096Tests.cs`・`Zd1jTests.cs`・`Mb86h47ProgramsTests.cs`)

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Denpa.Agent;
 
 /*
@@ -115,5 +117,120 @@ public static class UsbDevices
         if (OperatingSystem.IsWindows()) return WinUsbDevice.Open(found);
         if (OperatingSystem.IsMacOS()) return IoKitDevice.Open(found, vendor, product);
         throw new PlatformNotSupportedException();
+    }
+
+    /// <summary>
+    /// 端点の一覧を1行に (<c>EP 0x81 bulk 512 バイト、EP 0x83 interrupt 64 バイト</c>)。種類は USB の決まりの番号
+    /// (0 = control、1 = isochronous、2 = bulk、3 = interrupt)。macOS で開いたときに1回だけ記録に出す
+    /// </summary>
+    public static string DescribePipes(IEnumerable<(byte Endpoint, int Type, int MaxPacket)> pipes) =>
+        string.Join("、", pipes.Select(pipe =>
+            $"EP 0x{pipe.Endpoint:X2} {pipe.Type switch { 0 => "control", 1 => "isochronous", 2 => "bulk", 3 => "interrupt", _ => $"種類 {pipe.Type}" }} {pipe.MaxPacket} バイト"));
+}
+
+/// <summary>
+/// 端点の読みを1本ずつ出し続けて、届いた転送を順に溜める。**読む側の時間切れは溜めを待つ時間だけで、出した読みは取り消さない。**
+///
+/// <para>
+/// macOS の IOUSBLib は interrupt のパイプに時間切れが効かない (IOUSBLib.h の <c>ReadPipeTO</c> の説明。interrupt は
+/// 時間切れの無い <c>ReadPipe</c> で読む)。そこで時間切れの無い読みを専用のスレッドで出し続け、読む側は自前の時間で溜めを待つ。
+/// 時間切れのたびに読みを取り消すと、取り消しと転送がすれ違ったときに届いた答えを落とし、データトグルの食い違いを直す手当ても要る。
+/// 出し続けていれば取り消すのは閉じるときの1回だけで済み、時間切れのあとに届いた答えも次の読みで受け取れる
+/// (CECH-ZD1 J は答えに通し番号を付けて古いものを捨てるので、遅れて届いた答えが混ざってもよい)。
+/// </para>
+///
+/// <para>
+/// 1回の転送が1つの答え。<see cref="Read"/> は溜めの頭の転送を1つ渡し、受け口に入りきらないぶんは捨てる
+/// (Linux・Windows の1回の interrupt の読みと同じ振る舞い)。
+/// </para>
+/// </summary>
+internal sealed class UsbReadPump : IDisposable
+{
+    /// <summary>出した読みを取り消してスレッドが戻るまで待つ上限</summary>
+    private static readonly TimeSpan StopWait = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// 溜めておく転送の上限。読む側が止まっていても溜め続けないよう、越えたら古いものから捨てる
+    /// (CECH-ZD1 J の答えは送った塊ごとに1つで、通し番号で古いものを捨てるので、落ちても困らない)
+    /// </summary>
+    internal const int Capacity = 64;
+
+    private readonly string _name;
+    private readonly Func<byte[], int> _read;
+    private readonly Action _cancel;
+    private readonly int _size;
+    private readonly BlockingCollection<byte[]> _chunks = new(new ConcurrentQueue<byte[]>());
+    private readonly Thread _thread;
+    private volatile bool _closing;
+    private volatile Exception? _error;
+
+    /// <param name="name">スレッドの名前</param>
+    /// <param name="size">1回の読みの大きさ (端点の最大パケット長。それより大きいと、ちょうどの長さの答えで読みが終わらない)</param>
+    /// <param name="read">時間切れの無い読みを1回。受けたバイト数を返す (取り消されたら 0)。読めなければ投げる</param>
+    /// <param name="cancel">出している読みを取り消す (<paramref name="read"/> を戻らせる)。閉じるときだけ呼ぶ</param>
+    public UsbReadPump(string name, int size, Func<byte[], int> read, Action cancel)
+    {
+        _name = name;
+        _size = size;
+        _read = read;
+        _cancel = cancel;
+        _thread = new Thread(Run) { IsBackground = true, Name = name };
+        _thread.Start();
+    }
+
+    private void Run()
+    {
+        // 受け口は読みごとに新しく作る (渡した配列は溜めにそのまま入る)。取り消しが間に合わず戻らないままでも、
+        // 受け口はこのスレッドが持っているので、閉じた側が解放してしまうことはない
+        while (!_closing)
+        {
+            var buffer = new byte[_size];
+            int got;
+            try
+            {
+                got = _read(buffer);
+            }
+            catch (Exception error)
+            {
+                if (!_closing) _error = error;
+                break;
+            }
+            if (_closing) break;
+            if (got <= 0) continue;
+            while (_chunks.Count >= Capacity) _chunks.TryTake(out _);
+            _chunks.Add(got == buffer.Length ? buffer : buffer[..got]);
+        }
+        _chunks.CompleteAdding();
+    }
+
+    /// <summary>溜めの頭の転送を1つ渡す。<paramref name="timeoutMs"/> の間に何も届かなければ 0。読みが失敗していれば投げる</summary>
+    public int Read(Span<byte> buffer, int timeoutMs)
+    {
+        ObjectDisposedException.ThrowIf(_closing, _name);
+        if (!_chunks.TryTake(out var chunk, Math.Max(0, timeoutMs)))
+        {
+            if (_error is { } error) throw error as IOException ?? new IOException($"{_name}: {error.Message}", error);
+            return 0;
+        }
+        var length = Math.Min(chunk.Length, buffer.Length);
+        chunk.AsSpan(0, length).CopyTo(buffer);
+        return length;
+    }
+
+    /// <summary>出している読みを取り消して、スレッドが戻るのを待つ</summary>
+    public void Dispose() => Stop();
+
+    /// <summary>
+    /// 出している読みを取り消して、スレッドが戻るのを <see cref="StopWait"/> まで待つ。戻ったら true
+    /// (戻らなければ、呼ぶ側は読みが使っているもの (インターフェース) を手放さない)
+    /// </summary>
+    public bool Stop()
+    {
+        if (!_closing)
+        {
+            _closing = true;
+            _cancel();
+        }
+        return _thread.Join(StopWait);
     }
 }
