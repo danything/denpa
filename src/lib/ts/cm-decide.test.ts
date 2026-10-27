@@ -749,3 +749,73 @@ describe("実機の並び (点数で比べる)", () => {
     ]);
   });
 });
+
+describe("ロゴの区間の尻の、見えないまま持ち越された所", () => {
+  /**
+   * ロゴの区間 (`logo`) と、そのうちロゴが見えなかった所 (`dark`。点が 0) から材料を組む。
+   * ロゴの判定は、ロゴが溶けて見えない後ろでは直前の判断を持ち越す (`logo-detect.logoSpans`)
+   */
+  function held(
+    duration: number,
+    joints: number[],
+    logo: Range[],
+    dark: Range[],
+  ): CmInput {
+    const material = frames(duration, joints);
+    const inside = (ranges: Range[], t: number) =>
+      ranges.some((r) => t >= r.start && t < r.end);
+    return {
+      duration,
+      silences: silencesAt(joints),
+      ...material,
+      logo,
+      logoScores: material.times.map((t) =>
+        inside(logo, t) && !inside(dark, t) ? 0.75 : 0,
+      ),
+    };
+  }
+
+  test("録画 500: 番組の直後の 15 秒の CM がロゴの区間に入っていても、そこから CM", () => {
+    // 本編 39〜189.7 (ロゴの点は 190 で 0 に落ちる)、CM 189.7〜219.7 (15 + 15)、220 から本編。
+    // ロゴの区間は 203 まで持ち越されていた (点は 190〜220 ずっと 0)
+    const joints = [8.6, 23.8, 38.8, 44, 90, 179.8, 189.7, 204.8, 219.7];
+    const input = held(
+      400,
+      joints,
+      [
+        { start: 39.2, end: 203 },
+        { start: 220.2, end: 400 },
+      ],
+      [{ start: 189.9, end: 203 }],
+    );
+    expect(round(decideCm(input))).toEqual([
+      { start: 0, end: 38.8 },
+      { start: 189.7, end: 219.7 },
+    ]);
+  });
+
+  // 本編 0〜300、CM 300〜360、本編 360〜600
+  const cm = every15(300, 360);
+  const logo = [
+    { start: 0.2, end: 300 },
+    { start: 360.2, end: 600 },
+  ];
+
+  test("区間の中ほどで見えなかった所 (本編の白い場面) は、尺が CM に合っても番組", () => {
+    for (const length of [15, 30]) {
+      const input = held(600, [...cm, 100, 100 + length], logo, [
+        { start: 100, end: 100 + length },
+      ]);
+      expect(round(decideCm(input))).toEqual([{ start: 300, end: 360 }]);
+    }
+  });
+
+  test("番組の終わりの見えない 5 秒・10 秒・20 秒は番組に残す", () => {
+    for (const length of [5, 10, 20]) {
+      const input = held(600, [...cm, 300 - length], logo, [
+        { start: 300 - length, end: 300 },
+      ]);
+      expect(round(decideCm(input))).toEqual([{ start: 300, end: 360 }]);
+    }
+  });
+});

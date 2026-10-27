@@ -1,3 +1,5 @@
+import { OFF as LOGO_OFF } from "./logo-detect";
+
 /**
  * CM の境目を決める (純粋な計算)。材料は `server/cm-scan.ts` が1回の復号で取ったもの。
  *
@@ -270,6 +272,10 @@ const PROGRAM_LOGO = 1;
  * 番組の間の 14.5 秒より短いロゴの途切れ (アイキャッチ) は番組に残す
  */
 const PROGRAM_BARE = 0.5;
+/**
+ * 番組: ロゴの区間の尻で、見えないまま持ち越された 1 秒ごとの点 (`unseenTails`)。見えた秒の半分。CM のほうはロゴの減点をしない
+ */
+const UNSEEN_PROGRAM = 0.5;
 /** CM: 尺が 15 秒の倍数にぴったりのときの 1 秒ごとの点。ずれると減り、`CM_TOLERANCE` で 0 */
 const CM_FIT = 1;
 /** CM: 尺がどの倍数にも合わない (外れが `CM_TOLERANCE` 以上の) 区間の減点。ロゴの無い 14.5 秒の番組と同じ */
@@ -480,8 +486,26 @@ function creditBonus(state: State, nextIsCm: boolean, bare: number): number {
   return state === State.CreditAfterOther ? CREDIT * bare : 0;
 }
 
-/** ロゴの出ている区間から作る、出ている秒の数え方とロゴの出入り */
-function logoIndex(spans: Range[], duration: number) {
+/** 0 から `t` までに `ranges` (並んで重ならない) が占める秒を数えるもの */
+function measure(ranges: Range[]): (t: number) => number {
+  const starts = ranges.map((s) => s.start);
+  const before = [0];
+  for (const s of ranges) before.push(before.at(-1)! + s.end - s.start);
+  return (t) => {
+    const k = lowerBound(starts, t + 1e-9) - 1;
+    if (k < 0) return 0;
+    const s = ranges[k]!;
+    return before[k]! + Math.max(0, Math.min(t, s.end) - s.start);
+  };
+}
+
+/**
+ * ロゴの出ている区間から作る、出ている秒の数え方とロゴの出入り。
+ *
+ * `tails` はロゴの区間の尻の、ロゴが見えないまま持ち越された所 (`unseenTails`)。見えた秒 (`lit`) にもロゴの無い秒 (`bare`) にも
+ * 数えずに別に数え (`unseen`)、その頭もロゴの消え際に足す
+ */
+function logoIndex(spans: Range[], duration: number, tails: Range[] = []) {
   const sorted = [...spans].sort((a, b) => a.start - b.start);
   const merged: Range[] = [];
   for (const s of sorted) {
@@ -490,25 +514,77 @@ function logoIndex(spans: Range[], duration: number) {
       last.end = Math.max(last.end, s.end);
     else merged.push({ ...s });
   }
-  const starts = merged.map((s) => s.start);
-  const before = [0];
-  for (const s of merged) before.push(before.at(-1)! + s.end - s.start);
-  /** 0 から `t` までにロゴが出ていた秒 */
-  const litTo = (t: number) => {
-    const k = lowerBound(starts, t + 1e-9) - 1;
-    if (k < 0) return 0;
-    const s = merged[k]!;
-    return before[k]! + Math.max(0, Math.min(t, s.end) - s.start);
-  };
+  /** 0 から `t` までのロゴの区間の秒 / そのうち見えないまま持ち越された秒 */
+  const coveredTo = measure(merged);
+  const unseenTo = measure(tails);
+  const unseen = (a: number, b: number) => unseenTo(b) - unseenTo(a);
   // 録画の端で切れているロゴは、そこで出入りしたのではない
   const rises = merged.map((s) => s.start).filter((t) => t > EDGE);
-  const falls = merged.map((s) => s.end).filter((t) => t < duration - EDGE);
+  const falls = [...merged.map((s) => s.end), ...tails.map((s) => s.start)]
+    .filter((t) => t < duration - EDGE)
+    .sort((a, b) => a - b);
   return {
     merged,
-    lit: (a: number, b: number) => litTo(b) - litTo(a),
+    /** ロゴが見えていた秒 */
+    lit: (a: number, b: number) => coveredTo(b) - coveredTo(a) - unseen(a, b),
+    unseen,
+    /** ロゴの無い秒 */
+    bare: (a: number, b: number) => b - a - (coveredTo(b) - coveredTo(a)),
     rises,
     falls,
   };
+}
+
+/** 「見えた」とみなすロゴの点 (`logo-detect` の、消えたとみなす境目) */
+const SEEN_SCORE = LOGO_OFF;
+/** 前後 `SEEN_REACH` 秒にこのコマ数だけ `SEEN_SCORE` 以上の点があれば見えた (`logo-detect` の窓と同じ) */
+const SEEN_FRAMES = 3;
+const SEEN_REACH = 1;
+/** 見えないまま持ち越された所として扱う最短 (秒)。これより短いのは、ロゴの判定の窓のぶん */
+const UNSEEN_MIN = 2;
+
+/**
+ * **ロゴの区間の尻の、ロゴが見えないまま持ち越された所。** ロゴの判定 (`logo-detect.logoSpans`) は、ロゴが溶けて見えない後ろ
+ * (白っぽい場面・細かい柄) では直前の判断を持ち越すので、区間の尻に点が 0 のままの所が残ることがある。そこは番組の終わりの
+ * 明るい場面のこともあれば、番組から続けて入った CM のこともある (実機の TBS のアニメで、番組の直後の 15 秒の CM が、
+ * ロゴの点は 0 のまま区間に入り、番組にされた)。ロゴがあったとも無かったとも言い切れないので、番組には見えた秒の
+ * 半分の点 (`UNSEEN_PROGRAM`) だけ付け、CM にもロゴの減点をしない。CM か番組かは尺と無音と切れ目で決まる。
+ *
+ * **区間の中ほどは見ない。** 後ろでまたロゴが見えたなら、その間も番組と見てよい (本編の白い場面)。
+ *
+ * 区間の尻から、前後 `SEEN_REACH` 秒に `SEEN_SCORE` 以上の点が `SEEN_FRAMES` コマ無いコマが `UNSEEN_MIN` 秒以上続く所。点が無ければ空
+ */
+function unseenTails(input: CmInput, spans: Range[]): Range[] {
+  const { times, logoScores, duration } = input;
+  if (
+    times === undefined ||
+    logoScores === undefined ||
+    times.length === 0 ||
+    logoScores.length !== times.length
+  )
+    return [];
+  const n = times.length;
+  // `SEEN_SCORE` 以上のコマの数の累積
+  const count = new Int32Array(n + 1);
+  for (let i = 0; i < n; i++)
+    count[i + 1] = count[i]! + (logoScores[i]! >= SEEN_SCORE ? 1 : 0);
+  const out: Range[] = [];
+  for (const span of spans) {
+    // 区間の尻から遡って、最後に見えたコマを探す
+    const first = lowerBound(times, span.start);
+    let i = lowerBound(times, span.end) - 1;
+    for (; i >= first; i--) {
+      const t = times[i]!;
+      const seen =
+        count[lowerBound(times, t + SEEN_REACH + 1e-9)]! -
+          count[lowerBound(times, t - SEEN_REACH)]! >=
+        SEEN_FRAMES;
+      if (seen) break;
+    }
+    const start = i + 1 < n ? Math.max(span.start, times[i + 1]!) : duration;
+    if (span.end - start >= UNSEEN_MIN) out.push({ start, end: span.end });
+  }
+  return out.sort((a, b) => a.start - b.start);
 }
 
 /** `edges` (並んだ時刻) のうち `t` にいちばん近いものまでの距離 */
@@ -540,7 +616,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
     input,
     silences,
   );
-  const index = logoIndex(spans, duration);
+  const index = logoIndex(spans, duration, unseenTails(input, spans));
   const nodes = candidates(input, index.merged, silences);
   const n = nodes.length;
   const fall = logoChange(input, -1);
@@ -577,10 +653,9 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
       edgeCost(distance, starts ? EDGE_FLAT_FALL : EDGE_FLAT_RISE)
     );
   };
-  const program = (a: number, b: number) => {
-    const lit = index.lit(a, b);
-    return PROGRAM_LOGO * lit - PROGRAM_BARE * (b - a - lit);
-  };
+  const program = (a: number, b: number) =>
+    PROGRAM_LOGO * (index.lit(a, b) + UNSEEN_PROGRAM * index.unseen(a, b)) -
+    PROGRAM_BARE * index.bare(a, b);
   /** CM に挟まれた短い所の頭か (告知のあとに `ISLAND_REST` 秒以上ロゴが残る) */
   const island = (a: number, b: number) =>
     index.merged.some(
@@ -606,7 +681,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
   const creditBare = (i: number, s: State) => {
     const start = nodes[Math.floor(from[i]![s]! / STATES)]!.at;
     const end = nodes[i]!.at;
-    return end > start ? 1 - index.lit(start, end) / (end - start) : 0;
+    return end > start ? index.bare(start, end) / (end - start) : 0;
   };
   /** 告知だけの CM のまま番組に戻るときの減点 (告知の点を取り消し、尺の合わない CM とみる) */
   const SOLO = SPOT_FIT * CREDITS + CM_MISFIT;

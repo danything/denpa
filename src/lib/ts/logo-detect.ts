@@ -322,7 +322,7 @@ export interface Span {
  * 境目近くを行き来するコマで区間が細切れにならないように
  */
 const ON = 0.25;
-const OFF = 0.12;
+export const OFF = 0.12;
 /** 1コマごとの点を、前後これだけのコマの中央値でならす (奇数)。白いフラッシュ1枚で切れないように */
 const SMOOTH = 9;
 /**
