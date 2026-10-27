@@ -16,7 +16,7 @@ describe("互換モード (canvas で描く) を使うか", () => {
     expect(isTesla(`${CHROME} Tesla/`)).toBe(false);
   });
 
-  test("明示が無ければテスラだけ入", () => {
+  test("明示が無ければテスラだけオン", () => {
     expect(decide(null, TESLA)).toBe(true);
     expect(decide(null, CHROME)).toBe(false);
   });

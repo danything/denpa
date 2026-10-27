@@ -105,10 +105,10 @@ public class SianoTests
         var sysfs = FakeSysfs(("1-2", null), ("1-3", "smsusb"));
         try
         {
-            await Assert.That(SianoUserland.Driver(sysfs, "1-2")).IsNull();
-            await Assert.That(SianoUserland.Driver(sysfs, "1-3")).IsEqualTo("smsusb");
+            await Assert.That(UsbSysfs.Driver(sysfs, "1-2")).IsNull();
+            await Assert.That(UsbSysfs.Driver(sysfs, "1-3")).IsEqualTo("smsusb");
             // sysfs が無い (Linux でない) なら、使っているドライバも無い
-            await Assert.That(SianoUserland.Driver("/nonexistent/sysfs", "1-2")).IsNull();
+            await Assert.That(UsbSysfs.Driver("/nonexistent/sysfs", "1-2")).IsNull();
         }
         finally
         {

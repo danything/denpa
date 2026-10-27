@@ -11,31 +11,27 @@ COPY packages/arib/package.json packages/arib/
 RUN bun install
 
 # ---------------------------------------------------------------------------
-# 放送の MPEG-2 と AAC をブラウザでデコードする WebAssembly (docs/stream.md#放送そのままmpeg-2を送る)
+# 放送の MPEG-2・AAC と、互換モードの Opus をブラウザでデコードする WebAssembly (docs/stream.md#デコーダ)
 #
-# **ブラウザには MPEG-2 のデコーダが無い**ので、FFmpeg の mpeg2video と aac だけを組んで
-# 持ち込む。出てくるのは decoder.mjs と decoder.wasm の2つ (wasm 855KB + mjs 14KB で 870KB ほど) で、
-# どの arch で組んでも中身は同じ (wasm なので)。**置き場はアプリの外** (/opt/denpa/mpeg2) —
-# 開発と E2E の compose はソースを /app に被せるので、/app の中に置くと隠れる。
-# 配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
+# **ブラウザには MPEG-2 のデコーダが無い**ので、FFmpeg を組んで持ち込む。出てくるのは decoder.mjs と
+# decoder.wasm の2つで (大きさは docs/stream.md#デコーダ)、どの arch で組んでも中身は同じ (wasm なので)。
+# **置き場はアプリの外** (/opt/denpa/mpeg2) — 開発と E2E の compose はソースを /app に被せるので、
+# /app の中に置くと隠れる。配るのは `/api/live/mpeg2/<名前>` (MPEG2_DIR を読む)。
 #
 # FFmpeg は下の `ffmpeg` 段と同じバージョンに揃える (Renovate が同じ PR で2か所とも上げる)。
 # 組むのは要るデコーダだけなので、2分ほどで終わる
 #
 # **組むのは mpeg2video のデコーダと、フレームの区切りを探す parser と、AAC・Opus のデコーダだけ。**
-# 他は全部切る (`--disable-everything`)。AAC はブラウザの AudioDecoder に任せていたが、
-# https でしか出てこず iPhone の Safari には iOS 26 まで無いので、こちらでデコードする。
-# AAC の parser は組まない — ADTS の区切りと時刻は JS (packages/arib/src/pes.ts の AdtsSplitter) が付ける。
-# **Opus のデコーダも組む** (AV1 と組んで送られてくる fMP4 の音。ライブ・追っかけ・録画を canvas で
-# 描く経路 — 車載ブラウザなど <video> が止まる端末向け)。Opus のデコーダは swresample を当てにする
-# (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
+# 他は全部切る (`--disable-everything`)。AAC の parser は組まない — ADTS の区切りと時刻は JS
+# (packages/arib/src/pes.ts の AdtsSplitter) が付ける。Opus は AV1 と組んで送られてくる fMP4 の音 (互換モード)。
+# Opus のデコーダは swresample を当てにする (SILK の 8〜24kHz を 48kHz に揃える) ので、swresample だけは切らずに残す
 #
 # - `--disable-asm` … x86 の手書きアセンブリは wasm では使えない
 # - スレッドは使わない。SharedArrayBuffer のために COOP/COEP (crossOriginIsolated) が要り、効くのは
 #   https の Chrome・Edge・Firefox だけで、重くて困るはずの iPhone・iPad には効かない
 #   (docs/stream.md「スライスのスレッドを見送った理由」)
 # - **SIMD は付けておく** (`-msimd128`。コンパイラが自動でベクトルにする)。MPEG-2 では測っても差が揺れの中だった
-#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream.md「どこに時間が掛かっているか」)。今のブラウザはどれも対応している
+#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream.md「組み方を変えて測ったこと」)。今のブラウザはどれも対応している
 # - **LTO を掛ける** (`-flto`)。デコードが 2〜8% 速くなり、brotli 後はかえって 2 KB ほど縮む (同じ節)
 # - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
 #   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む
@@ -105,7 +101,7 @@ FROM docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebba
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
-# **ライブを変換せずに送る経路のデコーダ** (上の段)。/app の外に置くので bind mount に隠れない
+# **ブラウザへ配るデコーダ** (上の `mpeg2wasm` 段)。/app の外に置くので bind mount に隠れない
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 COPY . .
 EXPOSE 5173
@@ -350,7 +346,7 @@ RUN ["/usr/local/bin/ffprobe", "-hide_banner", "-loglevel", "error", "-version"]
 # データ放送と字幕を描くブラウザに渡す字 (Denpa Font。上の `denpa-font` 段)
 COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
 
-# ライブを変換せずに送るときにブラウザへ配る MPEG-2 と AAC のデコーダ (`mpeg2wasm` 段)
+# ブラウザへ配るデコーダ (MPEG-2・AAC・Opus。`mpeg2wasm` 段)
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 
 # **node_modules は載せない。**

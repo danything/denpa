@@ -14,7 +14,7 @@ using Microsoft.AspNetCore.Http.Features;
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland /
- *   siano-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs)
+ *   siano-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs)。CECH-ZD1 J は USB を直に持つ (Zd1j.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -39,9 +39,9 @@ if (args.Length > 0)
 {
     Console.Error.WriteLine($"知らない引数です: {string.Join(" ", args)}");
     Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
-    Console.Error.WriteLine("       denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]");
-    Console.Error.WriteLine("       denpa-agent --decode-file <in.ts> <out.ts>");
-    Console.Error.WriteLine("       denpa-agent --card [zd1j:<USB のポート>]");
+    Console.Error.WriteLine($"       {Probe.TuneUsage}");
+    Console.Error.WriteLine($"       {Probe.DecodeUsage}");
+    Console.Error.WriteLine($"       {Probe.CardUsage}");
     return 2;
 }
 
@@ -235,7 +235,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     // 溜めない。数パケット届いたらそのまま流す (64KB 貯めると 25ms 積み上がる)
     http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
-    /**
+    /*
      * 1バイトでも送ったか。**送る前に落ちたなら、まだ理由を返せる。**
      *
      * 落ちた回をどれも接続を壊して知らせていた頃は、選局が始まった直後に
@@ -434,21 +434,19 @@ app.MapFallback((HttpContext http) =>
 /*
  * **px4d / asicend は背景で起こす。** ready までファームウェアの流し込みで
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の API (= PT3 など他の
- * チューナーの提供) まで遅れる。筐体が無ければ何もしない
+ * チューナーの提供) まで遅れる。筐体が無ければ何もしない。
+ *
+ * **手元のカードは起動したときに開いておく** (LocalCard.Warm)。最初の選局がカードを開くのを待たない。
+ * px4d / asicend の内蔵リーダーは起きてからでないと見えないので、起こし終えたらもう一度試す
+ * (開けていれば何もしない)。鍵を貰いに行く拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
  */
 var warmCard = cardUrl is not { Length: > 0 } || sharing is not null;
+if (warmCard) _ = Task.Run(Keys.Local.Warm);
 _ = Task.Run(() =>
 {
     PrepareDaemons();
     if (warmCard) Keys.Local.Warm();
 });
-
-/*
- * **手元のカードは起動したときに開いておく** (LocalCard.Warm)。最初の選局がカードを開くのを待たない。
- * px4d / asicend の内蔵リーダーは起きてからでないと見えないので、上で起こし終えたらもう一度試す
- * (開けていれば何もしない)。鍵を貰いに行く拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
- */
-if (warmCard) _ = Task.Run(Keys.Local.Warm);
 
 /*
  * **畳むのは、流し終えてから。** `ApplicationStopping` でやっていた頃は、止まれの合図の

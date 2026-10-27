@@ -10,7 +10,7 @@
  * ## エンコードしたものを canvas で描けるか (互換モード。`canvasSupport`)
  *
  * 映像をデコードするのはブラウザの VideoDecoder (WebCodecs) で、**形式ごとに端末次第**。
- * VideoDecoder は安全な繋ぎ (https か localhost) でしか出てこないので、http で開いた LAN では
+ * VideoDecoder は https か localhost でしか出てこないので、http で開いた LAN では
  * どちらも使えない (MPEG-2 は使える)。音は WASM でデコードするので、ほかに要るものは変換しない経路と同じ
  * (WebGL2 は要らない — 2D で描く)
  */

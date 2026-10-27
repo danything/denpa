@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// Linux では usbfs を直接扱っている (Ccid.cs) が、macOS には usbfs が無く、CCID の
-/// リーダーは OS (CryptoTokenKit の ifd-ccid) が先に開く。横取りするより、OS が
+/// リーダーは OS の CCID ドライバ (Apple の標準のものか、従来の ifd-ccid) が先に開く。横取りするより、OS が
 /// 出している PC/SC の API を借りるほうが素直で、入れてもらうものも増えない。
 /// T=1 の枠組みも ATR の読み方も向こうが持つので、ここは APDU を渡すだけ。
 /// </para>

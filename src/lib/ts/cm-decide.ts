@@ -1,10 +1,10 @@
-import { OFF as LOGO_OFF } from "./logo-detect";
-
 /**
  * CM の境目を決める (純粋な計算)。材料は `server/cm-scan.ts` が1回の復号で取ったもの。
  *
  * 秒はどれも ffmpeg の時刻 (入れ物の頭を 0)。
  */
+
+import { OFF as LOGO_OFF } from "./logo-detect";
 
 export interface Range {
   start: number;
@@ -849,10 +849,10 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
 const BLOCK_MIN = 30;
 
 /** CMの尺は15秒の倍数 (15〜180秒) */
-export function isCmLength(seconds: number, tolerance = CM_TOLERANCE): boolean {
-  if (seconds < 15 - tolerance || seconds > 180 + tolerance) return false;
+export function isCmLength(seconds: number): boolean {
+  if (seconds < 15 - CM_TOLERANCE || seconds > 180 + CM_TOLERANCE) return false;
   const units = Math.round(seconds / 15);
-  return Math.abs(seconds - units * 15) <= tolerance;
+  return Math.abs(seconds - units * 15) <= CM_TOLERANCE;
 }
 
 /**

@@ -124,17 +124,17 @@ asicen-userland は入れません (Windows 用が無い)。カードリーダ�
 規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書いた。NVRAM の領域の表・郵便番号の範囲の読み方・
 BinaryTable の検索の比べ方・既定のスタイルなど一部は、web-bml の振る舞いを読んで合わせたが、コードは写していない (下の「使っていないもの」)。
 
-### ライブを変換せずに見るときにブラウザへ配るデコーダ
+### ブラウザへ配るデコーダ
 
 [Dockerfile](../Dockerfile) の `mpeg2wasm` 段で組み、イメージの `/opt/denpa/mpeg2` に置いて
 `/api/live/mpeg2/` から配る WebAssembly ([stream.md](stream.md#放送そのままmpeg-2を送る))。
 **`--enable-gpl` を付けずに組んでいる**ので、中の FFmpeg は LGPL のまま (denpa 自身は AGPL で、
 どちらでも問題は無い)。ソースは Dockerfile が取ってくる FFmpeg の tarball と `wasm/decoder.c`。
 
-| 名前                                                                               | 何に                                          | 出どころ                                        | ライセンス                        |
-| ---------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------- | --------------------------------- |
-| FFmpeg (libavcodec の mpeg2video・aac デコーダと mpegvideo parser、libavutil だけ) | 放送の MPEG-2 と AAC をブラウザでデコードする | <https://ffmpeg.org>                            | LGPL-2.1+                         |
-| emscripten のローダー (`decoder.mjs` に埋まる実行時の糊)                           | WASM を worker に読み込む                     | <https://github.com/emscripten-core/emscripten> | MIT / University of Illinois/NCSA |
+| 名前                                                                                                    | 何に                                                            | 出どころ                                        | ライセンス                        |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------- | --------------------------------- |
+| FFmpeg (libavcodec の mpeg2video・aac・opus デコーダと mpegvideo parser、libswresample・libavutil だけ) | 放送の MPEG-2・AAC と互換モードの Opus をブラウザでデコードする | <https://ffmpeg.org>                            | LGPL-2.1+                         |
+| emscripten のローダー (`decoder.mjs` に埋まる実行時の糊)                                                | WASM を worker に読み込む                                       | <https://github.com/emscripten-core/emscripten> | MIT / University of Illinois/NCSA |
 
 ## 使っていないもの (書いておく価値のあるもの)
 

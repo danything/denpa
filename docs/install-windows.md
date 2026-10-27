@@ -45,7 +45,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 - **WSL は勝手に入れません。** wslc が無いときは、エージェントだけ入れて `wsl --update` (WSL が無ければ
   管理者で `wsl --install --no-distribution`) を流すよう言って終わります
-- ドライバは入れません (下)。刺さっているチューナーが WinUSB でなければ、そう言います
+- ドライバは入れません (下)。刺さっている px4-userland と siano-userland のチューナーが WinUSB でなければ、そう言います
   (px4-userland の機材は `px4d --list-json` に聞くので、機種の表は持ちません)
 - genkan (`http://denpa.localhost`) には繋ぎません (genkan は Docker のネットワークにいて、wslc のコンテナからは入れない)
 - エージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))

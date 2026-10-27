@@ -124,13 +124,11 @@ export function feedFor(
  * 出す順は `Carousel` に委ねる (pmt → programInfo → DII → モジュール)。シークで戻った
  * ときも、頭から積み直すだけで正しい状態になる — 変化ログなので、積む順は届いた順。
  *
- * `at` の意味は渡すタイムライン次第 — `captureDataBroadcast` の出力 (`TimedMessage[]`,
- * 放送の実時刻 unix ms) をそのまま渡すテストと、`feedFor` が再生位置 (ms) つきの
- * `PlacedMessage[]` を渡す本番の両方で使う。`PlacedMessage.at` は常に数値なので、
- * `at === null` の枝は本番では通らない (頭の準備を積むためのテスト向け)。
+ * `at` の物差しは渡すタイムラインに合わせる。本番 (観る画面と `feedFor`) は再生位置 (ms) つきの
+ * `PlacedMessage[]`、テストは放送の実時刻 (unix ms) つきの `TimedMessage[]` も渡す。
+ * 時計を見る前のもの (`at === null`) はテストでしか来ない。
  *
- * @param timeline `captureDataBroadcast` の出力、または `toPlaybackTimeline` で写したもの
- * @param at その時刻 (放送の実時刻 unix ms / 再生位置 ms) までに配られたものを積む
+ * @param at その時刻までに配られたものを積む
  */
 export function replayAt(
   timeline: readonly TimedMessage[],

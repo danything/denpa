@@ -107,7 +107,7 @@ export default defineConfig({
            * 止めたいのはスクリプトで、CSS からできるのは見た目と下の *-src の範囲の読み込みまで
            */
           "style-src": ["self", "unsafe-inline"],
-          // データ放送の画像は blob: (JPEG・PNG・GIF を作り直したもの) と data: (DRCS の字)
+          // データ放送の画像と DRCS の字は作り直して blob:。data: は CSS に埋めたアイコン
           "img-src": ["self", "data:", "blob:"],
           "font-src": ["self", "data:", "blob:"],
           // MSE と端末に落とした録画は blob:

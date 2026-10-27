@@ -218,8 +218,8 @@ export interface MkvBlock {
 
 /**
  * **流れてくる Matroska から、トラックの形式とコマを取り出す。** 足りないところで止めて続きを待つ。
- * Tracks は丸ごと届いてから読む。Segment・Cluster・BlockGroup は中に入り、知らないものは
- * 大きさぶん飛ばす (SeekHead・Cues・Tags・Chapters・字幕トラックのコマは読んでも捨てる側が決める)
+ * Tracks は丸ごと届いてから読む。Segment・Cluster・BlockGroup は中に入り、知らないもの
+ * (SeekHead・Cues・Tags・Chapters) は大きさぶん飛ばす。字幕トラックのコマも出すので、捨てるのは使う側
  */
 export class MkvDemuxer {
   private buffer = new Uint8Array(0);

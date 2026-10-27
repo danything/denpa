@@ -168,8 +168,8 @@ let fmp4: Fmp4Video | null = null;
 /** 端末に保存した録画 (Matroska) を読む係。`mkv` のときだけ (`mkv.ts`)。読んだコマは `fmp4` へ渡す */
 let mkv: MkvInput | null = null;
 /**
- * デコーダ (WASM) を読み終える前に届いた fMP4。**読み終えたら順に渡す** — 頭 (init) は選局の直後に
- * 1回しか来ないので、落とすと以降を1つも読めない。読み終えたら null
+ * デコーダ (WASM) を読み終える前に届いたもの (fMP4・Matroska・録画の TS)。**読み終えたら順に渡す** —
+ * fMP4 の頭 (init) は選局の直後に1回しか来ないので、落とすと以降を1つも読めない。ライブの TS は溜めない (`init`)。読み終えたら null
  */
 let early: Uint8Array[] | null = [];
 /** `early` に溜めたバイト数 (録画は `FOLLOW_BYTES_MOST` まで) */
@@ -186,10 +186,10 @@ function post(message: FromWorker, transfer: Transferable[] = []): void {
   scope.postMessage(message, transfer);
 }
 
-/** 最後に画面へ伝えた絵の大きさ (`postSize`) */
+/** 最後に画面へ伝えた映像の大きさ (`postSize`) */
 let told = { width: 0, height: 0 };
 
-/** 描いた絵の大きさが変わっていたら画面へ伝える (`messages.ts` の `size`)。描くたびに呼ぶ */
+/** 描いた映像の大きさが変わっていたら画面へ伝える (`messages.ts` の `size`)。描くたびに呼ぶ */
 function postSize(): void {
   if (surface === null) return;
   const { width, height } = surface;
@@ -856,7 +856,8 @@ async function init(
   mode = kind;
   surface = canvas;
   follow = chase;
-  // 録画の元の TS も、デコーダを読み終えるまで溜めておく (音を落とすと、鳴らし始めが遅れる)。ライブは今までどおり
+  // 録画の元の TS も、デコーダを読み終えるまで溜めておく (音を落とすと、鳴らし始めが遅れる)。
+  // ライブの TS は溜めずに読む (映像は圧縮のまま待たせ、読み終える前の音は捨てる)
   if (kind === "ts-mpeg2" && !follow) early = null;
   if (kind !== "ts-mpeg2") {
     if (!startFmp4(canvas, follow)) return;

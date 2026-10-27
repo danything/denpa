@@ -268,14 +268,6 @@ export const STEADY: Steering = {
   settleRatio: 1.3,
 };
 
-/** 速さを変えない。**確かめるためだけ** (live-player の `chooseSteering`)。追っかけの速さはそのまま */
-export const FIXED: Steering = {
-  slowDown: false,
-  catchUpRatio: Number.POSITIVE_INFINITY,
-  catchUpPad: 0,
-  settleRatio: Number.POSITIVE_INFINITY,
-};
-
 /**
  * 速さを決める。**貯まり (届く直前の低いところ + 届く間隔。`pacing` の `low`) を狙いに寄せる。**
  *
