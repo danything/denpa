@@ -21,13 +21,20 @@ function checkDecoder(): void {
   );
   if (!existsSync(loader)) return;
   const text = readFileSync(loader, "utf8");
-  const missing = [
+  const exported = [
     ...readFileSync("wasm/decoder.c", "utf8").matchAll(
       /EMSCRIPTEN_KEEPALIVE\s[^(]*?(\w+)\s*\(/g,
     ),
-  ]
-    .map((match) => match[1]!)
-    .filter((name) => !new RegExp(`\\b_${name}\\b`).test(text));
+  ].map((match) => match[1]!);
+  // 書き方が変わって1つも拾えなくなったら、見ていないのと同じ。黙って通さない
+  if (exported.length === 0) {
+    throw new Error(
+      "wasm/decoder.c から書き出す関数を読めません (tests/global-setup.ts)",
+    );
+  }
+  const missing = exported.filter(
+    (name) => !new RegExp(`\\b_${name}\\b`).test(text),
+  );
   if (missing.length > 0) {
     throw new Error(
       `${loader} は wasm/decoder.c より古いデコーダです (${missing.join(", ")} がありません)。` +
