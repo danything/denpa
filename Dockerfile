@@ -1,9 +1,9 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # ---------------------------------------------------------------------------
 # 依存の解決だけを分ける。ソースを変えてもここは再実行されない
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1.4.4-slim AS deps
+FROM docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
 # ワークスペース (packages/) の package.json も、依存を解くのに要る
@@ -40,7 +40,7 @@ RUN bun install
 # - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
 #   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む
 # ---------------------------------------------------------------------------
-FROM docker.io/emscripten/emsdk:6.0.13 AS mpeg2wasm
+FROM docker.io/emscripten/emsdk:6.0.13@sha256:fb7864e398acfda863dfcea78b8bc8adad359fa60c6a0bbeb845931de64aa68a AS mpeg2wasm
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ARG FFMPEG_VERSION=9.0.2
 COPY wasm/decoder.c /src/decoder.c
@@ -101,7 +101,7 @@ RUN cd /usr/share/denpa-font && grep ' denpa-font.woff2$' SHA256SUMS | sha256sum
 # ---------------------------------------------------------------------------
 # 開発用。compose からソースを bind mount して使う
 # ---------------------------------------------------------------------------
-FROM docker.io/oven/bun:1.4.4-slim AS dev
+FROM docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS dev
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
@@ -149,8 +149,8 @@ CMD ["bun", "scripts/capture-docs.ts"]
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
-# **debian は digest で固定する** (ffmpeg / runtime-libs の2つとも同じもの)。
-# タグ (`trixie-slim`) だけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
+# **土台のイメージはどれも digest で固定する** (debian は ffmpeg / runtime-libs / denpa-font で同じもの。
+# agent/Dockerfile も同じ)。タグだけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
 # その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
 FROM docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS ffmpeg
@@ -244,7 +244,7 @@ RUN bun run build
 # tzdata など要るものだけを置いたもの)。下の `runtime-libs` 段が「土台にもうあるライブラリ」を
 # 見分けるのにも使うので、段に名前を付けておく
 # ---------------------------------------------------------------------------
-FROM gcr.io/distroless/cc-debian13:latest AS distroless
+FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb56c49d4441dba6153ccf790364f97e64b1 AS distroless
 
 # ---------------------------------------------------------------------------
 # 本番イメージへ写すライブラリを集める段。**本番イメージにはシェルも apt も無い**ので、
@@ -341,7 +341,7 @@ ENV NODE_ENV=production \
 COPY --from=runtime-libs /rootfs/ /
 
 # bun 本体。SvelteKit (adapter-bun) の出力を bun で動かす
-COPY --from=docker.io/oven/bun:1.4.4-slim /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 /usr/local/bin/bun /usr/local/bin/bun
 
 # 写したライブラリだけで ffmpeg / ffprobe が起きるかを、本番の中身でも見る (シェルが無いので exec の形で)
 RUN ["/usr/local/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-version"]

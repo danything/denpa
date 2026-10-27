@@ -15,7 +15,7 @@
 # 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
 # 各段の頭で読み替える。それ以外の arch は配布物が無いので、黙って amd64 のものを
 # 入れずにそこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` というタグは無い)
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
 ARG TARGETARCH
 WORKDIR /build
 # AOT のリンクに clang と zlib が要る
@@ -34,8 +34,10 @@ RUN case "${TARGETARCH}" in \
 # 外から取ってくるもの (ファームウェアと3つの userland)。**取ってくる道具は実行イメージに残さない**
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る
+# 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
+# 組み直しになり、PLEX のサイトへ zip を取りに行く回数が増える
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim AS fetch
+FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS fetch
 ARG TARGETARCH
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certificates unzip && \
@@ -151,7 +153,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
 # px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす
-FROM gcr.io/distroless/cc-debian13:latest
+FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb56c49d4441dba6153ccf790364f97e64b1
 
 COPY --from=fetch /opt/ /opt/
 

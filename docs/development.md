@@ -201,9 +201,16 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 
 ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / siano-userland / asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
+バージョンの無い PLEX のドライバの zip (IT930x のファームウェアを切り出す元) は、取ったものの SHA-256 を確かめ、
+中身が変わっていればビルドを止めます。
+
+**土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
+`名前:タグ@sha256:…`、ワークフローの `uses:` は `@<コミットの SHA> # vX.Y.Z` の形にします。
+タグは同じ名前のまま中身が差し替わることがあるので、タグだけでは同じ中身になりません。
 
 上げるのは Renovate 任せで、`# renovate:` の注釈と `renovate.json` の `customManagers` で
 場所を教えてあります。タグのあるものはタグで、無いものはブランチの先頭のコミット (`git-refs`) で追います。
+digest もタグと一緒に Renovate が上げ、タグだけで足した土台やアクションには digest を足す PR を出します (`renovate.json` の `pinDigests`)。
 `renovate.json` の書き方は `docker compose run --rm unit bunx --package renovate renovate-config-validator` で確かめます。
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。

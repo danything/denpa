@@ -56,7 +56,7 @@ jobs:
       denpa: ${{ steps.tag.outputs.denpa }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -110,7 +110,7 @@ jobs:
     name: build (${{ matrix.image.name }}, ${{ matrix.arch.name }})
     steps:
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -129,11 +129,11 @@ jobs:
 
       - name: Checkout
         if: steps.built.outputs.skip != 'true'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
         if: steps.built.outputs.skip != 'true'
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # **push する前に起こしてみる。** 組めても起きないイメージ (ライブラリの欠け・
       # runtime に写し忘れたファイル) を develop に出すと、そのままデプロイされて止まる。
@@ -151,7 +151,7 @@ jobs:
       # イメージは公開なので、PR の docker-build-check もログインせずに読める
       - name: Build
         if: steps.built.outputs.skip != 'true'
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.image.file }}
@@ -171,7 +171,7 @@ jobs:
       - name: Push by digest
         if: steps.built.outputs.skip != 'true'
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.image.file }}
@@ -193,7 +193,7 @@ jobs:
 
       - name: Upload digest
         if: steps.built.outputs.skip != 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digests-${{ matrix.image.scope }}-${{ matrix.arch.name }}
           path: ${{ runner.temp }}/digests/*
@@ -217,13 +217,13 @@ jobs:
     steps:
       # main の先頭で数え直すのに要る (.github/newest-tags.sh)
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       # 組まなかったイメージには digest が無い。見つからなくても止めず、下で「もうあるか」を見て決める
       - name: Download digests
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/digests
@@ -231,14 +231,14 @@ jobs:
           merge-multiple: true
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Create multi-arch manifest
         env:
@@ -285,7 +285,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -306,17 +306,17 @@ jobs:
           fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: .github/aio.Dockerfile
@@ -344,7 +344,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 

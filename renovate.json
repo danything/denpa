@@ -21,6 +21,12 @@
   ],
   "packageRules": [
     {
+      "description": "Dockerfile の土台のイメージと GitHub Actions は digest (コミットの SHA) で留める。タグも残す (イメージは `名前:タグ@sha256:…`、アクションは `@<SHA> # vX.Y.Z`) ので、Renovate はタグと digest を一緒に上げる。タグだけで足したものには、Renovate が digest を足す PR を出す。5ym/repo-config の共有ワークフローは持ち主の設定を main で追うので外す",
+      "matchManagers": ["dockerfile", "github-actions"],
+      "matchPackageNames": ["!5ym/repo-config"],
+      "pinDigests": true
+    },
+    {
       "description": "svelte-check が TypeScript 7 (tsgo) に未対応で、上げると型チェックが丸ごと落ちる。対応が入るまで5系に留める",
       "matchPackageNames": ["typescript"],
       "allowedVersions": "<6"
