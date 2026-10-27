@@ -157,6 +157,7 @@ EPGStation の置き換えとして作ったもので、エンコード設定は
       ├(コピー禁止の番組)→ skipped (録画しない。放送が終わってもそのまま。data.md「コピー禁止の番組は録らない」)
       ├(手で取り消し)→ canceled
       └(始まらないまま放送終了)→ missed
+      (放送中に録画をもう一度押すか取り消しを戻すと、録っている最中でなければ started_at を空に戻して録り直す。次の録画は別の行・別のファイル)
 
 録画 recording ─→ recorded ─→ available ─(削除)→ deleted
       (どの段でも、録画そのものが失敗して error が入れば failed。優先は deleted → failed → recording)

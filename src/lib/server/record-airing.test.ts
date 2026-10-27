@@ -45,7 +45,7 @@ config.agentUrl = `http://127.0.0.1:${agent.port}`;
 const { orm } = await import("./db");
 const { programs, recordings, reservations, services } =
   await import("./schema");
-const { recordAiring, reservationStates, reserveFromForm } =
+const { cancel, recordAiring, reservationStates, reserveFromForm, restore } =
   await import("./reservations");
 const { resolveConflicts, tick } = await import("./scheduler");
 const { COPY_NEVER_REASON } = await import("../format");
@@ -196,6 +196,99 @@ describe("いま流れている番組を録る", () => {
       state: "conflict",
     });
     expect(orm().select().from(reservations).all()).toHaveLength(2);
+  });
+});
+
+/*
+ * **途中で止めた番組を、もう一度録れる。** 止めても予約に録り始めた時刻が残り、
+ * 録画ボタンを押し直しても予約が「録り始めたもの」のままで録られなかった
+ */
+describe("途中で止めた番組を録り直す", () => {
+  /** 録り始めた予約と、その録画の行 (`done` なら録り終えた行、そうでなければ録画中) */
+  function started(programId: number, done: boolean): number {
+    program(programId, NOW - 10 * MINUTE, NOW + 20 * MINUTE);
+    orm()
+      .insert(reservations)
+      .values({
+        program_id: programId,
+        service_id: SERVICE,
+        name: `番組${programId}`,
+        start_at: NOW - 10 * MINUTE,
+        end_at: NOW + 20 * MINUTE,
+        manual: true,
+        priority: 2,
+        started_at: NOW - 5 * MINUTE,
+        created_at: 0,
+        updated_at: 0,
+      })
+      .run();
+    const id = orm()
+      .select()
+      .from(reservations)
+      .where(eq(reservations.program_id, programId))
+      .get()!.id;
+    orm()
+      .insert(recordings)
+      .values({
+        reservation_id: id,
+        program_id: programId,
+        service_id: SERVICE,
+        name: `番組${programId}`,
+        start_at: NOW - 10 * MINUTE,
+        end_at: NOW + 20 * MINUTE,
+        ts_path: `/recorded/${programId}.m2ts`,
+        finished_at: done ? NOW - MINUTE : null,
+        created_at: 0,
+        updated_at: 0,
+      })
+      .run();
+    return id;
+  }
+  const startedAt = (programId: number) =>
+    orm()
+      .select({ started_at: reservations.started_at })
+      .from(reservations)
+      .where(eq(reservations.program_id, programId))
+      .get()?.started_at;
+
+  test("取り消して止めたあと、録画ボタンでもう一度録り始める", async () => {
+    reset();
+    const id = started(2, false);
+    await cancel(id);
+    // 止まった録画の行 (止めると録り終えた時刻が入る)
+    orm().update(recordings).set({ finished_at: NOW }).run();
+
+    expect(await recordAiring(SERVICE, NOW)).toMatchObject({
+      ok: true,
+      programId: 2,
+      state: "scheduled",
+    });
+    expect(startedAt(2)).toBeNull();
+  });
+
+  test("取り消したものを戻しても、もう一度録り始める", async () => {
+    reset();
+    const id = started(3, true);
+    await cancel(id);
+    await restore(id);
+    expect(startedAt(3)).toBeNull();
+  });
+
+  test("録画が途中で止まったもの (録画中の行が無い) も録り直す", async () => {
+    reset();
+    started(4, true);
+    await recordAiring(SERVICE, NOW);
+    expect(startedAt(4)).toBeNull();
+  });
+
+  test("録っている最中に押しても、録り始めた時刻はそのまま (二重に録らない)", async () => {
+    reset();
+    started(5, false);
+    expect(await recordAiring(SERVICE, NOW)).toMatchObject({
+      ok: true,
+      state: "recording",
+    });
+    expect(startedAt(5)).toBe(NOW - 5 * MINUTE);
   });
 });
 

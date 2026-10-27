@@ -15,6 +15,21 @@ import {
 } from "./schema";
 import { settings } from "./settings";
 
+/**
+ * **途中で止めた予約を、もう一度録れるようにする** (`started_at` を空に戻す)。
+ * 録り始めた時刻が残っていると、スケジューラは録り始めたものとして二度と起こさない。
+ * 取り消して止めたものと、録画が途中で失敗して止まったもの (いま録っている録画の行が無い) が対象。
+ * 録っている最中のものはそのまま (二重に録らない)。次の録画は別の行・別のファイルになる
+ */
+const rerecord = sql`CASE
+  WHEN ${reservations.state} = 'canceled' THEN NULL
+  WHEN NOT EXISTS (
+    SELECT 1 FROM ${recordings}
+     WHERE ${recordings.reservation_id} = ${reservations.id} AND ${recordings.state} = 'recording'
+  ) THEN NULL
+  ELSE ${reservations.started_at}
+END`;
+
 /** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
 export async function reserve(programId: number): Promise<Reservation> {
   const program = orm()
@@ -63,6 +78,7 @@ export async function reserve(programId: number): Promise<Reservation> {
         priority: sql`excluded.priority`,
         encode: sql`excluded.encode`,
         state: sql`CASE WHEN ${reservations.state} = 'canceled' THEN 'scheduled' ELSE ${reservations.state} END`,
+        started_at: rerecord,
         // 取り消しを解除したので、印も消す
         canceled_by: null,
         updated_at: sql`excluded.updated_at`,
@@ -107,7 +123,13 @@ export async function restore(reservationId: number): Promise<void> {
 
   orm()
     .update(reservations)
-    .set({ state: "scheduled", canceled_by: null, updated_at: now() })
+    // 録っている途中で取り消したものも、戻せば続きを録る (`rerecord`)
+    .set({
+      state: "scheduled",
+      started_at: null,
+      canceled_by: null,
+      updated_at: now(),
+    })
     .where(eq(reservations.id, reservationId))
     .run();
   await resolveConflicts();
