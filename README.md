@@ -159,7 +159,6 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 **土台にしている仕事**:
 
 - [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — ホストにドライバを入れずにチューナーを使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
-- [web-bml](https://github.com/otya128/web-bml) (otya128) — データ放送は長くこれで描いていました。自前のエンジン (`src/lib/bml/`) は、その振る舞いを手本にしています
 
 ## ライセンス
 

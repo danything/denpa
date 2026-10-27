@@ -100,6 +100,7 @@ asicen-userland は入れません (Windows 用が無い)。カードリーダ�
 | ARIB ロゴの CLUT (129 色)    | [src/lib/ts/logo-palette.ts](../src/lib/ts/logo-palette.ts)                                                                 | 局ロゴの PNG 化                                                                                                                                                                                                                      | node-aribts / @chinachu/aribts の `logo_clut.js` と同じ並び                                                                                                                | MIT (上流)                          |
 | ARIB 外字表                  | [packages/arib/src/aribtext-gaiji.ts](../packages/arib/src/aribtext-gaiji.ts)                                               | 番組名の「🈟」「🈑」など                                                                                                                                                                                                             | 字は字幕の表 (下の b24-tables.ts) を引く。番組表だけで違える数点 (楽器の略号の文字列・空きの埋め方) は epgdump_py (Yasumasa Murakami, 2011) → ariblib に引き継がれた表から | MIT (libaribcaption・ariblib。上流) |
 | 字幕の文字の表とデコード方法 | [packages/arib/src/b24-tables.ts](../packages/arib/src/b24-tables.ts) / [b24caption.ts](../packages/arib/src/b24caption.ts) | 字幕を文字の配置にする (表は libaribcaption の b24_conv_tables.hpp / b24_gaiji_table.hpp / b24_colors.cpp / b24_drcs_conv.cpp を写したもので、いまは denpa が手で持つ。デコードの方法は decoder_impl.cpp を TypeScript に写したもの) | libaribcaption (Copyright (C) 2021 magicxqq)                                                                                                                               | MIT (上流)                          |
+| データ放送の通知の型         | [packages/arib/src/bml-protocol.ts](../packages/arib/src/bml-protocol.ts)                                                   | デコードする側と描く側の取り決め・録画の隣の `.bml.jsonl` の形式 (前に録ったものを読めるよう、web-bml の `server/ws_api.ts` の型をそのまま写してある。著作権表示と許諾の文は [packages/arib/LICENSE](../packages/arib/LICENSE))      | web-bml (Copyright (c) 2022 otya)                                                                                                                                          | MIT                                 |
 | 選局表の値と選局手順         | [agent/Denpa.Agent/ChannelTable.cs](../agent/Denpa.Agent/ChannelTable.cs) / `Tuning.cs`                                     | チャンネル名 → 周波数、DVB の手順                                                                                                                                                                                                    | recisdb-rs の `dvbv5_channels_isdbs.conf` / `dvbv5.rs` を参照 (コードは写していない)                                                                                       | GPL-3.0 (上流)                      |
 | エンコード再試行の秒数 (0.2) | [src/lib/server/config.ts](../src/lib/server/config.ts)                                                                     | 値だけ                                                                                                                                                                                                                               | EPGStation の `enc.js`                                                                                                                                                     | MIT (上流)                          |
 | アイコン類                   | [static/](../static)                                                                                                        | PWA のアイコン                                                                                                                                                                                                                       | 自作                                                                                                                                                                       | AGPL (denpa と同じ)                 |
@@ -120,8 +121,8 @@ asicen-userland は入れません (Windows 用が無い)。カードリーダ�
 | cookie / devalue / esm-env / clsx                                   | SvelteKit のランタイム (adapter-bun は静的ファイルを Bun の `routes` で配り、依存を束に持ち込まない) | 各上流                                                                              | MIT            |
 
 **データ放送のエンジン** (`src/lib/bml/`。[stream.md](stream.md#データ放送の統合)) は自前で、依存を持たない。
-規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書き、NVRAM の領域の表・郵便番号の範囲の読み方・
-BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml (otya128、MIT) の振る舞いを読んで合わせた (下の「使っていないもの」)。
+規格 (ARIB STD-B24・TR-B14・TR-B15) を元に書いた。NVRAM の領域の表・郵便番号の範囲の読み方・
+BinaryTable の検索の比べ方・既定のスタイルなど一部は、web-bml の振る舞いを読んで合わせたが、コードは写していない (下の「使っていないもの」)。
 
 ### ライブを変換せずに見るときにブラウザへ配るデコーダ
 
@@ -138,7 +139,8 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は web-bml
 ## 使っていないもの (書いておく価値のあるもの)
 
 - **web-bml (otya128, MIT)** — 2026-10 までデータ放送を描いていた借りもの。自前のエンジン
-  (`src/lib/bml/`) に置き換えて外した (es2・crc-32・css・fast-xml-parser・arib-mmt-tlv-ts・fflate も一緒に抜けた)
+  (`src/lib/bml/`) に置き換えて外した (es2・crc-32・css・fast-xml-parser・arib-mmt-tlv-ts・fflate も一緒に抜けた)。
+  通知の型だけは録画との互換のために写して残している (上の「リポジトリに写してあるもの」)
 - **@chinachu/aribts / aribb24.js / mpegts.js / hls.js / shaka-player** — 検討したうえで
   自前実装にしたもの ([stream.md](stream.md))
 - **@iconify/svelte / lucide-svelte** — アイコンは組むときに埋め込む unplugin-icons にした
