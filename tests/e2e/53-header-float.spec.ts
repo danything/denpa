@@ -106,17 +106,19 @@ test("明暗を選び直したときだけ画面全体が移り、開いたと�
     page.evaluate(() => (window as unknown as { kinds: string[][] }).kinds);
   const html = page.locator("html");
 
-  await goto(page, "/");
+  // 選ぶのは設定の「この端末」のテーマ
+  const select = page.getByTestId("theme-select");
+  await goto(page, "/settings/general");
   await expect(html).toHaveAttribute("data-theme", "dark");
   // 開いた直後は写しを取らない
   expect(await kinds()).toEqual([]);
 
-  await page.getByTestId("theme-toggle").click();
+  await select.selectOption("light");
   await expect(html).toHaveAttribute("data-theme", "light");
   expect(await kinds()).toEqual([["theme"]]);
 
   // 読み直しても、選んだ色で描かれ、移り変わりは走らない
-  await goto(page, "/");
+  await goto(page, "/settings/general");
   await expect(html).toHaveAttribute("data-theme", "light");
   expect(await kinds()).toEqual([]);
 
@@ -124,11 +126,8 @@ test("明暗を選び直したときだけ画面全体が移り、開いたと�
   await page.evaluate(() => {
     document.documentElement.dataset["lite"] = "";
   });
-  await page.getByTestId("theme-toggle").click();
-  await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
-    "data-mode",
-    "system",
-  );
+  await select.selectOption("system");
+  await expect(select).toHaveAttribute("data-mode", "system");
   expect(await kinds()).toEqual([]);
   await page.evaluate(() => {
     delete document.documentElement.dataset["lite"];
@@ -136,11 +135,8 @@ test("明暗を選び直したときだけ画面全体が移り、開いたと�
 
   // 動きを減らす設定では写しを取らず、すぐ替える
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByTestId("theme-toggle").click();
-  await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
-    "data-mode",
-    "dark",
-  );
+  await select.selectOption("dark");
+  await expect(select).toHaveAttribute("data-mode", "dark");
   expect(await kinds()).toEqual([]);
 });
 

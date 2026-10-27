@@ -320,8 +320,9 @@ test.describe("PWA", () => {
 
     const menu = page.getByTestId("nav-menu");
     await menu.getByRole("button", { name: "その他" }).click();
-    await expect(menu.getByRole("link", { name: "チューナー" })).toHaveCount(0);
-    await expect(menu.getByRole("link", { name: "設定" })).toBeVisible();
+    // 中身はルール・設定のリンクだけ (テーマは設定の「この端末」、新しいバージョンは設定の入口の点)
+    await expect(menu.getByRole("link")).toHaveText(["ルール", "設定"]);
+    await expect(menu.getByRole("button", { name: /テーマ/ })).toHaveCount(0);
     await menu.getByRole("link", { name: "ルール" }).click();
     await page.waitForURL(/rules/);
     await expect(menu.getByRole("button", { name: "その他" })).toHaveAttribute(
@@ -348,13 +349,13 @@ test.describe("PWA", () => {
 
   /*
    * **1000px 未満は下のタブにまとめる** (`#lib/phone-form.ts`)。タブレットや狭めた窓でもヘッダーを出さない。
-   * 640px からはルール・設定もタブに並べて 7 つ (アイコンの下に字)。タブに出した画面は「その他」に入れず、
+   * 640px からはルール・設定もタブに並べて 6 つ (アイコンの下に字)。「その他」は中身が無くなるので出さず、
    * いまの画面の印 (タブの上端の短い線) はそのタブの真ん中に 1 つだけ付く
    */
   test("1000px 未満は下のタブ。640px からはルール・設定も並ぶ", async ({
     browser,
   }) => {
-    const SEVEN = [
+    const SIX = [
       "tab-home",
       "tab-guide",
       "tab-live",
@@ -385,14 +386,13 @@ test.describe("PWA", () => {
       await expect(page.getByTestId("header-search"), label).toBeHidden();
       await expect(page.getByTestId("nav-rules"), label).toBeHidden();
 
-      // 左から 録画・番組表・ライブ・ルール・検索・設定・その他。的の幅はそろう
-      const more = page.getByTestId("nav-menu").getByRole("button");
+      // 左から 録画・番組表・ライブ・ルール・検索・設定。的の幅はそろう。「その他」は出さない
+      await expect(page.getByTestId("nav-menu"), label).toBeHidden();
       const boxes = [];
-      for (const id of SEVEN) {
+      for (const id of SIX) {
         await expect(page.getByTestId(id), `${label} ${id}`).toBeVisible();
         boxes.push((await page.getByTestId(id).boundingBox())!);
       }
-      boxes.push((await more.boundingBox())!);
       for (let i = 1; i < boxes.length; i++) {
         expect(boxes[i]!.x, `${label} の並び`).toBeGreaterThan(boxes[i - 1]!.x);
         expect(
@@ -401,12 +401,11 @@ test.describe("PWA", () => {
         ).toBeLessThan(1);
       }
 
-      // 印はルールのタブだけ。「その他」には付けない
+      // 印はルールのタブだけ
       await expect(page.getByTestId("tab-rules")).toHaveAttribute(
         "aria-current",
         "page",
       );
-      await expect(more).not.toHaveAttribute("aria-current", "page");
       const bar = (await tabbar.boundingBox())!;
       const mark = await tabbar.evaluate((el) => {
         const style = getComputedStyle(el, "::before");
@@ -422,14 +421,6 @@ test.describe("PWA", () => {
         ),
         `${label} の印の位置`,
       ).toBeLessThan(2);
-
-      // 「その他」にはルール・設定を入れない (テーマは残る)
-      await more.click();
-      const menu = page.getByTestId("nav-menu");
-      await expect(menu.getByRole("link", { name: "ルール" })).toHaveCount(0);
-      await expect(menu.getByRole("link", { name: "設定" })).toHaveCount(0);
-      await expect(menu.getByRole("button", { name: /^テーマ/ })).toBeVisible();
-      await page.keyboard.press("Escape");
 
       // 設定へ移ると印も設定のタブへ
       await page.getByTestId("tab-settings").click();

@@ -129,7 +129,10 @@ test.describe("ボタンの見た目", () => {
           id,
         ).toBeGreaterThanOrEqual(40);
       }
-      const toggle = await look(page.getByTestId("theme-toggle"));
+      // アイコンのボタンは録画の画面の頭の1行の「⋯」で見る (ヘッダーのテーマのボタンは設定に移した)。頭の1行が出るのはスマホの幅
+      await page.setViewportSize({ width: 390, height: 844 });
+      await goto(page, "/");
+      const toggle = await look(page.getByTestId("view-toggle"));
       expect(toggle.height).toBeGreaterThanOrEqual(40);
       expect(Math.abs(toggle.width - toggle.height)).toBeLessThan(1);
       expect(toggle.radius).toBeGreaterThanOrEqual(toggle.height / 2 - 0.5);

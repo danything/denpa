@@ -2,8 +2,10 @@
   import { refreshAll } from "$app/navigation";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import ExternalLink from "~icons/lucide/external-link";
 
   import Lead from "#lib/components/Lead.svelte";
+  import Icon from "#lib/components/player/Icon.svelte";
   import {
     agentSystem,
     CCID_DRIVER,
@@ -218,8 +220,9 @@
     <!--
         **動いているバージョンと、バグを報告するときに聞かれるもの。** denpa とエージェントのバージョン・OS・
         チューナー・カードリーダー・ブラウザ。エージェントのことは `GET /denpa/about` から。macOS のエージェントなら CCID ドライバも。
-        新しいバージョンのリンクはヘッダーと下のタブの「その他」にだけ出す (`server/update.ts`)。
-        ここにも並べると同じリンクが2か所になる。main のイメージと手元は `dev` で、リリースと見比べない
+        **新しいバージョンのリンクは denpa のバージョンのすぐ下に出す** (`server/update.ts`)。スマホの形ではヘッダーを隠すので、
+        ここが置き場になる。出ている間は設定の入口 (下のタブ・ヘッダー・左の一覧の「その他」) に同じ点を付ける (`.fresh-dot`)。
+        main のイメージと手元は `dev` で、リリースと見比べない
     -->
     <section class="section" data-testid="diagnostics-environment">
       <div class="section-head">
@@ -229,14 +232,27 @@
         <Lead>開発ビルドなので、新しいリリースとは見比べません</Lead>
       {:else}
         <Lead
-          >新しいバージョンが出たら、ヘッダー (狭い画面は下のタブの「その他」)
-          に出ます</Lead
+          >新しいバージョンが出たら、ここに出ます (設定の入口に点が付きます)</Lead
         >
       {/if}
       <div class="setting-rows">
         <div class="field">
           <span class="field-label">denpa のバージョン</span>
           <span class="small" data-testid="diag-version">{versionText}</span>
+          {#if data.update !== null}
+            <a
+              class="update small"
+              href={data.update.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="GitHub のリリースを開く"
+              data-testid="settings-update"
+            >
+              <span class="fresh-dot" aria-hidden="true"></span>
+              {data.update.version} が公開されています
+              <Icon icon={ExternalLink} size="size-3.5" />
+            </a>
+          {/if}
         </div>
         <div class="field">
           <span class="field-label">エージェントのバージョン</span>
@@ -446,6 +462,22 @@
   .mismatch {
     display: block;
     color: var(--dp-warn-text);
+  }
+  /*
+   * 新しいバージョンのリンク。事実なのでバッジにせず字のまま、外へ出る印を添える (ヘッダーの「… が公開されています」と同じ)。
+   * 指で押すので高さは 40px を取る
+   */
+  .update {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.5rem;
+    color: inherit;
+    text-decoration: none;
+  }
+  .update:hover {
+    color: var(--pico-h1-color);
   }
   .filters {
     display: flex;

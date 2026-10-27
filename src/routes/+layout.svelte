@@ -6,15 +6,12 @@
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import CalendarDays from "~icons/lucide/calendar-days";
-  import Contrast from "~icons/lucide/contrast";
   import Ellipsis from "~icons/lucide/ellipsis";
   import ExternalLink from "~icons/lucide/external-link";
   import ListChecks from "~icons/lucide/list-checks";
   import ListVideo from "~icons/lucide/list-video";
-  import Moon from "~icons/lucide/moon";
   import Search from "~icons/lucide/search";
   import Settings from "~icons/lucide/settings";
-  import Sun from "~icons/lucide/sun";
   import Tv from "~icons/lucide/tv";
 
   import type { ChannelNotice as NoticeKind } from "#lib/channel-notice.js";
@@ -33,7 +30,7 @@
   import { TABLETOP } from "#lib/phone-form.js";
   import { followNavigation, reload } from "#lib/reload.svelte.js";
   import { groupLabel } from "#lib/settings-sections.js";
-  import { theme, THEME_LABEL } from "#lib/theme.svelte.js";
+  import { theme } from "#lib/theme.svelte.js";
 
   let { children, data } = $props();
 
@@ -184,11 +181,9 @@
   let hydrated = $state(false);
 
   /**
-   * テーマは `theme.svelte.ts` が持つ (下のタブの「その他」のメニューからも選べるので、ここだけの値にしない)。
-   * 月・太陽・半分塗った丸 (Lucide)。絵文字は端末ごとに見た目が違い、太さも揃わなかった
+   * テーマは `theme.svelte.ts` が持ち、選ぶのは設定の「この端末」。ここは画面に出たら読み始めるだけ
+   * (どの画面から開いても、端末の設定の変化に付いていく)
    */
-  const ICON = { dark: Moon, light: Sun, system: Contrast };
-
   onMount(() => {
     hydrated = true;
     return theme.start();
@@ -322,7 +317,8 @@
    * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
    * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
    * 640px 未満はよく開く 3 画面と検索をタブに、残り (ルール・設定) は「その他」の `Menu` (popover) に。
-   * 640px からはルール・設定もタブに出し (`wide`。7 つ並ぶ)、「その他」にはテーマと新しいバージョンのお知らせだけが残る。
+   * 640px からはルール・設定もタブに出し (`wide`。6 つ並ぶ)、「その他」は出さない (中身が無くなる)。
+   * テーマは設定の「この端末」、新しいバージョンは設定の「バージョンと環境」にあり、設定の入口に点で知らせる (下の `fresh`)。
    * ヘッダー (検索の欄) を隠すので、検索はタブから入る
    */
   const tabs = [
@@ -335,18 +331,20 @@
   ] as const;
   /**
    * ルール・設定もタブに出している幅か。**下の style の `@media (min-width: 640px)` と同じ線**。
-   * タブに出したものは「その他」から外す (同じ画面がタブと「その他」の 2 か所で選ばれた印にならないように)
+   * その幅では「その他」を隠すので、印も付けない (隠れたタブに印が付くと、下線がそこへ滑っていく)
    */
   const wideTabbar = new MediaQuery("(min-width: 640px)", false);
-  const moreLinks = $derived(
-    links.filter(
-      (link) =>
-        !tabs.some(
-          (tab) => tab.href === link.href && (!tab.wide || wideTabbar.current),
-        ),
-    ),
+  /** 「その他」の中身。640px 未満で隠れるタブ (ルール・設定) */
+  const moreLinks = tabs.filter((tab) => tab.wide);
+  const moreCurrent = $derived(
+    !wideTabbar.current && moreLinks.some((link) => link.href === here),
   );
-  const moreCurrent = $derived(moreLinks.some((link) => link.href === here));
+  /**
+   * **新しいバージョンが出ていれば、設定の入口に点を付ける** (中身は設定の「バージョンと環境」。`server/update.ts`)。
+   * 点は未視聴の録画と同じ `.fresh-dot` (まだ見ていないものの印)。付けるのは下のタブの「設定」、640px 未満はそれを入れた
+   * 「その他」とその中の「設定」、広い形はヘッダーの「設定」
+   */
+  const fresh = $derived(data.update !== null);
   /** タブを出すのはナビの 5 画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
   const showTabbar = $derived(here !== null);
   /**
@@ -514,21 +512,10 @@
       />
     </div>
     <!--
-            テーマの切り替え・画面へのリンク (広い形だけ)。ログアウトは設定の「その他」にある。
+            画面へのリンク (広い形だけ)。テーマとログアウトは設定の「その他」にある (端末ごとの設定はヘッダーに出さない)。
             スマホの形ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
         -->
     <nav class="actions">
-      <button
-        type="button"
-        class="ghost small icon"
-        onclick={theme.cycle}
-        aria-label="テーマを切り替える"
-        title={THEME_LABEL[theme.mode]}
-        data-testid="theme-toggle"
-        data-mode={theme.mode}
-      >
-        <Icon icon={ICON[theme.mode]} size="size-5" />
-      </button>
       <!--
                 広い形はそのまま並べる。スマホの形では画面の下のタブに替わる。
                 同じリンクを2か所に出すことになるが、data-testid は別にして (`nav-*` と `tab-*`)、
@@ -544,6 +531,9 @@
               data-testid="nav-{slug(link.href)}"
             >
               {link.label}
+              {#if fresh && link.href === "/settings"}
+                {@render freshDot()}
+              {/if}
             </a>
           </li>
         {/each}
@@ -599,10 +589,15 @@
           data-testid="tab-{slug(tab.href)}"
         >
           <Icon icon={tab.icon} size="size-5" />
-          <span>{tab.label}</span>
+          <span
+            >{tab.label}{#if fresh && tab.href === "/settings"}{@render freshDot()}{/if}</span
+          >
         </a>
       {/each}
-      <!-- 「その他」。ほかのメニューと同じ `Menu` (popover)。リンクを並べるだけなので `nav` -->
+      <!--
+                「その他」(640px 未満だけ。下の style)。ほかのメニューと同じ `Menu` (popover)。リンクを並べるだけなので `nav`。
+                スマホの形ではヘッダーを隠すが、ヘッダーにあったもの (新しいバージョン) は設定の中にあるので、ここは画面へのリンクだけ
+            -->
       <div class="tab-more" data-testid="nav-menu">
         <Menu
           bind:open={menuOpen}
@@ -619,7 +614,9 @@
               aria-current={moreCurrent ? "page" : undefined}
             >
               <Icon icon={Ellipsis} size="size-5" />
-              <span>その他</span>
+              <span
+                >その他{#if fresh}{@render freshDot()}{/if}</span
+              >
             </button>
           {/snippet}
           <ul class="more-list">
@@ -631,32 +628,12 @@
                   aria-current={here === link.href ? "page" : undefined}
                 >
                   {link.label}
+                  {#if fresh && link.href === "/settings"}
+                    {@render freshDot()}
+                  {/if}
                 </a>
               </li>
             {/each}
-          </ul>
-          <!--
-                        スマホの形ではヘッダーを隠すので、ヘッダーにあったもの (新しいバージョン・テーマ) をここに置く
-                    -->
-          <ul class="more-list more-extra">
-            {#if data.update !== null}
-              <li>
-                <a
-                  class="menu-item"
-                  href={data.update.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {data.update.version} が公開されています
-                </a>
-              </li>
-            {/if}
-            <li>
-              <button type="button" class="menu-item" onclick={theme.cycle}>
-                <Icon icon={ICON[theme.mode]} size="size-5" />
-                テーマ: {THEME_LABEL[theme.mode]}
-              </button>
-            </li>
           </ul>
         </Menu>
       </div>
@@ -667,6 +644,16 @@
 {#if measure.on}
   <Measure />
 {/if}
+
+<!-- 設定の入口に付ける点 (上の `fresh`)。読み上げには何の点かを渡す -->
+{#snippet freshDot()}
+  <span
+    class="fresh-dot"
+    role="img"
+    aria-label="新しいバージョンがあります"
+    data-testid="update-dot"
+  ></span>
+{/snippet}
 
 <style>
   /* 土台。高さは html から % で降ろす(上のコメント) */
@@ -1019,15 +1006,26 @@
     margin: 0;
     padding: 0;
   }
-  .more-extra {
-    margin-top: 0.5rem;
+  /*
+     * 設定の入口の点 (`.fresh-dot`。上の `freshDot`)。タブは字の右上に浮かせ、字の真ん中寄せと下線の幅は変えない。
+     * ヘッダーのリンクも字の右上 (押す場所の内側)。メニューの項目は字の後ろに並べる
+     */
+  .tabbar :global(.tab > span > .fresh-dot) {
+    position: absolute;
+    top: -0.125rem;
+    left: calc(100% + 0.125rem);
+  }
+  ul.links :global(.fresh-dot) {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.3rem;
   }
   /* スマホの形 (`#lib/phone-form.ts`。1000px 未満とテーブルトップ。`<html data-phone>`) */
   :global(:where(html[data-phone]:has(.tabbar))) {
     --dp-tabbar: calc(4rem + 0.5rem + env(safe-area-inset-bottom));
   }
   /*
-     * 下のタブがある画面ではヘッダーを隠す。リンクはタブと重なり、残りは「その他」に移したので、
+     * 下のタブがある画面ではヘッダーを隠す。リンクはタブと重なり、新しいバージョンのお知らせは設定の中にもあるので、
      * 上の 3.5rem はまるごと中身に回す。上の安全域 (ノッチ) のぶんは本文の余白で避ける
      */
   :global(:where(html[data-phone])) .shell:has(.tabbar) .navbar {
@@ -1062,7 +1060,7 @@
     padding-top: var(--dp-page-top);
   }
   /*
-   * **640px からはルール・設定もタブに出す** (7 つ。上の `wideTabbar` と同じ線)。字はアイコンの下のまま一段大きく。
+   * **640px からはルール・設定もタブに出し、「その他」を隠す** (6 つ。上の `wideTabbar` と同じ線)。字はアイコンの下のまま一段大きく。
    * 640px 未満は 5 つ (録画・番組表・ライブ・検索・その他)。的の幅はどれも等分 (`.tabbar` の `grid-auto-flow`)
    */
   .tabbar .tab.wide {
@@ -1071,6 +1069,9 @@
   @media (min-width: 640px) {
     .tabbar .tab.wide {
       display: flex;
+    }
+    .tab-more {
+      display: none;
     }
     .tabbar .tab,
     .tab-more :global(.tab) {

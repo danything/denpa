@@ -308,33 +308,39 @@ test.describe("ホームと画面遷移", () => {
     await expect(detail).toHaveCount(0);
   });
 
-  test("テーマはダーク/ライト/端末に合わせるを切り替えられ、再読み込みしても残る", async ({
+  /**
+   * **テーマは設定の「この端末」で選ぶ** (前はヘッダーのボタンと下のタブの「その他」)。
+   * 選んだら画面全体がその色になり、ほかの画面へ移っても開き直しても残る
+   */
+  test("テーマは設定で ダーク/ライト/端末に合わせる を選べ、再読み込みしても残る", async ({
     page,
   }) => {
-    await goto(page, "/");
+    await goto(page, "/settings/general");
     const html = page.locator("html");
-    const toggle = page.getByTestId("theme-toggle");
+    const select = page.getByTestId("theme-select");
+    // ヘッダーには置かない (端末ごとの設定は設定の画面にまとめる)
+    await expect(page.getByTestId("theme-toggle")).toHaveCount(0);
 
     // 既定はダーク (映像を観るものはダークが基本)。端末の設定には従わない
-    await expect(toggle).toHaveAttribute("data-mode", "dark");
+    await expect(select).toHaveValue("dark");
     await expect(html).toHaveAttribute("data-theme", "dark");
     // ブラウザの枠の色 (theme-color) もテーマの地に合わせる
     const toolbar = page.locator('meta[name="theme-color"]');
     await expect(toolbar).toHaveAttribute("content", "#0b0c0f");
     // ホーム画面から開いた Android の下の帯 (マニフェストの background_color) も。ライトのときだけ印を付けて読ませる
     const manifest = page.locator('link[rel="manifest"]');
-    await expect(manifest).toHaveAttribute("href", "./manifest.webmanifest");
+    await expect(manifest).toHaveAttribute("href", "../manifest.webmanifest");
     // ブラウザが描く部品 (プルダウンの一覧など) も暗くする
     await expect(html).toHaveCSS("color-scheme", "dark");
 
-    await toggle.click();
+    await select.selectOption("light");
     await expect(html).toHaveAttribute("data-theme", "light");
-    await expect(toggle).toHaveAttribute("data-mode", "light");
+    await expect(select).toHaveAttribute("data-mode", "light");
     await expect(toolbar).toHaveAttribute("content", "#ffffff");
     await expect(html).toHaveCSS("color-scheme", "light");
     await expect(manifest).toHaveAttribute(
       "href",
-      "./manifest.webmanifest?theme=light",
+      "../manifest.webmanifest?theme=light",
     );
 
     // 明示した設定は再読み込みしても残る(ちらつかないようハイドレーション前に当てている)
@@ -348,32 +354,22 @@ test.describe("ホームと画面遷移", () => {
     );
     const light = await page.request.get("/manifest.webmanifest?theme=light");
     expect((await light.json()).background_color).toBe("#ffffff");
-    await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
-      "data-mode",
-      "light",
-    );
+    await goto(page, "/settings/general");
+    await expect(select).toHaveValue("light");
 
     // 端末に合わせる。テストはダークの端末として動かしている。これも選んだ印として残る
-    await page.getByTestId("theme-toggle").click();
-    await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
-      "data-mode",
-      "system",
-    );
+    await select.selectOption("system");
+    await expect(select).toHaveAttribute("data-mode", "system");
     await expect(html).toHaveAttribute("data-theme", "dark");
     await expect(toolbar).toHaveAttribute("content", "#0b0c0f");
-    await expect(manifest).toHaveAttribute("href", "./manifest.webmanifest");
-    await goto(page, "/");
-    await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
-      "data-mode",
-      "system",
-    );
+    await expect(manifest).toHaveAttribute("href", "../manifest.webmanifest");
+    await goto(page, "/settings/general");
+    await expect(select).toHaveValue("system");
 
-    // 一周してダークへ戻る
-    await page.getByTestId("theme-toggle").click();
-    await expect(page.getByTestId("theme-toggle")).toHaveAttribute(
-      "data-mode",
-      "dark",
-    );
+    // ダークへ戻す
+    await select.selectOption("dark");
+    await expect(select).toHaveAttribute("data-mode", "dark");
+    await expect(html).toHaveAttribute("data-theme", "dark");
   });
 
   /**
@@ -732,12 +728,12 @@ test.describe("ホームと画面遷移", () => {
   });
 
   /*
-   * **新しいバージョンが出ていたら、ヘッダーで知らせる。** サーバが GitHub の最新の
+   * **新しいバージョンが出ていたら、ヘッダーと設定で知らせる。** サーバが GitHub の最新の
    * リリースを見比べる (`server/update.ts`。ここでは偽通知先が GitHub の代わり)。
-   * 出ること・押せばリリースのページなこと・**リリースが消えれば引っ込むこと**を見る。
+   * 出ること・押せばリリースのページなこと・設定の入口に点が付くこと・**リリースが消えれば引っ込むこと**を見る。
    * 動いているバージョンは v1.0.0 (tests/stack.ts)、見比べは 1 秒おき
    */
-  test("新しいバージョンが出ていればヘッダーに出て、リリースが消えれば引っ込む", async ({
+  test("新しいバージョンが出ていればヘッダーと設定に出て、リリースが消えれば引っ込む", async ({
     page,
     request,
     stack,
@@ -771,6 +767,35 @@ test.describe("ホームと画面遷移", () => {
       await goto(page, "/");
       await expect(badge).toContainText("v9.9.9");
       await expect(badge).toHaveAttribute("href", /releases\/tag\/v9\.9\.9$/);
+      // 設定の入口に点。広い形はヘッダーの「設定」
+      const dot = page.getByTestId("update-dot");
+      await expect(
+        page.getByTestId("nav-settings").getByTestId("update-dot"),
+      ).toBeVisible();
+      // 設定の中では denpa のバージョンの下にリンク。左の一覧の「その他」にも点
+      await goto(page, "/settings/general#version");
+      const link = page.getByTestId("settings-update");
+      await expect(link).toContainText("v9.9.9 が公開されています");
+      await expect(link).toHaveAttribute("href", /releases\/tag\/v9\.9\.9$/);
+      await expect(
+        page.getByTestId("settings-nav-general").getByTestId("update-dot"),
+      ).toBeVisible();
+      // 640px からは下のタブの「設定」に点
+      await page.setViewportSize({ width: 700, height: 700 });
+      await expect(
+        page.getByTestId("tab-settings").getByTestId("update-dot"),
+      ).toBeVisible();
+      // 640px 未満は設定が「その他」の中なので、「その他」とその中の「設定」に点
+      await page.setViewportSize({ width: 390, height: 844 });
+      const more = page.getByTestId("nav-menu");
+      const moreButton = more.getByRole("button", { name: "その他" });
+      await expect(moreButton.getByTestId("update-dot")).toBeVisible();
+      await moreButton.click();
+      await expect(
+        more.getByRole("link", { name: "設定" }).getByTestId("update-dot"),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await page.setViewportSize({ width: 1280, height: 720 });
 
       // 最新が古いバージョンになった (新しいほうのリリースを消した) → 引っ込む
       await release({
@@ -787,6 +812,7 @@ test.describe("ホームと画面遷移", () => {
         .toBeNull();
       await goto(page, "/");
       await expect(badge).toHaveCount(0);
+      await expect(dot).toHaveCount(0);
     } finally {
       // 置きっぱなしにしない。他の試験はヘッダーの幅を測る
       await release(null);

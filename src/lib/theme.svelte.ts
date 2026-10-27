@@ -1,5 +1,5 @@
 /**
- * テーマ (ダーク・ライト・端末に合わせる)。**切り替えるのはヘッダーのボタン (狭い画面は下の「その他」) だけ。**
+ * テーマ (ダーク・ライト・端末に合わせる)。**選ぶのは設定の「この端末」だけ** (`routes/settings/general`)。
  *
  * 最初の色は `app.html` が描く前に当てる (ハイドレーションを待つと一瞬ちがう色が出る)。
  * ここは画面に出たあとの持ち主で、選び直したときに `<html>` の印と端末の控え (localStorage) を書く。
@@ -11,8 +11,8 @@ import { syncThemeColor } from "#lib/theme-color.js";
 
 export type ThemeMode = "system" | "light" | "dark";
 
-/** 並びはヘッダーのボタンで巡る順 */
-const THEME_MODES: readonly ThemeMode[] = ["dark", "light", "system"];
+/** 並びは設定の選ぶ欄の順 */
+export const THEME_MODES: readonly ThemeMode[] = ["system", "light", "dark"];
 
 export const THEME_LABEL: Record<ThemeMode, string> = {
   system: "端末に合わせる",
@@ -89,12 +89,5 @@ export const theme = {
     // 既定がダークなので「端末に合わせる」も選んだ印として残す (残さないと次に開いたときダークに戻る)
     write("theme", next);
     crossfade(apply);
-  },
-
-  /** ヘッダーのボタン。ダーク → ライト → 端末に合わせる の順に巡る */
-  cycle(): void {
-    theme.set(
-      THEME_MODES[(THEME_MODES.indexOf(mode) + 1) % THEME_MODES.length]!,
-    );
   },
 };

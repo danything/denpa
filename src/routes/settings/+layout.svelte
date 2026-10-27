@@ -7,7 +7,13 @@
 
   import { SECTION_ALIASES, SETTINGS_GROUPS } from "#lib/settings-sections.js";
 
-  let { children } = $props();
+  let { children, data } = $props();
+
+  /**
+   * 新しいバージョンが出ていれば、それがある「その他」(`general#version`) に点を付ける。
+   * 下のタブ・ヘッダーの「設定」の点 (`routes/+layout.svelte` の `fresh`) からここまでをたどれるように
+   */
+  const freshGroup = $derived(data.update === null ? null : "general");
 
   /** いま開いているグループ (`/settings/reception` なら `reception`)。`/settings` そのものなら null */
   const current = $derived(page.route.id?.split("/")[2] ?? null);
@@ -184,6 +190,14 @@
             data-testid="settings-nav-{g.slug}"
           >
             {g.label}
+            {#if freshGroup === g.slug}
+              <span
+                class="fresh-dot"
+                role="img"
+                aria-label="新しいバージョンがあります"
+                data-testid="update-dot"
+              ></span>
+            {/if}
             <!-- 狭い画面の一覧だけ。中に何があるかを1行で (節の一覧は出さないので) -->
             <span class="group-hint"
               >{g.sections.map((s) => s.label).join("・")}</span
@@ -289,6 +303,11 @@
   }
   .group-hint {
     display: none;
+  }
+  /* 新しいバージョンの点 (上の `freshGroup`)。名前の後ろに並べる */
+  .group-link .fresh-dot {
+    margin-inline-start: 0.375rem;
+    vertical-align: 0.1em;
   }
   /*
      * 狭い画面の一覧はグループだけ (押すとその画面。節へは節の行で飛ぶ)。

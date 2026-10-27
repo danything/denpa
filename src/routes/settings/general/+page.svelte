@@ -7,6 +7,12 @@
   import Lead from "#lib/components/Lead.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { measure } from "#lib/measure.svelte.js";
+  import {
+    theme,
+    THEME_LABEL,
+    THEME_MODES,
+    type ThemeMode,
+  } from "#lib/theme.svelte.js";
 
   import Diagnostics from "./Diagnostics.svelte";
 
@@ -44,11 +50,36 @@
 
 <!--
     節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先。
-    **ほかの場所で切り替えられるものはここに並べない** (テーマはヘッダーと下のタブの「その他」、
-    互換モードは再生画面の ⚙)。同じ設定が2か所にあると、どちらが効いているのか迷う
+    **ほかの場所で切り替えられるものはここに並べない** (互換モードは再生画面の ⚙)。
+    同じ設定が2か所にあると、どちらが効いているのか迷う
 -->
 <div class="part" id="browser" data-part>
   <div class="sections readable">
+    <!--
+            **テーマはここだけで選ぶ** (`#lib/theme.svelte.ts`)。前はヘッダーのボタンと下のタブの「その他」にあったが、
+            ほかの端末ごとの設定と同じくここに置く。サーバには送らず、端末に覚える (localStorage)
+        -->
+    <section class="section">
+      <div class="section-head">
+        <h2>テーマ</h2>
+      </div>
+      <select
+        class="narrow"
+        aria-label="テーマ"
+        onchange={(event) => theme.set(event.currentTarget.value as ThemeMode)}
+        data-testid="theme-select"
+        data-mode={theme.mode}
+      >
+        {#each THEME_MODES as mode (mode)}
+          <option value={mode} selected={theme.mode === mode}
+            >{THEME_LABEL[mode]}</option
+          >
+        {/each}
+      </select>
+      <Lead>
+        この端末だけの設定です。「端末に合わせる」は端末の明暗の設定に付いていきます
+      </Lead>
+    </section>
     <!--
             **端末でしか出ない食い違いを、その端末で読むための入口。** 縦のはみ出しは、引っ込む
             アドレスバーや画面の切り欠きが絡むと**その端末でしか起きない**。入り口をここに置くのは、

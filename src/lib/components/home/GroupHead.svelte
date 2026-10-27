@@ -62,7 +62,7 @@
       >
       {#if fresh > 0}
         <span class="group-unwatched tiny">
-          <span class="unwatched-dot" aria-hidden="true"></span>未視聴{fresh}
+          <span class="fresh-dot" aria-hidden="true"></span>未視聴{fresh}
         </span>
       {/if}
       <span class="row-name broadcast" data-testid="recording-group-name"

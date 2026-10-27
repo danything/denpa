@@ -61,7 +61,7 @@
     >
       {#if fresh}
         <span
-          class="unwatched-dot"
+          class="fresh-dot"
           role="img"
           aria-label="未視聴"
           data-testid="recording-unwatched"

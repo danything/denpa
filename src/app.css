@@ -337,6 +337,19 @@
     opacity: 0.35;
   }
 }
+/*
+ * ---- まだ見ていないものの点 (`.fresh-dot`)。主の色の小さな丸 ----
+ * 未視聴の録画 (`RowTitle`・`GroupHead`) と、新しいバージョンが出ている設定の入口 (下のタブ・ヘッダー・設定の左の一覧)。
+ * 置き場 (字の前・後ろ・右上) は使う側で決める
+ */
+.fresh-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--dp-radius-full);
+  background: var(--pico-primary-background);
+}
 
 /* ---- 読み込めたらふわっと出る画像 (`#lib/motion.svelte.ts` の `fadeIn`。録画のポスターは `Poster.svelte` の `{@attach}` から) ---- */
 img[data-fade] {

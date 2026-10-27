@@ -137,14 +137,9 @@
   border-radius: var(--dp-radius-full);
   background: var(--pico-primary-background);
 }
-/* まだ観ていない録画の点 (`unwatched`)。続きのバーと同じ主の色 */
-.board .unwatched-dot {
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
+/* まだ観ていない録画の点 (`unwatched`。形は `app.css` の `.fresh-dot`)。名前の前に置く */
+.board .fresh-dot {
   margin-right: 0.3rem;
-  border-radius: var(--dp-radius-full);
-  background: var(--pico-primary-background);
   vertical-align: 0.1em;
 }
 .board .group-unwatched {
