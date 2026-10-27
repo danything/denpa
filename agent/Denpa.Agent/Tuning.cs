@@ -579,12 +579,17 @@ public sealed unsafe class DvbTuner : ITuneDevice
     // linux/dvb/frontend.h
     private const uint FeSetProperty = 0x40106f52;   // _IOW('o', 82, struct dtv_properties)
     private const uint FeReadStatus = 0x80046f45;    // _IOR('o', 69, fe_status_t)
+    private const uint FeSetVoltage = 0x6f43;        // _IO('o', 67)。電圧は引数にそのまま渡す
     private const uint FeHasLock = 0x10;
+
+    // ドライバが電圧を変えられないときの errno。カーネルの中の ENOTSUPP (524) がそのまま返る。
+    // EOPNOTSUPP (95) を返すドライバもあり得るので、どちらも同じに扱う
+    private const int Enotsupp = 524;
+    private const int Eopnotsupp = 95;
 
     private const uint DtvTune = 1;
     private const uint DtvFrequency = 3;
     private const uint DtvBandwidthHz = 5;
-    private const uint DtvVoltage = 10;
     private const uint DtvDeliverySystem = 17;
     private const uint DtvIsdbtPartialReception = 18;
     private const uint DtvIsdbtSoundBroadcasting = 19;
@@ -627,6 +632,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// <summary>どのアダプタか。記録に添えるためだけに持つ</summary>
     private readonly string _adapter;
     private readonly int? _voltage;
+    /// <summary>電圧を断られた。以後は送らない (記録も1回だけ)</summary>
+    private bool _noVoltage;
     private bool _streaming;
 
     /// <param name="frontend">`/dev/dvb/adapter0/frontend0`。demux と dvr は同じ番号から組み立てる</param>
@@ -672,7 +679,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         if (tuning.Satellite)
         {
             properties.Add((DtvStreamId, streamId));
-            if (_voltage is not null) properties.Add((DtvVoltage, (uint)_voltage.Value));
+            if (_voltage is { } voltage && !_noVoltage) _noVoltage = !PowerLnb(_adapter, voltage, SetVoltage);
         }
         else
         {
@@ -693,6 +700,38 @@ public sealed unsafe class DvbTuner : ITuneDevice
         StartFilter();
         _streaming = true;
     }
+
+    /// <summary>
+    /// LNB の電源を出す。**選局の property (<c>DTV_VOLTAGE</c>) には入れず、先に別の呼び出しで送る。**
+    ///
+    /// <para>
+    /// カーネルは <c>FE_SET_PROPERTY</c> の property を前から順に当て、1つでも失敗すると
+    /// そこで全体を失敗にする (<c>dvb_frontend.c</c> の <c>dvb_frontend_handle_ioctl</c>)。
+    /// <c>DTV_VOLTAGE</c> は中で <c>FE_SET_VOLTAGE</c> を呼ぶだけで、ドライバに
+    /// <c>set_voltage</c> が無いと <c>-ENOTSUPP</c> になる。PLEX PX-BCUD (em28xx + tc90522) が
+    /// そうで、一緒に入れると選局ごと落ちる。別の呼び出しにしておけば、断られても選局は進められる。
+    /// </para>
+    ///
+    /// <para>
+    /// 出せない機材 (<c>ENOTSUPP</c> / <c>EOPNOTSUPP</c>) なら記録に残して false を返す。
+    /// 呼ぶ側は以後送らないので、記録は1回で済む。それ以外の失敗は投げる。
+    /// </para>
+    /// </summary>
+    /// <param name="setVoltage"><c>FE_SET_VOLTAGE</c> を呼び、成功なら 0、失敗なら errno を返す</param>
+    internal static bool PowerLnb(string adapter, int voltage, Func<int, int> setVoltage)
+    {
+        var errno = setVoltage(voltage);
+        if (errno == 0) return true;
+        if (errno is not (Enotsupp or Eopnotsupp))
+        {
+            throw new IOException($"LNB の電源の切り替えに失敗しました ({Marshal.GetPInvokeErrorMessage(errno)})");
+        }
+        Log.Write($"[{adapter}] この機材は LNB の電源を出せません。電源を出さずに選局します");
+        return false;
+    }
+
+    private int SetVoltage(int voltage) =>
+        Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeSetVoltage, voltage) < 0 ? Marshal.GetLastPInvokeError() : 0;
 
     private void SetProperties(List<(uint Command, uint Value)> properties)
     {

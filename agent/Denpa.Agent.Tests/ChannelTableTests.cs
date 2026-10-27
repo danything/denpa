@@ -167,4 +167,41 @@ public class DvbDeviceTests
     {
         Assert.Throws<ArgumentException>(() => DvbTuner.Split("/dev/px4video0"));
     }
+
+    // 電圧の errno。カーネルの中の ENOTSUPP はそのまま 524 で返る
+    private const int Enotsupp = 524;
+    private const int Eopnotsupp = 95;
+    private const int Ebusy = 16;
+
+    [Test]
+    public async Task LNB_の電源は指示した電圧で送る()
+    {
+        var sent = new List<int>();
+
+        var powered = DvbTuner.PowerLnb("/dev/dvb/adapter9/0", 1, voltage => { sent.Add(voltage); return 0; });
+
+        await Assert.That(powered).IsTrue();
+        await Assert.That(sent).IsEquivalentTo([1]);
+    }
+
+    [Test]
+    [Arguments(Enotsupp)]
+    [Arguments(Eopnotsupp)]
+    public async Task 電圧を変えられない機材では電源を飛ばして選局に進む(int errno)
+    {
+        // PX-BCUD (em28xx + tc90522) のように set_voltage を持たない frontend。投げずに false を返し、記録に残す
+        var adapter = $"/dev/dvb/adapter{errno}/lnb-test";
+
+        var powered = DvbTuner.PowerLnb(adapter, 1, _ => errno);
+
+        await Assert.That(powered).IsFalse();
+        await Assert.That(Log.Recent.Snapshot().Count(line => line.Text == $"[{adapter}] この機材は LNB の電源を出せません。電源を出さずに選局します")).IsEqualTo(1);
+    }
+
+    [Test]
+    public void ほかの失敗は選局の失敗にする()
+    {
+        // 断られた理由が「できない」でなければ、黙って続けると電源の来ないまま同期を待つことになる
+        Assert.Throws<IOException>(() => DvbTuner.PowerLnb("/dev/dvb/adapter8/0", 1, _ => Ebusy));
+    }
 }

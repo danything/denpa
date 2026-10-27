@@ -105,7 +105,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 **チューナー**
 
 - [docs/tuners.md](docs/tuners.md) — **使えるチューナー** (一覧・カードリーダー・B-CAS・直らないとき)
-- [docs/tuner-pt3.md](docs/tuner-pt3.md) — PT2・PT3・PX-BCUD (Linux DVB)
+- [docs/tuner-pt3.md](docs/tuner-pt3.md) — PT3 など (Linux DVB。実機で確かめていない機材も)
 - [docs/tuner-px4.md](docs/tuner-px4.md) — PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
 - [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD (siano-userland)
 

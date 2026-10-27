@@ -6,7 +6,9 @@
 
 ### どのチューナーが使えますか
 
-PT2・PT3・PX-BCUD (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD、Sony CECH-ZD1 J です。
+PT3 (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD、Sony CECH-ZD1 J です。
+ほかに、PT1 / PT2・PX-BCUD・Friio (白) など、実機では確かめていないものの Linux DVB で動くはずの機材があります
+([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))。使ってみたら、動いたかどうかを [Issue](https://github.com/danything/denpa/issues) で教えてください。
 挿してあれば自動で見つけ、地上波か衛星かも見分けます。
 一覧は [tuners.md](tuners.md#要るもの)。
 
