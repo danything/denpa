@@ -38,45 +38,40 @@ test.describe("ライブの貯め方", () => {
 
   /*
    * **Safari は速さを変えるたびにつまずく** (#1210。`pacing.ts` の `Steering`)。荒れた届き方で、
-   * `?steer=off` なら一度も速さを変えないこと、WebKit なら遅くしないことを見る
-   * (WebKit は `--browser=webkit` で手元だけ)
+   * WebKit なら遅くしないことを見る (WebKit は `--browser=webkit` で手元だけ)
    */
-  for (const off of [false, true]) {
-    test(`荒れた届き方で、${off ? "?steer=off なら速さを変えない" : "WebKit なら遅くしない"}`, async ({
-      page,
-      stack,
-      browserName,
-    }) => {
-      test.skip(!off && browserName !== "webkit", "WebKit だけの寄せ方");
-      test.setTimeout(120_000);
-      await page.addInitScript(() => {
-        const scope = window as unknown as { __rates: number[] };
-        scope.__rates = [];
-        document.addEventListener(
-          "ratechange",
-          (event) =>
-            scope.__rates.push((event.target as HTMLVideoElement).playbackRate),
-          true,
-        );
-      });
-      await watch(
-        page,
-        JSON.stringify({ gapEvery: [4, 6], gapMs: [500, 700] }),
-        stack,
-        off ? "/live?steer=off" : "/live",
+  test("荒れた届き方で、WebKit なら遅くしない", async ({
+    page,
+    stack,
+    browserName,
+  }) => {
+    test.skip(browserName !== "webkit", "WebKit だけの寄せ方");
+    test.setTimeout(120_000);
+    await page.addInitScript(() => {
+      const scope = window as unknown as { __rates: number[] };
+      scope.__rates = [];
+      document.addEventListener(
+        "ratechange",
+        (event) =>
+          scope.__rates.push((event.target as HTMLVideoElement).playbackRate),
+        true,
       );
-      await page.waitForTimeout(40_000);
-      const rates = await page.evaluate(
-        () => (window as unknown as { __rates: number[] }).__rates,
-      );
-      writeFileSync(
-        `test-results/live-rates-${off ? "off" : browserName}.json`,
-        JSON.stringify(rates),
-      );
-      if (off) expect(rates.filter((r) => r !== 1)).toEqual([]);
-      else expect(Math.min(1, ...rates)).toBe(1);
     });
-  }
+    await watch(
+      page,
+      JSON.stringify({ gapEvery: [4, 6], gapMs: [500, 700] }),
+      stack,
+    );
+    await page.waitForTimeout(40_000);
+    const rates = await page.evaluate(
+      () => (window as unknown as { __rates: number[] }).__rates,
+    );
+    writeFileSync(
+      `test-results/live-rates-${browserName}.json`,
+      JSON.stringify(rates),
+    );
+    expect(Math.min(1, ...rates)).toBe(1);
+  });
 });
 
 interface Joined {

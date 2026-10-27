@@ -13,7 +13,7 @@ import type { HybridcastLink } from "#lib/live.js";
  *   applicationLocation              … その先の経路
  * ```
  *
- * **名前空間の接頭辞は見ない** (`mhp:` のことも、無いこともある)。DOMParser はサーバとテストに無いので、要素の名前で拾う。
+ * **名前空間の接頭辞は見ない** (`mhp:` のことも、無いこともある)。DOMParser は単体テスト (bun) に無いので、要素の名前で拾う。
  * 開けるのは AUTOSTART と PRESENT だけで、URL の頭が http(s) でないものは出さない (電波の AIT と同じ。`@danything/arib/ait` の `parseAit`)
  */
 export function parseXmlAit(text: string): HybridcastLink[] {

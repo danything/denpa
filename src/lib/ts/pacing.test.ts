@@ -5,7 +5,6 @@ import {
   CEILING,
   cover,
   Extreme,
-  FIXED,
   FLOOR,
   GAP_MOST,
   GAP_WINDOW,
@@ -494,19 +493,6 @@ describe("steer (STEADY)", () => {
     expect(
       at({ end: 100 + FLOOR * 1.4, low: FLOOR * 0.5, steering: STEADY }).rate,
     ).toBe(1);
-  });
-});
-
-describe("steer (FIXED)", () => {
-  test("ライブでは速さを変えない。速めていたら等速に戻す", () => {
-    expect(steer(5, 0.5, 1, FIXED)).toBe(1);
-    expect(steer(0, 0.5, 1, FIXED)).toBe(1);
-    expect(steer(0.5, 0.5, CATCH_UP, FIXED)).toBe(1);
-  });
-  test("追っかけの速さはそのまま", () => {
-    expect(
-      at({ end: 100 + 300, chasing: true, speed: 1.5, steering: FIXED }).rate,
-    ).toBe(1.5);
   });
 });
 

@@ -61,7 +61,6 @@ describe("データ放送の覚え書き", () => {
     const held = new Carousel();
     held.take(moduleOf(96, 4096, 1));
     held.take(moduleOf(96, 4096, 2));
-    expect(held.held).toBe(1);
     expect(held.replay()).toEqual([moduleOf(96, 4096, 2)]);
   });
 
@@ -100,7 +99,7 @@ describe("データ放送の覚え書き", () => {
     const held = new Carousel();
     held.take(moduleOf(64, 0));
     held.take(moduleOf(96, 0));
-    expect(held.held).toBe(2);
+    expect(held.replay()).toEqual([moduleOf(64, 0), moduleOf(96, 0)]);
   });
 
   /*
@@ -114,22 +113,21 @@ describe("データ放送の覚え書き", () => {
     held.take(moduleOf(96, 0, 1));
     held.take(moduleOf(96, KEEP_MODULES));
 
-    expect(held.held).toBe(KEEP_MODULES);
     const ids = held
       .replay()
       .map((message) => (message as { moduleId: number }).moduleId);
+    expect(ids).toHaveLength(KEEP_MODULES);
     expect(ids).toContain(0);
     expect(ids).toContain(KEEP_MODULES);
     // 2番目に古かったものが落ちる
     expect(ids).not.toContain(1);
   });
 
-  /** 覚えないものは、渡すものにも数にも出てこない */
+  /** 覚えないものは、渡すものに出てこない */
   test("時刻は覚えない", () => {
     const held = new Carousel();
     held.take({ type: "currentTime", timeUnixMillis: 1 } as unknown as Message);
     expect(held.replay()).toEqual([]);
-    expect(held.held).toBe(0);
   });
 
   /*

@@ -22,9 +22,6 @@ class FakeDecoder {
   reset(): void {
     this.state = "unconfigured";
   }
-  close(): void {
-    this.state = "closed";
-  }
   decode(): void {}
 }
 
@@ -91,7 +88,6 @@ describe("Fmp4Video (追っかけで抱えきれないとき)", () => {
     feedRounds(video, 1);
     expect(seen.sounds).toBeGreaterThan(sounds);
     expect(seen.full).toBe(1);
-    video.close();
   });
 
   test("追っかけでなければ溢れを言わない (いちばん新しいキーフレームから持ち直す)", () => {
@@ -99,6 +95,5 @@ describe("Fmp4Video (追っかけで抱えきれないとき)", () => {
     video.feed(init);
     feedRounds(video, 50);
     expect(seen.full).toBe(0);
-    video.close();
   });
 });

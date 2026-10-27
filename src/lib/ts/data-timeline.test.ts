@@ -13,12 +13,13 @@ import {
   tdtPacket as tdt,
 } from "@danything/arib/synth";
 
-import { captureDataBroadcast, DataBroadcastCapture } from "./data-capture";
+import { DataBroadcastCapture } from "./data-capture";
 import {
   feedFor,
   type PlacedMessage,
   playbackMsAt,
   replayAt,
+  type TimedMessage,
   toPlaybackTimeline,
 } from "./data-timeline";
 
@@ -30,6 +31,13 @@ import {
  */
 
 const { bmlPid: BML_PID, downloadId: DOWNLOAD_ID } = BML_TS;
+
+/** TS を一気に食べさせて、並んだ変化を返す */
+function captureDataBroadcast(chunks: Uint8Array[]): TimedMessage[] {
+  const capture = new DataBroadcastCapture();
+  for (const chunk of chunks) capture.feed(chunk);
+  return capture.result();
+}
 
 /** モジュール1つぶんの multipart (ファイル1枚の形式) */
 const multipart = (body: string) =>
