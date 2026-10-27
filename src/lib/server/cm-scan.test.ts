@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
+import { LOOK_SIZE } from "../ts/cm-look";
 import {
   parseCuts,
   parseSilences,
+  readLook,
   scanLine,
   scanOutputs,
   scanReader,
@@ -14,7 +17,11 @@ import {
  * CM 検出の材料を1回のデコードで取るところ (`cm-scan.ts`)。ffmpeg は動かさず、
  * 渡す引数と、書き出しの読み方だけを見る
  */
-const files = { cuts: "/tmp/x.cuts", silences: "/tmp/x.silences" };
+const files = {
+  cuts: "/tmp/x.cuts",
+  silences: "/tmp/x.silences",
+  look: "/tmp/x.look",
+};
 
 describe("書き出しを読む", () => {
   test("切れ目はコマごとの時刻と点 (metadata の1コマ2行)", () => {
@@ -90,6 +97,41 @@ describe("ffmpeg に渡す出口", () => {
     ).toBe(true);
   });
 
+  test("縮めたコマは別の出口で、コマを間引かずに 32×18 の YUV420 を一時ファイルへ", () => {
+    const args = scanOutputs(
+      {
+        video: true,
+        audio: true,
+        logo: { filter: "crop=10:10:0:0", size: 100, onFrame: () => {} },
+        look: true,
+      },
+      files,
+    );
+    const at = args.indexOf("scale=32:18:flags=area,format=yuv420p");
+    expect(at).toBeGreaterThan(args.indexOf("pipe:1"));
+    expect(args.slice(at - 3, at + 4)).toEqual([
+      "-fps_mode",
+      "passthrough",
+      "-vf",
+      "scale=32:18:flags=area,format=yuv420p",
+      "-f",
+      "rawvideo",
+      "/tmp/x.look",
+    ]);
+  });
+
+  test("ロゴの枠だけ読み直すときは縮めたコマを取らない", () => {
+    const args = scanOutputs(
+      {
+        video: true,
+        audio: false,
+        logo: { filter: "crop=10:10:0:0", size: 100, onFrame: () => {} },
+      },
+      files,
+    );
+    expect(args).not.toContain("/tmp/x.look");
+  });
+
   test("音だけなら映像をデコードしない", () => {
     const args = scanOutputs({ video: false, audio: true }, files);
     expect(args.some((a) => a.includes("scdet"))).toBe(false);
@@ -149,5 +191,35 @@ describe("読み取り", () => {
     expect(found.duration).toBe(600);
     // 一時フォルダごと片付ける
     expect(existsSync(dirname(cuts))).toBe(false);
+  });
+});
+
+describe("縮めたコマを読む", () => {
+  const dir = mkdtempSync(join(tmpdir(), "denpa-look-"));
+  const path = join(dir, "look");
+  /** 明るさ `y` の一様なコマ (色は灰色) */
+  const flat = (y: number) => {
+    const frame = new Uint8Array(LOOK_SIZE).fill(128);
+    frame.fill(y, 0, 32 * 18);
+    return frame;
+  };
+
+  test("コマの数が時刻と合えば、場面と 1 秒ごとの絵の調子にまとめる", () => {
+    // 2 秒ぶん (10 コマ/秒)。1 秒目から明るい場面
+    const times = Array.from({ length: 20 }, (_, i) => i / 10);
+    const cuts = times.map((_, i) => (i === 10 ? 30 : 0));
+    writeFileSync(
+      path,
+      Buffer.concat(times.map((_, i) => flat(i < 10 ? 16 : 200))),
+    );
+    const look = readLook(path, times, cuts, 2)!;
+    expect([...look.shots.start]).toEqual([0, 10]);
+    expect([...look.tone]).toEqual([16, 128, 128, 0, 200, 128, 128, 0]);
+  });
+
+  test("コマの数が合わなければ使わない", () => {
+    writeFileSync(path, Buffer.concat([flat(16), flat(16)]));
+    expect(readLook(path, [0, 0.1, 0.2], [0, 0, 0], 1)).toBeNull();
+    expect(readLook(join(dir, "none"), [0], [0], 1)).toBeNull();
   });
 });

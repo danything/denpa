@@ -535,6 +535,27 @@ export const cmMaterials = sqliteTable("cm_materials", {
   created_at: integer("created_at").notNull(),
 });
 
+/**
+ * **ロゴの無かった場面のハッシュ** (`cm-shots.ts`)。よその局でも流れた CM を見つけるために、録画どうしで照らす。
+ * 材料の控え (`cm_materials`) から作ったもので、控えと一緒に書き、一緒に捨てる
+ */
+export const cmShots = sqliteTable(
+  "cm_shots",
+  {
+    recording_id: integer("recording_id")
+      .notNull()
+      .references(() => recordings.id, { onDelete: "cascade" }),
+    /** 録画の中の場面の順 (ロゴの出ていた場面も数える。続いているかを見るのに使う) */
+    seq: integer("seq").notNull(),
+    /** 64 ビットの差分ハッシュの上と下 */
+    hash_hi: integer("hash_hi").notNull(),
+    hash_lo: integer("hash_lo").notNull(),
+    /** 場面の長さ (秒) */
+    length: real("length").notNull(),
+  },
+  (t) => [index("cm_shots_recording").on(t.recording_id, t.seq)],
+);
+
 const ENCODE_STATES = [
   "queued",
   "running",

@@ -837,3 +837,82 @@ describe("ロゴの区間の尻の、見えないまま持ち越された所", (
     ]);
   });
 });
+
+describe("よその局でも流れた区間", () => {
+  const logo = [
+    { start: 0, end: 300 },
+    { start: 312, end: 600 },
+  ];
+
+  test("ロゴの無い 12 秒は、ふだんは番組のアイキャッチ。よその局でもロゴ無しで流れていれば CM", () => {
+    expect(decideCm(recording(600, [300, 312], logo))).toEqual([]);
+    expect(
+      round(
+        decideCm(
+          recording(600, [300, 312], logo, {
+            repeated: [{ start: 300, end: 312 }],
+          }),
+        ),
+      ),
+    ).toEqual([{ start: 300, end: 312 }]);
+  });
+
+  test("ロゴの出ている所は、よそで流れていても CM にしない", () => {
+    expect(
+      decideCm(
+        recording(600, [100, 130], [{ start: 0, end: 600 }], {
+          repeated: [{ start: 100, end: 130 }],
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("絵の調子", () => {
+  const logo = [
+    { start: 0, end: 300 },
+    { start: 320, end: 600 },
+  ];
+  /** 1 秒ごとの調子。番組は暗めの絵、`bare` の秒だけ `odd` の調子 */
+  const tone = (odd: number[]) =>
+    Uint8Array.from({ length: 600 * 4 }, (_, i) => {
+      const k = Math.floor(i / 4);
+      const program = [60, 120, 130, 40][i % 4]!;
+      return k >= 300 && k < 320 ? odd[i % 4]! : program;
+    });
+
+  test("尺の合わないロゴの無い 20 秒は CM だが、前後の番組と同じ調子なら番組に残す", () => {
+    expect(round(decideCm(recording(600, [300, 320], logo)))).toEqual([
+      { start: 300, end: 320 },
+    ]);
+    expect(
+      decideCm(
+        recording(600, [300, 320], logo, { tone: tone([60, 120, 130, 40]) }),
+      ),
+    ).toEqual([]);
+  });
+
+  test("調子が違えば今までどおり CM", () => {
+    expect(
+      round(
+        decideCm(
+          recording(600, [300, 320], logo, { tone: tone([200, 90, 170, 10]) }),
+        ),
+      ),
+    ).toEqual([{ start: 300, end: 320 }]);
+  });
+
+  test("尺がぴったりの CM は、番組と同じ調子でも CM のまま (番組に寄せる点は減点を消すだけ)", () => {
+    const fit = [
+      { start: 0, end: 300 },
+      { start: 330, end: 600 },
+    ];
+    const same = Uint8Array.from(
+      { length: 600 * 4 },
+      (_, i) => [60, 120, 130, 40][i % 4]!,
+    );
+    expect(
+      round(decideCm(recording(600, [300, 315, 330], fit, { tone: same }))),
+    ).toEqual([{ start: 300, end: 330 }]);
+  });
+});

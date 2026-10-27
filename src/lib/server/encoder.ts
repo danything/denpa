@@ -46,6 +46,7 @@ import {
 } from "./cm-cut";
 import { loadMaterial, saveMaterial } from "./cm-material-store";
 import { type Scan, scan, type ScanReader, scanReader } from "./cm-scan";
+import { repeatedFor } from "./cm-shots";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { type ChaptersChanged, emit, type EncodeProgress } from "./events";
@@ -1226,6 +1227,7 @@ async function runJob(jobId: number): Promise<void> {
       reading = await openCm(sourceTs, {
         signal,
         serviceId: recording.service_id,
+        recordingId: recording.id,
         ...programSpan(recording),
         onStep: (label) => setStep(jobId, label),
       });
@@ -1901,13 +1903,20 @@ async function runCmJob(jobId: number): Promise<void> {
   try {
     if (stored !== null && stored.logo !== null) {
       setPhase(jobId, "cm", "控えておいた材料から決め直しています");
-      detection = shiftDetection(decideFromMaterial(stored), stored.offset);
+      detection = shiftDetection(
+        decideFromMaterial(
+          stored,
+          repeatedFor(recording.id, recording.service_id, stored),
+        ),
+        stored.offset,
+      );
     } else {
       setPhase(jobId, "cm", "局ロゴを確かめています");
       const span = programSpan(recording);
       const reading = await openCm(input, {
         signal,
         serviceId: recording.service_id,
+        recordingId: recording.id,
         programLength: span.programLength,
         programStart: span.programStart - shift,
         onStep: (label) => setStep(jobId, label),

@@ -115,6 +115,7 @@ test("材料の控えがあれば読み直さずに決める (控えの物差し
       scores: new Float32Array(6000),
     },
     why: "",
+    look: null,
   });
   const jobId = enqueue(1, "cm");
   pump();

@@ -6,12 +6,13 @@ import {
   encodeMaterial,
   MATERIAL_VERSION,
 } from "./cm-material";
+import { forgetShots, saveShots } from "./cm-shots";
 import { now, orm } from "./db";
 import { cmMaterials, recordings } from "./schema";
 
 /** CM 検出の材料の控えの置き場 (`cm_materials`)。中身の形式は `cm-material.ts` */
 
-/** 控えを書く (同じ録画のものは差し替え)。**書けなくても CM 検出は落とさない** */
+/** 控えを書く (同じ録画のものは差し替え)。ロゴの無かった場面も書き直す (`cm-shots.ts`)。**書けなくても CM 検出は落とさない** */
 export function saveMaterial(recordingId: number, material: CmMaterial): void {
   try {
     const data = Buffer.from(encodeMaterial(material));
@@ -26,6 +27,7 @@ export function saveMaterial(recordingId: number, material: CmMaterial): void {
       .values(row)
       .onConflictDoUpdate({ target: cmMaterials.recording_id, set: row })
       .run();
+    saveShots(recordingId, material);
   } catch (error) {
     console.warn(`[cm] 材料の控えを書けませんでした: ${error}`);
   }
@@ -44,7 +46,7 @@ export function loadMaterial(recordingId: number): CmMaterial | null {
 
 /**
  * 局の録画の控えを捨てる。**覚えたロゴを捨てたとき** — 控えのロゴの区間は捨てた型で当てたものなので、
- * やり直すときは読み直して新しく覚えたロゴで当てる
+ * やり直すときは読み直して新しく覚えたロゴで当てる。ロゴの無かった場面 (`cm-shots.ts`) も同じ型で分けたものなので捨てる
  */
 export function forgetMaterials(serviceIds: number[]): void {
   const ids = orm()
@@ -58,4 +60,5 @@ export function forgetMaterials(serviceIds: number[]): void {
       .delete(cmMaterials)
       .where(inArray(cmMaterials.recording_id, ids))
       .run();
+  forgetShots(ids);
 }

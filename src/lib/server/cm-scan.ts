@@ -1,8 +1,25 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Range } from "../ts/cm-decide";
+import {
+  type FrameLook,
+  frameLook,
+  type Look,
+  LOOK_HEIGHT,
+  LOOK_SIZE,
+  LOOK_WIDTH,
+  summarize,
+} from "../ts/cm-look";
 import { framer } from "../ts/logo-detect";
 import { config } from "./config";
 import { run } from "./stream";
@@ -10,11 +27,12 @@ import { run } from "./stream";
 /**
  * **CM 検出の材料を、1回だけデコードして取る。**
  *
- * 取るのは3つ。どれもコマの時刻 (ffmpeg の時刻) にそろえて返す。
+ * 取るのは4つ。どれもコマの時刻 (ffmpeg の時刻) にそろえて返す。
  *
  * - **場面の切れ目** — `scdet` の点をコマごとに。`metadata` で一時ファイルへ (1コマ2行)
  * - **局ロゴの枠** — 枠だけ切り出した白黒のコマを標準出力へ。点を付けるのは呼ぶ側 (`logo-own.ts`)
  * - **無音** — 主音声に `silencedetect`。`ametadata` で一時ファイルへ
+ * - **縮めたコマ** — コマ全体を 32×18 に縮めて一時ファイルへ (YUV420)。場面のハッシュと 1 秒ごとの絵の調子にまとめる (`cm-look.ts`)
  *
  * ふだんは**エンコードと同じ ffmpeg で一緒に行う** (`scanReader` の `outputs` をエンコードする出口のあとに足す。
  * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起こすのは、ロゴを覚え直して枠だけ読み直すとき、
@@ -44,6 +62,8 @@ export interface ScanWant {
   video: boolean;
   /** ロゴの枠。無ければ切れ目だけ */
   logo?: ScanLogo | null;
+  /** コマ全体を縮めたものを取るか (場面のハッシュと絵の調子)。ロゴの枠だけ読み直すときは要らない */
+  look?: boolean;
   /** 無音を測るか */
   audio: boolean;
 }
@@ -67,6 +87,8 @@ export interface Scan {
   silences: Range[];
   /** 届いたロゴの枠の数。`times` と食い違えば読み落としがある */
   logoFrames: number;
+  /** 縮めたコマからまとめたもの。取らなかった・コマの数と合わなかったときは null */
+  look: Look | null;
   /** ffmpeg が言ってきた入れ物の尺 (秒)。ffprobe で測れなかったときの代わり。無ければ NaN */
   duration: number;
 }
@@ -140,7 +162,7 @@ export function parseSilences(text: string, end: number): Range[] {
  */
 export function scanOutputs(
   want: ScanWant,
-  files: { cuts: string; silences: string },
+  files: { cuts: string; silences: string; look: string },
 ): string[] {
   const args: string[] = [];
   if (want.video) {
@@ -167,6 +189,25 @@ export function scanOutputs(
     args.push(
       ...(want.logo ? ["-f", "rawvideo", "pipe:1"] : ["-f", "null", "-"]),
     );
+    if (want.look) {
+      /*
+       * 縮めたコマは別の出口で (ロゴの枠は標準出力を使っている)。映像のデコードは出口どうしで1回を分け合うので、
+       * 足すのは縮める手間だけ。これも ffmpeg の自動の選び方で同じ映像を選び、コマを間引かない (`times` と順番で突き合わせる)。
+       * 横 1440 の映像も 32×18 にそのまま縮める (画素は横長なので、縮めると 16:9 の絵になる)
+       */
+      args.push(
+        "-an",
+        "-sn",
+        "-dn",
+        "-fps_mode",
+        "passthrough",
+        "-vf",
+        `scale=${LOOK_WIDTH}:${LOOK_HEIGHT}:flags=area,format=yuv420p`,
+        "-f",
+        "rawvideo",
+        files.look,
+      );
+    }
   }
   if (want.audio) {
     // 主音声だけ。録画の尻にだけ現れる副音声を選ばないように (cm.probeLiveAudio)
@@ -202,9 +243,19 @@ export interface ScanReader {
  * 書き出しの置き場。読み取りごとに一時フォルダを1つ作る (名前は他と重ならない)。
  * **パスはフィルタの引数に入る**ので、`:` `,` などを含まない一時フォルダの下に固定の名前で置く
  */
-function scratch(): { dir: string; cuts: string; silences: string } {
+function scratch(): {
+  dir: string;
+  cuts: string;
+  silences: string;
+  look: string;
+} {
   const dir = mkdtempSync(join(tmpdir(), "denpa-scan-"));
-  return { dir, cuts: join(dir, "cuts"), silences: join(dir, "silences") };
+  return {
+    dir,
+    cuts: join(dir, "cuts"),
+    silences: join(dir, "silences"),
+    look: join(dir, "look"),
+  };
 }
 
 function read(path: string): string {
@@ -212,6 +263,43 @@ function read(path: string): string {
     return readFileSync(path, "utf8");
   } catch {
     return "";
+  }
+}
+
+/**
+ * 縮めたコマの書き出しを、少しずつ読んで手がかりにまとめる (3 時間の録画でも 280 MB を一度に持たない)。
+ * **コマの数が `times` と合わなければ使わない** (null) — 時刻と順番で突き合わせるので、1コマでも欠けるとずれる
+ */
+export function readLook(
+  path: string,
+  times: number[],
+  cuts: number[],
+  duration: number,
+): Look | null {
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return null;
+  }
+  try {
+    if (fstatSync(fd).size !== times.length * LOOK_SIZE) return null;
+    const looks: FrameLook[] = [];
+    const frames = 256;
+    const buffer = new Uint8Array(LOOK_SIZE * frames);
+    for (;;) {
+      const got = readSync(fd, buffer, 0, buffer.length, null);
+      if (got <= 0) break;
+      for (let at = 0; at + LOOK_SIZE <= got; at += LOOK_SIZE)
+        looks.push(frameLook(buffer.subarray(at, at + LOOK_SIZE)));
+      // 塊はコマの境目で切れる (ファイルの読み取りは頼んだだけ返る。尻だけ短い)
+      if (got % LOOK_SIZE !== 0) return null;
+    }
+    return looks.length === times.length
+      ? summarize(looks, times, cuts, duration)
+      : null;
+  } finally {
+    closeSync(fd);
   }
 }
 
@@ -237,6 +325,14 @@ export function scanReader(want: ScanWant): ScanReader {
         duration !== undefined && Number.isFinite(duration) ? duration : told;
       const { times, cuts } = parseCuts(read(files.cuts));
       const silences = parseSilences(read(files.silences), end);
+      const look = want.look
+        ? readLook(
+            files.look,
+            times,
+            cuts,
+            Number.isFinite(end) ? end : (times.at(-1) ?? 0) + 1,
+          )
+        : null;
       rmSync(files.dir, { recursive: true, force: true });
       return {
         code,
@@ -245,6 +341,7 @@ export function scanReader(want: ScanWant): ScanReader {
         cuts,
         silences,
         logoFrames,
+        look,
         duration: told,
       };
     },

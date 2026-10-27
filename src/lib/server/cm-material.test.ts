@@ -30,6 +30,7 @@ function material(frames: number, logo = true): CmMaterial {
     cuts,
     logo: logo ? { spans: [{ start: 10, end: 2500 }], scores } : null,
     why: logo ? "" : "ロゴの位置を特定できませんでした",
+    look: null,
   };
 }
 
@@ -57,6 +58,40 @@ describe("材料の控え", () => {
     const after = decodeMaterial(encodeMaterial(material(300, false)))!;
     expect(after.logo).toBeNull();
     expect(after.why).toBe("ロゴの位置を特定できませんでした");
+  });
+
+  test("縮めたコマから取ったもの (場面のハッシュと 1 秒ごとの絵の調子) もそのまま戻る", () => {
+    const before = {
+      ...material(9000),
+      look: {
+        shots: {
+          start: Uint32Array.of(0, 120, 4000),
+          hi: Uint32Array.of(0xffffffff, 1, 0x80000000),
+          lo: Uint32Array.of(0, 0xdeadbeef, 7),
+          contrast: Uint8Array.of(3, 40, 255),
+        },
+        tone: Uint8Array.from({ length: 301 * 4 }, (_, i) => i % 256),
+      },
+    };
+    const after = decodeMaterial(encodeMaterial(before))!;
+    expect(after.look).toEqual(before.look);
+  });
+
+  test("前のバージョンの控えは使わない (読み直す)", () => {
+    const bytes = encodeMaterial(material(300));
+    const raw = new Uint8Array(Bun.zstdDecompressSync(bytes));
+    const length = new DataView(raw.buffer).getUint32(0, true);
+    const head = JSON.parse(
+      new TextDecoder().decode(raw.subarray(4, 4 + length)),
+    );
+    const old = new TextEncoder().encode(
+      JSON.stringify({ ...head, version: 1 }),
+    );
+    const rewritten = new Uint8Array(4 + old.length + raw.length - 4 - length);
+    new DataView(rewritten.buffer).setUint32(0, old.length, true);
+    rewritten.set(old, 4);
+    rewritten.set(raw.subarray(4 + length), 4 + old.length);
+    expect(decodeMaterial(Bun.zstdCompressSync(rewritten))).toBeNull();
   });
 
   test("壊れたものは読まない", () => {

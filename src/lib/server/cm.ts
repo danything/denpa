@@ -3,6 +3,7 @@ import { decideCm, type Range } from "../ts/cm-decide";
 import type { CmMode } from "../types";
 import type { CmMaterial } from "./cm-material";
 import { type Scan, scan, type ScanWant } from "./cm-scan";
+import { repeatedFor } from "./cm-shots";
 import { config } from "./config";
 import { logoRepo, share } from "./logo-data";
 import { openLogo } from "./logo-own";
@@ -372,6 +373,8 @@ export interface CmOptions {
   signal?: AbortSignal;
   /** 局のID。覚えたロゴの置き場を局ごとに分けるのに使う */
   serviceId: number;
+  /** 録画のID。ほかの局の録画と場面を照らすときに、自分を除くのに使う (`cm-shots.repeatedFor`)。無ければ照らさない */
+  recordingId?: number;
   /** 番組の尺 (秒。番組表)。録画の頭と尻に入った前後の番組を見分けるのに使う */
   programLength?: number;
   /** 番組表どおりなら番組が始まる秒 (録画の前のマージン。入れ物の頭から) */
@@ -455,7 +458,12 @@ export async function openCm(
   }
 
   return {
-    want: () => ({ video, logo: logo?.scan() ?? null, audio: true }),
+    want: () => ({
+      video,
+      logo: logo?.scan() ?? null,
+      look: video,
+      audio: true,
+    }),
     duration: measured,
     async decide(found, { skip, before, video: read = true }) {
       /** ロゴが使えなかった理由。呼ぶたびに支度のときの理由から始める */
@@ -533,6 +541,7 @@ export async function openCm(
         cuts: Float32Array.from(found.cuts),
         logo: lit,
         why,
+        look: read ? found.look : null,
       };
       /*
        * 控えに残すのは映像まで読めたときだけ。音だけ読み直したもの・ロゴの枠が欠けたものは、
@@ -540,16 +549,27 @@ export async function openCm(
        */
       const keep =
         read && found.times.length > 0 && (logo === null || current !== null);
-      return { ...decideFromMaterial(material), ...(keep ? { material } : {}) };
+      const repeated =
+        options.recordingId === undefined
+          ? []
+          : repeatedFor(options.recordingId, serviceId, material);
+      return {
+        ...decideFromMaterial(material, repeated),
+        ...(keep ? { material } : {}),
+      };
     },
   };
 }
 
 /**
  * 材料から CM を決める (読み直さない)。**ロゴで決め、使えなければ同じ材料から CM の尺だけで決め直す。**
+ * `repeated` はほかの局の録画でもロゴ無しで流れた区間 (`cm-shots.repeatedFor`。材料の物差し)。
  * 返す区間と尺は材料の物差し (`offset` は足さない)
  */
-export function decideFromMaterial(material: CmMaterial): CmDetection {
+export function decideFromMaterial(
+  material: CmMaterial,
+  repeated: Range[] = [],
+): CmDetection {
   const { duration, times } = material;
   const at = (frame: number) =>
     frame < times.length ? times[frame]! : duration;
@@ -574,6 +594,8 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
         end: at(s.end + 1),
       })),
       logoScores: material.logo.scores,
+      repeated,
+      ...(material.look !== null ? { tone: material.look.tone } : {}),
     });
     if (cm.length === 0) why = "ロゴの消えている所がありませんでした";
     // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)

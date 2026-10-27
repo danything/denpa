@@ -1,6 +1,7 @@
 import { joinBytes } from "@danything/arib/bytes";
 
 import type { Range } from "../ts/cm-decide";
+import { type Look, TONE_FIELDS } from "../ts/cm-look";
 import type { Span } from "../ts/logo-detect";
 
 /**
@@ -13,7 +14,7 @@ import type { Span } from "../ts/logo-detect";
  */
 
 /** 中身の形式のバージョン。形式を変えたら上げる (古いバージョンの行は使わずに読み直す) */
-export const MATERIAL_VERSION = 1;
+export const MATERIAL_VERSION = 2;
 
 /** 切れ目はこの強さ以上だけ持つ (`cm-decide` の弱い切れ目の下限) */
 const CUT_KEEP = 3;
@@ -39,10 +40,15 @@ export interface CmMaterial {
   /** ロゴ。使えなかったときは null で、理由が `why` */
   logo: { spans: Span[]; scores: Float32Array } | null;
   why: string;
+  /** 縮めたコマから取ったもの (場面のハッシュと 1 秒ごとの絵の調子)。縮めたコマの数がコマの数と合わなかったときは null */
+  look: Look | null;
 }
 
 /** 頭の JSON。並びの長さはここから決まる */
-type Header = Omit<CmMaterial, "silences" | "times" | "cuts" | "logo"> & {
+type Header = Omit<
+  CmMaterial,
+  "silences" | "times" | "cuts" | "logo" | "look"
+> & {
   version: number;
   /** 1コマ目の時刻 (µs) とコマの数 */
   first: number;
@@ -51,11 +57,13 @@ type Header = Omit<CmMaterial, "silences" | "times" | "cuts" | "logo"> & {
   cuts: number;
   silences: [number, number][];
   spans: [number, number][] | null;
+  /** 場面の数と、絵の調子の秒数 (縮めたコマが無ければ null) */
+  look: { shots: number; seconds: number } | null;
 };
 
 /** 縮める (並びは docs/cm.md の「材料の控え」)。全体を zstd で */
 export function encodeMaterial(material: CmMaterial): Uint8Array {
-  const { times, cuts, logo, silences, ...rest } = material;
+  const { times, cuts, logo, silences, look, ...rest } = material;
   const frames = times.length;
   const micro = (t: number) => Math.round(t * 1e6);
   const kept: number[] = [];
@@ -68,6 +76,13 @@ export function encodeMaterial(material: CmMaterial): Uint8Array {
     cuts: kept.length,
     silences: silences.map((s) => [+s.start.toFixed(4), +s.end.toFixed(4)]),
     spans: logo === null ? null : logo.spans.map((s) => [s.start, s.end]),
+    look:
+      look === null
+        ? null
+        : {
+            shots: look.shots.start.length,
+            seconds: look.tone.length / TONE_FIELDS,
+          },
   };
   const head = new TextEncoder().encode(JSON.stringify(header));
   const deltas = new Int32Array(Math.max(0, frames - 1));
@@ -86,6 +101,12 @@ export function encodeMaterial(material: CmMaterial): Uint8Array {
         255,
         Math.max(0, Math.round((logo.scores[i] ?? 0) * SCORE_SCALE)),
       );
+  // 場面の頭はコマ番号の差で (切れ目と同じ)
+  const shotStarts = new Uint32Array(look?.shots.start.length ?? 0);
+  if (look !== null)
+    look.shots.start.forEach((frame, k) => {
+      shotStarts[k] = frame - (k > 0 ? look.shots.start[k - 1]! : 0);
+    });
   const raw = joinBytes([
     new Uint8Array(Uint32Array.of(head.length).buffer),
     head,
@@ -93,6 +114,15 @@ export function encodeMaterial(material: CmMaterial): Uint8Array {
     new Uint8Array(at.buffer),
     new Uint8Array(strength.buffer),
     scores,
+    ...(look === null
+      ? []
+      : [
+          new Uint8Array(shotStarts.buffer),
+          new Uint8Array(look.shots.hi.slice().buffer),
+          new Uint8Array(look.shots.lo.slice().buffer),
+          look.shots.contrast,
+          look.tone,
+        ]),
   ]);
   return Bun.zstdCompressSync(raw, { level: 19 });
 }
@@ -111,6 +141,7 @@ export function decodeMaterial(bytes: Uint8Array): CmMaterial | null {
       cuts: cutCount,
       silences,
       spans,
+      look: sizes,
       ...rest
     } = JSON.parse(
       new TextDecoder().decode(raw.subarray(4, 4 + length)),
@@ -129,6 +160,19 @@ export function decodeMaterial(bytes: Uint8Array): CmMaterial | null {
     const at = new Uint32Array(take(cutCount, 4));
     const strength = new Uint16Array(take(cutCount, 2));
     const scores = spans === null ? null : new Uint8Array(take(frames, 1));
+    let look: Look | null = null;
+    if (sizes !== null) {
+      const steps = new Uint32Array(take(sizes.shots, 4));
+      const hi = new Uint32Array(take(sizes.shots, 4));
+      const lo = new Uint32Array(take(sizes.shots, 4));
+      const contrast = new Uint8Array(take(sizes.shots, 1));
+      const tone = new Uint8Array(take(sizes.seconds * TONE_FIELDS, 1));
+      const start = new Uint32Array(sizes.shots);
+      steps.forEach((step, k) => {
+        start[k] = (k > 0 ? start[k - 1]! : 0) + step;
+      });
+      look = { shots: { start, hi, lo, contrast }, tone };
+    }
     const times = new Float64Array(frames);
     let micro = first;
     for (let i = 0; i < frames; i++) {
@@ -153,6 +197,7 @@ export function decodeMaterial(bytes: Uint8Array): CmMaterial | null {
               spans: spans.map(([start, end]) => ({ start, end })),
               scores: Float32Array.from(scores, (s) => s / SCORE_SCALE),
             },
+      look,
     };
   } catch {
     return null;

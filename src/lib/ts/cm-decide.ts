@@ -1,3 +1,4 @@
+import { TONE_FIELDS } from "./cm-look";
 import { OFF as LOGO_OFF } from "./logo-detect";
 
 /**
@@ -27,6 +28,10 @@ export interface CmInput {
   programLength?: number;
   /** 番組表どおりなら番組が始まる秒 (録画の前のマージン)。番組の置き場所が決めきれないときの目安 */
   programStart?: number;
+  /** よその局の録画でもロゴ無しで流れた区間 (秒。`cm-repeat.ts`)。CM の点を足す */
+  repeated?: Range[];
+  /** 1 秒ごとの絵の調子 (`cm-look.ts` の `tone`)。前後の番組に似たロゴの無い秒の減点を軽くする */
+  tone?: Uint8Array;
 }
 
 /** 境目の候補。無音1つにつき、その中の切れ目 (無ければ真ん中) */
@@ -282,6 +287,25 @@ const CM_FIT = 1;
 const CM_MISFIT = GAP_MIN * PROGRAM_BARE;
 /** CM: ロゴの出ている 1 秒ごとの減点。番組の点 (`PROGRAM_LOGO`) と CM の点 (`CM_FIT`) の和より大きく */
 const CM_LOGO = 3;
+/**
+ * CM: よその局の録画でもロゴ無しで流れた 1 秒ごとの点 (`repeated`)。尺の点 (`CM_FIT`) と同じ重み。
+ * ロゴの出ている秒の減点 (`CM_LOGO`) より小さいので、ロゴの出ている所を CM にはしない
+ */
+const REPEAT_CM = 1;
+/**
+ * 番組: ロゴの無い秒が前後の番組と同じ絵の調子のときに、ロゴの無い秒の減点 (`PROGRAM_BARE`) から戻す点の上限 (1 秒ごと)。
+ * **減点を消すだけで、点は足さない。** 番組に寄せる向きにしか効かないので、外したとき (アニメの CM・本編の絵を使う番宣) は
+ * CM が残る。尺がぴったり合う CM (1 秒ごとに `CM_FIT`) は、これだけでは番組にならない
+ */
+const TONE_PROGRAM = PROGRAM_BARE;
+/** 絵の調子を比べる、前後の番組の幅 (秒) */
+const TONE_REACH = 120;
+/** 番組として比べる相手にする秒の、ロゴの見えていた割合 */
+const TONE_LIT = 0.9;
+/** 比べる相手の最少の秒数。番組が短すぎると調子が決まらない */
+const TONE_MIN = 20;
+/** 絵の調子 (明るさ・U・V・コントラスト) の違いの目盛り。違いを目盛りで割って足し、1 を超えると似ていない */
+const TONE_SCALE = [24, 8, 8, 12];
 /** 局の短い告知の尺 (秒)。CM の尺 (15 秒) より短い。CM の続きでだけ CM とみる */
 const SPOTS = [5, 10];
 /** 告知: ぴったりのときの 1 秒ごとの点。15 秒の倍数より低い */
@@ -599,6 +623,70 @@ function unseenTails(input: CmInput, spans: Range[]): Range[] {
   return out.sort((a, b) => a.start - b.start);
 }
 
+/** 1 秒ごとの値の累積 (`prefix[k]` は 0〜k 秒の和) を、`a` 秒から `b` 秒まで足す (秒の途中は割合で) */
+function integrate(prefix: Float64Array, a: number, b: number): number {
+  const last = prefix.length - 1;
+  const at = (t: number) => {
+    if (t <= 0) return 0;
+    if (t >= last) return prefix[last]!;
+    const k = Math.floor(t);
+    return prefix[k]! + (prefix[k + 1]! - prefix[k]!) * (t - k);
+  };
+  return at(b) - at(a);
+}
+
+function median(values: number[]): number {
+  values.sort((a, b) => a - b);
+  return values[values.length >> 1]!;
+}
+
+/**
+ * **ロゴの無い秒が、前後の番組と同じ絵の調子か** (1 秒ごとに 0〜1 の似ている度合いに、その秒のロゴの無い割合を掛けたものの累積)。
+ * 前後 `TONE_REACH` 秒の、ロゴの見えていた秒の明るさ・U・V・コントラストの中央値と比べる。
+ * ロゴが溶けて見えない明るい場面・ロゴを消した場面・ロゴの判定が遅れた所は、前後の番組と調子が続くことが多い。
+ * 絵の調子が無ければ (古い材料) null
+ */
+function toneAlike(
+  input: CmInput,
+  index: ReturnType<typeof logoIndex>,
+): Float64Array | null {
+  const { tone, duration } = input;
+  const seconds = Math.min(
+    Math.ceil(duration),
+    Math.floor((tone?.length ?? 0) / TONE_FIELDS),
+  );
+  if (tone === undefined || seconds <= 0) return null;
+  const lit: number[] = [];
+  for (let k = 0; k < seconds; k++)
+    if (index.lit(k, k + 1) >= TONE_LIT) lit.push(k);
+  const prefix = new Float64Array(seconds + 1);
+  for (let k = 0; k < seconds; k++) {
+    let value = 0;
+    const bare = index.bare(k, Math.min(k + 1, duration));
+    if (bare > 0) {
+      const near: number[] = [];
+      for (
+        let i = lowerBound(lit, k - TONE_REACH);
+        i < lit.length && lit[i]! <= k + TONE_REACH;
+        i++
+      )
+        if (lit[i] !== k) near.push(lit[i]!);
+      if (near.length >= TONE_MIN) {
+        let distance = 0;
+        for (let f = 0; f < TONE_FIELDS; f++)
+          distance +=
+            Math.abs(
+              tone[k * TONE_FIELDS + f]! -
+                median(near.map((j) => tone[j * TONE_FIELDS + f]!)),
+            ) / TONE_SCALE[f]!;
+        value = Math.max(0, 1 - distance) * bare;
+      }
+    }
+    prefix[k + 1] = prefix[k]! + value;
+  }
+  return prefix;
+}
+
 /** `edges` (並んだ時刻) のうち `t` にいちばん近いものまでの距離 */
 function nearest(edges: number[], t: number): number {
   let best = Number.POSITIVE_INFINITY;
@@ -664,9 +752,17 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
       edgeCost(distance, starts ? EDGE_FLAT_FALL : EDGE_FLAT_RISE)
     );
   };
+  const alike = toneAlike(input, index);
   const program = (a: number, b: number) =>
     PROGRAM_LOGO * (index.lit(a, b) + UNSEEN_PROGRAM * index.unseen(a, b)) -
-    PROGRAM_BARE * index.bare(a, b);
+    PROGRAM_BARE * index.bare(a, b) +
+    (alike === null ? 0 : TONE_PROGRAM * integrate(alike, a, b));
+  /** よその局でも流れた秒 */
+  const repeatedTo = measure(
+    [...(input.repeated ?? [])].sort((x, y) => x.start - y.start),
+  );
+  const repeated = (a: number, b: number) =>
+    REPEAT_CM * (repeatedTo(b) - repeatedTo(a));
   /** CM に挟まれた短い所の頭か (告知のあとに `ISLAND_REST` 秒以上ロゴが残る) */
   const island = (a: number, b: number) =>
     index.merged.some(
@@ -773,7 +869,13 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
           continue;
         if (head || tail) {
           if (b.kind === "bare") continue;
-          relax(j, State.Other, base + credit - CM_LOGO * lit, i, s);
+          relax(
+            j,
+            State.Other,
+            base + credit - CM_LOGO * lit + repeated(a.at, b.at),
+            i,
+            s,
+          );
           continue;
         }
         const spot = fitSpot(length);
@@ -791,7 +893,11 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
         }
         const fit = fit15(length);
         const logoCost = CM_LOGO * lit;
-        const cm = CM_FIT * length * fit - CM_MISFIT * (1 - fit) - logoCost;
+        const cm =
+          CM_FIT * length * fit -
+          CM_MISFIT * (1 - fit) -
+          logoCost +
+          repeated(a.at, b.at);
         const next =
           fit === 0
             ? State.Other
