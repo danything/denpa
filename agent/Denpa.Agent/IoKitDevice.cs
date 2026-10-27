@@ -480,14 +480,23 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         lock (_gate)
         {
             // interrupt の読みを先に取り消して戻らせる (出したままインターフェースを閉じない)
-            foreach (var pump in _pumps.Values) pump.Dispose();
-            _pumps.Clear();
+            var stuck = _pumps.Values.Where(pump => !pump.Stop()).ToList();
             if (_interface is not null)
             {
+                // 閉じるとインターフェースの読みは全部取り消されるので、戻らなかった読みもここでもう一度待つ
                 ((delegate* unmanaged[Cdecl]<void*, int>)Slot(_interface, InterfaceClose))(_interface);
-                ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(_interface, Release))(_interface);
+                if (stuck.Any(pump => !pump.Stop()))
+                {
+                    // 戻らない読みがまだインターフェースを使っている。解放すると読みが消えたものに触るので、手放さずに残す
+                    Log.Write($"{Name}: interrupt の読みが取り消しても戻らないので、インターフェースを解放せずに閉じます");
+                }
+                else
+                {
+                    ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(_interface, Release))(_interface);
+                }
                 _interface = null;
             }
+            _pumps.Clear();
             if (_device is not null)
             {
                 ((delegate* unmanaged[Cdecl]<void*, int>)Slot(_device, DeviceClose))(_device);

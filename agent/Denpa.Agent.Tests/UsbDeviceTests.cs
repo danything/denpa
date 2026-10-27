@@ -164,4 +164,32 @@ public class UsbDeviceTests
         await Assert.That(Volatile.Read(ref endpoint.Reads)).IsEqualTo(reads);
         Assert.Throws<ObjectDisposedException>(() => pump.Read(new byte[64], 10));
     }
+
+    [Test]
+    public async Task interrupt_の溜めは上限を越えたら古いものから捨てる()
+    {
+        var endpoint = new FakeEndpoint();
+        using var pump = new UsbReadPump("test", 64, endpoint.Read, endpoint.Cancelled.Cancel);
+        for (var i = 0; i < UsbReadPump.Capacity + 3; i++) endpoint.Answers.Add([(byte)i]);
+        // 全部を読み終えて次の読みを出すまで待つ
+        for (var i = 0; i < 400 && Volatile.Read(ref endpoint.Reads) <= UsbReadPump.Capacity + 3; i++) Thread.Sleep(5);
+        var buffer = new byte[64];
+        await Assert.That(pump.Read(buffer, 1000)).IsEqualTo(1);
+        await Assert.That(buffer[0]).IsEqualTo((byte)3);
+    }
+
+    [Test]
+    public async Task 取り消しても戻らない読みは_戻らなかったと知らせる()
+    {
+        var release = new ManualResetEventSlim();
+        var pump = new UsbReadPump("test", 64, _ =>
+        {
+            release.Wait();
+            return 0;
+        }, () => { });
+        // インターフェースを手放してよいかを、呼ぶ側 (IoKitDevice.Dispose) が決める
+        await Assert.That(pump.Stop()).IsFalse();
+        release.Set();
+        await Assert.That(pump.Stop()).IsTrue();
+    }
 }

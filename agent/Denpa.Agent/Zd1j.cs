@@ -237,7 +237,7 @@ public sealed class Zd1jBoard : IDibTime
     }
 
     internal static string OpenFailure(string port, string stage, Exception error) =>
-        $"[{Zd1j.Model} {port}] 開けません ({stage}ところで): {error.Message}";
+        $"[{Zd1j.Model} {port}] 開けません ({stage}ところで): {Zd1j.Reason(error)}";
 
     /// <summary>返す。開いたままにする (USB が抜けていれば閉じる)</summary>
     public void Release()

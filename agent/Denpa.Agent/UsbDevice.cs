@@ -149,6 +149,12 @@ internal sealed class UsbReadPump : IDisposable
     /// <summary>出した読みを取り消してスレッドが戻るまで待つ上限</summary>
     private static readonly TimeSpan StopWait = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// 溜めておく転送の上限。読む側が止まっていても溜め続けないよう、越えたら古いものから捨てる
+    /// (CECH-ZD1 J の答えは送った塊ごとに1つで、通し番号で古いものを捨てるので、落ちても困らない)
+    /// </summary>
+    internal const int Capacity = 64;
+
     private readonly string _name;
     private readonly Func<byte[], int> _read;
     private readonly Action _cancel;
@@ -190,7 +196,9 @@ internal sealed class UsbReadPump : IDisposable
                 break;
             }
             if (_closing) break;
-            if (got > 0) _chunks.Add(got == buffer.Length ? buffer : buffer[..got]);
+            if (got <= 0) continue;
+            while (_chunks.Count >= Capacity) _chunks.TryTake(out _);
+            _chunks.Add(got == buffer.Length ? buffer : buffer[..got]);
         }
         _chunks.CompleteAdding();
     }
@@ -210,11 +218,19 @@ internal sealed class UsbReadPump : IDisposable
     }
 
     /// <summary>出している読みを取り消して、スレッドが戻るのを待つ</summary>
-    public void Dispose()
+    public void Dispose() => Stop();
+
+    /// <summary>
+    /// 出している読みを取り消して、スレッドが戻るのを <see cref="StopWait"/> まで待つ。戻ったら true
+    /// (戻らなければ、呼ぶ側は読みが使っているもの (インターフェース) を手放さない)
+    /// </summary>
+    public bool Stop()
     {
-        if (_closing) return;
-        _closing = true;
-        _cancel();
-        _thread.Join(StopWait);
+        if (!_closing)
+        {
+            _closing = true;
+            _cancel();
+        }
+        return _thread.Join(StopWait);
     }
 }
