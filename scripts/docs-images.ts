@@ -87,15 +87,19 @@ function anim(name: string): void {
   if (files.length === 0) throw new Error(`${name}: コマがありません`);
   const tmp = mkdtempSync(join(tmpdir(), "docs-images-"));
   try {
-    // 撮ったコマは届いた時刻のまま (間隔はまちまち)。見せる長さを渡し、ffmpeg で 30fps に揃える
-    // (fps フィルタが最後のコマもその長さのぶん並べるので、全体の長さは delays の合計になる)
+    // 撮ったコマは届いた時刻のまま (間隔はまちまち)。見せる長さをミリ秒の時刻で渡し
+    // (`framerate 1000` で刻みを 1 ミリ秒にする。既定の 1/25 秒では短いコマの時刻が丸まる)、ffmpeg で 30fps に揃える。
+    // concat は最後のコマの長さを読まないので、最後のコマをもう 1 回並べ、全体の長さで切る
     const list = ["ffconcat version 1.0"];
+    const entry = (f: string) => [
+      `file '${join(dir, f)}'`,
+      "option framerate 1000",
+    ];
     files.forEach((f, i) =>
-      list.push(
-        `file '${join(dir, f)}'`,
-        `duration ${(delays[i]! / 1000).toFixed(3)}`,
-      ),
+      list.push(...entry(f), `duration ${(delays[i]! / 1000).toFixed(3)}`),
     );
+    list.push(...entry(files.at(-1)!));
+    const ms = delays.reduce((sum, d) => sum + d, 0);
     const txt = join(tmp, "list.txt");
     writeFileSync(txt, `${list.join("\n")}\n`);
     const out = join(DST, `${name}.avif`);
@@ -103,9 +107,8 @@ function anim(name: string): void {
       ...["-f", "concat", "-safe", "0", "-i", txt],
       ...["-vf", `fps=${ANIM_FPS},${AV1_COLOR}`],
       ...AV1,
-      ...["-loop", "0", out],
+      ...["-t", (ms / 1000).toFixed(3), "-loop", "0", out],
     ]);
-    const ms = delays.reduce((sum, d) => sum + d, 0);
     console.log(
       name,
       files.length,
