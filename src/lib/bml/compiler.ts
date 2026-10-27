@@ -2,7 +2,7 @@
  * 木 ([parser.ts](parser.ts)) を VM ([vm.ts](vm.ts)) の命令列にする。
  *
  * 積み上げ式 (stack machine)。名前は組むときに決める: 関数の中で宣言したもの
- * (引数・var・中の関数) は「何段外の、何番目」で引き、どこにも無ければ大域の物の
+ * (引数・var・中の関数) は「何段外の、何番目」で引き、どこにも無ければグローバルオブジェクトの
  * 名前で引く。入れ子の関数は外の変数をキャプチャする (クロージャ) が、放送はほぼ使わない。
  */
 
@@ -562,7 +562,7 @@ class FunctionCompiler {
     } else if (target.kind === "index") {
       this.expression(target.object);
       this.expression(target.index);
-      // [名前, 物, 鍵] を [物, 鍵, 名前] に回す
+      // [名前, オブジェクト, キー] を [オブジェクト, キー, 名前] に回す
       this.emit(OP.ROT3, OP.ROT3, OP.SET_ELEM);
     }
     this.emit(OP.POP);

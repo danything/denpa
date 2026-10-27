@@ -91,7 +91,7 @@
       deleting.arm(item.id);
       return;
     }
-    // フォーム送信ではないので、消したら自分で構えを下ろす
+    // フォーム送信ではないので、消したら自分で2回押しを戻す
     deleting.fire();
     if (playing?.id === item.id) stop();
     await removeEverywhere(item);

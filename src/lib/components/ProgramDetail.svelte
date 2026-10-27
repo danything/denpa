@@ -208,11 +208,12 @@
   .detail-actions > :global(*) {
     pointer-events: auto;
   }
-  .detail-actions :global(form) {
-    margin: 0;
-  }
   .detail-close {
     margin-inline-end: auto;
+  }
+  /* 送れなかった理由 (開いた画面が並びに置く `.notice`) は 1 行まるごと使う */
+  .detail-actions > :global(.notice) {
+    flex-basis: 100%;
   }
   /* 狭い画面では下から出る一枚 (箱の形は `app.css` の `.modal-box`) */
   @media (max-width: 639.98px) {

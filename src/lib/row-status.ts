@@ -11,7 +11,7 @@
  * - 動いているもの: `rec` (録画中。赤) / `busy` (エンコード中。主の色) / `wait` (待ち。地の字) / `ok` で `running`
  * - 止まっているもの: `error` (✕) / `warning` (⚠) / `neutral` (削除済み・取り消し済み) / `ok` (端末に保存済み)
  */
-export type StatusTone =
+type StatusTone =
   "rec" | "busy" | "wait" | "ok" | "error" | "warning" | "neutral";
 
 export interface RowStatus {

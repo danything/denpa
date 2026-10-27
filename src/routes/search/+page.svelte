@@ -717,7 +717,7 @@
   <ProgramDetail program={detail.current} onclose={close}>
     {#snippet actions()}
       {#if form?.message}
-        <div class="notice error detail-error">{form.message}</div>
+        <div class="notice error">{form.message}</div>
       {/if}
       <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは左下 (`ProgramDetail`) -->
       {#if opened !== null}
@@ -924,9 +924,6 @@
   .more {
     align-self: flex-start;
     padding: var(--dp-space-2);
-  }
-  .detail-error {
-    flex-basis: 100%;
   }
   /* 狭い画面では操作を名前の下に回す (名前を潰さない) */
   @media (max-width: 639.98px) {

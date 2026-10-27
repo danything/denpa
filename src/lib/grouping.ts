@@ -44,7 +44,7 @@ export type GroupEntry<T extends Groupable> =
   { kind: "single"; item: T } | { kind: "group"; group: SeriesGroup<T> };
 
 /** 画面に描く1行。見出しか、行そのもの (`nested` は番組の中の行) */
-export type GroupLine<T extends Groupable> =
+type GroupLine<T extends Groupable> =
   | { kind: "head"; key: string; group: SeriesGroup<T>; open: boolean }
   | { kind: "row"; key: string; item: T; nested: boolean };
 

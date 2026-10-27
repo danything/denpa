@@ -1,3 +1,5 @@
+import type { CardReaderState } from "./server/scramble";
+
 export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /**
@@ -166,6 +168,22 @@ export function size(bytes: number): string {
   return gb >= 1
     ? `${gb.toFixed(1)} GB`
     : `${(bytes / 1024 ** 2).toFixed(0)} MB`;
+}
+
+/**
+ * 進み具合のバー (`JobProgress`) に出す大きさの単位と換算。数百GBをバイトで並べても読めないので、
+ * 合計が 1GB 以上なら GB (小数1桁)、それより小さければ MB (引き継ぎ・別の機械へ移す)
+ */
+export function byteScale(total: number): {
+  unit: "GB" | "MB";
+  scaled: (bytes: number) => number;
+} {
+  return total >= 1024 ** 3
+    ? {
+        unit: "GB",
+        scaled: (bytes) => Math.round((bytes / 1024 ** 3) * 10) / 10,
+      }
+    : { unit: "MB", scaled: (bytes) => Math.round(bytes / 1024 ** 2) };
 }
 
 /**
@@ -394,6 +412,15 @@ export function splitReaderName(name: string): {
   return { name: found[1] ?? name, where: found[2] ?? null };
 }
 
+/** カードリーダーの状態の呼び名。`unknown` は前のバージョンのエージェント (名前しか返さない) */
+export const READER_STATE_LABEL: Record<CardReaderState, string> = {
+  active: "使用中",
+  standby: "予備",
+  empty: "カードなし",
+  error: "エラー",
+  unknown: "—",
+};
+
 /** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */
 export const LOGO_OK = "ロゴ";
 
@@ -420,7 +447,7 @@ export function cmNoteWorthShowing(cmNote: string | null): boolean {
 const URL_PATTERN = /https?:\/\/[^\s"'<>）」』】〉、。，]+/g;
 const TRAILING = /[.,!?:;)\]}]+$/;
 
-export interface TextPart {
+interface TextPart {
   text: string;
   /** リンクなら宛先。素の文字なら undefined */
   href?: string;

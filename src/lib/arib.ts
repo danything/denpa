@@ -167,10 +167,8 @@ export const GENRE_TREE: {
 /**
  * ルールの条件の値を人が読める名前に。`"7-0"` → 「アニメ／特撮 > 国内アニメ」。
  *
- * 中分類が無いときは大分類だけを返す。**「7」のように - が無い値では
- * split の2つ目が undefined になる** ので、`Number.isNaN` では捕まらない
- * (`Number.isNaN(undefined)` は false)。これを見落として
- * 「アニメ／特撮 > undefined」と出していた。要素数で見る。
+ * 中分類が無いときは大分類だけを返す。「7」のように - が無い値は split の2つ目が undefined で、
+ * `Number.isNaN(undefined)` は false なので、要素数で見る。
  */
 export function genreName(value: string | number): string {
   const parts = String(value).split("-");
@@ -275,7 +273,7 @@ export type AudioSide = "main" | "sub" | "both";
 
 /** 選べる音声1つぶん */
 export interface AudioTrack {
-  /** 選ぶときの合言葉。`"0:main"` の形式。**画面とサーバの間で渡す** */
+  /** 選ぶときの ID。`"0:main"` の形式。**画面とサーバの間で渡す** */
   id: string;
   /** 何本目の音声か。ffmpeg の `-map 0:a:<これ>` に渡す */
   stream: number;
@@ -386,7 +384,7 @@ export function parseAudios(
  * 指定されたものを選ぶ。**知らないものを指定されたら主音声。**
  *
  * 番組が変われば音声の構成も変わる (二カ国語の映画が終わればステレオに戻る)。
- * 前の番組の合言葉が残っていても、無いものは選べない。
+ * 前の番組の ID が残っていても、無いものは選べない。
  *
  * **どれが主音声かは放送が言っている** (`main_component_flag`)。並び順の1本目が
  * 主音声とは限らないので、言っているならそちらに従う。何も言っていなければ先頭
@@ -404,7 +402,7 @@ export function pickTrack(
 }
 
 /**
- * 外から指定された音声の合言葉 (`AudioTrack.id`) を読む。**形式が違えば指定されなかったことにする。**
+ * 外から指定された音声の ID (`AudioTrack.id`) を読む。**形式が違えば指定されなかったことにする。**
  *
  * HTTP API (`?audio=0:sub`。docs/api.md) から来るもの。形式が合っていても無いもの
  * (番組が替わって消えた副音声など) は `pickTrack` が主音声に落とすので、ここで断らない

@@ -41,7 +41,7 @@ interface Accessor {
   set?: (value: Value) => void;
 }
 
-/** 外の物。名前ごとに読み書きの関数を持つ */
+/** 外のオブジェクト。名前ごとに読み書きの関数を持つ */
 export class HostObject extends JSObject {
   readonly accessors = new Map<string, Accessor>();
 

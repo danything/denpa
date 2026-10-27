@@ -26,6 +26,8 @@
 
 <div
   class="channel-notice {variant}"
+  class:notice={variant === "bar"}
+  class:info={variant === "bar"}
   role="status"
   data-testid="channel-notice"
 >
@@ -47,19 +49,26 @@
     margin: 0;
   }
   /*
-     * **枠で囲まない、画面の幅いっぱいの1行。** ヘッダーの下に貼る。線は引かず、案内の色の地で中身と分ける。
-     * 地の色は案内 (info) をごく薄く。狭い画面で文が長ければ折り返し、ボタンは右に残す
+     * **枠で囲まない、画面の幅いっぱいの1行。** ヘッダーの下に貼る。見た目はページの中の通知 (`app.css` の `.notice.info`。
+     * 淡い面と頭の ⓘ。地を案内の色で塗らない) を、角を落として 1 行の高さに詰めたもの。
+     * 狭い画面で文が長ければ折り返し、ボタンは右に残す
      */
   .bar {
+    --bar-pad: 1rem;
     justify-content: space-between;
-    padding: 0.375rem 1rem;
-    background: color-mix(in srgb, var(--dp-info) 8%, var(--dp-surface));
-    color: var(--dp-info-text);
+    padding: 0.375rem var(--bar-pad) 0.375rem
+      calc(var(--bar-pad) + 0.5rem + 1.125em);
+    border-radius: 0;
     font-size: var(--dp-text-sm);
+  }
+  .bar::before {
+    top: 50%;
+    translate: 0 -50%;
+    left: var(--bar-pad);
   }
   @media (min-width: 768px) {
     .bar {
-      padding-inline: 1.5rem;
+      --bar-pad: 1.5rem;
     }
   }
   .bar .button {

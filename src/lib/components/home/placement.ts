@@ -132,7 +132,7 @@ export function alignTop(list: HTMLElement): void {
 }
 
 /** 絞り込みを替える前に覚えておく、見えている所のいちばん上の行 */
-export interface Anchor {
+interface Anchor {
   key: string;
   /** 見えている所の上端から行の上端まで */
   offset: number;
@@ -152,19 +152,18 @@ export function topRow(list: HTMLElement): Anchor | null {
 
 /**
  * **絞り込みを替えても、見ていた行をその場に残す。** 覚えた行がまだ一覧にあれば、同じ高さに戻す。
- * 無くなっていれば「いま」の線 (開いたときと同じ置き方)。戻せたかを返す
+ * 無くなっていれば「いま」の線 (開いたときと同じ置き方)
  */
-export function restoreRow(list: HTMLElement, anchor: Anchor | null): boolean {
+export function restoreRow(list: HTMLElement, anchor: Anchor | null): void {
   const row =
     anchor === null
       ? null
       : list.querySelector<HTMLElement>(`[data-key="${anchor.key}"]`);
   if (anchor === null || row === null) {
     placeTimeline(list, null);
-    return false;
+    return;
   }
   scrollPage(row.getBoundingClientRect().top - topEdge(list) - anchor.offset);
-  return true;
 }
 
 /**
@@ -191,7 +190,7 @@ export function holdPlace(
 }
 
 /**
- * **いま頭に貼り付いている日** (カレンダーで薄く塗る日)。見えている所の上端に掛かっている包みの、日付の見出しの日。
+ * **いま頭に貼り付いている日** (カレンダーで下線を引く日)。見えている所の上端に掛かっている包みの、日付の見出しの日。
  * まとめて表示 (日付の見出しが無い) や、日付の無い包みなら null
  */
 export function topDay(list: HTMLElement): number | null {
@@ -208,18 +207,17 @@ export function topDay(list: HTMLElement): number | null {
 
 /**
  * その日の見出しを頭に送る (カレンダーで日を押したとき)。包みの頭を見えている所の上端に合わせる —
- * 見出しは貼り付くので、見出しの位置では送り先が決まらない。見出しが無ければ (まだ描いていない) 送らずに false。
+ * 見出しは貼り付くので、見出しの位置では送り先が決まらない。見出しが無ければ (まだ描いていない) 送らない。
  *
  * **見出しの上の離れ (`margin-top`。いちばん上の包みだけ 0) のぶんも送る。** 包みの頭だけを合わせていた頃は、
  * 上に別の日がある日を押すと、見出しが貼り付く所より離れのぶん (8px) 下に止まっていた
  */
-export function showDay(list: HTMLElement, day: number): boolean {
+export function showDay(list: HTMLElement, day: number): void {
   const head = list.querySelector<HTMLElement>(
     `[data-testid="timeline-day"][data-day="${day}"]`,
   );
   const block = head?.closest<HTMLElement>(".t-block");
-  if (head === null || block === null || block === undefined) return false;
+  if (head === null || block === null || block === undefined) return;
   const gap = Number.parseFloat(getComputedStyle(head).marginTop) || 0;
   scrollPage(block.getBoundingClientRect().top + gap - topEdge(list));
-  return true;
 }

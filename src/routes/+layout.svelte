@@ -432,13 +432,13 @@
   data-retract={retract ? "" : undefined}
   data-hydrated={hydrated ? "true" : undefined}
 >
+  <a class="skip" href="#main" onclick={skipToMain} data-testid="skip-to-main"
+    >本文へ移動</a
+  >
   <!--
         遷移の進み具合 (上の `slow`)。長さの分からない読み込みなので、
         光が左から右へ走るだけの不確定のバー。ヘッダーの上端に貼る
     -->
-  <a class="skip" href="#main" onclick={skipToMain} data-testid="skip-to-main"
-    >本文へ移動</a
-  >
   {#if slow}
     <div
       class="nav-progress"
@@ -512,15 +512,10 @@
       />
     </div>
     <!--
-            画面へのリンク (広い形だけ)。テーマとログアウトは設定の「その他」にある (端末ごとの設定はヘッダーに出さない)。
-            スマホの形ではリンクを隠し、画面の下のタブ (`.tabbar`) に任せる
+            画面へのリンク (広い形だけ。スマホの形では画面の下のタブ `.tabbar` に替わる)。テーマとログアウトは設定の「その他」にある。
+            同じリンクを2か所に出すので、data-testid は別にする (`nav-*` と `tab-*`)
         -->
     <nav class="actions">
-      <!--
-                広い形はそのまま並べる。スマホの形では画面の下のタブに替わる。
-                同じリンクを2か所に出すことになるが、data-testid は別にして (`nav-*` と `tab-*`)、
-                テストがどちらを指すのか迷わないようにする
-            -->
       <ul class="links">
         {#each links as link (link.href)}
           <li>
@@ -658,6 +653,11 @@
 <style>
   /* 土台。高さは html から % で降ろす(上のコメント) */
   .shell {
+    /*
+     * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる (`PlayerStage`) のに、
+     * 同じ幅だけ外へはみ出させるため。中身の外 (スマホの形の検索の欄) も同じ幅で、本文と字の始まりがそろう
+     */
+    --dp-gutter: 1rem;
     display: flex;
     flex-direction: column;
     min-height: 100%;
@@ -786,7 +786,6 @@
   /*
      * **いまの画面は主の色の太字と下線で示す** (選んでいるものはどこも線と字。塗らない)。ほかの画面へのリンクは本文の字のまま (薄くしない)。
      * 薄い灰色の地を敷くだけだった頃は、ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
-     * `app.css` の ghost は `aria-current` にも指を乗せたときの地を敷くので、ここで透明に戻す (地は指を乗せたときだけ)。
      * 下線は押す場所の内側に引くので、ヘッダーの高さは変わらない
      */
   ul.links a.button {
@@ -794,12 +793,8 @@
     font-size: var(--dp-text-sm);
   }
   ul.links a.button.ghost[aria-current="page"] {
-    --pico-background-color: transparent;
     --pico-color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
-  }
-  ul.links a.button.ghost[aria-current="page"]:hover {
-    --pico-background-color: var(--dp-btn-tonal-hover);
   }
   /*
      * 下線。画面を移ると前の画面の下線から横に滑る (`app.css` の「滑る印」と同じ作り。並びの疑似要素 1 本をアンカーで付ける)。
@@ -862,12 +857,12 @@
     position: sticky;
     top: 0;
     z-index: 40;
-    padding: calc(var(--dp-space-2) + env(safe-area-inset-top))
-      var(--dp-gutter, 1rem) var(--dp-space-2);
+    padding: calc(var(--dp-space-2) + env(safe-area-inset-top)) var(--dp-gutter)
+      var(--dp-space-2);
     background: var(--dp-bg);
   }
   /*
-   * 画面の下のタブ (スマホの形だけ)。**操作の層** (docs/design.md)。1 つの的は幅を等分する。
+   * 画面の下のタブ (スマホの形だけ)。**操作の層** (docs/design.md)。タブは幅を等分する。
    * タブの高さ (`--dp-tabbar`) は本文の下の余白と、右下の通知 (`Toasts`) の位置に使う (タブに被らないように)。
    * 左右と下から離したカプセルにして、中身の上に浮かせる。
    * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。下を流れる中身がうっすら見える。
@@ -920,10 +915,15 @@
     text-decoration: none;
     white-space: nowrap;
   }
-  .tabbar .tab:hover,
-  .tab-more :global(.tab:is(:hover, [aria-expanded="true"])) {
-    /* 指を乗せたら見出しの濃さの字に (本文より一段強い) */
-    color: var(--pico-h1-color);
+  /*
+   * 指を乗せたら地をごく薄く (ほかの選ぶものと同じ。選んでいる印とは混ぜない)。
+   * 乗せられる端末だけ — 指で押すと押したタブに乗せたままと見なされ、選んだタブに地が残る
+   */
+  @media (hover: hover) {
+    .tabbar .tab:hover,
+    .tab-more :global(.tab:is(:hover, [aria-expanded="true"])) {
+      background: var(--dp-hover-soft);
+    }
   }
   .tabbar .tab[aria-current="page"],
   .tab-more :global(.tab[aria-current="page"]) {
@@ -989,11 +989,11 @@
     width: 12rem;
   }
   /*
-     * 「その他」はいちばん右のタブなので、右端を揃えると画面の端に貼り付く。ページの余白ぶん内へ寄せる
+     * 「その他」はいちばん右のタブなので、右端を揃えると画面の端に貼り付く。下のタブの右端 (0.75rem) にそろえる
      * (anchor positioning の無いブラウザは `Menu` が JS で置き、端から 4px 空ける)
      */
   :global(.menu.tab-more-menu) {
-    margin-inline-end: var(--dp-gutter, 0.75rem);
+    margin-inline-end: 0.75rem;
   }
   /*
      * **縦に積む。** Pico のナビの部品を読んでいた頃は `nav ul` が横並び (flex) になり、
@@ -1061,7 +1061,7 @@
   }
   /*
    * **640px からはルール・設定もタブに出し、「その他」を隠す** (6 つ。上の `wideTabbar` と同じ線)。字はアイコンの下のまま一段大きく。
-   * 640px 未満は 5 つ (録画・番組表・ライブ・検索・その他)。的の幅はどれも等分 (`.tabbar` の `grid-auto-flow`)
+   * 640px 未満は 5 つ (録画・番組表・ライブ・検索・その他)。タブの幅はどれも等分 (`.tabbar` の `grid-auto-flow`)
    */
   .tabbar .tab.wide {
     display: none;
@@ -1115,12 +1115,6 @@
     display: none;
   }
   main {
-    /*
-         * **余白の幅は `--dp-gutter` で配る。** スマホの縦で映像だけ端まで広げる
-         * (`PlayerStage`) のに、同じ幅だけ外へはみ出させるため。数字を2か所に
-         * 書くと、片方だけ変えたときに映像が横にずれる
-         */
-    --dp-gutter: 1rem;
     /*
          * **ヘッダーから最初の中身までは `--dp-page-top`。** 地の上のヘッダーなら 0 (すぐ下から始める)、
          * 浮いたヘッダーの画面はそのぶん (`--dp-header-space`。下の「広い形」)。左右と下の余白 (`--dp-gutter`) は
@@ -1214,7 +1208,7 @@
     display: none;
   }
   @media (min-width: 768px) {
-    main {
+    .shell {
       --dp-gutter: 1.5rem;
     }
   }

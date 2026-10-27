@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  byteScale,
   capacityLabel,
   clipNote,
   clock,
@@ -170,6 +171,17 @@ describe("カードリーダーの名前", () => {
   test("括弧の無い名前はそのまま", () => {
     const name = "px4-userland 0960 Internal Card Reader";
     expect(splitReaderName(name)).toEqual({ name, where: null });
+  });
+});
+
+describe("進み具合のバーの大きさ", () => {
+  test("1GB からは GB で小数1桁、それより小さければ MB", () => {
+    const big = byteScale(30 * 1024 ** 3);
+    expect(big.unit).toBe("GB");
+    expect(big.scaled(1.26 * 1024 ** 3)).toBe(1.3);
+    const small = byteScale(512 * 1024 ** 2);
+    expect(small.unit).toBe("MB");
+    expect(small.scaled(100.4 * 1024 ** 2)).toBe(100);
   });
 });
 

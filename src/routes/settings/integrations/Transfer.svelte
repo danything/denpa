@@ -4,7 +4,7 @@
 
   import JobProgress from "#lib/components/JobProgress.svelte";
   import Lead from "#lib/components/Lead.svelte";
-  import { dateTime } from "#lib/format.js";
+  import { byteScale, dateTime } from "#lib/format.js";
   import type { CheckResult } from "#lib/server/transfer.js";
 
   import type { PageData } from "./$types";
@@ -210,11 +210,7 @@
       phase === "applying" ||
       phase === "restarting",
   );
-  const unit = $derived(total >= 1024 ** 3 ? "GB" : "MB");
-  const scaled = (bytes: number) =>
-    unit === "GB"
-      ? Math.round(bytes / 1024 ** 3 / 0.1) / 10
-      : Math.round(bytes / 1024 ** 2);
+  const bytes = $derived(byteScale(total));
 </script>
 
 <!-- **たまにしか触らないもの。** 機械を替えるときだけ使う (docs/migrate.md「別の機械へ移す」) -->
@@ -335,11 +331,14 @@
                 : "送って確かめる"}
           </button>
           {#if resumable && status.upload !== null}
+            <!-- 単位は送りかけのファイルの大きさで決める (まだ選んでいないので `total` は 0) -->
+            {@const upload = byteScale(status.upload.size)}
             <span class="small muted" data-testid="transfer-resume">
-              {status.upload.name} ({scaled(status.upload.received)} / {scaled(
+              {status.upload.name} ({upload.scaled(status.upload.received)} / {upload.scaled(
                 status.upload.size,
               )}
-              {unit}) を送りかけています。同じファイルを選ぶと続きから送ります
+              {upload.unit})
+              を送りかけています。同じファイルを選ぶと続きから送ります
             </span>
           {/if}
           {#if status.upload !== null || result !== null || phase === "sending"}
@@ -367,9 +366,9 @@
       {#if phase === "sending" && total > 0}
         <div class="progress-block">
           <JobProgress
-            done={scaled(sent)}
-            total={scaled(total)}
-            {unit}
+            done={bytes.scaled(sent)}
+            total={bytes.scaled(total)}
+            unit={bytes.unit}
             testid="transfer-progress"
           />
         </div>

@@ -3,6 +3,7 @@
   import { untrack } from "svelte";
   import X from "~icons/lucide/x";
 
+  import { pad } from "#lib/format.js";
   import {
     fullReport,
     initialLogs,
@@ -92,7 +93,6 @@
     const href = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
     a.href = href;
     a.download = `denpa-report-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.txt`;
     a.click();

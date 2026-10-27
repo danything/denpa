@@ -15,20 +15,22 @@
 <script lang="ts">
   import { speedLabel } from "#lib/ts/pacing.js";
 
+  import Menu from "../Menu.svelte";
   import ControlButton from "./ControlButton.svelte";
+  import { stageMenu } from "./controls.svelte";
   import { SPEED } from "./icons";
-  import OverlayMenu from "./OverlayMenu.svelte";
 
   /**
    * 速さの切り替え。**3画面で同じ見た目。**
    * `label` だけ画面の言葉 (ライブは「追っかけの速さ」、他は「再生の速さ」)。
    *
    * **ボタンは、等速ならメーターのアイコンだけの丸、速めている間は数字だけ (「1.25」)。**
-   * 「×1」と数字を出していた頃は、ふだん (等速) でも操作バーに数字が出たままで目に付いた。
    * 速めているときだけ数字が出れば、それ自体が「いま速めている」の印になる (押されている
    * 見た目 `on` も同じとき)。ボタンの上では × を付けない — 速さのボタンだと分かっているので要らない。
    *
-   * **選択肢は「×1.25」のまま。** 開いた並びは数字だけが縦に並ぶので、何の数か (倍) を書いておく
+   * **選択肢は「×1.25」のまま。** 開いた並びは数字だけが縦に並ぶので、何の数か (倍) を書いておく。
+   * 開け閉めは `Menu` (popover。最前面に出るので、舞台を全画面にしている間も隠れない)。
+   * testid: 枠は `{testid}-menu`、選択肢は `{testid}-option` に `data-speed`
    */
   let {
     testid,
@@ -41,6 +43,10 @@
     speed: number;
     onselect: (speed: number) => void;
   } = $props();
+
+  let open = $state(false);
+  /** 開いている間は操作列を残し、メニューは舞台の枠の中に収める (`stageMenu`) */
+  const stage = stageMenu(() => open);
 </script>
 
 <!--
@@ -51,17 +57,13 @@
   <span style="font-variant-numeric: tabular-nums">{speed}</span>
 {/snippet}
 
-<OverlayMenu
-  {testid}
-  attrName="speed"
+<Menu
+  bind:open
+  side="top"
   align="end"
-  size="large"
-  items={SPEEDS.map((value) => ({
-    key: value,
-    label: `×${value}`,
-    active: value === speed,
-  }))}
-  {onselect}
+  boundary={stage}
+  class="overlay-menu speed-menu"
+  testid={testid && `${testid}-menu`}
 >
   {#snippet trigger(menu)}
     <span class="speed">
@@ -75,7 +77,21 @@
       />
     </span>
   {/snippet}
-</OverlayMenu>
+  {#each SPEEDS as value (value)}
+    <button
+      type="button"
+      role="menuitem"
+      class="menu-item option"
+      onclick={() => onselect(value)}
+      data-testid={testid && `${testid}-option`}
+      data-speed={value}
+      data-active={value === speed ? "" : undefined}
+      aria-current={value === speed ? "true" : undefined}
+    >
+      ×{value}
+    </button>
+  {/each}
+</Menu>
 
 <style>
   /*
@@ -93,5 +109,17 @@
   /* 狭い枠 (舞台の `data-compact`) では丸が 40px になる (`ControlButton`)。数字も同じ幅から */
   :global(.stage[data-compact]) .speed :global(.ov-btn:not(.ov-round)) {
     min-width: 2.5rem;
+  }
+  /*
+     * 箱と選択肢の地・項目の間は `SettingsMenu` と同じなので app.css (`.menu`・`.overlay-menu`) に置く。
+     * ここは数字を大きく真ん中にそろえるだけ。狭い枠では速さのボタンごと ⚙ の頭に畳むので (`Extras`)、
+     * このメニューは広い枠でだけ出る
+     */
+  :global(.overlay-menu.speed-menu) {
+    font-size: var(--dp-text-lg);
+  }
+  :global(.overlay-menu.speed-menu .option) {
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
   }
 </style>

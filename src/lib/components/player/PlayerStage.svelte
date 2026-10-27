@@ -23,14 +23,13 @@
   interface Props {
     controls: PlayerControls;
     testid: string;
-    /** 枠そのもの。画面側で要るとき (録画視聴の開いた時点の全画面) に bind する */
+    /** 枠そのもの。画面側の全画面の出入り (`stageFullscreen`) などに bind する */
     element?: HTMLElement | null;
     /** 全画面の出入り (`stageFullscreen(() => element)`) */
     fullscreen: StageFullscreen;
     children: Snippet<[StageApi]>;
     /**
-     * 映像の上の通知 (`StageNote`) を積む列。**通知はみなここへ** — 通知ごとに
-     * 絶対配置していた頃は、置き場ごとに上からの距離を書いていて、同時に出ると重なった。
+     * 映像の上の通知 (`StageNote`) を積む列。**通知はみなここへ** (いくつ出ても重ならない。理由は `StageNote`)。
      * 上端の真ん中から下へ積む。右端の縦の列 (`ControlBar`) には掛けない
      */
     notes?: Snippet;
@@ -42,8 +41,6 @@
     ambient?: Ambient;
   }
   interface StageApi {
-    /** 狭い枠か (スマホの縦・低い枠・横にしたスマホ)。押すものを 40px に縮める */
-    compact: boolean;
     /** 毎回は使わないものを再生の設定 (⚙) に畳むか。狭い枠か、押すものが一段に収まらないとき */
     fold: boolean;
   }
@@ -57,12 +54,12 @@
     ambient,
   }: Props = $props();
 
-  // 中のメニュー (`OverlayMenu`・`SettingsMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
+  // 中のメニュー (`SpeedMenu`・`SettingsMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
   setContext(PLAYER_CONTROLS, () => controls);
   /** テーブルトップか (`#lib/phone-form.ts` の `TABLETOP`)。並べ方は CSS、ここは光と反射のどちらを置くかだけ */
   const tabletop = new MediaQuery(TABLETOP);
 
-  // メニューを枠の中に収める先 (`OverlayMenu`・`SettingsMenu`)。bind で入るので取り手で渡す
+  // メニューを枠の中に収める先 (`SpeedMenu`・`SettingsMenu`)。bind で入るので取り手で渡す
   setContext(PLAYER_STAGE, () => element);
 
   /**
@@ -327,10 +324,7 @@
     onfocusout={() => (controls.keyboard = false)}
     data-testid={testid}
   >
-    {@render children({
-      compact,
-      fold,
-    })}
+    {@render children({ fold })}
     {#if notes}
       <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
     {/if}

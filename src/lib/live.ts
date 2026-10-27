@@ -7,9 +7,8 @@
  *
  * 時刻は**エンコードした mp4 の物差し** — 受け側の `video.currentTime` と直に
  * 突き合わせられる。映像と字幕を**同じ ffmpeg** でエンコードしているので、入口で
- * 0 に寄せる幅が両方に同じだけ効く (`server/captions.ts` に実測)。
- * 別々の ffmpeg でエンコードしていた頃は寄せ幅が違って突き合わせられず、
- * 字幕は時刻ではなく「待たせる量」で合わせていた。
+ * 0 に寄せる幅が両方に同じだけ効く (`server/captions.ts` に実測)。変換せずに送る経路 (`rawTs`) と
+ * その字幕は放送の PTS のまま
  */
 
 import type { CaptionLanguage } from "@danything/arib/caption-text";
@@ -60,7 +59,7 @@ export const CHANNEL = {
    * 0x20 (字幕の画像) と 0x21 (字幕を消す) は以前の取り決めで、もう使わない (番号は空けておく)
    */
   captionText: 0x22,
-  /** データ放送 (JSON。`packages/arib/src/bml-protocol.ts` の `ResponseMessage`)。頼まれてから送る (`Command` の `data`。押されたか、常に受信する端末) */
+  /** データ放送 (JSON。`packages/arib/src/bml-protocol.ts` の `ResponseMessage`)。リクエストされてから送る (`Command` の `data`。押されたか、常に受信する端末) */
   data: 0x30,
   /** 制御。**ここだけ双方向**で、中身は JSON */
   control: 0x40,

@@ -313,7 +313,7 @@
      * 狭い画面の一覧はグループだけ (押すとその画面。節へは節の行で飛ぶ)。
      * 指で押すので行を高くする (40px 以上)。字は本文の大きさ、塗りだけ余白の外へ少し出す
      */
-  @media (max-width: 767px) {
+  @media (max-width: 767.98px) {
     .side {
       padding: 0;
       overflow: visible;
@@ -380,7 +380,7 @@
   .main-inner :global([data-part]) {
     scroll-margin-top: var(--dp-gutter);
   }
-  @media (max-width: 767px) {
+  @media (max-width: 767.98px) {
     /* 狭い画面は一覧か中身のどちらか。どちらを出すかは URL */
     .page.list-view .main,
     .page:not(.list-view) .side {
@@ -408,10 +408,10 @@
     color: inherit;
     text-decoration: none;
   }
-  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 (幅は左右の余白 0.65rem×2 を引いた字の幅。余白を変えたらここも) */
+  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 (`app.css` の `.chip` と同じ) */
   .jump a.selected {
-    background: linear-gradient(var(--pico-primary), var(--pico-primary))
-      no-repeat center bottom 0.1rem / calc(100% - 1.3rem) 2px;
+    text-decoration: underline 2px var(--pico-primary);
+    text-underline-offset: 0.3em;
     color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
   }
@@ -434,10 +434,9 @@
     height: 1.125rem;
   }
   /*
-     * **スマホの形 (下のタブがある形) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの頭の1行と同じ半透明のカプセル)。
+     * **スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの頭の1行と同じ半透明のカプセル)。
      * 読んでいる間は下のタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。中身の最後が隠れないよう、そのぶん下を空ける
      */
-  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
   :global(:where(html[data-phone])) .page {
     /* 下のタブとの隙間と、節へ飛ぶ行の高さ。節の操作の1行はこの上に積む (`--jump-room`。節へ飛ぶ行の無い 768px からは 0) */
     --jump-gap: 0.375rem;
@@ -451,7 +450,7 @@
     height: var(--jump-h);
     margin: 0;
     padding: 0.25rem 0.5rem;
-    border-radius: 1.375rem;
+    border-radius: var(--dp-radius-full);
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
@@ -493,7 +492,7 @@
     overflow-x: auto;
     scrollbar-width: none;
     white-space: nowrap;
-    border-radius: 1.375rem;
+    border-radius: var(--dp-radius-full);
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);

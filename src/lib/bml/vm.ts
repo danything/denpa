@@ -60,7 +60,7 @@ interface Frame {
   /** この呼び出しが始まったときの積み上げの高さ */
   base: number;
   thisValue: Value;
-  /** `new` で呼ばれたときにできた物 */
+  /** `new` で呼ばれたときにできたオブジェクト */
   construct: JSObject | null;
 }
 
@@ -557,7 +557,7 @@ export class Vm {
           const object = stack.pop();
           const key = toStr(stack.pop());
           if (!isObject(object))
-            throw new ScriptError("in の右が物ではありません");
+            throw new ScriptError("in の右がオブジェクトではありません");
           stack.push(object.has(key));
           break;
         }

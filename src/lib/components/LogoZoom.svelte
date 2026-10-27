@@ -205,7 +205,4 @@
   .learned {
     margin-right: auto;
   }
-  .modal-actions form {
-    margin: 0;
-  }
 </style>

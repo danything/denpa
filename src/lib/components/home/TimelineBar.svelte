@@ -5,13 +5,11 @@
    * 右の「⋯」に状態 (エンコード・空き。押せない頭) と表示の切り替え。
    * 広い画面では同じものをサイドバー (`HomeAside`) に置き、この行は出さない
    */
-  import { MediaQuery } from "svelte/reactivity";
   import Ellipsis from "~icons/lucide/ellipsis";
   import TriangleAlert from "~icons/lucide/triangle-alert";
 
   import Menu from "#lib/components/Menu.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
-  import { PHONE_FORM } from "#lib/phone-form.js";
   import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
 
   import type { HomeControls } from "./context";
@@ -22,8 +20,6 @@
     $props();
 
   let viewOpen = $state(false);
-  /** スマホの形 (下のタブがある形) ではこの行は下に貼り付くので、メニューは上に開く */
-  const phone = new MediaQuery(PHONE_FORM);
   /** 見てほしいことのチップ。件数のあるものだけ (選んでいるものは 0 件でも残す。外せるように) */
   const attention = $derived(
     ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id),
@@ -64,9 +60,10 @@
     {/each}
   </div>
 
+  <!-- この行は下のタブのすぐ上にあるので、メニューは上に開く -->
   <Menu
     bind:open={viewOpen}
-    side={phone.current ? "top" : "bottom"}
+    side="top"
     align="end"
     class="view-menu"
     testid="view-menu"
@@ -77,15 +74,14 @@
         type="button"
         class="ghost icon t-more"
         title="状態と表示の切り替え"
+        data-on={view.grouped || view.showDeleted || view.showFinished
+          ? ""
+          : undefined}
         data-testid="view-toggle"
       >
         <Icon icon={Ellipsis} size="size-5" /><span class="visually-hidden"
           >状態と表示の切り替え</span
         >
-        {#if view.grouped || view.showDeleted || view.showFinished}<span
-            class="view-dot"
-            aria-hidden="true"
-          ></span>{/if}
       </button>
     {/snippet}
     <!-- 状態は押せない頭 (サイドバーの無い幅でも読めるように) -->

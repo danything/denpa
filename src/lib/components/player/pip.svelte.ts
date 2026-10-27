@@ -76,12 +76,12 @@ const FIRST_FRAME = 2_000;
 /** `captureStream` は Chrome・Firefox にある (型には無い) */
 type CapturableVideo = HTMLVideoElement & { captureStream?: () => MediaStream };
 
-/** 標準の APIが使えるか */
+/** 標準の API が使えるか */
 function standard(): boolean {
   return document.pictureInPictureEnabled === true;
 }
 
-/** Safari の APIが使えるか (標準が無い古い Safari) */
+/** Safari の API が使えるか (標準が無い古い Safari) */
 function webkit(video: WebkitVideo): boolean {
   return (
     typeof video.webkitSupportsPresentationMode === "function" &&
@@ -436,7 +436,7 @@ export function pictureInPicture(options: Options): Pip {
     if (standard()) await video.requestPictureInPicture();
     else if (webkit(video)) {
       /*
-       * Safari の APIは断っても何も言わない。切り替わったかを見て言う。
+       * Safari の API は断っても何も言わない。切り替わったかを見て言う。
        * **一度でも切り替わったかで見る** — 1秒の間に閉じられた・画面を離れたものまで
        * 「切り替わらなかった」と言っていた
        */

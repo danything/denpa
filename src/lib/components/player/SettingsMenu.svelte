@@ -293,8 +293,8 @@
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   /*
-     * 入っているときも主の色 (青) は使わない (青はリンクとフォーカスだけ)。白を濃く敷いた溝にし、
-     * オン/オフは丸の位置でも分かる。メニューの面はいつも暗い (app.css の `.overlay-menu`)
+     * 入っているときもテーマの主の色は使わない (映像の上はテーマで変えない。docs/design.md の「色」)。
+     * 白を濃く敷いた溝にし、オン/オフは丸の位置でも分かる。メニューの面はいつも暗い (app.css の `.overlay-menu`)
      */
   .switch[data-on] {
     background: color-mix(in srgb, var(--dp-on-video) 60%, transparent);

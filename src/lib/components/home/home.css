@@ -64,10 +64,10 @@
   outline-offset: -2px;
 }
 /*
-    flex にしない。録画済みの行は書くことが多く (サイズ・コーデック)、flex-wrap だと
-    文字のかたまりごと次の行へ送られて、ロゴだけが1行に取り残される。
-    ロゴを文の中の1文字として流せば、折り返すのは文の途中になる
-*/
+ * flex にしない。録画済みの行は書くことが多く (サイズ・コーデック)、flex-wrap だと
+ * 文字のかたまりごと次の行へ送られて、ロゴだけが1行に取り残される。
+ * ロゴを文の中の1文字として流せば、折り返すのは文の途中になる
+ */
 .board .row-meta {
   margin-top: 0.25rem;
   font-size: 0.875rem;
@@ -130,12 +130,6 @@
   justify-content: center;
   gap: 0.5rem;
   margin-top: 0.5rem;
-}
-.board .view-dot {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: var(--dp-radius-full);
-  background: var(--pico-primary-background);
 }
 /* まだ観ていない録画の点 (`unwatched`。形は `app.css` の `.fresh-dot`)。名前の前に置く */
 .board .fresh-dot {
@@ -511,7 +505,7 @@
   bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
   margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
   padding-inline: 0.5rem;
-  border-radius: 1.375rem;
+  border-radius: var(--dp-radius-full);
   background: var(--dp-float);
   box-shadow: var(--dp-shadow-pop);
   transition: transform var(--dp-duration-move) var(--dp-ease-spring);
@@ -656,7 +650,7 @@
  * **狭い画面 (768px 未満)。** 同じ 2 段の形のまま、ポスターを 80px に、説明の頭とルールは外す
  * (番組名に幅を回す)。押すものは「⋯」1つ (下の `.row-more`)
  */
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .board .t-row,
   .board .group-head {
     gap: 0.25rem 0.625rem;
@@ -730,7 +724,7 @@
 .board div.row-wide {
   display: contents;
 }
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .board .row-more {
     display: block;
   }
@@ -750,43 +744,20 @@
   color: var(--dp-rec-text);
 }
 
-/* 表示の切り替えのスイッチ (`ViewList`)。押せるのは行ぜんぶで、これは入っているかの印だけ */
-.board .s-switch {
-  position: relative;
-  flex-shrink: 0;
-  width: 2rem;
-  height: 1.125rem;
-  border-radius: var(--dp-radius-full);
-  background: var(--dp-line-strong);
-  transition: background-color var(--dp-duration) var(--dp-ease);
-}
-.board .s-switch::after {
-  content: "";
-  position: absolute;
-  top: 0.1875rem;
-  left: 0.1875rem;
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: var(--dp-radius-full);
-  background: #fff;
-  transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-}
-.board .s-switch.on {
-  background: var(--pico-primary-background);
-}
-.board .s-switch.on::after {
-  transform: translateX(0.875rem);
-}
-
 .board .t-more {
   position: relative;
   flex-shrink: 0;
   margin: 0;
 }
-.board .t-more .view-dot {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+/*
+ * 表示の切り替えが既定から変わっているときは「⋯」にオンの短い下線 (`app.css` の `aria-pressed` と同じ印)。
+ * 主の色の点は「まだ見ていないもの」の印なので使わない (1 つの見た目に 1 つの意味)
+ */
+.board .t-more[data-on] {
+  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
+  background-repeat: no-repeat;
+  background-position: center bottom 0.2rem;
+  background-size: 1rem 2px;
 }
 /* 「⋯」の中。切り替えは右にスイッチ、空きは押せない1行 */
 .board .view-menu {

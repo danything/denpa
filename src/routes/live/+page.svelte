@@ -938,7 +938,7 @@
       min-height: 0;
     }
   }
-  /* 一行 = 局を選ぶボタンと中身を読むボタン。塗りと左の縦線は行に付ける (`app.css` の `.side-item`) */
+  /* 一行 = 局を選ぶボタンと中身を読むボタン。指を乗せたときの地と左の縦線は行に付ける (`app.css` の `.side-item`) */
   .channel-item {
     flex-shrink: 0;
     align-items: stretch;

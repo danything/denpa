@@ -53,7 +53,7 @@ export interface SuggestResponse {
   };
 }
 
-export interface Suggestion {
+interface Suggestion {
   /** 画面の中で1つだけの鍵。候補の id (`aria-activedescendant`) にも使う */
   key: string;
   label: string;

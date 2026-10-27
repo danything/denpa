@@ -11,7 +11,7 @@
 export type ChannelNotice = "all";
 
 /** いま選局できる局の数 (種別ごと。`server/epg.ts` の `serviceCounts`) */
-export type ServiceCounts = Record<string, number>;
+type ServiceCounts = Record<string, number>;
 
 export function channelNotice(counts: ServiceCounts): ChannelNotice | null {
   const total = Object.values(counts).reduce((sum, n) => sum + n, 0);

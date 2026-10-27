@@ -27,7 +27,7 @@ import {
 import type { PlayAxis } from "./ts/playback";
 
 /** 画面に映すぶんだけ。blob はここに持たない (要るときに IndexedDB から) */
-export interface OfflineEntry {
+interface OfflineEntry {
   state: "downloading" | "ready" | "failed";
   /** 落とせた割合 (0〜1)。測れない間は null (動いているだけのバーにする) */
   progress: number | null;
@@ -234,7 +234,7 @@ async function ensureRoom(bytes: number): Promise<void> {
   await navigator.storage.persist?.().catch(() => {});
 }
 
-export interface SaveTarget {
+interface SaveTarget {
   id: number;
   name: string;
   service_name: string;

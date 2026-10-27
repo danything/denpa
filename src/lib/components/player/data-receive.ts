@@ -17,8 +17,8 @@ export function storedDataReceive(saved: string | null): boolean {
 }
 
 /**
- * サーバに受信を頼むか。開いている (d) か、常に受信していて局を映しているとき
- * (追っかけ・録画に譲っている間は局のデータ放送が無いので頼まない)
+ * サーバに受信をリクエストするか。開いている (d) か、常に受信していて局を映しているとき
+ * (追っかけ・録画に譲っている間は局のデータ放送が無いのでリクエストしない)
  */
 export function wantsData(now: {
   open: boolean;

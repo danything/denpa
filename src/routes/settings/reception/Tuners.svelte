@@ -7,7 +7,11 @@
   import Lead from "#lib/components/Lead.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import SaveNote from "#lib/components/SaveNote.svelte";
-  import { SERVICE_TYPE_LABEL, splitReaderName } from "#lib/format.js";
+  import {
+    READER_STATE_LABEL,
+    SERVICE_TYPE_LABEL,
+    splitReaderName,
+  } from "#lib/format.js";
   import { held } from "#lib/live-updates.svelte.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
   import { CHANNEL_TYPES } from "#lib/types.js";
@@ -68,15 +72,11 @@
     lastCount = count;
   });
 
-  /** カードリーダーの行の呼び名。`unknown` は前のバージョンのエージェント (名前しか返さない) */
-  const READER_STATE: Record<CardReaderState, { label: string; tone: string }> =
-    {
-      active: { label: "使用中", tone: "success" },
-      standby: { label: "予備", tone: "" },
-      empty: { label: "カードなし", tone: "" },
-      error: { label: "エラー", tone: "error" },
-      unknown: { label: "—", tone: "" },
-    };
+  /** カードリーダーの状態のバッジの色。ほかは色なし */
+  const READER_TONE: Partial<Record<CardReaderState, string>> = {
+    active: "success",
+    error: "error",
+  };
 </script>
 
 <svelte:window onclick={deleting.stand} />
@@ -315,7 +315,7 @@
                         <div class="delete-slot">
                           {#if deleting.armed === index}
                             <!--
-                                                        2 回目。この行を除いて保存する。構えを下ろすのは送り出したあと —
+                                                        2 回目。この行を除いて保存する。2回押しを戻すのは送り出したあと —
                                                         押した場で下ろすと、送る前にこのボタンが消えて何も送られない
                                                     -->
                             <button
@@ -500,8 +500,8 @@
                       {/if}
                     </td>
                     <td class="nowrap" data-label="状態">
-                      <span class="tag {READER_STATE[reader.state].tone}">
-                        {READER_STATE[reader.state].label}
+                      <span class="tag {READER_TONE[reader.state] ?? ''}">
+                        {READER_STATE_LABEL[reader.state]}
                       </span>
                       {#if reader.error !== undefined}
                         <div class="text-error tiny">
@@ -799,7 +799,7 @@
       content: attr(data-label);
       display: block;
       margin-bottom: 0.25rem;
-      font-size: 0.8rem;
+      font-size: var(--dp-text-xs);
       font-weight: var(--dp-weight);
       color: var(--dp-muted);
     }
@@ -812,7 +812,7 @@
       content: attr(data-label);
       display: block;
       margin-bottom: 0.25rem;
-      font-size: 0.8rem;
+      font-size: var(--dp-text-xs);
       color: var(--dp-muted);
     }
   }

@@ -50,7 +50,7 @@ export interface OfflineVideo {
   databroadcast?: unknown;
 }
 
-export interface OutboxItem {
+interface OutboxItem {
   id: number;
   op: "delete";
   /** 何を消すのか、処理の記録に名前で残す */
@@ -58,7 +58,7 @@ export interface OutboxItem {
   queuedAt: number;
 }
 
-export interface ResumeItem {
+interface ResumeItem {
   id: number;
   /** 再生位置 (秒)。サーバの `POST …/resume` と同じ形式 */
   at: number;

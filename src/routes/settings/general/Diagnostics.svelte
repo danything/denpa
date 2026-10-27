@@ -6,6 +6,7 @@
 
   import Lead from "#lib/components/Lead.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
+  import { READER_STATE_LABEL } from "#lib/format.js";
   import {
     agentSystem,
     CCID_DRIVER,
@@ -18,7 +19,6 @@
   import { held } from "#lib/live-updates.svelte.js";
   import { PHONE_FORM } from "#lib/phone-form.js";
   import { redact } from "#lib/redact.js";
-  import type { CardReaderState } from "#lib/server/scramble.js";
 
   import type { PageData } from "./$types";
   import IssueDialog from "./IssueDialog.svelte";
@@ -47,14 +47,6 @@
     browser = navigator.userAgent;
   });
 
-  const READER_STATE: Record<CardReaderState, string> = {
-    active: "使用中",
-    standby: "予備",
-    empty: "カードなし",
-    error: "エラー",
-    unknown: "—",
-  };
-
   const tunerText = $derived(
     tuners.value === undefined
       ? null
@@ -78,7 +70,7 @@
         : card.value.readers
             .map(
               (r) =>
-                `${r.name} (${READER_STATE[r.state]}${r.error === undefined ? "" : `・${r.error}`})`,
+                `${r.name} (${READER_STATE_LABEL[r.state]}${r.error === undefined ? "" : `・${r.error}`})`,
             )
             .join("、"),
   );
@@ -414,7 +406,7 @@
         <ol class="log-lines" data-testid="log-lines">
           {#each rows.slice(0, shown) as row (row.key)}
             <li
-              class="log-line {row.level}"
+              class="log-line"
               data-source={row.source}
               data-level={row.level}
               data-testid="log-line"
@@ -528,10 +520,10 @@
     flex-shrink: 0;
     font-weight: var(--dp-weight-bold);
   }
-  .warn .level {
+  [data-level="warn"] .level {
     color: var(--dp-warn-text);
   }
-  .error .level {
+  [data-level="error"] .level {
     color: var(--dp-rec-text);
   }
   .text {

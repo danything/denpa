@@ -337,7 +337,7 @@
       />
     </div>
     <div class="row-actions">
-      <!-- 構えの鍵は負の値にして、録画のIDと混ざらないようにする (deleting は録画と共用) -->
+      <!-- 2回押しの鍵は負の値にして、録画のIDと混ざらないようにする (deleting は録画と共用) -->
       <ArmedDelete
         deleting={ctx.deleting}
         armKey={-res.id}
@@ -442,7 +442,7 @@
     </div>
     <div class="row-actions">
       {#if link !== null || canDelete}
-        <!-- 狭い画面では詳細と削除を「⋯」1つにまとめ、番組名に幅を回す (削除は行の削除と同じ構え `deleting`) -->
+        <!-- 狭い画面では詳細と削除を「⋯」1つにまとめ、番組名に幅を回す (削除は行の削除と同じ2回押し `deleting`) -->
         <div class="row-more">
           <Menu
             side="bottom"

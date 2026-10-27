@@ -30,7 +30,7 @@ import { reload } from "./reload.svelte";
  *
  * 切れたことに気付く手段は3つ:
  * - **番犬** … サーバは25秒おきに `ping` を送ってくる (`api/events`)。
- *   60秒何も届かなければ、開いているつもりで死んだ繋ぎ (遅い回線で TCP が
+ *   60秒何も届かなければ、開いているつもりで死んだ接続 (遅い回線で TCP が
  *   黙って死ぬ) とみなして作り直す
  * - **`error`** … EventSource が自分で諦めた (`CLOSED`)。プロキシが一瞬
  *   エラーを返したときなど。少し置いて作り直す
@@ -57,7 +57,7 @@ export function liveUpdates(
 
     const connect = () => {
       source?.close();
-      lastSeen = Date.now(); // 新しい繋ぎに60秒の猶予をやる
+      lastSeen = Date.now(); // 新しい接続に60秒の猶予をやる
       source = new EventSource(resolve("api/events"));
       source.addEventListener("open", () => {
         lastSeen = Date.now();
@@ -94,13 +94,13 @@ export function liveUpdates(
     };
     connect();
 
-    // 番犬。ping (25秒おき) が2回続けて見えなければ、死んだ繋ぎとみなす
+    // 番犬。ping (25秒おき) が2回続けて見えなければ、死んだ接続とみなす
     const watchdog = setInterval(() => {
       if (document.visibilityState !== "visible") return; // 裏のタブで空騒ぎしない
       if (Date.now() - lastSeen > 60_000) connect();
     }, 15_000);
 
-    // 凍らされている間に切られた繋ぎは、開き直しても黙ったまま (上の説明)
+    // 凍らされている間に切られた接続は、開き直しても黙ったまま (上の説明)
     const revive = () => {
       if (document.visibilityState !== "visible") return;
       if (source === null || source.readyState === EventSource.CLOSED)
@@ -129,7 +129,7 @@ export function liveUpdates(
 }
 
 /** 前に届いた中身を持ったままの入れ物 */
-export interface Held<T> {
+interface Held<T> {
   /** 最後に届いた中身。まだ一度も届いていないときだけ undefined */
   readonly value: T | undefined;
 }

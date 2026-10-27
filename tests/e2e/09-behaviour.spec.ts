@@ -573,25 +573,20 @@ test.describe("操作したときの反応", () => {
       .evaluate((el) => getComputedStyle(el, "::before").backgroundColor);
     expect(dot).toBe(swatch);
 
+    // ほかのジャンルのマスは字を透かして淡くする (マスに描く層を作らないよう opacity は使わない)
+    const other = page
+      .locator(`[data-testid="program-button"]:not([data-genre="${genre}"])`)
+      .first();
+    const hasOther = (await other.count()) > 0;
+    const color = () => other.evaluate((el) => getComputedStyle(el).color);
+    const plain = hasOther ? await color() : "";
     await menu.getByTestId(`genre-${genre}`).click();
-    const opacity = (selector: string) =>
-      page
-        .locator(selector)
-        .first()
-        .evaluate((el) => getComputedStyle(el).opacity);
-    expect(
-      await opacity(`[data-testid="program-button"][data-genre="${genre}"]`),
-    ).toBe("1");
-    const other = `[data-testid="program-button"]:not([data-genre="${genre}"])`;
-    if ((await page.locator(other).count()) > 0)
-      expect(Number(await opacity(other))).toBeLessThan(1);
+    if (hasOther) await expect.poll(color).not.toBe(plain);
 
     // 「すべて」で戻す
     await page.getByTestId("guide-genres").click();
     await menu.getByTestId("genre-all").click();
-    await expect(
-      page.locator('[data-testid="program-button"].dim'),
-    ).toHaveCount(0);
+    if (hasOther) await expect.poll(color).toBe(plain);
   });
 
   test("放送波を切り替えると横位置が先頭に戻る", async ({ page }) => {

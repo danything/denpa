@@ -98,8 +98,7 @@ export type VideoCodec = "av1" | "h264" | "none";
  * **行の型はテーブルの定義から導く** (`server/schema.ts`)。
  *
  * ここに interface として書き写していた頃は、列を足したときに片方だけ直しても
- * TS は何も言わなかった (`queryOne<Recording>` はキャストなので)。テーブルの定義は
- * マイグレーションで作った DB と突き合わせるテストがあるので (`server/schema.test.ts`)、
+ * TS は何も言わなかった。テーブルの定義はマイグレーションで作った DB と突き合わせるテストがあるので (`server/schema.test.ts`)、
  * そこから導いた型は DB と食い違わない。列ごとの説明もあちらにある
  */
 export type Service = typeof services.$inferSelect;

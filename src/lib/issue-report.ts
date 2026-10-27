@@ -13,6 +13,8 @@
  * 入りきらなかったぶんは数を書き、全部はコピーかダウンロードしたものを貼ってもらう
  */
 
+import { pad } from "./format";
+
 export type LogLevel = "info" | "warn" | "error";
 
 export interface LogLine {
@@ -32,7 +34,7 @@ export interface LogSource {
   note?: string;
 }
 
-export interface IssueFields {
+interface IssueFields {
   title: string;
   version: string;
   environment: string;
@@ -73,8 +75,6 @@ export function guessLevel(text: string): LogLevel {
   if (/\bwarn(?:ing)?\b|警告|注意/i.test(text)) return "warn";
   return "info";
 }
-
-const pad = (n: number, width = 2) => String(n).padStart(width, "0");
 
 /** 端末の時刻で `2026-10-25 12:34:56` */
 export function stamp(at: number): string {

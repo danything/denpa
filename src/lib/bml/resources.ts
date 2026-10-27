@@ -666,7 +666,7 @@ function remoteRef(url: string): Ref | null {
   return { component: REMOTE, module: 0, file: null, url: parsed.href };
 }
 
-/** 中継が返した Content-Type を、カルーセルのファイルと同じ形に (`text/X-arib-bml; charset=…`) */
+/** 中継が返した Content-Type を、カルーセルのファイルと同じ形式に (`text/X-arib-bml; charset=…`) */
 function mediaType(contentType: string): MediaType {
   const [head = "", ...rest] = contentType.split(";");
   const [major = "application", minor = "octet-stream"] = head

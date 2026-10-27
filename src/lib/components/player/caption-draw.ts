@@ -265,7 +265,7 @@ export function inkSpan(page: CaptionPage): [number, number] {
  * - 点滅があれば、その間だけ時計を回す
  *
  * 描いているかの印 (`data-drawn`) もここで立てる/下ろす。
- * 小窓 (`compose.ts`) とスクリーンショットがそれを見る
+ * 小窓 (`compose.ts`) と E2E がそれを見る
  */
 export class CaptionPainter {
   private page: CaptionPage | null = null;

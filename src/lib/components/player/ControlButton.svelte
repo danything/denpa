@@ -42,7 +42,7 @@
     onclick?: () => void;
     /** 添える文字。渡すと丸くなくなる (`undefined` は渡さないのと同じ。速さは等速のときだけ省く) */
     children?: import("svelte").Snippet | undefined;
-    /** メニューの引き金にするときに `Menu` から受け取る属性 (`OverlayMenu`・`SettingsMenu`)。そのまま広げる */
+    /** メニューの引き金にするときに `Menu` から受け取る属性 (`SpeedMenu`・`SettingsMenu`)。そのまま広げる */
     menu?: import("../Menu.svelte").MenuTrigger | undefined;
   } = $props();
 </script>

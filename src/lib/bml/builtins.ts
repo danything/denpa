@@ -1,5 +1,5 @@
 /**
- * 組み込みの物 (Object・Array・String・Number・Boolean・Date・parseInt・isNaN)。
+ * 組み込みのオブジェクト (Object・Array・String・Number・Boolean・Date・parseInt・isNaN)。
  * STD-B24 第二編 付属2 の ECMAScript で使えるもの。
  *
  * - 文字の符号は EUC-JP (`charCodeAt` / `fromCharCode`。[euc.ts](euc.ts))

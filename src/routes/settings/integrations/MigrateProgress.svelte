@@ -1,7 +1,7 @@
 <script lang="ts">
   import "@anyblades/blades/components/accordion";
   import JobProgress from "#lib/components/JobProgress.svelte";
-  import { stateLabel } from "#lib/format.js";
+  import { byteScale, stateLabel } from "#lib/format.js";
   import type { MigrateStatus } from "#lib/server/migrate.js";
 
   /**
@@ -15,15 +15,8 @@
   const done = $derived(
     migrate.imported + migrate.skipped + migrate.missing + migrate.failed,
   );
-  /**
-   * 取ってきた大きさの単位。数百GBをバイトで並べても読めないので、合計が 1GB 以上なら GB (小数1桁)、
-   * それより小さければ MB で出す
-   */
-  const unit = $derived(migrate.bytesTotal >= 1024 ** 3 ? "GB" : "MB");
-  const scaled = (bytes: number) =>
-    unit === "GB"
-      ? Math.round(bytes / 1024 ** 3 / 0.1) / 10
-      : Math.round(bytes / 1024 ** 2);
+  /** 取ってきた大きさの単位 (`byteScale`) */
+  const bytes = $derived(byteScale(migrate.bytesTotal));
   const currentPercent = $derived(
     migrate.currentTotal > 0
       ? Math.floor((migrate.currentDone / migrate.currentTotal) * 100)
@@ -68,9 +61,9 @@
   {/if}
   {#if recordings && migrate.apply && migrate.bytesTotal > 0}
     <JobProgress
-      done={scaled(migrate.bytesDone)}
-      total={scaled(migrate.bytesTotal)}
-      {unit}
+      done={bytes.scaled(migrate.bytesDone)}
+      total={bytes.scaled(migrate.bytesTotal)}
+      unit={bytes.unit}
       testid="migrate-bytes"
     >
       {#if currentPercent !== null}— いまのファイル {currentPercent}%{/if}

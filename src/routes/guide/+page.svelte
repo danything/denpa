@@ -435,10 +435,9 @@
     return resolve(`guide?${query}`);
   }
 
-  /** 表の日付 (`10/18(日)`) を月と日に分ける */
+  /** 表の日付 (`10/18(日)`)。狭い画面の日付のボタンは日だけ (`18(日)`) */
   const shownDate = $derived(date(data.start));
-  const month = $derived(shownDate.slice(0, shownDate.indexOf("/") + 1));
-  const day = $derived(shownDate.slice(month.length));
+  const day = $derived(dayLabel(data.start));
 
   const prevHref = $derived(
     href({ start: String(data.start - data.hours * HOUR) }),
@@ -588,8 +587,8 @@
   /** 目立たせているジャンル。ほかのマスを淡くする。端末をまたいで覚えるほどのものではない */
   let highlight = $state<number | null>(null);
 
-  /** 狭い画面ではサブch をジャンルのメニューに入れる (下の style の 767px と同じ線) */
-  const narrowQuery = new MediaQuery("max-width: 767px");
+  /** 狭い画面ではサブch をジャンルのメニューに入れる (下の style の 768px 未満と同じ線) */
+  const narrowQuery = new MediaQuery("max-width: 767.98px");
   const narrow = $derived(narrowQuery.current);
   /** スマホの形 (`#lib/phone-form.ts`) では操作の1行が下にあるので、メニューは上へ開く */
   const phoneForm = new MediaQuery(PHONE_FORM);
@@ -888,7 +887,11 @@
             onclick={() => setSubchannels(!subchannels)}
             data-testid="subch-item"
           >
-            <Icon icon={Layers} size="size-4" />サブチャンネルも表示
+            <Icon icon={Layers} size="size-4" />サブチャンネルも表示<span
+              class="s-switch"
+              class:on={subchannels}
+              aria-hidden="true"
+            ></span>
           </button>
           <hr />
         {/if}
@@ -1232,7 +1235,7 @@
                 上に出る。下に隠れるものを出しても読めないので、押したボタンの隣に置く
             -->
       {#if form?.message}
-        <div class="notice error guide-error">{form.message}</div>
+        <div class="notice error">{form.message}</div>
       {/if}
 
       <!--
@@ -1458,7 +1461,7 @@
      * 印だけのボタン1つ (ジャンル。サブch があればそれも中に)。日付の並びと時刻のボタンは出さない (日付のメニューに入っている)。
      * それでも入りきらない幅 (360px で今日以外を見ているとき) は横に流す
      */
-  @media (max-width: 767px) {
+  @media (max-width: 767.98px) {
     .toolbar {
       gap: var(--dp-space-1);
       overflow-x: auto;
@@ -1501,23 +1504,6 @@
   /* 「ドキュメンタリー／教養」も1行で (狭い画面で幅を詰められて、名前が3行に割れていた) */
   :global(.guide-menu) .menu-item {
     white-space: nowrap;
-  }
-  /*
-   * 入っている項目は塗らず、ほかのメニューの選んでいる項目 (`app.css` の `.menu-item`。日付のメニューの選んでいる日も) と
-   * 同じく左の縦線と主の色の太字
-   */
-  :global(.guide-menu) .menu-item[aria-checked="true"] {
-    color: var(--dp-primary-text);
-    font-weight: var(--dp-weight-bold);
-  }
-  :global(.guide-menu) .menu-item[aria-checked="true"]::before {
-    content: "";
-    position: absolute;
-    inset-block: 0.5rem;
-    left: 0;
-    width: 2px;
-    border-radius: 1px;
-    background: var(--pico-primary);
   }
   .menu-item .muted {
     margin-inline-start: auto;
@@ -1615,9 +1601,6 @@
   .hour::before {
     background: var(--dp-float);
   }
-  .corner {
-    background: var(--dp-bg);
-  }
   /* 時の列は 1 本につながった面。マスの上に浮くので遠い影 (右だけ。下の `clip-path`) */
   .hour::before {
     content: "";
@@ -1644,11 +1627,7 @@
     }
   }
   @supports (animation-timeline: scroll()) {
-    .hour::before {
-      animation: guide-float linear both;
-      animation-timeline: --guide-x;
-      animation-range: 0 1.5rem;
-    }
+    .hour::before,
     .corner::after {
       animation: guide-float linear both;
       animation-timeline: --guide-x;
@@ -1657,12 +1636,9 @@
   }
   /*
      * 局名は局ごとの小さな角丸の面 (ヘッダー・操作の1行と同じ材質。局の列と一緒に横へ動くので、1 本につながった面にはしない)。
-     * 広い画面では、表を縦に巻いてマスが裏に入ったときだけ出す (下の `@supports`)
+     * 広い形では、表を縦に巻いてマスが裏に入ったときだけ出す (上の `.service::before` の `@supports`)。
+     * 操作の1行に詰めて並ぶので、影は近い影だけ (`--dp-shadow-tight`)。上は操作の1行との隙間 (0.25rem) をそのまま使う
      */
-  .service {
-    isolation: isolate;
-  }
-  /* 操作の1行と同じ高さに並べるので、影は近い影だけ (`--dp-shadow-tight`)。上は操作の1行との隙間 (0.25rem) をそのまま使う */
   .service::before {
     content: "";
     position: absolute;
@@ -1672,12 +1648,6 @@
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-tight);
     pointer-events: none;
-  }
-  .hour {
-    clip-path: inset(0 -1.5rem 0 0);
-  }
-  .corner {
-    clip-path: inset(calc(-1 * var(--guide-head, 0px)) -1.5rem -1.5rem 0);
   }
   /*
      * **局名の行より上の時の列は、地の色で覆う。** 広い形では表がヘッダーと操作の1行の裏まで伸びていて、
@@ -1705,11 +1675,14 @@
     top: var(--guide-head, 0px);
     left: 0;
     z-index: 30;
+    background: var(--dp-bg);
+    clip-path: inset(calc(-1 * var(--guide-head, 0px)) -1.5rem -1.5rem 0);
   }
   .service {
     position: sticky;
     top: var(--guide-head, 0px);
     z-index: 20;
+    isolation: isolate;
     display: flex;
     align-items: center;
     gap: 0.375rem;
@@ -1732,6 +1705,7 @@
     position: sticky;
     left: 0;
     z-index: 10;
+    clip-path: inset(0 -1.5rem 0 0);
     padding-inline: 0.25rem;
     font-size: 0.75rem;
     /* 数字の行の高さは 1rem に揃える。高いと、前の時間の数字が枠の下に残って次の時間の数字と並んで見える */
@@ -1838,6 +1812,8 @@
       1
     );
     --shade: color-mix(in srgb, var(--dp-bg) 78%, transparent);
+    /* ジャンルを1つ目立たせているときに、ほかのマスに重ねる地 (`--veil`)。字・印は `--dot`・`--state-ink` で透かす。下の `data-highlight` */
+    --veil: color-mix(in srgb, var(--dp-bg) 70%, transparent);
     background-image: linear-gradient(var(--shade), var(--shade));
     background-repeat: no-repeat;
     background-size: 100% calc(var(--past) * 100%);
@@ -1862,7 +1838,7 @@
       );
     }
   }
-  :global([data-theme="dark"]) :is(.program, .swatch) {
+  :global([data-theme="dark"]) .program {
     --wash: 14%;
   }
   .program:hover {
@@ -1927,7 +1903,8 @@
   } /* 福祉 */
   /*
      * ジャンルを1つ目立たせているときの、ほかのマス (`highlight`)。押せるまま淡くするだけ。
-     * **表の側の印 (`data-highlight`) と CSS で決める** — マスごとに持たせると、切り替えるたびに全部のマスを書き直す
+     * **表の側の印 (`data-highlight`) と CSS で決める** — マスごとに持たせると、切り替えるたびに全部のマスを書き直す。
+     * `opacity` は使わない (マスごとに描く層を作る。上の `.program`)。面に地の色を重ね、字と印の色を透かす
      */
   .rows[data-highlight="0"] .program:not([data-genre="0"]),
   .rows[data-highlight="1"] .program:not([data-genre="1"]),
@@ -1941,7 +1918,15 @@
   .rows[data-highlight="9"] .program:not([data-genre="9"]),
   .rows[data-highlight="10"] .program:not([data-genre="10"]),
   .rows[data-highlight="11"] .program:not([data-genre="11"]) {
-    opacity: 0.3;
+    --dot: color-mix(in srgb, var(--tint) 30%, transparent);
+    --state-ink: color-mix(in srgb, var(--state) 30%, transparent);
+    color: color-mix(in srgb, currentColor 30%, transparent);
+    background-image:
+      linear-gradient(var(--shade), var(--shade)),
+      linear-gradient(var(--veil), var(--veil));
+    background-size:
+      100% calc(var(--past) * 100%),
+      100%;
   }
   /*
      * **録画中だけ、地を録画の赤でごく淡く塗る** (いま動いているもの。docs/design.md の「番組表のマス」)。
@@ -1969,7 +1954,7 @@
     height: 0.4375rem;
     margin-inline-end: 0.25rem;
     border-radius: 50%;
-    background: var(--tint);
+    background: var(--dot, var(--tint));
     vertical-align: 0.0625rem;
   }
   /*
@@ -1996,30 +1981,28 @@
      * 予約済みは主の色の ✓、録画中は録画の赤の ●、競合は赤い ⚠ (一覧の競合と同じ印)。
      * **競合は予約済みと同じ青にしない** — 青だと「録れる」に見え、チューナーが足りずに落ちる番組を見落とす
      */
-  .state {
+  .program {
+    --state: var(--dp-primary-text);
+  }
+  .program:is([data-state="recording"], [data-state="conflict"]) {
+    --state: var(--dp-rec-text);
+  }
+  .state,
+  .program .num::after {
     font-weight: var(--dp-weight-bold);
-    color: var(--dp-primary-text);
+    color: var(--state-ink, var(--state));
   }
-  .program:is([data-state="recording"], [data-state="conflict"]) .state {
-    color: var(--dp-rec-text);
-  }
-  .program[data-state="scheduled"] .num::after,
-  .program[data-state="recording"] .num::after,
-  .program[data-state="conflict"] .num::after {
+  .program .num::after {
     margin-inline-start: 0.25rem;
-    color: var(--dp-primary-text);
-    font-weight: var(--dp-weight-bold);
   }
   .program[data-state="scheduled"] .num::after {
     content: "✓";
   }
   .program[data-state="recording"] .num::after {
     content: "●";
-    color: var(--dp-rec-text);
   }
   .program[data-state="conflict"] .num::after {
     content: "⚠";
-    color: var(--dp-rec-text);
   }
   /*
      * **録らないと決めた予約 (コピー禁止) は予約済みの青にしない** — 青だと「録れる」に見える。
@@ -2040,10 +2023,5 @@
      */
   .desc {
     color: color-mix(in srgb, currentColor 80%, transparent);
-  }
-  /* 押すものの並び (`.modal-actions`) の中で、1行まるごと使う */
-  .guide-error {
-    flex-basis: 100%;
-    margin: 0;
   }
 </style>

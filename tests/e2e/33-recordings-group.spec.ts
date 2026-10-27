@@ -208,15 +208,13 @@ test.describe("ホームの一覧のまとめて表示", () => {
     const toggle = tools.getByTestId("recordings-group-toggle");
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await expect(toggle).toHaveAccessibleName("まとめて表示");
-    // 入っていないときは「表示の切り替え」に点が付かない
-    await expect(
-      page.getByTestId("view-toggle").locator(".view-dot"),
-    ).toHaveCount(0);
+    // 入っていないときは「表示の切り替え」にオンの印が付かない
+    await expect(page.getByTestId("view-toggle")).not.toHaveAttribute(
+      "data-on",
+    );
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await expect(
-      page.getByTestId("view-toggle").locator(".view-dot"),
-    ).toHaveCount(1);
+    await expect(page.getByTestId("view-toggle")).toHaveAttribute("data-on");
 
     // 閉じた見出しと1本ものが、いちばん新しい回の日付で並ぶ (線のすぐ上がいちばん新しい)
     expect((await listed(page)).slice(-4)).toEqual([

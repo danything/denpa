@@ -36,7 +36,7 @@
    * 舞台 (`PlayerStage`) が枠のすぐ前 (兄弟) に置く。オン/オフと写し方は `ambient.svelte.ts`、計算は `ambient.ts`。
    *
    * - 縦に積むときは映像の下の中身に、二段組は窓全体に敷き、枠から離れるほど薄くする (`reach`・`farthest`)。
-   *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5 以上で読める (`toneFrame`・`WASH_LUMINANCE`)
+   *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5:1 以上で読める (`toneFrame`・`WASH_LUMINANCE`)
    * - 色は小さな canvas で作って CSS で引き伸ばす。`filter: blur` は使わない (GPU の無い端末で重かった)
    * - 写す繰り返しと前の色からの入れ替えは、テーブルトップの反射 (`FoldReflection`) と同じ部品 (`glow-loop.svelte.ts`)。
    *   入れ替えは CSS の `opacity` の transition (下の style)。帯ごとに canvas を2枚重ね、新しい色を裏の1枚に
@@ -383,7 +383,7 @@
   canvas:global([data-front]) {
     opacity: 1;
   }
-  /* 表の印と、置き場・テーマが変わったとき・入れ替えの途中で次が来たときに動かさない印は JS が付ける (`face`) */
+  /* 表の印と、置き場・テーマが変わったとき・入れ替えの途中で次が来たときに動かさない印は JS が付ける (`Crossfade`) */
   .ambient:global([data-instant]) canvas {
     transition: none;
   }

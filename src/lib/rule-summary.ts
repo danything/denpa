@@ -1,14 +1,15 @@
 import { genreName } from "./arib";
-import { SERVICE_TYPE_LABEL } from "./format";
+import { SERVICE_TYPE_LABEL, time } from "./format";
 import { type Slot, slotSummary } from "./rule-time";
 import { parseSearchFields, SEARCH_FIELD_LABEL } from "./search";
+import { dayName } from "./timeline";
 
 /**
  * **ルールの条件を1行で** (ルールの一覧の「条件」の列)。
  * 探す所 ・ 局 ・ ジャンル ・ 時間帯と曜日 ・ 同じ回は1度 ・ 前の回は録らない ・ 除外、の順。キーワードは名前の列に出ているので書かない
  */
 
-export interface Summarized extends Slot {
+interface Summarized extends Slot {
   search_fields: string;
   service_ids: number[] | null;
   service_types: string[] | null;
@@ -57,14 +58,11 @@ export function conditionSummary(
  * 日付の切れ目は端末の時計 (画面で使う)
  */
 export function upcomingLabel(at: number, now: number): string {
-  const day = (ms: number) => {
-    const d = new Date(ms);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  };
+  const name = dayName(at, now);
   const d = new Date(at);
-  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const days = Math.round((day(at) - day(now)) / (24 * 60 * 60 * 1000));
-  if (days === 0) return `今日 ${hm}`;
-  if (days === 1) return `明日 ${hm}`;
-  return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+  const day =
+    name === "今日" || name === "明日"
+      ? name
+      : `${d.getMonth() + 1}/${d.getDate()}`;
+  return `${day} ${time(at)}`;
 }

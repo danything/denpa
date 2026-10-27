@@ -124,7 +124,7 @@ export function playerControls(): PlayerControls {
 }
 
 /**
- * 舞台の中のメニュー (`OverlayMenu`・`SettingsMenu`) の決まり。**部品の初めに呼ぶ** (context と `$effect` を使う)。
+ * 舞台の中のメニュー (`SpeedMenu`・`SettingsMenu`) の決まり。**部品の初めに呼ぶ** (context と `$effect` を使う)。
  *
  * - **開いている間は操作列を残す。** 操作列は触らなくなって 2.5 秒で引っ込むが、メニューは
  *   操作列の中にあるので、選んでいる最中に**メニューごと消えて**いた。舞台の外では何もしない

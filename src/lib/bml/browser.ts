@@ -100,11 +100,11 @@ export interface BrowserHost {
    */
   startApp?(hint: number[]): boolean;
   /**
-   * XML の AIT を取りに行けるか (双方向がオン)。**電波に AIT が無くても開ける局がある** — NHK は AIT を電波に載せず、
+   * XML の AIT を取得できるか (双方向がオン)。**電波に AIT が無くても開ける局がある** — NHK は AIT を電波に載せず、
    * 文書が XML の AIT の URL を渡してくる (`AITTransportMethod` の XML・HTTP を訊く)
    */
   canFetchAit?(): boolean;
-  /** 文書が渡した XML の AIT (`uri`) を取って、そこにあるアプリを開く。取りに行き始めたら true */
+  /** 文書が渡した XML の AIT (`uri`) を取って、そこにあるアプリを開く。取得し始めたら true */
   startAppFrom?(uri: string, hint: number[]): boolean;
 }
 
@@ -156,7 +156,7 @@ const AIT_QUERIES = new Set([
 
 /**
  * getBrowserSupport (TR-B14 第二分冊 5.12.6)。`app` は電波の AIT にあるアプリを開けるか、`xml` は XML の AIT を
- * 取りに行けるか (双方向がオン)。AIT の問い合わせは開けるときだけ 1 — 1 と答えて開かないと、放送のアプリは起動を待ったまま返らない。
+ * 取得できるか (双方向がオン)。AIT の問い合わせは開けるときだけ 1 — 1 と答えて開かないと、放送のアプリは起動を待ったまま返らない。
  * 運び方 (`AITTransportMethod`) は XML なら `xml`、それ以外 (電波の表) は `app` で答える
  */
 function browserSupport(
@@ -207,7 +207,7 @@ function browserSupport(
 }
 
 /**
- * startAITControlledApp の引数から XML の AIT の URL を拾う。**http(s) の絶対 URL だけ** — 数 (organisation_id など) と
+ * startAITControlledApp の引数から XML の AIT の URL を取り出す。**http(s) の絶対 URL だけ** — 数 (organisation_id など) と
  * 相対の名前は手がかりにしない (相対は何に対してかが決まっていない)
  */
 function aitUri(args: Value[]): string | null {
@@ -571,7 +571,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
     logCall("startReceivingAIT", args);
     return canStartApp() || canFetchAit() ? 1 : Number.NaN;
   });
-  // 受け取った AIT を文書へ渡す形は確かめられていない。何を訊かれたかだけ残して、無いと答える
+  // 受け取った AIT を文書へ渡す形式は確かめられていない。何を訊かれたかだけ残して、無いと答える
   fn("getReceivedAIT", (args) => {
     logCall("getReceivedAIT", args);
     return null;

@@ -23,7 +23,7 @@ export interface DayMark {
 }
 
 /** カレンダーに数える行。一覧の行 (`Item`) から種類と時刻と側だけ */
-export interface CalendarItem {
+interface CalendarItem {
   kind: "rec" | "missed" | "res";
   zone: Zone;
   at: number;

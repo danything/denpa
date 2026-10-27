@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { parseXmlAit } from "./xml-ait";
 
-/** ETSI TS 102 809 の形。値は作りもの */
+/** ETSI TS 102 809 の形式。値は作りもの */
 const AIT = `<?xml version="1.0" encoding="UTF-8"?>
 <mhp:ServiceDiscovery xmlns:mhp="urn:dvb:mhp:2009" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <mhp:ApplicationDiscovery DomainName="example.jp">

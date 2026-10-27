@@ -35,7 +35,7 @@
 
   /**
    * **2回押させる** (削除と同じ `arming`)。押し間違えると、家族の端末まで入り直しになる。
-   * 押す場所は1つなので、構えの鍵は 0 で足りる
+   * 押す場所は1つなので、2回押しの鍵は 0 で足りる
    */
   const confirming = arming('[data-testid^="logout-others"]');
   const sent: SubmitFunction = () => async (options) => {

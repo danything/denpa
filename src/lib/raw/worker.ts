@@ -69,7 +69,7 @@ const PENDING_MOST = 8 * CLOCK;
 const BEHIND_MOST = 0.5 * CLOCK;
 /** 1コマの長さの目安 (90kHz)。29.97 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 3003;
-/** 音の復号が続けて転んだら諦める回数 */
+/** 音のデコードが続けて失敗したら諦める回数 */
 const AUDIO_ERRORS_MOST = 20;
 /**
  * 録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう。** 読む側
@@ -186,10 +186,10 @@ function post(message: FromWorker, transfer: Transferable[] = []): void {
   scope.postMessage(message, transfer);
 }
 
-/** 最後に画面へ伝えた絵の大きさ (`postSize`) */
+/** 最後に画面へ伝えた映像の大きさ (`postSize`) */
 let told = { width: 0, height: 0 };
 
-/** 描いた絵の大きさが変わっていたら画面へ伝える (`messages.ts` の `size`)。描くたびに呼ぶ */
+/** 描いた映像の大きさが変わっていたら画面へ伝える (`messages.ts` の `size`)。描くたびに呼ぶ */
 function postSize(): void {
   if (surface === null) return;
   const { width, height } = surface;

@@ -51,7 +51,7 @@
     testid?: string;
     /**
      * つまんで動かしている間の下見。渡すと、動かしている間もその位置へ (粗く) 飛ぶ。
-     * 返す約束が終わる (飛び終わる) まで次は頼まない。渡さなければ離したときだけ飛ぶ
+     * 返す約束が終わる (飛び終わる) まで次はリクエストしない。渡さなければ離したときだけ飛ぶ
      * (飛ぶのが重いプレイヤー向け)
      */
     preview?: ((value: number) => unknown) | undefined;
@@ -106,14 +106,14 @@
 
   /*
    * 下見は1度に1つまで。終わったら、間 (`PREVIEW_GAP`) を空けていちばん新しい位置へ。
-   * 飛び終わらないまま次を頼むと前のを捨ててやり直すので、いつまでも映像が出ない
+   * 飛び終わらないまま次をリクエストすると前のを捨ててやり直すので、いつまでも映像が出ない
    */
   let wanted: number | null = null;
   let busy = false;
   let lastPreview = Number.NEGATIVE_INFINITY;
   let lastAsked: number | null = null;
 
-  /** つまみを指の位置へ。下見があれば頼む */
+  /** つまみを指の位置へ。下見があればリクエストする */
   function follow(event: PointerEvent): void {
     scrub = under(event);
     if (preview === undefined) return;

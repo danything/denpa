@@ -106,7 +106,7 @@ const BEHIND = 2;
 /** 貯める量を決め直す間隔 (ms)。塊は毎秒20個来るので、そのたびには回さない */
 const SETTLE_EVERY = 5_000;
 /**
- * 貯まりの低いところを見る長さ (秒。`pacing` の `low`)。**次の塊が届く直前の貯まりを拾う。**
+ * 貯まりの低いところを見る長さ (秒。`pacing` の `low`)。**次の塊が届く直前の貯まりを捉える。**
  *
  * まとめて届く経路では、塊は 0.3〜0.5 秒おきに束で来る。束の先頭の直前がいちばん低く、
  * 束の残りは届くたびに高く見える。何回ぶんかの束を収める長さにする
@@ -161,7 +161,7 @@ const SLIP_MOST = 0.1;
  * 読み直し (ffmpeg の立ち上がりとキーフレーム待ち) は 1 秒ほどなので、尽きる前に間に合う
  */
 const REFILL = 5;
-/** 飛び直す間隔の下限 (ms)。**復号が追いつかない状態は飛んでも直らない** */
+/** 飛び直す間隔の下限 (ms)。**デコードが追いつかない状態は飛んでも直らない** */
 const UNSLIP_EVERY = 3_000;
 /*
  * コマ落ちでは飛び直さない。実機の Windows Edge は落ち着いたあとでも絶えず 5.6% 落ちていて、合図にすると
@@ -173,7 +173,7 @@ const FRAME = 0.02;
  * 映像が出せるようになるのを待ってよい上限 (ms)。
  *
  * **貯まっただけでは始めない** (`canStart`)。それでも `readyState` が上がって
- * こないことはある (映像の無い放送・復号に失敗) ので、待ちきりにはしない
+ * こないことはある (映像の無い放送・デコードに失敗) ので、待ちきりにはしない
  */
 const START_WAIT = 1_500;
 /** 再生位置がキーフレームに着いたとみなす幅 (秒。`pace`)。ブラウザが時刻を丸めるぶん */
@@ -205,7 +205,7 @@ function remember(target: Tuned): void {
 const FLOOR_KEY = "live-floor";
 
 function storedFloor(): number {
-  // 読めない繋ぎ (プライベート窓) では下限から始める (`keep.read`)
+  // localStorage が読めないとき (プライベートウィンドウなど) は下限から始める (`keep.read`)
   const saved = Number(read(FLOOR_KEY));
   if (!Number.isFinite(saved)) return FLOOR;
   return Math.min(CEILING, Math.max(FLOOR, saved));
@@ -298,7 +298,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let showData = $state(false);
   /**
    * データ放送を常に受信するか (再生の設定の行)。**端末ごとに覚える** (`data-receive.ts`)。開いていなくても
-   * サーバに頼み、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
+   * サーバにリクエストし、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
    */
   let receiveData = $state(false);
   $effect(() => {
@@ -306,7 +306,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 選局の指示より先に送らない (`syncData`)。読んだ値に合わせるだけ
     untrack(syncData);
   });
-  /** サーバに受信を頼んでいるか (最後に送ったもの)。繋ぎ直したら頼んでいないところから */
+  /** サーバに受信をリクエストしているか (最後に送ったもの)。繋ぎ直したらリクエストしていないところから */
   let askedData = false;
   /** データ放送の通知を渡す先。**描いているものがあるときだけ** */
   let onData: ((message: ResponseMessage) => void) | null = null;
@@ -355,7 +355,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   } | null>(null);
   /** 追っかけが録れているところまで読み切ったか */
   let chaseEnded = $state(false);
-  /** 読み切ったら、流し残しが尽きたところでMediaSource を閉じる (`finishStream`) */
+  /** 読み切ったら、流し残しが尽きたところで MediaSource を閉じる (`finishStream`) */
   let ending = false;
 
   /*
@@ -409,7 +409,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * ---- 互換モード (`canvas-video.ts`) ----
    *
    * **エンコードしたもの (H.264 / AV1) も canvas に描く。** `<video>` の再生が止まる端末 (テスラの
-   * 車載ブラウザ) のため。サーバへのリクエストのしかたは変えず、届いた fMP4 を MSE ではなくRawEngine
+   * 車載ブラウザ) のため。サーバへのリクエストのしかたは変えず、届いた fMP4 を MSE ではなく RawEngine
    * (`RawEngine` の `fmp4`) へ流す。**ここでは `<video>` に戻らない** — 描けなくなったら
    * MPEG-2 へ、それも無理なら理由を出して止まる
    */
@@ -465,7 +465,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let running = false;
   /**
    * 描かれずに捨てられたコマの数 (画面に出す)。音・字幕・再生位置は同じ時計に乗っているので、映像だけ遅れるなら
-   * 遅れているのは復号。遅延の数字には出ないので、この数で切り分ける
+   * 遅れているのはデコード。遅延の数字には出ないので、この数で切り分ける
    */
   let dropped = $state(0);
   /** `droppedVideoFrames` を最後に読んだ値 (`countDropped`)。Safari は飛ぶたびに 0 に戻すので差を足し上げる */
@@ -734,7 +734,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 映像だけ遅れているのを、その場へ飛び直して直す (復号が間に合わないと映像だけ取り残され、戻らない)。
+   * 映像だけ遅れているのを、その場へ飛び直して直す (デコードが間に合わないと映像だけ取り残され、戻らない)。
    * 飛び直すとデコーダは積み残しを捨てて出し直す。連発はさせない (`UNSLIP_EVERY`)
    */
   function unslip(video: HTMLVideoElement): void {
@@ -772,7 +772,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     if (buffer === null || buffer.updating || pending.length === 0) {
-      // 追っかけを読み切っていて、流し残しも無ければ、ここでMediaSource を閉じる
+      // 追っかけを読み切っていて、流し残しも無ければ、ここで MediaSource を閉じる
       finishStream();
       return;
     }
@@ -787,7 +787,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 追っかけを読み切ったらMediaSource を閉じる (`MediaSource.endOfStream`)。
+   * 追っかけを読み切ったら MediaSource を閉じる (`MediaSource.endOfStream`)。
    * 締めないと、バッファの端で「読み込み中」のまま止まって見える。
    * 流し残し (`pending`) があるうちは待つ — 締めると残りが入らなくなる
    */
@@ -979,7 +979,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * 捨てられたコマを足し上げる (`droppedSeen`)。**塊が届くたびに読む** (`pace`) — 飛ぶ直前までの
-   * ぶんを、Safari が 0 に戻す前に拾う
+   * ぶんを、Safari が 0 に戻す前に数える
    */
   function countDropped(video: HTMLVideoElement): void {
     const now = video.getVideoPlaybackQuality?.().droppedVideoFrames;
@@ -1492,8 +1492,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * サーバに頼むかを、開いているか・常に受信するか・局を映しているかから決め直す (`wantsData`)。
-   * 変わったときだけ送る。**選局の指示のあとに送る** — 前の局のセッションに頼むと、前の局のものが届く
+   * サーバにリクエストするかを、開いているか・常に受信するか・局を映しているかから決め直す (`wantsData`)。
+   * 変わったときだけ送る。**選局の指示のあとに送る** — 前の局のセッションにリクエストすると、前の局のものが届く
    */
   function syncData(): void {
     const want = wantsData({
@@ -1751,7 +1751,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       warning = `MPEG-2 を再生できません: ${rawProblem}`;
     }
     if (!(await prepareCompat())) return;
-    // 数え直す。再エンコードでもMediaSource から作り直しになるので、前の数は続きではない
+    // 数え直す。再エンコードでも MediaSource から作り直しになるので、前の数は続きではない
     stalls = 0;
     // 字幕は映した1枚ごとに貼り直す (`follow`)。2度目からは何もしない
     follow(video);
@@ -1769,7 +1769,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (open) {
       const command = wantedCommand();
       if (command !== null) send(command);
-      // 局を映すか (追っかけ・録画に譲るか) で、常に受信のときの頼み方が変わる
+      // 局を映すか (追っかけ・録画に譲るか) で、常に受信のときのリクエストが変わる
       syncData();
       return;
     }
@@ -1804,7 +1804,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       attempts = 0;
       const command = wantedCommand();
       if (command !== null) ws.send(JSON.stringify(command));
-      // データ放送を受け取るかどうかはサーバでは繋ぎ (Viewer) に紐づいていて、切れると忘れられる
+      // データ放送を受け取るかどうかはサーバでは接続 (Viewer) に紐づいていて、切れると忘れられる
       askedData = false;
       syncData();
     };
@@ -1861,12 +1861,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           const now = Date.now();
           const calm = now - restartedAt >= RESTART_CALM;
           restartedAt = now;
-          // 字幕の本数も変わるかもしれない。無い番号を頼むと字幕ごと外されるので1本目に戻す
-          if (chase === null) captionTrack = 0;
           if (chase !== null) resumeChase(!calm);
-          else if (!calm) reconnect();
-          else if (tuned !== null && element !== null)
-            void tune(element, tuned, true);
+          else {
+            // 字幕の本数も変わるかもしれない。無い番号をリクエストすると字幕ごと外されるので1本目に戻す
+            captionTrack = 0;
+            if (!calm) reconnect();
+            else if (tuned !== null && element !== null)
+              void tune(element, tuned, true);
+          }
         } else if (notice.type === "notice") {
           // 映像は出ている。断り書きに残す (GPU でエンコードできずにソフトウェアへ降りた、など)
           warning = notice.message;
@@ -1910,7 +1912,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             since: Date.now(),
           };
         } else if (notice.type === "ended") {
-          // 録れているところまで読み切った。流し残しが尽きたらMediaSource を閉じる
+          // 録れているところまで読み切った。流し残しが尽きたら MediaSource を閉じる
           chaseEnded = true;
           ending = true;
           finishStream();

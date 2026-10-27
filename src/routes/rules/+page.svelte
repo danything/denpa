@@ -130,7 +130,7 @@
 <Toasts {notices} source={form} />
 
 <!--
-    **ホームと同じ作り。** 左に1本の一覧 (2段の淡い塊を 6px 空けて並べる)、広い形では右にサイドバー
+    **ホームと同じ作り。** 左に1本の一覧 (2段の件を件の面に乗せて並べる)、広い形では右にサイドバー
     (絞り込み・並び・集計。ドキュメントの目次と同じ行)。スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、
     絞り込みと並びを細い1行にまとめ、画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
@@ -155,8 +155,8 @@
       <ul class="rows" data-testid="rule-table">
         {#each paged.rows as rule (rule.id)}
           <!--
-                        **2段の塊。** 1段目に名前、右にスイッチと削除。2段目に条件・次の放送・予約と録画の数・最後に録れた日。
-                        塊を押すと検索の画面でそのルールを直す。スイッチと削除はリンクの外 (隣) なので、押してもルールは開かない
+                        **2段の件。** 1段目に名前、右にスイッチと削除。2段目に条件・次の放送・予約と録画の数・最後に録れた日。
+                        件を押すと検索の画面でそのルールを直す。スイッチと削除はリンクの外 (隣) なので、押してもルールは開かない
                     -->
           <li
             class="row item"
@@ -492,12 +492,6 @@
   }
 
   /* ---- スマホの形の細い1行 (`#lib/phone-form.ts`。`<html data-phone>`) ---- */
-  :global(:where(html[data-phone])) .rules-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--dp-space-2);
-    order: -1;
-  }
   .bar-chips {
     display: flex;
     flex: 1 1 0%;
@@ -521,12 +515,26 @@
   .chip-button:hover {
     background: var(--dp-hover-soft);
   }
-  /* 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (囲まず、主の色の太字と字の幅いっぱいの下線) */
+  .chip-button .num {
+    color: var(--dp-muted);
+  }
+  /*
+     * 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (囲まず、主の色の太字と字の幅いっぱいの下線)。
+     * 線は疑似要素で 1 本引く (`text-decoration` だと名前と数に別々の線が付く)
+     */
   .chip-button[aria-pressed="true"] {
-    text-decoration: underline 2px var(--pico-primary);
-    text-underline-offset: 0.3em;
+    position: relative;
     color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
+  }
+  .chip-button[aria-pressed="true"]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0.75rem;
+    bottom: 0.2rem;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--pico-primary);
   }
   .rules-bar select {
     flex: none;
@@ -547,8 +555,10 @@
      * 同じ半透明のカプセル (`--dp-float`) にして、読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
      * 一覧の最後の行が隠れないよう、この1行の高さぶん下を空ける
      */
-  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) */
   :global(:where(html[data-phone])) .rules-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-2);
     position: fixed;
     --dp-btn-solid: transparent;
     --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
@@ -558,7 +568,7 @@
     z-index: 30;
     padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
       var(--dp-space-3);
-    border-radius: 1.375rem;
+    border-radius: var(--dp-radius-full);
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);

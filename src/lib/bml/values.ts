@@ -5,7 +5,7 @@
  *   足し算・掛け算は丸めない (`Date.getTime()` が 32 ビットに収まらないため)。ビット演算は
  *   いつもの 32 ビット
  * - 文字列の大小は EUC-JP の符号の順 ([euc.ts](euc.ts))
- * - 物 (`JSObject`) は Map で持つ。DOM や `browser` は `getOwn`/`put` を上書きした子 (host)
+ * - オブジェクト (`JSObject`) は Map で持つ。DOM や `browser` は `getOwn`/`put` を上書きした子 (host)
  */
 
 import { compareEuc } from "./euc";
@@ -22,7 +22,7 @@ export class ScriptError extends Error {}
 export class JSObject {
   readonly props = new Map<string, Value>();
   /**
-   * 組み込みの物か。**for-in で列挙しない** (Array.prototype の join などが
+   * 組み込みのオブジェクトか。**for-in で列挙しない** (Array.prototype の join などが
    * 放送の for-in に混ざらないように)
    */
   builtin = false;
@@ -149,13 +149,13 @@ export class JSDate extends JSObject {
   }
 }
 
-/** 呼べる物。中身はスクリプトの関数 (`code`) か、組み込み (`native`) */
+/** 呼べるオブジェクト。中身はスクリプトの関数 (`code`) か、組み込み (`native`) */
 export class JSFunction extends JSObject {
   constructor(
     proto: JSObject | null,
     public readonly name: string,
     public readonly call: FunctionBody,
-    /** `new` されたときにできる物の元 (`prototype` を引くための入れ物の元) */
+    /** `new` されたときにできるオブジェクトの元 (`prototype` を引くための入れ物の元) */
     private readonly objectProto: JSObject | null,
   ) {
     super(proto, "Function");
@@ -318,7 +318,7 @@ export function lessThan(a: Value, b: Value): boolean | undefined {
 }
 
 export function add(a: Value, b: Value): Value {
-  // 物は日付も文字列にする (日付どうしでもつなぐ)
+  // オブジェクトは日付も文字列にする (日付どうしでもつなぐ)
   const x = isObject(a) ? toStr(a) : a;
   const y = isObject(b) ? toStr(b) : b;
   if (typeof x === "string" || typeof y === "string") {
@@ -339,7 +339,7 @@ export function modulo(a: number, b: number): number {
   return (a % b) + 0;
 }
 
-/** `typeof`。DOM や browser のような外の物は "hostobject" (web-bml と同じ) */
+/** `typeof`。DOM や browser のような外のオブジェクトは "hostobject" (web-bml と同じ) */
 export function typeOf(value: Value): string {
   if (value === null) return "object";
   if (value instanceof JSFunction) return "function";
