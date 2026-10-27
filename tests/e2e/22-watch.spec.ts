@@ -701,6 +701,14 @@ test.describe("録画を観る", () => {
         .getByTestId("watch-video")
         .evaluate((v) => (v as HTMLVideoElement).playbackRate),
     ).toBe(1.5);
+    // 読み直しても (src の入れ替えと同じ) 1 倍に戻る瞬間が無い。`loadstart` を待たずに見る
+    expect(
+      await page.getByTestId("watch-video").evaluate((v) => {
+        const video = v as HTMLVideoElement;
+        video.load();
+        return video.playbackRate;
+      }),
+    ).toBe(1.5);
   });
 
   /**

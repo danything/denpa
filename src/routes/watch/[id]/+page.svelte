@@ -975,6 +975,18 @@
   let speed = $state(1);
 
   /**
+   * **選んだ速さは既定の速さ (`defaultPlaybackRate`) にも入れる。** src を入れ替えると
+   * (端末のコピーへの差し替え・読み直し) ブラウザは速さを既定の速さへ戻す。`loadstart` で
+   * 掛け直していた頃は、src を入れてから `loadstart` が来るまでの間だけ 1 倍に戻っていた。
+   * `<video>` ができた (作り直された) ときも、ここで掛かる
+   */
+  $effect(() => {
+    if (video === null) return;
+    video.defaultPlaybackRate = speed;
+    video.playbackRate = speed;
+  });
+
+  /**
    * CM を自動で飛ばすか (CM を残してエンコードした録画のため)。端末ごとに覚える。
    * 観はじめに入れるかどうかは `skipCmAtStart` (ロゴでの判定に失敗した1本は切って始める)
    */
@@ -1118,8 +1130,6 @@
   function resume(): void {
     length = video?.duration ?? 0;
     place();
-    // src が変わるとブラウザは速さを 1 に戻す (`onloadstart` でも掛け直している)
-    if (video !== null && speed !== 1) video.playbackRate = speed;
     // 繋ぎが切れて読み直したところ。観ていた位置へ戻して続ける (`recover`)
     if (retryAt > 0 && video !== null) {
       video.currentTime = retryAt;
@@ -1308,7 +1318,6 @@
   function setSpeed(value: number, remember = true): void {
     if (drawing) return;
     speed = value;
-    if (video !== null) video.playbackRate = value;
     if (remember) remind(SPEED_KEY, String(value));
     controls.stir();
   }
@@ -1802,12 +1811,6 @@
               feedData();
             }}
             onseeked={feedData}
-            onloadstart={() => {
-              // **読み込みが始まった瞬間に速さを掛け直す。** src を入れ替えると
-              // (端末のコピーへの差し替え) ブラウザは playbackRate を 1 に戻す。
-              // metadata を待ってからでは、その間だけ選んだ速さが外れて見える
-              if (video !== null && speed !== 1) video.playbackRate = speed;
-            }}
             onloadedmetadata={() => {
               resume();
               syncAudio();
