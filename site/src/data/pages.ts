@@ -145,10 +145,10 @@ export const sidebarGroups: { label: string; items: string[] }[] = [
  */
 export const videoImages = [
   "dashboard.webp",
-  "home-watch-anim.webp",
-  "detail-anim.webp",
+  "home-watch-anim.avif",
+  "detail-anim.avif",
   "live.webp",
-  "live-anim.webp",
+  "live-anim.avif",
   "watch.webp",
 ];
 

@@ -32,7 +32,7 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 
 `docs/images/` の画像は **偽の放送で撮ります** — 局も番組もロゴも映像も字幕も作り物
 (`tests/fake/docs.ts`)。本物の放送・ロゴ・本番の画面は画像に出しません。
-E2E と同じ一式 (denpa + 偽エージェント) を立て、ルール・予約・録画を入れてから撮り、webp にして置きます。
+E2E と同じ一式 (denpa + 偽エージェント) を立て、ルール・予約・録画を入れてから撮り、静止画は WebP、動く画像は AVIF にして置きます。
 
 ```sh
 docker compose run --rm docs                                          # 全部撮り直して docs/images へ
@@ -44,7 +44,7 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 
 撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています — 画面の BIZ UDPゴシック
 (OFL で配られているもの) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
-ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、貼るときに 1120×630 へ縮める) は `scripts/capture-docs.ts` の頭に
+ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30fps で組む) は `scripts/capture-docs.ts` の頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
 ## テストの方針

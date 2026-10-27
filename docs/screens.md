@@ -43,7 +43,7 @@
 
 録画の行を押すと、そのまま観る画面へ:
 
-![録画の行から観る画面へ](images/home-watch-anim.webp)
+![録画の行から観る画面へ](images/home-watch-anim.avif)
 
 予約や録画が溜まってきたら、「まとめて表示」で**番組ごと**にまとめられます
 (端末ごとに覚えます)。まとめる単位は、エンコード済みの動画を置くシリーズのフォルダと同じです。
@@ -58,7 +58,7 @@
 録画をファイルとして持ち出すダウンロードはありません ([library.md](library.md#観るのはブラウザで))。
 コマ数 (30/60) や字幕の有無もここに出ます。
 
-![録画の詳細と操作](images/detail-anim.webp)
+![録画の詳細と操作](images/detail-anim.avif)
 
 ## 番組表
 
@@ -73,7 +73,7 @@
 理由ごと見られます。ライブの録画ボタンも同じ一文で断ります。
 観るのはそのままできます。
 
-![番組表から詳細を開く](images/guide-anim.webp)
+![番組表から詳細を開く](images/guide-anim.avif)
 
 BS/CS はロゴをカルーセルから取得して出します ([logo.ts](../src/lib/server/logo.ts))。
 
@@ -88,7 +88,7 @@ BS/CS はロゴをカルーセルから取得して出します ([logo.ts](../sr
 データ放送は映像の右端の縦の列の d で開き、開いている間は指で押せるリモコンが一覧の上に出ます。
 再生の設定 (⚙) の「データ放送を常に受信」を入れた端末では、開く前から受信しておき、番組が自分で出すもの (誘導の表示や自動で出る画面) をテレビと同じく重ねます。リモコンは開いてから出ます ([stream.md](stream.md#常に受信する端末))。
 
-![ライブ視聴](images/live-anim.webp)
+![ライブ視聴](images/live-anim.avif)
 
 ## 録画を観る
 
@@ -189,9 +189,9 @@ BS/CS はロゴをカルーセルから取得して出します ([logo.ts](../sr
 
 説明は要点1行で、続きは「詳しく」に畳んであります。前の節ごとの画面 (`/settings/tuners` など)・前のチューナーの画面 (`/tuners`)・前の「診断」 (`/settings/diagnostics`) は、グループの画面のその節へ送ります。
 
-![設定のチューナー](images/tuners-anim.webp)
+![設定のチューナー](images/tuners-anim.avif)
 
-![設定の録画](images/settings-anim.webp)
+![設定の録画](images/settings-anim.avif)
 
 ### バグの報告
 

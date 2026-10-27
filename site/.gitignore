@@ -4,4 +4,5 @@ dist/
 # scripts/import-docs.ts が ../docs と ../README.md から毎回書き出すもの
 src/content/docs/
 src/assets/docs/
+public/images/
 src/generated/

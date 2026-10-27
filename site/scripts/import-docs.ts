@@ -6,14 +6,15 @@
  *     src/data/pages.ts で上書きできる
  *   - リンク: 公開する docs はサイト内へ、それ以外 (../src など) は GitHub へ
  *   - 画像: docs/images を src/assets/docs に写し、Astro の画像の最適化が効く相対パスにする。
- *     README の <img> も Markdown の画像に直す
+ *     README の <img> も Markdown の画像に直す。動く画像 (AVIF) は Astro (sharp) が読めないので、
+ *     public/images に写して <img> で出す
  *   - GitHub の注意書き (`> [!NOTE]` など) は Starlight の aside (`:::note` など) に
  *   - 放送の映像が映る画像には、偽の放送だという添え書き
  *
  * README はページにせず、トップ (src/pages/index.astro) が読む節ごとの Markdown に切り出す
  * (src/generated/readme/*.md と top.json。どの節を出すかは src/data/pages.ts の topSections)。
  *
- * 書き出す先 (src/content/docs・src/assets/docs・src/generated) は毎回作り直し、git には入れない
+ * 書き出す先 (src/content/docs・src/assets/docs・public/images・src/generated) は毎回作り直し、git には入れない
  */
 import { execFileSync } from "node:child_process";
 import {
@@ -48,6 +49,8 @@ import {
 
 const outDocs = join(siteDir, "src/content/docs");
 const outImages = join(siteDir, "src/assets/docs");
+/** 動く画像 (AVIF) の置き場。Astro の画像の最適化を通さない */
+const outAnimImages = join(siteDir, "public/images");
 const outGenerated = join(siteDir, "src/generated");
 const outReadme = join(outGenerated, "readme");
 
@@ -79,6 +82,7 @@ const h1Anchors = new Map(
 
 rmSync(outDocs, { recursive: true, force: true });
 rmSync(outImages, { recursive: true, force: true });
+rmSync(outAnimImages, { recursive: true, force: true });
 rmSync(outGenerated, { recursive: true, force: true });
 mkdirSync(outDocs, { recursive: true });
 mkdirSync(outGenerated, { recursive: true });
@@ -129,10 +133,36 @@ function copyImages(): void {
   const from = join(docsDir, "images");
   if (!existsSync(from)) return;
   mkdirSync(outImages, { recursive: true });
+  mkdirSync(outAnimImages, { recursive: true });
   for (const f of readdirSync(from)) {
     if (statSync(join(from, f)).isFile())
-      copyFileSync(join(from, f), join(outImages, f));
+      copyFileSync(
+        join(from, f),
+        join(f.endsWith(".avif") ? outAnimImages : outImages, f),
+      );
   }
+}
+
+/**
+ * 動く画像 (AVIF) の Markdown の画像を <img> にする。Astro の画像の最適化を通さないので、
+ * 大きさ (読み込む前に場所を空けておく) と後から読む指定はここで付ける
+ */
+function animImages(text: string): string {
+  return text.replace(
+    new RegExp(`!\\[([^\\]]*)\\]\\((${base}images/([^)\\s]+\\.avif))\\)`, "g"),
+    (_, alt: string, src: string, file: string) => {
+      const { width, height } = avifSize(join(outAnimImages, file));
+      return `<img src="${src}" alt="${alt.replaceAll('"', "&quot;")}" width="${width}" height="${height}" loading="lazy" decoding="async">`;
+    },
+  );
+}
+
+/** AVIF の幅と高さ (ispe の箱。version・flags の 4 バイトのあとに幅と高さ) */
+function avifSize(file: string): { width: number; height: number } {
+  const buf = readFileSync(file);
+  const at = buf.indexOf("ispe");
+  if (at < 0) throw new Error(`import-docs: ${file} の大きさが読めません`);
+  return { width: buf.readUInt32BE(at + 8), height: buf.readUInt32BE(at + 12) };
 }
 
 function convert(text: string, source: Source, outFile: string): string {
@@ -150,6 +180,7 @@ function convert(text: string, source: Source, outFile: string): string {
   body = convertReadmeHtml(body);
   body = convertAlerts(body);
   body = rewriteLinks(body, source.path, outFile);
+  body = animImages(body);
   body = addVideoNotes(body);
 
   const description = override.description ?? describe(body);
@@ -170,6 +201,7 @@ function convertReadmePart(text: string, outFile: string): string {
   let body = convertReadmeHtml(text);
   body = convertAlerts(body);
   body = rewriteLinks(body, readme.path, outFile);
+  body = animImages(body);
   return addVideoNotes(body).trim();
 }
 
@@ -358,6 +390,8 @@ function resolveTarget(
     const slug = slugOf(doc[1]!);
     return `${base}${slug ? `${slug}/` : ""}${hash}`;
   }
+  if (repoPath.startsWith("docs/images/") && repoPath.endsWith(".avif"))
+    return `${base}images/${posix.basename(repoPath)}`;
   if (repoPath.startsWith("docs/images/")) {
     const rel = posix.relative(
       toPosix(dirname(outFile)),
@@ -470,7 +504,8 @@ function addVideoNotes(text: string): string {
     videoImages.some(
       (f) =>
         block.includes(`/assets/docs/${f})`) ||
-        block.includes(`/assets/docs/${f}"`),
+        block.includes(`/assets/docs/${f}"`) ||
+        block.includes(`${base}images/${f}"`),
     );
   // 空行ちょうどで割り、同じ形でつなぎ直す (コードの囲みの中の、続いた空行を潰さない)
   const blocks = text.split("\n\n");
@@ -498,7 +533,7 @@ function addVideoNotes(text: string): string {
       } else if (hasVideo(block)) shotsVideo = true;
       continue;
     }
-    if (/^!\[|^\[!\[/.test(block.trim()) && hasVideo(block)) pushNote();
+    if (/^!\[|^\[!\[|^<img /.test(block.trim()) && hasVideo(block)) pushNote();
   }
   return out.join("\n\n");
 }

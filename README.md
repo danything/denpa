@@ -11,7 +11,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
 1.x から上げる人は [2.0 で変わったこと](docs/v2.md) (画面の場所・無くなった設定) を先に。
 
 <p align="center">
-  <img src="docs/images/home-watch-anim.webp" alt="録画の行を押すと、そのまま観る画面へ" width="720">
+  <img src="docs/images/home-watch-anim.avif" alt="録画の行を押すと、そのまま観る画面へ" width="720">
 </p>
 
 <table>

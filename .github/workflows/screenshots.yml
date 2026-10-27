@@ -2,7 +2,7 @@ name: Screenshots
 
 # README・docs の画像を撮る (scripts/capture-docs.ts。docs/development.md「README の画像」)。
 # PR の CI には入れない (手で走らせるか、shots/ の枝に積んだときだけ)。
-# 偽の放送 (作り物の局・番組・ロゴ・映像) の一式を立てて撮り、docs/images の webp を artifact (shots) に上げる。
+# 偽の放送 (作り物の局・番組・ロゴ・映像) の一式を立てて撮り、docs/images の画像 (静止画の webp と動く画像の avif) を artifact (shots) に上げる。
 # 差し替えるときは artifact の中身を docs/images に置いてコミットする。
 # names に `ui` を入れて走らせると、見た目を見比べる一揃い (主な画面 × 明暗 × デスクトップ・スマホ) を artifact (ui) に上げる
 # `motion` を入れると、動きを見比べる GIF (画面の切り替え・メニューなど) を artifact (motion) に上げる
@@ -41,7 +41,9 @@ jobs:
         if: ${{ !contains(inputs.names, 'ui') && !contains(inputs.names, 'motion') }}
         with:
           name: shots
-          path: docs/images/*.webp
+          path: |
+            docs/images/*.webp
+            docs/images/*.avif
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ contains(inputs.names, 'ui') }}
         with:

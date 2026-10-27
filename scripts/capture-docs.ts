@@ -26,11 +26,11 @@
  * 2. 番組表を集め、ルールと予約を画面と同じ API から入れる
  * 3. 録画は**DB に直接置く** (偽の放送の録画は数秒の作り物で、一覧に並べると尺が嘘になる)。
  *    中身は本物の ffmpeg で組んだ作り物の映像 (色が流れるだけ。台詞は作り物の字幕) とサムネ、CM のチャプター
- * 4. 撮って、`scripts/docs-webp.ts` (ffmpeg) で webp にして docs/images に置く
+ * 4. 撮って、`scripts/docs-images.ts` (ffmpeg) で静止画は WebP、アニメーションは AVIF にして docs/images に置く
  *
  * **撮る条件はここに書いてある** (散らばると撮り直しのたびに画像の大きさが揃わない):
  * 1600×900 (20インチの画面と同じ 16:9)・暗いテーマ・ja-JP・Asia/Tokyo。
- * アニメーションも同じ広さで動かし、貼るときに 1120×630 まで縮める (組み立ての側)。
+ * アニメーションも同じ広さで動かし、縮めずに 30fps で組む (組み立ての側)。
  *
  * 字は本番と同じものを使う (イメージの `docs` 段): 画面は BIZ UDPゴシック、放送の字は
  * Denpa Font (`/api/font/denpa-font.woff2`)。どちらも無いと画像の字が別物になるので、
@@ -52,7 +52,7 @@ import { type Browser, chromium, type Page } from "@playwright/test";
 
 import { docsCaptions } from "../tests/fake/docs";
 import { boot } from "../tests/stack";
-import { toWebp } from "./docs-webp";
+import { toDocsImages } from "./docs-images";
 
 const OUT = process.env["OUT"] ?? "docs/images/.capture";
 const FFMPEG = process.env["DOCS_FFMPEG"] ?? "/usr/bin/ffmpeg";
@@ -429,53 +429,70 @@ async function still(page: Page, name: string): Promise<void> {
   console.log("still", name);
 }
 
-/** 動かしながら撮る。fn の間ずっとコマを貯め、アニメ WebP の材料にする */
+/**
+ * 動かしながら撮る。fn の間ずっとコマを貯め、アニメーションの材料にする。
+ * `motion` と同じく、ブラウザの画面配信 (描き替わるたびに 1 コマ届く) を貯める
+ * (スクリーンショットを繰り返すと 1 秒に数コマしか撮れず、動きがカクカクになる)。
+ * 描き替わらない間はコマが届かないので、コマの長さは届いた時刻の差で持つ
+ */
 async function anim(
   page: Page,
   name: string,
   fn: () => Promise<void>,
 ): Promise<void> {
-  const frames: { buf: Buffer; t: number }[] = [];
-  let running = true;
-  const loop = (async () => {
-    while (running) {
-      frames.push({
-        buf: await page.screenshot({ type: "png" }),
-        t: Date.now(),
-      });
-      await page.waitForTimeout(90);
-    }
-  })();
+  const cdp = await page.context().newCDPSession(page);
+  const frames: { data: string; t: number }[] = [];
+  cdp.on("Page.screencastFrame", (frame) => {
+    frames.push({
+      data: frame.data,
+      t: (frame.metadata.timestamp ?? Date.now() / 1000) * 1000,
+    });
+    void cdp
+      .send("Page.screencastFrameAck", { sessionId: frame.sessionId })
+      .catch(() => {});
+  });
+  await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
   await fn();
-  running = false;
-  await loop;
-  // コマの間隔を実時間で。最後のコマは少し長く見せる。組み立ては scripts/docs-webp.ts で
+  await cdp.send("Page.stopScreencast");
+  await cdp.detach();
+  // 最後のコマは少し長く見せる。組み立ては scripts/docs-images.ts で
   const dir = join(OUT, `${name}.frames`);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   frames.forEach((f, i) => {
-    writeFileSync(join(dir, `${String(i).padStart(4, "0")}.png`), f.buf);
+    writeFileSync(
+      join(dir, `${String(i).padStart(4, "0")}.png`),
+      Buffer.from(f.data, "base64"),
+    );
   });
   const delays = frames.map((f, i) =>
-    i + 1 < frames.length ? frames[i + 1]!.t - f.t : 1500,
+    i + 1 < frames.length
+      ? Math.max(1, Math.round(frames[i + 1]!.t - f.t))
+      : 1500,
   );
   writeFileSync(join(dir, "delays.json"), JSON.stringify(delays));
   console.log("anim", name, frames.length, "frames");
 }
 
-async function slowScroll(page: Page, steps = 40): Promise<void> {
-  // 一覧の画面も設定も窓ごと巻く (番組表と映像の画面だけが自分で巻き取る)
-  const total = await page.evaluate(() => {
+/** 窓ごと上から下まで、ms かけて同じ速さで巻く */
+async function slowScroll(page: Page, ms: number): Promise<void> {
+  // 一覧の画面も設定も窓ごと巻く (番組表と映像の画面だけが自分で巻き取る)。
+  // 描くたびに少しずつ巻く (間を空けて飛び飛びに巻くと、コマを増やしてもカクカクに見える)
+  await page.evaluate(async (ms) => {
     const el = document.scrollingElement;
-    return el ? el.scrollHeight - el.clientHeight : 0;
-  });
-  for (let i = 1; i <= steps; i++) {
-    await page.evaluate(
-      (y) => document.scrollingElement?.scrollTo({ top: y }),
-      (total * i) / steps,
-    );
-    await page.waitForTimeout(120);
-  }
+    if (!el) return;
+    const total = el.scrollHeight - el.clientHeight;
+    const start = performance.now();
+    await new Promise<void>((done) => {
+      const step = (now: number) => {
+        const p = Math.min(1, (now - start) / ms);
+        el.scrollTo({ top: total * p, behavior: "instant" });
+        if (p < 1) requestAnimationFrame(step);
+        else done();
+      };
+      requestAnimationFrame(step);
+    });
+  }, ms);
   await page.waitForTimeout(800);
 }
 
@@ -951,7 +968,7 @@ try {
     await page.context().close();
   }
 
-  // アニメーション (静止画と同じ 1600×900 で動かす。貼るときの大きさは組み立てで縮める)
+  // アニメーション (静止画と同じ 1600×900 で動かし、そのままの大きさで組む)
   {
     const page = await open(browser, 1600, 900);
     if (want("home-watch-anim")) {
@@ -1074,7 +1091,7 @@ try {
       await settle(page, 2000);
       await anim(page, "tuners-anim", async () => {
         await page.waitForTimeout(1000);
-        await slowScroll(page, 60);
+        await slowScroll(page, 7000);
       });
     }
     if (want("settings-anim")) {
@@ -1082,7 +1099,7 @@ try {
       await settle(page, 2000);
       await anim(page, "settings-anim", async () => {
         await page.waitForTimeout(1000);
-        await slowScroll(page, 50);
+        await slowScroll(page, 6000);
       });
     }
     await page.context().close();
@@ -1092,7 +1109,7 @@ try {
   await shutdown();
 }
 
-// 組み立てて docs/images へ (アニメーションは縮め、同じコマはまとめる)。見比べる一揃いと動き (`motion`) だけのときは組まない
+// 組み立てて docs/images へ。見比べる一揃いと動き (`motion`) だけのときは組まない
 if (only.length > 0 && only.every((n) => n === "ui" || n === "motion"))
   process.exit(0);
-toWebp(only);
+toDocsImages(only);
