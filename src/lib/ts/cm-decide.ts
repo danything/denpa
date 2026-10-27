@@ -545,6 +545,12 @@ const SEEN_FRAMES = 3;
 const SEEN_REACH = 1;
 /** 見えないまま持ち越された所として扱う最短 (秒)。これより短いのは、ロゴの判定の窓のぶん */
 const UNSEEN_MIN = 2;
+/**
+ * 見えないまま持ち越された所として扱う最長 (秒。CM 1 本ぶん)。**これより長いのは番組のまま。** 本番の録画 32 本を通すと、
+ * オープニングの 90 秒 (ロゴの点が 87 秒 0 のまま区間に入っていた) を CM にした録画が 2 本あった。CM は 15 秒ごとに
+ * 絵が替わるので、見えない後ろが何本も続くことは少ない
+ */
+const UNSEEN_MAX = 15 + CM_TOLERANCE;
 
 /**
  * **ロゴの区間の尻の、ロゴが見えないまま持ち越された所。** ロゴの判定 (`logo-detect.logoSpans`) は、ロゴが溶けて見えない後ろ
@@ -555,7 +561,8 @@ const UNSEEN_MIN = 2;
  *
  * **区間の中ほどは見ない。** 後ろでまたロゴが見えたなら、その間も番組と見てよい (本編の白い場面)。
  *
- * 区間の尻から、前後 `SEEN_REACH` 秒に `SEEN_SCORE` 以上の点が `SEEN_FRAMES` コマ無いコマが `UNSEEN_MIN` 秒以上続く所。点が無ければ空
+ * 区間の尻から、前後 `SEEN_REACH` 秒に `SEEN_SCORE` 以上の点が `SEEN_FRAMES` コマ無いコマが `UNSEEN_MIN` 秒以上 `UNSEEN_MAX` 秒以下
+ * 続く所。点が無ければ空
  */
 function unseenTails(input: CmInput, spans: Range[]): Range[] {
   const { times, logoScores, duration } = input;
@@ -585,7 +592,9 @@ function unseenTails(input: CmInput, spans: Range[]): Range[] {
       if (seen) break;
     }
     const start = i + 1 < n ? Math.max(span.start, times[i + 1]!) : duration;
-    if (span.end - start >= UNSEEN_MIN) out.push({ start, end: span.end });
+    const length = span.end - start;
+    if (length >= UNSEEN_MIN && length <= UNSEEN_MAX)
+      out.push({ start, end: span.end });
   }
   return out.sort((a, b) => a.start - b.start);
 }

@@ -818,4 +818,22 @@ describe("ロゴの区間の尻の、見えないまま持ち越された所", (
       expect(round(decideCm(input))).toEqual([{ start: 300, end: 360 }]);
     }
   });
+
+  test("CM 1 本より長く見えない区間の尻 (オープニングの 90 秒) は番組のまま", () => {
+    // 本編 10〜83.4、オープニング 83.4〜173.4 (ロゴの点は 0 のまま区間が 170 まで続く)、提供 173.4〜183.4、CM 183.4〜243.4
+    const joints = [10, 83.4, 173.4, ...every15(183.4, 243.4)];
+    const input = held(
+      600,
+      joints,
+      [
+        { start: 10.2, end: 170 },
+        { start: 243.6, end: 600 },
+      ],
+      [{ start: 83.4, end: 170 }],
+    );
+    expect(round(decideCm(input))).toEqual([
+      { start: 0, end: 10 },
+      { start: 183.4, end: 243.4 },
+    ]);
+  });
 });
