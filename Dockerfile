@@ -122,11 +122,11 @@ CMD ["bun", "run", "test"]
 
 # ---------------------------------------------------------------------------
 # README・docs の画像を撮る (scripts/capture-docs.ts。docs/development.md「README の画像」)。
-# E2E のイメージに、画像に出る字と、作り物の録画を組む本物の ffmpeg を足す
+# E2E のイメージに、画像に出る字と、本物の ffmpeg (作り物の録画を組み、撮った画像を WebP にする) を足す
 # ---------------------------------------------------------------------------
 FROM test AS docs
 RUN apt-get update && \
-    apt-get -y --no-install-recommends install ffmpeg python3-pil && \
+    apt-get -y --no-install-recommends install ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 # 画面の字。app.css が最初に挙げる BIZ UDPゴシックは Windows には入っているが、ここには無い。
 # OFL で配られているもの (google/fonts) をコミットで留め、中身を照らす

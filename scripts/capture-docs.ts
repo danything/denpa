@@ -26,7 +26,7 @@
  * 2. 番組表を集め、ルールと予約を画面と同じ API から入れる
  * 3. 録画は**DB に直接置く** (偽の放送の録画は数秒の作り物で、一覧に並べると尺が嘘になる)。
  *    中身は本物の ffmpeg で組んだ作り物の映像 (色が流れるだけ。台詞は作り物の字幕) とサムネ、CM のチャプター
- * 4. 撮って、`scripts/docs-webp.py` で webp にして docs/images に置く
+ * 4. 撮って、`scripts/docs-webp.ts` (ffmpeg) で webp にして docs/images に置く
  *
  * **撮る条件はここに書いてある** (散らばると撮り直しのたびに画像の大きさが揃わない):
  * 1600×900 (20インチの画面と同じ 16:9)・暗いテーマ・ja-JP・Asia/Tokyo。
@@ -52,6 +52,7 @@ import { type Browser, chromium, type Page } from "@playwright/test";
 
 import { docsCaptions } from "../tests/fake/docs";
 import { boot } from "../tests/stack";
+import { toWebp } from "./docs-webp";
 
 const OUT = process.env["OUT"] ?? "docs/images/.capture";
 const FFMPEG = process.env["DOCS_FFMPEG"] ?? "/usr/bin/ffmpeg";
@@ -448,7 +449,7 @@ async function anim(
   await fn();
   running = false;
   await loop;
-  // コマの間隔を実時間で。最後のコマは少し長く見せる。組み立ては Python (Pillow) で
+  // コマの間隔を実時間で。最後のコマは少し長く見せる。組み立ては scripts/docs-webp.ts で
   const dir = join(OUT, `${name}.frames`);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
@@ -1094,7 +1095,4 @@ try {
 // 組み立てて docs/images へ (アニメーションは縮め、同じコマはまとめる)。見比べる一揃いと動き (`motion`) だけのときは組まない
 if (only.length > 0 && only.every((n) => n === "ui" || n === "motion"))
   process.exit(0);
-const webp = spawnSync("python3", ["scripts/docs-webp.py", ...only], {
-  stdio: "inherit",
-});
-if (webp.status !== 0) throw new Error("webp の組み立てに失敗しました");
+toWebp(only);
