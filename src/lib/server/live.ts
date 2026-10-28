@@ -236,8 +236,18 @@ export function encodeArgs(
   codec: StreamCodec = "h264",
   caption: number | null = 0,
   hw: LiveHw | null = null,
+  copy = false,
 ): string[] {
-  const picture = codec === "audio" ? null : videoArgs(codec, hw);
+  const video = codec !== "audio";
+  /*
+   * **`copy` のときはデコードしない。** インタレ解除 (`-vf`) もコマ数の上限
+   * (`-fpsmax`) も「デコードして作り直す」前提の道具で、`-c:v copy` とは
+   * 同時に使えない (ffmpeg が受け付けない)。掛けるものが無いのは、相手が
+   * 既にプログレッシブな H.264 を作っているときだけ (`tunerTranscoding`)。
+   * AV1 を選ばれたら写せない (チューナーは H.264 しか作らない) ので、そのときも今までどおり
+   */
+  const passthrough = copy && codec === "h264";
+  const picture = video && !passthrough ? videoArgs(codec, hw) : null;
   const from = programSpec(program);
   return [
     "-hide_banner",
@@ -252,15 +262,14 @@ export function encodeArgs(
     "-i",
     "pipe:0",
     // 音声だけなら映像はエンコードしない (StreamCodec)
-    ...(picture !== null
+    ...(video
       ? [
           /*
            * インタレ解除 (上の説明)。**ライブは常に60コマ。** 録画は本編映像から実測して
            * 30に落とすことがあるが (`encoder.measureSmoothMotion`)、ライブは映像が来る前に
            * 決めないといけない。60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
            */
-          "-vf",
-          picture.filter,
+          ...(picture === null ? [] : ["-vf", picture.filter]),
           "-map",
           `${from}:v:0`,
           /*
@@ -282,9 +291,9 @@ export function encodeArgs(
            * 値はインタレ解除の出方そのまま — 29.97 のインタレのフィールドを
            * 起こすので 59.94
            */
-          "-fpsmax",
-          "60000/1001",
-          ...picture.encoder,
+          ...(picture === null ? [] : ["-fpsmax", "60000/1001"]),
+          // 写すときは映像のエンコーダを載せない (下の `copy` の説明)
+          ...(picture === null ? ["-c:v", "copy"] : picture.encoder),
         ]
       : []),
     // 何本目の音声か。複数入っている放送では 0 が主とは限らない
@@ -303,9 +312,7 @@ export function encodeArgs(
     "1",
     "pipe:1",
     // **2つ目の出口。** 字幕をそのまま、映像と同じ物差しの時刻付きで出す
-    ...(caption === null || picture === null
-      ? []
-      : captionOutput(from, caption)),
+    ...(caption === null || !video ? [] : captionOutput(from, caption)),
   ];
 }
 
@@ -490,12 +497,55 @@ export function audioArgs(codec: StreamCodec): string[] {
  * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
  *
  * **音声も組で決まる** (`audioArgs`)。AV1 は Opus、H.264 は AAC
+ *
+ * **写す経路 (`config.liveCopy`) でも同じ値を返す。** 実際に流れるのは
+ * チューナーが作った Main@3.1 (720p) で、宣言 (High@4.1) より低い。
+ * Chromium は `avc1.640029` を宣言したまま Main@3.1 の fMP4 を追記しても
+ * 受け取って再生した (15秒・エラー0・`readyState=4` を実測)。
+ * 宣言を実ストリームに合わせるには入口の SPS を読むことになるが、
+ * `tuned` を送る時点ではまだ1バイトも来ていない
  */
 export function codecsFor(codec: LiveCodec): string {
   return codec === "av1"
     ? 'video/mp4; codecs="av01.0.08M.08,opus"'
     : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 }
+
+/**
+ * チューナーが**オンボードで H.264 を作っているか** (`config.liveCopy` の判断)。
+ *
+ * 作っているなら、こちらでデコードして作り直す意味が無い — 画質は世代で劣化し、
+ * CPU を1コア近く食う。見に行く先はチューナーエージェントの `/presets` で、
+ * **`passthrough` のときだけ「作っていない」** (放送の MPEG-2 をそのまま流している。
+ * MSE は MPEG-2 を受け取れないので写せない)。
+ *
+ * **短く待って、少しの間は覚えておく。** 選局のたびに待つと映像が出るのが遅れる。
+ * 取れなかったら迷わず「作っていない」に倒す — 写せないのに写すと**何も出ない**が、
+ * エンコードしすぎるぶんには今までどおり映る
+ */
+export async function tunerTranscoding(): Promise<boolean> {
+  const now = Date.now();
+  if (presetSeen !== null && now - presetSeen.at < PRESET_TTL) {
+    return presetSeen.transcoding;
+  }
+  let transcoding = false;
+  try {
+    const res = await fetch(`${config.agentUrl}/presets`, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(1500),
+    });
+    const html = await res.text();
+    const active = /適用中: <b>([^<]*)<\/b>/.exec(html)?.[1] ?? null;
+    transcoding = active !== null && active !== "passthrough";
+  } catch {
+    transcoding = false;
+  }
+  presetSeen = { at: now, transcoding };
+  return transcoding;
+}
+
+const PRESET_TTL = 30_000;
+let presetSeen: { at: number; transcoding: boolean } | null = null;
 
 /**
  * 「放送休止」と読める番組名。
@@ -1037,6 +1087,18 @@ class Session {
       // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)
       let hw = this.codec === "audio" ? null : pickLiveHw(this.codec);
       /*
+       * **チューナーが既に H.264 を作っているなら、映像は写すだけにする**
+       * (`config.liveCopy`)。作っていない (放送そのままの MPEG-2) ときと、
+       * 追っかけ (録画の TS) のときは今までどおりエンコードする。
+       * 写すときは GPU の出番が無いので、試しのエンコードもしない
+       */
+      let copy =
+        config.liveCopy &&
+        this.codec === "h264" &&
+        this.source === undefined &&
+        (await tunerTranscoding());
+      if (copy) hw = null;
+      /*
        * **ライブの TS はリーダーを1つだけ作って、起こし直しても使い回す。**
        *
        * リーダー (`getReader`) は1人しか持てない。ffmpeg ごとに作ると、前の流し込みが
@@ -1055,7 +1117,14 @@ class Session {
         const proc = Bun.spawn(
           [
             config.ffmpeg,
-            ...encodeArgs(this.program, this.audio, this.codec, wanted, hw),
+            ...encodeArgs(
+              this.program,
+              this.audio,
+              this.codec,
+              wanted,
+              hw,
+              copy,
+            ),
           ],
           // 字幕は4本目のパイプ (pipe:3) へ出させる。**stdio の配列でしか増やせない**
           {
@@ -1072,7 +1141,7 @@ class Session {
         if (this.opening.media === undefined) {
           this.opening.spawned = this.since();
           delete this.opening.init;
-          this.way = `${this.codec}${hw === null ? "" : `・GPU ${hw.way.kind}`}`;
+          this.way = `${this.codec}${copy ? "・写す" : ""}${hw === null ? "" : `・GPU ${hw.way.kind}`}`;
         }
 
         /*
@@ -1128,6 +1197,23 @@ class Session {
          * ので先にそちらを直す (下)。**黙って替えず、一行だけ言う** — 遅れ・CPU の重さが
          * 変わるので、設定の印を外すかどうか決める手がかりになる
          */
+        /*
+         * **写して映像が出なかったら、エンコードし直す。**
+         *
+         * 写すだけでは、入口の頭が SPS/PPS + I フレームで始まっていないと
+         * **1パケットも出せない** (実測: 途中の PES から始めた TS を
+         * `-c:v copy` に通すと `non-existing PPS 0 referenced` で終了)。
+         * 見ている人はまだ何も受け取っていないので、経路を替えて起こし直すだけで済む。
+         * **黙って替えず、一行だけ言う** — CPU と画質の話が変わるので
+         */
+        if (copy && !this.produced) {
+          console.warn(
+            `[live] ${label}: チューナーの H.264 をそのまま写せなかったので、エンコードし直します`,
+          );
+          copy = false;
+          hw = this.codec === "audio" ? null : pickLiveHw(this.codec);
+          continue;
+        }
         if (
           hw !== null &&
           !this.produced &&

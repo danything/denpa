@@ -113,6 +113,16 @@ export const config = {
   encodeMaxAttempts: num("ENCODE_MAX_ATTEMPTS", 5),
   ffprobe: str("FFPROBE", "/usr/local/bin/ffprobe"),
   /**
+   * ライブで、チューナーが既に H.264 を作っているなら**映像を再エンコードせずに写す**。
+   *
+   * 既定は off。on にすると、チューナー側がオンボード変換しているときだけ
+   * `-c:v copy` で通す (`server/live.ts` の `tunerTranscoding`)。
+   * 変換していない (放送そのままの MPEG-2) ときは今までどおりエンコードする —
+   * MSE は MPEG-2 を受け取れないため。**音声は写さない** (AAC を写すと
+   * `esds` に AudioSpecificConfig が入らず MSE が拒否する)
+   */
+  liveCopy: bool("DENPA_LIVE_COPY", false),
+  /**
    * GPU のデバイスを探すパターン (最後の段に `*`)。当たったデバイスを全部試して、QSV / VA-API が
    * 初期化できたものでエンコードする (server/hwenc.ts)。Pod / コンテナに `/dev/dri` を
    * 渡していなければ1つも無いのが普通

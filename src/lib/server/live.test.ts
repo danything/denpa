@@ -298,6 +298,64 @@ describe("エンコード方式を選ぶ", () => {
 });
 
 /**
+ * **チューナーが既に H.264 を作っているなら、作り直さない** (`config.liveCopy`)。
+ *
+ * 実機 (PIX-DT295 のオンボード変換) では、こちらが `libx264 ultrafast` で
+ * デコードし直していた — 画質は世代で劣化し、CPU を1コア近く食っていた。
+ * 写すときはフィルタもコマ数の上限も掛けられない (`-c:v copy` と同時には使えない)。
+ *
+ * **音声は写さない。** 放送の AAC をそのまま mp4 へ入れると `esds` に
+ * AudioSpecificConfig (tag 0x05) が入らず、MSE が
+ * `CHUNK_DEMUXER_ERROR_APPEND_FAILED` で受け取らない (実測)。
+ * 音声だけエンコードすれば通る (15秒の fMP4 を Chromium で再生して確認)
+ */
+describe("チューナーの H.264 をそのまま写す", () => {
+  const passthrough = (
+    codec: "h264" | "av1" = "h264",
+    caption: number | null = 0,
+  ) => encodeArgs(1024, stereo, codec, caption, null, true);
+
+  test("映像は写し、音声はエンコードする", () => {
+    const args = passthrough();
+    expect(args[args.indexOf("-c:v") + 1]).toBe("copy");
+    expect(args).not.toContain("libx264");
+    expect(args[args.indexOf("-c:a") + 1]).toBe("aac");
+  });
+
+  /** フィルタを掛けると ffmpeg がデコードを始めるので、写せない */
+  test("インタレ解除もコマ数の上限も掛けない", () => {
+    const args = passthrough();
+    expect(args).not.toContain("-vf");
+    expect(args).not.toContain("-fpsmax");
+  });
+
+  /** 局を名指しする理屈は写すときも同じ (1つの物理チャンネルに複数の局が入っている) */
+  test("局の名指しは残る", () => {
+    const args = passthrough();
+    expect(args).toContain("0:p:1024:v:0");
+    expect(args).toContain("0:p:1024:a:0");
+  });
+
+  /** 字幕は別の ffmpeg が同じ TS から写すので、映像を写しても消えない */
+  test("字幕の出口は残る", () => {
+    expect(passthrough("h264", 0)).toContain("pipe:3");
+    expect(passthrough("h264", null)).not.toContain("pipe:3");
+  });
+
+  /** チューナーは H.264 しか作らない。AV1 を選ばれたら今までどおりエンコードする */
+  test("AV1 を選ばれたら写さない", () => {
+    const args = passthrough("av1");
+    expect(args[args.indexOf("-c:v") + 1]).toBe("libsvtav1");
+  });
+
+  /** 既定 (写さない) は今までと同じ */
+  test("指定しなければ今までどおりエンコードする", () => {
+    const args = encodeArgs(1024, stereo, "h264", 0, null, false);
+    expect(args[args.indexOf("-c:v") + 1]).toBe("libx264");
+  });
+});
+
+/**
  * **AV1 と組むときは Opus。**
  *
  * 設計 (stream.md#前提) が狙っていた組み合わせで、録画と同じ扱いでもある
