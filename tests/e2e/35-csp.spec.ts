@@ -56,12 +56,17 @@ test.describe("CSP", () => {
       "/rules",
       "/settings/recording",
       "/settings/reception",
+      "/settings/integrations",
     ]) {
       const response = await page.goto(path);
       const policy = response?.headers()["content-security-policy"] ?? "";
       expect(policy, path).toContain("script-src-attr 'none'");
       expect(policy, path).toMatch(/script-src 'self' 'nonce-[^']+'/);
       expect(policy, path).not.toContain("unsafe-eval");
+      // 外へ繋いでよいのは実況のコメントの 2 つだけ (ホストまで書く。`wss:` だけにするとどこへでも繋げる)
+      expect(policy, path).toContain(
+        "connect-src 'self' wss://nx-jikkyo.tsukumijima.net https://jikkyo.tsukumijima.net;",
+      );
       await page.locator('[data-hydrated="true"]').waitFor();
       // app.html の色当て (インラインの1つ) も nonce で通っている
       expect(

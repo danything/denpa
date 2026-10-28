@@ -7,6 +7,8 @@ import { FileSystemIconLoader } from "unplugin-icons/loaders";
 import Icons from "unplugin-icons/vite";
 import { defineConfig, type Plugin } from "vite";
 
+import { KAKOLOG_API, NX_JIKKYO_WS } from "./src/lib/jikkyo/endpoints.ts";
+
 /**
  * イメージに入れる Denpa Font のバージョン (Dockerfile の `ARG DENPA_FONT_VERSION`)。
  * 字の URL に付けて、バージョンごとに1年持たせる (`src/lib/font.ts`)。読めなければ空にして言う
@@ -112,8 +114,12 @@ export default defineConfig({
           "font-src": ["self", "data:", "blob:"],
           // MSE と端末に落とした録画は blob:
           "media-src": ["self", "blob:"],
-          // fetch・SSE・ライブの WebSocket はみな自分 ('self' は同じ host の ws:/wss: も含む)
-          "connect-src": ["self"],
+          /*
+           * fetch・SSE・ライブの WebSocket は自分 ('self' は同じ host の ws:/wss: も含む)。
+           * 外は実況のコメントの 2 つだけ (端末が直接繋ぐ。`#lib/jikkyo/endpoints.ts`)。世帯の設定がオフでも許したまま —
+           * CSP は組むときに決まるので、繋ぐかどうかは画面が設定を見て決める
+           */
+          "connect-src": ["self", NX_JIKKYO_WS, KAKOLOG_API],
           // 変換せずに観る経路の worker と PWA の ServiceWorker
           "worker-src": ["self"],
           "object-src": ["none"],

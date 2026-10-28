@@ -1,0 +1,65 @@
+<script lang="ts">
+  import { autosave, SaveState } from "#lib/autosave.svelte.js";
+  import Lead from "#lib/components/Lead.svelte";
+  import SaveNote from "#lib/components/SaveNote.svelte";
+
+  import type { PageData } from "./$types";
+
+  let { data }: { data: PageData } = $props();
+  const save = new SaveState();
+</script>
+
+<!--
+    **実況のコメント (世帯の設定。既定はオフ)。** オンにすると、端末の ⚙ に「実況」の行が出る
+    (端末ごとのオン・オフはそちら)。コメントは denpa のサーバを通らず、端末が NX-Jikkyo と
+    過去ログ API に直接繋ぐ。相手に何が見えるかは説明の1行目に出す (隠さない。docs/architecture.md)
+-->
+<div class="sections readable">
+  <section class="section">
+    <div class="section-head">
+      <h2>実況</h2>
+      <SaveNote status={save} />
+    </div>
+    <form
+      method="POST"
+      action="?/saveJikkyo"
+      use:autosave={save}
+      class="fields setting-rows"
+    >
+      <div class="check-item">
+        <label class="check-row">
+          <input
+            type="checkbox"
+            name="jikkyo"
+            checked={data.jikkyo}
+            data-testid="jikkyo-setting"
+          />
+          <span>ニコニコ実況のコメントを流せるようにする</span>
+        </label>
+        <Lead class="indent">
+          オンにすると、実況をオンにした端末が外のサービスに直接繋ぎます。<strong
+            >相手には端末の IP と、どの局をいつ観ているかが見えます</strong
+          >
+          {#snippet more()}
+            <p>
+              ライブと録画に、ニコニコ実況のコメントを流せるようにします。流すかどうかは、端末ごとに再生の設定
+              (⚙) の「実況」で決めます。
+            </p>
+            <p>
+              コメントは denpa のサーバを通りません。端末が NX-Jikkyo
+              (tsukumijima さんが運営する非公式のサービス) とニコニコ実況
+              過去ログ API に直接繋ぎます。相手と、その前に立つ Cloudflare
+              には、端末の IP・ブラウザの種類・denpa のアドレス
+              (ホスト名)・どの局をいつ観ているかが見えます。録画の一覧やログインの情報は出ません。
+            </p>
+            <p>
+              ライブの局の一覧の「実況」タブ (勢いの順) だけは、denpa のサーバが
+              NX-Jikkyo から勢いを読んで渡します (端末の IP
+              は見えません)。コメントを書き込む機能はありません。
+            </p>
+          {/snippet}
+        </Lead>
+      </div>
+    </form>
+  </section>
+</div>

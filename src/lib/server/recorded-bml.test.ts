@@ -17,6 +17,7 @@ import {
   stream,
   tdtPacket as tdt,
 } from "@danything/arib/synth";
+import { eq } from "drizzle-orm";
 
 import { replayAt } from "#lib/ts/data-timeline.js";
 
@@ -26,7 +27,7 @@ import type { Recording } from "../types";
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-bml-db-")), "denpa.db");
 const { orm } = await import("./db");
-const { services } = await import("./schema");
+const { recordings, services } = await import("./schema");
 const { loadRecordedBml, saveRecordedBml, withProgramInfo } =
   await import("./recorded-bml");
 
@@ -238,5 +239,54 @@ describe("saveRecordedBml / loadRecordedBml", () => {
       }),
     ).toBe(0);
     expect(loadRecordedBml(sidecar)).toEqual([]);
+  });
+});
+
+describe("saveRecordedBml と録画の頭の放送時刻", () => {
+  /** 録画の行を 1 つ入れる (`ts_head` を見るため) */
+  function row(tsHead: number | null): void {
+    orm().delete(recordings).run();
+    orm()
+      .insert(recordings)
+      .values({
+        id: 1,
+        service_id: 7,
+        name: "録画のテスト",
+        start_at: T,
+        end_at: T + 60_000,
+        ts_head: tsHead,
+        created_at: 0,
+        updated_at: 0,
+      })
+      .run();
+  }
+  const tsHeadOf = () =>
+    orm()
+      .select({ ts_head: recordings.ts_head })
+      .from(recordings)
+      .where(eq(recordings.id, 1))
+      .get()?.ts_head;
+
+  test("空なら、TS の頭の放送時刻を書く (データ放送の有る無しに関わらず)", async () => {
+    const ts = join(dir, "head.ts");
+    writeFileSync(ts, recorded());
+    row(null);
+    await saveRecordedBml(ts, join(dir, "head.bml.jsonl"), recording(T), {
+      kept: null,
+      skip: 0,
+    });
+    // 最初の TDT は録画の頭 (番組の始まりの 10秒前) と同じ PCR に来ている
+    expect(tsHeadOf()).toBe(T - 10_000);
+  });
+
+  test("録っている間に測れていれば上書きしない", async () => {
+    const ts = join(dir, "head2.ts");
+    writeFileSync(ts, recorded());
+    row(T - 9_500);
+    await saveRecordedBml(ts, join(dir, "head2.bml.jsonl"), recording(T), {
+      kept: null,
+      skip: 0,
+    });
+    expect(tsHeadOf()).toBe(T - 9_500);
   });
 });

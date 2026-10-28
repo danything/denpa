@@ -26,6 +26,7 @@
     "remoteControlKey": 9,
     "logo": "api/services/3227310008/logo",
     "live": "api/services/3227310008/live",
+    "jikkyo": "jk9",
     "now": {
       "id": 32736103210001,
       "title": "ニュース",
@@ -68,6 +69,9 @@
 - `now.reserved` はその番組を録る予定か (予約が予約済みか録画中。競合で弾かれたものは `false`)、`now.recording` は
   いま録っている最中か (録画中なら `reserved` も `true`)。番組表のマスの印と同じ物差しです。
   録画ボタンの印に使い、押すのは [`POST /api/services/<id>/record`](#いまの番組を録る-post-apiservicesidrecord)
+- `jikkyo` は実況のチャンネル (`jk1` など。NX-Jikkyo と過去ログ API のチャンネルの ID)。実況の無い局と、世帯の設定 (連携の「実況」) が
+  オフのときは `null`。対応表は denpa が持ちます (`src/lib/jikkyo/channels.ts`)。コメントは denpa を通らないので、
+  使う側が NX-Jikkyo と過去ログ API へ直接繋ぎます ([architecture.md](architecture.md#端末が外へ繋ぐもの-実況のコメント))
 
 ### 音声の一覧 `audios`
 
@@ -649,7 +653,13 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 ## 録画の状態 `GET /api/recordings/<id>`
 
 ```json
-{ "id": 12, "encoded": false, "state": "recording", "durationMs": null }
+{
+  "id": 12,
+  "encoded": false,
+  "state": "recording",
+  "durationMs": null,
+  "jikkyo": { "channel": "jk9", "head": 1790000000000 }
+}
 ```
 
 - `encoded` はエンコード済みのファイルがあるか。「エンコードしない」録画は元の TS を置くだけなので、置き終えても `false` のまま
@@ -657,6 +667,24 @@ OAuth のデバイス認可 (RFC 8628) と同じ方式です。どちらも資�
 - `durationMs` は[一覧](#録画の一覧-get-apirecordings)の `durationMs` と同じもの (録画中は `null`)。
   追っかけのストリームが終わったとき、録り終えて最後まで観たのかを確かめるのに使えます (一覧を取り直さずに済む)
 - 追っかけ再生の画面は `recordings` の通知 ([上記](#変化の通知-get-apievents)) のたびにこれを読み、`encoded` が `true` になったら観る画面への案内を出す
+- `jikkyo` は実況のチャンネルと、元の TS の頭 (再生位置 0 の手前) の放送時刻 (epoch ms)。実況の無い局と、世帯の設定がオフのときは `null`。
+  頭は TS から測った値で、測れていない録画 (取り込んだものなど) は予定の時刻 (`record_from`、無ければ番組の始まりから前のマージンを引いたもの) です。
+  再生位置を元の TS の秒に直して (CM を切ったものは切った区間を戻して) 足すと、その場面の放送時刻になります。
+  過去ログ API にその時刻のコメントを訊けば、場面に合ったコメントが取れます
+
+## 局の勢い `GET /api/jikkyo/ranking`
+
+実況のある局の、いまの勢い (直近 60 秒のコメント数。公式のニコニコ実況と NX-Jikkyo の合計) です。
+
+```json
+{ "at": 1790000000000, "channels": [{ "serviceId": 3227310008, "force": 36 }] }
+```
+
+- 今の受信設定にある局のうち、放送中のスレッドがある局だけ。並べ替えはしません。
+  系列の地方局とサブチャンネルには、当たったチャンネルの勢いを同じように付けます
+- NX-Jikkyo の REST はブラウザから読めない (CORS が無い) ので、denpa のサーバが中継します。呼ばれたときだけ NX-Jikkyo を読み、
+  30 秒は同じものを返します (`at` は読んだ時刻)。保存はしません
+- 世帯の設定がオフなら `403`、NX-Jikkyo から読めなければ `503`
 
 ## 録画を消す `DELETE /api/recordings/<id>`
 

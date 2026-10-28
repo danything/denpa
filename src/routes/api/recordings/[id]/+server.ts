@@ -2,6 +2,7 @@ import { error, json } from "@sveltejs/kit";
 
 import { emit } from "#lib/server/events.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
+import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { encodedFile } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 
@@ -14,7 +15,9 @@ import { recordingOr404 } from "#lib/server/recording.js";
  * `encoded` は**エンコード済みのファイルがあるか**。「エンコードしない」録画は置き場にあるのが
  * 元の TS なので、置き終えても false のまま。
  * `durationMs` は一覧 (`GET api/recordings`) と同じもの。テレビのアプリの追っかけは、ストリームが終わったときに
- * これで「録り終えて最後まで観たか」を確かめる (一覧を丸ごと取り直さずに済む)
+ * これで「録り終えて最後まで観たか」を確かめる (一覧を丸ごと取り直さずに済む)。
+ * `jikkyo` は実況のチャンネルと、元の TS の頭の放送時刻 (`{ channel, head }`。`server/jikkyo.ts`)。
+ * 世帯の設定がオフ・実況の無い局は null。コメントは端末が過去ログ API から直接取得する
  */
 export function GET({ params }) {
   const recording = recordingOr404(params.id);
@@ -23,6 +26,7 @@ export function GET({ params }) {
     encoded: encodedFile(recording) !== null,
     state: recording.state,
     durationMs: recording.duration_ms,
+    jikkyo: recordingJikkyo(recording),
   });
 }
 

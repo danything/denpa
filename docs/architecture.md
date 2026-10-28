@@ -186,21 +186,21 @@ VA-API のドライバ) だけで、Debian では amd64 にしか無いので ar
 JS として動き**、ログインの控えで API を呼べることになるので、「放送のものを本物の JS として
 動かさない」最後の砦として CSP でも止めます。
 
-| 指令                       | 値                       | 理由                                                                                                                                                                                                                                                                                                                                |
-| -------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `script-src`               | `'self'` + nonce         | 自分の束 (`_app/`。データ放送のエンジンの遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない**                                                                                                                                                           |
-| `script-src-attr`          | `'none'`                 | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの)                                                                                                                                                                                                                                                                         |
-| `style-src`                | `'self' 'unsafe-inline'` | 下の「スタイルは止めない」                                                                                                                                                                                                                                                                                                          |
-| `img-src`                  | `'self' data: blob:`     | 局ロゴ・ポスターは自分。データ放送の画像と DRCS (外字) は作り直して blob:。data: は CSS に埋めたアイコン                                                                                                                                                                                                                            |
-| `font-src`                 | `'self' data: blob:`     | Denpa Font は自分 (`/api/font/denpa-font.woff2`)                                                                                                                                                                                                                                                                                    |
-| `media-src`                | `'self' blob:`           | 録画は自分。ライブの MSE と端末に保存した録画は blob:                                                                                                                                                                                                                                                                               |
-| `connect-src`              | `'self'`                 | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む                                                                                                                                                                                                              |
-| `worker-src`               | `'self'`                 | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker                                                                                                                                                                                                                                                       |
-| `object-src`               | `'none'`                 | 使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない                                                                                                                                                                                                                                     |
-| `frame-src`                | `'self'`                 | Hybridcast のアプリを入れる iframe (`/api/bml/hybridcast`) だけ。中身は sandbox で使い捨てのオリジンになり、denpa には触れない ([stream.md](stream.md#hybridcast))                                                                                                                                                                  |
-| `base-uri` / `form-action` | `'self'`                 | `<base>` とフォームの送り先は自分だけ                                                                                                                                                                                                                                                                                               |
-| `frame-ancestors`          | `'self'`                 | denpa の画面を枠に入れてよいのは自分だけ。外のサイトの隠した iframe で、信頼するネットワークの人の権限のままボタンを押させるのを止める ([auth.md](auth.md#アプリのペアリング))。古いブラウザ向けに `X-Frame-Options: SAMEORIGIN` も付ける (`hooks.server.ts` の `finish`)。Home Assistant の Ingress のような同じオリジンの枠は通る |
-| `default-src`              | `'self'`                 | 上に無いもの (マニフェストなど)                                                                                                                                                                                                                                                                                                     |
+| 指令                       | 値                                                                      | 理由                                                                                                                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `script-src`               | `'self'` + nonce                                                        | 自分の束 (`_app/`。データ放送のエンジンの遅延読み込みも) と、SvelteKit の起動・後から流すデータの `<script>` (nonce)。**`'unsafe-inline'` と `'unsafe-eval'` は入れない**                                                                                                                                                           |
+| `script-src-attr`          | `'none'`                                                                | `onclick="…"` などの属性のハンドラを止める (上の穴そのもの)                                                                                                                                                                                                                                                                         |
+| `style-src`                | `'self' 'unsafe-inline'`                                                | 下の「スタイルは止めない」                                                                                                                                                                                                                                                                                                          |
+| `img-src`                  | `'self' data: blob:`                                                    | 局ロゴ・ポスターは自分。データ放送の画像と DRCS (外字) は作り直して blob:。data: は CSS に埋めたアイコン                                                                                                                                                                                                                            |
+| `font-src`                 | `'self' data: blob:`                                                    | Denpa Font は自分 (`/api/font/denpa-font.woff2`)                                                                                                                                                                                                                                                                                    |
+| `media-src`                | `'self' blob:`                                                          | 録画は自分。ライブの MSE と端末に保存した録画は blob:                                                                                                                                                                                                                                                                               |
+| `connect-src`              | `'self' wss://nx-jikkyo.tsukumijima.net https://jikkyo.tsukumijima.net` | fetch・SSE・データ放送の双方向の中継 (`/api/bml/…`)・ライブの WebSocket。`'self'` は同じ host の `ws:` / `wss:` も含む。外の 2 つは実況のコメント (下の「端末が外へ繋ぐもの」)。ホストまで書き、世帯の設定がオフでも許したまま (CSP は組むときに決まる。繋ぐかどうかは画面が設定を見て決める)                                       |
+| `worker-src`               | `'self'`                                                                | 変換せずに観る経路の worker (`src/lib/raw/worker.ts`) と PWA の ServiceWorker                                                                                                                                                                                                                                                       |
+| `object-src`               | `'none'`                                                                | 使わない。BML の `<object>` はエンジンが画像 (`<img>`) か映像の場所の目印にするので読み込まない                                                                                                                                                                                                                                     |
+| `frame-src`                | `'self'`                                                                | Hybridcast のアプリを入れる iframe (`/api/bml/hybridcast`) だけ。中身は sandbox で使い捨てのオリジンになり、denpa には触れない ([stream.md](stream.md#hybridcast))                                                                                                                                                                  |
+| `base-uri` / `form-action` | `'self'`                                                                | `<base>` とフォームの送り先は自分だけ                                                                                                                                                                                                                                                                                               |
+| `frame-ancestors`          | `'self'`                                                                | denpa の画面を枠に入れてよいのは自分だけ。外のサイトの隠した iframe で、信頼するネットワークの人の権限のままボタンを押させるのを止める ([auth.md](auth.md#アプリのペアリング))。古いブラウザ向けに `X-Frame-Options: SAMEORIGIN` も付ける (`hooks.server.ts` の `finish`)。Home Assistant の Ingress のような同じオリジンの枠は通る |
+| `default-src`              | `'self'`                                                                | 上に無いもの (マニフェストなど)                                                                                                                                                                                                                                                                                                     |
 
 **画面の移動は関わりません。** OIDC のログイン (`/login` が Entra へ 302)・
 Hybridcast (別のタブで開く)・更新のお知らせのリンクは移動なので、上のどれにも掛かりません。
@@ -237,6 +237,7 @@ CSS で抜き出して困る秘密 (属性に入った鍵など) はありませ
 **この「外へは出られない」は `img-src` / `font-src` を自分・data:・blob: に絞っているから**
 成り立っています。外のサーバの画像や字を許すと、BML の CSS (属性セレクタ + `url()`) で
 画面の中身を外へ送れるようになるので、そのときはスタイルも絞り直します。
+`connect-src` に外を足しても、CSS からは `connect-src` を使えないので、ここは崩れません。
 
 ### 増やすとき
 
@@ -244,3 +245,32 @@ CSS で抜き出して困る秘密 (属性に入った鍵など) はありませ
 直します。止められたものは開発者ツールのコンソールに `Refused to …` と出ます。
 E2E (`tests/e2e/35-csp.spec.ts`) は主な画面を回って違反が1つも出ないこと、
 BML の `onclick` を押しても動かないことを見ています。
+
+## 端末が外へ繋ぐもの (実況のコメント)
+
+**ふだんの画面は denpa のサーバにしか繋ぎません。外へ繋ぐのは、実況のコメントを流すときだけです。**
+世帯の設定 (連携の「実況」) と端末の ⚙ の「実況」の両方がオンの端末が、denpa のサーバを通さずに次の 2 か所へ繋ぎます
+(宛先は `src/lib/jikkyo/endpoints.ts`。CSP の `connect-src` に同じものを書いています)。
+
+| 宛先                                                         | 使うとき                             | 方式                                                           |
+| ------------------------------------------------------------ | ------------------------------------ | -------------------------------------------------------------- |
+| NX-Jikkyo (`wss://nx-jikkyo.tsukumijima.net`)                | ライブと、録画中の追っかけの新しい所 | WebSocket (視聴の WS → コメントの WS)                          |
+| ニコニコ実況 過去ログ API (`https://jikkyo.tsukumijima.net`) | 録画と、録画中の追っかけの古い所     | fetch (`credentials: "omit"`・`referrerPolicy: "no-referrer"`) |
+
+どちらも tsukumijima さんが個人で運営している非公式のサービスで、過去ログ API の前には Cloudflare が立っています。
+相手に見えるのは次のものです。
+
+| 見えるもの                        | NX-Jikkyo                                       | 過去ログ API                        |
+| --------------------------------- | ----------------------------------------------- | ----------------------------------- |
+| 端末の IP                         | 見える                                          | 見える                              |
+| ブラウザの User-Agent             | 見える (NX-Jikkyo は記録に残す)                 | 見える                              |
+| denpa のアドレスのホスト (Origin) | 見える (WebSocket の手順でブラウザが必ず付ける) | 見える (CORS のリクエストに付く)    |
+| denpa のページの URL (Referer)    | 付かない                                        | 付けない                            |
+| どの局をいつ観ているか            | 見える (繋いだチャンネルと時刻)                 | 見える (どの局のどの時間を取ったか) |
+| Cookie・ニコニコのアカウント      | 送らない (ログインしない)                       | 送らない                            |
+
+- **denpa のサーバ・世帯のほかの端末・録画の一覧・ログインの情報は出ません。** 出るのは、その端末で何を観ているかだけです
+- 受けたコメントは本文と時刻だけにして、利用者の ID などはその場で捨てます。コメントは端末のメモリにだけ置き、画面を閉じれば消えます
+- **局の勢い (ライブの「実況」タブ) だけはサーバが中継します。** NX-Jikkyo の REST は CORS を許していないためです
+  (`GET /api/jikkyo/ranking`。呼ばれたときだけ読み、30 秒だけメモリに持つ)。NX-Jikkyo に見えるのは denpa のサーバの IP です
+- 書き込みはしません

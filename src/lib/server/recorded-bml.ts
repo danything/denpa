@@ -30,6 +30,7 @@ import type { Ruler } from "#lib/ts/watch.js";
 
 import type { Recording } from "../types";
 import { orm } from "./db";
+import { fillTsHead } from "./recording";
 import { programs, services } from "./schema";
 
 /**
@@ -130,7 +131,8 @@ async function capture(
  * 録画のデータ放送を取り出して、サイドカーに書く。
  *
  * 時刻は**エンコードしたものの再生位置**で書く (観る画面の物差し。`playbackPlan` の `axis`)。
- * 基準は元の TS の頭 (`DataBroadcastCapture.head`) で、番組の始まり (`start_at`) ではない
+ * 基準は元の TS の頭 (`DataBroadcastCapture.head`) で、番組の始まり (`start_at`) ではない。
+ * 測った頭は、録画の行の `ts_head` が空なら書く (`recording.fillTsHead`。実況のコメントを合わせるのに使う)
  *
  * @param tsPath 元のTS (**CMを切る前のほう**。放送の実時刻 (TDT) が続いている)
  * @param sidecarPath 書き先 (`metadata.sidecarPaths` の `dataBroadcast`)
@@ -145,6 +147,8 @@ export async function saveRecordedBml(
   ruler: Ruler,
 ): Promise<number> {
   const { timeline, head } = await capture(tsPath);
+  // 頭の放送時刻は実況のコメントにも使う。録っている間に測れていなければここで書く (データ放送の有る無しに関わらず)
+  if (head !== null) fillTsHead(recording.id, head);
   /*
    * **描けるモジュールが1つも無ければ書かない。** データ放送の載っていない局でも
    * `pmt` は必ず1つ出る (timeline は空にならない) ので、それだけでは持たせない —

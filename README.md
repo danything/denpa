@@ -32,6 +32,8 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 - カードの鍵を、世帯の外の機器に配らない
 - カードを書き換えない
 
+端末 (ブラウザ) が外のサービスに直接繋ぐのは、設定でオンにしたときの実況のコメントだけです。NX-Jikkyo とニコニコ実況 過去ログ API に繋ぎ、相手には端末の IP とどの局をいつ観ているかが見えます ([docs/architecture.md](docs/architecture.md#端末が外へ繋ぐもの-実況のコメント))。
+
 考え方は [Discussion #760](https://github.com/danything/denpa/discussions/760) にまとめています (法律相談ではなく、議論のための整理です)。
 
 ## できること

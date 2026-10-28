@@ -6,6 +6,8 @@ import { EpgReader } from "@danything/arib/eit";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { eq, sql } from "drizzle-orm";
 
+import { TsHead } from "#lib/ts/ts-head.js";
+
 import type { Recording, Reservation } from "../types";
 import { fileSize } from "./chase";
 import { config } from "./config";
@@ -16,7 +18,7 @@ import { emit } from "./events";
 import { moveFile } from "./fsx";
 import { libraryPath, recordedPath } from "./library";
 import { writeThumbnail } from "./metadata";
-import { recordingSummary } from "./recording";
+import { fillTsHead, recordingSummary } from "./recording";
 import { programs, recordings, reservations, services } from "./schema";
 import { chunks } from "./stream";
 import { parseTitle } from "./title";
@@ -314,6 +316,15 @@ async function pump(
     Date.now() > recording.start_at && (fileSize(path) ?? 0) > 0;
   /** 始めから禁止だったので録画をやめたか。前の番組のぶんを書いていても失敗にする */
   let stoppedForCopyNever = false;
+  /*
+   * **書いた TS の頭の放送時刻を測る** (`recordings.ts_head`。実況のコメントを録画中の追っかけでも合わせるため)。
+   * 測れるのはファイルの頭から書くときだけ — 再起動をまたいで続きを足すときは、もう頭が過ぎている
+   * (そのときはエンコードのときに測る。`recorded-bml.ts`)。測れたら行に書いて、あとは食わせない
+   */
+  let measure =
+    recording.ts_head === null && (fileSize(path) ?? 0) === 0
+      ? new TsHead()
+      : null;
   // 何を使っているのかが設定の「チューナー」に出る。番組名は載せず、IDだけ渡して向こうで引く
   const use = recordingUse(recording.id);
 
@@ -374,6 +385,9 @@ async function pump(
           continue;
         }
 
+        // 取り直したら PCR が飛ぶので、そこまでに測れていなければ諦める (エンコードのときに測る)
+        if (written > 0) measure = null;
+
         try {
           for await (const chunk of chunks(stream)) {
             if (epg.feed(chunk) && eventId !== null) {
@@ -430,6 +444,13 @@ async function pump(
               wroteProgram = true;
             written += out.byteLength;
             if (!sink.write(out)) await once(sink, "drain");
+            if (measure !== null) {
+              measure.feed(out);
+              if (measure.head !== null) {
+                fillTsHead(recording.id, measure.head);
+                measure = null;
+              }
+            }
           }
         } catch (error) {
           broke = error ?? new Error("不明な理由");

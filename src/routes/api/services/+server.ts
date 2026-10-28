@@ -2,6 +2,7 @@ import { json } from "@sveltejs/kit";
 import { and, gt, inArray, lte, sql } from "drizzle-orm";
 
 import { audioTracks, parseAudios } from "#lib/arib.js";
+import { jikkyoChannel } from "#lib/jikkyo/channels.js";
 import { orm } from "#lib/server/db.js";
 import {
   currentServices,
@@ -10,6 +11,7 @@ import {
 } from "#lib/server/epg.js";
 import { reservationStates } from "#lib/server/reservations.js";
 import { programs, services } from "#lib/server/schema.js";
+import { settings } from "#lib/server/settings.js";
 
 /**
  * **局の一覧** (画面の外のもの向けの API。docs/api.md)。並びはテレビと同じ
@@ -17,13 +19,16 @@ import { programs, services } from "#lib/server/schema.js";
  * `now` はいま放送中の番組 (番組表に無ければ null)。テレビのアプリがライブの列に出す。
  * `now.audios` はその番組で選べる音声 (画面のライブと同じ一覧。`live?audio=<id>` で選ぶ)。
  * `now.reserved` / `now.recording` はその番組を録る予定か・録っている最中か (アプリの録画ボタンの印。
- * 押すのは `POST api/services/<id>/record`)
+ * 押すのは `POST api/services/<id>/record`)。
+ * `jikkyo` は実況のチャンネル (`jk1` など。`#lib/jikkyo/channels.ts`)。実況の無い局と、世帯の設定 (連携の「実況」) が
+ * オフのときは null
  */
 export function GET() {
   const rows = orm()
     .select({
       id: services.id,
       type: services.type,
+      serviceId: services.service_id,
       name: services.name,
       remoteControlKey: services.remote_control_key,
       hasLogo: services.has_logo,
@@ -74,6 +79,7 @@ export function GET() {
       ];
     }),
   );
+  const jikkyo = settings().jikkyo;
   return json(
     rows.map((row) => ({
       id: row.id,
@@ -83,6 +89,13 @@ export function GET() {
       logo: row.hasLogo ? `api/services/${row.id}/logo` : null,
       live: `api/services/${row.id}/live`,
       now: nowOf.get(row.id) ?? null,
+      jikkyo: jikkyo
+        ? jikkyoChannel({
+            type: row.type,
+            service_id: row.serviceId,
+            name: row.name,
+          })
+        : null,
     })),
   );
 }

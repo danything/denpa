@@ -87,6 +87,12 @@ export interface Settings {
    * (`/api/recordings/<id>/stream`) のと追っかけ再生を数える。null は自動 (GPU が無ければ 2、あれば 4)
    */
   transcodeLimit: number | null;
+  /**
+   * **実況のコメントを流せるようにするか。既定はオフ。** オンのときだけ、局の一覧に実況のチャンネル (`jikkyo`) が入り、
+   * 端末の ⚙ に「実況」の行が出る。コメントは denpa のサーバを通らず、実況をオンにした端末が
+   * NX-Jikkyo と過去ログ API に直接繋ぐ (`#lib/jikkyo/endpoints.ts`)。相手には端末の IP と、どの局をいつ観ているかが見える
+   */
+  jikkyo: boolean;
 }
 
 /** 本数の上限に選べる幅 */
@@ -180,6 +186,7 @@ export function settings(): Settings {
     // テレビと同じく通信できるのが既定。設定画面の説明の1行目で、視聴の記録が送られうることを出す
     bmlNetwork: flag("bmlNetwork", true),
     transcodeLimit: parseTranscodeLimit(stored("transcodeLimit")),
+    jikkyo: flag("jikkyo", false),
   };
 }
 

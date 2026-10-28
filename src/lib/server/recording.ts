@@ -53,3 +53,15 @@ export function recordingOr404(idLike: string, deleted = false): Recording {
   if (recording === undefined) error(404, "録画が見つかりません");
   return recording;
 }
+
+/**
+ * 録画の頭の放送時刻 (`ts_head`) を書く。**空のときだけ** — 録っている間に測れていれば、
+ * エンコードのときに測り直した値で上書きしない (どちらも同じ TS の頭を測るので同じ値になる)
+ */
+export function fillTsHead(recordingId: number, head: number): void {
+  orm()
+    .update(recordings)
+    .set({ ts_head: head })
+    .where(and(eq(recordings.id, recordingId), isNull(recordings.ts_head)))
+    .run();
+}

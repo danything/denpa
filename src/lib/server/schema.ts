@@ -496,6 +496,13 @@ export const recordings = sqliteTable(
     record_from: integer("record_from"),
     record_to: integer("record_to"),
     /**
+     * **元の TS の頭 (再生位置 0 の手前) の放送時刻** (unix ms)。最初の TDT から、そこまでに PCR が進んだぶんを引いて測る
+     * (`ts/ts-head.ts`)。録っている間 (`recorder.ts`) と、エンコードのとき (`recorded-bml.ts`。空なら) に書く。
+     * 実況のコメントを再生位置に合わせるのに使う。測れていない録画 (TDT を読めない・取り込んだ録画) は NULL で、
+     * そのときは予定の時刻 (`record_from ?? start_at − START_MARGIN`) で代わりに合わせる (`server/jikkyo.ts`)
+     */
+    ts_head: integer("ts_head"),
+    /**
      * どこまで観たか (ms)。**続きから観るためだけの目印。** まだ観ていない・観終えたものは NULL。
      * 端末に持たせず DB に置くのは、居間のタブレットで観たものを机の PC で
      * 続けられるようにするため (`api/recordings/<id>/resume`)。**元の TS の物差し** (入れ物の頭から) で覚え、

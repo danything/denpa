@@ -2,6 +2,7 @@
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
 
+  import Jikkyo from "./Jikkyo.svelte";
   import Migrate from "./Migrate.svelte";
   import MigrateEdcb from "./MigrateEdcb.svelte";
   import Notifications from "./Notifications.svelte";
@@ -44,6 +45,7 @@
 <!-- 節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先 -->
 <div class="part" id="notifications" data-part><Notifications {data} /></div>
 <div class="part" id="tv" data-part><Tv {data} /></div>
+<div class="part" id="jikkyo" data-part><Jikkyo {data} /></div>
 <div class="part" id="migrate" data-part><Migrate {data} /></div>
 <div class="part" id="migrate-edcb" data-part><MigrateEdcb {data} /></div>
 <div class="part" id="transfer" data-part><Transfer {data} /></div>
