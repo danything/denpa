@@ -52,6 +52,7 @@
     liveSubtitle,
     muteRow,
     speedRow,
+    tunerPreset,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
   import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
@@ -185,6 +186,38 @@
 
   /** 一覧の各行。開いたときに、いま映している局まで送る (局が100を超えると画面の外のほうが普通) */
   const rows: Record<number, HTMLElement | undefined> = $state({});
+
+  /** チューナー側の画質。選局したときにだけ効く (下の注記を読む) */
+  let tunerPresetId = $state("passthrough");
+
+  onMount(() => {
+    void loadTunerPreset();
+  });
+
+  async function loadTunerPreset() {
+    try {
+      const res = await fetch("/api/tuner-preset");
+      if (!res.ok) return;
+      const body = (await res.json()) as { active?: string };
+      if (body.active) tunerPresetId = body.active;
+    } catch {
+      /* チューナーが居ないだけ。既定のまま */
+    }
+  }
+
+  async function selectTunerPreset(name: string) {
+    tunerPresetId = name;
+    try {
+      const res = await fetch("/api/tuner-preset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ preset: name }),
+      });
+      if (!res.ok) await loadTunerPreset();
+    } catch {
+      await loadTunerPreset();
+    }
+  }
   /** 一覧そのもの。送るのはこの中だけ (下の説明) */
   let list = $state<HTMLElement | null>(null);
   /** 一度送ったら、あとは触らない。見ている途中で勝手に動くと邪魔になる */
@@ -585,6 +618,11 @@
               prefix="live"
               fold={[
                 muteRow(SOUND_OFF, player.silenced, player.toggleMute),
+                tunerPreset({
+                  icon: CODEC,
+                  preset: tunerPresetId,
+                  onselect: (key) => void selectTunerPreset(key),
+                }),
                 ...(hybridcast === undefined
                   ? []
                   : [

@@ -1,6 +1,6 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
-import { LIVE_CODECS, type LiveCodec } from "#lib/live.js";
+import { LIVE_CODECS, LIVE_TUNER_PRESETS, type LiveCodec } from "#lib/live.js";
 import { SPEEDS } from "#lib/ts/pacing.js";
 
 import type { IconShape } from "./icons";
@@ -101,6 +101,34 @@ export function liveCodecs(opts: {
  * 観る画面のコーデック。録画ごとに観られるものが違い、「自動」も並ぶので、並びは渡されたまま
  * (`ts/playback.ts` の `codecChoices`)。`disabled` は互換モードでこの端末が描けない形式 (`canvasChoices`)
  */
+/**
+ * チューナー側の画質。**選局したときにしか効かない** (チューナーは選局を共有するので、
+ * いま見ている絵は変わらない)。そのため行には注記を出す。
+ */
+export function tunerPreset(opts: {
+  icon: IconShape;
+  preset: string;
+  onselect: (preset: string) => void;
+}): { kind: "choice" } & SettingChoice {
+  const current =
+    LIVE_TUNER_PRESETS.find((p) => p.id === opts.preset)?.label ??
+    LIVE_TUNER_PRESETS[0]?.label ??
+    opts.preset;
+  return {
+    kind: "choice",
+    id: "tuner-preset",
+    label: "チューナー画質",
+    icon: opts.icon,
+    value: current,
+    options: LIVE_TUNER_PRESETS.map((p) => ({
+      key: p.id,
+      label: p.label,
+      active: p.id === opts.preset,
+    })),
+    pick: (key) => opts.onselect(String(key)),
+  };
+}
+
 export function recordingCodecs(opts: {
   icon: IconShape;
   choices: { key: string; label: string; disabled?: boolean }[];

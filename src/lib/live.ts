@@ -29,6 +29,20 @@ export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
 ];
 
 /**
+ * チューナー側の画質プリセット (DT295 のオンボード変換)。
+ * `passthrough` は変換しない = 放送の MPEG-2 そのまま。値は選局のときにだけ効く。
+ */
+export type LiveTunerPreset = string;
+
+export const LIVE_TUNER_PRESETS: { id: LiveTunerPreset; label: string }[] = [
+  { id: "passthrough", label: "パススルー (MPEG-2)" },
+  { id: "720p8m", label: "720p 8Mbps" },
+  { id: "720p4m", label: "720p 4Mbps" },
+  { id: "480p15", label: "480p 1.5Mbps" },
+  { id: "240p03", label: "240p 300kbps" },
+];
+
+/**
  * 選べる字幕1つぶん。**取り決めなので、ここに置く** — 組み立てるのは
  * サーバ (`server/captions.ts` の `TrackList`) だが、画面も同じ形式で読む
  */
