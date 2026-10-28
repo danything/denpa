@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Comment } from "./comments";
-import { type NxDeps, NxJikkyo } from "./nx";
+import { commentPath, type NxDeps, NxJikkyo } from "./nx";
 
 /*
  * NX-Jikkyo への繋ぎ方。外には繋がず、偽の WebSocket と偽の時計で見る。返事は自分で作った偽物
@@ -189,6 +189,22 @@ describe("NxJikkyo", () => {
         },
       },
     ]);
+  });
+
+  test("room のコメントの WS が NX-Jikkyo の外を指していたら繋がない", () => {
+    const h = harness();
+    h.nx.start();
+    const watch = h.sockets[0]!;
+    watch.open();
+    watch.receive({
+      type: "room",
+      data: { messageServer: { uri: "wss://example.com/ws" }, threadId: "1" },
+    });
+    expect(h.sockets).toHaveLength(1);
+    expect(commentPath("wss://nx-jikkyo.tsukumijima.net/api/v1/x?y=1")).toBe(
+      "/api/v1/x?y=1",
+    );
+    expect(commentPath("ws://nx-jikkyo.tsukumijima.net/api")).toBeNull();
   });
 
   test("閉じたら繋ぎ直さない", () => {
