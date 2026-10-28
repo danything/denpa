@@ -1857,13 +1857,15 @@
           >
           </video>
           <div bind:this={jikkyoSlot} style="display:contents">
-            <JikkyoLayer
-              feed={jikkyo}
-              air={airTime}
-              show={jikkyoActive && data.jikkyo !== null && !showData}
-              paused={!playing}
-              rate={speed}
-            />
+            {#if data.jikkyoAllowed}
+              <JikkyoLayer
+                feed={jikkyo}
+                air={airTime}
+                show={jikkyoActive && data.jikkyo !== null && !showData}
+                paused={!playing}
+                rate={speed}
+              />
+            {/if}
           </div>
           <!--
                     字幕は `<track>` ではなく canvas に放送の置き場所のまま描く (左右の位置・背景の箱・外字が落ちるため)。

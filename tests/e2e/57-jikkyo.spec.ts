@@ -256,15 +256,20 @@ test.describe("録画の実況", () => {
         },
       );
       await deviceOn(page);
-      await goto(page, `/watch/${id}`);
-      // 偽の録画は映像として進まないので、再生位置を時計で進める
-      await page.getByTestId("watch-video").evaluate((video) => {
+      /*
+       * 偽 ffmpeg は映像を作らないので、録画は再生できない。映像の取得は返さずに待たせ (読めない形式で
+       * 別の再生方法へ移らないように)、再生位置は時計で進める。偽の録画は 5 秒ほどしかないので、頭からゆっくり (1/4 の速さで)
+       */
+      await page.route(/\/api\/recordings\/\d+\/(file|stream)/, () => {});
+      await page.addInitScript(() => {
         const from = Date.now();
-        Object.defineProperty(video, "currentTime", {
-          get: () => 5 + (Date.now() - from) / 1000,
+        Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+          configurable: true,
+          get: () => (Date.now() - from) / 4000,
           set: () => {},
         });
       });
+      await goto(page, `/watch/${id}`);
       await expect(page.getByTestId("jikkyo-comment").first()).toHaveText(
         "録画のコメント",
         { timeout: 20_000 },
