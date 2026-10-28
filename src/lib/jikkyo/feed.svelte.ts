@@ -12,6 +12,8 @@ import { type NxDeps, NxJikkyo } from "./nx";
 
 /** 過去ログ API が読めなかったとき、もう一度試すまで */
 const KAKOLOG_RETRY = 60_000;
+/** 過去ログにまだ入りきっていないところを取り足す間隔 (過去ログは 5 分おきに集めている) */
+const KAKOLOG_REFRESH = 5 * 60_000;
 
 /** 形のずれは端末ごとに 1 回だけ言う (NX-Jikkyo や過去ログ API のバージョンが変わったときに気付けるように) */
 let warned = false;
@@ -95,7 +97,8 @@ export class JikkyoFeed {
   /**
    * 過去ログ API から `[from, to())` を取る。録画は開いたときに 1 回 (`every` を省く)、録画中の追っかけは
    * `every` ごとに新しいところを取り足す。取ったところは控えが覚えているので、同じ区間を 2 度訊かない。
-   * 読めなければ「いまは読めない」にして、60 秒後にもう一度試す
+   * **10 分より新しいところは、取っても「埋めた」ことにしない** (過去ログにまだ入りきっていない)。録り終えてすぐ開いた録画は、
+   * そこが埋まるまで `KAKOLOG_REFRESH` ごとに取り足す。読めなければ「いまは読めない」にして、60 秒後にもう一度試す
    */
   kakolog(from: number, to: () => number, every?: number): void {
     this.stopKakolog();
@@ -104,13 +107,16 @@ export class JikkyoFeed {
     const run = ++this.kakologRun;
     const step = async (): Promise<void> => {
       let ok = true;
-      const end = Math.min(to(), Date.now());
+      const now = Date.now();
+      const end = Math.min(to(), now);
+      // ここより新しいところは、まだ過去ログに入りきっていない
+      const settled = now - KAKOLOG_LAG;
       for (const [start, stop] of this.cursor.store.missing(from, end)) {
         try {
           const got = await fetchKakolog(channel, start, stop);
           if (run !== this.kakologRun) return;
           if (got.odd > 0) warnShape("過去ログの返事の形が一部違います");
-          this.cursor.receive(got.comments, [start, stop]);
+          this.cursor.receive(got.comments, [start, Math.min(stop, settled)]);
         } catch {
           ok = false;
           break;
@@ -118,7 +124,9 @@ export class JikkyoFeed {
       }
       if (run !== this.kakologRun) return;
       this.mark("kakolog", ok);
-      const wait = ok ? every : KAKOLOG_RETRY;
+      const wait = !ok
+        ? KAKOLOG_RETRY
+        : (every ?? (end > settled ? KAKOLOG_REFRESH : undefined));
       if (wait !== undefined)
         this.kakologTimer = setTimeout(() => void step(), wait);
     };
