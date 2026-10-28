@@ -12,7 +12,7 @@
  * 書き込みはしない。`yourPostKey` は `thread` の `threadkey` に渡すだけ
  */
 import { type Comment, toComment } from "./comments";
-import { watchUrl } from "./endpoints";
+import { NX_JIKKYO_WS, watchUrl } from "./endpoints";
 
 /** 続けて何回失敗したら「いまは読めない」にするか */
 const FAILURES_TO_DOWN = 5;
@@ -20,6 +20,19 @@ const FAILURES_TO_DOWN = 5;
 const MAX_BACKOFF = 60_000;
 /** 遡るときの件数の上限 (NX-Jikkyo の DB の読み出しは重いので、1 回だけ・1000 件まで) */
 export const BACKFILL_LIMIT = 1000;
+
+/**
+ * `room` が言うコメントの WS の URL から、NX-Jikkyo の中のパスだけを取る。**NX-Jikkyo の外を指していたら null** —
+ * 返事の言うまま別のホストへ繋がない (CSP でも止まるが、こちらでも確かめる)。URL はこの定数のオリジンに付け直して使う
+ */
+export function commentPath(uri: string): string | null {
+  try {
+    const url = new URL(uri);
+    return url.origin === NX_JIKKYO_WS ? `${url.pathname}${url.search}` : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface NxEvents {
   /** コメントが来た (形のずれたもの・流さないものは来ない) */
@@ -133,9 +146,16 @@ export class NxJikkyo {
           this.events.odd("room の形が違います");
           return;
         }
+        const path = commentPath(uri);
+        if (path === null) {
+          this.events.odd(
+            "room のコメントの WS が NX-Jikkyo の外を指しています",
+          );
+          return;
+        }
         const key = body["yourPostKey"];
         this.room = { thread, key: typeof key === "string" ? key : "" };
-        this.openComment(uri);
+        this.openComment(`${NX_JIKKYO_WS}${path}`);
         break;
       }
       case "disconnect":
