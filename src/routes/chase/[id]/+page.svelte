@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
 
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import { ambientMode } from "#lib/components/player/ambient.svelte.js";
@@ -27,6 +27,7 @@
     SPEED,
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
+  import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
@@ -55,6 +56,9 @@
   import { programDetail, recordingFacts } from "#lib/detail.svelte.js";
   import { driveGate } from "#lib/drive-gate.svelte.js";
   import { clock as clockLabel } from "#lib/format.js";
+  import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
+  import { KAKOLOG_LAG } from "#lib/jikkyo/kakolog.js";
+  import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { write as remind } from "#lib/keep.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
@@ -139,6 +143,33 @@
       : Math.max(line.totalSec, recorded),
   );
   const pos = $derived(player.chasePosition);
+
+  /**
+   * 実況のコメント (docs/watch.md の「実況のコメント」)。古いところ (10 分より前) は過去ログ API から
+   * 開いたときに 1 回、その後は 5 分おきに取り足し、新しいところは NX-Jikkyo の WebSocket から受ける
+   */
+  const jikkyoOn = jikkyoSwitch();
+  const jikkyo = new JikkyoFeed(true);
+  const jikkyoActive = $derived(data.jikkyoAllowed && jikkyoOn.on);
+  $effect(() => {
+    const target = data.jikkyo;
+    jikkyo.set(target?.channel ?? null, jikkyoActive);
+    if (target !== null && jikkyoActive)
+      untrack(() =>
+        jikkyo.kakolog(target.head, () => Date.now() - KAKOLOG_LAG, 5 * 60_000),
+      );
+  });
+  onMount(() => () => jikkyo.close());
+  /** いま観ている場面の放送時刻 (元の TS の頭の放送時刻 + 追っかけの再生位置) */
+  function airTime(): number | null {
+    const target = data.jikkyo;
+    return target === null ? null : target.head + player.chasePosition * 1000;
+  }
+  // 過去ログにまだ入っていない新しいところ (10 分以内) を観ているなら、NX-Jikkyo で 1 回だけ遡る
+  $effect(() => {
+    const w = airTime();
+    if (w !== null && jikkyoActive) untrack(() => jikkyo.backfill(w));
+  });
 
   /** シーク。**録れているところより先へは行かせない** (まだ無い) */
   function seekTo(value: number): void {
@@ -272,7 +303,17 @@
         bind:video
         bind:still
         bind:overlay
-      />
+      >
+        {#snippet under()}
+          <JikkyoLayer
+            feed={jikkyo}
+            air={airTime}
+            show={jikkyoActive && data.jikkyo !== null}
+            paused={player.paused}
+            rate={player.rate}
+          />
+        {/snippet}
+      </MediaStack>
 
       <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き) -->
       <ControlBar side shown={controls.shown}>
@@ -395,6 +436,14 @@
             })}
             audio={liveAudio(AUDIO, player)}
             subtitle={liveSubtitle(CAPTION, player)}
+            jikkyo={data.jikkyoAllowed
+              ? {
+                  on: jikkyoOn.on,
+                  toggle: jikkyoOn.toggle,
+                  missing: data.jikkyo === null,
+                  down: jikkyo.down,
+                }
+              : undefined}
           />
         </ControlRow>
       </ControlBar>

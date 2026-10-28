@@ -18,10 +18,14 @@ import { orm } from "./db";
 import { services } from "./schema";
 import { settings } from "./settings";
 
-/** 録画の実況。チャンネルと、元の TS の頭 (再生位置 0 の手前) の放送時刻 (unix ms) */
+/**
+ * 録画の実況。チャンネルと、元の TS の頭 (再生位置 0 の手前) の放送時刻、録画の終わりの放送時刻 (unix ms)。
+ * 観る画面は `[head, end)` のコメントを過去ログ API から 1 回で取る
+ */
 export interface RecordingJikkyo {
   channel: string;
   head: number;
+  end: number;
 }
 
 /**
@@ -50,6 +54,8 @@ export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
       recording.ts_head ??
       recording.record_from ??
       recording.start_at - config.startMargin,
+    // 録画の終わりは予定 (使えた区間・後ろのマージン込み)。録っている途中ならまだ先
+    end: recording.record_to ?? recording.end_at + config.endMargin,
   };
 }
 

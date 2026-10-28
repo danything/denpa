@@ -57,6 +57,7 @@
     TRASH,
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
+  import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
   import { fitRect } from "#lib/components/player/paint.js";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
@@ -95,6 +96,8 @@
     size,
   } from "#lib/format.js";
   import { CODEC_LABEL } from "#lib/hw.js";
+  import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
+  import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { read as stored, write as remind } from "#lib/keep.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
@@ -143,6 +146,7 @@
     resumePoint,
     skipCmAtStart,
     skipTarget,
+    toTsTime,
   } from "#lib/ts/watch.js";
 
   let { data, form } = $props();
@@ -274,7 +278,7 @@
     try {
       made = canvasPlayer({
         host: mediaBox as HTMLElement,
-        before: overlay,
+        before: jikkyoSlot ?? overlay,
         input: local !== null ? "mkv" : codec === "mpeg2" ? "ts-mpeg2" : "fmp4",
         request: (at, audio, signal) =>
           local !== null
@@ -900,6 +904,38 @@
   });
   /** 字幕を重ねる先 */
   let overlay = $state<HTMLCanvasElement | null>(null);
+  /** 実況の層の置き場。canvas で描くときの映像はこの手前に差し込む (映像 → 実況 → 字幕) */
+  let jikkyoSlot = $state<HTMLElement | null>(null);
+
+  /**
+   * 実況のコメント (docs/watch.md の「実況のコメント」)。世帯の設定と端末の ⚙ の両方がオンなら、
+   * 録画の区間のコメントを過去ログ API から開いたときに 1 回で取り、再生位置の放送時刻に合わせて流す
+   */
+  const jikkyoOn = jikkyoSwitch();
+  const jikkyo = new JikkyoFeed(false);
+  const jikkyoActive = $derived(data.jikkyoAllowed && jikkyoOn.on);
+  $effect(() => {
+    const target = data.jikkyo;
+    jikkyo.set(target?.channel ?? null, jikkyoActive);
+    // 録画の終わりは予定なので、少し後ろまで訊く (今より後は fetchKakolog が切る)
+    if (target !== null && jikkyoActive)
+      untrack(() => jikkyo.kakolog(target.head, () => target.end + 60_000));
+  });
+  onMount(() => () => jikkyo.close());
+
+  /**
+   * いま観ている場面の放送時刻。再生位置を元の TS の秒に直して (CM を切ったものは切った区間を戻して) 頭の放送時刻に足す。
+   * **切った CM の区間は飛び越すので、そこに書かれたコメントは流れない**
+   */
+  function airTime(): number | null {
+    const target = data.jikkyo;
+    if (target === null || info === null) return null;
+    const ruler =
+      info.axis === "encoded"
+        ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
+        : null;
+    return target.head + toTsTime(mediaTime(), ruler) * 1000;
+  }
   /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
   let following: HTMLVideoElement | null = null;
   /** 読めなかったとき。黙って黒いままにしない */
@@ -1820,6 +1856,15 @@
             data-testid="watch-video"
           >
           </video>
+          <div bind:this={jikkyoSlot} style="display:contents">
+            <JikkyoLayer
+              feed={jikkyo}
+              air={airTime}
+              show={jikkyoActive && data.jikkyo !== null && !showData}
+              paused={!playing}
+              rate={speed}
+            />
+          </div>
           <!--
                     字幕は `<track>` ではなく canvas に放送の置き場所のまま描く (左右の位置・背景の箱・外字が落ちるため)。
                     映像と同じ箱に入れて、データ放送の小窓へ一緒に縮ませる (ライブの `MediaStack` と同じ)。
@@ -2089,6 +2134,14 @@
                 : undefined}
               receive={data.hasData
                 ? { on: receiveData, toggle: toggleReceiveData }
+                : undefined}
+              jikkyo={data.jikkyoAllowed
+                ? {
+                    on: jikkyoOn.on,
+                    toggle: jikkyoOn.toggle,
+                    missing: data.jikkyo === null,
+                    down: jikkyo.down,
+                  }
                 : undefined}
               subtitle={hasCaptions
                 ? subtitles({

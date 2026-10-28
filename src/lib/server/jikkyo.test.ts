@@ -191,6 +191,8 @@ describe("recordingJikkyo", () => {
     ({
       service_id: 7,
       start_at: T,
+      end_at: T + 30 * 60_000,
+      record_to: null,
       ts_head: null,
       record_from: null,
       ...patch,
@@ -206,16 +208,19 @@ describe("recordingJikkyo", () => {
     expect(recordingJikkyo(recording({ ts_head: T - 9_000 }))).toEqual({
       channel: "jk6",
       head: T - 9_000,
+      end: T + 30 * 60_000 + config.endMargin,
     });
     expect(recordingJikkyo(recording({}))).toEqual({
       channel: "jk6",
       head: T - config.startMargin,
+      end: T + 30 * 60_000 + config.endMargin,
     });
     // 取り合いで頭を譲った録画は、使えた区間の頭
-    expect(recordingJikkyo(recording({ record_from: T + 60_000 }))).toEqual({
-      channel: "jk6",
-      head: T + 60_000,
-    });
+    expect(
+      recordingJikkyo(
+        recording({ record_from: T + 60_000, record_to: T + 20 * 60_000 }),
+      ),
+    ).toEqual({ channel: "jk6", head: T + 60_000, end: T + 20 * 60_000 });
   });
 
   test("実況の無い局は null", () => {

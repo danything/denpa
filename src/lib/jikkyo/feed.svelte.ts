@@ -7,7 +7,11 @@
  */
 import type { Comment, CommentStore } from "./comments";
 import { Cursor, type Take } from "./cursor";
+import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
 import { type NxDeps, NxJikkyo } from "./nx";
+
+/** 過去ログ API が読めなかったとき、もう一度試すまで */
+const KAKOLOG_RETRY = 60_000;
 
 /** 形のずれは端末ごとに 1 回だけ言う (NX-Jikkyo や過去ログ API のバージョンが変わったときに気付けるように) */
 let warned = false;
@@ -29,6 +33,9 @@ export class JikkyoFeed {
   private active = false;
   /** 読めなくなっている出どころ (`nx`・`kakolog`) */
   private readonly failing = new Set<string>();
+  private kakologTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 過去ログの取得の回。止めたら進め、前の回の返事を捨てる */
+  private kakologRun = 0;
 
   constructor(
     /** NX-Jikkyo の WebSocket に繋ぐか (ライブと追っかけ) */
@@ -77,9 +84,45 @@ export class JikkyoFeed {
     this.nx.start();
   }
 
-  /** NX-Jikkyo で `before` より前を 1 回だけ遡る (追っかけ) */
-  backfill(before: number): void {
-    this.nx?.backfill(before);
+  /**
+   * NX-Jikkyo で 1 回だけ遡る (録画中の追っかけ)。いまの放送時刻 `w` が過去ログにまだ入っていない新しいところ
+   * (10 分以内) に来たときだけ。NX-Jikkyo の DB の読み出しは重いので、2 度目からは何もしない
+   */
+  backfill(w: number, now = Date.now()): void {
+    if (w > now - KAKOLOG_LAG) this.nx?.backfill(now);
+  }
+
+  /**
+   * 過去ログ API から `[from, to())` を取る。録画は開いたときに 1 回 (`every` を省く)、録画中の追っかけは
+   * `every` ごとに新しいところを取り足す。取ったところは控えが覚えているので、同じ区間を 2 度訊かない。
+   * 読めなければ「いまは読めない」にして、60 秒後にもう一度試す
+   */
+  kakolog(from: number, to: () => number, every?: number): void {
+    this.stopKakolog();
+    const channel = this.channel;
+    if (!this.active || channel === null) return;
+    const run = ++this.kakologRun;
+    const step = async (): Promise<void> => {
+      let ok = true;
+      const end = Math.min(to(), Date.now());
+      for (const [start, stop] of this.cursor.store.missing(from, end)) {
+        try {
+          const got = await fetchKakolog(channel, start, stop);
+          if (run !== this.kakologRun) return;
+          if (got.odd > 0) warnShape("過去ログの返事の形が一部違います");
+          this.cursor.receive(got.comments, [start, stop]);
+        } catch {
+          ok = false;
+          break;
+        }
+      }
+      if (run !== this.kakologRun) return;
+      this.mark("kakolog", ok);
+      const wait = ok ? every : KAKOLOG_RETRY;
+      if (wait !== undefined)
+        this.kakologTimer = setTimeout(() => void step(), wait);
+    };
+    void step();
   }
 
   /** 外から足す (過去ログ API で取ったもの)。`span` はその区間を埋めたことにする */
@@ -106,9 +149,16 @@ export class JikkyoFeed {
     this.stopSources();
   }
 
+  private stopKakolog(): void {
+    this.kakologRun++;
+    if (this.kakologTimer !== null) clearTimeout(this.kakologTimer);
+    this.kakologTimer = null;
+  }
+
   private stopSources(): void {
     this.nx?.close();
     this.nx = null;
+    this.stopKakolog();
     this.failing.clear();
     this.down = false;
   }

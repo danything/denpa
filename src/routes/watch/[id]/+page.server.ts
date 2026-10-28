@@ -5,6 +5,7 @@ import { eq, getTableColumns } from "drizzle-orm";
 
 import { orm } from "#lib/server/db.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
+import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { sidecarPaths } from "#lib/server/metadata.js";
 import { relative } from "#lib/server/paths.js";
 import { encodedFile, rulerOf, tsPathOf } from "#lib/server/playback.js";
@@ -60,13 +61,17 @@ export function load({ params, url }) {
   }
 
   // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
-  const { postalCode, prefecture } = settings();
+  const { postalCode, prefecture, jikkyo } = settings();
   return {
     recording,
     /** 観るものがあるか。エンコード済みか、録り終えた元の TS */
     playable: encoded !== null || ts !== null,
     broadcast: { postalCode, prefecture },
     hasData,
+    /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
+    jikkyoAllowed: jikkyo,
+    /** 実況のチャンネルと頭・終わりの放送時刻。実況の無い局・世帯の設定がオフなら null */
+    jikkyo: recordingJikkyo(recording),
   };
 }
 
