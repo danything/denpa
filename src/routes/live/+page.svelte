@@ -52,7 +52,6 @@
     liveSubtitle,
     muteRow,
     speedRow,
-    tunerPreset,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
   import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
@@ -70,6 +69,7 @@
   import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+  import { LIVE_TUNER_PRESETS } from "#lib/live.js";
   import type { HybridcastLink } from "#lib/live.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR } from "#lib/ts/pacing.js";
@@ -618,11 +618,6 @@
               prefix="live"
               fold={[
                 muteRow(SOUND_OFF, player.silenced, player.toggleMute),
-                tunerPreset({
-                  icon: CODEC,
-                  preset: tunerPresetId,
-                  onselect: (key) => void selectTunerPreset(key),
-                }),
                 ...(hybridcast === undefined
                   ? []
                   : [
@@ -661,6 +656,13 @@
                 unavailable: player.unavailable,
                 onselect: (key) => player.setCodec(key),
                 onraw: () => player.setRaw(),
+                preset: tunerPresetId,
+                presets: LIVE_TUNER_PRESETS,
+                onpreset: (id) => {
+                  void selectTunerPreset(id);
+                  if (id === "passthrough") player.setRaw();
+                  else if (player.raw) player.setCodec("h264");
+                },
               })}
               audio={liveAudio(AUDIO, player)}
               subtitle={liveSubtitle(CAPTION, player)}
