@@ -1095,7 +1095,8 @@ describe("止まれと言われたとき", () => {
   const PORT2 = PORT + 1;
   const BASE2 = `http://127.0.0.1:${PORT2}`;
 
-  test("録画の選局が開いている間は生きていて、離すと落ちる", async () => {
+  /** 別のエージェントを立てて、聞き始めるまで待つ。`stop` で必ず片付ける */
+  async function spawnOther() {
     const room = mkdtempSync(join(tmpdir(), "denpa-agent-stop-"));
     writeFileSync(join(room, "tuners.json"), TUNERS);
     writeFileSync(
@@ -1120,44 +1121,128 @@ describe("止まれと言われたとき", () => {
       stderr: "ignore",
     });
 
-    try {
-      // 立ち上がるまで待つ
-      for (let i = 0; i < 100; i++) {
-        try {
-          if ((await fetch(`${BASE2}/denpa/tuners`)).ok) break;
-        } catch {
-          // まだ聞いていない
-        }
-        await sleep(100);
+    for (let i = 0; i < 100; i++) {
+      try {
+        if ((await fetch(`${BASE2}/denpa/tuners`)).ok) break;
+      } catch {
+        // まだ聞いていない
       }
+      await sleep(100);
+    }
 
-      const aborter = new AbortController();
-      const res = await fetch(
-        `${BASE2}/denpa/stream?type=GR&channel=T16&use=rec&priority=10`,
-        {
-          signal: aborter.signal,
-        },
+    const stop = async () => {
+      other.kill("SIGKILL");
+      await other.exited;
+      rmSync(room, { recursive: true, force: true });
+    };
+    return { other, stop };
+  }
+
+  /** 開いて最初の塊まで読む。`abort` で接続ごと切る */
+  async function openOn(path: string) {
+    const aborter = new AbortController();
+    const res = await fetch(`${BASE2}${path}`, { signal: aborter.signal });
+    expect(res.ok).toBe(true);
+    const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+    await reader.read();
+    return { reader, abort: () => aborter.abort() };
+  }
+
+  /** `ms` のうちに落ちたか */
+  const exitsWithin = async (other: Bun.Subprocess, ms: number) => {
+    await Promise.race([other.exited, sleep(ms)]);
+    return other.exitCode !== null;
+  };
+
+  test("録画の選局が開いている間は生きていて、離すと落ちる", async () => {
+    const { other, stop } = await spawnOther();
+    try {
+      const rec = await openOn(
+        "/denpa/stream?type=GR&channel=T16&use=rec&priority=10",
       );
-      expect(res.ok).toBe(true);
-      const reader = (res.body as ReadableStream<Uint8Array>).getReader();
-      await reader.read();
 
       other.kill("SIGTERM");
 
       // **使っている間は落ちない。** ついでに、切られずに読み続けられること
       await sleep(1500);
-      expect(other.killed && other.exitCode !== null).toBe(false);
-      const still = await reader.read();
+      expect(other.exitCode).toBeNull();
+      const still = await rec.reader.read();
       expect(still.done).toBe(false);
 
       // 離せばそこで畳む
-      aborter.abort();
-      await Promise.race([other.exited, sleep(15_000)]);
-      expect(other.exitCode).not.toBeNull();
+      rec.abort();
+      expect(await exitsWithin(other, 15_000)).toBe(true);
     } finally {
-      other.kill("SIGKILL");
-      await other.exited;
-      rmSync(room, { recursive: true, force: true });
+      await stop();
+    }
+  }, 60_000);
+
+  /*
+   * **止まる途中に来た選局も受ける** (Program.cs の Drain)。断っていた頃は、入れ替えの最中に始まる
+   * 録画の頭が欠けた。Recreate なので新しい Pod はこちらが終わるまで立たず、断っても誰も録れない。
+   * ライブは受けるが、それを理由には待たない
+   */
+  test("止まる途中に来た録画の選局は受けて、録り終えるまで居座る", async () => {
+    const { other, stop } = await spawnOther();
+    try {
+      const first = await openOn(
+        "/denpa/stream?type=GR&channel=T16&use=rec%201&priority=10",
+      );
+
+      other.kill("SIGTERM");
+      await sleep(500);
+
+      const second = await openOn(
+        "/denpa/stream?type=BS&channel=BS11_0&use=rec%202&priority=10",
+      );
+      const live = await openOn(
+        "/denpa/stream?type=BS&channel=BS03_0&use=live&priority=5",
+      );
+
+      // 前の録画を離しても、あとから来た録画が残っているので落ちない
+      first.abort();
+      await sleep(2500);
+      expect(other.exitCode).toBeNull();
+      expect((await second.reader.read()).done).toBe(false);
+
+      // 録画が終われば、ライブが開いていても待たずに畳む (ライブは一緒に切れる)
+      second.abort();
+      expect(await exitsWithin(other, 10_000)).toBe(true);
+      // 残りを読み切れば終わる (接続ごと壊れて終わってもよい)。流れ続けることはない
+      try {
+        while (!(await live.reader.read()).done);
+      } catch {
+        // 壊れて終わった
+      }
+    } finally {
+      await stop();
+    }
+  }, 60_000);
+
+  /*
+   * **録画が無ければすぐ落ちる。** 通知を開きっぱなしにされると、Kestrel が 30 秒 (既定の ShutdownTimeout)
+   * 受け口だけ閉じて待っていた。そのぶん入れ替えの隙間が伸び、実機では録画の頭が約 35 秒欠けた
+   */
+  test("録画が無ければ、通知や番組表の選局が開いていてもすぐ落ちる", async () => {
+    const { other, stop } = await spawnOther();
+    try {
+      const aborter = new AbortController();
+      const events = await fetch(`${BASE2}/denpa/events`, {
+        signal: aborter.signal,
+      });
+      expect(events.ok).toBe(true);
+      const epg = await openOn(
+        "/denpa/stream?type=GR&channel=T21&use=epg&priority=3",
+      );
+
+      other.kill("SIGTERM");
+      // 30 秒より十分短く。偽の選局を畳む間だけ待つ
+      expect(await exitsWithin(other, 10_000)).toBe(true);
+
+      aborter.abort();
+      epg.abort();
+    } finally {
+      await stop();
     }
   }, 60_000);
 });

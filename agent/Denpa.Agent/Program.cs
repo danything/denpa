@@ -27,18 +27,28 @@ using Microsoft.AspNetCore.Http.Features;
  */
 if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
 
+/*
+ * バージョンを出して終わる。chart の先引きの Job (charts/denpa/templates/prepull.yaml) は、
+ * イメージを引いたらこれで終わる (土台は distroless でシェルも /bin/true も無い)
+ */
+if (args is ["--version"])
+{
+    Console.WriteLine(About.Version);
+    return 0;
+}
 // 実機で選局と復号だけ試す入口。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
 /*
  * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ刺さっている機材を自分で拾って使い始めるので、
- * 打ち間違い (`--version` など) で本番と同じ機材を取り合うことになる
+ * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
  */
 if (args.Length > 0)
 {
     Console.Error.WriteLine($"知らない引数です: {string.Join(" ", args)}");
     Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
+    Console.Error.WriteLine("       denpa-agent --version");
     Console.Error.WriteLine($"       {Probe.TuneUsage}");
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
@@ -302,7 +312,13 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
          * (実機の Slack で 1 時間おきに鳴った)。SSE のコメント (`:` で始まる行) は
          * 受け手が読み飛ばすものなので、それで生きていると伝える
          */
-        var ct = http.RequestAborted;
+        /*
+         * **止まるときはこちらから閉じる。** Kestrel は開いている応答が終わるのを 30 秒 (既定の ShutdownTimeout)
+         * 待ってから止まり、その間は受け口だけ閉じている。denpa は通知を開きっぱなしにするので、録画が無いときの
+         * 入れ替えでも古い Pod が 30 秒居残り、その間に始まった録画の頭が欠けていた (実機で約 35 秒。下の Drain)
+         */
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted, app.Lifetime.ApplicationStopping);
+        var ct = stopping.Token;
         await http.Response.Body.FlushAsync(ct);
         Task<string>? pending = null;
         while (true)
@@ -449,9 +465,15 @@ _ = Task.Run(() =>
 });
 
 /*
- * **畳むのは、流し終えてから。** `ApplicationStopping` でやっていた頃は、止まれの合図の
- * その場で録画中のチューナーまで離していた (上の 30 分番組はこれ)。`ApplicationStopped` は
- * Kestrel が開いている応答を流し終えたあとに来る (録画を待つのはその前の `Drain`)。
+ * **選局を離すのは `ApplicationStopping` で。** これが来るのは `Drain` が録画を待ち終えてからなので、録画は切らない
+ * (止まれの合図のその場で来ていた頃は、録画中のチューナーまで離していた。上の 30 分番組はこれ)。
+ * ここで離さないと、番組表やライブの選局が残っている間 Kestrel が 30 秒待ち、そのぶん入れ替えの隙間が伸びる。
+ * 離された選局は接続を壊して終わる (録り終えたようには見せない。/denpa/stream)
+ */
+app.Lifetime.ApplicationStopping.Register(pool.CloseAll);
+/*
+ * 機材を畳むのは、応答を流し終えてから (`ApplicationStopped` は Kestrel が止まったあとに来る)。
+ * 止まり際に滑り込んだ選局もここで離す
  */
 app.Lifetime.ApplicationStopped.Register(() =>
 {
@@ -514,6 +536,13 @@ internal static class Respond
 /// 待つのは録画だけ (<see cref="TunerPool.Recording"/>)。番組表もロゴも
 /// 切れたら取り直せばいいが、放送は二度と来ない。待ち終えたら
 /// <c>StopApplication</c> を呼んで、いつもどおり畳ませる。
+/// </para>
+///
+/// <para>
+/// **待っている間も、新しい選局は断らない** (denpa の scheduler.ts の「止められている最中でも始める」と同じ考え)。
+/// <c>Recreate</c> なので新しい Pod はこちらが終わるまで立たず、断ってもその間に始まる録画の頭が欠けるだけ。
+/// 来た録画は録り終えるまで待つ (待ちは伸びるが <c>SHUTDOWN_WAIT</c> が歯止め)。ライブや番組表は受けるが
+/// 待たず、録画が終われば一緒に切れる。**録画が無ければすぐ畳む** — 待っても入れ替えの隙間が伸びるだけ。
 /// </para>
 /// </summary>
 internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetime lifetime)

@@ -23,4 +23,40 @@ spec:
           # 必ず取りに行かせる。IfNotPresent だと古いものが残っているかぎり引かない
           imagePullPolicy: Always
           command: ['/usr/local/bin/bun', '--version']
+---
+# エージェントも同じ。入れ替えの隙間に始まる録画の頭が欠けるのは、こちらも同じ (docs/architecture.md)。
+# チューナーの刺さったノードで引かないと意味が無いので、置き場所はエージェントに合わせる。
+# 起こさずに `denpa-agent --version` で終わる (機材には触らない)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tuner-agent-prepull
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: prepull
+          image: "{{ .Values.image.agent.repository }}:{{ .Values.image.agent.tag }}"
+          imagePullPolicy: Always
+          command: ['/usr/local/bin/denpa-agent', '--version']
+      {{- with .Values.agent.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.agent.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.agent.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 {{- end }}

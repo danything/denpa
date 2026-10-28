@@ -107,8 +107,8 @@ agent:
   networkPolicy:
     enabled: false
 
-# 新しいイメージを**入れ替える前に**ノードへ引いておく Job (ArgoCD の PreSync)。
-# denpa は新旧2Podを並べられない (Recreate) ので、入れ替えの間は録画が途切れる。
+# 新しいイメージを**入れ替える前に**ノードへ引いておく Job (ArgoCD の PreSync)。denpa とエージェントの両方。
+# どちらも新旧2Podを並べられない (Recreate) ので、入れ替えの間は録画が途切れる。
 # その隙間はほぼイメージの取得時間だった (実測 13.6 秒) ので、先に引いておく。
 # ArgoCD 以外で使うなら false に (フックの注釈が効かない)
 prepull:
