@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { resolve } from "$app/paths";
 
   import { submitting } from "#lib/actions.js";
   import type { Service } from "#lib/bml/engine.js";
@@ -196,7 +197,7 @@
 
   async function loadTunerPreset() {
     try {
-      const res = await fetch("/api/tuner-preset");
+      const res = await fetch(resolve("api/tuner-preset"));
       if (!res.ok) return;
       const body = (await res.json()) as { active?: string };
       if (body.active) tunerPresetId = body.active;
@@ -208,7 +209,7 @@
   async function selectTunerPreset(name: string) {
     tunerPresetId = name;
     try {
-      const res = await fetch("/api/tuner-preset", {
+      const res = await fetch(resolve("api/tuner-preset"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ preset: name }),
