@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
 
   import { submitting } from "#lib/actions.js";
   import type { Service } from "#lib/bml/engine.js";
@@ -69,6 +69,7 @@
   import { driveGate } from "#lib/drive-gate.svelte.js";
   import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
+  import { JikkyoRanking } from "#lib/jikkyo/ranking.svelte.js";
   import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
@@ -155,14 +156,47 @@
   });
   onMount(() => () => jikkyo.close());
 
-  /** 一覧は種別で切り替える (番組表と同じ並び)。局を持っている種別だけ出す */
-  const types = $derived(
-    CHANNEL_TYPES.filter((t) => channels.some((c) => c.type === t)),
+  /**
+   * 一覧は種別で切り替える (番組表と同じ並び)。局を持っている種別だけ出す。
+   * 世帯の設定と端末の ⚙ の両方で実況がオンなら、最後に「実況」タブ (勢いの順。`JIKKYO_TAB`) を足す
+   */
+  const JIKKYO_TAB = "jikkyo";
+  const jikkyoTab = $derived(
+    data.jikkyo && jikkyoOn.on && channels.some((c) => c.jikkyo !== null),
   );
-  /** 開いたときは、いま映している局の種別 */
+  const types = $derived([
+    ...CHANNEL_TYPES.filter((t) => channels.some((c) => c.type === t)),
+    ...(jikkyoTab ? [JIKKYO_TAB] : []),
+  ]);
+  /** 開いたときは、いま映している局の種別。「実況」タブを選んでいても、タブが消えたら戻す */
   let picked = $state<string | null>(null);
-  const shown = $derived(picked ?? current?.type ?? types[0] ?? "GR");
-  const listed = $derived(channels.filter((c) => c.type === shown));
+  const shown = $derived(
+    (picked !== null && types.includes(picked) ? picked : null) ??
+      current?.type ??
+      types[0] ??
+      "GR",
+  );
+  /** 「実況」タブの勢い。開いている間だけ 30 秒ごとに取りに行き、並びは開いた時点で止める */
+  const ranking = new JikkyoRanking();
+  $effect(() => {
+    if (shown !== JIKKYO_TAB) return;
+    // 開いた時点の局で並べる (受信設定が変わっても、次に開くまで変えない)
+    const ids = untrack(() =>
+      channels.filter((c) => c.jikkyo !== null).map((c) => c.id),
+    );
+    return ranking.open(ids);
+  });
+  const listed = $derived.by(() => {
+    if (shown !== JIKKYO_TAB) return channels.filter((c) => c.type === shown);
+    const supported = channels.filter((c) => c.jikkyo !== null);
+    const order = ranking.order;
+    if (order === null) return supported;
+    const at = new Map(order.map((id, index) => [id, index]));
+    // 開いた後に増えた局 (並びに無い) は末尾に
+    return [...supported].sort(
+      (a, b) => (at.get(a.id) ?? order.length) - (at.get(b.id) ?? order.length),
+    );
+  });
 
   /**
    * 局を選ぶ。エンコード方式は引き継ぐ (その端末で出るかの話)。音声は引き継がない (番組ごとに構成が変わる。
@@ -792,19 +826,31 @@
               }}
               data-testid="live-type-{type}"
             >
-              {SERVICE_TYPE_LABEL[type]}
+              {type === JIKKYO_TAB ? "実況" : SERVICE_TYPE_LABEL[type]}
             </button>
           {/each}
         </div>
         <!-- 枠の無い行を並べる (サイドバーの一覧と同じ形) -->
+        <!-- 勢いを読めないときは一覧の頭に 1 行だけ (通知は出さない。並びは番号順) -->
+        {#if shown === JIKKYO_TAB && ranking.failed}
+          <p class="ranking-note" data-testid="live-ranking-note">
+            いまは勢いを読めません
+          </p>
+        {/if}
         <ul
           bind:this={list}
           class="channels side-list"
+          data-mixed={shown === JIKKYO_TAB ? "" : undefined}
           data-testid="live-channels"
         >
           {#each listed as channel (channel.id)}
             <!-- いま映しているものかどうかは、この行の中で何度も使う -->
             {@const tuned = current?.id === channel.id}
+            <!-- 「実況」タブでは 2 段目の頭に勢い (1 分あたりのコメント数)。ほかのタブには付けない -->
+            {@const force =
+              shown === JIKKYO_TAB
+                ? ranking.forces?.get(channel.id)
+                : undefined}
             <li class="channel-item side-item">
               <button
                 type="button"
@@ -850,9 +896,14 @@
                       data-testid="live-number">{channel.number ?? ""}</span
                     >{channel.name}
                   </span>
-                  {#if channel.now}
+                  {#if channel.now || force !== undefined}
                     <span class="channel-now broadcast">
-                      {channel.now.name}
+                      {#if force !== undefined}<span
+                          class="force"
+                          data-testid="live-force"
+                          ><span title="1分あたりのコメント数">勢い</span>
+                          {force}</span
+                        >{#if channel.now}・{/if}{/if}{channel.now?.name ?? ""}
                     </span>
                   {/if}
                 </span>
@@ -1034,6 +1085,21 @@
     font-weight: var(--dp-weight-bold);
   }
   .channel-now {
+    font-size: var(--dp-text-xs);
+    color: var(--dp-muted);
+  }
+  /* 「実況」タブは種別が混ざる (地上波は 1〜2 桁、BS・CS は 3 桁) ので、番号の幅を 3 桁にそろえる */
+  .channels[data-mixed] .channel-number {
+    min-width: 3ch;
+  }
+  /* 勢いは控えた字のまま、数字の幅をそろえる (書き換わっても番組名が揺れない) */
+  .force {
+    font-variant-numeric: tabular-nums;
+  }
+  /* 勢いを読めないときの 1 行。一覧の行と同じ左の余白で、控えた字 */
+  .ranking-note {
+    margin: 0;
+    padding: var(--dp-space-2) var(--dp-space-3);
     font-size: var(--dp-text-xs);
     color: var(--dp-muted);
   }

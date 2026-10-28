@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page, WebSocketRoute } from "@playwright/test";
 
-import { MX } from "../fake/services";
+import { BS11, FUJI, MX } from "../fake/services";
 import {
   expect,
   goto,
@@ -304,6 +304,103 @@ test.describe("録画の実況", () => {
       await expect(page.getByTestId("watch-jikkyo")).toContainText(
         "(いまは読めません)",
       );
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
+
+test.describe("「実況」タブ", () => {
+  /** 一覧に並んだ局の ID (上から) */
+  const order = (page: Page) =>
+    page
+      .getByTestId("live-channel")
+      .evaluateAll((rows) =>
+        rows.map((row) => Number((row as HTMLElement).dataset["service"])),
+      );
+
+  test("どちらかの設定がオフならタブを出さない", async ({ page }) => {
+    await setJikkyo(page, true);
+    try {
+      // 端末の ⚙ はオフのまま
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-type-GR")).toBeVisible();
+      await expect(page.getByTestId("live-type-jikkyo")).toHaveCount(0);
+    } finally {
+      await setJikkyo(page, false);
+    }
+    await deviceOn(page);
+    await goto(page, `/live?service=${MX.id}`);
+    await expect(page.getByTestId("live-type-GR")).toBeVisible();
+    await expect(page.getByTestId("live-type-jikkyo")).toHaveCount(0);
+  });
+
+  test("勢いの順に並べ、並びは止めたまま数字だけ書き換える", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      // 勢いの中継は偽物に (サーバから NX-Jikkyo へは行かせない)
+      const replies = [
+        [
+          { serviceId: MX.id, force: 5 },
+          { serviceId: FUJI.id, force: 40 },
+          { serviceId: BS11.id, force: 20 },
+        ],
+        [
+          { serviceId: MX.id, force: 100 },
+          { serviceId: FUJI.id, force: 1 },
+          { serviceId: BS11.id, force: 2 },
+        ],
+      ];
+      let asked = 0;
+      await page.route("**/api/jikkyo/ranking", (route) => {
+        const channels = replies[Math.min(asked, replies.length - 1)];
+        asked++;
+        return route.fulfill({ json: { at: Date.now(), channels } });
+      });
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await page.getByTestId("live-type-jikkyo").click();
+      await expect(page.getByTestId("live-force").first()).toContainText("40");
+      const first = await order(page);
+      expect(first.slice(0, 3)).toEqual([FUJI.id, BS11.id, MX.id]);
+
+      // 見えるようになったら取り直す (30 秒待たずに)。数字は替わり、並びは止めたまま
+      await page.evaluate(() =>
+        document.dispatchEvent(new Event("visibilitychange")),
+      );
+      const mx = page.locator(
+        `[data-testid="live-channel"][data-service="${MX.id}"]`,
+      );
+      await expect(mx.getByTestId("live-force")).toContainText("100");
+      expect(await order(page)).toEqual(first);
+      // ほかのタブには数を付けない
+      await page.getByTestId("live-type-GR").click();
+      await expect(page.getByTestId("live-force")).toHaveCount(0);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("読めないときは番号順で並べ、一覧の頭に 1 行だけ出す", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await page.route("**/api/jikkyo/ranking", (route) =>
+        route.fulfill({ status: 503, body: "いまは勢いを読めません" }),
+      );
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await page.getByTestId("live-type-jikkyo").click();
+      await expect(page.getByTestId("live-ranking-note")).toHaveText(
+        "いまは勢いを読めません",
+      );
+      await expect(page.getByTestId("live-force")).toHaveCount(0);
+      // 番号順 (地上波 → BS)
+      const ids = await order(page);
+      expect(ids.indexOf(BS11.id)).toBeGreaterThan(ids.indexOf(MX.id));
     } finally {
       await setJikkyo(page, false);
     }
