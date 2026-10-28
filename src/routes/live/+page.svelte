@@ -389,14 +389,16 @@
         bind:box={mediaBox}
       >
         {#snippet under()}
-          <!-- 映像 → 実況 → 字幕。データ放送を出している間は重ねない -->
-          <JikkyoLayer
-            feed={jikkyo}
-            air={() => player.airTime()}
-            show={jikkyoActive && jikkyoChannel !== null && !player.showData}
-            paused={player.paused}
-            rate={player.rate}
-          />
+          <!-- 映像 → 実況 → 字幕。世帯の設定がオンのときだけ置く。データ放送を出している間は重ねない -->
+          {#if data.jikkyo}
+            <JikkyoLayer
+              feed={jikkyo}
+              air={() => player.airTime()}
+              show={jikkyoActive && jikkyoChannel !== null && !player.showData}
+              paused={player.paused}
+              rate={player.rate}
+            />
+          {/if}
         {/snippet}
       </MediaStack>
 

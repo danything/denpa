@@ -305,13 +305,16 @@
         bind:overlay
       >
         {#snippet under()}
-          <JikkyoLayer
-            feed={jikkyo}
-            air={airTime}
-            show={jikkyoActive && data.jikkyo !== null}
-            paused={player.paused}
-            rate={player.rate}
-          />
+          <!-- 映像 → 実況 → 字幕。世帯の設定がオンのときだけ置く (ライブと同じ) -->
+          {#if data.jikkyoAllowed}
+            <JikkyoLayer
+              feed={jikkyo}
+              air={airTime}
+              show={jikkyoActive && data.jikkyo !== null}
+              paused={player.paused}
+              rate={player.rate}
+            />
+          {/if}
         {/snippet}
       </MediaStack>
 
