@@ -116,13 +116,15 @@ async function readChannels(): Promise<unknown> {
 }
 
 /**
- * **局の勢いの中継。** 誰かが呼んだときだけ NX-Jikkyo を読み、`RANKING_TTL` の間は同じものを返す。
+ * **局の勢いの中継。** 誰かが呼んだときだけ NX-Jikkyo を読み、`RANKING_TTL` の間は同じものを返す (読めなかったときも、その間は同じ失敗を返す)。
  * 誰も呼ばなければ読まない。同時に呼ばれても読むのは 1 回。
  * 読めないときは記録に警告を 1 行だけ残す (同じ理由は繰り返さない。戻ったらそのことも 1 行)
  */
 export class RankingRelay {
   private cached: { at: number; forces: Forces } | null = null;
   private pending: Promise<{ at: number; forces: Forces }> | null = null;
+  /** 最後に読めなかった時刻と理由。`RANKING_TTL` の間は読み直さずに同じ失敗を返す (止まっている相手を叩き続けない) */
+  private failed: { at: number; error: unknown } | null = null;
   /** 最後に記録に残した失敗の理由。戻ったら null */
   private failure: string | null = null;
   /** 形のずれの警告を出したか (1 回だけ) */
@@ -138,6 +140,9 @@ export class RankingRelay {
     const cached = this.cached;
     if (cached !== null && this.clock() - cached.at < RANKING_TTL)
       return cached;
+    const failed = this.failed;
+    if (failed !== null && this.clock() - failed.at < RANKING_TTL)
+      throw failed.error;
     this.pending ??= this.load().finally(() => {
       this.pending = null;
     });
@@ -155,6 +160,7 @@ export class RankingRelay {
         console.log("[jikkyo] NX-Jikkyo から勢いを読めるようになりました");
         this.failure = null;
       }
+      this.failed = null;
       this.cached = { at: this.clock(), forces };
       return this.cached;
     } catch (error) {
@@ -165,6 +171,7 @@ export class RankingRelay {
       }
       // 古い勢いは返さない (画面は「いまは勢いを読めません」にする)
       this.cached = null;
+      this.failed = { at: this.clock(), error };
       throw error;
     }
   }

@@ -93,18 +93,26 @@ describe("RankingRelay", () => {
     const log = spyOn(console, "log").mockImplementation(() => {});
     let now = 0;
     let fail = true;
+    let reads = 0;
     const relay = new RankingRelay(
       async () => {
+        reads++;
         if (fail) throw new Error("HTTP 502");
         return [channel("jk1", 3)];
       },
       () => now,
     );
     await expect(relay.get()).rejects.toThrow();
+    // 30 秒は読み直さずに同じ失敗を返す
     now += 1;
     await expect(relay.get()).rejects.toThrow();
+    expect(reads).toBe(1);
+    now += RANKING_TTL;
+    await expect(relay.get()).rejects.toThrow();
+    expect(reads).toBe(2);
     expect(warn).toHaveBeenCalledTimes(1);
     fail = false;
+    now += RANKING_TTL;
     expect((await relay.get()).forces.get("jk1")).toBe(3);
     expect(log).toHaveBeenCalledTimes(1);
   });
