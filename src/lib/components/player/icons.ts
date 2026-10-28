@@ -35,6 +35,8 @@ export { default as BACKGROUND } from "~icons/lucide/headphones";
 export { default as INFO } from "~icons/lucide/info";
 /** 全画面にする / 戻す */
 export { default as EXPAND } from "~icons/lucide/maximize";
+/** 実況のコメント (再生の設定の行) */
+export { default as JIKKYO } from "~icons/lucide/message-square-text";
 export { default as SHRINK } from "~icons/lucide/minimize";
 /** 互換モード (再生の設定の行。動画が止まる端末向けに canvas に描く。`canvas-video.ts`) */
 export { default as COMPAT } from "~icons/lucide/monitor-play";

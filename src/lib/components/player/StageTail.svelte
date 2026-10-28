@@ -20,6 +20,7 @@
     CUT,
     DATA,
     EXPAND,
+    JIKKYO,
     PIP,
     SHRINK,
   } from "./icons";
@@ -64,6 +65,13 @@
     receive?: { on: boolean; toggle: () => void } | undefined;
     /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
     subtitle?: SettingChoice | undefined;
+    /**
+     * 実況のコメント (3画面で同じ。端末ごと。`#lib/jikkyo/switch.svelte.ts`)。世帯の設定 (連携の「実況」) がオンのときだけ渡す。
+     * 実況の無い局・録画は `missing` で押せなくし、読めないときは `down` で「(いまは読めません)」を添える (押せるまま)
+     */
+    jikkyo?:
+      | { on: boolean; toggle: () => void; missing: boolean; down: boolean }
+      | undefined;
   }
   let {
     prefix,
@@ -78,6 +86,7 @@
     data,
     receive,
     subtitle,
+    jikkyo,
     fold = [],
   }: Props = $props();
 
@@ -161,6 +170,23 @@
             icon: DATA,
             on: receive.on,
             toggle: receive.toggle,
+          },
+        ]),
+    ...(jikkyo === undefined
+      ? []
+      : [
+          {
+            id: "jikkyo",
+            label: "実況",
+            icon: JIKKYO,
+            on: jikkyo.on && !jikkyo.missing,
+            toggle: jikkyo.toggle,
+            disabled: jikkyo.missing,
+            note: jikkyo.missing
+              ? "この局にはありません"
+              : jikkyo.on && jikkyo.down
+                ? "いまは読めません"
+                : undefined,
           },
         ]),
     {

@@ -45,6 +45,10 @@ export interface SettingToggle {
    * 窓のボタンを押した1回目がメニューの外を押したことになって、閉じるだけで終わる
    */
   closes?: boolean;
+  /** 名前の後ろに添える注記 (「この局にはありません」など。括弧は付けて出す) */
+  note?: string | undefined;
+  /** 並べるが押せない */
+  disabled?: boolean;
 }
 
 /** 押せない形式に添える注記 (docs/writing.md「同じことは同じ文言で」) */

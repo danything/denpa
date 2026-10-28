@@ -3,6 +3,7 @@ import { and, gt, lte, sql } from "drizzle-orm";
 
 import { channelNotice } from "#lib/channel-notice.js";
 import { channelNumber } from "#lib/format.js";
+import { jikkyoChannel } from "#lib/jikkyo/channels.js";
 import { LAST_COOKIE, type LiveCodec } from "#lib/live.js";
 import { orm } from "#lib/server/db.js";
 import {
@@ -49,6 +50,8 @@ export interface LiveChannel {
    * にあたる (BS朝日1=151、WOWOWプライム=191、時代劇専門ch=292)。
    */
   number: number | null;
+  /** 実況のチャンネル (`jk1` など。`#lib/jikkyo/channels.ts`)。実況の無い局と、世帯の設定 (連携の「実況」) がオフのときは null */
+  jikkyo: string | null;
   hasLogo: boolean;
   /** いま流れている番組。無いこともある (番組表がまだ薄い局) */
   now: {
@@ -128,6 +131,7 @@ export function load(event) {
     now.map((program) => [program.service_id, program]),
   );
 
+  const current = settings();
   const channels: LiveChannel[] = airing(services, now).map((service) => {
     const program = byService.get(service.id);
     return {
@@ -139,6 +143,7 @@ export function load(event) {
       serviceId: service.service_id,
       number: channelNumber(service),
       hasLogo: service.has_logo,
+      jikkyo: current.jikkyo ? jikkyoChannel(service) : null,
       now:
         program === undefined
           ? null
@@ -191,7 +196,6 @@ export function load(event) {
     );
 
   // データ放送に渡す郵便番号と都道府県。家の場所は端末では変わらないので、置き場はサーバ
-  const current = settings();
   return {
     channels,
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
@@ -200,6 +204,8 @@ export function load(event) {
     postalCode: current.postalCode,
     prefecture: current.prefecture,
     bmlNetwork: current.bmlNetwork,
+    /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
+    jikkyo: current.jikkyo,
   };
 }
 

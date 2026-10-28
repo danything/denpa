@@ -1,6 +1,14 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Page, WebSocketRoute } from "@playwright/test";
 
-import { expect, goto, test } from "./helpers";
+import { MX } from "../fake/services";
+import {
+  expect,
+  goto,
+  openSettings,
+  pickCodec,
+  test,
+  wakeControls,
+} from "./helpers";
 
 /**
  * **ニコニコ実況のコメント** (docs/watch.md の「実況」)。既定はオフで、世帯の設定 (連携の「実況」) と
@@ -53,6 +61,146 @@ test.describe("実況の世帯の設定", () => {
       const list = await channels(request);
       expect(list["ＴＯＫＹＯ　ＭＸ"]).toBe("jk9");
       expect(list["フジテレビ"]).toBe("jk8");
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
+
+/** NX-Jikkyo の WebSocket の偽物。視聴の WS に room を返し、コメントの WS に `comments()` の本文を流し続ける */
+async function fakeNx(
+  page: Page,
+  opts: { refuse?: () => boolean; text?: string } = {},
+): Promise<{ watched: string[] }> {
+  const watched: string[] = [];
+  await page.routeWebSocket(
+    /nx-jikkyo\.tsukumijima\.net\/.*\/ws\/watch$/,
+    (ws) => {
+      watched.push(ws.url());
+      if (opts.refuse?.() === true) {
+        void ws.close({ code: 1011, reason: "down" });
+        return;
+      }
+      ws.onMessage((message) => {
+        const body = JSON.parse(String(message)) as { type?: string };
+        if (body.type !== "startWatching") return;
+        ws.send(
+          JSON.stringify({ type: "seat", data: { keepIntervalSec: 30 } }),
+        );
+        ws.send(
+          JSON.stringify({
+            type: "room",
+            data: {
+              messageServer: {
+                uri: "wss://nx-jikkyo.tsukumijima.net/api/v1/channels/jk9/ws/comment",
+              },
+              threadId: "1",
+              yourPostKey: "",
+            },
+          }),
+        );
+      });
+    },
+  );
+  await page.routeWebSocket(
+    /nx-jikkyo\.tsukumijima\.net\/.*\/ws\/comment$/,
+    (ws: WebSocketRoute) => {
+      let timer: ReturnType<typeof setInterval> | null = null;
+      ws.onMessage(() => {
+        ws.send(JSON.stringify({ thread: { resultcode: 0, thread: "1" } }));
+        // いま書かれたことにして流し続ける (画面は映しているコマの放送時刻に届いたものから流す)
+        timer ??= setInterval(() => {
+          const now = Date.now();
+          ws.send(
+            JSON.stringify({
+              chat: {
+                thread: "1",
+                date: Math.floor(now / 1000),
+                date_usec: (now % 1000) * 1000,
+                user_id: "fake",
+                content: opts.text ?? "テストのコメント",
+              },
+            }),
+          );
+        }, 500);
+      });
+      ws.onClose(() => {
+        if (timer !== null) clearInterval(timer);
+      });
+    },
+  );
+  return { watched };
+}
+
+/** 端末の ⚙ の「実況」をオンにしておく (読み込む前に) */
+async function deviceOn(page: Page): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("player-jikkyo", "1"));
+}
+
+test.describe("ライブの実況", () => {
+  test("世帯の設定がオフなら ⚙ に「実況」は出ない", async ({ page }) => {
+    await goto(page, `/live?service=${MX.id}`);
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    await wakeControls(page, "live-frame");
+    await openSettings(page, "live");
+    await expect(page.getByTestId("live-ambient")).toBeVisible();
+    await expect(page.getByTestId("live-jikkyo")).toHaveCount(0);
+  });
+
+  test("両方オンなら NX-Jikkyo のコメントを映像の上に流し、⚙ で切れる", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      const nx = await fakeNx(page);
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      // 映像が進まないと放送時刻も進まない。偽の放送をそのままデコードできる MPEG-2 で観る (28-live-raw と同じ)
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "mpeg2");
+      const comment = page.getByTestId("jikkyo-comment").first();
+      await expect(comment).toHaveText("テストのコメント", { timeout: 20_000 });
+      expect(nx.watched[0]).toContain("/channels/jk9/ws/watch");
+      // 読み上げには出さない
+      await expect(page.getByTestId("jikkyo-layer")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+
+      await wakeControls(page, "live-frame");
+      await openSettings(page, "live");
+      const row = page.getByTestId("live-jikkyo");
+      await expect(row).toHaveAttribute("aria-checked", "true");
+      await row.click();
+      await expect(row).toHaveAttribute("aria-checked", "false");
+      await expect(page.getByTestId("jikkyo-comment")).toHaveCount(0);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("NX-Jikkyo に繋がらなければ、⚙ の行に「(いまは読めません)」を添える (通知は出さない)", async ({
+    page,
+  }) => {
+    // 5 回続けて失敗するまで 1+2+4+8 秒ほど待つ
+    test.setTimeout(150_000);
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, { refuse: () => true });
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await wakeControls(page, "live-frame");
+      await openSettings(page, "live");
+      await expect(page.getByTestId("live-jikkyo")).toContainText(
+        "(いまは読めません)",
+        { timeout: 60_000 },
+      );
+      await expect(page.getByTestId("live-jikkyo")).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     } finally {
       await setJikkyo(page, false);
     }

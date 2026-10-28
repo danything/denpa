@@ -125,13 +125,21 @@
     role="menuitemcheckbox"
     class="menu-item setting"
     aria-checked={item.on}
+    aria-disabled={item.disabled === true ? "true" : undefined}
+    data-disabled={item.disabled === true ? "" : undefined}
     data-keep-open={item.closes === true ? undefined : ""}
     data-setting={item.id}
     data-testid="{prefix}-{item.id}"
-    onclick={() => item.toggle()}
+    onclick={() => {
+      if (item.disabled !== true) item.toggle();
+    }}
   >
     <Icon icon={item.icon} />
-    <span class="label">{item.label}</span>
+    <span class="label"
+      >{item.label}{#if item.note !== undefined}<span class="note">
+          ({item.note})</span
+        >{/if}</span
+    >
     <span class="switch" data-on={item.on ? "" : undefined} aria-hidden="true"
     ></span>
   </button>
@@ -264,6 +272,10 @@
     font-size: inherit;
     line-height: 1.3;
     text-align: right;
+    color: var(--dp-muted);
+  }
+  /* 注記は値と同じく色だけ控える (押せない形式の「(再生できません)」と同じ言い方) */
+  .note {
     color: var(--dp-muted);
   }
   .back {

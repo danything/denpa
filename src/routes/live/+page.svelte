@@ -37,6 +37,7 @@
     SPEED,
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
+  import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout, {
@@ -67,6 +68,8 @@
   import { programDetail } from "#lib/detail.svelte.js";
   import { driveGate } from "#lib/drive-gate.svelte.js";
   import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
+  import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
+  import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
@@ -134,6 +137,23 @@
   const current = $derived(
     channels.find((c) => c.id === player.tuned?.serviceId),
   );
+
+  /**
+   * 実況のコメント (docs/watch.md の「実況」)。世帯の設定 (`data.jikkyo`) と端末の ⚙ の両方がオンで、
+   * 局を映している間だけ NX-Jikkyo に繋ぐ。局を替えたら繋ぎ直す
+   */
+  const jikkyoOn = jikkyoSwitch();
+  const jikkyo = new JikkyoFeed(true);
+  const jikkyoChannel = $derived(
+    data.jikkyo ? (current?.jikkyo ?? null) : null,
+  );
+  const jikkyoActive = $derived(
+    data.jikkyo && jikkyoOn.on && player.tuned !== null,
+  );
+  $effect(() => {
+    jikkyo.set(jikkyoChannel, jikkyoActive);
+  });
+  onMount(() => () => jikkyo.close());
 
   /** 一覧は種別で切り替える (番組表と同じ並び)。局を持っている種別だけ出す */
   const types = $derived(
@@ -333,7 +353,18 @@
         bind:still
         bind:overlay
         bind:box={mediaBox}
-      />
+      >
+        {#snippet under()}
+          <!-- 映像 → 実況 → 字幕。データ放送を出している間は重ねない -->
+          <JikkyoLayer
+            feed={jikkyo}
+            air={() => player.airTime()}
+            show={jikkyoActive && jikkyoChannel !== null && !player.showData}
+            paused={player.paused}
+            rate={player.rate}
+          />
+        {/snippet}
+      </MediaStack>
 
       <!-- データ放送。映像はここ (`media`) とだけ伝えて描くのはエンジンに任せる。局が変わったら作り直す -->
       <!-- 常に受信する端末は、開く前から動かす (局を映している間だけ。`data-receive.ts`) -->
@@ -616,6 +647,14 @@
                 on: player.receiveData,
                 toggle: () => player.toggleReceiveData(),
               }}
+              jikkyo={data.jikkyo
+                ? {
+                    on: jikkyoOn.on,
+                    toggle: jikkyoOn.toggle,
+                    missing: jikkyoChannel === null,
+                    down: jikkyo.down,
+                  }
+                : undefined}
               codec={liveCodecs({
                 icon: CODEC,
                 codec: player.codec,

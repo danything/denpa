@@ -2389,6 +2389,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get rateChanges() {
       return rateChanges;
     },
+    /**
+     * **いま映しているコマの放送時刻** (unix ms、サーバの時計)。`clock` の通知と再生位置から出す
+     * (実況のコメントを合わせる。`JikkyoLayer`)。`clock` がまだ届いていなければ null
+     */
+    airTime(): number | null {
+      if (broadcast === null) return null;
+      const at =
+        engine !== null ? engine.position : (element?.currentTime ?? null);
+      if (at === null) return null;
+      return broadcast.unixMs + (at - broadcast.at) * 1000;
+    },
     /** 押して止めているか */
     get paused() {
       return paused;
