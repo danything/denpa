@@ -137,6 +137,11 @@ export class JikkyoFeed {
     this.down = this.failing.size > 0;
   }
 
+  /** 重ねるのを止めた (データ放送を出した・オフにした)。戻ったときに、止めていた間のぶんをまとめて流さない */
+  pause(): void {
+    this.cursor.pause();
+  }
+
   /** いまの放送時刻 `w` までに書かれたもののうち、まだ流していないもの。流していないときは何も返さない */
   take(w: number): Take {
     if (!this.active) return { comments: [], jumped: false };
