@@ -25,6 +25,8 @@ export class JikkyoRanking {
   private ids: number[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private run = 0;
+  /** 取りに行った回。通信中に見え直して次の回が始まったら、前の回の返事は捨てる (取りに行くのを 1 本に保つ) */
+  private ticks = 0;
 
   /**
    * タブを開いた。`ids` は実況に対応している局を番号順に。
@@ -56,6 +58,7 @@ export class JikkyoRanking {
 
   private async tick(run: number): Promise<void> {
     this.pause();
+    const tick = ++this.ticks;
     let forces: Map<number, number> | null = null;
     try {
       const res = await fetch(resolve("api/jikkyo/ranking"));
@@ -63,11 +66,12 @@ export class JikkyoRanking {
     } catch {
       // 繋がらない。読めないのと同じ
     }
-    if (run !== this.run) return;
+    if (run !== this.run || tick !== this.ticks) return;
     this.forces = forces;
     this.failed = forces === null;
     // 並びは最初の返事で 1 回だけ決める (読めなければ番号順のまま)
     this.order ??= rankOrder(this.ids, forces);
+    this.pause();
     if (document.visibilityState === "visible")
       this.timer = setTimeout(() => void this.tick(run), EVERY);
   }
