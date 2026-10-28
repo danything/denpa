@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { resolve } from "$app/paths";
+  import { onMount } from "svelte";
 
   import { submitting } from "#lib/actions.js";
   import type { Service } from "#lib/bml/engine.js";
