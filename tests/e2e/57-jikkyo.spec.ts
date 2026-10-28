@@ -108,20 +108,25 @@ async function fakeNx(
       let timer: ReturnType<typeof setInterval> | null = null;
       ws.onMessage(() => {
         ws.send(JSON.stringify({ thread: { resultcode: 0, thread: "1" } }));
-        // いま書かれたことにして流し続ける (画面は映しているコマの放送時刻に届いたものから流す)
+        /*
+         * 書かれた時刻を前後に散らして流し続ける。画面は映しているコマの放送時刻 (偽の放送の時計) に届いたものから流し、
+         * 10 秒より古いものは捨てるので、放送時刻が壁時計より進んでいても遅れていても、どれかが当たるように
+         */
         timer ??= setInterval(() => {
-          const now = Date.now();
-          ws.send(
-            JSON.stringify({
-              chat: {
-                thread: "1",
-                date: Math.floor(now / 1000),
-                date_usec: (now % 1000) * 1000,
-                user_id: "fake",
-                content: opts.text ?? "テストのコメント",
-              },
-            }),
-          );
+          for (const offset of [-5_000, 0, 5_000, 10_000, 20_000]) {
+            const at = Date.now() + offset;
+            ws.send(
+              JSON.stringify({
+                chat: {
+                  thread: "1",
+                  date: Math.floor(at / 1000),
+                  date_usec: (at % 1000) * 1000,
+                  user_id: "fake",
+                  content: opts.text ?? "テストのコメント",
+                },
+              }),
+            );
+          }
         }, 500);
       });
       ws.onClose(() => {
