@@ -191,6 +191,9 @@ export class NxJikkyo {
     };
     ws.onmessage = (event) => this.onComment(ws, event.data);
     ws.onclose = (event) => this.onClose(ws, event.code);
+    ws.onerror = () => {
+      // 続く close で繋ぎ直す
+    };
   }
 
   private sendBackfill(): void {

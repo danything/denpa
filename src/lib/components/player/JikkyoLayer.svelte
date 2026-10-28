@@ -78,6 +78,7 @@
     if (!show) {
       items = [];
       lanes.clear();
+      feed.pause();
       return;
     }
     const timer = setInterval(tick, 100);
