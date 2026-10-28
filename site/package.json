@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.7",
-    "astro": "7.4.2"
+    "astro": "7.4.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
