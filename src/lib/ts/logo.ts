@@ -191,6 +191,11 @@ export class LogoCollector {
     return this.dsmcc.hasLogoService;
   }
 
+  /** 衛星のロゴのカルーセルを1回ぶん読み切ったか (`DsmccLogoCollector.carouselRead`) */
+  get satelliteCarouselRead(): boolean {
+    return this.dsmcc.carouselRead;
+  }
+
   feed(chunk: Uint8Array): void {
     for (const packet of this.packets.feed(chunk)) {
       for (const section of this.cdt.feed(packet)) {

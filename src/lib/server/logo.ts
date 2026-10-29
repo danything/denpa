@@ -64,19 +64,6 @@ const SWEEP_TIMEOUT = 6 * 60_000;
 const SATELLITE_TIMEOUT = 20 * 60_000;
 
 /**
- * 衛星で「もう来ない」とみなすまでの静けさ。
- *
- * **「この中継ぶんが揃ったら閉じる」では決められない。** カルーセルには BS と CS の
- * 全局が載っているが、そのうち何局ぶんが載っているのかは開く前には分からない。
- * 「衛星でまだ持っていない局が0になるまで」で待つと、放送側が流していない局
- * (実機の CS の一部) が1つでもあると**毎回20分丸ごと待つ**ことになる。
- *
- * まとまって来て、あとは無音、という流れ方をするので、**最後に1局取得してから
- * これだけ何も来なければ切り上げる**。実測ではカルーセル1回ぶんが同じ1分の中に
- * 収まっていたので、これだけ空けば取りこぼしはない。
- */
-const SATELLITE_QUIET = 15_000;
-/**
  * 選局を共有するときの上限。向こうの都合でいつ閉じてもおかしくないので短くする。
  * こちらはチューナーを増やさない (同じチャンネルなら**エージェントが選局を共有させる**)。
  * **実際に集めているのはほぼこちら** (`sweep`)
@@ -318,9 +305,10 @@ function watch(networkId: number): Feed {
       broken = true;
     }
   };
-  /** 外れの中継を早く見切るために覗く。地上波では使わない */
-  Object.defineProperty(feed, "hasSatelliteLogo", {
-    get: () => collector.hasSatelliteLogo,
+  /** 外れの中継を早く見切るため・読み切ったかを見るために覗く。地上波では使わない */
+  Object.defineProperties(feed, {
+    hasSatelliteLogo: { get: () => collector.hasSatelliteLogo },
+    carouselRead: { get: () => collector.satelliteCarouselRead },
   });
   return feed as Feed;
 }
@@ -329,6 +317,8 @@ function watch(networkId: number): Feed {
 interface Feed {
   (chunk: Uint8Array): void;
   readonly hasSatelliteLogo: boolean | null;
+  /** 衛星のロゴのカルーセルを1回ぶん読み切ったか */
+  readonly carouselRead: boolean;
 }
 
 /**
@@ -594,33 +584,18 @@ async function collect(
       after,
     );
     const feed = watch(target.network_id);
-    let left = before;
-    let progressed = Date.now();
     for await (const chunk of chunks(stream)) {
       feed(chunk);
       const now = remaining();
-      if (now < left) {
-        left = now;
-        progressed = Date.now();
-      }
       // 全部揃ったら、これ以上開けておく理由がない
-      if (now === 0) {
-        if (satellite) markAbsent();
-        break;
-      }
+      if (now === 0) break;
       /*
        * 衛星は揃いきらないことがある (カルーセルに載っていない局がある)。
-       * 取得できたあと何も来なくなったら、そこで切り上げる。これが無いと
-       * 載っていない局が1つでもあるだけで毎回20分丸ごと待つことになる。
-       *
-       * ここまで来たなら**カルーセルは1回ぶん読み切った**。残っている局は
-       * 載っていない局なので、そう書き留めて次からは行かない
+       * **DII が知らせたロゴのモジュールが全部揃ったら、カルーセルは1回ぶん読み切った**
+       * (`carouselRead`)。残っている局は載っていない局なので、そう書き留めて次からは行かない。
+       * これが無いと、載っていない局が1つでもあるだけで毎回20分丸ごと待つことになる
        */
-      if (
-        satellite &&
-        left < before &&
-        Date.now() - progressed > SATELLITE_QUIET
-      ) {
+      if (satellite && feed.carouselRead) {
         markAbsent();
         break;
       }
@@ -877,6 +852,12 @@ export async function sweepNow(): Promise<{
       return { started: false, message: "まだ前の取得が終わっていません" };
   }
   reconcile();
+  /*
+   * **押されたら「カルーセルに載っていない」の控えを捨てて当たり直す。** 控えが間違っていると
+   * (読み切る前に見切った、など)、押しても「すべて取得済み」と言われ、取り直せなかった
+   */
+  const known = notes();
+  if (Object.keys(known.absent).length > 0) save({ ...known, absent: {} });
   const targets = missing();
   if (targets.length === 0) {
     return { started: false, message: "ロゴはすべて取得済みです" };
