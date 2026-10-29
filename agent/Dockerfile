@@ -37,7 +37,7 @@ RUN case "${TARGETARCH}" in \
 # 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
 # 組み直しになり、PLEX のサイトへ zip を取りに行く回数が増える
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31 AS fetch
+FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS fetch
 ARG TARGETARCH
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certificates unzip && \
