@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
 
   import { submitting } from "#lib/actions.js";
@@ -69,6 +70,7 @@
   import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+  import { LIVE_TUNER_PRESETS } from "#lib/live.js";
   import type { HybridcastLink } from "#lib/live.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR } from "#lib/ts/pacing.js";
@@ -185,6 +187,38 @@
 
   /** 一覧の各行。開いたときに、いま映している局まで送る (局が100を超えると画面の外のほうが普通) */
   const rows: Record<number, HTMLElement | undefined> = $state({});
+
+  /** チューナー側の画質。選局したときにだけ効く (下の注記を読む) */
+  let tunerPresetId = $state("passthrough");
+
+  onMount(() => {
+    void loadTunerPreset();
+  });
+
+  async function loadTunerPreset() {
+    try {
+      const res = await fetch(resolve("api/tuner-preset"));
+      if (!res.ok) return;
+      const body = (await res.json()) as { active?: string };
+      if (body.active) tunerPresetId = body.active;
+    } catch {
+      /* チューナーが居ないだけ。既定のまま */
+    }
+  }
+
+  async function selectTunerPreset(name: string) {
+    tunerPresetId = name;
+    try {
+      const res = await fetch(resolve("api/tuner-preset"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ preset: name }),
+      });
+      if (!res.ok) await loadTunerPreset();
+    } catch {
+      await loadTunerPreset();
+    }
+  }
   /** 一覧そのもの。送るのはこの中だけ (下の説明) */
   let list = $state<HTMLElement | null>(null);
   /** 一度送ったら、あとは触らない。見ている途中で勝手に動くと邪魔になる */
@@ -623,6 +657,13 @@
                 unavailable: player.unavailable,
                 onselect: (key) => player.setCodec(key),
                 onraw: () => player.setRaw(),
+                preset: tunerPresetId,
+                presets: LIVE_TUNER_PRESETS,
+                onpreset: (id) => {
+                  void selectTunerPreset(id);
+                  if (id === "passthrough") player.setRaw();
+                  else if (player.raw) player.setCodec("h264");
+                },
               })}
               audio={liveAudio(AUDIO, player)}
               subtitle={liveSubtitle(CAPTION, player)}
