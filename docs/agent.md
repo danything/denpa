@@ -231,7 +231,7 @@ CM検出用のロゴはチューナーを使いません。録れたものから
 
 ## 設定は2つのファイルに分ける
 
-既定は `/config/tuners.json` と `/config/channels.json` (`TUNERS_FILE` / `CHANNELS_FILE` で変えられる。Mac と Windows のインストーラは `~/denpa/config/`)。どちらも無くて構いません (機材は自分で見つけ、
+既定は Linux (コンテナ) が `/config/tuners.json` と `/config/channels.json`、Mac と Windows が `~/denpa/config/` (`DENPA_HOME` の `config`。インストーラと同じなので、常駐を止めて手で `--tune` などを流しても同じファイルを使う)。`TUNERS_FILE` / `CHANNELS_FILE` で変えられます。どちらも無くて構いません (機材は自分で見つけ、
 チャンネルはスキャンするまで空。ただし衛星を受けられる機材があれば、BS / CS の局が
 無いうちに denpa が標準の表を預けてくる。`src/lib/server/channel-seed.ts`)。
 
