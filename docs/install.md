@@ -1,6 +1,6 @@
 # 立てる
 
-README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
+README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm・Talos Linux)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
 Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
 
 ## 用意するもの
@@ -91,6 +91,15 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 `oci://ghcr.io/danything/charts/denpa-agent` を使い、本体側は `TUNER_AGENT_URL` でそこを指します
 ([agent.md](agent.md#エージェントは別イメージ別プロセス))。値の一覧と意味は
 [charts/denpa/values.yaml](../charts/denpa/values.yaml) のコメントにあります。
+
+### Talos Linux に OS ごと
+
+PT3 を挿した機械を Talos Linux の 1 台のクラスタにして、OS の設定から denpa まで 1 行で立てます
+(Talos の alpha で、実機では確かめていない)。手順は [install-talos.md](install-talos.md)。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.sh | sh -s -- --node <IP> --disk <ディスク>
+```
 
 ### イメージのタグ
 

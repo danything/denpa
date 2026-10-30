@@ -37,7 +37,8 @@ denpa が使える内蔵のカードリーダーは無いので、USB のカー�
 ## 入れ方
 
 1. **ホストでドライバを読み込みます。** どれも mainline のカーネルに入っているドライバです。
-   `/dev/dvb/adapter0` などが出ていれば準備はできています
+   `/dev/dvb/adapter0` などが出ていれば準備はできています。
+   Talos Linux なら、ドライバは system extension `siderolabs/dvb-pt3` で入ります (PT3 だけ。[install-talos.md](install-talos.md))
 2. **denpa を入れます** ([install.md](install.md#1行で入れる))。compose.prod.yml・`denpa-aio`・Helm は、
    どれも `/dev/dvb` をディレクトリごと渡してあります。compose.prod.yml と `denpa-aio` の手順は
    DVB のデバイス (212) を開く許可も付けてあるので、挿し直しても再起動は要りません

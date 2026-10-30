@@ -1,0 +1,12 @@
+# Talos のイメージに足す system extension (Image Factory の schematic)。docs/install-talos.md。
+#
+# 中身が同じなら誰が送っても同じ ID になる。install.sh はこれを https://factory.talos.dev/schematics に
+# 送って ID を受け取り、インストールのイメージ (factory.talos.dev/metal-installer/<ID>:<Talos のバージョン>) に使う。
+#
+# dvb-pt3 は PT3 のドライバ (earth-pt3 と、それが読む復調・チューナーのモジュール)。Talos v1.15.0-alpha.1 から。
+# Intel の GPU でエンコードするなら siderolabs/i915 を、CPU のマイクロコードを当てるなら
+# siderolabs/intel-ucode か siderolabs/amd-ucode を足す (ID が変わる)。
+customization:
+  systemExtensions:
+    officialExtensions:
+      - siderolabs/dvb-pt3

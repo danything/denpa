@@ -210,6 +210,52 @@ jobs:
           # 外しても compose と設定は残す
           test -f ~/denpa/compose.yml
 
+  # Talos Linux の入れ方 (docs/install-talos.md)。実機は無いので、確かめるのは形だけ:
+  # talos/install.sh のリント、install.sh と同じバージョンの talosctl で patch.yaml を重ねた
+  # machine config を作って validate、install.sh が書く値で chart が描けるか。
+  # **必須チェックにはしない** (talosctl のイメージと Image Factory に頼るので)。Renovate が Talos を
+  # 上げたときにここが赤くなったら、docs の ISO の URL か patch.yaml を直す
+  talos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint talos/install.sh
+        run: |
+          sh -n talos/install.sh
+          shellcheck talos/install.sh
+
+      - name: Validate the machine config
+        run: |
+          set -euo pipefail
+          v=$(sed -n 's/^TALOS_VERSION=//p' talos/install.sh)
+          k=$(sed -n 's/^KUBERNETES_VERSION=//p' talos/install.sh)
+          id=$(curl -fsS -X POST --data-binary @talos/schematic.yaml https://factory.talos.dev/schematics | jq -r .id)
+          # docs に書いた ISO が、いまの schematic と Talos のバージョンを指しているか
+          grep -qF "https://factory.talos.dev/image/$id/$v/metal-amd64.iso" docs/install-talos.md
+          mkdir -p out
+          t() { docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "ghcr.io/siderolabs/talosctl:$v" "$@"; }
+          t gen config denpa https://192.0.2.10:6443 \
+            --kubernetes-version "$k" --install-disk /dev/sda \
+            --install-image "factory.talos.dev/metal-installer/$id:$v" \
+            --config-patch @talos/patch.yaml --with-docs=false --with-examples=false \
+            -t controlplane -o out/controlplane.yaml
+          t validate --config out/controlplane.yaml --mode metal
+          # 1 台に載せるので、control-plane の NoSchedule が残っていないこと
+          ! grep -q 'node-role.kubernetes.io/control-plane: NoSchedule' out/controlplane.yaml
+          grep -q '^name: earth-pt3$' out/controlplane.yaml
+
+      - name: Render the chart with the values install.sh writes
+        run: |
+          set -euo pipefail
+          helm template denpa charts/denpa --namespace denpa \
+            --set service.type=NodePort --set service.nodePort=30300 --set prepull.enabled=false \
+            --set-string denpa.trustedNetworks=192.168.0.0/16 > out.yaml
+          grep -q 'nodePort: 30300' out.yaml
+          grep -q 'externalTrafficPolicy: Local' out.yaml
+
   # Mac (Apple Silicon) で動かすエージェント (docs/install-mac.md)。
   #
   # **Native AOT は Linux から macOS 向けにビルドできない** ので、Mac のランナーでビルドして起こす。

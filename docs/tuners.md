@@ -22,7 +22,7 @@
   (設定の「その他」→「ログ」の「Issue にする」から作れます。[tuner-pt3.md](tuner-pt3.md#動いたか教えてください))
 
 - **B-CASカード** と USB のカードリーダー (px4-userland・asicen-userland の機材と CECH-ZD1 J は内蔵リーダーでもよい。[下記](#カードリーダー))
-- **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)
+- **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)
 - **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
   Kubernetes なら Helm
 - あれば Intel の GPU (`/dev/dri` を渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします

@@ -144,6 +144,12 @@ persistence:
 
 service:
   port: 3000
+  # 前段 (下の httpRoute など) を置かずに、ノードの IP で直に開くなら NodePort にする
+  # (Talos 1 台で動かすとき。docs/install-talos.md)。NodePort のときは接続元の IP が
+  # trustedNetworks に届くよう externalTrafficPolicy を Local にする (Cluster だとノードの
+  # アドレスに付け替わる)。nodePort は 30000〜32767 から。空なら Kubernetes が選ぶ
+  type: ClusterIP
+  nodePort: ""
   # 止まりかけの Pod にも回す。denpa は録画中に入れ替えが来ると居座るが、
   # Kubernetes は deletionTimestamp が付いた時点で Service から外すので、
   # 録画は無事なのに画面だけ落ちていた。replicas は 1 で readinessProbe も

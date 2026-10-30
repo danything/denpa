@@ -24,9 +24,20 @@ metadata:
 spec:
   # 止まりかけの Pod にも回す (values.yaml の service.publishNotReadyAddresses)
   publishNotReadyAddresses: {{ .Values.service.publishNotReadyAddresses }}
+  {{- if not (has .Values.service.type (list "ClusterIP" "NodePort")) }}
+  {{- fail "service.type は ClusterIP か NodePort" }}
+  {{- end }}
+  {{- if eq .Values.service.type "NodePort" }}
+  type: NodePort
+  # 接続元の IP を残す (values.yaml の service.type)
+  externalTrafficPolicy: Local
+  {{- end }}
   selector:
     app: denpa
   ports:
     - name: http
       port: {{ .Values.service.port }}
       targetPort: 3000
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
