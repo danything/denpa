@@ -159,6 +159,19 @@ describe("B24CaptionDecoder", () => {
     ]);
   });
 
+  test("表で空いている点はゲタ (〓) にする (「�」はフォントに無い)", () => {
+    const page = decoder().decode(
+      text([
+        ...HEAD,
+        ...aps(0, 0),
+        // 漢字の表の 87区1点 (追加記号の空き)、8区63点 (JIS X 0213 にも無い点)
+        ...[0x77, 0x21, 0x28, 0x5f],
+        ...encodeAribText("字"),
+      ]),
+    );
+    expect(page?.runs.map((r) => r.text)).toEqual(["〓〓字"]);
+  });
+
   test("置き換えられない外字は画像で送る (なめらかにした濃淡。drcs-smooth.ts)", () => {
     const rows = [
       "#.......",
