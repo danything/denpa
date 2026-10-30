@@ -60,8 +60,8 @@ const TEST_SERVICES: FakeService[] = [
     },
   },
   {
-    id: 3274301064,
-    serviceId: 1064,
+    id: 3274301056,
+    serviceId: 1056,
     networkId: 32743,
     name: "フジテレビ",
     type: "GR",

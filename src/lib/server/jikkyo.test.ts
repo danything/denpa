@@ -146,11 +146,11 @@ describe("rankingEntries", () => {
     expect(
       rankingEntries(
         [
-          { id: 1, type: "GR", service_id: 1048, name: "ＴＢＳ１" },
-          { id: 2, type: "GR", service_id: 2064, name: "ＭＢＳ毎日放送" },
-          { id: 3, type: "GR", service_id: 1024, name: "ＮＨＫ総合１・東京" },
-          { id: 4, type: "BS", service_id: 102, name: "ＮＨＫ　ＢＳ" },
-          { id: 5, type: "GR", service_id: 9999, name: "どこかの局" },
+          { id: 1, type: "GR", service_id: 1048 },
+          { id: 2, type: "GR", service_id: 2064 },
+          { id: 3, type: "GR", service_id: 1024 },
+          { id: 4, type: "BS", service_id: 102 },
+          { id: 5, type: "GR", service_id: 9999 },
         ],
         forces,
       ),

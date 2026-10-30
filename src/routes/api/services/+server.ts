@@ -93,7 +93,6 @@ export function GET() {
         ? jikkyoChannel({
             type: row.type,
             service_id: row.serviceId,
-            name: row.name,
           })
         : null,
     })),

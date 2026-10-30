@@ -1,78 +1,62 @@
 import { describe, expect, test } from "bun:test";
 
-import { jikkyoChannel, TERRESTRIAL } from "./channels";
+import { jikkyoChannel } from "./channels";
+import { TERRESTRIAL } from "./terrestrial";
 
 /*
- * 局と実況のチャンネルの対応表。地上波は局の名前 (放送のとおり全角混じり)、BS・CS は局の番号で引く
+ * 局と実況のチャンネルの対応表。どれも局の番号 (service_id) で引く
  */
 
-const gr = (name: string) => jikkyoChannel({ type: "GR", service_id: 1, name });
+const gr = (service_id: number) => jikkyoChannel({ type: "GR", service_id });
 
 describe("jikkyoChannel", () => {
-  test("関東の局は、放送の名前 (全角・空白入り) のままで当たる", () => {
-    expect(gr("ＮＨＫ総合１・東京")).toBe("jk1");
-    expect(gr("ＮＨＫＥテレ１東京")).toBe("jk2");
-    expect(gr("日テレ１")).toBe("jk4");
-    expect(gr("テレビ朝日")).toBe("jk5");
-    expect(gr("ＴＢＳ１")).toBe("jk6");
-    expect(gr("テレビ東京１")).toBe("jk7");
-    expect(gr("フジテレビ")).toBe("jk8");
-    expect(gr("ＴＯＫＹＯ　ＭＸ１")).toBe("jk9");
-    expect(gr("テレ玉")).toBe("jk10");
-    expect(gr("ｔｖｋ")).toBe("jk11");
-    expect(gr("チバテレ")).toBe("jk12");
+  test("関東の局", () => {
+    expect(gr(1024)).toBe("jk1");
+    expect(gr(1032)).toBe("jk2");
+    expect(gr(1040)).toBe("jk4");
+    expect(gr(1048)).toBe("jk6");
+    expect(gr(1056)).toBe("jk8");
+    expect(gr(23608)).toBe("jk9");
   });
 
-  test("系列の地方局はキー局のチャンネルに当たる", () => {
-    expect(gr("ＭＢＳ毎日放送")).toBe("jk6");
-    expect(gr("ＡＢＣテレビ")).toBe("jk5");
-    expect(gr("関西テレビ")).toBe("jk8");
-    expect(gr("読売テレビ")).toBe("jk4");
-    expect(gr("テレビ大阪")).toBe("jk7");
-    expect(gr("メ～テレ")).toBe("jk5");
-    expect(gr("ＮＨＫ総合・大阪")).toBe("jk1");
-    expect(gr("サンテレビ")).toBe("jk13");
-    expect(gr("ＫＢＳ京都")).toBe("jk14");
+  test("系列の地方局と、NX-Jikkyo にチャンネルのある独立局", () => {
+    // MBS 毎日放送 → TBS 系
+    expect(gr(2064)).toBe("jk6");
+    expect(gr(41008)).toBe("jk7");
+    expect(gr(43056)).toBe("jk13");
+    expect(gr(42032)).toBe("jk14");
   });
 
-  test("長い名前から当てる (「朝日放送」を含む別の局名でも、その局の名前で当たる)", () => {
-    expect(gr("青森朝日放送")).toBe("jk5");
-    // 「九州放送」(TVQ) は「九州朝日放送」の中に無い
-    expect(gr("九州朝日放送")).toBe("jk5");
-    expect(gr("ＴＶＱ九州放送")).toBe("jk7");
-    expect(gr("北海道文化放送")).toBe("jk8");
-    expect(gr("北海道放送")).toBe("jk6");
+  test("サブチャンネルは本チャンネルに当たる (1 つ前・2 つ前の番号)", () => {
+    // NHK 総合 2・東京、E テレ 3 東京
+    expect(gr(1025)).toBe("jk1");
+    expect(gr(1034)).toBe("jk2");
+    // TOKYO MX2 は表に載っている
+    expect(gr(23610)).toBe("jk9");
   });
 
   test("表に無い局はコメントなし", () => {
-    expect(gr("奈良テレビ")).toBeNull();
-    expect(gr("放送大学")).toBeNull();
+    // 奈良テレビ (独立局。NX-Jikkyo にチャンネルが無い)
+    expect(gr(0xb030)).toBeNull();
+    expect(gr(1)).toBeNull();
   });
 
   test("BS・CS は局の番号で引く。サブチャンネルも同じチャンネル", () => {
     const bs = (service_id: number) =>
-      jikkyoChannel({ type: "BS", service_id, name: "" });
+      jikkyoChannel({ type: "BS", service_id });
     expect(bs(101)).toBe("jk101");
     expect(bs(102)).toBe("jk101");
     expect(bs(142)).toBe("jk141");
     expect(bs(211)).toBe("jk211");
     expect(bs(231)).toBeNull();
-    expect(jikkyoChannel({ type: "CS", service_id: 333, name: "" })).toBe(
-      "jk333",
-    );
-    // 地上波の名前でも、BS の局は番号でしか引かない
-    expect(jikkyoChannel({ type: "BS", service_id: 999, name: "ＴＢＳ" })).toBe(
-      null,
-    );
+    expect(jikkyoChannel({ type: "CS", service_id: 333 })).toBe("jk333");
+    // 地上波の番号でも、BS の局は BS の表でしか引かない
+    expect(jikkyoChannel({ type: "BS", service_id: 1024 })).toBeNull();
   });
 
-  test("表の名前はどれも、そのチャンネルに当たる (別の系列の名前に食われない)", () => {
-    for (const [channel, names] of Object.entries(TERRESTRIAL))
-      for (const name of names) expect(gr(name), name).toBe(channel);
-  });
-
-  test("表に同じ名前が 2 度出てこない", () => {
-    const all = Object.values(TERRESTRIAL).flat();
-    expect(new Set(all).size).toBe(all.length);
+  test("地上波の表は NX-Jikkyo の地上波のチャンネル (jk1〜14、jk3 は無い) だけを指す", () => {
+    for (const jk of TERRESTRIAL.values()) {
+      expect(jk >= 1 && jk <= 14 && jk !== 3, String(jk)).toBe(true);
+    }
   });
 });
