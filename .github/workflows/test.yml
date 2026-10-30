@@ -244,7 +244,8 @@ jobs:
             -t controlplane -o out/controlplane.yaml
           t validate --config out/controlplane.yaml --mode metal
           # 1 台に載せるので、control-plane の NoSchedule が残っていないこと
-          ! grep -q 'node-role.kubernetes.io/control-plane: NoSchedule' out/controlplane.yaml
+          # (`! grep` は set -e で止まらないので if で)
+          if grep -q 'node-role.kubernetes.io/control-plane: NoSchedule' out/controlplane.yaml; then exit 1; fi
           grep -q '^name: earth-pt3$' out/controlplane.yaml
 
       - name: Render the chart with the values install.sh writes
@@ -255,6 +256,8 @@ jobs:
             --set-string denpa.trustedNetworks=192.168.0.0/16 > out.yaml
           grep -q 'nodePort: 30300' out.yaml
           grep -q 'externalTrafficPolicy: Local' out.yaml
+          # 知らない type は描かずに止まる
+          if helm template denpa charts/denpa --set service.type=LoadBalancer >/dev/null 2>&1; then exit 1; fi
 
   # Mac (Apple Silicon) で動かすエージェント (docs/install-mac.md)。
   #

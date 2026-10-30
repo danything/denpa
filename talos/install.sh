@@ -156,8 +156,11 @@ if talosctl get disks --insecure -n "$NODE" -e "$NODE" >/dev/null 2>&1; then
 
 	say "$DISK に Talos を入れます。入れ終わると機械が再起動します"
 	talosctl apply-config --insecure -n "$NODE" -e "$NODE" -f "$DIR/controlplane.yaml"
-elif [ -f "$TALOSCONFIG" ] && talosctl version >/dev/null 2>&1; then
+elif [ -f "$TALOSCONFIG" ] && talosctl version -n "$NODE" -e "$NODE" >/dev/null 2>&1; then
+	# 手元の資格情報で話せる = この置き場で入れた機械。以降は --node の機械に向ける
 	say "$NODE には入れてあります。インストールは飛ばします"
+	talosctl config endpoint "$NODE"
+	talosctl config node "$NODE"
 else
 	die "$NODE に繋がりません。Talos の ISO で起こして、起動画面に出る IP を --node に渡してください"
 fi
