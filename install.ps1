@@ -345,7 +345,13 @@ function Get-Px4Userland([string]$Work, [string]$To) {
     }
 
     Say 'IT930x のファームウェアを PLEX のドライバから切り出します'
-    Get-Url 'https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip' "$Work\plex.zip"
+    # PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した)。
+    # 中身はハッシュで確かめるので、取れなければ Internet Archive の写し (同じハッシュ) から取る
+    try {
+        Get-Url 'https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip' "$Work\plex.zip"
+    } catch {
+        Get-Url 'https://web.archive.org/web/20260927060746id_/http://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip' "$Work\plex.zip"
+    }
     Assert-Hash "$Work\plex.zip" $PlexDriverSha256
     $zip = Open-Zip "$Work\plex.zip"
     try {
