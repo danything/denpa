@@ -1,6 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { and, eq, inArray } from "drizzle-orm";
 
+import { countClips, findClips } from "#lib/server/clips.js";
 import { now, orm } from "#lib/server/db.js";
 import { currentServices, watchableServices } from "#lib/server/epg.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
@@ -39,6 +40,9 @@ export type { Preview, PreviewRow, Verdict } from "#lib/server/rule-preview.js";
  * これより多いときは件数だけ本当の数を出し、言葉を足してもらう
  */
 const LIMIT = 100;
+
+/** 検索の結果に並べる切り抜きの数。1行に収まるくらい */
+const CLIP_PREVIEW = 6;
 
 /**
  * `?program=<番組ID>` で開く番組。ヘッダーの候補 (`SearchField`) から番組や予約を選ぶと、
@@ -146,6 +150,14 @@ export function load({ url }) {
     recordings: searchRecordings(q, options),
     reservations: searchReservations(q, options),
     rules: searchRules(q, options),
+    /** 切り抜き。並べるのは頭の数枚だけで、続きは切り抜きの画面で */
+    clips:
+      q === ""
+        ? { total: 0, rows: [] }
+        : {
+            total: countClips({ q }),
+            rows: findClips({ q }).clips.slice(0, CLIP_PREVIEW),
+          },
     /** 詳細を開いておく番組 (`?program=`)。無ければ null */
     focus: focusOf(url),
     // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)

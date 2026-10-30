@@ -16,6 +16,7 @@ import {
   eq,
   gte,
   inArray,
+  isNotNull,
   isNull,
   lt,
   ne,
@@ -703,4 +704,28 @@ export function clipImage(file: string, small: boolean): Response {
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+/** 条件に当たる枚数 (検索の結果の節の数) */
+export function countClips(query: ClipQuery): number {
+  return (
+    orm()
+      .select({ n: sql<number>`count(*)` })
+      .from(clips)
+      .where(and(...clipConditions(query)))
+      .get()?.n ?? 0
+  );
+}
+
+/** 録画ごとの切り抜きの数 (録画の一覧の詳細の「この録画の切り抜き (n)」)。切り抜きのある録画だけ */
+export function clipCountsByRecording(): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const row of orm()
+    .select({ id: clips.recording_id, n: sql<number>`count(*)` })
+    .from(clips)
+    .where(and(isNotNull(clips.recording_id), ne(clips.file, "")))
+    .groupBy(clips.recording_id)
+    .all())
+    if (row.id !== null) counts[row.id] = row.n;
+  return counts;
 }

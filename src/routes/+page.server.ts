@@ -19,6 +19,7 @@ import { channelNotice } from "#lib/channel-notice.js";
 import { capacityLabel } from "#lib/format.js";
 import { GROUPED_COOKIE, storedGrouped } from "#lib/grouping.js";
 import { fileSize } from "#lib/server/chase.js";
+import { clipCountsByRecording } from "#lib/server/clips.js";
 import { now, orm } from "#lib/server/db.js";
 import { capacity } from "#lib/server/disk.js";
 import {
@@ -335,6 +336,8 @@ export function load({ url, cookies }) {
     capacity: room === null ? null : capacityLabel(room.free, room.hours),
     /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
     grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),
+    /** 録画ごとの切り抜きの数。詳細の「この録画の切り抜き (n)」 */
+    clipCounts: clipCountsByRecording(),
   };
 }
 

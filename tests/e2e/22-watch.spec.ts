@@ -696,6 +696,156 @@ test.describe("録画を観る", () => {
     ).toBeVisible();
   });
 
+  /**
+   * **切り抜きの画面** (`/clips`)。撮った1枚が番組名つきで並び、言葉で絞れ、開いて「この場面から観る」で
+   * 録画のその位置へ行ける。2回押しで消すと画像も 404。入口は広い形のヘッダー・観る画面の右の列・検索の結果
+   */
+  test("切り抜きの画面で探して開き、この場面から観られ、2回押しで消せる", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const id = await watchable(page, request);
+    await goto(page, `/watch/${id}`);
+    await fakeFrame(page, "watch-video");
+    await wakeControls(page, "watch-stage");
+    const clip = await takeClip(page, "watch-shot");
+
+    // 観る画面の右の列に「この録画の切り抜き (n)」
+    await goto(page, `/watch/${id}`);
+    const fromWatch = page.getByTestId("watch-clips");
+    await expect(fromWatch).toContainText("この録画の切り抜き");
+    await expect(fromWatch).toHaveAttribute("href", `/clips?recording=${id}`);
+
+    // 検索の結果に切り抜きの節
+    await goto(page, `/search?q=${encodeURIComponent(clip.programName)}`);
+    await expect(page.getByTestId("search-clips")).toBeVisible();
+    await expect(page.getByTestId("search-clip").first()).toBeVisible();
+
+    // 広い形のヘッダーから開く
+    await page.getByTestId("nav-clips").click();
+    await expect(page).toHaveURL(/\/clips$/);
+    const card = page.locator(
+      `[data-testid="clip-card"][data-clip-id="${clip.id}"]`,
+    );
+    await expect(card.getByTestId("clip-name")).toHaveText(clip.programName);
+
+    // 言葉で絞る (番組名なら残り、無い言葉なら消える)
+    const search = page.getByTestId("clip-search");
+    await search.fill(clip.programName);
+    await expect(page).toHaveURL(/\?q=/);
+    await expect(card).toBeVisible();
+    await search.fill("どこにも無い言葉");
+    await expect(card).toHaveCount(0);
+    await expect(page.getByText("当てはまるものはありません")).toBeVisible();
+    await search.fill("");
+    await expect(page).toHaveURL(/\/clips$/);
+
+    // 開くと暗い全画面。「この場面から観る」で録画のその位置へ
+    await card.click();
+    const viewer = page.getByTestId("clip-viewer");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByTestId("clip-viewer-title")).toHaveText(
+      clip.programName,
+    );
+    const watch = viewer.getByTestId("clip-watch");
+    await expect(watch).toHaveAttribute(
+      "href",
+      new RegExp(String.raw`/watch/${id}\?at=\d+(\.\d)?$`),
+    );
+    await watch.click();
+    await expect(page).toHaveURL(new RegExp(String.raw`/watch/${id}\?at=`));
+    await expect(page.getByTestId("watch-video")).toBeVisible();
+
+    // 2回押しで消える。画像も 404
+    await goto(page, "/clips");
+    await card.click();
+    await viewer.getByTestId("clip-delete").click();
+    await viewer.getByTestId("clip-delete-confirm").click();
+    await expect(viewer).toBeHidden();
+    await expect(card).toHaveCount(0);
+    expect((await request.get(`/api/clips/${clip.id}/image`)).status()).toBe(
+      404,
+    );
+  });
+
+  /**
+   * **スマホの幅では、絞り込みの1行を下のタブのすぐ上に浮かせ**、開いた1枚の右端の列は 48px の丸
+   * (車のタブレットでも指が届く大きさ。観る画面の右の列と同じ)
+   */
+  test("スマホの幅の切り抜きの画面: 絞り込みは下のタブの上、開いた1枚の列は 48px", async ({
+    browser,
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const id = await watchable(page, request);
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    const tab = await context.newPage();
+    await goto(tab, "/clips");
+    // 合成の1枚 (端末の canvas で作った PNG) を API で置く
+    const png = await tab.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 180;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#3a6";
+      ctx.fillRect(0, 0, 320, 180);
+      return canvas.toDataURL("image/png").split(",")[1]!;
+    });
+    const res = await request.post(
+      `/api/clips?place=watch&recording=${id}&at=5`,
+      {
+        headers: { "content-type": "image/png" },
+        data: Buffer.from(png, "base64"),
+      },
+    );
+    expect(res.status()).toBe(201);
+    const clip = (await res.json()) as { id: number };
+    try {
+      await goto(tab, "/clips");
+      const bar = tab.getByTestId("clip-bar");
+      await expect(bar).toBeVisible();
+      await expect(tab.getByTestId("clip-side")).toBeHidden();
+      const gap = await tab.evaluate(() => {
+        const rect = (testid: string) =>
+          document
+            .querySelector(`[data-testid="${testid}"]`)!
+            .getBoundingClientRect();
+        return rect("tabbar").top - rect("clip-bar").bottom;
+      });
+      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeLessThan(16);
+
+      await tab
+        .locator(`[data-testid="clip-card"][data-clip-id="${clip.id}"]`)
+        .click();
+      const viewer = tab.getByTestId("clip-viewer");
+      await expect(viewer).toBeVisible();
+      for (const testid of [
+        "clip-close",
+        "clip-watch",
+        "clip-save",
+        "clip-delete",
+      ]) {
+        const box = (await viewer.getByTestId(testid).boundingBox())!;
+        expect(Math.round(box.width), testid).toBe(48);
+        expect(Math.round(box.height), testid).toBe(48);
+      }
+      // 削除はいちばん下
+      const save = (await viewer.getByTestId("clip-save").boundingBox())!;
+      const trash = (await viewer.getByTestId("clip-delete").boundingBox())!;
+      expect(trash.y).toBeGreaterThan(save.y);
+    } finally {
+      await request.delete(`/api/clips?ids=${clip.id}`);
+      await context.close();
+    }
+  });
+
   /** 残りは「あと何分で終わるか」。**倍速のぶんは割る** */
   test("残り時間も出て、倍速のぶんは割る", async ({ page, request }) => {
     test.setTimeout(180_000);

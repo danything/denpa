@@ -929,6 +929,16 @@
     >
       ルールを作る
     </a>
+    {#if (data.clipCounts[rec.id] ?? 0) > 0}
+      <!-- この録画で撮った切り抜き。録画で絞った切り抜きの画面へ -->
+      <a
+        class="button secondary outline"
+        href={resolve(`clips?recording=${rec.id}`)}
+        data-testid="detail-clips"
+      >
+        この録画の切り抜き <span class="num">({data.clipCounts[rec.id]})</span>
+      </a>
+    {/if}
     {#if hasFile(rec)}
       <!--
                 **めったに押さないものの置き場。** 上に開く (フッターは画面の下端にある)。中身は上から

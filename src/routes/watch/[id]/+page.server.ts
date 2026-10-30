@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { error, fail, redirect } from "@sveltejs/kit";
 import { eq, getTableColumns } from "drizzle-orm";
 
+import { clipCount, sceneTime } from "#lib/server/clips.js";
 import { orm } from "#lib/server/db.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
@@ -60,6 +61,16 @@ export function load({ params, url }) {
     );
   }
 
+  /*
+   * 「この場面から観る」(`?at=` 番組の始めからの秒。切り抜きの画面から)。観る画面の物差しの秒に直して渡す。
+   * 続きの位置より先に使う
+   */
+  const at = Number(url.searchParams.get("at") ?? "");
+  const scene =
+    url.searchParams.has("at") && Number.isFinite(at) && at >= 0
+      ? sceneTime(recording, at * 1000)
+      : null;
+
   // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
   const { postalCode, prefecture, jikkyo } = settings();
   return {
@@ -72,6 +83,10 @@ export function load({ params, url }) {
     jikkyoAllowed: jikkyo,
     /** 実況のチャンネルと頭・終わりの放送時刻。実況の無い局・世帯の設定がオフなら null */
     jikkyo: recordingJikkyo(recording),
+    /** 「この場面から観る」で始める位置 (秒。観る画面の物差し)。無ければ null */
+    scene,
+    /** この録画の切り抜きの数 (右の列の「この録画の切り抜き」) */
+    clips: clipCount(id),
   };
 }
 

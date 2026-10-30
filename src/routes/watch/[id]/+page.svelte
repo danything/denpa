@@ -185,6 +185,12 @@
   let remux: RemuxPlayer | null = null;
   /** 選び直したときに続ける位置 (秒)。プレイヤーの開始位置に使う */
   let switchAt: number | null = null;
+  /**
+   * 「この場面から観る」(切り抜きの画面から `?at=`) で始める位置 (秒)。続きの位置より先に使い、1度使ったら忘れる。
+   * 続きからではないので「続きから」とは言わない
+   */
+  // svelte-ignore state_referenced_locally
+  let sceneAt: number | null = data.scene;
 
   /*
    * ---- 互換モード (`canvas-video.ts`。docs/player.md) ----
@@ -277,7 +283,7 @@
   function startCanvas(codec: CanvasCodec): void {
     const local = localMkv;
     const duration = canvasLength();
-    const fresh = switchAt === null;
+    const fresh = switchAt === null && sceneAt === null;
     const from = startFrom(duration);
     let made: CanvasPlayer;
     try {
@@ -553,16 +559,18 @@
   }
 
   /**
-   * プレイヤーを作るときに始める位置 (秒)。コーデックを切り替えた所か、続きの位置。頭からなら null。
+   * プレイヤーを作るときに始める位置 (秒)。コーデックを切り替えた所か、この場面から観る位置か、続きの位置。頭からなら null。
    * **切り替えた所は1度読んだら忘れる**
    */
   function startFrom(duration: number): number | null {
     const from =
       switchAt ??
+      sceneAt ??
       (rec.resume_ms === null
         ? null
         : resumePoint(rec.resume_ms / 1000, duration));
     switchAt = null;
+    sceneAt = null;
     return from;
   }
 
@@ -1193,6 +1201,11 @@
     }
     if (resumed || video === null) return;
     resumed = true;
+    if (sceneAt !== null) {
+      video.currentTime = sceneAt;
+      sceneAt = null;
+      return;
+    }
     const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
     if (at !== null && resumePoint(at, video.duration) !== null) {
       video.currentTime = at;
@@ -2228,7 +2241,7 @@
   {/if}
 
   <!--
-        右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。押すものは置かない
+        右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。押すものはこの録画の切り抜きへのリンクだけ
         (閉じる・削除は映像の上の列。全画面のタブレットで映像から出ずに押す)
     -->
   {#snippet aside()}
@@ -2250,6 +2263,14 @@
       <div class="small muted meta num" data-testid="watch-meta">
         {recordedDuration(rec)} ・ {size(rec.ts_size)}
       </div>
+      {#if data.clips > 0}
+        <a
+          class="small clips-link"
+          href={resolve(`clips?recording=${rec.id}`)}
+          data-testid="watch-clips"
+          >この録画の切り抜き <span class="num">({data.clips})</span></a
+        >
+      {/if}
     </FactsAside>
   {/snippet}
 </PlayerLayout>
@@ -2310,5 +2331,13 @@
   }
   .meta {
     margin-top: 0.75rem;
+  }
+  /* この録画の切り抜きへ。押せる高さは一覧の行の操作と同じ 40px */
+  .clips-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 2.5rem;
+    margin-top: 0.25rem;
   }
 </style>

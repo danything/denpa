@@ -205,7 +205,7 @@ WebM に入れてよい映像は VP8 / VP9 / AV1 だけです (H.264 は開発�
 自動では消しません。世帯で共有し、誰が撮ったかは持ちません。画像は他の API と同じ資格で開け (`Cache-Control: private`。添付にはしない)、
 EXIF は書かず、まとめて書き出す機能もありません。置き場をエンコード済みの下にしたのは、既定の構成で残る置き場が
 DB (`/data`) と録画の2つだけだから (`MEDIA_DIR` そのものはボリュームではない) で、置き場を別のディスクに移すときも録画と一緒に写ります。
-API は [api.md](api.md#切り抜き-post-apiclips)。
+並べる画面は `/clips` ([screens.md](screens.md#切り抜き))、API は [api.md](api.md#切り抜き-post-apiclips)。
 
 ## テレビのアプリ
 
