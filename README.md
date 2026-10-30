@@ -167,7 +167,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [@unlimish](https://github.com/unlimish) (#431)
 - [@fetburner](https://github.com/fetburner) (#662)
 - [@sirius128](https://github.com/sirius128) (#775)
-- [@chiroru27](https://github.com/chiroru27) (#1681)
+- [@chiroru27](https://github.com/chiroru27) (#1681 #1724)
 
 **報告や提案をくれた人** (ありがとうございます):
 
