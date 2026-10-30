@@ -340,49 +340,133 @@ test.describe("「実況」タブ", () => {
     await expect(page.getByTestId("live-type-jikkyo")).toHaveCount(0);
   });
 
-  test("勢いの順に並べ、並びは止めたまま数字だけ書き換える", async ({
+  /**
+   * 勢いの中継を偽物に (サーバから NX-Jikkyo へは行かせない)。
+   * 1 回目は フジ > BS11 > MX、2 回目からは MX > BS11 > フジ
+   */
+  async function fakeRanking(page: Page): Promise<void> {
+    const replies = [
+      [
+        { serviceId: MX.id, force: 5 },
+        { serviceId: FUJI.id, force: 40 },
+        { serviceId: BS11.id, force: 20 },
+      ],
+      [
+        { serviceId: MX.id, force: 100 },
+        { serviceId: FUJI.id, force: 1 },
+        { serviceId: BS11.id, force: 2 },
+      ],
+    ];
+    let asked = 0;
+    await page.route("**/api/jikkyo/ranking", (route) => {
+      const channels = replies[Math.min(asked, replies.length - 1)];
+      asked++;
+      return route.fulfill({ json: { at: Date.now(), channels } });
+    });
+  }
+
+  /** タブを開き、1 回目の返事で並ぶまで */
+  async function openTab(page: Page): Promise<void> {
+    await deviceOn(page);
+    await goto(page, `/live?service=${MX.id}`);
+    await page.getByTestId("live-type-jikkyo").click();
+    await expect(page.getByTestId("live-force").first()).toContainText("40");
+    expect((await order(page)).slice(0, 3)).toEqual([FUJI.id, BS11.id, MX.id]);
+  }
+
+  /** 見えるようになったことにして、30 秒待たずに取り直させる (2 回目の返事)。MX の数字が替わるまで */
+  async function refresh(page: Page): Promise<void> {
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("visibilitychange")),
+    );
+    await expect(
+      page
+        .locator(`[data-testid="live-channel"][data-service="${MX.id}"]`)
+        .getByTestId("live-force"),
+    ).toContainText("100");
+  }
+
+  /** 行が滑り始めた回数を数える (並べ直した行の `translate` の transition) */
+  async function countSlides(page: Page): Promise<() => Promise<number>> {
+    await page.evaluate(() => {
+      const box = window as unknown as { slides: number };
+      box.slides = 0;
+      document.addEventListener("transitionrun", (event) => {
+        if (event.propertyName === "translate") box.slides++;
+      });
+    });
+    return () =>
+      page.evaluate(() => (window as unknown as { slides: number }).slides);
+  }
+
+  test("数字が新しくなるたびに勢いの順に並べ直す。動きを減らす設定では滑らせずに置き換える", async ({
     page,
   }) => {
     await setJikkyo(page, true);
     try {
-      // 勢いの中継は偽物に (サーバから NX-Jikkyo へは行かせない)
-      const replies = [
-        [
-          { serviceId: MX.id, force: 5 },
-          { serviceId: FUJI.id, force: 40 },
-          { serviceId: BS11.id, force: 20 },
-        ],
-        [
-          { serviceId: MX.id, force: 100 },
-          { serviceId: FUJI.id, force: 1 },
-          { serviceId: BS11.id, force: 2 },
-        ],
-      ];
-      let asked = 0;
-      await page.route("**/api/jikkyo/ranking", (route) => {
-        const channels = replies[Math.min(asked, replies.length - 1)];
-        asked++;
-        return route.fulfill({ json: { at: Date.now(), channels } });
-      });
-      await deviceOn(page);
-      await goto(page, `/live?service=${MX.id}`);
-      await page.getByTestId("live-type-jikkyo").click();
-      await expect(page.getByTestId("live-force").first()).toContainText("40");
-      const first = await order(page);
-      expect(first.slice(0, 3)).toEqual([FUJI.id, BS11.id, MX.id]);
-
-      // 見えるようになったら取り直す (30 秒待たずに)。数字は替わり、並びは止めたまま
-      await page.evaluate(() =>
-        document.dispatchEvent(new Event("visibilitychange")),
-      );
-      const mx = page.locator(
-        `[data-testid="live-channel"][data-service="${MX.id}"]`,
-      );
-      await expect(mx.getByTestId("live-force")).toContainText("100");
-      expect(await order(page)).toEqual(first);
+      await fakeRanking(page);
+      await openTab(page);
+      const slid = await countSlides(page);
+      await refresh(page);
+      expect((await order(page)).slice(0, 3)).toEqual([
+        MX.id,
+        BS11.id,
+        FUJI.id,
+      ]);
+      // E2E の既定は動きを減らす設定 (`playwright.config.ts`)。時間が 0 なので滑らない
+      expect(await slid()).toBe(0);
       // ほかのタブには数を付けない
       await page.getByTestId("live-type-GR").click();
       await expect(page.getByTestId("live-force")).toHaveCount(0);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("動きを減らす設定でなければ、並べ直した行は前の場所から滑る", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await setJikkyo(page, true);
+    try {
+      await fakeRanking(page);
+      await openTab(page);
+      const slid = await countSlides(page);
+      await refresh(page);
+      expect((await order(page)).slice(0, 3)).toEqual([
+        MX.id,
+        BS11.id,
+        FUJI.id,
+      ]);
+      await expect.poll(slid).toBeGreaterThan(0);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("一覧にポインタが乗っている間は並べ直さず、離れたら並べ直す", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeRanking(page);
+      await openTab(page);
+      const first = await order(page);
+      // 押そうとして 3 番目の行 (MX) に乗せる
+      const mx = page.locator(
+        `[data-testid="live-channel"][data-service="${MX.id}"]`,
+      );
+      await mx.hover();
+      await refresh(page);
+      // 数字は替わるが、並びはそのまま。待っても乗っている間は替えない
+      expect(await order(page)).toEqual(first);
+      await page.waitForTimeout(1_500);
+      expect(await order(page)).toEqual(first);
+      // 離れたら (少し待って) 並べ直す
+      await page.mouse.move(0, 0);
+      await expect
+        .poll(async () => (await order(page)).slice(0, 3))
+        .toEqual([MX.id, BS11.id, FUJI.id]);
     } finally {
       await setJikkyo(page, false);
     }

@@ -70,6 +70,7 @@
   import { driveGate } from "#lib/drive-gate.svelte.js";
   import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
+  import { slides } from "#lib/jikkyo/ranking.js";
   import { JikkyoRanking } from "#lib/jikkyo/ranking.svelte.js";
   import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
@@ -177,7 +178,7 @@
       types[0] ??
       "GR",
   );
-  /** 「実況」タブの勢い。開いている間だけ 30 秒ごとに取りに行き、並びは開いた時点で止める */
+  /** 「実況」タブの勢い。開いている間だけ 30 秒ごとに取りに行き、一覧を使っていなければ並べ直す */
   const ranking = new JikkyoRanking();
   $effect(() => {
     if (shown !== JIKKYO_TAB) return;
@@ -261,6 +262,56 @@
       list.scrollTop + (here.top - box.top) - (box.height - here.height) / 2;
     list.scrollTop = Math.max(0, Math.min(room, middle));
   });
+
+  /**
+   * **「実況」タブで並べ直した行は、前の場所から滑る** (docs/design.md の「動き」)。
+   * 並べ直す前に各行の上端を測り、並べ直した後にその差だけずらした姿 (`data-slide` と `--slide-from`) を置いて、
+   * 印を外すと CSS が元の場所へ滑らせる。動きを減らす設定では時間が 0 なので、その場で置き換わる。
+   * 最初の返事で番号順から並べ替えるとき (前の並びが無い) は滑らせない
+   */
+  let tops: Map<number, number> | null = null;
+  let shownOrder: readonly number[] | null = null;
+  $effect.pre(() => {
+    const order = ranking.order;
+    tops =
+      shownOrder !== null &&
+      order !== null &&
+      untrack(() => shown) === JIKKYO_TAB
+        ? untrack(rowTops)
+        : null;
+    shownOrder = order;
+  });
+  $effect(() => {
+    void ranking.order;
+    const before = tops;
+    tops = null;
+    if (before === null || list === null) return;
+    untrack(() => slide(before));
+  });
+  /** 一覧の各行の上端 (局の ID → px) */
+  function rowTops(): Map<number, number> {
+    const at = new Map<number, number>();
+    for (const [id, row] of Object.entries(rows)) {
+      const item = row?.parentElement;
+      if (item?.isConnected)
+        at.set(Number(id), item.getBoundingClientRect().top);
+    }
+    return at;
+  }
+  function slide(before: Map<number, number>): void {
+    const items: HTMLElement[] = [];
+    for (const [id, offset] of slides(before, rowTops())) {
+      const item = rows[id]?.parentElement;
+      if (!item) continue;
+      item.style.setProperty("--slide-from", `${offset}px`);
+      item.dataset["slide"] = "";
+      items.push(item);
+    }
+    if (items.length === 0) return;
+    // ずらした姿を一度描いたことにしてから印を外す (測らせないと、ずらす前と後がまとめられて滑らない)
+    list?.getBoundingClientRect();
+    for (const item of items) delete item.dataset["slide"];
+  }
 
   /** 右の列に出す番組の中身 (モーダルにしない)。あらすじや出演者は番組表の側にあるので、開いた時点で引き直す */
   const detail = programDetail();
@@ -854,11 +905,28 @@
             いまは勢いを読めません
           </p>
         {/if}
+        <!--
+          「実況」タブの並べ直しは、一覧を使っている間は待つ (`JikkyoRanking.hold`)。指は touch のほうで見る
+          (巻き始めると pointer は取り消されるが、touch は指を離すまで続く)。フォーカスはキーボードで入ったときだけ
+          (マウスで押したボタンに残るフォーカスでは止めない)
+        -->
         <ul
           bind:this={list}
           class="channels side-list"
           data-mixed={shown === JIKKYO_TAB ? "" : undefined}
           data-testid="live-channels"
+          onpointerenter={() => ranking.hold("pointer", true)}
+          onpointerleave={() => ranking.hold("pointer", false)}
+          ontouchstart={() => ranking.hold("touch", true)}
+          ontouchend={() => ranking.hold("touch", false)}
+          ontouchcancel={() => ranking.hold("touch", false)}
+          onfocusin={(event) =>
+            ranking.hold(
+              "focus",
+              (event.target as HTMLElement).matches(":focus-visible"),
+            )}
+          onfocusout={() => ranking.hold("focus", false)}
+          onscroll={() => ranking.scrolled()}
         >
           {#each listed as channel (channel.id)}
             <!-- いま映しているものかどうかは、この行の中で何度も使う -->
@@ -1052,6 +1120,15 @@
     gap: 0;
     padding: 0;
     font-size: inherit;
+    /* 地は行の決まりと同じ。並べ直した行は前の場所から滑る (上の `slide`) */
+    transition:
+      background-color var(--dp-duration),
+      translate var(--dp-duration-move) var(--dp-ease-spring);
+  }
+  /* 並べ直した直後の 1 回だけ、前の場所にずらして置く (印を外すと滑る。印は `slide` が付けるので、Svelte からは見えない) */
+  .channel-item:global([data-slide]) {
+    translate: 0 var(--slide-from);
+    transition: none;
   }
   .channel {
     display: flex;
