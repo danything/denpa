@@ -59,6 +59,7 @@
   import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
+  import { playerVolume } from "#lib/components/player/volume.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, {
@@ -324,6 +325,18 @@
   // MPEG-2 をデコードした音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     player.playback = background.on || pip.active;
+  });
+
+  /** 音量 (`volume.svelte.ts`)。canvas はエンジンの中で、`<video>` は Web Audio に通して掛ける */
+  const volume = playerVolume({
+    video: () => (player.canvas ? null : video),
+    through: () => background.on || pip.active,
+    remote: (paused) => {
+      if (paused !== player.paused) player.toggle();
+    },
+  });
+  $effect(() => {
+    player.volume = volume.level;
   });
 
   /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
@@ -651,6 +664,7 @@
                         -->
             <StageTail
               prefix="live"
+              {volume}
               fold={[
                 muteRow(SOUND_OFF, player.silenced, player.toggleMute),
                 ...(hybridcast === undefined

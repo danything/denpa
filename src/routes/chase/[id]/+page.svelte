@@ -51,6 +51,7 @@
   import { stageTap } from "#lib/components/player/stage-tap.js";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
+  import { playerVolume } from "#lib/components/player/volume.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
   import { programDetail, recordingFacts } from "#lib/detail.svelte.js";
@@ -257,6 +258,18 @@
     player.playback = background.on || pip.active;
   });
 
+  /** 音量 (`volume.svelte.ts`)。canvas はエンジンの中で、`<video>` は Web Audio に通して掛ける (ライブと同じ) */
+  const volume = playerVolume({
+    video: () => (player.canvas ? null : video),
+    through: () => background.on || pip.active,
+    remote: (paused) => {
+      if (paused !== player.paused) player.toggle();
+    },
+  });
+  $effect(() => {
+    player.volume = volume.level;
+  });
+
   /** キーでも動かせるようにする。割り当ては観る画面と共通 (`player/keys.ts`) */
   const keys = playerKeys({
     togglePlay: () => player.toggle(),
@@ -266,6 +279,7 @@
     toggleFull: fullscreen.toggle,
     stepSpeed: (by) => setSpeed(stepSpeed(want, by)),
     toggleMute: player.toggleMute,
+    stepVolume: volume.step,
   });
 
   /** いまの1コマを字幕ごと切り抜いて PNG に (ライブ・観る画面と同じ。`snapshot.ts`) */
@@ -414,6 +428,7 @@
           <!-- コーデックは選び直すと再生していた位置から再エンコード (ライブと同じ) -->
           <StageTail
             prefix="chase"
+            {volume}
             fold={[
               muteRow(SOUND_OFF, player.silenced, player.toggleMute),
               ...(player.canvas
@@ -500,6 +515,9 @@
         {#if player.warning}
           <!-- リクエストどおりにできなかった断り書き (GPU でエンコードできずにソフトウェアへ降りた、など) -->
           <StageNote>{player.warning}</StageNote>
+        {/if}
+        {#if volume.noted}
+          <StageNote testid="chase-volume-note">音量 {volume.level}%</StageNote>
         {/if}
       {/if}
     {/snippet}

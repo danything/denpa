@@ -81,6 +81,7 @@
   import { stageTap } from "#lib/components/player/stage-tap.js";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
+  import { playerVolume } from "#lib/components/player/volume.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, {
     errorNotice,
@@ -315,6 +316,7 @@
     canvas = made;
     drawing = true;
     if (muted) made.mute(true);
+    made.volume(volume.level);
     drawingLocal = local !== null;
     length = duration;
     at = from ?? 0;
@@ -987,6 +989,17 @@
   $effect(() => {
     const on = background.on || pip.active;
     if (drawing) canvas?.background(on);
+  });
+
+  /** 音量 (`volume.svelte.ts`)。canvas はプレイヤーの中で、`<video>` は Web Audio に通して掛ける (ライブ・追っかけと同じ) */
+  const volume = playerVolume({
+    video: () => (drawing ? null : video),
+    through: () => background.on || pip.active,
+    remote: (stop) => (stop ? pauseMedia() : playMedia()),
+  });
+  $effect(() => {
+    const level = volume.level;
+    if (drawing) canvas?.volume(level);
   });
 
   /** バックグラウンド再生 ([background.svelte.ts](../../../lib/components/player/background.svelte.ts)) */
@@ -1724,6 +1737,7 @@
     toggleFull: fullscreen.toggle,
     stepSpeed: (by) => setSpeed(stepSpeed(speed, by)),
     toggleMute,
+    stepVolume: volume.step,
   });
   function keys(event: KeyboardEvent): void {
     if (showData && event.key.startsWith("Arrow")) return;
@@ -2109,6 +2123,7 @@
                         -->
             <StageTail
               prefix="watch"
+              {volume}
               fold={[
                 muteRow(SOUND_OFF, muted, toggleMute),
                 ...(compat
@@ -2193,6 +2208,9 @@
         {#if warning !== null}
           <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
           <StageNote>{warning}</StageNote>
+        {/if}
+        {#if volume.noted}
+          <StageNote testid="watch-volume-note">音量 {volume.level}%</StageNote>
         {/if}
       {/snippet}
     </PlayerStage>

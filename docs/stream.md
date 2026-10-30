@@ -774,12 +774,14 @@ GPU の無い端末で描く量を減らすこと（素通しでも実時間に�
 - 自動再生で音を断られたら、**壁時計を時計にして映像だけ進め**、「音を出す」を押された時点で
   鳴っている位置のまま音の時計へ移る（`RawEngine.follow`）。逆に音が止められたら（出口が
   外れた・OS に止められた）壁時計へ戻り、映像は止めない
+- 音量 ([watch.md](watch.md#音量)) のリミッタ (DynamicsCompressorNode) は、先読みのぶん音を 6ms ほど遅らせる。
+  時計には入れていない (1コマより短く、気づかれない)
 
 #### `<audio>` を通すとき
 
 **バックグラウンド再生をオンにしている間と、押して小窓を開いている間は、音を `<audio>` から鳴らします**
-（`RawEngine.route`。Safari は除く — そちらは Audio Session を `playback` にする。理由は
-[watch.md](watch.md#裏に回したら止めます)）。GainNode の先を `createMediaStreamDestination()` に繋ぎ替え、
+（`#lib/sound.ts` の `Outlet.route`。Safari は除く — そちらは Audio Session を `playback` にする。理由は
+[watch.md](watch.md#裏に回したら止めます)）。リミッタの後ろを `createMediaStreamDestination()` に繋ぎ替え、
 そのストリームを `<audio>` の `srcObject` に渡すだけで、予約の仕方も時計の物差し（`context.currentTime`）も変わりません。
 変わるのは**耳に届くまでの遅れ**です:
 

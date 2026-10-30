@@ -26,6 +26,8 @@ export interface PlayerKeys {
   stepSpeed?: (direction: number) => void;
   /** m */
   toggleMute?: () => void;
+  /** ↑ ↓ (音量。`volume.svelte.ts` の `step`) */
+  stepVolume?: (direction: number) => void;
 }
 
 export function playerKeys(
@@ -42,7 +44,7 @@ export function playerKeys(
     )
       return;
 
-    const { stepSpeed } = actions;
+    const { stepSpeed, stepVolume } = actions;
     const map: Record<string, (() => void) | undefined> = {
       " ": actions.togglePlay,
       k: actions.togglePlay,
@@ -54,6 +56,8 @@ export function playerKeys(
       ">": stepSpeed === undefined ? undefined : () => stepSpeed(1),
       "<": stepSpeed === undefined ? undefined : () => stepSpeed(-1),
       m: actions.toggleMute,
+      ArrowUp: stepVolume === undefined ? undefined : () => stepVolume(1),
+      ArrowDown: stepVolume === undefined ? undefined : () => stepVolume(-1),
     };
     const run = map[event.key];
     if (run === undefined) return;

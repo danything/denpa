@@ -1,11 +1,13 @@
 <script lang="ts">
   import { tick } from "svelte";
 
+  import { LEVEL_STEP, MAX_LEVEL } from "#lib/volume.js";
+
   import Menu from "../Menu.svelte";
   import ControlButton from "./ControlButton.svelte";
   import { stageMenu } from "./controls.svelte";
   import Icon from "./Icon.svelte";
-  import { BACK, FORWARD, SETTINGS } from "./icons";
+  import { BACK, FORWARD, SETTINGS, SOUND_ON } from "./icons";
   import type {
     SettingAction,
     SettingChoice,
@@ -17,15 +19,18 @@
    * 再生の設定 (⚙。3画面で同じ)。何を並べるかは `StageTail`、振る舞いは docs/player.md。上の並びは切り替えが先で
    * その場で変わり (`menuitemcheckbox`)、選ぶものは押すと選択肢の並びに入る (先頭が「戻る」、選ぶと閉じる。
    * `menuitemradio`。Esc か ← で戻る)。狭い枠では操作バーから畳んだもの (`head`) を頭に置き、余白で分ける。
+   * 音量のつまみ (`volume`) は畳んだものの次、切り替えの前に置き、指でもつまめる高さにする。←→ で動かし、
+   * ↑↓ はほかの行と同じく行を移る。
    *
    * testid: ボタンは `{prefix}-settings`、枠は `{prefix}-settings-menu`、行は `{prefix}-{id}`、
-   * 選択肢は `{prefix}-{id}-option` に `data-{id}={key}` (例: `data-codec="av1"`)
+   * 選択肢は `{prefix}-{id}-option` に `data-{id}={key}` (例: `data-codec="av1"`)、音量のつまみは `{prefix}-volume`
    */
   let {
     prefix,
     head = [],
     toggles,
     choices,
+    volume,
   }: {
     /** testid の頭 (`watch` / `chase` / `live`) */
     prefix: string;
@@ -33,6 +38,8 @@
     head?: SettingRow[];
     toggles: SettingToggle[];
     choices: SettingChoice[];
+    /** 音量 (%。`volume.svelte.ts`) */
+    volume?: { level: number; set: (level: number) => void } | undefined;
   } = $props();
 
   let open = $state(false);
@@ -194,6 +201,33 @@
       {/each}
       <!-- 畳んだものといつもの行の境目。線は引かず、上下を空ける (app.css の `.menu hr`) -->
       {#if head.length > 0}<hr />{/if}
+      {#if volume !== undefined}
+        <!--
+          音量。名前と値の下につまみ。行は押しても閉じない (`data-keep-open`)。
+          ↑↓ で行を移るために、つまみ自身を項目 (`menu-item`) にする
+        -->
+        <div class="volume" role="group" aria-label="音量">
+          <div class="volume-head" aria-hidden="true">
+            <Icon icon={SOUND_ON} />
+            <span class="label">音量</span>
+            <span class="value num">{volume.level}%</span>
+          </div>
+          <input
+            type="range"
+            class="menu-item"
+            min="0"
+            max={MAX_LEVEL}
+            step={LEVEL_STEP}
+            value={volume.level}
+            style:--fill="{(volume.level / MAX_LEVEL) * 100}%"
+            aria-label="音量"
+            aria-valuetext="{volume.level}%"
+            data-keep-open
+            data-testid="{prefix}-volume"
+            oninput={(event) => volume?.set(Number(event.currentTarget.value))}
+          />
+        </div>
+      {/if}
       {#each toggles as item (item.id)}
         {@render toggle(item)}
       {/each}
@@ -280,6 +314,78 @@
   }
   .back {
     margin-bottom: 0.375rem;
+  }
+  /*
+     * 音量のつまみ。名前と値は行と同じ並び (余白も `.menu-item` と同じ)、その下につまみ。
+     * つまみの的は高さ 44px (車のタブレットで指でつまめる)。溝・入れたぶん・丸は再生位置のバー (`SeekBar`) と同じ
+     * (docs/design.md の「映像の上の操作」)。触っているときは行ごと薄い地 (ほかの項目のフォーカスと同じ)
+     */
+  .volume {
+    padding: 0.5rem 0.75rem 0;
+    border-radius: calc(var(--dp-radius-lg) - var(--menu-pad, 0.5rem));
+  }
+  .volume:has(input:focus) {
+    background: var(--dp-hover);
+  }
+  .volume-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .volume input {
+    --track: color-mix(in srgb, var(--dp-on-video) 22%, transparent);
+    --filled: var(--pico-primary-background);
+    display: block;
+    width: 100%;
+    height: 2.75rem;
+    margin: 0;
+    padding: 0;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+    touch-action: pan-y;
+  }
+  .volume input:focus {
+    background: transparent;
+  }
+  /* 2つのブラウザの擬似要素は1つの規則にまとめられない (知らないほうが規則ごと捨てる) */
+  .volume input::-webkit-slider-runnable-track {
+    height: 0.25rem;
+    border: 0;
+    border-radius: var(--dp-radius-full);
+    background: linear-gradient(
+      to right,
+      var(--filled) var(--fill),
+      var(--track) var(--fill)
+    );
+  }
+  .volume input::-moz-range-track {
+    height: 0.25rem;
+    border: 0;
+    border-radius: var(--dp-radius-full);
+    background: linear-gradient(
+      to right,
+      var(--filled) var(--fill),
+      var(--track) var(--fill)
+    );
+  }
+  .volume input::-webkit-slider-thumb {
+    appearance: none;
+    width: 0.75rem;
+    height: 0.75rem;
+    margin-top: -0.25rem;
+    border: 0;
+    border-radius: var(--dp-radius-full);
+    background: var(--filled);
+    box-shadow: 0 0 2px rgb(0 0 0 / 0.5);
+  }
+  .volume input::-moz-range-thumb {
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 0;
+    border-radius: var(--dp-radius-full);
+    background: var(--filled);
+    box-shadow: 0 0 2px rgb(0 0 0 / 0.5);
   }
   /* オン/オフのスイッチ。状態は行の `aria-checked` で読ませ、これは見た目だけ */
   .switch {

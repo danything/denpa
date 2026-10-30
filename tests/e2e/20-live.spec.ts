@@ -1853,10 +1853,21 @@ test.describe("ライブ視聴", () => {
     await expect(menu).toBeVisible();
     await expect(menu).toHaveAttribute("role", "menu");
 
-    // 先頭はデータ放送を常に受信 (ライブに CMスキップは無い。データ放送を開くのは右端の列の d)。
+    // 先頭は音量のつまみ。← → で動かし、↓ はほかの行と同じく次の行へ (音量は変えない)
+    const volume = page.getByTestId("live-volume");
+    await expect(volume).toBeFocused();
+    await expect(volume).toHaveValue("100");
+    await page.keyboard.press("ArrowLeft");
+    await expect(volume).toHaveValue("95");
+    await page.keyboard.press("ArrowRight");
+    await expect(volume).toHaveValue("100");
+    await page.keyboard.press("ArrowDown");
+
+    // 次はデータ放送を常に受信 (ライブに CMスキップは無い。データ放送を開くのは右端の列の d)。
     // Enter で切り替わり、閉じない
     const first = page.getByTestId("live-data-receive");
     await expect(first).toBeFocused();
+    await expect(volume).toHaveValue("100");
     await expect(first).toHaveAttribute("role", "menuitemcheckbox");
     const before = await first.getAttribute("aria-checked");
     await page.keyboard.press("Enter");

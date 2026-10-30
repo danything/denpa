@@ -27,6 +27,7 @@
   import type { Pip } from "./pip.svelte.js";
   import type { SettingChoice, SettingRow, SettingToggle } from "./settings";
   import SettingsMenu from "./SettingsMenu.svelte";
+  import type { Volume } from "./volume.svelte.js";
 
   /**
    * 操作バーの右端 (3画面で同じ)。再生の設定 (⚙ `SettingsMenu`。並びと中身は docs/player.md)・小窓 (出せる端末だけ)・
@@ -37,6 +38,8 @@
     /** testid の頭 (`watch` / `chase` / `live`) */
     prefix: string;
     background: Background;
+    /** 音量 (`volume.svelte.ts`)。⚙ の上の並びにつまみを置く */
+    volume: Volume;
     ambient: Ambient;
     pip: Pip;
     fullscreen: StageFullscreen;
@@ -76,6 +79,7 @@
   let {
     prefix,
     background,
+    volume,
     ambient,
     pip,
     fullscreen,
@@ -218,7 +222,7 @@
   );
 </script>
 
-<SettingsMenu {prefix} {head} {toggles} {choices} />
+<SettingsMenu {prefix} {head} {toggles} {choices} {volume} />
 <!-- 出すときだけ置く。ライブは再生の前に出す注意を自分でも持っているので、いつも置くと2つになる -->
 {#if confirming}
   <DriveNotice

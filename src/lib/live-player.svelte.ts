@@ -78,6 +78,7 @@ import {
   STEADY,
   type Steering,
 } from "#lib/ts/pacing.js";
+import { MAX_LEVEL } from "#lib/volume.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
 
@@ -430,6 +431,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * (画面が決める。`background.svelte.ts`)
    */
   let playback = false;
+  /** 音量 (%。`#lib/volume.ts`)。canvas で描くときに RawEngine へ渡す。`<video>` のぶんは画面が持つ (`volume.svelte.ts`) */
+  let volume = MAX_LEVEL;
   /** canvas で描く経路の刻み。貯まり・貯める量の決め直しを回す (`rawPace`) */
   let rawTimer: ReturnType<typeof setInterval> | null = null;
   /** canvas で描くとき、1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。**画面に出す** */
@@ -2158,6 +2161,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       video.style.opacity = "0";
       // 音を消していたなら、canvas で描くときも消したまま始める
       if (silenced) engine.mute();
+      engine.volume = volume;
     } else {
       engine.reset();
     }
@@ -2313,6 +2317,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     set playback(on: boolean) {
       playback = on;
       if (engine !== null) engine.background = on;
+    },
+    /** 音量 (%)。canvas で描くときの音に掛ける。`<video>` の音は画面が Web Audio に通して掛ける (`volume.svelte.ts`) */
+    set volume(level: number) {
+      volume = level;
+      if (engine !== null) engine.volume = level;
     },
     /** canvas で描くとき、1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。canvas で描いていなければ 0 */
     get decodeMs() {

@@ -101,6 +101,8 @@ export interface CanvasPlayer {
   play(): void;
   pause(): void;
   mute(on: boolean): void;
+  /** 音量 (%。`#lib/volume.ts`)。消音とは別 */
+  volume(level: number): void;
   /**
    * 音声を選び直す。fMP4 は選んだ1本だけ流れているのでリクエストし直す、元の TS はエンジンの中で選び直す。
    * 保存した録画はトラックを選び直してから読み直す
@@ -386,6 +388,9 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     mute(on: boolean): void {
       if (on) engine.mute();
       else engine.unmute();
+    },
+    volume(level: number): void {
+      engine.volume = level;
     },
     setAudio(id: string): void {
       if (id === audio) return;

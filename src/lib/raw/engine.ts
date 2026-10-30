@@ -21,6 +21,7 @@ import { resolve } from "$app/paths";
 import { CLOCK, unwrap } from "@danything/arib/pes";
 
 import type { AudioSide } from "#lib/arib.js";
+import { Outlet, playbackSession } from "#lib/sound.js";
 
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
 import { type Chunk, Playout, type Scheduled } from "./playout";
@@ -34,7 +35,7 @@ const GRAB_WAIT = 2_000;
 /** デコーダの置き場 (`routes/api/live/mpeg2`) */
 const DECODER = "/api/live/mpeg2";
 /**
- * **`<audio>` を通したとき、出口から耳までの遅れの見込み (秒)** (`RawEngine.route`)。
+ * **`<audio>` を通したとき、出口から耳までの遅れの見込み (秒)** (`Outlet.route`)。
  *
  * ストリーム (MediaStream) へ出した音は、Web Audio が組んだその場でストリームに乗る — ページから直に
  * 鳴らすときの出口の遅れ (`baseLatency + outputLatency`。`latencyHint: 'playback'` で
@@ -59,7 +60,7 @@ interface RawEvents {
   /**
    * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —
    * ロック画面・車のハンドルの再生ボタン・ブラウザの再生中の通知は `<audio>` を直に
-   * 止めるので、画面の「止めているか」をそれに合わせる (`RawEngine.route`)
+   * 止めるので、画面の「止めているか」をそれに合わせる (`Outlet.route`)
    */
   remote(paused: boolean): void;
   /**
@@ -71,46 +72,14 @@ interface RawEvents {
   ended?(): void;
 }
 
-/**
- * **「再生する音」だと Safari に言う** (Audio Session API。Safari にしか無い)。
- *
- * MPEG-2 の音はページが Web Audio で鳴らしている。言わずにおくと iOS はこれを効果音と
- * 同じに扱い、**Safari を裏へ回すと止める** — 小窓で観ていても音だけ消えた
- * (iPhone 15 Pro Max、iOS 27.2)。エンコードする経路は `<video>` が鳴らすので、初めから
- * 再生の音として扱われている。消音スイッチで黙らないのも `<video>` と同じになる。
- * 畳むときは既定 (`auto`) に戻す。
- *
- * **言うのはバックグラウンド再生をオンにしているときと、押して小窓を開いている間だけ**
- * (`RawEngine.background`)。切っているのに言うと、裏で鳴らす音として扱われる
- *
- * これが言える端末 (Safari) では `<audio>` を通さない (`RawEngine.route`)
- */
-function playbackSession(on: boolean): void {
-  const session = audioSession();
-  if (session === undefined) return;
-  try {
-    session.type = on ? "playback" : "auto";
-  } catch {
-    // 受け付けない種類。言えなくても鳴らすことはできる
-  }
-}
-
-function audioSession(): { type: string } | undefined {
-  return (navigator as Navigator & { audioSession?: { type: string } })
-    .audioSession;
-}
-
-/** `<audio>` を通す出口。**要るまで作らない** (`RawEngine.route`) */
-interface Through {
-  audio: HTMLAudioElement;
-  destination: MediaStreamAudioDestinationNode;
-}
-
 export class RawEngine {
   readonly canvas: HTMLCanvasElement;
   private readonly worker: Worker;
   private readonly context: AudioContext;
+  /** 音を消す (`mute`)。この後ろが音量・リミッタ・鳴らす先 (`outlet`) */
   private readonly gain: GainNode;
+  /** 音量・リミッタ・鳴らす先 (`#lib/sound.ts`)。バックグラウンド再生・小窓では `<audio>` を通す */
+  private readonly outlet: Outlet;
   private readonly playout: Playout<AudioChunk>;
   private readonly nodes = new Set<AudioBufferSourceNode>();
   private readonly timer: ReturnType<typeof setInterval>;
@@ -146,14 +115,6 @@ export class RawEngine {
     (bitmap: ImageBitmap | null) => void
   >();
   private grabbed = 0;
-  /** `<audio>` を通したいか (`background`)。通しているかは `through` */
-  private wanted: boolean;
-  /** `<audio>` の出口。一度作ったら畳むまで使い回す */
-  private out: Through | null = null;
-  /** **いま音を `<audio>` へ流しているか。** 時計の引き方が変わる (`clock`) */
-  private through = false;
-  /** 止めているか (押して)。`<audio>` も止めておく — 外から見て「止まっている」と分かるように */
-  private held = false;
   /** 描かれずに捨てたコマ (worker が数える) */
   dropped = 0;
   /** 1コマをデコードする時間の 95 パーセンタイル (ms) */
@@ -165,7 +126,7 @@ export class RawEngine {
    * @param host 映像の入れ物。canvas はここに入る (**データ放送が入れ物ごと動かす**ので中に置く)
    * @param before この前に差し込む (字幕の canvas より下に来るように)
    * @param target どれだけ貯めるか (秒)。あとから変えるときは `target`
-   * @param background 「再生する音」だと言うか (`playbackSession`・`route`)。あとから変えるときは `background`
+   * @param background 「再生する音」だと言うか (`playbackSession`・`Outlet.route`)。あとから変えるときは `background`
    * @param input 何を受け取るか (`messages.ts` の `RawInput`)。元の TS か、エンコードしたもの (fMP4。互換モード)
    * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても飛ばず、止めて再開は止めた所から
    *   (`playout.ts` と worker の `follow`)。録画 (`canvas-player.ts`) は飛ぶ先 (`reset` の `from`) と終わり
@@ -182,7 +143,6 @@ export class RawEngine {
   ) {
     this.playout = new Playout(target);
     this.playout.follow = chase;
-    this.wanted = background;
     this.canvas = document.createElement("canvas");
     this.canvas.setAttribute("data-testid", "live-raw");
     this.canvas.setAttribute("aria-hidden", "true");
@@ -196,10 +156,22 @@ export class RawEngine {
     let context: AudioContext | null = null;
     let worker: Worker | null = null;
     try {
+      /*
+       * **「再生する音」だと言うのはバックグラウンド再生をオンにしているときと、押して小窓を開いている間だけ**
+       * (`background`)。切っているのに言うと、裏で鳴らす音として扱われる
+       */
       playbackSession(background);
       this.context = context = new AudioContext({ latencyHint: "playback" });
       this.gain = context.createGain();
-      this.gain.connect(context.destination);
+      this.outlet = new Outlet(
+        context,
+        (audio) => this.canvas.after(audio),
+        (paused) => {
+          if (!this.gone) this.events.remote(paused);
+        },
+        "live-raw-audio",
+      );
+      this.gain.connect(this.outlet.input);
       this.wall = context.state !== "running";
       // 押される前でも鳴らせることがある (前に押したことのあるサイト)。駄目なら押すまで壁時計
       void context.resume().catch(() => undefined);
@@ -249,7 +221,7 @@ export class RawEngine {
     this.frame = requestAnimationFrame(onFrame);
     document.addEventListener("visibilitychange", this.onVisibility);
     this.onVisibility();
-    this.route();
+    this.outlet.want(background);
   }
 
   /** 見えているかを worker へ (`visible`)。見えていない間は映像をデコードしない */
@@ -263,14 +235,18 @@ export class RawEngine {
   }
 
   /**
-   * 「再生する音」だと言うか (`playbackSession`)、`<audio>` を通すか (`route`)。
+   * 「再生する音」だと言うか (`playbackSession`)、`<audio>` を通すか (`Outlet.route`)。
    * バックグラウンド再生・小窓の出し入れで変わる
    */
   set background(on: boolean) {
     if (this.gone) return;
     playbackSession(on);
-    this.wanted = on;
-    this.route();
+    this.outlet.want(on);
+  }
+
+  /** 音量 (%。`#lib/volume.ts`)。**消音 (`mute`) とは別** — 消しても音量はそのまま */
+  set volume(level: number) {
+    this.outlet.level = level;
   }
 
   /** 音を鳴らせていないか (自動再生を断られた)。**押して `unmute` してもらう** */
@@ -329,21 +305,19 @@ export class RawEngine {
    * 追っかけ (`follow`) は止めた所から (`playout.ts`)
    */
   pause(): void {
-    this.held = true;
     this.playout.hold(this.now());
     this.stopAll();
     this.tellClock();
-    if (this.through) this.out?.audio.pause();
+    if (!this.gone) this.outlet.hold(true);
   }
 
   resume(): void {
-    this.held = false;
     this.playout.resume();
     this.send({ type: "resume" });
-    this.route();
+    if (!this.gone) this.outlet.hold(false);
   }
 
-  /** 音を消す。**消すのは GainNode だけ** — `<audio>` を通していてもいなくても同じ所で効く */
+  /** 音を消す。**消すのは音量の前の GainNode** — `<audio>` を通していてもいなくても同じ所で効く */
   mute(): void {
     this.gain.gain.value = 0;
   }
@@ -352,7 +326,7 @@ export class RawEngine {
   unmute(): void {
     this.gain.gain.value = 1;
     void this.context.resume().catch(() => undefined);
-    this.route();
+    if (!this.gone) this.outlet.route();
   }
 
   /** いま出している PTS (秒、伸ばしたもの)。**鳴らしていなければ null** */
@@ -441,91 +415,10 @@ export class RawEngine {
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.stopAll();
     this.worker.terminate();
-    if (this.out !== null) {
-      this.out.audio.pause();
-      this.out.audio.srcObject = null;
-      this.out.audio.remove();
-    }
+    this.outlet.destroy();
     void this.context.close().catch(() => undefined);
     playbackSession(false);
     this.canvas.remove();
-  }
-
-  /**
-   * **音の出口を決め直す。** バックグラウンド再生をオンにしているとき・押して小窓を開いている間
-   * (`wanted`) は、ページから直に鳴らさず、ストリーム (`createMediaStreamDestination`) にして
-   * `<audio>` で鳴らす。
-   *
-   * Web Audio の音を、ブラウザによっては効果音と同じに扱い、**裏へ回すと止める**
-   * (テスラの車載ブラウザ。Chromium 系)。`<audio>` が鳴らしていれば「メディアの再生」で、
-   * エンコードする経路の `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、
-   * そこで押された止める・再開は `remote` で画面に伝える。
-   *
-   * - **Safari は通さない** — Audio Session を `playback` にすれば裏でも止まらない
-   *   (`playbackSession`。iPhone で確かめてある)。iOS で MediaStream を鳴らすと、出口が
-   *   通話の扱いに寄ることがあった
-   * - ストリームを作れない端末は直に鳴らすまま
-   * - **`play()` を断られたら (自動再生) 直に鳴らす。** 押されたら (`unmute`・`resume`) また試す
-   * - 音を消すのは GainNode (`mute`)。`<audio>` の `volume`/`muted` は触らない
-   */
-  private route(): void {
-    if (this.gone) return;
-    const want =
-      this.wanted &&
-      audioSession() === undefined &&
-      typeof this.context.createMediaStreamDestination === "function";
-    if (!want) {
-      this.direct();
-      return;
-    }
-    let out = this.out;
-    if (out === null) {
-      try {
-        out = this.out = this.makeOut();
-      } catch {
-        return;
-      }
-    }
-    if (!this.through) {
-      this.gain.disconnect();
-      this.gain.connect(out.destination);
-      this.through = true;
-    }
-    if (this.held || !out.audio.paused) return;
-    const { audio } = out;
-    void audio.play().catch(() => {
-      // 断られた。**黙らせない** — 直に鳴らして、押されたらまた試す
-      if (this.out?.audio === audio && audio.paused) this.direct();
-    });
-  }
-
-  /** 直に鳴らす (`route`) */
-  private direct(): void {
-    if (!this.through) return;
-    this.through = false;
-    this.gain.disconnect();
-    this.gain.connect(this.context.destination);
-    this.out?.audio.pause();
-  }
-
-  private makeOut(): Through {
-    const destination = this.context.createMediaStreamDestination();
-    const audio = document.createElement("audio");
-    audio.setAttribute("data-testid", "live-raw-audio");
-    audio.srcObject = destination.stream;
-    /*
-     * **外から止められた・再開されたら画面に伝える。** こちらが止めた・再開したもの
-     * (`held` と合っている) と、直に鳴らしている間のものには反応しない
-     */
-    const sync = () => {
-      if (this.gone || !this.through || audio.paused === this.held) return;
-      this.events.remote(audio.paused);
-    };
-    audio.addEventListener("pause", sync);
-    audio.addEventListener("play", sync);
-    // 操作 UI (`controls`) を出さないので、置いても見えない
-    this.canvas.after(audio);
-    return { audio, destination };
   }
 
   private send(message: ToWorker, transfer: Transferable[] = []): void {
@@ -616,7 +509,7 @@ export class RawEngine {
    * いま耳に届いている PTS と、それが届いた時刻 (performance の ms)。
    * **音の時間は「いま予約している位置」なので、出口までの遅れを引く** (`getOutputTimestamp`)
    *
-   * **`<audio>` を通している間は、引くものを差し替える** (`route`)。音は組んだその場でストリームに
+   * **`<audio>` を通している間は、引くものを差し替える** (`Outlet.route`)。音は組んだその場でストリームに
    * 乗るので、ページの出口の遅れ (`baseLatency + outputLatency`) は掛からず、`<audio>` の
    * 出口の遅れ (`STREAM_OUT`) が掛かる。滑らかさは `getOutputTimestamp` の組のまま使い、
    * PTS をその差だけ先へずらす
@@ -629,14 +522,14 @@ export class RawEngine {
     }
     const page =
       (this.context.baseLatency || 0) + (this.context.outputLatency || 0);
-    const ahead = this.through ? page - STREAM_OUT : 0;
+    const ahead = this.outlet.through ? page - STREAM_OUT : 0;
     const stamp = this.context.getOutputTimestamp();
     const contextTime = stamp.contextTime ?? 0;
     if (contextTime > 0 && stamp.performanceTime !== undefined) {
       const pts = this.playout.position(contextTime + ahead);
       return pts === null ? null : { pts, at: stamp.performanceTime };
     }
-    const latency = this.through
+    const latency = this.outlet.through
       ? STREAM_OUT
       : this.context.outputLatency || this.context.baseLatency || 0;
     const pts = this.playout.position(this.context.currentTime - latency);
