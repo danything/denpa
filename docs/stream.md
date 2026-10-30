@@ -76,7 +76,7 @@ Kotlin で持つ (denpa-tv 0.16.0 から)。画像 (PNG) を配っていた頃�
 [stream-history.md](stream-history.md#字幕を画像で配っていた頃)。
 
 外字 (DRCS) は置き換え表で字にできるものは字に、できないものは画像で送り (1字 3.5KB ほど)、受け側が字の枠いっぱいに引き伸ばす。
-放送の外字は 16〜36 画素の白黒の画像で、そのまま伸ばすと1点が 4x4 の階段になる。
+放送の外字は 16〜36 画素の白黒か 4 階調の画像で、そのまま伸ばすと1点が 4x4 の階段になる。
 **サーバで斜めを丸めた濃淡の画像にしてから送る** (`packages/arib/src/drcs-smooth.ts`。水増しされた行・列を畳み、Scale2x で斜めを
 細かくし、4x4 ずつ平均して縁に中間の濃さを付ける。16 階調・一辺 64〜256)。
 録画には放送の字幕がそのまま入る (`S_ARIBSUB`) ので同じ描き方で観られる。PGS の画像が入った古いエンコード済みの録画の字幕は読まない。
@@ -1312,7 +1312,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 - **電波に AIT を載せない局もある** (NHK)。PMT に印が無く、データ放送が `AITTransportMethod` の XML・HTTP を訊いてくる。
   双方向がオンならこれと `AITControlledAppEngineFunction`・`AITControlledApp.Start` に 1 と答え
   (電波の表で運ぶ `AITTransferMethod` は 0)、`startAITControlledApp` に渡された http(s) の URL を XML の AIT として
-  中継で取り、そこにあるアプリを開く (`hybridcast/xml-ait.ts`。ETSI TS 102 809 の形)。文書には取りに行き始めた時点で 1 を返す (上の「開けないのに 1 と答えない」とは矛盾しない — 開く手立てがあるから 1 と答えていて、URL を渡されなければ失敗を返す)。
+  中継で取り、そこにあるアプリを開く (`hybridcast/xml-ait.ts`。ETSI TS 102 809 の形)。文書には取得し始めた時点で 1 を返す (上の「開けないのに 1 と答えない」とは矛盾しない — 開く手立てがあるから 1 と答えていて、URL を渡されなければ失敗を返す)。
   取れなかったときは `[bml] XML の AIT を読めませんでした` をコンソールに出して、データ放送のまま。
   **XML の AIT を渡せるのは放送の文書だけ**です。通信の文書 (http・https から取った文書) には、XML の AIT の問い合わせに 0 と答え、
   `startAITControlledApp` に URL を渡されても失敗を返す — 開いたアプリは局の NVRAM を読み書きできるので、

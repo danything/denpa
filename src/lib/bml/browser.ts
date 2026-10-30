@@ -96,7 +96,7 @@ export interface BrowserHost {
   canStartApp?(): boolean;
   /**
    * Hybridcast のアプリを開く (startAITControlledApp)。`hint` は数の引数 (どのアプリかの手がかり。
-   * organization_id・application_id など)。開けたら true
+   * organisation_id・application_id など)。開けたら true
    */
   startApp?(hint: number[]): boolean;
   /**

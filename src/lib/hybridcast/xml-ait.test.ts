@@ -34,7 +34,7 @@ const AIT = `<?xml version="1.0" encoding="UTF-8"?>
 </mhp:ServiceDiscovery>`;
 
 describe("parseXmlAit", () => {
-  test("開けるアプリの名前・識別・行き先を拾う。KILL は出さない", () => {
+  test("開けるアプリの名前・識別・行き先を読み取る。KILL は出さない", () => {
     expect(parseXmlAit(AIT)).toEqual([
       {
         name: "番組 & 連動",

@@ -6,10 +6,9 @@
  * コメントの出どころ (NX-Jikkyo・過去ログ API) と控えはここが持つ。どこから埋めるかは docs/watch.md の「実況」
  */
 import { type PostStyle, postStyle } from "./command";
-import type { Comment, CommentStore } from "./comments";
 import { Cursor, type Take } from "./cursor";
 import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
-import { type NxDeps, NxJikkyo } from "./nx";
+import { NxJikkyo } from "./nx";
 import type { PostResult } from "./post";
 
 /** 過去ログ API が読めなかったとき、もう一度試すまで */
@@ -19,7 +18,7 @@ const KAKOLOG_REFRESH = 5 * 60_000;
 
 /** 形のずれは端末ごとに 1 回だけ言う (NX-Jikkyo や過去ログ API のバージョンが変わったときに気付けるように) */
 let warned = false;
-export function warnShape(what: string): void {
+function warnShape(what: string): void {
   if (warned) return;
   warned = true;
   console.warn(
@@ -44,23 +43,7 @@ export class JikkyoFeed {
   constructor(
     /** NX-Jikkyo の WebSocket に繋ぐか (ライブと追っかけ) */
     private readonly live: boolean,
-    private readonly deps?: NxDeps,
   ) {}
-
-  /** いまのチャンネル (`jk1` など)。null は実況の無い局 */
-  get current(): string | null {
-    return this.channel;
-  }
-
-  /** 流しているか (チャンネルがあり、オンのとき) */
-  get running(): boolean {
-    return this.active;
-  }
-
-  /** 控え (どこを埋めたか・一番古いコメント)。追っかけの取得の決め方に使う */
-  get comments(): CommentStore {
-    return this.cursor.store;
-  }
 
   /**
    * 局を替えた・オン/オフを替えた。替わったら繋ぎ直す。局が替わったら控えも捨てる。
@@ -76,15 +59,11 @@ export class JikkyoFeed {
     this.active = active;
     this.stopSources();
     if (!active || !this.live || channel === null) return;
-    this.nx = new NxJikkyo(
-      channel,
-      {
-        comments: (comments) => this.cursor.receive(comments),
-        state: (ok) => this.mark("nx", ok),
-        odd: warnShape,
-      },
-      this.deps,
-    );
+    this.nx = new NxJikkyo(channel, {
+      comments: (comments) => this.cursor.receive(comments),
+      state: (ok) => this.mark("nx", ok),
+      odd: warnShape,
+    });
     this.nx.start();
   }
 
@@ -166,13 +145,8 @@ export class JikkyoFeed {
     return result;
   }
 
-  /** 外から足す (過去ログ API で取ったもの)。`span` はその区間を埋めたことにする */
-  add(comments: Comment[], span?: [number, number]): void {
-    this.cursor.receive(comments, span);
-  }
-
-  /** 出どころが読めるか (過去ログ API は呼ぶ側が取得の結果で言う)。どれかが読めなければ `down` */
-  mark(source: string, ok: boolean): void {
+  /** 出どころが読めるか。どれかが読めなければ `down` */
+  private mark(source: string, ok: boolean): void {
     if (ok) this.failing.delete(source);
     else this.failing.add(source);
     this.down = this.failing.size > 0;

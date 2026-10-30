@@ -1150,7 +1150,7 @@ describe("ライブのように流し続けても、持つものと握る時間�
       }
       await watch(() => false, 300);
       const inner = engine(bml);
-      // 流れは届いている (受け手が動いた)
+      // ストリームは届いている (受け手が動いた)
       expect(Number(inner.ureg[2])).toBeGreaterThan(10);
       expect(Number(inner.ureg[3])).toBeGreaterThan(10);
       expect(inner.halted).toBe(false);

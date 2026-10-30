@@ -22,7 +22,7 @@ const KEY = fragments.findIndex(
     i > 0 && readFragment(f, tracks).some((s) => s.track === video && s.key),
 );
 
-describe("途中から入った流れ", () => {
+describe("途中から入ったストリーム", () => {
   test("キーフレームを含む塊まで渡さず、その時刻を覚える", () => {
     const gate = new KeyGate();
     gate.init(head);
@@ -49,7 +49,7 @@ describe("途中から入った流れ", () => {
     expect(gate.pass(fragments[3]!)).toBe(false);
   });
 
-  // 印が読めない流れでも、映像が出ないまま止まらない
+  // 印が読めないストリームでも、映像が出ないまま止まらない
   test("キーフレームが来ないまま 4 秒ぶん過ぎたら、待つのをやめる", () => {
     const gate = new KeyGate();
     gate.init(head);

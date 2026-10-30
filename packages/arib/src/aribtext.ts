@@ -339,7 +339,7 @@ function afterEscape(
     const target = byte - 0x28;
     if (data[at + 1] === 0x20) {
       // 1バイトDRCS
-      designate(target, { bytes: 1, kind: "blank" });
+      designate(target, MOSAIC);
       return at + 3;
     }
     designate(target, CHARSETS.get(data[at + 1]!));

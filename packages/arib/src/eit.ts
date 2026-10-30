@@ -43,7 +43,7 @@ const DESC_COMPONENT = 0x50;
 const DESC_CONTENT = 0x54;
 const DESC_AUDIO_COMPONENT = 0xc4;
 
-/** 自局のものだけ扱う。他局の番組表 (0x4F / 0x60〜0x6F) は選局し直せば取れる */
+/** 自局の表か (p/f 0x4E と schedule 0x50〜0x5F)。ほかの TS の schedule (0x60〜0x6F) は下、他局の p/f (0x4F) は読まない */
 function isEitActual(tableId: number): boolean {
   return (
     tableId === TABLE_PF_ACTUAL ||
