@@ -234,7 +234,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const videos = new Set(files.filter((path) => VIDEO.test(path)));
     for (const path of videos) {
       // 動画は消さない。手で置いたものかもしれないので、数えるだけ。
-      // エンコードしている途中の切り出し (`<入力>.cut.m2ts`) を数に入れないよう、書きたては飛ばす
+      // エンコードの途中で作る復号したTS (`<入力>.decoded.m2ts`) を数に入れないよう、書きたては飛ばす
       if (!known.has(path) && !settling(path, at)) strays++;
     }
     for (const path of files) {

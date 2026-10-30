@@ -131,7 +131,7 @@ export function airing<S extends Station, P extends Omit<Airing, "id">>(
 
 /**
  * **いまライブで選べる局。** 番組の詳細に「視聴」を出すかどうかに使う
- * (番組表・ルールのプレビュー)。
+ * (番組表・検索)。
  *
  * **ライブ画面と同じ決め方にする** (`airing`)。一覧のマスは**名前の無い枠でも
  * 出る**が、ライブの一覧には出ないので、そこに「視聴」を出すと**押した先で
@@ -141,7 +141,7 @@ export function airing<S extends Station, P extends Omit<Airing, "id">>(
  * 局は種別で絞らない。ライブ画面が地上波・BS・CS をまとめて見ているので、
  * 絞ると `airing` の「1局も残らなければ全部出す」の効き方がずれる。
  *
- * **出す画面ごとに書かない。** 番組表とルールで別々に書いていると、片方だけ
+ * **出す画面ごとに書かない。** 番組表と検索で別々に書いていると、片方だけ
  * 直したときに同じ番組の詳細でも「視聴」が出たり出なかったりする
  */
 export function watchableServices(at: number): number[] {

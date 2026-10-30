@@ -47,10 +47,10 @@ export function pwaNames(): { host: string; name: string }[] {
 /**
  * テーマの地の色 (app.css の `--dp-bg`)。`background_color` と `theme_color` に入れる。
  *
- * **Android でホーム画面から開くと、下のジェスチャーバーの帯は `background_color` で塗られる**
- * (ページはその帯の裏まで描けない。Chrome 155 で確かめた)。ダークの色のままだと、ライトで開いても
- * 帯だけ黒くなるので、ページの今のテーマで返す (`app.html` と `theme.svelte.ts` が `?theme=light` を付ける)。
- * Chrome は入れたあとのマニフェストを日を置いて読み直すので、テーマを替えても帯が追いつくのは後になる
+ * **Android でホーム画面から開くと、下のジェスチャーバーは `background_color` で塗られる**
+ * (ページはその裏まで描けない。Chrome 155 で確かめた)。ダークの色のままだと、ライトで開いても
+ * ジェスチャーバーだけ黒くなるので、ページの今のテーマで返す (`app.html` と `theme.svelte.ts` が `?theme=light` を付ける)。
+ * Chrome は入れたあとのマニフェストを日を置いて読み直すので、テーマを替えてもジェスチャーバーの色が追いつくのは後になる
  */
 const BACKGROUND = { dark: "#0b0c0f", light: "#ffffff" } as const;
 

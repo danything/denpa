@@ -168,15 +168,13 @@ function parseHwAllow(value: string | undefined): HwAllow {
 }
 
 export function settings(): Settings {
-  const codec = stored("codec");
   const cmCut = stored("cmCut");
   const flag = (key: string, fallback: boolean) => {
     const value = stored(key);
     return value === undefined ? fallback : value === "true";
   };
-  // **コーデックはカンマ区切りで持つ** (`av1,h264`)。1つだけの古い値 (`av1` / `h264` / `none`) もそのまま読める
-  const codecs = parseCodecs(codec);
-  // 主は先頭 (parseCodecs が AV1 を先頭に寄せている — 小さいので既定の再生に向く)
+  const codecs = parseCodecs(stored("codec"));
+  // 主は先頭 (parseCodecs が AV1 を先頭に寄せている)
   const primary: VideoCodec = codecs[0] ?? "none";
   return {
     codec: primary,

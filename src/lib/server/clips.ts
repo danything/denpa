@@ -31,6 +31,7 @@ import {
   type ClipPlace,
   type ClipQuery,
 } from "../clips";
+import { pad } from "../format";
 import type { FileSource } from "../source";
 import { fromTsTime, toTsTime } from "../ts/watch";
 import type { Recording } from "../types";
@@ -59,7 +60,7 @@ import { searchable } from "./title";
  */
 
 /** 一覧用の幅 (px)。グリッドの1枚は広い画面でも 240px ほどなので、2倍の密度まで */
-export const SMALL_WIDTH = 480;
+const SMALL_WIDTH = 480;
 /**
  * AVIF の画質 (SVT-AV1 の CRF。小さいほどきれいで大きい)。1080 の1コマで数百 KB に収まり、
  * 字幕の縁が崩れない所。一覧用は縮めて見るだけなので粗くてよい
@@ -250,12 +251,12 @@ export function clipsDir(): string {
 /** 置き場からの相対の名前 (`2026-10/12.avif`)。年月はサーバの時計で、撮った時刻から */
 export function clipFile(id: number, takenAt: number): string {
   const at = new Date(takenAt);
-  const month = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}`;
+  const month = `${at.getFullYear()}-${pad(at.getMonth() + 1)}`;
   return `${month}/${id}.avif`;
 }
 
 /** 一覧用の名前 (`2026-10/12-small.avif`) */
-export function smallFile(file: string): string {
+function smallFile(file: string): string {
   return file.replace(/\.avif$/, "-small.avif");
 }
 
@@ -384,7 +385,7 @@ export function sceneTime(recording: Recording, offsetMs: number): number {
 }
 
 /** 字幕の文字を揃える (改行と続く空白を1つの空白に、長すぎるものは切る) */
-export function captionsText(raw: string): string {
+function captionsText(raw: string): string {
   return [...raw.replace(/\s+/g, " ").trim()].slice(0, CAPTIONS_MOST).join("");
 }
 
@@ -526,7 +527,7 @@ export function clipOr404(idLike: string): Clip & { file: string } {
 }
 
 /** 1枚引く。無ければ undefined */
-export function clipById(id: number): (Clip & { file: string }) | undefined {
+function clipById(id: number): (Clip & { file: string }) | undefined {
   const row = orm()
     .select({ ...clipColumns(), alive: ALIVE })
     .from(clips)
@@ -563,7 +564,7 @@ function dayRange(day: string): [number, number] {
 }
 
 /** 条件を SQL に。言葉は空白で区切った語を**すべて**含むもの (揃えた文字で比べる) */
-export function clipConditions(query: ClipQuery): SQL[] {
+function clipConditions(query: ClipQuery): SQL[] {
   const where: SQL[] = [ne(clips.file, "")];
   for (const word of searchWords(searchQuery(query.q)))
     where.push(sql`instr(${clips.search_text}, ${word}) > 0`);
@@ -652,15 +653,9 @@ export function clipFacets(): ClipFacets {
   };
 }
 
-/** 録画の切り抜きの数 (録画の詳細の「この録画の切り抜き (n)」) */
+/** 録画の切り抜きの数 (観る画面の「この録画の切り抜き (n)」) */
 export function clipCount(recordingId: number): number {
-  return (
-    orm()
-      .select({ n: sql<number>`count(*)` })
-      .from(clips)
-      .where(and(eq(clips.recording_id, recordingId), ne(clips.file, "")))
-      .get()?.n ?? 0
-  );
+  return countClips({ recording: recordingId });
 }
 
 /** 消す。画像と行を。消せた数を返す (もう無いものは数えない) */

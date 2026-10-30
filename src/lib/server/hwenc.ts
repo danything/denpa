@@ -210,7 +210,7 @@ export interface Picture {
  * AVBR が静かな場面で量を下げるだけで、足りないよりよい。ライブとその場の変換もこれ
  * (映像が来る前に引数を決めるので大きさを知らない)
  */
-export const LARGEST: Picture = { height: 1080, smooth: true };
+const LARGEST: Picture = { height: 1080, smooth: true };
 
 /**
  * **Rockchip MPP に渡すビットレート (bit/s)。** 今の CPU の H.264 (libx264 medium crf 23) と

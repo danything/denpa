@@ -319,7 +319,7 @@ export function verifyToken(token: string, at = now()): TokenOwner | null {
   return { id: row.id, name: row.name };
 }
 
-/** アクセストークンを無効にする (設定画面の「取り消す」と、アプリの「サーバーから外す」) */
+/** アクセストークンを無効にする (設定画面の「取消」と、アプリの「サーバーから外す」) */
 export function revokeToken(id: number, at = now()): boolean {
   return (
     affected(

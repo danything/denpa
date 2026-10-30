@@ -179,7 +179,7 @@ export function start(): void {
    *
    * inotify (fs.watch) で消した瞬間に気づけないか試したが、この構成では
    * 最初の1件しかイベントが来ず当てにできなかったので定期実行にしてある。
-   * すぐ反映したいときは画面の「実体と照合」を押す。
+   * すぐ反映したいときは画面の「ファイルと照合」を押す。
    */
   nowAndEvery(config.reconcileInterval, "reconcile", reconcile);
 

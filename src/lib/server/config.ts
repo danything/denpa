@@ -95,7 +95,7 @@ export const config = {
 
   ffmpeg: str("FFMPEG", "/usr/local/bin/ffmpeg"),
   /**
-   * ブラウザで MPEG-2 と AAC をデコードする WebAssembly の置き場 (ライブを放送そのままで送る経路。docs/stream.md#放送そのままmpeg-2を送る)。
+   * ブラウザで MPEG-2・AAC・Opus をデコードする WebAssembly の置き場 (変換せずに観るライブと録画・互換モードの音。docs/stream.md#放送そのままmpeg-2を送る)。
    * Dockerfile の `mpeg2wasm` 段が置く。**アプリの外にあるのは、開発の compose がソースを
    * /app に被せるため** (中に置くと隠れる)。無ければ放送そのままの経路は使えず、画面はエンコードしたものに戻る
    */

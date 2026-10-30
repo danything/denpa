@@ -100,7 +100,7 @@ export function failure(error: unknown): string {
  * Discord の Webhook の URL か (`/api/webhooks/{id}/{token}`。API のバージョン付きも)。
  *
  * Discord は本文を `content` で受け取り、`content` や `embeds` が無いと 400 で断る
- * (Slack 向けの `text` は読まない)。末尾が `/slack` の Slack 互換の口は `text` を読むので、
+ * (Slack 向けの `text` は読まない)。末尾が `/slack` の Slack 互換のエンドポイントは `text` を読むので、
  * ほかの通知先と同じ形で送る
  */
 export function discord(raw: string): boolean {

@@ -550,7 +550,7 @@ export function whyNotTuned(why: string, until: number | null): string {
 }
 
 interface Viewer {
-  /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者 (liveStream) は映像だけを流すエンドポイント */
+  /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者は映像か字幕だけを流すエンドポイント (`sessionStream`・`liveCaptions`) */
   connection: Pick<Connection, "send">;
   /** init を渡したか。渡す前に中身を送っても MSE は捨てる */
   ready: boolean;
@@ -2047,7 +2047,7 @@ export function chaseStream(
   }
   const release = holdTranscode();
   if (release === null) return "busy";
-  return sessionStream((viewer, held) =>
+  return sessionStream((viewer, hold) =>
     openChase(
       {
         type: "chase",
@@ -2059,7 +2059,7 @@ export function chaseStream(
         language: undefined,
       },
       viewer,
-      held,
+      hold,
       release,
     ),
   );
@@ -2301,10 +2301,10 @@ function spawnRecordingCaptioner(
  * 流すのは映像のコンテナ (init + 中身) と元のTSだけで、字幕・データ放送・通知は捨てる。
  * エンコードできなくなったら・読み切ったら・チューナーから外されたら・番組が替わって作り直すなら (`error` / `ended` / `lost` / `restart`) 応答を閉じる。読むのが追いつかない
  * 相手も閉じる (溜め続けるとメモリが増え続け、fMP4 は途中を捨てると壊れる)。
- * `held` は溜まりすぎて送り込みを止めたいか (追っかけだけが使う。`CHASE_STREAM_HOLD`)
+ * `hold` は溜まりすぎて送り込みを止めたいか (追っかけだけが使う。`CHASE_STREAM_HOLD`)
  */
 export function sessionStream(
-  open: (viewer: Viewer, held: () => boolean) => Session | null,
+  open: (viewer: Viewer, hold: () => boolean) => Session | null,
 ): ReadableStream<Uint8Array> {
   let session: Session | null = null;
   /** もう閉じたか。加えている最中 (watch の中) に閉じることがあるので、戻ってから見る */
@@ -2436,7 +2436,7 @@ export function warm(
 
   /*
    * **誰も来なければ自分で畳む。** 見ている人がいなくなったら畳む仕掛け
-   * (`attend` の `leave`) は、**1人も来なかった場合には動かない**
+   * (`depart`) は、**1人も来なかった場合には動かない**
    */
   const timer = setTimeout(() => {
     if (session.empty) session.stop();
