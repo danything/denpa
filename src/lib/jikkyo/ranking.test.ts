@@ -95,7 +95,7 @@ describe("ListHold", () => {
     expect(released).toBe(0);
   });
 
-  test("巻いたら、止まってから待つ。閉じたら待つのをやめる", async () => {
+  test("巻いたら、止まってから待つ。閉じたら待つのをやめ、理由も忘れる", async () => {
     let released = 0;
     const hold = new ListHold(() => released++, SETTLE);
     hold.poke();
@@ -103,7 +103,8 @@ describe("ListHold", () => {
     await wait(SETTLE * 2);
     expect(released).toBe(1);
     hold.poke();
-    hold.cancel();
+    hold.set("pointer", true);
+    hold.clear();
     expect(hold.held).toBe(false);
     await wait(SETTLE * 2);
     expect(released).toBe(1);

@@ -52,7 +52,7 @@ export class JikkyoRanking {
     return () => {
       this.run++;
       this.pause();
-      this.holder.cancel();
+      this.holder.clear();
       this.next = null;
       document.removeEventListener("visibilitychange", onVisible);
     };

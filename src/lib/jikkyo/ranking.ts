@@ -37,7 +37,7 @@ export class ListHold {
   set(reason: HoldReason, on: boolean): void {
     if (on) {
       this.reasons.add(reason);
-      this.cancel();
+      this.stop();
     } else if (this.reasons.delete(reason) && this.reasons.size === 0) {
       this.wait();
     }
@@ -48,14 +48,22 @@ export class ListHold {
     if (this.reasons.size === 0) this.wait();
   }
 
-  /** 待つのをやめる (タブを閉じた)。理由はそのまま (指やポインタが乗っているのは変わらない) */
-  cancel(): void {
+  /**
+   * 忘れる (タブを閉じた)。待つのをやめ、理由も消す。乗ったまま一覧が消えると離れた合図が来ないので、
+   * 残すと次に開いたときに並べ直さないままになる (タブは一覧の外にあるので、開くときは一覧から離れている)
+   */
+  clear(): void {
+    this.reasons.clear();
+    this.stop();
+  }
+
+  private stop(): void {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
   }
 
   private wait(): void {
-    this.cancel();
+    this.stop();
     this.timer = setTimeout(() => {
       this.timer = null;
       this.release();
