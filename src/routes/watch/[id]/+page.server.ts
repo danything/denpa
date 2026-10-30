@@ -65,9 +65,10 @@ export function load({ params, url }) {
    * 「この場面から観る」(`?at=` 番組の始めからの秒。切り抜きの画面から)。観る画面の物差しの秒に直して渡す。
    * 続きの位置より先に使う
    */
-  const at = Number(url.searchParams.get("at") ?? "");
+  const raw = url.searchParams.get("at") ?? "";
+  const at = Number(raw);
   const scene =
-    url.searchParams.has("at") && Number.isFinite(at) && at >= 0
+    raw !== "" && Number.isFinite(at) && at >= 0
       ? sceneTime(recording, at * 1000)
       : null;
 

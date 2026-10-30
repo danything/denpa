@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import { untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import ListFilter from "~icons/lucide/list-filter";
 
@@ -48,32 +49,62 @@
   // 切り抜きが増えた・消えたら読み直す (`api/events` の `clips`)
   liveUpdates(["clips"]);
 
-  /** 下端で足した続き。条件が変わる (load が回り直す) と捨てる */
+  /**
+   * 下端で足した続き。load が回り直したら頭から作り直す。**条件が変わったときだけ捨てる** —
+   * ほかの端末で撮った・消した (`clips` の通知) ときは、読み進めていたぶんまで取り直して、位置を引き戻さない
+   */
   let more = $state<Clip[]>([]);
   // svelte-ignore state_referenced_locally
   let next = $state<number | null>(data.next);
+  /** 読み直しの世代。古い世代で取った続きは足さない (取っている間に読み直したとき) */
+  let generation = 0;
+  let shownQuery = "";
   $effect(() => {
     void data.clips;
+    const query = String(clipSearch(data.query));
+    const keep = query === shownQuery ? untrack(() => more.length) : 0;
+    shownQuery = query;
+    generation++;
     more = [];
     next = data.next;
+    if (keep > 0) untrack(() => void refill(keep));
   });
   const clips = $derived([...data.clips, ...more]);
 
+  /** 続きを1ページ取る。世代が替わっていたら捨てる */
+  async function fetchMore(): Promise<boolean> {
+    if (next === null) return false;
+    const mine = generation;
+    const params = clipSearch(data.query);
+    params.set("before", String(next));
+    const res = await fetch(`${resolve("api/clips")}?${params}`);
+    if (!res.ok || mine !== generation) return false;
+    const body = (await res.json()) as {
+      clips: Clip[];
+      next: number | null;
+    };
+    if (mine !== generation) return false;
+    more = [...more, ...body.clips];
+    next = body.next;
+    return true;
+  }
+
   let loading = false;
   async function loadMore(): Promise<void> {
-    if (loading || next === null) return;
+    if (loading) return;
     loading = true;
     try {
-      const params = clipSearch(data.query);
-      params.set("before", String(next));
-      const res = await fetch(`${resolve("api/clips")}?${params}`);
-      if (!res.ok) return;
-      const body = (await res.json()) as {
-        clips: Clip[];
-        next: number | null;
-      };
-      more = [...more, ...body.clips];
-      next = body.next;
+      await fetchMore();
+    } finally {
+      loading = false;
+    }
+  }
+
+  /** 読み直したあと、読み進めていたぶん (`count` 枚) まで続きを取り直す */
+  async function refill(count: number): Promise<void> {
+    loading = true;
+    try {
+      while (more.length < count && (await fetchMore()));
     } finally {
       loading = false;
     }

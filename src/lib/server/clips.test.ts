@@ -31,7 +31,9 @@ const {
   avifArgs,
   checkImage,
   ClipError,
+  clipCountsByRecording,
   clipFacets,
+  countClips,
   clipFile,
   clipPath,
   clipsDir,
@@ -414,6 +416,16 @@ describe("置く・探す・消す", () => {
     utimesSync(left, old, old);
     await put("A");
     expect(existsSync(left)).toBe(false);
+  });
+
+  test("当たる枚数と、録画ごとの枚数 (検索の結果・録画の詳細)", async () => {
+    await put("夜のニュース");
+    await put("朝のニュース");
+    await put("ドラマ");
+    orm().update(clips).set({ recording_id: 7 }).run();
+    expect(countClips({ q: "ニュース" })).toBe(2);
+    expect(countClips({ q: "どこにも無い" })).toBe(0);
+    expect(clipCountsByRecording()).toEqual({ 7: 3 });
   });
 
   test("消すと画像も消える。もう無いものは数えない", async () => {
