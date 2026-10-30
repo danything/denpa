@@ -128,14 +128,15 @@
       oninput={(event) => volume.set(Number(event.currentTarget.value))}
       onpointerdown={() => {
         dragging = true;
-        window.addEventListener(
-          "pointerup",
-          () => {
-            dragging = false;
-            if (!hovered) later();
-          },
-          { once: true },
-        );
+        // 離した・取り上げられた (`pointercancel`) のどちらでも終える。残ると閉じなくなる
+        const done = new AbortController();
+        const end = () => {
+          done.abort();
+          dragging = false;
+          if (!hovered) later();
+        };
+        window.addEventListener("pointerup", end, { signal: done.signal });
+        window.addEventListener("pointercancel", end, { signal: done.signal });
       }}
     />
   </span>
