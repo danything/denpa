@@ -18,12 +18,21 @@ const A: HwUsable = {
   path: "/dev/dri/renderD128",
   qsv: ["av1", "h264"],
   vaapi: ["av1", "h264"],
+  rkmpp: [],
 };
 /** AV1 をエンコードできない (Arc より前) */
 const B: HwUsable = {
   path: "/dev/dri/renderD129",
   qsv: ["h264"],
   vaapi: ["h264"],
+  rkmpp: [],
+};
+/** Rockchip MPP (`/dev/mpp_service`)。H.264 だけ */
+const R: HwUsable = {
+  path: "/dev/mpp_service",
+  qsv: [],
+  vaapi: [],
+  rkmpp: ["h264"],
 };
 
 describe("エンコーダの選択", () => {
@@ -38,7 +47,12 @@ describe("エンコーダの選択", () => {
     const next = chooseHw({}, [A, B], "h264", HW_SOFTWARE);
     expect(hwChoice(next, [A, B], "h264")).toBe(HW_SOFTWARE);
     expect(hwChoice(next, [A, B], "av1")).toBe(A.path);
-    expect(next[A.path]).toEqual({ qsv: ["av1"], vaapi: ["av1"] });
+    // A で使えない方式 (Rockchip MPP) の印は前のまま (書かれていなければ全部よい)
+    expect(next[A.path]).toEqual({
+      qsv: ["av1"],
+      vaapi: ["av1"],
+      rkmpp: ["av1", "h264"],
+    });
   });
 
   test("デバイスを選ぶと、ほかのデバイスの印が外れる", () => {
@@ -54,12 +68,13 @@ describe("エンコーダの選択", () => {
     expect(next[A.path]).toEqual({
       qsv: ["av1", "h264"],
       vaapi: ["av1", "h264"],
+      rkmpp: ["av1", "h264"],
     });
   });
 
   test("すでに選んであるデバイスは、方式ごとの印を崩さない", () => {
     const allow: HwAllow = {
-      [A.path]: { qsv: ["h264"], vaapi: ["av1", "h264"] },
+      [A.path]: { qsv: ["h264"], vaapi: ["av1", "h264"], rkmpp: [] },
     };
     expect(hwChoice(allow, [A], "av1")).toBe(A.path);
     expect(chooseHw(allow, [A], "av1", A.path)).toEqual(allow);
@@ -67,13 +82,27 @@ describe("エンコーダの選択", () => {
 
   test("いま見えていないデバイスの印は前のまま", () => {
     const allow: HwAllow = {
-      "/dev/dri/renderD130": { qsv: [], vaapi: ["h264"] },
+      "/dev/dri/renderD130": { qsv: [], vaapi: ["h264"], rkmpp: [] },
     };
     expect(
       chooseHw(allow, [A], "h264", HW_SOFTWARE)["/dev/dri/renderD130"],
     ).toEqual({
       qsv: [],
       vaapi: ["h264"],
+      rkmpp: [],
     });
+  });
+});
+
+describe("Rockchip MPP の選択", () => {
+  test("H.264 の選択肢にだけ出て、GPU と同じく選べる", () => {
+    expect(hwChoice({}, [A, R], "av1")).toBe(A.path);
+    expect(hwChoice({}, [A, R], "h264")).toBe(HW_EVERY);
+    const next = chooseHw({}, [A, R], "h264", R.path);
+    expect(hwChoice(next, [A, R], "h264")).toBe(R.path);
+    expect(hwAllowed(next, R.path, "rkmpp", "h264")).toBe(true);
+    expect(hwAllowed(next, A.path, "qsv", "h264")).toBe(false);
+    // AV1 は A のまま
+    expect(hwChoice(next, [A, R], "av1")).toBe(A.path);
   });
 });

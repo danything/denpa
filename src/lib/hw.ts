@@ -7,13 +7,18 @@
 export const HW_CODECS = ["av1", "h264"] as const;
 export type HwCodec = (typeof HW_CODECS)[number];
 
-/** GPU でエンコードする方式。並びがそのまま試す順 (QSV が先。理由は server/hwenc.ts) */
-export const HW_KINDS = ["qsv", "vaapi"] as const;
+/**
+ * GPU でエンコードする方式。並びがそのまま試す順 (QSV が先。理由は server/hwenc.ts)。
+ * `rkmpp` は Rockchip (RK3588 / RK3588S) のハードウェアエンコーダで、デバイスがほかの2つと別
+ * (`/dev/mpp_service`。server/hwenc.ts)
+ */
+export const HW_KINDS = ["qsv", "vaapi", "rkmpp"] as const;
 export type HwKind = (typeof HW_KINDS)[number];
 
 export const HW_KIND_LABEL: Record<HwKind, string> = {
   qsv: "QSV",
   vaapi: "VA-API",
+  rkmpp: "Rockchip MPP",
 };
 export const CODEC_LABEL: Record<HwCodec, string> = {
   av1: "AV1",

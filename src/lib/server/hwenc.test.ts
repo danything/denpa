@@ -10,6 +10,7 @@ import {
   type HwDevice,
   liveHw,
   liveHwArgs,
+  rkmppBitrate,
 } from "./hwenc";
 
 const A: HwDevice = {
@@ -17,6 +18,7 @@ const A: HwDevice = {
   label: "A",
   qsv: ["h264", "av1"],
   vaapi: ["h264", "av1"],
+  rkmpp: [],
   cqp: [],
   full: [],
 };
@@ -25,6 +27,7 @@ const B: HwDevice = {
   label: "B",
   qsv: ["h264"],
   vaapi: ["h264"],
+  rkmpp: [],
   cqp: [],
   full: [],
 };
@@ -46,8 +49,8 @@ describe("GPU の方式の選び方", () => {
 
   test("デバイスごとに外せる。A は AV1 だけ、B は H.264 だけ、のような割り振り", () => {
     const allow = {
-      [A.path]: { qsv: ["av1" as const], vaapi: [] },
-      [B.path]: { qsv: ["h264" as const], vaapi: ["h264" as const] },
+      [A.path]: { qsv: ["av1" as const], vaapi: [], rkmpp: [] },
+      [B.path]: { qsv: ["h264" as const], vaapi: ["h264" as const], rkmpp: [] },
     };
     expect(hwChain("h264", allow, 0, [A, B])).toEqual([
       { device: B.path, kind: "qsv" },
@@ -58,7 +61,12 @@ describe("GPU の方式の選び方", () => {
     ]);
     // 使えないものは許しても出ない (B は AV1 をエンコードできない)
     expect(
-      hwChain("av1", { [B.path]: { qsv: ["av1"], vaapi: ["av1"] } }, 0, [B]),
+      hwChain(
+        "av1",
+        { [B.path]: { qsv: ["av1"], vaapi: ["av1"], rkmpp: [] } },
+        0,
+        [B],
+      ),
     ).toEqual([]);
   });
 
@@ -120,7 +128,7 @@ describe("ライブを GPU でエンコードする経路", () => {
   test("印が無ければ (使えなければ) ソフトウェア", () => {
     expect(liveHw("h264", {}, 0, [])).toBeNull();
     expect(
-      liveHw("h264", { [A.path]: { qsv: [], vaapi: [] } }, 0, [A]),
+      liveHw("h264", { [A.path]: { qsv: [], vaapi: [], rkmpp: [] } }, 0, [A]),
     ).toBeNull();
   });
 
@@ -137,7 +145,9 @@ describe("ライブを GPU でエンコードする経路", () => {
   });
 
   test("VA-API の印を外せば、デコードから GPU も使わない", () => {
-    const allow = { [A.path]: { qsv: ["h264" as const], vaapi: [] } };
+    const allow = {
+      [A.path]: { qsv: ["h264" as const], vaapi: [], rkmpp: [] },
+    };
     expect(liveHw("h264", allow, 0, [FULL])).toEqual({
       way: { device: A.path, kind: "qsv" },
       full: false,
@@ -183,5 +193,97 @@ describe("ライブを GPU でエンコードする経路", () => {
     expect(full.encoder.join(" ")).toBe(
       "h264_vaapi -rc_mode CQP -qp 24 -bf 0 -async_depth 1",
     );
+  });
+});
+
+describe("Rockchip MPP", () => {
+  /** `/dev/mpp_service`。renderD* とは別の行で、H.264 だけ */
+  const R: HwDevice = {
+    path: "/dev/mpp_service",
+    label: "mpp_service (Rockchip)",
+    qsv: [],
+    vaapi: [],
+    rkmpp: ["h264"],
+    cqp: [],
+    full: [],
+  };
+
+  test("H.264 だけを受け持ち、ほかの GPU と同じくジョブごとに回す", () => {
+    expect(hwChain("av1", {}, 0, [R])).toEqual([]);
+    expect(hwChain("h264", {}, 0, [B, R])).toEqual([
+      { device: B.path, kind: "qsv" },
+      { device: B.path, kind: "vaapi" },
+      { device: R.path, kind: "rkmpp" },
+    ]);
+    expect(hwChain("h264", {}, 1, [B, R])[0]).toEqual({
+      device: R.path,
+      kind: "rkmpp",
+    });
+    // 印を外せば使わない
+    expect(
+      hwChain("h264", { [R.path]: { qsv: [], vaapi: [], rkmpp: [] } }, 0, [R]),
+    ).toEqual([]);
+  });
+
+  test("ビットレートは出す高さとコマ数で決まり、高さが測れなければ 1080 の値", () => {
+    const hd30 = rkmppBitrate({ height: 1080, smooth: false });
+    const hd60 = rkmppBitrate({ height: 1080, smooth: true });
+    const p720 = rkmppBitrate({ height: 720, smooth: true });
+    const sd60 = rkmppBitrate({ height: 480, smooth: true });
+    expect(hd60).toBeGreaterThan(hd30);
+    expect(hd60).toBeGreaterThan(p720);
+    expect(p720).toBeGreaterThan(sd60);
+    expect(rkmppBitrate({ height: Number.NaN, smooth: true })).toBe(hd60);
+    expect(rkmppBitrate({ height: Number.NaN, smooth: false })).toBe(hd30);
+    // MPP が受ける幅 (1K〜100M bit/s)。外れると MPP は黙って既定の 2 Mbit/s に戻す
+    for (const bps of [hd30, hd60, p720, sd60]) {
+      expect(bps).toBeGreaterThan(1000);
+      expect((bps * 17) / 16).toBeLessThan(100_000_000);
+    }
+  });
+
+  test("録画は CPU で作ったフレームを nv12 で渡し、AVBR に上限と下限も添える", () => {
+    const picture = { height: 1080, smooth: false };
+    const bps = rkmppBitrate(picture);
+    const args = hwArgs({ device: R.path, kind: "rkmpp" }, "h264", picture);
+    // デバイスは MPP が自分で開く
+    expect(args.device).toEqual([]);
+    expect(args.filter).toEqual(["format=nv12"]);
+    expect(args.encoder).toEqual([
+      "h264_rkmpp",
+      "-rc",
+      "avbr",
+      "-b:v",
+      String(bps),
+      "-maxrate",
+      String(Math.round((bps * 17) / 16)),
+      "-minrate",
+      String(Math.round(bps / 16)),
+      "-g",
+      "250",
+    ]);
+  });
+
+  test("ライブは 1080 の 60コマの値で、MPP が持たない引数 (-async_depth) を渡さない", () => {
+    const live = liveHwArgs(
+      { way: { device: R.path, kind: "rkmpp" }, full: false },
+      "h264",
+    );
+    expect(live.input).toEqual([]);
+    expect(live.filter).toEqual(["format=nv12"]);
+    expect(live.encoder.slice(0, 5)).toEqual([
+      "h264_rkmpp",
+      "-rc",
+      "avbr",
+      "-b:v",
+      String(rkmppBitrate({ height: 1080, smooth: true })),
+    ]);
+    expect(live.encoder).not.toContain("-async_depth");
+    // -g はライブの側が足す
+    expect(live.encoder).not.toContain("-g");
+    expect(liveHw("h264", {}, 0, [R])).toEqual({
+      way: { device: R.path, kind: "rkmpp" },
+      full: false,
+    });
   });
 });

@@ -22,7 +22,8 @@ import {
  * **GPU は偽物** — `stack.hwDir` に `renderD128` のような名前でファイルを置くと
  * denpa にはデバイスとして見え、偽 ffmpeg は渡されたデバイスが在るのを見て QSV / VA-API の
  * 試しのエンコードを通す。消せば、エンコードしようとした GPU の方式が本物と同じく初期化で落ちる
- * (次の方式・ソフトウェアへ倒れるのを試せる)
+ * (次の方式・ソフトウェアへ倒れるのを試せる)。
+ * `mpp_service` を置くと Rockchip MPP (`RKMPP_DEVICE`) のデバイスとして見える
  */
 
 /**
@@ -48,7 +49,8 @@ function encodeRuns(file: string, recordingId: string | null): string[][] {
 function wayOf(run: string[]): string {
   const encoder =
     run.find(
-      (a) => /_(qsv|vaapi)$/.test(a) || a === "libx264" || a === "libsvtav1",
+      (a) =>
+        /_(qsv|vaapi|rkmpp)$/.test(a) || a === "libx264" || a === "libsvtav1",
     ) ?? "?";
   const device = run.find(
     (a) => a.startsWith("qsv=") || a.startsWith("vaapi="),
@@ -157,5 +159,44 @@ test.describe("GPU でエンコードする", () => {
       "renderD129:h264_vaapi",
       "libx264",
     ]);
+  });
+
+  test("Rockchip MPP は別の行に出て、H.264 だけを受け持つ", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(180_000);
+    clearGpus(stack.hwDir);
+    const mpp = `${stack.hwDir}/mpp_service`;
+    writeFileSync(mpp, "1");
+    await goto(page, "/settings/recording");
+    await page.getByTestId("hw-probe").click();
+    await expect(page.getByTestId("hw-status")).toContainText(
+      "デバイスが 1 個見つかり、1 個で GPU エンコードできます",
+    );
+    await expect(page.getByTestId("hw-device")).toContainText(
+      "mpp_service (Rockchip): Rockchip MPP: H.264",
+    );
+    // AV1 をエンコードできるデバイスは無いので、AV1 のエンコーダを選ぶ欄は出ない
+    await expect(page.getByTestId("hw-av1")).toHaveCount(0);
+    await expect(page.getByTestId("hw-h264")).toHaveValue(mpp);
+
+    // 両方エンコードすると、AV1 はソフトウェア、H.264 は h264_rkmpp (デバイスは引数に出ない)
+    await syncEpg(request);
+    rmSync(stack.encodeArgsFile, { force: true });
+    await setRecording(request, { codecs: ["av1", "h264"] });
+    const programId = await reserveSoon(page, request, "BS", 2);
+    const row = page.locator(
+      `[data-testid="recording-row"][data-program-id="${programId}"]`,
+    );
+    await waitWatchable(page, row);
+    const recordingId = await row.getAttribute("data-recording-id");
+    const runs = encodeRuns(stack.encodeArgsFile, recordingId);
+    expect(runs.map(wayOf)).toEqual(["libsvtav1", "h264_rkmpp"]);
+    // AVBR でビットレートを渡す (hwenc.rkmppBitrate)
+    expect(runs[1]!.join(" ")).toMatch(
+      /-rc avbr -b:v \d+ -maxrate \d+ -minrate \d+ -g 250/,
+    );
   });
 });

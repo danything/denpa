@@ -1,7 +1,9 @@
 import { afterAll, expect, mock, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import type { HwDevice } from "./hwenc";
 
 /**
  * **試しのエンコードの落とし方** (`hwenc.probe`)。手元にも CI にも GPU は無いので、ffmpeg を
@@ -31,10 +33,15 @@ const { config } = await import("./config");
 const dir = mkdtempSync(join(tmpdir(), "dri-"));
 writeFileSync(join(dir, "renderD128"), "");
 const devicesBefore = config.hwDevices;
+const rkmppBefore = config.rkmppDevice;
 config.hwDevices = `${dir}/renderD*`;
+// Rockchip MPP のデバイスは下のテストが置くまで無い
+const mppService = join(dir, "mpp_service");
+config.rkmppDevice = mppService;
 afterAll(() => {
   answer = null;
   config.hwDevices = devicesBefore;
+  config.rkmppDevice = rkmppBefore;
 });
 
 const { probe, describeDevice, liveHw } = await import("./hwenc");
@@ -106,4 +113,44 @@ test("試し素材を作れなければ、デコードから GPU は試さない
   const { devices } = await probe();
   expect(devices[0]!.full).toEqual([]);
   expect(calls.some((argv) => argv.includes("-hwaccel"))).toBe(false);
+});
+
+test("/dev/mpp_service が在れば、別の行で H.264 だけ h264_rkmpp を試す", async () => {
+  writeFileSync(mppService, "");
+  try {
+    answer = (argv) => (argv.join(" ").includes("qsv") ? 1 : 0);
+    calls.length = 0;
+    const { devices, message } = await probe();
+    expect(devices.map((d) => d.path)).toEqual([
+      join(dir, "renderD128"),
+      mppService,
+    ]);
+    const [gpu, mpp] = devices as [HwDevice, HwDevice];
+    // renderD* では MPP を試さない (同じエンコーダが GPU の行に並ばない)
+    expect(gpu.rkmpp).toEqual([]);
+    expect(mpp).toMatchObject({
+      label: "mpp_service (Rockchip)",
+      qsv: [],
+      vaapi: [],
+      rkmpp: ["h264"],
+      full: [],
+    });
+    const tried = calls.filter((argv) =>
+      argv.some((a) => a.endsWith("_rkmpp")),
+    );
+    expect(tried.map((argv) => argv.find((a) => a.endsWith("_rkmpp")))).toEqual(
+      ["h264_rkmpp"],
+    );
+    expect(describeDevice(mpp)).toBe("Rockchip MPP: H.264");
+    expect(message).toBe(
+      "デバイスが 2 個見つかり、2 個で GPU エンコードできます",
+    );
+
+    // MPP が開けなければ (BSP でないカーネル) 行は出るが、使えない
+    answer = (argv) => (argv.includes("h264_rkmpp") ? 1 : 0);
+    const again = await probe();
+    expect(again.devices[1]!.rkmpp).toEqual([]);
+  } finally {
+    rmSync(mppService, { force: true });
+  }
 });

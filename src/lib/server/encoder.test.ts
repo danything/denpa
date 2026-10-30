@@ -20,6 +20,7 @@ import {
   inputSkip,
   readInputPos,
 } from "./encoder";
+import { rkmppBitrate } from "./hwenc";
 
 function argValue(args: string[], key: string): string | undefined {
   const i = args.indexOf(key);
@@ -192,6 +193,37 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
     // 渡さなければソフトウェア。GPU のデバイスも開けない
     expect(buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264")).not.toContain(
       "-init_hw_device",
+    );
+  });
+
+  test("Rockchip MPP はデバイスを開けず、映像の高さとコマ数でビットレートを決める", () => {
+    const mpp = (height: number | undefined, smoothMotion: boolean) =>
+      buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
+        hardware: { device: "/dev/mpp_service", kind: "rkmpp" },
+        smoothMotion,
+        ...(height === undefined ? {} : { height }),
+        displaySize: { width: 1920, height: 1080 },
+      });
+    const hd = mpp(1080, false);
+    expect(hd).not.toContain("-init_hw_device");
+    expect(hd).toContain("h264_rkmpp");
+    expect(argValue(hd, "-rc")).toBe("avbr");
+    // インタレ解除と引き伸ばしは CPU のまま
+    expect(argValue(hd, "-vf")).toBe(
+      "bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=nv12",
+    );
+    expect(argValue(hd, "-b:v")).toBe(
+      String(rkmppBitrate({ height: 1080, smooth: false })),
+    );
+    expect(argValue(mpp(1080, true), "-b:v")).toBe(
+      String(rkmppBitrate({ height: 1080, smooth: true })),
+    );
+    expect(argValue(mpp(480, true), "-b:v")).toBe(
+      String(rkmppBitrate({ height: 480, smooth: true })),
+    );
+    // 高さが分からなければ 1080 の値
+    expect(argValue(mpp(undefined, false), "-b:v")).toBe(
+      String(rkmppBitrate({ height: 1080, smooth: false })),
     );
   });
 

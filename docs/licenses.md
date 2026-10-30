@@ -13,26 +13,31 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 [Dockerfile](../Dockerfile) の `runtime` 段。土台は distroless (`gcr.io/distroless/cc-debian13`。エージェントと同じ)。
 Debian のパッケージ (libva・ドライバなど) は要るファイルだけを写し、そのパッケージの copyright を
-`/usr/share/doc/<パッケージ>/copyright` に置いています。
+`/usr/share/doc/<パッケージ>/copyright` に置いています。ソースから組む Rockchip MPP (arm64 だけ) は、
+ライセンスの文を `/usr/share/doc/rockchip-mpp/` に置いています。
 
 ### 自前ビルドの ffmpeg と、そこに繋がるもの
 
-`--enable-gpl` で x264 を繋いでいるので、**出来上がる ffmpeg / ffprobe と、2つが共有する `libav*` の
-共有ライブラリ (`/usr/local/lib`) は GPL-2.0-or-later** になります。
+`--enable-gpl` で x264 を繋ぎ、`--enable-version3` も付けて組んでいるので、**出来上がる ffmpeg / ffprobe と、
+2つが共有する `libav*` の共有ライブラリ (`/usr/local/lib`) は GPL-3.0-or-later** になります。
+version3 は arm64 で Rockchip MPP (Apache-2.0。GPLv2 とは組み合わせられない) を繋ぐためで、
+FFmpeg の configure が rkmpp を version3 の一覧に入れています。ライセンスが arch で分かれないよう amd64 もそろえています。
+denpa 本体は AGPL-3.0-or-later で、GPLv3 のものと一緒に配れます。
 
-| 名前                                              | 何に                                                                         | 出どころ                                                                  | ライセンス                               |
-| ------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------- |
-| FFmpeg                                            | エンコード・字幕・サムネイル・ライブ                                         | <https://ffmpeg.org>                                                      | LGPL-2.1+ (`--enable-gpl` で GPL-2.0+)   |
-| x264                                              | H.264 のエンコード                                                           | <https://www.videolan.org/developers/x264.html>                           | GPL-2.0+                                 |
-| SVT-AV1 (ソースから組み、libavcodec に静的リンク) | AV1 のエンコード                                                             | <https://gitlab.com/AOMediaCodec/SVT-AV1>                                 | BSD-3-Clause-Clear + AOM 特許ライセンス  |
-| dav1d                                             | AV1 のデコード                                                               | <https://code.videolan.org/videolan/dav1d>                                | BSD-2-Clause                             |
-| Opus (libopus)                                    | 音声                                                                         | <https://opus-codec.org>                                                  | BSD-3-Clause                             |
-| libva / libva-drm                                 | VA-API (GPU でエンコードする)                                                | <https://github.com/intel/libva>                                          | MIT                                      |
-| libvpl / libmfx-gen                               | Intel QSV (GPU でエンコードする)                                             | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT                                      |
-| intel-media-va-driver (iHD)                       | Intel の VA-API ドライバ                                                     | <https://github.com/intel/media-driver>                                   | MIT (一部 BSD)                           |
-| i965-va-driver・libigdgmm・libdrm・libpciaccess   | 古い世代の Intel の VA-API ドライバと、ドライバの依存                        | Debian のパッケージ                                                       | MIT 系 (パッケージの copyright のとおり) |
-| zlib                                              | ffmpeg の依存                                                                | <https://zlib.net>                                                        | zlib                                     |
-| [patches/](../patches)                            | ffmpeg に当てる直しの置き場 (いまは空。denpa が書いたもの。上流に投げる前提) | —                                                                         | 当てる先と同じ (ffmpeg は LGPL/GPL)      |
+| 名前                                                                     | 何に                                                                                  | 出どころ                                                                  | ライセンス                                               |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
+| FFmpeg                                                                   | エンコード・字幕・サムネイル・ライブ                                                  | <https://ffmpeg.org>                                                      | LGPL-2.1+ (`--enable-gpl --enable-version3` で GPL-3.0+) |
+| x264                                                                     | H.264 のエンコード                                                                    | <https://www.videolan.org/developers/x264.html>                           | GPL-2.0+                                                 |
+| SVT-AV1 (ソースから組み、libavcodec に静的リンク)                        | AV1 のエンコード                                                                      | <https://gitlab.com/AOMediaCodec/SVT-AV1>                                 | BSD-3-Clause-Clear + AOM 特許ライセンス                  |
+| dav1d                                                                    | AV1 のデコード                                                                        | <https://code.videolan.org/videolan/dav1d>                                | BSD-2-Clause                                             |
+| Opus (libopus)                                                           | 音声                                                                                  | <https://opus-codec.org>                                                  | BSD-3-Clause                                             |
+| libva / libva-drm                                                        | VA-API (GPU でエンコードする)                                                         | <https://github.com/intel/libva>                                          | MIT                                                      |
+| libvpl / libmfx-gen                                                      | Intel QSV (GPU でエンコードする)                                                      | <https://github.com/intel/libvpl> / <https://github.com/intel/vpl-gpu-rt> | MIT                                                      |
+| intel-media-va-driver (iHD)                                              | Intel の VA-API ドライバ                                                              | <https://github.com/intel/media-driver>                                   | MIT (一部 BSD)                                           |
+| Rockchip MPP (arm64 だけ。ソースから組み、`librockchip_mpp.so.1` を置く) | RK3588 / RK3588S のハードウェアエンコード (h264_rkmpp)                                | <https://github.com/rockchip-linux/mpp>                                   | Apache-2.0 (一部 MIT)                                    |
+| i965-va-driver・libigdgmm・libdrm・libpciaccess                          | 古い世代の Intel の VA-API ドライバと、ドライバの依存 (libdrm は Rockchip MPP も使う) | Debian のパッケージ                                                       | MIT 系 (パッケージの copyright のとおり)                 |
+| zlib                                                                     | ffmpeg の依存                                                                         | <https://zlib.net>                                                        | zlib                                                     |
+| [patches/](../patches)                                                   | ffmpeg に当てる直しの置き場 (いまは空。denpa が書いたもの。上流に投げる前提)          | —                                                                         | 当てる先と同じ (ffmpeg は LGPL/GPL)                      |
 
 ### フォント
 

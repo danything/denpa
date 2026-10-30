@@ -118,6 +118,12 @@ export const config = {
    * 渡していなければ1つも無いのが普通
    */
   hwDevices: str("HW_DEVICES", "/dev/dri/renderD*"),
+  /**
+   * Rockchip MPP (RK3588 / RK3588S のハードウェアエンコーダ) のデバイス。在れば h264_rkmpp を試す
+   * (server/hwenc.ts)。BSP カーネルでないと無い。ffmpeg (MPP) は決まった場所を自分で開くので、
+   * ここを変えても ffmpeg の見る場所は変わらない — 変えるのはテスト (偽のデバイス) だけ
+   */
+  rkmppDevice: str("RKMPP_DEVICE", "/dev/mpp_service"),
   /** GPU の試しのエンコード1本に待つ上限 (ms)。ドライバが固まっても起動が止まらないように */
   hwProbeTimeout: num("HW_PROBE_TIMEOUT", 20000),
 

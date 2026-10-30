@@ -141,7 +141,7 @@ ENV FFPROBE=/usr/bin/ffprobe
 CMD ["bun", "scripts/capture-docs.ts"]
 
 # ---------------------------------------------------------------------------
-# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV)。
+# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV) + Rockchip MPP (arm64)。
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5
 SHELL ["/bin/bash", "-c"]
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 と arm64 を別の機械で。QEMU で
 # ffmpeg を組むと何倍も掛かる)。digest は複数 arch の索引を指しているので、上の FROM は
-# 組む arch のものを引く。違うのは Intel の QSV だけ (下の説明)
+# 組む arch のものを引く。違うのは Intel の QSV と Rockchip の MPP だけ (下の説明)
 ARG TARGETARCH
 
 # ダウンロードは CI で切られることがあるので必ずリトライさせる。
@@ -171,6 +171,15 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # amd64 にしか無い (Intel の GPU が載る arm の機械は無い)。arm64 では libvpl を外して組み、
 # VA-API だけ残す — 起動時の試しのエンコード (src/lib/server/hwenc.ts) で QSV が落ちて、VA-API か
 # ソフトウェアでエンコードするだけなので、denpa の側は何も変えない
+#
+# **Rockchip の MPP (h264_rkmpp) は arm64 だけ。** RK3588 / RK3588S のハードウェアエンコーダを
+# FFmpeg 本家のエンコーダ (8.1 から) で使う (docs/encode.md「Rockchip (RK3588) でエンコードする」)。
+# MPP は Debian に無いのでソースから組み、`librockchip_mpp.so.1` を /usr/local/lib に置く
+# (下の runtime-libs 段が ldd で辿って運ぶ)。イメージは分けず、arm64 の全員に入る —
+# /dev/mpp_service が無ければ試しのエンコードが落ちて使わないだけ。
+# FFmpeg の configure は rkmpp を version3 の一覧に入れているので、**両方の arch で
+# `--enable-version3` にそろえる** (出来上がる ffmpeg は GPL-3.0-or-later。docs/licenses.md)。
+# rkmpp は libdrm も要る (`--enable-libdrm`)
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -180,6 +189,9 @@ ENV FFMPEG_VERSION=9.0.2
 # (そのために `-DCMAKE_POSITION_INDEPENDENT_CODE=ON` で組む)
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
 ARG SVT_AV1_VERSION=v4.2.0
+# Rockchip MPP (arm64 だけ。上の説明)。FFmpeg の configure が求めるのは pkg-config で `rockchip_mpp >= 1.3.8`
+# renovate: datasource=github-tags depName=rockchip-linux/mpp
+ARG MPP_VERSION=1.1.0
 
 # **上流に投げるつもりの直しだけを当てる** (patches/README.md。いまは無い)。`--fuzz=0` は、
 # ffmpeg を上げて当たらなくなったら黙ってずれて当たるより、ビルドを止めてほしいため
@@ -190,14 +202,24 @@ COPY patches/ /patches/
 # ライブラリは /usr/local/lib に置き、`--enable-rpath` で ffmpeg / ffprobe にその場所を書き込む
 # (ld.so の既定の検索先ではないので、ldconfig や LD_LIBRARY_PATH に頼らない)。
 # 実行イメージへ運ぶものは /out にまとめる。.so のバージョン付きの symlink は運ばず、実行時に読まれる
-# SONAME の名前 (libavcodec.so.63 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため
+# SONAME の名前 (libavcodec.so.63 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため。
+# 名前の形では見分けない (MPP は実体が `.so.0` で SONAME が `.so.1`)。MPP が一緒に入れる
+# librockchip_vpu (古い API) は ffmpeg が使わないので消す
 RUN case "${TARGETARCH}" in \
-      amd64) qsv_dev=libvpl-dev qsv_flag=--enable-libvpl ;; \
-      arm64) qsv_dev="" qsv_flag="" ;; \
+      amd64) arch_dev=libvpl-dev arch_flags=--enable-libvpl ;; \
+      arm64) arch_dev=libdrm-dev arch_flags="--enable-libdrm --enable-rkmpp" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     apt-get update && \
-    apt-get -y --no-install-recommends install $DEV $qsv_dev && \
+    apt-get -y --no-install-recommends install $DEV $arch_dev && \
+    if [ "${TARGETARCH}" = arm64 ]; then \
+      mkdir /tmp/mpp && cd /tmp/mpp && \
+      $CURL https://github.com/rockchip-linux/mpp/archive/refs/tags/${MPP_VERSION}.tar.gz | tar -xz --strip-components=1 && \
+      cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_TEST=OFF && \
+      cmake --build build -j$(nproc) && cmake --install build && \
+      rm /usr/local/lib/librockchip_vpu.* && \
+      mkdir -p /out/doc/rockchip-mpp && cp LICENSES/* /out/doc/rockchip-mpp/; \
+    fi && \
     mkdir /tmp/svtav1 && cd /tmp/svtav1 && \
     $CURL https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz | tar -xz --strip-components=1 && \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF \
@@ -208,6 +230,7 @@ RUN case "${TARGETARCH}" in \
     for p in /patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done && \
     ./configure \
       --enable-gpl \
+      --enable-version3 \
       --enable-shared \
       --disable-static \
       --enable-rpath \
@@ -217,13 +240,17 @@ RUN case "${TARGETARCH}" in \
       --enable-libx264 \
       --enable-libdav1d \
       --enable-vaapi \
-      $qsv_flag \
+      $arch_flags \
     && \
     make -j$(nproc) && make install && \
-    mkdir -p /out/bin /out/lib && \
+    if [ "${TARGETARCH}" = arm64 ] && ! /usr/local/bin/ffmpeg -hide_banner -encoders | grep -q h264_rkmpp; then \
+      echo "ffmpeg に h264_rkmpp が組み込まれていません" >&2; exit 1; \
+    fi && \
+    mkdir -p /out/bin /out/lib /out/doc && \
     cp /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /out/bin/ && \
     for lib in /usr/local/lib/lib*.so.*; do \
-      case "${lib##*.so.}" in *.*) ;; *) cp -L "$lib" /out/lib/ ;; esac; \
+      soname=$(objdump -p "$lib" | awk '$1 == "SONAME" { print $2 }'); \
+      if [ "$soname" = "$(basename "$lib")" ]; then cp -L "$lib" /out/lib/; fi; \
     done && \
     rm -rf /var/lib/apt/lists/* /tmp/*
 
@@ -251,6 +278,8 @@ FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb5
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
 # (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の4つは amd64 だけ**
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
+# arm64 の Rockchip MPP (librockchip_mpp.so.1) は ffmpeg 段で組んで /usr/local/lib に一緒に来る。
+# libdrm (rkmpp と VA-API が繋ぐ) は libva-drm2 の依存で入り、どちらも下の ldd で /rootfs に運ばれる
 # i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS runtime-libs
@@ -270,6 +299,8 @@ RUN case "${TARGETARCH}" in \
 # ffmpeg / ffprobe と、2つが共有する libav* (`ffmpeg` 段の説明)
 COPY --from=ffmpeg /out/bin/ /usr/local/bin/
 COPY --from=ffmpeg /out/lib/ /usr/local/lib/
+# 自前で組んだもののうち、Debian のパッケージの copyright に載らないもののライセンス (いまは arm64 の Rockchip MPP だけ)
+COPY --from=ffmpeg /out/doc/ /rootfs/usr/share/doc/
 
 # /rootfs に写すもの:
 # - ffmpeg / ffprobe / libav* と、それらが繋ぐライブラリ (ldd で辿る)

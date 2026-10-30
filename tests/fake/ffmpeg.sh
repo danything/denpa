@@ -46,6 +46,18 @@ for arg in "$@"; do
     prev="$arg"
 done
 
+# Rockchip MPP (`h264_rkmpp`)。本物は引数でデバイスを受けず、MPP が /dev/mpp_service を自分で開く。
+# ここでは denpa と同じ `RKMPP_DEVICE` を見て、**在れば上の GPU と同じく通し、無ければ初期化で落ちる**
+if printf '%s\n' "$@" | grep -qx -- 'h264_rkmpp'; then
+    if [ ! -e "${RKMPP_DEVICE:-/dev/mpp_service}" ]; then
+        echo "mpp_open failed: no such device" >&2
+        exit 1
+    fi
+    if printf '%s\n' "$@" | grep -qx -- 'lavfi'; then
+        exit 0
+    fi
+fi
+
 # CM検出 (silencedetect)。300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
 # エンコードする出口 (`-f matroska`) があればエンコードと一緒に行っている (encoder.ts) ので、材料を出してから
 # 下のエンコードする処理へ進む。無ければ検出だけ (ロゴの枠を読み直すとき)

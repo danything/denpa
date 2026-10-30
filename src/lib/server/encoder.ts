@@ -185,7 +185,11 @@ export type Keyframes = "scene" | number[];
 /**
  * キーフレームを置かせる引数。どのエンコーダも、印の付いたコマ (`pict_type = I`) を
  * キーフレームにする。**QSV だけは指定しないと IDR にならない** (`-forced_idr`)。IDR でないと
- * 入れ物にキーフレームとして書かれず、そこで切れない
+ * 入れ物にキーフレームとして書かれず、そこで切れない。
+ *
+ * **Rockchip MPP (h264_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
+ * MPP に渡さない)。渡しても害は無く、境目にキーフレームが無ければ CM を切るところで
+ * ソフトウェアで再エンコードする (`runJob`)
  */
 function keyframeArgs(
   keyframes: Keyframes | undefined,
@@ -214,6 +218,7 @@ function videoArgs(
   scale: string | null,
   hardware: HwWay | null,
   keyframes?: Keyframes,
+  height = Number.NaN,
 ): { filter: string; encoder: string[]; device: string[] } {
   const steps = [
     /*
@@ -228,12 +233,13 @@ function videoArgs(
   const keys = keyframeArgs(keyframes, hardware);
   if (hardware !== null) {
     /*
-     * **GPU (Intel QSV / VA-API)。** インタレ解除も引き伸ばしも CPU のフィルタで
-     * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs。
+     * **GPU (Intel QSV / VA-API・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
+     * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs
+     * (Rockchip MPP は出す高さとコマ数でビットレートを決める)。
      * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
      * ソフトウェアで再エンコードする** (runJob) ので、ここで保険はかけない
      */
-    const hw = hwArgs(hardware, codec);
+    const hw = hwArgs(hardware, codec, { height, smooth });
     return {
       filter: [...steps, ...hw.filter].join(","),
       encoder: [...hw.encoder, ...keys],
@@ -313,6 +319,11 @@ interface EncodeOptions {
    * 1440x1080 (SAR 4:3) なら 1920x1080。もともと正方形の素材では渡さない
    */
   displaySize?: { width: number; height: number };
+  /**
+   * 映像の高さ (`probeVideo`。引き伸ばすのは横だけなので、出すものも同じ高さ)。
+   * Rockchip MPP のビットレートを決めるのに使う (`hwenc.rkmppBitrate`)。測れなければ 1080 の値
+   */
+  height?: number;
   /** 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`) */
   audioTitles?: string[];
   /**
@@ -323,7 +334,7 @@ interface EncodeOptions {
   /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
   mediaTitle?: string;
   /**
-   * GPU でエンコードする経路 (どのデバイスを `qsv` / `vaapi` のどちらで)。使えるかどうかは
+   * GPU でエンコードする経路 (どのデバイスを `qsv` / `vaapi` / `rkmpp` のどれで)。使えるかどうかは
    * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
    * 最後はソフトウェア (undefined)
    */
@@ -415,6 +426,7 @@ export function buildArgs(
     squarePixels(options.displaySize),
     hardware,
     options.keyframes,
+    options.height,
   );
 
   const args = ["-y"];
@@ -1258,6 +1270,7 @@ async function runJob(jobId: number): Promise<void> {
   // 尺と毎秒コマ数は進み具合の分母にもなる (encodeProgress。下で probed に渡す)
   const measured = await probeVideo(sourceTs);
   encodeOptions.probed = { duration: measured.duration, fps: measured.fps };
+  encodeOptions.height = measured.height;
   encodeOptions.audioStreams = await probeLiveAudio(sourceTs);
   // 映像が出るまでの音声だけの区間。頭から捨てて 0 秒から始める
   encodeOptions.videoStart = await probeLeadIn(
@@ -1418,11 +1431,22 @@ async function runJob(jobId: number): Promise<void> {
       keyframes?: (skip: number) => Keyframes | undefined;
       /** GPU を使わない (境目を指して再エンコードするとき。GPU は指定を聞かないことがある) */
       software?: boolean;
+      /**
+       * CM の境目を指してキーフレームを置く (2本目)。**Rockchip MPP は使わない** — 指定を聞かない
+       * (`keyframeArgs`) ので、通しても境目で切れずにソフトウェアでやり直すだけになる。
+       * 1本目 (場面の切れ目ごと) では使う: CM の無い番組ならそのまま置け、CM があれば切るところで再エンコードに倒れる
+       */
+      pointed?: boolean;
     },
   ) => {
     const ways: (HwWay | undefined)[] = extra.software
       ? [undefined]
-      : [...hwChain(codec, settings().hwAllow, hwTurn++), undefined];
+      : [
+          ...hwChain(codec, settings().hwAllow, hwTurn++).filter(
+            (way) => !(extra.pointed === true && way.kind === "rkmpp"),
+          ),
+          undefined,
+        ];
     const attempts = ways.flatMap((hardware) => [
       { seek: null, hardware },
       { seek: config.encodeRetrySeek, hardware },
@@ -1607,6 +1631,7 @@ async function runJob(jobId: number): Promise<void> {
       ...(cutting
         ? {
             keyframes: (skip: number) => (first ? "scene" : cutKeys(skip)),
+            pointed: !first && (detection?.cm.length ?? 0) > 0,
           }
         : {}),
     });

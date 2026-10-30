@@ -45,8 +45,8 @@ denpa)
             files.push(...new Bun.Glob(pattern).scanSync({ cwd, absolute: true }));
         }
         let ok = true;
-        // QSV と Intel の VA-API ドライバは amd64 だけに入れている (Dockerfile の runtime-libs 段)
-        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/libmfx-gen.so.1.2`] : [];
+        // QSV と Intel の VA-API ドライバは amd64、Rockchip の MPP は arm64 だけに入れている (Dockerfile)
+        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/libmfx-gen.so.1.2`] : ["/usr/local/lib/librockchip_mpp.so.1"];
         for (const file of want) {
             if (!files.includes(file)) { console.error(`ありません: ${file}`); ok = false; }
         }
@@ -61,7 +61,10 @@ denpa)
 
     encoders=$(run /usr/local/bin/ffmpeg -hide_banner -encoders)
     want="libx264 libsvtav1 libopus aac png h264_vaapi av1_vaapi"
-    [ "$(docker image inspect -f '{{.Architecture}}' "$image")" = amd64 ] && want="$want h264_qsv av1_qsv"
+    arch=$(docker image inspect -f '{{.Architecture}}' "$image")
+    # QSV は amd64、Rockchip の MPP は arm64 だけ (Dockerfile の ffmpeg 段)。MPP の .so は上の ld.so の確かめに入る
+    [ "$arch" = amd64 ] && want="$want h264_qsv av1_qsv"
+    [ "$arch" = arm64 ] && want="$want h264_rkmpp"
     for e in $want; do
         grep -qw "$e" <<< "$encoders" || { echo "エンコーダがありません: $e" >&2; exit 1; }
     done

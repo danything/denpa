@@ -9,8 +9,10 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
 - **Intel の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
-  `compose.override.yml` で渡します (Helm は既定で渡す)。GPU を使えるのは amd64 だけです
+  `compose.override.yml` で渡します (Helm は既定で渡す)。Intel の GPU を使えるのは amd64 だけです
   ([encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api))
+- **Rockchip (RK3588 / RK3588S)** — BSP カーネルの上で `/dev/mpp_service` と `/dev/dma_heap` を渡せば、H.264 を
+  ハードウェアでエンコードします (arm64。[encode.md](encode.md#rockchip-rk3588-でエンコードする))
 
 ## 1行で入れる
 

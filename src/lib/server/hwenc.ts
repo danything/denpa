@@ -1,4 +1,10 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
@@ -25,13 +31,17 @@ import { run } from "./stream";
  * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は予備** — 同じ GPU なら速さは
  * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
  *
+ * **Rockchip (RK3588 / RK3588S) は別のデバイス** (`/dev/mpp_service`。`config.rkmppDevice`)。在れば
+ * そのデバイスで h264_rkmpp を同じく1コマ試す (RK3588 は AV1 をエンコードできないので H.264 だけ)。
+ * 画質の決め方は `rkmppBitrate`。
+ *
  * **ライブも同じ設定で GPU に載る** (`liveHw`)。設定項目は増やさず、エンコーダをソフトウェアにすれば CPU に戻る。
  * 全体の話は docs/encode.md「GPU でエンコードする」
  */
 
 /** 1つのデバイス (GPU) で何がエンコードできるか */
 export interface HwDevice {
-  /** `/dev/dri/renderD128` のようなデバイス */
+  /** `/dev/dri/renderD128` や `/dev/mpp_service` のようなデバイス */
   path: string;
   /** 画面に出す名前。`renderD128 (Intel)` のように、デバイスの名前と作り手 */
   label: string;
@@ -39,6 +49,8 @@ export interface HwDevice {
   qsv: HwCodec[];
   /** VA-API でエンコードできたコーデック */
   vaapi: HwCodec[];
+  /** Rockchip MPP でエンコードできたコーデック (`/dev/mpp_service` のときだけ。H.264 だけ試す) */
+  rkmpp: HwCodec[];
   /**
    * VA-API のうち、**ICQ が通らず CQP でだけエンコードできた**コーデック。
    * i965 (Gemini Lake などの古いドライバ) は ICQ を持たない (`hwArgs`)
@@ -54,7 +66,7 @@ export interface HwDevice {
 export interface HwEncode {
   /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/recording/+page.server.ts) */
   probed: boolean;
-  /** 見つかったデバイス、`HW_DEVICES` に当たった順。空なら GPU が見えていない */
+  /** 見つかったデバイス、`HW_DEVICES` に当たった順 (Rockchip MPP は最後)。空なら GPU が見えていない */
   devices: HwDevice[];
   /** 画面に出す一言。何が使えて、使えないなら何が理由か */
   message: string;
@@ -138,11 +150,27 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * H.264 の qp は 0〜51 で ICQ と同じ軸。AV1 の qp は 0〜255 なので、比で写して 120。
  * **どちらも実測はまだ** (ICQ と同じく当てずっぽう。CQP は場面に応じて量を
  * 変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなるはず)
+ *
+ * ## Rockchip MPP はビットレートで指定する
+ *
+ * 本家 FFmpeg の h264_rkmpp は画質での指定 (CQP・qp) を持たず、レート制御は `-rc` の
+ * vbr / cbr / avbr だけ。**AVBR** (動きの少ない場面では量を下げる VBR) で、出す映像の大きさと
+ * コマ数ごとに決めたビットレートを渡す (`rkmppBitrate`)。デバイスは開かない (MPP が自分で
+ * `/dev/mpp_service` を開く)。CPU で作ったフレームを nv12 で渡す。`-g 250` は x264 の既定の
+ * キーフレームの間隔 (keyint 250) に合わせたもの — 渡さないと libavcodec の既定の 12 コマになる
  */
 export function hwArgs(
   way: HwWay,
   codec: HwCodec,
+  picture: Picture = LARGEST,
 ): { device: string[]; filter: string[]; encoder: string[] } {
+  if (way.kind === "rkmpp") {
+    return {
+      device: [],
+      filter: ["format=nv12"],
+      encoder: [`${codec}_rkmpp`, ...rkmppRate(picture), "-g", "250"],
+    };
+  }
   if (way.kind === "qsv") {
     return {
       device: ["-init_hw_device", `qsv=hw:hw,child_device=${way.device}`],
@@ -167,6 +195,67 @@ function vaapiQuality(way: HwWay, codec: HwCodec): string[] {
   if (way.cqp === true)
     return ["-rc_mode", "CQP", "-qp", codec === "av1" ? "120" : "24"];
   return ["-rc_mode", "ICQ", "-global_quality", "24"];
+}
+
+/** 出す映像の大きさとコマ数。Rockchip MPP のビットレートを決める (`rkmppBitrate`)。ほかの方式は画質で指定するので見ない */
+export interface Picture {
+  /** 出す映像の高さ (画素を正方形に直したあと) */
+  height: number;
+  /** 60コマで出す (`encoder.measureSmoothMotion`)。false なら 30コマ */
+  smooth: boolean;
+}
+
+/**
+ * 大きさが分からないとき。**放送でいちばん重い 1080 の 60コマ** — 小さい映像に多めに渡しても
+ * AVBR が静かな場面で量を下げるだけで、足りないよりよい。ライブとその場の変換もこれ
+ * (映像が来る前に引数を決めるので大きさを知らない)
+ */
+export const LARGEST: Picture = { height: 1080, smooth: true };
+
+/**
+ * **Rockchip MPP に渡すビットレート (bit/s)。** 今の CPU の H.264 (libx264 medium crf 23) と
+ * 同じくらいの画質になる値を、放送を使わずに測って決めた (docs/encode.md「画質はビットレートで決める」):
+ *
+ * Blender の公開映像 (Big Buck Bunny・Tears of Steel、CC BY 3.0) 4 か所を放送に似せた MPEG-2 にして、
+ * denpa と同じフィルタを通し、libx264 medium crf 23 の VMAF を測る。ハードウェアの代わりに
+ * libx264 veryfast・B フレームなし・ビットレート指定で同じ VMAF に届くビットレートを内挿し、
+ * 4 か所のいちばん大きい値に 2 割足して 500 kbit/s 単位で切り上げた。測ったいちばん大きい値は
+ * 1080 の 30コマ 7.3 Mbit/s・60コマ 8.6、720 の 60コマ 5.0、480 の 60コマ 2.3。720 と 480 の 30コマは
+ * 測っておらず、1080 の 30コマと 60コマの比 (0.85) で出した。
+ * **実機の h264_rkmpp では測っていない** — MPP が x264 の代わりより効率が悪ければ、2 割で足りないことがある
+ */
+export function rkmppBitrate(picture: Picture): number {
+  // 高さが測れていない (NaN) ときはどの行にも当たらないので、いちばん上 (`LARGEST` と同じ考え)
+  const row =
+    RKMPP_KBPS.find((r) => picture.height >= r.height) ?? RKMPP_KBPS[0];
+  return (picture.smooth ? row.smooth : row.frame) * 1000;
+}
+
+/** 高さごとの kbit/s (`rkmppBitrate`)。上から順に、高さがこれ以上なら使う */
+const RKMPP_KBPS = [
+  { height: 1080, frame: 9000, smooth: 10500 },
+  { height: 720, frame: 5500, smooth: 6500 },
+  { height: 0, frame: 2500, smooth: 3000 },
+] as const;
+
+/**
+ * h264_rkmpp のレート制御の引数。**上限と下限も渡す** — MPP の VBR / AVBR が実際に目指すのは
+ * 上限 (`rc:bps_max`) で、渡さないと MPP の既定 (2 Mbit/s の ±25%) のまま残る。
+ * 上限は目標の 17/16、下限は 1/16 (MPP の試験用のコード `mpi_enc_utils.c` が VBR / AVBR に置く値)。
+ * AVBR は動きの無い場面で上限に対する下限の割合まで量を下げる
+ */
+function rkmppRate(picture: Picture): string[] {
+  const bps = rkmppBitrate(picture);
+  return [
+    "-rc",
+    "avbr",
+    "-b:v",
+    String(bps),
+    "-maxrate",
+    String(Math.round((bps * 17) / 16)),
+    "-minrate",
+    String(Math.round(bps / 16)),
+  ];
 }
 
 /** ライブで GPU を使うときの方式。`full` ならデコードとインタレ解除まで GPU (`liveHwArgs`) */
@@ -213,6 +302,10 @@ export function liveHw(
  *
  * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
  *
+ * **Rockchip MPP は録画と同じ AVBR を、いちばん重い映像の値で** (`LARGEST`。ライブは常に60コマで、
+ * 大きさは映像が来る前に決まらない)。`-async_depth` は持たない (渡すと使われない引数として
+ * ffmpeg が降りる)。MPP の H.264 は B フレームを作らないので `-bf` も要らない。
+ *
  * ## `full` — デコードとインタレ解除も GPU (VA-API だけ)
  *
  * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU でデコードし、フレームを GPU に
@@ -231,6 +324,13 @@ export function liveHwArgs(
 ): { input: string[]; filter: string[]; encoder: string[] } {
   const { way } = hw;
   const base = hwArgs(way, codec);
+  if (way.kind === "rkmpp") {
+    return {
+      input: base.device,
+      filter: base.filter,
+      encoder: [`${codec}_rkmpp`, ...rkmppRate(LARGEST)],
+    };
+  }
   const lowDelay = ["-bf", "0", "-async_depth", "1"];
   if (way.kind === "qsv") {
     return {
@@ -341,18 +441,19 @@ export function probe(): Promise<HwEncode> {
   return running;
 }
 
+/** 何も試していないデバイス */
+function emptyDevice(path: string, label: string): HwDevice {
+  return { path, label, qsv: [], vaapi: [], rkmpp: [], cqp: [], full: [] };
+}
+
+/** `/dev/dri/*` で試す方式。Rockchip MPP は別のデバイスで試す (`probeOnce`) */
+const DRI_KINDS = ["qsv", "vaapi"] as const;
+
 async function probeOnce(): Promise<HwEncode> {
   const devices: HwDevice[] = [];
   for (const path of findDevices()) {
-    const device: HwDevice = {
-      path,
-      label: labelOf(path),
-      qsv: [],
-      vaapi: [],
-      cqp: [],
-      full: [],
-    };
-    for (const kind of HW_KINDS) {
+    const device = emptyDevice(path, labelOf(path));
+    for (const kind of DRI_KINDS) {
       for (const codec of HW_CODECS) {
         if (await tryWay({ device: path, kind }, codec)) {
           device[kind].push(codec);
@@ -366,6 +467,18 @@ async function probeOnce(): Promise<HwEncode> {
         }
       }
     }
+    devices.push(device);
+  }
+  /*
+   * **Rockchip MPP は `/dev/mpp_service` が在るときだけ、H.264 だけ試す** (RK3588 は AV1 をエンコードできない)。
+   * renderD* の行とは別の1行にする — 同じエンコーダが GPU の行にも並ばないように。
+   * 在っても MPP が開けなければ (BSP でないカーネル・権限) 試しのエンコードが落ちて、使わないだけ
+   */
+  if (existsSync(config.rkmppDevice)) {
+    const path = config.rkmppDevice;
+    const device = emptyDevice(path, `${basename(path)} (Rockchip)`);
+    if (await tryWay({ device: path, kind: "rkmpp" }, "h264"))
+      device.rkmpp.push("h264");
     devices.push(device);
   }
   await probeFull(devices);
@@ -479,10 +592,10 @@ export function describeDevice(device: HwDevice): string {
 
 function describe(devices: HwDevice[]): string {
   if (devices.length === 0) {
-    return `GPU が見つかりません (${config.hwDevices} に該当するデバイスがありません)。ソフトウェアでエンコードします`;
+    return `GPU が見つかりません (${config.hwDevices} に該当するデバイスも ${config.rkmppDevice} もありません)。ソフトウェアでエンコードします`;
   }
-  const usable = devices.filter(
-    (d) => d.qsv.length > 0 || d.vaapi.length > 0,
+  const usable = devices.filter((d) =>
+    HW_KINDS.some((kind) => d[kind].length > 0),
   ).length;
   if (usable === 0)
     return `デバイスが ${devices.length} 個見つかりましたが、どれも GPU でエンコードできません。ソフトウェアでエンコードします`;
