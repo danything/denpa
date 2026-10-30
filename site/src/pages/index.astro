@@ -15,6 +15,12 @@ const parts = import.meta.glob<{ Content: AstroComponentFactory }>('../generated
 const part = (key: string) => parts[`../generated/readme/${key}.md`]?.Content;
 const Intro = part('intro');
 const install = top.sections.find((s) => s.key === 'install');
+// end の節 (謝辞) は、入口のカードの下に出す
+const sections = (end: boolean) =>
+    top.sections.flatMap((s) => {
+        const Content = s.end === end ? part(s.key) : undefined;
+        return Content ? [{ ...s, Content }] : [];
+    });
 // 見出しの横の画面。Starlight の hero の画像は 400×400 の枠に収める作りで横長の画面が小さくなるので、
 // 最適化だけ Astro に任せ、<img> は自前で書く (image.html)
 const images = import.meta.glob<{ default: ImageMetadata }>('../assets/docs/*.{webp,png,jpg}', { eager: true });
@@ -70,17 +76,12 @@ const head = [
     <div class="top">
         {Intro && <section class="top-intro"><Intro /></section>}
         {
-            top.sections.map((s) => {
-                const Content = part(s.key);
-                return (
-                    Content && (
-                        <section class={`top-section top-${s.key}`} aria-labelledby={s.id}>
-                            <h2 id={s.id}>{s.heading}</h2>
-                            <Content />
-                        </section>
-                    )
-                );
-            })
+            sections(false).map(({ key, id, heading, Content }) => (
+                <section class={`top-section top-${key}`} aria-labelledby={id}>
+                    <h2 id={id}>{heading}</h2>
+                    <Content />
+                </section>
+            ))
         }
         {
             top.entrances.length > 0 && (
@@ -107,6 +108,14 @@ const head = [
                     </ul>
                 </section>
             )
+        }
+        {
+            sections(true).map(({ key, id, heading, Content }) => (
+                <section class={`top-section top-${key}`} aria-labelledby={id}>
+                    <h2 id={id}>{heading}</h2>
+                    <Content />
+                </section>
+            ))
         }
     </div>
 </StarlightPage>
@@ -225,6 +234,11 @@ const head = [
     }
     .top-usage > :global(:last-child) {
         margin-bottom: 0;
+    }
+
+    /* 謝辞: 特別協賛のアイコンは GitHub のプロフィールと同じく丸く */
+    .top-thanks :global(img) {
+        border-radius: 50%;
     }
 
     /* もっと詳しく: 入口のカード */

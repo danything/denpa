@@ -151,6 +151,12 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 ## 謝辞
 
+**特別協賛**:
+
+<a href="https://github.com/eggplants"><img src="https://github.com/eggplants.png?size=192" alt="@eggplants" width="96" height="96"></a>
+
+[**@eggplants**](https://github.com/eggplants) (haruna) さんが、GitHub Sponsors で denpa を大きく支えてくれました。本当にありがとうございます。
+
 **手を入れてくれた人** (ありがとうございます):
 
 - [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
@@ -163,7 +169,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 - [@kametani-mikihiro](https://github.com/kametani-mikihiro) — iOS・iPadOS の Safari での全画面・H.264 の録画の再生・メニューの見づらさと、PX-W3U4 で映らない件を報告してくれました。録画一覧のまとめ表示、空き容量と未視聴の表示、マルチ編成の局を番組表で隠すのも、この人の提案からです (#437 #471 #480 #481 #503 #505 #509)
 - [@shino-zxc](https://github.com/shino-zxc) — ライブの最小バッファ時間について提案してくれました (#1210)
-- [@eggplants](https://github.com/eggplants) — ニコニコ実況の Discussion を立ててくれました (#1617)。実況のコメントを流す機能はここから始まっています
+- [@eggplants](https://github.com/eggplants) — ニコニコ実況の Discussion を立ててくれました (#1617)。実況のコメントを流す機能はここから始まっています。ハードウェアエンコードの Discussion も立ててくれました (#1709)
 
 **土台にしている仕事**:
 
