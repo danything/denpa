@@ -344,6 +344,14 @@ test.describe("音量", () => {
     await wakeControls(page, "live-frame");
     await openSettings(page, "live");
     await expect(page.getByTestId("live-volume")).toHaveValue("70");
+    // つまみは名前と値の下で、メニューの幅いっぱい (Pico の `[role="group"]` の横並びにしない)
+    const slider = await page.getByTestId("live-volume").boundingBox();
+    const head = await page
+      .getByTestId("live-settings-menu")
+      .locator(".volume-head")
+      .boundingBox();
+    expect(slider!.y).toBeGreaterThanOrEqual(head!.y + head!.height - 1);
+    expect(Math.abs(slider!.width - head!.width)).toBeLessThan(2);
     await page.keyboard.press("Escape");
     await letPlay(page);
     await waitHooked(page, "element");

@@ -320,7 +320,9 @@
      * つまみの的は高さ 44px (車のタブレットで指でつまめる)。溝・入れたぶん・丸は再生位置のバー (`SeekBar`) と同じ
      * (docs/design.md の「映像の上の操作」)。触っているときは行ごと薄い地 (ほかの項目のフォーカスと同じ)
      */
+  /* `role="group"` に Pico が付ける横並び (`inline-flex`) を消し、つまみを名前と値の下に置く */
   .volume {
+    display: block;
     padding: 0.5rem 0.75rem 0;
     border-radius: calc(var(--dp-radius-lg) - var(--menu-pad, 0.5rem));
   }
