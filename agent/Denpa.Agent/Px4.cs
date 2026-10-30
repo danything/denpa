@@ -1046,6 +1046,31 @@ public sealed class Px4Tuner : ITuneDevice
     private readonly Action? _lost;
     private readonly Lock _gate = new();
 
+    /// <summary>
+    /// 筐体ごとの順番。**px4d に受信機の要求を送るのは、同じ筐体で1度に1つ。**
+    ///
+    /// <para>
+    /// px4d は同じブリッジの受信機の要求を1つのキューで順に片付ける (MLT5 系なら受信機 0〜3 が同じキュー)。
+    /// こちらの待つ上限 (TUNE なら 7 秒) は送ったときから数えるので、ほかの受信機の TUNE が
+    /// キューに並んでいると、その待ちまで上限に食われる。同期しない TUNE は1つ 5 秒かかり、
+    /// 複数のチューナーでスキャンすると後ろのほうが時間切れになっていた。時間切れを
+    /// 接続が切れたと見て受信機を返し、取り直しは前の lease が残っていて BUSY で断られ、
+    /// そのチャンネルが結果から落ちた (#1713)。こちらで1つずつ送れば、待つのは自分の処理のぶんだけ。
+    /// どうせ px4d が順に処理するので、選局が遅くなるわけではない。
+    /// </para>
+    /// <para>
+    /// 区切りは筐体 (制御ソケット) 単位。どの受信機が同じキューかは px4d の中の作りなので当てにしない
+    /// (Q3U4 のようにキューが2つある筐体でも、ブリッジをまたいだ選局が少し待つだけ)。
+    /// START_STREAM から ATTACH_STREAM までは px4d が 5 秒しか待たないので、その間も放さない。
+    /// 閉じるとき (<see cref="Dispose"/>) は並ばない — 答えが来なくても接続を閉じれば px4d が返すし、
+    /// <c>TunerPool</c> の錠を持ったまま呼ばれるので、ほかの受信機の選局を待つと取り合いごと止まる。
+    /// カード (Px4Card.cs) は px4d の別のキューなので入れない
+    /// </para>
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lock> Turns = new();
+
+    private readonly Lock _turn;
+
     /// <summary>受信機を取っている制御ソケット。null なら取っていない</summary>
     private Px4Control? _control;
 
@@ -1097,6 +1122,7 @@ public sealed class Px4Tuner : ITuneDevice
         _wire = wire ?? Px4Wire.Px4;
         _device = device ?? Px4Userland.Device(id, receiver);
         _name = name ?? $"px4-{Px4Userland.Tail(id)} #{receiver}";
+        _turn = Turns.GetOrAdd(Px4Control.Endpoint(runtimeDir, id, "control.sock", _wire), _ => new Lock());
     }
 
     /// <summary>読む側がいないまま溜めが空かなければ、この時間で TS のストリームを畳む</summary>
@@ -1171,14 +1197,17 @@ public sealed class Px4Tuner : ITuneDevice
             if (lnb != _lnb) WarnLnb();
             DropStream();
             var reused = _control is not null;
-            try
+            lock (_turn)
             {
-                Attempt(tuning, streamId, lnb);
-            }
-            catch (IOException error) when (reused && Lost(error))
-            {
-                Log.Write($"[{_name}] {_wire.Daemon} との接続が切れていたので、受信機を取り直します ({error.Message})");
-                Attempt(tuning, streamId, lnb);
+                try
+                {
+                    Attempt(tuning, streamId, lnb);
+                }
+                catch (IOException error) when (reused && Lost(error))
+                {
+                    Log.Write($"[{_name}] {_wire.Daemon} との接続が切れていたので、受信機を取り直します ({error.Message})");
+                    Attempt(tuning, streamId, lnb);
+                }
             }
         }
     }
@@ -1358,7 +1387,7 @@ public sealed class Px4Tuner : ITuneDevice
             if (_control is not { } control || !_started || _stream is not { Ended: false } || _statsTimer is null) return;
             try
             {
-                Counted(control.Request(Px4Control.Stats, Lease(), RequestTimeout));
+                lock (_turn) Counted(control.Request(Px4Control.Stats, Lease(), RequestTimeout));
             }
             catch (IOException error)
             {
