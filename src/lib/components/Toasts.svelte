@@ -9,7 +9,7 @@
 
   /**
    * `form?.message` (fail の言葉) をトーストの形に。無ければ空。
-   * どの画面も同じ1行を書いていたので、綴りをここにまとめた。
+   * どの画面も同じ1行を書いていたので、ここにまとめた。
    * スプレッドでも `push(...)` でもそのまま混ぜられるよう、配列で返す
    */
   export function errorNotice(form: unknown, key: string): Notice[] {

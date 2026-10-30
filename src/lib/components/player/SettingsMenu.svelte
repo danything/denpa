@@ -18,7 +18,7 @@
   /**
    * 再生の設定 (⚙。3画面で同じ)。何を並べるかは `StageTail`、振る舞いは docs/player.md。上の並びは切り替えが先で
    * その場で変わり (`menuitemcheckbox`)、選ぶものは押すと選択肢の並びに入る (先頭が「戻る」、選ぶと閉じる。
-   * `menuitemradio`。Esc か ← で戻る)。狭い枠では操作バーから畳んだもの (`head`) を頭に置き、余白で分ける。
+   * `menuitemradio`。Esc か ← で戻る)。操作バーから畳んだもの (`head`。`PlayerStage` の `fold`) は頭に置き、余白で分ける。
    * 音量のつまみ (`volume`) は畳んだものの次、切り替えの前に置き、指でもつまめる高さにする。←→ で動かし、
    * ↑↓ はほかの行と同じく行を移る。
    *
@@ -34,7 +34,7 @@
   }: {
     /** testid の頭 (`watch` / `chase` / `live`) */
     prefix: string;
-    /** 狭い枠で操作バーから畳んだもの。上の並びの頭に置く */
+    /** 操作バーから畳んだもの (狭い枠か、一段に収まらないとき)。上の並びの頭に置く */
     head?: SettingRow[];
     toggles: SettingToggle[];
     choices: SettingChoice[];

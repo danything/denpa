@@ -664,7 +664,7 @@
         入りきらない幅では、時刻のボタンを「⋯」に、さらに狭いと日付のメニューに移す
     -->
   <div class="toolbar guide-bar" data-testid="guide-toolbar">
-    <div role="group" class="types segmented" data-testid="type-tabs">
+    <div role="group" class="segmented" data-testid="type-tabs">
       {#each CHANNEL_TYPES as type (type)}
         <a
           class="button small {data.type === type ? '' : 'secondary outline'}"
@@ -850,7 +850,7 @@
       <Menu
         side={menuSide}
         align="end"
-        class="guide-menu genre-menu"
+        class="guide-menu"
         testid="guide-genre-menu"
       >
         {#snippet trigger(props)}
@@ -1052,7 +1052,7 @@
 
         {#if nowSlots !== null}
           <!--
-                        「いま」の時刻 (ホームと同じ `NowLine` の `overlay`)。ホームのような一言は添えない。
+                        「いま」の時刻 (ホームと同じ `NowLine`。表に重ねる `overlay`)。ホームのような一言は添えない。
                         **時刻は時刻の列の中に置く** — 列の外へ出すと番組名に被る。同じ時の数字とは重なるが、
                         時刻のカプセルの面で隠す。`sticky` (`left: 0`) で横に流しても左端に残る
                         (`absolute` だと枠 `grid-column: 1 / -1` の左端に付いて流れていく)
@@ -1536,7 +1536,7 @@
     /* 中の貼り付くもの (`z-index`) を箱の中に閉じ込め、上に重ねる操作の1行より下にする */
     isolation: isolate;
     /*
-     * 巻いた量をヘッダーへ渡す (`+layout.svelte` の `.navbar` と下の `.guide-bar` がこれで浮く)。
+     * 巻いた量をヘッダーへ渡す (`+layout.svelte` の `.navbar` と `app.css` の `.guide-bar` がこれで浮く)。
      * 横の巻いた量 `--guide-x` は、時の列と左上の角が浮くのに使う (下の `.corner`・`.hour::before`)
      */
     scroll-timeline:

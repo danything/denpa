@@ -22,7 +22,7 @@ describe("全画面への切り替え方", () => {
     ).toBe("standard");
   });
 
-  test("前置き付きしか無ければそれ (古い iPadOS)", () => {
+  test("プレフィックス付きしか無ければそれ (古い iPadOS)", () => {
     expect(fullscreenMode({ webkitRequestFullscreen: noop }, {})).toBe(
       "webkit",
     );
@@ -53,7 +53,7 @@ describe("全画面への切り替え方", () => {
     ).toBe("pseudo");
   });
 
-  test("いまの全画面は前置き付きも見る", () => {
+  test("いまの全画面はプレフィックス付きも見る", () => {
     const el = {} as Element;
     expect(nativeFullscreenElement({ fullscreenElement: el })).toBe(el);
     expect(

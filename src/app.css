@@ -546,7 +546,7 @@ html[data-status-bar="translucent"][data-theme="light"] body::before {
 /*
  * **舞台を広げている間 (iPhone の全画面の代わり。`player/fullscreen.svelte.ts`) は
  * 後ろのページを止めて黒く。** 枠は画面いっぱいに被さるが、指でなぞると後ろが
- * 転がる。横持ちの切り欠きの帯は Safari がページの地の色で塗るので、黒にしておく
+ * 転がる。横持ちの切り欠きの横の余白は Safari がページの地の色で塗るので、黒にしておく
  */
 html[data-stage-fullscreen],
 html[data-stage-fullscreen] body {
@@ -613,7 +613,7 @@ td {
 }
 /*
  * 表の見出しは地を塗らず、小さく沈めた字だけ。行の区切りの線も引かない (`--pico-table-border-color` は透明。行の上下の余白で分ける)。
- * 淡い面に太字だった頃は、見出しの帯が中身より目立っていた
+ * 淡い面に太字だった頃は、見出しの行が中身より目立っていた
  */
 thead th {
   background: transparent;

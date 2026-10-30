@@ -9,7 +9,6 @@
     rememberResume,
     removeEverywhere,
     removeLocal,
-    startOffline,
   } from "#lib/offline.svelte.js";
 
   /**
@@ -40,16 +39,13 @@
     loading = false;
   }
 
-  onMount(() => {
-    startOffline();
-    return () => {
-      stop();
-      for (const url of posterUrls.values()) URL.revokeObjectURL(url);
-      posterUrls.clear();
-    };
+  onMount(() => () => {
+    stop();
+    for (const url of posterUrls.values()) URL.revokeObjectURL(url);
+    posterUrls.clear();
   });
 
-  // 控えが変わったら映し直す。SW の「保存できた」も startOffline が受け取って revision に出る
+  // 控えが変わったら映し直す。SW の「保存できた」も startOffline (`+layout.svelte` が始める) が受け取って revision に出る
   $effect(() => {
     offline.revision;
     void load();

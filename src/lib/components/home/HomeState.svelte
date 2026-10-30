@@ -1,21 +1,18 @@
 <script lang="ts">
   /**
-   * **状態** (エンコード・空き)。押せない並び。次の録画は「いま」の線に出す (`NowLine`)。広い画面はサイドバーのカレンダーの下、
-   * 狭い画面は「⋯」の頭に同じものを出す (`where` で testid を分ける)
+   * **状態** (エンコード・空き)。押せない並び。次の録画は「いま」の線に出す (`NowLine`)。広い形はサイドバーのカレンダーの下、
+   * スマホの形は「⋯」の頭に同じものを出す (`where` で testid を分ける)
    */
   import { encodeLive } from "#lib/encode-live.svelte.js";
   import { eta, percent } from "#lib/format.js";
 
-  import type { Rec } from "./context";
+  import type { HomeControls } from "./context";
 
   let {
     encoding,
     capacity,
     where,
-  }: {
-    /** エンコードを待っている・している録画 (動いているものが先) */
-    encoding: Rec[];
-    capacity: { free: string; hours: string | null } | null;
+  }: Pick<HomeControls, "encoding" | "capacity"> & {
     where: "side" | "menu";
   } = $props();
 

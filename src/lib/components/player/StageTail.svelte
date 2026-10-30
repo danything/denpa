@@ -31,7 +31,7 @@
 
   /**
    * 操作バーの右端 (3画面で同じ)。再生の設定 (⚙ `SettingsMenu`。並びと中身は docs/player.md)・小窓 (出せる端末だけ)・
-   * 全画面。狭い枠 (`stage.fold`) では毎回は使わないものを ⚙ の頭に入れる (`fold`。小窓もここで足す)。
+   * 全画面。畳むとき (`stage.fold`。狭い枠か、一段に収まらないとき) は毎回は使わないものを ⚙ の頭に入れる (`fold`。小窓もここで足す)。
    * 互換モードは切り替えたらページを読み直す — `<video>` か canvas かはプレイヤーを組むときに決まる
    */
   interface Props {
@@ -46,7 +46,7 @@
     /** 舞台 (`PlayerStage`) が渡す畳み方 */
     stage: { fold: boolean };
     /**
-     * 狭い枠で操作バーから畳むもの (`settings.ts` の `SettingRow`)。操作バーと同じ順に。畳まないときは使わない。
+     * 操作バーから畳むもの (`settings.ts` の `SettingRow`)。操作バーと同じ順に。畳まないときは使わない。
      * 小窓はここで足す
      */
     fold?: SettingRow[];
@@ -94,7 +94,7 @@
     fold = [],
   }: Props = $props();
 
-  /** 狭い枠で ⚙ の頭に入れるもの。小窓は出せる端末だけ */
+  /** 畳むときに ⚙ の頭に入れるもの。小窓は出せる端末だけ */
   const head = $derived<SettingRow[]>(
     stage.fold
       ? [

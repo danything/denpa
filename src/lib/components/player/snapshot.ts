@@ -201,11 +201,8 @@ export function clipParams(
 }
 
 /**
- * **端末に保存する** (サーバに置けなかったとき)。前は押すたびにこうしていた。
- *
- * - **指の端末** … 共有シート (`navigator.share`)。断られたら (押した直後でなくなった・
- *   共有できない形式) 落とすほうに倒す。閉じられたら何も残らないので、そう言う
- * - **PC** … PNG を落とす
+ * **端末に保存する** (サーバに置けなかったとき)。PNG にして `keepOnDevice` に渡す。
+ * 共有シートを閉じられたら何も残らないので、そう言う。
  *
  * 返り値は通知 (トースト)。サーバに置けなかったことは必ず言う (黙ると、一覧に無い理由が分からない)
  */
@@ -216,16 +213,15 @@ export async function saveOnDevice(
 ): Promise<Notice | null> {
   const blob = await pngOf(canvas);
   if (blob === null) return null;
-  const name = shotName(title, new Date());
-  const saved: Notice = {
+  const kept = await keepOnDevice(blob, shotName(title, new Date()));
+  return {
     key,
     kind: "info",
-    text: "サーバに保存できなかったので端末に保存しました",
+    text:
+      kept === "canceled"
+        ? "サーバに保存できませんでした"
+        : "サーバに保存できなかったので端末に保存しました",
   };
-
-  return (await keepOnDevice(blob, name)) === "canceled"
-    ? { key, kind: "info", text: "サーバに保存できませんでした" }
-    : saved;
 }
 
 /**

@@ -136,7 +136,7 @@
     const params = clipSearch(merged as ClipQuery);
     void goto(`${resolve("clips")}${params.size === 0 ? "" : `?${params}`}`, {
       replace: true,
-      // 打っている欄の焦点と、読んでいる位置はそのまま
+      // 打っている欄のフォーカスと、読んでいる位置はそのまま
       reset: false,
     });
   }
@@ -279,7 +279,7 @@
     if (selected.has(clip.id)) selected.delete(clip.id);
     else selected.add(clip.id);
   }
-  /** まとめて消すボタンの聞き返し (1つだけなので鍵は 0) */
+  /** まとめて消すボタンの聞き返しの id (1つだけなので 0) */
   const MANY = 0;
 
   let filterOpen = $state(false);
@@ -385,7 +385,7 @@
   <div class="c-main">
     <section class="c-list" aria-label="切り抜き">
       {#if data.recording !== null}
-        <!-- 録画から来たとき。どの録画で絞っているかと、外す印 -->
+        <!-- 録画から来たとき。どの録画で絞っているかと、外すボタン -->
         <p class="c-scope small">
           <span class="truncate broadcast"
             >「{data.recording.name}」の切り抜き</span

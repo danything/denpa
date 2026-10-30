@@ -10,10 +10,7 @@
   import Lead from "#lib/components/Lead.svelte";
   import LogoZoom from "#lib/components/LogoZoom.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
-  import {
-    SERVICE_TYPE_LABEL,
-    STATE_LABEL as SHARED_STATE_LABEL,
-  } from "#lib/format.js";
+  import { SERVICE_TYPE_LABEL, stateLabel } from "#lib/format.js";
 
   import type { PageData } from "./$types";
 
@@ -64,13 +61,6 @@
     { value: "CS", label: SERVICE_TYPE_LABEL["CS"] },
     { value: "GR,BS,CS", label: "すべて" },
   ];
-  /** スキャンの状態の呼び名。共通のものに、スキャンだけの2つを足す */
-  const STATE_LABEL: Record<string, string> = {
-    ...SHARED_STATE_LABEL,
-    canceled: "中断",
-    idle: "待機中",
-  };
-
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身のDBから来る。**
    * エージェントにも控えはあるが、聞きに行かない (`channels.server.ts`)
@@ -232,7 +222,7 @@
       <div class="progress-block" data-state={scan.state}>
         <div class="cluster small">
           <span class="tag" data-testid="scan-state"
-            >{STATE_LABEL[scan.state]}</span
+            >{scan.state === "canceled" ? "中断" : stateLabel(scan.state)}</span
           >
           {#if scan.phase}
             <span class="muted">{scan.phase}</span>

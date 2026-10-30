@@ -151,7 +151,7 @@
   );
 
   /**
-   * 実況のコメント (docs/watch.md の「実況」)。世帯の設定 (`data.jikkyo`) と端末の ⚙ の両方がオンで、
+   * 実況のコメント (docs/watch.md の「実況のコメント」)。世帯の設定 (`data.jikkyo`) と端末の ⚙ の両方がオンで、
    * 局を映している間だけ NX-Jikkyo に繋ぐ。局を替えたら繋ぎ直す
    */
   const jikkyoOn = jikkyoSwitch();
@@ -204,7 +204,7 @@
       types[0] ??
       "GR",
   );
-  /** 「実況」タブの勢い。開いている間だけ 30 秒ごとに取りに行き、一覧を使っていなければ並べ直す */
+  /** 「実況」タブの勢い。開いている間だけ 30 秒ごとに取得し、一覧を使っていなければ並べ直す */
   const ranking = new JikkyoRanking();
   $effect(() => {
     if (shown !== JIKKYO_TAB) return;
@@ -261,7 +261,7 @@
    * 滑らせるのは CSS (下の style の `scroll-behavior`)
    */
   function backToPicture(): void {
-    if (stageEl === null || !window.matchMedia(PHONE_LANDSCAPE).matches) return;
+    if (stageEl === null || !phoneLandscape.current) return;
     stageEl.scrollIntoView({ block: "start" });
   }
 
@@ -889,7 +889,7 @@
       {#if player.yielded}
         {@const yielded = player.yielded}
         <span class="stage-note yielded" data-testid="live-yielded">
-          <span class="yielded-text">
+          <span>
             録画のため局を切り替えました: <span class="broadcast"
               >{yielded.recording.title}</span
             >
@@ -1160,7 +1160,7 @@
     top: 0.75rem;
     left: 0.75rem;
   }
-  /* 列の幅いっぱいに伸びるので、3 つを均等に広げる。左に寄せると右に溝だけが余った */
+  /* 列の幅いっぱいに伸びるので、タブを均等に広げる。左に寄せると右に溝だけが余った */
   .type-tabs {
     display: flex;
     margin-bottom: 0.5rem;

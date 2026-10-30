@@ -110,9 +110,7 @@
     if (live) {
       timer = setTimeout(() => {
         sent = q;
-        /*
-         * 直しているルール (`?rule=`) は付けたまま。言葉を探し直しても、右の書く欄はそのルールのまま
-         */
+        // 直しているルール (`?rule=`) は付けたまま。言葉を探し直しても、右の書く欄はそのルールのまま
         const next = new URLSearchParams(q === "" ? {} : { q });
         const rule = page.url.searchParams.get("rule");
         if (rule !== null) next.set("rule", rule);

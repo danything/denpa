@@ -167,7 +167,7 @@
   let localSrc = $state<string | null>(null);
   let localChecked = $state(false);
   let localCopy: OfflineVideo | null = null;
-  /** 端末に保存したものを探している最中の約束。字幕・チャプターも探し終えてから読む */
+  /** 端末に保存したものを探している最中の Promise。字幕・チャプターも探し終えてから読む */
   let localLookup: Promise<OfflineVideo | null> = Promise.resolve(null);
   /**
    * 何で観られるか (`api/recordings/<id>/playback`)。聞けなかった (オフライン) ときは null。
@@ -804,12 +804,12 @@
     dataChannel = `${rec.id}`;
   }
 
-  /** 変化ログを取得している最中の約束 (`startData`) */
+  /** 変化ログを取得している最中の Promise (`startData`) */
   let dataLoading: Promise<void> | null = null;
 
   /**
    * 変化ログを取得する。**端末に保存したものを探し終えてから** — 常に受信する端末は開いた直後に呼ぶので、
-   * 探し終える前に見るとオフラインでもサーバへ取りに行って空になる。取れなければ空 (次に押したら取り直す)
+   * 探し終える前に見るとオフラインでもサーバから取得しようとして空になる。取れなければ空 (次に押したら取り直す)
    */
   async function loadTimeline(): Promise<void> {
     const copy = await localLookup;
@@ -1091,7 +1091,7 @@
   /** 続きから出したか。画面にも言う */
   let continued = $state(false);
 
-  /** 押し間違い防止に2回押させる (3画面共通) */
+  /** 押し間違い防止に2回押させる (どの画面とも同じ。`arming.svelte.ts`) */
   const deleting = arming('[data-testid^="watch-delete"]');
 
   const detail = programDetail();
@@ -1523,9 +1523,9 @@
     paint();
   }
 
-  /** 字幕を取りに行ったか。取るのは1回だけ */
+  /** 字幕を取得したか。取得は1回だけ */
   let captionsAsked = false;
-  /** 取りに行って繋がらなかったか。字幕を入れ直したときだけ取り直す */
+  /** 取得しようとして繋がらなかったか。字幕を入れ直したときだけ取り直す */
   let captionsFailed = false;
   /** 映像が出ないまま待つ上限の時計 (`CAPTION_WAIT`) */
   let captionWait: ReturnType<typeof setTimeout> | null = null;
@@ -1714,7 +1714,7 @@
   /**
    * シークバーをつまんで動かしている間の下見 (`SeekBar` の `preview`)。`<video>` だけ。
    * 粗くてよいので、持っていれば `fastSeek` (近くのキーフレーム) を使う。飛び終わり (`seeked`) で
-   * 約束を終え、シークバーはそれから次を頼む。離したときは `seekTo` でちゃんと飛ぶ。
+   * Promise を終え、シークバーはそれから次をリクエストする。離したときは `seekTo` でちゃんと飛ぶ。
    * **canvas のプレイヤーには渡さない** — 飛ぶたびに持っているものを捨てて取り直すので、離したときだけにする
    */
   function previewSeek(to: number): Promise<void> {

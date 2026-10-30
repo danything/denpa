@@ -149,7 +149,7 @@ function flashes(page: CaptionPage | null): boolean {
 function drawPage(
   ctx: CanvasRenderingContext2D,
   page: CaptionPage,
-  now = 0,
+  now: number,
 ): void {
   const { width, height } = ctx.canvas;
   const sx = width / page.plane[0];

@@ -230,7 +230,7 @@
                                             (上の「詳しく」に順番)。ルールの「優先度」(0〜9) と同じ名前の別の
                                             物差しが並ぶと、ルールの 2 が番組表の 3 に負けるように読めていた。
                                             数は調べるとき用に `data-priority` にだけ残す。
-                                            目印は番号で。同じ用途が2つ乗ることはあり、字を目印にすると落ちる
+                                            目印は番号で。同じ用途が2つ並ぶこともあり、字を目印にすると落ちる
                                         -->
                       <div class="cluster state">
                         {#if tuner.disabled}
@@ -351,7 +351,7 @@
         {#if adding}
           <!--
                     足すための欄。名前は番号の代わりに `add` (`name.add` …) で、「追加」のボタン (`add`) で送ったときだけサーバが読む。
-                    ほかの行を変えたときの保存にも乗るが、そこでは読まれない (`tuners.server.ts`)
+                    ほかの行を変えたときの保存でも送られるが、そこでは読まれない (`tuners.server.ts`)
                 -->
           <div class="add" data-no-autosave data-testid="tuner-add">
             <input type="hidden" name="use.add" value="on" />

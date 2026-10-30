@@ -51,7 +51,7 @@ export function nativeFullscreenElement(doc: object): Element | null {
 
 /**
  * 本物の全画面に入る。**失敗しても黙る** (押した直後でなくなった・許可が無いなど)。
- * 古い webkit は約束を返さないことがある
+ * 古い webkit は Promise を返さないことがある
  */
 export async function requestNative(
   element: object,

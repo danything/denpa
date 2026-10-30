@@ -22,7 +22,7 @@
   /**
    * データ放送を映像の上に重ねる。**描くのはエンジン** (`src/lib/bml/`)。
    *
-   * denpa が作った `ResponseMessage` をそのまま食べさせるだけで、**映像は denpa のまま**。
+   * denpa が作った `ResponseMessage` をそのまま渡すだけで、**映像は denpa のまま**。
    * エンジンは映像の object の場所を教えるだけで、映像の入れ物をそこへ寄せるのはこちら
    * (`placeVideo`。[docs/stream.md](../../../../docs/stream.md#データ放送の統合))。
    *
@@ -300,7 +300,7 @@
   let dueD = false;
   /** 何回押したか。**返事が無いときだけ増える** (`TAP_MOST`) */
   let taps = 0;
-  /** 次に押す約束 */
+  /** 次に押すタイマー */
   let knocking: ReturnType<typeof setTimeout> | null = null;
   /** 枠の大きさを見張る。全画面にすると変わる */
   let watcher: ResizeObserver | null = null;

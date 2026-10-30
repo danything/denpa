@@ -8,7 +8,7 @@ import { type Tap, tap, zoneOf } from "#lib/ts/watch.js";
  * - マウス … 1回で再生/一時停止、左右の端を素早く2回で 10秒
  * - 指 … 1回で操作列の出し入れ、真ん中を素早く2回で再生/一時停止、端2回で 10秒
  *
- * 指かどうかは押すたびに見る (`(pointer: coarse)` は「いま使っている指し手が粗いか」なので、
+ * 指かどうかは押すたびに見る (`(pointer: coarse)` は「いま使っているポインタが粗いか」なので、
  * タッチのノートPCでも当たる)
  */
 export function stageTap(on: {

@@ -105,6 +105,8 @@
     return () => clearInterval(timer);
   });
   const watchable = $derived(new Set(data.watchable));
+  /** 切り抜きの節の行き先。同じ言葉のまま切り抜きの画面へ */
+  const clipsHref = $derived(resolve(`clips?${new URLSearchParams({ q })}`));
 
   /**
    * 番組の詳細。押すもの (視聴・予約・取消・ルールを作る) を出すのに、開いた行を覚えておく。
@@ -465,10 +467,8 @@
             切り抜き <span class="count">{data.clips.total}</span>
           </h2>
           {#if data.clips.total > 0}
-            <a
-              class="small"
-              href={resolve(`clips?${new URLSearchParams({ q })}`)}
-              data-testid="search-clips-all">切り抜きの画面で見る</a
+            <a class="small" href={clipsHref} data-testid="search-clips-all"
+              >切り抜きの画面で見る</a
             >
           {/if}
         </div>
@@ -478,10 +478,7 @@
           <ul class="clip-strip">
             {#each data.clips.rows as clip (clip.id)}
               <li>
-                <a
-                  href={resolve(`clips?${new URLSearchParams({ q })}`)}
-                  data-testid="search-clip"
-                >
+                <a href={clipsHref} data-testid="search-clip">
                   <img
                     src={resolve(`api/clips/${clip.id}/small`)}
                     alt={clip.programName || clip.serviceName}

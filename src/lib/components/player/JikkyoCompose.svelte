@@ -62,6 +62,10 @@
   };
   const POSITION_NAMES = { ue: "上", naka: "流れる", shita: "下" } as const;
   const SIZE_NAMES = { big: "大", medium: "中", small: "小" } as const;
+  /** 頭の 1 行のいつもの表示と、書けない理由 (何か所かで出す) */
+  const IDLE = "NX-Jikkyo に書きます";
+  const BEHIND = "ライブに戻ると書けます";
+  const CLOSED = "(いまは書けません)";
 
   let text = $state("");
   let busy = $state(false);
@@ -111,14 +115,14 @@
     note !== ""
       ? note
       : !caught
-        ? "ライブに戻ると書けます"
+        ? BEHIND
         : !ready && !busy
-          ? "(いまは書けません)"
+          ? CLOSED
           : why !== null && why !== ""
             ? why
-            : "NX-Jikkyo に書きます",
+            : IDLE,
   );
-  const warn = $derived(line !== "NX-Jikkyo に書きます");
+  const warn = $derived(line !== IDLE);
 
   function choose(next: Partial<PostStyle>): void {
     style = { ...style, ...next };
@@ -138,10 +142,10 @@
       if (refused !== "") tell(refused);
       return;
     }
-    if (!caught) return tell("ライブに戻ると書けます");
+    if (!caught) return tell(BEHIND);
     const now = Date.now();
     if (spacing.left(now) > 0) return tell("3 秒待ってください");
-    if (!feed.writable) return tell("(いまは書けません)");
+    if (!feed.writable) return tell(CLOSED);
     spacing.mark(now);
     busy = true;
     note = "";
@@ -163,7 +167,7 @@
         tell("この書き込みは受け付けられませんでした");
         break;
       case "closed":
-        tell("(いまは書けません)");
+        tell(CLOSED);
         break;
     }
   }

@@ -112,8 +112,8 @@
   }
   /*
      * 箱と選択肢の地・項目の間は `SettingsMenu` と同じなので app.css (`.menu`・`.overlay-menu`) に置く。
-     * ここは数字を大きく真ん中にそろえるだけ。狭い枠では速さのボタンごと ⚙ の頭に畳むので (`Extras`)、
-     * このメニューは広い枠でだけ出る
+     * ここは数字を大きく真ん中にそろえるだけ。畳むときは速さのボタンごと ⚙ の頭に入れるので (`Extras`)、
+     * このメニューは畳まないときだけ出る
      */
   :global(.overlay-menu.speed-menu) {
     font-size: var(--dp-text-lg);

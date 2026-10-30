@@ -10,7 +10,6 @@
     EVERY,
     farthest,
     follow,
-    frameDelta,
     fromHex,
     GLANCE,
     type GlowLayout,
@@ -73,8 +72,6 @@
   /** 縦に積んでいるか (1000px より狭い)。色は映像の下へだけ敷く */
   let stacked = $state(false);
   let dark = $state(false);
-  /** 最後に写した1枚と、最後に入れ替えた1枚の違い (`frameDelta`)。E2E が「止まった映像では 0 に近い」を見る */
-  let delta = $state<number | null>(null);
 
   const loop = new GlowLoop(() => ({ ambient, room, fullscreen }), show);
   const now = $derived(loop.now);
@@ -151,8 +148,7 @@
       lastAt === null ? EVERY : now - lastAt,
     );
     lastAt = now;
-    // 最後に入れ替えた色との違い。小さければ入れ替えない (`ambient.ts` の `changed`)
-    delta = colors === null ? null : frameDelta(colors, smoothed);
+    // 最後に入れ替えた色との違いが小さければ入れ替えない (`ambient.ts` の `changed`)
     if (colors !== null && !changed(colors, smoothed)) return;
     const next = Float32Array.from(smoothed);
     colors = next;
@@ -328,7 +324,6 @@
   data-off={now === "off" ? "" : undefined}
   data-plan={now}
   data-updates={loop.updates}
-  data-delta={delta === null ? undefined : delta.toFixed(2)}
   data-testid={testid}
   aria-hidden="true"
 >
