@@ -20,9 +20,6 @@ public interface IUsbDevice : IDisposable
     /// <summary>EP0 の OUT の制御転送</summary>
     void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs);
 
-    /// <summary>bulk の IN を1回。時間切れなら 0</summary>
-    int BulkRead(byte endpoint, Span<byte> buffer, int timeoutMs);
-
     /// <summary>bulk の OUT を1回 (全部送れなければ投げる)</summary>
     void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs);
 
@@ -140,7 +137,7 @@ public static class UsbDevices
 /// </para>
 ///
 /// <para>
-/// 1回の転送が1つの答え。<see cref="Read"/> は溜めの頭の転送を1つ渡し、受け口に入りきらないぶんは捨てる
+/// 1回の転送が1つの答え。<see cref="Read"/> は溜めの頭の転送を1つ渡し、バッファに入りきらないぶんは捨てる
 /// (Linux・Windows の1回の interrupt の読みと同じ振る舞い)。
 /// </para>
 /// </summary>
@@ -180,8 +177,8 @@ internal sealed class UsbReadPump : IDisposable
 
     private void Run()
     {
-        // 受け口は読みごとに新しく作る (渡した配列は溜めにそのまま入る)。取り消しが間に合わず戻らないままでも、
-        // 受け口はこのスレッドが持っているので、閉じた側が解放してしまうことはない
+        // バッファは読みごとに新しく作る (渡した配列は溜めにそのまま入る)。取り消しが間に合わず戻らないままでも、
+        // バッファはこのスレッドが持っているので、閉じた側が解放してしまうことはない
         while (!_closing)
         {
             var buffer = new byte[_size];

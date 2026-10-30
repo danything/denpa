@@ -43,7 +43,7 @@ public class Dib8096Tests
             "D1025=0100", "D1028=0000",
             // 電源 = すべて (6.4)
             "D900?", "D1280?", "D774=0000", "D775=0000", "D776=0000", "D900=0000", "D1280=0000",
-            // ADC = 切 (6.5)
+            // ADC = オフ (6.5)
             "D907=3000", "D908=007A",
             "D770=FFFF", "D771=FFFF", "D772=FFFC", "D898=000C", "D1280=004D", "D1281=000C",
             "D770=0000", "D771=0000", "D772=0000", "D898=0004", "D1280=0000", "D1281=0000",
@@ -69,7 +69,7 @@ public class Dib8096Tests
         var gate = i2c.Log.IndexOf("D1025=C000");
         await Assert.That(gate).IsGreaterThan(i2c.Log.IndexOf("D1028=0000", i2c.Log.IndexOf("D565?")));
         await Assert.That(gate).IsLessThan(i2c.Log.FindIndex(line => line.StartsWith('T')));
-        // ゲートを閉じる書き込み (D[1025] = 0x0100) は初期化の頭の3回だけ
+        // ゲートを閉じる書き込み (D[1025] = 0x0100) は初期化の頭の2回だけ
         await Assert.That(i2c.Log.Count(line => line == "D1025=0100")).IsEqualTo(2);
         await Assert.That(i2c.Log.Skip(gate).Any(line => line == "D1025=0100")).IsFalse();
     }

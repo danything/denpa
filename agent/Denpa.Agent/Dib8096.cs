@@ -82,7 +82,7 @@ public sealed class Dib8096
     /// </summary>
     private const int CapacitorTolerance = 50;
 
-    /// <summary>周波数 (DiB0090 に頼んだ kHz) ごとの、較正で決まったキャパシタと、そのときの差 (メモリの上だけ。ボードは開いたまま)</summary>
+    /// <summary>周波数 (DiB0090 に指定した kHz) ごとの、較正で決まったキャパシタと、そのときの差 (メモリの上だけ。ボードは開いたまま)</summary>
     private readonly Dictionary<uint, (int Cap, int Dmin)> _capacitors = [];
 
     private (int Cap, int Dmin) _capKnown;
@@ -104,9 +104,7 @@ public sealed class Dib8096
     private int? _temperatureLast;
 
     /// <summary>最後の選局の経路 (探索した / 覚えた値で合わせた / 既定で合わせた)</summary>
-    public string LastPath => _path;
-
-    private string _path = "";
+    public string LastPath { get; private set; } = "";
 
     /// <summary>DiB8000 のバージョン (D[897]: 0x8000〜0x8002)</summary>
     public ushort Version { get; private set; }
@@ -195,7 +193,7 @@ public sealed class Dib8096
         // 4.7 アドレスの確定 (復調器は1つなので既定の 0x12 のまま)
         D(1287, 0x0003);
         InitializeDemod();
-        // 6.1 DiB0090 への道。開けっぱなしでよい (DiB8000 は自分のアドレスで答え続ける)
+        // 6.1 DiB0090 への経路 (I2C のゲート)。開けっぱなしでよい (DiB8000 は自分のアドレスで答え続ける)
         D(1028, 0);
         D(1025, 0xC000);
         InitializeTuner();
@@ -450,7 +448,7 @@ public sealed class Dib8096
         if ((TunerVersion & 0x1F) >= 3) Fuses();
         // 水晶 12MHz
         T(0x14, 2);
-        // 較正の宿題。走るのは最初の選局のとき
+        // 較正の宿題。DC は開くときに (CalibrateDc)、WBD と温度は最初の選局で走る
         _dcPending = _wbdPending = _tempPending = true;
         _tunerState = TunerStart;
     }
@@ -588,7 +586,7 @@ public sealed class Dib8096
         {
             var parts = string.Join(" / ", _breakdown.Select(part =>
                 $"{part.Name} {part.Ms:F0}ms (待ち {part.SleptMs:F0}ms{(part.Steps > 1 ? $"、{part.Steps} 歩" : "")})"));
-            _trace($"選局 {hz} Hz → {result} ({_path}){(_notes.Count > 0 ? $" [{string.Join("。", _notes)}]" : "")}: 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
+            _trace($"選局 {hz} Hz → {result} ({LastPath}){(_notes.Count > 0 ? $" [{string.Join("。", _notes)}]" : "")}: 合計 {_time.NowMs - started:F0}ms (待ち {_slept - slept:F0}ms) | {parts}");
         }
         return result;
     }
@@ -608,7 +606,7 @@ public sealed class Dib8096
             DibLock.Locked => "ロックしたがデータはまだ",
             _ => "同期しなかった",
         };
-        return $"選局 {hz} Hz: {_path}、ロックまで {lockMs:F0}ms、{Pick("キャパシタ: ", "-")}、{Pick("温度: ", "-")}、{sync}";
+        return $"選局 {hz} Hz: {LastPath}、ロックまで {lockMs:F0}ms、{Pick("キャパシタ: ", "-")}、{Pick("温度: ", "-")}、{sync}";
     }
 
     /// <summary>ロックまでの内訳の1つ (段の名前・かかった時間・そのうち眠った時間・歩数)</summary>
@@ -722,7 +720,7 @@ public sealed class Dib8096
         for (var guard = 0; ; guard++)
         {
             if (guard > 1000) throw new IOException("DiB0090 の選局が終わりません");
-            var kind = _dcPending ? "DiB0090 DC の較正" : _wbdPending ? "DiB0090 WBD の較正" : _tempPending ? "DiB0090 温度"
+            var kind = _wbdPending ? "DiB0090 WBD の較正" : _tempPending ? "DiB0090 温度"
                 : _capPending ? "DiB0090 キャパシタ" : "DiB0090 PLL と段 0・段 1";
             var started = _time.NowMs;
             var slept = _slept;
@@ -736,8 +734,7 @@ public sealed class Dib8096
     /// <summary>1歩。待ち (0.1ms) を返す</summary>
     private int TunerStep()
     {
-        if (_tunerState == TunerStart && (_dcPending || _wbdPending || _tempPending)) T(0x23, T(0x23) & ~0x4000);
-        if (_dcPending) return DcStep();
+        if (_tunerState == TunerStart && (_wbdPending || _tempPending)) T(0x23, T(0x23) & ~0x4000);
         if (_wbdPending) return WbdStep();
         if (_tempPending) return TemperatureStep();
         if (_capPending) return P1g ? CapacitorP1gStep() : CapacitorStep();
@@ -1248,8 +1245,6 @@ public sealed class Dib8096
         T(0x05, 0xABCD);
         _tunerTuned = true;
         _wbdPending = true;
-        // 温度を測り直すかは次の選局の始めに決める (Tune)
-        _tempPending = false;
         _tunerState = TunerEnd;
         return 10;
     }
@@ -1675,8 +1670,8 @@ public sealed class Dib8096
     private const double SearchLimitMs = 5000;
 
     /// <summary>
-    /// 7.5 の状態の機械を回す。**1歩の間は最低 10ms 空ける** (仕様書 7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
-    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)
+    /// 7.5 の状態の機械を回す。**1歩の間は仕様書では最低 10ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
+    /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。それに関わらない段だけ 3ms に詰める (<see cref="Floor"/>)
     /// </summary>
     private DibLock Search()
     {
@@ -1689,23 +1684,23 @@ public sealed class Dib8096
         _programmed = null;
         Snapshot? known = null;
         if (_memory is not null) _memory.Channels.TryGetValue(_khz, out known);
-        // 入り方は 覚えた値 → 既定 (8K) でガードだけ探す → FFT から探す の順で固定 (合わなければ次へ)
+        // 入り方は 覚えた値 → 既定 (8K) でガードだけ探す (DiB8000 0x8002 から) → FFT から探す の順で固定 (合わなければ次へ)
         if (known is not null)
         {
             Restore(known);
             _entry = Entry.Known;
-            _path = "覚えた値で合わせた";
+            LastPath = "覚えた値で合わせた";
         }
         else if (Version >= 0x8002)
         {
             _foundFft = Fft.K8;
             _entry = Entry.Guard;
-            _path = "既定 (8K) でガードだけ探した";
+            LastPath = "既定 (8K) でガードだけ探した";
         }
         else
         {
             _entry = Entry.Full;
-            _path = "探索した";
+            LastPath = "探索した";
         }
 
         var started = _time.NowMs;
@@ -1725,7 +1720,7 @@ public sealed class Dib8096
             step = next;
             if (_demodState == DemodState.FftSuccess && !readBack)
             {
-                ReadBack();
+                ReadParameters();
                 readBack = true;
             }
             if (step == Step.Stop) Account(name, _time.NowMs - stepStarted, _slept - stepSlept);
@@ -1733,7 +1728,7 @@ public sealed class Dib8096
             {
                 // 覚えた値・既定で合わなかった。探索からやり直す
                 if (_entry == Entry.Known) _memory?.Forget(_khz);
-                _path = _entry == Entry.Known ? "覚えた値で合わず探索した" : "既定 (8K) で合わず探索した";
+                LastPath = _entry == Entry.Known ? "覚えた値で合わず探索した" : "既定 (8K) で合わず探索した";
                 _entry = Entry.Full;
                 _fft = Fft.Auto;
                 _guard = -1;
@@ -2239,12 +2234,9 @@ public sealed class Dib8096
     }
 
     /// <summary>7.5.6 見つけた値を読み戻す。TMCC の同期が無ければ何もしない (早すぎる読みはロックを妨げる)</summary>
-    private void ReadBack() => ReadParameters();
-
-    /// <summary>7.5.6 の読み戻し。TMCC の同期があって読めたら true</summary>
-    private bool ReadParameters()
+    private void ReadParameters()
     {
-        if ((D(568) & 0x001E) != 0x001E) return false;
+        if ((D(568) & 0x001E) != 0x001E) return;
         D(508);
         var v = D(570);
         _inversion = (v >> 6) & 1;
@@ -2280,7 +2272,6 @@ public sealed class Dib8096
                 },
             };
         }
-        return true;
     }
 
     private enum DiversityMode
@@ -2326,10 +2317,7 @@ public sealed class Dib8096
     // ---------------------------------------------------------------------
 
     /// <summary>8.1 のロック (ビット 12 と、ビット 5〜7 のどれか)</summary>
-    public static bool IsLocked(ushort status) => (status & 0x1000) != 0 && (status & 0x00E0) != 0;
-
-    /// <summary>D[568] (8.1)</summary>
-    public ushort Status() => D(568);
+    private static bool IsLocked(ushort status) => (status & 0x1000) != 0 && (status & 0x00E0) != 0;
 
     public DibSignal Signal()
     {
@@ -2393,7 +2381,7 @@ public sealed class Dib8096
 }
 
 /// <summary>
-/// チャンネル (周波数) ごとに、前にロックしたときの値 (FFT・ガード・階層)。**ボードを閉じても残す** (エージェントが動いている間)。
+/// チャンネル (周波数) ごとに、前にロックしたときの値 (FFT・ガード・階層)。**ボードを閉じても、エージェントを起こし直しても残す** (zd1j-locks.json。<see cref="Zd1jLocks"/>)。
 /// 日本の地上波はモードとガードがほぼ決まっていて、次からは探索せずに合わせられる
 /// </summary>
 public sealed class DibMemory

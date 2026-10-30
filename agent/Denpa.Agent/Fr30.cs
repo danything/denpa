@@ -27,7 +27,7 @@ public enum Fr30Cond
 
 /// <summary>
 /// 命令を順に並べて 16 ビットの語にする。ラベルは前にも後ろにも飛べる (最後の <see cref="Words"/> で埋める)。
-/// 番地は <see cref="Origin"/> (プログラムを置く所) から数える
+/// アドレスは <see cref="Origin"/> (プログラムを置く所) から数える
 /// </summary>
 public sealed class Fr30Assembler(uint origin)
 {
@@ -39,7 +39,7 @@ public sealed class Fr30Assembler(uint origin)
 
     public uint Origin { get; } = origin;
 
-    /// <summary>いまの番地</summary>
+    /// <summary>いまのアドレス</summary>
     public uint Here => Origin + (uint)(_code.Count * 2);
 
     /// <summary>GNU の書き方の一覧 (fr30-elf-as に通せる)</summary>
@@ -122,7 +122,7 @@ public sealed class Fr30Assembler(uint origin)
 
     public void Stb(Fr30Reg ri, Fr30Reg rj) => Emit((ushort)(0x1600 | (R(rj) << 4) | R(ri)), $"stb {N(ri)}, @{N(rj)}");
 
-    /// <summary>LD @(R13, Rj), Ri (R13 + Rj の番地)</summary>
+    /// <summary>LD @(R13, Rj), Ri (R13 + Rj のアドレス)</summary>
     public void LdAc(Fr30Reg rj, Fr30Reg ri) => Emit((ushort)(0x0000 | (R(rj) << 4) | R(ri)), $"ld @(r13, {N(rj)}), {N(ri)}");
 
     /// <summary>ST Ri, @(R13, Rj)</summary>
@@ -208,7 +208,7 @@ public sealed class Fr30Assembler(uint origin)
 
     public void Bra(string label) => B(Fr30Cond.Ra, label);
 
-    /// <summary>CALL label (非遅延)。届くのは -2048〜+2046 バイト。戻り番地は RP に入る</summary>
+    /// <summary>CALL label (非遅延)。届くのは -2048〜+2046 バイト。戻りアドレスは RP に入る</summary>
     public void Call(string label)
     {
         _fixups.Add((_code.Count, label, rel =>
@@ -221,8 +221,8 @@ public sealed class Fr30Assembler(uint origin)
 
     public void Jmp(Fr30Reg ri) => Emit((ushort)(0x9700 | R(ri)), $"jmp @{N(ri)}");
 
-    /// <summary>LDI:20 #label, Ri (ラベルの番地。0x100000 未満に置くプログラムだけ)</summary>
-    public void LdiLabel(string label, Fr30Reg ri)
+    /// <summary>LDI:20 #label, Ri (ラベルのアドレス。0x100000 未満に置くプログラムだけ)</summary>
+    private void LdiLabel(string label, Fr30Reg ri)
     {
         _absolutes.Add((_code.Count, label, ri));
         Emit2(0, 0, $"ldi:20 #{label}, {N(ri)}");
@@ -251,14 +251,14 @@ public sealed class Fr30Assembler(uint origin)
 
     public void Nop() => Emit(0x9FA0, "nop");
 
-    /// <summary>ST RP, @-R15 (戻り番地を積む)</summary>
+    /// <summary>ST RP, @-R15 (戻りアドレスを積む)</summary>
     public void PushRp() => Emit(0x1781, "st rp, @-r15");
 
     /// <summary>LD @R15+, RP</summary>
     public void PopRp() => Emit(0x0781, "ld @r15+, rp");
 
     /// <summary>
-    /// 組み上がった 16 ビットの語。分岐の飛び先は PC + 2 + rel × 2 (PC は分岐の命令の番地)
+    /// 組み上がった 16 ビットの語。分岐の飛び先は PC + 2 + rel × 2 (PC は分岐の命令のアドレス)
     /// </summary>
     public ushort[] Words()
     {
@@ -272,7 +272,7 @@ public sealed class Fr30Assembler(uint origin)
         {
             if (!_labels.TryGetValue(label, out var target)) throw new InvalidOperationException($"ラベル {label} がありません");
             var address = Origin + (uint)(target * 2);
-            if (address > 0xFFFFF) throw new InvalidOperationException($"{label} の番地 0x{address:X} は LDI:20 に入りません");
+            if (address > 0xFFFFF) throw new InvalidOperationException($"{label} のアドレス 0x{address:X} は LDI:20 に入りません");
             code[at] = (ushort)(0x9B00 | ((address >> 16) << 4) | (uint)R(reg));
             code[at + 1] = (ushort)address;
         }

@@ -50,7 +50,6 @@ public class B25Tests
         private readonly Dictionary<int, int> _counters = [];
         public List<byte> Wire { get; } = [];
         public List<byte> Plain { get; } = [];
-        public int Scrambled { get; private set; }
 
         private byte Counter(int pid)
         {
@@ -134,7 +133,6 @@ public class B25Tests
                 cipher.SetKeys(Key(g, even: false), Key(g, even: true));
                 if (start < 188) cipher.Encrypt(even, packet.AsSpan(start));
                 packet[3] |= (byte)(even ? 0x80 : 0xC0);
-                Scrambled++;
             }
             Wire.AddRange(packet);
             return this;
@@ -752,7 +750,7 @@ public class B25Tests
     /// ワンセグを含む)。番組の PMT は B-CAS と別の方式の CA 記述子も持ち、その方式の ECM はカードが断る。
     ///
     /// <para>
-    /// 本番 (2026-10-26) では、先回りで拾ったその ECM をカードに聞き、断られるまでの 0.4 秒ほど止まっていた
+    /// 本番 (2026-10-26) では、先回りで読んだその ECM をカードに聞き、断られるまでの 0.4 秒ほど止まっていた
     /// (選局から送り出しまで毎回 1 秒ほど)。止まっている時間はパケットの数では見えないので、断る ECM を
     /// 聞かないことと、流し始める位置が前の決め方 (PAT → PMT → その後の ECM を聞く) より後ろにならないことを確かめる
     /// </para>
@@ -809,7 +807,7 @@ public class B25Tests
 
     /// <summary>
     /// **ES の PES の頭を ECM と取り違えない。** PES は <c>00 00 01</c> で始まるので、セクションとして読むと
-    /// pointer_field 0・table_id 0x00 になる。後ろに 0x82 が並んでいても拾わない
+    /// pointer_field 0・table_id 0x00 になる。後ろに 0x82 が並んでいても ECM として読まない
     /// </summary>
     [Test]
     public async Task 掛かっていないPESの頭をECMと読まない()

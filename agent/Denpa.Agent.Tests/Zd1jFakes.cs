@@ -195,8 +195,6 @@ internal sealed class FakeBridgeUsb : IUsbDevice
         Packets.Add(data.ToArray());
     }
 
-    public int BulkRead(byte endpoint, Span<byte> buffer, int timeoutMs) => 0;
-
     /// <summary>EP 0x83: 答えていない塊があれば、命令を DibModel に届けて答えを作る</summary>
     public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
     {

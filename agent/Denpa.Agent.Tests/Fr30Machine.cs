@@ -18,8 +18,6 @@ internal sealed class Fr30Machine
     /// <summary>命令の語を読む (プログラムを置いた所)</summary>
     public required Func<uint, ushort> Fetch { get; init; }
 
-    public long Steps { get; private set; }
-
     /// <summary>PC が <paramref name="stop"/> のどれかに来るまで (上限まで) 動かす。来たら true</summary>
     public bool RunUntil(Func<uint, bool> stop, long limit = 1_000_000)
     {
@@ -77,7 +75,6 @@ internal sealed class Fr30Machine
 
     public void Step()
     {
-        Steps++;
         var at = Pc;
         var op = Fetch(at);
         var next = at + 2;

@@ -11,8 +11,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 並べるのは <c>IOServiceMatching("IOUSBHostDevice")</c> に <c>idVendor</c>・<c>idProduct</c> を足したもの。ポートの名前は
-/// <c>locationID</c> から Linux の sysfs と同じ形にする (上の 8 ビット = バスの番号、続く 4 ビットずつ = ハブのポートを根から。
-/// <c>0x14320000</c> → <c>20-3.2</c>)。**挿すポートを変えると別の名前になる。**
+/// <c>locationID</c> から Linux の sysfs と同じ形にする (<see cref="UsbDevices.MacPort"/>)。**挿すポートを変えると別の名前になる。**
 /// </para>
 ///
 /// <para>
@@ -330,7 +329,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     private readonly record struct PipeInfo(byte Ref, byte Type, int MaxPacket);
 
     /// <summary>
-    /// IOUSBLib は端点を pipeRef (1 から) で指すので、端点の番地との対応を作る。転送の種類も覚える (interrupt は読み方が違う)。
+    /// IOUSBLib は端点を pipeRef (1 から) で指すので、端点のアドレスとの対応を作る。転送の種類も覚える (interrupt は読み方が違う)。
     /// 一覧はその場所で初めて開いたときだけ記録に出す (実機で確かめていない macOS で、何が見えているかを残すため)
     /// </summary>
     private void MapPipes(string location)
@@ -395,8 +394,6 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         Check(Name, "制御転送", ((delegate* unmanaged[Cdecl]<void*, DeviceRequest*, int>)Slot(device, DeviceRequestTO))(device, &call));
         return (int)call.Done;
     }
-
-    public int BulkRead(byte endpoint, Span<byte> buffer, int timeoutMs) => Read(endpoint, buffer, timeoutMs);
 
     /// <summary>
     /// interrupt のパイプには <c>ReadPipeTO</c> の時間切れが効かない (IOUSBLib.h)。時間切れの無い <c>ReadPipe</c> を
@@ -507,7 +504,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     }
 
     /// <summary>
-    /// <c>ReadPipeAsync</c> を何本も出しておく読み。完了は CFRunLoop を回す専用のスレッドで受け、その場で中身を写して同じ受け口で
+    /// <c>ReadPipeAsync</c> を何本も出しておく読み。完了は CFRunLoop を回す専用のスレッドで受け、その場で中身を写して同じバッファで
     /// 出し直す (1本の端点の読みは出した順に済むので、写した順がそのまま届いた順)
     /// </summary>
     private sealed class InStream : IUsbInStream
@@ -640,7 +637,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
             var @interface = _owner._interface;
             if (@interface is not null) ((delegate* unmanaged[Cdecl]<void*, byte, int>)IoKitDevice.Slot(@interface, AbortPipe))(@interface, _pipe);
             _loop.Join(TimeSpan.FromSeconds(3));
-            // 返ってこなかった読みの受け口は、IOKit がまだ持っているかもしれないので返さない
+            // 返ってこなかった読みのバッファは、IOKit がまだ持っているかもしれないので返さない
             if (Volatile.Read(ref _outstanding) != 0) return;
             for (var i = 0; i < _buffers.Length; i++)
             {

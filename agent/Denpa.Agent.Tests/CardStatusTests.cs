@@ -172,15 +172,15 @@ public class CardStatusTests
     [Test]
     public async Task 配り役から貰っているときはその相手と番号を返す()
     {
-        var report = Card.Report(Card.Remote("http://card:25252", () => Using), ["PT3-T1"]);
+        var report = Card.Report(Card.Remote("http://card:25253", () => Using), ["PT3-T1"]);
         await Assert.That(report["source"]!.GetValue<string>()).IsEqualTo("remote");
-        await Assert.That(report["remote"]!.GetValue<string>()).IsEqualTo("http://card:25252");
+        await Assert.That(report["remote"]!.GetValue<string>()).IsEqualTo("http://card:25253");
         await Assert.That(report["ok"]!.GetValue<bool>()).IsTrue();
         await Assert.That(report["ids"]![0]!.GetValue<string>()).IsEqualTo("0000001234567890");
         await Assert.That(report["tuners"]![0]!.GetValue<string>()).IsEqualTo("PT3-T1");
         await Assert.That(report["readers"]!.AsArray().Count).IsEqualTo(0);
 
-        var down = Card.Remote("http://card:25252", () => throw new IOException("鍵を配る拠点からカードの情報を受け取れません (503)"));
+        var down = Card.Remote("http://card:25253", () => throw new IOException("鍵を配る拠点からカードの情報を受け取れません (503)"));
         await Assert.That(down.Ok).IsFalse();
         await Assert.That(down.Message).Contains("503");
     }

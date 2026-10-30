@@ -62,9 +62,9 @@ public class ChannelTableTests
     }
 
     [Test]
-    public async Task 同じ周波数を共有している本数を覚えておく()
+    public async Task 同じ周波数のTSは相対番号で見分ける()
     {
-        // BS01_0 と BS01_1 は**同じ周波数**。開いたままなら選局し直さずに済む
+        // BS01_0 と BS01_3 は**同じ周波数**。開いたままなら選局し直さずに済む
         await Assert.That(ChannelTable.Parse("BS01_3")!.Frequency).IsEqualTo(ChannelTable.Parse("BS01_0")!.Frequency);
         await Assert.That(ChannelTable.Parse("BS01_0")!.RelativeTs).IsEqualTo(0);
         await Assert.That(ChannelTable.Parse("BS01_3")!.RelativeTs).IsEqualTo(3);
@@ -152,9 +152,9 @@ public class StreamIdTests
 public class DvbDeviceTests
 {
     [Test]
-    // Linux の置き場の形式 (sysfs の名前の「:」、/dev のパス) を見るもの。Windows では作れない
+    // パスの区切りが / の前提。Windows では割り方が違う
     [ExcludeOn(OS.Windows)]
-    public async Task frontend_から_demux_と_dvr_を組み立てる()
+    public async Task frontend_からアダプタと番号を割り出す()
     {
         var (adapter, number) = DvbTuner.Split("/dev/dvb/adapter1/frontend0");
 

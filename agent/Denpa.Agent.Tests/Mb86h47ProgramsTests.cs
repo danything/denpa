@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
@@ -13,7 +12,6 @@ public class Mb86h47ProgramsTests
     private sealed class Memory
     {
         public readonly Dictionary<uint, byte> Bytes = [];
-        public readonly List<string> Stores = [];
 
         public void Put(uint address, uint[] words)
         {
@@ -59,7 +57,7 @@ public class Mb86h47ProgramsTests
     }
 
     [Test]
-    public async Task 番地を広げるルーチンは_wValue_の下位バイトを上に足す()
+    public async Task アドレスを広げるルーチンは_wValue_の下位バイトを上に足す()
     {
         var (memory, cpu) = Routine(0, write: false, 0x7A3C00, 0x17);
         await Assert.That(memory.Read(State + 0x44, 4)).IsEqualTo(0x177A3C00u);
@@ -79,7 +77,7 @@ public class Mb86h47ProgramsTests
     }
 
     [Test]
-    public async Task 番地を広げるルーチンは_0x80000_からの付け替えを残す()
+    public async Task アドレスを広げるルーチンは_0x80000_からの付け替えを残す()
     {
         var (memory, _) = Routine(0, write: false, 0x82008, 0);
         await Assert.That(memory.Read(State + 0x44, 4)).IsEqualTo(0xF02008u);
