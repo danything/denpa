@@ -26,7 +26,10 @@
     "32-chase-api",
     "41-watch-compat-local",
     "43-raw-cadence",
-    "51-live-gaps"
+    "51-live-gaps",
+    "53-header-float",
+    "54-lite",
+    "57-jikkyo"
   ],
   "3": [
     "09-behaviour",
@@ -37,7 +40,10 @@
     "21-onair-fallback",
     "22-oidc",
     "34-live-yield",
-    "46-home-timeline"
+    "46-home-timeline",
+    "55-tabletop",
+    "56-transfer",
+    "58-volume"
   ],
   "4": [
     "01-dashboard",
@@ -46,20 +52,20 @@
     "15-scramble",
     "17-logo",
     "39-watch-stream",
-    "52-diagnostics"
+    "52-diagnostics",
+    "23-watch-data",
+    "48-link-hover",
+    "49-guide-skeleton"
   ],
   "5": [
     "04-external-delete",
     "05-rules",
-    "23-watch-data",
     "26-hwenc",
     "28-live-raw",
     "30-api",
     "38-live-compat",
     "44-ambient",
     "47-search-rule",
-    "46-search",
-    "48-link-hover",
-    "49-guide-skeleton"
+    "46-search"
   ]
 }
