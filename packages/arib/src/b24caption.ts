@@ -14,6 +14,8 @@
  *   取っていて常に 0 になり、最初の1回しか読まない。ここは群を正しく見る
  *   (番組が変わって群が替わったときに書式を読み直す)
  * - **点滅 (FLC) を読み取る。** あちらは読み捨てている
+ * - **表で空いている点 (U+FFFD) はゲタ (〓) にする。** 「�」は Denpa Font に無く、端末の字の
+ *   「?」の印で出る。定義されていない外字と同じ扱い
  *
  * 入力は字幕の PES の中身 (データ識別 0x80 から)。ffmpeg が `-c:s copy` で Matroska
  * (`S_ARIBSUB`) に入れたコマの中身がそのままこれになる。
@@ -863,7 +865,8 @@ export class B24CaptionDecoder {
 
   private push(code: number, drcs: number | null = null): void {
     this.caption.chars.push({
-      code,
+      // 表で空いている点 (規格の空き・JIS X 0213 にも無い区点) もゲタで埋める
+      code: code === 0xfffd ? 0x3013 : code,
       drcs,
       x: this.posX,
       y: this.posY - this.sectionHeight(),

@@ -334,6 +334,31 @@ const ENGINEERING = { service: 929, pmt: 0x1f0, es: 0x1f1 };
 
 function carouselPackets(services: FakeService[]): Uint8Array {
   /*
+   * **BS (ネットワーク4) は `LOGO-05`、CS は `CS_LOGO-05` に分け、DII も別々に流す。** 本物の BS15_0 も
+   * 2つのモジュールで流れてくる。1つにまとめていると、片方だけ揃った時点で読み切ったと決める
+   * 誤り (`DsmccLogoCollector.carouselRead`) がテストで見えない
+   */
+  // 載せる局が無くても両方流す (本物も CS の局を受けていない家に CS_LOGO-05 を流している)
+  return Uint8Array.from([
+    ...carouselModule(
+      services.filter((s) => s.networkId === 4),
+      "LOGO-05",
+      0x1234,
+    ),
+    ...carouselModule(
+      services.filter((s) => s.networkId !== 4),
+      "CS_LOGO-05",
+      0x1235,
+    ),
+  ]);
+}
+
+function carouselModule(
+  services: FakeService[],
+  name: string,
+  downloadId: number,
+): Uint8Array {
+  /*
    * テストは1枚を全局で使い回す。スクリーンショットを撮るときは局ごとに別の画像 (番組表に並ぶので見分けが付くように)
    */
   const module = logoModule(
@@ -344,27 +369,29 @@ function carouselPackets(services: FakeService[]): Uint8Array {
           services: [[s.networkId, s.serviceId] as [number, number]],
           data: logoOf(s, true),
         }))
-      : [
-          {
-            logoId: services[0]!.serviceId % 512,
-            services: services.map(
-              (s) => [s.networkId, s.serviceId] as [number, number],
-            ),
-            data: LOGO_PNG_LARGE,
-          },
-        ],
+      : services.length === 0
+        ? []
+        : [
+            {
+              logoId: services[0]!.serviceId % 512,
+              services: services.map(
+                (s) => [s.networkId, s.serviceId] as [number, number],
+              ),
+              data: LOGO_PNG_LARGE,
+            },
+          ],
   );
   return Uint8Array.from([
     ...packetize(
       ENGINEERING.es,
-      diiSection(0x1234, 4066, {
+      diiSection(downloadId, 4066, {
         moduleId: 1,
         moduleSize: module.length,
         moduleVersion: 1,
-        name: "LOGO-05",
+        name,
       }),
     ),
-    ...packetize(ENGINEERING.es, ddbSection(0x1234, 1, 1, 0, module)),
+    ...packetize(ENGINEERING.es, ddbSection(downloadId, 1, 1, 0, module)),
   ]);
 }
 

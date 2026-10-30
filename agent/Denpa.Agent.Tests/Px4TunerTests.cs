@@ -721,4 +721,179 @@ public class Px4TunerTests
         await Assert.That(took).IsLessThan(TimeSpan.FromSeconds(1));
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
     }
+
+    /// <summary>
+    /// 受信機ごとに接続を持ち、**要求を全部1つのキューで順に片付ける** px4d のふり (#1713)。
+    /// 本物の px4d も同じブリッジの受信機の要求は1つずつ処理する (MLT5 系なら受信機 0〜3)。
+    /// TUNE は <see cref="TuneTakes"/> かけて「同期しませんでした」(TIMEOUT) で答える
+    /// </summary>
+    private sealed class QueuedPx4d : IDisposable
+    {
+        private readonly Socket _control;
+        private readonly Lock _queue = new();
+        private readonly List<Socket> _open = [];
+        private readonly Task _serving;
+        private volatile bool _closed;
+        private ulong _nextLease = 0x1000;
+
+        public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("px4");
+
+        public TimeSpan TuneTakes { get; init; }
+
+        public int Acquired;
+
+        public QueuedPx4d()
+        {
+            var dir = Path.Combine(Runtime.FullName, Px4Wire.Px4.Product, Id);
+            Directory.CreateDirectory(dir);
+            _control = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            _control.Bind(new UnixDomainSocketEndPoint(Path.Combine(dir, "control.sock")));
+            _control.Listen();
+            // 待ち方は FakePx4d.Serve と同じ (Accept で待たない)
+            _serving = Task.Factory.StartNew(() =>
+            {
+                while (!_closed)
+                {
+                    Socket client;
+                    try
+                    {
+                        if (!_control.Poll(TimeSpan.FromMilliseconds(100), SelectMode.SelectRead)) continue;
+                        client = _control.Accept();
+                    }
+                    catch (Exception)
+                    {
+                        return;
+                    }
+                    lock (_open) _open.Add(client);
+                    Task.Factory.StartNew(() =>
+                    {
+                        try
+                        {
+                            while (true)
+                            {
+                                var (type, _, id, _) = Px4Control.ReadFrame(client, Px4Control.MaxPayload, Px4Wire.Px4);
+                                var (flags, answer) = Answer(type);
+                                Px4Control.SendAll(client, Px4Control.Encode(type, flags, id, answer, Px4Wire.Px4));
+                            }
+                        }
+                        catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
+                        {
+                        }
+                        finally
+                        {
+                            client.Dispose();
+                        }
+                    }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                }
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+
+        private (ushort, byte[]) Answer(ushort type)
+        {
+            const ushort ok = Px4Control.ResponseFlag;
+            const ushort failed = Px4Control.ResponseFlag | Px4Control.ErrorFlag;
+            lock (_queue)
+            {
+                switch (type)
+                {
+                    case Px4Control.Hello:
+                    {
+                        var hello = new byte[8];
+                        BinaryPrimitives.WriteUInt16LittleEndian(hello, 1);
+                        return (ok, hello);
+                    }
+                    case Px4Control.Acquire:
+                    {
+                        Interlocked.Increment(ref Acquired);
+                        var answer = new byte[24];
+                        BinaryPrimitives.WriteUInt64LittleEndian(answer, ++_nextLease);
+                        Nonce.CopyTo(answer, 8);
+                        return (ok, answer);
+                    }
+                    case Px4Control.Tune:
+                    {
+                        Thread.Sleep(TuneTakes);
+                        var error = new byte[6];
+                        BinaryPrimitives.WriteUInt32LittleEndian(error, Px4Error.Timeout);
+                        return (failed, error);
+                    }
+                    case Px4Control.Release:
+                        return (ok, []);
+                    default:
+                    {
+                        var error = new byte[6];
+                        BinaryPrimitives.WriteUInt32LittleEndian(error, Px4Error.InvalidArgument);
+                        return (failed, error);
+                    }
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            _closed = true;
+            if (!_serving.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("偽の px4d の受け手が 5 秒で抜けません");
+            _control.Dispose();
+            lock (_open)
+            {
+                foreach (var socket in _open)
+                {
+                    try
+                    {
+                        socket.Shutdown(SocketShutdown.Both);
+                    }
+                    catch (Exception error) when (error is SocketException or ObjectDisposedException)
+                    {
+                    }
+                    socket.Dispose();
+                }
+            }
+            Runtime.Delete(true);
+        }
+    }
+
+    /// <summary>
+    /// **同じ筐体の受信機を同時に選局しても、px4d の順番待ちで時間切れにしない** (#1713)。
+    ///
+    /// <para>
+    /// 複数のチューナーでスキャンすると、4つの TUNE が px4d のキューに並ぶ。同期しないチャンネルは
+    /// 1つ 5 秒かかるので、後ろのほうは答えが来るまでに待つ上限 (7 秒) を過ぎていた。
+    /// 時間切れを「接続が切れた」と取って受信機を返し、取り直しは BUSY で断られ、
+    /// そのチャンネルがスキャンの結果から落ちていた
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task 同じ筐体の受信機を同時に選局しても時間切れにならない(CancellationToken cancel)
+    {
+        await Task.Yield();
+        using var px4d = new QueuedPx4d { TuneTakes = TimeSpan.FromSeconds(2.5) };
+        var tuners = Enumerable.Range(0, 4)
+            .Select(receiver => new Px4Tuner(Id, receiver, null, px4d.Runtime.FullName, () => null))
+            .ToList();
+        try
+        {
+            var bs = ChannelTable.Parse("BS15_0")!;
+            var tuning = tuners.Select(tuner => Task.Factory.StartNew(() =>
+            {
+                try
+                {
+                    tuner.Tune(bs, ChannelTable.NoStreamId);
+                    return "";
+                }
+                catch (IOException error)
+                {
+                    return error.Message;
+                }
+            }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
+            var messages = await Task.WhenAll(tuning).WaitAsync(TimeSpan.FromSeconds(40), cancel);
+
+            // どれも「同期しませんでした」で終わる。時間切れ (TimedOut) や取り直し (BUSY) にならない
+            await Assert.That(messages).IsEquivalentTo(Enumerable.Repeat(ITuneDevice.SyncFailed, 4).ToArray());
+            await Assert.That(px4d.Acquired).IsEqualTo(4);
+        }
+        finally
+        {
+            foreach (var tuner in tuners) tuner.Dispose();
+        }
+    }
 }

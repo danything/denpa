@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 
+import { cut } from "../issue-report";
 import type { WebhookEvent } from "../webhook-events";
 import { now, orm } from "./db";
 import { webhooks } from "./schema";
@@ -59,7 +60,11 @@ export async function send(
       redirect: "manual",
       // 相手が遅くても録画側を待たせない
       signal: AbortSignal.timeout(10_000),
-      body: JSON.stringify({ ...payload, sentAt: at }),
+      body: JSON.stringify(
+        discord(webhook.url)
+          ? discordBody(payload.text)
+          : { ...payload, sentAt: at },
+      ),
     });
     // 本文は読まずに捨てる (接続を手放すため)
     await res.body?.cancel();
@@ -89,6 +94,43 @@ export function failure(error: unknown): string {
   return /^[\w-]{1,40}$/.test(code)
     ? `繋がりませんでした (${code})`
     : "繋がりませんでした";
+}
+
+/**
+ * Discord の Webhook の URL か (`/api/webhooks/{id}/{token}`。API のバージョン付きも)。
+ *
+ * Discord は本文を `content` で受け取り、`content` や `embeds` が無いと 400 で断る
+ * (Slack 向けの `text` は読まない)。末尾が `/slack` の Slack 互換の口は `text` を読むので、
+ * ほかの通知先と同じ形で送る
+ */
+export function discord(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return (
+      /^(?:(?:ptb|canary)\.)?discord(?:app)?\.com$/.test(url.hostname) &&
+      /^\/api(?:\/v\d+)?\/webhooks\/[^/]+\/[^/]+\/?$/.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Discord の `content` の上限 (字数) */
+export const DISCORD_CONTENT_LIMIT = 2000;
+
+/**
+ * Discord に送る本文。番組名などは放送局が付けたものなので、上限を超えたら切り詰め、
+ * `@everyone` のような文字が入っていても誰にも通知が飛ばないようにメンションは全部切る
+ */
+export function discordBody(text: string): {
+  content: string;
+  allowed_mentions: { parse: string[] };
+} {
+  const content =
+    text.length > DISCORD_CONTENT_LIMIT
+      ? `${cut(text, DISCORD_CONTENT_LIMIT - 1)}…`
+      : text;
+  return { content, allowed_mentions: { parse: [] } };
 }
 
 /** 通知先にできる URL か。http か https で、ホストがあるもの */

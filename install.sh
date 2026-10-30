@@ -371,7 +371,10 @@ mac_main() {
 
   # 再配布の許諾は誰も持っていないので、PLEX の配布物から手元で切り出す (docs/tuner-px4.md)
   say "IT930x のファームウェアを PLEX のドライバから切り出します"
-  fetch https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip driver.zip
+  # PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した)。
+  # 中身はハッシュで確かめるので、取れなければ Internet Archive の写し (同じハッシュ) から取る
+  curl -fsSL --retry 3 -o driver.zip https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip \
+    || fetch "https://web.archive.org/web/20260927060746id_/http://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip" driver.zip
   check driver.zip "$PLEX_DRIVER_SHA256"
   unzip -p driver.zip pxw3u4_BDA_ver1x64/PXW3U4.sys > PXW3U4.sys
   check PXW3U4.sys "$PXW3U4_SYS_SHA256"

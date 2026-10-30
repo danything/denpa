@@ -47,6 +47,20 @@ function loadCaptionFont(url: string): Promise<void> {
   return fontLoading;
 }
 
+let fallback: string | null = null;
+
+/**
+ * 字幕の字の指定。**Denpa Font に無い字は、画面の放送の字 (`--broadcast-font`、`app.css`) と同じ
+ * 並びへ落とす。** 何も並べないとブラウザの既定の字に落ち、端末によっては明朝になる
+ */
+function captionFont(px: number): string {
+  fallback ??=
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--pico-font-family-sans-serif")
+      .trim() || "sans-serif";
+  return `${px}px ${CAPTION_FONT}, ${fallback}`;
+}
+
 /** 絵文字の字体を持ちうる字。数字や # も入るので、ASCII は `textStyle` で除く */
 const EMOJI = /^\p{Emoji}$/u;
 
@@ -72,7 +86,7 @@ let ink: Ink | null = null;
 
 function measureInk(ctx: CanvasRenderingContext2D): Ink {
   if (ink !== null) return ink;
-  ctx.font = `100px ${CAPTION_FONT}`;
+  ctx.font = captionFont(100);
   const m = ctx.measureText("永");
   const measured = {
     ascent: m.actualBoundingBoxAscent / 100,
@@ -164,7 +178,7 @@ function drawRun(
   const baseline =
     (fontPx - (metrics.ascent + metrics.descent) * fontPx) / 2 +
     metrics.ascent * fontPx;
-  ctx.font = `${fontPx}px ${CAPTION_FONT}`;
+  ctx.font = captionFont(fontPx);
   chars.forEach((char, i) => {
     const left = (run.x + i * run.w) * sx;
     const top = run.y * sy;

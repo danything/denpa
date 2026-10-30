@@ -177,10 +177,11 @@ export class DsmccLogoCollector {
   /** 揃ったロゴ */
   private readonly logos = new Map<string, ModuleLogo>();
   /**
-   * DII が知らせたロゴのモジュールと、そのうち一度でも揃ったもの (`downloadKey`)。全部揃えば
-   * カルーセルを1回ぶん読み切った (`carouselRead`)。知らせたほうは組み立て中と同じく数を限る
+   * DII が知らせたロゴのモジュール (`downloadKey` → 名前) と、そのうち一度でも揃ったもの。
+   * 両方の名前が知らされて全部揃えば、カルーセルを1回ぶん読み切った (`carouselRead`)。
+   * 組み立て中と同じく数を限り、あふれたら両方とも捨てて数え直す
    */
-  private readonly announced = new Set<string>();
+  private readonly announced = new Map<string, string>();
   private readonly completed = new Set<string>();
   /** PAT を読んだか。読むまでは「この中継にロゴがあるか」を判断できない */
   private sawPat = false;
@@ -224,8 +225,11 @@ export class DsmccLogoCollector {
           module.moduleSize <= MAX_LOGO_MODULE_SIZE &&
           !this.announced.has(key)
         ) {
-          if (this.announced.size >= MAX_LOGO_DOWNLOADS) this.announced.clear();
-          this.announced.add(key);
+          if (this.announced.size >= MAX_LOGO_DOWNLOADS) {
+            this.announced.clear();
+            this.completed.clear();
+          }
+          this.announced.set(key, module.name);
         }
         const building = this.downloads.get(key);
         // 組み立て中のものを作り直さない (受け取ったブロックが消える)
@@ -267,7 +271,7 @@ export class DsmccLogoCollector {
 
     // 揃った。次の DII でまた組み立て始める (同じバージョンなら同じロゴで上書きするだけ)
     this.downloads.delete(key);
-    this.completed.add(key);
+    if (this.announced.has(key)) this.completed.add(key);
     for (const logo of parseLogoModule(download.data)) {
       if (logo.data.length > 0) this.logos.set(logoKey(logo), logo);
     }
@@ -278,16 +282,18 @@ export class DsmccLogoCollector {
   }
 
   /**
-   * **カルーセルを1回ぶん読み切ったか。** DII が知らせたロゴのモジュール (`LOGO-05`・`CS_LOGO-05`) が
-   * 全部一度は揃った。ここまで来て持っていない局は、カルーセルに載っていない。
+   * **カルーセルを1回ぶん読み切ったか。** DII が `LOGO-05` と `CS_LOGO-05` の両方を知らせ、知らせた
+   * モジュールが全部一度は揃った。BS と CS が別々の DII で来ることもありうるので、片方の名前しか
+   * 知らされていないうちは読み切ったことにしない。ここまで来て持っていない局は、カルーセルに載っていない。
    *
    * 静かになったら読み切った、とみなしていた頃は、BS と CS のモジュールが別々の時刻に来ると、
    * 片方が揃って静かになった時点で、もう片方の全局を「載っていない」と控えていた
    */
   get carouselRead(): boolean {
+    const names = new Set(this.announced.values());
     return (
-      this.announced.size > 0 &&
-      [...this.announced].every((key) => this.completed.has(key))
+      [...LOGO_MODULE_NAMES].every((name) => names.has(name)) &&
+      [...this.announced.keys()].every((key) => this.completed.has(key))
     );
   }
 
