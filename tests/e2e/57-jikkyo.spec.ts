@@ -5,6 +5,7 @@ import {
   expect,
   goto,
   openSettings,
+  overlayTroubles,
   pickCodec,
   recordOne,
   test,
@@ -506,6 +507,43 @@ test.describe("ライブで実況に書き込む", () => {
       const tabbar = (await page.getByTestId("tabbar").boundingBox())!;
       expect(compose.y + compose.height).toBeLessThanOrEqual(tabbar.y);
       expect(tabbar.y - (compose.y + compose.height)).toBeLessThan(16);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  /*
+   * 「書く」で右端の縦の列が4つになる。スマホの縦の低い枠では、列を下の操作バーの上で止め、
+   * 入りきらないものを左へもう1列に並べる (丸は縮めない。全画面のボタンに重ねない)
+   */
+  test("スマホの縦でも、右端の列は下の操作バーに重ならない", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, { quiet: true });
+      await deviceOn(page);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await goto(page, `/live?service=${MX.id}`);
+      await wakeControls(page, "live-frame");
+      const write = page.getByTestId("live-write");
+      await expect(write).toBeVisible();
+      await expect(page.getByTestId("live-seek")).toBeVisible();
+      expect(await overlayTroubles(page, "live-frame")).toEqual([]);
+
+      const record = (await page.getByTestId("live-record").boundingBox())!;
+      const pencil = (await write.boundingBox())!;
+      const seek = (await page.getByTestId("live-seek").boundingBox())!;
+      // 丸は 40px のまま。右の縁の列はそのままで、「書く」はその左に
+      expect(pencil.width).toBe(40);
+      expect(pencil.height).toBe(40);
+      expect(pencil.x + pencil.width).toBeLessThanOrEqual(record.x);
+      for (const id of ["live-record", "live-data-button", "live-shot"]) {
+        const box = (await page.getByTestId(id).boundingBox())!;
+        expect(box.x).toBe(record.x);
+        // 再生位置のバーにも掛からない
+        expect(box.y + box.height).toBeLessThanOrEqual(seek.y);
+      }
     } finally {
       await setJikkyo(page, false);
     }

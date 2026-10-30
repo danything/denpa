@@ -141,6 +141,44 @@
   });
 
   /**
+   * 下の操作バーの中身の高さ (px。上の影の余白は除く)。右端の縦の列はこの上で止め、入りきらないぶんは
+   * 左へもう1列に並べる (`ControlBar` の `.side`)。スマホの縦では列に4つ並ぶと全画面のボタンに重なっていた
+   */
+  let barHeight = $state(0);
+  $effect(() => {
+    const target = element;
+    if (target === null) return;
+    let bar: HTMLElement | null = null;
+    const measure = () => {
+      barHeight =
+        bar === null
+          ? 0
+          : Math.ceil(
+              bar.offsetHeight - parseFloat(getComputedStyle(bar).paddingTop),
+            );
+    };
+    const sizes = new ResizeObserver(measure);
+    const attach = () => {
+      const next = target.querySelector<HTMLElement>(
+        ":scope > [data-stage-bar]",
+      );
+      if (next === bar) return;
+      if (bar !== null) sizes.unobserve(bar);
+      bar = next;
+      if (bar !== null) sizes.observe(bar);
+      measure();
+    };
+    // 操作バーそのものが出入りする (ライブは選局するまで出さない)
+    const outer = new MutationObserver(attach);
+    outer.observe(target, { childList: true });
+    attach();
+    return () => {
+      sizes.disconnect();
+      outer.disconnect();
+    };
+  });
+
+  /**
    * 広い枠でも、押すものが一段に収まらなければ畳む (`crowded`)。並ぶものは番組しだいで幅の線では決められないので、
    * 測るときだけ畳んだものを並べ (`data-measuring`)、いちばん右が行の右端を越えるかを読む (同じ処理の中なので画面には出ない)
    */
@@ -307,6 +345,7 @@
     bind:this={element}
     class="stage"
     style:--dp-aspect={aspect}
+    style:--stage-bar="{barHeight}px"
     class:quiet={!controls.shown}
     data-compact={compact ? "" : undefined}
     data-fold={fold ? "" : undefined}

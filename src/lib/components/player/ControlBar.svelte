@@ -48,11 +48,20 @@
   .side {
     top: 0;
     right: 0;
-    bottom: 0;
+    /*
+     * 下の操作バーの中身の上で止める (`PlayerStage` の `--stage-bar`)。全画面のボタンと再生位置のバーに重ねない。
+     * 下の余白 (8px) は操作バーとの間に要らないので、そのぶん下げる
+     */
+    bottom: max(0px, var(--stage-bar, 0px) - 0.5rem);
     pointer-events: none;
     display: flex;
-    /* 縦に積む (車のタブレットで指が届く右の縁。上の説明)。横一行に直さない */
+    /*
+     * 縦に積む (車のタブレットで指が届く右の縁。上の説明)。横一行に直さない。
+     * 入りきらない低い枠 (スマホの縦) では、残りを左へもう1列に並べる (丸は縮めない)
+     */
     flex-direction: column;
+    flex-wrap: wrap-reverse;
+    align-content: flex-start;
     align-items: center;
     /* 丸どうしは 8px 空ける (指で隣を押さない) */
     gap: 0.5rem;
@@ -72,7 +81,8 @@
   .side::before {
     content: "";
     position: absolute;
-    inset: 0 0 0 auto;
+    /* 列は操作バーの上で止まるが、影は舞台の下の端まで流す */
+    inset: 0 0 calc(-1 * var(--stage-bar, 0px)) auto;
     z-index: -1;
     width: 7.5rem;
     background: linear-gradient(
