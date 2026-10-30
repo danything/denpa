@@ -218,6 +218,7 @@ describe("B24CaptionDecoder", () => {
     expect(DRCS_REPLACE.get("c7b93e8e27f686cbeeb88e871c17327c")).toBe(0x300a);
     expect(DRCS_REPLACE.get("e806d1481cfa721da5f60413531f39bd")).toBe(0x1f4f1);
     expect(DRCS_REPLACE.get("d9b5d861024ce112c12fa5f155bb1af3")).toBe(0x1f50a);
+    expect(DRCS_REPLACE.get("d1e6371a34eaf49154ea6a4d0e9064ac")).toBe(0x1f50a);
   });
 
   test("追加記号 (90区〜) は Unicode の字にする", () => {
