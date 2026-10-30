@@ -90,7 +90,15 @@ export function playerVolume(options: Options): Volume {
         options.remote,
         "video-sound",
       );
-      made.onstatechange = sync;
+      made.onstatechange = () => {
+        /*
+         * 通したあとに止められた (iOS の割り込み・裏で止められた) なら起こし直す。通した `<video>` の音は
+         * Web Audio からしか出ないので、止まったままだと押すまで無音になる
+         */
+        if (made.state === "closed") return;
+        if (tapped !== null && made.state !== "running") wake();
+        sync();
+      };
       context = made;
     } catch {
       return null;
