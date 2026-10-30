@@ -163,21 +163,21 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **手を入れてくれた人** (ありがとうございます):
 
-- [@Khronos31](https://github.com/Khronos31) (#188)
-- [@unlimish](https://github.com/unlimish) (#431)
-- [@fetburner](https://github.com/fetburner) (#662)
-- [@sirius128](https://github.com/sirius128) (#775)
-- [@chiroru27](https://github.com/chiroru27) (#1681 #1724)
+- [@Khronos31](https://github.com/Khronos31) ([#188](https://github.com/danything/denpa/issues/188))
+- [@unlimish](https://github.com/unlimish) ([#431](https://github.com/danything/denpa/issues/431))
+- [@fetburner](https://github.com/fetburner) ([#662](https://github.com/danything/denpa/issues/662))
+- [@sirius128](https://github.com/sirius128) ([#775](https://github.com/danything/denpa/issues/775))
+- [@chiroru27](https://github.com/chiroru27) ([#1681](https://github.com/danything/denpa/issues/1681) [#1724](https://github.com/danything/denpa/issues/1724))
 
 **報告や提案をくれた人** (ありがとうございます):
 
-- [@Khronos31](https://github.com/Khronos31) (#184 #195 #376 #377)
-- [@unlimish](https://github.com/unlimish) (#417)
-- [@kametani-mikihiro](https://github.com/kametani-mikihiro) (#437 #471 #480 #481 #503 #505 #509)
-- [@fetburner](https://github.com/fetburner) (#668)
-- [@shino-zxc](https://github.com/shino-zxc) (#1210 #1713)
-- [@eggplants](https://github.com/eggplants) (#1617 #1709)
-- [@ogatomo21](https://github.com/ogatomo21) (#1708)
+- [@Khronos31](https://github.com/Khronos31) ([#184](https://github.com/danything/denpa/issues/184) [#195](https://github.com/danything/denpa/issues/195) [#376](https://github.com/danything/denpa/issues/376) [#377](https://github.com/danything/denpa/issues/377))
+- [@unlimish](https://github.com/unlimish) ([#417](https://github.com/danything/denpa/issues/417))
+- [@kametani-mikihiro](https://github.com/kametani-mikihiro) ([#437](https://github.com/danything/denpa/issues/437) [#471](https://github.com/danything/denpa/issues/471) [#480](https://github.com/danything/denpa/issues/480) [#481](https://github.com/danything/denpa/issues/481) [#503](https://github.com/danything/denpa/issues/503) [#505](https://github.com/danything/denpa/issues/505) [#509](https://github.com/danything/denpa/issues/509))
+- [@fetburner](https://github.com/fetburner) ([#668](https://github.com/danything/denpa/issues/668))
+- [@shino-zxc](https://github.com/shino-zxc) ([#1210](https://github.com/danything/denpa/issues/1210) [#1713](https://github.com/danything/denpa/issues/1713))
+- [@eggplants](https://github.com/eggplants) ([#1617](https://github.com/danything/denpa/issues/1617) [#1709](https://github.com/danything/denpa/issues/1709))
+- [@ogatomo21](https://github.com/ogatomo21) ([#1708](https://github.com/danything/denpa/issues/1708))
 
 <!-- thanks:end -->
 

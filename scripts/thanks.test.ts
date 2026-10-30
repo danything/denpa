@@ -94,13 +94,13 @@ describe("一覧の形", () => {
       [
         "**手を入れてくれた人** (ありがとうございます):",
         "",
-        "- [@Khronos31](https://github.com/Khronos31) (#188)",
-        "- [@fetburner](https://github.com/fetburner) (#662)",
+        "- [@Khronos31](https://github.com/Khronos31) ([#188](https://github.com/danything/denpa/issues/188))",
+        "- [@fetburner](https://github.com/fetburner) ([#662](https://github.com/danything/denpa/issues/662))",
         "",
         "**報告や提案をくれた人** (ありがとうございます):",
         "",
-        "- [@Khronos31](https://github.com/Khronos31) (#184 #377)",
-        "- [@fetburner](https://github.com/fetburner) (#668)",
+        "- [@Khronos31](https://github.com/Khronos31) ([#184](https://github.com/danything/denpa/issues/184) [#377](https://github.com/danything/denpa/issues/377))",
+        "- [@fetburner](https://github.com/fetburner) ([#668](https://github.com/danything/denpa/issues/668))",
       ].join("\n"),
     );
   });
@@ -110,7 +110,7 @@ describe("一覧の形", () => {
       [
         "**報告や提案をくれた人** (ありがとうございます):",
         "",
-        "- [@a](https://github.com/a) (#5)",
+        "- [@a](https://github.com/a) ([#5](https://github.com/danything/denpa/issues/5))",
       ].join("\n"),
     );
   });

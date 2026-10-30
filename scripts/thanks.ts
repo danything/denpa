@@ -118,7 +118,7 @@ export function render(items: Item[]): string {
           "",
           ...list.map(
             (p) =>
-              `- [@${p.login}](https://github.com/${p.login}) (${p.numbers.map((n) => `#${n}`).join(" ")})`,
+              `- [@${p.login}](https://github.com/${p.login}) (${p.numbers.map((n) => `[#${n}](https://github.com/danything/denpa/issues/${n})`).join(" ")})`,
           ),
           "",
         ];
