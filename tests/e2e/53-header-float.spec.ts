@@ -14,16 +14,19 @@ test.use({
   reducedMotion: "no-preference",
 });
 
-/** ヘッダーの面が透明か */
+/**
+ * ヘッダーの面が透明か。アニメーションの途中 (番組表の上端など) では、透明も `oklab(0 0 0 / 0)` の形で返る
+ */
 function flat(page: Page) {
-  return page.evaluate(
-    () =>
-      getComputedStyle(document.querySelector(".navbar")!).backgroundColor ===
-      "rgba(0, 0, 0, 0)",
+  return page.evaluate(() =>
+    /^rgba\(0, 0, 0, 0\)$|\/ 0\)$/.test(
+      getComputedStyle(document.querySelector(".navbar")!).backgroundColor,
+    ),
   );
 }
 
-test("巻くと浮き、巻けない画面へ移ると平らに戻る", async ({ page }) => {
+/** 設定の画面で巻いて、ヘッダーを浮かせる */
+async function floatOnSettings(page: Page) {
   await goto(page, "/settings");
   const scrollable = await page.evaluate(
     () =>
@@ -36,11 +39,72 @@ test("巻くと浮き、巻けない画面へ移ると平らに戻る", async ({
 
   await page.mouse.wheel(0, 2000);
   await expect.poll(() => flat(page)).toBe(false);
+}
 
+test("巻くと浮き、巻けない画面へ移ると平らに戻る", async ({ page }) => {
+  await floatOnSettings(page);
   // ルールが空なら巻けない画面。巻けるときは上端に戻した姿を見る
   await page.locator('.navbar a[href="/rules"]').first().click();
   await page.waitForURL("**/rules");
   await expect.poll(() => flat(page)).toBe(true);
+});
+
+/** 番組表を開き、表を縦に巻いてヘッダーを浮かせる (開いたときも「いま」へ巻くので浮いている) */
+async function floatOnGuide(page: Page) {
+  await goto(page, "/guide?type=GR");
+  await expect(page.getByTestId("guide-service").first()).toBeVisible();
+  await page
+    .getByTestId("guide-grid")
+    .evaluate((el) => el.scrollTo({ top: 400, behavior: "instant" }));
+  await expect.poll(() => flat(page)).toBe(false);
+}
+
+/** ヘッダーのナビから移る (設定は最初の節へ送られる) */
+async function navigate(page: Page, url: string) {
+  await page.locator(`.navbar ul.links a[href="${url}"]`).click();
+  await page.waitForURL((u) =>
+    url === "/" ? u.pathname === "/" : u.pathname.startsWith(url),
+  );
+}
+
+/** 番組表の表を縦に巻き、描き直しを 1 回待ってからヘッダーが平らかを返す */
+async function scrollGuideAndRead(page: Page, top: number) {
+  await page.getByTestId("guide-grid").evaluate(async (el, t) => {
+    el.scrollTo({ top: t, behavior: "instant" });
+    await new Promise(requestAnimationFrame);
+  }, top);
+  return flat(page);
+}
+
+/*
+ * **ライブは窓も箱も巻かないので、どこから移ってもヘッダーは平ら** (docs/design.md の「観る画面」)。
+ * 番組表と同じ時間の軸のアニメーションを残していたので、表を巻いて浮いた番組表から移ると、浮いたままになっていた。
+ * ほかの画面 (録画・設定) へ移ったときも、上端に戻るので平らになる
+ */
+for (const [from, float, urls] of [
+  ["番組表", floatOnGuide, ["/live", "/", "/settings"]],
+  ["設定", floatOnSettings, ["/live", "/"]],
+] as const) {
+  for (const url of urls) {
+    test(`${from}で浮いたまま移っても平らに戻る (${url})`, async ({ page }) => {
+      await float(page);
+      await navigate(page, url);
+      await expect.poll(() => flat(page)).toBe(true);
+    });
+  }
+}
+
+test("設定で浮いたまま番組表へ移ると、表の巻いた量で浮く", async ({ page }) => {
+  await floatOnSettings(page);
+  await navigate(page, "/guide");
+  await expect(page.getByTestId("guide-service").first()).toBeVisible();
+  // 開いたときの「いま」への位置合わせが後から来るので、上端に戻すのも込みで待つ
+  await expect(async () => {
+    expect(await scrollGuideAndRead(page, 0)).toBe(true);
+  }).toPass();
+  await expect(async () => {
+    expect(await scrollGuideAndRead(page, 400)).toBe(false);
+  }).toPass();
 });
 
 /**
