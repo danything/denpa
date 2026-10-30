@@ -10,6 +10,7 @@ import {
   expectSideAligned,
   expectSideFrame,
   FAKE_CAPTION,
+  fakeFrame,
   flipSetting,
   goto,
   holdCaptions,
@@ -19,6 +20,7 @@ import {
   overlayTroubles,
   recordOne,
   routeCaptions,
+  takeClip,
   test,
   wakeControls,
 } from "./helpers";
@@ -617,11 +619,12 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **切り抜きは字幕ごと PNG に落ちる** (`番組名_YYYYMMDD-HHMMSS.png`)。PC では
-   * クリップボードにも置くが、置けるかは繋ぎ次第なので、ここで見るのは落ちるところまで。
-   * 指の端末の共有シートはヘッドレスに無い
+   * **切り抜きはサーバに保存する** (`POST /api/clips`)。端末には落とさず、トーストに「保存しました」。
+   * 番組の情報はサーバが録画から引く。画像は AVIF で配り、消すと 404。
+   * **送れなかったとき (オフライン・サーバが断った) だけ**、今までどおり PNG を端末に落とす
+   * (`番組名_YYYYMMDD-HHMMSS.png`。指の端末の共有シートはヘッドレスに無い)
    */
-  test("切り抜きは番組名と時刻の名前で PNG に落ちる", async ({
+  test("切り抜きはサーバに保存し、送れなければ端末に保存する", async ({
     page,
     request,
   }) => {
@@ -634,19 +637,50 @@ test.describe("録画を観る", () => {
     const name =
       (await page.getByTestId("watch-name").textContent())?.trim() ?? "";
 
-    // コマが無いうちは押しても何も起きない (落とすものが無い)。画面も壊れない
+    // コマが無いうちは押しても何も起きない (送るものが無い)。画面も壊れない
     await wakeControls(page, "watch-stage");
     await shot.click();
     await expect(page.getByTestId("watch-video")).toBeVisible();
 
-    /*
-     * 偽 ffmpeg のエンコードしたものは中身が無く、フレームは来ない。**フレームが来たことにする** —
-     * 大きささえあれば写せる (中身の無い映像は黒く写る)
-     */
-    await page.getByTestId("watch-video").evaluate((video) => {
-      Object.defineProperty(video, "videoWidth", { get: () => 320 });
-      Object.defineProperty(video, "videoHeight", { get: () => 180 });
-    });
+    await fakeFrame(page, "watch-video");
+    await wakeControls(page, "watch-stage");
+    const clip = await takeClip(page, "watch-shot");
+    expect(clip).toMatchObject({ place: "watch", recordingId: Number(id) });
+    expect(clip.programName).not.toBe("");
+    expect(clip.offsetMs).not.toBeNull();
+
+    // 探せる。画像は AVIF で、添付にはしない
+    const found = (await (
+      await request.get(`/api/clips?recording=${id}`)
+    ).json()) as { clips: { id: number }[] };
+    expect(found.clips.map((c) => c.id)).toContain(clip.id);
+    const image = await request.get(`/api/clips/${clip.id}/image`);
+    expect(image.status()).toBe(200);
+    expect(image.headers()["content-type"]).toBe("image/avif");
+    expect(image.headers()["cache-control"]).toContain("private");
+    expect(image.headers()["content-disposition"]).toBeUndefined();
+    expect((await request.get(`/api/clips/${clip.id}/small`)).status()).toBe(
+      200,
+    );
+    // 画像でないものは 415
+    expect(
+      (
+        await request.post(`/api/clips?place=watch&recording=${id}&at=1`, {
+          headers: { "content-type": "image/png" },
+          data: "<svg></svg>",
+        })
+      ).status(),
+    ).toBe(415);
+    expect((await request.delete(`/api/clips/${clip.id}`)).status()).toBe(204);
+    expect((await request.get(`/api/clips/${clip.id}/image`)).status()).toBe(
+      404,
+    );
+
+    // サーバが断ったら、端末に落とす (前と同じ名前)
+    await page.route(
+      (url) => url.pathname.endsWith("/api/clips"),
+      (route) => route.fulfill({ status: 500 }),
+    );
     await wakeControls(page, "watch-stage");
     const download = page.waitForEvent("download");
     await shot.click();
@@ -658,7 +692,7 @@ test.describe("録画を観る", () => {
         .startsWith(`${name.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60)}_`),
     ).toBe(true);
     await expect(
-      page.getByText("切り抜きを保存しました", { exact: false }),
+      page.getByText("サーバに保存できなかったので端末に保存しました"),
     ).toBeVisible();
   });
 

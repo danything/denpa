@@ -584,6 +584,54 @@ export const encodeJobs = sqliteTable(
   ],
 );
 
+/** 切り抜きをどこで撮ったか。ライブ・追っかけ・観る画面 */
+export const CLIP_PLACES = ["live", "chase", "watch"] as const;
+
+/**
+ * **切り抜き** (観ている1コマを字幕ごと写した静止画。`clips.ts`)。画像は置き場 (`clips.clipsDir`) に AVIF で置き、
+ * ここには探すための情報を持つ。世帯で共有し、誰が撮ったかは持たない。
+ *
+ * 番組の情報は**撮ったときの値を写して持つ** (番組表は流れて消え、録画も消える。切り抜きは残す)
+ */
+export const clips = sqliteTable(
+  "clips",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** 撮った時刻 (サーバが受け取った時刻。ms)。並びと日付の絞り込みに使う */
+    taken_at: integer("taken_at").notNull(),
+    place: text("place", { enum: CLIP_PLACES }).notNull(),
+    /** 撮った録画。ライブは同じ番組を録っていればそれ。**録画を消したら NULL** (`files.deleteRecordingFiles`) */
+    recording_id: integer("recording_id"),
+    /** 局の内部ID (`tuner.serviceKey`) */
+    service_id: integer("service_id").notNull(),
+    /** 番組。引けなかった (番組表に無い時刻) なら NULL */
+    event_id: integer("event_id"),
+    program_start_at: integer("program_start_at"),
+    program_name: text("program_name").notNull().default(""),
+    service_name: text("service_name").notNull().default(""),
+    /** 番組の始めからの位置 (ms)。「この場面から観る」の行き先。番組が引けなければ NULL */
+    offset_ms: integer("offset_ms"),
+    /** 出していた字幕の文字。出していなければ空 */
+    captions: text("captions").notNull().default(""),
+    /**
+     * 探すための文字 (番組名・局名・字幕を `title.searchable` で揃えてつないだもの)。
+     * 撮ったときに作るので、探すときは SQL だけで当たる (キーセットのページがそのまま使える)
+     */
+    search_text: text("search_text").notNull().default(""),
+    /** 画像。置き場からの相対 (`2026-10/12.avif`)。一覧用の小さいものは `-small` を足した名前 */
+    file: text("file").notNull().default(""),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    /** 置き場で使っている大きさ (画像と一覧用の合計) */
+    bytes: integer("bytes").notNull(),
+  },
+  (t) => [
+    index("clips_taken").on(t.taken_at),
+    index("clips_recording").on(t.recording_id),
+    index("clips_service").on(t.service_id),
+  ],
+);
+
 /** OIDC でログインした控え。Cookie に入るのは id だけで、中身はここにしかない */
 export const sessions = sqliteTable(
   "sessions",

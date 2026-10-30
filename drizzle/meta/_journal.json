@@ -141,6 +141,13 @@
       "when": 1793149777117,
       "tag": "0019_recording-ts-head",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1793372974469,
+      "tag": "0020_clips",
+      "breakpoints": true
     }
   ]
 }

@@ -24,6 +24,7 @@
     AUDIO,
     CAMERA,
     CAPTION,
+    CHECK,
     CODEC,
     DATA,
     INFO,
@@ -55,7 +56,11 @@
     speedRow,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
-  import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
+  import {
+    captionWords,
+    grabbedFrame,
+    videoFrame,
+  } from "#lib/components/player/snapshot.js";
   import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
@@ -342,7 +347,7 @@
   /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
   const stageTap = centerTap(() => player.toggle(), controls.toggle);
 
-  /** いまの1コマを字幕ごと切り抜いて PNG に (3画面共通。`snapshot.ts`) */
+  /** いまの1コマを字幕ごと切り抜いてサーバに保存する (3画面共通。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
   const notices = $derived<Notice[]>([
     ...shooter.notices,
@@ -365,6 +370,12 @@
       () => (player.canvas ? grabbedFrame(player.grab()) : videoFrame(video)),
       player.captions && player.hasCaptions ? overlay : null,
       current?.now?.name ?? current?.name ?? "ライブ",
+      () => ({
+        place: "live",
+        service: player.tuned?.serviceId ?? 0,
+        aired: player.airTime(),
+      }),
+      player.captions ? captionWords(player.shownCaption) : "",
     );
   }
 
@@ -476,7 +487,7 @@
           {/if}
           <!-- MPEG-2 でも切り抜ける (worker の canvas から1枚もらう。`snapshot.grabbedFrame`) -->
           <ControlButton
-            icon={CAMERA}
+            icon={shooter.saved ? CHECK : CAMERA}
             label="この場面を切り抜く"
             testid="live-shot"
             onclick={() => void snapshot()}

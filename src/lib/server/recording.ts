@@ -2,6 +2,7 @@ import { error } from "@sveltejs/kit";
 import { and, eq, isNull } from "drizzle-orm";
 
 import type { Recording } from "../types";
+import { config } from "./config";
 import { orm } from "./db";
 import { recordings } from "./schema";
 import type { Payload } from "./webhook";
@@ -64,4 +65,19 @@ export function fillTsHead(recordingId: number, head: number): void {
     .set({ ts_head: head })
     .where(and(eq(recordings.id, recordingId), isNull(recordings.ts_head)))
     .run();
+}
+
+/**
+ * **元の TS の頭 (再生位置 0 の手前) の放送時刻** (unix ms)。測った値 (`ts_head`) があればそれ、
+ * 測れていない録画 (TDT を読めない・取り込んだ録画) は予定の時刻 (`record_from ?? start_at − START_MARGIN`) で
+ * 代わりにする。数秒ずれることがある。実況のコメント (`jikkyo.ts`) と切り抜きの位置 (`clips.ts`) が使う
+ */
+export function tsHeadOf(
+  recording: Pick<Recording, "ts_head" | "record_from" | "start_at">,
+): number {
+  return (
+    recording.ts_head ??
+    recording.record_from ??
+    recording.start_at - config.startMargin
+  );
 }

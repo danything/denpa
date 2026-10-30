@@ -36,7 +36,9 @@ export type DenpaEvent =
    * **録画のチャプターが書き換わった** (CM検出のやり直し。`encoder.runCmJob`)。中身は `ChaptersChanged`。
    * 開いている観る画面がチャプターを取り直す — 開いたときに読んだきりなので、CM飛ばしとシークバーが古いままになる
    */
-  | "chapters";
+  | "chapters"
+  /** 切り抜きが増えた・消えた (`server/clips.ts`)。開いている切り抜きの画面が読み直す */
+  | "clips";
 
 /** `chapters` イベントの中身 */
 export interface ChaptersChanged {

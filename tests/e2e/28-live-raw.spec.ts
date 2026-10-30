@@ -254,7 +254,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
    * worker に1枚貰う (`raw/engine.ts` の `grab`)。描いたものは残さない作り
    * (`preserveDrawingBuffer` 無し) なので、**描き直さずに読むと真っ黒**になる — 黒くないことまで見る
    */
-  test("MPEG-2 のまま見ている間も切り抜きは映像ごと PNG に落ちる", async ({
+  test("MPEG-2 のまま見ている間も切り抜きは映像ごとサーバに届く", async ({
     page,
   }) => {
     await goto(page, "/live");
@@ -270,16 +270,20 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
       .toBeGreaterThan(10);
 
     await wakeControls(page, "live-frame");
-    const download = page.waitForEvent("download");
+    // 送る1枚 (WebP) を見る。サーバの返事 (偽 ffmpeg) は待たない
+    const sent = page.waitForRequest(
+      (req) =>
+        req.method() === "POST" &&
+        new URL(req.url()).pathname.endsWith("/api/clips"),
+    );
     await page.getByTestId("live-shot").click();
-    const file = await download;
-    expect(file.suggestedFilename()).toMatch(/^.+_\d{8}-\d{6}\.png$/);
-
-    const png = readFileSync(await file.path()).toString("base64");
+    const body = (await sent).postDataBuffer();
+    expect(body).not.toBeNull();
+    const image = body!.toString("base64");
     const lit = await page.evaluate(async (data) => {
       // data: を fetch すると CSP (connect-src 'self') に止められるので、手でデコードする
       const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "image/png" });
+      const blob = new Blob([bytes]);
       const bitmap = await createImageBitmap(blob);
       const board = new OffscreenCanvas(bitmap.width, bitmap.height);
       const ctx = board.getContext("2d") as OffscreenCanvasRenderingContext2D;
@@ -290,7 +294,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
         if (pixels[i]! + pixels[i + 1]! + pixels[i + 2]! > 60) bright++;
       }
       return { width: bitmap.width, bright };
-    }, png);
+    }, image);
     expect(lit.width).toBeGreaterThan(0);
     expect(lit.bright).toBeGreaterThan(0);
   });

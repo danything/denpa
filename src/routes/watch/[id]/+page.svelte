@@ -73,7 +73,11 @@
     subtitles,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
-  import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
+  import {
+    captionWords,
+    grabbedFrame,
+    videoFrame,
+  } from "#lib/components/player/snapshot.js";
   import SpeedMenu, {
     SPEED_KEY,
     storedSpeed,
@@ -1759,7 +1763,7 @@
   /** 右に出す中身。録画の行が持っているぶん (追っかけと同じ)。番組表から引けたら `detail` が差し替える */
   const facts = $derived(recordingFacts(rec));
 
-  /** 切り抜きの結果。貼れたかどうかは言う */
+  /** 切り抜き。保存できたか・端末に保存したかを言う */
   const shooter = snapshotter(controls);
 
   /**
@@ -1785,7 +1789,7 @@
   ]);
 
   /**
-   * いまの1コマを字幕ごと切り抜いて PNG に (3画面共通。[snapshot.ts](../../../lib/components/player/snapshot.ts))。
+   * いまの1コマを字幕ごと切り抜いてサーバに保存する (3画面共通。[shot.svelte.ts](../../../lib/components/player/shot.svelte.ts))。
    * canvas に描いているときはプレイヤーから1枚もらう (`<video>` は空)
    */
   function snapshot(): void {
@@ -1794,6 +1798,13 @@
       () => (canvas !== null ? grabbedFrame(canvas.grab()) : videoFrame(video)),
       drawn ? overlay : null,
       rec.name,
+      () => ({
+        place: "watch",
+        recording: rec.id,
+        at: mediaTime(),
+        source: info?.axis,
+      }),
+      drawn ? captionWords(shownPage) : "",
     );
   }
 </script>
@@ -1981,7 +1992,7 @@
         <ControlBar side shown={controls.shown} testid="watch-side">
           <CloseLink testid="watch-close" />
           <ControlButton
-            icon={CAMERA}
+            icon={shooter.saved ? CHECK : CAMERA}
             label="この場面を切り抜く"
             testid="watch-shot"
             onclick={() => void snapshot()}

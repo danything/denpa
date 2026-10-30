@@ -8,12 +8,14 @@ import {
   expectSharpCaptions,
   expectSideAligned,
   expectSideFrame,
+  fakeFrame,
   feedCaption,
   goto,
   holdCaptions,
   leaveFullscreen,
   oneRowTroubles,
   syncEpg,
+  takeClip,
   test,
   wakeControls,
 } from "./helpers";
@@ -111,6 +113,21 @@ async function checkChase(
   await holdCaptions(page, "chase-captions");
   await feedCaption(page, "chase");
   await expectSharpCaptions(page, "既定の画面");
+
+  /*
+   * **切り抜きはサーバに保存する** (観る画面・ライブと同じ)。録画と位置を送り、番組はサーバが引く。
+   * 出していた字幕の文字も添える (探すため)
+   */
+  await fakeFrame(page, "chase-video");
+  await wakeControls(page, "chase");
+  const clip = await takeClip(page, "chase-shot");
+  expect(clip).toMatchObject({
+    place: "chase",
+    recordingId: Number(id),
+    captions: "字幕はくっきり",
+  });
+  expect(clip.programName).not.toBe("");
+
   for (const [what, options] of CAPTION_SCREENS) {
     const context = await browser.newContext(options);
     const tab = await context.newPage();

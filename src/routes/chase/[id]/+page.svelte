@@ -19,6 +19,7 @@
     AUDIO,
     CAMERA,
     CAPTION,
+    CHECK,
     CODEC,
     PAUSE,
     PLAY,
@@ -43,7 +44,11 @@
     speedRow,
   } from "#lib/components/player/settings.js";
   import { snapshotter } from "#lib/components/player/shot.svelte.js";
-  import { grabbedFrame, videoFrame } from "#lib/components/player/snapshot.js";
+  import {
+    captionWords,
+    grabbedFrame,
+    videoFrame,
+  } from "#lib/components/player/snapshot.js";
   import SpeedMenu, {
     SPEED_KEY,
     storedSpeed,
@@ -282,7 +287,7 @@
     stepVolume: volume.step,
   });
 
-  /** いまの1コマを字幕ごと切り抜いて PNG に (ライブ・観る画面と同じ。`snapshot.ts`) */
+  /** いまの1コマを字幕ごと切り抜いてサーバに保存する (ライブ・観る画面と同じ。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
   const notices = $derived<Notice[]>([...shooter.notices, ...pip.notices]);
   function snapshot(): void {
@@ -290,6 +295,14 @@
       () => (player.canvas ? grabbedFrame(player.grab()) : videoFrame(video)),
       player.captions && player.hasCaptions ? overlay : null,
       data.rec.name,
+      () => ({
+        place: "chase",
+        recording: data.rec.id,
+        at: pos,
+        // 追っかけは元の TS を流す
+        source: "ts",
+      }),
+      player.captions ? captionWords(player.shownCaption) : "",
     );
   }
 </script>
@@ -337,8 +350,9 @@
       <ControlBar side shown={controls.shown}>
         <CloseLink />
         <ControlButton
-          icon={CAMERA}
+          icon={shooter.saved ? CHECK : CAMERA}
           label="この場面を切り抜く"
+          testid="chase-shot"
           onclick={() => void snapshot()}
         />
       </ControlBar>

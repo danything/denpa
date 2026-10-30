@@ -1312,3 +1312,52 @@ export async function expectSideFrame(
     `映像の列の左 ${column.x} と、${first} の右 ${right}`,
   ).toBeLessThanOrEqual(1);
 }
+
+/**
+ * **フレームが来たことにする** (切り抜き)。偽の放送・偽 ffmpeg の映像はブラウザが読めず、フレームは来ない。
+ * 大きささえあれば写せる (中身の無い映像は黒く写る)。`testid` は `<video>` の目印
+ */
+export async function fakeFrame(page: Page, testid: string): Promise<void> {
+  await page.getByTestId(testid).evaluate((video) => {
+    Object.defineProperty(video, "videoWidth", { get: () => 320 });
+    Object.defineProperty(video, "videoHeight", { get: () => 180 });
+  });
+}
+
+/** 切り抜き1枚 (`POST /api/clips` の返事。`#lib/clips.ts` の `Clip`) */
+export interface ClipJson {
+  id: number;
+  place: "live" | "chase" | "watch";
+  recordingId: number | null;
+  serviceName: string;
+  programName: string;
+  offsetMs: number | null;
+  captions: string;
+}
+
+/**
+ * 切り抜きのボタンを押して、サーバに置けたところまで待つ。**端末には落とさない** (落ちたら失敗)。
+ * 返事 (201) の中身を返す
+ */
+export async function takeClip(page: Page, button: string): Promise<ClipJson> {
+  let downloads = 0;
+  const count = () => downloads++;
+  page.on("download", count);
+  try {
+    const response = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        new URL(res.url()).pathname.endsWith("/api/clips"),
+    );
+    await page.getByTestId(button).click();
+    const res = await response;
+    expect(res.status()).toBe(201);
+    await expect(
+      page.getByText("保存しました", { exact: false }),
+    ).toBeVisible();
+    expect(downloads).toBe(0);
+    return (await res.json()) as ClipJson;
+  } finally {
+    page.off("download", count);
+  }
+}

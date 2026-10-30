@@ -567,6 +567,46 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 追っかけで観た続きをエンコードしたもので開いても、同じ場面から始まります。切った CM の途中だった位置は、その後の本編の頭になります。
 答えの `resume` は送った `source` の時刻のままです (v1.55 までに覚えた位置は直していないので、CM を切った録画では少しずれることがあります)
 
+## 切り抜き `POST /api/clips`
+
+観ている1コマを置きます。**本文は画像そのもの** (PNG・JPEG・WebP。`Content-Type` は見ずに中身で見分けます)。
+どこで撮ったかは URL の問い合わせで渡し、番組名・局名・番組の始めからの位置はサーバが引きます。
+
+| 撮った所                  | 問い合わせ                                                                                                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 録画 (観る画面・追っかけ) | `place=watch` か `place=chase`、`recording` (録画ID)、`at` (位置の秒)、`source` (観ているファイル。[観た位置](#観た位置-post-apirecordingsidresume) と同じ) |
+| ライブ                    | `place=live`、`service` (局の `id`)、`aired` (映していたコマの放送時刻。UNIX ミリ秒。省くと受け取った時刻)                                                  |
+
+どちらにも `captions` (出していた字幕の文字) を足せます。サーバは AVIF (と一覧用の幅 480 のもの) にして置き、`201` で1枚の中身を返します。
+大きさの上限は 512 KiB (本文の上限 `BODY_SIZE_LIMIT` の既定と同じ) で、超えると `413`、読めない画像は `415` です。
+
+```json
+{
+  "id": 12,
+  "takenAt": 1793372974469,
+  "place": "watch",
+  "recordingId": 34,
+  "serviceId": 3273601024,
+  "serviceName": "でんぱテレビ",
+  "programName": "夜のニュース",
+  "programStartAt": 1793368800000,
+  "eventId": 77,
+  "offsetMs": 175000,
+  "captions": "こんばんは",
+  "width": 1920,
+  "height": 1080,
+  "bytes": 312345
+}
+```
+
+`recordingId` は撮った録画 (ライブなら同じ番組を録っていればその録画)。消した録画は `null` になります。番組表に無い時刻のライブは
+`programName` が空で、`programStartAt`・`eventId`・`offsetMs` が `null` です。
+
+- **探す** `GET /api/clips?q=&service=&day=YYYY-MM-DD&recording=&kind=live|recorded&before=` → `{ "clips": [...], "next": ID または null }`。
+  新しい順に 60 件ずつで、続きは `before` に `next` を入れます。`q` は空白で区切った語をすべて含むもの (番組名・局名・字幕)
+- **画像** `GET /api/clips/<id>/image` (AVIF)・`GET /api/clips/<id>/small` (一覧用)。`GET /api/clips/<id>` は1枚の中身
+- **消す** `DELETE /api/clips/<id>` (`204`)・まとめて `DELETE /api/clips?ids=1,2,3` (`{ "deleted": 消せた数 }`。一度に 500 枚まで)
+
 ## 変化の通知 `GET /api/events`
 
 Server-Sent Events (`text/event-stream`) で、サーバ側の変化を流し続けます。受け取ったら該当の一覧を読み直してください。
@@ -582,6 +622,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 - 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
 - `programs` は番組表を集めたときのほか、**ライブで開いている局の番組が放送で替わった・延びた**ときにも来ます
   (EIT[p/f] が番組表と違ったとき)。局の一覧 (`GET /api/services`) の `now` を読み直せば、いまの番組に追いつきます
+- `clips` は切り抜きが増えた・消えたことの通知 ([切り抜き](#切り抜き-post-apiclips))
 - `chapters` は**録画のチャプターが書き換わった** (CM検出をやり直した) ことの通知。`data` は `{"recordingId":12}`。
   その録画を観ていれば [チャプター](#録画のチャプター-get-apirecordingsidchapters) を読み直してください。位置 (秒) の物差しは変わりません
 - `data` は `encode` と `yielded` と `chapters` だけが中身を運び、ほかは `1`。`encode` は `recordingId` `percent` `etaMs` `log`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`

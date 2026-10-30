@@ -15,6 +15,18 @@ for arg in "$@"; do
     prev="$arg"
 done
 
+# 切り抜きの AVIF (`server/clips.ts` の `avifArgs`)。本物は2枚 (そのままと一覧用) を書く。ここでは
+# 受けた画像をそのまま両方へ写す (中身は WebP などのままだが、ブラウザは中身で読むので映る)。
+# エンコードの引数の控えには残さない (エンコードを見るテストに混ざらないように)
+if printf '%s\n' "$@" | grep -qx -- 'avif'; then
+    prev=""
+    for arg in "$@"; do
+        if [ "$prev" = "avif" ]; then cp "$input" "$arg" || exit 1; fi
+        prev="$arg"
+    done
+    exit 0
+fi
+
 # **何を渡されたかを残す** (ライブの FAKE_FFMPEG_ARGS_FILE と同じ形式)。エンコードするときに
 # GPU の方式 (`h264_qsv` など) を選べているか、落ちたらソフトウェアへ倒れているかを
 # テストから見るため。**どの方式でも、落ちる前に**残す。1回ぶんずつ足す

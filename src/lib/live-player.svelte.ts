@@ -2475,6 +2475,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get captions() {
       return captions;
     },
+    /** いま描いている字幕の1枚 (切り抜きに文字を添える)。出していなければ null */
+    get shownCaption(): CaptionPage | null {
+      return shown;
+    },
     /** 放送が字幕を持っているか。**1枚も届いていなくても分かる** */
     get hasCaptions() {
       return captionTracks.length > 0;

@@ -13,7 +13,7 @@ export type IconShape = Component<SvelteHTMLElements["svg"]>;
 export { default as DATA } from "~icons/denpa/data";
 /** 音声を選ぶ (主・副・二か国語) */
 export { default as AUDIO } from "~icons/lucide/audio-lines";
-/** 切り抜き (いまの1コマを PNG に) */
+/** 切り抜き (いまの1コマをサーバに保存する) */
 export { default as CAMERA } from "~icons/lucide/camera";
 export { default as CAPTION } from "~icons/lucide/captions";
 /** 聞き返しの2回目 (レ点)。**文字を出さずに「これでいいか」を言う** */

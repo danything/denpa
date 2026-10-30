@@ -1,3 +1,6 @@
+import type { CaptionPage, CaptionRun } from "@danything/arib/caption-text";
+
+import { CLIP_BYTES_MOST } from "#lib/clips.js";
 import type { Notice } from "#lib/components/Toasts.svelte";
 import { pad } from "#lib/format.js";
 
@@ -85,29 +88,11 @@ function download(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/**
- * いまの1コマを字幕ごと切り抜いて PNG にする。**3画面 (ライブ・追っかけ・観る画面) で同じ。**
- *
- * 映像を1枚に写し、出している字幕 (`caption`) があれば映像の大きさに合わせて重ねる。
- *
- * 渡し方は端末で分ける:
- *
- * - **指の端末** … 共有シート (`navigator.share`)。断られたら (押した直後でなくなった・
- *   共有できない形式) 落とすほうに倒す。閉じられたら何もしない (やめたのは本人)
- * - **PC** … 落とす。**クリップボードにも置く** (そのまま貼りたいとき用)。置けるのは https か localhost で
- *   押した直後だけなので、断られても黙って落とすだけにする
- *
- * 返り値は通知 (トースト)。撮れなかった・共有に渡した (シートそのものが返事) なら null。
- *
- * @param frame 写すフレーム。まだ来ていなければ null (何もしない)
- * @param caption 重ねる字幕の canvas。消しているとき・持っていないときは null
- * @param title 番組名 (ファイル名の頭)
- */
-export async function clipFrame(
+/** いまの1コマを字幕ごと1枚の canvas に写す。映像の大きさに合わせて字幕を重ねる。まだフレームが来ていなければ null */
+export function composeFrame(
   frame: Frame | null,
   caption: HTMLCanvasElement | null,
-  title: string,
-): Promise<Notice | null> {
+): HTMLCanvasElement | null {
   if (frame === null || frame.width === 0) return null;
   const canvas = document.createElement("canvas");
   canvas.width = frame.width;
@@ -118,43 +103,138 @@ export async function clipFrame(
   if (caption !== null && caption.width > 1) {
     ctx.drawImage(caption, 0, 0, canvas.width, canvas.height);
   }
+  return canvas;
+}
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/png"),
-  );
+export function pngOf(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+/** サーバへ送るときの画質 (WebP・JPEG の 0〜1)。上限に収まるまでこの順に下げる */
+const QUALITIES = [0.92, 0.85, 0.75, 0.6];
+
+/**
+ * **サーバへ送る1枚。** PNG は 1080 で数 MB になり、本文の上限 (`CLIP_BYTES_MOST`) を超えるので、
+ * WebP (作れないブラウザ (Safari) では JPEG) にして、収まるまで画質を下げる。
+ * サーバは受けたものを AVIF にし直すので、ここは見た目が崩れない程度でよい。収まらなければ null
+ */
+export async function uploadBlob(
+  canvas: HTMLCanvasElement,
+): Promise<Blob | null> {
+  let type = "image/webp";
+  for (const quality of QUALITIES) {
+    let blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, type, quality),
+    );
+    // WebP を作れないブラウザは PNG を返してくる
+    if (blob !== null && blob.type !== type) {
+      type = "image/jpeg";
+      blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, type, quality),
+      );
+    }
+    if (blob === null) return null;
+    if (blob.size <= CLIP_BYTES_MOST) return blob;
+  }
+  return null;
+}
+
+/**
+ * 出している字幕の文字 (探すため)。字の並びを上から行ごとにつなぐ。ルビと外字の代わりの「〓」は落とす
+ */
+export function captionWords(page: CaptionPage | null): string {
+  if (page === null) return "";
+  const lines = new Map<number, CaptionRun[]>();
+  for (const run of page.runs) {
+    if (run.ruby === true || run.drcs !== undefined) continue;
+    const line = lines.get(run.y) ?? [];
+    line.push(run);
+    lines.set(run.y, line);
+  }
+  return [...lines.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, runs]) =>
+      runs
+        .sort((a, b) => a.x - b.x)
+        .map((run) => run.text)
+        .join("")
+        .trim(),
+    )
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** どこで撮ったか。サーバはこれで番組を引く (`POST /api/clips`) */
+export type ClipWhere =
+  | {
+      place: "watch" | "chase";
+      recording: number;
+      /** 位置 (秒)。観ているものの物差し */
+      at: number;
+      /** 観ているもの (`ts` / `encoded` / `alt`)。分からなければ undefined */
+      source: string | undefined;
+    }
+  | {
+      place: "live";
+      service: number;
+      /** 映していたコマの放送時刻 (unix ms)。分からなければ null (サーバが受け取った時刻にする) */
+      aired: number | null;
+    };
+
+/** `POST /api/clips` の URL の問い合わせ */
+export function clipParams(
+  where: ClipWhere,
+  captions: string,
+): URLSearchParams {
+  const params = new URLSearchParams({ place: where.place });
+  if (where.place === "live") {
+    params.set("service", String(where.service));
+    if (where.aired !== null)
+      params.set("aired", String(Math.round(where.aired)));
+  } else {
+    params.set("recording", String(where.recording));
+    params.set("at", where.at.toFixed(3));
+    if (where.source !== undefined) params.set("source", where.source);
+  }
+  if (captions !== "") params.set("captions", captions);
+  return params;
+}
+
+/**
+ * **端末に保存する** (サーバに置けなかったとき)。前は押すたびにこうしていた。
+ *
+ * - **指の端末** … 共有シート (`navigator.share`)。断られたら (押した直後でなくなった・
+ *   共有できない形式) 落とすほうに倒す。閉じられたら何も残らないので、そう言う
+ * - **PC** … PNG を落とす
+ *
+ * 返り値は通知 (トースト)。サーバに置けなかったことは必ず言う (黙ると、一覧に無い理由が分からない)
+ */
+export async function saveOnDevice(
+  canvas: HTMLCanvasElement,
+  title: string,
+  key: string,
+): Promise<Notice | null> {
+  const blob = await pngOf(canvas);
   if (blob === null) return null;
   const name = shotName(title, new Date());
-  const key = `shot-${Date.now()}`;
+  const saved: Notice = {
+    key,
+    kind: "info",
+    text: "サーバに保存できなかったので端末に保存しました",
+  };
 
   const file = new File([blob], name, { type: "image/png" });
   if (prefersShare(file)) {
     try {
       await navigator.share({ files: [file] });
-      return null;
+      return saved;
     } catch (error) {
-      // 閉じた (やめた) なら何もしない。それ以外 (押した直後でなくなった・断られた) は落とす
+      // 閉じた (やめた) なら何も残っていない
       if (error instanceof DOMException && error.name === "AbortError")
-        return null;
-      // **共有できなかったことは言う。** 黙って落とすと、シートが出なかった理由が分からない
-      download(blob, name);
-      return {
-        key,
-        kind: "info",
-        text: `共有できなかったので保存しました: ${name}`,
-      };
+        return { key, kind: "info", text: "サーバに保存できませんでした" };
+      // それ以外 (押した直後でなくなった・断られた) は落とす
     }
   }
-
   download(blob, name);
-  try {
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    return {
-      key,
-      kind: "success",
-      text: `切り抜きを保存しました (クリップボードにもコピー): ${name}`,
-    };
-  } catch {
-    // http の接続や断られたとき。落としてあるので、それだけ言う
-    return { key, kind: "success", text: `切り抜きを保存しました: ${name}` };
-  }
+  return saved;
 }

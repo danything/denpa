@@ -15,6 +15,7 @@ import { NX_JIKKYO_CHANNELS } from "../jikkyo/endpoints";
 import type { Recording } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
+import { tsHeadOf } from "./recording";
 import { services } from "./schema";
 import { settings } from "./settings";
 
@@ -49,10 +50,7 @@ export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
   if (channel === null) return null;
   return {
     channel,
-    head:
-      recording.ts_head ??
-      recording.record_from ??
-      recording.start_at - config.startMargin,
+    head: tsHeadOf(recording),
     // 録画の終わりは予定 (使えた区間・後ろのマージン込み)。録っている途中ならまだ先
     end: recording.record_to ?? recording.end_at + config.endMargin,
   };
