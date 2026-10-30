@@ -140,44 +140,55 @@
         ];
   }
 
+  /** 枠がいま開いているか (`beforetoggle` で写す)。`open` と食い違うときだけ枠を開け閉めする */
+  let shown = false;
+
   /** `open` を枠に写す (呼び出し側が閉じることもある。送り終えたときなど) */
   $effect(() => {
-    if (content === null) return;
-    const shown = content.matches(":popover-open");
-    if (open && !shown) {
+    if (content === null || open === shown) return;
+    if (open) {
       filled = true;
       content.showPopover();
-    } else if (!open && shown) content.hidePopover();
+    } else content.hidePopover();
   });
 
-  /** 枠の開け閉めを `open` に写す */
+  /**
+   * 枠の開け閉めを `open` に写す。
+   *
+   * **`open` は `beforetoggle` で変える。** `toggle` は後のタスクで届くので、それを待つと、開いてから届くまでに
+   * 押した Esc を受けられず (受ける側をまだ付けていない)、閉じてから届くまでにキーやフォーカスを動かすと、遅れて
+   * フォーカスを引き金へ戻して横取りしていた (閉じた直後の ↑ が引き金に当たって開き直す)。`beforetoggle` は
+   * 開け閉めのその場で届く
+   */
   $effect(() => {
     const element = content;
     if (element === null) return;
-    const ontoggle = (event: Event) => {
-      const shown = (event as ToggleEvent).newState === "open";
+    const onbefore = (event: Event) => {
+      shown = (event as ToggleEvent).newState === "open";
+      if (shown) {
+        filled = true;
+      } else if (element.contains(document.activeElement)) {
+        // 中にいたフォーカスは引き金へ戻す (閉じる前に。閉じてからだと body に落ちている)。外の別のものを
+        // 押して閉じたときは、そちらに任せる
+        triggerElement()?.focus({ preventScroll: true });
+      }
+      open = shown;
+    };
+    const ontoggle = () => {
+      // 届いたときの枠を見る (届くまでにまた開け閉めしていることがある)
+      shown = element.matches(":popover-open");
       open = shown;
       if (shown) {
         place();
         const list = items();
-        const target = byPointer ? element : fromEnd ? list.at(-1) : list[0];
-        (target ?? element).focus({ preventScroll: true });
-      } else {
-        // 中にいたフォーカスは引き金へ戻す。外の別のものを押して閉じたときは、そちらに任せる
-        const active = document.activeElement;
-        if (
-          active === null ||
-          active === document.body ||
-          element.contains(active)
-        ) {
-          triggerElement()?.focus({ preventScroll: true });
+        // 届くまでにキーボードで中へ入っていたら動かさない
+        if (!element.contains(document.activeElement)) {
+          const target = byPointer ? element : fromEnd ? list.at(-1) : list[0];
+          (target ?? element).focus({ preventScroll: true });
         }
       }
       byPointer = false;
       fromEnd = false;
-    };
-    const onbefore = (event: Event) => {
-      if ((event as ToggleEvent).newState === "open") filled = true;
     };
     element.addEventListener("beforetoggle", onbefore);
     element.addEventListener("toggle", ontoggle);

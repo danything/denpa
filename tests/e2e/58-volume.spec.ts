@@ -609,3 +609,79 @@ test.describe("指の端末の音のボタン", () => {
     await expect(page.getByTestId("live-sound-pop")).toBeHidden();
   });
 });
+
+/**
+ * **⚙ の開け閉めは `toggle` を待たない** (`Menu.svelte`)。`toggle` は後のタスクで届くので、重い CI では開いてから
+ * 届くまでに押した Esc が効かず、閉じてから届くまでに動かしたフォーカスを遅れて引き金へ戻していた (閉じた直後の
+ * ↑↓ が引き金に当たってメニューを開き直す)。ここでは popover の `toggle` を止めておき、届く前に操作してから届ける
+ */
+test.describe("⚙ の開け閉めと遅れて届く toggle", () => {
+  test("届く前の Esc で閉じ、閉じた後に動かしたフォーカスを奪わない", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      // 止めている popover と、止めた間のもとの状態 (oldState)。届けるときは1回にまとめる (ブラウザと同じ)
+      const held = new Map<HTMLElement, string>();
+      (globalThis as { __release?: () => void }).__release = () => {
+        for (const [target, oldState] of held) {
+          const newState = target.matches(":popover-open") ? "open" : "closed";
+          target.dispatchEvent(
+            new ToggleEvent("toggle", { oldState, newState }),
+          );
+        }
+        held.clear();
+      };
+      window.addEventListener(
+        "toggle",
+        (event) => {
+          const target = event.target;
+          if (
+            !event.isTrusted ||
+            !(target instanceof HTMLElement) ||
+            !target.hasAttribute("popover")
+          )
+            return;
+          event.stopImmediatePropagation();
+          if (!held.has(target))
+            held.set(target, (event as ToggleEvent).oldState);
+        },
+        true,
+      );
+    });
+    const release = () =>
+      page.evaluate(() =>
+        (globalThis as unknown as { __release: () => void }).__release(),
+      );
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    const menu = page.getByTestId("live-settings-menu");
+    const trigger = page.getByTestId("live-settings");
+
+    // 開いて、toggle が届く前の Esc
+    await wakeControls(page, STAGE.live);
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await release();
+    await expect(menu).toBeHidden();
+
+    // 中にフォーカスがある間に閉じると、その場で引き金へ戻る。そこから動かしたフォーカスは、
+    // 後から届いた toggle に奪われない
+    await wakeControls(page, STAGE.live);
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await release();
+    await page.getByTestId("live-volume").focus();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await release();
+    await expect(trigger).not.toBeFocused();
+    await expect(menu).toBeHidden();
+  });
+});
