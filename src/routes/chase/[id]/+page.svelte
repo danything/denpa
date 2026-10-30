@@ -24,7 +24,6 @@
     PAUSE,
     PLAY,
     SOUND_OFF,
-    SOUND_ON,
     SPEED,
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
@@ -49,6 +48,7 @@
     grabbedFrame,
     videoFrame,
   } from "#lib/components/player/snapshot.js";
+  import SoundButton from "#lib/components/player/SoundButton.svelte";
   import SpeedMenu, {
     SPEED_KEY,
     storedSpeed,
@@ -377,11 +377,11 @@
           />
           <!-- 畳むときは音と速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
           <Extras>
-            <ControlButton
-              icon={player.silenced ? SOUND_OFF : SOUND_ON}
-              label={player.silenced ? "音を出す" : "音を消す"}
+            <SoundButton
+              silenced={player.silenced}
               testid="chase-sound"
               onclick={player.toggleMute}
+              {volume}
             />
             {#if player.hasCaptions}
               <ControlButton

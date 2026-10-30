@@ -36,7 +36,6 @@
     PLAY,
     RECORD,
     SOUND_OFF,
-    SOUND_ON,
     SPEED,
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
@@ -64,6 +63,7 @@
     grabbedFrame,
     videoFrame,
   } from "#lib/components/player/snapshot.js";
+  import SoundButton from "#lib/components/player/SoundButton.svelte";
   import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
@@ -632,11 +632,11 @@
             />
             <!-- 畳むときは音・Hybridcast・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
-              <ControlButton
-                icon={player.silenced ? SOUND_OFF : SOUND_ON}
-                label={player.silenced ? "音を出す" : "音を消す"}
+              <SoundButton
+                silenced={player.silenced}
                 testid="live-sound"
                 onclick={player.toggleMute}
+                {volume}
               />
 
               <!--

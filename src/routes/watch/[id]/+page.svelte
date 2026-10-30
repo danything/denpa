@@ -52,7 +52,6 @@
     PLAY,
     PREV,
     SOUND_OFF,
-    SOUND_ON,
     SPEED,
     TRASH,
   } from "#lib/components/player/icons.js";
@@ -78,6 +77,7 @@
     grabbedFrame,
     videoFrame,
   } from "#lib/components/player/snapshot.js";
+  import SoundButton from "#lib/components/player/SoundButton.svelte";
   import SpeedMenu, {
     SPEED_KEY,
     storedSpeed,
@@ -2067,11 +2067,11 @@
             />
             <!-- 畳むときは音と速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
-              <ControlButton
-                icon={muted ? SOUND_OFF : SOUND_ON}
-                label={muted ? "音を出す" : "音を消す"}
+              <SoundButton
+                silenced={muted}
                 testid="watch-sound"
                 onclick={toggleMute}
+                {volume}
               />
 
               <!-- 字幕を持っている録画でだけ出す。押しても何も起きない操作を並べない (`/live` と同じ) -->

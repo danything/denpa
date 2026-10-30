@@ -490,3 +490,122 @@ test.describe("音量", () => {
     await expect(page.getByTestId("watch-volume-note")).toHaveText("音量 100%");
   });
 });
+
+/**
+ * **音のボタンに乗せると縦のつまみが浮かぶ** (`SoundButton`)。マウスで指せる端末だけ。
+ * 指の端末 (車のタブレットなど) は ⚙ のつまみだけを使う
+ */
+test.describe("音のボタンの縦のつまみ", () => {
+  test("乗せると真上に出て、縦に動かす・ホイールで変わり、⚙ と同じ値。外れたら閉じ、キーボードでも開く", async ({
+    page,
+  }) => {
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    const button = page.getByTestId("live-sound");
+    const pop = page.getByTestId("live-sound-pop");
+    const slider = page.getByTestId("live-sound-volume");
+
+    await wakeControls(page, STAGE.live);
+    await expect(pop).toBeHidden();
+    await button.hover();
+    await expect(pop).toBeVisible();
+    // ボタンの真上に、縦長で
+    const at = (await button.boundingBox())!;
+    const box = (await slider.boundingBox())!;
+    expect(box.height).toBeGreaterThan(box.width);
+    expect(box.y + box.height).toBeLessThanOrEqual(at.y + 1);
+    expect(
+      Math.abs(box.x + box.width / 2 - (at.x + at.width / 2)),
+    ).toBeLessThan(2);
+    await expect(slider).toHaveValue("100");
+
+    // 下の端までつまんで下ろすと 0%、半ばまで上げると 50% 前後
+    const x = box.x + box.width / 2;
+    await page.mouse.move(x, box.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(x, box.y + box.height + 20, { steps: 5 });
+    await expect(slider).toHaveValue("0");
+    await page.mouse.move(x, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    const half = Number(await slider.inputValue());
+    expect(half).toBeGreaterThanOrEqual(40);
+    expect(half).toBeLessThanOrEqual(60);
+    await expect(pop).toContainText(`${half}%`);
+
+    // ホイールで 1 刻み (上へ回すと大きく)
+    await page.mouse.wheel(0, -100);
+    await expect(slider).toHaveValue(String(half + 5));
+    await page.mouse.wheel(0, 100);
+    await page.mouse.wheel(0, 100);
+    await expect(slider).toHaveValue(String(half - 5));
+
+    // 押すと今までどおり消音の切り替え (開いたまま)
+    // (自動再生を断られて消えていることもあるので、名前が替わって戻るかで見る)
+    const name = (await button.getAttribute("aria-label"))!;
+    await button.click();
+    await expect(button).not.toHaveAccessibleName(name);
+    await expect(pop).toBeVisible();
+    await button.click();
+    await expect(button).toHaveAccessibleName(name);
+
+    // 外れたら少し待ってから閉じる
+    const stage = (await page.getByTestId(STAGE.live).boundingBox())!;
+    await page.mouse.move(stage.x + stage.width / 2, stage.y + 20);
+    await expect(pop).toBeVisible();
+    await expect(pop).toBeHidden();
+
+    // ⚙ のつまみと同じ値
+    await openSettings(page, "live");
+    await expect(page.getByTestId("live-volume")).toHaveValue(String(half - 5));
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("live-settings-menu")).toBeHidden();
+
+    // キーボードでボタンに来ても開き、つまみは ↑↓ で動く
+    await wakeControls(page, STAGE.live);
+    await page.getByTestId("live-play").focus();
+    await page.keyboard.press("Tab");
+    await expect(button).toBeFocused();
+    await expect(pop).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(slider).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(slider).toHaveValue(String(half));
+    await page.keyboard.press("Escape");
+    await expect(pop).toBeHidden();
+  });
+});
+
+test.describe("指の端末の音のボタン", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 1280, height: 800 },
+  });
+
+  test("押しても縦のつまみは出ず、消音を切り替えるだけ", async ({ page }) => {
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => matchMedia("(hover: hover) and (pointer: fine)").matches,
+      ),
+    ).toBe(false);
+
+    const bar = page.getByTestId("live-controls");
+    if ((await bar.getAttribute("data-shown")) !== "true") {
+      const stage = (await page.getByTestId(STAGE.live).boundingBox())!;
+      await page.touchscreen.tap(
+        stage.x + stage.width / 2,
+        stage.y + stage.height / 2,
+      );
+    }
+    await expect(bar).toHaveAttribute("data-shown", "true");
+    const button = page.getByTestId("live-sound");
+    const name = await button.getAttribute("aria-label");
+    await button.tap();
+    await expect(button).not.toHaveAccessibleName(name!);
+    await expect(page.getByTestId("live-sound-pop")).toBeHidden();
+  });
+});
