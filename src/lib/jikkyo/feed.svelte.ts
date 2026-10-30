@@ -142,7 +142,8 @@ export class JikkyoFeed {
 
   /**
    * NX-Jikkyo に書き込む (確かめるのは呼ぶ側。`post.ts`)。送れたら、いまの放送時刻 `w` に置いてすぐ流す
-   * (戻ってきた同じものは `nx.ts` が 1 回だけ捨てる)。`w` は返事を受けたときに読む
+   * (戻ってきた同じものは `nx.ts` が 1 回だけ捨てる)。`w` は返事を受けたときに読み、読めなければ送ったときの値に置く
+   * (どちらも無いと、送れたものがどこにも流れない)
    */
   async post(
     text: string,
@@ -151,8 +152,9 @@ export class JikkyoFeed {
   ): Promise<PostResult> {
     const nx = this.nx;
     if (nx === null) return "closed";
+    const before = w();
     const result = await nx.post(text, style);
-    const at = w();
+    const at = w() ?? before;
     if (result === "sent" && nx === this.nx && at !== null) {
       const own = postStyle(style);
       this.cursor.receive([
