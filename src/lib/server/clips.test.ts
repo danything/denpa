@@ -98,7 +98,7 @@ function seed(): void {
     .insert(programs)
     .values({
       id: SERVICE * 100000 + 77,
-      service_id: SID,
+      service_id: SERVICE,
       network_id: NETWORK,
       event_id: 77,
       start_at: START,
@@ -368,7 +368,10 @@ describe("置く・探す・消す", () => {
     const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     expect(findClips({ day }).clips).toHaveLength(2);
     expect(findClips({ day: "2000-01-01" }).clips).toHaveLength(0);
-    expect(clipFacets()).toMatchObject({ count: 2, days: [day] });
+    expect(clipFacets()).toMatchObject({
+      count: 2,
+      days: [{ day, count: 2 }],
+    });
   });
 
   test(`${CLIP_PAGE} 件ずつ。続きは前のページの最後の ID より古いもの`, async () => {

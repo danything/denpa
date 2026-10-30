@@ -8,6 +8,7 @@ import {
   goto,
   pickCodec,
   syncEpg,
+  takeClip,
   test,
   wakeControls,
 } from "./helpers";
@@ -256,6 +257,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
    */
   test("MPEG-2 のまま見ている間も切り抜きは映像ごとサーバに届く", async ({
     page,
+    request,
   }) => {
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
@@ -270,16 +272,11 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
       .toBeGreaterThan(10);
 
     await wakeControls(page, "live-frame");
-    // 送る1枚 (WebP) を見る。サーバの返事 (偽 ffmpeg) は待たない
-    const sent = page.waitForRequest(
-      (req) =>
-        req.method() === "POST" &&
-        new URL(req.url()).pathname.endsWith("/api/clips"),
-    );
-    await page.getByTestId("live-shot").click();
-    const body = (await sent).postDataBuffer();
-    expect(body).not.toBeNull();
-    const image = body!.toString("base64");
+    // 送った1枚を見る。偽 ffmpeg は受けたものをそのまま置くので、置いた画像が送った WebP
+    const clip = await takeClip(page, "live-shot");
+    const image = (
+      await (await request.get(`/api/clips/${clip.id}/image`)).body()
+    ).toString("base64");
     const lit = await page.evaluate(async (data) => {
       // data: を fetch すると CSP (connect-src 'self') に止められるので、手でデコードする
       const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));

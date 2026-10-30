@@ -335,8 +335,8 @@ export function liveScene(serviceId: number, aired: number): Scene {
     .from(programs)
     .where(
       and(
-        eq(programs.network_id, Math.floor(serviceId / 100000)),
-        eq(programs.service_id, serviceId % 100000),
+        // 番組の service_id は局の内部ID (services.id) で持っている
+        eq(programs.service_id, serviceId),
         sql`${programs.start_at} <= ${aired}`,
         sql`${programs.end_at} > ${aired}`,
       ),
@@ -578,8 +578,8 @@ export interface ClipFacets {
   count: number;
   bytes: number;
   services: { id: number; name: string; count: number }[];
-  /** 撮った日 (`YYYY-MM-DD`)。新しい順 */
-  days: string[];
+  /** 撮った日 (`YYYY-MM-DD`。サーバの時計の日付) と、その日の枚数。新しい順 */
+  days: { day: string; count: number }[];
 }
 
 export function clipFacets(): ClipFacets {
@@ -604,7 +604,7 @@ export function clipFacets(): ClipFacets {
     .groupBy(clips.service_id)
     .orderBy(desc(sql`count(*)`))
     .all();
-  const days = new Set<string>();
+  const days = new Map<string, number>();
   for (const { at } of orm()
     .select({ at: clips.taken_at })
     .from(clips)
@@ -612,15 +612,14 @@ export function clipFacets(): ClipFacets {
     .orderBy(desc(clips.taken_at))
     .all()) {
     const d = new Date(at);
-    days.add(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-    );
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    days.set(day, (days.get(day) ?? 0) + 1);
   }
   return {
     count: total.count,
     bytes: total.bytes,
     services: byService,
-    days: [...days],
+    days: [...days].map(([day, count]) => ({ day, count })),
   };
 }
 

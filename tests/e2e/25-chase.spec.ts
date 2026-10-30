@@ -127,6 +127,10 @@ async function checkChase(
     captions: "字幕はくっきり",
   });
   expect(clip.programName).not.toBe("");
+  // 押したボタンから焦点を外す (残っていると、この後の空白キーがボタンを押す)
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
 
   for (const [what, options] of CAPTION_SCREENS) {
     const context = await browser.newContext(options);

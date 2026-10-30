@@ -39,12 +39,12 @@ const FORBIDDEN = /[\\/:*?"<>|\p{Cc}]/gu;
 const NAME_MOST = 60;
 
 /**
- * 切り抜きのファイル名。`番組名_YYYYMMDD-HHMMSS.png` (時刻は撮った瞬間・端末の時計)。
+ * 切り抜きのファイル名。`番組名_YYYYMMDD-HHMMSS.png` (時刻は撮った瞬間。拡張子は `extension`)。
  *
  * **時刻は秒まで入れる。** 同じ番組を何枚も撮ると名前がぶつかり、ブラウザが「(1)」を
  * 足していくか、共有先 (写真アプリ) で上書きの確認が出る
  */
-export function shotName(title: string, at: Date): string {
+export function shotName(title: string, at: Date, extension = "png"): string {
   const name =
     title
       .replace(FORBIDDEN, "_")
@@ -55,7 +55,7 @@ export function shotName(title: string, at: Date): string {
       .replace(/[. ]+$/, "") || "denpa";
   const day = `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}`;
   const time = `${pad(at.getHours())}${pad(at.getMinutes())}${pad(at.getSeconds())}`;
-  return `${name}_${day}-${time}.png`;
+  return `${name}_${day}-${time}.${extension}`;
 }
 
 /**
@@ -223,18 +223,31 @@ export async function saveOnDevice(
     text: "サーバに保存できなかったので端末に保存しました",
   };
 
-  const file = new File([blob], name, { type: "image/png" });
+  return (await keepOnDevice(blob, name)) === "canceled"
+    ? { key, kind: "info", text: "サーバに保存できませんでした" }
+    : saved;
+}
+
+/**
+ * 画像を端末に渡す。**指の端末は共有シート** (写真へ保存・そのまま送る)、PC はファイルに落とす。
+ * 共有を断られたら (押した直後でなくなった・共有できない形式) 落とすほうに倒す。閉じられたら `canceled`
+ */
+export async function keepOnDevice(
+  blob: Blob,
+  name: string,
+): Promise<"shared" | "downloaded" | "canceled"> {
+  const file = new File([blob], name, { type: blob.type });
   if (prefersShare(file)) {
     try {
       await navigator.share({ files: [file] });
-      return saved;
+      return "shared";
     } catch (error) {
       // 閉じた (やめた) なら何も残っていない
       if (error instanceof DOMException && error.name === "AbortError")
-        return { key, kind: "info", text: "サーバに保存できませんでした" };
-      // それ以外 (押した直後でなくなった・断られた) は落とす
+        return "canceled";
+      // それ以外は落とす
     }
   }
   download(blob, name);
-  return saved;
+  return "downloaded";
 }
