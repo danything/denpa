@@ -83,7 +83,7 @@ export class NxJikkyo {
     done: (result: PostResult) => void;
   } | null = null;
   private readonly echoes = new Echoes();
-  /** 遡るのを頼まれた時刻 (unix ms)。コメントの WS が開いたら 1 回だけ送る */
+  /** 遡る起点の時刻 (unix ms)。コメントの WS が開いたら 1 回だけ送る */
   private backfillBefore: number | null = null;
   private backfilled = false;
 
@@ -410,6 +410,6 @@ export class NxJikkyo {
         // 閉じられなくても捨てる
       }
     }
-    // 遡りは繋ぎ直しても取り直さない (1 回だけ)。頼まれて送る前だったものは次の WS で送る
+    // 遡りは繋ぎ直しても取り直さない (1 回だけ)。送る前だったものは次の WS で送る
   }
 }

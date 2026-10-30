@@ -20,7 +20,7 @@ public class Zd1jTests
     [Test]
     public async Task メモリ要求の_wValue_と_wIndex()
     {
-        // wValue の上位バイト = 番地のビット 16〜23、下位バイト = ビット 24〜31
+        // wValue の上位バイト = アドレスのビット 16〜23、下位バイト = ビット 24〜31
         await Assert.That(Mb86h47.Setup(0x1700000 + 0xA3F00)).IsEqualTo(((ushort)0x7A01, (ushort)0x3F00));
         await Assert.That(Mb86h47.Setup(0x82008)).IsEqualTo(((ushort)0x0800, (ushort)0x2008));
     }
@@ -50,7 +50,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 番地を広げる語はルーチンを置いてから書く()
+    public async Task アドレスを広げる語はルーチンを置いてから書く()
     {
         var usb = new FakeBridgeUsb();
         Started(usb);
@@ -121,7 +121,7 @@ public class Zd1jTests
         int Index(string line) => log.IndexOf(line);
         // 4.3: 16 ビットのレジスタは語の上位半分
         await Assert.That(Index("W 00F1010C=82010000")).IsGreaterThan(0);
-        // 4.3 の 4: 0x1000000 以上の番地 (広げたあと)
+        // 4.3 の 4: 0x1000000 以上のアドレス (広げたあと)
         await Assert.That(Index("W 01700404=00040000")).IsGreaterThan(Index("W 000E9D94=9FA09F8D"));
         // 4.4: 割り込みのレベルを 31 に
         await Assert.That(Index("W 00000440=1F1F1F1F")).IsGreaterThan(0);
@@ -287,7 +287,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 探すときはカーネルのドライバが掴んでいるものを並べない()
+    public async Task 探すときはカーネルのドライバが使っているものを並べない()
     {
         // sysfs のインターフェースの名前 (1-4:1.0) は Windows ではファイル名にできない
         if (OperatingSystem.IsWindows()) return;
@@ -350,7 +350,7 @@ public class Zd1jTests
             await Assert.That(usb.Log).Contains("W 00D02010=04000000");
             await Assert.That(usb.Dib.Demod[1286]).IsEqualTo((ushort)0);
             await Assert.That(usb.Dib.Demod[1029] & 2).IsEqualTo(2);
-            // チューナーが捨てられたので、誰も借りていないボードは閉じる
+            // チューナーが捨てられたので、誰も使っていないボードは閉じる
             await Assert.That(usb.Disposed).IsTrue();
             // 閉じる前に眠らせた (DiB0090 のスリープ = GPIO 0 を High)
             await Assert.That(usb.Dib.Demod[1030] & 1).IsEqualTo(1);
@@ -370,7 +370,7 @@ public class Zd1jTests
             var usb = new FakeBridgeUsb();
             var board = Zd1jBoard.Acquire(port, () => usb);
             board.Release();
-            // PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。次に借りる人は同じボード (起動し直さない)
+            // PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。次に使う人は同じボード (起動し直さない)
             await Assert.That(usb.Disposed).IsFalse();
             var again = Zd1jBoard.Acquire(port, () => throw new InvalidOperationException());
             again.Release();

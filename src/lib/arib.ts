@@ -2,7 +2,7 @@
  * ARIB の符号を人が読める言葉に直す。
  *
  * EPG が持っているジャンルも音声の種別も番号でしかない。番組表の詳細で
- * 「アニメ／特撮 > 国内アニメ」「ステレオ (日本語)」と出すためだけの対応表。
+ * 「アニメ／特撮 > 国内アニメ」「ステレオ (日本語)」と出すための対応表と、選べる音声の組み立て (`audioTracks`・`pickTrack`)。
  *
  * ブラウザ側でも使うのでサーバの機能には触れない。
  * 出典は ARIB STD-B10 第2部 (content_nibble / component_type)。
@@ -167,16 +167,13 @@ export const GENRE_TREE: {
 /**
  * ルールの条件の値を人が読める名前に。`"7-0"` → 「アニメ／特撮 > 国内アニメ」。
  *
- * 中分類が無いときは大分類だけを返す。「7」のように - が無い値は split の2つ目が undefined で、
- * `Number.isNaN(undefined)` は false なので、要素数で見る。
+ * 中分類が無いときは大分類だけを返す。
  */
 export function genreName(value: string | number): string {
   const parts = String(value).split("-");
   const lv1 = Number(parts[0]);
   const head = GENRE_LV1[lv1];
   if (head === undefined) return String(value);
-  if (parts.length < 2) return head;
-
   const lv2 = Number(parts[1]);
   if (Number.isNaN(lv2)) return head;
   return `${head} > ${GENRE_LV2[lv1]?.[lv2] ?? lv2}`;

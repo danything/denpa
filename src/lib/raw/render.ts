@@ -153,7 +153,7 @@ export class YuvRenderer {
   private matrix = BT709;
 
   constructor(private readonly canvas: OffscreenCanvas) {
-    // 描いたものを読み戻さないので、残しておく必要は無い
+    // 回をまたいで読み戻さないので (切り抜きは描き直してから読む。`capture`)、残しておく必要は無い
     const gl = canvas.getContext("webgl2", {
       alpha: false,
       antialias: false,

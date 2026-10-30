@@ -78,6 +78,7 @@ import {
   STEADY,
   type Steering,
 } from "#lib/ts/pacing.js";
+import { retryWait } from "#lib/ts/playback.js";
 import { MAX_LEVEL } from "#lib/volume.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
@@ -133,15 +134,6 @@ const GRACE = 3_000;
  * 画面が残る。壊れているのに動いて見えるのがいちばん悪い
  */
 const HOLD_MOST = 6_000;
-/**
- * 接続が切れたときに待つ時間 (ms)。**倍々に伸ばして、この上限で頭打ち。**
- *
- * いちばん多いのは**サーバの入れ替え** (デプロイ)。コンテナごと作り直すので数十秒
- * 帰ってこないが、帰ってくることは分かっている。切れた時点で諦めていた頃は、
- * 観ている最中に「選んでください」に戻って**自分で選び直す**ことになっていた
- */
-const RETRY_FIRST = 1_000;
-const RETRY_MOST = 10_000;
 /** 番組が替わって作り直す (`restart`) のが、これより短い間に続いたら待つ (ms) */
 const RESTART_CALM = 30_000;
 /** 追っかけで作り直したあと、手元がこれ (秒) を切ったらリクエストし直す (`resumeChase`) */
@@ -467,7 +459,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let dropped = $state(0);
   /** `droppedVideoFrames` を最後に読んだ値 (`countDropped`)。Safari は飛ぶたびに 0 に戻すので差を足し上げる */
   let droppedSeen = 0;
-  /** 途中から入った流れの、最初のキーフレームまでを渡さない係 (`ts/key-gate.ts`)。**始める位置もここで決まる** */
+  /** 途中から入ったストリームの、最初のキーフレームまでを渡さない係 (`ts/key-gate.ts`)。**始める位置もここで決まる** */
   const keyGate = new KeyGate();
   /** 映した1枚が再生位置からどれだけ遅れているか (秒)。音と字幕は再生位置に乗るので、口の動きだけずれる (`unslip`) */
   let slip = $state(0);
@@ -1384,8 +1376,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 待ってから繋ぎ直す (いちばん多いのはサーバの入れ替え)。待ちは倍々で `RETRY_MOST` まで。回数の上限は
-   * 置かない — 点けっぱなしで戻ってきたときに映っていてほしい
+   * 待ってから繋ぎ直す (いちばん多いのはサーバの入れ替え)。待ちは倍々で 10 秒まで (`retryWait`)。回数の上限は
+   * 置かない — 点けっぱなしで戻ってきたときに映っていてほしい。切れた時点で諦めていた頃は、
+   * 観ている最中に「選んでください」に戻って自分で選び直すことになっていた
    */
   function reconnect(): void {
     if (
@@ -1397,7 +1390,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     state = "connecting";
     message = "";
-    const wait = Math.min(RETRY_MOST, RETRY_FIRST * 2 ** attempts);
+    const wait = retryWait(attempts);
     attempts++;
     retry = setTimeout(() => {
       retry = null;

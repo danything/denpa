@@ -139,7 +139,7 @@ function switchOf(fields: Fields, key: string): boolean | null {
  * (`0 || 2` は 2)。「いちばん譲る」を選べないことになる。
  * 既定はルールの 1 で、手動予約はその上の 2。
  *
- * **空欄と 0 は別物。** `Number('')` は 0 なので、まとめて読むと**箱を空にした
+ * **空欄と 0 は別物。** `Number('')` は 0 なので、まとめて読むと**欄を空にした
  * だけで「いちばん譲る」に落ちる**。無ければ既定に戻す
  */
 export function rulePriority(fields: Fields): number {

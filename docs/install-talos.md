@@ -27,7 +27,7 @@ alpha.1 にもドライバは入っていますが、復調とチューナーの
 ## 用意するもの
 
 - **入れる機械** — amd64 で、PT3 と USB のカードリーダーを挿したもの ([tuners.md](tuners.md#要るもの))。
-  ディスクは 1 台で 120GB 以上 (OS とイメージに 64GB、残りを録画と DB に。[下記](#machine-config-の中身))。**中身は消えます**
+  ディスクは 1 台で 128GB 以上 (OS とイメージに 64GiB、録画と DB に 50GiB 以上。[下記](#machine-config-の中身))。**中身は消えます**
 - **操作する機械** — Linux か Mac で、`curl` と [`helm`](https://helm.sh/docs/intro/install/) が入っているもの。
   `talosctl` は install.sh が合うバージョンを取ってきます
 - 同じ LAN に置き、入れる機械に IP が DHCP で振られること

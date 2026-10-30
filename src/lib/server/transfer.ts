@@ -18,7 +18,7 @@ import { dirname, isAbsolute, join, relative } from "node:path";
 
 import { and, asc, count, eq, gt } from "drizzle-orm";
 
-import { size as formatSize } from "../format";
+import { pad, size as formatSize } from "../format";
 import { config } from "./config";
 import { bootstrap, closeDatabase, MIGRATIONS, orm } from "./db";
 import { freeBytes } from "./disk";
@@ -301,8 +301,7 @@ function countRows(db: Database): Omit<Counts, "logos"> {
  */
 function stamp(at: number, seconds = false): string {
   const d = new Date(at);
-  const two = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${seconds ? two(d.getSeconds()) : ""}`;
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${seconds ? pad(d.getSeconds()) : ""}`;
 }
 
 /**

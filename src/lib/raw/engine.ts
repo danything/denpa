@@ -431,7 +431,7 @@ export class RawEngine {
   }
 
   private receive(message: FromWorker): void {
-    // 前の局・飛ぶ前の知らせ (`resetting`)
+    // 前の局・飛ぶ前の通知 (`resetting`)
     if (
       this.resetting > 0 &&
       (message.type === "audio" ||

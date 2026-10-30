@@ -61,7 +61,7 @@ export async function handle({ event, resolve }) {
 
   /*
    * **何も聞かずに通す相手。** アドレスが `TRUSTED_NETWORKS` に当たり、名前も知っているものの
-   * ときだけ。LAN のプレイヤーに資格情報を入れずに使わせるためで、ここに当たると
+   * ときだけ。LAN のテレビのアプリ (denpa-tv) に資格情報を入れずに使わせるためで、ここに当たると
    * OIDC も掛からない。
    *
    * **名前も見るのは DNS リバインディングを防ぐため** (`auth.knownHost`)。知らない名前なら

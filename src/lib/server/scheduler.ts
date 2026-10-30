@@ -42,7 +42,7 @@ interface Candidate extends Reservation {
 }
 
 /**
- * チューナーの様子。**予約の割り振り (`assign`) とルール画面の下見 (`contentions`) が同じものを読む。**
+ * チューナーの様子。**予約の割り振り (`assign`) とルールの下見 (`rule-preview.ts`) が同じものを読む。**
  *
  * - `capacity`: 動いているチューナーを、エージェントが選ぶ順 (`rank`) に組にしたもの (`Capacity`)
  * - `busy`: 録画中の予約が、いまどのチューナーにいて、いつ離すか (tuner.ts の `recordingHolds`)

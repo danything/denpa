@@ -10,13 +10,11 @@
  * 何度実行しても二重にはならない。ルールと履歴は `source` (`edcb:<ID>`・`edcb:recinfo:<キー>` など) で見分ける。
  * 値は設定フォルダのファイルを読んでいたころと同じなので、そのころ取り込んだものも飛ぶ
  */
-import { eq } from "drizzle-orm";
-
 import { parseSearchFields } from "#lib/search.js";
 
 import { toHalfWidth } from "../fold";
 import type { Slot } from "../rule-time";
-import { now, orm } from "./db";
+import { now } from "./db";
 import {
   EdcbClient,
   type EdcbDate,
@@ -28,6 +26,7 @@ import {
 import {
   addHistory,
   counts,
+  importReservation,
   insertRule,
   type MigrateOptions,
   record,
@@ -39,8 +38,6 @@ import {
   SlotWindows,
   track,
 } from "./migrate";
-import { reserve } from "./reservations";
-import { programs } from "./schema";
 import { programKey, serviceKey } from "./tuner";
 
 /**
@@ -353,32 +350,11 @@ export async function importEdcbReservations(
       tally.skipped++;
       continue;
     }
-    const program = orm()
-      .select({ id: programs.id })
-      .from(programs)
-      .where(
-        eq(programs.id, programKey(row.networkId, row.serviceId, row.eventId)),
-      )
-      .get();
-    if (program === undefined) {
-      // 番組表を集める前だと出る。集めてからもう一度実行すれば入る
-      record(`番組表に無いので取り込めません: ${row.title}`);
-      tally.skipped++;
-      continue;
-    }
-    if (options.apply) {
-      try {
-        await reserve(program.id);
-      } catch (error) {
-        record(
-          `予約できません: ${row.title} (${error instanceof Error ? error.message : String(error)})`,
-        );
-        tally.skipped++;
-        continue;
-      }
-    }
-    recordPlan(options, "予約", row.title);
-    tally.imported++;
+    await importReservation(
+      programKey(row.networkId, row.serviceId, row.eventId),
+      row.title,
+      options,
+    );
   }
 }
 

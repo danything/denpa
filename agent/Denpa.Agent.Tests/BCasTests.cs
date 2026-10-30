@@ -29,7 +29,7 @@ public class BCasTests
         return response;
     }
 
-    /// <summary>IDI の応答。番号1つ (メーカー識別・バージョン・48 ビットの番号・チェックコード)</summary>
+    /// <summary>IDI の応答。番号ごとに (メーカー識別・バージョン・48 ビットの番号・チェックコード)</summary>
     private static byte[] IdiResponse(params byte[][] ids)
     {
         var response = new byte[7 + ids.Length * 10 + 2];

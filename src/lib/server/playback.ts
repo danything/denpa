@@ -430,7 +430,7 @@ export async function playbackPlan(
 /** 失敗の理由だけ出させる (`transcodeBody` がログへ回す) */
 const QUIET = ["-hide_banner", "-nostats", "-loglevel", "error"];
 
-/** 詰め替えの共通の出口。時刻はそのまま書かせる (`copyArgs` の説明) */
+/** 詰め替えと変換で共通の出口。時刻はそのまま書かせる (`copyArgs` の説明) */
 const FMP4_OUT = [
   "-f",
   "mp4",
@@ -483,7 +483,7 @@ export function copyArgs(
     `0:a:${audio}?`,
     "-c:v",
     "copy",
-    // モノラル (デュアルモノを分けたもの) も両耳へ。音量の揃え方はライブと同じ
+    // モノラル (デュアルモノを分けたもの) も両耳へ。エンコード方法はライブと同じ (`live.audioArgs`)
     ...audioArgs(codec),
     "-avoid_negative_ts",
     "make_non_negative",
@@ -1036,7 +1036,7 @@ export async function tsChapters(
 }
 
 /**
- * **字幕の筋だけを抜く引数** (`api/recordings/<id>/captions.json`)。デコードせずに写す (デコードするのは denpa)。
+ * **字幕のストリームだけを抜く引数** (`api/recordings/<id>/captions.json`)。デコードせずに写す (デコードするのは denpa)。
  *
  * エンコード済みがあればそこから。無ければ元の TS から抜き、時刻を物差し (TS の頭を 0) に揃える
  * (`-copyts` で放送の PTS を運び、頭のぶん引く。`presented`)。どちらも無ければ null

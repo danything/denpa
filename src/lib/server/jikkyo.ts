@@ -30,10 +30,8 @@ export interface RecordingJikkyo {
 }
 
 /**
- * 録画の実況のチャンネルと頭の放送時刻。世帯の設定がオフ・実況の無い局なら null。
- *
- * 頭は測った値 (`ts_head`) を使い、測れていない録画 (TDT を読めない・取り込んだ録画) は
- * 予定の時刻 (`record_from ?? start_at − START_MARGIN`) で代わりに合わせる。数秒ずれることがある
+ * 録画の実況のチャンネルと頭の放送時刻 (`recording.tsHeadOf`。測れていない録画は予定の時刻で代わりにするので、
+ * 数秒ずれることがある)。世帯の設定がオフ・実況の無い局なら null
  */
 export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
   if (!settings().jikkyo) return null;
@@ -126,7 +124,7 @@ async function readChannels(): Promise<unknown> {
 export class RankingRelay {
   private cached: { at: number; forces: Forces } | null = null;
   private pending: Promise<{ at: number; forces: Forces }> | null = null;
-  /** 最後に読めなかった時刻と理由。`RANKING_TTL` の間は読み直さずに同じ失敗を返す (止まっている相手を叩き続けない) */
+  /** 最後に読めなかった時刻と理由。`RANKING_TTL` の間は読み直さずに同じ失敗を返す (止まっている相手を呼び続けない) */
   private failed: { at: number; error: unknown } | null = null;
   /** 最後に記録に残した失敗の理由。戻ったら null */
   private failure: string | null = null;

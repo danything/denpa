@@ -719,7 +719,7 @@ function watch(
   report();
 }
 
-/** 1秒ごとに数を出す (見えていない間も。音のコマ数は画面がこの知らせで書き出す) */
+/** 1秒ごとに数を出す (見えていない間も。音のコマ数は画面がこの通知で書き出す) */
 function report(): void {
   const wall = performance.now();
   if (wall - statsAt < 1000) return;

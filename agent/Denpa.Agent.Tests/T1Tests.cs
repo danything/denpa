@@ -19,7 +19,7 @@ public class T1Tests
 
     private static byte[] S(int type, string inf) => T1Protocol.Block((byte)(0xC0 | type), Convert.FromHexString(inf));
 
-    /// <summary>台本どおりに答えるカード。WTX の倍率も (送ったブロック, 倍率) で控える</summary>
+    /// <summary>台本どおりに答えるカード。送ったブロックごとの WTX の倍率も控える</summary>
     private sealed class Script(params (byte[] Expect, byte[]? Reply)[] steps)
     {
         private readonly Queue<(byte[] Expect, byte[]? Reply)> _steps = new(steps);

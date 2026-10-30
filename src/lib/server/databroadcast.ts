@@ -4,7 +4,8 @@
  *     エージェント (MPEG-TS) → ServiceFilter ┬→ ffmpeg     → fMP4 / 字幕
  *                                            └→ BmlDecoder → データ放送
  *
- * [stream.md](../../../docs/stream.md#データ放送の統合) にあたる第3段階。
+ * [stream-history.md](../../../docs/stream-history.md#実装の順序) の3番目にあたる。仕組みは
+ * [stream.md](../../../docs/stream.md#データ放送の統合)。
  *
  * デコードするのは [packages/arib/src/bml.ts](../../../packages/arib/src/bml.ts)、覚えておくのは [ts/carousel.ts](../ts/carousel.ts)。
  * **ここは入出力の付け替えと、転んだときの畳み方だけ。**

@@ -1,5 +1,5 @@
 /**
- * ブラウザで MPEG-2・AAC・Opus をデコードする WebAssembly を配る (ライブを変換せずに送る経路。docs/stream.md#放送そのままmpeg-2を送る)。
+ * ブラウザで MPEG-2・AAC・Opus をデコードする WebAssembly を配る (変換せずに観るライブと録画・互換モードの音。docs/stream.md#放送そのままmpeg-2を送る)。
  *
  * **static/ に置かないのは、組むのがイメージの中だから** (Dockerfile の `mpeg2wasm` 段。
  * emscripten で FFmpeg のデコーダを組む)。git には入れない — 1MB ほどの

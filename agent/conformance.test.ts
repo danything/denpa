@@ -152,7 +152,7 @@ async function open(query: string): Promise<Opened> {
   return { status: res.status, reader: res.body.getReader(), close };
 }
 
-/** 読み終わるまで待つ。チューナーを取り上げられたときは reason が入る */
+/** 読み終わるまで待つ。チューナーを取り上げられたときは error が入る */
 async function drain(
   reader: ReadableStreamDefaultReader,
 ): Promise<{ bytes: number; error: string | null }> {

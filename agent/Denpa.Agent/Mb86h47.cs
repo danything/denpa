@@ -9,7 +9,7 @@ namespace Denpa.Agent;
  * 節の番号 (「4.2」など) はその仕様書のもの。仕様書が「こちらで決めてよい」とした所 (コア 1 への指示の形など) は
  * Mb86h47Programs.cs に書いた形で決めた。
  *
- * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを叩く。メモリ要求は全部この錠で1つずつ通す
+ * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを読み書きする。メモリ要求は全部この錠で1つずつ通す
  * (カードの UART もメモリ要求なので、チューナーとカードが別のスレッドから呼んでも混ざらない)。
  * TS の EP 0x81 の読みはこの外 (IUsbInStream) で並べる。
  *
@@ -17,10 +17,10 @@ namespace Denpa.Agent;
  * (開く・選局からロック・メモリ要求の回数。ホストから直 (5.3) / コア 1 のメモリ要求のリング / コア 1 の bulk の命令):
  * 開く 385 / 167 / 182ms、ロック 3439 / 2730 / 2570ms、メモリ要求 24664 / 2360 / 1083 回。bulk の命令がいちばん速く、
  * 要求もいちばん少ないので、ほかの2つはコードごと外した。コア 1 が起きない・bulk に答えないときは開くのを止める
- * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起きていて、逃げ道に要る形が無い)。
+ * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起きていて、代わりの形を残す理由が無い)。
  */
 
-/// <summary>I2C の相手と話す口。DiB8096 はこれと待ちだけを受け取る</summary>
+/// <summary>I2C の相手と話すインターフェース。DiB8096 はこれと待ちと覚えた値だけを受け取る</summary>
 public interface II2c
 {
     void Write(byte address, ReadOnlySpan<byte> data);
@@ -35,7 +35,7 @@ public interface II2c
     void Flush();
 }
 
-/// <summary>MB86H47A。<b>メモリ要求・番地を広げる・クロック・I2C・TS・カードの UART</b></summary>
+/// <summary>MB86H47A。<b>メモリ要求・アドレスを広げる・クロック・I2C・TS・カードの UART</b></summary>
 public sealed class Mb86h47 : II2c
 {
     private const byte RequestIn = 0xC0;
@@ -120,7 +120,7 @@ public sealed class Mb86h47 : II2c
     /// <summary>I2C のやり取りの数 (書き込み・読み・読みかえ書きを1つずつ)</summary>
     public long I2cTransfers { get; private set; }
 
-    /// <param name="trace">あれば、起動の様子 (番地を広げたか) を渡す (<c>--tune</c> のとき)</param>
+    /// <param name="trace">あれば、起動の様子 (アドレスを広げたか) を渡す (<c>--tune</c> のとき)</param>
     public Mb86h47(IUsbDevice usb, Action<string>? trace = null)
     {
         _usb = usb;
@@ -131,13 +131,13 @@ public sealed class Mb86h47 : II2c
     // メモリ要求 (3)
     // ---------------------------------------------------------------------
 
-    /// <summary>番地 → (wValue, wIndex)。wValue の上位バイト = ビット 16〜23、下位バイト = ビット 24〜31</summary>
+    /// <summary>アドレス → (wValue, wIndex)。wValue の上位バイト = ビット 16〜23、下位バイト = ビット 24〜31</summary>
     public static (ushort Value, ushort Index) Setup(uint address) =>
         ((ushort)((((address >> 16) & 0xFF) << 8) | (address >> 24)), (ushort)address);
 
     private void Check(uint address)
     {
-        if (address >= 0x1000000 && !_widened) throw new InvalidOperationException($"番地 0x{address:X} は 4.2 で広げる前には届きません");
+        if (address >= 0x1000000 && !_widened) throw new InvalidOperationException($"アドレス 0x{address:X} は 4.2 で広げる前には届きません");
     }
 
     private uint Read32(uint address)
@@ -234,7 +234,7 @@ public sealed class Mb86h47 : II2c
     }
 
     /// <summary>
-    /// 4.2 メモリ要求の番地を 32 ビットに広げる。すでに自分のルーチンを指していれば何もしない。別の中身のルーチンを指していれば、
+    /// 4.2 メモリ要求のアドレスを 32 ビットに広げる。すでに自分のルーチンを指していれば何もしない。別の中身のルーチンを指していれば、
     /// 使われていないほうのバンクに置いてから飛ぶ語を書き換える (途中で要求が来ても、いつもどちらかの完全なルーチンに飛ぶように)
     /// </summary>
     private void Widen()
@@ -310,7 +310,7 @@ public sealed class Mb86h47 : II2c
         Write16(0xF1010C, 0x8201);
         Write16(0xF10114, 0x8008);
         Write16(0xF10118, 0xFFFF);
-        foreach (var engine in new uint[] { 0x14D0000, 0x10D0000, 0x12D0000, 0x13D0000, 0xE70000, 0xC70000, 0xD00000, 0x1600000, 0x1700000 })
+        foreach (var engine in new uint[] { 0x14D0000, 0x10D0000, 0x12D0000, 0x13D0000, 0xE70000, 0xC70000, 0xD00000, Core0, Core1 })
         {
             Modify(engine + 0x404, 0, 0x00040000);
         }
@@ -472,13 +472,13 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    private static IOException I2cError(int code, byte address) => new(code switch
+    private static IOException I2cError(int code) => new(code switch
     {
-        1 => $"I2C のバスエラーです (0x{address:X2})",
-        2 => $"I2C のアドレス 0x{address:X2} に ACK がありません",
-        3 => $"I2C のデータに ACK がありません (0x{address:X2})",
-        4 => $"I2C が固まりました (0x{address:X2})",
-        _ => $"I2C で知らない誤り {code} です (0x{address:X2})",
+        1 => "I2C のバスエラーです",
+        2 => "I2C のアドレスに ACK がありません",
+        3 => "I2C のデータに ACK がありません",
+        4 => "I2C が固まりました",
+        _ => $"I2C で知らない誤り {code} です",
     });
 
     /// <summary>バイトをビッグエンディアンの語に詰める</summary>
@@ -550,7 +550,7 @@ public sealed class Mb86h47 : II2c
             {
                 throw error == 6
                     ? new IOException($"{Zd1j.Model} のブリッジのコア 1 が知らない命令を受けました (命令 {info >> 16})")
-                    : I2cError(error, 0);
+                    : I2cError(error);
             }
             var length = (int)Math.Min(info & 0xFFFF, (uint)Mb86h47Programs.BulkReplyData);
             return reply.AsSpan(8, Math.Min(length, got - 8)).ToArray();
@@ -645,7 +645,7 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    /// <summary>9.3 流し始め。準備の残りを済ませ、受け口と書き手を動かす。復調器はもう出力していること</summary>
+    /// <summary>9.3 流し始め。準備の残りを済ませ、受信側と書き手を動かす。復調器はもう出力していること</summary>
     public void StartStream()
     {
         lock (_gate)
@@ -662,7 +662,7 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    /// <summary>9.5 流し終わりの 1〜3 (コア 0・受け口・書き手を止める)。出力のハイインピーダンスと読みの取り消しは呼ぶ側</summary>
+    /// <summary>9.5 流し終わりの 1〜3 (コア 0・受信側・書き手を止める)。出力のハイインピーダンスと読みの取り消しは呼ぶ側</summary>
     public void StopStream()
     {
         lock (_gate)
@@ -767,7 +767,7 @@ public sealed class Mb86h47 : II2c
 }
 
 /// <summary>
-/// 9.4 EP 0x81 から来る「4 バイトの到着時刻 + 188 バイトの TS」の 192 バイトの単位をほどいて、188 バイトのパケットにする。
+/// 9.4 EP 0x81 から来る「4 バイトの到着時刻 + 188 バイトの TS」の 192 バイトの単位から取り出して、188 バイトのパケットにする。
 /// 読みの区切りは単位と揃わないので、TS の頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の2つで揃える
 /// (TS の中の 0x47 は珍しくないので1つでは信じない)。揃えたあと頭が 0x47 でなくなったら揃え直す
 /// </summary>
@@ -781,7 +781,7 @@ public sealed class Mb86h47Framer
     private int _carry;
     private bool _locked;
 
-    /// <summary>ほどいたパケットを書き、書いたバイト数を返す。半端は次の呼び出しにつなぐ</summary>
+    /// <summary>取り出したパケットを書き、書いたバイト数を返す。半端は次の呼び出しにつなぐ</summary>
     public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output)
     {
         if (_work.Length < _carry + data.Length) Array.Resize(ref _work, Math.Max(_work.Length * 2, _carry + data.Length));

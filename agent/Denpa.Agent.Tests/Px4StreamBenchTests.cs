@@ -93,7 +93,7 @@ public class Px4StreamBenchTests
                 await File.AppendAllTextAsync(summary, line + "\n", cancel);
             }
 
-            // 流したぶん (の 7 割) が届いていること。偽物の速さの揺れ (寝る間隔の粗い Windows) を見込む
+            // 流したぶん (の 7 割) が届いていること。偽物の速さの揺れを見込む
             await Assert.That(mbps).IsGreaterThan(Streams * Rate / 1024 / 1024 * 0.7);
         }
         finally

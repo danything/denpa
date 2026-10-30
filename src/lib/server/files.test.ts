@@ -334,12 +334,12 @@ describe("実体との照合", () => {
     expect(existsSync(left)).toBe(false);
   });
 
-  test("切り出したばかりのTSは「実体だけ」に数えない", () => {
+  test("復号したばかりのTSは「実体だけ」に数えない", () => {
     fresh();
     put(config.rawDir, "番組.m2ts");
-    put(config.rawDir, "番組.m2ts.cut.m2ts", false);
+    put(config.rawDir, "番組.m2ts.decoded.m2ts", false);
 
-    // 元のTSのほうはDBに無いので1件。書きたての .cut.m2ts は数えない
+    // 元のTSのほうはDBに無いので1件。書きたての .decoded.m2ts は数えない
     expect(reconcile().strays).toBe(1);
   });
 

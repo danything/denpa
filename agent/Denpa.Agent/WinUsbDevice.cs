@@ -11,8 +11,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 並べるのは SetupAPI の <c>GUID_DEVINTERFACE_USB_DEVICE</c> (Zadig で入れたものも同じ GUID で見える)。ポートの名前は Linux の sysfs と
-/// 同じ形 (<c>1-3.2</c>) にする: 頭の数はホストコントローラーを場所の文字列 (<c>PCIROOT(0)#PCI(1400)</c>) で並べた順番 (1 から)、
-/// 後ろはハブのポートを根から順に (<c>SPDRP_LOCATION_PATHS</c> の <c>USB(n)</c>)。**挿すポートを変えると別の名前になる。**
+/// 同じ形 (<c>1-3.2</c>) にする (<c>SPDRP_LOCATION_PATHS</c> から。<see cref="UsbDevices.WindowsPort"/>)。**挿すポートを変えると別の名前になる。**
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -296,8 +295,6 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         }
     }
 
-    public int BulkRead(byte endpoint, Span<byte> buffer, int timeoutMs) => Read(endpoint, buffer, timeoutMs);
-
     public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs) => Read(endpoint, buffer, timeoutMs);
 
     private int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
@@ -343,7 +340,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         }
     }
 
-    /// <summary>OVERLAPPED 付きの読みを何本も出しておき、出した順に待つ。OVERLAPPED と受け口はアンマネージドのメモリに置く</summary>
+    /// <summary>OVERLAPPED 付きの読みを何本も出しておき、出した順に待つ。OVERLAPPED とバッファはアンマネージドのメモリに置く</summary>
     private sealed class InStream : IUsbInStream
     {
         private readonly WinUsbDevice _owner;
@@ -450,7 +447,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     if (WinUsb_GetOverlappedResult(handle, (nint)_overlapped[i], &done, 1) == 0
                         && Marshal.GetLastPInvokeError() is not (ErrorOperationAborted or ErrorGenFailure or ErrorBadCommand or ErrorDeviceNotConnected))
                     {
-                        // 済んだか分からない読みの受け口は返さない
+                        // 済んだか分からない読みのバッファは返さない
                         return;
                     }
                     _pending[i] = false;

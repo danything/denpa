@@ -224,7 +224,7 @@ export class Reader {
 }
 
 /** 1件の最小のバイト数 ({@link Reader.array}) */
-const LEAST = { struct: 4, string: 4, word: 2, longlong: 8 } as const;
+const LEAST = { struct: 4, word: 2, longlong: 8 } as const;
 
 /** 時間帯と曜日の1件 (`EPGDB_SEARCH_DATE_INFO`)。曜日は 0 = 日曜 */
 export interface EdcbDate {
