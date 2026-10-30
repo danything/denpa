@@ -61,6 +61,13 @@ describe("GitHub から読む", () => {
     ]);
   });
 
+  test("JSON でない返事でも、何が読めなかったかを出して止める", async () => {
+    const fetchFn = async () => new Response("Bad Gateway", { status: 502 });
+    await expect(fetchItems("danything/denpa", "t", fetchFn)).rejects.toThrow(
+      "pr を読めませんでした (502)",
+    );
+  });
+
   test("エラーが返れば止める (半端な一覧で書き換えない)", async () => {
     const fetchFn = async () =>
       Response.json({

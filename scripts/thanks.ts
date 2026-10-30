@@ -72,7 +72,8 @@ export async function fetchItems(
         },
         body: JSON.stringify({ query, variables: { owner, name, after } }),
       });
-      const json = (await res.json()) as {
+      // 502 などでは本文が JSON でないので、読めなければ空として下で止める (何が読めなかったかを出す)
+      const json = (await res.json().catch(() => ({}))) as {
         data?: { repository: Record<string, Page> | null };
         errors?: { message: string }[];
       };
