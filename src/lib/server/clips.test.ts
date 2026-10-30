@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,6 +32,7 @@ const {
   checkImage,
   ClipError,
   clipFacets,
+  clipFile,
   clipPath,
   clipsDir,
   deleteClips,
@@ -383,6 +387,33 @@ describe("置く・探す・消す", () => {
     expect(second.clips).toHaveLength(5);
     expect(second.next).toBeNull();
     expect(second.clips[0]!.id).toBeLessThan(first.next!);
+  });
+
+  test("置き場へ移せなければ、行を残さない", async () => {
+    rmSync(clipsDir(), { recursive: true, force: true });
+    // 年月のフォルダの名前にファイルを置いて、移せないようにする
+    const month = join(clipsDir(), clipFile(1, Date.now()).split("/")[0]!);
+    mkdirSync(clipsDir(), { recursive: true });
+    writeFileSync(month, "");
+    try {
+      const promise = saveClip(png(1920, 1080), liveScene(SERVICE, START), "");
+      expect(promise).rejects.toThrow();
+      await promise.catch(() => undefined);
+      expect(orm().select().from(clips).all()).toEqual([]);
+    } finally {
+      rmSync(month, { force: true });
+    }
+  });
+
+  test("落ちて残った古い作業ファイルは、次に置くときに片付ける", async () => {
+    const work = join(clipsDir(), ".work");
+    mkdirSync(work, { recursive: true });
+    const left = join(work, "left.webp");
+    writeFileSync(left, "x");
+    const old = new Date(Date.now() - 2 * 60 * 60_000);
+    utimesSync(left, old, old);
+    await put("A");
+    expect(existsSync(left)).toBe(false);
   });
 
   test("消すと画像も消える。もう無いものは数えない", async () => {

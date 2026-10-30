@@ -1,6 +1,7 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   renameSync,
   rmSync,
   statSync,
@@ -412,6 +413,28 @@ const ALIVE = sql<
   number | null
 >`(SELECT id FROM recordings WHERE id = ${clips.recording_id} AND deleted_at IS NULL)`;
 
+/** 作業ファイルを残しておく長さ。これより古いものは落ちて残ったもの */
+const WORK_KEEP = 60 * 60_000;
+
+/** 落ちて残った作業ファイル (変換の途中で止まったもの) を片付ける */
+function sweepWork(work: string): void {
+  let names: string[];
+  try {
+    names = readdirSync(work);
+  } catch {
+    return;
+  }
+  const before = Date.now() - WORK_KEEP;
+  for (const name of names) {
+    const path = join(work, name);
+    try {
+      if (statSync(path).mtimeMs < before) rmSync(path, { force: true });
+    } catch {
+      // 読んでいる間に消えた
+    }
+  }
+}
+
 /**
  * 1枚を受けて置く。画像を確かめ、AVIF にし、行を足して置き場へ移す。
  * 変換できなかった (画像として読めない) ものは 415
@@ -429,6 +452,7 @@ export async function saveClip(
   const small = `${stem}-small.avif`;
   try {
     await oneAtATime(async () => {
+      sweepWork(work);
       mkdirSync(work, { recursive: true });
       writeFileSync(input, image);
       const result = await run(
@@ -449,33 +473,39 @@ export async function saveClip(
     const takenAt = now();
     const text = captionsText(captions);
     const bytes = statSync(full).size + statSync(small).size;
-    const row = orm()
-      .insert(clips)
-      .values({
-        ...scene,
-        taken_at: takenAt,
-        captions: text,
-        search_text: searchable(
-          [scene.program_name, scene.service_name, text].join("\n"),
-        ),
-        width: info.width - (info.width % 2),
-        height: info.height - (info.height % 2),
-        bytes,
-      })
-      .returning()
-      .get();
-    const file = clipFile(row.id, takenAt);
-    try {
-      mkdirSync(dirname(clipPath(file)), { recursive: true });
-      renameSync(full, clipPath(file));
-      renameSync(small, clipPath(file, true));
-    } catch (error) {
-      orm().delete(clips).where(eq(clips.id, row.id)).run();
-      removeIfExists(clipPath(file));
-      throw error;
-    }
-    orm().update(clips).set({ file }).where(eq(clips.id, row.id)).run();
-    return toClip({ ...row, file, alive: row.recording_id });
+    /*
+     * **行を足すのと置き場へ移すのは1つのトランザクションで。** 名前は ID で決まるので行を先に足すが、
+     * 移せなかった (途中で落ちた) ときに、名前の無い行を残さない
+     */
+    const row = orm().transaction((tx) => {
+      const added = tx
+        .insert(clips)
+        .values({
+          ...scene,
+          taken_at: takenAt,
+          captions: text,
+          search_text: searchable(
+            [scene.program_name, scene.service_name, text].join("\n"),
+          ),
+          width: info.width - (info.width % 2),
+          height: info.height - (info.height % 2),
+          bytes,
+        })
+        .returning()
+        .get();
+      const file = clipFile(added.id, takenAt);
+      try {
+        mkdirSync(dirname(clipPath(file)), { recursive: true });
+        renameSync(full, clipPath(file));
+        renameSync(small, clipPath(file, true));
+      } catch (error) {
+        removeIfExists(clipPath(file));
+        throw error;
+      }
+      tx.update(clips).set({ file }).where(eq(clips.id, added.id)).run();
+      return { ...added, file };
+    });
+    return toClip({ ...row, alive: row.recording_id });
   } finally {
     rmSync(input, { force: true });
     rmSync(full, { force: true });
@@ -596,7 +626,7 @@ export function clipFacets(): ClipFacets {
     .select({
       id: clips.service_id,
       // 局名は撮ったときのもの。いちばん新しい1枚の名前で出す
-      name: sql<string>`(SELECT service_name FROM clips c2 WHERE c2.service_id = ${clips.service_id} ORDER BY c2.id DESC LIMIT 1)`,
+      name: sql<string>`(SELECT service_name FROM clips c2 WHERE c2.service_id = ${clips.service_id} AND c2.file <> '' ORDER BY c2.id DESC LIMIT 1)`,
       count: sql<number>`count(*)`,
     })
     .from(clips)
@@ -604,22 +634,20 @@ export function clipFacets(): ClipFacets {
     .groupBy(clips.service_id)
     .orderBy(desc(sql`count(*)`))
     .all();
-  const days = new Map<string, number>();
-  for (const { at } of orm()
-    .select({ at: clips.taken_at })
+  // 日付はサーバの時計で (日付の絞り込み `dayRange` と同じ。DB の localtime もサーバの TZ を読む)
+  const day = sql<string>`strftime('%Y-%m-%d', ${clips.taken_at} / 1000, 'unixepoch', 'localtime')`;
+  const days = orm()
+    .select({ day, count: sql<number>`count(*)` })
     .from(clips)
     .where(live)
-    .orderBy(desc(clips.taken_at))
-    .all()) {
-    const d = new Date(at);
-    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    days.set(day, (days.get(day) ?? 0) + 1);
-  }
+    .groupBy(day)
+    .orderBy(desc(day))
+    .all();
   return {
     count: total.count,
     bytes: total.bytes,
     services: byService,
-    days: [...days].map(([day, count]) => ({ day, count })),
+    days,
   };
 }
 
