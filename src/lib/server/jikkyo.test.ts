@@ -138,7 +138,7 @@ describe("RankingRelay", () => {
 });
 
 describe("rankingEntries", () => {
-  test("同じ対応表で局に当てる。系列の地方局・サブチャンネルにも同じ勢い、放送中でない局は載せない", () => {
+  test("同じ対応表で局に当てる。系列の地方局にも同じ勢い。サブチャンネルと放送中でない局は載せない", () => {
     const forces = new Map([
       ["jk6", 36],
       ["jk101", 0],
@@ -149,7 +149,8 @@ describe("rankingEntries", () => {
           { id: 1, type: "GR", service_id: 1048 },
           { id: 2, type: "GR", service_id: 2064 },
           { id: 3, type: "GR", service_id: 1024 },
-          { id: 4, type: "BS", service_id: 102 },
+          { id: 4, type: "BS", service_id: 101 },
+          { id: 6, type: "BS", service_id: 102 },
           { id: 5, type: "GR", service_id: 9999 },
         ],
         forces,

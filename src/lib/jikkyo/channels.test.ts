@@ -27,12 +27,11 @@ describe("jikkyoChannel", () => {
     expect(gr(42032)).toBe("jk14");
   });
 
-  test("サブチャンネルは本チャンネルに当たる (1 つ前・2 つ前の番号)", () => {
-    // NHK 総合 2・東京、E テレ 3 東京
-    expect(gr(1025)).toBe("jk1");
-    expect(gr(1034)).toBe("jk2");
-    // TOKYO MX2 は表に載っている
-    expect(gr(23610)).toBe("jk9");
+  test("サブチャンネルは当てない (たいてい本チャンネルと別の番組)", () => {
+    // NHK 総合 2・東京、E テレ 3 東京、TOKYO MX2
+    expect(gr(1025)).toBeNull();
+    expect(gr(1034)).toBeNull();
+    expect(gr(23610)).toBeNull();
   });
 
   test("表に無い局はコメントなし", () => {
@@ -41,12 +40,12 @@ describe("jikkyoChannel", () => {
     expect(gr(1)).toBeNull();
   });
 
-  test("BS・CS は局の番号で引く。サブチャンネルも同じチャンネル", () => {
+  test("BS・CS は局の番号で引く。サブチャンネルは当てない", () => {
     const bs = (service_id: number) =>
       jikkyoChannel({ type: "BS", service_id });
     expect(bs(101)).toBe("jk101");
-    expect(bs(102)).toBe("jk101");
-    expect(bs(142)).toBe("jk141");
+    expect(bs(102)).toBeNull();
+    expect(bs(142)).toBeNull();
     expect(bs(211)).toBe("jk211");
     expect(bs(231)).toBeNull();
     expect(jikkyoChannel({ type: "CS", service_id: 333 })).toBe("jk333");
