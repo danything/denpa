@@ -158,19 +158,28 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 [**@eggplants**](https://github.com/eggplants) (haruna) さんが、GitHub Sponsors で denpa を大きく支えてくれました。本当にありがとうございます。
 
+<!-- 下の印の間は scripts/thanks.ts が履歴から書く。手で直さない -->
+<!-- thanks:start -->
+
 **手を入れてくれた人** (ありがとうございます):
 
-- [@Khronos31](https://github.com/Khronos31) — px4-userland / siano-userland で選局できなかったのを、PX-Q3U4 の実機で見つけて直してくれました (#188)。ほかにも不具合を報告してくれました (#195 #376 #377)
-- [@unlimish](https://github.com/unlimish) — ライブ・追っかけ・観る画面に小窓 (PiP) を足してくれました (#431)。非力な機材で複数のライブを観るときの詰まりを実測つきで報告してくれ、ライブを GPU でエンコードできるようになりました (#417)
-- [@fetburner](https://github.com/fetburner) — ルール画面の下見でチューナーの取り合いを数えるところを、時刻順に1回なぞるやり方にして、全件で 20 倍ほど速くしてくれました (#662)。兼用チューナーで取り合いを見落とす組み合わせも報告してくれました (#668)
-- [@sirius128](https://github.com/sirius128) — 古い Intel の内蔵 GPU (Haswell など) でも GPU でエンコードできるように、イメージに i965 のドライバを足してくれました。Pentium G3250 と PT3 の実機で確かめてくれています (#775)
-- [@chiroru27](https://github.com/chiroru27) — iOS でホーム画面へ戻ると、バックグラウンド再生をオンにしていても映像が止まるのを、iPhone と iPad の実機で調べて直してくれました (#1681)。Mac の CECH-ZD1 J でカードが読めない件と、USB のポートを差し替えると見失う件をログつきで報告して、直ったことまで確かめてくれました。途中で止めた番組を録り直せない件も見つけてくれました
+- [@Khronos31](https://github.com/Khronos31) (#188)
+- [@unlimish](https://github.com/unlimish) (#431)
+- [@fetburner](https://github.com/fetburner) (#662)
+- [@sirius128](https://github.com/sirius128) (#775)
+- [@chiroru27](https://github.com/chiroru27) (#1681)
 
 **報告や提案をくれた人** (ありがとうございます):
 
-- [@kametani-mikihiro](https://github.com/kametani-mikihiro) — iOS・iPadOS の Safari での全画面・H.264 の録画の再生・メニューの見づらさと、PX-W3U4 で映らない件を報告してくれました。録画一覧のまとめ表示、空き容量と未視聴の表示、マルチ編成の局を番組表で隠すのも、この人の提案からです (#437 #471 #480 #481 #503 #505 #509)
-- [@shino-zxc](https://github.com/shino-zxc) — ライブの最小バッファ時間について提案してくれました (#1210)
-- [@eggplants](https://github.com/eggplants) — ニコニコ実況の Discussion を立ててくれました (#1617)。実況のコメントを流す機能はここから始まっています。ハードウェアエンコードの Discussion も立ててくれました (#1709)
+- [@Khronos31](https://github.com/Khronos31) (#184 #195 #376 #377)
+- [@unlimish](https://github.com/unlimish) (#417)
+- [@kametani-mikihiro](https://github.com/kametani-mikihiro) (#437 #471 #480 #481 #503 #505 #509)
+- [@fetburner](https://github.com/fetburner) (#668)
+- [@shino-zxc](https://github.com/shino-zxc) (#1210 #1713)
+- [@eggplants](https://github.com/eggplants) (#1617 #1709)
+- [@ogatomo21](https://github.com/ogatomo21) (#1708)
+
+<!-- thanks:end -->
 
 **土台にしている仕事**:
 

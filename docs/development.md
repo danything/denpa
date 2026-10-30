@@ -50,6 +50,15 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30fps で組む) は `scripts/capture-docs.ts` の頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
+## README の謝辞
+
+「謝辞」の節のうち `<!-- thanks:start -->` と `<!-- thanks:end -->` の間は、マージされた PR の作者と
+Issue・Discussion を立てた人を GitHub の履歴から並べたもので、`scripts/thanks.ts` が書きます (手で直さない)。
+Actions の **Thanks** (`.github/workflows/thanks.yml`) が週に 1 回回し、変わっていれば image marks と同じく
+PR を出して自分でマージします。急ぐときは Actions から手で走らせるか、手元で
+`GH_TOKEN=$(gh auth token) bun run thanks` (コンテナの中で) を回して PR にします。
+特別協賛と土台にしている仕事は印の外で、手で書きます。載せない人 (持ち主) は `EXCLUDE` にあります
+
 ## テストの方針
 
 **E2E が主で、単体テストは純粋関数の境界条件だけ。** 偽エージェント・偽の通知先・偽の EPGStation・偽の EpgTimerSrv・
@@ -169,7 +178,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 CI が両方をビルドして `deploy/` の印を書き戻します。**main は直接 push できない**
 (ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(5)` / `claude-review`) ので、
 書き戻しは bot が PR を出し、必須チェックの status を自分で付けてマージします
-(手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しも同じ)。
+(手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しと README の謝辞の一覧も同じ)。
 release は組み直さず、main で組んだイメージにバージョンを 1 層足します
 (`.github/release.Dockerfile`。タグの決め方と理由は [architecture.md](architecture.md#イメージのタグ)、
 出し方は `.github/image-tags.sh`)。

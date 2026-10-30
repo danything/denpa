@@ -16,8 +16,8 @@
 # 必須チェックが足された途端に bump の PR が「Expected」のまま塞がった (#99、2026-09-11)。
 # ruleset で足したものにここが自動で追いつくようにする。引けなければ `check` だけ (以前の方式) に落ちる。
 #
-# **2つのワークフローが同じ手を要る** (build-and-deploy の deploy の印と、release の
-# Chart.yaml のバージョン)。書き写すと片方だけ直したときに食い違うので、ここ1つに置く
+# **3つのワークフローが同じ手を要る** (build-and-deploy の deploy の印と、release の
+# Chart.yaml のバージョンと、thanks の README の謝辞の一覧)。書き写すと1つだけ直したときに食い違うので、ここ1つに置く
 # (image-tags.sh と同じ)。
 #
 # 使い方 (GH_TOKEN が要る):

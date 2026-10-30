@@ -1,0 +1,69 @@
+name: Thanks
+
+# README の謝辞の一覧 (thanks:start〜end の印の間) を GitHub の履歴から作り直す (scripts/thanks.ts)。
+# 変わっていれば、image marks の書き戻しと同じく PR を出して自分でマージする (.github/bump-pr.sh)。
+# 書き換えるのは README の印の間だけで、中身は API の返事から一意に決まるので、確かめるものは残っていない
+on:
+  schedule:
+    # 毎週月曜の 3:00 (JST)
+    - cron: "0 18 * * 0"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  # 書き換えた枝を push する
+  contents: write
+  pull-requests: write
+  # その PR に必須チェックの status を自分で付けるため (context は ruleset から引く)
+  statuses: write
+  # 一覧の元 (GraphQL で読む)
+  issues: read
+  discussions: read
+  # マージのあとサイト (pages.yml) を起こす
+  actions: write
+
+jobs:
+  thanks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # bun のバージョンは Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
+      - name: Read bun version from Dockerfile
+        id: bun
+        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      # scripts/thanks.ts は fetch と fs だけなので bun install は要らない
+      - name: Open and self-merge a PR that rewrites the thanks list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          . .github/bump-pr.sh
+          bump_begin update-thanks
+          bun scripts/thanks.ts
+          if git diff --quiet README.md; then
+            echo "謝辞の一覧は変わりなし"
+            exit 0
+          fi
+          bump_finish update-thanks \
+            "docs: 謝辞の一覧を更新する" \
+            "README の謝辞の印の間を、マージされた PR と Issue・Discussion の履歴から作り直しただけ。必須チェックが付いたら自分でマージする" \
+            "README の謝辞の一覧だけ" \
+            README.md
+          # GITHUB_TOKEN でのマージは他の workflow を動かさないので、サイトはここから起こす。
+          # auto-merge に倒れたときはまだ main に入っていないので起こさない (次に docs が変わったときに追いつく)
+          if [ "$(gh pr view update-thanks --json state -q .state)" = MERGED ]; then
+            gh workflow run pages.yml
+          fi
