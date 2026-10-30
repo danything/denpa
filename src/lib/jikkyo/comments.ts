@@ -1,16 +1,22 @@
 /**
- * **実況のコメントを本文と時刻だけにする**、と**時刻つきの控え** (端末の中)。
+ * **実況のコメントを本文と時刻と流し方だけにする**、と**時刻つきの控え** (端末の中)。
  *
  * NX-Jikkyo の WebSocket も過去ログ API も、旧ニコ生と同じ形の `chat` を返す
  * (`{ thread, no, vpos, date, date_usec, mail, user_id, premium, anonymity, content }`)。
  * 値は WebSocket が数、過去ログが文字列なので、どちらでも読む。
- * **`user_id`・`mail`・`premium`・`no` などは読んだその場で捨てる** — 持つのは本文と投稿時刻だけ
+ * **`user_id`・`premium`・`no` などは読んだその場で捨てる** — 持つのは本文と投稿時刻と、`mail` のうち色・位置・大きさのコマンドだけ
+ * (`command.ts`)
  */
+import { readMail, type Style } from "./command";
 
 /** 流すコメント。`at` は投稿時刻 (unix ms。公式のものはニコニコ、ほかは NX-Jikkyo のサーバの時計) */
 export interface Comment {
   at: number;
   text: string;
+  /** 色・位置・大きさ。既定 (白・流れる・中) なら無い */
+  style?: Style;
+  /** この端末から書き込んだもの (流れる字の下に空色の短い線) */
+  mine?: true;
 }
 
 /** 数か、数の文字列を数に。読めなければ NaN */
@@ -35,7 +41,9 @@ export function toComment(chat: unknown): Comment | null | undefined {
   const text = content.trim();
   // 運営のコメント (`/nicoad`・`/gift` など。古い過去ログに入っている) は流さない
   if (text === "" || /^\/[a-z]/.test(text)) return null;
-  return { at: date * 1000 + Math.floor(usec / 1000), text };
+  const at = date * 1000 + Math.floor(usec / 1000);
+  const style = readMail(raw["mail"]);
+  return Object.keys(style).length > 0 ? { at, text, style } : { at, text };
 }
 
 /**

@@ -1,7 +1,8 @@
 /**
  * 操作列を出しておくか消すかの決め方 (3画面で同じ。DOM も映像も触らない)。触っていない間は引っ込める。
  * 止めていても引っ込める — 一時停止はたいてい映像の中の文字を見るためで、押さないと消せないほうが邪魔だった。
- * 残すのはキーボードで触っている間 (映像を押して出し直す手が無い) と、メニューを開いている間だけ (`stageMenu`)
+ * 残すのはキーボードで触っている間 (映像を押して出し直す手が無い) と、メニューを開いている間 (`stageMenu`)、
+ * 実況に書き込む 1 行を開いている間だけ (`writing`)
  */
 
 import { getContext } from "svelte";
@@ -32,6 +33,8 @@ export interface PlayerControls {
   keyboard: boolean;
   /** メニューが開いている間は残す。**選んでいる最中に消えては選べない** */
   hold: boolean;
+  /** 実況に書き込む 1 行を開いている間は残す (打っている最中に消えない) */
+  writing: boolean;
   /** その場で出し直す (ボタンを押した直後など) */
   stir: () => void;
   /** その場で消す (指で1回押して引っ込めるとき) */
@@ -52,12 +55,13 @@ export function playerControls(): PlayerControls {
   let wasShown = false;
   let keyboard = $state(false);
   let hold = $state(false);
+  let writing = $state(false);
   /** 前にいた場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
   let lastX = Number.NaN;
   let lastY = Number.NaN;
 
   // 見るのは「触ったか」だけ (キーボードと開いているメニューを除く。再生の状態は混ぜない)
-  const shown = $derived(keyboard || hold || now - touched < LINGER);
+  const shown = $derived(keyboard || hold || writing || now - touched < LINGER);
 
   $effect(() => {
     if (!shown) return;
@@ -90,6 +94,12 @@ export function playerControls(): PlayerControls {
     },
     set hold(value: boolean) {
       hold = value;
+    },
+    get writing(): boolean {
+      return writing;
+    },
+    set writing(value: boolean) {
+      writing = value;
     },
     /**
      * 指は押したときだけ出す (滑らせただけでは何もしない)。マウスは本当に動いたときだけ出す — 止まったカーソルの

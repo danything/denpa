@@ -39,7 +39,9 @@ function harness() {
   const sockets: FakeSocket[] = [];
   const timers: { run: () => void; ms: number; id: number }[] = [];
   let id = 0;
+  const clock = { now: T };
   const deps: NxDeps = {
+    now: () => clock.now,
     open: (url) => {
       const socket = new FakeSocket(url);
       sockets.push(socket);
@@ -72,10 +74,12 @@ function harness() {
     timer?.run();
     return timer?.ms;
   };
-  return { nx, sockets, timers, got, states, fire };
+  return { nx, sockets, timers, got, states, fire, clock };
 }
 
 const T = Date.UTC(2026, 9, 28, 12, 0, 0);
+/** スレッドの頭 (vpos の基準)。いまの 1 時間前 */
+const BASE = T - 3_600_000;
 const COMMENT_URL =
   "wss://nx-jikkyo.tsukumijima.net/api/v1/channels/jk9/ws/comment";
 
@@ -90,6 +94,7 @@ function connect(h: ReturnType<typeof harness>, from = 0): FakeSocket {
       messageServer: { uri: COMMENT_URL },
       threadId: "777",
       yourPostKey: "key",
+      vposBaseTime: new Date(BASE).toISOString(),
     },
   });
   const comment = h.sockets[from + 1]!;
@@ -214,5 +219,119 @@ describe("NxJikkyo", () => {
     h.nx.close();
     expect(h.sockets.every((s) => s.closed)).toBe(true);
     expect(h.timers).toEqual([]);
+  });
+});
+
+describe("NxJikkyo.post", () => {
+  const STYLE = { color: "red", position: "ue", size: "big" } as const;
+
+  /** 繋いでスレッドの返事まで受けたもの */
+  function ready() {
+    const h = harness();
+    h.nx.start();
+    const comment = connect(h);
+    comment.receive({ thread: { resultcode: 0 } });
+    return { h, watch: h.sockets[0]!, comment };
+  }
+
+  test("視聴の WS に postComment を送る。いつも 184、vpos はスレッドの頭からの 1/100 秒", async () => {
+    const { h, watch } = ready();
+    h.clock.now = T + 1_230;
+    const result = h.nx.post("わこつ", STYLE);
+    expect(watch.sent.at(-1)).toEqual({
+      type: "postComment",
+      data: {
+        text: "わこつ",
+        vpos: (T + 1_230 - BASE) / 10,
+        isAnonymous: true,
+        color: "red",
+        position: "ue",
+        size: "big",
+      },
+    });
+    watch.receive({
+      type: "postCommentResult",
+      data: { chat: { mail: "184 red ue big", content: "わこつ" } },
+    });
+    expect(await result).toBe("sent");
+  });
+
+  test("error の NOT_ON_AIR はスレッドの替わり目、INVALID_MESSAGE は受け付けられなかった", async () => {
+    const { h, watch } = ready();
+    const first = h.nx.post("一つ目", STYLE);
+    watch.receive({ type: "error", data: { message: "NOT_ON_AIR" } });
+    expect(await first).toBe("not-on-air");
+    const second = h.nx.post("二つ目", STYLE);
+    watch.receive({ type: "error", data: { message: "INVALID_MESSAGE" } });
+    expect(await second).toBe("rejected");
+  });
+
+  test("5 秒返事が無ければ分からない", async () => {
+    const { h } = ready();
+    const result = h.nx.post("届いた?", STYLE);
+    // keepSeat (30 秒) より先に鳴る
+    expect(h.fire()).toBe(5_000);
+    expect(await result).toBe("unknown");
+  });
+
+  test("返事を待っている間に切れたら分からない。繋ぎ直すまでは書けない", async () => {
+    const { h, watch } = ready();
+    const result = h.nx.post("切れた", STYLE);
+    watch.drop();
+    expect(await result).toBe("unknown");
+    expect(h.nx.ready).toBe(false);
+    expect(await h.nx.post("繋がっていない", STYLE)).toBe("closed");
+  });
+
+  test("1 件ずつ。返事を待っている間は送らない", async () => {
+    const { h, watch } = ready();
+    const first = h.nx.post("一つ目", STYLE);
+    expect(h.nx.ready).toBe(false);
+    expect(await h.nx.post("二つ目", STYLE)).toBe("closed");
+    expect(
+      watch.sent.filter((m) => (m as { type?: string }).type === "postComment"),
+    ).toHaveLength(1);
+    watch.receive({ type: "postCommentResult", data: { chat: {} } });
+    expect(await first).toBe("sent");
+    expect(h.nx.ready).toBe(true);
+  });
+
+  test("room の前は書けない", async () => {
+    const h = harness();
+    h.nx.start();
+    h.sockets[0]!.open();
+    expect(await h.nx.post("早すぎる", STYLE)).toBe("closed");
+  });
+
+  test("戻ってきた自分の書き込み (yourpost) は 1 回だけ流さない。ほかの人の同じ本文は流す", async () => {
+    const { h, watch, comment } = ready();
+    const result = h.nx.post("草", STYLE);
+    watch.receive({ type: "postCommentResult", data: { chat: {} } });
+    expect(await result).toBe("sent");
+    const chat = { date: T / 1000, content: "草", mail: "184 red ue big" };
+    comment.receive({ chat: { ...chat, yourpost: 1 } });
+    comment.receive({ chat });
+    comment.receive({ chat: { ...chat, yourpost: 1 } });
+    expect(h.got.map((c) => c.text)).toEqual(["草", "草"]);
+  });
+
+  test("返事より先に自分の書き込みが戻ってきたら、返事が無くても送れている", async () => {
+    const { h, comment } = ready();
+    const result = h.nx.post("先に戻る", STYLE);
+    comment.receive({
+      chat: { date: T / 1000, content: "先に戻る", yourpost: 1 },
+    });
+    h.fire();
+    expect(await result).toBe("sent");
+    expect(h.got).toEqual([]);
+  });
+
+  test("送れなかったものは、戻ってきても捨てない", async () => {
+    const { h, watch, comment } = ready();
+    const result = h.nx.post("失敗", STYLE);
+    watch.receive({ type: "error", data: { message: "INVALID_MESSAGE" } });
+    expect(await result).toBe("rejected");
+    comment.receive({ chat: { date: T / 1000, content: "失敗", yourpost: 1 } });
+    expect(h.got.map((c) => c.text)).toEqual(["失敗"]);
   });
 });

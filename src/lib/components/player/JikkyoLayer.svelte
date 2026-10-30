@@ -7,6 +7,7 @@
     laneCount,
     Lanes,
     lineHeight,
+    sizeScale,
     textWidth,
   } from "#lib/jikkyo/lanes.js";
 
@@ -18,8 +19,11 @@
    * - 映像の枠 (16:9 に収めた所。字幕の面と同じ) の全面に流す。重ねる順は 映像 → 実況 → 字幕 → 操作バー
    * - 動きは CSS の `translateX` だけ (JS では動かさない)。止めたら `animation-play-state: paused`、
    *   速さを変えたら長さを割る。流し終えたら外す
-   * - 色・位置・大きさのコマンドは使わず、全部白で右から左へ。透明度 0.5。読み上げには出さない
-   * - 動きを減らす設定では流さず、上の行に 3 秒置いて消す
+   * - 色・位置・大きさはコメントのコマンドどおり (`command.ts`。既定は白で右から左へ)。`ue`・`shita` は上・下の行に 3 秒止める。
+   *   止めるもので枠より広いものは、枠に収まるまで字を縮める。透明度 0.5。読み上げには出さない
+   * - 動きを減らす設定では流さず、上の行に 3 秒置いて消す (`shita` は下の行)
+   *   (長さは `!important` で書く。Pico は動きを減らす設定で `animation-duration` を 1ms にするので、置いたものがすぐ消えていた)
+   * - この端末から書き込んだものは、字の下に空色の短い線 (`mine`)
    * - 同時に流すのは 60 件まで (`data-lite` の端末では 15 件)。空いた行が無ければ捨てる
    */
   interface Props {
@@ -41,7 +45,12 @@
     /** 流れ終わるまで (放送時刻の ms) */
     duration: number;
     width: number;
+    /** 止めて置く (上・下・動きを減らす設定) */
     still: boolean;
+    /** 字の大きさ (px) */
+    size: number;
+    color: string | undefined;
+    mine: boolean;
   }
 
   let items = $state<Item[]>([]);
@@ -97,10 +106,18 @@
     const added: Item[] = [];
     for (const comment of comments) {
       if (items.length + added.length >= most) break;
-      const width = textWidth(comment.text, size);
-      const flow = reduced
-        ? lanes.still(w)
-        : lanes.flow(w, width, frame.width, size);
+      const style = comment.style ?? {};
+      const still = reduced || style.place !== undefined;
+      let px = size * sizeScale(style.size);
+      let width = textWidth(comment.text, px);
+      // 止めるものは枠に収める (流れるものは長くても流れきる)
+      if (still && width > frame.width) {
+        px *= frame.width / width;
+        width = frame.width;
+      }
+      const flow = still
+        ? lanes.hold(w, style.place === "shita" ? "bottom" : "top")
+        : lanes.flow(w, width, frame.width, px);
       if (flow === null) continue;
       added.push({
         id: nextId++,
@@ -108,7 +125,10 @@
         lane: flow.lane,
         duration: flow.duration,
         width,
-        still: reduced,
+        still,
+        size: px,
+        color: style.color,
+        mine: comment.mine === true,
       });
     }
     if (added.length > 0) items = [...items, ...added];
@@ -139,11 +159,15 @@
       <span
         class="comment"
         class:still={item.still}
+        class:mine={item.mine}
+        style:font-size={item.size === size ? undefined : `${item.size}px`}
+        style:color={item.color}
         data-testid="jikkyo-comment"
         style:top="{(item.lane + 0.5) * line}px"
         style:--from="{frame.width}px"
         style:--to="{-item.width}px"
-        style:animation-duration="{item.duration / Math.max(rate, 0.1)}ms"
+        style:animation-duration|important="{item.duration /
+          Math.max(rate, 0.1)}ms"
         onanimationend={() => done(item.id)}>{item.text}</span
       >
     {/each}
@@ -184,6 +208,18 @@
     translate: -50% 0;
     will-change: auto;
     animation-name: jikkyo-still;
+  }
+  /* この端末から書き込んだもの。映像の上のオンと同じ空色の短い線を字の下に (字の色は替えない) */
+  .comment.mine::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: min(2em, 100%);
+    height: 2px;
+    border-radius: 1px;
+    translate: -50% 0;
+    background: var(--dp-on-video-on);
   }
   .jikkyo[data-paused] .comment {
     animation-play-state: paused;

@@ -9,10 +9,14 @@
  *    60 秒おきに試し続ける。スレッドは毎日 4:00 に替わり、サーバが閉じる (`disconnect` か、コード 1000)。
  *    そのときは視聴の WS から繋ぎ直して新しいスレッドを受け取る (替わり目の数秒は抜けることがある)
  *
- * 書き込みはしない。`yourPostKey` は `thread` の `threadkey` に渡すだけ
+ * 4. 書き込み (`post`) は視聴の WS に `postComment` を送り、返事 (`postCommentResult` か `error`) を待つ。1 件ずつで、
+ *    5 秒返事が無ければ「分からない」。`room` の `yourPostKey` を `thread` の `threadkey` に渡しておくと、自分の書き込みは
+ *    コメントの WS から `yourpost: 1` で戻ってくる。送れたものは画面がすぐ流すので、戻ってきたものは 1 回だけ捨てる (`Echoes`)
  */
+import type { PostStyle } from "./command";
 import { type Comment, toComment } from "./comments";
 import { NX_JIKKYO_WS, watchUrl } from "./endpoints";
+import { Echoes, type PostResult, REPLY_WAIT, vpos } from "./post";
 
 /** 続けて何回失敗したら「いまは読めない」にするか */
 const FAILURES_TO_DOWN = 5;
@@ -48,10 +52,12 @@ export interface NxDeps {
   open: (url: string) => WebSocket;
   setTimeout: (run: () => void, ms: number) => unknown;
   clearTimeout: (id: unknown) => void;
+  now: () => number;
 }
 
 const browser: NxDeps = {
   open: (url) => new WebSocket(url),
+  now: () => Date.now(),
   setTimeout: (run, ms) => setTimeout(run, ms),
   clearTimeout: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
 };
@@ -67,7 +73,16 @@ export class NxJikkyo {
   private live = false;
   private closed = false;
   /** いまのスレッド (`room`)。コメントの WS に `thread` を送るのに使う */
-  private room: { thread: string; key: string } | null = null;
+  private room: { thread: string; key: string; base: number } | null = null;
+  /** 返事を待っている書き込み。1 件ずつ */
+  private pending: {
+    text: string;
+    timer: unknown;
+    /** 返事より先に、自分の書き込みが戻ってきた (送れている) */
+    echoed: boolean;
+    done: (result: PostResult) => void;
+  } | null = null;
+  private readonly echoes = new Echoes();
   /** 遡るのを頼まれた時刻 (unix ms)。コメントの WS が開いたら 1 回だけ送る */
   private backfillBefore: number | null = null;
   private backfilled = false;
@@ -81,6 +96,64 @@ export class NxJikkyo {
   start(): void {
     this.closed = false;
     this.connect();
+  }
+
+  /** 書き込めるか (視聴の WS が開いていて、スレッドを受け取っている。返事を待っている間は false) */
+  get ready(): boolean {
+    return (
+      this.watch !== null &&
+      this.watch.readyState === 1 &&
+      this.room !== null &&
+      this.pending === null
+    );
+  }
+
+  /**
+   * 書き込む (`text` は確かめ終えたもの。`post.ts` の `refusal`)。いつも 184 (匿名)。色・位置・大きさは選んだもの
+   * (NX-Jikkyo のサーバが `mail` に組む)。
+   * 繋がっていない・返事を待っている間は `closed`
+   */
+  post(text: string, style: PostStyle): Promise<PostResult> {
+    const ws = this.watch;
+    const room = this.room;
+    if (!this.ready || ws === null || room === null)
+      return Promise.resolve("closed");
+    const now = this.deps.now();
+    return new Promise((resolve) => {
+      this.pending = {
+        text,
+        echoed: false,
+        timer: this.deps.setTimeout(
+          () => this.settlePost(this.pending?.echoed ? "sent" : "unknown"),
+          REPLY_WAIT,
+        ),
+        done: resolve,
+      };
+      this.echoes.expect(text, now);
+      ws.send(
+        JSON.stringify({
+          type: "postComment",
+          data: {
+            text,
+            vpos: vpos(now, room.base),
+            isAnonymous: true,
+            color: style.color,
+            position: style.position,
+            size: style.size,
+          },
+        }),
+      );
+    });
+  }
+
+  /** 書き込みの返事が決まった。送れなかったものは、戻ってきても捨てない */
+  private settlePost(result: PostResult): void {
+    const pending = this.pending;
+    if (pending === null) return;
+    this.pending = null;
+    this.deps.clearTimeout(pending.timer);
+    if (result !== "sent") this.echoes.forget(pending.text);
+    pending.done(result);
   }
 
   /** 閉じる。もう繋ぎ直さない */
@@ -154,10 +227,26 @@ export class NxJikkyo {
           return;
         }
         const key = body["yourPostKey"];
-        this.room = { thread, key: typeof key === "string" ? key : "" };
+        // 書き込みの vpos の基準。読めなければ受け取った時刻 (vpos はずれるが、流れ方には効かない)
+        const base = Date.parse(String(body["vposBaseTime"]));
+        this.room = {
+          thread,
+          key: typeof key === "string" ? key : "",
+          base: Number.isFinite(base) ? base : this.deps.now(),
+        };
         this.openComment(`${NX_JIKKYO_WS}${path}`);
         break;
       }
+      case "postCommentResult":
+        this.settlePost("sent");
+        break;
+      case "error":
+        // 書き込みの返事。待っていなければ何もしない
+        if (this.pending === null) break;
+        this.settlePost(
+          body["message"] === "NOT_ON_AIR" ? "not-on-air" : "rejected",
+        );
+        break;
       case "disconnect":
         // スレッドの終わり (`END_PROGRAM`) など。視聴の WS から繋ぎ直す
         this.teardown();
@@ -234,11 +323,21 @@ export class NxJikkyo {
       if (item === null || typeof item !== "object") continue;
       if ("thread" in item) this.settle();
       if (!("chat" in item)) continue;
-      const comment = toComment((item as { chat: unknown }).chat);
+      const chat = (item as { chat: unknown }).chat;
+      const comment = toComment(chat);
       if (comment === undefined) this.events.odd("chat の形が違います");
-      else if (comment !== null) comments.push(comment);
+      else if (comment !== null && !this.ownEcho(chat, comment.text))
+        comments.push(comment);
     }
     if (comments.length > 0) this.events.comments(comments);
+  }
+
+  /** 戻ってきた自分の書き込みで、もう流したもの。返事を待っている間なら、送れている印にする */
+  private ownEcho(chat: unknown, text: string): boolean {
+    if ((chat as { yourpost?: unknown }).yourpost !== 1) return false;
+    if (!this.echoes.take(text, this.deps.now())) return false;
+    if (this.pending?.text === text) this.pending.echoed = true;
+    return true;
   }
 
   /** 読めるようになった。失敗の数を戻す */
@@ -292,6 +391,9 @@ export class NxJikkyo {
   private teardown(): void {
     if (this.keep !== null) this.deps.clearTimeout(this.keep);
     this.keep = null;
+    // 返事を待っている間に切れた。届いたかは分からない (戻ってきていれば送れている)
+    this.settlePost(this.pending?.echoed === true ? "sent" : "unknown");
+    this.room = null;
     const watch = this.watch;
     const comment = this.comment;
     this.watch = null;

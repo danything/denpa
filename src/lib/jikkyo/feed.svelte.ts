@@ -5,10 +5,12 @@
  * 渡して `take` を呼び、返ってきたものを流す (`JikkyoLayer`)。出し方は `cursor.ts`。
  * コメントの出どころ (NX-Jikkyo・過去ログ API) と控えはここが持つ。どこから埋めるかは docs/watch.md の「実況」
  */
+import { type PostStyle, postStyle } from "./command";
 import type { Comment, CommentStore } from "./comments";
 import { Cursor, type Take } from "./cursor";
 import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
 import { type NxDeps, NxJikkyo } from "./nx";
+import type { PostResult } from "./post";
 
 /** 過去ログ API が読めなかったとき、もう一度試すまで */
 const KAKOLOG_RETRY = 60_000;
@@ -131,6 +133,35 @@ export class JikkyoFeed {
         this.kakologTimer = setTimeout(() => void step(), wait);
     };
     void step();
+  }
+
+  /** NX-Jikkyo に書き込めるか (繋がっていて、前の書き込みの返事を待っていない) */
+  get writable(): boolean {
+    return this.nx?.ready === true;
+  }
+
+  /**
+   * NX-Jikkyo に書き込む (確かめるのは呼ぶ側。`post.ts`)。送れたら、いまの放送時刻 `w` に置いてすぐ流す
+   * (戻ってきた同じものは `nx.ts` が 1 回だけ捨てる)。`w` は返事を受けたときに読む
+   */
+  async post(
+    text: string,
+    style: PostStyle,
+    w: () => number | null,
+  ): Promise<PostResult> {
+    const nx = this.nx;
+    if (nx === null) return "closed";
+    const result = await nx.post(text, style);
+    const at = w();
+    if (result === "sent" && nx === this.nx && at !== null) {
+      const own = postStyle(style);
+      this.cursor.receive([
+        Object.keys(own).length > 0
+          ? { at, text, style: own, mine: true }
+          : { at, text, mine: true },
+      ]);
+    }
+    return result;
   }
 
   /** 外から足す (過去ログ API で取ったもの)。`span` はその区間を埋めたことにする */

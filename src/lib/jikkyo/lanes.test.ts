@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { laneCount, Lanes, lineHeight, SPAN_MS, textWidth } from "./lanes";
+import {
+  laneCount,
+  Lanes,
+  lineHeight,
+  sizeScale,
+  SPAN_MS,
+  textWidth,
+} from "./lanes";
 
 /*
  * コメントを流す行の割り当て
@@ -42,10 +49,20 @@ describe("Lanes", () => {
     expect(lanes.flow(1, 100, 1000, 20)?.lane).toBe(0);
   });
 
-  test("動きを減らす設定では、3 秒置いて空ける", () => {
-    const lanes = new Lanes(1);
-    expect(lanes.still(0)).toEqual({ lane: 0, duration: 3000 });
-    expect(lanes.still(2999)).toBeNull();
-    expect(lanes.still(3000)?.lane).toBe(0);
+  test("止めるものは 3 秒置いて空ける。上は上の行から、下は下の行から積み、流れるものとは別に数える", () => {
+    const lanes = new Lanes(3);
+    expect(lanes.hold(0, "top")).toEqual({ lane: 0, duration: 3000 });
+    expect(lanes.hold(0, "bottom")).toEqual({ lane: 2, duration: 3000 });
+    expect(lanes.hold(1, "bottom")?.lane).toBe(1);
+    expect(lanes.hold(2, "top")).toBeNull();
+    expect(lanes.hold(3000, "top")?.lane).toBe(0);
+    // 流れるものの行は空いたまま
+    expect(lanes.flow(1, 100, 1000, 20)?.lane).toBe(0);
+  });
+
+  test("大きいものは 1.25 倍、小さいものは 0.75 倍", () => {
+    expect(sizeScale("big")).toBe(1.25);
+    expect(sizeScale("small")).toBe(0.75);
+    expect(sizeScale(undefined)).toBe(1);
   });
 });

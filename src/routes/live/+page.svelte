@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
   import type { Service } from "#lib/bml/engine.js";
@@ -30,6 +31,7 @@
     OPEN_OUT,
     OVERLAY,
     PAUSE,
+    PENCIL,
     PLAY,
     RECORD,
     SOUND_OFF,
@@ -37,6 +39,7 @@
     SPEED,
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
+  import JikkyoCompose from "#lib/components/player/JikkyoCompose.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
@@ -75,6 +78,7 @@
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
+  import { PHONE_FORM, TABLETOP } from "#lib/phone-form.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR } from "#lib/ts/pacing.js";
   import { CHANNEL_TYPES } from "#lib/types.js";
@@ -156,6 +160,23 @@
     jikkyo.set(jikkyoChannel, jikkyoActive);
   });
   onMount(() => () => jikkyo.close());
+
+  /**
+   * 実況に書き込む 1 行 (`JikkyoCompose`)。出せるのは流しているときと同じ条件 (世帯と端末の両方がオンで、映している局に
+   * 実況のチャンネルがある) で、書き込み用の設定は無い。開いている間は操作バーを引っ込めない。
+   * 置き場は、スマホの形 (横にしたスマホ・テーブルトップ・全画面を除く) では下のタブのすぐ上、ほかは操作バーのすぐ上。
+   * テーブルトップの下のタブは別の段にあり、映像の段の中からは浮かせられない (段の箱が `position: fixed` の基準になる)
+   */
+  const canWrite = $derived(
+    jikkyoActive && jikkyoChannel !== null && player.yielded === null,
+  );
+  let writing = $state(false);
+  $effect(() => {
+    if (!canWrite) writing = false;
+  });
+  const phoneForm = new MediaQuery(PHONE_FORM);
+  const phoneLandscape = new MediaQuery(PHONE_LANDSCAPE);
+  const tabletop = new MediaQuery(TABLETOP);
 
   /**
    * 一覧は種別で切り替える (番組表と同じ並び)。局を持っている種別だけ出す。
@@ -279,6 +300,22 @@
   /** 全画面にする枠と、その出入り (3画面共通) */
   let stageEl = $state<HTMLElement | null>(null);
   const fullscreen = stageFullscreen(() => stageEl);
+
+  // 書き込む 1 行の置き場 (上の `canWrite`) と、開いている間は操作バーを残す
+  const docked = $derived(
+    phoneForm.current &&
+      !phoneLandscape.current &&
+      !tabletop.current &&
+      !fullscreen.active,
+  );
+  $effect(() => {
+    controls.writing = writing;
+  });
+  /** 閉じたら「実況に書く」へ焦点を戻す */
+  function closeWriting(): void {
+    writing = false;
+    document.querySelector<HTMLElement>('[data-testid="live-write"]')?.focus();
+  }
 
   /** 画面を落とさせない。止めている間も掛けたまま (追っかけの始まりで、画面を見ていることが多い) */
   const awake = screenAwake();
@@ -481,10 +518,31 @@
             testid="live-shot"
             onclick={() => void snapshot()}
           />
+          <!-- 実況に書き込む 1 行を開く (`canWrite`。追い付いていないときも出し、1 行のほうで理由を言う) -->
+          {#if canWrite}
+            <ControlButton
+              icon={PENCIL}
+              label="実況に書く"
+              on={writing}
+              testid="live-write"
+              onclick={() => (writing = !writing)}
+            />
+          {/if}
         </ControlBar>
 
         <!-- 操作バーは映像が出る前から出しておく (出たり消えたりすると押そうとしたところで動く) -->
         <ControlBar shown={controls.shown} testid="live-controls">
+          <!-- 実況に書き込む 1 行 (操作バーのすぐ上)。スマホの形では下のタブのすぐ上 (`docked`。置く所は同じで、CSS で浮かせる) -->
+          {#if writing}
+            <JikkyoCompose
+              feed={jikkyo}
+              air={() => player.airTime()}
+              lag={player.fromAir}
+              paused={player.paused}
+              {docked}
+              onclose={closeWriting}
+            />
+          {/if}
           <!--
                         上に位置、下に押すもの (観る画面と同じ二段)。放送の今にいる間は右端に張り付かせる
                         (貯めているぶん後ろにいるが、描くと摘みが左へ動いて見える)。MPEG-2 では出さない

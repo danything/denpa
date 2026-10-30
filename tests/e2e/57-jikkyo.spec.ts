@@ -68,12 +68,36 @@ test.describe("実況の世帯の設定", () => {
   });
 });
 
-/** NX-Jikkyo の WebSocket の偽物。視聴の WS に room を返し、コメントの WS に `comments()` の本文を流し続ける */
+/** 書き込みの返事の偽物。`ok` は受け付けて、コメントの WS から `yourpost: 1` で戻す。`none` は返事をしない */
+type Reply = "ok" | "NOT_ON_AIR" | "INVALID_MESSAGE" | "none";
+
+/** 画面が送った書き込み (`postComment` の `data`) */
+interface Posted {
+  text: string;
+  vpos: number;
+  isAnonymous: boolean;
+  color?: string;
+  position?: string;
+  size?: string;
+}
+
+/**
+ * NX-Jikkyo の WebSocket の偽物。視聴の WS に room を返し、コメントの WS に `text` の本文 (`mail` 付き) を流し続ける
+ * (`quiet` なら流さない)。書き込み (`postComment`) は `posts` に貯め、`reply` のとおりに返す
+ */
 async function fakeNx(
   page: Page,
-  opts: { refuse?: () => boolean; text?: string } = {},
-): Promise<{ watched: string[] }> {
+  opts: {
+    refuse?: () => boolean;
+    text?: string;
+    mail?: string;
+    quiet?: boolean;
+    reply?: () => Reply;
+  } = {},
+): Promise<{ watched: string[]; posts: Posted[] }> {
   const watched: string[] = [];
+  const posts: Posted[] = [];
+  let comments: WebSocketRoute | null = null;
   await page.routeWebSocket(
     /nx-jikkyo\.tsukumijima\.net\/.*\/ws\/watch$/,
     (ws) => {
@@ -83,7 +107,47 @@ async function fakeNx(
         return;
       }
       ws.onMessage((message) => {
-        const body = JSON.parse(String(message)) as { type?: string };
+        const body = JSON.parse(String(message)) as {
+          type?: string;
+          data?: Posted;
+        };
+        if (body.type === "postComment" && body.data !== undefined) {
+          const data = body.data;
+          posts.push(data);
+          const reply = opts.reply?.() ?? "ok";
+          if (reply === "none") return;
+          if (reply !== "ok") {
+            ws.send(
+              JSON.stringify({ type: "error", data: { message: reply } }),
+            );
+            return;
+          }
+          // 本物と同じく、コメントの WS へ先に流してから返事をする
+          const mail = ["184", data.color, data.position, data.size]
+            .filter((c) => c !== undefined)
+            .join(" ");
+          const at = Date.now();
+          comments?.send(
+            JSON.stringify({
+              chat: {
+                thread: "1",
+                date: Math.floor(at / 1000),
+                date_usec: (at % 1000) * 1000,
+                user_id: "me",
+                mail,
+                yourpost: 1,
+                content: data.text,
+              },
+            }),
+          );
+          ws.send(
+            JSON.stringify({
+              type: "postCommentResult",
+              data: { chat: { mail, anonymity: 1, content: data.text } },
+            }),
+          );
+          return;
+        }
         if (body.type !== "startWatching") return;
         ws.send(
           JSON.stringify({ type: "seat", data: { keepIntervalSec: 30 } }),
@@ -96,7 +160,8 @@ async function fakeNx(
                 uri: "wss://nx-jikkyo.tsukumijima.net/api/v1/channels/jk9/ws/comment",
               },
               threadId: "1",
-              yourPostKey: "",
+              yourPostKey: "me",
+              vposBaseTime: new Date(Date.now() - 3_600_000).toISOString(),
             },
           }),
         );
@@ -106,9 +171,11 @@ async function fakeNx(
   await page.routeWebSocket(
     /nx-jikkyo\.tsukumijima\.net\/.*\/ws\/comment$/,
     (ws: WebSocketRoute) => {
+      comments = ws;
       let timer: ReturnType<typeof setInterval> | null = null;
       ws.onMessage(() => {
         ws.send(JSON.stringify({ thread: { resultcode: 0, thread: "1" } }));
+        if (opts.quiet === true) return;
         /*
          * 書かれた時刻を前後に散らして流し続ける。画面は映しているコマの放送時刻 (偽の放送の時計) に届いたものから流し、
          * 10 秒より古いものは捨てるので、放送時刻が壁時計より進んでいても遅れていても、どれかが当たるように
@@ -123,6 +190,7 @@ async function fakeNx(
                   date: Math.floor(at / 1000),
                   date_usec: (at % 1000) * 1000,
                   user_id: "fake",
+                  ...(opts.mail === undefined ? {} : { mail: opts.mail }),
                   content: opts.text ?? "テストのコメント",
                 },
               }),
@@ -135,7 +203,7 @@ async function fakeNx(
       });
     },
   );
-  return { watched };
+  return { watched, posts };
 }
 
 /** 端末の ⚙ の「実況」をオンにしておく (読み込む前に) */
@@ -207,6 +275,237 @@ test.describe("ライブの実況", () => {
         "aria-disabled",
         "true",
       );
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
+
+test.describe("ライブの実況の色・位置・大きさ", () => {
+  test("ほかの人のコメントの mail を読み、色を付けて上に止め、大きく出す", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, { text: "赤い上の字", mail: "184 red ue big" });
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "mpeg2");
+      const comment = page.getByTestId("jikkyo-comment").first();
+      await expect(comment).toHaveText("赤い上の字", { timeout: 20_000 });
+      await expect(comment).toHaveClass(/\bstill\b/);
+      await expect(comment).toHaveCSS("color", "rgb(255, 0, 0)");
+      // 大きい (中の 1.25 倍)
+      expect(
+        await comment.evaluate(
+          (el) =>
+            parseFloat(getComputedStyle(el).fontSize) /
+            parseFloat(getComputedStyle(el.parentElement!).fontSize),
+        ),
+      ).toBeCloseTo(1.25);
+      // 上の行から積む (いちばん上のものは枠の上の端の近く)。止めたものは 3 秒残る
+      const frame = (await page.getByTestId("jikkyo-layer").boundingBox())!;
+      const tops = await page
+        .getByTestId("jikkyo-comment")
+        .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+      expect(Math.min(...tops) - frame.y).toBeLessThan(frame.height / 4);
+      await page.waitForTimeout(1_000);
+      await expect(page.getByTestId("jikkyo-comment").first()).toBeVisible();
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
+
+/** 書き込みが CSP に止められていないか (読み込む前に控えを仕掛ける) */
+async function watchViolations(page: Page): Promise<() => Promise<string[]>> {
+  await page.addInitScript(() => {
+    const seen = window as unknown as { __csp: string[] };
+    seen.__csp = [];
+    document.addEventListener("securitypolicyviolation", (event) => {
+      seen.__csp.push(`${event.effectiveDirective} ${event.blockedURI}`);
+    });
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
+}
+
+/** ライブを MPEG-2 で観て (放送時刻が進むように)、書き込む 1 行を開く */
+async function openWriting(page: Page): Promise<void> {
+  await deviceOn(page);
+  await goto(page, `/live?service=${MX.id}`);
+  await expect(page.getByTestId("live-title")).toBeVisible();
+  await wakeControls(page, "live-frame");
+  await pickCodec(page, "live", "mpeg2");
+  await wakeControls(page, "live-frame");
+  await page.getByTestId("live-write").click();
+  await expect(page.getByTestId("jikkyo-compose-input")).toBeFocused();
+  // 映像が出て「いま」に追い付くまで
+  await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
+    "NX-Jikkyo に書きます",
+    { timeout: 20_000 },
+  );
+}
+
+test.describe("ライブで実況に書き込む", () => {
+  test("選んだ色・位置・大きさで送り、すぐ流す。戻ってきた同じものは 2 度流さない", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      const csp = await watchViolations(page);
+      const nx = await fakeNx(page, { quiet: true });
+      await openWriting(page);
+      // 開いている間は操作バーを引っ込めない
+      await page.waitForTimeout(3_000);
+      await expect(page.getByTestId("live-controls")).toHaveAttribute(
+        "data-shown",
+        "true",
+      );
+
+      await page.getByTestId("jikkyo-style-button").click();
+      await page.getByTestId("jikkyo-color-red").click();
+      await page.getByTestId("jikkyo-position-shita").click();
+      await page.getByTestId("jikkyo-size-big").click();
+      await expect(page.getByTestId("jikkyo-color-red")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+
+      const input = page.getByTestId("jikkyo-compose-input");
+      await input.fill("自分の書き込み");
+      await input.press("Enter");
+      await expect(input).toHaveValue("");
+      expect(nx.posts).toHaveLength(1);
+      expect(nx.posts[0]).toMatchObject({
+        text: "自分の書き込み",
+        isAnonymous: true,
+        color: "red",
+        position: "shita",
+        size: "big",
+      });
+      expect(nx.posts[0]!.vpos).toBeGreaterThan(0);
+
+      const mine = page.getByTestId("jikkyo-comment");
+      await expect(mine).toHaveCount(1);
+      await expect(mine).toHaveText("自分の書き込み");
+      await expect(mine).toHaveClass(/\bmine\b/);
+      await expect(mine).toHaveCSS("color", "rgb(255, 0, 0)");
+      // 下に止める (枠の下半分)
+      const frame = (await page.getByTestId("jikkyo-layer").boundingBox())!;
+      const box = (await mine.boundingBox())!;
+      expect(box.y - frame.y).toBeGreaterThan(frame.height / 2);
+      // 戻ってきた yourpost のものは流さない
+      await page.waitForTimeout(1_000);
+      await expect(mine).toHaveCount(1);
+
+      // 3 秒空けないと送らない
+      await input.fill("続けて");
+      await input.press("Enter");
+      await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
+        "3 秒待ってください",
+      );
+      await expect(input).toHaveValue("続けて");
+      expect(nx.posts).toHaveLength(1);
+
+      // 選んだものは端末ごとに覚える
+      await page.getByTestId("jikkyo-compose-close").click();
+      await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);
+      await page.reload();
+      await page.locator('[data-hydrated="true"]').waitFor();
+      await wakeControls(page, "live-frame");
+      await page.getByTestId("live-write").click();
+      await page.getByTestId("jikkyo-style-button").click();
+      await expect(page.getByTestId("jikkyo-position-shita")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(await csp()).toEqual([]);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("受け付けられなければ、理由を 1 行で出して本文を残す。Esc で閉じる", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, { quiet: true, reply: () => "INVALID_MESSAGE" });
+      await openWriting(page);
+      const input = page.getByTestId("jikkyo-compose-input");
+      await input.fill("断られる書き込み");
+      await page.getByTestId("jikkyo-compose-send").click();
+      await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
+        "この書き込みは受け付けられませんでした",
+      );
+      await expect(input).toHaveValue("断られる書き込み");
+      await expect(page.getByTestId("jikkyo-comment")).toHaveCount(0);
+      await input.press("Escape");
+      await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);
+      await expect(page.getByTestId("live-write")).toBeFocused();
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("変換中の Enter では送らない", async ({ page }) => {
+    await setJikkyo(page, true);
+    try {
+      const nx = await fakeNx(page, { quiet: true });
+      await openWriting(page);
+      const input = page.getByTestId("jikkyo-compose-input");
+      await input.fill("へんかんちゅう");
+      await input.evaluate((el) =>
+        el.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Enter",
+            isComposing: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      );
+      await page.waitForTimeout(500);
+      expect(nx.posts).toHaveLength(0);
+      await expect(input).toHaveValue("へんかんちゅう");
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("止めていると書けない", async ({ page }) => {
+    await setJikkyo(page, true);
+    try {
+      const nx = await fakeNx(page, { quiet: true });
+      await openWriting(page);
+      await page.getByTestId("live-play").click();
+      const line = page.getByTestId("jikkyo-compose-line");
+      await expect(line).toHaveText("ライブに戻ると書けます");
+      const input = page.getByTestId("jikkyo-compose-input");
+      await input.fill("止めたまま");
+      await input.press("Enter");
+      await expect(line).toHaveText("ライブに戻ると書けます");
+      expect(nx.posts).toHaveLength(0);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("スマホの幅では下のタブのすぐ上に出す", async ({ page }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, { quiet: true });
+      await openWriting(page);
+      // コーデックは広い幅で選び (狭い幅では ⚙ の中の並びが違う)、開いたまま縮める
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.getByTestId("tabbar")).toBeVisible();
+      const compose = (await page.getByTestId("jikkyo-compose").boundingBox())!;
+      const tabbar = (await page.getByTestId("tabbar").boundingBox())!;
+      expect(compose.y + compose.height).toBeLessThanOrEqual(tabbar.y);
+      expect(tabbar.y - (compose.y + compose.height)).toBeLessThan(16);
     } finally {
       await setJikkyo(page, false);
     }

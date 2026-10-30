@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { CommentStore, KEEP_SPAN, readPackets, toComment } from "./comments";
 
 /*
- * 実況のコメントを本文と時刻だけにする・控え。見本は自分で作った偽のコメント
+ * 実況のコメントを本文と時刻と流し方だけにする・控え。見本は自分で作った偽のコメント
  */
 
 const T = Date.UTC(2026, 9, 28, 12, 0, 0);
@@ -18,7 +18,7 @@ describe("toComment", () => {
     ).toEqual({ at: T + 5, text: "888" });
   });
 
-  test("本文と時刻だけを持つ。利用者の ID などは残さない", () => {
+  test("本文と時刻 (と流し方) だけを持つ。利用者の ID などは残さない", () => {
     const comment = toComment({
       date: T / 1000,
       content: "テスト",
@@ -29,6 +29,21 @@ describe("toComment", () => {
     });
     expect(comment).toEqual({ at: T, text: "テスト" });
     expect(Object.keys(comment ?? {})).toEqual(["at", "text"]);
+  });
+
+  test("mail の色・位置・大きさは流し方として持つ (WebSocket と過去ログのどちらでも)", () => {
+    expect(
+      toComment({ date: T / 1000, content: "赤", mail: "184 red ue big" }),
+    ).toEqual({
+      at: T,
+      text: "赤",
+      style: { color: "#ff0000", place: "ue", size: "big" },
+    });
+    expect(
+      readPackets([
+        { chat: { date: String(T / 1000), content: "下", mail: "shita" } },
+      ]).comments,
+    ).toEqual([{ at: T, text: "下", style: { place: "shita" } }]);
   });
 
   test("本文が空・運営のコメントは流さない (null)", () => {
