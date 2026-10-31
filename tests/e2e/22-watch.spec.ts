@@ -51,6 +51,33 @@ async function watchable(
   return shared.id;
 }
 
+/** 合成の1枚 (端末の canvas で作った PNG) を API で切り抜きに置く。`page` は何か開いていること */
+async function putClip(
+  page: Page,
+  request: APIRequestContext,
+  id: string,
+  at: number,
+): Promise<number> {
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 180;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#3a6";
+    ctx.fillRect(0, 0, 320, 180);
+    return canvas.toDataURL("image/png").split(",")[1]!;
+  });
+  const res = await request.post(
+    `/api/clips?place=watch&recording=${id}&at=${at}`,
+    {
+      headers: { "content-type": "image/png" },
+      data: Buffer.from(png, "base64"),
+    },
+  );
+  expect(res.status()).toBe(201);
+  return ((await res.json()) as { id: number }).id;
+}
+
 test.describe("録画を観る", () => {
   test("一覧の行から観る画面へ行き、右に番組の中身が出る", async ({
     page,
@@ -717,29 +744,34 @@ test.describe("録画を観る", () => {
     await expect(fromWatch).toContainText("この録画の切り抜き");
     await expect(fromWatch).toHaveAttribute("href", `/clips?recording=${id}`);
 
-    // 検索の結果に切り抜きの節
+    // 検索の結果に切り抜きの節。「切り抜きの画面で見る」で同じ言葉のまま切り抜きの画面へ。
+    // 切り抜きの画面に言葉の欄は無く、探した言葉と外すボタンを出す
     await goto(page, `/search?q=${encodeURIComponent(clip.programName)}`);
     await expect(page.getByTestId("search-clips")).toBeVisible();
     await expect(page.getByTestId("search-clip").first()).toBeVisible();
-
-    // 広い形のヘッダーから開く
-    await page.getByTestId("nav-clips").click();
-    await expect(page).toHaveURL(/\/clips$/);
+    await page.getByTestId("search-clips-all").click();
+    await expect(page).toHaveURL(/\/clips\?q=/);
     const card = page.locator(
       `[data-testid="clip-card"][data-clip-id="${clip.id}"]`,
     );
     await expect(card.getByTestId("clip-name")).toHaveText(clip.programName);
+    await expect(page.getByTestId("clip-query")).toContainText(
+      clip.programName,
+    );
+    await expect(page.locator('[data-testid="clips"] input')).toHaveCount(0);
+    await page.getByTestId("clip-query-clear").click();
+    await expect(page).toHaveURL(/\/clips$/);
+    await expect(page.getByTestId("clip-query")).toHaveCount(0);
 
-    // 言葉で絞る (番組名なら残り、無い言葉なら消える)
-    const search = page.getByTestId("clip-search");
-    await search.fill(clip.programName);
-    await expect(page).toHaveURL(/\?q=/);
-    await expect(card).toBeVisible();
-    await search.fill("どこにも無い言葉");
+    // 当たらない言葉なら「当てはまるものはありません」
+    await goto(page, `/clips?q=${encodeURIComponent("どこにも無い言葉")}`);
     await expect(card).toHaveCount(0);
     await expect(page.getByText("当てはまるものはありません")).toBeVisible();
-    await search.fill("");
+
+    // 広い形のヘッダーから開く
+    await page.getByTestId("nav-clips").click();
     await expect(page).toHaveURL(/\/clips$/);
+    await expect(card).toBeVisible();
 
     // 開くと暗い全画面。「この場面から観る」で録画のその位置へ
     await card.click();
@@ -864,10 +896,11 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **スマホの幅では、絞り込みの1行を下のタブのすぐ上に浮かせ**、開いた1枚の右端の列は 48px の丸
-   * (車のタブレットでも指が届く大きさ。観る画面の右の列と同じ)
+   * **スマホの幅では、絞り込みを下のタブのすぐ上に浮かせ**、開いた1枚の右端の列は 48px の丸
+   * (車のタブレットでも指が届く大きさ。観る画面の右の列と同じ)。
+   * 指の端末には乗せる操作が無いので、長押しで選ぶ形に入り、下の1行が選んだぶんの操作に替わる
    */
-  test("スマホの幅の切り抜きの画面: 絞り込みは下のタブの上、開いた1枚の列は 48px", async ({
+  test("スマホの幅の切り抜きの画面: 絞り込みは下のタブの上、開いた1枚の列は 48px、長押しで選ぶ", async ({
     browser,
     page,
     request,
@@ -881,25 +914,7 @@ test.describe("録画を観る", () => {
     });
     const tab = await context.newPage();
     await goto(tab, "/clips");
-    // 合成の1枚 (端末の canvas で作った PNG) を API で置く
-    const png = await tab.evaluate(() => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 320;
-      canvas.height = 180;
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#3a6";
-      ctx.fillRect(0, 0, 320, 180);
-      return canvas.toDataURL("image/png").split(",")[1]!;
-    });
-    const res = await request.post(
-      `/api/clips?place=watch&recording=${id}&at=5`,
-      {
-        headers: { "content-type": "image/png" },
-        data: Buffer.from(png, "base64"),
-      },
-    );
-    expect(res.status()).toBe(201);
-    const clip = (await res.json()) as { id: number };
+    const clip = { id: await putClip(tab, request, id, 5) };
     try {
       await goto(tab, "/clips");
       const bar = tab.getByTestId("clip-bar");
@@ -915,9 +930,10 @@ test.describe("録画を観る", () => {
       expect(gap).toBeGreaterThanOrEqual(0);
       expect(gap).toBeLessThan(16);
 
-      await tab
-        .locator(`[data-testid="clip-card"][data-clip-id="${clip.id}"]`)
-        .click();
+      const card = tab.locator(
+        `[data-testid="clip-card"][data-clip-id="${clip.id}"]`,
+      );
+      await card.click();
       const viewer = tab.getByTestId("clip-viewer");
       await expect(viewer).toBeVisible();
       for (const testid of [
@@ -934,9 +950,137 @@ test.describe("録画を観る", () => {
       const save = (await viewer.getByTestId("clip-save").boundingBox())!;
       const trash = (await viewer.getByTestId("clip-delete").boundingBox())!;
       expect(trash.y).toBeGreaterThan(save.y);
+      await viewer.getByTestId("clip-close").click();
+      await expect(viewer).toBeHidden();
+
+      // 長押しで選ぶ形に入る。指を離したときの押しでは開かない
+      const check = tab.locator(
+        `li:has([data-clip-id="${clip.id}"]) [data-testid="clip-check"]`,
+      );
+      await expect(check).toHaveCSS("opacity", "0");
+      const box = (await card.boundingBox())!;
+      const at = { clientX: box.x + 40, clientY: box.y + 40 };
+      await card.dispatchEvent("pointerdown", { pointerType: "touch", ...at });
+      await tab.waitForTimeout(700);
+      await card.dispatchEvent("pointerup", { pointerType: "touch", ...at });
+      await card.dispatchEvent("click", at);
+      await expect(viewer).toBeHidden();
+      await expect(card).toHaveAttribute("aria-pressed", "true");
+      await expect(check).toHaveAttribute("aria-pressed", "true");
+      await expect(bar.getByTestId("clip-picked")).toHaveText("1 枚を選択中");
+      await expect(bar.getByTestId("clip-filter")).toHaveCount(0);
+
+      // いまは選ぶ形なので、押せば外れて抜ける
+      await card.click();
+      await expect(bar.getByTestId("clip-picked")).toHaveCount(0);
+      // 指が動いた (巻いた) ら長押しにしない
+      await card.dispatchEvent("pointerdown", { pointerType: "touch", ...at });
+      await card.dispatchEvent("pointermove", {
+        pointerType: "touch",
+        clientX: at.clientX,
+        clientY: at.clientY + 40,
+      });
+      await tab.waitForTimeout(700);
+      await card.dispatchEvent("pointercancel", { pointerType: "touch" });
+      await expect(bar.getByTestId("clip-picked")).toHaveCount(0);
+      await expect(bar.getByTestId("clip-filter")).toBeVisible();
     } finally {
       await request.delete(`/api/clips?ids=${clip.id}`);
       await context.close();
+    }
+  });
+
+  /**
+   * **選び方は写真のサービスと同じ。** マウスで乗せると1枚の左上に丸が出て、押すと選ぶ形に入る。
+   * 選ぶ形の間は1枚を押すと選ぶ・外す (開かない)、Shift でまとめて選び、2回押しでまとめて消す。
+   * Esc で抜けると、押せばまた開く
+   */
+  test("切り抜きは乗せて出る丸で選び、Shift でまとめて選び、まとめて消せる。Esc で抜ける", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const id = await watchable(page, request);
+    await goto(page, "/clips");
+    // 並びは新しい順なので、置いた逆の順に並ぶ
+    const ids = [
+      await putClip(page, request, id, 5),
+      await putClip(page, request, id, 6),
+      await putClip(page, request, id, 7),
+    ].reverse();
+    try {
+      await goto(page, `/clips?recording=${id}`);
+      const cardOf = (clip: number) =>
+        page.locator(`[data-testid="clip-card"][data-clip-id="${clip}"]`);
+      const checkOf = (clip: number) =>
+        page.locator(
+          `li:has([data-clip-id="${clip}"]) [data-testid="clip-check"]`,
+        );
+      const [first, second, third] = ids as [number, number, number];
+      const picked = page.getByTestId("clip-picked").first();
+
+      // 乗せる前は丸は見えず、乗せると出る。読み上げには番組名ごとの名前
+      await expect(checkOf(first)).toHaveCSS("opacity", "0");
+      await cardOf(first).hover();
+      await expect(checkOf(first)).toHaveCSS("opacity", "1");
+      await expect(checkOf(first)).toHaveAttribute("aria-label", /^選ぶ: /);
+      await expect(checkOf(first)).toHaveAttribute("aria-pressed", "false");
+
+      // 丸を押すと選ぶ形に入り、ほかの1枚にも丸が出る
+      await checkOf(first).click();
+      await expect(picked).toHaveText("1 枚を選択中");
+      await expect(checkOf(first)).toHaveAttribute("aria-pressed", "true");
+      await expect(cardOf(first)).toHaveAttribute("aria-pressed", "true");
+      await page.mouse.move(0, 0);
+      await expect(checkOf(third)).toHaveCSS("opacity", "1");
+
+      // Shift で3枚目までまとめて選ぶ。選ぶ形の間は押しても開かない
+      await cardOf(third).click({ modifiers: ["Shift"] });
+      await expect(picked).toHaveText("3 枚を選択中");
+      await expect(page.getByTestId("clip-viewer")).toBeHidden();
+      // 押すと外れる
+      await cardOf(second).click();
+      await expect(picked).toHaveText("2 枚を選択中");
+      await expect(cardOf(second)).toHaveAttribute("aria-pressed", "false");
+
+      // Esc で抜ける。丸は隠れ、押せばまた開く
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("clip-picked")).toHaveCount(0);
+      await page.mouse.move(0, 0);
+      await expect(checkOf(third)).toHaveCSS("opacity", "0");
+      await expect(cardOf(first)).not.toHaveAttribute("aria-pressed");
+      await cardOf(second).click();
+      const viewer = page.getByTestId("clip-viewer");
+      await expect(viewer).toBeVisible();
+      await viewer.getByTestId("clip-close").click();
+      await expect(viewer).toBeHidden();
+
+      // 丸はキーボードでも押せる (1枚の次に Tab で触ると見える)
+      await cardOf(first).focus();
+      await page.keyboard.press("Tab");
+      await expect(checkOf(first)).toBeFocused();
+      await expect(checkOf(first)).toHaveCSS("opacity", "1");
+      await page.keyboard.press("Enter");
+      await expect(picked).toHaveText("1 枚を選択中");
+      await cardOf(third).click();
+      await expect(picked).toHaveText("2 枚を選択中");
+
+      // 削除は2回押し。1回目は聞き返すだけ
+      await page.getByTestId("clip-delete-many").first().click();
+      await expect(cardOf(first)).toBeVisible();
+      await page.getByTestId("clip-delete-many-confirm").first().click();
+      await expect(cardOf(first)).toHaveCount(0);
+      await expect(cardOf(third)).toHaveCount(0);
+      await expect(cardOf(second)).toBeVisible();
+      await expect(page.getByTestId("clip-picked")).toHaveCount(0);
+      expect((await request.get(`/api/clips/${first}/image`)).status()).toBe(
+        404,
+      );
+      expect((await request.get(`/api/clips/${second}/image`)).status()).toBe(
+        200,
+      );
+    } finally {
+      await request.delete(`/api/clips?ids=${ids.join(",")}`);
     }
   });
 

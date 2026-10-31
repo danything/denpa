@@ -42,12 +42,15 @@
    * **切り抜き** (`/clips`)。観る画面・追っかけ・ライブで押した1コマ (字幕・コメントごと) を、撮った日の見出しの下に平らなグリッドで並べる。
    *
    * - 条件は URL で持つ (`GET /api/clips` と同じ名前。`#lib/clips.ts`)。最初の 60 枚は load、続きは下端で API から足す
-   * - 広い形は右のサイドバーに言葉・カレンダー・ライブか録画か・局・使っている量。スマホの形は下のタブのすぐ上に
-   *   絞り込みの1行 (言葉と「絞り込み」のメニュー)
+   * - 広い形は右のサイドバーにカレンダー・ライブか録画か・局・使っている量。スマホの形は下のタブのすぐ上に
+   *   「絞り込み」のメニュー。言葉で探すのはヘッダーの検索で、その結果の「切り抜き」から `?q=` 付きで来たときは
+   *   一覧の上に探した言葉と外すボタンを出す
    * - 1枚を開くと暗い全画面。右端の縦の列に閉じる・この場面から観る・字幕とコメントの出し入れ (撮ったときに出していたものだけ)・
    *   端末に保存・削除 (2回押し。いちばん下)。
    *   列は観る画面と同じ部品 (`ControlBar`・`ControlButton`)
-   * - まとめて消すときは「選んで削除」で選ぶ形に入り、選んだぶんを2回押しで消す
+   * - 選び方は写真のサービスと同じ。マウスでは乗せた1枚の左上に丸が出て、押すと選ぶ形に入る。指の端末は長押しで入る。
+   *   選ぶ形の間は1枚を押すと選ぶ・外す (開かない)。Shift を押しながらなら、前に押した1枚までをまとめて選ぶ。
+   *   選んだぶんは2回押しで消す。Esc か「選択をやめる」で抜け、全部外しても抜ける
    */
   let { data } = $props();
 
@@ -141,18 +144,9 @@
     const params = clipSearch(merged as ClipQuery);
     void goto(`${resolve("clips")}${params.size === 0 ? "" : `?${params}`}`, {
       replace: true,
-      // 打っている欄のフォーカスと、読んでいる位置はそのまま
+      // 読んでいる位置はそのまま
       reset: false,
     });
-  }
-
-  /** 言葉は打つそばから (少し待ってから) 探す */
-  // svelte-ignore state_referenced_locally
-  let words = $state(data.query.q ?? "");
-  let typing: ReturnType<typeof setTimeout> | undefined;
-  function onwords(): void {
-    clearTimeout(typing);
-    typing = setTimeout(() => apply({ q: words.trim() || undefined }), 300);
   }
 
   /** `YYYY-MM-DD` ⇔ その日の 0 時 (端末の時計) */
@@ -291,28 +285,91 @@
       return;
     }
     if (viewing !== null && ids.includes(viewing.id)) close();
-    selected.clear();
-    selecting = false;
+    endSelecting();
     await invalidateAll();
   }
 
   /*
-   * ---- 選んで削除 ----
+   * ---- 選ぶ (写真のサービスと同じ形) ----
    */
-  let selecting = $state(false);
   const selected = new SvelteSet<number>();
-  function toggleSelecting(): void {
-    selecting = !selecting;
+  /** 選ぶ形。1枚でも選んでいる間だけ (全部外したら抜ける) */
+  const selecting = $derived(selected.size > 0);
+  /** Shift でまとめて選ぶときの起点 (最後に押した1枚) */
+  let anchor: number | null = null;
+  function endSelecting(): void {
     selected.clear();
+    anchor = null;
     deleting.fire();
   }
-  function press(clip: Clip): void {
-    if (!selecting) {
-      open(clip);
+  // 読み直して並びから無くなったもの (ほかの端末で消した・条件を替えた) は、選んだぶんから外す
+  $effect(() => {
+    const shown = new Set(clips.map((clip) => clip.id));
+    for (const id of untrack(() => [...selected]))
+      if (!shown.has(id)) selected.delete(id);
+  });
+  /** 1枚を選ぶ・外す。Shift を押していれば、起点からその1枚までを選ぶ (並びの順) */
+  function pick(clip: Clip, event: MouseEvent): void {
+    const from =
+      event.shiftKey && anchor !== null
+        ? clips.findIndex((c) => c.id === anchor)
+        : -1;
+    if (from >= 0) {
+      const to = clips.findIndex((c) => c.id === clip.id);
+      const [lo, hi] = from < to ? [from, to] : [to, from];
+      for (const c of clips.slice(lo, hi + 1)) selected.add(c.id);
+    } else if (selected.has(clip.id)) selected.delete(clip.id);
+    else selected.add(clip.id);
+    anchor = clip.id;
+  }
+  function press(clip: Clip, event: MouseEvent): void {
+    // 長押しで選んだあとの押し (指を離したときの click) は、もう選んだので何もしない
+    if (held) {
+      held = false;
       return;
     }
-    if (selected.has(clip.id)) selected.delete(clip.id);
-    else selected.add(clip.id);
+    if (selecting) pick(clip, event);
+    else open(clip);
+  }
+  /** Esc で選ぶ形を抜ける (1枚を開いている間はダイアログが閉じるほう) */
+  function onkey(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || !selecting || dialog?.open === true) return;
+    event.preventDefault();
+    endSelecting();
+  }
+
+  /**
+   * 指の端末は長押しで選ぶ (乗せる操作が無く、左上の丸が出ないので)。長さは OS の長押しと同じくらい
+   * (Android の既定は 400〜500ms)。指が動いた (巻いている) ら取りやめる
+   */
+  const HOLD_MS = 500;
+  /** これより動いたら長押しではない (px) */
+  const HOLD_SLOP = 10;
+  let hold: ReturnType<typeof setTimeout> | undefined;
+  let held = false;
+  let holdFrom = { x: 0, y: 0 };
+  function onholdstart(clip: Clip, event: PointerEvent): void {
+    held = false;
+    clearTimeout(hold);
+    hold = undefined;
+    if (event.pointerType === "mouse") return;
+    holdFrom = { x: event.clientX, y: event.clientY };
+    hold = setTimeout(() => {
+      held = true;
+      selected.add(clip.id);
+      anchor = clip.id;
+    }, HOLD_MS);
+  }
+  function onholdmove(event: PointerEvent): void {
+    if (
+      Math.hypot(event.clientX - holdFrom.x, event.clientY - holdFrom.y) >
+      HOLD_SLOP
+    )
+      onholdend();
+  }
+  function onholdend(): void {
+    clearTimeout(hold);
+    hold = undefined;
   }
   /** まとめて消すボタンの聞き返しの id (1つだけなので 0) */
   const MANY = 0;
@@ -321,19 +378,7 @@
 </script>
 
 <svelte:head><title>切り抜き - denpa</title></svelte:head>
-<svelte:window onclick={deleting.stand} />
-
-{#snippet search(testid: string)}
-  <input
-    type="search"
-    class="c-search"
-    placeholder="番組名・局名・字幕で探す"
-    aria-label="切り抜きを言葉で探す"
-    bind:value={words}
-    oninput={onwords}
-    data-testid={testid}
-  />
-{/snippet}
+<svelte:window onclick={deleting.stand} onkeydown={onkey} />
 
 {#snippet kinds(done?: () => void)}
   {#each KINDS as kind (kind.label)}
@@ -383,16 +428,15 @@
   {/each}
 {/snippet}
 
-<!-- まとめて消す。選ぶ形の間だけ、選んだ数と2回押しの削除 -->
+<!-- 選ぶ形の間だけ、選んだ数と2回押しの削除 -->
 {#snippet selectTools()}
   <span class="small num c-picked" data-testid="clip-picked"
-    >{selected.size} 枚を選択</span
+    >{selected.size} 枚を選択中</span
   >
   {#if deleting.armed === MANY}
     <button
       type="button"
       class="danger small"
-      disabled={selected.size === 0}
       onclick={() => void remove([...selected])}
       data-testid="clip-delete-many-confirm">削除を確定</button
     >
@@ -400,7 +444,6 @@
     <button
       type="button"
       class="outline danger small"
-      disabled={selected.size === 0}
       onclick={() => deleting.arm(MANY)}
       data-testid="clip-delete-many">削除</button
     >
@@ -408,8 +451,8 @@
   <button
     type="button"
     class="ghost small"
-    onclick={toggleSelecting}
-    data-testid="clip-select-end">やめる</button
+    onclick={endSelecting}
+    data-testid="clip-select-end">選択をやめる</button
   >
 {/snippet}
 
@@ -433,9 +476,21 @@
           >
         </p>
       {/if}
+      {#if data.query.q !== undefined}
+        <!-- ヘッダーの検索の結果から来たとき。探した言葉と、外すボタン -->
+        <p class="c-scope small" data-testid="clip-query">
+          <span class="truncate">「{data.query.q}」で探した切り抜き</span>
+          <button
+            type="button"
+            class="ghost small"
+            onclick={() => apply({ q: undefined })}
+            data-testid="clip-query-clear">絞り込みを外す</button
+          >
+        </p>
+      {/if}
       {#if selecting}
         <!-- 広い形の選ぶ形の操作 (スマホの形では下の1行が替わる) -->
-        <div class="c-select-wide" role="group" aria-label="選んで削除">
+        <div class="c-select-wide" role="group" aria-label="選んだ切り抜き">
           {@render selectTools()}
         </div>
       {/if}
@@ -449,14 +504,23 @@
               >{/if}
           </span>
         </h2>
-        <ul class="c-grid">
+        <ul class="c-grid" data-selecting={selecting ? "" : undefined}>
           {#each group.clips as clip (clip.id)}
-            <li>
+            <li class="c-item">
               <button
                 type="button"
                 class="c-card"
                 aria-pressed={selecting ? selected.has(clip.id) : undefined}
-                onclick={() => press(clip)}
+                onclick={(event) => press(clip, event)}
+                onpointerdown={(event) => onholdstart(clip, event)}
+                onpointermove={onholdmove}
+                onpointerup={onholdend}
+                onpointercancel={onholdend}
+                onpointerleave={onholdend}
+                oncontextmenu={(event) => {
+                  // 指の長押しで出る画像のメニューは出さない (長押しは選ぶ操作)
+                  if (held || hold !== undefined) event.preventDefault();
+                }}
                 data-testid="clip-card"
                 data-clip-id={clip.id}
               >
@@ -471,11 +535,6 @@
                   loading="lazy"
                   decoding="async"
                 />
-                {#if selecting}
-                  <span class="c-check" aria-hidden="true"
-                    ><Icon icon={CHECK} size="size-4" /></span
-                  >
-                {/if}
                 <span class="c-name truncate broadcast" data-testid="clip-name"
                   >{title(clip)}</span
                 >
@@ -485,6 +544,19 @@
                     >{/if}</span
                 >
               </button>
+              <!-- 選ぶ丸。マウスで乗せた・キーボードで触った・選ぶ形の間だけ見える -->
+              <button
+                type="button"
+                class="c-check"
+                aria-pressed={selected.has(clip.id)}
+                aria-label="選ぶ: {title(clip)}"
+                title="選ぶ"
+                onclick={(event) => pick(clip, event)}
+                data-testid="clip-check"
+                ><span class="c-check-mark"
+                  ><Icon icon={CHECK} size="size-4" /></span
+                ></button
+              >
             </li>
           {/each}
         </ul>
@@ -523,9 +595,6 @@
       aria-label="絞り込み"
       data-testid="clip-side"
     >
-      <h2 class="side-label">言葉</h2>
-      <div class="c-search-side">{@render search("clip-search")}</div>
-
       <HomeCalendar
         {marks}
         today={dayStart(now)}
@@ -550,25 +619,18 @@
       <p class="c-usage small muted num" data-testid="clip-usage">
         {data.facets.count} 枚 ・ {size(data.facets.bytes)}
       </p>
-      {#if data.facets.count > 0 && !selecting}
-        <div class="side-list">
-          <button
-            type="button"
-            class="side-item"
-            onclick={toggleSelecting}
-            data-testid="clip-select">選んで削除</button
-          >
-        </div>
-      {/if}
     </aside>
   </div>
 
-  <!-- スマホの形の絞り込みの1行 (下のタブのすぐ上)。選ぶ形の間は選んだぶんの操作に替わる -->
-  <div class="c-bar" data-testid="clip-bar">
+  <!-- スマホの形の絞り込み (下のタブのすぐ上)。選ぶ形の間は選んだぶんの操作の1行に替わる -->
+  <div
+    class="c-bar"
+    data-selecting={selecting ? "" : undefined}
+    data-testid="clip-bar"
+  >
     {#if selecting}
       {@render selectTools()}
     {:else}
-      {@render search("clip-search-bar")}
       <Menu
         bind:open={filterOpen}
         side="top"
@@ -617,19 +679,6 @@
         <div class="c-menu-head small muted num">
           {data.facets.count} 枚 ・ {size(data.facets.bytes)}
         </div>
-        {#if data.facets.count > 0}
-          <div class="side-list">
-            <button
-              type="button"
-              class="side-item"
-              onclick={() => {
-                toggleSelecting();
-                filterOpen = false;
-              }}
-              data-testid="clip-select-bar">選んで削除</button
-            >
-          </div>
-        {/if}
       </Menu>
     {/if}
   </div>
@@ -785,13 +834,6 @@
     display: flex;
     padding-top: 0.25rem;
   }
-  .c-search-side {
-    padding-inline-start: 0.75rem;
-  }
-  .c-search {
-    width: 100%;
-    margin: 0;
-  }
   .c-usage {
     margin: 0.25rem 0 0.25rem 0.75rem;
   }
@@ -864,11 +906,15 @@
     list-style: none;
   }
   .c-grid > li {
+    position: relative;
     min-width: 0;
     margin: 0;
     list-style: none;
   }
   .c-card {
+    /* 長押しは選ぶ操作。字を選ぶ・画像のメニュー (iOS) を出さない */
+    -webkit-touch-callout: none;
+    user-select: none;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -906,11 +952,42 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  /* 選ぶ形の印。選んだものは主の色の円にレ点、選んでいないものは淡い円 (塗るのは印だけ) */
+  /*
+   * 選ぶ丸 (画像の左上)。押せる所は 40px、見える丸は 28px。ふだんは隠し、マウスで乗せた・キーボードで触った・
+   * 選ぶ形の間だけ出す (指の端末は乗せる操作が無いので長押しで入る)。
+   * 選んだものは主の色の円にレ点、選んでいないものは淡い円 (塗るのは印だけ)
+   */
   .c-check {
     position: absolute;
-    top: 0.375rem;
-    left: 0.375rem;
+    top: 0;
+    left: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dp-duration) var(--dp-ease);
+  }
+  .c-check:focus-visible,
+  .c-grid[data-selecting] .c-check {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  @media (hover: hover) {
+    .c-grid > li:hover .c-check {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+  .c-check-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -920,8 +997,15 @@
     background: color-mix(in srgb, var(--dp-video) 55%, transparent);
     color: transparent;
     box-shadow: inset 0 0 0 2px var(--dp-on-video);
+    transition:
+      background-color var(--dp-duration) var(--dp-ease),
+      color var(--dp-duration) var(--dp-ease);
   }
-  .c-card[aria-pressed="true"] .c-check {
+  /* 乗せたら、押せば選べることをレ点で先に見せる */
+  .c-check:hover .c-check-mark {
+    color: var(--dp-on-video);
+  }
+  .c-check[aria-pressed="true"] .c-check-mark {
     background: var(--pico-primary);
     color: var(--pico-primary-inverse);
     box-shadow: none;
@@ -1002,10 +1086,11 @@
     width: auto;
     margin: 0;
   }
-  :global(html[data-phone]) .c-bar .c-search {
-    flex: 1;
-    min-width: 0;
-    height: var(--dp-btn-h-sm);
+  /* ふだんは「絞り込み」のボタンだけなので、右端に丸く寄せる (言葉で探すのはヘッダーの検索) */
+  :global(html[data-phone]) .c-bar:not([data-selecting]) {
+    align-self: flex-end;
+    width: fit-content;
+    padding-inline: 0;
   }
   @media (min-width: 768px) {
     :global(html[data-phone]) .c-bar {
