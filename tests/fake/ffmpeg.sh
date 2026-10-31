@@ -65,9 +65,9 @@ for arg in "$@"; do
     prev="$arg"
 done
 
-# Rockchip MPP (`h264_rkmpp`)。本物は引数でデバイスを受けず、MPP が /dev/mpp_service を自分で開く。
+# Rockchip MPP (`h264_rkmpp` / `hevc_rkmpp`)。本物は引数でデバイスを受けず、MPP が /dev/mpp_service を自分で開く。
 # ここでは denpa と同じ `RKMPP_DEVICE` を見て、**在れば上の GPU と同じく通し、無ければ初期化で落ちる**
-if printf '%s\n' "$@" | grep -qx -- 'h264_rkmpp'; then
+if printf '%s\n' "$@" | grep -qE -- '^(h264|hevc)_rkmpp$'; then
     if [ ! -e "${RKMPP_DEVICE:-/dev/mpp_service}" ]; then
         echo "mpp_open failed: no such device" >&2
         exit 1
@@ -77,10 +77,10 @@ if printf '%s\n' "$@" | grep -qx -- 'h264_rkmpp'; then
     fi
 fi
 
-# NVIDIA の NVENC (`h264_nvenc` / `av1_nvenc`)。本物はデバイスファイルを受けず、GPU を番号 (`-gpu N`) で受ける。
+# NVIDIA の NVENC (`h264_nvenc` / `hevc_nvenc` / `av1_nvenc`)。本物はデバイスファイルを受けず、GPU を番号 (`-gpu N`) で受ける。
 # ここでは denpa と同じく `NVIDIA_DIR` の nvidia<番号> を番号の順に並べ、**N 番目が在れば上の GPU と同じく通し、
 # 無ければ初期化で落ちる** (本物も、コンテナから見える GPU の数を超えた番号では降りる)
-if printf '%s\n' "$@" | grep -qE -- '^(h264|av1)_nvenc$'; then
+if printf '%s\n' "$@" | grep -qE -- '^(h264|hevc|av1)_nvenc$'; then
     gpu=0
     prev=""
     for arg in "$@"; do

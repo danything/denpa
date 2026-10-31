@@ -447,13 +447,18 @@ export const recordings = sqliteTable(
     ts_path: mediaPath("ts_path", () => config.rawDir),
     ts_size: integer("ts_size").notNull().default(0),
     /**
-     * エンコードしたもの (再生で主に使う)。両方のコーデックをエンコードしたときは
-     * **AV1 のほう** (小さいので既定の再生に向く)
+     * エンコードしたもの (再生で主に使う)。いくつものコーデックでエンコードしたときは、
+     * **AV1 → H.265 → H.264 の先頭** (小さいので既定の再生に向く。`#lib/hw.ts` の `HW_CODECS`)
      */
     library_path: mediaPath("library_path", () => config.encodedDir),
     /**
-     * もう一方のコーデックでエンコードしたもの。両方を選んだときだけ入る (AV1 が主なら H.264)。
-     * 古いテレビのように AV1 をデコードできない相手はこちらを開く
+     * H.265 でエンコードしたもの。**主でないときだけ入る** (AV1 も選んだとき)。AV1 を選ばずに H.265 を選んだら
+     * H.265 が主 (`library_path`) で、ここは空。AV1 をデコードできず H.265 ならデコードできる相手はこちらを開く
+     */
+    hevc_path: mediaPath("hevc_path", () => config.encodedDir),
+    /**
+     * H.264 でエンコードしたもの。**主でないときだけ入る** (AV1 か H.265 も選んだとき)。
+     * 古いテレビのように AV1 も H.265 もデコードできない相手はこちらを開く
      */
     alt_path: mediaPath("alt_path", () => config.encodedDir),
     /** 録り終えた時刻。NULL なら**まだチューナーを使っている**。「録画中かどうか」を文字列で持たないための、ただ一つの事実 */

@@ -19,7 +19,7 @@
 ```
 [一覧・詳細] ──押す──▶ ダウンロード (Background Fetch)
      │                     backgroundFetch.fetch() でブラウザに預ける (タブを閉じても続く)
-     │                     動画は端末がデコードできるコーデック (既定 AV1、無理なら H.264)
+     │                     動画は端末がデコードできるコーデック (AV1 → H.265 → H.264 の順)
      │                     SW の backgroundfetchsuccess → IndexedDB に blob 保存
      │
      ├─観る──▶ オンライン: /watch が blob を使う (字幕・チャプター・データ放送も)
@@ -41,7 +41,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 
 - `videos` (key: 録画ID) … 保存した録画1本。`video: Blob` と付属のデータ
   (`captionText`: `captions.json` の JSON・`poster: Blob`・`chapters`/`databroadcast`: JSON) を1行にまとめ、
-  名前・局名・開始時刻・尺・どちらを保存したか (`source: 'encoded' | 'alt'`)、
+  名前・局名・開始時刻・尺・どれを保存したか (`source: 'encoded' | 'hevc' | 'alt'`)、
   試みの印 (`attempt`)、状態 (`state`) を持つ。
 - `outbox` (key: 録画ID) … オンライン復帰で処理する予約 (`{op: 'delete', name, queuedAt}`)。
 - `resume` (key: 録画ID) … オフライン中に進んだ視聴位置。復帰時にまとめて
@@ -75,13 +75,18 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    (タブを開いたまま。進捗は一覧の行の3段目に出す)。機能検出は
    `'backgroundFetch' in swReg`。仕分けは SW の受け取りと共有 (`storeResponse`)。
 
-### どちらを保存するか — 端末がデコードできるコーデック
+### どれを保存するか — 端末がデコードできるコーデック
 
-**既定はエンコード済みのファイル** (`library_path`。ふつうは AV1)。それが AV1 で、端末が AV1 をデコードできなければ
-H.264 (`alt_path`) を保存する。判定は `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の
-`supported`)。**H.264 だけでエンコードした録画** (`library_path` が `… [H264].mkv`) は、そのまま保存する (AV1 は確かめない)。
-H.264 しかデコードできない端末で、AV1 だけでエンコードした録画は、ダウンロード時に「この端末では再生できない」と断る
-(保存できても観られないため)。
+エンコード済みのファイル (主 `library_path`・H.265 `hevc_path`・H.264 `alt_path`) のうち、**AV1 → H.265 → H.264 の順で
+この端末で観られる最初のもの**を保存する (観る画面と同じ順。`offline-db.ts` の `offlineSource`)。コーデックは置き場の名前で
+見分ける (`… [H265].mkv`・`… [H264].mkv`。H.264 だけでエンコードした録画は主がもう H.264)。
+
+- AV1 … `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の `supported`)。AV1 の Matroska は WebM としても読める
+- H.265 … 同じく `hvc1.…` でデコードできて、**しかも `canPlayType` が Matroska の H.265 を読めると言うとき**。保存するのは
+  Matroska のままで、WebM に H.265 は入れられないので、デコーダがあっても入れ物を読めない端末 (Safari など) がある
+- H.264 … 確かめない (どの端末もデコードできる前提)
+
+どれも観られなければ、ダウンロード時に「この端末では再生できません」と断る (保存できても観られないため)。
 
 ### 観る
 
@@ -109,7 +114,7 @@ H.264 しかデコードできない端末で、AV1 だけでエンコードし�
 
 ## 決めたこと
 
-コーデック (既定 AV1) とダウンロード方式 (Background Fetch) は上記。ほかに:
+コーデック (AV1 → H.265 → H.264) とダウンロード方式 (Background Fetch) は上記。ほかに:
 
 - **削除の API: `DELETE /api/recordings/[id]`。** 何度呼んでも同じ結果になる
   (答えは [api.md](api.md#録画を消す-delete-apirecordingsid))。

@@ -16,7 +16,11 @@ const { libraryPath, encodedPath, encodedCodec, libraryFamily, seriesFolder } =
 
 /** 2026-08-03 22:30 開始の録画 */
 function recording(
-  overrides: { library_path?: string | null; alt_path?: string | null } = {},
+  overrides: {
+    library_path?: string | null;
+    hevc_path?: string | null;
+    alt_path?: string | null;
+  } = {},
 ) {
   return {
     id: 39,
@@ -69,7 +73,7 @@ describe("保存先での名前", () => {
    * H.264 のほうに印を付けて衝突を避ける。どちらも Matroska (mp4 は ARIB 字幕を
    * 持てない)。テレビでどちらを選べばよいかも名前で分かる
    */
-  test("AV1 は素の .mkv、H.264 は [H264] 付き", () => {
+  test("AV1 は素の .mkv、H.265 は [H265]、H.264 は [H264] 付き", () => {
     // 他のテストが置いた PLAIN と衝突しないよう、別のシリーズで見る
     const rec = {
       id: 7,
@@ -83,27 +87,38 @@ describe("保存先での名前", () => {
     expect(encodedPath(rec, "h264")).toBe(
       join(config.encodedDir, "別番組/別番組 - 2026-08-03 - 2230 [H264].mkv"),
     );
+    expect(encodedPath(rec, "hevc")).toBe(
+      join(config.encodedDir, "別番組/別番組 - 2026-08-03 - 2230 [H265].mkv"),
+    );
   });
 
-  test("いま置いてある2本 (主・もう一方) はどちらも衝突ではない", () => {
+  test("いま置いてある3本 (主・H.265・H.264) はどれも衝突ではない", () => {
     const av1 = place(PLAIN);
+    const hevc = place("番組/番組 - 2026-08-03 - 2230 [H265].mkv");
     const h264 = place("番組/番組 - 2026-08-03 - 2230 [H264].mkv");
-    const rec = recording({ library_path: av1, alt_path: h264 });
+    const rec = recording({
+      library_path: av1,
+      hevc_path: hevc,
+      alt_path: h264,
+    });
     expect(encodedPath(rec, "av1")).toBe(av1);
+    expect(encodedPath(rec, "hevc")).toBe(hevc);
     expect(encodedPath(rec, "h264")).toBe(h264);
   });
 
   /*
-   * **再エンコードする前の掃除の対象にすべき候補。** コーデック (素/[H264]) × 録画IDの有無で
-   * 4通り。命名規則が変わる前の素名ファイルまで含めて片付けるために、この一覧を
+   * **再エンコードする前の掃除の対象にすべき候補。** コーデック (素/[H265]/[H264]) × 録画IDの有無で
+   * 6通り。命名規則が変わる前の素名ファイルまで含めて片付けるために、この一覧を
    * 使う (encoder.ts のはぐれ掃除)
    */
-  test("取りうる置き場所4通りを列挙する", () => {
+  test("取りうる置き場所6通りを列挙する", () => {
     const dir = config.encodedDir;
     expect(new Set(libraryFamily(recording()))).toEqual(
       new Set([
         join(dir, "番組/番組 - 2026-08-03 - 2230.mkv"),
         join(dir, "番組/番組 - 2026-08-03 - 2230 [39].mkv"),
+        join(dir, "番組/番組 - 2026-08-03 - 2230 [H265].mkv"),
+        join(dir, "番組/番組 - 2026-08-03 - 2230 [39] [H265].mkv"),
         join(dir, "番組/番組 - 2026-08-03 - 2230 [H264].mkv"),
         join(dir, "番組/番組 - 2026-08-03 - 2230 [39] [H264].mkv"),
       ]),
@@ -137,6 +152,7 @@ describe("encodedCodec", () => {
   test("名前からコーデックを見分ける。エンコードしない録画 (元のTS) は mpeg2", () => {
     expect(encodedCodec("/m/番組/番組 #1.mkv")).toBe("av1");
     expect(encodedCodec("/m/番組/番組 #1 [H264].mkv")).toBe("h264");
+    expect(encodedCodec("/m/番組/番組 #1 [H265].mkv")).toBe("hevc");
     expect(encodedCodec("/m/番組/番組 #1.m2ts")).toBe("mpeg2");
   });
 });

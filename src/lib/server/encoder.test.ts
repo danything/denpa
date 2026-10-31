@@ -624,6 +624,34 @@ describe("CM を切るときのキーフレーム", () => {
     expect(args).not.toContain("-forced_idr");
   });
 
+  test("H.265 も同じ指定で境目にキーフレームを置く (QSV・NVENC は IDR の指定、VA-API は印だけ)", () => {
+    const qsv = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
+      keyframes: [120.5],
+      hardware: { kind: "qsv", device: "/dev/dri/renderD128" },
+    });
+    expect(qsv).toContain("hevc_qsv");
+    expect(argValue(qsv, "-force_key_frames:v")).toBe("120.499");
+    expect(argValue(qsv, "-forced_idr")).toBe("1");
+    const nvenc = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
+      keyframes: "scene",
+      hardware: { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
+    });
+    expect(nvenc).toContain("hevc_nvenc");
+    expect(argValue(nvenc, "-forced-idr")).toBe("1");
+    const vaapi = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
+      keyframes: [120.5],
+      hardware: { kind: "vaapi", device: "/dev/dri/renderD128" },
+    });
+    expect(vaapi).toContain("hevc_vaapi");
+    expect(argValue(vaapi, "-force_key_frames:v")).toBe("120.499");
+  });
+
+  test("H.265 はソフトウェアでエンコードしない (呼ぶ側の誤りなので投げる)", () => {
+    expect(() =>
+      buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {}),
+    ).toThrow();
+  });
+
   test("切らないなら何も足さない", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
     expect(args).not.toContain("-force_key_frames:v");

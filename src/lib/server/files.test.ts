@@ -412,4 +412,58 @@ describe("実体との照合", () => {
     expect(row.lib).toBe(av1);
     expect(row.alt).toBeNull();
   });
+
+  /** 3つのコーデックでエンコードした録画。返り値は実パス */
+  function threeCodec(): { av1: string; hevc: string; h264: string } {
+    const av1 = put(config.encodedDir, "三本立て/三本立て - 1.mkv");
+    const hevc = put(config.encodedDir, "三本立て/三本立て - 1 [H265].mkv");
+    const h264 = put(config.encodedDir, "三本立て/三本立て - 1 [H264].mkv");
+    orm()
+      .insert(recordings)
+      .values({
+        id: 10,
+        service_id: 1,
+        name: "三本立て",
+        start_at: 0,
+        end_at: 0,
+        finished_at: 0,
+        library_path: av1,
+        hevc_path: hevc,
+        alt_path: h264,
+        created_at: 0,
+        updated_at: 0,
+      })
+      .run();
+    return { av1, hevc, h264 };
+  }
+  const row10 = () =>
+    orm()
+      .select({
+        lib: recordings.library_path,
+        hevc: recordings.hevc_path,
+        alt: recordings.alt_path,
+      })
+      .from(recordings)
+      .where(eq(recordings.id, 10))
+      .get()!;
+
+  test("3本あるとき、H.265 も stray に数えず、主が消えたら H.265 を繰り上げる", () => {
+    fresh();
+    const { av1, hevc, h264 } = threeCodec();
+    expect(reconcile().strays).toBe(0);
+    rmSync(av1);
+    expect(reconcile().removed).toBe(0);
+    expect(row10()).toEqual({ lib: hevc, hevc: null, alt: h264 });
+  });
+
+  test("主と H.265 が消えたら H.264 を繰り上げる。H.265 だけ消えたら控えだけ外す", () => {
+    fresh();
+    const { av1, hevc, h264 } = threeCodec();
+    rmSync(hevc);
+    reconcile();
+    expect(row10()).toEqual({ lib: av1, hevc: null, alt: h264 });
+    rmSync(av1);
+    reconcile();
+    expect(row10()).toEqual({ lib: h264, hevc: null, alt: null });
+  });
 });

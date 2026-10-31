@@ -360,7 +360,7 @@ export async function recordOne(
 export async function setRecording(
   request: APIRequestContext,
   patch: {
-    /** エンコードするコーデック。両方エンコードするなら `['av1', 'h264']`、エンコードしないなら `[]`。省けば av1 */
+    /** エンコードするコーデック。いくつもエンコードするなら `["av1", "hevc", "h264"]`、エンコードしないなら `[]`。省けば av1 */
     codecs?: string[];
     cmCut?: string;
     keepOriginal?: boolean;
@@ -378,6 +378,8 @@ export async function setRecording(
    */
   const encoding = new URLSearchParams();
   for (const codec of chosen) encoding.append("codecs", codec);
+  // H.265 の行を出した画面から送ったことにする (出していない画面から来ると、H.265 のチェックは前のまま)
+  encoding.append("codecsShown", "hevc");
   if (patch.keepOriginal === true) encoding.append("keepOriginal", "on");
   if (patch.transcodeLimit !== undefined)
     encoding.append("transcodeLimit", patch.transcodeLimit);

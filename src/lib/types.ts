@@ -89,14 +89,15 @@ export type CmMode = "off" | "chapter" | "cut";
  * 録画をどう出すか。
  *
  * av1  : 既定。同じ画質でファイルが小さいが、エンコードに時間がかかる
+ * hevc : H.265。**GPU でだけエンコードする** (`#lib/hw.ts` の `SOFTWARE_CODECS`)。AV1 をデコードできない端末向けに H.264 より小さく
  * h264 : エンコードが速く、非力なマシンや古いクライアント向け
  * none : **エンコードしない。** 元のTSのまま保存先へ置く
  *
- * 両方エンコードするときもこの型は主のほうだけ (一覧は `Settings.codecs`)。
+ * いくつもエンコードするときもこの型は主のほうだけ (一覧は `Settings.codecs`)。
  * 別に「エンコードする」のチェックを持っていた頃は、外したときにコーデックの
  * 選択だけが残って、どちらが効いているのか画面から読めなかった。それで `none` もここに入れる
  */
-export type VideoCodec = "av1" | "h264" | "none";
+export type VideoCodec = "av1" | "hevc" | "h264" | "none";
 
 /*
  * **行の型はテーブルの定義から導く** (`server/schema.ts`)。

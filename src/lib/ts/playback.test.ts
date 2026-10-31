@@ -268,3 +268,85 @@ describe("互換モード (canvasChoices / pickCanvas)", () => {
     expect(canvasTranscodes(withTs, "mpeg2")).toBe(false);
   });
 });
+
+describe("H.265 もある録画 (AV1 → H.265 → H.264)", () => {
+  const MKV = (codecs: string) => `video/x-matroska; codecs="${codecs}"`;
+  const HEVC_MP4 = 'video/mp4; codecs="hvc1.1.6.L123.90,mp4a.40.2"';
+  /** 3つともエンコードした録画。サーバの並びに意味は無いので、わざと H.264 を先に置く */
+  const three: PlaybackInfo = {
+    ...h264Only,
+    offers: [
+      { codec: "h264", way: "file", source: "alt", codecs: "avc1.640028,opus" },
+      {
+        codec: "hevc",
+        way: "file",
+        source: "hevc",
+        codecs: "hvc1.1.6.L123.90,opus",
+      },
+      {
+        codec: "av1",
+        way: "file",
+        source: "encoded",
+        codecs: "av01.0.08M.08,opus",
+      },
+      { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
+      { codec: "hevc", way: "stream", codecs: "hvc1.1.6.L123.90,mp4a.40.2" },
+      { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+    ],
+  };
+
+  test("そのまま読めるファイルは小さいほうから", () => {
+    const all = browser(
+      [
+        MKV("avc1.640028,opus"),
+        MKV("hvc1.1.6.L123.90,opus"),
+        MKV("av01.0.08M.08,opus"),
+      ],
+      [],
+    );
+    expect(pickOffer(three, all)).toEqual({
+      way: "file",
+      codec: "av1",
+      source: "encoded",
+    });
+    // AV1 をデコードできなければ H.265
+    const noAv1 = browser(
+      [MKV("avc1.640028,opus"), MKV("hvc1.1.6.L123.90,opus")],
+      [],
+    );
+    expect(pickOffer(three, noAv1)).toEqual({
+      way: "file",
+      codec: "hevc",
+      source: "hevc",
+    });
+  });
+
+  test("Matroska を読めない端末 (Safari) は、詰め替えも H.265 を H.264 より先に", () => {
+    const safari = browser([], [H264_MP4, HEVC_MP4]);
+    expect(pickOffer(three, safari)).toEqual({
+      way: "stream",
+      codec: "hevc",
+      type: HEVC_MP4,
+    });
+  });
+
+  test("H.265 は選べるコーデックに並ぶが、エンコード済みが無ければ並ばない", () => {
+    const can = browser([], [H264_MP4, H264_LIVE, HEVC_MP4, AV1_MP4]);
+    expect(codecChoices(three, can)).toEqual(["h264", "hevc", "av1"]);
+    expect(codecChoices(av1Only, can)).toEqual(["h264", "av1"]);
+    expect(pickOffer(three, can, "hevc")).toEqual({
+      way: "stream",
+      codec: "hevc",
+      type: HEVC_MP4,
+    });
+  });
+
+  test("互換モードには H.265 を並べない (描けない)", () => {
+    const all = { h264: true, av1: true, mpeg2: true };
+    expect(canvasChoices(three, all).map((item) => item.codec)).toEqual([
+      "h264",
+      "av1",
+    ]);
+    expect(pickCanvas(three, all, "hevc")).toBe("h264");
+  });
+});

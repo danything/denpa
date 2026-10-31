@@ -163,7 +163,7 @@ test.describe("GPU でエンコードする", () => {
     ]);
   });
 
-  test("Rockchip MPP は別の行に出て、H.264 だけを受け持つ", async ({
+  test("Rockchip MPP は別の行に出て、H.264 と H.265 だけを受け持つ", async ({
     page,
     request,
     stack,
@@ -178,7 +178,7 @@ test.describe("GPU でエンコードする", () => {
       "デバイスが 1 個見つかり、1 個で GPU エンコードできます",
     );
     await expect(page.getByTestId("hw-device")).toContainText(
-      "mpp_service (Rockchip): Rockchip MPP: H.264",
+      "mpp_service (Rockchip): Rockchip MPP: H.265 / H.264",
     );
     // AV1 をエンコードできるデバイスは無いので、AV1 のエンコーダを選ぶ欄は出ない
     await expect(page.getByTestId("hw-av1")).toHaveCount(0);
@@ -219,7 +219,7 @@ test.describe("GPU でエンコードする", () => {
       "デバイスが 1 個見つかり、1 個で GPU エンコードできます",
     );
     await expect(page.getByTestId("hw-device")).toContainText(
-      "nvidia1 (NVIDIA): NVENC: AV1 / H.264",
+      "nvidia1 (NVIDIA): NVENC: AV1 / H.265 / H.264",
     );
     await expect(page.getByTestId("hw-av1")).toHaveValue(nvidia);
     await expect(page.getByTestId("hw-h264")).toHaveValue(nvidia);
@@ -239,5 +239,70 @@ test.describe("GPU でエンコードする", () => {
     expect(runs[0]!.join(" ")).toMatch(
       /h264_nvenc -gpu 0 -preset p4 -rc vbr -b:v \d+ -maxrate \d+ -bufsize \d+ -g 250/,
     );
+  });
+
+  test("H.265 は GPU があるときだけ選べ、1本目に GPU でエンコードして [H265] の名前で置く", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(300_000);
+    clearGpus(stack.hwDir);
+    await goto(page, "/settings/recording");
+    await page.getByTestId("hw-probe").click();
+    await expect(page.getByTestId("hw-status")).toContainText(
+      "GPU が見つかりません",
+    );
+    // GPU が無ければ H.265 の行ごと出さない (ソフトウェアではエンコードしない)
+    await expect(page.getByTestId("codec-hevc")).toHaveCount(0);
+
+    writeFileSync(`${stack.hwDir}/renderD128`, "1");
+    await page.getByTestId("hw-probe").click();
+    await expect(page.getByTestId("hw-device")).toContainText(
+      "QSV: AV1 / H.265 / H.264",
+    );
+    await expect(page.getByTestId("codec-hevc")).toBeVisible();
+    // エンコーダに「ソフトウェア」を置かない
+    await expect(
+      page.getByTestId("hw-hevc").locator('option[value="software"]'),
+    ).toHaveCount(0);
+
+    // 3つ選ぶと、H.265 を1本目に GPU で。主は AV1、H.265 と H.264 はもう一方
+    await syncEpg(request);
+    rmSync(stack.encodeArgsFile, { force: true });
+    await setRecording(request, { codecs: ["av1", "hevc", "h264"] });
+    let programId = await reserveSoon(page, request, "BS", 4);
+    let row = page.locator(
+      `[data-testid="recording-row"][data-program-id="${programId}"]`,
+    );
+    await waitWatchable(page, row);
+    let recordingId = await row.getAttribute("data-recording-id");
+    const ways = encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf);
+    expect(ways).toHaveLength(3);
+    expect(ways[0]).toMatch(/^renderD128:hevc_(qsv|vaapi)$/);
+    const main = (await row.getAttribute("data-library-path")) ?? "";
+    expect(main).toMatch(/\.mkv$/);
+    expect(main).not.toMatch(/\[H26[45]\]/);
+    expect(await row.getAttribute("data-hevc-path")).toMatch(/ \[H265\]\.mkv$/);
+    expect(await row.getAttribute("data-alt-path")).toMatch(/ \[H264\]\.mkv$/);
+
+    // GPU が無くなったら H.265 は飛ばし、ほかのコーデックだけエンコードする
+    clearGpus(stack.hwDir);
+    await request.post("/settings/recording?/probeHw", { form: {} });
+    rmSync(stack.encodeArgsFile, { force: true });
+    await setRecording(request, { codecs: ["hevc", "h264"] });
+    programId = await reserveSoon(page, request, "BS", 5);
+    row = page.locator(
+      `[data-testid="recording-row"][data-program-id="${programId}"]`,
+    );
+    await waitWatchable(page, row);
+    recordingId = await row.getAttribute("data-recording-id");
+    expect(encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf)).toEqual([
+      "libx264",
+    ]);
+    expect(await row.getAttribute("data-library-path")).toMatch(
+      / \[H264\]\.mkv$/,
+    );
+    expect(await row.getAttribute("data-hevc-path")).toBeNull();
   });
 });

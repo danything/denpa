@@ -32,13 +32,16 @@ import { run } from "./stream";
  * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
  *
  * **Rockchip (RK3588 / RK3588S) は別のデバイス** (`/dev/mpp_service`。`config.rkmppDevice`)。在れば
- * そのデバイスで h264_rkmpp を同じく1コマ試す (RK3588 は AV1 をエンコードできないので H.264 だけ)。
+ * そのデバイスで h264_rkmpp / hevc_rkmpp を同じく1コマ試す (RK3588 は AV1 をエンコードできないので H.264 と H.265 だけ)。
  * 画質の決め方は `hwBitrate`。
  *
  * **NVIDIA の GPU も別のデバイス** (`/dev/nvidia0`・`/dev/nvidia1` …。`config.nvidiaDir`)。在れば
- * 1枚ごとに h264_nvenc / av1_nvenc を同じく1コマ試す (AV1 は RTX 40 以降だけで、通るかは試しのエンコードで決まる)。
+ * 1枚ごとに h264_nvenc / hevc_nvenc / av1_nvenc を同じく1コマ試す (AV1 は RTX 40 以降だけで、通るかは試しのエンコードで決まる)。
  * ffmpeg は GPU を番号 (`-gpu N`) で受けるので、番号はデバイスファイルの並びから決める (`findNvidia`)。
  * 消費者向けの GPU は同時に開けるエンコードの数に上限がある (`nvencBusy`)。
+ *
+ * **H.265 (`hevc`) は録画のエンコードでだけ使う。** 試しのエンコードは AV1・H.264 と同じく方式ごとに1コマ行うが、
+ * ソフトウェアのエンコーダは無く、ライブと追っかけ・その場の変換は H.265 を出さない (デコードから GPU の試し `probeFull` もしない)。
  *
  * **ライブも同じ設定で GPU に載る** (`liveHw`)。設定項目は増やさず、エンコーダをソフトウェアにすれば CPU に戻る。
  * 全体の話は docs/encode.md「GPU でエンコードする」
@@ -54,7 +57,7 @@ export interface HwDevice {
   qsv: HwCodec[];
   /** VA-API でエンコードできたコーデック */
   vaapi: HwCodec[];
-  /** Rockchip MPP でエンコードできたコーデック (`/dev/mpp_service` のときだけ。H.264 だけ試す) */
+  /** Rockchip MPP でエンコードできたコーデック (`/dev/mpp_service` のときだけ。H.264 と H.265 だけ試す) */
   rkmpp: HwCodec[];
   /** NVENC でエンコードできたコーデック (`/dev/nvidia0` などのときだけ) */
   nvenc: HwCodec[];
@@ -150,8 +153,8 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * QSV は実装を hw に固定 (ソフトウェア実装へは倒さない) して、子デバイスに
  * VA-API のデバイスを渡す。**画質は ICQ (`-global_quality`)** — ビットレートを決めずに
  * 「この画質」を指定する、x264 の crf に相当するもの。**QSV も VA-API も 1〜51 の
- * 同じ物差し**で、コーデックが違っても同じ値で同じ見た目になる (AV1 はそのぶん
- * 小さくなる) — ソフトウェアで H.264 crf 23 と AV1 crf 35 を揃えたのと同じ考え。
+ * 同じ物差し**で、コーデックが違っても同じ値で同じ見た目になる (H.265・AV1 は
+ * そのぶん小さくなる) — ソフトウェアで H.264 crf 23 と AV1 crf 35 を揃えたのと同じ考え。
  * 値は **24** (H.264 の crf と同じ軸)。**手元に GPU が無いので実測はまだ** —
  * ソフトウェア側の 23 も持ってきていない (あちらは実測で決めた値で、こちらは
  * 1つの値で両コーデックを賄う別の建て付け。測らずに写すと二重に当てずっぽうになる)。
@@ -163,13 +166,13 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * **i965 (Gemini Lake などの VA-API ドライバ) は ICQ を持たない** — 試しのエンコードが落ちて
  * 「エンコードできない」に見えていた (issue #417)。ICQ が落ちたら CQP (`-qp`、量子化の幅を固定)
  * でも試し (`probeOnce`)、通ればそちらでエンコードする (`HwWay.cqp`)。値は ICQ と同じ 24 —
- * H.264 の qp は 0〜51 で ICQ と同じ軸。AV1 の qp は 0〜255 なので、比で写して 120。
+ * H.264 と H.265 の qp は 0〜51 で ICQ と同じ軸。AV1 の qp は 0〜255 なので、比で写して 120。
  * **どちらも実測はまだ** (ICQ と同じく当てずっぽう。CQP は場面に応じて量を
  * 変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなるはず)
  *
  * ## Rockchip MPP はビットレートで指定する
  *
- * 本家 FFmpeg の h264_rkmpp は画質での指定 (CQP・qp) を持たず、レート制御は `-rc` の
+ * 本家 FFmpeg の h264_rkmpp / hevc_rkmpp は画質での指定 (CQP・qp) を持たず、レート制御は `-rc` の
  * vbr / cbr / avbr だけ。**AVBR** (動きの少ない場面では量を下げる VBR) で、出す映像の大きさと
  * コマ数ごとに決めたビットレートを渡す (`hwBitrate`)。デバイスは開かない (MPP が自分で
  * `/dev/mpp_service` を開く)。CPU で作ったフレームを nv12 で渡す。`-g 250` は x264 の既定の
@@ -190,7 +193,7 @@ export function hwArgs(
     return {
       device: [],
       filter: ["format=nv12"],
-      encoder: [`${codec}_rkmpp`, ...rkmppRate(picture), "-g", "250"],
+      encoder: [`${codec}_rkmpp`, ...rkmppRate(codec, picture), "-g", "250"],
     };
   }
   if (way.kind === "nvenc") {
@@ -227,7 +230,7 @@ export function hwArgs(
   };
 }
 
-/** VA-API の画質の指定方法。ICQ を持たないドライバには CQP (`hwArgs` の説明) */
+/** VA-API の画質の指定方法。ICQ を持たないドライバには CQP (`hwArgs` の説明。qp は H.264・H.265 が 24、AV1 が 120) */
 function vaapiQuality(way: HwWay, codec: HwCodec): string[] {
   if (way.cqp === true)
     return ["-rc_mode", "CQP", "-qp", codec === "av1" ? "120" : "24"];
@@ -265,10 +268,11 @@ const LARGEST: Picture = { height: 1080, smooth: true };
  * **実機の h264_rkmpp・h264_nvenc では測っていない** — 代わりより効率が悪ければ、2 割で足りないことがある。
  * NVENC の H.264 は B フレームを作れるぶん、代わりより効率は良いはず (それも測っていない)。
  *
- * AV1 (av1_nvenc) は `AV1_KBPS`
+ * AV1 (av1_nvenc) は `AV1_KBPS`、H.265 (hevc_nvenc・hevc_rkmpp) は `HEVC_KBPS`
  */
 export function hwBitrate(codec: HwCodec, picture: Picture): number {
-  const table = codec === "av1" ? AV1_KBPS : H264_KBPS;
+  const table =
+    codec === "av1" ? AV1_KBPS : codec === "hevc" ? HEVC_KBPS : H264_KBPS;
   // 高さが測れていない (NaN) ときはどの行にも当たらないので、いちばん上 (`LARGEST` と同じ考え)
   const row = table.find((r) => picture.height >= r.height) ?? table[0];
   return (picture.smooth ? row.smooth : row.frame) * 1000;
@@ -293,13 +297,24 @@ const H264_KBPS = [
 const AV1_KBPS = H264_KBPS;
 
 /**
- * h264_rkmpp のレート制御の引数。**上限と下限も渡す** — MPP の VBR / AVBR が実際に目指すのは
+ * **H.265 の高さごとの kbit/s。いまは H.264 と同じ値で、H.265 では何も測っていない** (CPU でも GPU でも)。
+ *
+ * 下げない理由は AV1 (`AV1_KBPS`) と同じ — 同じ画質で H.265 が H.264 よりどれだけ小さいかを、放送に似せた素材で
+ * 測ったものが手元に無い。忙しい実写では AV1 ですら H.264 と互角だった (docs/encode.md「H.264 は crf 23」) ので、
+ * いちばん重い素材で決める表を測らずに下げると足りなくなりうる。**NVENC の VBR は平均を、Rockchip MPP の AVBR は
+ * 上限をこの値に寄せるので、ファイルは H.264 とほぼ同じ大きさになり、H.265 で浮くぶんは画質に回る** (小さくしたいなら、
+ * 実機の hevc_nvenc・hevc_rkmpp で測ってからここを下げる)
+ */
+const HEVC_KBPS = H264_KBPS;
+
+/**
+ * h264_rkmpp / hevc_rkmpp のレート制御の引数。**上限と下限も渡す** — MPP の VBR / AVBR が実際に目指すのは
  * 上限 (`rc:bps_max`) で、渡さないと MPP の既定 (2 Mbit/s の ±25%) のまま残る。
  * 上限は目標の 17/16、下限は 1/16 (MPP の試験用のコード `mpi_enc_utils.c` が VBR / AVBR に置く値)。
  * AVBR は動きの無い場面で上限に対する下限の割合まで量を下げる
  */
-function rkmppRate(picture: Picture): string[] {
-  const bps = hwBitrate("h264", picture);
+function rkmppRate(codec: HwCodec, picture: Picture): string[] {
+  const bps = hwBitrate(codec, picture);
   return [
     "-rc",
     "avbr",
@@ -433,7 +448,7 @@ export function liveHwArgs(
     return {
       input: base.device,
       filter: base.filter,
-      encoder: [`${codec}_rkmpp`, ...rkmppRate(LARGEST)],
+      encoder: [`${codec}_rkmpp`, ...rkmppRate(codec, LARGEST)],
     };
   }
   if (way.kind === "nvenc") {
@@ -606,6 +621,9 @@ function emptyDevice(path: string, label: string): HwDevice {
 /** `/dev/dri/*` で試す方式。Rockchip MPP は別のデバイスで試す (`probeOnce`) */
 const DRI_KINDS = ["qsv", "vaapi"] as const;
 
+/** Rockchip MPP で試すコーデック。RK3588 は AV1 をエンコードできない (並びは HW_CODECS と同じ) */
+const RKMPP_CODECS = ["hevc", "h264"] as const;
+
 async function probeOnce(): Promise<HwEncode> {
   const devices: HwDevice[] = [];
   for (const path of findDevices()) {
@@ -643,15 +661,17 @@ async function probeOnce(): Promise<HwEncode> {
     devices.push(device);
   }
   /*
-   * **Rockchip MPP は `/dev/mpp_service` が在るときだけ、H.264 だけ試す** (RK3588 は AV1 をエンコードできない)。
+   * **Rockchip MPP は `/dev/mpp_service` が在るときだけ、H.264 と H.265 だけ試す** (RK3588 は AV1 をエンコードできない)。
    * renderD* の行とは別の1行にする — 同じエンコーダが GPU の行にも並ばないように。
    * 在っても MPP が開けなければ (BSP でないカーネル・権限) 試しのエンコードが落ちて、使わないだけ
    */
   if (existsSync(config.rkmppDevice)) {
     const path = config.rkmppDevice;
     const device = emptyDevice(path, `${basename(path)} (Rockchip)`);
-    if (await tryWay({ device: path, kind: "rkmpp" }, "h264"))
-      device.rkmpp.push("h264");
+    for (const codec of RKMPP_CODECS) {
+      if (await tryWay({ device: path, kind: "rkmpp" }, codec))
+        device.rkmpp.push(codec);
+    }
     devices.push(device);
   }
   await probeFull(devices);
@@ -717,7 +737,8 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
       return;
     }
     for (const device of devices) {
-      for (const codec of device.vaapi) {
+      // ライブは H.265 を出さない (`liveHw`) ので、H.265 は試さない
+      for (const codec of device.vaapi.filter((c) => c !== "hevc")) {
         const way = wayOf(device, "vaapi", codec);
         const hw = liveHwArgs({ way, full: true }, codec);
         const ok = await tryEncode([

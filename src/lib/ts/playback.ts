@@ -6,8 +6,8 @@
  * 端末が何かを知らない。決め方は `server/playback.ts`
  */
 
-/** 出せる映像の形式 */
-export type PlayCodec = "h264" | "av1" | "mpeg2";
+/** 出せる映像の形式。H.265 はエンコード済みがあるときだけ (ファイルそのままと詰め替え。その場の変換では作らない) */
+export type PlayCodec = "h264" | "hevc" | "av1" | "mpeg2";
 
 /**
  * 出し方。
@@ -20,7 +20,7 @@ export type PlayCodec = "h264" | "av1" | "mpeg2";
 export type PlayWay = "file" | "stream" | "raw";
 
 /** 配るファイルの名指し (`#lib/source.ts` の `FileSource` のうち、エンコード済み) */
-export type EncodedSource = "encoded" | "alt";
+export type EncodedSource = "encoded" | "hevc" | "alt";
 
 export interface PlayOffer {
   codec: PlayCodec;
@@ -104,7 +104,7 @@ export function retryable(error: unknown): boolean {
 }
 
 /** 画面が選べるコーデック。`auto` は端末に合わせて決める (`pickOffer`) */
-export type CodecChoice = "auto" | "h264" | "av1";
+export type CodecChoice = "auto" | "h264" | "hevc" | "av1";
 
 /** ブラウザに問い合わせる関数。**試しで差し替えられるように**受け取る */
 export interface MediaAbility {
@@ -117,7 +117,7 @@ export interface MediaAbility {
 /** どれで観るか */
 export type Picked =
   | { way: "file"; codec: PlayCodec; source: EncodedSource }
-  | { way: "stream"; codec: "h264" | "av1"; type: string };
+  | { way: "stream"; codec: "h264" | "hevc" | "av1"; type: string };
 
 /**
  * そのままのファイルを読めるか。Matroska と WebM の両方で聞く — Chrome は `video/x-matroska` に答えるが、
@@ -155,12 +155,27 @@ function asPicked(offer: PlayOffer): Picked | null {
 }
 
 /**
+ * エンコード済みを選ぶ順。**AV1 → H.265 → H.264** (小さくなる順。主を選ぶ順 `#lib/hw.ts` の `HW_CODECS` と同じ)。
+ * 観る画面・端末に保存・テレビのアプリで同じ順にする
+ */
+export const ENCODED_ORDER = ["av1", "hevc", "h264"] as const;
+
+/** `ENCODED_ORDER` の順に並べ替える (同じコーデックの中では元の並びのまま) */
+function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {
+  const rank = (codec: PlayCodec) => {
+    const at = (ENCODED_ORDER as readonly PlayCodec[]).indexOf(codec);
+    return at === -1 ? ENCODED_ORDER.length : at;
+  };
+  return [...offers].sort((a, b) => rank(a.codec) - rank(b.codec));
+}
+
+/**
  * **どれで観るか。** 人が選んだコーデックがあれば、それを観られる方法 (ファイルそのまま → その場で流す)。
  * 観られなければ、または `auto` なら端末に合わせる:
  *
- * 1. **そのまま読めるファイル** (並びはサーバの順。主 → もう一方)
- * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い)
- * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする)
+ * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先 — 同じ画質なら回線もディスクも食わない)
+ * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い。並びは 1 と同じ)
+ * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする。H.265 には変換しない)
  * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ観る画面が観られる先を案内する
  *
  * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する方式は画面の設定で別に決める)。何も無ければ null
@@ -170,7 +185,9 @@ export function pickOffer(
   can: MediaAbility,
   choice: CodecChoice = "auto",
 ): Picked | null {
-  const files = info.offers.filter((offer) => offer.way === "file");
+  const files = byEncodedOrder(
+    info.offers.filter((offer) => offer.way === "file"),
+  );
   const streams = info.offers.filter((offer) => offer.way === "stream");
   if (choice !== "auto") {
     const file = files.find(
@@ -184,8 +201,10 @@ export function pickOffer(
   }
   const order = [
     ...files.filter((offer) => playsFile(offer, can)),
-    ...streams.filter(
-      (offer) => playsStream(offer, can) && hasFile(info, offer.codec),
+    ...byEncodedOrder(
+      streams.filter(
+        (offer) => playsStream(offer, can) && hasFile(info, offer.codec),
+      ),
     ),
     ...streams.filter((offer) => playsStream(offer, can)),
     ...files,
@@ -213,13 +232,14 @@ export function streamForAudio(
 }
 
 /**
- * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → AV1)
+ * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → H.265 → AV1)。
+ * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)
  */
 export function codecChoices(
   info: PlaybackInfo,
   can: MediaAbility,
-): ("h264" | "av1")[] {
-  return (["h264", "av1"] as const).filter((codec) =>
+): ("h264" | "hevc" | "av1")[] {
+  return (["h264", "hevc", "av1"] as const).filter((codec) =>
     info.offers.some(
       (offer) =>
         offer.codec === codec &&
@@ -236,8 +256,11 @@ export function codecChoices(
  * ---------------------------------------------------------------------------
  */
 
-/** 互換モードで描く形式 */
-export type CanvasCodec = PlayCodec;
+/**
+ * 互換モードで描く形式。**H.265 は描かない** — 描く側 (`ts/fmp4.ts`・`raw/support.ts`) は H.264・AV1・MPEG-2 しか
+ * 読まない。H.265 だけの録画も、AV1 か H.264 に変換して流せば描ける
+ */
+export type CanvasCodec = Exclude<PlayCodec, "hevc">;
 
 /** この端末で描ける形式 (`raw/support.ts` の `canvasSupport` と `rawUnsupported`) */
 export type CanvasAbility = Record<CanvasCodec, boolean>;
@@ -276,7 +299,8 @@ export function pickCanvas(
   const usable = canvasChoices(info, can)
     .filter((item) => item.drawable && !avoid.includes(item.codec))
     .map((item) => item.codec);
-  if (choice !== "auto" && usable.includes(choice)) return choice;
+  if (choice !== "auto" && choice !== "hevc" && usable.includes(choice))
+    return choice;
   const light = usable.filter((c) => c !== "mpeg2" && hasFile(info, c));
   return [...light, ...usable][0] ?? null;
 }

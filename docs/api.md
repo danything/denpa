@@ -158,6 +158,11 @@
         "url": "api/recordings/12/file?source=encoded"
       },
       {
+        "source": "hevc",
+        "codec": "hevc",
+        "url": "api/recordings/12/file?source=hevc"
+      },
+      {
         "source": "alt",
         "codec": "h264",
         "url": "api/recordings/12/file?source=alt"
@@ -184,12 +189,16 @@
 
 - 時刻は UNIX ミリ秒。`title` は記号 (`[字]` など) を落とした名前、`name` は放送のままの名前
 - `files` は出せるものだけ。**どれを開くかは呼ぶ側が決めます** (テレビのアプリなら、その端末がデコードできるもの)。
+  並びは主 (`encoded`) → H.265 (`hevc`) → H.264 (`alt`) → 元のTS (`ts`) で、エンコードしたものは小さい順 (AV1 → H.265 → H.264)。
+  観る画面と端末に保存は、この順にデコードできる最初のものを選んでいます。`codec` は `av1` / `hevc` / `h264` / `mpeg2`
+  (知らない値は読み飛ばしてください)。`hevc` の行は H.265 を GPU でエンコードした録画にだけあり、
+  H.265 が主 (AV1 を選ばなかった) なら `encoded` の `codec` が `hevc` になります。
   エンコードしたものは Matroska (`video/x-matroska`)、元のTSは TS (`video/mp2t`)。Range に応じます。
   再生のためのもので、ダウンロード用ではありません (添付は付けない)
 - `audio` は主音声だけを AAC (ADTS、`audio/aac`) で流します。音声だけを聴くとき向け。
   `source` と一緒に渡せば、元にするファイルを選べます
 - `resumeMs` は続きから観る位置 (画面の「続き」と同じもの)。観ていない・観終えたものは `null`。
-  **エンコードしたもの (`source` が `encoded`・`alt`) の時刻**で、エンコードしたものが無ければ元のTSの時刻。
+  **エンコードしたもの (`source` が `encoded`・`hevc`・`alt`) の時刻**で、エンコードしたものが無ければ元のTSの時刻。
   エンコードしたものがあるのに元のTS (`source=ts`) で開くときは、時刻が合わないので使えません (CM を切ったもの・頭を捨てたもの)。
   `durationMs` もエンコードし終えると出来上がりの長さになるので、`resumeMs` と同じ物差しです (観た割合・残りは2つから出せます)
 - `watchedAt` は末尾まで観た時刻 (ms)。まだなら `null`。`watchedAt` も `resumeMs` も `null` なら未視聴 (画面の一覧の印と同じ)。
@@ -264,18 +273,19 @@
 - `axis` は**時刻の物差し**。`encoded` はエンコード済みのファイルの時刻、`ts` は元の TS の頭を 0 とした時刻
   (エンコード済みが無い録画)。`duration`・下の `from`・ストリームの時刻・字幕 (`captions.json`)・チャプターはどれもこれで数えます
 - `offers` の `way`:
-  - `file` … エンコード済みのファイルそのまま (`api/recordings/<id>/file?source=<source>`)。`codecs` は入れ物の中身 (読めなければ無い)
+  - `file` … エンコード済みのファイルそのまま (`api/recordings/<id>/file?source=<source>`。`source` は `encoded` / `hevc` / `alt`)。`codecs` は入れ物の中身 (読めなければ無い。H.265 は `hvc1.…`)
   - `stream` … `stream?codec=<codec>` で fragmented MP4。`codecs` は MP4 の中身。エンコード済みと同じコーデックなら詰め替えるだけ
-    (軽い)、違えばエンコード済み (無ければ元の TS) から変換します
+    (軽い)、違えばエンコード済み (無ければ元の TS) から変換します。
+    **`hevc` の `stream` は詰め替えだけ**で、H.265 のエンコード済みがある録画にだけ出します (その場の変換では H.265 を作らない。`hvc1` と名乗り、音声は AAC)
   - `raw` … `stream?codec=mpeg2` で元の TS をそのまま。元の TS が残っていて、CM を切らずにエンコードした録画 (か、エンコード済みが無い録画) だけ。エンコードで捨てた頭の長さを覚えていない古い録画には出さない
 - `audios` の `id` を `stream?audio=` に渡します
 - 録っている最中の録画、エンコード済みも元の TS も無い録画は 404
 
 ## 録画を流す `GET /api/recordings/<id>/stream`
 
-`?codec=h264` / `av1` / `mpeg2` (要る。無い・知らない値は 400)、`?from=<秒>` (物差しの上の位置。既定 0)、`?audio=<id>`。**シークは `from` を変えてリクエストし直します。**
+`?codec=h264` / `hevc` / `av1` / `mpeg2` (要る。無い・知らない値は 400。`hevc` は `offers` にあるときだけ)、`?from=<秒>` (物差しの上の位置。既定 0)、`?audio=<id>`。**シークは `from` を変えてリクエストし直します。**
 
-- `h264` / `av1` … fragmented MP4 (`video/mp4`)。塊の時刻 (tfdt) は物差しの時刻のまま書きます (頭を 0 に詰め直さない)。
+- `h264` / `hevc` / `av1` … fragmented MP4 (`video/mp4`)。塊の時刻 (tfdt) は物差しの時刻のまま書きます (頭を 0 に詰め直さない)。
   詰め替えは `from` の手前のキーフレームから、変換は元の TS なら `from` の 1 秒手前の映像から始まります
 - `mpeg2` … 元の TS を `from` の 1 秒手前の映像から流します (`video/mp2t`)。**`X-Denpa-Origin` に物差しの 0 にあたる PTS** (90kHz) を返します。
   物差しの時刻 = (PTS − `X-Denpa-Origin`) を 33 ビットの一周の中で取って 90000 で割ったもの。`audio` は効きません (全部の音声が入る)
@@ -563,7 +573,7 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 ## 観た位置 `POST /api/recordings/<id>/resume`
 
 本文は `{ "at": 秒, "length": 尺の秒, "source": "encoded" }` (`length` は分からなければ省く)。`source` は観ているファイル
-(`files` の `source` と同じ `encoded` / `alt` / `ts`。追っかけは `ts`)。省くと、エンコードしたものがあれば `encoded`、無ければ `ts` とみなします。
+(`files` の `source` と同じ `encoded` / `hevc` / `alt` / `ts`。追っかけは `ts`)。省くと、エンコードしたものがあれば `encoded`、無ければ `ts` とみなします。
 `at` と `length` はそのファイルの時刻です。画面と同じく、頭の少しと
 末尾の 30 秒は「覚えない」(消す) 扱いです。答えは `{ "resume": 覚えた秒 または null, "edge": 30 }`。
 15 秒おきくらいに送れば、ほかの端末 (画面・ほかのテレビ) でも続きから観られます。

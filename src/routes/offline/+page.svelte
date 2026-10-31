@@ -170,7 +170,9 @@
               {#if item.video !== undefined}
                 ・ {size(item.video.size)}
               {/if}
-              {#if item.source === "alt"}
+              {#if item.source === "hevc"}
+                ・ H.265
+              {:else if item.source === "alt"}
                 ・ H.264
               {/if}
             </div>

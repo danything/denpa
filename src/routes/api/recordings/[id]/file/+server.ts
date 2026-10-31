@@ -63,14 +63,15 @@ function respond(
    */
   const encoding = activeEncodeJob(recording.id) !== undefined;
   /*
-   * **どちらを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `alt`)。
+   * **どれを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `hevc` / `alt`)。
    *
    * - `ts` … 元のTS
-   * - `encoded` … 主のエンコード済み (両方エンコードしたときは AV1)
-   * - `alt` … もう一方 (H.264)。両方エンコードした録画でだけ在る。古いテレビはこちら
+   * - `encoded` … 主のエンコード済み (AV1 → H.265 → H.264 の先頭)
+   * - `hevc` … H.265。AV1 と一緒にエンコードした録画でだけ在る (H.265 が主なら `encoded`)
+   * - `alt` … H.264。ほかのコーデックと一緒にエンコードした録画でだけ在る。古いテレビはこちら
    *
    * アプリは録画の一覧 (`api/recordings`) の `files` から再生できるものを選んで名指しする。
-   * 端末に保存も `encoded` / `alt` を名指しする (`offline-db.ts` の `downloadRequests`)。
+   * 端末に保存も `encoded` / `hevc` / `alt` を名指しする (`offline-db.ts` の `downloadRequests`)。
    * 名指しが無ければ上の「今いいほう」
    */
   const path =
@@ -78,11 +79,13 @@ function respond(
       ? recording.ts_path
       : source === "alt"
         ? recording.alt_path
-        : source === "encoded"
-          ? recording.library_path
-          : encoding && recording.ts_path !== null
-            ? recording.ts_path
-            : (recording.library_path ?? recording.ts_path);
+        : source === "hevc"
+          ? recording.hevc_path
+          : source === "encoded"
+            ? recording.library_path
+            : encoding && recording.ts_path !== null
+              ? recording.ts_path
+              : (recording.library_path ?? recording.ts_path);
   if (path === null) error(404, "ファイルがありません");
   if (audio) return audioOnly(path, request);
 

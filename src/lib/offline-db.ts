@@ -8,7 +8,53 @@
  * - `resume` … オフライン中に進んだ視聴位置。復帰時にまとめて送る
  */
 
-import type { PlayAxis } from "./ts/playback";
+import { encodedCodec } from "./encoded-codec";
+import { CODEC_LABEL } from "./hw";
+import {
+  ENCODED_ORDER,
+  type EncodedSource,
+  type PlayAxis,
+} from "./ts/playback";
+
+/** 落とすファイルの名指し (`?source=`)。主・H.265 (`hevc_path`)・H.264 (`alt_path`) */
+export type OfflineSource = EncodedSource;
+
+/**
+ * **どれを落とすか。** エンコード済みのファイルのうち、AV1 → H.265 → H.264 の順で `playable` (この端末で
+ * 観られるか) が通る最初のもの (観る画面と同じ順。`ts/playback.ts` の `ENCODED_ORDER`)。コーデックは
+ * 置き場の名前で見分ける (`encodedCodec`。H.264 だけでエンコードした録画は主がもう `… [H264].mkv`)。
+ * どれも観られなければ投げる (保存できても観られないため)
+ */
+export async function offlineSource(
+  rec: {
+    library_path: string | null;
+    hevc_path: string | null;
+    alt_path: string | null;
+  },
+  playable: (codec: (typeof ENCODED_ORDER)[number]) => Promise<boolean>,
+): Promise<OfflineSource> {
+  const files = (
+    [
+      ["encoded", rec.library_path],
+      ["hevc", rec.hevc_path],
+      ["alt", rec.alt_path],
+    ] as const
+  ).flatMap(([source, path]) => {
+    const codec = path === null ? "mpeg2" : encodedCodec(path);
+    return codec === "mpeg2" ? [] : [{ source, codec }];
+  });
+  files.sort(
+    (a, b) => ENCODED_ORDER.indexOf(a.codec) - ENCODED_ORDER.indexOf(b.codec),
+  );
+  for (const file of files) {
+    if (await playable(file.codec)) return file.source;
+  }
+  throw new Error(
+    files.length === 0
+      ? "エンコード済みのファイルがありません"
+      : `この端末では再生できません (${files.map((file) => CODEC_LABEL[file.codec]).join("・")} をデコードできません)`,
+  );
+}
 
 const DB = "denpa-offline";
 const VERSION = 1;
@@ -22,8 +68,8 @@ export interface OfflineVideo {
   startAt: number;
   /** 実際に録れた長さ (ms)。無ければ null */
   durationMs: number | null;
-  /** どちらを落としたか。端末が AV1 をデコードできなければ alt (H.264) */
-  source: "encoded" | "alt";
+  /** どれを落としたか (`saveOffline`)。主が端末でデコードできなければ hevc (H.265) か alt (H.264) */
+  source: OfflineSource;
   /**
    * 何回目の試みか (でたらめな文字列)。**やり直しと前回の残骸を見分ける印。**
    * 前回の失敗を中止してからやり直すとき、その中止の通知が遅れて届いても、
@@ -78,7 +124,7 @@ interface ResumeItem {
  */
 export function fetchId(
   id: number,
-  source: "encoded" | "alt",
+  source: OfflineSource,
   attempt: string,
 ): string {
   return `rec-${id}-${source}-${attempt}`;
@@ -92,13 +138,13 @@ export function fetchIdPrefix(id: number): string {
 /** 登録IDを読み戻す。Background Fetch の成否イベントは ID しか持っていない */
 export function parseFetchId(
   value: string,
-): { id: number; source: "encoded" | "alt"; attempt: string } | null {
+): { id: number; source: OfflineSource; attempt: string } | null {
   // 印の無い古い形式 (rec-42-encoded) も読める。付ける前に預けたぶんが残っていることがある
-  const m = /^rec-(\d+)-(encoded|alt)(?:-([a-z0-9]+))?$/.exec(value);
+  const m = /^rec-(\d+)-(encoded|hevc|alt)(?:-([a-z0-9]+))?$/.exec(value);
   if (m === null) return null;
   return {
     id: Number(m[1]),
-    source: m[2] as "encoded" | "alt",
+    source: m[2] as OfflineSource,
     attempt: m[3] ?? "",
   };
 }
@@ -109,10 +155,7 @@ export function parseFetchId(
  * **頭 (前段の接頭辞。server/paths.ts) は呼ぶ側 (offline.svelte.ts) が付ける。** ここは
  * Service Worker からも読まれ、パスの形で付き添いを見分ける (`kindOf`) ので、ルートからのパスのまま持つ
  */
-export function downloadRequests(
-  id: number,
-  source: "encoded" | "alt",
-): string[] {
+export function downloadRequests(id: number, source: OfflineSource): string[] {
   return [
     `/api/recordings/${id}/file?source=${source}`,
     `/api/recordings/${id}/captions.json`,

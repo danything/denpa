@@ -20,15 +20,15 @@ import { settings as settingsTable } from "./schema";
 export interface Settings {
   /**
    * 録画のエンコードに使う映像コーデック。`none` ならエンコードしない。
-   * **主のほう** — 両方エンコードするときは AV1 (小さいので既定の再生に向く)
+   * **主のほう** — いくつもエンコードするときは AV1 → H.265 → H.264 の先頭 (小さいので既定の再生に向く)
    */
   codec: VideoCodec;
   /**
-   * エンコードするコーデックの一覧。**両方選べる** (`['av1', 'h264']`)。
+   * エンコードするコーデックの一覧。**いくつでも選べる** (`["av1", "hevc", "h264"]`)。H.265 は GPU でだけエンコードする
    *
    * 古いテレビは AV1 をデコードできないので、H.264 も一緒にエンコードしておくと同じ録画を
    * どちらの端末でも観られる (`server/encoder.ts`)。`none` (エンコードしない)
-   * のときは空。AV1 を先頭に寄せる — 主 (`library_path`) はそちらにする
+   * のときは空。並びは AV1 → H.265 → H.264 — 主 (`library_path`) は先頭にする
    */
   codecs: HwCodec[];
   /**
@@ -134,7 +134,7 @@ export function stored(key: string): string | undefined {
  * コーデックの選択を読む。**カンマ区切りで、1つだけの古い値も読める。**
  *
  * `av1,h264` → `['av1', 'h264']`、`av1` → `['av1']`、`none` や空 → `[]`。
- * **AV1 を先頭に寄せる** — 主 (`library_path`) をそちらにするので、順序を固定する
+ * **並びは AV1 → H.265 → H.264 に揃える** — 主 (`library_path`) を先頭にするので、順序を固定する
  */
 export function parseCodecs(value: string | undefined): HwCodec[] {
   const raw = (value ?? config.encodeCodec).split(",").map((s) => s.trim());
@@ -178,7 +178,7 @@ export function settings(): Settings {
     return value === undefined ? fallback : value === "true";
   };
   const codecs = parseCodecs(stored("codec"));
-  // 主は先頭 (parseCodecs が AV1 を先頭に寄せている)
+  // 主は先頭 (parseCodecs が AV1 → H.265 → H.264 に揃えている)
   const primary: VideoCodec = codecs[0] ?? "none";
   return {
     codec: primary,

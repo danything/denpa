@@ -449,3 +449,91 @@ describe("NVIDIA NVENC", () => {
     expect(nvencBusy("Device creation failed: -19.")).toBe(false);
   });
 });
+
+describe("H.265 (GPU でだけ)", () => {
+  const H: HwDevice = {
+    ...A,
+    qsv: ["av1", "hevc", "h264"],
+    vaapi: ["av1", "hevc", "h264"],
+  };
+  const R: HwDevice = {
+    path: "/dev/mpp_service",
+    label: "mpp_service (Rockchip)",
+    qsv: [],
+    vaapi: [],
+    rkmpp: ["hevc", "h264"],
+    nvenc: [],
+    cqp: [],
+    full: [],
+  };
+  const N: HwDevice = {
+    ...R,
+    path: "/dev/nvidia0",
+    label: "nvidia0 (NVIDIA)",
+    rkmpp: [],
+    nvenc: ["hevc", "h264"],
+    gpu: 0,
+  };
+
+  test("試しのエンコードが通った方式だけを、ほかのコーデックと同じ順で使う", () => {
+    expect(hwChain("hevc", {}, 0, [B])).toEqual([]);
+    expect(hwChain("hevc", {}, 0, [B, H, R])).toEqual([
+      { device: H.path, kind: "qsv" },
+      { device: H.path, kind: "vaapi" },
+      { device: R.path, kind: "rkmpp" },
+    ]);
+  });
+
+  test("QSV・VA-API は H.264 と同じ ICQ 24、CQP なら qp 24 (0〜51 の軸)", () => {
+    expect(hwArgs({ device: H.path, kind: "qsv" }, "hevc").encoder).toEqual([
+      "hevc_qsv",
+      "-preset",
+      "medium",
+      "-global_quality",
+      "24",
+    ]);
+    expect(hwArgs({ device: H.path, kind: "vaapi" }, "hevc").encoder).toEqual([
+      "hevc_vaapi",
+      "-rc_mode",
+      "ICQ",
+      "-global_quality",
+      "24",
+    ]);
+    expect(
+      hwArgs({ device: H.path, kind: "vaapi", cqp: true }, "hevc").encoder,
+    ).toEqual(["hevc_vaapi", "-rc_mode", "CQP", "-qp", "24"]);
+  });
+
+  test("NVENC・Rockchip MPP の表は H.264 と別に引くが、測るまでは同じ値", () => {
+    const picture = { height: 720, smooth: true };
+    for (const p of [
+      { height: 1080, smooth: true },
+      picture,
+      { height: 480, smooth: false },
+    ]) {
+      expect(hwBitrate("hevc", p)).toBe(hwBitrate("h264", p));
+    }
+    const bps = hwBitrate("hevc", picture);
+    const nvenc = hwArgs(
+      { device: N.path, kind: "nvenc", gpu: 0 },
+      "hevc",
+      picture,
+    );
+    expect(nvenc.encoder.slice(0, 5)).toEqual([
+      "hevc_nvenc",
+      "-gpu",
+      "0",
+      "-preset",
+      "p4",
+    ]);
+    expect(nvenc.encoder).toContain(String(bps));
+    const mpp = hwArgs({ device: R.path, kind: "rkmpp" }, "hevc", picture);
+    expect(mpp.encoder.slice(0, 5)).toEqual([
+      "hevc_rkmpp",
+      "-rc",
+      "avbr",
+      "-b:v",
+      String(bps),
+    ]);
+  });
+});

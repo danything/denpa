@@ -19,7 +19,8 @@ import { fromTsTime } from "#lib/ts/watch.js";
  * ロゴでの判定に失敗した録画は無音だけで当てていて外れやすいので、false)。
  *
  * `files` は出せるものを全部、コーデック付きで並べる。どれを開くかは呼ぶ側が決める
- * (古いテレビなら H.264、新しいテレビなら AV1、MPEG-2 をハードでデコードできる端末なら元のTS)。URL は denpa の根からの相対。
+ * (AV1 → H.265 → H.264 の順でデコードできる最初のもの、MPEG-2 をハードでデコードできる端末なら元のTS)。
+ * 並びは主 → H.265 → H.264 → 元のTS で、エンコード済みは小さくなる順 (`ENCODED_ORDER`) と同じ。URL は denpa の根からの相対。
  * `audios` は放送の音声の構成で、追っかけ (`chase?audio=<id>`) で選ぶもの。
  * `?limit=` と `?offset=` で区切れる (既定は全部)
  */
@@ -40,6 +41,7 @@ export function GET({ url }) {
       encodeSkip: recordings.encode_skip,
       watchedAt: recordings.watched_at,
       library: recordings.library_path,
+      hevc: recordings.hevc_path,
       alt: recordings.alt_path,
       ts: recordings.ts_path,
       state: recordings.state,
@@ -75,6 +77,7 @@ export function GET({ url }) {
       const files = (
         [
           ["encoded", row.library],
+          ["hevc", row.hevc],
           ["alt", row.alt],
           ["ts", row.ts],
         ] as const

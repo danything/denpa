@@ -62,11 +62,18 @@ export const actions = {
    */
   saveEncoding: async ({ request }) => {
     const form = await request.formData();
-    // **コーデックは複数選べる** (`av1` / `h264` を両方)。1つも選ばなければ「エンコードしない」。カンマ区切りで持つ
-    const codecs = form
-      .getAll("codecs")
-      .map(String)
-      .filter((c): c is "av1" | "h264" => c === "av1" || c === "h264");
+    // **コーデックは複数選べる** (`av1` / `hevc` / `h264`)。1つも選ばなければ「エンコードしない」。カンマ区切りで持つ
+    const picked = form.getAll("codecs").map(String);
+    /*
+     * H.265 の行は、H.265 をエンコードできる GPU を確かめ終えてからしか出ない (`codecsShown`)。
+     * 出ていない画面から来たら、H.265 のチェックは前のまま (確かめている最中に別の欄を変えて外れないように)
+     */
+    const shown = form.getAll("codecsShown").map(String);
+    const codecs = HW_CODECS.filter((codec) =>
+      codec === "hevc" && !shown.includes("hevc")
+        ? settings().codecs.includes("hevc")
+        : picked.includes(codec),
+    );
     // その場で変換する本数の上限。空は自動 (GPU の有無で決める)。欄が無ければ前のまま
     const rawLimit = form.get("transcodeLimit");
     const transcodeLimit =
@@ -79,7 +86,7 @@ export const actions = {
       return fail(400, { message: "本数が不正です" });
     }
     /*
-     * **コーデックごとのエンコーダ** (`hw.av1` / `hw.h264`。ソフトウェア・デバイスの path・順番に使う)。
+     * **コーデックごとのエンコーダ** (`hw.av1` / `hw.hevc` / `hw.h264`。ソフトウェア・デバイスの path・順番に使う。H.265 にソフトウェアは無い)。
      * 持ち方はデバイス × 方式 × コーデックのまま (`chooseHw`)。欄が無いコーデック (GPU を
      * 確かめ終わる前に保存した・そのコーデックを使えるデバイスが無い) と、いま見えていないデバイスを
      * 選んできたもの (画面を開いたあとに確かめ直して GPU が変わった) は前のまま
@@ -95,7 +102,7 @@ export const actions = {
       if (known) hwAllow = chooseHw(hwAllow, devices, codec, choice);
     }
     saveSettings({
-      // 順序は読むとき (parseCodecs) に AV1 を先頭へ寄せる。ここは来たまま
+      // 並びは HW_CODECS のまま (AV1 → H.265 → H.264)
       codec: (codecs.length > 0 ? codecs.join(",") : "none") as VideoCodec,
       keepOriginal: form.get("keepOriginal") === "on",
       fpsDetect: form.get("fpsDetect") === "on",

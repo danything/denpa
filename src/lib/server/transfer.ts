@@ -721,13 +721,14 @@ function inspect(): CheckResult {
   try {
     const rows = db
       .query(
-        `SELECT name, ts_path, library_path, alt_path, finished_at FROM recordings
+        `SELECT name, ts_path, library_path, hevc_path, alt_path, finished_at FROM recordings
          WHERE deleted_at IS NULL ORDER BY start_at`,
       )
       .all() as {
       name: string;
       ts_path: string | null;
       library_path: string | null;
+      hevc_path: string | null;
       alt_path: string | null;
       finished_at: number | null;
     }[];
@@ -745,11 +746,14 @@ function inspect(): CheckResult {
     for (const row of rows) {
       if (row.library_path !== null) {
         const main = locate(row.library_path, config.encodedDir);
-        const alt =
-          row.alt_path === null
-            ? null
-            : locate(row.alt_path, config.encodedDir);
-        if (existsSync(main.path) || (alt !== null && existsSync(alt.path))) {
+        // 主が無くても、もう一方 (H.265・H.264) があれば観られる (照合で繰り上がる。`files.reconcile`)
+        const others = [row.hevc_path, row.alt_path].flatMap((path) =>
+          path === null ? [] : [locate(path, config.encodedDir)],
+        );
+        if (
+          existsSync(main.path) ||
+          others.some((other) => existsSync(other.path))
+        ) {
           files.present++;
           continue;
         }

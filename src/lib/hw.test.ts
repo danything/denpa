@@ -52,10 +52,10 @@ describe("エンコーダの選択", () => {
     expect(hwChoice(next, [A, B], "av1")).toBe(A.path);
     // A で使えない方式 (Rockchip MPP) の印は前のまま (書かれていなければ全部よい)
     expect(next[A.path]).toEqual({
-      qsv: ["av1"],
-      vaapi: ["av1"],
-      rkmpp: ["av1", "h264"],
-      nvenc: ["av1", "h264"],
+      qsv: ["av1", "hevc"],
+      vaapi: ["av1", "hevc"],
+      rkmpp: ["av1", "hevc", "h264"],
+      nvenc: ["av1", "hevc", "h264"],
     });
   });
 
@@ -70,10 +70,38 @@ describe("エンコーダの選択", () => {
     const off = chooseHw({}, [A], "av1", HW_SOFTWARE);
     const next = chooseHw(off, [A], "av1", A.path);
     expect(next[A.path]).toEqual({
-      qsv: ["av1", "h264"],
-      vaapi: ["av1", "h264"],
-      rkmpp: ["av1", "h264"],
-      nvenc: ["av1", "h264"],
+      qsv: ["av1", "hevc", "h264"],
+      vaapi: ["av1", "hevc", "h264"],
+      rkmpp: ["av1", "hevc", "h264"],
+      nvenc: ["av1", "hevc", "h264"],
+    });
+  });
+
+  test("H.265 のエンコーダを選んでも、ほかのコーデックの印は崩さない。並びは AV1 → H.265 → H.264", () => {
+    // A は H.264 だけ GPU、AV1 はソフトウェアにしてある。H.265 を B だけに寄せる
+    const allow: HwAllow = {
+      [A.path]: { qsv: ["h264"], vaapi: ["h264"], rkmpp: [], nvenc: [] },
+    };
+    const C: HwUsable = {
+      ...A,
+      path: "/dev/dri/renderD130",
+      qsv: ["hevc"],
+      vaapi: ["hevc"],
+    };
+    const D: HwUsable = {
+      ...A,
+      qsv: ["av1", "hevc", "h264"],
+      vaapi: ["av1", "hevc", "h264"],
+    };
+    const next = chooseHw(allow, [D, C], "hevc", C.path);
+    expect(hwChoice(next, [D, C], "hevc")).toBe(C.path);
+    expect(next[D.path]).toEqual(allow[D.path]);
+    const back = chooseHw(next, [D, C], "hevc", HW_EVERY);
+    expect(back[D.path]).toEqual({
+      qsv: ["hevc", "h264"],
+      vaapi: ["hevc", "h264"],
+      rkmpp: [],
+      nvenc: [],
     });
   });
 

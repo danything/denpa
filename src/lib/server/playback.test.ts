@@ -41,7 +41,7 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** 偽 ffprobe。ファイル名に h264 / av1 があればその中身を、無ければ読めない (1 で降りる) */
+/** 偽 ffprobe。ファイル名に h264 / av1 / hevc があればその中身を、無ければ読めない (1 で降りる) */
 const PROBE = join(dir, "ffprobe");
 writeFileSync(
   PROBE,
@@ -51,6 +51,7 @@ writeFileSync(
     'case "$last" in',
     `  *h264*) echo '{"streams":[{"codec_type":"video","codec_name":"h264","profile":"High","level":40},{"codec_type":"audio","codec_name":"opus","tags":{"title":"主音声"}},{"codec_type":"audio","codec_name":"opus","tags":{"title":"副音声"}}],"format":{"duration":"1790.5"}}' ;;`,
     `  *av1*) echo '{"streams":[{"codec_type":"video","codec_name":"av1","profile":"Main","level":8,"pix_fmt":"yuv420p"},{"codec_type":"audio","codec_name":"opus","tags":{"title":"主音声"}}],"format":{"duration":"1790.5"}}' ;;`,
+    `  *hevc*) echo '{"streams":[{"codec_type":"video","codec_name":"hevc","profile":"Main","level":123},{"codec_type":"audio","codec_name":"opus","tags":{"title":"主音声"}}],"format":{"duration":"1790.5"}}' ;;`,
     "  *) exit 1 ;;",
     "esac",
   ].join("\n"),
@@ -81,8 +82,11 @@ const media = join(dir, "media");
 mkdirSync(media);
 const h264 = join(media, "a-h264.mkv");
 const av1 = join(media, "a-av1.mkv");
+const hevc = join(media, "a-hevc.mkv");
 const unknown = join(media, "a-unknown.mkv");
-for (const path of [h264, av1, unknown]) writeFileSync(path, "mkv");
+const unknownHevc = join(media, "a-unknown [H265].mkv");
+for (const path of [h264, av1, hevc, unknown, unknownHevc])
+  writeFileSync(path, "mkv");
 
 /** 合成した元の TS。映像と音声の PES に空のパケットを挟む (`ts/seek.test.ts` と同じ作り) */
 function synthTs(start: number, seconds: number): Uint8Array {
@@ -230,12 +234,44 @@ describe("何を出せるか (playbackPlan)", () => {
     ).toBeNull();
   });
 
-  test("中身を読めないエンコード済みは、いまの設定のコーデックとみなしてファイルだけ", async () => {
-    saveSettings({ codec: "av1" });
+  test("中身を読めないエンコード済みは、置き場の名前のコーデックとみなしてファイルだけ", async () => {
     const plan = await playbackPlan(seed({ library_path: unknown }));
     expect(plan?.info.offers).toEqual([
       { codec: "av1", way: "file", source: "encoded" },
     ]);
+    const named = await playbackPlan(seed({ library_path: unknownHevc }));
+    expect(named?.info.offers).toEqual([
+      { codec: "hevc", way: "file", source: "encoded" },
+    ]);
+  });
+
+  test("H.265 もある録画: ファイルと詰め替えは出すが、H.265 への変換は出さない", async () => {
+    const plan = await playbackPlan(
+      seed({ library_path: av1, hevc_path: hevc, alt_path: h264 }),
+    );
+    expect(plan?.info.offers).toEqual([
+      {
+        codec: "av1",
+        way: "file",
+        source: "encoded",
+        codecs: "av01.0.08M.08,opus",
+      },
+      {
+        codec: "hevc",
+        way: "file",
+        source: "hevc",
+        codecs: "hvc1.1.6.L123.90,opus",
+      },
+      { codec: "h264", way: "file", source: "alt", codecs: "avc1.640028,opus" },
+      { codec: "hevc", way: "stream", codecs: "hvc1.1.6.L123.90,mp4a.40.2" },
+      { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
+      { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+    ]);
+    // H.265 のエンコード済みが無ければ H.265 は出さない (その場の変換では作らない)
+    const none = await playbackPlan(seed({ library_path: av1 }));
+    expect(none?.info.offers.some((offer) => offer.codec === "hevc")).toBe(
+      false,
+    );
   });
 });
 
@@ -278,6 +314,12 @@ describe("ffmpeg の引数", () => {
     );
     expect(args.at(-1)).toBe("pipe:1");
     expect(copyArgs("/m/a.mkv", 0, 0, "h264")).not.toContain("-ss");
+  });
+
+  test("H.265 の詰め替え: hvc1 と名乗らせ、音声は AAC", () => {
+    const joined = copyArgs("/m/a.mkv", 0, 0, "hevc").join(" ");
+    expect(joined).toContain("-c:v copy -tag:v hvc1 -c:a aac");
+    expect(copyArgs("/m/a.mkv", 0, 0, "h264")).not.toContain("-tag:v");
   });
 
   test("エンコード済みの変換: インタレ解除を挟まない", () => {
@@ -348,6 +390,10 @@ describe("流す (streamResponse)", () => {
     ).rejects.toMatchObject({
       status: 404,
     });
+    // H.265 はエンコード済みの H.265 が無ければ出さない (変換では作らない)
+    await expect(
+      streamResponse(rec, new URLSearchParams({ codec: "hevc" })),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   test("変換は枠を使い、埋まっていれば 503。詰め替えは数えない", async () => {
@@ -509,6 +555,25 @@ describe("ffprobe の読み (mediaInfo)", () => {
       ).video;
     expect(av1("yuv420p")).toBe("av01.0.08M.08");
     expect(av1("yuv420p10le")).toBe("av01.0.08M.10");
+  });
+
+  test("H.265 Main / Main 10 は hvc1 の書き方で (tier は Main、level はそのまま)", () => {
+    const hevc = (profile: string, level?: number) =>
+      mediaInfo(
+        "hevc",
+        probe([
+          {
+            codec_type: "video",
+            codec_name: "hevc",
+            profile,
+            ...(level === undefined ? {} : { level }),
+          },
+        ]),
+      ).video;
+    expect(hevc("Main", 150)).toBe("hvc1.1.6.L150.90");
+    expect(hevc("Main 10", 123)).toBe("hvc1.2.4.L123.90");
+    // level が無ければ 4.0 (120)
+    expect(hevc("Main")).toBe("hvc1.1.6.L120.90");
   });
 
   test("知らない形式・読めない出力は null (判断に使わない)", () => {

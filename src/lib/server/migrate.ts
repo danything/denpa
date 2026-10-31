@@ -248,9 +248,12 @@ function importedRow(sourceId: number): Recording | undefined {
 
 /** 行の指すファイルが1つでも実在するか */
 function hasFile(recording: Recording): boolean {
-  return [recording.ts_path, recording.library_path, recording.alt_path].some(
-    (path) => path !== null && existsSync(path),
-  );
+  return [
+    recording.ts_path,
+    recording.library_path,
+    recording.hevc_path,
+    recording.alt_path,
+  ].some((path) => path !== null && existsSync(path));
 }
 
 /**
@@ -464,6 +467,7 @@ async function importOne(
         .set({
           ts_path: file.raw ? target : null,
           library_path: file.raw ? null : target,
+          hevc_path: null,
           alt_path: null,
           ts_size: file.size,
           updated_at: at,

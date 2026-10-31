@@ -1,0 +1,1 @@
+ALTER TABLE `recordings` ADD `hevc_path` text;

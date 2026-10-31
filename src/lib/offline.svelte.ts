@@ -13,11 +13,11 @@
 import { browser } from "$app/env";
 import { resolve } from "$app/paths";
 
-import { encodedCodec } from "./encoded-codec";
 import {
   downloadRequests,
   fetchId,
   fetchIdPrefix,
+  offlineSource,
   type OfflineVideo,
   outbox,
   parseFetchId,
@@ -201,14 +201,13 @@ export function startOffline(): void {
   if (navigator.onLine) void flush();
 }
 
-/** 端末が AV1 をデコードできるか。デコードできなければ H.264 (`alt`) を落とす */
-const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
-async function canPlayAv1(): Promise<boolean> {
+/** 端末がそのコーデックをデコードできるか (`navigator.mediaCapabilities`。聞けなければ `canPlayType`) */
+async function canDecode(type: string): Promise<boolean> {
   try {
     const info = await navigator.mediaCapabilities.decodingInfo({
       type: "file",
       video: {
-        contentType: AV1,
+        contentType: type,
         width: 1920,
         height: 1080,
         bitrate: 4_000_000,
@@ -217,8 +216,30 @@ async function canPlayAv1(): Promise<boolean> {
     });
     return info.supported;
   } catch {
-    return document.createElement("video").canPlayType(AV1) !== "";
+    return document.createElement("video").canPlayType(type) !== "";
   }
+}
+
+const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
+const HEVC = 'video/mp4; codecs="hvc1.1.6.L120.90"';
+
+/**
+ * **保存したファイルをこの端末で観られるか** (コーデックごと)。
+ *
+ * - H.264 … 確かめない (どの端末もデコードできる前提。前からそう)
+ * - AV1 … デコードできるか。AV1 の Matroska は WebM としても読める (Safari もそれで読む)
+ * - H.265 … デコードできて、**しかも Matroska のまま読めるか** (`canPlayType`)。保存するのは Matroska で、
+ *   WebM に H.265 は入れられないので、デコーダがあっても入れ物を読めない端末 (Safari など) がある
+ */
+async function playable(codec: "av1" | "hevc" | "h264"): Promise<boolean> {
+  if (codec === "h264") return true;
+  if (codec === "av1") return canDecode(AV1);
+  return (
+    (await canDecode(HEVC)) &&
+    document
+      .createElement("video")
+      .canPlayType('video/x-matroska; codecs="hvc1.1.6.L120.90"') !== ""
+  );
 }
 
 /** 保存に使ってよい残り容量か。動画そのもの + 一時領域ぶんの遊びを見る */
@@ -242,8 +263,11 @@ interface SaveTarget {
   start_at: number;
   duration_ms: number | null;
   ts_size: number;
-  /** エンコード済みのファイル。H.264 だけでエンコードした録画は、これが `… [H264].mkv` */
+  /** エンコード済みの主。H.264 だけでエンコードした録画は、これが `… [H264].mkv` */
   library_path: string | null;
+  /** H.265 (主でないときだけ) */
+  hevc_path: string | null;
+  /** H.264 (主でないときだけ) */
   alt_path: string | null;
 }
 
@@ -287,20 +311,13 @@ async function probeDownloads(
 }
 
 /**
- * 端末に保存する。**どちらを落とすかはここで決める** — 既定はエンコード済みのファイル、
- * それが AV1 で端末がデコードできなければ H.264 (両方エンコードした録画だけ)。
- * H.264 だけでエンコードした録画は、エンコード済みのファイルがもう H.264 なので AV1 を確かめない
- * (確かめていた頃は、AV1 をデコードできない端末で「H.264 のものもありません」と断っていた。#1806)
+ * 端末に保存する。**どれを落とすかはここで決める** — エンコード済みのファイルのうち、**AV1 → H.265 → H.264 の
+ * 順で、この端末で観られる最初のもの** (`playable`。観る画面と同じ順。`ts/playback.ts` の `ENCODED_ORDER`)。
+ * どれも観られなければ断る (保存できても観られないため)。コーデックは置き場の名前で見分ける
+ * (H.264 だけでエンコードした録画は主がもう `… [H264].mkv`。AV1 と決めてかかっていた頃は断っていた。#1806)
  */
 export async function saveOffline(rec: SaveTarget): Promise<void> {
-  let source: "encoded" | "alt" = "encoded";
-  const h264Only =
-    rec.library_path !== null && encodedCodec(rec.library_path) === "h264";
-  if (!h264Only && !(await canPlayAv1())) {
-    if (rec.alt_path === null)
-      throw new Error("AV1 を再生できず、H.264 のものもありません");
-    source = "alt";
-  }
+  const source = await offlineSource(rec, playable);
 
   // 下見して、在るものだけに絞る (404 が混ざると全体が失敗になる)
   const { urls, total } = await probeDownloads(

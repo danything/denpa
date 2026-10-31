@@ -139,6 +139,7 @@
     type Picked,
     pickOffer,
     type PlaybackInfo,
+    type PlayCodec,
     retryWait,
     STREAM_RETRIES,
     streamForAudio,
@@ -228,7 +229,7 @@
   const drive = driveGate();
 
   /** 形式の名前 (メニュー・混んでいるときの勧め) */
-  function codecLabel(codec: CanvasCodec): string {
+  function codecLabel(codec: PlayCodec): string {
     return codec === "mpeg2" ? "MPEG-2" : CODEC_LABEL[codec];
   }
 
@@ -557,7 +558,7 @@
   );
 
   /** その場で流すもの (`/stream`) のリクエスト先。`at` 秒から、`audio` (`streamAudio`) の音声で */
-  function streamUrl(codec: CanvasCodec, at: number, audio: string): string {
+  function streamUrl(codec: PlayCodec, at: number, audio: string): string {
     return resolve(
       `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
     );
@@ -709,7 +710,7 @@
   );
 
   /** 混んでいて断られたとき、サーバに変換させずに観られるもの (エンコード済み・詰め替え) */
-  const lighter = $derived.by((): CanvasCodec[] => {
+  const lighter = $derived.by((): PlayCodec[] => {
     if (info === null || !busy) return [];
     // 互換モードは描ける形式のうち、変換させないもの (詰め替え・元の TS)
     if (compat) {

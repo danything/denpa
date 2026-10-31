@@ -38,10 +38,14 @@
    */
   const recording = $derived(data.recording);
 
-  /** 映像コーデックの行。並びは HW_CODECS と同じ (AV1 が先) */
+  /**
+   * 映像コーデックの行。並びは HW_CODECS と同じ (AV1 → H.265 → H.264)。
+   * **H.265 は GPU でだけエンコードする**ので、H.265 をエンコードできる GPU があるときだけ行を出す (`gpuOnly`)
+   */
   const CODECS = [
-    { codec: "av1", label: "AV1 (小さい・遅い)" },
-    { codec: "h264", label: "H.264 (古いテレビ向け・大きい)" },
+    { codec: "av1", label: "AV1 (小さい・遅い)", gpuOnly: false },
+    { codec: "hevc", label: "H.265 (GPU だけ)", gpuOnly: true },
+    { codec: "h264", label: "H.264 (古いテレビ向け・大きい)", gpuOnly: false },
   ] as const;
 
   /** 保存の結果 (`autosave`)。節ごとに見出しの横に出す */
@@ -83,59 +87,78 @@
                     **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。** 選べるのは、そのコーデックを
                     GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
                     (`chooseHw`)。チェックを外したコーデックも、ライブと追っかけはこのエンコーダを使うので、
-                    選ぶ欄はチェックと関係なく出しておく
+                    選ぶ欄はチェックと関係なく出しておく。
+                    **H.265 は GPU でだけエンコードする**ので、行ごと GPU を確かめてから出し、エンコーダに
+                    「ソフトウェア」を置かない (外すならチェックを外す)。行を出したときだけ `codecsShown` を送る —
+                    確かめている最中や GPU が無いときに保存しても、H.265 のチェックは前のまま (saveEncoding)
                 -->
+        {#snippet codecRow(
+          codec: (typeof CODECS)[number]["codec"],
+          label: string,
+          gpuOnly: boolean,
+        )}
+          <div class="codec-row">
+            <label class="check">
+              <input
+                type="checkbox"
+                name="codecs"
+                value={codec}
+                checked={recording.codecs.includes(codec)}
+                data-testid={`codec-${codec}`}
+              />
+              <span>{label}</span>
+            </label>
+            {#await data.hw then hw}
+              {@const usable = hwUsable(hw.devices, codec)}
+              {@const choice = hwChoice(recording.hwAllow, hw.devices, codec)}
+              {#if usable.length > 0}
+                <select
+                  name={`hw.${codec}`}
+                  class="encoder"
+                  aria-label={`${CODEC_LABEL[codec]} のエンコーダ`}
+                  data-testid={`hw-${codec}`}
+                >
+                  {#if !gpuOnly}
+                    <option
+                      value={HW_SOFTWARE}
+                      selected={choice === HW_SOFTWARE}>ソフトウェア</option
+                    >
+                  {/if}
+                  <!-- GPU だけのコーデックで、どの GPU の印も外れていれば (前の設定) 先頭の GPU を選んで見せる -->
+                  {#each usable as device, i (device.path)}
+                    <option
+                      value={device.path}
+                      selected={choice === device.path ||
+                        (gpuOnly && choice === HW_SOFTWARE && i === 0)}
+                      >{device.label}</option
+                    >
+                  {/each}
+                  {#if usable.length > 1}
+                    <option value={HW_EVERY} selected={choice === HW_EVERY}
+                      >GPU を順番に使う</option
+                    >
+                  {/if}
+                </select>
+              {:else if hw.devices.length > 0}
+                <span class="hint">ソフトウェア</span>
+              {/if}
+            {/await}
+          </div>
+        {/snippet}
         <fieldset class="field">
           <span class="field-label">映像コーデック</span>
           <div class="codecs">
-            {#each CODECS as { codec, label } (codec)}
-              <div class="codec-row">
-                <label class="check">
-                  <input
-                    type="checkbox"
-                    name="codecs"
-                    value={codec}
-                    checked={recording.codecs.includes(codec)}
-                    data-testid={`codec-${codec}`}
-                  />
-                  <span>{label}</span>
-                </label>
+            {#each CODECS as { codec, label, gpuOnly } (codec)}
+              {#if gpuOnly}
                 {#await data.hw then hw}
-                  {@const usable = hwUsable(hw.devices, codec)}
-                  {@const choice = hwChoice(
-                    recording.hwAllow,
-                    hw.devices,
-                    codec,
-                  )}
-                  {#if usable.length > 0}
-                    <select
-                      name={`hw.${codec}`}
-                      class="encoder"
-                      aria-label={`${CODEC_LABEL[codec]} のエンコーダ`}
-                      data-testid={`hw-${codec}`}
-                    >
-                      <option
-                        value={HW_SOFTWARE}
-                        selected={choice === HW_SOFTWARE}>ソフトウェア</option
-                      >
-                      {#each usable as device (device.path)}
-                        <option
-                          value={device.path}
-                          selected={choice === device.path}
-                          >{device.label}</option
-                        >
-                      {/each}
-                      {#if usable.length > 1}
-                        <option value={HW_EVERY} selected={choice === HW_EVERY}
-                          >GPU を順番に使う</option
-                        >
-                      {/if}
-                    </select>
-                  {:else if hw.devices.length > 0}
-                    <span class="hint">ソフトウェア</span>
+                  {#if hwUsable(hw.devices, codec).length > 0}
+                    <input type="hidden" name="codecsShown" value={codec} />
+                    {@render codecRow(codec, label, gpuOnly)}
                   {/if}
                 {/await}
-              </div>
+              {:else}
+                {@render codecRow(codec, label, gpuOnly)}
+              {/if}
             {/each}
           </div>
           <!-- 列の右側 (欄の下) に置くため、要点の行は div で包む -->
@@ -191,13 +214,27 @@
                 <p>CM のチャプターや字幕トラックも付きません。</p>
               {/snippet}
             </Lead>
-          {:else if recording.codecs.length === 2}
+          {:else if recording.codecs.length > 1}
             <Lead>
-              1本の録画を両方でエンコードします
+              1本の録画を選んだコーデックの数だけエンコードします
               {#snippet more()}
                 <p>
-                  再生は既定で AV1 です。テレビごとの設定で H.264 を渡せます。
+                  再生では AV1 → H.265 → H.264
+                  の順に、端末で再生できるものを選びます。
                 </p>
+              {/snippet}
+            </Lead>
+          {/if}
+          {#if recording.codecs.includes("hevc")}
+            <Lead>
+              H.265 は GPU でだけエンコードします
+              {#snippet more()}
+                <p>
+                  GPU でエンコードできないときは H.265
+                  を飛ばし、ほかに選んだコーデックだけエンコードします。H.265
+                  だけを選んでいたらエンコードは失敗し、元のTSが残ります。
+                </p>
+                <p>ライブと追っかけは H.265 では流しません。</p>
               {/snippet}
             </Lead>
           {/if}

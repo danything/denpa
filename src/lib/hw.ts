@@ -3,8 +3,12 @@
  * 探し方・エンコード方式の本体は `server/hwenc.ts` (画面からは読み込めない)
  */
 
-/** GPU でエンコードできるコーデック。**AV1 が先** — 主 (`library_path`) をそちらにする順序と同じ */
-export const HW_CODECS = ["av1", "h264"] as const;
+/**
+ * GPU でエンコードできるコーデック。**並びは小さくなる順 (AV1 → H.265 → H.264)** — 主 (`library_path`) を
+ * 選ぶ順、端末で観るものを選ぶ順と同じ。**H.265 (`hevc`) は GPU でだけエンコードする** (ソフトウェアの
+ * エンコーダを組んでいない。`SOFTWARE_CODECS`)。ライブと追っかけは H.265 を出さない (`#lib/live.ts` の `LiveCodec`)
+ */
+export const HW_CODECS = ["av1", "hevc", "h264"] as const;
 export type HwCodec = (typeof HW_CODECS)[number];
 
 /**
@@ -23,8 +27,15 @@ export const HW_KIND_LABEL: Record<HwKind, string> = {
 };
 export const CODEC_LABEL: Record<HwCodec, string> = {
   av1: "AV1",
+  hevc: "H.265",
   h264: "H.264",
 };
+
+/**
+ * ソフトウェア (CPU) でもエンコードできるコーデック。H.265 は入らない — 録画のエンコードで GPU が全部落ちても
+ * ソフトウェアには倒れず、設定のエンコーダにも「ソフトウェア」を出さない (docs/encode.md「H.265 は GPU でだけ」)
+ */
+export const SOFTWARE_CODECS: readonly HwCodec[] = ["av1", "h264"];
 
 /**
  * **デバイス (GPU) ごとに、GPU でエンコードしてよいコーデック** (設定 `hwAllow`)。デバイスの path がキー。
@@ -110,7 +121,7 @@ export function chooseHw(
         );
         if (keep || !device[kind].includes(codec)) return [kind, before];
         const others = before.filter((c) => c !== codec);
-        // 並びは HW_CODECS のまま (AV1 が先)
+        // 並びは HW_CODECS のまま (AV1 → H.265 → H.264)
         return [
           kind,
           chosen

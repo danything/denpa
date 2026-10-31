@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { pad } from "#lib/format.js";
+import { HW_CODECS, type HwCodec } from "#lib/hw.js";
 
 import { config } from "./config";
 import { parseTitle, sanitizeFileName } from "./title";
@@ -13,7 +14,9 @@ export interface LibraryNameInput {
   start_at: number;
   /** いま置いてある場所。再エンコードのとき、自分自身を「衝突」と読まないために要る */
   library_path?: string | null;
-  /** もう一方のコーデックの置き場所。これも「自分自身」なので衝突と読まない */
+  /** H.265 の置き場所 (主でないとき)。これも「自分自身」なので衝突と読まない */
+  hevc_path?: string | null;
+  /** H.264 の置き場所 (主でないとき)。これも「自分自身」なので衝突と読まない */
   alt_path?: string | null;
 }
 
@@ -61,8 +64,13 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
 export function libraryPath(rec: LibraryNameInput, ext: string): string {
   const rel = libraryRelPath(rec, ext);
   const abs = join(config.encodedDir, rel);
-  // 自分がいま置いてある2本 (主・もう一方) は衝突ではない
-  if (!existsSync(abs) || abs === rec.library_path || abs === rec.alt_path)
+  // 自分がいま置いてあるもの (主と、H.265・H.264 のもう一方) は衝突ではない
+  if (
+    !existsSync(abs) ||
+    abs === rec.library_path ||
+    abs === rec.hevc_path ||
+    abs === rec.alt_path
+  )
     return abs;
   return join(config.encodedDir, libraryRelPath(rec, ` [${rec.id}]${ext}`));
 }
@@ -70,16 +78,34 @@ export function libraryPath(rec: LibraryNameInput, ext: string): string {
 /**
  * コーデックごとの置き場所。
  *
- * どちらも Matroska (`.mkv`) — mp4 は放送の字幕 (ARIB 字幕。Matroska なら `S_ARIBSUB`) を持てない
- * ため、両方 mkv で揃える。**H.264 のほうは名前に印を付ける** (`[H264]`)。
- * 同じフォルダに2本並ぶので、名前が違わないと衝突する。
+ * どれも Matroska (`.mkv`) — mp4 は放送の字幕 (ARIB 字幕。Matroska なら `S_ARIBSUB`) を持てない
+ * ため、全部 mkv で揃える。**H.265・H.264 のほうは名前に印を付ける** (`[H265]`・`[H264]`)。
+ * 同じフォルダに最大3本並ぶので、名前が違わないと衝突する。
  */
-export function encodedPath(
-  rec: LibraryNameInput,
-  codec: "av1" | "h264",
-): string {
-  return libraryPath(rec, codec === "h264" ? " [H264].mkv" : ".mkv");
+export function encodedPath(rec: LibraryNameInput, codec: HwCodec): string {
+  return libraryPath(rec, CODEC_SUFFIX[codec]);
 }
+
+/**
+ * **エンコードしたもの全部** (無いものは除く)。並びは主 (`library_path`) → H.265 → H.264 で、
+ * 小さくなる順 (`HW_CODECS`) と同じ。削除・照合・大きさ・移すときに、列を1つずつ書き並べずにこれで回す
+ */
+export function encodedPaths(rec: {
+  library_path: string | null;
+  hevc_path: string | null;
+  alt_path: string | null;
+}): string[] {
+  return [rec.library_path, rec.hevc_path, rec.alt_path].filter(
+    (path): path is string => path !== null,
+  );
+}
+
+/** コーデックごとの名前の終わり (`encodedPath`)。AV1 は印を付けない */
+const CODEC_SUFFIX: Record<HwCodec, string> = {
+  av1: ".mkv",
+  hevc: " [H265].mkv",
+  h264: " [H264].mkv",
+};
 
 /** 置き場の名前からコーデックを見分ける (`encodedPath` の逆。画面と共有するので `#lib/encoded-codec.ts` に置く) */
 export { encodedCodec } from "../encoded-codec";
@@ -87,17 +113,15 @@ export { encodedCodec } from "../encoded-codec";
 /**
  * この録画が取りうる保存先の候補すべて。
  *
- * コーデック (素 = AV1 / `[H264]`) と、衝突回避の `[録画ID]` の有無で最大4通り。
- * 再エンコードする前に、DBの `library_path`/`alt_path` が指していない**はぐれファイル**まで
+ * コーデック (素 = AV1 / `[H265]` / `[H264]`) と、衝突回避の `[録画ID]` の有無で6通り。
+ * 再エンコードする前に、DBの `library_path`/`hevc_path`/`alt_path` が指していない**はぐれファイル**まで
  * 含めて片付けるために使う (残っていると `libraryPath` がそれを「衝突」と読む)。
  */
 export function libraryFamily(rec: LibraryNameInput): string[] {
-  const exts = [
-    ".mkv",
-    ` [${rec.id}].mkv`,
-    " [H264].mkv",
-    ` [${rec.id}] [H264].mkv`,
-  ];
+  const exts = HW_CODECS.flatMap((codec) => [
+    CODEC_SUFFIX[codec],
+    ` [${rec.id}]${CODEC_SUFFIX[codec]}`,
+  ]);
   return exts.map((ext) => join(config.encodedDir, libraryRelPath(rec, ext)));
 }
 

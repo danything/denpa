@@ -16,7 +16,7 @@ import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 
 import { audioTitles, DUAL_MONO } from "#lib/arib.js";
 
-import { HW_KIND_LABEL, type HwCodec } from "../hw";
+import { HW_CODECS, HW_KIND_LABEL, type HwCodec, SOFTWARE_CODECS } from "../hw";
 import { encodeSource } from "../source";
 import type { EncodeJob, EncodeKind, EncodePhase, Recording } from "../types";
 import { programSpec } from "./captions";
@@ -62,7 +62,12 @@ import {
 } from "./fps";
 import { removeIfExists } from "./fsx";
 import { hwArgs, hwChain, type HwWay } from "./hwenc";
-import { encodedPath, libraryFamily, libraryPath } from "./library";
+import {
+  encodedPath,
+  encodedPaths,
+  libraryFamily,
+  libraryPath,
+} from "./library";
 import {
   removeSidecars,
   sidecarPaths,
@@ -262,7 +267,12 @@ function videoArgs(
    *
    * **8bit で出す** (10bit は 2% 小さいだけで 15% 遅く、Main10 をデコードできる相手が要る)。
    * 実測は docs/encode.md「10bit では出しません」
+   *
+   * **H.265 はソフトウェアでエンコードしない** (libx265 を組んでいない。GPU が全部落ちたら、その1本は失敗にする。
+   * `runJob` の `encodeWays`)。ここに来るのは呼ぶ側の誤りなので、黙って別のコーデックにせず投げる
    */
+  if (codec === "hevc")
+    throw new Error("H.265 はソフトウェアではエンコードしません");
   return {
     filter: [...steps, "format=yuv420p"].join(","),
     device: [],
@@ -1321,13 +1331,11 @@ async function runJob(jobId: number): Promise<void> {
    * 画面でも「まだ保存先に無い」と正しく出る
    */
   /*
-   * **DBが指す2本だけでなく、この録画が取りうる名前の“はぐれファイル”も消す** (`libraryFamily`)。
+   * **DBが指すもの (最大3本) だけでなく、この録画が取りうる名前の“はぐれファイル”も消す** (`libraryFamily`)。
    * 残っていると置き場所を「衝突」と読ませて `[録画ID]` が付く。
    * **他の録画が現に使っている置き場所は消さない** (DBで確認する)
    */
-  const stalePaths = new Set<string>();
-  if (recording.library_path !== null) stalePaths.add(recording.library_path);
-  if (recording.alt_path !== null) stalePaths.add(recording.alt_path);
+  const stalePaths = new Set<string>(encodedPaths(recording));
   for (const candidate of libraryFamily(recording)) {
     if (stalePaths.has(candidate) || !existsSync(candidate)) continue;
     if (!usedByOther(candidate, recording.id)) stalePaths.add(candidate);
@@ -1339,21 +1347,46 @@ async function runJob(jobId: number): Promise<void> {
     }
     orm()
       .update(recordings)
-      .set({ library_path: null, alt_path: null, updated_at: now() })
+      .set({
+        library_path: null,
+        hevc_path: null,
+        alt_path: null,
+        updated_at: now(),
+      })
       .where(eq(recordings.id, recording.id))
       .run();
     emit("recordings");
   }
 
   /*
-   * **選ばれたコーデックごとにエンコードする。** 両方選べば AV1 と H.264 の2本を作る (`settings().codecs`)。
-   * CM は1本目をエンコードしながら探し、2本目は決まった境目でエンコードする (チャプターを入れる・境目に
+   * **選ばれたコーデックごとにエンコードする。** いくつも選べば1本ずつ順に作る (`settings().codecs`)。
+   * CM は1本目をエンコードしながら探し、2本目からは決まった境目でエンコードする (チャプターを入れる・境目に
    * キーフレームを置く)。
+   *
+   * **H.265 は GPU でだけエンコードする** (ソフトウェアのエンコーダを組んでいない。`SOFTWARE_CODECS`)。
+   * いま H.265 をエンコードできる GPU が無ければ (抜いた・設定で外した) H.265 は飛ばしてほかのコーデックだけ作り、
+   * H.265 しか選んでいなければ失敗にする (元のTSは残るので、GPU を戻して再エンコードすればよい)。
+   *
+   * **H.265 を選んでいれば1本目にする。** 1本目は場面の切れ目ごとにキーフレームを置き、CM の境目に無ければ
+   * 境目を指してエンコードし直してから切る。境目を指してもキーフレームを置けない方式 (Rockchip MPP) しか無ければ
+   * H.265 は切れないが、1本目なら「切れなかったので CM を残してチャプターにする」になり、2本目からも揃って切らない。
+   * 2本目で切れないと、先に切った1本目と長さが食い違う (残した区間・データ放送・チャプターは1つの時刻でしか持てない)。
+   * 主 (`library_path`) にするのは、エンコードした順ではなく AV1 → H.265 → H.264 の先頭 (下の `primary`)
    *
    * どれか1つでも失敗すれば、そのジョブごと失敗にする (途中まで置いたものは消す)。
    */
-  const codecs =
-    settings().codecs.length > 0 ? settings().codecs : (["av1"] as const);
+  const chosen: readonly HwCodec[] =
+    settings().codecs.length > 0 ? settings().codecs : ["av1"];
+  const hevcReady = hwChain("hevc", settings().hwAllow).length > 0;
+  if (chosen.includes("hevc") && !hevcReady && chosen.length > 1) {
+    console.warn(
+      `[encode] H.265 をエンコードできる GPU が無いため、H.265 は飛ばします (録画 ${recording.id})`,
+    );
+  }
+  const codecs: HwCodec[] = [
+    ...(chosen.includes("hevc") && hevcReady ? (["hevc"] as const) : []),
+    ...chosen.filter((codec) => codec !== "hevc"),
+  ];
   const placed: { codec: HwCodec; path: string; skip: number }[] = [];
   // 測れなかったときの尺の当て。ffmpeg が言ってきた値 (下の duration_ms)
   let lastOutTimeUs = 0;
@@ -1430,7 +1463,10 @@ async function runJob(jobId: number): Promise<void> {
     extra: {
       analysis: boolean;
       keyframes?: (skip: number) => Keyframes | undefined;
-      /** GPU を使わない (境目を指して再エンコードするとき。GPU は指定を聞かないことがある) */
+      /**
+       * GPU を使わない (境目を指して再エンコードするとき。GPU は指定を聞かないことがある)。
+       * **H.265 はソフトウェアが無いので、指定を聞く GPU (Rockchip MPP 以外) で** (`canPoint`)
+       */
       software?: boolean;
       /**
        * CM の境目を指してキーフレームを置く (2本目)。**Rockchip MPP は使わない** — 指定を聞かない
@@ -1440,14 +1476,21 @@ async function runJob(jobId: number): Promise<void> {
       pointed?: boolean;
     },
   ) => {
-    const ways: (HwWay | undefined)[] = extra.software
-      ? [undefined]
-      : [
-          ...hwChain(codec, settings().hwAllow, hwTurn++).filter(
-            (way) => !(extra.pointed === true && way.kind === "rkmpp"),
-          ),
-          undefined,
-        ];
+    // H.265 はソフトウェアに倒れない (`SOFTWARE_CODECS`)。GPU が全部落ちたら、その1本は失敗
+    const software = SOFTWARE_CODECS.includes(codec);
+    const ways: (HwWay | undefined)[] =
+      extra.software === true && software
+        ? [undefined]
+        : [
+            ...hwChain(codec, settings().hwAllow, hwTurn++).filter(
+              (way) =>
+                !(
+                  (extra.pointed === true || extra.software === true) &&
+                  way.kind === "rkmpp"
+                ),
+            ),
+            ...(software ? [undefined] : []),
+          ];
     const attempts = ways.flatMap((hardware) => [
       { seek: null, hardware },
       { seek: config.encodeRetrySeek, hardware },
@@ -1511,11 +1554,14 @@ async function runJob(jobId: number): Promise<void> {
     }
     /** 映像まで読めたか。探さずに再エンコードしたら音だけ読み直す */
     let video = true;
+    // 探さずにエンコードし直すのはソフトウェアで。H.265 はソフトウェアが無いので、いちばん先の GPU で
+    const plain = software ? undefined : ways[0];
     if (
       result.code !== 0 &&
       extra.analysis &&
       reading !== null &&
-      !canceled.has(jobId)
+      !canceled.has(jobId) &&
+      (software || plain !== undefined)
     ) {
       setStep(jobId, `CMを探さずにエンコードし直します (${codec})`);
       skip = inputSkip(null, encodeOptions.videoStart);
@@ -1526,7 +1572,7 @@ async function runJob(jobId: number): Promise<void> {
         recording.audio_type,
         null,
         codec,
-        encodeOptions,
+        { ...encodeOptions, hardware: plain },
       );
       if (result.code === 0 && !canceled.has(jobId)) {
         // 音だけ読み直して、CM の尺だけで決める (音のデコードだけなので軽い)
@@ -1610,6 +1656,25 @@ async function runJob(jobId: number): Promise<void> {
       );
   };
 
+  /**
+   * 境目を指してキーフレームを置き直せるか (CM を切るところで境目にキーフレームが無かったとき)。ソフトウェアなら
+   * いつでも。**H.265 は指定を聞く GPU (Rockchip MPP 以外) があるときだけ** — 無ければ切らずに CM を残して置く
+   */
+  const canPoint = (codec: HwCodec): boolean =>
+    SOFTWARE_CODECS.includes(codec) ||
+    hwChain(codec, settings().hwAllow).some((way) => way.kind !== "rkmpp");
+
+  // H.265 だけを選んでいて、H.265 をエンコードできる GPU がいま無い (上の `codecs`)
+  if (codecs.length === 0) {
+    cleanup(null);
+    fail(
+      jobId,
+      recording,
+      "H.265 をエンコードできる GPU がありません (H.265 はソフトウェアではエンコードしません)",
+    );
+    return;
+  }
+
   for (const [index, codec] of codecs.entries()) {
     /*
      * 別名に書いてから置き換える (入力と出力が同じ場所でも元を壊さない。失敗しても元が残る)。
@@ -1668,7 +1733,7 @@ async function runJob(jobId: number): Promise<void> {
     if (cutting && cuttable && detection !== null && detection.cm.length > 0) {
       setPhase(jobId, "cut", "CMを切っています");
       let cut = await cutWorking(working, done.skip);
-      if (cut === "keys" && !canceled.has(jobId)) {
+      if (cut === "keys" && !canceled.has(jobId) && canPoint(codec)) {
         /*
          * 境目にキーフレームが無かった (無音の真ん中に置いた境目・GPU が指定を聞かなかった)。
          * 境目を指して再エンコードしてから切る
@@ -1718,12 +1783,21 @@ async function runJob(jobId: number): Promise<void> {
     placed.push({ codec, path: output, skip });
   }
 
-  // 主は AV1 (小さいので既定の再生に向く)。無ければエンコードしたほう
-  const primary = placed.find((p) => p.codec === "av1") ?? placed[0];
+  /*
+   * 主は AV1 → H.265 → H.264 の先頭 (小さいので既定の再生に向く。エンコードした順とは別)。
+   * もう一方は H.265 が `hevc_path`、H.264 が `alt_path` (主でないときだけ)
+   */
+  const ordered = HW_CODECS.flatMap((codec) =>
+    placed.filter((p) => p.codec === codec),
+  );
+  const primary = ordered[0];
   // 上のループはエンコードできなければ return しているので、ここに来れば1本はある
   if (primary === undefined)
     throw new Error("エンコード済みのファイルがありません");
-  const alt = placed.find((p) => p.path !== primary.path)?.path ?? null;
+  const secondary = (codec: HwCodec) =>
+    ordered.find((p) => p !== primary && p.codec === codec)?.path ?? null;
+  const hevc = secondary("hevc");
+  const alt = secondary("h264");
   const output = primary.path;
 
   /*
@@ -1779,14 +1853,14 @@ async function runJob(jobId: number): Promise<void> {
     }),
   });
   /*
-   * **もう一方 (H.264) の隣にもポスターを複製しておく** (同じ画像。ffmpeg を
-   * もう一度は回さない)。主 (AV1) を消すと残ったほうが主に繰り上がるので、
+   * **もう一方 (H.265・H.264) の隣にもポスターを複製しておく** (同じ画像。ffmpeg を
+   * もう一度は回さない)。主を消すと残ったほうが主に繰り上がるので、
    * そのときも画面のサムネが途切れない
    */
-  if (alt !== null) {
-    const primaryPoster = sidecarPaths(output).thumbnail;
-    if (existsSync(primaryPoster))
-      copyFileSync(primaryPoster, sidecarPaths(alt).thumbnail);
+  const primaryPoster = sidecarPaths(output).thumbnail;
+  for (const other of [hevc, alt]) {
+    if (other !== null && existsSync(primaryPoster))
+      copyFileSync(primaryPoster, sidecarPaths(other).thumbnail);
   }
 
   removeIfExists(encodeOptions.chaptersFile);
@@ -1819,7 +1893,7 @@ async function runJob(jobId: number): Promise<void> {
   });
 
   // 保存先が入った時点で「視聴可能」になる (recordings.state は生成列)。
-  // 主は AV1 (`output`)、もう一方は `alt` (両方エンコードしたときだけ)。
+  // 主は `output` (AV1 → H.265 → H.264 の先頭)、もう一方は `hevc`・`alt` (主でないときだけ)。
   // コマ数 (実測か既定の60) も一緒に書く — 番組詳細のラベルはここからしか出せない
   const fps = encodeOptions.smoothMotion === true ? 60 : 30;
   /*
@@ -1828,6 +1902,7 @@ async function runJob(jobId: number): Promise<void> {
    */
   const finished = {
     library_path: output,
+    hevc_path: hevc,
     alt_path: alt,
     ts_size: size,
     fps,
@@ -1876,9 +1951,8 @@ async function runCmJob(jobId: number): Promise<void> {
       : null;
   const raw = encodeSource(recording) ?? placedTs;
   const ts = raw !== null && !isScrambled(raw) ? raw : null;
-  const files = [recording.library_path, recording.alt_path].filter(
-    (path): path is string =>
-      path?.endsWith(".mkv") === true && existsSync(path),
+  const files = encodedPaths(recording).filter(
+    (path) => path.endsWith(".mkv") && existsSync(path),
   );
   const input = ts ?? files[0];
   if (input === undefined) {

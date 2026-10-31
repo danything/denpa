@@ -17,14 +17,17 @@ export function encodeSource(recording: {
 
 /**
  * 配るファイルの名指し (`?source=`)。`ts` = 元のTS、`encoded` = 主のエンコード済み
- * (両方エンコードしたときは AV1)、`alt` = もう一方 (H.264)。名指しが無ければ「今いいほう」。
+ * (AV1 → H.265 → H.264 の先頭)、`hevc` = H.265 (主でないとき)、`alt` = H.264 (主でないとき)。
+ * 名指しが無ければ「今いいほう」。
  * 配るエンドポイント・アプリ向けの録画一覧・端末に保存で同じ語彙を使う
  */
-export type FileSource = "ts" | "encoded" | "alt";
+export type FileSource = "ts" | "encoded" | "hevc" | "alt";
 
 /** クエリの文字を語彙に直す。知らない値は null (= 名指しなし) */
 export function parseFileSource(raw: string | null): FileSource | null {
-  return raw === "ts" || raw === "encoded" || raw === "alt" ? raw : null;
+  return raw === "ts" || raw === "encoded" || raw === "hevc" || raw === "alt"
+    ? raw
+    : null;
 }
 
 /**
