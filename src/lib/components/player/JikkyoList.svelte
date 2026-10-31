@@ -194,7 +194,7 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    margin-bottom: 1.75rem;
+    margin-bottom: var(--dp-space-5);
   }
   .head {
     display: flex;
