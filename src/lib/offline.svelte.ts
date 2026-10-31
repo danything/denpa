@@ -14,6 +14,7 @@ import { browser } from "$app/env";
 import { resolve } from "$app/paths";
 
 import {
+  clearParts,
   downloadRequests,
   fetchId,
   fetchIdPrefix,
@@ -21,10 +22,12 @@ import {
   type OfflineVideo,
   outbox,
   parseFetchId,
+  putPart,
   resumeQueue,
   storeResponse,
   videos,
 } from "./offline-db";
+import { streamParts } from "./stream-parts";
 import type { PlayAxis } from "./ts/playback";
 
 /** 画面に映すぶんだけ。blob はここに持たない (要るときに IndexedDB から) */
@@ -292,9 +295,10 @@ interface SaveTarget {
  */
 async function probeDownloads(
   requests: string[],
-): Promise<{ urls: string[]; total: number | null }> {
+): Promise<{ urls: string[]; total: number | null; videoSize: number | null }> {
   const urls: string[] = [];
   let total = 0;
+  let videoSize: number | null = null;
   for (const url of requests) {
     const video = url.includes("/file?");
     try {
@@ -305,7 +309,10 @@ async function probeDownloads(
       }
       urls.push(url);
       const length = Number(res.headers.get("content-length"));
-      if (Number.isFinite(length) && length > 0) total += length;
+      if (Number.isFinite(length) && length > 0) {
+        total += length;
+        if (video) videoSize = length;
+      }
     } catch (error) {
       if (video)
         throw error instanceof Error
@@ -314,7 +321,7 @@ async function probeDownloads(
       // 付き添いの下見に失敗しただけなら、そのぶんを諦めて先へ
     }
   }
-  return { urls, total: total > 0 ? total : null };
+  return { urls, total: total > 0 ? total : null, videoSize };
 }
 
 /** 端末に保存する。どれを落とすかは `offlineSource` (この端末で観られる最初のエンコード済みファイル。#1806) */
@@ -322,7 +329,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
   const source = await offlineSource(rec, playable);
 
   // 下見して、在るものだけに絞る (404 が混ざると全体が失敗になる)
-  const { urls, total } = await probeDownloads(
+  const { urls, total, videoSize } = await probeDownloads(
     downloadRequests(rec.id, source).map(
       (url) => `${resolve("")}${url.slice(1)}`,
     ),
@@ -370,7 +377,7 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
       return;
     }
     // 対応していないブラウザ。タブを開いたまま、ページで落とす
-    await downloadInPage(held, urls);
+    await downloadInPage(held, urls, videoSize);
   } catch (error) {
     await videos.remove(rec.id);
     await refresh();
@@ -378,40 +385,51 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
   }
 }
 
-/** 進み具合を数えながら本体を受け取る。Content-Length が無ければ数えない */
-async function blobWithProgress(id: number, response: Response): Promise<Blob> {
-  const total = Number(response.headers.get("content-length"));
-  if (!Number.isFinite(total) || total <= 0 || response.body === null)
-    return await response.blob();
+/**
+ * 動画を塊ごとに置き場へ書きながら受け取る ([stream-parts.ts](./stream-parts.ts))。
+ * **全部をメモリに抱えない** — 900MB を抱えていた頃は、iPhone の Safari のタブが重くなって
+ * 落とされていた。1塊は 16MiB (書き込み待ちで抱えるのはこれだけ)
+ */
+const PART_BYTES = 16 * 1024 * 1024;
 
-  const parts: BlobPart[] = [];
-  let got = 0;
-  const reader = response.body.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    parts.push(value);
-    got += value.length;
-    setProgress(id, Math.min(1, got / total));
-  }
-  return new Blob(parts);
+/**
+ * 全体の大きさ。**届いた返事に無ければ、下見 (HEAD) で測った大きさ** — Cloudflare など
+ * 間に入るものが Content-Length を外して送ることがあり、そのときは割合が出ず
+ * 流れるだけの表示になっていた
+ */
+function sizeOf(response: Response, probed: number | null): number | null {
+  const length = Number(response.headers.get("content-length"));
+  return Number.isFinite(length) && length > 0 ? length : probed;
 }
 
-/** ページ主導のフォールバック。仕分けは SW の受け取りと同じ (`storeResponse`) */
+/** ページ主導のフォールバック。付き添いの仕分けは SW の受け取りと同じ (`storeResponse`) */
 async function downloadInPage(
   held: OfflineVideo,
   requests: string[],
+  videoSize: number | null,
 ): Promise<void> {
+  // 前の試みの塊が残っていたら捨てる (同じ番号に上書きすると、短くなったとき後ろが残る)
+  await clearParts(held.id);
   for (const url of requests) {
     const response = await fetch(url).catch(() => null);
     if (response === null || !response.ok) {
       if (url.includes("/file?")) throw new Error("動画を取得できませんでした");
       continue; // 付き添いは無い録画もある
     }
-    // 動画だけは進み具合を数えながら読む
-    await storeResponse(held, url, response, (r) =>
-      blobWithProgress(held.id, r),
+    if (!url.includes("/file?") || response.body === null) {
+      await storeResponse(held, url, response);
+      continue;
+    }
+    const { parts } = await streamParts(
+      response.body,
+      PART_BYTES,
+      (part, index) => putPart(held.id, index, part),
+      sizeOf(response, videoSize),
+      (progress) => setProgress(held.id, progress),
     );
+    held.parts = parts;
+    const type = response.headers.get("content-type");
+    if (type !== null) held.videoType = type;
   }
   held.state = "ready";
   held.downloadedAt = Date.now();

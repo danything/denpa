@@ -4,6 +4,8 @@
  *
  * - `videos` … 落とした録画。動画の blob と、観るのに要る付き添い
  *   (字幕・チャプター・データ放送・ポスター) を1行にまとめて持つ
+ * - `parts` … ページで受け取った動画の塊 (`OfflineVideo.parts`)。読むときに `videos` が
+ *   1本の `video` につないで出すので、観る側は塊を知らなくてよい
  * - `outbox` … オンラインに戻ったときにサーバへ伝えること (いまは削除だけ)
  * - `resume` … オフライン中に進んだ視聴位置。復帰時にまとめて送る
  */
@@ -54,7 +56,8 @@ export async function offlineSource(
 }
 
 const DB = "denpa-offline";
-const VERSION = 1;
+/** 2 で `parts` を足した (前に保存したものは `video` のまま読める) */
+const VERSION = 2;
 
 /** 落とした録画1本。付き添いは取れなかったら無いまま (観るときに諦める) */
 export interface OfflineVideo {
@@ -83,6 +86,14 @@ export interface OfflineVideo {
   downloadedAt: number;
   /** 動画の実体。downloading の間は無い */
   video?: Blob;
+  /**
+   * 動画を塊で持っているときの塊の数 (`parts` の置き場)。**ページで受け取ったもの**
+   * (Background Fetch の無い iPhone の Safari) はこちら — 全部をメモリに抱えると落とされる
+   * (`stream-parts.ts`)。読むときは `videos.get` / `all` が `video` につないで出す
+   */
+  parts?: number;
+  /** 塊で持っているときの動画の形式 (`Content-Type`)。つないだ `video` に付ける */
+  videoType?: string;
   /**
    * 字幕 (`captions.json`)。以前は画像字幕 (PGS) を `captions` に持っていたが、もう読まない
    * (前に保存した控えに残っていても、使わないだけで害は無い)
@@ -193,8 +204,15 @@ export async function storeResponse(
   else held[kind] = await response.json().catch(() => undefined);
 }
 
-type Store = "videos" | "outbox" | "resume";
-const STORES: Store[] = ["videos", "outbox", "resume"];
+type Store = "videos" | "outbox" | "resume" | "parts";
+const STORES: Exclude<Store, "parts">[] = ["videos", "outbox", "resume"];
+
+/** 動画の塊1つ。`[id, index]` で引く (同じ録画の塊は index の順に並ぶ) */
+interface VideoPart {
+  id: number;
+  index: number;
+  blob: Blob;
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -203,6 +221,8 @@ function openDb(): Promise<IDBDatabase> {
       for (const name of STORES)
         if (!req.result.objectStoreNames.contains(name))
           req.result.createObjectStore(name, { keyPath: "id" });
+      if (!req.result.objectStoreNames.contains("parts"))
+        req.result.createObjectStore("parts", { keyPath: ["id", "index"] });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -236,6 +256,70 @@ function table<T>(store: Store) {
   };
 }
 
-export const videos = table<OfflineVideo>("videos");
+/** その録画の塊ぜんぶ (`[id, 0]` から `[id, 最大]` まで) */
+function partRange(id: number): IDBKeyRange {
+  return IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]);
+}
+
+/** 動画の塊を1つ書く。ページで受け取るとき、溜まった順に呼ぶ */
+export async function putPart(
+  id: number,
+  index: number,
+  blob: Blob,
+): Promise<void> {
+  await tx("parts", "readwrite", (s) => s.put({ id, index, blob }));
+}
+
+/** その録画の塊を全部消す。やり直す前と、控えを消すとき */
+export async function clearParts(id: number): Promise<void> {
+  await tx("parts", "readwrite", (s) => s.delete(partRange(id)));
+}
+
+/**
+ * 塊で持っている動画を1本の `video` につなぐ。**中身は写さない** — 置き場から出した
+ * Blob はファイルを指しているだけなので、つないでもメモリには載らない。
+ * 塊が欠けていたら (書いている途中で落とされた) `video` 無しで返す
+ */
+async function joinParts(held: OfflineVideo): Promise<OfflineVideo> {
+  if (held.parts === undefined) return held;
+  const parts = await tx<VideoPart[]>("parts", "readonly", (s) =>
+    s.getAll(partRange(held.id)),
+  );
+  if (parts.length !== held.parts) {
+    const { video: _, ...rest } = held;
+    return rest;
+  }
+  return {
+    ...held,
+    video: new Blob(
+      parts.map((p) => p.blob),
+      { type: held.videoType ?? "" },
+    ),
+  };
+}
+
+const videoRows = table<OfflineVideo>("videos");
+
+/**
+ * 落とした録画。**塊で持っているものも、読むときは `video` がつながった形で出す**
+ * (観る画面・/offline・SW は塊を知らない)。書くときはつないだ `video` を行に戻さない
+ * (塊と二重に持つことになる)。消すときは塊も消す
+ */
+export const videos = {
+  get: async (id: number) => {
+    const held = await videoRows.get(id);
+    return held === undefined ? undefined : await joinParts(held);
+  },
+  all: async () => Promise.all((await videoRows.all()).map(joinParts)),
+  put: (value: OfflineVideo) => {
+    if (value.parts === undefined) return videoRows.put(value);
+    const { video: _, ...rest } = value;
+    return videoRows.put(rest);
+  },
+  remove: async (id: number) => {
+    await videoRows.remove(id);
+    await clearParts(id);
+  },
+};
 export const outbox = table<OutboxItem>("outbox");
 export const resumeQueue = table<ResumeItem>("resume");
