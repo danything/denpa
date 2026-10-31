@@ -166,12 +166,51 @@ const front = (handler) => (request, server) => {
     : response && compress(request, response);
 };
 
+/**
+ * **サービスワーカーは毎回聞き直させる** (`Cache-Control: no-cache`)。adapter は名前に指紋の無い静的ファイルに
+ * 何も付けないので、前段 (Cloudflare など) が `.js` として勝手に持ち、組み直しても古いサービスワーカーを
+ * 配り続けていた — 端末は「新しいものは無い」と判断し、直したオフラインの入口がいつまでも届かなかった。
+ *
+ * 静的ファイルは adapter が `routes` で渡す (`fetch` を通らない) ので、その `/service-worker.js` の口を包む
+ */
+function freshWorker(routes) {
+  if (routes === undefined || routes === null) return routes;
+  const noCache = (response) => {
+    if (response instanceof Promise) return response.then(noCache);
+    response?.headers.set("cache-control", "no-cache");
+    return response;
+  };
+  return Object.fromEntries(
+    Object.entries(routes).map(([path, route]) => {
+      if (
+        !path.endsWith("/service-worker.js") ||
+        typeof route !== "object" ||
+        route === null ||
+        route instanceof Response
+      )
+        return [path, route];
+      const wrapped = Object.entries(route).map(([method, handler]) => [
+        method,
+        typeof handler === "function"
+          ? (...args) => noCache(handler(...args))
+          : handler,
+      ]);
+      return [path, Object.fromEntries(wrapped)];
+    }),
+  );
+}
+
 const serve = Bun.serve;
 let served = false;
 Bun.serve = (options) => {
   Bun.serve = serve;
   served = true;
-  return serve({ ...options, fetch: front(options.fetch), websocket });
+  return serve({
+    ...options,
+    routes: freshWorker(options.routes),
+    fetch: front(options.fetch),
+    websocket,
+  });
 };
 try {
   await import("./build/index.js");
