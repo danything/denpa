@@ -172,6 +172,46 @@ describe("B24CaptionDecoder", () => {
     expect(page?.runs.map((r) => r.text)).toEqual(["〓〓字"]);
   });
 
+  test("JIS X 0213 の1面・2面を読む", () => {
+    const page = decoder().decode(
+      text([
+        ...HEAD,
+        ...aps(0, 0),
+        // 漢字集合の 3区1点 (JIS X 0213 にだけある字) と 85区1点 (追加漢字)
+        ...[0x23, 0x21, 0x75, 0x21],
+        // JIS互換漢字1面の 85区1点 (第3水準の漢字)
+        ...[0x1b, 0x24, 0x39, 0x75, 0x21],
+        // JIS互換漢字2面の 1区1点と 94区94点 (空き)
+        ...[0x1b, 0x24, 0x3a, 0x21, 0x21, 0x7e, 0x7e],
+      ]),
+    );
+    expect(page?.runs.map((r) => r.text)).toEqual(["▷㐂擄𠂉〓"]);
+  });
+
+  test("2つのコードポイントの字は1区画の run にする (joined)", () => {
+    const page = decoder().decode(
+      text([
+        ...HEAD,
+        ...aps(0, 0),
+        ...encodeAribText("字"),
+        // 4区87点 (か + 半濁点)・11区70点 (声調の組)
+        ...[0x24, 0x77, 0x2b, 0x66],
+        ...encodeAribText("字"),
+      ]),
+    );
+    const runs = page?.runs ?? [];
+    expect(runs.map((r) => [r.text, r.joined])).toEqual([
+      ["字", undefined],
+      ["か゚", true],
+      ["˥˩", true],
+      ["字", undefined],
+    ]);
+    // 区画は1つずつ右へ
+    expect(runs.map((r) => r.x - runs[0]!.x)).toEqual(
+      [0, 1, 2, 3].map((i) => i * runs[0]!.w),
+    );
+  });
+
   test("置き換えられない外字は画像で送る (なめらかにした濃淡。drcs-smooth.ts)", () => {
     const rows = [
       "#.......",

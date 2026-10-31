@@ -14,6 +14,8 @@
  *   取っていて常に 0 になり、最初の1回しか読まない。ここは群を正しく見る
  *   (番組が変わって群が替わったときに書式を読み直す)
  * - **点滅 (FLC) を読み取る。** あちらは読み捨てている
+ * - **JIS X 0213 を最後まで読む。** JIS互換漢字2面 (0x3A) を2面の表で、1面 (0x39) の 85〜94区を
+ *   第3水準の漢字で引く。か゚ のような2つのコードポイントの字も出す (あちらは空き)
  * - **表で空いている点 (U+FFFD) はゲタ (〓) にする。** 「�」は Denpa Font に無く、端末の字の
  *   「?」の印で出る。定義されていない外字と同じ扱い
  *
@@ -34,8 +36,11 @@ import {
   JISX0201_HALF,
   KANA_SYMBOLS_HALF,
   KANJI_DIFF,
+  KANJI_SEQUENCES,
   KANJI_SYMBOLS_HALF,
   KATAKANA,
+  PLANE1_HIGH,
+  PLANE2,
 } from "./b24-tables.js";
 import { ascii, u16, u24 } from "./bytes.js";
 import {
@@ -51,6 +56,8 @@ import { smoothDrcs } from "./drcs-smooth.js";
 /** 符号の集合。DRCS は 0〜15 の面 */
 type GraphicSet =
   | "kanji"
+  | "plane1"
+  | "plane2"
   | "alnum"
   | "hiragana"
   | "katakana"
@@ -72,7 +79,13 @@ const KATA: Entry = { set: "katakana", bytes: 1 };
 const MACRO: Entry = { set: "macro", bytes: 1 };
 const MOSAIC: Entry = { set: "mosaic", bytes: 1 };
 
-/** 終端バイト → 集合 (G の指示)。プロポーショナルも JIS X 0213 も同じ表で引く (libaribcaption と同じ) */
+/**
+ * 終端バイト → 集合 (G の指示)。プロポーショナルは同じ表で引く (libaribcaption と同じ)。
+ *
+ * JIS X 0213 の1面 (0x39) は 1〜84区を漢字集合 (0x42) と同じ表で引き (漢字集合でも JIS X 0213 にだけある字を出す)、
+ * 85〜94区は JIS X 0213 の漢字 (`PLANE1_HIGH`)。漢字集合と追加記号 (0x3B) の 85区から先は追加記号。
+ * 2面 (0x3A) は別の表 (`PLANE2`)。libaribcaption は 1面・2面とも漢字集合の表で引いていた
+ */
 const G_SETS = new Map<number, Entry>([
   [0x42, KANJI],
   [0x4a, ALNUM],
@@ -86,8 +99,8 @@ const G_SETS = new Map<number, Entry>([
   [0x37, HIRA],
   [0x38, KATA],
   [0x49, { set: "jisx0201", bytes: 1 }],
-  [0x39, KANJI],
-  [0x3a, KANJI],
+  [0x39, { set: "plane1", bytes: 2 }],
+  [0x3a, { set: "plane2", bytes: 2 }],
   [0x3b, { set: "additional", bytes: 2 }],
 ]);
 
@@ -158,7 +171,12 @@ const T = {
   alnumHalf: points(ALNUM_HALF),
   kanjiHalf: points(KANJI_SYMBOLS_HALF),
   additional: points(ADDITIONAL),
+  plane1High: points(PLANE1_HIGH),
+  /** 2面の区 (0 から) → 94 字 */
+  plane2: new Map(PLANE2.map(([ku, row]) => [ku - 1, points(row)])),
 };
+/** 1区画に2つのコードポイントを描く字 (区×94+点 → 字)。JIS X 0213 の か゚ など */
+const sequences = new Map(KANJI_SEQUENCES);
 
 /** 色。CLUT の組 (0〜7) と番号 (0〜15) */
 function clut(palette: number, index: number): string {
@@ -222,6 +240,8 @@ function sendable(drcs: Drcs): CaptionDrcs {
 /** デコードした1字。libaribcaption の CaptionChar と同じもの */
 interface Char {
   code: number;
+  /** 1区画に2つのコードポイントを描く字 (JIS X 0213 の か゚ など)。`code` はその1つめ */
+  joined: string | null;
   /** 置き換えられなかった外字 */
   drcs: number | null;
   x: number;
@@ -823,22 +843,29 @@ export class B24CaptionDecoder {
     } else if (set === "jisx0201") {
       this.push((this.msz() ? T.jisx0201Half : T.jisx0201)[index]!);
       this.moveRelative(1, 0);
-    } else if (set === "kanji" || set === "additional") {
+    } else if (set === "kanji" || set === "plane1" || set === "additional") {
       const ku = ch - 0x21;
       const ten = ch2 - 0x21;
       let code: number;
+      let joined: string | null = null;
       if (ku < 84) {
         const i = ku * 94 + ten;
-        code = kanji(i);
+        joined = sequences.get(i) ?? null;
+        code = joined?.codePointAt(0) ?? kanji(i);
         if (this.msz()) {
           if (ku < 2) code = T.kanjiHalf[i]!;
           if (code === 0x3000 || (code >= 0xff01 && code <= 0xff5e))
             code = (code & 0xff) + 0x20;
         }
+      } else if (set === "plane1") {
+        code = T.plane1High[(ku - 84) * 94 + ten] ?? 0xfffd;
       } else {
         code = T.additional[(ku - 84) * 94 + ten] ?? 0xfffd;
       }
-      this.push(code);
+      this.push(code, null, joined);
+      this.moveRelative(1, 0);
+    } else if (set === "plane2") {
+      this.push(T.plane2.get(ch - 0x21)?.[ch2 - 0x21] ?? 0xfffd);
       this.moveRelative(1, 0);
     } else if (set === "alnum") {
       this.push((this.msz() ? T.alnumHalf : T.alnumFull)[index]!);
@@ -863,10 +890,15 @@ export class B24CaptionDecoder {
     return entry.bytes;
   }
 
-  private push(code: number, drcs: number | null = null): void {
+  private push(
+    code: number,
+    drcs: number | null = null,
+    joined: string | null = null,
+  ): void {
     this.caption.chars.push({
       // 表で空いている点 (規格の空き・JIS X 0213 にも無い区点) もゲタで埋める
       code: code === 0xfffd ? 0x3013 : code,
+      joined,
       drcs,
       x: this.posX,
       y: this.posY - this.sectionHeight(),
@@ -975,10 +1007,11 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
       fy: (char.vSpacing * char.vScale) / 2,
       size,
       scaleX,
-      text: String.fromCodePoint(char.code),
+      text: char.joined ?? String.fromCodePoint(char.code),
       fg: char.fg,
       bg: char.bg,
     };
+    if (char.joined !== null) run.joined = true;
     if (char.drcs !== null) {
       const key = String(char.drcs);
       run.drcs = key;
@@ -995,12 +1028,13 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
     if (char.flash) run.flash = true;
     if (char.ruby) run.ruby = true;
 
-    // 見た目が同じで、すぐ右に続いていれば束ねる。外字の画像は1字ずつ
+    // 見た目が同じで、すぐ右に続いていれば束ねる。外字の画像と、2つのコードポイントの字は1字ずつ
     const { x: _x, y: _y, text: _t, ...looks } = run;
     const key = JSON.stringify(looks);
     if (
       last !== null &&
       run.drcs === undefined &&
+      run.joined === undefined &&
       last.key === key &&
       last.run.y === run.y &&
       last.run.x + last.count * last.run.w === run.x

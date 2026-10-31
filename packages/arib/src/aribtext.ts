@@ -17,17 +17,24 @@
  *
  * ## 漢字は EUC-JP に押し付ける
  *
- * 2バイトの漢字集合は JIS X 0208 そのもので、区点は (第1-0x20, 第2-0x20)。
- * **各バイトの最上位を立てれば EUC-JP になる**ので、変換表を抱え込まずに
- * `TextDecoder('euc-jp')` に渡せる。自前で持つのは規格の外にある外字だけ
- * ([aribtext-gaiji.ts](aribtext-gaiji.ts))。
+ * 2バイトの漢字集合は JIS X 0208 の並びで、区点は (第1-0x20, 第2-0x20)。
+ * **各バイトの最上位を立てれば EUC-JP になる**ので、ほとんどの字は
+ * `TextDecoder('euc-jp')` に渡せる。自前の表を引くのは:
+ *
+ * - 85区から先の外字 ([aribtext-gaiji.ts](aribtext-gaiji.ts))
+ * - EUC-JP に無い JIS X 0213 の1面の字 (字幕と同じ表。▷ や ⓐ、か゚ のような2つのコードポイントの字も)
+ * - JIS互換漢字1面 (終端 0x39) の 85〜94区と、2面 (0x3A) 全部 (`PLANE1_HIGH`・`PLANE2`)
  */
 
 import { GAIJI } from "./aribtext-gaiji.js";
 import {
   HIRAGANA as HIRAGANA_TABLE,
   JISX0201_HALF,
+  KANJI_DIFF,
+  KANJI_SEQUENCES,
   KATAKANA as KATAKANA_TABLE,
+  PLANE1_HIGH,
+  PLANE2,
 } from "./b24-tables.js";
 
 /** 符号表の種類。バイト数と読み方だけ分かればいい */
@@ -35,6 +42,7 @@ interface Charset {
   bytes: 1 | 2;
   kind:
     | "kanji"
+    | "plane1"
     | "plane2"
     | "symbol"
     | "alnum"
@@ -63,7 +71,7 @@ const MOSAIC: Charset = { bytes: 1, kind: "blank" };
  */
 const CHARSETS = new Map<number, Charset>([
   [0x42, KANJI],
-  [0x39, KANJI], // JIS互換漢字1面
+  [0x39, { bytes: 2, kind: "plane1" }], // JIS互換漢字1面
   [0x3a, { bytes: 2, kind: "plane2" }], // JIS互換漢字2面
   [0x3b, { bytes: 2, kind: "symbol" }], // 追加記号
   [0x4a, ALNUM],
@@ -88,13 +96,28 @@ const UNKNOWN = "□";
  * - ひらがなの 0x74〜0x76 は規格で空き。字幕は全角の空白で埋めるが、番組表では何も出さない
  * - JIS X 0201 カタカナはいつも半角 (字幕は大きさで全角と半角を描き分ける)
  * - 英数は大きさに従って全角か ASCII (字幕の半角の表は 0x5C が ¥、0x7E が ‾。番組表は検索で打つ字に合わせる)
- * - 漢字は EUC-JP のまま読む (字幕は 1区33点の 〜・34点の ‖・61点の − などを差し替える。`KANJI_DIFF`)
+ * - 漢字は EUC-JP のまま読む (字幕は 1区33点の 〜・34点の ‖・61点の − などを差し替える。`KANJI_DIFF`)。
+ *   EUC-JP に無い点だけ字幕と同じ JIS X 0213 の字を引く
  */
 const HIRA = [...HIRAGANA_TABLE];
 const KATA = [...KATAKANA_TABLE];
 const ANK = [...JISX0201_HALF];
 
 const eucjp = new TextDecoder("euc-jp");
+
+/** EUC-JP に無い JIS X 0213 の1面の字 (区×94+点 → 字)。字幕と同じ表 */
+const x0213 = new Map<number, string>(KANJI_SEQUENCES);
+for (const [start, chars] of KANJI_DIFF) {
+  let i = start;
+  for (const char of chars) {
+    if (!x0213.has(i)) x0213.set(i, char);
+    i++;
+  }
+}
+const PLANE1_HIGH_CHARS = [...PLANE1_HIGH];
+/** 2面の区 (1〜94) → 94 字 */
+const PLANE2_ROWS = new Map(PLANE2.map(([ku, row]) => [ku, [...row]]));
+
 /**
  * 2バイト文字の変換結果を覚えておく。
  *
@@ -103,21 +126,37 @@ const eucjp = new TextDecoder("euc-jp");
  */
 const cache = new Map<number, string>();
 
-function twoByte(code: number, plane2: boolean): string {
-  // 2面は同じ区点でも別の字。覚えるときも外字を引くときも1面と混ぜない
-  const key = plane2 ? code | 0x10000 : code;
+function twoByte(code: number, kind: Charset["kind"]): string {
+  // 2面と、1面の 85区から先は同じ区点でも別の字。覚えるときも漢字集合と混ぜない
+  const high = code >> 8;
+  const low = code & 0xff;
+  const key =
+    kind === "plane2"
+      ? code | 0x10000
+      : kind === "plane1" && high >= 0x75
+        ? code | 0x20000
+        : code;
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
 
-  const gaiji = plane2 ? undefined : GAIJI.get(code);
-  const high = code >> 8;
-  const low = code & 0xff;
-  // EUC-JP は最上位を立てたもの。2面は 0x8F を頭に付ける
-  const bytes = plane2
-    ? Uint8Array.of(0x8f, high | 0x80, low | 0x80)
-    : Uint8Array.of(high | 0x80, low | 0x80);
-  // 85区から先は外字の表だけで引く。EUC-JP に渡すと 89〜92区が IBM 拡張の漢字になる
-  const decoded = gaiji ?? (!plane2 && high >= 0x75 ? "" : eucjp.decode(bytes));
+  const ku = high - 0x20;
+  const cell = (ku - 1) * 94 + low - 0x21;
+  let decoded: string;
+  if (low > 0x7e) {
+    decoded = ""; // 0x7F は字ではない (次の区の頭を引かないように)
+  } else if (kind === "plane2") {
+    decoded = PLANE2_ROWS.get(ku)?.[low - 0x21] ?? "";
+  } else if (ku >= 85) {
+    // 85区から先は自前の表だけで引く。EUC-JP に渡すと 89〜92区が IBM 拡張の漢字になる
+    decoded =
+      kind === "plane1"
+        ? (PLANE1_HIGH_CHARS[cell - 84 * 94] ?? "")
+        : (GAIJI.get(code) ?? "");
+  } else {
+    // EUC-JP は最上位を立てたもの。EUC-JP に無い点は JIS X 0213 の字
+    decoded = eucjp.decode(Uint8Array.of(high | 0x80, low | 0x80));
+    if (decoded.includes("�")) decoded = x0213.get(cell) ?? "";
+  }
   // 変換できないと置換文字が返る。そのまま出すとタイトルに「�」が並ぶ
   const text = decoded === "" || decoded.includes("�") ? UNKNOWN : decoded;
   cache.set(key, text);
@@ -254,9 +293,7 @@ export function decodeAribText(data: Uint8Array): string {
       at += 2;
       if (second < 0x21) continue;
       out +=
-        set.kind === "blank"
-          ? ""
-          : twoByte((first << 8) | second, set.kind === "plane2");
+        set.kind === "blank" ? "" : twoByte((first << 8) | second, set.kind);
       continue;
     }
 

@@ -1,7 +1,7 @@
 /**
  * **字の表の字が、取ってくるフォント (Denpa Font) に全部入っているか。**
  *
- * 字幕 (`b24-tables.ts`)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
+ * 字幕と番組表 (`b24-tables.ts`。JIS X 0213 の1面・2面も)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
  * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めているバージョンのリリースの ttf の cmap と突き合わせる。
  * 表に字を足したのにフォントに無いと、その字だけ端末の字で出て見た目が揃わない。
  *
@@ -28,8 +28,11 @@ import {
   JISX0201_HALF,
   KANA_SYMBOLS_HALF,
   KANJI_DIFF,
+  KANJI_SEQUENCES,
   KANJI_SYMBOLS_HALF,
   KATAKANA,
+  PLANE1_HIGH,
+  PLANE2,
 } from "@danything/arib/b24-tables";
 
 /** フォントに入れないと決めた字 (denpa-font の missing.txt と同じ)。いまは無い */
@@ -94,41 +97,28 @@ function tableCodepoints(): Map<number, string> {
     ALNUM_HALF,
     KANJI_SYMBOLS_HALF,
     ADDITIONAL,
+    PLANE1_HIGH,
   };
   for (const [name, value] of Object.entries(strings))
     add(value, `b24-tables ${name}`);
   /*
-   * データ放送の 1〜84 区は `TextDecoder('euc-jp')` が返す字 (`src/lib/bml/euc.ts` と同じ読み方)。
-   * 見るのは JIS X 0208 に字のある区点だけ — WHATWG の EUC-JP は 13 区を NEC 特殊文字
-   * (㍉・㊤ など) として読むが、ARIB の放送はこの区を使わない (同じ字は 90〜94 区の追加記号にあり、
-   * `ADDITIONAL` で見ている)
+   * 1〜84 区は `TextDecoder('euc-jp')` が返す字 (データ放送の `src/lib/bml/euc.ts` と同じ読み方。
+   * 字幕と番組表も EUC-JP で読み、差分 `KANJI_DIFF` と2つのコードポイントの字を足す)。
+   * 13 区 (WHATWG の EUC-JP では NEC 特殊文字。JIS X 0213 の1面もほぼ同じ字) も入れる
    */
   const decoder = new TextDecoder("euc-jp");
-  const jis0208 = (cell: number): string | null => {
-    if (Math.floor(cell / 94) + 1 === 13) return null;
+  for (let cell = 0; cell < 84 * 94; cell++) {
     const ch = decoder.decode(
       Uint8Array.of(0xa1 + Math.floor(cell / 94), 0xa1 + (cell % 94)),
     );
-    return ch === "�" ? null : ch;
-  };
-  // JIS の差分は、放送が使う区点 (JIS X 0208 に字のある区点と外字の 85・86・90〜94 区) の分だけ
-  // (denpa-font の一覧と同じ)
-  const used = (cell: number) => {
-    const ku = Math.floor(cell / 94) + 1;
-    return (
-      jis0208(cell) !== null || ku === 85 || ku === 86 || (ku >= 90 && ku <= 94)
-    );
-  };
-  for (const [start, s] of KANJI_DIFF) {
-    [...s].forEach((ch, k) => {
-      if (used(start + k)) add(ch, "b24-tables KANJI_DIFF");
-    });
+    add(ch, "EUC-JP の 1〜84 区 (データ放送・字幕・番組表)");
   }
+  for (const [, s] of KANJI_DIFF) add(s, "b24-tables KANJI_DIFF");
+  for (const [, s] of KANJI_SEQUENCES) add(s, "b24-tables KANJI_SEQUENCES");
+  for (const [, s] of PLANE2) add(s, "b24-tables PLANE2");
   for (const c of DRCS_REPLACE.values())
     add(String.fromCodePoint(c), "b24-tables DRCS_REPLACE");
   for (const s of GAIJI.values()) add(s, "aribtext-gaiji GAIJI");
-  for (let cell = 0; cell < 84 * 94; cell++)
-    add(jis0208(cell) ?? "", "データ放送 (EUC-JP の 1〜84 区)");
   return out;
 }
 

@@ -170,7 +170,8 @@ function drawRun(
   metrics: Ink,
   dark: boolean,
 ): void {
-  const chars = [...run.text];
+  // 区画ごとの字。`joined` なら text 全体で1区画 (か゚ などはフォントが1字に組む)
+  const chars = run.joined === true ? [run.text] : [...run.text];
   const fontPx = run.size * sy;
   const glyphW = run.size * run.scaleX * sx;
   const strokePx = STROKE_WIDTH * sx;

@@ -221,10 +221,48 @@ describe("ARIB 8単位符号", () => {
     ).toBe("鿄鿅🄪ℓ");
   });
 
-  test("JIS互換漢字2面は1面と混ぜない", () => {
-    // 85区1点は1面 (外字) なら「㐂」。2面では外字の表を引かず、2面の表も持たないので「□」
+  test("EUC-JP に無い点は JIS X 0213 の1面の字", () => {
+    // 3区1点・9区1点・13区31点 (13区のほかの点は EUC-JP の字のまま)
+    expect(decodeAribText(bytes(0x23, 0x21, 0x29, 0x21, 0x2d, 0x3f))).toBe(
+      "▷€Ⅺ",
+    );
+    expect(decodeAribText(bytes(0x2d, 0x21))).toBe("①");
+    // 漢字集合のままでも、JIS互換漢字1面を指示しても同じ
+    expect(decodeAribText(bytes(0x1b, 0x24, 0x39, 0x23, 0x21))).toBe("▷");
+    // 1区33点は EUC-JP の字のまま (字幕は 〜 に差し替える)
+    expect(decodeAribText(bytes(0x21, 0x41))).toBe(
+      new TextDecoder("euc-jp").decode(bytes(0xa1, 0xc1)),
+    );
+  });
+
+  test("2つのコードポイントで表す字は並べて出す", () => {
+    // 4区87点 (か + 半濁点)・11区69点 (声調の組)
+    expect(decodeAribText(bytes(0x24, 0x77, 0x2b, 0x65))).toBe("か゚˩˥");
+  });
+
+  test("85区から先は、JIS互換漢字1面なら JIS X 0213 の漢字、漢字集合なら外字", () => {
     expect(decodeAribText(bytes(0x75, 0x21))).toBe("㐂");
-    expect(decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x75, 0x21))).toBe("□");
+    expect(decodeAribText(bytes(0x1b, 0x24, 0x39, 0x75, 0x21))).toBe("擄");
+    expect(decodeAribText(bytes(0x1b, 0x24, 0x39, 0x7e, 0x76))).toBe("龐");
+    // 追加記号の集合は外字
+    expect(decodeAribText(bytes(0x1b, 0x24, 0x3b, 0x75, 0x21))).toBe("㐂");
+  });
+
+  test("JIS互換漢字2面は2面の表を引く。1面と混ぜない", () => {
+    // 2面の1区1点・3区1点。1面なら「　」と「▷」
+    expect(
+      decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x21, 0x21, 0x23, 0x21)),
+    ).toBe("𠂉儈");
+    // 2面の 94区94点は空き、2区は字の無い区
+    expect(
+      decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x7e, 0x7e, 0x22, 0x21)),
+    ).toBe("□□");
+    // G1 に2面を載せて、G0 の漢字集合と交互に引いても混ざらない
+    expect(
+      decodeAribText(
+        bytes(0x1b, 0x24, 0x29, 0x3a, 0x0e, 0x21, 0x21, 0x0f, 0x21, 0x21),
+      ),
+    ).toBe("𠂉　");
   });
 
   test("JIS にも外字にも無い区点は印を残す。黙って消さない", () => {

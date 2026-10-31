@@ -53,6 +53,11 @@ export interface CaptionRun {
    */
   scaleX: number;
   text: string;
+  /**
+   * `text` 全体で1つの区画 (JIS X 0213 の か゚・æ̀・˩˥ のように、2つのコードポイントで1字のもの)。
+   * この run は1字だけで、`text` をまとめて描く (フォントが1字に組む)
+   */
+  joined?: true;
   /** 置き換えられなかった外字。`text` は「〓」で、この画像を字の枠いっぱいに描く */
   drcs?: string;
   /** 字の色 */
