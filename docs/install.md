@@ -100,7 +100,7 @@ PT3 を挿した機械を Talos Linux の 1 台のクラスタにして、OS の
 (Talos の alpha で、実機では確かめていない)。手順は [install-talos.md](install-talos.md)。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.sh | sh -s -- --node <IP> --disk <ディスク>
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.sh | sh -s -- --node <IP>
 ```
 
 ### イメージのタグ

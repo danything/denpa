@@ -4,12 +4,12 @@
 # docs/install-talos.md。
 #
 #   curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.sh | sh -s -- --node 192.168.1.50
-#       ディスクの一覧を出して止まる (どれに入れるかを選ぶ)
+#       ディスクの一覧を番号で出し、選んだディスクに入れて denpa まで (yes と打つまで消さない)
 #   curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.sh | sh -s -- --node 192.168.1.50 --disk /dev/nvme0n1
-#       そのディスクに入れて、denpa まで
+#       聞かずにそのディスクに入れる (端末の無いところから流すとき)
 #
 #   --node IP        Talos の ISO で起こした機械の IP (起動画面に出る)。必須
-#   --disk PATH      入れるディスク (/dev/sda・/dev/nvme0n1 など)。**中身は消える**
+#   --disk PATH      入れるディスク (/dev/sda・/dev/nvme0n1 など)。**中身は消える**。渡さなければ番号で選ぶ
 #   --trusted CIDR   ログインなしで通すネットワーク (カンマ区切り。既定は 192.168.0.0/16,10.0.0.0/8。docs/auth.md)
 #
 # 流すのは操作する側の機械 (Linux・Mac)。Talos の機械には何も入れない (シェルが無い)。
@@ -123,9 +123,42 @@ export TALOSCONFIG="$DIR/talosconfig"
 # --- machine config と、ディスクへのインストール ------------------------------
 # 機械がメンテナンスモード (ISO で起きて、設定を待っている) なら、--insecure で話せる
 if talosctl get disks --insecure -n "$NODE" -e "$NODE" >/dev/null 2>&1; then
-	if [ -z "$DISK" ]; then
+	# 入れられるディスク (読み取り専用と光学ドライブを除く) を「パス<TAB>大きさ<TAB>型番<TAB>繋ぎ方」で1行ずつ。
+	# talosctl の YAML (DiskSpec の dev_path・pretty_size・model・transport・readonly・cdrom) を読む。
+	# ISO を焼いた USB メモリも並ぶので、繋ぎ方 (usb・nvme・sata) を添えて見分けられるようにする
+	disks=$(talosctl get disks --insecure -n "$NODE" -e "$NODE" -o yaml | awk '
+		function flush() {
+			if (path != "" && ro != "true" && cd != "true") printf "%s\t%s\t%s\t%s\n", path, size, model, tr
+			path = ""; size = ""; model = ""; tr = ""; ro = ""; cd = ""
+		}
+		/^---/ || /^node:/ { flush() }
+		$1 == "dev_path:" { path = $2 }
+		$1 == "pretty_size:" { $1 = ""; size = substr($0, 2) }
+		$1 == "model:" { $1 = ""; model = substr($0, 2) }
+		$1 == "transport:" { tr = $2 }
+		$1 == "readonly:" { ro = $2 }
+		$1 == "cdrom:" { cd = $2 }
+		END { flush() }
+	')
+	[ -n "$disks" ] || die "$NODE に入れられるディスクが見つかりません"
+	if [ -n "$DISK" ]; then
+		printf '%s\n' "$disks" | cut -f1 | grep -qx "$DISK" ||
+			die "$NODE に $DISK はありません。あるのは: $(printf '%s\n' "$disks" | cut -f1 | tr '\n' ' ')"
+	elif (exec </dev/tty) 2>/dev/null; then
+		# curl | sh で流すと標準入力はこのスクリプトそのものなので、答えは端末 (/dev/tty) から読む
+		say "$NODE のディスクです。入れる先を番号で選んでください (中身は消えます)"
+		printf '%s\n' "$disks" | awk -F '\t' '{ printf "  %d) %s  %s  %s  %s\n", NR, $1, $2, $3, $4 }'
+		printf '番号: '
+		read -r pick </dev/tty
+		DISK=$(printf '%s\n' "$disks" | awk -F '\t' -v n="$pick" 'NR == n { print $1 }')
+		[ -n "$DISK" ] || die "番号が合いません: $pick"
+		printf '%s の中身を消して Talos を入れます。よければ yes と打ってください: ' "$DISK"
+		read -r answer </dev/tty
+		[ "$answer" = yes ] || die "やめました"
+	else
+		# 端末が無い (CI や、ほかのスクリプトから流した) ときは一覧だけ出して止まる
 		say "$NODE のディスクです。入れる先を --disk で渡して、もう一度流してください (中身は消えます)"
-		talosctl get disks --insecure -n "$NODE" -e "$NODE"
+		printf '%s\n' "$disks" | awk -F '\t' '{ printf "  %s  %s  %s  %s\n", $1, $2, $3, $4 }'
 		exit 1
 	fi
 
