@@ -848,8 +848,10 @@ export function clipFacets(): ClipFacets {
   const byService = orm()
     .select({
       id: clips.service_id,
-      // 局名は撮ったときのもの。いちばん新しい1枚の名前で出す
-      name: sql<string>`(SELECT service_name FROM clips c2 WHERE c2.service_id = ${clips.service_id} AND c2.file <> '' ORDER BY c2.id DESC LIMIT 1)`,
+      // 局名は撮ったときのもの。いちばん新しい1枚の名前で出す。
+      // 外の行の局は "clips"."service_id" と書く。`${clips.service_id}` は表の名前の付かない
+      // "service_id" になり、副問い合わせの中では c2 自身の列と読まれて、どの局も全体の最新の1枚の名前になっていた
+      name: sql<string>`(SELECT c2.service_name FROM clips c2 WHERE c2.service_id = "clips"."service_id" AND c2.file <> '' ORDER BY c2.id DESC LIMIT 1)`,
       count: sql<number>`count(*)`,
     })
     .from(clips)
