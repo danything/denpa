@@ -242,6 +242,23 @@ export const programs = sqliteTable(
     copy_never: flag("copy_never")
       .notNull()
       .default(sql`0`),
+    /*
+     * **シリーズ** (EIT のシリーズ記述子)。載せる局のぶんだけ入り、載っていない番組は全部 NULL。
+     * docs/data.md「シリーズ」
+     */
+    /** シリーズの番号。**局の中でだけ決まる** — 比べるときは局 (`service_id`) と組にする */
+    series_id: integer("series_id"),
+    /**
+     * 再放送の印 (repeat_label)。0 はオリジナル、それ以外はオリジナルと期間の重なる再放送。
+     * **0 でも初回とは言えない** (重ならない再放送は 0 で来ることがある)
+     */
+    series_repeat: integer("series_repeat"),
+    /** 何話目か。放送が言っていなければ NULL */
+    series_episode: integer("series_episode"),
+    /** 全何話か。分からなければ NULL。`series_episode` と同じなら最終回 */
+    series_last_episode: integer("series_last_episode"),
+    /** シリーズ名。空なら空文字 */
+    series_name: text("series_name"),
     updated_at: integer("updated_at").notNull(),
   },
   (t) => [
@@ -455,6 +472,13 @@ export const recordings = sqliteTable(
      * エンコードしたものの音声トラックに**番組表と同じ名前**を入れるのに使う (`arib.audioTitles`)
      */
     audios: json("audios", objects<Audio>()),
+    /**
+     * 番組表から写したシリーズの話数と再放送の印 (`programs` の同じ名前の列)。番組詳細の
+     * 「第N話 (全M話)」「最終回」「再放送」と、同じ回の見分け (`episode.episodeOf`) に使う
+     */
+    series_episode: integer("series_episode"),
+    series_last_episode: integer("series_last_episode"),
+    series_repeat: integer("series_repeat"),
     /** 実際に録れた長さ。番組表の尺 (end_at - start_at) は予定でしかない。取れていなければ NULL (古い行) */
     duration_ms: integer("duration_ms"),
     /** エンコードしたもののコマ数 (30/60)。実測 (fpsDetect) か既定の60。未エンコード・fps記録前の古い行は NULL */

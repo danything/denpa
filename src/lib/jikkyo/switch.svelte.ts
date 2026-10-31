@@ -6,17 +6,19 @@ import { read, write } from "#lib/keep.js";
  * 出すのは世帯の設定 (連携の「実況」) がオンのときだけで、そちらは画面が load で受け取る
  */
 export const JIKKYO_KEY = "player-jikkyo";
+/** 右の列に「コメントの一覧」を出すか (映像の右端の列のボタン)。これも端末ごと。既定は出さない */
+export const JIKKYO_LIST_KEY = "player-jikkyo-list";
 
 export interface JikkyoSwitch {
   readonly on: boolean;
   toggle: () => void;
 }
 
-export function jikkyoSwitch(): JikkyoSwitch {
+export function jikkyoSwitch(key = JIKKYO_KEY): JikkyoSwitch {
   /** 開いた端末で決まる。サーバで組むときは無いので、開いてから読む */
   let on = $state(false);
   $effect(() => {
-    on = read(JIKKYO_KEY) === "1";
+    on = read(key) === "1";
   });
   return {
     get on() {
@@ -24,7 +26,7 @@ export function jikkyoSwitch(): JikkyoSwitch {
     },
     toggle() {
       on = !on;
-      write(JIKKYO_KEY, on ? "1" : "0");
+      write(key, on ? "1" : "0");
     },
   };
 }

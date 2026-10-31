@@ -1,7 +1,12 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  import { audioLabel, genreLabel, videoLabel } from "#lib/arib.js";
+  import {
+    audioLabel,
+    genreLabel,
+    seriesLabels,
+    videoLabel,
+  } from "#lib/arib.js";
   import {
     COPY_NEVER_REASON,
     dateTime,
@@ -68,6 +73,8 @@
   const video = $derived(
     videoLabel(program.video_resolution, program.video_type),
   );
+  /** シリーズ記述子の話数 (「第3話 (全12話)」「最終回」「再放送」)。載せない局では何も出ない */
+  const series = $derived(seriesLabels(program));
 </script>
 
 <!--
@@ -97,10 +104,13 @@
 
 <!--
   EPG が持っている符号は、そのままでは読めないので言葉に直して出す。
-  **ジャンル・映像・音声は囲まず、控えた字を「・」でつなぐ** (一覧の行の補足と同じ)。
+  **話数・ジャンル・映像・音声は囲まず、控えた字を「・」でつなぐ** (一覧の行の補足と同じ)。
   囲むのは状態 (有料・コピー禁止) だけ (`app.css` の `.tag`)
 -->
 <div class="badges small" data-testid="detail-badges">
+  {#each series as label (label)}
+    <span class="fact" data-testid="detail-series">{label}</span>
+  {/each}
   <!-- 目印は番号で (`genres` の注) -->
   {#each genres as label, i (i)}
     <span class="fact" data-testid="detail-genre">{label}</span>

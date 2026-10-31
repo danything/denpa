@@ -73,7 +73,7 @@ export function load({ params, url }) {
       : null;
 
   // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
-  const { postalCode, prefecture, jikkyo } = settings();
+  const { postalCode, prefecture, jikkyo, jikkyoNg } = settings();
   return {
     recording,
     /** 観るものがあるか。エンコード済みか、録り終えた元の TS */
@@ -82,6 +82,8 @@ export function load({ params, url }) {
     hasData,
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
     jikkyoAllowed: jikkyo,
+    /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
+    jikkyoNg,
     /** 実況のチャンネルと頭・終わりの放送時刻。実況の無い局・世帯の設定がオフなら null */
     jikkyo: recordingJikkyo(recording),
     /** 「この場面から観る」で始める位置 (秒。観る画面の物差し)。無ければ null */

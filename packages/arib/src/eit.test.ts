@@ -8,7 +8,12 @@ import {
   PresentFollowing,
   ScheduleProgress,
 } from "./eit.js";
-import { eitSection, packetize, type SynthEvent } from "./synth.js";
+import {
+  eitSection,
+  packetize,
+  type SynthEvent,
+  type SynthSeries,
+} from "./synth.js";
 
 const NETWORK = 32736;
 const TSID = 32736;
@@ -239,6 +244,71 @@ describe("EIT の解析", () => {
     expect(
       parseEit(section([event()], { tableId: 0x4e }))?.events[0]?.copyNever,
     ).toBe(false);
+  });
+
+  /*
+   * シリーズ記述子 (ARIB STD-B10 第2部)。バイトは仕様の並びから手で組んだもの:
+   * series_id=0x1234 / repeat_label=2 program_pattern=2 (週1回) 有効期限あり /
+   * expire_date / episode_number=300 last_episode_number=1000 / 「テスト」(JIS の 2546 2539 2548)
+   */
+  test("シリーズ記述子の並びをビットどおりに読む", () => {
+    // 長さは名前の6バイトまで含めて14
+    const raw = [
+      0xd5, 0x0e, 0x12, 0x34, 0x25, 0xe8, 0xa0, 0x12, 0xc3, 0xe8, 0x25, 0x46,
+      0x25, 0x39, 0x25, 0x48,
+    ];
+    const parsed = parseEit(section([event({ rawDescriptors: raw })]));
+    expect(parsed?.events[0]?.series).toEqual({
+      seriesId: 0x1234,
+      repeatLabel: 2,
+      programPattern: 2,
+      episode: 300,
+      lastEpisode: 1000,
+      name: "テスト",
+    });
+  });
+
+  test("話数の 0 は「分からない」(null)。名前が無ければ空", () => {
+    const series = (s: SynthSeries) =>
+      parseEit(section([event({ series: s })]))?.events[0]?.series;
+    expect(series({ seriesId: 1 })).toEqual({
+      seriesId: 1,
+      repeatLabel: 0,
+      programPattern: 0,
+      episode: null,
+      lastEpisode: null,
+      name: "",
+    });
+    // 全何話かだけ分からない
+    expect(series({ seriesId: 1, episode: 5 })).toMatchObject({
+      episode: 5,
+      lastEpisode: null,
+    });
+    // 12ビットのいっぱいまで
+    expect(
+      series({ seriesId: 0xffff, episode: 4095, lastEpisode: 4095 }),
+    ).toMatchObject({ seriesId: 0xffff, episode: 4095, lastEpisode: 4095 });
+    expect(
+      series({
+        seriesId: 1,
+        repeatLabel: 15,
+        programPattern: 7,
+        name: "連続ドラマ",
+      }),
+    ).toMatchObject({ repeatLabel: 15, programPattern: 7, name: "連続ドラマ" });
+  });
+
+  test("シリーズでなければ null。詳細の表は記述子を載せないので「言っていない」(項目ごと無い)", () => {
+    expect(parseEit(section([event()]))?.events[0]?.series).toBeNull();
+    const extended = parseEit(section([event()], { tableId: 0x58 }))?.events[0];
+    expect(extended).not.toHaveProperty("series");
+  });
+
+  test("短すぎるシリーズ記述子は読まない", () => {
+    const parsed = parseEit(
+      section([event({ rawDescriptors: [0xd5, 0x03, 0x00, 0x01, 0x00] })]),
+    );
+    expect(parsed?.events[0]?.series).toBeNull();
   });
 
   test("他局の番組表 (0x4F / 0x60〜) は読まない", () => {
@@ -542,6 +612,25 @@ describe("EpgReader", () => {
     // 基本の表が「禁止ではない」と言い直せば外れる
     reader.feed(packets(section([event()])));
     expect(reader.all()[0]!.copyNever).toBe(false);
+  });
+
+  test("詳細だけの表があとから来ても、シリーズを消さない", () => {
+    const reader = new EpgReader();
+    reader.feed(
+      packets(section([event({ series: { seriesId: 9, episode: 3 } })])),
+    );
+    reader.feed(
+      packets(
+        section([event({ name: "", extended: { 番組内容: "あらすじ" } })], {
+          tableId: 0x58,
+        }),
+      ),
+    );
+    expect(reader.all()[0]!.series).toMatchObject({ seriesId: 9, episode: 3 });
+
+    // 基本の表が載せずに来れば外れる
+    reader.feed(packets(section([event()])));
+    expect(reader.all()[0]!.series).toBeNull();
   });
 
   test("開始時刻や尺が未定の番組は溜めない。録画の時刻が決まらない", () => {

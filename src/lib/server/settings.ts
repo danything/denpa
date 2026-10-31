@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 
 import { HW_CODECS, type HwAllow, type HwCodec, type HwKind } from "../hw";
+import { readNg } from "../jikkyo/ng";
 import { normalizePrefecture } from "../prefecture";
 import type { CmMode, VideoCodec } from "../types";
 import { isCmMode } from "./cm";
@@ -93,6 +94,8 @@ export interface Settings {
    * NX-Jikkyo と過去ログ API に直接繋ぐ (`#lib/jikkyo/endpoints.ts`)。相手には端末の IP と、どの局をいつ観ているかが見える
    */
   jikkyo: boolean;
+  /** **実況の NG ワード** (世帯で 1 つ)。含むコメントは流さない (`#lib/jikkyo/ng.ts`)。設定の 1 キーに JSON の配列で持つ */
+  jikkyoNg: string[];
 }
 
 /** 本数の上限に選べる幅 */
@@ -192,6 +195,7 @@ export function settings(): Settings {
     bmlNetwork: flag("bmlNetwork", true),
     transcodeLimit: parseTranscodeLimit(stored("transcodeLimit")),
     jikkyo: flag("jikkyo", false),
+    jikkyoNg: readNg(stored("jikkyoNg")),
   };
 }
 
@@ -223,11 +227,11 @@ export function saveSettings(
   orm().transaction((tx) => {
     for (const [key, value] of Object.entries(patch)) {
       if (value === undefined) continue;
-      // デバイスごとの GPU の設定だけ入れ子なので JSON。自動 (null) は空。ほかは文字列で足りる
+      // デバイスごとの GPU の設定と NG ワードの並びは JSON。自動 (null) は空。ほかは文字列で足りる
       const text =
         value === null
           ? ""
-          : typeof value === "object" && !Array.isArray(value)
+          : typeof value === "object"
             ? JSON.stringify(value)
             : String(value);
       saveRaw(tx, key, text, at);

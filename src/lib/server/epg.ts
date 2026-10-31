@@ -1,6 +1,7 @@
 import type { EitEvent } from "@danything/arib/eit";
 import {
   and,
+  type AnyColumn,
   count,
   eq,
   gt,
@@ -441,6 +442,9 @@ function serviceIdIndex(): Map<string, number> {
 /** 読み取った番組をDBへ。取り込めた件数を返す */
 export function savePrograms(events: EitEvent[]): number {
   const index = serviceIdIndex();
+  /** その表がシリーズを言っていれば (`series_said`) 新しい値、言っていなければ前のまま */
+  const kept = (column: AnyColumn) =>
+    sql`CASE WHEN ${sql.placeholder("series_said")} = 1 THEN excluded.${sql.identifier(column.name)} ELSE ${column} END`;
   /**
    * 同じ番組が来たら上書きする中身。
    *
@@ -468,6 +472,12 @@ export function savePrograms(events: EitEvent[]): number {
     video_resolution: sql`excluded.video_resolution`,
     // コピー禁止か。**表が言っていない回 (NULL) は前のまま** (`EitEvent.copyNever`)
     copy_never: sql`COALESCE(${sql.placeholder("copy_never")}, ${programs.copy_never})`,
+    // シリーズも同じ。**詳細の表 (載せない表) から来た回は前のまま** (`EitEvent.series`)
+    series_id: kept(programs.series_id),
+    series_repeat: kept(programs.series_repeat),
+    series_episode: kept(programs.series_episode),
+    series_last_episode: kept(programs.series_last_episode),
+    series_name: kept(programs.series_name),
     updated_at: sql`excluded.updated_at`,
   };
   /*
@@ -518,6 +528,11 @@ export function savePrograms(events: EitEvent[]): number {
         video_type: sql.placeholder("video_type"),
         video_resolution: sql.placeholder("video_resolution"),
         copy_never: sql`COALESCE(${sql.placeholder("copy_never")}, 0)`,
+        series_id: sql.placeholder("series_id"),
+        series_repeat: sql.placeholder("series_repeat"),
+        series_episode: sql.placeholder("series_episode"),
+        series_last_episode: sql.placeholder("series_last_episode"),
+        series_name: sql.placeholder("series_name"),
         updated_at: sql.placeholder("updated_at"),
       })
       .onConflictDoUpdate({ target: programs.id, set: refresh })
@@ -583,6 +598,12 @@ export function savePrograms(events: EitEvent[]): number {
         video_type: event.video?.type ?? null,
         video_resolution: event.video?.resolution ?? null,
         copy_never: event.copyNever,
+        series_said: event.series === undefined ? 0 : 1,
+        series_id: event.series?.seriesId ?? null,
+        series_repeat: event.series?.repeatLabel ?? null,
+        series_episode: event.series?.episode ?? null,
+        series_last_episode: event.series?.lastEpisode ?? null,
+        series_name: event.series?.name ?? null,
         updated_at: at,
       });
       count++;
