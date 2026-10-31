@@ -205,6 +205,26 @@ COPY patches/ /patches/
 # SONAME の名前 (libavcodec.so.63 など) の実体だけを置く — COPY で symlink を辿ると同じ中身が並ぶため。
 # 名前の形では見分けない (MPP は実体が `.so.0` で SONAME が `.so.1`)。MPP が一緒に入れる
 # librockchip_vpu (古い API) は ffmpeg が使わないので消す
+#
+# **組むのは denpa が使う部品だけ** (`--disable-everything` のうえで下の一覧を足す)。全部組むと
+# libavcodec だけで 26MB あり、ほとんどは放送にも録画にも出てこないコーデックだった。
+# 名前は src/lib/server の ffmpeg の引数から拾ったもの。**引数に新しいフィルタ・コーデック・形式を足したら、
+# ここにも足すこと** — テストは偽の ffmpeg で回るので気づけず、イメージの確かめ (.github/image-smoke.sh) が
+# 同じ経路を本物の ffmpeg で通して初めて分かる。名前の出どころ:
+# - デコーダ: 放送 (mpeg2video・h264・aac)、録画 (libdav1d・h264・opus)、切り抜きの画像 (png・mjpeg・webp)。
+#   hevc・ac3・eac3・mp2・aac_latm は、ほかの録画ソフトから移した録画 (サムネイル・音声だけ) のため
+# - lavfi の入力 (GPU の試しの素材) は wrapped_avframe で届くので、その「デコーダ」も要る。
+#   pcm_s16le のデコーダは、イメージの確かめで lavfi の音 (sine) を受けるためだけ
+# - エンコーダ: wrapped_avframe と pcm_s16le は `-f null` の既定。mpeg2video は GPU の試しの素材、mjpeg はサムネイル、
+#   rawvideo は CM 検出のロゴのコマ。qsv は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
+# - パーサ: demuxer が頼るのに configure が自分で足さないもの。画像の *_pipe は区切りをパーサに任せる
+# - bsf: h264_mp4toannexb は concat の demuxer が H.264 の mkv に差し込む (cm-cut.ts)。extract_extradata は
+#   libavformat が入力を調べるときに使う (無いと `-ss` で途中から読んだ MPEG-2 が次のシーケンスヘッダまで
+#   デコードできず、エラーを並べる)
+# - フィルタ: 引数に書いたもののほか、ffmpeg が自分で差し込むもの (buffer・null・format・aformat・scale・
+#   aresample・trim・atrim・fps、回転の印がある画像の transpose・hflip・vflip・rotate)
+# - testsrc2・sine・telecine・tinterlace・noise・overlay は denpa は使わず、イメージの確かめで素材を作るためだけ
+#   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
       amd64) arch_dev=libvpl-dev arch_flags=--enable-libvpl ;; \
       arm64) arch_dev=libdrm-dev arch_flags="--enable-libdrm --enable-rkmpp" ;; \
@@ -241,6 +261,18 @@ RUN case "${TARGETARCH}" in \
       --enable-libdav1d \
       --enable-vaapi \
       $arch_flags \
+      --disable-everything \
+      --disable-network \
+      --enable-decoder=mpeg2video,h264,aac,opus,libdav1d,png,mjpeg,webp,hevc,ac3,eac3,mp2,aac_latm,wrapped_avframe,pcm_s16le \
+      --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,h264_qsv,av1_qsv,h264_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
+      --enable-hwaccel=mpeg2_vaapi,h264_vaapi \
+      --enable-demuxer=mpegts,matroska,mov,concat,ffmetadata,image2,png_pipe,jpeg_pipe,webp_pipe \
+      --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
+      --enable-parser=mpegvideo,h264,aac,av1,opus,png,mjpeg,webp,hevc,ac3,mpegaudio,aac_latm \
+      --enable-bsf=h264_mp4toannexb,aac_adtstoasc,extract_extradata \
+      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
+      --enable-indev=lavfi \
+      --enable-protocol=file,pipe \
     && \
     make -j$(nproc) && make install && \
     if [ "${TARGETARCH}" = arm64 ] && ! /usr/local/bin/ffmpeg -hide_banner -encoders | grep -q h264_rkmpp; then \
