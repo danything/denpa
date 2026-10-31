@@ -945,7 +945,7 @@ describe("面の大きさと縦横比", () => {
     }
   });
 
-  test("4:3 の面は高さを合わせて左右の真ん中、16:9 は枠いっぱい", () => {
+  test("16:9 の枠では 4:3 の面は左右の真ん中、16:9 は枠いっぱい", () => {
     const box = { width: 1600, height: 900 };
     expect(planeArea(box, { aspect: "4:3" })).toEqual({
       left: 200,
@@ -965,6 +965,37 @@ describe("面の大きさと縦横比", () => {
       top: 300,
       width: 400,
       height: 300,
+    });
+  });
+});
+
+describe("16:9 の面の配置", () => {
+  test("スマホの縦長の枠では上下の真ん中に収める", () => {
+    expect(planeArea({ width: 400, height: 900 }, { aspect: "16:9" })).toEqual({
+      left: 0,
+      top: 337.5,
+      width: 400,
+      height: 225,
+    });
+  });
+
+  test("横長の枠では左右の真ん中に収める", () => {
+    expect(planeArea({ width: 1920, height: 900 }, { aspect: "16:9" })).toEqual(
+      {
+        left: 160,
+        top: 0,
+        width: 1600,
+        height: 900,
+      },
+    );
+  });
+
+  test("面の比率が未指定なら 16:9 で収める", () => {
+    expect(planeArea({ width: 400, height: 900 }, {})).toEqual({
+      left: 0,
+      top: 337.5,
+      width: 400,
+      height: 225,
     });
   });
 });
