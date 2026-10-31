@@ -211,8 +211,11 @@ public sealed class TunerPool(
          * **譲らせた相手が読み終わるまで待つ。** 前の読み出しが回っているうちに次を始めると、同じ読み出し側を
          * 2本で取り合い、前の局のパケットが混ざる (docs/agent.md「前の利用者が抜けるまで、次の選局を始めない」)
          */
-        kicked?.Await();
-        if (kicked is not null) lease.KickedMs = lease.Clock.ElapsedMilliseconds;
+        if (kicked is not null)
+        {
+            kicked.Await();
+            lease.KickedMs = lease.Clock.ElapsedMilliseconds;
+        }
 
         try
         {

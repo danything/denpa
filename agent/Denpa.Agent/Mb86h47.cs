@@ -43,10 +43,10 @@ public sealed class Mb86h47 : II2c
     private const byte MemoryRequest = 0xBC;
 
     /// <summary>起動の段の名前 (<see cref="Start"/>。失敗の記録に「…ところで」と続けて出す)</summary>
-    public const string StageStart = "ブリッジを起動する";
+    private const string StageStart = "ブリッジを起動する";
 
     /// <summary>コア 1 との bulk の経路 (5.5) を用意する段</summary>
-    public const string StageCommands = "コア 1 との bulk の経路を用意する";
+    private const string StageCommands = "コア 1 との bulk の経路を用意する";
 
     /// <summary>メモリ要求と bulk の命令の時間切れ (仕様書 3 章「タイムアウトは 1 秒で動いている」)</summary>
     private const int TimeoutMs = 1000;

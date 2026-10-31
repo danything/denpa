@@ -32,7 +32,7 @@ namespace Denpa.Agent;
 public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks, int Hops, TimeSpan? MaxRoundTrip)
 {
     /// <summary>ルーターを1つも越えない</summary>
-    public const int DefaultHops = 1;
+    private const int DefaultHops = 1;
 
     /// <summary>
     /// <c>CARD_TTL</c> の上限。Docker のブリッジを両側で使うと 3、Kubernetes でノードをまたぐと

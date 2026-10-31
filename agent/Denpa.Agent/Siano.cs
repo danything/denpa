@@ -214,7 +214,7 @@ public sealed class SianoTuner : ITuneDevice
 
     /// <summary>
     /// siano-ts 1つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の答えを待つため)。
-    /// **印は子ごとに持つ。** 止めたかどうかを1つの旗で持つと、前の子の後始末が次の子の旗を読む
+    /// **印は子ごとに持つ。** 止めたかどうかを1つのフラグで持つと、前の子の後始末が次の子のフラグを読む
     /// (起こし直した直後に前の子の終了が回ってくる)
     /// </summary>
     private sealed class Child(Process process)

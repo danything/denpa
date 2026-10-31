@@ -18,7 +18,7 @@ internal sealed class Fr30Machine
     /// <summary>命令の語を読む (プログラムを置いた所)</summary>
     public required Func<uint, ushort> Fetch { get; init; }
 
-    /// <summary>PC が <paramref name="stop"/> のどれかに来るまで (上限まで) 動かす。来たら true</summary>
+    /// <summary><paramref name="stop"/> が true を返すまで (上限まで) 動かす。来たら true</summary>
     public bool RunUntil(Func<uint, bool> stop, long limit = 1_000_000)
     {
         for (var i = 0L; i < limit; i++)

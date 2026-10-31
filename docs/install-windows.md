@@ -17,7 +17,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 1. **エージェント** — 最新のリリースから取り、タスク スケジューラに「ログオンしたら起こす」
    タスク (`denpa-agent`) を載せます。自分のアカウントのタスクなので管理者は要りません。窓は出さず
-   (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` の輪。
+   (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` のループ。
    タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
 2. **denpa 本体** — エージェントと同じバージョンのイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
    載せて、いま1度流します。起こすのは `denpa-start.ps1` (install.ps1 が書く)

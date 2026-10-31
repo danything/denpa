@@ -6,7 +6,8 @@ namespace Denpa.Agent.Tests;
 
 /*
  * USB の層 (UsbDevice.cs・UsbFsDevice.cs)。機材なしで確かめられる所: usbfs の ioctl の番号と構造体の大きさ
- * (カーネルの uapi の linux/usbdevice_fs.h の形)、Windows と macOS のポートの名前の作り方。
+ * (カーネルの uapi の linux/usbdevice_fs.h の形)、Windows と macOS のポートの名前の作り方、
+ * interrupt の読みを出し続ける UsbReadPump (UsbDevice.cs)。
  */
 public class UsbDeviceTests
 {

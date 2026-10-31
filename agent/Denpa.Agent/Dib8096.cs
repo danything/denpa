@@ -46,7 +46,7 @@ public sealed class Dib8096
     public const byte TunerAddress = 0xC0;
 
     /// <summary>LED のピン (DiB8000 の GPIO 1。出力 High = 赤、Low か入力 = 緑)</summary>
-    public const int LedPin = 1;
+    private const int LedPin = 1;
 
     private readonly II2c _i2c;
     private readonly IDibTime _time;
@@ -69,7 +69,7 @@ public sealed class Dib8096
     /// 温度の較正を使い回す長さ (ms)。測った温度は WBD の目標に使うだけで、選局の合間 (数秒〜数分) にチューナーの温度は
     /// ほとんど変わらないとみて 1 分にした (根拠は上)
     /// </summary>
-    public const double TemperatureReuseMs = 60_000;
+    private const double TemperatureReuseMs = 60_000;
 
     /// <summary>
     /// 探索で、シンボルの数の時間切れに関わらない段を見る間隔 (ms)。1 回の I2C の読み (bulk の塊の往復) より少し長い間隔 (根拠は上)
@@ -593,7 +593,7 @@ public sealed class Dib8096
 
     /// <summary>
     /// 最後の選局の要約の1行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3ms・許容値 50) を本番の記録で見直すのに使う。
-    /// 形: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / 同期しなかった&gt;</c>
+    /// 形: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / ロックしたがデータはまだ / 同期しなかった&gt;</c>
     /// </summary>
     public string LastSummary { get; private set; } = "";
 
@@ -1684,7 +1684,8 @@ public sealed class Dib8096
         _programmed = null;
         Snapshot? known = null;
         if (_memory is not null) _memory.Channels.TryGetValue(_khz, out known);
-        // 入り方は 覚えた値 → 既定 (8K) でガードだけ探す (DiB8000 0x8002 から) → FFT から探す の順で固定 (合わなければ次へ)
+        // 入り方は、覚えた値があればそれで合わせ、無ければ既定 (8K) でガードだけ探す (DiB8000 0x8002 から)。
+        // どちらも合わなければ FFT から探し直す (この順は固定)
         if (known is not null)
         {
             Restore(known);
@@ -2096,14 +2097,7 @@ public sealed class Dib8096
                 Modulation.Qam16 => 2,
                 _ => 3,
             };
-            var fec = layer.Fec switch
-            {
-                1 => 1,
-                2 => 2,
-                3 => 3,
-                5 => 5,
-                _ => 7,
-            };
+            var fec = Fec(layer.Fec);
             var ti = layer.Interleave == 0 ? 0 : 32 - int.LeadingZeroCount(layer.Interleave);
             if (ti > 3) ti = 0;
             D(2 + i, (modulation << 10) | ((layer.Segments & 0xF) << 6) | (fec << 3) | ti);
@@ -2255,14 +2249,7 @@ public sealed class Dib8096
             {
                 Segments = D(493 + i) & 0xF,
                 Interleave = interleave == 3 ? 4 : interleave,
-                Fec = (D(481 + i) & 7) switch
-                {
-                    1 => 1,
-                    2 => 2,
-                    3 => 3,
-                    5 => 5,
-                    _ => 7,
-                },
+                Fec = Fec(D(481 + i) & 7),
                 Modulation = (D(487 + i) & 3) switch
                 {
                     0 => Modulation.Dqpsk,
@@ -2323,10 +2310,13 @@ public sealed class Dib8096
     {
         var status = D(568);
         var strength = Strength(65535 - D(390));
-        double? cn = null;
-        if (IsLocked(status)) cn = CarrierToNoise(D(542), D(543));
-        return new DibSignal(IsLocked(status), strength, cn, status);
+        var locked = IsLocked(status);
+        double? cn = locked ? CarrierToNoise(D(542), D(543)) : null;
+        return new DibSignal(locked, strength, cn, status);
     }
+
+    /// <summary>符号化率の値。1・2・3・5 以外は 7 にそろえる</summary>
+    private static int Fec(int raw) => raw is 1 or 2 or 3 or 5 ? raw : 7;
 
     private static readonly (uint S, uint Y)[] StrengthTable =
     [

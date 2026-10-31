@@ -8,8 +8,8 @@ namespace Denpa.Agent;
 /// <summary>
 /// 選局した TS を **pipe で受け取る**ときの共通部分。子プロセス (siano-ts) の標準出力を
 /// 読み出し側にするところ (<see cref="Stdout"/>) と、pipe の扱い (<see cref="WidenPipe"/> /
-/// <see cref="ReaderDrain"/>)。px4d から受けた TS の溜め
-/// (Px4Stream。Px4.cs。pipe ではなく Pipelines) も、閉じ方 (<see cref="ReaderDrain"/>) はここに揃える。
+/// <see cref="ReaderDrain"/>)。px4d と CECH-ZD1 J から受けた TS の溜め
+/// (Px4Stream・Zd1jStream。pipe ではなく Pipelines) も、閉じ方 (<see cref="ReaderDrain"/>) はここに揃える。
 ///
 /// <para>
 /// **読み出し側は <see cref="DeviceStream"/> に載せる。** Unix は pipe をそのまま fd として poll で待ち、
@@ -48,7 +48,7 @@ internal static class ChildTs
     /// 起きて印を見るので、fd を閉じるのは読む側が戻ってから (閉じた番号を
     /// 次の pipe が使い回すと、抜けかけの読む側が新しい pipe を読んでしまう)。
     /// 待つのは読みかけがいるときだけ (<see cref="DeviceStream.WaitReaders"/>)。
-    /// siano-ts の後始末 (SianoTuner.Drop) と px4d の TS の後始末 (Px4Stream.Stop) で使う
+    /// siano-ts の後始末 (SianoTuner.Drop)・px4d の TS の後始末 (Px4Stream.Stop)・CECH-ZD1 J の TS の後始末 (Zd1jStream.Stop) で使う
     /// </summary>
     internal static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
 

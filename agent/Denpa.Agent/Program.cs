@@ -10,11 +10,11 @@ using Microsoft.AspNetCore.Http.Features;
  *
  * denpa から触れないものが3つある。
  *
- * - B-CASカード … USB のリーダーも px4d の内蔵リーダーも、こちらが直接扱う (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも px4d / asicend の内蔵リーダーも、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
- * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland /
- *   siano-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs)。CECH-ZD1 J は USB を直に持つ (Zd1j.cs)
+ * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland / siano-userland /
+ *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。CECH-ZD1 J は USB を直に持つ (Zd1j.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -41,7 +41,7 @@ if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
 /*
- * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ刺さっている機材を自分で拾って使い始めるので、
+ * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ刺さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
  */
 if (args.Length > 0)
@@ -314,7 +314,7 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
          */
         /*
          * **止まるときはこちらから閉じる。** Kestrel は開いている応答が終わるのを 30 秒 (既定の ShutdownTimeout)
-         * 待ってから止まり、その間は受け口だけ閉じている。denpa は通知を開きっぱなしにするので、録画が無いときの
+         * 待ってから止まり、その間は待ち受けだけ閉じている。denpa は通知を開きっぱなしにするので、録画が無いときの
          * 入れ替えでも古い Pod が 30 秒居残り、その間に始まった録画の頭が欠けていた (実機で約 35 秒。下の Drain)
          */
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted, app.Lifetime.ApplicationStopping);
@@ -389,10 +389,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
 app.MapGet("/denpa/channels", (HttpContext http) => Respond.Write(http, config.LoadChannels()));
 
 /*
- * スキャンの結果を預かる。**書いてくるのは denpa。**
- *
- * 総当たりの選局はこちらに任されるが、NIT も SDT も解析しないので「何があったか」は
- * 分からない。読むのはあちらの仕事で、こちらは控えを持って配るだけ。
+ * スキャンの結果を預かる。**書いてくるのは denpa** (Config.cs)。
  */
 app.MapPut("/denpa/channels", async (HttpContext http) =>
 {
@@ -533,8 +530,7 @@ internal static class Respond
 /// </para>
 ///
 /// <para>
-/// 待つのは録画だけ (<see cref="TunerPool.Recording"/>)。番組表もロゴも
-/// 切れたら取り直せばいいが、放送は二度と来ない。待ち終えたら
+/// 待つのは録画だけ (<see cref="TunerPool.Recording"/>)。待ち終えたら
 /// <c>StopApplication</c> を呼んで、いつもどおり畳ませる。
 /// </para>
 ///

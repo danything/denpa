@@ -16,7 +16,7 @@ name: denpa
 
 services:
   # チューナーエージェント。**機材に触るのはここだけ。**
-  # 選局・B-CASカード・スクランブル解除を受け持ち、
+  # 選局・B-CASカード・スクランブルの復号を受け持ち、
   # 素のTSを denpa へ流す (番組表を読むのは denpa の仕事)
   tuner-agent:
     image: ghcr.io/danything/denpa-agent:latest
@@ -108,6 +108,6 @@ services:
 
 volumes:
   denpa-data:
-  # 元のTSの作業領域。エージェント側にも見せて、スクランブル解除をあちらにやらせる
+  # 元のTSの作業領域。エージェント側にも見せて、スクランブルの復号をあちらにやらせる
   denpa-recorded:
   denpa-library:
