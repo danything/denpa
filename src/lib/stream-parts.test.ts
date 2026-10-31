@@ -45,14 +45,48 @@ describe("streamParts", () => {
     expect([...joined]).toEqual([1, 1, 1, 2, 2, 2, 2, 2, 3, 3]);
   });
 
-  test("書き終わるまで次の塊を作らない", async () => {
+  test("書き込みは1つずつ (前が終わるまで次を書かない)", async () => {
     let writing = false;
     let overlapped = false;
+    const order: number[] = [];
     await streamParts(
-      chunks([4, 4, 4]),
+      chunks([4, 4, 4, 4]),
+      4,
+      async (_, index) => {
+        if (writing) overlapped = true;
+        writing = true;
+        await new Promise((r) => setTimeout(r, 5));
+        order.push(index);
+        writing = false;
+      },
+      null,
+      () => {},
+    );
+    expect(overlapped).toBe(false);
+    expect(order).toEqual([0, 1, 2, 3]);
+  });
+
+  test("書いている間も次を受け取る", async () => {
+    let writing = false;
+    let readWhileWriting = false;
+    let i = 0;
+    const sizes = [4, 4, 4];
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (writing) readWhileWriting = true;
+          const size = sizes[i++];
+          if (size === undefined) controller.close();
+          else controller.enqueue(new Uint8Array(size));
+        },
+        // 先読みさせない (読みに来たときだけ pull が呼ばれる)
+      },
+      { highWaterMark: 0 },
+    );
+    await streamParts(
+      body,
       4,
       async () => {
-        if (writing) overlapped = true;
         writing = true;
         await new Promise((r) => setTimeout(r, 5));
         writing = false;
@@ -60,7 +94,29 @@ describe("streamParts", () => {
       null,
       () => {},
     );
-    expect(overlapped).toBe(false);
+    expect(readWhileWriting).toBe(true);
+  });
+
+  test("書けなかったら投げて、受け取りもやめる", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(4));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const run = streamParts(
+      body,
+      4,
+      () => Promise.reject(new Error("full")),
+      null,
+      () => {},
+    );
+    expect(run).rejects.toThrow("full");
+    await run.catch(() => {});
+    expect(cancelled).toBe(true);
   });
 
   test("割合は 1% 変わったときだけ知らせる", async () => {
