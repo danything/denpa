@@ -88,7 +88,7 @@ spec:
           enabled: true
           # Cloudflare を通さない(映像の配信と遅延。アドレスの判定も接続元の IP に頼る)。
           # gitops は Cloudflare を通すのを基本にし、通さないものにこの注釈を付ける
-          # (danything/gitops の apps/external-dns/README.md)。ExternalDNS が proxied ではないレコードを作る
+          # (danything/gitops の deploy/external-dns/README.md)。ExternalDNS が proxied ではないレコードを作る
           annotations:
             external-dns.kubernetes.io/cloudflare-proxied: "false"
           parentRefs:
