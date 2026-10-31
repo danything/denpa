@@ -168,18 +168,18 @@ function describedEpisode(
  *   飾りが違うので、副題 (`Chapter 15「百足坑道の主」`) が揃って初めて同じ回と分かる。
  *   足せなかった局とは、片方に副題が無いときの見方 (`sameEpisode`) で比べる。
  *   話数の後ろの `◆枠の名前` `▼出演者` も副題とは限らないので、概要に副題があればそちらを使う
- * - **どちらにも無ければ、放送が言う話数** (シリーズ記述子。`Described.series_episode`) を使う。
- *   タイトルや概要より後にするのは、載せない局・予約・引き継いだ履歴はタイトルと概要でしか読めないから。
- *   先に使うと、同じ回でも載せる局と載せない局で話数の読み方が分かれ、今まで束ねられていたものが離れる。
- *   記述子の話数がシリーズ通しなのかクールごとなのかも局次第なので、読めているものは上書きしない
- * - **それも無ければ null**。その番組は「回」が分からないので、
+ * - **話数は、放送が言うもの (シリーズ記述子。`Described.series_episode`) があればそれを先に使う。**
+ *   タイトルや概要の話数は局の書き方しだいで読み違えうるが、記述子は局が回として送っている値なので確か。
+ *   載せない局・予約・引き継いだ履歴は、今までどおりタイトルと概要から読み、それどうしで突き合わせる
+ *   (載せる局と載せない局で話数の数え方が違えば、その間では同じ回と見なされないことがある)
+ * - **どれにも無く、副題も無ければ null**。その番組は「回」が分からないので、
  *   時刻をまたいでは束ねない (毎日の「ニュース」が初回しか録れなくなる)。
  *   同じ時刻に同じタイトルが流れる同時放送だけは束ねる (`firstAirings`)
  */
 export function episodeOf(program: Described): Episode | null {
   // 番組名は放送のとおり全角混じり。この下の規則 (`SLOT` の英字など) は半角で書いてあるので寄せてから読む
   const parsed = parseTitle(toHalfWidth(program.name));
-  let number = parsed.episode;
+  let number = program.series_episode ?? parsed.episode;
   let subtitle = squash(parsed.subtitle);
   let inferred = MARKED.test(subtitle);
   if (subtitle === "" || inferred) {
@@ -190,11 +190,9 @@ export function episodeOf(program: Described): Episode | null {
     const described = describedEpisode(texts);
     if (number === null) {
       if (subtitle === "") {
-        if (described !== null) {
-          ({ number, subtitle } = described);
-          inferred = !described.bracketed;
-        } else if (program.series_episode == null) return null;
-        else number = program.series_episode;
+        if (described === null) return null;
+        ({ number, subtitle } = described);
+        inferred = !described.bracketed;
       }
     } else if (described?.number === number && described.subtitle !== "") {
       subtitle = described.subtitle;
