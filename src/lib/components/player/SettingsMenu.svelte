@@ -20,7 +20,7 @@
    * その場で変わり (`menuitemcheckbox`)、選ぶものは押すと選択肢の並びに入る (先頭が「戻る」、選ぶと閉じる。
    * `menuitemradio`。Esc か ← で戻る)。操作バーから畳んだもの (`head`。`PlayerStage` の `fold`) は頭に置き、余白で分ける。
    * 音量のつまみ (`volume`) は畳んだものの次、切り替えの前に置き、指でもつまめる高さにする。←→ で動かし、
-   * ↑↓ はほかの行と同じく行を移る。
+   * ↑↓ はほかの行と同じく行を移る。渡されるのは音のボタンがつまみを出せないときだけ (`StageTail`)。
    *
    * testid: ボタンは `{prefix}-settings`、枠は `{prefix}-settings-menu`、行は `{prefix}-{id}`、
    * 選択肢は `{prefix}-{id}-option` に `data-{id}={key}` (例: `data-codec="av1"`)、音量のつまみは `{prefix}-volume`
@@ -38,7 +38,7 @@
     head?: SettingRow[];
     toggles: SettingToggle[];
     choices: SettingChoice[];
-    /** 音量 (%。`volume.svelte.ts`) */
+    /** 音量 (%。`volume.svelte.ts`)。省くとつまみを置かない */
     volume?: { level: number; set: (level: number) => void } | undefined;
   } = $props();
 

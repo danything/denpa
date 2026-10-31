@@ -41,6 +41,7 @@
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import JikkyoCompose from "#lib/components/player/JikkyoCompose.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
+  import { playerKeys } from "#lib/components/player/keys.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout, {
@@ -86,7 +87,7 @@
   import type { HybridcastLink } from "#lib/live.js";
   import { PHONE_FORM, TABLETOP } from "#lib/phone-form.js";
   import { reload } from "#lib/reload.svelte.js";
-  import { FLOOR } from "#lib/ts/pacing.js";
+  import { FLOOR, stepSpeed } from "#lib/ts/pacing.js";
   import { CHANNEL_TYPES } from "#lib/types.js";
 
   import type { LiveChannel } from "./+page.server";
@@ -467,6 +468,34 @@
     );
   }
 
+  /**
+   * キーでも動かせるようにする。**割り当ては追っかけ・観る画面と共通** (`player/keys.ts`)。
+   * ← → はシークバーと同じく、出しているときだけ (MPEG-2 と録画に譲っている間は無い)。速さは追っかけ中だけ効く
+   * (`live-player` の `setSpeed`)
+   */
+  const playerKey = playerKeys({
+    togglePlay: () => player.toggle(),
+    seekBy: (seconds) => {
+      if (player.canvas || player.yielded !== null) return;
+      player.seek((player.live ? player.newest : player.position) + seconds);
+    },
+    toggleCaptions: () => player.toggleCaptions(),
+    snapshot,
+    toggleFull: fullscreen.toggle,
+    stepSpeed: (by) => player.setSpeed(stepSpeed(player.speed, by)),
+    toggleMute: player.toggleMute,
+    stepVolume: volume.step,
+  });
+  /** データ放送を出している間は、空白・十字キー・f はあちらのリモコン (`bml/engine.ts` の `aribKey`) */
+  function keys(event: KeyboardEvent): void {
+    if (
+      player.showData &&
+      (event.key === " " || event.key === "f" || event.key.startsWith("Arrow"))
+    )
+      return;
+    playerKey(event);
+  }
+
   /** この番組に載っている Hybridcast (先頭だけ)。別のタブで開く (操作バーと ⚙ の行) */
   const hybridcast = $derived(player.hybridcast[0]);
   function hybridcastLabel(app: HybridcastLink): string {
@@ -476,6 +505,8 @@
     window.open(app.url, "_blank", "noopener,noreferrer");
   }
 </script>
+
+<svelte:window onkeydown={keys} />
 
 <!--
     映像を左、局を右 (YouTube の再生画面と同じ形)。広い画面ではページごとスクロールさせず、動くのは右の一覧だけ
@@ -914,6 +945,9 @@
       <!-- 指定されたとおりにできなかったときの断り書き (H.264 に戻した・ソフトウェアでエンコードしている) -->
       {#if player.warning}
         <StageNote testid="live-warning">{player.warning}</StageNote>
+      {/if}
+      {#if volume.noted}
+        <StageNote testid="live-volume-note">音量 {volume.level}%</StageNote>
       {/if}
     {/snippet}
   </PlayerStage>

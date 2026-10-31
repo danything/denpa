@@ -1,3 +1,11 @@
+<script module lang="ts">
+  /**
+   * つまみを浮かべる端末。指の端末の「乗せた」は押した後にしか来ないので、浮かべない。
+   * ⚙ に音量のつまみを置くかもこれで決める (`StageTail`)
+   */
+  export const POINTER = "(hover: hover) and (pointer: fine)";
+</script>
+
 <script lang="ts">
   import { LEVEL_STEP, MAX_LEVEL, stepLevel } from "#lib/volume.js";
 
@@ -12,8 +20,9 @@
    * キーボードでボタンに来たときも開く。つまみの上ではホイールでも変えられる。外れたら少し待ってから閉じる
    * (ボタンからつまみへ斜めに動かしたときに、角で閉じないように)。開いている間は操作バーを残す (`stageMenu`)。
    *
-   * 指の端末 (ホバーが無い) では浮かばない。⚙ のつまみ (`SettingsMenu`) を使う。⚙ のつまみはマウスの端末でも残す —
-   * 畳むとき (狭い枠か、一段に収まらないとき) はこのボタンごと ⚙ に入るので、⚙ の中身を端末で変えると決まりが2つになる。
+   * 指の端末 (ホバーが無い) では浮かばない。⚙ のつまみ (`SettingsMenu`) を使う。**音量のつまみは画面に1つだけ** —
+   * ⚙ のつまみは、このボタンがつまみを出せないときだけ出す (`StageTail`)。指の端末と、畳むとき (狭い枠か、
+   * 一段に収まらないとき。このボタンごと ⚙ に入る) がそれ。
    *
    * testid: ボタンは `testid`、浮かぶ面は `{testid}-pop`、つまみは `{testid}-volume`
    */
@@ -31,8 +40,6 @@
     volume: { level: number; set: (level: number) => void };
   } = $props();
 
-  /** 浮かべる端末。指の端末の「乗せた」は押した後にしか来ないので、浮かべない */
-  const POINTER = "(hover: hover) and (pointer: fine)";
   /** 外れてから閉じるまで (ms)。ボタンとつまみの間を斜めに動かす間 */
   const LINGER = 400;
 
@@ -188,7 +195,7 @@
       transform var(--dp-duration-enter) var(--dp-ease-spring),
       visibility 0s;
   }
-  /* 指の端末では浮かべない (⚙ のつまみを使う) */
+  /* 指の端末では浮かべない (⚙ のつまみを使う)。条件は `POINTER` と同じ */
   @media not ((hover: hover) and (pointer: fine)) {
     .pop {
       display: none;
