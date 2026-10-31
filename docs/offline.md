@@ -81,7 +81,9 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 この端末で観られる最初のもの**を保存する (観る画面と同じ順。`offline-db.ts` の `offlineSource`)。コーデックは置き場の名前で
 見分ける (`… [H265].mkv`・`… [H264].mkv`。H.264 だけでエンコードした録画は主がもう H.264)。
 
-- AV1 … `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の `supported`)。AV1 の Matroska は WebM としても読める
+- AV1 … `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.0.09M.08` を 1080p60 で問うた `supported`)。
+  AV1 の Matroska は WebM としても読める。**Level は 4.1** — 4.0 は 30fps までで、Safari は Level と
+  コマ数を突き合わせて「デコードできない」と答える
 - H.265 … 同じく `hvc1.…` でデコードできて、**しかも `canPlayType` が Matroska の H.265 を読めると言うとき**。保存するのは
   Matroska のままで、WebM に H.265 は入れられないので、デコーダがあっても入れ物を読めない端末 (Safari など) がある
 - H.264 … 確かめない (どの端末もデコードできる前提)
