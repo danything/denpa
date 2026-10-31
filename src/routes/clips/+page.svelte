@@ -785,10 +785,13 @@
     top: calc(env(safe-area-inset-top, 0px) + var(--c-day-gap));
   }
 
-  /* 平らなグリッド。件の面には乗せず、画像と字だけ (docs/design.md の「ふだんは平らに」) */
+  /*
+     * 平らなグリッド。件の面には乗せず、画像と字だけ (docs/design.md の「ふだんは平らに」)。
+     * 1枚の幅は 16rem から (11rem では何が写っているか読めなかった)。電話では1列に並ぶ
+     */
   .c-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
     gap: 1rem 0.75rem;
     margin: 0 0 1rem;
     padding: 0;

@@ -141,7 +141,7 @@ ENV FFPROBE=/usr/bin/ffprobe
 CMD ["bun", "scripts/capture-docs.ts"]
 
 # ---------------------------------------------------------------------------
-# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV) + NVIDIA NVENC (amd64) + Rockchip MPP (arm64)。
+# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel・AMD の GPU (VA-API/QSV) + NVIDIA NVENC (amd64) + Rockchip MPP (arm64)。
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
@@ -277,7 +277,7 @@ RUN case "${TARGETARCH}" in \
       --disable-network \
       --enable-decoder=mpeg2video,h264,aac,opus,libdav1d,png,mjpeg,webp,hevc,ac3,eac3,mp2,aac_latm,wrapped_avframe,pcm_s16le \
       --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,h264_qsv,av1_qsv,h264_nvenc,av1_nvenc,h264_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
-      --enable-hwaccel=mpeg2_vaapi,h264_vaapi,mpeg2_nvdec,h264_nvdec\
+      --enable-hwaccel=mpeg2_vaapi,h264_vaapi,mpeg2_nvdec,h264_nvdec \
       --enable-demuxer=mpegts,matroska,mov,concat,ffmetadata,image2,png_pipe,jpeg_pipe,webp_pipe \
       --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
       --enable-parser=mpegvideo,h264,aac,av1,opus,png,mjpeg,webp,hevc,ac3,mpegaudio,aac_latm \
@@ -299,6 +299,41 @@ RUN case "${TARGETARCH}" in \
     rm -rf /var/lib/apt/lists/* /tmp/*
 
 # ---------------------------------------------------------------------------
+# AMD の GPU の VA-API ドライバ (radeonsi_drv_video.so。docs/encode.md「GPU でエンコードする」)。amd64 だけ
+#
+# **Debian の mesa-va-drivers は使わず、Mesa をソースから組む。** パッケージは全部の GPU のドライバと
+# LLVM (libLLVM 120MB) を引き込み、イメージが展開後で約 170MB 増える。radeonsi と VA-API だけを
+# LLVM 無しで組むと 18MB の1ファイルで済む (radeonsi は Mesa 24.0 から LLVM 無しで組め、シェーダは ACO で組む)。
+# `video-codecs=all` は、既定では外れる H.264・H.265 のエンコードとデコードを入れるため (AV1 は既定で入る)。
+# ドライバが繋ぐ libdrm_amdgpu・libelf・libexpat・libzstd は Debian のもので、runtime-libs 段が ldd で辿って運ぶ
+#
+# **Mesa は 25 系に留める** (renovate.json)。26 系は libdrm 2.4.133 以上を求め、trixie の libdrm は 2.4.124。
+# arm64 では組まない (AMD の GPU を載せた arm の機械はまず無い)。空の /out を残し、runtime-libs 段の COPY が通るようにする
+# ---------------------------------------------------------------------------
+FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS mesa
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+ARG TARGETARCH
+# renovate: datasource=gitlab-tags depName=mesa/mesa registryUrl=https://gitlab.freedesktop.org extractVersion=^mesa-(?<version>\d+\.\d+\.\d+)$
+ARG MESA_VERSION=25.3.6
+RUN mkdir -p /out/dri /out/doc && \
+    if [ "${TARGETARCH}" = amd64 ]; then \
+      apt-get update && \
+      apt-get -y --no-install-recommends install curl ca-certificates xz-utils build-essential meson ninja-build pkg-config \
+        python3-mako python3-yaml python3-packaging bison flex libdrm-dev libva-dev libexpat1-dev zlib1g-dev libelf-dev && \
+      mkdir /tmp/mesa && cd /tmp/mesa && \
+      curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20 \
+        "https://archive.mesa3d.org/mesa-${MESA_VERSION}.tar.xz" | tar -xJ --strip-components=1 && \
+      meson setup build --prefix=/usr --buildtype=release -Db_ndebug=true \
+        -Dllvm=disabled -Dgallium-drivers=radeonsi -Dvulkan-drivers= -Dplatforms= \
+        -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled \
+        -Dgallium-va=enabled -Dvideo-codecs=all && \
+      ninja -C build && \
+      strip --strip-unneeded -o /out/dri/radeonsi_drv_video.so build/src/gallium/targets/va/libgallium_drv_video.so && \
+      mkdir /out/doc/mesa && cp docs/license.rst /out/doc/mesa/ && \
+      rm -rf /var/lib/apt/lists/* /tmp/*; \
+    fi
+
+# ---------------------------------------------------------------------------
 # 本番ビルド
 # ---------------------------------------------------------------------------
 FROM deps AS build
@@ -307,11 +342,14 @@ COPY . .
 RUN bun run build
 
 # ---------------------------------------------------------------------------
-# 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・libstdc++・zlib・ca-certificates・
-# tzdata など要るものだけを置いたもの)。下の `runtime-libs` 段が「土台にもうあるライブラリ」を
+# 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・ca-certificates・tzdata など
+# 要るものだけを置いたもの)。**libssl の無い base-nossl を使う** — bun は TLS を自分で持ち (BoringSSL を静的に繋ぐ)、
+# ffmpeg も OpenSSL を繋がないので、cc の土台にある libssl・libcrypto・libgomp (8MB ほど) は誰も読まない。
+# ffmpeg と GPU のドライバが繋ぐ libstdc++・libgcc_s・zlib は、下の `runtime-libs` 段が ldd で辿って写す
+# (エージェントを同じコンテナに入れる denpa-aio は libssl を要るので、あちらで足す。.github/aio.Dockerfile)。下の `runtime-libs` 段が「土台にもうあるライブラリ」を
 # 見分けるのにも使うので、段に名前を付けておく
 # ---------------------------------------------------------------------------
-FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb56c49d4441dba6153ccf790364f97e64b1 AS distroless
+FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:ca1c7e6a875e59345ae6ff182a1e0930f0ca1ffef23a9b830f8823ab348ad5dd AS distroless
 
 # ---------------------------------------------------------------------------
 # 本番イメージへ写すライブラリを集める段。**本番イメージにはシェルも apt も無い**ので、
@@ -325,33 +363,39 @@ FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb5
 # arm64 の Rockchip MPP (librockchip_mpp.so.1) は ffmpeg 段で組んで /usr/local/lib に一緒に来る。
 # libdrm (rkmpp と VA-API が繋ぐ) は libva-drm2 の依存で入り、どちらも下の ldd で /rootfs に運ばれる
 # i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
+# AMD の VA-API ドライバ (radeonsi) は `mesa` 段で組んだもの。それが繋ぐライブラリ (libdrm-amdgpu1 など) と、
+# GPU の名前の一覧 (libdrm-common の amdgpu.ids) は Debian から入れる。これも amd64 だけ
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS runtime-libs
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
-      amd64) intel="libvpl2 intel-media-va-driver i965-va-driver libmfx-gen1.2" ;; \
-      arm64) intel="" ;; \
+      amd64) gpu="libvpl2 intel-media-va-driver i965-va-driver libmfx-gen1.2 libdrm-amdgpu1 libdrm-common libelf1t64 libexpat1 libzstd1" ;; \
+      arm64) gpu="" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     apt-get update && \
     apt-get -y --no-install-recommends install \
       libopus0 libx264-164 libdav1d7 \
-      libva2 libva-drm2 $intel && \
+      libva2 libva-drm2 $gpu && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ffmpeg / ffprobe と、2つが共有する libav* (`ffmpeg` 段の説明)
 COPY --from=ffmpeg /out/bin/ /usr/local/bin/
 COPY --from=ffmpeg /out/lib/ /usr/local/lib/
-# 自前で組んだもののうち、Debian のパッケージの copyright に載らないもののライセンス (いまは arm64 の Rockchip MPP だけ)
+# AMD の VA-API ドライバ (`mesa` 段。arm64 では空)。Debian のパッケージのものではないので、下で別に扱う
+COPY --from=mesa /out/dri/ /usr/local/lib/dri/
+# 自前で組んだもののうち、Debian のパッケージの copyright に載らないもののライセンス (arm64 の Rockchip MPP と amd64 の Mesa)
 COPY --from=ffmpeg /out/doc/ /rootfs/usr/share/doc/
+COPY --from=mesa /out/doc/ /rootfs/usr/share/doc/
 
 # /rootfs に写すもの:
 # - ffmpeg / ffprobe / libav* と、それらが繋ぐライブラリ (ldd で辿る)
 # - **dlopen で読むもの** (ldd には出ない): libva のドライバ (dri/ の iHD・i965) と、libvpl が読む
 #   QSV のランタイム (libmfx-gen.so.1.2 と、それがさらに読む libmfx-gen/)。ドライバはディレクトリ
-#   ごと写し、それらが繋ぐライブラリも ldd で辿る
-# **土台 (distroless) にもうあるもの (glibc・libstdc++・zlib など) は写さない** (名前で見分ける)。
+#   ごと写し、それらが繋ぐライブラリも ldd で辿る。`mesa` 段で組んだ AMD のドライバも同じ dri/ に置く
+#   (パッケージの記録は無いので status.d には載らない。ライセンスは /usr/share/doc/mesa)
+# **土台 (distroless) にもうあるもの (glibc など) は写さない** (名前で見分ける)。
 # 写したライブラリのパッケージの記録 (status.d) と copyright も置く — distroless と同じ置き方で、
 # 脆弱性の検査やライセンスの確かめが中身を読めるように。
 # 依存が見つからなければここでビルドを止める (起動してからエンコードで落ちるより早く分かる)
@@ -372,6 +416,14 @@ RUN --mount=type=bind,from=distroless,target=/distroless \
     if [ -e "${lib}/libmfx-gen.so.1.2" ]; then \
       cp -L "${lib}/libmfx-gen.so.1.2" "/rootfs${lib}/"; \
       targets+=("${lib}/libmfx-gen.so.1.2"); owned+=("${lib}/libmfx-gen.so.1.2"); \
+    fi && \
+    for drv in /usr/local/lib/dri/*.so; do \
+      mkdir -p "/rootfs${lib}/dri" && cp "$drv" "/rootfs${lib}/dri/"; \
+      targets+=("$drv"); \
+    done && \
+    if [ -e /usr/share/libdrm/amdgpu.ids ]; then \
+      install -D -m 644 /usr/share/libdrm/amdgpu.ids /rootfs/usr/share/libdrm/amdgpu.ids; \
+      owned+=(/usr/share/libdrm/amdgpu.ids); \
     fi && \
     if ldd "${targets[@]}" | grep 'not found'; then echo "足りないライブラリがあります" >&2; exit 1; fi && \
     for dep in $(ldd "${targets[@]}" | awk '$2 == "=>" && $3 ~ /^\// { print $3 }' | sort -u); do \

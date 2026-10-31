@@ -1,6 +1,6 @@
 import { rmSync, writeFileSync } from "node:fs";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { MX } from "../fake/services";
 import {
@@ -248,18 +248,33 @@ async function waitHooked(
 /** 舞台の testid。操作列を出すときに動かす所 */
 const STAGE = { live: "live-frame", chase: "chase", watch: "watch-stage" };
 
-/** ⚙ のつまみを `level` (%) に */
+/**
+ * 音のボタンに乗せて、浮かんだ縦のつまみを返す (マウスの端末。広い枠では ⚙ につまみは無い)。
+ * 返したあともポインタはボタンの上に残る
+ */
+async function soundSlider(
+  page: Page,
+  prefix: keyof typeof STAGE,
+): Promise<Locator> {
+  await wakeControls(page, STAGE[prefix]);
+  await page.getByTestId(`${prefix}-sound`).hover();
+  const slider = page.getByTestId(`${prefix}-sound-volume`);
+  await expect(slider).toBeVisible();
+  return slider;
+}
+
+/** 音のボタンの縦のつまみを `level` (%) に。フォーカスはつまみから外す (キーを画面に渡す) */
 async function setVolume(
   page: Page,
   prefix: keyof typeof STAGE,
   level: number,
 ): Promise<void> {
-  await wakeControls(page, STAGE[prefix]);
-  await openSettings(page, prefix);
-  await page.getByTestId(`${prefix}-volume`).fill(String(level));
-  await expect(page.getByTestId(`${prefix}-volume`)).toHaveValue(String(level));
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId(`${prefix}-settings-menu`)).toBeHidden();
+  const slider = await soundSlider(page, prefix);
+  await slider.fill(String(level));
+  await expect(slider).toHaveValue(String(level));
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
 }
 
 /** 押したことにして AudioContext を起こし、断られて消音になっていれば音を出す */
@@ -341,18 +356,7 @@ test.describe("音量", () => {
     await page.reload();
     await page.getByTestId("live-channel").first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
-    await wakeControls(page, "live-frame");
-    await openSettings(page, "live");
-    await expect(page.getByTestId("live-volume")).toHaveValue("70");
-    // つまみは名前と値の下で、メニューの幅いっぱい (Pico の `[role="group"]` の横並びにしない)
-    const slider = await page.getByTestId("live-volume").boundingBox();
-    const head = await page
-      .getByTestId("live-settings-menu")
-      .locator(".volume-head")
-      .boundingBox();
-    expect(slider!.y).toBeGreaterThanOrEqual(head!.y + head!.height - 1);
-    expect(Math.abs(slider!.width - head!.width)).toBeLessThan(2);
-    await page.keyboard.press("Escape");
+    await expect(await soundSlider(page, "live")).toHaveValue("70");
     await letPlay(page);
     await waitHooked(page, "element");
     const kept = await measure(page, "element");
@@ -415,7 +419,7 @@ test.describe("音量", () => {
     await inject(page, "buffer", null);
   });
 
-  test("3画面で同じ音量を使い、観る画面と追っかけでは ↑↓ でも変えられる", async ({
+  test("3画面で同じ音量を使い、どの画面でも ↑↓ で変えられる", async ({
     page,
     request,
   }) => {
@@ -423,7 +427,20 @@ test.describe("音量", () => {
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
-    await setVolume(page, "live", 60);
+    await setVolume(page, "live", 50);
+    // ライブも ↑↓ で変わり、映像の上に今の音量を出す
+    await page.keyboard.press("ArrowUp");
+    await expect(page.getByTestId("live-volume-note")).toHaveText("音量 55%");
+    await page.keyboard.press("ArrowUp");
+    await expect(page.getByTestId("live-volume-note")).toHaveText("音量 60%");
+    // m で消音の切り替え (追っかけ・観る画面と同じ割り当て)
+    const sound = page.getByTestId("live-sound");
+    const name = (await sound.getAttribute("aria-label"))!;
+    await page.keyboard.press("m");
+    await expect(sound).not.toHaveAccessibleName(name);
+    await page.keyboard.press("m");
+    await expect(sound).toHaveAccessibleName(name);
+    await expect(await soundSlider(page, "live")).toHaveValue("60");
 
     // 追っかけ (録っている最中の録画)
     expect(
@@ -447,11 +464,7 @@ test.describe("音量", () => {
       }).toPass({ timeout: 60_000, intervals: [500] });
       await goto(page, `/chase/${id}`);
       await expect(page.getByTestId("chase-title")).toBeVisible();
-      await wakeControls(page, STAGE.chase);
-      await openSettings(page, "chase");
-      await expect(page.getByTestId("chase-volume")).toHaveValue("60");
-      await page.keyboard.press("Escape");
-      await expect(page.getByTestId("chase-settings-menu")).toBeHidden();
+      await expect(await soundSlider(page, "chase")).toHaveValue("60");
       await page.evaluate(() =>
         (document.activeElement as HTMLElement | null)?.blur(),
       );
@@ -474,11 +487,7 @@ test.describe("音量", () => {
     // 観る画面
     const { id: watchId } = await recordOne(page, request);
     await goto(page, `/watch/${watchId}`);
-    await wakeControls(page, STAGE.watch);
-    await openSettings(page, "watch");
-    await expect(page.getByTestId("watch-volume")).toHaveValue("55");
-    await page.keyboard.press("Escape");
-    await expect(page.getByTestId("watch-settings-menu")).toBeHidden();
+    await expect(await soundSlider(page, "watch")).toHaveValue("55");
     await page.evaluate(() =>
       (document.activeElement as HTMLElement | null)?.blur(),
     );
@@ -493,10 +502,10 @@ test.describe("音量", () => {
 
 /**
  * **音のボタンに乗せると縦のつまみが浮かぶ** (`SoundButton`)。マウスで指せる端末だけ。
- * 指の端末 (車のタブレットなど) は ⚙ のつまみだけを使う
+ * 指の端末 (車のタブレットなど) と、畳んで音のボタンごと ⚙ に入ったときは ⚙ のつまみを使う (つまみは画面に1つだけ)
  */
 test.describe("音のボタンの縦のつまみ", () => {
-  test("乗せると真上に出て、縦に動かす・ホイールで変わり、⚙ と同じ値。外れたら閉じ、キーボードでも開く", async ({
+  test("乗せると真上に出て、縦に動かす・ホイールで変わり、⚙ には置かない。外れたら閉じ、キーボードでも開く", async ({
     page,
   }) => {
     await goto(page, "/live");
@@ -555,9 +564,10 @@ test.describe("音のボタンの縦のつまみ", () => {
     await expect(pop).toBeVisible();
     await expect(pop).toBeHidden();
 
-    // ⚙ のつまみと同じ値
+    // つまみは画面に1つだけ。マウスの端末の広い枠では ⚙ に音量のつまみを置かない
     await openSettings(page, "live");
-    await expect(page.getByTestId("live-volume")).toHaveValue(String(half - 5));
+    await expect(page.getByTestId("live-settings-menu")).toBeVisible();
+    await expect(page.getByTestId("live-volume")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("live-settings-menu")).toBeHidden();
 
@@ -607,6 +617,57 @@ test.describe("指の端末の音のボタン", () => {
     await button.tap();
     await expect(button).not.toHaveAccessibleName(name!);
     await expect(page.getByTestId("live-sound-pop")).toBeHidden();
+
+    // 代わりに ⚙ の先頭に音量のつまみ。← → で動かし、↓ はほかの行と同じく次の行へ (音量は変えない)
+    const gear = page.getByTestId("live-settings");
+    await gear.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("live-settings-menu")).toBeVisible();
+    const volume = page.getByTestId("live-volume");
+    await expect(volume).toBeFocused();
+    await expect(volume).toHaveValue("100");
+    await page.keyboard.press("ArrowLeft");
+    await expect(volume).toHaveValue("95");
+    await page.keyboard.press("ArrowRight");
+    await expect(volume).toHaveValue("100");
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByTestId("live-data-receive")).toBeFocused();
+    await expect(volume).toHaveValue("100");
+    // つまみは名前と値の下で、メニューの幅いっぱい (Pico の `[role="group"]` の横並びにしない)
+    const slider = (await volume.boundingBox())!;
+    const head = (await page
+      .getByTestId("live-settings-menu")
+      .locator(".volume-head")
+      .boundingBox())!;
+    expect(slider.y).toBeGreaterThanOrEqual(head.y + head.height - 1);
+    expect(Math.abs(slider.width - head.width)).toBeLessThan(2);
+  });
+});
+
+/** マウスの端末でも、畳んで音のボタンごと ⚙ に入ったら (狭い枠) ⚙ につまみを置く */
+test.describe("畳んだ枠の音量", () => {
+  test.use({ viewport: { width: 400, height: 800 } });
+
+  test("音のボタンは ⚙ の「消音」の行になり、音量のつまみも ⚙ に出る", async ({
+    page,
+  }) => {
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    expect(
+      await page.evaluate(
+        () => matchMedia("(hover: hover) and (pointer: fine)").matches,
+      ),
+    ).toBe(true);
+    await expect(page.getByTestId(STAGE.live)).toHaveAttribute("data-fold", "");
+
+    await wakeControls(page, STAGE.live);
+    await expect(page.getByTestId("live-sound")).toBeHidden();
+    await openSettings(page, "live");
+    await expect(page.getByTestId("live-mute")).toBeVisible();
+    const volume = page.getByTestId("live-volume");
+    await expect(volume).toBeVisible();
+    await volume.fill("40");
+    await expect(page.getByTestId("live-settings-menu")).toContainText("40%");
   });
 });
 
@@ -673,7 +734,7 @@ test.describe("⚙ の開け閉めと遅れて届く toggle", () => {
     await trigger.click();
     await expect(menu).toBeVisible();
     await release();
-    await page.getByTestId("live-volume").focus();
+    await page.getByTestId("live-ambient").focus();
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(trigger).toBeFocused();

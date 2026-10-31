@@ -136,7 +136,6 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 **仕組み**
 
 - [docs/architecture.md](docs/architecture.md) — **なぜこの作りなのか** (決めたこと・踏んだ落とし穴・画面で動いてよいもの (CSP))
-- [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・画面・状態遷移・テスト)
 - [docs/agent.md](docs/agent.md) — **チューナーエージェント** (取り合い・共有・選局・設定ファイル・B25・鍵の配布)
 - [docs/data.md](docs/data.md) — エージェントに都度聞くもの / denpa が持つもの
 - [docs/stream.md](docs/stream.md) — ライブの仕組み ([経緯](docs/stream-history.md))
@@ -144,7 +143,11 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [docs/encode.md](docs/encode.md) — エンコード (字幕・AV1・GPU)
 - [docs/cm.md](docs/cm.md) — CM 検出
 - [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
+
+**手を入れる**
+
 - [docs/development.md](docs/development.md) — **手を入れるとき** (開発環境・テスト)
+- [docs/app.md](docs/app.md) — **どこに何があるか** (ファイル・画面・状態遷移・テスト)
 - [docs/writing.md](docs/writing.md) — 書き方 (画面・docs・コメントの言葉)
 - [docs/design.md](docs/design.md) — 見た目の決まり
 - [docs/licenses.md](docs/licenses.md) — 借りているもの

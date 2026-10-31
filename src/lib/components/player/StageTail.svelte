@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
 
   import {
     canvasVideo,
@@ -27,6 +28,7 @@
   import type { Pip } from "./pip.svelte.js";
   import type { SettingChoice, SettingRow, SettingToggle } from "./settings";
   import SettingsMenu from "./SettingsMenu.svelte";
+  import { POINTER } from "./SoundButton.svelte";
   import type { Volume } from "./volume.svelte.js";
 
   /**
@@ -38,7 +40,7 @@
     /** testid の頭 (`watch` / `chase` / `live`) */
     prefix: string;
     background: Background;
-    /** 音量 (`volume.svelte.ts`)。⚙ の上の並びにつまみを置く */
+    /** 音量 (`volume.svelte.ts`)。音のボタンがつまみを出せないときだけ、⚙ の上の並びにつまみを置く */
     volume: Volume;
     ambient: Ambient;
     pip: Pip;
@@ -114,6 +116,13 @@
         ]
       : [],
   );
+
+  /**
+   * ⚙ に音量のつまみを置くか。**つまみは画面に1つだけ** — マウスの端末では音のボタンに乗せると浮かぶので
+   * (`SoundButton`) ⚙ には置かない。置くのは指の端末 (浮かばない) と、畳んで音のボタンごと ⚙ に入ったときだけ
+   */
+  const pointer = new MediaQuery(POINTER);
+  const showVolume = $derived(stage.fold || !pointer.current);
 
   /** 互換モードか。端末で決まるので、開いてから読む */
   let compat = $state(false);
@@ -222,7 +231,13 @@
   );
 </script>
 
-<SettingsMenu {prefix} {head} {toggles} {choices} {volume} />
+<SettingsMenu
+  {prefix}
+  {head}
+  {toggles}
+  {choices}
+  volume={showVolume ? volume : undefined}
+/>
 <!-- 出すときだけ置く。ライブは再生の前に出す注意を自分でも持っているので、いつも置くと2つになる -->
 {#if confirming}
   <DriveNotice

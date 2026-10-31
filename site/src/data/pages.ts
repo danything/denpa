@@ -112,6 +112,7 @@ export const sidebarGroups: { label: string; items: string[] }[] = [
       "install",
       "install-mac",
       "install-windows",
+      "install-talos",
       "screens",
       "faq",
       "v2",
@@ -129,7 +130,6 @@ export const sidebarGroups: { label: string; items: string[] }[] = [
     label: "仕組み",
     items: [
       "architecture",
-      "app",
       "agent",
       "data",
       "stream",
@@ -138,11 +138,11 @@ export const sidebarGroups: { label: string; items: string[] }[] = [
       "encode",
       "cm",
       "logo",
-      "development",
-      "writing",
-      "design",
-      "licenses",
     ],
+  },
+  {
+    label: "手を入れる",
+    items: ["development", "app", "writing", "design", "licenses"],
   },
 ];
 

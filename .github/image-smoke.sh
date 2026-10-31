@@ -54,7 +54,7 @@ denpa)
         }
         let ok = true;
         // QSV と Intel の VA-API ドライバは amd64、Rockchip の MPP は arm64 だけに入れている (Dockerfile)
-        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/libmfx-gen.so.1.2`] : ["/usr/local/lib/librockchip_mpp.so.1"];
+        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/dri/radeonsi_drv_video.so`, `${lib}/libmfx-gen.so.1.2`] : ["/usr/local/lib/librockchip_mpp.so.1"];
         for (const file of want) {
             if (!files.includes(file)) { console.error(`ありません: ${file}`); ok = false; }
         }
@@ -162,6 +162,18 @@ denpa-aio)
     # 本体のイメージそのままなので、ここでは起動だけを見る。バージョンを渡されたら、
     # release.Dockerfile で足したバージョンを本体が読めているかも見る
     want_version=${3:-}
+    # エージェントが https で読む libssl は、本体の土台 (base-nossl) に無くエージェントから写したもの
+    # (.github/aio.Dockerfile)。dlopen で読むので起動しただけでは分からず、ld.so に依存を解かせる
+    docker run --rm --entrypoint /usr/local/bin/bun "$image" -e '
+        const x64 = process.arch === "x64";
+        const lib = x64 ? "/usr/lib/x86_64-linux-gnu" : "/usr/lib/aarch64-linux-gnu";
+        const ld = x64 ? "/lib64/ld-linux-x86-64.so.2" : "/lib/ld-linux-aarch64.so.1";
+        for (const name of ["libssl.so.3", "libcrypto.so.3", "libzstd.so.1"]) {
+            const r = Bun.spawnSync([ld, "--list", `${lib}/${name}`]);
+            const out = r.stdout.toString() + r.stderr.toString();
+            if (r.exitCode !== 0 || out.includes("not found")) { console.error(`使えません: ${name}\n${out}`); process.exit(1); }
+        }
+    '
     docker run -d --name aio-smoke -p 3000:3000 -p 25252:25252 "$image" > /dev/null
     trap 'docker logs aio-smoke; docker rm -f aio-smoke > /dev/null' EXIT
     wait_for localhost:25252/denpa/tuners 30 || { echo "エージェントが答えません" >&2; exit 1; }

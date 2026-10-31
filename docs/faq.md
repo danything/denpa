@@ -22,7 +22,7 @@ Apple Silicon の Mac と x64 の Windows で動きます。エージェント�
 
 Linux の arm64 で動きます。イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます。
 arm64 には Intel の QSV が無く、VA-API のドライバも入れていないので、ソフトウェアでエンコードします。
-[install.md](install.md#用意するもの)・[encode.md](encode.md#gpu-でエンコードする-intel-qsv--va-api)。
+[install.md](install.md#用意するもの)・[encode.md](encode.md#gpu-でエンコードする-qsv--va-api)。
 
 ### GPU が無くても使えますか
 
