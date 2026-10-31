@@ -157,6 +157,7 @@
    */
   const jikkyoOn = jikkyoSwitch();
   const jikkyo = new JikkyoFeed(true);
+  $effect(() => jikkyo.setNg(data.jikkyoNg));
   const jikkyoChannel = $derived(
     data.jikkyo ? (current?.jikkyo ?? null) : null,
   );

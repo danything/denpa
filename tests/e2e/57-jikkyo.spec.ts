@@ -93,6 +93,8 @@ async function fakeNx(
   opts: {
     refuse?: () => boolean;
     text?: string;
+    /** 本文を替えて流す (それぞれを同じ時刻に) */
+    texts?: string[];
     mail?: string;
     quiet?: boolean;
     reply?: () => Reply;
@@ -186,18 +188,21 @@ async function fakeNx(
         timer ??= setInterval(() => {
           for (const offset of [-5_000, 0, 5_000, 10_000, 20_000]) {
             const at = Date.now() + offset;
-            ws.send(
-              JSON.stringify({
-                chat: {
-                  thread: "1",
-                  date: Math.floor(at / 1000),
-                  date_usec: (at % 1000) * 1000,
-                  user_id: "fake",
-                  ...(opts.mail === undefined ? {} : { mail: opts.mail }),
-                  content: opts.text ?? "テストのコメント",
-                },
-              }),
-            );
+            for (const content of opts.texts ?? [
+              opts.text ?? "テストのコメント",
+            ])
+              ws.send(
+                JSON.stringify({
+                  chat: {
+                    thread: "1",
+                    date: Math.floor(at / 1000),
+                    date_usec: (at % 1000) * 1000,
+                    user_id: "fake",
+                    ...(opts.mail === undefined ? {} : { mail: opts.mail }),
+                    content,
+                  },
+                }),
+              );
           }
         }, 500);
       });
@@ -319,6 +324,57 @@ test.describe("ライブの実況の色・位置・大きさ", () => {
     } finally {
       await setJikkyo(page, false);
     }
+  });
+});
+
+/** 設定画面の NG ワードを書き換えて、保存し終えるまで (欄を離れたときに保存する) */
+async function setNg(page: Page, text: string): Promise<void> {
+  await goto(page, "/settings/integrations");
+  const field = page.getByTestId("jikkyo-ng");
+  await field.fill(text);
+  await field.blur();
+  await expect(page.getByTestId("saved-result")).toBeVisible();
+}
+
+test.describe("実況の NG ワード", () => {
+  test("NG ワードを含むコメントは流さない (半角カナで書いても、ひらがなのものに効く)", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await setNg(page, "ﾈﾀﾊﾞﾚ\n\n");
+      // 空の行は落として保存する
+      await goto(page, "/settings/integrations");
+      await expect(page.getByTestId("jikkyo-ng")).toHaveValue("ﾈﾀﾊﾞﾚ");
+      await fakeNx(page, { texts: ["ねたばれ注意", "ふつうのコメント"] });
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "mpeg2");
+      const comments = page.getByTestId("jikkyo-comment");
+      await expect(comments.first()).toHaveText("ふつうのコメント", {
+        timeout: 20_000,
+      });
+      await page.waitForTimeout(1_000);
+      expect(await comments.allTextContents()).not.toContain("ねたばれ注意");
+    } finally {
+      await setNg(page, "");
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("多すぎる・長すぎる NG ワードは保存せず、理由を出す", async ({
+    page,
+  }) => {
+    await goto(page, "/settings/integrations");
+    const field = page.getByTestId("jikkyo-ng");
+    await field.fill("あ".repeat(41));
+    await field.blur();
+    await expect(page.getByTestId("settings-error")).toContainText(
+      "1 語は 40 文字までです",
+    );
+    await expect(field).toHaveValue("");
   });
 });
 

@@ -8,6 +8,7 @@
 import { type PostStyle, postStyle } from "./command";
 import { Cursor, type Take } from "./cursor";
 import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
+import { compileNg } from "./ng";
 import { NxJikkyo } from "./nx";
 import type { PostResult } from "./post";
 
@@ -30,6 +31,8 @@ export class JikkyoFeed {
   /** 読めないか。読めなくなったら ⚙ の行に「(いまは読めません)」を添える (通知は出さない) */
   down = $state(false);
 
+  /** NG ワードを含むか (世帯の設定)。控えには残し、出すときに外す (語を変えたらすぐ効く。取り直さない) */
+  private ng: (text: string) => boolean = () => false;
   private readonly cursor = new Cursor();
   private nx: NxJikkyo | null = null;
   private channel: string | null = null;
@@ -157,10 +160,20 @@ export class JikkyoFeed {
     this.cursor.pause();
   }
 
-  /** いまの放送時刻 `w` までに書かれたもののうち、まだ流していないもの。流していないときは何も返さない */
+  /** NG ワードを替えた。次に出すものから効く */
+  setNg(words: readonly string[]): void {
+    this.ng = compileNg(words);
+  }
+
+  /**
+   * いまの放送時刻 `w` までに書かれたもののうち、まだ流していないもの。流していないときは何も返さない。
+   * NG ワードを含むものは外す (自分の書き込みも)
+   */
   take(w: number): Take {
     if (!this.active) return { comments: [], jumped: false };
-    return this.cursor.take(w);
+    const take = this.cursor.take(w);
+    const comments = take.comments.filter((c) => !this.ng(c.text));
+    return { comments, jumped: take.jumped };
   }
 
   /** 画面を閉じた。繋いでいるものを閉じる */

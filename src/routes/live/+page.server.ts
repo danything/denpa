@@ -206,6 +206,8 @@ export function load(event) {
     bmlNetwork: current.bmlNetwork,
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
     jikkyo: current.jikkyo,
+    /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
+    jikkyoNg: current.jikkyoNg,
   };
 }
 

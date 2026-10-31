@@ -156,6 +156,7 @@
    */
   const jikkyoOn = jikkyoSwitch();
   const jikkyo = new JikkyoFeed(true);
+  $effect(() => jikkyo.setNg(data.jikkyoNg));
   const jikkyoActive = $derived(data.jikkyoAllowed && jikkyoOn.on);
   $effect(() => {
     const target = data.jikkyo;

@@ -2,6 +2,7 @@
   import { autosave, SaveState } from "#lib/autosave.svelte.js";
   import Lead from "#lib/components/Lead.svelte";
   import SaveNote from "#lib/components/SaveNote.svelte";
+  import { NG_LENGTH, NG_MAX } from "#lib/jikkyo/ng.js";
 
   import type { PageData } from "./$types";
 
@@ -68,6 +69,22 @@
           {/snippet}
         </Lead>
       </div>
+      <!-- NG ワード。1 行に 1 語。欄を離れたときに保存する (打っている途中では送らない) -->
+      <label class="field">
+        <span class="field-label">NG ワード</span>
+        <textarea
+          name="jikkyoNg"
+          rows="4"
+          spellcheck="false"
+          value={data.jikkyoNg.join("\n")}
+          data-testid="jikkyo-ng"></textarea>
+        <span class="hint"
+          >1 行に 1
+          語。含むコメントは流しません。全角・半角、英字の大小、ひらがな・カタカナの違いは区別しません
+          ({NG_MAX}
+          語まで・1 語 {NG_LENGTH} 文字まで)</span
+        >
+      </label>
     </form>
   </section>
 </div>
