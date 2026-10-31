@@ -260,7 +260,8 @@ export const config = {
    */
   agentDownGrace: num("AGENT_DOWN_GRACE", 3 * MIN),
   /**
-   * 局ロゴの定期チェックの間隔。**ほかの選局を共有するだけで、自分ではチューナーを開かない** (`logo.sweep`)。
+   * 局ロゴの定期チェックの間隔。**ほかの選局を共有する** (`logo.sweep`)。自分で開くのは、衛星のロゴが足りない間に
+   * どのチューナーも空いているときに、当たりの中継で待つ (分からなければ探す。`logo.awaitCarousel`)。
    * 開いた瞬間の通知 (`tuners`) でも共有するので、これは通知を取りこぼしたときの保険
    */
   logoSweepInterval: 10 * MIN,

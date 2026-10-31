@@ -11,7 +11,11 @@ import {
 } from "@danything/arib/synth";
 
 import { LogoCollector } from "./logo";
-import { DsmccLogoCollector, parseLogoModule } from "./logo-dsmcc";
+import {
+  CarouselProgress,
+  DsmccLogoCollector,
+  parseLogoModule,
+} from "./logo-dsmcc";
 
 /**
  * 衛星 (BS/CS) のロゴ。
@@ -358,6 +362,120 @@ describe("DsmccLogoCollector", () => {
       for (const packet of packets(data)) collector.feed(packet);
     }).not.toThrow();
     expect(collector.collected()).toEqual([]);
+  });
+});
+
+/**
+ * **開き直しても読みかけを捨てない** (`CarouselProgress`)。
+ *
+ * 衛星のカルーセルは十数分に一度まとめて来るだけで、チューナーが2台の衛星では番組表集めやライブに
+ * 途中で取り上げられる。開くたびに一から読んでいた頃は、DII を見たあとで切れるとそれまでの
+ * ブロックが消え、次に開いても DII が来るまで何も組み立てられず、何日経っても揃わなかった
+ */
+describe("読みかけ (CarouselProgress)", () => {
+  const bs = logoModule(0x05, [
+    { logoId: 1, services: [[4, 211]], data: PNG },
+    { logoId: 2, services: [[4, 212]], data: PNG },
+  ]);
+  const cs = logoModule(0x05, [{ logoId: 1, services: [[7, 330]], data: PNG }]);
+  const CS_MODULE_ID = MODULE_ID + 1;
+  const BLOCK = 8;
+  const blocksOf = (moduleId: number, module: Uint8Array) => {
+    const list: Uint8Array[] = [];
+    for (let at = 0, n = 0; at < module.length; at += BLOCK, n++)
+      list.push(
+        packetize(
+          ES_PID,
+          ddbSection(
+            DOWNLOAD_ID,
+            moduleId,
+            1,
+            n,
+            module.subarray(at, at + BLOCK),
+          ),
+        ),
+      );
+    return list;
+  };
+  const head = (dii: boolean) =>
+    stream(
+      packetize(0x0000, patSection([[ESS, PMT_PID]])),
+      packetize(PMT_PID, pmtSection(ESS, ES_PID, 0x79)),
+      ...(dii
+        ? [
+            packetize(
+              ES_PID,
+              diiSection(DOWNLOAD_ID, BLOCK, [
+                {
+                  moduleId: MODULE_ID,
+                  moduleSize: bs.length,
+                  moduleVersion: 1,
+                  name: "LOGO-05",
+                },
+                {
+                  moduleId: CS_MODULE_ID,
+                  moduleSize: cs.length,
+                  moduleVersion: 1,
+                  name: "CS_LOGO-05",
+                },
+              ]),
+            ),
+          ]
+        : []),
+    );
+  const bsBlocks = blocksOf(MODULE_ID, bs);
+  const csBlocks = blocksOf(CS_MODULE_ID, cs);
+  const half = (list: Uint8Array[], first: boolean) => {
+    const mid = Math.ceil(list.length / 2);
+    return first ? list.slice(0, mid) : list.slice(mid);
+  };
+  /** 1回目: DII と前半のブロックで切れる。2回目: DII の無いまま後半のブロック */
+  const first = stream(
+    head(true),
+    ...half(bsBlocks, true),
+    ...half(csBlocks, true),
+  );
+  const second = stream(
+    head(false),
+    ...half(bsBlocks, false),
+    ...half(csBlocks, false),
+  );
+
+  test("読みかけを渡せば、DII の無い2回目でも続きから組み立てる", () => {
+    const progress = new CarouselProgress();
+    const before = new DsmccLogoCollector(progress);
+    for (const packet of packets(first)) before.feed(packet);
+    expect(before.collected()).toEqual([]);
+    expect(before.carouselRead).toBe(false);
+
+    // 開き直し。PAT・PMT はその中継のものを読み直す
+    const after = new DsmccLogoCollector(progress);
+    for (const packet of packets(second)) after.feed(packet);
+    expect(
+      after
+        .collected()
+        .flatMap((logo) => logo.services.map((s) => s.serviceId))
+        .sort(),
+    ).toEqual([211, 212, 330]);
+    // 2回に分けて読んでも、知らされたモジュールが全部揃えば読み切ったことになる
+    expect(after.carouselRead).toBe(true);
+  });
+
+  test("渡さなければ一から (2回目だけでは何も組み立てられない)", () => {
+    const before = new DsmccLogoCollector();
+    for (const packet of packets(first)) before.feed(packet);
+    const after = new DsmccLogoCollector();
+    for (const packet of packets(second)) after.feed(packet);
+    expect(after.collected()).toEqual([]);
+  });
+
+  test("LogoCollector も同じ読みかけを使う", () => {
+    const progress = new CarouselProgress();
+    new LogoCollector(4, progress).feed(first);
+    const collector = new LogoCollector(4, progress);
+    collector.feed(second);
+    expect(collector.satelliteCarouselRead).toBe(true);
+    expect(collector.collected().map((f) => f.networkId)).toEqual([4, 4, 7]);
   });
 });
 

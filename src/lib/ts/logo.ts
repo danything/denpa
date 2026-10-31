@@ -25,7 +25,7 @@ import {
   TABLE_SDT_ACTUAL,
 } from "@danything/arib/psi";
 
-import { DsmccLogoCollector } from "./logo-dsmcc";
+import { type CarouselProgress, DsmccLogoCollector } from "./logo-dsmcc";
 import { withPalette } from "./logo-palette";
 
 const PID_CDT = 0x0029;
@@ -170,7 +170,7 @@ export class LogoCollector {
   private readonly sdt = new SectionAssembler(PID_SDT);
   private readonly packets = new PacketStream();
   /** 衛星ぶん。地上波の TS では何も出てこないので、開いていても害は無い */
-  private readonly dsmcc = new DsmccLogoCollector();
+  private readonly dsmcc: DsmccLogoCollector;
 
   /** logo_id ごとの、いま持っている一番大きいロゴ */
   private readonly logos = new Map<number, LogoData>();
@@ -180,8 +180,15 @@ export class LogoCollector {
   /**
    * @param networkId 開いている物理チャンネルのネットワーク。地上波の CDT には
    *   ネットワークが入っていないので、外から教えてもらう
+   * @param carousel 衛星のカルーセルの読みかけ (`CarouselProgress`)。渡せば、前に開いたときの続きから
+   *   読む。渡さなければ一から
    */
-  constructor(private readonly networkId: number) {}
+  constructor(
+    private readonly networkId: number,
+    carousel?: CarouselProgress,
+  ) {
+    this.dsmcc = new DsmccLogoCollector(carousel);
+  }
 
   /**
    * この中継にロゴのカルーセルが載っているか (衛星のみ)。

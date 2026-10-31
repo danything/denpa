@@ -194,6 +194,21 @@
           (1週間後にまた確かめます)
         </div>
       {/if}
+      {#if data.logos.satellite.missing > 0 && !data.logoSweep.running}
+        <!--
+                    衛星のロゴは十数分に一度しか流れてこず、揃うまで何回か開き直すことがある。
+                    いつ続きを読むのかを言わないと、止まっているように見える (logo.awaitCarousel)
+                -->
+        <div class="tiny muted" data-testid="logo-satellite-waiting">
+          BS・CS の <span class="num">{data.logos.satellite.missing}</span>
+          局は、{#if data.logos.satellite.carrier !== null}
+            {data.logos.satellite.carrier} に十数分おきにまとめて流れてくるのを待っています。
+            番組表集めがこの中継を開いたときと、チューナーが空いているときに、続きから読みます
+          {:else}
+            ロゴを流している中継をまだ探しています。チューナーが空いているときと、番組表集めが衛星の中継を開いたときに確かめます
+          {/if}
+        </div>
+      {/if}
     {/if}
 
     <!-- ロゴの取得は1チャンネルに数分かかる。出さないと押しても何も起きていないように見える -->
