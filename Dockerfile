@@ -263,11 +263,14 @@ COPY . .
 RUN bun run build
 
 # ---------------------------------------------------------------------------
-# 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・libstdc++・zlib・ca-certificates・
-# tzdata など要るものだけを置いたもの)。下の `runtime-libs` 段が「土台にもうあるライブラリ」を
+# 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・ca-certificates・tzdata など
+# 要るものだけを置いたもの)。**libssl の無い base-nossl を使う** — bun は TLS を自分で持ち (BoringSSL を静的に繋ぐ)、
+# ffmpeg も OpenSSL を繋がないので、cc の土台にある libssl・libcrypto・libgomp (8MB ほど) は誰も読まない。
+# ffmpeg と GPU のドライバが繋ぐ libstdc++・libgcc_s・zlib は、下の `runtime-libs` 段が ldd で辿って写す
+# (エージェントを同じコンテナに入れる denpa-aio は libssl を要るので、あちらで足す。.github/aio.Dockerfile)。下の `runtime-libs` 段が「土台にもうあるライブラリ」を
 # 見分けるのにも使うので、段に名前を付けておく
 # ---------------------------------------------------------------------------
-FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb56c49d4441dba6153ccf790364f97e64b1 AS distroless
+FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:ca1c7e6a875e59345ae6ff182a1e0930f0ca1ffef23a9b830f8823ab348ad5dd AS distroless
 
 # ---------------------------------------------------------------------------
 # 本番イメージへ写すライブラリを集める段。**本番イメージにはシェルも apt も無い**ので、
@@ -307,7 +310,7 @@ COPY --from=ffmpeg /out/doc/ /rootfs/usr/share/doc/
 # - **dlopen で読むもの** (ldd には出ない): libva のドライバ (dri/ の iHD・i965) と、libvpl が読む
 #   QSV のランタイム (libmfx-gen.so.1.2 と、それがさらに読む libmfx-gen/)。ドライバはディレクトリ
 #   ごと写し、それらが繋ぐライブラリも ldd で辿る
-# **土台 (distroless) にもうあるもの (glibc・libstdc++・zlib など) は写さない** (名前で見分ける)。
+# **土台 (distroless) にもうあるもの (glibc など) は写さない** (名前で見分ける)。
 # 写したライブラリのパッケージの記録 (status.d) と copyright も置く — distroless と同じ置き方で、
 # 脆弱性の検査やライセンスの確かめが中身を読めるように。
 # 依存が見つからなければここでビルドを止める (起動してからエンコードで落ちるより早く分かる)

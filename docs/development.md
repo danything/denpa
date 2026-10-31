@@ -197,7 +197,7 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
 ### イメージの土台は distroless
 
-**本体もエージェントも土台は distroless** (`gcr.io/distroless/cc-debian13`) で、シェルも apt も
+**本体もエージェントも土台は distroless** (本体は libssl の無い `gcr.io/distroless/base-nossl-debian13`、エージェントは `gcr.io/distroless/cc-debian13`) で、シェルも apt も
 coreutils もありません。どちらも root で動きます。本体の ffmpeg が使うライブラリ
 (libva・Intel の VA-API ドライバ・QSV のランタイムなど) は、Dockerfile の `runtime-libs` 段で
 Debian のパッケージを入れてから要るファイルだけを写しています (dlopen で読むドライバはディレクトリごと)。
