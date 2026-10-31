@@ -216,7 +216,6 @@
      * 形が変わったら (`ResizeObserver`) と中身が入れ替わったら (`MutationObserver`) 測り直す。
      * どちらもコマに束ねてから測る — 測ること自体が組み直しを呼ぶので、そのままだと止まらない
      */
-    const again = () => take();
     let waiting = 0;
     const later = () => {
       if (waiting !== 0) return;
@@ -226,9 +225,9 @@
       });
     };
 
-    window.addEventListener("resize", again);
-    window.addEventListener("scroll", again, { passive: true });
-    window.visualViewport?.addEventListener("resize", again);
+    window.addEventListener("resize", take);
+    window.addEventListener("scroll", take, { passive: true });
+    window.visualViewport?.addEventListener("resize", take);
 
     /*
      * **見張るのは土台の中だけ。** この表示も body の中にいるので、body ごと
@@ -251,9 +250,9 @@
 
     return () => {
       if (waiting !== 0) cancelAnimationFrame(waiting);
-      window.removeEventListener("resize", again);
-      window.removeEventListener("scroll", again);
-      window.visualViewport?.removeEventListener("resize", again);
+      window.removeEventListener("resize", take);
+      window.removeEventListener("scroll", take);
+      window.visualViewport?.removeEventListener("resize", take);
       sizes.disconnect();
       changes.disconnect();
     };

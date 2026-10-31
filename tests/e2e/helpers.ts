@@ -21,8 +21,8 @@ export async function goto(page: Page, url: string): Promise<void> {
   await page.locator('[data-hydrated="true"]').waitFor();
   /*
    * **番組表はマスだけ後から届く** (`guide/+page.ts` が `/api/guide` から取る)。
-   * ハイドレーションだけ待って触りにいくと、まだ骨組みしか無いことがある。局が1つも無ければ表の代わりに
-   * 「局がありません」が出るので、どちらかが出るまで待つ
+   * ハイドレーションだけ待って触りにいくと、まだ骨組みしか無いことがある。局や番組表が無ければ表の代わりに
+   * 案内 (`empty-grid`) が出るので、どちらかが出るまで待つ
    */
   const pathname = new URL(url, "http://localhost").pathname;
   if (pathname === "/guide") {
@@ -487,8 +487,7 @@ export async function clearRules(page: Page): Promise<void> {
  * (`<一覧>-more`。`use:sentinel`) が画面に入るたびに続きを足す。件数を数える・
  * 行を番号で名指しするテストは、その前にこれを呼ぶ (ホームは `goto` が呼ぶ)。
  *
- * **印を巻き取って見せる**のはブラウザの `scrollIntoView` で。一覧は自分の箱の中で
- * 巻き取る (`overflow: auto`) ので、箱ごと動かさないと見えない。足されたかどうかは
+ * **印を巻き取って見せる**のはブラウザの `scrollIntoView` で。足されたかどうかは
  * **行の数**で見る (印の文言で見ていた頃は、読む前に足されると比べる相手が同じになって
  * 5 秒ずつ空回りし、テストごと時間切れになった)。
  *
@@ -566,6 +565,15 @@ export async function cancelAllReservations(page: Page): Promise<void> {
  * 同じ場所への `pointermove` は捨てられるので (止まっているカーソルの下で
  * 中身が動いただけでもブラウザは投げてくる)、**2回、違う場所へ動かします**
  */
+export async function wakeControls(page: Page, stage: string): Promise<void> {
+  const box = await page.getByTestId(stage).boundingBox();
+  if (box === null) return;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.move(x, y - 4);
+}
+
 /**
  * GPU で描ける端末として開く。E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`) ので、
  * WebGL の描き手の名前を差し替える。時間で動き続けるもの (アンビエントの光など) を回したまま見るテストで使う
@@ -578,15 +586,6 @@ export async function pretendGpu(page: Page): Promise<void> {
       return typeof value === "string" ? "Test GPU" : value;
     };
   });
-}
-
-export async function wakeControls(page: Page, stage: string): Promise<void> {
-  const box = await page.getByTestId(stage).boundingBox();
-  if (box === null) return;
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.move(x, y - 4);
 }
 
 /**
@@ -717,8 +716,8 @@ export async function oneRowTroubles(
 }
 
 /**
- * **全画面をやめる。** 指の端末の観る画面は、開いた時点で全画面に入る。狭い枠のまま
- * (操作バーを映像の下に出した形) を見るときに呼ぶ
+ * **全画面をやめる。** 指の端末の観る画面は、開いた時点で全画面に入る。全画面でない狭い枠を
+ * 見るときに呼ぶ
  */
 export async function leaveFullscreen(page: Page): Promise<void> {
   await page.evaluate(
@@ -1223,7 +1222,7 @@ export async function routeCaptions(page: Page): Promise<void> {
 
 /**
  * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) の入れ物を返す。
- * 広い画面 (1000px 以上) はサイドバーの「表示」、狭い画面は一覧の頭の1行の「⋯」から出るメニュー
+ * 広い画面 (1000px 以上) はサイドバーの「表示」、狭い画面は下のタブのすぐ上の1行の「⋯」から出るメニュー
  */
 export async function homeTools(page: Page): Promise<Locator> {
   const side = page.getByTestId("sidebar");
@@ -1236,7 +1235,7 @@ export async function homeTools(page: Page): Promise<Locator> {
 
 /**
  * ホームの絞り込み (すべて・予約・録画中・未視聴、見てほしいことの競合・失敗・録り逃し・CMの判定) を押す。
- * 広い画面はサイドバーの行、狭い画面は一覧の頭のチップ
+ * 広い画面はサイドバーの行、狭い画面は下のタブのすぐ上の1行のチップ
  */
 export async function homeFilter(page: Page, id: string): Promise<void> {
   const side = page.getByTestId("sidebar");
@@ -1327,7 +1326,7 @@ export async function fakeFrame(page: Page, testid: string): Promise<void> {
 }
 
 /** 切り抜き1枚 (`POST /api/clips` の返事。`#lib/clips.ts` の `Clip`) */
-export interface ClipJson {
+interface ClipJson {
   id: number;
   place: "live" | "chase" | "watch";
   recordingId: number | null;

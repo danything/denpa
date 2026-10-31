@@ -493,7 +493,12 @@
     localLookup = loadOffline(rec.id).catch(() => null);
     const asked = stored(CODEC_KEY);
     choice =
-      asked === "h264" || asked === "av1" || asked === "mpeg2" ? asked : "auto";
+      asked === "h264" ||
+      asked === "hevc" ||
+      asked === "av1" ||
+      asked === "mpeg2"
+        ? asked
+        : "auto";
     void (async () => {
       const [held, got] = await Promise.all([
         localLookup,

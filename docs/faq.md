@@ -21,8 +21,8 @@ Apple Silicon の Mac と x64 の Windows で動きます。エージェント�
 ### arm64 でも動きますか
 
 Linux の arm64 で動きます。イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます。
-arm64 には Intel の QSV が無く、VA-API のドライバも入れていないので、ソフトウェアでエンコードします。
-[install.md](install.md#用意するもの)・[encode.md](encode.md#gpu-でエンコードする-qsv--va-api)。
+arm64 には Intel の QSV が無く、VA-API のドライバも入れていないので、ふつうはソフトウェアでエンコードします。Rockchip (RK3588) なら MPP でハードウェアエンコードします。
+[install.md](install.md#用意するもの)・[encode.md](encode.md#gpu-でエンコードする-qsv--va-api)・[Rockchip](encode.md#rockchip-rk3588-でエンコードする)。
 
 ### GPU が無くても使えますか
 

@@ -148,16 +148,16 @@
   --dp-shine: 1.8s;
   --pico-transition: var(--dp-duration) var(--dp-ease);
   /*
-	 * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
-	 * そのまま使う (上書きしない。アイコンの水色とも揃う)。
-	 * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・通知 cyan)。
-	 * 「通知」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
-	 *
-	 * **状態の色は状態にだけ使い、ふつうの状態には付けない。**
-	 * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
-	 * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
-	 * ふつうの状態は地の色に混ぜた淡いバッジにして、目は録画中の赤だけに行くようにする
-	 */
+     * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
+     * そのまま使う (上書きしない。アイコンの水色とも揃う)。
+     * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・通知 cyan)。
+     * 「通知」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
+     *
+     * **状態の色は状態にだけ使い、ふつうの状態には付けない。**
+     * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
+     * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
+     * ふつうの状態は地の色に混ぜた淡いバッジにして、目は録画中の赤だけに行くようにする
+     */
   --dp-rec: #d93526; /* red-500 */
   --dp-ok: #00895a; /* jade-500 */
   --dp-warn: #c79400; /* amber-350 */
@@ -428,28 +428,6 @@ html:active-view-transition-type(theme)::view-transition-group(*) {
 /* Pico は送信ボタンを横幅いっぱいにする。ボタンは中身の幅に */
 button[type="submit"] {
   width: auto;
-}
-/*
- * 押せる入れ物 (行やカードを丸ごと押すもの。`<div role="button">`)。Pico は [role=button] をボタンの見た目にするので、
- * 入れ物には当てない(色も枠も余白も親のまま。見た目は各画面の <style>)
- */
-div[role="button"] {
-  --pico-background-color: transparent;
-  --pico-border-color: transparent;
-  --pico-color: inherit;
-  --pico-box-shadow: none;
-  display: block;
-  width: auto;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font-weight: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  text-align: inherit;
-  box-shadow: none;
 }
 /*
  * **画面の高さは、単位ではなく `html` から採る。**
@@ -1408,7 +1386,7 @@ a.button {
 /*
  * ---- 滑る印 (タブの下線・ヘッダーのナビの下線・下のタブの印・サイドバーの左の縦線) ----
  * **印は並び (`.segmented`・`ul.links`・`.tabbar`・`.side-list`) の疑似要素 1 本で、選んでいる項目に CSS のアンカーで付ける。**
- * 選び直すとアンカーが移り、`left`・`right` の transition で前の場所から滑る (ばね。`--dp-duration-move`)。
+ * 選び直すとアンカーが移り、`left`・`right` (縦の並びは `top`・`bottom`) の transition で前の場所から滑る (ばね。`--dp-duration-move`)。
  * 開いた直後は前の値が無いので、その場に出る (ほかの画面から来たときは滑らない)。
  * 並びごとに `anchor-scope` で閉じ、別の並びの印と混ざらないようにする
  */
@@ -2264,7 +2242,7 @@ dialog[open] > article {
 
 /*
  * ---- サイドバー (`.side-panel`・`.side-label`・`.side-list`・`.side-item`・`.side-foot`) ----
- * **録画・ルール・設定のサイドバーは同じ部品。** ライブの局の一覧と検索の「ルールとして保存」の行も、行の形だけ使う。
+ * **録画・切り抜き・ルール・設定のサイドバーは同じ部品。** ライブの局の一覧と検索の「ルールとして保存」の行も、行の形だけ使う。
  * 幅と左右どちらに置くか (グリッドの列) は使う側で。
  *
  * - 窓の端とヘッダーに付ける。地・枠・影は付けない

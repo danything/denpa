@@ -42,13 +42,13 @@ export { default as JIKKYO } from "~icons/lucide/message-square-text";
 export { default as SHRINK } from "~icons/lucide/minimize";
 /** 互換モード (再生の設定の行。動画が止まる端末向けに canvas に描く。`canvas-video.ts`) */
 export { default as COMPAT } from "~icons/lucide/monitor-play";
-export { default as PAUSE } from "~icons/lucide/pause";
 /** 実況に書き込むものの色・位置・大きさ */
 export { default as PALETTE } from "~icons/lucide/palette";
+export { default as PAUSE } from "~icons/lucide/pause";
 /** ピクチャーインピクチャー (小窓) */
 export { default as PIP } from "~icons/lucide/picture-in-picture-2";
 export { default as PLAY } from "~icons/lucide/play";
-/** CM飛ばし。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
+/** CMスキップ。**鋏**にしてあるのは、送りのボタン (`NEXT`) と見分けるため */
 export { default as CUT } from "~icons/lucide/scissors";
 /** 再生の設定 (⚙ `SettingsMenu`) */
 export { default as SETTINGS } from "~icons/lucide/settings";
@@ -58,9 +58,9 @@ export { default as NEXT } from "~icons/lucide/skip-forward";
 /** アンビエントモード (`AmbientGlow.svelte`)。弱い光を放つ太陽 */
 export { default as AMBIENT } from "~icons/lucide/sun-dim";
 export { default as TRASH } from "~icons/lucide/trash";
-export { default as SOUND_ON } from "~icons/lucide/volume-2";
 /** 音量のつまみ (`VolumeSlider`) の中で、半分より小さいとき */
 export { default as SOUND_LOW } from "~icons/lucide/volume-1";
+export { default as SOUND_ON } from "~icons/lucide/volume-2";
 export { default as SOUND_OFF } from "~icons/lucide/volume-off";
 export { default as CLOSE } from "~icons/lucide/x";
 

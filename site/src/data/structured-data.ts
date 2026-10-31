@@ -5,7 +5,7 @@
 import { ogImage, repoUrl, siteUrl } from "./pages.ts";
 
 /** <head> に入れる <script type="application/ld+json">。`</script>` で閉じないよう `<` は逃がす */
-export function jsonLd(data: Record<string, unknown>) {
+function jsonLd(data: Record<string, unknown>) {
   return {
     tag: "script" as const,
     attrs: { type: "application/ld+json" },
@@ -21,7 +21,7 @@ export function jsonLd(data: Record<string, unknown>) {
  * 取れなければ (オフライン・API の回数制限) undefined で、構造化データからバージョンを省く
  */
 let latest: Promise<string | undefined> | undefined;
-export function latestVersion(): Promise<string | undefined> {
+function latestVersion(): Promise<string | undefined> {
   latest ??= (async () => {
     const api = repoUrl.replace(
       "https://github.com/",

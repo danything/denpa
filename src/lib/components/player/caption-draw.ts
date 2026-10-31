@@ -33,10 +33,10 @@ import { fitRect } from "./paint";
  */
 const CAPTION_FONT = '"Denpa Font"';
 
-/** 読み込みを頼んだ字。同じ字で何度も頼まない */
+/** 読み込みをリクエストした字。同じ字で何度もリクエストしない */
 const asked = new Set<string>();
 
-/** その字を描く字を読み込む。頼むものが無ければ null、あればそれが済む (読めなくても済む) Promise */
+/** その字を描く字を読み込む。リクエストするものが無ければ null、あればそれが済む (読めなくても済む) Promise */
 function loadFor(text: string): Promise<void> | null {
   const chars = [...new Set(text)].filter((c) => !asked.has(c)).join("");
   if (chars === "") return null;

@@ -54,7 +54,7 @@
     ambient,
   }: Props = $props();
 
-  // 中のメニュー (`SpeedMenu`・`SettingsMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
+  // 中のメニュー (`stageMenu`) が「開いている間は操作列を残せ」と言う先。取り手で渡す (props は差し替わりうる)
   setContext(PLAYER_CONTROLS, () => controls);
   /** テーブルトップか (`#lib/phone-form.ts` の `TABLETOP`)。並べ方は CSS、ここは光と反射のどちらを置くかだけ */
   const tabletop = new MediaQuery(TABLETOP);

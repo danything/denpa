@@ -290,7 +290,7 @@ const QUALITIES = [0.92, 0.85, 0.75, 0.6];
  * WebP (作れないブラウザ (Safari) では JPEG) にして、`most` バイトに収まるまで画質を下げる。
  * サーバは受けたものを AVIF にし直すので、ここは見た目が崩れない程度でよい。収まらなければ null
  */
-export async function uploadBlob(
+async function uploadBlob(
   canvas: HTMLCanvasElement,
   most = CLIP_BYTES_MOST,
 ): Promise<Blob | null> {
