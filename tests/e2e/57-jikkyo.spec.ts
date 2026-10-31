@@ -1,4 +1,9 @@
-import type { APIRequestContext, Page, WebSocketRoute } from "@playwright/test";
+import type {
+  APIRequestContext,
+  Locator,
+  Page,
+  WebSocketRoute,
+} from "@playwright/test";
 
 import { BS11, FUJI, MX } from "../fake/services";
 import {
@@ -608,6 +613,94 @@ test.describe("ライブで実況に書き込む", () => {
   });
 });
 
+test.describe("実況のコメントの一覧", () => {
+  test("右端の列のボタンで右の列の頭に出し、端末に覚える。上へ巻くと「最新へ」が出る", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page);
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "mpeg2");
+      await expect(page.getByTestId("jikkyo-list")).toHaveCount(0);
+      await wakeControls(page, "live-frame");
+      const button = page.getByTestId("live-jikkyo-list");
+      await button.click();
+      await expect(button).toHaveAttribute("aria-pressed", "true");
+      expect(
+        await page.evaluate(() => localStorage.getItem("player-jikkyo-list")),
+      ).toBe("1");
+
+      // 局の一覧はそのまま下に残る
+      const list = page.getByTestId("jikkyo-list");
+      const box = (await list.boundingBox())!;
+      const channels = (await page.getByTestId("live-channels").boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(channels.y);
+
+      const rows = page.getByTestId("jikkyo-list-row");
+      await expect(rows.first()).toContainText("テストのコメント", {
+        timeout: 20_000,
+      });
+      await expect(
+        page.getByRole("list", { name: "実況のコメント" }),
+      ).toBeVisible();
+      // 時刻は h:mm:ss
+      await expect(rows.first().locator("time")).toHaveText(
+        /^\d{1,2}:\d{2}:\d{2}$/,
+      );
+      await expect(page.getByTestId("jikkyo-list-force")).not.toHaveText(
+        /勢い 0$/,
+      );
+      // 巻けるほど貯まるのを待ってから、上へ巻く
+      await expect
+        .poll(() => rows.count(), { timeout: 20_000 })
+        .toBeGreaterThan(30);
+      const scroller = page.getByTestId("jikkyo-list-rows");
+      await scroller.evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      const latest = page.getByTestId("jikkyo-list-latest");
+      await expect(latest).toBeVisible();
+      await latest.click();
+      await expect(latest).toBeHidden();
+      expect(
+        await scroller.evaluate(
+          (el) => el.scrollHeight - el.scrollTop - el.clientHeight,
+        ),
+      ).toBeLessThan(10);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("スマホの縦では、映像の下・局の一覧の上に出す", async ({ page }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, { quiet: true });
+      await deviceOn(page);
+      await page.addInitScript(() =>
+        localStorage.setItem("player-jikkyo-list", "1"),
+      );
+      await page.setViewportSize({ width: 390, height: 844 });
+      await goto(page, `/live?service=${MX.id}`);
+      const list = page.getByTestId("jikkyo-list");
+      await expect(list).toBeVisible();
+      const box = (await list.boundingBox())!;
+      const frame = (await page.getByTestId("live-frame").boundingBox())!;
+      const channels = (await page.getByTestId("live-channels").boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(frame.y + frame.height);
+      expect(box.y + box.height).toBeLessThanOrEqual(channels.y);
+      // 幅からはみ出さない
+      expect(box.x + box.width).toBeLessThanOrEqual(390);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
+
 test.describe("録画の実況", () => {
   test("録画の区間のコメントを過去ログ API から 1 回で取り、再生位置の放送時刻に合わせて流す", async ({
     page,
@@ -690,6 +783,93 @@ test.describe("録画の実況", () => {
       ).toContain('name="comments"');
       expect(clip.layers.comments).toBe(true);
       await request.delete(`/api/clips/${clip.id}`);
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("コメントの一覧は再生位置に合わせて読み直し、行を押すとその時刻へ飛ぶ", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { id } = await recordOne(page, request);
+    await setJikkyo(page, true);
+    try {
+      const state = (await (
+        await request.get(`/api/recordings/${id}`)
+      ).json()) as {
+        jikkyo: { channel: string; head: number; end: number } | null;
+      };
+      const target = state.jikkyo;
+      if (target === null) throw new Error("録画に実況のチャンネルが無い");
+      // 偽の過去ログ。録画の頭から 0.1 秒おきに、頭からの番号を本文にしたコメント
+      await page.route(
+        "https://jikkyo.tsukumijima.net/api/kakolog/**",
+        (route) => {
+          const packet = [];
+          for (let n = 0; n < 1200; n++) {
+            const at = target.head + n * 100;
+            packet.push({
+              chat: {
+                thread: "1",
+                date: String(Math.floor(at / 1000)),
+                date_usec: String((at % 1000) * 1000),
+                user_id: "fake",
+                content: `${n}番`,
+              },
+            });
+          }
+          return route.fulfill({
+            contentType: "application/json",
+            headers: { "access-control-allow-origin": "*" },
+            body: JSON.stringify({ packet }),
+          });
+        },
+      );
+      await deviceOn(page);
+      await page.addInitScript(() =>
+        localStorage.setItem("player-jikkyo-list", "1"),
+      );
+      /*
+       * 再生位置は時計で進める (上と同じく偽の録画は再生できない)。飛んだら (`currentTime` を書いたら) そこから進める。
+       * 偽の録画は数秒しかなく、それより先の放送時刻は録画の終わりに留まるので、戻る向きに飛んで確かめる
+       */
+      await page.route(/\/api\/recordings\/\d+\/(file|stream)/, () => {});
+      await page.addInitScript(() => {
+        let base = 0;
+        let from = Date.now();
+        Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+          configurable: true,
+          get: () => base + (Date.now() - from) / 2000,
+          set: (to: number) => {
+            base = to;
+            from = Date.now();
+          },
+        });
+      });
+      await goto(page, `/watch/${id}`);
+      const rows = page.getByTestId("jikkyo-list-row");
+      const number = async (row: Locator) =>
+        Number(
+          /^(\d+)番/.exec(
+            (await row.locator(".text").textContent()) ?? "",
+          )?.[1],
+        );
+      // 進むにつれて、新しいものが下に増える
+      await expect
+        .poll(() => rows.count(), { timeout: 30_000 })
+        .toBeGreaterThan(20);
+      const before = await number(rows.last());
+      await expect.poll(() => number(rows.last())).toBeGreaterThan(before);
+
+      // 行を押すと、その時刻へ戻り、そこまでのもので並べ直す
+      const count = await rows.count();
+      const pick = rows.nth(count - 20);
+      const to = await number(pick);
+      await pick.locator("button").click();
+      await expect.poll(() => number(rows.last())).toBeLessThan(to + 10);
+      expect(await number(rows.last())).toBeGreaterThanOrEqual(to);
     } finally {
       await setJikkyo(page, false);
     }

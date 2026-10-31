@@ -115,6 +115,30 @@ export class CommentStore {
     return this.list.slice(this.after(from), this.after(to));
   }
 
+  /** `from < at ≤ to` のコメントの数 (勢い。並べ直さずに数える) */
+  count(from: number, to: number): number {
+    return Math.max(0, this.after(to) - this.after(from));
+  }
+
+  /**
+   * `from < at ≤ to` のうち、`keep` を満たす新しいほうから `limit` 件 (時刻の順で返す)。
+   * 後ろから見ていき、`limit` 件そろったら止める (区間が長くても、見るのは要るぶんだけ)
+   */
+  latest(
+    from: number,
+    to: number,
+    limit: number,
+    keep: (comment: Comment) => boolean = () => true,
+  ): Comment[] {
+    const out: Comment[] = [];
+    const lo = this.after(from);
+    for (let i = this.after(to) - 1; i >= lo && out.length < limit; i--) {
+      const comment = this.list[i]!;
+      if (keep(comment)) out.push(comment);
+    }
+    return out.reverse();
+  }
+
   /** `[from, to)` のうち、まだ埋めていない区間 */
   missing(from: number, to: number): Span[] {
     const gaps: Span[] = [];

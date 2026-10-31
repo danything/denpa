@@ -1,6 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
 
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import { ambientMode } from "#lib/components/player/ambient.svelte.js";
@@ -21,6 +22,7 @@
     CAPTION,
     CHECK,
     CODEC,
+    JIKKYO,
     PAUSE,
     PLAY,
     SOUND_OFF,
@@ -28,10 +30,13 @@
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
+  import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
-  import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
+  import PlayerLayout, {
+    PHONE_LANDSCAPE,
+  } from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
@@ -64,7 +69,7 @@
   import { clock as clockLabel } from "#lib/format.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { KAKOLOG_LAG } from "#lib/jikkyo/kakolog.js";
-  import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
+  import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { write as remind } from "#lib/keep.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
@@ -167,6 +172,19 @@
       );
   });
   onMount(() => () => jikkyo.close());
+
+  /**
+   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
+   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない
+   */
+  const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
+  const phoneLandscape = new MediaQuery(PHONE_LANDSCAPE);
+  const canList = $derived(
+    jikkyoActive &&
+      data.jikkyo !== null &&
+      !phoneLandscape.current &&
+      !fullscreen.active,
+  );
   /** いま観ている場面の放送時刻 (元の TS の頭の放送時刻 + 追っかけの再生位置) */
   function airTime(): number | null {
     const target = data.jikkyo;
@@ -356,6 +374,16 @@
           testid="chase-shot"
           onclick={() => void snapshot()}
         />
+        <!-- 右の列の頭に「コメントの一覧」を出す・しまう (`canList`) -->
+        {#if canList}
+          <ControlButton
+            icon={JIKKYO}
+            label="コメントの一覧"
+            on={jikkyoList.on}
+            testid="chase-jikkyo-list"
+            onclick={jikkyoList.toggle}
+          />
+        {/if}
       </ControlBar>
 
       <ControlBar shown={controls.shown} testid="chase-controls">
@@ -541,6 +569,12 @@
   <!-- 右は番組の中身。枠は観る画面と同じ部品 (FactsAside)、中身も同じ (ProgramFacts) -->
   {#snippet aside()}
     <FactsAside testid="chase-facts">
+      {#snippet top()}
+        <!-- 実況のコメントの一覧は、出している間だけ列の頭に (観る画面と同じ) -->
+        {#if canList && jikkyoList.on}
+          <JikkyoList feed={jikkyo} air={airTime} />
+        {/if}
+      {/snippet}
       <ProgramFacts program={detail.current ?? facts} />
     </FactsAside>
   {/snippet}

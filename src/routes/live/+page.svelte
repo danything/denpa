@@ -29,6 +29,7 @@
     CODEC,
     DATA,
     INFO,
+    JIKKYO,
     OPEN_OUT,
     OVERLAY,
     PAUSE,
@@ -41,6 +42,7 @@
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import JikkyoCompose from "#lib/components/player/JikkyoCompose.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
+  import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
@@ -81,7 +83,7 @@
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { slides } from "#lib/jikkyo/ranking.js";
   import { JikkyoRanking } from "#lib/jikkyo/ranking.svelte.js";
-  import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
+  import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
@@ -359,6 +361,18 @@
   let stageEl = $state<HTMLElement | null>(null);
   const fullscreen = stageFullscreen(() => stageEl);
 
+  /**
+   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
+   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない
+   */
+  const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
+  const canList = $derived(
+    jikkyoActive &&
+      jikkyoChannel !== null &&
+      !phoneLandscape.current &&
+      !fullscreen.active,
+  );
+
   // 書き込む 1 行の置き場 (上の `canWrite`) と、開いている間は操作バーを残す
   const docked = $derived(
     phoneForm.current &&
@@ -620,6 +634,16 @@
               on={writing}
               testid="live-write"
               onclick={() => (writing = !writing)}
+            />
+          {/if}
+          <!-- 右の列の頭に「コメントの一覧」を出す・しまう (`canList`) -->
+          {#if canList}
+            <ControlButton
+              icon={JIKKYO}
+              label="コメントの一覧"
+              on={jikkyoList.on}
+              testid="live-jikkyo-list"
+              onclick={jikkyoList.toggle}
             />
           {/if}
         </ControlBar>
@@ -969,6 +993,12 @@
           testid: "live-detail-close",
         }}
       >
+        {#snippet top()}
+          <!-- 番組の中身を開いていても、コメントの一覧は列の頭に残す (局の一覧のときと同じ) -->
+          {#if canList && jikkyoList.on}
+            <JikkyoList feed={jikkyo} air={() => player.airTime()} />
+          {/if}
+        {/snippet}
         <ProgramFacts program={detail.current} />
       </FactsAside>
     {:else}
@@ -980,6 +1010,10 @@
             -->
         {#if dataPress !== null}
           <Remote press={dataPress} />
+        {/if}
+        <!-- 実況のコメントの一覧も、出している間は一覧の上 (リモコンの下) -->
+        {#if canList && jikkyoList.on}
+          <JikkyoList feed={jikkyo} air={() => player.airTime()} />
         {/if}
 
         <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->

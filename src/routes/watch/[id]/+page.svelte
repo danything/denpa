@@ -9,6 +9,7 @@
     type CaptionPages,
   } from "@danything/arib/caption-text";
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
@@ -47,6 +48,7 @@
     CAPTION,
     CHECK,
     CODEC,
+    JIKKYO,
     NEXT,
     PAUSE,
     PLAY,
@@ -57,10 +59,13 @@
   } from "#lib/components/player/icons.js";
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
+  import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
   import { fitRect } from "#lib/components/player/paint.js";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
-  import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
+  import PlayerLayout, {
+    PHONE_LANDSCAPE,
+  } from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import Remote from "#lib/components/player/Remote.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
@@ -102,7 +107,7 @@
   } from "#lib/format.js";
   import { CODEC_LABEL } from "#lib/hw.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
-  import { jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
+  import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { read as stored, write as remind } from "#lib/keep.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
@@ -144,6 +149,7 @@
     type Chapter,
     chapterAt,
     cmSpans,
+    fromTsTime,
     isCm,
     nextChapterAt,
     plainMarks,
@@ -937,6 +943,29 @@
       untrack(() => jikkyo.kakolog(target.head, () => target.end + 60_000));
   });
   onMount(() => () => jikkyo.close());
+
+  /**
+   * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
+   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない。行を押すとその時刻へ飛ぶ
+   */
+  const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
+  const phoneLandscape = new MediaQuery(PHONE_LANDSCAPE);
+  const canList = $derived(
+    jikkyoActive &&
+      data.jikkyo !== null &&
+      !phoneLandscape.current &&
+      !fullscreen.active,
+  );
+  /** 放送時刻 `at` の場面へ飛ぶ (`airTime` の逆。切った CM の中なら、その後の本編の頭へ) */
+  function seekAir(at: number): void {
+    const target = data.jikkyo;
+    if (target === null || info === null) return;
+    const ruler =
+      info.axis === "encoded"
+        ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
+        : null;
+    seekTo(fromTsTime(Math.max(0, at - target.head) / 1000, ruler));
+  }
 
   /**
    * いま観ている場面の放送時刻。再生位置を元の TS の秒に直して (CM を切ったものは切った区間を戻して) 頭の放送時刻に足す。
@@ -2011,6 +2040,16 @@
             testid="watch-shot"
             onclick={() => void snapshot()}
           />
+          <!-- 右の列の頭に「コメントの一覧」を出す・しまう (`canList`) -->
+          {#if canList}
+            <ControlButton
+              icon={JIKKYO}
+              label="コメントの一覧"
+              on={jikkyoList.on}
+              testid="watch-jikkyo-list"
+              onclick={jikkyoList.toggle}
+            />
+          {/if}
           <!-- 観終わったその場で消せるように。2回目も同じ大きさの丸 (`icons.ts` の `OVERLAY_DANGER`) -->
           <form method="POST" action="?/delete" use:submitting>
             <input type="hidden" name="id" value={rec.id} />
@@ -2251,6 +2290,10 @@
         <!-- データ放送のリモコンは、出している間だけ右の列の頭に出す (ライブと同じ) -->
         {#if dataPress !== null}
           <Remote press={dataPress} />
+        {/if}
+        <!-- 実況のコメントの一覧も、出している間は列の頭 (リモコンの下) -->
+        {#if canList && jikkyoList.on}
+          <JikkyoList feed={jikkyo} air={airTime} seek={seekAir} />
         {/if}
       {/snippet}
 

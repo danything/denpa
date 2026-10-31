@@ -6,8 +6,10 @@
  * コメントの出どころ (NX-Jikkyo・過去ログ API) と控えはここが持つ。どこから埋めるかは docs/watch.md の「実況」
  */
 import { type PostStyle, postStyle } from "./command";
+import type { Comment } from "./comments";
 import { Cursor, type Take } from "./cursor";
 import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
+import { FORCE_SPAN, LIST_SPAN } from "./list";
 import { compileNg } from "./ng";
 import { NxJikkyo } from "./nx";
 import type { PostResult } from "./post";
@@ -174,6 +176,26 @@ export class JikkyoFeed {
     const take = this.cursor.take(w);
     const comments = take.comments.filter((c) => !this.ng(c.text));
     return { comments, jumped: take.jumped };
+  }
+
+  /**
+   * コメントの一覧に並べるもの。いまの放送時刻 `w` までの `LIST_SPAN` に書かれたもののうち、新しいほうから `limit` 件
+   * (時刻の順)。`take` と違って何も消費しないので、何度読んでもよい。NG ワードを含むものは外す
+   */
+  recent(w: number, limit: number): Comment[] {
+    if (!this.active) return [];
+    return this.cursor.store.latest(
+      w - LIST_SPAN,
+      w,
+      limit,
+      (c) => !this.ng(c.text),
+    );
+  }
+
+  /** 勢い。いまの放送時刻 `w` までの 1 分に書かれたものの数 (NG ワードのものも数える) */
+  force(w: number): number {
+    if (!this.active) return 0;
+    return this.cursor.store.count(w - FORCE_SPAN, w);
   }
 
   /** 画面を閉じた。繋いでいるものを閉じる */
