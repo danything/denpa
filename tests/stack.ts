@@ -62,7 +62,7 @@ export interface Stack {
   liveFailFile: string;
   /**
    * これを置くとライブ視聴の偽 ffmpeg が、字幕を持たない放送を受けた本物と同じく、字幕の出口を頼まれたら降りる。
-   * 偽の放送の PMT から字幕を外すつまみ (`/__control/captions?on=0`) と一緒に使う
+   * 偽の放送の PMT は既定で字幕を載せない (`/__control/captions` で載せる)
    */
   liveNoCaptionsFile: string;
   /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1局に絞れているかを見る */

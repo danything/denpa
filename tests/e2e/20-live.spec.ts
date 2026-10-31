@@ -2209,12 +2209,20 @@ test.describe("ライブ視聴", () => {
   test("字幕は映像と同じ ffmpeg で、同じ物差しで取り出す", async ({
     page,
     stack,
+    request,
   }) => {
-    await goto(page, "/live");
-    await page.getByTestId("live-channel").first().click();
-    await expect(page.getByTestId("live-title")).toBeVisible();
-
-    const args = await ffmpegArgs(stack.liveArgsFile, expect);
+    // 偽の放送の PMT に字幕の ES を載せる。無ければ字幕の出口は頼まない (下の「字幕を持たない放送」)
+    await request.post(`${stack.agentUrl}/__control/captions?on=1`);
+    let args: string[];
+    try {
+      await goto(page, "/live");
+      await page.getByTestId("live-channel").first().click();
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      args = await ffmpegArgs(stack.liveArgsFile, expect);
+    } finally {
+      // 載せたままだと、同じ偽の放送を使うデータ放送の E2E を乱す (`Knobs.captions`)
+      await request.post(`${stack.agentUrl}/__control/captions?on=0`);
+    }
     // 映像と字幕が同じ1回の中にあること
     expect(args).toContain("libx264");
     expect(args).toContain("pipe:1");
@@ -2252,6 +2260,7 @@ test.describe("ライブ視聴", () => {
     request,
   }) => {
     rmSync(stack.liveArgsFile, { force: true });
+    // 偽の放送の PMT は、既定で字幕の ES を載せない (`Knobs.captions`)
     await request.post(`${stack.agentUrl}/__control/captions?on=0`);
     writeFileSync(stack.liveNoCaptionsFile, "1");
     try {
@@ -2271,7 +2280,6 @@ test.describe("ライブ視聴", () => {
       expect(runs).toHaveLength(1);
     } finally {
       rmSync(stack.liveNoCaptionsFile, { force: true });
-      await request.post(`${stack.agentUrl}/__control/captions?on=1`);
     }
   });
 

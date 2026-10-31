@@ -115,10 +115,13 @@ export interface Knobs {
    */
   tablesLate: boolean;
   /**
-   * **PMT に字幕の ES を載せない** (ショッピングやサブチャンネルのように字幕を持たない放送)。
-   * denpa は ffmpeg を起こす前に PMT を読み、字幕が無ければ字幕の出口を頼まない (`server/captions.ts` の `peekCaptions`)
+   * **PMT に字幕の ES を載せる。** denpa は ffmpeg を起こす前に PMT を読み、字幕が無ければ字幕の出口を
+   * 頼まない (`server/captions.ts` の `peekCaptions`)。
+   *
+   * **既定は載せない。** 部品タグの付いた ES があるとデータ放送の見張りが PMT を画面へ配り
+   * (`packages/arib/src/bml.ts`)、データ放送の E2E が手で流し込む PMT を上書きしてしまう
    */
-  noCaptions: boolean;
+  captions: boolean;
 }
 
 export const DEFAULT_KNOBS: Knobs = {
@@ -128,7 +131,7 @@ export const DEFAULT_KNOBS: Knobs = {
   eitCopyNever: [],
   pmtCopyNever: false,
   tablesLate: false,
-  noCaptions: false,
+  captions: false,
 };
 
 /** その局の番組。つまみ (`eitCopyNever`) に入っている局なら、コピー禁止の印を付ける */
@@ -497,13 +500,13 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
     const streams: ([number, number] | [number, number, number[]])[] = [
       [0x02, pids.video],
       [0x0f, pids.audio],
-      ...(knobs.noCaptions
-        ? []
-        : ([[0x06, pids.caption, captionDescriptors()]] as [
+      ...(knobs.captions
+        ? ([[0x06, pids.caption, captionDescriptors()]] as [
             number,
             number,
             number[],
-          ][])),
+          ][])
+        : []),
       // **印が付いた ES があって初めて AIT を読みに行く** (`packages/arib/src/ait.ts`)
       ...(service.hybridcast === undefined
         ? []

@@ -511,10 +511,10 @@ const options: Bun.ServeOptions = {
       knobs.tablesLate = url.searchParams.get("on") === "1";
       return json({ tablesLate: knobs.tablesLate });
     }
-    // PMT に字幕の ES を載せるか (`Knobs.noCaptions`。`on=0` で載せない)
+    // PMT に字幕の ES を載せるか (`Knobs.captions`)
     if (url.pathname === "/__control/captions" && request.method === "POST") {
-      knobs.noCaptions = url.searchParams.get("on") === "0";
-      return json({ noCaptions: knobs.noCaptions });
+      knobs.captions = url.searchParams.get("on") === "1";
+      return json({ captions: knobs.captions });
     }
     /*
      * コピー禁止。番組表で禁止と言う局 (`eit` に service_id をカンマ区切り。空なら無し) と、
