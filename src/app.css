@@ -178,13 +178,11 @@
   --dp-video-menu: color-mix(in srgb, var(--dp-video-panel) 75%, transparent);
   /*
      * つまみ (再生位置のバー・音量) の入れたぶん。主の色に青みのある灰を混ぜて、鮮やかさと明るさを落とす
-     * (太いカプセルで広く塗っても重くならないように)。白い字は 5.7:1、黒い舞台とは 3.3:1
+     * (太いカプセルで広く塗っても重くならないように)。白い字は 5.7:1、黒い舞台とは 3.3:1。
+     * 主の色 (azure-550 `#0172ad`) 60% と `#5b6573` を混ぜた値を固定で書く。`var()` で混ぜると `<html>` のテーマの
+     * 値のまま受け継がれ、テーマで変えない映像の上に混ざる
      */
-  --dp-video-fill: color-mix(
-    in srgb,
-    var(--pico-primary-background) 60%,
-    #5b6573
-  );
+  --dp-video-fill: #256d96;
   --dp-video-veil: rgb(0 0 0 / 0.6);
   --dp-video-veil-strong: rgb(0 0 0 / 0.8);
 }
