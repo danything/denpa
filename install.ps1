@@ -68,8 +68,10 @@ $WslHelp = 'WSL を新しくしてください (PowerShell で wsl --update。WS
 function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
 # 取ってくる。PowerShell 5.1 の Invoke-WebRequest は遅い (進み具合の表示) ので、Windows 10 から入っている curl.exe で
+# **時間の上限を付ける。** 繋がったまま止まる相手 (落ちかけの PLEX のサイトや Internet Archive) だと、付けなければいつまでも待つ。
+# 時間切れも --retry が試し直す
 function Get-Url([string]$From, [string]$To) {
-    & curl.exe -fsSL --retry 3 -o $To $From
+    & curl.exe -fsSL --retry 3 --connect-timeout 20 --max-time 300 -o $To $From
     if ($LASTEXITCODE -ne 0) { throw "ダウンロードできません: $From" }
 }
 
@@ -82,7 +84,7 @@ function Assert-Hash([string]$Path, [string]$Expected) {
 # 入れるバージョン。API を使わず、latest の転送先からタグを読む (install.sh と同じ)
 function Get-Version {
     if ($env:DENPA_VERSION) { return $env:DENPA_VERSION }
-    $tag = & curl.exe -fsLI -o NUL -w '%{url_effective}' "https://github.com/$Repo/releases/latest"
+    $tag = & curl.exe -fsLI --connect-timeout 20 --max-time 60 -o NUL -w '%{url_effective}' "https://github.com/$Repo/releases/latest"
     if ($LASTEXITCODE -ne 0) { throw '最新のリリースが分かりません' }
     return ($tag -split '/')[-1]
 }
@@ -147,7 +149,7 @@ function Test-Wslc([switch]$Quiet) {
 }
 
 function Test-Health {
-    & curl.exe -fs -o NUL "$Url/api/health"
+    & curl.exe -fs --max-time 5 -o NUL "$Url/api/health"
     return $LASTEXITCODE -eq 0
 }
 
@@ -527,7 +529,7 @@ function Install-Agent([string]$Ref) {
 
     Say 'エージェントを起動しました。応答を待ちます'
     for ($i = 0; $i -lt 15; $i++) {
-        $tuners = & curl.exe -fs "http://127.0.0.1:$Port/denpa/tuners"
+        $tuners = & curl.exe -fs --max-time 5 "http://127.0.0.1:$Port/denpa/tuners"
         if ($LASTEXITCODE -eq 0) {
             Write-Host $tuners
             return
