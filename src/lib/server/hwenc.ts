@@ -604,6 +604,16 @@ export function probe(): Promise<HwEncode> {
   return running;
 }
 
+/**
+ * **一度は確かめ終わった見立て。** まだなら (起動した直後) 確かめ終わるのを待つ。確かめ終わっていれば探し直さない。
+ * 録画のエンコードはこれを待ってからコーデックと方式を決める (`encoder.ts`) — 待たずに決めていた頃は、
+ * 起動した直後に溜まっていたジョブが確かめの終わる前に始まり、GPU が無いものとして H.265 を黙って飛ばし、
+ * H.264 を CPU でエンコードしていた (起動は確かめを待たずに進む。`runtime.ts`)
+ */
+export function hwReady(): Promise<HwEncode> {
+  return state.probed ? Promise.resolve(state) : probe();
+}
+
 /** 何も試していないデバイス */
 function emptyDevice(path: string, label: string): HwDevice {
   return {

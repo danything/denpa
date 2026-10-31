@@ -51,7 +51,8 @@ afterAll(() => {
   config.nvidiaDir = nvidiaDirBefore;
 });
 
-const { probe, describeDevice, liveHw } = await import("./hwenc");
+const { probe, describeDevice, liveHw, hwReady, hwEncode } =
+  await import("./hwenc");
 
 /** i965 らしい返事 */
 function i965(argv: string[]): number {
@@ -62,6 +63,23 @@ function i965(argv: string[]): number {
   if (line.includes("-rc_mode ICQ")) return 1;
   return 0;
 }
+
+/*
+ * **録画のエンコードは確かめ終わるのを待つ** (`hwReady`)。起動した直後のジョブが、確かめる前の「GPU 無し」で
+ * H.265 を飛ばしていた。まだなら確かめて待ち、確かめ終わっていれば ffmpeg を起こさない
+ */
+test("hwReady: まだ確かめていなければ確かめ終わるのを待ち、済んでいれば探し直さない", async () => {
+  answer = i965;
+  calls.length = 0;
+  const wasProbed = hwEncode().probed;
+  const ready = await hwReady();
+  expect(ready.probed).toBe(true);
+  expect(ready.devices[0]?.vaapi).toEqual(["hevc", "h264"]);
+  if (!wasProbed) expect(calls.length).toBeGreaterThan(0);
+  calls.length = 0;
+  expect(await hwReady()).toBe(hwEncode());
+  expect(calls).toEqual([]);
+});
 
 test("ICQ が落ちたら CQP で試し、通ったほうを覚える", async () => {
   answer = i965;
