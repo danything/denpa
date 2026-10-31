@@ -173,6 +173,21 @@ if [ "$input" = "pipe:0" ]; then
         printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ARGS_FILE"
     fi
 
+    # 字幕を持たない放送 (E2E が偽の放送の PMT から字幕を外すのと一緒に置く)。本物と同じ言い分で、
+    # 字幕の出口を頼まれていたら組み立ての時点で降りる (`server/captions.ts` の `NO_SUBTITLE`)。
+    # 起こしたことは上で残してあるので、テストから起こし直したかを数えられる
+    if [ -f "${FAKE_FFMPEG_NO_CAPTIONS_FILE:-/nonexistent}" ]; then
+        map="$(printf '%s\n' "$@" | grep -E '^0(:p:[0-9]+)?:s:[0-9]+$' | head -1)"
+        if [ -n "$map" ]; then
+            echo "Stream map '$map' matches no streams." >&2
+            echo "To ignore this, add a trailing '?' to the map." >&2
+            echo "Failed to set value '$map' for option 'map': Invalid argument" >&2
+            echo "Error parsing options for output file pipe:3." >&2
+            echo "Error opening output files: Invalid argument" >&2
+            exit 1
+        fi
+    fi
+
     # **互換モード (canvas に描く方式) の E2E から「本物の映像を流せ」と指示する目印。**
     # 置いてあれば、本物の ffmpeg に書かせた fMP4 (H.264 + AAC / AV1 + Opus。エンコード方式はライブと同じ組) を
     # 時刻を進めながら繰り返し流す (`fmp4-loop.ts`)。置いていなければ今までどおり素通し

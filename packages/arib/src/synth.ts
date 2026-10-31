@@ -525,6 +525,16 @@ export function bxmlDescriptor(
   return [0xfd, body.length, ...body];
 }
 
+/**
+ * 字幕の ES (stream_type 0x06) に付ける記述子。**字幕の目印。**
+ *
+ * 部品タグ (stream_identifier_descriptor。ふつうの字幕は 0x30〜0x37) と、データ符号化方式記述子の
+ * data_component_id 0x0008 (字幕)。続く1バイトの DMF・時刻制御モードは denpa も ffmpeg も見ない
+ */
+export function captionDescriptors(componentTag = 0x30): number[] {
+  return [0x52, 0x01, componentTag, 0xfd, 0x03, 0x00, 0x08, 0x3d];
+}
+
 /** DSM-CC のセクションで包む */
 function dsmccSection(tableId: number, message: number[]): Uint8Array {
   return withCrc([...head(tableId, 0), ...message]);

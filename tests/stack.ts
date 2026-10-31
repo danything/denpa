@@ -60,6 +60,11 @@ export interface Stack {
    * **黙って消えず、画面に理由が出る**ことを確かめるのに使う
    */
   liveFailFile: string;
+  /**
+   * これを置くとライブ視聴の偽 ffmpeg が、字幕を持たない放送を受けた本物と同じく、字幕の出口を頼まれたら降りる。
+   * 偽の放送の PMT から字幕を外すつまみ (`/__control/captions?on=0`) と一緒に使う
+   */
+  liveNoCaptionsFile: string;
   /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1局に絞れているかを見る */
   liveTsFile: string;
   /**
@@ -178,6 +183,7 @@ export async function boot(
     slowFile: `${root}/slow-encode`,
     liveArgsFile: `${root}/live-ffmpeg-args`,
     liveFailFile: `${root}/fail-live`,
+    liveNoCaptionsFile: `${root}/no-captions-live`,
     liveTsFile: `${root}/live-ffmpeg-ts`,
     liveFmp4File: `${root}/live-fmp4`,
     hwDir: `${root}/gpu`,
@@ -247,6 +253,7 @@ export async function boot(
       FAKE_FFMPEG_SLOW_FILE: stack.slowFile,
       FAKE_FFMPEG_ARGS_FILE: stack.liveArgsFile,
       FAKE_FFMPEG_LIVE_FAIL_FILE: stack.liveFailFile,
+      FAKE_FFMPEG_NO_CAPTIONS_FILE: stack.liveNoCaptionsFile,
       FAKE_FFMPEG_TS_FILE: stack.liveTsFile,
       FAKE_FFMPEG_LIVE_FMP4_FILE: stack.liveFmp4File,
       // 偽の GPU。denpa にはデバイスとして、偽 ffmpeg には「ある」印として同じファイルを見せる

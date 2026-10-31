@@ -37,6 +37,15 @@ import {
 } from "@danything/arib/caption-text";
 import { LANGUAGE } from "@danything/arib/language";
 import { CLOCK } from "@danything/arib/pes";
+import {
+  descriptors,
+  packetPid,
+  PacketStream,
+  PID_PAT,
+  pmtStreams,
+  PmtTracker,
+  TABLE_PMT,
+} from "@danything/arib/psi";
 
 import { type CaptionTrack, CHANNEL, type Notice } from "#lib/live.js";
 import { type MkvFrame, MkvSplitter } from "#lib/ts/mkv.js";
@@ -139,9 +148,151 @@ export function rawCaptionArgs(program: number, track: number): string[] {
  * `0:p:X:s:0` を要求すると、ffmpeg は**組み立ての時点で降りる** — つまり
  * **映像も出ない**。そうと分かったら字幕なしで再エンコードする (`Session.run`)。
  *
- * ffmpeg は `Stream map '' matches no streams.` と言う
+ * ffmpeg は `Stream map '' matches no streams.` と言う。**この行は記録に残らない** (`worthLogging` の
+ * 言葉を含まない)。残るのはそのあとの `Failed to set value '0:p:X:s:0' for option 'map': Invalid argument`
+ *
+ * 起こす前に PMT を読んで、字幕が無ければ初めから頼まない (`peekCaptions`)。これは PMT を読めなかった
+ * ときと、ffmpeg と見立てが食い違ったときの備え
  */
 export const NO_SUBTITLE = /matches no streams/;
+
+/** 字幕の ES の stream_type (PES の private_data) */
+const STREAM_PRIVATE_DATA = 0x06;
+const DESC_STREAM_IDENTIFIER = 0x52;
+
+/**
+ * 字幕の部品タグ (component_tag)。ffmpeg が字幕として扱うのと同じ範囲 (libavformat/mpegts.c)。
+ * 0x30〜0x37 がふつうの字幕、0x87 がワンセグの字幕。0x38〜0x3F の文字スーパーは ffmpeg が字幕と
+ * みなさないので数えない
+ */
+const isCaptionTag = (tag: number) =>
+  (tag >= 0x30 && tag <= 0x37) || tag === 0x87;
+
+/**
+ * **PMT に字幕の ES が何本あるか。** ffmpeg が `0:p:<局>:s:<n>` で数えるものと揃える。
+ *
+ * ffmpeg はデータ符号化方式記述子 (0xFD) の data_component_id も見るが、ここでは見ない。
+ * 多く数えても困るのは ffmpeg が降りるときだけで、そこは `NO_SUBTITLE` で字幕なしに戻せる。
+ * 少なく数えると字幕を出せる放送で出さなくなる
+ */
+export function captionStreams(section: Uint8Array): number {
+  let count = 0;
+  for (const [type, , info] of pmtStreams(section)) {
+    if (type !== STREAM_PRIVATE_DATA) continue;
+    for (const [tag, body] of descriptors(info)) {
+      if (tag === DESC_STREAM_IDENTIFIER && body.length >= 1) {
+        if (isCaptionTag(body[0]!)) count++;
+        break;
+      }
+    }
+  }
+  return count;
+}
+
+/** TS を少しずつ食わせて、その局の PMT から字幕の本数を読む (`captionStreams`) */
+export class CaptionCount {
+  private readonly packets = new PacketStream();
+  private readonly pmt: PmtTracker;
+
+  /** @param program 放送が名乗っている番号 */
+  constructor(program: number) {
+    this.pmt = new PmtTracker(program);
+  }
+
+  /** 塊を1つ。**PMT を読めたら字幕の本数**、まだなら null */
+  feed(chunk: Uint8Array): number | null {
+    for (const packet of this.packets.feed(chunk)) {
+      const pid = packetPid(packet);
+      if (pid !== PID_PAT && pid !== this.pmt.pid) continue;
+      for (const section of this.pmt.feed(packet, pid))
+        if (section[0] === TABLE_PMT) return captionStreams(section);
+    }
+    return null;
+  }
+}
+
+/**
+ * PMT を待つ長さ (ms)。本物の電波は PMT を 100ms ごとに流すので、届き始めればすぐ読める。
+ *
+ * **待っても映像は遅れない。** ffmpeg へ渡すものは局に絞っていて、絞る側 (`ServiceFilter`) は
+ * PMT を読むまで1バイトも出さない。ここで区切るのは、その局の PMT が来ない放送で待ち続けないため
+ */
+export const PMT_WAIT = 3_000;
+
+/**
+ * **ffmpeg を起こす前に、字幕があるかを TS の頭から読む。**
+ *
+ * 字幕を持たない放送に字幕の出口を頼むと ffmpeg は入口を探り終えてから降り、起こし直すぶん
+ * 映像が 1.5秒ほど遅れる (`NO_SUBTITLE`)。PMT には ES が全部並んでいるので、起こす前に分かる。
+ * ffmpeg の `-map …?` (無ければ飛ばす) では足りない — 字幕の出口に何も無いと、それで降りる
+ *
+ * **読んだ塊は捨てない。** 返すストリームの頭から同じものが出てくる
+ *
+ * @param program 放送が名乗っている番号
+ * @param wait これだけ待って PMT を読めなければ、字幕の本数は null (分からない)
+ * @param onChunk 塊が届くたびに呼ぶ (開くまでの内訳の「最初のバイト」)
+ */
+export async function peekCaptions(
+  stream: AsyncGenerator<Uint8Array>,
+  program: number,
+  wait: number,
+  onChunk?: () => void,
+): Promise<{ stream: AsyncGenerator<Uint8Array>; count: number | null }> {
+  const counter = new CaptionCount(program);
+  const head: Uint8Array[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => resolve("late"), wait);
+  });
+  /** 読みかけ。待ちきれずに抜けたら、返すストリームがこれを最初に受け取る */
+  let pending: Promise<IteratorResult<Uint8Array>> | null = null;
+  let count: number | null = null;
+  try {
+    for (;;) {
+      pending = stream.next();
+      // 転んだらここでは受けない。返すストリームを読んだ側に同じ転びが届く (`replay`)
+      const next = await Promise.race([pending, late]).catch(
+        () => "late" as const,
+      );
+      if (next === "late") break;
+      pending = null;
+      if (next.done === true) {
+        pending = Promise.resolve(next);
+        break;
+      }
+      onChunk?.();
+      head.push(next.value);
+      count = counter.feed(next.value);
+      if (count !== null) break;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  return { stream: replay(head, pending, stream), count };
+}
+
+/** 読んでおいた塊、読みかけの1つ、残り、の順に出す */
+async function* replay(
+  head: Uint8Array[],
+  pending: Promise<IteratorResult<Uint8Array>> | null,
+  rest: AsyncGenerator<Uint8Array>,
+): AsyncGenerator<Uint8Array> {
+  try {
+    yield* head;
+    if (pending !== null) {
+      const first = await pending;
+      if (first.done === true) return;
+      yield first.value;
+    }
+    for (;;) {
+      const next = await rest.next();
+      if (next.done === true) return;
+      yield next.value;
+    }
+  } finally {
+    await rest.return(undefined);
+  }
+}
 
 /** ffmpeg が入口の見出しに書く行 */
 const PROGRAM = /^\s*Program (\d+)/;

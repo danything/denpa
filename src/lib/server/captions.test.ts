@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  captionDescriptors,
+  packetize,
+  patSection,
+  programMap,
+  stream,
+} from "@danything/arib/synth";
+import {
   captionMkv as mkv,
   encodeAribText,
   management,
@@ -13,12 +20,15 @@ import {
   appFrame,
   CAPTION_FEED_BACKLOG,
   CAPTION_FEED_HOLD,
+  CaptionCount,
   captionFeed,
   type CaptionOut,
   captionOutput,
+  captionStreams,
   CaptionText,
   NO_SUBTITLE,
   pagesFromMkv,
+  peekCaptions,
   rawCaptionArgs,
   textFrame,
   TrackList,
@@ -115,6 +125,169 @@ describe("字幕が無いと分かる", () => {
     expect(
       NO_SUBTITLE.test("  Stream #0:2[0x130]: Subtitle: arib_caption"),
     ).toBe(false);
+  });
+
+  /*
+   * 記録に残るのはそのあとの `Failed to set value …` の行で、見分ける行そのものは残らない。
+   * 本番の記録に「matches no streams」が見えなくても、字幕なしに戻ったのはこれのため
+   */
+  test("見分ける行は記録に残さない", () => {
+    expect(
+      worthLogging(
+        "[out#0/matroska @ 0x1] Stream map '0:p:55:s:0' matches no streams.",
+      ),
+    ).toBe(false);
+    expect(
+      worthLogging(
+        "Failed to set value '0:p:55:s:0' for option 'map': Invalid argument",
+      ),
+    ).toBe(true);
+  });
+});
+
+/** 作り物の局。映像・音声・字幕の PID */
+const SERVICE = 55;
+const PMT_PID = 0x1f0;
+const VIDEO_PID = 0x111;
+
+/** PAT と、`streams` を並べた PMT */
+function head(
+  streams: ([number, number] | [number, number, number[]])[],
+): Uint8Array {
+  return stream(
+    packetize(0x0000, patSection([[SERVICE, PMT_PID]])),
+    packetize(
+      PMT_PID,
+      programMap(SERVICE, VIDEO_PID, [
+        [0x02, VIDEO_PID],
+        [0x0f, 0x112],
+        ...streams,
+      ]),
+    ),
+  );
+}
+
+/** 塊を順に出すストリーム。尽きたら `then` を待つ (来ないままにもできる) */
+async function* chunksOf(
+  parts: Uint8Array[],
+  then: Promise<void> = Promise.resolve(),
+): AsyncGenerator<Uint8Array> {
+  yield* parts;
+  await then;
+}
+
+/** 全部読む */
+async function readAll(
+  source: AsyncGenerator<Uint8Array>,
+): Promise<Uint8Array[]> {
+  const out: Uint8Array[] = [];
+  for await (const chunk of source) out.push(chunk);
+  return out;
+}
+
+/**
+ * **字幕があるかは ffmpeg を起こす前に PMT で分かる** (`peekCaptions`)。無い放送に字幕の出口を頼むと
+ * ffmpeg は入口を探り終えてから降り、起こし直すぶん映像が遅れる
+ */
+describe("PMT で字幕の本数を見る", () => {
+  test("字幕の部品タグを持つ ES を数える", () => {
+    const pmt = (streams: ([number, number] | [number, number, number[]])[]) =>
+      programMap(SERVICE, VIDEO_PID, [[0x02, VIDEO_PID], ...streams]);
+    expect(captionStreams(pmt([]))).toBe(0);
+    expect(captionStreams(pmt([[0x06, 0x130, captionDescriptors()]]))).toBe(1);
+    // 言語が複数ある放送は ES が2本
+    expect(
+      captionStreams(
+        pmt([
+          [0x06, 0x130, captionDescriptors(0x30)],
+          [0x06, 0x131, captionDescriptors(0x31)],
+        ]),
+      ),
+    ).toBe(2);
+    // ワンセグの字幕
+    expect(captionStreams(pmt([[0x06, 0x130, [0x52, 0x01, 0x87]]]))).toBe(1);
+  });
+
+  test("文字スーパーやデータ放送は数えない", () => {
+    const pmt = programMap(SERVICE, VIDEO_PID, [
+      [0x02, VIDEO_PID],
+      // 文字スーパー (ffmpeg は字幕とみなさない)
+      [0x06, 0x138, captionDescriptors(0x38)],
+      // 部品タグの無い private_data
+      [0x06, 0x139],
+      // データ放送 (同じタグでも stream_type が違う)
+      [0x0d, 0x140, [0x52, 0x01, 0x30]],
+    ]);
+    expect(captionStreams(pmt)).toBe(0);
+  });
+
+  test("TS を少しずつ食わせて、その局の PMT を読めたら本数を返す", () => {
+    const ts = head([[0x06, 0x130, captionDescriptors()]]);
+    const counter = new CaptionCount(SERVICE);
+    // パケットの切れ目と関係なく割って届く
+    expect(counter.feed(ts.subarray(0, 100))).toBeNull();
+    expect(counter.feed(ts.subarray(100, 300))).toBeNull();
+    expect(counter.feed(ts.subarray(300))).toBe(1);
+  });
+
+  test("ほかの局の PMT では決めない", () => {
+    expect(new CaptionCount(SERVICE + 1).feed(head([]))).toBeNull();
+  });
+
+  test("字幕が無い PMT なら 0、読んだ塊はそのまま出てくる", async () => {
+    const video = packetize(VIDEO_PID, new Uint8Array(10));
+    const ts = head([]);
+    const parts = [video, ts.subarray(0, 200), ts.subarray(200), video];
+    const peeked = await peekCaptions(chunksOf(parts), SERVICE, 1_000);
+    expect(peeked.count).toBe(0);
+    expect(await readAll(peeked.stream)).toEqual(parts);
+  });
+
+  test("字幕があれば本数", async () => {
+    const parts = [head([[0x06, 0x130, captionDescriptors()]])];
+    const peeked = await peekCaptions(chunksOf(parts), SERVICE, 1_000);
+    expect(peeked.count).toBe(1);
+    expect(await readAll(peeked.stream)).toEqual(parts);
+  });
+
+  test("PMT が来なければ待ちきって null、読みかけも捨てない", async () => {
+    const video = packetize(VIDEO_PID, new Uint8Array(10));
+    let late!: () => void;
+    const then = new Promise<void>((resolve) => (late = resolve));
+    const source = (async function* () {
+      yield video;
+      await then;
+      // 待ちきったあとに届く1つ目。返すストリームから出てこないといけない
+      yield video;
+    })();
+    const peeked = await peekCaptions(source, SERVICE, 50);
+    expect(peeked.count).toBeNull();
+    late();
+    expect(await readAll(peeked.stream)).toEqual([video, video]);
+  });
+
+  test("先に尽きたら null", async () => {
+    const parts = [packetize(VIDEO_PID, new Uint8Array(10))];
+    const peeked = await peekCaptions(chunksOf(parts), SERVICE, 1_000);
+    expect(peeked.count).toBeNull();
+    expect(await readAll(peeked.stream)).toEqual(parts);
+  });
+
+  test("転んだら、返すストリームを読んだ側に届く", async () => {
+    const source = (async function* (): AsyncGenerator<Uint8Array> {
+      yield packetize(VIDEO_PID, new Uint8Array(10));
+      throw new Error("切れた");
+    })();
+    const peeked = await peekCaptions(source, SERVICE, 1_000);
+    expect(peeked.count).toBeNull();
+    await expect(readAll(peeked.stream)).rejects.toThrow("切れた");
+  });
+
+  test("塊が届くたびに知らせる", async () => {
+    let seen = 0;
+    const parts = [packetize(VIDEO_PID, new Uint8Array(10)), head([])];
+    await peekCaptions(chunksOf(parts), SERVICE, 1_000, () => seen++);
+    expect(seen).toBe(2);
   });
 });
 

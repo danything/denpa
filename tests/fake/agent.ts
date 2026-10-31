@@ -511,6 +511,11 @@ const options: Bun.ServeOptions = {
       knobs.tablesLate = url.searchParams.get("on") === "1";
       return json({ tablesLate: knobs.tablesLate });
     }
+    // PMT に字幕の ES を載せるか (`Knobs.noCaptions`。`on=0` で載せない)
+    if (url.pathname === "/__control/captions" && request.method === "POST") {
+      knobs.noCaptions = url.searchParams.get("on") === "0";
+      return json({ noCaptions: knobs.noCaptions });
+    }
     /*
      * コピー禁止。番組表で禁止と言う局 (`eit` に service_id をカンマ区切り。空なら無し) と、
      * 流れているもの (`pmt=1`) を別々に切り替える

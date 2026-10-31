@@ -15,6 +15,7 @@ import { CLOCK } from "@danything/arib/pes";
 import {
   aitSection,
   aitSignallingDescriptor,
+  captionDescriptors,
   copyControlDescriptor,
   ddbSection,
   diiSection,
@@ -113,6 +114,11 @@ export interface Knobs {
    * 本物の電波は PAT・PMT を 100ms ごとに流すので、選局したては映像と音声が先に届く (`ServiceFilter` が取っておく)
    */
   tablesLate: boolean;
+  /**
+   * **PMT に字幕の ES を載せない** (ショッピングやサブチャンネルのように字幕を持たない放送)。
+   * denpa は ffmpeg を起こす前に PMT を読み、字幕が無ければ字幕の出口を頼まない (`server/captions.ts` の `peekCaptions`)
+   */
+  noCaptions: boolean;
 }
 
 export const DEFAULT_KNOBS: Knobs = {
@@ -122,6 +128,7 @@ export const DEFAULT_KNOBS: Knobs = {
   eitCopyNever: [],
   pmtCopyNever: false,
   tablesLate: false,
+  noCaptions: false,
 };
 
 /** その局の番組。つまみ (`eitCopyNever`) に入っている局なら、コピー禁止の印を付ける */
@@ -316,6 +323,8 @@ const pidsOf = (index: number) => ({
   audio: 0x1002 + index * 0x10,
   /** Hybridcast の在り処 (AIT)。載せている局だけ使う */
   ait: 0x1003 + index * 0x10,
+  /** 字幕。ES を PMT に載せるだけで、中身は流さない (字幕の有無は PMT で決まる) */
+  caption: 0x1004 + index * 0x10,
 });
 
 /**
@@ -488,6 +497,13 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
     const streams: ([number, number] | [number, number, number[]])[] = [
       [0x02, pids.video],
       [0x0f, pids.audio],
+      ...(knobs.noCaptions
+        ? []
+        : ([[0x06, pids.caption, captionDescriptors()]] as [
+            number,
+            number,
+            number[],
+          ][])),
       // **印が付いた ES があって初めて AIT を読みに行く** (`packages/arib/src/ait.ts`)
       ...(service.hybridcast === undefined
         ? []

@@ -2240,6 +2240,42 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
+   * **字幕を持たない放送では、初めから字幕の出口を頼まない。**
+   *
+   * 頼むと ffmpeg は入口を探り終えてから降り、字幕なしで起こし直すまで映像が 1.5秒ほど遅れていた
+   * (実機の CS で、開くたびに)。PMT には ES が全部並んでいるので、起こす前に読めば分かる
+   * (`server/captions.ts` の `peekCaptions`)。偽 ffmpeg は本物と同じく、頼まれたら降りる
+   */
+  test("字幕を持たない放送では、ffmpeg を起こし直さずに開く", async ({
+    page,
+    stack,
+    request,
+  }) => {
+    rmSync(stack.liveArgsFile, { force: true });
+    await request.post(`${stack.agentUrl}/__control/captions?on=0`);
+    writeFileSync(stack.liveNoCaptionsFile, "1");
+    try {
+      await goto(page, "/live");
+      await page.getByTestId("live-channel").first().click();
+      await expect(page.getByTestId("live-title")).toBeVisible();
+
+      const args = await ffmpegArgs(stack.liveArgsFile, expect);
+      expect(args).not.toContain("pipe:3");
+      expect(args.some((arg) => /:s:\d+$/.test(arg))).toBe(false);
+
+      // 起こし直していれば、降りてすぐ2回目が足される。少し待っても1回のまま
+      await page.waitForTimeout(2_000);
+      const runs = readFileSync(stack.liveArgsFile, "utf8")
+        .split("---\n")
+        .filter((run) => run.includes("libx264"));
+      expect(runs).toHaveLength(1);
+    } finally {
+      rmSync(stack.liveNoCaptionsFile, { force: true });
+      await request.post(`${stack.agentUrl}/__control/captions?on=1`);
+    }
+  });
+
+  /*
    * **前回見ていたチャンネルで開く。** テレビを点けたときと同じ振る舞いで、
    * 毎回いちばん上の局から始まると、いつも選び直すことになる
    */
