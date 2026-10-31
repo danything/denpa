@@ -59,6 +59,8 @@ export { default as NEXT } from "~icons/lucide/skip-forward";
 export { default as AMBIENT } from "~icons/lucide/sun-dim";
 export { default as TRASH } from "~icons/lucide/trash";
 export { default as SOUND_ON } from "~icons/lucide/volume-2";
+/** 音量のつまみ (`VolumeSlider`) の中で、半分より小さいとき */
+export { default as SOUND_LOW } from "~icons/lucide/volume-1";
 export { default as SOUND_OFF } from "~icons/lucide/volume-off";
 export { default as CLOSE } from "~icons/lucide/x";
 

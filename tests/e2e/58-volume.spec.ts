@@ -633,14 +633,31 @@ test.describe("指の端末の音のボタン", () => {
     await page.keyboard.press("ArrowDown");
     await expect(page.getByTestId("live-data-receive")).toBeFocused();
     await expect(volume).toHaveValue("100");
-    // つまみは名前と値の下で、メニューの幅いっぱい (Pico の `[role="group"]` の横並びにしない)
+    // つまみは行の幅いっぱいの横のカプセルで、高さ 44px (ほかの行と同じ幅)
     const slider = (await volume.boundingBox())!;
-    const head = (await page
+    const row = (await page.getByTestId("live-data-receive").boundingBox())!;
+    expect(Math.abs(slider.width - row.width)).toBeLessThan(2);
+    expect(slider.height).toBeGreaterThanOrEqual(43.5);
+
+    // 値は変えている間だけ出て、止めて少し経つと消える。読み上げにはいつも渡す
+    const value = page
       .getByTestId("live-settings-menu")
-      .locator(".volume-head")
-      .boundingBox())!;
-    expect(slider.y).toBeGreaterThanOrEqual(head.y + head.height - 1);
-    expect(Math.abs(slider.width - head.width)).toBeLessThan(2);
+      .locator(".volume-slider .value");
+    await volume.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(value).toHaveText("95%");
+    await expect(value).toHaveCSS("opacity", "1");
+    await expect(value).toHaveCSS("opacity", "0");
+    await expect(volume).toHaveAttribute("aria-valuetext", "95%");
+
+    // 押した所へ飛ぶ (指でも。左の端は 0%、右の端は 100%)
+    await page.touchscreen.tap(slider.x + 2, slider.y + slider.height / 2);
+    await expect(volume).toHaveValue("0");
+    await page.touchscreen.tap(
+      slider.x + slider.width - 2,
+      slider.y + slider.height / 2,
+    );
+    await expect(volume).toHaveValue("100");
   });
 });
 
