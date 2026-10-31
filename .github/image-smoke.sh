@@ -70,15 +70,19 @@ denpa)
     encoders=$(run /usr/local/bin/ffmpeg -hide_banner -encoders)
     want="libx264 libsvtav1 libopus aac mjpeg h264_vaapi av1_vaapi"
     arch=$(docker image inspect -f '{{.Architecture}}' "$image")
-    # QSV は amd64、Rockchip の MPP は arm64 だけ (Dockerfile の ffmpeg 段)。MPP の .so は上の ld.so の確かめに入る
-    [ "$arch" = amd64 ] && want="$want h264_qsv av1_qsv"
+    # QSV と NVIDIA の NVENC は amd64、Rockchip の MPP は arm64 だけ (Dockerfile の ffmpeg 段)。MPP の .so は上の ld.so の確かめに入る。
+    # NVENC のドライバのライブラリはホストから差し込まれるもので、イメージには無い (ld.so の確かめにも入らない)
+    [ "$arch" = amd64 ] && want="$want h264_qsv av1_qsv h264_nvenc av1_nvenc"
     [ "$arch" = arm64 ] && want="$want h264_rkmpp"
     for e in $want; do
         grep -qw "$e" <<< "$encoders" || { echo "エンコーダがありません: $e" >&2; exit 1; }
     done
     # GPU の経路のフィルタ (hwenc.ts)。ランナーに GPU が無く通せないので、組み込まれているかだけ見る
     filters=$(run /usr/local/bin/ffmpeg -hide_banner -filters)
-    for f in hwupload deinterlace_vaapi; do
+    want="hwupload deinterlace_vaapi"
+    # CUDA のフィルタは amd64 だけ。clang で PTX に組めなければ configure が黙って外すので、ここで見る
+    [ "$arch" = amd64 ] && want="$want hwupload_cuda scale_cuda bwdif_cuda"
+    for f in $want; do
         grep -qw "$f" <<< "$filters" || { echo "フィルタがありません: $f" >&2; exit 1; }
     done
     # GPU の試しのエンコードの素材 (hwenc.ts)。lavfi の nullsrc からインタレの MPEG-2 の TS を作る

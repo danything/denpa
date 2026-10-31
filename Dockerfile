@@ -141,7 +141,7 @@ ENV FFPROBE=/usr/bin/ffprobe
 CMD ["bun", "scripts/capture-docs.ts"]
 
 # ---------------------------------------------------------------------------
-# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV) + Rockchip MPP (arm64)。
+# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel GPU (VA-API/QSV) + NVIDIA NVENC (amd64) + Rockchip MPP (arm64)。
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5
 SHELL ["/bin/bash", "-c"]
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 と arm64 を別の機械で。QEMU で
 # ffmpeg を組むと何倍も掛かる)。digest は複数 arch の索引を指しているので、上の FROM は
-# 組む arch のものを引く。違うのは Intel の QSV と Rockchip の MPP だけ (下の説明)
+# 組む arch のものを引く。違うのは Intel の QSV・NVIDIA の NVENC と Rockchip の MPP だけ (下の説明)
 ARG TARGETARCH
 
 # ダウンロードは CI で切られることがあるので必ずリトライさせる。
@@ -180,6 +180,14 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # FFmpeg の configure は rkmpp を version3 の一覧に入れているので、**両方の arch で
 # `--enable-version3` にそろえる** (出来上がる ffmpeg は GPL-3.0-or-later。docs/licenses.md)。
 # rkmpp は libdrm も要る (`--enable-libdrm`)
+#
+# **NVIDIA の NVENC (h264_nvenc / av1_nvenc) は amd64 だけ。** NVIDIA の GPU を挿した arm64 の家庭用サーバは
+# まず無い (Jetson はエンコーダの仕組みが別)。組むのに要るのは nv-codec-headers (Debian の
+# libffmpeg-nvenc-dev。MIT のヘッダだけで、nonfree にはならない) で、ドライバのライブラリ (libcuda・
+# libnvidia-encode) は ffmpeg が実行時に dlopen する。**実行イメージには何も足さない** — NVIDIA Container
+# Toolkit がホストのドライバのライブラリをコンテナに差し込む (docs/encode.md「NVIDIA でエンコードする」)。
+# GPU が無ければ試しのエンコードが落ちて使わないだけなのは QSV と同じ。
+# clang は CUDA のフィルタ (scale_cuda・bwdif_cuda) を PTX に組むため (`--enable-cuda-llvm`。CUDA の SDK は要らない)
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -216,7 +224,10 @@ COPY patches/ /patches/
 # - lavfi の入力 (GPU の試しの素材) は wrapped_avframe で届くので、その「デコーダ」も要る。
 #   pcm_s16le のデコーダは、イメージの確かめで lavfi の音 (sine) を受けるためだけ
 # - エンコーダ: wrapped_avframe と pcm_s16le は `-f null` の既定。mpeg2video は GPU の試しの素材、mjpeg はサムネイル、
-#   rawvideo は CM 検出のロゴのコマ。qsv は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
+#   rawvideo は CM 検出のロゴのコマ。qsv・nvenc は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
+# - hwaccel の nvdec と、フィルタの hwupload_cuda・scale_cuda・bwdif_cuda は、NVIDIA の GPU で放送の MPEG-2 を
+#   デコードしてインタレ解除まで済ませるためのもの。**denpa はまだ使わない** (実機で確かめてから引数に足す。
+#   docs/encode.md「NVIDIA でエンコードする」)。clang で組めているかは、イメージの確かめで先に見ておく
 # - パーサ: demuxer が頼るのに configure が自分で足さないもの。画像の *_pipe は区切りをパーサに任せる
 # - bsf: h264_mp4toannexb は concat の demuxer が H.264 の mkv に差し込む (cm-cut.ts)。extract_extradata は
 #   libavformat が入力を調べるときに使う (無いと `-ss` で途中から読んだ MPEG-2 が次のシーケンスヘッダまで
@@ -226,7 +237,8 @@ COPY patches/ /patches/
 # - testsrc2・sine・telecine・tinterlace・noise・overlay は denpa は使わず、イメージの確かめで素材を作るためだけ
 #   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
-      amd64) arch_dev=libvpl-dev arch_flags=--enable-libvpl ;; \
+      amd64) arch_dev="libvpl-dev libffmpeg-nvenc-dev clang" \
+             arch_flags="--enable-libvpl --enable-ffnvcodec --enable-nvenc --enable-nvdec --enable-cuda-llvm" ;; \
       arm64) arch_dev=libdrm-dev arch_flags="--enable-libdrm --enable-rkmpp" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
@@ -264,13 +276,13 @@ RUN case "${TARGETARCH}" in \
       --disable-everything \
       --disable-network \
       --enable-decoder=mpeg2video,h264,aac,opus,libdav1d,png,mjpeg,webp,hevc,ac3,eac3,mp2,aac_latm,wrapped_avframe,pcm_s16le \
-      --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,h264_qsv,av1_qsv,h264_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
-      --enable-hwaccel=mpeg2_vaapi,h264_vaapi \
+      --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,h264_qsv,av1_qsv,h264_nvenc,av1_nvenc,h264_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
+      --enable-hwaccel=mpeg2_vaapi,h264_vaapi,mpeg2_nvdec,h264_nvdec\
       --enable-demuxer=mpegts,matroska,mov,concat,ffmetadata,image2,png_pipe,jpeg_pipe,webp_pipe \
       --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
       --enable-parser=mpegvideo,h264,aac,av1,opus,png,mjpeg,webp,hevc,ac3,mpegaudio,aac_latm \
       --enable-bsf=h264_mp4toannexb,aac_adtstoasc,extract_extradata \
-      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
+      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,hwupload_cuda,scale_cuda,bwdif_cuda,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
       --enable-indev=lavfi \
       --enable-protocol=file,pipe \
     && \
@@ -394,6 +406,12 @@ ENV NODE_ENV=production \
     TZ=Asia/Tokyo \
     FFMPEG=/usr/local/bin/ffmpeg \
     FFPROBE=/usr/local/bin/ffprobe
+# NVIDIA の GPU を渡されたとき (ffmpeg 段の説明) に、NVIDIA Container Toolkit が差し込むドライバのライブラリ。
+# 既定 (compute,utility) には NVENC の libnvidia-encode が入らないので video を足す。
+# CUDA の GPU の番号は PCI のバスの順にする — 既定 (速い順) だと、`-gpu N` が /dev/nvidiaN の並びと合わない
+# (src/lib/server/hwenc.ts はデバイスファイルの並びで番号を決める)
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
+    CUDA_DEVICE_ORDER=PCI_BUS_ID
 
 # B-CASカードは触らない。掛かったまま録れたTSの解除はチューナーエージェントに
 # 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
