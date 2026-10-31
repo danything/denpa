@@ -186,8 +186,8 @@ release は組み直さず、main で組んだイメージにバージョンを 
 **イメージは amd64 と arm64 の2つ**で、同じタグに束ねてあります (理由と組み方は
 [architecture.md](architecture.md#イメージのタグ))。Dockerfile は BuildKit の `TARGETARCH`
 で配布物 (px4-userland / siano-ts) の名前と .NET の RID を読み替え、
-Intel の QSV (libvpl・libmfx-gen・intel-media-va-driver) は amd64 だけに入れます
-(Debian の arm64 には無い)。Dockerfile やそこへ入るもの (`agent/`・`patches/`・依存) を
+Intel の QSV (libvpl・libmfx-gen・intel-media-va-driver) と AMD の VA-API ドライバは amd64 だけに入れます
+(Debian の arm64 には QSV が無く、AMD の GPU を載せた arm の機械はまず無い)。Dockerfile やそこへ入るもの (`agent/`・`patches/`・依存) を
 触った PR では、`Docker build check` が両方の arch を本物のランナーで組みます
 (push はしない。必須チェックではない)。手元で arm64 を組むなら
 `docker buildx build --platform linux/arm64 -f agent/Dockerfile .` (amd64 の機械では
@@ -199,7 +199,7 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 
 **本体もエージェントも土台は distroless** (`gcr.io/distroless/cc-debian13`) で、シェルも apt も
 coreutils もありません。どちらも root で動きます。本体の ffmpeg が使うライブラリ
-(libva・Intel の VA-API ドライバ・QSV のランタイムなど) は、Dockerfile の `runtime-libs` 段で
+(libva・Intel と AMD の VA-API ドライバ・QSV のランタイムなど) は、Dockerfile の `runtime-libs` 段で
 Debian のパッケージを入れてから要るファイルだけを写しています (dlopen で読むドライバはディレクトリごと)。
 足りないものが無いかは `.github/image-smoke.sh` が ld.so に依存を解かせて確かめます。
 

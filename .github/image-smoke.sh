@@ -46,7 +46,7 @@ denpa)
         }
         let ok = true;
         // QSV と Intel の VA-API ドライバは amd64、Rockchip の MPP は arm64 だけに入れている (Dockerfile)
-        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/libmfx-gen.so.1.2`] : ["/usr/local/lib/librockchip_mpp.so.1"];
+        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/dri/radeonsi_drv_video.so`, `${lib}/libmfx-gen.so.1.2`] : ["/usr/local/lib/librockchip_mpp.so.1"];
         for (const file of want) {
             if (!files.includes(file)) { console.error(`ありません: ${file}`); ok = false; }
         }
