@@ -290,8 +290,11 @@
     void task.then(async () => {
       if (sending.get(clip.id) !== task) return; // 後に続きが並んでいる
       sending.delete(clip.id);
-      await invalidateAll();
-      if (!sending.has(clip.id)) shownLayers.delete(clip.id);
+      try {
+        await invalidateAll();
+      } finally {
+        if (!sending.has(clip.id)) shownLayers.delete(clip.id);
+      }
     });
   }
 
