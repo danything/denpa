@@ -148,7 +148,11 @@
         duration: length,
         start: at >= length - 1 ? 0 : at,
         audio: "0",
-        background: false,
+        /*
+         * **「再生する音」として鳴らす。** そうしないと iPhone は消音スイッチで Web Audio を黙らせる
+         * (`<video>` は消音スイッチでも鳴る)。押して観はじめたものなので、`<video>` と同じに扱う
+         */
+        background: true,
         paused: false,
         state: (state) => {
           if (state === "failed") close("録画を読み込めませんでした");
