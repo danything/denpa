@@ -29,11 +29,15 @@ export interface Slot {
   size: number;
 }
 
-/** WASM のメモリに `size` バイトの置き場を用意する。**足りるうちは使い回す** */
+/**
+ * WASM のメモリに `size` バイトの置き場を用意する。**足りるうちは使い回す。** 取れなければ
+ * `pointer` が 0 で大きさも 0 (次にまた取りに行く。0 番地へ書かせない)
+ */
 export function ensure(decoder: AudioDecoder, slot: Slot, size: number): Slot {
   if (size <= slot.size) return slot;
   if (slot.pointer !== 0) decoder._free(slot.pointer);
-  return { pointer: decoder._malloc(size), size };
+  const pointer = decoder._malloc(size);
+  return { pointer, size: pointer === 0 ? 0 : size };
 }
 
 /** デコーダ (`<base>/decoder.mjs` と `.wasm`) を読む。`base` は `/api/live/mpeg2` (置いたパスの下も含む) */
@@ -54,20 +58,30 @@ export class WasmAudio {
   /** 開き直す (前のデコーダは `audio_open` が閉じる)。Opus は OpusHead が要る。**開けなければ false** */
   open(codec: "aac" | "opus", config: Uint8Array | null): boolean {
     if (codec === "aac") return this.decoder._aac_open() === 0;
-    if (config === null) return false;
-    return this.decoder._opus_open(this.put(config), config.length) === 0;
+    const at = config === null ? 0 : this.put(config);
+    return at !== 0 && this.decoder._opus_open(at, config!.length) === 0;
   }
 
-  /** 1コマデコードする。**出てこなければ null、壊れたコマは `"broken"`** */
+  /** 1コマデコードする。**出てこなければ null、壊れたコマ (と置き場を取れない・形式がおかしい) は `"broken"`** */
   decode(data: Uint8Array): Pcm | null | "broken" {
     const d = this.decoder;
-    const samples = d._audio_push(this.put(data), data.length);
+    const at = this.put(data);
+    if (at === 0) return "broken";
+    const samples = d._audio_push(at, data.length);
     if (samples < 0) return "broken";
     if (samples === 0) return null;
     // デコードしたあとに読む — メモリが伸びると HEAPU8 の下の ArrayBuffer が替わる
     const info = d._audio_peek() >> 2;
     const channels = d.HEAP32[info]!;
     const sampleRate = d.HEAP32[info + 1]!;
+    // 面は 8 本まで (`wasm/decoder.c` の AUDIO_PLANES)。外れていたら読み違えている
+    if (
+      channels < 1 ||
+      channels > 8 ||
+      sampleRate < 8000 ||
+      sampleRate > 192000
+    )
+      return "broken";
     const planes = Array.from({ length: channels }, (_, i) =>
       new Float32Array(
         d.HEAPU8.buffer,
@@ -78,9 +92,11 @@ export class WasmAudio {
     return { sampleRate, samples, planes };
   }
 
+  /** WASM のメモリへ写す。**取れなければ 0** (書かない) */
   private put(data: Uint8Array): number {
     this.slot = ensure(this.decoder, this.slot, data.length);
-    this.decoder.HEAPU8.set(data, this.slot.pointer);
+    if (this.slot.pointer !== 0)
+      this.decoder.HEAPU8.set(data, this.slot.pointer);
     return this.slot.pointer;
   }
 }

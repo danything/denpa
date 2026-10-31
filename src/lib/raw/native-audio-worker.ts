@@ -42,6 +42,7 @@ function fail(message: string): void {
 function segment(d: WasmAudio, message: Segment): void {
   if (message.init) {
     epoch = message.epoch;
+    broken = 0;
     track = readInit(message.bytes).find((t) => t.kind === "audio");
     if (track === undefined) throw new Error("audio track missing");
     const open = audioCodec(track);
@@ -62,8 +63,6 @@ function segment(d: WasmAudio, message: Segment): void {
     if (pcm === null) continue;
     broken = 0;
     const { sampleRate, planes } = pcm;
-    if (planes.length < 1 || sampleRate < 8000 || sampleRate > 192000)
-      throw new Error("invalid PCM format");
     const pts = sample.pts / track.timescale;
     post(
       { type: "pcm", epoch, chunk: { pts, sampleRate, planes } },

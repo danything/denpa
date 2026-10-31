@@ -38,6 +38,33 @@ describe("WasmAudio", () => {
     expect(audio.decode(new Uint8Array([1]))).toBeNull();
     expect(audio.decode(new Uint8Array([0]))).toBe("broken");
   });
+
+  test("面の数・標本化周波数がおかしければ (読み違え) 面を切り出さず broken", () => {
+    expect(
+      new WasmAudio(fakeDecoder({ channels: 9 })).decode(new Uint8Array([1])),
+    ).toBe("broken");
+    expect(
+      new WasmAudio(fakeDecoder({ channels: 0 })).decode(new Uint8Array([1])),
+    ).toBe("broken");
+    expect(
+      new WasmAudio(fakeDecoder({ sampleRate: 0 })).decode(new Uint8Array([1])),
+    ).toBe("broken");
+  });
+
+  test("メモリを取れなければ書かずに broken・開けない (0 番地へ書かない)", () => {
+    const d = fakeDecoder();
+    d._malloc = () => 0;
+    const audio = new WasmAudio(d);
+    d.HEAPU8[0] = 42;
+    expect(audio.decode(new Uint8Array([7]))).toBe("broken");
+    expect(audio.open("opus", new Uint8Array([1]))).toBe(false);
+    expect(d.HEAPU8[0]).toBe(42);
+    // 置き場の大きさは 0 のまま (次にまた取りに行く)
+    expect(ensure(d, { pointer: 0, size: 0 }, 8)).toEqual({
+      pointer: 0,
+      size: 0,
+    });
+  });
 });
 
 test("ensure: 足りるうちは使い回し、足りなくなったら前のを返して取り直す", () => {
