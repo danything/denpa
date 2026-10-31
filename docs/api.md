@@ -460,7 +460,10 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
   "video_type": "mpeg2",
   "video_resolution": "1080i",
   "is_free": true,
-  "copy_never": false
+  "copy_never": false,
+  "series_episode": 1,
+  "series_last_episode": 12,
+  "series_repeat": 0
 }
 ```
 
@@ -472,6 +475,9 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 - `is_free` は無料放送か
 - `copy_never` はコピー禁止の番組か。禁止の番組は録らない ([data.md](data.md#コピー禁止の番組は録らない))。
   `POST /api/services/<id>/record` は `400` と「コピー禁止の番組なので録画しません」を返す
+- `series_episode` (何話目か)・`series_last_episode` (全何話か)・`series_repeat` (再放送の印) は放送のシリーズ記述子から
+  ([data.md](data.md#シリーズ記述子の話数と再放送の印))。載せない局の番組と、放送が言っていない数は `null`。
+  `series_episode` と `series_last_episode` が同じなら最終回。`series_repeat` は 0 でなければ再放送 (0 でも初回とは限らない)
 - 番組表は終わった番組を消していくので、**引けないことがあります** (`404`)。そのときは呼ぶ側が持っている分
   (`now` の番組名・時刻など) だけを出してください
 

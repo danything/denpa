@@ -344,6 +344,60 @@ describe("savePrograms", () => {
     expect(copyNever()).toBe(false);
   });
 
+  /* シリーズ (docs/data.md「シリーズ」)。詳細の表は記述子を載せないので、項目ごと無い回では前のまま */
+  test("シリーズを持つ。言っていない回では前のまま、載せずに来たら外す", async () => {
+    offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
+    syncServicesOnly(await getChannels());
+    orm().delete(programs).run();
+    const series = () =>
+      orm()
+        .select({
+          id: programs.series_id,
+          repeat: programs.series_repeat,
+          episode: programs.series_episode,
+          last: programs.series_last_episode,
+          name: programs.series_name,
+        })
+        .from(programs)
+        .get();
+    const told = {
+      seriesId: 0x1234,
+      repeatLabel: 1,
+      programPattern: 2,
+      episode: 12,
+      lastEpisode: 12,
+      name: "連続ドラマ",
+    };
+
+    savePrograms([event()]);
+    expect(series()).toEqual({
+      id: null,
+      repeat: null,
+      episode: null,
+      last: null,
+      name: null,
+    });
+    savePrograms([event({ series: told })]);
+    expect(series()).toEqual({
+      id: 0x1234,
+      repeat: 1,
+      episode: 12,
+      last: 12,
+      name: "連続ドラマ",
+    });
+    // 詳細の表から (項目ごと無い)
+    savePrograms([event({ name: "" })]);
+    expect(series()?.episode).toBe(12);
+    // 話数を言わないシリーズ
+    savePrograms([
+      event({ series: { ...told, episode: null, lastEpisode: null } }),
+    ]);
+    expect(series()).toMatchObject({ id: 0x1234, episode: null, last: null });
+    // 基本の表が載せずに来た
+    savePrograms([event({ series: null })]);
+    expect(series()?.id).toBeNull();
+  });
+
   test("タイトルの無い回で、入っているタイトルを消さない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
     syncServicesOnly(await getChannels());

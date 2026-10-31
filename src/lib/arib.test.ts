@@ -9,6 +9,7 @@ import {
   genreName,
   parseAudios,
   pickTrack,
+  seriesLabels,
   videoLabel,
 } from "./arib";
 
@@ -360,5 +361,37 @@ describe("audioTitles", () => {
     expect(
       audioTitles([{ componentType: 2, langs: ["jpn", "eng"] }], true),
     ).not.toContain("主+副");
+  });
+});
+
+describe("seriesLabels", () => {
+  const labels = (
+    series_episode: number | null,
+    series_last_episode: number | null = null,
+    series_repeat: number | null = null,
+  ) => seriesLabels({ series_episode, series_last_episode, series_repeat });
+
+  test("話数と全何話", () => {
+    expect(labels(3)).toEqual(["第3話"]);
+    expect(labels(3, 12)).toEqual(["第3話 (全12話)"]);
+  });
+
+  test("全何話と同じなら最終回", () => {
+    expect(labels(12, 12)).toEqual(["第12話", "最終回"]);
+  });
+
+  test("全何話を超える話数は、全何話を出さない (放送の数え違い)", () => {
+    expect(labels(13, 12)).toEqual(["第13話"]);
+  });
+
+  test("何話目かが無ければ全何話だけ。どちらも無ければ何も出さない", () => {
+    expect(labels(null, 12)).toEqual(["全12話"]);
+    expect(labels(null)).toEqual([]);
+  });
+
+  test("再放送の印が 0 でなければ再放送。0 (オリジナル) と NULL (記述子なし) は何も言わない", () => {
+    expect(labels(3, null, 1)).toEqual(["第3話", "再放送"]);
+    expect(labels(3, null, 0)).toEqual(["第3話"]);
+    expect(labels(null, null, null)).toEqual([]);
   });
 });
