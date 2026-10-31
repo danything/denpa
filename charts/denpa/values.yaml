@@ -72,7 +72,7 @@ denpa:
   livenessProbe:
     initialDelaySeconds: 20
     periodSeconds: 30
-  # **Intel の GPU でエンコードする** (docs/encode.md「GPU でエンコードする」)。イメージには QSV / VA-API の
+  # **Intel・AMD の GPU でエンコードする** (docs/encode.md「GPU でエンコードする」)。イメージには QSV / VA-API の
   # ドライバが入っていて、コンテナから /dev/dri が見えれば起動時に見つけて使う
   # (無ければソフトウェアでエンコードする)。GPU を挿せば何もしなくても効くように、既定で
   # /dev/dri を hostPath で渡す。そのぶん Pod は privileged になる

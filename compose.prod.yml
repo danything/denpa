@@ -90,7 +90,7 @@ services:
       - "3000:3000"
     # GPU でエンコードするならデバイスを渡す。見えれば起動時に見つけて使い、無ければソフトウェアでエンコードする。
     # ホストに無いデバイスを書くと起動できないので、使うものの行だけ残す:
-    # Intel は /dev/dri (docs/encode.md「GPU でエンコードする」)、Rockchip (RK3588 / RK3588S) は
+    # Intel・AMD は /dev/dri (docs/encode.md「GPU でエンコードする」)、Rockchip (RK3588 / RK3588S) は
     # BSP カーネルの上で /dev/mpp_service と /dev/dma_heap (docs/encode.md「Rockchip (RK3588) でエンコードする」)
     # devices:
     #     - /dev/dri:/dev/dri

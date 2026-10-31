@@ -3,11 +3,11 @@
   "extends": ["github>5ym/repo-config"],
   "customManagers": [
     {
-      "description": "Dockerfile の `# renovate:` 付き ARG/ENV。tarball で取ってくる外部のものは Renovate が自力で見つけられないので、注釈で教える",
+      "description": "Dockerfile の `# renovate:` 付き ARG/ENV。tarball で取ってくる外部のものは Renovate が自力で見つけられないので、注釈で教える。gitlab.com 以外の GitLab (Mesa の gitlab.freedesktop.org) は registryUrl で場所を教える",
       "customType": "regex",
       "managerFilePatterns": ["/(^|/)Dockerfile$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?(?: versioning=(?<versioning>\\S+?))?\\s+(?:ENV|ARG) \\w+=(?<currentValue>\\S+)"
+        "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: registryUrl=(?<registryUrl>\\S+?))?(?: extractVersion=(?<extractVersion>\\S+?))?(?: versioning=(?<versioning>\\S+?))?\\s+(?:ENV|ARG) \\w+=(?<currentValue>\\S+)"
       ]
     },
     {
@@ -49,6 +49,12 @@
       "groupSlug": "asicen-userland",
       "automerge": false,
       "addLabels": ["needs-review"]
+    },
+    {
+      "description": "Mesa (Dockerfile の mesa 段) は 25 系に留める。26 系は libdrm 2.4.133 以上を求め、土台の Debian trixie の libdrm は 2.4.124 で組めない。土台を次の Debian に上げたら外す",
+      "matchDatasources": ["gitlab-tags"],
+      "matchPackageNames": ["mesa/mesa"],
+      "allowedVersions": "<26"
     },
     {
       "description": "danything/denpa-font のバージョンは vX.Y のタグだけ (元フォントを置いた source-… のリリースはバージョンではない)",
