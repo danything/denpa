@@ -68,12 +68,12 @@ denpa)
     '
 
     encoders=$(run /usr/local/bin/ffmpeg -hide_banner -encoders)
-    want="libx264 libsvtav1 libopus aac mjpeg h264_vaapi av1_vaapi"
+    want="libx264 libsvtav1 libopus aac mjpeg h264_vaapi av1_vaapi hevc_vaapi"
     arch=$(docker image inspect -f '{{.Architecture}}' "$image")
     # QSV と NVIDIA の NVENC は amd64、Rockchip の MPP は arm64 だけ (Dockerfile の ffmpeg 段)。MPP の .so は上の ld.so の確かめに入る。
     # NVENC のドライバのライブラリはホストから差し込まれるもので、イメージには無い (ld.so の確かめにも入らない)
-    [ "$arch" = amd64 ] && want="$want h264_qsv av1_qsv h264_nvenc av1_nvenc"
-    [ "$arch" = arm64 ] && want="$want h264_rkmpp"
+    [ "$arch" = amd64 ] && want="$want h264_qsv av1_qsv hevc_qsv h264_nvenc av1_nvenc hevc_nvenc"
+    [ "$arch" = arm64 ] && want="$want h264_rkmpp hevc_rkmpp"
     for e in $want; do
         grep -qw "$e" <<< "$encoders" || { echo "エンコーダがありません: $e" >&2; exit 1; }
     done
@@ -84,6 +84,12 @@ denpa)
     [ "$arch" = amd64 ] && want="$want hwupload_cuda scale_cuda bwdif_cuda"
     for f in $want; do
         grep -qw "$f" <<< "$filters" || { echo "フィルタがありません: $f" >&2; exit 1; }
+    done
+    # CM を切る concat が H.265 の mkv に差し込む bsf (cm-cut.ts)。H.265 は GPU でしかエンコードしないので
+    # ランナーでは H.265 の mkv を作れず、下の H.264 のように繋いでは見られない。組み込まれているかだけ見る
+    bsfs=$(run /usr/local/bin/ffmpeg -hide_banner -bsfs)
+    for b in h264_mp4toannexb hevc_mp4toannexb; do
+        grep -qx "$b" <<< "$bsfs" || { echo "bsf がありません: $b" >&2; exit 1; }
     done
     # GPU の試しのエンコードの素材 (hwenc.ts)。lavfi の nullsrc からインタレの MPEG-2 の TS を作る
     ff -f lavfi -i nullsrc=s=256x256:r=30:d=0.2 -vf format=nv12 \

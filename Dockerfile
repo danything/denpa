@@ -176,7 +176,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # VA-API だけ残す — 起動時の試しのエンコード (src/lib/server/hwenc.ts) で QSV が落ちて、VA-API か
 # ソフトウェアでエンコードするだけなので、denpa の側は何も変えない
 #
-# **Rockchip の MPP (h264_rkmpp) は arm64 だけ。** RK3588 / RK3588S のハードウェアエンコーダを
+# **Rockchip の MPP (h264_rkmpp・hevc_rkmpp) は arm64 だけ。** RK3588 / RK3588S のハードウェアエンコーダを
 # FFmpeg 本家のエンコーダ (8.1 から) で使う (docs/encode.md「Rockchip (RK3588) でエンコードする」)。
 # MPP は Debian に無いのでソースから組み、`librockchip_mpp.so.1` を /usr/local/lib に置く
 # (下の runtime-libs 段が ldd で辿って運ぶ)。イメージは分けず、arm64 の全員に入る —
@@ -185,7 +185,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # `--enable-version3` にそろえる** (出来上がる ffmpeg は GPL-3.0-or-later。docs/licenses.md)。
 # rkmpp は libdrm も要る (`--enable-libdrm`)
 #
-# **NVIDIA の NVENC (h264_nvenc / av1_nvenc) は amd64 だけ。** NVIDIA の GPU を挿した arm64 の家庭用サーバは
+# **NVIDIA の NVENC (h264_nvenc・av1_nvenc・hevc_nvenc) は amd64 だけ。** NVIDIA の GPU を挿した arm64 の家庭用サーバは
 # まず無い (Jetson はエンコーダの仕組みが別)。組むのに要るのは nv-codec-headers (Debian の
 # libffmpeg-nvenc-dev。MIT のヘッダだけで、nonfree にはならない) で、ドライバのライブラリ (libcuda・
 # libnvidia-encode) は ffmpeg が実行時に dlopen する。**実行イメージには何も足さない** — NVIDIA Container
@@ -224,17 +224,20 @@ COPY patches/ /patches/
 # ここにも足すこと** — テストは偽の ffmpeg で回るので気づけず、イメージの確かめ (.github/image-smoke.sh) が
 # 同じ経路を本物の ffmpeg で通して初めて分かる。名前の出どころ:
 # - デコーダ: 放送 (mpeg2video・h264・aac)、録画 (libdav1d・h264・opus)、切り抜きの画像 (png・mjpeg・webp)。
-#   hevc・ac3・eac3・mp2・aac_latm は、ほかの録画ソフトから移した録画 (サムネイル・音声だけ) のため
+#   hevc は GPU で H.265 にエンコードした録画 (その場の変換・CM 検出のやり直し) と、ほかの録画ソフトから移した録画。
+#   ac3・eac3・mp2・aac_latm は、ほかの録画ソフトから移した録画 (サムネイル・音声だけ) のため
 # - lavfi の入力 (GPU の試しの素材) は wrapped_avframe で届くので、その「デコーダ」も要る。
 #   pcm_s16le のデコーダは、イメージの確かめで lavfi の音 (sine) を受けるためだけ
 # - エンコーダ: wrapped_avframe と pcm_s16le は `-f null` の既定。mpeg2video は GPU の試しの素材、mjpeg はサムネイル、
-#   rawvideo は CM 検出のロゴのコマ。qsv・nvenc は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
+#   rawvideo は CM 検出のロゴのコマ。H.265 (hevc_*) は GPU のものだけで、libx265 は組まない
+#   (ソフトウェアでは H.265 をエンコードしない。docs/encode.md「H.265 は GPU でだけ」)。
+#   qsv・nvenc は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
 # - hwaccel の nvdec と、フィルタの hwupload_cuda・scale_cuda・bwdif_cuda は、NVIDIA の GPU で放送の MPEG-2 を
 #   デコードしてインタレ解除まで済ませるためのもの。**denpa はまだ使わない** (実機で確かめてから引数に足す。
 #   docs/encode.md「NVIDIA でエンコードする」)。clang で組めているかは、イメージの確かめで先に見ておく
 # - パーサ: demuxer が頼るのに configure が自分で足さないもの。画像の *_pipe は区切りをパーサに任せる
-# - bsf: h264_mp4toannexb は concat の demuxer が H.264 の mkv に差し込む (cm-cut.ts)。extract_extradata は
-#   libavformat が入力を調べるときに使う (無いと `-ss` で途中から読んだ MPEG-2 が次のシーケンスヘッダまで
+# - bsf: h264_mp4toannexb・hevc_mp4toannexb は concat の demuxer が H.264・H.265 の mkv に差し込む (cm-cut.ts)。
+#   extract_extradata は libavformat が入力を調べるときに使う (無いと `-ss` で途中から読んだ MPEG-2 が次のシーケンスヘッダまで
 #   デコードできず、エラーを並べる)
 # - フィルタ: 引数に書いたもののほか、ffmpeg が自分で差し込むもの (buffer・null・format・aformat・scale・
 #   aresample・trim・atrim・fps、回転の印がある画像の transpose・hflip・vflip・rotate)
@@ -281,19 +284,21 @@ RUN case "${TARGETARCH}" in \
       --disable-everything \
       --disable-network \
       --enable-decoder=mpeg2video,h264,aac,opus,libdav1d,png,mjpeg,webp,hevc,ac3,eac3,mp2,aac_latm,wrapped_avframe,pcm_s16le \
-      --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,h264_qsv,av1_qsv,h264_nvenc,av1_nvenc,h264_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
+      --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,hevc_vaapi,h264_qsv,av1_qsv,hevc_qsv,h264_nvenc,av1_nvenc,hevc_nvenc,h264_rkmpp,hevc_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
       --enable-hwaccel=mpeg2_vaapi,h264_vaapi,mpeg2_nvdec,h264_nvdec \
       --enable-demuxer=mpegts,matroska,mov,concat,ffmetadata,image2,png_pipe,jpeg_pipe,webp_pipe \
       --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
       --enable-parser=mpegvideo,h264,aac,av1,opus,png,mjpeg,webp,hevc,ac3,mpegaudio,aac_latm \
-      --enable-bsf=h264_mp4toannexb,aac_adtstoasc,extract_extradata \
+      --enable-bsf=h264_mp4toannexb,hevc_mp4toannexb,aac_adtstoasc,extract_extradata \
       --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,hwupload_cuda,scale_cuda,bwdif_cuda,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
       --enable-indev=lavfi \
       --enable-protocol=file,pipe \
     && \
     make -j$(nproc) && make install && \
-    if [ "${TARGETARCH}" = arm64 ] && ! /usr/local/bin/ffmpeg -hide_banner -encoders | grep -q h264_rkmpp; then \
-      echo "ffmpeg に h264_rkmpp が組み込まれていません" >&2; exit 1; \
+    if [ "${TARGETARCH}" = arm64 ]; then \
+      for e in h264_rkmpp hevc_rkmpp; do \
+        /usr/local/bin/ffmpeg -hide_banner -encoders | grep -qw "$e" || { echo "ffmpeg に $e が組み込まれていません" >&2; exit 1; }; \
+      done; \
     fi && \
     mkdir -p /out/bin /out/lib /out/doc && \
     cp /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /out/bin/ && \
