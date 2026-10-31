@@ -6,6 +6,7 @@
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import CalendarDays from "~icons/lucide/calendar-days";
+  import Camera from "~icons/lucide/camera";
   import Ellipsis from "~icons/lucide/ellipsis";
   import ExternalLink from "~icons/lucide/external-link";
   import ListChecks from "~icons/lucide/list-checks";
@@ -320,8 +321,8 @@
    * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
    * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
    * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
-   * 640px 未満はよく開く 3 画面と検索をタブに、残り (ルール・設定) は「その他」の `Menu` (popover) に。
-   * 640px からはルール・設定もタブに出し (`wide`。6 つ並ぶ)、「その他」は出さない (中身が無くなる)。
+   * 640px 未満はよく開く 3 画面と検索をタブに、残り (切り抜き・ルール・設定) は「その他」の `Menu` (popover) に。
+   * 640px からは切り抜き・ルール・設定もタブに出し (`wide`。7 つ並ぶ。並びはヘッダーと同じ)、「その他」は出さない (中身が無くなる)。
    * テーマは設定の「この端末」、新しいバージョンは設定の「バージョンと環境」にあり、設定の入口に点で知らせる (下の `fresh`)。
    * ヘッダー (検索の欄) を隠すので、検索はタブから入る
    */
@@ -329,16 +330,17 @@
     { href: "/", label: "録画", icon: ListVideo, wide: false },
     { href: "/guide", label: "番組表", icon: CalendarDays, wide: false },
     { href: "/live", label: "ライブ", icon: Tv, wide: false },
+    { href: "/clips", label: "切り抜き", icon: Camera, wide: true },
     { href: "/rules", label: "ルール", icon: ListChecks, wide: true },
     { href: SEARCH.href, label: SEARCH.label, icon: Search, wide: false },
     { href: "/settings", label: "設定", icon: Settings, wide: true },
   ] as const;
   /**
-   * ルール・設定もタブに出している幅か。**下の style の `@media (min-width: 640px)` と同じ線**。
+   * 切り抜き・ルール・設定もタブに出している幅か。**下の style の `@media (min-width: 640px)` と同じ線**。
    * その幅では「その他」を隠すので、印も付けない (隠れたタブに印が付くと、下線がそこへ滑っていく)
    */
   const wideTabbar = new MediaQuery("(min-width: 640px)", false);
-  /** 「その他」の中身。640px 未満で隠れるタブ (ルール・設定) */
+  /** 「その他」の中身。640px 未満で隠れるタブ (切り抜き・ルール・設定) */
   const moreLinks = tabs.filter((tab) => tab.wide);
   const moreCurrent = $derived(
     !wideTabbar.current && moreLinks.some((link) => link.href === here),
@@ -1064,7 +1066,7 @@
     padding-top: var(--dp-page-top);
   }
   /*
-   * **640px からはルール・設定もタブに出し、「その他」を隠す** (6 つ。上の `wideTabbar` と同じ線)。字はアイコンの下のまま一段大きく。
+   * **640px からは切り抜き・ルール・設定もタブに出し、「その他」を隠す** (7 つ。上の `wideTabbar` と同じ線)。字はアイコンの下のまま一段大きく。
    * 640px 未満は 5 つ (録画・番組表・ライブ・検索・その他)。タブの幅はどれも等分 (`.tabbar` の `grid-auto-flow`)
    */
   .tabbar .tab.wide {
