@@ -1,8 +1,8 @@
 /**
  * データ放送と字幕、画面の放送の字を描くためのフォント (Denpa Font。danything/denpa-font のリリースの woff2 をそのまま)。
  *
- * - `denpa-font.woff2`: 基本の字 (JIS X 0208・ARIB の外字など)。データ放送はこれだけで足りる
- * - `denpa-font-jisx0213.woff2`: JIS X 0213 にだけある字 (字幕・番組表の JIS互換漢字1面・2面)
+ * - `denpa-font.woff2`: 基本の字 (JIS X 0208・ARIB の外字・JIS X 0213 の記号やかななど漢字でない字)。データ放送はこれだけで足りる
+ * - `denpa-font-jisx0213.woff2`: JIS X 0213 で足された漢字 (第3・第4水準。字幕・番組表にはめったに出ない)
  * - `denpa-font.css`: 2 つを同じファミリ名で名乗らせる CSS (`#lib/server/font.ts` の `fontCss`)。
  *   後のほうは `unicode-range` 付きなので、その字が出たときだけブラウザが取りに来る
  *

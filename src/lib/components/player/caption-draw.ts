@@ -27,7 +27,7 @@ import { fitRect } from "./paint";
 
 /**
  * 字は画面の放送の字と同じ Denpa Font (`+layout.svelte` が読む CSS で名乗らせてある。`#lib/font.ts`)。
- * 基本の字と JIS X 0213 にだけある字の 2 つの woff2 に分かれていて、後のほうはその字が出たときだけ落ちてくる。
+ * 基本の字と JIS X 0213 で足された漢字の 2 つの woff2 に分かれていて、後のほうはその字が出たときだけ落ちてくる。
  * **canvas は読み込みを待たずに端末の字で描いてしまう**ので、出す字幕の字を `document.fonts.load` に
  * 渡して要るほうを読ませ、届いたら描き直す (`loadFor`)。手元の開発ではイメージに無いので、画面の字へ落ちる
  */
@@ -316,7 +316,7 @@ export class CaptionPainter {
       this.flashTimer = null;
     }
     this.draw();
-    // まだ読んでいない字 (JIS X 0213 にだけある字の初めての1字など) があれば、届いてから描き直す
+    // まだ読んでいない字 (JIS X 0213 で足された漢字の初めての1字など) があれば、届いてから描き直す
     const text = page?.runs
       .filter((run) => run.drcs === undefined)
       .map((run) => run.text)

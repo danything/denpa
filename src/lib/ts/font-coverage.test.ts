@@ -2,7 +2,7 @@
  * **字の表の字が、取ってくるフォント (Denpa Font) に全部入っているか。**
  *
  * 字幕と番組表 (`b24-tables.ts`。JIS X 0213 の1面・2面も)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
- * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めているバージョンのリリースの woff2 の 2 つ (基本の字と JIS X 0213 にだけある字) の cmap と突き合わせる。
+ * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めているバージョンのリリースの woff2 の 2 つ (基本の字と JIS X 0213 で足された漢字) の cmap と突き合わせる。
  * 表に字を足したのにフォントに無いと、その字だけ端末の字で出て見た目が揃わない。
  *
  * 落ちたら: danything/denpa-font の `DENPA_COMMIT` を上げて (元に無い字は描き方を足して) リリースを出し、
@@ -213,7 +213,7 @@ describe("字の表とフォント", () => {
   });
 
   /*
-   * ブラウザが使う 2 つの woff2 (基本の字と JIS X 0213 にだけある字) を合わせて見る。
+   * ブラウザが使う 2 つの woff2 (基本の字と JIS X 0213 で足された漢字) を合わせて見る。
    * 後のほうは CSS の unicode-range (`denpa-font-jisx0213.txt`) の字のときだけ取りに行くので、
    * 範囲がそのファイルの字とずれていると、字があっても取りに行かない (か、要らないのに取りに行く)
    */

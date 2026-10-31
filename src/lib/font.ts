@@ -1,7 +1,7 @@
 /**
  * Denpa Font (放送の字。`/api/font/`) の置き場。**URL はここだけで作る。**
  *
- * 字は 2 つの woff2 に分かれている (基本の字と、JIS X 0213 にだけある字)。画面の字 (`app.css` の
+ * 字は 2 つの woff2 に分かれている (基本の字と、JIS X 0213 で足された漢字)。画面の字 (`app.css` の
  * `.broadcast`) と字幕は、2 つを `unicode-range` で名乗らせる CSS (`denpaFontCssUrl`) を読み、
  * 後のほうはその字が出たときだけ落ちてくる。データ放送は基本の字だけで足りる (`denpaFontUrl`)。
  *
@@ -24,7 +24,7 @@ function versioned(file: "denpa-font.woff2" | "denpa-font.css"): string {
     : `${url}?v=${encodeURIComponent(DENPA_FONT_VERSION)}`;
 }
 
-/** 基本の字の woff2 (データ放送。EUC-JP の字と追加記号だけを描くので、JIS X 0213 にだけある字は要らない) */
+/** 基本の字の woff2 (データ放送。EUC-JP の字と追加記号だけを描くので、JIS X 0213 で足された漢字は要らない) */
 export function denpaFontUrl(): string {
   return versioned("denpa-font.woff2");
 }

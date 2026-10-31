@@ -439,7 +439,7 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
   読めるようにしておいてください (前に保存した字幕には白黒の `bits` 1 が入っています)。
   `md5` は放送の元の画像の MD5 (外字の置き換え表に足すときのキー。描くのには使わない)。
   置き換え表で字にできたもの (〓 にならないもの) はここに来ません
-- 色は `#rrggbbaa`。字はデータ放送と同じ丸ゴシック (Denpa Font) で描きます。字は 2 つの woff2 に分かれています: 基本の字の `GET /api/font/denpa-font.woff2` と、JIS X 0213 にだけある字の `GET /api/font/denpa-font-jisx0213.woff2`。ブラウザは `GET /api/font/denpa-font.css` (2 つを同じファミリ名で名乗らせ、後のほうに `unicode-range` を付けたもの) を読めば、要るときだけ後のほうを取ります。Android など 1 つのファイルが欲しいときは、danything/denpa-font のリリースの `denpa-font.ttf` (全部の字) を使ってください。2 つを合わせると字幕に出る字 (JIS X 0213 の1面・2面も) を全部持っていますが、念のため無い字は端末の角ゴシックへ落としてください。バージョンの付かない URL は毎回確かめる (`no-cache` + ETag) ので、そのまま取っても古い字は残りません
+- 色は `#rrggbbaa`。字はデータ放送と同じ丸ゴシック (Denpa Font) で描きます。字は 2 つの woff2 に分かれています: 基本の字の `GET /api/font/denpa-font.woff2` と、JIS X 0213 で足された漢字の `GET /api/font/denpa-font-jisx0213.woff2`。ブラウザは `GET /api/font/denpa-font.css` (2 つを同じファミリ名で名乗らせ、後のほうに `unicode-range` を付けたもの) を読めば、要るときだけ後のほうを取ります。Android など 1 つのファイルが欲しいときは、danything/denpa-font のリリースの `denpa-font.ttf` (全部の字) を使ってください。2 つを合わせると字幕に出る字 (JIS X 0213 の1面・2面も) を全部持っていますが、念のため無い字は端末の角ゴシックへ落としてください。バージョンの付かない URL は毎回確かめる (`no-cache` + ETag) ので、そのまま取っても古い字は残りません
 
 ## 番組表の番組の中身 `GET /api/programs/<id>`
 

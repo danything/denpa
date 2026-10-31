@@ -407,7 +407,7 @@
   /**
    * **放送の字 (Denpa Font) をここで名乗らせる** (使うのは `app.css` の `.broadcast` と字幕)。
    * バージョン付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
-   * 名乗らせる CSS は基本の字と JIS X 0213 にだけある字の 2 つの woff2 を `unicode-range` で分けて書いてあり、
+   * 名乗らせる CSS は基本の字と JIS X 0213 で足された漢字の 2 つの woff2 を `unicode-range` で分けて書いてあり、
    * どちらも使う字が画面に出たときだけ落ちてくる。届くまでは画面の字で出しておく (`swap`)
    */
   const fontCss = denpaFontCssUrl();
