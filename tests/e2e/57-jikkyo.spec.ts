@@ -396,7 +396,7 @@ async function watchViolations(page: Page): Promise<() => Promise<string[]>> {
     page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
 }
 
-/** ライブを MPEG-2 で観て (放送時刻が進むように)、書き込む 1 行を開く */
+/** ライブを MPEG-2 で観て (放送時刻が進むように)、右端の列のボタンでコメントの一覧を開く (下に書き込む 1 行が付く) */
 async function openWriting(page: Page): Promise<void> {
   await deviceOn(page);
   await goto(page, `/live?service=${MX.id}`);
@@ -404,7 +404,8 @@ async function openWriting(page: Page): Promise<void> {
   await wakeControls(page, "live-frame");
   await pickCodec(page, "live", "mpeg2");
   await wakeControls(page, "live-frame");
-  await page.getByTestId("live-write").click();
+  await page.getByTestId("live-jikkyo-list").click();
+  await expect(page.getByTestId("jikkyo-list")).toBeVisible();
   await expect(page.getByTestId("jikkyo-compose-input")).toBeFocused();
   // 映像が出て「いま」に追い付くまで
   await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
@@ -422,12 +423,6 @@ test.describe("ライブで実況に書き込む", () => {
       const csp = await watchViolations(page);
       const nx = await fakeNx(page, { quiet: true });
       await openWriting(page);
-      // 開いている間は操作バーを引っ込めない
-      await page.waitForTimeout(3_000);
-      await expect(page.getByTestId("live-controls")).toHaveAttribute(
-        "data-shown",
-        "true",
-      );
 
       await page.getByTestId("jikkyo-style-button").click();
       await page.getByTestId("jikkyo-color-red").click();
@@ -474,13 +469,13 @@ test.describe("ライブで実況に書き込む", () => {
       await expect(input).toHaveValue("続けて");
       expect(nx.posts).toHaveLength(1);
 
-      // 選んだものは端末ごとに覚える
-      await page.getByTestId("jikkyo-compose-close").click();
-      await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);
+      // 一覧の中なので ✕ は無い (しまうのは右端の列のボタン)
+      await expect(page.getByTestId("jikkyo-compose-close")).toHaveCount(0);
+      // 選んだものは端末ごとに覚える。覚えていた一覧で開いたときは、入力欄へフォーカスを移さない
       await page.reload();
       await page.locator('[data-hydrated="true"]').waitFor();
-      await wakeControls(page, "live-frame");
-      await page.getByTestId("live-write").click();
+      await expect(page.getByTestId("jikkyo-compose-input")).toBeVisible();
+      await expect(page.getByTestId("jikkyo-compose-input")).not.toBeFocused();
       await page.getByTestId("jikkyo-style-button").click();
       await expect(page.getByTestId("jikkyo-position-shita")).toHaveAttribute(
         "aria-pressed",
@@ -492,7 +487,7 @@ test.describe("ライブで実況に書き込む", () => {
     }
   });
 
-  test("受け付けられなければ、理由を 1 行で出して本文を残す。Esc で閉じる", async ({
+  test("受け付けられなければ、理由を 1 行で出して本文を残す。Esc で一覧ごとしまう", async ({
     page,
   }) => {
     await setJikkyo(page, true);
@@ -507,9 +502,16 @@ test.describe("ライブで実況に書き込む", () => {
       );
       await expect(input).toHaveValue("断られる書き込み");
       await expect(page.getByTestId("jikkyo-comment")).toHaveCount(0);
+      // 番組の中身を開いて列を入れ替えても、書きかけは残る
+      await page.getByTestId("live-channel-detail").first().click();
+      await expect(page.getByTestId("live-detail")).toBeVisible();
+      await expect(input).toHaveValue("断られる書き込み");
+      await page.getByTestId("live-detail-close").click();
+      await expect(input).toHaveValue("断られる書き込み");
       await input.press("Escape");
+      await expect(page.getByTestId("jikkyo-list")).toHaveCount(0);
       await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);
-      await expect(page.getByTestId("live-write")).toBeFocused();
+      await expect(page.getByTestId("live-jikkyo-list")).toBeFocused();
     } finally {
       await setJikkyo(page, false);
     }
@@ -558,25 +560,59 @@ test.describe("ライブで実況に書き込む", () => {
     }
   });
 
-  test("スマホの幅では下のタブのすぐ上に出す", async ({ page }) => {
+  test("全画面では一覧を出せないので、同じボタンで操作バーのすぐ上に 1 行を開く。開いている間は操作バーを引っ込めない", async ({
+    page,
+  }) => {
     await setJikkyo(page, true);
     try {
-      await fakeNx(page, { quiet: true });
-      await openWriting(page);
-      // コーデックは広い幅で選び (狭い幅では ⚙ の中の並びが違う)、開いたまま縮める
-      await page.setViewportSize({ width: 390, height: 844 });
-      await expect(page.getByTestId("tabbar")).toBeVisible();
+      const nx = await fakeNx(page, { quiet: true });
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "mpeg2");
+      await wakeControls(page, "live-frame");
+      await page.getByTestId("live-full").click();
+      await expect
+        .poll(() => page.evaluate(() => document.fullscreenElement !== null))
+        .toBe(true);
+      await wakeControls(page, "live-frame");
+      const button = page.getByTestId("live-jikkyo-list");
+      await expect(button).toHaveAttribute("aria-label", "実況に書く");
+      await button.click();
+      await expect(page.getByTestId("jikkyo-list")).toHaveCount(0);
+      const input = page.getByTestId("jikkyo-compose-input");
+      await expect(input).toBeFocused();
+      // 操作バーのすぐ上 (映像の中)
       const compose = (await page.getByTestId("jikkyo-compose").boundingBox())!;
-      const tabbar = (await page.getByTestId("tabbar").boundingBox())!;
-      expect(compose.y + compose.height).toBeLessThanOrEqual(tabbar.y);
-      expect(tabbar.y - (compose.y + compose.height)).toBeLessThan(16);
+      const seek = (await page.getByTestId("live-play").boundingBox())!;
+      expect(compose.y + compose.height).toBeLessThanOrEqual(seek.y);
+      await page.waitForTimeout(3_000);
+      await expect(page.getByTestId("live-controls")).toHaveAttribute(
+        "data-shown",
+        "true",
+      );
+      await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
+        "NX-Jikkyo に書きます",
+        { timeout: 20_000 },
+      );
+      await input.fill("全画面から");
+      await input.press("Enter");
+      await expect(input).toHaveValue("");
+      expect(nx.posts.map((p) => p.text)).toEqual(["全画面から"]);
+      await page.getByTestId("jikkyo-compose-close").click();
+      await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);
+      await expect(button).toBeFocused();
     } finally {
+      await page.evaluate(
+        () => document.fullscreenElement && document.exitFullscreen(),
+      );
       await setJikkyo(page, false);
     }
   });
 
   /*
-   * 「書く」で右端の縦の列が4つになる。スマホの縦の低い枠では、列を下の操作バーの上で止め、
+   * 実況のボタンで右端の縦の列が4つになる。スマホの縦の低い枠では、列を下の操作バーの上で止め、
    * 入りきらないものを左へもう1列に並べる (丸は縮めない。全画面のボタンに重ねない)
    */
   test("スマホの縦でも、右端の列は下の操作バーに重ならない", async ({
@@ -589,18 +625,18 @@ test.describe("ライブで実況に書き込む", () => {
       await page.setViewportSize({ width: 390, height: 844 });
       await goto(page, `/live?service=${MX.id}`);
       await wakeControls(page, "live-frame");
-      const write = page.getByTestId("live-write");
+      const write = page.getByTestId("live-jikkyo-list");
       await expect(write).toBeVisible();
       await expect(page.getByTestId("live-seek")).toBeVisible();
       expect(await overlayTroubles(page, "live-frame")).toEqual([]);
 
       const record = (await page.getByTestId("live-record").boundingBox())!;
-      const pencil = (await write.boundingBox())!;
+      const jikkyo = (await write.boundingBox())!;
       const seek = (await page.getByTestId("live-seek").boundingBox())!;
-      // 丸は 40px のまま。右の縁の列はそのままで、「書く」はその左に
-      expect(pencil.width).toBe(40);
-      expect(pencil.height).toBe(40);
-      expect(pencil.x + pencil.width).toBeLessThanOrEqual(record.x);
+      // 丸は 40px のまま。右の縁の列はそのままで、実況のボタンはその左に
+      expect(jikkyo.width).toBe(40);
+      expect(jikkyo.height).toBe(40);
+      expect(jikkyo.x + jikkyo.width).toBeLessThanOrEqual(record.x);
       for (const id of ["live-record", "live-data-button", "live-shot"]) {
         const box = (await page.getByTestId(id).boundingBox())!;
         expect(box.x).toBe(record.x);
@@ -614,7 +650,7 @@ test.describe("ライブで実況に書き込む", () => {
 });
 
 test.describe("実況のコメントの一覧", () => {
-  test("右端の列のボタンで右の列の頭に出し、端末に覚える。上へ巻くと「最新へ」が出る", async ({
+  test("右端の列のボタンで右の列の頭に出し、端末に覚える。「最新へ」は上へ巻いたときだけ出す", async ({
     page,
   }) => {
     await setJikkyo(page, true);
@@ -654,29 +690,55 @@ test.describe("実況のコメントの一覧", () => {
       await expect(page.getByTestId("jikkyo-list-force")).not.toHaveText(
         /勢い 0$/,
       );
-      // 巻けるほど貯まるのを待ってから、上へ巻く
+      const scroller = page.getByTestId("jikkyo-list-rows");
+      const latest = page.getByTestId("jikkyo-list-latest");
+      const gap = () =>
+        scroller.evaluate(
+          (el) => el.scrollHeight - el.scrollTop - el.clientHeight,
+        );
+      // 行が少ないうちも下に寄せる (いちばん新しい行が一覧の下の端)
+      const fewRows = (await rows.last().boundingBox())!;
+      const fewBox = (await scroller.boundingBox())!;
+      expect(
+        fewBox.y + fewBox.height - (fewRows.y + fewRows.height),
+      ).toBeLessThan(2);
+      // 巻けるほど貯まるのを待つ。付いていく間は、増えても「最新へ」を出さない
       await expect
         .poll(() => rows.count(), { timeout: 20_000 })
         .toBeGreaterThan(30);
-      const scroller = page.getByTestId("jikkyo-list-rows");
+      for (let i = 0; i < 4; i++) {
+        await expect(latest).toHaveCount(0);
+        expect(await gap()).toBeLessThan(10);
+        await page.waitForTimeout(250);
+      }
+      // ポインタが乗っている間は止めるが、下にいるなら「最新へ」は出さない (いちばん新しい行に重なる)
+      const before = await rows.last().textContent();
+      await rows.last().hover();
+      await page.waitForTimeout(1_500);
+      await expect(latest).toHaveCount(0);
+      expect(await rows.last().textContent()).toBe(before);
+      // 離れて 1 秒たったら、また付いていく
+      await page.mouse.move(0, 0);
+      await expect
+        .poll(() => rows.last().textContent(), { timeout: 5_000 })
+        .not.toBe(before);
+      await expect(latest).toHaveCount(0);
+      // 上へ巻くと出す
       await scroller.evaluate((el) => {
         el.scrollTop = 0;
       });
-      const latest = page.getByTestId("jikkyo-list-latest");
       await expect(latest).toBeVisible();
       await latest.click();
       await expect(latest).toBeHidden();
-      expect(
-        await scroller.evaluate(
-          (el) => el.scrollHeight - el.scrollTop - el.clientHeight,
-        ),
-      ).toBeLessThan(10);
+      expect(await gap()).toBeLessThan(10);
     } finally {
       await setJikkyo(page, false);
     }
   });
 
-  test("スマホの縦では、映像の下・局の一覧の上に出す", async ({ page }) => {
+  test("スマホの縦では、映像の下・局の一覧の上に出し、書き込む 1 行は一覧の下に付く", async ({
+    page,
+  }) => {
     await setJikkyo(page, true);
     try {
       await fakeNx(page, { quiet: true });
@@ -695,6 +757,13 @@ test.describe("実況のコメントの一覧", () => {
       expect(box.y + box.height).toBeLessThanOrEqual(channels.y);
       // 幅からはみ出さない
       expect(box.x + box.width).toBeLessThanOrEqual(390);
+      const compose = (await page.getByTestId("jikkyo-compose").boundingBox())!;
+      const rows = (await page.getByTestId("jikkyo-list-rows").boundingBox())!;
+      expect(compose.y).toBeGreaterThanOrEqual(rows.y + rows.height);
+      expect(compose.y + compose.height).toBeLessThanOrEqual(
+        box.y + box.height,
+      );
+      expect(compose.x + compose.width).toBeLessThanOrEqual(390);
     } finally {
       await setJikkyo(page, false);
     }

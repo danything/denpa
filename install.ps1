@@ -41,7 +41,7 @@ $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff
 # 起動の不具合が直ったのが 0.2.1)
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 $Px4UserlandVersion = '0.2.1'
-# IT930x のファームウェアは PLEX 公式ドライバから切り出す。3つのハッシュは agent/Dockerfile・install.sh と同じ
+# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と3つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.sh と同じ
 $PlexDriverSha256 = 'bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200'
 $Pxw3u4SysSha256 = '8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722'
 $It930xFirmwareSha256 = '5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484'
@@ -68,8 +68,10 @@ $WslHelp = 'WSL を新しくしてください (PowerShell で wsl --update。WS
 function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
 # 取ってくる。PowerShell 5.1 の Invoke-WebRequest は遅い (進み具合の表示) ので、Windows 10 から入っている curl.exe で
+# **時間の上限を付ける。** 繋がったまま止まる相手 (落ちかけの PLEX のサイトや Internet Archive) だと、付けなければいつまでも待つ。
+# 時間切れも --retry が試し直す
 function Get-Url([string]$From, [string]$To) {
-    & curl.exe -fsSL --retry 3 -o $To $From
+    & curl.exe -fsSL --retry 3 --connect-timeout 20 --max-time 300 -o $To $From
     if ($LASTEXITCODE -ne 0) { throw "ダウンロードできません: $From" }
 }
 
@@ -82,7 +84,7 @@ function Assert-Hash([string]$Path, [string]$Expected) {
 # 入れるバージョン。API を使わず、latest の転送先からタグを読む (install.sh と同じ)
 function Get-Version {
     if ($env:DENPA_VERSION) { return $env:DENPA_VERSION }
-    $tag = & curl.exe -fsLI -o NUL -w '%{url_effective}' "https://github.com/$Repo/releases/latest"
+    $tag = & curl.exe -fsLI --connect-timeout 20 --max-time 60 -o NUL -w '%{url_effective}' "https://github.com/$Repo/releases/latest"
     if ($LASTEXITCODE -ne 0) { throw '最新のリリースが分かりません' }
     return ($tag -split '/')[-1]
 }
@@ -147,7 +149,7 @@ function Test-Wslc([switch]$Quiet) {
 }
 
 function Test-Health {
-    & curl.exe -fs -o NUL "$Url/api/health"
+    & curl.exe -fs --max-time 5 -o NUL "$Url/api/health"
     return $LASTEXITCODE -eq 0
 }
 
@@ -527,7 +529,7 @@ function Install-Agent([string]$Ref) {
 
     Say 'エージェントを起動しました。応答を待ちます'
     for ($i = 0; $i -lt 15; $i++) {
-        $tuners = & curl.exe -fs "http://127.0.0.1:$Port/denpa/tuners"
+        $tuners = & curl.exe -fs --max-time 5 "http://127.0.0.1:$Port/denpa/tuners"
         if ($LASTEXITCODE -eq 0) {
             Write-Host $tuners
             return

@@ -43,8 +43,6 @@ export { default as SHRINK } from "~icons/lucide/minimize";
 /** 互換モード (再生の設定の行。動画が止まる端末向けに canvas に描く。`canvas-video.ts`) */
 export { default as COMPAT } from "~icons/lucide/monitor-play";
 export { default as PAUSE } from "~icons/lucide/pause";
-/** 実況に書き込む (ライブの右端の列) */
-export { default as PENCIL } from "~icons/lucide/pencil";
 /** 実況に書き込むものの色・位置・大きさ */
 export { default as PALETTE } from "~icons/lucide/palette";
 /** ピクチャーインピクチャー (小窓) */

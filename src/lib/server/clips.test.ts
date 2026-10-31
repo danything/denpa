@@ -400,6 +400,32 @@ describe("置く・探す・消す", () => {
     });
   });
 
+  test("局の絞り込みの名前は、局ごとにその局のいちばん新しい1枚の名前", async () => {
+    const a = await put("A");
+    const b = await put("B", "", SERVICE + 1);
+    const c = await put("C");
+    orm()
+      .update(clips)
+      .set({ service_name: "局その1 (古い名前)" })
+      .where(eq(clips.id, a))
+      .run();
+    orm()
+      .update(clips)
+      .set({ service_name: "局その2" })
+      .where(eq(clips.id, b))
+      .run();
+    orm()
+      .update(clips)
+      .set({ service_name: "局その1" })
+      .where(eq(clips.id, c))
+      .run();
+    // 局の名前を取る副問い合わせが外の行の局を見ていなかった頃は、どの局もいちばん新しい1枚 (局その1) の名前になっていた
+    expect(clipFacets().services).toEqual([
+      { id: SERVICE, name: "局その1", count: 2 },
+      { id: SERVICE + 1, name: "局その2", count: 1 },
+    ]);
+  });
+
   test(`${CLIP_PAGE} 件ずつ。続きは前のページの最後の ID より古いもの`, async () => {
     for (let i = 0; i < CLIP_PAGE + 5; i++) await put(`番組${i}`);
     const first = findClips({});

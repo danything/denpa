@@ -472,7 +472,7 @@ jobs:
           & $script -AgentOnly -NoOpen
           $prefix = "$env:LOCALAPPDATA\denpa-agent"
           Get-ScheduledTask -TaskName denpa-agent | Format-List TaskName, State
-          Invoke-RestMethod http://127.0.0.1:25252/denpa/card | ConvertTo-Json -Compress
+          Invoke-RestMethod -TimeoutSec 10 http://127.0.0.1:25252/denpa/card | ConvertTo-Json -Compress
           & "$prefix\siano-userland\siano-ts.exe" --list
           "siano-ts --list: exit $LASTEXITCODE"
           Get-Content "$prefix\denpa-agent.cmd"
@@ -504,7 +504,7 @@ jobs:
           if (-not $acl.AreAccessRulesProtected -or @($acl.Access).Count -ne 3) { throw 'C:\denpa-run DACL is not the expected one' }
 
           & $script -AgentOnly -NoOpen
-          $tuners = Invoke-RestMethod http://127.0.0.1:25252/denpa/tuners
+          $tuners = Invoke-RestMethod -TimeoutSec 10 http://127.0.0.1:25252/denpa/tuners
           if ($null -eq $tuners.tuners) { throw 'agent does not answer after the upgrade' }
 
           & $script -Uninstall

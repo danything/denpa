@@ -34,11 +34,12 @@ export function atBottom(box: {
 }
 
 /**
- * 並べ直したあと、いちばん下へ付いていくか。いちばん下にいて (`stuck`)、一覧を使っていない (`held`) ときだけ。
- * 使っている間に増えたぶんは、離れてから付いていく
+ * 並べ直して、いちばん下へ付いていくか。いちばん下にいて (`stuck`)、一覧を使っていない (`held`) ときだけ。
+ * 使っている間に増えたぶんは、離れてから付いていく。まだ 1 行も無ければ (`shown` が 0) いつも付いていく
+ * (守る読みかけが無い。乗ったまま初めての行が来ても、頭に並べたまま待たない)
  */
-export function follows(stuck: boolean, held: boolean): boolean {
-  return stuck && !held;
+export function follows(stuck: boolean, held: boolean, shown: number): boolean {
+  return shown === 0 || (stuck && !held);
 }
 
 /** 同じ行の並びか (読み直すたびに描き直さないように)。控えは足すだけなので、件数と両端で分かる */

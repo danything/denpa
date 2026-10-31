@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, type Snippet, tick } from "svelte";
 
   import type { Comment } from "#lib/jikkyo/comments.js";
   import type { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
@@ -21,11 +21,14 @@
    *
    * - 置き場はデータ放送のリモコンと同じく右の列の頭で、局の一覧・番組の中身はその下に残す。高さは決めてあり、中だけ巻く
    * - 流れるほうと同じ `air()` で控えを 0.25 秒ごとに読み直す。シーク・巻き戻しにもそのまま付いていく
-   * - 新しいものが下。いちばん下にいる間は付いていき、上へ巻いた・指やポインタやフォーカスが乗っている間は止めて「最新へ」を出す。
+   * - 新しいものが下。行が少ないうちも下に寄せる (いちばん新しい行が、いつも一覧の下の端に来る)
+   * - いちばん下にいる間は付いていき、上へ巻いた・指やポインタやフォーカスが乗っている間は止める。
    *   止めている間は並びも替えない (上限を超えて上の行が落ちると、読んでいる行がずれる)。飛んだ (シーク) ときだけは替える
    *   (下へはいつも飛ぶ。滑らせると、滑っている間に増えた行で下の端が逃げ、付いていくのが外れる)
+   * - 「最新へ」は上へ巻いている間だけ出す。下で乗っているだけなら出さない (離れれば付いていくのに戻る。出すといちばん新しい行に重なる)
    * - 読み上げには知らせない (`aria-live` を付けない。1 分に何百件も来る)。自分の書き込みは流れるほうと同じく字の下に短い線
    * - `seek` があれば (観る画面)、行を押すとその時刻へ飛ぶ
+   * - `children` は一覧の下に置くもの (ライブで書き込む 1 行)
    */
   interface Props {
     feed: JikkyoFeed;
@@ -33,16 +36,15 @@
     air: () => number | null;
     /** 行を押したときにその放送時刻へ飛ぶ (録画だけ) */
     seek?: (at: number) => void;
+    children?: Snippet;
   }
-  let { feed, air, seek }: Props = $props();
+  let { feed, air, seek, children }: Props = $props();
 
   let rows = $state<Comment[]>([]);
   let force = $state(0);
-  /** いちばん下より上を見ていて、まだ並べていない新しいものがある (「最新へ」を出す) */
-  let behind = $state(false);
   let box = $state<HTMLOListElement | null>(null);
-  /** いちばん下にいる (付いていく)。上へ巻いたら外れ、下まで戻すか「最新へ」で戻る */
-  let stuck = true;
+  /** いちばん下にいる (付いていく)。上へ巻いたら外れ、下まで戻すか「最新へ」で戻る。外れている間は「最新へ」を出す */
+  let stuck = $state(true);
   let last: number | null = null;
   let most = LIST_MAX;
 
@@ -73,36 +75,25 @@
     last = w;
     force = feed.force(w);
     const next = feed.recent(w, most);
-    const follow = latest || leap || follows(stuck, hold.held);
+    const follow = latest || leap || follows(stuck, hold.held, rows.length);
     if (sameRows(rows, next)) {
       if (follow) toBottom();
       return;
     }
-    if (!follow && rows.length > 0) {
-      behind = true;
-      return;
-    }
+    if (!follow) return;
     rows = next;
     await tick();
-    if (follow) toBottom();
-    else measure();
+    toBottom();
   }
 
   function toBottom(): void {
     if (box === null) return;
     box.scrollTop = box.scrollHeight;
     stuck = true;
-    behind = false;
-  }
-
-  function measure(): void {
-    if (box !== null) behind = !atBottom(box);
   }
 
   function onscroll(): void {
-    if (box === null) return;
-    stuck = atBottom(box);
-    behind = !stuck;
+    if (box !== null) stuck = atBottom(box);
   }
 </script>
 
@@ -164,7 +155,7 @@
         </li>
       {/each}
     </ol>
-    {#if behind}
+    {#if !stuck}
       <button
         type="button"
         class="small latest"
@@ -173,6 +164,7 @@
       >
     {/if}
   </div>
+  {@render children?.()}
 </section>
 
 <style>
@@ -202,8 +194,14 @@
   .body {
     position: relative;
   }
-  /* 高さはデータ放送のリモコンと同じくらい。中だけ巻く */
+  /*
+   * 高さはデータ放送のリモコンと同じくらい。中だけ巻く。行が少ないうちも下に寄せる (上に寄せると、下に空いた所が
+   * 下の局の一覧との間に見え、間がリモコンのときより広く見える)。`justify-content: flex-end` だと溢れた上の行へ巻けないので、
+   * 頭の行の上の余白で押し下げる
+   */
   .rows {
+    display: flex;
+    flex-direction: column;
     height: 16rem;
     margin: 0;
     padding: 0;
@@ -214,6 +212,9 @@
   .row {
     margin: 0;
     list-style: none;
+  }
+  .row:first-child {
+    margin-top: auto;
   }
   .line {
     display: flex;
@@ -251,6 +252,7 @@
     text-decoration: underline 2px var(--dp-primary-text);
     text-underline-offset: 3px;
   }
+  /* 上へ巻いている間だけ出すので、重なるのは読み返している古い行 (いちばん新しい行は下の外にある) */
   .latest {
     position: absolute;
     left: 50%;

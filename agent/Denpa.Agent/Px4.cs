@@ -74,18 +74,6 @@ public static class Px4Userland
     public static string Dir =>
         Environment.GetEnvironmentVariable("PX4_USERLAND_DIR") ?? "/opt/px4-userland";
 
-    /// <summary>
-    /// IT930x のファームウェア。**同梱してある** (Dockerfile)。
-    ///
-    /// <para>
-    /// 本体には入っておらず、挿すたびにホストから RAM へ流し込むもの。
-    /// px4-userland は受理するバージョンを SHA-256 で1つに固定していて、
-    /// 違うものを渡すと <c>FIRMWARE_REJECTED</c> で起動しない。
-    /// </para>
-    /// </summary>
-    public static string Firmware =>
-        Environment.GetEnvironmentVariable("PX4_FIRMWARE") ?? Path.Combine(Dir, "firmware", "it930x-firmware.bin");
-
     /// <summary>px4d / px4ctl の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
     public static string Executable(string dir, string name) =>
         Path.Combine(dir, OperatingSystem.IsWindows() ? $"{name}.exe" : name);
@@ -561,8 +549,14 @@ public static class Px4Userland
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (object Owner, string Text)> Notices =
         new(StringComparer.Ordinal);
 
+    /// <remarks>
+    /// ファームウェアを取ってこられなかったときは、px4-userland の受信機すべてにその理由を出す
+    /// (px4d を起こせず、どの受信機も使えない。<see cref="Px4Firmware.Problem"/>)
+    /// </remarks>
     public static string? Notice(string? device) =>
-        device is not null && Notices.TryGetValue(device, out var notice) ? notice.Text : null;
+        device?.StartsWith(Scheme, StringComparison.Ordinal) == true && Px4Firmware.Problem is { } firmware
+            ? firmware
+            : device is not null && Notices.TryGetValue(device, out var notice) ? notice.Text : null;
 
     internal static void SetNotice(string device, object owner, string text) => Notices[device] = (owner, text);
 
@@ -918,20 +912,17 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
         {
             throw new IOException($"{Px4Userland.Label(Id)} の筐体が見つかりません (抜けたか、USB ポートを変えた?)");
         }
-        if (!File.Exists(Px4Userland.Firmware))
-        {
-            throw new IOException($"ファームウェアがありません: {Px4Userland.Firmware}"
-                + (OperatingSystem.IsWindows() ? " (install.ps1 を流し直すと切り出します)" : ""));
-        }
         var px4d = Px4Userland.Executable(Px4Userland.Dir, "px4d");
         if (!File.Exists(px4d)) throw new IOException($"px4-userland が入っていません: {px4d}");
         // ランタイムルートが px4d の決まりに合わなければ、px4d の分かりにくい INVALID_ARGUMENT の前に理由を言う
         if (Px4Userland.RuntimeProblem(Px4Userland.RuntimeDir, Id) is { } problem) throw new IOException(problem);
+        // イメージには入れていない。初めてなら取ってきて設定の置き場に置く (Px4Firmware.cs)
+        var firmware = Px4Firmware.Ensure();
 
         Launch(px4d,
             [
                 .. Select(enclosure),
-                "--firmware", Px4Userland.Firmware,
+                "--firmware", firmware,
                 "--runtime-dir", Px4Userland.RuntimeDir,
                 /*
                  * 15V を出してよいかのチェックは2段。ここは「指定されたら出す」で開けておき、

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
@@ -33,7 +33,6 @@
     OPEN_OUT,
     OVERLAY,
     PAUSE,
-    PENCIL,
     PLAY,
     RECORD,
     SOUND_OFF,
@@ -87,7 +86,6 @@
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
-  import { PHONE_FORM, TABLETOP } from "#lib/phone-form.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR, stepSpeed } from "#lib/ts/pacing.js";
   import { CHANNEL_TYPES } from "#lib/types.js";
@@ -173,20 +171,14 @@
 
   /**
    * 実況に書き込む 1 行 (`JikkyoCompose`)。出せるのは流しているときと同じ条件 (世帯と端末の両方がオンで、映している局に
-   * 実況のチャンネルがある) で、書き込み用の設定は無い。開いている間は操作バーを引っ込めない。
-   * 置き場は、スマホの形 (横にしたスマホ・テーブルトップ・全画面を除く) では下のタブのすぐ上、ほかは操作バーのすぐ上。
-   * テーブルトップの下のタブは別の段にあり、映像の段の中からは浮かせられない (段の箱が `position: fixed` の基準になる)
+   * 実況のチャンネルがある) で、書き込み用の設定は無い。置き場はコメントの一覧の下 (下の `canList`)。
+   * 一覧を出せない形 (横にしたスマホ・全画面) では、右端の列の同じボタンで映像の上 (操作バーのすぐ上) に開き (`writing`)、
+   * 開いている間は操作バーを引っ込めない
    */
   const canWrite = $derived(
     jikkyoActive && jikkyoChannel !== null && player.yielded === null,
   );
-  let writing = $state(false);
-  $effect(() => {
-    if (!canWrite) writing = false;
-  });
-  const phoneForm = new MediaQuery(PHONE_FORM);
   const phoneLandscape = new MediaQuery(PHONE_LANDSCAPE);
-  const tabletop = new MediaQuery(TABLETOP);
 
   /**
    * 一覧は種別で切り替える (番組表と同じ並び)。局を持っている種別だけ出す。
@@ -363,7 +355,8 @@
 
   /**
    * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
-   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない
+   * 書ける間は一覧の下に書き込む 1 行を付ける (上の `canWrite`)。右の列の無い形 (横にしたスマホ・全画面) では出さず、
+   * 同じボタンで映像の上の 1 行を開く (書けなければボタンも置かない)
    */
   const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
   const canList = $derived(
@@ -372,22 +365,39 @@
       !phoneLandscape.current &&
       !fullscreen.active,
   );
-
-  // 書き込む 1 行の置き場 (上の `canWrite`) と、開いている間は操作バーを残す
-  const docked = $derived(
-    phoneForm.current &&
-      !phoneLandscape.current &&
-      !tabletop.current &&
-      !fullscreen.active,
-  );
+  /** 映像の上の 1 行を開いている (一覧を出せない形だけ) */
+  let writing = $state(false);
+  $effect(() => {
+    if (!canWrite || canList) writing = false;
+  });
   $effect(() => {
     controls.writing = writing;
   });
-  /** 閉じたら「実況に書く」へ焦点を戻す */
-  function closeWriting(): void {
-    writing = false;
-    document.querySelector<HTMLElement>('[data-testid="live-write"]')?.focus();
+  /** ボタンで一覧を開いた (書き込む 1 行へフォーカスを移す。覚えていた一覧で開いたときは移さない) */
+  let opened = $state(false);
+  function pressJikkyo(): void {
+    if (canList) {
+      jikkyoList.toggle();
+      opened = jikkyoList.on;
+      // 出た 1 行が読んだら下ろす (列を入れ替えて一覧を描き直したときに、また取らない)
+      void tick().then(() => (opened = false));
+    } else writing = !writing;
   }
+  /** 閉じたら (Esc・✕) 右端の列のボタンへフォーカスを戻す。一覧の下の 1 行なら一覧ごとしまう */
+  function closeWriting(): void {
+    if (canList) {
+      if (jikkyoList.on) jikkyoList.toggle();
+    } else writing = false;
+    // 一覧の下で打っている間は操作列が引っ込んでいることがある。出し直してから移す (消えている間は押せない)
+    controls.stir();
+    void tick().then(() =>
+      document
+        .querySelector<HTMLElement>('[data-testid="live-jikkyo-list"]')
+        ?.focus(),
+    );
+  }
+  /** 書きかけ (一覧の下と映像の上で同じもの。番組の中身との行き来で一覧を描き直しても残す) */
+  let draft = $state("");
 
   /** 画面を落とさせない。止めている間も掛けたまま (追っかけの始まりで、画面を見ていることが多い) */
   const awake = screenAwake();
@@ -626,38 +636,33 @@
             testid="live-shot"
             onclick={() => void snapshot()}
           />
-          <!-- 実況に書き込む 1 行を開く (`canWrite`。追い付いていないときも出し、1 行のほうで理由を言う) -->
-          {#if canWrite}
-            <ControlButton
-              icon={PENCIL}
-              label="実況に書く"
-              on={writing}
-              testid="live-write"
-              onclick={() => (writing = !writing)}
-            />
-          {/if}
-          <!-- 右の列の頭に「コメントの一覧」を出す・しまう (`canList`) -->
-          {#if canList}
+          <!--
+            右の列の頭に「コメントの一覧」(書ける間は下に書き込む 1 行) を出す・しまう (`canList`)。
+            一覧を出せない形では、映像の上に書き込む 1 行を開く (`canWrite`。追い付いていないときも出し、1 行のほうで理由を言う)
+          -->
+          {#if canList || canWrite}
             <ControlButton
               icon={JIKKYO}
-              label="コメントの一覧"
-              on={jikkyoList.on}
+              label={canList ? "コメントの一覧" : "実況に書く"}
+              on={canList ? jikkyoList.on : writing}
               testid="live-jikkyo-list"
-              onclick={jikkyoList.toggle}
+              onclick={pressJikkyo}
             />
           {/if}
         </ControlBar>
 
         <!-- 操作バーは映像が出る前から出しておく (出たり消えたりすると押そうとしたところで動く) -->
         <ControlBar shown={controls.shown} testid="live-controls">
-          <!-- 実況に書き込む 1 行 (操作バーのすぐ上)。スマホの形では下のタブのすぐ上 (`docked`。置く所は同じで、CSS で浮かせる) -->
+          <!-- 一覧を出せない形で書き込む 1 行 (操作バーのすぐ上。`writing`) -->
           {#if writing}
             <JikkyoCompose
               feed={jikkyo}
               air={() => player.airTime()}
               lag={player.fromAir}
               paused={player.paused}
-              {docked}
+              panel={false}
+              focus
+              bind:text={draft}
               onclose={closeWriting}
             />
           {/if}
@@ -981,6 +986,23 @@
         右の列。幅は固定で、映像側だけ伸ばす。番組表と同じ並びで、高さは残りぜんぶ
     -->
   {#snippet aside()}
+    <!-- 右の列の頭のコメントの一覧。書ける間は下に書き込む 1 行を付ける (局の一覧・番組の中身のどちらでも同じ) -->
+    {#snippet commentList()}
+      <JikkyoList feed={jikkyo} air={() => player.airTime()}>
+        {#if canWrite}
+          <JikkyoCompose
+            feed={jikkyo}
+            air={() => player.airTime()}
+            lag={player.fromAir}
+            paused={player.paused}
+            panel
+            focus={opened}
+            bind:text={draft}
+            onclose={closeWriting}
+          />
+        {/if}
+      </JikkyoList>
+    {/snippet}
     {#if detail.current}
       <!--
             番組の中身は、この列を入れ替えて出す (モーダルにしない — 映像に被さると観ながら読めない)
@@ -996,7 +1018,7 @@
         {#snippet top()}
           <!-- 番組の中身を開いていても、コメントの一覧は列の頭に残す (局の一覧のときと同じ) -->
           {#if canList && jikkyoList.on}
-            <JikkyoList feed={jikkyo} air={() => player.airTime()} />
+            {@render commentList()}
           {/if}
         {/snippet}
         <ProgramFacts program={detail.current} />
@@ -1013,7 +1035,7 @@
         {/if}
         <!-- 実況のコメントの一覧も、出している間は一覧の上 (リモコンの下) -->
         {#if canList && jikkyoList.on}
-          <JikkyoList feed={jikkyo} air={() => player.airTime()} />
+          {@render commentList()}
         {/if}
 
         <!-- 番組表と同じ並び・同じ見た目。探す場所がずれないようにする -->

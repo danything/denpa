@@ -46,7 +46,7 @@ PX4_USERLAND_VERSION=0.2.1
 SIANO_USERLAND_VERSION=0.1.10
 ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
 
-# IT930x のファームウェアは PLEX 公式ドライバから切り出す。3つのハッシュは agent/Dockerfile と同じ
+# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と3つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.ps1 と同じ
 PLEX_DRIVER_SHA256=bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200
 PXW3U4_SYS_SHA256=8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722
 IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484
@@ -70,13 +70,16 @@ done
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31mエラー:\033[0m %s\n' "$*" >&2; exit 1; }
-fetch() { curl -fsSL --retry 3 -o "$2" "$1" || die "ダウンロードできません: $1"; }
+# 時間の上限を付ける。繋がったまま止まる相手 (落ちかけの PLEX のサイトや Internet Archive) だと、付けなければいつまでも待つ。
+# 時間切れも --retry が試し直す
+CURL_LIMITS=(--connect-timeout 20 --max-time 300)
+fetch() { curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o "$2" "$1" || die "ダウンロードできません: $1"; }
 
 # 入れるバージョン。compose ファイルはこのバージョン (git の ref) から取り、イメージは x.y.z の形式のときだけそのバージョンに
 # 揃える (コミットやブランチなら latest)。API を使わず、latest の転送先からタグを読む (API は回数制限がある)
 version() {
   if [ -n "${DENPA_VERSION:-}" ]; then echo "$DENPA_VERSION"; return; fi
-  tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest") \
+  tag=$(curl -fsSLI --connect-timeout 20 --max-time 60 -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest") \
     || die "最新のリリースが分かりません"
   echo "${tag##*/}"
 }
@@ -125,7 +128,7 @@ ensure_genkan() {
     return 1
   fi
   say "genkan を $HOME/genkan に入れます (http://denpa.localhost で開けるように)"
-  (cd "$HOME" && curl -fsSL https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s) \
+  (cd "$HOME" && curl -fsSL "${CURL_LIMITS[@]}" https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s) \
     || { say "genkan を入れられませんでした (ポート 3000 で開きます)"; return 1; }
   genkan_running
 }
@@ -172,7 +175,7 @@ compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 start_denpa() {
   say "denpa $2 を $DENPA_DIR に置きます"
   mkdir -p "$DENPA_DIR/config"
-  curl -fsSL --retry 3 -o "$DENPA_DIR/compose.yml.new" "https://raw.githubusercontent.com/$REPO/$2/$1" \
+  curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o "$DENPA_DIR/compose.yml.new" "https://raw.githubusercontent.com/$REPO/$2/$1" \
     || die "$2 に $1 がありません。compose.mac.yml は v1.23.0 からなので、それより前のバージョンは Mac に入れられません"
   # 手で置いたもの・手を入れたものは黙って上書きせず、compose.yml.bak に退けてそう言う。
   # install.sh が書いたものは1行目が印で、残りは前に書いた控え (.compose.yml.orig) と同じはず
@@ -238,7 +241,7 @@ stop_denpa() {
 wait_and_open() {
   say "denpa の応答を待ちます"
   for _ in $(seq 90); do
-    if curl -fsS -o /dev/null "$URL/api/health" 2>/dev/null; then
+    if curl -fsS --max-time 5 -o /dev/null "$URL/api/health" 2>/dev/null; then
       url=$URL
       # Linux の Docker は localhost への接続を中継し、送信元が Docker のゲートウェイに見える (既定の
       # TRUSTED_NETWORKS に入らない)。このマシンのブラウザでも LAN の IP で開く
@@ -246,7 +249,7 @@ wait_and_open() {
       # genkan 越しにも答えれば、そちらを開く (Caddy がラベルを読むまで少し掛かる)
       if [ "$2" = yes ]; then
         for _ in $(seq 15); do
-          if curl -fsS -o /dev/null --resolve denpa.localhost:80:127.0.0.1 "$GENKAN_URL/api/health" 2>/dev/null; then
+          if curl -fsS --max-time 5 -o /dev/null --resolve denpa.localhost:80:127.0.0.1 "$GENKAN_URL/api/health" 2>/dev/null; then
             url=$GENKAN_URL
             break
           fi
@@ -353,7 +356,7 @@ mac_main() {
     ref=$(version)
     agent="denpa-agent-${ref#v}-darwin-arm64.tar.gz"
     say "denpa-agent $ref"
-    curl -fsSL --retry 3 -o "$agent" "https://github.com/$REPO/releases/download/$ref/$agent" \
+    curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o "$agent" "https://github.com/$REPO/releases/download/$ref/$agent" \
       || die "$ref には Mac 用のエージェントがありません。Mac 用は v1.23.0 からなので、それより前のバージョンは Mac に入れられません"
     fetch "https://github.com/$REPO/releases/download/$ref/$agent.sha256" "$agent.sha256"
     check "$agent" "$(awk '{print $1}' "$agent.sha256")"
@@ -373,7 +376,7 @@ mac_main() {
   say "IT930x のファームウェアを PLEX のドライバから切り出します"
   # PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した)。
   # 中身はハッシュで確かめるので、取れなければ Internet Archive の写し (同じハッシュ) から取る
-  curl -fsSL --retry 3 -o driver.zip https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip \
+  curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o driver.zip https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip \
     || fetch "https://web.archive.org/web/20260927060746id_/http://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip" driver.zip
   check driver.zip "$PLEX_DRIVER_SHA256"
   unzip -p driver.zip pxw3u4_BDA_ver1x64/PXW3U4.sys > PXW3U4.sys
@@ -446,7 +449,7 @@ EOF
   say "エージェントを起動しました。応答を待ちます"
   answered=no
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if tuners=$(curl -fsS "http://127.0.0.1:$PORT/denpa/tuners" 2>/dev/null); then
+    if tuners=$(curl -fsS --max-time 5 "http://127.0.0.1:$PORT/denpa/tuners" 2>/dev/null); then
       echo "$tuners"
       answered=yes
       break

@@ -320,8 +320,12 @@ test.describe("PWA", () => {
 
     const menu = page.getByTestId("nav-menu");
     await menu.getByRole("button", { name: "その他" }).click();
-    // 中身はルール・設定のリンクだけ (テーマは設定の「この端末」、新しいバージョンは設定の入口の点)
-    await expect(menu.getByRole("link")).toHaveText(["ルール", "設定"]);
+    // 中身は切り抜き・ルール・設定のリンクだけ (テーマは設定の「この端末」、新しいバージョンは設定の入口の点)
+    await expect(menu.getByRole("link")).toHaveText([
+      "切り抜き",
+      "ルール",
+      "設定",
+    ]);
     await expect(menu.getByRole("button", { name: /テーマ/ })).toHaveCount(0);
     await menu.getByRole("link", { name: "ルール" }).click();
     await page.waitForURL(/rules/);
@@ -352,13 +356,14 @@ test.describe("PWA", () => {
    * 640px からはルール・設定もタブに並べて 6 つ (アイコンの下に字)。「その他」は中身が無くなるので出さず、
    * いまの画面の印 (タブの上端の短い線) はそのタブの真ん中に 1 つだけ付く
    */
-  test("1000px 未満は下のタブ。640px からはルール・設定も並ぶ", async ({
+  test("1000px 未満は下のタブ。640px からは切り抜き・ルール・設定も並ぶ", async ({
     browser,
   }) => {
-    const SIX = [
+    const SEVEN = [
       "tab-home",
       "tab-guide",
       "tab-live",
+      "tab-clips",
       "tab-rules",
       "tab-search",
       "tab-settings",
@@ -386,10 +391,10 @@ test.describe("PWA", () => {
       await expect(page.getByTestId("header-search"), label).toBeHidden();
       await expect(page.getByTestId("nav-rules"), label).toBeHidden();
 
-      // 左から 録画・番組表・ライブ・ルール・検索・設定。的の幅はそろう。「その他」は出さない
+      // 左から 録画・番組表・ライブ・切り抜き・ルール・検索・設定。的の幅はそろう。「その他」は出さない
       await expect(page.getByTestId("nav-menu"), label).toBeHidden();
       const boxes = [];
-      for (const id of SIX) {
+      for (const id of SEVEN) {
         await expect(page.getByTestId(id), `${label} ${id}`).toBeVisible();
         boxes.push((await page.getByTestId(id).boundingBox())!);
       }
@@ -414,7 +419,7 @@ test.describe("PWA", () => {
           width: Number.parseFloat(style.width),
         };
       });
-      const rules = boxes[3]!;
+      const rules = boxes[SEVEN.indexOf("tab-rules")]!;
       expect(
         Math.abs(
           bar.x + mark.left + mark.width / 2 - (rules.x + rules.width / 2),
