@@ -58,7 +58,7 @@ AMD の別の仕組み (AMF) は、Linux では AMD が別に配るランタイ�
 
 **そのコーデックのエンコーダに GPU を選んであれば、ライブと追っかけも GPU でエンコードします** (設定項目は増やして
 いません。ソフトウェアにすれば CPU に戻ります。録画でチェックを外したコーデックも同じです)。低遅延のために録画とは引数を変えています (`hwenc.liveHwArgs`: `-bf 0`、
-`-async_depth 1`、QSV は `-preset veryfast`)。
+`-async_depth 1`、QSV は `-preset veryfast`。NVENC は別の言い方で、[NVIDIA の節](#nvidia-でエンコードする))。
 
 **MPEG-2 を GPU でデコードできるデバイスでは、デコードとインタレ解除も GPU に寄せます** (VA-API だけ。`-hwaccel vaapi
 -hwaccel_output_format vaapi` + `deinterlace_vaapi=rate=field`)。エンコードするところだけ GPU に移しても、CPU に残るデコード・
@@ -70,7 +70,7 @@ bwdif・nv12 への変換で非力な機材は3本同時に間に合わないた
 **映像を1つも出さないうちに GPU の ffmpeg が降りたら、ソフトウェアで再エンコードします** (`live.ts` の `Session.run`)。
 ソフトウェアで映像が出たら GPU のせいだったと決めて、画面に一行出し、その方式を15分覚えてその間はソフトウェアで
 エンコードします (選局のたびに待たせない)。ソフトウェアでも出なければ GPU とは関係なく降りたので (選局直後に映像が
-まだ来ていない、など) 覚えません。出し始めてから落ちたものも GPU のせいとは限らないので、いつもどおり
+まだ来ていない、など) 覚えません。NVENC が同時に開ける数を超えて降りたときも覚えません ([NVIDIA の節](#nvidia-でエンコードする))。出し始めてから落ちたものも GPU のせいとは限らないので、いつもどおり
 「映像を出せませんでした」です。
 
 **手元に GPU が無いので、確かめていないもの:** 最初の映像が出るまでの時間 (x264 ultrafast と比べて)、
@@ -100,7 +100,7 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 音声だけも軽いので数えません。埋まっていれば 503「サーバが混んでいます」です。
 
 **既定は GPU が無ければ 2、あれば 4 です。ドライバに「同時に何本エンコードできるか」を聞く手が無いので、GPU の有無で
-決めています。** denpa が使う QSV / VA-API はセッション数の上限を言いません。実際に何本間に合うかは機材と素材で変わるので、設定で変えられるようにしてあります
+決めています。** denpa が使う QSV / VA-API はセッション数の上限を言わず、NVENC の消費者向けの上限 (いまは 12) もドライバには聞けません。実際に何本間に合うかは機材と素材で変わるので、設定で変えられるようにしてあります
 (起動時の試しのエンコードは使えるかを見るだけで、速さは測っていません)。
 
 ## Rockchip (RK3588) でエンコードする
@@ -139,7 +139,7 @@ services:
 ### 画質はビットレートで決める
 
 本家の h264_rkmpp は画質での指定 (CQP・qp) を持たず、レート制御は `-rc` の vbr / cbr / avbr だけです。そこで
-**AVBR (静かな場面では量を下げる VBR) に、出す高さとコマ数ごとのビットレートを渡します** (`hwenc.rkmppBitrate`):
+**AVBR (静かな場面では量を下げる VBR) に、出す高さとコマ数ごとのビットレートを渡します** (`hwenc.hwBitrate`):
 
 | 出す映像の高さ | 30コマ     | 60コマ      |
 | -------------- | ---------- | ----------- |
@@ -179,11 +179,68 @@ services:
 あるので、時刻で合わせると 60コマでは 1 コマずれて 15 点ほど低く出る)。
 
 **実機の h264_rkmpp では測っていません** (手元に無い)。x264 の代わりと MPP の効率の差は 4 の 2 割で見込んだつもりで、
-足りるかは実機で見てもらうしかありません。粗く見えたら `hwenc.rkmppBitrate` の表を上げてください。
+足りるかは実機で見てもらうしかありません。粗く見えたら `hwenc.hwBitrate` の表を上げてください。
 
 **実機で確かめていないこと:** 上の値で見た目が今の H.264 と揃うか、速さ (1080i を 1080p の H.264 にして実時間の何倍か。
 CPU に残る bwdif がどれだけ食うか)、要るデバイスファイル (`/dev/mpp_service` と `/dev/dma_heap` で足りるか)、
 ライブで最初の映像が出るまでの時間。
+
+## NVIDIA でエンコードする
+
+**NVIDIA の GPU の NVENC で H.264 と AV1 をエンコードできます** (amd64。`h264_nvenc` / `av1_nvenc`)。AV1 は RTX 40 以降
+(Ada) だけで、それより前の GPU では試しのエンコードが落ちて H.264 だけになります。ffmpeg は nv-codec-headers (MIT) で
+組んであり、**ドライバのライブラリ (libcuda・libnvidia-encode) はイメージに入れていません** — ホストのものを
+NVIDIA Container Toolkit がコンテナに差し込みます (`Dockerfile` の ffmpeg 段)。
+
+**要るもの:**
+
+- **ホストの NVIDIA のドライバ 530 以降** (イメージの nv-codec-headers 12.1 が求める)
+- **NVIDIA Container Toolkit** (Docker・containerd に GPU を渡すもの)。イメージは `NVIDIA_DRIVER_CAPABILITIES=compute,video,utility`
+  を置いてあり、NVENC のライブラリ (video) も差し込ませます。Compose は `compose.override.yml` に書きます:
+
+```yaml
+services:
+  denpa:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
+```
+
+- Kubernetes は NVIDIA の device plugin と RuntimeClass (GPU Operator が作るもの) を入れ、chart の `denpa.runtimeClassName`
+  にその名前を、`denpa.resources.limits` に `nvidia.com/gpu: 1` を書きます
+
+起動時に `/dev/nvidia0`・`/dev/nvidia1` … が見えれば、GPU (`renderD*`) とは別の行 (`nvidia0 (NVIDIA)`) で1枚ごとに
+NVENC を1コマ試し、通れば設定の「エンコード」でエンコーダに選べます (自動で使うのも、落ちたら次の方式・ソフトウェアへ倒れるのも、
+ライブとその場の変換が同じ印で載るのも GPU と同じ)。`HW_DEVICES` は変えていません — NVENC は GPU をデバイスファイルではなく
+番号 (`-gpu N`) で受けるので、探し方を分けています。番号はデバイスファイルの並びの位置です (コンテナに2枚目だけ渡すと、CUDA
+からは0番に見えるため)。並びと CUDA の番号を揃えるため、イメージは `CUDA_DEVICE_ORDER=PCI_BUS_ID` を置いています。
+
+- **画質はビットレートで決めます。** NVENC は ICQ (`-global_quality`) を受けないので、Rockchip MPP と同じ表
+  ([上](#画質はビットレートで決める)) の値を VBR (`-rc vbr`) で渡します。上限とバッファは目標の 2 倍 (測っていません)、
+  `-preset p4` (7段の真ん中)、キーフレームの間隔は 250 コマです。**AV1 の表はいまは H.264 と同じ値で、何も測っていません。**
+  CPU での比べ ([下](#h264-は-crf-23-av1-と同じ画質)) では、同じ画質で忙しい実写は AV1 のほうが大きく、表はいちばん重い素材で
+  決めているので、下げる根拠が無いためです。VBR は平均を表の値に寄せるので、AV1 を選んでもファイルは H.264 とほぼ同じ大きさで、
+  浮くぶんは画質に回ります。小さくしたければ、実機で測ってから `hwenc.hwBitrate` の AV1 の表を下げてください
+- **CM を切る境目にもキーフレームを置けます。** NVENC は指定しないと IDR にならないので、`-forced-idr 1` を付けます
+  (QSV は `-forced_idr`。綴りが違う)
+- **ライブは低遅延の引数に替えます** (`hwenc.liveHwArgs`): `-preset p2 -tune ll -bf 0 -zerolatency 1 -delay 0`。
+  QSV・VA-API の `-async_depth` は NVENC に無く、渡すと降ります。**デコードとインタレ解除は CPU のまま**です
+  (NVENC の側でデコードから GPU に寄せるのは、実機で確かめてから)
+- **消費者向けの GPU (GeForce) は、同時に開けるエンコードの数に上限があります** (いまの NVIDIA の一覧で 12。システム全体で)。
+  超えた1本はエンコードを開くところで降りるので、ライブとその場の変換はその1本だけソフトウェアでエンコードし、**方式は覚えません**
+  (ほかの理由で降りたときのように15分外すと、空いたあとの選局までソフトウェアになるため)。見分けは ffmpeg の言い分で
+  (`hwenc.nvencBusy`)、録画は今までどおり次の方式へ倒れます
+- **WSL2 で動くかは分かりません** (Docker Desktop の GPU の渡し方で NVENC まで使えるかは確かめていない)
+
+**実機で確かめていないこと** (手元に NVIDIA の GPU がありません): 上の値で見た目が今の H.264 と揃うか・AV1 の値、速さ、
+ライブで最初の映像が出るまでの時間、同時に開ける数を超えたときの言い分 (ドライバで違う。FFmpeg の nvenc.c が出す形から
+`out of memory` と `incompatible client key` を拾っている)、2枚挿しで番号が並びと合うか、distroless の実行イメージで
+Container Toolkit がライブラリを差し込めるか (Toolkit は差し込んだあと ldconfig を走らせようとするが、イメージには無い。
+差し込み先の `/usr/lib/x86_64-linux-gnu` は既定の検索先なので、dlopen は通るはず)。
 
 ## 字幕は放送の ARIB 字幕をそのまま
 

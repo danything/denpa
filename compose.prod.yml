@@ -96,6 +96,15 @@ services:
     #     - /dev/dri:/dev/dri
     #     - /dev/mpp_service:/dev/mpp_service
     #     - /dev/dma_heap:/dev/dma_heap
+    # NVIDIA は devices ではなく、ホストに NVIDIA Container Toolkit を入れて GPU を予約する
+    # (docs/encode.md「NVIDIA でエンコードする」。ドライバのライブラリと /dev/nvidia0 などは Toolkit が差し込む):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu, video, compute, utility]
 
 volumes:
   denpa-data:

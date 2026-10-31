@@ -23,7 +23,7 @@ import {
  * denpa にはデバイスとして見え、偽 ffmpeg は渡されたデバイスが在るのを見て QSV / VA-API の
  * 試しのエンコードを通す。消せば、エンコードしようとした GPU の方式が本物と同じく初期化で落ちる
  * (次の方式・ソフトウェアへ倒れるのを試せる)。
- * `mpp_service` を置くと Rockchip MPP (`RKMPP_DEVICE`) のデバイスとして見える
+ * `mpp_service` を置くと Rockchip MPP (`RKMPP_DEVICE`)、`nvidia0` を置くと NVIDIA の GPU (`NVIDIA_DIR`) のデバイスとして見える
  */
 
 /**
@@ -50,7 +50,9 @@ function wayOf(run: string[]): string {
   const encoder =
     run.find(
       (a) =>
-        /_(qsv|vaapi|rkmpp)$/.test(a) || a === "libx264" || a === "libsvtav1",
+        /_(qsv|vaapi|rkmpp|nvenc)$/.test(a) ||
+        a === "libx264" ||
+        a === "libsvtav1",
     ) ?? "?";
   const device = run.find(
     (a) => a.startsWith("qsv=") || a.startsWith("vaapi="),
@@ -194,9 +196,48 @@ test.describe("GPU でエンコードする", () => {
     const recordingId = await row.getAttribute("data-recording-id");
     const runs = encodeRuns(stack.encodeArgsFile, recordingId);
     expect(runs.map(wayOf)).toEqual(["libsvtav1", "h264_rkmpp"]);
-    // AVBR でビットレートを渡す (hwenc.rkmppBitrate)
+    // AVBR でビットレートを渡す (hwenc.hwBitrate)
     expect(runs[1]!.join(" ")).toMatch(
       /-rc avbr -b:v \d+ -maxrate \d+ -minrate \d+ -g 250/,
+    );
+  });
+
+  test("NVIDIA の GPU は別の行に出て、GPU の番号でエンコードする", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(180_000);
+    clearGpus(stack.hwDir);
+    // 2枚目だけをコンテナに渡したときの形。番号は並びの位置なので -gpu 0 になる
+    const nvidia = `${stack.hwDir}/nvidia1`;
+    writeFileSync(nvidia, "1");
+    writeFileSync(`${stack.hwDir}/nvidiactl`, "1");
+    await goto(page, "/settings/recording");
+    await page.getByTestId("hw-probe").click();
+    await expect(page.getByTestId("hw-status")).toContainText(
+      "デバイスが 1 個見つかり、1 個で GPU エンコードできます",
+    );
+    await expect(page.getByTestId("hw-device")).toContainText(
+      "nvidia1 (NVIDIA): NVENC: AV1 / H.264",
+    );
+    await expect(page.getByTestId("hw-av1")).toHaveValue(nvidia);
+    await expect(page.getByTestId("hw-h264")).toHaveValue(nvidia);
+
+    // H.264 を NVENC で。キーフレームの指定は NVENC の綴り (-forced-idr) で IDR にさせる
+    await syncEpg(request);
+    rmSync(stack.encodeArgsFile, { force: true });
+    await setRecording(request, { codecs: ["h264"] });
+    const programId = await reserveSoon(page, request, "BS", 3);
+    const row = page.locator(
+      `[data-testid="recording-row"][data-program-id="${programId}"]`,
+    );
+    await waitWatchable(page, row);
+    const recordingId = await row.getAttribute("data-recording-id");
+    const runs = encodeRuns(stack.encodeArgsFile, recordingId);
+    expect(runs.map(wayOf)).toEqual(["h264_nvenc"]);
+    expect(runs[0]!.join(" ")).toMatch(
+      /h264_nvenc -gpu 0 -preset p4 -rc vbr -b:v \d+ -maxrate \d+ -bufsize \d+ -g 250/,
     );
   });
 });

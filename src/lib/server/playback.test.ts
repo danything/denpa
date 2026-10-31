@@ -375,18 +375,28 @@ describe("流す (streamResponse)", () => {
 
 describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
   test("1 バイトも出さずに降りたら次の手で起こし直し、次で出せたら前のせいだったと覚える", async () => {
-    let blamed = 0;
+    const blamed: string[] = [];
     let done = 0;
     const body = transcodeBody(
       [
-        { argv: ["sh", "-c", "echo gpu >&2; exit 1"] },
-        { argv: ["sh", "-c", "printf ok"], blame: () => blamed++ },
+        // 降りた理由の行は最後の 3 行に入るとは限らない。全文を渡す (覚えるかを理由で決める。`hwenc.nvencBusy`)
+        {
+          argv: [
+            "sh",
+            "-c",
+            "echo gpu >&2; echo 2 >&2; echo 3 >&2; echo 4 >&2; exit 1",
+          ],
+        },
+        {
+          argv: ["sh", "-c", "printf ok"],
+          blame: (failed) => blamed.push(failed),
+        },
       ],
       "[試験]",
       () => done++,
     );
     expect(await new Response(body).text()).toBe("ok");
-    expect(blamed).toBe(1);
+    expect(blamed).toEqual(["gpu\n2\n3\n4\n"]);
     expect(done).toBe(1);
   });
 

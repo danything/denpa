@@ -48,6 +48,10 @@ spec:
     spec:
       # 録画中に入れ替えが来たら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)
       terminationGracePeriodSeconds: {{ .Values.denpa.terminationGracePeriodSeconds }}
+      {{- with .Values.denpa.runtimeClassName }}
+      # NVIDIA の GPU を渡すランタイム (values.yaml の説明)
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
       containers:
         - name: denpa
           image: "{{ .Values.image.denpa.repository }}:{{ .Values.image.denpa.tag }}"

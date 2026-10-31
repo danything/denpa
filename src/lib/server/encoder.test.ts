@@ -20,7 +20,7 @@ import {
   inputSkip,
   readInputPos,
 } from "./encoder";
-import { rkmppBitrate } from "./hwenc";
+import { hwBitrate } from "./hwenc";
 
 function argValue(args: string[], key: string): string | undefined {
   const i = args.indexOf(key);
@@ -213,18 +213,41 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
       "bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=nv12",
     );
     expect(argValue(hd, "-b:v")).toBe(
-      String(rkmppBitrate({ height: 1080, smooth: false })),
+      String(hwBitrate("h264", { height: 1080, smooth: false })),
     );
     expect(argValue(mpp(1080, true), "-b:v")).toBe(
-      String(rkmppBitrate({ height: 1080, smooth: true })),
+      String(hwBitrate("h264", { height: 1080, smooth: true })),
     );
     expect(argValue(mpp(480, true), "-b:v")).toBe(
-      String(rkmppBitrate({ height: 480, smooth: true })),
+      String(hwBitrate("h264", { height: 480, smooth: true })),
     );
     // 高さが分からなければ 1080 の値
     expect(argValue(mpp(undefined, false), "-b:v")).toBe(
-      String(rkmppBitrate({ height: 1080, smooth: false })),
+      String(hwBitrate("h264", { height: 1080, smooth: false })),
     );
+  });
+
+  test("NVENC はデバイスを開けず GPU の番号で選び、映像の高さとコマ数でビットレートを決める", () => {
+    for (const codec of ["av1", "h264"] as const) {
+      const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec, {
+        hardware: { device: "/dev/nvidia1", kind: "nvenc", gpu: 1 },
+        smoothMotion: false,
+        height: 720,
+        displaySize: { width: 1280, height: 720 },
+      });
+      expect(args).not.toContain("-init_hw_device");
+      expect(args).toContain(`${codec}_nvenc`);
+      expect(argValue(args, "-gpu")).toBe("1");
+      // ICQ (-global_quality) は NVENC が断るので渡さない
+      expect(args).not.toContain("-global_quality");
+      expect(argValue(args, "-rc")).toBe("vbr");
+      expect(argValue(args, "-b:v")).toBe(
+        String(hwBitrate(codec, { height: 720, smooth: false })),
+      );
+      expect(argValue(args, "-vf")).toBe(
+        "bwdif=mode=send_frame,scale=1280:720,setsar=1,format=nv12",
+      );
+    }
   });
 
   test("字幕は1本だけ。入力も1回しか開かない", () => {
@@ -590,6 +613,15 @@ describe("CM を切るときのキーフレーム", () => {
     expect(filter.indexOf("scdet@key")).toBeLessThan(
       filter.indexOf("format=nv12"),
     );
+  });
+
+  test("NVENC も指定しないと IDR にならない (QSV と綴りが違う)", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
+      keyframes: [120.5],
+      hardware: { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
+    });
+    expect(argValue(args, "-forced-idr")).toBe("1");
+    expect(args).not.toContain("-forced_idr");
   });
 
   test("切らないなら何も足さない", () => {

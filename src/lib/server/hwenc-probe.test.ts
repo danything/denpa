@@ -1,5 +1,5 @@
 import { afterAll, expect, mock, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,10 +38,16 @@ config.hwDevices = `${dir}/renderD*`;
 // Rockchip MPP のデバイスは下のテストが置くまで無い
 const mppService = join(dir, "mpp_service");
 config.rkmppDevice = mppService;
+// NVIDIA の GPU のデバイスファイルも、下のテストが置くまで無い (本物の /dev は見ない)
+const nvidiaDirBefore = config.nvidiaDir;
+const nvidiaDir = join(dir, "nvidia");
+mkdirSync(nvidiaDir);
+config.nvidiaDir = nvidiaDir;
 afterAll(() => {
   answer = null;
   config.hwDevices = devicesBefore;
   config.rkmppDevice = rkmppBefore;
+  config.nvidiaDir = nvidiaDirBefore;
 });
 
 const { probe, describeDevice, liveHw } = await import("./hwenc");
@@ -133,6 +139,7 @@ test("/dev/mpp_service が在れば、別の行で H.264 だけ h264_rkmpp を�
       qsv: [],
       vaapi: [],
       rkmpp: ["h264"],
+      nvenc: [],
       full: [],
     });
     const tried = calls.filter((argv) =>
@@ -152,5 +159,60 @@ test("/dev/mpp_service が在れば、別の行で H.264 だけ h264_rkmpp を�
     expect(again.devices[1]!.rkmpp).toEqual([]);
   } finally {
     rmSync(mppService, { force: true });
+  }
+});
+
+test("NVIDIA の GPU は1枚ずつ別の行で NVENC を試し、GPU の番号で選ぶ", async () => {
+  // 2枚挿し。nvidiactl は GPU ではないので行にしない
+  for (const name of ["nvidia0", "nvidia1", "nvidiactl"])
+    writeFileSync(join(nvidiaDir, name), "");
+  try {
+    // 1枚目 (-gpu 0) は RTX 40 より前で AV1 をエンコードできない。QSV はどの行でも落ちる
+    answer = (argv) => {
+      const line = argv.join(" ");
+      if (line.includes("qsv")) return 1;
+      if (line.includes("av1_nvenc -gpu 0")) return 1;
+      return 0;
+    };
+    calls.length = 0;
+    const { devices, message } = await probe();
+    expect(devices.map((d) => d.path)).toEqual([
+      join(dir, "renderD128"),
+      join(nvidiaDir, "nvidia0"),
+      join(nvidiaDir, "nvidia1"),
+    ]);
+    const [gpu, n0, n1] = devices as [HwDevice, HwDevice, HwDevice];
+    // renderD* では NVENC を試さない
+    expect(gpu.nvenc).toEqual([]);
+    expect(n0).toMatchObject({
+      label: "nvidia0 (NVIDIA)",
+      gpu: 0,
+      qsv: [],
+      vaapi: [],
+      nvenc: ["h264"],
+      full: [],
+    });
+    expect(n1).toMatchObject({ gpu: 1, nvenc: ["av1", "h264"] });
+    // GPU の番号はデバイスファイルの並びの位置。デバイスファイルは ffmpeg に渡さない
+    const tried = calls.filter((argv) =>
+      argv.some((a) => a.endsWith("_nvenc")),
+    );
+    expect(tried).toHaveLength(4);
+    expect(tried.every((argv) => !argv.join(" ").includes(nvidiaDir))).toBe(
+      true,
+    );
+    expect(describeDevice(n0)).toBe("NVENC: H.264");
+    expect(describeDevice(n1)).toBe("NVENC: AV1 / H.264");
+    expect(message).toBe(
+      "デバイスが 3 個見つかり、3 個で GPU エンコードできます",
+    );
+    // ライブも番号を添えて NVENC に載る (デコードから GPU はしない)
+    expect(liveHw("av1", {}, 0, [n0, n1])).toEqual({
+      way: { device: n1.path, kind: "nvenc", gpu: 1 },
+      full: false,
+    });
+  } finally {
+    rmSync(nvidiaDir, { recursive: true, force: true });
+    mkdirSync(nvidiaDir);
   }
 });

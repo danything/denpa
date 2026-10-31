@@ -81,6 +81,10 @@ denpa:
   # `gpu.intel.com/i915: 1` を足す (こちらが行儀がよい)
   gpu:
     hostPath: true
+  # **NVIDIA の GPU でエンコードする** (docs/encode.md「NVIDIA でエンコードする」)。NVIDIA の device plugin と
+  # RuntimeClass (GPU Operator が作る `nvidia` など) を入れたクラスタで、ここにその名前を書き、
+  # resources.limits に `nvidia.com/gpu: 1` を足す。空なら書かない (クラスタの既定のランタイム)
+  runtimeClassName: ""
   nodeSelector: {}
   tolerations: []
   affinity: {}

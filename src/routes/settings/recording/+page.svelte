@@ -157,8 +157,8 @@
                 >
                 {#snippet more()}
                   <p>
-                    使える GPU は Intel QSV / VA-API
-                    です。見つかれば自動で使います。
+                    使える GPU は Intel (QSV / VA-API)・AMD (VA-API)・NVIDIA
+                    (NVENC)・Rockchip (MPP) です。見つかれば自動で使います。
                   </p>
                   <p>
                     QSV → VA-API →

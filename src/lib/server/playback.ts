@@ -67,7 +67,7 @@ import type { Recording } from "#lib/types.js";
 import { programSpec } from "./captions";
 import { chapterList } from "./cm";
 import { config } from "./config";
-import type { LiveHw } from "./hwenc";
+import { type LiveHw, nvencBusy } from "./hwenc";
 import {
   aribServiceId,
   audioArgs,
@@ -619,15 +619,18 @@ export interface Attempt {
   argv: string[];
   /** 標準入力へ流し込むもの (TS が元)。起こすたびに読み直す */
   input?: () => ReadableStream<Uint8Array>;
-  /** これで 1 バイトも出せずに降り、次で出せたときに呼ぶ (GPU のせいだったと覚える) */
-  blame?: () => void;
+  /**
+   * 前の手が 1 バイトも出せずに降り、これで出せたときに呼ぶ (GPU のせいだったと覚える)。
+   * 渡すのは降りた前の手の標準エラーの全文 (理由で覚えるかを決める。`hwenc.nvencBusy`)
+   */
+  blame?: (failed: string) => void;
 }
 
 /**
  * **ffmpeg の出口を応答の本文にする** (`stream.ffmpegBody` に、降りたときの次の手と詰まりの見張りを足したもの)。
  *
  * - 読まれたぶんしか読み出さない。相手が読まなければ出口が詰まり、ffmpeg も止まる
- * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す
+ * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す。次で出せたら、降りた手の標準エラーを添えて `blame` を呼ぶ
  * - `IDLE_LIMIT` のあいだ読まれなければ畳む。閉じられた・読み切った・落ちたときも畳む
  * - **読みに来て ffmpeg が出すのを待っている間は、「読まれない」ではなく「ffmpeg が出さない」として数える。**
  *   上限は同じ `IDLE_LIMIT`。分けていなかった頃は、出だしの遅い ffmpeg を待っている相手を
@@ -644,6 +647,8 @@ export function transcodeBody(
   let index = 0;
   let proc: ReturnType<typeof spawnAttempt> | null = null;
   let sent = false;
+  /** 1 つ前の手が降りたときの標準エラー (`Attempt.blame` に渡す) */
+  let failed = "";
   let finished = false;
   let lastRead = Date.now();
   /** 読みに来て ffmpeg が出すのを待ちはじめた時刻。待っていなければ null */
@@ -705,7 +710,7 @@ export function transcodeBody(
       const { done: ended, value } = await current.read();
       if (finished) return;
       if (!ended) {
-        if (!sent && index > 0) attempts[index]?.blame?.();
+        if (!sent && index > 0) attempts[index]?.blame?.(failed);
         sent = true;
         controller.enqueue(value);
         return;
@@ -720,6 +725,7 @@ export function transcodeBody(
       const why = await current.why();
       if (!sent && index + 1 < attempts.length) {
         console.warn(`${what}をやり直します (${code}): ${why}`);
+        failed = await current.log();
         index++;
         proc = spawnAttempt(attempts[index]!);
         continue;
@@ -762,6 +768,8 @@ function spawnAttempt(attempt: Attempt) {
     read: () => out.read(),
     exited: proc.exited,
     why: async () => (await stderr).trim().split("\n").slice(-3).join(" / "),
+    /** 標準エラーの全文。降りた理由の行が最後の 3 行に入るとは限らない (`Attempt.blame`) */
+    log: () => stderr,
     stop: () => {
       source?.cancel().catch(() => undefined);
       proc.kill();
@@ -870,7 +878,10 @@ export async function streamResponse(
   });
 }
 
-/** GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える */
+/**
+ * GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える —
+ * NVENC の同時に開ける数を超えただけなら覚えない (`live.blameLiveHw`)
+ */
 function withFallback(
   codec: LiveCodec,
   interlaced: boolean,
@@ -879,7 +890,13 @@ function withFallback(
   const hw = pickLiveHw(codec, interlaced);
   const software = build(null);
   if (hw === null) return [software];
-  return [build(hw), { ...software, blame: () => blameLiveHw(codec, hw) }];
+  return [
+    build(hw),
+    {
+      ...software,
+      blame: (failed) => blameLiveHw(codec, hw, nvencBusy(failed)),
+    },
+  ];
 }
 
 function fileAttempts(

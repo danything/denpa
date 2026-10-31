@@ -11,6 +11,8 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 - **Intel・AMD の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
   `compose.override.yml` で渡します (Helm は既定で渡す)。Intel・AMD の GPU を使えるのは amd64 だけです
   ([encode.md](encode.md#gpu-でエンコードする-qsv--va-api))
+- **NVIDIA の GPU** — ホストにドライバ (530 以降) と NVIDIA Container Toolkit を入れ、GPU を予約して渡せば、H.264 と AV1 (RTX 40 以降) を
+  NVENC でエンコードします (amd64。[encode.md](encode.md#nvidia-でエンコードする))
 - **Rockchip (RK3588 / RK3588S)** — BSP カーネルの上で `/dev/mpp_service` と `/dev/dma_heap` を渡せば、H.264 を
   ハードウェアでエンコードします (arm64。[encode.md](encode.md#rockchip-rk3588-でエンコードする))
 

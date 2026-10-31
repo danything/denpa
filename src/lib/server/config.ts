@@ -124,6 +124,12 @@ export const config = {
    * ここを変えても ffmpeg の見る場所は変わらない — 変えるのはテスト (偽のデバイス) だけ
    */
   rkmppDevice: str("RKMPP_DEVICE", "/dev/mpp_service"),
+  /**
+   * NVIDIA の GPU のデバイスファイル (`nvidia0`・`nvidia1` …) を探すフォルダ。在れば NVENC を試す
+   * (server/hwenc.ts)。ffmpeg は GPU をデバイスファイルではなく番号 (`-gpu N`) で受けるので、
+   * ここを変えても ffmpeg の使う GPU は変わらない — 変えるのはテスト (偽のデバイス) だけ
+   */
+  nvidiaDir: str("NVIDIA_DIR", "/dev"),
   /** GPU の試しのエンコード1本に待つ上限 (ms)。ドライバが固まっても起動が止まらないように */
   hwProbeTimeout: num("HW_PROBE_TIMEOUT", 20000),
 

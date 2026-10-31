@@ -5,12 +5,14 @@ import { join } from "node:path";
 
 import {
   findDevices,
+  findNvidia,
   hwArgs,
+  hwBitrate,
   hwChain,
   type HwDevice,
   liveHw,
   liveHwArgs,
-  rkmppBitrate,
+  nvencBusy,
 } from "./hwenc";
 
 const A: HwDevice = {
@@ -19,6 +21,7 @@ const A: HwDevice = {
   qsv: ["h264", "av1"],
   vaapi: ["h264", "av1"],
   rkmpp: [],
+  nvenc: [],
   cqp: [],
   full: [],
 };
@@ -28,6 +31,7 @@ const B: HwDevice = {
   qsv: ["h264"],
   vaapi: ["h264"],
   rkmpp: [],
+  nvenc: [],
   cqp: [],
   full: [],
 };
@@ -49,8 +53,13 @@ describe("GPU の方式の選び方", () => {
 
   test("デバイスごとに外せる。A は AV1 だけ、B は H.264 だけ、のような割り振り", () => {
     const allow = {
-      [A.path]: { qsv: ["av1" as const], vaapi: [], rkmpp: [] },
-      [B.path]: { qsv: ["h264" as const], vaapi: ["h264" as const], rkmpp: [] },
+      [A.path]: { qsv: ["av1" as const], vaapi: [], rkmpp: [], nvenc: [] },
+      [B.path]: {
+        qsv: ["h264" as const],
+        vaapi: ["h264" as const],
+        rkmpp: [],
+        nvenc: [],
+      },
     };
     expect(hwChain("h264", allow, 0, [A, B])).toEqual([
       { device: B.path, kind: "qsv" },
@@ -63,7 +72,7 @@ describe("GPU の方式の選び方", () => {
     expect(
       hwChain(
         "av1",
-        { [B.path]: { qsv: ["av1"], vaapi: ["av1"], rkmpp: [] } },
+        { [B.path]: { qsv: ["av1"], vaapi: ["av1"], rkmpp: [], nvenc: [] } },
         0,
         [B],
       ),
@@ -128,7 +137,12 @@ describe("ライブを GPU でエンコードする経路", () => {
   test("印が無ければ (使えなければ) ソフトウェア", () => {
     expect(liveHw("h264", {}, 0, [])).toBeNull();
     expect(
-      liveHw("h264", { [A.path]: { qsv: [], vaapi: [], rkmpp: [] } }, 0, [A]),
+      liveHw(
+        "h264",
+        { [A.path]: { qsv: [], vaapi: [], rkmpp: [], nvenc: [] } },
+        0,
+        [A],
+      ),
     ).toBeNull();
   });
 
@@ -146,7 +160,7 @@ describe("ライブを GPU でエンコードする経路", () => {
 
   test("VA-API の印を外せば、デコードから GPU も使わない", () => {
     const allow = {
-      [A.path]: { qsv: ["h264" as const], vaapi: [], rkmpp: [] },
+      [A.path]: { qsv: ["h264" as const], vaapi: [], rkmpp: [], nvenc: [] },
     };
     expect(liveHw("h264", allow, 0, [FULL])).toEqual({
       way: { device: A.path, kind: "qsv" },
@@ -204,6 +218,7 @@ describe("Rockchip MPP", () => {
     qsv: [],
     vaapi: [],
     rkmpp: ["h264"],
+    nvenc: [],
     cqp: [],
     full: [],
   };
@@ -221,20 +236,25 @@ describe("Rockchip MPP", () => {
     });
     // 印を外せば使わない
     expect(
-      hwChain("h264", { [R.path]: { qsv: [], vaapi: [], rkmpp: [] } }, 0, [R]),
+      hwChain(
+        "h264",
+        { [R.path]: { qsv: [], vaapi: [], rkmpp: [], nvenc: [] } },
+        0,
+        [R],
+      ),
     ).toEqual([]);
   });
 
   test("ビットレートは出す高さとコマ数で決まり、高さが測れなければ 1080 の値", () => {
-    const hd30 = rkmppBitrate({ height: 1080, smooth: false });
-    const hd60 = rkmppBitrate({ height: 1080, smooth: true });
-    const p720 = rkmppBitrate({ height: 720, smooth: true });
-    const sd60 = rkmppBitrate({ height: 480, smooth: true });
+    const hd30 = hwBitrate("h264", { height: 1080, smooth: false });
+    const hd60 = hwBitrate("h264", { height: 1080, smooth: true });
+    const p720 = hwBitrate("h264", { height: 720, smooth: true });
+    const sd60 = hwBitrate("h264", { height: 480, smooth: true });
     expect(hd60).toBeGreaterThan(hd30);
     expect(hd60).toBeGreaterThan(p720);
     expect(p720).toBeGreaterThan(sd60);
-    expect(rkmppBitrate({ height: Number.NaN, smooth: true })).toBe(hd60);
-    expect(rkmppBitrate({ height: Number.NaN, smooth: false })).toBe(hd30);
+    expect(hwBitrate("h264", { height: Number.NaN, smooth: true })).toBe(hd60);
+    expect(hwBitrate("h264", { height: Number.NaN, smooth: false })).toBe(hd30);
     // MPP が受ける幅 (1K〜100M bit/s)。外れると MPP は黙って既定の 2 Mbit/s に戻す
     for (const bps of [hd30, hd60, p720, sd60]) {
       expect(bps).toBeGreaterThan(1000);
@@ -244,7 +264,7 @@ describe("Rockchip MPP", () => {
 
   test("録画は CPU で作ったフレームを nv12 で渡し、AVBR に上限と下限も添える", () => {
     const picture = { height: 1080, smooth: false };
-    const bps = rkmppBitrate(picture);
+    const bps = hwBitrate("h264", picture);
     const args = hwArgs({ device: R.path, kind: "rkmpp" }, "h264", picture);
     // デバイスは MPP が自分で開く
     expect(args.device).toEqual([]);
@@ -276,7 +296,7 @@ describe("Rockchip MPP", () => {
       "-rc",
       "avbr",
       "-b:v",
-      String(rkmppBitrate({ height: 1080, smooth: true })),
+      String(hwBitrate("h264", { height: 1080, smooth: true })),
     ]);
     expect(live.encoder).not.toContain("-async_depth");
     // -g はライブの側が足す
@@ -285,5 +305,147 @@ describe("Rockchip MPP", () => {
       way: { device: R.path, kind: "rkmpp" },
       full: false,
     });
+  });
+});
+
+describe("NVIDIA NVENC", () => {
+  /** `/dev/nvidia0` (RTX 40 以降。AV1 も) と `/dev/nvidia1` (それより前。H.264 だけ) */
+  const N0: HwDevice = {
+    path: "/dev/nvidia0",
+    label: "nvidia0 (NVIDIA)",
+    qsv: [],
+    vaapi: [],
+    rkmpp: [],
+    nvenc: ["av1", "h264"],
+    gpu: 0,
+    cqp: [],
+    full: [],
+  };
+  const N1: HwDevice = { ...N0, path: "/dev/nvidia1", nvenc: ["h264"], gpu: 1 };
+
+  test("デバイスファイルは nvidia<番号> だけを番号の順に並べ、その位置を GPU の番号にする", () => {
+    const dir = mkdtempSync(join(tmpdir(), "nvidia-"));
+    for (const name of [
+      "nvidia10",
+      "nvidia2",
+      "nvidia0",
+      "nvidiactl",
+      "nvidia-uvm",
+      "nvidia-modeset",
+    ])
+      writeFileSync(join(dir, name), "");
+    expect(findNvidia(dir)).toEqual([
+      `${dir}/nvidia0`,
+      `${dir}/nvidia2`,
+      `${dir}/nvidia10`,
+    ]);
+    expect(findNvidia(join(dir, "無い"))).toEqual([]);
+  });
+
+  test("方式に GPU の番号を添え、ほかの GPU と同じくジョブごとに回す", () => {
+    expect(hwChain("av1", {}, 0, [N0, N1])).toEqual([
+      { device: N0.path, kind: "nvenc", gpu: 0 },
+    ]);
+    expect(hwChain("h264", {}, 1, [N0, N1])).toEqual([
+      { device: N1.path, kind: "nvenc", gpu: 1 },
+      { device: N0.path, kind: "nvenc", gpu: 0 },
+    ]);
+    // 印を外せば使わない
+    expect(
+      hwChain(
+        "h264",
+        { [N0.path]: { qsv: [], vaapi: [], rkmpp: [], nvenc: ["av1"] } },
+        0,
+        [N0],
+      ),
+    ).toEqual([]);
+  });
+
+  test("録画は CPU で作ったフレームを nv12 で渡し、VBR に上限とバッファを添える", () => {
+    const picture = { height: 1080, smooth: true };
+    for (const codec of ["av1", "h264"] as const) {
+      const bps = hwBitrate(codec, picture);
+      const args = hwArgs(
+        { device: N1.path, kind: "nvenc", gpu: 1 },
+        codec,
+        picture,
+      );
+      // デバイスは開かない (番号で選ぶ)
+      expect(args.device).toEqual([]);
+      expect(args.filter).toEqual(["format=nv12"]);
+      expect(args.encoder).toEqual([
+        `${codec}_nvenc`,
+        "-gpu",
+        "1",
+        "-preset",
+        "p4",
+        "-rc",
+        "vbr",
+        "-b:v",
+        String(bps),
+        "-maxrate",
+        String(bps * 2),
+        "-bufsize",
+        String(bps * 2),
+        "-g",
+        "250",
+      ]);
+    }
+  });
+
+  test("AV1 の表は H.264 と別に引くが、測るまでは同じ値", () => {
+    for (const picture of [
+      { height: 1080, smooth: true },
+      { height: 720, smooth: false },
+      { height: 480, smooth: true },
+    ]) {
+      expect(hwBitrate("av1", picture)).toBe(hwBitrate("h264", picture));
+    }
+  });
+
+  test("ライブは低遅延の NVENC の言い方で、-async_depth は渡さない", () => {
+    const live = liveHwArgs(
+      { way: { device: N0.path, kind: "nvenc", gpu: 0 }, full: false },
+      "h264",
+    );
+    expect(live.input).toEqual([]);
+    expect(live.filter).toEqual(["format=nv12"]);
+    const line = live.encoder.join(" ");
+    expect(line).toStartWith("h264_nvenc -gpu 0 -preset p2 -tune ll -rc vbr");
+    expect(line).toContain(
+      `-b:v ${hwBitrate("h264", { height: 1080, smooth: true })}`,
+    );
+    expect(line).toEndWith("-bf 0 -zerolatency 1 -delay 0");
+    expect(live.encoder).not.toContain("-async_depth");
+    expect(live.encoder).not.toContain("-g");
+    // デコードから GPU は VA-API だけ (NVENC は実機で確かめてから)
+    expect(liveHw("h264", {}, 0, [N0])).toEqual({
+      way: { device: N0.path, kind: "nvenc", gpu: 0 },
+      full: false,
+    });
+  });
+
+  test("同時に開ける数を超えて降りたかを、ffmpeg の言い分で見分ける", () => {
+    // 新しいドライバと古いドライバの言い方 (FFmpeg の nvenc.c が出す形)
+    expect(
+      nvencBusy(
+        "[h264_nvenc @ 0x5581] OpenEncodeSessionEx failed: out of memory (10): (no details)",
+      ),
+    ).toBe(true);
+    expect(
+      nvencBusy(
+        "Stream mapping:\n[av1_nvenc @ 0x1] OpenEncodeSessionEx failed: incompatible client key (21): (no details)\n[av1_nvenc @ 0x1] No capable devices found\n",
+      ),
+    ).toBe(true);
+    // ほかの理由で降りたものは GPU のせい (覚えて外す)
+    expect(
+      nvencBusy(
+        "[h264_nvenc @ 0x1] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      ),
+    ).toBe(false);
+    expect(nvencBusy("[h264_nvenc @ 0x1] Cannot load libcuda.so.1")).toBe(
+      false,
+    );
+    expect(nvencBusy("Device creation failed: -19.")).toBe(false);
   });
 });

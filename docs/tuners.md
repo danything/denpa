@@ -25,7 +25,7 @@
 - **OS** — Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)
 - **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
   Kubernetes なら Helm
-- あれば Intel か AMD の GPU (`/dev/dri` を渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします
+- あれば Intel か AMD の GPU (`/dev/dri` を渡す) か NVIDIA の GPU (NVIDIA Container Toolkit で渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします
 
 機材ごとの入れ方は表のリンク先に。
 

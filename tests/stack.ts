@@ -72,7 +72,7 @@ export interface Stack {
    * denpa は `HW_DEVICES` (`<ここ>/renderD*`) のデバイスとして見つけ、偽 ffmpeg は渡された
    * デバイスが在るのを見て「GPU がある」と答える (QSV / VA-API の試しのエンコードが通る)。
    * 消せば、エンコードしようとした GPU の経路が本物と同じく初期化で落ちる。
-   * `mpp_service` を置けば Rockchip MPP (`RKMPP_DEVICE`) として同じく見える
+   * `mpp_service` を置けば Rockchip MPP (`RKMPP_DEVICE`)、`nvidia0` を置けば NVIDIA の GPU (`NVIDIA_DIR`) として同じく見える
    */
   hwDir: string;
   /** エンコードするときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
@@ -252,6 +252,7 @@ export async function boot(
       // 偽の GPU。denpa にはデバイスとして、偽 ffmpeg には「ある」印として同じファイルを見せる
       HW_DEVICES: `${stack.hwDir}/renderD*`,
       RKMPP_DEVICE: `${stack.hwDir}/mpp_service`,
+      NVIDIA_DIR: stack.hwDir,
       FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
       /*
        * 新しいバージョンの通知。GitHub の代わりに偽通知先が「最新のリリース」を返す

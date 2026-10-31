@@ -70,6 +70,26 @@ if printf '%s\n' "$@" | grep -qx -- 'h264_rkmpp'; then
     fi
 fi
 
+# NVIDIA の NVENC (`h264_nvenc` / `av1_nvenc`)。本物はデバイスファイルを受けず、GPU を番号 (`-gpu N`) で受ける。
+# ここでは denpa と同じく `NVIDIA_DIR` の nvidia<番号> を番号の順に並べ、**N 番目が在れば上の GPU と同じく通し、
+# 無ければ初期化で落ちる** (本物も、コンテナから見える GPU の数を超えた番号では降りる)
+if printf '%s\n' "$@" | grep -qE -- '^(h264|av1)_nvenc$'; then
+    gpu=0
+    prev=""
+    for arg in "$@"; do
+        if [ "$prev" = "-gpu" ]; then gpu="$arg"; fi
+        prev="$arg"
+    done
+    found=$(ls "${NVIDIA_DIR:-/dev}" 2>/dev/null | grep -E '^nvidia[0-9]+$' | sed 's/^nvidia//' | sort -n | sed -n "$((gpu + 1))p")
+    if [ -z "$found" ]; then
+        echo "Requested GPU $gpu, but no such GPU is available!" >&2
+        exit 1
+    fi
+    if printf '%s\n' "$@" | grep -qx -- 'lavfi'; then
+        exit 0
+    fi
+fi
+
 # CM検出 (silencedetect)。300秒と360秒に境界が来るので、300-360 の 60 秒がCMブロックとして検出される。
 # エンコードする出口 (`-f matroska`) があればエンコードと一緒に行っている (encoder.ts) ので、材料を出してから
 # 下のエンコードする処理へ進む。無ければ検出だけ (ロゴの枠を読み直すとき)

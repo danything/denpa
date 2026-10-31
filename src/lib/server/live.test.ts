@@ -9,11 +9,13 @@ import {
 import { CHANNEL } from "#lib/live.js";
 
 import {
+  blameLiveHw,
   CHASE_STREAM_HOLD,
   codecsFor,
   encodeArgs,
   key,
   LIVE_STREAM_BACKLOG,
+  liveHwFailed,
   openingLine,
   sessionStream,
   whyNotTuned,
@@ -574,6 +576,37 @@ describe("GPU でエンコードする", () => {
     });
     expect(args).not.toContain("-init_hw_device");
     expect(args).not.toContain("-hwaccel");
+  });
+
+  test("NVENC は GPU の番号で選び、低遅延の引数で渡す (デバイスは開かない)", () => {
+    const args = encodeArgs(1024, stereo, "h264", 0, {
+      way: { device: "/dev/nvidia0", kind: "nvenc", gpu: 0 },
+      full: false,
+    });
+    expect(args).not.toContain("-init_hw_device");
+    expect(args[args.indexOf("-vf") + 1]).toBe("bwdif,format=nv12");
+    expect(args.join(" ")).toContain("-c:v h264_nvenc -gpu 0");
+    expect(args.join(" ")).toContain("-zerolatency 1 -delay 0 -g 60");
+    expect(args).not.toContain("-async_depth");
+  });
+
+  /*
+   * 消費者向けの GPU は同時に開けるエンコードの数に上限がある (`hwenc.nvencBusy`)。
+   * 超えて降りたのは GPU が壊れているのではないので、15分外すことはしない
+   */
+  test("同時に開ける数を超えて降りただけなら、方式を覚えない", () => {
+    // ほかの試験と混ざらないよう、ここだけのデバイス
+    const hw = {
+      way: { device: "/dev/nvidia-test-busy", kind: "nvenc" as const, gpu: 0 },
+      full: false,
+    };
+    expect(blameLiveHw("h264", hw, true)).toBe(false);
+    expect(liveHwFailed("h264", hw)).toBe(false);
+    // ほかの理由なら覚えて、しばらくソフトウェア
+    expect(blameLiveHw("h264", hw, false)).toBe(true);
+    expect(liveHwFailed("h264", hw)).toBe(true);
+    // コーデックが違えば別の方式
+    expect(liveHwFailed("av1", hw)).toBe(false);
   });
 });
 
