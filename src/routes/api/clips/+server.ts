@@ -40,7 +40,7 @@ function number(url: URL, name: string): number | null {
  *
  * どこで撮ったかは URL で:
  *
- * - `place=watch|chase` … `recording` (録画ID)・`at` (位置の秒。観ているものの物差し)・`source` (`ts` / `encoded` / `alt`)
+ * - `place=watch|chase` … `recording` (録画ID)・`at` (位置の秒。観ているものの物差し)・`source` (`ts` / `encoded` / `hevc` / `alt`)
  * - `place=live` … `service` (局の内部ID)・`aired` (映していたコマの放送時刻。unix ms。無ければ受け取った時刻)
  * - `captions` … 出していた字幕の文字 (任意)
  *

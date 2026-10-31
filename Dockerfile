@@ -220,7 +220,7 @@ COPY patches/ /patches/
 #
 # **組むのは denpa が使う部品だけ** (`--disable-everything` のうえで下の一覧を足す)。全部組むと
 # libavcodec だけで 26MB あり、ほとんどは放送にも録画にも出てこないコーデックだった。
-# 名前は src/lib/server の ffmpeg の引数から拾ったもの。**引数に新しいフィルタ・コーデック・形式を足したら、
+# 名前は src/lib/server の ffmpeg の引数から取り出したもの。**引数に新しいフィルタ・コーデック・形式を足したら、
 # ここにも足すこと** — テストは偽の ffmpeg で回るので気づけず、イメージの確かめ (.github/image-smoke.sh) が
 # 同じ経路を本物の ffmpeg で通して初めて分かる。名前の出どころ:
 # - デコーダ: 放送 (mpeg2video・h264・aac)、録画 (libdav1d・h264・opus)、切り抜きの画像 (png・mjpeg・webp)。

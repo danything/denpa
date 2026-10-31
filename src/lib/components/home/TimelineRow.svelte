@@ -190,13 +190,13 @@
     }
     problems.push(...clipLine(rec, true));
     if (logoUnusable(rec.cm_note) && rec.deleted_at === null) {
-      // 覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられる
+      // 覚えたロゴは設定の「受信できるチャンネル」の「CMロゴ」で確かめられる
       problems.push({
         kind: "logo",
         tone: "warning",
         label: "ロゴでCMを判定できませんでした",
         detail:
-          "無音だけで判定。覚えたロゴは設定の「チャンネル」の「CMロゴ」で確かめられます",
+          "無音だけで判定。覚えたロゴは設定の「受信できるチャンネル」の「CMロゴ」で確かめられます",
       });
     }
     return statusLines(activities, problems);

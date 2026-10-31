@@ -403,7 +403,7 @@ export type ClipWhere =
       recording: number;
       /** 位置 (秒)。観ているものの物差し */
       at: number;
-      /** 観ているもの (`ts` / `encoded` / `alt`)。分からなければ undefined */
+      /** 観ているもの (`ts` / `encoded` / `hevc` / `alt`。`#lib/source.ts` の `FileSource`)。分からなければ undefined */
       source: string | undefined;
     }
   | {
