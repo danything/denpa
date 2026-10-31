@@ -803,7 +803,8 @@ test.describe("録画を観る", () => {
 
   /**
    * **字幕はあとから出し入れできる。** 字幕を出して撮ると、映像と字幕を分けて送り (multipart)、字幕が重なった1枚で並ぶ。
-   * 開いた1枚の「字幕」で外す・戻すと `PATCH /api/clips/<id>` が元から重ね直し、読み直しても続く。
+   * 開いた1枚は元の画像を重ねて見せ、「字幕」で外す・戻すと**サーバの返事を待たずに**字幕の1枚を隠す・出す。
+   * 残すのは `PATCH /api/clips/<id>` (一覧の画像を元から重ね直す) で、読み直しても続く。
    * 撮ったときに無かったもの (コメント) の切り替えは出さない
    */
   test("切り抜きの字幕を開いた1枚で外し、戻せる", async ({ page, request }) => {
@@ -842,32 +843,79 @@ test.describe("録画を観る", () => {
       const toggle = viewer.getByTestId("clip-layer-captions");
       await expect(toggle).toHaveAttribute("aria-pressed", "true");
       await expect(viewer.getByTestId("clip-layer-comments")).toHaveCount(0);
-      const image = viewer.getByTestId("clip-image");
-      await expect(image).toHaveAttribute("src", /\?v=-1$/);
+      // 映像と字幕の元の画像を重ねる。持っていない重ねは 404
+      await expect(viewer.getByTestId("clip-image")).toHaveAttribute(
+        "src",
+        new RegExp(`/api/clips/${clip.id}/layer/frame$`),
+      );
+      const layer = viewer.getByTestId("clip-layer-image-captions");
+      await expect(layer).toBeVisible();
+      // 重ねる箱は映像の形で、舞台に収まる
+      const box = (await viewer.getByTestId("clip-layers").boundingBox())!;
+      const stage = (await viewer.locator(".v-stage").boundingBox())!;
+      const ratio = await viewer
+        .getByTestId("clip-image")
+        .evaluate(async (img: HTMLImageElement) => {
+          await img.decode();
+          return img.naturalWidth / img.naturalHeight;
+        });
+      expect(box.width / box.height).toBeCloseTo(ratio, 1);
+      expect(box.width).toBeLessThanOrEqual(stage.width + 1);
+      expect(box.height).toBeLessThanOrEqual(stage.height + 1);
+      expect(
+        Math.max(box.width / stage.width, box.height / stage.height),
+      ).toBeGreaterThan(0.99);
+      await expect(viewer.getByTestId("clip-layer-image-comments")).toHaveCount(
+        0,
+      );
+      expect(
+        (await request.get(`/api/clips/${clip.id}/layer/captions`)).status(),
+      ).toBe(200);
+      expect(
+        (await request.get(`/api/clips/${clip.id}/layer/comments`)).status(),
+      ).toBe(404);
+      const thumb = card.locator("img.c-thumb");
+      await expect(thumb).toHaveAttribute("src", /\?v=-1$/);
 
-      // 外す。重ね直したら画像の版 (`?v=`) が替わる
+      // 外す。返事を止めておいても、字幕はすぐ消える
+      let release = () => {};
+      const held = new Promise<void>((done) => (release = done));
+      await page.route(`**/api/clips/${clip.id}`, async (route) => {
+        if (route.request().method() !== "PATCH") return route.fallback();
+        await held;
+        await route.fallback();
+      });
       const patched = page.waitForResponse(
         (res) =>
           res.request().method() === "PATCH" &&
           new URL(res.url()).pathname.endsWith(`/api/clips/${clip.id}`),
       );
+      const sent = page.waitForRequest(
+        (req) =>
+          req.method() === "PATCH" &&
+          new URL(req.url()).pathname.endsWith(`/api/clips/${clip.id}`),
+      );
       await toggle.click();
+      expect((await sent).postDataJSON()).toEqual({ captions: false });
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(layer).toBeHidden();
+      await expect(viewer.getByTestId("clip-image")).toBeVisible();
+      release();
       const res = await patched;
       expect(res.status()).toBe(200);
-      expect(res.request().postDataJSON()).toEqual({ captions: false });
       expect(((await res.json()) as { layers: unknown }).layers).toEqual({
         captions: false,
       });
-      await expect(toggle).toHaveAttribute("aria-pressed", "false");
-      await expect(image).toHaveAttribute("src", /\?v=-0$/);
-      expect(
-        (await request.get(`/api/clips/${clip.id}/image?v=-0`)).status(),
-      ).toBe(200);
+      await page.unroute(`**/api/clips/${clip.id}`);
+      // 残ったら一覧の画像も重ね直したものに替わる
+      await expect(thumb).toHaveAttribute("src", /\?v=-0$/);
+      await expect(layer).toBeHidden();
 
       // 読み直しても外したまま
       await page.reload();
       await card.click();
       await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(layer).toBeHidden();
 
       // 戻す
       const again = page.waitForResponse(
@@ -878,6 +926,22 @@ test.describe("録画を観る", () => {
       await toggle.click();
       expect((await again).status()).toBe(200);
       await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await expect(layer).toBeVisible();
+      await expect(thumb).toHaveAttribute("src", /\?v=-1$/);
+
+      // 断られたら切り替えを戻して知らせる
+      await page.route(`**/api/clips/${clip.id}`, (route) =>
+        route.request().method() === "PATCH"
+          ? route.fulfill({ status: 500 })
+          : route.fallback(),
+      );
+      await toggle.click();
+      await expect(
+        page.locator(".toast", { hasText: "切り替えられませんでした" }),
+      ).toBeVisible();
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await expect(layer).toBeVisible();
+      await page.unroute(`**/api/clips/${clip.id}`);
       const fresh = (await (
         await request.get(`/api/clips/${clip.id}`)
       ).json()) as { layers: unknown };

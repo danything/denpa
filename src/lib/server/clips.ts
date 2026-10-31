@@ -932,6 +932,43 @@ export function clipImage(
   });
 }
 
+/** 元の画像の拡張子ごとの `Content-Type` (映像は受けた形式のまま、重ねは PNG) */
+const SRC_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+};
+
+/**
+ * 元の画像を1枚返す (`frame` は映像、`captions`・`comments` は透明な PNG)。開いた1枚は画面がこれを重ねて見せ、
+ * 出し入れで待たせない。**元は替わらない** (ID は使い回さない) ので、`?v=` なしでも端末に持たせる。
+ * 認証・`private`・添付にしないのは `clipImage` と同じ。持っていなければ 404 (重ねの無い古い切り抜きなど)
+ */
+export function clipLayer(
+  clip: { file: string },
+  part: "frame" | ClipLayer,
+): Response {
+  const dir = clipSrcDir(clip.file);
+  let name: string | undefined;
+  if (existsSync(dir))
+    name =
+      part === "frame"
+        ? srcFrame(dir)
+        : existsSync(join(dir, srcName(part)))
+          ? srcName(part)
+          : undefined;
+  const type = SRC_TYPES[name?.split(".").at(-1) ?? ""];
+  if (name === undefined || type === undefined)
+    error(404, "元の画像がありません");
+  return new Response(Bun.file(join(dir, name)), {
+    headers: {
+      "Content-Type": type,
+      "Cache-Control": "private, max-age=86400",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 /** 条件に当たる枚数 (検索の結果の節の数) */
 export function countClips(query: ClipQuery): number {
   return (

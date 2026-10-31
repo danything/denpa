@@ -2,14 +2,16 @@
   import { goto, invalidateAll } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { untrack } from "svelte";
-  import { SvelteSet } from "svelte/reactivity";
+  import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import ListFilter from "~icons/lucide/list-filter";
 
   import { arming } from "#lib/arming.svelte.js";
   import {
     type Clip,
+    CLIP_LAYERS,
     type ClipKind,
     type ClipLayer,
+    type ClipLayers,
     type ClipQuery,
     clipSearch,
     clipVersionQuery,
@@ -222,11 +224,16 @@
   let notice = $state<Notice | null>(null);
   const notices = $derived(notice === null ? [] : [notice]);
 
-  /** 端末に保存 (指の端末は共有シート、PC はファイル)。名前は `番組名_YYYYMMDD-HHMMSS.avif` */
+  /**
+   * 端末に保存 (指の端末は共有シート、PC はファイル)。名前は `番組名_YYYYMMDD-HHMMSS.avif`。
+   * 保存するのはサーバが重ねた AVIF なので、出し入れを送っている途中なら済むのを待ってから取る (いま見せている重ねで保存する)
+   */
   async function save(clip: Clip): Promise<void> {
     try {
+      await sending.get(clip.id);
+      const shown = { layers: layersShown(clip) };
       const res = await fetch(
-        `${resolve(`api/clips/${clip.id}/image`)}${clipVersionQuery(clip)}`,
+        `${resolve(`api/clips/${clip.id}/image`)}${clipVersionQuery(shown)}`,
       );
       if (!res.ok) throw new Error(String(res.status));
       await keepOnDevice(
@@ -243,31 +250,49 @@
   }
 
   /**
-   * 字幕・コメントを出し入れする (`PATCH /api/clips/<id>`)。サーバが元の画像から重ね直すので1秒ほど待つ。
-   * その間は画像を薄くし、ほかの切り替えは受けない。画像の URL は重ねの版 (`?v=`) で替わる
+   * 字幕・コメントの出し入れ。開いた1枚は元の画像 (`/layer/*`) を重ねて見せているので、**見せ方はすぐ替える**
+   * (`shownLayers`)。残すのは `PATCH /api/clips/<id>` で、サーバが一覧・保存用の AVIF を重ね直す (1秒ほど) のは待たない。
+   * 送るのは1枚ごとに順に (押した順にサーバへ届く)。断られたらその切り替えを戻して知らせる。
+   * 送り終えたら読み直し、一覧の小さい画像も新しい重ね (`?v=`) にする
    */
-  let layering = $state<number | null>(null);
-  async function toggleLayer(clip: Clip, layer: ClipLayer): Promise<void> {
-    if (layering !== null) return;
-    layering = clip.id;
-    try {
-      const res = await fetch(resolve(`api/clips/${clip.id}`), {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ [layer]: clip.layers[layer] !== true }),
+  const shownLayers = new SvelteMap<number, ClipLayers>();
+  /** 1枚ごとの送っている途中の列 (済めば消す)。保存はこれを待つ */
+  const sending = new Map<number, Promise<void>>();
+  function layersShown(clip: Clip): ClipLayers {
+    return shownLayers.get(clip.id) ?? clip.layers;
+  }
+  function toggleLayer(clip: Clip, layer: ClipLayer): void {
+    const on = layersShown(clip)[layer] !== true;
+    shownLayers.set(clip.id, { ...layersShown(clip), [layer]: on });
+    const task = (sending.get(clip.id) ?? Promise.resolve())
+      .then(async () => {
+        const res = await fetch(resolve(`api/clips/${clip.id}`), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ [layer]: on }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const changed = (await res.json()) as Clip;
+        if (viewing?.id === changed.id) viewing = changed;
+      })
+      .catch(() => {
+        // 後から押し直していなければ戻す
+        const now = shownLayers.get(clip.id);
+        if (now?.[layer] === on)
+          shownLayers.set(clip.id, { ...now, [layer]: !on });
+        notice = {
+          key: `clip-layer-${Date.now()}`,
+          kind: "error",
+          text: "切り替えられませんでした",
+        };
       });
-      if (!res.ok) throw new Error(String(res.status));
-      const changed = (await res.json()) as Clip;
-      if (viewing?.id === changed.id) viewing = changed;
-    } catch {
-      notice = {
-        key: `clip-layer-${Date.now()}`,
-        kind: "error",
-        text: "切り替えられませんでした",
-      };
-    } finally {
-      layering = null;
-    }
+    sending.set(clip.id, task);
+    void task.then(async () => {
+      if (sending.get(clip.id) !== task) return; // 後に続きが並んでいる
+      sending.delete(clip.id);
+      await invalidateAll();
+      if (!sending.has(clip.id)) shownLayers.delete(clip.id);
+    });
   }
 
   const deleting = arming('[data-testid^="clip-delete"]');
@@ -706,14 +731,42 @@
   {#if viewing !== null}
     {@const clip = viewing}
     {@const href = sceneHref(clip)}
+    {@const shown = layersShown(clip)}
     <div class="v-stage">
-      <img
-        class="v-image"
-        src="{resolve(`api/clips/${clip.id}/image`)}{clipVersionQuery(clip)}"
-        alt={title(clip)}
-        aria-busy={layering === clip.id}
-        data-testid="clip-image"
-      />
+      {#if Object.keys(clip.layers).length === 0}
+        <img
+          class="v-image"
+          src="{resolve(`api/clips/${clip.id}/image`)}{clipVersionQuery(clip)}"
+          alt={title(clip)}
+          data-testid="clip-image"
+        />
+      {:else}
+        <!--
+          重ねを持つものは元の画像を重ねて見せる (観る画面の字幕・コメントと同じく画面で重ねる)。3枚は同じ縦横なので、
+          映像の形の箱に重ねればぴったり合う。出し入れは隠すだけ (隠した重ねも先に読んでおく)
+        -->
+        <div
+          class="v-layers"
+          style:--v-ratio="{clip.width} / {clip.height}"
+          data-testid="clip-layers"
+        >
+          <img
+            src={resolve(`api/clips/${clip.id}/layer/frame`)}
+            alt={title(clip)}
+            data-testid="clip-image"
+          />
+          {#each CLIP_LAYERS as layer (layer)}
+            {#if clip.layers[layer] !== undefined}
+              <img
+                src={resolve(`api/clips/${clip.id}/layer/${layer}`)}
+                alt=""
+                hidden={shown[layer] !== true}
+                data-testid="clip-layer-image-{layer}"
+              />
+            {/if}
+          {/each}
+        </div>
+      {/if}
       <div class="v-info" aria-live="polite">
         <p class="v-title broadcast" data-testid="clip-viewer-title">
           {title(clip)}
@@ -725,11 +778,6 @@
         </p>
         {#if clip.captions !== ""}
           <p class="v-captions small broadcast">{clip.captions}</p>
-        {/if}
-        {#if layering === clip.id}
-          <p class="v-meta small" data-testid="clip-layering">
-            切り替えています…
-          </p>
         {/if}
       </div>
       <ControlBar side testid="clip-side-bar">
@@ -751,22 +799,22 @@
           </a>
         {/if}
         <!-- 字幕・コメントの出し入れ。撮ったときに出していたもの (分けて送られたもの) だけ -->
-        {#if clip.layers.captions !== undefined}
+        {#if shown.captions !== undefined}
           <ControlButton
             icon={CAPTION}
             label="字幕"
-            on={clip.layers.captions}
+            on={shown.captions}
             testid="clip-layer-captions"
-            onclick={() => void toggleLayer(clip, "captions")}
+            onclick={() => toggleLayer(clip, "captions")}
           />
         {/if}
-        {#if clip.layers.comments !== undefined}
+        {#if shown.comments !== undefined}
           <ControlButton
             icon={JIKKYO}
             label="コメント"
-            on={clip.layers.comments}
+            on={shown.comments}
             testid="clip-layer-comments"
-            onclick={() => void toggleLayer(clip, "comments")}
+            onclick={() => toggleLayer(clip, "comments")}
           />
         {/if}
         <ControlButton
@@ -1141,6 +1189,7 @@
     aspect-ratio: 16 / 9;
     min-height: min(24rem, calc(100svh - 2rem));
     overflow: hidden;
+    container-type: size;
     border-radius: var(--dp-radius-lg);
     background: var(--dp-video);
     box-shadow: var(--dp-shadow-pop);
@@ -1162,11 +1211,19 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    transition: opacity var(--dp-duration);
   }
-  /* 字幕・コメントを切り替えている間 (サーバが重ね直している) */
-  .v-image[aria-busy="true"] {
-    opacity: 0.5;
+  /* 重ねる箱。舞台に収まる最大の、映像の形の箱 (舞台の縦横は `cqw`・`cqh` で見る) */
+  .v-layers {
+    position: relative;
+    width: min(100cqw, 100cqh * var(--v-ratio));
+    aspect-ratio: var(--v-ratio);
+  }
+  .v-layers > img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
   /* 読みものは左下。右端の列に掛からないよう右を空け、明るい画像の上でも読めるよう下から影を敷く */
   .v-info {

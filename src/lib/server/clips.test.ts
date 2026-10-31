@@ -34,6 +34,7 @@ const {
   checkImage,
   checkParts,
   clipImage,
+  clipLayer,
   clipSrcDir,
   ClipError,
   clipCountsByRecording,
@@ -716,6 +717,46 @@ describe("字幕・コメントを分けて受ける", () => {
     expect(cache(layered, null)).toBe("private, no-cache");
     expect(cache(layered, "-0")).toBe("private, no-cache");
     expect(cache(plain, null)).toBe("private, max-age=86400");
+  });
+
+  test("元の画像を1枚ずつ返す。替わらないので端末に持たせ、持っていなければ 404", async () => {
+    const layered = await saveClip(
+      { frame: jpeg(1920, 1080), captions: png(1920, 1080, "captions") },
+      liveScene(SERVICE, START),
+      "",
+    );
+    const plain = await saveClip(
+      { frame: png(1920, 1080) },
+      liveScene(SERVICE, START),
+      "",
+    );
+    const rows = orm().select().from(clips).all();
+    const fileOf = (id: number) => ({
+      file: rows.find((row) => row.id === id)!.file,
+    });
+    const status = (run: () => unknown): number => {
+      try {
+        run();
+        return 200;
+      } catch (thrown) {
+        return (thrown as { status?: number }).status ?? 500;
+      }
+    };
+
+    const frame = clipLayer(fileOf(layered.id), "frame");
+    expect(frame.headers.get("content-type")).toBe("image/jpeg");
+    expect(frame.headers.get("cache-control")).toBe("private, max-age=86400");
+    expect([...new Uint8Array(await frame.arrayBuffer())]).toEqual([
+      ...jpeg(1920, 1080),
+    ]);
+    const captions = clipLayer(fileOf(layered.id), "captions");
+    expect(captions.headers.get("content-type")).toBe("image/png");
+    expect([...new Uint8Array(await captions.arrayBuffer())]).toEqual([
+      ...png(1920, 1080, "captions"),
+    ]);
+    // 撮ったときに無かった重ね・元を残さない1枚だけのもの
+    expect(status(() => clipLayer(fileOf(layered.id), "comments"))).toBe(404);
+    expect(status(() => clipLayer(fileOf(plain.id), "frame"))).toBe(404);
   });
 });
 
