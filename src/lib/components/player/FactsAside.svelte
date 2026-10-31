@@ -65,8 +65,11 @@
   .top {
     padding: var(--dp-side-top, var(--dp-side-pad, 0)) var(--dp-side-pad, 0) 0;
   }
-  /* 中身が無ければ場所も取らない (データ放送を出していない間のリモコン) */
-  .top:empty {
+  /*
+   * 中身が無ければ場所も取らない (データ放送を出していない間のリモコン・出していないコメントの一覧)。
+   * `:empty` で見ないのは、出し分けるものが 2 つ並ぶと間に空白の字が残るため
+   */
+  .top:not(:has(:global(*))) {
     display: none;
   }
   /*
@@ -78,7 +81,7 @@
     padding: var(--dp-side-top, var(--dp-side-pad, 0.25rem))
       var(--dp-side-pad, 0.5rem) 0;
   }
-  .top:not(:empty) + .back-row {
+  .top:has(:global(*)) + .back-row {
     padding-top: var(--dp-side-pad, 0.25rem);
   }
   .back {
@@ -110,7 +113,7 @@
   .back-row + .box .body {
     padding-top: 0.5rem;
   }
-  .top:not(:empty) + .box .body {
+  .top:has(:global(*)) + .box .body {
     padding-top: var(--dp-side-pad, 0.25rem);
   }
 </style>

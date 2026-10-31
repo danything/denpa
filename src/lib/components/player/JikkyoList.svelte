@@ -21,7 +21,8 @@
    *
    * - 置き場はデータ放送のリモコンと同じく右の列の頭で、局の一覧・番組の中身はその下に残す。高さは決めてあり、中だけ巻く
    * - 流れるほうと同じ `air()` で控えを 0.25 秒ごとに読み直す。シーク・巻き戻しにもそのまま付いていく
-   * - 新しいものが下。いちばん下にいる間は付いていき、上へ巻いた・指やポインタやフォーカスが乗っている間は止めて「最新へ」を出す
+   * - 新しいものが下。いちばん下にいる間は付いていき、上へ巻いた・指やポインタやフォーカスが乗っている間は止めて「最新へ」を出す。
+   *   止めている間は並びも替えない (上限を超えて上の行が落ちると、読んでいる行がずれる)。飛んだ (シーク) ときだけは替える
    *   (下へはいつも飛ぶ。滑らせると、滑っている間に増えた行で下の端が逃げ、付いていくのが外れる)
    * - 読み上げには知らせない (`aria-live` を付けない。1 分に何百件も来る)。自分の書き込みは流れるほうと同じく字の下に短い線
    * - `seek` があれば (観る画面)、行を押すとその時刻へ飛ぶ
@@ -47,7 +48,7 @@
 
   /** 一覧から離れて 1 秒たったら、いちばん下へ戻す (使っている間に増えたぶん) */
   const hold = new ListHold(() => {
-    if (stuck) toBottom();
+    if (stuck) void refresh(true);
   });
 
   onMount(() => {
@@ -63,17 +64,27 @@
     };
   });
 
-  async function refresh(): Promise<void> {
+  /** 読み直す。`latest` (離れた・「最新へ」) なら、止めていても並べ直していちばん下へ */
+  async function refresh(latest = false): Promise<void> {
     const w = air();
     if (w === null) return;
-    if (jumped(last, w)) stuck = true;
+    const leap = jumped(last, w);
+    if (leap) stuck = true;
     last = w;
     force = feed.force(w);
     const next = feed.recent(w, most);
-    if (sameRows(rows, next)) return;
+    const follow = latest || leap || follows(stuck, hold.held);
+    if (sameRows(rows, next)) {
+      if (follow) toBottom();
+      return;
+    }
+    if (!follow && rows.length > 0) {
+      behind = true;
+      return;
+    }
     rows = next;
     await tick();
-    if (follows(stuck, hold.held)) toBottom();
+    if (follow) toBottom();
     else measure();
   }
 
@@ -158,7 +169,7 @@
         type="button"
         class="small latest"
         data-testid="jikkyo-list-latest"
-        onclick={toBottom}>最新へ</button
+        onclick={() => void refresh(true)}>最新へ</button
       >
     {/if}
   </div>
