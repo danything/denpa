@@ -302,6 +302,10 @@
             ? Promise.resolve(local.request(at))
             : fetch(streamUrl(codec, at, audio), { signal }),
         duration,
+        // 端末に保存した録画の Blob は読むのが速すぎる。観ている位置の少し先までしか読まない (`canvas-player.ts` の `room`)
+        ...(local !== null && localCopy?.video !== undefined && duration > 0
+          ? { bytesPerSecond: localCopy.video.size / duration }
+          : {}),
         start: from ?? 0,
         audio: streamAudio(audioIndex),
         background: background.on || pip.active,

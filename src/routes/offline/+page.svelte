@@ -146,6 +146,8 @@
         input: "mkv",
         request: (from) => Promise.resolve(source.request(from)),
         duration: length,
+        // Blob は読むのが速すぎる。観ている位置の少し先までしか読まない (`canvas-player.ts` の `room`)
+        ...(length > 0 ? { bytesPerSecond: item.video.size / length } : {}),
         start: at >= length - 1 ? 0 : at,
         audio: "0",
         /*
