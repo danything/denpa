@@ -850,3 +850,42 @@ describe("earlierAirings", () => {
     ).toBe(0);
   });
 });
+
+/*
+ * 放送が言う話数 (シリーズ記述子。`Described.series_episode`)。**タイトルからも概要からも読めないときだけ**使う。
+ * 載せない局・予約・引き継いだ履歴はタイトルと概要でしか読めないので、読めているものを上書きすると
+ * 同じ回が載せる局と載せない局で離れる
+ */
+describe("放送が言う話数", () => {
+  const base = Date.UTC(2026, 9, 1, 14);
+  const read = (
+    name: string,
+    series_episode: number | null,
+    description = "",
+  ) => episodeOf({ name, description, extended: null, series_episode });
+
+  test("タイトルにも概要にも回が無ければ、放送が言う話数で回が分かる", () => {
+    expect(read("連続ドラマ", null)).toBeNull();
+    expect(read("連続ドラマ", 5)).toMatchObject({ number: 5, subtitle: "" });
+  });
+
+  test("タイトルや概要に話数があれば、そちらのまま (放送の話数で上書きしない)", () => {
+    expect(read("連続ドラマ #3", 15)?.number).toBe(3);
+    expect(read("連続ドラマ", 15, "#3「はじまり」")?.number).toBe(3);
+    // 副題だけのタイトルも話数を足さない (載せない局の同じ回と話数が分かれる)
+    expect(read("連続ドラマ「はじまり」", 15)?.number).toBeNull();
+  });
+
+  test("話数の無い番組でも、同じ話数の再放送は録らない", () => {
+    const first = airing("連続ドラマ", base, { series_episode: 5 });
+    const again = airing("連続ドラマ", base + 3 * DAY, { series_episode: 5 });
+    const other = airing("連続ドラマ", base + 7 * DAY, { series_episode: 6 });
+    expect(kept([first, again, other])).toEqual([first.id, other.id]);
+  });
+
+  test("話数を言わない放送どうしは、今までどおり時刻をまたいで束ねない", () => {
+    const one = airing("連続ドラマ", base, { series_episode: null });
+    const two = airing("連続ドラマ", base + DAY);
+    expect(kept([one, two])).toEqual([one.id, two.id]);
+  });
+});

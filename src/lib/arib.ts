@@ -424,3 +424,34 @@ export function videoLabel(
   const parts = [resolution, type === null ? null : (VIDEO_TYPE[type] ?? type)];
   return parts.filter((part) => part !== null && part !== "").join(" ");
 }
+
+/**
+ * シリーズ記述子から出す言葉 (`programs.series_*`)。**「第3話 (全12話)」「最終回」「再放送」。**
+ *
+ * - 話数が全何話と同じなら、(全12話) の代わりに「最終回」
+ * - 「再放送」は再放送の印が 0 でないときだけ。0 は初回とは限らない (`programs.series_repeat`)
+ * - 何話目かを言わない局もある。全何話かだけ分かれば「全12話」
+ */
+export function seriesLabels(series: {
+  series_episode: number | null;
+  series_last_episode: number | null;
+  series_repeat: number | null;
+}): string[] {
+  const {
+    series_episode: episode,
+    series_last_episode: last,
+    series_repeat: repeat,
+  } = series;
+  const labels: string[] = [];
+  if (episode !== null) {
+    const final = episode === last;
+    labels.push(
+      last === null || final || last < episode
+        ? `第${episode}話`
+        : `第${episode}話 (全${last}話)`,
+    );
+    if (final) labels.push("最終回");
+  } else if (last !== null) labels.push(`全${last}話`);
+  if (repeat !== null && repeat !== 0) labels.push("再放送");
+  return labels;
+}

@@ -286,6 +286,9 @@
       video_resolution: null,
       is_free: true,
       copy_never: program.copy_never,
+      series_episode: null,
+      series_last_episode: null,
+      series_repeat: null,
     };
     facts = seed;
     selected = program;

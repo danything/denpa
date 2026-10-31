@@ -18,6 +18,9 @@ export interface DetailSeed {
   genre_detail?: Program["genre_detail"];
   audios?: Program["audios"];
   extended?: Program["extended"];
+  series_episode?: number | null;
+  series_last_episode?: number | null;
+  series_repeat?: number | null;
 }
 
 /** 行の分を番組詳細の形式にする。足りないところは既定 (番組表から引けたら差し替わる) */
@@ -31,6 +34,9 @@ function filled(seed: DetailSeed): ProgramDetail {
     video_resolution: null,
     is_free: true,
     copy_never: false,
+    series_episode: null,
+    series_last_episode: null,
+    series_repeat: null,
     ...seed,
   };
 }
@@ -50,6 +56,9 @@ export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
     extended,
     genre_detail,
     audios,
+    series_episode,
+    series_last_episode,
+    series_repeat,
   } = rec;
   return filled({
     name,
@@ -60,6 +69,9 @@ export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
     extended,
     genre_detail,
     audios,
+    series_episode,
+    series_last_episode,
+    series_repeat,
   });
 }
 

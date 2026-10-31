@@ -42,6 +42,7 @@ const DESC_EXTENDED_EVENT = 0x4e;
 const DESC_COMPONENT = 0x50;
 const DESC_CONTENT = 0x54;
 const DESC_AUDIO_COMPONENT = 0xc4;
+const DESC_SERIES = 0xd5;
 
 /** 自局の表か (p/f 0x4E と schedule 0x50〜0x5F)。ほかの TS の schedule (0x60〜0x6F) は下、他局の p/f (0x4F) は読まない */
 function isEitActual(tableId: number): boolean {
@@ -79,6 +80,33 @@ interface EventAudio {
   main?: boolean;
 }
 
+/**
+ * シリーズ (series_descriptor。ARIB STD-B10 第2部)。**載せる局と載せない局がある。**
+ *
+ * `seriesId` で決まるのは**その局の中だけ**。番号は局ごとに振るので、別の局の同じ番号は
+ * 別のシリーズ。比べるときは局 (original_network_id + service_id) と組にする
+ */
+export interface EitSeries {
+  seriesId: number;
+  /**
+   * 再放送の印 (repeat_label)。**0 はオリジナル**、それ以外は、オリジナルの放送期間と
+   * 重なって流れる再放送のシリーズを別のものとして見分けるための番号。
+   * 重ならない再放送は 0 のまま来ることがあるので、**0 でも初回とは言えない**
+   */
+  repeatLabel: number;
+  /**
+   * 編成の型 (program_pattern)。0=不定期 1=帯 (毎日・平日のみなど) 2=週1回 3=月1回
+   * 4=同じ日に何話か 5=長い番組を分けたもの。6・7 はここでは意味を読まない
+   */
+  programPattern: number;
+  /** 何話目か (episode_number)。0 (話数が決まっていない) は null */
+  episode: number | null;
+  /** 全何話か (last_episode_number)。0 (分からない) は null */
+  lastEpisode: number | null;
+  /** シリーズ名。載っていなければ空文字 */
+  name: string;
+}
+
 /** ジャンル。大分類 (`lv1`) と中分類 (`lv2`) の番号 */
 export interface Genre {
   lv1: number;
@@ -113,6 +141,13 @@ export interface EitEvent {
    * (`EpgReader.merge`)
    */
   copyNever: boolean | null;
+  /**
+   * シリーズ (series_descriptor)。載っていなければ null。
+   *
+   * **この項目が無い**のは「この表は言っていない」。`copyNever` と同じく基本の表 (と p/f) に載り、
+   * 詳細の表 (0x58〜) には載らない。詳細だけ届いた回で消さないため (`EpgReader.merge`)
+   */
+  series?: EitSeries | null;
 }
 
 export interface EitSection {
@@ -327,6 +362,29 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
         event.copyNever = isCopyNever(data);
         break;
       }
+      /*
+       * series_descriptor (ARIB STD-B10 第2部)。
+       *
+       *     [0..1] series_id
+       *     [2]    repeat_label(4) program_pattern(3) expire_date_valid_flag(1)
+       *     [3..4] expire_date (MJD) … 使わない
+       *     [5..7] episode_number(12) last_episode_number(12)
+       *     [残り] series_name_char
+       */
+      case DESC_SERIES: {
+        if (data.length < 8) break;
+        const episode = (data[5]! << 4) | (data[6]! >> 4);
+        const lastEpisode = ((data[6]! & 0x0f) << 8) | data[7]!;
+        event.series = {
+          seriesId: u16(data, 0),
+          repeatLabel: data[2]! >> 4,
+          programPattern: (data[2]! >> 1) & 0x07,
+          episode: episode === 0 ? null : episode,
+          lastEpisode: lastEpisode === 0 ? null : lastEpisode,
+          name: decodeAribText(data.subarray(8)).trim(),
+        };
+        break;
+      }
       default:
         break;
     }
@@ -397,6 +455,8 @@ export function parseEit(
       video: null,
       // 記述子が無ければ「禁止ではない」。詳細の表はもとから載せないので「言っていない」
       copyNever: tableId >= SCHEDULE_ACTUAL_EXTENDED ? null : false,
+      // シリーズも同じ。載っていなければ「シリーズではない」、詳細の表なら「言っていない」
+      ...(tableId >= SCHEDULE_ACTUAL_EXTENDED ? {} : { series: null }),
     };
     at += 12 + descriptorsLength;
     if (body.length < descriptorsLength) break;
@@ -677,6 +737,9 @@ export class EpgReader {
       audios: event.audios.length === 0 ? old.audios : event.audios,
       video: event.video ?? old.video,
       copyNever: event.copyNever ?? old.copyNever,
+      ...(event.series === undefined && old.series !== undefined
+        ? { series: old.series }
+        : {}),
     });
   }
 

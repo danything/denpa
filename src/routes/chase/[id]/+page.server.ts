@@ -50,6 +50,9 @@ export const load: PageServerLoad = ({ params, url }) => {
       genre_detail: rec.genre_detail,
       audios: rec.audios,
       extended: rec.extended,
+      series_episode: rec.series_episode,
+      series_last_episode: rec.series_last_episode,
+      series_repeat: rec.series_repeat,
     },
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
     jikkyoAllowed: settings().jikkyo,

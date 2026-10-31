@@ -128,6 +128,10 @@ function createRecording(reservation: Reservation): Recording {
       genre_detail: program?.genre_detail ?? null,
       // エンコードしたものの音声トラックに番組表と同じ名前を入れるのに要る (`audioTitles`)
       audios: program?.audios ?? null,
+      // 番組詳細の「第N話」と、同じ回の見分け (`episode.episodeOf`) に要る。番組表の行は24時間で消える
+      series_episode: program?.series_episode ?? null,
+      series_last_episode: program?.series_last_episode ?? null,
+      series_repeat: program?.series_repeat ?? null,
       created_at: at,
       updated_at: at,
     })

@@ -71,6 +71,10 @@ export interface ProgramDetail {
   is_free: boolean;
   /** コピー禁止の番組か。禁止の番組は録らない (`format.COPY_NEVER_REASON`) */
   copy_never: boolean;
+  /** シリーズの話数・全何話・再放送の印 (`programs` の同じ名前の列)。載せない局は NULL */
+  series_episode: number | null;
+  series_last_episode: number | null;
+  series_repeat: number | null;
 }
 
 /**

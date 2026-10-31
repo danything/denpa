@@ -465,6 +465,7 @@ const TAKEN_COLUMNS = {
   name: recordings.name,
   description: recordings.description,
   extended: recordings.extended,
+  series_episode: recordings.series_episode,
   start_at: recordings.start_at,
   service_name: recordings.service_name,
 };
@@ -475,6 +476,7 @@ function takenOf(
     name: string;
     description: string;
     extended: Record<string, string> | null;
+    series_episode: number | null;
     start_at: number;
     service_name: string;
   }[],
