@@ -249,7 +249,7 @@ public sealed class Zd1jBoard : IDibTime
     }
 
     /// <summary>開く段の名前 (USB を開くところ)。そのあとの段は <see cref="Mb86h47.Start"/> が知らせる</summary>
-    internal const string OpeningUsb = "USB を開く";
+    private const string OpeningUsb = "USB を開く";
 
     /// <summary>ポートごとの、最後に記録した開けなかった理由。同じ理由は繰り返し記録しない (<see cref="Registry"/> の中で触る)</summary>
     private static readonly Dictionary<string, string> LastFailure = [];
@@ -266,7 +266,7 @@ public sealed class Zd1jBoard : IDibTime
         Log.Write(line);
     }
 
-    internal static string OpenFailure(string port, string stage, Exception error) =>
+    private static string OpenFailure(string port, string stage, Exception error) =>
         $"[{Zd1j.Model} {port}] 開けません ({stage}ところで): {Zd1j.Reason(error)}";
 
     /// <summary>返す。開いたままにする (USB が抜けていれば閉じる)</summary>
@@ -398,7 +398,7 @@ public sealed class Zd1jTuner : ITuneDevice
     /// 読む側がいないまま、溜めが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
     /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く見切ると、TunerPool が畳む前に TS が途切れる)
     /// </summary>
-    internal static TimeSpan StallLimit { get; set; } = TunerPool.Linger;
+    internal static TimeSpan StallLimit => TunerPool.Linger;
 
     private readonly string _name;
     private readonly Func<Zd1jBoard> _acquire;
@@ -659,7 +659,6 @@ internal sealed class Zd1jStream
                 if (stalled.Elapsed >= Zd1jTuner.StallLimit)
                 {
                     writer.CancelPendingFlush();
-                    End(null);
                     _ended = true;
                     _stalled();
                     return false;
@@ -761,7 +760,7 @@ public sealed class Zd1jCard : ICardLink
         if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
         try
         {
-            // 抜き差しの知らせは無いので、APDU の前ごとに見る (仕様書 13.3)
+            // 抜き差しの通知は無いので、APDU の前ごとに見る (仕様書 13.3)
             if (!Bridge.CardPresent())
             {
                 _t1 = null;

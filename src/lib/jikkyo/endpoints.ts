@@ -12,7 +12,7 @@
 /** NX-Jikkyo の WebSocket のオリジン */
 export const NX_JIKKYO_WS = "wss://nx-jikkyo.tsukumijima.net";
 /** NX-Jikkyo の REST のオリジン (サーバだけが使う) */
-export const NX_JIKKYO_API = "https://nx-jikkyo.tsukumijima.net";
+const NX_JIKKYO_API = "https://nx-jikkyo.tsukumijima.net";
 /** ニコニコ実況 過去ログ API のオリジン */
 export const KAKOLOG_API = "https://jikkyo.tsukumijima.net";
 

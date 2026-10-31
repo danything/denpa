@@ -369,8 +369,7 @@ public class B25Tests
     [Test]
     public async Task 鍵が来るまで溜めて_来たら頭から復号する()
     {
-        var before = Channel().Videos(30, 1);
-        var ts = before.Ecm(EcmPid, 1).Videos(5, 1);
+        var ts = Channel().Videos(30, 1).Ecm(EcmPid, 1).Videos(5, 1);
         var descrambler = new Descrambler(new Cards());
         var output = new ArrayBufferWriter<byte>();
 
@@ -605,7 +604,6 @@ public class B25Tests
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
         await Assert.That(descrambler.LastError!).Contains("0x8901");
     }
-
 
     /// <summary>**PMT より前に来た掛かったパケットも、溜めておいて、揃ったところで復号する**</summary>
     [Test]

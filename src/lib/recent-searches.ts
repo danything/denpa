@@ -18,7 +18,7 @@ export function pushRecent(list: string[], q: string): string[] {
   return [word, ...list.filter((item) => item !== word)].slice(0, RECENT_MAX);
 }
 
-/** 文字列から読む。形が違えば空 */
+/** 文字列から読む。形式が違えば空 */
 export function parseRecent(raw: string | null): string[] {
   if (raw === null) return [];
   try {

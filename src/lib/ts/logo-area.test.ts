@@ -40,7 +40,7 @@ const SIN = Float32Array.from({ length: 4096 }, (_, i) =>
 );
 const sin = (a: number) => SIN[Math.floor((a / (Math.PI * 2)) * 4096) & 4095]!;
 
-/** その乱数列。試験のたびに同じ画像が出るように自前で回す */
+/** 乱数列。試験のたびに同じ画像が出るように自前で回す */
 function random(seed: number): () => number {
   let s = seed >>> 0;
   return () => {

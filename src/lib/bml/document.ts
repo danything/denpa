@@ -51,8 +51,6 @@ const MAX_ELEMENTS = 4096;
 export class BmlText {
   readonly kind = "text";
   parent: BmlElement | null = null;
-  /** 描く側の入れ物 */
-  view: unknown = null;
   constructor(
     public data: string,
     readonly cdata: boolean,
@@ -76,8 +74,6 @@ export class BmlElement implements Cascade {
     active: new Map(),
   };
   state: State = "normal";
-  /** 描く側の入れ物 */
-  view: unknown = null;
   /** beitem の覚え書き (前に起きたこと) */
   memo: Record<string, unknown> = {};
   /** 決めた見た目 (`generation` が変わるまで使い回す) */

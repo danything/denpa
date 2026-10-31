@@ -1,7 +1,7 @@
 /**
  * **実況のコメントを本文と時刻と流し方だけにする**、と**時刻つきの控え** (端末の中)。
  *
- * NX-Jikkyo の WebSocket も過去ログ API も、旧ニコ生と同じ形の `chat` を返す
+ * NX-Jikkyo の WebSocket も過去ログ API も、旧ニコ生と同じ形式の `chat` を返す
  * (`{ thread, no, vpos, date, date_usec, mail, user_id, premium, anonymity, content }`)。
  * 値は WebSocket が数、過去ログが文字列なので、どちらでも読む。
  * **`user_id`・`premium`・`no` などは読んだその場で捨てる** — 持つのは本文と投稿時刻と、`mail` のうち色・位置・大きさのコマンドだけ
@@ -28,7 +28,7 @@ function num(value: unknown): number {
 
 /**
  * `chat` の中身を 1 つ読む。**流さないもの** (本文が空・`/nicoad` などの運営のコメント) は null、
- * **形がずれていて読めない**ものは undefined (呼ぶ側がまとめて 1 回だけ警告する)
+ * **形式がずれていて読めない**ものは undefined (呼ぶ側がまとめて 1 回だけ警告する)
  */
 export function toComment(chat: unknown): Comment | null | undefined {
   if (chat === null || typeof chat !== "object") return undefined;
@@ -48,7 +48,7 @@ export function toComment(chat: unknown): Comment | null | undefined {
 
 /**
  * `{ chat: {...} }` の並び (過去ログ API の `packet`) を読む。`chat` 以外の行は飛ばす。
- * 形のずれた行は飛ばして、その数を返す
+ * 形式のずれた行は飛ばして、その数を返す
  */
 export function readPackets(packets: unknown[]): {
   comments: Comment[];
@@ -70,6 +70,11 @@ export function readPackets(packets: unknown[]): {
 export const KEEP_SPAN = 2 * 60 * 60_000;
 
 type Span = [from: number, to: number];
+
+/** 同じ時刻・同じ本文のものを 1 つにするキー (控えと、右の一覧の行で同じ) */
+export function commentKey(comment: Comment): string {
+  return `${comment.at}\u0000${comment.text}`;
+}
 
 /**
  * **時刻つきのコメントの控え。** 観ている局 (録画) ごとに 1 つ。
@@ -100,7 +105,7 @@ export class CommentStore {
   add(comments: readonly Comment[], span?: Span): Comment[] {
     const added: Comment[] = [];
     for (const comment of comments) {
-      const key = `${comment.at}\u0000${comment.text}`;
+      const key = commentKey(comment);
       if (this.keys.has(key)) continue;
       this.keys.add(key);
       this.list.splice(this.after(comment.at), 0, comment);
@@ -170,7 +175,7 @@ export class CommentStore {
     const keep = this.list.filter((c) => c.at >= lo && c.at <= hi);
     for (const comment of this.list)
       if (comment.at < lo || comment.at > hi)
-        this.keys.delete(`${comment.at}\u0000${comment.text}`);
+        this.keys.delete(commentKey(comment));
     this.list.splice(0, this.list.length, ...keep);
     this.spans = this.spans
       .map(([start, end]): Span => [Math.max(start, lo), Math.min(end, hi)])

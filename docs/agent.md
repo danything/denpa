@@ -398,7 +398,7 @@ ATTACH_STREAM` (SPEC 6.3。px4-userland 0.1.6 から)。返すのはデバイス
 - **IT930x のファームウェアはイメージに入っていません。** px4d を起こす前に `Px4Firmware.Ensure` が探し
   (`PX4_FIRMWARE`、px4-userland の横、`tuners.json` の隣の順)、どこにも無ければ PLEX のドライバを取ってきて
   切り出し、`tuners.json` の隣に置きます。それを px4d の `--firmware` に渡します。取れなければ px4d を起こさず、
-  理由を px4-userland の受信機すべての `error` に出して、10 分は取りに行きません ([tuner-px4.md](tuner-px4.md#ファームウェア))
+  理由を px4-userland の受信機すべての `error` に出して、10 分は取得し直しません ([tuner-px4.md](tuner-px4.md#ファームウェア))
 
 ### siano-userland の作り
 
@@ -521,7 +521,7 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
 - **TS は EP 0x81 の読みを 16 本出しっぱなしにします** (読みが出ていない間に来たものは抜けるため)。届くのは 4 バイトの到着時刻 +
   188 バイトの単位なので、TS の頭の 0x47 と 192 バイト先の 0x47 の2つで揃えて取り出し、px4d から受けるときと同じく `Pipe` (8MB) に詰めます
 - **カードは CCID ではありません。** ブリッジのスマートカードの UART を読み書きし、T=1 の枠組みはこちらで組みます (`T1Protocol` を
-  そのまま使う)。リセットと IFSD の取り決めは1回だけで、あとはつないだまま。抜き差しの知らせは無いので、APDU の前ごとに見ます
+  そのまま使う)。リセットと IFSD の取り決めは1回だけで、あとはつないだまま。抜き差しの通知は無いので、APDU の前ごとに見ます
 - **前面の LED は流している間ずっと赤** (DiB8000 の GPIO 1)。選局しなおしでは触らず、止めたら緑に戻します
 - **USB は OS ごとに P/Invoke だけで持ちます** (外のライブラリなし)。Linux は usbfs の ioctl (TS は URB を 16 本出しっぱなし)、
   Windows は WinUSB (利用者が Zadig で WinUSB を当てる。`OVERLAPPED` の読みを 16 本)、macOS は IOKit の IOUSBLib (カーネルの拡張なし。

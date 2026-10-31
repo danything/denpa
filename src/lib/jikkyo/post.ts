@@ -20,7 +20,7 @@ export const POST_GAP = 3_000;
 /** 返事を待つ長さ (ms)。過ぎたら「送れたか分かりません」 */
 export const REPLY_WAIT = 5_000;
 /** 「いま」に追い付いているとみなす遅れ (秒) */
-export const CAUGHT_UP = 30;
+const CAUGHT_UP = 30;
 /** 自分の書き込みが戻ってきたものを捨てる間 (ms)。送ってからこの間に、本文が同じものを 1 回だけ */
 export const ECHO_SPAN = 60_000;
 

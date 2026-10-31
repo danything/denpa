@@ -183,7 +183,7 @@ public sealed partial class PcscLink : ICardLink
     /// <c>SCardEstablishContext</c> から断られる (<c>SCARD_E_NO_SERVICE</c>。Windows も Smart Card
     /// サービスが止まっていれば同じ)。それも空として扱う
     /// </summary>
-    public static List<string> Readers()
+    private static List<string> Readers()
     {
         if (!(OperatingSystem.IsMacOS() || OperatingSystem.IsWindows()) || Establish(out var context) != 0) return [];
         try

@@ -19,7 +19,7 @@ describe("最近の検索", () => {
     expect(next[0]).toBe("new");
   });
 
-  test("形の違う控えは空として読む", () => {
+  test("形式の違う控えは空として読む", () => {
     expect(parseRecent(null)).toEqual([]);
     expect(parseRecent("{")).toEqual([]);
     expect(parseRecent('{"a":1}')).toEqual([]);

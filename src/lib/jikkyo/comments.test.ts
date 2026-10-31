@@ -51,7 +51,7 @@ describe("toComment", () => {
     expect(toComment({ date: T / 1000, content: "/nicoad {}" })).toBeNull();
   });
 
-  test("形がずれていれば undefined", () => {
+  test("形式がずれていれば undefined", () => {
     expect(toComment({ content: "時刻が無い" })).toBeUndefined();
     expect(toComment({ date: "x", content: "a" })).toBeUndefined();
     expect(toComment({ date: T / 1000, content: 5 })).toBeUndefined();

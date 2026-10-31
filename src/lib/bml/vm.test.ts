@@ -497,7 +497,7 @@ describe("細かい意味", () => {
       await evaluate(
         'var a = ["亜", "Ａ", "あ"]; a.sort(); var result = a.join("");',
       ),
-    ).toBe("ＡあA".replace("A", "亜"));
+    ).toBe("Ａあ亜");
   });
 
   test("文字列の Date は日本の時刻で読み、読めない形式は NaN", async () => {

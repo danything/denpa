@@ -41,7 +41,7 @@ export interface Clip {
   bytes: number;
   /**
    * あとから出し入れできる重ね。**撮ったときに出していたものだけ**キーがあり、値はいま重ねているか。
-   * 分けて送られなかったもの (字幕を焼き込んだ古い切り抜きなど) は空
+   * 分けて送られなかったもの (字幕を画像に描き込んだ古い切り抜きなど) は空
    */
   layers: ClipLayers;
 }
@@ -52,7 +52,7 @@ export type ClipLayer = (typeof CLIP_LAYERS)[number];
 export type ClipLayers = Partial<Record<ClipLayer, boolean>>;
 
 /**
- * 画像の版。重ねを出し入れすると同じ URL の中身が替わるので、画面は `?v=` に付けて端末のキャッシュを分ける。
+ * 画像のバージョン。重ねを出し入れすると同じ URL の中身が替わるので、画面は `?v=` に付けて端末のキャッシュを分ける。
  * 重ねを持たないものは空 (中身は替わらない)
  */
 export function clipVersion(layers: ClipLayers): string {

@@ -136,7 +136,7 @@ function selectIn(engine: RawEngine, input: RawInput, id: string): void {
   engine.selectAudio(track.stream, input === "mkv" ? "both" : track.side);
 }
 
-/** 写さずに worker へ渡せる形にする (塊が大きな ArrayBuffer の一部なら写す) */
+/** 写さずに worker へ渡せるようにする (塊が大きな ArrayBuffer の一部なら写す) */
 function own(bytes: Uint8Array): ArrayBuffer {
   if (
     bytes.byteOffset === 0 &&

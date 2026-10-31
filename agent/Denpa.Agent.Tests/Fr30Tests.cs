@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
 /*
  * FR30 のアセンブラ (Fr30.cs)。期待値の語は、同じ並びを binutils 2.44 の fr30-elf-as で組んで objcopy で取り出したもの
  * (道具の出力。コンテナで fr30-elf を組んで突き合わせた)。アセンブラが出すどの形の命令もここに1つずつ並べてある。
- * 命令の振る舞いは Fr30Machine (この下の小さな FR30 の真似) でプログラムを動かして確かめる (Mb86h47ProgramsTests.cs)。
+ * 命令の振る舞いは Fr30Machine (Fr30Machine.cs の小さな FR30 の真似) でプログラムを動かして確かめる (Mb86h47ProgramsTests.cs)。
  */
 public class Fr30Tests
 {

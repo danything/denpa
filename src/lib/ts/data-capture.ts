@@ -25,7 +25,7 @@ export class DataBroadcastCapture {
   private readonly measure = new TsHead();
 
   constructor() {
-    // 「配る価値があるか」の判定はライブと同じ土俵に乗せる (変わらない pmt/programInfo は
+    // 「配る価値があるか」の判定はライブと同じ土俵に乗せる (変わらない pmt は
     // 落ちる)。中の記憶そのものは使わない — 使うのは take の判定だけ
     const gate = new Carousel();
     let at: number | null = null;

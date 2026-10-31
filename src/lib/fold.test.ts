@@ -35,7 +35,7 @@ describe("探すときの寄せ (foldForSearch)", () => {
   });
 });
 
-describe("LIKE に掛けられる切れ端 (likePieces)", () => {
+describe("SQL の前絞りに掛けられる切れ端 (likePieces)", () => {
   test("寄せ先と関わらない語はそのまま", () => {
     expect(likePieces("名探偵")).toEqual(["名探偵"]);
     expect(likePieces("nhk")).toEqual(["nhk"]);

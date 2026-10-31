@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 namespace Denpa.Agent;
 
 /// <summary>
-/// IT930x のファームウェア (px4-userland の機材に挿すたびに流し込む)。**イメージには入れず、使う人の機械で取ってくる。**
+/// IT930x のファームウェア。**イメージには入れず、使う人の機械で取ってくる。**
 ///
 /// <para>
 /// 本体には入っておらず、挿すたびにホストから RAM へ流し込むもの。px4-userland は受理するバージョンを SHA-256 で
@@ -42,7 +42,7 @@ public static class Px4Firmware
         FirmwareSha256: "5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484");
 
     /// <summary>
-    /// 取れなかったあと、次に試すまで待つ時間。**選局のたびには取りに行かない** (番組表の取得や録画の予約は
+    /// 取れなかったあと、次に試すまで待つ時間。**選局のたびには取得しない** (番組表の取得や録画の予約は
     /// 数分おきに選局する。PLEX のサイトや Internet Archive が落ちるのは何時間という単位)
     /// </summary>
     internal static readonly TimeSpan Backoff = TimeSpan.FromMinutes(10);
@@ -112,9 +112,9 @@ internal sealed record Px4FirmwareSource(
 
 /// <summary>
 /// ファームウェアの置き場1つ。**置いてあるものが勝ち**、無ければ取ってきて <c>target</c> に置く。
-/// 取れなければ <see cref="Px4Firmware.Backoff"/> のあいだ取りに行かず、同じ理由で断る
+/// 取れなければ <see cref="Px4Firmware.Backoff"/> のあいだ取得し直さず、同じ理由で断る
 /// </summary>
-/// <param name="existing">先に見る置き場。どれかにあればそれを使い、取りに行かない</param>
+/// <param name="existing">先に見る置き場。どれかにあればそれを使い、取得しない</param>
 /// <param name="target">取ってきたものを置く場所</param>
 /// <param name="download">URL の中身を返す。テストは偽の zip を返す</param>
 internal sealed class Px4FirmwareStore(
@@ -126,7 +126,7 @@ internal sealed class Px4FirmwareStore(
     public string? Problem { get; private set; }
 
     /// <summary>
-    /// ファームウェアのパス。無ければ取ってくる (筐体が2台でも取りに行くのは1度。もう1台は待つ)。
+    /// ファームウェアのパス。無ければ取ってくる (筐体が2台でも取得は1度。もう1台は待つ)。
     /// 取れなければ、または待つ時間のうちなら、理由を添えて <see cref="IOException"/>
     /// </summary>
     public string Ensure()
@@ -140,7 +140,11 @@ internal sealed class Px4FirmwareStore(
         }
         lock (_gate)
         {
-            if (File.Exists(target)) return target;
+            if (File.Exists(target))
+            {
+                Problem = null;
+                return target;
+            }
             if (Problem is { } problem && clock.GetUtcNow() < _retryAt) throw new IOException(problem);
             try
             {

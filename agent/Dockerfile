@@ -35,7 +35,7 @@ RUN case "${TARGETARCH}" in \
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る
 # 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
-# 組み直しになり、配布元へ取りに行く回数が増える
+# 組み直しになり、配布元から取ってくる回数が増える
 # ---------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS fetch
 ARG TARGETARCH
@@ -144,11 +144,11 @@ FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb5
 COPY --from=fetch /opt/ /opt/
 
 # 設定は PVC (/config) に置く (/config/tuners.json と /config/channels.json はエージェントの既定。Config.cs)。
-# **どちらも denpa の画面が書く。** px4-userland の機材に流し込む IT930x のファームウェアも、初めて要ったときに
-# エージェントが取ってきてここに置く (/config/it930x-firmware.bin。Px4Firmware.cs)。
-#
-# **どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を
+# **どちらも denpa の画面が書き、どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
+#
+# px4-userland の機材に流し込む IT930x のファームウェアも、初めて要ったときに
+# エージェントが取ってきてここに置く (/config/it930x-firmware.bin。Px4Firmware.cs)。
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
 
 EXPOSE 25252

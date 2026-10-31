@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import { CommentStore } from "./comments";
+import { jumped } from "./cursor";
 import {
   airClock,
   atBottom,
   BOTTOM_SLACK,
   follows,
-  jumped,
   LIST_MAX,
   LIST_SPAN,
   sameRows,

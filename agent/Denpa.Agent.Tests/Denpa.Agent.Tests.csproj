@@ -23,7 +23,8 @@
         <Compile Include="../Denpa.Agent/DeviceProbe.cs" />
         <Compile Include="../Denpa.Agent/ChannelTable.cs" />
         <Compile Include="../Denpa.Agent/Tuning.cs" />
-        <Compile Include="../Denpa.Agent/Px4.cs" />        <Compile Include="../Denpa.Agent/Px4Firmware.cs" />
+        <Compile Include="../Denpa.Agent/Px4.cs" />
+        <Compile Include="../Denpa.Agent/Px4Firmware.cs" />
         <Compile Include="../Denpa.Agent/Siano.cs" />
         <Compile Include="../Denpa.Agent/Asicen.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />

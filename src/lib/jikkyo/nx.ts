@@ -3,7 +3,7 @@
  *
  * 1. 視聴の WS (`watchUrl`) に繋ぎ、`startWatching` を送る。`room` でコメントの WS の URL と
  *    スレッドを受け取る (URL はこちらで組まない。変わっても追える)。`seat` の間隔で `keepSeat`、`ping` には `pong` を返す
- * 2. コメントの WS に旧ニコ生と同じ形の `thread` を送る (`res_from: -100`。局を替えた直後でもすぐ流せる)。
+ * 2. コメントの WS に旧ニコ生と同じ形式の `thread` を送る (`res_from: -100`。局を替えた直後でもすぐ流せる)。
  *    返事の `thread` のあと、直近のぶんと新しい `chat` が 1 件ずつ来る
  * 3. 切れたら 1 秒 → 2 秒 → … 60 秒で頭打ちで繋ぎ直す。5 回続けて失敗したら「いまは読めない」にし、
  *    60 秒おきに試し続ける。スレッドは毎日 4:00 に替わり、サーバが閉じる (`disconnect` か、コード 1000)。
@@ -23,7 +23,7 @@ const FAILURES_TO_DOWN = 5;
 /** 繋ぎ直しの間隔の頭打ち (ms) */
 const MAX_BACKOFF = 60_000;
 /** 遡るときの件数の上限 (NX-Jikkyo の DB の読み出しは重いので、1 回だけ・1000 件まで) */
-export const BACKFILL_LIMIT = 1000;
+const BACKFILL_LIMIT = 1000;
 
 /**
  * `room` が言うコメントの WS の URL から、NX-Jikkyo の中のパスだけを取る。**NX-Jikkyo の外を指していたら null** —
@@ -38,12 +38,12 @@ export function commentPath(uri: string): string | null {
   }
 }
 
-export interface NxEvents {
-  /** コメントが来た (形のずれたもの・流さないものは来ない) */
+interface NxEvents {
+  /** コメントが来た (形式のずれたもの・流さないものは来ない) */
   comments: (comments: Comment[]) => void;
   /** 読めているか。最初は読めている扱い。5 回続けて失敗したら false、戻れば true */
   state: (ok: boolean) => void;
-  /** 形のずれた返事を受けた (呼ぶ側が 1 回だけ警告する) */
+  /** 形式のずれた返事を受けた (呼ぶ側が 1 回だけ警告する) */
   odd: (what: string) => void;
 }
 
@@ -165,7 +165,7 @@ export class NxJikkyo {
   }
 
   /**
-   * `before` より前のコメントを 1 回だけ遡って取る (録画中の追っかけで、10 分より新しい古いところ)。
+   * `before` より前のコメントを 1 回だけ遡って取る (録画中の追っかけで、過去ログにまだ入っていない 10 分以内のところ)。
    * 2 度目からは何もしない — NX-Jikkyo の DB の読み出しは重いので、何度も遡らない
    */
   backfill(before: number): void {
@@ -216,7 +216,7 @@ export class NxJikkyo {
         const uri = server?.uri;
         const thread = body["threadId"];
         if (typeof uri !== "string" || typeof thread !== "string") {
-          this.events.odd("room の形が違います");
+          this.events.odd("room の形式が違います");
           return;
         }
         const path = commentPath(uri);
@@ -325,7 +325,7 @@ export class NxJikkyo {
       if (!("chat" in item)) continue;
       const chat = (item as { chat: unknown }).chat;
       const comment = toComment(chat);
-      if (comment === undefined) this.events.odd("chat の形が違います");
+      if (comment === undefined) this.events.odd("chat の形式が違います");
       else if (comment !== null && !this.ownEcho(chat, comment.text))
         comments.push(comment);
     }

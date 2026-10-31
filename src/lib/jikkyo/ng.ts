@@ -10,7 +10,7 @@ export const NG_MAX = 100;
 /** 1 語の長さの上限 (文字) */
 export const NG_LENGTH = 40;
 
-/** 比べる形にそろえる。NFKC (全角・半角・半角カナ) → 小文字 → カタカナをひらがなに */
+/** 比べられるようにそろえる。NFKC (全角・半角・半角カナ) → 小文字 → カタカナをひらがなに */
 export function foldText(text: string): string {
   return text
     .normalize("NFKC")

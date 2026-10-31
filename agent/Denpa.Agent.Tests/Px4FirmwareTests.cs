@@ -99,7 +99,7 @@ public class Px4FirmwareTests
             await Assert.That(asked).IsEquivalentTo(new[] { "https://first.example/driver.zip", "https://second.example/driver.zip" });
             await Assert.That(store.Problem).IsNull();
 
-            // 置いたものを使う (もう取りに行かない)
+            // 置いたものを使う (もう取得しない)
             await Assert.That(store.Ensure()).IsEqualTo(target);
             await Assert.That(asked.Count).IsEqualTo(2);
         }
@@ -121,7 +121,7 @@ public class Px4FirmwareTests
             File.WriteAllBytes(bundled, [1, 2, 3]);
             var target = Path.Combine(dir.FullName, "config", Px4Firmware.FileName);
             var store = new Px4FirmwareStore([configured, bundled], target, Source(),
-                _ => throw new InvalidOperationException("取りに行かない"), new FakeClock());
+                _ => throw new InvalidOperationException("取得しない"), new FakeClock());
 
             await Assert.That(store.Ensure()).IsEqualTo(bundled);
             await Assert.That(File.Exists(target)).IsFalse();
@@ -137,7 +137,7 @@ public class Px4FirmwareTests
     }
 
     [Test]
-    public async Task 取れなければ理由を残し_しばらく取りに行かない()
+    public async Task 取れなければ理由を残し_しばらく取得し直さない()
     {
         var dir = Directory.CreateTempSubdirectory("px4fw");
         try
@@ -160,7 +160,7 @@ public class Px4FirmwareTests
             await Assert.That(store.Problem).IsEqualTo(first.Message);
             await Assert.That(asked).IsEqualTo(2);
 
-            // 待つ時間のうちは取りに行かず、同じ理由で断る
+            // 待つ時間のうちは取得し直さず、同じ理由で断る
             online = true;
             clock.Now += Px4Firmware.Backoff - TimeSpan.FromSeconds(1);
             var again = Assert.Throws<IOException>(() => store.Ensure());
@@ -194,6 +194,29 @@ public class Px4FirmwareTests
 
             File.WriteAllBytes(placed, [1]);
             await Assert.That(store.Ensure()).IsEqualTo(placed);
+            await Assert.That(store.Problem).IsNull();
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task 取ってくる先に手で置かれても理由を消す()
+    {
+        var dir = Directory.CreateTempSubdirectory("px4fw");
+        try
+        {
+            var target = Path.Combine(dir.FullName, Px4Firmware.FileName);
+            var store = new Px4FirmwareStore([], target, Source(),
+                _ => throw new HttpRequestException("繋がりません"), new FakeClock());
+
+            Assert.Throws<IOException>(() => store.Ensure());
+            await Assert.That(store.Problem).IsNotNull();
+
+            File.WriteAllBytes(target, [1]);
+            await Assert.That(store.Ensure()).IsEqualTo(target);
             await Assert.That(store.Problem).IsNull();
         }
         finally

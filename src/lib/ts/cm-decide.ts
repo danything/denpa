@@ -680,7 +680,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
   const value = Array.from({ length: n }, () =>
     new Float64Array(STATES).fill(Number.NEGATIVE_INFINITY),
   );
-  /** 戻り道: 前の候補 × STATES + 前の状態 */
+  /** たどる元: 前の候補 × STATES + 前の状態 */
   const from = Array.from({ length: n }, () => new Int32Array(STATES).fill(-1));
   const relax = (j: number, s: State, v: number, i: number, prev: State) => {
     if (v > value[j]![s]!) {
@@ -688,7 +688,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
       from[j]![s] = i * STATES + prev;
     }
   };
-  /** いま終わった提供 (候補 `i` で終わった状態 `s`) のうちロゴの無い割合。頭は戻り道から引く */
+  /** いま終わった提供 (候補 `i` で終わった状態 `s`) のうちロゴの無い割合。頭は `from` から引く */
   const creditBare = (i: number, s: State) => {
     const start = nodes[Math.floor(from[i]![s]! / STATES)]!.at;
     const end = nodes[i]!.at;
