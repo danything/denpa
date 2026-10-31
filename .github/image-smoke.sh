@@ -34,11 +34,11 @@ denpa)
     run() { local bin=$1; shift; docker run --rm -v "$work:/work" -w /work --entrypoint "$bin" "$image" "$@"; }
     # ffmpeg のエラーは、終わりの値が 0 でも落とす。部品が欠けたときは「デコードできずに読み飛ばして
     # 先へ進む」ことがある (extract_extradata が無いと `-ss` のあとの MPEG-2 がそうなった)。
-    # SVT-AV1 は自前のログ (`Svt[…]`) を必ず出すので除く
+    # SVT-AV1 (`Svt[…]`) と arm64 の Rockchip MPP (`mpp[…]`。SoC を調べに行って無いと言う) は自前のログを必ず出すので除く
     ff() {
         local err status=0
         err=$(run /usr/local/bin/ffmpeg -hide_banner -loglevel error -nostdin -y "$@" 2>&1 >/dev/null) || status=$?
-        err=$(grep -v '^Svt\[' <<< "$err" || true)
+        err=$(grep -v -e '^Svt\[' -e '^mpp\[' <<< "$err" || true)
         [ "$status" -eq 0 ] && [ -z "$err" ] || { echo "ffmpeg $*" >&2; echo "$err" >&2; return 1; }
     }
 
