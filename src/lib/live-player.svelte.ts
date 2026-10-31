@@ -33,7 +33,6 @@ import {
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
-import { denpaFontUrl } from "#lib/font.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   type CaptionTrack,
@@ -1543,7 +1542,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   ): void {
     still = frozen;
     painter?.close();
-    painter = new CaptionPainter(subtitles, denpaFontUrl());
+    painter = new CaptionPainter(subtitles);
     host = box;
   }
 

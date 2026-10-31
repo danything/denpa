@@ -98,7 +98,6 @@
   } from "#lib/components/Toasts.svelte";
   import { programDetail, recordingFacts } from "#lib/detail.svelte.js";
   import { driveGate } from "#lib/drive-gate.svelte.js";
-  import { denpaFontUrl } from "#lib/font.js";
   import {
     clock,
     cmNoteWorthShowing,
@@ -915,7 +914,7 @@
   let shownPage: CaptionPage | null = null;
   $effect(() => {
     if (overlay === null) return;
-    const made = new CaptionPainter(overlay, denpaFontUrl());
+    const made = new CaptionPainter(overlay);
     painter = made;
     return () => {
       made.close();

@@ -23,7 +23,7 @@
   import Menu from "#lib/components/Menu.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import SearchField from "#lib/components/SearchField.svelte";
-  import { denpaFontUrl } from "#lib/font.js";
+  import { denpaFontCssUrl } from "#lib/font.js";
   import { markLite } from "#lib/lite.js";
   import { measure } from "#lib/measure.svelte.js";
   import { startOffline } from "#lib/offline.svelte.js";
@@ -405,18 +405,19 @@
   }
 
   /**
-   * **放送の字 (Denpa Font) をここで名乗らせる** (使うのは `app.css` の `.broadcast`)。
+   * **放送の字 (Denpa Font) をここで名乗らせる** (使うのは `app.css` の `.broadcast` と字幕)。
    * バージョン付きの URL は組むときに決まるので、`app.css` には書けない (`#lib/font.ts`)。
-   * 使う字が画面に出たときだけ落ちてくる。届くまでは画面の字で出しておく (`swap`)
+   * 名乗らせる CSS は基本の字と JIS X 0213 にだけある字の 2 つの woff2 を `unicode-range` で分けて書いてあり、
+   * どちらも使う字が画面に出たときだけ落ちてくる。届くまでは画面の字で出しておく (`swap`)
    */
-  const fontFace = `<style>@font-face{font-family:"Denpa Font";src:url("${denpaFontUrl()}") format("woff2");font-display:swap}</style>`;
+  const fontCss = denpaFontCssUrl();
 </script>
 
 <svelte:window onkeydown={searchShortcut} />
 
 <svelte:head>
   <title>{title}</title>
-  {@html fontFace}
+  <link rel="stylesheet" href={fontCss} />
 </svelte:head>
 
 <!--
