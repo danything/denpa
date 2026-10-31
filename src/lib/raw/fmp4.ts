@@ -92,6 +92,18 @@ interface Pending {
   data: Uint8Array;
 }
 
+/**
+ * 映像のコマの dts が、前のコマ (`expected` = 前の dts + 長さ) から飛んだか (90kHz)。1コマぶんまでは揺れとして許す。
+ * 飛んでいたら受け取る側はキーフレームまで捨てる (`Fmp4Video.queue`)
+ */
+export function jumped(
+  expected: number,
+  dts: number,
+  duration: number,
+): boolean {
+  return Math.abs(dts - expected) > duration + 2;
+}
+
 /** 90kHz に直す */
 function ticks(value: number, timescale: number): number {
   return Math.round((value * CLOCK) / timescale);
@@ -268,7 +280,7 @@ export class Fmp4Video {
     // 時刻が飛んだ (サーバが詰まって捨てた)。**次のキーフレームまで捨てる** (上の説明)
     if (
       this.expected !== null &&
-      Math.abs(item.dts - this.expected) > item.duration + 2
+      jumped(this.expected, item.dts, item.duration)
     )
       this.needKey = true;
     this.expected = item.dts + item.duration;
