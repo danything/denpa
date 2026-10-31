@@ -139,7 +139,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
 # px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす
-FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb56c49d4441dba6153ccf790364f97e64b1
+FROM gcr.io/distroless/cc-debian13:latest@sha256:58e12be899275afaa05f1b03051ab19037ed7f252528e57a3a9ad7e220a62578
 
 COPY --from=fetch /opt/ /opt/
 
