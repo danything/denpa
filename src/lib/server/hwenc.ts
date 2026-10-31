@@ -108,7 +108,7 @@ export function hwEncode(): HwEncode {
  *
  * **デバイスは `turn` で回す。** グラボが2枚あって両方が同じコーデックをエンコードできるなら、
  * 1本エンコードするごとに先頭を入れ替えて、2本並べてエンコードするとき片方に寄らないようにする。
- * 同じデバイスの中では QSV → VA-API
+ * 同じデバイスの中では QSV → VA-API → MPP → NVENC (`HW_KINDS` の順)
  */
 export function hwChain(
   codec: HwCodec,
