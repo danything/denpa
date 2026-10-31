@@ -24,7 +24,6 @@ interface BackgroundFetchManager {
     requests: (Request | string)[],
     options?: {
       title?: string;
-      icons?: { src: string; sizes?: string; type?: string }[];
       downloadTotal?: number;
     },
   ): Promise<BackgroundFetchRegistration>;

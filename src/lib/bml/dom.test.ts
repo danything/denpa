@@ -21,7 +21,6 @@ const BML = `<?xml version="1.0" encoding="EUC-JP"?>
 </body></bml>`;
 
 interface Setup {
-  vm: Vm;
   doc: BmlDocument;
   subscribed: BmlElement[];
   run(source: string): Promise<Value>;
@@ -58,7 +57,6 @@ function setup(): Setup {
   const dom = new Dom(host);
   realm.global.put("document", dom.document);
   return {
-    vm,
     doc,
     subscribed,
     async run(source: string): Promise<Value> {

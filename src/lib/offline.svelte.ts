@@ -310,12 +310,7 @@ async function probeDownloads(
   return { urls, total: total > 0 ? total : null };
 }
 
-/**
- * 端末に保存する。**どれを落とすかはここで決める** — エンコード済みのファイルのうち、**AV1 → H.265 → H.264 の
- * 順で、この端末で観られる最初のもの** (`playable`。観る画面と同じ順。`ts/playback.ts` の `ENCODED_ORDER`)。
- * どれも観られなければ断る (保存できても観られないため)。コーデックは置き場の名前で見分ける
- * (H.264 だけでエンコードした録画は主がもう `… [H264].mkv`。AV1 と決めてかかっていた頃は断っていた。#1806)
- */
+/** 端末に保存する。どれを落とすかは `offlineSource` (この端末で観られる最初のエンコード済みファイル。#1806) */
 export async function saveOffline(rec: SaveTarget): Promise<void> {
   const source = await offlineSource(rec, playable);
 

@@ -15,7 +15,7 @@ export const KAKOLOG_LAG = 10 * 60_000;
 /** 1 回に取ってよい長さ */
 const MAX_SPAN = 3 * 24 * 60 * 60_000;
 
-/** `[from, to)` を取る (unix ms)。`to` は `now` で切る。形のずれた行の数も返す */
+/** `[from, to)` を取る (unix ms)。`to` は `now` で切る。形式のずれた行の数も返す */
 export async function fetchKakolog(
   channel: string,
   from: number,
@@ -42,7 +42,7 @@ export async function fetchKakolog(
     const body = (await res.json()) as { packet?: unknown; error?: unknown };
     if (body.error !== undefined) throw new Error(String(body.error));
     if (!Array.isArray(body.packet))
-      throw new Error("過去ログの返事の形が違います");
+      throw new Error("過去ログの返事の形式が違います");
     const read = readPackets(body.packet);
     comments.push(...read.comments.filter((c) => c.at >= start && c.at < stop));
     odd += read.odd;

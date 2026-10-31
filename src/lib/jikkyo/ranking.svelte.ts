@@ -2,18 +2,18 @@ import { resolve } from "$app/paths";
 
 import { type HoldReason, ListHold, parseRanking, rankOrder } from "./ranking";
 
-/** 取りに行く間隔。サーバが NX-Jikkyo の勢いを持つ長さと同じ (細かく呼んでも同じものが返る) */
+/** 取得する間隔。サーバが NX-Jikkyo の勢いを持つ長さと同じ (細かく呼んでも同じものが返る) */
 const EVERY = 30_000;
 
 /**
  * **「実況」タブの勢い** (ライブの局の一覧。docs/screens.md のライブ)。
  *
- * - 取りに行くのは、タブを開いていて、ページが見えている間だけ。30 秒ごとに `GET /api/jikkyo/ranking`。
+ * - 取得するのは、タブを開いていて、ページが見えている間だけ。30 秒ごとに `GET /api/jikkyo/ranking`。
  *   隠れたら止め、見えるようになったらすぐ 1 回取る
  * - **数字が届くたびに勢いの順に並べ直す。** 最初の返事までは番号順で、数字は出さない
  * - **一覧を使っている間 (`hold`) は並べ直しを待つ。** 数字だけ書き換え、離れてから並べ直す (`ListHold`)。
  *   押そうとした行が動いて別の局を選ばないように
- * - 読めないとき (503・繋がらない・形がずれている) は数字を消して番号順に戻し、「いまは勢いを読めません」を出す (通知は出さない)
+ * - 読めないとき (503・繋がらない・形式がずれている) は数字を消して番号順に戻し、「いまは勢いを読めません」を出す (通知は出さない)
  */
 export class JikkyoRanking {
   /** 局ごとの勢い。読めていなければ null (数字を出さない) */
@@ -29,7 +29,7 @@ export class JikkyoRanking {
   private readonly holder = new ListHold(() => this.apply());
   private timer: ReturnType<typeof setTimeout> | null = null;
   private run = 0;
-  /** 取りに行った回。通信中に見え直して次の回が始まったら、前の回の返事は捨てる (取りに行くのを 1 本に保つ) */
+  /** 取得した回。通信中に見え直して次の回が始まったら、前の回の返事は捨てる (取得を 1 本に保つ) */
   private ticks = 0;
 
   /**

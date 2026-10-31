@@ -259,7 +259,7 @@ describe("本チャンネルとサブチャンネル", () => {
     ]);
   });
 
-  test('既定はサブも出す。cookie が "0" (切った) のときだけ隠す', () => {
+  test('既定はサブも出す。cookie が "0" (オフにした) のときだけ隠す', () => {
     expect(storedSubchannels(undefined)).toBe(true);
     expect(storedSubchannels("1")).toBe(true);
     expect(storedSubchannels("0")).toBe(false);

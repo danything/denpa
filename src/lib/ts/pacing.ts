@@ -112,7 +112,7 @@ const GAP_MARGIN = 1.2;
 /** 余裕に足す量 (秒) */
 const GAP_PAD = 0.1;
 
-export interface Buffered {
+interface Buffered {
   /** 持っている中でいちばん古い時刻 */
   start: number;
   /** いちばん新しい時刻 = 放送の今 */
@@ -152,7 +152,7 @@ export interface Buffered {
   steering?: Steering;
 }
 
-export interface Pacing {
+interface Pacing {
   /** ここへ移る。移らないなら null */
   seek: number | null;
   /** ここで再生を始める */

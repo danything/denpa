@@ -9,7 +9,7 @@
  * Mirakurun も同じ切り分けで、ネットワーク4 は DSM-CC を読みに行く
  * (`TSFilter.ts` の `_enableParseDSMCC`)。
  *
- * 道のりが長い。
+ * 手順が長い。
  *
  * 1. PAT から**サービス 929** (エンジニアリングサービス) の PMT を見つける
  * 2. その PMT で `stream_identifier_descriptor` の component_tag が

@@ -148,34 +148,32 @@ function broadcast(): Uint8Array {
 
   const parts: Uint8Array[] = [];
   // 1周だけ。繰り返すと、化けて落ちたセクションを次の周が埋めてしまい、差が見えない
-  for (let round = 0; round < 1; round++) {
-    parts.push(
-      section(0x0000, pat),
-      ...PMT.map((pid, i) => section(pid, pmts[i]!)),
-    );
-    parts.push(
-      section(
-        0x0011,
-        sdtSection(
-          TSID,
-          ONID,
-          SERVICES.map((id) => [id, 0x01, `局${id}`]),
-        ),
+  parts.push(
+    section(0x0000, pat),
+    ...PMT.map((pid, i) => section(pid, pmts[i]!)),
+  );
+  parts.push(
+    section(
+      0x0011,
+      sdtSection(
+        TSID,
+        ONID,
+        SERVICES.map((id) => [id, 0x01, `局${id}`]),
       ),
-    );
-    parts.push(
-      section(
-        0x0010,
-        nitSection(ONID, 5, [[TSID, ONID, SERVICES.map((id) => [id, 0x01])]]),
-      ),
-    );
-    parts.push(tdtPacket(BASE + round * 1000), pcrPacket(VIDEO, round));
-    parts.push(...SERVICES.map((_, i) => section(AIT + i, ait)));
-    for (const [i, body] of [...carousel, ...eits].entries()) {
-      parts.push(section(i < carousel.length ? BML : 0x0012, body));
-      for (let k = 0; k < 4; k++)
-        parts.push(es(k === 0 ? AUDIO : VIDEO, k === 1), filler);
-    }
+    ),
+  );
+  parts.push(
+    section(
+      0x0010,
+      nitSection(ONID, 5, [[TSID, ONID, SERVICES.map((id) => [id, 0x01])]]),
+    ),
+  );
+  parts.push(tdtPacket(BASE), pcrPacket(VIDEO, 0));
+  parts.push(...SERVICES.map((_, i) => section(AIT + i, ait)));
+  for (const [i, body] of [...carousel, ...eits].entries()) {
+    parts.push(section(i < carousel.length ? BML : 0x0012, body));
+    for (let k = 0; k < 4; k++)
+      parts.push(es(k === 0 ? AUDIO : VIDEO, k === 1), filler);
   }
   return stream(...parts);
 }

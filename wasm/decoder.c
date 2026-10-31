@@ -250,7 +250,7 @@ EMSCRIPTEN_KEEPALIVE int audio_push(const uint8_t *data, int len) {
     if (sent < 0) return sent;
     av_frame_unref(audio_frame);
     if (avcodec_receive_frame(audio, audio_frame) != 0) return 0;
-    // `aac` も `opus` も面ごとの float で出す (Web Audio がそのまま受け取る形)。違えば読み違えるので転ばせる
+    // `aac` も `opus` も面ごとの float で出す (Web Audio がそのまま受け取る形式)。違えば読み違えるので転ばせる
     if (audio_frame->format != AV_SAMPLE_FMT_FLTP) return -2;
     int channels = audio_frame->ch_layout.nb_channels;
     if (channels > AUDIO_PLANES) channels = AUDIO_PLANES;

@@ -152,7 +152,7 @@ export function sections<T extends TimelineItem>(items: T[]): Sections<T> {
 export type TimelineLine<T extends TimelineItem> =
   /** 日付の見出し。`at` はその日の 0 時。1日に1つ (今日は線をまたいで1つ) */
   | { kind: "day"; key: string; at: number }
-  /** まとめて表示のときの側の見出し (「予約」「録画」) */
+  /** まとめて表示のときの側の見出し (「これからの予約」「録画」) */
   | { kind: "side"; key: string; zone: "future" | "past" }
   /** 「いま」の線 */
   | { kind: "now"; key: "now" }

@@ -2,17 +2,16 @@
   import { onMount, type Snippet, tick } from "svelte";
 
   import { clock } from "#lib/format.js";
-  import type { Comment } from "#lib/jikkyo/comments.js";
+  import { type Comment, commentKey } from "#lib/jikkyo/comments.js";
+  import { jumped } from "#lib/jikkyo/cursor.js";
   import type { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import {
     airClock,
     atBottom,
     follows,
-    jumped,
     LIST_EVERY,
     LIST_MAX,
     LIST_MAX_LITE,
-    rowKey,
     sameRows,
   } from "#lib/jikkyo/list.js";
   import { ListHold } from "#lib/jikkyo/ranking.js";
@@ -131,7 +130,7 @@
         )}
       onfocusout={() => hold.set("focus", false)}
     >
-      {#each rows as comment (rowKey(comment))}
+      {#each rows as comment (commentKey(comment))}
         {@const where = place?.(comment.at)}
         {@const to = typeof where === "number" && seek ? where : null}
         <!--

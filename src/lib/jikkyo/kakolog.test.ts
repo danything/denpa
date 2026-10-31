@@ -98,7 +98,7 @@ describe("fetchKakolog", () => {
     ).rejects.toThrow("不正です");
   });
 
-  test("形のずれた行は飛ばして数える", async () => {
+  test("形式のずれた行は飛ばして数える", async () => {
     const { get } = fake(() => ({
       packet: [chat(T, "a"), { chat: { content: "時刻が無い" } }],
     }));

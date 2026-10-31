@@ -17,7 +17,7 @@ export type PlayCodec = "h264" | "hevc" | "av1" | "mpeg2";
  *   詰め替えるだけ、違えばエンコードし直す。シークは `from` を変えてリクエストし直す
  * - `raw` … 元の TS を飛び先から流す (`/stream?codec=mpeg2`)。画面が自分で再生する
  */
-export type PlayWay = "file" | "stream" | "raw";
+type PlayWay = "file" | "stream" | "raw";
 
 /** 配るファイルの名指し (`#lib/source.ts` の `FileSource` のうち、エンコード済み) */
 export type EncodedSource = "encoded" | "hevc" | "alt";
@@ -132,7 +132,7 @@ function playsFile(offer: PlayOffer, can: MediaAbility): boolean {
 }
 
 /** MSE に渡す型 */
-export function streamType(offer: PlayOffer): string {
+function streamType(offer: PlayOffer): string {
   return `video/mp4; codecs="${offer.codecs ?? ""}"`;
 }
 

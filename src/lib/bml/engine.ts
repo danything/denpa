@@ -104,7 +104,7 @@ export interface BmlOptions {
   /** 待っているモジュールがあるか (データ取得中) */
   onReceiving?: (receiving: boolean) => void;
   /** 文書が替わった */
-  onLoad?: (plane: Plane, path: string) => void;
+  onLoad?: (plane: Plane) => void;
   /**
    * 文書が別の局へ選局したい (epgTune)。**選局するのは呼び手** — 受けたら true (文書はここで
    * 閉じる)、できなければ false (文書には失敗を返す)。無ければいつも失敗。
@@ -138,14 +138,12 @@ export interface Bml {
   key(code: number, down: boolean): void;
   /** 今の文書がその種類の beitem を subscribe しているか */
   listens(type: string): boolean;
-  setReceiverInfo(info: Partial<ReceiverInfo>): void;
   /** 押したままのキーを忘れる (窓のフォーカスが外れて keyup が来ないとき) */
   releaseKeys(): void;
   /** いまの局と番組 (放送の programInfo)。Hybridcast のアプリに渡す */
   program(): ProgramInfoMessage | null;
   /** Greg (64 本。局が変わっても消えない)。Hybridcast のアプリと共有する (`hybridcast/compat.ts`) */
   readonly greg: string[];
-  readonly plane: Plane;
   /** 切り分け用 (今の文書の名前) */
   readonly path: string | null;
   /** 開いた (`opened` が真になった)。自動起動でない入口を待たせていれば、ここで始める */
@@ -382,16 +380,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     });
   }
 
-  setReceiverInfo(info: Partial<ReceiverInfo>): void {
-    this.receiver = { ...this.receiver, ...info };
-  }
-
   releaseKeys(): void {
     this.held = null;
-  }
-
-  get plane(): Plane {
-    return this.size;
   }
 
   get path(): string | null {
@@ -904,7 +894,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.renderer = new Renderer(this.shadow, doc, this, (rect) =>
       this.options.onVideoRect?.(rect, this.size),
     );
-    this.options.onLoad?.(this.size, path);
+    this.options.onLoad?.(this.size);
     this.setHidden(body?.attr("invisible") === "invisible");
     this.screenLocked = false;
     this.renderer.draw(true);

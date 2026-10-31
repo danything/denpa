@@ -3,7 +3,7 @@
  *
  * 画面は放送時刻 `W` (いま映しているコマの放送時刻。ライブは `clock` の通知、録画は `ts_head` と再生位置から) を
  * 渡して `take` を呼び、返ってきたものを流す (`JikkyoLayer`)。出し方は `cursor.ts`。
- * コメントの出どころ (NX-Jikkyo・過去ログ API) と控えはここが持つ。どこから埋めるかは docs/watch.md の「実況」
+ * コメントの出どころ (NX-Jikkyo・過去ログ API) と控えはここが持つ。どこから埋めるかは docs/watch.md の「実況のコメント」
  */
 import { type PostStyle, postStyle } from "./command";
 import type { Comment } from "./comments";
@@ -19,7 +19,7 @@ const KAKOLOG_RETRY = 60_000;
 /** 過去ログにまだ入りきっていないところを取り足す間隔 (過去ログは 5 分おきに集めている) */
 const KAKOLOG_REFRESH = 5 * 60_000;
 
-/** 形のずれは端末ごとに 1 回だけ言う (NX-Jikkyo や過去ログ API のバージョンが変わったときに気付けるように) */
+/** 形式のずれは端末ごとに 1 回だけ言う (NX-Jikkyo や過去ログ API のバージョンが変わったときに気付けるように) */
 let warned = false;
 function warnShape(what: string): void {
   if (warned) return;
@@ -103,7 +103,7 @@ export class JikkyoFeed {
         try {
           const got = await fetchKakolog(channel, start, stop);
           if (run !== this.kakologRun) return;
-          if (got.odd > 0) warnShape("過去ログの返事の形が一部違います");
+          if (got.odd > 0) warnShape("過去ログの返事の形式が一部違います");
           this.cursor.receive(got.comments, [start, Math.min(stop, settled)]);
         } catch {
           ok = false;

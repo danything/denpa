@@ -200,7 +200,7 @@ export interface SynthSeries {
  * expire_date(16) / episode_number(12) last_episode_number(12) / series_name_char。
  * 有効期限は載せない (flag 0、日付は全ビット1)
  */
-export function seriesDescriptor(series: SynthSeries): number[] {
+function seriesDescriptor(series: SynthSeries): number[] {
   const episode = series.episode ?? 0;
   const last = series.lastEpisode ?? 0;
   const body = [

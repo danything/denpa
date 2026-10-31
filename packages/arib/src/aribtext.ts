@@ -44,7 +44,6 @@ interface Charset {
     | "kanji"
     | "plane1"
     | "plane2"
-    | "symbol"
     | "alnum"
     | "hiragana"
     | "katakana"
@@ -73,7 +72,7 @@ const CHARSETS = new Map<number, Charset>([
   [0x42, KANJI],
   [0x39, { bytes: 2, kind: "plane1" }], // JIS互換漢字1面
   [0x3a, { bytes: 2, kind: "plane2" }], // JIS互換漢字2面
-  [0x3b, { bytes: 2, kind: "symbol" }], // 追加記号
+  [0x3b, KANJI], // 追加記号 (漢字集合と同じ表を引く)
   [0x4a, ALNUM],
   [0x30, HIRAGANA],
   [0x31, KATAKANA],
@@ -276,7 +275,7 @@ export function decodeAribText(data: Uint8Array): string {
       else if (byte === NSZ) half = false;
       else if (byte === SZX) half = data[at] === SZX_TINY;
       let params = C1_PARAMS.get(byte) ?? 0;
-      // COL と CDC は「色を直に指定する」形のときだけ引数が1つ増える
+      // COL と CDC は「色を直に指定する」形式のときだけ引数が1つ増える
       if ((byte === 0x90 || byte === 0x92) && data[at] === 0x20) params = 2;
       at += params;
       continue;
