@@ -5,7 +5,7 @@ import type { Fmp4Sample } from "#lib/ts/fmp4.js";
 import { MkvDemuxer } from "#lib/ts/mkv-media.js";
 
 import { mkvFromClip } from "../../../tests/fake/mkv-clip";
-import type { Fmp4Video } from "./fmp4";
+import { type Fmp4Video, jumped } from "./fmp4";
 import { MkvInput } from "./mkv";
 
 /**
@@ -54,6 +54,47 @@ describe("MkvInput", () => {
     // 2度言われても同じものは出さない
     input.finish();
     expect(video.length).toBe(videoAt.length);
+  });
+
+  /*
+   * **B フレームのある H.264 (x264 の既定) で、dts が1コマずつ進む。** 29.97 コマ・160x90・3秒を
+   * `ffmpeg -c:v libx264 -preset medium` で焼いた Matroska (`tests/fake/x264-bframes.mkv`)。
+   * 先の数枚の最小をそのまま dts にしていた頃は、dts が止まったり跳んだりして受け取る側が「時刻が飛んだ」と
+   * 見なし (`jumped`)、90 コマ中 86 コマをキーフレームまで捨てていた (iPhone で真っ黒のまま音だけ進んだ)
+   */
+  test("B フレームがあっても dts は1コマずつ進み、受け取る側に捨てられない", () => {
+    const mkv = new Uint8Array(
+      readFileSync(
+        new URL("../../../tests/fake/x264-bframes.mkv", import.meta.url),
+      ),
+    );
+    const video: Fmp4Sample[] = [];
+    const target = {
+      configure: () => {},
+      push: (samples: readonly Fmp4Sample[]) => {
+        video.push(...samples);
+      },
+    } as unknown as Fmp4Video;
+    const input = new MkvInput(target);
+    input.feed(mkv);
+    input.finish();
+    expect(video.length).toBe(90);
+    // 見せる順と違う (B フレームがある) ことを先に確かめる。無ければこの試験は何も見ていない
+    expect(video.some((s, i) => i > 0 && s.pts < video[i - 1]!.pts)).toBe(true);
+    // 時刻の刻みは 1ms。90kHz に直してから比べる (`Fmp4Video.push`)
+    const ticks = (ms: number) => Math.round(ms * 90);
+    for (const [i, sample] of video.entries()) {
+      expect(sample.dts).toBeLessThanOrEqual(sample.pts);
+      if (i === 0) continue;
+      const before = video[i - 1]!;
+      expect(
+        jumped(
+          ticks(before.dts + before.duration),
+          ticks(sample.dts),
+          ticks(sample.duration),
+        ),
+      ).toBe(false);
+    }
   });
 
   test("飛んだら (reset) 待たせていたものは捨てる", () => {

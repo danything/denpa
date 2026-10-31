@@ -143,15 +143,19 @@
   /**
    * 端末に保存する ([docs/offline.md](../../docs/offline.md))。落とすものは
    * `saveOffline` が決める (AV1 → H.265 → H.264 のうち、端末で観られる最初のもの)。
-   * Background Fetch ならタブを閉じても続くので、押したら詳細は閉じる
+   * 始めたら返ってくる (ページで受け取るときも終わりは待たない) ので、押したら詳細は閉じる
    */
   async function saveToDevice(rec: Rec): Promise<void> {
     try {
-      await saveOffline(rec);
+      const how = await saveOffline(rec);
       offlineNote = {
         key: `offline-save-${rec.id}`,
         kind: "info",
-        text: `端末への保存を始めました: ${rec.name}`,
+        // ページで受け取るブラウザ (Safari など) は、閉じると止まる
+        text:
+          how === "page"
+            ? `端末への保存を始めました (終わるまでこのページを開いたままにしてください): ${rec.name}`
+            : `端末への保存を始めました: ${rec.name}`,
       };
     } catch (error) {
       offlineNote = {

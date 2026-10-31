@@ -8,9 +8,14 @@
  *
  * - トラックの形式 (`ts/mkv-media.ts` の `asFmp4Track`) を渡す。音は選んだ1本だけ (`audio`。何本目か)
  * - **デコードする順の時刻 (dts) を起こす。** Matroska のコマが持つのは見せる時刻だけで、H.264 の B フレームは
- *   順が入れ替わる。デコードする順に並んだコマの先 `REORDER` 枚の見せる時刻のうち、いちばん早いものを
- *   そのコマの dts にする (見せる時刻を並べ直したものに近くなる)。そのぶん渡すのが数コマ遅れるので、
- *   尻まで読んだら残りを出しきる (`finish`)
+ *   順が入れ替わる。デコードする順に並んだコマの先 `REORDER` 枚の見せる時刻を溜めておき、**まだ使っていない
+ *   いちばん早いものを1つずつ使う** (見せる時刻を並べ直したものになる。`REORDER` コマぶん手前にずらして、
+ *   見せる時刻より後にならないようにする)。そのぶん渡すのが数コマ遅れるので、尻まで読んだら残りを出しきる (`finish`)
+ *
+ *   **同じ時刻を2度使わない。** 先の数枚の最小をそのまま使っていた頃は、B フレームのところで dts が
+ *   止まったり2コマ跳んだりした (`0,33,67,100,100,133,200`)。受け取る側は dts が前のコマ + 1コマから
+ *   外れると「時刻が飛んだ」としてキーフレームまで捨てる (`fmp4.ts` の `queue`) ので、29.97 コマの
+ *   H.264 (x264 の既定は B フレームあり) は 600 コマ中 584 コマ捨てられ、真っ黒のまま音だけ進んでいた
  */
 
 import type { Fmp4Sample } from "#lib/ts/fmp4.js";
@@ -31,6 +36,8 @@ export class MkvInput {
   private frame = 1;
   /** dts を決めかねて待たせている映像のコマ (デコードする順) */
   private held: MkvBlock[] = [];
+  /** 待たせているコマの見せる時刻のうち、まだ dts に使っていないもの (数は `held` と同じ) */
+  private times: number[] = [];
 
   /**
    * @param target 渡す先 (fMP4 の経路)
@@ -52,6 +59,7 @@ export class MkvInput {
     this.video = null;
     this.audio = null;
     this.held = [];
+    this.times = [];
   }
 
   feed(bytes: Uint8Array): void {
@@ -88,6 +96,7 @@ export class MkvInput {
         });
       } else if (block.track === this.video) {
         this.held.push(block);
+        this.times.push(block.at);
         if (this.held.length > REORDER) samples.push(this.release());
       }
     }
@@ -104,10 +113,12 @@ export class MkvInput {
     if (samples.length > 0) this.target.push(samples);
   }
 
-  /** 待たせている頭の1枚を、dts を付けて出す */
+  /** 待たせている頭の1枚を、dts を付けて出す (まだ使っていないいちばん早い見せる時刻。上の説明) */
   private release(): Fmp4Sample {
     const block = this.held.shift() as MkvBlock;
-    const dts = Math.min(block.at, ...this.held.map((b) => b.at));
+    const earliest = Math.min(...this.times);
+    this.times.splice(this.times.indexOf(earliest), 1);
+    const dts = earliest - REORDER * this.frame;
     return {
       track: block.track,
       dts,

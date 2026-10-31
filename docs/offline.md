@@ -34,10 +34,17 @@
 足したのは Background Fetch の受け取りとオフラインの入口だけで、
 `/offline` を install 時に控えて、ナビゲーションが繋がらないときの行き先にします
 (ブラウザのダウンロード表示を押したときも `backgroundfetchclick` で `/offline` を開く)。
+繋がらないときは**どの画面を開いても `/offline` へ移す** (その URL のまま入口の HTML を返すと、
+殻がその URL の画面として始まり、データを取りに行って転ぶ)。入口は SSR を切った殻で、開くたびに
+共通の枠のデータ (`/offline/__data.json`。ログインの控えなど) を取りに行くので、これも一緒に控えて
+繋がらないときだけ出す。控えていなかった頃は、電波が無いと真っ白な画面になっていた。
+「繋がらない」は失敗だけでなく**待ちすぎも含む** — 端末が繋がっていないと言うなら取りに行かず、
+10秒返事が無ければ見切って、その後30秒は取りに行かない。iPhone の Safari は機内モードで、
+取りに行ったものが失敗せず返事待ちのまま止まることがあり、いつまでも読み込み中になっていた。
 
 ## データモデル (IndexedDB)
 
-DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
+DB 名 `denpa-offline`、ストア4つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
 
 - `videos` (key: 録画ID) … 保存した録画1本。`video: Blob` と付属のデータ
   (`captionText`: `captions.json` の JSON・`poster: Blob`・`chapters`/`databroadcast`: JSON) を1行にまとめ、
@@ -46,6 +53,11 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 - `outbox` (key: 録画ID) … オンライン復帰で処理する予約 (`{op: 'delete', name, queuedAt}`)。
 - `resume` (key: 録画ID) … オフライン中に進んだ視聴位置。復帰時にまとめて
   `POST /api/recordings/<id>/resume` で送る。
+- `parts` (key: `[録画ID, 番号]`) … ページで受け取った動画の塊 (16MiB ずつ。下記の 5)。
+  その録画の `videos` の行は `video` の代わりに塊の数 (`parts`) と形式 (`videoType`) を持つ。
+  **読むときは `videos.get` / `all` が塊を1本の `video` につないで出す**ので、観る画面・`/offline`・SW は
+  塊を知らなくてよい (つないでも中身は写さない。置き場の Blob はファイルを指しているだけ)。
+  塊が欠けていたら `video` 無しとして扱い、消すときは塊も消す。DB の版は 2 (1 で保存したものはそのまま読める)。
 
 `state` は `'downloading' | 'ready' | 'failed'` の3つ。**失敗は消さずに残す。**
 通知 (トースト) は一瞬なので、控えごと消すと無かったことに見える。残った行がそのまま
@@ -57,7 +69,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 
 ### ダウンロード — Background Fetch API を使う
 
-1. **HEAD で下見してから預ける** (`probeDownloads`)。Background Fetch は
+1. **HEAD で下見してから預ける** (`probeDownloads`。一度に訊く)。Background Fetch は
    404 が1つでも混ざると全体が失敗になる (`failureReason: bad-status`) ので、付属のデータは
    在るものだけに絞る。`downloadTotal` を超えても打ち切られるので、HEAD の実測合計 (+2%) を渡す。
    どちらも実機の Edge で踏んだ。
@@ -73,7 +85,19 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    開き直したときは、「保存中」なのにブラウザ側にダウンロードが無ければ失敗に倒す (`watchRunning`)。
 5. 対応していないブラウザ (Safari / Firefox) はページ主導の fetch にフォールバック
    (タブを開いたまま。進捗は一覧の行の3段目に出す)。機能検出は
-   `'backgroundFetch' in swReg`。仕分けは SW の受け取りと共有 (`storeResponse`)。
+   `'backgroundFetch' in swReg`。付属のデータの仕分けは SW の受け取りと共有 (`storeResponse`)。
+   - **始めたら返る** (`saveOffline` は受け取り終わりを待たない)。押したらすぐ「保存中」にし、
+     下見は動画だけ (付属のデータは受け取るときに無ければ飛ばす。下見はサーバで録画を読む —
+     字幕は ffmpeg、チャプターは ffprobe — ので、1つずつ訊いていた頃は始まるまで数秒待たせていた)。
+     付属のデータは動画と同時に取りに行く。途中の失敗は `state='failed'` で残し、塊は捨てる
+   - 取り消し・削除は受け取りも止める。開き直したときに「保存中」なのに受け取っていない行は失敗に倒す
+     (ページを閉じた・読み込み直した時点で止まっている。`watchRunning`)
+   - **動画は 16MiB の塊ごとに `parts` へ書きながら受け取る** (`stream-parts.ts`)。全部をメモリに
+     溜めてから1つの Blob にしていた頃は、900MB の録画で iPhone の Safari のタブがだんだん重くなり、
+     最後は落とされて読み込み直しになっていた。書いている間も次の塊を受け取る (書き込みは1つずつ)
+   - **割合の分母は、返事に `Content-Length` が無ければ下見 (HEAD) の大きさ。** Cloudflare など
+     間に入るものが外して送ることがあり、そのときは割合が出ず流れるだけの表示になっていた。
+     割合は 1% 変わったときだけ書き換える (届くたびに一覧を描き直さない)
 
 ### どれを保存するか — 端末がデコードできるコーデック
 
@@ -81,7 +105,9 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 この端末で観られる最初のもの**を保存する (観る画面と同じ順。`offline-db.ts` の `offlineSource`)。コーデックは置き場の名前で
 見分ける (`… [H265].mkv`・`… [H264].mkv`。H.264 だけでエンコードした録画は主がもう H.264)。
 
-- AV1 … `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の `supported`)。AV1 の Matroska は WebM としても読める
+- AV1 … `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.0.09M.08` を 1080p60 で問うた `supported`)。
+  AV1 の Matroska は WebM としても読める。**Level は 4.1** — 4.0 は 30fps までで、Safari は Level と
+  コマ数を突き合わせて「デコードできない」と答える
 - H.265 … 同じく `hvc1.…` でデコードできて、**しかも `canPlayType` が Matroska の H.265 を読めると言うとき**。保存するのは
   Matroska のままで、WebM に H.265 は入れられないので、デコーダがあっても入れ物を読めない端末 (Safari など) がある
 - H.264 … 確かめない (どの端末もデコードできる前提)
@@ -97,6 +123,11 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
   互換モードでは保存した Matroska をそのまま canvas に描く (`mkv-source.ts`。[stream.md](stream.md#録画の観る画面も-canvas-に描く))。
 - **オフラインの `/offline`** は素の `<video controls>` で、動画だけを流す
   (字幕・チャプター・データ放送は保存してあっても使わない)。位置は5秒ごとに `resume` ストアへ。
+  **`<video>` に断られたら canvas に描く** (観る画面の互換モードと同じエンジン。`canvas-player.ts`・`mkv-source.ts`)。
+  保存したものは Matroska で、iPhone の Safari の `<video>` は Matroska を読めない (再生ボタンに斜線が出るだけだった)。
+  読めるかは前もって聞いても当てにならない (Chrome は再生できるのに `canPlayType` は読めないと答える) ので、渡して
+  `error` が来たら移る。canvas のときは再生・一時停止・位置のつまみ・時刻を自前で出す。音のデコーダ
+  (`/api/live/mpeg2/decoder.{mjs,wasm}`) は SW が install 時に控え、繋がらないときは控えから出す (`/api/` で唯一控えるもの)
 - 使い終わったら `URL.revokeObjectURL` する。
 
 ### 削除とサーバ同期

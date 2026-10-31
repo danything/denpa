@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
 
   import { arming } from "#lib/arming.svelte.js";
-  import { dateTime, durationMs, percent, size } from "#lib/format.js";
+  import type { CanvasPlayer } from "#lib/canvas-player.js";
+  import { clock, dateTime, durationMs, percent, size } from "#lib/format.js";
   import { type OfflineVideo, resumeQueue, videos } from "#lib/offline-db.js";
   import {
     offline,
@@ -18,6 +19,11 @@
    * プレイヤーはこの画面に内蔵する。オフラインでは /watch/<id> へは行けない
    * (あの画面はサーバが組む) ので、ここで直接観られるようにしておく。
    * オンラインで観るぶんには従来どおり /watch が端末のコピーを使う。
+   *
+   * **`<video>` で読めなければ canvas に描く** (観る画面の互換モードと同じエンジン。`canvas-player.ts`・
+   * `mkv-source.ts`)。保存したものは Matroska で、iPhone の Safari の `<video>` は Matroska を読めない
+   * (再生ボタンに斜線が出るだけだった)。読めるかは前もって聞いても当てにならない (Chrome は Matroska を
+   * 再生できるのに `canPlayType` は読めないと答える) ので、`<video>` に渡して断られたら移る
    */
 
   let list = $state<OfflineVideo[]>([]);
@@ -28,6 +34,24 @@
   let src = $state<string | null>(null);
   let poster = $state<string | null>(null);
   let video = $state<HTMLVideoElement | null>(null);
+  /** 観はじめる位置 (秒)。前回の続き */
+  let startAt = 0;
+  /** 何本目に観はじめたものか。読み込みを待つ間に閉じた・別のものを観はじめたら、遅れて来た結果を捨てる */
+  let session = 0;
+
+  /** canvas に描いているとき (`<video>` に断られた)。描きはじめるまでは `drawn` が null */
+  let canvasMode = $state(false);
+  let drawn = $state<CanvasPlayer | null>(null);
+  let stage = $state<HTMLElement | null>(null);
+  let drawnAt = $state(0);
+  let drawnLength = $state(0);
+  let drawnPaused = $state(false);
+  let drawnMuted = $state(false);
+  let drawnWaiting = $state(false);
+  /** 位置のつまみを動かしている間の値。離したら飛ぶ */
+  let scrub = $state<number | null>(null);
+  /** 観られなかった理由 */
+  let problem = $state<string | null>(null);
   /**
    * 消すのは2回押し。挙動はほかの画面と共通 ([arming.svelte.ts](../../lib/arming.svelte.ts))。
    * サーバからも消えることが分かる言葉で聞き返す
@@ -52,6 +76,13 @@
   });
 
   function stop(): void {
+    session += 1;
+    drawn?.destroy();
+    drawn = null;
+    canvasMode = false;
+    drawnWaiting = false;
+    scrub = null;
+    problem = null;
     if (src !== null) URL.revokeObjectURL(src);
     if (poster !== null) URL.revokeObjectURL(poster);
     src = null;
@@ -68,18 +99,118 @@
       item.poster === undefined ? null : URL.createObjectURL(item.poster);
     // 前回の続きから。オフライン中の位置は resumeQueue に覚えている
     const kept = await resumeQueue.get(item.id);
-    if (kept !== undefined && video !== null) video.currentTime = kept.at;
+    startAt = kept?.at ?? 0;
+    if (video !== null) video.currentTime = startAt;
+  }
+
+  /** `<video>` に断られた (読めない入れ物・形式)。canvas に描く */
+  async function fallBack(): Promise<void> {
+    const item = playing;
+    if (item?.video === undefined || canvasMode) return;
+    const mine = session;
+    const at = video?.currentTime || startAt;
+    canvasMode = true;
+    if (src !== null) URL.revokeObjectURL(src);
+    src = null;
+    const [{ canvasPlayer }, { openMkv }, { canvasSupport }] =
+      await Promise.all([
+        import("#lib/canvas-player.js"),
+        import("#lib/mkv-source.js"),
+        import("#lib/raw/support.js"),
+      ]);
+    const [source, support] = await Promise.all([
+      openMkv(item.video).catch(() => null),
+      canvasSupport(),
+    ]);
+    if (mine !== session) return;
+    if (source?.codec == null) {
+      problem = "この録画を読み込めませんでした";
+      return;
+    }
+    if (!support[source.codec]) {
+      problem = `この端末では再生できません (${source.codec === "av1" ? "AV1" : "H.264"} を描けません)`;
+      return;
+    }
+    await tick();
+    if (mine !== session || stage === null) return;
+    const length = source.duration ?? (item.durationMs ?? 0) / 1000;
+    const close = (reason: string) => {
+      drawn?.destroy();
+      drawn = null;
+      problem = reason;
+    };
+    try {
+      drawn = canvasPlayer({
+        host: stage,
+        before: null,
+        input: "mkv",
+        request: (from) => Promise.resolve(source.request(from)),
+        duration: length,
+        // Blob は読むのが速すぎる。観ている位置の少し先までしか読まない (`canvas-player.ts` の `room`)
+        ...(length > 0 ? { bytesPerSecond: item.video.size / length } : {}),
+        start: at >= length - 1 ? 0 : at,
+        audio: "0",
+        /*
+         * **「再生する音」として鳴らす。** そうしないと iPhone は消音スイッチで Web Audio を黙らせる
+         * (`<video>` は消音スイッチでも鳴る)。押して観はじめたものなので、`<video>` と同じに扱う
+         */
+        background: true,
+        paused: false,
+        state: (state) => {
+          if (state === "failed") close("録画を読み込めませんでした");
+        },
+        gaveUp: (reason) => close(`再生できませんでした (${reason})`),
+        remote: (stop) => (stop ? drawn?.pause() : drawn?.play()),
+        waiting: (on) => (drawnWaiting = on),
+        ended: () => (drawnPaused = true),
+        tick: drawnTick,
+      });
+    } catch (error) {
+      problem = `再生を始められませんでした (${error instanceof Error ? error.message : String(error)})`;
+      return;
+    }
+    drawnLength = length;
+    drawnAt = drawn.currentTime;
+    drawnPaused = drawn.paused;
+    drawnMuted = false;
+  }
+
+  /** canvas の刻み。位置を映し、覚える */
+  function drawnTick(): void {
+    if (drawn === null) return;
+    drawnAt = drawn.currentTime;
+    drawnPaused = drawn.paused;
+    // 自動再生で断られて音を出せていない。消音にしておき、押して出してもらう (観る画面と同じ)
+    if (!drawnMuted && drawn.blocked && !drawn.paused) {
+      drawnMuted = true;
+      drawn.mute(true);
+    }
+    remember(drawnAt, drawnLength);
+  }
+
+  function toggleDrawn(): void {
+    if (drawn === null) return;
+    if (drawn.paused) drawn.play();
+    else drawn.pause();
+    drawnPaused = drawn.paused;
+  }
+
+  function unmuteDrawn(): void {
+    drawn?.mute(false);
+    drawnMuted = false;
   }
 
   /** 視聴位置を覚える (数秒おき)。オンラインに戻ったときにまとめて送る */
   let lastKept = 0;
-  function onTime(): void {
-    if (playing === null || video === null) return;
-    const at = video.currentTime;
+  function remember(at: number, length: number): void {
+    if (playing === null) return;
     if (Math.abs(at - lastKept) < 5) return;
     lastKept = at;
     // 落としたものはエンコードしたもの
-    void rememberResume(playing.id, at, video.duration || 0, "encoded");
+    void rememberResume(playing.id, at, length, "encoded");
+  }
+  function onTime(): void {
+    if (video !== null) remember(video.currentTime, video.duration || 0);
   }
 
   async function remove(item: OfflineVideo): Promise<void> {
@@ -121,18 +252,64 @@
     <strong>次にオンラインに戻ったとき、サーバの録画も消えます</strong>。
   </p>
 
-  {#if playing !== null && src !== null}
+  {#if playing !== null}
     <div class="player">
-      <!-- svelte-ignore a11y_media_has_caption -->
-      <video
-        bind:this={video}
-        {src}
-        poster={poster ?? undefined}
-        controls
-        autoplay
-        playsinline
-        ontimeupdate={onTime}
-      ></video>
+      {#if !canvasMode && src !== null}
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <video
+          bind:this={video}
+          {src}
+          poster={poster ?? undefined}
+          controls
+          autoplay
+          playsinline
+          ontimeupdate={onTime}
+          onerror={fallBack}
+        ></video>
+      {:else if canvasMode}
+        <!-- canvas はエンジンがここに入れる (`canvas-player.ts`) -->
+        <div class="stage" bind:this={stage} data-testid="offline-stage">
+          {#if problem === null && (drawn === null || drawnWaiting)}
+            <span class="loading small">読み込んでいます…</span>
+          {/if}
+        </div>
+        {#if drawn !== null}
+          <div class="controls">
+            <button
+              type="button"
+              class="ghost small"
+              onclick={toggleDrawn}
+              data-testid="offline-toggle"
+            >
+              {drawnPaused ? "再生" : "一時停止"}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max={Math.max(1, Math.floor(drawnLength))}
+              step="1"
+              value={scrub ?? drawnAt}
+              aria-label="再生位置"
+              oninput={(event) => (scrub = Number(event.currentTarget.value))}
+              onchange={(event) => {
+                drawn?.seek(Number(event.currentTarget.value));
+                scrub = null;
+              }}
+            />
+            <span class="clock tiny muted">
+              {clock(scrub ?? drawnAt)} / {clock(drawnLength)}
+            </span>
+            {#if drawnMuted}
+              <button type="button" class="ghost small" onclick={unmuteDrawn}>
+                音を出す
+              </button>
+            {/if}
+          </div>
+        {/if}
+      {/if}
+      {#if problem !== null}
+        <p class="problem small text-error" role="alert">{problem}</p>
+      {/if}
       <div class="player-bar">
         <span class="name truncate small broadcast">{playing.name}</span>
         <button type="button" class="ghost xs" onclick={stop}>閉じる</button>
@@ -245,6 +422,41 @@
     width: 100%;
     border-radius: var(--dp-radius);
     background: var(--dp-video);
+  }
+  /* canvas の入れ物。canvas は中いっぱいに置かれる (`raw/engine.ts`) */
+  .stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--dp-radius);
+    background: var(--dp-video);
+  }
+  .loading {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    color: var(--dp-on-video);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .controls input[type="range"] {
+    min-width: 0;
+    flex: 1 1 0%;
+    margin: 0;
+  }
+  .clock {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .problem {
+    margin: 0.25rem 0 0;
   }
   .player-bar {
     display: flex;

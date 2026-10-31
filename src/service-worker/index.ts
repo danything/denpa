@@ -43,6 +43,57 @@ const SHELL = [
  * install のたびに取り直す
  */
 const OFFLINE_PAGE = resolve("offline");
+/**
+ * 入口が始まるときに読むデータ (共通の枠の `+layout.server.ts`。ログインの控えなど)。
+ * **入口は SSR を切った殻なので、開くたびにこれをサーバへ取りに行く** — 控えていなかった頃は
+ * 電波が無いとここで転び、真っ白な画面になっていた。入口と一緒に控え、繋がらないときだけ出す
+ */
+const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
+/**
+ * 音 (と MPEG-2) をデコードする WebAssembly (`routes/api/live/mpeg2`。`raw/worker.ts` が読む)。
+ * **入口で保存した録画を canvas に描くとき要る** — iPhone の Safari は保存した Matroska を `<video>` で
+ * 読めないので、入口は観る画面の互換モードと同じエンジンで描く (`offline/+page.svelte`)。
+ * `/api/` は素通しなので、控えていなかった頃は電波が無いと「音声を再生できません」で止まっていた。
+ * 中身はイメージごとに変わる (URL は同じ) ので、入口と同じく install のたびに取り直し、サーバ優先で出す
+ */
+const DECODER = ["decoder.mjs", "decoder.wasm"].map(
+  (file) => `${resolve("")}api/live/mpeg2/${file}`,
+);
+
+/**
+ * 画面と入口のデータをサーバへ取りに行く。**繋がらないと分かっていれば待たず、返事が来なければ見切る。**
+ *
+ * iPhone の Safari は機内モードで、取りに行ったものが失敗せずに返事待ちのまま止まることがあり、
+ * 入口へ移れずにいつまでも読み込み中になっていた。電波の弱いところで繋がりかけのまま止まるのも同じ。
+ * 端末が繋がっていないと言うなら取りに行かず、10秒返事が無ければ繋がらないものとして扱う
+ * (ふだんの画面は Celeron でも数秒で返る)。
+ *
+ * **見切ったら、しばらく (30秒) は取りに行かない。** 開いた画面 → 入口へ移る → 入口のデータ、と
+ * 続けて取りに行くので、毎回待つと 10秒 × 3 待たせていた
+ */
+const NETWORK_WAIT = 10_000;
+const GIVE_UP_FOR = 30_000;
+let unreachableUntil = 0;
+function fromNetwork(request: Request): Promise<Response> {
+  if (!worker.navigator.onLine || Date.now() < unreachableUntil)
+    return Promise.reject(new Error("繋がっていません"));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unreachableUntil = Date.now() + GIVE_UP_FOR;
+      reject(new Error("返事がありません"));
+    }, NETWORK_WAIT);
+    fetch(request).then(
+      (response) => {
+        clearTimeout(timer);
+        resolve(response);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
 
 worker.addEventListener("install", (event) => {
   event.waitUntil(
@@ -50,6 +101,9 @@ worker.addEventListener("install", (event) => {
       await cache.addAll(SHELL);
       // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
       await cache.add(OFFLINE_PAGE).catch(() => {});
+      await cache.add(OFFLINE_DATA).catch(() => {});
+      // 組んでいない denpa もある (無ければ 404)。入口で描けないだけなので諦める
+      await Promise.all(DECODER.map((url) => cache.add(url).catch(() => {})));
     }),
   );
   void worker.skipWaiting();
@@ -75,8 +129,19 @@ worker.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
+  // デコーダはサーバ優先、繋がらなければ控え (`DECODER`)
+  if (DECODER.includes(url.pathname)) {
+    event.respondWith(
+      fromNetwork(request).catch(
+        async () =>
+          (await caches.match(url.pathname, { ignoreVary: true })) ??
+          Response.error(),
+      ),
+    );
+    return;
+  }
   /*
-   * API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
+   * ほかの API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
    * どちらもキャッシュに載せると壊れる
    */
   if (url.pathname.startsWith(`${resolve("")}api/`)) return;
@@ -88,10 +153,29 @@ worker.addEventListener("fetch", (event) => {
    */
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const fallback = await caches.match(OFFLINE_PAGE);
-        return fallback ?? Response.error();
+      fromNetwork(request).catch(async () => {
+        const page = await caches.match(OFFLINE_PAGE);
+        if (page === undefined) return Response.error();
+        /*
+         * **入口へ移す** (その場で入口の HTML を返さない)。殻は開いた URL の画面として
+         * 始まるので、`/` のまま返すと一覧の画面を組もうとしてデータを取りに行き、転んでいた
+         */
+        if (url.pathname !== OFFLINE_PAGE)
+          return Response.redirect(new URL(OFFLINE_PAGE, location.origin));
+        return page;
       }),
+    );
+    return;
+  }
+
+  // 入口のデータはサーバ優先 (ログインの控えが変わる)。繋がらなければ控え
+  if (url.pathname === OFFLINE_DATA) {
+    event.respondWith(
+      fromNetwork(request).catch(
+        async () =>
+          (await caches.match(OFFLINE_DATA, { ignoreSearch: true })) ??
+          Response.error(),
+      ),
     );
     return;
   }
