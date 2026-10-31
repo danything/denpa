@@ -305,8 +305,8 @@
     --c-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 40px rgb(0 0 0 / 0.45);
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.5rem;
+    gap: var(--dp-space-1);
+    margin-bottom: var(--dp-space-2);
     color: var(--c-fg);
   }
   .compose.in-list {
@@ -330,8 +330,9 @@
   .pick {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+    gap: var(--dp-space-1);
+    padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
+      var(--dp-space-3);
     border-radius: var(--dp-radius-full);
     background: var(--c-face);
     box-shadow: var(--c-shadow);
@@ -404,7 +405,7 @@
     min-width: 6rem;
     height: 2.5rem;
     margin: 0;
-    padding: 0 0.75rem;
+    padding: 0 var(--dp-space-3);
     border: 0;
     border-radius: var(--dp-radius-full);
     background: var(--c-field);
@@ -437,7 +438,7 @@
     height: 2.5rem;
     min-width: 2.5rem;
     margin: 0;
-    padding: 0 0.75rem;
+    padding: 0 var(--dp-space-3);
     border: 0;
     border-radius: var(--dp-radius-full);
     background: transparent;

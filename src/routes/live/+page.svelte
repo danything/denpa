@@ -1362,7 +1362,8 @@
   /* 勢いを読めないときの 1 行。一覧の行と同じ左の余白で、控えた字 */
   .ranking-note {
     margin: 0;
-    padding: var(--dp-space-2) var(--dp-space-3);
+    /* 上はタブの下の余白 (`.type-tabs` の 8px) がそのまま空く。下も同じ 8px にして、タブと一覧の間の真ん中に置く */
+    padding: 0 var(--dp-space-3) var(--dp-space-2);
     font-size: var(--dp-text-xs);
     color: var(--dp-muted);
   }
