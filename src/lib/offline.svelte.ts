@@ -96,6 +96,8 @@ function setProgress(id: number, progress: number | null): void {
 
 /** 進み具合を見ている最中の録画。同じものを二重に見ない */
 const polling = new Set<number>();
+/** ページで受け取っている最中の録画 (`downloadInPage`)。取り消されたら止める */
+const inPage = new Map<number, AbortController>();
 
 /**
  * ブラウザに預けたダウンロードの進み具合を映す。**イベントとポーリングの両建て。**
@@ -153,18 +155,17 @@ function watchProgress(
  * 開き直したとき、運んでいる最中のものに追いつく (預けた側のタブはもう無いかもしれない)。
  *
  * **突き合わせもする。** 控えは「保存中」なのに、ブラウザ側に対応する
- * ダウンロードが無い — ページ主導のフォールバック中にタブを閉じた、
- * SW が受け取りそこねた — なら、それはもう動いていない。失敗に倒して
+ * ダウンロードもページで受け取っているものも無い — ページ主導のフォールバック中に
+ * タブを閉じた・読み込み直した、SW が受け取りそこねた — なら、それはもう動いていない。失敗に倒して
  * やり直す入口にする (「保存中」のまま永遠に張り付かない)
  */
 async function watchRunning(): Promise<void> {
   try {
     const reg = await navigator.serviceWorker.ready;
-    if (reg.backgroundFetch === undefined) return;
-
-    const alive = new Set<number>();
-    for (const id of await reg.backgroundFetch.getIds()) {
-      const running = await reg.backgroundFetch.get(id);
+    const alive = new Set<number>(inPage.keys());
+    // ページで受け取る道 (Safari など) は、ページを閉じた・読み込み直した時点で止まっている
+    for (const id of (await reg.backgroundFetch?.getIds()) ?? []) {
+      const running = await reg.backgroundFetch?.get(id);
       if (running === undefined) continue;
       const parsed = parseFetchId(running.id);
       if (parsed === null) continue;
@@ -175,6 +176,9 @@ async function watchRunning(): Promise<void> {
     for (const held of await videos.all()) {
       if (held.state !== "downloading" || alive.has(held.id)) continue;
       held.state = "failed";
+      // ページで受け取りかけた塊は捨てて場所を空ける (やり直しは初めから)
+      delete held.parts;
+      await clearParts(held.id);
       await videos.put(held);
     }
     await refresh();
@@ -296,43 +300,82 @@ interface SaveTarget {
 async function probeDownloads(
   requests: string[],
 ): Promise<{ urls: string[]; total: number | null; videoSize: number | null }> {
+  // 一度に訊く。付き添いの下見はサーバで録画を読む (字幕は ffmpeg、チャプターは ffprobe) ので、
+  // 1つずつ訊いていた頃は押してから始まるまでに数秒待たせていた
+  const probed = await Promise.all(
+    requests.map(async (url) => {
+      const video = url.includes("/file?");
+      const res = await fetch(url, { method: "HEAD" }).catch((error) => {
+        if (video)
+          throw error instanceof Error
+            ? error
+            : new Error("動画を取得できませんでした");
+        return null; // 付き添いの下見に失敗しただけなら、そのぶんを諦めて先へ
+      });
+      if (res === null) return null;
+      if (!res.ok) {
+        if (video) throw new Error("動画を取得できませんでした");
+        return null; // 無い付き添いは落とさない
+      }
+      const length = Number(res.headers.get("content-length"));
+      return {
+        url,
+        video,
+        size: Number.isFinite(length) && length > 0 ? length : 0,
+      };
+    }),
+  );
   const urls: string[] = [];
   let total = 0;
   let videoSize: number | null = null;
-  for (const url of requests) {
-    const video = url.includes("/file?");
-    try {
-      const res = await fetch(url, { method: "HEAD" });
-      if (!res.ok) {
-        if (video) throw new Error("動画を取得できませんでした");
-        continue; // 無い付き添いは落とさない
-      }
-      urls.push(url);
-      const length = Number(res.headers.get("content-length"));
-      if (Number.isFinite(length) && length > 0) {
-        total += length;
-        if (video) videoSize = length;
-      }
-    } catch (error) {
-      if (video)
-        throw error instanceof Error
-          ? error
-          : new Error("動画を取得できませんでした");
-      // 付き添いの下見に失敗しただけなら、そのぶんを諦めて先へ
-    }
+  for (const hit of probed) {
+    if (hit === null) continue;
+    urls.push(hit.url);
+    total += hit.size;
+    if (hit.video && hit.size > 0) videoSize = hit.size;
   }
   return { urls, total: total > 0 ? total : null, videoSize };
 }
 
-/** 端末に保存する。どれを落とすかは `offlineSource` (この端末で観られる最初のエンコード済みファイル。#1806) */
-export async function saveOffline(rec: SaveTarget): Promise<void> {
-  const source = await offlineSource(rec, playable);
+/**
+ * 端末に保存する。どれを落とすかは `offlineSource` (この端末で観られる最初のエンコード済みファイル。#1806)。
+ *
+ * **始めたら返る。** ページで受け取る道 (`"page"`) も終わりを待たない — 待っていた頃は
+ * 900MB を受け取り終わるまで押した結果 (通知) が出ず、詳細も閉じなかった。
+ * ページで受け取っている間の失敗は控えを「失敗」にして `failed` で知らせる
+ * (Background Fetch の失敗と同じ道)
+ *
+ * @returns どちらで受け取るか。`"page"` はタブを開いたままにしてもらう
+ */
+export async function saveOffline(
+  rec: SaveTarget,
+): Promise<"background" | "page"> {
+  // 押したらすぐ「保存中」にする。下見の間 (数百ms〜) も、押せたのか分からない間を作らない
+  entries = { ...entries, [rec.id]: { state: "downloading", progress: null } };
+  try {
+    return await startSave(rec);
+  } catch (error) {
+    await videos.remove(rec.id);
+    await refresh();
+    throw error;
+  }
+}
 
-  // 下見して、在るものだけに絞る (404 が混ざると全体が失敗になる)
+async function startSave(rec: SaveTarget): Promise<"background" | "page"> {
+  const source = await offlineSource(rec, playable);
+  const reg = await navigator.serviceWorker.ready;
+  const byPage = reg.backgroundFetch === undefined;
+
+  /*
+   * 下見して、在るものだけに絞る (Background Fetch は 404 が混ざると全体が失敗になる)。
+   * ページで受け取るなら動画だけ — 付き添いは受け取るときに無ければ飛ばせるし、
+   * 下見はサーバで録画を読むぶん重い
+   */
+  const requests = downloadRequests(rec.id, source).map(
+    (url) => `${resolve("")}${url.slice(1)}`,
+  );
   const { urls, total, videoSize } = await probeDownloads(
-    downloadRequests(rec.id, source).map(
-      (url) => `${resolve("")}${url.slice(1)}`,
-    ),
+    byPage ? requests.filter((url) => url.includes("/file?")) : requests,
   );
   await ensureRoom(total ?? rec.ts_size);
 
@@ -354,35 +397,27 @@ export async function saveOffline(rec: SaveTarget): Promise<void> {
     downloadedAt: Date.now(),
   };
   await videos.put(held);
-  entries = { ...entries, [rec.id]: { state: "downloading", progress: null } };
 
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    if (reg.backgroundFetch !== undefined) {
-      // 前回の残骸 (失敗して居座っている登録) を先に中止する
-      await abortRunning(reg, rec.id);
-      // ブラウザに預ける。受け取りは SW (`service-worker/index.ts`)。
-      // downloadTotal は実測の合計 + 2% (転送の揺れぶん。超えたら打ち切られる)
-      const running = await reg.backgroundFetch.fetch(
-        fetchId(rec.id, source, attempt),
-        urls,
-        {
-          title: `denpa: ${rec.name}`,
-          ...(total === null
-            ? {}
-            : { downloadTotal: Math.round(total * 1.02) }),
-        },
-      );
-      watchProgress(running);
-      return;
-    }
-    // 対応していないブラウザ。タブを開いたまま、ページで落とす
-    await downloadInPage(held, urls, videoSize);
-  } catch (error) {
-    await videos.remove(rec.id);
-    await refresh();
-    throw error;
+  if (byPage) {
+    // 対応していないブラウザ。タブを開いたまま、ページで落とす (終わりは待たない)
+    void downloadInPage(held, requests, videoSize);
+    return "page";
   }
+
+  // 前回の残骸 (失敗して居座っている登録) を先に中止する
+  await abortRunning(reg, rec.id);
+  // ブラウザに預ける。受け取りは SW (`service-worker/index.ts`)。
+  // downloadTotal は実測の合計 + 2% (転送の揺れぶん。超えたら打ち切られる)
+  const running = await reg.backgroundFetch!.fetch(
+    fetchId(rec.id, source, attempt),
+    urls,
+    {
+      title: `denpa: ${rec.name}`,
+      ...(total === null ? {} : { downloadTotal: Math.round(total * 1.02) }),
+    },
+  );
+  watchProgress(running);
+  return "background";
 }
 
 /**
@@ -402,38 +437,81 @@ function sizeOf(response: Response, probed: number | null): number | null {
   return Number.isFinite(length) && length > 0 ? length : probed;
 }
 
-/** ページ主導のフォールバック。付き添いの仕分けは SW の受け取りと同じ (`storeResponse`) */
+/** ページで受け取っているなら止める (取り消し・削除) */
+function stopInPage(id: number): void {
+  inPage.get(id)?.abort();
+  inPage.delete(id);
+}
+
+/**
+ * ページ主導のフォールバック。付き添いの仕分けは SW の受け取りと同じ (`storeResponse`)。
+ *
+ * **付き添いは動画と同時に取りに行く。** 字幕はサーバが録画から抜き出すので数秒かかる。
+ * 動画の後に取りに行っていた頃は、100% になってからしばらく「保存中」のままだった
+ */
 async function downloadInPage(
   held: OfflineVideo,
   requests: string[],
   videoSize: number | null,
 ): Promise<void> {
-  // 前の試みの塊が残っていたら捨てる (同じ番号に上書きすると、短くなったとき後ろが残る)
-  await clearParts(held.id);
-  for (const url of requests) {
-    const response = await fetch(url).catch(() => null);
-    if (response === null || !response.ok) {
-      if (url.includes("/file?")) throw new Error("動画を取得できませんでした");
-      continue; // 付き添いは無い録画もある
-    }
-    if (!url.includes("/file?") || response.body === null) {
-      await storeResponse(held, url, response);
-      continue;
-    }
-    const { parts } = await streamParts(
-      response.body,
-      PART_BYTES,
-      (part, index) => putPart(held.id, index, part),
-      sizeOf(response, videoSize),
-      (progress) => setProgress(held.id, progress),
+  stopInPage(held.id);
+  const control = new AbortController();
+  inPage.set(held.id, control);
+  const { signal } = control;
+  try {
+    // 前の試みの塊が残っていたら捨てる (同じ番号に上書きすると、短くなったとき後ろが残る)
+    await clearParts(held.id);
+    await Promise.all(
+      requests.map(async (url) => {
+        const video = url.includes("/file?");
+        const response = await fetch(url, { signal }).catch((error) => {
+          if (video || signal.aborted) throw error;
+          return null;
+        });
+        if (response === null || !response.ok) {
+          if (video) throw new Error("動画を取得できませんでした");
+          return; // 付き添いは無い録画もある
+        }
+        if (!video || response.body === null) {
+          await storeResponse(held, url, response);
+          return;
+        }
+        const { parts } = await streamParts(
+          response.body,
+          PART_BYTES,
+          async (part, index) => {
+            // 取り消されたら書かない (消したあとに塊が戻ってこない)
+            if (signal.aborted) throw signal.reason;
+            await putPart(held.id, index, part);
+          },
+          sizeOf(response, videoSize),
+          (progress) => setProgress(held.id, progress),
+        );
+        held.parts = parts;
+        const type = response.headers.get("content-type");
+        if (type !== null) held.videoType = type;
+      }),
     );
-    held.parts = parts;
-    const type = response.headers.get("content-type");
-    if (type !== null) held.videoType = type;
+    if (signal.aborted) return;
+    held.state = "ready";
+    held.downloadedAt = Date.now();
+    await videos.put(held);
+  } catch {
+    if (signal.aborted) {
+      // 取り消された。行は消す側が消す。書きかけだった塊は、消したあとに書き終わることが
+      // あるので、ここでもう一度捨てる (やり直しが始まっていたらそちらのものなので触らない)
+      if (!inPage.has(held.id)) await clearParts(held.id).catch(() => {});
+      return;
+    }
+    // 失敗は消さずに残す (やり直しの入口)。塊は捨てて場所を空ける
+    held.state = "failed";
+    delete held.parts;
+    await clearParts(held.id).catch(() => {});
+    await videos.put(held).catch(() => {});
+    failed = held.id;
+  } finally {
+    if (inPage.get(held.id) === control) inPage.delete(held.id);
   }
-  held.state = "ready";
-  held.downloadedAt = Date.now();
-  await videos.put(held);
   await refresh();
 }
 
@@ -442,6 +520,7 @@ export async function removeEverywhere(rec: {
   id: number;
   name: string;
 }): Promise<void> {
+  stopInPage(rec.id);
   await videos.remove(rec.id);
   await outbox.put({
     id: rec.id,
@@ -469,7 +548,8 @@ async function abortRunning(
 
 /** 端末からだけ消す (サーバの録画は残す)。保存し直したいときや空けたいとき用 */
 export async function removeLocal(id: number): Promise<void> {
-  // 運んでいる最中なら、ブラウザに預けたぶんも取り消す
+  // 運んでいる最中なら、ブラウザに預けたぶん・ページで受け取っているぶんも取り消す
+  stopInPage(id);
   try {
     await abortRunning(await navigator.serviceWorker.ready, id);
   } catch {
