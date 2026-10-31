@@ -80,6 +80,10 @@ spec:
             size: 64Gi
           encoded:
             size: 170Gi
+          # 中身は数 KB だが、StorageClass が xfs で、xfs は 300MB より小さいとフォーマットできない
+          # (128Mi だと PV がマウントできず、Pod が ContainerCreating のまま止まる)
+          agentConfig:
+            size: 512Mi
 
         # Cilium Gateway (danything/gitops の bootstrap/gateway/) に付ける。
         # dp.doany.io は `*.doany.io` の、dp.l.doany.io は `*.l.doany.io` の
