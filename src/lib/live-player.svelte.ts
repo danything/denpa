@@ -50,6 +50,7 @@ import {
 } from "#lib/live.js";
 import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
+import { NativeAudio } from "#lib/raw/native-audio.js";
 import {
   type CanvasSupport,
   canvasSupport,
@@ -225,6 +226,11 @@ interface LivePlayerOptions {
    * **まだ見せていない端末で、canvas で描く前に1回だけ呼ぶ。** 押されるまで再生を始めない
    */
   confirm?: () => Promise<void>;
+  /**
+   * `<video>` で観るとき、音を別に鳴らすか (`raw/native-audio.ts`。WebKit だけ。`native-audio-choice.ts`)。
+   * ライブ画面だけが渡す。渡さない画面 (追っかけ・観る画面) は従来のまま
+   */
+  separateAudio?: () => boolean;
 }
 
 export function livePlayer(options: LivePlayerOptions = {}) {
@@ -424,6 +430,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let playback = false;
   /** 音量 (%。`#lib/volume.ts`)。canvas で描くときに RawEngine へ渡す。`<video>` のぶんは画面が持つ (`volume.svelte.ts`) */
   let volume = MAX_LEVEL;
+  /** 音を別に鳴らしているとき (`separateAudio`)。`<video>` は消音にしてある */
+  let nativeAudio: NativeAudio | null = null;
   /** canvas で描く経路の刻み。貯まり・貯める量の決め直しを回す (`rawPace`) */
   let rawTimer: ReturnType<typeof setInterval> | null = null;
   /** canvas で描くとき、1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。**画面に出す** */
@@ -1014,9 +1022,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 鳴らす。断られたら音を諦めて映像だけ出す (前回の局で勝手に始めるので、開いた直後は自動再生として断られる)
    */
   async function play(video: HTMLVideoElement): Promise<void> {
-    video.muted = silenced;
+    nativeAudio?.setMuted(silenced);
+    video.muted = nativeAudio !== null || silenced;
     try {
       await video.play();
+      if (nativeAudio?.blocked) mute();
     } catch {
       video.muted = true;
       silenced = true;
@@ -1033,7 +1043,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     silenced = false;
     engine?.unmute();
     if (element === null || canvas) return;
-    element.muted = false;
+    nativeAudio?.setMuted(false);
+    element.muted = nativeAudio !== null;
     void element.play().catch(() => {
       /* 押したのに断られることはない */
     });
@@ -1043,6 +1054,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function mute(): void {
     silenced = true;
     engine?.mute();
+    nativeAudio?.setMuted(true);
     if (element !== null) element.muted = true;
   }
 
@@ -1239,6 +1251,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 必要は無い (`setAudio`)。MediaSource を作り直す `start` からも通る
    */
   function clear(): void {
+    nativeAudio?.destroy();
+    nativeAudio = null;
     buffer = null;
     source = null;
     running = false;
@@ -1978,6 +1992,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           // 途中から入ったら、最初のキーフレームまでは渡さない (`ts/key-gate.ts`)
           if (!keyGate.pass(body)) return;
         }
+        nativeAudio?.feed(body, kind === CHANNEL.videoInit);
         pending.push(body);
         drain();
         return;
@@ -2035,6 +2050,33 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // エンコード方式が変われば太さも変わる。数え直す
     received = 0;
     receivedFrom = 0;
+    /*
+     * **音を別に鳴らせなくなっても再生は止めない。** `<video>` の音に戻す (音量のつまみは効かないが、
+     * 前と同じに観られる)。自動で選んだ経路なので、それが転んで観られなくなるのでは困る
+     */
+    const giveUpAudio = (reason: string): void => {
+      nativeAudio?.destroy();
+      nativeAudio = null;
+      video.muted = silenced;
+      warning = `音を別に鳴らせないため、音量のつまみは効きません (${reason})`;
+    };
+    if (options.separateAudio?.()) {
+      try {
+        const separate = new NativeAudio(
+          video,
+          (reason) => {
+            if (nativeAudio === separate) giveUpAudio(reason);
+          },
+          `${resolve("").replace(/\/$/, "")}/api/live/mpeg2`,
+        );
+        nativeAudio = separate;
+        separate.setVolume(volume);
+        separate.setMuted(silenced);
+        separate.setBackground(playback);
+      } catch (error) {
+        giveUpAudio(error instanceof Error ? error.message : String(error));
+      }
+    }
     const media = new picked.Source();
     source = media;
     /*
@@ -2309,11 +2351,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     set playback(on: boolean) {
       playback = on;
       if (engine !== null) engine.background = on;
+      nativeAudio?.setBackground(on);
     },
     /** 音量 (%)。canvas で描くときの音に掛ける。`<video>` の音は画面が Web Audio に通して掛ける (`volume.svelte.ts`) */
     set volume(level: number) {
       volume = level;
       if (engine !== null) engine.volume = level;
+      nativeAudio?.setVolume(level);
     },
     /** canvas で描くとき、1コマデコードするのに掛かっている時間 (ms、95パーセンタイル)。canvas で描いていなければ 0 */
     get decodeMs() {

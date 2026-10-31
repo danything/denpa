@@ -36,6 +36,8 @@ interface Options {
   pip: () => boolean;
   /** 止めているか */
   paused: () => boolean;
+  /** 消音にしているか。音を `<video>` と別に鳴らす画面 (ライブ) だけ渡す — `<video>` はわざと消音にしてある */
+  muted?: () => boolean;
   /** 裏に回ったので止める */
   pause: () => void;
   /** 戻ってきたので再開する */
@@ -107,6 +109,7 @@ export function backgroundPlayback(options: Options): Background {
         media: navigator.mediaSession,
         enabled: () => on && !options.pip() && options.nativeVideo() === video,
         userPaused: options.paused,
+        audible: () => !(options.muted?.() ?? video.muted),
         pause: options.pause,
         resume: options.resume,
         interrupted: () =>

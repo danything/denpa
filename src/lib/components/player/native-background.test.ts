@@ -31,11 +31,17 @@ class Visibility extends EventTarget {
   }
 }
 
-function fixture(controls = true) {
+function fixture(controls = true, separateMuted?: boolean) {
   const video = new Video();
   const visibility = new Visibility();
   const page = new EventTarget();
-  const state = { time: 0, enabled: true, paused: false, interrupted: false };
+  const state = {
+    time: 0,
+    enabled: true,
+    paused: false,
+    interrupted: false,
+    separateMuted,
+  };
   const handlers = new Map<string, (() => void) | null>();
   const stop = nativeBackgroundRecovery({
     video,
@@ -55,6 +61,7 @@ function fixture(controls = true) {
       void video.play();
     },
     interrupted: () => state.interrupted,
+    audible: () => !(state.separateMuted ?? video.muted),
     now: () => state.time,
   });
   return { video, visibility, page, state, handlers, stop };
@@ -166,4 +173,28 @@ test("pagehide のあとと、止めたあとは戻さない。止めると Medi
   f.stop();
   expect(f.handlers.get("pause")).toBeNull();
   expect(f.handlers.get("play")).toBeNull();
+});
+
+test("音を別に鳴らしていれば、<video> が消音でも戻す", () => {
+  const f = fixture(true, false);
+  f.video.muted = true;
+  f.visibility.set("hidden");
+  f.video.pause();
+  expect(f.video.calls).toBe(1);
+  f.stop();
+});
+
+test("別に鳴らす音を消音にしている・外から止められたときは戻さない", () => {
+  const muted = fixture(true, true);
+  muted.video.muted = true;
+  muted.visibility.set("hidden");
+  muted.video.pause();
+  expect(muted.video.calls).toBe(0);
+  muted.stop();
+  const remote = fixture(true, false);
+  remote.video.muted = true;
+  remote.visibility.set("hidden");
+  remote.handlers.get("pause")?.();
+  expect(remote.video.calls).toBe(0);
+  remote.stop();
 });

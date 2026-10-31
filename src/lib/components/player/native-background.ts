@@ -34,6 +34,8 @@ interface Options {
   enabled: () => boolean;
   /** ページのボタンで止めているか */
   userPaused: () => boolean;
+  /** 音が出ているか。音を別に鳴らしているときは `<video>` が消音でも鳴っている (無ければ `video.muted` で見る) */
+  audible?: () => boolean;
   pause: () => void;
   resume: () => void;
   interrupted: () => boolean;
@@ -61,7 +63,12 @@ export function nativeBackgroundRecovery(options: Options): () => void {
     if (!hidden || !video.paused || options.now() > until) return;
     if (!controls || gone || remotePause || !options.enabled()) return;
     if (options.userPaused() || options.interrupted()) return;
-    if (video.ended || video.muted || video.readyState < 2) return;
+    if (
+      video.ended ||
+      !(options.audible?.() ?? !video.muted) ||
+      video.readyState < 2
+    )
+      return;
     // play() の中で pause が来ても繰り返さないよう、先に閉じる
     until = -Infinity;
     play();
