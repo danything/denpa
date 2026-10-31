@@ -61,7 +61,7 @@ import {
   windowLabel,
 } from "./fps";
 import { removeIfExists } from "./fsx";
-import { hwArgs, hwChain, type HwWay } from "./hwenc";
+import { hwArgs, hwChain, hwReady, type HwWay } from "./hwenc";
 import {
   encodedPath,
   encodedPaths,
@@ -1374,7 +1374,11 @@ async function runJob(jobId: number): Promise<void> {
    * 主 (`library_path`) にするのは、エンコードした順ではなく AV1 → H.265 → H.264 の先頭 (下の `primary`)
    *
    * どれか1つでも失敗すれば、そのジョブごと失敗にする (途中まで置いたものは消す)。
+   *
+   * **GPU を確かめ終わるのを待ってから決める** (`hwReady`)。起動した直後のジョブが、確かめる前の
+   * 「GPU 無し」で H.265 を飛ばし、H.264 を CPU でエンコードしないように
    */
+  await hwReady();
   const chosen: readonly HwCodec[] =
     settings().codecs.length > 0 ? settings().codecs : ["av1"];
   const hevcReady = hwChain("hevc", settings().hwAllow).length > 0;
