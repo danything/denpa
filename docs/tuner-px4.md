@@ -9,6 +9,7 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントのイメージに同梱**しています
 (`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間のドライバで、`/dev/bus/usb` が見えれば動き、
 ホストに `px4_drv` (DKMS) もカーネルモジュールも要りません (`px4_drv` の `/dev/px4video*` には対応していません)。
+ファームウェアはイメージに入れず、初めて使うときにエージェントが取ってきます ([ファームウェア](#ファームウェア))。
 
 ## 対応機種
 
@@ -50,15 +51,22 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px
 
 ## ファームウェア
 
-**ファームウェアは同梱しています。** IT930x は挿すたびにホストから RAM へ
+**ファームウェアはイメージに入れず、使う人の機械で取ってきます。** IT930x は挿すたびにホストから RAM へ
 ファームウェアを流し込み、px4-userland は受理するバージョンを SHA-256 で1つに固定して
-います。イメージをビルドするとき (Mac と Windows は install.sh / install.ps1 が入れるとき) に、PLEX 公式の Windows ドライバ
+います。PLEX 公式の Windows ドライバ
 (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から
 切り出します (0x287d0 から 2,169 バイト)。配布 zip・`.sys`・切り出したものの3つを
-ハッシュで確かめます。
+ハッシュで確かめます。PLEX のサイトから取れなければ Internet Archive の写し (同じハッシュ) から取ります。
 
-**再配布の許諾は誰も持っていません。** 権利者が動いていないことを当てにした判断です。
-px4-userland 本体は方針として同梱しない (SPEC 4.5) ので、そこはこちらが背負います。
+- **コンテナ** (`denpa-agent` / `denpa-aio`) は、エージェントが初めて px4d を起こすときに取ってきて
+  `/config/it930x-firmware.bin` (`tuners.json` の隣) に置き、次からはそれを使います (`Px4Firmware.cs`)。
+  **初めて使うときはインターネットに繋がっている必要があります。** 取れなければ理由を記録とチューナー画面
+  (そのチューナーの `error`) に出し、10 分おきに試し直します。そのあいだも他のチューナーは使えます
+- **Mac と Windows** は install.sh / install.ps1 が入れるときに切り出して px4-userland の横に置き、
+  `PX4_FIRMWARE` で指します。置いてあればエージェントは取りに行きません
+
+**再配布の許諾は誰も持っていません。** なので配布するもの (イメージ・リリースの添付) には入れず、
+使う人の機械で PLEX の配布物から切り出します。px4-userland 本体も方針として同梱しません (SPEC 4.5)。
 
 ## 確かめたこと
 

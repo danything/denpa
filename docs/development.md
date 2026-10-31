@@ -213,8 +213,8 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 
 ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / siano-userland / asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
-バージョンの無い PLEX のドライバの zip (IT930x のファームウェアを切り出す元) は、取ったものの SHA-256 を確かめ、
-中身が変わっていればビルドを止めます。
+バージョンの無い PLEX のドライバの zip (IT930x のファームウェアを切り出す元) はイメージに入れず、エージェントが使う人の
+機械で取ってきます。取ったものの SHA-256 を確かめ、中身が変わっていれば使いません (`Px4Firmware.cs`)。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は
 `名前:タグ@sha256:…`、ワークフローの `uses:` は `@<コミットの SHA> # vX.Y.Z` の形にします。

@@ -41,7 +41,7 @@ $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff
 # 起動の不具合が直ったのが 0.2.1)
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 $Px4UserlandVersion = '0.2.1'
-# IT930x のファームウェアは PLEX 公式ドライバから切り出す。3つのハッシュは agent/Dockerfile・install.sh と同じ
+# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と3つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.sh と同じ
 $PlexDriverSha256 = 'bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200'
 $Pxw3u4SysSha256 = '8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722'
 $It930xFirmwareSha256 = '5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484'

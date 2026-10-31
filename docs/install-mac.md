@@ -54,8 +54,8 @@ LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き
 (`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
 `SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RAW_DIR`)。`PX4_RUNTIME_DIR` を
 `~/Library/Caches/denpa-agent` と短くしているのは、px4d の制御ソケットのパスが macOS では
-104 バイトまでだからです。IT930x のファームウェアはコンテナと同じく PLEX のドライバから
-手元で切り出します (ハッシュ3つで確かめる)。
+104 バイトまでだからです。IT930x のファームウェアは install.sh が PLEX のドライバから
+手元で切り出します (ハッシュ3つで確かめる。コンテナではエージェントが初めて使うときに取ってきます)。
 denpa も Docker で動かすときは、もう1つ `AGENT_HOST=127.0.0.1` を書き、エージェントを Mac のループバックでだけ
 待ち受けさせます (認証を持たないため)。コンテナの denpa は `host.docker.internal` 越しにそこへ繋ぎます。
 `--no-docker` では書きません (別の機械の denpa から繋ぐため)。

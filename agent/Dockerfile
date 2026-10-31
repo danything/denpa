@@ -31,45 +31,27 @@ RUN case "${TARGETARCH}" in \
     dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
-# 外から取ってくるもの (ファームウェアと3つの userland)。**取ってくる道具は実行イメージに残さない**
+# 外から取ってくるもの (3つの userland)。**取ってくる道具は実行イメージに残さない**
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る
 # 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
-# 組み直しになり、PLEX のサイトへ zip を取りに行く回数が増える
+# 組み直しになり、配布元へ取りに行く回数が増える
 # ---------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS fetch
 ARG TARGETARCH
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
-RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certificates unzip && \
+RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certificates && \
     case "${TARGETARCH}" in amd64|arm64) ;; *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; esac
-
-# IT930x のファームウェア (px4-userland の機材に挿すたびに流し込む)。
-# **PLEX 公式の Windows ドライバ (PX-W3U4 BDA Ver.1.0 64bit) の PXW3U4.sys から
-# 切り出す。** 配布 zip・.sys・切り出したものの3つをハッシュで確かめる。
-# px4-userland SPEC 4.5 が受理するのはこの 2,169 バイトの1つだけ。
-# 再配布の許諾は誰も持っていないので、そこはこちらが背負う判断 (docs/tuner-px4.md)。
-# PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した) ので、
-# 取れなければ Internet Archive の写し (同じハッシュ) から取る。
-ARG PLEX_DRIVER_SHA256=bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200
-ARG PXW3U4_SYS_SHA256=8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722
-ARG IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484
-RUN set -eu && mkdir -p /opt/px4-userland/firmware && cd /tmp && \
-    { $CURL -o driver.zip https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip || \
-      $CURL -o driver.zip https://web.archive.org/web/20260927060746id_/http://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip; } && \
-    echo "${PLEX_DRIVER_SHA256}  driver.zip" | sha256sum -c - && \
-    unzip -p driver.zip pxw3u4_BDA_ver1x64/PXW3U4.sys > PXW3U4.sys && \
-    echo "${PXW3U4_SYS_SHA256}  PXW3U4.sys" | sha256sum -c - && \
-    dd if=PXW3U4.sys of=/opt/px4-userland/firmware/it930x-firmware.bin bs=1 skip=$((0x287d0)) count=2169 status=none && \
-    echo "${IT930X_FIRMWARE_SHA256}  /opt/px4-userland/firmware/it930x-firmware.bin" | sha256sum -c - && \
-    rm -rf /tmp/*
 
 # PLEX PX-Q3U4 などは px4-userland で動かす (Px4.cs)。**カーネルドライバを入れてもらわない。**
 # px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に話すので
 # (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
 # **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか聞かない。
+# **IT930x のファームウェアは入れない** (再配布の許諾は誰も持っていない)。エージェントが初めて px4d を起こすときに
+# PLEX 公式の Windows ドライバから切り出して /config に置く (Px4Firmware.cs)。
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 ARG PX4_USERLAND_VERSION=0.2.1
-RUN set -eu && cd /tmp && \
+RUN set -eu && mkdir -p /opt/px4-userland && cd /tmp && \
     case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac && \
     base="https://github.com/Khronos31/px4-userland/releases/download/v${PX4_USERLAND_VERSION}" && \
     archive="px4-userland-${PX4_USERLAND_VERSION}-linux-glibc-${arch}.tar.gz" && \
@@ -146,7 +128,8 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # **土台は distroless (Debian 13 = trixie。組む段の sdk:10.0 と同じバージョンなので glibc も合う)。**
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部: 実行ファイルが直に繋ぐのは libc と libm だけ、
-# CARD_URL を https で指したときは .NET の HttpClient が libssl を読み、証明書は ca-certificates で確かめる。
+# CARD_URL を https で指したときと IT930x のファームウェアを取ってくるときは .NET の HttpClient が libssl を読み、
+# 証明書は ca-certificates で確かめる。
 # 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起こす。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
@@ -161,7 +144,8 @@ FROM gcr.io/distroless/cc-debian13:latest@sha256:d74d144baa124dd9defd01d71872bb5
 COPY --from=fetch /opt/ /opt/
 
 # 設定は PVC (/config) に置く (/config/tuners.json と /config/channels.json はエージェントの既定。Config.cs)。
-# **どちらも denpa の画面が書く。**
+# **どちらも denpa の画面が書く。** px4-userland の機材に流し込む IT930x のファームウェアも、初めて要ったときに
+# エージェントが取ってきてここに置く (/config/it930x-firmware.bin。Px4Firmware.cs)。
 #
 # **どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
