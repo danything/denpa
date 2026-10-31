@@ -675,7 +675,7 @@
           href={href({ type, start: String(data.start) })}
           data-testid="type-{type}"
         >
-          <span class="seg-label">{SERVICE_TYPE_LABEL[type]}</span>
+          {SERVICE_TYPE_LABEL[type]}
         </a>
       {/each}
     </div>

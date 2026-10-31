@@ -59,7 +59,7 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "apple-touch-icon",
-            href: "/denpa/apple-touch-icon.png",
+            href: `${base}apple-touch-icon.png`,
           },
         },
         {

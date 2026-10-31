@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 
 // アクセシビリティの検査 (.github/workflows/pages.yml)。axe で WCAG 2.1 A/AA の規則を調べ、
 // 影響が serious・critical の違反があると失敗する。ライト・ダーク × デスクトップ・スマホの各プロジェクトで走る
+// (テーマは既定の「自動」のまま。プロジェクトの colorScheme (OS の設定) でライト・ダークが決まる)
 const pages = [
   "/denpa/",
   "/denpa/install/",
@@ -13,7 +14,6 @@ const pages = [
 ];
 
 test.beforeEach(async ({ context }) => {
-  // テーマは既定の「自動」のまま。プロジェクトの colorScheme (OS の設定) でライト・ダークが決まる
   // 外 (GitHub など) には出ない
   await context.route(/^https?:\/\/(?!127\.0\.0\.1|localhost)/, (r) =>
     r.abort(),

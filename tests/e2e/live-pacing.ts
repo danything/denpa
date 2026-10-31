@@ -59,7 +59,7 @@ export async function watch(
   });
 }
 
-export interface Watched {
+interface Watched {
   stalls: number;
   lag: number;
   target: number;

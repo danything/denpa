@@ -4,7 +4,7 @@
  * 単体テストで見るために分けてある (`background.test.ts`)
  */
 
-/** 端末ごとに覚える鍵 (`keep.ts`)。速さ・CM 飛ばしと同じ置き場 */
+/** 端末ごとに覚える鍵 (`keep.ts`)。速さ・CMスキップと同じ置き場 */
 export const BACKGROUND_KEY = "player-background";
 
 /** 覚えていた値。**既定はオフ** — オンにしたことのある端末だけオンで始まる */

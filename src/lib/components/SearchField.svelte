@@ -457,7 +457,4 @@
   .suggest-empty {
     padding: var(--dp-space-2) var(--dp-space-3);
   }
-  .suggest-all {
-    padding-top: var(--dp-space-2);
-  }
 </style>

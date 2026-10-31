@@ -340,7 +340,7 @@
 
 <svelte:window onkeydown={keys} />
 
-<!-- ライブ・観る画面と同じレイアウト (PlayerLayout / PlayerStage / MediaStack)。映像が左、番組の中身が右 -->
+<!-- ライブと同じレイアウト (PlayerLayout / PlayerStage / MediaStack。観る画面も PlayerLayout / PlayerStage は同じ)。映像が左、番組の中身が右 -->
 <PlayerLayout>
   <PlayerStage
     {controls}
