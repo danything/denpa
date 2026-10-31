@@ -435,7 +435,7 @@
   /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
   const stageTap = centerTap(() => player.toggle(), controls.toggle);
 
-  /** いまの1コマを字幕ごと切り抜いてサーバに保存する (3画面共通。`shot.svelte.ts`) */
+  /** いまの1コマを字幕・コメントごと切り抜いてサーバに保存する (3画面共通。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
   const notices = $derived<Notice[]>([
     ...shooter.notices,

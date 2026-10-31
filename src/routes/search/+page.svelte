@@ -7,6 +7,7 @@
 
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
+  import { clipVersionQuery } from "#lib/clips.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
@@ -480,7 +481,9 @@
               <li>
                 <a href={clipsHref} data-testid="search-clip">
                   <img
-                    src={resolve(`api/clips/${clip.id}/small`)}
+                    src="{resolve(
+                      `api/clips/${clip.id}/small`,
+                    )}{clipVersionQuery(clip)}"
                     alt={clip.programName || clip.serviceName}
                     width={clip.width}
                     height={clip.height}

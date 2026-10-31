@@ -588,7 +588,7 @@ export const encodeJobs = sqliteTable(
 export const CLIP_PLACES = ["live", "chase", "watch"] as const;
 
 /**
- * **切り抜き** (観ている1コマを字幕ごと写した静止画。`clips.ts`)。画像は置き場 (`clips.clipsDir`) に AVIF で置き、
+ * **切り抜き** (観ている1コマを字幕・コメントごと写した静止画。`clips.ts`)。画像は置き場 (`clips.clipsDir`) に AVIF で置き (字幕・コメントを分けて受けたものは元の画像も)、
  * ここには探すための情報を持つ。世帯で共有し、誰が撮ったかは持たない。
  *
  * 番組の情報は**撮ったときの値を写して持つ** (番組表は流れて消え、録画も消える。切り抜きは残す)
@@ -622,8 +622,25 @@ export const clips = sqliteTable(
     file: text("file").notNull().default(""),
     width: integer("width").notNull(),
     height: integer("height").notNull(),
-    /** 置き場で使っている大きさ (画像と一覧用の合計) */
+    /** 置き場で使っている大きさ (画像・一覧用・元の画像の合計) */
     bytes: integer("bytes").notNull(),
+    /**
+     * 字幕・実況のコメントを分けて受けたか (元の画像を `<ID>.src/` に持っている)。撮ったときに出していたものだけ。
+     * 分けて受けていないもの (字幕を焼き込んだ古い切り抜き) は両方 0 で、出し入れできない
+     */
+    has_captions: flag("has_captions")
+      .notNull()
+      .default(sql`0`),
+    has_comments: flag("has_comments")
+      .notNull()
+      .default(sql`0`),
+    /** いま画像に重ねているか (`has_*` のものだけ意味を持つ)。撮ったときは出していたものが入っている */
+    show_captions: flag("show_captions")
+      .notNull()
+      .default(sql`0`),
+    show_comments: flag("show_comments")
+      .notNull()
+      .default(sql`0`),
   },
   (t) => [
     index("clips_taken").on(t.taken_at),

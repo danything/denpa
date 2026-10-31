@@ -9,8 +9,10 @@
   import {
     type Clip,
     type ClipKind,
+    type ClipLayer,
     type ClipQuery,
     clipSearch,
+    clipVersionQuery,
   } from "#lib/clips.js";
   import HomeCalendar from "#lib/components/home/HomeCalendar.svelte";
   import Menu from "#lib/components/Menu.svelte";
@@ -18,9 +20,11 @@
   import ControlButton from "#lib/components/player/ControlButton.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
   import {
+    CAPTION,
     CHECK,
     CLOSE,
     DOWNLOAD,
+    JIKKYO,
     OVERLAY,
     OVERLAY_BTN,
     OVERLAY_ROUND,
@@ -35,18 +39,19 @@
   import { dayName, dayStart } from "#lib/timeline.js";
 
   /**
-   * **切り抜き** (`/clips`)。観る画面・追っかけ・ライブで押した1コマ (字幕ごと) を、撮った日の見出しの下に平らなグリッドで並べる。
+   * **切り抜き** (`/clips`)。観る画面・追っかけ・ライブで押した1コマ (字幕・コメントごと) を、撮った日の見出しの下に平らなグリッドで並べる。
    *
    * - 条件は URL で持つ (`GET /api/clips` と同じ名前。`#lib/clips.ts`)。最初の 60 枚は load、続きは下端で API から足す
    * - 広い形は右のサイドバーに言葉・カレンダー・ライブか録画か・局・使っている量。スマホの形は下のタブのすぐ上に
    *   絞り込みの1行 (言葉と「絞り込み」のメニュー)
-   * - 1枚を開くと暗い全画面。右端の縦の列に閉じる・この場面から観る・端末に保存・削除 (2回押し。いちばん下)。
+   * - 1枚を開くと暗い全画面。右端の縦の列に閉じる・この場面から観る・字幕とコメントの出し入れ (撮ったときに出していたものだけ)・
+   *   端末に保存・削除 (2回押し。いちばん下)。
    *   列は観る画面と同じ部品 (`ControlBar`・`ControlButton`)
    * - まとめて消すときは「選んで削除」で選ぶ形に入り、選んだぶんを2回押しで消す
    */
   let { data } = $props();
 
-  // 切り抜きが増えた・消えたら読み直す (`api/events` の `clips`)
+  // 切り抜きが増えた・消えた・切り替えたら読み直す (`api/events` の `clips`)
   liveUpdates(["clips"]);
 
   /**
@@ -226,7 +231,9 @@
   /** 端末に保存 (指の端末は共有シート、PC はファイル)。名前は `番組名_YYYYMMDD-HHMMSS.avif` */
   async function save(clip: Clip): Promise<void> {
     try {
-      const res = await fetch(resolve(`api/clips/${clip.id}/image`));
+      const res = await fetch(
+        `${resolve(`api/clips/${clip.id}/image`)}${clipVersionQuery(clip)}`,
+      );
       if (!res.ok) throw new Error(String(res.status));
       await keepOnDevice(
         await res.blob(),
@@ -238,6 +245,34 @@
         kind: "error",
         text: "画像を取得できませんでした",
       };
+    }
+  }
+
+  /**
+   * 字幕・コメントを出し入れする (`PATCH /api/clips/<id>`)。サーバが元の画像から重ね直すので1秒ほど待つ。
+   * その間は画像を薄くし、ほかの切り替えは受けない。画像の URL は重ねの版 (`?v=`) で替わる
+   */
+  let layering = $state<number | null>(null);
+  async function toggleLayer(clip: Clip, layer: ClipLayer): Promise<void> {
+    if (layering !== null) return;
+    layering = clip.id;
+    try {
+      const res = await fetch(resolve(`api/clips/${clip.id}`), {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ [layer]: clip.layers[layer] !== true }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const changed = (await res.json()) as Clip;
+      if (viewing?.id === changed.id) viewing = changed;
+    } catch {
+      notice = {
+        key: `clip-layer-${Date.now()}`,
+        kind: "error",
+        text: "切り替えられませんでした",
+      };
+    } finally {
+      layering = null;
     }
   }
 
@@ -427,7 +462,9 @@
               >
                 <img
                   class="c-thumb"
-                  src={resolve(`api/clips/${clip.id}/small`)}
+                  src="{resolve(`api/clips/${clip.id}/small`)}{clipVersionQuery(
+                    clip,
+                  )}"
                   alt=""
                   width={clip.width}
                   height={clip.height}
@@ -600,7 +637,7 @@
 
 <!--
     1枚を開いた所。暗い全画面 (映像の上と同じく、テーマにかかわらず黒い舞台)。右端の縦の列は観る画面と同じ部品で、
-    上から閉じる・この場面から観る・端末に保存・削除 (2回押し。いちばん下)
+    上から閉じる・この場面から観る・字幕・コメント・端末に保存・削除 (2回押し。いちばん下)
 -->
 <dialog
   class="viewer"
@@ -619,11 +656,12 @@
     <div class="v-stage">
       <img
         class="v-image"
-        src={resolve(`api/clips/${clip.id}/image`)}
+        src="{resolve(`api/clips/${clip.id}/image`)}{clipVersionQuery(clip)}"
         alt={title(clip)}
+        aria-busy={layering === clip.id}
         data-testid="clip-image"
       />
-      <div class="v-info">
+      <div class="v-info" aria-live="polite">
         <p class="v-title broadcast" data-testid="clip-viewer-title">
           {title(clip)}
         </p>
@@ -634,6 +672,11 @@
         </p>
         {#if clip.captions !== ""}
           <p class="v-captions small broadcast">{clip.captions}</p>
+        {/if}
+        {#if layering === clip.id}
+          <p class="v-meta small" data-testid="clip-layering">
+            切り替えています…
+          </p>
         {/if}
       </div>
       <ControlBar side testid="clip-side-bar">
@@ -653,6 +696,25 @@
           >
             <Icon icon={PLAY} />
           </a>
+        {/if}
+        <!-- 字幕・コメントの出し入れ。撮ったときに出していたもの (分けて送られたもの) だけ -->
+        {#if clip.layers.captions !== undefined}
+          <ControlButton
+            icon={CAPTION}
+            label="字幕"
+            on={clip.layers.captions}
+            testid="clip-layer-captions"
+            onclick={() => void toggleLayer(clip, "captions")}
+          />
+        {/if}
+        {#if clip.layers.comments !== undefined}
+          <ControlButton
+            icon={JIKKYO}
+            label="コメント"
+            on={clip.layers.comments}
+            testid="clip-layer-comments"
+            onclick={() => void toggleLayer(clip, "comments")}
+          />
         {/if}
         <ControlButton
           icon={DOWNLOAD}
@@ -997,6 +1059,11 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+    transition: opacity var(--dp-duration);
+  }
+  /* 字幕・コメントを切り替えている間 (サーバが重ね直している) */
+  .v-image[aria-busy="true"] {
+    opacity: 0.5;
   }
   /* 読みものは左下。右端の列に掛からないよう右を空け、明るい画像の上でも読めるよう下から影を敷く */
   .v-info {

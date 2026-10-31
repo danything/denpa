@@ -124,12 +124,18 @@ denpa)
         -filter_complex "[0:v:0]split[a][b];[a]scale=w=trunc(iw/2)*2:h=trunc(ih/2)*2:out_color_matrix=bt709:out_range=full,format=yuv420p[full];[b]scale=w='min(160,trunc(iw/2)*2)':h=-2:out_color_matrix=bt709:out_range=full,format=yuv420p[small]" \
         -map "[full]" -frames:v 1 -c:v libsvtav1 -preset 8 -crf 30 -svtav1-params avif=1 -f avif full.avif \
         -map "[small]" -frames:v 1 -c:v libsvtav1 -preset 8 -crf 30 -svtav1-params avif=1 -f avif small.avif
+    # 字幕・コメントを重ねた切り抜き (clips.ts の overlay)。本番の重ねは透明な PNG だが、イメージには PNG の
+    # エンコーダが無いので、lavfi の RGBA の1枚を重ねに見立てる
+    ff -i thumb.jpg -f lavfi -i testsrc2=size=320x180,format=rgba -map_metadata -1 \
+        -filter_complex "[0:v:0][1:v:0]overlay=format=rgb[l1];[l1]split[a][b];[a]scale=w=trunc(iw/2)*2:h=trunc(ih/2)*2:out_color_matrix=bt709:out_range=full,format=yuv420p[full];[b]scale=w='min(160,trunc(iw/2)*2)':h=-2:out_color_matrix=bt709:out_range=full,format=yuv420p[small]" \
+        -map "[full]" -frames:v 1 -c:v libsvtav1 -preset 8 -crf 30 -svtav1-params avif=1 -f avif layered.avif \
+        -map "[small]" -frames:v 1 -c:v libsvtav1 -preset 8 -crf 30 -svtav1-params avif=1 -f avif layered-small.avif
     # コマ数の見分け方 (src/lib/server/fps.ts)。テレシネ・60i・30p の合成の映像で、判定が分かれるか。
     # イメージには src が無いので、チェックアウトを読み取り専用で渡す (fps.ts はほかのモジュールを読まない)
     docker run --rm -v "$PWD:/src:ro" -v "$work:/work" -w /work --entrypoint /usr/local/bin/bun "$image" \
         /src/scripts/fps-smoke.ts /work
     run /usr/local/bin/bun -e '
-        for (const name of ["in.ts", "h264.mkv", "av1.mkv", "live.mp4", "stream.mp4", "audio.aac", "cuts.txt", "logo.raw", "cut.mkv", "chapters.mkv", "thumb.jpg", "full.avif", "small.avif"]) {
+        for (const name of ["in.ts", "h264.mkv", "av1.mkv", "live.mp4", "stream.mp4", "audio.aac", "cuts.txt", "logo.raw", "cut.mkv", "chapters.mkv", "thumb.jpg", "full.avif", "small.avif", "layered.avif", "layered-small.avif"]) {
             const size = Bun.file(name).size;
             console.log(`${name}: ${size} バイト`);
             if (size === 0) process.exit(1);

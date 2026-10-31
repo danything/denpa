@@ -7,6 +7,7 @@ import {
   deleteClips,
   findClips,
   liveScene,
+  readClipForm,
   recordingScene,
   saveClip,
   type Scene,
@@ -31,13 +32,19 @@ function number(url: URL, name: string): number | null {
 }
 
 /**
- * 1枚を受けて置く。**本文は画像そのもの** (PNG・JPEG・WebP)、どこで撮ったかは URL で:
+ * 1枚を受けて置く。本文は2つの形のどちらか:
+ *
+ * - **multipart/form-data** … `frame` (映像。PNG・JPEG・WebP) と、出していた重ね `captions` (字幕)・`comments` (実況のコメント)。
+ *   重ねは映像と同じ縦横の透明な PNG で、送ったものはあとから出し入れできる (`PATCH /api/clips/<id>`)
+ * - **画像そのもの** (PNG・JPEG・WebP) … 重ねは無し (出し入れできない)
+ *
+ * どこで撮ったかは URL で:
  *
  * - `place=watch|chase` … `recording` (録画ID)・`at` (位置の秒。観ているものの物差し)・`source` (`ts` / `encoded` / `alt`)
  * - `place=live` … `service` (局の内部ID)・`aired` (映していたコマの放送時刻。unix ms。無ければ受け取った時刻)
  * - `captions` … 出していた字幕の文字 (任意)
  *
- * 番組の情報はサーバが引く (`server/clips.ts`)。返事は 201 と `Clip`。大きすぎれば 413、画像でなければ 415
+ * 番組の情報はサーバが引く (`server/clips.ts`)。返事は 201 と `Clip`。本文が大きすぎれば 413、画像でなければ 415
  */
 export async function POST({ url, request }) {
   const length = Number(request.headers.get("content-length"));
@@ -69,9 +76,18 @@ export async function POST({ url, request }) {
       error(400, "place が不正です");
     }
 
-    const image = new Uint8Array(await request.arrayBuffer());
+    const multipart = (request.headers.get("content-type") ?? "")
+      .toLowerCase()
+      .startsWith("multipart/form-data");
+    const parts = multipart
+      ? await readClipForm(
+          await request.formData().catch(() => {
+            throw new ClipError(400, "本文を読めませんでした");
+          }),
+        )
+      : { frame: new Uint8Array(await request.arrayBuffer()) };
     const clip = await saveClip(
-      image,
+      parts,
       scene,
       url.searchParams.get("captions") ?? "",
     );

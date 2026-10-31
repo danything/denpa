@@ -4,13 +4,17 @@ import type { Notice } from "#lib/components/Toasts.svelte";
 
 import type { PlayerControls } from "./controls.svelte";
 import {
+  captionLayer,
+  clipForm,
+  type ClipLayerCanvases,
   clipParams,
   type ClipWhere,
+  commentLayer,
   composeFrame,
   type Frame,
   pngOf,
+  readComments,
   saveOnDevice,
-  uploadBlob,
 } from "./snapshot";
 
 /** 押したあとボタンをチェックの形にしておく長さ (ms) */
@@ -19,7 +23,8 @@ const SAVED_MS = 1500;
 /**
  * 切り抜きの3点セット (撮る・結果を持つ・トーストに出す)。**3画面 (ライブ・追っかけ・観る画面) で同じ形。**
  *
- * 押すと、いまの1コマを字幕ごと写して**サーバへ送る** (`POST /api/clips`。サーバが AVIF にして置き、
+ * 押すと、いまの1コマを、出している字幕・実況のコメントごと写して**サーバへ送る** (`POST /api/clips`。映像と字幕・コメントは
+ * 分けて送り、あとから出し入れできる。サーバが重ねて AVIF にして置き、
  * 「切り抜き」の画面に並ぶ)。知らせ方は控えめに: ボタンが一瞬チェックになり、トーストに「保存しました」の1行。
  * PC ではクリップボードにもコピーする (そのまま貼りたいとき用)。
  *
@@ -59,23 +64,24 @@ export function snapshotter(controls: PlayerControls) {
       );
   }
 
-  /** サーバへ送る。置けたら true。オフライン・断られた・届かないは false */
+  /**
+   * サーバへ送る。映像と、出していた重ね (字幕・コメント) を分けて (`clipForm`)。置けたら true。
+   * オフライン・断られた・届かないは false
+   */
   async function upload(
-    canvas: HTMLCanvasElement,
+    frame: HTMLCanvasElement,
+    layers: ClipLayerCanvases,
+    composite: HTMLCanvasElement,
     where: ClipWhere,
     captions: string,
   ): Promise<boolean> {
     if (!navigator.onLine) return false;
-    const blob = await uploadBlob(canvas);
-    if (blob === null) return false;
+    const form = await clipForm(frame, layers, composite);
+    if (form === null) return false;
     try {
       const res = await fetch(
         `${resolve("api/clips")}?${clipParams(where, captions)}`,
-        {
-          method: "POST",
-          headers: { "content-type": blob.type },
-          body: blob,
-        },
+        { method: "POST", body: form },
       );
       return res.status === 201;
     } catch {
@@ -97,7 +103,7 @@ export function snapshotter(controls: PlayerControls) {
       if (shot?.key === key) shot = null;
     },
     /**
-     * いまの1コマを字幕ごと切り抜いて送る。
+     * いまの1コマを、出している字幕・実況のコメントごと切り抜いて送る。コメントは画面から読む (`readComments`)。
      * @param frame 写すフレームを取ってくる関数。**撮れると決まってから呼ぶ** (`busy` の後) — canvas で
      *   描いているときは worker から1枚もらう (`raw/engine.ts` の `grab`) ので、先に呼ぶと
      *   弾いた押しのぶんのフレーム (1080 で 8MB) が誰にも閉じられずに残る
@@ -117,17 +123,30 @@ export function snapshotter(controls: PlayerControls) {
       busy = true;
       controls.stir();
       const at = where();
+      // コメントは流れ続けるので、フレームを待つ前に押した瞬間の位置を読んでおく
+      const comments = readComments();
       let got: Frame | null = null;
       try {
         got = await frame();
-        const canvas = composeFrame(got, caption);
+        const base = composeFrame(got);
         // worker から貰ったフレーム (1080 で 8MB) は写し終えたら手放す。GC 任せだと押すたびに溜まる
         if (got?.image instanceof ImageBitmap) got.image.close();
         got = null;
-        if (canvas === null) return;
+        if (base === null) return;
+        const { width, height } = base;
+        const layers: ClipLayerCanvases = {
+          captions: captionLayer(caption, width, height),
+          comments: commentLayer(comments, width, height),
+        };
+        // 観ていたとおりに重ねたもの (クリップボードと、送れなかったときに端末へ)。重ねる順は映像 → コメント → 字幕
+        const shown = composeFrame({ image: base, width, height }, [
+          layers.comments,
+          layers.captions,
+        ]);
+        if (shown === null) return;
         const key = `shot-${Date.now()}`;
-        const copied = copy(canvas);
-        if (await upload(canvas, at, captions)) {
+        const copied = copy(shown);
+        if (await upload(base, layers, shown, at, captions)) {
           saved = true;
           if (savedTimer !== null) clearTimeout(savedTimer);
           savedTimer = setTimeout(() => (saved = false), SAVED_MS);
@@ -140,7 +159,7 @@ export function snapshotter(controls: PlayerControls) {
           };
           return;
         }
-        const notice = await saveOnDevice(canvas, title, key);
+        const notice = await saveOnDevice(shown, title, key);
         if (notice !== null) shot = notice;
       } finally {
         busy = false;

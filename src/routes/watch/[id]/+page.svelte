@@ -1802,7 +1802,7 @@
   ]);
 
   /**
-   * いまの1コマを字幕ごと切り抜いてサーバに保存する (3画面共通。[shot.svelte.ts](../../../lib/components/player/shot.svelte.ts))。
+   * いまの1コマを字幕・コメントごと切り抜いてサーバに保存する (3画面共通。[shot.svelte.ts](../../../lib/components/player/shot.svelte.ts))。
    * canvas に描いているときはプレイヤーから1枚もらう (`<video>` は空)
    */
   function snapshot(): void {

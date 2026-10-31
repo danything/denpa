@@ -223,7 +223,8 @@ COPY patches/ /patches/
 #   デコードできず、エラーを並べる)
 # - フィルタ: 引数に書いたもののほか、ffmpeg が自分で差し込むもの (buffer・null・format・aformat・scale・
 #   aresample・trim・atrim・fps、回転の印がある画像の transpose・hflip・vflip・rotate)
-# - testsrc2・sine・telecine・tinterlace・noise・overlay は denpa は使わず、イメージの確かめで素材を作るためだけ
+# - overlay は切り抜きに字幕・コメントを重ねる (clips.ts)
+# - testsrc2・sine・telecine・tinterlace・noise は denpa は使わず、イメージの確かめで素材を作るためだけ
 #   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
       amd64) arch_dev=libvpl-dev arch_flags=--enable-libvpl ;; \

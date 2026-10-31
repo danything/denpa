@@ -16,12 +16,19 @@ for arg in "$@"; do
 done
 
 # 切り抜きの AVIF (`server/clips.ts` の `avifArgs`)。本物は2枚 (そのままと一覧用) を書く。ここでは
-# 受けた画像をそのまま両方へ写す (中身は WebP などのままだが、ブラウザは中身で読むので映る)。
+# 受けた映像 (最初の `-i`。字幕・コメントの重ねは後ろの `-i`) をそのまま両方へ写す (中身は WebP などのままだが、
+# ブラウザは中身で読むので映る)。重ねは写さない (出し入れしても画像は替わらない)。
 # エンコードの引数の控えには残さない (エンコードを見るテストに混ざらないように)
 if printf '%s\n' "$@" | grep -qx -- 'avif'; then
     prev=""
+    frame=""
     for arg in "$@"; do
-        if [ "$prev" = "avif" ]; then cp "$input" "$arg" || exit 1; fi
+        if [ "$prev" = "-i" ] && [ -z "$frame" ]; then frame="$arg"; fi
+        prev="$arg"
+    done
+    prev=""
+    for arg in "$@"; do
+        if [ "$prev" = "avif" ]; then cp "$frame" "$arg" || exit 1; fi
         prev="$arg"
     done
     exit 0

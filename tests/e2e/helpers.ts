@@ -1333,6 +1333,8 @@ export interface ClipJson {
   programName: string;
   offsetMs: number | null;
   captions: string;
+  /** あとから出し入れできる重ね (`Clip.layers`) */
+  layers: { captions?: boolean; comments?: boolean };
 }
 
 /**

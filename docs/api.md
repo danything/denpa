@@ -569,7 +569,12 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 
 ## 切り抜き `POST /api/clips`
 
-観ている1コマを置きます。**本文は画像そのもの** (PNG・JPEG・WebP。`Content-Type` は見ずに中身で見分けます)。
+観ている1コマを置きます。本文は次のどちらかです (画像の形式は `Content-Type` を見ずに中身で見分けます)。
+
+- **`multipart/form-data`** … `frame` (映像。PNG・JPEG・WebP) と、出していた重ね `captions` (字幕)・`comments` (実況のコメント)。
+  重ねは映像と同じ縦横の透明な PNG で、出していなかったものは省きます。送った重ねは、あとから出し入れできます (下の「重ねの出し入れ」)
+- **画像そのもの** (PNG・JPEG・WebP) … 重ねを分けずに1枚で。出し入れはできません
+
 どこで撮ったかは URL の問い合わせで渡し、番組名・局名・番組の始めからの位置はサーバが引きます。
 
 | 撮った所                  | 問い合わせ                                                                                                                                                  |
@@ -577,8 +582,9 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 | 録画 (観る画面・追っかけ) | `place=watch` か `place=chase`、`recording` (録画ID)、`at` (位置の秒)、`source` (観ているファイル。[観た位置](#観た位置-post-apirecordingsidresume) と同じ) |
 | ライブ                    | `place=live`、`service` (局の `id`)、`aired` (映していたコマの放送時刻。UNIX ミリ秒。省くと受け取った時刻)                                                  |
 
-どちらにも `captions` (出していた字幕の文字) を足せます。サーバは AVIF (と一覧用の幅 480 のもの) にして置き、`201` で1枚の中身を返します。
-大きさの上限は 512 KiB (本文の上限 `BODY_SIZE_LIMIT` の既定と同じ) で、超えると `413`、読めない画像は `415` です。
+どちらにも `captions` (出していた字幕の文字) を足せます。サーバは重ねを映像に重ねて AVIF (と一覧用の幅 480 のもの) にして置き、
+`201` で1枚の中身を返します。本文の大きさの上限は、重ねも合わせて 512 KiB (本文の上限 `BODY_SIZE_LIMIT` の既定と同じ) で、
+超えると `413`、読めない画像は `415`、重ねが PNG でなければ `415`、映像と縦横が違えば `400` です。
 
 ```json
 {
@@ -595,17 +601,24 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
   "captions": "こんばんは",
   "width": 1920,
   "height": 1080,
-  "bytes": 312345
+  "bytes": 312345,
+  "layers": { "captions": true }
 }
 ```
 
 `recordingId` は撮った録画 (ライブなら同じ番組を録っていればその録画)。消した録画は `null` になります。番組表に無い時刻のライブは
-`programName` が空で、`programStartAt`・`eventId`・`offsetMs` が `null` です。
+`programName` が空で、`programStartAt`・`eventId`・`offsetMs` が `null` です。`bytes` は置き場で使っている大きさ (AVIF の2枚と元の画像)。
+`layers` は分けて送った重ね (`captions`・`comments`) だけキーがあり、値はいま重ねているか。重ねの無いものは `{}` です。
+
+**重ねの出し入れ** `PATCH /api/clips/<id>` に `{ "captions": false }` のように変えたいものだけ真偽で送ると、元の画像から重ね直して
+1枚の中身を返します (1080 で1秒ほど)。持っていない重ね・読めない本文は `400` です。
 
 - **探す** `GET /api/clips?q=&service=&day=YYYY-MM-DD&recording=&kind=live|recorded&before=` → `{ "clips": [...], "next": ID または null }`。
   新しい順に 60 件ずつで、続きは `before` に `next` を入れます。`q` は空白で区切った語をすべて含むもの (番組名・局名・字幕)
-- **画像** `GET /api/clips/<id>/image` (AVIF)・`GET /api/clips/<id>/small` (一覧用)。`GET /api/clips/<id>` は1枚の中身
-- **消す** `DELETE /api/clips/<id>` (`204`)・まとめて `DELETE /api/clips?ids=1,2,3` (`{ "deleted": 消せた数 }`。一度に 500 枚まで)
+- **画像** `GET /api/clips/<id>/image` (AVIF)・`GET /api/clips/<id>/small` (一覧用)。`GET /api/clips/<id>` は1枚の中身。
+  重ねを持つものは出し入れで中身が替わるので、端末に持たせるのは `?v=` にいまの版を付けたときだけです (版は `layers` から作る
+  `コメント・字幕` の順の2文字で、持っていない `-`・重ねていない `0`・重ねている `1`。例 `?v=-1`)。付けなければ毎回取り直させます
+- **消す** `DELETE /api/clips/<id>` (`204`。元の画像も)・まとめて `DELETE /api/clips?ids=1,2,3` (`{ "deleted": 消せた数 }`。一度に 500 枚まで)
 
 ## 変化の通知 `GET /api/events`
 
@@ -622,7 +635,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 - 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
 - `programs` は番組表を集めたときのほか、**ライブで開いている局の番組が放送で替わった・延びた**ときにも来ます
   (EIT[p/f] が番組表と違ったとき)。局の一覧 (`GET /api/services`) の `now` を読み直せば、いまの番組に追いつきます
-- `clips` は切り抜きが増えた・消えたことの通知 ([切り抜き](#切り抜き-post-apiclips))
+- `clips` は切り抜きが増えた・消えた・字幕やコメントを切り替えたことの通知 ([切り抜き](#切り抜き-post-apiclips))
 - `chapters` は**録画のチャプターが書き換わった** (CM検出をやり直した) ことの通知。`data` は `{"recordingId":12}`。
   その録画を観ていれば [チャプター](#録画のチャプター-get-apirecordingsidchapters) を読み直してください。位置 (秒) の物差しは変わりません
 - `data` は `encode` と `yielded` と `chapters` だけが中身を運び、ほかは `1`。`encode` は `recordingId` `percent` `etaMs` `log`。`percent` は 0〜1 (名前に反して百分率ではない)。`etaMs` は見積もれなければ `null`

@@ -770,6 +770,100 @@ test.describe("録画を観る", () => {
   });
 
   /**
+   * **字幕はあとから出し入れできる。** 字幕を出して撮ると、映像と字幕を分けて送り (multipart)、字幕が重なった1枚で並ぶ。
+   * 開いた1枚の「字幕」で外す・戻すと `PATCH /api/clips/<id>` が元から重ね直し、読み直しても続く。
+   * 撮ったときに無かったもの (コメント) の切り替えは出さない
+   */
+  test("切り抜きの字幕を開いた1枚で外し、戻せる", async ({ page, request }) => {
+    test.setTimeout(180_000);
+    const id = await watchable(page, request);
+    await routeCaptions(page);
+    await goto(page, `/watch/${id}`);
+    await expect(page.getByTestId("watch-captions-canvas")).toHaveAttribute(
+      "data-drawn",
+      "",
+    );
+    await fakeFrame(page, "watch-video");
+    await wakeControls(page, "watch-stage");
+    const posted = page.waitForRequest(
+      (req) =>
+        req.method() === "POST" &&
+        new URL(req.url()).pathname.endsWith("/api/clips"),
+    );
+    const clip = await takeClip(page, "watch-shot");
+    const body = (await posted).postDataBuffer()?.toString("latin1") ?? "";
+    expect((await posted).headers()["content-type"]).toContain(
+      "multipart/form-data",
+    );
+    expect(body).toContain('name="frame"');
+    expect(body).toContain('name="captions"');
+    expect(body).not.toContain('name="comments"');
+    expect(clip.layers).toEqual({ captions: true });
+
+    try {
+      await goto(page, "/clips");
+      const card = page.locator(
+        `[data-testid="clip-card"][data-clip-id="${clip.id}"]`,
+      );
+      await card.click();
+      const viewer = page.getByTestId("clip-viewer");
+      const toggle = viewer.getByTestId("clip-layer-captions");
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await expect(viewer.getByTestId("clip-layer-comments")).toHaveCount(0);
+      const image = viewer.getByTestId("clip-image");
+      await expect(image).toHaveAttribute("src", /\?v=-1$/);
+
+      // 外す。重ね直したら画像の版 (`?v=`) が替わる
+      const patched = page.waitForResponse(
+        (res) =>
+          res.request().method() === "PATCH" &&
+          new URL(res.url()).pathname.endsWith(`/api/clips/${clip.id}`),
+      );
+      await toggle.click();
+      const res = await patched;
+      expect(res.status()).toBe(200);
+      expect(res.request().postDataJSON()).toEqual({ captions: false });
+      expect(((await res.json()) as { layers: unknown }).layers).toEqual({
+        captions: false,
+      });
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(image).toHaveAttribute("src", /\?v=-0$/);
+      expect(
+        (await request.get(`/api/clips/${clip.id}/image?v=-0`)).status(),
+      ).toBe(200);
+
+      // 読み直しても外したまま
+      await page.reload();
+      await card.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+      // 戻す
+      const again = page.waitForResponse(
+        (r) =>
+          r.request().method() === "PATCH" &&
+          new URL(r.url()).pathname.endsWith(`/api/clips/${clip.id}`),
+      );
+      await toggle.click();
+      expect((await again).status()).toBe(200);
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      const fresh = (await (
+        await request.get(`/api/clips/${clip.id}`)
+      ).json()) as { layers: unknown };
+      expect(fresh.layers).toEqual({ captions: true });
+      // 持っていない重ねは 400
+      expect(
+        (
+          await request.patch(`/api/clips/${clip.id}`, {
+            data: { comments: true },
+          })
+        ).status(),
+      ).toBe(400);
+    } finally {
+      await request.delete(`/api/clips/${clip.id}`);
+    }
+  });
+
+  /**
    * **スマホの幅では、絞り込みの1行を下のタブのすぐ上に浮かせ**、開いた1枚の右端の列は 48px の丸
    * (車のタブレットでも指が届く大きさ。観る画面の右の列と同じ)
    */

@@ -7,8 +7,9 @@
 export type ClipPlace = "live" | "chase" | "watch";
 
 /**
- * 送れる画像の大きさの上限 (バイト)。**サーバの本文の上限 (`BODY_SIZE_LIMIT`。既定 512K) に合わせる** —
- * それより大きい本文は SvelteKit に届く前に断られる。画面はこれに収まるまで画質を下げて送る
+ * 送れる本文の大きさの上限 (バイト)。**サーバの本文の上限 (`BODY_SIZE_LIMIT`。既定 512K) に合わせる** —
+ * それより大きい本文は SvelteKit に届く前に断られる。映像と字幕・コメントの重ねを一緒に送るときは、合わせてこれに収める
+ * (画面は収まるまで映像の画質を下げる)
  */
 export const CLIP_BYTES_MOST = 512 * 1024;
 
@@ -36,8 +37,51 @@ export interface Clip {
   captions: string;
   width: number;
   height: number;
-  /** 置き場で使っている大きさ (画像と一覧用の合計) */
+  /** 置き場で使っている大きさ (画像・一覧用・元の画像の合計) */
   bytes: number;
+  /**
+   * あとから出し入れできる重ね。**撮ったときに出していたものだけ**キーがあり、値はいま重ねているか。
+   * 分けて送られなかったもの (字幕を焼き込んだ古い切り抜きなど) は空
+   */
+  layers: ClipLayers;
+}
+
+/** 切り抜きに重ねられるもの (`comments` は実況のコメント)。重ねる順は映像 → コメント → 字幕 (観ている画面と同じ) */
+export const CLIP_LAYERS = ["comments", "captions"] as const;
+export type ClipLayer = (typeof CLIP_LAYERS)[number];
+export type ClipLayers = Partial<Record<ClipLayer, boolean>>;
+
+/**
+ * 画像の版。重ねを出し入れすると同じ URL の中身が替わるので、画面は `?v=` に付けて端末のキャッシュを分ける。
+ * 重ねを持たないものは空 (中身は替わらない)
+ */
+export function clipVersion(layers: ClipLayers): string {
+  if (CLIP_LAYERS.every((layer) => layers[layer] === undefined)) return "";
+  return CLIP_LAYERS.map((layer) =>
+    layers[layer] === undefined ? "-" : layers[layer] ? "1" : "0",
+  ).join("");
+}
+
+/** 画像の URL の問い合わせ (`?v=`)。重ねを持たないものは空 */
+export function clipVersionQuery(clip: Pick<Clip, "layers">): string {
+  const version = clipVersion(clip.layers);
+  return version === "" ? "" : `?v=${version}`;
+}
+
+/**
+ * `PATCH /api/clips/<id>` の本文を読む。`{ "captions": false }` のように、変えたいものだけ真偽で。
+ * 知らない名前・真偽でない値・空なら null
+ */
+export function parseLayerPatch(body: unknown): ClipLayers | null {
+  if (typeof body !== "object" || body === null || Array.isArray(body))
+    return null;
+  const patch: ClipLayers = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (!(CLIP_LAYERS as readonly string[]).includes(key)) return null;
+    if (typeof value !== "boolean") return null;
+    patch[key as ClipLayer] = value;
+  }
+  return Object.keys(patch).length === 0 ? null : patch;
 }
 
 /** 絞り込みの「ライブか録画か」 */

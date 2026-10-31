@@ -27,9 +27,13 @@ import {
 import {
   type Clip,
   CLIP_BYTES_MOST,
+  CLIP_LAYERS,
   CLIP_PAGE,
+  type ClipLayer,
+  type ClipLayers,
   type ClipPlace,
   type ClipQuery,
+  clipVersion,
 } from "../clips";
 import { pad } from "../format";
 import type { FileSource } from "../source";
@@ -46,16 +50,21 @@ import { run } from "./stream";
 import { searchable } from "./title";
 
 /**
- * **切り抜き** (観ている1コマを字幕ごと写した静止画) を受けて置く。
+ * **切り抜き** (観ている1コマを、出していた字幕・実況のコメントごと写した静止画) を受けて置く。
  *
- * 画面は撮った1コマを WebP か JPEG で送ってくる (`components/player/snapshot.ts`)。ここで ffmpeg に通して
- * **AVIF** (SVT-AV1 の静止画) にし、一覧用の小さいもの (幅 480) と一緒に置き場 (`clipsDir()`) に置く。
- * ffmpeg に通すのは、小さくするためと、**画像として読めるかの確認**を兼ねる (読めなければ断る)。
+ * 画面は撮った1コマを WebP か JPEG で、出していた字幕とコメントはそれぞれ透明な PNG (映像と同じ縦横) で、
+ * 分けて送ってくる (`components/player/snapshot.ts`)。ここで ffmpeg に通して重ね、**AVIF** (SVT-AV1 の静止画) にし、
+ * 一覧用の小さいもの (幅 480) と一緒に置き場 (`clipsDir()`) に置く。ffmpeg に通すのは、小さくするためと、
+ * **画像として読めるかの確認**を兼ねる (読めなければ断る)。
+ *
+ * **字幕とコメントはあとから出し入れできる** (`setClipLayers`)。受けた元の画像を残しておき、出し入れのたびに
+ * 元から重ね直す (AVIF を重ねて作り直すと、そのたびに崩れていくので)。重ねを送らないもの (1枚だけの画像) は元を残さない。
  *
  * 番組の情報はサーバが引く。画面が送るのは「どの録画のどこか」か「どの局のいつか」だけで、
  * 番組名・局名・番組の始めからの位置はここで決めて写しておく (番組表は流れ、録画は消える)。
  *
- * - 置き場は `<年月>/<ID>.avif` と `<年月>/<ID>-small.avif`。**自動では消さない**。録画を消しても残す
+ * - 置き場は `<年月>/<ID>.avif` と `<年月>/<ID>-small.avif`、元の画像は `<年月>/<ID>.src/` (`frame.webp` などと
+ *   `captions.png`・`comments.png`)。**自動では消さない**。録画を消しても残す
  * - EXIF などは書かない (`-map_metadata -1`)。ログに番組名を出さない
  */
 
@@ -181,6 +190,59 @@ export function checkImage(bytes: Uint8Array): {
   return info;
 }
 
+/** 受けた1枚。映像 (`frame`) と、出していた重ね (透明な PNG) */
+export interface ClipParts {
+  frame: Uint8Array;
+  captions?: Uint8Array | undefined;
+  comments?: Uint8Array | undefined;
+}
+
+/**
+ * multipart の本文から読む。部分の名前は `frame` (映像。要る)・`captions`・`comments` (重ね。任意)。
+ * ほかの名前は読み捨てる。映像が無い・ファイルでない部分は 400
+ */
+export async function readClipForm(form: FormData): Promise<ClipParts> {
+  const bytes = async (name: string): Promise<Uint8Array | undefined> => {
+    const part = form.get(name);
+    if (part === null) return undefined;
+    if (typeof part === "string")
+      throw new ClipError(400, `${name} は画像のファイルで送ってください`);
+    return new Uint8Array(await part.arrayBuffer());
+  };
+  const frame = await bytes("frame");
+  if (frame === undefined) throw new ClipError(400, "画像がありません");
+  return {
+    frame,
+    captions: await bytes("captions"),
+    comments: await bytes("comments"),
+  };
+}
+
+/**
+ * 受けた1枚を確かめる。映像は `checkImage` と同じ。重ねは**映像と同じ縦横の PNG** だけ (透けている所が要る)。
+ * 部分ごとの大きさも `checkImage` の上限で見る (合わせた本文の上限は、読む前に `POST` が見る)
+ */
+export function checkParts(parts: ClipParts): {
+  type: ImageType;
+  width: number;
+  height: number;
+} {
+  const info = checkImage(parts.frame);
+  for (const layer of CLIP_LAYERS) {
+    const bytes = parts[layer];
+    if (bytes === undefined) continue;
+    const layered = checkImage(bytes);
+    if (layered.type !== "png")
+      throw new ClipError(415, "字幕・コメントは PNG で送ってください");
+    if (layered.width !== info.width || layered.height !== info.height)
+      throw new ClipError(
+        400,
+        "字幕・コメントは映像と同じ縦横で送ってください",
+      );
+  }
+  return info;
+}
+
 /** AVIF の色の書き方。canvas の画素は sRGB なので、BT.709 の行列でフルレンジの YUV にする */
 const AVIF_COLOR = [
   "-color_range",
@@ -194,10 +256,18 @@ const AVIF_COLOR = [
 ];
 
 /**
- * ffmpeg の引数。1回の起動で AVIF を2枚 (そのままの大きさと一覧用) 書く。
- * 4:2:0 は縦横が偶数でないとエンコードできないので、奇数なら1画素削る
+ * ffmpeg の引数。映像 (`input`) に重ね (`layers`。透明な PNG、下から順に) を重ね、1回の起動で AVIF を2枚
+ * (そのままの大きさと一覧用) 書く。4:2:0 は縦横が偶数でないとエンコードできないので、奇数なら1画素削る。
+ *
+ * 重ねるのは RGB で (`overlay=format=rgb`)。既定の YUV 4:2:0 で重ねると、色を半分の細かさにしてから重ねるので
+ * 字の縁の色がにじむ。YUV にするのは最後の1回だけ (重ねないときと同じ)
  */
-export function avifArgs(input: string, full: string, small: string): string[] {
+export function avifArgs(
+  input: string,
+  layers: string[],
+  full: string,
+  small: string,
+): string[] {
   const encode = (crf: number) => [
     "-frames:v",
     "1",
@@ -215,6 +285,13 @@ export function avifArgs(input: string, full: string, small: string): string[] {
     "avif",
   ];
   const yuv = "out_color_matrix=bt709:out_range=full,format=yuv420p";
+  // 映像に1枚ずつ重ねる。[0:v:0] → [l1] → [l2] …
+  let base = "[0:v:0]";
+  let overlays = "";
+  layers.forEach((_, i) => {
+    overlays += `${base}[${i + 1}:v:0]overlay=format=rgb[l${i + 1}];`;
+    base = `[l${i + 1}]`;
+  });
   return [
     "-y",
     "-v",
@@ -222,10 +299,11 @@ export function avifArgs(input: string, full: string, small: string): string[] {
     "-nostdin",
     "-i",
     input,
+    ...layers.flatMap((layer) => ["-i", layer]),
     "-map_metadata",
     "-1",
     "-filter_complex",
-    `[0:v:0]split[a][b];` +
+    `${overlays}${base}split[a][b];` +
       `[a]scale=w=trunc(iw/2)*2:h=trunc(ih/2)*2:${yuv}[full];` +
       `[b]scale=w='min(${SMALL_WIDTH},trunc(iw/2)*2)':h=-2:${yuv}[small]`,
     "-map",
@@ -263,6 +341,30 @@ function smallFile(file: string): string {
 /** 画像の置き場の絶対パス。`small` なら一覧用 */
 export function clipPath(file: string, small = false): string {
   return join(clipsDir(), small ? smallFile(file) : file);
+}
+
+/** 元の画像の置き場 (`2026-10/12.src`)。重ねを分けて受けたものだけが持つ */
+export function clipSrcDir(file: string): string {
+  return join(clipsDir(), file.replace(/\.avif$/, ".src"));
+}
+
+/** 元の画像の名前。映像は受けた形式の拡張子で (ffmpeg の image2 は拡張子で読み方を決める) */
+function srcName(part: "frame" | ClipLayer, type: ImageType = "png"): string {
+  return `${part}.${type}`;
+}
+
+/** 元の映像の名前。形式は持っていないので、置き場を見て探す */
+function srcFrame(dir: string): string | undefined {
+  return readdirSync(dir).find((name) => name.startsWith("frame."));
+}
+
+/** 置き場の1つのフォルダの中の大きさの合計 (元の画像)。無ければ 0 */
+function dirBytes(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  return readdirSync(dir).reduce(
+    (sum, name) => sum + statSync(join(dir, name)).size,
+    0,
+  );
 }
 
 /**
@@ -389,6 +491,19 @@ function captionsText(raw: string): string {
   return [...raw.replace(/\s+/g, " ").trim()].slice(0, CAPTIONS_MOST).join("");
 }
 
+/** 行の重ね (`Clip.layers`)。持っているものだけキーを立てる */
+function layersOf(row: {
+  has_captions: boolean;
+  has_comments: boolean;
+  show_captions: boolean;
+  show_comments: boolean;
+}): ClipLayers {
+  const layers: ClipLayers = {};
+  if (row.has_comments) layers.comments = row.show_comments;
+  if (row.has_captions) layers.captions = row.show_captions;
+  return layers;
+}
+
 /** DB の行を API の形に。消した録画は付けない */
 type ClipRow = typeof clips.$inferSelect & { alive: number | null };
 function toClip(row: ClipRow): Clip {
@@ -407,6 +522,7 @@ function toClip(row: ClipRow): Clip {
     width: row.width,
     height: row.height,
     bytes: row.bytes,
+    layers: layersOf(row),
   };
 }
 
@@ -430,7 +546,8 @@ function sweepWork(work: string): void {
   for (const name of names) {
     const path = join(work, name);
     try {
-      if (statSync(path).mtimeMs < before) rmSync(path, { force: true });
+      if (statSync(path).mtimeMs < before)
+        rmSync(path, { recursive: true, force: true });
     } catch {
       // 読んでいる間に消えた
     }
@@ -438,43 +555,70 @@ function sweepWork(work: string): void {
 }
 
 /**
- * 1枚を受けて置く。画像を確かめ、AVIF にし、行を足して置き場へ移す。
+ * ffmpeg で重ねて AVIF を2枚書く。読めなければ (画像として壊れている) false。理由はログへ (番組名は出さない)
+ */
+async function encode(
+  input: string,
+  layers: string[],
+  full: string,
+  small: string,
+): Promise<boolean> {
+  const result = await run(
+    [config.ffmpeg, ...avifArgs(input, layers, full, small)],
+    { timeoutMs: CONVERT_TIMEOUT, stderr: true },
+  );
+  if (result.code === 0) return true;
+  console.warn(
+    `[clips] AVIF にできませんでした (code ${result.code}): ${result.stderr.trim().split("\n").slice(-3).join(" / ")}`,
+  );
+  return false;
+}
+
+/** 作業の名前 (`.work/<時刻>-<乱数>`)。AVIF の2枚はこれに `.avif`・`-small.avif` を足した名前 */
+function workStem(): { work: string; stem: string } {
+  const work = join(clipsDir(), ".work");
+  return { work, stem: join(work, `${Date.now()}-${crypto.randomUUID()}`) };
+}
+
+/**
+ * 1枚を受けて置く。画像を確かめ、重ねて AVIF にし、行を足して置き場へ移す。重ねを受けたときは元の画像も残す
+ * (撮ったときは受けた重ねをすべて重ねる — 出していたものだけが送られてくる)。
  * 変換できなかった (画像として読めない) ものは 415
  */
 export async function saveClip(
-  image: Uint8Array,
+  parts: ClipParts,
   scene: Scene,
   captions: string,
 ): Promise<Clip> {
-  const info = checkImage(image);
-  const work = join(clipsDir(), ".work");
-  const stem = join(work, `${Date.now()}-${crypto.randomUUID()}`);
-  const input = `${stem}.${info.type}`;
+  const info = checkParts(parts);
+  const layered = CLIP_LAYERS.filter((layer) => parts[layer] !== undefined);
+  const { work, stem } = workStem();
+  const src = `${stem}.src`;
+  const input = join(src, srcName("frame", info.type));
+  const layerPaths = layered.map((layer) => join(src, srcName(layer)));
   const full = `${stem}.avif`;
   const small = `${stem}-small.avif`;
   try {
     await oneAtATime(async () => {
       sweepWork(work);
-      mkdirSync(work, { recursive: true });
-      writeFileSync(input, image);
-      const result = await run(
-        [config.ffmpeg, ...avifArgs(input, full, small)],
-        {
-          timeoutMs: CONVERT_TIMEOUT,
-          stderr: true,
-        },
+      mkdirSync(src, { recursive: true });
+      writeFileSync(input, parts.frame);
+      layered.forEach((layer, i) =>
+        writeFileSync(layerPaths[i]!, parts[layer]!),
       );
-      if (result.code !== 0) {
-        console.warn(
-          `[clips] AVIF にできませんでした (code ${result.code}): ${result.stderr.trim().split("\n").slice(-3).join(" / ")}`,
-        );
+      if (!(await encode(input, layerPaths, full, small)))
         throw new ClipError(415, "画像を読めませんでした");
-      }
     });
 
     const takenAt = now();
     const text = captionsText(captions);
-    const bytes = statSync(full).size + statSync(small).size;
+    // 重ねの無いものは元を残さない (出し入れするものが無い)
+    const keepSrc = layered.length > 0;
+    const bytes =
+      statSync(full).size +
+      statSync(small).size +
+      (keepSrc ? dirBytes(src) : 0);
+    const has = (layer: ClipLayer) => layered.includes(layer);
     /*
      * **行を足すのと置き場へ移すのは1つのトランザクションで。** 名前は ID で決まるので行を先に足すが、
      * 移せなかった (途中で落ちた) ときに、名前の無い行を残さない
@@ -492,6 +636,10 @@ export async function saveClip(
           width: info.width - (info.width % 2),
           height: info.height - (info.height % 2),
           bytes,
+          has_captions: has("captions"),
+          has_comments: has("comments"),
+          show_captions: has("captions"),
+          show_comments: has("comments"),
         })
         .returning()
         .get();
@@ -500,8 +648,10 @@ export async function saveClip(
         mkdirSync(dirname(clipPath(file)), { recursive: true });
         renameSync(full, clipPath(file));
         renameSync(small, clipPath(file, true));
+        if (keepSrc) renameSync(src, clipSrcDir(file));
       } catch (error) {
         removeIfExists(clipPath(file));
+        removeIfExists(clipPath(file, true));
         throw error;
       }
       tx.update(clips).set({ file }).where(eq(clips.id, added.id)).run();
@@ -509,7 +659,74 @@ export async function saveClip(
     });
     return toClip({ ...row, alive: row.recording_id });
   } finally {
-    rmSync(input, { force: true });
+    rmSync(src, { recursive: true, force: true });
+    rmSync(full, { force: true });
+    rmSync(small, { force: true });
+  }
+}
+
+/**
+ * **字幕・コメントを出し入れする** (`PATCH /api/clips/<id>`)。`patch` は変えたいものだけ。元の画像から重ね直して
+ * AVIF の2枚を差し替え、行の `show_*` と大きさを書き換える。1080 で1秒ほど。
+ *
+ * 持っていない重ねを変えようとしたら 400 (字幕を焼き込んだ古い切り抜きなど)、元の画像が無ければ 404。
+ * 何も変わらなければ作り直さない。**変換と同じ列に並べる** — 続けて押されても、行と画像が食い違わない
+ */
+export async function setClipLayers(
+  id: number,
+  patch: ClipLayers,
+): Promise<Clip & { file: string }> {
+  const { work, stem } = workStem();
+  const full = `${stem}.avif`;
+  const small = `${stem}-small.avif`;
+  try {
+    return await oneAtATime(async () => {
+      const clip = clipById(id);
+      if (clip === undefined)
+        throw new ClipError(404, "切り抜きが見つかりません");
+      for (const layer of CLIP_LAYERS) {
+        if (patch[layer] !== undefined && clip.layers[layer] === undefined)
+          throw new ClipError(
+            400,
+            layer === "captions"
+              ? "この切り抜きには字幕がありません"
+              : "この切り抜きにはコメントがありません",
+          );
+      }
+      const next = { ...clip.layers, ...patch };
+      if (CLIP_LAYERS.every((layer) => next[layer] === clip.layers[layer]))
+        return clip;
+
+      const dir = clipSrcDir(clip.file);
+      const frame = existsSync(dir) ? srcFrame(dir) : undefined;
+      if (frame === undefined) throw new ClipError(404, "元の画像がありません");
+      const layers = CLIP_LAYERS.filter((layer) => next[layer] === true).map(
+        (layer) => join(dir, srcName(layer)),
+      );
+      sweepWork(work);
+      mkdirSync(work, { recursive: true });
+      if (!(await encode(join(dir, frame), layers, full, small)))
+        throw new ClipError(500, "重ね直せませんでした");
+      // 作っている間に消された (消すのは列に並ばない)。ここからは await を挟まないので、もう消されない
+      if (clipById(id) === undefined)
+        throw new ClipError(404, "切り抜きが見つかりません");
+      renameSync(full, clipPath(clip.file));
+      renameSync(small, clipPath(clip.file, true));
+      orm()
+        .update(clips)
+        .set({
+          show_captions: next.captions === true,
+          show_comments: next.comments === true,
+          bytes:
+            statSync(clipPath(clip.file)).size +
+            statSync(clipPath(clip.file, true)).size +
+            dirBytes(dir),
+        })
+        .where(eq(clips.id, id))
+        .run();
+      return clipById(id)!;
+    });
+  } finally {
     rmSync(full, { force: true });
     rmSync(small, { force: true });
   }
@@ -554,6 +771,10 @@ function clipColumns() {
     width: clips.width,
     height: clips.height,
     bytes: clips.bytes,
+    has_captions: clips.has_captions,
+    has_comments: clips.has_comments,
+    show_captions: clips.show_captions,
+    show_comments: clips.show_comments,
   };
 }
 
@@ -670,6 +891,7 @@ export function deleteClips(ids: number[]): number {
     if (row.file === "") continue;
     removeIfExists(clipPath(row.file));
     removeIfExists(clipPath(row.file, true));
+    rmSync(clipSrcDir(row.file), { recursive: true, force: true });
     pruneEmptyDirs(clipPath(row.file));
   }
   orm()
@@ -686,16 +908,25 @@ export function deleteClips(ids: number[]): number {
 
 /**
  * 画像を返す。他の API と同じ認証の内側で、**添付にはしない** (開けばそのまま映る)。
- * 同じ ID の画像は変わらない (ID は使い回さない) ので端末に持たせてよいが、世帯の外の
- * 共有のキャッシュには置かせない (`private`)。置き場に無ければ 404
+ * 世帯の外の共有のキャッシュには置かせない (`private`)。置き場に無ければ 404。
+ *
+ * 端末に持たせてよいのは中身が替わらないときだけ: 重ねを持たないもの (ID は使い回さない) と、
+ * いまの重ねの版 (`clipVersion`) を `?v=` に付けて開いたもの。重ねを持つものを版なしで (古い版で) 開いたら、
+ * 出し入れで替わるので毎回取り直させる
  */
-export function clipImage(file: string, small: boolean): Response {
-  const path = clipPath(file, small);
+export function clipImage(
+  clip: Pick<Clip, "layers"> & { file: string },
+  small: boolean,
+  version: string | null,
+): Response {
+  const path = clipPath(clip.file, small);
   if (!existsSync(path)) error(404, "画像がありません");
+  const current = clipVersion(clip.layers);
+  const fixed = current === "" || version === current;
   return new Response(Bun.file(path), {
     headers: {
       "Content-Type": "image/avif",
-      "Cache-Control": "private, max-age=86400",
+      "Cache-Control": fixed ? "private, max-age=86400" : "private, no-cache",
       "X-Content-Type-Options": "nosniff",
     },
   });

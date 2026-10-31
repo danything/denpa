@@ -3,11 +3,13 @@ import type { APIRequestContext, Page, WebSocketRoute } from "@playwright/test";
 import { BS11, FUJI, MX } from "../fake/services";
 import {
   expect,
+  fakeFrame,
   goto,
   openSettings,
   overlayTroubles,
   pickCodec,
   recordOne,
+  takeClip,
   test,
   wakeControls,
 } from "./helpers";
@@ -617,6 +619,21 @@ test.describe("録画の実況", () => {
       expect(asked[0]!.searchParams.get("starttime")).toBe(
         String(Math.floor(target.head / 1000)),
       );
+
+      // 切り抜きには流れているコメントも写る。映像とは分けて送り、あとから出し入れできる
+      await fakeFrame(page, "watch-video");
+      await wakeControls(page, "watch-stage");
+      const posted = page.waitForRequest(
+        (req) =>
+          req.method() === "POST" &&
+          new URL(req.url()).pathname.endsWith("/api/clips"),
+      );
+      const clip = await takeClip(page, "watch-shot");
+      expect(
+        (await posted).postDataBuffer()?.toString("latin1") ?? "",
+      ).toContain('name="comments"');
+      expect(clip.layers.comments).toBe(true);
+      await request.delete(`/api/clips/${clip.id}`);
     } finally {
       await setJikkyo(page, false);
     }

@@ -25,6 +25,7 @@
    *   (長さは `!important` で書く。Pico は動きを減らす設定で `animation-duration` を 1ms にするので、置いたものがすぐ消えていた)
    * - この端末から書き込んだものは、字の下に空色の短い線 (`mine`)
    * - 同時に流すのは 60 件まで (`data-lite` の端末では 15 件)。空いた行が無ければ捨てる
+   * - 切り抜きは、いま見えているものを見えている位置のまま写す (`snapshot.ts` の `commentLayer`。枠は `data-frame` で探す)
    */
   interface Props {
     feed: JikkyoFeed;
@@ -148,6 +149,7 @@
 >
   <div
     class="frame"
+    data-frame
     style:left="{frame.left}px"
     style:top="{frame.top}px"
     style:width="{frame.width}px"

@@ -287,7 +287,7 @@
     stepVolume: volume.step,
   });
 
-  /** いまの1コマを字幕ごと切り抜いてサーバに保存する (ライブ・観る画面と同じ。`shot.svelte.ts`) */
+  /** いまの1コマを字幕・コメントごと切り抜いてサーバに保存する (ライブ・観る画面と同じ。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
   const notices = $derived<Notice[]>([...shooter.notices, ...pip.notices]);
   function snapshot(): void {
