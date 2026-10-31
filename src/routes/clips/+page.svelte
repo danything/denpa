@@ -1039,12 +1039,11 @@
   /*
    * 1枚を開いた所。**画面を覆わず、一覧の上に浮かぶ箱** (ダイアログと同じく後ろは幕 `--dp-backdrop`、幕を押すと閉じる)。
    * 箱は 16:9 の黒い舞台 (テーマにかかわらず。映像の上と同じ色の決まり) で、画面に収まる大きさまで。
+   * 縦は右端の列 (6 つ) が1列に収まる高さを下限にする (スマホの縦の 16:9 では低すぎて列が折り返す)。
+   * 並べ方 (真ん中に置く) は Pico の dialog のまま。ここで `display` を書くと閉じた幕が消えずに一覧を塞ぐ。
    * 開き方もダイアログの箱と同じ (少し縮んだ姿からばねで。app.css の `dialog > article`)
    */
   .viewer {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     padding: 1rem;
     color: var(--dp-on-video);
   }
@@ -1055,6 +1054,7 @@
     justify-content: center;
     width: min(calc(100vw - 2rem), calc((100svh - 2rem) * 16 / 9), 80rem);
     aspect-ratio: 16 / 9;
+    min-height: min(24rem, calc(100svh - 2rem));
     overflow: hidden;
     border-radius: var(--dp-radius-lg);
     background: var(--dp-video);

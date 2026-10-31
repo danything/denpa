@@ -741,7 +741,7 @@ test.describe("録画を観る", () => {
     await search.fill("");
     await expect(page).toHaveURL(/\/clips$/);
 
-    // 開くと暗い全画面。「この場面から観る」で録画のその位置へ
+    // 開くと一覧の上に浮かぶ箱。「この場面から観る」で録画のその位置へ
     await card.click();
     const viewer = page.getByTestId("clip-viewer");
     await expect(viewer).toBeVisible();
