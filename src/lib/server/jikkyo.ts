@@ -63,14 +63,14 @@ export const RANKING_TTL = 30_000;
 /**
  * `GET /api/v1/channels` の返事から、放送中のスレッドの勢いを抜く。
  * 返すのは勢いだけで、`viewers` (NX-Jikkyo に繋いでいる数で、ニコニコの視聴者数ではない)・番組名・スレッドの一覧は捨てる。
- * 形がずれていたら、読めたチャンネルだけ使う (`warn` に 1 回言う)。1 つも読めなければ失敗にする
+ * 形式がずれていたら、読めたチャンネルだけ使う (`warn` に 1 回言う)。1 つも読めなければ失敗にする
  */
 export function parseForces(
   body: unknown,
   warn: (message: string) => void = () => {},
 ): Map<string, number> {
   if (!Array.isArray(body))
-    throw new Error("返事の形が違います (配列ではありません)");
+    throw new Error("返事の形式が違います (配列ではありません)");
   const forces = new Map<string, number>();
   let odd = 0;
   for (const entry of body as unknown[]) {
@@ -95,10 +95,10 @@ export function parseForces(
     forces.set(channel.id, active.jikkyo_force);
   }
   if (odd > 0 && forces.size === 0)
-    throw new Error("返事の形が違います (勢いを読めません)");
+    throw new Error("返事の形式が違います (勢いを読めません)");
   if (odd > 0)
     warn(
-      `NX-Jikkyo の返事の形が一部違います (${odd} チャンネルを読めません)。NX-Jikkyo のバージョンが変わったかもしれません`,
+      `NX-Jikkyo の返事の形式が一部違います (${odd} チャンネルを読めません)。NX-Jikkyo のバージョンが変わったかもしれません`,
     );
   return forces;
 }
@@ -128,7 +128,7 @@ export class RankingRelay {
   private failed: { at: number; error: unknown } | null = null;
   /** 最後に記録に残した失敗の理由。戻ったら null */
   private failure: string | null = null;
-  /** 形のずれの警告を出したか (1 回だけ) */
+  /** 形式のずれの警告を出したか (1 回だけ) */
   private warnedShape = false;
 
   constructor(
