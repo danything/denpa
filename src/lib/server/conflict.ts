@@ -54,19 +54,9 @@ export interface Accepted<T extends Assignable> {
   to: number;
 }
 
-export interface AssignResult<T extends Assignable> {
+interface AssignResult<T extends Assignable> {
   accepted: Accepted<T>[];
   rejected: { reservation: T; reason: string }[];
-}
-
-/**
- * 番組そのものが丸ごと入っているか。**マージンが削られただけなら「丸ごと」。**
- *
- * 隣り合う番組はマージンぶんだけ必ず重なるので、そこを削っただけで
- * 「途中から」と言い出すと、**ほとんどの録画にラベルが付いて意味を失う**
- */
-export function whole<T extends Assignable>(a: Accepted<T>): boolean {
-  return a.from <= a.reservation.start_at && a.to >= a.reservation.end_at;
 }
 
 /**
@@ -81,7 +71,7 @@ function window(a: { start_at: number; end_at: number }, margins: Margins) {
   return { from: a.start_at - margins.start, to: a.end_at + margins.end };
 }
 
-export interface Margins {
+interface Margins {
   /** 開始何ms前から録り始めるか */
   start: number;
   /** 終了何ms後まで録り続けるか */
@@ -96,7 +86,7 @@ function poolOf(type: string): string {
 }
 
 /** 同じ `rank` のチューナーの組。受けられる種別は同じ (エージェントとの約束) */
-export interface TunerGroup {
+interface TunerGroup {
   rank: number;
   types: ReadonlySet<string>;
   count: number;
@@ -342,7 +332,7 @@ export function placements(
  * ## 番組はマージンに勝つ
  *
  * マージンは「番組が延びたときのための保険」なので、他所の**番組**とぶつかったら
- * 相手が優先度の高い予約でもマージンのほうを削る (削っただけなら `whole`)。
+ * 相手が優先度の高い予約でもマージンのほうを削る (削っただけなら欠けたとは言わない。`format.clipNote`)。
  * 削るのは要るぶんだけ — 削らずに入るならそのまま、削れば長く入るなら削る
  */
 export function assign<T extends Assignable>(

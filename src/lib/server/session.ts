@@ -21,7 +21,7 @@ export const PENDING_COOKIE = "denpa_login";
 export const PENDING_TTL = 10 * 60;
 
 /** 控えのうち、認証に要るぶん (作った時刻は要らない) */
-export type Session = Pick<
+type Session = Pick<
   typeof sessions.$inferSelect,
   "id" | "subject" | "name" | "expires_at"
 >;

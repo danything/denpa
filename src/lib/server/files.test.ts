@@ -190,7 +190,7 @@ describe("古い履歴の片付け", () => {
  * 手で置いたものかもしれないので、数えるだけ。
  */
 describe("実体との照合", () => {
-  /** 置き場を作り直して、そこに置いたファイルの一覧を返す */
+  /** 元のTSの置き場にあるファイルの一覧 */
   function files(): string[] {
     return readdirSync(config.rawDir).sort();
   }
@@ -343,7 +343,7 @@ describe("実体との照合", () => {
     expect(reconcile().strays).toBe(1);
   });
 
-  /** 両方のコーデックをエンコードした録画を1件入れる。返り値は {av1, h264} の実パス */
+  /** AV1 と H.264 の2つでエンコードした録画を1件入れる。返り値は {av1, h264} の実パス */
   function twoCodec(): { av1: string; h264: string } {
     const av1 = put(config.encodedDir, "二本立て/二本立て - 1.mkv");
     const h264 = put(config.encodedDir, "二本立て/二本立て - 1 [H264].mkv");
@@ -366,7 +366,7 @@ describe("実体との照合", () => {
   }
 
   /*
-   * **両方エンコードした録画の H.264 は「DBに無い動画」ではない。** known 集合に
+   * **AV1 と H.264 でエンコードした録画の H.264 は「DBに無い動画」ではない。** known 集合に
    * `alt_path` も入れておかないと、もう一方が野良動画として数えられてしまう
    */
   test("もう一方のコーデックは stray に数えない", () => {

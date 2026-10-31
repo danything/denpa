@@ -185,14 +185,14 @@ let hwTurn = 0;
  * - `scene` … 場面の切れ目ごと。まだ境目が分からない1本目 (CM を探しながらエンコードする)
  * - 時刻の並び … 境目が決まってからエンコードするもの (2本目のコーデック・再エンコード)。エンコードするものの時刻 (秒)
  */
-export type Keyframes = "scene" | number[];
+type Keyframes = "scene" | number[];
 
 /**
  * キーフレームを置かせる引数。どのエンコーダも、印の付いたコマ (`pict_type = I`) を
  * キーフレームにする。**QSV と NVENC は指定しないと IDR にならない** (QSV は `-forced_idr`、NVENC は
  * `-forced-idr`。名前の綴りが違う)。IDR でないと入れ物にキーフレームとして書かれず、そこで切れない。
  *
- * **Rockchip MPP (h264_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
+ * **Rockchip MPP (h264_rkmpp・hevc_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
  * MPP に渡さない)。渡しても害は無く、境目にキーフレームが無ければ CM を切るところで
  * ソフトウェアで再エンコードする (`runJob`)
  */
@@ -1449,7 +1449,7 @@ async function runJob(jobId: number): Promise<void> {
    * 録画開始直後の数百msだけ壊れているケースをここで救う (buildArgs のコメント)。
    * 別の理由での失敗もここに来るが、もう一度同じ理由で落ちるだけなので無害。
    *
-   * **GPU でエンコードするときは、その2回が駄目なら次の方式 (QSV → VA-API → ソフトウェア) で
+   * **GPU でエンコードするときは、その2回が駄目なら次の方式 (`hwChain` の順。最後はソフトウェア) で
    * 同じ2回をやり直す。** 起動時の試しのエンコードは通っても、素材しだいで落ちることは
    * ありうる (ドライバの対応していない大きさなど)。GPU が駄目なだけで録画が
    * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
@@ -2050,7 +2050,7 @@ async function runCmJob(jobId: number): Promise<void> {
 
   /*
    * エンコードしたものにチャプターを書き直す。「何もしない」なら外す。
-   * **全部書き終えてから差し替える** — 2本 (AV1 と H.264) のうち片方だけ新しくなる状態を残さない。
+   * **全部書き終えてから差し替える** — 何本か (AV1・H.265・H.264) のうち一部だけ新しくなる状態を残さない。
    * 覚え書き (`cm_ranges`) も差し替えたあとに書く
    */
   const cm = settings().cmCut === "off" ? [] : shiftRanges(detection.cm, skip);

@@ -211,7 +211,7 @@ describe("ライブを GPU でエンコードする経路", () => {
 });
 
 describe("Rockchip MPP", () => {
-  /** `/dev/mpp_service`。renderD* とは別の行で、H.264 だけ */
+  /** `/dev/mpp_service`。renderD* とは別の行 (ここでは H.264 だけ) */
   const R: HwDevice = {
     path: "/dev/mpp_service",
     label: "mpp_service (Rockchip)",
@@ -223,7 +223,7 @@ describe("Rockchip MPP", () => {
     full: [],
   };
 
-  test("H.264 だけを受け持ち、ほかの GPU と同じくジョブごとに回す", () => {
+  test("AV1 は受け持たず、ほかの GPU と同じくジョブごとに回す", () => {
     expect(hwChain("av1", {}, 0, [R])).toEqual([]);
     expect(hwChain("h264", {}, 0, [B, R])).toEqual([
       { device: B.path, kind: "qsv" },

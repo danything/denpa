@@ -37,7 +37,7 @@ const RANGES =
 /**
  * Denpa Font を名乗らせる CSS (`/api/font/denpa-font.css`)。**2 つの woff2 を同じファミリ名で名乗らせる**:
  * 基本の字 (`denpa-font.woff2`) と、JIS X 0213 で足された漢字 (`denpa-font-jisx0213.woff2`)。後のほうには
- * `unicode-range` を付けるので、ブラウザはその字が画面に出たときだけ取りに行く (多くの画面は基本の字だけで済む)。
+ * `unicode-range` を付けるので、ブラウザはその字が画面に出たときだけ取得する (多くの画面は基本の字だけで済む)。
  *
  * URL は CSS からの相対 (接頭辞の下でも同じ)。`version` は入っているバージョンで、woff2 を1年持たせる鍵。
  * 範囲 (`ranges`) が無い・読めないときは基本のファイルだけを名乗らせる

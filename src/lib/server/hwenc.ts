@@ -26,7 +26,7 @@ import { run } from "./stream";
  *
  * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
  * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** 方式 (QSV / VA-API) ×
- * コーデックの4通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は
+ * コーデックの6通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は
  * 設定の「エンコード」に出て、使えるものは自動で使う (コーデックごとのエンコーダ。`settings().hwAllow` と
  * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は予備** — 同じ GPU なら速さは
  * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
@@ -411,7 +411,7 @@ export function liveHw(
  * - `-async_depth 1` … GPU に先積みしない。既定 (VA-API 2・QSV 4) のぶんだけ映像が遅れて出る
  * - QSV は `-preset veryfast`。先読み (`look_ahead`) は既定で切れているので触らない —
  *   書いて名前が変わると、エンコードできずにソフトウェアへ落ちるだけになる
- * - 画質は録画と同じ ICQ 24 (CQP なら同じ値の qp)。x264 ultrafast の既定 (crf 23) と
+ * - 画質は録画と同じ ICQ 24 (CQP なら録画と同じ qp)。x264 ultrafast の既定 (crf 23) と
  *   同じ軸のつもりだが、**手元に GPU が無いので見比べていない**
  *
  * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
@@ -647,7 +647,7 @@ async function probeOnce(): Promise<HwEncode> {
   /*
    * **NVIDIA の GPU は1枚ずつ、NVENC だけ試す。** renderD* の行とは別にする — NVIDIA のドライバが
    * renderD* も作っていても、イメージに NVIDIA の VA-API ドライバは無く、そちらの行は使えないと出るだけ。
-   * AV1 は RTX 40 以降だけで、それより前の GPU は試しのエンコードが落ちて H.264 だけになる
+   * AV1 は RTX 40 以降だけで、それより前の GPU は AV1 の試しのエンコードが落ちて H.264・H.265 だけになる
    */
   for (const [gpu, path] of findNvidia().entries()) {
     const device: HwDevice = {
@@ -759,7 +759,7 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 }
 
 /**
- * デバイスごとの一言。「QSV: H.264 / AV1、VA-API: H.264 (CQP)」か「GPU でエンコードできません」。
+ * デバイスごとの一言。「QSV: AV1 / H.264、VA-API: H.264 (CQP)」か「GPU でエンコードできません」。
  * ICQ を持たないドライバで CQP に落としたものには (CQP) を添え、デコードから GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */

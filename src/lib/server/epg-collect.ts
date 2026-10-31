@@ -117,7 +117,7 @@ function latestPerService(
 
 const key = (channel: AgentChannel) => `${channel.type}:${channel.channel}`;
 
-export interface CollectState {
+interface CollectState {
   running: boolean;
   /** いま開いているチャンネル */
   active: string[];

@@ -15,7 +15,7 @@ import { webhooks } from "./schema";
  * どちらも前のバージョンのエージェントには無いので、取れなければ理由を返して画面は止めない
  */
 
-export interface AgentLogs {
+interface AgentLogs {
   lines: LogLine[];
   /** 取れなかった理由。取れたら null */
   error: string | null;
@@ -73,7 +73,7 @@ export async function agentLogs(known: Known): Promise<AgentLogs> {
   }
 }
 
-export interface AgentAboutResult {
+interface AgentAboutResult {
   about: AgentAbout | null;
   /** 取れなかった理由。取れたら null */
   error: string | null;

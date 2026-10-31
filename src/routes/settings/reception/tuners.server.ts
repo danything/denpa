@@ -59,7 +59,7 @@ const USE_WORDS: [RegExp, string][] = [
  *
  * **数字は画面に出さない。** ルールの「優先度」(0〜9。予約どうしを比べる) と並ぶと、
  * ルールの 2 が番組表の 3 に負けるように読めてしまう (別の物差し)。順番だけ言えば足りる。
- * 鍵を `config.priority` から取るので、用途を足したら言葉も足さないと型で落ちる
+ * キーを `config.priority` から取るので、用途を足したら言葉も足さないと型で落ちる
  */
 const USE_LABEL: Record<keyof typeof config.priority, string> = {
   recording: "録画",

@@ -24,7 +24,7 @@ const RELEASE = object({
 });
 type Release = Infer<typeof RELEASE>;
 
-export interface Available {
+interface Available {
   /** `v1.8.0` の形式。そのまま画面に出す */
   version: string;
   /** リリースのページ */

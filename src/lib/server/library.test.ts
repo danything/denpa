@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { encodedCodec } from "../encoded-codec";
+
 /**
  * 保存先での名前の付け方。
  *
@@ -11,7 +13,7 @@ import { dirname, join } from "node:path";
 const { config } = await import("./config");
 config.encodedDir = mkdtempSync(join(tmpdir(), "denpa-lib-"));
 
-const { libraryPath, encodedPath, encodedCodec, libraryFamily, seriesFolder } =
+const { libraryPath, encodedPath, libraryFamily, seriesFolder } =
   await import("./library");
 
 /** 2026-08-03 22:30 開始の録画 */
@@ -69,9 +71,9 @@ describe("保存先での名前", () => {
   });
 
   /*
-   * **コーデックごとに名前を分ける。** 両方エンコードすると同じフォルダに2本並ぶので、
-   * H.264 のほうに印を付けて衝突を避ける。どちらも Matroska (mp4 は ARIB 字幕を
-   * 持てない)。テレビでどちらを選べばよいかも名前で分かる
+   * **コーデックごとに名前を分ける。** いくつものコーデックでエンコードすると同じフォルダに最大3本並ぶので、
+   * H.265・H.264 のほうに印を付けて衝突を避ける。どれも Matroska (mp4 は ARIB 字幕を
+   * 持てない)。テレビでどれを選べばよいかも名前で分かる
    */
   test("AV1 は素の .mkv、H.265 は [H265]、H.264 は [H264] 付き", () => {
     // 他のテストが置いた PLAIN と衝突しないよう、別のシリーズで見る

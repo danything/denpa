@@ -97,7 +97,7 @@ describe("空きと残り時間", () => {
 
   test("1時間あたりの量で空きを割る。残した元のTSも数え、消したものと短いものは数えない", () => {
     orm().delete(recordings).run();
-    // 1本は元のTSも残している (エンコードした 1GB + 元のTS 3GB)
+    // 1本は元のTSも残している (エンコードしたものと元のTS 3KB で、足して 1GB)
     const raw = join(dir, "kept.ts");
     writeFileSync(raw, Buffer.alloc(3 * 1024));
     orm()

@@ -91,7 +91,7 @@ function parseGenreDetail(program: Matchable): Genre[] {
  * 有効なルール 318 × これから放送される番組 25,608 = **810万回**それをやっていた。
  * ルールを1つ足すだけで十数秒待たされていたのはこれが理由。
  */
-export interface CompiledRule {
+interface CompiledRule {
   rule: Rule;
   services: number[] | null;
   types: string[] | null;
@@ -290,7 +290,7 @@ export interface RulePrefill {
 }
 
 /** 録画・番組から読む分 */
-export interface RuleSource {
+interface RuleSource {
   name: string;
   service_id: number;
   genre_detail: Genre[] | null;
@@ -358,7 +358,7 @@ export function coveringRule(
 }
 
 /** 取り消し済みの放送に、番組が当たるかどうか */
-export interface Declined {
+interface Declined {
   has(
     program: Pick<Program, "name" | "start_at"> & { channel: string },
   ): boolean;
@@ -672,7 +672,7 @@ export function keepsReservation(
   return held.manual || held.start_at < at + config.ruleRetractGrace;
 }
 
-export interface RuleSync {
+interface RuleSync {
   /** 新しく立てた予約 */
   created: number;
   /** どのルールにも当たらなくなって消した予約 */

@@ -98,7 +98,7 @@ export class ClipError extends Error {
   }
 }
 
-export type ImageType = "png" | "jpeg" | "webp";
+type ImageType = "png" | "jpeg" | "webp";
 
 /**
  * 送られてきた画像の形式と縦横を頭から読む。**中身で見る** (`Content-Type` は信じない)。
@@ -191,7 +191,7 @@ export function checkImage(bytes: Uint8Array): {
 }
 
 /** 受けた1枚。映像 (`frame`) と、出していた重ね (透明な PNG) */
-export interface ClipParts {
+interface ClipParts {
   frame: Uint8Array;
   captions?: Uint8Array | undefined;
   comments?: Uint8Array | undefined;
@@ -669,7 +669,7 @@ export async function saveClip(
  * **字幕・コメントを出し入れする** (`PATCH /api/clips/<id>`)。`patch` は変えたいものだけ。元の画像から重ね直して
  * AVIF の2枚を差し替え、行の `show_*` と大きさを書き換える。1080 で1秒ほど。
  *
- * 持っていない重ねを変えようとしたら 400 (字幕を焼き込んだ古い切り抜きなど)、元の画像が無ければ 404。
+ * 持っていない重ねを変えようとしたら 400 (字幕を重ねて1枚にした古い切り抜きなど)、元の画像が無ければ 404。
  * 何も変わらなければ作り直さない。**変換と同じ列に並べる** — 続けて押されても、行と画像が食い違わない
  */
 export async function setClipLayers(
@@ -827,7 +827,7 @@ export function findClips(query: ClipQuery): {
 }
 
 /** 絞り込みの手がかり (画面のサイドバー)。局ごとの枚数・撮った日・使っている量 */
-export interface ClipFacets {
+interface ClipFacets {
   count: number;
   bytes: number;
   services: { id: number; name: string; count: number }[];
@@ -876,11 +876,6 @@ export function clipFacets(): ClipFacets {
   };
 }
 
-/** 録画の切り抜きの数 (観る画面の「この録画の切り抜き (n)」) */
-export function clipCount(recordingId: number): number {
-  return countClips({ recording: recordingId });
-}
-
 /** 消す。画像と行を。消せた数を返す (もう無いものは数えない) */
 export function deleteClips(ids: number[]): number {
   if (ids.length === 0) return 0;
@@ -913,7 +908,7 @@ export function deleteClips(ids: number[]): number {
  * 世帯の外の共有のキャッシュには置かせない (`private`)。置き場に無ければ 404。
  *
  * 端末に持たせてよいのは中身が替わらないときだけ: 重ねを持たないもの (ID は使い回さない) と、
- * いまの重ねの版 (`clipVersion`) を `?v=` に付けて開いたもの。重ねを持つものを版なしで (古い版で) 開いたら、
+ * いまの重ねのバージョン (`clipVersion`) を `?v=` に付けて開いたもの。重ねを持つものをバージョンなしで (古いバージョンで) 開いたら、
  * 出し入れで替わるので毎回取り直させる
  */
 export function clipImage(

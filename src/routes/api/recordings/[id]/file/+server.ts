@@ -9,7 +9,7 @@ import { type FileSource, parseFileSource } from "#lib/source.js";
 
 /**
  * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。
- * 元がどれ (元のTS・AV1・H.264) でも同じ形式で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
+ * 元がどれ (元のTS・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
  * 音声だけなので軽い。閉じられたら ffmpeg も止める
  */
 function audioOnly(path: string, request: Request): Response {

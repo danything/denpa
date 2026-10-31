@@ -614,7 +614,7 @@ export const encodeJobs = sqliteTable(
 );
 
 /** 切り抜きをどこで撮ったか。ライブ・追っかけ・観る画面 */
-export const CLIP_PLACES = ["live", "chase", "watch"] as const;
+const CLIP_PLACES = ["live", "chase", "watch"] as const;
 
 /**
  * **切り抜き** (観ている1コマを字幕・コメントごと写した静止画。`clips.ts`)。画像は置き場 (`clips.clipsDir`) に AVIF で置き (字幕・コメントを分けて受けたものは元の画像も)、
@@ -655,7 +655,7 @@ export const clips = sqliteTable(
     bytes: integer("bytes").notNull(),
     /**
      * 字幕・実況のコメントを分けて受けたか (元の画像を `<ID>.src/` に持っている)。撮ったときに出していたものだけ。
-     * 分けて受けていないもの (字幕を焼き込んだ古い切り抜き) は両方 0 で、出し入れできない
+     * 分けて受けていないもの (字幕を重ねて1枚にした古い切り抜き) は両方 0 で、出し入れできない
      */
     has_captions: flag("has_captions")
       .notNull()

@@ -133,7 +133,7 @@ export function reconcile(): {
 
   let removed = 0;
   for (const recording of placed) {
-    // もう一方 (H.265・H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
+    // 主でないもの (H.265・H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
     let hevc = recording.hevc_path;
     let alt = recording.alt_path;
     for (const [column, path] of [

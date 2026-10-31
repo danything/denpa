@@ -22,7 +22,7 @@ const KEY_SCENE = 8;
 
 /**
  * エンコードする鎖の頭に足すフィルタ。印 (`lavfi.scd.time`) の付いたコマを `-force_key_frames scd_metadata` が
- * キーフレームにする。CM 検出の `scdet@cm` と名前で分ける (どちらも標準エラーに行を出す)
+ * キーフレームにする。同じ ffmpeg に並ぶ CM 検出の `scdet@cm` と名前で分ける
  */
 export const KEY_SCDET = `scdet@key=threshold=${KEY_SCENE}`;
 

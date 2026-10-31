@@ -174,7 +174,7 @@ export async function cancel(reservationId: number): Promise<void> {
 }
 
 /** {@link recordAiring} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */
-export type RecordAiring =
+type RecordAiring =
   | { ok: true; programId: number; name: string; state: ReservationState }
   | { ok: false; status: 400 | 404; message: string };
 

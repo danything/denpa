@@ -279,7 +279,7 @@ describe("通していい人か", () => {
   });
 });
 
-describe("画面に出す名前", () => {
+describe("控えに残す名前", () => {
   test("name が無ければ別の名乗りを使う", () => {
     const { name: _name, ...nameless } = base;
     expect(

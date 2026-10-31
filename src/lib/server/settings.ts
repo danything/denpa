@@ -17,7 +17,7 @@ import { settings as settingsTable } from "./schema";
  * 全体で1つに寄せてある。初期値は config.ts が持ち、DBに値があればそちらが勝つ。
  */
 
-export interface Settings {
+interface Settings {
   /**
    * 録画のエンコードに使う映像コーデック。`none` ならエンコードしない。
    * **主のほう** — いくつもエンコードするときは AV1 → H.265 → H.264 の先頭 (小さいので既定の再生に向く)

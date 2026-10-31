@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { error, fail, redirect } from "@sveltejs/kit";
 import { eq, getTableColumns } from "drizzle-orm";
 
-import { clipCount, sceneTime } from "#lib/server/clips.js";
+import { countClips, sceneTime } from "#lib/server/clips.js";
 import { orm } from "#lib/server/db.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
@@ -89,7 +89,7 @@ export function load({ params, url }) {
     /** 「この場面から観る」で始める位置 (秒。観る画面の物差し)。無ければ null */
     scene,
     /** この録画の切り抜きの数 (右の列の「この録画の切り抜き」) */
-    clips: clipCount(id),
+    clips: countClips({ recording: id }),
   };
 }
 

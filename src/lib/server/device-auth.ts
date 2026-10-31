@@ -76,7 +76,7 @@ export function normalizeUserCode(input: string): string | null {
   return `${chars.slice(0, 4)}-${chars.slice(4)}`;
 }
 
-export interface IssuedCode {
+interface IssuedCode {
   deviceCode: string;
   userCode: string;
 }
@@ -170,7 +170,7 @@ export function issueCode(
 
 type CodeState = "pending" | "approved" | "expired" | "consumed";
 
-export interface CodeView {
+interface CodeView {
   userCode: string;
   name: string;
   state: CodeState;
@@ -227,7 +227,7 @@ export function approve(
 }
 
 /** 端末への答え (RFC 8628 の名前)。断る手順が無いので `access_denied` は返さない */
-export type PollError =
+type PollError =
   "authorization_pending" | "slow_down" | "expired_token" | "invalid_grant";
 
 /**
@@ -279,7 +279,7 @@ export function poll(
   return { token };
 }
 
-export interface TokenOwner {
+interface TokenOwner {
   id: number;
   name: string;
 }

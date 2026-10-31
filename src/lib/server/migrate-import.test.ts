@@ -188,7 +188,7 @@ describe("取り込み (v3)", () => {
     expect(second.service_name).toBe("どこかのテレビ");
     expect(second.service_id).toBe(0);
 
-    // 元のTSしか取らない (エンコード済みがあるものは元のTSを取得しない)
+    // 選んだファイルだけ取る (エンコード済みがあるものは元のTSを取得しない)
     expect(fake.videoRequests.map((item) => item.id).sort()).toEqual([
       11, 21, 51,
     ]);

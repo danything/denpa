@@ -201,9 +201,7 @@ function temporaryPath(
  * 置き場は元のTSの置き場の直下と、保存先のシリーズのフォルダ (`libraryPath` の形式)。
  * 走るのは一度に1つだけ (`start`) なので、ここで見つかるものは誰も書いていない
  */
-export function sweepTemporaries(
-  keep: ReadonlySet<string> = new Set(),
-): number {
+export function sweepTemporaries(keep: ReadonlySet<string>): number {
   const dirs = [config.rawDir, config.encodedDir];
   try {
     for (const entry of readdirSync(config.encodedDir, {
@@ -268,7 +266,7 @@ function alreadyImported(existing: Recording | undefined): boolean {
 }
 
 /** 取ってくるファイル。エンコード済みがあればそちら、複数あれば最初のもの */
-export interface VideoChoice {
+interface VideoChoice {
   id: number;
   size: number;
   /** 元のTSか (`type` がエンコード済みでない)。元のTSは作業領域へ置く */

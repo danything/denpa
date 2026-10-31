@@ -31,7 +31,7 @@ export interface Described {
   extended: Record<string, string> | null;
   /**
    * 放送が言う何話目か (シリーズ記述子。`programs.series_episode`)。載せない局・予約・引き継いだ履歴には無い。
-   * **タイトルからも概要からも回が読めないときだけ**使う (`episodeOf`)
+   * **あればタイトルや概要の話数より先に**使う (`episodeOf`)
    */
   series_episode?: number | null;
 }

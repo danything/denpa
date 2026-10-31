@@ -31,7 +31,7 @@ async function text(stream: ReadableStream<Uint8Array>): Promise<string> {
 
 /**
  * 流れてくるバイト列を行に割って返す。
- * ffmpeg の `-progress pipe:1` のように、終わるのを待たずに読みたいとき用。
+ * ffmpeg の `-progress` の出力のように、終わるのを待たずに読みたいとき用。
  */
 export async function* lines(
   stream: ReadableStream<Uint8Array>,

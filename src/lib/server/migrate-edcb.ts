@@ -57,7 +57,7 @@ export function genreOf(value: number): string | null {
 }
 
 /** 時間帯と曜日を写した結果 ({@link parseDateList}) */
-export type DateListResult =
+type DateListResult =
   | {
       slot: Slot;
       /** 日をまたぐ時間帯で、次の日の曜日も足した (当たる番組が増える) */
@@ -156,7 +156,7 @@ function wordsOf(text: string): string[] {
 const PER_WORD = /^(::|:(title|event|genre|video|audio):)/;
 
 /** ルールに入れる値 ({@link convertRule}) */
-export interface EdcbRuleValues {
+interface EdcbRuleValues {
   name: string;
   keyword: string;
   ignore_keyword: string;
@@ -170,7 +170,7 @@ export interface EdcbRuleValues {
   dedupe: boolean;
 }
 
-export type ConvertedRule =
+type ConvertedRule =
   { values: EdcbRuleValues; notes: string[] } | { skip: string };
 
 /**

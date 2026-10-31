@@ -13,7 +13,7 @@ import { webhooks } from "./schema";
  * 録画やエンコードが止まるほうが困るため。
  */
 
-export type Webhook = typeof webhooks.$inferSelect;
+type Webhook = typeof webhooks.$inferSelect;
 
 export interface Payload {
   event: WebhookEvent;

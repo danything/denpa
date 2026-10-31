@@ -109,7 +109,7 @@ describe("縮めて返す", () => {
         }),
       );
       const reader = (response.body as ReadableStream<Uint8Array>).getReader();
-      // 終わりまで来ていない流れも、出し切ったところまでは伸ばせる (`finishFlush`)
+      // 終わりまで来ていないストリームも、出し切ったところまでは伸ばせる (`finishFlush`)
       const inflate = (bytes: Uint8Array) => {
         if (bytes.length === 0) return "";
         return (

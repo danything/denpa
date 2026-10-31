@@ -58,7 +58,7 @@ export const load: PageServerLoad = ({ params, url }) => {
     jikkyoAllowed: settings().jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg: settings().jikkyoNg,
-    /** 実況のチャンネルと頭の放送時刻。古いところは過去ログ API、新しいところは NX-Jikkyo から取る */
+    /** 実況のチャンネルと頭・終わりの放送時刻。古いところは過去ログ API、新しいところは NX-Jikkyo から取る */
     jikkyo: recordingJikkyo(rec),
   };
 };

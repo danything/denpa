@@ -635,7 +635,7 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 - **探す** `GET /api/clips?q=&service=&day=YYYY-MM-DD&recording=&kind=live|recorded&before=` → `{ "clips": [...], "next": ID または null }`。
   新しい順に 60 件ずつで、続きは `before` に `next` を入れます。`q` は空白で区切った語をすべて含むもの (番組名・局名・字幕)
 - **画像** `GET /api/clips/<id>/image` (AVIF)・`GET /api/clips/<id>/small` (一覧用)。`GET /api/clips/<id>` は1枚の中身。
-  重ねを持つものは出し入れで中身が替わるので、端末に持たせるのは `?v=` にいまの版を付けたときだけです (版は `layers` から作る
+  重ねを持つものは出し入れで中身が替わるので、端末に持たせるのは `?v=` にいまのバージョンを付けたときだけです (バージョンは `layers` から作る
   `コメント・字幕` の順の2文字で、持っていない `-`・重ねていない `0`・重ねている `1`。例 `?v=-1`)。付けなければ毎回取り直させます
 - **元の画像** `GET /api/clips/<id>/layer/frame` (映像。送られた WebP か JPEG のまま)・`/layer/captions`・`/layer/comments`
   (透明な PNG。3枚とも同じ縦横)。重ねを持つものだけで、持っていなければ `404` です。替わらないので `?v=` なしで端末に持たせます

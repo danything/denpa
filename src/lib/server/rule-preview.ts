@@ -55,7 +55,7 @@ const stillHeld = () =>
  * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)。`declined` は人が取り消した放送
  * (ルールは立て直さない。`rules.canceledBroadcasts`)
  */
-export type Skip =
+type Skip =
   | { kind: "repeat" | "recorded"; service_name: string; start_at: number }
   | { kind: "earlier"; number: number }
   | { kind: "copy-never" | "declined" }
@@ -153,7 +153,7 @@ interface Pending {
   conflict_reason: string | null;
 }
 
-export interface PreviewOptions {
+interface PreviewOptions {
   /** 編集中のルール。条件から外れたのに残っている、そのルールの予約も混ぜる */
   editing?: Rule | undefined;
   /** 「録るか」を1つずつ知りたい番組 (検索の結果の行)。当たらないものは理由も返す */

@@ -16,7 +16,7 @@ import { recordingOr404 } from "#lib/server/recording.js";
  * 元の TS なので、置き終えても false のまま。
  * `durationMs` は一覧 (`GET api/recordings`) と同じもの。テレビのアプリの追っかけは、ストリームが終わったときに
  * これで「録り終えて最後まで観たか」を確かめる (一覧を丸ごと取り直さずに済む)。
- * `jikkyo` は実況のチャンネルと、元の TS の頭の放送時刻 (`{ channel, head }`。`server/jikkyo.ts`)。
+ * `jikkyo` は実況のチャンネルと、元の TS の頭と録画の終わりの放送時刻 (`{ channel, head, end }`。`server/jikkyo.ts`)。
  * 世帯の設定がオフ・実況の無い局は null。コメントは端末が過去ログ API から直接取得する
  */
 export function GET({ params }) {

@@ -101,7 +101,7 @@ export async function challengeOf(verifier: string): Promise<string> {
   return base64Url(new Uint8Array(digest));
 }
 
-export interface Pending {
+interface Pending {
   state: string;
   nonce: string;
   verifier: string;
@@ -123,7 +123,7 @@ export function safeReturn(to: string | null): string {
 /**
  * 戻ってくる先の URL。**Entra のアプリ登録に、名前ごとに1つずつ足しておくこと。**
  *
- * denpa には名前が2つある (`dp.doany.io` と `dp.l.doany.io`) ので、決め打ちにせず
+ * denpa は名前をいくつも持てる (外向けと家の中向けなど) ので、決め打ちにせず
  * 来たリクエストから組み立てる。**認可のときと引き換えのときで同じ値**を渡す
  * 必要があるので、両方ここから取る
  */
@@ -270,7 +270,7 @@ const CLAIMS = object({
   nbf: optional(number),
   nonce: optional(string),
 });
-export type Claims = Infer<typeof CLAIMS>;
+type Claims = Infer<typeof CLAIMS>;
 
 /** ヘッダのうち見るもの。署名方式と鍵の名前 */
 const HEADER = object({ alg: optional(string), kid: optional(string) });

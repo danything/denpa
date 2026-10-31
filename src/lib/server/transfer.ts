@@ -66,13 +66,13 @@ export class TransferError extends Error {
 }
 
 /** 書き出したときの控え (`denpa-export.json`)。画面に出すだけで、検証には使わない */
-export interface Manifest {
+interface Manifest {
   version: string;
   exportedAt: number;
   counts: Counts;
 }
 
-export interface Counts {
+interface Counts {
   rules: number;
   reservations: number;
   recordings: number;
@@ -80,14 +80,14 @@ export interface Counts {
 }
 
 /** 送ったファイルの名乗り。同じファイルなら続きから送る */
-export interface UploadMeta {
+interface UploadMeta {
   name: string;
   size: number;
   lastModified: number;
 }
 
 /** 置き場の確かめ。**この機械の** `ENCODED_DIR`・`RAW_DIR` で引く */
-export interface FileCheck {
+interface FileCheck {
   /** 削除済みでない録画のうち、ファイルがあったもの */
   present: number;
   /** エンコードしたものが無い (取り込むと起動直後の照合が削除済みにする) */
@@ -110,7 +110,7 @@ export interface CheckResult {
   blocked: boolean;
 }
 
-export interface TransferStatus {
+interface TransferStatus {
   exporting: boolean;
   /** まだ使っていない denpa か (取り込めるのはこのときだけ) */
   empty: boolean;

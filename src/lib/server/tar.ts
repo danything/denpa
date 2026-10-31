@@ -101,7 +101,7 @@ export function writeTar(
   });
 }
 
-export interface TarLimits {
+interface TarLimits {
   /** 中身の大きさの合計の上限。縮めたものを開くと膨らむので、ここで止める */
   maxBytes: number;
   /** エントリの数の上限 */
@@ -116,7 +116,7 @@ export interface TarEntry {
 }
 
 /** 読んだ中身の書き込み先。`write` は流れてきた順に呼ぶ */
-export interface TarSink {
+interface TarSink {
   write(chunk: Uint8Array): void;
   close(): void;
 }
@@ -215,14 +215,14 @@ function parseHeader(block: Uint8Array): TarEntry {
 }
 
 /**
- * tar を読み、エントリごとに `accept` に渡す。`accept` は書き込み先を返すか、名前が駄目なら投げる。
- * 上限 (`limits`) を超えたら、書き込む前に止める
+ * tar を読み、エントリごとに `accept` に渡す。`accept` は書き込み先 (読み捨てるなら null) を返すか、
+ * 名前が駄目なら投げる。上限 (`limits`) を超えたら、書き込む前に止める
  */
 export async function readTar(
   stream: ReadableStream<Uint8Array>,
   limits: TarLimits,
   accept: (entry: TarEntry) => TarSink | null,
-): Promise<number> {
+): Promise<void> {
   const reader = new Reader(stream[Symbol.asyncIterator]());
   let entries = 0;
   let bytes = 0;
@@ -230,7 +230,7 @@ export async function readTar(
     const block = await reader.exact(BLOCK);
     if (block === null) throw new Error("ファイルが途中で切れています");
     // 0 のブロックが終わりの印。後ろの詰め物は読まない
-    if (block.every((byte) => byte === 0)) return entries;
+    if (block.every((byte) => byte === 0)) return;
     const entry = parseHeader(block);
     entries++;
     if (entries > limits.maxEntries)

@@ -33,7 +33,7 @@ const PENDING = sql.raw(
 /** 外側のルール */
 const RULE = sql.raw('"rules"."id"');
 
-export interface RuleRow {
+interface RuleRow {
   id: number;
   name: string;
   keyword: string;
@@ -61,7 +61,7 @@ export interface RuleRow {
   last_recorded_at: number | null;
 }
 
-export interface RuleSummary {
+interface RuleSummary {
   /** これから一週間の予約 (ルールも手動も) */
   weekReservations: number;
   /** この一週間に録れた録画。**消したものも入れる** (`RuleRow.last_recorded_at` と同じ) */

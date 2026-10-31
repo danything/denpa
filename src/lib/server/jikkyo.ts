@@ -2,7 +2,7 @@
  * **実況のコメント (サーバの受け持ち)。** コメントそのものはサーバを通らない — 端末が NX-Jikkyo と
  * 過去ログ API に直接繋ぐ (`#lib/jikkyo/endpoints.ts`)。サーバが渡すのは次の 2 つだけ:
  *
- * - 録画の実況のチャンネルと頭の放送時刻 (`recordingJikkyo`)。観る画面がコメントを再生位置に合わせるのに使う
+ * - 録画の実況のチャンネルと、頭と終わりの放送時刻 (`recordingJikkyo`)。観る画面がコメントを取って再生位置に合わせるのに使う
  * - 局の勢い (`RankingRelay`)。NX-Jikkyo の REST は CORS を許していないのでブラウザから読めず、
  *   ここで中継する。**保持しない** (30 秒だけメモリに持つ。DB にもファイルにも書かない)
  *
@@ -30,8 +30,8 @@ export interface RecordingJikkyo {
 }
 
 /**
- * 録画の実況のチャンネルと頭の放送時刻 (`recording.tsHeadOf`。測れていない録画は予定の時刻で代わりにするので、
- * 数秒ずれることがある)。世帯の設定がオフ・実況の無い局なら null
+ * 録画の実況 (頭は `recording.tsHeadOf`。測れていない録画は予定の時刻で代わりにするので、数秒ずれることがある)。
+ * 世帯の設定がオフ・実況の無い局なら null
  */
 export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
   if (!settings().jikkyo) return null;

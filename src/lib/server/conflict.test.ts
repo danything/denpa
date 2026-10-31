@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { RECORDING, scenes } from "../../../tests/fake/tuner-scenes";
 import {
+  type Accepted,
   assign,
   type Assignable,
   type Capacity,
@@ -10,8 +11,24 @@ import {
   type Occupant,
   placements,
   settled,
-  whole,
 } from "./conflict";
+
+/**
+ * 番組そのものが丸ごと入っているか。**マージンが削られただけなら「丸ごと」** (画面の「欠けます」と同じ。`format.clipNote`)。
+ * 隣り合う番組はマージンぶんだけ必ず重なるので、そこを削っただけで「途中から」と言うと、ほとんどの録画に付いてしまう
+ */
+function whole(a: Accepted<Assignable>): boolean {
+  return a.from <= a.reservation.start_at && a.to >= a.reservation.end_at;
+}
+
+/** 決まった種から作る乱数 (落ちたときに同じ場面を再現できるように) */
+function random(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1103515245 + 12345) % 2 ** 31;
+    return s / 2 ** 31;
+  };
+}
 
 function res(over: Partial<Assignable> & { id: number }): Assignable {
   return {
@@ -724,11 +741,7 @@ describe("兼用のチューナーがあるとき (#668)", () => {
    * なぞり直して (`placements`)、全員が最後まで1台のチューナーを使えることを確かめる
    */
   test("通したものは、約束どおりに頭からなぞっても全員使える", () => {
-    let s = 3;
-    const next = () => {
-      s = (s * 1103515245 + 12345) % 2 ** 31;
-      return s / 2 ** 31;
-    };
+    const next = random(3);
     const channels = {
       GR: ["T16", "T21", "T22"],
       BS: ["BS11_0", "BS01_0"],
@@ -789,14 +802,6 @@ describe("兼用のチューナーがあるとき (#668)", () => {
  * 先にどのチューナーへ入ったかは後に響かず、瞬間ごとの台数を数えるのと同じになる
  */
 describe("専用だけ・兼用だけの構成", () => {
-  /** 決まった種から作る乱数 (落ちたときに同じ場面を再現できるように) */
-  function random(seed: number) {
-    let s = seed;
-    return () => {
-      s = (s * 1103515245 + 12345) % 2 ** 31;
-      return s / 2 ** 31;
-    };
-  }
   const CHANNELS = {
     GR: ["T16", "T21", "T22", "T23"],
     BS: ["BS11_0", "BS03_0", "BS01_0"],

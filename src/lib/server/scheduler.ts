@@ -47,7 +47,7 @@ interface Candidate extends Reservation {
  * - `capacity`: 動いているチューナーを、エージェントが選ぶ順 (`rank`) に組にしたもの (`Capacity`)
  * - `busy`: 録画中の予約が、いまどのチューナーにいて、いつ離すか (tuner.ts の `recordingHolds`)
  *
- * エージェントに繋がらないときは空 (「制限なし」) を返し、予約を勝手に conflict にしない(実際に
+ * エージェントに繋がらないときは空 (「制限なし」) を返し、予約を勝手に conflict にしない (実際に
  * 録画が始まるときにあちらが弾くので、予約表を壊すより実行時に失敗させるほうが害が小さい)。
  */
 export async function tunerState(): Promise<{

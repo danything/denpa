@@ -64,7 +64,7 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
 export function libraryPath(rec: LibraryNameInput, ext: string): string {
   const rel = libraryRelPath(rec, ext);
   const abs = join(config.encodedDir, rel);
-  // 自分がいま置いてあるもの (主と、H.265・H.264 のもう一方) は衝突ではない
+  // 自分がいま置いてあるもの (主と、主でない H.265・H.264) は衝突ではない
   if (
     !existsSync(abs) ||
     abs === rec.library_path ||
@@ -106,9 +106,6 @@ const CODEC_SUFFIX: Record<HwCodec, string> = {
   hevc: " [H265].mkv",
   h264: " [H264].mkv",
 };
-
-/** 置き場の名前からコーデックを見分ける (`encodedPath` の逆。画面と共有するので `#lib/encoded-codec.ts` に置く) */
-export { encodedCodec } from "../encoded-codec";
 
 /**
  * この録画が取りうる保存先の候補すべて。
