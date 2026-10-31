@@ -87,13 +87,7 @@ function carousel(
 }
 
 function startup(body: string, script = ""): [string, string, string] {
-  return [
-    "startup.bml",
-    "text/X-arib-bml",
-    `<?xml version="1.0" encoding="EUC-JP"?>
-<bml><head><title>t</title><script><![CDATA[${script}]]></script></head>
-<body style="resolution:960x540" onload="start();">${body}</body></bml>`,
-  ];
+  return bmlFile("startup.bml", body, script);
 }
 
 const opened: Bml[] = [];

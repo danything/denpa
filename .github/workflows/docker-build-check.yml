@@ -36,6 +36,7 @@ on:
       # 動くので、イメージに入れ忘れても PR の間は分からない
       - "server.js"
       - "src/lib/server/address.ts"
+      - "src/lib/server/compress.ts"
       - "vite.config.ts"
       - "drizzle/**"
       - ".dockerignore"
@@ -87,7 +88,7 @@ jobs:
               .github/aio.Dockerfile | .github/aio-entrypoint.ts | .github/release.Dockerfile) dist=true ;;
               .github/workflows/docker-build-check.yml | .github/image-smoke.sh) images=true; dist=true ;;
               Dockerfile | agent/* | patches/* | wasm/* | package.json | packages/*/package.json | bun.lock | server.js) images=true ;;
-              src/lib/server/address.ts | vite.config.ts | drizzle/* | .dockerignore) images=true ;;
+              src/lib/server/address.ts | src/lib/server/compress.ts | vite.config.ts | drizzle/* | .dockerignore) images=true ;;
               src/lib/server/fps.ts | scripts/fps-smoke.ts) images=true ;;
             esac
           done < <(gh api --paginate "repos/${{ github.repository }}/pulls/$PR/files" --jq '.[].filename')

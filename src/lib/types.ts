@@ -20,7 +20,7 @@ export const CHANNEL_TYPES: readonly ChannelType[] = ["GR", "BS", "CS"];
  * 出演者やあらすじ (`extended`)、音声 (`audios`)、ジャンルの中分類
  * (`genre_detail`) は詳細を開いたときにしか使わないのに、BS の 24 時間ぶん
  * (2,171 件) で応答 1.43 MB のうち 41% を占めていた。しかも前日・翌日の先読みが
- * 同じ形の応答をもう 2 つ取る。詳細は開いた 1 件だけ `/api/programs/<id>` で取る
+ * 同じ形式の応答をもう 2 つ取る。詳細は開いた 1 件だけ `/api/programs/<id>` で取る
  * (予約・録画の一覧と同じ経路)
  */
 export interface GridProgram extends Pick<

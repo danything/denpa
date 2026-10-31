@@ -344,7 +344,7 @@ export function quietState(state: string): boolean {
   return QUIET_STATES.has(state);
 }
 
-export const STATE_LABEL: Record<string, string> = {
+const STATE_LABEL: Record<string, string> = {
   scheduled: "予約済み",
   conflict: "競合",
   // コピー禁止の番組。録らないと決めた予約 (`COPY_NEVER_REASON`)

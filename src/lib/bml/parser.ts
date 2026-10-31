@@ -379,7 +379,7 @@ class Parser {
     return { kind: "switch", disc, cases };
   }
 
-  expression(): Expr {
+  private expression(): Expr {
     const first = this.assignment();
     if (!this.is(",")) return first;
     const items = [first];

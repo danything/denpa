@@ -14,7 +14,7 @@
 /** 右の端から左の端まで (放送時刻の ms) */
 export const SPAN_MS = 4_000;
 /** 上・下に止めるもの (と、動きを減らす設定のときの流れるもの) を置いておく長さ */
-export const HOLD_MS = 3_000;
+const HOLD_MS = 3_000;
 /** 行の高さの下限 (px) */
 const MIN_LINE = 14;
 /** 前のコメントとの間に空ける幅 (字の大きさに対して) */
@@ -46,7 +46,7 @@ export function textWidth(text: string, size: number): number {
 }
 
 /** 1 件の流し方 */
-export interface Flow {
+interface Flow {
   lane: number;
   /** 流れ終わるまで (放送時刻の ms)。画面の CSS の長さは、これを再生の速さで割ったもの */
   duration: number;

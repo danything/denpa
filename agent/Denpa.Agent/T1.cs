@@ -186,7 +186,7 @@ public sealed class T1Protocol
     }
 
     /// <summary>正しい形式のブロックなら (PCB, INF)。長さ・LRC が合わなければ null</summary>
-    public static (byte Pcb, byte[] Inf)? Check(byte[]? block, int ifsd)
+    private static (byte Pcb, byte[] Inf)? Check(byte[]? block, int ifsd)
     {
         if (block is null || block.Length < 4) return null;
         int length = block[2];

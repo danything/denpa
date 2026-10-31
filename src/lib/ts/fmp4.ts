@@ -110,7 +110,7 @@ export interface Fmp4Track {
   /** WebCodecs の書き方の codec (`avc1.640029` / `av01.0.08M.08` / `mp4a.40.2` / `opus`) */
   codec: string;
   /**
-   * デコードする道具に渡すもの。映像は avcC / av1C の中身 (VideoDecoder の `description`)、
+   * デコーダに渡すもの。映像は avcC / av1C の中身 (VideoDecoder の `description`)、
    * AAC は AudioSpecificConfig、Opus は dOps の中身
    */
   config: Uint8Array<ArrayBuffer>;

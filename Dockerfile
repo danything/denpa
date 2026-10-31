@@ -356,8 +356,8 @@ RUN bun run build
 # 要るものだけを置いたもの)。**libssl の無い base-nossl を使う** — bun は TLS を自分で持ち (BoringSSL を静的に繋ぐ)、
 # ffmpeg も OpenSSL を繋がないので、cc の土台にある libssl・libcrypto・libgomp (8MB ほど) は誰も読まない。
 # ffmpeg と GPU のドライバが繋ぐ libstdc++・libgcc_s・zlib は、下の `runtime-libs` 段が ldd で辿って写す
-# (エージェントを同じコンテナに入れる denpa-aio は libssl を要るので、あちらで足す。.github/aio.Dockerfile)。下の `runtime-libs` 段が「土台にもうあるライブラリ」を
-# 見分けるのにも使うので、段に名前を付けておく
+# (エージェントを同じコンテナに入れる denpa-aio は libssl を要るので、あちらで足す。.github/aio.Dockerfile)。
+# その段が「土台にもうあるライブラリ」を見分けるのにも使うので、段に名前を付けておく
 # ---------------------------------------------------------------------------
 FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:ca1c7e6a875e59345ae6ff182a1e0930f0ca1ffef23a9b830f8823ab348ad5dd AS distroless
 
@@ -475,7 +475,7 @@ ENV NODE_ENV=production \
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
     CUDA_DEVICE_ORDER=PCI_BUS_ID
 
-# B-CASカードは触らない。掛かったまま録れたTSの解除はチューナーエージェントに
+# B-CASカードは触らない。掛かったまま録れたTSの復号はチューナーエージェントに
 # 投げる(カードリーダーとやり取りするのはあちら)。recisdb も libpcsclite も要らない
 COPY --from=runtime-libs /rootfs/ /
 

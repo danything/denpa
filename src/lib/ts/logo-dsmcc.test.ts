@@ -21,7 +21,7 @@ import { DsmccLogoCollector, parseLogoModule } from "./logo-dsmcc";
  * → DII でモジュールの大きさ → DDB でブロック、と辿らないと取得できない。
  */
 
-/** 1x1 の PNG のつもり。中身は問わない */
+/** PNG の署名だけのもの。中身は問わない */
 const PNG = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xbe, 0xef,
 ]);

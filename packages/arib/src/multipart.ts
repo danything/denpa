@@ -129,7 +129,7 @@ function find(haystack: Uint8Array, needle: Uint8Array, from: number): number {
 
 /**
  * 中身を1つ読む。**ヘッダの終わり (空行) が無いものは null** — どこからが本体か
- * 分からない。`multipart/mixed` なら中までデコードする (入れ子も同じ形)。
+ * 分からない。`multipart/mixed` なら中までデコードする (入れ子も同じ形式)。
  *
  * @param part multipart の中の部品か。部品はヘッダの行でちょうど終わってよい (下の説明)
  */

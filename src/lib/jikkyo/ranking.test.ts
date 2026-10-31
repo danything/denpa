@@ -40,7 +40,7 @@ describe("parseRanking", () => {
     ).toEqual(new Map([[7, 36]]));
   });
 
-  test("形がずれていれば null", () => {
+  test("形式がずれていれば null", () => {
     expect(parseRanking({ at: 1 })).toBeNull();
     expect(
       parseRanking({ channels: [{ serviceId: "7", force: 1 }] }),

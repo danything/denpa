@@ -311,7 +311,7 @@ describe("覚えたものを持つ", () => {
     );
   });
 
-  test("形の違うものは読まない", () => {
+  test("形式の違うものは読まない", () => {
     expect(decodeModel(new Uint8Array(10))).toBeNull();
     expect(decodeModel(new Uint8Array(100))).toBeNull();
   });

@@ -114,7 +114,7 @@ export class Fmp4Video {
   /** 渡した時刻 (µs → performance.now())。デコードするのに掛かった時間を測る */
   private readonly started = new Map<number, number>();
   private errors = 0;
-  /** 追っかけで抱えきれなくなったか。**次の init (リクエストし直し) まで、届いたものは捨てる** */
+  /** 追っかけで抱えきれなくなったか。**次の reset (リクエストし直し) まで、届いたものは捨てる** */
   private overflowed = false;
   /** 圧縮のまま持っているバイト数 (`FOLLOW_BYTES_MOST`) */
   private pendingBytes = 0;
@@ -450,7 +450,7 @@ export class Fmp4Video {
     frame.close();
     if (this.lastPts !== null) {
       const gap = pts - this.lastPts;
-      if (gap > 0 && gap < 3 * FRAME * 2) this.frameTicks = gap;
+      if (gap > 0 && gap < 6 * FRAME) this.frameTicks = gap;
     }
     this.lastPts = pts;
     this.current = pts;

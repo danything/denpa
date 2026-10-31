@@ -2,7 +2,7 @@
  * **Web Audio で鳴らす音の出口** (3画面共通)。canvas に描く経路 (`raw/engine.ts`) と、`<video>` の音を通す
  * 経路 (`components/player/volume.svelte.ts`) が同じものを使う。
  *
- * 出口までは「音量 → リミッタ → 出口」の一本道 (`Outlet`)。決め方は `volume.ts`
+ * 出口までは「音量 → リミッタ → 出口」の1本の経路 (`Outlet`)。決め方は `volume.ts`
  */
 
 import {

@@ -156,7 +156,7 @@ export class Vm {
     if (this.frames.length > 0) throw new Error("VM は動いている途中です");
   }
 
-  makeFunction(code: Code, env: Env | null): JSFunction {
+  private makeFunction(code: Code, env: Env | null): JSFunction {
     return new JSFunction(
       this.realm.functionProto,
       code.name,

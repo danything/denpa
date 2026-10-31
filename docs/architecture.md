@@ -113,8 +113,8 @@ arch ごとにその arch のランナー (amd64 は `ubuntu-latest`、arm64 は
 組んで digest だけで push し、最後に両方を束ねた索引へ名前を付けます
 (`.github/workflows/build-and-deploy.yml`)。QEMU で arm64 を組むと ffmpeg と Native AOT が
 何倍も掛かるので使いません。片方の arch が落ちたら名前は付けません (片方だけの
-`develop` が出ていくより、前のものが残るほうがいい)。中身の違いは Intel と AMD の GPU の部品 (QSV と
-VA-API のドライバ) だけで、arm64 のイメージには入れていません
+`develop` が出ていくより、前のものが残るほうがいい)。中身の違いは GPU の部品だけで、Intel の QSV・AMD の VA-API のドライバ・
+NVIDIA の NVENC は amd64 に、Rockchip の MPP は arm64 にだけ入れています
 ([encode.md](encode.md#gpu-でエンコードする-qsv--va-api))。
 
 `denpa-aio` (本体とエージェントを1つにしたもの) も同じ名前で出ます。組み直さず、束ねた2つを

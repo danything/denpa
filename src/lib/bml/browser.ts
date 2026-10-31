@@ -22,7 +22,7 @@ import { type Cell, Table } from "./binary";
 import { HostObject } from "./dom";
 import { clipEuc, decodeEuc, encodeEuc } from "./euc";
 import type { Nvram } from "./nvram";
-import { isRemote, type LockKind } from "./resources";
+import { hex, isRemote, type LockKind } from "./resources";
 import type { Sound } from "./sound";
 import {
   type Abort,
@@ -145,7 +145,7 @@ const API_GROUPS = new Set([
 ]);
 
 const hex4 = (n: number | null | undefined): string | null =>
-  n == null ? null : `0x${n.toString(16).padStart(4, "0")}`;
+  n == null ? null : `0x${hex(n, 4)}`;
 
 /** AIT (Hybridcast) についての問い合わせ。何を訊かれたかを残す (局がどれで出し分けているかを見るため) */
 const AIT_QUERIES = new Set([
@@ -402,7 +402,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
     const ts = p?.transportStreamId;
     const service = p?.serviceId;
     const id = (n: number | null | undefined): string =>
-      n == null ? "-1" : n.toString(16).padStart(4, "0");
+      n == null ? "-1" : hex(n, 4);
     switch (toNumber(args[0])) {
       case 1:
         return hex4(p?.eventId);

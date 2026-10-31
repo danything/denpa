@@ -13,7 +13,7 @@
 
 import { resolve } from "$app/paths";
 
-/** 組んだときの Denpa Font のバージョン (`v2.1` など)。読めなければ空 (バージョンの付かない URL になる) */
+/** 組んだときの Denpa Font のバージョン (`v3.6` など)。読めなければ空 (バージョンの付かない URL になる) */
 const DENPA_FONT_VERSION: string = import.meta.env.DENPA_FONT_VERSION ?? "";
 
 /** `/api/font/<file>` にバージョンを付けたもの。接頭辞の下でも動くよう、呼ぶたびに `resolve` を通す */

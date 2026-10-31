@@ -32,7 +32,7 @@
 # ---------------------------------------------------------------------------
 set -eu
 
-# Talos は PT3 のドライバ (dvb-pt3) が入った v1.15 の alpha に乗せる。正式版が出たらそちらへ。
+# Talos は PT3 のドライバ (dvb-pt3) が入った v1.15 の alpha に乗せる。正式リリースが出たらそちらへ。
 # renovate: datasource=github-releases depName=siderolabs/talos
 TALOS_VERSION=v1.15.0-alpha.2
 # gen config の既定は talosctl と組の Kubernetes で、alpha の talosctl だと Kubernetes も alpha になるので留める
@@ -125,7 +125,7 @@ export TALOSCONFIG="$DIR/talosconfig"
 if talosctl get disks --insecure -n "$NODE" -e "$NODE" >/dev/null 2>&1; then
 	# 入れられるディスク (読み取り専用と光学ドライブを除く) を「パス<TAB>大きさ<TAB>型番<TAB>繋ぎ方」で1行ずつ。
 	# talosctl の YAML (DiskSpec の dev_path・pretty_size・model・transport・readonly・cdrom) を読む。
-	# ISO を焼いた USB メモリも並ぶので、繋ぎ方 (usb・nvme・sata) を添えて見分けられるようにする
+	# ISO を書き込んだ USB メモリも並ぶので、繋ぎ方 (usb・nvme・sata) を添えて見分けられるようにする
 	disks=$(talosctl get disks --insecure -n "$NODE" -e "$NODE" -o yaml | awk '
 		function flush() {
 			if (path != "" && ro != "true" && cd != "true") printf "%s\t%s\t%s\t%s\n", path, size, model, tr

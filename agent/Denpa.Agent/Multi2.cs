@@ -22,14 +22,13 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 1つの実体は**1本のストリームからしか触らない**。鍵を書き換えている途中に別のストリームが
-/// 復号すると半端な鍵で復号してしまうが、ロックは掛けない (<see cref="Descrambler"/> が
-/// 1本のストリーム (デスクランブラ) の中で順に呼ぶ)。
+/// 復号すると半端な鍵で復号してしまうが、ロックは掛けない (<see cref="Descrambler"/> が順に呼ぶ)。
 /// </para>
 /// </summary>
 public sealed class Multi2
 {
     /// <summary>段数。放送は 4 (これ以外の値で送ってくる局は無い)</summary>
-    public const int Rounds = 4;
+    private const int Rounds = 4;
 
     [InlineArray(8)]
     private struct Words

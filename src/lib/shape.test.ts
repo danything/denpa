@@ -52,7 +52,7 @@ describe("外から来た JSON の形式", () => {
     expect("error" in tuner).toBe(false);
   });
 
-  test("違うところを道筋で言う", () => {
+  test("違うところをパスで言う", () => {
     expect(() =>
       read(
         TUNER,

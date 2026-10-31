@@ -57,8 +57,8 @@ function base128(b: Uint8Array, at: number): [number, number] {
 }
 
 /**
- * WOFF2 の cmap の字。**表を解いて cmap だけ読む** — 表は brotli で 1 つに圧縮してあり、
- * 目録の順に並んでいる (glyf・loca・hmtx は形を変えて詰めてあるので長さが違うが、cmap は元のまま)
+ * WOFF2 の cmap の字。**表を展開して cmap だけ読む** — 表は brotli で 1 つに圧縮してあり、
+ * 目録の順に並んでいる (glyf・loca・hmtx は変換して詰めてあるので長さが違うが、cmap は元のまま)
  */
 function woff2Codepoints(woff2: Uint8Array): Set<number> {
   const v = new DataView(woff2.buffer, woff2.byteOffset, woff2.byteLength);
@@ -73,7 +73,7 @@ function woff2Codepoints(woff2: Uint8Array): Set<number> {
     if (known === 63) at += 4; // 目録に無い表は名前が続く
     let length: number;
     [length, at] = base128(woff2, at);
-    // glyf (10)・loca (11) は形の変え方 0 が「変えた」、hmtx (3) は 1 が「変えた」。変えた表は詰めた長さが続く
+    // glyf (10)・loca (11) は変換の種類 0 が「変換した」、hmtx (3) は 1 が「変換した」。変換した表は詰めた長さが続く
     const transform = flags >> 6;
     const transformed =
       known === 10 || known === 11 ? transform === 0 : transform !== 0;
@@ -92,11 +92,10 @@ function woff2Codepoints(woff2: Uint8Array): Set<number> {
 
 /** cmap (format 12 か 4) の字。`v` は cmap の表 */
 function cmapCodepoints(v: DataView): Set<number> {
-  const cmap = 0;
   const out = new Set<number>();
   let f4 = -1;
-  for (let i = 0; i < v.getUint16(cmap + 2); i++) {
-    const off = cmap + v.getUint32(cmap + 8 + i * 8);
+  for (let i = 0; i < v.getUint16(2); i++) {
+    const off = v.getUint32(8 + i * 8);
     const format = v.getUint16(off);
     if (format === 12) {
       for (let g = 0; g < v.getUint32(off + 12); g++) {

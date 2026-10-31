@@ -141,7 +141,7 @@ const MACROS = [
 });
 
 const eucjp = new TextDecoder("euc-jp");
-/** 漢字の表 (区×94+点 → 字)。EUC-JP で読み、libaribcaption と違うところだけ差し替える */
+/** 漢字の表 (区×94+点 → 字)。EUC-JP で読み、違うところ (`KANJI_DIFF`) だけ差し替える */
 const kanjiOverride = new Map<number, number>();
 for (const [start, chars] of KANJI_DIFF) {
   let i = start;

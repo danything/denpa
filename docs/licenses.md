@@ -13,8 +13,8 @@ Dockerfile の行・`package.json`) を優先し、上流の表示に拠るも�
 
 [Dockerfile](../Dockerfile) の `runtime` 段。土台は distroless (`gcr.io/distroless/base-nossl-debian13`。libssl を持たない)。libstdc++・zlib は ffmpeg と GPU のドライバが繋ぐので Debian のパッケージから写す。
 Debian のパッケージ (libva・ドライバなど) は要るファイルだけを写し、そのパッケージの copyright を
-`/usr/share/doc/<パッケージ>/copyright` に置いています。ソースから組む Rockchip MPP (arm64 だけ) は、
-ライセンスの文を `/usr/share/doc/rockchip-mpp/` に置いています。
+`/usr/share/doc/<パッケージ>/copyright` に置いています。ソースから組む Rockchip MPP (arm64 だけ) と Mesa (amd64 だけ) は、
+ライセンスの文を `/usr/share/doc/rockchip-mpp/`・`/usr/share/doc/mesa/` に置いています。
 
 ### 自前ビルドの ffmpeg と、そこに繋がるもの
 
@@ -37,7 +37,7 @@ denpa 本体は AGPL-3.0-or-later で、GPLv3 のものと一緒に配れます�
 | Mesa (radeonsi の VA-API ドライバだけ。amd64 だけ。ソースから組む)              | AMD の VA-API ドライバ                                                                                 | <https://mesa3d.org>                                                      | MIT (一部 BSD など。docs/license.rst を /usr/share/doc/mesa に置く)       |
 | libdrm-amdgpu・libelf・libexpat・libzstd                                        | AMD の VA-API ドライバの依存                                                                           | Debian のパッケージ                                                       | MIT 系・libelf は GPL-2.0+ か LGPL-3.0+ (パッケージの copyright のとおり) |
 | nv-codec-headers (amd64 だけ。組むときのヘッダだけで、ファイルとしては入らない) | NVIDIA の NVENC (GPU でエンコードする)。ドライバのライブラリはホストのものを使い、イメージには入れない | <https://github.com/FFmpeg/nv-codec-headers>                              | MIT                                                                       |
-| Rockchip MPP (arm64 だけ。ソースから組み、`librockchip_mpp.so.1` を置く)        | RK3588 / RK3588S のハードウェアエンコード (h264_rkmpp)                                                 | <https://github.com/rockchip-linux/mpp>                                   | Apache-2.0 (一部 MIT)                                                     |
+| Rockchip MPP (arm64 だけ。ソースから組み、`librockchip_mpp.so.1` を置く)        | RK3588 / RK3588S のハードウェアエンコード (h264_rkmpp・hevc_rkmpp)                                     | <https://github.com/rockchip-linux/mpp>                                   | Apache-2.0 (一部 MIT)                                                     |
 | i965-va-driver・libigdgmm・libdrm・libpciaccess                                 | 古い世代の Intel の VA-API ドライバと、ドライバの依存 (libdrm は Rockchip MPP も使う)                  | Debian のパッケージ                                                       | MIT 系 (パッケージの copyright のとおり)                                  |
 | zlib                                                                            | ffmpeg の依存                                                                                          | <https://zlib.net>                                                        | zlib                                                                      |
 | [patches/](../patches)                                                          | ffmpeg に当てる直しの置き場 (いまは空。denpa が書いたもの。上流に投げる前提)                           | —                                                                         | 当てる先と同じ (ffmpeg は LGPL/GPL)                                       |

@@ -9,7 +9,7 @@
 import { type Comment, CommentStore } from "./comments";
 
 /** 届いたのが遅れても出す幅 */
-export const LATE_MS = 10_000;
+const LATE_MS = 10_000;
 /** これより大きく W が進んだら、飛んだとみなす (再生の詰まりで 1 回に進む幅より十分大きく) */
 export const JUMP_MS = 10_000;
 /**
@@ -17,7 +17,15 @@ export const JUMP_MS = 10_000;
  * そのたびに流れているものを消さないように
  */
 export const BACK_MS = 1_000;
-/** 控えを前後 2 時間に収め直す間隔 (放送時刻の ms)。毎回見るほどのことではない */
+
+/**
+ * 放送時刻が飛んだか (シーク・局の切り替え。流すほうの `Cursor` と右の一覧で同じ)。一覧は、飛んだら
+ * 上へ巻いていてもいちばん下 (飛んだ先のいま) へ戻す
+ */
+export function jumped(last: number | null, w: number): boolean {
+  return last !== null && (w < last - BACK_MS || w - last > JUMP_MS);
+}
+/** 控えを前後あわせて 2 時間に収め直す間隔 (放送時刻の ms)。毎回見るほどのことではない */
 const TRIM_EVERY = 60_000;
 
 /** 1 回の `take` の結果 */
@@ -47,7 +55,7 @@ export class Cursor {
   /** いまの放送時刻 `w` までに書かれたもののうち、まだ出していないもの */
   take(w: number): Take {
     const last = this.last;
-    if (last === null || w < last - BACK_MS || w - last > JUMP_MS) {
+    if (last === null || jumped(last, w)) {
       this.last = w;
       this.late = [];
       return { comments: [], jumped: last !== null };

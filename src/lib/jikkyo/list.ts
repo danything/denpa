@@ -1,4 +1,3 @@
-import { pad } from "../format";
 /**
  * **右の列の「コメントの一覧」の決まり** (画面に触らない所。単体テストで見る)。部品は `JikkyoList.svelte`。
  *
@@ -8,8 +7,8 @@ import { pad } from "../format";
  * - 新しいものが下。いちばん下にいる間は下へ付いていき、上へ巻いた・指やポインタやフォーカスが乗っている間は止める
  * - 勢いは `W` までの 1 分に書かれたものの数 (録画でも同じ)
  */
+import { pad } from "../format";
 import type { Comment } from "./comments";
-import { BACK_MS, JUMP_MS } from "./cursor";
 
 /** 並べるのは `W` からこれだけ前まで (静かな局でも何件かは並ぶように長めに。見るのは新しいほうから要るぶんだけ) */
 export const LIST_SPAN = 30 * 60_000;
@@ -50,21 +49,8 @@ export function sameRows(
   return a.length === b.length && a[0] === b[0] && a.at(-1) === b.at(-1);
 }
 
-/** 行の鍵。控えも同じ時刻・同じ本文のものを 1 つにしている */
-export function rowKey(comment: Comment): string {
-  return `${comment.at}\u0000${comment.text}`;
-}
-
 /** 書かれた時刻 (放送時刻の h:mm:ss。端末の時計の時間帯で) */
 export function airClock(at: number): string {
   const d = new Date(at);
   return `${d.getHours()}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/**
- * 放送時刻が飛んだか (シーク・局の切り替え。流すほうの `Cursor` と同じ幅)。飛んだら、上へ巻いていても
- * いちばん下 (飛んだ先のいま) へ戻す
- */
-export function jumped(last: number | null, w: number): boolean {
-  return last !== null && (w < last - BACK_MS || w - last > JUMP_MS);
 }

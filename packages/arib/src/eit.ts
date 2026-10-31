@@ -261,7 +261,7 @@ const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
  * 見出しごとに繋ぎ直さないと、長い説明が途中で切れる。見出しが空の項目は
  * 「直前の項目の続き」という意味なので、そこにも繋ぐ。
  *
- * **繋ぐのは復号する前、バイトのうちに。** 部分ごとに復号して文字列を繋いで
+ * **繋ぐのはデコードする前、バイトのうちに。** 部分ごとにデコードして文字列を繋いで
  * いた頃は、続きが**別の文字で出て**いました (実機の「音楽制作ずはのづ ねふびどっ」。
  * 正しくは「音楽制作:ONE MUSIC」)。分割点は
  *
@@ -269,10 +269,10 @@ const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
  * - **文字集合の状態を持ち越す** — G0〜G3 の指示も GL/GR の呼び出しも、
  *   続きの側には書き直されない。前の状態のまま読む前提で送られてくる
  *
- * ので、部分だけを単独で復号すると、そこから先が崩れます。
+ * ので、部分だけを単独でデコードすると、そこから先が崩れます。
  */
 function readDescriptors(event: EitEvent, body: Uint8Array): void {
-  /** 見出しごとの生バイト。**全部揃ってから復号する** (Map なので見出しの出てきた順に並ぶ) */
+  /** 見出しごとの生バイト。**全部揃ってからデコードする** (Map なので見出しの出てきた順に並ぶ) */
   const pending = new Map<string, Uint8Array[]>();
   let lastHeading = "";
 
@@ -390,7 +390,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
     }
   }
 
-  // 全部揃ってから復号する (分割点が二バイト文字や文字集合の途中に来るため)
+  // 全部揃ってからデコードする (分割点が二バイト文字や文字集合の途中に来るため)
   for (const [heading, parts] of pending)
     event.extended[heading] = decodeAribText(joinBytes(parts));
 }
@@ -749,7 +749,7 @@ export class EpgReader {
    * **`running_status` を当てにしきれない。** 4 (放送中) を入れてくる局も
    * あれば、**0 (未定義) しか入れてこない局もある** — 実機の NHK は 74 節
    * ぜんぶ 0 だった。4 だけを見ていると、そういう局では延長追従が丸ごと
-   * 効かなくなる (denpa の docs/agent.md)。
+   * 効かなくなる (denpa の docs/data.md)。
    *
    * そこで 0 のときは**節の番号で決める**。p/f は仕様で
    * **section 0 が現在・section 1 が次**と決まっていて、こちらは局の都合で

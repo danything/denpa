@@ -41,7 +41,7 @@ public static class AsicenUserland
     public static string Firmware =>
         Environment.GetEnvironmentVariable("ASICEN_FIRMWARE") ?? Path.Combine(Dir, "firmware", "asicen-loader.bin");
 
-    /// <summary>asicend が socket を置く場所 (この下に <c>asicen-userland/&lt;ポート&gt;/</c>)</summary>
+    /// <summary>asicend がソケットを置く場所 (この下に <c>asicen-userland/&lt;ポート&gt;/</c>)</summary>
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("ASICEN_RUNTIME_DIR") ?? "/run/asicen-userland";
 

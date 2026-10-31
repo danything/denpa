@@ -50,7 +50,7 @@ describe("コマを小さく縮める", () => {
     let worst = 0;
     for (let i = 0; i < a.length; i++)
       worst = Math.max(worst, Math.abs(a[i]! - b[i]!));
-    // 1画素あたり元の 900 画素を平均するので、±12 の雑音は 1 段にも届かない (点で拾うと ±12 のまま揺れる)
+    // 1画素あたり元の 900 画素を平均するので、±12 の雑音は 1 段にも届かない (点で間引くと ±12 のまま揺れる)
     expect(worst).toBeLessThanOrEqual(2);
   });
 });

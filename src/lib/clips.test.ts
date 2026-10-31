@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { clipVersion, clipVersionQuery, parseLayerPatch } from "./clips";
 
-describe("切り抜きの重ねの版", () => {
+describe("切り抜きの重ねのバージョン", () => {
   test("重ねの無いものは空 (中身は替わらない)", () => {
     expect(clipVersion({})).toBe("");
     expect(clipVersionQuery({ layers: {} })).toBe("");

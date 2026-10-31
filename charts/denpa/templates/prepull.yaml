@@ -20,7 +20,7 @@ spec:
       containers:
         - name: prepull
           image: "{{ .Values.image.denpa.repository }}:{{ .Values.image.denpa.tag }}"
-          # 必ず取りに行かせる。IfNotPresent だと古いものが残っているかぎり引かない
+          # 必ず引かせる。IfNotPresent だと古いものが残っているかぎり引かない
           imagePullPolicy: Always
           command: ['/usr/local/bin/bun', '--version']
 ---

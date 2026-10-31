@@ -126,7 +126,10 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private long _patMs = -1, _pmtMs = -1, _ecmMs = -1;
     /// <summary>最後に答えが来た ECM の PID</summary>
     private int _lastEcm = -1;
-    /// <summary>溜めている間に鍵の相手へ聞いた回数と、その往復・錠の待ち・カードの素を貰うのにかかった時間の合計</summary>
+    /// <summary>
+    /// 溜めている間に鍵の相手へ聞いた回数・覚えた答えを使った回数・未契約の回数と、往復と錠の待ちの合計・
+    /// カードの素を貰うのにかかった時間
+    /// </summary>
     private int _asks, _cached, _unentitledAnswers;
     private long _askMs, _waitedMs, _initMs = -1;
 
@@ -177,7 +180,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// </summary>
     public long DecodeAll(Stream input, Stream output, Action<ReadOnlySpan<byte>>? read = null)
     {
-        var buffer = new byte[188 * 1024];
+        var buffer = new byte[PacketSize * 1024];
         var decoded = new ArrayBufferWriter<byte>();
         long written = 0;
         int count;
@@ -421,13 +424,13 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// </para>
     ///
     /// <para>
-    /// **拾った ECM をその場でカードに聞かない。** 地上波には B-CAS のカードが断る ECM も流れていて、断られるまでに
+    /// **先に読んだだけの ECM をその場でカードに聞かない。** 地上波には B-CAS のカードが断る ECM も流れていて、断られるまでに
     /// 短い応答の送り直し (<see cref="BCas"/>) ごと 0.4 秒ほどかかる。その間は次のパケットへ進まないので、PAT・PMT が
     /// そろうのも送り出しもそのぶん遅れていた (本番の地上波で、選局から送り出しまで毎回 1 秒ほど)。
     /// </para>
     ///
     /// <para>
-    /// ES の PES は頭が <c>00 00 01</c> なので、pointer_field 0・table_id 0x00 と読めて、ここでは拾わない
+    /// ES の PES は頭が <c>00 00 01</c> なので、pointer_field 0・table_id 0x00 と読めて、ここでは ECM として読まない
     /// (掛かっている PES はそもそも読まない。<see cref="Take"/>)。
     /// </para>
     /// </summary>
@@ -547,7 +550,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// ES → ECM の表を作り直す。PAT か PMT が変わったとき (まれ) だけ。
+    /// ES → ECM の表を作り直す。PAT か PMT か、カードの方式が変わったとき (まれ) だけ。
     /// 引き続き要る ECM は鍵ごと残す — 作り直すと次の ECM が来るまで復号できなくなる
     /// </summary>
     private void Rebuild()

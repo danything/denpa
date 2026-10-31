@@ -436,8 +436,8 @@ public static class Px4Userland
         public int? Number(JsonObject obj, string key, string where, bool optional = false) =>
             Read(obj, key, where, optional, "整数", out int number) ? number : null;
 
-        public bool? Flag(JsonObject obj, string key, string where, bool optional = false) =>
-            Read(obj, key, where, optional, "真偽値", out bool flag) ? flag : null;
+        public bool? Flag(JsonObject obj, string key, string where) =>
+            Read(obj, key, where, false, "真偽値", out bool flag) ? flag : null;
 
         /// <summary>鍵の値を <typeparamref name="T"/> で読む。型が違えば「<paramref name="kind"/>ではない」と残す</summary>
         private bool Read<T>(JsonObject obj, string key, string where, bool optional, string kind, out T? result)
@@ -1641,14 +1641,14 @@ internal sealed class Px4Stream
                     }
                     var body = new byte[length];
                     Px4Control.Receive(_socket, body, _wire);
-                    if (type == Px4Control.StreamEnd && body.Length >= 68)
+                    if (type == Px4Control.StreamEnd && body.Length >= Px4Counters.Size + 4)
                     {
                         // final counters (u64 × 8) のあとに u32 error_code。**誤りがあれば数も残す** (途切れの切り分けに)
                         if (Px4Counters.Parse(body) is { } final && Px4Counters.Describe(null, final) is { } errors)
                         {
                             Log.Write($"[{_name}] {_wire.Daemon} の TS の数 (止まるまで): {errors}");
                         }
-                        var code = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(64));
+                        var code = BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(Px4Counters.Size));
                         End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
                         return;
                     }

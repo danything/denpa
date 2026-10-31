@@ -17,6 +17,7 @@ import {
   patSection,
   programMap,
   stream,
+  tdtPacket,
   withCrc,
 } from "./synth.js";
 
@@ -387,20 +388,7 @@ describe("BmlDecoder", () => {
   /** TDT。BML の `getCurrentDateTime` はこれを見る */
   test("放送の時刻を配る", () => {
     const at = Date.UTC(2026, 7, 9, 12, 0, 0);
-    const jst = at + 9 * 3600 * 1000;
-    const days = Math.floor(jst / 86400000) + 40587;
-    const bcd = (n: number) => ((n / 10) << 4) | (n % 10);
-    const tdt = Uint8Array.from([
-      0x70,
-      0x70,
-      0x05,
-      (days >> 8) & 0xff,
-      days & 0xff,
-      bcd(21),
-      bcd(0),
-      bcd(0),
-    ]);
-    const out = decode(...head, packetize(0x0014, tdt));
+    const out = decode(...head, tdtPacket(at));
     const time = out.find((message) => message.type === "currentTime");
     if (time?.type !== "currentTime")
       throw new Error("currentTime が出ていない");

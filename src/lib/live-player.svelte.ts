@@ -1707,7 +1707,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       }
       return true;
     }
-    // エンコードしたものはどちらも描けない。MPEG-2 なら描ける (覚えはしない — 互換モードを切れば元に戻る)。
+    // エンコードしたものはどちらも描けない。MPEG-2 なら描ける (覚えはしない — 互換モードをオフにすれば元に戻る)。
     // 追っかけに MPEG-2 は無い (サーバが変換せずには送らない)
     if (chase === null && rawProblem === null && !rawGaveUp && tuned !== null) {
       rawChosen = true;

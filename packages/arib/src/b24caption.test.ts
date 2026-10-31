@@ -87,7 +87,7 @@ describe("B24CaptionDecoder", () => {
         0x50 | 0x04, // 背景を青
         ...encodeAribText("赤"),
         0x87, // WHF
-        ...csi("1;7", 0x63), // ORN 縁取り 黒 (組0の0)… p2 = 7 → 組0の7 (白)
+        ...csi("1;7", 0x63), // ORN 縁取り 組0の7 (白)
         0x97,
         0x4f, // HLC 四方
         0x9a, // STL

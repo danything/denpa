@@ -354,7 +354,7 @@ export const DESC_DIGITAL_COPY_CONTROL = 0xc1;
  *
  * 先頭2ビットの digital_recording_control_data が 11 なら禁止
  * (00 コピー可、01 事業者定義、10 1世代のみ)。禁止の番組は録らない
- * ([data.md](https://github.com/danything/denpa/blob/main/docs/data.md)「コピー禁止の番組」)
+ * ([data.md](https://github.com/danything/denpa/blob/main/docs/data.md)「コピー禁止の番組は録らない」)
  */
 export function isCopyNever(data: Uint8Array): boolean {
   return data.length >= 1 && data[0]! >> 6 === 0b11;
