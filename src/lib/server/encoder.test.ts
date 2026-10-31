@@ -172,7 +172,7 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
         "qsv=hw:hw,child_device=/dev/dri/renderD129",
       );
       expect(args).toContain(`${codec}_qsv`);
-      expect(argValue(args, "-global_quality")).toBe("24");
+      expect(argValue(args, "-global_quality:v")).toBe("24");
       expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=nv12");
       expect(args).not.toContain("libx264");
       expect(args).not.toContain("libsvtav1");
@@ -239,7 +239,7 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
       expect(args).toContain(`${codec}_nvenc`);
       expect(argValue(args, "-gpu")).toBe("1");
       // ICQ (-global_quality) は NVENC が断るので渡さない
-      expect(args).not.toContain("-global_quality");
+      expect(args).not.toContain("-global_quality:v");
       expect(argValue(args, "-rc")).toBe("vbr");
       expect(argValue(args, "-b:v")).toBe(
         String(hwBitrate(codec, { height: 720, smooth: false })),
