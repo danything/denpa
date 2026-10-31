@@ -70,15 +70,16 @@ spec:
           # 後ろ盾は日次の restic (R2) で、復元リハーサルは通っている
           protectFromPruning: false
           # 置き場の大きさは、ノードの LVM の thin プール(約 340Gi。danything/gitops の bootstrap/storage.yaml)から
-          # ほかの PVC の合計(約 170Gi)を引いた残りぎりぎり。thin なので PVC の大きさを足すと実際の容量を
+          # ほかの PVC の合計(約 95Gi。使用量に合わせて縮めた。danything/gitops#645)を引いた残りぎりぎり。thin なので PVC の大きさを足すと実際の容量を
           # 超えられるが、超えると denpa の残量の見張り(src/lib/server/disk.ts)は PVC の大きさしか見ないので鳴らず、
           # プールが先に埋まって全部の PVC の書き込みが止まる。だから合計がプールに収まる大きさにする。
-          # raw は 5 チューナーで同時に 1 時間録ると 40GB ほどになるので多めに取る。
+          # raw は 5 チューナーで同時に 1 時間録ると 40GB ほどになるので多めに取る。encoded は AV1 で 1 時間 1〜1.5GB ほど
+          # (docs/encode.md の実測)なので、170Gi で 110〜170 時間ぶん(1 日 8 時間録って 2 週間ほど)。
           # ほかの PVC を増やしたら、ここを減らす
           raw:
             size: 64Gi
           encoded:
-            size: 96Gi
+            size: 170Gi
 
         # Cilium Gateway (danything/gitops の bootstrap/gateway/) に付ける。
         # dp.doany.io は `*.doany.io` の、dp.l.doany.io は `*.l.doany.io` の
