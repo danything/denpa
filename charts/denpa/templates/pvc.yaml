@@ -5,19 +5,18 @@ existingClaim を渡したものは作らない
 */ -}}
 {{- $root := . -}}
 {{- /*
-`k8up` は k8up にファイルとして取らせるかどうか。operator が
-BACKUP_SKIP_WITHOUT_ANNOTATION=true なので、**注釈そのものが「取る」という宣言**になる。
-`k8upArgs` は restic に足す引数(JSON の配列)。
+バックアップは PVC ごとのスナップショット (VolSync) で、どれを取るかは chart ではなく
+クラスタ側が決める (danything/gitops の deploy/volsync/application.yaml)。
+DB の SQLite は WAL なので、スナップショットから自分で立ち直る
 */ -}}
 {{- range $item := list
-    (dict "key" "agentConfig" "name" "agent-config" "k8up" "true"
+    (dict "key" "agentConfig" "name" "agent-config"
           "note" "エージェントの設定 (tuners.json / channels.json)。denpa の画面から書く")
-    (dict "key" "data" "name" "denpa-data" "k8up" "true"
-          "k8upArgs" "[\"--exclude\",\"denpa.db*\"]"
-          "note" "denpa の DB と logos/。DB は Pod 側の backupcommand で取るので除外し、logos/ だけをファイルとして取る")
-    (dict "key" "raw" "name" "denpa-raw" "k8up" "false"
+    (dict "key" "data" "name" "denpa-data"
+          "note" "denpa の DB と logos/")
+    (dict "key" "raw" "name" "denpa-raw"
           "note" "元のTSの作業領域。エンコードが終われば消える。容量が大きく数時間で入れ替わるので取らない")
-    (dict "key" "encoded" "name" "denpa-encoded" "k8up" "true"
+    (dict "key" "encoded" "name" "denpa-encoded"
           "note" "エンコード済みの置き場。denpa がここから配り、削除も denpa がやる")
 }}
 {{- $p := index $root.Values.persistence $item.key }}
@@ -36,10 +35,6 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=false,Delete=false
     {{- end }}
     helm.sh/resource-policy: keep
-    k8up.io/backup: {{ $item.k8up | quote }}
-    {{- with $item.k8upArgs }}
-    k8up.io/backup-restic-args: {{ . | quote }}
-    {{- end }}
 spec:
   accessModes:
     - ReadWriteOnce
