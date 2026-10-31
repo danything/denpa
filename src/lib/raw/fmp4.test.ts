@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import { Fmp4Splitter, type Fmp4Track } from "#lib/ts/fmp4.js";
+import {
+  Fmp4Splitter,
+  type Fmp4Track,
+  readFragment,
+  readInit,
+} from "#lib/ts/fmp4.js";
 
-import { type Fmp4Host, Fmp4Video } from "./fmp4";
+import { audioCodec, audioFrame, type Fmp4Host, Fmp4Video } from "./fmp4";
 
 /**
  * **追っかけで抱えきれなくなったとき** (`follow`)。圧縮のまま持つのが上限を超えたら、受け取るのを
@@ -173,4 +178,49 @@ describe("Fmp4Video (描く大きさ)", () => {
       expect(closed).toBe(true);
     });
   }
+});
+
+/**
+ * **音の開き方と1コマの形** (`audioCodec`・`audioFrame`)。canvas に描く worker とライブの音だけの worker が
+ * 同じものを使う。作り置きの H.264 は AAC、AV1 は Opus (本物の ffmpeg が書いたもの)
+ */
+describe("audioCodec・audioFrame", () => {
+  const audioOf = (name: string) => {
+    const bytes = new Uint8Array(
+      readFileSync(new URL(`../../../tests/fake/${name}`, import.meta.url)),
+    );
+    const tracks = readInit(bytes);
+    const track = tracks.find((t) => t.kind === "audio")!;
+    const sample = readFragment(bytes, tracks).find(
+      (s) => s.track === track.id,
+    )!;
+    return { track, sample };
+  };
+
+  test("AAC は設定なしで開き、1コマに ADTS の頭 (7バイト。長さは頭を含む) を付ける", () => {
+    const { track, sample } = audioOf("live-h264.mp4");
+    expect(audioCodec(track)).toEqual({ codec: "aac", config: null });
+    const frame = audioFrame(track, sample.data)!;
+    expect(frame.length).toBe(sample.data.length + 7);
+    expect([frame[0], frame[1]! & 0xf6]).toEqual([0xff, 0xf0]);
+    expect(((frame[3]! & 3) << 11) | (frame[4]! << 3) | (frame[5]! >> 5)).toBe(
+      frame.length,
+    );
+    expect(frame.subarray(7)).toEqual(sample.data);
+  });
+
+  test("Opus は OpusHead を添えて開き、1コマはそのまま渡す", () => {
+    const { track, sample } = audioOf("live-av1.mp4");
+    const open = audioCodec(track)!;
+    expect(open.codec).toBe("opus");
+    expect(new TextDecoder().decode(open.config!.subarray(0, 8))).toBe(
+      "OpusHead",
+    );
+    expect(audioFrame(track, sample.data)).toBe(sample.data);
+  });
+
+  test("OpusHead を組めない Opus は開かない", () => {
+    const { track } = audioOf("live-av1.mp4");
+    expect(audioCodec({ ...track, config: new Uint8Array(2) })).toBeNull();
+  });
 });

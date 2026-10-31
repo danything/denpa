@@ -65,6 +65,28 @@ export const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
 /** デコーダが転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
 
+/**
+ * 音のトラックを WASM (`wasm-audio.ts`) で開くときの形式。Opus は OpusHead を添える (dOps から組む)。
+ * **Opus でなければ AAC として開く。** OpusHead を組めなければ null
+ */
+export function audioCodec(
+  track: Fmp4Track,
+): { codec: "aac" | "opus"; config: Uint8Array | null } | null {
+  if (track.codec !== "opus") return { codec: "aac", config: null };
+  const config = opusHead(track.config);
+  return config === null ? null : { codec: "opus", config };
+}
+
+/** 音の1コマをデコーダへ渡す形にする。AAC は ADTS の頭を付ける (デコーダは ADTS として読む)。付けられなければ null */
+export function audioFrame(
+  track: Fmp4Track,
+  data: Uint8Array,
+): Uint8Array | null {
+  if (track.codec === "opus") return data;
+  const head = adtsHeader(track.config, data.length);
+  return head === null ? null : concatBytes([head, data]);
+}
+
 /** 音の1フレームを画面へ渡す関数 (WASM でデコードするのは worker.ts) */
 interface AudioSink {
   /** 開き直す。`opus` のときは OpusHead を渡す。**開けなければ false** */
@@ -188,12 +210,9 @@ export class Fmp4Video {
           key: sample.key,
           data: sample.data,
         });
-      } else if (track.codec === "opus") {
-        this.host.audio.push(sample.data, pts);
       } else {
-        const head = adtsHeader(track.config, sample.data.length);
-        if (head !== null)
-          this.host.audio.push(concatBytes([head, sample.data]), pts);
+        const frame = audioFrame(track, sample.data);
+        if (frame !== null) this.host.audio.push(frame, pts);
       }
     }
   }
@@ -204,12 +223,8 @@ export class Fmp4Video {
     const video = tracks.find((t) => t.kind === "video") ?? null;
     const audio = tracks.find((t) => t.kind === "audio") ?? null;
     if (audio !== null) {
-      const opus = audio.codec === "opus";
-      const config = opus ? opusHead(audio.config) : null;
-      if (
-        (opus && config === null) ||
-        !this.host.audio.open(opus ? "opus" : "aac", config)
-      ) {
+      const open = audioCodec(audio);
+      if (open === null || !this.host.audio.open(open.codec, open.config)) {
         this.host.fail("音声を再生できません");
         return;
       }
