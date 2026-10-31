@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * 再生位置のバー (3画面で同じ見た目)。映像の上の細い溝で、観たぶんは主の色。触っている間だけ太くなりつまみが出る
+   * 再生位置のバー (3画面で同じ見た目)。映像の上の細い溝で、観たぶんは落ち着かせた主の色 (`--dp-video-fill`)。触っている間だけ太くなりつまみが出る
    * (指の端末では止めている間も)。読み上げとキーボードは見えない `<input type="range">` が受け持つ。
    *
    * `cm` は CM の区間 (観る画面)。CM は琥珀で塗る (denpa-tv と同じ。明るさも違うので色の見え方によらず分かる)。
@@ -238,7 +238,7 @@
      */
   .seek {
     --seek-track: color-mix(in srgb, var(--dp-on-video) 22%, transparent);
-    --seek-played: var(--pico-primary-background);
+    --seek-played: var(--dp-video-fill);
     --seek-cm: rgb(255 200 95 / 0.55);
     --seek-cm-played: rgb(255 179 0);
     position: relative;

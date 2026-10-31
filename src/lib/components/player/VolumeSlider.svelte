@@ -7,7 +7,7 @@
   /**
    * 音量のつまみ。**音のボタンの上に浮かぶ縦のもの (`SoundButton`) と ⚙ の横のもの (`SettingsMenu`) で同じ姿。**
    *
-   * 太いカプセル全体がつまみで、入れたぶんを下 (横なら左) から主の色で塗る。細い溝と丸は無い。
+   * 太いカプセル全体がつまみで、入れたぶんを下 (横なら左) から落ち着かせた主の色 (`--dp-video-fill`) で塗る。細い溝と丸は無い。
    * 中の端にスピーカーのアイコンを置き、音量で替える (0% は消した形・半分より下は波1本・それより上は波2本)。
    * 値 (%) は**変えている間だけ** 反対の端に出し、止めて少し経ったら消す。読み上げには `aria-valuetext` でいつも渡す。
    *
@@ -161,7 +161,7 @@
 <style>
   /*
      * カプセルは丸く閉じ (`--dp-radius-full`)、入れたぶんの塗りは中で切り取る。色は再生位置のバー (`SeekBar`) と
-     * 同じく主の色 (docs/design.md の「映像の上の操作」)。アイコンと字は白に小さな影 (塗りの上でも、空の所でも読める)。
+     * 同じく落ち着かせた主の色 (`--dp-video-fill`。docs/design.md の「映像の上の操作」)。アイコンと字は白に小さな影 (塗りの上でも、空の所でも読める)。
      * 的は縦なら幅、横なら高さ 44px (`--hit`)。縦のカプセルは少し細く見せ、的だけ左右へ広げる。
      * `touch-action` — 横のもの (⚙。指の端末) は縦にはメニューを送れるようにし、縦のものはページを動かさない
      */
@@ -192,11 +192,10 @@
     padding: 0 0.75rem;
     overflow: hidden;
     border-radius: var(--dp-radius-full);
-    /* 空の所。⚙ の中では白を薄く敷き、浮かべるときは映像の上の面 (`SoundButton` が渡す) */
-    background: var(
-      --volume-empty,
-      color-mix(in srgb, var(--dp-on-video) 16%, transparent)
-    );
+    /*
+       * 空の所。⚙ の中ではメニューの面を黒で沈め (塗りと 3:1 以上)、浮かべるときは映像の上の面 (`SoundButton` が渡す)
+       */
+    background: var(--volume-empty, color-mix(in srgb, #000 40%, transparent));
     box-shadow: var(--volume-shadow, none);
     color: var(--dp-on-video);
   }
@@ -213,7 +212,7 @@
   .fill {
     position: absolute;
     inset: 0;
-    background: var(--pico-primary-background);
+    background: var(--dp-video-fill);
     transform: scaleX(var(--level));
     transform-origin: left center;
     transition: transform var(--dp-duration) var(--dp-ease);
