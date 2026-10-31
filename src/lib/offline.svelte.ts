@@ -220,7 +220,14 @@ async function canDecode(type: string): Promise<boolean> {
   }
 }
 
-const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
+/**
+ * **AV1 は Level 4.1 (`09`) で問う。** `canDecode` は 1080p60 と言っているので、それが収まる Level で
+ * なければならない — AV1 の Level 4.0 (`08`) は 30fps まで。Safari は codecs の Level と
+ * 大きさ・コマ数・ビットレートを突き合わせ (WebKit の `validateAV1PerLevelConstraints`)、
+ * 収まらなければ「デコードできない」と答える。4.0 で問うていた頃は、AV1 をデコードできる iPhone
+ * (15 Pro Max) でも AV1 を保存しなかった。Chrome は突き合わせない
+ */
+const AV1 = 'video/mp4; codecs="av01.0.09M.08"';
 const HEVC = 'video/mp4; codecs="hvc1.1.6.L120.90"';
 
 /**
