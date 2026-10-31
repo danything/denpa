@@ -45,9 +45,20 @@
     panel: boolean;
     /** 出たら入力欄にフォーカスを移す (押して開いたとき。覚えていた一覧を開き直したときは移さない) */
     focus: boolean;
+    /** 書きかけ。画面が持つ (列を入れ替えて描き直しても消えない) */
+    text: string;
     onclose: () => void;
   }
-  let { feed, air, lag, paused, panel, focus, onclose }: Props = $props();
+  let {
+    feed,
+    air,
+    lag,
+    paused,
+    panel,
+    focus,
+    text = $bindable(),
+    onclose,
+  }: Props = $props();
 
   /** 色・位置・大きさを覚えておく鍵 (端末ごと。頭の `player-` は画面をまたいで効くもの) */
   const JIKKYO_STYLE_KEY = "player-jikkyo-style";
@@ -69,7 +80,6 @@
   const BEHIND = "ライブに戻ると書けます";
   const CLOSED = "(いまは書けません)";
 
-  let text = $state("");
   let busy = $state(false);
   /** 送った結果・送れなかった理由。打ち直したら消す */
   let note = $state("");

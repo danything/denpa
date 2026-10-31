@@ -502,6 +502,12 @@ test.describe("ライブで実況に書き込む", () => {
       );
       await expect(input).toHaveValue("断られる書き込み");
       await expect(page.getByTestId("jikkyo-comment")).toHaveCount(0);
+      // 番組の中身を開いて列を入れ替えても、書きかけは残る
+      await page.getByTestId("live-channel-detail").first().click();
+      await expect(page.getByTestId("live-detail")).toBeVisible();
+      await expect(input).toHaveValue("断られる書き込み");
+      await page.getByTestId("live-detail-close").click();
+      await expect(input).toHaveValue("断られる書き込み");
       await input.press("Escape");
       await expect(page.getByTestId("jikkyo-list")).toHaveCount(0);
       await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);

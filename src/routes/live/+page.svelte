@@ -388,10 +388,16 @@
     if (canList) {
       if (jikkyoList.on) jikkyoList.toggle();
     } else writing = false;
-    document
-      .querySelector<HTMLElement>('[data-testid="live-jikkyo-list"]')
-      ?.focus();
+    // 一覧の下で打っている間は操作列が引っ込んでいることがある。出し直してから移す (消えている間は押せない)
+    controls.stir();
+    void tick().then(() =>
+      document
+        .querySelector<HTMLElement>('[data-testid="live-jikkyo-list"]')
+        ?.focus(),
+    );
   }
+  /** 書きかけ (一覧の下と映像の上で同じもの。番組の中身との行き来で一覧を描き直しても残す) */
+  let draft = $state("");
 
   /** 画面を落とさせない。止めている間も掛けたまま (追っかけの始まりで、画面を見ていることが多い) */
   const awake = screenAwake();
@@ -656,6 +662,7 @@
               paused={player.paused}
               panel={false}
               focus
+              bind:text={draft}
               onclose={closeWriting}
             />
           {/if}
@@ -990,6 +997,7 @@
             paused={player.paused}
             panel
             focus={opened}
+            bind:text={draft}
             onclose={closeWriting}
           />
         {/if}
