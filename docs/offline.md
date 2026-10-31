@@ -77,10 +77,11 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 
 ### どちらを保存するか — 端末がデコードできるコーデック
 
-**既定は AV1** (`library_path`)。端末が AV1 をデコードできなければ H.264 (`alt_path`) を保存する。
-判定は `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の
-`supported`)。H.264 しかデコードできない端末で `alt_path` が無い録画は、ダウンロード時に
-「この端末では再生できない」と断る (保存できても観られないため)。
+**既定はエンコード済みのファイル** (`library_path`。ふつうは AV1)。それが AV1 で、端末が AV1 をデコードできなければ
+H.264 (`alt_path`) を保存する。判定は `navigator.mediaCapabilities.decodingInfo()` (`video/mp4; codecs=av01.…` の
+`supported`)。**H.264 だけでエンコードした録画** (`library_path` が `… [H264].mkv`) は、そのまま保存する (AV1 は確かめない)。
+H.264 しかデコードできない端末で、AV1 だけでエンコードした録画は、ダウンロード時に「この端末では再生できない」と断る
+(保存できても観られないため)。
 
 ### 観る
 

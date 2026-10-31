@@ -81,12 +81,8 @@ export function encodedPath(
   return libraryPath(rec, codec === "h264" ? " [H264].mkv" : ".mkv");
 }
 
-/** 置き場の名前 (`… [H264].mkv`) からコーデックを見分ける (`encodedPath` の逆) */
-export function encodedCodec(path: string): "av1" | "h264" | "mpeg2" {
-  // エンコードしない録画は元のTS (`.m2ts`) をそのまま保存先に置く (`recorder.ts`)
-  if (/\.m2ts$/i.test(path)) return "mpeg2";
-  return / \[H264\]\.mkv$/i.test(path) ? "h264" : "av1";
-}
+/** 置き場の名前からコーデックを見分ける (`encodedPath` の逆。画面と共有するので `#lib/encoded-codec.ts` に置く) */
+export { encodedCodec } from "../encoded-codec";
 
 /**
  * この録画が取りうる保存先の候補すべて。

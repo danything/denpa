@@ -13,6 +13,7 @@
 import { browser } from "$app/env";
 import { resolve } from "$app/paths";
 
+import { encodedCodec } from "./encoded-codec";
 import {
   downloadRequests,
   fetchId,
@@ -241,6 +242,8 @@ interface SaveTarget {
   start_at: number;
   duration_ms: number | null;
   ts_size: number;
+  /** エンコード済みのファイル。H.264 だけでエンコードした録画は、これが `… [H264].mkv` */
+  library_path: string | null;
   alt_path: string | null;
 }
 
@@ -284,12 +287,16 @@ async function probeDownloads(
 }
 
 /**
- * 端末に保存する。**どちらを落とすかはここで決める** — 既定は AV1、
- * 端末がデコードできなければ H.264 (両方エンコードした録画だけ)。
+ * 端末に保存する。**どちらを落とすかはここで決める** — 既定はエンコード済みのファイル、
+ * それが AV1 で端末がデコードできなければ H.264 (両方エンコードした録画だけ)。
+ * H.264 だけでエンコードした録画は、エンコード済みのファイルがもう H.264 なので AV1 を確かめない
+ * (確かめていた頃は、AV1 をデコードできない端末で「H.264 のものもありません」と断っていた。#1806)
  */
 export async function saveOffline(rec: SaveTarget): Promise<void> {
   let source: "encoded" | "alt" = "encoded";
-  if (!(await canPlayAv1())) {
+  const h264Only =
+    rec.library_path !== null && encodedCodec(rec.library_path) === "h264";
+  if (!h264Only && !(await canPlayAv1())) {
     if (rec.alt_path === null)
       throw new Error("AV1 を再生できず、H.264 のものもありません");
     source = "alt";
