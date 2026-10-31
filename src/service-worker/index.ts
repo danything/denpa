@@ -43,6 +43,12 @@ const SHELL = [
  * install のたびに取り直す
  */
 const OFFLINE_PAGE = resolve("offline");
+/**
+ * 入口が始まるときに読むデータ (共通の枠の `+layout.server.ts`。ログインの控えなど)。
+ * **入口は SSR を切った殻なので、開くたびにこれをサーバへ取りに行く** — 控えていなかった頃は
+ * 電波が無いとここで転び、真っ白な画面になっていた。入口と一緒に控え、繋がらないときだけ出す
+ */
+const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
 
 worker.addEventListener("install", (event) => {
   event.waitUntil(
@@ -50,6 +56,7 @@ worker.addEventListener("install", (event) => {
       await cache.addAll(SHELL);
       // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
       await cache.add(OFFLINE_PAGE).catch(() => {});
+      await cache.add(OFFLINE_DATA).catch(() => {});
     }),
   );
   void worker.skipWaiting();
@@ -89,9 +96,28 @@ worker.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(async () => {
-        const fallback = await caches.match(OFFLINE_PAGE);
-        return fallback ?? Response.error();
+        const page = await caches.match(OFFLINE_PAGE);
+        if (page === undefined) return Response.error();
+        /*
+         * **入口へ移す** (その場で入口の HTML を返さない)。殻は開いた URL の画面として
+         * 始まるので、`/` のまま返すと一覧の画面を組もうとしてデータを取りに行き、転んでいた
+         */
+        if (url.pathname !== OFFLINE_PAGE)
+          return Response.redirect(new URL(OFFLINE_PAGE, location.origin));
+        return page;
       }),
+    );
+    return;
+  }
+
+  // 入口のデータはサーバ優先 (ログインの控えが変わる)。繋がらなければ控え
+  if (url.pathname === OFFLINE_DATA) {
+    event.respondWith(
+      fetch(request).catch(
+        async () =>
+          (await caches.match(OFFLINE_DATA, { ignoreSearch: true })) ??
+          Response.error(),
+      ),
     );
     return;
   }
