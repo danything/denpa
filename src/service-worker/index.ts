@@ -49,6 +49,16 @@ const OFFLINE_PAGE = resolve("offline");
  * 電波が無いとここで転び、真っ白な画面になっていた。入口と一緒に控え、繋がらないときだけ出す
  */
 const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
+/**
+ * 音 (と MPEG-2) をデコードする WebAssembly (`routes/api/live/mpeg2`。`raw/worker.ts` が読む)。
+ * **入口で保存した録画を canvas に描くとき要る** — iPhone の Safari は保存した Matroska を `<video>` で
+ * 読めないので、入口は観る画面の互換モードと同じエンジンで描く (`offline/+page.svelte`)。
+ * `/api/` は素通しなので、控えていなかった頃は電波が無いと「音声を再生できません」で止まっていた。
+ * 中身はイメージごとに変わる (URL は同じ) ので、入口と同じく install のたびに取り直し、サーバ優先で出す
+ */
+const DECODER = ["decoder.mjs", "decoder.wasm"].map(
+  (file) => `${resolve("")}api/live/mpeg2/${file}`,
+);
 
 /**
  * 画面と入口のデータをサーバへ取りに行く。**繋がらないと分かっていれば待たず、返事が来なければ見切る。**
@@ -92,6 +102,8 @@ worker.addEventListener("install", (event) => {
       // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
       await cache.add(OFFLINE_PAGE).catch(() => {});
       await cache.add(OFFLINE_DATA).catch(() => {});
+      // 組んでいない denpa もある (無ければ 404)。入口で描けないだけなので諦める
+      await Promise.all(DECODER.map((url) => cache.add(url).catch(() => {})));
     }),
   );
   void worker.skipWaiting();
@@ -117,8 +129,19 @@ worker.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
+  // デコーダはサーバ優先、繋がらなければ控え (`DECODER`)
+  if (DECODER.includes(url.pathname)) {
+    event.respondWith(
+      fromNetwork(request).catch(
+        async () =>
+          (await caches.match(url.pathname, { ignoreVary: true })) ??
+          Response.error(),
+      ),
+    );
+    return;
+  }
   /*
-   * API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
+   * ほかの API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
    * どちらもキャッシュに載せると壊れる
    */
   if (url.pathname.startsWith(`${resolve("")}api/`)) return;
