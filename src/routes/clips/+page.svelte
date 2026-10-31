@@ -647,6 +647,10 @@
     deleting.fire();
   }}
   onkeydown={onviewerkey}
+  onclick={(event) => {
+    // 箱の外 (幕) を押したら閉じる。箱の中の押しは箱の要素に当たるので、ここに来るのは幕だけ
+    if (event.target === dialog) close();
+  }}
   aria-label={viewing === null ? "切り抜き" : title(viewing)}
   data-testid="clip-viewer"
 >
@@ -1032,28 +1036,42 @@
     overflow-y: auto;
   }
 
-  /* 1枚を開いた所。テーマにかかわらず黒い舞台 (映像の上と同じ色の決まり) */
+  /*
+   * 1枚を開いた所。**画面を覆わず、一覧の上に浮かぶ箱** (ダイアログと同じく後ろは幕 `--dp-backdrop`、幕を押すと閉じる)。
+   * 箱は 16:9 の黒い舞台 (テーマにかかわらず。映像の上と同じ色の決まり) で、画面に収まる大きさまで。
+   * 開き方もダイアログの箱と同じ (少し縮んだ姿からばねで。app.css の `dialog > article`)
+   */
   .viewer {
-    width: 100vw;
-    max-width: none;
-    height: 100svh;
-    max-height: none;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: var(--dp-video);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
     color: var(--dp-on-video);
-  }
-  .viewer::backdrop {
-    background: var(--dp-video);
   }
   .v-stage {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
+    width: min(calc(100vw - 2rem), calc((100svh - 2rem) * 16 / 9), 80rem);
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--dp-radius-lg);
+    background: var(--dp-video);
+    box-shadow: var(--dp-shadow-pop);
+    transition: transform var(--dp-duration-exit) var(--dp-ease-exit);
+  }
+  .viewer:not([open]) .v-stage {
+    transform: translateY(0.5rem) scale(0.95);
+  }
+  .viewer[open] .v-stage {
+    transition-duration: var(--dp-duration-enter);
+    transition-timing-function: var(--dp-ease-spring);
+  }
+  @starting-style {
+    .viewer[open] .v-stage {
+      transform: translateY(0.5rem) scale(0.95);
+    }
   }
   .v-image {
     max-width: 100%;
