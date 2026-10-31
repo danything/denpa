@@ -384,14 +384,14 @@
   };
 
   /**
-   * BML の画面 (960x540 など。エンジンは原寸で描く) を枠いっぱいに伸ばす。縦横は別々に —
-   * 枠を埋めている映像と同じだけ伸びていないと位置がずれる
+   * BML の画面 (960x540 など。エンジンは原寸で描く) を放送の縦横比で枠内に収める。
+   * 映像の小窓も同じ面の座標で配置する
    */
   function fit(): void {
     if (mount === null || host === null || plane === null) return;
     const box = host.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) return;
-    // 4:3 の面 (720x480 の display-aspect-ratio: 4v3) は高さを合わせて左右の真ん中 (`planeArea`)
+
     const area = planeArea(box, plane);
     mount.style.left = `${area.left}px`;
     mount.style.top = `${area.top}px`;
@@ -399,7 +399,7 @@
     mount.style.height = `${plane.height}px`;
     mount.style.transform = `scale(${area.width / plane.width}, ${area.height / plane.height})`;
     // 枠いっぱいでない面では、映像を寄せる先も枠の大きさで変わる
-    if (engine !== null && plane.aspect === "4:3") placeVideo(visible);
+    if (engine !== null) placeVideo(visible);
   }
 
   /** 出すかどうかを決め直し、映像の入れ物を寄せる/戻す */
@@ -449,7 +449,7 @@
       mediaStyle ??= media.style.cssText;
       // 字幕を操作バーの上へ持ち上げない印 (`PlayerStage`。小窓の中は操作バーと重ならない)
       media.dataset["bmlWindow"] = "";
-      // 面の中の場所を、枠の中の割合に (4:3 の面は枠の真ん中に置いてある。`fit`)
+      // 面の中の場所を、枠の中の割合に (面は縦横比を保って枠の真ん中に置いてある。`fit`)
       const box = host?.getBoundingClientRect() ?? { width: 1, height: 1 };
       const area = planeArea(box, plane);
       const left = box.width > 0 ? area.left / box.width : 0;

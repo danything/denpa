@@ -7,6 +7,7 @@ import { TABLETOP } from "#lib/phone-form.js";
 import {
   exitNative,
   fullscreenMode,
+  landscapeLock,
   nativeFullscreenElement,
   requestNative,
 } from "./fullscreen";
@@ -17,6 +18,8 @@ import {
  * 全画面への切り替え方は端末の API で決める (`fullscreen.ts`)。本物の全画面 (標準・webkit) が無い
  * iPhone の Safari では**枠を画面いっぱいに広げて代わりにする** (以下「広げる」)。
  * 押すボタン・ボタンのアイコン・`f` キーはどれでも同じ。
+ * 本物の全画面ではタッチ端末の向きを横に固定し、終了時に解除する (対応ブラウザのみ)。
+ * テーブルトップのページごとの全画面では、折り目に合わせた並べ方を保つため固定しない。
  *
  * ## 広げる (iPhone)
  *
@@ -58,10 +61,18 @@ export function stageFullscreen(
   let pseudo = $state(false);
 
   $effect(() => {
+    const orient = landscapeLock(screen.orientation);
     const update = () => {
       const element = nativeFullscreenElement(document);
       native = element !== null;
       whole = element === document.documentElement;
+      orient(
+        element !== null &&
+          element === untrack(target) &&
+          !whole &&
+          matchMedia("(pointer: coarse)").matches &&
+          !matchMedia(TABLETOP).matches,
+      );
     };
     update();
     document.addEventListener("fullscreenchange", update);
@@ -69,6 +80,7 @@ export function stageFullscreen(
     return () => {
       document.removeEventListener("fullscreenchange", update);
       document.removeEventListener("webkitfullscreenchange", update);
+      orient(false);
     };
   });
 

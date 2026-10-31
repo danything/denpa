@@ -16,17 +16,16 @@ export interface Plane {
 }
 
 /**
- * 面を、縦横 `box` の枠のどこへ映すか (枠の中の座標)。16:9 の面は枠いっぱいに伸ばし (映像と同じ)、
- * 4:3 の面は高さを合わせて左右の真ん中に置く (16:9 の画面に 4:3 を映す受信機と同じ)
+ * 面を、縦横 `box` の枠のどこへ映すか (枠の中の座標)。放送の縦横比を保って枠内に収め、
+ * 上下左右の真ん中に置く。縦長の画面や全画面でも、面を引き伸ばさない
  */
 export function planeArea(
   box: { width: number; height: number },
   plane: { aspect?: Plane["aspect"] },
 ): Rect {
-  if (plane.aspect !== "4:3" || box.height === 0)
-    return { left: 0, top: 0, width: box.width, height: box.height };
-  const width = Math.min(box.width, (box.height * 4) / 3);
-  const height = width === box.width ? (box.width * 3) / 4 : box.height;
+  const ratio = plane.aspect === "4:3" ? 4 / 3 : 16 / 9;
+  const width = Math.min(box.width, box.height * ratio);
+  const height = width === box.width ? box.width / ratio : box.height;
   return {
     left: (box.width - width) / 2,
     top: (box.height - height) / 2,
