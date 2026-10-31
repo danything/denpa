@@ -50,6 +50,41 @@ const OFFLINE_PAGE = resolve("offline");
  */
 const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
 
+/**
+ * 画面と入口のデータをサーバへ取りに行く。**繋がらないと分かっていれば待たず、返事が来なければ見切る。**
+ *
+ * iPhone の Safari は機内モードで、取りに行ったものが失敗せずに返事待ちのまま止まることがあり、
+ * 入口へ移れずにいつまでも読み込み中になっていた。電波の弱いところで繋がりかけのまま止まるのも同じ。
+ * 端末が繋がっていないと言うなら取りに行かず、10秒返事が無ければ繋がらないものとして扱う
+ * (ふだんの画面は Celeron でも数秒で返る)。
+ *
+ * **見切ったら、しばらく (30秒) は取りに行かない。** 開いた画面 → 入口へ移る → 入口のデータ、と
+ * 続けて取りに行くので、毎回待つと 10秒 × 3 待たせていた
+ */
+const NETWORK_WAIT = 10_000;
+const GIVE_UP_FOR = 30_000;
+let unreachableUntil = 0;
+function fromNetwork(request: Request): Promise<Response> {
+  if (!worker.navigator.onLine || Date.now() < unreachableUntil)
+    return Promise.reject(new Error("繋がっていません"));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unreachableUntil = Date.now() + GIVE_UP_FOR;
+      reject(new Error("返事がありません"));
+    }, NETWORK_WAIT);
+    fetch(request).then(
+      (response) => {
+        clearTimeout(timer);
+        resolve(response);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
 worker.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE).then(async (cache) => {
@@ -95,7 +130,7 @@ worker.addEventListener("fetch", (event) => {
    */
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => {
+      fromNetwork(request).catch(async () => {
         const page = await caches.match(OFFLINE_PAGE);
         if (page === undefined) return Response.error();
         /*
@@ -113,7 +148,7 @@ worker.addEventListener("fetch", (event) => {
   // 入口のデータはサーバ優先 (ログインの控えが変わる)。繋がらなければ控え
   if (url.pathname === OFFLINE_DATA) {
     event.respondWith(
-      fetch(request).catch(
+      fromNetwork(request).catch(
         async () =>
           (await caches.match(OFFLINE_DATA, { ignoreSearch: true })) ??
           Response.error(),
