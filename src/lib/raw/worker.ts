@@ -50,6 +50,12 @@ import { Fmp4Video, FOLLOW_BYTES_MOST } from "./fmp4";
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
 import { MkvInput } from "./mkv";
 import { YuvRenderer } from "./render";
+import {
+  type AudioDecoder,
+  ensure,
+  loadDecoder,
+  WasmAudio,
+} from "./wasm-audio";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -80,12 +86,9 @@ const FOLLOW_PENDING_MOST = 30 * CLOCK;
 /** 飛び先より手前をデコードして捨てるとき、1回の刻みでデコードする上限 (1枚 10〜20ms) */
 const UNDER_PER_TICK = 4;
 
-interface Decoder {
+/** デコーダ (`wasm/decoder.c`)。音とメモリの口は `wasm-audio.ts` */
+interface Decoder extends AudioDecoder {
   _dec_open(): number;
-  _aac_open(): number;
-  _opus_open(extra: number, length: number): number;
-  _audio_push(data: number, length: number): number;
-  _audio_peek(): number;
   _dec_push(data: number, length: number, pts: number): number;
   _dec_count(): number;
   _dec_peek(): number;
@@ -94,10 +97,6 @@ interface Decoder {
   _dec_pop(): void;
   _dec_last_ms(): number;
   _dec_skip(on: number): void;
-  _malloc(size: number): number;
-  _free(pointer: number): void;
-  HEAPU8: Uint8Array;
-  HEAP32: Int32Array;
 }
 
 interface Pending {
@@ -159,8 +158,8 @@ let floor: number | null = null;
 /** いま開いている音の形式 (`標本化周波数/チャンネル数`)。変わったら開き直す */
 let audioConfig = "";
 let audioErrors = 0;
-/** 音のコマを WASM のメモリへ写す置き場 (`input` は映像が使う) */
-let audioInput = { pointer: 0, size: 0 };
+/** 音をデコードする係 (`wasm-audio.ts`)。デコーダを読み終えたら作る */
+let audio: WasmAudio | null = null;
 
 let budget = new DecodeBudget();
 /** 何を受け取っているか (`messages.ts` の `RawInput`)。`init` で決まる */
@@ -322,7 +321,7 @@ function skipTo(target: number): void {
 }
 
 function onAudio(pes: Pes): void {
-  if (decoder === null) return;
+  if (audio === null) return;
   for (const frame of adts.feed(
     pes.data,
     pes.pts === null ? null : extend(pes.pts),
@@ -334,13 +333,13 @@ function onAudio(pes: Pes): void {
      */
     const config = `${frame.sampleRate}/${frame.channels}`;
     if (config !== audioConfig) {
-      if (decoder._aac_open() !== 0) {
+      if (!audio.open("aac", null)) {
         fail("音声を再生できませんでした");
         return;
       }
       audioConfig = config;
     }
-    decodeAudio(decoder, frame.data, frame.pts);
+    decodeAudio(audio, frame.data, frame.pts);
   }
 }
 
@@ -348,32 +347,15 @@ function onAudio(pes: Pes): void {
  * ADTS の1コマをデコードして画面へ渡す。**壊れたコマは飛ばす** (放送の取りこぼし)。
  * 続けて転ぶなら諦める
  */
-function decodeAudio(decoder: Decoder, data: Uint8Array, pts: number): void {
-  audioInput = ensure(decoder, audioInput, data.length);
-  decoder.HEAPU8.set(data, audioInput.pointer);
-  const samples = decoder._audio_push(audioInput.pointer, data.length);
-  if (samples < 0) {
+function decodeAudio(audio: WasmAudio, data: Uint8Array, pts: number): void {
+  const pcm = audio.decode(data);
+  if (pcm === "broken") {
     if (++audioErrors > AUDIO_ERRORS_MOST) fail("音声を再生できませんでした");
     return;
   }
-  if (samples === 0) return;
+  if (pcm === null) return;
   audioErrors = 0;
-  // デコードしたあとに読む — メモリが伸びると HEAPU8 の下の ArrayBuffer が替わる
-  const info = decoder._audio_peek() >> 2;
-  const heap = decoder.HEAP32;
-  const channels = heap[info]!;
-  const sampleRate = heap[info + 1]!;
-  const planes: Float32Array[] = [];
-  for (let i = 0; i < channels; i++) {
-    // 写して持ち出す。デコーダの面は次のコマで上書きされる
-    planes.push(
-      new Float32Array(
-        decoder.HEAPU8.buffer,
-        heap[info + 3 + i]!,
-        samples,
-      ).slice(),
-    );
-  }
+  const { samples, sampleRate, planes } = pcm;
   post(
     {
       type: "audio",
@@ -384,17 +366,6 @@ function decodeAudio(decoder: Decoder, data: Uint8Array, pts: number): void {
     },
     planes.map((plane) => plane.buffer),
   );
-}
-
-/** WASM のメモリに `size` バイトの置き場を用意する。**足りるうちは使い回す** */
-function ensure(
-  decoder: Decoder,
-  slot: { pointer: number; size: number },
-  size: number,
-): { pointer: number; size: number } {
-  if (size <= slot.size) return slot;
-  if (slot.pointer !== 0) decoder._free(slot.pointer);
-  return { pointer: decoder._malloc(size), size };
 }
 
 /** 1 PES ぶんをデコーダへ。**WASM のメモリへ写してから渡す** */
@@ -814,13 +785,9 @@ async function grab(id: number, size: GrabSize | undefined): Promise<void> {
  * AAC は ADTS の頭を付けて (`fmp4.ts` が付ける)、Opus は OpusHead を渡して開く
  */
 function openAudio(codec: "aac" | "opus", config: Uint8Array | null): boolean {
-  if (decoder === null) return false;
+  if (audio === null) return false;
   audioErrors = 0;
-  if (codec === "aac") return decoder._aac_open() === 0;
-  if (config === null) return false;
-  audioInput = ensure(decoder, audioInput, config.length);
-  decoder.HEAPU8.set(config, audioInput.pointer);
-  return decoder._opus_open(audioInput.pointer, config.length) === 0;
+  return audio.open(codec, config);
 }
 
 function startFmp4(canvas: OffscreenCanvas, follow: boolean): boolean {
@@ -835,7 +802,7 @@ function startFmp4(canvas: OffscreenCanvas, follow: boolean): boolean {
         audio: {
           open: openAudio,
           push: (data, pts) => {
-            if (decoder !== null) decodeAudio(decoder, data, pts);
+            if (audio !== null) decodeAudio(audio, data, pts);
           },
         },
         drew: (first) => {
@@ -883,14 +850,8 @@ async function init(
     }
   }
   try {
-    const url = new URL(`${base}/decoder.mjs`, scope.location.origin).href;
-    const module = (await import(/* @vite-ignore */ url)) as {
-      default: (options: object) => Promise<Decoder>;
-    };
-    decoder = await module.default({
-      locateFile: (name: string) =>
-        new URL(`${base}/${name}`, scope.location.origin).href,
-    });
+    decoder = await loadDecoder<Decoder>(base, scope.location.origin);
+    audio = new WasmAudio(decoder);
     if (decoder._dec_open() !== 0 || decoder._aac_open() !== 0)
       throw new Error("開けません");
   } catch {
