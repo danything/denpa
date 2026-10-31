@@ -90,7 +90,8 @@
   }
 
   function down(event: PointerEvent): void {
-    if (event.button !== 0 || root === null) return;
+    // 2本目の指は受けない (1本目の離したのを取りこぼさないように)
+    if (event.button !== 0 || root === null || pointer !== null) return;
     // 押した所へすぐ。文字選び・ページの送り・既定のフォーカスは起こさない
     event.preventDefault();
     root.setPointerCapture(event.pointerId);
