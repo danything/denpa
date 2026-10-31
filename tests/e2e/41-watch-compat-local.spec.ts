@@ -64,7 +64,8 @@ test("端末に保存した録画も canvas に描き、飛ぶ・CM 飛ばし・
     async ({ id, base64, caption }) => {
       const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open("denpa-offline", 1);
+        // 版は指定しない (画面が先に開いて上げている。`offline-db.ts` の VERSION)
+        const req = indexedDB.open("denpa-offline");
         req.onupgradeneeded = () => {
           for (const store of ["videos", "outbox", "resume"])
             if (!req.result.objectStoreNames.contains(store))
