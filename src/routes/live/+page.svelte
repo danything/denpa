@@ -192,11 +192,14 @@
     ...CHANNEL_TYPES.filter((t) => channels.some((c) => c.type === t)),
     ...(jikkyoTab ? [JIKKYO_TAB] : []),
   ]);
-  /** 開いたときは、いま映している局の種別。「実況」タブを選んでいても、タブが消えたら戻す */
+  /**
+   * 開いたときは、「実況」タブが出ている (実況を流している) なら「実況」、ほかはいま映している局の種別。
+   * 押して選んだタブはページにいる間だけ持ち (覚えない)、そのタブが消えたら開いたときの決め方に戻す
+   */
   let picked = $state<string | null>(null);
   const shown = $derived(
     (picked !== null && types.includes(picked) ? picked : null) ??
-      current?.type ??
+      (jikkyoTab ? JIKKYO_TAB : current?.type) ??
       types[0] ??
       "GR",
   );

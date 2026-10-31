@@ -9,6 +9,7 @@ import {
   nextChapterAt,
   parseChapters,
   plainMarks,
+  playbackAt,
   prevChapterAt,
   resumePoint,
   SKIP,
@@ -337,6 +338,27 @@ describe("続きの位置の物差し", () => {
   test("元の TS で観るときはそのまま", () => {
     expect(fromTsTime(120, null)).toBe(120);
     expect(toTsTime(120, null)).toBe(120);
+  });
+
+  /** コメントの一覧の時刻。寄せずに、観られない所はそうと返す */
+  test("コメントの再生位置は、本編の中なら残した区間をつないで数える", () => {
+    expect(playbackAt(50, cut)).toBe(40);
+    expect(playbackAt(200, cut)).toBe(130);
+    expect(playbackAt(50, plain)).toBe(47);
+    expect(playbackAt(120, null)).toBe(120);
+  });
+
+  test("録画の頭より前と、観られる所の前は「開始前」", () => {
+    expect(playbackAt(-1, null)).toBe("before");
+    expect(playbackAt(-1, cut)).toBe("before");
+    expect(playbackAt(5, cut)).toBe("before");
+    expect(playbackAt(1, plain)).toBe("before");
+  });
+
+  test("切った CM の中と、残した区間の後は CM", () => {
+    expect(playbackAt(120, cut)).toBe("cut");
+    expect(playbackAt(100, cut)).toBe("cut");
+    expect(playbackAt(400, cut)).toBe("cut");
   });
 });
 

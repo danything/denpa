@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, type Snippet, tick } from "svelte";
 
+  import { clock } from "#lib/format.js";
   import type { Comment } from "#lib/jikkyo/comments.js";
   import type { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import {
@@ -27,18 +28,21 @@
    *   (下へはいつも飛ぶ。滑らせると、滑っている間に増えた行で下の端が逃げ、付いていくのが外れる)
    * - 「最新へ」は上へ巻いている間だけ出す。下で乗っているだけなら出さない (離れれば付いていくのに戻る。出すといちばん新しい行に重なる)
    * - 読み上げには知らせない (`aria-live` を付けない。1 分に何百件も来る)。自分の書き込みは流れるほうと同じく字の下に短い線
-   * - `seek` があれば (観る画面)、行を押すとその時刻へ飛ぶ
+   * - 録画 (観る画面・追っかけ) は時刻の代わりに録画の中の再生位置を出す (`place`)。観られないものは「開始前」「CM」。
+   *   `seek` があれば、時刻のボタン (と行) を押すとその位置へ飛ぶ。ライブは書かれた時刻のまま
    * - `children` は一覧の下に置くもの (ライブで書き込む 1 行)
    */
   interface Props {
     feed: JikkyoFeed;
     /** いま映しているコマの放送時刻 (ms)。まだ分からなければ null */
     air: () => number | null;
-    /** 行を押したときにその放送時刻へ飛ぶ (録画だけ) */
-    seek?: (at: number) => void;
+    /** 放送時刻 (ms) → 録画の中の再生位置 (秒)。無ければ (ライブ) 書かれた時刻を出す */
+    place?: (at: number) => number | "before" | "cut";
+    /** 時刻のボタン・行を押したときに、その再生位置 (秒) へ飛ぶ */
+    seek?: (seconds: number) => void;
     children?: Snippet;
   }
-  let { feed, air, seek, children }: Props = $props();
+  let { feed, air, place, seek, children }: Props = $props();
 
   let rows = $state<Comment[]>([]);
   let force = $state(0);
@@ -128,30 +132,48 @@
       onfocusout={() => hold.set("focus", false)}
     >
       {#each rows as comment (rowKey(comment))}
-        <li class="row" class:mine={comment.mine} data-testid="jikkyo-list-row">
-          {#if seek}
-            <button
-              type="button"
-              class="line seekable"
-              onclick={() => seek(comment.at)}
+        {@const where = place?.(comment.at)}
+        {@const to = typeof where === "number" && seek ? where : null}
+        <!--
+          飛べる行は、行のどこを押しても飛ぶ (マウス・指で狙いやすく)。キーボードと読み上げは頭の時刻のボタンで
+        -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+        <li
+          class="row"
+          class:mine={comment.mine}
+          class:seekable={to !== null}
+          onclick={to === null ? undefined : () => seek?.(to)}
+          data-testid="jikkyo-list-row"
+        >
+          <span class="line">
+            {#if where === undefined}
+              <time class="at num">{airClock(comment.at)}</time>
+            {:else if to !== null}
+              <button
+                type="button"
+                class="at num jump"
+                aria-label="{clock(to)} へ移る"
+                onclick={(event) => {
+                  event.stopPropagation();
+                  seek?.(to);
+                }}
+                data-testid="jikkyo-list-at">{clock(to)}</button
+              >
+            {:else}
+              <span class="at num" data-testid="jikkyo-list-at"
+                >{where === "before"
+                  ? "開始前"
+                  : where === "cut"
+                    ? "CM"
+                    : clock(where)}</span
+              >
+            {/if}
+            <span class="text"
+              >{comment.text}{#if comment.mine}<span class="visually-hidden"
+                  >(自分の書き込み)</span
+                >{/if}</span
             >
-              <time class="at num">{airClock(comment.at)}</time>
-              <span class="text"
-                >{comment.text}{#if comment.mine}<span class="visually-hidden"
-                    >(自分の書き込み)</span
-                  >{/if}</span
-              >
-            </button>
-          {:else}
-            <span class="line">
-              <time class="at num">{airClock(comment.at)}</time>
-              <span class="text"
-                >{comment.text}{#if comment.mine}<span class="visually-hidden"
-                    >(自分の書き込み)</span
-                  >{/if}</span
-              >
-            </span>
-          {/if}
+          </span>
         </li>
       {/each}
     </ol>
@@ -219,16 +241,9 @@
   .line {
     display: flex;
     gap: var(--dp-space-2);
-    width: 100%;
-    margin: 0;
     padding: 0.125rem 0;
-    border: 0;
-    background: none;
-    color: inherit;
-    font: inherit;
     font-size: var(--dp-text-sm);
     line-height: 1.5;
-    text-align: start;
   }
   .seekable {
     cursor: pointer;
@@ -241,6 +256,22 @@
     font-size: var(--dp-text-xs);
     line-height: calc(var(--dp-text-sm) * 1.5);
     color: var(--dp-muted);
+  }
+  /* 飛べる時刻はリンクと同じ主の色の字で、押せると分かるように。行の高さは変えない */
+  .jump {
+    width: auto;
+    height: auto;
+    margin: 0 -0.25rem;
+    padding: 0 0.25rem;
+    border: 0;
+    border-radius: var(--dp-radius);
+    background: none;
+    box-shadow: none;
+    color: var(--dp-primary-text);
+  }
+  .jump:hover {
+    background: var(--dp-hover-soft);
+    text-decoration: underline;
   }
   .text {
     min-width: 0;

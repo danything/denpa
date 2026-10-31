@@ -1399,8 +1399,8 @@ a.button {
   pointer-events: none;
 }
 /*
- * ---- 滑る印 (タブの下線・ヘッダーのナビの下線・下のタブの印) ----
- * **印は並び (`.segmented`・`ul.links`・`.tabbar`) の疑似要素 1 本で、選んでいる項目に CSS のアンカーで付ける。**
+ * ---- 滑る印 (タブの下線・ヘッダーのナビの下線・下のタブの印・サイドバーの左の縦線) ----
+ * **印は並び (`.segmented`・`ul.links`・`.tabbar`・`.side-list`) の疑似要素 1 本で、選んでいる項目に CSS のアンカーで付ける。**
  * 選び直すとアンカーが移り、`left`・`right` の transition で前の場所から滑る (ばね。`--dp-duration-move`)。
  * 開いた直後は前の値が無いので、その場に出る (ほかの画面から来たときは滑らない)。
  * 並びごとに `anchor-scope` で閉じ、別の並びの印と混ざらないようにする
@@ -2384,6 +2384,56 @@ dialog[open] > article {
 .side-item:has(> [aria-current]:not([aria-current="false"]))
   > [aria-current]:not([aria-current="false"]) {
   color: var(--dp-primary-text);
+}
+/*
+ * **選び直すと、左の縦線が前の場所から縦に滑る** (タブの下線と同じ「滑る印」。上の `.segmented` の説明)。
+ * 並び (`.side-list`) の疑似要素 1 本を、選んでいる行に CSS のアンカーで付ける。行ごとに線を描くと、選び直したときに
+ * 前の線が消えて次の線が出るだけで、滑らなかった (ライブの局を替えたとき)。並びをまたぐ (設定の別の節の束) ときはその場に出る。
+ * 並びの外の行 (並びに入れずに使う `.side-item`) とアンカーを知らないブラウザは、上の行ごとの線のまま
+ */
+@supports (anchor-name: --a) {
+  .side-list {
+    position: relative;
+    anchor-scope: --side;
+  }
+  .side-list
+    .side-item:is(
+      [aria-current]:not([aria-current="false"]),
+      [aria-pressed="true"],
+      :has(> [aria-current]:not([aria-current="false"]))
+    ) {
+    anchor-name: --side;
+  }
+  .side-list
+    .side-item:is(
+      [aria-current]:not([aria-current="false"]),
+      [aria-pressed="true"],
+      :has(> [aria-current]:not([aria-current="false"]))
+    )::before {
+    content: none;
+  }
+  /* `:has` の中に `:has` は書けないので、行の中の選んでいるボタン (ライブの局) は子の側から見る */
+  .side-list:has(
+      .side-item:is(
+        [aria-current]:not([aria-current="false"]),
+        [aria-pressed="true"]
+      ),
+      .side-item > [aria-current]:not([aria-current="false"])
+    )::after {
+    content: "";
+    position: absolute;
+    position-anchor: --side;
+    top: calc(anchor(top) + 0.625rem);
+    bottom: calc(anchor(bottom) + 0.625rem);
+    left: anchor(left);
+    width: 2px;
+    border-radius: 1px;
+    background: var(--pico-primary);
+    pointer-events: none;
+    transition:
+      top var(--dp-duration-move) var(--dp-ease-spring),
+      bottom var(--dp-duration-move) var(--dp-ease-spring);
+  }
 }
 /* 見せるだけの行 (集計・状態)。指を乗せても塗らない */
 .side-item.static:hover {

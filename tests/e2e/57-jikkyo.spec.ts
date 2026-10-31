@@ -219,9 +219,20 @@ async function fakeNx(
   return { watched, posts };
 }
 
+/** 勢いの偽物 (`fakeRanking`) を置いたページ */
+const ranked = new WeakSet<Page>();
+
 /** 端末の ⚙ の「実況」をオンにしておく (読み込む前に) */
 async function deviceOn(page: Page): Promise<void> {
   await page.addInitScript(() => localStorage.setItem("player-jikkyo", "1"));
+  /*
+   * 両方オンだとライブは「実況」タブで開き、勢いを訊く。サーバから NX-Jikkyo へ行かせないよう、空の返事にしておく
+   * (勢いを見るテストの `fakeRanking` が先でも後でも、そちらを使う)
+   */
+  if (!ranked.has(page))
+    await page.route("**/api/jikkyo/ranking", (route) =>
+      route.fulfill({ json: { at: Date.now(), channels: [] } }),
+    );
 }
 
 test.describe("ライブの実況", () => {
@@ -512,6 +523,57 @@ test.describe("ライブで実況に書き込む", () => {
       await expect(page.getByTestId("jikkyo-list")).toHaveCount(0);
       await expect(page.getByTestId("jikkyo-compose")).toHaveCount(0);
       await expect(page.getByTestId("live-jikkyo-list")).toBeFocused();
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+
+  /*
+   * 色・位置・大きさは種別のタブと同じ並び (`.segmented`)。選んでいるものの見た目はどのまとまりでも同じで、塗らない。
+   * 色の 8 つは列の幅に入らないので、4 つずつ 2 行にそろえる (6 と 2 に崩さない)
+   */
+  test("色・位置・大きさの選んでいるものは同じ見た目で、色は 4 つずつ並ぶ", async ({
+    page,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, { quiet: true });
+      await openWriting(page);
+      await page.getByTestId("jikkyo-style-button").click();
+      await page.getByTestId("jikkyo-color-red").click();
+      await page.getByTestId("jikkyo-position-shita").click();
+      await page.getByTestId("jikkyo-size-big").click();
+      // 押したものに乗せたままだと、指を乗せた地が出る。外してから比べる
+      await page.mouse.move(0, 0);
+      const look = (id: string) =>
+        page.getByTestId(id).evaluate((el) => {
+          const style = getComputedStyle(el);
+          const group = el.parentElement!;
+          return {
+            color: style.color,
+            weight: style.fontWeight,
+            background: style.backgroundColor,
+            // 下線は並びの 1 本 (アンカーで選んでいるものに付く)
+            line: getComputedStyle(group, "::after").height,
+          };
+        });
+      const color = await look("jikkyo-color-red");
+      expect(await look("jikkyo-position-shita")).toEqual(color);
+      expect(await look("jikkyo-size-big")).toEqual(color);
+      expect(color.background).toBe("rgba(0, 0, 0, 0)");
+      expect(color.line).toBe("2px");
+      // 選んでいないものは本文の字
+      const plain = await page
+        .getByTestId("jikkyo-size-small")
+        .evaluate((el) => getComputedStyle(el).fontWeight);
+      expect(plain).not.toBe(color.weight);
+
+      const rows = await page
+        .getByTestId("jikkyo-style")
+        .locator('[data-testid^="jikkyo-color-"]')
+        .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().y));
+      expect(new Set(rows).size).toBe(2);
+      expect(rows.filter((y) => y === rows[0])).toHaveLength(4);
     } finally {
       await setJikkyo(page, false);
     }
@@ -932,11 +994,17 @@ test.describe("録画の実況", () => {
       const before = await number(rows.last());
       await expect.poll(() => number(rows.last())).toBeGreaterThan(before);
 
-      // 行を押すと、その時刻へ戻り、そこまでのもので並べ直す
+      // 時刻は書かれた時刻ではなく、録画の中の再生位置 (操作バーの位置と同じ形)。押せるボタン
       const count = await rows.count();
       const pick = rows.nth(count - 20);
+      const at = pick.getByTestId("jikkyo-list-at");
+      const label = (await at.textContent()) ?? "";
+      expect(label).toMatch(/^\d+:\d{2}$/);
+      await expect(at).toHaveAttribute("aria-label", `${label} へ移る`);
+      expect(await at.evaluate((el) => el.tagName)).toBe("BUTTON");
+      // 時刻を押すと、その位置へ戻り、そこまでのもので並べ直す
       const to = await number(pick);
-      await pick.locator("button").click();
+      await at.click();
       await expect.poll(() => number(rows.last())).toBeLessThan(to + 10);
       expect(await number(rows.last())).toBeGreaterThanOrEqual(to);
     } finally {
@@ -1017,6 +1085,8 @@ test.describe("「実況」タブ", () => {
       ],
     ];
     let asked = 0;
+    await page.unroute("**/api/jikkyo/ranking");
+    ranked.add(page);
     await page.route("**/api/jikkyo/ranking", (route) => {
       const channels = replies[Math.min(asked, replies.length - 1)];
       asked++;
@@ -1057,6 +1127,43 @@ test.describe("「実況」タブ", () => {
     return () =>
       page.evaluate(() => (window as unknown as { slides: number }).slides);
   }
+
+  /*
+   * ライブに戻ったとき、コメントを流している端末では「実況」タブを開いておく (局の種別のタブではなく)。
+   * 押して選んだタブはページにいる間はそのまま
+   */
+  test("両方オンなら開いたときは「実況」タブ。押して選んだタブはそのまま", async ({
+    page,
+  }) => {
+    await fakeRanking(page);
+    await setJikkyo(page, true);
+    try {
+      await deviceOn(page);
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-type-jikkyo")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect(page.getByTestId("live-type-GR")).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      await expect(page.getByTestId("live-force").first()).toBeVisible();
+      await page.getByTestId("live-type-GR").click();
+      await expect(page.getByTestId("live-type-GR")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    } finally {
+      await setJikkyo(page, false);
+    }
+    // 世帯の設定がオフならタブは無く、いま映している局の種別
+    await goto(page, `/live?service=${MX.id}`);
+    await expect(page.getByTestId("live-type-GR")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
 
   test("数字が新しくなるたびに勢いの順に並べ直す。動きを減らす設定では滑らせずに置き換える", async ({
     page,
@@ -1136,10 +1243,11 @@ test.describe("「実況」タブ", () => {
   }) => {
     await setJikkyo(page, true);
     try {
+      await deviceOn(page);
+      // deviceOn の空の返事より後に足す (後で足した route が先に効く)
       await page.route("**/api/jikkyo/ranking", (route) =>
         route.fulfill({ status: 503, body: "いまは勢いを読めません" }),
       );
-      await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
       await page.getByTestId("live-type-jikkyo").click();
       await expect(page.getByTestId("live-ranking-note")).toHaveText(

@@ -186,9 +186,12 @@
   {onkeydown}
 >
   {#if picking}
-    <!-- 色・位置・大きさ。メニューと同じ形 (塗らずに、選んでいるものは空色の太字と短い線) -->
+    <!--
+      色・位置・大きさ。どれも種別のタブと同じ並び (`app.css` の `.segmented`。塗らずに、選んでいるものは主の色の太字と下線。
+      選び直すと下線が滑る)。映像の上では主の色を空色に替える
+    -->
     <div class="pick" data-testid="jikkyo-style">
-      <div role="group" aria-label="色" class="choices">
+      <div role="group" aria-label="色" class="choices colors segmented">
         {#each POST_COLORS as color (color)}
           <button
             type="button"
@@ -203,7 +206,7 @@
           >
         {/each}
       </div>
-      <div role="group" aria-label="位置" class="choices">
+      <div role="group" aria-label="位置" class="choices segmented">
         {#each POSITIONS as position (position)}
           <button
             type="button"
@@ -215,7 +218,7 @@
           >
         {/each}
       </div>
-      <div role="group" aria-label="大きさ" class="choices">
+      <div role="group" aria-label="大きさ" class="choices segmented">
         {#each SIZES as size (size)}
           <button
             type="button"
@@ -314,6 +317,8 @@
     --c-face: transparent;
     --c-field: var(--dp-field);
     --c-shadow: none;
+    /* 選ぶ行と頭の字の間も、選ぶ行のまとまりの間と同じくらい空ける (詰めると選ぶ行の続きに見えた) */
+    gap: var(--dp-space-3);
     margin: var(--dp-space-2) 0 0;
   }
   @media (prefers-reduced-transparency: reduce) {
@@ -331,12 +336,37 @@
     background: var(--c-face);
     box-shadow: var(--c-shadow);
   }
+  /*
+   * 色の 8 つは 1 行に並べ、入りきらない幅 (一覧の下の列) では 4 つずつ 2 行にそろえる (6 と 2 に崩さない)。
+   * 位置と大きさはその下の 1 行。まとまりの間はどれも同じ余白
+   */
   .pick {
+    container-type: inline-size;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
+    gap: var(--dp-space-3) var(--dp-space-4);
+    padding: var(--dp-space-2);
     border-radius: var(--dp-radius-lg);
+  }
+  /* 選んでいる印 (`.segmented`) の色。映像の上はボタンのオンと同じ空色 (一覧の下はページの色のまま) */
+  .compose:not(.in-list) .pick {
+    --pico-primary: var(--c-on);
+    --dp-primary-text: var(--c-on);
+    --dp-hover-soft: var(--c-hover);
+    --pico-secondary: var(--c-fg);
+    --pico-secondary-hover: var(--c-fg);
+  }
+  .pick .colors {
+    display: grid;
+    grid-template-columns: repeat(8, 2.5rem);
+    flex-basis: 100%;
+    justify-content: center;
+  }
+  /* 8 つ (2.5rem と間 2px) が入らない幅 */
+  @container (width < 21rem) {
+    .pick .colors {
+      grid-template-columns: repeat(4, 2.5rem);
+    }
   }
   .line {
     flex-shrink: 1;
@@ -366,8 +396,8 @@
     justify-content: flex-start;
     padding: 0;
   }
-  .in-list .choices {
-    flex-wrap: wrap;
+  .in-list .pick .colors {
+    justify-content: start;
   }
   input {
     flex: 1;
@@ -419,7 +449,8 @@
   button.icon {
     padding: 0;
   }
-  button:is(:hover, :focus-visible):not(:disabled) {
+  /* 選択肢 (`.choice`) の地と字は `.segmented` が決める (指を乗せたらごく薄い地) */
+  button:not(.choice):is(:hover, :focus-visible):not(:disabled) {
     background: var(--c-hover);
   }
   button:disabled {
@@ -432,26 +463,9 @@
     display: inline-flex;
     filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6));
   }
-  .choices {
-    display: flex;
-    gap: 0.125rem;
-  }
-  /* 選んでいるものは空色 (ページの上では主の色) の太字と、下の短い線。塗らない */
-  .choice[aria-pressed="true"] {
-    color: var(--c-on);
-    font-weight: var(--dp-weight-bold);
-    background-image: none;
-  }
-  .choice[aria-pressed="true"]::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: 0.125rem;
-    width: 1rem;
-    height: 2px;
-    border-radius: 1px;
-    background: var(--c-on);
-    translate: -50% 0;
+  .choice {
+    background: var(--pico-background-color);
+    color: var(--pico-color);
   }
   .swatch {
     padding: 0;

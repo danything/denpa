@@ -148,10 +148,10 @@
     type Chapter,
     chapterAt,
     cmSpans,
-    fromTsTime,
     isCm,
     nextChapterAt,
     plainMarks,
+    playbackAt,
     prevChapterAt,
     resumePoint,
     skipCmAtStart,
@@ -945,7 +945,7 @@
 
   /**
    * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
-   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない。行を押すとその時刻へ飛ぶ
+   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない。時刻は録画の中の再生位置で出し、押すとそこへ飛ぶ
    */
   const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
   const phoneLandscape = new MediaQuery(PHONE_LANDSCAPE);
@@ -955,15 +955,18 @@
       !phoneLandscape.current &&
       !fullscreen.active,
   );
-  /** 放送時刻 `at` の場面へ飛ぶ (`airTime` の逆。切った CM の中なら、その後の本編の頭へ) */
-  function seekAir(at: number): void {
+  /**
+   * 放送時刻 `at` が、観ているもの (エンコードしたもの・元の TS) のどこか (`airTime` の逆)。
+   * 録画の頭より前は「開始前」、切った CM の中は「CM」で、飛べない
+   */
+  function placeAir(at: number): number | "before" | "cut" {
     const target = data.jikkyo;
-    if (target === null || info === null) return;
+    if (target === null || info === null) return "before";
     const ruler =
       info.axis === "encoded"
         ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
         : null;
-    seekTo(fromTsTime(Math.max(0, at - target.head) / 1000, ruler));
+    return playbackAt((at - target.head) / 1000, ruler);
   }
 
   /**
@@ -2292,7 +2295,12 @@
         {/if}
         <!-- 実況のコメントの一覧も、出している間は列の頭 (リモコンの下) -->
         {#if canList && jikkyoList.on}
-          <JikkyoList feed={jikkyo} air={airTime} seek={seekAir} />
+          <JikkyoList
+            feed={jikkyo}
+            air={airTime}
+            place={placeAir}
+            seek={seekTo}
+          />
         {/if}
       {/snippet}
 

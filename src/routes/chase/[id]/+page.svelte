@@ -75,6 +75,7 @@
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { keepResume } from "#lib/resume.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
+  import { playbackAt } from "#lib/ts/watch.js";
 
   /**
    * 追っかけ再生 (録画中の録画を頭から観る)。プレイヤーはライブと同じ (`live-player.svelte.ts` の chase モード)。
@@ -189,6 +190,13 @@
   function airTime(): number | null {
     const target = data.jikkyo;
     return target === null ? null : target.head + player.chasePosition * 1000;
+  }
+  /** 放送時刻 `at` が追っかけのどこか (`airTime` の逆)。録画の頭より前は「開始前」で、飛べない */
+  function placeAir(at: number): number | "before" | "cut" {
+    const target = data.jikkyo;
+    return target === null
+      ? "before"
+      : playbackAt((at - target.head) / 1000, null);
   }
   // 過去ログにまだ入っていない新しいところ (10 分以内) を観ているなら、NX-Jikkyo で 1 回だけ遡る
   $effect(() => {
@@ -572,7 +580,12 @@
       {#snippet top()}
         <!-- 実況のコメントの一覧は、出している間だけ列の頭に (観る画面と同じ) -->
         {#if canList && jikkyoList.on}
-          <JikkyoList feed={jikkyo} air={airTime} />
+          <JikkyoList
+            feed={jikkyo}
+            air={airTime}
+            place={placeAir}
+            seek={seekTo}
+          />
         {/if}
       {/snippet}
       <ProgramFacts program={detail.current ?? facts} />

@@ -569,6 +569,59 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
+   * 左の縦線は行ごとではなく一覧の 1 本 (`app.css` の `.side-list`)。局を替えると前の行から滑る (docs/design.md の「動き」)。
+   * ほかのテストは動きを止めて流すので、ここだけ動きを戻す
+   */
+  test("局を替えると、左の縦線が前の行から滑る", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await goto(page, "/live");
+    const channels = page.getByTestId("live-channel");
+    const list = page.getByTestId("live-channels");
+    /** 一覧の線の上端と、行の上端 (どちらも画面の座標) */
+    const mark = () =>
+      list.evaluate((el) => {
+        const style = getComputedStyle(el, "::after");
+        const box = el.getBoundingClientRect();
+        return {
+          content: style.content,
+          top: box.top + Number.parseFloat(style.top) - el.scrollTop,
+        };
+      });
+    await channels.nth(0).click();
+    await expect(channels.nth(0)).toHaveAttribute("data-current", "true");
+    // 行には線を引かない (2 本にならない)
+    expect(
+      await channels
+        .nth(0)
+        .locator("..")
+        .evaluate((el) => getComputedStyle(el, "::before").content),
+    ).toBe("none");
+    expect((await mark()).content).not.toBe("none");
+    await page.evaluate(() => {
+      const box = window as unknown as { slides: number };
+      box.slides = 0;
+      document.addEventListener("transitionrun", (event) => {
+        if (event.propertyName === "top") box.slides++;
+      });
+    });
+    await channels.nth(1).click();
+    await expect(channels.nth(1)).toHaveAttribute("data-current", "true");
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { slides: number }).slides),
+      )
+      .toBeGreaterThan(0);
+    // 滑り終えたら、選んだ行の高さの中にいる
+    await expect
+      .poll(async () => {
+        const row = (await channels.nth(1).locator("..").boundingBox())!;
+        const at = (await mark()).top;
+        return at > row.y && at < row.y + row.height;
+      })
+      .toBe(true);
+  });
+
+  /*
    * **番組表で見つけた番組は、その場から観に行ける。**
    *
    * ライブ画面へ移ってから同じ局を一覧で探し直させるのは遠回りで、局が100を
