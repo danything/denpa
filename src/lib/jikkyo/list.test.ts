@@ -67,9 +67,14 @@ describe("並べるところ (CommentStore.latest)", () => {
 
 describe("付いていくか", () => {
   test("いちばん下にいて、使っていないときだけ付いていく", () => {
-    expect(follows(true, false)).toBe(true);
-    expect(follows(true, true)).toBe(false);
-    expect(follows(false, false)).toBe(false);
+    expect(follows(true, false, 10)).toBe(true);
+    expect(follows(true, true, 10)).toBe(false);
+    expect(follows(false, false, 10)).toBe(false);
+  });
+
+  test("まだ 1 行も無ければ、使っていても付いていく", () => {
+    expect(follows(true, true, 0)).toBe(true);
+    expect(follows(false, false, 0)).toBe(true);
   });
 
   test("下の端から BOTTOM_SLACK までは、いちばん下とみなす", () => {
