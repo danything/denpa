@@ -116,7 +116,7 @@ describe("ICQ を持たないドライバ (i965)", () => {
       "h264_vaapi",
       "-rc_mode",
       "ICQ",
-      "-global_quality",
+      "-global_quality:v",
       "24",
     ]);
     const cqp = hwArgs(
@@ -181,7 +181,7 @@ describe("ライブを GPU でエンコードする経路", () => {
     ]);
     expect(vaapi.filter).toEqual(["format=nv12", "hwupload"]);
     expect(vaapi.encoder.join(" ")).toBe(
-      "h264_vaapi -rc_mode ICQ -global_quality 24 -bf 0 -async_depth 1",
+      "h264_vaapi -rc_mode ICQ -global_quality:v 24 -bf 0 -async_depth 1",
     );
 
     const qsv = liveHwArgs(
@@ -190,7 +190,7 @@ describe("ライブを GPU でエンコードする経路", () => {
     );
     expect(qsv.filter).toEqual(["format=nv12"]);
     expect(qsv.encoder.join(" ")).toBe(
-      "av1_qsv -preset veryfast -global_quality 24 -bf 0 -async_depth 1",
+      "av1_qsv -preset veryfast -global_quality:v 24 -bf 0 -async_depth 1",
     );
   });
 
@@ -489,19 +489,37 @@ describe("H.265 (GPU でだけ)", () => {
       "hevc_qsv",
       "-preset",
       "medium",
-      "-global_quality",
+      "-global_quality:v",
       "24",
     ]);
     expect(hwArgs({ device: H.path, kind: "vaapi" }, "hevc").encoder).toEqual([
       "hevc_vaapi",
       "-rc_mode",
       "ICQ",
-      "-global_quality",
+      "-global_quality:v",
       "24",
     ]);
     expect(
       hwArgs({ device: H.path, kind: "vaapi", cqp: true }, "hevc").encoder,
     ).toEqual(["hevc_vaapi", "-rc_mode", "CQP", "-qp", "24"]);
+  });
+
+  /*
+   * **画質の指定は映像にだけ効かせる** (`-global_quality:v`)。付けないと音のエンコーダにも効き、
+   * libopus は開けずに転ぶ (AV1 + Opus の録画とライブ)。録画・ライブのどちらの引数にも素の形を出さない
+   */
+  test("-global_quality は :v 付きで、音のエンコーダに効かせない", () => {
+    for (const kind of ["qsv", "vaapi"] as const) {
+      for (const codec of ["av1", "hevc", "h264"] as const) {
+        const way = { device: H.path, kind };
+        const record = hwArgs(way, codec).encoder;
+        const live = liveHwArgs({ way, full: false }, codec).encoder;
+        for (const args of [record, live]) {
+          expect(args).not.toContain("-global_quality");
+          expect(args).toContain("-global_quality:v");
+        }
+      }
+    }
   });
 
   test("NVENC・Rockchip MPP の表は H.264 と別に引くが、測るまでは同じ値", () => {

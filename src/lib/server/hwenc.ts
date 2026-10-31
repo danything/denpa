@@ -161,6 +161,10 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * ソフトウェアでエンコードしたものと大きさが違って見えたら、ここを動かす。
  * QSV の `-preset medium` は7段 (veryfast〜veryslow) の真ん中。
  *
+ * **`-global_quality` は `:v` を付けて映像にだけ効かせる。** 付けないとどのストリームにも効き、音のエンコーダが
+ * 画質での指定として受け取る — libopus は「画質での指定はできない」で開けずに転び、aac は VBR に切り替わる
+ * (GPU を挿して QSV・VA-API でエンコードし始めたら、AV1 + Opus の録画とライブが通らなかった)
+ *
  * ## ICQ を持たないドライバには CQP で指定する
  *
  * **i965 (Gemini Lake などの VA-API ドライバ) は ICQ を持たない** — 試しのエンコードが落ちて
@@ -215,7 +219,7 @@ export function hwArgs(
     return {
       device: ["-init_hw_device", `qsv=hw:hw,child_device=${way.device}`],
       filter: ["format=nv12"],
-      encoder: [`${codec}_qsv`, "-preset", "medium", "-global_quality", "24"],
+      encoder: [`${codec}_qsv`, "-preset", "medium", "-global_quality:v", "24"],
     };
   }
   return {
@@ -234,7 +238,7 @@ export function hwArgs(
 function vaapiQuality(way: HwWay, codec: HwCodec): string[] {
   if (way.cqp === true)
     return ["-rc_mode", "CQP", "-qp", codec === "av1" ? "120" : "24"];
-  return ["-rc_mode", "ICQ", "-global_quality", "24"];
+  return ["-rc_mode", "ICQ", "-global_quality:v", "24"];
 }
 
 /**
@@ -481,7 +485,7 @@ export function liveHwArgs(
         `${codec}_qsv`,
         "-preset",
         "veryfast",
-        "-global_quality",
+        "-global_quality:v",
         "24",
         ...lowDelay,
       ],
