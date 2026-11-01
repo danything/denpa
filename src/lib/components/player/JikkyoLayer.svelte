@@ -334,7 +334,6 @@
     position: absolute;
     left: 0;
     white-space: pre;
-    font-family: var(--broadcast-font);
     color: var(--dp-on-video);
     opacity: 0.5;
     /* 黒い縁。明るい場面でも読めるように */
