@@ -31,6 +31,8 @@ public class Dt295TunerTests
     [Test]
     public async Task sysfs_から_06b8_103b_だけを並べる()
     {
+        // sysfs は Linux だけ (インターフェースの名前の「:」は Windows のファイル名に使えない)
+        if (OperatingSystem.IsWindows()) return;
         var dir = Directory.CreateTempSubdirectory("dt295sysfs");
         try
         {
