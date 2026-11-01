@@ -278,17 +278,19 @@ function videoArgs(
     };
   }
   /*
-   * H.264 の crf 23 は AV1 の既定 (crf35) と同じ画質に揃えた値、medium は slow に
+   * H.264 の crf 23 は AV1 の前の設定 (preset 9・crf 35) と同じ画質に揃えた値、medium は slow に
    * しても時間が増えるだけ。実測の表は docs/encode.md「H.264 は crf 23」
    *
    * AV1 は **preset と crf を書いておく** — SVT-AV1 の既定はバージョンで変わる (preset は
    * 2.3.0 が 10、4.2.0 が 8)。エンコードする速さと大きさは denpa が決める。
    *
+   * **preset 8・crf 37** は前の preset 9・crf 35 とほぼ同じ大きさ (97%) で XPSNR が 0.26〜0.42 dB
+   * 上がる。増えるのはエンコードの時間で 1.6 倍。
+   *
    * **10 に戻さない。** 4.x の M10 以上は「機械にかけるための段」で、エンコードするたびに
    * visual artifacts が出ると警告される。実際に出るのは**シーンの変わり目の
    * ブロックノイズ**で、カット直後だけ大きく崩れる (最低 29.74dB → 9 なら 37.77dB)。
-   * 9 は 10 より小さくなって時間が 18% 増えるだけ。8 まで落としても崩れはこれ以上
-   * 直らない。実測は docs/encode.md「preset は 9・crf 35 (値は書いておく)」
+   * 実測は docs/encode.md「preset は 8・crf 37 (値は書いておく)」
    *
    * **8bit で出す** (10bit は 2% 小さいだけで 15% 遅く、Main10 をデコードできる相手が要る)。
    * 実測は docs/encode.md「10bit では出しません」
@@ -304,7 +306,7 @@ function videoArgs(
     encoder: [
       ...(codec === "h264"
         ? ["libx264", "-preset", "medium", "-crf", "23"]
-        : ["libsvtav1", "-preset", "9", "-crf", "35"]),
+        : ["libsvtav1", "-preset", "8", "-crf", "37"]),
       ...keys,
     ],
   };

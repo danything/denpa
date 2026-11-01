@@ -153,7 +153,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * ビットレートを決めずに画質で指定する。CQP は量子化の幅を固定し (0〜51)、ICQ は x264 の crf に当たる
  * 「この画質で」の指定 (1〜51)。**値はコーデックごとに、ソフトウェアのエンコードと同じ画質になる所**
  * (`VAAPI_QP`・`AV1_ICQ`)。Arc A310 (iHD) で放送の 1440x1080 を 60 秒ずつ 2 か所エンコードし、
- * ソフトウェアの設定を決めたのと同じ XPSNR が、svt-av1 crf 35 と x264 crf 23 の高いほうに 2 か所とも
+ * ソフトウェアの設定を決めたのと同じ XPSNR が、svt-av1 preset 9・crf 35 (前の設定) と x264 crf 23 の高いほうに 2 か所とも
  * −0.26 dB 以内で揃う値を選んだ (ソフトウェアどうしは −0.36 dB まで離れていた。H.265 はソフトウェアの
  * エンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値:
  *
@@ -273,7 +273,7 @@ export function hwArgs(
 
 /**
  * VA-API の H.264・H.265 の録画の CQP の qp (0〜51)。`VAAPI_SLOW` を足したうえで、XPSNR が
- * svt-av1 crf 35・x264 crf 23 の高いほうと揃う所。同じ画質で ICQ より H.264 は 5〜7%、H.265 は 9〜17% 小さい
+ * svt-av1 preset 9・crf 35 (前の設定)・x264 crf 23 の高いほうと揃う所。同じ画質で ICQ より H.264 は 5〜7%、H.265 は 9〜17% 小さい
  * (`hwArgs` の説明)
  */
 const VAAPI_QP: Record<Exclude<HwCodec, "av1">, number> = {
