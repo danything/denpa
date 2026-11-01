@@ -205,3 +205,78 @@ describe("Vsync (裏から戻ったとき)", () => {
     expect(vsync.next(60_001)).toBeCloseTo(60_000.4 + 1000 / 60, 6);
   });
 });
+
+describe("Vsync (覚えた間隔がずれたとき)", () => {
+  /**
+   * `period` ms ごとの画面の切り替わりを `frames` 回ぶん進め、rAF の時刻を流す。時刻は ±0.3ms 揺れ、
+   * `drop` の割合で 1〜2 回ぶん来ない。最後の切り替わりの時刻を返す
+   */
+  function play(
+    vsync: Vsync,
+    from: number,
+    period: number,
+    frames: number,
+    rand: () => number,
+    drop = 0,
+  ): number {
+    let at = from;
+    for (let i = 0; i < frames; i++) {
+      at += period;
+      if (rand() < drop) at += period * (rand() < 0.5 ? 1 : 2);
+      vsync.feed(at + (rand() - 0.5) * 0.6);
+    }
+    return at;
+  }
+
+  const near = (vsync: Vsync, period: number) =>
+    expect(Math.abs(vsync.period! - period)).toBeLessThan(0.2);
+
+  test("混んで短い間が続き、間隔が本当の半分ほどに縮んでも戻る", () => {
+    const rand = random(1);
+    const vsync = new Vsync();
+    let at = play(vsync, 0, 1000 / 60, 20, rand);
+    // 混んで 8〜11ms の間が続いた
+    for (let i = 0; i < 15; i++) {
+      at += 8 + rand() * 3;
+      vsync.feed(at);
+    }
+    expect(vsync.period!).toBeLessThan((1000 / 60) * (2 / 3));
+    play(vsync, at, 1000 / 60, 120, rand);
+    near(vsync, 1000 / 60);
+  });
+
+  test("60Hz で、ときどき落とす (2〜3回ぶん空く) 回があっても 16.67ms を覚える", () => {
+    const rand = random(2);
+    const vsync = new Vsync();
+    play(vsync, 0, 1000 / 60, 600, rand, 0.15);
+    near(vsync, 1000 / 60);
+  });
+
+  test("120Hz と 50Hz の画面も、落とす回があっても間隔を覚える", () => {
+    for (const period of [1000 / 120, 1000 / 50]) {
+      const rand = random(3);
+      const vsync = new Vsync();
+      play(vsync, 0, period, 600, rand, 0.15);
+      near(vsync, period);
+    }
+  });
+
+  test("画面の速さが変わったら (60Hz→120Hz、120Hz→60Hz) 60 回のうちに追いつく", () => {
+    const rand = random(4);
+    const vsync = new Vsync();
+    let at = play(vsync, 0, 1000 / 60, 120, rand);
+    at = play(vsync, at, 1000 / 120, 60, rand);
+    near(vsync, 1000 / 120);
+    play(vsync, at, 1000 / 60, 60, rand);
+    near(vsync, 1000 / 60);
+  });
+
+  test("rAF の 4 割が来ない間が続いても、来るようになれば 16.67ms に戻る", () => {
+    const rand = random(5);
+    const vsync = new Vsync();
+    let at = play(vsync, 0, 1000 / 60, 60, rand);
+    at = play(vsync, at, 1000 / 60, 300, rand, 0.4);
+    play(vsync, at, 1000 / 60, 100, rand);
+    near(vsync, 1000 / 60);
+  });
+});
