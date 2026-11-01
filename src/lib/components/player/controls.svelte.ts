@@ -66,7 +66,7 @@ export function playerControls(): PlayerControls {
   let lastX = Number.NaN;
   let lastY = Number.NaN;
 
-  // 見るのは「触ったか」だけ (キーボードと開いているメニューを除く。再生の状態は混ぜない)
+  // 見るのは「触ったか」だけ (キーボード・開いているメニュー・書き込む 1 行を除く。再生の状態は混ぜない)
   const shown = $derived(keyboard || hold || writing || now - touched < LINGER);
 
   $effect(() => {

@@ -8,8 +8,8 @@
  */
 
 /**
- * 一覧の下に被さるもの (下のタブと、そのすぐ上に貼り付いた頭の1行) の高さ。
- * 頭の1行を出すのはスマホの形だけで、いつも下に貼り付く (`home.css`)。上に被さるものは日付の見出しだけ
+ * 一覧の下に被さるもの (下のタブと、そのすぐ上に貼り付いた操作の1行) の高さ。
+ * 操作の1行を出すのはスマホの形だけで、いつも下に貼り付く (`home.css`)。上に被さるものは日付の見出しだけ
  */
 function bottomCover(): number {
   const tab =
@@ -38,7 +38,7 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
     topEdge(list) +
     (list.querySelector<HTMLElement>(".t-day")?.offsetHeight ?? 32);
   const bottom = window.innerHeight - bottomCover();
-  // 見えている所の高さ (上はヘッダーと見出し、スマホの形は下のタブと頭の1行が被さる)
+  // 見えている所の高さ (上はヘッダーと見出し、スマホの形は下のタブと操作の1行が被さる)
   const view = bottom - line;
   /*
    * **録画中は線を見せない** (`TimelineHeading`。読み上げの見出しだけ残す)。見せていない線は流れの外に置かれ、

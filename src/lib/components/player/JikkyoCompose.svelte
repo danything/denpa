@@ -191,7 +191,7 @@
       選び直すと下線が滑る)。映像の上では主の色を空色に替える
     -->
     <div class="pick" data-testid="jikkyo-style">
-      <div role="group" aria-label="色" class="choices colors segmented">
+      <div role="group" aria-label="色" class="colors segmented">
         {#each POST_COLORS as color (color)}
           <button
             type="button"
@@ -206,7 +206,7 @@
           >
         {/each}
       </div>
-      <div role="group" aria-label="位置" class="choices segmented">
+      <div role="group" aria-label="位置" class="segmented">
         {#each POSITIONS as position (position)}
           <button
             type="button"
@@ -218,7 +218,7 @@
           >
         {/each}
       </div>
-      <div role="group" aria-label="大きさ" class="choices segmented">
+      <div role="group" aria-label="大きさ" class="segmented">
         {#each SIZES as size (size)}
           <button
             type="button"

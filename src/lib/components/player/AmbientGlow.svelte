@@ -32,7 +32,7 @@
 
   /**
    * アンビエントモード。いまのコマの色を、映像の周りの地に薄く敷く (YouTube と同じ見え方。docs/player.md)。
-   * 舞台 (`PlayerStage`) が枠のすぐ前 (兄弟) に置く。オン/オフと写し方は `ambient.svelte.ts`、計算は `ambient.ts`。
+   * 舞台 (`PlayerStage`) が枠の置き場 (`.room`) の前に置く。オン/オフと写し方は `ambient.svelte.ts`、計算は `ambient.ts`。
    *
    * - 縦に積むときは映像の下の中身に、二段組は窓全体に敷き、枠から離れるほど薄くする (`reach`・`farthest`)。
    *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5:1 以上で読める (`toneFrame`・`WASH_LUMINANCE`)

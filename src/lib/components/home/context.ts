@@ -1,6 +1,6 @@
 /**
- * ホーム (`routes/+page.svelte`) の部品が分け合うもの。行・番組の見出し・頭の1行は、
- * 開いた行の覚え・詳細の開き方・削除の2回押しをホームと共有するので、props で何段も渡さずに
+ * ホーム (`routes/+page.svelte`) の部品が分け合うもの。行と見出し (日付・番組・「いま」) は、
+ * 描いた時刻・番組の開け閉め・詳細の開き方・削除の2回押しをホームと共有するので、props で何段も渡さずに
  * コンテキストで配る (`setHome` はホームだけが呼ぶ)
  */
 
@@ -35,7 +35,7 @@ export interface ViewControls {
   showDeleted: boolean;
 }
 
-/** 絞り込み・状態・表示の切り替え。頭の1行 (`TimelineBar`) とサイドバー (`HomeAside`) が同じものを受ける */
+/** 絞り込み・状態・表示の切り替え。操作の1行 (`TimelineBar`) とサイドバー (`HomeAside`) が同じものを受ける */
 export interface HomeControls extends ViewControls {
   filter: Filter;
   /** 絞り込みを替える (見ていた行をその場に残す。`routes/+page.svelte`) */
@@ -47,7 +47,7 @@ export interface HomeControls extends ViewControls {
   encoding: Rec[];
 }
 
-export interface HomeContext {
+interface HomeContext {
   /** 描いた時刻。「いま」の線と予約の側分けの物差し */
   readonly clock: number;
   /** 「いま」の線に添える一言 (次の録画まで)。次の予約が無ければ null */

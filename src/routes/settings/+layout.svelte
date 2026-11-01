@@ -434,7 +434,7 @@
     height: 1.125rem;
   }
   /*
-     * **スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの頭の1行と同じ半透明のカプセル)。
+     * **スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの操作の1行と同じ半透明のカプセル)。
      * 読んでいる間は下のタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。中身の最後が隠れないよう、そのぶん下を空ける
      */
   :global(:where(html[data-phone])) .page {

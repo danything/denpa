@@ -94,8 +94,9 @@
   // 無くなった通知の閉じた印は捨てる。同じ key で次に来るものは別の通知
   $effect(() => {
     const alive = new Set(notices.map((notice) => notice.key));
-    const kept = untrack(() => dismissed).filter((key) => alive.has(key));
-    if (kept.length !== untrack(() => dismissed).length) dismissed = kept;
+    const before = untrack(() => dismissed);
+    const kept = before.filter((key) => alive.has(key));
+    if (kept.length !== before.length) dismissed = kept;
   });
 
   function dismiss(key: string): void {

@@ -357,7 +357,7 @@
     testid="{testid}-reflection"
   />
 {:else if ambient}
-  <!-- 光は枠より前 (兄弟) に置く。位置を持つ枠のほうが後ろなので、光の上に描かれる -->
+  <!-- 光は枠の置き場より前に置く。位置を持つ枠のほうが後ろなので、光の上に描かれる -->
   <AmbientGlow
     {ambient}
     stage={element}

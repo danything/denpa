@@ -116,9 +116,9 @@
         <div class="cluster section-bar" data-testid="channel-actions">
           {@render scanControl()}
           <!--
-                        入れたばかりのとき用。普段の周回は録画にもスキャンにもロゴにも
+                        入れたばかりのとき用。普段の周回は録画にもスキャンにも
                         譲るので、何か動いていると番組表がなかなか埋まらない。
-                        押されている間は録画以外には譲らせて、全チューナーで回る
+                        押されている間は録画とライブ視聴以外には譲らせて、全チューナーで回る
                     -->
           <ActionButton
             action="?/collectNow"
