@@ -162,10 +162,12 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
   });
 
   test("GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を GPU へ上げて渡す", () => {
-    // 画質は H.264 が CQP の qp 25、AV1 が ICQ 26
+    // 画質は H.264 が CQP の qp 24、AV1 が ICQ 26。録画はどちらも品質寄りの段 (1)
     for (const [codec, flag, value] of [
       ["av1", "-global_quality:v", "26"],
-      ["h264", "-qp", "25"],
+      ["h264", "-qp", "24"],
+      ["av1", "-compression_level:v", "1"],
+      ["h264", "-compression_level:v", "1"],
     ] as const) {
       const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec, {
         hardware: { device: "/dev/dri/renderD128", kind: "vaapi" },
@@ -607,6 +609,12 @@ describe("CM を切るときのキーフレーム", () => {
     });
     expect(args).not.toContain("-forced_idr");
     expect(args).not.toContain("-forced-idr");
+    /*
+     * B フレームのピラミッド (`-b_depth 2`) と一緒でも印は渡す。FFmpeg は印の付いたコマを IDR にし、
+     * その前で B の並びを閉じる (hwenc.hwArgs の説明)
+     */
+    expect(argValue(args, "-b_depth")).toBe("2");
+    expect(argValue(args, "-force_key_frames:v")).toBe("scd_metadata");
     // 印は GPU へ上げる前に付ける
     const filter = argValue(args, "-vf") ?? "";
     expect(filter.indexOf("scdet@key")).toBeLessThan(
