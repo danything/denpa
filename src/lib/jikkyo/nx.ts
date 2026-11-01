@@ -8,7 +8,6 @@
  * 3. 切れたら 1 秒 → 2 秒 → … 60 秒で頭打ちで繋ぎ直す。5 回続けて失敗したら「いまは読めない」にし、
  *    60 秒おきに試し続ける。スレッドは毎日 4:00 に替わり、サーバが閉じる (`disconnect` か、コード 1000)。
  *    そのときは視聴の WS から繋ぎ直して新しいスレッドを受け取る (替わり目の数秒は抜けることがある)
- *
  * 4. 書き込み (`post`) は視聴の WS に `postComment` を送り、返事 (`postCommentResult` か `error`) を待つ。1 件ずつで、
  *    5 秒返事が無ければ「分からない」。`room` の `yourPostKey` を `thread` の `threadkey` に渡しておくと、自分の書き込みは
  *    コメントの WS から `yourpost: 1` で戻ってくる。送れたものは画面がすぐ流すので、戻ってきたものは 1 回だけ捨てる (`Echoes`)
@@ -22,7 +21,7 @@ import { Echoes, type PostResult, REPLY_WAIT, vpos } from "./post";
 const FAILURES_TO_DOWN = 5;
 /** 繋ぎ直しの間隔の頭打ち (ms) */
 const MAX_BACKOFF = 60_000;
-/** 遡るときの件数の上限 (NX-Jikkyo の DB の読み出しは重いので、1 回だけ・1000 件まで) */
+/** 遡るときの件数の上限 (`backfill`) */
 const BACKFILL_LIMIT = 1000;
 
 /**

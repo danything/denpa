@@ -187,7 +187,7 @@ HLS を作って自分の `<video>` に映すので**映像を出すプレイヤ
 映像の入れ物を BML の Shadow DOM の中へ移す・`onclick` を本物の属性のまま DOM に入れる・ES の処理系ごと 700KB ある、といった癖への
 手当てが重なったので、自前のエンジン (`src/lib/bml/`) に置き換えた。
 
-デコードする側 (`server/decode_ts.ts`) も一度は借りたが、denpa が通るのは3割 (DSM-CC と PMT の記述子) で、そのために
+デコードする側 (web-bml の `server/decode_ts.ts`) も一度は借りたが、denpa が通るのは3割 (DSM-CC と PMT の記述子) で、そのために
 `@chinachu/aribts` (2.3MB) を抱えるより書き直した。自前の `BmlDecoder` は借りていた `decodeTS` と、揃うモジュール・ファイル数・
 バイト数・種別まで一致することを確かめてある。古い端末に残る `denpa_bml_denpa_nvram_…` (web-bml の頃の NVRAM) は読まない。
 

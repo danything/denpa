@@ -276,7 +276,7 @@ export class Playout<T extends Chunk> {
       : oldest;
   }
 
-  /** 放送の今から `target` 手前で鳴らし始める。追っかけは止めた所・飛ぶ先 (無ければいちばん古いもの) から */
+  /** 放送の今から `target` 手前で鳴らし始める。追っかけは `startFrom` から */
   private startAt(now: number): Scheduled<T>[] {
     const newest = this.newest as number;
     const oldest = this.chunks[0]!.pts;

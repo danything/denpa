@@ -610,7 +610,7 @@ export class Resources {
     });
   }
 
-  /** モジュールを捨てる。押さえていなければ作った URL を返す */
+  /** モジュールを捨てる。今のもの・押さえたものとしてまだ持っていなければ、作った URL を返す */
   private release(module: Module): void {
     const k = key(module.component, module.id);
     if (this.cache.get(k) === module || this.locks.get(k)?.module === module)

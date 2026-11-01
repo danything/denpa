@@ -30,7 +30,7 @@ export interface CmInput {
 }
 
 /** 境目の候補。無音1つにつき、その中の切れ目 (無ければ真ん中) */
-export interface Boundary {
+interface Boundary {
   /** 無音 */
   silence: Range;
   /** 切れ目 (新しい場面の1コマ目の秒)。強い順 */

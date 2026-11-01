@@ -17,7 +17,7 @@ export interface AudioDecoder {
 }
 
 /** デコードできた1コマ。面は写して持ち出したもの (デコーダの面は次のコマで上書きされる) */
-export interface Pcm {
+interface Pcm {
   sampleRate: number;
   samples: number;
   planes: Float32Array<ArrayBuffer>[];

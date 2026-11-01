@@ -180,7 +180,7 @@ const TEMPLATE_MIN = 40;
 const SHIFT = 6;
 
 /** 当てるための型。`crop` を切り出したコマに対して `points` の画素を見る */
-export interface Template {
+interface Template {
   /** 切り出す枠 (コマの座標)。ずらして測るぶんの余白を含む */
   crop: Rect;
   /** 見る画素 (`crop` の中の添字) と、そこでの向き (倍角の単位ベクトル) */
@@ -399,7 +399,7 @@ function peak(
 }
 
 /** コマごとに測るもの。`score`・`level`・`texture` を並べたもの */
-export interface Readings {
+interface Readings {
   scores: Float32Array;
   levels: Uint8Array;
   textures: Uint8Array;

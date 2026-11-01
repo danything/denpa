@@ -11,6 +11,7 @@
 - **データ放送** — DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`、形式は `bml-protocol`)
 - **Hybridcast の AIT** (`ait`)、**1つの局だけを抜き出す** (`service-filter`)
 - **試験用の TS を組み立てる** — PSI・EIT・字幕・カルーセル・映像と音声 (`synth`、`synth-caption`、`synth-av`)
+- 下で使う道具 — バイト列 (`bytes`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする (`drcs-smooth`)
 
 依存するパッケージはありません。
 

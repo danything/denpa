@@ -31,7 +31,7 @@ export const CORNERS = [
   "bottom-right",
   "bottom-left",
 ] as const;
-export type Corner = (typeof CORNERS)[number];
+type Corner = (typeof CORNERS)[number];
 
 /** 隅として見る範囲。横は 1/3、縦は 1/5 まで */
 const REGION_W = 1 / 3;

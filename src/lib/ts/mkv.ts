@@ -60,7 +60,7 @@ export interface MkvFrame {
 }
 
 /** 読めた見出し。`body` は中身の先頭位置 */
-export interface EbmlHead {
+interface EbmlHead {
   id: number;
   size: number;
   body: number;

@@ -71,7 +71,7 @@ function decodeXml(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-/** 文字参照の番号を文字に。**範囲の外は捨てる** — 1つの壊れた参照で AIT ごと読めなくしない */
+/** 文字参照の番号を文字に。**範囲の外は捨てる** — 1 つの壊れた参照で AIT ごと読めなくしない */
 function codePoint(n: number): string {
   return Number.isInteger(n) && n >= 0 && n <= 0x10ffff
     ? String.fromCodePoint(n)

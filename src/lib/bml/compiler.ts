@@ -88,7 +88,7 @@ export interface Code {
   slots: number;
   /** `arguments` の置き場所 (使わなければ -1) */
   argumentsSlot: number;
-  /** 入ったときに作る関数宣言 [関数の番号, 置き場所 (大域なら -1)、大域の名前] */
+  /** 入ったときに作る関数宣言 [関数の番号, 置き場所 (大域なら -1), 名前] */
   hoisted: [number, number, string][];
   /** 大域のコードで宣言した var (入ったときに無ければ undefined を置く) */
   globals: string[];

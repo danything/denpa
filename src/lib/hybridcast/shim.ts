@@ -133,8 +133,8 @@ export function shim(init: ShimInit): void {
     if (url.startsWith(denpaTop)) return relayFrom + url.slice(denpaTop.length);
     return url;
   };
-  // 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る
   /*
+   * 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る。
    * **読み込む要素だけ。** iframe・a の行き先まで中継にすると、中継の返り (sandbox の CSP) の中で script が
    * 動かなくなる。iframe は CSP の frame-src で止めてあり、a で移った先はアプリの外
    */

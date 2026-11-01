@@ -300,7 +300,7 @@ export interface MkvCue {
 }
 
 /** ファイルの頭から読んだもの (`readMkvHead`) */
-export interface MkvHead {
+interface MkvHead {
   /** Segment の中身の頭 (ファイルの頭から)。Cues・SeekHead の位置はここから数える */
   segment: number;
   /** 最初の Cluster の位置 (ファイルの頭から)。ここまでが「頭」 */
