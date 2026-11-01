@@ -21,7 +21,7 @@ function failed(message: string): Response {
 /**
  * Entra から戻ってくるところ。
  *
- * **`state` が合うことが「自分が始めたログイン」の証拠**になる。合言葉は
+ * **`state` が合うことが「自分が始めたログイン」の証拠**になる。比べる元の state は
  * Cookie にしか無いので、他所のサイトから貼られたリンクでは通らない。
  */
 export async function GET({ url, cookies, request }) {
