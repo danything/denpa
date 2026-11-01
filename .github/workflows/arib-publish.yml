@@ -1,7 +1,12 @@
 name: Publish @danything/arib
 
-# **`packages/arib` を npm に出す** (docs/development.md「`@danything/arib` を出す」)。main のコミットに
-# タグ `arib-v<バージョン>` を押すと出る。バージョンは packages/arib/package.json の `version` と同じにする (違えば止まる)。
+# **`packages/arib` を npm に出す** (docs/development.md「`@danything/arib` を出す」)。
+# ふだんは denpa のリリースといっしょに出る。前の `arib-v*` タグから packages/arib が変わっていれば
+# packages/arib/package.json の `version` で出し、リリースのコミットにタグ `arib-v<バージョン>` を付ける。
+# 変わっていなければ何もしない。変わっているのにそのバージョンのタグがもうあれば止まる (勝手に上げない)。
+# タグはこの workflow の GITHUB_TOKEN で押すので、タグの方でもう一度動くことはない
+#
+# 手で出すときは、main のコミットにタグ `arib-v<バージョン>` を押す。バージョンは package.json と同じにする (違えば止まる)。
 # `[skip ci]` のコミット (main の先頭に積まれる bump image marks) に付けたタグでは、この workflow は動かない
 #
 # npm へはふだん Trusted Publishing (OIDC) で出す。トークンは持たず、provenance も付く。
@@ -11,6 +16,8 @@ name: Publish @danything/arib
 on:
   push:
     tags: ["arib-v*"]
+  release:
+    types: [published]
 
 concurrency:
   group: arib-publish-${{ github.ref }}
@@ -25,41 +32,68 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Tag is on main and matches package version
+      # タグで来たら、そのタグを出す。リリースで来たら、前の arib タグから変わったときだけ出す
+      - name: Decide
+        id: decide
         run: |
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo "タグ ${GITHUB_REF_NAME} が main のコミットに付いていない"
+            echo "::error::タグ ${GITHUB_REF_NAME} が main のコミットに付いていない"
             exit 1
           }
           version=$(jq -r .version packages/arib/package.json)
-          test "${GITHUB_REF_NAME}" = "arib-v${version}" || {
-            echo "タグ ${GITHUB_REF_NAME} と packages/arib/package.json のバージョン ${version} が違う"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test "${GITHUB_REF_NAME}" = "arib-v${version}" || {
+              echo "::error::タグ ${GITHUB_REF_NAME} と packages/arib/package.json のバージョン ${version} が違う"
+              exit 1
+            }
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last=$(git describe --tags --match 'arib-v*' --abbrev=0 "$GITHUB_SHA")
+          if git diff --quiet "$last" "$GITHUB_SHA" -- packages/arib; then
+            echo "packages/arib は ${last} から変わっていないので出さない"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse -q --verify "refs/tags/arib-v${version}" > /dev/null; then
+            echo "::error::packages/arib が ${last} から変わっているのにバージョンが上がっていない (${version})。リリースの前に package.json の version を上げる"
             exit 1
-          }
+          fi
+          echo "packages/arib が ${last} から変わったので ${version} を出す"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
 
       # bun のバージョンは Dockerfile と食い違わないよう、そこから読む (test.yml と同じ)
       - name: Read bun version from Dockerfile
+        if: steps.decide.outputs.publish == 'true'
         id: bun
         run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
 
       - name: Set up bun
+        if: steps.decide.outputs.publish == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ steps.bun.outputs.version }}
 
       - name: Install dependencies
+        if: steps.decide.outputs.publish == 'true'
         run: bun install --frozen-lockfile
 
       - name: Test
+        if: steps.decide.outputs.publish == 'true'
         run: bun test packages/arib
 
       - name: Build
+        if: steps.decide.outputs.publish == 'true'
         working-directory: packages/arib
         run: |
           bun run build
@@ -67,6 +101,7 @@ jobs:
 
       # Trusted Publishing は npm 11.5.1 から
       - name: Set up Node
+        if: steps.decide.outputs.publish == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.1
@@ -75,7 +110,27 @@ jobs:
 
       # npm は OIDC を先に試し、信頼する設定が無ければトークンに戻る (最初の1回)
       - name: Publish
+        if: steps.decide.outputs.publish == 'true'
         working-directory: packages/arib
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance
+
+  # リリースから出したときだけ、そのコミットにタグを付ける (次のリリースで比べる起点になる)。
+  # write が要るのはここだけなので、ジョブを分けてある
+  tag:
+    needs: publish
+    if: github.event_name == 'release' && needs.publish.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Push tag
+        env:
+          TAG: arib-v${{ needs.publish.outputs.version }}
+        run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
