@@ -366,12 +366,15 @@ FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:d710a5c8bfe4cf7e726d7e1
 # ここで Debian のパッケージを入れて ffmpeg を置き、要るファイルだけを /rootfs にまとめる。
 # 土台は ffmpeg 段と同じ digest (どちらも trixie なので、glibc のバージョンは distroless と揃う)
 #
-# libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver (iHD) は
+# libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver-non-free (iHD) は
 # Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
 # (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の4つは amd64 だけ**
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
 # arm64 の Rockchip MPP (librockchip_mpp.so.1) は ffmpeg 段で組んで /usr/local/lib に一緒に来る。
 # libdrm (rkmpp と VA-API が繋ぐ) は libva-drm2 の依存で入り、どちらも下の ldd で /rootfs に運ばれる
+# iHD は Debian の non-free 版 (そのために non-free を足す)。free 版はソースの無い GPU のカーネル (シェーダ) を
+# 抜いてあり、シェーダを使うエンコードができない。Skylake〜Comet Lake の H.265 と、Broadwell のエンコードは
+# どれもシェーダを使うので、free 版では GPU でエンコードできない。中身のライセンスは free 版と同じ MIT
 # i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
 # AMD の VA-API ドライバ (radeonsi) は `mesa` 段で組んだもの。それが繋ぐライブラリ (libdrm-amdgpu1 など) と、
 # GPU の名前の一覧 (libdrm-common の amdgpu.ids) は Debian から入れる。これも amd64 だけ
@@ -380,10 +383,11 @@ FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
-      amd64) gpu="libvpl2 intel-media-va-driver i965-va-driver libmfx-gen1.2 libdrm-amdgpu1 libdrm-common libelf1t64 libexpat1 libzstd1" ;; \
+      amd64) gpu="libvpl2 intel-media-va-driver-non-free i965-va-driver libmfx-gen1.2 libdrm-amdgpu1 libdrm-common libelf1t64 libexpat1 libzstd1" ;; \
       arm64) gpu="" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
+    sed -i 's/^Components: main$/Components: main non-free/' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get -y --no-install-recommends install \
       libopus0 libx264-164 libdav1d7 \
