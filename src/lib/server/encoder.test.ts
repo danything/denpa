@@ -40,15 +40,15 @@ describe("録画エンコードの引数", () => {
 
   // 上流の既定 preset はバージョンで変わる (encoder.videoArgs の実測)。書いてあることを守る。
   // **10 に戻さない** — M10 以上はシーンの変わり目でブロックノイズが出る
-  // (docs/encode.md「preset は 9・crf 35 (値は書いておく)」)
+  // (docs/encode.md「preset は 8・crf 37 (値は書いておく)」)
   test("AV1 の preset と crf は書いてある", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
-    expect(argValue(args, "-preset")).toBe("9");
-    expect(argValue(args, "-crf")).toBe("35");
+    expect(argValue(args, "-preset")).toBe("8");
+    expect(argValue(args, "-crf")).toBe("37");
   });
 
   /*
-   * **H.264 の crf は AV1 と同じ画質になる値。** 24 だった頃は、実写の忙しい
+   * **H.264 の crf は AV1 (前の preset 9・crf 35) と同じ画質になる値。** 24 だった頃は、実写の忙しい
    * ところで AV1 より 0.94dB 低く、そのぶん小さいだけだった。実測の表は docs/encode.md「H.264 は crf 23」
    */
   test("H.264 の crf は AV1 と同じ画質の 23", () => {
