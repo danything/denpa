@@ -913,14 +913,16 @@ test.describe("ライブ視聴", () => {
      * `pointer-events-none` なので押せてはいる — 押す場所が見えないだけで、
      * 触って確かめる形では捕まらない
      */
+    // 操作列の段はボタンの並び (`[data-bar-items]`) が持つ (外の箱は持たない。`ControlBar`)
     const layers = await page.evaluate(() => {
-      const z = (name: string) =>
+      const z = (selector: string) =>
         Number(
-          getComputedStyle(
-            document.querySelector(`[data-testid="${name}"]`) as Element,
-          ).zIndex,
+          getComputedStyle(document.querySelector(selector) as Element).zIndex,
         );
-      return { data: z("live-data"), controls: z("live-controls") };
+      return {
+        data: z('[data-testid="live-data"]'),
+        controls: z('[data-testid="live-controls"] > [data-bar-items]'),
+      };
     });
     expect(layers.data, "データ放送が操作列を覆っている").toBeLessThan(
       layers.controls,

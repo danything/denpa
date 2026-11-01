@@ -1385,7 +1385,10 @@ test.describe("録画を観る", () => {
     }
     // 閉じるはいちばん上。ライブ・追っかけと同じ並び
     const top = await side.evaluate(
-      (el) => (el.firstElementChild as HTMLElement).dataset["testid"],
+      (el) =>
+        el.querySelector<HTMLElement>(":scope > [data-bar-items] > *")?.dataset[
+          "testid"
+        ],
     );
     expect(top).toBe("watch-close");
     // 縦に積む (横一行にしない)。丸は 48px で、間は 8px
@@ -1680,9 +1683,16 @@ test.describe("スマホの縦で観る", () => {
 
     // 映像に重ねるので、放っておけば引っ込む (ほかの枠と同じ)。押せばまた出る
     await expect(bar).toHaveAttribute("data-shown", "false", { timeout: 6000 });
+    // 透明度は影とボタンの並びがそれぞれ持つ (外の箱は持たない。`ControlBar`)
     await expect
-      .poll(() => bar.evaluate((el) => getComputedStyle(el).opacity))
-      .toBe("0");
+      .poll(() =>
+        bar.evaluate((el) => [
+          getComputedStyle(el, "::before").opacity,
+          getComputedStyle(el.querySelector(":scope > [data-bar-items]")!)
+            .opacity,
+        ]),
+      )
+      .toEqual(["0", "0"]);
     const again = (await stage.boundingBox())!;
     await page.touchscreen.tap(
       again.x + again.width / 2,

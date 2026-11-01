@@ -1948,11 +1948,11 @@
           <!--
                     字幕は `<track>` ではなく canvas に放送の置き場所のまま描く (左右の位置・背景の箱・外字が落ちるため)。
                     映像と同じ箱に入れて、データ放送の小窓へ一緒に縮ませる (ライブの `MediaStack` と同じ)。
-                    位置と大きさは `place` が書く
+                    位置と大きさは `place` が書く。段は実況 (8) より上、操作列のボタン (10) より下 (`ControlBar`)
                 -->
           <canvas
             bind:this={overlay}
-            style="position:absolute; pointer-events:none;"
+            style="position:absolute; z-index:9; pointer-events:none;"
             data-testid="watch-captions-canvas"
             data-on={captions && hasCaptions}
             aria-hidden="true"
@@ -1963,7 +1963,7 @@
                 -->
           <canvas
             bind:this={cover}
-            style="position:absolute; pointer-events:none;"
+            style="position:absolute; z-index:9; pointer-events:none;"
             hidden={!hopping}
             aria-hidden="true"
           ></canvas>
@@ -2370,9 +2370,11 @@
     color: var(--dp-on-video);
     --pico-color: var(--dp-on-video);
   }
+  /* 段は字幕と同じ 9 (実況のコメントを上に流さない。`ControlBar`) */
   .broken {
     position: absolute;
     inset: 0;
+    z-index: 9;
     display: flex;
     flex-direction: column;
     align-items: center;
