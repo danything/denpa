@@ -100,24 +100,24 @@ describe("ICQ を持たないドライバ (i965)", () => {
     });
   });
 
-  test("CQP なら -qp で指定する。値は ICQ と同じ軸", () => {
+  test("CQP なら -qp で指定する。AV1 は -qp を受けないので -global_quality で", () => {
     const icq = hwArgs({ device: C.path, kind: "vaapi" }, "h264").encoder;
     expect(icq).toEqual([
       "h264_vaapi",
       "-rc_mode",
       "ICQ",
       "-global_quality:v",
-      "24",
+      "27",
     ]);
     const cqp = hwArgs(
       { device: C.path, kind: "vaapi", cqp: true },
       "h264",
     ).encoder;
-    expect(cqp).toEqual(["h264_vaapi", "-rc_mode", "CQP", "-qp", "24"]);
-    // AV1 の qp は 0〜255
+    expect(cqp).toEqual(["h264_vaapi", "-rc_mode", "CQP", "-qp", "27"]);
+    // AV1 の量子化の値は 0〜255。`-qp` は黙って無視されるので使わない
     expect(
       hwArgs({ device: C.path, kind: "vaapi", cqp: true }, "av1").encoder,
-    ).toContain("120");
+    ).toEqual(["av1_vaapi", "-rc_mode", "CQP", "-global_quality:v", "95"]);
   });
 });
 
@@ -157,7 +157,7 @@ describe("ライブを GPU でエンコードする経路", () => {
     ]);
     expect(vaapi.filter).toEqual(["format=nv12", "hwupload"]);
     expect(vaapi.encoder.join(" ")).toBe(
-      "h264_vaapi -rc_mode ICQ -global_quality:v 24 -bf 0 -async_depth 1",
+      "h264_vaapi -rc_mode ICQ -global_quality:v 27 -bf 0 -async_depth 1",
     );
   });
 
@@ -172,7 +172,7 @@ describe("ライブを GPU でエンコードする経路", () => {
     // CPU のフィルタ (format / hwupload) は挟まない
     expect(full.filter).toEqual(["deinterlace_vaapi=rate=field"]);
     expect(full.encoder.join(" ")).toBe(
-      "h264_vaapi -rc_mode CQP -qp 24 -bf 0 -async_depth 1",
+      "h264_vaapi -rc_mode CQP -qp 27 -bf 0 -async_depth 1",
     );
   });
 });
@@ -442,17 +442,17 @@ describe("H.265 (GPU でだけ)", () => {
     ]);
   });
 
-  test("VA-API は H.264 と同じ ICQ 24、CQP なら qp 24 (0〜51 の軸)", () => {
+  test("VA-API の H.265 は H.264 と同じ ICQ 27、CQP なら qp 27 (0〜51 の軸)", () => {
     expect(hwArgs({ device: H.path, kind: "vaapi" }, "hevc").encoder).toEqual([
       "hevc_vaapi",
       "-rc_mode",
       "ICQ",
       "-global_quality:v",
-      "24",
+      "27",
     ]);
     expect(
       hwArgs({ device: H.path, kind: "vaapi", cqp: true }, "hevc").encoder,
-    ).toEqual(["hevc_vaapi", "-rc_mode", "CQP", "-qp", "24"]);
+    ).toEqual(["hevc_vaapi", "-rc_mode", "CQP", "-qp", "27"]);
   });
 
   /*
