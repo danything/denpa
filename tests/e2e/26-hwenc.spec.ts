@@ -268,9 +268,16 @@ test.describe("GPU でエンコードする", () => {
     );
     await waitWatchable(page, row);
     let recordingId = await row.getAttribute("data-recording-id");
-    const ways = encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf);
-    expect(ways).toHaveLength(3);
-    expect(ways[0]).toMatch(/^renderD128:hevc_vaapi$/);
+    const runs = encodeRuns(stack.encodeArgsFile, recordingId);
+    expect(runs).toHaveLength(3);
+    /*
+     * 1本目は CM 検出の材料を一緒に取るもの (書き出しを `denpa-scan-…` に置く)。**引数を書いた順では見ない** —
+     * 3本は同時に立ち上がるので、どれが先に書くかは決まらない (CI で AV1 が先に来て落ちていた)
+     */
+    const lead = runs.filter((run) =>
+      run.some((a) => a.includes("denpa-scan-")),
+    );
+    expect(lead.map(wayOf)).toEqual(["renderD128:hevc_vaapi"]);
     const main = (await row.getAttribute("data-library-path")) ?? "";
     expect(main).toMatch(/\.mkv$/);
     expect(main).not.toMatch(/\[H26[45]\]/);
