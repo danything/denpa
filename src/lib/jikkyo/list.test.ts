@@ -4,11 +4,15 @@ import { CommentStore } from "./comments";
 import { jumped } from "./cursor";
 import {
   airClock,
-  atBottom,
+  atNow,
   BOTTOM_SLACK,
   follows,
+  LIST_AHEAD,
   LIST_MAX,
   LIST_SPAN,
+  moreAhead,
+  nearEnd,
+  nowTop,
   sameRows,
 } from "./list";
 
@@ -65,8 +69,42 @@ describe("並べるところ (CommentStore.latest)", () => {
   });
 });
 
+describe("この先 (録画だけ)", () => {
+  test("W より後に書かれたものの古いほうから件数ぶん。端までで止める", () => {
+    const store = new CommentStore();
+    store.add([at(1), at(2), at(3), at(4), at(5), at(6)]);
+    // W ちょうどのものは、いままでのほうに入る
+    expect(store.earliest(2, 6, 2).map((c) => c.at)).toEqual([3, 4]);
+    // 端 (追っかけは録れているところ) より後は並べない
+    expect(store.earliest(2, 4, 10).map((c) => c.at)).toEqual([3, 4]);
+    expect(store.latest(0, 2, 10).map((c) => c.at)).toEqual([1, 2]);
+  });
+
+  test("外すもの (NG ワード) を飛ばして、件数をそろえる", () => {
+    const store = new CommentStore();
+    store.add([at(1, "NG"), at(2), at(3, "NG"), at(4), at(5)]);
+    const rows = store.earliest(0, 10, 2, (c) => c.text !== "NG");
+    expect(rows.map((c) => c.at)).toEqual([2, 4]);
+  });
+
+  test("下の端まで 1 画面を切ったら足す", () => {
+    const box = { scrollHeight: 1000, clientHeight: 200 };
+    expect(nearEnd({ ...box, scrollTop: 400 })).toBe(false);
+    expect(nearEnd({ ...box, scrollTop: 600 })).toBe(true);
+    expect(nearEnd({ ...box, scrollTop: 800 })).toBe(true);
+  });
+
+  test("足すときは LIST_AHEAD 件ずつ。並べる件数の上限で止め、端まで並べてあれば増やさない", () => {
+    expect(moreAhead(LIST_AHEAD, LIST_AHEAD, LIST_MAX)).toBe(LIST_AHEAD * 2);
+    expect(moreAhead(LIST_MAX - 10, LIST_MAX - 10, LIST_MAX)).toBe(LIST_MAX);
+    expect(moreAhead(LIST_MAX, LIST_MAX, LIST_MAX)).toBe(LIST_MAX);
+    // 求めたぶんに届いていない (録画の終わり・録れているところまで並べた)
+    expect(moreAhead(LIST_AHEAD, 12, LIST_MAX)).toBe(LIST_AHEAD);
+  });
+});
+
 describe("付いていくか", () => {
-  test("いちばん下にいて、使っていないときだけ付いていく", () => {
+  test("「いま」にいて、使っていないときだけ付いていく", () => {
     expect(follows(true, false, 10)).toBe(true);
     expect(follows(true, true, 10)).toBe(false);
     expect(follows(false, false, 10)).toBe(false);
@@ -77,15 +115,39 @@ describe("付いていくか", () => {
     expect(follows(false, false, 0)).toBe(true);
   });
 
-  test("下の端から BOTTOM_SLACK までは、いちばん下とみなす", () => {
+  test("この先が無ければ、下の端から BOTTOM_SLACK までは「いま」とみなす", () => {
     const box = { scrollHeight: 1000, clientHeight: 200 };
-    expect(atBottom({ ...box, scrollTop: 800 })).toBe(true);
-    expect(atBottom({ ...box, scrollTop: 800 - BOTTOM_SLACK })).toBe(true);
-    expect(atBottom({ ...box, scrollTop: 700 })).toBe(false);
+    const now = nowTop(box, null);
+    expect(now).toBe(800);
+    expect(atNow(800, now)).toBe(true);
+    expect(atNow(800 - BOTTOM_SLACK, now)).toBe(true);
+    expect(atNow(700, now)).toBe(false);
     // 巻くほど無い
     expect(
-      atBottom({ scrollHeight: 100, clientHeight: 200, scrollTop: 0 }),
+      atNow(0, nowTop({ scrollHeight: 100, clientHeight: 200 }, null)),
     ).toBe(true);
+  });
+
+  test("この先があれば、いままでの行の下の端が見えている所の下の端に来る所が「いま」。上へも下へも離れたら外れる", () => {
+    // いままでの行が 600px、その下にこの先が 400px
+    const box = { scrollHeight: 1000, clientHeight: 200 };
+    const now = nowTop(box, 600);
+    expect(now).toBe(400);
+    expect(atNow(400, now)).toBe(true);
+    expect(atNow(400 + BOTTOM_SLACK, now)).toBe(true);
+    // 下へ巻いて、この先を読んでいる
+    expect(atNow(500, now)).toBe(false);
+    // 上へ巻いて、読み返している
+    expect(atNow(300, now)).toBe(false);
+    // 巻ける幅は超えない
+    expect(nowTop(box, 1200)).toBe(800);
+    expect(nowTop(box, 100)).toBe(0);
+  });
+
+  test("一覧から押して飛んだ直後は、乗っていても、押す前に巻いて離れていても付いていく", () => {
+    expect(follows(true, true, 10, true)).toBe(true);
+    expect(follows(false, true, 10, true)).toBe(true);
+    expect(follows(true, true, 10, false)).toBe(false);
   });
 
   test("放送時刻が飛んだ (シーク) ら、いちばん下へ戻す", () => {

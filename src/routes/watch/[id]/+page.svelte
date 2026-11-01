@@ -2307,6 +2307,7 @@
             air={airTime}
             place={placeAir}
             seek={seekTo}
+            edge={() => data.jikkyo?.end ?? null}
           />
         {/if}
       {/snippet}
