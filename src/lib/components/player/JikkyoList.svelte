@@ -276,7 +276,7 @@
               : clock(where)}</span
         >
       {/if}
-      <span class="text" class:mine-dot={comment.mine}
+      <span class="text" class:mine-line={comment.mine}
         >{comment.text}{#if comment.mine}<span class="visually-hidden"
             >(自分の書き込み)</span
           >{/if}</span
