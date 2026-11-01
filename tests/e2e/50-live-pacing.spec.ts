@@ -2,6 +2,7 @@ import { rmSync, writeFileSync } from "node:fs";
 
 import type { Page } from "@playwright/test";
 
+import { FLOOR, SMOOTH } from "../../src/lib/ts/pacing";
 import { expect, goto, syncEpg, test } from "./helpers";
 import { result, watch } from "./live-pacing";
 
@@ -21,7 +22,11 @@ test.describe("ライブの貯め方", () => {
 
   /*
    * **低い遅延が先。** 宅内のように滑らかに届くなら、貯める量は下限 (0.2秒) のまま動かさない。
-   * 遅延 (貯まり) も直す前と同じ (手元で中央値 0.185 秒。直す前も 0.185 秒)
+   * 遅延 (貯まり) も直す前と同じ (手元で中央値 0.185 秒。直す前も 0.185 秒)。
+   *
+   * **遅延の上限は、詰め始める貯まり** (`pacing.ts` の `steer`。下限 0.2 秒の `SMOOTH.catchUpRatio` 倍 = 0.3 秒)。
+   * その手前は作りのうえで詰めないので、組の中が混んで始めに多めに貯まると 0.26 秒あたりで落ち着く。
+   * 膨らみ続ける・詰めなくなる、はこれを超えるので落ちる
    */
   test("滑らかに届けば、貯める量も遅延も下限のまま", async ({
     page,
@@ -33,7 +38,7 @@ test.describe("ライブの貯め方", () => {
     const watched = await result(page, "smooth");
     expect(watched.stalls).toBe(0);
     expect(watched.target).toBeLessThanOrEqual(0.25);
-    expect(watched.lag).toBeLessThanOrEqual(0.25);
+    expect(watched.lag).toBeLessThanOrEqual(FLOOR * SMOOTH.catchUpRatio);
   });
 
   /*
