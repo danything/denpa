@@ -129,6 +129,35 @@ public partial class DeviceStreamTests
         }
     }
 
+    /*
+     * **選局し直す前に、前のチャンネルの残りを捨てる** (`DvbTuner.Tune`)。dvr は選局を跨いで開いたままで、
+     * 溜まっているぶんは DMX_START でも消えない。残すと前のチャンネルの PAT が次の選局の頭に乗り、
+     * 衛星の局ロゴが当たりの中継を「外れ」と控えていた
+     */
+    [Test]
+    public async Task 捨てると_溜まっていたぶんは読まれず_待たずに戻り_あとから来たものは読める()
+    {
+        var (stream, write) = Silent();
+        using (stream)
+        using (write)
+        {
+            var stale = Enumerable.Repeat((byte)0x11, 188 * 3).ToArray();
+            await Assert.That(Write(write, stale)).IsEqualTo(stale.Length);
+
+            var clock = Stopwatch.StartNew();
+            await Assert.That(stream.Discard()).IsEqualTo(stale.Length);
+            // 空なら待たずに戻る (書き込み側は開いたまま)
+            await Assert.That(stream.Discard()).IsEqualTo(0);
+            await Assert.That(clock.ElapsedMilliseconds < 500).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+
+            var fresh = new byte[] { 0x47, 0x00, 0x00 };
+            await Assert.That(Write(write, fresh)).IsEqualTo(fresh.Length);
+            var buffer = new byte[188];
+            var read = stream.Read(buffer, 0, buffer.Length, () => false);
+            await Assert.That(buffer.AsSpan(0, read).ToArray()).IsEquivalentTo(fresh);
+        }
+    }
+
     private static unsafe int Write(SafeFileHandle handle, byte[] data)
     {
         fixed (byte* source = data)
