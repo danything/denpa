@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+
 import type {
   APIRequestContext,
   APIResponse,
@@ -393,6 +395,44 @@ export async function setRecording(
     new URLSearchParams({ cmCut: patch.cmCut ?? "chapter" }),
   );
   await saveRecordingPart(request, "saveReserve", reserve);
+}
+
+/** 偽 ffmpeg がエンコードしていた1回 (`stack.encodeSpansFile`)。`end` が null なら終わらなかった (止められた) */
+export interface EncodeSpan {
+  output: string;
+  start: number;
+  end: number | null;
+}
+
+/**
+ * 偽 ffmpeg がその録画の元のTSをエンコードしていた間。作業ファイル (`….<コーデック>.encoding`) へ書いたものだけ
+ * (サムネイルなどは除く)。始まった順
+ */
+export function encodeSpans(file: string, recordingId: string): EncodeSpan[] {
+  if (!existsSync(file)) return [];
+  const mine = new RegExp(`-${recordingId}\\.m2ts$`);
+  const spans: EncodeSpan[] = [];
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const [kind, at, input, output] = line.split("\t");
+    if (input === undefined || output === undefined) continue;
+    if (!mine.test(input) || !output.endsWith(".encoding")) continue;
+    if (kind === "start") spans.push({ output, start: Number(at), end: null });
+    if (kind === "end") {
+      const open = [...spans]
+        .reverse()
+        .find((s) => s.output === output && s.end === null);
+      if (open !== undefined) open.end = Number(at);
+    }
+  }
+  return spans;
+}
+
+/** 偽 ffmpeg に渡された引数 (`stack.encodeArgsFile`)。1回ぶんずつ */
+export function encodeRuns(file: string): string[][] {
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8")
+    .split("---\n")
+    .map((run) => run.split("\n"));
 }
 
 async function saveRecordingPart(

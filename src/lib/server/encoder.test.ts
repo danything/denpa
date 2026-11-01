@@ -12,6 +12,8 @@ import { join } from "node:path";
 
 import {
   buildArgs,
+  combineProgress,
+  encodeOrder,
   encodeProgress,
   expectedFrames,
   failureReason,
@@ -288,12 +290,13 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
     expect(argValue(args, "-c:s")).toBe("copy");
   });
 
-  test("チャプターだけならそれが2つ目の入力になる", () => {
+  test("チャプターはエンコードするときには入れない (エンコードしたあとに書き足す)", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
-      chaptersFile: "/tmp/c.txt",
+      keyframes: "scene",
     });
-    expect(args).toContain("/tmp/c.txt");
-    expect(argValue(args, "-map_chapters")).toBe("1");
+    expect(args).not.toContain("-map_chapters");
+    // 入力は録画の TS だけ
+    expect(args.filter((a) => a === "-i")).toHaveLength(1);
   });
 
   test("字幕は放送の ARIB 字幕を局で名指しして写す", () => {
@@ -672,5 +675,79 @@ describe("頭から捨てる長さ", () => {
     expect(headSkip(0)).toBe(0);
     expect(headSkip(undefined)).toBe(0);
     expect(headSkip(Number.NaN)).toBe(0);
+  });
+});
+
+describe("encodeOrder", () => {
+  test("H.265 を選んでいれば1本目 (CM を探し、切れるかを決める)", () => {
+    expect(encodeOrder(["av1", "hevc", "h264"], true)).toEqual([
+      "hevc",
+      "av1",
+      "h264",
+    ]);
+  });
+
+  test("H.265 をエンコードできる GPU が無ければ外す", () => {
+    expect(encodeOrder(["av1", "hevc"], false)).toEqual(["av1"]);
+    expect(encodeOrder(["hevc"], false)).toEqual([]);
+  });
+
+  test("H.265 が無ければ選んだ順", () => {
+    expect(encodeOrder(["av1", "h264"], true)).toEqual(["av1", "h264"]);
+  });
+});
+
+describe("combineProgress", () => {
+  const part = (percent: number, etaMs: number | null, log = "frame: 1") => ({
+    percent,
+    etaMs,
+    log,
+  });
+
+  test("1本だけならそのまま", () => {
+    const one = part(0.4, 1000);
+    expect(combineProgress(new Map([["av1", one]]), 1)).toEqual(one);
+  });
+
+  test("同時に走るコーデックの平均。残り時間はいちばん遅いもの", () => {
+    const got = combineProgress(
+      new Map([
+        ["av1", part(0.2, 80_000)],
+        ["h264", part(0.6, 20_000)],
+      ]),
+      2,
+    );
+    expect(got.percent).toBeCloseTo(0.4);
+    expect(got.etaMs).toBe(80_000);
+    expect(got.log).toBe("AV1: frame: 1 / H.264: frame: 1");
+  });
+
+  test("エンコードし終えたものは 1 で数え、残り時間には入れない", () => {
+    const got = combineProgress(
+      new Map([
+        ["av1", part(0.5, 10_000)],
+        ["h264", part(1, null)],
+      ]),
+      2,
+    );
+    expect(got.percent).toBeCloseTo(0.75);
+    expect(got.etaMs).toBe(10_000);
+  });
+
+  test("まだ始まっていない (枠を待っている) ものは 0 で数え、残り時間は出さない", () => {
+    const got = combineProgress(new Map([["av1", part(0.6, 10_000)]]), 3);
+    expect(got.percent).toBeCloseTo(0.2);
+    expect(got.etaMs).toBeNull();
+  });
+
+  test("速さが読めないものがあれば残り時間は出さない", () => {
+    const got = combineProgress(
+      new Map([
+        ["av1", part(0.5, 10_000)],
+        ["h264", part(0.1, null)],
+      ]),
+      2,
+    );
+    expect(got.etaMs).toBeNull();
   });
 });
