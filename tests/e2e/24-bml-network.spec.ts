@@ -195,10 +195,10 @@ test.describe("データ放送の双方向", () => {
   });
 
   /*
-   * **Hybridcast のアプリの中継** (`server/hc-relay.ts`)。合言葉は http・https のアプリに出し、
-   * 中継は合言葉の配信元へだけ、`/api/bml/proxy` と同じ枠で繋ぐ (内側は断る)
+   * **Hybridcast のアプリの中継** (`server/hc-relay.ts`)。トークンは http・https のアプリに出し、
+   * 中継はトークンの配信元へだけ、`/api/bml/proxy` と同じ枠で繋ぐ (内側は断る)
    */
-  test("アプリの中継は、合言葉の配信元へだけ、内側は断って繋ぐ", async ({
+  test("アプリの中継は、トークンの配信元へだけ、内側は断って繋ぐ", async ({
     request,
   }) => {
     const issue = async (url: string) =>
@@ -219,7 +219,7 @@ test.describe("データ放送の双方向", () => {
     expect(root).toMatch(/^api\/bml\/hc\/[0-9a-f]{32}\/$/);
     // 配信元が内側なので、中継しても断る (502)
     expect((await request.get(`/${root}p/index.js`)).status()).toBe(502);
-    // 知らない合言葉は 404
+    // 知らないトークンは 404
     expect(
       (
         await request.get(

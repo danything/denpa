@@ -14,7 +14,7 @@ import { enabled as oidcEnabled } from "./oidc";
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・端末に保存もこの控え (Cookie) で通る |
  * | アクセストークン (`Bearer denpa_…`) | ペアリングしたアプリ (`device-auth.ts`) |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
- * | Hybridcast の中継の合言葉 | Hybridcast のアプリの読み込みだけ (`hc-relay.ts`。下の `OPEN_PATHS`) |
+ * | Hybridcast の中継のトークン | Hybridcast のアプリの読み込みだけ (`hc-relay.ts`。下の `OPEN_PATHS`) |
  *
  * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
  * 起動時に自動で掛けていたが、廃止した — 残っていたのは「画面に出して
@@ -37,8 +37,8 @@ import { enabled as oidcEnabled } from "./oidc";
  * - **ペアリングコードとアクセストークンの受け取り** (`/api/device/code`・`/api/device/token`)。テレビは
  *   まだ何の資格も持っていない。コードを出すだけでは入れず、許すのは `/device` (ここは守る)。
  *   誰でも呼べるので、有効なコードの数に上限がある (device-auth.ts の `MAX_PENDING`)
- * - **http の Hybridcast のアプリの中継** (`/api/bml/hc/<合言葉>/…`)。アプリは使い捨てのオリジンの iframe にいて、
- *   そこからの読み込みにはログインの cookie が付かない。推測できない合言葉が許可証で、出すのはログインした人にだけ
+ * - **http の Hybridcast のアプリの中継** (`/api/bml/hc/<トークン>/…`)。アプリは使い捨てのオリジンの iframe にいて、
+ *   そこからの読み込みにはログインの cookie が付かない。推測できないトークンが許可証で、出すのはログインした人にだけ
  *   (`POST /api/bml/hc`。hc-relay.ts)
  */
 const OPEN_PATHS = [

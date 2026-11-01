@@ -15,7 +15,7 @@ config.dbPath = join(root, "denpa.db");
 
 const { now, orm } = await import("./db");
 const { programs, recordedHistory, rules, services } = await import("./schema");
-const { status, track } = await import("./migrate");
+const { start, status, track } = await import("./migrate");
 const {
   convertRule,
   edcbTarget,
@@ -674,4 +674,41 @@ describe("EpgTimerSrv から通しで", () => {
       "host:port",
     );
   });
+});
+
+test("EPGStation に訊いている間に EDCB の引き継ぎが走り出したら、EPGStation は始めない", async () => {
+  // /api/version の返事を、こちらが放すまで止めておく偽の EPGStation
+  let answer!: () => void;
+  const answered = new Promise<void>((resolve) => (answer = resolve));
+  let reached!: () => void;
+  const asked = new Promise<void>((resolve) => (reached = resolve));
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch() {
+      reached();
+      await answered;
+      return Response.json({ version: "2.10.0" });
+    },
+  });
+  try {
+    const epgstation = start(`http://127.0.0.1:${server.port}`, preview);
+    await asked;
+    let finish!: () => void;
+    const edcb = track(
+      "edcb",
+      preview,
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    answer();
+    expect(await epgstation).toEqual({
+      started: false,
+      message: "すでに実行中です",
+    });
+    expect(status().from).toBe("edcb");
+    finish();
+    await edcb;
+  } finally {
+    void server.stop(true);
+  }
 });

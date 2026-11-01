@@ -6,10 +6,10 @@
  * - **https のアプリも通す。** 配る script の `location.href = …` などを差し込みへ向ける (`hybridcast/location.ts`)。
  *   元のサーバから直に読ませると書き換えられず、アプリが移るときに iframe ごと外へ行こうとして止められる
  *
- * アプリを開くときに合言葉を出し、`/api/bml/hc/<合言葉>/<経路>` をアプリの配信元の同じ経路へ中継する (`routes/api/bml/hc`)。
+ * アプリを開くときにトークンを出し、`/api/bml/hc/<トークン>/<経路>` をアプリの配信元の同じ経路へ中継する (`routes/api/bml/hc`)。
  *
- * - **合言葉が許可証。** アプリは使い捨てのオリジンの iframe にいて、そこからの読み込みにはログインの cookie が付かない。
- *   だから中継の側はログインを見ない (`auth.ts` の `OPEN_PATHS`)。合言葉は推測できない乱数で、配信元 1 つに結びつき、
+ * - **トークンが許可証。** アプリは使い捨てのオリジンの iframe にいて、そこからの読み込みにはログインの cookie が付かない。
+ *   だから中継の側はログインを見ない (`auth.ts` の `OPEN_PATHS`)。トークンは推測できない乱数で、配信元 1 つに結びつき、
  *   `TTL` で切れる。出すのはログインした人にだけ (`POST /api/bml/hc`)
  * - 覚えておくのはプロセスの中だけ。再起動したら、開き直せば出し直す
  */
@@ -21,7 +21,7 @@ import { error } from "@sveltejs/kit";
 import { rewriteLocationBytes, scriptable } from "../hybridcast/location";
 import { type Fetched, fetchForBml, refusalMessage } from "./bml-network";
 
-/** 合言葉の寿命 (ms)。番組 1 本を見終えるくらい */
+/** トークンの寿命 (ms)。番組 1 本を見終えるくらい */
 const TTL = 6 * 60 * 60 * 1000;
 /** 覚えておく数の上限。超えたら古いほうから捨てる (開くたびに出すので、溜め込まない) */
 const MOST = 64;
@@ -33,10 +33,10 @@ interface Grant {
 
 const grants = new Map<string, Grant>();
 
-/** 合言葉の形。`auth.ts` の `OPEN_PATHS` も同じ形を別に書いている */
+/** トークンの形。`auth.ts` の `OPEN_PATHS` も同じ形を別に書いている */
 export const TOKEN = /^[0-9a-f]{32}$/;
 
-/** `origin` (http://host[:port]) へ中継する合言葉を出す */
+/** `origin` (http://host[:port]) へ中継するトークンを出す */
 export function grant(origin: string, now = Date.now()): string {
   for (const [token, entry] of grants)
     if (entry.until <= now) grants.delete(token);
@@ -50,7 +50,7 @@ export function grant(origin: string, now = Date.now()): string {
   return token;
 }
 
-/** 合言葉の配信元。知らない・切れた合言葉は null */
+/** トークンの配信元。知らない・切れたトークンは null */
 export function originOf(token: string, now = Date.now()): string | null {
   const entry = grants.get(token);
   if (entry === undefined) return null;
@@ -67,7 +67,7 @@ export function forgetGrants(): void {
 }
 
 /**
- * 合言葉の配信元の `path` を取って返す (`routes/api/bml/hc/[token]/[...path]`)。取り方は `fetchForBml` (差し替えは試験のため)。
+ * トークンの配信元の `path` を取って返す (`routes/api/bml/hc/[token]/[...path]`)。取り方は `fetchForBml` (差し替えは試験のため)。
  *
  * **返したものを denpa の権限で動かさない。** どれにも `sandbox` の CSP と `nosniff` を付ける — この URL を直に開かれても、
  * denpa のオリジンの文書にはならない (script・画像・CSS として読まれる分には CSP は効かない)
@@ -80,7 +80,7 @@ export async function relayAsset(
 ): Promise<Response> {
   const origin = TOKEN.test(token) ? originOf(token) : null;
   if (origin === null)
-    error(404, "合言葉が切れています。アプリを開き直してください");
+    error(404, "トークンが切れています。アプリを開き直してください");
   const target = `${origin}/${path}${search}`;
   try {
     const got = await fetcher(target);

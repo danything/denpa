@@ -5,7 +5,7 @@ import { forgetGrants, grant, originOf, TOKEN } from "./hc-relay";
 afterEach(() => forgetGrants());
 
 describe("hc-relay", () => {
-  test("合言葉は推測できない形で、出した配信元を返す", () => {
+  test("トークンは推測できない形で、出した配信元を返す", () => {
     const a = grant("http://hc.example.jp", 0);
     const b = grant("http://hc.example.jp", 0);
     expect(a).toMatch(TOKEN);

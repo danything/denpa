@@ -284,7 +284,7 @@ interface SaveTarget {
  * どちらも Background Fetch の仕様が理由 (実機の Edge で踏んだ):
  *
  * - **404 が1つでも混ざると全体が失敗になる** (`failureReason: bad-status`)。
- *   付き添い (字幕・データ放送・ポスター) は無い録画もあるので、そのまま
+ *   付属のデータ (字幕・データ放送・ポスター) は無い録画もあるので、そのまま
  *   渡すと**動画は落ち終わっているのに**全部が捨てられる。進みは 97% あたりで
  *   止まり、控えごと消えて「無かったことになった」ように見えていた
  * - **downloadTotal を超えた時点で打ち切られる。** 当てずっぽうの見積もりでは
@@ -301,7 +301,7 @@ async function probeDownloads(
       const res = await fetch(url, { method: "HEAD" });
       if (!res.ok) {
         if (video) throw new Error("動画を取得できませんでした");
-        continue; // 無い付き添いは落とさない
+        continue; // 無い付属のデータは落とさない
       }
       urls.push(url);
       const length = Number(res.headers.get("content-length"));
@@ -311,7 +311,7 @@ async function probeDownloads(
         throw error instanceof Error
           ? error
           : new Error("動画を取得できませんでした");
-      // 付き添いの下見に失敗しただけなら、そのぶんを諦めて先へ
+      // 付属のデータの下見に失敗しただけなら、そのぶんを諦めて先へ
     }
   }
   return { urls, total: total > 0 ? total : null };
@@ -406,7 +406,7 @@ async function downloadInPage(
     const response = await fetch(url).catch(() => null);
     if (response === null || !response.ok) {
       if (url.includes("/file?")) throw new Error("動画を取得できませんでした");
-      continue; // 付き添いは無い録画もある
+      continue; // 付属のデータは無い録画もある
     }
     // 動画だけは進み具合を数えながら読む
     await storeResponse(held, url, response, (r) =>

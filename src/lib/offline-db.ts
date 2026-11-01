@@ -2,7 +2,7 @@
  * オフライン視聴の置き場 (IndexedDB)。**ページとサービスワーカーの両方から使う**ので、
  * Svelte に依存しないただの層にしてある ([docs/offline.md](../../docs/offline.md))。
  *
- * - `videos` … 落とした録画。動画の blob と、観るのに要る付き添い
+ * - `videos` … 落とした録画。動画の blob と、観るのに要る付属のデータ
  *   (字幕・チャプター・データ放送・ポスター) を1行にまとめて持つ
  * - `outbox` … オンラインに戻ったときにサーバへ伝えること (いまは削除だけ)
  * - `resume` … オフライン中に進んだ視聴位置。復帰時にまとめて送る
@@ -56,7 +56,7 @@ export async function offlineSource(
 const DB = "denpa-offline";
 const VERSION = 1;
 
-/** 落とした録画1本。付き添いは取れなかったら無いまま (観るときに諦める) */
+/** 落とした録画1本。付属のデータは取れなかったら無いまま (観るときに諦める) */
 export interface OfflineVideo {
   id: number;
   name: string;
@@ -147,10 +147,10 @@ export function parseFetchId(
 }
 
 /**
- * 落とすものの一覧。動画 + 観るのに要る付き添い。
+ * 落とすものの一覧。動画 + 観るのに要る付属のデータ。
  *
  * **頭 (前段の接頭辞。server/paths.ts) は呼ぶ側 (offline.svelte.ts) が付ける。** ここは
- * Service Worker からも読まれ、パスの形で付き添いを見分ける (`kindOf`) ので、ルートからのパスのまま持つ
+ * Service Worker からも読まれ、パスの形でどのデータかを見分ける (`kindOf`) ので、ルートからのパスのまま持つ
  */
 export function downloadRequests(id: number, source: EncodedSource): string[] {
   return [
@@ -162,7 +162,7 @@ export function downloadRequests(id: number, source: EncodedSource): string[] {
   ];
 }
 
-/** URL がどの付き添いか。Background Fetch の結果を仕分けるのに使う */
+/** URL がどのデータか。Background Fetch の結果を仕分けるのに使う */
 export function kindOf(
   url: string,
 ): "video" | "captionText" | "chapters" | "databroadcast" | "poster" | null {
