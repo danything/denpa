@@ -144,7 +144,7 @@
     gap: 0.75rem;
     flex-shrink: 0;
     /* カードにしない。ほかのサイドバーと同じく地も枠も影も付けず、局の一覧とは余白で分ける (`app.css` の `.side-panel`) */
-    margin-bottom: 1.75rem;
+    margin-bottom: var(--dp-space-4);
   }
   .colors {
     display: flex;
