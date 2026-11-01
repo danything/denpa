@@ -51,7 +51,7 @@ public sealed class Mb86h47 : II2c
     /// <summary>メモリ要求と bulk の命令の時間切れ (仕様書 3 章「タイムアウトは 1 秒で動いている」)</summary>
     private const int TimeoutMs = 1000;
 
-    /// <summary>1回のメモリ要求の上限 (4.2 で広げたあと。仕様書 3 章の「最大 64 バイト」)</summary>
+    /// <summary>1回のメモリ要求の上限 (仕様書 3 章の「最大 64 バイト」)。書き込みで使えるのは 4.2 で広げたあとだけ</summary>
     private const int MaxWords = 16;
 
     private const uint Core0 = 0x1600000;
@@ -429,7 +429,7 @@ public sealed class Mb86h47 : II2c
     }
 
     // ---------------------------------------------------------------------
-    // I2C (5)。書き込みと読みかえ書きは塊に溜めて答えを待たずに流し、読み・待つ前 (Flush) に送る
+    // I2C (5)。書き込みと読みかえ書きは1つずつ答えを待たずに塊に溜め、読む前と待つ前 (Flush) にまとめて送る
     // ---------------------------------------------------------------------
 
     public void Write(byte address, ReadOnlySpan<byte> data)

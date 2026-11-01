@@ -595,7 +595,7 @@ public static class Px4Userland
 /// <c>Lnb15v</c> は LNB に 15V を出せるか (<c>lnb_15v_supported</c>、px4-userland 0.1.9 から)。
 /// **分からなければ null** で、そのときは言われたとおり指定する (合わなければ px4d が断る)。
 /// <c>px4ctl list</c> には載らない (IPC の形式は変えないと SPEC 4.1 v0.26) ので、筐体の一覧から写す
-/// (<see cref="Px4Daemon.Ensure"/>)。
+/// (<see cref="Px4Daemon.WithLnb"/>)。
 /// </para>
 /// </summary>
 public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bool? Lnb15v = null)
@@ -612,7 +612,6 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
     /// <c>system</c> は <c>ISDB-T</c> / <c>ISDB-S</c> / <c>ISDB-T/S</c> (どちらも)。
     /// **知らない値は飛ばして続ける** — px4-userland が新しくなって方式が増えても、
     /// 分かる受信機は使えるように。飛ばしたことは <paramref name="warn"/> で残す。
-    /// 15V の可否はここには載らない (<see cref="Px4Daemon.WithLnb"/> が一覧から写す)。
     /// </para>
     /// </summary>
     public static List<Px4Receiver> ParseList(string output, Action<string> warn)
@@ -747,7 +746,7 @@ public abstract class UserlandDaemon(string name, string id)
 
     /// <summary>
     /// 起こして、<paramref name="ready"/> が通るまで待つ。<paramref name="runtimeDir"/> (ランタイムルート) は
-    /// 呼ぶ側が用意する決まり (常駐は下の階層しか作らない)
+    /// ここで作る (常駐は下の階層しか作らない決まり。Unix では本人だけが使えるようにする)
     /// </summary>
     /// <param name="stopByStdin">
     /// **標準入力で止める** (Windows の px4d。<c>--exit-on-stdin-eof</c>)。標準入力は何も書かずに開けたまま持ち、
@@ -998,7 +997,8 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 /// <para>
 /// 最初の選局で <c>ACQUIRE → TUNE → START_STREAM → ATTACH_STREAM</c>、2回目からは
 /// <c>STOP_STREAM → TUNE → START_STREAM → ATTACH_STREAM</c> (px4-userland SPEC 6.3)。
-/// 返すのは <see cref="Dispose"/> (<c>RELEASE</c>) のときだけ (返すと px4d が電源を落とし、次の選局が遅くなる)。
+/// 返すのは <see cref="Dispose"/> (<c>RELEASE</c>) と、取ったままでは続けられない失敗のときだけ
+/// (<see cref="Keeps"/>。返すと px4d が電源を落とし、次の選局が遅くなる)。
 /// TS は <c>stream.sock</c> に来る (<see cref="Px4Stream"/>)。誰も読まなくなったら TS のストリームだけ畳み、
 /// 次の選局は同じ lease で選局し直す (<see cref="Tuned"/>)。docs/agent.md「px4-userland の作り」
 /// </para>
@@ -1483,7 +1483,7 @@ internal sealed class Px4StreamError(string message, bool keepsLease) : IOExcept
 /// <para>
 /// <c>stream.sock</c> に繋いで ATTACH_STREAM (lease と nonce) を送ると、あとは px4d が
 /// TS_DATA の枠を送り続け、止めると STREAM_END が来る (SPEC 6.3 / 6.4)。枠の中身はソケットから
-/// <see cref="Pipe"/> のメモリ (<see cref="PipeWriter.GetMemory"/>) へ直に受け、読み出し側はその読む側 (<see cref="DeviceStream"/>)。
+/// <see cref="Pipe"/> のメモリ (<see cref="PipeWriter.GetMemory"/>) へ直に受け、その読む側を読み出し側 (<see cref="DeviceStream"/>) に載せる。
 /// OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った) ので、溜めの深さは <see cref="Depth"/> で決め打つ。
 /// </para>
 ///

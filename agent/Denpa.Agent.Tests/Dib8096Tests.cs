@@ -125,7 +125,7 @@ public class Dib8096Tests
         await InOrder(i2c.Log,
             // UHF なので GPIO 3 = Low
             "D1029&FFF7|0000", "D1030&FFF7|0000",
-            // req = 557,142 - 63 = 557,079。通常の表の 650000 の行 (切替 2) と、PLL の表の 580000 の行 (帯 1・符号 3・分周 6・前置 6)
+            // req = 557,142 - 63 = 557,079。通常の表の 650000 の行 (切替 2) と、PLL の表の 580000 の行 (VCO のバンド 1・符号 3・分周 6・前置 6)
             // vco = 6 × 557,079 × 2 = 6,684,948、/ 6 = 1,114,158、fb = 557、rest = 158 → 200 → 200 × 6528 / 200 = 6528
             "T0B=B802", "T15=022D", "T16=FF06", "T17=1980",
             // lo5 = 0x049E | (3 << 11) | (1 << 7)、lo6 = 0xFF28 | 6
@@ -156,7 +156,7 @@ public class Dib8096Tests
         await Assert.That(result).IsEqualTo(DibLock.DataLocked);
         await InOrder(i2c.Log,
             "D1029&FFF7|0000", "D1030&FFF7|0008",
-            // 通常の表の 380000 の行 (切替 1)。PLL の表の 280000 の行 (帯 1・符号 5・分周 12・前置 6)
+            // 通常の表の 380000 の行 (切替 1)。PLL の表の 280000 の行 (VCO のバンド 1・符号 5・分周 12・前置 6)
             // vco = 12 × 230,999 × 2 = 5,543,976、/ 6 = 923,996、fb = 461、rest = 1996 > 1900 → 0、fb = 462
             "T0B=B801", "T15=01CE", "T16=0106", "T17=0000",
             // lo5 = 0x049F | (5 << 11) | (1 << 7)、lo6 = 0xFFF8
@@ -186,7 +186,7 @@ public class Dib8096Tests
     }
 
     [Test]
-    public async Task CATV_の_C13_から_C63_まで選局できて帯で切り替えを選ぶ()
+    public async Task CATV_の_C13_から_C63_まで選局できてバンドで切り替えを選ぶ()
     {
         var (dib, i2c, model, _) = Make();
         dib.Initialize();
@@ -194,7 +194,7 @@ public class Dib8096Tests
         {
             var hz = ChannelTable.Parse($"C{channel}")!.Frequency;
             await Assert.That(dib.Tune(hz)).IsEqualTo(DibLock.DataLocked);
-            // UHF の帯 (250MHz を超える) だけ Low
+            // UHF のバンド (250MHz を超える) だけ Low
             var high = (model.Demod[1030] & 0x0008) != 0;
             await Assert.That(high).IsEqualTo(hz / 1000 <= 250_000);
         }

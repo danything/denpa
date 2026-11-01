@@ -246,7 +246,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 単位をほどくときは_0x47_を2つ見て揃える()
+    public async Task 単位から取り出すときは_0x47_を2つ見て揃える()
     {
         static byte[] Unit(byte marker)
         {

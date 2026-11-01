@@ -40,9 +40,7 @@ public class Zd1jLocksTests
         var memory = new Zd1jLocks(Temp()).For("4-12.1");
         var changes = 0;
         memory.Changed += () => changes++;
-        var (dib, model) = Tuner(memory);
-        // FFT の探索で 8K が見つかるように (c2 = D[594]:D[595] がいちばん大きい)
-        model.Demod[595] = 1;
+        var (dib, _) = Tuner(memory);
         dib.Tune(557_142_857);
         // 覚えた値で合わせた選局では書かない
         dib.Tune(557_142_857);

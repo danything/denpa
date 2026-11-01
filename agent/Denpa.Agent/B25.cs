@@ -640,7 +640,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>
     /// 鍵を貰って入れる。**失敗したら鍵を捨てる** — 古い鍵で復号し続けると化けたものを流す。
     /// **渡すのはセクションの頭 8 バイトと末尾の CRC 4 バイトを除いた中身** — libaribb25 と同じ切り方で、
-    /// 拠点を跨いで鍵を貰う線 (CardShare.cs) もこれを運ぶ。変えると古いエージェントと話が通じなくなる
+    /// 拠点を跨いで鍵を貰うとき (CardShare.cs) もこれを運ぶ。変えると古いエージェントと話が通じなくなる
     /// </summary>
     private void Ask(Ecm ecm)
     {
