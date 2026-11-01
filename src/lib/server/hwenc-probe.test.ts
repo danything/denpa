@@ -91,12 +91,19 @@ test("H.264・H.265 は初めから CQP で試し、ICQ では試さない", asy
   // CQP の印は AV1 が ICQ から落ちたときだけ。H.264・H.265 はいつも CQP なので付けない
   expect(device.cqp).toEqual([]);
   const lines = calls.map((argv) => argv.join(" "));
-  expect(lines.some((l) => l.includes("hevc_vaapi -rc_mode CQP -qp 25"))).toBe(
-    true,
-  );
-  expect(lines.some((l) => l.includes("h264_vaapi -rc_mode CQP -qp 25"))).toBe(
-    true,
-  );
+  // 録画と同じ引数 (品質寄りの段と B フレームのピラミッドも) で試す。どれもドライバが持たなくても落ちない
+  for (const [codec, factor] of [
+    ["hevc", "1.4"],
+    ["h264", "1.3"],
+  ]) {
+    expect(
+      lines.some((l) =>
+        l.includes(
+          `${codec}_vaapi -rc_mode CQP -qp 24 -compression_level:v 1 -bf 3 -b_depth 2 -b_qfactor ${factor}`,
+        ),
+      ),
+    ).toBe(true);
+  }
   expect(lines.some((l) => /(h264|hevc)_vaapi -rc_mode ICQ/.test(l))).toBe(
     false,
   );
@@ -106,9 +113,9 @@ test("H.264・H.265 は初めから CQP で試し、ICQ では試さない", asy
       .filter((argv) => argv.includes("-hwaccel"))
       .map((argv) => argv.find((a) => a.endsWith("_vaapi"))),
   ).toEqual(["h264_vaapi"]);
-  // デコードから GPU の試しも録画と同じ CQP で指定している
+  // デコードから GPU の試しはライブと同じ引数 (qp 25、ピラミッドなし)
   const full = calls.find((argv) => argv.includes("-hwaccel"));
-  expect(full?.join(" ")).toContain("-rc_mode CQP -qp 25");
+  expect(full?.join(" ")).toContain("-rc_mode CQP -qp 25 -bf 0 -async_depth 1");
   expect(full?.join(" ")).toContain("deinterlace_vaapi=rate=field");
   expect(device.full).toEqual(["h264"]);
   expect(describeDevice(device)).toBe(
@@ -136,7 +143,9 @@ test("AV1 は ICQ が落ちたら CQP (-global_quality 75) で試し、通った
   expect(lines.some((l) => l.includes("av1_vaapi -rc_mode ICQ"))).toBe(true);
   expect(
     lines.some((l) =>
-      l.includes("av1_vaapi -rc_mode CQP -global_quality:v 75"),
+      l.includes(
+        "av1_vaapi -rc_mode CQP -global_quality:v 75 -compression_level:v 1",
+      ),
     ),
   ).toBe(true);
   // デコードから GPU の試しも、AV1 は CQP のまま

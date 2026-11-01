@@ -155,19 +155,47 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * (`VAAPI_QP`・`AV1_ICQ`)。Arc A310 (iHD) で放送の 1440x1080 を 60 秒ずつ 2 か所エンコードし、
  * ソフトウェアの設定を決めたのと同じ XPSNR が、svt-av1 crf 35 と x264 crf 23 の高いほうに 2 か所とも
  * −0.26 dB 以内で揃う値を選んだ (ソフトウェアどうしは −0.36 dB まで離れていた。H.265 はソフトウェアの
- * エンコーダが無いので同じ目標に合わせる)。場面の切り替わりの後 4 コマの PSNR の最小も、3 つとも svt-av1 より上:
+ * エンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値:
  *
- * - H.264 は **qp 25**。同じ XPSNR で ICQ より 5〜7% 小さい
- * - H.265 は **qp 25**。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった
- * - AV1 は **ICQ 26**。AV1 は ICQ のほうがはっきり良い
+ * - H.264 は **qp 24** (目標との差 −0.12・−0.14 dB)。同じ XPSNR で ICQ より 5〜7% 小さい
+ * - H.265 は **qp 24** (−0.21・−0.14 dB)。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった。
+ *   25 は B の qp の倍率 1.3 でも −0.38 dB で外れる
+ * - AV1 は **ICQ 26** (+0.46・−0.05 dB)。AV1 は ICQ のほうがはっきり良い。27 は −0.26 dB でぎりぎりなので採らない
  *
- * ビットレートは 300 秒・600 秒の所で H.264 2347・1472 kbps、H.265 1803・1064、AV1 2182・1262
- * (前の ICQ では H.264 27 が 1963・1179、H.265 27 が 1977・1108、AV1 28 が 1667・933)。
- * XPSNR は FFmpeg の vf_xpsnr (輝度) を JS で書き直したものでポッドの中で測り、ffmpeg のフィルタとは突き合わせていない。
+ * ビットレートは 300 秒・600 秒の所で H.264 2203・1383 kbps、H.265 1498・988、AV1 2157・1250
+ * (前の qp 25・ICQ 26 では H.264 2347・1472、H.265 1803・1064、AV1 2182・1262。2 か所のうち悪いほうの
+ * XPSNR は前と同じか上)。XPSNR は FFmpeg の vf_xpsnr (輝度) を JS で書き直したものでポッドの中で測り、
+ * ffmpeg のフィルタとは突き合わせていない。
  *
  * **`-global_quality` は `:v` を付けて映像にだけ効かせる。** 付けないとどのストリームにも効き、音のエンコーダが
  * 画質での指定として受け取る — libopus は「画質での指定はできない」で開けずに転び、aac は VBR に切り替わる
  * (GPU を挿してエンコードし始めたら、AV1 + Opus の録画とライブが通らなかった)
+ *
+ * ## 録画は遅くても小さく (`VAAPI_SLOW`)
+ *
+ * 録画は急がないので、同じ画質で小さくなる指定を足す。**ライブには足さない** (`liveHwArgs`):
+ *
+ * - `-compression_level:v 1` … ドライバの品質と速さの段 (iHD は 1〜7 で、渡さないときは 4 と同じ出力)。
+ *   1 は 3 つとも同じ XPSNR で 3〜5% 小さい。**これも `:v` を付ける** — 付けないと音のエンコーダにも効き、
+ *   libopus はこれを計算の手間 (complexity) として読み、10 から 1 に落とす
+ * - `-bf 3 -b_depth 2 -b_qfactor` (H.264・H.265 だけ) … B フレームを 3 枚にして、真ん中の B を
+ *   残りの B の参照にするピラミッドにし、B の qp を P の 1.3 倍 (H.265 は 1.4 倍。どちらも +1.25) にする。同じ qp では XPSNR が
+ *   少し下がるので、qp を 25 から 24 に上げてある。**`-bf 7 -b_depth 3` は映像が壊れる** (A310 で XPSNR が
+ *   14〜35 dB に落ちた) ので使わない。AV1 は B フレームの数や GOP の長さを変えると、大きくなるか
+ *   場所によって良し悪しが割れたので既定のまま
+ *
+ * 1 分の映像のエンコードは H.264・H.265 で 4.7〜5.0 秒 (前は 3.4〜4.2 秒)、AV1 で 6.4〜6.8 秒 (前は 4.2〜4.4 秒)。
+ *
+ * **どれもドライバが持たなくても落ちない指定なので、試しのエンコード (`probeOnce`) はこのまま試す。**
+ * FFmpeg は `-compression_level` を、ドライバが段を持たなければ警告して無視し、段より大きければ丸める
+ * (vaapi_encode.c の `vaapi_encode_init_quality`)。B フレームを持たないドライバでは `-bf` を捨てて I と P だけにし、
+ * `-b_depth` は B の枚数から決まる深さで頭打ちにする (hw_base_encode.c の `ff_hw_base_init_gop_structure`)。
+ * 落ちうるのは段の問い合わせ (`vaGetConfigAttributes`) そのものが失敗したときだけで、同じ問い合わせは
+ * レート制御を決めるときにも行うので、それが通るドライバなら通る。
+ *
+ * **CM を切るときのキーフレーム (`encoder.ts` の `keyframeArgs`) もピラミッドのまま IDR になる。** FFmpeg は
+ * 印の付いたコマ (`pict_type = I`) を IDR にすると決め、その1つ前のコマを P にして B の並びをそこで閉じる
+ * (hw_base_encode.c)。ピラミッドは閉じた並びの中を分けるだけなので、IDR の位置は変わらない
  *
  * ## ICQ を持たないドライバの AV1 は CQP で指定する
  *
@@ -176,7 +204,14 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * 通ればそちらでエンコードする (`HwWay.cqp`)。H.264・H.265 は初めから CQP なので落ちない。
  * **av1_vaapi は `-qp` を受けず、`-global_quality` で量子化の値 (0〜255) を受ける。** `-qp` は黙って無視され、
  * 既定の値で 9〜12 Mbps も出ていた (前の `-qp 120` がそれ。HuC の無い A310 の録画が 2.5GB になった)。
- * 値は **75** (`AV1_CQP`)。ICQ 26 と同じ画質になると見込んだ値で、**測っていない**。
+ * 値は **75** (`AV1_CQP`)。
+ *
+ * **AV1 の CQP は、同じ画質で ICQ より 5 割ほど大きい。** FFmpeg の av1_vaapi は CQP のとき CDEF を使わず
+ * (vaapi_encode_av1.c が `enable_cdef` を立てるのは CQP でないときだけ)、ループフィルタの強さも渡さない
+ * (ICQ ではドライバのレート制御が決める)。A310 で CQP にすると、CDEF もループフィルタも全部のコマで 0 だった。
+ * 300 秒の所で b_qfactor 1.1 の 75 が ICQ 26 とほぼ同じ XPSNR (37.23 と 37.16 dB) で 3368 kbps と、
+ * ICQ の 2182 kbps の 1.5 倍 (既定の b_qfactor の 75 は測っていない)。それでも Mesa (AMD) で AV1 を
+ * エンコードできるように残す。**直すには FFmpeg の側を変える必要がある** (CQP でもフィルタを使うように)。
  * CQP は場面に応じて量を変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなる
  *
  * ## Rockchip MPP はビットレートで指定する
@@ -228,32 +263,85 @@ export function hwArgs(
       "va",
     ],
     filter: ["format=nv12", "hwupload"],
-    encoder: [`${codec}_vaapi`, ...vaapiQuality(way, codec)],
+    encoder: [
+      `${codec}_vaapi`,
+      ...vaapiQuality(way, codec, VAAPI_QP),
+      ...VAAPI_SLOW[codec],
+    ],
   };
 }
 
 /**
- * VA-API の H.264・H.265 の CQP の qp (0〜51)。XPSNR が svt-av1 crf 35・x264 crf 23 の高いほうと揃う所。
- * 同じ画質で ICQ より H.264 は 5〜7%、H.265 は 9〜17% 小さい (`hwArgs` の説明)
+ * VA-API の H.264・H.265 の録画の CQP の qp (0〜51)。`VAAPI_SLOW` を足したうえで、XPSNR が
+ * svt-av1 crf 35・x264 crf 23 の高いほうと揃う所。同じ画質で ICQ より H.264 は 5〜7%、H.265 は 9〜17% 小さい
+ * (`hwArgs` の説明)
  */
 const VAAPI_QP: Record<Exclude<HwCodec, "av1">, number> = {
+  h264: 24,
+  hevc: 24,
+};
+
+/**
+ * ライブの qp。ライブは H.265 を出さないが、型を録画と揃えて両方置く。**25 のまま** — 25 は B フレームを
+ * 2 枚作る FFmpeg の既定で、目標の XPSNR に揃っていた値 (前の録画の値)。ライブは B フレームを作らず
+ * (`liveHwArgs`)、どのコマも P の qp で出るので、それより画質が落ちることはない
+ */
+const LIVE_QP: Record<Exclude<HwCodec, "av1">, number> = {
   h264: 25,
   hevc: 25,
+};
+
+/**
+ * 録画だけに足す、遅くても小さくなる指定 (`hwArgs` の説明)。`-compression_level` は音のエンコーダも
+ * 読むので `:v` を付ける。`-bf`・`-b_depth`・`-b_qfactor` は音のエンコーダが読まない。
+ *
+ * `-b_qfactor` はコーデックごとに、目標の内でいちばん小さくなる値 (qp 24 で測った):
+ * H.264 は 1.3 (−0.12・−0.14 dB、2203・1383 kbps。1.4 は −0.49 dB で外れる)、
+ * H.265 は 1.4 (−0.21・−0.14 dB、1498・988 kbps。1.3 は +0.12・−0.03 dB で 1675・1055 kbps)
+ */
+const VAAPI_SLOW: Record<HwCodec, readonly string[]> = {
+  h264: [
+    "-compression_level:v",
+    "1",
+    "-bf",
+    "3",
+    "-b_depth",
+    "2",
+    "-b_qfactor",
+    "1.3",
+  ],
+  hevc: [
+    "-compression_level:v",
+    "1",
+    "-bf",
+    "3",
+    "-b_depth",
+    "2",
+    "-b_qfactor",
+    "1.4",
+  ],
+  av1: ["-compression_level:v", "1"],
 };
 
 /** VA-API の AV1 の ICQ の値。AV1 は CQP より ICQ のほうがはっきり良い (`hwArgs` の説明) */
 const AV1_ICQ = 26;
 
 /**
- * ICQ を持たないドライバ (i965・Mesa) で AV1 に渡す CQP の量子化の値 (0〜255)。
- * ICQ 26 と同じ画質になると見込んだ値で、測っていない (`hwArgs` の説明)
+ * ICQ を持たないドライバ (i965・Mesa) で AV1 に渡す CQP の量子化の値 (0〜255)。A310 では ICQ 26 と
+ * ほぼ同じ XPSNR (b_qfactor 1.1 で測った) で、FFmpeg が CQP で CDEF とループフィルタを使わないぶん 1.5 倍大きい (`hwArgs` の説明)
  */
 const AV1_CQP = 75;
 
-/** VA-API の画質の指定方法。H.264・H.265 は CQP、AV1 は ICQ (持たないドライバには CQP) */
-function vaapiQuality(way: HwWay, codec: HwCodec): string[] {
-  if (codec !== "av1")
-    return ["-rc_mode", "CQP", "-qp", String(VAAPI_QP[codec])];
+/**
+ * VA-API の画質の指定方法。H.264・H.265 は CQP (qp は録画とライブで別。`qp`)、AV1 は ICQ
+ * (持たないドライバには CQP)
+ */
+function vaapiQuality(
+  way: HwWay,
+  codec: HwCodec,
+  qp: Record<Exclude<HwCodec, "av1">, number>,
+): string[] {
+  if (codec !== "av1") return ["-rc_mode", "CQP", "-qp", String(qp[codec])];
   // AV1 は `-qp` を受けない (黙って無視される)。量子化の値は `-global_quality` で渡す
   return way.cqp === true
     ? ["-rc_mode", "CQP", "-global_quality:v", String(AV1_CQP)]
@@ -431,8 +519,9 @@ export function liveHw(
  *
  * - `-bf 0` … B フレームを作らない。作ると必ず1枚以上待つ (x264 の `zerolatency` と同じ狙い)
  * - `-async_depth 1` … GPU に先積みしない。既定 (2) のぶんだけ映像が遅れて出る
- * - 画質は録画と同じ値 (`VAAPI_QP`・`AV1_ICQ`・`AV1_CQP`)。x264 ultrafast の既定 (crf 23) と
- *   見比べたのは録画の preset だけで、ライブの ultrafast とは見比べていない
+ * - 録画の遅くても小さくする指定 (`VAAPI_SLOW`。`-compression_level 1` と B フレームのピラミッド) は足さない。
+ *   B フレームを作らないので qp は録画の 24 ではなく前のままの 25 (`LIVE_QP`)。AV1 は録画と同じ (`AV1_ICQ`・`AV1_CQP`)。
+ *   x264 ultrafast の既定 (crf 23) と見比べたのは録画の preset だけで、ライブの ultrafast とは見比べていない
  *
  * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
  *
@@ -492,7 +581,15 @@ export function liveHwArgs(
       ],
     };
   }
-  const encoder = [...base.encoder, "-bf", "0", "-async_depth", "1"];
+  // 録画の遅くても小さくする指定 (`VAAPI_SLOW`) は足さない
+  const encoder = [
+    `${codec}_vaapi`,
+    ...vaapiQuality(way, codec, LIVE_QP),
+    "-bf",
+    "0",
+    "-async_depth",
+    "1",
+  ];
   if (!hw.full) return { input: base.device, filter: base.filter, encoder };
   return {
     input: [

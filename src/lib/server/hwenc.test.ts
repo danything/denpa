@@ -84,24 +84,53 @@ describe("GPU の方式の選び方", () => {
 });
 
 describe("VA-API の画質の指定", () => {
-  test("H.264 は CQP の qp 25", () => {
+  test("H.264 は CQP の qp 24 に、品質寄りの段と B フレームのピラミッドを足す", () => {
     expect(hwArgs({ device: A.path, kind: "vaapi" }, "h264").encoder).toEqual([
       "h264_vaapi",
       "-rc_mode",
       "CQP",
       "-qp",
-      "25",
+      "24",
+      "-compression_level:v",
+      "1",
+      "-bf",
+      "3",
+      "-b_depth",
+      "2",
+      "-b_qfactor",
+      "1.3",
     ]);
   });
 
-  test("AV1 は ICQ 26", () => {
+  test("AV1 は ICQ 26 に品質寄りの段だけ足す (B フレームと GOP は既定のまま)", () => {
     expect(hwArgs({ device: A.path, kind: "vaapi" }, "av1").encoder).toEqual([
       "av1_vaapi",
       "-rc_mode",
       "ICQ",
       "-global_quality:v",
       "26",
+      "-compression_level:v",
+      "1",
     ]);
+  });
+
+  /*
+   * **`-compression_level` は `:v` 付きで。** 付けないと libopus が計算の手間 (complexity) として読み、
+   * 10 から 1 に落とす。`-bf 7 -b_depth 3` は A310 で映像が壊れたので、どのコーデックにも出さない
+   */
+  test("品質寄りの段は映像にだけ効かせ、壊れる深さのピラミッドは出さない", () => {
+    for (const way of [
+      { device: A.path, kind: "vaapi" },
+      { device: A.path, kind: "vaapi", cqp: true },
+    ] as const) {
+      for (const codec of ["h264", "hevc", "av1"] as const) {
+        const args = hwArgs(way, codec).encoder;
+        expect(args).not.toContain("-compression_level");
+        expect(args).toContain("-compression_level:v");
+        expect(args.join(" ")).not.toContain("-bf 7");
+        expect(args.join(" ")).not.toContain("-b_depth 3");
+      }
+    }
   });
 });
 
@@ -127,11 +156,19 @@ describe("ICQ を持たないドライバの AV1 (i965・Mesa)", () => {
     // AV1 の量子化の値は 0〜255。`-qp` は黙って無視されるので使わない
     expect(
       hwArgs({ device: C.path, kind: "vaapi", cqp: true }, "av1").encoder,
-    ).toEqual(["av1_vaapi", "-rc_mode", "CQP", "-global_quality:v", "75"]);
+    ).toEqual([
+      "av1_vaapi",
+      "-rc_mode",
+      "CQP",
+      "-global_quality:v",
+      "75",
+      "-compression_level:v",
+      "1",
+    ]);
     // H.264 は印があってもなくても同じ CQP
     expect(
       hwArgs({ device: C.path, kind: "vaapi", cqp: true }, "h264").encoder,
-    ).toEqual(["h264_vaapi", "-rc_mode", "CQP", "-qp", "25"]);
+    ).toEqual(hwArgs({ device: C.path, kind: "vaapi" }, "h264").encoder);
   });
 });
 
@@ -170,9 +207,27 @@ describe("ライブを GPU でエンコードする経路", () => {
       "va",
     ]);
     expect(vaapi.filter).toEqual(["format=nv12", "hwupload"]);
+    // 録画の品質寄りの段とピラミッドは足さず、qp も前のままの 25
     expect(vaapi.encoder.join(" ")).toBe(
       "h264_vaapi -rc_mode CQP -qp 25 -bf 0 -async_depth 1",
     );
+    const av1 = liveHwArgs(
+      { way: { device: A.path, kind: "vaapi" }, full: false },
+      "av1",
+    );
+    expect(av1.encoder.join(" ")).toBe(
+      "av1_vaapi -rc_mode ICQ -global_quality:v 26 -bf 0 -async_depth 1",
+    );
+    // デコードから GPU のときも同じ
+    for (const codec of ["h264", "av1"] as const) {
+      const full = liveHwArgs(
+        { way: { device: A.path, kind: "vaapi" }, full: true },
+        codec,
+      ).encoder;
+      expect(full).not.toContain("-compression_level:v");
+      expect(full).not.toContain("-b_depth");
+      expect(full.join(" ")).toContain("-bf 0 -async_depth 1");
+    }
   });
 
   test("デコードから GPU なら、フレームを GPU に置いたままインタレ解除してエンコードする", () => {
@@ -456,13 +511,21 @@ describe("H.265 (GPU でだけ)", () => {
     ]);
   });
 
-  test("VA-API の H.265 は H.264 と同じ CQP の qp 25 (0〜51 の軸)", () => {
+  test("VA-API の H.265 は H.264 と同じ CQP の qp 24 (0〜51 の軸) とピラミッドで、B の qp の倍率だけ 1.4", () => {
     expect(hwArgs({ device: H.path, kind: "vaapi" }, "hevc").encoder).toEqual([
       "hevc_vaapi",
       "-rc_mode",
       "CQP",
       "-qp",
-      "25",
+      "24",
+      "-compression_level:v",
+      "1",
+      "-bf",
+      "3",
+      "-b_depth",
+      "2",
+      "-b_qfactor",
+      "1.4",
     ]);
   });
 
