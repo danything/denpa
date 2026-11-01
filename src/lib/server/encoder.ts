@@ -170,7 +170,7 @@ function squarePixels(
   return `scale=${size.width}:${size.height},setsar=1`;
 }
 
-/** 画面に出す、エンコードの経路の名前。`renderD128 の QSV` / `ソフトウェア` */
+/** 画面に出す、エンコードの経路の名前。`renderD128 の VA-API` / `ソフトウェア` */
 function wayName(way: HwWay | undefined): string {
   return way === undefined
     ? "ソフトウェア"
@@ -189,8 +189,8 @@ type Keyframes = "scene" | number[];
 
 /**
  * キーフレームを置かせる引数。どのエンコーダも、印の付いたコマ (`pict_type = I`) を
- * キーフレームにする。**QSV と NVENC は指定しないと IDR にならない** (QSV は `-forced_idr`、NVENC は
- * `-forced-idr`。名前の綴りが違う)。IDR でないと入れ物にキーフレームとして書かれず、そこで切れない。
+ * キーフレームにする。**NVENC は指定しないと IDR にならない** (`-forced-idr`)。
+ * IDR でないと入れ物にキーフレームとして書かれず、そこで切れない。VA-API は印だけで IDR になる。
  *
  * **Rockchip MPP (h264_rkmpp・hevc_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
  * MPP に渡さない)。渡しても害は無く、境目にキーフレームが無ければ CM を切るところで
@@ -213,7 +213,6 @@ function keyframeArgs(
   return [
     "-force_key_frames:v",
     at,
-    ...(hardware?.kind === "qsv" ? ["-forced_idr", "1"] : []),
     ...(hardware?.kind === "nvenc" ? ["-forced-idr", "1"] : []),
   ];
 }
@@ -239,7 +238,7 @@ function videoArgs(
   const keys = keyframeArgs(keyframes, hardware);
   if (hardware !== null) {
     /*
-     * **GPU (Intel QSV / VA-API・NVIDIA NVENC・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
+     * **GPU (VA-API・NVIDIA NVENC・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
      * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs
      * (Rockchip MPP と NVENC は出す高さとコマ数でビットレートを決める)。
      * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
@@ -345,7 +344,7 @@ interface EncodeOptions {
   /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
   mediaTitle?: string;
   /**
-   * GPU でエンコードする経路 (どのデバイスを `qsv` / `vaapi` / `rkmpp` / `nvenc` のどれで)。使えるかどうかは
+   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` のどれで)。使えるかどうかは
    * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
    * 最後はソフトウェア (undefined)
    */

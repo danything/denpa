@@ -20,7 +20,7 @@ import {
  * GPU でエンコードする (server/hwenc.ts)。
  *
  * **GPU は偽物** — `stack.hwDir` に `renderD128` のような名前でファイルを置くと
- * denpa にはデバイスとして見え、偽 ffmpeg は渡されたデバイスが在るのを見て QSV / VA-API の
+ * denpa にはデバイスとして見え、偽 ffmpeg は渡されたデバイスが在るのを見て VA-API の
  * 試しのエンコードを通す。消せば、エンコードしようとした GPU の方式が本物と同じく初期化で落ちる
  * (次の方式・ソフトウェアへ倒れるのを試せる)。
  * `mpp_service` を置くと Rockchip MPP (`RKMPP_DEVICE`)、`nvidia0` を置くと NVIDIA の GPU (`NVIDIA_DIR`) のデバイスとして見える
@@ -50,18 +50,10 @@ function wayOf(run: string[]): string {
   const encoder =
     run.find(
       (a) =>
-        /_(qsv|vaapi|rkmpp|nvenc)$/.test(a) ||
-        a === "libx264" ||
-        a === "libsvtav1",
+        /_(vaapi|rkmpp|nvenc)$/.test(a) || a === "libx264" || a === "libsvtav1",
     ) ?? "?";
-  const device = run.find(
-    (a) => a.startsWith("qsv=") || a.startsWith("vaapi="),
-  );
-  const port = device
-    ?.split(/child_device=|va:/)
-    .at(-1)
-    ?.split("/")
-    .at(-1);
+  const device = run.find((a) => a.startsWith("vaapi="));
+  const port = device?.split("va:").at(-1)?.split("/").at(-1);
   return port === undefined ? encoder : `${port}:${encoder}`;
 }
 
@@ -103,7 +95,7 @@ test.describe("GPU でエンコードする", () => {
     await expect(page.getByTestId("hw-av1")).toHaveValue("every");
     await expect(page.getByTestId("hw-h264")).toHaveValue("every");
 
-    // デバイスごとに割り振る: AV1 は 128、H.264 は 129 (どちらも QSV/VA-API 両方)
+    // デバイスごとに割り振る: AV1 は 128、H.264 は 129
     // 変えたらその場で保存する (保存のボタンは無い)。最後の保存が終わるのを待ってから読み直す
     const [d128, d129] = GPUS.map((gpu) => `${stack.hwDir}/${gpu}`);
     await page.getByTestId("hw-av1").selectOption(d128 as string);
@@ -114,7 +106,7 @@ test.describe("GPU でエンコードする", () => {
     await expect(page.getByTestId("hw-h264")).toHaveValue(d129 as string);
   });
 
-  test("割り振ったデバイスでエンコードし、落ちたら次の方式へ倒れる", async ({
+  test("割り振ったデバイスでエンコードし、落ちたらソフトウェアへ倒れる", async ({
     page,
     request,
     stack,
@@ -133,10 +125,10 @@ test.describe("GPU でエンコードする", () => {
     );
     await waitWatchable(page, row);
     let recordingId = await row.getAttribute("data-recording-id");
-    // AV1 は 128 の QSV、H.264 は 129 の QSV (どちらも先頭の方式で通る)
+    // AV1 は 128、H.264 は 129 の VA-API
     expect(encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf)).toEqual([
-      "renderD128:av1_qsv",
-      "renderD129:h264_qsv",
+      "renderD128:av1_vaapi",
+      "renderD129:h264_vaapi",
     ]);
 
     /*
@@ -155,8 +147,6 @@ test.describe("GPU でエンコードする", () => {
     await waitWatchable(page, row);
     recordingId = await row.getAttribute("data-recording-id");
     expect(encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf)).toEqual([
-      "renderD129:h264_qsv",
-      "renderD129:h264_qsv",
       "renderD129:h264_vaapi",
       "renderD129:h264_vaapi",
       "libx264",
@@ -259,7 +249,7 @@ test.describe("GPU でエンコードする", () => {
     writeFileSync(`${stack.hwDir}/renderD128`, "1");
     await page.getByTestId("hw-probe").click();
     await expect(page.getByTestId("hw-device")).toContainText(
-      "QSV: AV1 / H.265 / H.264",
+      "VA-API: AV1 / H.265 / H.264",
     );
     await expect(page.getByTestId("codec-hevc")).toBeVisible();
     // エンコーダに「ソフトウェア」を置かない
@@ -279,7 +269,7 @@ test.describe("GPU でエンコードする", () => {
     let recordingId = await row.getAttribute("data-recording-id");
     const ways = encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf);
     expect(ways).toHaveLength(3);
-    expect(ways[0]).toMatch(/^renderD128:hevc_(qsv|vaapi)$/);
+    expect(ways[0]).toMatch(/^renderD128:hevc_vaapi$/);
     const main = (await row.getAttribute("data-library-path")) ?? "";
     expect(main).toMatch(/\.mkv$/);
     expect(main).not.toMatch(/\[H26[45]\]/);

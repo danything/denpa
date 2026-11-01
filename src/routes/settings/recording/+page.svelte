@@ -180,11 +180,11 @@
                 >
                 {#snippet more()}
                   <p>
-                    使える GPU は Intel (QSV / VA-API)・AMD (VA-API)・NVIDIA
-                    (NVENC)・Rockchip (MPP) です。見つかれば自動で使います。
+                    使える GPU は Intel・AMD (VA-API)・NVIDIA (NVENC)・Rockchip
+                    (MPP) です。見つかれば自動で使います。
                   </p>
                   <p>
-                    GPU (Intel は QSV → VA-API) →
+                    GPU →
                     ソフトウェアの順に試し、失敗したら次の方法でやり直します
                     (H.265 はソフトウェアでエンコードしません)。
                   </p>

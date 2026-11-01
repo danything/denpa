@@ -25,11 +25,12 @@ import { run } from "./stream";
  * **GPU でエンコードできるか、起動時に ffmpeg に確かめさせる。**
  *
  * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
- * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** 方式 (QSV / VA-API) ×
- * コーデックの6通りを `nullsrc` で実際に1コマエンコードして確かめる。結果は
+ * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** VA-API で
+ * 3つのコーデックを `nullsrc` で実際に1コマエンコードして確かめる。結果は
  * 設定の「エンコード」に出て、使えるものは自動で使う (コーデックごとのエンコーダ。`settings().hwAllow` と
- * 突き合わせるのは `hwChain`)。**QSV を先に、VA-API は予備** — 同じ GPU なら速さは
- * 変わらないが、QSV のほうがレート制御が豊富で Intel が手入れしている。
+ * 突き合わせるのは `hwChain`)。**Intel も VA-API だけで、QSV は使わない** — QSV は VA-API の上に
+ * かぶさる層で速さは同じ。QSV にしか無い先読みなどは使っておらず、Tiger Lake より前の世代では
+ * QSV のランタイムが動かない (docs/encode.md「QSV を使わない理由」)。
  *
  * **Rockchip (RK3588 / RK3588S) は別のデバイス** (`/dev/mpp_service`。`config.rkmppDevice`)。在れば
  * そのデバイスで h264_rkmpp / hevc_rkmpp を同じく1コマ試す (RK3588 は AV1 をエンコードできないので H.264 と H.265 だけ)。
@@ -53,8 +54,6 @@ export interface HwDevice {
   path: string;
   /** 画面に出す名前。`renderD128 (Intel)` のように、デバイスの名前と作り手 */
   label: string;
-  /** QSV でエンコードできたコーデック */
-  qsv: HwCodec[];
   /** VA-API でエンコードできたコーデック */
   vaapi: HwCodec[];
   /** Rockchip MPP でエンコードできたコーデック (`/dev/mpp_service` のときだけ。H.264 と H.265 だけ試す) */
@@ -108,7 +107,7 @@ export function hwEncode(): HwEncode {
  *
  * **デバイスは `turn` で回す。** グラボが2枚あって両方が同じコーデックをエンコードできるなら、
  * 1本エンコードするごとに先頭を入れ替えて、2本並べてエンコードするとき片方に寄らないようにする。
- * 同じデバイスの中では QSV → VA-API → MPP → NVENC (`HW_KINDS` の順)
+ * 同じデバイスの中では VA-API → MPP → NVENC (`HW_KINDS` の順)
  */
 export function hwChain(
   codec: HwCodec,
@@ -146,24 +145,22 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * **ffmpeg に渡す、方式ごとの引数** (hwenc と encoder.buildArgs で同じものを使う)。
  *
  * - `device` … 入力より前に置く。GPU のデバイスを開ける
- * - `filter` … 映像フィルタの最後に足す。どちらも CPU で作ったフレームを渡すので nv12 に
+ * - `filter` … 映像フィルタの最後に足す。CPU で作ったフレームを渡すので nv12 に
  *   揃える。VA-API は自分では上げてくれないので `hwupload` まで
  * - `encoder` … `-c:v` に続くもの
  *
- * QSV は実装を hw に固定 (ソフトウェア実装へは倒さない) して、子デバイスに
- * VA-API のデバイスを渡す。**画質は ICQ (`-global_quality`)** — ビットレートを決めずに
- * 「この画質」を指定する、x264 の crf に相当するもの。**QSV も VA-API も 1〜51 の
+ * **VA-API の画質は ICQ (`-global_quality`)** — ビットレートを決めずに
+ * 「この画質」を指定する、x264 の crf に相当するもの。**1〜51 の
  * 同じ物差し**で、コーデックが違っても同じ値で同じ見た目になる (H.265・AV1 は
  * そのぶん小さくなる) — ソフトウェアで H.264 crf 23 と AV1 crf 35 を揃えたのと同じ考え。
  * 値は **24** (H.264 の crf と同じ軸)。**手元に GPU が無いので実測はまだ** —
  * ソフトウェア側の 23 も持ってきていない (あちらは実測で決めた値で、こちらは
  * 1つの値で両コーデックを賄う別の建て付け。測らずに写すと二重に当てずっぽうになる)。
  * ソフトウェアでエンコードしたものと大きさが違って見えたら、ここを動かす。
- * QSV の `-preset medium` は7段 (veryfast〜veryslow) の真ん中。
  *
  * **`-global_quality` は `:v` を付けて映像にだけ効かせる。** 付けないとどのストリームにも効き、音のエンコーダが
  * 画質での指定として受け取る — libopus は「画質での指定はできない」で開けずに転び、aac は VBR に切り替わる
- * (GPU を挿して QSV・VA-API でエンコードし始めたら、AV1 + Opus の録画とライブが通らなかった)
+ * (GPU を挿してエンコードし始めたら、AV1 + Opus の録画とライブが通らなかった)
  *
  * ## ICQ を持たないドライバには CQP で指定する
  *
@@ -186,7 +183,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  *
  * NVENC は `-global_quality` (ICQ) を受けない (FFmpeg の nvenc.c が断る)。Rockchip MPP と同じ表のビットレートを
  * **VBR** で渡す (`nvencRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
- * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は7段 (p1〜p7) の真ん中 (QSV の medium と同じ考え)
+ * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は7段 (p1〜p7) の真ん中
  */
 export function hwArgs(
   way: HwWay,
@@ -213,13 +210,6 @@ export function hwArgs(
         "-g",
         "250",
       ],
-    };
-  }
-  if (way.kind === "qsv") {
-    return {
-      device: ["-init_hw_device", `qsv=hw:hw,child_device=${way.device}`],
-      filter: ["format=nv12"],
-      encoder: [`${codec}_qsv`, "-preset", "medium", "-global_quality:v", "24"],
     };
   }
   return {
@@ -388,8 +378,7 @@ export interface LiveHw {
  * 録画と同じ `hwChain` — 設定の印をそのまま使う (項目は増やさない)。そのうえで
  * **デコードから GPU で通せる方式 (`HwDevice.full`) があれば先に採る。** エンコードするところだけ GPU に
  * 移しても、CPU に残るデコード・bwdif・nv12 への変換で非力な機材は3本目が間に合わない
- * (issue #417 の実測: Celeron J4125 で3本同時、エンコードするだけ GPU 0.76x / 全部 GPU 1.2x)。
- * 同じデバイスの QSV より VA-API の全部 GPU を上に置くのはそのため
+ * (issue #417 の実測: Celeron J4125 で3本同時、エンコードするだけ GPU 0.76x / 全部 GPU 1.2x)
  */
 export function liveHw(
   codec: HwCodec,
@@ -412,9 +401,7 @@ export function liveHw(
  * **ライブで GPU にエンコードさせる引数。** 録画の `hwArgs` との違いは遅れを作らないこと:
  *
  * - `-bf 0` … B フレームを作らない。作ると必ず1枚以上待つ (x264 の `zerolatency` と同じ狙い)
- * - `-async_depth 1` … GPU に先積みしない。既定 (VA-API 2・QSV 4) のぶんだけ映像が遅れて出る
- * - QSV は `-preset veryfast`。先読み (`look_ahead`) は既定で切れているので触らない —
- *   書いて名前が変わると、エンコードできずにソフトウェアへ落ちるだけになる
+ * - `-async_depth 1` … GPU に先積みしない。既定 (2) のぶんだけ映像が遅れて出る
  * - 画質は録画と同じ ICQ 24 (CQP なら録画と同じ qp)。x264 ultrafast の既定 (crf 23) と
  *   同じ軸のつもりだが、**手元に GPU が無いので見比べていない**
  *
@@ -427,7 +414,7 @@ export function liveHw(
  * **NVENC も同じ表の、いちばん重い映像の値を VBR で。** 遅れを作らない引数は NVENC の言い方で渡す —
  * `-async_depth` は持たず (渡すと降りる)、代わりに `-delay 0` (出来たコマを溜めずにすぐ出す。既定は
  * 作業用の面の数 − 1 コマぶん溜める)。`-tune ll` (低遅延向けの調整)、`-zerolatency 1` (並べ替えの待ちを作らない)、
- * `-bf 0`。preset は `p2` (7段の速いほうから2つ目。QSV の veryfast と同じ考え)。**どれも実機では見ていない**。
+ * `-bf 0`。preset は `p2` (7段の速いほうから2つ目)。**どれも実機では見ていない**。
  * デコードとインタレ解除を GPU に寄せる (`full`) のは VA-API だけで、NVENC は実機で確かめてから
  *
  * ## `full` — デコードとインタレ解除も GPU (VA-API だけ)
@@ -476,22 +463,7 @@ export function liveHwArgs(
       ],
     };
   }
-  const lowDelay = ["-bf", "0", "-async_depth", "1"];
-  if (way.kind === "qsv") {
-    return {
-      input: base.device,
-      filter: base.filter,
-      encoder: [
-        `${codec}_qsv`,
-        "-preset",
-        "veryfast",
-        "-global_quality:v",
-        "24",
-        ...lowDelay,
-      ],
-    };
-  }
-  const encoder = [...base.encoder, ...lowDelay];
+  const encoder = [...base.encoder, "-bf", "0", "-async_depth", "1"];
   if (!hw.full) return { input: base.device, filter: base.filter, encoder };
   return {
     input: [
@@ -623,7 +595,6 @@ function emptyDevice(path: string, label: string): HwDevice {
   return {
     path,
     label,
-    qsv: [],
     vaapi: [],
     rkmpp: [],
     nvenc: [],
@@ -632,9 +603,6 @@ function emptyDevice(path: string, label: string): HwDevice {
   };
 }
 
-/** `/dev/dri/*` で試す方式。Rockchip MPP は別のデバイスで試す (`probeOnce`) */
-const DRI_KINDS = ["qsv", "vaapi"] as const;
-
 /** Rockchip MPP で試すコーデック。RK3588 は AV1 をエンコードできない (並びは HW_CODECS と同じ) */
 const RKMPP_CODECS = ["hevc", "h264"] as const;
 
@@ -642,18 +610,15 @@ async function probeOnce(): Promise<HwEncode> {
   const devices: HwDevice[] = [];
   for (const path of findDevices()) {
     const device = emptyDevice(path, labelOf(path));
-    for (const kind of DRI_KINDS) {
-      for (const codec of HW_CODECS) {
-        if (await tryWay({ device: path, kind }, codec)) {
-          device[kind].push(codec);
-        } else if (
-          kind === "vaapi" &&
-          (await tryWay({ device: path, kind, cqp: true }, codec))
-        ) {
-          // ICQ を持たないドライバ (i965)。CQP でエンコードする (`hwArgs` の説明)
-          device[kind].push(codec);
-          device.cqp.push(codec);
-        }
+    for (const codec of HW_CODECS) {
+      if (await tryWay({ device: path, kind: "vaapi" }, codec)) {
+        device.vaapi.push(codec);
+      } else if (
+        await tryWay({ device: path, kind: "vaapi", cqp: true }, codec)
+      ) {
+        // ICQ を持たないドライバ (i965)。CQP でエンコードする (`hwArgs` の説明)
+        device.vaapi.push(codec);
+        device.cqp.push(codec);
       }
     }
     devices.push(device);
@@ -773,7 +738,7 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 }
 
 /**
- * デバイスごとの一言。「QSV: AV1 / H.264、VA-API: H.264 (CQP)」か「GPU でエンコードできません」。
+ * デバイスごとの一言。「VA-API: AV1 / H.264 (CQP)」か「GPU でエンコードできません」。
  * ICQ を持たないドライバで CQP に落としたものには (CQP) を添え、デコードから GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */

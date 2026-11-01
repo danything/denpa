@@ -2,7 +2,7 @@ name: Docker build check
 
 # **Dockerfile を壊したまま main へ入れない。** イメージを組むのは main の
 # build-and-deploy だけだったので、Dockerfile の誤りや arm64 だけで転ぶ依存
-# (Intel の QSV は amd64 にしか無い、配布物の名前が arch で違う) は、入れてから
+# (Intel の VA-API ドライバは amd64 にしか無い、配布物の名前が arch で違う) は、入れてから
 # デプロイが止まって初めて分かった。PR の間に両方の arch を本物のランナーで組む
 # (push はしない)。
 #

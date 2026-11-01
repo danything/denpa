@@ -12,15 +12,14 @@ export const HW_CODECS = ["av1", "hevc", "h264"] as const;
 export type HwCodec = (typeof HW_CODECS)[number];
 
 /**
- * GPU でエンコードする方式。並びがそのまま試す順 (QSV が先。理由は server/hwenc.ts)。
+ * GPU でエンコードする方式。並びがそのまま試す順。Intel・AMD は VA-API (QSV を使わない理由は server/hwenc.ts)。
  * `rkmpp` は Rockchip (RK3588 / RK3588S) のハードウェアエンコーダ、`nvenc` は NVIDIA の GPU の
- * エンコーダで、どちらもデバイスが QSV・VA-API と別 (`/dev/mpp_service`・`/dev/nvidia0`。server/hwenc.ts)
+ * エンコーダで、どちらもデバイスが VA-API と別 (`/dev/mpp_service`・`/dev/nvidia0`。server/hwenc.ts)
  */
-export const HW_KINDS = ["qsv", "vaapi", "rkmpp", "nvenc"] as const;
+export const HW_KINDS = ["vaapi", "rkmpp", "nvenc"] as const;
 export type HwKind = (typeof HW_KINDS)[number];
 
 export const HW_KIND_LABEL: Record<HwKind, string> = {
-  qsv: "QSV",
   vaapi: "VA-API",
   rkmpp: "Rockchip MPP",
   nvenc: "NVENC",
@@ -100,7 +99,7 @@ export function hwChoice(
  * **選んだエンコーダを設定 (`hwAllow`) に書き戻す。** 持ち方はデバイス × 方式 × コーデックのまま。
  *
  * - 選ばれなかったデバイスは、このコーデックの印を (使える方式すべてで) 外す
- * - 選ばれたデバイスは、すでにどれかの方式で許されていればそのまま (QSV だけ外した、などを崩さない)。
+ * - 選ばれたデバイスは、すでにどれかの方式で許されていればそのまま。
  *   どれも許されていなければ、使える方式すべてに印を付ける
  * - 使えない方式の印・ほかのコーデック・いま見えていないデバイスは前のまま (GPU を挿し替えたときにそのまま効く)
  */

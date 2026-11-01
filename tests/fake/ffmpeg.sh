@@ -35,24 +35,23 @@ if printf '%s\n' "$@" | grep -qx -- 'avif'; then
 fi
 
 # **何を渡されたかを残す** (ライブの FAKE_FFMPEG_ARGS_FILE と同じ形式)。エンコードするときに
-# GPU の方式 (`h264_qsv` など) を選べているか、落ちたらソフトウェアへ倒れているかを
+# GPU の方式 (`h264_vaapi` など) を選べているか、落ちたらソフトウェアへ倒れているかを
 # テストから見るため。**どの方式でも、落ちる前に**残す。1回ぶんずつ足す
 if [ -n "${FAKE_FFMPEG_ENCODE_ARGS_FILE:-}" ]; then
     printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ENCODE_ARGS_FILE"
 fi
 
-# GPU (QSV / VA-API) の方式。`-init_hw_device` が付いていたら、それ。
+# GPU (VA-API) の方式。`-init_hw_device` が付いていたら、それ。
 #
 # 本物はデバイス (/dev/dri/renderD128) が無ければ初期化で落ちる。ここでも同じで、
-# **渡されたデバイス (`child_device=…` / `vaapi=va:…`) がファイルとして在れば「GPU がある」**
+# **渡されたデバイス (`vaapi=va:…`) がファイルとして在れば「GPU がある」**
 # ことにする — 起動時の試しのエンコード (server/hwenc.ts、入力は lavfi) は黙って通し、
 # 本番のエンコードはそのまま下の普通の経路へ流す。無ければ本物と同じく落ちる
 # (エンコードの途中で GPU が駄目になったときの、次の方式での再エンコードもこれで通る)
 prev=""
 for arg in "$@"; do
     if [ "$prev" = "-init_hw_device" ]; then
-        dev="${arg##*child_device=}"
-        dev="${dev##*vaapi=va:}"
+        dev="${arg##*vaapi=va:}"
         if [ ! -e "$dev" ]; then
             echo "Device creation failed: -19." >&2
             echo "Failed to set value '$arg' for option 'init_hw_device': No such device" >&2
