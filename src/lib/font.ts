@@ -1,7 +1,7 @@
 /**
  * Denpa Font (放送の字。`/api/font/`) の置き場。**URL はここだけで作る。**
  *
- * 字は 2 つの woff2 に分かれている (基本の字と、JIS X 0213 で足された漢字)。画面の字 (`app.css` の
+ * 字は 2 つの woff2 に分かれている (基本の字と、JIS X 0213 で足された漢字)。画面の放送の字 (`app.css` の
  * `.broadcast`) と字幕は、2 つを `unicode-range` で名乗らせる CSS (`denpaFontCssUrl`) を読み、
  * 後のほうはその字が出たときだけ落ちてくる。データ放送は基本の字だけで足りる (`denpaFontUrl`)。
  *
