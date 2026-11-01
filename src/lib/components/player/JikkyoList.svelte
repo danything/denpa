@@ -392,7 +392,6 @@
   .text {
     min-width: 0;
     overflow-wrap: anywhere;
-    font-family: var(--broadcast-font);
   }
   /* この端末から書き込んだもの。流れるほうと同じく字の下に短い線 (字の色は替えない) */
   .mine .text {
