@@ -5,11 +5,13 @@
 
 - **認証は画面と同じです** ([下記](#認証))。`TRUSTED_NETWORKS` に入っている相手はそのまま通ります
   (家の LAN の Home Assistant など。名前で呼ぶなら [ALLOWED_HOSTS](auth.md#ログインなしで開ける名前-allowed_hosts) に書く)。それ以外はログインか、アクセストークンが要ります
-- **書き込み (POST・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも)。
+- **書き込み (POST・PATCH・DELETE) には `Content-Type: application/json` を付けます** (本文が無い DELETE でも。画像を送る [`POST /api/clips`](#切り抜き-post-apiclips) は除く)。
   付けないと、SvelteKit の CSRF の守りが「よそのサイトからのフォーム送信」とみなして 403 を返します
   (アプリは Origin を付けないため)
 - 設定の画面からだけ使うもの (denpa を別の機械へ移す `/settings/integrations/transfer/…` など) はここに載せません。
   形式は保たず、アクセストークンでは断ります (403。[auth.md](auth.md#アプリのペアリング))
+- 画面と起動の確かめだけが使うもの (番組表のマス `/api/guide`・ライブのチケット `/api/live/ticket`・データ放送の中継 `/api/bml/…`・
+  `/api/health` など) も載せません。形式は保ちません
 - **URL は denpa の根からの相対で返します** (`api/services/…`)。denpa を開いている URL に足して使います。
   前段の接頭辞 (`/denpa/` など) の下で動かしていても、そのまま解決できます
 

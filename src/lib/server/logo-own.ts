@@ -42,7 +42,7 @@ import { run } from "./stream";
  *    点を付けて区間にする。ついでに散らしたコマを足して、覚えたものを育てる
  *
  * 覚えたものは局ごとの入れ物に、コマの大きさごとに置く (`logo-data.logoRepo`・`modelFile`)。
- * 「この画像は違う」で入れ物ごと捨てると、次の録画で一から覚える。
+ * 「覚え直す」で入れ物ごと捨てると、次の録画で一から覚える。
  */
 
 /**
@@ -77,7 +77,7 @@ export function load(
 /**
  * 覚えたものを書く。**書けなくても検出は落とさない** (次の録画で覚え直せば済む)。
  * 書きかけを読まれないよう隣に書いてから差し替える。隣の名前は書くたびに変える
- * (2 本ずつエンコードするので、同じ局の録画が同時に書きに来ることがある)
+ * (エンコードは何本か同時に走るので、同じ局の録画が同時に書きに来ることがある)
  */
 export function save(repo: string, model: LogoModel): void {
   const path = join(repo, modelFile(model.frameWidth, model.frameHeight));
@@ -107,7 +107,7 @@ function overlaps(a: Rect, b: Rect): boolean {
 }
 
 /** 録画の映像の大きさと尺 (`cm.probeVideo`) */
-export interface Video {
+interface Video {
   width: number;
   height: number;
   duration: number;
@@ -248,7 +248,7 @@ function tracker(model: LogoModel, video: Video): Tracker | string {
   };
 }
 
-export interface LogoResult {
+interface LogoResult {
   /** 0 で当たった。それ以外はロゴを使わずに決める */
   code: number;
   /** ロゴの出ていた区間 (コマ番号。CM 検出のデコードの `times` と同じ並び) */

@@ -1,6 +1,7 @@
 # 借りているもの (ライセンス)
 
-denpa 自身は **AGPL-3.0-or-later** ([LICENSE](../LICENSE)) です。ここには、**コンテナ
+denpa 自身は **AGPL-3.0-or-later** ([LICENSE](../LICENSE)) です。ただし `packages/arib/` (npm の `@danything/arib`。
+denpa のリリースといっしょに出す) は **MIT** ([packages/arib/LICENSE](../packages/arib/LICENSE)) です。ここには、**コンテナ
 イメージに同梱して配っているもの・リポジトリに写してあるもの・ブラウザへ配る束に
 入るもの**を、出どころとライセンスごとに並べます。README の「ライセンス」はこの入口です。
 

@@ -159,7 +159,8 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
    使っていないもの・同じことを何か所にも書いたもの・回りくどい書き方を縮めます。範囲ごとに PR に分けて出します
 2. **画面を変えたなら、docs の画像を撮り直す** ([上](#readme-の画像))。Actions の **Screenshots** を main で走らせ、
    artifact の `shots` を `docs/images/` に写して PR にします
-3. main のイメージのビルドが通ったのを確かめて、リリースを作る:
+3. **`packages/arib/` が変わっていれば、その `version` を上げる** ([下](#danythingarib-を出す))。リリースといっしょに npm へ出ます
+4. main のイメージのビルドが通ったのを確かめて、リリースを作る:
    `gh release create vX.Y.Z --target main --generate-notes --title vX.Y.Z`。
    イメージは組み直さず、そのコミットのものにバージョンを貼り足します ([下](#イメージ))
 
@@ -168,11 +169,11 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 `packages/arib/` はふだん denpa のリリースといっしょに npm へ出ます。前のタグ `arib-v*` から `packages/arib/` が
 変わっていれば、`.github/workflows/arib-publish.yml` が `packages/arib/package.json` の `version` で出して、
 リリースのコミットにタグ `arib-v<バージョン>` を付けます。変わっていなければ何もしません。
-なので **リリースの前に、`packages/arib/` が変わっていれば `version` を上げておきます** (互換が壊れるなら major、
-機能を足したなら minor、直しだけなら patch)。上げ忘れるとリリースのときにこの workflow が止まります (勝手には上げない)。
+上げる `version` は、互換が壊れるなら major、機能を足したなら minor、直しだけなら patch。
+上げ忘れるとリリースのときにこの workflow が止まります (勝手には上げない)。
 
 リリースを待たずに出すときは、`version` を上げる PR をマージしてから、main のそのコミットにタグを押します
-(`git tag arib-v0.2.0 <そのコミット> && git push origin arib-v0.2.0`)。
+(`git tag arib-v1.0.1 <そのコミット> && git push origin arib-v1.0.1`)。
 **main の先頭には付けないこと。** マージのあとに `chore: bump image marks [skip ci]` が積まれることが多く、`[skip ci]` のコミットに付けたタグでは Actions が動きません。
 どちらもテストとビルドをしてから、Trusted Publishing で出します (トークンは持たない)。
 リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `scripts/manifest.ts` が

@@ -48,7 +48,7 @@ export interface ScanWant {
   audio: boolean;
 }
 
-export interface ScanOptions extends ScanWant {
+interface ScanOptions extends ScanWant {
   signal?: AbortSignal | undefined;
   timeoutMs: number;
   /** 入力の前に置く引数。エンコードと同じだけ頭を捨てる (`-ss`) ときに */

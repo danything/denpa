@@ -371,7 +371,7 @@ export interface CmDetection {
   material?: CmMaterial;
 }
 
-export interface CmOptions {
+interface CmOptions {
   signal?: AbortSignal;
   /** 局のID。覚えたロゴの置き場を局ごとに分けるのに使う */
   serviceId: number;

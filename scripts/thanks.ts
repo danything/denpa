@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 /** 一覧に載せない人。持ち主は自分の PR や Issue を数えない (bot は __typename で落とす) */
-export const EXCLUDE = new Set(["5ym"]);
+const EXCLUDE = new Set(["5ym"]);
 
 export const START = "<!-- thanks:start -->";
 export const END = "<!-- thanks:end -->";
@@ -23,7 +23,7 @@ export interface Item {
   number: number;
   login: string;
 }
-export interface Person {
+interface Person {
   login: string;
   numbers: number[];
 }
@@ -94,7 +94,7 @@ export async function fetchItems(
 }
 
 /** 人ごとにまとめる。並びは最初に関わった順 (いちばん小さい番号の順)、番号は小さい順 */
-export function people(items: Item[], kinds: Kind[]): Person[] {
+function people(items: Item[], kinds: Kind[]): Person[] {
   const map = new Map<string, number[]>();
   for (const item of items) {
     if (!kinds.includes(item.kind) || EXCLUDE.has(item.login)) continue;

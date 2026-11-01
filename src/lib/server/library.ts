@@ -88,7 +88,7 @@ export function encodedPath(rec: LibraryNameInput, codec: HwCodec): string {
 
 /**
  * **エンコードしたもの全部** (無いものは除く)。並びは主 (`library_path`) → H.265 → H.264 で、
- * 小さくなる順 (`HW_CODECS`) と同じ。削除・照合・大きさ・移すときに、列を1つずつ書き並べずにこれで回す
+ * 小さい順 (`HW_CODECS`) と同じ。削除・照合・大きさ・移すときに、列を1つずつ書き並べずにこれで回す
  */
 export function encodedPaths(rec: {
   library_path: string | null;
