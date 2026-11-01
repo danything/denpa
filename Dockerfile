@@ -145,7 +145,7 @@ ENV FFPROBE=/usr/bin/ffprobe
 CMD ["bun", "scripts/capture-docs.ts"]
 
 # ---------------------------------------------------------------------------
-# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel・AMD の GPU (VA-API/QSV) + NVIDIA NVENC (amd64) + Rockchip MPP (arm64)。
+# ffmpeg (自前ビルド。AV1 libsvtav1/dav1d + H.264 x264 + Opus + Intel・AMD の GPU (VA-API) + NVIDIA NVENC (amd64) + Rockchip MPP (arm64)。
 # 上流に投げる直しがあれば patches/ から当てる。ARIB 字幕はデコードせずに写すだけなので
 # デコーダ (libaribcaption) は組み込まない — `-c:s copy` にデコーダは要らない)
 # ---------------------------------------------------------------------------
@@ -157,24 +157,20 @@ FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5
 SHELL ["/bin/bash", "-c"]
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 と arm64 を別の機械で。QEMU で
 # ffmpeg を組むと何倍も掛かる)。digest は複数 arch の索引を指しているので、上の FROM は
-# 組む arch のものを引く。違うのは Intel の QSV・NVIDIA の NVENC と Rockchip の MPP だけ (下の説明)
+# 組む arch のものを引く。違うのは NVIDIA の NVENC と Rockchip の MPP だけ (下の説明)
 ARG TARGETARCH
 
 # ダウンロードは CI で切られることがあるので必ずリトライさせる。
 # 一度これで ffmpeg の取得に失敗してデプロイが止まった
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 
-# libvpl-dev / libva-dev は Intel の GPU (QSV) 向け (docs/encode.md「GPU でエンコードする」)。
-# ffmpeg に libvpl (QSV = h264_qsv / av1_qsv) を組み込み、実行イメージにドライバを
-# 入れてある。コンテナから /dev/dri が見えれば、起動時に src/lib/server/hwenc.ts が試しのエンコードで
-# 見つけて使い、無ければソフトウェア (libsvtav1 / libx264) でエンコードする。
-# **libva は QSV の下に必ずいる** (Linux では libvpl → libmfx-gen → libva → /dev/dri)。
-# vaapi も有効にしてあるのは、QSV が初期化できない機種の逃げ道 (h264_vaapi) のため
-#
-# **QSV (libvpl) は amd64 だけ。** Debian の libvpl / libmfx-gen / intel-media-va-driver は
-# amd64 にしか無い (Intel の GPU が載る arm の機械は無い)。arm64 では libvpl を外して組み、
-# VA-API だけ残す — 起動時の試しのエンコード (src/lib/server/hwenc.ts) で QSV が落ちて、VA-API か
-# ソフトウェアでエンコードするだけなので、denpa の側は何も変えない
+# libva-dev は Intel・AMD の GPU (VA-API) 向け (docs/encode.md「GPU でエンコードする」)。
+# 実行イメージにドライバを入れてあり、コンテナから /dev/dri が見えれば、起動時に
+# src/lib/server/hwenc.ts が試しのエンコードで見つけて使い、無ければソフトウェア
+# (libsvtav1 / libx264) でエンコードする。
+# **Intel の QSV (libvpl) は組み込まない。** QSV は VA-API の上にかぶさる層で、denpa が使う
+# 指定 (ICQ・キーフレーム) は VA-API だけで足りる。Tiger Lake より前の世代ではそもそも動かない
+# (docs/encode.md「QSV を使わない理由」)
 #
 # **Rockchip の MPP (h264_rkmpp・hevc_rkmpp) は arm64 だけ。** RK3588 / RK3588S のハードウェアエンコーダを
 # FFmpeg 本家のエンコーダ (8.1 から) で使う (docs/encode.md「Rockchip (RK3588) でエンコードする」)。
@@ -190,7 +186,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # libffmpeg-nvenc-dev。MIT のヘッダだけで、nonfree にはならない) で、ドライバのライブラリ (libcuda・
 # libnvidia-encode) は ffmpeg が実行時に dlopen する。**実行イメージには何も足さない** — NVIDIA Container
 # Toolkit がホストのドライバのライブラリをコンテナに差し込む (docs/encode.md「NVIDIA でエンコードする」)。
-# GPU が無ければ試しのエンコードが落ちて使わないだけなのは QSV と同じ。
+# GPU が無ければ試しのエンコードが落ちて使わないだけなのは VA-API と同じ。
 # clang は CUDA のフィルタ (scale_cuda・bwdif_cuda) を PTX に組むため (`--enable-cuda-llvm`。CUDA の SDK は要らない)
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
 
@@ -231,7 +227,7 @@ COPY patches/ /patches/
 # - エンコーダ: wrapped_avframe と pcm_s16le は `-f null` の既定。mpeg2video は GPU の試しの素材、mjpeg はサムネイル、
 #   rawvideo は CM 検出のロゴのコマ。H.265 (hevc_*) は GPU のものだけで、libx265 は組まない
 #   (ソフトウェアでは H.265 をエンコードしない。docs/encode.md「H.265 は GPU でだけ」)。
-#   qsv・nvenc は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
+#   nvenc は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
 # - hwaccel の nvdec と、フィルタの hwupload_cuda・scale_cuda・bwdif_cuda は、NVIDIA の GPU で放送の MPEG-2 を
 #   デコードしてインタレ解除まで済ませるためのもの。**denpa はまだ使わない** (実機で確かめてから引数に足す。
 #   docs/encode.md「NVIDIA でエンコードする」)。clang で組めているかは、イメージの確かめで先に見ておく
@@ -245,8 +241,8 @@ COPY patches/ /patches/
 # - testsrc2・sine・telecine・tinterlace・noise は denpa は使わず、イメージの確かめで素材を作るためだけ
 #   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
-      amd64) arch_dev="libvpl-dev libffmpeg-nvenc-dev clang" \
-             arch_flags="--enable-libvpl --enable-ffnvcodec --enable-nvenc --enable-nvdec --enable-cuda-llvm" ;; \
+      amd64) arch_dev="libffmpeg-nvenc-dev clang" \
+             arch_flags="--enable-ffnvcodec --enable-nvenc --enable-nvdec --enable-cuda-llvm" ;; \
       arm64) arch_dev=libdrm-dev arch_flags="--enable-libdrm --enable-rkmpp" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
@@ -284,7 +280,7 @@ RUN case "${TARGETARCH}" in \
       --disable-everything \
       --disable-network \
       --enable-decoder=mpeg2video,h264,aac,opus,libdav1d,png,mjpeg,webp,hevc,ac3,eac3,mp2,aac_latm,wrapped_avframe,pcm_s16le \
-      --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,hevc_vaapi,h264_qsv,av1_qsv,hevc_qsv,h264_nvenc,av1_nvenc,hevc_nvenc,h264_rkmpp,hevc_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
+      --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,hevc_vaapi,h264_nvenc,av1_nvenc,hevc_nvenc,h264_rkmpp,hevc_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
       --enable-hwaccel=mpeg2_vaapi,h264_vaapi,mpeg2_nvdec,h264_nvdec \
       --enable-demuxer=mpegts,matroska,mov,concat,ffmetadata,image2,png_pipe,jpeg_pipe,webp_pipe \
       --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
@@ -366,9 +362,9 @@ FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:d710a5c8bfe4cf7e726d7e1
 # ここで Debian のパッケージを入れて ffmpeg を置き、要るファイルだけを /rootfs にまとめる。
 # 土台は ffmpeg 段と同じ digest (どちらも trixie なので、glibc のバージョンは distroless と揃う)
 #
-# libvpl2 + libmfx-gen1.2 (QSV のランタイム) + libva* + intel-media-va-driver-non-free (iHD) は
-# Intel の GPU (QSV / VA-API) 向け (上の ffmpeg 段の説明)。GPU の無い機械でも害は無い
-# (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel の4つは amd64 だけ**
+# libva* + intel-media-va-driver-non-free (iHD) は Intel の GPU (VA-API) 向け (上の ffmpeg 段の説明)。
+# GPU の無い機械でも害は無い
+# (起動時の試しのエンコードが落ちて、ソフトウェアでエンコードするだけ)。**Intel のドライバは amd64 だけ**
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
 # arm64 の Rockchip MPP (librockchip_mpp.so.1) は ffmpeg 段で組んで /usr/local/lib に一緒に来る。
 # libdrm (rkmpp と VA-API が繋ぐ) は libva-drm2 の依存で入り、どちらも下の ldd で /rootfs に運ばれる
@@ -383,7 +379,7 @@ FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
-      amd64) gpu="libvpl2 intel-media-va-driver-non-free i965-va-driver libmfx-gen1.2 libdrm-amdgpu1 libdrm-common libelf1t64 libexpat1 libzstd1" ;; \
+      amd64) gpu="intel-media-va-driver-non-free i965-va-driver libdrm-amdgpu1 libdrm-common libelf1t64 libexpat1 libzstd1" ;; \
       arm64) gpu="" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
@@ -405,8 +401,7 @@ COPY --from=mesa /out/doc/ /rootfs/usr/share/doc/
 
 # /rootfs に写すもの:
 # - ffmpeg / ffprobe / libav* と、それらが繋ぐライブラリ (ldd で辿る)
-# - **dlopen で読むもの** (ldd には出ない): libva のドライバ (dri/ の iHD・i965) と、libvpl が読む
-#   QSV のランタイム (libmfx-gen.so.1.2 と、それがさらに読む libmfx-gen/)。ドライバはディレクトリ
+# - **dlopen で読むもの** (ldd には出ない): libva のドライバ (dri/ の iHD・i965)。ドライバはディレクトリ
 #   ごと写し、それらが繋ぐライブラリも ldd で辿る。`mesa` 段で組んだ AMD のドライバも同じ dri/ に置く
 #   (パッケージの記録は無いので status.d には載らない。ライセンスは /usr/share/doc/mesa)
 # **土台 (distroless) にもうあるもの (glibc など) は写さない** (名前で見分ける)。
@@ -422,14 +417,9 @@ RUN --mount=type=bind,from=distroless,target=/distroless \
     cp -a /usr/local/lib/lib*.so.* /rootfs/usr/local/lib/ && \
     targets=(/usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/lib/lib*.so.*) && \
     owned=() && \
-    for dir in "${lib}/dri" "${lib}/libmfx-gen"; do \
-      [ -d "$dir" ] || continue; \
-      cp -a "$dir" "/rootfs${lib}/"; \
-      targets+=("$dir"/*.so); owned+=("$dir"/*.so); \
-    done && \
-    if [ -e "${lib}/libmfx-gen.so.1.2" ]; then \
-      cp -L "${lib}/libmfx-gen.so.1.2" "/rootfs${lib}/"; \
-      targets+=("${lib}/libmfx-gen.so.1.2"); owned+=("${lib}/libmfx-gen.so.1.2"); \
+    if [ -d "${lib}/dri" ]; then \
+      cp -a "${lib}/dri" "/rootfs${lib}/"; \
+      targets+=("${lib}"/dri/*.so); owned+=("${lib}"/dri/*.so); \
     fi && \
     for drv in /usr/local/lib/dri/*.so; do \
       mkdir -p "/rootfs${lib}/dri" && cp "$drv" "/rootfs${lib}/dri/"; \

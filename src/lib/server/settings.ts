@@ -142,8 +142,8 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 }
 
 /**
- * `hwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ qsv: [...], vaapi: [...], rkmpp: [...], nvenc: [...] }`。
- * 書かれていない方式は空 — 方式はデバイスごとに決まっていて (`/dev/dri/*` は QSV・VA-API、
+ * `hwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...] }`。
+ * 書かれていない方式は空 — 方式はデバイスごとに決まっていて (`/dev/dri/*` は VA-API、
  * `/dev/mpp_service` は Rockchip MPP、`/dev/nvidia0` などは NVENC)、そのデバイスで使えない方式の印は何にも効かない
  */
 function parseHwAllow(value: string | undefined): HwAllow {
@@ -159,7 +159,6 @@ function parseHwAllow(value: string | undefined): HwAllow {
       const pick = (raw: unknown): HwCodec[] =>
         HW_CODECS.filter((codec) => Array.isArray(raw) && raw.includes(codec));
       out[device] = {
-        qsv: pick(entry.qsv),
         vaapi: pick(entry.vaapi),
         rkmpp: pick(entry.rkmpp),
         nvenc: pick(entry.nvenc),

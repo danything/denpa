@@ -113,7 +113,7 @@ export const config = {
   encodeMaxAttempts: num("ENCODE_MAX_ATTEMPTS", 5),
   ffprobe: str("FFPROBE", "/usr/local/bin/ffprobe"),
   /**
-   * GPU のデバイスを探すパターン (最後の段に `*`)。当たったデバイスを全部試して、QSV / VA-API が
+   * GPU のデバイスを探すパターン (最後の段に `*`)。当たったデバイスを全部試して、VA-API が
    * 初期化できたものでエンコードする (server/hwenc.ts)。Pod / コンテナに `/dev/dri` を
    * 渡していなければ1つも無いのが普通
    */

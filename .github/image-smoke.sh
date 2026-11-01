@@ -42,19 +42,19 @@ denpa)
         [ "$status" -eq 0 ] && [ -z "$err" ] || { echo "ffmpeg $*" >&2; echo "$err" >&2; return 1; }
     }
 
-    # ライブラリの欠け。dlopen で読むもの (libva のドライバ・QSV のランタイム) は ldd に出ず、
+    # ライブラリの欠け。dlopen で読むもの (libva のドライバ) は ldd に出ず、
     # ffmpeg が起きるだけでは分からないので、ld.so に1つずつ依存を解かせる (ldd も無いので bun で回す)
     run /usr/local/bin/bun -e '
         const x64 = process.arch === "x64";
         const lib = x64 ? "/usr/lib/x86_64-linux-gnu" : "/usr/lib/aarch64-linux-gnu";
         const ld = x64 ? "/lib64/ld-linux-x86-64.so.2" : "/lib/ld-linux-aarch64.so.1";
         const files = ["/usr/local/bin/ffmpeg", "/usr/local/bin/ffprobe"];
-        for (const [cwd, pattern] of [["/usr/local/lib", "*.so.*"], [lib, "dri/*.so"], [lib, "libmfx-gen.so.*"], [lib, "libmfx-gen/*.so"]]) {
+        for (const [cwd, pattern] of [["/usr/local/lib", "*.so.*"], [lib, "dri/*.so"]]) {
             files.push(...new Bun.Glob(pattern).scanSync({ cwd, absolute: true }));
         }
         let ok = true;
-        // QSV と Intel の VA-API ドライバは amd64、Rockchip の MPP は arm64 だけに入れている (Dockerfile)
-        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/dri/radeonsi_drv_video.so`, `${lib}/libmfx-gen.so.1.2`] : ["/usr/local/lib/librockchip_mpp.so.1"];
+        // Intel の VA-API ドライバは amd64、Rockchip の MPP は arm64 だけに入れている (Dockerfile)
+        const want = x64 ? [`${lib}/dri/iHD_drv_video.so`, `${lib}/dri/i965_drv_video.so`, `${lib}/dri/radeonsi_drv_video.so`] : ["/usr/local/lib/librockchip_mpp.so.1"];
         for (const file of want) {
             if (!files.includes(file)) { console.error(`ありません: ${file}`); ok = false; }
         }
@@ -70,9 +70,9 @@ denpa)
     encoders=$(run /usr/local/bin/ffmpeg -hide_banner -encoders)
     want="libx264 libsvtav1 libopus aac mjpeg h264_vaapi av1_vaapi hevc_vaapi"
     arch=$(docker image inspect -f '{{.Architecture}}' "$image")
-    # QSV と NVIDIA の NVENC は amd64、Rockchip の MPP は arm64 だけ (Dockerfile の ffmpeg 段)。MPP の .so は上の ld.so の確かめに入る。
+    # NVIDIA の NVENC は amd64、Rockchip の MPP は arm64 だけ (Dockerfile の ffmpeg 段)。MPP の .so は上の ld.so の確かめに入る。
     # NVENC のドライバのライブラリはホストから差し込まれるもので、イメージには無い (ld.so の確かめにも入らない)
-    [ "$arch" = amd64 ] && want="$want h264_qsv av1_qsv hevc_qsv h264_nvenc av1_nvenc hevc_nvenc"
+    [ "$arch" = amd64 ] && want="$want h264_nvenc av1_nvenc hevc_nvenc"
     [ "$arch" = arm64 ] && want="$want h264_rkmpp hevc_rkmpp"
     for e in $want; do
         grep -qw "$e" <<< "$encoders" || { echo "エンコーダがありません: $e" >&2; exit 1; }

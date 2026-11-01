@@ -562,10 +562,10 @@ describe("GPU でエンコードする", () => {
     }
     // AV1 は Opus のまま
     const av1 = encodeArgs(1024, stereo, "av1", 0, {
-      way: { device, kind: "qsv" },
+      way: { device, kind: "vaapi" },
       full: false,
     });
-    expect(av1.join(" ")).toContain("-c:v av1_qsv");
+    expect(av1.join(" ")).toContain("-c:v av1_vaapi");
     expect(av1.join(" ")).toContain("-c:a libopus");
   });
 

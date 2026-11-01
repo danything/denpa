@@ -161,23 +161,18 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
     expect(args).toContain("-preset");
   });
 
-  test("GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を渡す", () => {
-    // QSV は自分で上げるので hwupload は無い。画質は ICQ で、コーデックが違っても同じ 24
+  test("GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を GPU へ上げて渡す", () => {
+    // 画質は ICQ で、コーデックが違っても同じ 24
     for (const codec of ["av1", "h264"] as const) {
       const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec, {
-        hardware: { device: "/dev/dri/renderD129", kind: "qsv" },
+        hardware: { device: "/dev/dri/renderD128", kind: "vaapi" },
       });
       expect(args.indexOf("-init_hw_device")).toBeLessThan(args.indexOf("-i"));
-      expect(argValue(args, "-init_hw_device")).toBe(
-        "qsv=hw:hw,child_device=/dev/dri/renderD129",
-      );
-      expect(args).toContain(`${codec}_qsv`);
+      expect(args).toContain(`${codec}_vaapi`);
       expect(argValue(args, "-global_quality:v")).toBe("24");
-      expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=nv12");
       expect(args).not.toContain("libx264");
       expect(args).not.toContain("libsvtav1");
     }
-    // VA-API は上げるところまで自分でやる
     const va = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
       hardware: { device: "/dev/dri/renderD128", kind: "vaapi" },
     });
@@ -602,12 +597,13 @@ describe("CM を切るときのキーフレーム", () => {
     expect(argValue(args, "-vf")).not.toContain("scdet");
   });
 
-  test("QSV は指定しないと IDR にならない", () => {
+  test("VA-API は印だけで IDR になるので、IDR の指定を足さない", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
       keyframes: "scene",
-      hardware: { kind: "qsv", device: "/dev/dri/renderD128" },
+      hardware: { kind: "vaapi", device: "/dev/dri/renderD128" },
     });
-    expect(argValue(args, "-forced_idr")).toBe("1");
+    expect(args).not.toContain("-forced_idr");
+    expect(args).not.toContain("-forced-idr");
     // 印は GPU へ上げる前に付ける
     const filter = argValue(args, "-vf") ?? "";
     expect(filter.indexOf("scdet@key")).toBeLessThan(
@@ -615,23 +611,15 @@ describe("CM を切るときのキーフレーム", () => {
     );
   });
 
-  test("NVENC も指定しないと IDR にならない (QSV と綴りが違う)", () => {
+  test("NVENC は指定しないと IDR にならない", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
       keyframes: [120.5],
       hardware: { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
     });
     expect(argValue(args, "-forced-idr")).toBe("1");
-    expect(args).not.toContain("-forced_idr");
   });
 
-  test("H.265 も同じ指定で境目にキーフレームを置く (QSV・NVENC は IDR の指定、VA-API は印だけ)", () => {
-    const qsv = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
-      keyframes: [120.5],
-      hardware: { kind: "qsv", device: "/dev/dri/renderD128" },
-    });
-    expect(qsv).toContain("hevc_qsv");
-    expect(argValue(qsv, "-force_key_frames:v")).toBe("120.499");
-    expect(argValue(qsv, "-forced_idr")).toBe("1");
+  test("H.265 も同じ指定で境目にキーフレームを置く (NVENC は IDR の指定、VA-API は印だけ)", () => {
     const nvenc = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
       keyframes: "scene",
       hardware: { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
