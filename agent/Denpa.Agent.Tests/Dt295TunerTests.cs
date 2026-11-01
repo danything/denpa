@@ -55,6 +55,106 @@ public class Dt295TunerTests
     }
 
     [Test]
+    [Arguments(0x06B8, 0x103B, "PIXELA PIX-DT295", true)]
+    [Arguments(0x06B8, 0x103C, "PIXELA PIX-DT295 W", false)]
+    [Arguments(0x06B8, 0x1038, "PIXELA PIX-DT420", false)]
+    [Arguments(0x06B8, 0x1039, "PIXELA PIX-DT410", false)]
+    [Arguments(0x04C5, 0x202F, "PIX-DTxxx (SPI モード)", false)]
+    public async Task 公式_INF_の_ID_を見分けて_DT295_だけを使う(int vendor, int product, string name, bool supported)
+    {
+        var model = Dt295.Find(vendor, product);
+        await Assert.That(model).IsNotNull();
+        await Assert.That(model!.Name).IsEqualTo(name);
+        await Assert.That(model.Supported).IsEqualTo(supported);
+        await Assert.That(model.Unconfirmed is null).IsEqualTo(supported);
+    }
+
+    [Test]
+    public async Task 同じドライバーでない_ID_は見分けない()
+    {
+        await Assert.That(Dt295.Find(0x06B8, 0x103A)).IsNull();
+        await Assert.That(Dt295.Find(0x054C, 0x04B2)).IsNull();
+        await Assert.That(Dt295.Family.Select(model => (model.Vendor, model.Product)).Distinct().Count()).IsEqualTo(Dt295.Family.Count);
+        await Assert.That(Dt295.Family.Count(model => model.Supported)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task 未確認の機材は_USB_に触らずに断る()
+    {
+        using var usb = new FakeDt295Usb();
+        var opened = 0;
+        IUsbDevice Open(Dt295Model model)
+        {
+            opened++;
+            return usb;
+        }
+        foreach (var model in Dt295.Family.Where(model => !model.Supported))
+        {
+            var error = Assert.Throws<Dt295Exception>(() => Dt295.OpenUsb("3-1", _ => model, Open));
+            await Assert.That(error.Message).Contains(model.Name);
+            await Assert.That(error.Message).Contains("未確認");
+            await Assert.That(error.Message).Contains($"{model.Vendor:x4}:{model.Product:x4}");
+        }
+        Assert.Throws<IOException>(() => Dt295.OpenUsb("3-1", _ => null, Open));
+        await Assert.That(opened).IsEqualTo(0);
+
+        // 開く前に断るので、選局のときに開く入口 (Acquire) からでも機材には何も送らない
+        var dt420 = Dt295.Find(0x06B8, 0x1038)!;
+        Assert.Throws<Dt295Exception>(() =>
+            Dt295Board.Acquire("3-1", FakeDt295Material.Vendor, () => Dt295.OpenUsb("3-1", _ => dt420, Open), usb.Time, refresher: false));
+        await Assert.That(opened).IsEqualTo(0);
+        await Assert.That(usb.Log).IsEmpty();
+        await Assert.That(usb.Bulk).IsEmpty();
+
+        var dt295 = Dt295.Find(Dt295.Vendor, Dt295.Product)!;
+        Dt295Model? asked = null;
+        var got = Dt295.OpenUsb("3-1", _ => dt295, model =>
+        {
+            asked = model;
+            return usb;
+        });
+        await Assert.That(got).IsSameReferenceAs(usb);
+        await Assert.That(asked).IsEqualTo(dt295);
+    }
+
+    [Test]
+    public async Task sysfs_から同じドライバーの機材を見分けて並べる()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var dir = Directory.CreateTempSubdirectory("dt295family");
+        try
+        {
+            void Usb(string name, string vendor, string product)
+            {
+                var at = Directory.CreateDirectory(Path.Combine(dir.FullName, name)).FullName;
+                File.WriteAllText(Path.Combine(at, "idVendor"), vendor + "\n");
+                File.WriteAllText(Path.Combine(at, "idProduct"), product + "\n");
+            }
+            Usb("1-1", "06b8", "103b");
+            Usb("1-2", "06b8", "103c");
+            Usb("1-3", "06b8", "1038");
+            Usb("1-4", "06b8", "1039");
+            Usb("1-5", "04c5", "202f");
+            Usb("1-6", "06b8", "103a");
+            var found = Dt295.Found(dir.FullName, null);
+            await Assert.That(found.Select(item => $"{item.Port}={item.Model.Name}")).IsEquivalentTo(new[]
+            {
+                "1-1=PIXELA PIX-DT295", "1-2=PIXELA PIX-DT295 W", "1-3=PIXELA PIX-DT420", "1-4=PIXELA PIX-DT410", "1-5=PIX-DTxxx (SPI モード)",
+            });
+            await Assert.That(Dt295.Identify(dir.FullName, "1-3")?.Name).IsEqualTo("PIXELA PIX-DT420");
+            await Assert.That(Dt295.Identify(dir.FullName, "1-6")).IsNull();
+            List<string> warnings = [];
+            await Assert.That(Dt295.Ports(dir.FullName, warnings.Add)).IsEquivalentTo(new[] { "1-1" });
+            await Assert.That(warnings.Count).IsEqualTo(4);
+            await Assert.That(warnings.All(warning => warning.Contains("未確認"))).IsTrue();
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Test]
     public async Task dt295_の_device_は開かずに_Dt295Tuner_にする()
     {
         if (OperatingSystem.IsWindows()) return;
