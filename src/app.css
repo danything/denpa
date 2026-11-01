@@ -365,6 +365,21 @@
   background: var(--pico-primary-background);
 }
 
+/*
+ * ---- 自分の書き込みの点 (`.mine-dot`)。字と同じ色の小さな丸を字の前に ----
+ * 実況の流れるコメントと一覧。形は `.fresh-dot` と同じで、色を字に合わせて「まだ見ていない」(主の色) と分ける
+ */
+.mine-dot::before {
+  content: "";
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  margin-inline-end: 0.3em;
+  vertical-align: middle;
+  border-radius: var(--dp-radius-full);
+  background: currentColor;
+}
+
 /* ---- 読み込めたらふわっと出る画像 (`#lib/motion.svelte.ts` の `fadeIn`。録画のポスターは `Poster.svelte` の `{@attach}` から) ---- */
 img[data-fade] {
   transition: opacity var(--dp-duration-enter) var(--dp-ease);
