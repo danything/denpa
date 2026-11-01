@@ -699,7 +699,7 @@ public sealed class Zd1jCard : ICardLink
     /// <summary>ATR を待つ上限 (仕様書 13.7 の「1 秒まで」)</summary>
     private static readonly TimeSpan AtrTimeout = TimeSpan.FromSeconds(1);
 
-    /// <summary>ATR を受けるときの速さのクロック数 (9600 ボー)。カードのクロックは 9600 × 372 Hz</summary>
+    /// <summary>カードのクロック (Hz)。ATR を受ける 9600 ボー (F 372 / D 1) から 9600 × 372</summary>
     private const double CardClock = 9600.0 * 372;
 
     private readonly Func<Zd1jBoard> _acquire;

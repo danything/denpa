@@ -33,7 +33,7 @@ public sealed class Fr30Assembler(uint origin)
 {
     private readonly List<ushort> _code = [];
     private readonly Dictionary<string, int> _labels = new(StringComparer.Ordinal);
-    private readonly List<(int At, string Label, Func<int, ushort> Encode, string Name)> _fixups = [];
+    private readonly List<(int At, string Label, Func<int, ushort> Encode)> _fixups = [];
     private readonly StringBuilder _listing = new();
     private int _unique;
 
@@ -202,7 +202,7 @@ public sealed class Fr30Assembler(uint origin)
         {
             if (rel is < -128 or > 127) throw new InvalidOperationException($"{label} まで遠すぎます ({rel * 2} バイト)");
             return (ushort)(0xE000 | ((int)cond << 8) | (rel & 0xFF));
-        }, label));
+        }));
         Emit(0, $"{name} {label}");
     }
 
@@ -215,7 +215,7 @@ public sealed class Fr30Assembler(uint origin)
         {
             if (rel is < -1024 or > 1023) throw new InvalidOperationException($"{label} まで遠すぎます ({rel * 2} バイト)");
             return (ushort)(0xD000 | (rel & 0x7FF));
-        }, label));
+        }));
         Emit(0, $"call {label}");
     }
 
@@ -263,7 +263,7 @@ public sealed class Fr30Assembler(uint origin)
     public ushort[] Words()
     {
         var code = _code.ToArray();
-        foreach (var (at, label, encode, _) in _fixups)
+        foreach (var (at, label, encode) in _fixups)
         {
             if (!_labels.TryGetValue(label, out var target)) throw new InvalidOperationException($"ラベル {label} がありません");
             code[at] = encode(target - (at + 1));

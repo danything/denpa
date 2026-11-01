@@ -231,7 +231,6 @@ public sealed class Multi2
         var at = 0;
         while (data.Length - at >= width * 8)
         {
-            // 幅の倍数に切り上げると余りのぶんまで回るが、そこは捨てる (書き戻さない)
             var blocks = Math.Min((data.Length - at) / 8, WideBlocks);
             var chunk = data.Slice(at, blocks * 8);
             for (var index = 0; index < blocks; index++)
@@ -240,6 +239,7 @@ public sealed class Multi2
                 rights[index] = BinaryPrimitives.ReadUInt32BigEndian(chunk[(index * 8 + 4)..]);
             }
 
+            // 幅の倍数に切り上げると余りのぶんまで回るが、そこは捨てる (書き戻さない)
             for (var index = 0; index + width <= WideBlocks && index < blocks; index += width)
             {
                 var l = Vector.LoadUnsafe(ref lefts[0], (nuint)index);

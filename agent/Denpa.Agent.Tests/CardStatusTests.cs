@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 画面の「カードリーダー」の表 (Card.cs の Local / Remote / Report)。
  *
- * 本物のリーダーは無い。INT と IDI に答える線を置き、**使っているリーダーを
+ * 本物のリーダーは無い。INT と IDI に答える接続を置き、**使っているリーダーを
  * 開き直さない**ことと、予備・カードなし・壊れたリーダーがそれぞれの行になることを確かめる。
  */
 public class CardStatusTests
@@ -14,7 +14,7 @@ public class CardStatusTests
     // カードの番号は必ず架空のものにする (本物のカードの番号を載せない)
     private static readonly CardInit Using = new(new byte[32], new byte[8], 5, [1234567890]);
 
-    /// <summary>INT (返り値 0x2100) と IDI (番号 <paramref name="id"/>) に答える線</summary>
+    /// <summary>INT (返り値 0x2100) と IDI (番号 <paramref name="id"/>) に答える接続</summary>
     private sealed class FakeLink(string name, long id) : ICardLink
     {
         public string Name { get; } = name;

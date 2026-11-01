@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// カードリーダーを探して、B-CAS を開く。**USB のリーダーと px4d の内蔵リーダーを区別しない。**
+/// カードリーダーを探して、B-CAS を開く。**USB のリーダーと内蔵リーダーを区別しない。**
 /// </summary>
 public static class CardLinks
 {

@@ -6,7 +6,7 @@ namespace Denpa.Agent;
  * 3段に分けてある。上から:
  *
  * - Descrambler … TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)
- * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (BCas.cs) か、別の拠点 (CardShare.cs)
+ * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
  * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直接扱う (Ccid.cs。
  *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d・asicend の内蔵リーダー (Px4Card.cs) か、
  *                 CECH-ZD1 J の内蔵の差し込み口 (Zd1j.cs の Zd1jCard)
@@ -22,7 +22,7 @@ public sealed record CardInit(byte[] SystemKey, byte[] InitCbc, int CaSystemId, 
 /// <param name="Code">カードの返り値 (0x0200 など。契約の有無が分かる)</param>
 /// <param name="Cached">
 /// カードに聞かず、覚えていた答えを返した (同じ ECM を別のストリームが先に聞いていた)。
-/// 選局の内訳の記録に出すだけで、鍵の扱いは変わらない。拠点を跨ぐ線では運ばない
+/// 選局の内訳の記録に出すだけで、鍵の扱いは変わらない。拠点のあいだでは運ばない (<see cref="CardWire"/>)
 /// </param>
 /// <param name="WaitedMs">カードを順番に使う錠 (<see cref="BCas"/>) を待った時間 (ミリ秒)。記録に出すだけ</param>
 public readonly record struct EcmAnswer(byte[] Odd, byte[] Even, int Code, bool Cached = false, long WaitedMs = 0);

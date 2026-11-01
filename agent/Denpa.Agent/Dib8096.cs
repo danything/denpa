@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
+
 namespace Denpa.Agent;
 
 /*
@@ -527,7 +530,7 @@ public sealed class Dib8096
         Uhf,
     }
 
-    /// <summary>7.1 帯の分け方 (kHz)</summary>
+    /// <summary>7.1 バンドの分け方 (kHz)</summary>
     private static Band BandOf(uint khz) => khz <= 170000 ? Band.Cband : khz <= 250000 ? Band.Vhf : Band.Uhf;
 
     private uint _khz;
@@ -940,7 +943,7 @@ public sealed class Dib8096
         }
     }
 
-    // 7.3.11 PLL の表 (上限 kHz・VCO の帯・分周の符号・分周・前置分周)
+    // 7.3.11 PLL の表 (上限 kHz・VCO のバンド・分周の符号・分周・前置分周)
     private static readonly (uint Upper, int VcoBand, int Code, int Divider, int Prediv)[] PllNormal =
     [
         (56000, 0, 9, 48, 6), (70000, 1, 9, 48, 6), (87000, 0, 8, 32, 4), (105000, 1, 8, 32, 4),
@@ -1014,7 +1017,7 @@ public sealed class Dib8096
     private TuneRow _tuneRow;
     private int _rest;
 
-    /// <summary>DiB0090 が決めた帯 (VHF を CBAND で受けるときは CBAND)</summary>
+    /// <summary>DiB0090 が決めたバンド (VHF を CBAND で受けるときは CBAND)</summary>
     private Band _tunerBand;
 
     /// <summary>7.3.4 本体の「始め」(周波数を決めて PLL を書く)</summary>
@@ -1516,7 +1519,7 @@ public sealed class Dib8096
         T(0x04, 1);
     }
 
-    /// <summary>7.4.1 AGC の設定 (CBAND 用と、それ以外の帯用)。前回と同じ帯なら何もしない</summary>
+    /// <summary>7.4.1 AGC の設定 (CBAND 用と、それ以外のバンド用)。前回と同じバンドなら何もしない</summary>
     private void AgcSettings()
     {
         var cband = _band == Band.Cband;
@@ -2405,19 +2408,19 @@ public sealed class DibMemory
         && a.Layers.SequenceEqual(b.Layers);
 
     /// <summary>ファイルに書く形: <c>{ "&lt;kHz&gt;": { fft, guard, inversion, partial, diff, layers: [[変調, 符号化率, インターリーブ, セグメント数] × 3] } }</c></summary>
-    public System.Text.Json.Nodes.JsonObject ToJson()
+    public JsonObject ToJson()
     {
-        var json = new System.Text.Json.Nodes.JsonObject();
+        var json = new JsonObject();
         lock (Channels)
         {
             foreach (var (khz, s) in Channels.OrderBy(pair => pair.Key))
             {
-                var layers = new System.Text.Json.Nodes.JsonArray();
+                var layers = new JsonArray();
                 foreach (var (modulation, fec, interleave, segments) in s.Layers)
                 {
-                    layers.Add((System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonArray(modulation, fec, interleave, segments));
+                    layers.Add((JsonNode)new JsonArray(modulation, fec, interleave, segments));
                 }
-                json[khz.ToString(System.Globalization.CultureInfo.InvariantCulture)] = new System.Text.Json.Nodes.JsonObject
+                json[khz.ToString(CultureInfo.InvariantCulture)] = new JsonObject
                 {
                     ["fft"] = s.Fft, ["guard"] = s.Guard, ["inversion"] = s.Inversion, ["partial"] = s.Partial, ["diff"] = s.Diff, ["layers"] = layers,
                 };
@@ -2427,12 +2430,12 @@ public sealed class DibMemory
     }
 
     /// <summary>ファイルの中身から。**どれか1つでも形が違えば投げる** (呼ぶ側が全部捨てて探索から)</summary>
-    public static DibMemory FromJson(System.Text.Json.Nodes.JsonObject json)
+    public static DibMemory FromJson(JsonObject json)
     {
         var memory = new DibMemory();
         foreach (var (key, node) in json)
         {
-            if (!uint.TryParse(key, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var khz) || node is not System.Text.Json.Nodes.JsonObject value)
+            if (!uint.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var khz) || node is not JsonObject value)
             {
                 throw new FormatException($"周波数「{key}」が読めません");
             }
@@ -2441,8 +2444,8 @@ public sealed class DibMemory
                 var number = value[name]?.GetValue<int>() ?? throw new FormatException($"{key} の {name} がありません");
                 return number >= min && number <= max ? number : throw new FormatException($"{key} の {name} ({number}) が範囲の外です");
             }
-            if (value["layers"] is not System.Text.Json.Nodes.JsonArray { Count: 3 } layers) throw new FormatException($"{key} の layers が 3 つではありません");
-            var parsed = layers.Select(layer => layer is System.Text.Json.Nodes.JsonArray { Count: 4 } item
+            if (value["layers"] is not JsonArray { Count: 3 } layers) throw new FormatException($"{key} の layers が 3 つではありません");
+            var parsed = layers.Select(layer => layer is JsonArray { Count: 4 } item
                 ? (item[0]!.GetValue<int>(), item[1]!.GetValue<int>(), item[2]!.GetValue<int>(), item[3]!.GetValue<int>())
                 : throw new FormatException($"{key} の階層が 4 つの数ではありません")).ToArray();
             if (parsed.Any(layer => layer.Item1 is < 0 or > 4 || layer.Item2 is < 0 or > 7 || layer.Item3 is < 0 or > 4 || layer.Item4 is < 0 or > 13))

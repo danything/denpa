@@ -127,7 +127,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 {
     private readonly HttpClient _http = new(new SocketsHttpHandler
     {
-        // ルーターの先に置いた配り役は、TTL で SYN-ACK が戻らず黙る。待ち続けずに理由を出す
+        // ルーターの先に置いた配り役には TTL で届かず、答えが無いまま待たされる。待ち続けずに理由を出す
         ConnectTimeout = TimeSpan.FromSeconds(5),
         ConnectCallback = (context, cancel) => CardLan.Connect(context.DnsEndPoint, hops, cancel),
     })

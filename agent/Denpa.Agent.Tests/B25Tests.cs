@@ -230,10 +230,10 @@ public class B25Tests
 
     /// <summary>
     /// **カードに渡すのはセクションの頭 8 バイトと CRC を除いた中身。** libaribb25 と同じ切り方で、
-    /// 拠点を跨いで鍵を貰う線がこれを運んでいる。変わると古いエージェントと通じなくなる
+    /// 拠点を跨いで鍵を貰うときもこれを運ぶ。変わると古いエージェントと通じなくなる
     /// </summary>
     [Test]
-    public async Task カードに渡すのは節の頭とCRCを除いた中身()
+    public async Task カードに渡すのはセクションの頭とCRCを除いた中身()
     {
         var cards = new Cards();
         Run(new Descrambler(cards), Channel().Ecm(EcmPid, 3).Videos(3, 3).Wire.ToArray());
@@ -244,7 +244,7 @@ public class B25Tests
 
     /// <summary>セクションはパケットを跨ぐし、1つのパケットに2つ入ることもある (pointer_field の手前は前のセクションの尻尾)</summary>
     [Test]
-    public async Task パケットを跨ぐ節も_1つのパケットに並ぶ節も読む()
+    public async Task パケットを跨ぐセクションも_1つのパケットに並ぶセクションも読む()
     {
         // 1つ目の ECM (243 バイト) は2つのパケットを跨ぎ、2つ目のパケットにはその尻尾と2つ目の ECM が並ぶ
         byte[] body = [4, .. Enumerable.Range(0, 230).Select(i => (byte)i)];
