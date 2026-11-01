@@ -364,9 +364,11 @@ public sealed class TunerPool(
         {
             lock (_gate)
             {
-                // デスクランブラが別のスレッドで配っているので、入れ物は Sinks のロックの下で触る
-                lock (lease.Sinks) lease.Sinks.Remove(leaving);
-                if (lease.Sinks.Count == 0) ScheduleRelease(lease);
+                // デスクランブラが別のスレッドで配っているので、入れ物は Sinks のロックの下で触る。
+                // もう外されていれば (取り上げられた・選局が落ちた) 何もしない。畳んだ選局をもう一度畳まない
+                bool removed;
+                lock (lease.Sinks) removed = lease.Sinks.Remove(leaving);
+                if (removed && lease.Sinks.Count == 0) ScheduleRelease(lease);
             }
             onChange();
         });
@@ -642,11 +644,20 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
 
     public void Fail(string reason) => Close(reason);
 
-    /// <summary>読む側が去った。共有から抜ける</summary>
+    /// <summary>
+    /// 読む側が去った。共有から抜ける。**先に切られていても抜ける** — 読み出しが追いつかずに切った
+    /// (<see cref="Push"/>) あとも選局の利用者に残っていると、そのチューナーは誰も読んでいないのに
+    /// 同じ優先度のまま塞がり続けた (実機で、番組表集めが「空きがありません」と断られ続け、
+    /// 衛星の局ロゴは空いた1台を番組表集めに30分ごとに取り上げられた)。
+    /// 取り上げられて先に外されたぶんは、抜ける側 (<c>Join</c>) が見分けて何もしない
+    /// </summary>
     public void Leave()
     {
-        if (Close()) onLeave(this);
+        Close();
+        if (Interlocked.Exchange(ref _departed, 1) == 0) onLeave(this);
     }
+
+    private int _departed;
 
     /// <summary>読み出しを終わらせる。**最初の1回だけ効く** (2回目からは false)</summary>
     private bool Close(string? reason = null)
