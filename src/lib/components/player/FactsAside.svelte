@@ -81,8 +81,12 @@
     padding: var(--dp-side-top, var(--dp-side-pad, 0.25rem))
       var(--dp-side-pad, 0.5rem) 0;
   }
+  /*
+   * 上に置くもの (リモコン・コメントの一覧) は、自分の下に次のものとの間 (`--dp-space-4`) を持っている。
+   * ここでも足すと、番組の中身のときだけ間が倍の 32px になった (局の一覧のときと同じ 16px にする)
+   */
   .top:has(:global(*)) + .back-row {
-    padding-top: var(--dp-side-pad, 0.25rem);
+    padding-top: 0;
   }
   .back {
     margin: 0 0 0 -0.5rem;
@@ -109,11 +113,11 @@
     padding: var(--dp-side-top, var(--dp-side-pad, 0.25rem))
       var(--dp-side-pad, 0.5rem) 1rem;
   }
-  /* 上に戻るやリモコンがあるときは、その下は列の中の余白 */
+  /* 上に戻るがあるときは、その下は列の中の余白。リモコン・コメントの一覧の下の間は、それぞれが持つ (上の `.back-row`) */
   .back-row + .box .body {
     padding-top: 0.5rem;
   }
   .top:has(:global(*)) + .box .body {
-    padding-top: var(--dp-side-pad, 0.25rem);
+    padding-top: 0;
   }
 </style>

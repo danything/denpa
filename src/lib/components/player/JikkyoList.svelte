@@ -218,14 +218,16 @@
   /*
    * 高さはデータ放送のリモコンと同じくらい。中だけ巻く。行が少ないうちも下に寄せる (上に寄せると、下に空いた所が
    * 下の局の一覧との間に見え、間がリモコンのときより広く見える)。`justify-content: flex-end` だと溢れた上の行へ巻けないので、
-   * 頭の行の上の余白で押し下げる
+   * 頭の行の上の余白で押し下げる。
+   * 巻き取る箱は局の一覧 (ライブの `.channels`) と同じく列の幅いっぱいに広げ、スクロールバーを窓の右端に出す。
+   * 行の端は列の余白 (`--dp-side-pad`) の内側のまま (見出し・番組名の端と同じ所)
    */
   .rows {
     display: flex;
     flex-direction: column;
     height: 16rem;
-    margin: 0;
-    padding: 0;
+    margin: 0 calc(-1 * var(--dp-side-pad, 0px));
+    padding: 0 var(--dp-side-pad, 0px);
     overflow-y: auto;
     overscroll-behavior: contain;
     list-style: none;
