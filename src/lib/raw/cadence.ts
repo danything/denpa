@@ -23,11 +23,19 @@ const PERIOD_MAX = 50;
 const PERIOD_GAIN = 0.1;
 /** これより古い時刻しか無ければ当てにしない (裏に回って rAF が止まった) */
 const STALE_MS = 1000;
+/**
+ * 続けてこれだけ2回ぶん以上と割ったら、覚えた間隔のほうが短すぎるとみて測り直す。落とす回は
+ * ときどきしか来ない (混んだ CI でも 150 回のうち 40〜90 回) ので、0.5 秒 (60Hz で 30 回) の間に
+ * 1回ぶんの間が1つも無いことはまず無い
+ */
+const RESEED_RUN = 30;
 
 /** 画面の切り替わり。時刻は `performance.timeOrigin + performance.now()` の ms */
 export class Vsync {
   private anchor: number | null = null;
   private interval: number | null = null;
+  /** 続けて2回ぶん以上と割った間 */
+  private run: number[] = [];
 
   /** requestAnimationFrame の時刻を1つ受け取る */
   feed(at: number): void {
@@ -42,6 +50,17 @@ export class Vsync {
     const count = Math.max(1, Math.round(gap / guess));
     const one = gap / count;
     if (one < PERIOD_MIN || one > PERIOD_MAX) return;
+    // 覚えた間隔が本当の 2/3 より短くなる (混んで短い間が続いた・120Hz から 60Hz に変わった) と、
+    // ふつうの間を毎回2回ぶんと割って半分に寄せ、戻らない。続いたら、来た間の真ん中から測り直す
+    if (count === 1) this.run = [];
+    else {
+      this.run.push(gap);
+      if (this.run.length >= RESEED_RUN) {
+        this.interval = median(this.run);
+        this.run = [];
+        return;
+      }
+    }
     this.interval =
       this.interval === null
         ? one
@@ -79,7 +98,14 @@ export class Vsync {
   clear(): void {
     this.anchor = null;
     this.interval = null;
+    this.run = [];
   }
+}
+
+/** 真ん中の値。いちばん短い間は揺れて短く来たものかもしれないので使わない */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
 }
 
 /** 切り替わりの間隔のうち、デコードを始めてよい前半の割合 (`settled`) */
