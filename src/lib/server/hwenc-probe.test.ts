@@ -92,11 +92,14 @@ test("H.264・H.265 は初めから CQP で試し、ICQ では試さない", asy
   expect(device.cqp).toEqual([]);
   const lines = calls.map((argv) => argv.join(" "));
   // 録画と同じ引数 (品質寄りの段と B フレームのピラミッドも) で試す。どれもドライバが持たなくても落ちない
-  for (const codec of ["hevc", "h264"]) {
+  for (const [codec, factor] of [
+    ["hevc", "1.4"],
+    ["h264", "1.3"],
+  ]) {
     expect(
       lines.some((l) =>
         l.includes(
-          `${codec}_vaapi -rc_mode CQP -qp 24 -compression_level:v 1 -bf 3 -b_depth 2 -b_qfactor 1.3`,
+          `${codec}_vaapi -rc_mode CQP -qp 24 -compression_level:v 1 -bf 3 -b_depth 2 -b_qfactor ${factor}`,
         ),
       ),
     ).toBe(true);

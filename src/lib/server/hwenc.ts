@@ -158,11 +158,11 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * エンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値:
  *
  * - H.264 は **qp 24** (目標との差 −0.12・−0.14 dB)。同じ XPSNR で ICQ より 5〜7% 小さい
- * - H.265 は **qp 24** (+0.12・−0.03 dB)。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった。
- *   25 は −0.38 dB で外れる
+ * - H.265 は **qp 24** (−0.21・−0.14 dB)。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった。
+ *   25 は B の qp の倍率 1.3 でも −0.38 dB で外れる
  * - AV1 は **ICQ 26** (+0.46・−0.05 dB)。AV1 は ICQ のほうがはっきり良い。27 は −0.26 dB でぎりぎりなので採らない
  *
- * ビットレートは 300 秒・600 秒の所で H.264 2203・1383 kbps、H.265 1675・1055、AV1 2157・1250
+ * ビットレートは 300 秒・600 秒の所で H.264 2203・1383 kbps、H.265 1498・988、AV1 2157・1250
  * (前の qp 25・ICQ 26 では H.264 2347・1472、H.265 1803・1064、AV1 2182・1262。2 か所のうち悪いほうの
  * XPSNR は前と同じか上)。XPSNR は FFmpeg の vf_xpsnr (輝度) を JS で書き直したものでポッドの中で測り、
  * ffmpeg のフィルタとは突き合わせていない。
@@ -178,8 +178,8 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * - `-compression_level:v 1` … ドライバの品質と速さの段 (iHD は 1〜7 で、渡さないときは 4 と同じ出力)。
  *   1 は 3 つとも同じ XPSNR で 3〜5% 小さい。**これも `:v` を付ける** — 付けないと音のエンコーダにも効き、
  *   libopus はこれを計算の手間 (complexity) として読み、10 から 1 に落とす
- * - `-bf 3 -b_depth 2 -b_qfactor 1.3` (H.264・H.265 だけ) … B フレームを 3 枚にして、真ん中の B を
- *   残りの B の参照にするピラミッドにし、B の qp を P の 1.3 倍 (+1.25) にする。同じ qp では XPSNR が
+ * - `-bf 3 -b_depth 2 -b_qfactor` (H.264・H.265 だけ) … B フレームを 3 枚にして、真ん中の B を
+ *   残りの B の参照にするピラミッドにし、B の qp を P の 1.3 倍 (H.265 は 1.4 倍。どちらも +1.25) にする。同じ qp では XPSNR が
  *   少し下がるので、qp を 25 から 24 に上げてある。**`-bf 7 -b_depth 3` は映像が壊れる** (A310 で XPSNR が
  *   14〜35 dB に落ちた) ので使わない。AV1 は B フレームの数や GOP の長さを変えると、大きくなるか
  *   場所によって良し悪しが割れたので既定のまま
@@ -293,7 +293,11 @@ const LIVE_QP: Record<Exclude<HwCodec, "av1">, number> = {
 
 /**
  * 録画だけに足す、遅くても小さくなる指定 (`hwArgs` の説明)。`-compression_level` は音のエンコーダも
- * 読むので `:v` を付ける。`-bf`・`-b_depth`・`-b_qfactor` は音のエンコーダが読まない
+ * 読むので `:v` を付ける。`-bf`・`-b_depth`・`-b_qfactor` は音のエンコーダが読まない。
+ *
+ * `-b_qfactor` はコーデックごとに、目標の内でいちばん小さくなる値 (qp 24 で測った):
+ * H.264 は 1.3 (−0.12・−0.14 dB、2203・1383 kbps。1.4 は −0.49 dB で外れる)、
+ * H.265 は 1.4 (−0.21・−0.14 dB、1498・988 kbps。1.3 は +0.12・−0.03 dB で 1675・1055 kbps)
  */
 const VAAPI_SLOW: Record<HwCodec, readonly string[]> = {
   h264: [
@@ -314,7 +318,7 @@ const VAAPI_SLOW: Record<HwCodec, readonly string[]> = {
     "-b_depth",
     "2",
     "-b_qfactor",
-    "1.3",
+    "1.4",
   ],
   av1: ["-compression_level:v", "1"],
 };

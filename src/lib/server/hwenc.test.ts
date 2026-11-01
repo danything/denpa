@@ -511,14 +511,22 @@ describe("H.265 (GPU でだけ)", () => {
     ]);
   });
 
-  test("VA-API の H.265 は H.264 と同じ CQP の qp 24 (0〜51 の軸) と同じピラミッド", () => {
+  test("VA-API の H.265 は H.264 と同じ CQP の qp 24 (0〜51 の軸) とピラミッドで、B の qp の倍率だけ 1.4", () => {
     expect(hwArgs({ device: H.path, kind: "vaapi" }, "hevc").encoder).toEqual([
       "hevc_vaapi",
-      ...hwArgs({ device: H.path, kind: "vaapi" }, "h264").encoder.slice(1),
+      "-rc_mode",
+      "CQP",
+      "-qp",
+      "24",
+      "-compression_level:v",
+      "1",
+      "-bf",
+      "3",
+      "-b_depth",
+      "2",
+      "-b_qfactor",
+      "1.4",
     ]);
-    expect(
-      hwArgs({ device: H.path, kind: "vaapi" }, "hevc").encoder.slice(1, 5),
-    ).toEqual(["-rc_mode", "CQP", "-qp", "24"]);
   });
 
   /*
